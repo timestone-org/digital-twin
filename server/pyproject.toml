@@ -1,0 +1,75 @@
+[tool.uv.workspace]
+members = ["lib", "domain/*", "services/*"]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "pytest-randomly>=3.16",
+    "httpx>=0.28",
+    "aiosqlite>=0.20",
+    "black>=24.10",
+    "ruff>=0.8",
+    "pyright>=1.1.390",
+    "diff-cover>=9.2",
+]
+
+[tool.black]
+line-length = 80
+target-version = ["py312"]
+
+[tool.ruff]
+line-length = 80
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "N",
+    "UP",
+    "B",
+    "C90",
+    "PL",
+    "RUF",
+    "ASYNC",
+    "S",
+    "T20",
+]
+ignore = [
+    # 路由函数的依赖注入件天然多于 5 个形参，规模上限靠评审与函数行数守
+    "PLR0913",
+    # 本仓注释与文案一律中文，全角标点是正字法而非「易混淆字符」
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    # 本仓日志器的签名是 (event, msg, **fields)，不是 stdlib 的 (fmt, *args)
+    "PLE1205",
+    # 异常名一律是「条件」而非「XxxError」，共同后缀由基类 AppError 承担
+    "N818",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["lib", "auth_server", "scripts"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-args = 5
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "PLR2004", "S105", "S106"]
+"**/migrations/**" = ["N999"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+reportMissingTypeStubs = false
+include = ["lib/src", "services/*/src", "services/*/scripts"]
+exclude = ["**/__pycache__", "**/.venv", "**/migrations/versions"]

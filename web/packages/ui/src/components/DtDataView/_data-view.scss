@@ -1,0 +1,128 @@
+// DtDataView 的皮肤。与 SFC 分开只为把单文件压在 300 行内，样式仍随 scoped 编译。
+
+.dt-data-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  // ⚠ 漏了这条就永远撑破外层而不是内部滚动：flex 子项的 min-height 默认是 auto
+  min-height: 0;
+
+  // 铺满态：吃掉外层 flex 列剩下的高度。外层不是受高度约束的 flex 列时
+  // 这条自然失效，退化成按内容高度渲染。
+  &.is-fill {
+    flex: 1;
+  }
+
+  &__bar {
+    display: flex;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+  }
+
+  &__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  &__aside {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-disabled);
+  }
+
+  &__panel {
+    display: flex;
+    flex-direction: column;
+    // 表体滚动时内容要被切在圆角内，否则会盖住卡片描边
+    overflow: hidden;
+  }
+
+  &__pager {
+    flex-shrink: 0;
+  }
+
+  &.is-fill &__panel {
+    flex: 1;
+    min-height: 0;
+  }
+
+  // 卡片网格自己纵向滚，工具条与分页器不跟着走
+  &.is-fill &__grid {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    // ⚠ 缺了它 grid 的 align-content 按 stretch 走：只有两张卡时会被拉到满屏高
+    align-content: start;
+  }
+
+  &__grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: 1fr;
+
+    // 单列以上只在够宽时生效：窄屏铺两列会把每张卡挤到读不了
+    @media (min-width: 640px) {
+      &.is-cols-2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      &.is-cols-3 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (min-width: 1024px) {
+      &.is-cols-3 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+  }
+
+  &__card-head {
+    min-width: 0;
+  }
+
+  &__card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-title);
+  }
+
+  &__card-meta {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--text-disabled);
+  }
+
+  &__fields {
+    display: grid;
+    gap: 8px 16px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0;
+
+    dt {
+      margin: 0;
+      font-size: 10px;
+      color: var(--text-disabled);
+    }
+
+    dd {
+      margin: 2px 0 0;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+  }
+}

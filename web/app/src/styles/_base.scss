@@ -1,0 +1,93 @@
+// 全局基底：深色科技底色、滚动条、选区、键盘焦点环。
+
+// ⚠ 整份包进 `@layer base`：不分层的规则在级联里**永远赢过**任何 @layer，
+// 全局基底会压掉页面上的 Tailwind 工具类，且 devtools 里看不出是谁赢的。
+// 与 Tailwind 的 preflight 同层、排在其后，故仍然覆盖得掉 preflight。
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #app {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--surface-base);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    // 深空径向氛围底：青蓝高光自上沉入近黑
+    background-image:
+      radial-gradient(
+        1200px 700px at 50% -10%,
+        rgba(var(--accent-primary-rgb), 0.1),
+        transparent 60%
+      ),
+      radial-gradient(
+        900px 600px at 100% 0%,
+        rgba(var(--accent-secondary-rgb), 0.06),
+        transparent 55%
+      );
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background: rgba(var(--accent-primary-rgb), 0.3);
+    color: var(--text-primary);
+  }
+
+  // 只在 :focus-visible 上出现，鼠标点击不打扰
+  :where(
+    button,
+    a,
+    input,
+    select,
+    textarea,
+    summary,
+    [tabindex]
+  ):focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(var(--accent-primary-rgb), 0.35) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(var(--accent-primary-rgb), 0.28);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-radius: var(--radius-md);
+
+    &:hover {
+      background: rgba(var(--accent-primary-rgb), 0.5);
+      background-clip: padding-box;
+    }
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}

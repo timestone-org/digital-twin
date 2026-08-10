@@ -1,0 +1,118 @@
+# edge-gateway —— 唯一的入口。
+#
+# ⚠ 这是 envsubst 模板：官方 nginx 镜像在启动时渲染 /etc/nginx/templates/*.template。
+# 必须设 NGINX_ENVSUBST_FILTER=^AUTH_ ，否则 $uri / $host 这些 nginx 变量会被一起替换成空。
+# 它做且只做：TLS 终结、按前缀反代、auth_request 前置鉴权、公开面限流、静态资源发布。
+# 它不做：业务逻辑、数据聚合、协议转换。
+
+worker_processes auto;
+
+events {
+  worker_connections 2048;
+}
+
+http {
+  include       /etc/nginx/mime.types;
+  default_type  application/octet-stream;
+  sendfile      on;
+  server_tokens off;
+
+  # /verify 的响应头里带 base64 权限集，默认 4k 的缓冲会截断
+  proxy_buffer_size 8k;
+  proxy_buffers     8 8k;
+
+  log_format json escape=json '{"ts":"$time_iso8601","status":$status,'
+    '"method":"$request_method","uri":"$uri","rt":$request_time,'
+    '"trace":"$http_traceparent"}';
+  access_log /dev/stdout json;
+
+  # 公开面是可枚举凭据的爆破面，必须限流
+  limit_req_zone $binary_remote_addr zone=login:10m rate=10r/m;
+
+  upstream auth_server { server auth-server:8004; }
+
+  server {
+    listen 80;
+
+    # ⚠ 客户端伪造这几个头就等于伪造身份，server 级先一律置空
+    proxy_set_header X-Auth-User-Id   "";
+    proxy_set_header X-Auth-Username  "";
+    proxy_set_header X-Auth-Role      "";
+    proxy_set_header X-Auth-Permissions "";
+    proxy_set_header X-Auth-Permissions-Truncated "";
+    proxy_set_header X-Auth-Exp       "";
+    proxy_set_header X-Auth-Sig       "";
+
+    # 内部面不对外暴露
+    location ^~ /internal/ { deny all; }
+
+    # —— 免认证 location ——
+    # ⚠ 规则表里的空 permission_codes 是「任意已登录用户」，不是匿名放行。
+    # 匿名可达性只由这几条 location 保证；删掉任何一条都会导致全站无法登录。
+    location = /api/v1/auth/sessions {
+      limit_req zone=login burst=5 nodelay;
+      proxy_pass http://auth_server;
+      include /etc/nginx/conf.d/proxy-common.conf;
+    }
+    location = /api/v1/auth/sessions:refresh {
+      proxy_pass http://auth_server;
+      include /etc/nginx/conf.d/proxy-common.conf;
+    }
+    location = /api/v1/auth/sessions:revoke {
+      proxy_pass http://auth_server;
+      include /etc/nginx/conf.d/proxy-common.conf;
+    }
+    location = /api/v1/auth/registrations {
+      limit_req zone=login burst=3 nodelay;
+      proxy_pass http://auth_server;
+      include /etc/nginx/conf.d/proxy-common.conf;
+    }
+    location = /api/v1/auth/health { proxy_pass http://auth_server; }
+    location = /api/v1/auth/ready  { proxy_pass http://auth_server; }
+    location = /api/v1/auth/docs   { proxy_pass http://auth_server; }
+    location = /api/v1/auth/redoc  { proxy_pass http://auth_server; }
+    location = /api/v1/auth/openapi.json { proxy_pass http://auth_server; }
+
+    # —— 受保护面 ——
+    location /api/v1/auth/ {
+      auth_request /_auth;
+      auth_request_set $auth_user  $upstream_http_x_auth_user_id;
+      auth_request_set $auth_name  $upstream_http_x_auth_username;
+      auth_request_set $auth_role  $upstream_http_x_auth_role;
+      auth_request_set $auth_perms $upstream_http_x_auth_permissions;
+      auth_request_set $auth_trunc $upstream_http_x_auth_permissions_truncated;
+      auth_request_set $auth_exp   $upstream_http_x_auth_exp;
+      auth_request_set $auth_sig   $upstream_http_x_auth_sig;
+
+      proxy_set_header X-Auth-User-Id   $auth_user;
+      proxy_set_header X-Auth-Username  $auth_name;
+      proxy_set_header X-Auth-Role      $auth_role;
+      proxy_set_header X-Auth-Permissions $auth_perms;
+      proxy_set_header X-Auth-Permissions-Truncated $auth_trunc;
+      proxy_set_header X-Auth-Exp       $auth_exp;
+      proxy_set_header X-Auth-Sig       $auth_sig;
+
+      proxy_pass http://auth_server;
+      include /etc/nginx/conf.d/proxy-common.conf;
+    }
+
+    # 鉴权子请求。⚠ auth_request 只能发 GET，故 /verify 是 GET。
+    location = /_auth {
+      internal;
+      proxy_pass http://auth_server/internal/v1/verify;
+      proxy_pass_request_body off;
+      proxy_set_header Content-Length "";
+      proxy_set_header X-Original-URI    $uri;
+      proxy_set_header X-Original-Method $request_method;
+      proxy_set_header X-Service-Key     "${AUTH_EDGE_SERVICE_KEY}";
+      # 全站前置，每个受保护请求过一次，必须快；超时按拒绝处理
+      proxy_connect_timeout 500ms;
+      proxy_read_timeout    500ms;
+    }
+
+    location / {
+      root /usr/share/nginx/html;
+      try_files $uri $uri/ /index.html;
+    }
+  }
+}

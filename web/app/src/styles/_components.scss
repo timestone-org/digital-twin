@@ -1,0 +1,43 @@
+// 跨页面复用的视觉基元：工业网格底纹、扫描线、辉光标题。
+// 单一工具类难以表达、且不止一个消费者的那些才放这里。
+//
+// 卡片外框与四角括号**不在这**：它们是 @dt/ui 的 DtCard，全仓只有那一处定义。
+
+@use 'tokens-bridge' as t;
+
+// ⚠ 整份包进 `@layer components`：不分层的规则在级联里**永远赢过**任何
+// @layer，页面上的工具类会被这些类名压住。放进 components 层后，
+// 工具类（utilities 层在其后）才能就地改写这里的取值。
+@layer components {
+  // 工业网格底纹：用于大面板与舞台背景
+  .dt-grid-bg {
+    background-image:
+      linear-gradient(to right, var(--fx-grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--fx-grid-line) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  // CRT 扫描线叠层。贴在定位容器上，不吃指针。
+  .dt-scanlines {
+    position: relative;
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: var(--z-sticky);
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        var(--fx-scanline) 2px,
+        var(--fx-scanline) 4px
+      );
+    }
+  }
+
+  .dt-glow-text {
+    @include t.glow-text;
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@dt/ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@dt/contracts": "workspace:*",
+    "@dt/tokens": "workspace:*"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "vue-tsc": "^2.2.0",
+    "typescript": "~5.7.2"
+  }
+}

@@ -1,0 +1,65 @@
+/**
+ * Tailwind 入口 + 语义 token 到工具类的桥接。
+ *
+ * ⚠ 这个文件必须是 `.css`，不能并进 index.scss：Sass 会把 `@import 'tailwindcss'`
+ * 当成自己的导入，直接把 node_modules 里那份**静态** CSS 内联进来，
+ * @tailwindcss/vite 于是根本看不到入口，一个工具类都不生成——
+ * 页面全裸，但 build / lint / typecheck **全部照常通过**，只有肉眼能发现。
+ * 这是本仓唯一允许的纯 CSS 文件，见 docs/agents/code-style-typescript.md。
+ *
+ * ⚠ `source(none)` + 显式 `@source`：自动探测的根随 CSS 文件位置和 .git 位置漂移，
+ * 在 monorepo 里会连 server/ 一起扫。写死扫描范围才不会因为挪目录而静默少扫。
+ */
+@import 'tailwindcss' source(none);
+
+@source '../';
+
+/**
+ * `@theme inline` 让工具类直接引用 var(--…)，因此运行时改 :root 上的语义 token
+ * 就能让全部工具类跟着变——这是「换肤」成立的前提。写死取值会让主题切换失效。
+ *
+ * ⚠ 下面的 `inline` 不能去掉。普通 `@theme` 会把键原样写进 :root，而字体与圆角的
+ * 键名和 @dt/tokens 的 token 同名（--font-sans / --radius-md …），写进去就是自引用，
+ * 整条声明作废——字体回落到浏览器默认、圆角变直角，且没有任何报错。
+ */
+@theme inline {
+  --color-surface-base: var(--surface-base);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-panel: var(--surface-panel);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-overlay: var(--surface-overlay);
+
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+  --color-border-hover: var(--border-hover);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-disabled: var(--text-disabled);
+  --color-text-title: var(--text-title);
+  --color-text-inverse: var(--text-inverse);
+
+  --color-accent-primary: var(--accent-primary);
+  --color-accent-secondary: var(--accent-secondary);
+
+  --color-state-success: var(--state-success);
+  --color-state-warning: var(--state-warning);
+  --color-state-danger: var(--state-danger);
+  --color-state-info: var(--state-info);
+
+  --font-display: var(--font-display);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+}
+
+@theme {
+  /* 密集面板需要 11px / 10px 这一档，Tailwind 内置阶最小到 text-xs(12px)。
+     取 rem 而非 px：用户把浏览器基准字号调大时它要跟着放大。 */
+  --text-2xs: 0.6875rem;
+  --text-3xs: 0.625rem;
+}

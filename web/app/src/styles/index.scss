@@ -1,0 +1,14 @@
+// app 全局样式入口（Sass 侧）。
+//
+// ⚠ Tailwind 的入口**不在这里**，在同目录的 tailwind.css：`@import 'tailwindcss'`
+// 一旦写进 .scss，Sass 会抢在 @tailwindcss/vite 之前把它当自己的导入内联掉，
+// 于是一个工具类都不生成。理由与后果写在 tailwind.css 的文件头。
+//
+// ⚠ Tailwind 只在**应用壳**里用：@dt/ui 的组件一律 scoped SCSS + CSS 变量，
+// 那样它才能脱离本应用被复用（Storybook、别的宿主）。规则见
+// docs/agents/project-structure-typescript.md §4.3，由结构闸执行。
+
+@use '@dt/tokens/tokens.scss';
+@use 'base';
+@use 'animations';
+@use 'components';

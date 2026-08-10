@@ -1,0 +1,28 @@
+// app 侧的样式共用件：断点、常用混入。
+// 颜色与尺寸一律来自 @dt/tokens 的 CSS 变量，这里不重复定义任何设计值。
+
+$bp-sm: 640px;
+$bp-lg: 1024px;
+
+/// 媒体查询：至少这么宽。
+/// @param {Length} $min 断点
+@mixin from($min) {
+  @media (min-width: $min) {
+    @content;
+  }
+}
+
+/// 无障碍降级：把常驻动效整条关掉。
+@mixin reduced-motion {
+  @media (prefers-reduced-motion: reduce) {
+    @content;
+  }
+}
+
+/// 标题辉光。
+@mixin glow-text {
+  color: var(--text-title);
+  text-shadow:
+    0 0 8px var(--fx-glow-title),
+    0 0 22px rgba(var(--accent-primary-rgb), 0.15);
+}

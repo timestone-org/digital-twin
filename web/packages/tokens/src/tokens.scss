@@ -1,0 +1,125 @@
+/**
+ * @dt/tokens · tokens.css —— 语义设计 token（深色科技工业大屏）。
+ *
+ * 权威层是本文件的 :root；组件以 scoped 样式直接消费 var()，不依赖 Tailwind，
+ * 保证 @dt/ui 可以脱离 app 独立使用。Tailwind 工具类的桥接在 app 的 theme.css。
+ */
+
+:root {
+  /* —— surface —— */
+  --surface-base: #010d1e;
+  --surface-sunken: rgba(0, 0, 0, 0.25);
+  --surface-panel: rgba(0, 20, 50, 0.4);
+  --surface-raised: rgba(0, 80, 160, 0.15);
+  --surface-overlay: rgba(0, 10, 30, 0.9);
+
+  /* —— border —— */
+  --border-subtle: rgba(0, 206, 252, 0.12);
+  --border-default: rgba(0, 206, 252, 0.18);
+  --border-strong: #2c5a8a;
+  --border-hover: rgba(0, 206, 252, 0.4);
+  --border-focus: var(--accent-primary);
+
+  /* —— text ——
+   * --text-disabled 是三级正文（空态提示 / 单位 / 次要说明），不是禁用控件色：
+   * 那些是要读的内容，不享受 WCAG 对禁用态的豁免，故取到 6.2:1。 */
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --text-disabled: rgba(255, 255, 255, 0.55);
+  --text-title: #daf9ff;
+  --text-title-rgb: 218, 249, 255;
+  --text-inverse: #010d1e;
+  /* 强调实心底上的前景色。本调色板的强调色都是高亮度霓虹色，白字压上去只有
+   * 1.8~3.3:1，故恒为深墨色。 */
+  --text-on-emphasis: #011018;
+
+  /* —— accent —— */
+  --accent-primary: #00cefc;
+  --accent-primary-rgb: 0, 206, 252;
+  --accent-secondary: #45d3fd;
+  --accent-secondary-rgb: 69, 211, 253;
+
+  /* —— state —— */
+  --state-success: #14e144;
+  --state-success-rgb: 20, 225, 68;
+  --state-warning: #ffe400;
+  --state-warning-rgb: 255, 228, 0;
+  --state-danger: #ff4d4f;
+  --state-danger-rgb: 255, 77, 79;
+  --state-info: var(--accent-primary);
+  --state-info-rgb: var(--accent-primary-rgb);
+  --state-idle: #7aa7be;
+  --state-offline: #8a9aa6;
+  --neutral-fg-rgb: 255, 255, 255;
+
+  /* —— fx —— */
+  --fx-glow-title: rgba(0, 206, 252, 0.4);
+  --fx-corner-color: #00deff;
+  --fx-scanline: rgba(0, 0, 0, 0.04);
+  --fx-grid-line: rgba(0, 206, 252, 0.05);
+  --fx-transition: 0.5s ease;
+
+  /* —— radius —— */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+
+  /* —— 控件尺寸轴：@dt/ui 全体表单原语的唯一真源 ——
+   * h 主轴高度（同档必须逐像素相同，一行摆开要齐平）/ fs 字号 / px 横向内边距 /
+   * icon 内嵌图标边长 / r 圆角（md、lg 共用 --radius-md，48px 高再放大会变胶囊）。 */
+  --ctl-h-sm: 32px;
+  --ctl-h-md: 40px;
+  --ctl-h-lg: 48px;
+  --ctl-fs-sm: 12px;
+  --ctl-fs-md: 14px;
+  --ctl-fs-lg: 16px;
+  --ctl-px-sm: 10px;
+  --ctl-px-md: 12px;
+  --ctl-px-lg: 16px;
+  --ctl-btn-px-sm: 12px;
+  --ctl-btn-px-md: 16px;
+  --ctl-btn-px-lg: 24px;
+  --ctl-icon-sm: 14px;
+  --ctl-icon-md: 16px;
+  --ctl-icon-lg: 18px;
+  --ctl-r-sm: var(--radius-sm);
+  --ctl-r-md: var(--radius-md);
+  --ctl-r-lg: var(--radius-md);
+  /* 标签与提示是元信息，比控件内文字小一档 */
+  --ctl-label-fs-sm: 11px;
+  --ctl-label-fs-md: 12px;
+  --ctl-label-fs-lg: 13px;
+  --ctl-hint-fs-sm: 10px;
+  --ctl-hint-fs-md: 11px;
+  --ctl-hint-fs-lg: 12px;
+
+  /* —— 层级标尺：只约束脱离文档流的全局浮层 ——
+   * 组件内部的层叠继续用 1/2/3，那些比的是兄弟节点、不是全局。 */
+  --z-base: 0;
+  --z-sticky: 100;
+  --z-nav: 200;
+  --z-dropdown: 300;
+  --z-tooltip: 400;
+  --z-modal: 500;
+  --z-toast: 600;
+
+  /* —— 卡片复合层（默认引用语义层）—— */
+  --card-bg: var(--surface-panel);
+  --card-border: var(--border-default);
+  --card-border-hover: var(--border-hover);
+  --card-radius: var(--radius-md);
+  --card-corner-color: var(--fx-corner-color);
+  --card-corner-display: block;
+  --card-corner-glow: 5px;
+
+  /* —— 字体族 ——
+   * 库包脱离 app 时字体资源缺席，逐项回退到 PingFang / 雅黑，布局不受影响。 */
+  --font-display:
+    'Chakra Petch', 'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei',
+    system-ui, sans-serif;
+  --font-sans:
+    'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Chakra Petch',
+    system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'JetBrains Mono', monospace;
+}

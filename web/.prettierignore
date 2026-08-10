@@ -1,0 +1,5 @@
+# 构建产物与依赖不参与格式化。根 .gitignore 不在 web/ 下，prettier 默认找不到它。
+node_modules/
+dist/
+coverage/
+pnpm-lock.yaml

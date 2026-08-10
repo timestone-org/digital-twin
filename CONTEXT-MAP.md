@@ -1,0 +1,34 @@
+# 上下文地图
+
+本仓分成若干**上下文**，每个上下文有自己的 `CONTEXT.md`（通用语言、边界、不变量）。
+跨上下文的契约变更**先改文档、再改代码**。
+
+| 上下文 | 位置 | `CONTEXT.md` | 状态 |
+|---|---|---|---|
+| 后端基础设施 | `server/lib/` | `server/lib/README.md` | 已建 |
+| 认证与授权 | `server/services/auth-server/` | [`server/services/auth-server/CONTEXT.md`](server/services/auth-server/CONTEXT.md) | 已建 |
+| 业务平台 | `server/services/platform-server/` | —— | 未建 |
+| 采集运行时 | `server/services/collector-server/` | —— | 未建 |
+| 实时通道 | `server/services/realtime-hub/` | —— | 未建 |
+| AI 助手 | `server/services/ai-assistant/` | —— | 未建 |
+| 前端 | `web/` | [`web/CONTEXT.md`](web/CONTEXT.md) | 已建 |
+| 边缘网关 | `docker/nginx/` | 见 `docker/README.md` | 已建 |
+
+## 全局约定
+
+- 服务划分与部署形态：[`docs/ARCHITECTURE_MICROSERVICES.md`](docs/ARCHITECTURE_MICROSERVICES.md)
+- 对外接口口径：[`docs/agents/api-contract.md`](docs/agents/api-contract.md)
+- 各语言的结构、风格、注释、测试规范：[`docs/agents/`](docs/agents/)
+- 架构决策：[`docs/adr/`](docs/adr/)
+
+## 建设进度
+
+按 [ARCHITECTURE §8](docs/ARCHITECTURE_MICROSERVICES.md#8-建设顺序) 的顺序：
+
+1. ✅ `server/` workspace 骨架（`lib` 的配置、日志、异常、响应、DB、缓存、限流、令牌）
+2. ✅ `auth-server` + `edge-gateway`（匿名被拒 / 带令牌放行 / 权限不足被拒 三条路径已跑通）
+3. ⬜ `platform-server` 的 `api` 角色
+4. ⬜ `realtime-hub` + `platform-publisher`
+5. ⬜ `collector-server`
+6. ⬜ `platform-worker`
+7. ⬜ `ai-assistant`

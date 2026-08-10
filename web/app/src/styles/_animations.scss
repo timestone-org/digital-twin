@@ -1,0 +1,102 @@
+// 入场与氛围动效。
+// 消费侧一律「类名 + 可选的 animation-delay」，不在组件里现写 keyframes：
+// SFC 的 scoped 会给块内 @keyframes 改名加 hash，跨组件复用必然失配。
+
+@use 'tokens-bridge' as t;
+
+// ⚠ 整份包进 `@layer components`：不分层的规则在级联里**永远赢过**任何
+// @layer，页面上的工具类会被这些类名压住。放进 components 层后，
+// 工具类（utilities 层在其后）才能就地改写这里的取值。
+@layer components {
+  @keyframes dt-fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes dt-rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(16px) scale(0.985);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes dt-scan-y {
+    0% {
+      transform: translateY(-120%);
+    }
+
+    100% {
+      transform: translateY(120%);
+    }
+  }
+
+  @keyframes dt-pulse-dot {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 0.72;
+    }
+
+    50% {
+      transform: scale(1.18);
+      opacity: 1;
+    }
+  }
+
+  @keyframes dt-scan-x {
+    0% {
+      transform: translateX(-120%);
+    }
+
+    100% {
+      transform: translateX(420%);
+    }
+  }
+
+  @keyframes dt-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .dt-animate-fade-up {
+    animation: dt-fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .dt-animate-rise-in {
+    animation: dt-rise-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .dt-animate-scan-y {
+    animation: dt-scan-y 5s linear infinite;
+  }
+
+  .dt-animate-pulse-dot {
+    animation: dt-pulse-dot 1.4s ease-in-out infinite;
+  }
+
+  @include t.reduced-motion {
+    // 常驻动效整条关掉：压到 0.001ms 仍可能停在中间态
+    .dt-animate-scan-y,
+    .dt-animate-pulse-dot {
+      animation: none;
+    }
+
+    .dt-animate-fade-up,
+    .dt-animate-rise-in {
+      animation-duration: 0.001ms;
+    }
+  }
+}

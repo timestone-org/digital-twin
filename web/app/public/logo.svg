@@ -1,0 +1,27 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- favicon 用的独立静态件：浏览器渲染 favicon 时读不到页面的 CSS 变量，
+       故这里写死取值，与 @dt/tokens 的语义色一一对应。
+       几何必须与 app/src/components/brand/AppLogo.vue 一致，由契约测试钉住。 -->
+  <rect width="1024" height="1024" rx="224" fill="#010d1e"/>
+  <path d="M512 161C705.852 161 863 262.919 863 388.5C863 514.081 705.852 616 512 616C318.148 616 161 514.081 161 388.5C161 262.919 318.148 161 512 161Z" stroke="#00cefc" stroke-width="26" stroke-linecap="round" stroke-dasharray="16 34"/>
+  <path d="M512 298C679.066 298 814.5 384.559 814.5 491.5C814.5 598.441 679.066 685 512 685C344.934 685 209.5 598.441 209.5 491.5C209.5 384.559 344.934 298 512 298Z" stroke="#45d3fd" stroke-width="18" stroke-linecap="round" stroke-dasharray="12 28"/>
+  <path d="M512 230L735 358.5V615.5L512 744L289 615.5V358.5L512 230Z" fill="rgba(0, 206, 252, 0.1)" stroke="#45d3fd" stroke-width="20"/>
+  <path d="M512 230V744" stroke="#45d3fd" stroke-width="14" stroke-linecap="round"/>
+  <path d="M289 358.5L512 487L735 358.5" stroke="#45d3fd" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M289 615.5L512 487L735 615.5" stroke="rgba(0, 206, 252, 0.55)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M381 409L512 333L643 409V560L512 636L381 560V409Z" fill="rgba(0, 206, 252, 0.16)" stroke="#00cefc" stroke-width="16" stroke-linejoin="round"/>
+  <path d="M512 333V636" stroke="#00cefc" stroke-width="11" stroke-linecap="round"/>
+  <path d="M381 409L512 484L643 409" stroke="#00cefc" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M430 527L512 575L594 527V457L512 410L430 457V527Z" fill="rgba(69, 211, 253, 0.28)" stroke="#daf9ff" stroke-width="10"/>
+  <circle cx="512" cy="230" r="28" fill="#00cefc"/>
+  <circle cx="735" cy="358" r="24" fill="#45d3fd"/>
+  <circle cx="735" cy="616" r="24" fill="#00cefc"/>
+  <circle cx="512" cy="744" r="28" fill="#45d3fd"/>
+  <circle cx="289" cy="616" r="24" fill="#00cefc"/>
+  <circle cx="289" cy="358" r="24" fill="#45d3fd"/>
+  <path d="M169 745L313 661" stroke="#00cefc" stroke-width="18" stroke-linecap="round"/>
+  <path d="M855 745L711 661" stroke="#45d3fd" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="154" cy="754" r="31" fill="#00cefc"/>
+  <circle cx="870" cy="754" r="31" fill="#45d3fd"/>
+  <path d="M410 798H614" stroke="#45d3fd" stroke-width="22" stroke-linecap="round"/>
+</svg>

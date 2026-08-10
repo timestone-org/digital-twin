@@ -1,0 +1,24 @@
+# 依赖与虚拟环境
+.venv/
+node_modules/
+__pycache__/
+*.py[cod]
+
+# 构建产物
+dist/
+coverage/
+coverage.xml
+.coverage
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+.vite/
+
+# ⚠ 密钥不进版本库。模板是 .env.example，那份可以提交。
+.env
+.env.*
+!.env.example
+!.env.template
+
+# 系统
+.DS_Store

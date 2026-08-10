@@ -1,0 +1,53 @@
+# 本地与单机部署编排。
+# ⚠ 共享值（边缘签名密钥、服务级密钥）的回退链必须**每个服务都写全**：
+# 少写一处就是非对称失效——发送端有值、接收端没有，表现为一律 403，
+# 而现象与原因隔得极远。
+
+name: digitaltwin
+
+services:
+  edge-gateway:
+    image: nginx:1.27-alpine
+    depends_on: [auth-server]
+    ports: ['${EDGE_HTTP_PORT:-8080}:80']
+    environment:
+      AUTH_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填：/internal/ 的服务级密钥}
+      NGINX_ENVSUBST_FILTER: '^AUTH_'
+      NGINX_ENVSUBST_OUTPUT_DIR: /etc/nginx
+    volumes:
+      - ./nginx/nginx.conf.template:/etc/nginx/templates/nginx.conf.template:ro
+      - ./nginx/proxy-common.conf:/etc/nginx/conf.d/proxy-common.conf:ro
+      - ../web/app/dist:/usr/share/nginx/html:ro
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1/api/v1/auth/health']
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  auth-server:
+    build:
+      context: ../server
+      dockerfile: services/auth-server/Dockerfile
+    environment:
+      AUTH_APP_ROLE: api
+      AUTH_APP_LOG_FORMAT: json
+      AUTH_POSTGRES_HOST: ${POSTGRES_HOST:?必填}
+      AUTH_POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      AUTH_POSTGRES_USER: ${POSTGRES_USER:?必填}
+      AUTH_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必填}
+      AUTH_POSTGRES_DB: ${POSTGRES_DB:?必填}
+      AUTH_REDIS_HOST: ${REDIS_HOST:?必填}
+      AUTH_REDIS_PORT: ${REDIS_PORT:-6379}
+      AUTH_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?必填：openssl rand -hex 32}
+      AUTH_JWT_PREVIOUS_SECRET: ${AUTH_JWT_PREVIOUS_SECRET:-}
+      AUTH_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
+      AUTH_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
+      AUTH_SIGNUP_ENABLED: ${AUTH_SIGNUP_ENABLED:-false}
+    expose: ['8004']
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8004/api/v1/auth/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped

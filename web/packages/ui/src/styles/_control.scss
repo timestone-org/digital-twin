@@ -1,0 +1,38 @@
+// @dt/ui 表单原语的共用 SCSS 件。
+//
+// 尺寸档的三份声明（sm/md/lg）如果在每个组件里各抄一遍，就会出现「同一档不同高、
+// 不同字号」的静默漂移——那种参差只有把一行控件摆在一起才看得出。这里统一出一个
+// mixin，取值全部来自 @dt/tokens 的 --ctl-* 变量。
+
+@use 'sass:map';
+
+$sizes: sm, md, lg;
+
+/// 主轴高度 + 横向内边距 + 圆角，按档取 --ctl-* 变量。
+/// @param {String} $size 档位名
+/// @param {String} $pad 内边距变量前缀（控件用 px，按钮用 btn-px）
+@mixin control-box($size, $pad: 'px') {
+  height: var(--ctl-h-#{$size});
+  padding: 0 var(--ctl-#{$pad}-#{$size});
+  border-radius: var(--ctl-r-#{$size});
+}
+
+/// 控件内文字字号。挂在文本元素上而不是根上：根还承载前后置插槽。
+@mixin control-font($size) {
+  font-size: var(--ctl-fs-#{$size});
+}
+
+/// 键盘焦点环。只在 :focus-visible 上出现，鼠标点击不打扰。
+@mixin focus-ring($rgb: var(--accent-primary-rgb)) {
+  &:focus-visible {
+    outline: 2px solid rgba($rgb, 0.6);
+    outline-offset: 2px;
+  }
+}
+
+/// 无障碍降级：把常驻动效整条关掉，而不只是把时长压到 0。
+@mixin reduced-motion {
+  @media (prefers-reduced-motion: reduce) {
+    @content;
+  }
+}
