@@ -65,64 +65,50 @@
   }
 
   &__grid {
+    // 轨道宽度的公式里要减去列间距，走变量才不会和 gap 各说各的
+    --dt-card-gap: 12px;
+
     display: grid;
-    gap: 12px;
+    gap: var(--dt-card-gap);
     grid-template-columns: 1fr;
 
-    // 单列以上只在够宽时生效：窄屏铺两列会把每张卡挤到读不了
-    @media (min-width: 640px) {
-      &.is-cols-2 {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-
-      &.is-cols-3 {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
+    // grid 子项的 min-width 默认是 auto：一串不断行的权限码会顶破轨道。
+    // ⚠ 必须 :deep()——自定义卡片是调用方的插槽内容，带的是页面的 scope id
+    > :deep(*) {
+      min-width: 0;
     }
 
-    @media (min-width: 1024px) {
-      &.is-cols-3 {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
-    }
-  }
-
-  &__card-head {
-    min-width: 0;
-  }
-
-  &__card-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-family: var(--font-display);
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-title);
-  }
-
-  &__card-meta {
-    margin-top: 4px;
-    font-size: 11px;
-    color: var(--text-disabled);
-  }
-
-  &__fields {
-    display: grid;
-    gap: 8px 16px;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin: 0;
-
-    dt {
-      margin: 0;
-      font-size: 10px;
-      color: var(--text-disabled);
+    // 列数按**容器**宽度自适应，不用视口断点：这个网格的宽度是内容区
+    // （已扣掉侧栏与内边距），而侧栏可折叠，视口宽度并不代表它能有多宽。
+    //
+    // 轨道下限取「一张卡还读得下去的宽度」与「均分 N 列」的较大者：
+    // 够宽时后者胜出，正好铺满 N 列；窄下去前者胜出，auto-fill 自己少铺一列。
+    // ⚠ 外面那层 min(100%,…) 不能省：容器比 --dt-card-min 还窄时，
+    // 没有它轨道会撑破容器横向溢出。
+    &.is-cols-2 {
+      grid-template-columns: repeat(
+        auto-fill,
+        minmax(
+          min(
+            100%,
+            max(var(--dt-card-min), calc((100% - var(--dt-card-gap)) / 2))
+          ),
+          1fr
+        )
+      );
     }
 
-    dd {
-      margin: 2px 0 0;
-      font-size: 12px;
-      color: var(--text-secondary);
+    &.is-cols-3 {
+      grid-template-columns: repeat(
+        auto-fill,
+        minmax(
+          min(
+            100%,
+            max(var(--dt-card-min), calc((100% - var(--dt-card-gap) * 2) / 3))
+          ),
+          1fr
+        )
+      );
     }
   }
 }
