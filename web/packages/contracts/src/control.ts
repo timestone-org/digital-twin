@@ -82,3 +82,23 @@ export interface DtSelectOption {
   label: string
   disabled?: boolean
 }
+
+/** 单选组的选项。与 `DtSelectOption` 同形但不共用：下拉会长出分组，单选不会。 */
+export interface DtRadioOption {
+  value: string
+  label: string
+  disabled?: boolean
+}
+
+/**
+ * 数字输入的取值域。聚成一个对象而不是四个 prop：
+ * 它们总是一起给，分开写会把 `DtNumberInput` 的 props 数推过上限。
+ */
+export interface DtNumberRange {
+  min?: number
+  max?: number
+  /** 步进按钮与方向键的增减量，缺省 1。 */
+  step?: number
+  /** 落定时保留的小数位；缺省不做定点舍入。 */
+  precision?: number
+}

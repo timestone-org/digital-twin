@@ -56,8 +56,8 @@ function onChange(event: Event): void {
 
   &__box {
     position: relative;
-    width: 16px;
-    height: 16px;
+    width: var(--ctl-box-md);
+    height: var(--ctl-box-md);
     flex-shrink: 0;
     border: 1px solid var(--border-default);
     border-radius: var(--radius-sm);

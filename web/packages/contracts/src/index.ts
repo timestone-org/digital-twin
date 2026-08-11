@@ -28,6 +28,8 @@ export type {
   DtDataColumn,
   DtDataViewMode,
   DtIntent,
+  DtNumberRange,
+  DtRadioOption,
   DtSegmentedOption,
   DtSelectOption,
   DtSize,
