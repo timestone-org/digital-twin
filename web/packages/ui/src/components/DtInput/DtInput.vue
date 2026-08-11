@@ -20,8 +20,10 @@ withDefaults(
     hint?: string
     error?: string
     type?: 'text' | 'password' | 'email' | 'search' | 'tel'
-    size?: DtSize
-    disabled?: boolean
+    // ⚠ 显式 `| undefined`：exactOptionalPropertyTypes 下 withDefaults 不收窄读取端，
+    // 上游组件原样转发自己的 size / disabled 时必然带着 undefined（同 DtField）
+    size?: DtSize | undefined
+    disabled?: boolean | undefined
     required?: boolean
   }>(),
   {

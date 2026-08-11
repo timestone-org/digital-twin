@@ -9,12 +9,15 @@ import type { DtButtonVariant, DtIntent, DtSize } from '@dt/contracts'
 import DtIcon from '../DtIcon/DtIcon.vue'
 
 const props = withDefaults(
+  // ⚠ 转发进来的档位与禁用态显式写出 `| undefined`：开着 exactOptionalPropertyTypes
+  // 时 withDefaults 不收窄读取端的类型，上游组件把自己的 `size` 原样传进来必然带上
+  // undefined，不接就整条 typecheck 红（同 DtField）。
   defineProps<{
     variant?: DtButtonVariant
     intent?: DtIntent
-    size?: DtSize
+    size?: DtSize | undefined
     type?: 'button' | 'submit' | 'reset'
-    disabled?: boolean
+    disabled?: boolean | undefined
     loading?: boolean
     block?: boolean
     icon?: string
