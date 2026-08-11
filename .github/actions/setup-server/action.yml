@@ -1,0 +1,31 @@
+name: 装配后端工作区
+description: 装 uv 与锁定的依赖。全部作业共用一份，避免各写各的版本。
+
+inputs:
+  groups:
+    description: 是否装 dev 依赖组（跑测试与静态检查要，只跑脚本不要）
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: 装 uv
+      uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+      with:
+        version: '0.11.28'
+        # ⚠ act 里关掉缓存：它的 post 步骤（保存缓存）在本地容器里跑不起来，
+        # 而那会把一个全绿的作业报成失败。真实 runner 上照常缓存。
+        enable-cache: ${{ env.ACT != 'true' }}
+        cache-dependency-glob: server/uv.lock
+
+    # ⚠ --frozen：锁文件与 pyproject 不一致时直接失败，而不是悄悄解出另一套版本
+    - name: 装依赖
+      shell: bash
+      working-directory: server
+      run: |
+        if [ "${{ inputs.groups }}" = "true" ]; then
+          uv sync --all-packages --frozen
+        else
+          uv sync --all-packages --frozen --no-dev
+        fi

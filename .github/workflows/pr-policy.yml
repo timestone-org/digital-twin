@@ -1,0 +1,62 @@
+# PR 专用闸门：规模、提交信息、分支命名、锁文件纪律。
+#
+# 这些条目在 push 上没有意义（分支中途的提交本来就可以是碎的），
+# 只在「要合进主干」这一刻才成立，故与主流水线分开。
+#
+# ⚠ 评审质量随 PR 规模断崖式下降：超过几百行之后，评审就从「逐行看」
+# 退化为「看起来没问题」，而那正是缺陷溜进去的方式。
+
+name: PR 规范
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+concurrency:
+  group: pr-policy-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  policy:
+    name: PR 规模与提交约定
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          # 要算 merge-base 与逐条提交信息，浅克隆不够
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-gates
+
+      - name: 检查
+        env:
+          PR_BASE_REF: origin/${{ github.base_ref }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_BRANCH: ${{ github.head_ref }}
+          # 机械化的大范围改动（重命名、格式化、自动生成）在标题里标
+          # `[机械]` 可豁免规模上限，但仍必须单独成 PR
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          uv run --python 3.12 --no-project python scripts/gates/check_pr_policy.py
+
+  # PR 描述必须能回答「为什么改、怎么验的、出问题怎么退」
+  description:
+    name: PR 描述完整性
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - name: 检查必填段落
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          missing=()
+          for section in 动机 验证 风险; do
+            printf '%s' "$BODY" | grep -q "$section" || missing+=("$section")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::PR 描述缺少：${missing[*]}（见 docs/agents/engineering-workflow.md §3.2）"
+            exit 1
+          fi
+          echo 'PR 描述完整'

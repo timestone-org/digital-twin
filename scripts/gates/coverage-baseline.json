@@ -1,0 +1,14 @@
+{
+  "auth-server": {
+    "lines": 85.69,
+    "branches": 51.18
+  },
+  "lib": {
+    "lines": 97.04,
+    "branches": 79.27
+  },
+  "web": {
+    "lines": 98.44,
+    "branches": 93.03
+  }
+}

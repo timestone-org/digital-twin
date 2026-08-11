@@ -14,6 +14,14 @@ htmlcov/
 .ruff_cache/
 .vite/
 
+# CI 在工作区里落的中间产物：闸门读完就丢，不进版本库
+*-coverage.xml
+*-junit.xml
+*-pytest.log
+pyright.json
+pyright.raw
+requirements-audit.txt
+
 # ⚠ 密钥不进版本库。模板是 .env.example，那份可以提交。
 .env
 .env.*

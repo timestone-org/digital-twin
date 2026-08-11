@@ -1,0 +1,33 @@
+# 本地用 act 跑 CI 的默认参数。用法见 scripts/ci-local.sh。
+#
+# ⚠ 镜像必须是带完整工具链的那档：act 默认的 `node:16-buster-slim`
+# 里没有 python3 / jq / docker，闸门会以「命令不存在」失败，
+# 而那与「闸门真的红了」长得一模一样。
+# 流水线跑在自托管运行器上（runs-on: [self-hosted, Linux, X64]），
+# 本地用同档次的镜像顶替这组标签
+-P self-hosted=catthehacker/ubuntu:act-24.04
+-P Linux=catthehacker/ubuntu:act-24.04
+-P X64=catthehacker/ubuntu:act-24.04
+-P ubuntu-24.04=catthehacker/ubuntu:act-24.04
+-P ubuntu-latest=catthehacker/ubuntu:act-24.04
+
+# Apple Silicon 上不指定架构会拉到 arm64 镜像，与 CI 的 amd64 行为不一致
+--container-architecture=linux/amd64
+
+# ⚠ 不开 --reuse：复用容器会让并发作业共用同一个文件系统，一个作业的产物
+# 与失败会串到另一个作业上，报出来的失败作业名与真实的对不上。
+
+# ⚠ Docker Desktop 在 macOS 上并发创建多个作业容器时会偶发
+# 「RWLayer ... unexpectedly nil」——那是宿主的问题，不是流水线红了。
+# 本地串行跑，真实并发交给 GitHub 的 runner。
+--concurrent-jobs=1
+
+# ⚠ act 在 JS action 的 post 步骤里直接 `docker exec node`，用的是它自己
+# 攒出来的 PATH，而不是镜像的默认 PATH——setup-uv 往 PATH 里加过东西之后
+# node 就找不着了，一个全绿的作业会被报成 "Post 装 uv" 失败。
+# 把镜像自带的 node 目录显式补回去。版本随镜像升级要一起改。
+--env=PATH=/opt/acttoolcache/node/24.19.0/x64/bin:/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# ⚠ 保持 act 默认的 host 网络：它把服务容器的端口映射到宿主，作业于是能用
+# `localhost` 访问——与 GitHub 的服务容器完全一致，流水线里不必为本地另写
+# 一套地址。换成用户自定义网络反而要按服务名访问，两边就分叉了。

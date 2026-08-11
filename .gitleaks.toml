@@ -1,0 +1,22 @@
+# 机密扫描配置。默认规则集全开，这里只加一条**窄**豁免。
+#
+# ⚠ 豁免只针对 `generic-api-key` 这一条**启发式**规则，且只在测试目录下：
+# 它是按「像密钥的字符串」猜的，测试夹具里的假口令（`Admin123456`、
+# `EXPIRED_TOKEN`）必然命中。所有**具体**规则——私钥、AWS/GitHub/Slack 令牌、
+# 连接串——在全仓包括测试目录里一律照常拦截，所以「真凭据被写进测试」
+# 这件 testing-standard-python.md §7.4 真正要防的事仍然拦得住。
+
+title = "DigitalTwin"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[rules.allowlist]
+description = "测试夹具里的假凭据不是密钥"
+paths = [
+  '''(^|/)tests/''',
+  '''\.(test|spec|contract\.spec)\.[cm]?tsx?$''',
+]

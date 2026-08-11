@@ -1,0 +1,114 @@
+# 每日定时闸门：太慢、不适合进 PR 阻断路径的那些。
+#
+# testing-standard-*.md §9 把 E2E、可访问性全站扫描、变异测试明确排除在
+# PR 闸门之外——它们的时长会让每个 PR 都等十几分钟，代价大于收益。
+# 放这里的规则是：**失败开 issue，不阻断合并**，但必须有人看。
+
+name: 每日闸门
+
+on:
+  schedule:
+    # 每天 UTC 18:00 = 次日 02:00（业务时区 +8），避开工作时间
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  mutation:
+    name: 变异测试（核心域逻辑）
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: ./.github/actions/setup-server
+
+      # ⚠ 安全铁律：变异流程绝不允许用 git checkout / restore / stash / reset
+      # 还原变异体——工作区常年有未提交改动，那会直接抹掉别人的工作。
+      # mutmut 在自己的临时副本里施加变异，不动工作区。
+      - name: 变异 lib.auth 与 lib.web（覆盖率最高档的那部分）
+        run: |
+          uv run --project server --with mutmut==3.2.1 mutmut run \
+            --paths-to-mutate server/lib/src/lib/auth \
+            --tests-dir server/lib/tests || true
+          uv run --project server --with mutmut==3.2.1 mutmut results
+
+  a11y:
+    name: 可访问性全站扫描
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: ./.github/actions/setup-web
+
+      - name: 构建
+        working-directory: web
+        run: pnpm build
+
+      # ⚠ 对比度要在两个主题下各验一次：只在一个主题下达标是常见的漏网形态
+      - name: axe 扫描
+        working-directory: web
+        run: |
+          if [ ! -d e2e ]; then
+            echo '::notice::还没有 web/e2e/，可访问性扫描待 Playwright 接上'
+            exit 0
+          fi
+          pnpm exec playwright test --config e2e/playwright.config.ts
+
+  images:
+    name: 镜像内容断言
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      # 规则写了不等于生效：镜像内容要被断言，不能靠肉眼（docker-build.md §5）
+      - name: 构建 auth-server 镜像
+        run: |
+          docker build -t auth-server:ci \
+            -f server/services/auth-server/Dockerfile server/
+
+      - name: 镜像里只有这一个服务
+        run: |
+          services=$(docker run --rm auth-server:ci sh -c 'ls /src/services')
+          test "$services" = "auth-server" \
+            || { echo "::error::镜像里还有别的服务：$services"; exit 1; }
+
+      - name: 不以 root 运行
+        run: |
+          test "$(docker run --rm auth-server:ci id -u)" = "10001" \
+            || { echo '::error::镜像以 root 运行'; exit 1; }
+
+      - name: 没有测试代码与重依赖混入
+        run: |
+          docker run --rm auth-server:ci sh -c \
+            'ls /src/.venv/lib/python3.12/site-packages | grep -Ei "sklearn|scikit|matplotlib|torch|pytest"' \
+            && { echo '::error::重依赖或测试依赖进了运行镜像'; exit 1; } || true
+          docker run --rm auth-server:ci sh -c 'find /src -name "*.env" -o -name ".env"' \
+            | grep -q . && { echo '::error::镜像里出现 .env'; exit 1; } || true
+
+      # 没有闸门，镜像只会越来越大
+      - name: 体积上限 400MB
+        run: |
+          size=$(docker image inspect auth-server:ci --format '{{.Size}}')
+          limit=$((400 * 1024 * 1024))
+          echo "镜像 $((size / 1024 / 1024)) MB / $((limit / 1024 / 1024)) MB"
+          test "$size" -le "$limit" || { echo '::error::镜像超出体积上限'; exit 1; }
+
+  report:
+    name: 失败即开 issue
+    if: failure()
+    needs: [mutation, a11y, images]
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: 开 issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "每日闸门失败：$(date -u +%Y-%m-%d)" \
+            --label "kind/bug,priority/p2" \
+            --body "运行：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            每日闸门不阻断合并，但必须有人看——失败留在这里没人处理，
+            等于把它降级成了噪音。"

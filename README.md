@@ -9,11 +9,23 @@
 ## 目录
 
 ```
+.github/       流水线与复合动作
 docs/          规范与架构决策
 server/        后端（uv workspace）：lib / domain / services
 web/           前端（pnpm workspace）：packages / app
 docker/        边缘网关与编排
-scripts/       仓库级闸门脚本
+scripts/       仓库级闸门脚本（scripts/gates/）
+```
+
+## CI
+
+每次 push 与每个 PR 跑五段闸门：秒级检查 → 静态检查 → 测试（真 Postgres + Redis）
+→ 契约与产物 → 汇总。分支保护只需把 `5·全部闸门` 设成必需检查。
+规范条目与闸门的对照见 [`docs/agents/ci-gates.md`](docs/agents/ci-gates.md)。
+
+```bash
+scripts/ci-local.sh --fast    # 只跑闸门脚本，秒级
+scripts/ci-local.sh --all     # 用 act 在容器里跑整条流水线
 ```
 
 ## 当前进度

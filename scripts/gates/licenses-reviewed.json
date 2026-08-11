@@ -1,0 +1,5 @@
+{
+  "npm:lightningcss*": "MPL-2.0：文件级 copyleft，只要不改它的源文件就不传染到本仓；各平台二进制同源，故用通配。",
+  "py:certifi": "MPL-2.0：只是一份 CA 证书数据包，未修改，不传染。",
+  "py:pathspec": "MPL-2.0：文件级 copyleft，作为库原样引用，未修改。"
+}

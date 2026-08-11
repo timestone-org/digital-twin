@@ -59,6 +59,10 @@ TypeScript：tsconfig 开满（含 `noUncheckedIndexedAccess`）；禁 `any`/`!`
 注释只做四件事：文件头 = 这个文件是什么（1–3 行，理由指向文档）；函数 = 一句话 + 参数；常量/行内 = 一个名字，不是一句话；反直觉的坑 = 用到处一行。禁止变更史注释。
 按语言见 `docs/agents/comment-style-python.md` 与 `docs/agents/comment-style-typescript.md`。
 
+### CI gates
+
+规范不是靠记的，是靠红灯守的。五段串行的流水线在 `.github/workflows/ci.yml`（每次 push 与每个 PR 都跑），PR 规模与提交约定在 `pr-policy.yml`，慢闸门（E2E / a11y / 变异 / 镜像断言）在 `nightly.yml`。闸门脚本在 `scripts/gates/`，本地用 `scripts/ci-local.sh` 跑（`--fast` 秒级，其余走 act）。**规范条目 → 作业 → 命令的对照表见 `docs/agents/ci-gates.md`**。闸门自己也被守：`pyright` 的覆盖范围、CI 里的 skip、以及「禁止任何重试」都各有一道自检。
+
 ### Engineering workflow
 
 主干开发，分支 ≤2 天；PR ≤400 行且只碰一个服务，锁文件单独成 PR；迁移/鉴权/并发/对外契约/新增 `type: ignore` 必须逐行评审；**迁移先行且只做扩展步**——代码可回滚、数据库不回滚，故「新结构 + 旧代码」必须可用；镜像 tag 用版本+SHA、**禁 `latest`**；第三方 Action 按 commit SHA 固定；ADR 的四条触发条件见文档。见 `docs/agents/engineering-workflow.md`。

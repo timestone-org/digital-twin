@@ -1,0 +1,419 @@
+# 主流水线。每次 push 与每个 PR 都跑，分五段，前一段绿了才跑后一段。
+#
+# 分段的意义是**反馈时序**：秒级的闸门（机密、结构、注释）先跑，它们红了
+# 就不必再花几分钟装依赖跑测试；慢闸门（测试、构建、供应链）排在后面，
+# 且只在快闸门全绿之后启动。闸门与规范条目的对照见 docs/agents/ci-gates.md。
+#
+# 这份文件不做 CD：产物构建与断言在这里，推送与部署不在。
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# 同一分支的新推送取消上一轮，避免排队堆积
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ============ 第 1 段：秒级闸门 ============
+  secrets:
+    name: 1·机密扫描
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+
+      # 写进版本库的密钥等于泄漏的密钥，而且历史层删不掉——扫全历史
+      - name: gitleaks
+        run: |
+          version=8.28.0
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          ./gitleaks detect --source . --redact --no-banner --exit-code 1
+
+  hygiene:
+    name: 1·仓库卫生
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      # ⚠ 自托管运行器不像 GitHub 托管镜像那样什么都预装好：缺一样就是一条
+      # 与「闸门真的红了」长得一样的失败。先把前提说清楚。
+      - name: 运行器工具自检
+        run: |
+          missing=()
+          for tool in git curl tar docker node; do
+            command -v "$tool" > /dev/null 2>&1 || missing+=("$tool")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::运行器缺少：${missing[*]}（见 docs/agents/ci-gates.md §6）"
+            exit 1
+          fi
+          echo "运行器工具齐全"
+
+      - uses: ./.github/actions/setup-gates
+      - name: 供应链与仓库卫生（Action 按 SHA 固定、禁 latest、锁文件在仓）
+        run: uv run --python 3.12 --no-project python scripts/gates/check_ci_hygiene.py
+
+  structure:
+    name: 1·结构与规范闸
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: ./.github/actions/setup-gates
+
+      # 这一批只读源码、只用标准库，所以排在最前面——它们是最便宜的红灯
+      - name: 后端结构（project-structure-python §7）
+        run: uv run --python 3.12 --no-project python scripts/gates/check_structure_python.py
+      - name: 前端结构（project-structure-typescript §7）
+        run: uv run --python 3.12 --no-project python scripts/gates/check_structure_web.py
+      - name: 前端样式与页面布局
+        run: uv run --python 3.12 --no-project python scripts/gates/check_web_styles.py
+      - name: 前端依赖图（分层与零环）
+        run: uv run --python 3.12 --no-project python scripts/gates/check_web_deps.py
+      - name: Python 规模与压制指令
+        run: uv run --python 3.12 --no-project python scripts/gates/check_python_style.py
+      - name: Python 运行期正确性
+        run: uv run --python 3.12 --no-project python scripts/gates/check_python_runtime.py
+      - name: Python 命名
+        run: uv run --python 3.12 --no-project python scripts/gates/check_python_naming.py
+      - name: TS/Vue 风格
+        run: uv run --python 3.12 --no-project python scripts/gates/check_ts_style.py
+      - name: 注释规范
+        run: uv run --python 3.12 --no-project python scripts/gates/check_comments.py
+      - name: 可观测性（event 字面量、密钥不进日志、liveness 不查依赖）
+        run: uv run --python 3.12 --no-project python scripts/gates/check_logging.py
+      - name: 配置与密钥
+        run: uv run --python 3.12 --no-project python scripts/gates/check_config_secrets.py
+      - name: 数据库迁移
+        run: uv run --python 3.12 --no-project python scripts/gates/check_migrations.py
+      - name: 对外契约（URL 形状、序列化口径、错误码）
+        run: uv run --python 3.12 --no-project python scripts/gates/check_api_contract.py
+      - name: 测试质量（无断言用例、分层、skip）
+        run: uv run --python 3.12 --no-project python scripts/gates/check_tests.py
+
+  # ============ 第 2 段：静态检查 ============
+  server-static:
+    name: 2·后端格式/lint/类型
+    needs: [secrets, hygiene, structure]
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: ./.github/actions/setup-server
+
+      - name: 格式（black，line-length 80）
+        run: uv run --project server black --check --config server/pyproject.toml server scripts
+      - name: Lint（ruff，零告警）
+        run: uv run --project server ruff check --config server/pyproject.toml server scripts
+
+      # 原始输出的切分与逐条报错都在 check_pyright.py 里，这里不依赖 jq
+      - name: 类型（pyright strict）
+        env:
+          # 用运行器自带的 node，免掉 pyright 包装器每次跑都下一个
+          PYRIGHT_PYTHON_GLOBAL_NODE: 'true'
+        run: |
+          (cd server && uv run pyright --outputjson > ../pyright.raw) || true
+          uv run --project server python scripts/gates/check_pyright.py \
+            pyright.raw pyright.json
+
+      # ⚠ pyright 的 include 写错时会「0 errors 但一个源文件都没看」，
+      # 必须单独断言它真的覆盖到了全部源码
+      - name: 类型检查范围自检
+        run: |
+          uv run --project server python scripts/gates/check_typecheck_scope.py \
+            pyright.json
+
+      - name: 闸门脚本自身的类型
+        run: uv run --project server pyright --project scripts
+
+  web-static:
+    name: 2·前端格式/lint/类型
+    needs: [secrets, hygiene, structure]
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: ./.github/actions/setup-web
+
+      - name: 格式（prettier）
+        working-directory: web
+        run: pnpm format:check
+      - name: Lint（eslint --max-warnings=0）
+        working-directory: web
+        run: pnpm lint
+      - name: 类型（vue-tsc）
+        working-directory: web
+        run: pnpm typecheck
+
+  # ============ 第 3 段：测试 ============
+  server-test:
+    name: 3·后端测试与覆盖率
+    needs: [server-static]
+    runs-on: [self-hosted, Linux, X64]
+
+    # ⚠ L2/L3 必须打真实 Postgres：在 SQLite 上全绿的迁移与查询可以在生产上
+    # 直接失败，而这类「测试通过但线上炸」是公网发布最不可接受的失败模式
+    services:
+      postgres:
+        image: timescale/timescaledb:2.17.2-pg16
+        env:
+          POSTGRES_USER: dt
+          POSTGRES_PASSWORD: dt
+          POSTGRES_DB: dt
+        ports: ['55432:5432']
+        options: >-
+          --health-cmd "pg_isready -U dt"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+      redis:
+        image: redis:7.4-alpine
+        ports: ['56379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      # 服务容器的端口映射到 runner 上，所以一律走 localhost——
+      # act 也是这么映射的，两边不需要各写一套地址
+      AUTH_POSTGRES_HOST: localhost
+      AUTH_POSTGRES_PORT: '55432'
+      AUTH_POSTGRES_USER: dt
+      AUTH_POSTGRES_PASSWORD: dt
+      AUTH_POSTGRES_DB: dt
+      AUTH_POSTGRES_SCHEMA: auth
+      AUTH_REDIS_HOST: localhost
+      AUTH_REDIS_PORT: '56379'
+      LIB_TEST_POSTGRES_DSN: postgresql+asyncpg://dt:dt@localhost:55432/dt
+      LIB_TEST_REDIS_URL: redis://localhost:56379/0
+      # 只在 CI 进程里存在的测试用密钥，与任何环境的真实取值无关
+      AUTH_JWT_SECRET: ci-only-jwt-secret-0123456789abcdef
+      AUTH_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
+      AUTH_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
+      # ⚠ 必须与集成用例里写死的口令一致：那几条用例是以种子管理员身份登录的
+      AUTH_SEED_ADMIN_PASSWORD: Admin123456
+
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-server
+
+      # ⚠ 端口通了不等于能用了：GitHub 的服务容器有 health-cmd 守着，act 没有
+      - name: 等依赖就绪
+        run: |
+          uv run --project server python scripts/wait_for_deps.py \
+            "$LIB_TEST_POSTGRES_DSN" "$LIB_TEST_REDIS_URL"
+
+      - name: 建 schema 与种子
+        working-directory: server/services/auth-server
+        run: |
+          uv run alembic upgrade head
+          uv run auth-seed
+
+      # ⚠ --cov 必须用点号模块名：写成路径形式时 coverage 静默跳过、数字虚高
+      - name: lib 单元 + 契约
+        working-directory: server/lib
+        run: |
+          set -o pipefail
+          uv run pytest -q --cov=lib --cov-branch \
+            --cov-report=xml:../../lib-coverage.xml \
+            --junitxml=../../lib-junit.xml 2>&1 | tee ../../lib-pytest.log
+
+      - name: auth-server 全层
+        working-directory: server/services/auth-server
+        run: |
+          set -o pipefail
+          uv run pytest -q --cov=auth_server --cov-branch \
+            --cov-report=xml:../../../auth-coverage.xml \
+            --junitxml=../../../auth-junit.xml 2>&1 | tee ../../../auth-pytest.log
+
+      # CI 里 skip 掉的用例等于没跑：环境能力由服务容器保证，缺了就该红
+      - name: 运行结果自检（无 skip、无外网、覆盖率口径）
+        run: |
+          uv run --project server python scripts/gates/check_pytest_run.py \
+            lib-junit.xml lib-pytest.log
+          uv run --project server python scripts/gates/check_pytest_run.py \
+            auth-junit.xml auth-pytest.log
+
+      # 整体覆盖率不许低于基线——哪怕仍在阈值之上
+      - name: 覆盖率棘轮
+        run: |
+          uv run --project server python scripts/gates/check_coverage.py \
+            lib lib-coverage.xml
+          uv run --project server python scripts/gates/check_coverage.py \
+            auth-server auth-coverage.xml
+
+      - name: 增量覆盖 ≥90%
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          uv run --project server diff-cover lib-coverage.xml auth-coverage.xml \
+            --compare-branch "origin/${{ github.base_ref }}" --fail-under=90
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always() && !env.ACT
+        with:
+          name: server-coverage
+          path: '*-coverage.xml'
+          retention-days: 7
+
+  web-test:
+    name: 3·前端测试与覆盖率
+    needs: [web-static]
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-web
+      - uses: ./.github/actions/setup-server
+
+      # 阈值写在 vitest.config.ts 里，本地与 CI 同一份口径
+      - name: 单元 + 组件 + 契约（含覆盖率阈值）
+        working-directory: web
+        run: pnpm test:coverage
+
+      - name: 覆盖率棘轮
+        run: |
+          uv run --project server python scripts/gates/check_coverage.py \
+            web web/coverage/lcov.info
+
+      - name: 增量覆盖 ≥90%
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          uv run --project server diff-cover web/coverage/lcov.info \
+            --compare-branch "origin/${{ github.base_ref }}" --fail-under=90
+
+  # ============ 第 4 段：契约、构建与供应链 ============
+  contracts:
+    name: 4·契约与迁移可逆性
+    needs: [server-test]
+    runs-on: [self-hosted, Linux, X64]
+    services:
+      postgres:
+        image: timescale/timescaledb:2.17.2-pg16
+        env:
+          POSTGRES_USER: dt
+          POSTGRES_PASSWORD: dt
+          POSTGRES_DB: dt
+        ports: ['55432:5432']
+        options: >-
+          --health-cmd "pg_isready -U dt"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      AUTH_POSTGRES_HOST: localhost
+      AUTH_POSTGRES_PORT: '55432'
+      AUTH_POSTGRES_USER: dt
+      AUTH_POSTGRES_PASSWORD: dt
+      AUTH_POSTGRES_DB: dt
+      AUTH_POSTGRES_SCHEMA: auth
+      AUTH_REDIS_HOST: redis-not-used-in-this-job
+      MIGRATION_DSN: postgresql+asyncpg://dt:dt@localhost:55432/dt
+      AUTH_JWT_SECRET: ci-only-jwt-secret-0123456789abcdef
+      AUTH_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
+      AUTH_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: ./.github/actions/setup-server
+
+      - name: 等依赖就绪
+        run: uv run --project server python scripts/wait_for_deps.py "$MIGRATION_DSN"
+
+      # openapi.json 是前后端之间唯一的类型真源：重新生成必须逐字节一致
+      - name: openapi.json 与代码一致
+        working-directory: server/services/auth-server
+        run: uv run auth-openapi --check
+
+      # ⚠ 代码可以回滚、数据库不回滚，所以每个迁移都必须真的能上能下
+      - name: 迁移 upgrade → downgrade → upgrade
+        working-directory: server/services/auth-server
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+
+  web-build:
+    name: 4·前端构建与包体预算
+    needs: [web-test]
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: ./.github/actions/setup-web
+
+      # ⚠ build 不能省：它是 SFC 里 <style lang="scss"> 的唯一编译者。一段
+      # 花括号不配对的 SCSS 能一路通过 format / lint / typecheck / 全部用例
+      - name: 构建
+        working-directory: web
+        run: pnpm build
+
+      - uses: ./.github/actions/setup-gates
+      - name: 首屏包体预算
+        run: |
+          uv run --python 3.12 --no-project python \
+            scripts/gates/check_bundle_budget.py
+
+  supply-chain:
+    name: 4·依赖漏洞与许可证
+    needs: [server-static, web-static]
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: ./.github/actions/setup-server
+      - uses: ./.github/actions/setup-web
+
+      - name: 许可证（GPL/AGPL 即阻断）
+        run: uv run --project server python scripts/gates/check_licenses.py
+
+      # ⚠ 审的是导出的第三方依赖清单，不是环境：本仓自己的 workspace 成员是
+      # 可编辑安装、也不在 PyPI 上，直接审环境会让 `--strict` 把「查不到自己」
+      # 当成失败，而放弃 `--strict` 又会把真正查不到的第三方包一起放过去。
+      - name: Python 依赖漏洞
+        run: |
+          uv export --project server --no-dev --no-emit-workspace \
+            --format requirements.txt > requirements-audit.txt
+          uv run --project server --with pip-audit==2.9.0 \
+            pip-audit --strict --requirement requirements-audit.txt
+
+      - name: Node 依赖漏洞（高危即阻断）
+        working-directory: web
+        run: pnpm audit --audit-level=high
+
+  # ============ 第 5 段：汇总 ============
+  gate:
+    name: 5·全部闸门
+    if: always()
+    needs:
+      - secrets
+      - hygiene
+      - structure
+      - server-static
+      - web-static
+      - server-test
+      - web-test
+      - contracts
+      - web-build
+      - supply-chain
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      # 只有这个作业需要设成分支保护里的必需检查：任一上游没成功即失败，
+      # 包括被跳过的——跳过的闸门不算通过
+      - name: 汇总
+        run: |
+          printf '%s\n' '${{ toJSON(needs) }}' | tee results.json
+          if grep -qE '"result": *"(failure|cancelled|skipped)"' results.json; then
+            echo '::error::有闸门未通过，见上面的作业'
+            exit 1
+          fi
+          echo '全部闸门通过'
