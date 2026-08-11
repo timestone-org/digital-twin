@@ -82,3 +82,38 @@ export interface DtSelectOption {
   label: string
   disabled?: boolean
 }
+
+/**
+ * 动作菜单的一项。
+ * ⚠ 与 `DtSelectOption` 分开：菜单项是**动作**（可以是危险动作、可以带图标），
+ * 下拉项是**取值**，两者的读屏语义与可长出的字段都不一样。
+ */
+export interface DtMenuItem {
+  value: string
+  label: string
+  /** 已在 DtIcon 注册表登记的名字。 */
+  icon?: string
+  disabled?: boolean
+  /** 删除、停用这类不可逆动作，渲染成危险色。 */
+  danger?: boolean
+}
+
+/** 单选组的选项。与 `DtSelectOption` 同形但不共用：下拉会长出分组，单选不会。 */
+export interface DtRadioOption {
+  value: string
+  label: string
+  disabled?: boolean
+}
+
+/**
+ * 数字输入的取值域。聚成一个对象而不是四个 prop：
+ * 它们总是一起给，分开写会把 `DtNumberInput` 的 props 数推过上限。
+ */
+export interface DtNumberRange {
+  min?: number
+  max?: number
+  /** 步进按钮与方向键的增减量，缺省 1。 */
+  step?: number
+  /** 落定时保留的小数位；缺省不做定点舍入。 */
+  precision?: number
+}

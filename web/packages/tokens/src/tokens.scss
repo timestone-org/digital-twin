@@ -87,6 +87,10 @@
   --ctl-icon-sm: 14px;
   --ctl-icon-md: 16px;
   --ctl-icon-lg: 18px;
+  /* box 是勾选框与单选圆点的边长。两者常并排出现，各写各的会差一圈 */
+  --ctl-box-sm: 14px;
+  --ctl-box-md: 16px;
+  --ctl-box-lg: 18px;
   --ctl-r-sm: var(--radius-sm);
   --ctl-r-md: var(--radius-md);
   --ctl-r-lg: var(--radius-md);
