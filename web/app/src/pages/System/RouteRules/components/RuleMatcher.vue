@@ -1,9 +1,12 @@
 <script setup lang="ts">
 /**
- * @fileoverview 「试一条路径」：自带触发按钮，在弹窗里预演闸 1 的判定。
+ * @fileoverview 「试一条路径」：一个触发按钮加它的弹窗，在弹窗里预演闸 1 的判定。
  *
  * ⚠ 结果是**预演**：真正的判定在 auth-server。它存在的理由是排序错了就是
  * 直接 403，而排序错误只看表是看不出来的——必须能试。
+ *
+ * 根节点就是那颗按钮、不带任何布局容器：它挂在页面顶栏的操作区里，
+ * 由那一行决定间距与对齐。
  */
 import { computed, ref } from 'vue'
 import type { DtSelectOption, RouteRule } from '@dt/contracts'
@@ -44,17 +47,15 @@ const outcome = computed(() => OUTCOME_TEXT[result.value.outcome])
 </script>
 
 <template>
-  <div class="flex">
-    <DtButton
-      variant="outline"
-      intent="neutral"
-      size="sm"
-      icon="route"
-      @click="open = true"
-    >
-      试一条路径
-    </DtButton>
-  </div>
+  <DtButton
+    variant="outline"
+    intent="neutral"
+    size="sm"
+    icon="route"
+    @click="open = true"
+  >
+    试一条路径
+  </DtButton>
 
   <DtModal
     v-model="open"

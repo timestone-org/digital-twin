@@ -183,9 +183,13 @@ async function onLogout(): Promise<void> {
 <style scoped lang="scss">
 @use '@/styles/tokens-bridge' as t;
 
+// 骑在边界上的小圆钮。24px 是 WCAG 2.5.8 给的点击目标下限，不要再往下调；
+// ⚠ right 必须等于 -(尺寸 / 2)，否则它不在分界线上而是偏到一侧
+$toggle-size: 24px;
+
 .nav-toggle {
   position: absolute;
-  right: -16px;
+  right: -$toggle-size * 0.5;
   top: 50%;
   z-index: 1;
   display: inline-flex;
@@ -194,7 +198,10 @@ async function onLogout(): Promise<void> {
   // 挡住身下的分界线，否则边框会从半透明的钮身里透出来
   background: var(--surface-base);
 
+  // 比 sm 档再小一号：它是贴边的辅助控件，按正常按钮的分量做会盖过导航本身
   :deep(.dt-btn) {
+    width: $toggle-size;
+    height: $toggle-size;
     border-radius: var(--radius-pill);
   }
 
