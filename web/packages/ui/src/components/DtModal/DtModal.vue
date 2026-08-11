@@ -129,7 +129,7 @@ onBeforeUnmount(() => {
   &__backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--fx-scrim);
     backdrop-filter: blur(2px);
   }
 
@@ -143,7 +143,7 @@ onBeforeUnmount(() => {
     border: 1px solid var(--border-default);
     border-radius: var(--radius-lg);
     background: var(--surface-overlay);
-    box-shadow: 0 24px 64px -16px rgba(0, 0, 0, 0.7);
+    box-shadow: var(--fx-shadow-modal);
   }
 
   &__head {

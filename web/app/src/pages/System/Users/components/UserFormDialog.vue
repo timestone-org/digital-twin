@@ -22,14 +22,29 @@ const emit = defineEmits<{
   saved: [message: string]
 }>()
 
-const form = ref({
+const BLANK_FORM = {
   username: '',
   email: '',
   password: '',
   full_name: '',
   phone: '',
   role_id: '',
-})
+}
+
+/** 打开时把目标账号铺进表单；新建时留空，角色落在第一个可选项上。 */
+function toForm(user: UserBase | null, fallbackRoleId: string) {
+  if (user === null) return { ...BLANK_FORM, role_id: fallbackRoleId }
+  return {
+    ...BLANK_FORM,
+    username: user.username,
+    email: user.email,
+    full_name: user.full_name ?? '',
+    phone: user.phone ?? '',
+    role_id: user.role.id,
+  }
+}
+
+const form = ref({ ...BLANK_FORM })
 const busy = ref(false)
 const error = ref<string | null>(null)
 
@@ -43,15 +58,7 @@ watch(
   (open) => {
     if (!open) return
     error.value = null
-    const user = props.user
-    form.value = {
-      username: user?.username ?? '',
-      email: user?.email ?? '',
-      password: '',
-      full_name: user?.full_name ?? '',
-      phone: user?.phone ?? '',
-      role_id: user?.role.id ?? props.roles[0]?.id ?? '',
-    }
+    form.value = toForm(props.user, props.roles[0]?.id ?? '')
   },
   // ⚠ immediate：组件在「已经是打开态」时被挂载（深链、或标记与挂载同一 tick）
   // 时，只监听变化的 watch 一次都不会跑，表单会是空的。

@@ -14,3 +14,19 @@ export function formatDateTime(value: string | null, empty = '—'): string {
   if (Number.isNaN(parsed.getTime())) return '—'
   return parsed.toLocaleString('zh-CN', { hour12: false })
 }
+
+/**
+ * 常驻时钟的时分秒。
+ * @param at 要渲染的时刻，缺省取当前
+ */
+export function formatTimeOfDay(at: Date = new Date()): string {
+  return at.toLocaleTimeString('zh-CN', { hour12: false })
+}
+
+/**
+ * 常驻时钟的日期。
+ * @param at 要渲染的时刻，缺省取当前
+ */
+export function formatDate(at: Date = new Date()): string {
+  return at.toLocaleDateString('zh-CN')
+}

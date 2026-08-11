@@ -1,0 +1,81 @@
+// DtSelect 的皮肤。与 SFC 分开只为把单文件压在 300 行内，样式仍随 scoped 编译。
+
+@use '../../styles/control' as ctl;
+
+.dt-select {
+  position: relative;
+  display: flex;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-default);
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+
+  &:focus-within,
+  &.is-open {
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 3px rgba(var(--accent-primary-rgb), 0.18);
+  }
+
+  &--invalid {
+    border-color: var(--state-danger);
+  }
+
+  &--disabled {
+    opacity: 0.5;
+  }
+
+  &__trigger {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border: 0;
+    background: transparent;
+    color: var(--text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &:disabled {
+      cursor: not-allowed;
+    }
+
+    // 焦点环由外框的 :focus-within 给，这里再来一圈会套两层
+    &:focus-visible {
+      outline: none;
+    }
+  }
+
+  &__value {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &.is-placeholder {
+      color: var(--text-disabled);
+    }
+  }
+
+  &__caret {
+    flex-shrink: 0;
+    color: var(--text-disabled);
+  }
+}
+
+@each $size in ctl.$sizes {
+  .dt-select--#{$size} {
+    @include ctl.control-box($size);
+
+    padding: 0;
+  }
+
+  .dt-select--#{$size} .dt-select__trigger {
+    @include ctl.control-font($size);
+
+    padding: 0 var(--ctl-px-#{$size});
+    border-radius: var(--ctl-r-#{$size});
+  }
+}

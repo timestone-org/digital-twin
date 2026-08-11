@@ -10,27 +10,25 @@ import DtField from '../DtField/DtField.vue'
 
 defineOptions({ inheritAttrs: false })
 
+// ⚠ placeholder / name / autocomplete / readonly 刻意不声明成 prop：
+// 它们是原生 input 属性，由下面的 `v-bind="$attrs"` 直接落到 <input> 上。
+// 声明一遍只是把同一件事写两份，还会把 props 数量推过上限。
 withDefaults(
   defineProps<{
     modelValue?: string
     label?: string
     hint?: string
     error?: string
-    placeholder?: string
     type?: 'text' | 'password' | 'email' | 'search' | 'tel'
     size?: DtSize
     disabled?: boolean
-    readonly?: boolean
     required?: boolean
-    name?: string
-    autocomplete?: string
   }>(),
   {
     modelValue: '',
     type: 'text',
     size: DT_CONTROL_DEFAULT_SIZE,
     disabled: false,
-    readonly: false,
     required: false,
   },
 )
@@ -95,13 +93,9 @@ defineExpose({ inputEl: exposed })
           v-bind="$attrs"
           class="dt-input__el"
           :type="type"
-          :name="name"
           :value="modelValue"
-          :placeholder="placeholder"
           :disabled="disabled"
-          :readonly="readonly"
           :required="required"
-          :autocomplete="autocomplete"
           :aria-invalid="invalid || undefined"
           :aria-describedby="describedby"
           @input="onInput"

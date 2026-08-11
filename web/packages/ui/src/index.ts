@@ -3,6 +3,10 @@ export { default as DtCard } from './components/DtCard/DtCard.vue'
 export { default as DtCheckbox } from './components/DtCheckbox/DtCheckbox.vue'
 export { default as DtConfirmHost } from './components/DtConfirmHost/DtConfirmHost.vue'
 export { default as DtDataView } from './components/DtDataView/DtDataView.vue'
+export type {
+  DtDataViewEmpty,
+  DtDataViewLayout,
+} from './components/DtDataView/DtDataView.vue'
 export { default as DtEmpty } from './components/DtEmpty/DtEmpty.vue'
 export { default as DtField } from './components/DtField/DtField.vue'
 export { default as DtIcon } from './components/DtIcon/DtIcon.vue'

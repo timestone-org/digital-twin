@@ -95,3 +95,29 @@ export function resolveOverlayZIndex(from: HTMLElement | null): number {
   }
   return Math.max(DROPDOWN_Z, hostZ + 1)
 }
+
+export interface MenuMeasureInput {
+  root: HTMLElement | null
+  menuHeight: number
+  placement: 'bottom' | 'top'
+}
+
+/**
+ * 量一次触发器并算出浮层的行内样式；root 还没挂上时给空样式。
+ * @param input 触发器所在元素、浮层实测高度、首选方向
+ */
+export function measureMenu(input: MenuMeasureInput): Record<string, string> {
+  const rect = input.root?.getBoundingClientRect()
+  if (rect === undefined) return {}
+  const position = computeMenuPosition({
+    trigger: rect,
+    menuHeight: input.menuHeight,
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+    placement: input.placement,
+  })
+  return {
+    ...position.style,
+    zIndex: String(resolveOverlayZIndex(input.root)),
+  }
+}

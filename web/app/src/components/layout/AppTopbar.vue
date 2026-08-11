@@ -7,6 +7,8 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { DtIcon } from '@dt/ui'
 
+import { formatTimeOfDay } from '@/utils/datetime'
+
 const props = defineProps<{
   title?: string | undefined
   subtitle?: string | undefined
@@ -17,17 +19,13 @@ const props = defineProps<{
 
 const backText = computed(() => props.backLabel ?? '返回')
 
-function readClock(): string {
-  return new Date().toLocaleTimeString('zh-CN', { hour12: false })
-}
-
 // 初值在 setup 里就取：只在 onMounted 里赋值的话时钟位置会空一帧
-const now = ref(readClock())
+const now = ref(formatTimeOfDay())
 let timer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
   timer = setInterval(() => {
-    now.value = readClock()
+    now.value = formatTimeOfDay()
   }, 1000)
 })
 

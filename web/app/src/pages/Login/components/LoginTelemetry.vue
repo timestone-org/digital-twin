@@ -5,6 +5,8 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { DtIcon } from '@dt/ui'
 
+import { formatDate, formatTimeOfDay } from '@/utils/datetime'
+
 /** 装饰性遥测读数（静态质感数据，仅用于氛围）。 */
 const telemetry = [
   { key: 'status', label: 'SYSTEM', value: 'ONLINE', accent: true },
@@ -14,11 +16,7 @@ const telemetry = [
 ]
 
 function readClock(): { time: string; date: string } {
-  const now = new Date()
-  return {
-    time: now.toLocaleTimeString('zh-CN', { hour12: false }),
-    date: now.toLocaleDateString('zh-CN'),
-  }
+  return { time: formatTimeOfDay(), date: formatDate() }
 }
 
 // 初值在 setup 时就算好：只在 onMounted 里赋值会让首帧的时钟位置是空的

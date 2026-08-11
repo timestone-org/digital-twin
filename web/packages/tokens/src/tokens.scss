@@ -58,6 +58,10 @@
   --fx-scanline: rgba(0, 0, 0, 0.04);
   --fx-grid-line: rgba(0, 206, 252, 0.05);
   --fx-transition: 0.5s ease;
+  /* 弹层遮罩与投影：硬编码在组件里换肤时第一个露馅 */
+  --fx-scrim: rgba(0, 0, 0, 0.6);
+  --fx-shadow-modal: 0 24px 64px -16px rgba(0, 0, 0, 0.7);
+  --fx-shadow-menu: 0 12px 32px rgba(0, 0, 0, 0.45);
 
   /* —— radius —— */
   --radius-sm: 4px;

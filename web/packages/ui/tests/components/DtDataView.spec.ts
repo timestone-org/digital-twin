@@ -97,7 +97,7 @@ describe('DtDataView', () => {
   })
 
   it('toggle=false 时不渲染切换器——多块数据共用页面上那一个', () => {
-    const wrapper = render({ toggle: false })
+    const wrapper = render({ layout: { toggle: false } })
     expect(wrapper.find('.dt-segmented').exists()).toBe(false)
   })
 
@@ -155,17 +155,17 @@ describe('DtDataView', () => {
   })
 
   it('空态标题可以按场景改', () => {
-    const wrapper = render({ rows: [], emptyTitle: '还没有账号' })
+    const wrapper = render({ rows: [], empty: { title: '还没有账号' } })
     expect(wrapper.text()).toContain('还没有账号')
   })
 
   it('最小宽度透传给表格', () => {
-    const wrapper = render({ minWidth: '70rem' })
+    const wrapper = render({ layout: { minWidth: '70rem' } })
     expect(wrapper.find('table').attributes('style')).toContain('70rem')
   })
 
   it('卡片列数落到栅格类名上', () => {
-    const wrapper = render({ view: 'card', cardColumns: 3 })
+    const wrapper = render({ view: 'card', layout: { cardColumns: 3 } })
     expect(wrapper.find('.dt-data-view__grid').classes()).toContain('is-cols-3')
   })
 
@@ -188,7 +188,7 @@ describe('DtDataView 高度收敛', () => {
   })
 
   it('铺满开关关掉后按内容高度渲染——一页里若干张小表要的是这个', () => {
-    const wrapper = render({ fill: false })
+    const wrapper = render({ layout: { fill: false } })
     expect(wrapper.find('.dt-data-view').classes()).not.toContain('is-fill')
     expect(wrapper.find('.dt-table__scroll').classes()).not.toContain('is-fill')
   })
@@ -198,7 +198,9 @@ describe('DtDataView 高度收敛', () => {
       'is-fill',
     )
     expect(
-      render({ view: 'card', fill: false }).find('.dt-data-view').classes(),
+      render({ view: 'card', layout: { fill: false } })
+        .find('.dt-data-view')
+        .classes(),
     ).not.toContain('is-fill')
   })
 

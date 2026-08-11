@@ -24,8 +24,8 @@ vi.mock('vue-router', () => ({
  * 列表项的假件。
  *
  * ⚠ 刻意**不带** role_permissions / direct_permissions / permissions：
- * `GET /users` 真的不返回它们。假件比真接口宽松，是这一页曾经整页崩掉却
- * 测试全绿的原因——凡是列表项都必须照这个形状造。
+ * `GET /users` 真的不返回它们。假件比真接口宽松时，页面读一个后端不返回的
+ * 字段会全绿通过、运行时崩在渲染里——凡是列表项都必须照这个形状造。
  */
 function listItem(over: Record<string, unknown> = {}) {
   return {

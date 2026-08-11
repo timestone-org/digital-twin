@@ -31,21 +31,40 @@ const emit = defineEmits<{
   saved: [message: string]
 }>()
 
-const form = ref<{
+interface RuleForm {
   path_pattern: string
   http_method: HttpMethod
   match_mode: MatchMode
+  /** 表单里是字符串，提交时才转数字——输入框中间态不该被强转成 NaN。 */
   priority: string
   is_enabled: boolean
   description: string
-}>({
+}
+
+const BLANK_FORM: RuleForm = {
   path_pattern: '/api/v1/',
   http_method: 'GET',
   match_mode: 'all',
   priority: '500',
   is_enabled: true,
   description: '',
-})
+}
+
+/** 打开时把目标规则铺进表单；新建时用默认值。 */
+function toForm(rule: RouteRule | null): RuleForm {
+  if (rule === null) return { ...BLANK_FORM }
+  return {
+    ...BLANK_FORM,
+    path_pattern: rule.path_pattern,
+    http_method: rule.http_method,
+    match_mode: rule.match_mode,
+    priority: String(rule.priority),
+    is_enabled: rule.is_enabled,
+    description: rule.description ?? '',
+  }
+}
+
+const form = ref<RuleForm>({ ...BLANK_FORM })
 const selected = ref<Set<string>>(new Set())
 const busy = ref(false)
 const error = ref<string | null>(null)
@@ -57,16 +76,8 @@ watch(
   async (open) => {
     if (!open) return
     error.value = null
-    const rule = props.rule
-    form.value = {
-      path_pattern: rule?.path_pattern ?? '/api/v1/',
-      http_method: rule?.http_method ?? 'GET',
-      match_mode: rule?.match_mode ?? 'all',
-      priority: String(rule?.priority ?? 500),
-      is_enabled: rule?.is_enabled ?? true,
-      description: rule?.description ?? '',
-    }
-    selected.value = new Set(rule?.permission_codes ?? [])
+    form.value = toForm(props.rule)
+    selected.value = new Set(props.rule?.permission_codes ?? [])
     await catalog.ensure()
     error.value = catalog.error.value
   },

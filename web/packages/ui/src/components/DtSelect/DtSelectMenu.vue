@@ -11,16 +11,21 @@ import { nextTick, ref, watch } from 'vue'
 import type { DtSelectOption } from '@dt/contracts'
 import DtIcon from '../DtIcon/DtIcon.vue'
 
+/** 搜索这件事的四个取值：要不要、当前词、占位、无结果时的文案。 */
+export interface DtSelectMenuSearch {
+  enabled: boolean
+  query: string
+  placeholder: string
+  emptyText: string
+}
+
 const props = defineProps<{
   id: string
   options: readonly DtSelectOption[]
   selected: string
   activeIndex: number
   style: Record<string, string>
-  searchable: boolean
-  query: string
-  searchPlaceholder: string | undefined
-  emptyText: string | undefined
+  search: DtSelectMenuSearch
   labelledby: string | undefined
   /** teleport 目标。见 DtSelect 里挑目标的理由。 */
   to: string | HTMLElement
@@ -34,7 +39,7 @@ const emit = defineEmits<{
 }>()
 
 const el = ref<HTMLElement | null>(null)
-const search = ref<HTMLInputElement | null>(null)
+const searchEl = ref<HTMLInputElement | null>(null)
 
 /** 键盘移动高亮时把它滚进可视区；`nearest` 保证不会整页跳。 */
 function scrollActiveIntoView(): void {
@@ -44,7 +49,7 @@ function scrollActiveIntoView(): void {
 }
 
 function focusSearch(): void {
-  search.value?.focus()
+  searchEl.value?.focus()
 }
 
 watch(
@@ -60,15 +65,15 @@ defineExpose({ el, focusSearch, scrollActiveIntoView })
 <template>
   <Teleport :to="to">
     <div ref="el" class="dt-select-menu" :style="style">
-      <div v-if="searchable" class="dt-select-menu__search">
+      <div v-if="search.enabled" class="dt-select-menu__search">
         <DtIcon name="search" :size="13" />
         <input
-          ref="search"
+          ref="searchEl"
           class="dt-select-menu__input"
           type="text"
           autocomplete="off"
-          :placeholder="searchPlaceholder"
-          :value="query"
+          :placeholder="search.placeholder"
+          :value="search.query"
           :aria-controls="id"
           :aria-activedescendant="
             activeIndex >= 0 ? `${id}-o${activeIndex}` : undefined
@@ -115,7 +120,7 @@ defineExpose({ el, focusSearch, scrollActiveIntoView })
           />
         </li>
         <li v-if="options.length === 0" class="dt-select-menu__empty">
-          {{ emptyText }}
+          {{ search.emptyText }}
         </li>
       </ul>
     </div>
@@ -131,7 +136,7 @@ defineExpose({ el, focusSearch, scrollActiveIntoView })
   background: var(--surface-overlay);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+  box-shadow: var(--fx-shadow-menu);
   backdrop-filter: blur(6px);
 
   &__search {

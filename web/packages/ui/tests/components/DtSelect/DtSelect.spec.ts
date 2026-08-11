@@ -59,7 +59,7 @@ afterEach(() => {
 
 describe('DtSelect 触发器', () => {
   it('没有选中时显示 placeholder', () => {
-    render({ placeholder: '全部角色' })
+    render({ display: { placeholder: '全部角色' } })
     expect(trigger()?.textContent).toContain('全部角色')
   })
 
@@ -69,7 +69,7 @@ describe('DtSelect 触发器', () => {
   })
 
   it('取值不在选项里时回落 placeholder，不显示裸取值', () => {
-    render({ modelValue: 'ghost', placeholder: '请选择' })
+    render({ modelValue: 'ghost', display: { placeholder: '请选择' } })
     expect(trigger()?.textContent).toContain('请选择')
     expect(trigger()?.textContent).not.toContain('ghost')
   })
@@ -259,13 +259,13 @@ describe('DtSelect 搜索', () => {
   })
 
   it('searchable 可以强制打开或关掉自动判断', async () => {
-    const forced = render({ searchable: true })
+    const forced = render({ display: { searchable: true } })
     await forced.get('.dt-select__trigger').trigger('click')
     expect(document.querySelector('.dt-select-menu__input')).not.toBeNull()
     forced.unmount()
     document.body.innerHTML = ''
 
-    const off = render({ options: MANY, searchable: false })
+    const off = render({ options: MANY, display: { searchable: false } })
     await off.get('.dt-select__trigger').trigger('click')
     expect(document.querySelector('.dt-select-menu__input')).toBeNull()
   })
@@ -298,8 +298,7 @@ describe('DtSelect 搜索', () => {
 
   it('emptyText 与 searchPlaceholder 可定制', async () => {
     await openWithQuery('nope', {
-      emptyText: '没有这个角色',
-      searchPlaceholder: '搜角色',
+      display: { emptyText: '没有这个角色', searchPlaceholder: '搜角色' },
     })
     expect(document.body.textContent).toContain('没有这个角色')
     expect(

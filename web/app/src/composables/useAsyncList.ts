@@ -10,6 +10,7 @@ import type { Page } from '@dt/contracts'
 import type { DtPaginationState } from '@dt/ui'
 
 import { BizError, TransportError } from '@/api/client'
+import { useRacedFetch } from '@/composables/useRacedFetch'
 
 /** 把后端与网络错误归一成一句能给用户看的话。 */
 export function describeError(caught: unknown): string {
@@ -53,47 +54,25 @@ export function useAsyncList<TItem>(
   const error = ref<string | null>(null)
   const page = ref(1)
   const size = ref(initialSize)
-
-  let sequence = 0
+  const raced = useRacedFetch()
 
   async function reload(): Promise<void> {
-    const mine = ++sequence
     loading.value = true
     error.value = null
-    try {
-      const result = await fetcher({ page: page.value, size: size.value })
-      // 已经有更新的请求发出去了，这一份结果直接丢弃
-      if (mine !== sequence) return
-      items.value = result.items
-      total.value = result.total
-    } catch (caught) {
-      if (mine !== sequence) return
-      error.value = describeError(caught)
-      items.value = []
-      total.value = 0
-    } finally {
-      if (mine === sequence) loading.value = false
-    }
-  }
-
-  async function goToPage(next: number): Promise<void> {
-    if (next === page.value) return
-    page.value = next
-    await reload()
-  }
-
-  async function setSize(next: number): Promise<void> {
-    if (next === size.value) return
-    size.value = next
-    // ⚠ 必须回第一页：在第 9 页把每页条数从 10 改成 100，原来的页码会落到
-    // 一个空页上，用户看到的是「数据没了」。
-    page.value = 1
-    await reload()
-  }
-
-  async function reloadFromFirstPage(): Promise<void> {
-    page.value = 1
-    await reload()
+    const task = (): Promise<Page<TItem>> =>
+      fetcher({ page: page.value, size: size.value })
+    await raced.run(task, {
+      ok: ({ items: rows, total: count }) => {
+        items.value = rows
+        total.value = count
+      },
+      fail: (caught) => {
+        error.value = describeError(caught)
+        items.value = []
+        total.value = 0
+      },
+      settled: () => (loading.value = false),
+    })
   }
 
   const pager = computed<DtPaginationState>(() => ({
@@ -101,16 +80,35 @@ export function useAsyncList<TItem>(
     size: size.value,
     total: total.value,
   }))
+  const state = { items, total, loading, error, pager }
+  return { ...state, reload, ...pageActions({ page, size, reload }) }
+}
 
+interface PagingRefs {
+  page: Ref<number>
+  size: Ref<number>
+  reload: () => Promise<void>
+}
+
+/** 三个翻页动作。它们只改页码与页大小，取数一律交回 `reload`。 */
+function pageActions(refs: PagingRefs) {
   return {
-    items,
-    total,
-    loading,
-    error,
-    pager,
-    reload,
-    goToPage,
-    setSize,
-    reloadFromFirstPage,
+    goToPage: async (next: number): Promise<void> => {
+      if (next === refs.page.value) return
+      refs.page.value = next
+      await refs.reload()
+    },
+    // ⚠ 改每页条数必须回第一页：在第 9 页把每页条数从 10 改成 100，原来的
+    // 页码会落到一个空页上，用户看到的是「数据没了」。
+    setSize: async (next: number): Promise<void> => {
+      if (next === refs.size.value) return
+      refs.size.value = next
+      refs.page.value = 1
+      await refs.reload()
+    },
+    reloadFromFirstPage: async (): Promise<void> => {
+      refs.page.value = 1
+      await refs.reload()
+    },
   }
 }

@@ -11,20 +11,13 @@
  */
 import { computed, onMounted, ref } from 'vue'
 import type {
-  DtDataColumn,
   DtSegmentedOption,
   PermissionCatalog,
   PermissionKind,
 } from '@dt/contracts'
-import {
-  DtCard,
-  DtDataView,
-  DtIcon,
-  DtInput,
-  DtPageState,
-  DtSegmented,
-  DtTag,
-} from '@dt/ui'
+import { DtIcon, DtInput, DtPageState, DtSegmented } from '@dt/ui'
+
+import PermissionGroupCard from './components/PermissionGroupCard.vue'
 
 import { fetchPermissionCatalog } from '@/api/auth'
 import { AppShell } from '@/components/layout'
@@ -32,14 +25,6 @@ import { describeError } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
 import { useAuthStore } from '@/stores/auth'
 import SystemTabs from '../components/SystemTabs.vue'
-
-const COLUMNS: readonly DtDataColumn[] = [
-  { key: 'name', label: '名称', width: '14rem', card: 'title' },
-  { key: 'code', label: '权限码', width: '14rem', card: 'meta' },
-  { key: 'kind', label: '档位', width: '8rem' },
-  { key: 'held', label: '我是否持有', width: '8rem' },
-  { key: 'description', label: '说明' },
-]
 
 const VIEW_OPTIONS: readonly DtSegmentedOption[] = [
   { value: 'table', label: '表格视图', icon: 'table', iconOnly: true },
@@ -134,47 +119,15 @@ onMounted(() => {
         <!-- ⚠ 这一页是「若干个分组各一张小表」，滚动归这一层，
              每张小表都按内容高度渲染（fill=false），否则它们会互相抢高度 -->
         <div class="flex h-full min-h-0 flex-col gap-5 overflow-y-auto pr-1">
-          <DtCard
+          <PermissionGroupCard
             v-for="group in groups"
             :key="group.code"
             :title="group.label"
-            :subtitle="`${group.items.length} 个码`"
-            padding="sm"
-          >
-            <DtDataView
-              :columns="COLUMNS"
-              :rows="group.items"
-              :view="view"
-              :toggle="false"
-              :fill="false"
-              min-width="48rem"
-              :card-columns="3"
-            >
-              <template #cell-name="{ row }">{{ row.name }}</template>
-
-              <template #cell-code="{ row }">
-                <code class="text-accent-secondary">{{ row.code }}</code>
-              </template>
-
-              <template #cell-kind="{ row }">
-                <div class="flex items-center gap-1.5">
-                  <DtTag :intent="KIND_META[row.kind].intent">
-                    {{ KIND_META[row.kind].label }}
-                  </DtTag>
-                  <DtTag v-if="row.is_builtin">内置</DtTag>
-                </div>
-              </template>
-
-              <template #cell-held="{ row }">
-                <DtTag v-if="held.has(row.code)" intent="success">持有</DtTag>
-                <span v-else>—</span>
-              </template>
-
-              <template #cell-description="{ row }">
-                {{ row.description || '—' }}
-              </template>
-            </DtDataView>
-          </DtCard>
+            :items="group.items"
+            :view="view"
+            :held="held"
+            :kind-meta="KIND_META"
+          />
         </div>
       </DtPageState>
     </div>

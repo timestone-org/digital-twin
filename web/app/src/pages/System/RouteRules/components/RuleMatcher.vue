@@ -71,7 +71,7 @@ const outcome = computed(() => OUTCOME_TEXT[result.value.outcome])
           class="w-32"
           label="方法"
           :options="METHOD_OPTIONS"
-          :searchable="false"
+          :display="{ searchable: false }"
         />
         <DtInput
           v-model="path"
