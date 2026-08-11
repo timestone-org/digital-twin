@@ -7,7 +7,7 @@
 |---|---|---|---|
 | 后端基础设施 | `server/lib/` | `server/lib/README.md` | 已建 |
 | 认证与授权 | `server/services/auth-server/` | [`server/services/auth-server/CONTEXT.md`](server/services/auth-server/CONTEXT.md) | 已建 |
-| 业务平台 | `server/services/platform-server/` | —— | 未建 |
+| 业务平台 | `server/services/platform-server/` | [`server/services/platform-server/CONTEXT.md`](server/services/platform-server/CONTEXT.md) | 已建（`api` 角色） |
 | 采集运行时 | `server/services/collector-server/` | —— | 未建 |
 | 实时通道 | `server/services/realtime-hub/` | —— | 未建 |
 | AI 助手 | `server/services/ai-assistant/` | —— | 未建 |
@@ -27,7 +27,7 @@
 
 1. ✅ `server/` workspace 骨架（`lib` 的配置、日志、异常、响应、DB、缓存、限流、令牌）
 2. ✅ `auth-server` + `edge-gateway`（匿名被拒 / 带令牌放行 / 权限不足被拒 三条路径已跑通）
-3. ⬜ `platform-server` 的 `api` 角色
+3. ✅ `platform-server` 的 `api` 角色（`apps/hvac`：空调台账与车间房间空间配置）
 4. ⬜ `realtime-hub` + `platform-publisher`
 5. ⬜ `collector-server`
 6. ⬜ `platform-worker`
