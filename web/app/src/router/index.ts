@@ -31,6 +31,24 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '个人资料' },
   },
   {
+    path: '/hvac/units',
+    name: 'hvac-units',
+    component: () => import('@/pages/Hvac/Units/index.vue'),
+    meta: {
+      title: '空调台账',
+      permissions: [PERMISSION_CODES.acView],
+    },
+  },
+  {
+    path: '/hvac/spaces',
+    name: 'hvac-spaces',
+    component: () => import('@/pages/Hvac/Spaces/index.vue'),
+    meta: {
+      title: '空间配置',
+      permissions: [PERMISSION_CODES.acView],
+    },
+  },
+  {
     path: '/system/users',
     name: 'system-users',
     component: () => import('@/pages/System/Users/index.vue'),
