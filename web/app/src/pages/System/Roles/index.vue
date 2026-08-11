@@ -2,12 +2,13 @@
 /**
  * @fileoverview 角色管理：列表、建改删、覆盖式设置角色权限。
  *
- * ⚠ 内置角色的**名称与权限集不可改**（描述仍可改），由后端拦；界面据
- * `is_builtin` 隐藏对应入口，而不是硬编码角色名——种子改名不该让界面失灵。
+ * ⚠ 内置角色的**名称与权限集不可改**（描述仍可改），由后端拦。界面不因此
+ * 抽掉入口——权限入口对所有角色都在，只是内置角色打开的是只读视图，并给出
+ * 「以此为模板新建」这条出路；判定一律据 `is_builtin` 而不是硬编码角色名。
  *
  * 默认卡片视图：角色数量少、每个都带一串权限码，铺开比挤在单元格里好读。
  */
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import type { DtDataColumn, RoleSummary } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import { DtButton, DtDataView, DtTag, useConfirm, useToast } from '@dt/ui'
@@ -17,9 +18,17 @@ import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
 import { describeError, useAsyncList } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
+import { useAuthStore } from '@/stores/auth'
+import CodeChips from '../components/CodeChips.vue'
+import { sortCodes } from '../components/codes'
 import SystemTabs from '../components/SystemTabs.vue'
+import { suggestCloneName } from './cloneName'
+import type { RoleFormTask } from './roleFormTask'
+import RoleCard from './components/RoleCard.vue'
+import RoleCodesViewDialog from './components/RoleCodesViewDialog.vue'
 import RoleFormDialog from './components/RoleFormDialog.vue'
 import RolePermissionsDialog from './components/RolePermissionsDialog.vue'
+import RoleRowActions from './components/RoleRowActions.vue'
 
 const COLUMNS: readonly DtDataColumn[] = [
   { key: 'name', label: '角色', width: '12rem', card: 'title' },
@@ -30,29 +39,48 @@ const COLUMNS: readonly DtDataColumn[] = [
     key: 'actions',
     label: '操作',
     align: 'right',
-    width: '9rem',
+    width: '11rem',
     card: 'actions',
   },
 ]
 
 const toast = useToast()
 const confirm = useConfirm()
+const auth = useAuthStore()
 
 const view = useViewMode('system-roles', 'card')
 const list = useAsyncList<RoleSummary>((query) => admin.listRoles(query))
 
-const editing = ref<RoleSummary | null>(null)
-const formOpen = ref(false)
-const permDialogFor = ref<RoleSummary | null>(null)
+const formTask = ref<RoleFormTask | null>(null)
+const codesFor = ref<RoleSummary | null>(null)
+
+const existingNames = computed(() => list.items.value.map((row) => row.name))
+
+/** 导航级闸，与 PermGuard 同一口径；能不能授予永远由后端说了算。 */
+const codesEditable = computed(
+  () =>
+    codesFor.value !== null &&
+    !codesFor.value.is_builtin &&
+    auth.can([PERMISSION_CODES.roleManage]),
+)
 
 function openCreate(): void {
-  editing.value = null
-  formOpen.value = true
+  formTask.value = { mode: 'create', name: '', description: '', codes: [] }
 }
 
 function openEdit(role: RoleSummary): void {
-  editing.value = role
-  formOpen.value = true
+  formTask.value = { mode: 'edit', role }
+}
+
+/** 克隆 = 带种子的新建，不是第三种表单形态。 */
+function openClone(role: RoleSummary): void {
+  formTask.value = {
+    mode: 'create',
+    name: suggestCloneName(role.name, existingNames.value),
+    description: role.description ?? '',
+    codes: role.permissions,
+    seededFrom: role.name,
+  }
 }
 
 async function afterWrite(message: string): Promise<void> {
@@ -104,12 +132,22 @@ onMounted(() => {
         :loading="list.loading.value"
         :error="list.error.value"
         :pagination="list.pager.value"
-        :layout="{ minWidth: '52rem' }"
+        :layout="{ minWidth: '52rem', cardColumns: 3, cardMinWidth: '20rem' }"
         @update:page="list.goToPage"
         @update:size="list.setSize"
         @retry="list.reload()"
       >
         <template #summary>共 {{ list.total.value }} 个角色</template>
+
+        <template #card="{ row }">
+          <RoleCard
+            :role="row"
+            @codes="codesFor = $event"
+            @clone="openClone($event)"
+            @edit="openEdit($event)"
+            @remove="removeRole($event)"
+          />
+        </template>
 
         <template #cell-name="{ row }">
           <span class="truncate">{{ row.name }}</span>
@@ -121,63 +159,40 @@ onMounted(() => {
         </template>
 
         <template #cell-permissions="{ row }">
-          <div class="flex flex-wrap gap-1.5">
-            <DtTag v-for="code in row.permissions" :key="code" mono>
-              {{ code }}
-            </DtTag>
-            <span v-if="row.permissions.length === 0">没有任何权限码</span>
-          </div>
+          <CodeChips
+            :codes="sortCodes(row.permissions)"
+            empty="尚未配置权限码"
+          />
         </template>
 
         <template #cell-users="{ row }">{{ row.user_count }}</template>
 
         <template #cell-actions="{ row }">
-          <div class="flex items-center justify-end gap-1">
-            <PermGuard :codes="[PERMISSION_CODES.roleManage]">
-              <DtButton
-                variant="ghost"
-                intent="neutral"
-                size="sm"
-                icon="pencil"
-                aria-label="编辑角色"
-                title="编辑角色"
-                @click="openEdit(row)"
-              />
-              <DtButton
-                v-if="!row.is_builtin"
-                variant="ghost"
-                intent="neutral"
-                size="sm"
-                icon="list-checks"
-                aria-label="设置权限"
-                title="设置权限"
-                @click="permDialogFor = row"
-              />
-              <DtButton
-                v-if="!row.is_builtin"
-                variant="ghost"
-                intent="danger"
-                size="sm"
-                icon="trash"
-                aria-label="删除角色"
-                title="删除角色"
-                @click="removeRole(row)"
-              />
-            </PermGuard>
-          </div>
+          <RoleRowActions
+            :role="row"
+            @codes="codesFor = $event"
+            @clone="openClone($event)"
+            @edit="openEdit($event)"
+            @remove="removeRole($event)"
+          />
         </template>
       </DtDataView>
     </div>
 
     <RoleFormDialog
-      v-model="formOpen"
-      :role="editing"
+      :task="formTask"
+      @close="formTask = null"
       @saved="afterWrite($event)"
     />
     <RolePermissionsDialog
-      :role="permDialogFor"
-      @close="permDialogFor = null"
+      :role="codesEditable ? codesFor : null"
+      @close="codesFor = null"
       @saved="afterWrite($event)"
+    />
+    <RoleCodesViewDialog
+      :role="codesEditable ? null : codesFor"
+      @close="codesFor = null"
+      @clone="openClone($event)"
     />
   </AppShell>
 </template>
