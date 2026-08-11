@@ -2,7 +2,12 @@ packages:
   - 'packages/*'
   - 'app'
 
-# esbuild 与 vue-demi 的安装脚本是它们正常工作的前提，显式放行
+# 安装脚本必须逐个表态：没表态的包在干净检出上会让 `--frozen-lockfile` 直接
+# 失败（ERR_PNPM_IGNORED_BUILDS），而本地因为决定被缓存着，一切照常。
 allowBuilds:
+  # esbuild 与 vue-demi 的安装脚本是它们正常工作的前提，显式放行
   esbuild: true
   vue-demi: true
+  # ⚠ @parcel/watcher 只是 sass-embedded 的文件监听后端，编不出原生模块时
+  # 自动退回轮询。CI 不需要它，编译它反而多一段跑在安装期的任意代码。
+  '@parcel/watcher': false

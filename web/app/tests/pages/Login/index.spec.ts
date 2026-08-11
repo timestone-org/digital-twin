@@ -4,7 +4,7 @@
  */
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { ERROR_CODES } from '@dt/contracts'
 
 import { BizError, TransportError } from '@/api/client'
@@ -34,8 +34,7 @@ async function fillAndSubmit(
   await inputs[0]?.setValue(username)
   await inputs[1]?.setValue(password)
   await wrapper.find('form').trigger('submit')
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  await wrapper.vm.$nextTick()
+  await flushPromises()
 }
 
 beforeEach(() => {
@@ -122,8 +121,15 @@ describe('登录页', () => {
 
   it('大写锁定开启时给出提示', async () => {
     const wrapper = mountPage()
-    const input = wrapper.findAll('input')[0]
-    await input?.trigger('keyup', { getModifierState: () => true })
+    const input = wrapper.findAll('input')[0]?.element
+    expect(input).toBeDefined()
+    // ⚠ 不能靠 `trigger('keyup', { getModifierState })` 传：VTU 是把选项
+    // Object.assign 到事件上的，而 getModifierState 是原型上的只读方法，
+    // 赋值静默失败、组件永远读到 false。只能自己造事件并定义这个属性。
+    const event = new KeyboardEvent('keyup', { key: 'a' })
+    Object.defineProperty(event, 'getModifierState', { value: () => true })
+    input?.dispatchEvent(event)
+    await flushPromises()
     expect(wrapper.text()).toContain('大写锁定已开启')
   })
 
