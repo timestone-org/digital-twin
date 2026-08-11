@@ -126,7 +126,7 @@ access + refresh 两枚，刷新一次即**轮换两枚**，旧刷新令牌进�
 ```bash
 cd server/services/auth-server
 uv run alembic upgrade head     # 建表
-uv run auth-seed                # 写权限码、内置角色、路由规则、种子账号
+uv run python -m scripts.seed   # 写权限码、内置角色、路由规则、种子账号
 uv run auth-server              # 起服务（默认 8004）
 uv run pytest -q                # 全量测试
 ```

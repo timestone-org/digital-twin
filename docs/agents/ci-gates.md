@@ -72,7 +72,7 @@ E2E、a11y、变异测试不进 PR 闸门是 `testing-standard-*.md` §9 的明�
 | 规范 | 闸门 |
 |---|---|
 | api-contract §1 URL 形状、§5.2 分页上限、§6 序列化口径、§4.1 错误码 | `check_api_contract.py`（读提交进仓的 `openapi.json`） |
-| 同 §9 openapi 与代码逐字节一致 | `contracts` 作业的 `auth-openapi --check` |
+| 同 §9 openapi 与代码逐字节一致 | `contracts` 作业的 `python -m scripts.export_openapi --check`（每个服务各一次） |
 | database-standard §5 扩展—收缩、lock_timeout、禁回填/改名/改类型 | `check_migrations.py` |
 | 同 §5.5 可逆性 | `contracts` 作业的 `upgrade → downgrade → upgrade` |
 

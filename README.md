@@ -54,7 +54,7 @@ cp .env.example .env
 ```bash
 cd server/services/auth-server
 uv run alembic upgrade head   # 建 auth schema 与全部表
-uv run auth-seed              # 权限码目录、内置角色、内置路由规则、种子管理员
+uv run python -m scripts.seed # 权限码目录、内置角色、内置路由规则、种子管理员
 ```
 
 种子只建**一个**管理员账号，密码取自 `AUTH_SEED_ADMIN_PASSWORD`；

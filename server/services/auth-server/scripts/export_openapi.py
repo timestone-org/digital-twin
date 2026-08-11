@@ -53,7 +53,8 @@ def main() -> None:
         current = OUTPUT.read_text(encoding="utf-8") if OUTPUT.exists() else ""
         if current != text:
             sys.stderr.write(
-                "openapi.json 与代码不一致，请运行 uv run auth-openapi 后提交\n"
+                "openapi.json 与代码不一致，"
+                "请运行 uv run python -m scripts.export_openapi 后提交\n"
             )
             raise SystemExit(1)
         sys.stdout.write("openapi.json 一致\n")
