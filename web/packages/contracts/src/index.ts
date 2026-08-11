@@ -23,6 +23,16 @@ export type {
 } from './admin'
 export { HTTP_METHODS, MATCH_MODES } from './admin'
 export type {
+  AcUnit,
+  AcUnitFilters,
+  AcUnitRelocateResult,
+  Room,
+  RoomRef,
+  Workshop,
+  WorkshopRef,
+} from './hvac'
+export { AC_UNIT_RELOCATE_MAX } from './hvac'
+export type {
   DtButtonVariant,
   DtDataCardRole,
   DtDataColumn,

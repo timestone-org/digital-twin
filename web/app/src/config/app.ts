@@ -5,6 +5,9 @@
 /** auth-server 的对外前缀，与 server/services/auth-server 的 API_PREFIX 同值。 */
 export const AUTH_BASE_URL = '/api/v1/auth'
 
+/** platform-server 的对外前缀，与该服务的 API_PREFIX 同值。 */
+export const PLATFORM_BASE_URL = '/api/v1/platform'
+
 export const appConfig = {
   name: '数字孪生平台',
   shortName: 'DIGITAL TWIN',

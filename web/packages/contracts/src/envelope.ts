@@ -30,7 +30,8 @@ export const SUCCESS_CODE = 0
 
 /**
  * 已发布的错误码。**按码分支，不要按 message 分支**——文案会改、会翻译。
- * 分段十进制 `<4|5><领域两位><序号两位>`，领域 00 通用、01 认证与授权。
+ * 分段十进制 `<4|5><领域两位><序号两位>`，领域 00 通用、01 认证与授权、
+ * 16 空调与空间。
  */
 export const ERROR_CODES = {
   validationFailed: 40001,
@@ -50,6 +51,14 @@ export const ERROR_CODES = {
   builtinImmutable: 40110,
   tooManyLoginAttempts: 40111,
   signupDisabled: 40112,
+  workshopNotFound: 41601,
+  roomNotFound: 41602,
+  acUnitNotFound: 41603,
+  workshopNameTaken: 41604,
+  roomNameTaken: 41605,
+  acUnitSerialTaken: 41606,
+  workshopNotEmpty: 41607,
+  roomNotEmpty: 41608,
   internal: 50000,
   dependencyUnavailable: 50001,
 } as const

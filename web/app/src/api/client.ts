@@ -57,13 +57,20 @@ export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | undefined
   body?: unknown
   query?: Record<string, string | number | boolean | undefined> | undefined
+  /**
+   * 后端服务前缀，缺省打 auth-server。
+   * ⚠ 取值只从 `config/app.ts` 的常量里来，不在调用处拼字符串——前缀是边缘的
+   * 路由键，写歪一个字符会被反代兜底成前端静态资源，拿到的是一段 HTML。
+   */
+  baseUrl?: string | undefined
   /** 跳过令牌注入与 401 重试（登录、刷新自己走这条）。 */
   anonymous?: boolean | undefined
   signal?: AbortSignal | undefined
 }
 
-function buildUrl(path: string, query?: RequestOptions['query']): string {
-  const url = `${AUTH_BASE_URL}${path}`
+function buildUrl(path: string, options: RequestOptions): string {
+  const { query } = options
+  const url = `${options.baseUrl ?? AUTH_BASE_URL}${path}`
   if (!query) return url
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(query)) {
@@ -122,7 +129,7 @@ async function send(path: string, options: RequestOptions): Promise<Response> {
     ? AbortSignal.any([options.signal, timeout])
     : timeout
   try {
-    return await fetch(buildUrl(path, options.query), {
+    return await fetch(buildUrl(path, options), {
       method: options.method ?? 'GET',
       headers,
       body: options.body === undefined ? null : JSON.stringify(options.body),
