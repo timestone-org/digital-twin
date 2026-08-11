@@ -26,7 +26,7 @@ jobs:
     name: 1·机密扫描
     runs-on: [self-hosted, Linux, X64]
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
@@ -42,7 +42,7 @@ jobs:
     name: 1·仓库卫生
     runs-on: [self-hosted, Linux, X64]
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # ⚠ 自托管运行器不像 GitHub 托管镜像那样什么都预装好：缺一样就是一条
       # 与「闸门真的红了」长得一样的失败。先把前提说清楚。
@@ -66,7 +66,7 @@ jobs:
     name: 1·结构与规范闸
     runs-on: [self-hosted, Linux, X64]
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup-gates
 
       # 这一批只读源码、只用标准库，所以排在最前面——它们是最便宜的红灯
@@ -105,7 +105,7 @@ jobs:
     needs: [secrets, hygiene, structure]
     runs-on: [self-hosted, Linux, X64]
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup-server
 
       - name: 格式（black，line-length 80）
@@ -138,7 +138,7 @@ jobs:
     needs: [secrets, hygiene, structure]
     runs-on: [self-hosted, Linux, X64]
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup-web
 
       - name: 格式（prettier）
@@ -202,7 +202,7 @@ jobs:
       AUTH_SEED_ADMIN_PASSWORD: Admin123456
 
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup-server
@@ -259,7 +259,7 @@ jobs:
           uv run --project server diff-cover lib-coverage.xml auth-coverage.xml \
             --compare-branch "origin/${{ github.base_ref }}" --fail-under=90
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always() && !env.ACT
         with:
           name: server-coverage
@@ -271,7 +271,7 @@ jobs:
     needs: [web-static]
     runs-on: [self-hosted, Linux, X64]
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup-web
@@ -325,7 +325,7 @@ jobs:
       AUTH_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
       AUTH_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup-server
 
       - name: 等依赖就绪
@@ -349,7 +349,7 @@ jobs:
     needs: [web-test]
     runs-on: [self-hosted, Linux, X64]
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup-web
 
       # ⚠ build 不能省：它是 SFC 里 <style lang="scss"> 的唯一编译者。一段
@@ -369,7 +369,7 @@ jobs:
     needs: [server-static, web-static]
     runs-on: [self-hosted, Linux, X64]
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup-server
       - uses: ./.github/actions/setup-web
 

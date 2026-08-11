@@ -21,7 +21,7 @@ jobs:
     name: 变异测试（核心域逻辑）
     runs-on: [self-hosted, Linux, X64]
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup-server
 
       # ⚠ 安全铁律：变异流程绝不允许用 git checkout / restore / stash / reset
@@ -38,7 +38,7 @@ jobs:
     name: 可访问性全站扫描
     runs-on: [self-hosted, Linux, X64]
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup-web
 
       - name: 构建
@@ -59,7 +59,7 @@ jobs:
     name: 镜像内容断言
     runs-on: [self-hosted, Linux, X64]
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # 规则写了不等于生效：镜像内容要被断言，不能靠肉眼（docker-build.md §5）
       - name: 构建 auth-server 镜像
@@ -100,7 +100,7 @@ jobs:
     needs: [mutation, a11y, images]
     runs-on: [self-hosted, Linux, X64]
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: 开 issue
         env:
           GH_TOKEN: ${{ github.token }}

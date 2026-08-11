@@ -8,10 +8,11 @@ runs:
     # 而闸门脚本用了 3.12 的语法（`type` 别名、`X | Y` 形式的 isinstance）。
     # GitHub 托管镜像上它恰好是 3.12，于是这类差异只会在自托管上炸。
     - name: 装 uv
-      uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+      uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9
       with:
         version: '0.11.28'
-        enable-cache: ${{ env.ACT != 'true' }}
+        # 理由同 setup-server：常驻运行器上这层缓存只会解压失败
+        enable-cache: false
 
     - name: 备一个 3.12
       shell: bash

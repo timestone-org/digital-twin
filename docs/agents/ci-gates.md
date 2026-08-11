@@ -181,6 +181,40 @@ GitHub 托管镜像那样什么都预装好**，缺一样就是一条与「闸�
    端口冲突会让服务容器起不来，而报错停在「连不上数据库」这一层。
 3. **不依赖 `jq`。** pyright 原始输出的切分与逐条报错都在 `check_pyright.py` 里。
 
-⚠ 运行器上的工作区**不是每次都干净的**：`actions/checkout` 默认会
-`git clean -ffdx`，因此 `node_modules/` 与 `.venv/` 每轮都会被清掉。
-setup-uv 与 setup-node 的缓存就是为这件事存在的，别关。
+⚠ **Actions 缓存一律关掉**（`enable-cache: false`，setup-node 不带 `cache:`）。
+`actions/checkout` 默认 `git clean -ffdx`，每轮会清掉工作区里的 `node_modules/`
+与 `.venv/`；但真正省时间的是**工作区之外**的 `~/.cache/uv` 与 pnpm store，
+它们在常驻运行器上本来就留在盘上，装依赖照样是从本地硬链。再叠一层 Actions
+缓存只会把归档解到已经存在的文件上——tar 报 `Cannot open: File exists`
+并以退出码 2 结束，每轮留一条红字警告，而它一点也没加速。
+
+⚠ **服务容器的镜像拉取受运行器 Docker 的 registry mirror 影响**。
+`Docker pull failed with exit code 1, back off … before retry` 这条警告的来源是
+宿主 `/etc/docker/daemon.json` 里配的镜像源超时（runner 会自动重试，所以只是
+警告不是失败）。它**修不到仓库里**——换掉不稳的 mirror 或直连 Docker Hub
+才是解，见 §7。
+
+---
+
+## 7. 那条 docker pull 警告怎么根治
+
+```
+Docker pull failed with exit code 1, back off 1.743 seconds before retry.
+Error response from daemon: Head "https://docker.m.daocloud.io/v2/library/redis/…":
+  net/http: request canceled (Client.Timeout exceeded while awaiting headers)
+```
+
+runner 的 Docker 配了 `docker.m.daocloud.io` 作镜像源，它偶发超时。GitHub 的
+runner 会自动重试并成功，所以是**警告不是失败**——但每次起服务容器都赌一次。
+
+在**运行器宿主**上处理，仓库里改不到：
+
+```bash
+# 看当前配的是哪个源
+sudo cat /etc/docker/daemon.json
+# 换成可靠的源，或直接删掉 registry-mirrors 直连 Docker Hub
+sudo systemctl restart docker
+```
+
+⚠ 别用「预先 `docker pull` 好」来绕：镜像已在本地时 Docker 仍会向 registry 发
+一次 HEAD 查摘要，超时的正是这一步。
