@@ -204,8 +204,14 @@ Error response from daemon: Head "https://docker.m.daocloud.io/v2/library/redis/
   net/http: request canceled (Client.Timeout exceeded while awaiting headers)
 ```
 
-runner 的 Docker 配了 `docker.m.daocloud.io` 作镜像源，它偶发超时。GitHub 的
-runner 会自动重试并成功，所以是**警告不是失败**——但每次起服务容器都赌一次。
+runner 的 Docker 配了 `docker.m.daocloud.io` 作镜像源，它偶发超时。runner 会
+自动重试并成功，所以是**警告不是失败**——但每次起服务容器都赌一次，而输的那次
+很贵：实测同一个作业，快的时候 `Initialize containers` 3 秒，慢的时候
+**952 秒**（后端测试作业因此从 4m58s 变成 18m25s，其中真正跑测试只有 17 秒）。
+
+⚠ 镜像**已经在本地**也躲不掉：日志里明明是 `Status: Image is up to date`，
+那 952 秒仍然花在 `docker pull` 上——Docker 要先向 registry 查一次摘要确认
+本地这份是不是最新，卡住的正是这一步。所以「预先 pull 好」不是解。
 
 在**运行器宿主**上处理，仓库里改不到：
 
@@ -215,6 +221,3 @@ sudo cat /etc/docker/daemon.json
 # 换成可靠的源，或直接删掉 registry-mirrors 直连 Docker Hub
 sudo systemctl restart docker
 ```
-
-⚠ 别用「预先 `docker pull` 好」来绕：镜像已在本地时 Docker 仍会向 registry 发
-一次 HEAD 查摘要，超时的正是这一步。
