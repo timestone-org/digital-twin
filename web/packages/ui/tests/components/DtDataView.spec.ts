@@ -1,8 +1,9 @@
 /**
  * @fileoverview DtDataView 的行为契约。
  *
- * 最要紧的一条：**两种视图必须用同一套单元格插槽**。这个组件存在的全部理由
- * 就是不让表格和卡片各写一份渲染；那条契约破了，它就只是多了一层包装。
+ * 最要紧的一条：**没给 `card` 插槽时两种视图必须用同一套单元格插槽**。这个组件
+ * 存在的全部理由就是不让表格和卡片各写一份渲染；那条契约破了，它就只是多了一层
+ * 包装。给了 `card` 才由调用方接管卡片，那条路也要钉住插槽名与载荷。
  * 另两条：高度收敛（铺满外层、内部滚动）与分页器只在拿到分页信息时出现。
  */
 import { flushPromises, mount } from '@vue/test-utils'
@@ -169,6 +170,21 @@ describe('DtDataView', () => {
     expect(wrapper.find('.dt-data-view__grid').classes()).toContain('is-cols-3')
   })
 
+  // 降列的阈值是 CSS 变量喂进去的；prop 名写错不会报错，只会静默用回默认值
+  it('卡片最小宽度落到栅格的 --dt-card-min 上', () => {
+    const wrapper = render({ view: 'card', layout: { cardMinWidth: '22rem' } })
+    expect(wrapper.find('.dt-data-view__grid').attributes('style')).toContain(
+      '--dt-card-min: 22rem',
+    )
+  })
+
+  it('没给最小宽度时也有默认值，栅格不会拿到 undefined', () => {
+    const wrapper = render({ view: 'card' })
+    expect(wrapper.find('.dt-data-view__grid').attributes('style')).toContain(
+      '--dt-card-min: 18rem',
+    )
+  })
+
   it('排序事件原样透传给调用方', async () => {
     const wrapper = render({
       columns: [{ key: 'name', label: '名称', sortable: true }],
@@ -176,6 +192,81 @@ describe('DtDataView', () => {
     await wrapper.find('th button').trigger('click')
     expect(wrapper.emitted('update:sort')).toEqual([
       [{ key: 'name', desc: false }],
+    ])
+  })
+})
+
+describe('DtDataView 自定义卡片插槽', () => {
+  const CARD = '<article class="c-card">{{ params.row.name }}</article>'
+
+  function renderCard(props: Record<string, unknown> = {}) {
+    return mount(DtDataView, {
+      props: { columns: COLUMNS, rows: ROWS, view: 'card', ...props },
+      slots: { ...SLOTS, card: CARD },
+      attachTo: document.body,
+    })
+  }
+
+  it('给了 card 插槽就整张卡交给调用方渲染', () => {
+    const wrapper = renderCard()
+    expect(wrapper.findAll('.c-card').map((n) => n.text())).toEqual([
+      '甲',
+      '乙',
+    ])
+  })
+
+  it('给了 card 插槽就不再渲染内置卡的字段表——两张卡不会同时出现', () => {
+    const wrapper = renderCard()
+    expect(wrapper.find('dl').exists()).toBe(false)
+    expect(wrapper.find('dt').exists()).toBe(false)
+  })
+
+  it('card 插槽拿到行数据与页内序号', () => {
+    const wrapper = mount(DtDataView, {
+      props: { columns: COLUMNS, rows: ROWS, view: 'card' },
+      slots: {
+        ...SLOTS,
+        card: '<article class="c-card">{{ params.row.id }}:{{ params.index }}</article>',
+      },
+    })
+    expect(wrapper.findAll('.c-card').map((n) => n.text())).toEqual([
+      'a:0',
+      'b:1',
+    ])
+  })
+
+  it('表格视图下 card 插槽不渲染——它只是卡片视图的一张卡', () => {
+    const wrapper = renderCard({ view: 'table' })
+    expect(wrapper.find('.c-card').exists()).toBe(false)
+    expect(wrapper.find('table').exists()).toBe(true)
+  })
+
+  it('card 与 cell-* 同时给时，表格视图照旧走 cell-*', () => {
+    const wrapper = renderCard({ view: 'table' })
+    expect(wrapper.findAll('.c-name').map((n) => n.text())).toEqual([
+      '甲',
+      '乙',
+    ])
+    expect(wrapper.findAll('.c-note').map((n) => n.text())).toEqual([
+      '第一条',
+      '第二条',
+    ])
+  })
+
+  it('card 插槽仍在网格与三态之内：空列表给空态而不是空网格', () => {
+    const wrapper = renderCard({ rows: [] })
+    expect(wrapper.find('.c-card').exists()).toBe(false)
+    expect(wrapper.text()).toContain('暂无数据')
+  })
+
+  it('没给 card 插槽就走内置卡片，既有行为逐字不变', () => {
+    const wrapper = render({ view: 'card' })
+    expect(wrapper.find('.c-card').exists()).toBe(false)
+    expect(wrapper.findAll('.dt-data-view__fields').length).toBe(2)
+    expect(wrapper.findAll('dt').map((n) => n.text())).toEqual(['备注', '备注'])
+    expect(wrapper.findAll('.c-name').map((n) => n.text())).toEqual([
+      '甲',
+      '乙',
     ])
   })
 })

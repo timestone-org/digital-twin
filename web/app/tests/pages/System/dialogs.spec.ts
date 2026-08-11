@@ -6,6 +6,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { PermissionCatalog, RoleSummary } from '@dt/contracts'
+import type { RoleFormTask } from '@/pages/System/Roles/roleFormTask'
 
 import * as admin from '@/api/admin'
 import * as authApi from '@/api/auth'
@@ -65,6 +66,18 @@ function role(over: Partial<RoleSummary> = {}): RoleSummary {
     user_count: 0,
     ...over,
   }
+}
+
+/** 编辑形态的表单任务。 */
+function editTask(over: Partial<RoleSummary> = {}): RoleFormTask {
+  return { mode: 'edit', role: role(over) }
+}
+
+/** 新建形态的表单任务，`codes` 非空即克隆。 */
+function createTask(
+  over: Partial<Extract<RoleFormTask, { mode: 'create' }>> = {},
+): RoleFormTask {
+  return { mode: 'create', name: '', description: '', codes: [], ...over }
 }
 
 /**
@@ -259,8 +272,19 @@ describe('ResetPasswordDialog', () => {
 })
 
 describe('RoleFormDialog', () => {
+  function save(): HTMLButtonElement | undefined {
+    return [...document.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('保存'),
+    )
+  }
+
+  /** 权限码复选框；第 0 个是 user:view，第 1 个是 user:grant。 */
+  function codeBoxes(): NodeListOf<HTMLInputElement> {
+    return document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')
+  }
+
   it('内置角色的名称输入框被禁用', async () => {
-    mount(RoleFormDialog, { props: { modelValue: true, role: role() } })
+    mount(RoleFormDialog, { props: { task: editTask() } })
     await flushPromises()
     expect(document.querySelectorAll('input:disabled').length).toBe(1)
     expect(bodyText()).toContain('内置角色的名称与权限集由种子维护')
@@ -268,12 +292,9 @@ describe('RoleFormDialog', () => {
 
   it('内置角色只提交描述，不下发必被拒的 name', async () => {
     const update = vi.spyOn(admin, 'updateRole').mockResolvedValue(role())
-    mount(RoleFormDialog, { props: { modelValue: true, role: role() } })
+    mount(RoleFormDialog, { props: { task: editTask() } })
     await flushPromises()
-    const save = [...document.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('保存'),
-    )
-    save?.click()
+    save()?.click()
     await flushPromises()
     expect(update).toHaveBeenCalledWith('r1', { description: '只读' })
   })
@@ -281,21 +302,165 @@ describe('RoleFormDialog', () => {
   it('自建角色可以改名', async () => {
     const update = vi.spyOn(admin, 'updateRole').mockResolvedValue(role())
     mount(RoleFormDialog, {
-      props: {
-        modelValue: true,
-        role: role({ is_builtin: false, name: 'ops' }),
-      },
+      props: { task: editTask({ is_builtin: false, name: 'ops' }) },
     })
     await flushPromises()
-    const save = [...document.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('保存'),
-    )
-    save?.click()
+    save()?.click()
     await flushPromises()
     expect(update).toHaveBeenCalledWith('r1', {
       name: 'ops',
       description: '只读',
     })
+  })
+
+  it('挂载时就是打开态也要填好表单——只监听变化的 watch 一次都不跑', async () => {
+    mount(RoleFormDialog, {
+      props: { task: editTask({ is_builtin: false, name: 'ops' }) },
+    })
+    await flushPromises()
+    const name = document.querySelectorAll('input')[0] as HTMLInputElement
+    expect(name.value).toBe('ops')
+  })
+
+  it('新建形态渲染权限码选择段，勾上的码排序后进载荷', async () => {
+    const create = vi.spyOn(admin, 'createRole').mockResolvedValue(role())
+    mount(RoleFormDialog, { props: { task: createTask({ name: 'ops' }) } })
+    await flushPromises()
+    expect(bodyText()).toContain('权限码')
+    // 先勾 user:grant 再勾 user:view：不排序的话载荷会是插入序
+    codeBoxes()[1]?.click()
+    await flushPromises()
+    codeBoxes()[0]?.click()
+    await flushPromises()
+    save()?.click()
+    await flushPromises()
+    expect(create).toHaveBeenCalledWith({
+      name: 'ops',
+      description: undefined,
+      codes: ['user:grant', 'user:view'],
+    })
+  })
+
+  it('「全不选」把已勾的码清空，且勾之前它是禁用的', async () => {
+    mount(RoleFormDialog, { props: { task: createTask({ name: 'ops' }) } })
+    await flushPromises()
+    const clear = (): HTMLButtonElement | undefined =>
+      [...document.querySelectorAll('button')].find(
+        (node) => node.textContent?.trim() === '全不选',
+      )
+    expect(clear()?.disabled).toBe(true)
+    codeBoxes()[0]?.click()
+    await flushPromises()
+    expect(bodyText()).toContain('已选 1 项')
+    clear()?.click()
+    await flushPromises()
+    expect(bodyText()).toContain('已选 0 项')
+    expect([...codeBoxes()].every((box) => !box.checked)).toBe(true)
+  })
+
+  it('编辑形态一个码都不渲染，载荷里也没有 codes', async () => {
+    const update = vi.spyOn(admin, 'updateRole').mockResolvedValue(role())
+    mount(RoleFormDialog, {
+      props: { task: editTask({ is_builtin: false, name: 'ops' }) },
+    })
+    await flushPromises()
+    expect(codeBoxes().length).toBe(0)
+    expect(bodyText()).not.toContain('已选')
+    save()?.click()
+    await flushPromises()
+    expect(update).toHaveBeenCalledWith('r1', {
+      name: 'ops',
+      description: '只读',
+    })
+  })
+
+  it('克隆形态预填好勾选，且不与源角色共用同一个数组', async () => {
+    const source = role({ permissions: ['user:view'] })
+    mount(RoleFormDialog, {
+      props: {
+        task: createTask({
+          name: 'viewer_copy',
+          codes: source.permissions,
+          seededFrom: 'viewer',
+        }),
+      },
+    })
+    await flushPromises()
+    expect(bodyText()).toContain('已预填 1 个来自「viewer」的权限码')
+    expect(codeBoxes()[0]?.checked).toBe(true)
+    // 取消勾选不许反写回列表数据
+    codeBoxes()[0]?.click()
+    await flushPromises()
+    expect(source.permissions).toEqual(['user:view'])
+  })
+
+  it('授予被拒时原样显示原因，弹窗不关、已勾的码还在', async () => {
+    vi.spyOn(admin, 'createRole').mockRejectedValue(
+      new BizError(40107, '不能授予自己不具备的权限：role:manage', 403, 't'),
+    )
+    mount(RoleFormDialog, { props: { task: createTask({ name: 'ops' }) } })
+    await flushPromises()
+    codeBoxes()[0]?.click()
+    await flushPromises()
+    save()?.click()
+    await flushPromises()
+    expect(bodyText()).toContain('不能授予自己不具备的权限：role:manage')
+    expect(bodyText()).toContain('新建角色')
+    expect(codeBoxes()[0]?.checked).toBe(true)
+  })
+
+  it('角色名已被占用照样原样显示——本地的 _copy 后缀不是校验', async () => {
+    vi.spyOn(admin, 'createRole').mockRejectedValue(
+      new BizError(40004, '角色名已被占用', 409, 't'),
+    )
+    mount(RoleFormDialog, {
+      props: { task: createTask({ name: 'viewer_copy' }) },
+    })
+    await flushPromises()
+    save()?.click()
+    await flushPromises()
+    expect(bodyText()).toContain('角色名已被占用')
+  })
+
+  it('目录取不到时新建禁用保存，点了也不发请求', async () => {
+    __resetPermissionCatalog()
+    vi.spyOn(authApi, 'fetchPermissionCatalog').mockRejectedValue(
+      new BizError(50000, '目录服务不可用', 500, 't'),
+    )
+    const create = vi.spyOn(admin, 'createRole').mockResolvedValue(role())
+    mount(RoleFormDialog, { props: { task: createTask({ name: 'ops' }) } })
+    await flushPromises()
+    expect(save()?.disabled).toBe(true)
+    save()?.click()
+    await flushPromises()
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('目录取不到不影响编辑形态', async () => {
+    __resetPermissionCatalog()
+    vi.spyOn(authApi, 'fetchPermissionCatalog').mockRejectedValue(
+      new BizError(50000, '目录服务不可用', 500, 't'),
+    )
+    const update = vi.spyOn(admin, 'updateRole').mockResolvedValue(role())
+    mount(RoleFormDialog, { props: { task: editTask() } })
+    await flushPromises()
+    expect(save()?.disabled).toBe(false)
+    save()?.click()
+    await flushPromises()
+    expect(update).toHaveBeenCalled()
+  })
+
+  it('成功文案随实际授予的码数变，不无脑催人再配一次', async () => {
+    vi.spyOn(admin, 'createRole').mockResolvedValue(role())
+    const wrapper = mount(RoleFormDialog, {
+      props: { task: createTask({ name: 'ops' }) },
+    })
+    await flushPromises()
+    codeBoxes()[0]?.click()
+    await flushPromises()
+    save()?.click()
+    await flushPromises()
+    expect(wrapper.emitted('saved')?.[0]?.[0]).toContain('并授予 1 个权限码')
   })
 })
 
@@ -372,7 +537,7 @@ describe('弹窗的取消与失败路径', () => {
   it('RoleFormDialog：新建成功后提示接着去配权限', async () => {
     const create = vi.spyOn(admin, 'createRole').mockResolvedValue(role())
     const wrapper = mount(RoleFormDialog, {
-      props: { modelValue: true, role: null },
+      props: { task: createTask() },
     })
     await flushPromises()
     const name = document.querySelectorAll('input')[0] as HTMLInputElement
@@ -393,7 +558,7 @@ describe('弹窗的取消与失败路径', () => {
     const update = vi
       .spyOn(admin, 'updateRole')
       .mockRejectedValue(new BizError(40110, '内置角色不可改名', 403, 't'))
-    mount(RoleFormDialog, { props: { modelValue: true, role: role() } })
+    mount(RoleFormDialog, { props: { task: editTask() } })
     await flushPromises()
     clickButton('保存')
     await flushPromises()

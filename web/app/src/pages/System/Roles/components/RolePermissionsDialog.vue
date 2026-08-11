@@ -41,7 +41,8 @@ async function onSubmit(): Promise<void> {
   busy.value = true
   error.value = null
   try {
-    await admin.setRolePermissions(role.id, [...selected.value])
+    // ⚠ 排序：Set 的迭代序是插入序，同一集合会因勾选顺序给出不同数组
+    await admin.setRolePermissions(role.id, [...selected.value].sort())
     emit('saved', '角色权限已更新')
     emit('close')
   } catch (caught) {

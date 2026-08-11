@@ -5,31 +5,10 @@
  * ⚠ 语义是**覆盖**不是追加：`modelValue` 就是最终集合。三处的调用方都必须把
  * 「当前有哪些」先填进来，否则提交上去就是把已有授权清空。
  */
-import type { DtIntent, PermissionGroup, PermissionKind } from '@dt/contracts'
+import type { PermissionGroup } from '@dt/contracts'
 import { DtCheckbox, DtTag } from '@dt/ui'
 
-interface RiskTag {
-  label: string
-  intent: DtIntent
-}
-
-/** 只标风险档；view / manage 不打标，免得整页都是标签反而看不出重点。 */
-const RISK_TAGS: Record<PermissionKind, RiskTag | null> = {
-  view: null,
-  manage: null,
-  operate: { label: '操作', intent: 'warning' },
-  admin: { label: '高危', intent: 'danger' },
-}
-
-/** 这一档要不要打风险标。 */
-function hasRisk(kind: PermissionKind): boolean {
-  return RISK_TAGS[kind] !== null
-}
-
-/** 风险标的取值。调用前先用 `hasRisk` 判，免得返回类型带上 null。 */
-function riskTag(kind: PermissionKind): RiskTag {
-  return RISK_TAGS[kind] ?? { label: '', intent: 'neutral' }
-}
+import { hasRisk, riskTag } from './riskTags'
 
 const props = withDefaults(
   defineProps<{

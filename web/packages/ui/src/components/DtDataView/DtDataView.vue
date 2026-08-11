@@ -1,8 +1,11 @@
 <script setup lang="ts" generic="TRow extends { id: string }">
 /**
  * @fileoverview DtDataView —— 同一份数据的表格 / 卡片两种呈现，可就地切换。
- * ⚠ 一套列定义 + 一套 `cell-<key>` 插槽喂两种视图：各写一份必然出现
- * 「表格里改了、卡片里忘了改」，而两种视图不会同屏，评审也看不出来。
+ * `columns` 是表格的唯一真源；`cell-<key>` 插槽默认同时喂两种视图，而 `card`
+ * 插槽给了就整张卡改由调用方渲染。
+ * ⚠ 用 `card` 的页面等于把同一份数据的标记写了两份，「表格里改了、卡片里忘了
+ * 改」这份漂移风险就落在页面上——两种视图不同屏，评审也看不出来。凡两种视图
+ * 都要出现、且不止一个元素的片段，页面必须抽成子组件供两处共用。
  */
 import { computed } from 'vue'
 import type {
@@ -28,8 +31,13 @@ export interface DtDataViewLayout {
   minWidth?: string | undefined
   /** 关掉内置切换器：多块数据共用页面上一个切换器时用。 */
   toggle?: boolean | undefined
-  /** 卡片视图每行几张。窄屏一律单列。 */
+  /** 卡片视图每行**最多**几张。够宽才铺满，窄了自己降列。 */
   cardColumns?: 1 | 2 | 3 | undefined
+  /**
+   * 一张卡还读得下去的最小宽度。轨道窄到这个值就少铺一列，
+   * 所以它决定的是「什么时候降列」，不是卡片的实际宽度。
+   */
+  cardMinWidth?: string | undefined
   /**
    * 吃满外层给的高度、超出部分在内部滚动，工具条与分页器不跟着滚。
    * 关掉它按内容高度渲染——一页里若干个分组各一张小表时要的是后者。
@@ -67,12 +75,26 @@ const empty = computed(() => ({
   hint: props.empty?.hint,
 }))
 
-const layout = computed(() => ({
-  minWidth: props.layout?.minWidth ?? '52rem',
-  toggle: props.layout?.toggle ?? true,
-  cardColumns: props.layout?.cardColumns ?? 2,
-  fill: props.layout?.fill ?? true,
-}))
+/**
+ * 取调用方给的值，没给就用缺省。抽成函数不是为了短，是为了每加一项 layout
+ * 都不必再往这个 computed 里塞一个分支——它已经顶到复杂度上限了。
+ * @param given 调用方传的值
+ * @param fallback 缺省值
+ */
+function orDefault<T>(given: T | undefined, fallback: T): T {
+  return given ?? fallback
+}
+
+const layout = computed(() => {
+  const given: DtDataViewLayout = props.layout ?? {}
+  return {
+    minWidth: orDefault(given.minWidth, '52rem'),
+    toggle: orDefault(given.toggle, true),
+    cardColumns: orDefault(given.cardColumns, 2),
+    cardMinWidth: orDefault(given.cardMinWidth, '18rem'),
+    fill: orDefault(given.fill, true),
+  }
+})
 
 const emit = defineEmits<{
   'update:view': [value: DtDataViewMode]
@@ -85,6 +107,8 @@ const emit = defineEmits<{
 defineSlots<{
   toolbar?: () => unknown
   summary?: () => unknown
+  /** 卡片视图里的一张卡。给了就整张卡由调用方渲染，不给走内置 DtDataCard。 */
+  card?: (props: { row: TRow; index: number }) => unknown
   [key: `cell-${string}`]: (props: { row: TRow; index: number }) => unknown
 }>()
 
@@ -183,25 +207,32 @@ const fieldColumns = computed(() =>
       :empty-hint="empty.hint"
       @retry="emit('retry')"
     >
-      <div class="dt-data-view__grid" :class="`is-cols-${layout.cardColumns}`">
-        <DtDataCard
-          v-for="(row, index) in rows"
-          :key="row.id"
-          :title-column="titleColumn"
-          :meta-columns="metaColumns"
-          :actions-column="actionsColumn"
-          :field-columns="fieldColumns"
-        >
-          <template
-            v-for="column in columns"
-            :key="column.key"
-            #[cellSlot(column.key)]
-          >
-            <slot :name="`cell-${column.key}`" :row="row" :index="index"
-              >—</slot
+      <div
+        class="dt-data-view__grid"
+        :class="`is-cols-${layout.cardColumns}`"
+        :style="{ '--dt-card-min': layout.cardMinWidth }"
+      >
+        <!-- 走插槽的后备内容而不是双分支：两条路径不会同时存在 -->
+        <template v-for="(row, index) in rows" :key="row.id">
+          <slot name="card" :row="row" :index="index">
+            <DtDataCard
+              :title-column="titleColumn"
+              :meta-columns="metaColumns"
+              :actions-column="actionsColumn"
+              :field-columns="fieldColumns"
             >
-          </template>
-        </DtDataCard>
+              <template
+                v-for="column in columns"
+                :key="column.key"
+                #[cellSlot(column.key)]
+              >
+                <slot :name="`cell-${column.key}`" :row="row" :index="index"
+                  >—</slot
+                >
+              </template>
+            </DtDataCard>
+          </slot>
+        </template>
       </div>
     </DtPageState>
 

@@ -50,3 +50,7 @@ defineSlots<{
     </dl>
   </DtCard>
 </template>
+
+<style scoped lang="scss">
+@use './data-card';
+</style>

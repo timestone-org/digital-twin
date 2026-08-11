@@ -5,7 +5,8 @@
  * ⚠ 列表按**判定顺序**排（priority 降 → 模式长度降），因为「首条命中即终局」：
  * 命中但权限不足不会继续找更宽松的规则，所以顺序本身就是语义。
  * 因此这张表**一列都不可排序**——按别的列排会让人对着一份看不出判定结果的表
- * 做决定。卡片视图同理按同一顺序铺开。
+ * 做决定。⚠ 卡片视图按宽度铺成多列，位置本身表达不了判定序，
+ * 该语义**全靠每张卡上的 `#n`**（`orderOf` 算的全局序，不是页内下标）。
  */
 import { onMounted, ref } from 'vue'
 import type { DtDataColumn, RouteRule } from '@dt/contracts'
@@ -15,7 +16,7 @@ import {
   DtDataView,
   DtIcon,
   DtInput,
-  DtTag,
+  DtNotice,
   useConfirm,
   useToast,
 } from '@dt/ui'
@@ -26,8 +27,14 @@ import { AppShell } from '@/components/layout'
 import { describeError, useAsyncList } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
 import SystemTabs from '../components/SystemTabs.vue'
+import MethodTag from './components/MethodTag.vue'
+import RuleBadges from './components/RuleBadges.vue'
+import RuleCard from './components/RuleCard.vue'
+import RuleCodes from './components/RuleCodes.vue'
 import RuleFormDialog from './components/RuleFormDialog.vue'
 import RuleMatcher from './components/RuleMatcher.vue'
+import RulePattern from './components/RulePattern.vue'
+import RuleRowActions from './components/RuleRowActions.vue'
 
 const COLUMNS: readonly DtDataColumn[] = [
   { key: 'priority', label: '优先级', width: '5rem' },
@@ -88,6 +95,15 @@ async function removeRule(rule: RouteRule): Promise<void> {
   }
 }
 
+/**
+ * 判定序 = 页偏移 + 页内下标。这是「第几个被检查」，不是「第几条生效规则」。
+ * @param index 卡片在当前页里的下标
+ */
+function orderOf(index: number): number {
+  const pager = list.pager.value
+  return (pager.page - 1) * pager.size + index + 1
+}
+
 async function toggleEnabled(rule: RouteRule): Promise<void> {
   try {
     await admin.updateRouteRule(rule.id, { is_enabled: !rule.is_enabled })
@@ -105,16 +121,29 @@ onMounted(() => {
 <template>
   <AppShell title="路由规则" subtitle="闸 1 的鉴权矩阵 · 按判定顺序排列">
     <template #actions>
-      <PermGuard :codes="[PERMISSION_CODES.routeRuleManage]">
-        <DtButton size="sm" icon="plus" @click="openCreate">新增规则</DtButton>
-      </PermGuard>
+      <!-- 自成一组：顶栏的 gap 是给「操作区 ↔ 时钟」的，直接铺进去两颗钮会松得
+           看不出它们是一组 -->
+      <div class="flex items-center gap-2">
+        <!-- 试算不改数据，故不套 PermGuard：能看这张表的人就该能试 -->
+        <RuleMatcher :rules="list.items.value" />
+        <PermGuard :codes="[PERMISSION_CODES.routeRuleManage]">
+          <DtButton size="sm" icon="plus" @click="openCreate">
+            新增规则
+          </DtButton>
+        </PermGuard>
+      </div>
     </template>
 
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
     <div class="flex h-full min-h-0 flex-col gap-4">
       <SystemTabs />
 
-      <RuleMatcher :rules="list.items.value" />
+      <!-- 两种视图下都在：它说的是数据语义，不是卡片装饰 -->
+      <!-- ⚠ 措辞对两种视图都得成立：表格是自上而下，卡片按宽度铺成多列，
+           所以只说「按列表顺序」，具体第几个由卡上的 #n 讲 -->
+      <DtNotice intent="info" icon="alert-circle">
+        按列表顺序依次判定，首条命中即终局——命中但权限不足不会再往下找更宽的规则；停用的规则整条跳过。
+      </DtNotice>
 
       <DtDataView
         v-model:view="view"
@@ -124,7 +153,7 @@ onMounted(() => {
         :loading="list.loading.value"
         :error="list.error.value"
         :pagination="list.pager.value"
-        :layout="{ minWidth: '60rem' }"
+        :layout="{ minWidth: '60rem', cardColumns: 3, cardMinWidth: '22rem' }"
         @update:page="list.goToPage"
         @update:size="list.setSize"
         @retry="list.reload()"
@@ -157,13 +186,12 @@ onMounted(() => {
         </template>
 
         <template #cell-method="{ row }">
-          <DtTag mono>{{ row.http_method }}</DtTag>
+          <MethodTag :method="row.http_method" />
         </template>
 
         <template #cell-pattern="{ row }">
-          <code :class="{ 'opacity-50': !row.is_enabled }">
-            {{ row.path_pattern }}
-          </code>
+          <RulePattern :rule="row" />
+          <!-- 表格行的次要行可以消失；卡片那边补 `—` 是为了每张卡等高 -->
           <p
             v-if="row.description"
             class="m-0 mt-1 text-2xs text-text-disabled"
@@ -173,58 +201,30 @@ onMounted(() => {
         </template>
 
         <template #cell-codes="{ row }">
-          <!-- 空码不是「匿名放行」，是「任意已登录用户」——写清楚，
-               否则运维会以为这条规则等于没有 -->
-          <span v-if="row.permission_codes.length === 0">任意登录用户</span>
-          <div v-else class="flex flex-wrap items-center gap-1.5">
-            <DtTag v-for="code in row.permission_codes" :key="code" mono>
-              {{ code }}
-            </DtTag>
-            <DtTag v-if="row.match_mode === 'any'" intent="info">任一</DtTag>
-          </div>
+          <RuleCodes :codes="row.permission_codes" :mode="row.match_mode" />
         </template>
 
         <template #cell-status="{ row }">
-          <div class="flex items-center gap-1.5">
-            <DtTag :intent="row.is_enabled ? 'success' : 'danger'">
-              {{ row.is_enabled ? '启用' : '停用' }}
-            </DtTag>
-            <DtTag v-if="row.is_builtin" intent="primary">内置</DtTag>
-          </div>
+          <RuleBadges :rule="row" />
         </template>
 
         <template #cell-actions="{ row }">
-          <div class="flex items-center justify-end gap-1">
-            <PermGuard :codes="[PERMISSION_CODES.routeRuleManage]">
-              <DtButton
-                variant="ghost"
-                intent="neutral"
-                size="sm"
-                icon="pencil"
-                aria-label="编辑规则"
-                title="编辑规则"
-                @click="openEdit(row)"
-              />
-              <DtButton
-                variant="ghost"
-                intent="neutral"
-                size="sm"
-                :icon="row.is_enabled ? 'toggle-right' : 'toggle-left'"
-                :aria-label="row.is_enabled ? '停用' : '启用'"
-                :title="row.is_enabled ? '停用' : '启用'"
-                @click="toggleEnabled(row)"
-              />
-              <DtButton
-                variant="ghost"
-                intent="danger"
-                size="sm"
-                icon="trash"
-                aria-label="删除规则"
-                title="删除规则"
-                @click="removeRule(row)"
-              />
-            </PermGuard>
-          </div>
+          <RuleRowActions
+            :rule="row"
+            @edit="openEdit"
+            @toggle-enabled="toggleEnabled"
+            @remove="removeRule"
+          />
+        </template>
+
+        <template #card="{ row, index }">
+          <RuleCard
+            :rule="row"
+            :order="orderOf(index)"
+            @edit="openEdit"
+            @toggle-enabled="toggleEnabled"
+            @remove="removeRule"
+          />
         </template>
       </DtDataView>
     </div>
