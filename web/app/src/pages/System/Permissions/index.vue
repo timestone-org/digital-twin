@@ -10,11 +10,7 @@
  * 而这一页的语义是「同一份目录换个看法」。
  */
 import { computed, onMounted, ref } from 'vue'
-import type {
-  DtSegmentedOption,
-  PermissionCatalog,
-  PermissionKind,
-} from '@dt/contracts'
+import type { DtSegmentedOption, PermissionCatalog } from '@dt/contracts'
 import { DtIcon, DtInput, DtPageState, DtSegmented } from '@dt/ui'
 
 import PermissionGroupCard from './components/PermissionGroupCard.vue'
@@ -30,17 +26,6 @@ const VIEW_OPTIONS: readonly DtSegmentedOption[] = [
   { value: 'table', label: '表格视图', icon: 'table', iconOnly: true },
   { value: 'card', label: '卡片视图', icon: 'layout-grid', iconOnly: true },
 ]
-
-/** 四档的展示口径：operate 与 admin 打红标，与后端 `kind` 一一对应。 */
-const KIND_META: Record<
-  PermissionKind,
-  { label: string; intent: 'neutral' | 'primary' | 'warning' | 'danger' }
-> = {
-  view: { label: '查看', intent: 'neutral' },
-  manage: { label: '管理', intent: 'primary' },
-  operate: { label: '操作', intent: 'warning' },
-  admin: { label: '高危', intent: 'danger' },
-}
 
 const auth = useAuthStore()
 
@@ -126,7 +111,6 @@ onMounted(() => {
             :items="group.items"
             :view="view"
             :held="held"
-            :kind-meta="KIND_META"
           />
         </div>
       </DtPageState>

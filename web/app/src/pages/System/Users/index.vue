@@ -9,7 +9,7 @@
  * ⚠ 排序抛给后端做：列表是服务端分页的，只排当前页等于按页各排各的。
  * `SORT_FIELDS` 必须落在后端 `USER_SORTABLE` 白名单内，多写一个就是 400。
  */
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import type {
   DtDataColumn,
   DtTableSort,
@@ -17,16 +17,7 @@ import type {
   UserListItem,
 } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import {
-  DtButton,
-  DtDataView,
-  DtIcon,
-  DtInput,
-  DtSelect,
-  DtTag,
-  useConfirm,
-  useToast,
-} from '@dt/ui'
+import { DtButton, DtDataView, DtTag, useConfirm, useToast } from '@dt/ui'
 
 import * as admin from '@/api/admin'
 import PermGuard from '@/components/PermGuard.vue'
@@ -37,8 +28,11 @@ import { formatDateTime } from '@/utils/datetime'
 import SystemTabs from '../components/SystemTabs.vue'
 import UserFormDialog from './components/UserFormDialog.vue'
 import AssignRoleDialog from './components/AssignRoleDialog.vue'
+import DirectGrantTag from './components/DirectGrantTag.vue'
 import DirectPermissionsDialog from './components/DirectPermissionsDialog.vue'
 import ResetPasswordDialog from './components/ResetPasswordDialog.vue'
+import UserCard from './components/UserCard.vue'
+import UserFilters from './components/UserFilters.vue'
 import UserRowActions from './components/UserRowActions.vue'
 
 const COLUMNS: readonly DtDataColumn[] = [
@@ -81,11 +75,6 @@ const list = useAsyncList<UserListItem>((query) => {
     sort: `${sort.value.desc ? '-' : ''}${field}`,
   })
 })
-
-const roleOptions = computed(() => [
-  { value: '', label: '全部角色' },
-  ...roles.value.map((role) => ({ value: role.id, label: role.name })),
-])
 
 const editing = ref<UserListItem | null>(null)
 const formOpen = ref(false)
@@ -176,7 +165,7 @@ onMounted(async () => {
         :error="list.error.value"
         :sort="sort"
         :pagination="list.pager.value"
-        :layout="{ minWidth: '64rem' }"
+        :layout="{ minWidth: '64rem', cardColumns: 3, cardMinWidth: '19rem' }"
         :empty="{ hint: '换个筛选条件试试，或新建一个账号' }"
         @update:sort="onSort"
         @update:page="list.goToPage"
@@ -184,42 +173,13 @@ onMounted(async () => {
         @retry="list.reload()"
       >
         <template #toolbar>
-          <DtInput
-            v-model="filters.q"
-            class="w-60"
-            placeholder="搜索用户名 / 邮箱 / 姓名"
-            size="sm"
-            @enter="list.reloadFromFirstPage()"
-          >
-            <template #leading><DtIcon name="search" :size="14" /></template>
-          </DtInput>
-          <DtSelect
-            v-model="filters.roleId"
-            class="w-40"
-            size="sm"
-            aria-label="按角色筛选"
-            :options="roleOptions"
-            @update:model-value="list.reloadFromFirstPage()"
+          <UserFilters
+            v-model:q="filters.q"
+            v-model:role-id="filters.roleId"
+            v-model:active="filters.active"
+            :roles="roles"
+            @search="list.reloadFromFirstPage()"
           />
-          <DtSelect
-            v-model="filters.active"
-            class="w-32"
-            size="sm"
-            aria-label="按状态筛选"
-            :options="[
-              { value: '', label: '全部状态' },
-              { value: 'yes', label: '已启用' },
-              { value: 'no', label: '已停用' },
-            ]"
-            @update:model-value="list.reloadFromFirstPage()"
-          />
-          <DtButton
-            variant="outline"
-            size="sm"
-            @click="list.reloadFromFirstPage()"
-          >
-            查询
-          </DtButton>
         </template>
 
         <template #summary>共 {{ list.total.value }} 个账号</template>
@@ -239,10 +199,7 @@ onMounted(async () => {
 
         <template #cell-direct="{ row }">
           <!-- 列表只知道条数：权限码要点「设置直权」拉详情才有 -->
-          <span v-if="row.direct_permission_count === 0">—</span>
-          <DtTag v-else intent="info" mono>
-            +{{ row.direct_permission_count }}
-          </DtTag>
+          <DirectGrantTag :count="row.direct_permission_count" />
         </template>
 
         <template #cell-status="{ row }">
@@ -257,6 +214,18 @@ onMounted(async () => {
 
         <template #cell-actions="{ row }">
           <UserRowActions
+            :user="row"
+            @edit="openEdit"
+            @toggle-active="toggleActive"
+            @reset-password="resetDialogFor = $event"
+            @assign-role="roleDialogFor = $event"
+            @set-permissions="permDialogFor = $event"
+            @remove="removeUser"
+          />
+        </template>
+
+        <template #card="{ row }">
+          <UserCard
             :user="row"
             @edit="openEdit"
             @toggle-active="toggleActive"

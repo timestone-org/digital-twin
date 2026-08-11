@@ -1,6 +1,6 @@
 /**
  * @fileoverview 用户管理页的行为契约：列表渲染、权限门禁、写操作后刷新、
- * 删除必须二次确认。
+ * 删除必须二次确认，以及卡片视图走的是本页专属的 UserCard。
  */
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -125,6 +125,12 @@ async function pickInSelect(
     (node) => node.textContent?.trim() === label,
   )
   option?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  await flushPromises()
+}
+
+/** 切到卡片视图。默认是表格视图，偏好每条用例前都被 localStorage.clear() 抹掉。 */
+async function toCardView(wrapper: ReturnType<typeof mount>): Promise<void> {
+  await wrapper.find('[aria-label="卡片视图"]').trigger('click')
   await flushPromises()
 }
 
@@ -430,5 +436,158 @@ describe('用户管理页 · 弹窗联动', () => {
     await wrapper.find('[aria-label="设置直权"]').trigger('click')
     await flushPromises()
     expect(document.body.textContent).toContain('设置直权')
+  })
+})
+
+describe('用户管理页 · 卡片视图', () => {
+  it('卡片视图走本页专属的 UserCard，而不是通用卡的字段表', async () => {
+    // ⚠ 这条钉的是插槽名：写成 #cards 会静默退回内置卡，typecheck 与 lint 都不响
+    const wrapper = await render(['user:view'])
+    await toCardView(wrapper)
+    expect(wrapper.find('.user-card').exists()).toBe(true)
+    expect(wrapper.find('.dt-data-view__fields').exists()).toBe(false)
+  })
+
+  it('卡片把身份三档都摊开：用户名、姓名、邮箱各占各的位置', async () => {
+    const wrapper = await render(['user:view'])
+    await toCardView(wrapper)
+    const card = wrapper.get('.user-card')
+    expect(card.get('h2').text()).toBe('alice')
+    expect(card.text()).toContain('爱丽丝')
+    expect(card.text()).toContain('alice@example.com')
+    expect(card.text()).toContain('viewer')
+  })
+
+  it('停用态在两种视图里说的是同一句话', async () => {
+    vi.spyOn(admin, 'listUsers').mockResolvedValue({
+      items: [listItem({ is_active: false })],
+      page: 1,
+      size: 50,
+      total: 1,
+    })
+    const wrapper = await render(['user:view'])
+    expect(wrapper.text()).toContain('已停用')
+    await toCardView(wrapper)
+    expect(wrapper.get('.user-card').text()).toContain('已停用')
+  })
+
+  it('停用的账号整卡下沉，与路由规则页的停用规则同一套变量', async () => {
+    vi.spyOn(admin, 'listUsers').mockResolvedValue({
+      items: [listItem({ is_active: false })],
+      page: 1,
+      size: 50,
+      total: 1,
+    })
+    const wrapper = await render(['user:view'])
+    await toCardView(wrapper)
+    expect(wrapper.get('.user-card').attributes('style')).toContain('--card-bg')
+  })
+
+  it('启用的账号不改卡片底色变量', async () => {
+    const wrapper = await render(['user:view'])
+    await toCardView(wrapper)
+    expect(wrapper.get('.user-card').attributes('style') ?? '').not.toContain(
+      '--card-bg',
+    )
+  })
+
+  it('没有直权时两种视图都说「无」，而不是凭空多出一个 +0', async () => {
+    const wrapper = await render(['user:view'])
+    expect(wrapper.text()).toContain('无')
+    expect(wrapper.text()).not.toContain('+0')
+    await toCardView(wrapper)
+    expect(wrapper.get('.user-card').text()).toContain('无')
+    expect(wrapper.get('.user-card').text()).not.toContain('+0')
+  })
+
+  it('有直权时两种视图都是 +N', async () => {
+    vi.spyOn(admin, 'listUsers').mockResolvedValue({
+      items: [listItem({ direct_permission_count: 2 })],
+      page: 1,
+      size: 50,
+      total: 1,
+    })
+    const wrapper = await render(['user:view'])
+    expect(wrapper.text()).toContain('+2')
+    await toCardView(wrapper)
+    expect(wrapper.get('.user-card').text()).toContain('+2')
+  })
+
+  it('从未登录过的账号在卡片上写「从未登录」，不是空格', async () => {
+    const wrapper = await render(['user:view'])
+    await toCardView(wrapper)
+    expect(wrapper.get('.user-card').text()).toContain('从未登录')
+  })
+
+  it('没填姓名也占一行，卡片不会因此矮一截', async () => {
+    vi.spyOn(admin, 'listUsers').mockResolvedValue({
+      items: [listItem({ full_name: null })],
+      page: 1,
+      size: 50,
+      total: 1,
+    })
+    const wrapper = await render(['user:view'])
+    await toCardView(wrapper)
+    expect(wrapper.get('.user-card').text()).toContain('未填写姓名')
+  })
+
+  it('六个操作在卡片视图下仍然在，且按 aria-label 找得到', async () => {
+    const wrapper = await render([
+      'user:view',
+      'user:manage',
+      'user:grant',
+      'user:delete',
+    ])
+    await toCardView(wrapper)
+    const card = wrapper.get('.user-card')
+    for (const label of [
+      '编辑资料',
+      '停用',
+      '重置密码',
+      '改派角色',
+      '设置直权',
+      '删除',
+    ]) {
+      expect(card.find(`[aria-label="${label}"]`).exists()).toBe(true)
+    }
+  })
+
+  it('卡片上的每个入口都接到了页面的动作上——事件名写错时只有这条会红', async () => {
+    const setActive = vi
+      .spyOn(admin, 'setUserActive')
+      .mockResolvedValue(user({ is_active: false }))
+    vi.spyOn(admin, 'getUser').mockResolvedValue(user())
+    const wrapper = await render(['user:view', 'user:manage', 'user:grant'])
+    await toCardView(wrapper)
+
+    await wrapper.get('.user-card [aria-label="停用"]').trigger('click')
+    await flushPromises()
+    expect(setActive).toHaveBeenCalledWith('u1', false)
+
+    for (const label of ['编辑资料', '改派角色', '重置密码', '设置直权']) {
+      await wrapper.get(`.user-card [aria-label="${label}"]`).trigger('click')
+      await flushPromises()
+      expect(document.body.textContent).toContain(label)
+      await clickInConfirm('取消')
+    }
+  })
+
+  it('只读账号的卡片连那条操作区分隔线都不画', async () => {
+    const wrapper = await render(['user:view'])
+    await toCardView(wrapper)
+    const card = wrapper.get('.user-card')
+    expect(card.find('[aria-label="编辑资料"]').exists()).toBe(false)
+    expect(card.find('.border-t').exists()).toBe(false)
+  })
+
+  it('卡片上的删除走的还是同一条二次确认路径', async () => {
+    const remove = vi.spyOn(admin, 'deleteUser').mockResolvedValue()
+    const wrapper = await renderWithHosts(['user:view', 'user:delete'])
+    await toCardView(wrapper)
+    await wrapper.get('.user-card [aria-label="删除"]').trigger('click')
+    await flushPromises()
+    expect(remove).not.toHaveBeenCalled()
+    await clickInConfirm('删除')
+    expect(remove).toHaveBeenCalledWith('u1')
   })
 })
