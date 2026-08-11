@@ -40,22 +40,42 @@ select = [
     "ASYNC",
     "S",
     "T20",
+    # 时区：naive datetime 一旦落库就再也说不清它是哪个时区的
+    "DTZ",
+    # 相对导入让文件移动时静默指向别的东西
+    "TID",
+    # 注释掉的死代码直接删，不要搬家
+    "ERA",
+    # pytest 写法：裸 assert、参数化、fixture 作用域
+    "PT",
+    # 日志器与 logging 的常见误用
+    "LOG",
+    "G",
+    # 访问别人的私有成员即为分层错误
+    "SLF",
+    # 可简化的分支与推导式
+    "SIM",
+    "RET",
+    "C4",
+    "PIE",
+    "PERF",
+    # 未用的参数往往是签名漂移的残留
+    "ARG",
 ]
 ignore = [
-    # 路由函数的依赖注入件天然多于 5 个形参，规模上限靠评审与函数行数守
-    "PLR0913",
     # 本仓注释与文案一律中文，全角标点是正字法而非「易混淆字符」
     "RUF001",
     "RUF002",
     "RUF003",
     # 本仓日志器的签名是 (event, msg, **fields)，不是 stdlib 的 (fmt, *args)
     "PLE1205",
+    "G004",
     # 异常名一律是「条件」而非「XxxError」，共同后缀由基类 AppError 承担
     "N818",
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["lib", "auth_server", "scripts"]
+known-first-party = ["lib", "auth_server", "scripts", "_report"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
@@ -63,13 +83,27 @@ max-complexity = 10
 [tool.ruff.lint.pylint]
 max-args = 5
 
+[tool.ruff.lint.flake8-tidy-imports]
+# 相对导入让文件移动时静默指向别的东西
+ban-relative-imports = "all"
+
 [tool.ruff.lint.per-file-ignores]
-"**/tests/**" = ["S101", "PLR2004", "S105", "S106"]
-"**/migrations/**" = ["N999"]
+# 测试里 assert 是断言本身；魔数是被断言的期望值；假密钥不是密钥
+"**/tests/**" = ["S101", "PLR2004", "S105", "S106", "SLF001"]
+"**/migrations/**" = ["N999", "ERA001"]
+# 测试假件的形参由被实现的协议决定，用不上也不能删——删了就不是同一个接口
+"**/testing/**" = ["ARG002"]
+# 路由函数的依赖注入件天然多于 5 个形参，规模上限由函数行数闸守
+"**/api/**" = ["PLR0913"]
+# 闸门脚本按路径互相引用（`from _report import …`），不走包结构；
+# 它们解析的是本仓自己产出的报告、并按固定参数调用 git，不是不可信输入
+"**/gates/*.py" = ["TID252", "S314", "S603", "S607"]
 
 [tool.pyright]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 reportMissingTypeStubs = false
-include = ["lib/src", "services/*/src", "services/*/scripts"]
+# ⚠ 必须写 `**`：pyright 的单个 `*` 匹配不到 `services/<svc>/src` 这一层，
+# 写成 `services/*/src` 时它一个服务文件都不看，而输出仍是「0 errors」。
+include = ["lib/src", "services/**/src", "services/**/scripts"]
 exclude = ["**/__pycache__", "**/.venv", "**/migrations/versions"]

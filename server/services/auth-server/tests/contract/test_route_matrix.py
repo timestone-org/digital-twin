@@ -34,14 +34,24 @@ def build_app() -> FastAPI:
 
 
 def iter_routes(app: FastAPI) -> Iterator[APIRoute]:
+    """遍历应用里全部的 APIRoute，含被 include 进来的子路由。
+
+    ⚠ 不能只顺着 `.routes` 走：`include_router` 挂进来的是一个
+    `_IncludedRouter` 包装对象，真正的路由挂在它的 `original_router` 上。
+    只走 `.routes` 会一条路由都取不到，参数化列表因此为空——而 pytest 把
+    空参数化标成 skip，本文件那两条契约用例于是双双**空跑**且全绿。
+    Args: app。
+    """
     stack: list[Any] = list(app.routes)
     while stack:
         item = stack.pop()
         if isinstance(item, APIRoute):
             yield item
-        nested = getattr(item, "routes", None)
-        if nested:
-            stack.extend(nested)
+        for attribute in ("routes", "original_router"):
+            nested = getattr(item, attribute, None)
+            if nested is None:
+                continue
+            stack.extend(nested if isinstance(nested, list) else [nested])
 
 
 def catalog_rules() -> list[RuleView]:
@@ -88,6 +98,11 @@ def public_routes() -> list[tuple[str, str]]:
 
 
 ROUTE_CASES = public_routes()
+
+
+def test_the_route_table_was_actually_scanned() -> None:
+    # ⚠ 扫不到路由就等于下面两条契约没跑，而空参数化在 pytest 里是 skip 不是红
+    assert len(ROUTE_CASES) > 0
 
 
 def test_every_public_route_has_a_seeded_rule() -> None:

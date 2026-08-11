@@ -849,6 +849,7 @@
         "description": "角色详情。`permissions` 是该角色持有的权限码。",
         "properties": {
           "created_at": {
+            "format": "date-time",
             "title": "Created At",
             "type": "string"
           },
@@ -884,6 +885,7 @@
             "type": "array"
           },
           "updated_at": {
+            "format": "date-time",
             "title": "Updated At",
             "type": "string"
           },
@@ -1068,6 +1070,7 @@
         "description": "一条鉴权矩阵规则。",
         "properties": {
           "created_at": {
+            "format": "date-time",
             "title": "Created At",
             "type": "string"
           },
@@ -1133,6 +1136,7 @@
             "type": "integer"
           },
           "updated_at": {
+            "format": "date-time",
             "title": "Updated At",
             "type": "string"
           }
@@ -1404,6 +1408,7 @@
             "title": "Avatar Url"
           },
           "created_at": {
+            "format": "date-time",
             "title": "Created At",
             "type": "string"
           },
@@ -1441,6 +1446,7 @@
           "last_login_at": {
             "anyOf": [
               {
+                "format": "date-time",
                 "type": "string"
               },
               {
@@ -1478,6 +1484,7 @@
             "type": "array"
           },
           "updated_at": {
+            "format": "date-time",
             "title": "Updated At",
             "type": "string"
           },
@@ -1516,6 +1523,7 @@
             "title": "Avatar Url"
           },
           "created_at": {
+            "format": "date-time",
             "title": "Created At",
             "type": "string"
           },
@@ -1550,6 +1558,7 @@
           "last_login_at": {
             "anyOf": [
               {
+                "format": "date-time",
                 "type": "string"
               },
               {
@@ -1573,6 +1582,7 @@
             "$ref": "#/components/schemas/RoleRef"
           },
           "updated_at": {
+            "format": "date-time",
             "title": "Updated At",
             "type": "string"
           },
