@@ -16,6 +16,10 @@ USER_GRANT = "user:grant"
 ROLE_MANAGE = "role:manage"
 ROUTE_RULE_VIEW = "route_rule:view"
 ROUTE_RULE_MANAGE = "route_rule:manage"
+# platform-server 的 apps/hvac 消费这两个码。服务之间不许互相 import，
+# 那边的 apps/hvac/catalog.py 只是复述，两边必须逐字一致
+AC_VIEW = "ac:view"
+AC_MANAGE = "ac:manage"
 
 # ---- 内置角色 ----
 
@@ -121,6 +125,24 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
         sort_order=20,
         description="增删改路由规则，改动即改变全系统鉴权矩阵",
     ),
+    PermissionSpec(
+        code=AC_VIEW,
+        name="查看空调与空间",
+        kind="view",
+        group_code="hvac",
+        group_label="空调与空间",
+        sort_order=10,
+        description="空调台账、车间与房间的全部读面",
+    ),
+    PermissionSpec(
+        code=AC_MANAGE,
+        name="管理空调与空间",
+        kind="manage",
+        group_code="hvac",
+        group_label="空调与空间",
+        sort_order=20,
+        description="增删改空调、车间、房间，以及批量改派空调所在房间",
+    ),
 )
 
 ALL_CODES: frozenset[str] = frozenset(item.code for item in PERMISSIONS)
@@ -142,6 +164,7 @@ ROLES: tuple[RoleSpec, ...] = (
 )
 
 _P = "/api/v1/auth"
+_PLATFORM = "/api/v1/platform"
 
 ROUTE_RULES: tuple[RouteRuleSpec, ...] = (
     RouteRuleSpec(f"{_P}/health", "GET", priority=999, description="存活探针"),
@@ -288,6 +311,49 @@ ROUTE_RULES: tuple[RouteRuleSpec, ...] = (
         codes=(ROUTE_RULE_MANAGE,),
         priority=925,
         description="删除规则",
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/health", "GET", priority=999, description="存活探针"
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/ready", "GET", priority=999, description="就绪探针"
+    ),
+    RouteRuleSpec(f"{_PLATFORM}/docs", "GET", priority=998, description="文档"),
+    RouteRuleSpec(
+        f"{_PLATFORM}/redoc", "GET", priority=998, description="文档"
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/openapi.json", "GET", priority=998, description="契约"
+    ),
+    # ⚠ `fnmatch` 的 `*` 跨斜杠，故这四条按方法兜住 platform 的整个对外面。
+    # 将来某个资源要单独的码，加一条更高 priority 的窄规则压过它，别改这四条。
+    RouteRuleSpec(
+        f"{_PLATFORM}/*",
+        "GET",
+        codes=(AC_VIEW,),
+        priority=900,
+        description="空调、车间、房间的全部读面",
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/*",
+        "POST",
+        codes=(AC_MANAGE,),
+        priority=900,
+        description="新建与批量改派",
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/*",
+        "PATCH",
+        codes=(AC_MANAGE,),
+        priority=900,
+        description="更新空调、车间、房间",
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/*",
+        "DELETE",
+        codes=(AC_MANAGE,),
+        priority=900,
+        description="删除空调、车间、房间",
     ),
 )
 
