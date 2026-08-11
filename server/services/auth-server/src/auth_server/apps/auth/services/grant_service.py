@@ -5,6 +5,7 @@
 """
 
 import uuid
+from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,10 +56,12 @@ async def assign_role(
     await _assert_grant_allowed(
         session,
         operation,
-        target=target,
-        next_codes=new_role_codes | target.direct_codes,
-        granted=new_role_codes,
-        action="改派角色",
+        _GrantCheck(
+            target=target,
+            next_codes=new_role_codes | target.direct_codes,
+            granted=new_role_codes,
+            action="改派角色",
+        ),
     )
     before = {"role_id": str(target.user.role_id)}
     # ⚠ 必须同时改关系对象：只改 role_id 的话，已加载的 `user.role`
@@ -68,13 +71,17 @@ async def assign_role(
     await session.flush()
     audit.record(
         session,
-        actor=operation.operator.user,
-        action=audit.ACTION_ROLE_ASSIGNED,
-        target_type=TARGET_TYPE,
-        target_id=str(user_id),
-        before=before,
-        after={"role_id": str(role.id), "role_name": role.name},
-        source_ip=operation.source_ip,
+        audit.Entry(
+            actor=operation.operator.user,
+            action=audit.ACTION_ROLE_ASSIGNED,
+            target_type=TARGET_TYPE,
+            target_id=str(user_id),
+            change=audit.Change(
+                before=before,
+                after={"role_id": str(role.id), "role_name": role.name},
+            ),
+            source_ip=operation.source_ip,
+        ),
     )
     return to_user_detail(await load_identity(session, target.user))
 
@@ -96,10 +103,12 @@ async def set_direct_permissions(
     await _assert_grant_allowed(
         session,
         operation,
-        target=target,
-        next_codes=target.role_codes | requested,
-        granted=requested,
-        action="设置直权",
+        _GrantCheck(
+            target=target,
+            next_codes=target.role_codes | requested,
+            granted=requested,
+            action="设置直权",
+        ),
     )
     before = {"direct_permissions": sorted(target.direct_codes)}
     await user_crud.replace_direct_permissions(
@@ -108,13 +117,17 @@ async def set_direct_permissions(
     await session.flush()
     audit.record(
         session,
-        actor=operation.operator.user,
-        action=audit.ACTION_DIRECT_PERMISSIONS_SET,
-        target_type=TARGET_TYPE,
-        target_id=str(user_id),
-        before=before,
-        after={"direct_permissions": sorted(requested)},
-        source_ip=operation.source_ip,
+        audit.Entry(
+            actor=operation.operator.user,
+            action=audit.ACTION_DIRECT_PERMISSIONS_SET,
+            target_type=TARGET_TYPE,
+            target_id=str(user_id),
+            change=audit.Change(
+                before=before,
+                after={"direct_permissions": sorted(requested)},
+            ),
+            source_ip=operation.source_ip,
+        ),
     )
     return to_user_detail(await load_identity(session, target.user))
 
@@ -149,35 +162,43 @@ async def _resolve_codes(
     return found
 
 
+@dataclass(frozen=True)
+class _GrantCheck:
+    """一次授权变更的四个判定输入：改谁、改成什么、给了什么、叫什么。"""
+
+    target: Identity
+    next_codes: frozenset[str]
+    granted: frozenset[str]
+    action: str
+
+
 async def _assert_grant_allowed(
-    session: AsyncSession,
-    operation: Operation,
-    *,
-    target: Identity,
-    next_codes: frozenset[str],
-    granted: frozenset[str],
-    action: str,
+    session: AsyncSession, operation: Operation, check: _GrantCheck
 ) -> None:
     operator = operation.operator
+    target = check.target
     guards.assert_target_not_higher(
         operator_codes=operator.codes,
         target_codes=target.codes,
         is_super=operator.is_super,
-        action=action,
+        action=check.action,
     )
     guards.assert_grantable(
         operator_codes=operator.codes,
-        granted_codes=granted,
+        granted_codes=check.granted,
         is_super=operator.is_super,
     )
     guards.assert_keeps_admin_capability(
         operator_id=operator.user.id,
         target_id=target.user.id,
-        remaining_codes=next_codes,
+        remaining_codes=check.next_codes,
         required_codes=SELF_LOCK_GUARD_CODES & operator.codes,
     )
     await _assert_keeps_a_super_admin(
-        session, target=target, next_codes=next_codes, action=action
+        session,
+        target=target,
+        next_codes=check.next_codes,
+        action=check.action,
     )
 
 
@@ -193,7 +214,7 @@ async def _assert_keeps_a_super_admin(
     if guards.is_super_admin(next_codes, target.builtin_codes):
         return
     guards.assert_not_last_super_admin(
-        target_is_super=True,
+        is_target_super=True,
         super_admin_count=await count_super_admins(session),
         action=action,
     )

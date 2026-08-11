@@ -86,20 +86,20 @@ def assert_role_not_higher(
 def assert_builtin_role_mutable(
     *,
     is_builtin: bool,
-    changing_name: bool,
-    changing_codes: bool,
+    is_changing_name: bool,
+    is_changing_codes: bool,
 ) -> None:
     """内置角色的名称与权限集不可改（描述仍可改）。
 
     ⚠ `name` 是种子的幂等键：改名后种子只会新建一个空壳而不是修复它。
 
-    Args: is_builtin, changing_name, changing_codes。
+    Args: is_builtin, is_changing_name, is_changing_codes。
     """
     if not is_builtin:
         return
-    if changing_name:
+    if is_changing_name:
         raise BuiltinImmutable("内置角色的名称不可修改")
-    if changing_codes:
+    if is_changing_codes:
         raise BuiltinImmutable("内置角色的权限集由种子维护，不可修改")
 
 
@@ -115,13 +115,13 @@ def assert_not_self(
 
 
 def assert_not_last_super_admin(
-    *, target_is_super: bool, super_admin_count: int, action: str
+    *, is_target_super: bool, super_admin_count: int, action: str
 ) -> None:
     """不能让系统失去最后一个全权账号。
 
-    Args: target_is_super, super_admin_count, action。
+    Args: is_target_super, super_admin_count, action。
     """
-    if target_is_super and super_admin_count <= 1:
+    if is_target_super and super_admin_count <= 1:
         raise SelfLockout(f"这是最后一个全权账号，不能{action}")
 
 

@@ -30,6 +30,7 @@ from auth_server.apps.auth.services.token_service import (
 )
 from lib.auth import (
     MAX_PERMISSION_HEADER_BYTES,
+    SignedContext,
     encode_identity,
     encode_permissions,
     sign_context,
@@ -77,7 +78,7 @@ class VerifyService:
             method=method,
             held_codes=identity.codes,
         )
-        if not decision.allowed:
+        if not decision.is_allowed:
             self._log_denied(identity, path, method, decision)
             raise PermissionRequired("没有该操作的权限")
         return self.build_headers(identity)
@@ -93,10 +94,12 @@ class VerifyService:
         expires_at = int(self.clock().timestamp()) + self.header_ttl_s
         signature = sign_context(
             self.signing_secret,
-            user_id=user_id,
-            role=role,
-            permissions_b64=permissions,
-            expires_at=expires_at,
+            SignedContext(
+                user_id=user_id,
+                role=role,
+                permissions_b64=permissions,
+                expires_at=expires_at,
+            ),
         )
         headers = {
             HEADER_USER_ID: user_id,

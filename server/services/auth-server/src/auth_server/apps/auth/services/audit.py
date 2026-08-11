@@ -1,5 +1,6 @@
 """审计写入。必须与被审计的变更同一个事务，故只挂 session、从不自己提交。"""
 
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,32 +26,44 @@ ACTION_ROUTE_RULE_UPDATED = "route_rule_updated"
 ACTION_ROUTE_RULE_DELETED = "route_rule_deleted"
 
 
-def record(
-    session: AsyncSession,
-    *,
-    actor: User,
-    action: str,
-    target_type: str,
-    target_id: str | None = None,
-    before: dict[str, Any] | None = None,
-    after: dict[str, Any] | None = None,
-    source_ip: str | None = None,
-) -> AuditLog:
+@dataclass(frozen=True)
+class Change:
+    """一次变更的前后值。新建没有 before，删除没有 after。"""
+
+    before: dict[str, Any] | None = None
+    after: dict[str, Any] | None = None
+
+
+NO_CHANGE = Change()
+
+
+@dataclass(frozen=True)
+class Entry:
+    """一条待写入的审计记录：谁、什么时候、对什么做了什么、改成了什么。"""
+
+    actor: User
+    action: str
+    target_type: str
+    target_id: str | None = None
+    change: Change = NO_CHANGE
+    source_ip: str | None = None
+
+
+def record(session: AsyncSession, entry: Entry) -> AuditLog:
     """把一条审计记录挂进当前事务。
 
-    Args: session, actor, action, target_type, target_id, before, after,
-        source_ip。
+    Args: session, entry。
     """
-    entry = AuditLog(
-        actor_id=actor.id,
-        actor_username=actor.username,
-        action=action,
-        target_type=target_type,
-        target_id=target_id,
-        before=before,
-        after=after,
-        source_ip=source_ip,
+    row = AuditLog(
+        actor_id=entry.actor.id,
+        actor_username=entry.actor.username,
+        action=entry.action,
+        target_type=entry.target_type,
+        target_id=entry.target_id,
+        before=entry.change.before,
+        after=entry.change.after,
+        source_ip=entry.source_ip,
         trace_id=current_log_context().trace_id,
     )
-    session.add(entry)
-    return entry
+    session.add(row)
+    return row

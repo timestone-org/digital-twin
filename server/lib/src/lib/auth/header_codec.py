@@ -15,6 +15,7 @@ import base64
 import hmac
 import json
 from collections.abc import Iterable
+from dataclasses import dataclass
 from hashlib import sha256
 from typing import cast
 from urllib.parse import quote, unquote
@@ -74,48 +75,41 @@ def decode_identity(raw: str | None) -> str:
         return ""
 
 
-def sign_context(
-    secret: str,
-    *,
-    user_id: str,
-    role: str,
-    permissions_b64: str,
-    expires_at: int,
-) -> str:
+@dataclass(frozen=True)
+class SignedContext:
+    """被签名的那四个字段。签名覆盖它们的拼接，改任一项签名即失效。"""
+
+    user_id: str
+    role: str  # **编码后的值**
+    permissions_b64: str
+    expires_at: int  # Unix 秒
+
+    def message(self) -> str:
+        return (
+            f"{self.user_id}|{self.role}"
+            f"|{self.permissions_b64}|{self.expires_at}"
+        )
+
+
+def sign_context(secret: str, context: SignedContext) -> str:
     """对身份+权限+过期时刻算 HMAC-SHA256，十六进制。
 
-    Args: secret, user_id, role（**编码后的值**）, permissions_b64,
-        expires_at（Unix 秒）。
+    Args: secret, context。
     """
-    message = f"{user_id}|{role}|{permissions_b64}|{expires_at}"
     return hmac.new(
-        secret.encode("utf-8"), message.encode("utf-8"), sha256
+        secret.encode("utf-8"), context.message().encode("utf-8"), sha256
     ).hexdigest()
 
 
 def verify_context(
-    secret: str,
-    *,
-    user_id: str,
-    role: str,
-    permissions_b64: str,
-    expires_at: int,
-    signature: str,
-    now: int,
+    secret: str, context: SignedContext, *, signature: str, now: int
 ) -> bool:
     """验签并检查是否过期。密钥为空、签名不符或已过期一律 False。
 
-    Args: secret, user_id, role, permissions_b64, expires_at, signature, now。
+    Args: secret, context, signature, now。
     """
     if not secret or not signature:
         return False
-    if expires_at <= now:
+    if context.expires_at <= now:
         return False
-    expected = sign_context(
-        secret,
-        user_id=user_id,
-        role=role,
-        permissions_b64=permissions_b64,
-        expires_at=expires_at,
-    )
-    return hmac.compare_digest(expected, signature)
+    return hmac.compare_digest(sign_context(secret, context), signature)

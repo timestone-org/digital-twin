@@ -102,7 +102,9 @@ async def create_role(
         operation,
         audit.ACTION_ROLE_CREATED,
         role,
-        after={"name": role.name, "permissions": sorted(requested)},
+        audit.Change(
+            after={"name": role.name, "permissions": sorted(requested)}
+        ),
     )
     return await _present(session, role)
 
@@ -122,8 +124,8 @@ async def update_role(
     changes = payload.model_dump(exclude_unset=True)
     guards.assert_builtin_role_mutable(
         is_builtin=role.is_builtin,
-        changing_name="name" in changes,
-        changing_codes=False,
+        is_changing_name="name" in changes,
+        is_changing_codes=False,
     )
     await _assert_role_reachable(session, operation, role)
     before = {"name": role.name, "description": role.description}
@@ -134,8 +136,10 @@ async def update_role(
         operation,
         audit.ACTION_ROLE_UPDATED,
         role,
-        before=before,
-        after={"name": role.name, "description": role.description},
+        audit.Change(
+            before=before,
+            after={"name": role.name, "description": role.description},
+        ),
     )
     return await _present(session, role)
 
@@ -154,8 +158,8 @@ async def set_role_permissions(
     role = await _require_role(session, role_id)
     guards.assert_builtin_role_mutable(
         is_builtin=role.is_builtin,
-        changing_name=False,
-        changing_codes=True,
+        is_changing_name=False,
+        is_changing_codes=True,
     )
     requested = frozenset(payload.codes)
     ids = await resolve_permission_ids(session, requested)
@@ -175,8 +179,7 @@ async def set_role_permissions(
         operation,
         audit.ACTION_ROLE_PERMISSIONS_SET,
         role,
-        before=before,
-        after={"permissions": sorted(requested)},
+        audit.Change(before=before, after={"permissions": sorted(requested)}),
     )
     return await _present(session, role)
 
@@ -194,8 +197,8 @@ async def delete_role(
     role = await _require_role(session, role_id)
     guards.assert_builtin_role_mutable(
         is_builtin=role.is_builtin,
-        changing_name=True,
-        changing_codes=True,
+        is_changing_name=True,
+        is_changing_codes=True,
     )
     await _assert_role_reachable(session, operation, role)
     if await user_crud.count_by_role(session, role.id) > 0:
@@ -205,7 +208,7 @@ async def delete_role(
         operation,
         audit.ACTION_ROLE_DELETED,
         role,
-        before={"name": role.name},
+        audit.Change(before={"name": role.name}),
     )
     await role_crud.delete(session, role)
 
@@ -240,19 +243,18 @@ def _audit(
     operation: Operation,
     action: str,
     role: Role,
-    *,
-    before: dict[str, object] | None = None,
-    after: dict[str, object] | None = None,
+    change: audit.Change = audit.NO_CHANGE,
 ) -> None:
     audit.record(
         session,
-        actor=operation.operator.user,
-        action=action,
-        target_type=TARGET_TYPE,
-        target_id=str(role.id),
-        before=before,
-        after=after,
-        source_ip=operation.source_ip,
+        audit.Entry(
+            actor=operation.operator.user,
+            action=action,
+            target_type=TARGET_TYPE,
+            target_id=str(role.id),
+            change=change,
+            source_ip=operation.source_ip,
+        ),
     )
 
 

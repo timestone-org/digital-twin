@@ -139,7 +139,7 @@ async def create_rule(
         operation,
         audit.ACTION_ROUTE_RULE_CREATED,
         rule,
-        after=_snapshot(rule),
+        audit.Change(after=_snapshot(rule)),
     )
     cache.invalidate()
     return to_route_rule_out(rule)
@@ -171,8 +171,7 @@ async def update_rule(
         operation,
         audit.ACTION_ROUTE_RULE_UPDATED,
         rule,
-        before=before,
-        after=_snapshot(rule),
+        audit.Change(before=before, after=_snapshot(rule)),
     )
     cache.invalidate()
     return to_route_rule_out(rule)
@@ -195,7 +194,7 @@ async def delete_rule(
         operation,
         audit.ACTION_ROUTE_RULE_DELETED,
         rule,
-        before=_snapshot(rule),
+        audit.Change(before=_snapshot(rule)),
     )
     await route_rule_crud.delete(session, rule)
     cache.invalidate()
@@ -224,19 +223,18 @@ def _audit(
     operation: Operation,
     action: str,
     rule: RouteRule,
-    *,
-    before: dict[str, object] | None = None,
-    after: dict[str, object] | None = None,
+    change: audit.Change = audit.NO_CHANGE,
 ) -> None:
     audit.record(
         session,
-        actor=operation.operator.user,
-        action=action,
-        target_type=TARGET_TYPE,
-        target_id=str(rule.id),
-        before=before,
-        after=after,
-        source_ip=operation.source_ip,
+        audit.Entry(
+            actor=operation.operator.user,
+            action=action,
+            target_type=TARGET_TYPE,
+            target_id=str(rule.id),
+            change=change,
+            source_ip=operation.source_ip,
+        ),
     )
 
 

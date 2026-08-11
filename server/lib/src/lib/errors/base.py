@@ -21,7 +21,7 @@ class AppError(Exception):
 
     code: int = 50000
     http_status: int = 500
-    retryable: bool = False
+    is_retryable: bool = False
 
     def __init__(
         self,
@@ -95,4 +95,4 @@ class DependencyUnavailable(AppError):
 
     code = 50001
     http_status = 503
-    retryable = True
+    is_retryable = True

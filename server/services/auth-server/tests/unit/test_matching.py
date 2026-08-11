@@ -51,7 +51,7 @@ def test_higher_priority_wins_even_when_less_specific() -> None:
         method="GET",
         held_codes=frozenset(),
     )
-    assert decision.allowed
+    assert decision.is_allowed
 
 
 def test_first_match_is_final_even_if_a_looser_rule_would_pass() -> None:
@@ -62,7 +62,7 @@ def test_first_match_is_final_even_if_a_looser_rule_would_pass() -> None:
     decision = decide(
         rules, path="/x/secret", method="GET", held_codes=frozenset()
     )
-    assert not decision.allowed
+    assert not decision.is_allowed
     assert decision.reason is DecisionReason.INSUFFICIENT
 
 
@@ -70,14 +70,14 @@ def test_no_matching_rule_denies() -> None:
     decision = decide(
         [], path="/anything", method="GET", held_codes=frozenset({"a"})
     )
-    assert not decision.allowed
+    assert not decision.is_allowed
     assert decision.reason is DecisionReason.NO_RULE
 
 
 def test_empty_code_rule_allows_any_authenticated_caller() -> None:
     rules = [rule("/open", "GET", (), priority=1)]
     decision = decide(rules, path="/open", method="GET", held_codes=frozenset())
-    assert decision.allowed
+    assert decision.is_allowed
     assert decision.required_codes == frozenset()
 
 
@@ -85,17 +85,17 @@ def test_all_mode_requires_every_code() -> None:
     rules = [rule("/x", "GET", ("a", "b"), priority=1)]
     assert not decide(
         rules, path="/x", method="GET", held_codes=frozenset({"a"})
-    ).allowed
+    ).is_allowed
     assert decide(
         rules, path="/x", method="GET", held_codes=frozenset({"a", "b"})
-    ).allowed
+    ).is_allowed
 
 
 def test_any_mode_requires_only_one_code() -> None:
     rules = [rule("/x", "GET", ("a", "b"), mode="any", priority=1)]
     assert decide(
         rules, path="/x", method="GET", held_codes=frozenset({"b"})
-    ).allowed
+    ).is_allowed
 
 
 def test_method_specific_rule_ignores_other_methods() -> None:
@@ -124,9 +124,9 @@ def test_path_normalization(raw: str, expected: str) -> None:
 
 
 def test_sort_key_is_a_total_order_on_equal_priority() -> None:
-    a = rule("/aaa", "GET", priority=5)
-    b = rule("/aaaa", "GET", priority=5)
-    assert sort_key(b) < sort_key(a)
+    shorter = rule("/aaa", "GET", priority=5)
+    longer = rule("/aaaa", "GET", priority=5)
+    assert sort_key(longer) < sort_key(shorter)
 
 
 def test_rule_matching_a_broader_rule_with_same_verdict_is_redundant() -> None:

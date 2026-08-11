@@ -85,7 +85,9 @@ async def _ensure_role_loaded(session: AsyncSession, user: User) -> None:
     它同样走 noload 策略。只能显式取一次再挂上去（同会话内命中身份映射，
     多数情况下不产生额外查询）。
     """
-    if user.role is not None:
+    # ⚠ 类型上 `role` 不可空，运行期在 noload 下却真的是 None，
+    # 故这里必须按可空处理——收窄成 `is not None` 会被优化掉。
+    if getattr(user, "role", None) is not None:
         return
     role = await session.get(Role, user.role_id)
     if role is None:

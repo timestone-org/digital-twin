@@ -40,7 +40,7 @@ class PermissionCrud(CrudBase[Permission]):
                 Permission.code.in_(codes)
             )
         )
-        return {code: permission_id for code, permission_id in rows.all()}
+        return {row.code: row.id for row in rows.all()}
 
     async def builtin_codes(self, session: AsyncSession) -> frozenset[str]:
         """内置码集合。全权判定以它为基准，手工建码不影响判定。"""

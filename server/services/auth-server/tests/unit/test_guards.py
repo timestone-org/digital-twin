@@ -83,23 +83,23 @@ def test_cannot_edit_a_role_whose_current_codes_exceed_the_operator() -> None:
 def test_builtin_role_name_and_codes_are_immutable() -> None:
     with pytest.raises(BuiltinImmutable):
         guards.assert_builtin_role_mutable(
-            is_builtin=True, changing_name=True, changing_codes=False
+            is_builtin=True, is_changing_name=True, is_changing_codes=False
         )
     with pytest.raises(BuiltinImmutable):
         guards.assert_builtin_role_mutable(
-            is_builtin=True, changing_name=False, changing_codes=True
+            is_builtin=True, is_changing_name=False, is_changing_codes=True
         )
 
 
 def test_builtin_role_description_stays_editable() -> None:
     guards.assert_builtin_role_mutable(
-        is_builtin=True, changing_name=False, changing_codes=False
+        is_builtin=True, is_changing_name=False, is_changing_codes=False
     )
 
 
 def test_custom_role_is_fully_mutable() -> None:
     guards.assert_builtin_role_mutable(
-        is_builtin=False, changing_name=True, changing_codes=True
+        is_builtin=False, is_changing_name=True, is_changing_codes=True
     )
 
 
@@ -113,13 +113,13 @@ def test_cannot_act_on_self() -> None:
 def test_last_super_admin_is_protected() -> None:
     with pytest.raises(SelfLockout):
         guards.assert_not_last_super_admin(
-            target_is_super=True, super_admin_count=1, action="删除"
+            is_target_super=True, super_admin_count=1, action="删除"
         )
 
 
 def test_non_super_target_is_not_protected_by_the_last_admin_rule() -> None:
     guards.assert_not_last_super_admin(
-        target_is_super=False, super_admin_count=1, action="删除"
+        is_target_super=False, super_admin_count=1, action="删除"
     )
 
 

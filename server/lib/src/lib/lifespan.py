@@ -30,15 +30,15 @@ class LifespanHook:
 class ReadinessGate:
     """就绪闸。收到 SIGTERM 后立刻置否，让编排器先摘流量再 drain。"""
 
-    ready: bool = False
+    is_ready: bool = False
     reason: str = "starting"
 
     def open(self) -> None:
-        self.ready = True
+        self.is_ready = True
         self.reason = "ok"
 
     def close(self, reason: str) -> None:
-        self.ready = False
+        self.is_ready = False
         self.reason = reason
 
 

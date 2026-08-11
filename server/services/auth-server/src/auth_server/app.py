@@ -10,7 +10,7 @@ from auth_server.container import Container, build_container
 from auth_server.settings import API_PREFIX, Settings
 from lib.lifespan import LifespanHook
 from lib.logging import configure_logging, get_logger
-from lib.web import ReadinessProbe, create_app
+from lib.web import ReadinessProbe, Runtime, create_app
 
 _logger = get_logger("auth.app")
 
@@ -32,9 +32,11 @@ def build_app(settings: Settings) -> FastAPI:
         title="DigitalTwin Auth Server",
         prefix=API_PREFIX,
         routers=ROUTERS,
-        lifespan_hooks=_hooks(container),
-        readiness_probes=_probes(container),
-        drain_timeout_s=settings.app_drain_timeout_s,
+        runtime=Runtime(
+            lifespan_hooks=_hooks(container),
+            readiness_probes=_probes(container),
+            drain_timeout_s=settings.app_drain_timeout_s,
+        ),
     )
     app.state.container = container
     return app

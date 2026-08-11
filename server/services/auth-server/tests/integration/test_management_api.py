@@ -68,8 +68,8 @@ async def test_list_item_gives_direct_permission_count_not_the_codes(
 ) -> None:
     """列表项给直权**条数**，不展开码。
 
-    ⚠ 前端按这个形状渲染。曾经前端把列表项当详情用，拿 `direct_permissions`
-    的长度，实际取到 undefined，整页崩在渲染里——列表与详情的形状差异必须钉死。
+    ⚠ 列表与详情的形状差异必须钉死：前端把列表项当详情用、去拿
+    `direct_permissions` 的长度时，取到的是 undefined，整页崩在渲染里。
     """
     headers = await admin(app_client)
     created = await new_user(app_client, "mgmt-shape")

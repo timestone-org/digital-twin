@@ -16,7 +16,7 @@ class InMemoryCache:
     """进程内字典实现。"""
 
     store: dict[str, str] = field(default_factory=dict[str, str])
-    ttl: dict[str, int] = field(default_factory=dict[str, int])
+    ttl_s: dict[str, int] = field(default_factory=dict[str, int])
 
     async def ping(self) -> bool:
         return True
@@ -35,18 +35,18 @@ class InMemoryCache:
 
     async def set_json(self, key: str, value: Any, *, ttl_s: int) -> None:
         self.store[key] = json.dumps(value, ensure_ascii=False)
-        self.ttl[key] = ttl_s
+        self.ttl_s[key] = ttl_s
 
     async def set_if_absent(self, key: str, value: str, *, ttl_s: int) -> bool:
         if key in self.store:
             return False
         self.store[key] = value
-        self.ttl[key] = ttl_s
+        self.ttl_s[key] = ttl_s
         return True
 
     async def delete(self, key: str) -> None:
         self.store.pop(key, None)
-        self.ttl.pop(key, None)
+        self.ttl_s.pop(key, None)
 
     async def exists(self, key: str) -> bool:
         return key in self.store
@@ -54,12 +54,12 @@ class InMemoryCache:
     async def incr_in_window(self, key: str, *, window_s: int) -> int:
         count = int(self.store.get(key, "0")) + 1
         self.store[key] = str(count)
-        self.ttl.setdefault(key, window_s)
+        self.ttl_s.setdefault(key, window_s)
         return count
 
     async def close(self) -> None:
         self.store.clear()
-        self.ttl.clear()
+        self.ttl_s.clear()
 
 
 @dataclass

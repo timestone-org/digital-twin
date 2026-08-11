@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
@@ -16,6 +17,20 @@ from lib.logging.logger import get_logger
 _logger = get_logger("lib.db")
 
 
+@dataclass(frozen=True)
+class PoolProfile:
+    """连接池容量与各级超时。默认值取自 runtime-resilience.md §3.1 的预算表。"""
+
+    pool_size: int = 10
+    max_overflow: int = 5
+    connect_timeout_s: float = 5.0
+    statement_timeout_ms: int = 2000
+    lock_timeout_ms: int = 3000
+
+
+DEFAULT_POOL = PoolProfile()
+
+
 class Database:
     """持有引擎与会话工厂。进程内单例，但只是无状态的连接池句柄。"""
 
@@ -23,26 +38,22 @@ class Database:
         self,
         *,
         dsn: str,
-        pool_size: int = 10,
-        max_overflow: int = 5,
-        connect_timeout_s: float = 5.0,
-        statement_timeout_ms: int = 2000,
-        lock_timeout_ms: int = 3000,
+        profile: PoolProfile = DEFAULT_POOL,
         search_path: str | None = None,
     ) -> None:
         server_settings = {
-            "statement_timeout": str(statement_timeout_ms),
-            "lock_timeout": str(lock_timeout_ms),
+            "statement_timeout": str(profile.statement_timeout_ms),
+            "lock_timeout": str(profile.lock_timeout_ms),
         }
         if search_path is not None:
             server_settings["search_path"] = search_path
         self._engine: AsyncEngine = create_async_engine(
             dsn,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
+            pool_size=profile.pool_size,
+            max_overflow=profile.max_overflow,
             pool_pre_ping=True,
             connect_args={
-                "timeout": connect_timeout_s,
+                "timeout": profile.connect_timeout_s,
                 "server_settings": server_settings,
             },
         )

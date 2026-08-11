@@ -16,23 +16,28 @@ from auth_server.settings import Settings
 
 OUTPUT = Path(__file__).resolve().parent.parent / "openapi.json"
 
-# 导出只需要一个能构造出来的配置对象，不连任何依赖。
 # ⚠ 这些占位值只在导出进程里存在，绝不能出现在运行时配置里。
-_EXPORT_ONLY = {
-    "postgres_host": "openapi-export",
-    "postgres_user": "openapi-export",
-    "postgres_password": SecretStr("openapi-export"),
-    "postgres_db": "openapi-export",
-    "redis_host": "openapi-export",
-    "jwt_secret": SecretStr("x" * 32),
-    "edge_signing_secret": SecretStr("x" * 32),
-    "edge_service_key": SecretStr("x" * 32),
-}
+_PLACEHOLDER = "openapi-export"
+_PLACEHOLDER_SECRET = SecretStr("x" * 32)
+
+
+def _export_settings() -> Settings:
+    """导出只需要一个能构造出来的配置对象，不连任何依赖。"""
+    return Settings(
+        postgres_host=_PLACEHOLDER,
+        postgres_user=_PLACEHOLDER,
+        postgres_password=SecretStr(_PLACEHOLDER),
+        postgres_db=_PLACEHOLDER,
+        redis_host=_PLACEHOLDER,
+        jwt_secret=_PLACEHOLDER_SECRET,
+        edge_signing_secret=_PLACEHOLDER_SECRET,
+        edge_service_key=_PLACEHOLDER_SECRET,
+    )
 
 
 def build_schema() -> dict[str, Any]:
     """构造应用并取它的 OpenAPI 文档。"""
-    return build_app(Settings(**_EXPORT_ONLY)).openapi()
+    return build_app(_export_settings()).openapi()
 
 
 def render(schema: dict[str, Any]) -> str:

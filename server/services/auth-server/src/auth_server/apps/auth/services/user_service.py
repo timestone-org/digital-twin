@@ -138,7 +138,7 @@ async def update_user(
         operation,
         audit.ACTION_USER_UPDATED,
         target.user,
-        before=before,
+        before,
     )
     return to_user_detail(await load_identity(session, target.user))
 
@@ -161,18 +161,20 @@ async def delete_user(
     )
     _assert_can_touch(operation, target, action="删除")
     guards.assert_not_last_super_admin(
-        target_is_super=target.is_super,
+        is_target_super=target.is_super,
         super_admin_count=await count_super_admins(session),
         action="删除",
     )
     audit.record(
         session,
-        actor=operation.operator.user,
-        action=audit.ACTION_USER_DELETED,
-        target_type=TARGET_TYPE,
-        target_id=str(target.user.id),
-        before=_snapshot(target.user),
-        source_ip=operation.source_ip,
+        audit.Entry(
+            actor=operation.operator.user,
+            action=audit.ACTION_USER_DELETED,
+            target_type=TARGET_TYPE,
+            target_id=str(target.user.id),
+            change=audit.Change(before=_snapshot(target.user)),
+            source_ip=operation.source_ip,
+        ),
     )
     await user_crud.delete(session, target.user)
 
@@ -198,7 +200,7 @@ async def set_active(
             action="执行停用",
         )
         guards.assert_not_last_super_admin(
-            target_is_super=target.is_super,
+            is_target_super=target.is_super,
             super_admin_count=await count_super_admins(session),
             action="停用",
         )
@@ -214,7 +216,7 @@ async def set_active(
             else audit.ACTION_USER_DEACTIVATED
         ),
         target.user,
-        before=before,
+        before,
     )
     return to_user_detail(await load_identity(session, target.user))
 
@@ -274,18 +276,18 @@ def _audit(
     operation: Operation,
     action: str,
     user: User,
-    *,
     before: dict[str, object] | None = None,
 ) -> None:
     audit.record(
         session,
-        actor=operation.operator.user,
-        action=action,
-        target_type=TARGET_TYPE,
-        target_id=str(user.id),
-        before=before,
-        after=_snapshot(user),
-        source_ip=operation.source_ip,
+        audit.Entry(
+            actor=operation.operator.user,
+            action=action,
+            target_type=TARGET_TYPE,
+            target_id=str(user.id),
+            change=audit.Change(before=before, after=_snapshot(user)),
+            source_ip=operation.source_ip,
+        ),
     )
 
 

@@ -62,7 +62,7 @@ def _mount_probes(
         return JSONResponse(status_code=200, content={"status": "alive"})
 
     async def ready() -> JSONResponse:
-        if not gate.ready:
+        if not gate.is_ready:
             return JSONResponse(
                 status_code=503,
                 content={"status": "not_ready", "reason": gate.reason},
@@ -81,22 +81,32 @@ def _mount_probes(
     app.include_router(router)
 
 
+@dataclass(frozen=True)
+class Runtime:
+    """进程生命周期相关的装配项：启动钩子、就绪探针、drain 上限。"""
+
+    lifespan_hooks: Sequence[LifespanHook] = ()
+    readiness_probes: Sequence[ReadinessProbe] = ()
+    drain_timeout_s: float = 20.0
+
+
+DEFAULT_RUNTIME = Runtime()
+
+
 def create_app(
     *,
     title: str,
     prefix: str,
     routers: Sequence[APIRouter] = (),
-    lifespan_hooks: Sequence[LifespanHook] = (),
-    readiness_probes: Sequence[ReadinessProbe] = (),
-    drain_timeout_s: float = 20.0,
+    runtime: Runtime = DEFAULT_RUNTIME,
 ) -> FastAPI:
     """按统一约定装配 FastAPI 实例。
 
-    Args: title, prefix（对外路径前缀）, routers, lifespan_hooks,
-        readiness_probes, drain_timeout_s。
+    Args: title, prefix（对外路径前缀）, routers, runtime。
     """
     runner = LifespanRunner(
-        hooks=tuple(lifespan_hooks), drain_timeout_s=drain_timeout_s
+        hooks=tuple(runtime.lifespan_hooks),
+        drain_timeout_s=runtime.drain_timeout_s,
     )
 
     @asynccontextmanager
@@ -118,7 +128,9 @@ def create_app(
         RequestContextMiddleware, health_paths=_health_paths(prefix)
     )
     register_exception_handlers(app)
-    _mount_probes(app, prefix=prefix, gate=runner.gate, probes=readiness_probes)
+    _mount_probes(
+        app, prefix=prefix, gate=runner.gate, probes=runtime.readiness_probes
+    )
     for router in routers:
         app.include_router(router)
     return app

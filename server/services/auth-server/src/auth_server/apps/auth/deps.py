@@ -37,6 +37,7 @@ def get_container(request: Request) -> Container:
     Args: request。
     """
     container = request.app.state.container
+    # pragma 理由：装配失败时进程根本起不来，这条分支没有可达的测试路径
     if not isinstance(container, Container):  # pragma: no cover
         raise RuntimeError("应用未装配 container")
     return container

@@ -65,15 +65,19 @@ async def test_revoked_refresh_token_is_rejected() -> None:
 
 
 async def test_revoking_twice_is_harmless() -> None:
-    service = make_service(InMemoryCache())
+    cache = InMemoryCache()
+    service = make_service(cache)
     pair = service.issue_pair(USER, now=utcnow())
     await service.revoke_refresh(pair.refresh_token)
+    revoked = dict(cache.store)
     await service.revoke_refresh(pair.refresh_token)
+    assert cache.store == revoked
 
 
 async def test_revoking_garbage_is_a_no_op_so_logout_still_succeeds() -> None:
-    service = make_service(InMemoryCache())
-    await service.revoke_refresh("not-a-token")
+    cache = InMemoryCache()
+    await make_service(cache).revoke_refresh("not-a-token")
+    assert cache.store == {}
 
 
 async def test_refresh_fails_closed_when_cache_is_unreachable() -> None:

@@ -3,6 +3,7 @@
 from lib.auth.context import CallerContext
 from lib.auth.header_codec import (
     MAX_PERMISSION_HEADER_BYTES,
+    SignedContext,
     decode_identity,
     decode_permissions,
     encode_identity,
@@ -18,6 +19,7 @@ __all__ = [
     "CallerContext",
     "JwtCodec",
     "PasswordHasher",
+    "SignedContext",
     "TokenClaims",
     "TokenError",
     "decode_identity",

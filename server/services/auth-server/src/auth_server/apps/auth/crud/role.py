@@ -85,7 +85,7 @@ class RoleCrud(CrudBase[Role]):
             .where(User.role_id.in_(role_ids))
             .group_by(User.role_id)
         )
-        counts = {role_id: 0 for role_id in role_ids}
+        counts = dict.fromkeys(role_ids, 0)
         for role_id, total in rows.all():
             counts[role_id] = int(total)
         return counts

@@ -37,7 +37,7 @@ class RuleView:
 class Decision:
     """一次闸 1 判定的结果。"""
 
-    allowed: bool
+    is_allowed: bool
     reason: DecisionReason
     rule: RuleView | None = None
 
@@ -100,7 +100,7 @@ def decide(
     """
     rule = find_rule(rules, path=path, method=method)
     if rule is None:
-        return Decision(allowed=False, reason=DecisionReason.NO_RULE)
+        return Decision(is_allowed=False, reason=DecisionReason.NO_RULE)
     # 空码 = 任意已登录用户放行；匿名可达性由边缘免认证 location 保证
     if not rule.permission_codes:
         return Decision(True, DecisionReason.GRANTED, rule)
@@ -110,7 +110,7 @@ def decide(
         else rule.permission_codes <= held_codes
     )
     return Decision(
-        allowed=satisfied,
+        is_allowed=satisfied,
         reason=(
             DecisionReason.GRANTED if satisfied else DecisionReason.INSUFFICIENT
         ),
