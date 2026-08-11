@@ -200,6 +200,14 @@ jobs:
       AUTH_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
       # ⚠ 必须与集成用例里写死的口令一致：那几条用例是以种子管理员身份登录的
       AUTH_SEED_ADMIN_PASSWORD: Admin123456
+      PLATFORM_POSTGRES_HOST: localhost
+      PLATFORM_POSTGRES_PORT: '55432'
+      PLATFORM_POSTGRES_USER: dt
+      PLATFORM_POSTGRES_PASSWORD: dt
+      PLATFORM_POSTGRES_DB: dt
+      PLATFORM_POSTGRES_SCHEMA: platform
+      # ⚠ 与 AUTH_EDGE_SIGNING_SECRET 同值：这两个取值分叉就是全链路 401
+      PLATFORM_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -217,7 +225,11 @@ jobs:
         working-directory: server/services/auth-server
         run: |
           uv run alembic upgrade head
-          uv run auth-seed
+          uv run python -m scripts.seed
+
+      - name: 建 platform schema
+        working-directory: server/services/platform-server
+        run: uv run alembic upgrade head
 
       # ⚠ --cov 必须用点号模块名：写成路径形式时 coverage 静默跳过、数字虚高
       - name: lib 单元 + 契约
@@ -236,6 +248,15 @@ jobs:
             --cov-report=xml:../../../auth-coverage.xml \
             --junitxml=../../../auth-junit.xml 2>&1 | tee ../../../auth-pytest.log
 
+      - name: platform-server 全层
+        working-directory: server/services/platform-server
+        run: |
+          set -o pipefail
+          uv run pytest -q --cov=platform_server --cov-branch \
+            --cov-report=xml:../../../platform-coverage.xml \
+            --junitxml=../../../platform-junit.xml 2>&1 \
+            | tee ../../../platform-pytest.log
+
       # CI 里 skip 掉的用例等于没跑：环境能力由服务容器保证，缺了就该红
       - name: 运行结果自检（无 skip、无外网、覆盖率口径）
         run: |
@@ -243,6 +264,8 @@ jobs:
             lib-junit.xml lib-pytest.log
           uv run --project server python scripts/gates/check_pytest_run.py \
             auth-junit.xml auth-pytest.log
+          uv run --project server python scripts/gates/check_pytest_run.py \
+            platform-junit.xml platform-pytest.log
 
       # 整体覆盖率不许低于基线——哪怕仍在阈值之上
       - name: 覆盖率棘轮
@@ -251,12 +274,15 @@ jobs:
             lib lib-coverage.xml
           uv run --project server python scripts/gates/check_coverage.py \
             auth-server auth-coverage.xml
+          uv run --project server python scripts/gates/check_coverage.py \
+            platform-server platform-coverage.xml
 
       - name: 增量覆盖 ≥90%
         if: github.event_name == 'pull_request'
         run: |
           git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
-          uv run --project server diff-cover lib-coverage.xml auth-coverage.xml \
+          uv run --project server diff-cover \
+            lib-coverage.xml auth-coverage.xml platform-coverage.xml \
             --compare-branch "origin/${{ github.base_ref }}" --fail-under=90
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -324,6 +350,13 @@ jobs:
       AUTH_JWT_SECRET: ci-only-jwt-secret-0123456789abcdef
       AUTH_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
       AUTH_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
+      PLATFORM_POSTGRES_HOST: localhost
+      PLATFORM_POSTGRES_PORT: '55432'
+      PLATFORM_POSTGRES_USER: dt
+      PLATFORM_POSTGRES_PASSWORD: dt
+      PLATFORM_POSTGRES_DB: dt
+      PLATFORM_POSTGRES_SCHEMA: platform
+      PLATFORM_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup-server
@@ -332,13 +365,24 @@ jobs:
         run: uv run --project server python scripts/wait_for_deps.py "$MIGRATION_DSN"
 
       # openapi.json 是前后端之间唯一的类型真源：重新生成必须逐字节一致
-      - name: openapi.json 与代码一致
+      - name: auth openapi.json 与代码一致
         working-directory: server/services/auth-server
-        run: uv run auth-openapi --check
+        run: uv run python -m scripts.export_openapi --check
+
+      - name: platform openapi.json 与代码一致
+        working-directory: server/services/platform-server
+        run: uv run python -m scripts.export_openapi --check
 
       # ⚠ 代码可以回滚、数据库不回滚，所以每个迁移都必须真的能上能下
-      - name: 迁移 upgrade → downgrade → upgrade
+      - name: auth 迁移 upgrade → downgrade → upgrade
         working-directory: server/services/auth-server
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+
+      - name: platform 迁移 upgrade → downgrade → upgrade
+        working-directory: server/services/platform-server
         run: |
           uv run alembic upgrade head
           uv run alembic downgrade base

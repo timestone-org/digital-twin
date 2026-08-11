@@ -30,6 +30,7 @@ http {
   limit_req_zone $binary_remote_addr zone=login:10m rate=10r/m;
 
   upstream auth_server { server auth-server:8004; }
+  upstream platform_server { server platform-server:8005; }
 
   server {
     listen 80;
@@ -73,26 +74,26 @@ http {
     location = /api/v1/auth/redoc  { proxy_pass http://auth_server; }
     location = /api/v1/auth/openapi.json { proxy_pass http://auth_server; }
 
+    location = /api/v1/platform/health { proxy_pass http://platform_server; }
+    location = /api/v1/platform/ready  { proxy_pass http://platform_server; }
+    location = /api/v1/platform/docs   { proxy_pass http://platform_server; }
+    location = /api/v1/platform/redoc  { proxy_pass http://platform_server; }
+    location = /api/v1/platform/openapi.json {
+      proxy_pass http://platform_server;
+    }
+
     # —— 受保护面 ——
     location /api/v1/auth/ {
-      auth_request /_auth;
-      auth_request_set $auth_user  $upstream_http_x_auth_user_id;
-      auth_request_set $auth_name  $upstream_http_x_auth_username;
-      auth_request_set $auth_role  $upstream_http_x_auth_role;
-      auth_request_set $auth_perms $upstream_http_x_auth_permissions;
-      auth_request_set $auth_trunc $upstream_http_x_auth_permissions_truncated;
-      auth_request_set $auth_exp   $upstream_http_x_auth_exp;
-      auth_request_set $auth_sig   $upstream_http_x_auth_sig;
-
-      proxy_set_header X-Auth-User-Id   $auth_user;
-      proxy_set_header X-Auth-Username  $auth_name;
-      proxy_set_header X-Auth-Role      $auth_role;
-      proxy_set_header X-Auth-Permissions $auth_perms;
-      proxy_set_header X-Auth-Permissions-Truncated $auth_trunc;
-      proxy_set_header X-Auth-Exp       $auth_exp;
-      proxy_set_header X-Auth-Sig       $auth_sig;
-
+      include /etc/nginx/conf.d/auth-inject.conf;
       proxy_pass http://auth_server;
+      include /etc/nginx/conf.d/proxy-common.conf;
+    }
+
+    # ⚠ platform 完全依赖这里注入的签名头来认人：它自己不校验令牌。
+    # 这个 location 漏了 auth-inject，整个业务面就是一律 401。
+    location /api/v1/platform/ {
+      include /etc/nginx/conf.d/auth-inject.conf;
+      proxy_pass http://platform_server;
       include /etc/nginx/conf.d/proxy-common.conf;
     }
 
