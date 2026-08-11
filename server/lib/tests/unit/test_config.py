@@ -1,7 +1,7 @@
 """锁住配置装载：缺项即拒绝、密钥无默认值、连接串必须转义凭据。"""
 
 import pytest
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 from pydantic_settings import SettingsConfigDict
 
 from lib.config import (
@@ -10,6 +10,7 @@ from lib.config import (
     PostgresSettings,
     RedisSettings,
     load_settings,
+    load_settings_or_exit,
 )
 
 
@@ -72,10 +73,36 @@ def test_secret_never_appears_in_the_repr() -> None:
 
 def test_settings_object_is_frozen() -> None:
     settings = make()
-    with pytest.raises(Exception):  # noqa: B017
+    with pytest.raises(ValidationError):
         settings.postgres_host = "other"
 
 
 def test_trace_sample_ratio_is_bounded() -> None:
-    with pytest.raises(Exception):  # noqa: B017
+    with pytest.raises(ValidationError):
         make(app_trace_sample_ratio=1.5)
+
+
+def test_load_settings_or_exit_prints_and_exits_non_zero(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # ⚠ 配置不合法必须在启动第一秒响亮失败：日志器此时还没装配，
+    # 只能直写 stderr，且退出码非零才会让编排器判定启动失败
+    with pytest.raises(SystemExit) as caught:
+        load_settings_or_exit(Sample)
+    assert caught.value.code == 2
+    assert "SAMPLE_POSTGRES_HOST" in capsys.readouterr().err
+
+
+def test_load_settings_or_exit_returns_the_object_when_valid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name, value in {
+        "SAMPLE_POSTGRES_HOST": "db",
+        "SAMPLE_POSTGRES_USER": "u",
+        "SAMPLE_POSTGRES_PASSWORD": "p",
+        "SAMPLE_POSTGRES_DB": "d",
+        "SAMPLE_POSTGRES_SCHEMA": "s",
+        "SAMPLE_REDIS_HOST": "cache",
+    }.items():
+        monkeypatch.setenv(name, value)
+    assert load_settings_or_exit(Sample).postgres_host == "db"

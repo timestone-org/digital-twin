@@ -62,11 +62,11 @@ async def test_shutdown_order_is_not_the_reverse_of_startup() -> None:
 
 async def test_readiness_opens_after_startup_and_closes_on_shutdown() -> None:
     runner = LifespanRunner(hooks=())
-    assert not runner.gate.ready
+    assert not runner.gate.is_ready
     await runner.startup()
-    assert runner.gate.ready
+    assert runner.gate.is_ready
     await runner.shutdown()
-    assert not runner.gate.ready
+    assert not runner.gate.is_ready
     assert runner.gate.reason == "shutting_down"
 
 
@@ -110,11 +110,11 @@ async def test_startup_failure_propagates_and_leaves_gate_closed() -> None:
     runner = LifespanRunner(hooks=(LifespanHook("bad", startup=explode),))
     with pytest.raises(RuntimeError):
         await runner.startup()
-    assert not runner.gate.ready
+    assert not runner.gate.is_ready
 
 
 def test_gate_reports_the_reason_it_was_closed() -> None:
     gate = ReadinessGate()
     gate.open()
     gate.close("draining")
-    assert (gate.ready, gate.reason) == (False, "draining")
+    assert (gate.is_ready, gate.reason) == (False, "draining")

@@ -45,39 +45,38 @@ def test_non_ascii_identity_survives_latin1_header_encoding() -> None:
     assert codec.decode_identity(encoded) == "张三"
 
 
-def test_signature_verifies_only_with_matching_fields() -> None:
-    args = {
+def context(**overrides: str | int) -> codec.SignedContext:
+    fields: dict[str, str | int] = {
         "user_id": "u1",
         "role": "admin",
-        "permissions_b64": codec.encode_permissions(["a"]),
+        "permissions_b64": "W10",
         "expires_at": 2000,
     }
-    signature = codec.sign_context("secret", **args)
-    assert codec.verify_context("secret", **args, signature=signature, now=1000)
+    fields.update(overrides)
+    return codec.SignedContext(**fields)  # type: ignore[arg-type]  # 测试夹具按名传值，类型由 SignedContext 自己收敛
+
+
+def test_signature_verifies_only_with_matching_fields() -> None:
+    signed = context(permissions_b64=codec.encode_permissions(["a"]))
+    signature = codec.sign_context("secret", signed)
+    assert codec.verify_context("secret", signed, signature=signature, now=1000)
+    tampered = context(
+        permissions_b64=codec.encode_permissions(["a"]), role="viewer"
+    )
     assert not codec.verify_context(
-        "secret", **{**args, "role": "viewer"}, signature=signature, now=1000
+        "secret", tampered, signature=signature, now=1000
     )
 
 
 def test_expired_signature_is_rejected() -> None:
-    args = {
-        "user_id": "u1",
-        "role": "admin",
-        "permissions_b64": "W10",
-        "expires_at": 2000,
-    }
-    signature = codec.sign_context("secret", **args)
+    signed = context()
+    signature = codec.sign_context("secret", signed)
     assert not codec.verify_context(
-        "secret", **args, signature=signature, now=2000
+        "secret", signed, signature=signature, now=2000
     )
 
 
 def test_missing_secret_or_signature_fails_closed() -> None:
-    args = {
-        "user_id": "u1",
-        "role": "admin",
-        "permissions_b64": "W10",
-        "expires_at": 2000,
-    }
-    assert not codec.verify_context("", **args, signature="x", now=1)
-    assert not codec.verify_context("s", **args, signature="", now=1)
+    signed = context()
+    assert not codec.verify_context("", signed, signature="x", now=1)
+    assert not codec.verify_context("s", signed, signature="", now=1)

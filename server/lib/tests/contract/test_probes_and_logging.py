@@ -14,7 +14,7 @@ import pytest
 
 from lib.logging import bind_log_context, get_logger, reset_log_context
 from lib.logging.logger import configure_logging
-from lib.web import ReadinessProbe, bootstrap, create_app
+from lib.web import ReadinessProbe, Runtime, bootstrap, create_app
 
 
 def _capture(*, level: str) -> list[dict[str, object]]:
@@ -47,13 +47,15 @@ async def ready_app() -> AsyncIterator[tuple[httpx.AsyncClient, list[str]]]:
     app = create_app(
         title="probe",
         prefix="/api/v1/p",
-        readiness_probes=(ReadinessProbe("db", healthy),),
+        runtime=Runtime(readiness_probes=(ReadinessProbe("db", healthy),)),
     )
-    async with app.router.lifespan_context(app):
-        async with httpx.AsyncClient(
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://t"
-        ) as client:
-            yield client, called
+        ) as client,
+    ):
+        yield client, called
 
 
 async def test_liveness_answers_without_touching_dependencies(
@@ -91,13 +93,15 @@ async def test_a_failing_dependency_makes_the_instance_not_ready() -> None:
     app = create_app(
         title="probe",
         prefix="/api/v1/p",
-        readiness_probes=(ReadinessProbe("db", broken),),
+        runtime=Runtime(readiness_probes=(ReadinessProbe("db", broken),)),
     )
-    async with app.router.lifespan_context(app):
-        async with httpx.AsyncClient(
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://t"
-        ) as client:
-            response = await client.get("/api/v1/p/ready")
+        ) as client,
+    ):
+        response = await client.get("/api/v1/p/ready")
     assert response.status_code == 503
     assert response.json()["failed"] == ["db"]
 
@@ -110,17 +114,19 @@ async def test_a_hanging_probe_is_bounded_and_counts_as_failed() -> None:
     app = create_app(
         title="probe",
         prefix="/api/v1/p",
-        readiness_probes=(ReadinessProbe("slow", hang),),
+        runtime=Runtime(readiness_probes=(ReadinessProbe("slow", hang),)),
     )
     original = bootstrap.READINESS_PROBE_TIMEOUT_S
     bootstrap.READINESS_PROBE_TIMEOUT_S = 0.05
     try:
-        async with app.router.lifespan_context(app):
-            async with httpx.AsyncClient(
+        async with (
+            app.router.lifespan_context(app),
+            httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),
                 base_url="http://t",
-            ) as client:
-                response = await client.get("/api/v1/p/ready")
+            ) as client,
+        ):
+            response = await client.get("/api/v1/p/ready")
     finally:
         bootstrap.READINESS_PROBE_TIMEOUT_S = original
     assert response.status_code == 503
@@ -133,13 +139,15 @@ async def test_a_raising_probe_counts_as_failed() -> None:
     app = create_app(
         title="probe",
         prefix="/api/v1/p",
-        readiness_probes=(ReadinessProbe("db", explode),),
+        runtime=Runtime(readiness_probes=(ReadinessProbe("db", explode),)),
     )
-    async with app.router.lifespan_context(app):
-        async with httpx.AsyncClient(
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://t"
-        ) as client:
-            response = await client.get("/api/v1/p/ready")
+        ) as client,
+    ):
+        response = await client.get("/api/v1/p/ready")
     assert response.json()["failed"] == ["db"]
 
 

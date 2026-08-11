@@ -54,20 +54,26 @@ async def test_limiter_allows_up_to_the_limit_then_rejects() -> None:
 
 
 async def test_limiter_counts_each_identity_separately() -> None:
+    cache = InMemoryCache()
     limiter = FixedWindowLimiter(
-        cache=InMemoryCache(), namespace="login", limit=1, window_s=60
+        cache=cache, namespace="login", limit=1, window_s=60
     )
     await limiter.hit("alice")
     await limiter.hit("bob")
+    assert cache.store["ratelimit:login:alice"] == "1"
+    assert cache.store["ratelimit:login:bob"] == "1"
 
 
 async def test_reset_clears_the_counter() -> None:
+    cache = InMemoryCache()
     limiter = FixedWindowLimiter(
-        cache=InMemoryCache(), namespace="login", limit=1, window_s=60
+        cache=cache, namespace="login", limit=1, window_s=60
     )
     await limiter.hit("alice")
     await limiter.reset("alice")
+    assert "ratelimit:login:alice" not in cache.store
     await limiter.hit("alice")
+    assert cache.store["ratelimit:login:alice"] == "1"
 
 
 async def test_limiter_fails_closed_when_the_cache_is_unreachable() -> None:
@@ -82,7 +88,7 @@ async def test_in_memory_cache_roundtrips_json_and_ttl() -> None:
     cache = InMemoryCache()
     await cache.set_json("k", {"a": 1}, ttl_s=30)
     assert await cache.get_json("k") == {"a": 1}
-    assert cache.ttl["k"] == 30
+    assert cache.ttl_s["k"] == 30
     await cache.delete("k")
     assert await cache.get_json("k") is None
 
