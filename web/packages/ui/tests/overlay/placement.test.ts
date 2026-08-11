@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { computeMenuPosition } from '../../../src/components/DtSelect/placement'
+import { computeMenuPosition } from '../../src/overlay/placement'
 
 const VIEWPORT = { viewportWidth: 1000, viewportHeight: 800 }
 const TRIGGER = { top: 100, bottom: 140, left: 200, width: 160 }

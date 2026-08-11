@@ -4,8 +4,8 @@
  */
 import { nextTick, ref } from 'vue'
 import type { Ref } from 'vue'
-import { measureMenu } from './placement'
-import { useOverlayTracking } from './useOverlayTracking'
+import { measureMenu } from '../../overlay/placement'
+import { useOverlayTracking } from '../../overlay/useOverlayTracking'
 
 /**
  * 浮层暴露出来的那几件事。
