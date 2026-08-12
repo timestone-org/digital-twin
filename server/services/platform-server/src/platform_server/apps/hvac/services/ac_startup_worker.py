@@ -12,11 +12,13 @@ from lib.errors import DependencyUnavailable
 from lib.logging import bind_log_context, get_logger, reset_log_context
 from lib.web.middleware import parse_traceparent
 from platform_server.apps.hvac.services import ac_startup_queue
-from platform_server.apps.hvac.services.ac_startup_service import (
+from platform_server.apps.hvac.services.ac_startup_extract import (
     ExtractionContext,
+    run_shard,
+)
+from platform_server.apps.hvac.services.ac_startup_service import (
     fail_shard,
     finalize_if_complete,
-    run_shard,
 )
 from platform_server.stream import StreamEntry, StreamGroup, StreamLike
 

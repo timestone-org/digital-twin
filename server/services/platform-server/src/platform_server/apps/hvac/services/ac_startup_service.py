@@ -5,53 +5,41 @@
 
 import uuid
 from dataclasses import dataclass
-from decimal import Decimal
+from datetime import datetime
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lib.db import Database
 from lib.logging import get_logger
 from platform_server.apps.hvac.crud import (
     ac_startup_batch_crud,
     ac_startup_episode_crud,
     ac_startup_exclusion_crud,
     ac_startup_shard_crud,
+    room_crud,
 )
-from platform_server.apps.hvac.datasets import (
-    DATASET_RAW_MINUTE,
-    find_dataset,
-    metric_keys,
+from platform_server.apps.hvac.errors import (
+    RoomNotFound,
+    StartupRebuildInProgress,
+    TimeRangeInvalid,
 )
-from platform_server.apps.hvac.errors import TimeRangeInvalid
 from platform_server.apps.hvac.models import (
-    AcDataBinding,
-    AcMetricLimit,
     AcStartupBatch,
-    AcStartupEpisode,
+    AcStartupExclusion,
     AcStartupShard,
-    AcUnit,
 )
-from platform_server.apps.hvac.schemas import TimeWindow
-from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
-from platform_server.apps.hvac.services.ac_startup_frames import (
-    MetricBand,
-    RoomUnit,
-    build_frames,
-)
+from platform_server.apps.hvac.schemas import StartupExclusionIn, TimeWindow
 from platform_server.apps.hvac.services.ac_startup_queue import (
     ShardMessage,
     current_traceparent,
+    publish_shards,
 )
 from platform_server.apps.hvac.services.ac_startup_rules import (
     LOGIC_VERSION,
-    Episode,
     ExtractionRules,
-    extract_episodes,
 )
 from platform_server.apps.hvac.services.ac_startup_shards import (
-    ShardRange,
     plan_months,
-    shard_range,
 )
 from platform_server.apps.hvac.startups import (
     BATCH_RETENTION,
@@ -61,32 +49,12 @@ from platform_server.apps.hvac.startups import (
     SHARD_STATUS_DONE,
     SHARD_STATUS_FAILED,
 )
+from platform_server.stream import StreamGroup, StreamLike
 
 _logger = get_logger("platform.hvac.ac_startup")
 
 # 与分片表的 CHECK 同口径
 _MAX_REASON = 500
-
-# 抽取要读的指标列：判定只用三个，读数留档要全量
-_RAW_DATASET = find_dataset(DATASET_RAW_MINUTE)
-_RAW_COLUMNS = metric_keys(_RAW_DATASET) if _RAW_DATASET else ()
-
-
-@dataclass(frozen=True)
-class BoundUnit:
-    """一台空调加上它读哪个数据源对象。"""
-
-    unit: RoomUnit
-    source_object: str
-
-
-@dataclass(frozen=True)
-class ExtractionContext:
-    """跑一片要用的协作对象与参数。"""
-
-    reader: AcSourceReader
-    rules: ExtractionRules
-    max_rows: int
 
 
 @dataclass(frozen=True)
@@ -98,6 +66,21 @@ class RebuildPlan:
     """
 
     batch: AcStartupBatch
+    messages: tuple[ShardMessage, ...]
+
+    def dispatch(self) -> "ShardDispatch":
+        """摘出投递要用的那点东西。
+
+        ⚠ 与 ORM 实体解耦：投递发生在事务提交之后，那时实体已经脱离会话。
+        """
+        return ShardDispatch(batch_id=self.batch.id, messages=self.messages)
+
+
+@dataclass(frozen=True)
+class ShardDispatch:
+    """要投出去的一批分片任务，不含任何 ORM 实体。"""
+
+    batch_id: uuid.UUID
     messages: tuple[ShardMessage, ...]
 
 
@@ -114,6 +97,8 @@ async def request_rebuild(
     的仍然是上一批次的完整数据。
     Args: session, room_id, window, rules。
     """
+    await _require_room(session, room_id)
+    await _require_no_running_batch(session, room_id)
     months = plan_months(window.start, window.end)
     if not months:
         # ⚠ 空区间会切出零片，而零片的批次在收尾时「全都跑完了」当场成立：
@@ -167,149 +152,6 @@ def _new_batch(
         shard_total=shards,
         shard_done=0,
     )
-
-
-async def run_shard(
-    session: AsyncSession,
-    context: ExtractionContext,
-    message: ShardMessage,
-) -> int:
-    """跑一片：取数、抽取、按归属区间写事件。返回写了多少条。
-
-    ⚠ 全片幂等：事件按 `(batch_id, started_at)` upsert，分片状态按
-    `(batch_id, month)` 覆盖。同一条消息重放多少次，结果都一样。
-    Args: session, context, message。
-    """
-    batch = await ac_startup_batch_crud.get(session, message.batch_id)
-    if batch is None or batch.status != BATCH_STATUS_RUNNING:
-        # 批次已被清理或已判失败：这条消息迟到了，静默跳过而不是造一批孤儿行
-        return 0
-    window = shard_range(
-        message.month,
-        window_start=batch.window_start,
-        window_end=batch.window_end,
-        rules=context.rules,
-    )
-    episodes = await _extract(session, context, batch=batch, window=window)
-    await ac_startup_episode_crud.upsert_many(
-        session,
-        [_to_row(batch, episode) for episode in episodes],
-    )
-    await ac_startup_shard_crud.mark(
-        session,
-        AcStartupShard(batch_id=batch.id, month=message.month),
-        status=SHARD_STATUS_DONE,
-    )
-    return len(episodes)
-
-
-async def _extract(
-    session: AsyncSession,
-    context: ExtractionContext,
-    *,
-    batch: AcStartupBatch,
-    window: ShardRange,
-) -> list[Episode]:
-    """把一片的取数区间跑成事件，并只留归本片写的那些。
-
-    Args: session, context, batch, window。
-    """
-    units = await load_bound_units(session, batch.room_id)
-    if not units:
-        return []
-    rows = {
-        bound.unit.serial: await context.reader.fetch_samples(
-            source_object=bound.source_object,
-            columns=_RAW_COLUMNS,
-            window=TimeWindow(start=window.read_start, end=window.read_end),
-            row_limit=context.max_rows,
-        )
-        for bound in units
-    }
-    frames = build_frames([bound.unit for bound in units], rows)
-    found = extract_episodes(frames, rules=context.rules)
-    # ⚠ 只写归属区间内的：取数越了界，事件也会多出来，不过滤就会与相邻分片
-    # 各写一份同一次开机
-    return [item for item in found if window.owns(item.started_at)]
-
-
-def _to_row(batch: AcStartupBatch, episode: Episode) -> AcStartupEpisode:
-    """抽取结果 → 事件行。
-
-    Args: batch, episode。
-    """
-    return AcStartupEpisode(
-        batch_id=batch.id,
-        room_id=batch.room_id,
-        started_at=episode.started_at,
-        running_set=list(episode.running_set),
-        complied_at=episode.complied_at,
-        duration_minutes=episode.duration_minutes,
-        outcome=episode.outcome,
-        readings={
-            serial: dict(values) for serial, values in episode.readings.items()
-        },
-    )
-
-
-async def load_bound_units(
-    session: AsyncSession, room_id: uuid.UUID
-) -> list[BoundUnit]:
-    """房间里绑定了原始数据的空调，连同它们各自的达标范围。
-
-    ⚠ 没绑数据源的空调整台跳过：它一分钟数据都没有，留在房间清单里只会让
-    每一帧都因「少一台」而作废。
-    Args: session, room_id。
-    """
-    rows = await session.execute(
-        select(AcUnit.id, AcUnit.serial, AcDataBinding.source_object)
-        .join(AcDataBinding, AcDataBinding.ac_unit_id == AcUnit.id)
-        .where(
-            AcUnit.room_id == room_id,
-            AcDataBinding.dataset == DATASET_RAW_MINUTE,
-        )
-        .order_by(AcUnit.serial.asc())
-    )
-    found = list(rows.all())
-    bands = await _load_bands(
-        session, frozenset(unit_id for unit_id, _, _ in found)
-    )
-    return [
-        BoundUnit(
-            unit=RoomUnit(serial=serial, bands=bands.get(unit_id, {})),
-            source_object=source_object,
-        )
-        for unit_id, serial, source_object in found
-    ]
-
-
-async def _load_bands(
-    session: AsyncSession, unit_ids: frozenset[uuid.UUID]
-) -> dict[uuid.UUID, dict[str, MetricBand]]:
-    """批量取一组空调的达标范围，逐台回查就是 N+1。
-
-    Args: session, unit_ids。
-    """
-    if not unit_ids:
-        return {}
-    rows = await session.execute(
-        select(
-            AcMetricLimit.ac_unit_id,
-            AcMetricLimit.metric,
-            AcMetricLimit.lower_limit,
-            AcMetricLimit.upper_limit,
-        ).where(AcMetricLimit.ac_unit_id.in_(unit_ids))
-    )
-    found: dict[uuid.UUID, dict[str, MetricBand]] = {}
-    for unit_id, metric, lower, upper in rows.all():
-        found.setdefault(unit_id, {})[metric] = MetricBand(
-            lower=_as_decimal(lower), upper=_as_decimal(upper)
-        )
-    return found
-
-
-def _as_decimal(value: object) -> Decimal | None:
-    return value if isinstance(value, Decimal) else None
 
 
 async def finalize_if_complete(
@@ -403,3 +245,141 @@ async def fail_shard(
         month=message.month,
         reason=reason[:_MAX_REASON],
     )
+
+
+async def _require_room(session: AsyncSession, room_id: uuid.UUID) -> None:
+    if await room_crud.get(session, room_id) is None:
+        raise RoomNotFound("房间不存在")
+
+
+async def _require_no_running_batch(
+    session: AsyncSession, room_id: uuid.UUID
+) -> None:
+    """同一个房间同时只允许一次抽取在跑。
+
+    ⚠ 不拦的话，连点几次按钮就是几份分片同时读同一段外库数据，最后只有一份
+    能切成当前批次，其余全是白算——而外库是厂商的，白算的代价落在别人身上。
+    Args: session, room_id。
+    """
+    if await ac_startup_batch_crud.find_running(session, room_id) is not None:
+        raise StartupRebuildInProgress("这个房间已经有一次抽取在跑，请稍候")
+
+
+async def dispatch_shards(
+    stream: StreamLike,
+    database: Database,
+    *,
+    target: StreamGroup,
+    plan: ShardDispatch,
+) -> None:
+    """把分片任务投进队列。**必须在事务提交之后跑**。
+
+    ⚠ 投递失败就把批次判失败：否则批次会永远停在「跑中」，进度停在 0/N，而
+    没有任何一条消息在路上——页面看起来还在算，其实永远算不完。
+    Args: stream, database, target, plan。
+    """
+    try:
+        await publish_shards(
+            stream, target=target, messages=list(plan.messages)
+        )
+    # 队列不可达时不重试：这条链路上没有任何一层在重试，失败要看得见
+    except Exception as error:
+        _logger.error(
+            "ac_startup_dispatch_failed",
+            "分片任务未能入队，批次判失败",
+            batch_id=str(plan.batch_id),
+            error=error,
+        )
+        await _open_and_fail(database, plan.batch_id)
+
+
+async def fail_batch(
+    session: AsyncSession, batch_id: uuid.UUID
+) -> AcStartupBatch | None:
+    """把还在跑的批次判失败；已经不在跑就什么都不做。
+
+    ⚠ 先锁行再判状态：收尾与判失败可能同时发生，不锁就会把一个刚切换成功的
+    批次改回失败。
+    Args: session, batch_id。
+    """
+    batch = await ac_startup_batch_crud.lock(session, batch_id)
+    if batch is None or batch.status != BATCH_STATUS_RUNNING:
+        return None
+    return await _fail(session, batch)
+
+
+async def _open_and_fail(database: Database, batch_id: uuid.UUID) -> None:
+    """另开一个事务把批次判失败——原来那个事务早已提交。
+
+    Args: database, batch_id。
+    """
+    try:
+        async with database.session() as session:
+            await fail_batch(session, batch_id)
+    # 连失败都记不下来时只剩日志
+    except Exception as error:  # pragma: no cover - 依赖库同时不可用
+        _logger.error(
+            "ac_startup_batch_failure_unrecorded",
+            "批次失败状态未能落库",
+            batch_id=str(batch_id),
+            error=error,
+        )
+
+
+async def put_exclusion(
+    session: AsyncSession,
+    *,
+    room_id: uuid.UUID,
+    started_at: datetime,
+    payload: StartupExclusionIn,
+    excluded_by: str,
+) -> AcStartupExclusion:
+    """按自然键写一条人工排除，重复调用是覆盖。
+
+    ⚠ 不校验「这个时刻确实有一条事件」：排除挂在自然键上，重算后某些事件的
+    起始时刻会平移，落空的那些由批次摘要里的计数报出来，而不是在这里拦下。
+    Args: session, room_id, started_at, payload, excluded_by。
+    """
+    await _require_room(session, room_id)
+    await ac_startup_exclusion_crud.upsert(
+        session,
+        AcStartupExclusion(
+            room_id=room_id,
+            started_at=started_at,
+            reason=payload.reason,
+            excluded_by=excluded_by,
+        ),
+    )
+    await session.flush()
+    _logger.info(
+        "ac_startup_exclusion_set",
+        "开机事件已人工排除",
+        room_id=str(room_id),
+        started_at=started_at.isoformat(),
+    )
+    found = await ac_startup_exclusion_crud.find(
+        session, room_id=room_id, started_at=started_at
+    )
+    if found is None:  # pragma: no cover - 刚写完必然取得到
+        raise RoomNotFound("人工排除写入后未能取回")
+    return found
+
+
+async def delete_exclusion(
+    session: AsyncSession, *, room_id: uuid.UUID, started_at: datetime
+) -> None:
+    """取消一条人工排除。没排除过也算成功——DELETE 必须幂等。
+
+    Args: session, room_id, started_at。
+    """
+    await _require_room(session, room_id)
+    removed = await ac_startup_exclusion_crud.delete_by_key(
+        session, room_id, started_at
+    )
+    if removed:
+        _logger.info(
+            "ac_startup_exclusion_cleared",
+            "人工排除已取消",
+            room_id=str(room_id),
+            started_at=started_at.isoformat(),
+        )

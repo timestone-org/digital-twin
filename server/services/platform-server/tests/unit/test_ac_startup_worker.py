@@ -17,13 +17,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lib.db import Database
 from lib.errors import DependencyUnavailable
 from lib.logging import current_log_context
-from platform_server.apps.hvac.services import ac_startup_worker
+from platform_server.apps.hvac.services import (
+    ac_startup_service,
+    ac_startup_worker,
+)
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
-from platform_server.apps.hvac.services.ac_startup_queue import ShardMessage
-from platform_server.apps.hvac.services.ac_startup_rules import ExtractionRules
-from platform_server.apps.hvac.services.ac_startup_service import (
+from platform_server.apps.hvac.services.ac_startup_extract import (
     ExtractionContext,
 )
+from platform_server.apps.hvac.services.ac_startup_queue import ShardMessage
+from platform_server.apps.hvac.services.ac_startup_rules import ExtractionRules
 from platform_server.apps.hvac.services.ac_startup_worker import (
     ConsumerOptions,
     ShardConsumer,
@@ -66,8 +69,10 @@ class FakeStream:
     )
     failure: Exception | None = None
     on_empty: Callable[[], None] | None = None
+    published: int = 0
 
     async def publish(self, stream: str, fields: dict[str, str]) -> str:
+        self.published += 1
         return f"{stream}:{len(fields)}"
 
     async def ensure_group(self, target: StreamGroup) -> None:
@@ -286,3 +291,65 @@ async def test_the_loop_keeps_ticking_until_it_is_told_to_stop(
     await consumer.run()
     assert stream.acked == ["1-0"]
     assert calls == [f"run:2026-01:{TRACE_ID}", "finalize"]
+
+
+@dataclass
+class FailingStream(FakeStream):
+    """投递必失败的流，用来验证入队失败的去向。"""
+
+    async def publish(self, stream: str, fields: dict[str, str]) -> str:
+        raise DependencyUnavailable(f"队列暂时不可用：{stream}/{len(fields)}")
+
+
+async def test_a_dispatch_that_cannot_reach_the_queue_fails_the_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 投不出去就把批次判失败，否则它会永远停在「跑中」而没有消息在路上。"""
+    failed: list[uuid.UUID] = []
+
+    async def fake_fail(_session: object, batch_id: uuid.UUID) -> None:
+        failed.append(batch_id)
+
+    monkeypatch.setattr(ac_startup_service, "fail_batch", fake_fail)
+    await ac_startup_service.dispatch_shards(
+        cast(StreamLike, FailingStream()),
+        cast(Database, FakeDatabase()),
+        target=TARGET,
+        plan=ac_startup_service.ShardDispatch(
+            batch_id=BATCH_ID,
+            messages=(
+                ShardMessage(
+                    batch_id=BATCH_ID,
+                    room_id=ROOM_ID,
+                    month="2026-01",
+                    traceparent=TRACEPARENT,
+                ),
+            ),
+        ),
+    )
+    assert failed == [BATCH_ID]
+
+
+async def test_a_dispatch_that_reaches_the_queue_publishes_every_shard() -> (
+    None
+):
+    """能投出去时每一片都要投，少一片就少跑一个月。"""
+    stream = FakeStream()
+    await ac_startup_service.dispatch_shards(
+        cast(StreamLike, stream),
+        cast(Database, FakeDatabase()),
+        target=TARGET,
+        plan=ac_startup_service.ShardDispatch(
+            batch_id=BATCH_ID,
+            messages=tuple(
+                ShardMessage(
+                    batch_id=BATCH_ID,
+                    room_id=ROOM_ID,
+                    month=month,
+                    traceparent=TRACEPARENT,
+                )
+                for month in ("2026-01", "2026-02")
+            ),
+        ),
+    )
+    assert stream.published == 2
