@@ -19,6 +19,7 @@ from platform_server.apps.hvac.errors import (
 from platform_server.apps.hvac.schemas import TimeWindow
 from platform_server.apps.hvac.services.ac_source_reader import (
     AcSourceReader,
+    build_extent_sql,
     build_samples_sql,
     build_series_sql,
     to_source_time,
@@ -211,3 +212,45 @@ async def test_buckets_bind_the_chosen_width_and_the_local_range() -> None:
         "range_start": source_time("2026-08-12T08:00:00"),
         "range_end": source_time("2026-08-13T08:00:00"),
     }
+
+
+def test_extent_sql_seeks_both_ends_of_the_clustered_key() -> None:
+    """⚠ 取两端是索引定位；真去 COUNT 才是 190 万行的全扫描。"""
+    assert build_extent_sql(OBJECT) == (
+        "SELECT MIN([CT]) AS range_start, MAX([CT]) AS range_end"
+        " FROM [KTStartData_K01]"
+    )
+
+
+async def test_the_extent_comes_back_as_utc() -> None:
+    """两端与逐行取数走同一条换算，不然范围会整体平移 8 小时。"""
+    source = StubSource(
+        rows=[
+            {
+                "range_start": source_time("2023-01-01T08:00:00"),
+                "range_end": source_time("2026-08-12T08:00:00"),
+            }
+        ]
+    )
+    extent = await reader_over(source).fetch_extent(OBJECT)
+    assert extent is not None
+    assert extent.start == datetime(2023, 1, 1, tzinfo=UTC)
+    assert extent.end == datetime(2026, 8, 12, tzinfo=UTC)
+
+
+async def test_an_empty_object_has_no_extent() -> None:
+    """一行都没有的对象给 None，不是给一个假的区间。"""
+    assert await reader_over(StubSource(rows=[])).fetch_extent(OBJECT) is None
+
+
+async def test_null_bounds_count_as_no_extent() -> None:
+    """⚠ 空表上的 MIN/MAX 回的是 NULL 而不是空结果集，两条路都要接住。"""
+    source = StubSource(rows=[{"range_start": None, "range_end": None}])
+    assert await reader_over(source).fetch_extent(OBJECT) is None
+
+
+async def test_an_unreachable_source_fails_the_extent_query() -> None:
+    """驱动异常一律收敛，不裸露给上层。"""
+    source = StubSource(failure=DependencyUnavailable("down"))
+    with pytest.raises(SourceUnavailable):
+        await reader_over(source).fetch_extent(OBJECT)

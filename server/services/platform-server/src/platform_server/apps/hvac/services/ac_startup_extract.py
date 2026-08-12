@@ -29,7 +29,10 @@ from platform_server.apps.hvac.models import (
     AcUnit,
 )
 from platform_server.apps.hvac.schemas import TimeWindow
-from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
+from platform_server.apps.hvac.services.ac_source_reader import (
+    AcSourceReader,
+    SourceExtent,
+)
 from platform_server.apps.hvac.services.ac_startup_frames import (
     MetricBand,
     RoomUnit,
@@ -213,3 +216,30 @@ async def _load_bands(
 
 def _as_decimal(value: object) -> Decimal | None:
     return value if isinstance(value, Decimal) else None
+
+
+async def resolve_source_extent(
+    session: AsyncSession, reader: AcSourceReader, *, room_id: uuid.UUID
+) -> SourceExtent | None:
+    """房间里全部绑定对象合起来覆盖的时间跨度；一台都没绑就给 None。
+
+    ⚠ 取并集不取交集：某台空调是后装的、数据从去年才有，按交集算会把前面几年
+    的历史整段切掉，而那正是样本最多的一段。
+    Args: session, reader, room_id。
+    """
+    units = await load_bound_units(session, room_id)
+    if not units:
+        return None
+    found = [
+        extent
+        for extent in [
+            await reader.fetch_extent(bound.source_object) for bound in units
+        ]
+        if extent is not None
+    ]
+    if not found:
+        return None
+    return SourceExtent(
+        start=min(extent.start for extent in found),
+        end=max(extent.end for extent in found),
+    )

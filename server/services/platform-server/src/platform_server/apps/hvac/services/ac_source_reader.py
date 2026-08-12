@@ -36,6 +36,10 @@ _SHAPED_OBJECTS_SQL = (
 )
 # 厂商自己的空调台账，只用来给下拉框补一个能认出位置的名字
 _CAPTIONS_SQL = "SELECT device_id, Caption FROM [KTInfo]"
+# 取数时间跨度的两端。⚠ 基表的聚簇主键就是这一列，故两端都是索引定位，
+# 不是全扫描——真去 COUNT 才是 190 万行
+_EXTENT_START = "range_start"
+_EXTENT_END = "range_end"
 
 
 class SqlSource(Protocol):
@@ -127,6 +131,31 @@ def build_series_sql(source_object: str, columns: Sequence[str]) -> str:
     )
 
 
+def build_extent_sql(source_object: str) -> str:
+    """一个对象里数据的时间跨度。
+
+    ⚠ 这里确实在拼 SQL：标识符不能参数化。对象名经 `quote_identifier` 的白名单
+    校验并方括号引用，且入库前另经同一条正则。
+    Args: source_object。
+    """
+    time_column = quote_identifier(SOURCE_TIME_COLUMN)
+    return (
+        # 理由：对象名与列名都经 quote_identifier 的白名单校验并方括号引用，
+        # 没有任何外部输入以字面量进入这段 SQL
+        f"SELECT MIN({time_column}) AS {_EXTENT_START},"  # noqa: S608
+        f" MAX({time_column}) AS {_EXTENT_END}"
+        f" FROM {quote_identifier(source_object)}"
+    )
+
+
+@dataclass(frozen=True)
+class SourceExtent:
+    """一个对象里数据的两端，都是 UTC 时刻。"""
+
+    start: datetime
+    end: datetime
+
+
 class AcSourceReader:
     """外部只读库的读取面。时区换算与驱动异常收敛都收在这一层。"""
 
@@ -181,6 +210,28 @@ class AcSourceReader:
             raise SourceUnavailable(_UNAVAILABLE) from error
         lowered = {name.lower(): columns for name, columns in found.items()}
         return lowered.get(source_object.lower(), {})
+
+    async def fetch_extent(self, source_object: str) -> SourceExtent | None:
+        """一个对象里数据的时间跨度；空表给 None。
+
+        Args: source_object。
+        """
+        rows = await self._query(build_extent_sql(source_object), {})
+        if not rows:
+            return None
+        return self._to_extent(rows[0])
+
+    def _to_extent(self, row: Mapping[str, object]) -> SourceExtent | None:
+        """回包的两端换算成 UTC；任一端不是时间就当作空表。
+
+        Args: row。
+        """
+        start, end = row.get(_EXTENT_START), row.get(_EXTENT_END)
+        if not isinstance(start, datetime) or not isinstance(end, datetime):
+            return None
+        return SourceExtent(
+            start=to_utc(start, self._zone), end=to_utc(end, self._zone)
+        )
 
     async def fetch_samples(
         self,

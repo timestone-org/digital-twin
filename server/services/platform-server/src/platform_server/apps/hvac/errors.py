@@ -120,6 +120,13 @@ class StartupRebuildInProgress(AppError):
     http_status = 409
 
 
+class StartupSourceUnbound(AppError):
+    """房间里没有可用的原始数据（没绑数据源，或绑了但一行都没有）。"""
+
+    code = 41617
+    http_status = 409
+
+
 class SourceUnavailable(AppError):
     """外部数据源不可用。⚠ 不返回陈旧数据兜底——查不到就明确说查不到。"""
 
