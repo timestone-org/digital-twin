@@ -32,7 +32,12 @@ describe('AppTopbar · 返回入口', () => {
       props: { title: '用户详情', backTo: '/system/users' },
     })
     expect(wrapper.get('a').attributes('href')).toBe('/system/users')
-    expect(wrapper.find('button').exists()).toBe(false)
+    // 顶栏另有换肤器这类真按钮，所以按「没有一个叫『返回』的按钮」来断言
+    expect(
+      wrapper
+        .findAll('button')
+        .some((node) => node.attributes('aria-label') === '返回'),
+    ).toBe(false)
   })
 
   it('图标按钮要有可读名称，缺省是「返回」', () => {
@@ -77,6 +82,29 @@ describe('AppTopbar · 标题与插槽', () => {
       slots: { actions: '<span class="probe">新建</span>' },
     })
     expect(wrapper.find('.probe').exists()).toBe(true)
+  })
+})
+
+describe('AppTopbar · 换肤入口', () => {
+  it('常驻顶栏：换肤是外壳功能，不该占用归页面所有的 actions 槽', () => {
+    const wrapper = mount(AppTopbar, { props: { title: '用户管理' } })
+    expect(
+      wrapper
+        .findAll('button')
+        .some((node) => node.attributes('aria-label')?.includes('主题外观')),
+    ).toBe(true)
+  })
+
+  it('页面自己的 actions 与换肤入口并存', () => {
+    const wrapper = mount(AppTopbar, {
+      props: { title: '用户管理' },
+      slots: { actions: '<button aria-label="新建">新建</button>' },
+    })
+    const labels = wrapper
+      .findAll('button')
+      .map((node) => node.attributes('aria-label') ?? '')
+    expect(labels).toContain('新建')
+    expect(labels.some((label) => label.includes('主题外观'))).toBe(true)
   })
 })
 
