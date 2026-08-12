@@ -43,6 +43,16 @@ describe('AppNavGroupTree', () => {
     expect(wrapper.find('a[href="/system/users"]').exists()).toBe(true)
   })
 
+  // 开合动画会在离场那几帧里留住节点。收完必须真摘掉：只是看不见的话，
+  // 合起来的二级链接仍在 Tab 序里，焦点会落到看不见的东西上。
+  it('收起后子链接从 DOM 里摘掉，而不是只是看不见', async () => {
+    const wrapper = render('/system/users')
+    expect(wrapper.find('a[href="/system/users"]').exists()).toBe(true)
+
+    await wrapper.get('[aria-controls="nav-group-system"]').trigger('click')
+    expect(wrapper.find('a[href="/system/users"]').exists()).toBe(false)
+  })
+
   it('子项没有目标时退回工作台，而不是渲染一个死链接', async () => {
     const wrapper = mount(AppNavGroupTree, {
       props: {

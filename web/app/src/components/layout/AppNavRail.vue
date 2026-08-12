@@ -83,7 +83,7 @@ async function onLogout(): Promise<void> {
          等一级项多到折叠态也需要滚时，得把面板改成 teleport + fixed 定位。 -->
     <nav
       id="app-nav"
-      class="flex flex-1 flex-col gap-1.5 py-3"
+      class="flex flex-1 flex-col gap-2.5 py-3"
       :class="isCollapsed ? 'items-center' : 'overflow-y-auto px-2'"
       aria-label="主导航"
     >
