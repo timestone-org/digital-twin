@@ -166,6 +166,34 @@ export async function listAcDatasets(): Promise<AcDataset[]> {
   return data.items
 }
 
+/**
+ * 外部库里一个可绑定的对象。
+ * ⚠ 类型落在 api 层而不是 `@dt/contracts`：这条端点的契约还没随 openapi.json
+ * 一起提交，稳定后再挪进契约包并补 `hvac-shapes` 的键集断言。
+ */
+export interface AcSourceObject {
+  name: string
+  /** 厂商给的中文别名，取不到时为 null。 */
+  caption: string | null
+  row_count_hint: number | null
+}
+
+/**
+ * 某个数据集在外部库里可绑定的对象。
+ * ⚠ 后端按**列形状**过滤而不是按名字：同前缀但没有时间列的那几个视图不会出现
+ * 在这里，所以这一项只能选、不能让人手打。
+ * @param dataset 数据集 key，取自目录
+ */
+export async function listAcSourceObjects(
+  dataset: string,
+): Promise<AcSourceObject[]> {
+  const data = await requestData<AcItemList<AcSourceObject>>(
+    `/ac-datasets/${dataset}/source-objects`,
+    onPlatform(),
+  )
+  return data.items
+}
+
 /* 数据源绑定 */
 
 export async function listAcDataBindings(

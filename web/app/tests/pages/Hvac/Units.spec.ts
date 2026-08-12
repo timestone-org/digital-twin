@@ -173,12 +173,26 @@ describe('空调台账页', () => {
     expect(wrapper.text()).not.toContain('新建空调')
     expect(wrapper.find('[aria-label="编辑空调"]').exists()).toBe(false)
     expect(wrapper.find('[aria-label="删除空调"]').exists()).toBe(false)
+    // 数据与达标整个是 manage-only：连可绑定对象的清单都会暴露外库结构
+    expect(wrapper.find('[aria-label="数据与达标"]').exists()).toBe(false)
   })
 
   it('持 ac:manage 才出现新建与行内操作', async () => {
     const wrapper = await render(['ac:view', 'ac:manage'])
     expect(wrapper.text()).toContain('新建空调')
     expect(wrapper.find('[aria-label="编辑空调"]').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="数据与达标"]').exists()).toBe(true)
+  })
+
+  it('点数据与达标打开的是这一台的配置', async () => {
+    vi.spyOn(hvac, 'listAcDatasets').mockResolvedValue([])
+    vi.spyOn(hvac, 'listAcDataBindings').mockResolvedValue([])
+    vi.spyOn(hvac, 'listAcMetricLimits').mockResolvedValue([])
+    const wrapper = await render(['ac:view', 'ac:manage'])
+    await wrapper.find('[aria-label="数据与达标"]').trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toContain('数据与达标 · AC-A-101')
+    expect(hvac.listAcDataBindings).toHaveBeenCalledWith('a1')
   })
 
   it('进页面就把车间选项拉回来，供筛选与建档共用', async () => {

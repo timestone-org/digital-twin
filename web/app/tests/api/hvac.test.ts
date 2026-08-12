@@ -52,6 +52,7 @@ describe('每一条都打 platform 前缀', () => {
     ['deleteAcUnit', () => hvac.deleteAcUnit('a1')],
     ['relocateAcUnits', () => hvac.relocateAcUnits(['a1'], 'r1')],
     ['listAcDatasets', () => hvac.listAcDatasets()],
+    ['listAcSourceObjects', () => hvac.listAcSourceObjects('raw_minute')],
     ['listAcDataBindings', () => hvac.listAcDataBindings('a1')],
     ['putAcDataBinding', () => hvac.putAcDataBinding('a1', 'raw_minute', 'V1')],
     ['deleteAcDataBinding', () => hvac.deleteAcDataBinding('a1', 'raw_minute')],
@@ -170,6 +171,19 @@ describe('数据集目录', () => {
     }
     requestMock.mockResolvedValue({ items: [dataset] })
     await expect(hvac.listAcDatasets()).resolves.toEqual([dataset])
+  })
+
+  it('可绑定对象按数据集问，数据集在路径上', async () => {
+    await hvac.listAcSourceObjects('raw_minute')
+    expect(call()[0]).toBe('/ac-datasets/raw_minute/source-objects')
+  })
+
+  it('可绑定对象同样剥掉 items 外壳，caption 可以是 null', async () => {
+    const object = { name: 'KTStartData_K01', caption: null, row_count_hint: 1 }
+    requestMock.mockResolvedValue({ items: [object] })
+    await expect(hvac.listAcSourceObjects('raw_minute')).resolves.toEqual([
+      object,
+    ])
   })
 })
 

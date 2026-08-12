@@ -25,6 +25,7 @@ import { describeError, useAsyncList } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
 import { useLocationPicker } from '@/features/hvac/useLocationPicker'
 import { formatDateTime } from '@/utils/datetime'
+import AcDataDialog from './components/AcDataDialog.vue'
 import AcUnitFormDialog from './components/AcUnitFormDialog.vue'
 import AcUnitRowActions from './components/AcUnitRowActions.vue'
 import UnitFilters from './components/UnitFilters.vue'
@@ -66,6 +67,8 @@ const {
 const keyword = ref('')
 const editing = ref<AcUnit | null>(null)
 const isFormOpen = ref(false)
+const configuring = ref<AcUnit | null>(null)
+const isDataOpen = ref(false)
 
 const list = useAsyncList<AcUnit>((query) =>
   hvac.listAcUnits({
@@ -101,6 +104,11 @@ function openCreate(): void {
 function openEdit(unit: AcUnit): void {
   editing.value = unit
   isFormOpen.value = true
+}
+
+function openData(unit: AcUnit): void {
+  configuring.value = unit
+  isDataOpen.value = true
 }
 
 async function afterWrite(message: string): Promise<void> {
@@ -193,6 +201,7 @@ onMounted(() => {
           <AcUnitRowActions
             :unit="row"
             @edit="openEdit($event)"
+            @configure="openData($event)"
             @remove="removeUnit($event)"
           />
         </template>
@@ -204,5 +213,7 @@ onMounted(() => {
       :unit="editing"
       @saved="afterWrite($event)"
     />
+
+    <AcDataDialog v-model="isDataOpen" :unit="configuring" />
   </AppShell>
 </template>
