@@ -31,6 +31,15 @@ http {
 
   upstream auth_server { server auth-server:8004; }
 
+  # 鉴权子请求要回答的是「客户端在访问哪条路径」。
+  # ⚠ 子请求里 $uri 是子请求自己的 /_auth，拿它去问规则表一律 no_matching_rule → 全站 403；
+  # 只有 $request_uri 继承自父请求。但它带查询串，而规则是对 path 做 fnmatch，
+  # 带上 ?a=b 会让 /api/v1/auth/health 这类精确规则错过，故在这里剥掉查询串。
+  map $request_uri $original_path {
+    default              $request_uri;
+    "~^(?<path_only>[^?]*)\?" $path_only;
+  }
+
   server {
     listen 80;
 
@@ -102,7 +111,7 @@ http {
       proxy_pass http://auth_server/internal/v1/verify;
       proxy_pass_request_body off;
       proxy_set_header Content-Length "";
-      proxy_set_header X-Original-URI    $uri;
+      proxy_set_header X-Original-URI    $original_path;
       proxy_set_header X-Original-Method $request_method;
       proxy_set_header X-Service-Key     "${AUTH_EDGE_SERVICE_KEY}";
       # 全站前置，每个受保护请求过一次，必须快；超时按拒绝处理
