@@ -5,6 +5,9 @@
 /** auth-server 的对外前缀，与 server/services/auth-server 的 API_PREFIX 同值。 */
 export const AUTH_BASE_URL = '/api/v1/auth'
 
+/** opcua-server 的对外前缀，与 server/services/opcua-server 的 API_PREFIX 同值。 */
+export const OPCUA_BASE_URL = '/api/v1/opcua'
+
 export const appConfig = {
   name: '数字孪生平台',
   shortName: 'DIGITAL TWIN',

@@ -23,6 +23,38 @@ export type {
 } from './admin'
 export { HTTP_METHODS, MATCH_MODES } from './admin'
 export type {
+  OpcuaCertificate,
+  OpcuaCreatableNodeClass,
+  OpcuaCredential,
+  OpcuaCredentialCreated,
+  OpcuaDataType,
+  OpcuaDesiredState,
+  OpcuaIdentifierKind,
+  OpcuaInstance,
+  OpcuaInstanceAction,
+  OpcuaInstanceCreateInput,
+  OpcuaInstanceUpdateInput,
+  OpcuaNode,
+  OpcuaNodeClass,
+  OpcuaNodeCreateInput,
+  OpcuaNodeMutation,
+  OpcuaNodeUpdateInput,
+  OpcuaNodeValue,
+  OpcuaNodeWrite,
+  OpcuaPortPool,
+  OpcuaSecurityPolicy,
+  OpcuaSession,
+  OpcuaTrustedCertificate,
+} from './opcua'
+export {
+  OPCUA_CREATABLE_NODE_CLASSES,
+  OPCUA_DATA_TYPES,
+  OPCUA_DESIRED_STATES,
+  OPCUA_IDENTIFIER_KINDS,
+  OPCUA_NODE_CLASSES,
+  OPCUA_SECURITY_POLICIES,
+} from './opcua'
+export type {
   DtButtonVariant,
   DtDataCardRole,
   DtDataColumn,
