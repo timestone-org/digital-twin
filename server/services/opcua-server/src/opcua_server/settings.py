@@ -25,6 +25,27 @@ PORT_MAX = 65535
 PUBLISH_WINDOW_FLOOR_MS = 200
 
 
+class MigrationSettings(PostgresSettings):
+    """迁移只需要连库这一组。
+
+    ⚠ 刻意**不**继承完整 `Settings`：跑一次建表与连边缘签名、Redis 毫无
+    关系，而配置的口径是「缺一个就退出」。让迁移依赖整份配置的后果是——
+    任何只配了数据库的场合（CI 的迁移作业、部署时先建表再起服务、本地
+    对着一个空库验可逆性）都会以「Field required」失败，而报出来的字段
+    与建表这件事完全对不上号。
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="OPCUA_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        frozen=True,
+    )
+
+    postgres_schema: str = DB_SCHEMA
+
+
 class Settings(AppSettings, PostgresSettings, RedisSettings):
     """进程启动时构造一次并冻结。"""
 
