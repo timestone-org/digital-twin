@@ -1,0 +1,3039 @@
+{
+  "components": {
+    "schemas": {
+      "ApiResponse_CredentialCreatedOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CredentialCreatedOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[CredentialCreatedOut]",
+        "type": "object"
+      },
+      "ApiResponse_InstanceActionOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstanceActionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[InstanceActionOut]",
+        "type": "object"
+      },
+      "ApiResponse_InstanceOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstanceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[InstanceOut]",
+        "type": "object"
+      },
+      "ApiResponse_NodeMutationOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NodeMutationOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[NodeMutationOut]",
+        "type": "object"
+      },
+      "ApiResponse_NodeOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NodeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[NodeOut]",
+        "type": "object"
+      },
+      "ApiResponse_NodeValueOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NodeValueOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[NodeValueOut]",
+        "type": "object"
+      },
+      "ApiResponse_NodeWriteOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NodeWriteOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[NodeWriteOut]",
+        "type": "object"
+      },
+      "ApiResponse_Page_InstanceOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page_InstanceOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Page[InstanceOut]]",
+        "type": "object"
+      },
+      "ApiResponse_Page_NodeOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page_NodeOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Page[NodeOut]]",
+        "type": "object"
+      },
+      "ApiResponse_PortPoolOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PortPoolOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[PortPoolOut]",
+        "type": "object"
+      },
+      "ApiResponse_TrustedCertificateOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrustedCertificateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[TrustedCertificateOut]",
+        "type": "object"
+      },
+      "ApiResponse_list_CredentialOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CredentialOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[list[CredentialOut]]",
+        "type": "object"
+      },
+      "ApiResponse_list_SessionOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SessionOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[list[SessionOut]]",
+        "type": "object"
+      },
+      "ApiResponse_list_TrustedCertificateOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TrustedCertificateOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[list[TrustedCertificateOut]]",
+        "type": "object"
+      },
+      "CertificateOut": {
+        "description": "证书的可展示部分。⚠ 私钥不在这里，也不在库里——它只在挂载卷上。",
+        "properties": {
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fingerprint"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          }
+        },
+        "title": "CertificateOut",
+        "type": "object"
+      },
+      "CredentialCreateIn": {
+        "additionalProperties": false,
+        "description": "建实例凭据。不填口令则由服务端生成一个高强度随机口令。",
+        "properties": {
+          "password": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 12,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          },
+          "username": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._-]+$",
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username"
+        ],
+        "title": "CredentialCreateIn",
+        "type": "object"
+      },
+      "CredentialCreatedOut": {
+        "description": "刚建成的凭据。`password` 是**唯一一次**能拿到明文的地方。\n\n⚠ 丢了只能重建，不能找回：库里存的是散列。",
+        "properties": {
+          "credential": {
+            "$ref": "#/components/schemas/CredentialOut"
+          },
+          "password": {
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "credential",
+          "password"
+        ],
+        "title": "CredentialCreatedOut",
+        "type": "object"
+      },
+      "CredentialOut": {
+        "description": "实例凭据。⚠ 明文口令永远不在这里——它只在创建时返回一次。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "instance_id": {
+            "format": "uuid",
+            "title": "Instance Id",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "instance_id",
+          "username",
+          "created_at"
+        ],
+        "title": "CredentialOut",
+        "type": "object"
+      },
+      "FieldErrorOut": {
+        "description": "字段级校验错误的对外形状。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "code",
+          "message"
+        ],
+        "title": "FieldErrorOut",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "InstanceActionOut": {
+        "description": "起停结果。以实况为准，不回显期望值。",
+        "properties": {
+          "desired_state": {
+            "title": "Desired State",
+            "type": "string"
+          },
+          "endpoint_url": {
+            "title": "Endpoint Url",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_running": {
+            "title": "Is Running",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "is_running",
+          "desired_state",
+          "endpoint_url"
+        ],
+        "title": "InstanceActionOut",
+        "type": "object"
+      },
+      "InstanceCreateIn": {
+        "additionalProperties": false,
+        "description": "建实例。端口不由调用方指定——它从部署期声明的池里分配。",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "endpoint_path": {
+            "default": "/digitaltwin",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^/.*$",
+            "title": "Endpoint Path",
+            "type": "string"
+          },
+          "is_anonymous_allowed": {
+            "default": false,
+            "title": "Is Anonymous Allowed",
+            "type": "boolean"
+          },
+          "is_autostart": {
+            "default": false,
+            "title": "Is Autostart",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "title": "Name",
+            "type": "string"
+          },
+          "namespace_uri": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Namespace Uri",
+            "type": "string"
+          },
+          "security_policies": {
+            "items": {
+              "enum": [
+                "NoSecurity",
+                "Basic256Sha256_Sign",
+                "Basic256Sha256_SignAndEncrypt",
+                "Aes128Sha256RsaOaep_Sign",
+                "Aes128Sha256RsaOaep_SignAndEncrypt",
+                "Aes256Sha256RsaPss_Sign",
+                "Aes256Sha256RsaPss_SignAndEncrypt"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Security Policies",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "namespace_uri",
+          "security_policies"
+        ],
+        "title": "InstanceCreateIn",
+        "type": "object"
+      },
+      "InstanceOut": {
+        "description": "实例详情。",
+        "properties": {
+          "certificate": {
+            "$ref": "#/components/schemas/CertificateOut"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "desired_state": {
+            "title": "Desired State",
+            "type": "string"
+          },
+          "endpoint_path": {
+            "title": "Endpoint Path",
+            "type": "string"
+          },
+          "endpoint_url": {
+            "title": "Endpoint Url",
+            "type": "string"
+          },
+          "has_pending_restart": {
+            "title": "Has Pending Restart",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_anonymous_allowed": {
+            "title": "Is Anonymous Allowed",
+            "type": "boolean"
+          },
+          "is_autostart": {
+            "title": "Is Autostart",
+            "type": "boolean"
+          },
+          "is_running": {
+            "title": "Is Running",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "namespace_uri": {
+            "title": "Namespace Uri",
+            "type": "string"
+          },
+          "node_count": {
+            "title": "Node Count",
+            "type": "integer"
+          },
+          "pending_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Pending Fields",
+            "type": "array"
+          },
+          "port": {
+            "title": "Port",
+            "type": "integer"
+          },
+          "security_policies": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Security Policies",
+            "type": "array"
+          },
+          "session_count": {
+            "title": "Session Count",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "endpoint_path",
+          "port",
+          "namespace_uri",
+          "security_policies",
+          "is_anonymous_allowed",
+          "is_autostart",
+          "desired_state",
+          "is_running",
+          "has_pending_restart",
+          "endpoint_url",
+          "node_count",
+          "session_count",
+          "certificate",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "InstanceOut",
+        "type": "object"
+      },
+      "InstanceUpdateIn": {
+        "additionalProperties": false,
+        "description": "改实例配置。缺省的字段表示本次不涉及。\n\n⚠ 除 `description` 与 `is_autostart` 外，其余每一项都要重启才生效。\n响应里的 `pending_fields` 会逐项列出，接口不会假装已经生效。",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "endpoint_path": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^/.*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint Path"
+          },
+          "is_anonymous_allowed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Anonymous Allowed"
+          },
+          "is_autostart": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Autostart"
+          },
+          "namespace_uri": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace Uri"
+          },
+          "security_policies": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "NoSecurity",
+                    "Basic256Sha256_Sign",
+                    "Basic256Sha256_SignAndEncrypt",
+                    "Aes128Sha256RsaOaep_Sign",
+                    "Aes128Sha256RsaOaep_SignAndEncrypt",
+                    "Aes256Sha256RsaPss_Sign",
+                    "Aes256Sha256RsaPss_SignAndEncrypt"
+                  ],
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Security Policies"
+          }
+        },
+        "title": "InstanceUpdateIn",
+        "type": "object"
+      },
+      "NodeCreateIn": {
+        "additionalProperties": false,
+        "description": "建节点。\n\n⚠ `identifier` 由人指定且**永不自动改写**（不变式 3）：上位系统的组态\n硬编码着 NodeId，服务端替它换一个，现场所有组态一起废。冲突只报错。",
+        "properties": {
+          "access_level": {
+            "default": 1,
+            "maximum": 255.0,
+            "minimum": 0.0,
+            "title": "Access Level",
+            "type": "integer"
+          },
+          "array_dimensions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Array Dimensions"
+          },
+          "browse_name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Browse Name",
+            "type": "string"
+          },
+          "data_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "boolean",
+                  "sbyte",
+                  "byte",
+                  "int16",
+                  "uint16",
+                  "int32",
+                  "uint32",
+                  "int64",
+                  "uint64",
+                  "float",
+                  "double",
+                  "string",
+                  "datetime",
+                  "guid",
+                  "byte_string"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Type"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "identifier": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Identifier",
+            "type": "string"
+          },
+          "identifier_kind": {
+            "default": "string",
+            "enum": [
+              "numeric",
+              "string"
+            ],
+            "title": "Identifier Kind",
+            "type": "string"
+          },
+          "initial_value": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initial Value"
+          },
+          "node_class": {
+            "default": "variable",
+            "enum": [
+              "object",
+              "variable",
+              "property",
+              "method"
+            ],
+            "title": "Node Class",
+            "type": "string"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "value_rank": {
+            "default": -1,
+            "minimum": -3.0,
+            "title": "Value Rank",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "identifier",
+          "browse_name"
+        ],
+        "title": "NodeCreateIn",
+        "type": "object"
+      },
+      "NodeMutationOut": {
+        "description": "节点增删改的结果，并回答本次哪些改动尚未生效。",
+        "properties": {
+          "node": {
+            "$ref": "#/components/schemas/NodeOut"
+          },
+          "pending_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Pending Fields",
+            "type": "array"
+          }
+        },
+        "required": [
+          "node"
+        ],
+        "title": "NodeMutationOut",
+        "type": "object"
+      },
+      "NodeOut": {
+        "description": "节点定义。",
+        "properties": {
+          "access_level": {
+            "title": "Access Level",
+            "type": "integer"
+          },
+          "array_dimensions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Array Dimensions"
+          },
+          "browse_name": {
+            "title": "Browse Name",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Type"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "identifier": {
+            "title": "Identifier",
+            "type": "string"
+          },
+          "identifier_kind": {
+            "title": "Identifier Kind",
+            "type": "string"
+          },
+          "initial_value": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initial Value"
+          },
+          "instance_id": {
+            "format": "uuid",
+            "title": "Instance Id",
+            "type": "string"
+          },
+          "node_class": {
+            "title": "Node Class",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "value_rank": {
+            "title": "Value Rank",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "instance_id",
+          "browse_name",
+          "node_class",
+          "identifier",
+          "identifier_kind",
+          "node_id",
+          "value_rank",
+          "access_level",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "NodeOut",
+        "type": "object"
+      },
+      "NodeUpdateIn": {
+        "additionalProperties": false,
+        "description": "改节点定义。\n\n⚠ 这里没有 `identifier`——它不可改（不变式 3）。要换标识只能删了重建，\n而那是一个现场必须同步改组态的动作，不该伪装成一次改名。\n⚠ `browse_name` 与 `data_type` 属于待重启档：保存成功但要重启才生效。",
+        "properties": {
+          "access_level": {
+            "anyOf": [
+              {
+                "maximum": 255.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Level"
+          },
+          "browse_name": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Browse Name"
+          },
+          "data_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "boolean",
+                  "sbyte",
+                  "byte",
+                  "int16",
+                  "uint16",
+                  "int32",
+                  "uint32",
+                  "int64",
+                  "uint64",
+                  "float",
+                  "double",
+                  "string",
+                  "datetime",
+                  "guid",
+                  "byte_string"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Type"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "initial_value": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initial Value"
+          }
+        },
+        "title": "NodeUpdateIn",
+        "type": "object"
+      },
+      "NodeValueOut": {
+        "description": "节点的当前值。\n\n⚠ `is_live` 为假表示实例没在跑，此时读到的是**初值**而不是运行时的值。\n不标注这一点，调用方会把配置当成现场读数。",
+        "properties": {
+          "data_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Type"
+          },
+          "identifier": {
+            "title": "Identifier",
+            "type": "string"
+          },
+          "is_live": {
+            "title": "Is Live",
+            "type": "boolean"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "identifier",
+          "node_id",
+          "is_live"
+        ],
+        "title": "NodeValueOut",
+        "type": "object"
+      },
+      "NodeWriteIn": {
+        "additionalProperties": false,
+        "description": "向节点写值。\n\n⚠ 只改运行时内存，**不写库**。重启后回到初值，这是明确语义。",
+        "properties": {
+          "value": {
+            "title": "Value"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "title": "NodeWriteIn",
+        "type": "object"
+      },
+      "NodeWriteOut": {
+        "description": "写值结果。`value` 是按数据类型收敛之后的实际值。",
+        "properties": {
+          "identifier": {
+            "title": "Identifier",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "identifier",
+          "node_id"
+        ],
+        "title": "NodeWriteOut",
+        "type": "object"
+      },
+      "Page_InstanceOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InstanceOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total"
+        ],
+        "title": "Page[InstanceOut]",
+        "type": "object"
+      },
+      "Page_NodeOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NodeOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total"
+        ],
+        "title": "Page[NodeOut]",
+        "type": "object"
+      },
+      "PortPoolOut": {
+        "description": "端口池的占用情况。池满时创建实例被拒绝，不会挑池外端口顶上。",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "integer"
+          },
+          "instance_count": {
+            "title": "Instance Count",
+            "type": "integer"
+          },
+          "max_instances": {
+            "title": "Max Instances",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "used": {
+            "title": "Used",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "used",
+          "available",
+          "max_instances",
+          "instance_count"
+        ],
+        "title": "PortPoolOut",
+        "type": "object"
+      },
+      "SessionOut": {
+        "description": "一条在线的上位机会话。",
+        "properties": {
+          "connected_at": {
+            "format": "date-time",
+            "title": "Connected At",
+            "type": "string"
+          },
+          "peer": {
+            "title": "Peer",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "required": [
+          "session_id",
+          "peer",
+          "connected_at"
+        ],
+        "title": "SessionOut",
+        "type": "object"
+      },
+      "TrustedCertificateCreateIn": {
+        "additionalProperties": false,
+        "description": "登记客户端证书。\n\n⚠ 只收 PEM 公钥。带私钥的输入一律拒绝——库里出现私钥意味着它会随\n数据库备份跑到任何存备份的地方（不变式 7）。",
+        "properties": {
+          "certificate_pem": {
+            "title": "Certificate Pem",
+            "type": "string"
+          }
+        },
+        "required": [
+          "certificate_pem"
+        ],
+        "title": "TrustedCertificateCreateIn",
+        "type": "object"
+      },
+      "TrustedCertificateOut": {
+        "description": "一张被信任的客户端证书。公钥不是秘密，故可入库。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "instance_id": {
+            "format": "uuid",
+            "title": "Instance Id",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "instance_id",
+          "fingerprint",
+          "subject",
+          "created_at"
+        ],
+        "title": "TrustedCertificateOut",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "DigitalTwin OPC UA Server",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/opcua/health": {
+      "get": {
+        "operationId": "health_api_v1_opcua_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "存活探针",
+        "tags": [
+          "probe"
+        ]
+      }
+    },
+    "/api/v1/opcua/instances": {
+      "get": {
+        "description": "分页列出实例。\n\nArgs: container, page, _viewer, q。",
+        "operationId": "list_instances_api_v1_opcua_instances_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Page_InstanceOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "实例列表",
+        "tags": [
+          "instance"
+        ]
+      },
+      "post": {
+        "description": "建实例并从池里分配端口。支持 `Idempotency-Key`。\n\nArgs: payload, container, key, manager。",
+        "operationId": "create_instance_api_v1_opcua_instances_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstanceCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_InstanceOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "创建实例",
+        "tags": [
+          "instance"
+        ]
+      }
+    },
+    "/api/v1/opcua/instances/port-pool": {
+      "get": {
+        "description": "端口池的容量与占用。池满时创建实例会被拒绝。\n\nArgs: container, _viewer。",
+        "operationId": "get_port_pool_api_v1_opcua_instances_port_pool_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PortPoolOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "端口池占用",
+        "tags": [
+          "instance"
+        ]
+      }
+    },
+    "/api/v1/opcua/instances/{instance_id}": {
+      "delete": {
+        "description": "删实例。在跑就先停。删已删的同样返回 204。\n\nArgs: instance_id, container, _manager。",
+        "operationId": "delete_instance_api_v1_opcua_instances__instance_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除实例",
+        "tags": [
+          "instance"
+        ]
+      },
+      "get": {
+        "description": "取实例详情。`is_running` 来自本地端口实况，不是期望状态。\n\nArgs: instance_id, container, _viewer。",
+        "operationId": "get_instance_api_v1_opcua_instances__instance_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_InstanceOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "实例详情",
+        "tags": [
+          "instance"
+        ]
+      },
+      "put": {
+        "description": "改实例配置。出参的 `pending_fields` 列出尚未生效的项。\n\nArgs: instance_id, payload, container, _manager。",
+        "operationId": "update_instance_api_v1_opcua_instances__instance_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstanceUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_InstanceOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "修改实例",
+        "tags": [
+          "instance"
+        ]
+      }
+    },
+    "/api/v1/opcua/instances/{instance_id}/credentials": {
+      "get": {
+        "description": "列出上位机账号。散列不出现在出参里。\n\nArgs: instance_id, container, _manager。",
+        "operationId": "list_credentials_api_v1_opcua_instances__instance_id__credentials_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_CredentialOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "实例凭据列表",
+        "tags": [
+          "security"
+        ]
+      },
+      "post": {
+        "description": "建上位机账号。⚠ 明文口令**只在这次响应里出现一次**，丢了只能重建。\n\nArgs: instance_id, payload, container, _manager。",
+        "operationId": "create_credential_api_v1_opcua_instances__instance_id__credentials_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CredentialCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_CredentialCreatedOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "创建实例凭据",
+        "tags": [
+          "security"
+        ]
+      }
+    },
+    "/api/v1/opcua/instances/{instance_id}/credentials/{credential_id}": {
+      "delete": {
+        "description": "删上位机账号。\n\nArgs: instance_id, credential_id, container, _manager。",
+        "operationId": "delete_credential_api_v1_opcua_instances__instance_id__credentials__credential_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "credential_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Credential Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除实例凭据",
+        "tags": [
+          "security"
+        ]
+      }
+    },
+    "/api/v1/opcua/instances/{instance_id}/nodes": {
+      "get": {
+        "description": "分页列出某实例的节点。\n\nArgs: instance_id, container, page, _viewer, q。",
+        "operationId": "list_nodes_api_v1_opcua_instances__instance_id__nodes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Page_NodeOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "节点列表",
+        "tags": [
+          "node"
+        ]
+      },
+      "post": {
+        "description": "建节点。标识冲突只报错，绝不自动改名。支持 `Idempotency-Key`。\n\nArgs: instance_id, payload, container, key, manager。",
+        "operationId": "create_node_api_v1_opcua_instances__instance_id__nodes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NodeCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_NodeMutationOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "创建节点",
+        "tags": [
+          "node"
+        ]
+      }
+    },
+    "/api/v1/opcua/instances/{instance_id}/nodes/{node_id}": {
+      "delete": {
+        "description": "删节点。\n\nArgs: instance_id, node_id, container, _manager。",
+        "operationId": "delete_node_api_v1_opcua_instances__instance_id__nodes__node_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Node Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除节点",
+        "tags": [
+          "node"
+        ]
+      },
+      "get": {
+        "description": "取节点定义。\n\nArgs: instance_id, node_id, container, _viewer。",
+        "operationId": "get_node_api_v1_opcua_instances__instance_id__nodes__node_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Node Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_NodeOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "节点详情",
+        "tags": [
+          "node"
+        ]
+      },
+      "put": {
+        "description": "改节点定义。标识不可改——要换只能删了重建。\n\nArgs: instance_id, node_id, payload, container, _manager。",
+        "operationId": "update_node_api_v1_opcua_instances__instance_id__nodes__node_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Node Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NodeUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_NodeMutationOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "修改节点",
+        "tags": [
+          "node"
+        ]
+      }
+    },
+    "/api/v1/opcua/instances/{instance_id}/nodes/{node_id}/value": {
+      "get": {
+        "description": "读当前值。⚠ 实例没在跑时 `is_live` 为假，读到的是初值。\n\nArgs: instance_id, node_id, container, _viewer。",
+        "operationId": "read_node_value_api_v1_opcua_instances__instance_id__nodes__node_id__value_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Node Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_NodeValueOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "读节点值",
+        "tags": [
+          "node"
+        ]
+      }
+    },
+    "/api/v1/opcua/instances/{instance_id}/nodes/{node_id}:write": {
+      "post": {
+        "description": "写值。只改运行时内存，不落库；重启回初值。\n\nArgs: instance_id, node_id, payload, container, key, operator。",
+        "operationId": "write_node_value_api_v1_opcua_instances__instance_id__nodes__node_id__write_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NodeWriteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_NodeWriteOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "写节点值",
+        "tags": [
+          "node"
+        ]
+      }
+    },
+    "/api/v1/opcua/instances/{instance_id}/sessions": {
+      "get": {
+        "description": "列出连上来的上位机。⚠ 实例没在跑时是空数组，不是错误。\n\nArgs: instance_id, container, _viewer。",
+        "operationId": "list_sessions_api_v1_opcua_instances__instance_id__sessions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_SessionOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "在线会话",
+        "tags": [
+          "security"
+        ]
+      }
+    },
+    "/api/v1/opcua/instances/{instance_id}/trusted-certificates": {
+      "get": {
+        "description": "列出被信任的客户端证书。\n\nArgs: instance_id, container, _manager。",
+        "operationId": "list_certificates_api_v1_opcua_instances__instance_id__trusted_certificates_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_TrustedCertificateOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "信任证书列表",
+        "tags": [
+          "security"
+        ]
+      },
+      "post": {
+        "description": "按指纹登记客户端证书。⚠ 带私钥的输入一律拒绝。\n\nArgs: instance_id, payload, container, _manager。",
+        "operationId": "add_certificate_api_v1_opcua_instances__instance_id__trusted_certificates_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrustedCertificateCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_TrustedCertificateOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "登记信任证书",
+        "tags": [
+          "security"
+        ]
+      }
+    },
+    "/api/v1/opcua/instances/{instance_id}/trusted-certificates/{certificate_id}": {
+      "delete": {
+        "description": "撤销一张信任证书。\n\nArgs: instance_id, certificate_id, container, _manager。",
+        "operationId": "delete_certificate_api_v1_opcua_instances__instance_id__trusted_certificates__certificate_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "certificate_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Certificate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "撤销信任证书",
+        "tags": [
+          "security"
+        ]
+      }
+    },
+    "/api/v1/opcua/instances/{instance_id}:restart": {
+      "post": {
+        "description": "重启实例，让待重启的配置生效。\n\nArgs: instance_id, container, _operator。",
+        "operationId": "restart_instance_api_v1_opcua_instances__instance_id__restart_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_InstanceActionOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "重启实例",
+        "tags": [
+          "instance"
+        ]
+      }
+    },
+    "/api/v1/opcua/instances/{instance_id}:start": {
+      "post": {
+        "description": "起实例。返回的 `is_running` 是真的连过一次端口的结果。\n\nArgs: instance_id, container, _operator。",
+        "operationId": "start_instance_api_v1_opcua_instances__instance_id__start_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_InstanceActionOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "启动实例",
+        "tags": [
+          "instance"
+        ]
+      }
+    },
+    "/api/v1/opcua/instances/{instance_id}:stop": {
+      "post": {
+        "description": "停实例。\n\nArgs: instance_id, container, _operator。",
+        "operationId": "stop_instance_api_v1_opcua_instances__instance_id__stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_InstanceActionOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "停止实例",
+        "tags": [
+          "instance"
+        ]
+      }
+    },
+    "/api/v1/opcua/ready": {
+      "get": {
+        "operationId": "ready_api_v1_opcua_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "就绪探针",
+        "tags": [
+          "probe"
+        ]
+      }
+    }
+  }
+}
