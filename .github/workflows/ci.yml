@@ -206,6 +206,15 @@ jobs:
       PLATFORM_POSTGRES_PASSWORD: dt
       PLATFORM_POSTGRES_DB: dt
       PLATFORM_POSTGRES_SCHEMA: platform
+      # 外部只读库在 CI 里没有实例，用例一律打假外库。⚠ host 写成解析不出来的
+      # 名字：真有用例去连它，要当场炸而不是连到别的什么东西上
+      PLATFORM_SQLSERVER_HOST: sqlserver-not-used-in-this-job
+      PLATFORM_SQLSERVER_USER: ci
+      PLATFORM_SQLSERVER_PASSWORD: ci-only-sqlserver-0123456789abcdef
+      PLATFORM_SQLSERVER_DATABASE: ci
+      # 分片队列，指向本作业的 redis 服务容器
+      PLATFORM_REDIS_HOST: localhost
+      PLATFORM_REDIS_PORT: '56379'
       # ⚠ 与 AUTH_EDGE_SIGNING_SECRET 同值：这两个取值分叉就是全链路 401
       PLATFORM_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
 
@@ -356,6 +365,11 @@ jobs:
       PLATFORM_POSTGRES_PASSWORD: dt
       PLATFORM_POSTGRES_DB: dt
       PLATFORM_POSTGRES_SCHEMA: platform
+      PLATFORM_SQLSERVER_HOST: sqlserver-not-used-in-this-job
+      PLATFORM_SQLSERVER_USER: ci
+      PLATFORM_SQLSERVER_PASSWORD: ci-only-sqlserver-0123456789abcdef
+      PLATFORM_SQLSERVER_DATABASE: ci
+      PLATFORM_REDIS_HOST: redis-not-used-in-this-job
       PLATFORM_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
