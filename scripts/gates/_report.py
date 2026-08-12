@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import ast
+import io
 import os
 import re
 import subprocess
@@ -175,6 +176,28 @@ def strip_ts_comments(text: str) -> str:
     Args: text。
     """
     return _LINE_COMMENT.sub("", _BLOCK_COMMENT.sub("", text))
+
+
+def strip_python_comments(text: str) -> str:
+    """去掉 Python 源码里的 `#` 注释与空行，只留代码。
+
+    ⚠ 只去 `#` 注释，**不去 docstring**：docstring 会被程序读走（帮助文本、
+    契约描述），当成散文抹掉就是一处静默的假阴性。
+    ⚠ 必须连空行一起去：注释独占一行时抹掉只剩空行，加一条注释就会让两侧
+    差出一个换行，比较结果又变成「改了」。
+    ⚠ 词法分析不了就原样返回——按「有改动」处理，宁可误报不可漏报。
+    Args: text。
+    """
+    lines = text.splitlines()
+    try:
+        tokens = list(tokenize.generate_tokens(io.StringIO(text).readline))
+    except (SyntaxError, tokenize.TokenError, IndentationError):
+        return text
+    for token in tokens:
+        if token.type == tokenize.COMMENT:
+            row, column = token.start
+            lines[row - 1] = lines[row - 1][:column]
+    return "\n".join(kept for line in lines if (kept := line.rstrip()))
 
 
 def python_comments(path: Path) -> Iterator[tuple[int, str]]:
