@@ -62,3 +62,24 @@ class RoomNotEmpty(AppError):
 
     code = 41608
     http_status = 409
+
+
+class DatasetNotFound(AppError):
+    """数据集不存在。目录见 apps/hvac/datasets.py。"""
+
+    code = 41609
+    http_status = 404
+
+
+class SourceObjectInvalid(AppError):
+    """数据源对象名不合法，或在外部库中不存在。"""
+
+    code = 41611
+    http_status = 422
+
+
+class MetricUnknown(AppError):
+    """指标不在目录内，或该指标不支持配置达标范围。"""
+
+    code = 41614
+    http_status = 422
