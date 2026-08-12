@@ -80,11 +80,13 @@ async def test_unmanaged_path_is_denied_rather_than_allowed(
     app_client: httpx.AsyncClient,
 ) -> None:
     token = await admin_token(app_client)
+    # ⚠ 探针路径必须真的没有规则：platform 那一片已被按方法的兜底规则整片覆盖，
+    # 拿它当「无规则」会让这条用例变成永远 200，而它守的正是缺省拒绝
     response = await app_client.get(
         VERIFY,
         headers={
             "Authorization": f"Bearer {token}",
-            **probe("/api/v1/platform/whatever"),
+            **probe("/api/v1/unmanaged/whatever"),
         },
     )
     assert response.status_code == 403

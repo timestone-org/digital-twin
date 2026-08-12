@@ -209,5 +209,9 @@ async def test_permission_catalog_is_readable_and_grouped(
     body = (
         await app_client.get(f"{API_PREFIX}/permissions", headers=headers)
     ).json()["data"]
-    assert {group["code"] for group in body["groups"]} == {"user", "system"}
+    assert {group["code"] for group in body["groups"]} == {
+        "user",
+        "system",
+        "hvac",
+    }
     assert all(item["kind"] for item in body["items"])
