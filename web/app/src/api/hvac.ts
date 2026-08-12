@@ -20,6 +20,10 @@ import type {
   RawSample,
   RawSeries,
   Room,
+  StartupBatches,
+  StartupEpisode,
+  StartupExclusion,
+  StartupRebuildResult,
   Workshop,
 } from '@dt/contracts'
 
@@ -301,4 +305,91 @@ export async function putAcMetricLimits(
     onPlatform({ method: 'PUT', body: { items: limits } }),
   )
   return data.items
+}
+
+/* 开机事件 */
+
+// ⚠ 用 type 而不是 interface：要当 `query` 传给 request（同 AcUnitFilters）
+export type StartupEpisodeFilters = {
+  outcome?: string | undefined
+  /** 逗号分隔的空调序号，与后端一致。 */
+  running_set?: string | undefined
+  limit?: number | undefined
+  after?: string | undefined
+}
+
+/**
+ * 一页开机事件。游标分页，`after` 只填上一页的 `next`。
+ * ⚠ 被人工排除的事件照样在结果里，由页面置灰保留。
+ * @param roomId 房间 id
+ * @param query 过滤条件与游标
+ */
+export async function listStartupEpisodes(
+  roomId: string,
+  query: StartupEpisodeFilters = {},
+): Promise<CursorPage<StartupEpisode>> {
+  return await requestData<CursorPage<StartupEpisode>>(
+    `/rooms/${roomId}/startup-episodes`,
+    onPlatform({ query }),
+  )
+}
+
+/** 批次列表、当前批次、组合覆盖度与指纹，一次取回。 */
+export async function getStartupBatches(
+  roomId: string,
+): Promise<StartupBatches> {
+  return await requestData<StartupBatches>(
+    `/rooms/${roomId}/startup-batches`,
+    onPlatform(),
+  )
+}
+
+/**
+ * 触发一次重算。
+ * ⚠ 只入队立刻返回（202），进度要回头轮 `getStartupBatches`——
+ * 把它当同步接口等结果的话，页面会挂在那儿直到超时。
+ * @param roomId 房间 id
+ * @param window 要重算的时间窗，UTC RFC3339
+ */
+export async function rebuildStartupBatches(
+  roomId: string,
+  window: { window_start: string; window_end: string },
+): Promise<StartupRebuildResult> {
+  return await requestData<StartupRebuildResult>(
+    `/rooms/${roomId}/startup-batches:rebuild`,
+    onPlatform({ method: 'POST', body: window }),
+  )
+}
+
+// ⚠ 起始时刻是路径里的一段，且带 `:` 与 `+`，必须转义后再拼
+function exclusionPath(roomId: string, startedAt: string): string {
+  return `/rooms/${roomId}/startup-exclusions/${encodeURIComponent(startedAt)}`
+}
+
+/**
+ * 把某次开机标记为不可用于训练。
+ * @param roomId 房间 id
+ * @param startedAt 事件起始时刻，UTC RFC3339
+ * @param reason 排除原因，长度上限 `STARTUP_EXCLUSION_REASON_MAX`
+ */
+export async function putStartupExclusion(
+  roomId: string,
+  startedAt: string,
+  reason: string,
+): Promise<StartupExclusion> {
+  return await requestData<StartupExclusion>(
+    exclusionPath(roomId, startedAt),
+    onPlatform({ method: 'PUT', body: { reason } }),
+  )
+}
+
+export async function deleteStartupExclusion(
+  roomId: string,
+  startedAt: string,
+): Promise<void> {
+  // ⚠ 走 request 而不是 requestData：这条返回 204，没有 data
+  await request<null>(
+    exclusionPath(roomId, startedAt),
+    onPlatform({ method: 'DELETE' }),
+  )
 }

@@ -66,6 +66,18 @@ describe('每一条都打 platform 前缀', () => {
     ['deleteAcDataBinding', () => hvac.deleteAcDataBinding('a1', 'raw_minute')],
     ['listAcMetricLimits', () => hvac.listAcMetricLimits('a1')],
     ['putAcMetricLimits', () => hvac.putAcMetricLimits('a1', [])],
+    ['listStartupEpisodes', () => hvac.listStartupEpisodes('r1')],
+    ['getStartupBatches', () => hvac.getStartupBatches('r1')],
+    [
+      'rebuildStartupBatches',
+      () =>
+        hvac.rebuildStartupBatches('r1', {
+          window_start: FROM,
+          window_end: TO,
+        }),
+    ],
+    ['putStartupExclusion', () => hvac.putStartupExclusion('r1', FROM, '异常')],
+    ['deleteStartupExclusion', () => hvac.deleteStartupExclusion('r1', FROM)],
   ])('%s', async (_name, invoke) => {
     await invoke()
     expect(call()[1].baseUrl).toBe(PLATFORM_BASE_URL)
@@ -307,5 +319,63 @@ describe('原始数据', () => {
   it('一个指标都没勾时 metrics 是空串，交给后端拒绝而不是本地静默不发', async () => {
     await hvac.getRawSeries('a1', { from: FROM, to: TO, metrics: [] })
     expect(call()[1].query).toEqual({ from: FROM, to: TO, metrics: '' })
+  })
+})
+
+describe('开机事件', () => {
+  it('事件列表挂在房间下，不是空调下——开机是房间级的', async () => {
+    await hvac.listStartupEpisodes('r1')
+    expect(call()[0]).toBe('/rooms/r1/startup-episodes')
+  })
+
+  it('按结果与运行组合过滤，游标原样带回', async () => {
+    await hvac.listStartupEpisodes('r1', {
+      outcome: 'usable',
+      running_set: 'K01,K02',
+      after: 'CURSOR-1',
+      limit: 200,
+    })
+    expect(call()[1].query).toEqual({
+      outcome: 'usable',
+      running_set: 'K01,K02',
+      after: 'CURSOR-1',
+      limit: 200,
+    })
+  })
+
+  it('批次、覆盖度与指纹一次取回，不用凑三条请求', async () => {
+    await hvac.getStartupBatches('r1')
+    const [path, options] = call()
+    expect(path).toBe('/rooms/r1/startup-batches')
+    expect(options.method).toBeUndefined()
+  })
+
+  it('触发重算是动作端点，POST 带时间窗', async () => {
+    await hvac.rebuildStartupBatches('r1', {
+      window_start: FROM,
+      window_end: TO,
+    })
+    const [path, options] = call()
+    expect(path).toBe('/rooms/r1/startup-batches:rebuild')
+    expect(options.method).toBe('POST')
+    expect(options.body).toEqual({ window_start: FROM, window_end: TO })
+  })
+
+  it('起始时刻进路径要转义——里面的冒号不转义会把路径切断', async () => {
+    await hvac.putStartupExclusion('r1', FROM, '现场检修')
+    const [path, options] = call()
+    expect(path).toBe(
+      `/rooms/r1/startup-exclusions/${encodeURIComponent(FROM)}`,
+    )
+    expect(path).not.toContain(':')
+    expect(options.method).toBe('PUT')
+    expect(options.body).toEqual({ reason: '现场检修' })
+  })
+
+  it('撤销排除走 request——它返回 204，走 requestData 会抛「服务端未返回数据」', async () => {
+    await hvac.deleteStartupExclusion('r1', FROM)
+    expect(call()[1].method).toBe('DELETE')
+    expect(vi.mocked(client.requestData)).not.toHaveBeenCalled()
+    expect(vi.mocked(client.request)).toHaveBeenCalledTimes(1)
   })
 })

@@ -191,3 +191,95 @@ export const RAW_SAMPLES_PAGE_MAX = 200
 
 /** 折线图一次最多要多少个桶，与后端 `max_points` 的上限同值。 */
 export const RAW_SERIES_POINTS_MAX = 2000
+
+/* 开机事件 —— docs/AC_STARTUP_DESIGN.md */
+
+/**
+ * 一次开机的结局。
+ * ⚠ openapi 把它声明成自由 `string`，闭集来自后端 `startups.py` 的 `OUTCOME_*`，
+ * 由契约用例双向锁死。丢弃原因与「可用」同样要显示——它们说明数据为什么少。
+ */
+export const STARTUP_OUTCOMES = [
+  'usable',
+  'set_changed',
+  'timeout',
+  'data_gap',
+] as const
+export type StartupOutcome = (typeof STARTUP_OUTCOMES)[number]
+
+/** 抽取批次的状态，同样与后端 `BATCH_STATUS_*` 由契约用例锁死。 */
+export const STARTUP_BATCH_STATUSES = ['running', 'ready', 'failed'] as const
+export type StartupBatchStatus = (typeof STARTUP_BATCH_STATUSES)[number]
+
+/** 起始帧上每台的原始读数：空调序号 → 指标 key → 取值。 */
+export type StartupReadings = Record<string, Record<string, number | null>>
+
+/** 一次开机事件。房间级，不是空调级。 */
+export interface StartupEpisode {
+  started_at: string
+  /** 这次开机里同时运行的那几台，按序号。 */
+  running_set: string[]
+  complied_at: string | null
+  /**
+   * 达标时长（分钟）；没达标就是 null。
+   * ⚠ **可以是 0**——风机一起来房间就已经在范围内，实测占三成多。
+   * 拿真假判空会把这批事件整段吞掉，页面上看不出少了什么。
+   */
+  duration_minutes: number | null
+  outcome: StartupOutcome
+  readings: StartupReadings
+  /** ⚠ 被排除的事件仍在列表里，只是置灰——消失会让人以为数据没了。 */
+  is_excluded: boolean
+  exclusion_reason: string | null
+}
+
+export interface StartupBatch {
+  id: string
+  status: StartupBatchStatus
+  is_current: boolean
+  params_fingerprint: string
+  logic_version: number
+  window_start: string
+  window_end: string
+  shard_total: number
+  shard_done: number
+  episode_count: number
+  /** 重算后对不上任何事件的人工排除条数。非零必须说出来：人工判断在悄悄流失。 */
+  unmatched_exclusion_count: number
+  created_at: string
+  updated_at: string
+}
+
+/** 一个运行组合攒下了多少可用事件。够不够建模看它。 */
+export interface CombinationCoverage {
+  running_set: string[]
+  usable_count: number
+}
+
+export interface StartupBatches {
+  items: StartupBatch[]
+  current: StartupBatch | null
+  coverage: CombinationCoverage[]
+  expected_fingerprint: string
+  /**
+   * ⚠ 只有「有当前批次**且**指纹不符」才为真。没算过的房间它是假，
+   * 页面该说的是「还没算过」而不是「该重算了」——两者要人做的事不同。
+   */
+  is_stale: boolean
+}
+
+export interface StartupRebuildResult {
+  batch_id: string
+  status: StartupBatchStatus
+  shard_total: number
+}
+
+export interface StartupExclusion {
+  started_at: string
+  reason: string
+  excluded_by: string
+  created_at: string
+}
+
+/** 排除原因的长度上限，与后端 `MAX_EXCLUSION_REASON` 同值。 */
+export const STARTUP_EXCLUSION_REASON_MAX = 500

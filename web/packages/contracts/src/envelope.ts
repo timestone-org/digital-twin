@@ -80,6 +80,7 @@ export const ERROR_CODES = {
   timeRangeInvalid: 41613,
   metricUnknown: 41614,
   cursorInvalid: 41615,
+  startupRebuildInProgress: 41616,
   internal: 50000,
   dependencyUnavailable: 50001,
   /** 外部数据源不可用。⚠ 后端刻意不给陈旧数据兜底，前端也不许显示旧值。 */

@@ -18,6 +18,7 @@ import type {
   AcSourceObject,
   AcUnit,
   AcUnitRelocateResult,
+  CombinationCoverage,
   CursorPage,
   Page,
   RawSample,
@@ -25,10 +26,21 @@ import type {
   Room,
   RoomRef,
   SeriesPoint,
+  StartupBatch,
+  StartupBatches,
+  StartupEpisode,
+  StartupExclusion,
+  StartupRebuildResult,
   Workshop,
   WorkshopRef,
 } from '@dt/contracts'
-import { AC_METRIC_GROUPS, AC_METRIC_LIMITS_MAX } from '@dt/contracts'
+import {
+  AC_METRIC_GROUPS,
+  AC_METRIC_LIMITS_MAX,
+  STARTUP_BATCH_STATUSES,
+  STARTUP_EXCLUSION_REASON_MAX,
+  STARTUP_OUTCOMES,
+} from '@dt/contracts'
 
 interface OpenApiSchema {
   properties?: Record<string, unknown>
@@ -67,7 +79,20 @@ const schemas = (
 interface OpenApiProperty {
   format?: string
   maxItems?: number
+  maxLength?: number
   anyOf?: { type?: string }[]
+}
+
+/** 触发重算那条端点的响应码表。 */
+function rebuildResponses(): Record<string, unknown> | undefined {
+  const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf8')) as {
+    paths: Record<
+      string,
+      Record<string, { responses?: Record<string, unknown> }>
+    >
+  }
+  return spec.paths['/api/v1/platform/rooms/{room_id}/startup-batches:rebuild']
+    ?.post?.responses
 }
 
 /** 同一份 spec 的细粒度视图：键集之外还要看类型、格式与上限。 */
@@ -232,6 +257,65 @@ const SHAPES: Record<string, Record<string, true>> = {
     ts: true,
     values: true,
   } satisfies Keys<SeriesPoint>,
+
+  StartupEpisodeOut: {
+    started_at: true,
+    running_set: true,
+    complied_at: true,
+    duration_minutes: true,
+    outcome: true,
+    readings: true,
+    is_excluded: true,
+    exclusion_reason: true,
+  } satisfies Keys<StartupEpisode>,
+
+  StartupBatchOut: {
+    id: true,
+    status: true,
+    is_current: true,
+    params_fingerprint: true,
+    logic_version: true,
+    window_start: true,
+    window_end: true,
+    shard_total: true,
+    shard_done: true,
+    episode_count: true,
+    unmatched_exclusion_count: true,
+    created_at: true,
+    updated_at: true,
+  } satisfies Keys<StartupBatch>,
+
+  StartupBatchesOut: {
+    items: true,
+    current: true,
+    coverage: true,
+    expected_fingerprint: true,
+    is_stale: true,
+  } satisfies Keys<StartupBatches>,
+
+  CombinationCoverageOut: {
+    running_set: true,
+    usable_count: true,
+  } satisfies Keys<CombinationCoverage>,
+
+  StartupRebuildOut: {
+    batch_id: true,
+    status: true,
+    shard_total: true,
+  } satisfies Keys<StartupRebuildResult>,
+
+  StartupExclusionOut: {
+    started_at: true,
+    reason: true,
+    excluded_by: true,
+    created_at: true,
+  } satisfies Keys<StartupExclusion>,
+
+  CursorPage_StartupEpisodeOut_: {
+    items: true,
+    next: true,
+    has_more: true,
+  } satisfies Keys<CursorPage<StartupEpisode>>,
 }
 
 describe('@dt/contracts 与 platform openapi.json 的字段一致', () => {
@@ -338,5 +422,52 @@ describe('指标分组的闭集与后端目录一致', () => {
     ].map((match) => match[1])
     expect(declared).not.toHaveLength(0)
     expect([...declared].sort()).toEqual([...AC_METRIC_GROUPS].sort())
+  })
+})
+
+describe('开机事件的闭集与后端常量一致', () => {
+  // ⚠ openapi 把 outcome 与 status 都声明成自由 string，闭集只在后端的常量表里
+  const STARTUP_SOURCE = join(
+    process.cwd(),
+    '..',
+    'server',
+    'services',
+    'platform-server',
+    'src',
+    'platform_server',
+    'apps',
+    'hvac',
+    'startups.py',
+  )
+
+  it.each([
+    ['OUTCOME', STARTUP_OUTCOMES],
+    ['BATCH_STATUS', STARTUP_BATCH_STATUSES],
+  ])('%s_* 与前端的联合类型逐项对上', (prefix, declared) => {
+    const source = readFileSync(STARTUP_SOURCE, 'utf8')
+    const found = [
+      ...source.matchAll(new RegExp(`^${prefix}_[A-Z_]+ = "([a-z_]+)"$`, 'gm')),
+    ].map((match) => match[1])
+    expect(found).not.toHaveLength(0)
+    expect([...found].sort()).toEqual([...declared].sort())
+  })
+
+  it('排除原因的长度上限与后端同值', () => {
+    const property = detailed().StartupExclusionIn?.properties?.reason
+    expect(property?.maxLength).toBe(STARTUP_EXCLUSION_REASON_MAX)
+  })
+
+  it('达标时长可以为 null，也可以是 0——0 是「一起来就达标」，不是没有值', () => {
+    const property = detailed().StartupEpisodeOut?.properties?.duration_minutes
+    expect(property?.anyOf?.map((item) => item.type)).toEqual([
+      'integer',
+      'null',
+    ])
+  })
+
+  it('触发重算只入队：202 而不是 200', () => {
+    const responses = Object.keys(rebuildResponses() ?? {})
+    expect(responses).toContain('202')
+    expect(responses).not.toContain('200')
   })
 })
