@@ -71,11 +71,20 @@ class CombinationCoverageOut(OutputModel):
     usable_count: int
 
 
+class SourceRangeOut(OutputModel):
+    """外部数据源里实际有数据的那一段。"""
+
+    start: Utc
+    end: Utc
+
+
 class StartupBatchesOut(OutputModel):
     """批次列表页要的全部东西，一次取回。
 
     ⚠ `is_stale` 只在**有**当前批次且指纹对不上时为真：一个房间还没算过时
     它是假，页面显示的是「还没算过」而不是「该重算了」——两者要人做的事不同。
+    ⚠ `source_range` 为 null 有两种可能：房间一台都没绑数据源，或外库此刻不
+    可达。页面两种情况都只能不预设范围，故不再细分。
     """
 
     items: list[StartupBatchOut]
@@ -83,21 +92,34 @@ class StartupBatchesOut(OutputModel):
     coverage: list[CombinationCoverageOut]
     expected_fingerprint: str
     is_stale: bool
+    source_range: SourceRangeOut | None
 
 
 class StartupRebuildIn(InputModel):
-    """重算的入参：要抽哪一段。"""
+    """重算的入参：要抽哪一段。
 
-    window_start: Utc
-    window_end: Utc
+    ⚠ 两端都可省，空请求体 `{}` 表示**全部可用历史**。省掉的那一端按数据源里
+    的实际范围算，不写死任何日期——今天的起点是 2023 年只是当下的事实，现场
+    会继续产出数据，也可能补录更早的。
+    """
+
+    window_start: Utc | None = None
+    window_end: Utc | None = None
 
 
 class StartupRebuildOut(OutputModel):
-    """入队的结果。⚠ 它只说「排上了」，不说「算完了」。"""
+    """入队的结果。⚠ 它只说「排上了」，不说「算完了」。
+
+    `window_start` / `window_end` 是**实际排进队列的那一段**：入参省掉的一端
+    已经按数据源范围补齐，超出数据范围的部分已经裁掉。
+    """
 
     batch_id: uuid.UUID
     status: str
     shard_total: int
+    window_start: Utc
+    window_end: Utc
+    is_clamped: bool
 
 
 class StartupExclusionIn(InputModel):

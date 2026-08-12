@@ -17,6 +17,7 @@ from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
 from platform_server.apps.hvac.crud import EpisodePage
 from platform_server.apps.hvac.deps import (
     Dispatcher,
+    get_ac_source_reader,
     get_caller,
     get_dispatcher,
     get_session,
@@ -29,12 +30,12 @@ from platform_server.apps.hvac.schemas import (
     StartupExclusionOut,
     StartupRebuildIn,
     StartupRebuildOut,
-    TimeWindow,
 )
 from platform_server.apps.hvac.services import (
     ac_startup_query,
     ac_startup_service,
 )
+from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.apps.hvac.services.ac_startup_rules import ExtractionRules
 from platform_server.settings import API_PREFIX
 
@@ -53,6 +54,7 @@ def episode_filters(
 
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+ReaderDep = Annotated[AcSourceReader, Depends(get_ac_source_reader)]
 CursorDep = Annotated[CursorParams, Depends(cursor_params)]
 FiltersDep = Annotated[EpisodePage, Depends(episode_filters)]
 DispatchDep = Annotated[Dispatcher, Depends(get_dispatcher)]
@@ -92,14 +94,17 @@ async def list_startup_episodes(
     summary="抽取批次与组合覆盖度",
 )
 async def list_startup_batches(
-    room_id: uuid.UUID, session: SessionDep, _viewer: ViewDep
+    room_id: uuid.UUID,
+    session: SessionDep,
+    reader: ReaderDep,
+    _viewer: ViewDep,
 ) -> ApiResponse[StartupBatchesOut]:
-    """批次列表、当前批次、进度、组合覆盖度与指纹是否过期。
+    """批次列表、当前批次、进度、组合覆盖度、数据范围与指纹是否过期。
 
-    Args: room_id, session, _viewer。
+    Args: room_id, session, reader, _viewer。
     """
     summary = await ac_startup_query.list_batches(
-        session, room_id=room_id, rules=ExtractionRules()
+        session, reader, room_id=room_id, rules=ExtractionRules()
     )
     return ok(summary)
 
@@ -114,34 +119,55 @@ async def rebuild_startup_batches(
     room_id: uuid.UUID,
     payload: StartupRebuildIn,
     session: SessionDep,
+    reader: ReaderDep,
     dispatcher: DispatchDep,
     _manager: ManageDep,
 ) -> ApiResponse[StartupRebuildOut]:
     """建一个新批次并把分片排进队列，立刻返回批次 id。
 
-    Args: room_id, payload, session, dispatcher, _manager。
+    Args: room_id, payload, session, reader, dispatcher, _manager。
     """
-    plan = await ac_startup_service.request_rebuild(
+    resolved = await ac_startup_service.resolve_window(
+        session, reader, room_id=room_id, asked=payload
+    )
+    plan = await _queue(session, room_id=room_id, resolved=resolved)
+    dispatcher.after_commit(plan.dispatch())
+    return ok(_to_rebuild_out(plan, resolved), message="重算已排队")
+
+
+async def _queue(
+    session: AsyncSession,
+    *,
+    room_id: uuid.UUID,
+    resolved: ac_startup_service.ResolvedWindow,
+) -> ac_startup_service.RebuildPlan:
+    """按定下来的区间建批次与分片行。
+
+    Args: session, room_id, resolved。
+    """
+    return await ac_startup_service.request_rebuild(
         session,
         room_id=room_id,
-        window=TimeWindow(start=payload.window_start, end=payload.window_end),
+        window=resolved.window,
         rules=ExtractionRules(),
     )
-    dispatcher.after_commit(plan.dispatch())
-    return ok(_to_rebuild_out(plan), message="重算已排队")
 
 
 def _to_rebuild_out(
     plan: ac_startup_service.RebuildPlan,
+    resolved: ac_startup_service.ResolvedWindow,
 ) -> StartupRebuildOut:
-    """入队计划 → 对外模型。
+    """入队计划 → 对外模型。回显的是**实际排进队列**的那一段。
 
-    Args: plan。
+    Args: plan, resolved。
     """
     return StartupRebuildOut(
         batch_id=plan.batch.id,
         status=plan.batch.status,
         shard_total=plan.batch.shard_total,
+        window_start=resolved.window.start,
+        window_end=resolved.window.end,
+        is_clamped=resolved.is_clamped,
     )
 
 

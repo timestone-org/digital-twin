@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import Database
 from lib.logging import get_logger
+from lib.utils.timeutils import format_rfc3339
 from platform_server.apps.hvac.crud import (
     ac_startup_batch_crud,
     ac_startup_episode_crud,
@@ -21,6 +22,7 @@ from platform_server.apps.hvac.crud import (
 from platform_server.apps.hvac.errors import (
     RoomNotFound,
     StartupRebuildInProgress,
+    StartupSourceUnbound,
     TimeRangeInvalid,
 )
 from platform_server.apps.hvac.models import (
@@ -28,7 +30,15 @@ from platform_server.apps.hvac.models import (
     AcStartupExclusion,
     AcStartupShard,
 )
-from platform_server.apps.hvac.schemas import StartupExclusionIn, TimeWindow
+from platform_server.apps.hvac.schemas import (
+    StartupExclusionIn,
+    StartupRebuildIn,
+    TimeWindow,
+)
+from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
+from platform_server.apps.hvac.services.ac_startup_extract import (
+    resolve_source_extent,
+)
 from platform_server.apps.hvac.services.ac_startup_queue import (
     ShardMessage,
     current_traceparent,
@@ -82,6 +92,71 @@ class ShardDispatch:
 
     batch_id: uuid.UUID
     messages: tuple[ShardMessage, ...]
+
+
+@dataclass(frozen=True)
+class ResolvedWindow:
+    """定下来的抽取区间，以及它是不是被数据范围裁过。"""
+
+    window: TimeWindow
+    is_clamped: bool
+
+
+async def resolve_window(
+    session: AsyncSession,
+    reader: AcSourceReader,
+    *,
+    room_id: uuid.UUID,
+    asked: StartupRebuildIn,
+) -> ResolvedWindow:
+    """把入参的区间补齐并裁进数据范围。
+
+    ⚠ 省掉的那一端按数据源里的实际范围算，不写死任何日期：今天的起点是 2023
+    年只是当下的事实，现场会继续产出数据，也可能补录更早的。
+    Args: session, reader, room_id, asked。
+    """
+    await _require_room(session, room_id)
+    if asked.window_start is not None and asked.window_end is not None:
+        _require_ordered(asked.window_start, asked.window_end)
+    extent = await resolve_source_extent(session, reader, room_id=room_id)
+    if extent is None:
+        raise StartupSourceUnbound(
+            "这个房间还没有可用的原始数据：先给空调绑定数据源，再重算"
+        )
+    start = max(asked.window_start or extent.start, extent.start)
+    end = min(asked.window_end or extent.end, extent.end)
+    if start >= end:
+        raise TimeRangeInvalid(
+            "这一段里没有数据；数据范围是 "
+            f"{format_rfc3339(extent.start)} 到 {format_rfc3339(extent.end)}"
+        )
+    return ResolvedWindow(
+        window=TimeWindow(start=start, end=end),
+        is_clamped=_is_clamped(asked, start, end),
+    )
+
+
+def _is_clamped(
+    asked: StartupRebuildIn, start: datetime, end: datetime
+) -> bool:
+    """要的那一段有没有被数据范围裁掉一截。省掉的一端不算被裁。
+
+    Args: asked, start, end。
+    """
+    trimmed_start = (
+        asked.window_start is not None and asked.window_start < start
+    )
+    trimmed_end = asked.window_end is not None and asked.window_end > end
+    return trimmed_start or trimmed_end
+
+
+def _require_ordered(start: datetime, end: datetime) -> None:
+    """区间左端必须早于右端。
+
+    Args: start, end。
+    """
+    if start >= end:
+        raise TimeRangeInvalid("区间左端必须早于右端")
 
 
 async def request_rebuild(

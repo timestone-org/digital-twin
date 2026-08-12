@@ -1939,6 +1939,27 @@
         "title": "SourceObjectsOut",
         "type": "object"
       },
+      "SourceRangeOut": {
+        "description": "外部数据源里实际有数据的那一段。",
+        "properties": {
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "SourceRangeOut",
+        "type": "object"
+      },
       "StartupBatchOut": {
         "description": "一个抽取批次的摘要。`shard_done / shard_total` 就是进度。",
         "properties": {
@@ -2019,7 +2040,7 @@
         "type": "object"
       },
       "StartupBatchesOut": {
-        "description": "批次列表页要的全部东西，一次取回。\n\n⚠ `is_stale` 只在**有**当前批次且指纹对不上时为真：一个房间还没算过时\n它是假，页面显示的是「还没算过」而不是「该重算了」——两者要人做的事不同。",
+        "description": "批次列表页要的全部东西，一次取回。\n\n⚠ `is_stale` 只在**有**当前批次且指纹对不上时为真：一个房间还没算过时\n它是假，页面显示的是「还没算过」而不是「该重算了」——两者要人做的事不同。\n⚠ `source_range` 为 null 有两种可能：房间一台都没绑数据源，或外库此刻不\n可达。页面两种情况都只能不预设范围，故不再细分。",
         "properties": {
           "coverage": {
             "items": {
@@ -2052,6 +2073,16 @@
             },
             "title": "Items",
             "type": "array"
+          },
+          "source_range": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceRangeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -2059,7 +2090,8 @@
           "current",
           "coverage",
           "expected_fingerprint",
-          "is_stale"
+          "is_stale",
+          "source_range"
         ],
         "title": "StartupBatchesOut",
         "type": "object"
@@ -2204,8 +2236,56 @@
       },
       "StartupRebuildIn": {
         "additionalProperties": false,
-        "description": "重算的入参：要抽哪一段。",
+        "description": "重算的入参：要抽哪一段。\n\n⚠ 两端都可省，空请求体 `{}` 表示**全部可用历史**。省掉的那一端按数据源里\n的实际范围算，不写死任何日期——今天的起点是 2023 年只是当下的事实，现场\n会继续产出数据，也可能补录更早的。",
         "properties": {
+          "window_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window End"
+          },
+          "window_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Start"
+          }
+        },
+        "title": "StartupRebuildIn",
+        "type": "object"
+      },
+      "StartupRebuildOut": {
+        "description": "入队的结果。⚠ 它只说「排上了」，不说「算完了」。\n\n`window_start` / `window_end` 是**实际排进队列的那一段**：入参省掉的一端\n已经按数据源范围补齐，超出数据范围的部分已经裁掉。",
+        "properties": {
+          "batch_id": {
+            "format": "uuid",
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "is_clamped": {
+            "title": "Is Clamped",
+            "type": "boolean"
+          },
+          "shard_total": {
+            "title": "Shard Total",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
           "window_end": {
             "format": "date-time",
             "title": "Window End",
@@ -2218,33 +2298,12 @@
           }
         },
         "required": [
-          "window_start",
-          "window_end"
-        ],
-        "title": "StartupRebuildIn",
-        "type": "object"
-      },
-      "StartupRebuildOut": {
-        "description": "入队的结果。⚠ 它只说「排上了」，不说「算完了」。",
-        "properties": {
-          "batch_id": {
-            "format": "uuid",
-            "title": "Batch Id",
-            "type": "string"
-          },
-          "shard_total": {
-            "title": "Shard Total",
-            "type": "integer"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
           "batch_id",
           "status",
-          "shard_total"
+          "shard_total",
+          "window_start",
+          "window_end",
+          "is_clamped"
         ],
         "title": "StartupRebuildOut",
         "type": "object"
@@ -3539,7 +3598,7 @@
     },
     "/api/v1/platform/rooms/{room_id}/startup-batches": {
       "get": {
-        "description": "批次列表、当前批次、进度、组合覆盖度与指纹是否过期。\n\nArgs: room_id, session, _viewer。",
+        "description": "批次列表、当前批次、进度、组合覆盖度、数据范围与指纹是否过期。\n\nArgs: room_id, session, reader, _viewer。",
         "operationId": "list_startup_batches_api_v1_platform_rooms__room_id__startup_batches_get",
         "parameters": [
           {
@@ -3583,7 +3642,7 @@
     },
     "/api/v1/platform/rooms/{room_id}/startup-batches:rebuild": {
       "post": {
-        "description": "建一个新批次并把分片排进队列，立刻返回批次 id。\n\nArgs: room_id, payload, session, dispatcher, _manager。",
+        "description": "建一个新批次并把分片排进队列，立刻返回批次 id。\n\nArgs: room_id, payload, session, reader, dispatcher, _manager。",
         "operationId": "rebuild_startup_batches_api_v1_platform_rooms__room_id__startup_batches_rebuild_post",
         "parameters": [
           {

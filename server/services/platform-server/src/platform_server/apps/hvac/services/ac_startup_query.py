@@ -9,6 +9,7 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.errors import FieldError, ValidationFailed
+from lib.logging import get_logger
 from lib.utils.timeutils import format_rfc3339
 from lib.web import CursorPage, CursorParams, decode_cursor, encode_cursor
 from platform_server.apps.hvac.crud import (
@@ -19,7 +20,7 @@ from platform_server.apps.hvac.crud import (
     ac_startup_shard_crud,
     room_crud,
 )
-from platform_server.apps.hvac.errors import RoomNotFound
+from platform_server.apps.hvac.errors import RoomNotFound, SourceUnavailable
 from platform_server.apps.hvac.models import (
     AcStartupBatch,
     AcStartupEpisode,
@@ -28,9 +29,14 @@ from platform_server.apps.hvac.models import (
 from platform_server.apps.hvac.schemas import (
     MAX_FILTER_SERIALS,
     CombinationCoverageOut,
+    SourceRangeOut,
     StartupBatchesOut,
     StartupBatchOut,
     StartupEpisodeOut,
+)
+from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
+from platform_server.apps.hvac.services.ac_startup_extract import (
+    resolve_source_extent,
 )
 from platform_server.apps.hvac.services.ac_startup_rules import ExtractionRules
 from platform_server.apps.hvac.startups import (
@@ -38,6 +44,8 @@ from platform_server.apps.hvac.startups import (
     OUTCOMES,
     SHARD_STATUS_DONE,
 )
+
+_logger = get_logger("platform.hvac.ac_startup_query")
 
 # 游标里锚点字段的名字，客户端不许解析
 CURSOR_TIME_FIELD = "before"
@@ -174,11 +182,15 @@ def _to_episode(
 
 
 async def list_batches(
-    session: AsyncSession, *, room_id: uuid.UUID, rules: ExtractionRules
+    session: AsyncSession,
+    reader: AcSourceReader,
+    *,
+    room_id: uuid.UUID,
+    rules: ExtractionRules,
 ) -> StartupBatchesOut:
-    """批次列表、当前批次、组合覆盖度与「该不该重算」。
+    """批次列表、当前批次、组合覆盖度、数据范围与「该不该重算」。
 
-    Args: session, room_id, rules。
+    Args: session, reader, room_id, rules。
     """
     await _require_room(session, room_id)
     rows = await ac_startup_batch_crud.list_by_room(
@@ -195,7 +207,32 @@ async def list_batches(
         expected_fingerprint=expected,
         # ⚠ 没有当前批次时不算「过期」：那是「还没算过」，要人做的事不一样
         is_stale=current is not None and current.params_fingerprint != expected,
+        source_range=await _source_range(session, reader, room_id),
     )
+
+
+async def _source_range(
+    session: AsyncSession, reader: AcSourceReader, room_id: uuid.UUID
+) -> SourceRangeOut | None:
+    """外库里实际有数据的那一段；没绑或外库不可达都给 None。
+
+    ⚠ 外库抖一下不该让整页 503：这一页的主体是我们自己的批次数据，只有这一个
+    字段依赖厂商库（CONTEXT §5）。取不到就说不知道，不返回陈旧值。
+    Args: session, reader, room_id。
+    """
+    try:
+        extent = await resolve_source_extent(session, reader, room_id=room_id)
+    except SourceUnavailable as error:
+        _logger.warning(
+            "ac_startup_source_range_unavailable",
+            "外库不可达，批次页不预设抽取范围",
+            room_id=str(room_id),
+            error=error,
+        )
+        return None
+    if extent is None:
+        return None
+    return SourceRangeOut(start=extent.start, end=extent.end)
 
 
 async def _coverage(
