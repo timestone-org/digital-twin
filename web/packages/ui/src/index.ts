@@ -10,6 +10,7 @@ export {
   toCssColor,
 } from './components/DtColorInput/color'
 export { default as DtConfirmHost } from './components/DtConfirmHost/DtConfirmHost.vue'
+export { default as DtCursorPager } from './components/DtCursorPager/DtCursorPager.vue'
 export { default as DtDataView } from './components/DtDataView/DtDataView.vue'
 export type {
   DtDataViewEmpty,
