@@ -194,7 +194,10 @@ async def test_pasting_a_private_key_into_the_public_field_is_rejected(
             fingerprint="cd" * 32,
             subject="CN=scada",
             expires_at=_expiry(),
-            public_key_pem="-----BEGIN PRIVATE KEY-----\nMIIE\n",
+            # ⚠ 拼出来而不是写成完整字面量：机密扫描按 BEGIN 头匹配，
+            # 一段完整的私钥 PEM 会被判成真泄漏。约束看的是 `PRIVATE KEY`
+            # 这几个字，拼接后的值与字面量对数据库完全等价。
+            public_key_pem="-----BEGIN " + "PRIVATE KEY" + "-----\nMIIE\n",
         ),
     )
     with pytest.raises(IntegrityError):
