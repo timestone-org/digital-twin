@@ -40,6 +40,17 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
+    // ⚠ 每台空调一个的**详情**路由，因此不进 NAV_ITEMS——那张表里每一项都要有
+    // 静态路径，且由契约测试钉着。回台账靠 AppShell 的 backTo。
+    path: '/hvac/ac-units/:acUnitId/data',
+    name: 'hvac-ac-data',
+    component: () => import('@/pages/Hvac/AcData/index.vue'),
+    meta: {
+      title: '空调数据',
+      permissions: [PERMISSION_CODES.acView],
+    },
+  },
+  {
     path: '/hvac/spaces',
     name: 'hvac-spaces',
     component: () => import('@/pages/Hvac/Spaces/index.vue'),
