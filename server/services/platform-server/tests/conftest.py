@@ -187,6 +187,33 @@ def ac_source() -> FakeAcSource:
 
 
 @pytest.fixture
+async def db_session(
+    settings: Settings, postgres_available: bool
+) -> AsyncIterator[AsyncSession]:
+    """一个包在回滚事务里的会话，给不经 HTTP 的持久层用例用。
+
+    ⚠ 与 `app_client` 一样打真实 Postgres：部分唯一索引、CHECK 与数组/JSONB 的
+    行为都只在真库上成立，SQLite 上全绿的持久层可以在生产直接失败。
+    """
+    if not postgres_available:
+        pytest.skip("本机连不到 Postgres")
+    application = build_app(settings)
+    container: Container = application.state.container
+    connection = await container.database.engine.connect()
+    transaction = await connection.begin()
+    maker = async_sessionmaker(
+        bind=connection,
+        expire_on_commit=False,
+        join_transaction_mode="create_savepoint",
+    )
+    async with maker() as session:
+        yield session
+    await transaction.rollback()
+    await connection.close()
+    await container.database.dispose()
+
+
+@pytest.fixture
 async def app_client(
     settings: Settings,
     postgres_available: bool,
