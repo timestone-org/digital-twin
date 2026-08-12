@@ -86,7 +86,7 @@
 - `uq_hvac_ac_metric_limits_ac_unit_id_metric`。
 - `ck_hvac_ac_metric_limits_bounds_ordered`：
   `lower_limit IS NULL OR upper_limit IS NULL OR lower_limit <= upper_limit`。
-- `ck_hvac_ac_metric_limits_not_both_null`：`lower_limit IS NOT NULL OR upper_limit IS NOT NULL`
+- `ck_hvac_ac_metric_limits_bounds_not_both_null`：`lower_limit IS NOT NULL OR upper_limit IS NOT NULL`
   ——两端都不限的那条记录没有意义，不如不存。
 - ⚠ **单边为空表示该侧不限制**，不表示 0。本期界面只配 `workshop_temp_avg` 与
   `workshop_humidity_avg` 两项，但表结构按「指标 → 上下限」存，加指标不改表。
@@ -116,7 +116,10 @@ DATASET_RAW_MINUTE = "raw_minute"
 由目录里的 `is_limitable: bool` 标出，界面据此渲染，不在前端硬编码。
 
 **折线图默认指标**：`workshop_temp_avg` `workshop_humidity_avg`
-`ac_temp_setpoint` `ac_humidity_setpoint`，同样由目录标出。
+`ac_temp_setpoint` `ac_humidity_setpoint`，由 `is_charted_by_default: bool` 标出。
+
+⚠ 两个布尔字段的 `is_` 前缀是硬要求（`check_python_naming` 会拦下不带前缀的
+写法），对外的 JSON 字段名与它们逐字相同。
 
 ---
 
@@ -141,9 +144,19 @@ GET /ac-datasets
 GET /ac-datasets/{dataset}/source-objects        权限：ac:manage
 → data: { items: [ { name, caption, row_count_hint } ] }
 ```
-实现：查外库 `INFORMATION_SCHEMA.COLUMNS`，只返回**同时具备 `CT` 与全部 19 个指标列**
-的对象；`caption` 从 `KTInfo` 按 `device_id` 关联取（取不到给 `null`），取用前 `strip()`。
+实现：查外库 `INFORMATION_SCHEMA.COLUMNS`，用
+`GROUP BY TABLE_NAME HAVING COUNT(DISTINCT COLUMN_NAME) = 20` 只返回**同时具备 `CT`
+与全部 19 个指标列**的对象；`caption` 从 `KTInfo` 按对象名末段的 `device_id` 关联取
+（取不到给 `null`），取用前 `strip()`。
 ⚠ 不按 `KTStartData%` 过滤——见 §2.1 第 2 条。
+
+⚠ `row_count_hint` **恒为 `null`**：可绑定的都是视图，SQL Server 不为视图存行数统计，
+真去数一次就是一次 190 万行的全扫描。字段留在契约里，等有便宜的估算来源再填。
+
+⚠ 这条 GET 要 `ac:manage`，而边缘的闸 1 只按方法兜（`GET` → `ac:view`），故它是全仓
+唯一一处**闸 2 严于闸 1** 的端点。方向是安全的，但反过来会是静默的越权洞，因此它
+登记在 `tests/contract/test_route_matrix.py` 的 `STRICTER_THAN_GATE_ONE` 表里，另有
+两条断言守着「只许收紧到 `ac:manage`」与「必须指向真实存在的路由」。
 
 ### 5.3 绑定
 
@@ -198,10 +211,10 @@ GET /ac-units/{ac_unit_id}/raw-samples
 SQL 形状（`[obj]` 已按 §5.3 校验并引用）：
 
 ```sql
-SELECT TOP (:limit_plus_one) CT, <19 列>
+SELECT TOP (:row_limit) [CT], <19 列>
 FROM [obj]
-WHERE CT >= :anchor AND CT < :to
-ORDER BY CT ASC
+WHERE [CT] >= :anchor AND [CT] < :range_end
+ORDER BY [CT] ASC
 ```
 `anchor` = 游标里的时刻 + 1 秒（`CT` 精度到分钟，加 1 秒即可严格前进且不漏行），
 首页时 `anchor = from`。多取一行判 `has_more`。
@@ -212,7 +225,7 @@ ORDER BY CT ASC
 
 ```
 GET /ac-units/{ac_unit_id}/raw-series
-    ?from=&to=&metrics=<逗号分隔>&max_points=<100..2000>
+    ?from=&to=&metrics=<逗号分隔>&max_points=<100..2000，默认 1000>
 → data: { interval_minutes: number, metrics: [...],
           points: [ { ts, values: { <metric>: number|null } } ] }
 ```
@@ -227,15 +240,20 @@ GET /ac-units/{ac_unit_id}/raw-series
 SQL 形状：
 
 ```sql
-SELECT DATEADD(minute, (DATEDIFF(minute, '2000-01-01', CT) / :bucket) * :bucket,
+SELECT DATEADD(minute,
+               (DATEDIFF(minute, '2000-01-01', [CT]) / :bucket_minutes)
+                 * :bucket_minutes,
                '2000-01-01') AS bucket_ts,
-       AVG(<metric>) ...
-FROM [obj] WHERE CT >= :from AND CT < :to
-GROUP BY DATEDIFF(minute, '2000-01-01', CT) / :bucket
+       AVG([<metric>]) AS [<metric>], ...
+FROM [obj] WHERE [CT] >= :range_start AND [CT] < :range_end
+GROUP BY DATEDIFF(minute, '2000-01-01', [CT]) / :bucket_minutes
 ORDER BY bucket_ts ASC
 ```
 ⚠ 用 `DATEDIFF` 不用 `DATEDIFF_BIG`：以 2000-01-01 为原点，分钟差到 2026 年约
 1.4×10⁷，离 `int` 上限很远，而 `DATEDIFF` 的兼容性更宽。
+
+`interval_minutes` 出参是 `PositiveInt`（openapi 里带 `exclusiveMinimum: 0`）：
+0 分钟的桶没有意义，把它写进契约比留给读的人猜好。
 
 ---
 
@@ -284,7 +302,10 @@ ORDER BY bucket_ts ASC
   （[runtime-resilience §1](agents/runtime-resilience.md)）。
 - **就绪探针不含 EMS**（ADR-0006）。启动自检会 ping 一次并记日志，但**不阻断启动**。
 - **降级方向：fail-closed，不返回陈旧数据**，故不需要陈旧标注。
-- **日志**：`event` 用稳定字面量（`ac_raw_samples_queried` 等）；
+- **日志**：每次取数的路由、状态与耗时由 `lib.web` 的访问日志中间件统一出，本模块
+  不再为每条查询另记一条同义事件。模块自己的稳定字面量只有启动自检的
+  `ac_source_selfcheck_passed` / `ac_source_selfcheck_failed`，与绑定变更的
+  `ac_data_binding_set` / `ac_data_binding_cleared`。
   ⚠ 连接串与口令绝不进日志，只记 `host` 与 `database`
   （[observability §2.4](agents/observability.md)）。
 
