@@ -25,7 +25,7 @@ from platform_server.apps.hvac.startups import (
 BASE = datetime(2026, 3, 1, 0, 0, tzinfo=UTC)
 DEFAULTS = ExtractionRules()
 # 不要求冷启动的取样口径，用来证明它只是一个参数
-WARM = ExtractionRules(is_cold_start_required=False)
+WARM = ExtractionRules(require_cold_start=False)
 # 冷启动门槛用满 30 分钟，之后的分钟号都从 30 起
 COLD = 30
 
@@ -136,7 +136,7 @@ def test_the_streak_restarts_and_still_yields_an_episode_after_a_break() -> (
     assert episode.duration_minutes == 9
 
 
-def test_a_warm_start_opens_once_the_cold_requirement_is_off() -> None:
+def test_dropping_the_cold_requirement_samples_the_current_state() -> None:
     """冷启动是取样口径不是引擎前提：关掉它，同一段数据就抽得出事件。"""
     frames = [
         *cold_frames(5),
@@ -144,25 +144,53 @@ def test_a_warm_start_opens_once_the_cold_requirement_is_off() -> None:
     ]
     episode = only(extract_episodes(frames, rules=WARM))
     assert episode.started_at == at(5)
+    assert episode.running_set == ("K11",)
     assert episode.duration_minutes == 15
     assert extract_episodes(frames, rules=DEFAULTS) == []
 
 
-def test_a_warm_start_takes_whatever_is_running_that_minute() -> None:
-    """半途加开一台时，组合是那一分钟在跑的全部机组。"""
+def test_a_stopped_room_is_not_a_current_state_sample() -> None:
+    """全停的分钟没有运行组合，取不出样本。"""
+    assert extract_episodes(cold_frames(60), rules=WARM) == []
+
+
+def test_a_compliant_room_does_not_reopen_every_minute() -> None:
+    """⚠ 达标的分钟不取样：不挡住它，房间一进范围就每分钟开一条零时长事件。"""
     frames = [
-        *[frame(minute, ["K11"]) for minute in range(30)],
-        *run_frames(range(30, 70), ["K11", "K12"], complied_at=50),
+        *cold_frames(5),
+        *[frame(minute, ["K11"]) for minute in range(5, 20)],
+        *[
+            frame(minute, ["K11"], is_compliant=True)
+            for minute in range(20, 60)
+        ],
     ]
     episode = only(extract_episodes(frames, rules=WARM))
-    assert episode.started_at == at(30)
-    assert episode.running_set == ("K11", "K12")
+    assert episode.started_at == at(5)
+    assert episode.complied_at == at(20)
 
 
-def test_a_room_that_never_stops_opens_no_warm_episode() -> None:
-    """⚠ 没有亲眼看到起机就不开事件，否则一条连续运行的曲线会每分钟开一条。"""
-    frames = run_frames(range(60), ["K11"], complied_at=20)
-    assert extract_episodes(frames, rules=WARM) == []
+def test_drifting_out_of_band_starts_another_current_state_sample() -> None:
+    """房间掉出范围又是一个样本：这正是当前状态取样想要的那批数据。"""
+    frames = [
+        *cold_frames(5),
+        *[frame(minute, ["K11"]) for minute in range(5, 20)],
+        *[
+            frame(minute, ["K11"], is_compliant=True)
+            for minute in range(20, 40)
+        ],
+        *[frame(minute, ["K11"]) for minute in range(40, 50)],
+        *[
+            frame(minute, ["K11"], is_compliant=True)
+            for minute in range(50, 70)
+        ],
+    ]
+    episodes = extract_episodes(frames, rules=WARM)
+    assert [item.started_at for item in episodes] == [at(5), at(40)]
+    assert [item.duration_minutes for item in episodes] == [15, 10]
+    assert [item.outcome for item in episodes] == [
+        OUTCOME_USABLE,
+        OUTCOME_USABLE,
+    ]
 
 
 def test_staggered_starts_within_the_window_form_one_combination() -> None:

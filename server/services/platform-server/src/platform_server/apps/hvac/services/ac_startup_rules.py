@@ -40,7 +40,7 @@ class ExtractionRules:
     compliance_frames: int = 1
     compliance_cap_minutes: int = 100
     max_gap_minutes: int = 3
-    is_cold_start_required: bool = True
+    require_cold_start: bool = True
 
     def __post_init__(self) -> None:
         # ⚠ 逐字段遍历而不是逐个点名：新加一条规则会自动进校验与指纹，点名写法
@@ -190,7 +190,6 @@ class _Machine:
         self.episodes: list[Episode] = []
         # ⚠ 从 0 起算：序列开头之前的状态我们看不见，只认亲眼数到的全停分钟
         self._off_streak = 0
-        self._previous_running: frozenset[str] | None = None
         self._open: _Open | None = None
 
     def step(self, minute: _Minute) -> None:
@@ -200,19 +199,9 @@ class _Machine:
         """
         if self._open is None:
             self._start_if_ready(minute)
-        if self._open is not None:
-            self._close_if_decided(minute, self._open)
-        frame = minute.frame
-        self._previous_running = (
-            frame.running if frame is not None and frame.is_valid else None
-        )
-
-    def _close_if_decided(self, minute: _Minute, episode: _Open) -> None:
-        """判完就收下这条事件，回到空闲。
-
-        Args: minute, episode。
-        """
-        finished = self._advance(minute, episode)
+        if self._open is None:
+            return
+        finished = self._advance(minute, self._open)
         if finished is None:
             return
         self.episodes.append(finished)
@@ -242,16 +231,16 @@ class _Machine:
         self._off_streak = 0
 
     def _is_startable(self, frame: Frame) -> bool:
-        """这一台开机够不够开出一次事件。
+        """这一分钟够不够开出一次事件；调用方已保证房间里有机组在跑。
 
-        ⚠ 不要求冷启动时认的是**亲眼看到的**那次起机（上一有效分钟没在跑的台
-        现在跑起来了）；否则一条持续运行的曲线会在每一分钟都开出一条新事件。
+        ⚠ 不要求冷启动时改判当前状态：在跑但没达标的任一分钟都是一个样本，
+        达标那一分钟不是——不挡住达标的分钟，房间一进范围就会立刻再开一条
+        零时长的事件，然后每分钟一条。
         Args: frame。
         """
-        if self._rules.is_cold_start_required:
+        if self._rules.require_cold_start:
             return self._off_streak >= self._rules.cold_off_minutes
-        previous = self._previous_running
-        return previous is not None and bool(frame.running - previous)
+        return not frame.is_compliant
 
     def _advance(self, minute: _Minute, episode: _Open) -> Episode | None:
         """判定中的事件走一分钟，判完就给出结果，否则给 None。
@@ -318,8 +307,12 @@ class _Machine:
         return None
 
     def _joins(self, ts: datetime, episode: _Open) -> bool:
-        """新开的这台还在不在组合窗内——窗从第一台起算，是定长的。
+        """新开的这台还在不在组合窗内。
 
+        ⚠ 窗**从第一台起算且定长**，不随后续每一台顺延。实测 964 次候选开机上，
+        「距上一台 10 分钟 + 距第一台累计 10 分钟」两条里后者永远先到，滚动那一
+        半一次都没生效过，故只留定长这一条。真要滚动，得让累计上限大于窗宽，
+        那必须是一次有意的改动而不是两个参数正好抵消。
         ⚠ 人工逐台启动会有间隔，窗开得太窄会把一次正常的顺序启动误判成中途变更。
         Args: ts, episode。
         """
