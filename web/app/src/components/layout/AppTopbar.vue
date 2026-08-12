@@ -9,6 +9,8 @@ import { DtIcon } from '@dt/ui'
 
 import { formatTimeOfDay } from '@/utils/datetime'
 
+import ThemeSwitcher from './ThemeSwitcher.vue'
+
 const props = defineProps<{
   title?: string | undefined
   subtitle?: string | undefined
@@ -74,6 +76,8 @@ onBeforeUnmount(() => {
 
     <div class="relative z-10 ml-auto flex items-center gap-4">
       <slot name="actions" />
+      <!-- 换肤是外壳常驻功能，不走 actions 槽——那个槽归页面自己 -->
+      <ThemeSwitcher />
       <div class="hidden items-center gap-2 text-text-secondary sm:flex">
         <DtIcon name="activity" :size="14" class="text-accent-primary/70" />
         <span class="text-sm tracking-wider text-accent-secondary">

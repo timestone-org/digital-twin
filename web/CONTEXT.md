@@ -26,7 +26,7 @@ L2  应用壳                    app
 | 包              | 内容                                                          | 依赖              |
 | --------------- | ------------------------------------------------------------- | ----------------- |
 | `@dt/contracts` | 后端类型、错误码、权限码、控件轴                              | ——                |
-| `@dt/tokens`    | 设计 token（`tokens.scss`）与运行时读取面                     | ——                |
+| `@dt/tokens`    | 设计 token（`tokens.scss`）、主题预设与注入引擎、运行时读取面 | ——                |
 | `@dt/security`  | 权限判定、令牌解析、登录态存储与跨标签同步                    | ——                |
 | `@dt/ui`        | 基础组件（DtButton / DtInput / DtField / DtIcon / DtSpinner） | contracts, tokens |
 | `@dt/app`       | 应用壳：路由、store、页面                                     | 全部              |
@@ -65,6 +65,35 @@ app/src/styles/
 - app 侧的断点与共用混入在 `app/src/styles/_tokens-bridge.scss`。
 - ⚠ `@keyframes` 定义在全局 `_animations.scss`，**不放 SFC 的 scoped 块**：
   scoped 会给块内 keyframes 改名加 hash，跨组件复用必然失配。
+
+### 3.1 换肤
+
+```
+顶栏 ThemeSwitcher ── setPreference(id | null)
+      ↓
+useThemePreference（模块级单例，偏好写 localStorage `dt.theme`）
+      ↓ resolvedId：null 时按 prefers-color-scheme 解析
+useGlobalTheme ── applyTheme(document.documentElement, id)
+      ↓ 在文档根写内联 CSS 变量，覆盖 tokens.scss 的 :root
+整个应用（含不套壳的登录页与错误页）跟着变
+```
+
+预设定义在 `packages/tokens/src/themePresets.ts`，`themeEngine.ts` 的
+`TOKEN_CSS_VAR` 是 token 路径到 CSS 变量的唯一桥接表。
+
+四条容易踩的：
+
+1. **默认深色 `dark-tech` 是 `isRootDefault`**：注入时逐项 `removeProperty`
+   而不是写一遍相同的值，故默认态下根上一个主题变量都不留 = 与不换肤时逐像素一致。
+2. **`-rgb` 伴生变量只在取值是 `#hex` 时同步**。给 `rgba()` 会让
+   `rgba(var(--x-rgb), α)` 的消费方静默回落到 `:root` 的深色三元组——页面不报错，
+   只是颜色不对。由 `themePresets.contract.spec.ts` 守。
+3. **派生变量不用管**（`--card-bg: var(--surface-panel)`、
+   `--border-focus: var(--accent-primary)`…）：CSS 自定义属性在取用处解析，
+   改了源变量它们自动跟随。反过来，**没有任何主题够得着的颜色是死色**，
+   换成浅色后会孤零零留一块深青——同一个契约测试守这条。
+4. **`color-scheme` 必须跟着 mode 走**，引擎在根上一并写。不写的话浅色主题下
+   原生滚动条、下拉、日期选择器与自动填充底色统统还是深色皮肤，且不报任何错。
 
 ## 4. 认证链路
 
