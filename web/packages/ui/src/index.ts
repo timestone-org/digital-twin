@@ -15,6 +15,7 @@ export type {
   DtDataViewEmpty,
   DtDataViewLayout,
 } from './components/DtDataView/DtDataView.vue'
+export { default as DtDateTimeInput } from './components/DtDateTimeInput/DtDateTimeInput.vue'
 export { default as DtDigits } from './components/DtDigits/DtDigits.vue'
 export { default as DtDropdownMenu } from './components/DtDropdownMenu/DtDropdownMenu.vue'
 export { default as DtEmpty } from './components/DtEmpty/DtEmpty.vue'
@@ -23,6 +24,7 @@ export { default as DtFilePicker } from './components/DtFilePicker/DtFilePicker.
 export { default as DtHelpTip } from './components/DtHelpTip/DtHelpTip.vue'
 export { default as DtIcon } from './components/DtIcon/DtIcon.vue'
 export { default as DtInput } from './components/DtInput/DtInput.vue'
+export { default as DtLineChart } from './components/DtLineChart/DtLineChart.vue'
 export { default as DtModal } from './components/DtModal/DtModal.vue'
 export { default as DtNotice } from './components/DtNotice/DtNotice.vue'
 export { default as DtNumberInput } from './components/DtNumberInput/DtNumberInput.vue'
@@ -53,3 +55,10 @@ export { useToast } from './composables/useToast'
 export type { DtToast, DtToastOptions } from './composables/useToast'
 export { ICONS, isIconName } from './components/DtIcon/registry'
 export type { IconName } from './components/DtIcon/registry'
+export type { DtChartHandle } from './shared/chart/echarts'
+export type { DtChartPoint, DtChartSeries } from './shared/chart/series'
+export {
+  formatLocalMinute,
+  fromLocalMinuteInput,
+  toLocalMinuteInput,
+} from './shared/datetime'
