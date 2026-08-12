@@ -30,6 +30,9 @@ http {
   limit_req_zone $binary_remote_addr zone=login:10m rate=10r/m;
 
   upstream auth_server { server auth-server:8004; }
+  # ⚠ 只有 opcua-server 的 HTTP 管理面在这里。实例的 opc.tcp 端口是二进制 TCP，
+  # http block 转不了，由编排层直接映射端口段，不经边缘（见 ADR-0006）。
+  upstream opcua_server { server opcua-server:8008; }
 
   # 鉴权子请求要回答的是「客户端在访问哪条路径」。
   # ⚠ 子请求里 $uri 是子请求自己的 /_auth，拿它去问规则表一律 no_matching_rule → 全站 403；
@@ -102,6 +105,35 @@ http {
       proxy_set_header X-Auth-Sig       $auth_sig;
 
       proxy_pass http://auth_server;
+      include /etc/nginx/conf.d/proxy-common.conf;
+    }
+
+    # OPC UA 服务端的探针与文档，与 auth 同档免认证
+    location = /api/v1/opcua/health { proxy_pass http://opcua_server; }
+    location = /api/v1/opcua/ready  { proxy_pass http://opcua_server; }
+    location = /api/v1/opcua/docs   { proxy_pass http://opcua_server; }
+    location = /api/v1/opcua/redoc  { proxy_pass http://opcua_server; }
+    location = /api/v1/opcua/openapi.json { proxy_pass http://opcua_server; }
+
+    location /api/v1/opcua/ {
+      auth_request /_auth;
+      auth_request_set $opcua_user  $upstream_http_x_auth_user_id;
+      auth_request_set $opcua_name  $upstream_http_x_auth_username;
+      auth_request_set $opcua_role  $upstream_http_x_auth_role;
+      auth_request_set $opcua_perms $upstream_http_x_auth_permissions;
+      auth_request_set $opcua_trunc $upstream_http_x_auth_permissions_truncated;
+      auth_request_set $opcua_exp   $upstream_http_x_auth_exp;
+      auth_request_set $opcua_sig   $upstream_http_x_auth_sig;
+
+      proxy_set_header X-Auth-User-Id   $opcua_user;
+      proxy_set_header X-Auth-Username  $opcua_name;
+      proxy_set_header X-Auth-Role      $opcua_role;
+      proxy_set_header X-Auth-Permissions $opcua_perms;
+      proxy_set_header X-Auth-Permissions-Truncated $opcua_trunc;
+      proxy_set_header X-Auth-Exp       $opcua_exp;
+      proxy_set_header X-Auth-Sig       $opcua_sig;
+
+      proxy_pass http://opcua_server;
       include /etc/nginx/conf.d/proxy-common.conf;
     }
 
