@@ -1,5 +1,5 @@
 /**
- * @fileoverview 空调台账与空间配置的接口封装。
+ * @fileoverview 空调台账、空间配置与空调数据面的接口封装。
  * 组件不直接发请求，一律经这里。分页一律带 page/size，后端 size 上限 200。
  *
  * ⚠ 这一组打的是 platform-server，不是 auth-server：每个函数都要给 `baseUrl`。
@@ -7,6 +7,10 @@
  */
 
 import type {
+  AcDataBinding,
+  AcDataset,
+  AcItemList,
+  AcMetricLimit,
   AcUnit,
   AcUnitFilters,
   AcUnitRelocateResult,
@@ -149,4 +153,86 @@ export async function relocateAcUnits(
       body: { ac_unit_ids: acUnitIds, room_id: roomId },
     }),
   )
+}
+
+/* 数据集目录 */
+
+/** 全部数据集与它们的指标。目录随后端版本走，前端不硬编码任何指标。 */
+export async function listAcDatasets(): Promise<AcDataset[]> {
+  const data = await requestData<AcItemList<AcDataset>>(
+    '/ac-datasets',
+    onPlatform(),
+  )
+  return data.items
+}
+
+/* 数据源绑定 */
+
+export async function listAcDataBindings(
+  acUnitId: string,
+): Promise<AcDataBinding[]> {
+  const data = await requestData<AcItemList<AcDataBinding>>(
+    `/ac-units/${acUnitId}/data-bindings`,
+    onPlatform(),
+  )
+  return data.items
+}
+
+/**
+ * 设定一台空调某个数据集读哪个对象。已有绑定会被换掉。
+ * @param acUnitId 空调 id
+ * @param dataset 数据集 key，取自目录
+ * @param sourceObject 外部库里的视图名
+ */
+export async function putAcDataBinding(
+  acUnitId: string,
+  dataset: string,
+  sourceObject: string,
+): Promise<AcDataBinding> {
+  return await requestData<AcDataBinding>(
+    `/ac-units/${acUnitId}/data-bindings/${dataset}`,
+    onPlatform({ method: 'PUT', body: { source_object: sourceObject } }),
+  )
+}
+
+export async function deleteAcDataBinding(
+  acUnitId: string,
+  dataset: string,
+): Promise<void> {
+  // ⚠ 走 request 而不是 requestData：这条返回 204，没有 data，
+  // requestData 会把它当成「服务端未返回数据」抛出来
+  await request<null>(
+    `/ac-units/${acUnitId}/data-bindings/${dataset}`,
+    onPlatform({ method: 'DELETE' }),
+  )
+}
+
+/* 达标范围 */
+
+export async function listAcMetricLimits(
+  acUnitId: string,
+): Promise<AcMetricLimit[]> {
+  const data = await requestData<AcItemList<AcMetricLimit>>(
+    `/ac-units/${acUnitId}/metric-limits`,
+    onPlatform(),
+  )
+  return data.items
+}
+
+/**
+ * 覆盖式写一台空调的全部达标范围。
+ * ⚠ 覆盖式：`limits` 里没出现的指标会被**清除**，不是「没给就是不改」。
+ * 提交前必须把界面上现存的每一项都带上。
+ * @param acUnitId 空调 id
+ * @param limits 全量的达标范围，条数上限 `AC_METRIC_LIMITS_MAX`
+ */
+export async function putAcMetricLimits(
+  acUnitId: string,
+  limits: readonly AcMetricLimit[],
+): Promise<AcMetricLimit[]> {
+  const data = await requestData<AcItemList<AcMetricLimit>>(
+    `/ac-units/${acUnitId}/metric-limits`,
+    onPlatform({ method: 'PUT', body: { items: limits } }),
+  )
+  return data.items
 }

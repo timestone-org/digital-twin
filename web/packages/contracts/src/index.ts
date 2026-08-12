@@ -23,6 +23,12 @@ export type {
 } from './admin'
 export { HTTP_METHODS, MATCH_MODES } from './admin'
 export type {
+  AcDataBinding,
+  AcDataset,
+  AcItemList,
+  AcMetric,
+  AcMetricGroup,
+  AcMetricLimit,
   AcUnit,
   AcUnitFilters,
   AcUnitRelocateResult,
@@ -31,7 +37,11 @@ export type {
   Workshop,
   WorkshopRef,
 } from './hvac'
-export { AC_UNIT_RELOCATE_MAX } from './hvac'
+export {
+  AC_METRIC_GROUPS,
+  AC_METRIC_LIMITS_MAX,
+  AC_UNIT_RELOCATE_MAX,
+} from './hvac'
 export type {
   DtButtonVariant,
   DtDataCardRole,

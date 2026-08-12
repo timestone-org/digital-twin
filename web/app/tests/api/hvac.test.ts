@@ -51,6 +51,12 @@ describe('每一条都打 platform 前缀', () => {
     ['updateAcUnit', () => hvac.updateAcUnit('a1', { name: '机' })],
     ['deleteAcUnit', () => hvac.deleteAcUnit('a1')],
     ['relocateAcUnits', () => hvac.relocateAcUnits(['a1'], 'r1')],
+    ['listAcDatasets', () => hvac.listAcDatasets()],
+    ['listAcDataBindings', () => hvac.listAcDataBindings('a1')],
+    ['putAcDataBinding', () => hvac.putAcDataBinding('a1', 'raw_minute', 'V1')],
+    ['deleteAcDataBinding', () => hvac.deleteAcDataBinding('a1', 'raw_minute')],
+    ['listAcMetricLimits', () => hvac.listAcMetricLimits('a1')],
+    ['putAcMetricLimits', () => hvac.putAcMetricLimits('a1', [])],
   ])('%s', async (_name, invoke) => {
     await invoke()
     expect(call()[1].baseUrl).toBe(PLATFORM_BASE_URL)
@@ -146,5 +152,92 @@ describe('空调接口', () => {
       ac_unit_ids: ['a1', 'a2'],
       room_id: 'r2',
     })
+  })
+})
+
+describe('数据集目录', () => {
+  it('目录是全局的，不挂在某台空调下', async () => {
+    await hvac.listAcDatasets()
+    expect(call()[0]).toBe('/ac-datasets')
+  })
+
+  it('剥掉 items 外壳，调用方直接拿数组', async () => {
+    const dataset = {
+      key: 'raw_minute',
+      name: '原始数据',
+      description: '逐分钟记录',
+      metrics: [],
+    }
+    requestMock.mockResolvedValue({ items: [dataset] })
+    await expect(hvac.listAcDatasets()).resolves.toEqual([dataset])
+  })
+})
+
+describe('数据源绑定', () => {
+  it('列表挂在空调下', async () => {
+    await hvac.listAcDataBindings('a1')
+    expect(call()[0]).toBe('/ac-units/a1/data-bindings')
+  })
+
+  it('列表同样剥掉 items 外壳', async () => {
+    requestMock.mockResolvedValue({ items: [] })
+    await expect(hvac.listAcDataBindings('a1')).resolves.toEqual([])
+  })
+
+  it('设绑定用 PUT，数据集在路径上、只送对象名', async () => {
+    await hvac.putAcDataBinding('a1', 'raw_minute', 'KTStartData_K01')
+    const [path, options] = call()
+    expect(path).toBe('/ac-units/a1/data-bindings/raw_minute')
+    expect(options.method).toBe('PUT')
+    expect(options.body).toEqual({ source_object: 'KTStartData_K01' })
+  })
+
+  it('解绑用 DELETE，路径与设绑定同形', async () => {
+    await hvac.deleteAcDataBinding('a1', 'raw_minute')
+    const [path, options] = call()
+    expect(path).toBe('/ac-units/a1/data-bindings/raw_minute')
+    expect(options.method).toBe('DELETE')
+  })
+
+  it('解绑走 request——它返回 204，走 requestData 会抛「服务端未返回数据」', async () => {
+    await hvac.deleteAcDataBinding('a1', 'raw_minute')
+    expect(vi.mocked(client.requestData)).not.toHaveBeenCalled()
+    expect(vi.mocked(client.request)).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('达标范围', () => {
+  it('列表挂在空调下', async () => {
+    await hvac.listAcMetricLimits('a1')
+    expect(call()[0]).toBe('/ac-units/a1/metric-limits')
+  })
+
+  it('写入是覆盖式整包：没带上的指标会被清掉，所以必须送全量', async () => {
+    const limits = [
+      { metric: 'workshop_temp_avg', lower_limit: '20.15', upper_limit: '24' },
+      { metric: 'workshop_humidity_avg', lower_limit: null, upper_limit: '65' },
+    ]
+    await hvac.putAcMetricLimits('a1', limits)
+    const [path, options] = call()
+    expect(path).toBe('/ac-units/a1/metric-limits')
+    expect(options.method).toBe('PUT')
+    expect(options.body).toEqual({ items: limits })
+  })
+
+  it('上下限原样透传字符串，不在封装层转成数字', async () => {
+    const limits = [
+      { metric: 'workshop_temp_avg', lower_limit: '20.15', upper_limit: null },
+    ]
+    await hvac.putAcMetricLimits('a1', limits)
+    const body = call()[1].body as { items: { lower_limit: unknown }[] }
+    expect(body.items[0]?.lower_limit).toBe('20.15')
+  })
+
+  it('写入的返回值也剥掉 items 外壳', async () => {
+    const saved = [
+      { metric: 'workshop_temp_avg', lower_limit: '20.15', upper_limit: null },
+    ]
+    requestMock.mockResolvedValue({ items: saved })
+    await expect(hvac.putAcMetricLimits('a1', [])).resolves.toEqual(saved)
   })
 })

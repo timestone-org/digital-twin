@@ -10,6 +10,11 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type {
+  AcDataBinding,
+  AcDataset,
+  AcItemList,
+  AcMetric,
+  AcMetricLimit,
   AcUnit,
   AcUnitRelocateResult,
   Page,
@@ -18,6 +23,7 @@ import type {
   Workshop,
   WorkshopRef,
 } from '@dt/contracts'
+import { AC_METRIC_GROUPS, AC_METRIC_LIMITS_MAX } from '@dt/contracts'
 
 interface OpenApiSchema {
   properties?: Record<string, unknown>
@@ -33,11 +39,48 @@ const SPEC_PATH = join(
   'openapi.json',
 )
 
+// 分组的闭集只存在于后端的常量表里，openapi 只说它是 string
+const CATALOG_PATH = join(
+  process.cwd(),
+  '..',
+  'server',
+  'services',
+  'platform-server',
+  'src',
+  'platform_server',
+  'apps',
+  'hvac',
+  'datasets.py',
+)
+
 const schemas = (
   JSON.parse(readFileSync(SPEC_PATH, 'utf8')) as {
     components: { schemas: Record<string, OpenApiSchema> }
   }
 ).components.schemas
+
+interface OpenApiProperty {
+  format?: string
+  maxItems?: number
+  anyOf?: { type?: string }[]
+}
+
+/** 同一份 spec 的细粒度视图：键集之外还要看类型、格式与上限。 */
+function detailed(): Record<
+  string,
+  { properties?: Record<string, OpenApiProperty | undefined> } | undefined
+> {
+  return (
+    JSON.parse(readFileSync(SPEC_PATH, 'utf8')) as {
+      components: {
+        schemas: Record<
+          string,
+          { properties?: Record<string, OpenApiProperty | undefined> }
+        >
+      }
+    }
+  ).components.schemas
+}
 
 /** 键集的类型层枚举。少写一个键、或写了接口上没有的键，vue-tsc 直接红。 */
 type Keys<T> = Record<keyof T, true>
@@ -93,6 +136,47 @@ const SHAPES: Record<string, Record<string, true>> = {
     size: true,
     total: true,
   } satisfies Keys<Page<AcUnit>>,
+
+  DatasetsOut: {
+    items: true,
+  } satisfies Keys<AcItemList<AcDataset>>,
+
+  DatasetOut: {
+    key: true,
+    name: true,
+    description: true,
+    metrics: true,
+  } satisfies Keys<AcDataset>,
+
+  MetricOut: {
+    key: true,
+    name: true,
+    unit: true,
+    group: true,
+    is_limitable: true,
+    is_charted_by_default: true,
+  } satisfies Keys<AcMetric>,
+
+  AcDataBindingsOut: {
+    items: true,
+  } satisfies Keys<AcItemList<AcDataBinding>>,
+
+  AcDataBindingOut: {
+    dataset: true,
+    source_object: true,
+    created_at: true,
+    updated_at: true,
+  } satisfies Keys<AcDataBinding>,
+
+  MetricLimitsOut: {
+    items: true,
+  } satisfies Keys<AcItemList<AcMetricLimit>>,
+
+  MetricLimitOut: {
+    metric: true,
+    lower_limit: true,
+    upper_limit: true,
+  } satisfies Keys<AcMetricLimit>,
 }
 
 describe('@dt/contracts 与 platform openapi.json 的字段一致', () => {
@@ -111,16 +195,67 @@ describe('@dt/contracts 与 platform openapi.json 的字段一致', () => {
   })
 
   it('时刻字段声明成 date-time，前端由此保住时间语义', () => {
-    const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf8')) as {
-      components: {
-        schemas: Record<
-          string,
-          { properties?: Record<string, { format?: string }> }
-        >
-      }
-    }
-    const properties = spec.components.schemas.AcUnitOut?.properties ?? {}
+    const properties = detailed().AcUnitOut?.properties ?? {}
     expect(properties.created_at?.format).toBe('date-time')
     expect(properties.updated_at?.format).toBe('date-time')
+  })
+
+  it('绑定的两个时刻同样是 date-time', () => {
+    const properties = detailed().AcDataBindingOut?.properties ?? {}
+    expect(properties.created_at?.format).toBe('date-time')
+    expect(properties.updated_at?.format).toBe('date-time')
+  })
+})
+
+describe('达标范围的上下限是精确小数', () => {
+  it.each(['lower_limit', 'upper_limit'])(
+    '%s 后端按 string 传，不是 JSON number',
+    (field) => {
+      const property = detailed().MetricLimitOut?.properties?.[field]
+      expect(property?.anyOf?.map((item) => item.type)).toEqual([
+        'string',
+        'null',
+      ])
+    },
+  )
+
+  it('前端类型也是 string | null——写成 number 会把 20.15 读成 20.149999999999999', () => {
+    const limit: AcMetricLimit = {
+      metric: 'workshop_temp_avg',
+      lower_limit: '20.15',
+      upper_limit: null,
+    }
+    expect(typeof limit.lower_limit).toBe('string')
+    expect(limit.upper_limit).toBeNull()
+  })
+})
+
+describe('入参形状', () => {
+  it('设绑定只送对象名，数据集在路径上', () => {
+    const keys = Object.keys(schemas.AcDataBindingPutIn?.properties ?? {})
+    expect(keys).toEqual(['source_object'])
+  })
+
+  it('写达标范围是覆盖式的整包，只有 items 一个键', () => {
+    const keys = Object.keys(schemas.MetricLimitsPutIn?.properties ?? {})
+    expect(keys).toEqual(['items'])
+  })
+
+  it('条数上限与后端同值', () => {
+    const items = detailed().MetricLimitsPutIn?.properties?.items
+    expect(items?.maxItems).toBe(AC_METRIC_LIMITS_MAX)
+  })
+})
+
+describe('指标分组的闭集与后端目录一致', () => {
+  it('AC_METRIC_GROUPS 与 datasets.py 的 GROUP_* 常量逐项对上', () => {
+    // ⚠ openapi 把 group 声明成自由 string，闭集在后端的常量表里，
+    // 只能从那份源码取——后端加一个分组而前端没跟上，穷尽分支会静默漏掉它
+    const source = readFileSync(CATALOG_PATH, 'utf8')
+    const declared = [
+      ...source.matchAll(/^GROUP_[A-Z_]+ = "([a-z_]+)"$/gm),
+    ].map((match) => match[1])
+    expect(declared).not.toHaveLength(0)
+    expect([...declared].sort()).toEqual([...AC_METRIC_GROUPS].sort())
   })
 })

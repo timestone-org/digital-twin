@@ -66,3 +66,66 @@ export type AcUnitFilters = {
 
 /** 一次批量改派的上限，与后端 `MAX_RELOCATE_BATCH` 同值。 */
 export const AC_UNIT_RELOCATE_MAX = 200
+
+/** 不分页的集合响应内层。数据集目录、绑定、达标范围三处同形。 */
+export interface AcItemList<TItem> {
+  items: TItem[]
+}
+
+/**
+ * 指标的 Y 轴分组。同组共用一条轴，取值落到 `DtLineChart` 的 `axis`。
+ * ⚠ openapi 把 `group` 声明成自由 `string`，这个闭集来自
+ * docs/AC_DATA_DESIGN.md §4，并与后端 `datasets.py` 的 `GROUP_*` 常量由
+ * 契约测试双向锁死——后端加一个分组而这里没跟上，穷尽分支会静默漏掉它。
+ */
+export const AC_METRIC_GROUPS = [
+  'temperature',
+  'humidity',
+  'pressure',
+  'frequency',
+] as const
+export type AcMetricGroup = (typeof AC_METRIC_GROUPS)[number]
+
+/** 数据集里的一个可读量。指标选择器与 Y 轴分组都读它。 */
+export interface AcMetric {
+  key: string
+  name: string
+  unit: string
+  group: AcMetricGroup
+  /** 能配达标范围。界面据此渲染，不在前端硬编码指标名。 */
+  is_limitable: boolean
+  /** 折线图初始就画它。 */
+  is_charted_by_default: boolean
+}
+
+/** 一台空调可看的一类数据。加一类数据是往目录里加一项，不是加一个页面。 */
+export interface AcDataset {
+  key: string
+  name: string
+  description: string
+  metrics: AcMetric[]
+}
+
+/** 「这台空调的这个数据集，读那个对象」这条对应关系。 */
+export interface AcDataBinding {
+  dataset: string
+  /** 外部 EMS 库里承载这个数据集的视图名，例如 `KTStartData_K01`。 */
+  source_object: string
+  created_at: string
+  updated_at: string
+}
+
+/** 一个指标的达标范围。单边为 `null` 表示该侧不限制。 */
+export interface AcMetricLimit {
+  metric: string
+  /**
+   * ⚠ 精确小数按 **string** 传，不是 number：JSON number 会把 20.15 读成
+   * 20.149999999999999。判定与显示前一律不许 `Number()` 再做算术，
+   * 见 docs/agents/code-style-typescript.md §8。
+   */
+  lower_limit: string | null
+  upper_limit: string | null
+}
+
+/** 一次覆盖式提交能带的指标条数上限，与后端 `MAX_METRIC_LIMITS` 同值。 */
+export const AC_METRIC_LIMITS_MAX = 64
