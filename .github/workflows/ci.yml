@@ -133,6 +133,12 @@ jobs:
       - name: 闸门脚本自身的类型
         run: uv run --project server pyright --project scripts
 
+      # ⚠ 单仓共享 venv 会让一个服务用上别人装进来的包而毫无察觉——
+      # import 成功、类型检查通过、全部用例绿，只有生产镜像会崩。
+      # 这一步按各服务自己声明的依赖独立装一遍再整包 import。
+      - name: 服务依赖自洽（按自己声明的依赖能否跑起来）
+        run: uv run --project server python scripts/gates/check_service_deps.py
+
   web-static:
     name: 2·前端格式/lint/类型
     needs: [secrets, hygiene, structure]

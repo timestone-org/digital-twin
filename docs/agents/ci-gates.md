@@ -105,6 +105,18 @@ E2E、a11y、变异测试不进 PR 闸门是 `testing-standard-*.md` §9 的明�
 | 同 §1–§3 分支、提交、PR 规模 | `check_pr_policy.py`（PR 专用） |
 | 密钥不进版本库 | `gitleaks` + `.gitleaks.toml` |
 | docker-build §5 镜像内容断言 | `nightly.yml` 的 `images` 作业 |
+| 服务只用自己声明的依赖 | `check_service_deps.py` |
+
+⚠ **`check_service_deps.py` 守的是一个在单仓里看不见的洞。** 开发与测试跑在
+workspace 的**共享 venv** 里，一个服务可以用上另一个服务装进来的包而毫无察觉——
+import 成功、pyright 通过、全部用例绿，只有按自己声明的依赖独立安装的生产镜像会崩。
+
+它不猜「import 名 → 分发名」（`jwt`←`pyjwt` 这类映射既要人工维护，又会在条件
+导入上漏判），而是复现生产条件：`uv export --package <svc>` 取该服务的依赖闭包，
+装进一个全新的空 venv，再 `walk_packages` 把服务包下每个模块都 import 一遍。
+
+真实案例：`opcua-server` 漏声明 `lib[auth]`，容器启动即
+`ModuleNotFoundError: No module named 'jwt'` 并无限重启，而 385 条用例全绿。
 
 ---
 
