@@ -38,6 +38,8 @@ BRANCH = re.compile(rf"^(?:{'|'.join(COMMIT_TYPES)})/[\w./-]+$")
 # 机械化的大范围改动（重命名、格式化、自动生成）可以超限，但必须单独成 PR
 MECHANICAL = re.compile(r"\[(?:机械|mechanical)]", re.IGNORECASE)
 LOCKFILES = frozenset({"server/uv.lock", "web/pnpm-lock.yaml"})
+# 锁文件的变更由清单文件引起，两者必须一起评审才看得懂
+MANIFESTS = frozenset({"pyproject.toml", "package.json"})
 # 生成物不计入评审规模
 GENERATED = ("openapi.json", "/dist/", "/coverage/")
 # `git diff --numstat` 每行是「新增\t删除\t路径」
@@ -143,11 +145,31 @@ def check_pr_touches_one_service() -> list[Violation]:
     ]
 
 
+def _accompanies_lockfile(name: str) -> bool:
+    """可以与锁文件同批的文件：造成它的清单，以及不含逻辑的文档。
+
+    ⚠ 这是允许清单不是排除清单——新增一种就要问一次「它会不会大到
+    让评审者跳过锁文件的 diff」。
+
+    Args: name。
+    """
+    return name.endswith(".md") or Path(name).name in MANIFESTS
+
+
 def check_lockfile_stands_alone() -> list[Violation]:
-    """⚠ 锁文件混在逻辑改动里时，评审者会直接跳过几千行 diff。"""
+    """⚠ 锁文件混在逻辑改动里时，评审者会直接跳过几千行 diff。
+
+    挡的是「锁文件被代码淹没」，不是「锁文件旁边有别的文件」：清单是锁
+    变更的**成因**，不和它一起看就无从判断依赖为什么变；文档不含逻辑。
+    新增代码单元必然同时动清单与锁文件，一刀切会让新服务根本进不来。
+    """
     files = set(_changed_files())
     touched = files & LOCKFILES
-    others = {name for name in files - LOCKFILES if _reviewable(name)}
+    others = {
+        name
+        for name in files - LOCKFILES
+        if _reviewable(name) and not _accompanies_lockfile(name)
+    }
     if not touched or not others:
         return []
     return [
