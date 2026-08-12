@@ -12,12 +12,12 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from lib.config import load_settings_or_exit
 from opcua_server.apps.instance.models import Base
-from opcua_server.settings import DB_SCHEMA, Settings
+from opcua_server.settings import DB_SCHEMA, MigrationSettings
 
 config = context.config
 target_metadata = Base.metadata
 
-_settings = load_settings_or_exit(Settings)
+_settings = load_settings_or_exit(MigrationSettings)
 
 
 def include_object(
