@@ -66,9 +66,7 @@ async def test_serial_is_unique_across_the_whole_plant(
 ) -> None:
     first = await build_room(app_client, "重号甲")
     second = await build_room(app_client, "重号乙")
-    await add_unit(
-        app_client, room_id=first, serial="AC-DUP-1", name="甲机"
-    )
+    await add_unit(app_client, room_id=first, serial="AC-DUP-1", name="甲机")
     # 换个车间换个房间也不行：序号是全场唯一的设备编号
     duplicate = await app_client.post(
         f"{PREFIX}/ac-units",
@@ -183,9 +181,7 @@ async def test_relocating_into_a_missing_room_is_404(
     app_client: httpx.AsyncClient,
 ) -> None:
     room = await build_room(app_client, "无处改派")
-    unit = await add_unit(
-        app_client, room_id=room, serial="AC-N-1", name="机"
-    )
+    unit = await add_unit(app_client, room_id=room, serial="AC-N-1", name="机")
     response = await app_client.post(
         f"{PREFIX}/ac-units:relocate",
         json={

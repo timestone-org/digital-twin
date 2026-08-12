@@ -58,16 +58,12 @@ def resolve(headers: dict[str, str]) -> object:
 
     Args: headers。
     """
-    return caller_from_headers(
-        headers, signing_secret=SECRET, now=utcnow()
-    )
+    return caller_from_headers(headers, signing_secret=SECRET, now=utcnow())
 
 
 def test_valid_headers_yield_the_signed_identity() -> None:
     headers = build_headers()
-    caller = caller_from_headers(
-        headers, signing_secret=SECRET, now=utcnow()
-    )
+    caller = caller_from_headers(headers, signing_secret=SECRET, now=utcnow())
     assert caller is not None
     assert str(caller.user_id) == headers["X-Auth-User-Id"]
     assert caller.role == "管理员"
