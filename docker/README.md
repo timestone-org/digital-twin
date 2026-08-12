@@ -36,3 +36,27 @@ docker compose up -d --build
 共享值（`AUTH_EDGE_SERVICE_KEY` 等）的回退链**必须每个服务都写全**：
 少写一处就是非对称失效——发送端有值、接收端没有，一律 403，
 而现象与原因隔得极远。
+
+### 迁移与种子
+
+容器起来**不会**自己建表。每个服务各有一条迁移链，各自只碰自己的 schema：
+
+```bash
+docker compose run --rm auth-server  alembic upgrade head
+docker compose run --rm auth-server  auth-seed
+docker compose run --rm opcua-server alembic upgrade head
+```
+
+⚠ **加了功能就要重跑种子。** 权限码与路由规则是源码里的目录，进库靠 `auth-seed`。
+新服务、新端点上线后不跑，边缘查不到规则，而 auth-server 的口径是**无规则一律拒绝**——
+表现是那一片接口**全部 403**，而代码看起来完全正常。
+
+### opcua-server 的两处部署前置
+
+**端口段必须与 `OPCUA_PORT_POOL` 逐字一致。** compose 里的 `ports` 映射决定了哪些端口
+真的能从外面连进来；配置里的池只是服务自己的账本。两者不一致时，服务会把池外的端口
+分配出去、状态显示「运行中」，而上位机连不上——这是最难排查的一类故障。
+
+**`opcua-pki` 卷装着全部实例的服务器私钥。** 它不进镜像层、不进数据库，也因此
+**不随数据库备份一起走**。卷丢了等于全部实例的证书作废，每台上位机都要重新信任新证书。
+备份策略要单独覆盖它。
