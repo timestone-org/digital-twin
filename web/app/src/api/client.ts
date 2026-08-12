@@ -60,10 +60,18 @@ export interface RequestOptions {
   /** 跳过令牌注入与 401 重试（登录、刷新自己走这条）。 */
   anonymous?: boolean | undefined
   signal?: AbortSignal | undefined
+  /** 服务前缀，缺省是 auth-server。别的服务传自己的。 */
+  baseUrl?: string | undefined
+  /** 附加请求头，如 `Idempotency-Key`。不许在这里塞 Authorization。 */
+  headers?: Record<string, string> | undefined
 }
 
-function buildUrl(path: string, query?: RequestOptions['query']): string {
-  const url = `${AUTH_BASE_URL}${path}`
+function buildUrl(
+  path: string,
+  query?: RequestOptions['query'],
+  baseUrl: string = AUTH_BASE_URL,
+): string {
+  const url = `${baseUrl}${path}`
   if (!query) return url
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(query)) {
@@ -108,7 +116,10 @@ async function readEnvelope<T>(
 }
 
 async function send(path: string, options: RequestOptions): Promise<Response> {
-  const headers: Record<string, string> = { Accept: 'application/json' }
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    ...options.headers,
+  }
   if (options.body !== undefined) {
     headers['Content-Type'] = 'application/json'
   }
@@ -122,7 +133,7 @@ async function send(path: string, options: RequestOptions): Promise<Response> {
     ? AbortSignal.any([options.signal, timeout])
     : timeout
   try {
-    return await fetch(buildUrl(path, options.query), {
+    return await fetch(buildUrl(path, options.query, options.baseUrl), {
       method: options.method ?? 'GET',
       headers,
       body: options.body === undefined ? null : JSON.stringify(options.body),

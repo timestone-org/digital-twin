@@ -17,6 +17,9 @@ export const PERMISSION_CODES = {
   roleManage: 'role:manage',
   routeRuleView: 'route_rule:view',
   routeRuleManage: 'route_rule:manage',
+  opcuaView: 'opcua:view',
+  opcuaOperate: 'opcua:operate',
+  opcuaManage: 'opcua:manage',
 } as const
 
 export type PermissionCode =
