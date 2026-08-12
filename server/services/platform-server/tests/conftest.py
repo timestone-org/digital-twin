@@ -251,41 +251,47 @@ def ac_source() -> FakeAcSource:
     )
 
 
-@pytest.fixture
-async def db_session(
-    settings: Settings, postgres_available: bool
-) -> AsyncIterator[AsyncSession]:
-    """一个包在回滚事务里的会话，给不经 HTTP 的持久层用例用。
+def _session_override(
+    maker: async_sessionmaker[AsyncSession],
+) -> Callable[[], AsyncIterator[AsyncSession]]:
+    """每个请求一个会话，与生产同构：失败即回滚到保存点，不毒死后续请求。
 
-    ⚠ 与 `app_client` 一样打真实 Postgres：部分唯一索引、CHECK 与数组/JSONB 的
-    行为都只在真库上成立，SQLite 上全绿的持久层可以在生产直接失败。
+    Args: maker。
     """
-    if not postgres_available:
-        pytest.skip("本机连不到 Postgres")
-    application = build_app(settings)
-    container: Container = application.state.container
-    connection = await container.database.engine.connect()
-    transaction = await connection.begin()
-    maker = async_sessionmaker(
-        bind=connection,
-        expire_on_commit=False,
-        join_transaction_mode="create_savepoint",
-    )
-    async with maker() as session:
-        yield session
-    await transaction.rollback()
-    await connection.close()
-    await container.database.dispose()
+
+    async def override() -> AsyncIterator[AsyncSession]:
+        async with maker() as session:
+            try:
+                yield session
+            except Exception:
+                await session.rollback()
+                raise
+            else:
+                await session.commit()
+
+    return override
+
+
+@dataclass
+class AppContext:
+    """整装应用的客户端与一个**同连接**的会话。
+
+    ⚠ 两者必须共用一条连接：分开连就是两个事务，用例在会话里种下的数据在
+    HTTP 那边根本看不见，而现象是「接口返回空列表」，看着像业务逻辑写错了。
+    """
+
+    client: httpx.AsyncClient
+    session: AsyncSession
 
 
 @pytest.fixture
-async def app_client(
+async def app_context(
     settings: Settings,
     postgres_available: bool,
     sign: SignHeaders,
     ac_source: FakeAcSource,
-) -> AsyncIterator[httpx.AsyncClient]:
-    """整装应用的客户端，默认带全权身份头。每条用例一个回滚事务。
+) -> AsyncIterator[AppContext]:
+    """整装应用 + 同连接的会话，每条用例一个回滚事务。
 
     ⚠ 外库一律换成假件：用例不许打网络，而真外库在 CI 里也不存在。
     """
@@ -304,28 +310,35 @@ async def app_client(
         join_transaction_mode="create_savepoint",
     )
 
-    # 每个请求一个会话，与生产同构：失败即回滚到保存点，不会把后续请求毒死
-    async def override() -> AsyncIterator[AsyncSession]:
-        async with maker() as session:
-            try:
-                yield session
-            except Exception:
-                await session.rollback()
-                raise
-            else:
-                await session.commit()
-
-    application.dependency_overrides[get_session] = override
+    application.dependency_overrides[get_session] = _session_override(maker)
     application.dependency_overrides[get_ac_source_reader] = (
         lambda: AcSourceReader(source=ac_source, timezone=SOURCE_TIMEZONE)
     )
     transport = httpx.ASGITransport(app=application)
-    async with httpx.AsyncClient(
-        transport=transport, base_url="http://platform-test", timeout=30
-    ) as client:
+    async with (
+        httpx.AsyncClient(
+            transport=transport, base_url="http://platform-test", timeout=30
+        ) as client,
+        maker() as session,
+    ):
         client.headers.update(sign())
-        yield client
+        yield AppContext(client=client, session=session)
 
     await transaction.rollback()
     await connection.close()
     await container.database.dispose()
+
+
+@pytest.fixture
+async def db_session(app_context: AppContext) -> AsyncSession:
+    """一个包在回滚事务里的会话，给不经 HTTP 的持久层用例用。
+
+    ⚠ 与 `app_client` 同一条连接：两边看见的是同一个事务里的数据。
+    """
+    return app_context.session
+
+
+@pytest.fixture
+async def app_client(app_context: AppContext) -> httpx.AsyncClient:
+    """整装应用的客户端，默认带全权身份头。"""
+    return app_context.client
