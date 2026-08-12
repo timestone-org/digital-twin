@@ -7,6 +7,10 @@
     "lines": 97.04,
     "branches": 79.27
   },
+  "opcua-server": {
+    "lines": 98.99,
+    "branches": 0.0
+  },
   "web": {
     "lines": 98.87,
     "branches": 94.7
