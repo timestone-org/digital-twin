@@ -36,7 +36,7 @@ class AcStartupShard(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     month: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
-    # 失败原因，只给人看；不含连接串与 SQL
+    # 停在这个状态的原因（失败原因或跳过原因），只给人看；不含连接串与 SQL
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (

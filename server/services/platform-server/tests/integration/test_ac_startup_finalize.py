@@ -31,6 +31,9 @@ from platform_server.apps.hvac.services.ac_source_reader import (
     SourceRow,
 )
 from platform_server.apps.hvac.services.ac_startup_extract import (
+    SHARD_RUN_EXTRACTED,
+    SHARD_RUN_ORPHANED,
+    SHARD_RUN_SKIPPED,
     ExtractionContext,
     load_bound_units,
     run_shard,
@@ -49,6 +52,7 @@ from platform_server.apps.hvac.startups import (
     BATCH_STATUS_FAILED,
     BATCH_STATUS_READY,
     SHARD_STATUS_FAILED,
+    SHARD_STATUS_SKIPPED,
 )
 from platform_server.stream import StreamEntry, StreamGroup, StreamLike
 
@@ -310,10 +314,14 @@ async def test_finalizing_keeps_only_the_three_newest_batches(
     assert [item.id for item in kept] == batch_ids[:0:-1]
 
 
-async def test_a_late_message_for_a_finished_batch_is_ignored(
+async def test_a_late_message_for_a_finished_batch_is_recorded_as_skipped(
     db_session: AsyncSession,
 ) -> None:
-    """批次已经收尾后迟到的那条消息不该再写一批孤儿事件。"""
+    """⚠ 迟到的消息不写孤儿事件，但也**绝不能让分片停在 pending**。
+
+    消息马上就要被确认，分片行再停在待跑就永远没人回来跑它：批次卡在 43/45，
+    队列里却一条消息都没有——线上两轮重算就是这么挂住的。
+    """
     room_id = await make_room(db_session, "迟到")
     plan = await request_rebuild(
         db_session, room_id=room_id, window=WINDOW, rules=RULES
@@ -322,13 +330,19 @@ async def test_a_late_message_for_a_finished_batch_is_ignored(
     for message in plan.messages:
         await run_shard(db_session, context, message)
     await finalize_if_complete(db_session, plan.batch.id)
-    assert await run_shard(db_session, context, plan.messages[0]) == 0
+
+    late = await run_shard(db_session, context, plan.messages[0])
+    assert late.outcome == SHARD_RUN_SKIPPED
+    assert late.episode_count == 0
+    shard = await _shard_of(db_session, plan.batch.id, "2026-01")
+    assert shard.status == SHARD_STATUS_SKIPPED
+    assert shard.error is not None
 
 
-async def test_a_message_for_a_vanished_batch_is_ignored(
+async def test_a_message_for_a_vanished_batch_reports_itself_orphaned(
     db_session: AsyncSession,
 ) -> None:
-    """批次被清理掉之后，它的分片消息只能是空转。"""
+    """批次被清理掉之后没有可落状态的地方，只能报出来而不是假装跑完了。"""
     room_id = await make_room(db_session, "无主")
     context = context_for(crossing_rows())
     ghost = ShardMessage(
@@ -337,7 +351,9 @@ async def test_a_message_for_a_vanished_batch_is_ignored(
         month="2026-01",
         traceparent="00-" + "0" * 32 + "-" + "0" * 16 + "-01",
     )
-    assert await run_shard(db_session, context, ghost) == 0
+    run = await run_shard(db_session, context, ghost)
+    assert run.outcome == SHARD_RUN_ORPHANED
+    assert run.episode_count == 0
 
 
 async def test_a_room_with_no_bound_units_yields_no_episodes(
@@ -354,7 +370,10 @@ async def test_a_room_with_no_bound_units_yields_no_episodes(
         db_session, room_id=room.id, window=WINDOW, rules=RULES
     )
     context = context_for(crossing_rows())
-    assert await run_shard(db_session, context, plan.messages[0]) == 0
+    run = await run_shard(db_session, context, plan.messages[0])
+    # 读不到数据是「跑完了但一条没有」，不是跳过：这一片确实跑过
+    assert run.outcome == SHARD_RUN_EXTRACTED
+    assert run.episode_count == 0
 
 
 async def test_a_unit_without_limits_still_reports_its_frames(

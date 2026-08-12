@@ -13,7 +13,10 @@ from lib.logging import bind_log_context, get_logger, reset_log_context
 from lib.web.middleware import parse_traceparent
 from platform_server.apps.hvac.services import ac_startup_queue
 from platform_server.apps.hvac.services.ac_startup_extract import (
+    SHARD_RUN_EXTRACTED,
+    SHARD_RUN_SKIPPED,
     ExtractionContext,
+    ShardRun,
     run_shard,
 )
 from platform_server.apps.hvac.services.ac_startup_service import (
@@ -145,9 +148,12 @@ class ShardConsumer:
                 )
             else:
                 await self._process(message)
+            # ⚠ 确认只在处理走完之后：放进 finally 的话，宽限期到点被取消的
+            # 那一条会被当成跑完了确认掉——它既没落分片状态也没留下任何日志，
+            # 而 drain 的约定恰恰是「没确认，会被别人认领回去」
+            await self._stream.ack(self._options.target, entry.entry_id)
         finally:
             reset_log_context(token)
-            await self._stream.ack(self._options.target, entry.entry_id)
             self._idle.set()
 
     async def _process(self, message: ac_startup_queue.ShardMessage) -> None:
@@ -172,14 +178,42 @@ class ShardConsumer:
 
     async def _run_one(self, message: ac_startup_queue.ShardMessage) -> None:
         async with self._database.session() as session:
-            written = await run_shard(session, self._context, message)
-        _logger.info(
-            "ac_startup_shard_done",
-            "分片抽取完成",
-            batch_id=str(message.batch_id),
-            month=message.month,
-            episode_count=written,
-        )
+            run = await run_shard(session, self._context, message)
+        self._log_run(message, run)
+
+    @staticmethod
+    def _log_run(message: ac_startup_queue.ShardMessage, run: ShardRun) -> None:
+        """按这一片真实的去向记一条日志。
+
+        ⚠ 「跑完了」与「跳过了」必须是两个 event：混成一条，卡住的批次在日志里
+        看起来与跑通的一模一样，而那正是这个缺陷两轮都没被发现的原因。
+        Args: message, run。
+        """
+        common = {
+            "batch_id": str(message.batch_id),
+            "month": message.month,
+        }
+        if run.outcome == SHARD_RUN_EXTRACTED:
+            _logger.info(
+                "ac_startup_shard_done",
+                "分片抽取完成",
+                episode_count=run.episode_count,
+                **common,
+            )
+        elif run.outcome == SHARD_RUN_SKIPPED:
+            _logger.warning(
+                "ac_startup_shard_skipped",
+                "批次已不在跑，分片跳过",
+                reason=run.reason,
+                **common,
+            )
+        else:
+            _logger.warning(
+                "ac_startup_shard_orphaned",
+                "分片所属的批次已不存在，消息丢弃",
+                reason=run.reason,
+                **common,
+            )
 
     async def _record_failure(
         self, message: ac_startup_queue.ShardMessage, *, reason: str

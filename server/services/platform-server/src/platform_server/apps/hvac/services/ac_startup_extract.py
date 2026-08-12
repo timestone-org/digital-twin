@@ -51,11 +51,17 @@ from platform_server.apps.hvac.services.ac_startup_shards import (
 from platform_server.apps.hvac.startups import (
     BATCH_STATUS_RUNNING,
     SHARD_STATUS_DONE,
+    SHARD_STATUS_SKIPPED,
 )
 
 # 抽取要读的指标列：判定只用三个，读数留档要全量
 _RAW_DATASET = find_dataset(DATASET_RAW_MINUTE)
 _RAW_COLUMNS = metric_keys(_RAW_DATASET) if _RAW_DATASET else ()
+
+# 一片跑完之后的去向
+SHARD_RUN_EXTRACTED = "extracted"
+SHARD_RUN_SKIPPED = "skipped"
+SHARD_RUN_ORPHANED = "orphaned"
 
 
 @dataclass(frozen=True)
@@ -75,21 +81,38 @@ class ExtractionContext:
     max_rows: int
 
 
+@dataclass(frozen=True)
+class ShardRun:
+    """一片跑完之后的去向：抽了就是抽了，跳过了就是跳过了。
+
+    ⚠ 调用方按 `outcome` 记日志，不许一律报成功：把跳过说成「分片抽取完成」，
+    等于让日志替一件没发生的事作证——线上正是这样，43/45 卡了两轮而日志全绿。
+    """
+
+    outcome: str
+    episode_count: int = 0
+    reason: str | None = None
+
+
 async def run_shard(
     session: AsyncSession,
     context: ExtractionContext,
     message: ShardMessage,
-) -> int:
-    """跑一片：取数、抽取、按归属区间写事件。返回写了多少条。
+) -> ShardRun:
+    """跑一片：取数、抽取、按归属区间写事件。返回这一片的去向。
 
     ⚠ 全片幂等：事件按 `(batch_id, started_at)` upsert，分片状态按
     `(batch_id, month)` 覆盖。同一条消息重放多少次，结果都一样。
     Args: session, context, message。
     """
     batch = await ac_startup_batch_crud.get(session, message.batch_id)
-    if batch is None or batch.status != BATCH_STATUS_RUNNING:
-        # 批次已被清理或已判失败：这条消息迟到了，静默跳过而不是造一批孤儿行
-        return 0
+    if batch is None:
+        # 批次行连同它的分片行一起被清理了：没有可落状态的地方，只能报出来
+        return ShardRun(outcome=SHARD_RUN_ORPHANED, reason="批次已不存在")
+    if batch.status != BATCH_STATUS_RUNNING:
+        return await _skip(
+            session, batch=batch, month=message.month, status=batch.status
+        )
     window = shard_range(
         message.month,
         window_start=batch.window_start,
@@ -106,7 +129,26 @@ async def run_shard(
         AcStartupShard(batch_id=batch.id, month=message.month),
         status=SHARD_STATUS_DONE,
     )
-    return len(episodes)
+    return ShardRun(outcome=SHARD_RUN_EXTRACTED, episode_count=len(episodes))
+
+
+async def _skip(
+    session: AsyncSession, *, batch: AcStartupBatch, month: str, status: str
+) -> ShardRun:
+    """批次已经不在跑了：把这一片记成跳过，并说清为什么。
+
+    ⚠ 必须落一个终态：消息马上就要被确认，分片行再停在 pending 就永远没人会
+    回来跑它——批次于是卡在 43/45，而队列里一条消息都没有。
+    Args: session, batch, month, status。
+    """
+    reason = f"批次已不在跑（{status}），这一片不再抽取"
+    await ac_startup_shard_crud.mark(
+        session,
+        AcStartupShard(batch_id=batch.id, month=month),
+        status=SHARD_STATUS_SKIPPED,
+        error=reason,
+    )
+    return ShardRun(outcome=SHARD_RUN_SKIPPED, reason=reason)
 
 
 async def _extract(

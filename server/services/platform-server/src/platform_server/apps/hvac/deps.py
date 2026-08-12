@@ -60,9 +60,10 @@ async def get_session(
 class Dispatcher:
     """把分片任务交出去的那只手。
 
-    ⚠ 它只在**事务提交之后**投递：本请求的事务要等依赖退出才提交，在请求里
-    直接投出去，消费者可能先于提交读到批次行还不存在——那是一个取决于调度
-    时机的间歇性缺陷。后台任务跑在响应发出之后，那时事务已经落盘。
+    ⚠ **后台任务并不跑在事务提交之后**：FastAPI 把「发响应」放在 yield 依赖的
+    退出栈里面，而 `Response.__call__` 发完响应就地 await 后台任务——于是投递
+    排在 `get_session` 提交之前。批次行因此必须由
+    `ac_startup_service.request_rebuild` 自己提交，本类不承担落盘时机。
     """
 
     stream: StreamLike

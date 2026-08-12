@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from platform_server.apps.hvac.crud import (
@@ -227,6 +228,33 @@ async def test_the_january_shard_reads_past_its_own_month(
     assert end == datetime(2026, 2, 1, 1, 40, tzinfo=UTC)
 
 
+async def test_the_batch_is_on_disk_before_the_plan_is_handed_back(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """⚠ 计划交出去之前，批次与分片必须已经落盘。
+
+    投递跑在响应发出的那一刻，而 FastAPI 把「发响应」放在 yield 依赖的退出栈
+    **里面**（`Response.__call__` 发完就地 await 后台任务）——那时
+    `get_session` 还没提交。消费者于是会先于提交读到消息，`run_shard` 看见
+    「批次不存在」，那一片被当成迟到消息跳过：线上两轮全史重算都恰好卡在最早
+    的两个月（2022-12、2023-01），日志时刻显示它们在建批次后 56ms 就「跑完」
+    了，而那两行分片的 updated_at 至今还是播种时刻。
+    """
+    room_id = await make_room(db_session, "先落盘")
+    commits: list[str] = []
+    committing = db_session.commit
+
+    async def counted_commit() -> None:
+        commits.append("commit")
+        await committing()
+
+    monkeypatch.setattr(db_session, "commit", counted_commit)
+    await request_rebuild(
+        db_session, room_id=room_id, window=WINDOW, rules=RULES
+    )
+    assert commits == ["commit"]
+
+
 async def test_the_february_shard_sees_the_start_but_does_not_write_it(
     db_session: AsyncSession,
 ) -> None:
@@ -236,8 +264,8 @@ async def test_the_february_shard_sees_the_start_but_does_not_write_it(
         db_session, room_id=room_id, window=WINDOW, rules=RULES
     )
     context = context_for(crossing_rows())
-    written = await run_shard(db_session, context, plan.messages[1])
-    assert written == 0
+    run = await run_shard(db_session, context, plan.messages[1])
+    assert run.episode_count == 0
 
 
 async def test_replaying_a_message_writes_no_duplicate(

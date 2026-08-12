@@ -72,7 +72,8 @@ class RebuildPlan:
     """一次重算的入队计划。
 
     ⚠ 消息**必须等事务提交之后再投**：提交前投出去，消费者可能先于提交读到
-    批次行还不存在，而那是一个取决于调度时机的间歇性缺陷。
+    批次行还不存在，而那是一个取决于调度时机的间歇性缺陷。落盘由
+    `request_rebuild` 在返回前自己做掉，不指望调用方所处的框架。
     """
 
     batch: AcStartupBatch
@@ -183,7 +184,11 @@ async def request_rebuild(
     session.add(batch)
     await session.flush()
     await ac_startup_shard_crud.seed(session, batch.id, months)
-    traceparent = current_traceparent()
+    # ⚠ 就地提交，不能等依赖退出时再提交：FastAPI 把「发响应」放在 yield 依赖
+    # 的退出栈**里面**，后台任务又由 `Response.__call__` 就地 await——投递因此
+    # 排在 `get_session` 提交之前。消费者拿到头几条消息时批次行还看不见，那几
+    # 片会被当成迟到消息跳过：线上两轮全史重算都卡在最早的两个月，就是这么来的
+    await session.commit()
     _logger.info(
         "ac_startup_batch_requested",
         "抽取批次已入队",
@@ -191,17 +196,25 @@ async def request_rebuild(
         batch_id=str(batch.id),
         shard_total=len(months),
     )
-    return RebuildPlan(
-        batch=batch,
-        messages=tuple(
-            ShardMessage(
-                batch_id=batch.id,
-                room_id=room_id,
-                month=month,
-                traceparent=traceparent,
-            )
-            for month in months
-        ),
+    return RebuildPlan(batch=batch, messages=_shard_messages(batch, months))
+
+
+def _shard_messages(
+    batch: AcStartupBatch, months: list[str]
+) -> tuple[ShardMessage, ...]:
+    """一个批次要投出去的全部分片消息。
+
+    Args: batch, months。
+    """
+    traceparent = current_traceparent()
+    return tuple(
+        ShardMessage(
+            batch_id=batch.id,
+            room_id=batch.room_id,
+            month=month,
+            traceparent=traceparent,
+        )
+        for month in months
     )
 
 
@@ -243,11 +256,29 @@ async def finalize_if_complete(
         return None
     counts = await ac_startup_shard_crud.count_by_status(session, batch_id)
     batch.shard_done = counts.get(SHARD_STATUS_DONE, 0)
+    # 事件数随分片跑完一路更新，不等到切换那一刻才算：页面上「跑中」的批次
+    # 也该看得见已经攒了多少条
+    episodes = await ac_startup_episode_crud.count_by_outcome(session, batch.id)
+    batch.episode_count = sum(episodes.values())
     if counts.get(SHARD_STATUS_FAILED, 0):
         return await _fail(session, batch)
-    if batch.shard_done < batch.shard_total:
+    if not _is_complete(batch, counts):
         return None
     return await _publish(session, batch)
+
+
+def _is_complete(batch: AcStartupBatch, counts: dict[str, int]) -> bool:
+    """全部分片都跑完了没有。
+
+    ⚠ 光数 done 不够，分片行的总数也要对上 `shard_total`：只比「done 够不够
+    多」的话，多出来的一行 done 就能替一片没跑的顶上，而 §5 的约定是「不完整
+    的批次绝不许成为当前批次」。跳过与待跑都算没跑完。
+    Args: batch, counts。
+    """
+    return (
+        batch.shard_done == batch.shard_total
+        and sum(counts.values()) == batch.shard_total
+    )
 
 
 async def _fail(session: AsyncSession, batch: AcStartupBatch) -> AcStartupBatch:
@@ -272,10 +303,10 @@ async def _publish(
 ) -> AcStartupBatch:
     """校验通过后把新批次切换成当前批次，并清理更老的。
 
+    ⚠ 只由 `finalize_if_complete` 在全部分片跑完之后调用：`episode_count` 与
+    `shard_done` 都是它刚数出来的。
     Args: session, batch。
     """
-    episodes = await ac_startup_episode_crud.count_by_outcome(session, batch.id)
-    batch.episode_count = sum(episodes.values())
     batch.unmatched_exclusion_count = (
         await ac_startup_exclusion_crud.count_unmatched(
             session, room_id=batch.room_id, batch_id=batch.id

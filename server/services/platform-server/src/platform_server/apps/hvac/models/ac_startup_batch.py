@@ -76,6 +76,16 @@ class AcStartupBatch(UuidPrimaryKeyMixin, TimestampMixin, Base):
             name="shards_within_total",
         ),
         CheckConstraint("episode_count >= 0", name="episode_count_nonnegative"),
+        # ⚠ 「不完整的批次绝不许成为当前批次」（§5）由库里守，不只靠收尾那段
+        # 代码自觉：绕过应用直接改这两列，就能把一份缺片的数据摆上页面，而它
+        # 看起来与正常切换一模一样
+        CheckConstraint(
+            "status <> 'ready' OR shard_done = shard_total",
+            name="ready_is_complete",
+        ),
+        CheckConstraint(
+            "NOT is_current OR status = 'ready'", name="current_is_ready"
+        ),
         CheckConstraint(
             "unmatched_exclusion_count >= 0",
             name="unmatched_exclusion_count_nonnegative",

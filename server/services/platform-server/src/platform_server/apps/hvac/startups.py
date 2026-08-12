@@ -15,9 +15,17 @@ BATCH_STATUSES: frozenset[str] = frozenset(
 SHARD_STATUS_PENDING = "pending"
 SHARD_STATUS_DONE = "done"
 SHARD_STATUS_FAILED = "failed"
+# 批次已经不在跑了，这一片不再抽取。⚠ 它是终态而不是「还没跑」：分片行停在
+# pending 时，看进度的人与 claim_stale 都会以为它还在路上
+SHARD_STATUS_SKIPPED = "skipped"
 
 SHARD_STATUSES: frozenset[str] = frozenset(
-    {SHARD_STATUS_PENDING, SHARD_STATUS_DONE, SHARD_STATUS_FAILED}
+    {
+        SHARD_STATUS_PENDING,
+        SHARD_STATUS_DONE,
+        SHARD_STATUS_FAILED,
+        SHARD_STATUS_SKIPPED,
+    }
 )
 
 # 房间达标了，这条可以进训练

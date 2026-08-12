@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import logging
 import uuid
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
@@ -23,7 +24,11 @@ from platform_server.apps.hvac.services import (
 )
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.apps.hvac.services.ac_startup_extract import (
+    SHARD_RUN_EXTRACTED,
+    SHARD_RUN_ORPHANED,
+    SHARD_RUN_SKIPPED,
     ExtractionContext,
+    ShardRun,
 )
 from platform_server.apps.hvac.services.ac_startup_queue import ShardMessage
 from platform_server.apps.hvac.services.ac_startup_rules import ExtractionRules
@@ -151,9 +156,9 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
     async def fake_run(
         _session: object, _context: object, message: ShardMessage
-    ) -> int:
+    ) -> ShardRun:
         recorded.append(f"run:{message.month}:{current_log_context().trace_id}")
-        return 1
+        return ShardRun(outcome=SHARD_RUN_EXTRACTED, episode_count=1)
 
     async def fake_fail(
         _session: object, message: ShardMessage, *, reason: str
@@ -185,6 +190,81 @@ async def test_the_trace_is_restored_from_the_envelope(
     """⚠ 链路在异步这一跳靠信封里的 traceparent 接上，漏了它就断在提交处。"""
     await build_consumer(FakeStream(batches=[[entry("1-0")]]))._tick()
     assert calls[0].endswith(TRACE_ID)
+
+
+async def test_a_skipped_shard_is_not_logged_as_done(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """⚠ 跳过的一片绝不能记成「分片抽取完成」。
+
+    线上 43/45 卡了两轮而没人看出来，正是因为日志替一件没发生的事作了证：
+    跳过与跑完共用一个 event，两者在日志里长得一模一样。
+    """
+
+    async def skipping(
+        _session: object, _context: object, _message: ShardMessage
+    ) -> ShardRun:
+        return ShardRun(outcome=SHARD_RUN_SKIPPED, reason="批次已不在跑")
+
+    monkeypatch.setattr(ac_startup_worker, "run_shard", skipping)
+    monkeypatch.setattr(ac_startup_worker, "finalize_if_complete", _no_finalize)
+    stream = FakeStream(batches=[[entry("1-0")]])
+    with caplog.at_level(logging.INFO):
+        await build_consumer(stream)._tick()
+    events = [record.getMessage() for record in caplog.records]
+    assert "ac_startup_shard_done" not in events
+    assert "ac_startup_shard_skipped" in events
+    # 状态已经落库了，这条消息不必再来一次
+    assert stream.acked == ["1-0"]
+
+
+async def test_an_orphaned_shard_is_reported_and_dropped(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """批次连同分片行一起没了：没有可落状态的地方，只能报出来再丢掉。"""
+
+    async def orphaned(
+        _session: object, _context: object, _message: ShardMessage
+    ) -> ShardRun:
+        return ShardRun(outcome=SHARD_RUN_ORPHANED, reason="批次已不存在")
+
+    monkeypatch.setattr(ac_startup_worker, "run_shard", orphaned)
+    monkeypatch.setattr(ac_startup_worker, "finalize_if_complete", _no_finalize)
+    stream = FakeStream(batches=[[entry("1-0")]])
+    with caplog.at_level(logging.INFO):
+        await build_consumer(stream)._tick()
+    events = [record.getMessage() for record in caplog.records]
+    assert "ac_startup_shard_done" not in events
+    assert "ac_startup_shard_orphaned" in events
+    # 再送一遍也是一样的结果，留在待确认表里只会没完没了
+    assert stream.acked == ["1-0"]
+
+
+async def test_a_cancelled_shard_is_not_acked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 宽限期到点被取消的那条消息不许确认。
+
+    确认是「这条不必再来一次」的唯一凭据。跑到一半被取消却确认掉，分片既没落
+    状态也没留下任何日志，而 `drain` 的约定恰恰是「没确认，会被别人认领回去」。
+    """
+
+    async def cancelled(
+        _session: object, _context: object, _message: ShardMessage
+    ) -> ShardRun:
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(ac_startup_worker, "run_shard", cancelled)
+    monkeypatch.setattr(ac_startup_worker, "finalize_if_complete", _no_finalize)
+    stream = FakeStream(batches=[[entry("1-0")]])
+    with pytest.raises(asyncio.CancelledError):
+        await build_consumer(stream)._tick()
+    assert stream.acked == []
+
+
+async def _no_finalize(_session: object, _batch_id: uuid.UUID) -> None:
+    """收尾在这一层不参与断言。"""
+    return
 
 
 async def test_an_unreadable_message_is_acked_without_running(
