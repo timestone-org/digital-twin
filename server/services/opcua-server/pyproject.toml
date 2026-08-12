@@ -12,6 +12,11 @@ dependencies = [
 
 [project.scripts]
 opcua-server = "opcua_server.__main__:main"
+# ⚠ 这里**不**登记 openapi 导出的 console 入口：`scripts` 是顶层包名，
+# auth-server 已经把它打进 wheel，同一个 venv 里两份会互相覆盖——实测中
+# `import scripts` 在不同机器上分别解析到了两个服务，于是导出脚本可能改写
+# **另一个服务**的 openapi.json。导出一律按路径调：
+#   uv run python scripts/export_openapi.py
 
 [tool.uv.sources]
 lib = { workspace = true }
@@ -33,7 +38,12 @@ markers = [
 ]
 
 [tool.coverage.run]
-branch = true
+# ⚠ 本服务是全仓唯一关掉分支覆盖的单元，理由与补偿控制见 ADR-0008。
+# 实测：`Server().init()` 裸跑 0.5s，在任何「非 sysmon 或开分支」的覆盖率
+# 配置下 >200s 不返回——coverage 的追踪器被 asyncua 那个 78000 行的
+# 生成函数拖死，即便 asyncua 根本不在 source 范围内。
+# 四种组合里只有「sysmon + 仅行」可用，故 CI 侧必须同时设 COVERAGE_CORE=sysmon。
+branch = false
 source = ["opcua_server"]
 omit = [
     "*/migrations/*",
