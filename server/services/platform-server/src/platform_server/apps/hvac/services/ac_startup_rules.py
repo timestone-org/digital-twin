@@ -28,20 +28,28 @@ Readings = Mapping[str, Mapping[str, float | None]]
 
 @dataclass(frozen=True)
 class ExtractionRules:
-    """抽取的全部可调参数。取值一变，指纹就变，页面据此提醒重算。"""
+    """抽取的全部可调参数。取值一变，指纹就变，页面据此提醒重算。
+
+    ⚠ 冷启动是**取样口径**而不是引擎的前提，故做成参数：实测冷启动样本稀少，
+    且与现场当前主力组合反相关（主力组合成段连续运行，很少全停），换口径时
+    该改的是这里的取值，不是状态机。
+    """
 
     cold_off_minutes: int = 30
-    join_window_minutes: int = 10
-    join_cap_minutes: int = 10
+    combination_window_minutes: int = 10
     compliance_frames: int = 1
     compliance_cap_minutes: int = 100
     max_gap_minutes: int = 3
+    is_cold_start_required: bool = True
 
     def __post_init__(self) -> None:
         # ⚠ 逐字段遍历而不是逐个点名：新加一条规则会自动进校验与指纹，点名写法
         # 漏一个的表现是「改了参数指纹却不变」，页面从此不再提醒重算
         for field in fields(self):
-            value: int = getattr(self, field.name)
+            value = getattr(self, field.name)
+            # 开关只有两个取值，不参与正整数校验
+            if isinstance(value, bool):
+                continue
             if value < 1:
                 raise ValueError(f"{field.name} 必须是正整数")
 
@@ -143,7 +151,6 @@ class _Open:
 
     started_at: datetime
     running_set: frozenset[str]
-    last_start_at: datetime
     readings: Readings
     compliant_streak: int = 0
     compliant_since: datetime | None = None
@@ -183,6 +190,7 @@ class _Machine:
         self.episodes: list[Episode] = []
         # ⚠ 从 0 起算：序列开头之前的状态我们看不见，只认亲眼数到的全停分钟
         self._off_streak = 0
+        self._previous_running: frozenset[str] | None = None
         self._open: _Open | None = None
 
     def step(self, minute: _Minute) -> None:
@@ -191,18 +199,28 @@ class _Machine:
         Args: minute。
         """
         if self._open is None:
-            self._start_if_cold(minute)
-        if self._open is None:
-            return
-        finished = self._advance(minute, self._open)
+            self._start_if_ready(minute)
+        if self._open is not None:
+            self._close_if_decided(minute, self._open)
+        frame = minute.frame
+        self._previous_running = (
+            frame.running if frame is not None and frame.is_valid else None
+        )
+
+    def _close_if_decided(self, minute: _Minute, episode: _Open) -> None:
+        """判完就收下这条事件，回到空闲。
+
+        Args: minute, episode。
+        """
+        finished = self._advance(minute, episode)
         if finished is None:
             return
         self.episodes.append(finished)
         self._open = None
         self._off_streak = 1 if _is_all_off(minute) else 0
 
-    def _start_if_cold(self, minute: _Minute) -> None:
-        """数全停分钟；攒够冷启动前提后的第一台开机即为起始时刻。
+    def _start_if_ready(self, minute: _Minute) -> None:
+        """数全停分钟；够开一次事件时，这一台开机即为起始时刻。
 
         Args: minute。
         """
@@ -215,14 +233,25 @@ class _Machine:
         if not frame.running:
             self._off_streak += 1
             return
-        if self._off_streak >= self._rules.cold_off_minutes:
+        if self._is_startable(frame):
             self._open = _Open(
                 started_at=frame.ts,
                 running_set=frame.running,
-                last_start_at=frame.ts,
                 readings=frame.readings,
             )
         self._off_streak = 0
+
+    def _is_startable(self, frame: Frame) -> bool:
+        """这一台开机够不够开出一次事件。
+
+        ⚠ 不要求冷启动时认的是**亲眼看到的**那次起机（上一有效分钟没在跑的台
+        现在跑起来了）；否则一条持续运行的曲线会在每一分钟都开出一条新事件。
+        Args: frame。
+        """
+        if self._rules.is_cold_start_required:
+            return self._off_streak >= self._rules.cold_off_minutes
+        previous = self._previous_running
+        return previous is not None and bool(frame.running - previous)
 
     def _advance(self, minute: _Minute, episode: _Open) -> Episode | None:
         """判定中的事件走一分钟，判完就给出结果，否则给 None。
@@ -276,7 +305,7 @@ class _Machine:
         )
 
     def _on_membership(self, frame: Frame, episode: _Open) -> Episode | None:
-        """运行组合的变化：滚动窗内的新增并入组合，其余一律判为组合变更。
+        """运行组合的变化：组合窗内的新增并入组合，其余一律判为组合变更。
 
         Args: frame, episode。
         """
@@ -286,18 +315,14 @@ class _Machine:
         if left or not self._joins(frame.ts, episode):
             return _closed(episode, OUTCOME_SET_CHANGED)
         episode.running_set = episode.running_set | frame.running
-        episode.last_start_at = frame.ts
         return None
 
     def _joins(self, ts: datetime, episode: _Open) -> bool:
-        """新开的这台能不能并进组合：距上一台与距第一台都要在窗内。
+        """新开的这台还在不在组合窗内——窗从第一台起算，是定长的。
 
-        ⚠ 人工逐台启动会有间隔，固定窗会把一次正常的顺序启动误判成中途变更。
+        ⚠ 人工逐台启动会有间隔，窗开得太窄会把一次正常的顺序启动误判成中途变更。
         Args: ts, episode。
         """
-        rules = self._rules
-        return ts - episode.last_start_at <= timedelta(
-            minutes=rules.join_window_minutes
-        ) and ts - episode.started_at <= timedelta(
-            minutes=rules.join_cap_minutes
+        return ts - episode.started_at <= timedelta(
+            minutes=self._rules.combination_window_minutes
         )

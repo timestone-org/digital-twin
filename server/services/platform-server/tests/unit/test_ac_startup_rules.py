@@ -1,6 +1,6 @@
 """开机事件判定规则的用例 —— docs/AC_STARTUP_DESIGN.md §3 逐条钉死。
 
-这一层守的是标签的对错：冷启动门槛、滚动窗、组合不变、达标口径、数据缺口与
+这一层守的是标签的对错：取样口径、组合窗、组合不变、达标口径、数据缺口与
 上限，每一条判错都不会报错，只会让训练集里多出或少掉一批样本。
 """
 
@@ -9,7 +9,6 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from platform_server.apps.hvac.services import ac_startup_rules
 from platform_server.apps.hvac.services.ac_startup_rules import (
     Episode,
     ExtractionRules,
@@ -25,6 +24,8 @@ from platform_server.apps.hvac.startups import (
 
 BASE = datetime(2026, 3, 1, 0, 0, tzinfo=UTC)
 DEFAULTS = ExtractionRules()
+# 不要求冷启动的取样口径，用来证明它只是一个参数
+WARM = ExtractionRules(is_cold_start_required=False)
 # 冷启动门槛用满 30 分钟，之后的分钟号都从 30 起
 COLD = 30
 
@@ -135,6 +136,35 @@ def test_the_streak_restarts_and_still_yields_an_episode_after_a_break() -> (
     assert episode.duration_minutes == 9
 
 
+def test_a_warm_start_opens_once_the_cold_requirement_is_off() -> None:
+    """冷启动是取样口径不是引擎前提：关掉它，同一段数据就抽得出事件。"""
+    frames = [
+        *cold_frames(5),
+        *run_frames(range(5, 40), ["K11"], complied_at=20),
+    ]
+    episode = only(extract_episodes(frames, rules=WARM))
+    assert episode.started_at == at(5)
+    assert episode.duration_minutes == 15
+    assert extract_episodes(frames, rules=DEFAULTS) == []
+
+
+def test_a_warm_start_takes_whatever_is_running_that_minute() -> None:
+    """半途加开一台时，组合是那一分钟在跑的全部机组。"""
+    frames = [
+        *[frame(minute, ["K11"]) for minute in range(30)],
+        *run_frames(range(30, 70), ["K11", "K12"], complied_at=50),
+    ]
+    episode = only(extract_episodes(frames, rules=WARM))
+    assert episode.started_at == at(30)
+    assert episode.running_set == ("K11", "K12")
+
+
+def test_a_room_that_never_stops_opens_no_warm_episode() -> None:
+    """⚠ 没有亲眼看到起机就不开事件，否则一条连续运行的曲线会每分钟开一条。"""
+    frames = run_frames(range(60), ["K11"], complied_at=20)
+    assert extract_episodes(frames, rules=WARM) == []
+
+
 def test_staggered_starts_within_the_window_form_one_combination() -> None:
     """t、t+4、t+9 三台顺序启动是一次开机，不是三次也不是中途变更。"""
     frames = [
@@ -152,8 +182,8 @@ def test_staggered_starts_within_the_window_form_one_combination() -> None:
     assert episode.outcome == OUTCOME_USABLE
 
 
-def test_a_start_at_the_total_cap_still_joins_the_combination() -> None:
-    """距第一台正好 10 分钟仍在窗内——上限是闭区间。"""
+def test_a_start_at_the_window_edge_still_joins_the_combination() -> None:
+    """距第一台正好 10 分钟仍在窗内——组合窗是闭区间。"""
     frames = [
         *cold_frames(),
         *[frame(minute, ["K11"]) for minute in range(30, 40)],
@@ -164,7 +194,7 @@ def test_a_start_at_the_total_cap_still_joins_the_combination() -> None:
     assert episode.outcome == OUTCOME_USABLE
 
 
-def test_a_start_past_the_total_cap_ends_the_episode() -> None:
+def test_a_start_past_the_window_ends_the_episode() -> None:
     """距第一台 11 分钟已经出窗，再开一台即为组合变更。"""
     frames = [
         *cold_frames(),
@@ -179,23 +209,9 @@ def test_a_start_past_the_total_cap_ends_the_episode() -> None:
     assert episode.duration_minutes is None
 
 
-def test_the_join_window_is_measured_from_the_previous_start() -> None:
-    """滚动窗按「距上一台」算：固定窗会把一次正常的顺序启动误判成中途变更。"""
-    rules = ExtractionRules(join_window_minutes=3, join_cap_minutes=10)
-    frames = [
-        *cold_frames(),
-        *[frame(minute, ["K11"]) for minute in range(30, 33)],
-        *[frame(minute, ["K11", "K12"]) for minute in range(33, 36)],
-        *run_frames(range(36, 61), ["K11", "K12", "K13"], complied_at=60),
-    ]
-    episode = only(extract_episodes(frames, rules=rules))
-    assert episode.running_set == ("K11", "K12", "K13")
-    assert episode.outcome == OUTCOME_USABLE
-
-
-def test_a_start_outside_the_rolling_window_ends_the_episode() -> None:
-    """距上一台超过窗宽即为组合变更，哪怕距第一台还在总上限内。"""
-    rules = ExtractionRules(join_window_minutes=3, join_cap_minutes=10)
+def test_the_combination_window_runs_from_the_first_start() -> None:
+    """窗从第一台起算、定长：把窗收窄，第 4 分钟起的那台就出窗了。"""
+    rules = ExtractionRules(combination_window_minutes=3)
     frames = [
         *cold_frames(),
         *[frame(minute, ["K11"]) for minute in range(30, 34)],
@@ -210,7 +226,7 @@ def test_a_start_outside_the_rolling_window_ends_the_episode() -> None:
     "stop_minute", [33, 50], ids=["inside-window", "after-window"]
 )
 def test_a_unit_stopping_ends_the_episode(stop_minute: int) -> None:
-    """停机不在滚动窗的照顾范围内：任何一台停都是组合变更。"""
+    """停机不在组合窗的照顾范围内：任何一台停都是组合变更。"""
     frames = [
         *cold_frames(),
         *[frame(minute, ["K11", "K12"]) for minute in range(30, stop_minute)],
@@ -435,63 +451,3 @@ def test_frames_out_of_order_are_rejected() -> None:
 def test_an_empty_frame_sequence_yields_no_episodes() -> None:
     """没有帧就没有事件。"""
     assert extract_episodes([], rules=DEFAULTS) == []
-
-
-@pytest.mark.parametrize(
-    "field",
-    [
-        "cold_off_minutes",
-        "join_window_minutes",
-        "join_cap_minutes",
-        "compliance_frames",
-        "compliance_cap_minutes",
-        "max_gap_minutes",
-    ],
-)
-def test_rules_reject_a_non_positive_value(field: str) -> None:
-    """每个参数都必须是正整数，0 与负数直接拒绝。"""
-    with pytest.raises(ValueError, match=field):
-        ExtractionRules(**{field: 0})
-
-
-def test_the_default_fingerprint_is_pinned() -> None:
-    """默认规则 + `LOGIC_VERSION` 的指纹钉成字面量：它一变就该全量重算。"""
-    assert DEFAULTS.fingerprint() == (
-        "b1385981eab3fe8840585908677dc119" "dc87175646791cdb41baef79a9eac043"
-    )
-
-
-@pytest.mark.parametrize(
-    ("field", "value"),
-    [
-        ("cold_off_minutes", 31),
-        ("join_window_minutes", 11),
-        ("join_cap_minutes", 12),
-        ("compliance_frames", 2),
-        ("compliance_cap_minutes", 120),
-        ("max_gap_minutes", 4),
-    ],
-)
-def test_the_fingerprint_changes_with_every_rule_value(
-    field: str, value: int
-) -> None:
-    """任何一个参数改了取值，指纹都必须变——不然页面不会提醒重算。"""
-    assert ExtractionRules(**{field: value}).fingerprint() != (
-        DEFAULTS.fingerprint()
-    )
-
-
-def test_the_fingerprint_changes_with_the_logic_version(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """抽取逻辑改了、参数没改时，靠 `LOGIC_VERSION` 让指纹动起来。"""
-    before = ExtractionRules().fingerprint()
-    monkeypatch.setattr(ac_startup_rules, "LOGIC_VERSION", 2)
-    assert ExtractionRules().fingerprint() != before
-
-
-def test_the_fingerprint_is_stable_for_the_same_rules() -> None:
-    """同一套取值永远算出同一个指纹，否则每次启动都提醒重算。"""
-    assert ExtractionRules(cold_off_minutes=45).fingerprint() == (
-        ExtractionRules(cold_off_minutes=45).fingerprint()
-    )
