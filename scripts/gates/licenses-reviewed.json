@@ -2,5 +2,5 @@
   "npm:lightningcss*": "MPL-2.0：文件级 copyleft，只要不改它的源文件就不传染到本仓；各平台二进制同源，故用通配。",
   "py:certifi": "MPL-2.0：只是一份 CA 证书数据包，未修改，不传染。",
   "py:pathspec": "MPL-2.0：文件级 copyleft，作为库原样引用，未修改。",
-  "py:pymssql": "LGPL-2.1：作为独立轮子原样动态链接使用，未修改其源码，不传染到本仓；自带 FreeTDS，替换成同接口的实现不需要改本仓代码。"
+  "py:pymssql": "GNU LESSER GENERAL PUBLIC LICENSE v2.1：作为独立轮子原样动态链接使用，未修改其源码，故文件级 copyleft 不传染到本仓；自带 FreeTDS，换成同接口的实现不需要改本仓代码。⚠ 它既没有 License-Expression 也没有许可证分类器，License 字段里塞的是整份许可证正文，故闸门读到的是首行。"
 }

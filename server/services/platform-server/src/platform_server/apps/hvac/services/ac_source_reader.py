@@ -88,7 +88,9 @@ def build_samples_sql(source_object: str, columns: Sequence[str]) -> str:
     time_column = quote_identifier(SOURCE_TIME_COLUMN)
     selected = ", ".join(quote_identifier(name) for name in columns)
     return (
-        # 理由：标识符不能参数化，安全由上面那三条保证；取值一律绑定参数
+        # 理由：两道防线——对象名与列名全部经 quote_identifier 的白名单
+        # 校验并方括号引用（对象名入库前另经同一条正则），且所有取值
+        # 一律走绑定参数，没有任何外部输入以字面量进入这段 SQL
         f"SELECT TOP (:row_limit) {time_column}, {selected}"  # noqa: S608
         f" FROM {quote_identifier(source_object)}"
         f" WHERE {time_column} >= :anchor AND {time_column} < :range_end"
@@ -113,7 +115,9 @@ def build_series_sql(source_object: str, columns: Sequence[str]) -> str:
         for name in columns
     )
     return (
-        # 理由：标识符不能参数化，安全由上面那三条保证；取值一律绑定参数
+        # 理由：两道防线——对象名与列名全部经 quote_identifier 的白名单
+        # 校验并方括号引用（对象名入库前另经同一条正则），且所有取值
+        # 一律走绑定参数，没有任何外部输入以字面量进入这段 SQL
         f"SELECT DATEADD(minute, ({bucket}) * :bucket_minutes,"  # noqa: S608
         f" '{BUCKET_ORIGIN}') AS {BUCKET_TIME_COLUMN}, {averages}"
         f" FROM {quote_identifier(source_object)}"
