@@ -10,6 +10,9 @@
     box-sizing: border-box;
   }
 
+  // 首帧兜底。生效中的主题由引擎在文档根写内联 color-scheme（内联胜过样式表），
+  // 这里只管 JS 起来之前的那一帧。
+  // ⚠ 不能写 `light dark`：那等于把首帧交给系统深浅，深色用户会先闪一下白底。
   :root {
     color-scheme: dark;
   }
