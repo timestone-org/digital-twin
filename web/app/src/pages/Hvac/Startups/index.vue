@@ -25,7 +25,9 @@ import EpisodeTable from './components/EpisodeTable.vue'
 import ExclusionDialog from './components/ExclusionDialog.vue'
 import {
   combinationOptions,
+  describeRebuild,
   outcomeOptions,
+  rebuildRangeProblem,
   toEpisodeRows,
   type EpisodeRow,
 } from './startupView'
@@ -46,6 +48,9 @@ const inspecting = ref<EpisodeRow | null>(null)
 const serial = ref('')
 const busy = ref(false)
 const actionError = ref<string | null>(null)
+// 抽取区间。两端都空即「全部可用历史」，由后端按数据源实际范围算
+const rebuildFrom = ref('')
+const rebuildTo = ref('')
 
 const batches = useStartupBatches(() => picker.roomId.value)
 const episodes = useCursorList(
@@ -142,8 +147,33 @@ async function restore(row: EpisodeRow): Promise<void> {
   }
 }
 
+/**
+ * 抽取前先说清这次要跑多大。
+ * ⚠ 不是 danger：它不删东西，上一批次会一直服务到新的一批跑成。
+ */
 async function onRebuild(): Promise<void> {
-  if (await batches.rebuild()) toast.success('已排队重算，完成前仍看上一批数据')
+  const range = { from: rebuildFrom.value, to: rebuildTo.value }
+  if (rebuildRangeProblem(range) !== null) return
+  const confirmed = await confirm.ask({
+    title: '开始抽取',
+    message: describeRebuild(range, batches.sourceRange.value),
+    confirmText: '开始抽取',
+  })
+  if (!confirmed) return
+  // ⚠ 留空的那端整个不发：省掉它才是「全部可用历史」，
+  // 塞一个前端自己编的日期进去就把范围写死了
+  const started = await batches.rebuild({
+    ...(range.from === '' ? {} : { window_start: range.from }),
+    ...(range.to === '' ? {} : { window_end: range.to }),
+  })
+  if (started === null) return
+  // ⚠ 被夹过要说：用户填的那段比数据源实际有的宽时，真正跑的是收窄后的一段，
+  // 不说的话他会以为自己要的范围抽全了
+  toast.success(
+    started.is_clamped
+      ? '已排队抽取，区间已按数据源实际范围收窄'
+      : '已排队抽取，完成前仍看上一批数据',
+  )
 }
 
 watch(() => picker.roomId.value, reload)
@@ -207,7 +237,12 @@ onMounted(() => {
           :batch="batches.current.value"
           :is-stale="batches.isStale.value"
           :rebuilding="batches.rebuilding.value"
+          :from="rebuildFrom"
+          :to="rebuildTo"
+          :source-range="batches.sourceRange.value"
           @rebuild="onRebuild"
+          @update:from="rebuildFrom = $event"
+          @update:to="rebuildTo = $event"
         />
         <DtNotice v-if="batches.error.value" intent="danger">
           {{ batches.error.value }}

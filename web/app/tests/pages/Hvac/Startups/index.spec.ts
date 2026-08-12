@@ -17,7 +17,7 @@ import type {
   StartupEpisode,
   Workshop,
 } from '@dt/contracts'
-import { DtConfirmHost, DtToastHost, useConfirm } from '@dt/ui'
+import { DtConfirmHost, DtToastHost, useConfirm, useToast } from '@dt/ui'
 
 import * as hvac from '@/api/hvac'
 import StartupsPage from '@/pages/Hvac/Startups/index.vue'
@@ -30,6 +30,8 @@ vi.mock('vue-router', () => ({
 }))
 
 const STAMP = '2026-08-12T02:00:00.000Z'
+const SOURCE_START = '2023-01-01T00:00:00.000Z'
+const SOURCE_END = '2026-08-01T00:00:00.000Z'
 
 function workshop(): Workshop {
   return {
@@ -104,9 +106,19 @@ function batches(over: Partial<StartupBatches> = {}): StartupBatches {
     coverage: [{ running_set: ['K01'], usable_count: 42 }],
     expected_fingerprint: 'abc',
     is_stale: false,
+    source_range: { start: SOURCE_START, end: SOURCE_END },
     ...over,
   }
 }
+
+const REBUILT = {
+  batch_id: 'b2',
+  status: 'running',
+  shard_total: 44,
+  window_start: SOURCE_START,
+  window_end: SOURCE_END,
+  is_clamped: false,
+} as const
 
 /** 手动结算的 promise，用来把两次取数的返回顺序倒过来。 */
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
@@ -148,6 +160,25 @@ async function pick(field: string, label: string): Promise<void> {
   await flushPromises()
 }
 
+/** 填抽取区间。⚠ TZ 钉成 UTC，本地时与 UTC 同值，断言才能写成字面量。 */
+async function fillRange(from: string, to: string): Promise<void> {
+  for (const [label, value] of [
+    ['抽取起始', from],
+    ['抽取结束', to],
+  ]) {
+    const id = [...document.querySelectorAll('label')]
+      .find((node) => node.textContent?.trim().startsWith(label ?? ''))
+      ?.getAttribute('for')
+    const field = document.getElementById(id ?? '')
+    if (!(field instanceof HTMLInputElement)) {
+      throw new Error(`找不到叫「${label}」的输入框`)
+    }
+    field.value = value ?? ''
+    field.dispatchEvent(new Event('input', { bubbles: true }))
+  }
+  await flushPromises()
+}
+
 async function selectRoom(): Promise<void> {
   await pick('车间', '东车间')
   await pick('房间', '注塑房')
@@ -179,6 +210,9 @@ beforeEach(() => {
   setActivePinia(createPinia())
   signIn(['ac:view', 'ac:manage'])
   document.body.innerHTML = ''
+  // ⚠ toast 队列是模块级单例：只清 DOM 不清队列的话，上一条用例弹过的提示
+  // 会随下一次挂载 DtToastHost 原样重现，断言「没提示过成功」必然假红/假绿
+  useToast().clear()
   vi.spyOn(hvac, 'listWorkshops').mockResolvedValue(page([workshop()]))
   vi.spyOn(hvac, 'listRooms').mockResolvedValue(
     page([room('r1', '注塑房', 2), room('r2', '空房', 0)]),
@@ -192,6 +226,7 @@ beforeEach(() => {
 enableAutoUnmount(afterEach)
 
 afterEach(() => {
+  vi.unstubAllEnvs()
   vi.restoreAllMocks()
 })
 
@@ -260,7 +295,8 @@ describe('批次状态', () => {
   })
 
   it('没算过的房间也给得出抽取入口，否则第一次永远开不了头', async () => {
-    // ⚠ 这颗键曾经只长在「已经算过」那条分支里，于是没抽取过的房间无从开始
+    // ⚠ 这颗键与「有没有批次」无关：只长在「已经算过」那条分支里的话，
+    // 没抽取过的房间就无从开始，而那正是最需要它的时候
     vi.mocked(hvac.getStartupBatches).mockResolvedValue(
       batches({ current: null, is_stale: false }),
     )
@@ -291,18 +327,146 @@ describe('批次状态', () => {
     expect(wrapper.text()).toContain('4 条人工排除')
   })
 
-  it('重算只入队：点一下就发 POST，不等它算完', async () => {
+  it('抽取用界面上填的区间，不再复用上一批次那个被钉死的窗口', async () => {
+    vi.stubEnv('TZ', 'UTC')
     const rebuild = vi
       .spyOn(hvac, 'rebuildStartupBatches')
-      .mockResolvedValue({ batch_id: 'b2', status: 'running', shard_total: 8 })
+      .mockResolvedValue(REBUILT)
+    mount(DtConfirmHost)
+    mount(DtToastHost)
+    await open()
+    await selectRoom()
+    await fillRange('2023-01-01T00:00', '2026-08-01T00:00')
+    await click('重新抽取')
+    useConfirm().resolve(true)
+    await flushPromises()
+    expect(rebuild).toHaveBeenCalledWith('r1', {
+      window_start: '2023-01-01T00:00:00.000Z',
+      window_end: '2026-08-01T00:00:00.000Z',
+    })
+  })
+
+  it('还没抽取过的房间也能发起第一次抽取', async () => {
+    vi.stubEnv('TZ', 'UTC')
+    vi.mocked(hvac.getStartupBatches).mockResolvedValue(
+      batches({ current: null }),
+    )
+    const rebuild = vi
+      .spyOn(hvac, 'rebuildStartupBatches')
+      .mockResolvedValue(REBUILT)
+    mount(DtConfirmHost)
+    mount(DtToastHost)
+    await open()
+    await selectRoom()
+    await fillRange('2023-01-01T00:00', '2026-08-01T00:00')
+    await click('开始抽取')
+    useConfirm().resolve(true)
+    await flushPromises()
+    expect(rebuild).toHaveBeenCalledWith('r1', {
+      window_start: '2023-01-01T00:00:00.000Z',
+      window_end: '2026-08-01T00:00:00.000Z',
+    })
+  })
+
+  it('抽取前要确认，说清这次跨多大；点取消就什么都不发', async () => {
+    vi.stubEnv('TZ', 'UTC')
+    const rebuild = vi.spyOn(hvac, 'rebuildStartupBatches')
+    mount(DtConfirmHost)
+    await open()
+    await selectRoom()
+    await fillRange('2023-01-01T00:00', '2026-08-01T00:00')
+    await click('重新抽取')
+    expect(document.body.textContent).toContain('个月度分片')
+    useConfirm().resolve(false)
+    await flushPromises()
+    expect(rebuild).not.toHaveBeenCalled()
+  })
+
+  it('不填区间就是全部历史：一个 window 字段都不发，也不发上一批次那个', async () => {
+    const rebuild = vi
+      .spyOn(hvac, 'rebuildStartupBatches')
+      .mockResolvedValue(REBUILT)
+    mount(DtConfirmHost)
     mount(DtToastHost)
     await open()
     await selectRoom()
     await click('重新抽取')
+    useConfirm().resolve(true)
+    await flushPromises()
+    expect(rebuild).toHaveBeenCalledWith('r1', {})
+  })
+
+  it('只填一端时另一端不发，交给后端按数据源算', async () => {
+    vi.stubEnv('TZ', 'UTC')
+    const rebuild = vi
+      .spyOn(hvac, 'rebuildStartupBatches')
+      .mockResolvedValue(REBUILT)
+    mount(DtConfirmHost)
+    mount(DtToastHost)
+    await open()
+    await selectRoom()
+    await fillRange('2025-01-01T00:00', '')
+    await click('重新抽取')
+    useConfirm().resolve(true)
+    await flushPromises()
     expect(rebuild).toHaveBeenCalledWith('r1', {
-      window_start: '2026-01-01T00:00:00.000Z',
-      window_end: '2026-08-01T00:00:00.000Z',
+      window_start: '2025-01-01T00:00:00.000Z',
     })
+  })
+
+  it('入队失败时说出原因，不谎报「已排队」', async () => {
+    vi.spyOn(hvac, 'rebuildStartupBatches').mockRejectedValue(new Error('boom'))
+    mount(DtConfirmHost)
+    mount(DtToastHost)
+    const wrapper = await open()
+    await selectRoom()
+    await click('重新抽取')
+    useConfirm().resolve(true)
+    await flushPromises()
+    expect(wrapper.text()).toContain('请求失败')
+    expect(document.body.textContent).not.toContain('已排队抽取')
+  })
+
+  it('区间被数据源实际范围夹过时要说出来，不能让人以为抽全了', async () => {
+    vi.stubEnv('TZ', 'UTC')
+    vi.spyOn(hvac, 'rebuildStartupBatches').mockResolvedValue({
+      ...REBUILT,
+      is_clamped: true,
+    })
+    mount(DtConfirmHost)
+    mount(DtToastHost)
+    await open()
+    await selectRoom()
+    await click('重新抽取')
+    useConfirm().resolve(true)
+    await flushPromises()
+    expect(document.body.textContent).toContain('收窄')
+  })
+
+  it('上一次抽取失败时说清屏幕上的数据可能不完整', async () => {
+    vi.mocked(hvac.getStartupBatches).mockResolvedValue(
+      batches({ current: batch({ status: 'failed' }) }),
+    )
+    const wrapper = await open()
+    await selectRoom()
+    expect(wrapper.text()).toContain('可能不完整')
+  })
+
+  it('房间没绑数据源时给去处，而不是一个填了就报错的空 picker', async () => {
+    vi.mocked(hvac.getStartupBatches).mockResolvedValue(
+      batches({ source_range: null }),
+    )
+    const wrapper = await open()
+    await selectRoom()
+    expect(wrapper.text()).toContain('数据与达标')
+    expect(buttonByName('重新抽取')?.disabled).toBe(true)
+  })
+
+  it('可用区间说给用户听，「全部历史」到底是多长才有着落', async () => {
+    const wrapper = await open()
+    await selectRoom()
+    expect(wrapper.text()).toContain('数据源现有')
+    expect(wrapper.text()).toContain('当前：全部历史')
   })
 })
 

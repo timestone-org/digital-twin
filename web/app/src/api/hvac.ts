@@ -348,12 +348,17 @@ export async function getStartupBatches(
  * 触发一次重算。
  * ⚠ 只入队立刻返回（202），进度要回头轮 `getStartupBatches`——
  * 把它当同步接口等结果的话，页面会挂在那儿直到超时。
+ * ⚠ 两端都可省，**空对象即全部可用历史**；省掉的那端由后端按数据源的实际范围
+ * 算，前端不写死任何日期。
  * @param roomId 房间 id
- * @param window 要重算的时间窗，UTC RFC3339
+ * @param window 要重算的时间窗，UTC RFC3339；缺省即全部历史
  */
 export async function rebuildStartupBatches(
   roomId: string,
-  window: { window_start: string; window_end: string },
+  window: {
+    window_start?: string | undefined
+    window_end?: string | undefined
+  } = {},
 ): Promise<StartupRebuildResult> {
   return await requestData<StartupRebuildResult>(
     `/rooms/${roomId}/startup-batches:rebuild`,

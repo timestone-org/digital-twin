@@ -266,12 +266,29 @@ export interface StartupBatches {
    * 页面该说的是「还没算过」而不是「该重算了」——两者要人做的事不同。
    */
   is_stale: boolean
+  /**
+   * 外库里实际有数据的那一段，用来给区间控件定上下界。
+   * ⚠ 为 null 有两种可能：房间一台都没绑数据源，或外库此刻不可达。
+   * 两种情况页面都只能不预设范围，因此不细分。
+   */
+  source_range: SourceRange | null
+}
+
+/** 外部数据源里实际有数据的那一段。 */
+export interface SourceRange {
+  start: string
+  end: string
 }
 
 export interface StartupRebuildResult {
   batch_id: string
   status: StartupBatchStatus
   shard_total: number
+  /** 后端最终决定抽的那一段——省略的那端由它算出来，回显给用户看。 */
+  window_start: string
+  window_end: string
+  /** 请求的区间被数据源的实际范围夹过。夹了要说，不然用户以为抽了他填的那段。 */
+  is_clamped: boolean
 }
 
 export interface StartupExclusion {

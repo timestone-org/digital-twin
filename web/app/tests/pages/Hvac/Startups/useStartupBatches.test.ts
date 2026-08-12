@@ -11,6 +11,11 @@ import { useStartupBatches } from '@/pages/Hvac/Startups/useStartupBatches'
 
 const STAMP = '2026-08-12T02:00:00.000Z'
 
+const WINDOW = {
+  window_start: '2023-01-01T00:00:00.000Z',
+  window_end: '2026-08-01T00:00:00.000Z',
+}
+
 function batch(over: Partial<StartupBatch> = {}): StartupBatch {
   return {
     id: 'b1',
@@ -37,6 +42,7 @@ function batches(over: Partial<StartupBatches> = {}): StartupBatches {
     coverage: [{ running_set: ['K01'], usable_count: 42 }],
     expected_fingerprint: 'abc',
     is_stale: false,
+    source_range: { start: '2023-01-01T00:00:00.000Z', end: WINDOW.window_end },
     ...over,
   }
 }
@@ -81,36 +87,50 @@ describe('useStartupBatches', () => {
     expect(view.error.value).toContain('请求失败')
   })
 
-  it('重算按当前批次的时间窗入队，随后回读一次拿到新状态', async () => {
-    const rebuild = vi
-      .spyOn(hvac, 'rebuildStartupBatches')
-      .mockResolvedValue({ batch_id: 'b2', status: 'running', shard_total: 8 })
+  it('抽取用调用方给的时间窗，不再拿上一批次的窗口顶上', async () => {
+    const rebuild = vi.spyOn(hvac, 'rebuildStartupBatches').mockResolvedValue({
+      batch_id: 'b2',
+      status: 'running',
+      shard_total: 44,
+      window_start: WINDOW.window_start,
+      window_end: WINDOW.window_end,
+      is_clamped: false,
+    })
     const view = useStartupBatches(() => 'r1')
     await view.load()
-    expect(await view.rebuild()).toBe(true)
-    expect(rebuild).toHaveBeenCalledWith('r1', {
+    expect(await view.rebuild(WINDOW)).not.toBeNull()
+    expect(rebuild).toHaveBeenCalledWith('r1', WINDOW)
+    // 上一批次的窗口是 2026-01-01 起，绝不能出现在载荷里
+    expect(rebuild).not.toHaveBeenCalledWith('r1', {
       window_start: '2026-01-01T00:00:00.000Z',
       window_end: '2026-08-01T00:00:00.000Z',
     })
     expect(hvac.getStartupBatches).toHaveBeenCalledTimes(2)
   })
 
-  it('还没算过时点不出重算——没有时间窗可依', async () => {
+  it('还没抽取过的房间照样发得出请求——那正是第一次抽取', async () => {
     vi.mocked(hvac.getStartupBatches).mockResolvedValue(
       batches({ current: null }),
     )
-    const rebuild = vi.spyOn(hvac, 'rebuildStartupBatches')
+    const rebuild = vi.spyOn(hvac, 'rebuildStartupBatches').mockResolvedValue({
+      batch_id: 'b2',
+      status: 'running',
+      shard_total: 44,
+      window_start: WINDOW.window_start,
+      window_end: WINDOW.window_end,
+      is_clamped: false,
+    })
     const view = useStartupBatches(() => 'r1')
     await view.load()
-    expect(await view.rebuild()).toBe(false)
-    expect(rebuild).not.toHaveBeenCalled()
+    expect(await view.rebuild(WINDOW)).not.toBeNull()
+    expect(rebuild).toHaveBeenCalledWith('r1', WINDOW)
   })
 
   it('已经有一次在跑时后端拒绝，原因要显示出来', async () => {
     vi.spyOn(hvac, 'rebuildStartupBatches').mockRejectedValue(new Error('boom'))
     const view = useStartupBatches(() => 'r1')
     await view.load()
-    expect(await view.rebuild()).toBe(false)
+    expect(await view.rebuild(WINDOW)).toBeNull()
     expect(view.error.value).toContain('请求失败')
     expect(view.rebuilding.value).toBe(false)
   })

@@ -8,7 +8,12 @@
  * （AC_STARTUP_DESIGN §5）。
  */
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
-import type { CombinationCoverage, StartupBatch } from '@dt/contracts'
+import type {
+  CombinationCoverage,
+  SourceRange,
+  StartupBatch,
+  StartupRebuildResult,
+} from '@dt/contracts'
 
 import * as hvac from '@/api/hvac'
 import { describeError } from '@/composables/useAsyncList'
@@ -19,6 +24,8 @@ export interface StartupBatchesView {
   coverage: Ref<CombinationCoverage[]>
   /** 指纹对不上：现在屏幕上这份数据是按**另一套规则**算出来的。 */
   isStale: Ref<boolean>
+  /** 外库实际有数据的那一段；null 表示没绑数据源或外库此刻不可达。 */
+  sourceRange: Ref<SourceRange | null>
   /** 有没有算过。没算过与该重算，要人做的事不同。 */
   hasBatch: ComputedRef<boolean>
   isRunning: ComputedRef<boolean>
@@ -26,7 +33,14 @@ export interface StartupBatchesView {
   rebuilding: Ref<boolean>
   error: Ref<string | null>
   load: () => Promise<void>
-  rebuild: () => Promise<boolean>
+  /** 成功给后端最终决定的那一段；失败给 null。 */
+  rebuild: (window: RebuildWindow) => Promise<StartupRebuildResult | null>
+}
+
+/** 要抽哪一段，UTC RFC3339。⚠ 两端都可省，全省即全部可用历史。 */
+export interface RebuildWindow {
+  window_start?: string | undefined
+  window_end?: string | undefined
 }
 
 interface BatchesState {
@@ -34,6 +48,7 @@ interface BatchesState {
   current: Ref<StartupBatch | null>
   coverage: Ref<CombinationCoverage[]>
   isStale: Ref<boolean>
+  sourceRange: Ref<SourceRange | null>
   loading: Ref<boolean>
   rebuilding: Ref<boolean>
   error: Ref<string | null>
@@ -49,6 +64,7 @@ export function useStartupBatches(roomId: () => string): StartupBatchesView {
     current: ref<StartupBatch | null>(null),
     coverage: ref<CombinationCoverage[]>([]),
     isStale: ref(false),
+    sourceRange: ref<SourceRange | null>(null),
     loading: ref(false),
     rebuilding: ref(false),
     error: ref<string | null>(null),
@@ -58,13 +74,14 @@ export function useStartupBatches(roomId: () => string): StartupBatchesView {
     current: state.current,
     coverage: state.coverage,
     isStale: state.isStale,
+    sourceRange: state.sourceRange,
     loading: state.loading,
     rebuilding: state.rebuilding,
     error: state.error,
     hasBatch: computed(() => state.current.value !== null),
     isRunning: computed(() => state.current.value?.status === 'running'),
     load: () => load(state),
-    rebuild: () => rebuild(state),
+    rebuild: (window) => rebuild(state, window),
   }
 }
 
@@ -74,6 +91,7 @@ async function load(state: BatchesState): Promise<void> {
     state.current.value = null
     state.coverage.value = []
     state.isStale.value = false
+    state.sourceRange.value = null
     return
   }
   state.loading.value = true
@@ -82,6 +100,7 @@ async function load(state: BatchesState): Promise<void> {
       state.current.value = found.current
       state.coverage.value = found.coverage
       state.isStale.value = found.is_stale
+      state.sourceRange.value = found.source_range
       state.error.value = null
     },
     fail: (caught) => (state.error.value = describeError(caught)),
@@ -91,23 +110,27 @@ async function load(state: BatchesState): Promise<void> {
 
 /**
  * 触发一次重算，成功即刻回读一次拿到 running 状态。
- * ⚠ 端点只入队（202），这里**不等它算完**——等的话页面会挂到超时。
+ *
+ * ⚠ 时间窗由调用方给，**不许再拿上一批次的窗口顶上**：那样一来窗口会被第一次
+ * 跑的取值永久钉死，用户改不动，界面上也看不出它从哪来。
+ * ⚠ 没有当前批次照样要能跑——那正是「第一次抽取」这条路。
+ * ⚠ 端点只入队（202），这里**不等它算完**：等的话页面会挂到超时。
+ * @param state 批次状态
+ * @param window 要抽的那一段
  */
-async function rebuild(state: BatchesState): Promise<boolean> {
-  const batch = state.current.value
-  if (batch === null) return false
+async function rebuild(
+  state: BatchesState,
+  window: RebuildWindow,
+): Promise<StartupRebuildResult | null> {
   state.rebuilding.value = true
   state.error.value = null
   try {
-    await hvac.rebuildStartupBatches(state.roomId(), {
-      window_start: batch.window_start,
-      window_end: batch.window_end,
-    })
+    const started = await hvac.rebuildStartupBatches(state.roomId(), window)
     await load(state)
-    return true
+    return started
   } catch (caught) {
     state.error.value = describeError(caught)
-    return false
+    return null
   } finally {
     state.rebuilding.value = false
   }

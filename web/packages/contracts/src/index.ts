@@ -45,6 +45,7 @@ export type {
   Room,
   RoomRef,
   SeriesPoint,
+  SourceRange,
   StartupBatch,
   StartupBatchStatus,
   StartupBatches,

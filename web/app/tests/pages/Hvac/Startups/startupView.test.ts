@@ -14,6 +14,11 @@ import type {
 
 import {
   batchProgress,
+  describeRebuild,
+  describeSourceRange,
+  estimatedShards,
+  isFullHistory,
+  rebuildRangeProblem,
   combinationOptions,
   curveWindow,
   formatDuration,
@@ -197,5 +202,73 @@ describe('toEpisodeRows', () => {
 
   it('没有排除原因时给空串，不把 null 显示出去', () => {
     expect(toEpisodeRows([episode()])[0]?.reason).toBe('')
+  })
+})
+
+describe('抽取区间', () => {
+  const FULL = {
+    from: '2023-01-01T00:00:00.000Z',
+    to: '2026-08-01T00:00:00.000Z',
+  }
+
+  it('两端都留空是合法的——那就是「全部可用历史」，交给后端算', () => {
+    expect(rebuildRangeProblem({ from: '', to: '' })).toBeNull()
+    expect(isFullHistory({ from: '', to: '' })).toBe(true)
+  })
+
+  it('只填一端也合法，另一端同样交给后端', () => {
+    expect(rebuildRangeProblem({ from: FULL.from, to: '' })).toBeNull()
+    expect(rebuildRangeProblem({ from: '', to: FULL.to })).toBeNull()
+    expect(isFullHistory({ from: FULL.from, to: '' })).toBe(false)
+  })
+
+  it('倒置的区间拦下', () => {
+    expect(rebuildRangeProblem({ from: FULL.to, to: FULL.from })).toContain(
+      '早于',
+    )
+  })
+
+  it('按月估分片数——2023-01 到 2026-08 正好 43 个月', () => {
+    expect(estimatedShards(FULL)).toBe(43)
+  })
+
+  it('不足一个月也算一片，不会算成 0', () => {
+    expect(
+      estimatedShards({
+        from: '2026-08-01T00:00:00.000Z',
+        to: '2026-08-02T00:00:00.000Z',
+      }),
+    ).toBe(1)
+  })
+
+  it('区间不合法时给 0，不拿 NaN 去拼文案', () => {
+    expect(estimatedShards({ from: 'x', to: 'y' })).toBe(0)
+  })
+
+  it('确认文案说清抽哪一段、几片，以及旧数据继续服务', () => {
+    const text = describeRebuild(FULL, null)
+    expect(text).toContain('43 个月度分片')
+    expect(text).toContain('上一批次')
+  })
+
+  it('没填区间时按数据源的实际范围估——不猜、也不写死任何日期', () => {
+    const text = describeRebuild(
+      { from: '', to: '' },
+      { start: FULL.from, end: FULL.to },
+    )
+    expect(text).toContain('43 个月度分片')
+  })
+
+  it('连数据源范围都拿不到时只说「全部可用历史」，不编一个跨度出来', () => {
+    const text = describeRebuild({ from: '', to: '' }, null)
+    expect(text).toContain('全部可用历史')
+    expect(text).not.toContain('分片')
+  })
+
+  it('可用区间说给用户听；拿不到就不说', () => {
+    expect(describeSourceRange({ start: FULL.from, end: FULL.to })).toContain(
+      '数据源现有',
+    )
+    expect(describeSourceRange(null)).toBe('')
   })
 })

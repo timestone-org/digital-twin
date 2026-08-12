@@ -4,6 +4,7 @@
  */
 import type {
   CombinationCoverage,
+  SourceRange,
   DtIntent,
   DtSelectOption,
   StartupBatch,
@@ -127,6 +128,71 @@ export function batchProgress(batch: StartupBatch): number {
 /** 批次覆盖的时间窗，给人看的那一行。 */
 export function formatWindow(batch: StartupBatch): string {
   return `${formatDateTime(batch.window_start)} — ${formatDateTime(batch.window_end)}`
+}
+
+// 分片按「房间 + 月」切，所以跨几个月就是几片（§5）
+const DAYS_PER_MONTH = 30.44
+const DAY_MS = 86_400_000
+
+/**
+ * 抽取区间是否可以提交；不行时给一句能显示的原因。
+ * ⚠ 两端都留空是合法的，那表示「全部可用历史」——由后端按数据源实际范围算，
+ * 前端不写死任何日期。只填一端也合法，另一端同样交给后端。
+ * @param range 当前填的区间
+ */
+export function rebuildRangeProblem(range: {
+  from: string
+  to: string
+}): string | null {
+  if (range.from !== '' && range.to !== '' && range.from >= range.to) {
+    return '起始时间必须早于结束时间'
+  }
+  return null
+}
+
+/** 有没有指定区间。两端都空就是全部历史。 */
+export function isFullHistory(range: { from: string; to: string }): boolean {
+  return range.from === '' && range.to === ''
+}
+
+/**
+ * 这一段大概跨多少个月分片，用来在确认框里说清这次要跑多大。
+ * @param range 抽取区间，两端都要有取值才估得出来
+ */
+export function estimatedShards(range: { from: string; to: string }): number {
+  const span = Date.parse(range.to) - Date.parse(range.from)
+  if (!Number.isFinite(span) || span <= 0) return 0
+  return Math.max(1, Math.ceil(span / DAY_MS / DAYS_PER_MONTH))
+}
+
+/**
+ * 确认框里那句话：抽哪一段、大概几片。
+ * ⚠ 没填区间时按 `source` 给的实际范围来估——那才是「全部历史」的真实跨度，
+ * 前端不猜、也不写死任何日期。
+ * @param range 抽取区间
+ * @param source 数据源里实际有数据的那一段，取不到时为 null
+ */
+export function describeRebuild(
+  range: { from: string; to: string },
+  source: SourceRange | null,
+): string {
+  const effective = {
+    from: range.from || source?.start || '',
+    to: range.to || source?.end || '',
+  }
+  const tail = '抽完之前，页面继续显示上一批次的结果。'
+  if (effective.from === '' || effective.to === '') {
+    return `将抽取全部可用历史。${tail}`
+  }
+  const span = `${formatDateTime(effective.from)} — ${formatDateTime(effective.to)}`
+  const shards = estimatedShards(effective)
+  return `将抽取 ${span}，约 ${shards} 个月度分片。${tail}`
+}
+
+/** 数据源实际有数据的那一段，说给用户听。 */
+export function describeSourceRange(source: SourceRange | null): string {
+  if (source === null) return ''
+  return `数据源现有 ${formatDateTime(source.start)} — ${formatDateTime(source.end)}`
 }
 
 export interface EpisodeRow {

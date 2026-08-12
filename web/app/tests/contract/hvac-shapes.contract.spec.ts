@@ -30,6 +30,7 @@ import type {
   StartupBatches,
   StartupEpisode,
   StartupExclusion,
+  SourceRange,
   StartupRebuildResult,
   Workshop,
   WorkshopRef,
@@ -83,6 +84,11 @@ interface OpenApiProperty {
   anyOf?: { type?: string }[]
 }
 
+interface OpenApiShape {
+  required?: string[]
+  properties?: Record<string, OpenApiProperty | undefined>
+}
+
 /** 触发重算那条端点的响应码表。 */
 function rebuildResponses(): Record<string, unknown> | undefined {
   const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf8')) as {
@@ -96,18 +102,10 @@ function rebuildResponses(): Record<string, unknown> | undefined {
 }
 
 /** 同一份 spec 的细粒度视图：键集之外还要看类型、格式与上限。 */
-function detailed(): Record<
-  string,
-  { properties?: Record<string, OpenApiProperty | undefined> } | undefined
-> {
+function detailed(): Record<string, OpenApiShape | undefined> {
   return (
     JSON.parse(readFileSync(SPEC_PATH, 'utf8')) as {
-      components: {
-        schemas: Record<
-          string,
-          { properties?: Record<string, OpenApiProperty | undefined> }
-        >
-      }
+      components: { schemas: Record<string, OpenApiShape> }
     }
   ).components.schemas
 }
@@ -291,7 +289,13 @@ const SHAPES: Record<string, Record<string, true>> = {
     coverage: true,
     expected_fingerprint: true,
     is_stale: true,
+    source_range: true,
   } satisfies Keys<StartupBatches>,
+
+  SourceRangeOut: {
+    start: true,
+    end: true,
+  } satisfies Keys<SourceRange>,
 
   CombinationCoverageOut: {
     running_set: true,
@@ -302,6 +306,9 @@ const SHAPES: Record<string, Record<string, true>> = {
     batch_id: true,
     status: true,
     shard_total: true,
+    window_start: true,
+    window_end: true,
+    is_clamped: true,
   } satisfies Keys<StartupRebuildResult>,
 
   StartupExclusionOut: {
@@ -463,6 +470,17 @@ describe('开机事件的闭集与后端常量一致', () => {
       'integer',
       'null',
     ])
+  })
+
+  it('抽取区间两端都可省——空请求体就是全部可用历史', () => {
+    const shape = detailed().StartupRebuildIn
+    expect(shape?.required ?? []).toEqual([])
+    for (const key of ['window_start', 'window_end']) {
+      expect(
+        shape?.properties?.[key]?.anyOf?.map((item) => item.type),
+        key,
+      ).toContain('null')
+    }
   })
 
   it('触发重算只入队：202 而不是 200', () => {
