@@ -35,6 +35,8 @@ gates=(
   check_api_contract
   check_tests
   check_licenses
+  # 比其余快闸门慢一档（要按服务各装一次），但仍是秒级
+  check_service_deps
 )
 
 run_fast() {
