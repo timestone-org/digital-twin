@@ -5,6 +5,7 @@
 
 from platform_server.apps.hvac.services import (
     ac_data_service,
+    ac_reading_service,
     ac_unit_service,
     room_service,
     workshop_service,
@@ -15,6 +16,7 @@ from platform_server.apps.hvac.services.edge_identity import (
 
 __all__ = [
     "ac_data_service",
+    "ac_reading_service",
     "ac_unit_service",
     "caller_from_headers",
     "room_service",

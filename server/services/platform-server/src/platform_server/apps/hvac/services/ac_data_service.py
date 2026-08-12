@@ -7,6 +7,7 @@
 import re
 import uuid
 from decimal import Decimal
+from typing import Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,15 +20,19 @@ from platform_server.apps.hvac.crud import (
 )
 from platform_server.apps.hvac.datasets import (
     DATASETS,
+    SOURCE_TIME_COLUMN,
     DatasetSpec,
     find_dataset,
     limitable_metric_keys,
+    metric_keys,
 )
 from platform_server.apps.hvac.errors import (
     AcUnitNotFound,
+    BindingNotFound,
     DatasetNotFound,
     MetricUnknown,
     SourceObjectInvalid,
+    SourceObjectShapeMismatch,
 )
 from platform_server.apps.hvac.models import AcDataBinding, AcMetricLimit
 from platform_server.apps.hvac.schemas import (
@@ -49,6 +54,12 @@ _logger = get_logger("platform.hvac.ac_data")
 # ⚠ 必须 `fullmatch`：Python 的 `$` 也匹配结尾换行，`"K01\n"` 能骗过 `match`。
 # ⚠ 不放行 `-`：它不是合法的裸 T-SQL 标识符。
 _SOURCE_OBJECT = re.compile(r"[A-Za-z0-9_]{1,128}")
+
+
+class SourceDescriber(Protocol):
+    """能回答「一个对象有哪些列」的读取面。真实实现是 `AcSourceReader`。"""
+
+    async def describe(self, source_object: str) -> dict[str, str]: ...
 
 
 def list_datasets() -> DatasetsOut:
@@ -109,8 +120,45 @@ async def list_bindings(
     return AcDataBindingsOut(items=[_to_binding_out(row) for row in rows])
 
 
+async def require_binding(
+    session: AsyncSession, *, ac_unit_id: uuid.UUID, dataset: str
+) -> AcDataBinding:
+    """取绑定，没绑过即 404——没有绑定就没有可读的数据源。
+
+    Args: session, ac_unit_id, dataset。
+    """
+    await _require_ac_unit(session, ac_unit_id)
+    require_dataset(dataset)
+    binding = await ac_data_binding_crud.find(session, ac_unit_id, dataset)
+    if binding is None:
+        raise BindingNotFound("这台空调还没有绑定该数据集")
+    return binding
+
+
+async def ensure_source_object_matches(
+    reader: SourceDescriber, *, source_object: str, dataset: DatasetSpec
+) -> None:
+    """外库里确实有这个对象，且它的列形状够这个数据集用。
+
+    ⚠ 三道校验缺一不可（白名单正则 → 存在性 → 列形状）：只过正则的话，绑一个
+    不存在的视图要等到有人翻数据时才炸，而那时错误看起来像「数据源不可用」。
+    Args: reader, source_object, dataset。
+    """
+    columns = await reader.describe(source_object)
+    if not columns:
+        raise SourceObjectInvalid("数据源对象在外部库中不存在")
+    present = {name.lower() for name in columns}
+    required = (SOURCE_TIME_COLUMN, *metric_keys(dataset))
+    missing = sorted(name for name in required if name.lower() not in present)
+    if missing:
+        raise SourceObjectShapeMismatch(
+            f"数据源对象缺少这些列：{'、'.join(missing)}"
+        )
+
+
 async def put_binding(
     session: AsyncSession,
+    reader: SourceDescriber,
     *,
     ac_unit_id: uuid.UUID,
     dataset: str,
@@ -118,13 +166,14 @@ async def put_binding(
 ) -> AcDataBindingOut:
     """设置绑定。同一空调同一数据集只有一条，重复调用是覆盖不是新增。
 
-    ⚠ 这里只校验对象名的形状。它在外部库里**是否真的存在、列形状对不对**要连
-    外库才知道，那道校验随读数面一起落地；在此之前绑一个不存在的视图不会被拦。
-    Args: session, ac_unit_id, dataset, payload。
+    Args: session, reader, ac_unit_id, dataset, payload。
     """
     await _require_ac_unit(session, ac_unit_id)
-    require_dataset(dataset)
+    spec = require_dataset(dataset)
     source_object = ensure_valid_source_object(payload.source_object)
+    await ensure_source_object_matches(
+        reader, source_object=source_object, dataset=spec
+    )
     binding = await ac_data_binding_crud.find(session, ac_unit_id, dataset)
     if binding is None:
         binding = AcDataBinding(

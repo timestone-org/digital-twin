@@ -8,7 +8,8 @@ L2/L3 打真实 Postgres（SQLite 上全绿的迁移可以在生产直接失败�
 import os
 import socket
 import uuid
-from collections.abc import AsyncIterator, Callable, Iterable
+from collections.abc import AsyncIterator, Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 
 import httpx
 import pytest
@@ -25,15 +26,82 @@ from lib.logging import configure_logging
 from lib.utils.timeutils import utcnow
 from platform_server.app import build_app
 from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
-from platform_server.apps.hvac.deps import get_session
+from platform_server.apps.hvac.datasets import (
+    DATASET_RAW_MINUTE,
+    SOURCE_TIME_COLUMN,
+    find_dataset,
+    metric_keys,
+)
+from platform_server.apps.hvac.deps import get_ac_source_reader, get_session
+from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.container import Container
 from platform_server.settings import Settings
 
 # 与 auth-server 的 AUTH_EDGE_PERMISSION_TTL_S 同量级，用例不依赖它的确切取值
 HEADER_TTL_S = 60
 FULL_CODES = (AC_VIEW, AC_MANAGE)
+# 用例里的源时区固定住，断言里的 UTC 时刻才是可手写的常量
+SOURCE_TIMEZONE = "Asia/Shanghai"
+# 默认几个形状齐备的对象，够既有的绑定用例用
+SEEDED_OBJECTS = ("KTStartData_K01", "KTStartData_K02", "KTStartData_K03")
 
 SignHeaders = Callable[..., dict[str, str]]
+
+
+def full_shape() -> dict[str, str]:
+    """一个形状齐备的对象：时间列 + 目录里的全部指标列。"""
+    dataset = find_dataset(DATASET_RAW_MINUTE)
+    assert dataset is not None
+    columns = {SOURCE_TIME_COLUMN: "datetime"}
+    columns.update(dict.fromkeys(metric_keys(dataset), "float"))
+    return columns
+
+
+@dataclass
+class FakeAcSource:
+    """替掉驱动的假外库：按 SQL 里的特征串分派，不解析 SQL。
+
+    ⚠ 它替的是**驱动**，不是被测逻辑——SQL 文本、时区换算与行映射走的都还是
+    真的 `AcSourceReader`，故用例仍然能拦住取数口径写错。
+    """
+
+    columns: dict[str, dict[str, str]] = field(default_factory=dict)
+    shaped_objects: list[str] = field(default_factory=list)
+    captions: list[dict[str, object]] = field(default_factory=list)
+    samples: list[dict[str, object]] = field(default_factory=list)
+    buckets: list[dict[str, object]] = field(default_factory=list)
+    queries: list[tuple[str, dict[str, object]]] = field(default_factory=list)
+    failure: Exception | None = None
+
+    async def fetch_all(
+        self, sql: str, params: Mapping[str, object]
+    ) -> list[dict[str, object]]:
+        self.queries.append((sql, dict(params)))
+        if self.failure is not None:
+            raise self.failure
+        if "INFORMATION_SCHEMA.COLUMNS" in sql:
+            return [{"object_name": name} for name in self.shaped_objects]
+        if "KTInfo" in sql:
+            return list(self.captions)
+        if "DATEADD" in sql:
+            return list(self.buckets)
+        return list(self.samples)[: _row_limit(params)]
+
+    async def describe_columns(
+        self, object_names: Sequence[str]
+    ) -> dict[str, dict[str, str]]:
+        if self.failure is not None:
+            raise self.failure
+        return {
+            name: self.columns[name]
+            for name in object_names
+            if name in self.columns
+        }
+
+
+def _row_limit(params: Mapping[str, object]) -> int:
+    limit = params.get("row_limit")
+    return limit if isinstance(limit, int) else 0
 
 
 def _reachable(host: str, port: int) -> bool:
@@ -109,10 +177,26 @@ def sign(settings: Settings) -> SignHeaders:
 
 
 @pytest.fixture
+def ac_source() -> FakeAcSource:
+    """假外库，默认已有几个形状齐备的对象。用例可以再往里塞数据。"""
+    shape = full_shape()
+    return FakeAcSource(
+        columns={name: dict(shape) for name in SEEDED_OBJECTS},
+        shaped_objects=list(SEEDED_OBJECTS),
+    )
+
+
+@pytest.fixture
 async def app_client(
-    settings: Settings, postgres_available: bool, sign: SignHeaders
+    settings: Settings,
+    postgres_available: bool,
+    sign: SignHeaders,
+    ac_source: FakeAcSource,
 ) -> AsyncIterator[httpx.AsyncClient]:
-    """整装应用的客户端，默认带全权身份头。每条用例一个回滚事务。"""
+    """整装应用的客户端，默认带全权身份头。每条用例一个回滚事务。
+
+    ⚠ 外库一律换成假件：用例不许打网络，而真外库在 CI 里也不存在。
+    """
     if not postgres_available:
         pytest.skip("本机连不到 Postgres")
     application = build_app(settings)
@@ -140,6 +224,9 @@ async def app_client(
                 await session.commit()
 
     application.dependency_overrides[get_session] = override
+    application.dependency_overrides[get_ac_source_reader] = (
+        lambda: AcSourceReader(source=ac_source, timezone=SOURCE_TIMEZONE)
+    )
     transport = httpx.ASGITransport(app=application)
     async with httpx.AsyncClient(
         transport=transport, base_url="http://platform-test", timeout=30

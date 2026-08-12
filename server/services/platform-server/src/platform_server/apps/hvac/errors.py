@@ -71,10 +71,31 @@ class DatasetNotFound(AppError):
     http_status = 404
 
 
+class BindingNotFound(AppError):
+    """这台空调还没有绑定该数据集，无从取数。"""
+
+    code = 41610
+    http_status = 404
+
+
 class SourceObjectInvalid(AppError):
     """数据源对象名不合法，或在外部库中不存在。"""
 
     code = 41611
+    http_status = 422
+
+
+class SourceObjectShapeMismatch(AppError):
+    """数据源对象的列形状与数据集不符。"""
+
+    code = 41612
+    http_status = 422
+
+
+class TimeRangeInvalid(AppError):
+    """查询区间不合法：缺时区、倒置，或超出跨度上限。"""
+
+    code = 41613
     http_status = 422
 
 
@@ -83,3 +104,18 @@ class MetricUnknown(AppError):
 
     code = 41614
     http_status = 422
+
+
+class CursorInvalid(AppError):
+    """游标不可解析。它是不透明串，只能从上一页响应里原样带回。"""
+
+    code = 41615
+    http_status = 422
+
+
+class SourceUnavailable(AppError):
+    """外部数据源不可用。⚠ 不返回陈旧数据兜底——查不到就明确说查不到。"""
+
+    code = 51601
+    http_status = 503
+    is_retryable = True

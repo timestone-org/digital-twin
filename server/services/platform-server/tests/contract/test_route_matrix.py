@@ -35,6 +35,16 @@ EXPECTED: dict[str, frozenset[str]] = {
     "PATCH": frozenset({AC_MANAGE}),
     "DELETE": frozenset({AC_MANAGE}),
 }
+# ⚠ 闸 2 严于闸 1 的端点必须逐条登记。闸 1 只按方法兜（GET → ac:view），而
+# 这条 GET 暴露的是外库的结构，故端点自己再收一道到 ac:manage。方向是安全的
+# （边缘放行、端点拒绝），但反过来——端点比边缘松——是一个静默的越权洞，
+# 所以下面的断言仍然要求「不在这张表里的端点必须与闸 1 逐字相同」。
+STRICTER_THAN_GATE_ONE: dict[tuple[str, str], frozenset[str]] = {
+    (f"{API_PREFIX}/ac-datasets/{{dataset}}/source-objects", "GET"): frozenset(
+        {AC_MANAGE}
+    ),
+}
+
 # 探针与文档不吃身份头，它们在边缘走免认证 location
 UNGUARDED = frozenset(
     {
@@ -133,8 +143,24 @@ def test_gate_two_requires_the_code_gate_one_requires(
         if item.path == path and method in (item.methods or set())
     )
     codes, mode = gate_two_requirement(route)
-    assert codes == EXPECTED[method]
+    expected = STRICTER_THAN_GATE_ONE.get((path, method), EXPECTED[method])
+    assert codes == expected
     assert mode == "all"
+
+
+def test_overrides_only_ever_tighten_to_the_manage_code() -> None:
+    # 只允许收紧到写权限。收紧成别的码等于给这条路由发明了第三套口径，
+    # 而登记成与闸 1 相同的码则是白留一个豁免位，下次有人会顺手用它放松
+    assert [
+        codes
+        for codes in STRICTER_THAN_GATE_ONE.values()
+        if codes != frozenset({AC_MANAGE})
+    ] == []
+
+
+def test_every_override_still_points_at_a_live_route() -> None:
+    # 端点改名后这张表会静默失效，那条路由于是悄悄退回闸 1 的宽口径
+    assert set(STRICTER_THAN_GATE_ONE) <= set(ROUTE_CASES)
 
 
 def test_no_public_route_is_left_unguarded() -> None:

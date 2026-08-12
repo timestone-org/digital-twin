@@ -18,6 +18,7 @@ from lib.auth import CallerContext
 from lib.errors import PermissionDenied, Unauthenticated
 from lib.utils.timeutils import utcnow
 from platform_server.apps.hvac.services import caller_from_headers
+from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.container import Container
 
 # 端点声明自己要的权限码，契约测试遍历路由时读它
@@ -46,6 +47,19 @@ async def get_session(
     """
     async with container.database.session() as session:
         yield session
+
+
+def get_ac_source_reader(
+    container: Annotated[Container, Depends(get_container)],
+) -> AcSourceReader:
+    """外部只读库的读取面。测试用 `dependency_overrides` 换成假件。
+
+    Args: container。
+    """
+    return AcSourceReader(
+        source=container.ac_source,
+        timezone=container.settings.acsource_timezone,
+    )
 
 
 async def get_caller(
