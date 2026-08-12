@@ -75,7 +75,13 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["lib", "auth_server", "scripts", "_report"]
+known-first-party = [
+    "lib",
+    "auth_server",
+    "opcua_server",
+    "scripts",
+    "_report",
+]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
