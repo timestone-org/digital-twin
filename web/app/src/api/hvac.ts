@@ -11,10 +11,14 @@ import type {
   AcDataset,
   AcItemList,
   AcMetricLimit,
+  AcSourceObject,
   AcUnit,
   AcUnitFilters,
   AcUnitRelocateResult,
+  CursorPage,
   Page,
+  RawSample,
+  RawSeries,
   Room,
   Workshop,
 } from '@dt/contracts'
@@ -167,18 +171,6 @@ export async function listAcDatasets(): Promise<AcDataset[]> {
 }
 
 /**
- * 外部库里一个可绑定的对象。
- * ⚠ 类型落在 api 层而不是 `@dt/contracts`：这条端点的契约还没随 openapi.json
- * 一起提交，稳定后再挪进契约包并补 `hvac-shapes` 的键集断言。
- */
-export interface AcSourceObject {
-  name: string
-  /** 厂商给的中文别名，取不到时为 null。 */
-  caption: string | null
-  row_count_hint: number | null
-}
-
-/**
  * 某个数据集在外部库里可绑定的对象。
  * ⚠ 后端按**列形状**过滤而不是按名字：同前缀但没有时间列的那几个视图不会出现
  * 在这里，所以这一项只能选、不能让人手打。
@@ -192,6 +184,52 @@ export async function listAcSourceObjects(
     onPlatform(),
   )
   return data.items
+}
+
+/* 原始数据 */
+
+// ⚠ 用 type 而不是 interface：interface 没有隐式索引签名，
+// 传给 `request` 的 `query`（Record<...>）会被类型检查拒掉（同 AcUnitFilters）。
+/** 查询区间，UTC RFC3339，半开 `[from, to)`。两端都是必填。 */
+export type RawRange = {
+  from: string
+  to: string
+}
+
+/**
+ * 一页原始采样。
+ * ⚠ 游标分页而不是页码：时序集合边写边翻页时，页码会静默重复或漏行。
+ * `after` 只能填上一页响应里的 `next`，不许自己拼。
+ * @param acUnitId 空调 id
+ * @param query 区间、单页条数与上一页给的游标
+ */
+export async function listRawSamples(
+  acUnitId: string,
+  query: RawRange & { limit?: number | undefined; after?: string | undefined },
+): Promise<CursorPage<RawSample>> {
+  return await requestData<CursorPage<RawSample>>(
+    `/ac-units/${acUnitId}/raw-samples`,
+    onPlatform({ query }),
+  )
+}
+
+/**
+ * 按点数上限聚合过的时序。
+ * @param acUnitId 空调 id
+ * @param query 区间、要哪几个指标、以及最多要多少个桶
+ */
+export async function getRawSeries(
+  acUnitId: string,
+  query: RawRange & {
+    metrics: readonly string[]
+    max_points?: number | undefined
+  },
+): Promise<RawSeries> {
+  return await requestData<RawSeries>(
+    `/ac-units/${acUnitId}/raw-series`,
+    // ⚠ metrics 是逗号分隔的**一个** query 参数，不是重复的同名参数
+    onPlatform({ query: { ...query, metrics: query.metrics.join(',') } }),
+  )
 }
 
 /* 数据源绑定 */

@@ -129,3 +129,65 @@ export interface AcMetricLimit {
 
 /** 一次覆盖式提交能带的指标条数上限，与后端 `MAX_METRIC_LIMITS` 同值。 */
 export const AC_METRIC_LIMITS_MAX = 64
+
+/** 外部库里一个可绑定的对象。 */
+export interface AcSourceObject {
+  name: string
+  /** 厂商给的中文别名，取不到时为 null。 */
+  caption: string | null
+  row_count_hint: number | null
+}
+
+/**
+ * 原始数据表格里的一行：一个时刻上的 19 个测点原值。
+ *
+ * ⚠ 逐个列出而不是用索引签名：字段与目录逐一对应这件事由 `hvac-shapes` 的
+ * 契约用例双向钉死，索引签名会让「后端少给一个字段」在编译期完全看不见。
+ * ⚠ 测点值是 JSON number（传感器精度本身低于 float64），而 `null` 一律保持
+ * `null`——折成 0 会把数据断档读成一次真实的停机。
+ */
+// ⚠ 用 type 而不是 interface：interface 没有隐式索引签名，`{ ts, ...readings }`
+// 解出来的那半就没法当 `Record<string, number | null>` 用，而按 key 查读数正是
+// 表格唯一的取值方式（列由目录生成，不是写死的属性名）。
+export type RawSampleReadings = {
+  workshop_temp_avg: number | null
+  workshop_humidity_avg: number | null
+  ac_temp_setpoint: number | null
+  ac_humidity_setpoint: number | null
+  fresh_air_temp: number | null
+  fresh_air_humidity: number | null
+  supply_air_temp: number | null
+  supply_air_humidity: number | null
+  return_air_temp: number | null
+  return_air_humidity: number | null
+  mixed_air_temp: number | null
+  mixed_air_humidity: number | null
+  chilled_water_supply_temp: number | null
+  chilled_water_supply_pressure: number | null
+  heat_steam_temp: number | null
+  heat_steam_pressure: number | null
+  humidify_steam_temp: number | null
+  humidify_steam_pressure: number | null
+  fan_frequency: number | null
+}
+
+export type RawSample = RawSampleReadings & { ts: string }
+
+/** 聚合序列上的一个桶。整桶全空的指标给 null，不给 0。 */
+export interface SeriesPoint {
+  ts: string
+  values: Record<string, number | null>
+}
+
+/** 聚合后的时序。`interval_minutes` 是服务端按点数上限挑的桶宽，必须显示出来。 */
+export interface RawSeries {
+  interval_minutes: number
+  metrics: string[]
+  points: SeriesPoint[]
+}
+
+/** 表格一页最多取多少条，与后端 `limit` 的上限同值。 */
+export const RAW_SAMPLES_PAGE_MAX = 200
+
+/** 折线图一次最多要多少个桶，与后端 `max_points` 的上限同值。 */
+export const RAW_SERIES_POINTS_MAX = 2000

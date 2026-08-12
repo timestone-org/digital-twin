@@ -1,4 +1,10 @@
-export type { ApiEnvelope, ErrorCode, FieldError, Page } from './envelope'
+export type {
+  ApiEnvelope,
+  CursorPage,
+  ErrorCode,
+  FieldError,
+  Page,
+} from './envelope'
 export { ERROR_CODES, SUCCESS_CODE } from './envelope'
 export type {
   AuthUser,
@@ -29,11 +35,15 @@ export type {
   AcMetric,
   AcMetricGroup,
   AcMetricLimit,
+  AcSourceObject,
   AcUnit,
   AcUnitFilters,
   AcUnitRelocateResult,
+  RawSample,
+  RawSeries,
   Room,
   RoomRef,
+  SeriesPoint,
   Workshop,
   WorkshopRef,
 } from './hvac'
@@ -41,6 +51,8 @@ export {
   AC_METRIC_GROUPS,
   AC_METRIC_LIMITS_MAX,
   AC_UNIT_RELOCATE_MAX,
+  RAW_SAMPLES_PAGE_MAX,
+  RAW_SERIES_POINTS_MAX,
 } from './hvac'
 export type {
   DtButtonVariant,

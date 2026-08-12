@@ -5,10 +5,9 @@
  * 共用序号会让两条路径互相顶掉，表现是「有时候下拉框是空的」。
  */
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
-import type { DtSelectOption } from '@dt/contracts'
+import type { AcSourceObject, DtSelectOption } from '@dt/contracts'
 
 import * as hvac from '@/api/hvac'
-import type { AcSourceObject } from '@/api/hvac'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch, type RacedFetch } from '@/composables/useRacedFetch'
 

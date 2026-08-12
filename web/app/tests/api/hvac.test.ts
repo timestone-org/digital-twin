@@ -33,6 +33,9 @@ function call(): [string, Record<string, unknown>] {
   return [args?.[0] as string, (args?.[1] ?? {}) as Record<string, unknown>]
 }
 
+const FROM = '2026-08-12T00:00:00.000Z'
+const TO = '2026-08-12T06:00:00.000Z'
+
 describe('每一条都打 platform 前缀', () => {
   it.each([
     ['listWorkshops', () => hvac.listWorkshops()],
@@ -53,6 +56,11 @@ describe('每一条都打 platform 前缀', () => {
     ['relocateAcUnits', () => hvac.relocateAcUnits(['a1'], 'r1')],
     ['listAcDatasets', () => hvac.listAcDatasets()],
     ['listAcSourceObjects', () => hvac.listAcSourceObjects('raw_minute')],
+    ['listRawSamples', () => hvac.listRawSamples('a1', { from: FROM, to: TO })],
+    [
+      'getRawSeries',
+      () => hvac.getRawSeries('a1', { from: FROM, to: TO, metrics: ['m'] }),
+    ],
     ['listAcDataBindings', () => hvac.listAcDataBindings('a1')],
     ['putAcDataBinding', () => hvac.putAcDataBinding('a1', 'raw_minute', 'V1')],
     ['deleteAcDataBinding', () => hvac.deleteAcDataBinding('a1', 'raw_minute')],
@@ -253,5 +261,51 @@ describe('达标范围', () => {
     ]
     requestMock.mockResolvedValue({ items: saved })
     await expect(hvac.putAcMetricLimits('a1', [])).resolves.toEqual(saved)
+  })
+})
+
+describe('原始数据', () => {
+  it('表格按区间取，区间两端都必须给', async () => {
+    await hvac.listRawSamples('a1', { from: FROM, to: TO })
+    const [path, options] = call()
+    expect(path).toBe('/ac-units/a1/raw-samples')
+    expect(options.query).toEqual({ from: FROM, to: TO })
+  })
+
+  it('翻页把上一页的 next 原样当 after 带回去，不做任何解析', async () => {
+    await hvac.listRawSamples('a1', {
+      from: FROM,
+      to: TO,
+      after: 'eyJ0cyI6ICIyMDI2In0=',
+      limit: 200,
+    })
+    expect(call()[1].query).toEqual({
+      from: FROM,
+      to: TO,
+      after: 'eyJ0cyI6ICIyMDI2In0=',
+      limit: 200,
+    })
+  })
+
+  it('折线的 metrics 是逗号分隔的一个参数，不是重复的同名参数', async () => {
+    await hvac.getRawSeries('a1', {
+      from: FROM,
+      to: TO,
+      metrics: ['workshop_temp_avg', 'workshop_humidity_avg'],
+      max_points: 500,
+    })
+    const [path, options] = call()
+    expect(path).toBe('/ac-units/a1/raw-series')
+    expect(options.query).toEqual({
+      from: FROM,
+      to: TO,
+      metrics: 'workshop_temp_avg,workshop_humidity_avg',
+      max_points: 500,
+    })
+  })
+
+  it('一个指标都没勾时 metrics 是空串，交给后端拒绝而不是本地静默不发', async () => {
+    await hvac.getRawSeries('a1', { from: FROM, to: TO, metrics: [] })
+    expect(call()[1].query).toEqual({ from: FROM, to: TO, metrics: '' })
   })
 })

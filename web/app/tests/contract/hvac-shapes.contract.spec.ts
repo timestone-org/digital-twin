@@ -15,11 +15,16 @@ import type {
   AcItemList,
   AcMetric,
   AcMetricLimit,
+  AcSourceObject,
   AcUnit,
   AcUnitRelocateResult,
+  CursorPage,
   Page,
+  RawSample,
+  RawSeries,
   Room,
   RoomRef,
+  SeriesPoint,
   Workshop,
   WorkshopRef,
 } from '@dt/contracts'
@@ -177,6 +182,56 @@ const SHAPES: Record<string, Record<string, true>> = {
     lower_limit: true,
     upper_limit: true,
   } satisfies Keys<AcMetricLimit>,
+
+  SourceObjectsOut: {
+    items: true,
+  } satisfies Keys<AcItemList<AcSourceObject>>,
+
+  SourceObjectOut: {
+    name: true,
+    caption: true,
+    row_count_hint: true,
+  } satisfies Keys<AcSourceObject>,
+
+  CursorPage_RawSampleOut_: {
+    items: true,
+    next: true,
+    has_more: true,
+  } satisfies Keys<CursorPage<RawSample>>,
+
+  RawSampleOut: {
+    ts: true,
+    workshop_temp_avg: true,
+    workshop_humidity_avg: true,
+    ac_temp_setpoint: true,
+    ac_humidity_setpoint: true,
+    fresh_air_temp: true,
+    fresh_air_humidity: true,
+    supply_air_temp: true,
+    supply_air_humidity: true,
+    return_air_temp: true,
+    return_air_humidity: true,
+    mixed_air_temp: true,
+    mixed_air_humidity: true,
+    chilled_water_supply_temp: true,
+    chilled_water_supply_pressure: true,
+    heat_steam_temp: true,
+    heat_steam_pressure: true,
+    humidify_steam_temp: true,
+    humidify_steam_pressure: true,
+    fan_frequency: true,
+  } satisfies Keys<RawSample>,
+
+  RawSeriesOut: {
+    interval_minutes: true,
+    metrics: true,
+    points: true,
+  } satisfies Keys<RawSeries>,
+
+  SeriesPointOut: {
+    ts: true,
+    values: true,
+  } satisfies Keys<SeriesPoint>,
 }
 
 describe('@dt/contracts 与 platform openapi.json 的字段一致', () => {
@@ -244,6 +299,32 @@ describe('入参形状', () => {
   it('条数上限与后端同值', () => {
     const items = detailed().MetricLimitsPutIn?.properties?.items
     expect(items?.maxItems).toBe(AC_METRIC_LIMITS_MAX)
+  })
+})
+
+describe('表格一行与指标目录逐一对应', () => {
+  it('RawSampleOut 的字段就是「时刻 + 目录里的每一个指标」，不多不少', () => {
+    // ⚠ 表格的列由目录生成：后端某个指标改了 key 而这里没跟上，那一列会静静
+    // 渲染成占位符，页面看着完全正常
+    const source = readFileSync(CATALOG_PATH, 'utf8')
+    const catalogKeys = [...source.matchAll(/^\s+key="([a-z0-9_]+)",$/gm)].map(
+      (match) => match[1],
+    )
+    const shape = Object.keys(schemas.RawSampleOut?.properties ?? {})
+    expect(catalogKeys).not.toHaveLength(0)
+    expect([...shape].sort()).toEqual([...catalogKeys, 'ts'].sort())
+  })
+
+  it('每个测点都是 number | null——null 是断档，不许折成 0', () => {
+    const properties = detailed().RawSampleOut?.properties ?? {}
+    const readings = Object.entries(properties).filter(([key]) => key !== 'ts')
+    expect(readings).not.toHaveLength(0)
+    for (const [key, property] of readings) {
+      expect(
+        property?.anyOf?.map((item) => item.type),
+        key,
+      ).toEqual(['number', 'null'])
+    }
   })
 })
 

@@ -11,12 +11,12 @@ import type {
   AcDataBinding,
   AcDataset,
   AcMetricLimit,
+  AcSourceObject,
   AcUnit,
 } from '@dt/contracts'
 import { DtConfirmHost, useConfirm } from '@dt/ui'
 
 import * as hvac from '@/api/hvac'
-import type { AcSourceObject } from '@/api/hvac'
 import AcDataDialog from '@/pages/Hvac/Units/components/AcDataDialog.vue'
 
 const STAMP = '2026-01-01T00:00:00.000Z'
