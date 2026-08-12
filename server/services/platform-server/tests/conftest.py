@@ -10,6 +10,7 @@ import socket
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 
 import httpx
 import pytest
@@ -69,6 +70,7 @@ class FakeAcSource:
     columns: dict[str, dict[str, str]] = field(default_factory=dict)
     shaped_objects: list[str] = field(default_factory=list)
     captions: list[dict[str, object]] = field(default_factory=list)
+    extent: list[dict[str, object]] = field(default_factory=list)
     samples: list[dict[str, object]] = field(default_factory=list)
     buckets: list[dict[str, object]] = field(default_factory=list)
     queries: list[tuple[str, dict[str, object]]] = field(default_factory=list)
@@ -84,6 +86,8 @@ class FakeAcSource:
             return [{"object_name": name} for name in self.shaped_objects]
         if "KTInfo" in sql:
             return list(self.captions)
+        if "MIN(" in sql:
+            return list(self.extent)
         if "DATEADD" in sql:
             return list(self.buckets)
         return list(self.samples)[: _row_limit(params)]
@@ -243,11 +247,23 @@ def sign(settings: Settings) -> SignHeaders:
 
 @pytest.fixture
 def ac_source() -> FakeAcSource:
-    """假外库，默认已有几个形状齐备的对象。用例可以再往里塞数据。"""
+    """假外库，默认已有几个形状齐备的对象与一段数据跨度。
+
+    ⚠ 跨度是**本地时**：外库的 CT 列没有时区信息，换算由被测的
+    `AcSourceReader` 做，用例因此仍然能拦住时区口径写错。
+    """
     shape = full_shape()
     return FakeAcSource(
         columns={name: dict(shape) for name in SEEDED_OBJECTS},
         shaped_objects=list(SEEDED_OBJECTS),
+        extent=[
+            {
+                # ⚠ 外库的 CT 列本来就是 naive 的当地时，假件必须照原样
+                # 回，换算才轮得到被测的 AcSourceReader 去做
+                "range_start": datetime(2023, 1, 1, 8, 0),  # noqa: DTZ001
+                "range_end": datetime(2026, 8, 12, 8, 0),  # noqa: DTZ001
+            }
+        ],
     )
 
 

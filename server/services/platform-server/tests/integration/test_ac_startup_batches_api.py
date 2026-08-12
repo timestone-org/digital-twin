@@ -7,6 +7,7 @@
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from typing import Protocol
 
 import httpx
 import pytest
@@ -15,8 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lib.web import encode_cursor
 from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
 from platform_server.apps.hvac.models import (
+    AcDataBinding,
     AcStartupBatch,
     AcStartupEpisode,
+    AcUnit,
     Room,
     Workshop,
 )
@@ -33,6 +36,16 @@ from platform_server.apps.hvac.startups import (
     OUTCOME_SET_CHANGED,
     OUTCOME_USABLE,
 )
+
+
+# conftest 的 `ac_source` fixture 形状。⚠ 不从 tests.conftest 导入：`tests`
+# 这个包名在 workspace 里被每个服务各占一份，解析到谁全看 sys.path 顺序。
+class FakeAcSource(Protocol):
+    """假外库：failure 一置就抛依赖不可用，extent 一清就是空数据源。"""
+
+    failure: Exception | None
+    extent: list[dict[str, object]]
+
 
 PREFIX = "/api/v1/platform"
 BASE = datetime(2026, 3, 1, tzinfo=UTC)
@@ -123,6 +136,26 @@ async def make_episode(
     await session.flush()
 
 
+async def bound_room(session: AsyncSession, label: str) -> uuid.UUID:
+    """一个房间，里面有一台绑好了原始数据的空调。
+
+    Args: session, label。
+    """
+    room_id = await make_room(session, label)
+    unit = AcUnit(room_id=room_id, serial=f"K11-{label}", name=f"{label}机")
+    session.add(unit)
+    await session.flush()
+    session.add(
+        AcDataBinding(
+            ac_unit_id=unit.id,
+            dataset="raw_minute",
+            source_object="KTStartData_K01",
+        )
+    )
+    await session.flush()
+    return room_id
+
+
 async def seeded_room(session: AsyncSession, label: str) -> uuid.UUID:
     """一个房间加一个当前批次与三条事件。
 
@@ -190,7 +223,7 @@ async def test_rebuilding_only_enqueues(
     app_client: httpx.AsyncClient, db_session: AsyncSession
 ) -> None:
     """⚠ API 角色永不跑重任务：请求路径里一条事件都不许产生。"""
-    room_id = await make_room(db_session, "入队")
+    room_id = await bound_room(db_session, "入队")
     response = await app_client.post(
         f"{PREFIX}/rooms/{room_id}/startup-batches:rebuild",
         json={
@@ -212,7 +245,7 @@ async def test_a_second_rebuild_while_one_runs_is_rejected(
     app_client: httpx.AsyncClient, db_session: AsyncSession
 ) -> None:
     """⚠ 连点几次按钮就是几份分片同时读同一段外库数据，其余全是白算。"""
-    room_id = await make_room(db_session, "重复入队")
+    room_id = await bound_room(db_session, "重复入队")
     body = {
         "window_start": "2026-01-01T00:00:00Z",
         "window_end": "2026-02-01T00:00:00Z",
