@@ -9,17 +9,24 @@
 """
 
 from collections.abc import AsyncIterator, Awaitable, Callable
+from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import BackgroundTasks, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
+from lib.db import Database
 from lib.errors import PermissionDenied, Unauthenticated
 from lib.utils.timeutils import utcnow
 from platform_server.apps.hvac.services import caller_from_headers
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
+from platform_server.apps.hvac.services.ac_startup_service import (
+    ShardDispatch,
+    dispatch_shards,
+)
 from platform_server.container import Container
+from platform_server.stream import StreamGroup, StreamLike
 
 # 端点声明自己要的权限码，契约测试遍历路由时读它
 REQUIRED_CODES_ATTR = "__auth_required_codes__"
@@ -47,6 +54,55 @@ async def get_session(
     """
     async with container.database.session() as session:
         yield session
+
+
+@dataclass(frozen=True)
+class Dispatcher:
+    """把分片任务交出去的那只手。
+
+    ⚠ 它只在**事务提交之后**投递：本请求的事务要等依赖退出才提交，在请求里
+    直接投出去，消费者可能先于提交读到批次行还不存在——那是一个取决于调度
+    时机的间歇性缺陷。后台任务跑在响应发出之后，那时事务已经落盘。
+    """
+
+    stream: StreamLike
+    target: StreamGroup
+    database: Database
+    tasks: BackgroundTasks
+
+    def after_commit(self, plan: ShardDispatch) -> None:
+        """排一次提交后的投递。
+
+        Args: plan。
+        """
+        self.tasks.add_task(
+            dispatch_shards,
+            self.stream,
+            self.database,
+            target=self.target,
+            plan=plan,
+        )
+
+
+def get_dispatcher(
+    container: Annotated[Container, Depends(get_container)],
+    tasks: BackgroundTasks,
+) -> Dispatcher:
+    """装出提交后投递用的那只手。测试用 `dependency_overrides` 换成假件。
+
+    Args: container, tasks。
+    """
+    settings = container.settings
+    return Dispatcher(
+        stream=container.stream,
+        target=StreamGroup(
+            stream=settings.acstartup_stream,
+            group=settings.acstartup_group,
+            consumer=settings.app_instance,
+        ),
+        database=container.database,
+        tasks=tasks,
+    )
 
 
 def get_ac_source_reader(

@@ -461,6 +461,51 @@
         "title": "ApiResponse[CursorPage[RawSampleOut]]",
         "type": "object"
       },
+      "ApiResponse_CursorPage_StartupEpisodeOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CursorPage_StartupEpisodeOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[CursorPage[StartupEpisodeOut]]",
+        "type": "object"
+      },
       "ApiResponse_DatasetsOut_": {
         "properties": {
           "code": {
@@ -821,6 +866,141 @@
         "title": "ApiResponse[SourceObjectsOut]",
         "type": "object"
       },
+      "ApiResponse_StartupBatchesOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StartupBatchesOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[StartupBatchesOut]",
+        "type": "object"
+      },
+      "ApiResponse_StartupExclusionOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StartupExclusionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[StartupExclusionOut]",
+        "type": "object"
+      },
+      "ApiResponse_StartupRebuildOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StartupRebuildOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[StartupRebuildOut]",
+        "type": "object"
+      },
       "ApiResponse_WorkshopOut_": {
         "properties": {
           "code": {
@@ -866,6 +1046,28 @@
         "title": "ApiResponse[WorkshopOut]",
         "type": "object"
       },
+      "CombinationCoverageOut": {
+        "description": "一个运行组合在当前批次里攒了多少条可用样本。",
+        "properties": {
+          "running_set": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Running Set",
+            "type": "array"
+          },
+          "usable_count": {
+            "title": "Usable Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "running_set",
+          "usable_count"
+        ],
+        "title": "CombinationCoverageOut",
+        "type": "object"
+      },
       "CursorPage_RawSampleOut_": {
         "properties": {
           "has_more": {
@@ -897,6 +1099,39 @@
           "has_more"
         ],
         "title": "CursorPage[RawSampleOut]",
+        "type": "object"
+      },
+      "CursorPage_StartupEpisodeOut_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StartupEpisodeOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          }
+        },
+        "required": [
+          "items",
+          "next",
+          "has_more"
+        ],
+        "title": "CursorPage[StartupEpisodeOut]",
         "type": "object"
       },
       "DatasetOut": {
@@ -1702,6 +1937,316 @@
           "items"
         ],
         "title": "SourceObjectsOut",
+        "type": "object"
+      },
+      "StartupBatchOut": {
+        "description": "一个抽取批次的摘要。`shard_done / shard_total` 就是进度。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "episode_count": {
+            "title": "Episode Count",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_current": {
+            "title": "Is Current",
+            "type": "boolean"
+          },
+          "logic_version": {
+            "title": "Logic Version",
+            "type": "integer"
+          },
+          "params_fingerprint": {
+            "title": "Params Fingerprint",
+            "type": "string"
+          },
+          "shard_done": {
+            "title": "Shard Done",
+            "type": "integer"
+          },
+          "shard_total": {
+            "title": "Shard Total",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "unmatched_exclusion_count": {
+            "title": "Unmatched Exclusion Count",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "window_end": {
+            "format": "date-time",
+            "title": "Window End",
+            "type": "string"
+          },
+          "window_start": {
+            "format": "date-time",
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "is_current",
+          "params_fingerprint",
+          "logic_version",
+          "window_start",
+          "window_end",
+          "shard_total",
+          "shard_done",
+          "episode_count",
+          "unmatched_exclusion_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "StartupBatchOut",
+        "type": "object"
+      },
+      "StartupBatchesOut": {
+        "description": "批次列表页要的全部东西，一次取回。\n\n⚠ `is_stale` 只在**有**当前批次且指纹对不上时为真：一个房间还没算过时\n它是假，页面显示的是「还没算过」而不是「该重算了」——两者要人做的事不同。",
+        "properties": {
+          "coverage": {
+            "items": {
+              "$ref": "#/components/schemas/CombinationCoverageOut"
+            },
+            "title": "Coverage",
+            "type": "array"
+          },
+          "current": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StartupBatchOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expected_fingerprint": {
+            "title": "Expected Fingerprint",
+            "type": "string"
+          },
+          "is_stale": {
+            "title": "Is Stale",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StartupBatchOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "current",
+          "coverage",
+          "expected_fingerprint",
+          "is_stale"
+        ],
+        "title": "StartupBatchesOut",
+        "type": "object"
+      },
+      "StartupEpisodeOut": {
+        "description": "一次开机事件。\n\n⚠ 被人工排除的事件仍然出现在列表里，只是带上排除标记——页面把它置灰保留\n而不是让它消失，否则人会以为自己排掉的那条从数据里没了。",
+        "properties": {
+          "complied_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Complied At"
+          },
+          "duration_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "达标时长；没达标就没有时长。\n\n⚠ 派生而不是单独存一份：与 `complied_at` 分开存的话两者会各自漂移，\n而页面读到的是哪一个全看它先看哪一列。",
+            "readOnly": true,
+            "title": "Duration Minutes"
+          },
+          "exclusion_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exclusion Reason"
+          },
+          "is_excluded": {
+            "title": "Is Excluded",
+            "type": "boolean"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "readings": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "title": "Readings",
+            "type": "object"
+          },
+          "running_set": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Running Set",
+            "type": "array"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "started_at",
+          "running_set",
+          "complied_at",
+          "outcome",
+          "readings",
+          "is_excluded",
+          "exclusion_reason",
+          "duration_minutes"
+        ],
+        "title": "StartupEpisodeOut",
+        "type": "object"
+      },
+      "StartupExclusionIn": {
+        "additionalProperties": false,
+        "description": "人工排除的入参。排除人取自调用者身份，不从请求体里读。",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "StartupExclusionIn",
+        "type": "object"
+      },
+      "StartupExclusionOut": {
+        "description": "一条人工排除。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "excluded_by": {
+            "title": "Excluded By",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "started_at",
+          "reason",
+          "excluded_by",
+          "created_at"
+        ],
+        "title": "StartupExclusionOut",
+        "type": "object"
+      },
+      "StartupRebuildIn": {
+        "additionalProperties": false,
+        "description": "重算的入参：要抽哪一段。",
+        "properties": {
+          "window_end": {
+            "format": "date-time",
+            "title": "Window End",
+            "type": "string"
+          },
+          "window_start": {
+            "format": "date-time",
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "window_start",
+          "window_end"
+        ],
+        "title": "StartupRebuildIn",
+        "type": "object"
+      },
+      "StartupRebuildOut": {
+        "description": "入队的结果。⚠ 它只说「排上了」，不说「算完了」。",
+        "properties": {
+          "batch_id": {
+            "format": "uuid",
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "shard_total": {
+            "title": "Shard Total",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "batch_id",
+          "status",
+          "shard_total"
+        ],
+        "title": "StartupRebuildOut",
         "type": "object"
       },
       "ValidationError": {
@@ -2989,6 +3534,317 @@
         "summary": "更新房间",
         "tags": [
           "room"
+        ]
+      }
+    },
+    "/api/v1/platform/rooms/{room_id}/startup-batches": {
+      "get": {
+        "description": "批次列表、当前批次、进度、组合覆盖度与指纹是否过期。\n\nArgs: room_id, session, _viewer。",
+        "operationId": "list_startup_batches_api_v1_platform_rooms__room_id__startup_batches_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "room_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Room Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_StartupBatchesOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "抽取批次与组合覆盖度",
+        "tags": [
+          "ac-startups"
+        ]
+      }
+    },
+    "/api/v1/platform/rooms/{room_id}/startup-batches:rebuild": {
+      "post": {
+        "description": "建一个新批次并把分片排进队列，立刻返回批次 id。\n\nArgs: room_id, payload, session, dispatcher, _manager。",
+        "operationId": "rebuild_startup_batches_api_v1_platform_rooms__room_id__startup_batches_rebuild_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "room_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Room Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartupRebuildIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_StartupRebuildOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "重算开机事件（入队）",
+        "tags": [
+          "ac-startups"
+        ]
+      }
+    },
+    "/api/v1/platform/rooms/{room_id}/startup-episodes": {
+      "get": {
+        "description": "当前批次里的开机事件，最新的在前。没算过的房间返回空页而不是 404。\n\nArgs: room_id, session, cursor, filters, _viewer。",
+        "operationId": "list_startup_episodes_api_v1_platform_rooms__room_id__startup_episodes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "room_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Room Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "outcome",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Outcome"
+            }
+          },
+          {
+            "in": "query",
+            "name": "running_set",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Running Set"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_CursorPage_StartupEpisodeOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "开机事件列表",
+        "tags": [
+          "ac-startups"
+        ]
+      }
+    },
+    "/api/v1/platform/rooms/{room_id}/startup-exclusions/{started_at}": {
+      "delete": {
+        "description": "取消排除。没排除过也返回 204——DELETE 必须幂等。\n\nArgs: room_id, started_at, session, _manager。",
+        "operationId": "delete_startup_exclusion_api_v1_platform_rooms__room_id__startup_exclusions__started_at__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "room_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Room Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "started_at",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Started At",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "取消人工排除",
+        "tags": [
+          "ac-startups"
+        ]
+      },
+      "put": {
+        "description": "按自然键排除，重复调用是覆盖。排除人取自调用者身份。\n\nArgs: room_id, started_at, payload, session, caller, _manager。",
+        "operationId": "put_startup_exclusion_api_v1_platform_rooms__room_id__startup_exclusions__started_at__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "room_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Room Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "started_at",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Started At",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartupExclusionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_StartupExclusionOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "人工排除一次开机",
+        "tags": [
+          "ac-startups"
         ]
       }
     },

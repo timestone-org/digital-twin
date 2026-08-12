@@ -113,6 +113,13 @@ class CursorInvalid(AppError):
     http_status = 422
 
 
+class StartupRebuildInProgress(AppError):
+    """这个房间已经有一次抽取在跑。重复触发只会白算一遍。"""
+
+    code = 41616
+    http_status = 409
+
+
 class SourceUnavailable(AppError):
     """外部数据源不可用。⚠ 不返回陈旧数据兜底——查不到就明确说查不到。"""
 
