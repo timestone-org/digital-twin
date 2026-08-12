@@ -259,6 +259,16 @@ describe('批次状态', () => {
     expect(wrapper.text()).not.toContain('旧规则')
   })
 
+  it('没算过的房间也给得出抽取入口，否则第一次永远开不了头', async () => {
+    // ⚠ 这颗键曾经只长在「已经算过」那条分支里，于是没抽取过的房间无从开始
+    vi.mocked(hvac.getStartupBatches).mockResolvedValue(
+      batches({ current: null, is_stale: false }),
+    )
+    await open()
+    await selectRoom()
+    expect(buttonByName('开始抽取')).toBeDefined()
+  })
+
   it('重算中显示分片进度，同时仍然展示上一批次的事件', async () => {
     vi.mocked(hvac.getStartupBatches).mockResolvedValue(
       batches({

@@ -34,12 +34,11 @@ const unmatched = computed(() => props.batch?.unmatched_exclusion_count ?? 0)
 
 <template>
   <div class="flex flex-col gap-2">
-    <DtNotice v-if="batch === null" intent="info">
-      这个房间还没有抽取过开机事件。
-    </DtNotice>
-
-    <template v-else>
-      <div class="flex flex-wrap items-center gap-3 text-xs">
+    <div class="flex flex-wrap items-center gap-3 text-xs">
+      <template v-if="batch === null">
+        <span class="text-text-secondary">还没有抽取过开机事件</span>
+      </template>
+      <template v-else>
         <DtTag :intent="batch.status === 'failed' ? 'danger' : 'neutral'">
           {{ batch.episode_count }} 条事件
         </DtTag>
@@ -47,22 +46,26 @@ const unmatched = computed(() => props.batch?.unmatched_exclusion_count ?? 0)
         <span class="text-text-disabled">
           逻辑版本 v{{ batch.logic_version }}
         </span>
-        <!-- ⚠ 触发重算要 ac:manage（后端挂的是 ManageDep），页面本身只要
-           ac:view——只读账号不该看见一颗点了就 403 的键 -->
-        <PermGuard :codes="[PERMISSION_CODES.acManage]">
-          <DtButton
-            class="ml-auto"
-            size="sm"
-            variant="outline"
-            :loading="rebuilding"
-            :disabled="isRunning"
-            @click="emit('rebuild')"
-          >
-            重新抽取
-          </DtButton>
-        </PermGuard>
-      </div>
+      </template>
+      <!-- ⚠ 触发重算要 ac:manage（后端挂的是 ManageDep），页面本身只要
+         ac:view——只读账号不该看见一颗点了就 403 的键 -->
+      <!-- ⚠ 这颗键在「还没抽取过」时也必须在：把它放进 v-else 分支里，
+         第一次抽取就没有入口，而没抽过恰恰是最需要这颗键的时候 -->
+      <PermGuard :codes="[PERMISSION_CODES.acManage]">
+        <DtButton
+          class="ml-auto"
+          size="sm"
+          variant="outline"
+          :loading="rebuilding"
+          :disabled="isRunning"
+          @click="emit('rebuild')"
+        >
+          {{ batch === null ? '开始抽取' : '重新抽取' }}
+        </DtButton>
+      </PermGuard>
+    </div>
 
+    <template v-if="batch !== null">
       <!-- 重算期间照常显示上一批次的完整数据，这里只多一条进度 -->
       <div v-if="isRunning" class="flex items-center gap-2">
         <DtProgress class="flex-1" :value="progress" />
