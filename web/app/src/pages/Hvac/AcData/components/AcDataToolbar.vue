@@ -43,22 +43,34 @@ function onView(value: string): void {
     <DtSelect
       v-if="datasetOptions.length > 1"
       class="w-44"
+      size="sm"
       :model-value="datasetKey"
       label="数据集"
       :options="datasetOptions"
       @update:model-value="emit('update:datasetKey', $event)"
     />
-    <DtDateTimeInput
-      :model-value="from"
-      label="开始时间"
-      :error="rangeError ?? undefined"
-      @update:model-value="emit('update:from', $event)"
-    />
-    <DtDateTimeInput
-      :model-value="to"
-      label="结束时间"
-      @update:model-value="emit('update:to', $event)"
-    />
+    <!-- ⚠ 整行统一 sm：不给 size 的话控件落回 md（40px），紧挨着的预设键是
+       sm（32px），同一行差 8px 一眼就能看出来 -->
+    <!-- ⚠ 宽度套在外层 div 上，不写在组件的 class 上：DtDateTimeInput 与
+       DtInput 一样是 inheritAttrs:false + v-bind="$attrs"，class 会落到里面
+       那个 <input> 上，外框反而不受约束 -->
+    <div class="w-52">
+      <DtDateTimeInput
+        size="sm"
+        :model-value="from"
+        label="开始时间"
+        :error="rangeError ?? undefined"
+        @update:model-value="emit('update:from', $event)"
+      />
+    </div>
+    <div class="w-52">
+      <DtDateTimeInput
+        size="sm"
+        :model-value="to"
+        label="结束时间"
+        @update:model-value="emit('update:to', $event)"
+      />
+    </div>
     <div class="flex items-center gap-1">
       <DtButton
         v-for="preset in presets"
@@ -73,6 +85,7 @@ function onView(value: string): void {
     </div>
     <DtSegmented
       class="ml-auto"
+      size="sm"
       :model-value="view"
       :options="VIEW_OPTIONS"
       aria-label="呈现方式"
