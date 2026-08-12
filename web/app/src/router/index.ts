@@ -51,6 +51,15 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/hvac/startups',
+    name: 'hvac-startups',
+    component: () => import('@/pages/Hvac/Startups/index.vue'),
+    meta: {
+      title: '开机事件',
+      permissions: [PERMISSION_CODES.acView],
+    },
+  },
+  {
     path: '/hvac/spaces',
     name: 'hvac-spaces',
     component: () => import('@/pages/Hvac/Spaces/index.vue'),

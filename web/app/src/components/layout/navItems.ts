@@ -34,6 +34,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
         permission: [PERMISSION_CODES.acView],
       },
       {
+        key: 'hvac-startups',
+        label: '开机事件',
+        icon: 'activity',
+        to: '/hvac/startups',
+        permission: [PERMISSION_CODES.acView],
+      },
+      {
         key: 'hvac-spaces',
         label: '空间配置',
         icon: 'building',
