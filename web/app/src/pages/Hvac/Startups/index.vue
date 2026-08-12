@@ -9,24 +9,24 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import type { AcDataset, AcUnit, DtSegmentedOption } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtNotice, DtSelect, useConfirm, useToast } from '@dt/ui'
+import { DtNotice, useConfirm, useToast } from '@dt/ui'
 
 import * as hvac from '@/api/hvac'
 import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
 import { describeError } from '@/composables/useAsyncList'
-import { useCursorList } from '@/composables/useCursorList'
+import { useCursorPages } from '@/composables/useCursorPages'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import { useLocationPicker } from '@/features/hvac/useLocationPicker'
 import BatchStatusStrip from './components/BatchStatusStrip.vue'
-import CoverageList from './components/CoverageList.vue'
+import CoverageSidebar from './components/CoverageSidebar.vue'
 import EpisodeCurveDialog from './components/EpisodeCurveDialog.vue'
 import EpisodeTable from './components/EpisodeTable.vue'
 import ExclusionDialog from './components/ExclusionDialog.vue'
+import StartupFilters from './components/StartupFilters.vue'
 import {
-  combinationOptions,
+  EPISODE_PAGE_SIZE,
   describeRebuild,
-  outcomeOptions,
   rebuildRangeProblem,
   toEpisodeRows,
   type EpisodeRow,
@@ -53,9 +53,11 @@ const rebuildFrom = ref('')
 const rebuildTo = ref('')
 
 const batches = useStartupBatches(() => picker.roomId.value)
-const episodes = useCursorList(
+// ⚠ 翻页是替换不是追加，所以 reload() 同时就是「回到第一页」——游标栈跟着清空
+const episodes = useCursorPages(
   (after) =>
     hvac.listStartupEpisodes(picker.roomId.value, {
+      limit: EPISODE_PAGE_SIZE,
       outcome: outcome.value || undefined,
       running_set: combination.value || undefined,
       ...(after === null ? {} : { after }),
@@ -122,7 +124,8 @@ async function submitExclusion(reason: string): Promise<void> {
     await hvac.putStartupExclusion(picker.roomId.value, row.id, reason)
     excluding.value = null
     toast.success('已排除，这条仍留在列表里')
-    await episodes.reload()
+    // ⚠ refresh 不是 reload：在第三页上排一条，回到第一页就等于说「它不见了」
+    await episodes.refresh()
   } catch (caught) {
     actionError.value = describeError(caught)
   } finally {
@@ -141,7 +144,7 @@ async function restore(row: EpisodeRow): Promise<void> {
   try {
     await hvac.deleteStartupExclusion(picker.roomId.value, row.id)
     toast.success('已撤销排除')
-    await episodes.reload()
+    await episodes.refresh()
   } catch (caught) {
     toast.error(describeError(caught))
   }
@@ -189,41 +192,19 @@ onMounted(() => {
 <template>
   <AppShell title="开机事件" subtitle="每一次从全停到达标的过程，供人工核对">
     <div class="flex h-full min-h-0 flex-col gap-4">
-      <div class="flex flex-wrap items-end gap-3">
-        <DtSelect
-          class="w-44"
-          size="sm"
-          :model-value="picker.workshopId.value"
-          label="车间"
-          :options="picker.workshopOptions.value"
-          @update:model-value="picker.workshopId.value = $event"
-        />
-        <DtSelect
-          class="w-44"
-          size="sm"
-          :model-value="picker.roomId.value"
-          label="房间"
-          :disabled="picker.workshopId.value === ''"
-          :options="roomOptions"
-          @update:model-value="picker.roomId.value = $event"
-        />
-        <DtSelect
-          class="w-40"
-          size="sm"
-          :model-value="outcome"
-          label="结果"
-          :options="outcomeOptions()"
-          @update:model-value="outcome = $event"
-        />
-        <DtSelect
-          class="w-56"
-          size="sm"
-          :model-value="combination"
-          label="运行组合"
-          :options="combinationOptions(batches.coverage.value)"
-          @update:model-value="combination = $event"
-        />
-      </div>
+      <StartupFilters
+        :workshop-id="picker.workshopId.value"
+        :workshop-options="picker.workshopOptions.value"
+        :room-id="picker.roomId.value"
+        :room-options="roomOptions"
+        :outcome="outcome"
+        :combination="combination"
+        :coverage="batches.coverage.value"
+        @update:workshop-id="picker.workshopId.value = $event"
+        @update:room-id="picker.roomId.value = $event"
+        @update:outcome="outcome = $event"
+        @update:combination="combination = $event"
+      />
 
       <DtNotice v-if="picker.error.value" intent="danger">
         {{ picker.error.value }}
@@ -248,20 +229,32 @@ onMounted(() => {
           {{ batches.error.value }}
         </DtNotice>
 
-        <CoverageList :items="batches.coverage.value" />
+        <!-- 左右分栏：组合列表在左、事件在右，各自在自己那栏里滚。
+             ⚠ 两边都要 min-h-0，少一个就不是滚动而是把整页撑长，
+             而 AppShell 的 main 是 overflow-hidden，撑出去的部分够不着。 -->
+        <div class="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
+          <CoverageSidebar
+            class="max-h-64 shrink-0 lg:max-h-none lg:w-72"
+            :items="batches.coverage.value"
+            :selected="combination"
+            @select="combination = $event"
+          />
 
-        <EpisodeTable
-          :rows="rows"
-          :loading="episodes.loading.value"
-          :loading-more="episodes.loadingMore.value"
-          :has-more="episodes.hasMore.value"
-          :error="episodes.problem.value"
-          @more="episodes.loadMore"
-          @retry="episodes.reload"
-          @inspect="onInspect"
-          @exclude="excluding = $event"
-          @restore="restore"
-        />
+          <EpisodeTable
+            :rows="rows"
+            :loading="episodes.loading.value"
+            :page="episodes.pageNumber.value"
+            :has-prev="episodes.hasPrev.value"
+            :has-next="episodes.hasNext.value"
+            :error="episodes.problem.value"
+            @prev="episodes.prev"
+            @next="episodes.next"
+            @retry="episodes.reload"
+            @inspect="onInspect"
+            @exclude="excluding = $event"
+            @restore="restore"
+          />
+        </div>
       </template>
     </div>
 

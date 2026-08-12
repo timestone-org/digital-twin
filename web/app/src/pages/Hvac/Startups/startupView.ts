@@ -85,6 +85,41 @@ export function sortedCoverage(
   })
 }
 
+// 低于这个条数的组合另标一下：样本太少，训练出来的结论不可信
+export const THIN_THRESHOLD = 20
+
+// 一页事件的条数。翻页是替换不是追加，所以它同时就是 DOM 里的行数上限
+export const EPISODE_PAGE_SIZE = 20
+
+export interface CoverageRow {
+  /** 传给运行组合筛选器的取值，与 `combinationOptions` 同一口径。 */
+  value: string
+  label: string
+  count: number
+  /** 组内最多的那个条数，条形按它取比例。 */
+  max: number
+  isThin: boolean
+}
+
+/**
+ * 覆盖度摊成左栏的行：条形按组内最大值取比例，一眼看得出哪三四个组合占了绝大多数。
+ * ⚠ `max` 至少为 1：一条都还没攒到时按 0 去除会得到 NaN，整排条形静默消失。
+ * @param items 当前批次的组合覆盖度
+ */
+export function coverageRows(
+  items: readonly CombinationCoverage[],
+): CoverageRow[] {
+  const rows = sortedCoverage(items)
+  const max = Math.max(1, ...rows.map((item) => item.usable_count))
+  return rows.map((item) => ({
+    value: item.running_set.join(','),
+    label: formatRunningSet(item.running_set),
+    count: item.usable_count,
+    max,
+    isThin: item.usable_count < THIN_THRESHOLD,
+  }))
+}
+
 /** 运行组合筛选器的选项，取自覆盖度——那就是实际出现过的组合。 */
 export function combinationOptions(
   items: readonly CombinationCoverage[],

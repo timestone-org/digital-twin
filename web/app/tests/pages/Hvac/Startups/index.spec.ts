@@ -21,6 +21,7 @@ import { DtConfirmHost, DtToastHost, useConfirm, useToast } from '@dt/ui'
 
 import * as hvac from '@/api/hvac'
 import StartupsPage from '@/pages/Hvac/Startups/index.vue'
+import { EPISODE_PAGE_SIZE } from '@/pages/Hvac/Startups/startupView'
 import { useAuthStore } from '@/stores/auth'
 
 vi.mock('vue-router', () => ({
@@ -142,6 +143,38 @@ async function click(name: string): Promise<void> {
   if (target === undefined) throw new Error(`找不到叫「${name}」的按钮`)
   target.click()
   await flushPromises()
+}
+
+function twoCombinations(): StartupBatches {
+  return batches({
+    coverage: [
+      { running_set: ['K01'], usable_count: 42 },
+      { running_set: ['K02', 'K03'], usable_count: 3 },
+    ],
+  })
+}
+
+/** 点左栏「组合覆盖」里的某一条。 */
+async function pickCombination(label: string): Promise<void> {
+  const row = [...document.querySelectorAll('button[aria-pressed]')].find(
+    (node) => node.textContent?.includes(label),
+  )
+  if (row === undefined) throw new Error(`左栏里没有「${label}」`)
+  row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  await flushPromises()
+}
+
+/** 某个下拉当前显示的取值。 */
+function selectValue(field: string): string {
+  const id = [...document.querySelectorAll('label')]
+    .find((node) => node.textContent?.trim().startsWith(field))
+    ?.getAttribute('for')
+  return (
+    document
+      .getElementById(id ?? '')
+      ?.querySelector('.dt-select__value')
+      ?.textContent?.trim() ?? ''
+  )
 }
 
 /** 在某个下拉里点一项。 */
@@ -487,6 +520,59 @@ describe('组合覆盖度', () => {
     expect(wrapper.text()).toContain('3 条')
     expect(wrapper.text()).toContain('样本太少')
   })
+
+  it('点左栏一条就把事件筛到它，走的还是工具条那个筛选器', async () => {
+    vi.mocked(hvac.getStartupBatches).mockResolvedValue(twoCombinations())
+    await open()
+    await selectRoom()
+    await pickCombination('K02、K03')
+    const last = vi.mocked(hvac.listStartupEpisodes).mock.calls.at(-1)
+    expect(last?.[1]?.running_set).toBe('K02,K03')
+    // ⚠ 同一个筛选器：工具条那个下拉必须跟着显示同一条，不能各记各的
+    expect(selectValue('运行组合')).toBe('K02、K03（3）')
+  })
+
+  it('再点一次选中的那条就回到全部组合', async () => {
+    vi.mocked(hvac.getStartupBatches).mockResolvedValue(twoCombinations())
+    await open()
+    await selectRoom()
+    await pickCombination('K02、K03')
+    await pickCombination('K02、K03')
+    const last = vi.mocked(hvac.listStartupEpisodes).mock.calls.at(-1)
+    expect(last?.[1]?.running_set).toBeUndefined()
+    expect(selectValue('运行组合')).toBe('全部组合')
+  })
+})
+
+describe('左右分栏', () => {
+  it('组合在左、事件在右，两栏各自在自己那格里滚', async () => {
+    const wrapper = await open()
+    await selectRoom()
+    const split = wrapper
+      .findAll('div')
+      .find((node) => node.classes().includes('lg:flex-row'))
+    expect(split?.classes()).toEqual(
+      expect.arrayContaining(['flex', 'min-h-0', 'flex-1']),
+    )
+    // 左栏自己滚
+    expect(wrapper.find('aside ul').classes()).toEqual(
+      expect.arrayContaining(['overflow-y-auto', 'min-h-0']),
+    )
+    // 右栏的表体由 DtDataView 内部滚，这里锁住它拿得到有界高度
+    expect(wrapper.find('.dt-data-view').classes()).toEqual(
+      expect.arrayContaining(['min-h-0', 'flex-1']),
+    )
+  })
+
+  it('页面根节点吃满高度，滚动不外溢到整页', async () => {
+    const wrapper = await open()
+    const root = wrapper
+      .findAll('div')
+      .find((node) => node.classes().includes('h-full'))
+    expect(root?.classes()).toEqual(
+      expect.arrayContaining(['flex', 'flex-col', 'min-h-0']),
+    )
+  })
 })
 
 describe('事件列表', () => {
@@ -533,7 +619,17 @@ describe('事件列表', () => {
     expect(last?.[1]?.outcome).toBe('usable')
   })
 
-  it('加载更多把上一页的游标原样带回并追加', async () => {
+  it('只取一页，不把整段历史一次性拉下来', async () => {
+    await open()
+    await selectRoom()
+    expect(vi.mocked(hvac.listStartupEpisodes).mock.calls[0]?.[1]?.limit).toBe(
+      EPISODE_PAGE_SIZE,
+    )
+  })
+})
+
+describe('翻页', () => {
+  it('下一页把游标原样带回，并**替换**当前页——DOM 里始终只有一页', async () => {
     vi.mocked(hvac.listStartupEpisodes)
       .mockResolvedValueOnce(cursor([episode()], 'CURSOR-1'))
       .mockResolvedValueOnce(
@@ -541,11 +637,77 @@ describe('事件列表', () => {
       )
     const wrapper = await open()
     await selectRoom()
-    await click('加载更多')
+    await click('下一页')
     expect(vi.mocked(hvac.listStartupEpisodes).mock.calls[1]?.[1]?.after).toBe(
       'CURSOR-1',
     )
-    expect(wrapper.findAll('tbody tr')).toHaveLength(2)
+    expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+    expect(wrapper.text()).toContain('第 2 页')
+  })
+
+  it('翻过去再翻回来，回到第一页那几条', async () => {
+    vi.mocked(hvac.listStartupEpisodes)
+      .mockResolvedValueOnce(cursor([episode()], 'CURSOR-1'))
+      .mockResolvedValueOnce(
+        cursor([
+          episode({
+            started_at: '2026-08-12T05:00:00.000Z',
+            duration_minutes: 88,
+          }),
+        ]),
+      )
+      .mockResolvedValueOnce(
+        cursor([episode({ duration_minutes: 11 })], 'CURSOR-1'),
+      )
+    const wrapper = await open()
+    await selectRoom()
+    await click('下一页')
+    expect(wrapper.text()).toContain('88 分钟')
+    await click('上一页')
+    // 第一页不带 after，不是拿某个自己算出来的游标去猜
+    expect(
+      vi.mocked(hvac.listStartupEpisodes).mock.calls[2]?.[1]?.after,
+    ).toBeUndefined()
+    expect(wrapper.text()).toContain('11 分钟')
+    expect(wrapper.text()).not.toContain('88 分钟')
+    expect(wrapper.text()).toContain('第 1 页')
+  })
+
+  it('第一页上翻不出「上一页」的请求', async () => {
+    await open()
+    await selectRoom()
+    await click('上一页')
+    expect(hvac.listStartupEpisodes).toHaveBeenCalledTimes(1)
+  })
+
+  it('换筛选把游标栈清空，重新从第一页取——不会翻进上一串结果的中间', async () => {
+    vi.mocked(hvac.listStartupEpisodes)
+      .mockResolvedValueOnce(cursor([episode()], 'CURSOR-1'))
+      .mockResolvedValueOnce(cursor([episode()], 'CURSOR-2'))
+    const wrapper = await open()
+    await selectRoom()
+    await click('下一页')
+    await pick('结果', '可用')
+    const last = vi.mocked(hvac.listStartupEpisodes).mock.calls.at(-1)
+    expect(last?.[1]?.outcome).toBe('usable')
+    expect(last?.[1]?.after).toBeUndefined()
+    expect(wrapper.text()).toContain('第 1 页')
+  })
+
+  it('换房间同样从第一页起，不接着上一个房间的游标翻', async () => {
+    vi.mocked(hvac.listRooms).mockResolvedValue(
+      page([room('r1', '注塑房', 2), room('r3', '装配房', 4)]),
+    )
+    vi.mocked(hvac.listStartupEpisodes)
+      .mockResolvedValueOnce(cursor([episode()], 'CURSOR-1'))
+      .mockResolvedValueOnce(cursor([episode()], 'CURSOR-2'))
+    await open()
+    await selectRoom()
+    await click('下一页')
+    await pick('房间', '装配房')
+    const last = vi.mocked(hvac.listStartupEpisodes).mock.calls.at(-1)
+    expect(last?.[0]).toBe('r3')
+    expect(last?.[1]?.after).toBeUndefined()
   })
 })
 
@@ -579,6 +741,36 @@ describe('人工排除', () => {
     await flushPromises()
     await click('确认排除')
     expect(put).toHaveBeenCalledWith('r1', STAMP, '现场检修')
+  })
+
+  it('在第二页上排除后留在第二页，不把人甩回第一页', async () => {
+    vi.mocked(hvac.listStartupEpisodes)
+      .mockResolvedValueOnce(cursor([episode()], 'CURSOR-1'))
+      .mockResolvedValue(
+        cursor([episode({ started_at: '2026-08-12T05:00:00.000Z' })], 'C2'),
+      )
+    vi.spyOn(hvac, 'putStartupExclusion').mockResolvedValue({
+      started_at: STAMP,
+      reason: '现场检修',
+      excluded_by: 'alice',
+      created_at: STAMP,
+    })
+    mount(DtToastHost)
+    const wrapper = await open()
+    await selectRoom()
+    await click('下一页')
+    await click('排除')
+    const box = document.querySelector('textarea')
+    if (box === null) throw new Error('没有填原因的输入框')
+    box.value = '现场检修'
+    box.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushPromises()
+    await click('确认排除')
+    // 重取的是第二页那个游标，不是回到第一页
+    expect(
+      vi.mocked(hvac.listStartupEpisodes).mock.calls.at(-1)?.[1]?.after,
+    ).toBe('CURSOR-1')
+    expect(wrapper.text()).toContain('第 2 页')
   })
 
   it('排除失败时把原因显示在弹窗里，不静默关掉', async () => {

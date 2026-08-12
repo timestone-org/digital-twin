@@ -20,6 +20,7 @@ import {
   isFullHistory,
   rebuildRangeProblem,
   combinationOptions,
+  coverageRows,
   curveWindow,
   formatDuration,
   formatRunningSet,
@@ -143,6 +144,31 @@ describe('sortedCoverage / combinationOptions', () => {
     const options = combinationOptions([coverage(['K01', 'K02'], 7)])
     expect(options[1]?.value).toBe('K01,K02')
     expect(options[1]?.label).toContain('7')
+  })
+})
+
+describe('coverageRows', () => {
+  it('条形按组内最多的那条取比例，取值与筛选器同口径', () => {
+    const rows = coverageRows([
+      coverage(['K02', 'K03'], 25),
+      coverage(['K01'], 100),
+    ])
+    expect(rows.map((row) => row.value)).toEqual(['K01', 'K02,K03'])
+    expect(rows.map((row) => row.count)).toEqual([100, 25])
+    expect(rows.every((row) => row.max === 100)).toBe(true)
+  })
+
+  it('样本太少的那几条标出来，但一条都不藏', () => {
+    const rows = coverageRows([coverage(['K01'], 19), coverage(['K02'], 20)])
+    expect(rows.map((row) => row.isThin)).toEqual([false, true])
+  })
+
+  it('全是 0 条时上限退到 1——按 0 除会得到 NaN，整排条形静默消失', () => {
+    expect(coverageRows([coverage(['K01'], 0)])[0]?.max).toBe(1)
+  })
+
+  it('一个组合都没有时给空数组，不是崩在 Math.max 上', () => {
+    expect(coverageRows([])).toEqual([])
   })
 })
 
