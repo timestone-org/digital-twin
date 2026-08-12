@@ -85,6 +85,12 @@ auth-server 的 `AUTH_EDGE_SIGNING_SECRET` 逐字相同。
   的端点。方向是安全的（边缘放行、端点拒绝），但**反过来会是一个静默的越权洞**，
   所以它登记在 `tests/contract/test_route_matrix.py` 的 `STRICTER_THAN_GATE_ONE`
   表里，并由两条断言守着：只许收紧到 `ac:manage`，且必须指向真实存在的路由。
+- ⚠ **闸 1 按方法兜住 `/api/v1/platform/*` 整个对外面**，这意味着一个**忘了写闸 2
+  的新端点不会被边缘拦下**——任何持 `ac:view` 的人都能打到它。堵住这个洞的是本服务
+  `tests/contract/test_route_matrix.py::test_no_public_route_is_left_unguarded`
+  「每条对外路由都必须自己声明权限码」。⚠ 这是一处**跨服务承重**关系：闸 1 的
+  宽口径在 auth-server，兜住它的断言在这里。删或放松那条用例之前，先想清楚谁来
+  接这个洞。
 
 ## 4. 模块结构
 
