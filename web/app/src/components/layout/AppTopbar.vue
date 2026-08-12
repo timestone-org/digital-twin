@@ -78,7 +78,9 @@ onBeforeUnmount(() => {
       <slot name="actions" />
       <!-- 换肤是外壳常驻功能，不走 actions 槽——那个槽归页面自己 -->
       <ThemeSwitcher />
-      <div class="hidden shrink-0 items-center gap-2 text-text-secondary sm:flex">
+      <div
+        class="hidden shrink-0 items-center gap-2 text-text-secondary sm:flex"
+      >
         <DtIcon name="activity" :size="14" class="text-accent-primary/70" />
         <DtDigits
           :value="now"
