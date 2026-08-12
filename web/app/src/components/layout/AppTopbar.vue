@@ -5,7 +5,7 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { DtIcon } from '@dt/ui'
+import { DtDigits, DtIcon } from '@dt/ui'
 
 import { formatTimeOfDay } from '@/utils/datetime'
 
@@ -78,11 +78,12 @@ onBeforeUnmount(() => {
       <slot name="actions" />
       <!-- 换肤是外壳常驻功能，不走 actions 槽——那个槽归页面自己 -->
       <ThemeSwitcher />
-      <div class="hidden items-center gap-2 text-text-secondary sm:flex">
+      <div class="hidden shrink-0 items-center gap-2 text-text-secondary sm:flex">
         <DtIcon name="activity" :size="14" class="text-accent-primary/70" />
-        <span class="text-sm tracking-wider text-accent-secondary">
-          {{ now }}
-        </span>
+        <DtDigits
+          :value="now"
+          class="topbar-clock text-sm tracking-wider text-accent-secondary"
+        />
       </div>
     </div>
   </header>
@@ -90,6 +91,15 @@ onBeforeUnmount(() => {
 
 <style scoped lang="scss">
 @use '@/styles/tokens-bridge' as t;
+
+// 时钟贴在顶栏最右，读数一变宽左邻的换肤钮与 actions 槽就跟着位移。DtDigits 已把每个
+// 数字锁进 1ch，这里再按最宽读数留一只固定盒子：冒号与字距不锁宽，且换语言环境后
+// 位数未必还是 8，留出富余比正好卡住稳。
+.topbar-clock {
+  display: inline-block;
+  min-width: 9ch;
+  text-align: center;
+}
 
 // 横向扫光。keyframes 定义在全局 animations.scss 里：scoped 会给块内 keyframes
 // 改名加 hash，与别处复用的同名动画对不上。
