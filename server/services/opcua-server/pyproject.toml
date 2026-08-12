@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "对上位系统暴露 opc.tcp 端点，托管多个 OPC UA 服务器实例。"
 requires-python = ">=3.12"
 dependencies = [
-    "lib[db,redis,web]",
+    # ⚠ auth 这一档不能省：deps.py 要 lib.auth 的 CallerContext 验边缘签名头，
+    # 实例凭据的哈希要 lib.auth 的 PasswordHasher。开发用的是 workspace 共享
+    # venv，auth-server 的 lib[auth] 会把 pyjwt 顺带装上，于是漏掉它在本地和
+    # 全部用例里都发现不了——只有按自己声明的依赖装的独立镜像会启动即崩。
+    "lib[auth,db,redis,web]",
     # 钉死而非范围：会话追踪要子类化 InternalServer/InternalSession，
     # 那两个扩展点不在文档化的公开 API 里，见 CONTEXT.md §5。
     "asyncua==1.1.8",

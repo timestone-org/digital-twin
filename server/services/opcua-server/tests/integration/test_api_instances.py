@@ -10,7 +10,7 @@ from opcua_server.apps.instance.deps import (
     PERM_OPERATE,
     PERM_VIEW,
 )
-from opcua_server.settings import API_PREFIX
+from opcua_server.settings import API_PREFIX, Settings
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -48,16 +48,20 @@ async def _create(
 
 @pytest.mark.usefixtures("clean_tables")
 async def test_created_instance_is_not_running(
-    client: httpx.AsyncClient, sign_headers: Headers
+    client: httpx.AsyncClient, sign_headers: Headers, settings: Settings
 ) -> None:
     """新建的实例不会自己跑起来，且端口来自池内。
 
-    Args: client, sign_headers。
+    ⚠ 断言对着配置里的池，不写死 4840-4859：测试用的池是运行时探到的
+    空闲窗口（见 conftest 的 `_free_window`），写死会让这条用例在
+    默认端口被占时红，而那与真缺陷长得一模一样。
+
+    Args: client, sign_headers, settings。
     """
     data = await _create(client, sign_headers, "fresh")
     assert data["is_running"] is False
     assert data["desired_state"] == "stopped"
-    assert 4840 <= int(str(data["port"])) <= 4859
+    assert int(str(data["port"])) in settings.ports()
 
 
 @pytest.mark.usefixtures("clean_tables")
