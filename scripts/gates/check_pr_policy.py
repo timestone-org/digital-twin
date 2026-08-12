@@ -12,11 +12,10 @@ from __future__ import annotations
 
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 
-from _report import ROOT, Violation, main
+from _report import Violation, main, run_git
 
 MAX_CHANGED_LINES = 400
 MAX_CHANGED_FILES = 20
@@ -50,14 +49,11 @@ HEAD_ARG = 3
 
 
 def _git(*args: str) -> str:
-    result = subprocess.run(
-        ["git", *args],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return result.stdout.strip()
+    """跑一条 git 并取标准输出。失败由 run_git 抛出，见那里的理由。
+
+    Args: *args。
+    """
+    return run_git(*args).strip()
 
 
 def _base() -> str:

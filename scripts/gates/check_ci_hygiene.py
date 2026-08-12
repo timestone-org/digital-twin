@@ -7,13 +7,26 @@
 
 from __future__ import annotations
 
+import ast
 import re
-import subprocess
 from pathlib import Path
 
-from _report import ROOT, Violation, at, iter_files, main, read
+from _report import (
+    PY,
+    ROOT,
+    FuncDef,
+    Violation,
+    at,
+    functions,
+    iter_files,
+    main,
+    parse,
+    read,
+    run_git,
+)
 
 WORKFLOWS = ROOT / ".github" / "workflows"
+GATES = ROOT / "scripts" / "gates"
 LOCKFILES = ("server/uv.lock", "web/pnpm-lock.yaml")
 
 USES = re.compile(r"^\s*(?:-\s*)?uses:\s*(?P<ref>\S+)")
@@ -32,14 +45,7 @@ def _workflows() -> list[Path]:
 
 
 def _tracked_files() -> set[str]:
-    result = subprocess.run(
-        ["git", "ls-files"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return set(result.stdout.splitlines())
+    return set(run_git("ls-files").splitlines())
 
 
 def check_actions_are_pinned_by_sha() -> list[Violation]:
@@ -171,6 +177,73 @@ def check_every_push_is_covered() -> list[Violation]:
     ]
 
 
+def _is_subprocess_run(call: ast.Call) -> bool:
+    """这次调用是不是 `subprocess.run`。
+
+    Args: call。
+    """
+    func = call.func
+    return (
+        isinstance(func, ast.Attribute)
+        and func.attr == "run"
+        and isinstance(func.value, ast.Name)
+        and func.value.id == "subprocess"
+    )
+
+
+def _checks_by_flag(call: ast.Call) -> bool:
+    """这次调用显式传了 `check=True`，失败会自己抛。
+
+    Args: call。
+    """
+    return any(
+        keyword.arg == "check"
+        and isinstance(keyword.value, ast.Constant)
+        and keyword.value.value is True
+        for keyword in call.keywords
+    )
+
+
+def _swallows_failure(node: FuncDef) -> bool:
+    """跑了外部命令，却既没 `check=True` 也没读 `returncode`。
+
+    Args: node。
+    """
+    calls = [
+        child
+        for child in ast.walk(node)
+        if isinstance(child, ast.Call) and _is_subprocess_run(child)
+    ]
+    if not calls or all(_checks_by_flag(call) for call in calls):
+        return False
+    return not any(
+        isinstance(child, ast.Attribute) and child.attr == "returncode"
+        for child in ast.walk(node)
+    )
+
+
+def check_gates_do_not_swallow_command_failures() -> list[Violation]:
+    """闸门跑外部命令必须查退出码。
+
+    ⚠ 吞掉失败的方向是**假绿**：`git ls-files` 挂掉时返回空集合，
+    「.env 不许进版本库」这类遍历式检查就变成遍历空集合、无条件通过。
+    worktree 里跑 act 就会真实触发——容器里 `.git` 指向宿主机路径。
+    """
+    found: list[Violation] = []
+    for path in iter_files(GATES, PY):
+        tree = parse(path)
+        if tree is None:
+            continue
+        found.extend(
+            Violation(
+                "闸门吞掉外部命令的失败", at(path, node.lineno), node.name
+            )
+            for node in functions(tree)
+            if _swallows_failure(node)
+        )
+    return found
+
+
 CHECKS = (
     check_actions_are_pinned_by_sha,
     check_no_latest_tag,
@@ -179,6 +252,7 @@ CHECKS = (
     check_images_run_as_non_root,
     check_ci_has_no_retries,
     check_every_push_is_covered,
+    check_gates_do_not_swallow_command_failures,
 )
 
 
