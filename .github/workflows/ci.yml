@@ -211,6 +211,10 @@ jobs:
       OPCUA_REDIS_PORT: '56379'
       # 私钥只落挂载卷；CI 里用一次性目录，随作业容器一起消失
       OPCUA_PKI_DIR: /tmp/opcua-pki-ci
+      # ⚠ 迁移也要它们：alembic 的 env.py 装载完整 Settings，而配置是
+      # 「启动即全量校验、缺失即退出」，少一个就在建 schema 那步失败。
+      OPCUA_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
+      OPCUA_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
