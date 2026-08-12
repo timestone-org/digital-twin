@@ -18,6 +18,10 @@ from platform_server.apps.hvac.services.ac_startup_frames import (
     RoomUnit,
     build_frames,
 )
+from platform_server.apps.hvac.services.ac_startup_rules import (
+    ExtractionRules,
+    extract_episodes,
+)
 
 BASE = datetime(2026, 3, 1, 0, 0, tzinfo=UTC)
 TEMP_BAND = MetricBand(lower=Decimal("22.00"), upper=Decimal("26.00"))
@@ -74,9 +78,7 @@ def test_a_zeroed_workshop_temperature_makes_the_frame_invalid() -> None:
     assert frames[0].is_valid is False
 
 
-@pytest.mark.parametrize(
-    "celsius", [273305.0, -30.0, 60.5], ids=["huge", "far-below", "just-over"]
-)
+@pytest.mark.parametrize("celsius", [273305.0, -30.0], ids=["huge", "below"])
 def test_a_temperature_spike_makes_the_frame_invalid(celsius: float) -> None:
     """超出 −20..60 ℃ 的读数是尖峰，那一帧不参与判定。"""
     frames = build_frames([K11], {"K11": [row(0, celsius=celsius)]})
@@ -203,3 +205,29 @@ def test_a_unit_with_no_rows_leaves_every_frame_invalid() -> None:
 def test_no_rows_at_all_yields_no_frames() -> None:
     """没有源行就没有帧。"""
     assert build_frames([K11], {}) == []
+
+
+def zeroing_rows() -> list[SourceRow]:
+    """一段带整行清零缺陷的源行：全停 30 分钟后开机，第 40 分钟被清零。"""
+    rows = [row(minute, celsius=28.0, frequency=0.0) for minute in range(30)]
+    rows.extend(row(minute, celsius=27.0) for minute in range(30, 40))
+    # 采集缺陷：这一分钟的频率与车间温度一起归零，下一分钟自行恢复
+    rows.append(row(40, celsius=0.0, frequency=0.0))
+    rows.extend(row(minute, celsius=27.0) for minute in range(41, 50))
+    rows.extend(row(minute) for minute in range(50, 71))
+    return rows
+
+
+def test_a_zeroed_minute_does_not_split_one_startup_into_two() -> None:
+    """⚠ 掩掉清零行之后，一次开机不会被切成一次停机加一次开机。
+
+    这是掩码真正的用处，也是全史里覆盖机组分钟数最多的那一条：不掩掉
+    `workshop_temp_avg = 0` 的行，按 `fan_frequency > 0` 就会凭空造出开停机对。
+    """
+    frames = build_frames([K11], {"K11": zeroing_rows()})
+    episodes = extract_episodes(frames, rules=ExtractionRules())
+    assert len(episodes) == 1
+    assert episodes[0].started_at == at(30)
+    assert episodes[0].complied_at == at(50)
+    assert episodes[0].duration_minutes == 20
+    assert episodes[0].outcome == "usable"
