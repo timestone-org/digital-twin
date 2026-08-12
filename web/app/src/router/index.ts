@@ -31,6 +31,24 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '个人资料' },
   },
   {
+    path: '/tools/opcua-servers',
+    name: 'tools-opcua-servers',
+    component: () => import('@/pages/Tools/OpcuaServers/index.vue'),
+    meta: {
+      title: 'OPC UA 服务端',
+      permissions: [PERMISSION_CODES.opcuaView],
+    },
+  },
+  {
+    path: '/tools/opcua-servers/:instanceId',
+    name: 'tools-opcua-server-detail',
+    component: () => import('@/pages/Tools/OpcuaServerDetail/index.vue'),
+    meta: {
+      title: 'OPC UA 实例',
+      permissions: [PERMISSION_CODES.opcuaView],
+    },
+  },
+  {
     path: '/system/users',
     name: 'system-users',
     component: () => import('@/pages/System/Users/index.vue'),
