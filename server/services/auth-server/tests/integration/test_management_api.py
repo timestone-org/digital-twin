@@ -396,8 +396,10 @@ async def test_new_rule_takes_effect_on_the_next_verify(
     app_client: httpx.AsyncClient,
 ) -> None:
     headers = await admin(app_client)
+    # ⚠ 建规则前必须先无规则：platform 那一片已被按方法的兜底规则整片覆盖，
+    # 拿它当「新路径」会让 before 就是 200，前后对比也就什么都没验证
     probe = {
-        "X-Original-URI": "/api/v1/platform/guarded",
+        "X-Original-URI": "/api/v1/unmanaged/guarded",
         "X-Original-Method": "GET",
     }
     token_headers = {**headers, **probe}
@@ -406,7 +408,7 @@ async def test_new_rule_takes_effect_on_the_next_verify(
         f"{API_PREFIX}/route-rules",
         headers=headers,
         json={
-            "path_pattern": "/api/v1/platform/guarded",
+            "path_pattern": "/api/v1/unmanaged/guarded",
             "http_method": "GET",
             "permission_codes": [],
             "priority": 200,
