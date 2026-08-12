@@ -49,6 +49,10 @@ class SourceProfile:
     pool_recycle_s: int = 3600
     login_timeout_s: float = 5.0
     query_timeout_s: float = 15.0
+    # ⚠ 客户端字符集。源库里 varchar 列按它自己的排序规则存字节，驱动要照这个
+    # 字符集转码。配错不会报错，只会把非 ASCII 文本变成一串看不懂的字母——而且
+    # 同一份代码在不同宿主上表现可能不同，开发机上正常、容器里乱码是常态
+    charset: str = "UTF-8"
 
     @property
     def call_budget_s(self) -> float:
@@ -85,6 +89,7 @@ class ReadOnlySqlSource:
             connect_args={
                 "login_timeout": math.ceil(profile.login_timeout_s),
                 "timeout": math.ceil(profile.query_timeout_s),
+                "charset": profile.charset,
             },
         )
 

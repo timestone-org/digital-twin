@@ -99,6 +99,9 @@ class SqlServerSettings(BaseSettings):
     sqlserver_query_timeout_s: float = 15.0
     sqlserver_pool_size: int = 5
     sqlserver_pool_recycle_s: int = 3600
+    # 驱动的客户端字符集。⚠ 老库的 varchar 列常是 CP936 一类的本地编码，配错
+    # 不报错、只出乱码，且开发机与容器的表现可能不一致
+    sqlserver_charset: str = "UTF-8"
 
     def sqlserver_dsn(self) -> str:
         """pymssql 驱动的连接串（含口令，禁止写日志）。

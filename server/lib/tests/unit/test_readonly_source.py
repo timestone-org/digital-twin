@@ -91,6 +91,7 @@ def test_engine_is_assembled_with_the_configured_pool_and_timeouts() -> None:
             pool_recycle_s=60,
             login_timeout_s=2.0,
             query_timeout_s=7.0,
+            charset="CP936",
         ),
         factory=recorder,
     )
@@ -99,8 +100,21 @@ def test_engine_is_assembled_with_the_configured_pool_and_timeouts() -> None:
         "pool_size": 3,
         "pool_recycle": 60,
         "pool_pre_ping": True,
-        "connect_args": {"login_timeout": 2, "timeout": 7},
+        "connect_args": {
+            "login_timeout": 2,
+            "timeout": 7,
+            "charset": "CP936",
+        },
     }
+
+
+def test_charset_defaults_to_utf8_and_reaches_the_driver() -> None:
+    # ⚠ 字符集配错不会报错，只会把非 ASCII 文本变成乱码，故它必须真的传下去
+    recorder = SqliteFactory()
+    ReadOnlySqlSource(dsn=DSN, factory=recorder)
+    connect_args = recorder.received["connect_args"]
+    assert isinstance(connect_args, dict)
+    assert connect_args["charset"] == "UTF-8"
 
 
 def test_sub_second_timeouts_round_up_to_a_whole_second() -> None:
@@ -114,6 +128,7 @@ def test_sub_second_timeouts_round_up_to_a_whole_second() -> None:
     assert recorder.received["connect_args"] == {
         "login_timeout": 1,
         "timeout": 1,
+        "charset": "UTF-8",
     }
 
 
