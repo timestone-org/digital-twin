@@ -11,13 +11,14 @@
   },
   "dependencies": {
     "@dt/contracts": "workspace:*",
-    "@dt/tokens": "workspace:*"
+    "@dt/tokens": "workspace:*",
+    "echarts": "^6.1.0"
   },
   "peerDependencies": {
     "vue": "^3.5.0"
   },
   "devDependencies": {
-    "vue-tsc": "^2.2.0",
-    "typescript": "~5.7.2"
+    "typescript": "~5.7.2",
+    "vue-tsc": "^2.2.0"
   }
 }
