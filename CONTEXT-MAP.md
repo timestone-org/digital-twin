@@ -9,6 +9,7 @@
 | 认证与授权 | `server/services/auth-server/` | [`server/services/auth-server/CONTEXT.md`](server/services/auth-server/CONTEXT.md) | 已建 |
 | 业务平台 | `server/services/platform-server/` | —— | 未建 |
 | 采集运行时 | `server/services/collector-server/` | —— | 未建 |
+| OPC UA 服务端 | `server/services/opcua-server/` | —— | 未建 |
 | 实时通道 | `server/services/realtime-hub/` | —— | 未建 |
 | AI 助手 | `server/services/ai-assistant/` | —— | 未建 |
 | 前端 | `web/` | [`web/CONTEXT.md`](web/CONTEXT.md) | 已建 |
@@ -27,8 +28,9 @@
 
 1. ✅ `server/` workspace 骨架（`lib` 的配置、日志、异常、响应、DB、缓存、限流、令牌）
 2. ✅ `auth-server` + `edge-gateway`（匿名被拒 / 带令牌放行 / 权限不足被拒 三条路径已跑通）
-3. ⬜ `platform-server` 的 `api` 角色
-4. ⬜ `realtime-hub` + `platform-publisher`
-5. ⬜ `collector-server`
-6. ⬜ `platform-worker`
-7. ⬜ `ai-assistant`
+3. ⬜ `opcua-server`
+4. ⬜ `realtime-hub`
+5. ⬜ `platform-server` 的 `api` 角色 + `platform-publisher`
+6. ⬜ `collector-server`
+7. ⬜ `platform-worker`
+8. ⬜ `ai-assistant`
