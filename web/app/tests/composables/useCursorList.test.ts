@@ -7,7 +7,8 @@ import { describe, expect, it, vi } from 'vitest'
 import type { CursorPage } from '@dt/contracts'
 
 import { BizError } from '@/api/client'
-import { useCursorList } from '@/pages/Hvac/AcData/useCursorList'
+import { describeAcDataError } from '@/pages/Hvac/AcData/acDataError'
+import { useCursorList } from '@/composables/useCursorList'
 
 function page(items: string[], next: string | null = null): CursorPage<string> {
   return { items, next, has_more: next !== null }
@@ -15,7 +16,10 @@ function page(items: string[], next: string | null = null): CursorPage<string> {
 
 describe('useCursorList', () => {
   it('首屏替换整份列表，并记下有没有下一页', async () => {
-    const list = useCursorList(() => Promise.resolve(page(['a'], 'C1')))
+    const list = useCursorList(
+      () => Promise.resolve(page(['a'], 'C1')),
+      describeAcDataError,
+    )
     await list.reload()
     expect(list.items.value).toEqual(['a'])
     expect(list.hasMore.value).toBe(true)
@@ -26,7 +30,7 @@ describe('useCursorList', () => {
       .fn<(after: string | null) => Promise<CursorPage<string>>>()
       .mockResolvedValueOnce(page(['a'], 'C1'))
       .mockResolvedValueOnce(page(['b']))
-    const list = useCursorList(fetcher)
+    const list = useCursorList(fetcher, describeAcDataError)
     await list.reload()
     await list.loadMore()
     expect(list.items.value).toEqual(['a', 'b'])
@@ -38,7 +42,7 @@ describe('useCursorList', () => {
       .fn<(after: string | null) => Promise<CursorPage<string>>>()
       .mockResolvedValueOnce(page(['a'], 'eyJ0cyI6ICIyMDI2In0='))
       .mockResolvedValueOnce(page(['b']))
-    const list = useCursorList(fetcher)
+    const list = useCursorList(fetcher, describeAcDataError)
     await list.reload()
     await list.loadMore()
     expect(fetcher.mock.calls[0]?.[0]).toBeNull()
@@ -49,7 +53,7 @@ describe('useCursorList', () => {
     const fetcher = vi
       .fn<(after: string | null) => Promise<CursorPage<string>>>()
       .mockResolvedValue(page(['a']))
-    const list = useCursorList(fetcher)
+    const list = useCursorList(fetcher, describeAcDataError)
     await list.reload()
     await list.loadMore()
     expect(fetcher).toHaveBeenCalledTimes(1)
@@ -60,7 +64,7 @@ describe('useCursorList', () => {
       .fn<(after: string | null) => Promise<CursorPage<string>>>()
       .mockResolvedValueOnce(page(['a'], 'C1'))
       .mockReturnValueOnce(new Promise(() => undefined))
-    const list = useCursorList(fetcher)
+    const list = useCursorList(fetcher, describeAcDataError)
     await list.reload()
     void list.loadMore()
     await list.loadMore()
@@ -72,7 +76,7 @@ describe('useCursorList', () => {
       .fn<(after: string | null) => Promise<CursorPage<string>>>()
       .mockResolvedValueOnce(page(['a'], 'C1'))
       .mockRejectedValueOnce(new BizError(51601, '外部数据源不可用', 503, 't'))
-    const list = useCursorList(fetcher)
+    const list = useCursorList(fetcher, describeAcDataError)
     await list.reload()
     await list.reload()
     expect(list.items.value).toEqual([])

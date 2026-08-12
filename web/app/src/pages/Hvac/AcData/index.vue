@@ -23,9 +23,10 @@ import {
   rangeProblem,
   toggleMetric,
 } from './acDataQuery'
+import { describeAcDataError } from './acDataError'
 import { toSampleColumns, toSampleRow } from './sampleTable'
 import { useAcDataView } from './useAcDataView'
-import { useCursorList } from './useCursorList'
+import { useCursorList } from '@/composables/useCursorList'
 import { useRawSeries } from './useRawSeries'
 import AcDataToolbar from './components/AcDataToolbar.vue'
 import RawSampleTable from './components/RawSampleTable.vue'
@@ -54,12 +55,14 @@ const datasetOptions = computed<DtSelectOption[]>(() =>
 )
 const columns = computed(() => toSampleColumns(metrics.value))
 
-const samples = useCursorList((after) =>
-  hvac.listRawSamples(acUnitId.value, {
-    from: from.value,
-    to: to.value,
-    ...(after === null ? {} : { after }),
-  }),
+const samples = useCursorList(
+  (after) =>
+    hvac.listRawSamples(acUnitId.value, {
+      from: from.value,
+      to: to.value,
+      ...(after === null ? {} : { after }),
+    }),
+  describeAcDataError,
 )
 const series = useRawSeries(() =>
   hvac.getRawSeries(acUnitId.value, {
