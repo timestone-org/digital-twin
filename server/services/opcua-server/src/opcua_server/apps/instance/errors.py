@@ -32,6 +32,17 @@ class PortPoolExhausted(AppError):
     http_status = 409
 
 
+class PortUnavailable(AppError):
+    """指定的端口不在池内，或已被别的实例占用。
+
+    ⚠ 与 `PortPoolExhausted` 分开：那条是「池满了」，这条是「你点名要的
+    那个不行」。合成一条会让页面没法告诉用户到底该换端口还是该扩池。
+    """
+
+    code = 42113
+    http_status = 409
+
+
 class InstanceAlreadyRunning(AppError):
     """实例已在运行，重复启动无意义。"""
 
