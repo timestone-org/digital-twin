@@ -343,6 +343,13 @@ ROUTE_RULES: tuple[RouteRuleSpec, ...] = (
     ),
     RouteRuleSpec(
         f"{_PLATFORM}/*",
+        "PUT",
+        codes=(AC_MANAGE,),
+        priority=900,
+        description="覆盖式写：数据源绑定与达标范围",
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/*",
         "PATCH",
         codes=(AC_MANAGE,),
         priority=900,
