@@ -16,7 +16,7 @@
 
 ### Service topology
 
-后端 **5 个代码单元、8 个部署单元**：`auth-server` / `platform-server` / `collector-server` / `realtime-hub` / `ai-assistant`，其中 `platform-server` 按 `ROLE=api|worker|publisher` 跑出三种进程。**代码单元 ≠ 部署单元**——扩缩与故障隔离在部署层解决，不为运行角色另建服务目录。数据是一库多 schema、**写独占读放行**。见 `docs/ARCHITECTURE_MICROSERVICES.md` 与 `docs/adr/0001`–`0005`。
+后端 **6 个代码单元、9 个部署单元**：`auth-server` / `platform-server` / `collector-server` / `opcua-server` / `realtime-hub` / `ai-assistant`，其中 `platform-server` 按 `ROLE=api|worker|publisher` 跑出三种进程，`opcua-server` 独占 opc.tcp 端口段、单活且不经边缘。**代码单元 ≠ 部署单元**——扩缩与故障隔离在部署层解决，不为运行角色另建服务目录。数据是一库多 schema、**写独占读放行**。见 `docs/ARCHITECTURE_MICROSERVICES.md` 与 `docs/adr/0001`–`0007`。
 
 ### Project structure
 

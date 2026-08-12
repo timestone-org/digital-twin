@@ -1,6 +1,6 @@
 # 服务架构
 
-> 后端由 **5 个代码单元、8 个部署单元**构成。本文定义它们各自的边界、通信方式与数据所有权。
+> 后端由 **6 个代码单元、9 个部署单元**构成。本文定义它们各自的边界、通信方式与数据所有权。
 > 每条约束的理由见 [`adr/`](adr/)；代码结构见 [`agents/project-structure-python.md`](agents/project-structure-python.md)；镜像构建见 [`agents/docker-build.md`](agents/docker-build.md)。
 
 ---
@@ -23,6 +23,7 @@
 | 成分 | 网络位置 | 扩缩维度 | 爆炸半径 | 结论 |
 |---|---|---|---|---|
 | OPC UA 连接、订阅、采样、归档 | **工控网** | PLC 分片，单活 | 高：重复会话击穿 PLC 会话上限 | 独立服务 |
+| 对上位系统暴露 opc.tcp 端点 | 独占宿主机端口段 | 不水平扩，单活 | 中：重启期间端点整体不可用 | 独立服务 |
 | 报告渲染 / 台账重算回填 / 建模训练 / 3D 拆分 | 无 | 队列深度、CPU 核 | 高：OOM 拖垮 API | 独立进程角色 |
 | 看板实时发布 | 无 | 活跃看板数 | 中 | 独立进程角色 |
 | WebSocket 连接与扇出 | 无 | 连接数 | 中 | 独立服务 |
@@ -35,17 +36,18 @@
 
 ## 2. 服务清单
 
-### 2.1 代码单元（`server/services/*`，5 个）
+### 2.1 代码单元（`server/services/*`，6 个）
 
 | 服务 | 职责 | 对外前缀 | 端口 |
 |---|---|---|---|
 | `auth-server` | 认证、RBAC 权限判定、路由规则、边缘鉴权端点 `/verify` | `/api/v1/auth` | 8004 |
 | `platform-server` | 组态大屏、点位配置、数据台账、报告、AI 建模、素材、运行参数 | `/api/v1/platform` | 8005 |
 | `collector-server` | 连接 PLC、订阅、采样、写快照与历史 | 无业务面（仅探针） | 8007 |
+| `opcua-server` | 对上位系统暴露 opc.tcp 端点，托管多个 OPC UA 服务器实例 | `/api/v1/opcua` | 8008 |
 | `realtime-hub` | WebSocket 连接与订阅、服务→客户端扇出、通知 | `/api/v1/realtime` | 8000 |
 | `ai-assistant` | 对话式助手、知识检索、意图路由 | `/api/v1/assistant` | 8006 |
 
-### 2.2 部署单元（8 个）
+### 2.2 部署单元（9 个）
 
 | # | 部署单元 | 代码单元 | 角色 | 副本策略 |
 |---|---|---|---|---|
@@ -53,10 +55,11 @@
 | 2 | `auth-server` | auth-server | api | HPA（QPS） |
 | 3 | `realtime-hub` | realtime-hub | hub | 按连接数 |
 | 4 | `collector` | collector-server | leader | **单活 + 热备**（租约竞选，`replicas: 2`） |
-| 5 | `platform-api` | platform-server | `api` | HPA（QPS），**完全无状态** |
-| 6 | `platform-worker` | platform-server | `worker` | HPA（队列深度） |
-| 7 | `platform-publisher` | platform-server | `publisher` | **单活**（租约） |
-| 8 | `ai-assistant` | ai-assistant | api | HPA |
+| 5 | `opcua-server` | opcua-server | api | **单活无热备**（`replicas: 1`，端口独占，不做租约竞选，见 [ADR-0006](adr/0006-opcua服务端独立成代码单元.md)） |
+| 6 | `platform-api` | platform-server | `api` | HPA（QPS），**完全无状态** |
+| 7 | `platform-worker` | platform-server | `worker` | HPA（队列深度） |
+| 8 | `platform-publisher` | platform-server | `publisher` | **单活**（租约） |
+| 9 | `ai-assistant` | ai-assistant | api | HPA |
 | — | `migrate` | 各服务 | one-shot | 部署前 Job |
 
 `platform-publisher` 与 `platform-worker` 可以合成一个进程（`ROLE=worker,publisher`）省一份内存。一旦实测批任务的 CPU 抖动把推送延迟拉高就拆开——两者是同一镜像换启动参数，拆分成本接近零。
@@ -111,7 +114,19 @@
 
 对外只有两类接口：客户端的 WebSocket 端点（带鉴权），以及服务端的推送端点（服务级密钥，不是用户权限码——权限码挂在人身上，而这里要挡的正是"任何人"）。
 
-### 3.6 `ai-assistant`
+### 3.6 `opcua-server`
+
+对上位系统（SCADA、MES）暴露 `opc.tcp` 端点的**发布面**。方向与 `collector-server` 相反：那里本平台是 OPC UA 客户端，主动去连 PLC；这里本平台是 OPC UA 服务端，被上位机连。两者共用协议，不共用运行时，也不共用数据。
+
+一期是纯人造数据：节点值由 `/api/v1/opcua` 管理面写入，上位机也可反向写值。**它不桥接内部点位**——把采集快照映射成 OPC UA 节点会让它依赖采集运行时，那条路留插件点不实现。
+
+单进程内托管多个实例，每个实例一个 `opc.tcp` 端口，从固定端口池（默认 `4840`–`4859`）分配。**端口池是部署期常量**，由容器端口段映射决定，运行期开不出池外的新端口——池满即**响亮失败**，不许静默降级成一个"显示运行中但连不上"的实例。副本固定为 1 且不做租约竞选，理由见 [ADR-0006](adr/0006-opcua服务端独立成代码单元.md)。
+
+**它的 `opc.tcp` 端口不经 edge-gateway。** 边缘只有 http block，转不了二进制 TCP；这段流量的安全完全由 OPC UA 自身的 SecurityPolicy 与身份令牌承担。只有 `/api/v1/opcua` 的 HTTP 管理面走边缘。
+
+明确**不做**：OPC UA PubSub、GDS（全局发现服务）、Issued Token 身份令牌。
+
+### 3.7 `ai-assistant`
 
 对话式助手。它是**纯消费方**：经 HTTP 调 platform 取业务数据、调 auth 校验身份，不直连任何其它服务的数据库。
 
@@ -148,6 +163,7 @@ server/
 | schema | 内容 | 属主 |
 |---|---|---|
 | `auth` | 用户、角色、权限码、路由规则、API 密钥 | auth-server |
+| `opcua` | 服务器实例、地址空间节点与类型、方法定义、实例凭据与信任证书 | opcua-server |
 | `realtime` | 主题登记、用户订阅 | realtime-hub |
 | `assistant` | 会话、消息、知识块 | ai-assistant |
 | `platform` | 大屏、绑定、项目、模板、素材、点位配置、台账、报告、建模 | platform-server |
@@ -194,19 +210,22 @@ server/
 
 1. **`server/` workspace 骨架**：`lib` 的配置、日志、异常、响应包封、DB 会话、Redis 客户端，加 `create_app()` 工厂与结构闸。此时没有任何业务。
 2. **`auth-server` + `edge-gateway`**：鉴权链路是所有其它服务的前提。先跑通"匿名被拒、带 token 放行、权限码不足被拒"三条路径。
-3. **`platform-server` 的 `api` 角色**：从点位配置与组态大屏两个模块起步，此时数据全部来自手工录入。
-4. **`realtime-hub` + `platform-publisher`**：打通推送链路，大屏能收到变化。
-5. **`collector-server`**：接上真实 PLC，采集计划下发 → 快照 → 历史归档。至此实时数据面完整。
-6. **`platform-worker`**：队列骨架 + 台账聚合，再逐个接入报告渲染、建模、3D 拆分。
-7. **`ai-assistant`**：它是纯消费方，最后接。
+3. **`opcua-server`**：它自成闭环——纯人造数据，不依赖任何未建成的服务，单独跑通就有完整价值（上位机能连、能读、能写）。它同时就是第 6 步所需的那个**可控 OPC UA 假件**，采集链路不必再另造一个。
+4. **`realtime-hub`**（先不带 `platform-publisher`）：hub 建成时需要一个真实推送方来趟通主题登记与推送端点，`opcua-server` 正是它的第一个消费方。跨服务耦合点靠假件验证不出来。
+5. **`platform-server` 的 `api` 角色**，随后接上 `platform-publisher`：从点位配置与组态大屏两个模块起步，此时数据全部来自手工录入；发布器接上后大屏能收到变化。
+6. **`collector-server`**：接上真实 PLC，采集计划下发 → 快照 → 历史归档。至此实时数据面完整。
+7. **`platform-worker`**：队列骨架 + 台账聚合，再逐个接入报告渲染、建模、3D 拆分。
+8. **`ai-assistant`**：它是纯消费方，最后接。
 
-第 2 步之前不写任何业务代码，第 5 步之前不接真实 PLC——用可控的 OPC UA 假件把采集链路先验证完。
+第 2 步之前不写任何业务代码，第 6 步之前不接真实 PLC——用第 3 步产出的那台可控 OPC UA 服务器把采集链路先验证完。
 
 ---
 
 ## 9. 什么情况下重新审视这份划分
 
 按业务域进一步拆分（dashboard / dataset / report / modeling 各自独立）**不在计划内**：它们的查询与 CRUD 面共享领域模型，拆开只买到跨服务 JOIN。
+
+`opcua-server` 的独立不属于此列：它划的是**网络形态**——对外开放非 HTTP 监听端口且必须单活，判据见 §1 与 [ADR-0006](adr/0006-opcua服务端独立成代码单元.md)。
 
 满足以下任意两条时重新评估：
 
