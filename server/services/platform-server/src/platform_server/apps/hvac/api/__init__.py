@@ -2,12 +2,13 @@
 
 from fastapi import APIRouter
 
-from platform_server.apps.hvac.api import ac_units, rooms, workshops
+from platform_server.apps.hvac.api import ac_data, ac_units, rooms, workshops
 
 ROUTERS: tuple[APIRouter, ...] = (
     workshops.router,
     rooms.router,
     ac_units.router,
+    ac_data.router,
 )
 
 __all__ = ["ROUTERS"]

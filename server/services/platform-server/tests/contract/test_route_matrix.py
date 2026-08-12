@@ -27,10 +27,11 @@ from platform_server.settings import API_PREFIX
 SAMPLE_ID = "3fa85f64-5717-4562-b3fc-2c963f66afa6"
 _PARAM = re.compile(r"\{[^}]+\}")
 
-# 与 auth-server catalog 里 `/api/v1/platform/*` 那四条规则逐字对应
+# 与 auth-server catalog 里 `/api/v1/platform/*` 那五条规则逐字对应
 EXPECTED: dict[str, frozenset[str]] = {
     "GET": frozenset({AC_VIEW}),
     "POST": frozenset({AC_MANAGE}),
+    "PUT": frozenset({AC_MANAGE}),
     "PATCH": frozenset({AC_MANAGE}),
     "DELETE": frozenset({AC_MANAGE}),
 }

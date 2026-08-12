@@ -6,6 +6,7 @@
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from typing import Annotated
 
 from pydantic import (
@@ -24,6 +25,14 @@ Utc = Annotated[
     datetime,
     PlainSerializer(format_rfc3339, return_type=str),
     WithJsonSchema({"type": "string", "format": "date-time"}),
+]
+
+# ⚠ 精确小数走字符串，不走 JSON 数字：JSON 数字在 JS 侧是双精度浮点，
+# 人配的 20.15 会读成 20.149999999999999。见 docs/agents/api-contract.md §6。
+ExactDecimal = Annotated[
+    Decimal,
+    PlainSerializer(str, return_type=str),
+    WithJsonSchema({"type": "string"}),
 ]
 
 # 现场的车间名、房间名、设备编号都可能是中文，故只限长度不限字符集；

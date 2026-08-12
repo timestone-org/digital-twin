@@ -1,6 +1,71 @@
 {
   "components": {
     "schemas": {
+      "AcDataBindingOut": {
+        "description": "一条数据源绑定。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dataset": {
+            "title": "Dataset",
+            "type": "string"
+          },
+          "source_object": {
+            "title": "Source Object",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset",
+          "source_object",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AcDataBindingOut",
+        "type": "object"
+      },
+      "AcDataBindingPutIn": {
+        "additionalProperties": false,
+        "description": "设置绑定。数据集在路径上，故这里只有对象名。",
+        "properties": {
+          "source_object": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Source Object",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_object"
+        ],
+        "title": "AcDataBindingPutIn",
+        "type": "object"
+      },
+      "AcDataBindingsOut": {
+        "description": "一台空调的全部绑定。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AcDataBindingOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AcDataBindingsOut",
+        "type": "object"
+      },
       "AcUnitCreateIn": {
         "additionalProperties": false,
         "description": "建空调。房间必填——空调不允许处于没有归属的中间态。",
@@ -171,6 +236,96 @@
         "title": "AcUnitUpdateIn",
         "type": "object"
       },
+      "ApiResponse_AcDataBindingOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AcDataBindingOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[AcDataBindingOut]",
+        "type": "object"
+      },
+      "ApiResponse_AcDataBindingsOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AcDataBindingsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[AcDataBindingsOut]",
+        "type": "object"
+      },
       "ApiResponse_AcUnitOut_": {
         "properties": {
           "code": {
@@ -259,6 +414,96 @@
           }
         },
         "title": "ApiResponse[AcUnitRelocateOut]",
+        "type": "object"
+      },
+      "ApiResponse_DatasetsOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DatasetsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[DatasetsOut]",
+        "type": "object"
+      },
+      "ApiResponse_MetricLimitsOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MetricLimitsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[MetricLimitsOut]",
         "type": "object"
       },
       "ApiResponse_Page_AcUnitOut__": {
@@ -486,6 +731,55 @@
         "title": "ApiResponse[WorkshopOut]",
         "type": "object"
       },
+      "DatasetOut": {
+        "description": "目录里的一个数据集。",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/MetricOut"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "description",
+          "metrics"
+        ],
+        "title": "DatasetOut",
+        "type": "object"
+      },
+      "DatasetsOut": {
+        "description": "数据集目录。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DatasetOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "DatasetsOut",
+        "type": "object"
+      },
       "FieldErrorOut": {
         "description": "字段级校验错误的对外形状。",
         "properties": {
@@ -521,6 +815,156 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "MetricLimitIn": {
+        "additionalProperties": false,
+        "description": "一个指标的达标范围。两端都省略等同于不配置该指标。",
+        "properties": {
+          "lower_limit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lower Limit"
+          },
+          "metric": {
+            "title": "Metric",
+            "type": "string"
+          },
+          "upper_limit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upper Limit"
+          }
+        },
+        "required": [
+          "metric"
+        ],
+        "title": "MetricLimitIn",
+        "type": "object"
+      },
+      "MetricLimitOut": {
+        "description": "一个指标的达标范围。单边为 null 表示该侧不限制。",
+        "properties": {
+          "lower_limit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lower Limit"
+          },
+          "metric": {
+            "title": "Metric",
+            "type": "string"
+          },
+          "upper_limit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upper Limit"
+          }
+        },
+        "required": [
+          "metric",
+          "lower_limit",
+          "upper_limit"
+        ],
+        "title": "MetricLimitOut",
+        "type": "object"
+      },
+      "MetricLimitsOut": {
+        "description": "一台空调的全部达标范围。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MetricLimitOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "MetricLimitsOut",
+        "type": "object"
+      },
+      "MetricLimitsPutIn": {
+        "additionalProperties": false,
+        "description": "覆盖式设置一台空调的全部达标范围。\n\n⚠ 覆盖式：请求里没出现的指标视为清除。这与 PATCH 的「没给就是不改」相反，\n用 PUT 正是为了把这个语义摆在方法上。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MetricLimitIn"
+            },
+            "maxItems": 64,
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "MetricLimitsPutIn",
+        "type": "object"
+      },
+      "MetricOut": {
+        "description": "目录里的一个指标。前端的指标选择器与 Y 轴分组都读它。",
+        "properties": {
+          "group": {
+            "title": "Group",
+            "type": "string"
+          },
+          "is_charted_by_default": {
+            "title": "Is Charted By Default",
+            "type": "boolean"
+          },
+          "is_limitable": {
+            "title": "Is Limitable",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "unit",
+          "group",
+          "is_limitable",
+          "is_charted_by_default"
+        ],
+        "title": "MetricOut",
         "type": "object"
       },
       "Page_AcUnitOut_": {
@@ -881,6 +1325,28 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/platform/ac-datasets": {
+      "get": {
+        "description": "可看的数据集与它们的指标。加数据集时前端不用改。\n\nArgs: _viewer。",
+        "operationId": "list_datasets_api_v1_platform_ac_datasets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_DatasetsOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "数据集目录",
+        "tags": [
+          "ac-data"
+        ]
+      }
+    },
     "/api/v1/platform/ac-units": {
       "get": {
         "description": "分页列出空调，可按车间、房间与关键字过滤。\n\nArgs: session, page, filters, _viewer, sort。",
@@ -1172,6 +1638,253 @@
         "summary": "更新空调",
         "tags": [
           "ac-unit"
+        ]
+      }
+    },
+    "/api/v1/platform/ac-units/{ac_unit_id}/data-bindings": {
+      "get": {
+        "description": "一台空调绑了哪些数据源。\n\nArgs: ac_unit_id, session, _viewer。",
+        "operationId": "list_bindings_api_v1_platform_ac_units__ac_unit_id__data_bindings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ac_unit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Ac Unit Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AcDataBindingsOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "空调的数据源绑定",
+        "tags": [
+          "ac-data"
+        ]
+      }
+    },
+    "/api/v1/platform/ac-units/{ac_unit_id}/data-bindings/{dataset}": {
+      "delete": {
+        "description": "解除绑定。没绑过也返回 204——DELETE 必须幂等。\n\nArgs: ac_unit_id, dataset, session, _manager。",
+        "operationId": "delete_binding_api_v1_platform_ac_units__ac_unit_id__data_bindings__dataset__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ac_unit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Ac Unit Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "dataset",
+            "required": true,
+            "schema": {
+              "title": "Dataset",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "解除数据源绑定",
+        "tags": [
+          "ac-data"
+        ]
+      },
+      "put": {
+        "description": "把这台空调的这个数据集指向外部库里的一个对象。\n\nArgs: ac_unit_id, dataset, payload, session, _manager。",
+        "operationId": "put_binding_api_v1_platform_ac_units__ac_unit_id__data_bindings__dataset__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ac_unit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Ac Unit Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "dataset",
+            "required": true,
+            "schema": {
+              "title": "Dataset",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcDataBindingPutIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AcDataBindingOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "设置数据源绑定",
+        "tags": [
+          "ac-data"
+        ]
+      }
+    },
+    "/api/v1/platform/ac-units/{ac_unit_id}/metric-limits": {
+      "get": {
+        "description": "一台空调各指标的上下限。\n\nArgs: ac_unit_id, session, _viewer。",
+        "operationId": "list_metric_limits_api_v1_platform_ac_units__ac_unit_id__metric_limits_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ac_unit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Ac Unit Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_MetricLimitsOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "空调的达标范围",
+        "tags": [
+          "ac-data"
+        ]
+      },
+      "put": {
+        "description": "覆盖式设置达标范围。请求里没出现的指标视为清除。\n\nArgs: ac_unit_id, payload, session, _manager。",
+        "operationId": "put_metric_limits_api_v1_platform_ac_units__ac_unit_id__metric_limits_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ac_unit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Ac Unit Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetricLimitsPutIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_MetricLimitsOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "设置达标范围",
+        "tags": [
+          "ac-data"
         ]
       }
     },
