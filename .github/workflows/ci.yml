@@ -201,6 +201,17 @@ jobs:
       # ⚠ 必须与集成用例里写死的口令一致：那几条用例是以种子管理员身份登录的
       AUTH_SEED_ADMIN_PASSWORD: Admin123456
 
+      OPCUA_POSTGRES_HOST: localhost
+      OPCUA_POSTGRES_PORT: '55432'
+      OPCUA_POSTGRES_USER: dt
+      OPCUA_POSTGRES_PASSWORD: dt
+      OPCUA_POSTGRES_DB: dt
+      OPCUA_POSTGRES_SCHEMA: opcua
+      OPCUA_REDIS_HOST: localhost
+      OPCUA_REDIS_PORT: '56379'
+      # 私钥只落挂载卷；CI 里用一次性目录，随作业容器一起消失
+      OPCUA_PKI_DIR: /tmp/opcua-pki-ci
+
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -219,6 +230,10 @@ jobs:
           uv run alembic upgrade head
           uv run auth-seed
 
+      - name: 建 opcua schema
+        working-directory: server/services/opcua-server
+        run: uv run alembic upgrade head
+
       # ⚠ --cov 必须用点号模块名：写成路径形式时 coverage 静默跳过、数字虚高
       - name: lib 单元 + 契约
         working-directory: server/lib
@@ -236,6 +251,20 @@ jobs:
             --cov-report=xml:../../../auth-coverage.xml \
             --junitxml=../../../auth-junit.xml 2>&1 | tee ../../../auth-pytest.log
 
+      # ⚠ COVERAGE_CORE=sysmon 与 `branch = false` 是一对，缺一个就挂死：
+      # coverage 的默认追踪器会被 asyncua 那个 78000 行的生成函数拖住，
+      # 单条起真实 Server 的用例 >200s 不返回。理由与补偿见 ADR-0008。
+      - name: opcua-server 全层
+        working-directory: server/services/opcua-server
+        env:
+          COVERAGE_CORE: sysmon
+        run: |
+          set -o pipefail
+          uv run pytest -q --cov=opcua_server \
+            --cov-report=xml:../../../opcua-coverage.xml \
+            --junitxml=../../../opcua-junit.xml 2>&1 \
+            | tee ../../../opcua-pytest.log
+
       # CI 里 skip 掉的用例等于没跑：环境能力由服务容器保证，缺了就该红
       - name: 运行结果自检（无 skip、无外网、覆盖率口径）
         run: |
@@ -243,6 +272,8 @@ jobs:
             lib-junit.xml lib-pytest.log
           uv run --project server python scripts/gates/check_pytest_run.py \
             auth-junit.xml auth-pytest.log
+          uv run --project server python scripts/gates/check_pytest_run.py \
+            opcua-junit.xml opcua-pytest.log
 
       # 整体覆盖率不许低于基线——哪怕仍在阈值之上
       - name: 覆盖率棘轮
@@ -251,12 +282,15 @@ jobs:
             lib lib-coverage.xml
           uv run --project server python scripts/gates/check_coverage.py \
             auth-server auth-coverage.xml
+          uv run --project server python scripts/gates/check_coverage.py \
+            opcua-server opcua-coverage.xml
 
       - name: 增量覆盖 ≥90%
         if: github.event_name == 'pull_request'
         run: |
           git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
-          uv run --project server diff-cover lib-coverage.xml auth-coverage.xml \
+          uv run --project server diff-cover \
+            lib-coverage.xml auth-coverage.xml opcua-coverage.xml \
             --compare-branch "origin/${{ github.base_ref }}" --fail-under=90
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -336,9 +370,40 @@ jobs:
         working-directory: server/services/auth-server
         run: uv run auth-openapi --check
 
+      # ⚠ 按路径调而不是 console 入口：`scripts` 是顶层包名，auth-server 已把
+      # 它打进 wheel，同一个 venv 里两份会互相覆盖，导出脚本可能改写**另一个
+      # 服务**的 openapi.json。理由与实测见 opcua-server 的 pyproject。
+      - name: opcua-server 的 openapi.json 与代码一致
+        working-directory: server/services/opcua-server
+        env:
+          OPCUA_POSTGRES_HOST: localhost
+          OPCUA_POSTGRES_PORT: '55432'
+          OPCUA_POSTGRES_USER: dt
+          OPCUA_POSTGRES_PASSWORD: dt
+          OPCUA_POSTGRES_DB: dt
+          OPCUA_POSTGRES_SCHEMA: opcua
+          OPCUA_REDIS_HOST: redis-not-used-in-this-job
+          OPCUA_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
+          OPCUA_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
+        run: uv run python scripts/export_openapi.py --check
+
       # ⚠ 代码可以回滚、数据库不回滚，所以每个迁移都必须真的能上能下
       - name: 迁移 upgrade → downgrade → upgrade
         working-directory: server/services/auth-server
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+
+      - name: opcua-server 的迁移 upgrade → downgrade → upgrade
+        working-directory: server/services/opcua-server
+        env:
+          OPCUA_POSTGRES_HOST: localhost
+          OPCUA_POSTGRES_PORT: '55432'
+          OPCUA_POSTGRES_USER: dt
+          OPCUA_POSTGRES_PASSWORD: dt
+          OPCUA_POSTGRES_DB: dt
+          OPCUA_POSTGRES_SCHEMA: opcua
         run: |
           uv run alembic upgrade head
           uv run alembic downgrade base
