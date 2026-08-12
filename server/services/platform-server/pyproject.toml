@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "业务平台：空调台账与车间房间空间配置。"
 requires-python = ">=3.12"
 dependencies = [
-    "lib[auth,db,web]",
+    "lib[auth,db,mssql,web]",
 ]
 
 [project.scripts]

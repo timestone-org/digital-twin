@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from lib.db import Database, PoolProfile
+from lib.db import Database, PoolProfile, ReadOnlySqlSource, SourceProfile
 from platform_server.settings import Settings
 
 
@@ -12,6 +12,7 @@ class Container:
 
     settings: Settings
     database: Database
+    ac_source: ReadOnlySqlSource
 
 
 def build_container(settings: Settings) -> Container:
@@ -19,7 +20,11 @@ def build_container(settings: Settings) -> Container:
 
     Args: settings。
     """
-    return Container(settings=settings, database=_build_database(settings))
+    return Container(
+        settings=settings,
+        database=_build_database(settings),
+        ac_source=_build_ac_source(settings),
+    )
 
 
 def _build_database(settings: Settings) -> Database:
@@ -33,4 +38,20 @@ def _build_database(settings: Settings) -> Database:
             lock_timeout_ms=settings.postgres_lock_timeout_ms,
         ),
         search_path=settings.postgres_schema,
+    )
+
+
+def _build_ac_source(settings: Settings) -> ReadOnlySqlSource:
+    """外部只读数据源。⚠ 只跑 SELECT，不建表、不迁移，见 docs/adr/0006。
+
+    Args: settings。
+    """
+    return ReadOnlySqlSource(
+        dsn=settings.sqlserver_dsn(),
+        profile=SourceProfile(
+            pool_size=settings.sqlserver_pool_size,
+            pool_recycle_s=settings.sqlserver_pool_recycle_s,
+            login_timeout_s=settings.sqlserver_login_timeout_s,
+            query_timeout_s=settings.sqlserver_query_timeout_s,
+        ),
     )

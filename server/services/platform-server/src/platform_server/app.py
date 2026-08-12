@@ -50,6 +50,11 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
             startup_order=10,
         ),
         LifespanHook(
+            name="ac_source",
+            shutdown=container.ac_source.dispose,
+            shutdown_order=98,
+        ),
+        LifespanHook(
             name="database",
             shutdown=container.database.dispose,
             # 连接池最后关：在途请求还要用它
@@ -59,6 +64,8 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
 
 
 def _probes(container: Container) -> tuple[ReadinessProbe, ...]:
+    # ⚠ 外部只读源不进就绪判定（docs/adr/0006）：它抖一下只该让空调数据面返回
+    # 503，台账页与空间配置页照常工作；进了这里就是整个副本被摘流量
     return (ReadinessProbe(name="postgres", check=container.database.ping),)
 
 
@@ -74,9 +81,28 @@ async def _selfcheck(container: Container) -> None:
             "依赖自检通过",
             postgres=settings.postgres_target(),
         )
+    else:
+        _logger.error(
+            "startup_selfcheck_failed",
+            "数据库不可达，服务将保持未就绪",
+            postgres=settings.postgres_target(),
+        )
+    await _selfcheck_ac_source(container)
+
+
+async def _selfcheck_ac_source(container: Container) -> None:
+    """外部只读源的可达性只记录、不阻断启动，也不进就绪判定。
+
+    Args: container。
+    """
+    target = container.settings.sqlserver_target()
+    if await container.ac_source.ping():
+        _logger.info(
+            "ac_source_selfcheck_passed", "外部只读数据源可达", ac_source=target
+        )
         return
-    _logger.error(
-        "startup_selfcheck_failed",
-        "数据库不可达，服务将保持未就绪",
-        postgres=settings.postgres_target(),
+    _logger.warning(
+        "ac_source_selfcheck_failed",
+        "外部只读数据源不可达，空调数据面将返回 503",
+        ac_source=target,
     )

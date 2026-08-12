@@ -843,11 +843,11 @@ name = "platform-server"
 version = "0.1.0"
 source = { editable = "services/platform-server" }
 dependencies = [
-    { name = "lib", extra = ["auth", "db", "web"] },
+    { name = "lib", extra = ["auth", "db", "mssql", "web"] },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "lib", extras = ["auth", "db", "web"], editable = "lib" }]
+requires-dist = [{ name = "lib", extras = ["auth", "db", "mssql", "web"], editable = "lib" }]
 
 [[package]]
 name = "platformdirs"

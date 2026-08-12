@@ -28,6 +28,10 @@ def _export_settings() -> Settings:
         postgres_user=_PLACEHOLDER,
         postgres_password=SecretStr(_PLACEHOLDER),
         postgres_db=_PLACEHOLDER,
+        sqlserver_host=_PLACEHOLDER,
+        sqlserver_user=_PLACEHOLDER,
+        sqlserver_password=SecretStr(_PLACEHOLDER),
+        sqlserver_database=_PLACEHOLDER,
         edge_signing_secret=_PLACEHOLDER_SECRET,
     )
 
