@@ -29,7 +29,7 @@
 
 | 文件 | 触发 | 管什么 |
 |---|---|---|
-| `pr-policy.yml` | 只在 PR | 规模 ≤400 行 / ≤20 文件 / ≤1 服务、提交信息、分支名、锁文件单独成 PR、PR 描述 |
+| `pr-policy.yml` | 只在 PR | 规模 ≤400 行 / ≤20 文件 / ≤1 服务、提交信息、分支名、锁文件单独成 PR、PR 描述、抽取逻辑版本 |
 | `nightly.yml` | 每日定时 | 变异测试、可访问性全站扫描、镜像内容断言。**失败开 issue，不阻断合并** |
 
 E2E、a11y、变异测试不进 PR 闸门是 `testing-standard-*.md` §9 的明确要求——它们太慢，
@@ -105,6 +105,18 @@ E2E、a11y、变异测试不进 PR 闸门是 `testing-standard-*.md` §9 的明�
 | 同 §1–§3 分支、提交、PR 规模 | `check_pr_policy.py`（PR 专用） |
 | 密钥不进版本库 | `gitleaks` + `.gitleaks.toml` |
 | docker-build §5 镜像内容断言 | `nightly.yml` 的 `images` 作业 |
+
+### 领域不变量
+
+有些口径只写在领域文档里，靠人记；它们同样得有红灯。
+
+| 规范 | 闸门 |
+|---|---|
+| AC_STARTUP_DESIGN §5 改抽取逻辑必须手动 +1 `LOGIC_VERSION` | `check_logic_version.py`（PR 专用） |
+
+⚠ 这条闸比的是「抽取引擎那两个文件在这次 diff 里动没动」对「`LOGIC_VERSION`
+的取值在这次 diff 里变没变」，**不对源码求哈希**：哈希一次格式化就炸，
+而被无视的闸门等于没有闸门。代价是改那两个文件里的注释也会红。
 
 ---
 

@@ -8,7 +8,9 @@
 from __future__ import annotations
 
 import ast
+import os
 import re
+import subprocess
 import sys
 import tokenize
 from collections.abc import Callable, Iterator, Sequence
@@ -222,6 +224,70 @@ def comment_lines(path: Path) -> Iterator[tuple[int, str]]:
         stripped = line.strip()
         if stripped.startswith(("//", "*", "/*", "<!--")):
             yield number, stripped
+
+
+# `<脚本> <base> <head>` —— 取参数要有这么多个
+_BASE_ARG = 2
+_HEAD_ARG = 3
+
+
+def git(*args: str) -> str:
+    """跑一条 git 命令取标准输出；跑不成给空串。
+
+    Args: args。
+    """
+    result = subprocess.run(
+        ["git", *args],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.stdout.strip()
+
+
+def diff_base() -> str:
+    """比较基线：命令行第一个参数 > `PR_BASE_REF` > `origin/main`。"""
+    if len(sys.argv) >= _BASE_ARG:
+        return sys.argv[1]
+    return os.environ.get("PR_BASE_REF", "origin/main")
+
+
+def diff_head() -> str:
+    """比较的另一头：命令行第二个参数 > `PR_HEAD_REF` > `HEAD`。"""
+    if len(sys.argv) >= _HEAD_ARG:
+        return sys.argv[2]
+    return os.environ.get("PR_HEAD_REF", "HEAD")
+
+
+def diff_range() -> str:
+    return f"{diff_base()}...{diff_head()}"
+
+
+def ref_exists(ref: str) -> bool:
+    """这个引用在本地解析得出提交吗。
+
+    ⚠ 解析不出来时 `git diff` 只是给空输出，闸门会当成「什么都没改」而长绿；
+    要基线的闸门必须先问这一句。
+    Args: ref。
+    """
+    return bool(git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"))
+
+
+def changed_files() -> list[str]:
+    """基线到头之间改过的文件，仓库相对路径。"""
+    output = git("diff", "--name-only", diff_range())
+    return [line for line in output.splitlines() if line]
+
+
+def file_at(ref: str, path: str) -> str | None:
+    """某个提交里这份文件的内容；那时还没有这个文件就给 None。
+
+    Args: ref, path。
+    """
+    if not git("ls-tree", "-r", "--name-only", ref, "--", path):
+        return None
+    return git("show", f"{ref}:{path}")
 
 
 def main(title: str, checks: Sequence[Check]) -> int:

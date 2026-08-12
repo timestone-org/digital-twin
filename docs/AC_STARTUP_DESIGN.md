@@ -132,6 +132,9 @@
 - **参数指纹** = 全部抽取参数的取值 + `logic_version`。指纹与当前数据不符即在
   页面上提醒重算。⚠ `logic_version` 由改抽取逻辑的人手动 +1；不对代码求哈希，
   否则一次格式化就触发全量重算提醒，很快没人理它。
+  ⚠ 「手动」不等于「靠记」：动了 `ac_startup_rules.py` 或 `ac_startup_frames.py`
+  却没改 `LOGIC_VERSION` 的 PR 会被 `scripts/gates/check_logic_version.py` 拦红。
+  否则一次没改参数的纯行为改动指纹分毫不变，页面会把旧规则算出的数据当成当前的。
 
 ---
 

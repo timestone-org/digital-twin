@@ -35,6 +35,8 @@ gates=(
   check_api_contract
   check_tests
   check_licenses
+  # 要拿基线比，本地按 origin/main 算；CI 上它只在 PR 流水线里跑
+  check_logic_version
 )
 
 run_fast() {

@@ -12,11 +12,17 @@ from __future__ import annotations
 
 import os
 import re
-import subprocess
-import sys
 from pathlib import Path
 
-from _report import ROOT, Violation, main
+from _report import (
+    Violation,
+    changed_files,
+    diff_base,
+    diff_head,
+    diff_range,
+    git,
+    main,
+)
 
 MAX_CHANGED_LINES = 400
 MAX_CHANGED_FILES = 20
@@ -45,40 +51,6 @@ GENERATED = ("openapi.json", "/dist/", "/coverage/")
 NUMSTAT_FIELDS = 3
 # `server/services/<svc>/…` —— 取服务名要有三段以上
 SERVICE_PATH_DEPTH = 2
-BASE_ARG = 2
-HEAD_ARG = 3
-
-
-def _git(*args: str) -> str:
-    result = subprocess.run(
-        ["git", *args],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return result.stdout.strip()
-
-
-def _base() -> str:
-    if len(sys.argv) >= BASE_ARG:
-        return sys.argv[1]
-    return os.environ.get("PR_BASE_REF", "origin/main")
-
-
-def _head() -> str:
-    if len(sys.argv) >= HEAD_ARG:
-        return sys.argv[2]
-    return os.environ.get("PR_HEAD_REF", "HEAD")
-
-
-def _range() -> str:
-    return f"{_base()}...{_head()}"
-
-
-def _changed_files() -> list[str]:
-    output = _git("diff", "--name-only", _range())
-    return [line for line in output.splitlines() if line]
 
 
 def _reviewable(name: str) -> bool:
@@ -89,7 +61,7 @@ def _reviewable(name: str) -> bool:
 
 def _changed_lines() -> int:
     total = 0
-    for line in _git("diff", "--numstat", _range()).splitlines():
+    for line in git("diff", "--numstat", diff_range()).splitlines():
         parts = line.split("\t")
         if len(parts) != NUMSTAT_FIELDS or not _reviewable(parts[2]):
             continue
@@ -106,14 +78,14 @@ def check_pr_size() -> list[Violation]:
     """改动 ≤400 行、≤20 个文件。超了就拆成多个 PR。"""
     if _is_mechanical():
         return []
-    files = [name for name in _changed_files() if _reviewable(name)]
+    files = [name for name in changed_files() if _reviewable(name)]
     lines = _changed_lines()
     found: list[Violation] = []
     if lines > MAX_CHANGED_LINES:
         found.append(
             Violation(
                 f"PR 改动不许超过 {MAX_CHANGED_LINES} 行",
-                _range(),
+                diff_range(),
                 f"{lines} 行（不含锁文件与生成物）",
             )
         )
@@ -121,7 +93,7 @@ def check_pr_size() -> list[Violation]:
         found.append(
             Violation(
                 f"PR 不许超过 {MAX_CHANGED_FILES} 个文件",
-                _range(),
+                diff_range(),
                 f"{len(files)} 个",
             )
         )
@@ -132,7 +104,7 @@ def check_pr_touches_one_service() -> list[Violation]:
     """跨服务改动拆成「先加新的、后切换、再删旧的」多个 PR。"""
     services = {
         Path(name).parts[2]
-        for name in _changed_files()
+        for name in changed_files()
         if name.startswith("server/services/")
         and len(Path(name).parts) > SERVICE_PATH_DEPTH
     }
@@ -141,7 +113,7 @@ def check_pr_touches_one_service() -> list[Violation]:
     return [
         Violation(
             f"一个 PR 只许碰 {MAX_SERVICES} 个服务",
-            _range(),
+            diff_range(),
             "、".join(sorted(services)),
         )
     ]
@@ -149,7 +121,7 @@ def check_pr_touches_one_service() -> list[Violation]:
 
 def check_lockfile_stands_alone() -> list[Violation]:
     """⚠ 锁文件混在逻辑改动里时，评审者会直接跳过几千行 diff。"""
-    files = set(_changed_files())
+    files = set(changed_files())
     touched = files & LOCKFILES
     others = {name for name in files - LOCKFILES if _reviewable(name)}
     if not touched or not others:
@@ -157,7 +129,7 @@ def check_lockfile_stands_alone() -> list[Violation]:
     return [
         Violation(
             "锁文件必须单独成 PR",
-            _range(),
+            diff_range(),
             f"{sorted(touched)} 与另外 {len(others)} 个文件混在一起",
         )
     ]
@@ -165,7 +137,8 @@ def check_lockfile_stands_alone() -> list[Violation]:
 
 def check_commit_messages() -> list[Violation]:
     """标题写做了什么，格式 `<类型>(<范围>): <一句话>`。"""
-    subjects = _git("log", "--format=%s", f"{_base()}..{_head()}").splitlines()
+    span = f"{diff_base()}..{diff_head()}"
+    subjects = git("log", "--format=%s", span).splitlines()
     return [
         Violation(
             "提交信息格式不合规",
@@ -179,7 +152,7 @@ def check_commit_messages() -> list[Violation]:
 
 def check_branch_name() -> list[Violation]:
     """分支命名 `<类型>/<简述>`，关联一个 issue。"""
-    name = os.environ.get("PR_HEAD_BRANCH") or _git(
+    name = os.environ.get("PR_HEAD_BRANCH") or git(
         "rev-parse", "--abbrev-ref", "HEAD"
     )
     if not name or name in {"HEAD", "main"} or BRANCH.match(name):
