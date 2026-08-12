@@ -128,6 +128,14 @@ export const ICONS = {
   check: ['m20 6-11 11-5-5'],
   'chevron-up': ['m6 15 6-6 6 6'],
   'chevron-down': ['m6 9 6 6 6-6'],
+  'chevron-left': ['m15 18-6-6 6-6'],
+  'chevron-right': ['m9 18 6-6-6-6'],
+  calendar: [
+    'M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z',
+    'M3 10h18',
+    'M8 2v4',
+    'M16 2v4',
+  ],
   table: [
     'M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z',
     'M3 10h18',

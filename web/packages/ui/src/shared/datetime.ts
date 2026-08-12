@@ -14,7 +14,7 @@ function pad(value: number, width = 2): string {
  * 取一个时刻的**本地**年月日时分，拼成 `YYYY-MM-DDTHH:mm`。
  * @param at 时刻
  */
-function localMinuteOf(at: Date): string {
+export function localMinuteOf(at: Date): string {
   const day = `${pad(at.getFullYear(), 4)}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`
   return `${day}T${pad(at.getHours())}:${pad(at.getMinutes())}`
 }
