@@ -92,7 +92,10 @@ class ShardConsumer:
         try:
             entries = await self._fetch()
         except DependencyUnavailable as error:
-            _logger.error(
+            # ⚠ 队列抖一下不是「需要人介入」，按 observability.md 只报 WARNING：
+            # 消费循环本来就会重试，而每个空转周期刷一条带堆栈的 ERROR，
+            # 只会让真正需要人看的那条淹在里面
+            _logger.warning(
                 "ac_startup_worker_fetch_failed", "取消息失败", error=error
             )
             await asyncio.sleep(self._options.block_ms / 1000)

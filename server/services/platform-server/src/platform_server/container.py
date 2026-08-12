@@ -6,6 +6,9 @@ from lib.db import Database, PoolProfile, ReadOnlySqlSource, SourceProfile
 from platform_server.settings import Settings
 from platform_server.stream import RedisStream
 
+# 阻塞读之外留给服务端应答与网络的余量
+STREAM_READ_MARGIN_S = 2.0
+
 
 @dataclass(frozen=True)
 class Container:
@@ -64,6 +67,13 @@ def _build_ac_source(settings: Settings) -> ReadOnlySqlSource:
 def _build_stream(settings: Settings) -> RedisStream:
     """抽取分片的队列。⚠ 构造不连网，API 角色不用它时也不会多一个连接。
 
+    ⚠ 套接字超时必须**大于**阻塞读的时长，否则队列一空就必然超时：服务端正
+    按约定挂起 `block_ms`，客户端却在 `redis_timeout_s` 就先放弃，于是空队列
+    被报成故障。`redis_timeout_s` 是给一问一答的调用用的，不管阻塞读。
     Args: settings。
     """
-    return RedisStream(url=settings.url(), timeout_s=settings.redis_timeout_s)
+    block_s = settings.acstartup_block_ms / 1000
+    return RedisStream(
+        url=settings.url(),
+        timeout_s=max(settings.redis_timeout_s, block_s + STREAM_READ_MARGIN_S),
+    )
