@@ -25,7 +25,7 @@ from platform_server.apps.hvac.startups import (
 BASE = datetime(2026, 3, 1, 0, 0, tzinfo=UTC)
 DEFAULTS = ExtractionRules()
 # 不要求冷启动的取样口径，用来证明它只是一个参数
-WARM = ExtractionRules(require_cold_start=False)
+WARM = ExtractionRules(is_cold_start_required=False)
 # 冷启动门槛用满 30 分钟，之后的分钟号都从 30 起
 COLD = 30
 

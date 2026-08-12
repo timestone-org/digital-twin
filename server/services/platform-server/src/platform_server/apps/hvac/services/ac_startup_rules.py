@@ -40,7 +40,7 @@ class ExtractionRules:
     compliance_frames: int = 1
     compliance_cap_minutes: int = 100
     max_gap_minutes: int = 3
-    require_cold_start: bool = True
+    is_cold_start_required: bool = True
 
     def __post_init__(self) -> None:
         # ⚠ 逐字段遍历而不是逐个点名：新加一条规则会自动进校验与指纹，点名写法
@@ -238,7 +238,7 @@ class _Machine:
         零时长的事件，然后每分钟一条。
         Args: frame。
         """
-        if self._rules.require_cold_start:
+        if self._rules.is_cold_start_required:
             return self._off_streak >= self._rules.cold_off_minutes
         return not frame.is_compliant
 

@@ -30,13 +30,13 @@ def test_rules_reject_a_non_positive_value(field: str) -> None:
 
 def test_the_cold_start_switch_is_not_a_minute_count() -> None:
     """开关不参与正整数校验，关掉它不该被当成非法取值。"""
-    assert ExtractionRules(require_cold_start=False).cold_off_minutes == 30
+    assert ExtractionRules(is_cold_start_required=False).cold_off_minutes == 30
 
 
 def test_the_default_fingerprint_is_pinned() -> None:
     """默认规则 + `LOGIC_VERSION` 的指纹钉成字面量：它一变就该全量重算。"""
     assert DEFAULTS.fingerprint() == (
-        "0724ac972a5c2b8ebd6c7d6f4723ea28" "011b63d6ddd07ce7a2a62046a3bdddef"
+        "606e29010e97ca112a35d125839f0798" "5b5b006a42c59da6171f41b0285574e7"
     )
 
 
@@ -48,7 +48,7 @@ def test_the_default_fingerprint_is_pinned() -> None:
         ("compliance_frames", 2),
         ("compliance_cap_minutes", 120),
         ("max_gap_minutes", 4),
-        ("require_cold_start", False),
+        ("is_cold_start_required", False),
     ],
 )
 def test_the_fingerprint_changes_with_every_rule_value(
