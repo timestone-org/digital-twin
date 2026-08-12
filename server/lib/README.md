@@ -14,7 +14,7 @@
 | `logging` | 结构化 JSON 日志器与请求上下文 |
 | `errors` | 异常基类、可重试标注、FastAPI 异常映射 |
 | `web` | 统一响应信封、分页、中间件、`create_app()` 工厂 |
-| `db` | 声明基类与命名约定、列混入、异步引擎与会话、通用 CRUD |
+| `db` | 声明基类与命名约定、列混入、异步引擎与会话、通用 CRUD、外部只读 SQL 源 |
 | `cache` | Redis 客户端与 JSON 缓存管理器 |
 | `ratelimit` | 固定窗口限流器基类（限流场景由服务注册） |
 | `auth` | JWT 签发与校验、口令散列、调用者身份载体、签名头编解码 |
@@ -26,6 +26,7 @@
 
 ```
 db     sqlalchemy / asyncpg / alembic
+mssql  pymssql（外部只读 SQL 源，自带 FreeTDS，不依赖系统 ODBC）
 redis  redis
 web    fastapi / uvicorn
 auth   pyjwt / argon2-cffi

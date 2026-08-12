@@ -5,6 +5,7 @@ from lib.config.base import (
     ConfigError,
     PostgresSettings,
     RedisSettings,
+    SqlServerSettings,
     load_settings,
     load_settings_or_exit,
 )
@@ -14,6 +15,7 @@ __all__ = [
     "ConfigError",
     "PostgresSettings",
     "RedisSettings",
+    "SqlServerSettings",
     "load_settings",
     "load_settings_or_exit",
 ]
