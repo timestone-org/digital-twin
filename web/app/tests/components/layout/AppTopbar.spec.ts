@@ -113,6 +113,18 @@ describe('AppTopbar · 时钟', () => {
     expect(mount(AppTopbar).text()).toMatch(/\d{1,2}:\d{2}:\d{2}/)
   })
 
+  // 比例字体下 1 比 0 窄，`10:00:00` → `11:11:11` 整串就会缩一截；时钟贴在最右侧，
+  // 一缩左边的换肤钮与 actions 槽跟着位移。逐字格子把每个数字锁进 1ch。
+  it('数字逐个进等宽格子，宽度不随读数变化', () => {
+    // 钉住时刻：读数取真实墙上时间的话，这条用例的位数就随运行时刻浮动
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 0, 5, 9, 5, 3))
+    const wrapper = mount(AppTopbar)
+    // 时分秒六位数字，冒号不锁宽
+    expect(wrapper.findAll('.dt-digits__cell--digit').length).toBe(6)
+    vi.useRealTimers()
+  })
+
   it('卸载时清掉定时器——顶栏常驻整个会话，漏一个就持续累积', () => {
     vi.useFakeTimers()
     const clearSpy = vi.spyOn(globalThis, 'clearInterval')
