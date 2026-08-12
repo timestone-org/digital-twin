@@ -36,6 +36,7 @@ from platform_server.apps.hvac.deps import get_ac_source_reader, get_session
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.container import Container
 from platform_server.settings import Settings
+from platform_server.stream import StreamEntry, StreamGroup
 
 # 与 auth-server 的 AUTH_EDGE_PERMISSION_TTL_S 同量级，用例不依赖它的确切取值
 HEADER_TTL_S = 60
@@ -97,6 +98,70 @@ class FakeAcSource:
             for name in object_names
             if name in self.columns
         }
+
+
+@dataclass
+class InMemoryStream:
+    """进程内的流假件，满足 `StreamLike`。
+
+    ⚠ `lib.testing` 的 `InMemoryCache` 满足的是 `CacheLike`，那上面没有任何流
+    操作，故这里另造一件而不是复用。它刻意保留待确认表：不确认的消息能被再取
+    一次，「重复投递」这条才测得出来。
+    """
+
+    entries: list[StreamEntry] = field(default_factory=list[StreamEntry])
+    pending: list[StreamEntry] = field(default_factory=list[StreamEntry])
+    acked: list[str] = field(default_factory=list[str])
+    groups: list[str] = field(default_factory=list[str])
+    reads: list[tuple[str, int, int]] = field(
+        default_factory=list[tuple[str, int, int]]
+    )
+    claims: list[tuple[str, int, int]] = field(
+        default_factory=list[tuple[str, int, int]]
+    )
+    failure: Exception | None = None
+    _serial: int = 0
+
+    async def publish(self, stream: str, fields: Mapping[str, str]) -> str:
+        self._serial += 1
+        entry_id = f"{stream}:{self._serial}"
+        self.entries.append(StreamEntry(entry_id=entry_id, fields=dict(fields)))
+        return entry_id
+
+    async def ensure_group(self, target: StreamGroup) -> None:
+        self.groups.append(target.group)
+
+    async def read_group(
+        self, target: StreamGroup, *, count: int, block_ms: int
+    ) -> list[StreamEntry]:
+        self.reads.append((target.group, count, block_ms))
+        if self.failure is not None:
+            raise self.failure
+        taken = self.entries[:count]
+        del self.entries[:count]
+        self.pending.extend(taken)
+        return taken
+
+    async def claim_stale(
+        self, target: StreamGroup, *, min_idle_ms: int, count: int
+    ) -> list[StreamEntry]:
+        self.claims.append((target.group, min_idle_ms, count))
+        return []
+
+    async def ack(self, target: StreamGroup, entry_id: str) -> None:
+        self.acked.append(f"{target.group}:{entry_id}")
+        self.pending = [
+            item for item in self.pending if item.entry_id != entry_id
+        ]
+
+    async def close(self) -> None:
+        self.entries.clear()
+
+
+@pytest.fixture
+def stream() -> InMemoryStream:
+    """一条空的进程内流。"""
+    return InMemoryStream()
 
 
 def _row_limit(params: Mapping[str, object]) -> int:

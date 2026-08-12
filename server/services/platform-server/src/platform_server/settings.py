@@ -6,14 +6,24 @@
 from pydantic import Field, SecretStr
 from pydantic_settings import SettingsConfigDict
 
-from lib.config import AppSettings, PostgresSettings, SqlServerSettings
+from lib.config import (
+    AppSettings,
+    PostgresSettings,
+    RedisSettings,
+    SqlServerSettings,
+)
 
 SERVICE_NAME = "platform-server"
 API_PREFIX = "/api/v1/platform"
 DB_SCHEMA = "platform"
 
+# 运行角色。⚠ 这是部署轴不是环境轴（ARCHITECTURE §3.4）：同一份镜像按角色跑出
+# 不同进程，取值差异之外还差在跑什么循环，故它必须是分支而不是参数。
+ROLE_API = "api"
+ROLE_WORKER = "worker"
 
-class Settings(AppSettings, PostgresSettings, SqlServerSettings):
+
+class Settings(AppSettings, PostgresSettings, RedisSettings, SqlServerSettings):
     """进程启动时构造一次并冻结。"""
 
     model_config = SettingsConfigDict(
@@ -35,3 +45,15 @@ class Settings(AppSettings, PostgresSettings, SqlServerSettings):
     # ⚠ 外部只读库的 CT 列是 naive 的当地时间，库里没有时区信息。对外一律 UTC，
     # 换算基准因此必须是配置项；见 docs/AC_DATA_DESIGN.md §6
     acsource_timezone: str = "Asia/Shanghai"
+
+    # 开机事件抽取的分片队列，见 docs/AC_STARTUP_DESIGN.md §5
+    acstartup_stream: str = "platform:ac-startup:shards"
+    acstartup_group: str = "ac-startup-workers"
+    acstartup_block_ms: int = 5000
+    # 多久没确认就算滞留，可以被别的消费者认领回来
+    acstartup_claim_idle_ms: int = 60000
+    acstartup_prefetch: int = 8
+    # ⚠ 一片的总预算必须大于它内部全部外库查询之和：6 台 × 15 s 查询超时 = 90 s
+    acstartup_shard_timeout_s: float = 300.0
+    # 一台空调一片最多取多少行；一个月按分钟采样约 4.5 万行
+    acstartup_max_rows: int = 60000

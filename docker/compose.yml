@@ -76,10 +76,47 @@ services:
       PLATFORM_SQLSERVER_CHARSET: ${ACSOURCE_CHARSET:-UTF-8}
       # ⚠ 与 auth-server 取同一个值：分叉就是业务面一律 401
       PLATFORM_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
+      # 抽取分片队列。api 角色只投递，worker 角色消费
+      PLATFORM_REDIS_HOST: ${REDIS_HOST:?必填}
+      PLATFORM_REDIS_PORT: ${REDIS_PORT:-6379}
+      PLATFORM_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      PLATFORM_ACSTARTUP_STREAM: ${ACSTARTUP_STREAM:-platform:ac-startup:shards}
+      PLATFORM_ACSTARTUP_GROUP: ${ACSTARTUP_GROUP:-ac-startup-workers}
     expose: ['8005']
     healthcheck:
       test: ['CMD', 'python', '-c', "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8005/api/v1/platform/health')"]
       interval: 10s
       timeout: 3s
       retries: 3
+    restart: unless-stopped
+
+  # 同一份镜像的 worker 角色：只跑抽取分片的消费循环，不监听 HTTP。
+  # ⚠ 重任务永远不在 api 角色里跑（ARCHITECTURE §3.4）；扩缩靠加副本，
+  # 多个 worker 共用一个消费组，各取各的分片。
+  platform-worker:
+    build:
+      context: ../server
+      dockerfile: services/platform-server/Dockerfile
+    environment:
+      PLATFORM_APP_ROLE: worker
+      PLATFORM_APP_LOG_FORMAT: json
+      PLATFORM_POSTGRES_HOST: ${POSTGRES_HOST:?必填}
+      PLATFORM_POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      PLATFORM_POSTGRES_USER: ${POSTGRES_USER:?必填}
+      PLATFORM_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必填}
+      PLATFORM_POSTGRES_DB: ${POSTGRES_DB:?必填}
+      PLATFORM_SQLSERVER_HOST: ${ACSOURCE_HOST:?必填：现场 EMS 库地址}
+      PLATFORM_SQLSERVER_PORT: ${ACSOURCE_PORT:-1433}
+      PLATFORM_SQLSERVER_USER: ${ACSOURCE_USER:?必填}
+      PLATFORM_SQLSERVER_PASSWORD: ${ACSOURCE_PASSWORD:?必填}
+      PLATFORM_SQLSERVER_DATABASE: ${ACSOURCE_DB:?必填}
+      PLATFORM_ACSOURCE_TIMEZONE: ${ACSOURCE_TIMEZONE:-Asia/Shanghai}
+      PLATFORM_SQLSERVER_CHARSET: ${ACSOURCE_CHARSET:-UTF-8}
+      # ⚠ 回退链必须与 platform-server 逐字一致：少写一处就是非对称失效
+      PLATFORM_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
+      PLATFORM_REDIS_HOST: ${REDIS_HOST:?必填}
+      PLATFORM_REDIS_PORT: ${REDIS_PORT:-6379}
+      PLATFORM_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      PLATFORM_ACSTARTUP_STREAM: ${ACSTARTUP_STREAM:-platform:ac-startup:shards}
+      PLATFORM_ACSTARTUP_GROUP: ${ACSTARTUP_GROUP:-ac-startup-workers}
     restart: unless-stopped

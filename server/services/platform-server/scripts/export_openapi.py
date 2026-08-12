@@ -32,6 +32,7 @@ def _export_settings() -> Settings:
         sqlserver_user=_PLACEHOLDER,
         sqlserver_password=SecretStr(_PLACEHOLDER),
         sqlserver_database=_PLACEHOLDER,
+        redis_host=_PLACEHOLDER,
         edge_signing_secret=_PLACEHOLDER_SECRET,
     )
 

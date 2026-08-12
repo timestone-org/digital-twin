@@ -15,6 +15,7 @@ from platform_server.apps.hvac.deps import get_ac_source_reader
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.container import Container
 from platform_server.settings import Settings
+from platform_server.stream import RedisStream
 
 PLACEHOLDER = "wiring-test"
 
@@ -32,6 +33,9 @@ class FakeDependency:
     async def dispose(self) -> None:
         self.closed.append("once")
 
+    async def close(self) -> None:
+        self.closed.append("once")
+
 
 def build_settings() -> Settings:
     """一份能构造出来的配置，不连任何依赖。"""
@@ -44,6 +48,7 @@ def build_settings() -> Settings:
         sqlserver_user=PLACEHOLDER,
         sqlserver_password=SecretStr(PLACEHOLDER),
         sqlserver_database=PLACEHOLDER,
+        redis_host=PLACEHOLDER,
         edge_signing_secret=SecretStr("x" * 32),
     )
 
@@ -57,11 +62,12 @@ def build_container(
     """
     database = FakeDependency(is_reachable=is_database_up)
     source = FakeDependency(is_reachable=is_source_up)
-    # cast 的理由：这两件只需要满足 ping/dispose，容器本身不做类型校验
+    # cast 的理由：这几件只需要满足 ping/dispose/close，容器本身不做类型校验
     container = Container(
         settings=build_settings(),
         database=cast(Database, database),
         ac_source=cast(ReadOnlySqlSource, source),
+        stream=cast(RedisStream, FakeDependency()),
     )
     return container, database, source
 
@@ -81,7 +87,7 @@ def test_the_external_source_is_closed_before_the_connection_pool() -> None:
         )
         if hook.shutdown is not None
     ]
-    assert closing == ["ac_source", "database"]
+    assert closing == ["stream", "ac_source", "database"]
 
 
 async def assert_selfcheck_survives(

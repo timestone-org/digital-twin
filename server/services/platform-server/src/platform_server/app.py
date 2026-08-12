@@ -50,6 +50,11 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
             startup_order=10,
         ),
         LifespanHook(
+            name="stream",
+            shutdown=container.stream.close,
+            shutdown_order=97,
+        ),
+        LifespanHook(
             name="ac_source",
             shutdown=container.ac_source.dispose,
             shutdown_order=98,

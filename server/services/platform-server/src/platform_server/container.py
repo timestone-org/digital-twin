@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from lib.db import Database, PoolProfile, ReadOnlySqlSource, SourceProfile
 from platform_server.settings import Settings
+from platform_server.stream import RedisStream
 
 
 @dataclass(frozen=True)
@@ -13,6 +14,7 @@ class Container:
     settings: Settings
     database: Database
     ac_source: ReadOnlySqlSource
+    stream: RedisStream
 
 
 def build_container(settings: Settings) -> Container:
@@ -24,6 +26,7 @@ def build_container(settings: Settings) -> Container:
         settings=settings,
         database=_build_database(settings),
         ac_source=_build_ac_source(settings),
+        stream=_build_stream(settings),
     )
 
 
@@ -56,3 +59,11 @@ def _build_ac_source(settings: Settings) -> ReadOnlySqlSource:
             charset=settings.sqlserver_charset,
         ),
     )
+
+
+def _build_stream(settings: Settings) -> RedisStream:
+    """抽取分片的队列。⚠ 构造不连网，API 角色不用它时也不会多一个连接。
+
+    Args: settings。
+    """
+    return RedisStream(url=settings.url(), timeout_s=settings.redis_timeout_s)
