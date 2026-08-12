@@ -11,6 +11,7 @@ import type { AcDataset, AcMetric, AcMetricLimit } from '@dt/contracts'
 import {
   buildLimitRows,
   compareDecimal,
+  implausibleWarnings,
   toLimitPayload,
   validateRows,
 } from '@/pages/Hvac/Units/acLimitForm'
@@ -36,6 +37,7 @@ function row(over: Partial<LimitRow> = {}): LimitRow {
     metric: 'workshop_temp_avg',
     name: '车间温度平均值',
     unit: '℃',
+    group: 'temperature',
     lower: '',
     upper: '',
     ...over,
@@ -108,6 +110,7 @@ describe('buildLimitRows', () => {
       metric: 'workshop_temp_avg',
       name: '车间温度',
       unit: '℃',
+      group: 'temperature',
       lower: '20.15',
       upper: '24',
     })
@@ -200,5 +203,74 @@ describe('toLimitPayload', () => {
   it('取值原样是字符串，不做数字化', () => {
     const [first] = toLimitPayload([row({ lower: ' 20.150 ' })])
     expect(first?.lower_limit).toBe('20.150')
+  })
+})
+
+describe('implausibleWarnings', () => {
+  const temp = (lower: string, upper: string): LimitRow =>
+    row({
+      name: '车间温度平均值',
+      group: 'temperature',
+      unit: '℃',
+      lower,
+      upper,
+    })
+  const humidity = (lower: string, upper: string): LimitRow =>
+    row({
+      metric: 'workshop_humidity_avg',
+      name: '车间湿度平均值',
+      group: 'humidity',
+      unit: '%',
+      lower,
+      upper,
+    })
+
+  it('现场那次填反：温 23~53 / 湿 27~63 必须出提醒', () => {
+    const found = implausibleWarnings([temp('23', '53'), humidity('27', '63')])
+    expect(found).not.toHaveLength(0)
+    expect(found.join(' ')).toContain('车间温度平均值')
+    expect(found.join(' ')).toContain('填反')
+  })
+
+  it('填对的那份一句提醒都不出：温 23~27 / 湿 53~63', () => {
+    expect(
+      implausibleWarnings([temp('23', '27'), humidity('53', '63')]),
+    ).toEqual([])
+  })
+
+  it('⚠ 上下限校验对这种填反完全无能为力——两对各自都是有序的', () => {
+    const transposed = [temp('23', '53'), humidity('27', '63')]
+    expect(validateRows(transposed)).toBeNull()
+    expect(implausibleWarnings(transposed)).not.toHaveLength(0)
+  })
+
+  it('温度高过常识上界要说一声', () => {
+    expect(implausibleWarnings([temp('', '53')])[0]).toContain('上限 53℃')
+  })
+
+  it('湿度低过常识下界同样要说一声', () => {
+    expect(implausibleWarnings([humidity('27', '')])[0]).toContain('下限 27%')
+  })
+
+  it('留空的一侧不参与判断——空是不限制，不是 0', () => {
+    expect(implausibleWarnings([temp('', '')])).toEqual([])
+  })
+
+  it('还没输完的半截取值不判，免得边打字边报警', () => {
+    expect(implausibleWarnings([temp('2', '-')])).toEqual([])
+  })
+
+  it('没有常识区间的分组不判，比如频率', () => {
+    const fan = row({
+      group: 'frequency',
+      unit: 'Hz',
+      lower: '0',
+      upper: '999',
+    })
+    expect(implausibleWarnings([fan])).toEqual([])
+  })
+
+  it('零下的温度是合理取值，不该被当成异常', () => {
+    expect(implausibleWarnings([temp('-10', '5')])).toEqual([])
   })
 })

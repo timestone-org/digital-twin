@@ -20,6 +20,7 @@ import {
   useToast,
 } from '@dt/ui'
 
+import { implausibleWarnings } from '../acLimitForm'
 import { useAcDataConfig } from '../useAcDataConfig'
 
 const props = defineProps<{
@@ -37,6 +38,8 @@ const title = computed(() =>
   props.unit === null ? '数据与达标' : `数据与达标 · ${props.unit.serial}`,
 )
 const hasDatasetChoice = computed(() => config.datasetOptions.value.length > 1)
+// 只提醒不拦截：范围是用户自己定的，但「看着不像这个量」值得说一声
+const warnings = computed(() => implausibleWarnings(config.rows.value))
 
 // immediate 兼作初值：组件在「已经是打开态」时被挂载时，只监听变化的 watch 一次都不跑
 watch(
@@ -129,26 +132,40 @@ async function onSaveLimits(): Promise<void> {
         <p class="text-xs text-secondary">
           留空表示该侧不限制。保存的是全部指标，清空即视为取消该项。
         </p>
+        <!-- ⚠ 一行一个指标、名字只说一次，两个框摆成「下限 ～ 上限」的区间：
+           上一版是每个指标一个 2×2 的数字方阵，两条轴（指标 / 上下限）谁横谁竖
+           全靠标签区分，现场 17 台全部把两条轴读反了。区间式没有第二条轴可读反。 -->
         <div
           v-for="row in config.rows.value"
           :key="row.metric"
-          class="grid grid-cols-2 gap-3"
+          class="flex flex-wrap items-end gap-2"
         >
+          <span class="w-32 shrink-0 pb-2 text-xs text-text-primary">
+            {{ row.name }}（{{ row.unit }}）
+          </span>
           <DtInput
             v-model="row.lower"
+            class="w-24"
             size="sm"
             inputmode="decimal"
-            :label="`${row.name}下限（${row.unit}）`"
+            label="下限"
+            :aria-label="`${row.name}下限（${row.unit}）`"
             placeholder="不限"
           />
+          <span class="pb-2 text-text-disabled">～</span>
           <DtInput
             v-model="row.upper"
+            class="w-24"
             size="sm"
             inputmode="decimal"
-            :label="`${row.name}上限（${row.unit}）`"
+            label="上限"
+            :aria-label="`${row.name}上限（${row.unit}）`"
             placeholder="不限"
           />
         </div>
+        <DtNotice v-for="text in warnings" :key="text" intent="warning">
+          {{ text }}
+        </DtNotice>
         <DtNotice v-if="config.rows.value.length === 0" intent="info">
           这个数据集里没有可配达标范围的指标。
         </DtNotice>

@@ -91,7 +91,13 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 
 /* 一律按可访问名定位 */
 
+// 可读名优先看 aria-label：达标范围那两个框的可见标签只剩「下限 / 上限」，
+// 完整的「指标 + 哪一侧」由 aria-label 承载（WCAG 2.5.3 的 Label in Name）
 function controlByLabel(text: string): HTMLElement | null {
+  const aria = [...document.querySelectorAll('[aria-label]')].find((node) =>
+    node.getAttribute('aria-label')?.startsWith(text),
+  )
+  if (aria instanceof HTMLElement) return aria
   const label = [...document.querySelectorAll('label')].find((node) =>
     node.textContent?.trim().startsWith(text),
   )
@@ -266,6 +272,45 @@ describe('达标范围', () => {
     expect(inputByLabel('车间温度下限（℃）')).toBeDefined()
     expect(inputByLabel('车间湿度上限（%）')).toBeDefined()
     expect(controlByLabel('新风温度下限')).toBeNull()
+  })
+
+  it('指标名一行只说一次，两个框的可见标签就是「下限 / 上限」', async () => {
+    // ⚠ 这条守的是那次现场事故：上一版每个指标一个 2×2 数字方阵，四个标签
+    // 前 7 个字完全相同，两条轴谁横谁竖只能靠读标签区分，17 台全读反了。
+    await open()
+    const visible = [...document.querySelectorAll('label')].map((node) =>
+      node.textContent?.trim(),
+    )
+    expect(visible).toContain('下限')
+    expect(visible).toContain('上限')
+    expect(visible).not.toContain('车间温度下限（℃）')
+    // 可读名仍然完整，读屏用户不会只听到两声「下限」
+    expect(inputByLabel('车间温度下限（℃）')).toBeDefined()
+    expect(inputByLabel('车间湿度下限（%）')).toBeDefined()
+  })
+
+  it('温湿度填反时给出提醒——上下限校验对这种错完全无能为力', async () => {
+    await open()
+    await fill('车间温度上限（℃）', '53')
+    await fill('车间湿度下限（%）', '27')
+    expect(document.body.textContent).toContain('填反')
+  })
+
+  it('提醒只是提醒，不拦保存——范围终究是用户自己定的', async () => {
+    const put = vi.spyOn(hvac, 'putAcMetricLimits').mockResolvedValue([])
+    await open()
+    await fill('车间温度上限（℃）', '53')
+    await click('保存达标范围')
+    expect(put).toHaveBeenCalled()
+  })
+
+  it('填对时一句提醒都不出', async () => {
+    await open()
+    await fill('车间温度下限（℃）', '23')
+    await fill('车间温度上限（℃）', '27')
+    await fill('车间湿度下限（%）', '53')
+    await fill('车间湿度上限（%）', '63')
+    expect(document.body.textContent).not.toContain('填反')
   })
 
   it('打开即铺好已存的取值', async () => {

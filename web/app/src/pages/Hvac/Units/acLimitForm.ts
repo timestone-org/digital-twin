@@ -12,6 +12,8 @@ export interface LimitRow {
   metric: string
   name: string
   unit: string
+  /** 指标所属的量纲分组，合理性提醒按它取常识区间。 */
+  group: string
   lower: string
   upper: string
 }
@@ -82,6 +84,7 @@ export function buildLimitRows(
         metric: metric.key,
         name: metric.name,
         unit: metric.unit,
+        group: metric.group,
         lower: found?.lower_limit ?? '',
         upper: found?.upper_limit ?? '',
       })
@@ -117,6 +120,48 @@ export function validateRows(rows: readonly LimitRow[]): string | null {
     }
   }
   return null
+}
+
+/**
+ * 各分组的常识区间，只用来提醒、不拦提交——达标范围终究是用户自己定的。
+ * ⚠ 它补的是 `validateRows` 补不上的那个洞：温湿度两行整体填反之后，两对上下限
+ * 各自**仍然是有序的**，`下限 ≤ 上限` 一条都拦不住，现场因此配错过 17 台。
+ */
+const PLAUSIBLE: Record<string, { low: string; high: string }> = {
+  temperature: { low: '-20', high: '40' },
+  humidity: { low: '40', high: '100' },
+}
+
+function bounds(row: LimitRow): readonly (readonly [string | null, string])[] {
+  return [
+    [boundOf(row.lower), '下限'],
+    [boundOf(row.upper), '上限'],
+  ] as const
+}
+
+/**
+ * 挑出看着不像本量纲的取值，给出可直接显示的提醒；都正常时是空数组。
+ * @param rows 表单当前的全部行
+ */
+export function implausibleWarnings(rows: readonly LimitRow[]): string[] {
+  const found: string[] = []
+  for (const row of rows) {
+    const band = PLAUSIBLE[row.group]
+    if (band === undefined) continue
+    for (const [text, side] of bounds(row)) {
+      if (text === null || !DECIMAL.test(text)) continue
+      const off =
+        compareDecimal(text, band.low) < 0 ||
+        compareDecimal(text, band.high) > 0
+      if (off) {
+        found.push(
+          `${row.name}的${side} ${text}${row.unit} 超出常见的 ` +
+            `${band.low}~${band.high}${row.unit}，请确认没有把温度与湿度填反。`,
+        )
+      }
+    }
+  }
+  return found
 }
 
 /**
