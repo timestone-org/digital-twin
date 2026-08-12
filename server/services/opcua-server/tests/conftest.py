@@ -56,13 +56,56 @@ def _reachable(host: str, port: int) -> bool:
         return False
 
 
+# 一次探测里最多往后挪多少个起点。探不到就说明这台机器上没有连续空窗。
+_WINDOW_ATTEMPTS = 200
+
+
+def _free_window(size: int) -> str:
+    """找一段连续空闲的端口，返回 `<起>-<止>`。
+
+    ⚠ 起实例的用例不许用配置里的默认池：那个池是给部署用的固定端口段，
+    机器上任何别的东西占着其中一个（另一份用例、本地跑起来的服务），
+    表现就是「实例起不来」——与真缺陷长得一模一样。
+
+    Args: size。
+    """
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        base = int(probe.getsockname()[1])
+    for offset in range(_WINDOW_ATTEMPTS):
+        low = base + offset * size
+        if all(_is_free(low + step) for step in range(size)):
+            return f"{low}-{low + size - 1}"
+    raise RuntimeError(f"找不到 {size} 个连续空闲端口")
+
+
+def _is_free(port: int) -> bool:
+    """这个端口当前没人占。
+
+    Args: port。
+    """
+    with socket.socket() as probe:
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            probe.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+    return True
+
+
 @pytest.fixture(scope="session")
 def settings() -> Settings:
-    """从 .env / 环境变量装载配置；缺配置直接跳过依赖真库的层。"""
+    """从 .env / 环境变量装载配置；缺配置直接跳过依赖真库的层。
+
+    端口池换成本次运行探到的空闲窗口——见 `_free_window` 的理由。
+    """
     try:
-        return load_settings(Settings)
+        loaded = load_settings(Settings)
     except Exception as error:
         pytest.skip(f"opcua-server 配置不完整：{error}")
+    return loaded.model_copy(
+        update={"port_pool": _free_window(loaded.max_instances)}
+    )
 
 
 @pytest.fixture(scope="session", autouse=True)

@@ -900,13 +900,13 @@ version = "0.1.0"
 source = { editable = "services/opcua-server" }
 dependencies = [
     { name = "asyncua" },
-    { name = "lib", extra = ["db", "redis", "web"] },
+    { name = "lib", extra = ["auth", "db", "redis", "web"] },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "asyncua", specifier = "==1.1.8" },
-    { name = "lib", extras = ["db", "redis", "web"], editable = "lib" },
+    { name = "lib", extras = ["auth", "db", "redis", "web"], editable = "lib" },
 ]
 
 [[package]]
