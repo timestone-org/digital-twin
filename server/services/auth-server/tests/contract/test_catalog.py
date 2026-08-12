@@ -18,6 +18,9 @@ PUBLISHED_CODES = frozenset(
         "role:manage",
         "route_rule:view",
         "route_rule:manage",
+        "opcua:view",
+        "opcua:operate",
+        "opcua:manage",
     }
 )
 
@@ -95,7 +98,7 @@ def test_no_route_rule_is_redundant() -> None:
 
 def test_permission_groups_keep_catalog_order_and_sorting() -> None:
     groups = catalog.grouped_permissions()
-    assert [group.code for group in groups] == ["user", "system"]
+    assert [group.code for group in groups] == ["user", "system", "opcua"]
     for group in groups:
         orders = [item.sort_order for item in group.items]
         assert orders == sorted(orders)
