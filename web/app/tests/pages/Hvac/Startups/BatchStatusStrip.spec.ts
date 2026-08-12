@@ -118,6 +118,14 @@ describe('BatchStatusStrip', () => {
     expect(wrapper.find('[role="alert"]').text()).toContain('早于')
   })
 
+  // ⚠ 这条守的是措辞：写成「逻辑版本 v3」会被当成每抽一次就 +1 的批次序号，
+  // 用户据此以为抽取没生效。它是判定规则的版本，重抽同一段数据不会变。
+  it('版本号说明白是抽取逻辑的，且带一条说明', () => {
+    const wrapper = render()
+    expect(wrapper.text()).toContain('抽取逻辑 v3')
+    expect(wrapper.find('[aria-label="抽取逻辑"]').exists()).toBe(true)
+  })
+
   it('正在抽取时禁掉按键，并显示分片进度', () => {
     const wrapper = render({
       batch: batch({ status: 'running', shard_done: 3, shard_total: 8 }),

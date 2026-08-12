@@ -8,11 +8,20 @@
  * 事件了，人的判断正在悄悄流失。
  * ⚠ 重算键要 ac:manage：页面是 ac:view 进得来的，但后端三个写端点挂的是
  * ManageDep，不挡的话只读账号会点出一串 403。
+ * ⚠ `logic_version` 是判定规则本身的版本，不是这一批的序号：它挨着事件数与
+ * 时间窗摆着，写成「逻辑版本」会被读成每抽一次就 +1 的计数器。
  */
 import { computed } from 'vue'
 import type { SourceRange, StartupBatch } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtDateTimeInput, DtNotice, DtProgress, DtTag } from '@dt/ui'
+import {
+  DtButton,
+  DtDateTimeInput,
+  DtHelpTip,
+  DtNotice,
+  DtProgress,
+  DtTag,
+} from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
 import {
@@ -64,8 +73,12 @@ const unmatched = computed(() => props.batch?.unmatched_exclusion_count ?? 0)
           {{ batch.episode_count }} 条事件
         </DtTag>
         <span class="text-text-secondary">{{ formatWindow(batch) }}</span>
-        <span class="text-text-disabled">
-          逻辑版本 v{{ batch.logic_version }}
+        <span class="inline-flex items-center gap-1 text-text-disabled">
+          抽取逻辑 v{{ batch.logic_version }}
+          <DtHelpTip
+            label="抽取逻辑"
+            text="判定规则本身的版本，只有改了抽取规则才会变；同一段数据重抽多少次它都不动。"
+          />
         </span>
       </template>
       <!-- ⚠ 触发重算要 ac:manage（后端挂的是 ManageDep），页面本身只要
