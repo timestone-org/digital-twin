@@ -42,32 +42,39 @@ function isActive(to: string | undefined): boolean {
       {{ item.label }}
     </DtButton>
 
-    <!-- v-if 而不是 v-show：藏起来的链接仍可 Tab 到达，焦点会落到看不见的东西上 -->
-    <div v-if="isOpen" :id="`nav-group-${item.key}`" class="nav-tree__children">
-      <RouterLink
-        v-for="child in item.children"
-        :key="child.key"
-        :to="child.to ?? '/'"
-        class="flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs transition-colors"
-        :class="
-          isActive(child.to)
-            ? 'bg-accent-primary/10 text-accent-primary'
-            : 'text-text-secondary hover:bg-accent-primary/10 hover:text-text-primary'
-        "
-        :aria-current="isActive(child.to) ? 'page' : undefined"
-      >
-        <DtIcon :name="child.icon" :size="15" />
-        <span class="truncate">{{ child.label }}</span>
-      </RouterLink>
-    </div>
+    <!-- v-if 而不是 v-show：藏起来的链接仍可 Tab 到达，焦点会落到看不见的东西上。
+         Transition 只在离场那几帧里留住节点，收完即摘，Tab 序照旧不含合起来的项。 -->
+    <Transition name="nav-sub">
+      <div v-if="isOpen" :id="`nav-group-${item.key}`" class="nav-tree__panel">
+        <div class="nav-tree__children">
+          <RouterLink
+            v-for="child in item.children"
+            :key="child.key"
+            :to="child.to ?? '/'"
+            class="flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs transition-colors"
+            :class="
+              isActive(child.to)
+                ? 'bg-accent-primary/10 text-accent-primary'
+                : 'text-text-secondary hover:bg-accent-primary/10 hover:text-text-primary'
+            "
+            :aria-current="isActive(child.to) ? 'page' : undefined"
+          >
+            <DtIcon :name="child.icon" :size="15" />
+            <span class="truncate">{{ child.label }}</span>
+          </RouterLink>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <style scoped lang="scss">
+@use '@/styles/tokens-bridge' as t;
+
 .nav-tree {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 // class 透传到 DtButton 的根节点上，scoped 属性一起加上去，特异度因此高过
@@ -86,13 +93,38 @@ function isActive(to: string | undefined): boolean {
   }
 }
 
+// 开合动画走 grid 的 0fr → 1fr：高度不用写死，二级项增减都不必回来改数。
+// ⚠ 只有网格项自己能压到零高时 0fr 才收得动，故 __children 必须 overflow: hidden。
+.nav-tree__panel {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition:
+    grid-template-rows 180ms ease,
+    opacity 180ms ease;
+}
+
 .nav-tree__children {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  overflow: hidden;
   // 二级缩进对齐一级图标右侧，视觉上挂在它下面
   margin-left: 18px;
   padding-left: 8px;
+  padding-block: 2px;
   border-left: 1px solid var(--border-subtle);
+}
+
+.nav-sub-enter-from,
+.nav-sub-leave-to {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+// 开合是一次纵向的高度伸缩，对前庭敏感的人要整条关掉
+@include t.reduced-motion {
+  .nav-tree__panel {
+    transition: none;
+  }
 }
 </style>
