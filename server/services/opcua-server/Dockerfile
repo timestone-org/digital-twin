@@ -6,7 +6,7 @@
 # ⚠ 服务器私钥不在镜像里，也不在数据库里——它只在 OPCUA_PKI_DIR 指向的
 # 挂载卷上。镜像换了、库备份外流了，私钥都不跟着走。
 
-FROM ghcr.io/astral-sh/uv:0.11-python3.12-bookworm-slim AS builder
+FROM ghcr.io/astral-sh/uv:0.9.30-python3.12-bookworm-slim AS builder
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
