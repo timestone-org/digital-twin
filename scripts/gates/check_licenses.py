@@ -30,8 +30,14 @@ ALLOWED = re.compile(
 )
 # SPDX 复合表达式：`MIT AND PSF-2.0`、`(MIT OR CC0-1.0)`
 SPDX_SPLIT = re.compile(r"\s+(?:AND|OR|WITH)\s+", re.IGNORECASE)
-# 传染性：私有部署交付时不可接受
-FORBIDDEN = re.compile(r"\b(?<!L)GPL|AGPL|SSPL|Commons Clause\b", re.IGNORECASE)
+# 传染性：私有部署交付时不可接受。LGPL 不在此列，故 `GPL` 前有个 (?<!L)
+# ⚠ 缩写与全称都要认：有的包不给 SPDX 标识符只给一段散文，那里出现的是
+# 「GNU GENERAL PUBLIC LICENSE」而不是「GPL」，只认缩写等于放它过去。
+FORBIDDEN = re.compile(
+    r"\b(?<!L)GPL|AGPL|SSPL|Commons Clause\b"
+    r"|(?<!LESSER )GNU GENERAL PUBLIC LICENSE|AFFERO",
+    re.IGNORECASE,
+)
 CLASSIFIER = re.compile(r"^License :: (?:OSI Approved :: )?(?P<name>.+)$")
 
 
@@ -107,7 +113,22 @@ def _license_of(distribution: metadata.Distribution) -> str:
         match = CLASSIFIER.match(str(value))
         if match is not None:
             return match.group("name")
-    return str(distribution.metadata.get("License") or "未声明")
+    return _first_line(str(distribution.metadata.get("License") or "未声明"))
+
+
+def _first_line(value: str) -> str:
+    """取许可证字段的首个非空行。
+
+    ⚠ 有的包把整篇许可证正文塞进 `License` 字段（pymssql 是 513 行）。整篇正文
+    里必然反复出现 GPL 字样，逐字扫描于是把 LGPL 判成 GPL；而首行恰恰是许可证
+    的正名。只截首行是安全的**前提是** FORBIDDEN 同时认全称，否则 GPL 正文的
+    首行「GNU GENERAL PUBLIC LICENSE」里没有 GPL 三个字母，会整个漏过去。
+    Args: value。
+    """
+    for line in value.splitlines():
+        if line.strip():
+            return line.strip()
+    return value.strip()
 
 
 def _node_licenses() -> dict[str, str]:
