@@ -53,5 +53,6 @@ def _build_ac_source(settings: Settings) -> ReadOnlySqlSource:
             pool_recycle_s=settings.sqlserver_pool_recycle_s,
             login_timeout_s=settings.sqlserver_login_timeout_s,
             query_timeout_s=settings.sqlserver_query_timeout_s,
+            charset=settings.sqlserver_charset,
         ),
     )

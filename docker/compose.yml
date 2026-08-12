@@ -72,6 +72,8 @@ services:
       PLATFORM_SQLSERVER_PASSWORD: ${ACSOURCE_PASSWORD:?必填}
       PLATFORM_SQLSERVER_DATABASE: ${ACSOURCE_DB:?必填}
       PLATFORM_ACSOURCE_TIMEZONE: ${ACSOURCE_TIMEZONE:-Asia/Shanghai}
+      # ⚠ 老库的 varchar 列多是本地编码，配错只出乱码不报错
+      PLATFORM_SQLSERVER_CHARSET: ${ACSOURCE_CHARSET:-UTF-8}
       # ⚠ 与 auth-server 取同一个值：分叉就是业务面一律 401
       PLATFORM_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
     expose: ['8005']
