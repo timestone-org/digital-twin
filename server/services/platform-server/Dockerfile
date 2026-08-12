@@ -3,7 +3,7 @@
 # ⚠ 密钥绝不进镜像层：镜像层不可删除，某层 COPY 进来、后层 rm 掉，
 # 文件仍在历史层里可被提取。全部走运行时环境变量。
 
-FROM ghcr.io/astral-sh/uv:0.11-python3.12-bookworm-slim AS builder
+FROM ghcr.io/astral-sh/uv:0.9.30-python3.12-bookworm-slim AS builder
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
