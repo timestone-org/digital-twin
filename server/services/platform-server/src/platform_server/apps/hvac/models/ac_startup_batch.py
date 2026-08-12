@@ -61,6 +61,11 @@ class AcStartupBatch(UuidPrimaryKeyMixin, TimestampMixin, Base):
     episode_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
     )
+    # ⚠ 重算后有多少条人工排除没能对上事件。参数一变某些事件的起始时刻会平移，
+    # 旧键就落空了——这个数必须报出来，否则人工判断会静默地烂掉
+    unmatched_exclusion_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
 
     __table_args__ = (
         # 批次状态是字符串枚举 + CHECK，不用原生 ENUM——加一个取值不必改类型
@@ -71,6 +76,10 @@ class AcStartupBatch(UuidPrimaryKeyMixin, TimestampMixin, Base):
             name="shards_within_total",
         ),
         CheckConstraint("episode_count >= 0", name="episode_count_nonnegative"),
+        CheckConstraint(
+            "unmatched_exclusion_count >= 0",
+            name="unmatched_exclusion_count_nonnegative",
+        ),
         # ⚠ 一个房间只能有一个当前批次，由部分唯一索引在库里保证：靠代码自觉，
         # 一次并发切换就会留下两个 is_current，而页面只会挑到其中随机的一个
         Index(

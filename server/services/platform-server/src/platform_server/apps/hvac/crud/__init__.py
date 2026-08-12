@@ -10,9 +10,11 @@ from platform_server.apps.hvac.crud.ac_startup import (
     AcStartupBatchCrud,
     AcStartupEpisodeCrud,
     AcStartupExclusionCrud,
+    AcStartupShardCrud,
     ac_startup_batch_crud,
     ac_startup_episode_crud,
     ac_startup_exclusion_crud,
+    ac_startup_shard_crud,
 )
 from platform_server.apps.hvac.crud.ac_unit import AcUnitCrud, ac_unit_crud
 from platform_server.apps.hvac.crud.room import (
@@ -31,6 +33,7 @@ __all__ = [
     "AcStartupBatchCrud",
     "AcStartupEpisodeCrud",
     "AcStartupExclusionCrud",
+    "AcStartupShardCrud",
     "AcUnitCrud",
     "RoomCrud",
     "RoomLocation",
@@ -40,6 +43,7 @@ __all__ = [
     "ac_startup_batch_crud",
     "ac_startup_episode_crud",
     "ac_startup_exclusion_crud",
+    "ac_startup_shard_crud",
     "ac_unit_crud",
     "room_crud",
     "workshop_crud",

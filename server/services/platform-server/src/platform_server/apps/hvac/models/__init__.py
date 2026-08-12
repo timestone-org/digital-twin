@@ -12,6 +12,7 @@ from platform_server.apps.hvac.models.ac_startup_episode import (
 from platform_server.apps.hvac.models.ac_startup_exclusion import (
     AcStartupExclusion,
 )
+from platform_server.apps.hvac.models.ac_startup_shard import AcStartupShard
 from platform_server.apps.hvac.models.ac_unit import AcUnit
 from platform_server.apps.hvac.models.base import Base
 from platform_server.apps.hvac.models.room import Room
@@ -23,6 +24,7 @@ __all__ = [
     "AcStartupBatch",
     "AcStartupEpisode",
     "AcStartupExclusion",
+    "AcStartupShard",
     "AcUnit",
     "Base",
     "Room",

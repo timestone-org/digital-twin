@@ -11,7 +11,10 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from platform_server.apps.hvac.crud import ac_startup_batch_crud
+from platform_server.apps.hvac.crud import (
+    ac_startup_batch_crud,
+    ac_startup_shard_crud,
+)
 from platform_server.apps.hvac.models import AcStartupBatch, Room, Workshop
 from platform_server.apps.hvac.startups import (
     BATCH_RETENTION,
@@ -224,3 +227,15 @@ async def test_a_batch_window_must_be_ordered(
     with pytest.raises(IntegrityError):
         await db_session.flush()
     await db_session.rollback()
+
+
+async def test_seeding_no_shards_writes_nothing(
+    db_session: AsyncSession,
+) -> None:
+    """没有月份就没有分片，不该发出一条 INSERT。"""
+    room_id = await make_room(db_session, "无片")
+    batch = make_batch(room_id)
+    db_session.add(batch)
+    await db_session.flush()
+    await ac_startup_shard_crud.seed(db_session, batch.id, [])
+    assert await ac_startup_shard_crud.list_by_batch(db_session, batch.id) == []

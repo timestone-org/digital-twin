@@ -12,6 +12,14 @@ BATCH_STATUSES: frozenset[str] = frozenset(
     {BATCH_STATUS_RUNNING, BATCH_STATUS_READY, BATCH_STATUS_FAILED}
 )
 
+SHARD_STATUS_PENDING = "pending"
+SHARD_STATUS_DONE = "done"
+SHARD_STATUS_FAILED = "failed"
+
+SHARD_STATUSES: frozenset[str] = frozenset(
+    {SHARD_STATUS_PENDING, SHARD_STATUS_DONE, SHARD_STATUS_FAILED}
+)
+
 # 房间达标了，这条可以进训练
 OUTCOME_USABLE = "usable"
 # 窗口关闭后运行组合变过，记录但不训练
