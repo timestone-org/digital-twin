@@ -265,3 +265,74 @@ async def test_start_reports_liveness_from_the_real_port(
         f"{INSTANCES}/{data['id']}:stop", headers=sign_headers(PERM_OPERATE)
     )
     assert stopped.json()["data"]["is_running"] is False
+
+
+@pytest.mark.usefixtures("clean_tables")
+async def test_a_named_port_is_honoured(
+    client: httpx.AsyncClient, sign_headers: Headers, settings: Settings
+) -> None:
+    """点名池内的空闲端口，就用那个，不另挑。
+
+    Args: client, sign_headers, settings。
+    """
+    wanted = settings.ports()[3]
+    data = await _create(client, sign_headers, "picked", port=wanted)
+    assert data["port"] == wanted
+
+
+@pytest.mark.usefixtures("clean_tables")
+async def test_a_port_outside_the_pool_is_rejected(
+    client: httpx.AsyncClient, sign_headers: Headers, settings: Settings
+) -> None:
+    """⚠ 池外端口一律拒绝，不静默换一个。
+
+    池外的端口没有容器映射，上位机连不上，而实例状态会显示「运行中」。
+
+    Args: client, sign_headers, settings。
+    """
+    outside = settings.ports()[-1] + 1
+    response = await client.post(
+        INSTANCES,
+        json=_payload("outside", port=outside),
+        headers=sign_headers(PERM_MANAGE),
+    )
+    assert response.status_code == CONFLICT
+    assert str(outside) in response.json()["message"]
+
+
+@pytest.mark.usefixtures("clean_tables")
+async def test_a_taken_port_is_rejected(
+    client: httpx.AsyncClient, sign_headers: Headers, settings: Settings
+) -> None:
+    """已被占用的端口点名不了。
+
+    Args: client, sign_headers, settings。
+    """
+    wanted = settings.ports()[2]
+    await _create(client, sign_headers, "first", port=wanted)
+    response = await client.post(
+        INSTANCES,
+        json=_payload("second", port=wanted),
+        headers=sign_headers(PERM_MANAGE),
+    )
+    assert response.status_code == CONFLICT
+
+
+@pytest.mark.usefixtures("clean_tables")
+async def test_port_pool_lists_the_free_ports(
+    client: httpx.AsyncClient, sign_headers: Headers, settings: Settings
+) -> None:
+    """池子端点要给出可选的端口，页面才做得出选择器。
+
+    Args: client, sign_headers, settings。
+    """
+    taken = settings.ports()[0]
+    await _create(client, sign_headers, "holder", port=taken)
+    body = (
+        await client.get(
+            f"{INSTANCES}/port-pool", headers=sign_headers(PERM_VIEW)
+        )
+    ).json()["data"]
+    assert taken not in body["free_ports"]
+    assert set(body["free_ports"]) <= set(settings.ports())
+    assert len(body["free_ports"]) == body["available"]

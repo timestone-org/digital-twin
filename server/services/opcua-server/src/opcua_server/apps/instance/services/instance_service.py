@@ -20,6 +20,7 @@ from opcua_server.apps.instance.errors import (
     InstanceNameTaken,
     InstanceNotFound,
     PortPoolExhausted,
+    PortUnavailable,
 )
 from opcua_server.apps.instance.models import Instance
 from opcua_server.apps.instance.runtime.instance import (
@@ -52,6 +53,26 @@ RESTART_FIELDS = frozenset(
         "is_anonymous_allowed",
     }
 )
+
+
+def _validated_port(
+    wanted: int, *, pool: tuple[int, ...], taken: frozenset[int]
+) -> int:
+    """点名的端口必须在池内且没人占。
+
+    ⚠ 池外一律拒绝、不静默换一个：池外端口没有容器映射，上位机连不上，
+    而实例状态会显示「运行中」——最难排查的一类故障。
+
+    Args: wanted, pool, taken。
+    """
+    if wanted not in pool:
+        raise PortUnavailable(
+            f"端口 {wanted} 不在部署声明的池内"
+            f"（{pool[0]}-{pool[-1]}），换一个池内的端口"
+        )
+    if wanted in taken:
+        raise PortUnavailable(f"端口 {wanted} 已被别的实例占用")
+    return wanted
 
 
 class InstanceService:
@@ -116,7 +137,7 @@ class InstanceService:
                 name=payload.name,
                 description=payload.description,
                 endpoint_path=payload.endpoint_path,
-                port=await self._pick_port(session),
+                port=await self._resolve_port(session, payload.port),
                 namespace_uri=payload.namespace_uri,
                 security_policies=list(payload.security_policies),
                 is_anonymous_allowed=payload.is_anonymous_allowed,
@@ -197,7 +218,11 @@ class InstanceService:
             used = len(await instance_crud.taken_ports(session))
             count = await instance_crud.count_all(session)
         total = len(allocator.pool)
+        async with self._database.session() as session:
+            occupied = await instance_crud.taken_ports(session)
+        free = [port for port in allocator.pool if port not in occupied]
         return PortPoolOut(
+            free_ports=free,
             total=total,
             used=used,
             available=max(total - used, 0),
@@ -293,21 +318,24 @@ class InstanceService:
                 f"已达实例数上限 {self._supervisor.max_instances}"
             )
 
-    async def _pick_port(self, session: AsyncSession) -> int:
-        """从池里挑一个没被占的端口。
+    async def _resolve_port(
+        self, session: AsyncSession, wanted: int | None
+    ) -> int:
+        """定下这个实例用哪个端口：点名的就校验，没点名就从池里挑。
 
         ⚠ 「先查再插」在并发下会重复，真正防重的是 `uq_opcua_instances_port`。
-        这里只负责挑，冲突交给唯一约束。
+        这里只负责挑与校验，冲突交给唯一约束。
 
-        Args: session。
+        Args: session, wanted。
         """
         taken = await instance_crud.taken_ports(session)
-        for port in self._supervisor.ports.pool:
+        pool = self._supervisor.ports.pool
+        if wanted is not None:
+            return _validated_port(wanted, pool=pool, taken=taken)
+        for port in pool:
             if port not in taken:
                 return port
-        raise PortPoolExhausted(
-            f"端口池 {len(self._supervisor.ports.pool)} 个端口已全部占用"
-        )
+        raise PortPoolExhausted(f"端口池 {len(pool)} 个端口已全部占用")
 
     @staticmethod
     async def _require(

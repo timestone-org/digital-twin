@@ -89,7 +89,12 @@ class InstanceOut(OutputModel):
 
 
 class InstanceCreateIn(InputModel):
-    """建实例。端口不由调用方指定——它从部署期声明的池里分配。"""
+    """建实例。
+
+    `port` 可以点名，也可以留空由服务从池里挑。⚠ 点名的端口必须在部署期
+    声明的池内——池外的端口没有容器映射，上位机连不上，而实例状态会显示
+    「运行中」。所以池外一律拒绝，不静默改成别的端口。
+    """
 
     name: InstanceName
     description: Description | None = None
@@ -98,6 +103,7 @@ class InstanceCreateIn(InputModel):
     security_policies: list[SecurityPolicy] = Field(min_length=1)
     is_anonymous_allowed: bool = False
     is_autostart: bool = False
+    port: int | None = Field(default=None, ge=1, le=65535)
 
 
 class InstanceUpdateIn(InputModel):
@@ -134,3 +140,5 @@ class PortPoolOut(OutputModel):
     available: int
     max_instances: int
     instance_count: int
+    # 池内当前没被占的端口，升序。建实例时可以从中点名一个。
+    free_ports: list[int]

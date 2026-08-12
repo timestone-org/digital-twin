@@ -834,7 +834,7 @@
       },
       "InstanceCreateIn": {
         "additionalProperties": false,
-        "description": "建实例。端口不由调用方指定——它从部署期声明的池里分配。",
+        "description": "建实例。\n\n`port` 可以点名，也可以留空由服务从池里挑。⚠ 点名的端口必须在部署期\n声明的池内——池外的端口没有容器映射，上位机连不上，而实例状态会显示\n「运行中」。所以池外一律拒绝，不静默改成别的端口。",
         "properties": {
           "description": {
             "anyOf": [
@@ -878,6 +878,19 @@
             "minLength": 1,
             "title": "Namespace Uri",
             "type": "string"
+          },
+          "port": {
+            "anyOf": [
+              {
+                "maximum": 65535.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Port"
           },
           "security_policies": {
             "items": {
@@ -1630,6 +1643,13 @@
             "title": "Available",
             "type": "integer"
           },
+          "free_ports": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Free Ports",
+            "type": "array"
+          },
           "instance_count": {
             "title": "Instance Count",
             "type": "integer"
@@ -1652,7 +1672,8 @@
           "used",
           "available",
           "max_instances",
-          "instance_count"
+          "instance_count",
+          "free_ports"
         ],
         "title": "PortPoolOut",
         "type": "object"
