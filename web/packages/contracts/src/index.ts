@@ -60,6 +60,9 @@ export type {
 export type {
   AcModel,
   AcModelStatus,
+  AcUnitLiveReading,
+  AcUnitReadingValues,
+  RoomLiveReadings,
   ModelErrorStats,
   ModelMetrics,
   ModelMetricsBlock,

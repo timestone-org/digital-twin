@@ -330,6 +330,12 @@ export interface ModelErrorStats {
   rmse: number
   coverage: number
   mean_width: number
+  /**
+   * 决定系数。⚠ null 有两种成因：老评估没算过（重训能补），以及实际值没有
+   * 离散度（只有一条热行时数学上无定义，重训也还是 null）。
+   * 渲染成 `—`，绝不折成 0——0 的含义是「与永远猜平均值一样」。
+   */
+  r2: number | null
   reliability: ModelReliability
 }
 
@@ -449,6 +455,32 @@ export interface ModelRecommendEntry {
 export interface ModelRecommendResult {
   items: ModelRecommendEntry[]
   trained_at: string
+}
+
+/* 房间实时工况 —— 试算与推荐的当下入参 */
+
+/** 一台机组的五项实时读数。⚠ 全部可空，null = 窗内没读到，不是 0。 */
+export interface AcUnitReadingValues {
+  workshop_temp_avg: number | null
+  workshop_humidity_avg: number | null
+  fresh_air_temp: number | null
+  fresh_air_humidity: number | null
+  chilled_water_supply_temp: number | null
+}
+
+/** 回看窗内某台的最后一行。⚠ `is_running` 三态：null = 未知，不等于停机。 */
+export interface AcUnitLiveReading {
+  serial: string
+  sampled_at: string | null
+  is_running: boolean | null
+  readings: AcUnitReadingValues
+}
+
+/** 房间的实时工况快照。⚠ 外库不可达时是 503，绝不返回旧数据。 */
+export interface RoomLiveReadings {
+  as_of: string
+  lookback_minutes: number
+  units: AcUnitLiveReading[]
 }
 
 /** 半衰期的允许范围（天），与后端校验同值。 */

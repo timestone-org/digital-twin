@@ -7,11 +7,13 @@ import type { DtDataColumn, ModelPrediction } from '@dt/contracts'
 import { DtDataView, type DtPaginationState } from '@dt/ui'
 
 import { formatDateTime } from '@/utils/datetime'
-import { formatSet } from '@/features/hvac/modelView'
+import { formatSet, isCovered, signedError } from '@/features/hvac/modelView'
 
 const COLUMNS: readonly DtDataColumn[] = [
   { key: 'started', label: '起始时刻', width: '12rem', card: 'title' },
   { key: 'set', label: '组合', width: '12rem', card: 'meta' },
+  // 折号是这条预测的出处：「这一折训练时模型没见过它」正是它可信的原因
+  { key: 'fold', label: '折', width: '4rem', align: 'right' },
   { key: 'actual', label: '实际', width: '7rem', align: 'right' },
   { key: 'p50', label: '预测 p50', width: '8rem', align: 'right' },
   { key: 'interval', label: '80% 区间', width: '10rem', align: 'right' },
@@ -22,6 +24,7 @@ interface Row {
   id: string
   started: string
   set: string
+  fold: number
   actual: string
   p50: string
   interval: string
@@ -48,13 +51,12 @@ function toRows(items: readonly ModelPrediction[]): Row[] {
     id: item.started_at,
     started: formatDateTime(item.started_at),
     set: formatSet(item.running_set),
+    fold: item.fold,
     actual: `${item.actual_minutes} 分钟`,
     p50: item.p50.toFixed(1),
     interval: `${item.p10.toFixed(1)} – ${item.p90.toFixed(1)}`,
-    error: (item.p50 - item.actual_minutes).toFixed(1),
-    isMissed: !(
-      item.p10 <= item.actual_minutes && item.actual_minutes <= item.p90
-    ),
+    error: signedError(item).toFixed(1),
+    isMissed: !isCovered(item),
   }))
 }
 </script>
@@ -67,7 +69,7 @@ function toRows(items: readonly ModelPrediction[]): Row[] {
     :rows="toRows(props.rows)"
     :loading="props.loading"
     :error="props.error"
-    :layout="{ toggle: false, minWidth: '56rem', fill: false }"
+    :layout="{ toggle: false, minWidth: '60rem', fill: false }"
     :pagination="props.pager"
     :empty="{
       title: '还没有折外预测',
@@ -78,6 +80,7 @@ function toRows(items: readonly ModelPrediction[]): Row[] {
     @retry="emit('retry')"
   >
     <template #cell-started="{ row }">{{ row.started }}</template>
+    <template #cell-fold="{ row }">{{ row.fold }}</template>
     <template #cell-actual="{ row }">{{ row.actual }}</template>
     <template #cell-p50="{ row }">{{ row.p50 }}</template>
     <template #cell-error="{ row }">{{ row.error }}</template>

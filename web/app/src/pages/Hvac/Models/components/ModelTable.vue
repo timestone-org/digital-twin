@@ -1,27 +1,52 @@
 <script setup lang="ts">
 /**
- * @fileoverview 模型列表。行点开详情；重训与删除是写操作，只给 ac:manage。
+ * @fileoverview 某个房间的模型表。行点开详情；重训与删除是写操作，只给 ac:manage。
+ *
+ * ⚠ 表格而不是卡片：同房间的多个模型只在几个数字上有差别，判断「哪个更好」
+ * 是逐列比大小的活儿，同一指标钉在同一条竖线上眼睛才扫得下来。窄屏用户可以
+ * 用内置切换器自己换成卡片。
  */
-import type { DtDataColumn } from '@dt/contracts'
+import type { DtDataColumn, DtDataViewMode, DtTableSort } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtDataView, DtTag } from '@dt/ui'
+import { DtButton, DtDataView, DtHelpTip, DtTag } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
-import type { ModelRow } from '@/features/hvac/modelView'
+import {
+  HOT_METRICS_HELP,
+  R2_HELP,
+  type ModelRow,
+} from '@/features/hvac/modelView'
 
 const COLUMNS: readonly DtDataColumn[] = [
-  { key: 'name', label: '名称', width: '12rem', card: 'title' },
-  { key: 'room', label: '房间', width: '10rem', card: 'meta' },
-  { key: 'status', label: '状态', width: '7rem' },
-  { key: 'sample', label: '样本', width: '6rem', align: 'right' },
-  { key: 'mae', label: '热行 MAE', width: '8rem', align: 'right' },
-  { key: 'coverage', label: '热行覆盖', width: '7rem', align: 'right' },
-  { key: 'trained', label: '训练时间', width: '11rem' },
-  { key: 'notice', label: '提示' },
+  { key: 'name', label: '名称', width: '16rem', card: 'title' },
+  { key: 'status', label: '状态', width: '6rem' },
+  { key: 'sets', label: '服务组合', width: '10rem', card: 'meta' },
+  {
+    key: 'sample',
+    label: '样本',
+    width: '7.5rem',
+    align: 'right',
+    sortable: true,
+  },
+  {
+    key: 'r2',
+    label: '热行 R²',
+    width: '6rem',
+    align: 'right',
+    sortable: true,
+  },
+  {
+    key: 'mae',
+    label: '热行 MAE',
+    width: '8rem',
+    align: 'right',
+    sortable: true,
+  },
+  { key: 'training', label: '训练', width: '10rem', sortable: true },
   {
     key: 'actions',
     label: '操作',
-    width: '10rem',
+    width: '9rem',
     align: 'right',
     card: 'actions',
   },
@@ -31,6 +56,8 @@ const props = defineProps<{
   rows: readonly ModelRow[]
   loading: boolean
   error: string | null
+  sort: DtTableSort | null
+  view: DtDataViewMode
 }>()
 
 const emit = defineEmits<{
@@ -38,48 +65,109 @@ const emit = defineEmits<{
   retrain: [row: ModelRow]
   remove: [row: ModelRow]
   retry: []
+  'update:sort': [value: DtTableSort]
+  'update:view': [value: DtDataViewMode]
 }>()
 </script>
 
 <template>
   <DtDataView
     class="min-h-0 flex-1"
-    view="table"
+    :view="props.view"
     :columns="COLUMNS"
     :rows="props.rows"
     :loading="props.loading"
     :error="props.error"
-    :layout="{ toggle: false, minWidth: '72rem' }"
+    :sort="props.sort"
+    :layout="{ minWidth: '72rem', cardColumns: 2, cardMinWidth: '20rem' }"
     :empty="{
-      title: '还没有建过模型',
-      hint: '先在开机事件页抽出数据，再回这里新建。',
+      title: '这个房间还没有模型',
+      hint: '用右上角的「新建模型」，拿它已抽出的开机事件训练一个。',
     }"
     @retry="emit('retry')"
+    @update:sort="emit('update:sort', $event)"
+    @update:view="emit('update:view', $event)"
   >
-    <template #cell-name="{ row }">
-      <button
-        type="button"
-        class="truncate text-left text-accent-primary hover:underline"
-        @click="emit('open', row)"
+    <template #toolbar>
+      <div
+        class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-text-secondary"
       >
-        {{ row.name }}
-      </button>
+        <span class="inline-flex items-center gap-1">
+          热行指标
+          <DtHelpTip label="热行指标" :text="HOT_METRICS_HELP" />
+        </span>
+        <span class="inline-flex items-center gap-1">
+          热行 R²
+          <DtHelpTip label="热行 R²" :text="R2_HELP" />
+        </span>
+      </div>
     </template>
-    <template #cell-room="{ row }">
-      <span class="truncate">{{ row.workshop }} · {{ row.room }}</span>
+
+    <template #cell-name="{ row }">
+      <div class="flex min-w-0 flex-col">
+        <button
+          type="button"
+          class="truncate text-left text-accent-primary hover:underline"
+          @click="emit('open', row)"
+        >
+          {{ row.name }}
+        </button>
+        <span
+          v-if="row.notice"
+          class="truncate text-2xs text-state-warning"
+          :title="row.notice"
+        >
+          {{ row.notice }}
+        </span>
+        <span
+          v-else-if="row.description"
+          class="truncate text-2xs text-text-secondary"
+          :title="row.description"
+        >
+          {{ row.description }}
+        </span>
+      </div>
     </template>
     <template #cell-status="{ row }">
       <DtTag size="sm" :intent="row.statusIntent">{{ row.statusLabel }}</DtTag>
     </template>
-    <template #cell-sample="{ row }">{{ row.sample }}</template>
-    <template #cell-mae="{ row }">{{ row.mae }}</template>
-    <template #cell-coverage="{ row }">{{ row.coverage }}</template>
-    <template #cell-trained="{ row }">{{ row.trained }}</template>
-    <template #cell-notice="{ row }">
-      <span v-if="row.notice" class="truncate text-xs text-state-warning">
-        {{ row.notice }}
+    <template #cell-sets="{ row }">
+      <span class="truncate font-mono text-xs" :title="row.setsTitle">
+        {{ row.sets }}
       </span>
-      <span v-else class="text-xs text-text-disabled">—</span>
+    </template>
+    <template #cell-sample="{ row }">
+      <div class="flex flex-col items-end">
+        <span>{{ row.sample }}</span>
+        <span v-if="row.sampleSplit" class="text-2xs text-text-disabled">
+          {{ row.sampleSplit }}
+        </span>
+      </div>
+    </template>
+    <template #cell-r2="{ row }">
+      <span :class="row.r2Class">{{ row.r2 }}</span>
+    </template>
+    <template #cell-mae="{ row }">
+      <div class="flex flex-col items-end">
+        <span>{{ row.mae }}</span>
+        <span
+          v-if="row.coverage"
+          class="text-2xs"
+          :class="
+            row.isCoverageLow ? 'text-state-warning' : 'text-text-disabled'
+          "
+        >
+          覆盖 {{ row.coverage }}
+        </span>
+      </div>
+    </template>
+    <template #cell-training="{ row }">
+      <div class="flex flex-col">
+        <span :title="row.trainedTitle">{{ row.trained }}</span>
+        <span v-if="row.window" class="text-2xs text-text-disabled">
+          {{ row.window }}
+        </span>
+      </div>
     </template>
     <template #cell-actions="{ row }">
       <div class="flex items-center justify-end gap-1">

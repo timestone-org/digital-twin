@@ -11,6 +11,9 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type {
   AcModel,
+  AcUnitLiveReading,
+  AcUnitReadingValues,
+  RoomLiveReadings,
   ModelErrorStats,
   ModelMetrics,
   ModelMetricsBlock,
@@ -363,6 +366,7 @@ const SHAPES: Record<string, Record<string, true>> = {
     rmse: true,
     coverage: true,
     mean_width: true,
+    r2: true,
     reliability: true,
   } satisfies Keys<ModelErrorStats>,
 
@@ -373,12 +377,34 @@ const SHAPES: Record<string, Record<string, true>> = {
     rmse: true,
     coverage: true,
     mean_width: true,
+    r2: true,
     reliability: true,
     hot: true,
     zero_count: true,
     zero_hit_rate: true,
     hot_hit_rate: true,
   } satisfies Keys<ModelMetricsBlock>,
+
+  LiveReadingValuesOut: {
+    workshop_temp_avg: true,
+    workshop_humidity_avg: true,
+    fresh_air_temp: true,
+    fresh_air_humidity: true,
+    chilled_water_supply_temp: true,
+  } satisfies Keys<AcUnitReadingValues>,
+
+  LiveUnitReadingOut: {
+    serial: true,
+    sampled_at: true,
+    is_running: true,
+    readings: true,
+  } satisfies Keys<AcUnitLiveReading>,
+
+  LiveReadingsOut: {
+    as_of: true,
+    lookback_minutes: true,
+    units: true,
+  } satisfies Keys<RoomLiveReadings>,
 
   ModelMetricsOut: {
     overall: true,
@@ -458,6 +484,37 @@ describe('@dt/contracts 与 platform openapi.json 的字段一致', () => {
     const properties = detailed().AcDataBindingOut?.properties ?? {}
     expect(properties.created_at?.format).toBe('date-time')
     expect(properties.updated_at?.format).toBe('date-time')
+  })
+})
+
+describe('缺席不是零', () => {
+  it('R² 可以是 null——老评估没算过，或热行没有离散度，都不是 0', () => {
+    const property = detailed().ErrorStatsOut?.properties?.r2
+    expect(property?.anyOf?.map((item) => item.type)).toEqual([
+      'number',
+      'null',
+    ])
+    expect(detailed().ErrorStatsOut?.required ?? []).toContain('r2')
+  })
+
+  it('实时读数五项全可空，null = 窗内没读到', () => {
+    const properties = detailed().LiveReadingValuesOut?.properties ?? {}
+    const entries = Object.entries(properties)
+    expect(entries).toHaveLength(5)
+    for (const [key, property] of entries) {
+      expect(
+        property?.anyOf?.map((item) => item.type),
+        key,
+      ).toEqual(['number', 'null'])
+    }
+  })
+
+  it('is_running 是三态：null 不等于停机', () => {
+    const property = detailed().LiveUnitReadingOut?.properties?.is_running
+    expect(property?.anyOf?.map((item) => item.type)).toEqual([
+      'boolean',
+      'null',
+    ])
   })
 })
 

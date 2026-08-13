@@ -26,6 +26,7 @@ import type {
   RawSample,
   RawSeries,
   Room,
+  RoomLiveReadings,
   StartupBatches,
   StartupEpisode,
   StartupExclusion,
@@ -239,6 +240,21 @@ export async function getRawSeries(
     `/ac-units/${acUnitId}/raw-series`,
     // ⚠ metrics 是逗号分隔的**一个** query 参数，不是重复的同名参数
     onPlatform({ query: { ...query, metrics: query.metrics.join(',') } }),
+  )
+}
+
+/**
+ * 房间里每台机组在回看窗内的最后一行读数。
+ * ⚠ 外库不可达时是 503（不是空数组）：这条接口绝不拿旧数据顶上，
+ * 页面照着 503 说「读不到」，不许静默降级成一份陈旧快照。
+ * @param roomId 房间 id
+ */
+export async function getRoomLiveReadings(
+  roomId: string,
+): Promise<RoomLiveReadings> {
+  return await requestData<RoomLiveReadings>(
+    `/rooms/${roomId}/live-readings`,
+    onPlatform(),
   )
 }
 

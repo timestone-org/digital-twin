@@ -30,6 +30,8 @@ import { formatSet } from '@/features/hvac/modelView'
 const props = defineProps<{
   open: boolean
   rooms: readonly Room[]
+  /** 打开时预填的房间；预填后仍可改，改了照常走覆盖度取数。 */
+  roomId?: string | undefined
 }>()
 
 const emit = defineEmits<{
@@ -39,7 +41,7 @@ const emit = defineEmits<{
 
 const coverageFetch = useRacedFetch()
 
-const roomId = ref('')
+const pickedRoom = ref('')
 const name = ref('')
 const description = ref('')
 const halfLife = ref(MODEL_HALF_LIFE_DEFAULT_DAYS)
@@ -70,7 +72,7 @@ const setOptions = computed(() =>
 
 const canSubmit = computed(
   () =>
-    roomId.value !== '' &&
+    pickedRoom.value !== '' &&
     name.value.trim() !== '' &&
     picked.value.size > 0 &&
     !busy.value,
@@ -80,23 +82,23 @@ watch(
   () => props.open,
   (open) => {
     if (!open) return
-    roomId.value = ''
+    // ⚠ 重置成预填值而不是空串：写 '' 会把 roomId prop 的预填立刻抹掉
+    pickedRoom.value = props.roomId ?? ''
     name.value = ''
     description.value = ''
     halfLife.value = MODEL_HALF_LIFE_DEFAULT_DAYS
     isAdvancedOpen.value = false
-    coverage.value = []
-    picked.value = new Set()
     problem.value = null
-    coverageError.value = null
   },
 )
 
-watch(roomId, (room) => {
+// ⚠ 打开与换房间合成一条：只盯 roomId 的话，带着同一个预填房间第二次打开时
+// 取值没变，覆盖度就永远停在「正在取…」
+watch([() => props.open, pickedRoom], ([open, room]) => {
   coverage.value = []
   picked.value = new Set()
   coverageError.value = null
-  if (room === '') return
+  if (!open || room === '') return
   void loadCoverage(room)
 })
 
@@ -135,7 +137,7 @@ async function submit(): Promise<void> {
       .filter((option) => picked.value.has(option.key))
       .map((option) => [...option.set].sort())
     const model = await hvac.createAcModel({
-      room_id: roomId.value,
+      room_id: pickedRoom.value,
       name: name.value.trim(),
       ...(description.value.trim() === ''
         ? {}
@@ -161,14 +163,19 @@ async function submit(): Promise<void> {
     @update:model-value="emit('close')"
   >
     <div class="flex flex-col gap-4">
-      <DtSelect v-model="roomId" label="房间" :options="roomOptions" required />
+      <DtSelect
+        v-model="pickedRoom"
+        label="房间"
+        :options="roomOptions"
+        required
+      />
       <DtInput v-model="name" label="模型名称" required maxlength="64" />
 
       <DtField label="服务组合" required>
         <DtNotice v-if="coverageError" intent="warning">
           {{ coverageError }}
         </DtNotice>
-        <p v-else-if="roomId === ''" class="text-xs text-text-secondary">
+        <p v-else-if="pickedRoom === ''" class="text-xs text-text-secondary">
           先选房间，再从它抽出的组合里勾选。
         </p>
         <p

@@ -81,6 +81,8 @@ export const ERROR_CODES = {
   metricUnknown: 41614,
   cursorInvalid: 41615,
   startupRebuildInProgress: 41616,
+  /** 服务组合与工件对不上（多半是训练之后新加的机组），要重训。 */
+  modelConfigInvalid: 41620,
   internal: 50000,
   dependencyUnavailable: 50001,
   /** 外部数据源不可用。⚠ 后端刻意不给陈旧数据兜底，前端也不许显示旧值。 */

@@ -1,24 +1,27 @@
 <script setup lang="ts">
 /**
- * @fileoverview 模型详情：评估、按组合分组、散点与逐条对比、试算。
+ * @fileoverview 模型详情：评估、折外总览、按组合分组、逐条对比与实时测试。
  *
  * ⚠ 训练中详情继续显示上一次的评估并挂进度提示——半份/空数据比旧数据危险
  * （AC_MODEL_DESIGN §6）。轮询到终态即停，卸载时清定时器。
+ * ⚠ 训练由 busy 转终态那一刻，折外预测被整体换掉：全量与分页两处都要刷新。
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { AcModel, ModelPrediction } from '@dt/contracts'
-import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtCard, DtNotice, DtTag, useConfirm, useToast } from '@dt/ui'
+import { DtCard, DtNotice, DtTag, useConfirm, useToast } from '@dt/ui'
 
 import * as hvac from '@/api/hvac'
-import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
 import { describeError, useAsyncList } from '@/composables/useAsyncList'
+import DetailActions from './components/DetailActions.vue'
+import LiveTestDialog from './components/LiveTestDialog.vue'
 import MetricsSummary from './components/MetricsSummary.vue'
-import ComparisonCard from './components/ComparisonCard.vue'
+import OutOfFoldCard from './components/OutOfFoldCard.vue'
+import PredictionTable from './components/PredictionTable.vue'
+import ProvenanceStrip from './components/ProvenanceStrip.vue'
 import SetMetricsTable from './components/SetMetricsTable.vue'
-import RecommendPanel from './components/RecommendPanel.vue'
+import { useOutOfFold } from './useOutOfFold'
 import {
   MODEL_STATUS_VIEW,
   isModelBusy,
@@ -37,10 +40,16 @@ const confirm = useConfirm()
 const modelId = computed(() => String(route.params['modelId'] ?? ''))
 const model = ref<AcModel | null>(null)
 const error = ref<string | null>(null)
+const isLiveTestOpen = ref(false)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
-/** 逐条对比的组合过滤；空串 = 全部。组合键是 `+` 拼的，后端要逗号分隔。 */
+/** 全页唯一的组合过滤；空串 = 全部。组合键是 `+` 拼的，后端要逗号分隔。 */
 const setFilter = ref('')
+
+const outOfFold = useOutOfFold(
+  () => modelId.value,
+  () => setFilter.value,
+)
 
 const predictions = useAsyncList<ModelPrediction>(
   (query) =>
@@ -73,10 +82,17 @@ const staleNotice = computed(() => {
   }
   return null
 })
+/** 回列表时把房间带回去，选中态才不会丢。 */
+const backTo = computed(() =>
+  model.value === null
+    ? '/hvac/models'
+    : `/hvac/models?room=${model.value.room.id}`,
+)
 
 onMounted(() => {
   void load()
   void predictions.reload()
+  outOfFold.reload()
 })
 
 onBeforeUnmount(() => {
@@ -90,8 +106,11 @@ async function load(): Promise<void> {
     model.value = found
     error.value = null
     syncPolling(found)
-    // 训练刚结束这一刻，逐条对比已整体换掉，跟着刷新
-    if (wasBusy && !isModelBusy(found)) void predictions.reload()
+    // 训练刚结束这一刻，折外预测已整体换掉，两处都跟着刷新
+    if (wasBusy && !isModelBusy(found)) {
+      void predictions.reload()
+      outOfFold.reload()
+    }
   } catch (caught) {
     error.value = describeError(caught)
   }
@@ -123,6 +142,12 @@ async function retrain(): Promise<void> {
   }
 }
 
+/** E4 的「去重训」：先关弹窗，再走与头部同一条重训路径。 */
+function retrainFromDialog(): void {
+  isLiveTestOpen.value = false
+  void retrain()
+}
+
 async function remove(): Promise<void> {
   const found = model.value
   if (found === null) return
@@ -149,25 +174,16 @@ async function remove(): Promise<void> {
     :subtitle="
       model ? `${model.workshop.name} · ${model.room.name}` : undefined
     "
-    back-to="/hvac/models"
+    :back-to="backTo"
     back-label="达标预测"
   >
     <template #actions>
-      <PermGuard :codes="[PERMISSION_CODES.acManage]">
-        <div class="flex items-center gap-2">
-          <DtButton
-            intent="primary"
-            size="sm"
-            :disabled="model === null || isModelBusy(model)"
-            @click="retrain"
-          >
-            重训
-          </DtButton>
-          <DtButton intent="danger" variant="ghost" size="sm" @click="remove">
-            删除
-          </DtButton>
-        </div>
-      </PermGuard>
+      <DetailActions
+        :model="model"
+        @live-test="isLiveTestOpen = true"
+        @retrain="retrain"
+        @remove="remove"
+      />
     </template>
 
     <!-- h-full + min-h-0 见 AppShell 的契约：main 不滚，高度由页面自己吃满 -->
@@ -194,6 +210,8 @@ async function remove(): Promise<void> {
           {{ model.error }}
         </DtNotice>
 
+        <ProvenanceStrip :model="model" />
+
         <MetricsSummary
           v-if="model.metrics"
           :overall="model.metrics.overall"
@@ -203,33 +221,54 @@ async function remove(): Promise<void> {
           还没有一次成功的训练。
         </DtNotice>
 
-        <div class="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_20rem]">
-          <!-- ⚠ min-w-0 缺一不可：grid/flex 子项默认不许窄于内容，宽表格会
-               顶破页面横滚，而不是在表格自己的滚动容器里滚 -->
-          <div class="flex min-h-0 min-w-0 flex-col gap-3">
-            <DtCard v-if="setRows.length > 0" class="min-w-0">
-              <h2 class="mb-2 text-sm font-semibold text-text-primary">
-                按服务组合
-              </h2>
-              <SetMetricsTable :rows="setRows" />
-            </DtCard>
+        <template v-if="model.metrics">
+          <OutOfFoldCard
+            :out-of-fold="outOfFold"
+            :sets="model.serving_sets"
+            :filter="setFilter"
+            @update:filter="setFilter = $event"
+          />
 
-            <ComparisonCard
-              v-model:filter="setFilter"
-              :predictions="predictions"
-              :sets="model.serving_sets"
-            />
-          </div>
-
-          <DtCard class="min-w-0 self-start">
+          <DtCard v-if="setRows.length > 0" class="min-w-0">
             <h2 class="mb-2 text-sm font-semibold text-text-primary">
-              开机策略推荐
+              按服务组合
+              <span class="ml-1 text-xs font-normal text-text-secondary">
+                点一行把上面的图与下面的表都筛到它
+              </span>
             </h2>
-            <RecommendPanel v-if="model.trained_at" :model="model" />
-            <p v-else class="text-xs text-text-secondary">训练完成后可用。</p>
+            <SetMetricsTable
+              :rows="setRows"
+              :selected="setFilter"
+              @select="setFilter = $event"
+            />
           </DtCard>
-        </div>
+
+          <DtCard class="min-w-0">
+            <h2 class="mb-2 text-sm font-semibold text-text-primary">
+              折外逐条
+              <span class="ml-1 text-xs font-normal text-text-secondary">
+                「折」= 这一折训练时模型没见过它，所以这条预测是可信的
+              </span>
+            </h2>
+            <PredictionTable
+              :rows="predictions.items.value"
+              :loading="predictions.loading.value"
+              :error="predictions.error.value"
+              :pager="predictions.pager.value"
+              @update:page="predictions.goToPage($event)"
+              @update:size="predictions.setSize($event)"
+              @retry="predictions.reload()"
+            />
+          </DtCard>
+        </template>
       </template>
     </div>
+
+    <LiveTestDialog
+      :open="isLiveTestOpen"
+      :model="model"
+      @close="isLiveTestOpen = false"
+      @retrain="retrainFromDialog"
+    />
   </AppShell>
 </template>
