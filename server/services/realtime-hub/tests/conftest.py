@@ -18,6 +18,7 @@ from datetime import timedelta
 
 import httpx
 import pytest
+from fastapi import FastAPI
 from realtime_hub.app import build_app
 from realtime_hub.apps.channel.crud import TopicCrud
 from realtime_hub.apps.channel.services import SessionService, TopicRegistry
@@ -118,6 +119,26 @@ def token(codec: JwtCodec) -> TokenFactory:
         return raw
 
     return issue
+
+
+@pytest.fixture
+async def application(
+    settings: Settings, postgres_available: bool
+) -> AsyncIterator[FastAPI]:
+    """整装应用本体。WS 用例要它——TestClient 收的是 app，不是 transport。
+
+    Args: settings, postgres_available。
+    """
+    if not postgres_available:
+        pytest.skip("本机连不到 Postgres")
+    built_app = build_app(settings)
+    built: Container = built_app.state.container
+    built_app.state.container = _with_fake_catalog(built)
+    yield built_app
+    await built.fanout.stop()
+    await built.pubsub.close()
+    await built.database.dispose()
+    await built.cache.close()
 
 
 @pytest.fixture

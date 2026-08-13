@@ -8,18 +8,25 @@
 import hmac
 from typing import Annotated
 
-from fastapi import Depends, Header, Request
+from fastapi import Depends, Header
+from starlette.requests import HTTPConnection
 
 from lib.errors import Unauthenticated
 from realtime_hub.container import Container
 
 
-def get_container(request: Request) -> Container:
+def get_container(connection: HTTPConnection) -> Container:
     """取组合根。
 
-    Args: request。
+    ⚠ 形参类型必须是 `HTTPConnection` 而不是 `Request`：WebSocket 端点上
+    FastAPI 注入的是 `WebSocket`，声明成 `Request` 会在**握手时**以
+    「get_container() missing 1 required positional argument」失败——而那条
+    路径没有 HTTP 用例覆盖，只有真实握手的契约用例才照得出来。
+    `HTTPConnection` 是两者的共同基类，HTTP 与 WS 都接得住。
+
+    Args: connection。
     """
-    container = request.app.state.container
+    container = connection.app.state.container
     # pragma 理由：装配失败时进程根本起不来，这条分支没有可达的测试路径
     if not isinstance(container, Container):  # pragma: no cover
         raise RuntimeError("应用未装配 container")
