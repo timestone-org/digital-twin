@@ -31,7 +31,11 @@ const DARK_TECH: ThemeDefinition = {
       inverse: '#010d1e',
       onEmphasis: '#011018',
     },
-    accent: { primary: '#00cefc', secondary: '#45d3fd' },
+    accent: {
+      primary: '#00cefc',
+      secondary: '#45d3fd',
+      onSurface: '#00cefc',
+    },
     state: {
       success: '#14e144',
       warning: '#ffe400',
@@ -81,7 +85,12 @@ const LIGHT: ThemeDefinition = {
       inverse: '#0a1a2b',
       onEmphasis: '#011018',
     },
-    accent: { primary: '#0098c8', secondary: '#0077a8' },
+    accent: {
+      primary: '#0098c8',
+      secondary: '#0077a8',
+      // ⚠ 比 primary 深：同一个取值压在浅底上当文字只有 3.09:1
+      onSurface: '#0077a8',
+    },
     // ⚠ 实心底恒配深墨前景（--text-on-emphasis），故状态色即便在浅色里也保持
     // 高亮度；调暗会让按钮/标签上的前景色掉到 4.5:1 以下
     state: {
@@ -136,7 +145,11 @@ const NEBULA_VIOLET: ThemeDefinition = {
       inverse: '#0a0a1e',
       onEmphasis: '#0a0520',
     },
-    accent: { primary: '#9d6bff', secondary: '#6f7bff' },
+    accent: {
+      primary: '#9d6bff',
+      secondary: '#6f7bff',
+      onSurface: '#9d6bff',
+    },
     state: {
       success: '#3ddc84',
       warning: '#ffc14d',
@@ -185,7 +198,11 @@ const EMERALD: ThemeDefinition = {
       inverse: '#03140f',
       onEmphasis: '#01130d',
     },
-    accent: { primary: '#2ee6a6', secondary: '#36d6c2' },
+    accent: {
+      primary: '#2ee6a6',
+      secondary: '#36d6c2',
+      onSurface: '#2ee6a6',
+    },
     state: {
       success: '#36e07f',
       warning: '#ffcb45',
@@ -234,7 +251,11 @@ const LAVA_AMBER: ThemeDefinition = {
       inverse: '#1a0d05',
       onEmphasis: '#1a0a02',
     },
-    accent: { primary: '#ff8a3d', secondary: '#ffb454' },
+    accent: {
+      primary: '#ff8a3d',
+      secondary: '#ffb454',
+      onSurface: '#ff8a3d',
+    },
     state: {
       success: '#5fd98a',
       warning: '#ffe14d',
@@ -283,7 +304,11 @@ const COBALT_DEEP: ThemeDefinition = {
       inverse: '#02091a',
       onEmphasis: '#010a1c',
     },
-    accent: { primary: '#3a7bff', secondary: '#4f9bff' },
+    accent: {
+      primary: '#3a7bff',
+      secondary: '#4f9bff',
+      onSurface: '#3a7bff',
+    },
     state: {
       success: '#2fe08a',
       warning: '#ffce47',

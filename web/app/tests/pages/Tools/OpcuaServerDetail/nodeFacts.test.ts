@@ -27,7 +27,9 @@ describe('节点图标', () => {
   })
 
   it('没登记的类别走兜底，而不是返回空名字', () => {
-    expect(iconOfClass('method')).toBe(FALLBACK_NODE_ICON)
+    // ⚠ 不拿 `method` 当例子：它现在是登记过的。拿一个真的不会出现的类别，
+    // 否则哪天补了图标这条用例会一起变绿，而它守的是兜底路径还在不在。
+    expect(iconOfClass('reference-type')).toBe(FALLBACK_NODE_ICON)
     expect(iconOfClass('')).toBe(FALLBACK_NODE_ICON)
   })
 

@@ -42,6 +42,7 @@
 
   --color-accent-primary: var(--accent-primary);
   --color-accent-secondary: var(--accent-secondary);
+  --color-accent-on-surface: var(--accent-on-surface);
 
   --color-state-success: var(--state-success);
   --color-state-warning: var(--state-warning);

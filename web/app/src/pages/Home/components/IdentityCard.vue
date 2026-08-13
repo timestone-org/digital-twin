@@ -39,7 +39,7 @@ const fields = computed(() => [
 <template>
   <DtCard corners class="flex flex-wrap items-center gap-5">
     <span
-      class="grid h-14 w-14 shrink-0 place-items-center rounded-full border border-accent-primary/40 bg-surface-raised text-xl font-semibold text-accent-primary"
+      class="grid h-14 w-14 shrink-0 place-items-center rounded-full border border-accent-primary/40 bg-surface-raised text-xl font-semibold text-accent-on-surface"
       aria-hidden="true"
     >
       {{ initial }}

@@ -54,7 +54,7 @@ onBeforeUnmount(() => {
       <RouterLink
         v-if="backTo"
         :to="backTo"
-        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border-default text-text-secondary transition-colors hover:border-accent-primary hover:text-accent-primary"
+        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border-default text-text-secondary transition-colors hover:border-accent-primary hover:text-accent-on-surface"
         :aria-label="backText"
         :title="backText"
       >
@@ -81,7 +81,7 @@ onBeforeUnmount(() => {
       <div
         class="hidden shrink-0 items-center gap-2 text-text-secondary sm:flex"
       >
-        <DtIcon name="activity" :size="14" class="text-accent-primary/70" />
+        <DtIcon name="activity" :size="14" class="text-accent-on-surface/70" />
         <DtDigits
           :value="now"
           class="topbar-clock text-sm tracking-wider text-accent-secondary"
