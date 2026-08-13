@@ -12,6 +12,10 @@ dependencies = [
     # 钉死而非范围：会话追踪要子类化 InternalServer/InternalSession，
     # 那两个扩展点不在文档化的公开 API 里，见 CONTEXT.md §5。
     "asyncua==1.1.8",
+    # 打 realtime-hub 的内部端点：登记/注销主题、推值变化（issue #5 的 PR-6）。
+    # ⚠ 必须自己声明：httpx 在工作区根的 dev 组里，本地与全部用例都 import
+    # 得到，只有按自己声明的依赖装的镜像会启动即崩。
+    "httpx>=0.28",
 ]
 
 [project.scripts]
