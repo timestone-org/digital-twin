@@ -130,6 +130,9 @@ api client ── 401 → 先 refresh 再重试一次 → 仍失败才登出
 - **页面目录 `pages/<Route>/` 用 `PascalCase`**，主组件固定 `index.vue`，
   页面私有组件放同目录 `components/`。
 - 两条都由 `scripts/check_structure_web.py` 执行，不靠评审记忆。
+- **`@dt/ui` 的 story 全部在 `packages/ui/stories/`**，一个组件一份
+  `<组件名>.stories.ts`，与 `src/`、`tests/` 平级——理由同测试：`src/` 下只留
+  会被打包的东西，覆盖率与结构闸的口径也不必再分辨哪些文件是给人看的。
 
 理由与完整规则见
 [`docs/agents/project-structure-typescript.md`](../docs/agents/project-structure-typescript.md)
@@ -156,6 +159,8 @@ pnpm typecheck
 pnpm test
 pnpm test:coverage
 pnpm build
+pnpm storybook       # @dt/ui 的组件展示，:6006；顶栏可切 6 套主题
+pnpm storybook:build # 出静态站到 packages/ui/storybook-static/
 python3 ../scripts/check_structure_web.py
 ```
 

@@ -166,6 +166,8 @@ packages/<pkg>/
 
 关于 `src/testing/`：它住在 `src/` 下是为了能被其它包经包导出复用，但它是**测试设施而非被测代码**——已在覆盖率统计中排除，生产代码引用它由 ESLint 拦截。
 
+`@dt/ui` 另有两处只服务于组件展示的目录，同样**不进 `src/`**：`.storybook/`（Storybook 装配与画布皮肤）与 `stories/`（一个组件一份 `<组件名>.stories.ts`）。理由与 §4.1 的测试同构：`src/` 下只留会被打包的东西。⚠ story 里的组件与 args 在 typescript-eslint 眼里是 `any`（`.vue` 的模块只有 vue-tsc 解析得出来），所以 `eslint.config.js` 对 `**/stories/**` 关掉了 `no-unsafe-*` 那一族——真正的类型检查由 `pnpm typecheck` 里的 vue-tsc 做，`stories/` 已并入 `packages/ui/tsconfig.json` 的 `include`。
+
 关于 `index.ts`：**只做转出，不写逻辑**。它已被排除出覆盖率统计，往里塞逻辑等于把代码藏进统计盲区。
 
 ### 4.1 测试一律独立成目录，不与源码同放
