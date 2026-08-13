@@ -12,6 +12,10 @@ dependencies = [
     #   redis —— 跨副本扇出，见 CONTEXT.md §4
     #   web   —— FastAPI 与 uvicorn
     "lib[auth,db,redis,web]",
+    # 登记主题时调 auth-server 的 /internal/v1/permission-codes 校验声明的码
+    # （ADR-0007 §决策 4）。⚠ 必须自己声明：httpx 在工作区根的 dev 组里，
+    # 本地与全部用例都 import 得到，只有按自己声明的依赖装的镜像会崩。
+    "httpx>=0.28",
 ]
 
 [project.scripts]
