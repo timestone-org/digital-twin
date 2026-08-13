@@ -10,6 +10,7 @@ from realtime_hub.apps.channel.crud import SubscriptionCrud, TopicCrud
 from realtime_hub.apps.channel.services import (
     CodeCatalog,
     ConnectionRegistry,
+    FanoutListener,
     PublishService,
     SessionService,
     TopicRegistry,
@@ -26,6 +27,7 @@ class Container:
     cache: Cache
     pubsub: PubSub
     connections: ConnectionRegistry
+    fanout: FanoutListener
     registry: TopicRegistry
     publisher: PublishService
     session: SessionService
@@ -69,12 +71,17 @@ def build_container(settings: Settings) -> Container:
         cache=Cache(url=settings.url(), timeout_s=settings.redis_timeout_s),
         pubsub=pubsub,
         connections=connections,
+        fanout=FanoutListener(
+            pubsub=pubsub,
+            connections=connections,
+            channel=settings.fanout_channel,
+        ),
         registry=registry,
         publisher=PublishService(
             database=database,
             pubsub=pubsub,
             topics=topics,
-            channel_of=settings.fanout_channel,
+            channel=settings.fanout_channel,
             max_items=settings.max_payload_items,
         ),
         session=SessionService(

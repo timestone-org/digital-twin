@@ -6,6 +6,7 @@ from realtime_hub.apps.channel.services.connections import (
     ConnectionRegistry,
     SendFn,
 )
+from realtime_hub.apps.channel.services.fanout import FanoutListener
 from realtime_hub.apps.channel.services.publisher import PublishService
 from realtime_hub.apps.channel.services.registry import TopicRegistry
 from realtime_hub.apps.channel.services.session import (
@@ -21,6 +22,7 @@ __all__ = [
     "CodeCatalog",
     "Connection",
     "ConnectionRegistry",
+    "FanoutListener",
     "Handshake",
     "PublishService",
     "SendFn",

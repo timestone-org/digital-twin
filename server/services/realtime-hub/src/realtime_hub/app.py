@@ -58,6 +58,16 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
             startup_order=10,
         ),
         LifespanHook(
+            name="fanout",
+            startup=container.fanout.start,
+            # 扇出在清残留之后起：先把上次的脏行清掉，再开始收消息
+            startup_order=20,
+            # ⚠ 停在连接之前：还在收消息却已经没有连接可发，只会刷一堆
+            # 「没人订」的日志
+            shutdown=container.fanout.stop,
+            shutdown_order=5,
+        ),
+        LifespanHook(
             name="connections",
             shutdown=container.connections.close_all,
             shutdown_order=10,

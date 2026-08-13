@@ -16,7 +16,6 @@
    的那一段只能靠头传。
 """
 
-from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
@@ -34,9 +33,6 @@ _logger = get_logger("realtime.publisher")
 # 服务端 → 客户端的消息类型，api-contract §10 的字符串枚举
 MESSAGE_TYPE_DATA = "data"
 
-# 主题 → Redis 频道名。注进来而不是在这里拼：频道命名是配置的事
-type ChannelFn = Callable[[str], str]
-
 
 class PublishService:
     """把推送方给的一条载荷变成带 seq 的信封，扇给所有副本。"""
@@ -47,13 +43,13 @@ class PublishService:
         database: Database,
         pubsub: PubSub,
         topics: TopicCrud,
-        channel_of: ChannelFn,
+        channel: str,
         max_items: int,
     ) -> None:
         self._database = database
         self._pubsub = pubsub
         self._topics = topics
-        self._channel_of = channel_of
+        self._channel = channel
         self._max_items = max_items
 
     async def publish(
@@ -85,9 +81,7 @@ class PublishService:
             traceparent=traceparent,
         )
         # ⚠ 事务已经提交，这里在事务之外
-        delivered = await self._pubsub.publish(
-            self._channel_of(topic), envelope
-        )
+        delivered = await self._pubsub.publish(self._channel, envelope)
         _logger.info(
             "message_published",
             "消息已扇出",

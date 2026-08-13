@@ -80,8 +80,14 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     permission_ttl_s: int = Field(default=60, ge=PERMISSION_TTL_FLOOR_S)
     # 单条推送的条目上限。超出即拒绝，让推送方去分片。
     max_payload_items: int = Field(default=500, ge=1, le=PAYLOAD_ITEM_CEILING)
-    # 跨副本扇出的 Redis 频道前缀。⚠ 与业务无关，只是通道自己的命名空间。
-    fanout_channel_prefix: str = "realtime.fanout"
+    # 跨副本扇出走**一条**频道，主题写在消息里由各副本自己筛。
+    # ⚠ 代价认下来：每个副本都会收到全部消息。选它是因为按主题一频道要求
+    # 副本随客户端的订阅动态增删频道订阅，而那条路上有一个很难查的竞态——
+    # 「订阅频道」与「本地已经有人订这个主题」之间的窗口里发出的消息会静默
+    # 丢掉。当前规模下（十几个实例、推送已被合并窗口压过一遍）多收几条远比
+    # 那个竞态便宜。真到扛不住时的出路是 psubscribe 按前缀订，仍不必动这里
+    # 的消息格式。
+    fanout_channel: str = "realtime.fanout"
 
     def verification_keys(self) -> tuple[str, ...]:
         """验签用的密钥序列，轮换期两枚都试。"""
@@ -89,10 +95,3 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
         if self.jwt_previous_secret is not None:
             keys.append(self.jwt_previous_secret.get_secret_value())
         return tuple(keys)
-
-    def fanout_channel(self, topic: str) -> str:
-        """某个主题的扇出频道名。
-
-        Args: topic。
-        """
-        return f"{self.fanout_channel_prefix}.{topic}"
