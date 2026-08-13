@@ -27,6 +27,7 @@ from platform_server.apps.hvac.schemas import (
     AcDataBindingPutIn,
     AcDataBindingsOut,
     DatasetsOut,
+    LiveReadingsOut,
     MetricLimitsOut,
     MetricLimitsPutIn,
     RawSampleOut,
@@ -37,6 +38,7 @@ from platform_server.apps.hvac.schemas import (
 )
 from platform_server.apps.hvac.services import (
     ac_data_service,
+    ac_live_readings,
     ac_reading_service,
 )
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
@@ -153,6 +155,26 @@ async def list_raw_series(
         session, reader, ac_unit_id=ac_unit_id, window=window, options=options
     )
     return ok(series)
+
+
+@router.get(
+    "/rooms/{room_id}/live-readings",
+    response_model=ApiResponse[LiveReadingsOut],
+    summary="房间机组的当下读数",
+)
+async def read_live_readings(
+    room_id: uuid.UUID,
+    session: SessionDep,
+    reader: ReaderDep,
+    _viewer: ViewDep,
+) -> ApiResponse[LiveReadingsOut]:
+    """房间里每台绑了原始数据的机组在回看窗内的最后一条可用读数。
+
+    Args: room_id, session, reader, _viewer。
+    """
+    return ok(
+        await ac_live_readings.read_live(session, reader, room_id=room_id)
+    )
 
 
 @router.get(

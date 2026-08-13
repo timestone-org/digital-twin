@@ -873,6 +873,51 @@
         "title": "ApiResponse[DatasetsOut]",
         "type": "object"
       },
+      "ApiResponse_LiveReadingsOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LiveReadingsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[LiveReadingsOut]",
+        "type": "object"
+      },
       "ApiResponse_MetricLimitsOut_": {
         "properties": {
           "code": {
@@ -1712,6 +1757,17 @@
             "title": "Medae",
             "type": "number"
           },
+          "r2": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "R2"
+          },
           "reliability": {
             "title": "Reliability",
             "type": "string"
@@ -1728,6 +1784,7 @@
           "rmse",
           "coverage",
           "mean_width",
+          "r2",
           "reliability"
         ],
         "title": "ErrorStatsOut",
@@ -1768,6 +1825,147 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LiveReadingValuesOut": {
+        "description": "一台机组当下的几个关键读数，字段与试算入参逐一对应。\n\n⚠ 缺测一律 null 不折成 0（0 是真实读数）；超出可信区间的温度按缺测处理，\n口径与抽取层同一份。",
+        "properties": {
+          "chilled_water_supply_temp": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chilled Water Supply Temp"
+          },
+          "fresh_air_humidity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fresh Air Humidity"
+          },
+          "fresh_air_temp": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fresh Air Temp"
+          },
+          "workshop_humidity_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workshop Humidity Avg"
+          },
+          "workshop_temp_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workshop Temp Avg"
+          }
+        },
+        "required": [
+          "workshop_temp_avg",
+          "workshop_humidity_avg",
+          "fresh_air_temp",
+          "fresh_air_humidity",
+          "chilled_water_supply_temp"
+        ],
+        "title": "LiveReadingValuesOut",
+        "type": "object"
+      },
+      "LiveReadingsOut": {
+        "description": "一个房间当下的读数面。\n\n只含绑定了原始数据的机组，按 serial 升序；`as_of` 是服务端当前时刻，与每台\n自己的 `sampled_at` 差多远就是这台的数据有多旧（清零行被跳过时会差得更远）。",
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "lookback_minutes": {
+            "exclusiveMinimum": 0.0,
+            "title": "Lookback Minutes",
+            "type": "integer"
+          },
+          "units": {
+            "items": {
+              "$ref": "#/components/schemas/LiveUnitReadingOut"
+            },
+            "title": "Units",
+            "type": "array"
+          }
+        },
+        "required": [
+          "as_of",
+          "lookback_minutes",
+          "units"
+        ],
+        "title": "LiveReadingsOut",
+        "type": "object"
+      },
+      "LiveUnitReadingOut": {
+        "description": "一台机组在回看窗内的最后一条可用读数。\n\n⚠ 采集整行清零的行（车间温度恰为 0）是假读数，会退到更早的可用行上，\n`sampled_at` 如实指向真正用了的那一行。\n⚠ 窗内一条可用行都没有时 `sampled_at` 与 `is_running` 都是 null——那是\n「不知道」，不是「停机」；频率为 NULL 同理。",
+        "properties": {
+          "is_running": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Running"
+          },
+          "readings": {
+            "$ref": "#/components/schemas/LiveReadingValuesOut"
+          },
+          "sampled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sampled At"
+          },
+          "serial": {
+            "title": "Serial",
+            "type": "string"
+          }
+        },
+        "required": [
+          "serial",
+          "sampled_at",
+          "is_running",
+          "readings"
+        ],
+        "title": "LiveUnitReadingOut",
         "type": "object"
       },
       "MetricLimitIn": {
@@ -1921,7 +2119,7 @@
         "type": "object"
       },
       "MetricsBlockOut": {
-        "description": "一组折外预测的评估：整体 + 热行（实际>0）单独一份。\n\n⚠ 整体 MAE 被大量「一开机就已达标」的零行灌水，判断模型好坏看 `hot`；\n热行/判零字段在老评估上是 None，重训后补齐。",
+        "description": "一组折外预测的评估：整体 + 热行（实际>0）单独一份。\n\n⚠ 整体 MAE 被大量「一开机就已达标」的零行灌水，判断模型好坏看 `hot`；\n热行、判零与 R² 字段在老评估上是 None，重训后补齐。",
         "properties": {
           "count": {
             "title": "Count",
@@ -1964,6 +2162,17 @@
             "title": "Medae",
             "type": "number"
           },
+          "r2": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "R2"
+          },
           "reliability": {
             "title": "Reliability",
             "type": "string"
@@ -2002,6 +2211,7 @@
           "rmse",
           "coverage",
           "mean_width",
+          "r2",
           "reliability",
           "hot",
           "zero_count",
@@ -5102,6 +5312,50 @@
         "summary": "更新房间",
         "tags": [
           "room"
+        ]
+      }
+    },
+    "/api/v1/platform/rooms/{room_id}/live-readings": {
+      "get": {
+        "description": "房间里每台绑了原始数据的机组在回看窗内的最后一条可用读数。\n\nArgs: room_id, session, reader, _viewer。",
+        "operationId": "read_live_readings_api_v1_platform_rooms__room_id__live_readings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "room_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Room Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_LiveReadingsOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "房间机组的当下读数",
+        "tags": [
+          "ac-data"
         ]
       }
     },

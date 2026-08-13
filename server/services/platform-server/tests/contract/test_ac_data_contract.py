@@ -10,7 +10,11 @@ from platform_server.apps.hvac.datasets import (
     find_dataset,
     metric_keys,
 )
-from platform_server.apps.hvac.schemas import RawSampleOut
+from platform_server.apps.hvac.schemas import (
+    LiveReadingValuesOut,
+    RawSampleOut,
+)
+from platform_server.apps.hvac.services.ac_live_readings import LIVE_METRICS
 
 # 设计文档 §7 登记的码，改一个都要先改这里
 EXPECTED_CODES = {
@@ -45,6 +49,12 @@ def test_every_metric_field_accepts_a_null_reading() -> None:
     payload.update(dict.fromkeys(keys))
     sample = RawSampleOut.model_validate(payload)
     assert [getattr(sample, key) for key in keys] == [None] * len(keys)
+
+
+def test_the_live_reading_fields_match_the_metrics_fetched_for_them() -> None:
+    # ⚠ 对外字段名与取数列名各写一份：漂了不报错，只会让那一格永远为空
+    assert tuple(LiveReadingValuesOut.model_fields) == LIVE_METRICS
+    assert set(LIVE_METRICS) <= set(catalog_metrics())
 
 
 def test_each_error_code_matches_the_designed_number_and_status() -> None:

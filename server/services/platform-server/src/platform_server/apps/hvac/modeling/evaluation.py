@@ -35,6 +35,8 @@ class ErrorStats:
     rmse: float
     coverage: float
     mean_width: float
+    # 折外 p50 对实际的决定系数；实际值没有离散度时无定义
+    r2: float | None
 
 
 @dataclass(frozen=True)
@@ -52,6 +54,7 @@ class MetricsBlock:
     rmse: float
     coverage: float
     mean_width: float
+    r2: float | None
     hot: ErrorStats | None
     zero_count: int
     # 零行里被判成 0 的占比；None = 没有零行
@@ -114,7 +117,23 @@ def _stats(rows: Sequence[OofPrediction]) -> ErrorStats:
         rmse=math.sqrt(sum(error**2 for error in errors) / len(errors)),
         coverage=inside / len(rows),
         mean_width=sum(row.p90 - row.p10 for row in rows) / len(rows),
+        r2=_r_squared(rows),
     )
+
+
+def _r_squared(rows: Sequence[OofPrediction]) -> float | None:
+    """折外 p50 对实际的决定系数；实际值全都一样时无定义。
+
+    ⚠ 无定义给 None 不给 0 或 1：0 的含义是「与照搬均值一样好」、1 是「完美」，
+    两个数都会被当成一份真实成绩读。单样本必然落进这一支。
+    Args: rows（非空）。
+    """
+    mean_actual = sum(row.actual_minutes for row in rows) / len(rows)
+    total = sum((row.actual_minutes - mean_actual) ** 2 for row in rows)
+    if total == 0:
+        return None
+    residual = sum((row.p50 - row.actual_minutes) ** 2 for row in rows)
+    return 1 - residual / total
 
 
 def _block(rows: Sequence[OofPrediction]) -> MetricsBlock:
@@ -132,6 +151,7 @@ def _block(rows: Sequence[OofPrediction]) -> MetricsBlock:
         rmse=whole.rmse,
         coverage=whole.coverage,
         mean_width=whole.mean_width,
+        r2=whole.r2,
         hot=_stats(hot_rows) if hot_rows else None,
         zero_count=len(zero_rows),
         zero_hit_rate=(

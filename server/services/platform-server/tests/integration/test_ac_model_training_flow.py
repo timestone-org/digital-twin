@@ -203,6 +203,9 @@ async def test_training_persists_everything_in_one_go(
     solo = found.metrics["by_set"][seeded.serials[0]]
     assert solo is not None
     assert solo["count"] == 40
+    # 事件时长都大于零，故整体块与热行块都算得出 R²
+    assert isinstance(found.metrics["overall"]["r2"], float)
+    assert isinstance(found.metrics["overall"]["hot"]["r2"], float)
     rows = await ac_model_prediction_crud.page(
         db_session, model_id=model.id, running_set=None, offset=0, limit=100
     )

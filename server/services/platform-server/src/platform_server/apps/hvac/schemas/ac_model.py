@@ -27,6 +27,9 @@ class ErrorStatsOut(OutputModel):
     rmse: float
     coverage: float
     mean_width: float
+    # 折外 p50 对实际的决定系数，可为负。⚠ null = 老评估没算过，或实际值没有
+    # 离散度（含单样本）故无定义——不是 0 也不是 1
+    r2: float | None
     # 按平均区间宽度分档：reliable / indicative / weak
     reliability: str
 
@@ -35,7 +38,7 @@ class MetricsBlockOut(OutputModel):
     """一组折外预测的评估：整体 + 热行（实际>0）单独一份。
 
     ⚠ 整体 MAE 被大量「一开机就已达标」的零行灌水，判断模型好坏看 `hot`；
-    热行/判零字段在老评估上是 None，重训后补齐。
+    热行、判零与 R² 字段在老评估上是 None，重训后补齐。
     """
 
     count: int
@@ -44,6 +47,7 @@ class MetricsBlockOut(OutputModel):
     rmse: float
     coverage: float
     mean_width: float
+    r2: float | None
     reliability: str
     hot: ErrorStatsOut | None
     zero_count: int | None

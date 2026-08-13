@@ -166,6 +166,72 @@ def test_all_hot_rows_leave_zero_rate_as_none() -> None:
     assert metrics.overall.hot_hit_rate == pytest.approx(1.0)
 
 
+def test_r_squared_reports_how_much_variance_the_model_explains() -> None:
+    """R² = 1 − 残差平方和 / 实际的总平方和，残差按 p50 算。"""
+    rows = [
+        oof(minute=0, actual=10, p50=12.0),
+        oof(minute=1, actual=20, p50=19.0),
+        oof(minute=2, actual=30, p50=32.0),
+    ]
+    metrics = summarize(rows, serving_sets=[["K11"]])
+    # 总平方和 = 100+0+100，残差平方和 = 4+1+4
+    assert metrics.overall.r2 == pytest.approx(1 - 9 / 200)
+
+
+def test_r_squared_is_one_when_every_prediction_is_exact() -> None:
+    """完美预测的 R² 恰好是 1。"""
+    rows = [
+        oof(minute=0, actual=10, p50=10.0),
+        oof(minute=1, actual=30, p50=30.0),
+    ]
+    metrics = summarize(rows, serving_sets=[["K11"]])
+    assert metrics.overall.r2 == pytest.approx(1.0)
+
+
+def test_r_squared_can_go_negative_when_the_model_beats_nothing() -> None:
+    """比「一律报均值」还差时 R² 为负——这是真实成绩，不许夹到 0。"""
+    rows = [
+        oof(minute=0, actual=10, p50=40.0),
+        oof(minute=1, actual=30, p50=0.0),
+    ]
+    metrics = summarize(rows, serving_sets=[["K11"]])
+    assert metrics.overall.r2 is not None
+    assert metrics.overall.r2 < 0
+
+
+def test_r_squared_is_none_when_the_actuals_have_no_spread() -> None:
+    """⚠ 实际值全都一样时 R² 无定义：给 None，不给 0 也不给 1。"""
+    rows = [
+        oof(minute=0, actual=20, p50=20.0),
+        oof(minute=1, actual=20, p50=25.0),
+    ]
+    metrics = summarize(rows, serving_sets=[["K11"]])
+    assert metrics.overall.r2 is None
+
+
+def test_r_squared_is_none_for_a_single_sample() -> None:
+    """一条样本没有方差可解释，同样是无定义。"""
+    metrics = summarize(
+        [oof(minute=0, actual=20, p50=25.0)], serving_sets=[["K11"]]
+    )
+    assert metrics.overall.r2 is None
+
+
+def test_hot_rows_get_their_own_r_squared() -> None:
+    """热行块的 R² 只看热行：零行把总平方和撑大，两个数不该相同。"""
+    rows = [
+        oof(minute=0, actual=0, p50=0.0),
+        oof(minute=1, actual=0, p50=0.0),
+        oof(minute=2, actual=30, p50=40.0),
+        oof(minute=3, actual=60, p50=50.0),
+    ]
+    metrics = summarize(rows, serving_sets=[["K11"]])
+    hot = metrics.overall.hot
+    assert hot is not None
+    assert metrics.overall.r2 == pytest.approx(1 - 200 / 2475)
+    assert hot.r2 == pytest.approx(1 - 200 / 450)
+
+
 @pytest.mark.parametrize(
     ("width", "expected"),
     [

@@ -167,6 +167,47 @@ class RawSampleOut(OutputModel):
     fan_frequency: float | None
 
 
+class LiveReadingValuesOut(OutputModel):
+    """一台机组当下的几个关键读数，字段与试算入参逐一对应。
+
+    ⚠ 缺测一律 null 不折成 0（0 是真实读数）；超出可信区间的温度按缺测处理，
+    口径与抽取层同一份。
+    """
+
+    workshop_temp_avg: float | None
+    workshop_humidity_avg: float | None
+    fresh_air_temp: float | None
+    fresh_air_humidity: float | None
+    chilled_water_supply_temp: float | None
+
+
+class LiveUnitReadingOut(OutputModel):
+    """一台机组在回看窗内的最后一条可用读数。
+
+    ⚠ 采集整行清零的行（车间温度恰为 0）是假读数，会退到更早的可用行上，
+    `sampled_at` 如实指向真正用了的那一行。
+    ⚠ 窗内一条可用行都没有时 `sampled_at` 与 `is_running` 都是 null——那是
+    「不知道」，不是「停机」；频率为 NULL 同理。
+    """
+
+    serial: str
+    sampled_at: Utc | None
+    is_running: bool | None
+    readings: LiveReadingValuesOut
+
+
+class LiveReadingsOut(OutputModel):
+    """一个房间当下的读数面。
+
+    只含绑定了原始数据的机组，按 serial 升序；`as_of` 是服务端当前时刻，与每台
+    自己的 `sampled_at` 差多远就是这台的数据有多旧（清零行被跳过时会差得更远）。
+    """
+
+    as_of: Utc
+    lookback_minutes: PositiveInt
+    units: list[LiveUnitReadingOut]
+
+
 class SeriesPointOut(OutputModel):
     """聚合序列上的一个桶。整桶全空的指标给 null，不给 0。"""
 

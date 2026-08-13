@@ -163,13 +163,14 @@ def _block_out(raw: object) -> MetricsBlockOut | None:
             rmse=base.rmse,
             coverage=base.coverage,
             mean_width=base.mean_width,
+            r2=base.r2,
             reliability=base.reliability,
             hot=_hot_out(values.get("hot")),
             zero_count=(
                 int(zero_count) if isinstance(zero_count, int) else None
             ),
-            zero_hit_rate=_rate_of(values.get("zero_hit_rate")),
-            hot_hit_rate=_rate_of(values.get("hot_hit_rate")),
+            zero_hit_rate=_number_of(values.get("zero_hit_rate")),
+            hot_hit_rate=_number_of(values.get("hot_hit_rate")),
         )
     except (KeyError, TypeError, ValueError):
         return None
@@ -189,8 +190,10 @@ def _hot_out(raw: object) -> ErrorStatsOut | None:
 
 
 def _stats_of(values: dict[str, object]) -> ErrorStatsOut:
-    """误差统计六元组的 JSON → 对外模型，可靠性按区间宽度现算。
+    """误差统计的 JSON → 对外模型，可靠性按区间宽度现算。
 
+    ⚠ 六元组按必需键直取（缺一个就整块判坏形状），后加的 `r2` 只能按可选取：
+    写成必需键会让全部老评估 JSON 连同它们完好的六元组一起变成 None。
     Args: values。
     """
     mean_width = float(cast(float, values["mean_width"]))
@@ -201,12 +204,13 @@ def _stats_of(values: dict[str, object]) -> ErrorStatsOut:
         rmse=float(cast(float, values["rmse"])),
         coverage=float(cast(float, values["coverage"])),
         mean_width=mean_width,
+        r2=_number_of(values.get("r2")),
         reliability=reliability(mean_width),
     )
 
 
-def _rate_of(raw: object) -> float | None:
-    """0~1 的占比字段；缺失或非数按 None。
+def _number_of(raw: object) -> float | None:
+    """可选的数值字段；缺失或非数按 None。
 
     Args: raw。
     """

@@ -141,6 +141,48 @@ async def test_patching_serving_sets_resummarizes_in_place(
     assert response.json()["data"]["status"] == MODEL_STATUS_READY
 
 
+async def test_a_legacy_evaluation_keeps_its_metrics_and_reads_r2_as_null(
+    app_client: httpx.AsyncClient, db_session: AsyncSession, sign: SignHeaders
+) -> None:
+    """⚠ 老评估 JSON 里没有 r2：缺的给 null，六元组必须照常读出来。"""
+    seeded = await seed_room(db_session)
+    manager = sign([AC_MANAGE])
+    data = await create_model(app_client, manager, seeded)
+    model_id = uuid.UUID(data["id"])
+    await _mark_trained(db_session, model_id, running_set=[seeded.serials[0]])
+    response = await app_client.get(
+        f"{PREFIX}/ac-models/{model_id}", headers=sign([AC_VIEW])
+    )
+    assert response.status_code == 200, response.text
+    overall = response.json()["data"]["metrics"]["overall"]
+    assert overall["r2"] is None
+    assert overall["count"] == 2
+    assert overall["mae"] == 2.0
+    assert overall["mean_width"] == 15.0
+    assert overall["reliability"] == "reliable"
+
+
+async def test_resummarizing_computes_r2_for_the_new_grouping(
+    app_client: httpx.AsyncClient, db_session: AsyncSession, sign: SignHeaders
+) -> None:
+    """改组合就地重汇总时 r2 一起补上：它来自存好的折外行，不用重训。"""
+    seeded = await seed_room(db_session)
+    manager = sign([AC_MANAGE])
+    data = await create_model(app_client, manager, seeded)
+    model_id = uuid.UUID(data["id"])
+    solo = [seeded.serials[0]]
+    await _mark_trained(db_session, model_id, running_set=solo)
+    response = await app_client.patch(
+        f"{PREFIX}/ac-models/{model_id}",
+        json={"serving_sets": [solo]},
+        headers=sign([AC_MANAGE]),
+    )
+    assert response.status_code == 200, response.text
+    block = response.json()["data"]["metrics"]["by_set"][seeded.serials[0]]
+    # 两条折外行的实际值是 20 与 21，有离散度故 R² 有定义
+    assert isinstance(block["r2"], float)
+
+
 async def test_retrain_conflicts_while_queued(
     app_client: httpx.AsyncClient, db_session: AsyncSession, sign: SignHeaders
 ) -> None:

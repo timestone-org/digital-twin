@@ -72,7 +72,7 @@ def build_frames(
     """
     by_serial = {
         unit.serial: {
-            row.ts: _numeric(row) for row in rows.get(unit.serial, ())
+            row.ts: numeric_values(row) for row in rows.get(unit.serial, ())
         }
         for unit in units
     }
@@ -93,7 +93,7 @@ def _at(
     }
 
 
-def _numeric(row: SourceRow) -> dict[str, float | None]:
+def numeric_values(row: SourceRow) -> dict[str, float | None]:
     """把一行源值收敛成「指标 → 数」。非数一律当作缺测。
 
     Args: row。
@@ -117,7 +117,10 @@ def _to_frame(
     return Frame(
         ts=ts,
         running=frozenset(
-            serial for serial, values in readings.items() if _is_running(values)
+            serial
+            for serial, values in readings.items()
+            # 频率缺测（未知）在帧上按未运行处理；那一帧另有 is_valid 拦着
+            if running_state(values) is True
         ),
         is_valid=is_valid,
         is_compliant=is_valid
@@ -129,25 +132,41 @@ def _to_frame(
 def _is_usable(values: Mapping[str, float | None]) -> bool:
     """这台在这一分钟的读数可不可信。
 
-    ⚠ `workshop_temp_avg == 0` 是采集的整行清零缺陷，不是「没开机」：按
-    `fan_frequency > 0` 朴素判定会凭空造出开停机对。
     Args: values。
     """
     celsius = values.get(METRIC_WORKSHOP_TEMP)
-    if celsius is None or celsius == 0:
+    if celsius is None or is_zeroed_row(values):
         return False
     if any(values.get(metric) is None for metric in DECISION_METRICS):
         return False
-    return MIN_PLAUSIBLE_CELSIUS <= celsius <= MAX_PLAUSIBLE_CELSIUS
+    return is_plausible_celsius(celsius)
 
 
-def _is_running(values: Mapping[str, float | None]) -> bool:
-    """这台在这一分钟是不是在运行。⚠ 频率为 NULL 不等于 0。
+def is_zeroed_row(values: Mapping[str, float | None]) -> bool:
+    """这一行是不是采集的整行清零缺陷。
+
+    ⚠ `workshop_temp_avg == 0` 不是「没开机」，是一行假读数：按
+    `fan_frequency > 0` 朴素判定会凭空造出开停机对。
+    Args: values。
+    """
+    return values.get(METRIC_WORKSHOP_TEMP) == 0
+
+
+def is_plausible_celsius(value: float) -> bool:
+    """摄氏读数在不在可信区间内（实测有 273305 这类尖峰）。
+
+    Args: value。
+    """
+    return MIN_PLAUSIBLE_CELSIUS <= value <= MAX_PLAUSIBLE_CELSIUS
+
+
+def running_state(values: Mapping[str, float | None]) -> bool | None:
+    """这台在这一刻的运行位；⚠ 频率为 NULL 是「不知道」，不是停机。
 
     Args: values。
     """
     frequency = values.get(METRIC_FAN_FREQUENCY)
-    return frequency is not None and frequency > 0
+    return None if frequency is None else frequency > 0
 
 
 def _is_in_band(unit: RoomUnit, values: Mapping[str, float | None]) -> bool:
