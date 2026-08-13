@@ -118,6 +118,20 @@ function bodyButton(label: string): HTMLButtonElement | undefined {
   )
 }
 
+/** 点开第 index 个 DtSelect 并选中给定文案的选项。浮层 teleport 在 body 上。 */
+async function pickInSelect(index: number, label: string): Promise<void> {
+  const triggers = document.body.querySelectorAll<HTMLButtonElement>(
+    '.dt-select__trigger',
+  )
+  triggers[index]?.click()
+  await flushPromises()
+  const option = [...document.querySelectorAll('.dt-select-menu__item')].find(
+    (item) => item.textContent?.trim() === label,
+  )
+  option?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  await flushPromises()
+}
+
 enableAutoUnmount(afterEach)
 
 beforeEach(() => {
@@ -255,6 +269,76 @@ describe('节点表单', () => {
     })
     await flushPromises()
     expect(bodyButton('创建')?.disabled).toBe(true)
+  })
+
+  it('变量节点默认按只读提交——显式带 access_level: 1，不靠后端缺省', async () => {
+    const wrapper = mount(NodeFormDialog, {
+      props: { modelValue: true, nodes: [] },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    fillModal({ 0: 'Line1.T', 1: 'T' })
+    await flushPromises()
+    bodyButton('创建')?.click()
+    await flushPromises()
+    const payload = wrapper.emitted('create')?.[0]?.[0] as
+      OpcuaNodeCreateInput | undefined
+    expect(payload?.access_level).toBe(1)
+  })
+
+  it('选「可写」后提交带 access_level: 3，并提示上位机将可写入', async () => {
+    const wrapper = mount(NodeFormDialog, {
+      props: { modelValue: true, nodes: [] },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    fillModal({ 0: 'Line1.T', 1: 'T' })
+    await flushPromises()
+    // 选择器序：节点类别、父节点、数据类型、访问权限
+    await pickInSelect(3, '可写')
+    expect(document.body.textContent).toContain('上位机将可直接写入该节点的值')
+    bodyButton('创建')?.click()
+    await flushPromises()
+    const payload = wrapper.emitted('create')?.[0]?.[0] as
+      OpcuaNodeCreateInput | undefined
+    expect(payload?.access_level).toBe(3)
+  })
+
+  it('object 类节点不出访问权限控件，提交不带 access_level', async () => {
+    const wrapper = mount(NodeFormDialog, {
+      props: { modelValue: true, nodes: [] },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    await pickInSelect(0, 'object')
+    expect(document.body.textContent).not.toContain('访问权限')
+    fillModal({ 0: 'Plant', 1: 'Plant' })
+    await flushPromises()
+    bodyButton('创建')?.click()
+    await flushPromises()
+    const payload = wrapper.emitted('create')?.[0]?.[0] as
+      Record<string, unknown> | undefined
+    expect(payload).toBeDefined()
+    expect(payload).not.toHaveProperty('access_level')
+  })
+
+  it('重新打开表单后访问权限回到只读', async () => {
+    const wrapper = mount(NodeFormDialog, {
+      props: { modelValue: true, nodes: [] },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    await pickInSelect(3, '可写')
+    await wrapper.setProps({ modelValue: false })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+    fillModal({ 0: 'Line1.T', 1: 'T' })
+    await flushPromises()
+    bodyButton('创建')?.click()
+    await flushPromises()
+    const payload = wrapper.emitted('create')?.[0]?.[0] as
+      OpcuaNodeCreateInput | undefined
+    expect(payload?.access_level).toBe(1)
   })
 
   it('可挂到已有的 object 节点下；变量节点不进父节点选项', async () => {
