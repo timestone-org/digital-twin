@@ -406,9 +406,7 @@ async def current_fingerprints(
             AcStartupBatch.is_current.is_(True),
         )
     )
-    return {
-        room_id: fingerprint for room_id, fingerprint in rows.tuples().all()
-    }
+    return dict(rows.tuples().all())
 
 
 async def _room_serials(
