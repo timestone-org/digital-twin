@@ -7,6 +7,8 @@
     "dev": "pnpm --filter @dt/app dev",
     "build": "pnpm --filter @dt/app build",
     "preview": "pnpm --filter @dt/app preview",
+    "storybook": "pnpm --filter @dt/ui storybook",
+    "storybook:build": "pnpm --filter @dt/ui storybook:build",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
