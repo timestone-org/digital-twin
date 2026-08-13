@@ -10,12 +10,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from auth_server.apps.auth import catalog
 from auth_server.apps.auth.deps import (
     get_container,
     get_session,
     require_service_key,
 )
-from auth_server.apps.auth.schemas import UserDetailOut
+from auth_server.apps.auth.schemas import PermissionCodesOut, UserDetailOut
 from auth_server.apps.auth.services import load_identity_by_id
 from auth_server.apps.auth.services.presenters import to_user_detail
 from auth_server.container import Container
@@ -78,3 +79,24 @@ async def read_user_permissions(
             headers={HEADER_USER_LOOKUP: "miss"},
         )
     return ok(to_user_detail(identity))
+
+
+@router.get(
+    "/permission-codes",
+    response_model=ApiResponse[PermissionCodesOut],
+    summary="权限码字面量全集",
+)
+async def read_permission_codes() -> ApiResponse[PermissionCodesOut]:
+    """给别的服务校验「某个权限码存不存在」用。
+
+    调用方是 realtime-hub：主题登记时要校验推送方声明的码在目录里
+    （[ADR-0007](../../../../../../docs/adr/0007-实时通道薄化与开放主题命名空间.md)
+    §决策 4）。它挡的是「编造一个不存在的码」。
+
+    ⚠ 读的是 `catalog.py` 的字面量而不是 DB 里那张表：目录的真源是代码，
+    DB 那份是种子同步过去的投影。查库会让「种子还没跑」这一刻的答案变成
+    「这个码不存在」——而那时代码里明明有，登记会被拒得莫名其妙。
+
+    ⚠ 不分页：码的数量是个位数到几十，且调用方要的就是全集做集合判断。
+    """
+    return ok(PermissionCodesOut(codes=sorted(catalog.ALL_CODES)))

@@ -9,6 +9,7 @@ from auth_server.apps.auth.schemas.common import (
 from auth_server.apps.auth.schemas.password import RawPassword
 from auth_server.apps.auth.schemas.permission import (
     PermissionCatalogOut,
+    PermissionCodesOut,
     PermissionGroupOut,
     PermissionKind,
     PermissionOut,
@@ -58,6 +59,7 @@ __all__ = [
     "MeUpdateIn",
     "OutputModel",
     "PermissionCatalogOut",
+    "PermissionCodesOut",
     "PermissionGroupOut",
     "PermissionKind",
     "PermissionOut",
