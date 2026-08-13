@@ -7,13 +7,13 @@
 import asyncio
 import signal
 from collections.abc import Awaitable, Callable
-from concurrent.futures import Executor, ProcessPoolExecutor
 from dataclasses import dataclass
 from typing import Protocol
 
 from lib.logging import configure_logging, get_logger
 from platform_server.apps.hvac.services.ac_model_worker import (
     TrainerOptions,
+    TrainerPool,
     TrainingConsumer,
 )
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
@@ -85,18 +85,18 @@ def build_consumer(container: Container) -> ShardConsumer:
 
 
 def build_trainer(
-    container: Container, *, executor: Executor
+    container: Container, *, pool: TrainerPool
 ) -> TrainingConsumer:
     """按配置装出训练消费者。
 
-    Args: container, executor（⚠ 必须是进程池：拟合是 CPU 密集，线程池救
-    不了 GIL，会把同一事件循环上的分片消费一起卡住）。
+    Args: container, pool（⚠ 必须是进程池：拟合是 CPU 密集，线程池救不了
+    GIL，会把同一事件循环上的分片消费一起卡住）。
     """
     settings = container.settings
     return TrainingConsumer(
         database=container.database,
         stream=container.stream,
-        executor=executor,
+        pool=pool,
         options=TrainerOptions(
             target=StreamGroup(
                 stream=settings.acmodel_stream,
@@ -176,13 +176,13 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
     container = build_container(settings)
     await selfcheck(container)
     # 单 worker 进程池：训练一次只跑一个，防止两次训练互相抢核
-    executor = ProcessPoolExecutor(max_workers=1)
+    pool = TrainerPool()
     try:
         await run_until_stopped(
             WorkerRuntime(
                 consumers=(
                     build_consumer(container),
-                    build_trainer(container, executor=executor),
+                    build_trainer(container, pool=pool),
                 ),
                 container=container,
                 wait=wait,
@@ -190,7 +190,7 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
             drain_timeout_s=settings.app_drain_timeout_s,
         )
     finally:
-        executor.shutdown(wait=False, cancel_futures=True)
+        pool.shutdown()
 
 
 async def wait_for_signal() -> None:  # pragma: no cover - 要真实进程信号

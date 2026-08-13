@@ -6,7 +6,8 @@ at-least-once（docs/agents/runtime-resilience.md §5）。
 """
 
 import asyncio
-from concurrent.futures import Executor
+from collections.abc import Callable
+from concurrent.futures import Executor, ProcessPoolExecutor
 from dataclasses import dataclass
 
 from lib.db import Database
@@ -25,6 +26,42 @@ from platform_server.apps.hvac.services.ac_model_trainer import (
 from platform_server.stream import StreamEntry, StreamGroup, StreamLike
 
 _logger = get_logger("platform.hvac.ac_model_worker")
+
+
+class TrainerPool:
+    """训练用的进程池，超时后整池换新。
+
+    ⚠ `ProcessPoolExecutor` 没有公开的「杀掉在跑任务」的口：cancel 只对还没
+    开跑的生效，`shutdown(cancel_futures=True)` 也一样。超时被掐断的拟合会
+    继续在子进程里烧 CPU，而单工池的下一个任务要排在它后面——僵尸拟合等于
+    把训练面整个堵死。唯一的出路是杀进程、换新池；`_processes` 是私有面，
+    sklearn 拟合无副作用，杀了没有半成品要收拾。
+    """
+
+    def __init__(self, factory: Callable[[], Executor] | None = None) -> None:
+        self._factory = factory or (lambda: ProcessPoolExecutor(max_workers=1))
+        self._executor = self._factory()
+
+    @property
+    def executor(self) -> Executor:
+        """当前可用的执行器。"""
+        return self._executor
+
+    def recycle(self) -> None:
+        """杀掉旧池里的子进程并换新池。超时路径专用。"""
+        old = self._executor
+        self._executor = self._factory()
+        self._terminate(old)
+
+    def shutdown(self) -> None:
+        """进程收摊时释放当前池。"""
+        self._terminate(self._executor)
+
+    @staticmethod
+    def _terminate(executor: Executor) -> None:
+        for process in getattr(executor, "_processes", {}).values():
+            process.kill()
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 @dataclass(frozen=True)
@@ -51,12 +88,12 @@ class TrainingConsumer:
         *,
         database: Database,
         stream: StreamLike,
-        executor: Executor,
+        pool: TrainerPool,
         options: TrainerOptions,
     ) -> None:
         self._database = database
         self._stream = stream
-        self._executor = executor
+        self._pool = pool
         self._options = options
         self._is_stopping = False
         self._idle = asyncio.Event()
@@ -159,11 +196,14 @@ class TrainingConsumer:
             async with asyncio.timeout(self._options.train_timeout_s):
                 run = await run_training(
                     self._database,
-                    executor=self._executor,
+                    executor=self._pool.executor,
                     timezone=self._options.timezone,
                     model_id=message.model_id,
                 )
         except TimeoutError:
+            # ⚠ 掐断的只是等待，拟合还在子进程里烧：必须杀进程换池，
+            # 否则单工池被僵尸拟合占着，下一次训练永远排不上
+            self._pool.recycle()
             reason = f"训练超过 {self._options.train_timeout_s:.0f} 秒被掐断"
             await self._record_failure(message, reason=reason)
             return

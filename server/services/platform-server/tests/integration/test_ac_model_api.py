@@ -242,6 +242,8 @@ async def test_patching_serving_sets_resummarizes_in_place(
     model_id = uuid.UUID(data["id"])
     solo = [seeded.serials[0]]
     await _mark_trained(db_session, model_id, running_set=solo)
+    # ⚠ 真训练在慢机器上会吃掉签名头的 TTL：重活之后重新签，不赌时钟
+    manager = sign([AC_MANAGE])
     response = await app_client.patch(
         f"{PREFIX}/ac-models/{model_id}",
         json={"serving_sets": [solo, list(seeded.serials)]},
@@ -278,8 +280,9 @@ async def test_retrain_requeues_a_trained_model(
     data = await create_model(app_client, manager, seeded)
     model_id = uuid.UUID(data["id"])
     await _mark_trained(db_session, model_id, running_set=[seeded.serials[0]])
+    # ⚠ 真训练在慢机器上会吃掉签名头的 TTL：重活之后重新签，不赌时钟
     response = await app_client.post(
-        f"{PREFIX}/ac-models/{model_id}:retrain", headers=manager
+        f"{PREFIX}/ac-models/{model_id}:retrain", headers=sign([AC_MANAGE])
     )
     assert response.status_code == 202
     assert response.json()["data"]["status"] == "queued"
@@ -316,6 +319,7 @@ async def test_prediction_pages_walk_by_cursor(
         running_set=[seeded.serials[0]],
         prediction_count=5,
     )
+    # ⚠ 真训练在慢机器上会吃掉签名头的 TTL：重活之后重新签，不赌时钟
     viewer = sign([AC_VIEW])
     url = f"{PREFIX}/ac-models/{model_id}/predictions"
     first = await app_client.get(url, params={"limit": 2}, headers=viewer)

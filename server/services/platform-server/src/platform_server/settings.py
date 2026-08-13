@@ -65,5 +65,6 @@ class Settings(AppSettings, PostgresSettings, RedisSettings, SqlServerSettings):
     # 训练要跑几十秒，认领门槛要比它长得多，否则跑到一半就被别人抢走重训
     acmodel_claim_idle_ms: int = 300000
     acmodel_prefetch: int = 1
-    # 一次训练的总预算：几百样本 × 15 次拟合在秒级，10 分钟是硬故障线不是余量
-    acmodel_train_timeout_s: float = 600.0
+    # 一次训练的总预算。⚠ 真实房间全史上万条可用事件，18 次拟合在竞争负载下
+    # 是分钟级；这条线是硬故障线，穿了按不可重试标失败
+    acmodel_train_timeout_s: float = 900.0

@@ -15,6 +15,7 @@ from lib.db import Database, ReadOnlySqlSource
 from platform_server import __main__ as main_module
 from platform_server import worker
 from platform_server.apps.hvac.services.ac_model_worker import (
+    TrainerPool,
     TrainingConsumer,
 )
 from platform_server.apps.hvac.services.ac_startup_worker import (
@@ -116,14 +117,17 @@ def test_the_consumer_takes_its_identity_from_config() -> None:
 
 def test_the_trainer_takes_its_identity_from_config() -> None:
     """训练消费循环的流名、消费组与时区都由配置决定。"""
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        trainer = build_trainer(build_container([]), executor=executor)
+    pool = TrainerPool(lambda: ThreadPoolExecutor(max_workers=1))
+    try:
+        trainer = build_trainer(build_container([]), pool=pool)
+    finally:
+        pool.shutdown()
     options = trainer._options
     assert options.target.stream == "platform:ac-model:train"
     assert options.target.group == "ac-model-trainers"
     assert options.target.consumer == "worker-1"
     assert options.timezone == "Asia/Shanghai"
-    assert options.train_timeout_s == 600.0
+    assert options.train_timeout_s == 900.0
 
 
 def test_the_shard_budget_exceeds_the_sum_of_its_source_queries() -> None:
@@ -215,8 +219,8 @@ async def test_serving_wires_the_container_and_shuts_it_down(
         lambda _: cast(ShardConsumer, FakeConsumer(ledger)),
     )
 
-    def fake_trainer(_: Container, *, executor: object) -> TrainingConsumer:
-        del executor
+    def fake_trainer(_: Container, *, pool: object) -> TrainingConsumer:
+        del pool
         return cast(TrainingConsumer, FakeConsumer(ledger))
 
     monkeypatch.setattr(worker, "build_trainer", fake_trainer)

@@ -31,6 +31,7 @@ from platform_server.apps.hvac.services.ac_model_trainer import (
 )
 from platform_server.apps.hvac.services.ac_model_worker import (
     TrainerOptions,
+    TrainerPool,
     TrainingConsumer,
 )
 from platform_server.stream import StreamEntry, StreamGroup, StreamLike
@@ -116,16 +117,37 @@ def entry(entry_id: str) -> StreamEntry:
     )
 
 
-def build(stream: FakeStream, *, timeout_s: float = 5.0) -> TrainingConsumer:
+class FakePool:
+    """记下换池次数的假池；executor 只是占位，run_training 已被打桩。"""
+
+    def __init__(self) -> None:
+        self.recycled = 0
+
+    @property
+    def executor(self) -> Executor:
+        return cast(Executor, object())
+
+    def recycle(self) -> None:
+        self.recycled += 1
+
+    def shutdown(self) -> None:
+        return None
+
+
+def build(
+    stream: FakeStream,
+    *,
+    timeout_s: float = 5.0,
+    pool: FakePool | None = None,
+) -> TrainingConsumer:
     """一个装着假件的训练消费者。
 
-    Args: stream, timeout_s。
+    Args: stream, timeout_s, pool。
     """
     return TrainingConsumer(
         database=cast(Database, FakeDatabase()),
         stream=cast(StreamLike, stream),
-        # cast 的理由：这一层的用例把 run_training 整个打了桩，进程池不会被碰
-        executor=cast(Executor, object()),
+        pool=cast(TrainerPool, pool or FakePool()),
         options=TrainerOptions(
             target=TARGET,
             prefetch=1,
@@ -223,10 +245,13 @@ async def test_a_timeout_is_recorded_as_a_failure(
     monkeypatch.setattr(ac_model_worker, "run_training", hang)
     monkeypatch.setattr(ac_model_worker, "mark_failed", record)
     stream = FakeStream(batches=[[entry("3-3")]])
-    await build(stream, timeout_s=0.01)._tick()
+    pool = FakePool()
+    await build(stream, timeout_s=0.01, pool=pool)._tick()
     assert len(failures) == 1
     assert "秒" in failures[0]
     assert stream.acked == ["3-3"]
+    # ⚠ 掐断的拟合还在子进程里烧：必须换池，否则下一次训练排不上
+    assert pool.recycled == 1
 
 
 def test_the_envelope_round_trips() -> None:

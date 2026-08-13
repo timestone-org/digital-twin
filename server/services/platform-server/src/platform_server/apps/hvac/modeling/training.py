@@ -110,7 +110,7 @@ def _fit_all(
     picked = [weights[row] for row in rows]
     found: list[Estimator] = []
     for quantile in QUANTILES:
-        estimator = make_quantile_estimator(quantile)
+        estimator = make_quantile_estimator(quantile, row_count=len(inputs))
         estimator.fit(inputs, answers, sample_weight=picked)
         found.append(estimator)
     return (found[0], found[1], found[2])
