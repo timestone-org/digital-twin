@@ -384,3 +384,29 @@ async def test_set_writable_on_an_object_node_is_a_no_op(
     before = instance._nodes[machine.identifier]
     await instance.set_node_writable(machine.identifier, is_writable=False)
     assert instance._nodes[machine.identifier] is before
+
+
+async def test_set_writable_on_frees_a_previously_read_only_node(
+    instance: RunningInstance,
+) -> None:
+    await instance.set_node_writable(NAMEPLATE.identifier, is_writable=True)
+    assert await instance.write_value(NAMEPLATE.identifier, "P-02") == "P-02"
+
+
+async def test_set_writable_on_an_unknown_identifier_is_rejected(
+    instance: RunningInstance,
+) -> None:
+    with pytest.raises(NodeNotFound):
+        await instance.set_node_writable("nope", is_writable=True)
+
+
+async def test_set_writable_on_a_stopped_instance_is_rejected(
+    pki: PkiStore,
+) -> None:
+    running = RunningInstance(
+        _spec(_free_port(), nodes=(TEMPERATURE,)), pki=pki
+    )
+    with pytest.raises(InstanceNotRunning):
+        await running.set_node_writable(
+            TEMPERATURE.identifier, is_writable=False
+        )

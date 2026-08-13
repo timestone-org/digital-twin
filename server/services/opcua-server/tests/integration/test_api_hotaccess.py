@@ -7,14 +7,17 @@
 """
 
 import logging
+import uuid
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
 from asyncua import Client, ua
 
+from lib.db import Database
 from opcua_server.apps.instance.deps import PERM_MANAGE, PERM_OPERATE, PERM_VIEW
+from opcua_server.apps.instance.services.node_service import NodeRuntimeSync
 from opcua_server.settings import API_PREFIX
 
 pytestmark = pytest.mark.requires_postgres
@@ -167,3 +170,153 @@ async def test_access_level_saved_while_stopped_reports_nothing_pending(
     )
     assert saved.status_code == OK, saved.text
     assert saved.json()["data"]["pending_fields"] == []
+
+
+@pytest.mark.usefixtures("clean_tables")
+async def test_raising_access_level_frees_a_live_client_write_at_once(
+    client: httpx.AsyncClient, sign_headers: Headers
+) -> None:
+    """放开可写位后，同一条上位机会话当场写得进去。"""
+    instance_id, endpoint = await _instance(
+        client, sign_headers, should_start=True
+    )
+    node = await _node(
+        client, sign_headers, instance_id, access_level=READ_ONLY
+    )
+    async with Client(url=endpoint) as upstream:
+        handle = upstream.get_node(str(node["node_id"]))
+        with pytest.raises(ua.UaStatusCodeError, match="BadUserAccessDenied"):
+            await handle.write_value(ua.Variant(11, ua.VariantType.Int32))
+        saved = await _set_access(
+            client, sign_headers, (instance_id, str(node["id"])), READ_WRITE
+        )
+        assert saved.json()["data"]["pending_fields"] == []
+        await handle.write_value(ua.Variant(22, ua.VariantType.Int32))
+        assert await handle.read_value() == 22
+
+
+@pytest.mark.usefixtures("clean_tables")
+async def test_hot_applied_access_level_governs_the_management_write_too(
+    client: httpx.AsyncClient, sign_headers: Headers
+) -> None:
+    """⚠ 运行表里的定义必须跟着换：留着旧的 is_writable，管理面还照旧放行。"""
+    instance_id, _ = await _instance(client, sign_headers, should_start=True)
+    node = await _node(client, sign_headers, instance_id)
+    await _set_access(
+        client, sign_headers, (instance_id, str(node["id"])), READ_ONLY
+    )
+    refused = await client.post(
+        f"{INSTANCES}/{instance_id}/nodes/{node['id']}:write",
+        json={"value": 33},
+        headers=sign_headers(PERM_OPERATE),
+    )
+    assert refused.status_code == CONFLICT
+    # 42109 = NodeNotWritable：可写位由热改后的定义说了算
+    assert refused.json()["code"] == 42109
+
+
+@pytest.mark.usefixtures("clean_tables")
+async def test_a_failed_hot_apply_keeps_the_saved_access_level(
+    client: httpx.AsyncClient,
+    sign_headers: Headers,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """热改失败不回滚保存：值是合法的，错的只是「还没生效」。"""
+    instance_id, _ = await _instance(client, sign_headers, should_start=True)
+    node = await _node(client, sign_headers, instance_id)
+
+    async def _refuse(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("模拟地址空间拒绝改写")
+
+    monkeypatch.setattr(
+        "opcua_server.apps.instance.runtime.instance."
+        "RunningInstance.set_node_writable",
+        _refuse,
+    )
+    await _set_access(
+        client, sign_headers, (instance_id, str(node["id"])), READ_ONLY
+    )
+    stored = await client.get(
+        f"{INSTANCES}/{instance_id}/nodes/{node['id']}",
+        headers=sign_headers(PERM_VIEW),
+    )
+    assert stored.json()["data"]["access_level"] == READ_ONLY
+
+
+@pytest.mark.usefixtures("clean_tables")
+async def test_access_level_saved_while_stopped_applies_on_next_start(
+    client: httpx.AsyncClient, sign_headers: Headers
+) -> None:
+    """停机时保存的可写位，下次起来对上位机就是生效的。"""
+    instance_id, endpoint = await _instance(
+        client, sign_headers, should_start=False
+    )
+    node = await _node(
+        client, sign_headers, instance_id, access_level=READ_ONLY
+    )
+    await _set_access(
+        client, sign_headers, (instance_id, str(node["id"])), READ_WRITE
+    )
+    started = await client.post(
+        f"{INSTANCES}/{instance_id}:start", headers=sign_headers(PERM_OPERATE)
+    )
+    assert started.status_code == OK, started.text
+    async with Client(url=endpoint) as upstream:
+        handle = upstream.get_node(str(node["node_id"]))
+        await handle.write_value(ua.Variant(44, ua.VariantType.Int32))
+        assert await handle.read_value() == 44
+
+
+@pytest.mark.usefixtures("clean_tables")
+async def test_object_node_access_level_change_is_a_quiet_no_op(
+    client: httpx.AsyncClient, sign_headers: Headers
+) -> None:
+    """object 节点没有值属性，热改对它是 no-op——不炸、也不假装待重启。"""
+    instance_id, _ = await _instance(client, sign_headers, should_start=True)
+    node = await _node(
+        client,
+        sign_headers,
+        instance_id,
+        identifier="Plant",
+        browse_name="Plant",
+        node_class="object",
+        data_type=None,
+        initial_value=None,
+        access_level=READ_ONLY,
+    )
+    saved = await _set_access(
+        client, sign_headers, (instance_id, str(node["id"])), READ_WRITE
+    )
+    assert saved.status_code == OK, saved.text
+    assert saved.json()["data"]["pending_fields"] == []
+    detail = await client.get(
+        f"{INSTANCES}/{instance_id}", headers=sign_headers(PERM_VIEW)
+    )
+    assert detail.json()["data"]["has_pending_restart"] is False
+
+
+class _RefusingRunning:
+    """set_node_writable 一调就炸的运行实例替身。"""
+
+    async def set_node_writable(
+        self, _identifier: str, *, is_writable: bool
+    ) -> None:
+        raise RuntimeError(f"模拟热改失败 is_writable={is_writable}")
+
+
+class _RefusingSupervisor:
+    """永远给出会拒绝热改的实例。"""
+
+    def find(self, _instance_id: object) -> _RefusingRunning:
+        return _RefusingRunning()
+
+
+async def test_a_degraded_rewrite_tolerates_a_vanished_instance_row(
+    database: Database,
+) -> None:
+    """降级要写的实例行已不在时不炸——行没了说明整台实例已删。"""
+    sync = NodeRuntimeSync(
+        database=database, supervisor=cast(Any, _RefusingSupervisor())
+    )
+    applied = await sync.rewrite_access(uuid.uuid4(), "ghost", is_writable=True)
+    assert applied is False
