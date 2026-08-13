@@ -88,6 +88,14 @@ class TopicRegistry:
         )
         return removed
 
+    async def topics_of(self, publisher: str) -> list[str]:
+        """某个推送方名下的全部主题。
+
+        Args: publisher。
+        """
+        async with self._database.session() as session:
+            return await self._topics.list_by_publisher(session, publisher)
+
     async def authorize(self, *, topic: str, codes: frozenset[str]) -> str:
         """判断某个持码集合能否订阅该主题，返回该主题声明的码。
 

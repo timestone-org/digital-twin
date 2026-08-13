@@ -55,3 +55,10 @@ class PublishOut(OutputModel):
 
     topic: str
     seq: int
+
+
+class TopicListOut(OutputModel):
+    """某个推送方名下的主题清单。对账用，不分页——主题数与实例数同量级。"""
+
+    publisher: str
+    topics: list[str]

@@ -27,6 +27,23 @@ class TopicCrud(CrudBase[TopicDeclaration]):
         )
         return result.scalars().one_or_none()
 
+    async def list_by_publisher(
+        self, session: AsyncSession, publisher: str
+    ) -> list[str]:
+        """某个推送方登记的全部主题。对账用。
+
+        ⚠ 只给主题名，不给声明的码：调用方要的是「我这边还有哪些主题挂着」，
+        给更多列只会让它顺手拿去做别的判断，而那份数据的真源在它自己手里。
+
+        Args: session, publisher。
+        """
+        result = await session.execute(
+            select(TopicDeclaration.topic)
+            .where(TopicDeclaration.publisher == publisher)
+            .order_by(TopicDeclaration.topic)
+        )
+        return list(result.scalars().all())
+
     async def bump_seq(
         self, session: AsyncSession, topic: str, *, now: datetime
     ) -> int | None:

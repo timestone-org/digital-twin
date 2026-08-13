@@ -14,6 +14,7 @@ from realtime_hub.apps.channel.schemas import (
     PublishIn,
     PublishOut,
     TopicDeclareIn,
+    TopicListOut,
     TopicRevokeOut,
 )
 from realtime_hub.container import Container
@@ -46,6 +47,21 @@ async def declare_topic(
         publisher=payload.publisher,
     )
     return ok(payload)
+
+
+@router.get("/topics", summary="列出某个推送方的主题")
+async def list_topics(
+    publisher: str, container: ContainerDep
+) -> ApiResponse[TopicListOut]:
+    """给推送方对账用：它那边的实体表是权威，这里只是投影。
+
+    ⚠ 不给分页：主题数与推送方的实体数同量级（一个 OPC UA 实例一个主题），
+    而对账要的就是全集——分页会让调用方写一段翻页循环，翻到一半实体又变了。
+
+    Args: publisher, container。
+    """
+    topics = await container.registry.topics_of(publisher)
+    return ok(TopicListOut(publisher=publisher, topics=topics))
 
 
 @router.delete("/topics/{topic}", summary="注销主题")
