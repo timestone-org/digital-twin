@@ -2,9 +2,12 @@
 
 from datetime import UTC, datetime
 
+from asyncua.server.user_managers import UserManager
+
 from lib.testing import FrozenClock
 from opcua_server.apps.instance.runtime.sessions import (
     SessionRegistry,
+    TrackingInternalServer,
     format_peer,
 )
 
@@ -90,3 +93,10 @@ def test_registries_do_not_share_state_across_instances() -> None:
     other = SessionRegistry(clock=FrozenClock())
     one.activated("s1", ("10.0.0.2", 1), None)
     assert (one.count(), other.count()) == (1, 0)
+
+
+def test_an_explicit_user_manager_is_passed_through() -> None:
+    # ⚠ 用户名/密码档的实例要沿用注入的管理器，不能静默换成宽松管理器
+    registry = SessionRegistry(clock=FrozenClock())
+    server = TrackingInternalServer(registry, user_manager=UserManager())
+    assert server.registry is registry
