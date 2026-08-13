@@ -2,14 +2,21 @@
 /**
  * @fileoverview 新建 / 编辑实例的表单。
  *
- * ⚠ 名称与端口只在新建时定：名称是人给的唯一标识，端口由服务端从池里分配，
- * 两者都不在编辑面上——改端口等于换一个上位机连不上的地址。
+ * ⚠ 名称与端口只在新建时定：名称是人给的唯一标识；端口一旦定下，上位机的
+ * 组态里就写着它，改端口等于换一个对方连不上的地址。所以两者都不在编辑面上。
+ *
+ * ⚠ 端口只能从池内的空闲端口里挑。池外的端口没有容器映射，服务能 bind 而
+ * 上位机连不上，实例状态却显示「运行中」——所以这里只给可选项，不给自由输入，
+ * 后端也会以 42113 拒绝池外取值。
  */
 import { computed, ref, watch } from 'vue'
 import type {
+  DtRadioOption,
+  DtSelectOption,
   OpcuaInstance,
   OpcuaInstanceCreateInput,
   OpcuaInstanceUpdateInput,
+  OpcuaPortPool,
   OpcuaSecurityPolicy,
 } from '@dt/contracts'
 import { OPCUA_SECURITY_POLICIES } from '@dt/contracts'
@@ -20,8 +27,13 @@ import {
   DtInput,
   DtModal,
   DtNotice,
+  DtRadioGroup,
+  DtSelect,
   DtSwitch,
 } from '@dt/ui'
+
+import * as opcua from '@/api/opcua'
+import { describeError } from '@/composables/useAsyncList'
 
 const props = defineProps<{
   modelValue: boolean
@@ -46,6 +58,39 @@ const autostart = ref(false)
 const DEFAULT_POLICIES: OpcuaSecurityPolicy[] = [
   'Basic256Sha256_SignAndEncrypt',
 ]
+
+/** 端口来源。默认自动——多数人并不在意具体是哪个。 */
+const PORT_MODES: readonly DtRadioOption[] = [
+  { value: 'auto', label: '自动分配' },
+  { value: 'manual', label: '指定端口' },
+]
+
+const portMode = ref('auto')
+const port = ref('')
+const pool = ref<OpcuaPortPool | null>(null)
+const poolError = ref<string | null>(null)
+
+const portOptions = computed<DtSelectOption[]>(() =>
+  (pool.value?.free_ports ?? []).map((value) => ({
+    value: String(value),
+    label: String(value),
+  })),
+)
+
+/** 池子空了就没得选，此时连「指定端口」这个选项都不该给。 */
+const canPickPort = computed(() => portOptions.value.length > 0)
+
+async function loadPool(): Promise<void> {
+  try {
+    pool.value = await opcua.getPortPool()
+    poolError.value = null
+    // 池子拿回来之后给一个默认选中项，省掉「切到指定端口却是空的」这一步
+    port.value = pool.value.free_ports[0]?.toString() ?? ''
+  } catch (caught) {
+    pool.value = null
+    poolError.value = describeError(caught)
+  }
+}
 
 interface FormValues {
   name: string
@@ -96,7 +141,12 @@ function reset(target: OpcuaInstance | null): void {
 watch(
   () => [props.modelValue, props.instance] as const,
   ([open, target]) => {
-    if (open) reset(target)
+    if (!open) return
+    reset(target)
+    portMode.value = 'auto'
+    port.value = ''
+    // 编辑时改不了端口，没必要去问池子
+    if (target === null) void loadPool()
   },
   { immediate: true },
 )
@@ -112,7 +162,8 @@ const canSubmit = computed(
   () =>
     policies.value.length > 0 &&
     namespaceUri.value.trim() !== '' &&
-    (isEdit.value || name.value.trim() !== ''),
+    (isEdit.value || name.value.trim() !== '') &&
+    (isEdit.value || portMode.value === 'auto' || port.value !== ''),
 )
 
 function submit(): void {
@@ -125,8 +176,14 @@ function submit(): void {
     is_anonymous_allowed: anonymous.value,
     is_autostart: autostart.value,
   }
-  if (isEdit.value) emit('update', shared)
-  else emit('create', { name: name.value.trim(), ...shared })
+  if (isEdit.value) {
+    emit('update', shared)
+    return
+  }
+  const input: OpcuaInstanceCreateInput = { name: name.value.trim(), ...shared }
+  // 自动分配就整个不传这个字段，让服务端去挑
+  if (portMode.value === 'manual') input.port = Number(port.value)
+  emit('create', input)
 }
 </script>
 
@@ -137,10 +194,7 @@ function submit(): void {
     @update:model-value="emit('update:modelValue', $event)"
   >
     <div class="flex flex-col gap-4">
-      <DtNotice v-if="!isEdit" intent="info" icon="alert-circle">
-        端口由服务端从固定端口池里分配，池满会直接拒绝——不会挑一个池外端口顶上。
-      </DtNotice>
-      <DtNotice v-else intent="warning" icon="alert-triangle">
+      <DtNotice v-if="isEdit" intent="warning" icon="alert-triangle">
         端点路径、命名空间 URI
         与安全策略改完要重启实例才生效，重启会断开该实例上全部上位机会话。
       </DtNotice>
@@ -151,6 +205,41 @@ function submit(): void {
           placeholder="字母开头，可含数字、下划线与短横"
         />
       </DtField>
+
+      <template v-if="!isEdit">
+        <DtNotice v-if="poolError" intent="danger" icon="alert-triangle">
+          取不到端口池：{{ poolError }}
+        </DtNotice>
+        <DtNotice
+          v-else-if="pool && !canPickPort"
+          intent="warning"
+          icon="alert-triangle"
+        >
+          端口池已用尽（{{ pool.used }} / {{ pool.total }}），建不了新实例。
+          扩池是部署期的事——容器的端口段映射要跟着一起改。
+        </DtNotice>
+
+        <DtField
+          v-else-if="pool"
+          label="端口"
+          :hint="`池内 ${pool.total} 个端口，已用 ${pool.used}，可选 ${pool.available}；实例上限 ${pool.max_instances}`"
+        >
+          <div class="flex flex-col gap-2">
+            <DtRadioGroup
+              v-model="portMode"
+              :options="PORT_MODES"
+              orientation="horizontal"
+              aria-label="端口来源"
+            />
+            <DtSelect
+              v-if="portMode === 'manual'"
+              v-model="port"
+              :options="portOptions"
+              aria-label="端口"
+            />
+          </div>
+        </DtField>
+      </template>
 
       <DtField label="描述">
         <DtInput v-model="description" placeholder="选填" />

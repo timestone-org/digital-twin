@@ -13,6 +13,7 @@ import * as opcuaApi from '@/api/opcua'
 import DetailPage from '@/pages/Tools/OpcuaServerDetail/index.vue'
 import NodeExplorer from '@/pages/Tools/OpcuaServerDetail/components/NodeExplorer.vue'
 import SecurityPanel from '@/pages/Tools/OpcuaServerDetail/components/SecurityPanel.vue'
+import SessionsPanel from '@/pages/Tools/OpcuaServerDetail/components/SessionsPanel.vue'
 import InstanceStatusTag from '@/pages/Tools/OpcuaServers/components/InstanceStatusTag.vue'
 import OpcuaServersPage from '@/pages/Tools/OpcuaServers/index.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -25,6 +26,8 @@ vi.mock('vue-router', () => ({
     query: {},
   }),
   RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
+  // 分区是子路由，详情页只留一个出口；出口里放什么由各分区自己的用例去验
+  RouterView: { template: '<div data-test="router-view" />' },
 }))
 
 const confirmSpy = vi.fn<() => Promise<boolean>>()
@@ -92,7 +95,10 @@ function node(over: Partial<OpcuaNode> = {}): OpcuaNode {
 
 const STUBS = {
   global: {
-    stubs: { RouterLink: { props: ['to'], template: '<a><slot /></a>' } },
+    stubs: {
+      // 保留 href：分区页签是不是真链接，就靠它验
+      RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
+    },
   },
 }
 
@@ -254,22 +260,31 @@ describe('详情页的失败反馈与分区', () => {
     expect(act).not.toHaveBeenCalled()
   })
 
-  it('切到会话分区能渲染', async () => {
+  // 分区已是子路由，切换由路由完成；这里只验出口与链接，分区内容各自有用例
+  it('三个分区都给出可收藏的链接，而不是页内状态', async () => {
     const wrapper = await detail()
-    await wrapper
-      .findAll('button')
-      .find((b) => b.text() === '在线会话')
-      ?.trigger('click')
-    await flushPromises()
-    expect(wrapper.text()).toContain('在线会话')
+    const hrefs = wrapper.findAll('a').map((a) => a.attributes('href'))
+    expect(hrefs).toContain('/tools/opcua-servers/i1/nodes')
+    expect(hrefs).toContain('/tools/opcua-servers/i1/sessions')
+    expect(hrefs).toContain('/tools/opcua-servers/i1/security')
   })
 
-  it('切到安全分区能渲染', async () => {
+  it('分区出口在实例取到之后才渲染', async () => {
     const wrapper = await detail()
-    await wrapper
-      .findAll('button')
-      .find((b) => b.text() === '安全')
-      ?.trigger('click')
+    expect(wrapper.find('[data-test="router-view"]').exists()).toBe(true)
+  })
+
+  it('会话分区能独立渲染', async () => {
+    vi.spyOn(opcuaApi, 'listSessions').mockResolvedValue([])
+    const wrapper = mount(SessionsPanel, { props: { instance: instance() } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('共 0 个会话')
+  })
+
+  it('安全分区能独立渲染', async () => {
+    vi.spyOn(opcuaApi, 'listCredentials').mockResolvedValue([])
+    vi.spyOn(opcuaApi, 'listTrustedCertificates').mockResolvedValue([])
+    const wrapper = mount(SecurityPanel, { props: { instance: instance() } })
     await flushPromises()
     expect(wrapper.text()).toContain('接入凭据')
   })
@@ -441,7 +456,7 @@ describe('安全面板的失败反馈', () => {
       },
     ])
     const wrapper = mount(SecurityPanel, {
-      props: { instanceId: 'i1' },
+      props: { instance: instance() },
       attachTo: document.body,
     })
     await flushPromises()

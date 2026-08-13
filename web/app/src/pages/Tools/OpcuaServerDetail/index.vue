@@ -7,36 +7,26 @@
  * 排查的一类故障，因为界面上一切正常。
  */
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { RouterView, useRoute } from 'vue-router'
 import type { OpcuaInstance } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import {
   DtButton,
   DtNotice,
   DtPageState,
-  DtSegmented,
   DtTag,
   useConfirm,
   useToast,
 } from '@dt/ui'
-import type { DtSegmentedOption } from '@dt/contracts'
 
 import * as opcua from '@/api/opcua'
 import PermGuard from '@/components/PermGuard.vue'
-import { AppShell } from '@/components/layout'
+import type { AppTabItem } from '@/components/layout'
+import { AppShell, AppTabNav } from '@/components/layout'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import InstanceStatusTag from '../OpcuaServers/components/InstanceStatusTag.vue'
 import { pendingFieldLabels } from '../OpcuaServers/pendingFields'
-import NodeExplorer from './components/NodeExplorer.vue'
-import SecurityPanel from './components/SecurityPanel.vue'
-import SessionsPanel from './components/SessionsPanel.vue'
-
-const TABS: readonly DtSegmentedOption[] = [
-  { value: 'nodes', label: '地址空间' },
-  { value: 'sessions', label: '在线会话' },
-  { value: 'security', label: '安全' },
-]
 
 const route = useRoute()
 const toast = useToast()
@@ -47,7 +37,31 @@ const instanceId = computed(() => String(route.params.instanceId ?? ''))
 const instance = ref<OpcuaInstance | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
-const tab = ref('nodes')
+
+/** 三个分区是子路由，页签因此是真链接：可收藏、可中键新开、后退可用。 */
+const tabs = computed<AppTabItem[]>(() => {
+  const base = `/tools/opcua-servers/${instanceId.value}`
+  return [
+    {
+      key: 'nodes',
+      label: '地址空间',
+      icon: 'layout-grid',
+      to: `${base}/nodes`,
+    },
+    {
+      key: 'sessions',
+      label: '在线会话',
+      icon: 'users',
+      to: `${base}/sessions`,
+    },
+    {
+      key: 'security',
+      label: '接入安全',
+      icon: 'shield-check',
+      to: `${base}/security`,
+    },
+  ]
+})
 
 const pendingLabels = computed(() =>
   pendingFieldLabels(instance.value?.pending_fields ?? []),
@@ -166,16 +180,14 @@ onMounted(() => {
           该实例还没有服务器证书，首次启动时会自签一张。私钥只写在挂载卷上，不入库。
         </DtNotice>
 
-        <DtSegmented v-model="tab" :options="TABS" aria-label="详情分区" />
+        <AppTabNav :items="tabs" label="实例详情分区" />
 
         <div class="min-h-0 flex-1 overflow-auto">
-          <NodeExplorer v-if="tab === 'nodes'" :instance="instance" />
-          <SessionsPanel
-            v-else-if="tab === 'sessions'"
-            :instance-id="instance.id"
-            :is-running="instance.is_running"
-          />
-          <SecurityPanel v-else :instance-id="instance.id" />
+          <!-- ⚠ 三个分区组件都收 `instance` 这一个 prop。写错 prop 名时
+               typecheck 与 lint 双双放行，靠 `sections.contract.spec.ts` 兜 -->
+          <RouterView v-slot="{ Component }">
+            <component :is="Component" :instance="instance" />
+          </RouterView>
         </div>
       </div>
     </DtPageState>

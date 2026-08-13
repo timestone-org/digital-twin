@@ -2,17 +2,26 @@
 /**
  * @fileoverview 接入凭据与 X509 信任白名单——决定「哪台上位机连得进来」。
  *
- * ⚠ 新建凭据的明文口令**只在创建回执里返回一次**，之后任何接口都取不到。
- * 所以它必须当场、显眼地摆出来，并说清关掉就没了。做成一条 toast 一闪而过
- * 的话，用户会失去唯一一次抄走的机会，只能删了重建。
+ * ⚠ 新建凭据的明文口令**只在创建回执里返回一次**，接住它的是
+ * `IssuedPasswordDialog`——那里说清了为什么不能用 toast。
+ *
+ * 两张表用 `DtDataView` 而不是手写 `<ul>`：与系统管理各页同一套空态与表格
+ * 样式。这里关掉视图切换器——两张小表各摆一个切换器只是噪音。
  */
 import { onMounted, ref } from 'vue'
-import type { OpcuaCredential, OpcuaTrustedCertificate } from '@dt/contracts'
+
+import type {
+  DtDataColumn,
+  DtDataViewMode,
+  OpcuaCredential,
+  OpcuaInstance,
+  OpcuaTrustedCertificate,
+} from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import {
   DtButton,
   DtCard,
-  DtEmpty,
+  DtDataView,
   DtField,
   DtInput,
   DtModal,
@@ -25,15 +34,29 @@ import {
 import * as opcua from '@/api/opcua'
 import PermGuard from '@/components/PermGuard.vue'
 import { describeError } from '@/composables/useAsyncList'
+import IssuedPasswordDialog from './IssuedPasswordDialog.vue'
 
-const props = defineProps<{ instanceId: string }>()
+const props = defineProps<{ instance: OpcuaInstance }>()
 
 const toast = useToast()
 const confirm = useConfirm()
 
+const CREDENTIAL_COLUMNS: readonly DtDataColumn[] = [
+  { key: 'username', label: '用户名' },
+  { key: 'actions', label: '操作', align: 'right', width: '6rem' },
+]
+
+const CERTIFICATE_COLUMNS: readonly DtDataColumn[] = [
+  { key: 'subject', label: '主体' },
+  { key: 'fingerprint', label: '指纹' },
+  { key: 'actions', label: '操作', align: 'right', width: '6rem' },
+]
+
 const credentials = ref<OpcuaCredential[]>([])
 const certificates = ref<OpcuaTrustedCertificate[]>([])
 const error = ref<string | null>(null)
+// 两张小表只用表格视图，切换器关掉——见文件头
+const tableOnly = ref<DtDataViewMode>('table')
 
 const credentialFormOpen = ref(false)
 const certificateFormOpen = ref(false)
@@ -45,8 +68,8 @@ const issuedPassword = ref<{ username: string; password: string } | null>(null)
 
 async function load(): Promise<void> {
   try {
-    credentials.value = await opcua.listCredentials(props.instanceId)
-    certificates.value = await opcua.listTrustedCertificates(props.instanceId)
+    credentials.value = await opcua.listCredentials(props.instance.id)
+    certificates.value = await opcua.listTrustedCertificates(props.instance.id)
     error.value = null
   } catch (caught) {
     error.value = describeError(caught)
@@ -57,7 +80,9 @@ async function addCredential(): Promise<void> {
   const username = newUsername.value.trim()
   if (username === '') return
   try {
-    const created = await opcua.createCredential(props.instanceId, { username })
+    const created = await opcua.createCredential(props.instance.id, {
+      username,
+    })
     credentialFormOpen.value = false
     newUsername.value = ''
     issuedPassword.value = {
@@ -79,7 +104,7 @@ async function removeCredential(credential: OpcuaCredential): Promise<void> {
   })
   if (!ok) return
   try {
-    await opcua.deleteCredential(props.instanceId, credential.id)
+    await opcua.deleteCredential(props.instance.id, credential.id)
     toast.success('凭据已删除')
     await load()
   } catch (caught) {
@@ -91,7 +116,7 @@ async function addCertificate(): Promise<void> {
   const pem = certificatePem.value.trim()
   if (pem === '') return
   try {
-    await opcua.addTrustedCertificate(props.instanceId, pem)
+    await opcua.addTrustedCertificate(props.instance.id, pem)
     certificateFormOpen.value = false
     certificatePem.value = ''
     toast.success('证书已加入白名单')
@@ -112,7 +137,7 @@ async function removeCertificate(
   })
   if (!ok) return
   try {
-    await opcua.deleteTrustedCertificate(props.instanceId, certificate.id)
+    await opcua.deleteTrustedCertificate(props.instance.id, certificate.id)
     toast.success('证书已移出白名单')
     await load()
   } catch (caught) {
@@ -146,30 +171,32 @@ onMounted(() => {
         </PermGuard>
       </div>
 
-      <DtEmpty
-        v-if="credentials.length === 0"
-        title="还没有凭据"
-        hint="上位机用用户名口令连接时需要"
-      />
-      <ul v-else class="m-0 flex list-none flex-col gap-2 p-0">
-        <li
-          v-for="credential in credentials"
-          :key="credential.id"
-          class="flex items-center justify-between gap-2 text-xs"
-        >
-          <span class="font-mono">{{ credential.username }}</span>
+      <DtDataView
+        v-model:view="tableOnly"
+        :columns="CREDENTIAL_COLUMNS"
+        :rows="credentials"
+        :layout="{ toggle: false, fill: false, minWidth: '24rem' }"
+        :empty="{
+          title: '还没有凭据',
+          hint: '上位机用用户名口令连接时需要',
+        }"
+      >
+        <template #cell-username="{ row }">
+          <span class="font-mono text-xs">{{ row.username }}</span>
+        </template>
+        <template #cell-actions="{ row }">
           <PermGuard :codes="[PERMISSION_CODES.opcuaManage]">
             <DtButton
               size="sm"
               variant="ghost"
               intent="danger"
-              @click="removeCredential(credential)"
+              @click="removeCredential(row)"
             >
               删除
             </DtButton>
           </PermGuard>
-        </li>
-      </ul>
+        </template>
+      </DtDataView>
     </DtCard>
 
     <DtCard>
@@ -187,35 +214,37 @@ onMounted(() => {
         </PermGuard>
       </div>
 
-      <DtEmpty
-        v-if="certificates.length === 0"
-        title="白名单为空"
-        hint="只有列在这里的客户端证书才能建立会话"
-      />
-      <ul v-else class="m-0 flex list-none flex-col gap-2 p-0">
-        <li
-          v-for="certificate in certificates"
-          :key="certificate.id"
-          class="flex items-center justify-between gap-2 text-xs"
-        >
-          <span class="min-w-0">
-            <span class="block truncate">{{ certificate.subject }}</span>
-            <span class="block truncate font-mono text-2xs text-text-disabled">
-              {{ certificate.fingerprint }}
-            </span>
+      <DtDataView
+        v-model:view="tableOnly"
+        :columns="CERTIFICATE_COLUMNS"
+        :rows="certificates"
+        :layout="{ toggle: false, fill: false, minWidth: '32rem' }"
+        :empty="{
+          title: '白名单为空',
+          hint: '只有列在这里的客户端证书才能建立会话',
+        }"
+      >
+        <template #cell-subject="{ row }">
+          <span class="truncate">{{ row.subject }}</span>
+        </template>
+        <template #cell-fingerprint="{ row }">
+          <span class="font-mono text-2xs text-text-disabled">
+            {{ row.fingerprint }}
           </span>
+        </template>
+        <template #cell-actions="{ row }">
           <PermGuard :codes="[PERMISSION_CODES.opcuaManage]">
             <DtButton
               size="sm"
               variant="ghost"
               intent="danger"
-              @click="removeCertificate(certificate)"
+              @click="removeCertificate(row)"
             >
               移除
             </DtButton>
           </PermGuard>
-        </li>
-      </ul>
+        </template>
+      </DtDataView>
     </DtCard>
 
     <DtModal v-model="credentialFormOpen" title="新建接入凭据">
@@ -252,28 +281,9 @@ onMounted(() => {
       </template>
     </DtModal>
 
-    <!-- ⚠ 只此一次：用独立弹窗而不是 toast，toast 会自己消失 -->
-    <DtModal
-      :model-value="issuedPassword !== null"
-      title="口令只显示这一次"
-      @update:model-value="issuedPassword = null"
-    >
-      <DtNotice intent="warning" icon="alert-triangle">
-        现在就抄走。关掉这个窗口之后，任何接口都取不到它——只能删掉凭据重建。
-      </DtNotice>
-      <div v-if="issuedPassword" class="mt-3 flex flex-col gap-2 text-xs">
-        <div>
-          <span class="text-text-disabled">用户名</span>
-          <p class="m-0 font-mono">{{ issuedPassword.username }}</p>
-        </div>
-        <div>
-          <span class="text-text-disabled">口令</span>
-          <p class="m-0 font-mono text-base">{{ issuedPassword.password }}</p>
-        </div>
-      </div>
-      <template #footer>
-        <DtButton @click="issuedPassword = null">我已抄走</DtButton>
-      </template>
-    </DtModal>
+    <IssuedPasswordDialog
+      :issued="issuedPassword"
+      @close="issuedPassword = null"
+    />
   </div>
 </template>

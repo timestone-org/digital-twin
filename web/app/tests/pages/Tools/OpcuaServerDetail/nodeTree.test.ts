@@ -7,9 +7,18 @@ import { describe, expect, it } from 'vitest'
 import type { OpcuaNode } from '@dt/contracts'
 
 import {
+  ancestorIds,
   buildNodeTree,
-  flattenNodeTree,
+  expandableIds,
+  filterNodeTree,
+  matchesKeyword,
+  visibleRows,
 } from '@/pages/Tools/OpcuaServerDetail/nodeTree'
+
+/** 全展开摊平成 id 序列。 */
+function flatAll(roots: ReturnType<typeof buildNodeTree>): string[] {
+  return visibleRows(roots, new Set(), true).map((row) => row.node.id)
+}
 
 function node(id: string, parentId: string | null = null): OpcuaNode {
   return {
@@ -45,7 +54,7 @@ describe('折树', () => {
       node('child', 'root'),
       node('grand', 'child'),
     ])
-    const flat = flattenNodeTree(roots)
+    const flat = visibleRows(roots, new Set(), true)
     expect(flat.map((item) => [item.node.id, item.depth])).toEqual([
       ['root', 0],
       ['child', 1],
@@ -79,7 +88,7 @@ describe('折树', () => {
 
   it('空输入给空树', () => {
     expect(buildNodeTree([])).toEqual([])
-    expect(flattenNodeTree([])).toEqual([])
+    expect(visibleRows([], new Set(), true)).toEqual([])
   })
 
   it('深度优先摊平：子在父之后、兄弟之前', () => {
@@ -89,11 +98,109 @@ describe('折树', () => {
       node('b'),
       node('b1', 'b'),
     ])
-    expect(flattenNodeTree(roots).map((item) => item.node.id)).toEqual([
-      'a',
-      'a1',
-      'b',
-      'b1',
+    expect(flatAll(roots)).toEqual(['a', 'a1', 'b', 'b1'])
+  })
+})
+
+describe('折叠与展开', () => {
+  const roots = buildNodeTree([
+    node('p'),
+    node('c', 'p'),
+    node('g', 'c'),
+    node('other'),
+  ])
+
+  it('默认全折起来时只剩根这一层', () => {
+    expect(visibleRows(roots, new Set()).map((row) => row.node.id)).toEqual([
+      'p',
+      'other',
     ])
+  })
+
+  it('展开一层只多出直接子节点，孙子仍然收着', () => {
+    const rows = visibleRows(roots, new Set(['p']))
+    expect(rows.map((row) => row.node.id)).toEqual(['p', 'c', 'other'])
+  })
+
+  it('expandAll 忽略折叠状态——搜出来却看不见等于没搜', () => {
+    expect(flatAll(roots)).toEqual(['p', 'c', 'g', 'other'])
+  })
+
+  it('叶子不带 aria-expanded 所需的展开态', () => {
+    const leaf = visibleRows(roots, new Set(), true).find(
+      (row) => row.node.id === 'g',
+    )
+    expect(leaf?.hasChildren).toBe(false)
+    expect(leaf?.isExpanded).toBe(false)
+  })
+
+  it('同层的 setSize / posInSet 反映真实兄弟数', () => {
+    const rows = visibleRows(roots, new Set())
+    expect(rows.map((row) => [row.setSize, row.posInSet])).toEqual([
+      [2, 1],
+      [2, 2],
+    ])
+  })
+
+  it('expandableIds 只收有子节点的', () => {
+    expect(expandableIds(roots).sort()).toEqual(['c', 'p'])
+  })
+
+  it('ancestorIds 给出从根到该节点的整条路径', () => {
+    expect(ancestorIds(roots, 'g')).toEqual(['p', 'c'])
+    expect(ancestorIds(roots, 'p')).toEqual([])
+    expect(ancestorIds(roots, 'no-such')).toEqual([])
+  })
+})
+
+describe('搜索', () => {
+  function named(id: string, browse: string, parentId: string | null = null) {
+    return { ...node(id, parentId), browse_name: browse }
+  }
+
+  it('BrowseName、标识与 NodeId 都参与匹配', () => {
+    const target = named('x', 'Temperature')
+    expect(matchesKeyword(target, 'temp')).toBe(true)
+    expect(matchesKeyword(target, 'x')).toBe(true)
+    expect(matchesKeyword(target, 'ns=2;s=x')).toBe(true)
+    expect(matchesKeyword(target, 'pressure')).toBe(false)
+  })
+
+  it('空关键词全部命中', () => {
+    expect(matchesKeyword(named('x', 'Temperature'), '')).toBe(true)
+  })
+
+  it('⚠ 命中节点的祖先必须保留，否则看不出它挂在哪', () => {
+    const roots = buildNodeTree([
+      named('line1', 'Line1'),
+      named('t', 'Temperature', 'line1'),
+      named('line2', 'Line2'),
+    ])
+    const filtered = filterNodeTree(roots, 'Temperature')
+    expect(flatAll(filtered)).toEqual(['line1', 't'])
+  })
+
+  it('祖先自己不命中也留着，且深度重新从 0 起算', () => {
+    const roots = buildNodeTree([
+      named('a', 'Plant'),
+      named('b', 'Line', 'a'),
+      named('c', 'Temperature', 'b'),
+    ])
+    const rows = visibleRows(filterNodeTree(roots, 'temper'), new Set(), true)
+    expect(rows.map((row) => [row.node.id, row.depth])).toEqual([
+      ['a', 0],
+      ['b', 1],
+      ['c', 2],
+    ])
+  })
+
+  it('一个都不命中就给空树', () => {
+    const roots = buildNodeTree([named('a', 'Plant')])
+    expect(filterNodeTree(roots, 'zzz')).toEqual([])
+  })
+
+  it('空关键词原样返回整棵树', () => {
+    const roots = buildNodeTree([named('a', 'Plant'), named('b', 'X', 'a')])
+    expect(flatAll(filterNodeTree(roots, '  '))).toEqual(['a', 'b'])
   })
 })

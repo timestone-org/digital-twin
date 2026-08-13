@@ -27,27 +27,32 @@ function collectVueFiles(dir: string): string[] {
 }
 
 /**
- * 取 `const COLUMNS … = [ … ]` 这一段，按方括号配对切出来。
+ * 取一个文件里全部列定义，按方括号配对切出来拼在一起。
+ *
  * ⚠ 起点要从 `=` 之后找，不能从 `const` 之后找：类型标注里的
  * `DtDataColumn[]` 会先撞上，切出来是个空数组，闸就永远绿。
+ * ⚠ 认 `XXX_COLUMNS` 而不只是 `COLUMNS`：一个文件里摆两张表时，两个常量
+ * 不可能都叫 `COLUMNS`，只认后者等于放过了这类文件（安全面板就是）。
  */
 function columnsBlock(source: string): string | null {
-  const declaration = /const COLUMNS[^=]*=\s*\[/.exec(source)
-  if (declaration === null) return null
-  const open = source.indexOf(
-    '[',
-    declaration.index + declaration[0].length - 1,
-  )
-  let depth = 0
-  for (let index = open; index < source.length; index += 1) {
-    const char = source[index]
-    if (char === '[') depth += 1
-    else if (char === ']') {
-      depth -= 1
-      if (depth === 0) return source.slice(open, index + 1)
+  const declaration = /const [A-Z_]*COLUMNS\b[^=]*=\s*\[/g
+  const blocks: string[] = []
+  for (const match of source.matchAll(declaration)) {
+    const open = source.indexOf('[', match.index + match[0].length - 1)
+    let depth = 0
+    for (let index = open; index < source.length; index += 1) {
+      const char = source[index]
+      if (char === '[') depth += 1
+      else if (char === ']') {
+        depth -= 1
+        if (depth === 0) {
+          blocks.push(source.slice(open, index + 1))
+          break
+        }
+      }
     }
   }
-  return null
+  return blocks.length > 0 ? blocks.join('\n') : null
 }
 
 interface Usage {

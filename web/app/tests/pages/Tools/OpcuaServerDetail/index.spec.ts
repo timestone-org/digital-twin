@@ -22,6 +22,8 @@ vi.mock('vue-router', () => ({
     query: {},
   }),
   RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
+  // 分区是子路由，详情页只留一个出口；出口里放什么由各分区自己的用例去验
+  RouterView: { template: '<div data-test="router-view" />' },
 }))
 
 interface ConfirmAsk {
@@ -79,7 +81,10 @@ async function render(over: Partial<OpcuaInstance> = {}): Promise<VueWrapper> {
   })
   const wrapper = mount(DetailPage, {
     global: {
-      stubs: { RouterLink: { props: ['to'], template: '<a><slot /></a>' } },
+      stubs: {
+        // 保留 href：分区页签是不是真链接，就靠它验
+        RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
+      },
     },
   })
   await flushPromises()
@@ -203,7 +208,10 @@ describe('取实例失败', () => {
     })
     const wrapper = mount(DetailPage, {
       global: {
-        stubs: { RouterLink: { props: ['to'], template: '<a><slot /></a>' } },
+        stubs: {
+          // 保留 href：分区页签是不是真链接，就靠它验
+          RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
+        },
       },
     })
     await flushPromises()
