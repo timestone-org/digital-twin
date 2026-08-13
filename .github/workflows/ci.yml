@@ -30,6 +30,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      # ⚠ 自托管 runner 的工作目录是**持久**的，`refs/pull/*` 只增不减。压缩合并
+      # 会给同一份内容换一个 SHA，于是原始提交作为孤儿留在这里——它们在仓库里
+      # 根本不存在，却每次都被扫。后果是按指纹豁免的误报永远对不上号（指纹钉的
+      # 是压缩后的那个 SHA），红灯一直亮着，而仓库本身是干净的。
+      # 实测：留着这些 ref 扫 155 个提交报 2 条，删掉后扫 134 个提交、0 条。
+      - name: 清掉 runner 上残留的 PR ref
+        run: |
+          git for-each-ref --format='delete %(refname)' refs/pull refs/remotes/pull \
+            | git update-ref --stdin
+
       # 写进版本库的密钥等于泄漏的密钥，而且历史层删不掉——扫全历史
       - name: gitleaks
         run: |
