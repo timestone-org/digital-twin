@@ -3,9 +3,9 @@
 ⚠ **值不落库**（不变式 1、2）：写值只改运行时内存，`opcua_nodes.initial_value`
 是初值不是当前值。进程重启后所有节点回到初值，这是明确语义。
 
-⚠ **加/删节点是热生效**（CONTEXT.md §6）：实例在跑就当场改地址空间，加完的
-节点即刻可被上位机读到、删掉的即刻读不到，会话不断。为加一个点重启实例会
-把全部上位机会话踢掉，而现场加点是常规操作。
+⚠ **加/删节点与改 access_level 是热生效**（CONTEXT.md §6）：实例在跑就当场
+改地址空间，加完的节点即刻可被上位机读到、删掉的即刻读不到、改过可写位的
+即刻按新口径放行或拒绝，会话不断。为常规操作重启实例会踢掉全部上位机会话。
 
 ⚠ **地址空间是外部 IO，绝不放进数据库事务**（database-standard）。因此两个
 方向的顺序是反的，都为了让失败留下可恢复的状态：
@@ -41,6 +41,7 @@ from opcua_server.apps.instance.schemas import (
     NodeWriteOut,
 )
 from opcua_server.apps.instance.services.presenter import (
+    ACCESS_LEVEL_WRITE,
     definition_of,
     node_id_of,
     to_node_out,
@@ -50,8 +51,10 @@ from opcua_server.apps.instance.services.presenter import (
 
 _logger = get_logger("opcua.nodes")
 
-# 改了要重启才生效的节点字段。access_level 与 description 不参与地址空间构建。
+# 改了要重启才生效的节点字段。description 不参与地址空间构建。
 RESTART_FIELDS = frozenset({"browse_name", "data_type", "initial_value"})
+# 热生效档的字段：实例在跑就当场改运行中的地址空间（CONTEXT.md §6）
+HOT_FIELD_ACCESS_LEVEL = "access_level"
 # 方法节点要绑定服务端回调，本服务没有可绑定的用户代码（CONTEXT.md §3）
 NODE_CLASS_METHOD = "method"
 
@@ -164,6 +167,9 @@ class NodeService:
     ) -> NodeMutationOut:
         """改节点定义。标识不可改——要换只能删了重建。
 
+        `access_level` 是热生效档：实例在跑就当场改运行中地址空间的可写位；
+        热改失败时保存不回滚，实例转待重启并把它计入 `pending_fields`。
+
         Args: instance_id, node_id, payload。
         """
         async with self._database.session() as session:
@@ -177,9 +183,17 @@ class NodeService:
                 )
             await session.flush()
             await session.refresh(row)
-            return NodeMutationOut(
-                node=to_node_out(row), pending_fields=pending
+            updated = to_node_out(row)
+            identifier = row.identifier
+            is_writable = bool(row.access_level & ACCESS_LEVEL_WRITE)
+        # ⚠ 热改在事务之外：地址空间是外部 IO，绝不放进数据库事务
+        if HOT_FIELD_ACCESS_LEVEL in changed:
+            applied = await self._sync.rewrite_access(
+                instance_id, identifier, is_writable=is_writable
             )
+            if not applied:
+                pending = sorted({*pending, HOT_FIELD_ACCESS_LEVEL})
+        return NodeMutationOut(node=updated, pending_fields=pending)
 
     async def delete_node(
         self, instance_id: uuid.UUID, node_id: uuid.UUID
@@ -417,3 +431,41 @@ class NodeRuntimeSync:
                 instance_id=str(instance_id),
                 identifier=identifier,
             )
+
+    async def rewrite_access(
+        self, instance_id: uuid.UUID, identifier: str, *, is_writable: bool
+    ) -> bool:
+        """把新的可写位热改进运行中的地址空间；已生效或无需生效返回 True。
+
+        ⚠ 失败**不回滚**已落库的配置——值是合法的，错的只是「还没生效」。
+        降级方向显式：置实例待重启，由调用方把 access_level 计入
+        pending_fields，绝不静默假装已生效（CONTEXT.md §6）。
+
+        Args: instance_id, identifier, is_writable。
+        """
+        running = self._supervisor.find(instance_id)
+        if running is None:
+            return True
+        try:
+            await running.set_node_writable(identifier, is_writable=is_writable)
+        except Exception as error:
+            _logger.warning(
+                "opcua_access_rewrite_degraded",
+                "热改可写位失败，已转待重启生效",
+                instance_id=str(instance_id),
+                identifier=identifier,
+                reason=type(error).__name__,
+            )
+            await self._flag_restart(instance_id)
+            return False
+        return True
+
+    async def _flag_restart(self, instance_id: uuid.UUID) -> None:
+        """把实例置成待重启。行已不在就算了——整台实例都删了。
+
+        Args: instance_id。
+        """
+        async with self._database.session() as session:
+            row = await instance_crud.get(session, instance_id)
+            if row is not None:
+                row.has_pending_restart = True

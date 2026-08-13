@@ -11,7 +11,8 @@
   BrowsePath 寻址时全部落空，而它拿到的错误只是「找不到节点」。
 """
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
 from typing import Any, cast
 
 from asyncua import Server, ua
@@ -233,6 +234,48 @@ def _data_type_of(definition: NodeDefinition) -> str:
     Args: definition。
     """
     return definition.data_type or FALLBACK_DATA_TYPE
+
+
+async def rewrite_writable(node: BuiltNode, *, is_writable: bool) -> BuiltNode:
+    """按新的可写位改一个已建成的节点，返回换好定义的新条目。
+
+    `set_writable` 同时置/清 AccessLevel 与 UserAccessLevel 的 CurrentWrite
+    位——两位都动才是上位机真的可写（契约测试钉死）。
+
+    ⚠ 调用方必须用返回值**换掉**表里的条目：definition 是 frozen dataclass，
+    留着旧的 is_writable，管理面写值的可写检查就还照旧口径走。
+
+    Args: node, is_writable。
+    """
+    await node.handle.set_writable(is_writable)
+    return BuiltNode(
+        definition=replace(node.definition, is_writable=is_writable),
+        handle=node.handle,
+    )
+
+
+def subtree_of(nodes: Mapping[str, BuiltNode], identifier: str) -> list[str]:
+    """`identifier` 及其全部后代，**子在前、父在后**。
+
+    删除要按这个顺序走：先摘子再摘父，中途失败时留下的是一棵仍然连通的
+    树，而不是一堆挂在已删父节点下的孤儿。
+
+    Args: nodes, identifier。
+    """
+    children: dict[str, list[str]] = {}
+    for key, node in nodes.items():
+        parent = node.definition.parent_identifier
+        if parent is not None:
+            children.setdefault(parent, []).append(key)
+    ordered: list[str] = []
+
+    def walk(current: str) -> None:
+        for child in sorted(children.get(current, ())):
+            walk(child)
+        ordered.append(current)
+
+    walk(identifier)
+    return ordered
 
 
 async def delete_node(server: Server, node: BuiltNode) -> None:

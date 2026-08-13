@@ -39,6 +39,8 @@ from opcua_server.apps.instance.runtime.addressspace import (
     delete_node,
     read_node_value,
     register_custom_namespace,
+    rewrite_writable,
+    subtree_of,
     write_node_value,
 )
 from opcua_server.apps.instance.runtime.pki import PkiStore
@@ -362,29 +364,6 @@ class RunningInstance:
             raise NodeNotFound(f"父节点 {parent} 不存在于本实例")
         return found.handle
 
-    def _subtree_of(self, identifier: str) -> list[str]:
-        """`identifier` 及其全部后代，**子在前、父在后**。
-
-        删除要按这个顺序走：先摘子再摘父，中途失败时留下的是一棵仍然连通的
-        树，而不是一堆挂在已删父节点下的孤儿。
-
-        Args: identifier。
-        """
-        children: dict[str, list[str]] = {}
-        for key, node in self._nodes.items():
-            parent = node.definition.parent_identifier
-            if parent is not None:
-                children.setdefault(parent, []).append(key)
-        ordered: list[str] = []
-
-        def walk(current: str) -> None:
-            for child in sorted(children.get(current, ())):
-                walk(child)
-            ordered.append(current)
-
-        walk(identifier)
-        return ordered
-
     async def remove_node(self, identifier: str) -> None:
         """运行中删一个节点及其后代，删完即刻不可被上位机读到。
 
@@ -403,7 +382,7 @@ class RunningInstance:
                 raise NodeNotFound(f"节点 {identifier} 不存在于本实例")
             removed: dict[str, BuiltNode] = {}
             try:
-                for target in self._subtree_of(identifier):
+                for target in subtree_of(self._nodes, identifier):
                     node = self._nodes.pop(target)
                     removed[target] = node
                     await delete_node(server, node)
@@ -423,6 +402,30 @@ class RunningInstance:
         if self._server is None:
             raise InstanceNotRunning(f"实例 {self.spec.name} 未运行")
         return self._server
+
+    async def set_node_writable(
+        self, identifier: str, *, is_writable: bool
+    ) -> None:
+        """运行中热改节点的可写位，改完即刻对上位机生效。
+
+        ⚠ object 类节点没有值属性，对它是 no-op——找不到可写属性不算失败。
+
+        Args: identifier, is_writable。
+        """
+        async with self._structure_lock:
+            node = self._require_node(identifier)
+            if not node.definition.has_value():
+                return
+            self._nodes[identifier] = await rewrite_writable(
+                node, is_writable=is_writable
+            )
+        _logger.info(
+            "opcua_node_access_rewritten",
+            "运行中改节点可写位",
+            instance_id=str(self.spec.instance_id),
+            identifier=identifier,
+            is_writable=is_writable,
+        )
 
     async def write_value(self, identifier: str, value: object) -> object:
         """写节点值，返回收敛后的实际值。
