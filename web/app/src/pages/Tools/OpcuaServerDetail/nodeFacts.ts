@@ -12,12 +12,17 @@
  * ⚠ 树里是**动态绑定** `:name`，而 `DtIcon.contract.spec.ts` 只扫模板里的
  * 字面量 `name="..."`——写错一个名字它抓不到，界面上只是图标位置空着。
  * `nodeFacts.test.ts` 有一条用例把这张表的取值与图标注册表对一遍。
- * `method` 不在表里：后端拒绝创建方法节点，真出现了走兜底。
+ *
+ * ⚠ `method` 也给一个图标，尽管后端拒绝创建方法节点：地址空间的数据未必
+ * 都经过本服务的 API（外部工具直接改库、将来支持方法节点），落到兜底就与
+ * 变量长得一模一样，人分不出这一行是个能被调用的东西。`arrow-right` 取的
+ * 是「调用」的语义，图标库里没有更贴的，不为此单画一个。
  */
 const CLASS_ICONS: Record<string, string> = {
   object: 'layout-grid',
   variable: 'activity',
   property: 'table',
+  method: 'arrow-right',
 }
 
 /** 兜底图标。导出是为了让契约测试连它一起检。 */

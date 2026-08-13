@@ -27,7 +27,12 @@ export interface ThemeTokens {
    * 引擎只在 hex 时同步 `-rgb` 伴生变量，给 rgba() 会让 `rgba(var(--x-rgb), α)`
    * 的消费方静默回落到 :root 的深色三元组——页面不报错，只是颜色不对。
    */
-  accent: { primary: string; secondary: string }
+  /**
+   * ⚠ `onSurface` 是**强调色当文字用**时的取值，与 `primary` 分开：
+   * `primary` 要在实心底上配深墨前景，浅色主题里因此不能调暗；而同一个
+   * 取值压在浅底上当文字只有 3.09:1，过不了 AA。两种用途拉不到同一个值上。
+   */
+  accent: { primary: string; secondary: string; onSurface: string }
   state: {
     success: string
     warning: string

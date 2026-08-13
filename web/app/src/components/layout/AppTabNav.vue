@@ -47,7 +47,7 @@ const route = useRoute()
       class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] transition-colors"
       :class="
         route.path === item.to
-          ? 'bg-accent-primary/10 text-accent-primary'
+          ? 'bg-accent-primary/10 text-accent-on-surface'
           : 'text-text-secondary hover:bg-accent-primary/10 hover:text-text-primary'
       "
       :aria-current="route.path === item.to ? 'page' : undefined"

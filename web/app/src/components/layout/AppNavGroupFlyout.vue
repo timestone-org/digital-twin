@@ -115,7 +115,7 @@ function onEsc(event: KeyboardEvent): void {
           class="flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs transition-colors"
           :class="
             isActive(child.to)
-              ? 'bg-accent-primary/10 text-accent-primary'
+              ? 'bg-accent-primary/10 text-accent-on-surface'
               : 'text-text-secondary hover:bg-accent-primary/10 hover:text-text-primary'
           "
           :aria-current="isActive(child.to) ? 'page' : undefined"

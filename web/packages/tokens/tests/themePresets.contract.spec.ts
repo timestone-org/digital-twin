@@ -134,6 +134,18 @@ describe('预设的文字对比度', () => {
     ).toBeGreaterThanOrEqual(AA_BODY)
   })
 
+  it.each(THEME_PRESETS)('$name 的强调色当文字用也过 AA', (theme) => {
+    // ⚠ 强调色不只做实心底，它同样被当**文字色**用：页签选中态、树的选中行、
+    // 导航栏。既有用例只验了「实心底 + onEmphasis 前景」那一侧，漏了这一侧——
+    // 而漏掉的这一侧恰好是选中态最常出现的地方。浅色主题下 primary 压在浅底
+    // 上只有 3.09:1，这正是 `accent.onSurface` 与 `primary` 分开的原因。
+    for (const [, backdrop] of backdrops(theme)) {
+      expect(
+        contrast(composite(theme.tokens.accent.onSurface, backdrop), backdrop),
+      ).toBeGreaterThanOrEqual(AA_BODY)
+    }
+  })
+
   it.each(THEME_PRESETS)('$name 的次要文字明显强于三级文字', (theme) => {
     const base = parseColor(theme.tokens.surface.base).rgb
     const secondary = contrast(

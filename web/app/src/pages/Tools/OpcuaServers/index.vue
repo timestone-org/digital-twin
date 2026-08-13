@@ -210,7 +210,7 @@ onMounted(() => {
 
         <template #cell-name="{ row }">
           <RouterLink
-            class="font-medium text-accent-primary"
+            class="font-medium text-accent-on-surface"
             :to="`/tools/opcua-servers/${row.id}`"
           >
             {{ row.name }}

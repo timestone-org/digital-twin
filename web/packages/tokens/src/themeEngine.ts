@@ -38,6 +38,7 @@ export const TOKEN_CSS_VAR: Record<TokenPath, string> = {
 
   'accent.primary': '--accent-primary',
   'accent.secondary': '--accent-secondary',
+  'accent.onSurface': '--accent-on-surface',
 
   'state.success': '--state-success',
   'state.warning': '--state-warning',

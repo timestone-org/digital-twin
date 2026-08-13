@@ -14,7 +14,7 @@ const router = useRouter()
       corners
       class="flex max-w-md flex-col items-center gap-3 px-8 py-10 text-center"
     >
-      <DtIcon name="alert-circle" :size="28" class="text-accent-primary" />
+      <DtIcon name="alert-circle" :size="28" class="text-accent-on-surface" />
       <h1 class="font-display m-0 text-xl font-bold text-text-title">
         页面不存在
       </h1>
