@@ -9,7 +9,7 @@
 
 ## 1. 流水线分段
 
-`.github/workflows/ci.yml`，每次 push 与每个 PR 都跑，五段串行：
+`.github/workflows/ci.yml`，main 的 push 与每个 PR 都跑（分支 push 不单独触发——PR 事件已经验过同一份代码，双触发只会把自托管 runner 的队列拖死），五段串行：
 
 ```
 1 秒级闸门        机密扫描 / 仓库卫生 / 结构与规范闸        ← 只读源码，最便宜的红灯
