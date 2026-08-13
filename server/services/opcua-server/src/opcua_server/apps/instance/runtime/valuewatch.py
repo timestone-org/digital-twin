@@ -70,6 +70,28 @@ class ValueWatcher:
             )
             self._subscription = None
 
+    async def add(self, identifier: str, node: Any) -> None:
+        """把运行中新加的节点补进订阅。
+
+        ⚠ 不补的话，热加的节点**永远不会推值**：订阅集是在实例启动那一刻定
+        下来的。而热加是文档化的能力（CONTEXT.md §6 的热生效档），表现会是
+        「新加的点在页面上永远不动」，且没有任何报错。
+
+        Args: identifier, node。
+        """
+        if self._subscription is None:
+            return
+        self._identifiers[str(node.nodeid.to_string())] = identifier
+        try:
+            await self._subscription.subscribe_data_change([node])
+        except Exception as error:
+            _logger.error(
+                "value_watch_add_failed",
+                "新节点未能加入值监听，它不会推值",
+                identifier=identifier,
+                error_type=type(error).__name__,
+            )
+
     async def stop(self) -> None:
         """撤订阅。已经没有就什么都不做。"""
         subscription = self._subscription

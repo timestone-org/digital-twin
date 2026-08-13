@@ -38,7 +38,11 @@ ENV PATH="/src/.venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     OPCUA_PKI_DIR=/var/lib/opcua/pki
 
-WORKDIR /src
+# ⚠ 运行期的工作目录是**服务目录**而不是 /src：`alembic.ini` 在这里，
+# 站在 /src 上跑 `alembic upgrade head` 会以「No 'script_location' key found」
+# 失败——而部署手册里那条命令正是这么写的。可执行入口是 console script，
+# 从哪个目录起都一样，所以换到这里没有代价。
+WORKDIR /src/services/opcua-server
 COPY --from=builder --chown=app:app /src /src
 
 # PKI 目录要能被非 root 写：自签证书在首次启动时生成

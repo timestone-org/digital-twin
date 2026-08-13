@@ -121,3 +121,25 @@ async def test_a_write_from_a_real_client_is_seen(
         await node.write_value(77.25)
     assert await _eventually(lambda: any(item[2] == 77.25 for item in seen))
     assert seen[-1][1] == TEMPERATURE.identifier
+
+
+async def test_a_hot_added_node_is_watched_too(
+    watched: tuple[RunningInstance, Seen],
+) -> None:
+    """⚠ 订阅集是在实例启动那一刻定下来的。
+
+    热加的节点不补进去的话，它**永远不会推值**——而热加是文档化的能力，
+    表现会是「新加的点在页面上永远不动」，且没有任何报错。
+    """
+    running, seen = watched
+    added = NodeDefinition(
+        identifier="plant.pressure",
+        browse_name="Pressure",
+        data_type="double",
+        initial_value=1.0,
+    )
+    await running.add_node(added)
+    seen.clear()
+    await running.write_value(added.identifier, 3.25)
+    assert await _eventually(lambda: any(item[2] == 3.25 for item in seen))
+    assert seen[-1][1] == added.identifier
