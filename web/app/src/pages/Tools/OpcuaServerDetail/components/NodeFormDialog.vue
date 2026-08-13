@@ -27,12 +27,17 @@ const emit = defineEmits<{
   create: [input: OpcuaNodeCreateInput]
 }>()
 
+// 访问权限两档对应的 AccessLevel 掩码：只读 = CurrentRead，可写 = CurrentRead|CurrentWrite
+const ACCESS_LEVELS = { readonly: 1, writable: 3 } as const
+type AccessChoice = keyof typeof ACCESS_LEVELS
+
 const identifier = ref('')
 const browseName = ref('')
 const nodeClass = ref<OpcuaCreatableNodeClass>('variable')
 const dataType = ref<OpcuaDataType>('double')
 const parentId = ref('')
 const initialValue = ref('')
+const access = ref<AccessChoice>('readonly')
 
 watch(
   () => props.modelValue,
@@ -44,6 +49,7 @@ watch(
     dataType.value = 'double'
     parentId.value = ''
     initialValue.value = ''
+    access.value = 'readonly'
   },
 )
 
@@ -60,6 +66,14 @@ const parentOptions = computed(() => [
     .map((node) => ({ value: node.id, label: node.browse_name })),
 ])
 
+const accessOptions = [
+  { value: 'readonly', label: '只读' },
+  { value: 'writable', label: '可写' },
+]
+const accessHint = computed(() =>
+  access.value === 'writable' ? '上位机将可直接写入该节点的值' : undefined,
+)
+
 const isVariable = computed(() => nodeClass.value !== 'object')
 const canSubmit = computed(
   () => identifier.value.trim() !== '' && browseName.value.trim() !== '',
@@ -75,6 +89,8 @@ function submit(): void {
   }
   if (isVariable.value) {
     input.data_type = dataType.value
+    // 总是显式带上：省略时后端缺省为只读，节点会静默建成不可写
+    input.access_level = ACCESS_LEVELS[access.value]
     if (initialValue.value !== '') input.initial_value = initialValue.value
   }
   emit('create', input)
@@ -110,6 +126,10 @@ function submit(): void {
 
       <DtField v-if="isVariable" label="数据类型">
         <DtSelect v-model="dataType" :options="typeOptions" />
+      </DtField>
+
+      <DtField v-if="isVariable" label="访问权限" :hint="accessHint">
+        <DtSelect v-model="access" :options="accessOptions" />
       </DtField>
 
       <DtField v-if="isVariable" label="初值" hint="留空则用类型的零值">
