@@ -325,14 +325,21 @@ ROUTE_RULES: tuple[RouteRuleSpec, ...] = (
     RouteRuleSpec(
         f"{_PLATFORM}/openapi.json", "GET", priority=998, description="契约"
     ),
-    # 试算是纯计算的读操作（POST 只因它带请求体）：viewer 也该能问
-    # 「这样开多久达标」。窄规则压过下面按方法兜底的 ac:manage
+    # 试算与推荐是纯计算的读操作（POST 只因它带请求体）：viewer 也该能问
+    # 「这样开多久达标」「今天开哪套最快」。窄规则压过下面按方法兜底的写权限
     RouteRuleSpec(
         f"{_PLATFORM}/ac-models/*:predict",
         "POST",
         codes=(AC_VIEW,),
         priority=905,
         description="达标时长试算，读档权限即可",
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/ac-models/*:recommend",
+        "POST",
+        codes=(AC_VIEW,),
+        priority=906,
+        description="开机策略推荐，读档权限即可",
     ),
     # ⚠ `fnmatch` 的 `*` 跨斜杠，故这四条按方法兜住 platform 的整个对外面。
     # 将来某个资源要单独的码，加一条更高 priority 的窄规则压过它，别改这四条。
