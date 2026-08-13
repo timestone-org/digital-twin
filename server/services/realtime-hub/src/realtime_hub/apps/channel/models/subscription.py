@@ -42,6 +42,10 @@ class Subscription(UuidPrimaryKeyMixin, TimestampMixin, Base):
         UUID(as_uuid=True), nullable=False
     )
     topic: Mapped[str] = mapped_column(
+        # ⚠ 类型必须排在 ForeignKey 之前：反过来 SQLAlchemy 会把长度当成
+        # 一个 SchemaItem 去解析，报「got String(length=200)」——错在建表期，
+        # 而信息与真正的原因隔得很远
+        String(TOPIC_MAX_LENGTH),
         # ⚠ 外键指向主题声明的自然键：主题注销时订阅必须跟着走，否则会留下
         # 指向不存在主题的订阅，而它在页面上看着一切正常、就是永远收不到数据
         ForeignKey(
@@ -49,7 +53,6 @@ class Subscription(UuidPrimaryKeyMixin, TimestampMixin, Base):
             ondelete="CASCADE",
             name="fk_subscription_topic",
         ),
-        String(TOPIC_MAX_LENGTH),
         nullable=False,
     )
     replica: Mapped[str] = mapped_column(
