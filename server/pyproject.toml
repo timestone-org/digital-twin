@@ -78,6 +78,7 @@ ignore = [
 known-first-party = [
     "lib",
     "auth_server",
+    "opcua_server",
     "platform_server",
     "scripts",
     "_report",

@@ -34,6 +34,17 @@ jobs:
             --tests-dir server/lib/tests || true
           uv run --project server --with mutmut==3.2.1 mutmut results
 
+      # ⚠ 这一段是补偿控制，不是锦上添花：opcua-server 因 coverage 与 asyncua
+      # 的病理性交互关掉了分支覆盖（ADR-0008），变异测试是它唯一的替代物。
+      # 撤掉这段等于让该服务的运行时层既无分支覆盖也无变异守护。
+      - name: 变异 opcua-server 的运行时层（分支覆盖的替代物）
+        run: |
+          uv run --project server --with mutmut==3.2.1 mutmut run \
+            --paths-to-mutate \
+            server/services/opcua-server/src/opcua_server/apps/instance/runtime \
+            --tests-dir server/services/opcua-server/tests || true
+          uv run --project server --with mutmut==3.2.1 mutmut results
+
   a11y:
     name: 可访问性全站扫描
     runs-on: [self-hosted, Linux, X64]

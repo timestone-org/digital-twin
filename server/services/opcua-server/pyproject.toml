@@ -1,0 +1,77 @@
+[project]
+name = "opcua-server"
+version = "0.1.0"
+description = "对上位系统暴露 opc.tcp 端点，托管多个 OPC UA 服务器实例。"
+requires-python = ">=3.12"
+dependencies = [
+    # ⚠ auth 这一档不能省：deps.py 要 lib.auth 的 CallerContext 验边缘签名头，
+    # 实例凭据的哈希要 lib.auth 的 PasswordHasher。开发用的是 workspace 共享
+    # venv，auth-server 的 lib[auth] 会把 pyjwt 顺带装上，于是漏掉它在本地和
+    # 全部用例里都发现不了——只有按自己声明的依赖装的独立镜像会启动即崩。
+    "lib[auth,db,redis,web]",
+    # 钉死而非范围：会话追踪要子类化 InternalServer/InternalSession，
+    # 那两个扩展点不在文档化的公开 API 里，见 CONTEXT.md §5。
+    "asyncua==1.1.8",
+    # 打 realtime-hub 的内部端点：登记/注销主题、推值变化（issue #5 的 PR-6）。
+    # ⚠ 必须自己声明：httpx 在工作区根的 dev 组里，本地与全部用例都 import
+    # 得到，只有按自己声明的依赖装的镜像会启动即崩。
+    "httpx>=0.28",
+]
+
+[project.scripts]
+opcua-server = "opcua_server.__main__:main"
+# ⚠ 这里**不**登记 openapi 导出的 console 入口：`scripts` 是顶层包名，
+# auth-server 已经把它打进 wheel，同一个 venv 里两份会互相覆盖——实测中
+# `import scripts` 在不同机器上分别解析到了两个服务，于是导出脚本可能改写
+# **另一个服务**的 openapi.json。导出一律按路径调：
+#   uv run python scripts/export_openapi.py
+
+[tool.uv.sources]
+lib = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/opcua_server"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-q"
+# `scripts` 不进 wheel（顶层同名包会互相遮蔽，见上），契约测试里
+# `scripts.export_openapi` 靠这条定死解析到本服务这份
+pythonpath = ["."]
+markers = [
+    "requires_postgres: 需要真实 Postgres（L2/L3/L4）",
+    "requires_redis: 需要真实 Redis",
+]
+
+[tool.coverage.run]
+# ⚠ 本服务是全仓唯一关掉分支覆盖的单元，理由与补偿控制见 ADR-0008。
+# 实测：`Server().init()` 裸跑 0.5s，在任何「非 sysmon 或开分支」的覆盖率
+# 配置下 >200s 不返回——coverage 的追踪器被 asyncua 那个 78000 行的
+# 生成函数拖死，即便 asyncua 根本不在 source 范围内。
+# 四种组合里只有「sysmon + 仅行」可用，故 CI 侧必须同时设 COVERAGE_CORE=sysmon。
+branch = false
+source = ["opcua_server"]
+omit = [
+    "*/migrations/*",
+    "*/__main__.py",
+    "*/conftest.py",
+]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = false
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+    "\\.\\.\\.",
+]
+
+[tool.coverage.xml]
+output = "coverage.xml"

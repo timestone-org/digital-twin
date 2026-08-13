@@ -8,7 +8,7 @@
 | 对外前缀 | `/api/v1/platform` |
 | 端口 | 8005 |
 | 数据 schema | `platform`（写独占，见 [ADR-0003](../../../docs/adr/0003-一库多schema且写独占读放行.md)） |
-| 外部依赖 | 现场 EMS 的 SQL Server，**只读**（见 [ADR-0006](../../../docs/adr/0006-空调原始数据由平台直读外部EMS库.md)） |
+| 外部依赖 | 现场 EMS 的 SQL Server，**只读**（见 [ADR-0009](../../../docs/adr/0009-空调原始数据由平台直读外部EMS库.md)） |
 | 运行角色 | `api`（本期只有它；`worker` / `publisher` 见 [ADR-0002](../../../docs/adr/0002-重任务用运行角色而非独立服务.md)） |
 
 边界、通用语言与不变量见 [`CONTEXT.md`](CONTEXT.md)。

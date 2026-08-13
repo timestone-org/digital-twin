@@ -30,6 +30,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      # ⚠ 自托管 runner 的工作目录是**持久**的，`refs/pull/*` 只增不减。压缩合并
+      # 会给同一份内容换一个 SHA，于是原始提交作为孤儿留在这里——它们在仓库里
+      # 根本不存在，却每次都被扫。后果是按指纹豁免的误报永远对不上号（指纹钉的
+      # 是压缩后的那个 SHA），红灯一直亮着，而仓库本身是干净的。
+      # 实测：留着这些 ref 扫 155 个提交报 2 条，删掉后扫 134 个提交、0 条。
+      - name: 清掉 runner 上残留的 PR ref
+        run: |
+          git for-each-ref --format='delete %(refname)' refs/pull refs/remotes/pull \
+            | git update-ref --stdin
+
       # 写进版本库的密钥等于泄漏的密钥，而且历史层删不掉——扫全历史
       - name: gitleaks
         run: |
@@ -133,6 +143,12 @@ jobs:
       - name: 闸门脚本自身的类型
         run: uv run --project server pyright --project scripts
 
+      # ⚠ 单仓共享 venv 会让一个服务用上别人装进来的包而毫无察觉——
+      # import 成功、类型检查通过、全部用例绿，只有生产镜像会崩。
+      # 这一步按各服务自己声明的依赖独立装一遍再整包 import。
+      - name: 服务依赖自洽（按自己声明的依赖能否跑起来）
+        run: uv run --project server python scripts/gates/check_service_deps.py
+
   web-static:
     name: 2·前端格式/lint/类型
     needs: [secrets, hygiene, structure]
@@ -218,6 +234,21 @@ jobs:
       # ⚠ 与 AUTH_EDGE_SIGNING_SECRET 同值：这两个取值分叉就是全链路 401
       PLATFORM_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
 
+      OPCUA_POSTGRES_HOST: localhost
+      OPCUA_POSTGRES_PORT: '55432'
+      OPCUA_POSTGRES_USER: dt
+      OPCUA_POSTGRES_PASSWORD: dt
+      OPCUA_POSTGRES_DB: dt
+      OPCUA_POSTGRES_SCHEMA: opcua
+      OPCUA_REDIS_HOST: localhost
+      OPCUA_REDIS_PORT: '56379'
+      # 私钥只落挂载卷；CI 里用一次性目录，随作业容器一起消失
+      OPCUA_PKI_DIR: /tmp/opcua-pki-ci
+      # ⚠ 迁移也要它们：alembic 的 env.py 装载完整 Settings，而配置是
+      # 「启动即全量校验、缺失即退出」，少一个就在建 schema 那步失败。
+      OPCUA_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
+      OPCUA_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
+
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -238,6 +269,10 @@ jobs:
 
       - name: 建 platform schema
         working-directory: server/services/platform-server
+        run: uv run alembic upgrade head
+
+      - name: 建 opcua schema
+        working-directory: server/services/opcua-server
         run: uv run alembic upgrade head
 
       # ⚠ --cov 必须用点号模块名：写成路径形式时 coverage 静默跳过、数字虚高
@@ -266,6 +301,20 @@ jobs:
             --junitxml=../../../platform-junit.xml 2>&1 \
             | tee ../../../platform-pytest.log
 
+      # ⚠ COVERAGE_CORE=sysmon 与 `branch = false` 是一对，缺一个就挂死：
+      # coverage 的默认追踪器会被 asyncua 那个 78000 行的生成函数拖住，
+      # 单条起真实 Server 的用例 >200s 不返回。理由与补偿见 ADR-0008。
+      - name: opcua-server 全层
+        working-directory: server/services/opcua-server
+        env:
+          COVERAGE_CORE: sysmon
+        run: |
+          set -o pipefail
+          uv run pytest -q --cov=opcua_server \
+            --cov-report=xml:../../../opcua-coverage.xml \
+            --junitxml=../../../opcua-junit.xml 2>&1 \
+            | tee ../../../opcua-pytest.log
+
       # CI 里 skip 掉的用例等于没跑：环境能力由服务容器保证，缺了就该红
       - name: 运行结果自检（无 skip、无外网、覆盖率口径）
         run: |
@@ -275,6 +324,8 @@ jobs:
             auth-junit.xml auth-pytest.log
           uv run --project server python scripts/gates/check_pytest_run.py \
             platform-junit.xml platform-pytest.log
+          uv run --project server python scripts/gates/check_pytest_run.py \
+            opcua-junit.xml opcua-pytest.log
 
       # 整体覆盖率不许低于基线——哪怕仍在阈值之上
       - name: 覆盖率棘轮
@@ -285,6 +336,8 @@ jobs:
             auth-server auth-coverage.xml
           uv run --project server python scripts/gates/check_coverage.py \
             platform-server platform-coverage.xml
+          uv run --project server python scripts/gates/check_coverage.py \
+            opcua-server opcua-coverage.xml
 
       - name: 增量覆盖 ≥90%
         if: github.event_name == 'pull_request'
@@ -292,6 +345,7 @@ jobs:
           git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
           uv run --project server diff-cover \
             lib-coverage.xml auth-coverage.xml platform-coverage.xml \
+            opcua-coverage.xml \
             --compare-branch "origin/${{ github.base_ref }}" --fail-under=90
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -387,6 +441,23 @@ jobs:
         working-directory: server/services/platform-server
         run: uv run python -m scripts.export_openapi --check
 
+      # ⚠ 按路径调而不是 console 入口：`scripts` 是顶层包名，auth-server 已把
+      # 它打进 wheel，同一个 venv 里两份会互相覆盖，导出脚本可能改写**另一个
+      # 服务**的 openapi.json。理由与实测见 opcua-server 的 pyproject。
+      - name: opcua-server 的 openapi.json 与代码一致
+        working-directory: server/services/opcua-server
+        env:
+          OPCUA_POSTGRES_HOST: localhost
+          OPCUA_POSTGRES_PORT: '55432'
+          OPCUA_POSTGRES_USER: dt
+          OPCUA_POSTGRES_PASSWORD: dt
+          OPCUA_POSTGRES_DB: dt
+          OPCUA_POSTGRES_SCHEMA: opcua
+          OPCUA_REDIS_HOST: redis-not-used-in-this-job
+          OPCUA_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
+          OPCUA_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
+        run: uv run python scripts/export_openapi.py --check
+
       # ⚠ 代码可以回滚、数据库不回滚，所以每个迁移都必须真的能上能下
       - name: auth 迁移 upgrade → downgrade → upgrade
         working-directory: server/services/auth-server
@@ -397,6 +468,20 @@ jobs:
 
       - name: platform 迁移 upgrade → downgrade → upgrade
         working-directory: server/services/platform-server
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+
+      - name: opcua-server 的迁移 upgrade → downgrade → upgrade
+        working-directory: server/services/opcua-server
+        env:
+          OPCUA_POSTGRES_HOST: localhost
+          OPCUA_POSTGRES_PORT: '55432'
+          OPCUA_POSTGRES_USER: dt
+          OPCUA_POSTGRES_PASSWORD: dt
+          OPCUA_POSTGRES_DB: dt
+          OPCUA_POSTGRES_SCHEMA: opcua
         run: |
           uv run alembic upgrade head
           uv run alembic downgrade base

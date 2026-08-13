@@ -87,7 +87,7 @@ platform-server 的 `lib[auth,db,mssql,web]` 才装得出 pymssql。
 | # | PR | 携带提交 | 行数 | 依赖 |
 |---|---|---|---|---|
 | 1 | fix(ci): 许可证闸认全称 | `2755b9a` | 27 | —— |
-| 2 | docs(hvac): 数据面设计与 ADR-0006 | `2e02483` | 424 ⚠ | —— |
+| 2 | docs(hvac): 数据面设计与 ADR-0009 | `2e02483` | 424 ⚠ | —— |
 | 3 | build(lib): mssql extra + 锁 | `28701b6` | 1 + 锁 | —— |
 | 4 | feat(lib/web): 游标分页 | `957d5a6` 的 `pagination.py` `web/__init__` 与两份测试 | 277 | —— |
 | 5 | feat(lib/config): SqlServerSettings | `957d5a6` 的 `config/*` 与 `test_config` | 83 | 3 |

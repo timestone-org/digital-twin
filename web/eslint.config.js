@@ -4,7 +4,14 @@ import tseslint from 'typescript-eslint'
 import vueParser from 'vue-eslint-parser'
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**'] },
+  {
+    ignores: [
+      '**/dist/**',
+      '**/coverage/**',
+      '**/node_modules/**',
+      '**/storybook-static/**',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   ...vue.configs['flat/recommended'],
@@ -127,6 +134,21 @@ export default tseslint.config(
     files: ['**/*.{test,spec}.ts'],
     rules: {
       '@typescript-eslint/no-unsafe-assignment': 'off',
+      'max-lines-per-function': 'off',
+    },
+  },
+  {
+    // ⚠ story 里的组件与 args 在 typescript-eslint 眼里是 any：`.vue` 的模块
+    // 只有 vue-tsc 解析得出来（同 `**/*.spec.ts` 那条）。真正的类型检查由
+    // `pnpm typecheck` 里的 vue-tsc 做，story 的 args 仍与组件 props 对齐。
+    // 展示矩阵的模板串天然长，按「函数 ≤50 行」量它等于要求把一组变体拆散。
+    files: ['**/stories/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
       'max-lines-per-function': 'off',
     },
   },

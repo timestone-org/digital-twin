@@ -66,6 +66,8 @@ export interface RequestOptions {
   /** 跳过令牌注入与 401 重试（登录、刷新自己走这条）。 */
   anonymous?: boolean | undefined
   signal?: AbortSignal | undefined
+  /** 附加请求头，如 `Idempotency-Key`。不许在这里塞 Authorization。 */
+  headers?: Record<string, string> | undefined
 }
 
 function buildUrl(path: string, options: RequestOptions): string {
@@ -115,7 +117,10 @@ async function readEnvelope<T>(
 }
 
 async function send(path: string, options: RequestOptions): Promise<Response> {
-  const headers: Record<string, string> = { Accept: 'application/json' }
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    ...options.headers,
+  }
   if (options.body !== undefined) {
     headers['Content-Type'] = 'application/json'
   }

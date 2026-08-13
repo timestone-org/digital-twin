@@ -57,6 +57,20 @@ export const NAV_ITEMS: readonly NavItem[] = [
     ],
   },
   {
+    key: 'tools',
+    label: '工具',
+    icon: 'layout-grid',
+    children: [
+      {
+        key: 'opcua-servers',
+        label: 'OPC UA 服务端',
+        icon: 'activity',
+        to: '/tools/opcua-servers',
+        permission: [PERMISSION_CODES.opcuaView],
+      },
+    ],
+  },
+  {
     key: 'system',
     label: '系统管理',
     icon: 'settings',

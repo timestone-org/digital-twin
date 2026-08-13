@@ -8,7 +8,7 @@ name: digitaltwin
 services:
   edge-gateway:
     image: nginx:1.27-alpine
-    depends_on: [auth-server, platform-server]
+    depends_on: [auth-server, platform-server, opcua-server, realtime-hub]
     ports: ['${EDGE_HTTP_PORT:-8080}:80']
     environment:
       AUTH_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填：/internal/ 的服务级密钥}
@@ -90,6 +90,50 @@ services:
       retries: 3
     restart: unless-stopped
 
+  # ⚠ 与其它服务不同，这个服务**自己对外开端口**：opc.tcp 是二进制 TCP，
+  # nginx 只有 http block，转不了。只有 8008 的 HTTP 管理面走边缘。
+  # 端口段与 OPCUA_PORT_POOL 必须逐字一致——池外的端口没有映射出去，
+  # 实例会「显示运行中但连不上」，是最难排查的一类故障（见 ADR-0006）。
+  opcua-server:
+    build:
+      context: ../server
+      dockerfile: services/opcua-server/Dockerfile
+    environment:
+      OPCUA_APP_ROLE: api
+      OPCUA_APP_LOG_FORMAT: json
+      OPCUA_POSTGRES_HOST: ${POSTGRES_HOST:?必填}
+      OPCUA_POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      OPCUA_POSTGRES_USER: ${POSTGRES_USER:?必填}
+      OPCUA_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必填}
+      OPCUA_POSTGRES_DB: ${POSTGRES_DB:?必填}
+      OPCUA_POSTGRES_SCHEMA: opcua
+      OPCUA_REDIS_HOST: ${REDIS_HOST:?必填}
+      OPCUA_REDIS_PORT: ${REDIS_PORT:-6379}
+      OPCUA_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      # ⚠ 与 auth-server 同值。少写一处就是非对称失效：边缘签得出、这边验不了，
+      # 表现为该服务一律 403，而现象与原因隔得极远。
+      OPCUA_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
+      OPCUA_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
+      OPCUA_PORT_POOL: ${OPCUA_PORT_POOL:-4840-4859}
+      OPCUA_MAX_INSTANCES: ${OPCUA_MAX_INSTANCES:-16}
+      OPCUA_PKI_DIR: /var/lib/opcua/pki
+      # 实例生灭时登记/注销主题、值变化批推都打它。
+      # ⚠ 不可达时不阻断建实例——降级方向是「少一个实时通道」。
+      OPCUA_REALTIME_BASE_URL: http://realtime-hub:8000
+    expose: ['8008']
+    ports:
+      - '${OPCUA_PORT_POOL:-4840-4859}:${OPCUA_PORT_POOL:-4840-4859}'
+    volumes:
+      # 服务器私钥只在这个卷上——不进镜像层、不进数据库、不随备份外流。
+      # 卷没了等于全部实例的证书没了，上位机需要重新信任新证书。
+      - opcua-pki:/var/lib/opcua/pki
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8008/api/v1/opcua/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
   # 同一份镜像的 worker 角色：只跑抽取分片的消费循环，不监听 HTTP。
   # ⚠ 重任务永远不在 api 角色里跑（ARCHITECTURE §3.4）；扩缩靠加副本，
   # 多个 worker 共用一个消费组，各取各的分片。
@@ -120,3 +164,38 @@ services:
       PLATFORM_ACSTARTUP_STREAM: ${ACSTARTUP_STREAM:-platform:ac-startup:shards}
       PLATFORM_ACSTARTUP_GROUP: ${ACSTARTUP_GROUP:-ac-startup-workers}
     restart: unless-stopped
+
+  realtime-hub:
+    build:
+      context: ../server
+      dockerfile: services/realtime-hub/Dockerfile
+    environment:
+      REALTIME_APP_ROLE: hub
+      REALTIME_APP_LOG_FORMAT: json
+      REALTIME_POSTGRES_HOST: ${POSTGRES_HOST:?必填}
+      REALTIME_POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      REALTIME_POSTGRES_USER: ${POSTGRES_USER:?必填}
+      REALTIME_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必填}
+      REALTIME_POSTGRES_DB: ${POSTGRES_DB:?必填}
+      REALTIME_POSTGRES_SCHEMA: realtime
+      REALTIME_REDIS_HOST: ${REDIS_HOST:?必填}
+      REALTIME_REDIS_PORT: ${REDIS_PORT:-6379}
+      REALTIME_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      # ⚠ 与 auth-server 同值。少写一处就是非对称失效：签得出、验不了，
+      # 表现为一律 403，而现象与原因隔得极远。
+      REALTIME_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
+      REALTIME_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
+      # ⚠ 验 WS 子协议里那枚 access token 用，必须与 auth-server 同值：
+      # 本服务只验不签
+      REALTIME_JWT_SECRET: ${AUTH_JWT_SECRET:?必填}
+      REALTIME_AUTH_BASE_URL: http://auth-server:8004
+    expose: ['8000']
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/api/v1/realtime/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  opcua-pki:

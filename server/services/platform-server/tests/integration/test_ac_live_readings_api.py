@@ -320,7 +320,7 @@ async def test_a_room_without_any_bound_unit_reports_an_empty_list(
 async def test_an_unreachable_source_is_a_retryable_503(
     app_client: httpx.AsyncClient, ac_source: FakeSource
 ) -> None:
-    """⚠ 外库不可达就明确说不可用，不拿上一次的读数冒充当下（ADR-0006）。"""
+    """⚠ 外库不可达就明确说不可用，不拿上一次的读数冒充当下（ADR-0009）。"""
     room, _ = await one_unit_room(app_client, "不可用")
     ac_source.failure = DependencyUnavailable("外库挂了")
     response = await app_client.get(f"{PREFIX}/rooms/{room}/live-readings")

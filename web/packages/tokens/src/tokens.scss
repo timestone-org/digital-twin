@@ -35,6 +35,8 @@
 
   /* —— accent —— */
   --accent-primary: #00cefc;
+  // 强调色当**文字**用时的取值，见 themeTokens 的说明
+  --accent-on-surface: #00cefc;
   --accent-primary-rgb: 0, 206, 252;
   --accent-secondary: #45d3fd;
   --accent-secondary-rgb: 69, 211, 253;

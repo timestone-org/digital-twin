@@ -45,6 +45,8 @@ BRANCH = re.compile(rf"^(?:{'|'.join(COMMIT_TYPES)})/[\w./-]+$")
 # 机械化的大范围改动（重命名、格式化、自动生成）可以超限，但必须单独成 PR
 MECHANICAL = re.compile(r"\[(?:机械|mechanical)]", re.IGNORECASE)
 LOCKFILES = frozenset({"server/uv.lock", "web/pnpm-lock.yaml"})
+# 锁文件的变更由清单文件引起，两者必须一起评审才看得懂
+MANIFESTS = frozenset({"pyproject.toml", "package.json"})
 # 生成物不计入评审规模
 GENERATED = ("openapi.json", "/dist/", "/coverage/")
 # `git diff --numstat` 每行是「新增\t删除\t路径」
@@ -74,9 +76,62 @@ def _is_mechanical() -> bool:
     return bool(MECHANICAL.search(os.environ.get("PR_TITLE", "")))
 
 
+def _new_code_unit() -> str | None:
+    """本次改动首次为某个代码单元落下源码；否则返回 None。
+
+    判据是 `server/services/<unit>/src/` 在 base 上不存在——**不看 PR 标题**，
+    标题可以随手写，仓库历史不能。
+
+    ⚠ 判的是 `src/` 而不是服务目录本身：新服务的文档与依赖层（pyproject、
+    README、CONTEXT）会先于代码单独成 PR（锁文件纪律逼出来的顺序），那时
+    目录已经存在，按目录判会让真正的落地提交拿不到豁免。
+    """
+    added = {
+        Path(name).parts[2]
+        for name in git(
+            "diff", "--diff-filter=A", "--name-only", diff_range()
+        ).splitlines()
+        if name.startswith("server/services/")
+        and len(Path(name).parts) > SERVICE_PATH_DEPTH
+    }
+    fresh = {
+        unit
+        for unit in added
+        if not git(
+            "ls-tree",
+            "--name-only",
+            diff_base(),
+            f"server/services/{unit}/src/",
+        )
+    }
+    return next(iter(fresh)) if len(fresh) == 1 else None
+
+
+def _is_landing_commit() -> bool:
+    """新代码单元的首次落地：全部可评审改动都在那个新目录里。
+
+    ⚠ 这是 ADR-0006 的豁免，三条边界都由这个函数机械保证：
+    只认 base 上不存在的服务目录（故一个单元只能用一次——第二个 PR 里
+    它已经存在），且**只要有一个文件落在目录外就整体不豁免**（故触及
+    既有单元的改动带不进来）。
+    """
+    unit = _new_code_unit()
+    if unit is None:
+        return False
+    prefix = f"server/services/{unit}/"
+    return all(
+        name.startswith(prefix) for name in changed_files() if _reviewable(name)
+    )
+
+
 def check_pr_size() -> list[Violation]:
-    """改动 ≤400 行、≤20 个文件。超了就拆成多个 PR。"""
-    if _is_mechanical():
+    """改动 ≤400 行、≤20 个文件。超了就拆成多个 PR。
+
+    两类例外：机械化改动（标题标记），以及新代码单元的首次落地提交
+    （[ADR-0006](../../docs/adr/0006-opcua服务端独立成代码单元.md)）——
+    后者不看标题，只看「是不是全部落在一个 base 上尚不存在的服务目录里」。
+    """
+    if _is_mechanical() or _is_landing_commit():
         return []
     files = [name for name in changed_files() if _reviewable(name)]
     lines = _changed_lines()
@@ -119,11 +174,31 @@ def check_pr_touches_one_service() -> list[Violation]:
     ]
 
 
+def _accompanies_lockfile(name: str) -> bool:
+    """可以与锁文件同批的文件：造成它的清单，以及不含逻辑的文档。
+
+    ⚠ 这是允许清单不是排除清单——新增一种就要问一次「它会不会大到
+    让评审者跳过锁文件的 diff」。
+
+    Args: name。
+    """
+    return name.endswith(".md") or Path(name).name in MANIFESTS
+
+
 def check_lockfile_stands_alone() -> list[Violation]:
-    """⚠ 锁文件混在逻辑改动里时，评审者会直接跳过几千行 diff。"""
+    """⚠ 锁文件混在逻辑改动里时，评审者会直接跳过几千行 diff。
+
+    挡的是「锁文件被代码淹没」，不是「锁文件旁边有别的文件」：清单是锁
+    变更的**成因**，不和它一起看就无从判断依赖为什么变；文档不含逻辑。
+    新增代码单元必然同时动清单与锁文件，一刀切会让新服务根本进不来。
+    """
     files = set(changed_files())
     touched = files & LOCKFILES
-    others = {name for name in files - LOCKFILES if _reviewable(name)}
+    others = {
+        name
+        for name in files - LOCKFILES
+        if _reviewable(name) and not _accompanies_lockfile(name)
+    }
     if not touched or not others:
         return []
     return [

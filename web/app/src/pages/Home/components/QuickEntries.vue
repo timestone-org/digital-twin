@@ -42,7 +42,7 @@ const entries = computed(() =>
         :to="entry.to ?? '/'"
         class="group flex items-center gap-3 rounded-md border border-border-subtle bg-surface-sunken px-3 py-2.5 text-text-secondary transition-colors hover:border-border-hover hover:text-text-primary"
       >
-        <DtIcon :name="entry.icon" :size="17" class="text-accent-primary" />
+        <DtIcon :name="entry.icon" :size="17" class="text-accent-on-surface" />
         <span class="flex-1 truncate text-[13px]">{{ entry.label }}</span>
         <DtIcon
           name="arrow-right"

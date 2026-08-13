@@ -73,6 +73,28 @@ NUMERIC = ("int", "float")
 # `q` 是 api-contract.md §5.3 钉死的全文搜索参数名，不是随手起的单字母
 CONTRACT_NAMES = frozenset({"q"})
 
+# 上游 API 定死的形参名——改名即断，本仓无权决定它叫什么。
+# 按文件收窄而非全局放行：否则以后任何一处 `external: bool` 都能溜过去。
+# `external`：asyncua 的 UaProcessor 以 `external=True` **关键字**调用
+# create_session（uaprocessor.py:198），改名即 TypeError。
+# `delete_subs`：覆盖 InternalSession.close_session 时形参名必须与基类一致，
+# 否则 pyright 判 LSP 不兼容——命名闸与类型闸冲突时以第三方定死的那个为准。
+# 两条都由 tests/contract/test_runtime_asyncua_contract.py 钉住。
+UPSTREAM_BOOL_NAMES: dict[str, frozenset[str]] = {
+    "apps/instance/runtime/sessions.py": frozenset({"external", "delete_subs"}),
+}
+
+
+def _upstream_allows(path: Path, name: str) -> bool:
+    """这个名字是上游 API 定死的，本仓改不得。
+
+    Args: path, name。
+    """
+    return any(
+        str(path).endswith(suffix) and name in names
+        for suffix, names in UPSTREAM_BOOL_NAMES.items()
+    )
+
 
 def _all_python() -> list[Path]:
     found = list(python_sources())
@@ -119,7 +141,11 @@ def check_boolean_names() -> list[Violation]:
         if tree is None:
             continue
         for line, name in _annotated_bools(tree):
-            if name.startswith(BOOL_PREFIX) or name.endswith(BOOL_SUFFIX):
+            if (
+                name.startswith(BOOL_PREFIX)
+                or name.endswith(BOOL_SUFFIX)
+                or _upstream_allows(path, name)
+            ):
                 continue
             found.append(
                 Violation(

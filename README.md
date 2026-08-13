@@ -1,6 +1,6 @@
 # DigitalTwin
 
-工业数字孪生平台。后端 5 个代码单元 / 8 个部署单元，前端一个 pnpm workspace。
+工业数字孪生平台。后端 6 个代码单元 / 9 个部署单元，前端一个 pnpm workspace。
 
 > 上下文划分见 [`CONTEXT-MAP.md`](CONTEXT-MAP.md)，服务边界见
 > [`docs/ARCHITECTURE_MICROSERVICES.md`](docs/ARCHITECTURE_MICROSERVICES.md)，

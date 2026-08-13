@@ -1,4 +1,4 @@
-"""权限码目录、内置角色与内置路由规则 —— 全系统权限口径的唯一真源。
+"""权限码目录与内置角色，全系统权限口径的唯一真源；规则见 `route_catalog.py`。
 
 只登记**已经有消费方**的码：无端点无页面的占位码不进目录，否则角色配置界面
 会摆出一排点了没有任何效果的开关。新功能面上线时同批加码、加规则、加契约测试。
@@ -20,6 +20,9 @@ ROUTE_RULE_MANAGE = "route_rule:manage"
 # 那边的 apps/hvac/catalog.py 只是复述，两边必须逐字一致
 AC_VIEW = "ac:view"
 AC_MANAGE = "ac:manage"
+OPCUA_VIEW = "opcua:view"
+OPCUA_OPERATE = "opcua:operate"
+OPCUA_MANAGE = "opcua:manage"
 
 # ---- 内置角色 ----
 
@@ -143,6 +146,39 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
         sort_order=20,
         description="增删改空调、车间、房间，以及批量改派空调所在房间",
     ),
+    PermissionSpec(
+        code=OPCUA_VIEW,
+        name="查看 OPC UA 服务端",
+        kind="view",
+        group_code="opcua",
+        group_label="OPC UA 服务端",
+        sort_order=10,
+        description="实例、地址空间节点、在线会话与端口池的全部读面",
+    ),
+    PermissionSpec(
+        code=OPCUA_OPERATE,
+        name="起停实例与写节点值",
+        kind="operate",
+        group_code="opcua",
+        group_label="OPC UA 服务端",
+        sort_order=20,
+        description=(
+            "起停/重启实例、向节点写值。⚠ 停实例会断开全部上位机会话；"
+            "写值等于改变上位系统读到的现场数据"
+        ),
+    ),
+    PermissionSpec(
+        code=OPCUA_MANAGE,
+        name="管理实例、节点与接入凭据",
+        kind="admin",
+        group_code="opcua",
+        group_label="OPC UA 服务端",
+        sort_order=30,
+        description=(
+            "增删实例与节点、改安全策略、管理上位机凭据与信任证书。"
+            "⚠ 归高危档是因为后半段决定「哪台上位机连得进来」"
+        ),
+    ),
 )
 
 ALL_CODES: frozenset[str] = frozenset(item.code for item in PERMISSIONS)
@@ -160,223 +196,6 @@ ROLES: tuple[RoleSpec, ...] = (
         name=ROLE_VIEWER,
         description="只读用户：持有全部查看档权限码",
         codes=VIEW_CODES,
-    ),
-)
-
-_P = "/api/v1/auth"
-_PLATFORM = "/api/v1/platform"
-
-ROUTE_RULES: tuple[RouteRuleSpec, ...] = (
-    RouteRuleSpec(f"{_P}/health", "GET", priority=999, description="存活探针"),
-    RouteRuleSpec(f"{_P}/ready", "GET", priority=999, description="就绪探针"),
-    RouteRuleSpec(f"{_P}/docs", "GET", priority=998, description="文档"),
-    RouteRuleSpec(f"{_P}/redoc", "GET", priority=998, description="文档"),
-    RouteRuleSpec(
-        f"{_P}/openapi.json", "GET", priority=998, description="契约"
-    ),
-    RouteRuleSpec(
-        f"{_P}/sessions*",
-        "*",
-        priority=995,
-        description="登录/刷新/登出。⚠ 匿名可达性由边缘免认证 location 保证",
-    ),
-    RouteRuleSpec(
-        f"{_P}/registrations",
-        "POST",
-        priority=994,
-        description="自助注册。⚠ 同上，需边缘免认证 location",
-    ),
-    RouteRuleSpec(
-        f"{_P}/users/me*",
-        "*",
-        priority=992,
-        description="个人资料自服务，任意登录用户，不要求权限码",
-    ),
-    RouteRuleSpec(
-        f"{_P}/users/*:assign-role",
-        "POST",
-        codes=(USER_GRANT,),
-        priority=971,
-        description="改派角色",
-    ),
-    RouteRuleSpec(
-        f"{_P}/users/*/permissions",
-        "PUT",
-        codes=(USER_GRANT,),
-        priority=971,
-        description="覆盖式写用户直权",
-    ),
-    RouteRuleSpec(
-        f"{_P}/users*",
-        "GET",
-        codes=(USER_VIEW,),
-        priority=965,
-        description="用户列表与详情",
-    ),
-    RouteRuleSpec(
-        f"{_P}/users",
-        "POST",
-        codes=(USER_MANAGE,),
-        priority=965,
-        description="创建用户",
-    ),
-    RouteRuleSpec(
-        f"{_P}/users/*",
-        "POST",
-        codes=(USER_MANAGE,),
-        priority=963,
-        description="启停、重置他人密码",
-    ),
-    RouteRuleSpec(
-        f"{_P}/users/*",
-        "PATCH",
-        codes=(USER_MANAGE,),
-        priority=960,
-        description="更新他人资料",
-    ),
-    RouteRuleSpec(
-        f"{_P}/users/*",
-        "DELETE",
-        codes=(USER_DELETE,),
-        priority=960,
-        description="删除用户",
-    ),
-    RouteRuleSpec(
-        f"{_P}/roles*",
-        "GET",
-        codes=(USER_VIEW,),
-        priority=955,
-        description="角色列表与详情",
-    ),
-    RouteRuleSpec(
-        f"{_P}/roles*",
-        "POST",
-        codes=(ROLE_MANAGE,),
-        priority=955,
-        description="建角色",
-    ),
-    RouteRuleSpec(
-        f"{_P}/roles*",
-        "PATCH",
-        codes=(ROLE_MANAGE,),
-        priority=955,
-        description="改角色",
-    ),
-    RouteRuleSpec(
-        f"{_P}/roles*",
-        "PUT",
-        codes=(ROLE_MANAGE,),
-        priority=955,
-        description="覆盖式设置角色权限",
-    ),
-    RouteRuleSpec(
-        f"{_P}/roles*",
-        "DELETE",
-        codes=(ROLE_MANAGE,),
-        priority=955,
-        description="删角色",
-    ),
-    RouteRuleSpec(
-        f"{_P}/permissions*",
-        "GET",
-        codes=(USER_VIEW, ROLE_MANAGE),
-        match_mode="any",
-        priority=945,
-        description="权限目录只读。配角色的人不一定有用户面的读码",
-    ),
-    RouteRuleSpec(
-        f"{_P}/route-rules*",
-        "GET",
-        codes=(ROUTE_RULE_VIEW,),
-        priority=925,
-        description="规则列表与详情",
-    ),
-    RouteRuleSpec(
-        f"{_P}/route-rules*",
-        "POST",
-        codes=(ROUTE_RULE_MANAGE,),
-        priority=925,
-        description="新增规则",
-    ),
-    RouteRuleSpec(
-        f"{_P}/route-rules*",
-        "PATCH",
-        codes=(ROUTE_RULE_MANAGE,),
-        priority=925,
-        description="修改规则",
-    ),
-    RouteRuleSpec(
-        f"{_P}/route-rules*",
-        "DELETE",
-        codes=(ROUTE_RULE_MANAGE,),
-        priority=925,
-        description="删除规则",
-    ),
-    RouteRuleSpec(
-        f"{_PLATFORM}/health", "GET", priority=999, description="存活探针"
-    ),
-    RouteRuleSpec(
-        f"{_PLATFORM}/ready", "GET", priority=999, description="就绪探针"
-    ),
-    RouteRuleSpec(f"{_PLATFORM}/docs", "GET", priority=998, description="文档"),
-    RouteRuleSpec(
-        f"{_PLATFORM}/redoc", "GET", priority=998, description="文档"
-    ),
-    RouteRuleSpec(
-        f"{_PLATFORM}/openapi.json", "GET", priority=998, description="契约"
-    ),
-    # 试算与推荐是纯计算的读操作（POST 只因它带请求体）：viewer 也该能问
-    # 「这样开多久达标」「今天开哪套最快」。窄规则压过下面按方法兜底的写权限
-    RouteRuleSpec(
-        f"{_PLATFORM}/ac-models/*:predict",
-        "POST",
-        codes=(AC_VIEW,),
-        priority=905,
-        description="达标时长试算，读档权限即可",
-    ),
-    RouteRuleSpec(
-        f"{_PLATFORM}/ac-models/*:recommend",
-        "POST",
-        codes=(AC_VIEW,),
-        priority=906,
-        description="开机策略推荐，读档权限即可",
-    ),
-    # ⚠ `fnmatch` 的 `*` 跨斜杠，故这四条按方法兜住 platform 的整个对外面。
-    # 将来某个资源要单独的码，加一条更高 priority 的窄规则压过它，别改这四条。
-    RouteRuleSpec(
-        f"{_PLATFORM}/*",
-        "GET",
-        codes=(AC_VIEW,),
-        priority=900,
-        description="空调、车间、房间的全部读面",
-    ),
-    RouteRuleSpec(
-        f"{_PLATFORM}/*",
-        "POST",
-        codes=(AC_MANAGE,),
-        priority=900,
-        description="新建与批量改派",
-    ),
-    RouteRuleSpec(
-        f"{_PLATFORM}/*",
-        "PUT",
-        codes=(AC_MANAGE,),
-        priority=900,
-        description="覆盖式写：数据源绑定与达标范围",
-    ),
-    RouteRuleSpec(
-        f"{_PLATFORM}/*",
-        "PATCH",
-        codes=(AC_MANAGE,),
-        priority=900,
-        description="更新空调、车间、房间",
-    ),
-    RouteRuleSpec(
-        f"{_PLATFORM}/*",
-        "DELETE",
-        codes=(AC_MANAGE,),
-        priority=900,
-        description="删除空调、车间、房间",
     ),
 )
 

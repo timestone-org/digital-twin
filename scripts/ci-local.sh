@@ -7,7 +7,7 @@
 # 通过再跑步骤，act 不会——流水线里因此有一步 wait_for_deps.py 显式等待。
 #
 #   scripts/ci-local.sh --fast          只跑闸门脚本（秒级，不起容器）
-#   scripts/ci-local.sh                 act 跑第 1–2 段
+#   scripts/ci-local.sh                 act 逐个跑第 1–2 段的作业
 #   scripts/ci-local.sh -j server-test  act 跑指定作业
 #   scripts/ci-local.sh --all           act 跑整条 push 流水线
 
@@ -37,6 +37,8 @@ gates=(
   check_licenses
   # 要拿基线比，本地按 origin/main 算；CI 上它只在 PR 流水线里跑
   check_logic_version
+  # 比其余快闸门慢一档（要按服务各装一次），但仍是秒级
+  check_service_deps
 )
 
 run_fast() {
@@ -62,7 +64,12 @@ case "${1:-}" in
     act push
     ;;
   '')
-    act push -j hygiene -j structure -j server-static -j web-static
+    # ⚠ act 的 -j 是单值旗标，传多次只有最后一个生效——`-j a -j b` 会静默地
+    # 只跑 b，而输出里看不出少跑了谁（依赖作业照样出现在日志里）。逐个跑。
+    for job in hygiene structure server-static web-static; do
+      echo "── act: ${job} ──"
+      act push -j "${job}"
+    done
     ;;
   *)
     act push "$@"

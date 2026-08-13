@@ -29,8 +29,19 @@ http {
   # 公开面是可枚举凭据的爆破面，必须限流
   limit_req_zone $binary_remote_addr zone=login:10m rate=10r/m;
 
+  # WebSocket 升级要的 Connection 头：只有客户端确实在升级时才置 upgrade，
+  # 恒置的话普通请求的连接复用会被打断
+  map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+  }
+
   upstream auth_server { server auth-server:8004; }
   upstream platform_server { server platform-server:8005; }
+  # ⚠ 只有 opcua-server 的 HTTP 管理面在这里。实例的 opc.tcp 端口是二进制 TCP，
+  # http block 转不了，由编排层直接映射端口段，不经边缘（见 ADR-0006）。
+  upstream opcua_server { server opcua-server:8008; }
+  upstream realtime_hub { server realtime-hub:8000; }
 
   # 鉴权子请求要回答的是「客户端在访问哪条路径」。
   # ⚠ 子请求里 $uri 是子请求自己的 /_auth，拿它去问规则表一律 no_matching_rule → 全站 403；
@@ -104,6 +115,70 @@ http {
       include /etc/nginx/conf.d/auth-inject.conf;
       proxy_pass http://platform_server;
       include /etc/nginx/conf.d/proxy-common.conf;
+    }
+
+    # OPC UA 服务端的探针与文档，与 auth 同档免认证
+    location = /api/v1/opcua/health { proxy_pass http://opcua_server; }
+    location = /api/v1/opcua/ready  { proxy_pass http://opcua_server; }
+    location = /api/v1/opcua/docs   { proxy_pass http://opcua_server; }
+    location = /api/v1/opcua/redoc  { proxy_pass http://opcua_server; }
+    location = /api/v1/opcua/openapi.json { proxy_pass http://opcua_server; }
+
+    location /api/v1/opcua/ {
+      auth_request /_auth;
+      auth_request_set $opcua_user  $upstream_http_x_auth_user_id;
+      auth_request_set $opcua_name  $upstream_http_x_auth_username;
+      auth_request_set $opcua_role  $upstream_http_x_auth_role;
+      auth_request_set $opcua_perms $upstream_http_x_auth_permissions;
+      auth_request_set $opcua_trunc $upstream_http_x_auth_permissions_truncated;
+      auth_request_set $opcua_exp   $upstream_http_x_auth_exp;
+      auth_request_set $opcua_sig   $upstream_http_x_auth_sig;
+
+      proxy_set_header X-Auth-User-Id   $opcua_user;
+      proxy_set_header X-Auth-Username  $opcua_name;
+      proxy_set_header X-Auth-Role      $opcua_role;
+      proxy_set_header X-Auth-Permissions $opcua_perms;
+      proxy_set_header X-Auth-Permissions-Truncated $opcua_trunc;
+      proxy_set_header X-Auth-Exp       $opcua_exp;
+      proxy_set_header X-Auth-Sig       $opcua_sig;
+
+      proxy_pass http://opcua_server;
+      include /etc/nginx/conf.d/proxy-common.conf;
+    }
+
+    # —— 实时通道 ——
+    location = /api/v1/realtime/health { proxy_pass http://realtime_hub; }
+    location = /api/v1/realtime/ready  { proxy_pass http://realtime_hub; }
+    location = /api/v1/realtime/docs   { proxy_pass http://realtime_hub; }
+    location = /api/v1/realtime/redoc  { proxy_pass http://realtime_hub; }
+    location = /api/v1/realtime/openapi.json { proxy_pass http://realtime_hub; }
+
+    # WebSocket 端点。⚠ 这是一条**免认证** location，不是漏了 auth_request：
+    # token 走 Sec-WebSocket-Protocol 子协议，`auth_request` 的子请求带不上它，
+    # 挂上去的结果是所有握手一律 401。认证在 hub 内部完成（它自己验签名、
+    # 验过期、按主题判权限），见 realtime-hub/CONTEXT.md §6。
+    location = /api/v1/realtime/ws {
+      proxy_pass http://realtime_hub;
+      # ⚠ 刻意**不** include proxy-common.conf：那份是给请求-响应用的，
+      # 里面的 proxy_read_timeout 25s 会切断长连接，而 nginx 不允许在同一个
+      # location 里重复声明同一条指令——想覆盖就只能不 include，逐条写全。
+      proxy_set_header Host              $host;
+      proxy_set_header X-Real-IP         $remote_addr;
+      proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header traceparent       $http_traceparent;
+      proxy_http_version 1.1;
+      proxy_connect_timeout 5s;
+
+      # ⚠ 这两行缺一条，握手就退化成普通 HTTP 请求，客户端收到 400/426
+      proxy_set_header Upgrade    $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+
+      # ⚠ 长连接的读写超时。用 proxy-common.conf 里那个 25s 的话，**每条空闲
+      # 25 秒的 WS 连接都会被切断**，表现是「前端每隔半分钟重连一次」，
+      # 查起来会一路怀疑到应用层去。客户端的心跳周期要小于它。
+      proxy_read_timeout  3600s;
+      proxy_send_timeout  3600s;
     }
 
     # 鉴权子请求。⚠ auth_request 只能发 GET，故 /verify 是 GET。

@@ -317,7 +317,7 @@ async def test_an_unreachable_source_is_a_retryable_503(
     query: str,
 ) -> None:
     unit = await bound_unit(app_client, f"不可用{label}")
-    # ⚠ 不返回陈旧数据兜底：查不到就明确说查不到（ADR-0006）
+    # ⚠ 不返回陈旧数据兜底：查不到就明确说查不到（ADR-0009）
     ac_source.failure = DependencyUnavailable("外库挂了")
     response = await app_client.get(f"{PREFIX}/ac-units/{unit}/{query}")
     assert response.status_code == 503

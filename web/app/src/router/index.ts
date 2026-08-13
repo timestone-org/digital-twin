@@ -88,6 +88,58 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/tools/opcua-servers',
+    name: 'tools-opcua-servers',
+    component: () => import('@/pages/Tools/OpcuaServers/index.vue'),
+    meta: {
+      title: 'OPC UA 服务端',
+      permissions: [PERMISSION_CODES.opcuaView],
+    },
+  },
+  {
+    // 详情的三个分区是**子路由**而不是页内状态：地址会变，于是「把安全页
+    // 发给同事」「刷新还停在这一页」「浏览器后退回上一个分区」都成立。
+    // ⚠ 子路由不重复写 permissions——`to.meta` 是全部匹配记录的合并，
+    // 父级这一条就管住了整棵子树，两处各写一份反而会漂。
+    path: '/tools/opcua-servers/:instanceId',
+    component: () => import('@/pages/Tools/OpcuaServerDetail/index.vue'),
+    meta: {
+      title: 'OPC UA 实例',
+      permissions: [PERMISSION_CODES.opcuaView],
+    },
+    children: [
+      {
+        path: '',
+        name: 'tools-opcua-server-detail',
+        redirect: (to) => ({
+          name: 'tools-opcua-server-nodes',
+          params: { instanceId: to.params.instanceId },
+        }),
+      },
+      {
+        path: 'nodes',
+        name: 'tools-opcua-server-nodes',
+        component: () =>
+          import('@/pages/Tools/OpcuaServerDetail/components/NodeExplorer.vue'),
+        meta: { title: '地址空间' },
+      },
+      {
+        path: 'sessions',
+        name: 'tools-opcua-server-sessions',
+        component: () =>
+          import('@/pages/Tools/OpcuaServerDetail/components/SessionsPanel.vue'),
+        meta: { title: '在线会话' },
+      },
+      {
+        path: 'security',
+        name: 'tools-opcua-server-security',
+        component: () =>
+          import('@/pages/Tools/OpcuaServerDetail/components/SecurityPanel.vue'),
+        meta: { title: '接入安全' },
+      },
+    ],
+  },
+  {
     path: '/system/users',
     name: 'system-users',
     component: () => import('@/pages/System/Users/index.vue'),

@@ -53,16 +53,43 @@ docker compose up -d --build
 时区信息的当地时，对外一律 UTC，填错的表现是整屏数据平移几个小时而不报任何错。
 
 ⚠ EMS 不可达**不影响启动，也不影响就绪**：空调数据面返回 503，台账页与空间配置页
-照常工作（[ADR-0006](../docs/adr/0006-空调原始数据由平台直读外部EMS库.md)）。
+照常工作（[ADR-0009](../docs/adr/0009-空调原始数据由平台直读外部EMS库.md)）。
 
-### ⚠ 每次上新功能都要重跑种子
+### 迁移与种子
 
-路由规则表（闸 1）存在**数据库里**，由 auth-server 的种子脚本全量覆盖。新增端点
-往往同时新增规则，**不重跑种子，新端点在边缘一律 403**——而直连服务端口却是好的，
-于是现象看起来像「前端坏了」。
+容器起来**不会**自己建表。每个服务各有一条迁移链，各自只碰自己的 schema：
 
 ```bash
-cd server/services/auth-server
-uv run alembic upgrade head
-uv run python -m scripts.seed      # 可重复执行；人工新建的规则不受影响
+docker compose run --rm auth-server     alembic upgrade head
+docker compose run --rm auth-server     python -m scripts.seed
+docker compose run --rm platform-server alembic upgrade head
+docker compose run --rm opcua-server    alembic upgrade head
+docker compose run --rm realtime-hub    alembic upgrade head
 ```
+
+⚠ **每次上新功能都要重跑种子。** 权限码与路由规则表（闸 1）存在**数据库里**，
+由 auth-server 的种子脚本全量覆盖（可重复执行；人工新建的规则不受影响）。
+新服务、新端点上线后不跑，边缘查不到规则，而 auth-server 的口径是**无规则一律
+拒绝**——表现是那一片接口**全部 403**，而直连服务端口却是好的，于是现象看起来
+像「前端坏了」。
+
+### realtime-hub 的两处部署前置
+
+**`/api/v1/realtime/ws` 是一条免认证 location，这不是漏了 `auth_request`。**
+WS 的 token 走 `Sec-WebSocket-Protocol` 子协议，而 `auth_request` 的子请求带不上它——
+挂上去的结果是所有握手一律 401。认证在 hub 内部完成：它自己验签名、验过期、
+按每个主题声明的权限码判订阅。
+
+**WS 那条 location 的读写超时是 3600s，不是共用的 25s。** `proxy-common.conf` 里那个
+值是给请求-响应用的；套在长连接上，**每条空闲 25 秒的连接都会被切断**，表现是
+「前端每隔半分钟重连一次」，查起来会一路怀疑到应用层。客户端的心跳周期必须小于它。
+
+### opcua-server 的两处部署前置
+
+**端口段必须与 `OPCUA_PORT_POOL` 逐字一致。** compose 里的 `ports` 映射决定了哪些端口
+真的能从外面连进来；配置里的池只是服务自己的账本。两者不一致时，服务会把池外的端口
+分配出去、状态显示「运行中」，而上位机连不上——这是最难排查的一类故障。
+
+**`opcua-pki` 卷装着全部实例的服务器私钥。** 它不进镜像层、不进数据库，也因此
+**不随数据库备份一起走**。卷丢了等于全部实例的证书作废，每台上位机都要重新信任新证书。
+备份策略要单独覆盖它。

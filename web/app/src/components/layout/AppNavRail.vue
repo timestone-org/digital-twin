@@ -58,7 +58,7 @@ async function onLogout(): Promise<void> {
   >
     <RouterLink
       to="/"
-      class="flex h-16 w-full shrink-0 items-center gap-2.5 text-accent-primary"
+      class="flex h-16 w-full shrink-0 items-center gap-2.5 text-accent-on-surface"
       :class="isCollapsed ? 'justify-center' : 'px-3'"
       title="返回工作台"
       aria-label="返回工作台"
@@ -105,7 +105,7 @@ async function onLogout(): Promise<void> {
           :class="[
             isCollapsed ? 'w-10 justify-center' : 'px-2.5',
             isActive(item.to)
-              ? 'bg-accent-primary/10 text-accent-primary'
+              ? 'bg-accent-primary/10 text-accent-on-surface'
               : 'text-text-secondary hover:bg-accent-primary/10 hover:text-text-primary',
           ]"
           :title="item.label"
@@ -134,7 +134,7 @@ async function onLogout(): Promise<void> {
       -->
       <RouterLink
         to="/profile"
-        class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border bg-surface-raised text-xs font-semibold text-accent-primary transition-colors"
+        class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border bg-surface-raised text-xs font-semibold text-accent-on-surface transition-colors"
         :class="
           isActive('/profile')
             ? 'border-accent-primary'

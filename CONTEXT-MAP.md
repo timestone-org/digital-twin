@@ -9,6 +9,7 @@
 | 认证与授权 | `server/services/auth-server/` | [`server/services/auth-server/CONTEXT.md`](server/services/auth-server/CONTEXT.md) | 已建 |
 | 业务平台 | `server/services/platform-server/` | [`server/services/platform-server/CONTEXT.md`](server/services/platform-server/CONTEXT.md) | 已建（`api` 角色） |
 | 采集运行时 | `server/services/collector-server/` | —— | 未建 |
+| OPC UA 服务端 | `server/services/opcua-server/` | —— | 未建 |
 | 实时通道 | `server/services/realtime-hub/` | —— | 未建 |
 | AI 助手 | `server/services/ai-assistant/` | —— | 未建 |
 | 前端 | `web/` | [`web/CONTEXT.md`](web/CONTEXT.md) | 已建 |
@@ -27,10 +28,11 @@
 
 1. ✅ `server/` workspace 骨架（`lib` 的配置、日志、异常、响应、DB、缓存、限流、令牌）
 2. ✅ `auth-server` + `edge-gateway`（匿名被拒 / 带令牌放行 / 权限不足被拒 三条路径已跑通）
-3. ✅ `platform-server` 的 `api` 角色（`apps/hvac`：空调台账、车间房间空间配置，
+3. ⬜ `opcua-server`
+4. ⬜ `realtime-hub` + `platform-publisher`
+5. ✅ `platform-server` 的 `api` 角色（`apps/hvac`：空调台账、车间房间空间配置，
    以及直读现场 EMS 库的空调数据面——数据集目录、数据源绑定、达标范围、
    原始数据表格与聚合序列）
-4. ⬜ `realtime-hub` + `platform-publisher`
-5. ⬜ `collector-server`
-6. ⬜ `platform-worker`
-7. ⬜ `ai-assistant`
+6. ⬜ `collector-server`
+7. ⬜ `platform-worker`
+8. ⬜ `ai-assistant`

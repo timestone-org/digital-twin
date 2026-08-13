@@ -45,6 +45,14 @@ TS = frozenset({".ts", ".tsx", ".vue"})
 STYLE = frozenset({".css", ".scss", ".sass"})
 
 
+class GateError(RuntimeError):
+    """闸门自己没能完成判定——不是「没有违规」，是「没能判」。
+
+    ⚠ 判定所依赖的外部命令失败时必须抛这个，不许退化成空结果：
+    「遍历全部被跟踪文件」的检查一旦拿到空集合，就会无条件通过。
+    """
+
+
 @dataclass(frozen=True)
 class Violation:
     """一条违规：命中的规则、位置、以及命中的具体内容。"""
@@ -56,6 +64,31 @@ class Violation:
 
 Check = Callable[[], list[Violation]]
 FuncDef = ast.FunctionDef | ast.AsyncFunctionDef
+
+
+def run_git(*args: str) -> str:
+    """跑一条 git 并返回标准输出。git 失败即抛 GateError，绝不返回空结果。
+
+    ⚠ 全仓只有这一处跑外部命令，因为吞掉 git 失败的方向是**假绿**：
+    `ls-files` 挂掉时「.env 不许进版本库」变成遍历空集合、无条件通过，
+    `diff` 挂掉时 PR 规模闸算出「0 行改动」。两者都只在最需要闸门时失效。
+
+    Args: *args。
+    """
+    result = subprocess.run(
+        ["git", *args],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        reason = result.stderr.strip().splitlines()
+        raise GateError(
+            f"git {' '.join(args)} 退出码 {result.returncode}："
+            f"{reason[0] if reason else '无输出'}"
+        )
+    return result.stdout
 
 
 def is_skipped(path: Path) -> bool:
@@ -257,6 +290,7 @@ _HEAD_ARG = 3
 def git(*args: str) -> str:
     """跑一条 git 命令取标准输出；跑不成给空串。
 
+    ⚠ 空串对「要基线」的闸门等于长绿，调用方必须先过 `ref_exists`，见那里。
     Args: args。
     """
     result = subprocess.run(
@@ -266,6 +300,8 @@ def git(*args: str) -> str:
         text=True,
         check=False,
     )
+    if result.returncode != 0:
+        return ""
     return result.stdout.strip()
 
 
@@ -319,8 +355,12 @@ def main(title: str, checks: Sequence[Check]) -> int:
     Args: title, checks。
     """
     violations: list[Violation] = []
-    for check in checks:
-        violations.extend(check())
+    try:
+        for check in checks:
+            violations.extend(check())
+    except GateError as error:
+        sys.stderr.write(f"[闸门无法判定] {title} → {error}\n")
+        return 1
     if not violations:
         sys.stdout.write(f"{title}通过（{len(checks)} 项）\n")
         return 0
