@@ -1268,11 +1268,15 @@ name = "realtime-hub"
 version = "0.1.0"
 source = { editable = "services/realtime-hub" }
 dependencies = [
+    { name = "httpx" },
     { name = "lib", extra = ["auth", "db", "redis", "web"] },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "lib", extras = ["auth", "db", "redis", "web"], editable = "lib" }]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "lib", extras = ["auth", "db", "redis", "web"], editable = "lib" },
+]
 
 [[package]]
 name = "redis"
