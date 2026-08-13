@@ -20,7 +20,8 @@ interface Dot {
   id: string
   x: number
   y: number
-  isCovered: boolean
+  /** 着色类：零行淡化，区间失手标警示色，其余是正常热行。 */
+  paint: string
   title: string
 }
 
@@ -36,12 +37,20 @@ const dots = computed<Dot[]>(() =>
     id: row.started_at,
     x: scale(row.actual_minutes),
     y: SIZE - scale(row.p50),
-    isCovered: row.p10 <= row.actual_minutes && row.actual_minutes <= row.p90,
+    paint: paintOf(row),
     title:
       `实际 ${row.actual_minutes} 分钟 · 预测 ${row.p50.toFixed(1)}` +
       `（${row.p10.toFixed(1)}–${row.p90.toFixed(1)}）`,
   })),
 )
+
+/** ⚠ 零行（开机即达标且判对）淡化：它们堆在原点，压住热行的真实表现。 */
+function paintOf(row: ModelPrediction): string {
+  const isCovered = row.p10 <= row.actual_minutes && row.actual_minutes <= row.p90
+  if (!isCovered) return 'fill-state-warning'
+  if (row.actual_minutes === 0 && row.p50 === 0) return 'fill-text-disabled/40'
+  return 'fill-accent-primary/70'
+}
 
 const ticks = computed(() => {
   const step = limit.value / 4
@@ -128,7 +137,7 @@ function scale(minutes: number): number {
       :cx="dot.x"
       :cy="dot.y"
       r="3"
-      :class="dot.isCovered ? 'fill-accent-primary/70' : 'fill-state-warning'"
+      :class="dot.paint"
     >
       <title>{{ dot.title }}</title>
     </circle>

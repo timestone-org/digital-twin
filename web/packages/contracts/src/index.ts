@@ -60,12 +60,16 @@ export type {
 export type {
   AcModel,
   AcModelStatus,
+  ModelErrorStats,
   ModelMetrics,
   ModelMetricsBlock,
   ModelPredictInput,
   ModelPredictReadings,
   ModelPredictResult,
   ModelPrediction,
+  ModelRecommendEntry,
+  ModelRecommendInput,
+  ModelRecommendResult,
   ModelReliability,
 } from './hvac'
 export {

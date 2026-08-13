@@ -50,6 +50,29 @@ describe('行映射', () => {
     expect(toModelRows([model()])[0]?.notice).toBeNull()
   })
 
+  it('⚠ 列表行的 MAE 与覆盖率取热行统计；老评估退回整体值', () => {
+    const rows = toModelRows([model()])
+    expect(rows[0]?.mae).toBe('4.2 分钟')
+    expect(rows[0]?.coverage).toBe('82%')
+    const base = metrics()
+    const legacy = toModelRows([
+      model({
+        metrics: {
+          ...base,
+          overall: {
+            ...base.overall,
+            hot: null,
+            zero_count: null,
+            zero_hit_rate: null,
+            hot_hit_rate: null,
+          },
+        },
+      }),
+    ])
+    expect(legacy[0]?.mae).toBe('2.1 分钟')
+    expect(legacy[0]?.coverage).toBe('93%')
+  })
+
   it('没训过的模型：样本与指标都是占位符', () => {
     const rows = toModelRows([
       model({ metrics: null, sample_count: null, trained_at: null }),
@@ -75,7 +98,32 @@ describe('按组合分组', () => {
     expect(empty?.reliabilityLabel).toBe('无样本')
     expect(empty?.mae).toBe('—')
     const solo = rows.find((row) => row.set === 'K11')
-    expect(solo?.count).toBe('110')
+    expect(solo?.count).toBe('热 74 / 零 36')
     expect(solo?.reliabilityLabel).toBe('可靠')
+  })
+
+  it('⚠ 误差列取热行统计，判零率单独一列', () => {
+    const rows = toSetRows(metrics().by_set)
+    const solo = rows.find((row) => row.set === 'K11')
+    expect(solo?.mae).toBe('4.0 分钟')
+    expect(solo?.coverage).toBe('84%')
+    expect(solo?.zeroHit).toBe('96%')
+  })
+
+  it('老评估没有热行拆分时退回整体值，样本列给总数', () => {
+    const block = metrics().by_set['K11']
+    if (!block) throw new Error('夹具里应有 K11 分组')
+    const legacy = {
+      ...block,
+      hot: null,
+      zero_count: null,
+      zero_hit_rate: null,
+      hot_hit_rate: null,
+    }
+    const rows = toSetRows({ K11: legacy })
+    const solo = rows.find((row) => row.set === 'K11')
+    expect(solo?.count).toBe('110')
+    expect(solo?.mae).toBe('2.0 分钟')
+    expect(solo?.zeroHit).toBe('—')
   })
 })

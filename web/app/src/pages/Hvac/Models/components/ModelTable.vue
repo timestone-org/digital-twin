@@ -14,8 +14,8 @@ const COLUMNS: readonly DtDataColumn[] = [
   { key: 'room', label: '房间', width: '10rem', card: 'meta' },
   { key: 'status', label: '状态', width: '7rem' },
   { key: 'sample', label: '样本', width: '6rem', align: 'right' },
-  { key: 'mae', label: '折外 MAE', width: '8rem', align: 'right' },
-  { key: 'coverage', label: '区间覆盖', width: '7rem', align: 'right' },
+  { key: 'mae', label: '热行 MAE', width: '8rem', align: 'right' },
+  { key: 'coverage', label: '热行覆盖', width: '7rem', align: 'right' },
   { key: 'trained', label: '训练时间', width: '11rem' },
   { key: 'notice', label: '提示' },
   {

@@ -5,21 +5,20 @@
  * ⚠ 训练中详情继续显示上一次的评估并挂进度提示——半份/空数据比旧数据危险
  * （AC_MODEL_DESIGN §6）。轮询到终态即停，卸载时清定时器。
  */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import type { AcModel } from '@dt/contracts'
+import type { AcModel, ModelPrediction } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import { DtButton, DtCard, DtNotice, DtTag, useConfirm, useToast } from '@dt/ui'
 
 import * as hvac from '@/api/hvac'
 import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
-import { describeError } from '@/composables/useAsyncList'
-import { useCursorPages } from '@/composables/useCursorPages'
+import { describeError, useAsyncList } from '@/composables/useAsyncList'
 import MetricsSummary from './components/MetricsSummary.vue'
 import ComparisonCard from './components/ComparisonCard.vue'
 import SetMetricsTable from './components/SetMetricsTable.vue'
-import WhatIfPanel from './components/WhatIfPanel.vue'
+import RecommendPanel from './components/RecommendPanel.vue'
 import {
   MODEL_STATUS_VIEW,
   isModelBusy,
@@ -28,7 +27,7 @@ import {
 
 // 训练中的刷新间隔；一页逐条对比的行数
 const POLL_INTERVAL_MS = 5000
-const PREDICTION_PAGE_SIZE = 50
+const PREDICTION_PAGE_SIZE = 20
 
 const route = useRoute()
 const router = useRouter()
@@ -40,14 +39,25 @@ const model = ref<AcModel | null>(null)
 const error = ref<string | null>(null)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
-const predictions = useCursorPages(
-  (after) =>
+/** 逐条对比的组合过滤；空串 = 全部。组合键是 `+` 拼的，后端要逗号分隔。 */
+const setFilter = ref('')
+
+const predictions = useAsyncList<ModelPrediction>(
+  (query) =>
     hvac.listModelPredictions(modelId.value, {
-      limit: PREDICTION_PAGE_SIZE,
-      ...(after === null ? {} : { after }),
+      page: query.page,
+      size: query.size,
+      ...(setFilter.value === ''
+        ? {}
+        : { running_set: setFilter.value.split('+').join(',') }),
     }),
-  describeError,
+  PREDICTION_PAGE_SIZE,
 )
+
+// 换过滤条件必须回第一页：旧页码在新过滤下多半是空页
+watch(setFilter, () => {
+  void predictions.reloadFromFirstPage()
+})
 
 const statusView = computed(() =>
   model.value ? MODEL_STATUS_VIEW[model.value.status] : null,
@@ -193,21 +203,29 @@ async function remove(): Promise<void> {
           还没有一次成功的训练。
         </DtNotice>
 
-        <div class="grid gap-3 xl:grid-cols-[1fr_20rem]">
-          <div class="flex min-h-0 flex-col gap-3">
-            <DtCard v-if="setRows.length > 0">
+        <div class="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_20rem]">
+          <!-- ⚠ min-w-0 缺一不可：grid/flex 子项默认不许窄于内容，宽表格会
+               顶破页面横滚，而不是在表格自己的滚动容器里滚 -->
+          <div class="flex min-h-0 min-w-0 flex-col gap-3">
+            <DtCard v-if="setRows.length > 0" class="min-w-0">
               <h2 class="mb-2 text-sm font-semibold text-text-primary">
                 按服务组合
               </h2>
               <SetMetricsTable :rows="setRows" />
             </DtCard>
 
-            <ComparisonCard :predictions="predictions" />
+            <ComparisonCard
+              v-model:filter="setFilter"
+              :predictions="predictions"
+              :sets="model.serving_sets"
+            />
           </div>
 
-          <DtCard class="self-start">
-            <h2 class="mb-2 text-sm font-semibold text-text-primary">试算</h2>
-            <WhatIfPanel v-if="model.trained_at" :model="model" />
+          <DtCard class="min-w-0 self-start">
+            <h2 class="mb-2 text-sm font-semibold text-text-primary">
+              开机策略推荐
+            </h2>
+            <RecommendPanel v-if="model.trained_at" :model="model" />
             <p v-else class="text-xs text-text-secondary">训练完成后可用。</p>
           </DtCard>
         </div>

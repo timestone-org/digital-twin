@@ -11,11 +11,12 @@ import { DtDataView, DtTag } from '@dt/ui'
 import type { SetMetricsRow } from '@/features/hvac/modelView'
 
 const COLUMNS: readonly DtDataColumn[] = [
-  { key: 'set', label: '组合', width: '16rem', card: 'title' },
-  { key: 'count', label: '样本', width: '6rem', align: 'right' },
-  { key: 'mae', label: 'MAE', width: '8rem', align: 'right' },
-  { key: 'coverage', label: '覆盖率', width: '7rem', align: 'right' },
+  { key: 'set', label: '组合', width: '14rem', card: 'title' },
+  { key: 'count', label: '样本', width: '8rem', align: 'right' },
+  { key: 'mae', label: '热行 MAE', width: '8rem', align: 'right' },
+  { key: 'coverage', label: '热行覆盖率', width: '7rem', align: 'right' },
   { key: 'width', label: '区间宽度', width: '8rem', align: 'right' },
+  { key: 'zeroHit', label: '判零率', width: '6rem', align: 'right' },
   { key: 'reliability', label: '可靠性', width: '8rem' },
 ]
 
@@ -44,6 +45,7 @@ const props = defineProps<{ rows: readonly SetMetricsRow[] }>()
     <template #cell-mae="{ row }">{{ row.mae }}</template>
     <template #cell-coverage="{ row }">{{ row.coverage }}</template>
     <template #cell-width="{ row }">{{ row.width }}</template>
+    <template #cell-zeroHit="{ row }">{{ row.zeroHit }}</template>
     <template #cell-reliability="{ row }">
       <DtTag size="sm" :intent="row.reliabilityIntent">
         {{ row.reliabilityLabel }}

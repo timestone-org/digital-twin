@@ -322,8 +322,8 @@ export type AcModelStatus = (typeof AC_MODEL_STATUSES)[number]
 export const MODEL_RELIABILITIES = ['reliable', 'indicative', 'weak'] as const
 export type ModelReliability = (typeof MODEL_RELIABILITIES)[number]
 
-/** 一组折外预测的评估。`coverage` 标称 0.8，显著更低说明区间在撒谎。 */
-export interface ModelMetricsBlock {
+/** 一组折外预测的误差统计。`coverage` 标称 0.8，显著更低说明区间在撒谎。 */
+export interface ModelErrorStats {
   count: number
   mae: number
   medae: number
@@ -331,6 +331,19 @@ export interface ModelMetricsBlock {
   coverage: number
   mean_width: number
   reliability: ModelReliability
+}
+
+/**
+ * 一组折外预测的评估：整体统计 + 热行（实际>0）单独一份。
+ * ⚠ 整体 MAE 被大量「一开机就已达标」的零行灌水，判断模型好坏看 `hot`；
+ * 热行/判零字段在老评估上是 null，重训后补齐。
+ */
+export interface ModelMetricsBlock extends ModelErrorStats {
+  hot: ModelErrorStats | null
+  zero_count: number | null
+  /** 零行判零率与热行判出率；对应的行不存在（或老评估）时为 null。 */
+  zero_hit_rate: number | null
+  hot_hit_rate: number | null
 }
 
 /** 总体 + 按服务组合的评估。⚠ 没样本的组合是 null 不是零。 */
@@ -401,10 +414,40 @@ export interface ModelPredictResult {
   p50: number
   p90: number
   interval_width_minutes: number
+  /** 开机即达标（时长 0）的概率，0~1。 */
+  instant_probability: number
   reliability: ModelReliability
   is_in_serving_sets: boolean
   /** 真 = 组合专属子模型在答话；假 = 组合样本不足，房间共用模型兜底。 */
   is_dedicated: boolean
+  trained_at: string
+}
+
+/** 推荐入参：同一个起始条件，让全部服务组合同台比，故不选组合。 */
+export interface ModelRecommendInput {
+  readings?: Record<string, ModelPredictReadings>
+  at?: string
+  idle_minutes?: number
+}
+
+/** 推荐结果里一个组合的成绩。 */
+export interface ModelRecommendEntry {
+  running_set: string[]
+  set_key: string
+  p10: number
+  p50: number
+  p90: number
+  interval_width_minutes: number
+  instant_probability: number
+  reliability: ModelReliability
+  is_dedicated: boolean
+  /** 排序：p50 快者优先 → p90 → 少开机组；第一名为真。 */
+  is_recommended: boolean
+}
+
+/** 推荐结果：全部服务组合按「更快达标」排好序。 */
+export interface ModelRecommendResult {
+  items: ModelRecommendEntry[]
   trained_at: string
 }
 

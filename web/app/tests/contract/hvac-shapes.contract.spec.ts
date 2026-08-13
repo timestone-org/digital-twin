@@ -11,10 +11,13 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type {
   AcModel,
+  ModelErrorStats,
   ModelMetrics,
   ModelMetricsBlock,
   ModelPrediction,
   ModelPredictResult,
+  ModelRecommendEntry,
+  ModelRecommendResult,
   AcDataBinding,
   AcDataset,
   AcItemList,
@@ -353,6 +356,16 @@ const SHAPES: Record<string, Record<string, true>> = {
     updated_at: true,
   } satisfies Keys<AcModel>,
 
+  ErrorStatsOut: {
+    count: true,
+    mae: true,
+    medae: true,
+    rmse: true,
+    coverage: true,
+    mean_width: true,
+    reliability: true,
+  } satisfies Keys<ModelErrorStats>,
+
   MetricsBlockOut: {
     count: true,
     mae: true,
@@ -361,6 +374,10 @@ const SHAPES: Record<string, Record<string, true>> = {
     coverage: true,
     mean_width: true,
     reliability: true,
+    hot: true,
+    zero_count: true,
+    zero_hit_rate: true,
+    hot_hit_rate: true,
   } satisfies Keys<ModelMetricsBlock>,
 
   ModelMetricsOut: {
@@ -383,17 +400,37 @@ const SHAPES: Record<string, Record<string, true>> = {
     p50: true,
     p90: true,
     interval_width_minutes: true,
+    instant_probability: true,
     reliability: true,
     is_in_serving_sets: true,
     is_dedicated: true,
     trained_at: true,
   } satisfies Keys<ModelPredictResult>,
 
-  CursorPage_ModelPredictionOut_: {
+  RecommendEntryOut: {
+    running_set: true,
+    set_key: true,
+    p10: true,
+    p50: true,
+    p90: true,
+    interval_width_minutes: true,
+    instant_probability: true,
+    reliability: true,
+    is_dedicated: true,
+    is_recommended: true,
+  } satisfies Keys<ModelRecommendEntry>,
+
+  RecommendOut: {
     items: true,
-    next: true,
-    has_more: true,
-  } satisfies Keys<CursorPage<ModelPrediction>>,
+    trained_at: true,
+  } satisfies Keys<ModelRecommendResult>,
+
+  Page_ModelPredictionOut_: {
+    items: true,
+    page: true,
+    size: true,
+    total: true,
+  } satisfies Keys<Page<ModelPrediction>>,
 }
 
 describe('@dt/contracts 与 platform openapi.json 的字段一致', () => {

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 /**
- * @fileoverview 折外逐条对比表。游标翻页，上一页 / 下一页**替换**当前页。
+ * @fileoverview 折外逐条对比表。页码分页（折外是有界快照，总数可知），
+ * 分页器带页码直选与每页条数。
  */
 import type { DtDataColumn, ModelPrediction } from '@dt/contracts'
-import { DtCursorPager, DtDataView } from '@dt/ui'
+import { DtDataView, type DtPaginationState } from '@dt/ui'
 
 import { formatDateTime } from '@/utils/datetime'
 import { formatSet } from '@/features/hvac/modelView'
@@ -33,14 +34,12 @@ const props = defineProps<{
   rows: readonly ModelPrediction[]
   loading: boolean
   error: string | null
-  page: number
-  hasPrev: boolean
-  hasNext: boolean
+  pager: DtPaginationState
 }>()
 
 const emit = defineEmits<{
-  prev: []
-  next: []
+  'update:page': [page: number]
+  'update:size': [size: number]
   retry: []
 }>()
 
@@ -61,45 +60,34 @@ function toRows(items: readonly ModelPrediction[]): Row[] {
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col gap-2">
-    <DtDataView
-      class="min-h-0 flex-1"
-      view="table"
-      :columns="COLUMNS"
-      :rows="toRows(props.rows)"
-      :loading="props.loading"
-      :error="props.error"
-      :layout="{ toggle: false, minWidth: '56rem' }"
-      :empty="{
-        title: '还没有折外预测',
-        hint: '训练完成后，这里逐条对比每次开机的预测与实际。',
-      }"
-      @retry="emit('retry')"
-    >
-      <template #cell-started="{ row }">{{ row.started }}</template>
-      <template #cell-actual="{ row }">{{ row.actual }}</template>
-      <template #cell-p50="{ row }">{{ row.p50 }}</template>
-      <template #cell-error="{ row }">{{ row.error }}</template>
-      <template #cell-set="{ row }">
-        <span class="font-mono text-xs">{{ row.set }}</span>
-      </template>
-      <template #cell-interval="{ row }">
-        <span :class="row.isMissed ? 'text-state-warning' : ''">
-          {{ row.interval }}
-        </span>
-      </template>
-    </DtDataView>
-
-    <DtCursorPager
-      class="shrink-0"
-      aria-label="逐条对比翻页"
-      :page="props.page"
-      :count="props.rows.length"
-      :has-prev="props.hasPrev"
-      :has-next="props.hasNext"
-      :loading="props.loading"
-      @prev="emit('prev')"
-      @next="emit('next')"
-    />
-  </div>
+  <DtDataView
+    class="min-w-0 flex-1"
+    view="table"
+    :columns="COLUMNS"
+    :rows="toRows(props.rows)"
+    :loading="props.loading"
+    :error="props.error"
+    :layout="{ toggle: false, minWidth: '56rem', fill: false }"
+    :pagination="props.pager"
+    :empty="{
+      title: '还没有折外预测',
+      hint: '训练完成后，这里逐条对比每次开机的预测与实际。',
+    }"
+    @update:page="emit('update:page', $event)"
+    @update:size="emit('update:size', $event)"
+    @retry="emit('retry')"
+  >
+    <template #cell-started="{ row }">{{ row.started }}</template>
+    <template #cell-actual="{ row }">{{ row.actual }}</template>
+    <template #cell-p50="{ row }">{{ row.p50 }}</template>
+    <template #cell-error="{ row }">{{ row.error }}</template>
+    <template #cell-set="{ row }">
+      <span class="font-mono text-xs">{{ row.set }}</span>
+    </template>
+    <template #cell-interval="{ row }">
+      <span :class="row.isMissed ? 'text-state-warning' : ''">
+        {{ row.interval }}
+      </span>
+    </template>
+  </DtDataView>
 </template>

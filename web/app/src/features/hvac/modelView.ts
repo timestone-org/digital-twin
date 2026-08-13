@@ -51,6 +51,14 @@ export function formatCoverage(value: number): string {
   return `${Math.round(value * 100)}%`
 }
 
+/** 占比的显示：百分比整数；null = 分母不存在，给占位符不给 0%。 */
+export function formatRate(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return '—'
+  }
+  return `${Math.round(value * 100)}%`
+}
+
 /** 训练中或排队中：列表页据此决定要不要轮询。 */
 export function isModelBusy(model: AcModel): boolean {
   return model.status === 'queued' || model.status === 'training'
@@ -73,11 +81,12 @@ export interface ModelRow {
   model: AcModel
 }
 
-/** 模型 → 列表行。 */
+/** 模型 → 列表行。⚠ 误差与覆盖率优先取热行统计：整体值被零行灌水。 */
 export function toModelRows(models: readonly AcModel[]): ModelRow[] {
   return models.map((model) => {
     const status = MODEL_STATUS_VIEW[model.status]
     const overall = model.metrics?.overall ?? null
+    const graded = overall?.hot ?? overall
     return {
       id: model.id,
       name: model.name,
@@ -88,8 +97,8 @@ export function toModelRows(models: readonly AcModel[]): ModelRow[] {
       statusIntent: status.intent,
       notice: noticeOf(model),
       sample: model.sample_count === null ? '—' : String(model.sample_count),
-      mae: overall ? formatMinutes(overall.mae) : '—',
-      coverage: overall ? formatCoverage(overall.coverage) : '—',
+      mae: graded ? formatMinutes(graded.mae) : '—',
+      coverage: graded ? formatCoverage(graded.coverage) : '—',
       trained: formatDateTime(model.trained_at),
       model,
     }
@@ -108,16 +117,19 @@ function noticeOf(model: AcModel): string | null {
 export interface SetMetricsRow {
   id: string
   set: string
+  /** 「热 n / 零 m」；老评估没有拆分时退回总数。 */
   count: string
+  /** 热行 MAE / 覆盖率 / 区间宽度；没有热行（或老评估）退回整体值。 */
   mae: string
   coverage: string
   width: string
+  zeroHit: string
   reliabilityLabel: string
   reliabilityIntent: DtIntent
   hasSamples: boolean
 }
 
-/** 分组评估 → 表行，键序即行序。 */
+/** 分组评估 → 表行，键序即行序。误差列优先取热行统计。 */
 export function toSetRows(
   bySet: Record<string, ModelMetricsBlock | null>,
 ): SetMetricsRow[] {
@@ -130,19 +142,25 @@ export function toSetRows(
         mae: '—',
         coverage: '—',
         width: '—',
+        zeroHit: '—',
         reliabilityLabel: '无样本',
         reliabilityIntent: 'neutral',
         hasSamples: false,
       }
     }
-    const reliability = RELIABILITY_VIEW[block.reliability]
+    const graded = block.hot ?? block
+    const reliability = RELIABILITY_VIEW[graded.reliability]
     return {
       id: key,
       set: key,
-      count: String(block.count),
-      mae: formatMinutes(block.mae),
-      coverage: formatCoverage(block.coverage),
-      width: formatMinutes(block.mean_width),
+      count:
+        block.zero_count === null
+          ? String(block.count)
+          : `热 ${block.hot?.count ?? 0} / 零 ${block.zero_count}`,
+      mae: formatMinutes(graded.mae),
+      coverage: formatCoverage(graded.coverage),
+      width: formatMinutes(graded.mean_width),
+      zeroHit: formatRate(block.zero_hit_rate),
       reliabilityLabel: reliability.label,
       reliabilityIntent: reliability.intent,
       hasSamples: true,

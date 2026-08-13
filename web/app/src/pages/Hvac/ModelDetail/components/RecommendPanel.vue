@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * @fileoverview 试算面板：选组合、填各台温湿度 → 三分位达标时长。
+ * @fileoverview 开机策略推荐面板：填一份起始条件 → 全部服务组合同台比，
+ * 每个组合各出 p50/区间/开机即达标概率，最快达标的带推荐标。
  *
  * ⚠ 缺测就留空，不要填 0——0 是一个真实且极端的读数。
  * ⚠ 全停时长留空即「未知」，特征层按缺测处理，不会当成刚停就开。
@@ -9,60 +10,41 @@ import { computed, ref, watch } from 'vue'
 import type {
   AcModel,
   ModelPredictReadings,
-  ModelPredictResult,
+  ModelRecommendResult,
 } from '@dt/contracts'
-import { DtButton, DtNotice, DtNumberInput, DtSelect, DtTag } from '@dt/ui'
+import { DtButton, DtNotice, DtNumberInput } from '@dt/ui'
 
 import * as hvac from '@/api/hvac'
 import { describeError } from '@/composables/useAsyncList'
-import {
-  RELIABILITY_VIEW,
-  formatMinutes,
-  formatSet,
-} from '@/features/hvac/modelView'
+import RecommendEntryCard from './RecommendEntryCard.vue'
 
 const props = defineProps<{ model: AcModel }>()
 
-const setKey = ref('')
 const temps = ref<Record<string, number | undefined>>({})
 const humidities = ref<Record<string, number | undefined>>({})
 const idle = ref<number | undefined>(undefined)
 const busy = ref(false)
 const problem = ref<string | null>(null)
-const result = ref<ModelPredictResult | null>(null)
+const result = ref<ModelRecommendResult | null>(null)
 
-const setOptions = computed(() =>
-  props.model.serving_sets.map((set) => ({
-    value: formatSet(set),
-    label: formatSet(set),
-  })),
+/** 全部服务组合涉及的机组并集：条件按机组填，与选哪个组合无关。 */
+const serials = computed(() =>
+  [...new Set(props.model.serving_sets.flat())].sort(),
 )
-
-const serials = computed(() => {
-  const found = props.model.serving_sets.find(
-    (set) => formatSet(set) === setKey.value,
-  )
-  return found ? [...found].sort() : []
-})
 
 watch(
   () => props.model.id,
   () => {
-    setKey.value = setOptions.value[0]?.value ?? ''
+    temps.value = {}
+    humidities.value = {}
+    idle.value = undefined
     result.value = null
     problem.value = null
   },
-  { immediate: true },
 )
 
-// 换组合后旧结果就是别的组合的答案，必须清掉而不是留着装没事
-watch(setKey, () => {
-  result.value = null
-  problem.value = null
-})
-
 async function run(): Promise<void> {
-  if (serials.value.length === 0 || busy.value) return
+  if (busy.value) return
   busy.value = true
   problem.value = null
   try {
@@ -75,8 +57,7 @@ async function run(): Promise<void> {
       if (humidity !== undefined) entry.workshop_humidity_avg = humidity
       if (Object.keys(entry).length > 0) readings[serial] = entry
     }
-    result.value = await hvac.predictWithAcModel(props.model.id, {
-      running_set: serials.value,
+    result.value = await hvac.recommendWithAcModel(props.model.id, {
       readings,
       ...(idle.value === undefined ? {} : { idle_minutes: idle.value }),
     })
@@ -90,12 +71,9 @@ async function run(): Promise<void> {
 
 <template>
   <div class="flex flex-col gap-3">
-    <DtSelect
-      v-model="setKey"
-      label="运行组合"
-      :options="setOptions"
-      :disabled="setOptions.length === 0"
-    />
+    <p class="text-xs text-text-secondary">
+      填当前各台的温湿度，比较每个组合要等多久——最快达标的带推荐标。
+    </p>
     <div
       v-for="serial in serials"
       :key="serial"
@@ -127,42 +105,18 @@ async function run(): Promise<void> {
       :steppers="false"
       :range="{ min: 0, max: 100000 }"
     />
-    <DtButton
-      intent="primary"
-      size="sm"
-      :loading="busy"
-      :disabled="serials.length === 0"
-      @click="run"
-    >
-      试算
+    <DtButton intent="primary" size="sm" :loading="busy" @click="run">
+      推荐开机策略
     </DtButton>
 
     <DtNotice v-if="problem" intent="danger">{{ problem }}</DtNotice>
 
-    <div
-      v-if="result"
-      class="flex flex-col gap-2 rounded-md border border-border-subtle p-3"
-    >
-      <p class="flex items-baseline gap-2">
-        <span class="text-2xl font-semibold text-text-primary">
-          {{ formatMinutes(result.p50) }}
-        </span>
-        <span class="text-xs text-text-secondary">
-          80% 区间 {{ result.p10.toFixed(1) }} – {{ result.p90.toFixed(1) }}
-        </span>
-      </p>
-      <p class="flex items-center gap-2">
-        <DtTag size="sm" :intent="RELIABILITY_VIEW[result.reliability].intent">
-          {{ RELIABILITY_VIEW[result.reliability].label }}
-        </DtTag>
-        <DtTag v-if="!result.is_in_serving_sets" size="sm" intent="warning">
-          服务组合之外的外推
-        </DtTag>
-        <DtTag v-if="!result.is_dedicated" size="sm" intent="info">
-          组合样本不足，房间共用模型兜底
-        </DtTag>
-        <DtTag v-else size="sm" intent="success">组合专属模型</DtTag>
-      </p>
+    <div v-if="result" class="flex flex-col gap-2">
+      <RecommendEntryCard
+        v-for="entry in result.items"
+        :key="entry.set_key"
+        :entry="entry"
+      />
     </div>
   </div>
 </template>

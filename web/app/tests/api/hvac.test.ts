@@ -431,17 +431,17 @@ describe('达标时长模型面', () => {
     expect(options.method).toBe('DELETE')
   })
 
-  it('逐条对比按组合过滤，游标原样带回', async () => {
+  it('逐条对比按组合过滤，页码分页', async () => {
     await hvac.listModelPredictions('m1', {
       running_set: 'K11,K12',
-      after: 'CURSOR-9',
-      limit: 50,
+      page: 3,
+      size: 50,
     })
     expect(call()[0]).toBe('/ac-models/m1/predictions')
     expect(call()[1].query).toEqual({
       running_set: 'K11,K12',
-      after: 'CURSOR-9',
-      limit: 50,
+      page: 3,
+      size: 50,
     })
   })
 
@@ -452,6 +452,16 @@ describe('达标时长模型面', () => {
       idle_minutes: 390,
     })
     expect(call()[0]).toBe('/ac-models/m1:predict')
+    expect(call()[1].method).toBe('POST')
+    expect(call()[1].baseUrl).toBe(PLATFORM_BASE_URL)
+  })
+
+  it('推荐是动作端点 POST :recommend', async () => {
+    await hvac.recommendWithAcModel('m1', {
+      readings: { K11: { workshop_temp_avg: 30 } },
+      idle_minutes: 390,
+    })
+    expect(call()[0]).toBe('/ac-models/m1:recommend')
     expect(call()[1].method).toBe('POST')
     expect(call()[1].baseUrl).toBe(PLATFORM_BASE_URL)
   })

@@ -12,6 +12,8 @@ import type {
   ModelPredictInput,
   ModelPredictResult,
   ModelPrediction,
+  ModelRecommendInput,
+  ModelRecommendResult,
   AcDataset,
   AcItemList,
   AcMetricLimit,
@@ -473,16 +475,16 @@ export async function retrainAcModel(modelId: string): Promise<AcModel> {
 export type ModelPredictionFilters = {
   /** 逗号分隔的空调序号，与后端一致。 */
   running_set?: string | undefined
-  limit?: number | undefined
-  after?: string | undefined
+  page?: number | undefined
+  size?: number | undefined
 }
 
-/** 一页折外预测与实际的对比。游标分页，`after` 只填上一页的 `next`。 */
+/** 一页折外预测与实际的对比。页码分页——折外是有界快照，总数可知。 */
 export async function listModelPredictions(
   modelId: string,
   query: ModelPredictionFilters = {},
-): Promise<CursorPage<ModelPrediction>> {
-  return await requestData<CursorPage<ModelPrediction>>(
+): Promise<Page<ModelPrediction>> {
+  return await requestData<Page<ModelPrediction>>(
     `/ac-models/${modelId}/predictions`,
     onPlatform({ query }),
   )
@@ -495,6 +497,17 @@ export async function predictWithAcModel(
 ): Promise<ModelPredictResult> {
   return await requestData<ModelPredictResult>(
     `/ac-models/${modelId}:predict`,
+    onPlatform({ method: 'POST', body: input }),
+  )
+}
+
+/** 推荐开机策略：全部服务组合同台比，返回已按「更快达标」排好的清单。 */
+export async function recommendWithAcModel(
+  modelId: string,
+  input: ModelRecommendInput,
+): Promise<ModelRecommendResult> {
+  return await requestData<ModelRecommendResult>(
+    `/ac-models/${modelId}:recommend`,
     onPlatform({ method: 'POST', body: input }),
   )
 }

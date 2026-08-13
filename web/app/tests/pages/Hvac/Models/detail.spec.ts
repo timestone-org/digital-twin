@@ -69,6 +69,14 @@ beforeEach(() => {
         p50: 30,
         p90: 40,
       }),
+      // 零行（开机即达标且判对）：散点上要淡化显示
+      prediction({
+        started_at: '2026-08-10T02:00:00.000Z',
+        actual_minutes: 0,
+        p10: 0,
+        p50: 0,
+        p90: 0,
+      }),
     ]),
   )
 })
@@ -96,11 +104,14 @@ async function clickConfirm(): Promise<void> {
 }
 
 describe('评估呈现', () => {
-  it('总体卡片给出 MAE、覆盖率与样本数', async () => {
+  it('⚠ 评估卡的主口径是热行：MAE/覆盖率取 hot，样本按热/零拆开', async () => {
     const wrapper = await open()
     expect(wrapper.text()).toContain('4.2 分钟')
     expect(wrapper.text()).toContain('82%')
-    expect(wrapper.text()).toContain('120')
+    expect(wrapper.text()).toContain('热 80 / 零 40')
+    // 判零 / 判出
+    expect(wrapper.text()).toContain('97%')
+    expect(wrapper.text()).toContain('95%')
   })
 
   it('⚠ 没样本的组合标「无样本」，不显示成零误差', async () => {
@@ -113,6 +124,16 @@ describe('评估呈现', () => {
     const wrapper = await open()
     // 第二条：实际 60 在 [20,40] 之外
     expect(wrapper.find('.text-state-warning').exists()).toBe(true)
+  })
+
+  it('⚠ 散点上零行淡化：它们堆在原点，不许压住热行的真实表现', async () => {
+    const wrapper = await open()
+    const paints = wrapper
+      .findAll('circle')
+      .map((node) => node.attributes('class'))
+    expect(paints).toContain('fill-text-disabled/40')
+    expect(paints).toContain('fill-state-warning')
+    expect(paints).toContain('fill-accent-primary/70')
   })
 
   it('失败的模型把人话原因亮出来，同时保留上一次的评估', async () => {
@@ -194,48 +215,89 @@ describe('操作', () => {
   })
 })
 
-describe('试算', () => {
-  it('按选中组合提交并展示三分位与可靠性', async () => {
-    vi.spyOn(hvac, 'predictWithAcModel').mockResolvedValue({
-      p10: 18,
-      p50: 25.4,
-      p90: 39,
-      interval_width_minutes: 21,
-      reliability: 'reliable',
-      is_in_serving_sets: true,
-      is_dedicated: true,
+describe('开机策略推荐', () => {
+  it('一次给全部服务组合出预测，第一名带推荐标', async () => {
+    vi.spyOn(hvac, 'recommendWithAcModel').mockResolvedValue({
+      items: [
+        {
+          running_set: ['K11'],
+          set_key: 'K11',
+          p10: 18,
+          p50: 25.4,
+          p90: 39,
+          interval_width_minutes: 21,
+          instant_probability: 0.35,
+          reliability: 'reliable',
+          is_dedicated: true,
+          is_recommended: true,
+        },
+        {
+          running_set: ['K11', 'K12'],
+          set_key: 'K11+K12',
+          p10: 10,
+          p50: 45,
+          p90: 90,
+          interval_width_minutes: 80,
+          instant_probability: 0.1,
+          reliability: 'weak',
+          is_dedicated: false,
+          is_recommended: false,
+        },
+      ],
       trained_at: STAMP,
     })
     const wrapper = await open()
-    const run = wrapper.findAll('button').find((item) => item.text() === '试算')
+    const run = wrapper
+      .findAll('button')
+      .find((item) => item.text() === '推荐开机策略')
     await run?.trigger('click')
     await flushPromises()
-    expect(hvac.predictWithAcModel).toHaveBeenCalledWith('m1', {
-      running_set: ['K11'],
+    expect(hvac.recommendWithAcModel).toHaveBeenCalledWith('m1', {
       readings: {},
     })
     expect(wrapper.text()).toContain('25.4 分钟')
+    expect(wrapper.text()).toContain('推荐')
+    expect(wrapper.text()).toContain('开机即达标 35%')
     expect(wrapper.text()).toContain('组合专属模型')
-    expect(wrapper.text()).toContain('可靠')
-  })
-
-  it('服务组合之外的外推要标出来', async () => {
-    vi.spyOn(hvac, 'predictWithAcModel').mockResolvedValue({
-      p10: 10,
-      p50: 45,
-      p90: 90,
-      interval_width_minutes: 80,
-      reliability: 'weak',
-      is_in_serving_sets: false,
-      is_dedicated: false,
-      trained_at: STAMP,
-    })
-    const wrapper = await open()
-    const run = wrapper.findAll('button').find((item) => item.text() === '试算')
-    await run?.trigger('click')
-    await flushPromises()
-    expect(wrapper.text()).toContain('服务组合之外的外推')
     expect(wrapper.text()).toContain('共用模型兜底')
     expect(wrapper.text()).toContain('仅供参考')
+  })
+
+  it('推荐失败把原因亮出来，不静默', async () => {
+    vi.spyOn(hvac, 'recommendWithAcModel').mockRejectedValue(
+      new Error('boom'),
+    )
+    const wrapper = await open()
+    const run = wrapper
+      .findAll('button')
+      .find((item) => item.text() === '推荐开机策略')
+    await run?.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('请求失败')
+  })
+})
+
+describe('逐条对比', () => {
+  it('⚠ 换组合过滤要回第一页重取，组合键转成逗号分隔', async () => {
+    await open()
+    expect(hvac.listModelPredictions).toHaveBeenCalledWith('m1', {
+      page: 1,
+      size: 20,
+    })
+    const trigger = document.body.querySelector<HTMLButtonElement>(
+      'button[aria-label="按组合过滤"]',
+    )
+    trigger?.click()
+    await flushPromises()
+    const option = [
+      ...document.body.querySelectorAll('[role="option"]'),
+    ].find((item) => item.textContent?.includes('K11+K12'))
+    ;(option as HTMLElement | undefined)?.click()
+    await flushPromises()
+    expect(hvac.listModelPredictions).toHaveBeenLastCalledWith('m1', {
+      page: 1,
+      size: 20,
+      running_set: 'K11,K12',
+    })
   })
 })
