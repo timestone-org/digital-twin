@@ -45,11 +45,23 @@ docker compose up -d --build
 docker compose run --rm auth-server  alembic upgrade head
 docker compose run --rm auth-server  auth-seed
 docker compose run --rm opcua-server alembic upgrade head
+docker compose run --rm realtime-hub alembic upgrade head
 ```
 
 ⚠ **加了功能就要重跑种子。** 权限码与路由规则是源码里的目录，进库靠 `auth-seed`。
 新服务、新端点上线后不跑，边缘查不到规则，而 auth-server 的口径是**无规则一律拒绝**——
 表现是那一片接口**全部 403**，而代码看起来完全正常。
+
+### realtime-hub 的两处部署前置
+
+**`/api/v1/realtime/ws` 是一条免认证 location，这不是漏了 `auth_request`。**
+WS 的 token 走 `Sec-WebSocket-Protocol` 子协议，而 `auth_request` 的子请求带不上它——
+挂上去的结果是所有握手一律 401。认证在 hub 内部完成：它自己验签名、验过期、
+按每个主题声明的权限码判订阅。
+
+**WS 那条 location 的读写超时是 3600s，不是共用的 25s。** `proxy-common.conf` 里那个
+值是给请求-响应用的；套在长连接上，**每条空闲 25 秒的连接都会被切断**，表现是
+「前端每隔半分钟重连一次」，查起来会一路怀疑到应用层。客户端的心跳周期必须小于它。
 
 ### opcua-server 的两处部署前置
 

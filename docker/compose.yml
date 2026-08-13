@@ -8,7 +8,7 @@ name: digitaltwin
 services:
   edge-gateway:
     image: nginx:1.27-alpine
-    depends_on: [auth-server, opcua-server]
+    depends_on: [auth-server, opcua-server, realtime-hub]
     ports: ['${EDGE_HTTP_PORT:-8080}:80']
     environment:
       AUTH_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填：/internal/ 的服务级密钥}
@@ -79,6 +79,9 @@ services:
       OPCUA_PORT_POOL: ${OPCUA_PORT_POOL:-4840-4859}
       OPCUA_MAX_INSTANCES: ${OPCUA_MAX_INSTANCES:-16}
       OPCUA_PKI_DIR: /var/lib/opcua/pki
+      # 实例生灭时登记/注销主题、值变化批推都打它。
+      # ⚠ 不可达时不阻断建实例——降级方向是「少一个实时通道」。
+      OPCUA_REALTIME_BASE_URL: http://realtime-hub:8000
     expose: ['8008']
     ports:
       - '${OPCUA_PORT_POOL:-4840-4859}:${OPCUA_PORT_POOL:-4840-4859}'
@@ -88,6 +91,38 @@ services:
       - opcua-pki:/var/lib/opcua/pki
     healthcheck:
       test: ['CMD', 'python', '-c', "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8008/api/v1/opcua/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+  realtime-hub:
+    build:
+      context: ../server
+      dockerfile: services/realtime-hub/Dockerfile
+    environment:
+      REALTIME_APP_ROLE: hub
+      REALTIME_APP_LOG_FORMAT: json
+      REALTIME_POSTGRES_HOST: ${POSTGRES_HOST:?必填}
+      REALTIME_POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      REALTIME_POSTGRES_USER: ${POSTGRES_USER:?必填}
+      REALTIME_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必填}
+      REALTIME_POSTGRES_DB: ${POSTGRES_DB:?必填}
+      REALTIME_POSTGRES_SCHEMA: realtime
+      REALTIME_REDIS_HOST: ${REDIS_HOST:?必填}
+      REALTIME_REDIS_PORT: ${REDIS_PORT:-6379}
+      REALTIME_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      # ⚠ 与 auth-server 同值。少写一处就是非对称失效：签得出、验不了，
+      # 表现为一律 403，而现象与原因隔得极远。
+      REALTIME_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
+      REALTIME_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
+      # ⚠ 验 WS 子协议里那枚 access token 用，必须与 auth-server 同值：
+      # 本服务只验不签
+      REALTIME_JWT_SECRET: ${AUTH_JWT_SECRET:?必填}
+      REALTIME_AUTH_BASE_URL: http://auth-server:8004
+    expose: ['8000']
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/api/v1/realtime/health')"]
       interval: 10s
       timeout: 3s
       retries: 3
