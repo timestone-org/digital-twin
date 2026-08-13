@@ -35,6 +35,16 @@ EXPECTED: dict[str, frozenset[str]] = {
     "PATCH": frozenset({AC_MANAGE}),
     "DELETE": frozenset({AC_MANAGE}),
 }
+# 闸 1 里为个别端点开的**窄放行**（更高 priority 的窄规则压过按方法的兜底），
+# 同样只能逐条复述。⚠ 方向是放松，所以每一条都必须对应 auth catalog 里一条
+# 真实存在的窄规则——这里单方面登记等于绕过边缘口径给自己开洞。
+NARROWED_IN_GATE_ONE: dict[tuple[str, str], frozenset[str]] = {
+    # auth catalog：POST /api/v1/platform/ac-models/*:predict → ac:view（905）
+    (f"{API_PREFIX}/ac-models/{{model_id}}:predict", "POST"): frozenset(
+        {AC_VIEW}
+    ),
+}
+
 # ⚠ 闸 2 严于闸 1 的端点必须逐条登记。闸 1 只按方法兜（GET → ac:view），而
 # 这条 GET 暴露的是外库的结构，故端点自己再收一道到 ac:manage。方向是安全的
 # （边缘放行、端点拒绝），但反过来——端点比边缘松——是一个静默的越权洞，
@@ -143,7 +153,10 @@ def test_gate_two_requires_the_code_gate_one_requires(
         if item.path == path and method in (item.methods or set())
     )
     codes, mode = gate_two_requirement(route)
-    expected = STRICTER_THAN_GATE_ONE.get((path, method), EXPECTED[method])
+    expected = STRICTER_THAN_GATE_ONE.get(
+        (path, method),
+        NARROWED_IN_GATE_ONE.get((path, method), EXPECTED[method]),
+    )
     assert codes == expected
     assert mode == "all"
 
@@ -161,6 +174,7 @@ def test_overrides_only_ever_tighten_to_the_manage_code() -> None:
 def test_every_override_still_points_at_a_live_route() -> None:
     # 端点改名后这张表会静默失效，那条路由于是悄悄退回闸 1 的宽口径
     assert set(STRICTER_THAN_GATE_ONE) <= set(ROUTE_CASES)
+    assert set(NARROWED_IN_GATE_ONE) <= set(ROUTE_CASES)
 
 
 def test_no_public_route_is_left_unguarded() -> None:
