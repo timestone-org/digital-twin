@@ -23,7 +23,7 @@ PNPM_STORE = ROOT / "web" / "node_modules" / ".pnpm"
 
 ALLOWED = re.compile(
     r"^(MIT|MIT-0|BSD|BSD-2-Clause|BSD-3-Clause|0BSD|Apache-2\.0|ISC"
-    r"|Python-2\.0|PSF-2\.0|Unlicense|CC0-1\.0|BlueOak-1\.0\.0"
+    r"|Python-2\.0|PSF-2\.0|Unlicense|CC0-1\.0|BlueOak-1\.0\.0|Zlib"
     r"|Apache Software License|MIT License|BSD License"
     r"|ISC License \(ISCL\)|The Unlicense \(Unlicense\))$",
     re.IGNORECASE,

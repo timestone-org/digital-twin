@@ -31,7 +31,9 @@ TIMED = re.compile(
     r"(?:^|_)(timeout|interval|ttl|delay|duration|period|deadline"
     r"|elapsed|lifetime|expiry|backoff|latency|grace)(?:_|$)"
 )
-UNIT_SUFFIX = re.compile(r"_(s|ms|us|ns|min|h|d|days|hours|seconds)$")
+UNIT_SUFFIX = re.compile(
+    r"_(s|ms|us|ns|min|minutes|h|d|days|hours|seconds)$"
+)
 
 # 领域内公认的缩写之外一律写全：读的人不该去猜 svc 是 service 还是 survey
 ABBREVIATIONS = frozenset(
