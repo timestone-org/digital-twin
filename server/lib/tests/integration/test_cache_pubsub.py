@@ -69,9 +69,7 @@ async def test_publish_returns_zero_when_nobody_listens(
     assert await sender.publish("lib.test.nobody", {"a": 1}) == 0
 
 
-async def test_publishing_when_redis_is_unreachable_reports_the_dependency() -> (
-    None
-):
+async def test_publishing_when_redis_is_down_reports_the_dependency() -> None:
     """⚠ 基础设施异常不许裸露给上层。
 
     调用方要能按「依赖不可用」降级，而不是去认识 redis 的异常类型——
@@ -83,9 +81,7 @@ async def test_publishing_when_redis_is_unreachable_reports_the_dependency() -> 
     await sender.close()
 
 
-async def test_listening_when_redis_is_unreachable_reports_the_dependency() -> (
-    None
-):
+async def test_listening_when_redis_is_down_reports_the_dependency() -> None:
     listener = PubSub(url=UNREACHABLE_REDIS_URL, timeout_s=0.2)
 
     async def take_one() -> None:
