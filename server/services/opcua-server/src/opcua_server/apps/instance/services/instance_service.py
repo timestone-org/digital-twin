@@ -40,6 +40,7 @@ from opcua_server.apps.instance.services.presenter import (
     endpoint_url_of,
     to_instance_out,
 )
+from opcua_server.apps.instance.services.realtime import RealtimeClient
 
 _logger = get_logger("opcua.instance_service")
 
@@ -84,14 +85,16 @@ class InstanceService:
         database: Database,
         supervisor: InstanceSupervisor,
         advertised_host: str,
+        realtime: RealtimeClient,
     ) -> None:
         """按数据库与实例管理器装配。
 
-        Args: database, supervisor, advertised_host。
+        Args: database, supervisor, advertised_host, realtime。
         """
         self._database = database
         self._supervisor = supervisor
         self._host = advertised_host
+        self._realtime = realtime
 
     async def list_instances(
         self, *, keyword: str | None, page: PageParams
@@ -147,7 +150,12 @@ class InstanceService:
             instance_crud.add(session, row)
             await session.flush()
             await session.refresh(row)
-            return await self._present(session, row)
+            created = await self._present(session, row)
+        # ⚠ 登记在事务**之外**：它是一次跨服务调用，放事务里会让一次 hub
+        # 抖动把数据库连接一起占住（database-standard.md 禁事务内做外部 IO）。
+        # 失败不抛——降级方向是「少一个实时通道」，不是「建不了实例」。
+        await self._realtime.declare(created.id)
+        return created
 
     async def update_instance(
         self, instance_id: uuid.UUID, payload: InstanceUpdateIn
@@ -179,6 +187,10 @@ class InstanceService:
         async with self._database.session() as session:
             row = await self._require(session, instance_id)
             await instance_crud.delete(session, row)
+        # ⚠ 注销放在删除**之后**且不抛：删了实例而主题还在，留下的是一个谁也
+        # 推不到、却仍可被订阅的空主题——这条按 at-least-once 处理，失败只记
+        # 日志。反过来「先注销再删」更糟：删除若失败，实例还在而主题没了。
+        await self._realtime.revoke(instance_id)
 
     async def start_instance(self, instance_id: uuid.UUID) -> InstanceActionOut:
         """起实例。

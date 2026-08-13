@@ -79,6 +79,12 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     # 自签证书的有效期；到期前要能不停机换发
     cert_valid_days: int = Field(default=825, ge=1)
 
+    # realtime-hub 的地址。实例生灭时登记/注销主题、值变化批推都打它。
+    # ⚠ 不可达时**不阻断建实例**：降级方向是「少一个实时通道」，不是
+    # 「建不了实例」。缺的主题由启动时的对账补上。
+    realtime_base_url: str = "http://realtime-hub:8000"
+    realtime_timeout_s: float = Field(default=2.0, gt=0)
+
     # 值变化推送的合并窗口。上位机可以每秒写几十次，逐次推送会打爆通道。
     publish_window_ms: int = Field(default=1000, ge=PUBLISH_WINDOW_FLOOR_MS)
     # 单条推送消息里最多带几个节点，超出分片并标注

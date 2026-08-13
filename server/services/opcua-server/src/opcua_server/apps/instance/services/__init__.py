@@ -13,6 +13,10 @@ from opcua_server.apps.instance.services.presenter import (
     unwrap_value,
     wrap_value,
 )
+from opcua_server.apps.instance.services.realtime import (
+    RealtimeClient,
+    topic_of,
+)
 from opcua_server.apps.instance.services.security_service import (
     SecurityService,
 )
@@ -21,11 +25,13 @@ __all__ = [
     "IdempotencyStore",
     "InstanceService",
     "NodeService",
+    "RealtimeClient",
     "SecurityService",
     "endpoint_url_of",
     "node_id_of",
     "to_instance_out",
     "to_node_out",
+    "topic_of",
     "unwrap_value",
     "wrap_value",
 ]
