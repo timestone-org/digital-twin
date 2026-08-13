@@ -12,6 +12,7 @@ from platform_server.apps.hvac.modeling.estimators import (
     Estimator,
     sklearn_version,
 )
+from platform_server.apps.hvac.services.ac_startup_frames import RoomUnit
 
 # 工件的序列化格式版本。改 ModelBundle 的形状就 +1，老工件拒载并提示重训
 FORMAT_VERSION = 1
@@ -23,15 +24,25 @@ class ArtifactRejected(Exception):
 
 @dataclass(frozen=True)
 class ModelBundle:
-    """一次训练的全部产物：三条分位的估计器 + 复原特征行所需的一切。"""
+    """一次训练的全部产物：三条分位的估计器 + 复原特征行所需的一切。
+
+    ⚠ `units` 是**训练时**的机组清单（含达标范围），试算永远按它拼特征行：
+    按房间当前清单拼的话，机组一变动列数就对不上，预测当场炸——训练/服务
+    偏差要在结构上堵死，不靠调用方自觉。
+    """
 
     feature_version: int
     feature_names: tuple[str, ...]
-    serials: tuple[str, ...]
+    units: tuple[RoomUnit, ...]
     timezone: str
     half_life_days: float
     # p10 / p50 / p90 各一个，顺序固定
     estimators: tuple[Estimator, Estimator, Estimator]
+
+    @property
+    def serials(self) -> tuple[str, ...]:
+        """训练时的机组 serial，升序。"""
+        return tuple(unit.serial for unit in self.units)
 
 
 @dataclass(frozen=True)

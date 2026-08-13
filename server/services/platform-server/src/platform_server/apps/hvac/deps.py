@@ -20,6 +20,10 @@ from lib.db import Database
 from lib.errors import PermissionDenied, Unauthenticated
 from lib.utils.timeutils import utcnow
 from platform_server.apps.hvac.services import caller_from_headers
+from platform_server.apps.hvac.services.ac_model_queue import TrainMessage
+from platform_server.apps.hvac.services.ac_model_service import (
+    dispatch_training,
+)
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.apps.hvac.services.ac_startup_service import (
     ShardDispatch,
@@ -68,11 +72,12 @@ class Dispatcher:
 
     stream: StreamLike
     target: StreamGroup
+    model_target: StreamGroup
     database: Database
     tasks: BackgroundTasks
 
     def after_commit(self, plan: ShardDispatch) -> None:
-        """排一次提交后的投递。
+        """排一次提交后的分片投递。
 
         Args: plan。
         """
@@ -82,6 +87,19 @@ class Dispatcher:
             self.database,
             target=self.target,
             plan=plan,
+        )
+
+    def after_commit_training(self, message: TrainMessage) -> None:
+        """排一次提交后的训练投递。
+
+        Args: message。
+        """
+        self.tasks.add_task(
+            dispatch_training,
+            self.stream,
+            self.database,
+            target=self.model_target,
+            message=message,
         )
 
 
@@ -99,6 +117,11 @@ def get_dispatcher(
         target=StreamGroup(
             stream=settings.acstartup_stream,
             group=settings.acstartup_group,
+            consumer=settings.app_instance,
+        ),
+        model_target=StreamGroup(
+            stream=settings.acmodel_stream,
+            group=settings.acmodel_group,
             consumer=settings.app_instance,
         ),
         database=container.database,

@@ -127,6 +127,55 @@ class StartupSourceUnbound(AppError):
     http_status = 409
 
 
+class ModelNotFound(AppError):
+    """模型不存在。"""
+
+    code = 41618
+    http_status = 404
+
+
+class ModelNameTaken(AppError):
+    """同一房间内已有同名模型。"""
+
+    code = 41619
+    http_status = 409
+
+
+class ModelConfigInvalid(AppError):
+    """模型配置不合法：组合越出房间机组，或组合为空/重复。"""
+
+    code = 41620
+    http_status = 422
+
+
+class ModelBatchMissing(AppError):
+    """房间还没有抽取出来的当前批次，没有数据可训。"""
+
+    code = 41621
+    http_status = 409
+
+
+class ModelNotReady(AppError):
+    """模型还没有一次成功的训练，没有可用的工件。"""
+
+    code = 41622
+    http_status = 409
+
+
+class ModelTrainingInProgress(AppError):
+    """这个模型已经排队或正在训练。重复触发只会白算一遍。"""
+
+    code = 41623
+    http_status = 409
+
+
+class ModelArtifactUnusable(AppError):
+    """工件没过加载护栏（损坏或版本不符），需要重训。"""
+
+    code = 41624
+    http_status = 409
+
+
 class SourceUnavailable(AppError):
     """外部数据源不可用。⚠ 不返回陈旧数据兜底——查不到就明确说查不到。"""
 

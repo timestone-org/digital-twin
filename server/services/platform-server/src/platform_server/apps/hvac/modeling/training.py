@@ -83,7 +83,7 @@ def train(
     bundle = ModelBundle(
         feature_version=FEATURE_VERSION,
         feature_names=feature_names(units),
-        serials=tuple(unit.serial for unit in units),
+        units=tuple(units),
         timezone=timezone,
         half_life_days=half_life_days,
         estimators=_fit_all(matrix, targets, weights, range(len(ordered))),
@@ -180,7 +180,7 @@ def _fold_bundle(
     return ModelBundle(
         feature_version=FEATURE_VERSION,
         feature_names=(),
-        serials=(),
+        units=(),
         timezone="UTC",
         half_life_days=0.0,
         estimators=_fit_all(matrix, targets, weights, used),

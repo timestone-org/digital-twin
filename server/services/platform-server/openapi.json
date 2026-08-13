@@ -66,6 +66,283 @@
         "title": "AcDataBindingsOut",
         "type": "object"
       },
+      "AcModelCreateIn": {
+        "additionalProperties": false,
+        "description": "建模入参。服务组合选的是服务面不是训练集（AC_MODEL_DESIGN §1）。",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "half_life_days": {
+            "default": 180.0,
+            "maximum": 3650.0,
+            "minimum": 7.0,
+            "title": "Half Life Days",
+            "type": "number"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "room_id": {
+            "format": "uuid",
+            "title": "Room Id",
+            "type": "string"
+          },
+          "serving_sets": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "minItems": 1,
+            "title": "Serving Sets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "room_id",
+          "name",
+          "serving_sets"
+        ],
+        "title": "AcModelCreateIn",
+        "type": "object"
+      },
+      "AcModelOut": {
+        "description": "一个模型的完整对外形态。\n\n⚠ `failed` 行上的 `metrics` 可能仍是上一次成功的产物（重训失败保留\n上一份），配着 `error` 一起读。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "feature_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Version"
+          },
+          "half_life_days": {
+            "title": "Half Life Days",
+            "type": "number"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_batch_stale": {
+            "title": "Is Batch Stale",
+            "type": "boolean"
+          },
+          "is_feature_stale": {
+            "title": "Is Feature Stale",
+            "type": "boolean"
+          },
+          "metrics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelMetricsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "room": {
+            "$ref": "#/components/schemas/RoomRef"
+          },
+          "sample_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Count"
+          },
+          "serving_sets": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Serving Sets",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "trained_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trained At"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "window_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window End"
+          },
+          "window_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Start"
+          },
+          "workshop": {
+            "$ref": "#/components/schemas/WorkshopRef"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "room",
+          "workshop",
+          "serving_sets",
+          "half_life_days",
+          "status",
+          "error",
+          "feature_version",
+          "trained_at",
+          "sample_count",
+          "window_start",
+          "window_end",
+          "metrics",
+          "is_batch_stale",
+          "is_feature_stale",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AcModelOut",
+        "type": "object"
+      },
+      "AcModelPatchIn": {
+        "additionalProperties": false,
+        "description": "改名、改描述或改服务组合。⚠ 改组合就地重汇总评估，不触发重训。",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "serving_sets": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serving Sets"
+          }
+        },
+        "title": "AcModelPatchIn",
+        "type": "object"
+      },
       "AcUnitCreateIn": {
         "additionalProperties": false,
         "description": "建空调。房间必填——空调不允许处于没有归属的中间态。",
@@ -326,6 +603,51 @@
         "title": "ApiResponse[AcDataBindingsOut]",
         "type": "object"
       },
+      "ApiResponse_AcModelOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AcModelOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[AcModelOut]",
+        "type": "object"
+      },
       "ApiResponse_AcUnitOut_": {
         "properties": {
           "code": {
@@ -414,6 +736,51 @@
           }
         },
         "title": "ApiResponse[AcUnitRelocateOut]",
+        "type": "object"
+      },
+      "ApiResponse_CursorPage_ModelPredictionOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CursorPage_ModelPredictionOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[CursorPage[ModelPredictionOut]]",
         "type": "object"
       },
       "ApiResponse_CursorPage_RawSampleOut__": {
@@ -731,6 +1098,51 @@
         "title": "ApiResponse[Page[WorkshopOut]]",
         "type": "object"
       },
+      "ApiResponse_PredictOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PredictOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[PredictOut]",
+        "type": "object"
+      },
       "ApiResponse_RawSeriesOut_": {
         "properties": {
           "code": {
@@ -1046,6 +1458,55 @@
         "title": "ApiResponse[WorkshopOut]",
         "type": "object"
       },
+      "ApiResponse_list_AcModelOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AcModelOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[list[AcModelOut]]",
+        "type": "object"
+      },
       "CombinationCoverageOut": {
         "description": "一个运行组合在当前批次里攒了多少条可用样本。",
         "properties": {
@@ -1066,6 +1527,39 @@
           "usable_count"
         ],
         "title": "CombinationCoverageOut",
+        "type": "object"
+      },
+      "CursorPage_ModelPredictionOut_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ModelPredictionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          }
+        },
+        "required": [
+          "items",
+          "next",
+          "has_more"
+        ],
+        "title": "CursorPage[ModelPredictionOut]",
         "type": "object"
       },
       "CursorPage_RawSampleOut_": {
@@ -1370,6 +1864,126 @@
         "title": "MetricOut",
         "type": "object"
       },
+      "MetricsBlockOut": {
+        "description": "一组折外预测的评估。`coverage` 标称 80%，显著更低说明区间在撒谎。",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "coverage": {
+            "title": "Coverage",
+            "type": "number"
+          },
+          "mae": {
+            "title": "Mae",
+            "type": "number"
+          },
+          "mean_width": {
+            "title": "Mean Width",
+            "type": "number"
+          },
+          "medae": {
+            "title": "Medae",
+            "type": "number"
+          },
+          "reliability": {
+            "title": "Reliability",
+            "type": "string"
+          },
+          "rmse": {
+            "title": "Rmse",
+            "type": "number"
+          }
+        },
+        "required": [
+          "count",
+          "mae",
+          "medae",
+          "rmse",
+          "coverage",
+          "mean_width",
+          "reliability"
+        ],
+        "title": "MetricsBlockOut",
+        "type": "object"
+      },
+      "ModelMetricsOut": {
+        "description": "总体 + 按服务组合的评估。⚠ 没样本的组合是 null 不是零。",
+        "properties": {
+          "by_set": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/MetricsBlockOut"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "By Set",
+            "type": "object"
+          },
+          "overall": {
+            "$ref": "#/components/schemas/MetricsBlockOut"
+          }
+        },
+        "required": [
+          "overall",
+          "by_set"
+        ],
+        "title": "ModelMetricsOut",
+        "type": "object"
+      },
+      "ModelPredictionOut": {
+        "description": "一条折外预测与实际的对比。",
+        "properties": {
+          "actual_minutes": {
+            "title": "Actual Minutes",
+            "type": "integer"
+          },
+          "fold": {
+            "title": "Fold",
+            "type": "integer"
+          },
+          "p10": {
+            "title": "P10",
+            "type": "number"
+          },
+          "p50": {
+            "title": "P50",
+            "type": "number"
+          },
+          "p90": {
+            "title": "P90",
+            "type": "number"
+          },
+          "running_set": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Running Set",
+            "type": "array"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "started_at",
+          "running_set",
+          "actual_minutes",
+          "p10",
+          "p50",
+          "p90",
+          "fold"
+        ],
+        "title": "ModelPredictionOut",
+        "type": "object"
+      },
       "Page_AcUnitOut_": {
         "properties": {
           "items": {
@@ -1461,6 +2075,164 @@
           "total"
         ],
         "title": "Page[WorkshopOut]",
+        "type": "object"
+      },
+      "PredictIn": {
+        "additionalProperties": false,
+        "description": "试算入参：一个假想的开机条件。\n\n`at` 省略即当下（决定时段与季节特征）；`idle_minutes` 省略按未知处理。",
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "idle_minutes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idle Minutes"
+          },
+          "readings": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PredictReadingsIn"
+            },
+            "title": "Readings",
+            "type": "object"
+          },
+          "running_set": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Running Set",
+            "type": "array"
+          }
+        },
+        "required": [
+          "running_set"
+        ],
+        "title": "PredictIn",
+        "type": "object"
+      },
+      "PredictOut": {
+        "description": "试算结果：三分位达标时长与可靠性。\n\n⚠ `is_in_serving_sets` 为假表示这是对服务组合之外的外推——不拒绝，\n但要说清楚。",
+        "properties": {
+          "interval_width_minutes": {
+            "title": "Interval Width Minutes",
+            "type": "number"
+          },
+          "is_in_serving_sets": {
+            "title": "Is In Serving Sets",
+            "type": "boolean"
+          },
+          "p10": {
+            "title": "P10",
+            "type": "number"
+          },
+          "p50": {
+            "title": "P50",
+            "type": "number"
+          },
+          "p90": {
+            "title": "P90",
+            "type": "number"
+          },
+          "reliability": {
+            "title": "Reliability",
+            "type": "string"
+          },
+          "trained_at": {
+            "format": "date-time",
+            "title": "Trained At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "p10",
+          "p50",
+          "p90",
+          "interval_width_minutes",
+          "reliability",
+          "is_in_serving_sets",
+          "trained_at"
+        ],
+        "title": "PredictOut",
+        "type": "object"
+      },
+      "PredictReadingsIn": {
+        "additionalProperties": false,
+        "description": "试算时一台机组的读数。⚠ 缺测就省略字段，不要填 0——0 是真实读数。",
+        "properties": {
+          "chilled_water_supply_temp": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chilled Water Supply Temp"
+          },
+          "fresh_air_humidity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fresh Air Humidity"
+          },
+          "fresh_air_temp": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fresh Air Temp"
+          },
+          "workshop_humidity_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workshop Humidity Avg"
+          },
+          "workshop_temp_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workshop Temp Avg"
+          }
+        },
+        "title": "PredictReadingsIn",
         "type": "object"
       },
       "RawSampleOut": {
@@ -2530,6 +3302,414 @@
         "summary": "可绑定的数据源对象",
         "tags": [
           "ac-data"
+        ]
+      }
+    },
+    "/api/v1/platform/ac-models": {
+      "get": {
+        "description": "全部模型（可按房间过滤），带过期提示位。\n\nArgs: session, _viewer, room_id。",
+        "operationId": "list_ac_models_api_v1_platform_ac_models_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "room_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Room Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_AcModelOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "模型列表",
+        "tags": [
+          "ac-models"
+        ]
+      },
+      "post": {
+        "description": "建一个模型并排进训练队列，立刻返回。\n\nArgs: payload, session, dispatcher, caller, _manager。",
+        "operationId": "create_ac_model_api_v1_platform_ac_models_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcModelCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AcModelOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "建模并入队训练",
+        "tags": [
+          "ac-models"
+        ]
+      }
+    },
+    "/api/v1/platform/ac-models/{model_id}": {
+      "delete": {
+        "description": "删除模型与它的工件、折外预测。没有也返回 204——DELETE 必须幂等。\n\nArgs: model_id, session, _manager。",
+        "operationId": "delete_ac_model_api_v1_platform_ac_models__model_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Model Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除模型",
+        "tags": [
+          "ac-models"
+        ]
+      },
+      "get": {
+        "description": "一个模型的完整形态：配置、评估、出处与过期提示。\n\nArgs: model_id, session, _viewer。",
+        "operationId": "get_ac_model_api_v1_platform_ac_models__model_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Model Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AcModelOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "模型详情",
+        "tags": [
+          "ac-models"
+        ]
+      },
+      "patch": {
+        "description": "改配置。⚠ 改服务组合就地重汇总评估，不触发重训。\n\nArgs: model_id, payload, session, _manager。",
+        "operationId": "patch_ac_model_api_v1_platform_ac_models__model_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Model Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcModelPatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AcModelOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "改名、改描述或改服务组合",
+        "tags": [
+          "ac-models"
+        ]
+      }
+    },
+    "/api/v1/platform/ac-models/{model_id}/predictions": {
+      "get": {
+        "description": "历史每一条可用事件的折外预测与实际，最新的在前，可按组合过滤。\n\nArgs: model_id, session, cursor, _viewer, running_set。",
+        "operationId": "list_ac_model_predictions_api_v1_platform_ac_models__model_id__predictions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Model Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "running_set",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Running Set"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_CursorPage_ModelPredictionOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "折外预测与实际的逐条对比",
+        "tags": [
+          "ac-models"
+        ]
+      }
+    },
+    "/api/v1/platform/ac-models/{model_id}:predict": {
+      "post": {
+        "description": "纯计算的 what-if，不训练也不碰外库。读权限即可试算。\n\nArgs: model_id, payload, session, _viewer。",
+        "operationId": "predict_with_ac_model_api_v1_platform_ac_models__model_id__predict_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Model Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PredictIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PredictOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "试算：给一个假想开机条件出三分位达标时长",
+        "tags": [
+          "ac-models"
+        ]
+      }
+    },
+    "/api/v1/platform/ac-models/{model_id}:retrain": {
+      "post": {
+        "description": "按当前配置与当前批次重训，立刻返回。\n\nArgs: model_id, session, dispatcher, _manager。",
+        "operationId": "retrain_ac_model_api_v1_platform_ac_models__model_id__retrain_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Model Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AcModelOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "重训（入队）",
+        "tags": [
+          "ac-models"
         ]
       }
     },
