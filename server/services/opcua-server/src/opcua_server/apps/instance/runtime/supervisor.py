@@ -21,6 +21,7 @@ from opcua_server.apps.instance.runtime.instance import (
 )
 from opcua_server.apps.instance.runtime.pki import PkiStore
 from opcua_server.apps.instance.runtime.ports import PortAllocator
+from opcua_server.apps.instance.runtime.valuewatch import OnValueChange
 
 _logger = get_logger("opcua.supervisor")
 
@@ -34,14 +35,19 @@ class InstanceSupervisor:
         ports: PortAllocator,
         pki: PkiStore,
         max_instances: int,
+        on_value_change: OnValueChange | None = None,
     ) -> None:
         """按端口池、证书库与上限初始化。
 
-        Args: ports, pki, max_instances。
+        ⚠ `on_value_change` 可缺省：不给就不建值监听。用例里起实例不必都带上
+        实时推送那条链路。
+
+        Args: ports, pki, max_instances, on_value_change。
         """
         self._ports = ports
         self._pki = pki
         self._max_instances = max_instances
+        self._on_value_change = on_value_change
         self._instances: dict[UUID, RunningInstance] = {}
 
     @property
@@ -92,7 +98,9 @@ class InstanceSupervisor:
                 f"已达单进程实例数上限 {self._max_instances}"
             )
         self._ports.reserve(spec.instance_id, spec.port)
-        instance = RunningInstance(spec, pki=self._pki)
+        instance = RunningInstance(
+            spec, pki=self._pki, on_value_change=self._on_value_change
+        )
         try:
             await instance.start()
         except Exception:

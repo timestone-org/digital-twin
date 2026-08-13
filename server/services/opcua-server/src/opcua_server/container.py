@@ -9,6 +9,7 @@ from lib.db import Database, PoolProfile
 from opcua_server.apps.instance.runtime.pki import PkiStore
 from opcua_server.apps.instance.runtime.ports import PortAllocator
 from opcua_server.apps.instance.runtime.supervisor import InstanceSupervisor
+from opcua_server.apps.instance.runtime.valuewatch import OnValueChange
 from opcua_server.apps.instance.services import (
     IdempotencyStore,
     InstanceService,
@@ -50,12 +51,15 @@ def _build_database(settings: Settings) -> Database:
     )
 
 
-def _build_supervisor(settings: Settings) -> InstanceSupervisor:
+def _build_supervisor(
+    settings: Settings, on_value_change: OnValueChange | None = None
+) -> InstanceSupervisor:
     """端口池与证书库都来自部署期配置，运行期不可扩。
 
     Args: settings。
     """
     return InstanceSupervisor(
+        on_value_change=on_value_change,
         ports=PortAllocator(settings.ports()),
         pki=PkiStore(
             settings.pki_dir,
@@ -83,7 +87,6 @@ def build_container(settings: Settings) -> Container:
     """
     database = _build_database(settings)
     cache = Cache(url=settings.url(), timeout_s=settings.redis_timeout_s)
-    supervisor = _build_supervisor(settings)
     realtime = RealtimeClient(
         base_url=settings.realtime_base_url,
         service_key=settings.edge_service_key.get_secret_value(),
@@ -94,6 +97,9 @@ def build_container(settings: Settings) -> Container:
         window_ms=settings.publish_window_ms,
         max_items=settings.publish_max_nodes,
     )
+    # ⚠ 监听在这里注进去而不是让实例自己找：实例是运行时对象，让它认识
+    # ValuePublisher 就等于把「有没有实时通道」搬进了 opc.tcp 那一侧
+    supervisor = _build_supervisor(settings, values.record)
     return Container(
         settings=settings,
         database=database,
@@ -105,9 +111,7 @@ def build_container(settings: Settings) -> Container:
             advertised_host=_advertised_host(),
             realtime=realtime,
         ),
-        nodes=NodeService(
-            database=database, supervisor=supervisor, values=values
-        ),
+        nodes=NodeService(database=database, supervisor=supervisor),
         security=SecurityService(
             database=database,
             supervisor=supervisor,
