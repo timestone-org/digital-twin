@@ -20,6 +20,7 @@ DEFAULTS = ExtractionRules()
         "compliance_frames",
         "compliance_cap_minutes",
         "max_gap_minutes",
+        "idle_lookback_minutes",
     ],
 )
 def test_rules_reject_a_non_positive_value(field: str) -> None:
@@ -36,7 +37,7 @@ def test_the_cold_start_switch_is_not_a_minute_count() -> None:
 def test_the_default_fingerprint_is_pinned() -> None:
     """默认规则 + `LOGIC_VERSION` 的指纹钉成字面量：它一变就该全量重算。"""
     assert DEFAULTS.fingerprint() == (
-        "606e29010e97ca112a35d125839f0798" "5b5b006a42c59da6171f41b0285574e7"
+        "f1872508b11fde7a9ca033f4034fd06d" "8ce64034123c7a43f806e1dd50b85d0e"
     )
 
 
@@ -49,6 +50,7 @@ def test_the_default_fingerprint_is_pinned() -> None:
         ("compliance_cap_minutes", 120),
         ("max_gap_minutes", 4),
         ("is_cold_start_required", False),
+        ("idle_lookback_minutes", 721),
     ],
 )
 def test_the_fingerprint_changes_with_every_rule_value(
@@ -65,7 +67,11 @@ def test_the_fingerprint_changes_with_the_logic_version(
 ) -> None:
     """抽取逻辑改了、参数没改时，靠 `LOGIC_VERSION` 让指纹动起来。"""
     before = ExtractionRules().fingerprint()
-    monkeypatch.setattr(ac_startup_rules, "LOGIC_VERSION", 2)
+    monkeypatch.setattr(
+        ac_startup_rules,
+        "LOGIC_VERSION",
+        ac_startup_rules.LOGIC_VERSION + 1,
+    )
     assert ExtractionRules().fingerprint() != before
 
 

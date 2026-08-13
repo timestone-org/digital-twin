@@ -228,6 +228,11 @@ export interface StartupEpisode {
   duration_minutes: number | null
   outcome: StartupOutcome
   readings: StartupReadings
+  /**
+   * 起始前亲眼数到的全停分钟数（截断在回看上限）。
+   * ⚠ null = 这行是旧抽取逻辑（LOGIC_VERSION < 2）的产物，不是「没停过」。
+   */
+  idle_minutes: number | null
   /** ⚠ 被排除的事件仍在列表里，只是置灰——消失会让人以为数据没了。 */
   is_excluded: boolean
   exclusion_reason: string | null

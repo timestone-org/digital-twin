@@ -197,6 +197,7 @@ def _to_row(batch: AcStartupBatch, episode: Episode) -> AcStartupEpisode:
         readings={
             serial: dict(values) for serial, values in episode.readings.items()
         },
+        idle_minutes=episode.idle_minutes,
     )
 
 

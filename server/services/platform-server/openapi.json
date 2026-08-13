@@ -2135,6 +2135,17 @@
             ],
             "title": "Exclusion Reason"
           },
+          "idle_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idle Minutes"
+          },
           "is_excluded": {
             "title": "Is Excluded",
             "type": "boolean"
@@ -2179,6 +2190,7 @@
           "complied_at",
           "outcome",
           "readings",
+          "idle_minutes",
           "is_excluded",
           "exclusion_reason",
           "duration_minutes"

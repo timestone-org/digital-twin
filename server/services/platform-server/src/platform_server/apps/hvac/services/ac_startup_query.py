@@ -176,6 +176,7 @@ def _to_episode(
         complied_at=row.complied_at,
         outcome=row.outcome,
         readings=dict(row.readings),
+        idle_minutes=row.idle_minutes,
         is_excluded=exclusion is not None,
         exclusion_reason=exclusion.reason if exclusion else None,
     )

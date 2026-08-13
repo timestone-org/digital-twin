@@ -29,6 +29,8 @@ class StartupEpisodeOut(OutputModel):
     complied_at: Utc | None
     outcome: str
     readings: Readings
+    # ⚠ null = 这行是 LOGIC_VERSION < 2 抽的，不是「全停时长为零」
+    idle_minutes: int | None
     is_excluded: bool
     exclusion_reason: str | None
 

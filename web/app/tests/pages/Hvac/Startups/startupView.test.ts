@@ -41,6 +41,7 @@ function episode(over: Partial<StartupEpisode> = {}): StartupEpisode {
     duration_minutes: 25,
     outcome: 'usable',
     readings: {},
+    idle_minutes: 390,
     is_excluded: false,
     exclusion_reason: null,
     ...over,

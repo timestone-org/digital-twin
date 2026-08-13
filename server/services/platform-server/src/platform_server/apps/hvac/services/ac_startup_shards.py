@@ -89,18 +89,20 @@ def shard_range(
 ) -> ShardRange:
     """一片的归属区间与取数区间。
 
-    ⚠ 取数向前多读 `cold_off_minutes`、向后多读 `compliance_cap_minutes`。
-    读也卡死在月界内的话，跨月的那次开机会在前一片里被判成「没达标」、在后
-    一片里根本看不到起始——**一次开机凭空消失，而两片都报成功**。
+    ⚠ 取数向前多读 `max(cold_off, idle_lookback)`（判冷启动 + 数全停时长）、
+    向后多读 `compliance_cap_minutes`。读也卡死在月界内的话，跨月的那次开机
+    会在前一片里被判成「没达标」、在后一片里根本看不到起始——**一次开机凭空
+    消失，而两片都报成功**。
     Args: month, window_start, window_end, rules。
     """
     start = month_start(month)
     write_start = max(start, window_start)
     write_end = min(next_month_start(start), window_end)
+    lookback = max(rules.cold_off_minutes, rules.idle_lookback_minutes)
     return ShardRange(
         month=month,
         write_start=write_start,
         write_end=write_end,
-        read_start=write_start - timedelta(minutes=rules.cold_off_minutes),
+        read_start=write_start - timedelta(minutes=lookback),
         read_end=write_end + timedelta(minutes=rules.compliance_cap_minutes),
     )

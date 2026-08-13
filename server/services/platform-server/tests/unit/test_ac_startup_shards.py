@@ -94,14 +94,14 @@ def test_a_shard_owns_exactly_its_own_month() -> None:
 
 
 def test_the_read_window_overruns_both_ends() -> None:
-    """⚠ 向前 30 分钟够判冷启动、向后 100 分钟够判达标上限。"""
+    """⚠ 向前 12 小时够数全停时长、向后 100 分钟够判达标上限。"""
     window = shard_range(
         "2026-02",
         window_start=WINDOW_START,
         window_end=WINDOW_END,
         rules=RULES,
     )
-    assert window.read_start == datetime(2026, 1, 31, 23, 30, tzinfo=UTC)
+    assert window.read_start == datetime(2026, 1, 31, 12, 0, tzinfo=UTC)
     assert window.read_end == datetime(2026, 3, 1, 1, 40, tzinfo=UTC)
 
 
@@ -111,10 +111,26 @@ def test_the_read_overrun_follows_the_rules_not_a_constant() -> None:
         "2026-02",
         window_start=WINDOW_START,
         window_end=WINDOW_END,
-        rules=ExtractionRules(cold_off_minutes=45, compliance_cap_minutes=200),
+        rules=ExtractionRules(
+            cold_off_minutes=45,
+            compliance_cap_minutes=200,
+            idle_lookback_minutes=60,
+        ),
+    )
+    assert window.read_start == datetime(2026, 1, 31, 23, 0, tzinfo=UTC)
+    assert window.read_end == datetime(2026, 3, 1, 3, 20, tzinfo=UTC)
+
+
+def test_the_read_lookback_takes_the_larger_of_the_two() -> None:
+    """⚠ 回看取 `max(cold_off, idle_lookback)`：把回看上限调到冷启动门槛之下，
+    取数也不能少于判冷启动所需的那一段。"""
+    window = shard_range(
+        "2026-02",
+        window_start=WINDOW_START,
+        window_end=WINDOW_END,
+        rules=ExtractionRules(cold_off_minutes=45, idle_lookback_minutes=10),
     )
     assert window.read_start == datetime(2026, 1, 31, 23, 15, tzinfo=UTC)
-    assert window.read_end == datetime(2026, 3, 1, 3, 20, tzinfo=UTC)
 
 
 def test_the_shard_is_clamped_to_the_batch_window() -> None:

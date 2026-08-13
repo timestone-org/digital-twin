@@ -263,6 +263,7 @@ const SHAPES: Record<string, Record<string, true>> = {
     duration_minutes: true,
     outcome: true,
     readings: true,
+    idle_minutes: true,
     is_excluded: true,
     exclusion_reason: true,
   } satisfies Keys<StartupEpisode>,

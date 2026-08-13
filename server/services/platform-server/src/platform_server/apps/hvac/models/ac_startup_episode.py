@@ -61,6 +61,9 @@ class AcStartupEpisode(UuidPrimaryKeyMixin, TimestampMixin, Base):
     readings: Mapped[dict[str, dict[str, float | None]]] = mapped_column(
         JSONB, nullable=False
     )
+    # 起始前亲眼数到的全停分钟数（截断在回看上限）。⚠ NULL 只表示「这一行
+    # 是 LOGIC_VERSION < 2 抽的」，不表示全停时长为零
+    idle_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     __table_args__ = (
         UniqueConstraint(
@@ -86,6 +89,10 @@ class AcStartupEpisode(UuidPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint(
             "duration_minutes IS NULL OR duration_minutes >= 0",
             name="duration_nonnegative",
+        ),
+        CheckConstraint(
+            "idle_minutes IS NULL OR idle_minutes >= 0",
+            name="idle_nonnegative",
         ),
         # batch_id 的外键索引由上面的唯一约束以前缀列兼任，不再另建
         Index("ix_hvac_ac_startup_episodes_room_id", "room_id"),

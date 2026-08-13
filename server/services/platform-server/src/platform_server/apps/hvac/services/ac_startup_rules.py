@@ -19,7 +19,8 @@ from platform_server.apps.hvac.startups import (
 
 # ⚠ 改抽取逻辑的人手动 +1，不对代码求哈希：否则一次格式化就触发全量重算提醒，
 # 很快没人理它（docs/AC_STARTUP_DESIGN.md §5）。
-LOGIC_VERSION = 1
+# v2：事件记录全停时长 idle_minutes（蓄热特征，docs/AC_MODEL_DESIGN.md §2.5）
+LOGIC_VERSION = 2
 
 _ONE_MINUTE = timedelta(minutes=1)
 
@@ -41,6 +42,9 @@ class ExtractionRules:
     compliance_cap_minutes: int = 100
     max_gap_minutes: int = 3
     is_cold_start_required: bool = True
+    # 全停时长最多回看多少分钟（蓄热特征的观测上限）。分片取数的向前越界量
+    # 取它与 cold_off_minutes 的较大者
+    idle_lookback_minutes: int = 720
 
     def __post_init__(self) -> None:
         # ⚠ 逐字段遍历而不是逐个点名：新加一条规则会自动进校验与指纹，点名写法
@@ -84,13 +88,18 @@ class Frame:
 
 @dataclass(frozen=True)
 class Episode:
-    """一次开机事件。`outcome` 的取值见 `apps/hvac/startups.py`。"""
+    """一次开机事件。`outcome` 的取值见 `apps/hvac/startups.py`。
+
+    ⚠ `idle_minutes` 是**亲眼数到的**全停分钟数，截断在回看上限：序列开头
+    之前的状态看不见，无效分钟又会清零计数，所以它只会少算不会多算。
+    """
 
     started_at: datetime
     running_set: tuple[str, ...]
     complied_at: datetime | None
     outcome: str
     readings: Readings
+    idle_minutes: int
 
     @property
     def duration_minutes(self) -> int | None:
@@ -152,6 +161,7 @@ class _Open:
     started_at: datetime
     running_set: frozenset[str]
     readings: Readings
+    idle_minutes: int
     compliant_streak: int = 0
     compliant_since: datetime | None = None
     invalid_streak: int = 0
@@ -179,6 +189,7 @@ def _closed(
         complied_at=complied_at,
         outcome=outcome,
         readings=episode.readings,
+        idle_minutes=episode.idle_minutes,
     )
 
 
@@ -227,6 +238,9 @@ class _Machine:
                 started_at=frame.ts,
                 running_set=frame.running,
                 readings=frame.readings,
+                idle_minutes=min(
+                    self._off_streak, self._rules.idle_lookback_minutes
+                ),
             )
         self._off_streak = 0
 
