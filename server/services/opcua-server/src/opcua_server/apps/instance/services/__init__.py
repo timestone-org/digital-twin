@@ -20,6 +20,9 @@ from opcua_server.apps.instance.services.realtime import (
 from opcua_server.apps.instance.services.security_service import (
     SecurityService,
 )
+from opcua_server.apps.instance.services.topic_reconcile import (
+    TopicReconciler,
+)
 from opcua_server.apps.instance.services.value_publisher import (
     ValuePublisher,
 )
@@ -30,6 +33,7 @@ __all__ = [
     "NodeService",
     "RealtimeClient",
     "SecurityService",
+    "TopicReconciler",
     "ValuePublisher",
     "endpoint_url_of",
     "node_id_of",

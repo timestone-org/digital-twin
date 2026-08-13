@@ -11,6 +11,7 @@
 import uuid
 
 import httpx
+from pydantic import BaseModel, ValidationError
 
 from lib.logging import get_logger
 from lib.logging.context import current_log_context
@@ -69,6 +70,54 @@ class RealtimeClient:
             },
             action="declare",
         )
+
+    async def topics(self) -> list[str]:
+        """列出本服务在 hub 上登记的全部主题。对账用。
+
+        ⚠ 取不到时返回**空列表**而不是抛：对账跑在启动路径上，hub 不可达时
+        应当安静跳过这一轮（下次启动再对），而不是让服务起不来。
+        ⚠ 空列表在对账里只会导致「补登记」，不会导致「清掉」——清的方向以
+        hub 的清单为输入，输入为空就什么都不清。这个不对称是刻意的。
+
+        """
+        try:
+            async with self._client() as client:
+                response = await client.get(
+                    TOPICS_PATH,
+                    params={"publisher": PUBLISHER_NAME},
+                    headers=self._headers(),
+                )
+                response.raise_for_status()
+                envelope = _TopicsEnvelope.model_validate(response.json())
+                return list(envelope.data.topics)
+        except (httpx.HTTPError, ValidationError, ValueError) as error:
+            _logger.warning(
+                "topic_list_failed",
+                "取主题清单失败，本轮对账跳过",
+                error_type=type(error).__name__,
+            )
+            return []
+
+    async def revoke_topic(self, topic: str) -> bool:
+        """按主题名注销。对账清理孤儿主题时用——那时实例已经不在了。
+
+        Args: topic。
+        """
+        try:
+            async with self._client() as client:
+                response = await client.delete(
+                    f"{TOPICS_PATH}/{topic}", headers=self._headers()
+                )
+                response.raise_for_status()
+        except httpx.HTTPError as error:
+            _logger.error(
+                "topic_revoke_failed",
+                "注销主题失败，留下了一个空主题",
+                topic=topic,
+                error_type=type(error).__name__,
+            )
+            return False
+        return True
 
     async def revoke(self, instance_id: uuid.UUID) -> bool:
         """注销实例的主题。返回是否注销成功。
@@ -176,3 +225,20 @@ def current_traceparent() -> str:
     trace_id = (context.trace_id or "").replace("-", "").rjust(32, "0")[:32]
     span_id = (context.span_id or "").replace("-", "").rjust(16, "0")[:16]
     return f"{_TRACE_VERSION}-{trace_id}-{span_id}-{_TRACE_FLAGS}"
+
+
+class _TopicsData(BaseModel):
+    """信封里的 data 段。"""
+
+    topics: list[str]
+
+
+class _TopicsEnvelope(BaseModel):
+    """hub 的统一信封，本地只取 data。
+
+    ⚠ 用模型收口而不是逐层下标：信封变形时要响亮失败（由调用方转成「跳过
+    本轮」），而不是让一个空列表流下去——空列表在对账里意味着「hub 上一个
+    主题都没有」，而那会让补登记跑一遍全量。
+    """
+
+    data: _TopicsData
