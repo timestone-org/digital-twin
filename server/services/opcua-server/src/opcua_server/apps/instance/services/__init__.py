@@ -20,6 +20,9 @@ from opcua_server.apps.instance.services.realtime import (
 from opcua_server.apps.instance.services.security_service import (
     SecurityService,
 )
+from opcua_server.apps.instance.services.value_publisher import (
+    ValuePublisher,
+)
 
 __all__ = [
     "IdempotencyStore",
@@ -27,6 +30,7 @@ __all__ = [
     "NodeService",
     "RealtimeClient",
     "SecurityService",
+    "ValuePublisher",
     "endpoint_url_of",
     "node_id_of",
     "to_instance_out",

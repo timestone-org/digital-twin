@@ -93,29 +93,45 @@ class RealtimeClient:
         return True
 
     async def publish(
-        self, instance_id: uuid.UUID, items: list[dict[str, object]]
+        self,
+        instance_id: uuid.UUID,
+        items: list[dict[str, object]],
+        *,
+        traceparent: str | None = None,
     ) -> bool:
         """推一批值变化。返回是否推送成功。
 
-        Args: instance_id, items。
+        ⚠ `traceparent` 要由调用方显式给：值变化的冲刷发生在**后台任务**里，
+        那时请求上下文早已不在，按当前上下文取只会得到一串全零——链路从写值
+        那一刻就断了。调用方在写入时捕获，随批次带过来。
+
+        Args: instance_id, items, traceparent。
         """
         return await self._post(
             PUBLISH_PATH,
             {"topic": topic_of(instance_id), "items": items},
             action="publish",
+            traceparent=traceparent,
         )
 
     async def _post(
-        self, path: str, payload: dict[str, object], *, action: str
+        self,
+        path: str,
+        payload: dict[str, object],
+        *,
+        action: str,
+        traceparent: str | None = None,
     ) -> bool:
         """打一次 hub，失败只记日志不抛。
 
-        Args: path, payload, action。
+        Args: path, payload, action, traceparent。
         """
         try:
             async with self._client() as client:
                 response = await client.post(
-                    path, json=payload, headers=self._headers()
+                    path,
+                    json=payload,
+                    headers=self._headers(traceparent=traceparent),
                 )
                 response.raise_for_status()
         except httpx.HTTPError as error:
@@ -135,20 +151,27 @@ class RealtimeClient:
             transport=self._transport,
         )
 
-    def _headers(self) -> dict[str, str]:
+    def _headers(self, *, traceparent: str | None = None) -> dict[str, str]:
         """服务级密钥 + traceparent。
 
         ⚠ traceparent 必须带：hub 会把它原样放进扇出信封，不带的话链路在
-        「推送方 → hub → 订阅方」这一跳断开。
+        「推送方 → hub → 订阅方」这一跳断开。给了显式值就用它——后台任务里
+        取当前上下文只会得到全零。
+
+        Args: traceparent。
         """
         return {
             "X-Service-Key": self._service_key,
-            "traceparent": _traceparent(),
+            "traceparent": traceparent or current_traceparent(),
         }
 
 
-def _traceparent() -> str:
-    """把当前日志上下文压成一条 W3C traceparent。"""
+def current_traceparent() -> str:
+    """把当前日志上下文压成一条 W3C traceparent。
+
+    ⚠ 在后台任务里调它得到的是一串全零：contextvars 不跨任务传播。要保住
+    链路，得在**还在请求上下文里**的时候取一次并带着走。
+    """
     context = current_log_context()
     trace_id = (context.trace_id or "").replace("-", "").rjust(32, "0")[:32]
     span_id = (context.span_id or "").replace("-", "").rjust(16, "0")[:16]

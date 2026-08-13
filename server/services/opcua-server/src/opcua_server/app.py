@@ -64,6 +64,15 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
             startup_order=20,
         ),
         LifespanHook(
+            name="value_publisher",
+            startup=container.values.start,
+            startup_order=30,
+            # ⚠ 停在实例之前：实例一停就不再有值变化，此时把攒着的最后一批
+            # 冲刷出去；反过来会把这批值丢掉
+            shutdown=container.values.stop,
+            shutdown_order=5,
+        ),
+        LifespanHook(
             name="opcua_instances",
             shutdown=container.supervisor.stop_all,
             shutdown_order=10,
