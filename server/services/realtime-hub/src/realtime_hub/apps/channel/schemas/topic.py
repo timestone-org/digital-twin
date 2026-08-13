@@ -36,10 +36,10 @@ class TopicDeclareIn(InputModel):
 
 
 class TopicRevokeOut(OutputModel):
-    """注销结果。`existed` 为假表示本来就没有——重复注销是正常路径。"""
+    """注销结果。`is_removed` 为假表示本来就没有——重复注销是正常路径。"""
 
     topic: str
-    existed: bool
+    is_removed: bool
 
 
 class PublishIn(InputModel):

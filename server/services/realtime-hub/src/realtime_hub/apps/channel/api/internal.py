@@ -54,13 +54,13 @@ async def revoke_topic(
 ) -> ApiResponse[TopicRevokeOut]:
     """注销一个主题，订阅由外键级联跟着走。
 
-    ⚠ 注销是 at-least-once，重复注销**不报错**：`existed` 为假即可，
+    ⚠ 注销是 at-least-once，重复注销**不报错**：`is_removed` 为假即可，
     推送方据它对账。
 
     Args: topic, container。
     """
-    existed = await container.registry.revoke(topic=topic)
-    return ok(TopicRevokeOut(topic=topic, existed=existed))
+    removed = await container.registry.revoke(topic=topic)
+    return ok(TopicRevokeOut(topic=topic, is_removed=removed))
 
 
 @router.post("/publish", summary="推送")
