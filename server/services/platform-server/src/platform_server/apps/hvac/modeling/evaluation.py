@@ -26,10 +26,24 @@ class OofPrediction:
 
 
 @dataclass(frozen=True)
-class MetricsBlock:
-    """一组折外预测的指标。
+class ErrorStats:
+    """一组折外预测的误差统计。`coverage` 标称 80%，显著更低说明区间在撒谎。"""
 
-    `coverage` 的标称值是 80%，显著更低说明区间在撒谎。
+    count: int
+    mae: float
+    medae: float
+    rmse: float
+    coverage: float
+    mean_width: float
+
+
+@dataclass(frozen=True)
+class MetricsBlock:
+    """一组折外预测的指标：整体统计 + 热行（实际>0）单独一份。
+
+    ⚠ 实测近半开机「一开机就已达标」，整体 MAE 被大量误差为零的行灌水，
+    只看它会把一个热行很差的模型读成「还行」。热行统计才是「要等多久」
+    这个问题上的真实成绩单；`hot` 为 None = 这组里没有热行。
     """
 
     count: int
@@ -38,6 +52,12 @@ class MetricsBlock:
     rmse: float
     coverage: float
     mean_width: float
+    hot: ErrorStats | None
+    zero_count: int
+    # 零行里被判成 0 的占比；None = 没有零行
+    zero_hit_rate: float | None
+    # 热行里被判出非零的占比（漏报的补）；None = 没有热行
+    hot_hit_rate: float | None
 
 
 @dataclass(frozen=True)
@@ -80,20 +100,50 @@ def summarize(
     )
 
 
-def _block(rows: Sequence[OofPrediction]) -> MetricsBlock:
-    """一组折外预测的指标块。
+def _stats(rows: Sequence[OofPrediction]) -> ErrorStats:
+    """一组折外预测的误差统计。
 
     Args: rows（非空）。
     """
     errors = sorted(abs(row.p50 - row.actual_minutes) for row in rows)
     inside = sum(1 for row in rows if row.p10 <= row.actual_minutes <= row.p90)
-    return MetricsBlock(
+    return ErrorStats(
         count=len(rows),
         mae=sum(errors) / len(errors),
         medae=_median(errors),
         rmse=math.sqrt(sum(error**2 for error in errors) / len(errors)),
         coverage=inside / len(rows),
         mean_width=sum(row.p90 - row.p10 for row in rows) / len(rows),
+    )
+
+
+def _block(rows: Sequence[OofPrediction]) -> MetricsBlock:
+    """一组折外预测的指标块：整体 + 热行拆开。
+
+    Args: rows（非空）。
+    """
+    whole = _stats(rows)
+    hot_rows = [row for row in rows if row.actual_minutes > 0]
+    zero_rows = [row for row in rows if row.actual_minutes == 0]
+    return MetricsBlock(
+        count=whole.count,
+        mae=whole.mae,
+        medae=whole.medae,
+        rmse=whole.rmse,
+        coverage=whole.coverage,
+        mean_width=whole.mean_width,
+        hot=_stats(hot_rows) if hot_rows else None,
+        zero_count=len(zero_rows),
+        zero_hit_rate=(
+            sum(1 for row in zero_rows if row.p50 == 0) / len(zero_rows)
+            if zero_rows
+            else None
+        ),
+        hot_hit_rate=(
+            sum(1 for row in hot_rows if row.p50 > 0) / len(hot_rows)
+            if hot_rows
+            else None
+        ),
     )
 
 

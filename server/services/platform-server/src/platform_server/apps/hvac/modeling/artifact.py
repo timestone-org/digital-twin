@@ -15,9 +15,11 @@ from platform_server.apps.hvac.modeling.estimators import (
 )
 from platform_server.apps.hvac.services.ac_startup_frames import RoomUnit
 
-# 工件的序列化格式版本。改 ModelBundle 的形状就 +1，老工件拒载并提示重训。
-# v2：两段混合（瞬时达标分类器 + 非零时长森林）× 每组合专属子模型
-FORMAT_VERSION = 2
+# 工件的序列化格式版本。改 ModelBundle 的形状**或成员的预测语义**就 +1，
+# 老工件拒载并提示重训。
+# v3：时长森林改 log1p 尺度——老工件在原始尺度上拟合，用新代码反解会把
+# 分钟数当对数再指数化，错得悄无声息，必须拒载
+FORMAT_VERSION = 3
 
 # 对外报的三个分位水平，顺序固定
 QUANTILE_LEVELS = (0.1, 0.5, 0.9)
@@ -127,10 +129,18 @@ def load(
     return bundle
 
 
-def predict_quantiles(
-    pair: StagePair, row: list[float]
-) -> tuple[float, float, float]:
-    """一行特征 → 混合分布的 (p10, p50, p90)。
+@dataclass(frozen=True)
+class MixturePrediction:
+    """一次混合分布预测：瞬时达标概率 + 三分位达标时长。"""
+
+    instant_probability: float
+    p10: float
+    p50: float
+    p90: float
+
+
+def predict_mixture(pair: StagePair, row: list[float]) -> MixturePrediction:
+    """一行特征 → 瞬时达标概率与混合分布的三分位。
 
     时长分布是「概率 p₀ 的 0 + 概率 (1−p₀) 的连续时长」的混合
     （实测近半开机一开机就已达标，直接回归会把非零场景全稀释成 0）。
@@ -152,7 +162,23 @@ def predict_quantiles(
         for (level, _), minutes in zip(positive, raw, strict=True):
             found[level] = max(0.0, minutes)
     ordered = sorted(found[level] for level in QUANTILE_LEVELS)
-    return (ordered[0], ordered[1], ordered[2])
+    return MixturePrediction(
+        instant_probability=p_zero,
+        p10=ordered[0],
+        p50=ordered[1],
+        p90=ordered[2],
+    )
+
+
+def predict_quantiles(
+    pair: StagePair, row: list[float]
+) -> tuple[float, float, float]:
+    """一行特征 → 混合分布的 (p10, p50, p90)。折外评估只要分位不要 p₀。
+
+    Args: pair, row。
+    """
+    found = predict_mixture(pair, row)
+    return (found.p10, found.p50, found.p90)
 
 
 def _minor(version: str) -> str:

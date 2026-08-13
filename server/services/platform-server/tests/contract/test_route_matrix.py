@@ -43,6 +43,10 @@ NARROWED_IN_GATE_ONE: dict[tuple[str, str], frozenset[str]] = {
     (f"{API_PREFIX}/ac-models/{{model_id}}:predict", "POST"): frozenset(
         {AC_VIEW}
     ),
+    # auth catalog：POST /api/v1/platform/ac-models/*:recommend → ac:view（906）
+    (f"{API_PREFIX}/ac-models/{{model_id}}:recommend", "POST"): frozenset(
+        {AC_VIEW}
+    ),
 }
 
 # ⚠ 闸 2 严于闸 1 的端点必须逐条登记。闸 1 只按方法兜（GET → ac:view），而

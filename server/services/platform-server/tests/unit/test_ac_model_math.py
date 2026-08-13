@@ -129,6 +129,43 @@ def test_set_key_is_order_insensitive() -> None:
     assert set_key(["K12", "K11"]) == set_key(("K11", "K12")) == "K11+K12"
 
 
+def test_hot_rows_get_their_own_stats() -> None:
+    """⚠ 热行（实际>0）单独一份统计：整体 MAE 被零行灌水，不能拿来评模型。"""
+    rows = [
+        oof(minute=0, actual=0, p50=0.0),
+        oof(minute=1, actual=0, p50=0.0),
+        oof(minute=2, actual=30, p50=40.0),
+        oof(minute=3, actual=60, p50=0.0),
+    ]
+    metrics = summarize(rows, serving_sets=[["K11"]])
+    overall = metrics.overall
+    assert overall.hot is not None
+    assert overall.hot.count == 2
+    assert overall.hot.mae == pytest.approx((10 + 60) / 2)
+    assert overall.zero_count == 2
+    # 两条零行都判成了 0；两条热行只有一条被判出非零
+    assert overall.zero_hit_rate == pytest.approx(1.0)
+    assert overall.hot_hit_rate == pytest.approx(0.5)
+
+
+def test_all_zero_rows_leave_hot_stats_as_none() -> None:
+    """只有零行时热行统计是 None 不是零——没有可评的对象。"""
+    rows = [oof(minute=0, actual=0, p50=0.0)]
+    metrics = summarize(rows, serving_sets=[["K11"]])
+    assert metrics.overall.hot is None
+    assert metrics.overall.hot_hit_rate is None
+    assert metrics.overall.zero_hit_rate == pytest.approx(1.0)
+
+
+def test_all_hot_rows_leave_zero_rate_as_none() -> None:
+    """只有热行时判零率是 None——分母不存在。"""
+    rows = [oof(minute=0, actual=30, p50=25.0)]
+    metrics = summarize(rows, serving_sets=[["K11"]])
+    assert metrics.overall.zero_count == 0
+    assert metrics.overall.zero_hit_rate is None
+    assert metrics.overall.hot_hit_rate == pytest.approx(1.0)
+
+
 @pytest.mark.parametrize(
     ("width", "expected"),
     [

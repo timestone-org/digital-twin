@@ -12,9 +12,11 @@ import numpy as np
 from sklearn import __version__ as _installed_sklearn_version
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 
-# 树的数量与叶子下限：几百到上万样本的量级，300 棵足够稳，叶子 5 防背样本
+# 超参由现网数据的折外对比实验选定（AC_MODEL_DESIGN §2.6）：叶子 2 在几十到
+# 几百条的组合样本上明显优于 5；时长森林抽一半特征让树间去相关，区间不再虚窄
 _TREES = 300
-_MIN_LEAF = 5
+_MIN_LEAF = 2
+_MAX_FEATURES = 0.5
 
 
 class ZeroClassifier:
@@ -73,16 +75,19 @@ class ZeroClassifier:
 
 
 class DurationForest:
-    """阶段 B：不瞬时达标时要多久。区间取树间预测的分位。
+    """阶段 B：不瞬时达标时要多久。log1p 尺度拟合，区间取树间预测的分位。
 
     ⚠ 树间分位是实用近似不是完整的分位数回归森林：它量的是模型的不确定，
     偏窄时靠覆盖率指标暴露（页面标出来），不靠假装它是完整区间。
+    ⚠ log 尺度是这个类的内部约定：进出都是分钟，调用方不感知；改这个约定
+    等于改工件语义，必须动 FORMAT_VERSION。
     """
 
     def __init__(self) -> None:
         self._forest = RandomForestRegressor(
             n_estimators=_TREES,
             min_samples_leaf=_MIN_LEAF,
+            max_features=_MAX_FEATURES,
             random_state=0,
             n_jobs=1,
         )
@@ -93,21 +98,21 @@ class DurationForest:
         minutes: Sequence[float],
         sample_weight: Sequence[float],
     ) -> None:
-        """拟合非零时长。
+        """拟合非零时长。时长右偏，log1p 后长尾不再拽着中位跑。
 
         Args: rows, minutes, sample_weight。
         """
         # pyright: ignore 的理由 —— 随机森林的 fit 在 sklearn 类型面上是部分未知
         self._forest.fit(  # pyright: ignore[reportUnknownMemberType]
             np.asarray(rows, dtype=float),
-            np.asarray(minutes, dtype=float),
+            np.log1p(np.asarray(minutes, dtype=float)),
             sample_weight=np.asarray(sample_weight, dtype=float),
         )
 
     def quantiles_at(
         self, row: Sequence[float], levels: Sequence[float]
     ) -> list[float]:
-        """一行在若干分位水平上的条件时长。
+        """一行在若干分位水平上的条件时长（分钟）。
 
         Args: row, levels（0~1，升序）。
         """
@@ -120,7 +125,10 @@ class DurationForest:
             [_first_prediction(tree, batch) for tree in estimators],
             dtype=float,
         )
-        return [float(np.percentile(spread, level * 100)) for level in levels]
+        return [
+            float(np.expm1(np.percentile(spread, level * 100)))
+            for level in levels
+        ]
 
 
 def _first_prediction(

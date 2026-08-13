@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
-from lib.web import ApiResponse, CursorPage, CursorParams, cursor_params, ok
+from lib.web import ApiResponse, Page, PageParams, ok, page_params
 from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
 from platform_server.apps.hvac.deps import (
     Dispatcher,
@@ -28,8 +28,12 @@ from platform_server.apps.hvac.schemas import (
     ModelPredictionOut,
     PredictIn,
     PredictOut,
+    RecommendEntryOut,
+    RecommendIn,
+    RecommendOut,
 )
 from platform_server.apps.hvac.services import (
+    ac_model_predictor,
     ac_model_query,
     ac_model_service,
 )
@@ -39,7 +43,7 @@ from platform_server.settings import API_PREFIX
 router = APIRouter(prefix=API_PREFIX, tags=["ac-models"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
-CursorDep = Annotated[CursorParams, Depends(cursor_params)]
+PageDep = Annotated[PageParams, Depends(page_params)]
 DispatchDep = Annotated[Dispatcher, Depends(get_dispatcher)]
 CallerDep = Annotated[CallerContext, Depends(get_caller)]
 ViewDep = Annotated[CallerContext, Depends(require(AC_VIEW))]
@@ -165,29 +169,23 @@ async def retrain_ac_model(
 
 @router.get(
     "/ac-models/{model_id}/predictions",
-    response_model=ApiResponse[CursorPage[ModelPredictionOut]],
+    response_model=ApiResponse[Page[ModelPredictionOut]],
     summary="折外预测与实际的逐条对比",
 )
 async def list_ac_model_predictions(
     model_id: uuid.UUID,
     session: SessionDep,
-    cursor: CursorDep,
+    params: PageDep,
     _viewer: ViewDep,
     running_set: Annotated[str | None, Query()] = None,
-) -> ApiResponse[CursorPage[ModelPredictionOut]]:
+) -> ApiResponse[Page[ModelPredictionOut]]:
     """历史每一条可用事件的折外预测与实际，最新的在前，可按组合过滤。
 
-    Args: model_id, session, cursor, _viewer, running_set。
+    页码分页：折外预测是训练时整体替换的有界快照（api-contract §5.1 的
+    「有限集合」），不是追加型时序流。
+    Args: model_id, session, params, _viewer, running_set。
     """
-    await ac_model_service.get_model(session, model_id)
-    filters = parse_filters(None, running_set)
-    page = await ac_model_query.prediction_page(
-        session,
-        model_id=model_id,
-        running_set=filters.running_set,
-        cursor=cursor,
-    )
-    return ok(page)
+    return ok(await _prediction_page(session, model_id, running_set, params))
 
 
 @router.post(
@@ -205,8 +203,47 @@ async def predict_with_ac_model(
 
     Args: model_id, payload, session, _viewer。
     """
-    found = await ac_model_service.predict(session, model_id, payload)
+    found = await ac_model_predictor.predict(session, model_id, payload)
     return ok(_predict_out(found))
+
+
+@router.post(
+    "/ac-models/{model_id}:recommend",
+    response_model=ApiResponse[RecommendOut],
+    summary="推荐开机策略：全部服务组合同台比，最快达标者带推荐标",
+)
+async def recommend_with_ac_model(
+    model_id: uuid.UUID,
+    payload: RecommendIn,
+    session: SessionDep,
+    _viewer: ViewDep,
+) -> ApiResponse[RecommendOut]:
+    """同一起始条件下每个服务组合各出一份预测，排好序。读权限即可。
+
+    Args: model_id, payload, session, _viewer。
+    """
+    found = await ac_model_predictor.recommend(session, model_id, payload)
+    return ok(_recommend_out(found))
+
+
+async def _prediction_page(
+    session: AsyncSession,
+    model_id: uuid.UUID,
+    running_set: str | None,
+    params: PageParams,
+) -> Page[ModelPredictionOut]:
+    """校验模型存在后取一页折外预测（组合过滤串在这里解析）。
+
+    Args: session, model_id, running_set, params。
+    """
+    await ac_model_service.get_model(session, model_id)
+    filters = parse_filters(None, running_set)
+    return await ac_model_query.prediction_page(
+        session,
+        model_id=model_id,
+        running_set=filters.running_set,
+        params=params,
+    )
 
 
 async def _present(session: AsyncSession, model_id: uuid.UUID) -> AcModelOut:
@@ -242,7 +279,7 @@ async def _present_many(
     ]
 
 
-def _predict_out(found: ac_model_service.PredictResult) -> PredictOut:
+def _predict_out(found: ac_model_predictor.PredictResult) -> PredictOut:
     """试算结果 → 对外模型，可靠性按区间宽度分档。
 
     Args: found。
@@ -253,8 +290,44 @@ def _predict_out(found: ac_model_service.PredictResult) -> PredictOut:
         p50=found.p50,
         p90=found.p90,
         interval_width_minutes=width,
+        instant_probability=found.instant_probability,
         reliability=reliability(width),
         is_in_serving_sets=found.is_in_serving_sets,
         is_dedicated=found.is_dedicated,
         trained_at=found.trained_at,
+    )
+
+
+def _recommend_out(
+    found: ac_model_predictor.RecommendResult,
+) -> RecommendOut:
+    """推荐结果 → 对外模型，可靠性逐组合按区间宽度分档。
+
+    Args: found。
+    """
+    return RecommendOut(
+        items=[_recommend_entry_out(entry) for entry in found.entries],
+        trained_at=found.trained_at,
+    )
+
+
+def _recommend_entry_out(
+    entry: ac_model_predictor.RecommendEntry,
+) -> RecommendEntryOut:
+    """推荐结果里一个组合的成绩 → 对外模型。
+
+    Args: entry。
+    """
+    width = entry.p90 - entry.p10
+    return RecommendEntryOut(
+        running_set=list(entry.running_set),
+        set_key=entry.set_key,
+        p10=entry.p10,
+        p50=entry.p50,
+        p90=entry.p90,
+        interval_width_minutes=width,
+        instant_probability=entry.instant_probability,
+        reliability=reliability(width),
+        is_dedicated=entry.is_dedicated,
+        is_recommended=entry.is_recommended,
     )

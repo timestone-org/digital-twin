@@ -8,7 +8,7 @@ import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from integration.test_ac_model_api import (
+from integration.ac_model_helpers import (
     MISSING_ID,
     PREFIX,
     SignHeaders,

@@ -12,8 +12,10 @@ from platform_server.apps.hvac.modeling.artifact import (
     FORMAT_VERSION,
     ArtifactRejected,
     load,
+    predict_mixture,
     predict_quantiles,
 )
+from platform_server.apps.hvac.modeling.estimators import DurationForest
 from platform_server.apps.hvac.modeling.features import (
     EpisodeSample,
     StartConditions,
@@ -160,6 +162,35 @@ def test_the_artifact_round_trips_and_predicts(
     p10, p50, p90 = predict_quantiles(pair, row)
     assert is_dedicated is True
     assert 0 <= p10 <= p50 <= p90
+
+
+def test_mixture_reports_the_instant_probability(
+    trained: TrainedModel,
+) -> None:
+    """混合预测带出 p₀：带内开机 p₀ 高、带外开机 p₀ 低，且都在 [0,1]。"""
+    bundle = load(
+        trained.artifact.payload,
+        digest=trained.artifact.digest,
+        format_version=trained.artifact.format_version,
+        trained_sklearn_version=trained.artifact.sklearn_version,
+    )
+    pair, _ = bundle.pair_for("K11")
+    instant = build_row(sample(0).conditions, units=UNITS, timezone=TZ)
+    delayed = build_row(sample(14).conditions, units=UNITS, timezone=TZ)
+    hot_p0 = predict_mixture(pair, delayed).instant_probability
+    cold_p0 = predict_mixture(pair, instant).instant_probability
+    assert 0.0 <= hot_p0 <= 1.0
+    assert 0.0 <= cold_p0 <= 1.0
+    assert cold_p0 > hot_p0
+
+
+def test_duration_forest_speaks_minutes_despite_log_scale() -> None:
+    """⚠ log1p 是森林的内部约定：常量 30 分钟的目标要原样回到 30 分钟。"""
+    forest = DurationForest()
+    rows = [[float(index % 7), 1.0] for index in range(60)]
+    forest.fit(rows, [30.0] * 60, sample_weight=[1.0] * 60)
+    found = forest.quantiles_at([3.0, 1.0], [0.1, 0.5, 0.9])
+    assert found == pytest.approx([30.0, 30.0, 30.0], rel=1e-6)
 
 
 def test_a_tampered_payload_is_rejected_with_a_reason(

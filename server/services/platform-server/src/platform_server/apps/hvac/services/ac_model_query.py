@@ -1,20 +1,12 @@
 """模型面的读侧：对外模型的组装与折外预测的游标翻页。"""
 
 import uuid
-from datetime import datetime
 from typing import cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from lib.utils.timeutils import format_rfc3339
-from lib.web import (
-    CursorPage,
-    CursorParams,
-    decode_cursor,
-    encode_cursor,
-)
+from lib.web import Page, PageParams
 from platform_server.apps.hvac.crud import ac_model_prediction_crud
-from platform_server.apps.hvac.errors import CursorInvalid
 from platform_server.apps.hvac.modeling.features import FEATURE_VERSION
 from platform_server.apps.hvac.modeling.gating import reliability
 from platform_server.apps.hvac.models import (
@@ -25,15 +17,13 @@ from platform_server.apps.hvac.models import (
 )
 from platform_server.apps.hvac.schemas import (
     AcModelOut,
+    ErrorStatsOut,
     MetricsBlockOut,
     ModelMetricsOut,
     ModelPredictionOut,
 )
 from platform_server.apps.hvac.schemas.common import RoomRef, WorkshopRef
 from platform_server.apps.hvac.services import ac_model_service
-
-# 游标里装的字段名
-_CURSOR_TIME_FIELD = "before"
 
 
 def to_model_out(
@@ -92,32 +82,30 @@ async def prediction_page(
     *,
     model_id: uuid.UUID,
     running_set: tuple[str, ...] | None,
-    cursor: CursorParams,
-) -> CursorPage[ModelPredictionOut]:
-    """折外逐条的游标翻页，最新的在前。
+    params: PageParams,
+) -> Page[ModelPredictionOut]:
+    """折外逐条的页码翻页，最新的在前，可按组合过滤。
 
-    Args: session, model_id, running_set, cursor。
+    页码而不是游标：折外预测是训练时整体替换的有界快照，不是追加型
+    时序流——总数可知且不会翻着翻着多出新行，页码直选对用户更顺手。
+    Args: session, model_id, running_set, params。
     """
+    serials = list(running_set) if running_set else None
     rows = await ac_model_prediction_crud.page(
         session,
         model_id=model_id,
-        running_set=list(running_set) if running_set else None,
-        before=_anchor_of(cursor.after),
-        limit=cursor.limit + 1,
+        running_set=serials,
+        offset=params.offset,
+        limit=params.size,
     )
-    has_more = len(rows) > cursor.limit
-    visible = rows[: cursor.limit]
-    next_cursor = (
-        encode_cursor(
-            {_CURSOR_TIME_FIELD: format_rfc3339(visible[-1].started_at)}
-        )
-        if has_more and visible
-        else None
+    total = await ac_model_prediction_crud.count_matching(
+        session, model_id=model_id, running_set=serials
     )
-    return CursorPage[ModelPredictionOut](
-        items=[_to_prediction(row) for row in visible],
-        next=next_cursor,
-        has_more=has_more,
+    return Page[ModelPredictionOut](
+        items=[_to_prediction(row) for row in rows],
+        page=params.page,
+        size=params.size,
+        total=total,
     )
 
 
@@ -135,22 +123,6 @@ def _to_prediction(row: AcModelPrediction) -> ModelPredictionOut:
         p90=row.p90,
         fold=row.fold,
     )
-
-
-def _anchor_of(after: str | None) -> datetime | None:
-    """游标解回锚点时刻；首页没有锚点。
-
-    ⚠ 游标是客户端可以随手改的入参，解析失败要 422 不是 500。
-    Args: after。
-    """
-    if after is None:
-        return None
-    try:
-        payload = decode_cursor(after)
-        moment = payload[_CURSOR_TIME_FIELD]
-        return datetime.fromisoformat(moment)
-    except Exception as error:
-        raise CursorInvalid("游标不可解析，请从上一页响应里原样带回") from error
 
 
 def _metrics_out(stored: dict[str, object] | None) -> ModelMetricsOut | None:
@@ -174,21 +146,70 @@ def _metrics_out(stored: dict[str, object] | None) -> ModelMetricsOut | None:
 def _block_out(raw: object) -> MetricsBlockOut | None:
     """一个指标块的 JSON → 对外模型；形状不对按没有处理。
 
+    ⚠ 热行/判零字段是后加的，老评估 JSON 里没有——缺就给 None，不算坏形状；
+    重训后自然补齐。
     Args: raw。
     """
     if not isinstance(raw, dict):
         return None
-    values = cast(dict[str, float], raw)
+    values = cast(dict[str, object], raw)
     try:
-        mean_width = float(values["mean_width"])
+        base = _stats_of(values)
+        zero_count = values.get("zero_count")
         return MetricsBlockOut(
-            count=int(values["count"]),
-            mae=float(values["mae"]),
-            medae=float(values["medae"]),
-            rmse=float(values["rmse"]),
-            coverage=float(values["coverage"]),
-            mean_width=mean_width,
-            reliability=reliability(mean_width),
+            count=base.count,
+            mae=base.mae,
+            medae=base.medae,
+            rmse=base.rmse,
+            coverage=base.coverage,
+            mean_width=base.mean_width,
+            reliability=base.reliability,
+            hot=_hot_out(values.get("hot")),
+            zero_count=(
+                int(zero_count) if isinstance(zero_count, int) else None
+            ),
+            zero_hit_rate=_rate_of(values.get("zero_hit_rate")),
+            hot_hit_rate=_rate_of(values.get("hot_hit_rate")),
         )
     except (KeyError, TypeError, ValueError):
         return None
+
+
+def _hot_out(raw: object) -> ErrorStatsOut | None:
+    """热行统计的 JSON → 对外模型；没有热行或老 JSON 都是 None。
+
+    Args: raw。
+    """
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return _stats_of(cast(dict[str, object], raw))
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _stats_of(values: dict[str, object]) -> ErrorStatsOut:
+    """误差统计六元组的 JSON → 对外模型，可靠性按区间宽度现算。
+
+    Args: values。
+    """
+    mean_width = float(cast(float, values["mean_width"]))
+    return ErrorStatsOut(
+        count=int(cast(int, values["count"])),
+        mae=float(cast(float, values["mae"])),
+        medae=float(cast(float, values["medae"])),
+        rmse=float(cast(float, values["rmse"])),
+        coverage=float(cast(float, values["coverage"])),
+        mean_width=mean_width,
+        reliability=reliability(mean_width),
+    )
+
+
+def _rate_of(raw: object) -> float | None:
+    """0~1 的占比字段；缺失或非数按 None。
+
+    Args: raw。
+    """
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    return None

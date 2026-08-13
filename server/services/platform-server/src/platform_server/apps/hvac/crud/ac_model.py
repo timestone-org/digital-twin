@@ -2,9 +2,8 @@
 
 import uuid
 from collections.abc import Sequence
-from datetime import datetime
 
-from sqlalchemy import Select, delete, select
+from sqlalchemy import Select, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import CrudBase
@@ -102,29 +101,51 @@ class AcModelPredictionCrud(CrudBase[AcModelPrediction]):
         *,
         model_id: uuid.UUID,
         running_set: Sequence[str] | None,
-        before: datetime | None,
+        offset: int,
         limit: int,
     ) -> list[AcModelPrediction]:
-        """按起始时刻倒序取一页，`before` 是上一页最后一条的时刻。
+        """按起始时刻倒序取一页。
 
-        游标建立在 `(model_id, started_at)` 的唯一约束上：时刻在一个模型内
-        唯一，不会重复也不会漏行。
-        Args: session, model_id, running_set, before, limit。
+        页码分页而不是游标：折外预测是训练时整体替换的有界快照，不是
+        追加型时序流，页码不会重复漏行（api-contract §5.1 的「有限集合」）。
+        Args: session, model_id, running_set, offset, limit。
         """
         statement: Select[tuple[AcModelPrediction]] = (
             select(AcModelPrediction)
             .where(AcModelPrediction.model_id == model_id)
             .order_by(AcModelPrediction.started_at.desc())
+            .offset(offset)
             .limit(limit)
         )
         if running_set is not None:
             statement = statement.where(
                 AcModelPrediction.running_set == sorted(running_set)
             )
-        if before is not None:
-            statement = statement.where(AcModelPrediction.started_at < before)
         result = await session.execute(statement)
         return list(result.scalars().all())
+
+    async def count_matching(
+        self,
+        session: AsyncSession,
+        *,
+        model_id: uuid.UUID,
+        running_set: Sequence[str] | None,
+    ) -> int:
+        """一个模型（可按组合过滤）的折外预测总数。
+
+        Args: session, model_id, running_set。
+        """
+        statement = (
+            select(func.count())
+            .select_from(AcModelPrediction)
+            .where(AcModelPrediction.model_id == model_id)
+        )
+        if running_set is not None:
+            statement = statement.where(
+                AcModelPrediction.running_set == sorted(running_set)
+            )
+        result = await session.execute(statement)
+        return int(result.scalar_one())
 
 
 ac_model_crud = AcModelCrud()

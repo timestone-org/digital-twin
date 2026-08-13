@@ -159,7 +159,7 @@ async def test_deleting_a_model_takes_artifact_and_predictions(
     await db_session.flush()
     assert await ac_model_artifact_crud.get(db_session, model.id) is None
     rows = await ac_model_prediction_crud.page(
-        db_session, model_id=model.id, running_set=None, before=None, limit=10
+        db_session, model_id=model.id, running_set=None, offset=0, limit=10
     )
     assert rows == []
 
@@ -183,15 +183,15 @@ async def test_replacing_predictions_is_wholesale(
         rows=[make_prediction(model.id, minute=2)],
     )
     rows = await ac_model_prediction_crud.page(
-        db_session, model_id=model.id, running_set=None, before=None, limit=10
+        db_session, model_id=model.id, running_set=None, offset=0, limit=10
     )
     assert [row.started_at for row in rows] == [BASE + timedelta(minutes=2)]
 
 
-async def test_prediction_pages_follow_the_time_cursor(
+async def test_prediction_pages_follow_the_offset(
     db_session: AsyncSession,
 ) -> None:
-    """按起始时刻倒序翻页，`before` 接着上一页走，不重复不漏行。"""
+    """按起始时刻倒序翻页，偏移接着上一页走，不重复不漏行；总数可知。"""
     room_id = await make_room(db_session, "翻页")
     model = make_model(room_id)
     db_session.add(model)
@@ -202,20 +202,20 @@ async def test_prediction_pages_follow_the_time_cursor(
         rows=[make_prediction(model.id, minute=minute) for minute in range(5)],
     )
     first = await ac_model_prediction_crud.page(
-        db_session, model_id=model.id, running_set=None, before=None, limit=2
+        db_session, model_id=model.id, running_set=None, offset=0, limit=2
     )
     second = await ac_model_prediction_crud.page(
-        db_session,
-        model_id=model.id,
-        running_set=None,
-        before=first[-1].started_at,
-        limit=2,
+        db_session, model_id=model.id, running_set=None, offset=2, limit=2
     )
     minutes = [
         int((row.started_at - BASE).total_seconds() // 60)
         for row in [*first, *second]
     ]
     assert minutes == [4, 3, 2, 1]
+    total = await ac_model_prediction_crud.count_matching(
+        db_session, model_id=model.id, running_set=None
+    )
+    assert total == 5
 
 
 async def test_crossed_quantiles_are_rejected_by_the_table(

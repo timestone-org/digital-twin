@@ -1,33 +1,28 @@
-"""模型面的应用服务：建、改、删、重训入队、试算与查询。
+"""模型面的写侧应用服务：建、改、删与重训入队。
 
+推理侧（试算/推荐）在 `ac_model_predictor`，读侧组装在 `ac_model_query`。
 ⚠ 建模与重训只入队不训练（API 角色永不跑重任务）；入队沿用
 `request_rebuild` 的先例：**自己提交，之后才投消息**。
 """
 
 import uuid
 from collections.abc import Sequence
-from dataclasses import dataclass
-from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import Database
 from lib.logging import get_logger
-from lib.utils.timeutils import utcnow
 from platform_server.apps.hvac.crud import (
-    ac_model_artifact_crud,
     ac_model_crud,
     ac_model_prediction_crud,
     ac_startup_batch_crud,
 )
 from platform_server.apps.hvac.errors import (
-    ModelArtifactUnusable,
     ModelBatchMissing,
     ModelConfigInvalid,
     ModelNameTaken,
     ModelNotFound,
-    ModelNotReady,
     ModelTrainingInProgress,
     RoomNotFound,
 )
@@ -36,19 +31,10 @@ from platform_server.apps.hvac.model_statuses import (
     MODEL_STATUS_QUEUED,
     MODEL_STATUS_TRAINING,
 )
-from platform_server.apps.hvac.modeling.artifact import (
-    ArtifactRejected,
-    load,
-    predict_quantiles,
-)
 from platform_server.apps.hvac.modeling.evaluation import (
     OofPrediction,
     set_key,
     summarize,
-)
-from platform_server.apps.hvac.modeling.features import (
-    StartConditions,
-    build_row,
 )
 from platform_server.apps.hvac.models import (
     AcModel,
@@ -60,7 +46,6 @@ from platform_server.apps.hvac.models import (
 from platform_server.apps.hvac.schemas import (
     AcModelCreateIn,
     AcModelPatchIn,
-    PredictIn,
 )
 from platform_server.apps.hvac.services import ac_model_queue
 from platform_server.apps.hvac.services.ac_model_queue import TrainMessage
@@ -204,7 +189,7 @@ async def _resummarize(session: AsyncSession, model: AcModel) -> None:
         session,
         model_id=model.id,
         running_set=None,
-        before=None,
+        offset=0,
         limit=1_000_000,
     )
     oof = [
@@ -259,80 +244,6 @@ async def delete_model(session: AsyncSession, model_id: uuid.UUID) -> None:
         return
     await session.delete(model)
     await session.flush()
-
-
-@dataclass(frozen=True)
-class PredictResult:
-    """一次试算的结果。"""
-
-    p10: float
-    p50: float
-    p90: float
-    is_in_serving_sets: bool
-    # 答话的是这个组合的专属子模型，还是房间共用模型在兜底
-    is_dedicated: bool
-    trained_at: datetime
-
-
-async def predict(
-    session: AsyncSession, model_id: uuid.UUID, payload: PredictIn
-) -> PredictResult:
-    """试算：读工件、算特征、出三分位。纯计算，不碰外库。
-
-    Args: session, model_id, payload。
-    """
-    model = await get_model(session, model_id)
-    stored = await ac_model_artifact_crud.get(session, model_id)
-    if stored is None or model.trained_at is None:
-        raise ModelNotReady("模型还没有一次成功的训练，先训练再试算")
-    try:
-        bundle = load(
-            stored.payload,
-            digest=stored.digest,
-            format_version=stored.format_version,
-            trained_sklearn_version=stored.sklearn_version,
-        )
-    except ArtifactRejected as error:
-        raise ModelArtifactUnusable(str(error)) from error
-    running = sorted(set(payload.running_set))
-    unknown = [item for item in running if item not in bundle.serials]
-    if unknown:
-        raise ModelConfigInvalid(
-            f"组合里有模型不认识的机组：{'、'.join(unknown)}"
-        )
-    # ⚠ 按工件自己的机组清单拼行，不按房间当前清单：房间变动不改老工件的列
-    row = build_row(
-        _conditions_of(payload, running),
-        units=bundle.units,
-        timezone=bundle.timezone,
-    )
-    pair, is_dedicated = bundle.pair_for(set_key(running))
-    p10, p50, p90 = predict_quantiles(pair, row)
-    return PredictResult(
-        p10=p10,
-        p50=p50,
-        p90=p90,
-        is_in_serving_sets=set_key(running)
-        in {set_key(serving) for serving in model.serving_sets},
-        is_dedicated=is_dedicated,
-        trained_at=model.trained_at,
-    )
-
-
-def _conditions_of(payload: PredictIn, running: list[str]) -> StartConditions:
-    """试算入参 → 起始条件。
-
-    Args: payload, running（已排序去重）。
-    """
-    return StartConditions(
-        started_at=payload.at or utcnow(),
-        running_set=tuple(running),
-        idle_minutes=payload.idle_minutes,
-        readings={
-            serial: reading.model_dump(exclude_none=True)
-            for serial, reading in payload.readings.items()
-        },
-    )
 
 
 async def dispatch_training(

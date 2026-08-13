@@ -738,51 +738,6 @@
         "title": "ApiResponse[AcUnitRelocateOut]",
         "type": "object"
       },
-      "ApiResponse_CursorPage_ModelPredictionOut__": {
-        "properties": {
-          "code": {
-            "default": 0,
-            "title": "Code",
-            "type": "integer"
-          },
-          "data": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/CursorPage_ModelPredictionOut_"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "details": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/FieldErrorOut"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Details"
-          },
-          "message": {
-            "default": "ok",
-            "title": "Message",
-            "type": "string"
-          },
-          "trace_id": {
-            "default": "",
-            "title": "Trace Id",
-            "type": "string"
-          }
-        },
-        "title": "ApiResponse[CursorPage[ModelPredictionOut]]",
-        "type": "object"
-      },
       "ApiResponse_CursorPage_RawSampleOut__": {
         "properties": {
           "code": {
@@ -1008,6 +963,51 @@
         "title": "ApiResponse[Page[AcUnitOut]]",
         "type": "object"
       },
+      "ApiResponse_Page_ModelPredictionOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page_ModelPredictionOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Page[ModelPredictionOut]]",
+        "type": "object"
+      },
       "ApiResponse_Page_RoomOut__": {
         "properties": {
           "code": {
@@ -1186,6 +1186,51 @@
           }
         },
         "title": "ApiResponse[RawSeriesOut]",
+        "type": "object"
+      },
+      "ApiResponse_RecommendOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[RecommendOut]",
         "type": "object"
       },
       "ApiResponse_RoomOut_": {
@@ -1529,39 +1574,6 @@
         "title": "CombinationCoverageOut",
         "type": "object"
       },
-      "CursorPage_ModelPredictionOut_": {
-        "properties": {
-          "has_more": {
-            "title": "Has More",
-            "type": "boolean"
-          },
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/ModelPredictionOut"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "next": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Next"
-          }
-        },
-        "required": [
-          "items",
-          "next",
-          "has_more"
-        ],
-        "title": "CursorPage[ModelPredictionOut]",
-        "type": "object"
-      },
       "CursorPage_RawSampleOut_": {
         "properties": {
           "has_more": {
@@ -1675,6 +1687,50 @@
           "items"
         ],
         "title": "DatasetsOut",
+        "type": "object"
+      },
+      "ErrorStatsOut": {
+        "description": "一组折外预测的误差统计。`coverage` 标称 80%，显著更低说明区间在撒谎。",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "coverage": {
+            "title": "Coverage",
+            "type": "number"
+          },
+          "mae": {
+            "title": "Mae",
+            "type": "number"
+          },
+          "mean_width": {
+            "title": "Mean Width",
+            "type": "number"
+          },
+          "medae": {
+            "title": "Medae",
+            "type": "number"
+          },
+          "reliability": {
+            "title": "Reliability",
+            "type": "string"
+          },
+          "rmse": {
+            "title": "Rmse",
+            "type": "number"
+          }
+        },
+        "required": [
+          "count",
+          "mae",
+          "medae",
+          "rmse",
+          "coverage",
+          "mean_width",
+          "reliability"
+        ],
+        "title": "ErrorStatsOut",
         "type": "object"
       },
       "FieldErrorOut": {
@@ -1865,7 +1921,7 @@
         "type": "object"
       },
       "MetricsBlockOut": {
-        "description": "一组折外预测的评估。`coverage` 标称 80%，显著更低说明区间在撒谎。",
+        "description": "一组折外预测的评估：整体 + 热行（实际>0）单独一份。\n\n⚠ 整体 MAE 被大量「一开机就已达标」的零行灌水，判断模型好坏看 `hot`；\n热行/判零字段在老评估上是 None，重训后补齐。",
         "properties": {
           "count": {
             "title": "Count",
@@ -1874,6 +1930,27 @@
           "coverage": {
             "title": "Coverage",
             "type": "number"
+          },
+          "hot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorStatsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hot_hit_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hot Hit Rate"
           },
           "mae": {
             "title": "Mae",
@@ -1894,6 +1971,28 @@
           "rmse": {
             "title": "Rmse",
             "type": "number"
+          },
+          "zero_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zero Count"
+          },
+          "zero_hit_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zero Hit Rate"
           }
         },
         "required": [
@@ -1903,7 +2002,11 @@
           "rmse",
           "coverage",
           "mean_width",
-          "reliability"
+          "reliability",
+          "hot",
+          "zero_count",
+          "zero_hit_rate",
+          "hot_hit_rate"
         ],
         "title": "MetricsBlockOut",
         "type": "object"
@@ -2013,6 +2116,37 @@
           "total"
         ],
         "title": "Page[AcUnitOut]",
+        "type": "object"
+      },
+      "Page_ModelPredictionOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ModelPredictionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total"
+        ],
+        "title": "Page[ModelPredictionOut]",
         "type": "object"
       },
       "Page_RoomOut_": {
@@ -2130,6 +2264,10 @@
       "PredictOut": {
         "description": "试算结果：三分位达标时长与可靠性。\n\n⚠ `is_in_serving_sets` 为假表示这是对服务组合之外的外推——不拒绝，\n但要说清楚。",
         "properties": {
+          "instant_probability": {
+            "title": "Instant Probability",
+            "type": "number"
+          },
           "interval_width_minutes": {
             "title": "Interval Width Minutes",
             "type": "number"
@@ -2169,6 +2307,7 @@
           "p50",
           "p90",
           "interval_width_minutes",
+          "instant_probability",
           "reliability",
           "is_in_serving_sets",
           "is_dedicated",
@@ -2512,6 +2651,130 @@
           "points"
         ],
         "title": "RawSeriesOut",
+        "type": "object"
+      },
+      "RecommendEntryOut": {
+        "description": "推荐结果里一个组合的成绩。",
+        "properties": {
+          "instant_probability": {
+            "title": "Instant Probability",
+            "type": "number"
+          },
+          "interval_width_minutes": {
+            "title": "Interval Width Minutes",
+            "type": "number"
+          },
+          "is_dedicated": {
+            "title": "Is Dedicated",
+            "type": "boolean"
+          },
+          "is_recommended": {
+            "title": "Is Recommended",
+            "type": "boolean"
+          },
+          "p10": {
+            "title": "P10",
+            "type": "number"
+          },
+          "p50": {
+            "title": "P50",
+            "type": "number"
+          },
+          "p90": {
+            "title": "P90",
+            "type": "number"
+          },
+          "reliability": {
+            "title": "Reliability",
+            "type": "string"
+          },
+          "running_set": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Running Set",
+            "type": "array"
+          },
+          "set_key": {
+            "title": "Set Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "running_set",
+          "set_key",
+          "p10",
+          "p50",
+          "p90",
+          "interval_width_minutes",
+          "instant_probability",
+          "reliability",
+          "is_dedicated",
+          "is_recommended"
+        ],
+        "title": "RecommendEntryOut",
+        "type": "object"
+      },
+      "RecommendIn": {
+        "additionalProperties": false,
+        "description": "推荐入参：同一个起始条件，让全部服务组合同台比。\n\n字段口径同 `PredictIn`，只是不选组合——组合就是被比的对象。",
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "idle_minutes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idle Minutes"
+          },
+          "readings": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PredictReadingsIn"
+            },
+            "title": "Readings",
+            "type": "object"
+          }
+        },
+        "title": "RecommendIn",
+        "type": "object"
+      },
+      "RecommendOut": {
+        "description": "推荐结果：全部服务组合按「更快达标」排好序，第一名带推荐标。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RecommendEntryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "trained_at": {
+            "format": "date-time",
+            "title": "Trained At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "trained_at"
+        ],
+        "title": "RecommendOut",
         "type": "object"
       },
       "RoomCreateIn": {
@@ -3534,7 +3797,7 @@
     },
     "/api/v1/platform/ac-models/{model_id}/predictions": {
       "get": {
-        "description": "历史每一条可用事件的折外预测与实际，最新的在前，可按组合过滤。\n\nArgs: model_id, session, cursor, _viewer, running_set。",
+        "description": "历史每一条可用事件的折外预测与实际，最新的在前，可按组合过滤。\n\n页码分页：折外预测是训练时整体替换的有界快照（api-contract §5.1 的\n「有限集合」），不是追加型时序流。\nArgs: model_id, session, params, _viewer, running_set。",
         "operationId": "list_ac_model_predictions_api_v1_platform_ac_models__model_id__predictions_get",
         "parameters": [
           {
@@ -3565,30 +3828,25 @@
           },
           {
             "in": "query",
-            "name": "limit",
+            "name": "page",
             "required": false,
             "schema": {
-              "default": 100,
-              "maximum": 200,
+              "default": 1,
               "minimum": 1,
-              "title": "Limit",
+              "title": "Page",
               "type": "integer"
             }
           },
           {
             "in": "query",
-            "name": "after",
+            "name": "size",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "After"
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
             }
           }
         ],
@@ -3597,7 +3855,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponse_CursorPage_ModelPredictionOut__"
+                  "$ref": "#/components/schemas/ApiResponse_Page_ModelPredictionOut__"
                 }
               }
             },
@@ -3669,6 +3927,60 @@
           }
         },
         "summary": "试算：给一个假想开机条件出三分位达标时长",
+        "tags": [
+          "ac-models"
+        ]
+      }
+    },
+    "/api/v1/platform/ac-models/{model_id}:recommend": {
+      "post": {
+        "description": "同一起始条件下每个服务组合各出一份预测，排好序。读权限即可。\n\nArgs: model_id, payload, session, _viewer。",
+        "operationId": "recommend_with_ac_model_api_v1_platform_ac_models__model_id__recommend_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Model Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecommendIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RecommendOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "推荐开机策略：全部服务组合同台比，最快达标者带推荐标",
         "tags": [
           "ac-models"
         ]

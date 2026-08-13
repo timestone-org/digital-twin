@@ -204,7 +204,7 @@ async def test_training_persists_everything_in_one_go(
     assert solo is not None
     assert solo["count"] == 40
     rows = await ac_model_prediction_crud.page(
-        db_session, model_id=model.id, running_set=None, before=None, limit=100
+        db_session, model_id=model.id, running_set=None, offset=0, limit=100
     )
     assert len(rows) == 40
     artifact = await ac_model_artifact_crud.get(db_session, model.id)

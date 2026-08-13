@@ -18,8 +18,8 @@ from platform_server.apps.hvac.schemas.common import (
 _MAX_HALF_LIFE_DAYS = 3650.0
 
 
-class MetricsBlockOut(OutputModel):
-    """一组折外预测的评估。`coverage` 标称 80%，显著更低说明区间在撒谎。"""
+class ErrorStatsOut(OutputModel):
+    """一组折外预测的误差统计。`coverage` 标称 80%，显著更低说明区间在撒谎。"""
 
     count: int
     mae: float
@@ -29,6 +29,27 @@ class MetricsBlockOut(OutputModel):
     mean_width: float
     # 按平均区间宽度分档：reliable / indicative / weak
     reliability: str
+
+
+class MetricsBlockOut(OutputModel):
+    """一组折外预测的评估：整体 + 热行（实际>0）单独一份。
+
+    ⚠ 整体 MAE 被大量「一开机就已达标」的零行灌水，判断模型好坏看 `hot`；
+    热行/判零字段在老评估上是 None，重训后补齐。
+    """
+
+    count: int
+    mae: float
+    medae: float
+    rmse: float
+    coverage: float
+    mean_width: float
+    reliability: str
+    hot: ErrorStatsOut | None
+    zero_count: int | None
+    # 零行判零率与热行判出率；对应的行不存在（或老评估）时为 None
+    zero_hit_rate: float | None
+    hot_hit_rate: float | None
 
 
 class ModelMetricsOut(OutputModel):
@@ -134,8 +155,44 @@ class PredictOut(OutputModel):
     p50: float
     p90: float
     interval_width_minutes: float
+    # 开机即达标（时长 0）的概率，0~1
+    instant_probability: float
     reliability: str
     is_in_serving_sets: bool
     # 真 = 这个组合的专属子模型在答话；假 = 组合样本不足，房间共用模型兜底
     is_dedicated: bool
+    trained_at: Utc
+
+
+class RecommendIn(InputModel):
+    """推荐入参：同一个起始条件，让全部服务组合同台比。
+
+    字段口径同 `PredictIn`，只是不选组合——组合就是被比的对象。
+    """
+
+    readings: dict[str, PredictReadingsIn] = Field(default_factory=dict)
+    at: Utc | None = None
+    idle_minutes: int | None = Field(default=None, ge=0)
+
+
+class RecommendEntryOut(OutputModel):
+    """推荐结果里一个组合的成绩。"""
+
+    running_set: list[str]
+    set_key: str
+    p10: float
+    p50: float
+    p90: float
+    interval_width_minutes: float
+    instant_probability: float
+    reliability: str
+    is_dedicated: bool
+    # 排序口径见 AC_MODEL_DESIGN §5.4：先比 p50，再比 p90，最后少开机组优先
+    is_recommended: bool
+
+
+class RecommendOut(OutputModel):
+    """推荐结果：全部服务组合按「更快达标」排好序，第一名带推荐标。"""
+
+    items: list[RecommendEntryOut]
     trained_at: Utc
