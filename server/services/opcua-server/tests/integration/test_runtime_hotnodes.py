@@ -1,4 +1,4 @@
-"""运行中增删节点：CONTEXT.md §6 的热生效档。
+"""运行中增删节点与热改可写位：CONTEXT.md §6 的热生效档。
 
 ⚠ 这一组的价值全在**真实客户端**上：只有让一条已建立的 `asyncua.Client`
 会话当场读到新节点、当场读不到已删节点，才算证明了「不重启也生效」。
@@ -20,6 +20,7 @@ from opcua_server.apps.instance.errors import (
     NodeDeleteFailed,
     NodeIdentifierTaken,
     NodeNotFound,
+    NodeNotWritable,
     NodeValueRejected,
 )
 from opcua_server.apps.instance.runtime.addressspace import (
@@ -359,3 +360,27 @@ async def test_a_vanished_node_surfaces_as_a_domain_error_on_read(
     await delete_node(instance._require_running(), node)
     with pytest.raises(NodeNotFound):
         await instance.read_value(TEMPERATURE.identifier)
+
+
+async def test_set_writable_off_is_enforced_for_the_management_write(
+    instance: RunningInstance,
+) -> None:
+    """⚠ 热改后运行表里的定义必须跟着换，否则管理面写值还照旧口径放行。"""
+    await instance.set_node_writable(TEMPERATURE.identifier, is_writable=False)
+    with pytest.raises(NodeNotWritable):
+        await instance.write_value(TEMPERATURE.identifier, 30.0)
+
+
+async def test_set_writable_on_an_object_node_is_a_no_op(
+    instance: RunningInstance,
+) -> None:
+    """object 节点没有值属性——热改必须安静跳过，不碰运行表。"""
+    machine = NodeDefinition(
+        identifier="plant.machine",
+        browse_name="Machine",
+        node_class="object",
+    )
+    await instance.add_node(machine)
+    before = instance._nodes[machine.identifier]
+    await instance.set_node_writable(machine.identifier, is_writable=False)
+    assert instance._nodes[machine.identifier] is before

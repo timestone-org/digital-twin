@@ -118,6 +118,8 @@ class NodeUpdateIn(InputModel):
     ⚠ 这里没有 `identifier`——它不可改（不变式 3）。要换标识只能删了重建，
     而那是一个现场必须同步改组态的动作，不该伪装成一次改名。
     ⚠ `browse_name` 与 `data_type` 属于待重启档：保存成功但要重启才生效。
+    ⚠ `access_level` 是热生效档：实例在跑就当场改运行中地址空间的可写位；
+    热改失败时转待重启，并计入出参的 `pending_fields`。
     """
 
     browse_name: BrowseName | None = None

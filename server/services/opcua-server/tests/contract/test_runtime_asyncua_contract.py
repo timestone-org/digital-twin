@@ -12,6 +12,7 @@ from importlib.metadata import version
 
 from asyncua import Server, ua
 from asyncua.common import manage_nodes
+from asyncua.common.node import Node
 from asyncua.server.internal_server import InternalServer
 from asyncua.server.internal_session import InternalSession
 from asyncua.server.uaprocessor import UaProcessor
@@ -131,3 +132,15 @@ def test_status_code_exposes_is_good() -> None:
     """状态码的判定 API 是 `is_good()`；改名会让失败检查静默失效。"""
     assert ua.StatusCode().is_good()
     assert not ua.StatusCode(ua.StatusCodes.BadNodeIdUnknown).is_good()
+
+
+def test_set_writable_toggles_current_write_on_both_access_attributes() -> None:
+    """⚠ 热改可写位靠 `set_writable`：它必须同时置/清 AccessLevel 与
+    UserAccessLevel 的 CurrentWrite 位——服务端对外部会话的写值把这两位
+    **都**校验，上游只动其一时热改会静默失效为「管理面以为改了」。
+    """
+    source = inspect.getsource(Node.set_writable)
+    for attribute in ("AccessLevel", "UserAccessLevel"):
+        bit = f"ua.AttributeIds.{attribute}, ua.AccessLevel.CurrentWrite"
+        assert f"set_attr_bit({bit})" in source
+        assert f"unset_attr_bit({bit})" in source
