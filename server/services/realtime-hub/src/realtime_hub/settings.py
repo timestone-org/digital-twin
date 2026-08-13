@@ -62,6 +62,14 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     # /internal/ 的服务级密钥，逐字 compare_digest 比较。未配置一律拒绝。
     edge_service_key: SecretStr = Field(min_length=32)
 
+    # 验 WS 子协议里那枚 access token 的签名。⚠ 必须与 auth-server 同值，
+    # 且 issuer 逐字一致——签发方是它，本服务只验不签。
+    jwt_secret: SecretStr = Field(min_length=32)
+    # 轮换期的旧密钥。⚠ 不给默认值也不许留空串：留空会让「配了旧密钥」与
+    # 「没配」分不开，轮换当中旧令牌会被判成伪造。
+    jwt_previous_secret: SecretStr | None = None
+    jwt_issuer: str = "auth-server"
+
     # 登记主题时回调 auth-server 校验声明的权限码是否存在于目录。
     # ⚠ 不可达时 fail-closed（拒绝登记），理由见 CONTEXT.md §7。
     auth_base_url: str = "http://auth-server:8001"
@@ -74,6 +82,13 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     max_payload_items: int = Field(default=500, ge=1, le=PAYLOAD_ITEM_CEILING)
     # 跨副本扇出的 Redis 频道前缀。⚠ 与业务无关，只是通道自己的命名空间。
     fanout_channel_prefix: str = "realtime.fanout"
+
+    def verification_keys(self) -> tuple[str, ...]:
+        """验签用的密钥序列，轮换期两枚都试。"""
+        keys = [self.jwt_secret.get_secret_value()]
+        if self.jwt_previous_secret is not None:
+            keys.append(self.jwt_previous_secret.get_secret_value())
+        return tuple(keys)
 
     def fanout_channel(self, topic: str) -> str:
         """某个主题的扇出频道名。

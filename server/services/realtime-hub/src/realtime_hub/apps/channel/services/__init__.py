@@ -8,12 +8,22 @@ from realtime_hub.apps.channel.services.connections import (
 )
 from realtime_hub.apps.channel.services.publisher import PublishService
 from realtime_hub.apps.channel.services.registry import TopicRegistry
+from realtime_hub.apps.channel.services.session import (
+    AuthenticationRejected,
+    BadRequest,
+    Handshake,
+    SessionService,
+)
 
 __all__ = [
+    "AuthenticationRejected",
+    "BadRequest",
     "CodeCatalog",
     "Connection",
     "ConnectionRegistry",
+    "Handshake",
     "PublishService",
     "SendFn",
+    "SessionService",
     "TopicRegistry",
 ]
