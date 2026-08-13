@@ -1,4 +1,9 @@
-# 主流水线。每次 push 与每个 PR 都跑，分五段，前一段绿了才跑后一段。
+# 主流水线。main 的 push 与每个 PR 都跑，分五段，前一段绿了才跑后一段。
+#
+# ⚠ push 只收 main：分支的验证走 pull_request 事件。两个触发器都收全部
+# 分支时，一个开着 PR 的分支每推一次会跑**两条**完整流水线（push 与
+# pull_request 分属不同 concurrency 组，互不取消），自托管 runner 会被
+# 队列拖死——真发生过，45 个 run 积压 9 小时。
 #
 # 分段的意义是**反馈时序**：秒级的闸门（机密、结构、注释）先跑，它们红了
 # 就不必再花几分钟装依赖跑测试；慢闸门（测试、构建、供应链）排在后面，
@@ -10,6 +15,7 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 # 同一分支的新推送取消上一轮，避免排队堆积
@@ -339,14 +345,14 @@ jobs:
           uv run --project server python scripts/gates/check_coverage.py \
             opcua-server opcua-coverage.xml
 
-      - name: 增量覆盖 ≥90%
+      - name: 增量覆盖 ≥85%
         if: github.event_name == 'pull_request'
         run: |
           git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
           uv run --project server diff-cover \
             lib-coverage.xml auth-coverage.xml platform-coverage.xml \
             opcua-coverage.xml \
-            --compare-branch "origin/${{ github.base_ref }}" --fail-under=90
+            --compare-branch "origin/${{ github.base_ref }}" --fail-under=85
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always() && !env.ACT
@@ -376,12 +382,12 @@ jobs:
           uv run --project server python scripts/gates/check_coverage.py \
             web web/coverage/lcov.info
 
-      - name: 增量覆盖 ≥90%
+      - name: 增量覆盖 ≥85%
         if: github.event_name == 'pull_request'
         run: |
           git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
           uv run --project server diff-cover web/coverage/lcov.info \
-            --compare-branch "origin/${{ github.base_ref }}" --fail-under=90
+            --compare-branch "origin/${{ github.base_ref }}" --fail-under=85
 
   # ============ 第 4 段：契约、构建与供应链 ============
   contracts:

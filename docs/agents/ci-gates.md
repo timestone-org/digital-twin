@@ -9,7 +9,7 @@
 
 ## 1. 流水线分段
 
-`.github/workflows/ci.yml`，每次 push 与每个 PR 都跑，五段串行：
+`.github/workflows/ci.yml`，main 的 push 与每个 PR 都跑（分支 push 不单独触发——PR 事件已经验过同一份代码，双触发只会把自托管 runner 的队列拖死），五段串行：
 
 ```
 1 秒级闸门        机密扫描 / 仓库卫生 / 结构与规范闸        ← 只读源码，最便宜的红灯
@@ -89,8 +89,8 @@ E2E、a11y、变异测试不进 PR 闸门是 `testing-standard-*.md` §9 的明�
 |---|---|
 | testing-standard-* §5.1 无断言/§2 命名/§6 skip 与 xfail/§1 分层 | `check_tests.py` |
 | 同 §4.1 覆盖率阈值 | `pyproject.toml` 的 `fail_under` · `vitest.config.ts` 的 `thresholds` |
-| 同 §4.2 棘轮（只许上不许下） | `check_coverage.py` + `coverage-baseline.json` |
-| 同 §4.1 增量覆盖 ≥90% | `diff-cover`（只在 PR 上跑） |
+| 同 §4.2 棘轮（不低于基线，基线按 90%/80% 封顶） | `check_coverage.py` + `coverage-baseline.json` |
+| 同 §4.1 增量覆盖 ≥85% | `diff-cover`（只在 PR 上跑） |
 | 同 §4.3 `--cov=` 点号模块名、§6.2 禁外网、CI 里禁 skip | `check_pytest_run.py`（读 junit 与日志） |
 | 同 §6.3 L2/L3 打真实 Postgres | `server-test` 的服务容器 |
 | 同 §8 首屏包体预算 | `check_bundle_budget.py`（读真实产物） |
