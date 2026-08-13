@@ -6,6 +6,14 @@ from platform_server.apps.hvac.crud.ac_data import (
     ac_data_binding_crud,
     ac_metric_limit_crud,
 )
+from platform_server.apps.hvac.crud.ac_model import (
+    AcModelArtifactCrud,
+    AcModelCrud,
+    AcModelPredictionCrud,
+    ac_model_artifact_crud,
+    ac_model_crud,
+    ac_model_prediction_crud,
+)
 from platform_server.apps.hvac.crud.ac_startup import (
     AcStartupBatchCrud,
     AcStartupShardCrud,
@@ -33,6 +41,9 @@ from platform_server.apps.hvac.crud.workshop import (
 __all__ = [
     "AcDataBindingCrud",
     "AcMetricLimitCrud",
+    "AcModelArtifactCrud",
+    "AcModelCrud",
+    "AcModelPredictionCrud",
     "AcStartupBatchCrud",
     "AcStartupEpisodeCrud",
     "AcStartupExclusionCrud",
@@ -44,6 +55,9 @@ __all__ = [
     "WorkshopCrud",
     "ac_data_binding_crud",
     "ac_metric_limit_crud",
+    "ac_model_artifact_crud",
+    "ac_model_crud",
+    "ac_model_prediction_crud",
     "ac_startup_batch_crud",
     "ac_startup_episode_crud",
     "ac_startup_exclusion_crud",
