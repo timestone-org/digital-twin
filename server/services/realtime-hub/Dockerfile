@@ -34,7 +34,11 @@ ENV PATH="/src/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-WORKDIR /src
+# ⚠ 运行期的工作目录是**服务目录**而不是 /src：`alembic.ini` 在这里，
+# 站在 /src 上跑 `alembic upgrade head` 会以「No 'script_location' key found」
+# 失败——而部署手册里那条命令正是这么写的。可执行入口是 console script，
+# 从哪个目录起都一样，所以换到这里没有代价。
+WORKDIR /src/services/realtime-hub
 COPY --from=builder --chown=app:app /src /src
 
 USER app

@@ -330,6 +330,10 @@ class RunningInstance:
             parent = self._parent_handle(server, definition)
             node = await add_node(parent, definition)
             self._nodes[definition.identifier] = node
+        if self._watcher is not None:
+            # ⚠ 在结构锁之外做：订阅是一次网络往返，锁内做长 IO 会把并发的
+            # 结构改动排在它后面
+            await self._watcher.add(definition.identifier, node.handle)
         _logger.info(
             "opcua_node_added",
             "运行中加节点",
