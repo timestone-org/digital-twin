@@ -57,10 +57,26 @@ export type {
   Workshop,
   WorkshopRef,
 } from './hvac'
+export type {
+  AcModel,
+  AcModelStatus,
+  ModelMetrics,
+  ModelMetricsBlock,
+  ModelPredictInput,
+  ModelPredictReadings,
+  ModelPredictResult,
+  ModelPrediction,
+  ModelReliability,
+} from './hvac'
 export {
   AC_METRIC_GROUPS,
   AC_METRIC_LIMITS_MAX,
+  AC_MODEL_STATUSES,
   AC_UNIT_RELOCATE_MAX,
+  MODEL_HALF_LIFE_DEFAULT_DAYS,
+  MODEL_HALF_LIFE_MAX_DAYS,
+  MODEL_HALF_LIFE_MIN_DAYS,
+  MODEL_RELIABILITIES,
   RAW_SAMPLES_PAGE_MAX,
   RAW_SERIES_POINTS_MAX,
   STARTUP_BATCH_STATUSES,

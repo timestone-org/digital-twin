@@ -10,6 +10,11 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type {
+  AcModel,
+  ModelMetrics,
+  ModelMetricsBlock,
+  ModelPrediction,
+  ModelPredictResult,
   AcDataBinding,
   AcDataset,
   AcItemList,
@@ -324,6 +329,70 @@ const SHAPES: Record<string, Record<string, true>> = {
     next: true,
     has_more: true,
   } satisfies Keys<CursorPage<StartupEpisode>>,
+
+  AcModelOut: {
+    id: true,
+    name: true,
+    description: true,
+    room: true,
+    workshop: true,
+    serving_sets: true,
+    half_life_days: true,
+    status: true,
+    error: true,
+    feature_version: true,
+    trained_at: true,
+    sample_count: true,
+    window_start: true,
+    window_end: true,
+    metrics: true,
+    is_batch_stale: true,
+    is_feature_stale: true,
+    created_by: true,
+    created_at: true,
+    updated_at: true,
+  } satisfies Keys<AcModel>,
+
+  MetricsBlockOut: {
+    count: true,
+    mae: true,
+    medae: true,
+    rmse: true,
+    coverage: true,
+    mean_width: true,
+    reliability: true,
+  } satisfies Keys<ModelMetricsBlock>,
+
+  ModelMetricsOut: {
+    overall: true,
+    by_set: true,
+  } satisfies Keys<ModelMetrics>,
+
+  ModelPredictionOut: {
+    started_at: true,
+    running_set: true,
+    actual_minutes: true,
+    p10: true,
+    p50: true,
+    p90: true,
+    fold: true,
+  } satisfies Keys<ModelPrediction>,
+
+  PredictOut: {
+    p10: true,
+    p50: true,
+    p90: true,
+    interval_width_minutes: true,
+    reliability: true,
+    is_in_serving_sets: true,
+    trained_at: true,
+  } satisfies Keys<ModelPredictResult>,
+
+  CursorPage_ModelPredictionOut_: {
+    items: true,
+    next: true,
+    has_more: true,
+  } satisfies Keys<CursorPage<ModelPrediction>>,
 }
 
 describe('@dt/contracts 与 platform openapi.json 的字段一致', () => {

@@ -379,3 +379,80 @@ describe('开机事件', () => {
     expect(vi.mocked(client.request)).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('达标时长模型面', () => {
+  it('列表带 platform 前缀，房间过滤走 query', async () => {
+    await hvac.listAcModels('r1')
+    expect(call()[0]).toBe('/ac-models')
+    expect(call()[1].baseUrl).toBe(PLATFORM_BASE_URL)
+    expect(call()[1].query).toEqual({ room_id: 'r1' })
+  })
+
+  it('不带房间时没有 query，全量列表', async () => {
+    await hvac.listAcModels()
+    expect(call()[1].query).toBeUndefined()
+  })
+
+  it('建模是 POST /ac-models，载荷原样带过去', async () => {
+    await hvac.createAcModel({
+      room_id: 'r1',
+      name: '早班',
+      serving_sets: [['K11']],
+      half_life_days: 90,
+    })
+    const [url, options] = call()
+    expect(url).toBe('/ac-models')
+    expect(options.method).toBe('POST')
+    expect(options.body).toEqual({
+      room_id: 'r1',
+      name: '早班',
+      serving_sets: [['K11']],
+      half_life_days: 90,
+    })
+  })
+
+  it('改服务组合走 PATCH', async () => {
+    await hvac.patchAcModel('m1', { serving_sets: [['K11', 'K12']] })
+    const [url, options] = call()
+    expect(url).toBe('/ac-models/m1')
+    expect(options.method).toBe('PATCH')
+  })
+
+  it('重训是动作端点 POST :retrain', async () => {
+    await hvac.retrainAcModel('m1')
+    expect(call()[0]).toBe('/ac-models/m1:retrain')
+    expect(call()[1].method).toBe('POST')
+  })
+
+  it('删除返回 204，走 request 而不是 requestData', async () => {
+    await hvac.deleteAcModel('m1')
+    const [url, options] = call()
+    expect(url).toBe('/ac-models/m1')
+    expect(options.method).toBe('DELETE')
+  })
+
+  it('逐条对比按组合过滤，游标原样带回', async () => {
+    await hvac.listModelPredictions('m1', {
+      running_set: 'K11,K12',
+      after: 'CURSOR-9',
+      limit: 50,
+    })
+    expect(call()[0]).toBe('/ac-models/m1/predictions')
+    expect(call()[1].query).toEqual({
+      running_set: 'K11,K12',
+      after: 'CURSOR-9',
+      limit: 50,
+    })
+  })
+
+  it('试算是动作端点 POST :predict', async () => {
+    await hvac.predictWithAcModel('m1', {
+      running_set: ['K11'],
+      readings: { K11: { workshop_temp_avg: 30 } },
+      idle_minutes: 390,
+    })
+    expect(call()[0]).toBe('/ac-models/m1:predict')
+    expect(call()[1].method).toBe('POST')
+    expect(call()[1].baseUrl).toBe(PLATFORM_BASE_URL)
+  })
+})

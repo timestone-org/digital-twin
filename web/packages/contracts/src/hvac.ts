@@ -305,3 +305,108 @@ export interface StartupExclusion {
 
 /** 排除原因的长度上限，与后端 `MAX_EXCLUSION_REASON` 同值。 */
 export const STARTUP_EXCLUSION_REASON_MAX = 500
+
+/**
+ * 模型状态。queued → training → ready|failed；重训回到 queued。
+ * ⚠ failed 行上可能仍带着上一次成功的评估（重训失败保留上一份产物）。
+ */
+export const AC_MODEL_STATUSES = [
+  'queued',
+  'training',
+  'ready',
+  'failed',
+] as const
+export type AcModelStatus = (typeof AC_MODEL_STATUSES)[number]
+
+/** 可靠性分档：按预测区间宽度，不按样本数。 */
+export const MODEL_RELIABILITIES = ['reliable', 'indicative', 'weak'] as const
+export type ModelReliability = (typeof MODEL_RELIABILITIES)[number]
+
+/** 一组折外预测的评估。`coverage` 标称 0.8，显著更低说明区间在撒谎。 */
+export interface ModelMetricsBlock {
+  count: number
+  mae: number
+  medae: number
+  rmse: number
+  coverage: number
+  mean_width: number
+  reliability: ModelReliability
+}
+
+/** 总体 + 按服务组合的评估。⚠ 没样本的组合是 null 不是零。 */
+export interface ModelMetrics {
+  overall: ModelMetricsBlock
+  /** 键是组合的稳定写法：serial 升序加号相连，如 `K11+K12`。 */
+  by_set: Record<string, ModelMetricsBlock | null>
+}
+
+/** 一个达标时长模型：一个房间一份配置 + 最近一次训练的产物。 */
+export interface AcModel {
+  id: string
+  name: string
+  description: string | null
+  room: RoomRef
+  workshop: WorkshopRef
+  /** 服务组合：选的是服务面不是训练集——训练永远用房间全部可用事件。 */
+  serving_sets: string[][]
+  half_life_days: number
+  status: AcModelStatus
+  error: string | null
+  feature_version: number | null
+  trained_at: string | null
+  sample_count: number | null
+  window_start: string | null
+  window_end: string | null
+  metrics: ModelMetrics | null
+  /** ⚠ 提示不是失效：数据已更新（批次指纹变了），训练产物照常可用。 */
+  is_batch_stale: boolean
+  /** 特征口径已更新（FEATURE_VERSION 变了），建议重训。 */
+  is_feature_stale: boolean
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+/** 一条折外预测与实际的对比。 */
+export interface ModelPrediction {
+  started_at: string
+  running_set: string[]
+  actual_minutes: number
+  p10: number
+  p50: number
+  p90: number
+  fold: number
+}
+
+/** 试算时一台机组的读数。⚠ 缺测就省略字段，不要填 0——0 是真实读数。 */
+export interface ModelPredictReadings {
+  workshop_temp_avg?: number
+  workshop_humidity_avg?: number
+  fresh_air_temp?: number
+  fresh_air_humidity?: number
+  chilled_water_supply_temp?: number
+}
+
+/** 试算入参：一个假想的开机条件。`at` 省略即当下。 */
+export interface ModelPredictInput {
+  running_set: string[]
+  readings?: Record<string, ModelPredictReadings>
+  at?: string
+  idle_minutes?: number
+}
+
+/** 试算结果。⚠ `is_in_serving_sets` 为假 = 对服务组合之外的外推。 */
+export interface ModelPredictResult {
+  p10: number
+  p50: number
+  p90: number
+  interval_width_minutes: number
+  reliability: ModelReliability
+  is_in_serving_sets: boolean
+  trained_at: string
+}
+
+/** 半衰期的允许范围（天），与后端校验同值。 */
+export const MODEL_HALF_LIFE_MIN_DAYS = 7
+export const MODEL_HALF_LIFE_MAX_DAYS = 3650
+export const MODEL_HALF_LIFE_DEFAULT_DAYS = 180

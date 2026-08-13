@@ -8,6 +8,10 @@
 
 import type {
   AcDataBinding,
+  AcModel,
+  ModelPredictInput,
+  ModelPredictResult,
+  ModelPrediction,
   AcDataset,
   AcItemList,
   AcMetricLimit,
@@ -396,5 +400,101 @@ export async function deleteStartupExclusion(
   await request<null>(
     exclusionPath(roomId, startedAt),
     onPlatform({ method: 'DELETE' }),
+  )
+}
+
+/* 达标时长模型 —— docs/AC_MODEL_DESIGN.md */
+
+/** 全部模型；`roomId` 给了就按房间过滤。 */
+export async function listAcModels(roomId?: string): Promise<AcModel[]> {
+  return await requestData<AcModel[]>(
+    '/ac-models',
+    onPlatform(roomId ? { query: { room_id: roomId } } : {}),
+  )
+}
+
+export interface AcModelCreateInput {
+  room_id: string
+  name: string
+  description?: string
+  serving_sets: string[][]
+  half_life_days?: number
+}
+
+/**
+ * 建模并入队训练。
+ * ⚠ 只入队立刻返回（202），训练进度要回头轮 `getAcModel`。
+ * @param input 房间、名称与服务组合
+ */
+export async function createAcModel(
+  input: AcModelCreateInput,
+): Promise<AcModel> {
+  return await requestData<AcModel>(
+    '/ac-models',
+    onPlatform({ method: 'POST', body: input }),
+  )
+}
+
+export async function getAcModel(modelId: string): Promise<AcModel> {
+  return await requestData<AcModel>(`/ac-models/${modelId}`, onPlatform())
+}
+
+export interface AcModelPatchInput {
+  name?: string
+  description?: string
+  serving_sets?: string[][]
+}
+
+/** 改名、改描述或改服务组合。⚠ 改组合就地重汇总评估，不触发重训。 */
+export async function patchAcModel(
+  modelId: string,
+  input: AcModelPatchInput,
+): Promise<AcModel> {
+  return await requestData<AcModel>(
+    `/ac-models/${modelId}`,
+    onPlatform({ method: 'PATCH', body: input }),
+  )
+}
+
+export async function deleteAcModel(modelId: string): Promise<void> {
+  // ⚠ 走 request 而不是 requestData：这条返回 204，没有 data
+  await request<null>(`/ac-models/${modelId}`, onPlatform({ method: 'DELETE' }))
+}
+
+/** 重训入队（202）。queued/training 期间再点是 409。 */
+export async function retrainAcModel(modelId: string): Promise<AcModel> {
+  return await requestData<AcModel>(
+    `/ac-models/${modelId}:retrain`,
+    onPlatform({ method: 'POST' }),
+  )
+}
+
+// ⚠ 用 type 而不是 interface：要当 `query` 传给 request（同 AcUnitFilters）
+export type ModelPredictionFilters = {
+  /** 逗号分隔的空调序号，与后端一致。 */
+  running_set?: string | undefined
+  limit?: number | undefined
+  after?: string | undefined
+}
+
+/** 一页折外预测与实际的对比。游标分页，`after` 只填上一页的 `next`。 */
+export async function listModelPredictions(
+  modelId: string,
+  query: ModelPredictionFilters = {},
+): Promise<CursorPage<ModelPrediction>> {
+  return await requestData<CursorPage<ModelPrediction>>(
+    `/ac-models/${modelId}/predictions`,
+    onPlatform({ query }),
+  )
+}
+
+/** 试算：纯计算立刻返回，不训练也不碰外库。 */
+export async function predictWithAcModel(
+  modelId: string,
+  input: ModelPredictInput,
+): Promise<ModelPredictResult> {
+  return await requestData<ModelPredictResult>(
+    `/ac-models/${modelId}:predict`,
+    onPlatform({ method: 'POST', body: input }),
   )
 }

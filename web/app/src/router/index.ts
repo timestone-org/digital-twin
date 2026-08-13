@@ -60,6 +60,25 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/hvac/models',
+    name: 'hvac-models',
+    component: () => import('@/pages/Hvac/Models/index.vue'),
+    meta: {
+      title: '达标预测',
+      permissions: [PERMISSION_CODES.acView],
+    },
+  },
+  {
+    // 每个模型一个的**详情**路由，不进 NAV_ITEMS；回列表靠 AppShell 的 backTo
+    path: '/hvac/models/:modelId',
+    name: 'hvac-model-detail',
+    component: () => import('@/pages/Hvac/ModelDetail/index.vue'),
+    meta: {
+      title: '模型详情',
+      permissions: [PERMISSION_CODES.acView],
+    },
+  },
+  {
     path: '/hvac/spaces',
     name: 'hvac-spaces',
     component: () => import('@/pages/Hvac/Spaces/index.vue'),
