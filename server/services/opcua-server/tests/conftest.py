@@ -139,11 +139,26 @@ async def app(
         pytest.skip("本机连不到 Postgres")
     application = build_app(settings)
     built: Container = application.state.container
-    application.state.container = _with_fake_cache(built)
+    application.state.container = _with_fake_cache(_with_stubbed_hub(built))
     yield httpx.ASGITransport(app=application)
     await built.supervisor.stop_all()
     await built.database.dispose()
     await built.cache.close()
+
+
+def _with_stubbed_hub(built: Container) -> Container:
+    """把 realtime-hub 的调用接到假传输上。
+
+    ⚠ 不这么做的话，每条建实例的用例都会真去解析 `realtime-hub` 这个名字：
+    慢、吵，而且把「hub 可达与否」混进了与它无关的断言里。降级路径本身由
+    `tests/unit/test_realtime_client.py` 单独守。
+
+    Args: built。
+    """
+    built.realtime._transport = httpx.MockTransport(  # type: ignore[attr-defined]  # 测试注入
+        lambda _request: httpx.Response(200, json={"data": {"seq": 1}})
+    )
+    return built
 
 
 def _with_fake_cache(built: Container) -> Container:
@@ -161,6 +176,7 @@ def _with_fake_cache(built: Container) -> Container:
         nodes=built.nodes,
         security=built.security,
         idempotency=type(built.idempotency)(cache=cache),
+        realtime=built.realtime,
     )
 
 
