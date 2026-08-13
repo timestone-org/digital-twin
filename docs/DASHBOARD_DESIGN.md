@@ -1,0 +1,332 @@
+# 大屏组态与实时 — 设计
+
+> 后端在 `platform-server/apps/dashboard` + `publisher` 角色，前端在 `web/packages/{modules,runtime,three-core,twin-config}` 与编辑器页面。
+> 写入面以节点为可寻址资源（[ADR-0012](adr/0012-大屏组态以节点为可寻址资源而非整文档替换.md)）。
+> 一期只落 **header** 与 **twin-view（数字孪生）** 两个模块。
+
+---
+
+## 1. 通用语言
+
+| 词 | 指什么 |
+|---|---|
+| **项目**（project） | 一组大屏的容器，持有主题与品牌 |
+| **大屏**（dashboard） | 一张画布，有设计坐标系尺寸与一棵节点树 |
+| **节点**（node） | 画布上的一个渲染单元。容器也是节点——**万物皆节点，节点可套节点** |
+| **模块**（module） | 节点的**类型**，由前端 manifest 定义（`header` / `twin-view` / …） |
+| **绑定**（binding） | 把节点的一个数据槽接到一个数据来源上 |
+| **绑定槽**（binding slot） | 模块声明的数据入口，`BindingSpec.key` |
+
+⚠ 采集那边的"点位"是 point，画布这边的"节点"是 node。**两个 node 不是一回事**，
+参考实现里它们同名，导致 `node_id` 一会儿指 OPC UA NodeId、一会儿指画布节点。本仓不许重名。
+
+---
+
+## 2. 数据模型（schema `platform`）
+
+### 2.1 表
+
+`dashboard_projects`：`id`、`name`、`description`、`theme_json`、`brand_json`、时间戳。
+
+`dashboards`：`id`、`project_id`、`name`、`description`、`design_width`(1920)、`design_height`(1080)、
+`theme_json`、`chrome_json`、`row_version`、**`schema_version`**、`is_public`、`public_token`、时间戳。
+
+`dashboard_nodes`：`id`、`dashboard_id`、`parent_id`(自引用)、`client_key`、`module_type`、
+`x`、`y`、`w`、`h`、`z_index`、`is_visible`、`config_json`、时间戳。
+唯一约束 `uq_dashboard_nodes_dashboard_id_client_key`。
+
+`dashboard_bindings`：`id`、`node_id`、`field_key`、`source_kind`、`node_key`、
+`static_value_json`、`compute_json`、`detail_json`、`transform_json`、时间戳。
+唯一约束 `uq_dashboard_bindings_node_id_field_key`。
+
+### 2.2 六处与参考实现刻意不同
+
+参考实现的这些行为是**已证实会静默出错**的，逐条改掉：
+
+| # | 参考实现 | 本仓 | 不改会怎样 |
+|---|---|---|---|
+| 1 | 绑定 id 每次保存重新生成 | id 永不改变，替换按 id 三路比对 | 实时推送的 `binding_id` 关联键每次保存断一次；Agent 上一步建的绑定下一步不可寻址 |
+| 2 | `client_key` 撞键 `setdefault` 先到先得 | 唯一约束，撞了 `409` | 第二个节点被安静地并进第一个 |
+| 3 | 关系无 `order_by` | 节点按 `(parent_id, z_index, id)`、绑定按 `(field_key, id)` | 两次导出不一致，Agent 无法 diff |
+| 4 | 无乐观锁，最后写入者获胜 | `expected_version` 不符即 `409` | 人与 Agent 同时编辑，一方的改动被静默抹掉 |
+| 5 | `(module_id, field_key)` 无唯一约束 | 有 | 同一个槽被绑两次，取哪个看行序 |
+| 6 | 格式版本靠"坐标是不是整数"启发式判断 | 显式 `schema_version` 整数列 | Agent 生成的合法文档被误判成旧格式，每个坐标被乘上栅格宽 |
+
+`row_version`（行版本，乐观锁用）与 `schema_version`（文档格式版本）**是两个字段，不许合并**。
+
+### 2.3 校验：写错就响亮失败
+
+以下一律 `400`，`details[]` 指到具体字段。参考实现全部是静默降级 + `200`：
+
+- `parent_id` 不存在 / 指向自己 / 成环 → `40010`
+- `module_type` 未在模块清单里 → `40010`
+- `field_key` 不是该模块声明的绑定槽 → `40010`
+- `source_kind` 未注册 → `40011`
+- 绑定的 `node_key` 查无此点位 → `40011`
+
+成环检查必须做在服务端。参考实现把它写在模型注释里交给前端，那条注释本身就是这个洞的自述。
+
+---
+
+## 3. API 面
+
+错误码领域号 **10**（大屏与绑定）。权限码 `dashboard:view` / `dashboard:edit` / `dashboard:manage`。
+
+```
+GET    /api/v1/platform/dashboards?project_id=&q=          分页
+POST   /api/v1/platform/dashboards                         Idempotency-Key
+GET    /api/v1/platform/dashboards/{id}                    加载（运行时与编辑器共用）
+PATCH  /api/v1/platform/dashboards/{id}                    元数据
+DELETE /api/v1/platform/dashboards/{id}
+POST   /api/v1/platform/dashboards/{id}:replace-layout     整树替换，必带 expected_version
+POST   /api/v1/platform/dashboards/{id}:validate           自检，返回全部悬空引用
+
+POST   /api/v1/platform/dashboards/{id}/nodes              新增节点
+GET    /api/v1/platform/dashboard-nodes?dashboard_id=
+PATCH  /api/v1/platform/dashboard-nodes/{id}
+DELETE /api/v1/platform/dashboard-nodes/{id}               连子树
+
+POST   /api/v1/platform/dashboard-nodes/{id}/bindings
+GET    /api/v1/platform/dashboard-bindings?node_id=
+PATCH  /api/v1/platform/dashboard-bindings/{id}
+DELETE /api/v1/platform/dashboard-bindings/{id}
+
+GET    /api/v1/platform/module-types                       模块清单（Agent 的地图）
+GET    /api/v1/platform/module-types/{type}
+```
+
+嵌套不超过两层，所以节点与绑定在第二层之后升为顶层资源按 query 过滤
+（[api-contract](agents/api-contract.md) §1）。
+
+⚠ 顶层资源名带 `dashboard-` 前缀，不叫光秃秃的 `nodes` / `bindings`：
+platform 这一个服务里同时有采集点位（`collect-points`）与画布节点，
+而 `opcua-server` 那边还有第三种 `nodes`（地址空间节点）。
+参考实现里这三样都叫 node，读代码时要靠上下文猜是哪一种——**同一个词指三样东西，
+是这套代码里最持久的一个理解成本**。
+
+### 3.1 面向 Agent 的四条口径
+
+用户明确要求后续由 AI Agent 设计大屏、连接点位。这不是"将来再说"——
+它决定接口现在长什么样。四条：
+
+1. **可发现。** `GET /module-types` 返回每个模块的 `displayName` / `category` /
+   `defaultSize` / `configSchema` / `bindings`。没有它，Agent 要生成一张大屏
+   就得先去读前端源码。
+2. **可寻址且稳定。** 每个节点、每个绑定有永不改变的 id。Agent 的工作方式是
+   "做一步、看结果、决定下一步"，这要求每一步都有可以指回去的名字。
+3. **可校验。** 写错立刻 `400` 且指到字段。Agent 看不见画布，它只有响应；
+   一个返回 `200` 却把节点悄悄挪到顶层的接口，会让它带着错误继续往下走。
+4. **可重试。** 所有创建带 `Idempotency-Key`，所有整树替换带 `expected_version`。
+
+⚠ 模块清单有一处**必须承认的重复**：manifest 的单一真源在前端包里（渲染组件与它同处一地才不会漂），
+服务端这份是前端在构建期导出的产物，进版本库、由契约测试锁死两侧一致。
+漏了这道测试，Agent 会按过期清单生成配置，而配置在前端渲染成空白——
+这正是本设计想消灭的那类静默故障，只是换了个位置。
+
+---
+
+## 4. 绑定与取数
+
+### 4.1 来源种类
+
+```
+opcua      → 实时点位，node_key 指向 collect_points，走 WS 推送
+static     → 常量，static_value_json
+computed   → 同模块内其它槽的运算，compute_json {op, inputs, precision}
+archive    → 历史序列，detail_json {node_key, range}
+```
+
+`source_kind` 是**闭合集合**，未注册的值 `400`。参考实现放开成任意字符串，
+于是 `"opuca"` 这种拼写照常入库、永不产数据、无任何告警。
+
+### 4.2 数组绑定
+
+一个 `BindingSpec` 声明 `array: true` + `arrayFields`，落库成 N 行，
+`field_key` 形如 `rows[0].value`。服务端校验索引**连续且从 0 起**——
+参考实现不校验，`rows[7]` 可以在没有 `rows[0..6]` 的情况下存在。
+
+### 4.3 取不到就说取不到
+
+绑定求值失败一律返回 `state: "error"` 加原因，**绝不推空序列冒充"这段时间没数据"**。
+陈旧数据必须标注为陈旧（[runtime-resilience](agents/runtime-resilience.md) §9）。
+
+---
+
+## 5. 模块系统 —— 扩展能力
+
+这是本次改造的重点要求。判据只有一条：**第三方新增一个模块，要改几个文件？**
+
+目标是 **1 个目录 + 1 行注册**，且**不碰运行时、不碰编辑器、不碰后端**。
+
+### 5.1 一个模块 = 一个目录
+
+```
+packages/modules/src/modules/<type>/
+├── manifest.ts      清单：type / displayName / category / defaultSize
+│                    / configSchema / bindings / component
+└── Component.vue    渲染组件，props 固定三件套
+```
+
+```ts
+// packages/modules/src/registry.ts
+export function defineModule(manifest: ModuleManifest): void
+export function getModule(type: string): ModuleManifest | undefined
+export function listModules(): readonly ModuleManifest[]
+```
+
+渲染组件的 props **固定三件套，不许扩**：
+
+```ts
+interface ModuleComponentProps {
+  config: Record<string, unknown>   // 用户配置，对应 configSchema
+  values: Record<string, unknown>   // 按 bindings[].key 求值后的值
+  meta?: ModuleMeta                 // loading/connected/stale/empty/unbound/error
+}
+```
+
+固定三件套是扩展性的**前提**而不是限制：运行时只需要认识这三样，
+就能渲染任何模块——包括它编译时并不知道的模块。一旦某个模块要求第四个 prop，
+运行时就得认识那个模块，49 个模块就会有 49 条分支。
+
+### 5.2 属性面板是 `configSchema` 泛型渲染的
+
+编辑器**没有任何针对具体模块的表单代码**。属性面板读 `configSchema`，
+按 `ConfigField.type`（`string`/`number`/`enum`/`color`/`boolean`/`array`/`object`/…）
+渲染对应控件。新增模块自动获得完整属性面板。
+
+同理，绑定选点面板读 `bindings: BindingSpec[]`，自动摆出该模块的槽位。
+
+### 5.3 五个必须避开的扩展性陷阱
+
+参考实现的模块系统已经相当好，但它有五处**实测存在的扩展性阻塞**。
+逐条说明它们是什么、本仓怎么避开——这些不是猜测，是从参考实现的代码里读出来的。
+
+**① 注册只能靠构建期 glob，第三方模块进不来。**
+参考实现用 `import.meta.glob('./modules/*/index.ts', { eager: true })` 发现模块。
+这意味着模块**必须住在这个包的这个目录下**，没有运行期注册入口、没有清单 URL、没有模块联邦。
+第三方要加模块只能 fork 或 vendor 进单仓。
+
+本仓：`registerModule(manifest)` 是**公开 API**，内置模块的 glob 只是它的第一个调用方。
+应用壳可以在启动时注册任意来源的清单。glob 是便利，不是机制。
+
+**② 新增模块会让一个"花名册"测试变红。**
+参考实现有一份 `interactionSources.test.ts`，要求每个注册的模块类型都必须出现在
+四个数组之一里。加一个模块 = 改一个不在你目录里的文件。
+
+本仓：一期不做节点联动，所以没有这份花名册。将来若要加，
+**能力声明在 manifest 上**（模块自己说它上不上抛交互），不许再造一份外部名单。
+
+**③ 运行时里散着模块类型的字符串字面量。**
+参考实现在 5 处硬编码了具体类型：`'segmented-tabs'`（联动的互斥切换要读它的 config）、
+`'page-nav'`（导航上下文的开关）、`'twin-view'|'twin-sim'|'topology-view'`（属性面板的子编辑器按钮）、
+`'header'|'footer'`（迁移时的钉位判断）、`'report-view'`。
+后果很直接：第三方写的标签页模块**参与不了互斥切换**，第三方模块**没法有子编辑器**。
+
+本仓：**运行时与编辑器里零模块类型字面量**。需要区分能力时在 manifest 上加声明字段
+（`region`、`isContainer`、`subEditor`），代码只读声明。这条要有闸门守：
+在 `packages/runtime` 与编辑器页面里 grep 具体 type 字符串，命中即失败。
+
+**④ 配置控件类型是闭合联合 + 闭合 switch。**
+参考实现的 `ConfigFieldType` 是 14 个成员的闭合联合，`ConfigFieldRenderer` 里是对应的闭合分支。
+加一种控件要同时改契约包和编辑器两个包。
+
+本仓：核心控件类型仍是闭合联合（类型安全值得保），但**渲染分发走注册表**
+（`Map<ConfigFieldType, Component>`）而不是 switch。加一种控件 = 注册一个组件。
+
+**⑤ 外观键目录是闭合的 39 键，且有一处"选了没反应"。**
+参考实现的 `CARD_BORDER_STYLE_OPTIONS` 没登记的样式在面板里选得到、渲染时静默回落成 `solid`——
+它的注释自己承认这是"全仓唯一一处『我选了但没反应』的拦截点"。
+
+本仓：一期不做卡片外观的完整目录。真要做时，**面板的选项从目录推导**，
+而不是面板一份、渲染一份——两份就一定会漂。
+
+### 5.4 三件不许做的事
+
+| 反模式 | 为什么 |
+|---|---|
+| 运行时里 `if (type === 'twin-view')` | 见陷阱 ③。有一处就会有第二处，registry 当场失效 |
+| 模块之间互相 import | 模块是叶子，共用的东西下沉到 `shared/` |
+| 模块直接发 HTTP 请求 | 取数走注入的 provider，否则模块无法在编辑器预览态与测试里运行 |
+
+### 5.5 取数比模块更该开放，且它已经是
+
+参考实现有一处做得明显更好，照抄：**取数那一侧是真开放的**——
+`BindingSourceKind` 是开放联合，`registerProvider(p)` 一行注册，
+模块状态的计算对来源类型无感知（只数"有几个实时绑定"，不认识具体是哪种）。
+
+结论是：**加一种数据来源比加一个模块容易**，而这个不对称没有道理。
+本仓把模块侧拉齐到取数侧的开放度，而不是反过来。
+
+### 5.4 一期只实现两个模块
+
+`header`（页头）与 `twin-view`（数字孪生）。选这两个不是随意的：
+一个是纯配置无绑定的最简模块，一个是带 3D 资源与数组绑定的最复杂模块——
+两端都跑通，中间的图表类模块就只是填空。
+
+`twin-view` 的 three.js 依赖收在 `@dt/three-core` 并**异步加载**：
+不打开孪生模块的大屏不该为它付首屏包体。
+
+---
+
+## 6. 实时链路
+
+```
+collector ──写──> Redis 快照 collect:snapshot:{source_id}
+                        │
+                        │ 读（只取本屏绑定的字段，不 HGETALL）
+                        ▼
+        platform-server ROLE=publisher（单活，Redis 租约）
+                        │ HTTP POST /internal/v1/realtime/publish
+                        │ X-Service-Key + traceparent
+                        ▼
+                   realtime-hub  ── WS ──> 浏览器
+```
+
+- **主题** `dashboard:{dashboard_id}`，形状照 api-contract §10 的 `<域>:<标识>`。
+  由 publisher 在大屏创建时向 hub **登记**并声明所需权限码 `dashboard:view`，
+  删除时注销（[ADR-0007](adr/0007-实时通道薄化与开放主题命名空间.md)）。
+- **`seq` 归 hub**，跨重启单调。客户端据它发现丢帧，不许自己推断。
+- **节流归推送方**：合并窗口、条目上限、分片都在 publisher 做。
+  hub 一旦知道"哪些载荷可以合并"，就又长出业务知识了。
+- 推送信封：`{type:"data", topic, ts, seq, payload:{items:[...]}, trace_id, traceparent}`。
+  hub 从不解释 `items` 的内容。
+- **hub 不可达时降级为"没有实时通道"，绝不降级为"大屏打不开"。**
+
+### 6.1 运行态零 HTTP
+
+大屏运行时的取数**全部走 WS**，包括首帧初值——publisher 发现新观看者时推一次全量。
+参考实现让首屏走 HTTP 拉快照、后续走 WS，于是同一份数据有两条口径，
+两条口径的字段名、时间戳精度、质量位在演进中各漂各的。
+
+---
+
+## 7. 前端包分层
+
+依赖表已由 [`project-structure-typescript.md`](agents/project-structure-typescript.md) §2 定死，
+本次新增四个包，**只能向上依赖**：
+
+| 包 | 依赖 | 装什么 |
+|---|---|---|
+| `@dt/twin-config` | contracts | 孪生场景的纯数据与数学，无 Vue 无 three |
+| `@dt/datasources` | contracts | 取数 provider 的实现（实时/静态/计算/历史） |
+| `@dt/three-core` | contracts, tokens, twin-config, ui | three.js 封装，异步加载的重资源 |
+| `@dt/modules` | contracts, three-core, tokens, twin-config, ui | 模块清单与渲染组件 |
+| `@dt/runtime` | contracts, modules, security, ui | 节点树递归渲染、几何、绑定求值、模块状态 |
+
+⚠ **`@dt/runtime` 不许依赖 `@dt/datasources`**（依赖表里没有这条边）。
+provider 由应用壳注入，接口类型定在 `@dt/contracts`（L0）。
+这不是绕路——它正是让 runtime 能在测试里跑假 provider、
+让"新增一种取数方式"不必碰渲染层的那条缝。
+
+WS 客户端留在应用壳（它要读 auth store），`@dt/datasources` 的 provider
+接收一个 `subscribe` 函数作为入参，不自己建连接。
+
+---
+
+## 8. 一期不做
+
+- header / twin-view 之外的模块（图表、表格、KPI……）。
+- 大屏模板库、素材对象存储、导入导出。
+- 节点联动（点击显隐、弹窗）。
+- 拓扑图编辑器。
+- 公开分享面（表结构里留了 `is_public` / `public_token`，接口不开）。

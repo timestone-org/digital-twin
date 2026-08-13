@@ -22,6 +22,12 @@ export const PERMISSION_CODES = {
   opcuaView: 'opcua:view',
   opcuaOperate: 'opcua:operate',
   opcuaManage: 'opcua:manage',
+  dashboardView: 'dashboard:view',
+  dashboardEdit: 'dashboard:edit',
+  dashboardManage: 'dashboard:manage',
+  collectView: 'collect:view',
+  collectOperate: 'collect:operate',
+  collectManage: 'collect:manage',
 } as const
 
 export type PermissionCode =

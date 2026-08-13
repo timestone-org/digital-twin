@@ -146,3 +146,70 @@ export {
   DT_INTENTS,
   DT_SIZES,
 } from './control'
+export type {
+  BindingDataType,
+  BindingSpec,
+  ConfigField,
+  ConfigFieldCondition,
+  ConfigFieldSpan,
+  ConfigFieldType,
+  ConfigOption,
+  ModuleChrome,
+  ModuleComponentProps,
+  ModuleDefaultSize,
+  ModuleManifest,
+  ModuleMeta,
+  ModulePreview,
+  ModuleRegion,
+  ModuleStatus,
+} from './module'
+export {
+  BINDING_DATA_TYPES,
+  CONFIG_FIELD_SPANS,
+  CONFIG_FIELD_TYPES,
+  MODULE_CHROMES,
+  MODULE_REGIONS,
+  MODULE_STATUSES,
+} from './module'
+export type {
+  BindingPayload,
+  DashboardNodePayload,
+  DashboardPayload,
+  ProjectPayload,
+} from './dashboard'
+export type {
+  ArchiveBindingDetail,
+  BindingSourceKind,
+  BindingTransform,
+  ComputeOp,
+  ComputeSpec,
+  HistoryPoint,
+  HistoryTimeRange,
+} from './binding'
+export { BINDING_SOURCE_KINDS, COMPUTE_OPS } from './binding'
+export type {
+  DataSourceProvider,
+  HistoryQuery,
+  HistoryResult,
+  PointQuality,
+  PointSample,
+  PointValueListener,
+  ProviderRegistry,
+  Unsubscribe,
+} from './datasource'
+export { POINT_QUALITIES } from './datasource'
+export type {
+  ClientAction,
+  ClientMessage,
+  ServerAckFrame,
+  ServerErrorFrame,
+  ServerFrame,
+  ServerFrameHead,
+  ServerFrameType,
+  ServerPayloadFrame,
+} from './realtime'
+export {
+  CLIENT_ACTIONS,
+  REALTIME_AUTH_EXPIRED_CLOSE_CODE,
+  SERVER_FRAME_TYPES,
+} from './realtime'
