@@ -11,11 +11,15 @@ import pytest
 
 from lib.cache import PubSub
 from lib.cache.pubsub import TRACEPARENT_KEY
+from lib.errors.base import DependencyUnavailable
 
 CHANNEL = "lib.test.fanout"
 # 订阅建立要一点时间；pub/sub 不补发，抢在它之前发的消息就是丢了
 SUBSCRIBE_GRACE_S = 0.3
 RECEIVE_TIMEOUT_S = 3.0
+# ⚠ 触发「依赖不可用」不能用 close()：redis-py 在下一次命令时会静默重连。
+# 指向一个没人听的端口，连接被立即拒绝，才是稳定的失败注入
+UNREACHABLE_REDIS_URL = "redis://127.0.0.1:1/0"
 
 
 @pytest.fixture
@@ -63,3 +67,31 @@ async def test_publish_returns_zero_when_nobody_listens(
 ) -> None:
     # ⚠ 0 不是错误：调用方不能把它当成「发失败了」去重试
     assert await sender.publish("lib.test.nobody", {"a": 1}) == 0
+
+
+async def test_publishing_when_redis_is_unreachable_reports_the_dependency() -> (
+    None
+):
+    """⚠ 基础设施异常不许裸露给上层。
+
+    调用方要能按「依赖不可用」降级，而不是去认识 redis 的异常类型——
+    hub 那边正是据它决定「这一批推不出去，客户端靠 seq 自己补」。
+    """
+    sender = PubSub(url=UNREACHABLE_REDIS_URL, timeout_s=0.2)
+    with pytest.raises(DependencyUnavailable):
+        await sender.publish(CHANNEL, {"a": 1})
+    await sender.close()
+
+
+async def test_listening_when_redis_is_unreachable_reports_the_dependency() -> (
+    None
+):
+    listener = PubSub(url=UNREACHABLE_REDIS_URL, timeout_s=0.2)
+
+    async def take_one() -> None:
+        async for _channel, _payload in listener.listen([CHANNEL]):
+            break
+
+    with pytest.raises(DependencyUnavailable):
+        await take_one()
+    await listener.close()
