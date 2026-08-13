@@ -17,13 +17,20 @@ from platform_server.apps.hvac.services.ac_startup_frames import (
 )
 
 # ⚠ 改特征算法的人手动 +1，纪律同 LOGIC_VERSION：模型上存着训练时的取值，
-# 页面据此提示「特征口径已更新，建议重训」
-FEATURE_VERSION = 1
+# 页面据此提示「特征口径已更新，建议重训」。
+# v2：加设定值距离、回风/送风、温湿度极差、焓值与空气路径温差（热力学口径
+# 取自参考实现 ../Baoding/api 的特征工程，只取按物理讲得通的那部分）
+FEATURE_VERSION = 2
 
 # 外部条件与供冷能力的代理测点（datasets.py 里的列名）
 _FRESH_TEMP = "fresh_air_temp"
 _FRESH_HUMIDITY = "fresh_air_humidity"
 _CHILLED_TEMP = "chilled_water_supply_temp"
+_RETURN_TEMP = "return_air_temp"
+_RETURN_HUMIDITY = "return_air_humidity"
+_SUPPLY_TEMP = "supply_air_temp"
+_SETPOINT_TEMP = "ac_temp_setpoint"
+_SETPOINT_HUMIDITY = "ac_humidity_setpoint"
 
 # 工作时段的本地小时界（左闭右开）
 _WORK_START_HOUR = 8
@@ -73,6 +80,17 @@ def feature_names(units: Sequence[RoomUnit]) -> tuple[str, ...]:
         "fresh_air_temp",
         "fresh_air_humidity",
         "chilled_water_temp",
+        "setpoint_temp_gap",
+        "setpoint_humidity_gap",
+        "return_air_temp",
+        "return_air_humidity",
+        "supply_air_temp",
+        "temp_spread",
+        "humidity_spread",
+        "workshop_enthalpy",
+        "enthalpy_setpoint_gap",
+        "fresh_return_temp_gap",
+        "supply_return_temp_gap",
     )
 
 
@@ -103,6 +121,19 @@ def build_row(
         _mean(_running_values(readings, running, _FRESH_TEMP)),
         _mean(_running_values(readings, running, _FRESH_HUMIDITY)),
         _mean(_running_values(readings, running, _CHILLED_TEMP)),
+        _setpoint_gap(readings, units, METRIC_WORKSHOP_TEMP, _SETPOINT_TEMP),
+        _setpoint_gap(
+            readings, units, METRIC_WORKSHOP_HUMIDITY, _SETPOINT_HUMIDITY
+        ),
+        _mean(_running_values(readings, running, _RETURN_TEMP)),
+        _mean(_running_values(readings, running, _RETURN_HUMIDITY)),
+        _mean(_running_values(readings, running, _SUPPLY_TEMP)),
+        _spread(_values(readings, units, METRIC_WORKSHOP_TEMP)),
+        _spread(_values(readings, units, METRIC_WORKSHOP_HUMIDITY)),
+        _mean(_enthalpies(readings, units)),
+        _mean(_enthalpy_gaps(readings, units)),
+        _mean(_pair_gaps(readings, running, _FRESH_TEMP, _RETURN_TEMP)),
+        _mean(_pair_gaps(readings, running, _SUPPLY_TEMP, _RETURN_TEMP)),
     ]
 
 
@@ -206,6 +237,114 @@ def _worst_margin(
     if not found:
         return math.nan
     return max(found)
+
+
+def _setpoint_gap(
+    readings: Readings,
+    units: Sequence[RoomUnit],
+    metric: str,
+    setpoint: str,
+) -> float:
+    """当前值距设定值的平均差（正 = 高于设定值）。
+
+    控制器追的是设定值不是达标带：距设定值越远，机组要做的功越多。
+    Args: readings, units, metric, setpoint。
+    """
+    found: list[float] = []
+    for unit in units:
+        values = readings.get(unit.serial, {})
+        current = values.get(metric)
+        target = values.get(setpoint)
+        if current is not None and target is not None:
+            found.append(current - target)
+    return _mean(found)
+
+
+def _spread(values: Sequence[float]) -> float:
+    """全房间读数的极差：梯度大说明气流没混匀，达标要等最慢的角落。
+
+    Args: values。
+    """
+    if not values:
+        return math.nan
+    return max(values) - min(values)
+
+
+def _enthalpy(temp_c: float, humidity_pct: float) -> float:
+    """湿空气比焓（kJ/kg 干空气），温湿度合一的真实热负荷量。
+
+    Buck 饱和压 + ASHRAE 常数，口径与参考实现 ../Baoding/api 一致。
+    Args: temp_c, humidity_pct。
+    """
+    if temp_c >= 0:
+        saturation = 610.78 * math.exp(17.27 * temp_c / (temp_c + 237.3))
+    else:
+        saturation = 610.78 * math.exp(21.88 * temp_c / (temp_c + 265.5))
+    vapor = humidity_pct / 100.0 * saturation
+    pressure = 101325.0
+    dry = max(pressure - vapor, 0.01 * pressure)
+    ratio = 0.622 * vapor / dry
+    return 1.006 * temp_c + ratio * (2501.0 + 1.86 * temp_c)
+
+
+def _enthalpies(readings: Readings, units: Sequence[RoomUnit]) -> list[float]:
+    """各台车间空气的比焓；温湿度缺一台就少一台。
+
+    Args: readings, units。
+    """
+    found: list[float] = []
+    for unit in units:
+        values = readings.get(unit.serial, {})
+        temperature = values.get(METRIC_WORKSHOP_TEMP)
+        humidity = values.get(METRIC_WORKSHOP_HUMIDITY)
+        if temperature is not None and humidity is not None:
+            found.append(_enthalpy(temperature, humidity))
+    return found
+
+
+def _enthalpy_gaps(
+    readings: Readings, units: Sequence[RoomUnit]
+) -> list[float]:
+    """各台「当前焓 − 设定焓」：比温差更接近机组真正要做的功。
+
+    Args: readings, units。
+    """
+    found: list[float] = []
+    for unit in units:
+        values = readings.get(unit.serial, {})
+        temperature = values.get(METRIC_WORKSHOP_TEMP)
+        humidity = values.get(METRIC_WORKSHOP_HUMIDITY)
+        target_temperature = values.get(_SETPOINT_TEMP)
+        target_humidity = values.get(_SETPOINT_HUMIDITY)
+        if temperature is None or humidity is None:
+            continue
+        if target_temperature is None or target_humidity is None:
+            continue
+        found.append(
+            _enthalpy(temperature, humidity)
+            - _enthalpy(target_temperature, target_humidity)
+        )
+    return found
+
+
+def _pair_gaps(
+    readings: Readings,
+    running: frozenset[str],
+    first: str,
+    second: str,
+) -> list[float]:
+    """运行机组上两个测点的差（新风−回风=新风负荷，送风−回风=处理能力）。
+
+    Args: readings, running, first, second。
+    """
+    found: list[float] = []
+    for serial in running:
+        values = readings.get(serial, {})
+        left = values.get(first)
+        right = values.get(second)
+        if left is not None and right is not None:
+            found.append(left - right)
+    return found
 
 
 def _clock(started_at: datetime, timezone: str) -> list[float]:

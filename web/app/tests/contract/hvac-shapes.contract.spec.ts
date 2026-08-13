@@ -385,6 +385,7 @@ const SHAPES: Record<string, Record<string, true>> = {
     interval_width_minutes: true,
     reliability: true,
     is_in_serving_sets: true,
+    is_dedicated: true,
     trained_at: true,
   } satisfies Keys<ModelPredictResult>,
 

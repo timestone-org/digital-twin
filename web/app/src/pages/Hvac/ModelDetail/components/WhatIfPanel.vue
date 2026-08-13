@@ -158,6 +158,10 @@ async function run(): Promise<void> {
         <DtTag v-if="!result.is_in_serving_sets" size="sm" intent="warning">
           服务组合之外的外推
         </DtTag>
+        <DtTag v-if="!result.is_dedicated" size="sm" intent="info">
+          组合样本不足，房间共用模型兜底
+        </DtTag>
+        <DtTag v-else size="sm" intent="success">组合专属模型</DtTag>
       </p>
     </div>
   </div>

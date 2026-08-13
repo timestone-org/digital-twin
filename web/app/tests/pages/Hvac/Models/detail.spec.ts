@@ -203,6 +203,7 @@ describe('试算', () => {
       interval_width_minutes: 21,
       reliability: 'reliable',
       is_in_serving_sets: true,
+      is_dedicated: true,
       trained_at: STAMP,
     })
     const wrapper = await open()
@@ -214,6 +215,7 @@ describe('试算', () => {
       readings: {},
     })
     expect(wrapper.text()).toContain('25.4 分钟')
+    expect(wrapper.text()).toContain('组合专属模型')
     expect(wrapper.text()).toContain('可靠')
   })
 
@@ -225,6 +227,7 @@ describe('试算', () => {
       interval_width_minutes: 80,
       reliability: 'weak',
       is_in_serving_sets: false,
+      is_dedicated: false,
       trained_at: STAMP,
     })
     const wrapper = await open()
@@ -232,6 +235,7 @@ describe('试算', () => {
     await run?.trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('服务组合之外的外推')
+    expect(wrapper.text()).toContain('共用模型兜底')
     expect(wrapper.text()).toContain('仅供参考')
   })
 })

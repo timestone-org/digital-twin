@@ -375,6 +375,7 @@ async def _mark_trained(
         units=await _trained_units(session, model),
         timezone=TZ,
         half_life_days=180.0,
+        serving_sets=[list(item) for item in model.serving_sets],
     )
     session.add(
         AcModelArtifact(

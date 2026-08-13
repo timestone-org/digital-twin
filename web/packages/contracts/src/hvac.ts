@@ -403,6 +403,8 @@ export interface ModelPredictResult {
   interval_width_minutes: number
   reliability: ModelReliability
   is_in_serving_sets: boolean
+  /** 真 = 组合专属子模型在答话；假 = 组合样本不足，房间共用模型兜底。 */
+  is_dedicated: boolean
   trained_at: string
 }
 

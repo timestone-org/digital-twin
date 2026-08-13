@@ -255,5 +255,6 @@ def _predict_out(found: ac_model_service.PredictResult) -> PredictOut:
         interval_width_minutes=width,
         reliability=reliability(width),
         is_in_serving_sets=found.is_in_serving_sets,
+        is_dedicated=found.is_dedicated,
         trained_at=found.trained_at,
     )

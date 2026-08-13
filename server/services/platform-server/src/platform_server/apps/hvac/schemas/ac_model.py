@@ -136,4 +136,6 @@ class PredictOut(OutputModel):
     interval_width_minutes: float
     reliability: str
     is_in_serving_sets: bool
+    # 真 = 这个组合的专属子模型在答话；假 = 组合样本不足，房间共用模型兜底
+    is_dedicated: bool
     trained_at: Utc

@@ -269,6 +269,8 @@ class PredictResult:
     p50: float
     p90: float
     is_in_serving_sets: bool
+    # 答话的是这个组合的专属子模型，还是房间共用模型在兜底
+    is_dedicated: bool
     trained_at: datetime
 
 
@@ -298,7 +300,31 @@ async def predict(
         raise ModelConfigInvalid(
             f"组合里有模型不认识的机组：{'、'.join(unknown)}"
         )
-    conditions = StartConditions(
+    # ⚠ 按工件自己的机组清单拼行，不按房间当前清单：房间变动不改老工件的列
+    row = build_row(
+        _conditions_of(payload, running),
+        units=bundle.units,
+        timezone=bundle.timezone,
+    )
+    pair, is_dedicated = bundle.pair_for(set_key(running))
+    p10, p50, p90 = predict_quantiles(pair, row)
+    return PredictResult(
+        p10=p10,
+        p50=p50,
+        p90=p90,
+        is_in_serving_sets=set_key(running)
+        in {set_key(serving) for serving in model.serving_sets},
+        is_dedicated=is_dedicated,
+        trained_at=model.trained_at,
+    )
+
+
+def _conditions_of(payload: PredictIn, running: list[str]) -> StartConditions:
+    """试算入参 → 起始条件。
+
+    Args: payload, running（已排序去重）。
+    """
+    return StartConditions(
         started_at=payload.at or utcnow(),
         running_set=tuple(running),
         idle_minutes=payload.idle_minutes,
@@ -306,21 +332,6 @@ async def predict(
             serial: reading.model_dump(exclude_none=True)
             for serial, reading in payload.readings.items()
         },
-    )
-    # ⚠ 按工件自己的机组清单拼行，不按房间当前清单：房间变动不改老工件的列
-    row = build_row(
-        conditions,
-        units=bundle.units,
-        timezone=bundle.timezone,
-    )
-    p10, p50, p90 = predict_quantiles(bundle, row)
-    return PredictResult(
-        p10=p10,
-        p50=p50,
-        p90=p90,
-        is_in_serving_sets=set_key(running)
-        in {set_key(serving) for serving in model.serving_sets},
-        trained_at=model.trained_at,
     )
 
 

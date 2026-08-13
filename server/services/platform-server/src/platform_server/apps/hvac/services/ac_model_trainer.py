@@ -103,6 +103,7 @@ async def run_training(
             return TrainRun(TRAIN_RUN_ORPHANED, reason="模型已被删除")
         model.status = MODEL_STATUS_TRAINING
         half_life_days = model.half_life_days
+        serving_sets = [list(item) for item in model.serving_sets]
         room_id = model.room_id
     try:
         async with database.session() as session:
@@ -112,6 +113,7 @@ async def run_training(
             inputs,
             timezone=timezone,
             half_life_days=half_life_days,
+            serving_sets=serving_sets,
         )
     except (InsufficientSamples, TrainingRejected) as error:
         return await _mark_failed(database, model_id, reason=str(error))
@@ -165,10 +167,11 @@ async def _fit(
     *,
     timezone: str,
     half_life_days: float,
+    serving_sets: list[list[str]],
 ) -> TrainedModel:
     """把拟合丢进进程池并等结果。
 
-    Args: executor, inputs, timezone, half_life_days。
+    Args: executor, inputs, timezone, half_life_days, serving_sets。
     """
     return await asyncio.get_running_loop().run_in_executor(
         executor,
@@ -178,6 +181,7 @@ async def _fit(
             units=inputs.units,
             timezone=timezone,
             half_life_days=half_life_days,
+            serving_sets=serving_sets,
         ),
     )
 

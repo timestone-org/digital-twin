@@ -47,6 +47,8 @@ async def test_predict_returns_quantiles_and_marks_extrapolation(
     found = served.json()["data"]
     assert 0 <= found["p10"] <= found["p50"] <= found["p90"]
     assert found["is_in_serving_sets"] is True
+    # 30 条全是这一个组合的样本 → 它有专属子模型
+    assert found["is_dedicated"] is True
     assert found["reliability"] in {"reliable", "indicative", "weak"}
     outside = await app_client.post(
         f"{PREFIX}/ac-models/{model_id}:predict",
@@ -54,6 +56,8 @@ async def test_predict_returns_quantiles_and_marks_extrapolation(
         headers=viewer,
     )
     assert outside.json()["data"]["is_in_serving_sets"] is False
+    # 这个组合没攒到样本 → 共用模型兜底
+    assert outside.json()["data"]["is_dedicated"] is False
 
 
 async def test_predict_before_training_is_a_conflict(

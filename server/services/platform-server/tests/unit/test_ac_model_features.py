@@ -72,7 +72,7 @@ def test_feature_names_scale_with_the_room() -> None:
     """组合指示列随房间机组数变，其余列固定。"""
     names = feature_names(UNITS)
     assert names.index("run_K11") < names.index("run_K12")
-    assert len(names) == 6 + len(UNITS) + 1 + 1 + 5 + 3
+    assert len(names) == 6 + len(UNITS) + 1 + 1 + 5 + 3 + 7 + 4
 
 
 def test_room_conditions_average_over_all_units() -> None:
@@ -209,3 +209,41 @@ def test_the_matrix_keeps_the_sample_order() -> None:
     names = feature_names(UNITS)
     at = names.index("idle_minutes")
     assert [row[at] for row in matrix] == [10.0, 20.0]
+
+
+def test_setpoint_gap_needs_both_readings() -> None:
+    """设定值距离要当前值与设定值都在场；只有一半就是缺测。"""
+    row = by_name(
+        build_row(
+            conditions(
+                {
+                    "K11": {
+                        "workshop_temp_avg": 27.0,
+                        "ac_temp_setpoint": 24.0,
+                    },
+                    "K12": {"workshop_temp_avg": 25.0},
+                }
+            ),
+            units=UNITS,
+            timezone=TZ,
+        )
+    )
+    assert row["setpoint_temp_gap"] == 3.0
+
+
+def test_spread_measures_the_room_gradient() -> None:
+    """极差量的是房间没混匀的程度：一台 24 一台 30 就是 6。"""
+    row = by_name(
+        build_row(
+            conditions(
+                {
+                    "K11": {"workshop_temp_avg": 24.0},
+                    "K12": {"workshop_temp_avg": 30.0},
+                }
+            ),
+            units=UNITS,
+            timezone=TZ,
+        )
+    )
+    assert row["temp_spread"] == 6.0
+    assert math.isnan(row["humidity_spread"])
