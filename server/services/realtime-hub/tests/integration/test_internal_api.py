@@ -125,3 +125,25 @@ async def test_unknown_fields_are_refused(
     # 本仓把入参校验统一映射成 400（不是 FastAPI 默认的 422），见 lib.errors
     response = await client.post(TOPICS, json={**DECLARED, "extra": 1})
     assert response.status_code == 400
+
+
+async def test_topics_can_be_listed_for_reconciliation(
+    client: httpx.AsyncClient,
+) -> None:
+    """⚠ 对账要的是全集：推送方拿它比对自己的实体表，补缺、清多。"""
+    await client.post(TOPICS, json=DECLARED)
+    await client.post(TOPICS, json={**DECLARED, "topic": "opcua:another"})
+    response = await client.get(TOPICS, params={"publisher": "opcua-server"})
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["publisher"] == "opcua-server"
+    assert set(payload["topics"]) == {DECLARED["topic"], "opcua:another"}
+
+
+async def test_listing_another_publisher_returns_nothing(
+    client: httpx.AsyncClient,
+) -> None:
+    # ⚠ 按推送方隔离：A 的对账不该看见也不该清掉 B 的主题
+    await client.post(TOPICS, json=DECLARED)
+    response = await client.get(TOPICS, params={"publisher": "someone-else"})
+    assert response.json()["data"]["topics"] == []
