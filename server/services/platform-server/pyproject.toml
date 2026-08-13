@@ -5,6 +5,8 @@ description = "业务平台：空调台账与车间房间空间配置。"
 requires-python = ">=3.12"
 dependencies = [
     "lib[auth,db,mssql,redis,web]",
+    "numpy>=2.1",
+    "scikit-learn>=1.7",
 ]
 
 [project.scripts]
