@@ -1,4 +1,5 @@
 {
+  "npm:axe-core": "MPL-2.0：文件级 copyleft，作为库原样引用、未修改。它只经 @storybook/addon-a11y 进入 Storybook 的开发与静态站构建，不进 @dt/app 的产物，交付物里没有它。",
   "npm:lightningcss*": "MPL-2.0：文件级 copyleft，只要不改它的源文件就不传染到本仓；各平台二进制同源，故用通配。",
   "py:asyncua": "LGPLv3+：以 import 方式原样引用、未修改、未静态链接，传染只及于对它自身源码的修改。本仓靠子类扩展点接入而非 patch 它的私有类（见 server/services/opcua-server/CONTEXT.md §5），且它按版本从 PyPI 装、可被替换成同接口的其它版本，满足 LGPL 的可替换要求。⚠ 一旦改动它的源码或把它 vendor 进仓，本条结论即失效，须重新评估。",
   "py:certifi": "MPL-2.0：只是一份 CA 证书数据包，未修改，不传染。",

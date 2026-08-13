@@ -1,0 +1,133 @@
+/**
+ * Storybook 画布自己的皮肤与排版工具类。
+ *
+ * 只服务于 story 的摆放（一行放几个、标注一句话），不进任何产物，也不许有
+ * 组件该有的样式：组件长什么样只能由 src/ 下的 scoped SCSS 说了算，
+ * 在这里补一笔，看到的就不是组件真实的样子了。
+ * 取值一律 var(--…)，跟着换肤走。
+ */
+
+body {
+  margin: 0;
+  background: var(--surface-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.sb-canvas {
+  display: flow-root;
+  min-height: 2rem;
+}
+
+/* 一行铺开，放不下就换行。变体矩阵的默认容器 */
+.sb-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.sb-row--top {
+  align-items: flex-start;
+}
+
+.sb-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+/* 等宽多列：同一档的不同取值并排比对时用 */
+.sb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.sb-grid--wide {
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+
+/* 一组样例的分组框：标题 + 内容 */
+.sb-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
+}
+
+.sb-group__title {
+  margin: 0;
+  color: var(--text-title);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* 单个样例的说明。⚠ 用它标注取值，别把说明写进组件的插槽里冒充内容 */
+.sb-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.sb-label--mono {
+  font-family: var(--font-mono);
+}
+
+.sb-note {
+  margin: 0;
+  color: var(--text-disabled);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+/* 表单类组件按真实使用宽度收窄，撑满整屏看不出对齐问题 */
+.sb-w-xs {
+  width: 180px;
+}
+
+.sb-w-sm {
+  width: 260px;
+}
+
+.sb-w-md {
+  width: 360px;
+}
+
+.sb-w-lg {
+  width: 520px;
+}
+
+.sb-w-full {
+  width: 100%;
+}
+
+/* 浮层类组件要留出翻转与避让的空间，否则永远只看得到一个方向 */
+.sb-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 260px;
+  padding: 24px;
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.sb-stage--tall {
+  min-height: 420px;
+}
+
+/* 定高滚动容器：验证表格 sticky 表头与内部滚动 */
+.sb-scroll {
+  display: flex;
+  flex-direction: column;
+  height: 320px;
+  min-height: 0;
+}
