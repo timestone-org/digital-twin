@@ -47,6 +47,7 @@ from opcua_server.apps.instance.services.presenter import (
     unwrap_value,
     wrap_value,
 )
+from opcua_server.apps.instance.services.value_publisher import ValuePublisher
 
 _logger = get_logger("opcua.nodes")
 
@@ -60,14 +61,19 @@ class NodeService:
     """节点面的业务与事务边界。"""
 
     def __init__(
-        self, *, database: Database, supervisor: InstanceSupervisor
+        self,
+        *,
+        database: Database,
+        supervisor: InstanceSupervisor,
+        values: ValuePublisher,
     ) -> None:
         """按数据库与实例管理器装配。
 
-        Args: database, supervisor。
+        Args: database, supervisor, values。
         """
         self._database = database
         self._supervisor = supervisor
+        self._values = values
         self._sync = NodeRuntimeSync(database=database, supervisor=supervisor)
 
     async def list_nodes(
@@ -245,6 +251,9 @@ class NodeService:
         if running is None:
             raise InstanceNotRunning("实例未运行，无法写值")
         written = await running.write_value(identifier, value)
+        # ⚠ 记的是**收敛后**的实际值，不是入参：类型收敛可能改写它，
+        # 推给订阅方的必须与上位机读到的一致
+        await self._values.record(instance_id, identifier, written)
         return NodeWriteOut(
             identifier=identifier, node_id=node_id_text, value=written
         )

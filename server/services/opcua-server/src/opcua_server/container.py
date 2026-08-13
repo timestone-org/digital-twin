@@ -15,6 +15,7 @@ from opcua_server.apps.instance.services import (
     NodeService,
     RealtimeClient,
     SecurityService,
+    ValuePublisher,
 )
 from opcua_server.settings import Settings
 
@@ -32,6 +33,7 @@ class Container:
     security: SecurityService
     idempotency: IdempotencyStore
     realtime: RealtimeClient
+    values: ValuePublisher
 
 
 def _build_database(settings: Settings) -> Database:
@@ -87,6 +89,11 @@ def build_container(settings: Settings) -> Container:
         service_key=settings.edge_service_key.get_secret_value(),
         timeout_s=settings.realtime_timeout_s,
     )
+    values = ValuePublisher(
+        realtime=realtime,
+        window_ms=settings.publish_window_ms,
+        max_items=settings.publish_max_nodes,
+    )
     return Container(
         settings=settings,
         database=database,
@@ -98,7 +105,9 @@ def build_container(settings: Settings) -> Container:
             advertised_host=_advertised_host(),
             realtime=realtime,
         ),
-        nodes=NodeService(database=database, supervisor=supervisor),
+        nodes=NodeService(
+            database=database, supervisor=supervisor, values=values
+        ),
         security=SecurityService(
             database=database,
             supervisor=supervisor,
@@ -106,4 +115,5 @@ def build_container(settings: Settings) -> Container:
         ),
         idempotency=IdempotencyStore(cache=cache),
         realtime=realtime,
+        values=values,
     )
