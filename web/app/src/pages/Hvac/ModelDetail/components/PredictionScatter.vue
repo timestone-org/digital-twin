@@ -46,7 +46,8 @@ const dots = computed<Dot[]>(() =>
 
 /** ⚠ 零行（开机即达标且判对）淡化：它们堆在原点，压住热行的真实表现。 */
 function paintOf(row: ModelPrediction): string {
-  const isCovered = row.p10 <= row.actual_minutes && row.actual_minutes <= row.p90
+  const isCovered =
+    row.p10 <= row.actual_minutes && row.actual_minutes <= row.p90
   if (!isCovered) return 'fill-state-warning'
   if (row.actual_minutes === 0 && row.p50 === 0) return 'fill-text-disabled/40'
   return 'fill-accent-primary/70'

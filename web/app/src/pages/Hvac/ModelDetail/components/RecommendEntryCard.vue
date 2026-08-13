@@ -53,9 +53,7 @@ const props = defineProps<{ entry: ModelRecommendEntry }>()
       <DtTag v-if="props.entry.is_dedicated" size="sm" intent="success">
         组合专属模型
       </DtTag>
-      <DtTag v-else size="sm" intent="info">
-        组合样本不足，共用模型兜底
-      </DtTag>
+      <DtTag v-else size="sm" intent="info"> 组合样本不足，共用模型兜底 </DtTag>
     </p>
   </div>
 </template>

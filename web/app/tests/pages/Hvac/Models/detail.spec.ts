@@ -264,9 +264,7 @@ describe('开机策略推荐', () => {
   })
 
   it('推荐失败把原因亮出来，不静默', async () => {
-    vi.spyOn(hvac, 'recommendWithAcModel').mockRejectedValue(
-      new Error('boom'),
-    )
+    vi.spyOn(hvac, 'recommendWithAcModel').mockRejectedValue(new Error('boom'))
     const wrapper = await open()
     const run = wrapper
       .findAll('button')
@@ -289,9 +287,9 @@ describe('逐条对比', () => {
     )
     trigger?.click()
     await flushPromises()
-    const option = [
-      ...document.body.querySelectorAll('[role="option"]'),
-    ].find((item) => item.textContent?.includes('K11+K12'))
+    const option = [...document.body.querySelectorAll('[role="option"]')].find(
+      (item) => item.textContent?.includes('K11+K12'),
+    )
     ;(option as HTMLElement | undefined)?.click()
     await flushPromises()
     expect(hvac.listModelPredictions).toHaveBeenLastCalledWith('m1', {
