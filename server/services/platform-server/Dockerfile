@@ -34,8 +34,10 @@ ENV PATH="/src/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-WORKDIR /src
 COPY --from=builder --chown=app:app /src /src
+# ⚠ 落在服务目录：alembic 与 `python -m scripts.<名>` 都按 CWD 找自己那份，
+# 停在 /src 会让部署期的迁移/种子命令逐个失败
+WORKDIR /src/services/platform-server
 
 USER app
 EXPOSE 8005
