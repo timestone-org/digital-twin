@@ -153,6 +153,18 @@ def _security_policies(security: SecurityProfile) -> list[Any]:
     return policies
 
 
+def _make_watcher(
+    instance_id: UUID, on_change: OnValueChange | None
+) -> ValueWatcher | None:
+    """按需造值监听。不给回调就不建——实时推送是可选链路。
+
+    Args: instance_id, on_change。
+    """
+    if on_change is None:
+        return None
+    return ValueWatcher(instance_id=instance_id, on_change=on_change)
+
+
 class RunningInstance:
     """一个已装配好的实例。start / stop 之外不持有后台循环。"""
 
@@ -173,13 +185,7 @@ class RunningInstance:
         """
         self.spec = spec
         self._pki = pki
-        self._watcher = (
-            ValueWatcher(
-                instance_id=spec.instance_id, on_change=on_value_change
-            )
-            if on_value_change is not None
-            else None
-        )
+        self._watcher = _make_watcher(spec.instance_id, on_value_change)
         self._registry = SessionRegistry(clock=clock)
         self._server: Server | None = None
         self._nodes: dict[str, BuiltNode] = {}
