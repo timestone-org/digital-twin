@@ -51,6 +51,7 @@ const draft = ref('')
 const live = useNodeValue(
   toRef(props, 'instanceId'),
   toRef(() => props.node.id),
+  toRef(() => props.node.identifier),
 )
 
 // 换节点时清掉上一个节点的草稿，否则会把 A 的输入误写进 B
