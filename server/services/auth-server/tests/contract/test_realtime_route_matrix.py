@@ -12,7 +12,7 @@ realtime-hub 的端点定义在另一个代码单元里，auth-server 看不见�
 
 import pytest
 
-from auth_server.apps.auth import catalog, route_catalog
+from auth_server.apps.auth import catalog
 from auth_server.apps.auth.services.matching import RuleView, find_rule
 
 REALTIME_PREFIX = "/api/v1/realtime"
@@ -37,7 +37,7 @@ def _rules() -> list[RuleView]:
             match_mode=spec.match_mode,
             priority=spec.priority,
         )
-        for spec in route_catalog.ROUTE_RULES
+        for spec in catalog.ROUTE_RULES
     ]
 
 

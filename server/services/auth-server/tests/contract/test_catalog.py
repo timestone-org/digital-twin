@@ -4,7 +4,7 @@
 且不会有任何编译期报错。这个文件是它唯一的守卫。
 """
 
-from auth_server.apps.auth import catalog, route_catalog
+from auth_server.apps.auth import catalog
 from auth_server.apps.auth.models import PERMISSION_KINDS
 from auth_server.apps.auth.services.matching import RuleView, is_redundant
 
@@ -65,7 +65,7 @@ def test_role_manage_is_grouped_under_user_not_its_code_prefix() -> None:
 def test_every_route_rule_references_a_registered_code() -> None:
     unknown = {
         code
-        for rule in route_catalog.ROUTE_RULES
+        for rule in catalog.ROUTE_RULES
         for code in rule.codes
         if code not in catalog.ALL_CODES
     }
@@ -74,8 +74,7 @@ def test_every_route_rule_references_a_registered_code() -> None:
 
 def test_route_rule_keys_are_unique() -> None:
     keys = [
-        (rule.path_pattern, rule.http_method)
-        for rule in route_catalog.ROUTE_RULES
+        (rule.path_pattern, rule.http_method) for rule in catalog.ROUTE_RULES
     ]
     assert len(keys) == len(set(keys))
 
@@ -89,7 +88,7 @@ def test_no_route_rule_is_redundant() -> None:
             match_mode=rule.match_mode,
             priority=rule.priority,
         )
-        for rule in route_catalog.ROUTE_RULES
+        for rule in catalog.ROUTE_RULES
     ]
     noise = [
         f"{view.http_method} {view.path_pattern}"

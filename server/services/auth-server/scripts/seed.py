@@ -12,7 +12,7 @@ from pydantic import EmailStr, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth_server.apps.auth import catalog, route_catalog
+from auth_server.apps.auth import catalog
 from auth_server.apps.auth.crud import (
     permission_crud,
     role_crud,
@@ -61,7 +61,7 @@ def check_catalog() -> list[str]:
 
 def _check_rule_codes() -> list[str]:
     problems: list[str] = []
-    for rule in route_catalog.ROUTE_RULES:
+    for rule in catalog.ROUTE_RULES:
         unknown = set(rule.codes) - catalog.ALL_CODES
         if unknown:
             problems.append(
@@ -92,7 +92,7 @@ def _check_rule_redundancy() -> list[str]:
             match_mode=rule.match_mode,
             priority=rule.priority,
         )
-        for rule in route_catalog.ROUTE_RULES
+        for rule in catalog.ROUTE_RULES
     ]
     return [
         f"规则 {view.http_method} {view.path_pattern} 与更宽的规则判定相同，"
@@ -158,7 +158,7 @@ async def sync_route_rules(session: AsyncSession) -> None:
 
     Args: session。
     """
-    for spec in route_catalog.ROUTE_RULES:
+    for spec in catalog.ROUTE_RULES:
         rule = await route_rule_crud.get_by_key(
             session,
             path_pattern=spec.path_pattern,
@@ -226,7 +226,7 @@ async def run(settings: Settings, seed: SeedSettings) -> None:
             "种子同步完成",
             permissions=len(catalog.PERMISSIONS),
             roles=len(catalog.ROLES),
-            route_rules=len(route_catalog.ROUTE_RULES),
+            route_rules=len(catalog.ROUTE_RULES),
             admin_created=created,
         )
     finally:

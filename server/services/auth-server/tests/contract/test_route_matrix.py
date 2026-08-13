@@ -13,7 +13,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
-from auth_server.apps.auth import route_catalog
+from auth_server.apps.auth import catalog
 from auth_server.apps.auth.api import ROUTERS
 from auth_server.apps.auth.deps import (
     REQUIRED_CODES_ATTR,
@@ -63,7 +63,7 @@ def catalog_rules() -> list[RuleView]:
             match_mode=spec.match_mode,
             priority=spec.priority,
         )
-        for spec in route_catalog.ROUTE_RULES
+        for spec in catalog.ROUTE_RULES
     ]
 
 
