@@ -224,7 +224,8 @@ async def test_the_january_shard_reads_past_its_own_month(
     reader = context.reader
     assert isinstance(reader, StubReader)
     start, end = reader.windows[0]
-    assert start == datetime(2025, 12, 31, 23, 30, tzinfo=UTC)
+    # 向前 12 小时（数全停时长）、向后 100 分钟（判达标上限）
+    assert start == datetime(2025, 12, 31, 12, 0, tzinfo=UTC)
     assert end == datetime(2026, 2, 1, 1, 40, tzinfo=UTC)
 
 

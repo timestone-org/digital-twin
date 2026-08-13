@@ -4,6 +4,7 @@
 会让在途那一片拿着一个已经关掉的连接池（docs/agents/runtime-resilience.md §8）。
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import cast
 
@@ -13,6 +14,9 @@ from pydantic import SecretStr
 from lib.db import Database, ReadOnlySqlSource
 from platform_server import __main__ as main_module
 from platform_server import worker
+from platform_server.apps.hvac.services.ac_model_worker import (
+    TrainingConsumer,
+)
 from platform_server.apps.hvac.services.ac_startup_worker import (
     ShardConsumer,
 )
@@ -20,8 +24,10 @@ from platform_server.container import Container
 from platform_server.settings import ROLE_API, ROLE_WORKER, Settings
 from platform_server.stream import RedisStream
 from platform_server.worker import (
+    Consumer,
     WorkerRuntime,
     build_consumer,
+    build_trainer,
     run_until_stopped,
     selfcheck,
 )
@@ -108,6 +114,18 @@ def test_the_consumer_takes_its_identity_from_config() -> None:
     assert options.shard_timeout_s == 300.0
 
 
+def test_the_trainer_takes_its_identity_from_config() -> None:
+    """训练消费循环的流名、消费组与时区都由配置决定。"""
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        trainer = build_trainer(build_container([]), executor=executor)
+    options = trainer._options
+    assert options.target.stream == "platform:ac-model:train"
+    assert options.target.group == "ac-model-trainers"
+    assert options.target.consumer == "worker-1"
+    assert options.timezone == "Asia/Shanghai"
+    assert options.train_timeout_s == 600.0
+
+
 def test_the_shard_budget_exceeds_the_sum_of_its_source_queries() -> None:
     """⚠ 一片的预算必须大于它内部全部外库查询之和，否则总是先被外层掐断。"""
     settings = build_settings()
@@ -130,7 +148,7 @@ async def test_shutdown_stops_intake_then_drains_then_releases() -> None:
     consumer = FakeConsumer(ledger)
     await run_until_stopped(
         WorkerRuntime(
-            consumer=cast(ShardConsumer, consumer),
+            consumers=(cast(Consumer, consumer),),
             container=container,
             wait=_immediate,
         ),
@@ -140,13 +158,32 @@ async def test_shutdown_stops_intake_then_drains_then_releases() -> None:
     assert consumer.drained == [1.5]
 
 
+async def test_every_consumer_stops_before_any_resource_closes() -> None:
+    """两条消费循环都要先停干净，然后才轮到资源。"""
+    ledger: list[str] = []
+    container = build_container(ledger)
+    first = FakeConsumer(ledger)
+    second = FakeConsumer(ledger)
+    await run_until_stopped(
+        WorkerRuntime(
+            consumers=(cast(Consumer, first), cast(Consumer, second)),
+            container=container,
+            wait=_immediate,
+        ),
+        drain_timeout_s=1.5,
+    )
+    assert ledger[:2] == ["stop", "stop"]
+    assert sorted(ledger[2:4]) == ["drain", "drain"]
+    assert ledger[4:] == ["stream", "ac_source", "database"]
+
+
 async def test_resources_are_released_even_when_the_wait_blows_up() -> None:
     """等待期间抛异常也要照常收摊，否则连接池会随进程一起泄漏。"""
     ledger: list[str] = []
     with pytest.raises(RuntimeError):
         await run_until_stopped(
             WorkerRuntime(
-                consumer=cast(ShardConsumer, FakeConsumer(ledger)),
+                consumers=(cast(Consumer, FakeConsumer(ledger)),),
                 container=build_container(ledger),
                 wait=_explode,
             ),
@@ -177,8 +214,16 @@ async def test_serving_wires_the_container_and_shuts_it_down(
         "build_consumer",
         lambda _: cast(ShardConsumer, FakeConsumer(ledger)),
     )
+
+    def fake_trainer(_: Container, *, executor: object) -> TrainingConsumer:
+        del executor
+        return cast(TrainingConsumer, FakeConsumer(ledger))
+
+    monkeypatch.setattr(worker, "build_trainer", fake_trainer)
     await worker.serve(build_settings(), wait=_immediate)
-    assert ledger == ["stop", "drain", "stream", "ac_source", "database"]
+    assert ledger[:2] == ["stop", "stop"]
+    assert sorted(ledger[2:4]) == ["drain", "drain"]
+    assert ledger[4:] == ["stream", "ac_source", "database"]
 
 
 def test_the_worker_role_runs_the_consumer_not_uvicorn(

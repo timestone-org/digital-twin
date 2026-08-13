@@ -57,3 +57,13 @@ class Settings(AppSettings, PostgresSettings, RedisSettings, SqlServerSettings):
     acstartup_shard_timeout_s: float = 300.0
     # 一台空调一片最多取多少行；一个月按分钟采样约 4.5 万行
     acstartup_max_rows: int = 60000
+
+    # 达标时长模型的训练队列，见 docs/AC_MODEL_DESIGN.md §4
+    acmodel_stream: str = "platform:ac-model:train"
+    acmodel_group: str = "ac-model-trainers"
+    acmodel_block_ms: int = 5000
+    # 训练要跑几十秒，认领门槛要比它长得多，否则跑到一半就被别人抢走重训
+    acmodel_claim_idle_ms: int = 300000
+    acmodel_prefetch: int = 1
+    # 一次训练的总预算：几百样本 × 15 次拟合在秒级，10 分钟是硬故障线不是余量
+    acmodel_train_timeout_s: float = 600.0
