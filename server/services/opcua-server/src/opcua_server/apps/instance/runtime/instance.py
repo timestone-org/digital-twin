@@ -47,6 +47,10 @@ from opcua_server.apps.instance.runtime.sessions import (
     SessionRegistry,
     TrackingInternalServer,
 )
+from opcua_server.apps.instance.runtime.valuewatch import (
+    OnValueChange,
+    ValueWatcher,
+)
 
 _logger = get_logger("opcua.instance")
 
@@ -158,13 +162,24 @@ class RunningInstance:
         *,
         pki: PkiStore,
         clock: Clock = utcnow,
+        on_value_change: OnValueChange | None = None,
     ) -> None:
         """按规格与证书库装配。
 
-        Args: spec, pki, clock。
+        ⚠ `on_value_change` 可缺省：不给就不建值监听，实例照常对上位机服务。
+        实时推送是可选链路，不该由它决定实例能不能起。
+
+        Args: spec, pki, clock, on_value_change。
         """
         self.spec = spec
         self._pki = pki
+        self._watcher = (
+            ValueWatcher(
+                instance_id=spec.instance_id, on_change=on_value_change
+            )
+            if on_value_change is not None
+            else None
+        )
         self._registry = SessionRegistry(clock=clock)
         self._server: Server | None = None
         self._nodes: dict[str, BuiltNode] = {}
@@ -198,6 +213,14 @@ class RunningInstance:
                 f"实例 {self.spec.name} 启动失败：端口 {self.spec.port} 不可用"
             ) from error
         self._server = server
+        if self._watcher is not None:
+            await self._watcher.watch(
+                server,
+                {
+                    identifier: built.handle
+                    for identifier, built in self._nodes.items()
+                },
+            )
         _logger.info(
             "opcua_instance_started",
             "实例已监听",
@@ -251,6 +274,10 @@ class RunningInstance:
             return
         self._server = None
         self._nodes = {}
+        # ⚠ 先撤订阅再停服务器：反过来的话，停机过程中的属性变化会触发回调，
+        # 而那时节点表已经清空，回调只会记一串找不到标识的空转
+        if self._watcher is not None:
+            await self._watcher.stop()
         try:
             async with asyncio.timeout(STOP_TIMEOUT_S):
                 await server.stop()

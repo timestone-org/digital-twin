@@ -47,7 +47,6 @@ from opcua_server.apps.instance.services.presenter import (
     unwrap_value,
     wrap_value,
 )
-from opcua_server.apps.instance.services.value_publisher import ValuePublisher
 
 _logger = get_logger("opcua.nodes")
 
@@ -65,15 +64,13 @@ class NodeService:
         *,
         database: Database,
         supervisor: InstanceSupervisor,
-        values: ValuePublisher,
     ) -> None:
         """按数据库与实例管理器装配。
 
-        Args: database, supervisor, values。
+        Args: database, supervisor。
         """
         self._database = database
         self._supervisor = supervisor
-        self._values = values
         self._sync = NodeRuntimeSync(database=database, supervisor=supervisor)
 
     async def list_nodes(
@@ -251,9 +248,9 @@ class NodeService:
         if running is None:
             raise InstanceNotRunning("实例未运行，无法写值")
         written = await running.write_value(identifier, value)
-        # ⚠ 记的是**收敛后**的实际值，不是入参：类型收敛可能改写它，
-        # 推给订阅方的必须与上位机读到的一致
-        await self._values.record(instance_id, identifier, written)
+        # ⚠ 这里**不**记值变化：地址空间上有一条内部订阅，管理面与上位机两条
+        # 写入路径都被它看见（runtime/valuewatch.py）。在这里再记一次，就有了
+        # 两个真源，将来新增写入路径时又会漏掉一个。
         return NodeWriteOut(
             identifier=identifier, node_id=node_id_text, value=written
         )
