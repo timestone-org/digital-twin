@@ -466,3 +466,26 @@ def _sample(index: int, running_set: list[str]) -> EpisodeSample:
         ),
         duration_minutes=int(8 * over),
     )
+
+
+async def test_predictions_filter_by_running_set(
+    app_client: httpx.AsyncClient, db_session: AsyncSession, sign: SignHeaders
+) -> None:
+    """逐条对比按组合过滤：别的组合的行不出现。"""
+    seeded = await seed_room(db_session)
+    manager = sign([AC_MANAGE])
+    data = await create_model(app_client, manager, seeded)
+    model_id = uuid.UUID(data["id"])
+    await _mark_trained(db_session, model_id, running_set=[seeded.serials[0]])
+    hit = await app_client.get(
+        f"{PREFIX}/ac-models/{model_id}/predictions",
+        params={"running_set": seeded.serials[0]},
+        headers=sign([AC_VIEW]),
+    )
+    assert len(hit.json()["data"]["items"]) == 2
+    miss = await app_client.get(
+        f"{PREFIX}/ac-models/{model_id}/predictions",
+        params={"running_set": ",".join(seeded.serials)},
+        headers=sign([AC_VIEW]),
+    )
+    assert miss.json()["data"]["items"] == []

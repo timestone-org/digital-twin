@@ -14,6 +14,7 @@ from decimal import Decimal
 from typing import cast
 
 import pytest
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import Database
@@ -40,7 +41,9 @@ from platform_server.apps.hvac.models import (
 )
 from platform_server.apps.hvac.services.ac_model_trainer import (
     TRAIN_RUN_FAILED,
+    TRAIN_RUN_ORPHANED,
     TRAIN_RUN_TRAINED,
+    mark_failed,
     run_training,
 )
 from platform_server.apps.hvac.startups import (
@@ -333,3 +336,59 @@ async def test_a_room_without_a_current_batch_refuses_to_train(
     assert found is not None
     assert found.error is not None
     assert "重算" in found.error
+
+
+async def test_training_a_deleted_model_is_orphaned(
+    db_session: AsyncSession,
+) -> None:
+    """模型已删：孤儿路径，不炸不重放。"""
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        run = await run_training(
+            cast(Database, OneSessionDatabase(db_session)),
+            executor=executor,
+            timezone=TZ,
+            model_id=uuid.uuid4(),
+        )
+    assert run.outcome == TRAIN_RUN_ORPHANED
+
+
+async def test_a_room_with_no_bound_units_refuses_to_train(
+    db_session: AsyncSession,
+) -> None:
+    """机组都没绑数据源：失败并把原因说成人话。"""
+    seeded = await seed_room(db_session, episodes=0)
+    await db_session.execute(
+        delete(AcDataBinding).where(
+            AcDataBinding.ac_unit_id.in_(
+                select(AcUnit.id).where(AcUnit.room_id == seeded.room_id)
+            )
+        )
+    )
+    model = make_model(seeded)
+    db_session.add(model)
+    await db_session.flush()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        run = await run_training(
+            cast(Database, OneSessionDatabase(db_session)),
+            executor=executor,
+            timezone=TZ,
+            model_id=model.id,
+        )
+    assert run.outcome == TRAIN_RUN_FAILED
+    found = await ac_model_crud.get(db_session, model.id)
+    assert found is not None
+    assert found.error is not None
+    assert "数据源" in found.error
+
+
+async def test_marking_a_deleted_model_failed_is_a_noop(
+    db_session: AsyncSession,
+) -> None:
+    """消费者的失败出口对已删模型不炸：无处可落就算了。"""
+    ghost = uuid.uuid4()
+    await mark_failed(
+        cast(Database, OneSessionDatabase(db_session)),
+        ghost,
+        reason="超时",
+    )
+    assert await ac_model_crud.get(db_session, ghost) is None

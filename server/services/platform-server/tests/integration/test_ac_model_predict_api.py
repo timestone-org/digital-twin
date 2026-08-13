@@ -18,6 +18,7 @@ from integration.test_ac_model_api import (
     seed_room,
 )
 from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
+from platform_server.apps.hvac.models import AcModelArtifact
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -87,3 +88,26 @@ async def test_predict_rejects_an_unknown_serial(
     )
     assert response.status_code == 422
     assert "K99" in response.json()["message"]
+
+
+async def test_a_corrupted_artifact_is_a_conflict_with_a_reason(
+    app_client: httpx.AsyncClient, db_session: AsyncSession, sign: SignHeaders
+) -> None:
+    """⚠ 工件没过护栏：409 + 人话原因，不静默降级也不 500。"""
+    seeded = await seed_room(db_session)
+    manager = sign([AC_MANAGE])
+    data = await create_model(app_client, manager, seeded)
+    model_id = uuid.UUID(data["id"])
+    await _mark_trained(db_session, model_id, running_set=[seeded.serials[0]])
+    artifact = await db_session.get(AcModelArtifact, model_id)
+    assert artifact is not None
+    artifact.digest = "f" * 64
+    await db_session.flush()
+    response = await app_client.post(
+        f"{PREFIX}/ac-models/{model_id}:predict",
+        json={"running_set": [seeded.serials[0]]},
+        headers=sign([AC_VIEW]),
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == 41624
+    assert "摘要不符" in response.json()["message"]

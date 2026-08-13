@@ -21,22 +21,6 @@ class AcModelCrud(CrudBase[AcModel]):
     def __init__(self) -> None:
         super().__init__(AcModel)
 
-    async def list_all(
-        self, session: AsyncSession, *, room_id: uuid.UUID | None
-    ) -> list[AcModel]:
-        """全部模型（可按房间过滤），新建的在前。
-
-        模型总量是「房间数 × 个位数」量级，整表一页放得下，不做分页。
-        Args: session, room_id。
-        """
-        statement: Select[tuple[AcModel]] = select(AcModel).order_by(
-            AcModel.created_at.desc(), AcModel.id.desc()
-        )
-        if room_id is not None:
-            statement = statement.where(AcModel.room_id == room_id)
-        result = await session.execute(statement)
-        return list(result.scalars().all())
-
     async def get_by_name(
         self, session: AsyncSession, *, room_id: uuid.UUID, name: str
     ) -> AcModel | None:
