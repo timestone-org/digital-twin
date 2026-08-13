@@ -179,6 +179,7 @@ ROLES: tuple[RoleSpec, ...] = (
 
 _P = "/api/v1/auth"
 _O = "/api/v1/opcua"
+_R = "/api/v1/realtime"
 
 ROUTE_RULES: tuple[RouteRuleSpec, ...] = (
     RouteRuleSpec(f"{_P}/health", "GET", priority=999, description="存活探针"),
@@ -405,6 +406,29 @@ ROUTE_RULES: tuple[RouteRuleSpec, ...] = (
         codes=(OPCUA_VIEW,),
         priority=950,
         description="实例、节点、节点值、在线会话、端口池的全部读面",
+    ),
+    # —— 实时通道（`/api/v1/realtime`）——
+    # ⚠ 这一段一个权限码都不新增，这是 ADR-0007 第 3 条的直接后果：hub 的订阅
+    # 授权**只比一次**——用户持有的码是否包含主题声明的码，没有第二处判断。
+    # 给连接本身另设一道码就是那个被否掉的第二处判断，而且它挡不住任何东西：
+    # 连上来却订不到任何主题的连接，一个字节也拿不到。主题声明的码由推送方在
+    # 登记时给出（opcua 的主题声明 `opcua:view`），hub 登记时校验它在本目录里。
+    RouteRuleSpec(f"{_R}/health", "GET", priority=999, description="存活探针"),
+    RouteRuleSpec(f"{_R}/ready", "GET", priority=999, description="就绪探针"),
+    RouteRuleSpec(f"{_R}/docs", "GET", priority=998, description="文档"),
+    RouteRuleSpec(f"{_R}/redoc", "GET", priority=998, description="文档"),
+    RouteRuleSpec(
+        f"{_R}/openapi.json", "GET", priority=998, description="契约"
+    ),
+    RouteRuleSpec(
+        f"{_R}/ws",
+        "GET",
+        priority=990,
+        description=(
+            "WebSocket 端点。任意已登录用户可连，能收到什么由每个主题声明的码"
+            "另判。⚠ token 走子协议而不是 Authorization 头，闸 1 认不出它——"
+            "匿名可达性必须由边缘免认证 location 保证，认证在 hub 内部完成"
+        ),
     ),
 )
 
