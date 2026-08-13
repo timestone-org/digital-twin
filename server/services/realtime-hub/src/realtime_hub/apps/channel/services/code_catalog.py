@@ -49,6 +49,9 @@ class CodeCatalog:
         self._base_url = base_url.rstrip("/")
         self._service_key = service_key
         self._timeout_s = timeout_s
+        # 传输层留成可替换的：用例要验的是解析与失败处置，不是 httpx 本身。
+        # ⚠ 生产路径上它恒为 None，走 httpx 自己的默认传输。
+        self._transport: httpx.AsyncBaseTransport | None = None
 
     async def known_codes(self) -> frozenset[str]:
         """取全部已登记的权限码。
@@ -59,7 +62,9 @@ class CodeCatalog:
         """
         try:
             async with httpx.AsyncClient(
-                base_url=self._base_url, timeout=self._timeout_s
+                base_url=self._base_url,
+                timeout=self._timeout_s,
+                transport=self._transport,
             ) as client:
                 response = await client.get(
                     CODES_PATH, headers={"X-Service-Key": self._service_key}

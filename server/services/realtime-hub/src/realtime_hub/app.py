@@ -105,10 +105,7 @@ async def _drop_stale(container: Container) -> None:
 
     Args: container。
     """
-    async with container.database.session() as session:
-        dropped = await container.subscriptions.drop_replica(
-            session, container.replica
-        )
+    dropped = await container.journal.drop_replica()
     _logger.info(
         "stale_subscriptions_dropped",
         "清掉了本副本上次残留的订阅",

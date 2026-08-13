@@ -13,6 +13,7 @@ from realtime_hub.apps.channel.services import (
     FanoutListener,
     PublishService,
     SessionService,
+    SubscriptionJournal,
     TopicRegistry,
 )
 from realtime_hub.settings import Settings
@@ -31,7 +32,7 @@ class Container:
     registry: TopicRegistry
     publisher: PublishService
     session: SessionService
-    subscriptions: SubscriptionCrud
+    journal: SubscriptionJournal
     # 本副本的标识。⚠ 用主机名：容器重启后它不变，正好用来清自己残留的订阅行
     replica: str
 
@@ -57,6 +58,11 @@ def build_container(settings: Settings) -> Container:
     """
     database = _build_database(settings)
     topics = TopicCrud()
+    journal = SubscriptionJournal(
+        database=database,
+        crud=SubscriptionCrud(),
+        replica=socket.gethostname(),
+    )
     connections = ConnectionRegistry()
     catalog = CodeCatalog(
         base_url=settings.auth_base_url,
@@ -65,6 +71,40 @@ def build_container(settings: Settings) -> Container:
     )
     registry = TopicRegistry(database=database, catalog=catalog, topics=topics)
     pubsub = PubSub(url=settings.url(), timeout_s=settings.redis_timeout_s)
+    parts = _Parts(
+        database=database,
+        topics=topics,
+        journal=journal,
+        connections=connections,
+        registry=registry,
+        pubsub=pubsub,
+    )
+    return _assemble(settings, parts)
+
+
+@dataclass(frozen=True)
+class _Parts:
+    """已经造好的协作对象。只为把装配拆成两段，本身不对外。"""
+
+    database: Database
+    topics: TopicCrud
+    journal: SubscriptionJournal
+    connections: ConnectionRegistry
+    registry: TopicRegistry
+    pubsub: PubSub
+
+
+def _assemble(settings: Settings, parts: _Parts) -> Container:
+    """把协作对象拼成容器。装配顺序仍在 `build_container` 里。
+
+    Args: settings, parts。
+    """
+    database = parts.database
+    pubsub = parts.pubsub
+    connections = parts.connections
+    registry = parts.registry
+    journal = parts.journal
+    topics = parts.topics
     return Container(
         settings=settings,
         database=database,
@@ -94,7 +134,8 @@ def build_container(settings: Settings) -> Container:
             ),
             registry=registry,
             connections=connections,
+            journal=journal,
         ),
-        subscriptions=SubscriptionCrud(),
+        journal=journal,
         replica=socket.gethostname(),
     )

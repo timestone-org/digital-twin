@@ -19,6 +19,7 @@ from realtime_hub.apps.channel.services.connections import (
     ConnectionRegistry,
     SendFn,
 )
+from realtime_hub.apps.channel.services.journal import SubscriptionJournal
 from realtime_hub.apps.channel.services.registry import TopicRegistry
 
 _logger = get_logger("realtime.session")
@@ -65,10 +66,12 @@ class SessionService:
         codec: JwtCodec,
         registry: TopicRegistry,
         connections: ConnectionRegistry,
+        journal: SubscriptionJournal,
     ) -> None:
         self._codec = codec
         self._registry = registry
         self._connections = connections
+        self._journal = journal
 
     def authenticate(self, token: str) -> Handshake:
         """验一枚访问令牌，解出身份与权限码。
@@ -119,11 +122,15 @@ class SessionService:
         return connection
 
     async def close(self, connection_id: uuid.UUID) -> None:
-        """连接关闭时摘掉它的全部占位。
+        """连接关闭时摘掉它的全部占位——内存索引与库里的订阅行都要清。
+
+        ⚠ 两处都清且顺序无所谓：内存那份决定还发不发，库里那份只供对账。
+        漏清库里的，对账会看到「有人在订」而实际上一条连接都没有。
 
         Args: connection_id。
         """
         await self._connections.remove(connection_id)
+        await self._journal.forget_all(connection_id)
 
     async def dispatch(
         self, connection: Connection, message: dict[str, Any]
@@ -173,9 +180,15 @@ class SessionService:
         if action == ACTION_SUBSCRIBE:
             await self._registry.authorize(topic=topic, codes=connection.codes)
             await self._connections.bind(connection.id, topic)
+            await self._journal.record(
+                connection_id=connection.id,
+                user_id=connection.user_id,
+                topic=topic,
+            )
             return
         if action == ACTION_UNSUBSCRIBE:
             await self._connections.unbind(connection.id, topic)
+            await self._journal.forget(connection_id=connection.id, topic=topic)
             return
         raise BadRequest(f"不认识的动作：{action!r}")
 
@@ -212,6 +225,9 @@ class SessionService:
                 )
             except AppError:
                 await self._connections.unbind(connection.id, topic)
+                await self._journal.forget(
+                    connection_id=connection.id, topic=topic
+                )
                 await connection.send(
                     {
                         "type": TYPE_SYSTEM,
