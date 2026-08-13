@@ -391,7 +391,9 @@ describe('地址空间的写入路径', () => {
     const write = vi
       .spyOn(opcuaApi, 'writeNodeValue')
       .mockResolvedValue({ node_id: 'x', identifier: 'T1', value: null })
-    const field = wrapper.find('input')
+    // ⚠ 按 aria-label 取，不能用 `find('input')`——左侧还有一个搜索框，
+    // 那个才是 DOM 里的第一个 input
+    const field = wrapper.find('input[aria-label="要写入的值"]')
     await field.setValue(raw)
     await wrapper
       .findAll('button')
@@ -429,7 +431,7 @@ describe('地址空间的写入路径', () => {
   it('写值失败时给出反馈', async () => {
     const wrapper = await explorer([node()], 'double')
     vi.spyOn(opcuaApi, 'writeNodeValue').mockRejectedValue(new Error('boom'))
-    await wrapper.find('input').setValue('1')
+    await wrapper.find('input[aria-label="要写入的值"]').setValue('1')
     await wrapper
       .findAll('button')
       .find((b) => b.text() === '写入')
@@ -486,7 +488,7 @@ describe('安全面板的其余路径', () => {
       },
     ])
     const wrapper = mount(SecurityPanel, {
-      props: { instanceId: 'i1' },
+      props: { instance: instance() },
       attachTo: document.body,
     })
     await flushPromises()
@@ -536,7 +538,7 @@ describe('安全面板的其余路径', () => {
   it('取数失败时给出错误', async () => {
     vi.spyOn(opcuaApi, 'listCredentials').mockRejectedValue(new Error('boom'))
     vi.spyOn(opcuaApi, 'listTrustedCertificates').mockResolvedValue([])
-    const wrapper = mount(SecurityPanel, { props: { instanceId: 'i1' } })
+    const wrapper = mount(SecurityPanel, { props: { instance: instance() } })
     await flushPromises()
     expect(wrapper.text()).toContain('请求失败')
   })
@@ -548,7 +550,7 @@ describe('会话时长', () => {
       { session_id: 's1', peer: 'p', username: 'u', connected_at: iso },
     ])
     const wrapper = mount(SessionsPanel, {
-      props: { instanceId: 'i1', isRunning: true },
+      props: { instance: instance({ is_running: true }) },
     })
     await flushPromises()
     return wrapper.text()
@@ -583,7 +585,7 @@ describe('会话时长', () => {
   it('取会话失败时给出错误', async () => {
     vi.spyOn(opcuaApi, 'listSessions').mockRejectedValue(new Error('boom'))
     const wrapper = mount(SessionsPanel, {
-      props: { instanceId: 'i1', isRunning: true },
+      props: { instance: instance({ is_running: true }) },
     })
     await flushPromises()
     expect(wrapper.text()).not.toContain('当前没有上位机连接')

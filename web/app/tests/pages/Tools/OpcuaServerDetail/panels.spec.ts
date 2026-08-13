@@ -178,7 +178,7 @@ describe('在线会话', () => {
   it('实例没跑时直接说明不会有会话，不去空转轮询', async () => {
     const list = vi.spyOn(opcuaApi, 'listSessions').mockResolvedValue([])
     const wrapper = mount(SessionsPanel, {
-      props: { instanceId: 'i1', isRunning: false },
+      props: { instance: instance({ is_running: false }) },
     })
     await flushPromises()
     expect(wrapper.text()).toContain('不会有任何上位机会话')
@@ -195,7 +195,7 @@ describe('在线会话', () => {
       },
     ])
     const wrapper = mount(SessionsPanel, {
-      props: { instanceId: 'i1', isRunning: true },
+      props: { instance: instance({ is_running: true }) },
     })
     await flushPromises()
     expect(wrapper.text()).toContain('10.0.0.9:51234')
@@ -206,7 +206,7 @@ describe('在线会话', () => {
     vi.useFakeTimers()
     const list = vi.spyOn(opcuaApi, 'listSessions').mockResolvedValue([])
     const wrapper = mount(SessionsPanel, {
-      props: { instanceId: 'i1', isRunning: true },
+      props: { instance: instance({ is_running: true }) },
     })
     await vi.advanceTimersByTimeAsync(0)
     const before = list.mock.calls.length
@@ -232,7 +232,7 @@ describe('安全', () => {
     })
     // ⚠ DtModal 会 Teleport 到 body，弹窗内容不在 wrapper.text() 里
     const wrapper = mount(SecurityPanel, {
-      props: { instanceId: 'i1' },
+      props: { instance: instance() },
       attachTo: document.body,
     })
     await flushPromises()
@@ -260,7 +260,7 @@ describe('安全', () => {
   it('凭据与证书都为空时各给一条空态', async () => {
     vi.spyOn(opcuaApi, 'listCredentials').mockResolvedValue([])
     vi.spyOn(opcuaApi, 'listTrustedCertificates').mockResolvedValue([])
-    const wrapper = mount(SecurityPanel, { props: { instanceId: 'i1' } })
+    const wrapper = mount(SecurityPanel, { props: { instance: instance() } })
     await flushPromises()
     expect(wrapper.text()).toContain('还没有凭据')
     expect(wrapper.text()).toContain('白名单为空')
@@ -277,7 +277,7 @@ describe('安全', () => {
     ])
     vi.spyOn(opcuaApi, 'listTrustedCertificates').mockResolvedValue([])
     const remove = vi.spyOn(opcuaApi, 'deleteCredential').mockResolvedValue()
-    const wrapper = mount(SecurityPanel, { props: { instanceId: 'i1' } })
+    const wrapper = mount(SecurityPanel, { props: { instance: instance() } })
     await flushPromises()
     await wrapper
       .findAll('button')

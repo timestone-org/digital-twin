@@ -99,6 +99,7 @@ const SHAPES: Record<string, Record<string, true>> = {
     available: true,
     instance_count: true,
     max_instances: true,
+    free_ports: true,
   } satisfies Keys<OpcuaPortPool>,
 
   NodeOut: {
@@ -233,6 +234,18 @@ describe('const 联合与后端枚举一致', () => {
 
   it('期望状态只有两档', () => {
     expect([...OPCUA_DESIRED_STATES].sort()).toEqual(['running', 'stopped'])
+  })
+})
+
+describe('入参里前端确实用得上的字段', () => {
+  it('建实例可以点名端口——表单的端口选择器全靠它', () => {
+    const properties = schemas.InstanceCreateIn?.properties ?? {}
+    expect(Object.keys(properties)).toContain('port')
+  })
+
+  it('端口池给出可选端口清单，页面才不用让人对着数字猜', () => {
+    const free = schemas.PortPoolOut?.properties?.free_ports
+    expect(free).toBeDefined()
   })
 })
 

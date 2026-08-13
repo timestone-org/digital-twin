@@ -120,6 +120,12 @@ export interface OpcuaPortPool {
   available: number
   instance_count: number
   max_instances: number
+  /**
+   * 池内当前没被占的端口，升序。建实例时可以从中点名一个。
+   * ⚠ 只能从这里挑：池外的端口没有容器映射，上位机连不上，
+   * 而实例状态会显示「运行中」。
+   */
+  free_ports: number[]
 }
 
 /** 地址空间里的一个节点。 */
@@ -219,6 +225,12 @@ export interface OpcuaInstanceCreateInput {
   endpoint_path?: string
   is_anonymous_allowed?: boolean
   is_autostart?: boolean
+  /**
+   * 点名一个端口。省略即由服务端从池里挑。
+   * ⚠ 必须是 `OpcuaPortPool.free_ports` 里的值——池外或已占用的端口后端会以
+   * 42113 拒绝，页面**不许**自作主张换一个：那会把明确的拒绝变成沉默的错。
+   */
+  port?: number | null
 }
 
 export interface OpcuaInstanceUpdateInput {
