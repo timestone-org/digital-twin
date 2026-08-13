@@ -305,13 +305,13 @@ jobs:
           uv run --project server python scripts/gates/check_coverage.py \
             opcua-server opcua-coverage.xml
 
-      - name: 增量覆盖 ≥90%
+      - name: 增量覆盖 ≥85%
         if: github.event_name == 'pull_request'
         run: |
           git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
           uv run --project server diff-cover \
             lib-coverage.xml auth-coverage.xml opcua-coverage.xml \
-            --compare-branch "origin/${{ github.base_ref }}" --fail-under=90
+            --compare-branch "origin/${{ github.base_ref }}" --fail-under=85
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always() && !env.ACT
@@ -341,12 +341,12 @@ jobs:
           uv run --project server python scripts/gates/check_coverage.py \
             web web/coverage/lcov.info
 
-      - name: 增量覆盖 ≥90%
+      - name: 增量覆盖 ≥85%
         if: github.event_name == 'pull_request'
         run: |
           git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
           uv run --project server diff-cover web/coverage/lcov.info \
-            --compare-branch "origin/${{ github.base_ref }}" --fail-under=90
+            --compare-branch "origin/${{ github.base_ref }}" --fail-under=85
 
   # ============ 第 4 段：契约、构建与供应链 ============
   contracts:

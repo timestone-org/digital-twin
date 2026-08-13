@@ -2,8 +2,9 @@
 """覆盖率棘轮闸：testing-standard-python.md §4.2 与 TS 侧同款口径。
 
 整体覆盖率**不允许下降**，哪怕仍在阈值之上——这条防的是「大量新代码
-稀释旧的高覆盖」。阈值本身写在各自的 pyproject / vitest.config 里，
-这里只管「不许比基线低」。
+稀释旧的高覆盖」。基线在比对时按 CEILING 封顶：覆盖一度冲到 99% 不会
+把之后每个 PR 的门槛也锁死在 99%。阈值本身写在各自的 pyproject /
+vitest.config 里，这里只管「不许比封顶后的基线低」。
 
 用法：
     check_coverage.py <名字> <coverage.xml|lcov.info> [--update]
@@ -24,6 +25,8 @@ BASELINE = Path(__file__).resolve().parent / "coverage-baseline.json"
 REQUIRED_ARGS = 3
 # 浮点抖动与用例顺序会带来极小的波动，低于这个幅度不算下降
 TOLERANCE = 0.1
+# 棘轮封顶：防稀释守的是水位线，不是历史最高点
+CEILING = {"lines": 90.0, "branches": 80.0}
 
 LCOV_LINES_FOUND = re.compile(r"^LF:(?P<count>\d+)$", re.MULTILINE)
 LCOV_LINES_HIT = re.compile(r"^LH:(?P<count>\d+)$", re.MULTILINE)
@@ -115,14 +118,18 @@ def _compare(name: str, current: dict[str, float]) -> list[Violation]:
                 "跑一次 check_coverage.py <名字> <报告> --update 并提交基线",
             )
         ]
+    floors = {
+        kind: min(recorded[kind], CEILING[kind])
+        for kind in ("lines", "branches")
+    }
     return [
         Violation(
-            "覆盖率不许低于基线",
+            "覆盖率不许低于基线（封顶后）",
             name,
-            f"{kind} {current[kind]}% < {recorded[kind]}%",
+            f"{kind} {current[kind]}% < {floors[kind]}%",
         )
         for kind in ("lines", "branches")
-        if current[kind] + TOLERANCE < recorded[kind]
+        if current[kind] + TOLERANCE < floors[kind]
     ]
 
 
