@@ -4,7 +4,9 @@
 每秒写几十次同一个点，逐次推会打爆通道，而中间那些值对看曲线的人没有意义。
 """
 
+import asyncio
 import uuid
+from collections.abc import Callable
 
 from lib.logging.context import bind_log_context, reset_log_context
 from opcua_server.apps.instance.services.value_publisher import (
@@ -14,6 +16,19 @@ from opcua_server.apps.instance.services.value_publisher import (
 
 INSTANCE = uuid.UUID("3fa85f64-5717-4562-b3fc-2c963f66afa6")
 OTHER = uuid.UUID("7c9e6679-7425-40de-944b-e07fc1f90ae7")
+
+CONDITION_TIMEOUT_S = 5.0
+CONDITION_POLL_S = 0.01
+
+
+async def _eventually(predicate: Callable[[], bool]) -> bool:
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + CONDITION_TIMEOUT_S
+    while loop.time() < deadline:
+        if predicate():
+            return True
+        await asyncio.sleep(CONDITION_POLL_S)
+    return predicate()
 
 
 class FakeRealtime:
@@ -145,3 +160,58 @@ async def test_the_trace_is_captured_when_recording_not_when_flushing() -> None:
         reset_log_context(token)
     await publisher.flush()
     assert realtime.traces == [f"00-{'a' * 32}-{'b' * 16}-01"]
+
+
+class ExplodingRealtime:
+    """publish 一律抛异常的假 hub 客户端。"""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.last: tuple[uuid.UUID, list[dict[str, object]], str | None] | None
+        self.last = None
+
+    async def publish(
+        self,
+        instance_id: uuid.UUID,
+        items: list[dict[str, object]],
+        *,
+        traceparent: str | None = None,
+    ) -> bool:
+        self.calls += 1
+        self.last = (instance_id, items, traceparent)
+        raise RuntimeError("boom")
+
+
+async def test_the_loop_flushes_on_the_window_cadence() -> None:
+    # 只 record 不手动 flush：值要靠窗口循环自己推出去
+    realtime = FakeRealtime()
+    publisher = ValuePublisher(
+        realtime=realtime,  # type: ignore[arg-type]  # 结构相同的假件
+        window_ms=10,
+        max_items=500,
+    )
+    await publisher.start()
+    try:
+        await publisher.record(INSTANCE, "temp", 1)
+        assert await _eventually(lambda: bool(realtime.calls))
+    finally:
+        await publisher.stop()
+
+
+async def test_a_flush_failure_does_not_stop_the_loop() -> None:
+    # ⚠ 一次 hub 抖动不该让同进程的全部实例从此再也不推值
+    realtime = ExplodingRealtime()
+    publisher = ValuePublisher(
+        realtime=realtime,  # type: ignore[arg-type]  # 结构相同的假件
+        window_ms=10,
+        max_items=500,
+    )
+    await publisher.start()
+    try:
+        await publisher.record(INSTANCE, "temp", 1)
+        assert await _eventually(lambda: realtime.calls >= 1)
+        # 上一轮炸了之后，新的值仍然要被下一轮推出去
+        await publisher.record(INSTANCE, "temp", 2)
+        assert await _eventually(lambda: realtime.calls >= 2)
+    finally:
+        await publisher.stop()

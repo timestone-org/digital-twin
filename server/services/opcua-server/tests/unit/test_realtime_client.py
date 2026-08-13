@@ -10,6 +10,7 @@ import uuid
 import httpx
 
 from opcua_server.apps.instance.services.realtime import (
+    PUBLISHER_NAME,
     TOPIC_REQUIRED_CODE,
     RealtimeClient,
     topic_of,
@@ -89,3 +90,54 @@ async def test_publish_carries_the_items() -> None:
     ok = await _client(handler).publish(INSTANCE, [{"identifier": "n1"}])
     assert ok is True
     assert "n1" in str(seen["body"])
+
+
+async def test_topics_lists_only_what_this_publisher_declared() -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["params"] = dict(request.url.params)
+        seen["key"] = request.headers["X-Service-Key"]
+        return httpx.Response(
+            200, json={"data": {"topics": [topic_of(INSTANCE)]}}
+        )
+
+    assert await _client(handler).topics() == [topic_of(INSTANCE)]
+    # ⚠ 必须按 publisher 过滤：对账只能拿自己的投影，别的服务的主题碰不得
+    assert seen["params"] == {"publisher": PUBLISHER_NAME}
+    assert seen["key"] == "k" * 32
+
+
+async def test_topics_returns_empty_when_the_hub_is_down() -> None:
+    # ⚠ 空列表而不是抛：对账跑在启动路径上，hub 不可达不能让服务起不来
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("hub down")
+
+    assert await _client(handler).topics() == []
+
+
+async def test_topics_returns_empty_when_the_envelope_is_malformed() -> None:
+    # ⚠ 信封变形要在这里拦下并转成「跳过本轮」，不能让残缺数据流进对账
+    handler = httpx.Response(200, json={"data": {}})
+    assert await _client(lambda _request: handler).topics() == []
+
+
+async def test_revoke_topic_targets_the_orphan_by_name() -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["url"] = str(request.url)
+        return httpx.Response(200, json={"data": {}})
+
+    assert await _client(handler).revoke_topic("opcua:orphan") is True
+    assert seen["method"] == "DELETE"
+    assert "opcua:orphan" in str(seen["url"])
+
+
+async def test_revoke_topic_failure_is_soft() -> None:
+    # ⚠ 对账清孤儿失败只记日志：下次启动还会再清一次
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("hub down")
+
+    assert await _client(handler).revoke_topic("opcua:orphan") is False
