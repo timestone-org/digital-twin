@@ -45,9 +45,16 @@ def build_app(settings: Settings) -> FastAPI:
 def _hooks(container: Container) -> tuple[LifespanHook, ...]:
     """启停钩子。
 
-    ⚠ 关停顺序不是启动的逆序：**实例最先停**（10），因为它们持有上位机的
-    TCP 连接，晚停会让对端在我们已经关掉数据库之后还在读写；缓存与数据库
-    最后关，在途请求还要用它们。
+    ⚠ 关停顺序不是启动的逆序：**实例最先停**，它们持有上位机的 TCP 连接，
+    晚停会让对端在我们已经关掉数据库之后还在读写；缓存与数据库最后关。
+
+    Args: container。
+    """
+    return (*_startup_hooks(container), *_shutdown_hooks(container))
+
+
+def _startup_hooks(container: Container) -> tuple[LifespanHook, ...]:
+    """启动钩子，按 order 升序执行。
 
     Args: container。
     """
@@ -63,15 +70,30 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
             # 自启排在自检之后：依赖不通时先把这件事写进日志再谈起实例
             startup_order=20,
         ),
+        # ⚠ 对账排在自启之后：先把实例起起来，再按最终的实例表对一遍
+        LifespanHook(
+            name="topic_reconcile",
+            startup=lambda: _reconcile(container),
+            startup_order=30,
+        ),
         LifespanHook(
             name="value_publisher",
             startup=container.values.start,
-            startup_order=30,
+            startup_order=40,
             # ⚠ 停在实例之前：实例一停就不再有值变化，此时把攒着的最后一批
             # 冲刷出去；反过来会把这批值丢掉
             shutdown=container.values.stop,
             shutdown_order=5,
         ),
+    )
+
+
+def _shutdown_hooks(container: Container) -> tuple[LifespanHook, ...]:
+    """关停钩子，按 order 升序执行。
+
+    Args: container。
+    """
+    return (
         LifespanHook(
             name="opcua_instances",
             shutdown=container.supervisor.stop_all,
@@ -126,3 +148,21 @@ async def _selfcheck(container: Container) -> None:
         postgres_ok=database_ok,
         redis_ok=cache_ok,
     )
+
+
+async def _reconcile(container: Container) -> None:
+    """主题对账。
+
+    ⚠ 它绝不能让启动失败：hub 不可达时安静跳过本轮，下次启动再对。
+    实时推送是可选链路，不该由它决定服务能不能起。
+
+    Args: container。
+    """
+    declared, revoked = await container.reconciler.reconcile()
+    if declared or revoked:
+        _logger.warning(
+            "topics_drifted",
+            "主题与实例表曾经漂移，已对齐",
+            declared=declared,
+            revoked=revoked,
+        )

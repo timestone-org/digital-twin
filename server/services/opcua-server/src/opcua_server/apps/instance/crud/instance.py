@@ -1,5 +1,7 @@
 """实例数据访问。"""
 
+from uuid import UUID
+
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -54,6 +56,17 @@ class InstanceCrud(CrudBase[Instance]):
         """
         result = await session.execute(select(Instance.port))
         return frozenset(result.scalars().all())
+
+    async def all_ids(self, session: AsyncSession) -> list[UUID]:
+        """全部实例的 id。主题对账要拿它比对 hub 那边的清单。
+
+        ⚠ 不分页：实例数由 max_instances 顶着（默认 16），而对账要的是全集——
+        分页会让调用方写一段翻页循环，翻到一半实例又变了。
+
+        Args: session。
+        """
+        result = await session.execute(select(Instance.id))
+        return list(result.scalars().all())
 
     async def count_all(self, session: AsyncSession) -> int:
         """实例总数，用于判定是否已达单进程上限。

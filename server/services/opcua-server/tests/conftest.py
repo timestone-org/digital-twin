@@ -178,6 +178,7 @@ def _with_fake_cache(built: Container) -> Container:
         idempotency=type(built.idempotency)(cache=cache),
         realtime=built.realtime,
         values=built.values,
+        reconciler=built.reconciler,
     )
 
 

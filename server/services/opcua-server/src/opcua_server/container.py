@@ -16,6 +16,7 @@ from opcua_server.apps.instance.services import (
     NodeService,
     RealtimeClient,
     SecurityService,
+    TopicReconciler,
     ValuePublisher,
 )
 from opcua_server.settings import Settings
@@ -35,6 +36,7 @@ class Container:
     idempotency: IdempotencyStore
     realtime: RealtimeClient
     values: ValuePublisher
+    reconciler: TopicReconciler
 
 
 def _build_database(settings: Settings) -> Database:
@@ -120,4 +122,5 @@ def build_container(settings: Settings) -> Container:
         idempotency=IdempotencyStore(cache=cache),
         realtime=realtime,
         values=values,
+        reconciler=TopicReconciler(database=database, realtime=realtime),
     )
