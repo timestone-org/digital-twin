@@ -197,6 +197,25 @@ async def client(
 
 
 @pytest.fixture
+async def database(
+    settings: Settings, postgres_available: bool
+) -> AsyncIterator[Database]:
+    """直连测试库的数据库句柄，给不走 HTTP 面的集成用例用。
+
+    Args: settings, postgres_available。
+    """
+    if not postgres_available:
+        pytest.skip("本机连不到 Postgres")
+    opened = Database(
+        dsn=settings.dsn(),
+        profile=PoolProfile(),
+        search_path=settings.postgres_schema,
+    )
+    yield opened
+    await opened.dispose()
+
+
+@pytest.fixture
 async def clean_tables(settings: Settings) -> AsyncIterator[None]:
     """每条用例后清表。
 
