@@ -105,6 +105,9 @@ export function closeRealtimeChannel(): void {
   socket?.close()
   socket = null
   handlers.clear()
+  // ⚠ 退避也要归零：不归零的话，登出前攒到的退避值会被下一次登录继承——
+  // 表现是「重新登录后要等半分钟才有实时数据」，而那与网络无关
+  reconnectMs = RECONNECT_MIN_MS
   isConnected.value = false
 }
 

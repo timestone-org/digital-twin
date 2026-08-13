@@ -180,6 +180,31 @@ describe('取值源', () => {
     wrapper.unmount()
   })
 
+  it('⚠ 载荷形状不对时按「这批里没有它」处理，不抹掉当前值', async () => {
+    // items 不是数组、条目不是对象——都来自另一个服务，形状变了不能连累显示
+    const live = fakeChannel()
+    vi.spyOn(opcuaApi, 'readNodeValue').mockResolvedValue(value({ value: 5 }))
+    const { wrapper, source } = harness(ref<string | null>('n1'), ref('T1'))
+    await vi.advanceTimersByTimeAsync(0)
+    live.push({ items: 'not a list' })
+    live.push({ items: [null, 'nope'] })
+    await nextTick()
+    expect(source.current?.value.value?.value).toBe(5)
+    wrapper.unmount()
+  })
+
+  it('还没读到初值时，推送不凭空拼出一个值', async () => {
+    // 没有初值就没有 data_type 等字段，凭一条推送拼不出完整的 OpcuaNodeValue
+    const live = fakeChannel()
+    vi.spyOn(opcuaApi, 'readNodeValue').mockRejectedValue(new Error('boom'))
+    const { wrapper, source } = harness(ref<string | null>('n1'), ref('T1'))
+    await vi.advanceTimersByTimeAsync(0)
+    live.push({ items: [{ identifier: 'T1', value: 9 }] })
+    await nextTick()
+    expect(source.current?.value.value).toBeNull()
+    wrapper.unmount()
+  })
+
   it('取值失败时给出可读错误并清掉旧值', async () => {
     fakeChannel()
     vi.spyOn(opcuaApi, 'readNodeValue').mockRejectedValue(new Error('boom'))
