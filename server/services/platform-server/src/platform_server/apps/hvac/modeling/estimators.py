@@ -49,7 +49,7 @@ def make_quantile_estimator(quantile: float, *, row_count: int) -> Estimator:
             max_leaf_nodes=15,
             min_samples_leaf=5,
             l2_regularization=1.0,
-            # sklearn 的类型面把 early_stopping 标成 str，实际收 bool：收敛在边界
+            # sklearn 的类型面把它标成 str、实际收 bool：收敛在边界
             early_stopping=cast(str, row_count >= _EARLY_STOPPING_MIN_ROWS),
             validation_fraction=0.1,
             n_iter_no_change=10,
