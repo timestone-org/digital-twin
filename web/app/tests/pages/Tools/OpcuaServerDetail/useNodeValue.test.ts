@@ -1,10 +1,11 @@
 /**
- * @fileoverview 取值源的行为契约。
+ * @fileoverview 取值源的行为契约（推送版）。
  *
- * 这个文件守的是三条**只有在现场才会暴露**的事：
- * 1. 卸载后定时器不许继续跑——运维屏一开几天，漏一个就持续累积并持续发请求。
+ * 这个文件守的是四条**只有在现场才会暴露**的事：
+ * 1. 卸载后必须退订——不退的话，切走的页面仍在收消息并更新已经不在的状态。
  * 2. 换节点时慢的那次不许覆盖快的那次，否则显示的是上一个节点的值且不报错。
  * 3. 换节点的瞬间旧值必须先清掉，否则新节点还没回来时界面在说谎。
+ * 4. **别的节点的推送不许抹掉当前值**——一个主题推的是整台实例的值。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, nextTick, ref } from 'vue'
@@ -13,7 +14,10 @@ import { mount } from '@vue/test-utils'
 import type { OpcuaNodeValue } from '@dt/contracts'
 
 import * as opcuaApi from '@/api/opcua'
+import * as channel from '@/composables/useRealtimeChannel'
 import { useNodeValue } from '@/pages/Tools/OpcuaServerDetail/useNodeValue'
+
+type Handler = (payload: Record<string, unknown>) => void
 
 function value(over: Partial<OpcuaNodeValue> = {}): OpcuaNodeValue {
   return {
@@ -26,15 +30,37 @@ function value(over: Partial<OpcuaNodeValue> = {}): OpcuaNodeValue {
   }
 }
 
+/** 装一个假通道，返回当前订阅者与退订次数。 */
+function fakeChannel(): {
+  push: (payload: Record<string, unknown>) => void
+  unsubscribed: () => number
+} {
+  const state = { handler: null as Handler | null, offCount: 0 }
+  vi.spyOn(channel, 'useRealtimeChannel').mockReturnValue({
+    isConnected: ref(true),
+    subscribe: (_topic: string, handler: Handler) => {
+      state.handler = handler
+      return () => {
+        state.offCount += 1
+        state.handler = null
+      }
+    },
+  })
+  return {
+    push: (payload) => state.handler?.(payload),
+    unsubscribed: () => state.offCount,
+  }
+}
+
 /** 把 composable 装进一个真实组件里，才能验证 onBeforeUnmount。 */
-function harness(nodeId: Ref<string | null>) {
+function harness(nodeId: Ref<string | null>, identifier: Ref<string | null>) {
   const source: { current: ReturnType<typeof useNodeValue> | null } = {
     current: null,
   }
   const wrapper = mount(
     defineComponent({
       setup() {
-        source.current = useNodeValue(ref('i1'), nodeId, 1000)
+        source.current = useNodeValue(ref('i1'), nodeId, identifier)
         return () => null
       },
     }),
@@ -52,52 +78,81 @@ afterEach(() => {
 })
 
 describe('取值源', () => {
-  it('节点为 null 时不发请求也不起定时器', async () => {
+  it('节点为 null 时不读也不订', async () => {
+    fakeChannel()
     const read = vi.spyOn(opcuaApi, 'readNodeValue')
-    const { wrapper } = harness(ref<string | null>(null))
+    const { wrapper } = harness(
+      ref<string | null>(null),
+      ref<string | null>(null),
+    )
     await nextTick()
-    await vi.advanceTimersByTimeAsync(5000)
     expect(read).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
-  it('选中节点后立刻取一次，并按间隔继续取', async () => {
+  it('选中节点后读一次初值——hub 只推变化，不会凭空给当前值', async () => {
+    fakeChannel()
     const read = vi.spyOn(opcuaApi, 'readNodeValue').mockResolvedValue(value())
-    const { wrapper } = harness(ref<string | null>('n1'))
+    const { wrapper } = harness(ref<string | null>('n1'), ref('T1'))
     await nextTick()
     expect(read).toHaveBeenCalledTimes(1)
-    await vi.advanceTimersByTimeAsync(2000)
-    expect(read).toHaveBeenCalledTimes(3)
+    // 此后不再轮询：又过了 10 秒也还是那一次
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(read).toHaveBeenCalledTimes(1)
     wrapper.unmount()
   })
 
-  it('⚠ 卸载后定时器不许再触发', async () => {
+  it('推送到达时就地更新，不再发请求', async () => {
+    const live = fakeChannel()
     const read = vi.spyOn(opcuaApi, 'readNodeValue').mockResolvedValue(value())
-    const { wrapper } = harness(ref<string | null>('n1'))
+    const { wrapper, source } = harness(ref<string | null>('n1'), ref('T1'))
+    await vi.advanceTimersByTimeAsync(0)
+    live.push({ items: [{ identifier: 'T1', value: 42 }] })
     await nextTick()
-    const before = read.mock.calls.length
+    expect(source.current?.value.value?.value).toBe(42)
+    expect(read).toHaveBeenCalledTimes(1)
     wrapper.unmount()
-    await vi.advanceTimersByTimeAsync(10_000)
-    expect(read).toHaveBeenCalledTimes(before)
+  })
+
+  it('⚠ 别的节点的推送不许抹掉当前值', async () => {
+    const live = fakeChannel()
+    vi.spyOn(opcuaApi, 'readNodeValue').mockResolvedValue(value({ value: 7 }))
+    const { wrapper, source } = harness(ref<string | null>('n1'), ref('T1'))
+    await vi.advanceTimersByTimeAsync(0)
+    live.push({ items: [{ identifier: 'OTHER', value: 999 }] })
+    await nextTick()
+    expect(source.current?.value.value?.value).toBe(7)
+    wrapper.unmount()
+  })
+
+  it('⚠ 卸载后必须退订', async () => {
+    const live = fakeChannel()
+    vi.spyOn(opcuaApi, 'readNodeValue').mockResolvedValue(value())
+    const { wrapper } = harness(ref<string | null>('n1'), ref('T1'))
+    await nextTick()
+    wrapper.unmount()
+    expect(live.unsubscribed()).toBeGreaterThan(0)
   })
 
   it('⚠ 换节点时先清空旧值，别让界面显示上一个节点的读数', async () => {
-    // 第二次故意挂着不返回，才能观察到「已清空、新值未到」那个中间态
+    fakeChannel()
     vi.spyOn(opcuaApi, 'readNodeValue')
       .mockResolvedValueOnce(value({ identifier: 'OLD' }))
       .mockImplementation(() => new Promise<OpcuaNodeValue>(() => {}))
     const nodeId = ref<string | null>('n1')
-    const { wrapper, source } = harness(nodeId)
+    const identifier = ref<string | null>('OLD')
+    const { wrapper, source } = harness(nodeId, identifier)
     await vi.advanceTimersByTimeAsync(0)
     expect(source.current?.value.value?.identifier).toBe('OLD')
     nodeId.value = 'n2'
+    identifier.value = 'NEW'
     await vi.advanceTimersByTimeAsync(0)
     expect(source.current?.value.value).toBeNull()
     wrapper.unmount()
   })
 
   it('⚠ 慢的那次不许覆盖快的那次', async () => {
-    // 用一个容器持有 resolve：直接赋给局部变量时 TS 会把它窄化成 never
+    fakeChannel()
     const slow: { resolve: ((result: OpcuaNodeValue) => void) | null } = {
       resolve: null,
     }
@@ -111,13 +166,14 @@ describe('取值源', () => {
       .mockResolvedValue(value({ identifier: 'FAST', value: 2 }))
 
     const nodeId = ref<string | null>('slow')
-    const { wrapper, source } = harness(nodeId)
+    const identifier = ref<string | null>('SLOW')
+    const { wrapper, source } = harness(nodeId, identifier)
     await nextTick()
     nodeId.value = 'fast'
+    identifier.value = 'FAST'
     await vi.advanceTimersByTimeAsync(0)
     expect(source.current?.value.value?.identifier).toBe('FAST')
 
-    // 迟到的第一次现在才回来，它必须被丢弃
     slow.resolve?.(value({ identifier: 'SLOW', value: 1 }))
     await vi.advanceTimersByTimeAsync(0)
     expect(source.current?.value.value?.identifier).toBe('FAST')
@@ -125,21 +181,12 @@ describe('取值源', () => {
   })
 
   it('取值失败时给出可读错误并清掉旧值', async () => {
+    fakeChannel()
     vi.spyOn(opcuaApi, 'readNodeValue').mockRejectedValue(new Error('boom'))
-    const { wrapper, source } = harness(ref<string | null>('n1'))
+    const { wrapper, source } = harness(ref<string | null>('n1'), ref('T1'))
     await vi.advanceTimersByTimeAsync(0)
-    expect(source.current?.error.value).not.toBeNull()
+    expect(source.current?.error.value).toBeTruthy()
     expect(source.current?.value.value).toBeNull()
-    wrapper.unmount()
-  })
-
-  it('refresh 能在两次轮询之间手动取一次', async () => {
-    const read = vi.spyOn(opcuaApi, 'readNodeValue').mockResolvedValue(value())
-    const { wrapper, source } = harness(ref<string | null>('n1'))
-    await vi.advanceTimersByTimeAsync(0)
-    const before = read.mock.calls.length
-    await source.current?.refresh()
-    expect(read.mock.calls.length).toBe(before + 1)
     wrapper.unmount()
   })
 })
