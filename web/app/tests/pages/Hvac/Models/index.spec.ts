@@ -9,6 +9,7 @@ import type { Page, Room } from '@dt/contracts'
 import { DtConfirmHost, DtToastHost, useToast } from '@dt/ui'
 
 import * as hvac from '@/api/hvac'
+import CreateModelDialog from '@/pages/Hvac/Models/components/CreateModelDialog.vue'
 import ModelsPage from '@/pages/Hvac/Models/index.vue'
 import { useAuthStore } from '@/stores/auth'
 import { STAMP, model } from '@/testing/modelFixtures'
@@ -78,6 +79,15 @@ async function open() {
   const wrapper = mount(ModelsPage, { attachTo: document.body })
   await flushPromises()
   return wrapper
+}
+
+/** 确认框 Teleport 到 body：在弹层范围内点确认钮，避开行里的同名按钮。 */
+async function clickConfirm(): Promise<void> {
+  const dialog = document.querySelector('[role="dialog"]') ?? document.body
+  const buttons = [...dialog.querySelectorAll('button')]
+  const accept = buttons.find((node) => node.textContent?.includes('删除'))
+  accept?.click()
+  await flushPromises()
 }
 
 describe('列表', () => {
@@ -166,6 +176,54 @@ describe('操作', () => {
     await cancel?.trigger('click')
     await flushPromises()
     expect(hvac.deleteAcModel).not.toHaveBeenCalled()
+  })
+})
+
+describe('操作·续', () => {
+  it('删除过确认后真删并刷新', async () => {
+    vi.spyOn(hvac, 'deleteAcModel').mockResolvedValue(undefined)
+    const wrapper = mount(
+      {
+        components: { ModelsPage, DtConfirmHost, DtToastHost },
+        template: '<ModelsPage /><DtConfirmHost /><DtToastHost />',
+      },
+      { attachTo: document.body },
+    )
+    await flushPromises()
+    const remove = wrapper
+      .findAll('button')
+      .find((item) => item.text() === '删除')
+    await remove?.trigger('click')
+    await flushPromises()
+    await clickConfirm()
+    expect(hvac.deleteAcModel).toHaveBeenCalledWith('m1')
+    expect(hvac.listAcModels).toHaveBeenCalledTimes(2)
+  })
+
+  it('重训失败把原因弹出来', async () => {
+    vi.spyOn(hvac, 'retrainAcModel').mockRejectedValue(new Error('409'))
+    const wrapper = mount(
+      {
+        components: { ModelsPage, DtToastHost },
+        template: '<ModelsPage /><DtToastHost />',
+      },
+      { attachTo: document.body },
+    )
+    await flushPromises()
+    const retrain = wrapper
+      .findAll('button')
+      .find((item) => item.text() === '重训')
+    await retrain?.trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toContain('请求失败')
+  })
+
+  it('对话框建成后跳到新模型详情', async () => {
+    const wrapper = await open()
+    const dialog = wrapper.findComponent(CreateModelDialog)
+    dialog.vm.$emit('created', 'm9')
+    await flushPromises()
+    expect(pushMock).toHaveBeenCalledWith('/hvac/models/m9')
   })
 })
 

@@ -7,7 +7,7 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
-import { useToast } from '@dt/ui'
+import { DtConfirmHost, DtToastHost, useToast } from '@dt/ui'
 
 import * as hvac from '@/api/hvac'
 import DetailPage from '@/pages/Hvac/ModelDetail/index.vue'
@@ -19,8 +19,10 @@ import {
   predictionPage,
 } from '@/testing/modelFixtures'
 
+const pushMock = vi.fn()
+
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ replace: vi.fn(), push: pushMock }),
   useRoute: () => ({
     path: '/hvac/models/m1',
     params: { modelId: 'm1' },
@@ -55,6 +57,7 @@ beforeEach(() => {
   signIn(['ac:view', 'ac:manage'])
   document.body.innerHTML = ''
   useToast().clear()
+  pushMock.mockClear()
   vi.spyOn(hvac, 'getAcModel').mockResolvedValue(model())
   vi.spyOn(hvac, 'listModelPredictions').mockResolvedValue(
     predictionPage([
@@ -81,6 +84,15 @@ async function open() {
   const wrapper = mount(DetailPage, { attachTo: document.body })
   await flushPromises()
   return wrapper
+}
+
+/** 确认框 Teleport 到 body：在弹层范围内点确认钮，避开行里的同名按钮。 */
+async function clickConfirm(): Promise<void> {
+  const dialog = document.querySelector('[role="dialog"]') ?? document.body
+  const buttons = [...dialog.querySelectorAll('button')]
+  const accept = buttons.find((node) => node.textContent?.includes('删除'))
+  accept?.click()
+  await flushPromises()
 }
 
 describe('评估呈现', () => {
@@ -129,6 +141,56 @@ describe('训练中', () => {
     expect(hvac.listModelPredictions).toHaveBeenCalledTimes(2)
     await vi.advanceTimersByTimeAsync(15000)
     expect(hvac.getAcModel).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('操作', () => {
+  it('重训入队后提示并刷新详情', async () => {
+    vi.spyOn(hvac, 'retrainAcModel').mockResolvedValue(
+      model({ status: 'queued' }),
+    )
+    const wrapper = await open()
+    const retrain = wrapper
+      .findAll('button')
+      .find((item) => item.text() === '重训')
+    await retrain?.trigger('click')
+    await flushPromises()
+    expect(hvac.retrainAcModel).toHaveBeenCalledWith('m1')
+    expect(hvac.getAcModel).toHaveBeenCalledTimes(2)
+  })
+
+  it('删除过确认后跳回列表', async () => {
+    vi.spyOn(hvac, 'deleteAcModel').mockResolvedValue(undefined)
+    const wrapper = mount(
+      {
+        components: { DetailPage, DtConfirmHost, DtToastHost },
+        template: '<DetailPage /><DtConfirmHost /><DtToastHost />',
+      },
+      { attachTo: document.body },
+    )
+    await flushPromises()
+    const remove = wrapper
+      .findAll('button')
+      .find((item) => item.text() === '删除')
+    await remove?.trigger('click')
+    await flushPromises()
+    await clickConfirm()
+    expect(hvac.deleteAcModel).toHaveBeenCalledWith('m1')
+    expect(pushMock).toHaveBeenCalledWith('/hvac/models')
+  })
+
+  it('取模型失败时把原因亮出来', async () => {
+    vi.mocked(hvac.getAcModel).mockRejectedValue(new Error('boom'))
+    const wrapper = await open()
+    expect(wrapper.text()).toContain('请求失败')
+  })
+
+  it('特征口径过期时提示重训', async () => {
+    vi.mocked(hvac.getAcModel).mockResolvedValue(
+      model({ is_feature_stale: true }),
+    )
+    const wrapper = await open()
+    expect(wrapper.text()).toContain('特征口径已更新')
   })
 })
 

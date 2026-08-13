@@ -166,3 +166,86 @@ describe('组合勾选', () => {
     expect(bodyText()).not.toContain('K11+K12')
   })
 })
+
+describe('对话框状态', () => {
+  it('关了再开：上一次的房间、勾选与错误全部重置', async () => {
+    const wrapper = await open()
+    await pickRoom('注塑房')
+    expect(bodyText()).toContain('K11+K12')
+    await wrapper.setProps({ open: false })
+    await wrapper.setProps({ open: true })
+    await flushPromises()
+    expect(bodyText()).toContain('先选房间')
+  })
+
+  it('覆盖度取不回来时给出人话原因', async () => {
+    vi.mocked(hvac.getStartupBatches).mockRejectedValue(new Error('boom'))
+    await open()
+    await pickRoom('注塑房')
+    expect(bodyText()).toContain('请求失败')
+  })
+
+  it('取消勾选后提交钮回到禁用', async () => {
+    await open()
+    await pickRoom('注塑房')
+    const checkbox = document.body.querySelector<HTMLInputElement>(
+      'input[type="checkbox"]',
+    )
+    checkbox?.click()
+    await flushPromises()
+    checkbox?.click()
+    await flushPromises()
+    expect(findButton('建模并训练')?.disabled).toBe(true)
+  })
+
+  it('描述与高级参数一并进载荷', async () => {
+    await open()
+    await pickRoom('注塑房')
+    document.body
+      .querySelector<HTMLInputElement>('input[type="checkbox"]')
+      ?.click()
+    await flushPromises()
+    const inputs = [...document.body.querySelectorAll('input')].filter(
+      (item) => item.type === 'text',
+    )
+    const name = inputs[0]
+    const description = inputs[1]
+    if (name) {
+      name.value = '带描述'
+      name.dispatchEvent(new Event('input'))
+    }
+    if (description) {
+      description.value = '  夜班用  '
+      description.dispatchEvent(new Event('input'))
+    }
+    findButton('高级参数…')?.click()
+    await flushPromises()
+    findButton('建模并训练')?.click()
+    await flushPromises()
+    expect(hvac.createAcModel).toHaveBeenCalledWith(
+      expect.objectContaining({ name: '带描述', description: '夜班用' }),
+    )
+  })
+
+  it('提交失败把原因留在对话框里，不静默关掉', async () => {
+    vi.mocked(hvac.createAcModel).mockRejectedValue(new Error('409'))
+    const wrapper = await open()
+    await pickRoom('注塑房')
+    document.body
+      .querySelector<HTMLInputElement>('input[type="checkbox"]')
+      ?.click()
+    await flushPromises()
+    const name = [...document.body.querySelectorAll('input')].find(
+      (item) => item.type === 'text',
+    )
+    if (name) {
+      name.value = '会失败'
+      name.dispatchEvent(new Event('input'))
+    }
+    await flushPromises()
+    findButton('建模并训练')?.click()
+    await flushPromises()
+    expect(bodyText()).toContain('请求失败')
+    expect(wrapper.emitted('created')).toBeUndefined()
+  })
+})
