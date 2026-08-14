@@ -11,8 +11,13 @@
   },
   "dependencies": {
     "@dt/contracts": "workspace:*",
+    "@dt/datasources": "workspace:*",
+    "@dt/modules": "workspace:*",
+    "@dt/runtime": "workspace:*",
     "@dt/security": "workspace:*",
+    "@dt/three-core": "workspace:*",
     "@dt/tokens": "workspace:*",
+    "@dt/twin-config": "workspace:*",
     "@dt/ui": "workspace:*",
     "pinia": "^2.3.0",
     "vue": "^3.5.13",

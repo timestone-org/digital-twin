@@ -8,6 +8,8 @@
 from __future__ import annotations
 
 import ast
+import io
+import os
 import re
 import subprocess
 import sys
@@ -209,6 +211,28 @@ def strip_ts_comments(text: str) -> str:
     return _LINE_COMMENT.sub("", _BLOCK_COMMENT.sub("", text))
 
 
+def strip_python_comments(text: str) -> str:
+    """去掉 Python 源码里的 `#` 注释与空行，只留代码。
+
+    ⚠ 只去 `#` 注释，**不去 docstring**：docstring 会被程序读走（帮助文本、
+    契约描述），当成散文抹掉就是一处静默的假阴性。
+    ⚠ 必须连空行一起去：注释独占一行时抹掉只剩空行，加一条注释就会让两侧
+    差出一个换行，比较结果又变成「改了」。
+    ⚠ 词法分析不了就原样返回——按「有改动」处理，宁可误报不可漏报。
+    Args: text。
+    """
+    lines = text.splitlines()
+    try:
+        tokens = list(tokenize.generate_tokens(io.StringIO(text).readline))
+    except (SyntaxError, tokenize.TokenError, IndentationError):
+        return text
+    for token in tokens:
+        if token.type == tokenize.COMMENT:
+            row, column = token.start
+            lines[row - 1] = lines[row - 1][:column]
+    return "\n".join(kept for line in lines if (kept := line.rstrip()))
+
+
 def python_comments(path: Path) -> Iterator[tuple[int, str]]:
     """产出 Python 源码里真正的注释（行号, 原文），含行尾注释。
 
@@ -256,6 +280,73 @@ def comment_lines(path: Path) -> Iterator[tuple[int, str]]:
         stripped = line.strip()
         if stripped.startswith(("//", "*", "/*", "<!--")):
             yield number, stripped
+
+
+# `<脚本> <base> <head>` —— 取参数要有这么多个
+_BASE_ARG = 2
+_HEAD_ARG = 3
+
+
+def git(*args: str) -> str:
+    """跑一条 git 命令取标准输出；跑不成给空串。
+
+    ⚠ 空串对「要基线」的闸门等于长绿，调用方必须先过 `ref_exists`，见那里。
+    Args: args。
+    """
+    result = subprocess.run(
+        ["git", *args],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()
+
+
+def diff_base() -> str:
+    """比较基线：命令行第一个参数 > `PR_BASE_REF` > `origin/main`。"""
+    if len(sys.argv) >= _BASE_ARG:
+        return sys.argv[1]
+    return os.environ.get("PR_BASE_REF", "origin/main")
+
+
+def diff_head() -> str:
+    """比较的另一头：命令行第二个参数 > `PR_HEAD_REF` > `HEAD`。"""
+    if len(sys.argv) >= _HEAD_ARG:
+        return sys.argv[2]
+    return os.environ.get("PR_HEAD_REF", "HEAD")
+
+
+def diff_range() -> str:
+    return f"{diff_base()}...{diff_head()}"
+
+
+def ref_exists(ref: str) -> bool:
+    """这个引用在本地解析得出提交吗。
+
+    ⚠ 解析不出来时 `git diff` 只是给空输出，闸门会当成「什么都没改」而长绿；
+    要基线的闸门必须先问这一句。
+    Args: ref。
+    """
+    return bool(git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"))
+
+
+def changed_files() -> list[str]:
+    """基线到头之间改过的文件，仓库相对路径。"""
+    output = git("diff", "--name-only", diff_range())
+    return [line for line in output.splitlines() if line]
+
+
+def file_at(ref: str, path: str) -> str | None:
+    """某个提交里这份文件的内容；那时还没有这个文件就给 None。
+
+    Args: ref, path。
+    """
+    if not git("ls-tree", "-r", "--name-only", ref, "--", path):
+        return None
+    return git("show", f"{ref}:{path}")
 
 
 def main(title: str, checks: Sequence[Check]) -> int:

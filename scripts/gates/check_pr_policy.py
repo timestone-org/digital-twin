@@ -12,10 +12,17 @@ from __future__ import annotations
 
 import os
 import re
-import sys
 from pathlib import Path
 
-from _report import Violation, main, run_git
+from _report import (
+    Violation,
+    changed_files,
+    diff_base,
+    diff_head,
+    diff_range,
+    git,
+    main,
+)
 
 MAX_CHANGED_LINES = 400
 MAX_CHANGED_FILES = 20
@@ -46,37 +53,6 @@ GENERATED = ("openapi.json", "/dist/", "/coverage/")
 NUMSTAT_FIELDS = 3
 # `server/services/<svc>/…` —— 取服务名要有三段以上
 SERVICE_PATH_DEPTH = 2
-BASE_ARG = 2
-HEAD_ARG = 3
-
-
-def _git(*args: str) -> str:
-    """跑一条 git 并取标准输出。失败由 run_git 抛出，见那里的理由。
-
-    Args: *args。
-    """
-    return run_git(*args).strip()
-
-
-def _base() -> str:
-    if len(sys.argv) >= BASE_ARG:
-        return sys.argv[1]
-    return os.environ.get("PR_BASE_REF", "origin/main")
-
-
-def _head() -> str:
-    if len(sys.argv) >= HEAD_ARG:
-        return sys.argv[2]
-    return os.environ.get("PR_HEAD_REF", "HEAD")
-
-
-def _range() -> str:
-    return f"{_base()}...{_head()}"
-
-
-def _changed_files() -> list[str]:
-    output = _git("diff", "--name-only", _range())
-    return [line for line in output.splitlines() if line]
 
 
 def _reviewable(name: str) -> bool:
@@ -87,7 +63,7 @@ def _reviewable(name: str) -> bool:
 
 def _changed_lines() -> int:
     total = 0
-    for line in _git("diff", "--numstat", _range()).splitlines():
+    for line in git("diff", "--numstat", diff_range()).splitlines():
         parts = line.split("\t")
         if len(parts) != NUMSTAT_FIELDS or not _reviewable(parts[2]):
             continue
@@ -112,8 +88,8 @@ def _new_code_unit() -> str | None:
     """
     added = {
         Path(name).parts[2]
-        for name in _git(
-            "diff", "--diff-filter=A", "--name-only", _range()
+        for name in git(
+            "diff", "--diff-filter=A", "--name-only", diff_range()
         ).splitlines()
         if name.startswith("server/services/")
         and len(Path(name).parts) > SERVICE_PATH_DEPTH
@@ -121,8 +97,11 @@ def _new_code_unit() -> str | None:
     fresh = {
         unit
         for unit in added
-        if not _git(
-            "ls-tree", "--name-only", _base(), f"server/services/{unit}/src/"
+        if not git(
+            "ls-tree",
+            "--name-only",
+            diff_base(),
+            f"server/services/{unit}/src/",
         )
     }
     return next(iter(fresh)) if len(fresh) == 1 else None
@@ -141,9 +120,7 @@ def _is_landing_commit() -> bool:
         return False
     prefix = f"server/services/{unit}/"
     return all(
-        name.startswith(prefix)
-        for name in _changed_files()
-        if _reviewable(name)
+        name.startswith(prefix) for name in changed_files() if _reviewable(name)
     )
 
 
@@ -156,14 +133,14 @@ def check_pr_size() -> list[Violation]:
     """
     if _is_mechanical() or _is_landing_commit():
         return []
-    files = [name for name in _changed_files() if _reviewable(name)]
+    files = [name for name in changed_files() if _reviewable(name)]
     lines = _changed_lines()
     found: list[Violation] = []
     if lines > MAX_CHANGED_LINES:
         found.append(
             Violation(
                 f"PR 改动不许超过 {MAX_CHANGED_LINES} 行",
-                _range(),
+                diff_range(),
                 f"{lines} 行（不含锁文件与生成物）",
             )
         )
@@ -171,7 +148,7 @@ def check_pr_size() -> list[Violation]:
         found.append(
             Violation(
                 f"PR 不许超过 {MAX_CHANGED_FILES} 个文件",
-                _range(),
+                diff_range(),
                 f"{len(files)} 个",
             )
         )
@@ -182,7 +159,7 @@ def check_pr_touches_one_service() -> list[Violation]:
     """跨服务改动拆成「先加新的、后切换、再删旧的」多个 PR。"""
     services = {
         Path(name).parts[2]
-        for name in _changed_files()
+        for name in changed_files()
         if name.startswith("server/services/")
         and len(Path(name).parts) > SERVICE_PATH_DEPTH
     }
@@ -191,7 +168,7 @@ def check_pr_touches_one_service() -> list[Violation]:
     return [
         Violation(
             f"一个 PR 只许碰 {MAX_SERVICES} 个服务",
-            _range(),
+            diff_range(),
             "、".join(sorted(services)),
         )
     ]
@@ -215,7 +192,7 @@ def check_lockfile_stands_alone() -> list[Violation]:
     变更的**成因**，不和它一起看就无从判断依赖为什么变；文档不含逻辑。
     新增代码单元必然同时动清单与锁文件，一刀切会让新服务根本进不来。
     """
-    files = set(_changed_files())
+    files = set(changed_files())
     touched = files & LOCKFILES
     others = {
         name
@@ -227,7 +204,7 @@ def check_lockfile_stands_alone() -> list[Violation]:
     return [
         Violation(
             "锁文件必须单独成 PR",
-            _range(),
+            diff_range(),
             f"{sorted(touched)} 与另外 {len(others)} 个文件混在一起",
         )
     ]
@@ -235,7 +212,8 @@ def check_lockfile_stands_alone() -> list[Violation]:
 
 def check_commit_messages() -> list[Violation]:
     """标题写做了什么，格式 `<类型>(<范围>): <一句话>`。"""
-    subjects = _git("log", "--format=%s", f"{_base()}..{_head()}").splitlines()
+    span = f"{diff_base()}..{diff_head()}"
+    subjects = git("log", "--format=%s", span).splitlines()
     return [
         Violation(
             "提交信息格式不合规",
@@ -249,7 +227,7 @@ def check_commit_messages() -> list[Violation]:
 
 def check_branch_name() -> list[Violation]:
     """分支命名 `<类型>/<简述>`，关联一个 issue。"""
-    name = os.environ.get("PR_HEAD_BRANCH") or _git(
+    name = os.environ.get("PR_HEAD_BRANCH") or git(
         "rev-parse", "--abbrev-ref", "HEAD"
     )
     if not name or name in {"HEAD", "main"} or BRANCH.match(name):

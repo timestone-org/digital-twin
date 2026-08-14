@@ -9,6 +9,10 @@
 # `test_crud_credentials.py:197` 守的正是「私钥绝不进库」这条约束：用例把一段
 # 私钥 PEM 塞进公钥列，断言库里的 CHECK 把它挡下来。字面量的密钥体是 `MIIE`
 # 四个字符，不是任何真钥匙；而 `private-key` 规则按 BEGIN 头匹配，必然命中。
+223b0942ae5b306fb95c0284363f2bcf1fa969ee:server/services/opcua-server/tests/integration/test_crud_credentials.py:private-key:197
+
+# 同一条用例随 opcua 分支 squash 合入 main（#15），提交换了 SHA，按新历史重判：
+# 仍是「私钥绝不进库」用例里的四字符假 PEM，不是真钥匙。
 #
 # 源码那一行已经改成拼接构造，**此后的提交不会再触发**；这条豁免只为已经进入
 # main 历史的那一个提交而存在，删不掉也不值得为它重写已推送的历史。

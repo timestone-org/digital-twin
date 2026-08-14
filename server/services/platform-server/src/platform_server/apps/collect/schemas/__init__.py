@@ -1,0 +1,69 @@
+"""采集配置面的入参与出参。ORM 模型绝不直接返给 HTTP 层。"""
+
+from platform_server.apps.collect.schemas.history import (
+    AGGREGATE_SQL,
+    AGGREGATES,
+    AggregateBucketOut,
+    AggregateIn,
+    AggregateOut,
+    HistoryPointOut,
+)
+from platform_server.apps.collect.schemas.plan import (
+    CollectPlanOut,
+    PlanPointOut,
+    PlanSourceOut,
+)
+from platform_server.apps.collect.schemas.point import (
+    CHECK_PASSED,
+    CHECK_REJECTED,
+    CHECK_UNVERIFIED,
+    AddressCheckOut,
+    PointBatchOut,
+    PointCreateIn,
+    PointItemIn,
+    PointOut,
+    PointSavedOut,
+    PointUpdateIn,
+)
+from platform_server.apps.collect.schemas.source import (
+    BrowseIn,
+    BrowseItemOut,
+    BrowseOut,
+    ConnectivityOut,
+    SourceCreateIn,
+    SourceOut,
+    SourceUpdateIn,
+    WriteIn,
+    WriteOut,
+)
+
+__all__ = [
+    "AGGREGATES",
+    "AGGREGATE_SQL",
+    "CHECK_PASSED",
+    "CHECK_REJECTED",
+    "CHECK_UNVERIFIED",
+    "AddressCheckOut",
+    "AggregateBucketOut",
+    "AggregateIn",
+    "AggregateOut",
+    "BrowseIn",
+    "BrowseItemOut",
+    "BrowseOut",
+    "CollectPlanOut",
+    "ConnectivityOut",
+    "HistoryPointOut",
+    "PlanPointOut",
+    "PlanSourceOut",
+    "PointBatchOut",
+    "PointCreateIn",
+    "PointItemIn",
+    "PointOut",
+    "PointSavedOut",
+    "PointUpdateIn",
+    "SourceCreateIn",
+    "SourceOut",
+    "SourceUpdateIn",
+    "WriteIn",
+    "WriteOut",
+]

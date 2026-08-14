@@ -1,7 +1,15 @@
 {
   "auth-server": {
-    "lines": 85.69,
-    "branches": 51.18
+    "lines": 95.7,
+    "branches": 77.0
+  },
+  "collector-server": {
+    "lines": 98.06,
+    "branches": 90.88
+  },
+  "timeseries": {
+    "lines": 100.0,
+    "branches": 100.0
   },
   "lib": {
     "lines": 97.04,
@@ -11,8 +19,12 @@
     "lines": 98.99,
     "branches": 0.0
   },
+  "platform-server": {
+    "lines": 98.1,
+    "branches": 85.2
+  },
   "web": {
-    "lines": 99.13,
-    "branches": 95.11
+    "lines": 99.31,
+    "branches": 95.55
   }
 }

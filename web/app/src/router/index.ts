@@ -31,6 +31,83 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '个人资料' },
   },
   {
+    path: '/dashboards',
+    name: 'dashboards',
+    component: () => import('@/pages/Dashboards/index.vue'),
+    meta: {
+      title: '大屏',
+      permissions: [PERMISSION_CODES.dashboardView],
+    },
+  },
+  {
+    // ⚠ 每张大屏一个的**编辑器**路由，因此不进 NAV_ITEMS——那张表里每一项都要有
+    // 静态路径，且由契约测试钉着。回列表靠 AppShell 的 backTo。
+    path: '/dashboards/:dashboardId/edit',
+    name: 'dashboard-editor',
+    component: () => import('@/pages/DashboardEditor/index.vue'),
+    meta: {
+      title: '大屏编辑器',
+      permissions: [PERMISSION_CODES.dashboardEdit],
+    },
+  },
+  {
+    path: '/hvac/units',
+    name: 'hvac-units',
+    component: () => import('@/pages/Hvac/Units/index.vue'),
+    meta: {
+      title: '空调台账',
+      permissions: [PERMISSION_CODES.acView],
+    },
+  },
+  {
+    // ⚠ 每台空调一个的**详情**路由，因此不进 NAV_ITEMS——那张表里每一项都要有
+    // 静态路径，且由契约测试钉着。回台账靠 AppShell 的 backTo。
+    path: '/hvac/ac-units/:acUnitId/data',
+    name: 'hvac-ac-data',
+    component: () => import('@/pages/Hvac/AcData/index.vue'),
+    meta: {
+      title: '空调数据',
+      permissions: [PERMISSION_CODES.acView],
+    },
+  },
+  {
+    path: '/hvac/startups',
+    name: 'hvac-startups',
+    component: () => import('@/pages/Hvac/Startups/index.vue'),
+    meta: {
+      title: '开机事件',
+      permissions: [PERMISSION_CODES.acView],
+    },
+  },
+  {
+    path: '/hvac/models',
+    name: 'hvac-models',
+    component: () => import('@/pages/Hvac/Models/index.vue'),
+    meta: {
+      title: '达标预测',
+      permissions: [PERMISSION_CODES.acView],
+    },
+  },
+  {
+    // 每个模型一个的**详情**路由，不进 NAV_ITEMS；回列表靠 AppShell 的 backTo
+    path: '/hvac/models/:modelId',
+    name: 'hvac-model-detail',
+    component: () => import('@/pages/Hvac/ModelDetail/index.vue'),
+    meta: {
+      title: '模型详情',
+      permissions: [PERMISSION_CODES.acView],
+    },
+  },
+  {
+    path: '/hvac/spaces',
+    name: 'hvac-spaces',
+    component: () => import('@/pages/Hvac/Spaces/index.vue'),
+    meta: {
+      title: '空间配置',
+      permissions: [PERMISSION_CODES.acView],
+    },
+  },
+  {
     path: '/tools/opcua-servers',
     name: 'tools-opcua-servers',
     component: () => import('@/pages/Tools/OpcuaServers/index.vue'),

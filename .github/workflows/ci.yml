@@ -222,6 +222,27 @@ jobs:
       AUTH_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
       # ⚠ 必须与集成用例里写死的口令一致：那几条用例是以种子管理员身份登录的
       AUTH_SEED_ADMIN_PASSWORD: Admin123456
+      PLATFORM_POSTGRES_HOST: localhost
+      PLATFORM_POSTGRES_PORT: '55432'
+      PLATFORM_POSTGRES_USER: dt
+      PLATFORM_POSTGRES_PASSWORD: dt
+      PLATFORM_POSTGRES_DB: dt
+      PLATFORM_POSTGRES_SCHEMA: platform
+      # 外部只读库在 CI 里没有实例，用例一律打假外库。⚠ host 写成解析不出来的
+      # 名字：真有用例去连它，要当场炸而不是连到别的什么东西上
+      PLATFORM_SQLSERVER_HOST: sqlserver-not-used-in-this-job
+      PLATFORM_SQLSERVER_USER: ci
+      PLATFORM_SQLSERVER_PASSWORD: ci-only-sqlserver-0123456789abcdef
+      PLATFORM_SQLSERVER_DATABASE: ci
+      # 分片队列，指向本作业的 redis 服务容器
+      PLATFORM_REDIS_HOST: localhost
+      PLATFORM_REDIS_PORT: '56379'
+      # ⚠ 与 AUTH_EDGE_SIGNING_SECRET 同值：这两个取值分叉就是全链路 401
+      PLATFORM_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
+      # ⚠ 与 COLLECT_EDGE_SERVICE_KEY 同值：它守 /internal/ 的计划下发端点。
+      # 少了它 Settings 构造不出来，`settings` 夹具会整包 skip——而 CI 里
+      # skip 等于没跑，本地有 .env 兜着更看不出来
+      PLATFORM_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
 
       OPCUA_POSTGRES_HOST: localhost
       OPCUA_POSTGRES_PORT: '55432'
@@ -231,6 +252,18 @@ jobs:
       OPCUA_POSTGRES_SCHEMA: opcua
       OPCUA_REDIS_HOST: localhost
       OPCUA_REDIS_PORT: '56379'
+
+      COLLECT_POSTGRES_HOST: localhost
+      COLLECT_POSTGRES_PORT: '55432'
+      COLLECT_POSTGRES_USER: dt
+      COLLECT_POSTGRES_PASSWORD: dt
+      COLLECT_POSTGRES_DB: dt
+      COLLECT_POSTGRES_SCHEMA: collect
+      COLLECT_REDIS_HOST: localhost
+      COLLECT_REDIS_PORT: '56379'
+      # ⚠ 与 PLATFORM_EDGE_SERVICE_KEY 同值：这两个取值分叉，collector 拉计划
+      # 就是 401，而现象只是「采不到数」
+      COLLECT_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
       # 私钥只落挂载卷；CI 里用一次性目录，随作业容器一起消失
       OPCUA_PKI_DIR: /tmp/opcua-pki-ci
       # ⚠ 迁移也要它们：alembic 的 env.py 装载完整 Settings，而配置是
@@ -254,10 +287,18 @@ jobs:
         working-directory: server/services/auth-server
         run: |
           uv run alembic upgrade head
-          uv run auth-seed
+          uv run python -m scripts.seed
+
+      - name: 建 platform schema
+        working-directory: server/services/platform-server
+        run: uv run alembic upgrade head
 
       - name: 建 opcua schema
         working-directory: server/services/opcua-server
+        run: uv run alembic upgrade head
+
+      - name: 建 collect schema
+        working-directory: server/services/collector-server
         run: uv run alembic upgrade head
 
       # ⚠ --cov 必须用点号模块名：写成路径形式时 coverage 静默跳过、数字虚高
@@ -269,6 +310,15 @@ jobs:
             --cov-report=xml:../../lib-coverage.xml \
             --junitxml=../../lib-junit.xml 2>&1 | tee ../../lib-pytest.log
 
+      - name: domain/timeseries 单元 + 契约
+        working-directory: server/domain/timeseries
+        run: |
+          set -o pipefail
+          uv run pytest -q --cov=timeseries --cov-branch \
+            --cov-report=xml:../../../timeseries-coverage.xml \
+            --junitxml=../../../timeseries-junit.xml 2>&1 \
+            | tee ../../../timeseries-pytest.log
+
       - name: auth-server 全层
         working-directory: server/services/auth-server
         run: |
@@ -276,6 +326,15 @@ jobs:
           uv run pytest -q --cov=auth_server --cov-branch \
             --cov-report=xml:../../../auth-coverage.xml \
             --junitxml=../../../auth-junit.xml 2>&1 | tee ../../../auth-pytest.log
+
+      - name: platform-server 全层
+        working-directory: server/services/platform-server
+        run: |
+          set -o pipefail
+          uv run pytest -q --cov=platform_server --cov-branch \
+            --cov-report=xml:../../../platform-coverage.xml \
+            --junitxml=../../../platform-junit.xml 2>&1 \
+            | tee ../../../platform-pytest.log
 
       # ⚠ COVERAGE_CORE=sysmon 与 `branch = false` 是一对，缺一个就挂死：
       # coverage 的默认追踪器会被 asyncua 那个 78000 行的生成函数拖住，
@@ -291,15 +350,30 @@ jobs:
             --junitxml=../../../opcua-junit.xml 2>&1 \
             | tee ../../../opcua-pytest.log
 
+      - name: collector-server 全层
+        working-directory: server/services/collector-server
+        run: |
+          set -o pipefail
+          uv run pytest -q --cov=collector_server --cov-branch \
+            --cov-report=xml:../../../collector-coverage.xml \
+            --junitxml=../../../collector-junit.xml 2>&1 \
+            | tee ../../../collector-pytest.log
+
       # CI 里 skip 掉的用例等于没跑：环境能力由服务容器保证，缺了就该红
       - name: 运行结果自检（无 skip、无外网、覆盖率口径）
         run: |
           uv run --project server python scripts/gates/check_pytest_run.py \
             lib-junit.xml lib-pytest.log
           uv run --project server python scripts/gates/check_pytest_run.py \
+            timeseries-junit.xml timeseries-pytest.log
+          uv run --project server python scripts/gates/check_pytest_run.py \
             auth-junit.xml auth-pytest.log
           uv run --project server python scripts/gates/check_pytest_run.py \
+            platform-junit.xml platform-pytest.log
+          uv run --project server python scripts/gates/check_pytest_run.py \
             opcua-junit.xml opcua-pytest.log
+          uv run --project server python scripts/gates/check_pytest_run.py \
+            collector-junit.xml collector-pytest.log
 
       # 整体覆盖率不许低于基线——哪怕仍在阈值之上
       - name: 覆盖率棘轮
@@ -307,16 +381,24 @@ jobs:
           uv run --project server python scripts/gates/check_coverage.py \
             lib lib-coverage.xml
           uv run --project server python scripts/gates/check_coverage.py \
+            timeseries timeseries-coverage.xml
+          uv run --project server python scripts/gates/check_coverage.py \
             auth-server auth-coverage.xml
           uv run --project server python scripts/gates/check_coverage.py \
+            platform-server platform-coverage.xml
+          uv run --project server python scripts/gates/check_coverage.py \
             opcua-server opcua-coverage.xml
+          uv run --project server python scripts/gates/check_coverage.py \
+            collector-server collector-coverage.xml
 
       - name: 增量覆盖 ≥85%
         if: github.event_name == 'pull_request'
         run: |
           git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
           uv run --project server diff-cover \
-            lib-coverage.xml auth-coverage.xml opcua-coverage.xml \
+            lib-coverage.xml timeseries-coverage.xml auth-coverage.xml \
+            platform-coverage.xml opcua-coverage.xml \
+            collector-coverage.xml \
             --compare-branch "origin/${{ github.base_ref }}" --fail-under=85
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -384,6 +466,18 @@ jobs:
       AUTH_JWT_SECRET: ci-only-jwt-secret-0123456789abcdef
       AUTH_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
       AUTH_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
+      PLATFORM_POSTGRES_HOST: localhost
+      PLATFORM_POSTGRES_PORT: '55432'
+      PLATFORM_POSTGRES_USER: dt
+      PLATFORM_POSTGRES_PASSWORD: dt
+      PLATFORM_POSTGRES_DB: dt
+      PLATFORM_POSTGRES_SCHEMA: platform
+      PLATFORM_SQLSERVER_HOST: sqlserver-not-used-in-this-job
+      PLATFORM_SQLSERVER_USER: ci
+      PLATFORM_SQLSERVER_PASSWORD: ci-only-sqlserver-0123456789abcdef
+      PLATFORM_SQLSERVER_DATABASE: ci
+      PLATFORM_REDIS_HOST: redis-not-used-in-this-job
+      PLATFORM_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup-server
@@ -392,9 +486,13 @@ jobs:
         run: uv run --project server python scripts/wait_for_deps.py "$MIGRATION_DSN"
 
       # openapi.json 是前后端之间唯一的类型真源：重新生成必须逐字节一致
-      - name: openapi.json 与代码一致
+      - name: auth openapi.json 与代码一致
         working-directory: server/services/auth-server
-        run: uv run auth-openapi --check
+        run: uv run python -m scripts.export_openapi --check
+
+      - name: platform openapi.json 与代码一致
+        working-directory: server/services/platform-server
+        run: uv run python -m scripts.export_openapi --check
 
       # ⚠ 按路径调而不是 console 入口：`scripts` 是顶层包名，auth-server 已把
       # 它打进 wheel，同一个 venv 里两份会互相覆盖，导出脚本可能改写**另一个
@@ -414,8 +512,15 @@ jobs:
         run: uv run python scripts/export_openapi.py --check
 
       # ⚠ 代码可以回滚、数据库不回滚，所以每个迁移都必须真的能上能下
-      - name: 迁移 upgrade → downgrade → upgrade
+      - name: auth 迁移 upgrade → downgrade → upgrade
         working-directory: server/services/auth-server
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+
+      - name: platform 迁移 upgrade → downgrade → upgrade
+        working-directory: server/services/platform-server
         run: |
           uv run alembic upgrade head
           uv run alembic downgrade base

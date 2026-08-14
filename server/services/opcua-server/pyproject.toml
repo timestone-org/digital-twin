@@ -40,6 +40,9 @@ packages = ["src/opcua_server"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-q"
+# `scripts` 不进 wheel（顶层同名包会互相遮蔽，见上），契约测试里
+# `scripts.export_openapi` 靠这条定死解析到本服务这份
+pythonpath = ["."]
 markers = [
     "requires_postgres: 需要真实 Postgres（L2/L3/L4）",
     "requires_redis: 需要真实 Redis",

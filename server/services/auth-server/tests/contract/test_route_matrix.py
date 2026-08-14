@@ -13,14 +13,14 @@ import pytest
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
-from auth_server.apps.auth import catalog
 from auth_server.apps.auth.api import ROUTERS
 from auth_server.apps.auth.deps import (
     REQUIRED_CODES_ATTR,
     REQUIRED_MODE_ATTR,
 )
-from auth_server.apps.auth.services.matching import RuleView, find_rule
+from auth_server.apps.auth.services.matching import find_rule
 from auth_server.settings import API_PREFIX, INTERNAL_PREFIX
+from contract.rule_views import catalog_rule_views
 
 SAMPLE_ID = "3fa85f64-5717-4562-b3fc-2c963f66afa6"
 _PARAM = re.compile(r"\{[^}]+\}")
@@ -52,19 +52,6 @@ def iter_routes(app: FastAPI) -> Iterator[APIRoute]:
             if nested is None:
                 continue
             stack.extend(nested if isinstance(nested, list) else [nested])
-
-
-def catalog_rules() -> list[RuleView]:
-    return [
-        RuleView(
-            path_pattern=spec.path_pattern,
-            http_method=spec.http_method,
-            permission_codes=frozenset(spec.codes),
-            match_mode=spec.match_mode,
-            priority=spec.priority,
-        )
-        for spec in catalog.ROUTE_RULES
-    ]
 
 
 def gate_two_requirement(route: APIRoute) -> tuple[frozenset[str], str]:
@@ -106,7 +93,7 @@ def test_the_route_table_was_actually_scanned() -> None:
 
 
 def test_every_public_route_has_a_seeded_rule() -> None:
-    rules = catalog_rules()
+    rules = catalog_rule_views()
     missing = [
         f"{method} {path}"
         for path, method in ROUTE_CASES
@@ -131,7 +118,7 @@ def test_gate_one_and_gate_two_require_the_same_codes(
     )
     endpoint_codes, endpoint_mode = gate_two_requirement(route)
     matched = find_rule(
-        catalog_rules(), path=_PARAM.sub(SAMPLE_ID, path), method=method
+        catalog_rule_views(), path=_PARAM.sub(SAMPLE_ID, path), method=method
     )
     assert matched is not None
     assert matched.permission_codes == endpoint_codes
@@ -140,7 +127,7 @@ def test_gate_one_and_gate_two_require_the_same_codes(
 
 
 def test_internal_routes_have_no_seeded_rule() -> None:
-    rules = catalog_rules()
+    rules = catalog_rule_views()
     assert (
         find_rule(rules, path=f"{INTERNAL_PREFIX}/verify", method="GET") is None
     )

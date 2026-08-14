@@ -1,4 +1,4 @@
-# PR 专用闸门：规模、提交信息、分支命名、锁文件纪律。
+# PR 专用闸门：规模、提交信息、分支命名、锁文件纪律，以及抽取逻辑版本。
 #
 # 这些条目在 push 上没有意义（分支中途的提交本来就可以是碎的），
 # 只在「要合进主干」这一刻才成立，故与主流水线分开。
@@ -41,6 +41,26 @@ jobs:
         run: |
           git fetch --no-tags origin "${{ github.base_ref }}"
           uv run --python 3.12 --no-project python scripts/gates/check_pr_policy.py
+
+  # 抽取引擎的行为改了、`LOGIC_VERSION` 没跟着改，页面就会把按旧规则算出来的
+  # 数据当成当前的。它同样要拿基线比，所以也只在 PR 上跑。
+  logic-version:
+    name: 抽取逻辑版本
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # 要与基线逐文件比，浅克隆不够
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-gates
+
+      - name: 检查
+        env:
+          PR_BASE_REF: origin/${{ github.base_ref }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          uv run --python 3.12 --no-project python scripts/gates/check_logic_version.py
 
   # PR 描述必须能回答「为什么改、怎么验的、出问题怎么退」
   description:

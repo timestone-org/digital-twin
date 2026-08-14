@@ -29,7 +29,7 @@
 
 | 文件 | 触发 | 管什么 |
 |---|---|---|
-| `pr-policy.yml` | 只在 PR | 规模 ≤400 行 / ≤20 文件 / ≤1 服务、提交信息、分支名、锁文件单独成 PR、PR 描述 |
+| `pr-policy.yml` | 只在 PR | 规模 ≤400 行 / ≤20 文件 / ≤1 服务、提交信息、分支名、锁文件单独成 PR、PR 描述、抽取逻辑版本 |
 | `nightly.yml` | 每日定时 | 变异测试、可访问性全站扫描、镜像内容断言。**失败开 issue，不阻断合并** |
 
 E2E、a11y、变异测试不进 PR 闸门是 `testing-standard-*.md` §9 的明确要求——它们太慢，
@@ -72,7 +72,7 @@ E2E、a11y、变异测试不进 PR 闸门是 `testing-standard-*.md` §9 的明�
 | 规范 | 闸门 |
 |---|---|
 | api-contract §1 URL 形状、§5.2 分页上限、§6 序列化口径、§4.1 错误码 | `check_api_contract.py`（读提交进仓的 `openapi.json`） |
-| 同 §9 openapi 与代码逐字节一致 | `contracts` 作业的 `auth-openapi --check` |
+| 同 §9 openapi 与代码逐字节一致 | `contracts` 作业的 `python -m scripts.export_openapi --check`（每个服务各一次） |
 | database-standard §5 扩展—收缩、lock_timeout、禁回填/改名/改类型 | `check_migrations.py` |
 | 同 §5.5 可逆性 | `contracts` 作业的 `upgrade → downgrade → upgrade` |
 
@@ -118,6 +118,24 @@ import 成功、pyright 通过、全部用例绿，只有按自己声明的依�
 真实案例：`opcua-server` 漏声明 `lib[auth]`，容器启动即
 `ModuleNotFoundError: No module named 'jwt'` 并无限重启，而 385 条用例全绿。
 
+### 领域不变量
+
+有些口径只写在领域文档里，靠人记；它们同样得有红灯。
+
+| 规范 | 闸门 |
+|---|---|
+| AC_STARTUP_DESIGN §5 改抽取逻辑必须手动 +1 `LOGIC_VERSION` | `check_logic_version.py`（PR 专用） |
+
+⚠ 这条闸比的是「抽取引擎那两个文件**去掉 `#` 注释之后**的内容在基线与头之间
+差没差」对「`LOGIC_VERSION` 的取值差没差」，**不对源码求哈希**：哈希一次格式化
+就炸，而 +1 的代价是已有批次全部判为过期、要重跑一次全量抽取——为一条改过措辞的
+注释付这个代价，这条闸很快就会被绕过。注释改不了抽取行为，去掉它不会漏报；
+docstring 不去，它可能被程序读走。
+
+⚠ **这条闸目前只报不拦**：按 §5，分支保护里唯一必需的检查是 `5·全部闸门`，
+而 `pr-policy.yml` 的作业都不在其列。红了照样合得进去——把它设成必需检查
+之前，别把它当成在拦。
+
 ---
 
 ## 3. 闸门自己也要被守住
@@ -162,6 +180,10 @@ node 的 PATH（否则 JS action 的 post 步骤会把一个全绿的作业报�
 任一失败**或被跳过**都会让它失败——跳过的闸门不算通过。
 
 另外：禁止直推 `main`、禁止管理员绕过、要求分支为最新再合并。
+
+⚠ **`pr-policy.yml` 的三个作业都不在必需之列，红了不拦合并**。它们只报不拦，
+包括 §2「领域不变量」那条 `check_logic_version.py`——一条不拦的闸只有在被人看的
+时候才有用，别把它当成在拦。要真拦得住，得在分支保护里把它们也设成必需检查。
 
 ---
 

@@ -29,7 +29,7 @@
 
 ```bash
 cd docker
-cp ../.env.example .env   # 填数据库、Redis 与三个密钥
+cp ../.env.example .env   # 填数据库、Redis、外部 EMS 库与三个密钥
 docker compose up -d --build
 ```
 
@@ -37,20 +37,41 @@ docker compose up -d --build
 少写一处就是非对称失效——发送端有值、接收端没有，一律 403，
 而现象与原因隔得极远。
 
+### 必配项
+
+密钥与地址类**都没有默认值，缺失即拒绝启动**——进程会在第一秒把缺的变量名逐个
+打到 stderr 并以退出码 2 退出，编排器据此判定启动失败。
+
+| 变量 | 谁读它 | 说明 |
+|---|---|---|
+| `POSTGRES_*` / `REDIS_*` | auth · platform | —— |
+| `AUTH_JWT_SECRET` / `AUTH_EDGE_SIGNING_SECRET` / `AUTH_EDGE_SERVICE_KEY` | auth（后两个 platform / 边缘也读） | 各 32 字节以上 |
+| `ACSOURCE_HOST` `ACSOURCE_USER` `ACSOURCE_PASSWORD` `ACSOURCE_DB` | platform | 现场 EMS 的 SQL Server，**只读**；compose 把它们转成 `PLATFORM_SQLSERVER_*` |
+| `ACSOURCE_PORT`（默认 1433）`ACSOURCE_TIMEZONE`（默认 `Asia/Shanghai`） | platform | 有默认值，取值差异不是行为差异 |
+
+⚠ `ACSOURCE_TIMEZONE` 是**外库时间列的时区口径**，不是展示时区。外库存的是没有
+时区信息的当地时，对外一律 UTC，填错的表现是整屏数据平移几个小时而不报任何错。
+
+⚠ EMS 不可达**不影响启动，也不影响就绪**：空调数据面返回 503，台账页与空间配置页
+照常工作（[ADR-0009](../docs/adr/0009-空调原始数据由平台直读外部EMS库.md)）。
+
 ### 迁移与种子
 
 容器起来**不会**自己建表。每个服务各有一条迁移链，各自只碰自己的 schema：
 
 ```bash
-docker compose run --rm auth-server  alembic upgrade head
-docker compose run --rm auth-server  auth-seed
-docker compose run --rm opcua-server alembic upgrade head
-docker compose run --rm realtime-hub alembic upgrade head
+docker compose run --rm auth-server     alembic upgrade head
+docker compose run --rm auth-server     python -m scripts.seed
+docker compose run --rm platform-server alembic upgrade head
+docker compose run --rm opcua-server    alembic upgrade head
+docker compose run --rm realtime-hub    alembic upgrade head
 ```
 
-⚠ **加了功能就要重跑种子。** 权限码与路由规则是源码里的目录，进库靠 `auth-seed`。
-新服务、新端点上线后不跑，边缘查不到规则，而 auth-server 的口径是**无规则一律拒绝**——
-表现是那一片接口**全部 403**，而代码看起来完全正常。
+⚠ **每次上新功能都要重跑种子。** 权限码与路由规则表（闸 1）存在**数据库里**，
+由 auth-server 的种子脚本全量覆盖（可重复执行；人工新建的规则不受影响）。
+新服务、新端点上线后不跑，边缘查不到规则，而 auth-server 的口径是**无规则一律
+拒绝**——表现是那一片接口**全部 403**，而直连服务端口却是好的，于是现象看起来
+像「前端坏了」。
 
 ### realtime-hub 的两处部署前置
 

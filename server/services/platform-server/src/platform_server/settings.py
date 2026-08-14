@@ -1,0 +1,115 @@
+"""platform-server 的配置。继承 lib 的基类，只加本服务字段。
+
+变量名 = `PLATFORM_<组>_<键>`。密钥类一律无默认值——缺失即拒绝启动。
+"""
+
+from pydantic import Field, SecretStr
+from pydantic_settings import SettingsConfigDict
+
+from lib.config import (
+    AppSettings,
+    PostgresSettings,
+    RedisSettings,
+    SqlServerSettings,
+)
+
+SERVICE_NAME = "platform-server"
+API_PREFIX = "/api/v1/platform"
+INTERNAL_PREFIX = "/internal/v1/platform"
+DB_SCHEMA = "platform"
+
+# 运行角色。⚠ 这是部署轴不是环境轴（ARCHITECTURE §3.4）：同一份镜像按角色跑出
+# 不同进程，取值差异之外还差在跑什么循环，故它必须是分支而不是参数。
+ROLE_API = "api"
+ROLE_WORKER = "worker"
+ROLE_PUBLISHER = "publisher"
+
+# 合并窗口的下限。配成 0 会让发布循环空转打满一个核
+PUBLISH_WINDOW_FLOOR_MS = 100
+# 租约存活期的下限。低于它时一次网络抖动就会丢主
+LEASE_TTL_FLOOR_S = 5
+
+
+class Settings(AppSettings, PostgresSettings, RedisSettings, SqlServerSettings):
+    """进程启动时构造一次并冻结。"""
+
+    model_config = SettingsConfigDict(
+        env_prefix="PLATFORM_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        frozen=True,
+    )
+
+    app_name: str = SERVICE_NAME
+    app_http_port: int = 8005
+    postgres_schema: str = DB_SCHEMA
+
+    # 边缘注入身份头时用的签名密钥，必须与 auth-server 取同一个值：
+    # 少配一边就是全链路 401，而现象与原因隔得极远
+    edge_signing_secret: SecretStr = Field(min_length=32)
+    # `/internal/` 的服务级密钥，逐字 compare_digest 比较。与 collector-server
+    # 的 COLLECT_EDGE_SERVICE_KEY 取同一个值：分叉就是 collector 永远拉不到计划
+    edge_service_key: SecretStr = Field(min_length=32)
+
+    # 采集配置面，见 docs/COLLECT_DESIGN.md §5
+    # 计划变更的广播频道。⚠ pub/sub 即发即弃，collector 仍按周期全量重拉兜底
+    collect_plan_channel: str = "collect:plan:changed"
+    # 浏览地址空间要走一趟现场设备，预算比别的命令宽
+    collect_browse_timeout_s: float = 10.0
+    # 连通性测试、寻址串校验、下发写值共用的命令预算
+    collect_command_timeout_s: float = 5.0
+    # 归档宽表的只读连接池。⚠ 与写库分池：一次跨月扫描不该把写连接一起占住
+    collect_history_pool_size: int = 5
+    # 时序扫描远慢于热路径写，故语句预算单列一档
+    collect_history_statement_timeout_ms: int = 15_000
+    # 按天/月聚合的业务时区。⚠ 不带 timezone 的 time_bucket 按 UNIX 纪元对齐，
+    # 东八区的日桶会从当地 08:00 开始（docs/COLLECT_DESIGN.md §6）
+    collect_bucket_timezone: str = "Asia/Shanghai"
+
+    # 大屏实时发布（publisher 角色），见 docs/DASHBOARD_DESIGN.md §6
+    # realtime-hub 的地址。主题登记/注销与批推都打它
+    realtime_base_url: str = "http://realtime-hub:8000"
+    realtime_timeout_s: float = Field(default=2.0, gt=0)
+    # 合并窗口：一拍读一次快照、推一批。⚠ 节流归推送方，hub 一旦知道「哪些
+    # 载荷可以合并」就又长出业务知识了（ADR-0007）
+    publish_window_ms: int = Field(default=1000, ge=PUBLISH_WINDOW_FLOOR_MS)
+    # 单条推送的条目上限。⚠ 必须 ≤ hub 的 REALTIME_MAX_PAYLOAD_ITEMS，超了
+    # hub 直接 413——分片是推送方的事，hub 不替谁拆
+    publish_max_items: int = Field(default=200, ge=1)
+    # 快照多旧就算陈旧。⚠ 陈旧值照推但标注为陈旧，不许当成现值
+    publish_stale_after_ms: int = Field(default=15_000, ge=1)
+    # 单活租约的存活期，续期在每一拍（远快于它）
+    publish_lease_ttl_s: int = Field(default=15, ge=LEASE_TTL_FLOOR_S)
+    # 主题登记与大屏表的对账周期。⚠ 它同时是「新建的大屏多久之后可被订阅」
+    # 的上界：主题未登记时 hub 一律拒订
+    publish_reconcile_interval_s: float = Field(default=5.0, gt=0)
+    # 订阅关系的只读连接池。realtime schema 归 realtime-hub 写独占
+    publish_viewer_pool_size: int = Field(default=2, ge=1)
+
+    # ⚠ 外部只读库的 CT 列是 naive 的当地时间，库里没有时区信息。对外一律 UTC，
+    # 换算基准因此必须是配置项；见 docs/AC_DATA_DESIGN.md §6
+    acsource_timezone: str = "Asia/Shanghai"
+
+    # 开机事件抽取的分片队列，见 docs/AC_STARTUP_DESIGN.md §5
+    acstartup_stream: str = "platform:ac-startup:shards"
+    acstartup_group: str = "ac-startup-workers"
+    acstartup_block_ms: int = 5000
+    # 多久没确认就算滞留，可以被别的消费者认领回来
+    acstartup_claim_idle_ms: int = 60000
+    acstartup_prefetch: int = 8
+    # ⚠ 一片的总预算必须大于它内部全部外库查询之和：6 台 × 15 s 查询超时 = 90 s
+    acstartup_shard_timeout_s: float = 300.0
+    # 一台空调一片最多取多少行；一个月按分钟采样约 4.5 万行
+    acstartup_max_rows: int = 60000
+
+    # 达标时长模型的训练队列，见 docs/AC_MODEL_DESIGN.md §4
+    acmodel_stream: str = "platform:ac-model:train"
+    acmodel_group: str = "ac-model-trainers"
+    acmodel_block_ms: int = 5000
+    # 训练要跑几十秒，认领门槛要比它长得多，否则跑到一半就被别人抢走重训
+    acmodel_claim_idle_ms: int = 300000
+    acmodel_prefetch: int = 1
+    # 一次训练的总预算。⚠ 真实房间全史上万条可用事件，18 次拟合在竞争负载下
+    # 是分钟级；这条线是硬故障线，穿了按不可重试标失败
+    acmodel_train_timeout_s: float = 900.0

@@ -57,21 +57,22 @@ export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | undefined
   body?: unknown
   query?: Record<string, string | number | boolean | undefined> | undefined
+  /**
+   * 后端服务前缀，缺省打 auth-server。
+   * ⚠ 取值只从 `config/app.ts` 的常量里来，不在调用处拼字符串——前缀是边缘的
+   * 路由键，写歪一个字符会被反代兜底成前端静态资源，拿到的是一段 HTML。
+   */
+  baseUrl?: string | undefined
   /** 跳过令牌注入与 401 重试（登录、刷新自己走这条）。 */
   anonymous?: boolean | undefined
   signal?: AbortSignal | undefined
-  /** 服务前缀，缺省是 auth-server。别的服务传自己的。 */
-  baseUrl?: string | undefined
   /** 附加请求头，如 `Idempotency-Key`。不许在这里塞 Authorization。 */
   headers?: Record<string, string> | undefined
 }
 
-function buildUrl(
-  path: string,
-  query?: RequestOptions['query'],
-  baseUrl: string = AUTH_BASE_URL,
-): string {
-  const url = `${baseUrl}${path}`
+function buildUrl(path: string, options: RequestOptions): string {
+  const { query } = options
+  const url = `${options.baseUrl ?? AUTH_BASE_URL}${path}`
   if (!query) return url
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(query)) {
@@ -133,7 +134,7 @@ async function send(path: string, options: RequestOptions): Promise<Response> {
     ? AbortSignal.any([options.signal, timeout])
     : timeout
   try {
-    return await fetch(buildUrl(path, options.query, options.baseUrl), {
+    return await fetch(buildUrl(path, options), {
       method: options.method ?? 'GET',
       headers,
       body: options.body === undefined ? null : JSON.stringify(options.body),

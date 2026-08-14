@@ -86,6 +86,49 @@ class PostgresSettings(BaseSettings):
         )
 
 
+class SqlServerSettings(BaseSettings):
+    """只读 SQL Server 连接组。密码无默认值。"""
+
+    sqlserver_host: str
+    sqlserver_port: int = 1433
+    sqlserver_user: str
+    sqlserver_password: SecretStr
+    sqlserver_database: str
+    sqlserver_login_timeout_s: float = 5.0
+    # 聚合类查询预算，见 docs/agents/runtime-resilience.md §3.1
+    sqlserver_query_timeout_s: float = 15.0
+    sqlserver_pool_size: int = 5
+    sqlserver_pool_recycle_s: int = 3600
+    # 驱动的客户端字符集。⚠ 老库的 varchar 列常是 CP936 一类的本地编码，配错
+    # 不报错、只出乱码，且开发机与容器的表现可能不一致
+    sqlserver_charset: str = "UTF-8"
+
+    def sqlserver_dsn(self) -> str:
+        """pymssql 驱动的连接串（含口令，禁止写日志）。
+
+        ⚠ 用户名与口令必须百分号编码：口令里一个 `@` 就会让 host 被解析成
+        口令的后半段，报出来的却是「域名解析失败」，与真实原因隔得极远。
+        """
+        user = quote(self.sqlserver_user, safe="")
+        password = quote(self.sqlserver_password.get_secret_value(), safe="")
+        return (
+            f"mssql+pymssql://{user}:{password}"
+            f"@{self.sqlserver_host}:{self.sqlserver_port}"
+            f"/{self.sqlserver_database}"
+        )
+
+    def sqlserver_target(self) -> str:
+        """可写进日志的连接目标：只有 host 与库名，没有凭据。
+
+        ⚠ 名字带组前缀是刻意的：多个连接组会被同一个 Settings 多继承，
+        同名方法会被 MRO 静默遮蔽掉一个。
+        """
+        return (
+            f"{self.sqlserver_host}:{self.sqlserver_port}"
+            f"/{self.sqlserver_database}"
+        )
+
+
 class RedisSettings(BaseSettings):
     """Redis 连接组。口令可为空（本地无密码实例），但不给弱默认值。"""
 

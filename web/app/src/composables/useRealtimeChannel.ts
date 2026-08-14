@@ -8,43 +8,65 @@
  * 浏览器的 WebSocket API 根本不允许自定义头。服务端只回 `dt.auth`。
  */
 
+import {
+  REALTIME_AUTH_EXPIRED_CLOSE_CODE,
+  REALTIME_HANDSHAKE_REJECTED_CLOSE_CODE,
+  type ClientMessage,
+} from '@dt/contracts'
 import { ref, type Ref } from 'vue'
 
+import { newClientUuid } from '@/api/idempotency'
+import { dispatchFrame } from '@/runtime/realtimeDispatch'
+import {
+  createTopicRegistry,
+  type TopicHandler,
+} from '@/runtime/topicRegistry'
+import type { DispatchPorts } from '@/runtime/realtimeDispatch'
 import { useAuthStore } from '@/stores/auth'
 
 /** hub 的对外前缀，与 server/services/realtime-hub 的 API_PREFIX 同值。 */
 export const REALTIME_WS_PATH = '/api/v1/realtime/ws'
 /** 握手要报的第一个子协议，服务端回它。 */
 export const AUTH_SUBPROTOCOL = 'dt.auth'
-/** 令牌过期时服务端用的关闭码。收到它要换票重连，而不是当成网络故障。 */
-export const CLOSE_TOKEN_EXPIRED = 4001
+/**
+ * 令牌过期时服务端用的关闭码。收到它要换票重连，而不是当成网络故障。
+ * ⚠ 取自 `@dt/contracts` 而不是就地再写一个 4001：两份同值常量一定会漂，
+ * 而漂开之后「换票重连」这条路径会安静地退化成普通重连。
+ */
+export const CLOSE_TOKEN_EXPIRED = REALTIME_AUTH_EXPIRED_CLOSE_CODE
 /** 重连退避的起点与上限。⚠ 不退避的话，hub 一挂全站客户端会一起打它。 */
 const RECONNECT_MIN_MS = 1_000
 const RECONNECT_MAX_MS = 30_000
 
-type Handler = (payload: Record<string, unknown>) => void
-
 interface Channel {
   isConnected: Ref<boolean>
-  subscribe: (topic: string, handler: Handler) => () => void
+  subscribe: (topic: string, handler: TopicHandler) => () => void
 }
 
 const isConnected = ref(false)
-const handlers = new Map<string, Set<Handler>>()
+const topics = createTopicRegistry()
+const ports: DispatchPorts = {
+  topics,
+  send: (message) => send(message),
+  token: () => useAuthStore().accessToken,
+  newRequestId: newClientUuid,
+}
 let socket: WebSocket | null = null
 let reconnectMs = RECONNECT_MIN_MS
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let isClosing = false
 
 /** 往服务端发一条动作。连接没就绪时丢弃——重连后会重订。 */
-function send(message: Record<string, unknown>): void {
+function send(message: ClientMessage): void {
   if (socket?.readyState !== WebSocket.OPEN) return
   socket.send(JSON.stringify(message))
 }
 
 /** 把当前登记的全部主题重订一遍。重连后必须做，否则连上了却收不到数据。 */
 function resubscribeAll(): void {
-  for (const topic of handlers.keys()) send({ action: 'subscribe', topic })
+  for (const topic of topics.topics()) {
+    send({ action: 'subscribe', topic, req_id: newClientUuid() })
+  }
 }
 
 function scheduleReconnect(): void {
@@ -55,19 +77,6 @@ function scheduleReconnect(): void {
   }, reconnectMs)
   // 指数退避，夹在上限内
   reconnectMs = Math.min(reconnectMs * 2, RECONNECT_MAX_MS)
-}
-
-function dispatch(raw: string): void {
-  const message: unknown = JSON.parse(raw)
-  if (typeof message !== 'object' || message === null) return
-  const envelope = message as Record<string, unknown>
-  const topic = envelope['topic']
-  if (typeof topic !== 'string') return
-  const payload = envelope['payload']
-  if (typeof payload !== 'object' || payload === null) return
-  for (const handler of handlers.get(topic) ?? []) {
-    handler(payload as Record<string, unknown>)
-  }
 }
 
 function connect(): void {
@@ -85,13 +94,16 @@ function connect(): void {
     resubscribeAll()
   })
   opened.addEventListener('message', (event: MessageEvent<string>) => {
-    dispatch(event.data)
+    dispatchFrame(event.data, ports)
   })
   opened.addEventListener('close', (event: CloseEvent) => {
     socket = null
     isConnected.value = false
-    // ⚠ 4001 是「票过期了」：换票要走登录态那条路，这里只重连，
-    // 由 store 的刷新逻辑保证下次握手带的是新票
+    // ⚠ 1008 是「票压根验不过」，换票没用：再重连也是拿同一张票被拒，
+    // 那会退化成一个打满退避上限的空转循环。停下，等登录态那条路把票换掉
+    if (event.code === REALTIME_HANDSHAKE_REJECTED_CLOSE_CODE) return
+    // ⚠ 4001 是「票过期了」：由 store 的刷新逻辑保证下次握手带的是新票，
+    // 所以退避归零、立刻重连
     if (event.code === CLOSE_TOKEN_EXPIRED) reconnectMs = RECONNECT_MIN_MS
     scheduleReconnect()
   })
@@ -104,7 +116,7 @@ export function closeRealtimeChannel(): void {
   reconnectTimer = null
   socket?.close()
   socket = null
-  handlers.clear()
+  topics.clear()
   // ⚠ 退避也要归零：不归零的话，登出前攒到的退避值会被下一次登录继承——
   // 表现是「重新登录后要等半分钟才有实时数据」，而那与网络无关
   reconnectMs = RECONNECT_MIN_MS
@@ -121,22 +133,13 @@ export function useRealtimeChannel(): Channel {
   isClosing = false
   connect()
 
-  function subscribe(topic: string, handler: Handler): () => void {
-    const existing = handlers.get(topic)
-    if (existing === undefined) {
-      handlers.set(topic, new Set([handler]))
-      send({ action: 'subscribe', topic })
-    } else {
-      existing.add(handler)
+  function subscribe(topic: string, handler: TopicHandler): () => void {
+    if (topics.add(topic, handler)) {
+      send({ action: 'subscribe', topic, req_id: newClientUuid() })
     }
     return () => {
-      const bucket = handlers.get(topic)
-      if (bucket === undefined) return
-      bucket.delete(handler)
-      // ⚠ 最后一个订阅者走了才退订：还有人在看时退订，另一半页面会静默停更
-      if (bucket.size === 0) {
-        handlers.delete(topic)
-        send({ action: 'unsubscribe', topic })
+      if (topics.remove(topic, handler)) {
+        send({ action: 'unsubscribe', topic, req_id: newClientUuid() })
       }
     }
   }

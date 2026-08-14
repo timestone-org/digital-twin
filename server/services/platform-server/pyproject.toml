@@ -1,0 +1,67 @@
+[project]
+name = "platform-server"
+version = "0.1.0"
+description = "业务平台：空调台账与车间房间空间配置。"
+requires-python = ">=3.12"
+dependencies = [
+    "lib[auth,db,mssql,redis,web]",
+    "timeseries",
+    "numpy>=2.1",
+    "scikit-learn>=1.7",
+    # publisher 角色打 realtime-hub 的主题登记与批推（docs/DASHBOARD_DESIGN.md §6）。
+    # ⚠ 必须自己声明：httpx 在工作区根的 dev 组里，本地与全部用例都 import 得到，
+    # 只有按自己声明的依赖装的镜像会启动即崩。
+    "httpx>=0.28",
+]
+
+[project.scripts]
+platform-server = "platform_server.__main__:main"
+
+[tool.uv.sources]
+lib = { workspace = true }
+timeseries = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# ⚠ `scripts` 不进 wheel：每个服务都有一个同名的顶层 `scripts` 包，装进同一个
+# workspace venv 就会互相遮蔽，谁赢取决于安装顺序。一次性命令一律
+# `uv run python -m scripts.<名>`，在服务目录下跑，由 CWD 决定用哪份。
+[tool.hatch.build.targets.wheel]
+packages = ["src/platform_server"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-q"
+markers = [
+    "requires_postgres: 需要真实 Postgres（L2/L3/L4）",
+]
+
+[tool.coverage.run]
+branch = true
+# ⚠ SQLAlchemy 的 async 面把同步 DBAPI 的活放在 greenlet 里跑。不声明并发口径，
+# 协程在 `await` 之后恢复的那些行 coverage 一行都记不上——整体数字会被低报十几个
+# 百分点，而报告本身看起来完全正常，只是「这几行没测到」是假的。
+concurrency = ["thread", "greenlet"]
+source = ["platform_server"]
+omit = [
+    "*/migrations/*",
+    "*/__main__.py",
+    "*/conftest.py",
+]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = false
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+    "\\.\\.\\.",
+]
+
+[tool.coverage.xml]
+output = "coverage.xml"

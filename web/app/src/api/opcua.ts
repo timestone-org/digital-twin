@@ -26,6 +26,7 @@ import type {
 
 import { OPCUA_BASE_URL } from '@/config/app'
 import { request, requestData } from './client'
+import { newIdempotencyKey } from './idempotency'
 
 export type OpcuaPageQuery = {
   q?: string | undefined
@@ -33,18 +34,7 @@ export type OpcuaPageQuery = {
   size?: number | undefined
 }
 
-/**
- * 生成一个幂等键。
- *
- * ⚠ 不用 `crypto.randomUUID()`：它只在**安全上下文**（HTTPS 或 localhost）里存在。
- * 本平台按内网 IP 走纯 HTTP 交付，那里 `crypto.randomUUID` 是 undefined，
- * 调用直接抛 TypeError——而它只在现场炸，开发机（localhost）永远复现不了。
- */
-export function newIdempotencyKey(): string {
-  const random = Math.random().toString(36).slice(2)
-  const more = Math.random().toString(36).slice(2)
-  return `${Date.now().toString(36)}-${random}${more}`
-}
+export { newIdempotencyKey }
 
 function opcua<T>(
   path: string,

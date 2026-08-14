@@ -22,6 +22,48 @@ export interface NavItem {
 export const NAV_ITEMS: readonly NavItem[] = [
   { key: 'home', label: '工作台', icon: 'home', to: '/' },
   {
+    key: 'dashboards',
+    label: '大屏',
+    icon: 'layout-grid',
+    to: '/dashboards',
+    permission: [PERMISSION_CODES.dashboardView],
+  },
+  {
+    key: 'hvac',
+    label: '空调管理',
+    icon: 'snowflake',
+    children: [
+      {
+        key: 'hvac-units',
+        label: '空调台账',
+        icon: 'list-checks',
+        to: '/hvac/units',
+        permission: [PERMISSION_CODES.acView],
+      },
+      {
+        key: 'hvac-startups',
+        label: '开机事件',
+        icon: 'activity',
+        to: '/hvac/startups',
+        permission: [PERMISSION_CODES.acView],
+      },
+      {
+        key: 'hvac-models',
+        label: '达标预测',
+        icon: 'sparkles',
+        to: '/hvac/models',
+        permission: [PERMISSION_CODES.acView],
+      },
+      {
+        key: 'hvac-spaces',
+        label: '空间配置',
+        icon: 'building',
+        to: '/hvac/spaces',
+        permission: [PERMISSION_CODES.acView],
+      },
+    ],
+  },
+  {
     key: 'tools',
     label: '工具',
     icon: 'layout-grid',

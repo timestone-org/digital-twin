@@ -25,6 +25,10 @@ BACKFILL = re.compile(
 NATIVE_ENUM = re.compile(r"\bsa\.Enum\(|postgresql\.ENUM\(")
 # `op.create_index(名字, 表名, 列)` —— 取表名至少要有两个位置参数
 INDEX_ARGS = 2
+# Postgres 的标识符上限。超了 SQLAlchemy 在 DDL 编译期抛 IdentifierError
+MAX_IDENTIFIER = 63
+# 只拿「长得像库对象名」的字面量比长度，别把 SQL 片段与说明文字算进来
+IDENTIFIER_SHAPE = re.compile(r"(?:ix|uq|ck|fk|pk)_[a-z0-9_]+")
 
 
 def _versions(service: Path) -> list[Path]:
@@ -273,6 +277,36 @@ def check_single_head_per_service() -> list[Violation]:
     return found
 
 
+def check_identifiers_fit_postgres() -> list[Violation]:
+    """迁移里写死的标识符不许超 63 字符。
+
+    ⚠ 这条只在**全新库**上才暴露：老库早就建好了那个对象，`upgrade head`
+    没有它要执行，于是本地与已部署环境全绿，而任何一次干净部署当场起不来。
+    SQLAlchemy 在 DDL 编译期就抛 IdentifierError，连库都没连上。
+    """
+    found: list[Violation] = []
+    for path in _all_versions():
+        tree = parse(path)
+        if tree is None:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Constant):
+                continue
+            value = node.value
+            if not isinstance(value, str) or len(value) <= MAX_IDENTIFIER:
+                continue
+            if not IDENTIFIER_SHAPE.fullmatch(value):
+                continue
+            found.append(
+                Violation(
+                    f"标识符不许超过 {MAX_IDENTIFIER} 字符",
+                    at(path, node.lineno),
+                    f"{value}（{len(value)} 字符）",
+                )
+            )
+    return found
+
+
 def _literal(path: Path, name: str) -> str | None:
     tree = parse(path)
     if tree is None:
@@ -311,6 +345,7 @@ CHECKS = (
     check_index_on_existing_table_is_concurrent,
     check_downgrade_is_honest,
     check_single_head_per_service,
+    check_identifiers_fit_postgres,
 )
 
 

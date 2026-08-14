@@ -1,0 +1,208 @@
+{
+  "catalog_version": 1,
+  "modules": [
+    {
+      "type": "header",
+      "display_name": "页头",
+      "category": "布局",
+      "icon": "layout-header",
+      "keywords": ["header", "页头", "标题栏"],
+      "default_size": { "width": 1920, "height": 96 },
+      "chrome": "bare",
+      "region": "header",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "default": "",
+          "group": "文案",
+          "span": "full",
+          "placeholder": "大屏标题"
+        },
+        {
+          "key": "subtitle",
+          "label": "副标题",
+          "type": "string",
+          "default": "",
+          "group": "文案",
+          "span": "full"
+        },
+        {
+          "key": "align",
+          "label": "对齐",
+          "type": "enum",
+          "default": "center",
+          "group": "版式",
+          "span": "half",
+          "options": [
+            { "value": "left", "label": "左对齐" },
+            { "value": "center", "label": "居中" },
+            { "value": "right", "label": "右对齐" }
+          ]
+        },
+        {
+          "key": "is_clock_shown",
+          "label": "显示时钟",
+          "type": "boolean",
+          "default": true,
+          "group": "版式",
+          "span": "half"
+        },
+        {
+          "key": "clock_format",
+          "label": "时钟格式",
+          "type": "enum",
+          "default": "date_time",
+          "group": "版式",
+          "span": "half",
+          "when": { "key": "is_clock_shown", "in": [true] },
+          "options": [
+            { "value": "date_time", "label": "日期与时间" },
+            { "value": "time_only", "label": "只显示时间" },
+            { "value": "date_only", "label": "只显示日期" }
+          ]
+        },
+        {
+          "key": "accent_color",
+          "label": "强调色",
+          "type": "color",
+          "default": "",
+          "group": "外观",
+          "span": "half",
+          "help": "留空则跟随大屏主题"
+        }
+      ],
+      "bindings": []
+    },
+    {
+      "type": "twin-view",
+      "display_name": "数字孪生",
+      "category": "孪生",
+      "icon": "cube",
+      "keywords": ["twin", "孪生", "三维", "3d"],
+      "default_size": {
+        "width": 1200,
+        "height": 720,
+        "min_width": 320,
+        "min_height": 240
+      },
+      "chrome": "card",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "scene_asset",
+          "label": "场景资源",
+          "type": "string",
+          "default": "",
+          "group": "场景",
+          "span": "full",
+          "help": "场景文件的素材标识"
+        },
+        {
+          "key": "camera_preset",
+          "label": "相机机位",
+          "type": "enum",
+          "default": "default",
+          "group": "场景",
+          "span": "half",
+          "options": [
+            { "value": "default", "label": "默认" },
+            { "value": "top", "label": "俯视" },
+            { "value": "front", "label": "正视" },
+            { "value": "free", "label": "自由" }
+          ]
+        },
+        {
+          "key": "is_auto_rotate_enabled",
+          "label": "自动旋转",
+          "type": "boolean",
+          "default": false,
+          "group": "场景",
+          "span": "half"
+        },
+        {
+          "key": "background_color",
+          "label": "背景色",
+          "type": "color",
+          "default": "",
+          "group": "外观",
+          "span": "half"
+        },
+        {
+          "key": "ambient_intensity",
+          "label": "环境光强度",
+          "type": "number",
+          "default": 1,
+          "group": "外观",
+          "span": "half",
+          "min": 0,
+          "max": 5,
+          "step": 0.1
+        },
+        {
+          "key": "hotspots",
+          "label": "热点",
+          "type": "array",
+          "group": "热点",
+          "span": "full",
+          "item_label_key": "label",
+          "min_items": 0,
+          "max_items": 32,
+          "item_schema": [
+            {
+              "key": "label",
+              "label": "名称",
+              "type": "string",
+              "default": "",
+              "span": "half"
+            },
+            {
+              "key": "anchor",
+              "label": "锚点",
+              "type": "string",
+              "default": "",
+              "span": "half",
+              "help": "场景里的对象名"
+            },
+            {
+              "key": "unit",
+              "label": "单位",
+              "type": "string",
+              "default": "",
+              "span": "half"
+            }
+          ]
+        }
+      ],
+      "bindings": [
+        {
+          "key": "hotspots",
+          "label": "热点读数",
+          "data_type": "number",
+          "is_array": true,
+          "array_fields": [
+            {
+              "key": "value",
+              "label": "读数",
+              "data_type": "number",
+              "is_required": true
+            },
+            {
+              "key": "state",
+              "label": "状态",
+              "data_type": "enum",
+              "enum_map": { "0": "离线", "1": "运行", "2": "故障" }
+            }
+          ]
+        },
+        {
+          "key": "scene_status",
+          "label": "场景状态",
+          "data_type": "string"
+        }
+      ]
+    }
+  ]
+}

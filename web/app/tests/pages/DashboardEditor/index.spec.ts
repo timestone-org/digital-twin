@@ -1,0 +1,292 @@
+/**
+ * @fileoverview 编辑器主体的行为契约。最要紧的三条不是渲染对不对，而是：
+ * 保存必带 `expected_version` 且 **409 走「重新加载」而不是静默覆盖**；
+ * 换大屏时按序号防竞态、慢的那次回来不许覆盖新屏；
+ * 删节点前二次确认，且文案说清连子树一起删（ADR-0012）。
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+import { flushPromises, mount } from '@vue/test-utils'
+import type { DashboardPayload } from '@dt/contracts'
+
+import * as dashboardApi from '@/api/dashboard'
+import { BizError } from '@/api/client'
+import { VERSION_CONFLICT_MESSAGE } from '@/composables/useDashboardDoc'
+import DashboardEditor from '@/pages/DashboardEditor/index.vue'
+import { useAuthStore } from '@/stores/auth'
+
+const route = { path: '/dashboards/db1/edit', params: { dashboardId: 'db1' }, query: {} }
+
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useRoute: () => route,
+  RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
+}))
+
+interface ConfirmAsk {
+  title: string
+  message: string
+  confirmText?: string
+  danger?: boolean
+}
+const confirmSpy = vi.fn<(request: ConfirmAsk) => Promise<boolean>>()
+const toastError = vi.fn()
+const toastSuccess = vi.fn()
+vi.mock('@dt/ui', async () => {
+  const actual = await vi.importActual<Record<string, unknown>>('@dt/ui')
+  return {
+    ...actual,
+    useConfirm: () => ({ ask: confirmSpy }),
+    useToast: () => ({
+      success: toastSuccess,
+      error: toastError,
+      info: vi.fn(),
+    }),
+  }
+})
+
+function payload(over: Partial<DashboardPayload> = {}): DashboardPayload {
+  return {
+    id: 'db1',
+    projectId: 'p1',
+    name: '一号大屏',
+    description: null,
+    designWidth: 1920,
+    designHeight: 1080,
+    themeJson: {},
+    chromeJson: {},
+    rowVersion: 7,
+    schemaVersion: 1,
+    isPublic: false,
+    publicToken: null,
+    createdAt: '',
+    updatedAt: '',
+    nodes: [],
+    ...over,
+  }
+}
+
+function node(id: string) {
+  return {
+    id,
+    dashboardId: 'db1',
+    parentId: null,
+    clientKey: null,
+    moduleType: 'header',
+    x: 0,
+    y: 0,
+    w: 100,
+    h: 50,
+    zIndex: 0,
+    isVisible: true,
+    configJson: {},
+    createdAt: '',
+    updatedAt: '',
+    bindings: [],
+  }
+}
+
+async function mountEditor() {
+  const wrapper = mount(DashboardEditor, {
+    global: { stubs: { Teleport: true } },
+  })
+  await flushPromises()
+  return wrapper
+}
+
+function buttonWith(wrapper: Awaited<ReturnType<typeof mountEditor>>, text: string) {
+  return wrapper.findAll('button').find((item) => item.text().includes(text))
+}
+
+beforeEach(() => {
+  setActivePinia(createPinia())
+  const auth = useAuthStore()
+  auth.accessToken = null
+  confirmSpy.mockReset()
+  confirmSpy.mockResolvedValue(false)
+  toastError.mockReset()
+  toastSuccess.mockReset()
+  vi.spyOn(dashboardApi, 'getDashboard').mockResolvedValue(payload())
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
+describe('加载', () => {
+  it('把大屏名放进标题，模块库列出已注册的模块', async () => {
+    const wrapper = await mountEditor()
+
+    expect(wrapper.text()).toContain('一号大屏')
+    expect(wrapper.findAll('.dt-lib__item').length).toBeGreaterThan(0)
+  })
+
+  it('加载失败时把原因显示出来', async () => {
+    vi.spyOn(dashboardApi, 'getDashboard').mockRejectedValue(
+      new BizError(40400, '大屏不存在', 404, 't'),
+    )
+    const wrapper = await mountEditor()
+
+    expect(wrapper.text()).toContain('大屏不存在')
+  })
+
+  it('父节点不存在的节点不画出来，但要提示有几个', async () => {
+    vi.spyOn(dashboardApi, 'getDashboard').mockResolvedValue(
+      payload({ nodes: [{ ...node('orphan'), parentId: 'gone' }] }),
+    )
+    const wrapper = await mountEditor()
+
+    expect(wrapper.text()).toContain('父节点不存在')
+  })
+})
+
+describe('加模块与保存', () => {
+  it('刚加载完不脏，保存键是禁用的', async () => {
+    const wrapper = await mountEditor()
+
+    expect(buttonWith(wrapper, '保存')?.attributes('disabled')).toBeDefined()
+  })
+
+  it('从模块库加一个模块之后置脏，保存带上当前行版本', async () => {
+    const replace = vi
+      .spyOn(dashboardApi, 'replaceLayout')
+      .mockResolvedValue(payload({ rowVersion: 8 }))
+    const wrapper = await mountEditor()
+
+    await wrapper.findAll('.dt-lib__item')[0]?.trigger('click')
+    expect(wrapper.text()).toContain('未保存')
+
+    await buttonWith(wrapper, '保存')?.trigger('click')
+    await flushPromises()
+
+    expect(replace.mock.calls[0]?.[1]).toMatchObject({ expectedVersion: 7 })
+    expect(replace.mock.calls[0]?.[1].nodes).toHaveLength(1)
+    expect(toastSuccess).toHaveBeenCalledWith('大屏已保存')
+  })
+
+  it('保存成功之后回到不脏，保存键重新禁用', async () => {
+    vi.spyOn(dashboardApi, 'replaceLayout').mockResolvedValue(
+      payload({ rowVersion: 8, nodes: [node('n1')] }),
+    )
+    const wrapper = await mountEditor()
+    await wrapper.findAll('.dt-lib__item')[0]?.trigger('click')
+    await buttonWith(wrapper, '保存')?.trigger('click')
+    await flushPromises()
+
+    expect(buttonWith(wrapper, '保存')?.attributes('disabled')).toBeDefined()
+  })
+})
+
+describe('版本冲突', () => {
+  it('409 时提示「重新加载」并把保存挡住，绝不静默覆盖', async () => {
+    vi.spyOn(dashboardApi, 'replaceLayout').mockRejectedValue(
+      new BizError(41007, '版本冲突', 409, 't'),
+    )
+    const wrapper = await mountEditor()
+    await wrapper.findAll('.dt-lib__item')[0]?.trigger('click')
+
+    await buttonWith(wrapper, '保存')?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(VERSION_CONFLICT_MESSAGE)
+    expect(wrapper.text()).toContain('版本已过期')
+    expect(buttonWith(wrapper, '保存')?.attributes('disabled')).toBeDefined()
+    expect(toastError).toHaveBeenCalledWith(VERSION_CONFLICT_MESSAGE)
+  })
+
+  it('重新加载之后冲突提示消失，草稿换成库里的那份', async () => {
+    vi.spyOn(dashboardApi, 'replaceLayout').mockRejectedValue(
+      new BizError(41007, '版本冲突', 409, 't'),
+    )
+    const load = vi
+      .spyOn(dashboardApi, 'getDashboard')
+      .mockResolvedValue(payload({ rowVersion: 9, nodes: [node('fresh')] }))
+    const wrapper = await mountEditor()
+    await wrapper.findAll('.dt-lib__item')[0]?.trigger('click')
+    await buttonWith(wrapper, '保存')?.trigger('click')
+    await flushPromises()
+
+    await buttonWith(wrapper, '重新加载')?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain(VERSION_CONFLICT_MESSAGE)
+    expect(load).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('撤销与删除', () => {
+  it('加了一个模块之后能撤销回去', async () => {
+    const wrapper = await mountEditor()
+    await wrapper.findAll('.dt-lib__item')[0]?.trigger('click')
+
+    await buttonWith(wrapper, '撤销')?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findAll('.dt-canvas__node')).toHaveLength(0)
+    expect(buttonWith(wrapper, '重做')?.attributes('disabled')).toBeUndefined()
+  })
+
+  it('删节点前二次确认，文案说清连子树与绑定一起删', async () => {
+    vi.spyOn(dashboardApi, 'getDashboard').mockResolvedValue(
+      payload({ nodes: [node('n1')] }),
+    )
+    const wrapper = await mountEditor()
+    const trash = wrapper
+      .findAll('button')
+      .find((item) => item.attributes('aria-label') === '删除这个节点')
+
+    await trash?.trigger('click')
+    await flushPromises()
+
+    expect(confirmSpy.mock.calls[0]?.[0].message).toContain(
+      '全部子节点与绑定',
+    )
+    expect(wrapper.findAll('.dt-canvas__node')).toHaveLength(1)
+  })
+
+  it('确认之后节点真的没了', async () => {
+    confirmSpy.mockResolvedValue(true)
+    vi.spyOn(dashboardApi, 'getDashboard').mockResolvedValue(
+      payload({ nodes: [node('n1')] }),
+    )
+    const wrapper = await mountEditor()
+    const trash = wrapper
+      .findAll('button')
+      .find((item) => item.attributes('aria-label') === '删除这个节点')
+
+    await trash?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findAll('.dt-canvas__node')).toHaveLength(0)
+  })
+})
+
+describe('属性与绑点', () => {
+  it('选中一个节点后属性面板按它的清单泛型渲染', async () => {
+    vi.spyOn(dashboardApi, 'getDashboard').mockResolvedValue(
+      payload({ nodes: [node('n1')] }),
+    )
+    const wrapper = await mountEditor()
+
+    await wrapper.find('.dt-canvas__node').trigger('pointerdown')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('初始可见')
+  })
+
+  it('切到绑点页时读清单摆槽位', async () => {
+    vi.spyOn(dashboardApi, 'getDashboard').mockResolvedValue(
+      payload({ nodes: [node('n1')] }),
+    )
+    const wrapper = await mountEditor()
+    await wrapper.find('.dt-canvas__node').trigger('pointerdown')
+
+    const tab = wrapper
+      .findAll('button')
+      .find((item) => item.text().trim() === '绑点')
+    await tab?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('这个模块不取数')
+  })
+})

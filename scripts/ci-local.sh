@@ -35,6 +35,8 @@ gates=(
   check_api_contract
   check_tests
   check_licenses
+  # 要拿基线比，本地按 origin/main 算；CI 上它只在 PR 流水线里跑
+  check_logic_version
   # 比其余快闸门慢一档（要按服务各装一次），但仍是秒级
   check_service_deps
 )

@@ -30,8 +30,11 @@ scripts/ci-local.sh --all     # 用 act 在容器里跑整条流水线
 
 ## 当前进度
 
-已建成 **auth-server + edge-gateway**：登录、令牌轮换、RBAC 三道闸、
-用户与角色管理、路由规则、审计，以及配套的登录页与权限门禁。
+- **auth-server + edge-gateway**：登录、令牌轮换、RBAC 三道闸、用户与角色管理、
+  路由规则、审计，以及配套的登录页与权限门禁。
+- **platform-server 的 `api` 角色**：空调台账、车间 / 房间空间配置，以及直读现场
+  EMS 库的空调数据面（数据源绑定、达标范围、原始数据表格与聚合序列）。
+
 其余服务按 [ARCHITECTURE §8](docs/ARCHITECTURE_MICROSERVICES.md#8-建设顺序) 的顺序接。
 
 ## 起一套本地环境
@@ -54,8 +57,17 @@ cp .env.example .env
 ```bash
 cd server/services/auth-server
 uv run alembic upgrade head   # 建 auth schema 与全部表
-uv run auth-seed              # 权限码目录、内置角色、内置路由规则、种子管理员
+uv run python -m scripts.seed # 权限码目录、内置角色、内置路由规则、种子管理员
+
+cd ../platform-server
+cp .env.example .env          # 至少填 PLATFORM_POSTGRES_*、PLATFORM_SQLSERVER_*
+                              # 与 PLATFORM_EDGE_SIGNING_SECRET（与 auth 同值）
+uv run alembic upgrade head   # 建 platform schema 与全部表
 ```
+
+⚠ **加了端点就要重跑一次 `scripts.seed`。** 闸 1 的路由规则存在数据库里，种子脚本
+全量覆盖内置规则；漏跑的表现是新端点在边缘一律 403，而直连服务端口却是好的——
+现象与原因隔得极远。种子可重复执行，人工新建的规则不受影响。
 
 种子只建**一个**管理员账号，密码取自 `AUTH_SEED_ADMIN_PASSWORD`；
 账号已存在时**不改密码**。首次登录后请立即修改。
@@ -63,9 +75,13 @@ uv run auth-seed              # 权限码目录、内置角色、内置路由规
 ### 3. 起服务
 
 ```bash
-cd server/services/auth-server && uv run auth-server   # :8004
-cd web && pnpm install && pnpm dev                     # :5173，/api 代到 8004
+cd server/services/auth-server     && uv run auth-server      # :8004
+cd server/services/platform-server && uv run platform-server  # :8005
+cd web && pnpm install && pnpm dev                            # :5173
 ```
+
+⚠ 业务服务**不能单独对外服务**：它们读的是边缘调过 `/verify` 之后注入的签名身份头，
+直连端口一律 401。要走通完整链路就起 `docker/compose.yml`，前端的 `/api` 代到边缘。
 
 生产形态用 `docker/compose.yml`（边缘网关 + auth-server），
 前端构建产物挂进 nginx。

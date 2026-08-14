@@ -31,10 +31,10 @@ tests/{unit,integration,contract,e2e}
 
 ```bash
 uv run alembic upgrade head    # 建表
-uv run auth-seed               # 权限码、内置角色、路由规则、种子管理员
+uv run python -m scripts.seed  # 权限码、内置角色、路由规则、种子管理员
 uv run auth-server             # 起服务
-uv run auth-openapi            # 重新导出 openapi.json
-uv run auth-openapi --check    # CI：与代码不一致即失败
+uv run python -m scripts.export_openapi          # 重新导出 openapi.json
+uv run python -m scripts.export_openapi --check  # CI：与代码不一致即失败
 
 uv run pytest -q                              # 全量
 uv run pytest tests/unit tests/contract -q    # 不需要数据库的两层

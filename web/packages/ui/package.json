@@ -13,7 +13,8 @@
   },
   "dependencies": {
     "@dt/contracts": "workspace:*",
-    "@dt/tokens": "workspace:*"
+    "@dt/tokens": "workspace:*",
+    "echarts": "^6.1.0"
   },
   "peerDependencies": {
     "vue": "^3.5.0"

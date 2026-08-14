@@ -26,11 +26,26 @@ export interface Page<TItem> {
   total: number
 }
 
+/**
+ * 游标分页的集合响应。时序集合用它而不是页码：页码分页会在新数据不断写入时
+ * 静默重复或漏行，见 docs/agents/api-contract.md §5。
+ */
+export interface CursorPage<TItem> {
+  items: TItem[]
+  /**
+   * 下一页的游标。
+   * ⚠ 不透明串，**只能原样带回**——解析它就是把后端的分页实现钉死在前端。
+   */
+  next: string | null
+  has_more: boolean
+}
+
 export const SUCCESS_CODE = 0
 
 /**
  * 已发布的错误码。**按码分支，不要按 message 分支**——文案会改、会翻译。
- * 分段十进制 `<4|5><领域两位><序号两位>`，领域 00 通用、01 认证与授权。
+ * 分段十进制 `<4|5><领域两位><序号两位>`，领域 00 通用、01 认证与授权、
+ * 16 空调与空间。
  */
 export const ERROR_CODES = {
   validationFailed: 40001,
@@ -50,8 +65,28 @@ export const ERROR_CODES = {
   builtinImmutable: 40110,
   tooManyLoginAttempts: 40111,
   signupDisabled: 40112,
+  workshopNotFound: 41601,
+  roomNotFound: 41602,
+  acUnitNotFound: 41603,
+  workshopNameTaken: 41604,
+  roomNameTaken: 41605,
+  acUnitSerialTaken: 41606,
+  workshopNotEmpty: 41607,
+  roomNotEmpty: 41608,
+  datasetNotFound: 41609,
+  bindingNotFound: 41610,
+  sourceObjectInvalid: 41611,
+  sourceObjectShapeMismatch: 41612,
+  timeRangeInvalid: 41613,
+  metricUnknown: 41614,
+  cursorInvalid: 41615,
+  startupRebuildInProgress: 41616,
+  /** 服务组合与工件对不上（多半是训练之后新加的机组），要重训。 */
+  modelConfigInvalid: 41620,
   internal: 50000,
   dependencyUnavailable: 50001,
+  /** 外部数据源不可用。⚠ 后端刻意不给陈旧数据兜底，前端也不许显示旧值。 */
+  sourceUnavailable: 51601,
 } as const
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES]
