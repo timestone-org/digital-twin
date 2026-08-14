@@ -14,6 +14,8 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type {
   ApiEnvelope,
+  ApiKey,
+  ApiKeySecret,
   AuthUser,
   FieldError,
   Page,
@@ -157,6 +159,23 @@ const SHAPES: Record<string, Record<string, true>> = {
     message: true,
   } satisfies Keys<FieldError>,
 
+  ApiKeyOut: {
+    id: true,
+    user_id: true,
+    name: true,
+    prefix: true,
+    is_active: true,
+    expires_at: true,
+    last_used_at: true,
+    revoked_at: true,
+    created_at: true,
+  } satisfies Keys<ApiKey>,
+
+  ApiKeySecretOut: {
+    api_key: true,
+    secret: true,
+  } satisfies Keys<ApiKeySecret>,
+
   Page_UserListItemOut_: {
     items: true,
     page: true,
@@ -180,6 +199,15 @@ describe('@dt/contracts 与 openapi.json 的字段一致', () => {
     const actual = Object.keys(schema?.properties ?? {}).sort()
     const declared = Object.keys(SHAPES[schemaName] ?? {}).sort()
     expect(actual).toEqual(declared)
+  })
+
+  it('密钥的读面永远没有明文——只有签发回执带 secret', () => {
+    const readKeys = Object.keys(schemas.ApiKeyOut?.properties ?? {})
+    expect(readKeys).not.toContain('secret')
+    expect(readKeys).not.toContain('hashed_secret')
+    expect(Object.keys(schemas.ApiKeySecretOut?.properties ?? {})).toContain(
+      'secret',
+    )
   })
 
   it('列表项与详情不是同一个形状——混用会在运行时取到 undefined', () => {

@@ -7,7 +7,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { copyText } from '@/pages/Tools/OpcuaServerDetail/clipboard'
+import { copyText } from '@/utils/clipboard'
 
 /** 装一个假的 clipboard，返回还原函数。传 undefined 模拟非安全上下文。 */
 function stubClipboard(api: { writeText: () => Promise<void> } | undefined): {
