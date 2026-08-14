@@ -7,8 +7,8 @@
 |---|---|---|---|
 | 后端基础设施 | `server/lib/` | `server/lib/README.md` | 已建 |
 | 认证与授权 | `server/services/auth-server/` | [`server/services/auth-server/CONTEXT.md`](server/services/auth-server/CONTEXT.md) | 已建 |
-| 业务平台 | `server/services/platform-server/` | [`server/services/platform-server/CONTEXT.md`](server/services/platform-server/CONTEXT.md) | 已建（`api` 角色） |
-| 采集运行时 | `server/services/collector-server/` | —— | 未建 |
+| 业务平台 | `server/services/platform-server/` | [`server/services/platform-server/CONTEXT.md`](server/services/platform-server/CONTEXT.md) | 已建（`api` 角色：空调台账 / 大屏组态 / 采集配置面；`publisher` 角色：大屏实时发布） |
+| 采集运行时 | `server/services/collector-server/` | [`server/services/collector-server/CONTEXT.md`](server/services/collector-server/CONTEXT.md) | 已建（驱动层 + OPC UA 驱动 + 运行时 + 归档管道） |
 | OPC UA 服务端 | `server/services/opcua-server/` | —— | 未建 |
 | 实时通道 | `server/services/realtime-hub/` | —— | 未建 |
 | AI 助手 | `server/services/ai-assistant/` | —— | 未建 |
@@ -34,7 +34,10 @@
 4. ⬜ `realtime-hub` + `platform-publisher`
 5. ✅ `platform-server` 的 `api` 角色（`apps/hvac`：空调台账、车间房间空间配置，
    以及直读现场 EMS 库的空调数据面——数据集目录、数据源绑定、达标范围、
-   原始数据表格与聚合序列）
-6. ⬜ `collector-server`
+   原始数据表格与聚合序列；`apps/dashboard`：大屏组态的配置面；
+   `apps/collect`：数据源与点位配置、采集计划下发、命令总线发起端、点位历史读侧）
+6. 🟡 `collector-server`（骨架、驱动适配器层与 OPC UA 驱动、单活与计划、命令总线、归档管道已建）
+6.1 ✅ `platform-publisher`（大屏实时发布：租约单活、活跃集由 hub 订阅关系推导、
+   快照批推 hub、主题登记周期对账）
 7. ⬜ `platform-worker`
 8. ⬜ `ai-assistant`

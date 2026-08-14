@@ -22,6 +22,13 @@ export interface NavItem {
 export const NAV_ITEMS: readonly NavItem[] = [
   { key: 'home', label: '工作台', icon: 'home', to: '/' },
   {
+    key: 'dashboards',
+    label: '大屏',
+    icon: 'layout-grid',
+    to: '/dashboards',
+    permission: [PERMISSION_CODES.dashboardView],
+  },
+  {
     key: 'hvac',
     label: '空调管理',
     icon: 'snowflake',

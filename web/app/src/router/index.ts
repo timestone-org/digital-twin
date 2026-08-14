@@ -31,6 +31,26 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '个人资料' },
   },
   {
+    path: '/dashboards',
+    name: 'dashboards',
+    component: () => import('@/pages/Dashboards/index.vue'),
+    meta: {
+      title: '大屏',
+      permissions: [PERMISSION_CODES.dashboardView],
+    },
+  },
+  {
+    // ⚠ 每张大屏一个的**编辑器**路由，因此不进 NAV_ITEMS——那张表里每一项都要有
+    // 静态路径，且由契约测试钉着。回列表靠 AppShell 的 backTo。
+    path: '/dashboards/:dashboardId/edit',
+    name: 'dashboard-editor',
+    component: () => import('@/pages/DashboardEditor/index.vue'),
+    meta: {
+      title: '大屏编辑器',
+      permissions: [PERMISSION_CODES.dashboardEdit],
+    },
+  },
+  {
     path: '/hvac/units',
     name: 'hvac-units',
     component: () => import('@/pages/Hvac/Units/index.vue'),

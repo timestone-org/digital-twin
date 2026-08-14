@@ -27,11 +27,17 @@
 
 **要不要再拆的唯一判据：有没有人会只给其中一半。** 否定的就合并。
 
-目录是 [`src/auth_server/apps/auth/catalog.py`](src/auth_server/apps/auth/catalog.py)，
+目录是 [`src/auth_server/apps/auth/catalog/`](src/auth_server/apps/auth/catalog/)，
 它是全系统权限口径的**唯一真源**。只登记已有消费方的码——无端点无页面的占位码
 会让角色配置界面摆出一排点了没反应的开关。
 
-当前 7 码 / 2 组 / 2 个内置角色 / 25 条内置路由规则。
+包内按职责分文件：`specs.py` 三种记录的形状、`permissions.py` 权限码、
+`roles.py` 内置角色、`rules_<服务>.py` 各服务前缀的路由规则，`__init__.py` 把
+`ROUTE_RULES` 拼起来并保持 `PERMISSIONS` / `ROLES` / `ROUTE_RULES` 三个名字不变。
+⚠ **一个服务前缀的规则必须待在同一个文件里**：`fnmatch` 的 `*` 跨斜杠，窄规则
+与兜底的优先级阶梯只有并排看才检查得出来。
+
+当前 18 码 / 6 组 / 2 个内置角色 / 75 条内置路由规则。
 
 ## 3. 三道闸
 
@@ -95,6 +101,32 @@
 普通用户查自己会在闸 1 就被 403，到不了服务端的自查分支。
 
 ⚠ `/api/v1/auth/*` **故意不设 catch-all**：未枚举路径落到「受管前缀无规则 = 拒绝」。
+
+### 5.1 `/api/v1/platform` 的三面共存
+
+这个前缀下住着三套码，靠 priority 分层。**读上一行要先读下一行**：
+
+| priority | 模式 | 码 |
+|---|---|---|
+| 940 | `collect-sources/*:test` · `…:browse` · `collect-points/*:write` | `collect:operate` |
+| 940 | `point-histories:aggregate` | `collect:view` |
+| 932 | `collect-*` · `point-histories*`（GET） | `collect:view` |
+| 930 | `collect-*` · `point-histories*`（`*` 方法） | `collect:manage` |
+| 920 | `dashboards/*:validate` | `dashboard:view` |
+| 915 | `dashboard-projects` 与 `dashboards` 的建删 | `dashboard:manage` |
+| 912 | `dashboard*` · `module-types*`（GET） | `dashboard:view` |
+| 910 | `dashboard*`（`*` 方法） | `dashboard:edit` |
+| 906 / 905 | `ac-models/*:recommend` · `…:predict` | `ac:view` |
+| 900 | `/api/v1/platform/*` 按五种方法兜底 | `ac:view` / `ac:manage` |
+
+⚠ 动作端点（含 `:verb`）必须排在前缀兜底之上：`*` 跨斜杠，`dashboard*` 同样
+匹配 `…:validate` 的完整路径，排反了就是「只读用户点自检被 403」。
+
+⚠ 两条写兜底用 `*` 方法而不是逐个方法列：漏一种方法它就落到 900 那五条上，
+表现是「持 `ac:manage` 的账号能改大屏与采集配置」。
+
+⚠ `:replace-layout` 要的正是 910 那个码，故**不另立规则**——一条判定相同的
+窄规则会被冗余自检判成噪音。「没写」不等于「漏了」，由契约测试证明。
 
 ## 6. 数据
 

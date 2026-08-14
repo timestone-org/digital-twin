@@ -2,6 +2,10 @@
  * @fileoverview 取数 provider 的**类型**面，实现全部归 `@dt/datasources`。
  * ⚠ 类型定在 L0、provider 由应用壳注入，这正是 `@dt/runtime` 不许依赖
  * `@dt/datasources` 的原因（依赖表见 docs/agents/project-structure-typescript.md §2）。
+ * ⚠ `PointSample` 是**按 `state` 判别的联合**而不是「必填三件套 + 可选 state」：
+ * publisher 的 error 档条目根本不带 `value` / `timestampMs` / `quality`
+ * （platform-server `services/publish_items.py`），做成可选字段的话，
+ * 取不到的点位会带着 `undefined` 值流进渲染层，而那与「现场报了空值」长得一样。
  */
 import type {
   BindingSourceKind,
@@ -13,14 +17,35 @@ import type {
 export const POINT_QUALITIES = ['good', 'uncertain', 'bad'] as const
 export type PointQuality = (typeof POINT_QUALITIES)[number]
 
-/** 一个点位的一次读数。 */
-export interface PointSample {
+/**
+ * 一次读数的三档结论，与 publisher 推送条目的 `state` 逐字一致。
+ * `ok` 现值、`stale` 值太旧、`error` 取不到。
+ */
+export const POINT_STATES = ['ok', 'stale', 'error'] as const
+export type PointState = (typeof POINT_STATES)[number]
+
+/**
+ * 取到了值的一次读数。
+ * ⚠ `stale` 档的 `timestampMs` 是**旧值**的时刻，不许用当前墙钟顶替——
+ * 顶替之后陈旧值在界面上与新值完全一样（runtime-resilience §9）。
+ */
+export interface PointReadingSample {
+  state: 'ok' | 'stale'
   /** ⚠ `0` / `false` / `''` 都是合法读数，不许当成「还没有值」。 */
   value: unknown
   /** 采样时刻，UTC 毫秒。 */
   timestampMs: number
   quality: PointQuality
 }
+
+/** 取不到，且说得出为什么。 */
+export interface PointErrorSample {
+  state: 'error'
+  errorMessage: string
+}
+
+/** 一个点位的一次读数。 */
+export type PointSample = PointReadingSample | PointErrorSample
 
 /**
  * 退订。

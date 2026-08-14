@@ -17,6 +17,7 @@ import {
   closeRealtimeChannel,
   useRealtimeChannel,
 } from '@/composables/useRealtimeChannel'
+import { REALTIME_AUTH_EXPIRED_CLOSE_CODE } from '@dt/contracts'
 import { STORAGE_KEYS } from '@dt/security'
 
 type Listener = (event: unknown) => void
@@ -169,6 +170,10 @@ describe('实时通道', () => {
     expect(FakeSocket.instances).toHaveLength(2)
     vi.advanceTimersByTime(1)
     expect(FakeSocket.instances).toHaveLength(3)
+  })
+
+  it('⚠ 关闭码取自契约包，不是就地再写一个 4001', () => {
+    expect(CLOSE_TOKEN_EXPIRED).toBe(REALTIME_AUTH_EXPIRED_CLOSE_CODE)
   })
 
   it('⚠ 票过期（4001）把退避重置——那是换票重连，不是网络故障', () => {

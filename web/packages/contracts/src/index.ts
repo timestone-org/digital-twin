@@ -191,25 +191,34 @@ export type {
   DataSourceProvider,
   HistoryQuery,
   HistoryResult,
+  PointErrorSample,
   PointQuality,
+  PointReadingSample,
   PointSample,
+  PointState,
   PointValueListener,
   ProviderRegistry,
   Unsubscribe,
 } from './datasource'
-export { POINT_QUALITIES } from './datasource'
+export { POINT_QUALITIES, POINT_STATES } from './datasource'
 export type {
   ClientAction,
   ClientMessage,
   ServerAckFrame,
+  ServerConnectedFrame,
   ServerErrorFrame,
   ServerFrame,
-  ServerFrameHead,
   ServerFrameType,
   ServerPayloadFrame,
+  ServerReauthRequiredFrame,
+  ServerSystemEvent,
+  ServerSystemFrame,
+  ServerUnsubscribedFrame,
 } from './realtime'
 export {
   CLIENT_ACTIONS,
   REALTIME_AUTH_EXPIRED_CLOSE_CODE,
+  REALTIME_HANDSHAKE_REJECTED_CLOSE_CODE,
   SERVER_FRAME_TYPES,
+  SERVER_SYSTEM_EVENTS,
 } from './realtime'

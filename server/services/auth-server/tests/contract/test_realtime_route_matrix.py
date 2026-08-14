@@ -13,7 +13,8 @@ realtime-hub 的端点定义在另一个代码单元里，auth-server 看不见�
 import pytest
 
 from auth_server.apps.auth import catalog
-from auth_server.apps.auth.services.matching import RuleView, find_rule
+from auth_server.apps.auth.services.matching import find_rule
+from contract.rule_views import catalog_rule_views
 
 REALTIME_PREFIX = "/api/v1/realtime"
 
@@ -28,31 +29,20 @@ EXPECTED: tuple[tuple[str, str, frozenset[str]], ...] = (
 )
 
 
-def _rules() -> list[RuleView]:
-    return [
-        RuleView(
-            path_pattern=spec.path_pattern,
-            http_method=spec.http_method,
-            permission_codes=frozenset(spec.codes),
-            match_mode=spec.match_mode,
-            priority=spec.priority,
-        )
-        for spec in catalog.ROUTE_RULES
-    ]
-
-
 @pytest.mark.parametrize(("path", "method", "expected"), EXPECTED)
 def test_each_endpoint_resolves_to_the_intended_codes(
     path: str, method: str, expected: frozenset[str]
 ) -> None:
-    rule = find_rule(_rules(), path=path, method=method)
+    rule = find_rule(catalog_rule_views(), path=path, method=method)
     assert rule is not None, f"{method} {path} 没有任何规则命中，闸 1 会直接拒"
     assert rule.permission_codes == expected
 
 
 def test_websocket_endpoint_carries_no_permission_code() -> None:
     """⚠ 反向不变式：给它补码就是 ADR-0007 否掉的第二处判断。"""
-    rule = find_rule(_rules(), path=f"{REALTIME_PREFIX}/ws", method="GET")
+    rule = find_rule(
+        catalog_rule_views(), path=f"{REALTIME_PREFIX}/ws", method="GET"
+    )
     assert rule is not None
     assert rule.permission_codes == frozenset()
 
@@ -65,6 +55,10 @@ def test_realtime_section_adds_no_permission_code() -> None:
 def test_internal_push_endpoint_has_no_seeded_rule() -> None:
     """推送端点在 `/internal/` 下，走服务级密钥，不该出现在闸 1 的表里。"""
     assert (
-        find_rule(_rules(), path="/internal/v1/realtime/publish", method="POST")
+        find_rule(
+            catalog_rule_views(),
+            path="/internal/v1/realtime/publish",
+            method="POST",
+        )
         is None
     )

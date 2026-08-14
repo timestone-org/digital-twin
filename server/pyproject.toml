@@ -77,7 +77,9 @@ ignore = [
 [tool.ruff.lint.isort]
 known-first-party = [
     "lib",
+    "timeseries",
     "auth_server",
+    "collector_server",
     "opcua_server",
     "platform_server",
     "scripts",

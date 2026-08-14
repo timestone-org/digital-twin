@@ -6,7 +6,8 @@
 
 from auth_server.apps.auth import catalog
 from auth_server.apps.auth.models import PERMISSION_KINDS
-from auth_server.apps.auth.services.matching import RuleView, is_redundant
+from auth_server.apps.auth.services.matching import is_redundant
+from contract.rule_views import catalog_rule_views
 
 # 已发布的权限码字面量。**只许新增，不许改名或删除。**
 PUBLISHED_CODES = frozenset(
@@ -23,6 +24,12 @@ PUBLISHED_CODES = frozenset(
         "opcua:view",
         "opcua:operate",
         "opcua:manage",
+        "dashboard:view",
+        "dashboard:edit",
+        "dashboard:manage",
+        "collect:view",
+        "collect:operate",
+        "collect:manage",
     }
 )
 
@@ -38,6 +45,36 @@ def test_permission_codes_are_unique() -> None:
 
 def test_every_permission_kind_is_one_of_the_four_tiers() -> None:
     assert all(item.kind in PERMISSION_KINDS for item in catalog.PERMISSIONS)
+
+
+def test_every_permission_carries_a_group_and_a_description() -> None:
+    # 缺任何一项，角色配置界面上就是一个没有归属、没有解释的裸开关
+    blank = [
+        item.code
+        for item in catalog.PERMISSIONS
+        if not (item.name and item.description)
+        or not (item.group_code and item.group_label)
+    ]
+    assert blank == []
+
+
+def test_each_group_code_carries_a_single_label() -> None:
+    # 同一个 group_code 配两个标签时，界面显示哪个取决于目录里的先后顺序
+    labels: dict[str, set[str]] = {}
+    for item in catalog.PERMISSIONS:
+        labels.setdefault(item.group_code, set()).add(item.group_label)
+    assert {code for code, seen in labels.items() if len(seen) > 1} == set()
+
+
+def test_sort_order_is_unique_within_each_group() -> None:
+    # 同组内并列的 sort_order 让组内次序退化成目录顺序，加一个码就会重排
+    seen: dict[str, list[int]] = {}
+    for item in catalog.PERMISSIONS:
+        seen.setdefault(item.group_code, []).append(item.sort_order)
+    collisions = {
+        code for code, orders in seen.items() if len(orders) != len(set(orders))
+    }
+    assert collisions == set()
 
 
 def test_admin_role_is_derived_from_the_whole_catalog() -> None:
@@ -72,6 +109,12 @@ def test_every_route_rule_references_a_registered_code() -> None:
     assert unknown == set()
 
 
+def test_every_permission_code_is_consumed_by_a_route_rule() -> None:
+    # 没有任何规则要的码，在角色配置界面上就是一个点了没有效果的开关
+    consumed = {code for rule in catalog.ROUTE_RULES for code in rule.codes}
+    assert catalog.ALL_CODES - consumed == set()
+
+
 def test_route_rule_keys_are_unique() -> None:
     keys = [
         (rule.path_pattern, rule.http_method) for rule in catalog.ROUTE_RULES
@@ -80,16 +123,7 @@ def test_route_rule_keys_are_unique() -> None:
 
 
 def test_no_route_rule_is_redundant() -> None:
-    views = [
-        RuleView(
-            path_pattern=rule.path_pattern,
-            http_method=rule.http_method,
-            permission_codes=frozenset(rule.codes),
-            match_mode=rule.match_mode,
-            priority=rule.priority,
-        )
-        for rule in catalog.ROUTE_RULES
-    ]
+    views = catalog_rule_views()
     noise = [
         f"{view.http_method} {view.path_pattern}"
         for view in views
@@ -105,6 +139,8 @@ def test_permission_groups_keep_catalog_order_and_sorting() -> None:
         "system",
         "hvac",
         "opcua",
+        "dashboard",
+        "collect",
     ]
     for group in groups:
         orders = [item.sort_order for item in group.items]

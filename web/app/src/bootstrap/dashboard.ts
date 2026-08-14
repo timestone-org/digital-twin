@@ -1,0 +1,65 @@
+/**
+ * @fileoverview 大屏子系统的启动装配：注册内置模块、登记配置控件、装配取数 provider。
+ *
+ * ⚠ WS 客户端留在应用壳（它要读登录态），provider 只收一个**注入的订阅函数**——
+ * 这正是 `@dt/datasources` 不自己建连接、也因此能在测试里跑假件的那条缝
+ * （docs/DASHBOARD_DESIGN.md §7）。
+ * ⚠ 模块注册只做一次：`registerBuiltinModules` 里的 glob 是 eager 的，
+ * 重复调用不会出错但会把同一份清单反复覆盖，告警槽里就多出一串噪音。
+ */
+import type { HistoryQuery, HistoryResult } from '@dt/contracts'
+import {
+  createComputedProvider,
+  createHistoryProvider,
+  createRealtimeProvider,
+  createStaticProvider,
+  registerProvider,
+} from '@dt/datasources'
+import { registerBuiltinModules } from '@dt/modules'
+
+import { installConfigControls } from '@/features/dashboard/configControls'
+import type { SubscribePoints } from '@/runtime/pointStream'
+
+/** 应用壳注入给大屏子系统的口子。 */
+export interface DashboardRuntimePorts {
+  /** 订阅当前大屏主题上的点位推送。 */
+  subscribe: SubscribePoints
+  /**
+   * 读一段历史序列。
+   * ⚠ 不注入时 `archive` 绑定一律拒绝取数：拿实时通道里收到过的那几个点
+   * 冒充历史，会画出一条从打开页面才开始的假曲线。
+   */
+  fetchHistory?: (query: HistoryQuery) => Promise<HistoryResult>
+}
+
+let modulesInstalled = false
+
+/** 注册内置模块与配置控件；重复调用只做第一次。 */
+export function installDashboardModules(): void {
+  if (modulesInstalled) return
+  modulesInstalled = true
+  registerBuiltinModules()
+  installConfigControls()
+}
+
+/**
+ * 装配四种取数来源。
+ * ⚠ 每次打开一张大屏都要重装：`subscribe` 闭包里绑着当前那张屏的主题，
+ * 沿用上一张的会让新屏订到旧主题上——连接是通的、数据永远不来。
+ * @param ports 应用壳注入的订阅与历史取数
+ */
+export function installDashboardDataSources(
+  ports: DashboardRuntimePorts,
+): void {
+  registerProvider(createRealtimeProvider({ subscribe: ports.subscribe }))
+  registerProvider(createStaticProvider())
+  registerProvider(createComputedProvider())
+  if (ports.fetchHistory !== undefined) {
+    registerProvider(createHistoryProvider({ fetchHistory: ports.fetchHistory }))
+  }
+}
+
+/** 只给测试用：让「模块只注册一次」这条判定回到初始状态。 */
+export function __resetDashboardBootstrap(): void {
+  modulesInstalled = false
+}

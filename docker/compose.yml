@@ -76,6 +76,12 @@ services:
       PLATFORM_SQLSERVER_CHARSET: ${ACSOURCE_CHARSET:-UTF-8}
       # ⚠ 与 auth-server 取同一个值：分叉就是业务面一律 401
       PLATFORM_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
+      # ⚠ /internal/ 的服务级密钥，与 collector 取同一个值：
+      # 分叉就是 collector 永远拉不到采集计划，而两侧代码单看都对
+      PLATFORM_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
+      # 采集计划变更的广播频道，collector 订阅同一个
+      PLATFORM_COLLECT_PLAN_CHANNEL: ${COLLECT_PLAN_CHANNEL:-collect:plan:changed}
+      PLATFORM_COLLECT_BUCKET_TIMEZONE: ${COLLECT_BUCKET_TIMEZONE:-Asia/Shanghai}
       # 抽取分片队列。api 角色只投递，worker 角色消费
       PLATFORM_REDIS_HOST: ${REDIS_HOST:?必填}
       PLATFORM_REDIS_PORT: ${REDIS_PORT:-6379}
@@ -158,11 +164,94 @@ services:
       PLATFORM_SQLSERVER_CHARSET: ${ACSOURCE_CHARSET:-UTF-8}
       # ⚠ 回退链必须与 platform-server 逐字一致：少写一处就是非对称失效
       PLATFORM_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
+      PLATFORM_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
       PLATFORM_REDIS_HOST: ${REDIS_HOST:?必填}
       PLATFORM_REDIS_PORT: ${REDIS_PORT:-6379}
       PLATFORM_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       PLATFORM_ACSTARTUP_STREAM: ${ACSTARTUP_STREAM:-platform:ac-startup:shards}
       PLATFORM_ACSTARTUP_GROUP: ${ACSTARTUP_GROUP:-ac-startup-workers}
+    restart: unless-stopped
+
+  # 同一份镜像的 publisher 角色：只跑大屏实时发布循环。
+  # ⚠ **无 expose、无探针**——它不接流量，「摘掉它」没有意义；能不能干活由租约
+  # 与推送日志说话（DASHBOARD_DESIGN §6）。
+  # ⚠ **全局单活**：多起一个副本不会加吞吐，只会让两个进程抢同一把租约；抢不到
+  # 的那个是热备，它在原主让位后立刻接管，不必等满一个 TTL。
+  platform-publisher:
+    build:
+      context: ../server
+      dockerfile: services/platform-server/Dockerfile
+    depends_on: [realtime-hub]
+    environment:
+      PLATFORM_APP_ROLE: publisher
+      PLATFORM_APP_LOG_FORMAT: json
+      PLATFORM_POSTGRES_HOST: ${POSTGRES_HOST:?必填}
+      PLATFORM_POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      PLATFORM_POSTGRES_USER: ${POSTGRES_USER:?必填}
+      PLATFORM_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必填}
+      PLATFORM_POSTGRES_DB: ${POSTGRES_DB:?必填}
+      PLATFORM_SQLSERVER_HOST: ${ACSOURCE_HOST:?必填：现场 EMS 库地址}
+      PLATFORM_SQLSERVER_PORT: ${ACSOURCE_PORT:-1433}
+      PLATFORM_SQLSERVER_USER: ${ACSOURCE_USER:?必填}
+      PLATFORM_SQLSERVER_PASSWORD: ${ACSOURCE_PASSWORD:?必填}
+      PLATFORM_SQLSERVER_DATABASE: ${ACSOURCE_DB:?必填}
+      PLATFORM_ACSOURCE_TIMEZONE: ${ACSOURCE_TIMEZONE:-Asia/Shanghai}
+      PLATFORM_SQLSERVER_CHARSET: ${ACSOURCE_CHARSET:-UTF-8}
+      # ⚠ 回退链必须与 platform-server 逐字一致：少写一处就是非对称失效
+      PLATFORM_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
+      # 打 hub 内部推送端点用的服务级密钥，与 realtime-hub 同值
+      PLATFORM_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
+      # 快照读侧与租约都用它，与 collector 写快照的是同一个实例
+      PLATFORM_REDIS_HOST: ${REDIS_HOST:?必填}
+      PLATFORM_REDIS_PORT: ${REDIS_PORT:-6379}
+      PLATFORM_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      # 主题登记/注销与批推都打它。⚠ 不可达时降级为「没有实时通道」
+      PLATFORM_REALTIME_BASE_URL: http://realtime-hub:8000
+      # 合并窗口：一拍读一次快照、推一批。节流归推送方，不归 hub
+      PLATFORM_PUBLISH_WINDOW_MS: ${DASHBOARD_PUBLISH_WINDOW_MS:-1000}
+      # ⚠ 必须 ≤ hub 的条目上限（默认 500），超了每一批都会被 413
+      PLATFORM_PUBLISH_MAX_ITEMS: ${DASHBOARD_PUBLISH_MAX_ITEMS:-200}
+      # 快照多旧就算陈旧。陈旧值照推但标注为陈旧，不许当成现值
+      PLATFORM_PUBLISH_STALE_AFTER_MS: ${DASHBOARD_PUBLISH_STALE_AFTER_MS:-15000}
+    restart: unless-stopped
+
+  # 采集运行时：唯一持有现场连接的进程。
+  # ⚠ 它必须跑在**有工控网卡**的宿主机上，且容器网络要能路由到工控网段
+  # （host network / macvlan / 宿主机静态路由），见 ARCHITECTURE §7。这是节点级
+  # 部署前置条件，不是应用配置——配不对的表现是「服务健康但一个点位都采不到」。
+  # ⚠ 无 expose：8007 只有探针，业务面在 platform，取数走 Redis 快照。
+  # 副本策略是单活 + 热备（租约竞选），compose 单机只跑一份。
+  collector-server:
+    build:
+      context: ../server
+      dockerfile: services/collector-server/Dockerfile
+    depends_on: [platform-server]
+    environment:
+      COLLECT_APP_ROLE: collector
+      COLLECT_APP_LOG_FORMAT: json
+      COLLECT_POSTGRES_HOST: ${POSTGRES_HOST:?必填}
+      COLLECT_POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      COLLECT_POSTGRES_USER: ${POSTGRES_USER:?必填}
+      COLLECT_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必填}
+      COLLECT_POSTGRES_DB: ${POSTGRES_DB:?必填}
+      COLLECT_POSTGRES_SCHEMA: collect
+      COLLECT_REDIS_HOST: ${REDIS_HOST:?必填}
+      COLLECT_REDIS_PORT: ${REDIS_PORT:-6379}
+      COLLECT_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      # ⚠ 与 auth-server 同值。少写一处就是非对称失效：拉计划一律 401，
+      # 表现是采集永久空转，而现象与原因隔得极远。
+      COLLECT_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
+      COLLECT_PLATFORM_BASE_URL: http://platform-server:8005
+      COLLECT_PLAN_REFRESH_INTERVAL_S: ${COLLECT_PLAN_REFRESH_INTERVAL_S:-30.0}
+      COLLECT_FLUSH_INTERVAL_MS: ${COLLECT_FLUSH_INTERVAL_MS:-300}
+      # ⚠ 每次 flush 续期：采集进程死掉后快照跟着过期，大屏于是拿不到值，
+      # 而不是拿着一份永不更新的旧值当实时值看
+      COLLECT_SNAPSHOT_TTL_S: ${COLLECT_SNAPSHOT_TTL_S:-60}
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8007/api/v1/collector/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
     restart: unless-stopped
 
   realtime-hub:

@@ -214,5 +214,7 @@ async def test_permission_catalog_is_readable_and_grouped(
         "system",
         "hvac",
         "opcua",
+        "dashboard",
+        "collect",
     }
     assert all(item["kind"] for item in body["items"])

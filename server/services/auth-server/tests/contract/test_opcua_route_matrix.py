@@ -13,7 +13,8 @@ opcua-server 的端点定义在另一个代码单元里，auth-server 看不见�
 import pytest
 
 from auth_server.apps.auth import catalog
-from auth_server.apps.auth.services.matching import RuleView, find_rule
+from auth_server.apps.auth.services.matching import find_rule
+from contract.rule_views import catalog_rule_views
 
 OPCUA_PREFIX = "/api/v1/opcua"
 INSTANCE = f"{OPCUA_PREFIX}/instances/3fa85f64-5717-4562-b3fc-2c963f66afa6"
@@ -63,19 +64,6 @@ EXPECTED: tuple[tuple[str, str, frozenset[str]], ...] = (
 )
 
 
-def _rules() -> list[RuleView]:
-    return [
-        RuleView(
-            path_pattern=spec.path_pattern,
-            http_method=spec.http_method,
-            permission_codes=frozenset(spec.codes),
-            match_mode=spec.match_mode,
-            priority=spec.priority,
-        )
-        for spec in catalog.ROUTE_RULES
-    ]
-
-
 @pytest.mark.parametrize(("path", "method", "expected"), EXPECTED)
 def test_each_endpoint_resolves_to_the_intended_codes(
     path: str, method: str, expected: frozenset[str]
@@ -84,7 +72,7 @@ def test_each_endpoint_resolves_to_the_intended_codes(
 
     Args: path, method, expected。
     """
-    rule = find_rule(_rules(), path=path, method=method)
+    rule = find_rule(catalog_rule_views(), path=path, method=method)
     assert rule is not None, f"{method} {path} 没有任何规则命中——闸 1 会拒绝"
     assert rule.permission_codes == expected
 
@@ -96,7 +84,7 @@ def test_no_opcua_endpoint_falls_through_to_another_service() -> None:
     会把别的服务的路径一起吃掉，而现象是「莫名其妙要 user:view」。
     """
     for path, method, _ in EXPECTED:
-        rule = find_rule(_rules(), path=path, method=method)
+        rule = find_rule(catalog_rule_views(), path=path, method=method)
         assert rule is not None
         assert rule.path_pattern.startswith(OPCUA_PREFIX)
 
@@ -105,7 +93,9 @@ def test_a_viewer_cannot_start_or_stop_an_instance() -> None:
     """只读角色拿不到 operate——起停会断开全部上位机会话。"""
     viewer = frozenset(catalog.ROLES[1].codes)
     for verb in (":start", ":stop", ":restart"):
-        rule = find_rule(_rules(), path=f"{INSTANCE}{verb}", method="POST")
+        rule = find_rule(
+            catalog_rule_views(), path=f"{INSTANCE}{verb}", method="POST"
+        )
         assert rule is not None
         assert not rule.permission_codes <= viewer
 
@@ -113,7 +103,9 @@ def test_a_viewer_cannot_start_or_stop_an_instance() -> None:
 def test_a_viewer_cannot_read_credentials() -> None:
     """⚠ 凭据的**读面**也要 manage：列表即暴露上位机账号名。"""
     viewer = frozenset(catalog.ROLES[1].codes)
-    rule = find_rule(_rules(), path=f"{INSTANCE}/credentials", method="GET")
+    rule = find_rule(
+        catalog_rule_views(), path=f"{INSTANCE}/credentials", method="GET"
+    )
     assert rule is not None
     assert not rule.permission_codes <= viewer
 
@@ -124,7 +116,7 @@ def test_write_value_is_not_swallowed_by_the_read_rule() -> None:
     ⚠ 这条单列是因为它最容易错：`{prefix}/instances*` 的模式长度短、
     优先级低，但 `*` 跨斜杠使它同样匹配 `:write` 的完整路径。
     """
-    rule = find_rule(_rules(), path=f"{NODE}:write", method="POST")
+    rule = find_rule(catalog_rule_views(), path=f"{NODE}:write", method="POST")
     assert rule is not None
     assert rule.path_pattern.endswith(":write")
     assert rule.permission_codes == frozenset({catalog.OPCUA_OPERATE})

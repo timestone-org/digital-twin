@@ -8,6 +8,7 @@
  * 浏览器的 WebSocket API 根本不允许自定义头。服务端只回 `dt.auth`。
  */
 
+import { REALTIME_AUTH_EXPIRED_CLOSE_CODE } from '@dt/contracts'
 import { ref, type Ref } from 'vue'
 
 import { useAuthStore } from '@/stores/auth'
@@ -16,8 +17,12 @@ import { useAuthStore } from '@/stores/auth'
 export const REALTIME_WS_PATH = '/api/v1/realtime/ws'
 /** 握手要报的第一个子协议，服务端回它。 */
 export const AUTH_SUBPROTOCOL = 'dt.auth'
-/** 令牌过期时服务端用的关闭码。收到它要换票重连，而不是当成网络故障。 */
-export const CLOSE_TOKEN_EXPIRED = 4001
+/**
+ * 令牌过期时服务端用的关闭码。收到它要换票重连，而不是当成网络故障。
+ * ⚠ 取自 `@dt/contracts` 而不是就地再写一个 4001：两份同值常量一定会漂，
+ * 而漂开之后「换票重连」这条路径会安静地退化成普通重连。
+ */
+export const CLOSE_TOKEN_EXPIRED = REALTIME_AUTH_EXPIRED_CLOSE_CODE
 /** 重连退避的起点与上限。⚠ 不退避的话，hub 一挂全站客户端会一起打它。 */
 const RECONNECT_MIN_MS = 1_000
 const RECONNECT_MAX_MS = 30_000
