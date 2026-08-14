@@ -88,7 +88,10 @@ class AcStartupBatch(UuidPrimaryKeyMixin, TimestampMixin, Base):
         ),
         CheckConstraint(
             "unmatched_exclusion_count >= 0",
-            name="unmatched_exclusion_count_nonnegative",
+            # ⚠ 名字要短：命名约定加的 `ck_<表名>_` 前缀就占 27 字符，而
+            # Postgres 标识符上限 63。带上 `_count` 恰好 64，SQLAlchemy 在
+            # DDL 编译期就抛 IdentifierError，全新库迁移直接起不来
+            name="unmatched_exclusions_nonnegative",
         ),
         # ⚠ 一个房间只能有一个当前批次，由部分唯一索引在库里保证：靠代码自觉，
         # 一次并发切换就会留下两个 is_current，而页面只会挑到其中随机的一个

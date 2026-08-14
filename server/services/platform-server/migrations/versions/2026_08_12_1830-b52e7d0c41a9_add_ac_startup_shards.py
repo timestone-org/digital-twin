@@ -38,7 +38,7 @@ def upgrade() -> None:
         schema="platform",
     )
     op.create_check_constraint(
-        "ck_hvac_ac_startup_batches_unmatched_exclusion_count_nonnegative",
+        "ck_hvac_ac_startup_batches_unmatched_exclusions_nonnegative",
         "hvac_ac_startup_batches",
         "unmatched_exclusion_count >= 0",
         schema="platform",
@@ -49,7 +49,7 @@ def downgrade() -> None:
     op.execute("SET lock_timeout = '3s'")
     op.execute("SET statement_timeout = '60s'")
     op.drop_constraint(
-        "ck_hvac_ac_startup_batches_unmatched_exclusion_count_nonnegative",
+        "ck_hvac_ac_startup_batches_unmatched_exclusions_nonnegative",
         "hvac_ac_startup_batches",
         type_="check",
         schema="platform",
