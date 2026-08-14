@@ -42,7 +42,12 @@ def test_schema_constant_matches_the_settings_default(
     assert settings.postgres_schema == DB_SCHEMA
 
 
-def test_service_key_has_no_default() -> None:
+def test_service_key_has_no_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    # ⚠ 必须先把环境清干净再断言：这条守的是「代码里没给默认值」，
+    # 而 pydantic-settings 会去读环境变量与 .env。CI 的作业级 env 里有这一项，
+    # 不清就变成在断言「这台机器上没配过它」——本机绿、CI 红
+    monkeypatch.delenv("COLLECT_EDGE_SERVICE_KEY", raising=False)
+    monkeypatch.chdir("/")
     with pytest.raises(ValueError, match="edge_service_key"):
         Settings(**REQUIRED)
 
