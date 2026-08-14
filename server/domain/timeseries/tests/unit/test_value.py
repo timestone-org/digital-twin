@@ -34,10 +34,11 @@ def test_split_leaves_both_columns_empty_for_a_missing_reading() -> None:
         ("warm", '"warm"'),
         ("", '""'),
         ("42", '"42"'),
+        ('{"a": 1}', '"{\\"a\\": 1}"'),
         ([1, "a"], '[1, "a"]'),
         ({"unit": "℃"}, '{"unit": "℃"}'),
     ],
-    ids=["文本", "空串", "数字样文本", "数组", "对象"],
+    ids=["文本", "空串", "数字样文本", "JSON 样文本", "数组", "对象"],
 )
 def test_split_encodes_everything_else_as_json_text(
     value: object, expected_text: str
@@ -47,6 +48,11 @@ def test_split_encodes_everything_else_as_json_text(
 
 def test_split_keeps_non_ascii_text_unescaped() -> None:
     assert split_value("出口温度") == (None, '"出口温度"')
+
+
+def test_split_sends_an_over_range_integer_to_the_text_column() -> None:
+    # ⚠ 溢出若抛出去，归档流会卡在同一条目上重试不休，整个数据源不再落库
+    assert split_value(10**400) == (None, "1" + "0" * 400)
 
 
 def test_split_falls_back_to_the_string_form_of_an_alien_object() -> None:

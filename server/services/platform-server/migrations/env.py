@@ -11,11 +11,19 @@ from sqlalchemy import Connection, pool, text
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from lib.config import load_settings_or_exit
-from platform_server.apps.hvac.models import Base
+from platform_server.apps.collect.models import Base as CollectBase
+from platform_server.apps.dashboard.models import Base as DashboardBase
+from platform_server.apps.hvac.models import Base as HvacBase
 from platform_server.settings import DB_SCHEMA, Settings
 
 config = context.config
-target_metadata = Base.metadata
+# ⚠ 每个 apps/<feature> 各有一个声明基类，故元数据是一组而不是一份：
+# 漏登记一个，那个模块的表在 autogenerate 眼里就是「该删掉的多余表」
+target_metadata = [
+    HvacBase.metadata,
+    DashboardBase.metadata,
+    CollectBase.metadata,
+]
 
 _settings = load_settings_or_exit(Settings)
 

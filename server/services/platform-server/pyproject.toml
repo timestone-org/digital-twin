@@ -5,8 +5,13 @@ description = "业务平台：空调台账与车间房间空间配置。"
 requires-python = ">=3.12"
 dependencies = [
     "lib[auth,db,mssql,redis,web]",
+    "timeseries",
     "numpy>=2.1",
     "scikit-learn>=1.7",
+    # publisher 角色打 realtime-hub 的主题登记与批推（docs/DASHBOARD_DESIGN.md §6）。
+    # ⚠ 必须自己声明：httpx 在工作区根的 dev 组里，本地与全部用例都 import 得到，
+    # 只有按自己声明的依赖装的镜像会启动即崩。
+    "httpx>=0.28",
 ]
 
 [project.scripts]
@@ -14,6 +19,7 @@ platform-server = "platform_server.__main__:main"
 
 [tool.uv.sources]
 lib = { workspace = true }
+timeseries = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

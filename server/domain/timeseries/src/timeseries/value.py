@@ -11,15 +11,29 @@ def split_value(value: object) -> tuple[float | None, str | None]:
 
     Args: value。
     """
-    # ⚠ bool 是 int 的子类，必须排在数值之前：调换顺序后 1.0/0.0 就由
-    # float(True) 决定，而不是由这里写死
+    # ⚠ bool 是 int 的子类，先判它，1.0/0.0 才是本包钉死的口径
     if isinstance(value, bool):
         return (1.0 if value else 0.0), None
-    if isinstance(value, int | float):
-        return float(value), None
     if value is None:
         return None, None
+    number = _as_float(value)
+    if number is not None:
+        return number, None
     return None, json.dumps(value, ensure_ascii=False, default=str)
+
+
+def _as_float(value: object) -> float | None:
+    """取数值列该存的浮点数；不是数值、或超出 float 值域的整数给 None。
+
+    Args: value。
+    """
+    if not isinstance(value, int | float):
+        return None
+    try:
+        return float(value)
+    except OverflowError:
+        # ⚠ 溢出在这里收住：抛给归档管道会让整条流卡在同一条目上重试不休
+        return None
 
 
 def read_value(value_num: float | None, value_text: str | None) -> object:

@@ -9,12 +9,20 @@ import os
 import socket
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 
 import httpx
 import pytest
+from fastapi import FastAPI
+from redis.asyncio import Redis
+from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from unit.collect_fakes import (
+    FakeChannelPublisher,
+    FakeCommandTransport,
+    FakeHistorySource,
+)
 
 from lib.auth import (
     SignedContext,
@@ -23,9 +31,42 @@ from lib.auth import (
     sign_context,
 )
 from lib.config import load_settings
+from lib.db import Database
 from lib.logging import configure_logging
+from lib.testing import InMemoryCache
 from lib.utils.timeutils import utcnow
 from platform_server.app import build_app
+from platform_server.apps.collect.catalog import (
+    COLLECT_MANAGE,
+    COLLECT_OPERATE,
+    COLLECT_VIEW,
+)
+from platform_server.apps.collect.deps import (
+    get_session as get_collect_session,
+)
+from platform_server.apps.collect.services import (
+    CommandBus,
+    PlanNotifier,
+    ReadOnlyHistorySource,
+)
+from platform_server.apps.dashboard.catalog import (
+    DASHBOARD_EDIT,
+    DASHBOARD_MANAGE,
+    DASHBOARD_VIEW,
+)
+from platform_server.apps.dashboard.deps import (
+    get_session as get_dashboard_session,
+)
+from platform_server.apps.dashboard.deps import (
+    get_validation_context as get_dashboard_validation_context,
+)
+from platform_server.apps.dashboard.services import (
+    SUBSCRIPTION_SCHEMA,
+    IdempotencyStore,
+    ReadOnlyViewerSource,
+    StaticPointCatalog,
+    ValidationContext,
+)
 from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
 from platform_server.apps.hvac.datasets import (
     DATASET_RAW_MINUTE,
@@ -38,10 +79,34 @@ from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.container import Container
 from platform_server.settings import Settings
 from platform_server.stream import StreamEntry, StreamGroup
+from timeseries import HISTORY_SCHEMA
 
 # 与 auth-server 的 AUTH_EDGE_PERMISSION_TTL_S 同量级，用例不依赖它的确切取值
 HEADER_TTL_S = 60
-FULL_CODES = (AC_VIEW, AC_MANAGE)
+FULL_CODES = (
+    AC_VIEW,
+    AC_MANAGE,
+    DASHBOARD_VIEW,
+    DASHBOARD_EDIT,
+    DASHBOARD_MANAGE,
+    COLLECT_VIEW,
+    COLLECT_OPERATE,
+    COLLECT_MANAGE,
+)
+# 命令总线的两档预算，用例里固定住，断言里的信封才是可手写的常量
+BROWSE_TIMEOUT_S = 10.0
+COMMAND_TIMEOUT_S = 5.0
+PLAN_CHANNEL = "collect:plan:changed"
+
+# 大屏绑定用例引用的点位。⚠ 采集配置面未落地，故点位台账在用例里是一份名单假件
+SEEDED_SOURCE_ID = "0192f0c0-0000-7000-8000-00000000abcd"
+SEEDED_NODE_KEYS = frozenset(
+    {
+        f"{SEEDED_SOURCE_ID}:outlet_temp",
+        f"{SEEDED_SOURCE_ID}:inlet_temp",
+        f"{SEEDED_SOURCE_ID}:run_state",
+    }
+)
 # 用例里的源时区固定住，断言里的 UTC 时刻才是可手写的常量
 SOURCE_TIMEZONE = "Asia/Shanghai"
 # 默认几个形状齐备的对象，够既有的绑定用例用
@@ -246,6 +311,12 @@ def sign(settings: Settings) -> SignHeaders:
 
 
 @pytest.fixture
+def point_catalog() -> StaticPointCatalog:
+    """点位台账假件：只认 `SEEDED_NODE_KEYS` 里那几条。"""
+    return StaticPointCatalog(known_keys=SEEDED_NODE_KEYS)
+
+
+@pytest.fixture
 def ac_source() -> FakeAcSource:
     """假外库，默认已有几个形状齐备的对象与一段数据跨度。
 
@@ -300,22 +371,170 @@ class AppContext:
     session: AsyncSession
 
 
+@dataclass(frozen=True)
+class CollectFakes:
+    """采集面那三跳跨进程调用的假件，一次性交给用例。"""
+
+    bus: FakeCommandTransport
+    plans: FakeChannelPublisher
+    history: FakeHistorySource
+
+
+@pytest.fixture
+async def history_source(
+    settings: Settings, postgres_available: bool
+) -> AsyncIterator[ReadOnlyHistorySource]:
+    """一条打真库的归档只读连接，用完就关。
+
+    ⚠ 用真库而不是假件：它验的就是「这条连接真的只读」这条数据库层的事实，
+    换成假件等于把要验的东西自己实现一遍。
+    Args: settings, postgres_available。
+    """
+    if not postgres_available:
+        pytest.skip("本机连不到 Postgres")
+    database = Database(dsn=settings.dsn(), search_path=HISTORY_SCHEMA)
+    yield ReadOnlyHistorySource(database=database)
+    await database.dispose()
+
+
+@pytest.fixture
+async def redis_url(settings: Settings) -> str:
+    """测试用 Redis 的连接串。
+
+    ⚠ 只探端口不够：本机常有一个**要口令**的 Redis 占着 6379，端口通而命令
+    一律被拒。这里真发一次 PING，连不上就按环境能力缺失跳过。
+    Args: settings。
+    """
+    url = settings.url()
+    client = Redis.from_url(  # pyright: ignore[reportUnknownMemberType]
+        url, socket_timeout=2, socket_connect_timeout=2
+    )
+    try:
+        await client.ping()  # pyright: ignore[reportUnknownMemberType]
+    except RedisError as error:
+        pytest.skip(f"本机 Redis 不可用：{type(error).__name__}")
+    finally:
+        await client.aclose()
+    return url
+
+
+@pytest.fixture
+async def viewer_source(
+    settings: Settings, postgres_available: bool
+) -> AsyncIterator[ReadOnlyViewerSource]:
+    """一条打真库的订阅表只读连接，用完就关。
+
+    ⚠ 用真库而不是假件：它验的就是「这条连接真的写不了别人的 schema」这条
+    数据库层的事实，换成假件等于把要验的东西自己实现一遍。
+    Args: settings, postgres_available。
+    """
+    if not postgres_available:
+        pytest.skip("本机连不到 Postgres")
+    database = Database(dsn=settings.dsn(), search_path=SUBSCRIPTION_SCHEMA)
+    yield ReadOnlyViewerSource(database=database)
+    await database.dispose()
+
+
+@pytest.fixture
+def collect_fakes() -> CollectFakes:
+    """一组空的采集面假件。用例按需往里填预置应答。"""
+    return CollectFakes(
+        bus=FakeCommandTransport(),
+        plans=FakeChannelPublisher(),
+        history=FakeHistorySource(),
+    )
+
+
+@dataclass(frozen=True)
+class ExternalFakes:
+    """整装应用要替掉的全部跨进程依赖，打成一包。
+
+    ⚠ 打成一包不是为了好看：fixture 的形参上限与函数一样是 5，而
+    `app_context` 还要 settings / 可达性 / 签名器三件。
+    """
+
+    ac_source: FakeAcSource
+    points: StaticPointCatalog
+    collect: CollectFakes
+
+
+@pytest.fixture
+def external_fakes(
+    ac_source: FakeAcSource,
+    point_catalog: StaticPointCatalog,
+    collect_fakes: CollectFakes,
+) -> ExternalFakes:
+    """把三组假件收成一包给 `app_context`。
+
+    Args: ac_source, point_catalog, collect_fakes。
+    """
+    return ExternalFakes(
+        ac_source=ac_source, points=point_catalog, collect=collect_fakes
+    )
+
+
+def _wire_fakes(
+    application: FastAPI,
+    *,
+    maker: async_sessionmaker[AsyncSession],
+    ac_source: FakeAcSource,
+    validation: ValidationContext,
+) -> None:
+    """把会打网络的依赖换成假件。
+
+    ⚠ 每个 apps/<feature> 各有一份 `get_session`，三份都要换：漏一份那个模块
+    就打真库真提交，用例之间开始互相看见对方的数据。
+    Args: application, maker, ac_source, validation。
+    """
+    override = _session_override(maker)
+    application.dependency_overrides[get_session] = override
+    application.dependency_overrides[get_dashboard_session] = override
+    application.dependency_overrides[get_collect_session] = override
+    application.dependency_overrides[get_ac_source_reader] = (
+        lambda: AcSourceReader(source=ac_source, timezone=SOURCE_TIMEZONE)
+    )
+    application.dependency_overrides[get_dashboard_validation_context] = (
+        lambda: validation
+    )
+
+
+def _faked_container(built: Container, fakes: ExternalFakes) -> Container:
+    """把会打网络的长生命周期对象换成进程内假件。
+
+    ⚠ 用例不许打网络，而 Redis 与归档库在 CI 里也不存在。
+    Args: built, fakes。
+    """
+    return replace(
+        built,
+        idempotency=IdempotencyStore(cache=InMemoryCache()),
+        command_bus=CommandBus(
+            transport=fakes.collect.bus,
+            browse_timeout_s=BROWSE_TIMEOUT_S,
+            command_timeout_s=COMMAND_TIMEOUT_S,
+        ),
+        plan_notifier=PlanNotifier(
+            publisher=fakes.collect.plans, channel=PLAN_CHANNEL
+        ),
+        history=fakes.collect.history,
+    )
+
+
 @pytest.fixture
 async def app_context(
     settings: Settings,
     postgres_available: bool,
     sign: SignHeaders,
-    ac_source: FakeAcSource,
+    external_fakes: ExternalFakes,
 ) -> AsyncIterator[AppContext]:
     """整装应用 + 同连接的会话，每条用例一个回滚事务。
 
-    ⚠ 外库一律换成假件：用例不许打网络，而真外库在 CI 里也不存在。
+    ⚠ 外库与 Redis 一律换成假件：用例不许打网络，而它们在 CI 里也不存在。
     """
     if not postgres_available:
         pytest.skip("本机连不到 Postgres")
     application = build_app(settings)
-    container: Container = application.state.container
-
+    container = _faked_container(application.state.container, external_fakes)
+    application.state.container = container
     connection = await container.database.engine.connect()
     transaction = await connection.begin()
     # join_transaction_mode="create_savepoint"：请求内的 commit 只落到保存点，
@@ -325,10 +544,13 @@ async def app_context(
         expire_on_commit=False,
         join_transaction_mode="create_savepoint",
     )
-
-    application.dependency_overrides[get_session] = _session_override(maker)
-    application.dependency_overrides[get_ac_source_reader] = (
-        lambda: AcSourceReader(source=ac_source, timezone=SOURCE_TIMEZONE)
+    _wire_fakes(
+        application,
+        maker=maker,
+        ac_source=external_fakes.ac_source,
+        validation=ValidationContext(
+            catalog=container.module_catalog, points=external_fakes.points
+        ),
     )
     transport = httpx.ASGITransport(app=application)
     async with (

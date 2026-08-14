@@ -3,21 +3,24 @@
 import uvicorn
 
 from lib.config import load_settings_or_exit
-from platform_server import worker
+from platform_server import publisher, worker
 from platform_server.app import build_app
-from platform_server.settings import ROLE_WORKER, Settings
+from platform_server.settings import ROLE_PUBLISHER, ROLE_WORKER, Settings
 
 
 def main() -> None:
     """按运行角色起对应的进程。
 
-    ⚠ 这是**部署轴**的分叉不是环境轴的：同一份镜像按 `APP_ROLE` 跑出 api 与
-    worker 两种进程（ARCHITECTURE §3.4）。API 角色永不跑重任务，HTTP 只负责
-    入队与查进度。
+    ⚠ 这是**部署轴**的分叉不是环境轴的：同一份镜像按 `APP_ROLE` 跑出 api、
+    worker 与 publisher 三种进程（ARCHITECTURE §3.4）。API 角色永不跑重任务，
+    HTTP 只负责入队与查进度；publisher 全局单活，且**不监听任何端口**。
     """
     settings = load_settings_or_exit(Settings)
     if settings.app_role == ROLE_WORKER:
         worker.run(settings)
+        return
+    if settings.app_role == ROLE_PUBLISHER:
+        publisher.run(settings)
         return
     serve_http(settings)
 

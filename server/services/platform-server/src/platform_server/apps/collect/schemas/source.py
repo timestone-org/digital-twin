@@ -1,0 +1,137 @@
+"""数据源面的入参与出参。ORM 模型绝不直接返给 HTTP 层。"""
+
+import uuid
+from typing import Any
+
+from pydantic import Field, SecretStr
+
+from platform_server.apps.collect.models import MIN_INTERVAL_MS
+from platform_server.apps.collect.protocols import Protocol, ReadMode
+from platform_server.apps.collect.schemas.common import (
+    Address,
+    Code,
+    InputModel,
+    Label,
+    OutputModel,
+    UpdateModel,
+    Utc,
+)
+
+# 连接参数的条数上限：它是给驱动的旁路配置，不是任意 KV 存储
+MAX_OPTIONS = 32
+
+
+class SourceOut(OutputModel):
+    """一个数据源。
+
+    ⚠ 没有凭据字段：口令只进 `credential_enc`，任何出参都不回它。
+    `has_credential` 只说「配没配过」，够界面判断了。
+    """
+
+    id: uuid.UUID
+    name: str
+    code: str
+    protocol: Protocol
+    endpoint: str
+    has_credential: bool
+    options_json: dict[str, str]
+    read_mode: ReadMode
+    poll_interval_ms: int
+    is_enabled: bool
+    point_count: int
+    created_at: Utc
+    updated_at: Utc
+
+
+class SourceCreateIn(InputModel):
+    """新建一个数据源。"""
+
+    name: Label
+    code: Code
+    protocol: Protocol
+    endpoint: Address
+    # ⚠ SecretStr：口令要经过日志、校验错误、异常三条路，裸 str 早晚被打出去
+    credential: SecretStr | None = None
+    options_json: dict[str, str] = Field(
+        default_factory=dict[str, str], max_length=MAX_OPTIONS
+    )
+    read_mode: ReadMode = "subscribe"
+    poll_interval_ms: int = Field(default=1000, ge=MIN_INTERVAL_MS)
+    is_enabled: bool = True
+
+
+class SourceUpdateIn(UpdateModel):
+    """改数据源。缺省的字段不动。
+
+    ⚠ `code` 不在这里：编码是数据源的身份，改名等于换身份，历史会断成两段
+    （docs/COLLECT_DESIGN.md §2）。要换名字就新建一个。
+    """
+
+    NON_NULLABLE = frozenset(
+        {
+            "name",
+            "endpoint",
+            "options_json",
+            "read_mode",
+            "poll_interval_ms",
+            "is_enabled",
+        }
+    )
+
+    name: Label | None = None
+    endpoint: Address | None = None
+    credential: SecretStr | None = None
+    options_json: dict[str, str] | None = Field(
+        default=None, max_length=MAX_OPTIONS
+    )
+    read_mode: ReadMode | None = None
+    poll_interval_ms: int | None = Field(default=None, ge=MIN_INTERVAL_MS)
+    is_enabled: bool | None = None
+
+
+class BrowseItemOut(OutputModel):
+    """地址空间里的一项。`address` 可直接填进点位配置。"""
+
+    address: str
+    name: str
+    has_children: bool
+    # 只有变量节点能当点位；对象节点只用来往下走
+    is_variable: bool
+
+
+class BrowseIn(InputModel):
+    """一次地址空间浏览。`parent` 缺省表示从根开始。"""
+
+    parent: Address | None = None
+
+
+class BrowseOut(OutputModel):
+    """一次浏览的结果。"""
+
+    items: list[BrowseItemOut]
+
+
+class ConnectivityOut(OutputModel):
+    """一次连通性测试的结论。
+
+    ⚠ `is_reachable` 为假时 `detail` 必须说清原因：把「没有活会话」与「寻址串
+    写错」显示成同一句话，用户就只能挨个试。
+    """
+
+    source_id: uuid.UUID
+    is_reachable: bool
+    detail: str | None
+
+
+class WriteIn(InputModel):
+    """向现场下发一个写值。"""
+
+    value: Any = Field(description="写下去的值，类型由点位的 data_type 决定")
+
+
+class WriteOut(OutputModel):
+    """一次下发的结论。"""
+
+    point_id: uuid.UUID
+    node_key: str
+    is_written: bool

@@ -9,9 +9,7 @@ from dataclasses import dataclass, field
 from typing import cast
 
 import pytest
-from pydantic import SecretStr
 
-from lib.db import Database, ReadOnlySqlSource
 from platform_server import __main__ as main_module
 from platform_server import worker
 from platform_server.apps.hvac.services.ac_model_worker import (
@@ -23,7 +21,6 @@ from platform_server.apps.hvac.services.ac_startup_worker import (
 )
 from platform_server.container import Container
 from platform_server.settings import ROLE_API, ROLE_WORKER, Settings
-from platform_server.stream import RedisStream
 from platform_server.worker import (
     Consumer,
     WorkerRuntime,
@@ -32,26 +29,10 @@ from platform_server.worker import (
     run_until_stopped,
     selfcheck,
 )
+from unit.wiring_fakes import build_container as build_wiring_container
+from unit.wiring_fakes import build_settings as build_wiring_settings
 
 PLACEHOLDER = "worker-test"
-
-
-@dataclass
-class FakeDependency:
-    """只回答通不通，并把自己被关的次序记进共享的账本。"""
-
-    name: str
-    ledger: list[str]
-    is_reachable: bool = True
-
-    async def ping(self) -> bool:
-        return self.is_reachable
-
-    async def dispose(self) -> None:
-        self.ledger.append(self.name)
-
-    async def close(self) -> None:
-        self.ledger.append(self.name)
 
 
 @dataclass
@@ -74,20 +55,7 @@ class FakeConsumer:
 
 def build_settings() -> Settings:
     """一份能构造出来的 worker 配置，不连任何依赖。"""
-    return Settings(
-        app_role=ROLE_WORKER,
-        app_instance="worker-1",
-        postgres_host=PLACEHOLDER,
-        postgres_user=PLACEHOLDER,
-        postgres_password=SecretStr(PLACEHOLDER),
-        postgres_db=PLACEHOLDER,
-        sqlserver_host=PLACEHOLDER,
-        sqlserver_user=PLACEHOLDER,
-        sqlserver_password=SecretStr(PLACEHOLDER),
-        sqlserver_database=PLACEHOLDER,
-        redis_host=PLACEHOLDER,
-        edge_signing_secret=SecretStr("x" * 32),
-    )
+    return build_wiring_settings(role=ROLE_WORKER)
 
 
 def build_container(ledger: list[str]) -> Container:
@@ -95,13 +63,7 @@ def build_container(ledger: list[str]) -> Container:
 
     Args: ledger。
     """
-    # cast 的理由：这几件只需要满足 ping/dispose/close，容器本身不做类型校验
-    return Container(
-        settings=build_settings(),
-        database=cast(Database, FakeDependency("database", ledger)),
-        ac_source=cast(ReadOnlySqlSource, FakeDependency("ac_source", ledger)),
-        stream=cast(RedisStream, FakeDependency("stream", ledger)),
-    )
+    return build_wiring_container(ledger, settings=build_settings())
 
 
 def test_the_consumer_takes_its_identity_from_config() -> None:
@@ -250,19 +212,7 @@ def test_the_worker_role_runs_the_consumer_not_uvicorn(
 def test_the_api_role_serves_http(monkeypatch: pytest.MonkeyPatch) -> None:
     """api 角色起 uvicorn，不跑任何重任务。"""
     started: list[str] = []
-    settings = Settings(
-        app_role=ROLE_API,
-        postgres_host=PLACEHOLDER,
-        postgres_user=PLACEHOLDER,
-        postgres_password=SecretStr(PLACEHOLDER),
-        postgres_db=PLACEHOLDER,
-        sqlserver_host=PLACEHOLDER,
-        sqlserver_user=PLACEHOLDER,
-        sqlserver_password=SecretStr(PLACEHOLDER),
-        sqlserver_database=PLACEHOLDER,
-        redis_host=PLACEHOLDER,
-        edge_signing_secret=SecretStr("x" * 32),
-    )
+    settings = build_wiring_settings(role=ROLE_API)
     monkeypatch.setattr(
         main_module, "load_settings_or_exit", lambda _: settings
     )

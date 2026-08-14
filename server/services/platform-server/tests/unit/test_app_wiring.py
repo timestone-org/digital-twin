@@ -9,13 +9,33 @@ from typing import cast
 
 from pydantic import SecretStr
 
+from lib.cache import Cache, PubSub
 from lib.db import Database, ReadOnlySqlSource
+from lib.testing import InMemoryCache
 from platform_server.app import _hooks, _probes, _selfcheck
+from platform_server.apps.collect.services import CommandBus, PlanNotifier
+from platform_server.apps.collect.services.command_transport import (
+    RedisCommandTransport,
+)
+from platform_server.apps.dashboard.services import (
+    IdempotencyStore,
+    StaticPointCatalog,
+    SubscriptionViewers,
+    load_module_catalog,
+)
 from platform_server.apps.hvac.deps import get_ac_source_reader
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.container import Container
+from platform_server.lease import Lease
+from platform_server.realtime import RealtimeClient
 from platform_server.settings import Settings
 from platform_server.stream import RedisStream
+from unit.collect_fakes import (
+    FakeChannelPublisher,
+    FakeCommandTransport,
+    FakeHistorySource,
+)
+from unit.publish_fakes import FakeSnapshotSource, FakeViewerSource
 
 PLACEHOLDER = "wiring-test"
 
@@ -50,6 +70,7 @@ def build_settings() -> Settings:
         sqlserver_database=PLACEHOLDER,
         redis_host=PLACEHOLDER,
         edge_signing_secret=SecretStr("x" * 32),
+        edge_service_key=SecretStr("y" * 32),
     )
 
 
@@ -62,12 +83,38 @@ def build_container(
     """
     database = FakeDependency(is_reachable=is_database_up)
     source = FakeDependency(is_reachable=is_source_up)
+    cache = InMemoryCache()
     # cast 的理由：这几件只需要满足 ping/dispose/close，容器本身不做类型校验
     container = Container(
         settings=build_settings(),
         database=cast(Database, database),
         ac_source=cast(ReadOnlySqlSource, source),
         stream=cast(RedisStream, FakeDependency()),
+        cache=cast(Cache, FakeDependency()),
+        idempotency=IdempotencyStore(cache=cache),
+        module_catalog=load_module_catalog(),
+        points=StaticPointCatalog(),
+        history=FakeHistorySource(),
+        history_database=cast(Database, FakeDependency()),
+        command_bus=CommandBus(
+            transport=FakeCommandTransport(),
+            browse_timeout_s=10.0,
+            command_timeout_s=5.0,
+        ),
+        command_transport=cast(RedisCommandTransport, FakeDependency()),
+        plan_notifier=PlanNotifier(
+            publisher=FakeChannelPublisher(), channel="collect:plan:changed"
+        ),
+        pubsub=cast(PubSub, FakeDependency()),
+        snapshots=FakeSnapshotSource(),
+        viewers=SubscriptionViewers(source=FakeViewerSource()),
+        viewer_database=cast(Database, FakeDependency()),
+        realtime=RealtimeClient(
+            base_url="http://realtime-test",
+            service_key=PLACEHOLDER,
+            timeout_s=1.0,
+        ),
+        lease=cast(Lease, FakeDependency()),
     )
     return container, database, source
 
@@ -87,7 +134,18 @@ def test_the_external_source_is_closed_before_the_connection_pool() -> None:
         )
         if hook.shutdown is not None
     ]
-    assert closing == ["stream", "ac_source", "database"]
+    assert closing == [
+        "stream",
+        "cache",
+        "command_bus",
+        "pubsub",
+        "snapshots",
+        "lease",
+        "ac_source",
+        "history_database",
+        "viewer_database",
+        "database",
+    ]
 
 
 async def assert_selfcheck_survives(

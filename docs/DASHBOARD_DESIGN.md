@@ -169,10 +169,16 @@ packages/modules/src/modules/<type>/
 
 ```ts
 // packages/modules/src/registry.ts
-export function defineModule(manifest: ModuleManifest): void
+export function registerModule(manifest: ModuleManifest): void
 export function getModule(type: string): ModuleManifest | undefined
 export function listModules(): readonly ModuleManifest[]
+// 纯身份函数，只给清单字面量收窄类型；注册永远是显式的一步，
+// 免得「import 了某个文件」变成一种隐式注册
+export function defineModule(manifest: ModuleManifest): ModuleManifest
 ```
+
+注册的那一行是 `registerModule`——它是 §5.3 ① 那条公开 API 的名字，
+`defineModule` 只管类型不管注册，两个名字不许混用。
 
 渲染组件的 props **固定三件套，不许扩**：
 
@@ -248,16 +254,24 @@ interface ModuleComponentProps {
 | 模块之间互相 import | 模块是叶子，共用的东西下沉到 `shared/` |
 | 模块直接发 HTTP 请求 | 取数走注入的 provider，否则模块无法在编辑器预览态与测试里运行 |
 
-### 5.5 取数比模块更该开放，且它已经是
+### 5.5 开放度来自注册表，不来自把类型放开
 
-参考实现有一处做得明显更好，照抄：**取数那一侧是真开放的**——
-`BindingSourceKind` 是开放联合，`registerProvider(p)` 一行注册，
-模块状态的计算对来源类型无感知（只数"有几个实时绑定"，不认识具体是哪种）。
+参考实现有一处值得学：**加一种数据来源只要写一个 provider + 一行 `registerProvider`**，
+且模块状态的计算对来源类型无感知（只数"有几个实时绑定"，不认识具体是哪种）。
+于是加一种来源不必碰渲染层。这个机制照搬。
 
-结论是：**加一种数据来源比加一个模块容易**，而这个不对称没有道理。
-本仓把模块侧拉齐到取数侧的开放度，而不是反过来。
+但它连**类型**也一起放开了（`BindingSourceKind` 是 `... | (string & {})` 的开放联合），
+这一步本仓不跟。理由在 §2.3：`source_kind` 拼错成 `"opuca"` 会照常入库、
+被下发计划的 `IN (...)` 过滤掉、永远不产数据、全程零告警。
+**开放的是注册表，不是类型。**故 `BindingSourceKind` 是闭合联合，未注册即 `400`（§4.1）。
 
-### 5.4 一期只实现两个模块
+两者不矛盾：注册表决定"系统认识哪些来源"，闭合类型决定"拼错时当场失败还是三天后才被发现"。
+真要新增一种来源，就在联合里加一个成员并注册一个 provider——两行，且改漏一处编译不过。
+
+结论仍是那句：**加一种数据来源本就比加一个模块容易，而这个不对称没有道理。**
+本仓把模块侧拉齐到取数侧的开放度，而不是把取数侧的类型安全丢掉。
+
+### 5.6 一期只实现两个模块
 
 `header`（页头）与 `twin-view`（数字孪生）。选这两个不是随意的：
 一个是纯配置无绑定的最简模块，一个是带 3D 资源与数组绑定的最复杂模块——

@@ -513,6 +513,163 @@
         "title": "AcUnitUpdateIn",
         "type": "object"
       },
+      "AddressCheckOut": {
+        "description": "一条寻址串在现场的校验结论。",
+        "properties": {
+          "address": {
+            "title": "Address",
+            "type": "string"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "address",
+          "status",
+          "detail"
+        ],
+        "title": "AddressCheckOut",
+        "type": "object"
+      },
+      "AggregateBucketOut": {
+        "description": "一个聚合桶。`bucket_start` 是桶的左端点，按业务时区对齐。",
+        "properties": {
+          "bucket_start": {
+            "format": "date-time",
+            "title": "Bucket Start",
+            "type": "string"
+          },
+          "node_key": {
+            "title": "Node Key",
+            "type": "string"
+          },
+          "sample_count": {
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "node_key",
+          "bucket_start",
+          "value",
+          "sample_count"
+        ],
+        "title": "AggregateBucketOut",
+        "type": "object"
+      },
+      "AggregateIn": {
+        "additionalProperties": false,
+        "description": "一次聚合查询。\n\n⚠ `timezone` 会回显在出参里：不带时区的 `time_bucket` 按 UNIX 纪元对齐，\n东八区的日桶会从当地 08:00 开始，07:00 的数据落进前一天\n（docs/COLLECT_DESIGN.md §6）。",
+        "properties": {
+          "aggregate": {
+            "default": "avg",
+            "title": "Aggregate",
+            "type": "string"
+          },
+          "interval": {
+            "maxLength": 8,
+            "pattern": "^\\d{1,4}(s|m|h|d)$",
+            "title": "Interval",
+            "type": "string"
+          },
+          "node_keys": {
+            "items": {
+              "maxLength": 256,
+              "minLength": 3,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Node Keys",
+            "type": "array"
+          },
+          "range_end": {
+            "format": "date-time",
+            "title": "Range End",
+            "type": "string"
+          },
+          "range_start": {
+            "format": "date-time",
+            "title": "Range Start",
+            "type": "string"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          }
+        },
+        "required": [
+          "node_keys",
+          "range_start",
+          "range_end",
+          "interval"
+        ],
+        "title": "AggregateIn",
+        "type": "object"
+      },
+      "AggregateOut": {
+        "description": "一次聚合的结果，回显它用的口径。",
+        "properties": {
+          "aggregate": {
+            "title": "Aggregate",
+            "type": "string"
+          },
+          "interval": {
+            "title": "Interval",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AggregateBucketOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "interval",
+          "aggregate",
+          "timezone"
+        ],
+        "title": "AggregateOut",
+        "type": "object"
+      },
       "ApiResponse_AcDataBindingOut_": {
         "properties": {
           "code": {
@@ -738,6 +895,231 @@
         "title": "ApiResponse[AcUnitRelocateOut]",
         "type": "object"
       },
+      "ApiResponse_AggregateOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AggregateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[AggregateOut]",
+        "type": "object"
+      },
+      "ApiResponse_BindingOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BindingOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[BindingOut]",
+        "type": "object"
+      },
+      "ApiResponse_BrowseOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BrowseOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[BrowseOut]",
+        "type": "object"
+      },
+      "ApiResponse_ConnectivityOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectivityOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ConnectivityOut]",
+        "type": "object"
+      },
+      "ApiResponse_CursorPage_HistoryPointOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CursorPage_HistoryPointOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[CursorPage[HistoryPointOut]]",
+        "type": "object"
+      },
       "ApiResponse_CursorPage_RawSampleOut__": {
         "properties": {
           "code": {
@@ -826,6 +1208,51 @@
           }
         },
         "title": "ApiResponse[CursorPage[StartupEpisodeOut]]",
+        "type": "object"
+      },
+      "ApiResponse_DashboardOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DashboardOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[DashboardOut]",
         "type": "object"
       },
       "ApiResponse_DatasetsOut_": {
@@ -963,6 +1390,141 @@
         "title": "ApiResponse[MetricLimitsOut]",
         "type": "object"
       },
+      "ApiResponse_ModuleCatalogOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModuleCatalogOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ModuleCatalogOut]",
+        "type": "object"
+      },
+      "ApiResponse_ModuleTypeOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModuleTypeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ModuleTypeOut]",
+        "type": "object"
+      },
+      "ApiResponse_NodeOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NodeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[NodeOut]",
+        "type": "object"
+      },
       "ApiResponse_Page_AcUnitOut__": {
         "properties": {
           "code": {
@@ -1006,6 +1568,51 @@
           }
         },
         "title": "ApiResponse[Page[AcUnitOut]]",
+        "type": "object"
+      },
+      "ApiResponse_Page_DashboardSummaryOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page_DashboardSummaryOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Page[DashboardSummaryOut]]",
         "type": "object"
       },
       "ApiResponse_Page_ModelPredictionOut__": {
@@ -1053,6 +1660,96 @@
         "title": "ApiResponse[Page[ModelPredictionOut]]",
         "type": "object"
       },
+      "ApiResponse_Page_PointOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page_PointOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Page[PointOut]]",
+        "type": "object"
+      },
+      "ApiResponse_Page_ProjectOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page_ProjectOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Page[ProjectOut]]",
+        "type": "object"
+      },
       "ApiResponse_Page_RoomOut__": {
         "properties": {
           "code": {
@@ -1096,6 +1793,51 @@
           }
         },
         "title": "ApiResponse[Page[RoomOut]]",
+        "type": "object"
+      },
+      "ApiResponse_Page_SourceOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page_SourceOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Page[SourceOut]]",
         "type": "object"
       },
       "ApiResponse_Page_WorkshopOut__": {
@@ -1143,6 +1885,96 @@
         "title": "ApiResponse[Page[WorkshopOut]]",
         "type": "object"
       },
+      "ApiResponse_PointBatchOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PointBatchOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[PointBatchOut]",
+        "type": "object"
+      },
+      "ApiResponse_PointSavedOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PointSavedOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[PointSavedOut]",
+        "type": "object"
+      },
       "ApiResponse_PredictOut_": {
         "properties": {
           "code": {
@@ -1186,6 +2018,51 @@
           }
         },
         "title": "ApiResponse[PredictOut]",
+        "type": "object"
+      },
+      "ApiResponse_ProjectOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProjectOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ProjectOut]",
         "type": "object"
       },
       "ApiResponse_RawSeriesOut_": {
@@ -1368,6 +2245,51 @@
         "title": "ApiResponse[SourceObjectsOut]",
         "type": "object"
       },
+      "ApiResponse_SourceOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[SourceOut]",
+        "type": "object"
+      },
       "ApiResponse_StartupBatchesOut_": {
         "properties": {
           "code": {
@@ -1503,6 +2425,51 @@
         "title": "ApiResponse[StartupRebuildOut]",
         "type": "object"
       },
+      "ApiResponse_ValidationReportOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ValidationReportOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ValidationReportOut]",
+        "type": "object"
+      },
       "ApiResponse_WorkshopOut_": {
         "properties": {
           "code": {
@@ -1546,6 +2513,51 @@
           }
         },
         "title": "ApiResponse[WorkshopOut]",
+        "type": "object"
+      },
+      "ApiResponse_WriteOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WriteOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[WriteOut]",
         "type": "object"
       },
       "ApiResponse_list_AcModelOut__": {
@@ -1597,6 +2609,517 @@
         "title": "ApiResponse[list[AcModelOut]]",
         "type": "object"
       },
+      "ApiResponse_list_BindingOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/BindingOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[list[BindingOut]]",
+        "type": "object"
+      },
+      "ApiResponse_list_NodeOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/NodeOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[list[NodeOut]]",
+        "type": "object"
+      },
+      "BindingCreateIn": {
+        "additionalProperties": false,
+        "description": "新增一条绑定。`id` 由调用方自带时用它，便于批量替换里指名道姓。",
+        "properties": {
+          "compute_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compute Json"
+          },
+          "detail_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail Json"
+          },
+          "field_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_]*(\\[\\d+\\]\\.[a-z][a-z0-9_]*)?$",
+            "title": "Field Key",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "node_key": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 3,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Key"
+          },
+          "source_kind": {
+            "enum": [
+              "archive",
+              "computed",
+              "opcua",
+              "static"
+            ],
+            "title": "Source Kind",
+            "type": "string"
+          },
+          "static_value_json": {
+            "title": "Static Value Json"
+          },
+          "transform_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transform Json"
+          }
+        },
+        "required": [
+          "field_key",
+          "source_kind"
+        ],
+        "title": "BindingCreateIn",
+        "type": "object"
+      },
+      "BindingOut": {
+        "description": "一条绑定。id 一经创建永不改变——实时推送以它作关联键。",
+        "properties": {
+          "compute_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compute Json"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "detail_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail Json"
+          },
+          "field_key": {
+            "title": "Field Key",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "node_id": {
+            "format": "uuid",
+            "title": "Node Id",
+            "type": "string"
+          },
+          "node_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Key"
+          },
+          "source_kind": {
+            "enum": [
+              "archive",
+              "computed",
+              "opcua",
+              "static"
+            ],
+            "title": "Source Kind",
+            "type": "string"
+          },
+          "static_value_json": {
+            "title": "Static Value Json"
+          },
+          "transform_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transform Json"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "node_id",
+          "field_key",
+          "source_kind",
+          "node_key",
+          "compute_json",
+          "detail_json",
+          "transform_json",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "BindingOut",
+        "type": "object"
+      },
+      "BindingSpecOut": {
+        "description": "模块声明的一个数据入口。服务端读它校验 `field_key`。",
+        "properties": {
+          "array_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/BindingSpecOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Array Fields"
+          },
+          "data_type": {
+            "enum": [
+              "boolean",
+              "enum",
+              "number",
+              "string"
+            ],
+            "title": "Data Type",
+            "type": "string"
+          },
+          "enum_map": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enum Map"
+          },
+          "is_array": {
+            "default": false,
+            "title": "Is Array",
+            "type": "boolean"
+          },
+          "is_required": {
+            "default": false,
+            "title": "Is Required",
+            "type": "boolean"
+          },
+          "is_time_series": {
+            "default": false,
+            "title": "Is Time Series",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "data_type"
+        ],
+        "title": "BindingSpecOut",
+        "type": "object"
+      },
+      "BindingUpdateIn": {
+        "additionalProperties": false,
+        "description": "改绑定。缺省的字段表示本次不涉及。\n\n⚠ `field_key` 不在这里：改槽等于换一条绑定，而 id 是实时推送的关联键。\n要换槽就删了重建。",
+        "properties": {
+          "compute_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compute Json"
+          },
+          "detail_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail Json"
+          },
+          "node_key": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 3,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Key"
+          },
+          "source_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "archive",
+                  "computed",
+                  "opcua",
+                  "static"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Kind"
+          },
+          "static_value_json": {
+            "title": "Static Value Json"
+          },
+          "transform_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transform Json"
+          }
+        },
+        "title": "BindingUpdateIn",
+        "type": "object"
+      },
+      "BrowseIn": {
+        "additionalProperties": false,
+        "description": "一次地址空间浏览。`parent` 缺省表示从根开始。",
+        "properties": {
+          "parent": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent"
+          }
+        },
+        "title": "BrowseIn",
+        "type": "object"
+      },
+      "BrowseItemOut": {
+        "description": "地址空间里的一项。`address` 可直接填进点位配置。",
+        "properties": {
+          "address": {
+            "title": "Address",
+            "type": "string"
+          },
+          "has_children": {
+            "title": "Has Children",
+            "type": "boolean"
+          },
+          "is_variable": {
+            "title": "Is Variable",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "address",
+          "name",
+          "has_children",
+          "is_variable"
+        ],
+        "title": "BrowseItemOut",
+        "type": "object"
+      },
+      "BrowseOut": {
+        "description": "一次浏览的结果。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BrowseItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "BrowseOut",
+        "type": "object"
+      },
       "CombinationCoverageOut": {
         "description": "一个运行组合在当前批次里攒了多少条可用样本。",
         "properties": {
@@ -1617,6 +3140,311 @@
           "usable_count"
         ],
         "title": "CombinationCoverageOut",
+        "type": "object"
+      },
+      "ConfigFieldConditionOut": {
+        "description": "条件显示：同级字段的当前值落在 `in_values` 里才渲染本字段。",
+        "properties": {
+          "in": {
+            "items": {},
+            "title": "In",
+            "type": "array"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "in"
+        ],
+        "title": "ConfigFieldConditionOut",
+        "type": "object"
+      },
+      "ConfigFieldOut": {
+        "description": "一个配置字段。属性面板按 `type` 选控件，没有针对具体模块的表单代码。",
+        "properties": {
+          "default": {
+            "title": "Default"
+          },
+          "fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConfigFieldOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fields"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
+          "help": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Help"
+          },
+          "item_label_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Label Key"
+          },
+          "item_schema": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConfigFieldOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Schema"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max"
+          },
+          "max_items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Items"
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min"
+          },
+          "min_items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Items"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConfigOptionOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
+          },
+          "placeholder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Placeholder"
+          },
+          "span": {
+            "anyOf": [
+              {
+                "enum": [
+                  "full",
+                  "half"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          },
+          "type": {
+            "enum": [
+              "array",
+              "boolean",
+              "color",
+              "enum",
+              "number",
+              "object",
+              "range",
+              "string"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "when": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfigFieldConditionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "type"
+        ],
+        "title": "ConfigFieldOut",
+        "type": "object"
+      },
+      "ConfigOptionOut": {
+        "description": "`type: \"enum\"` 的一个可选项。",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "title": "ConfigOptionOut",
+        "type": "object"
+      },
+      "ConnectivityOut": {
+        "description": "一次连通性测试的结论。\n\n⚠ `is_reachable` 为假时 `detail` 必须说清原因：把「没有活会话」与「寻址串\n写错」显示成同一句话，用户就只能挨个试。",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "is_reachable": {
+            "title": "Is Reachable",
+            "type": "boolean"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "is_reachable",
+          "detail"
+        ],
+        "title": "ConnectivityOut",
+        "type": "object"
+      },
+      "CursorPage_HistoryPointOut_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryPointOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          }
+        },
+        "required": [
+          "items",
+          "next",
+          "has_more"
+        ],
+        "title": "CursorPage[HistoryPointOut]",
         "type": "object"
       },
       "CursorPage_RawSampleOut_": {
@@ -1683,6 +3511,339 @@
           "has_more"
         ],
         "title": "CursorPage[StartupEpisodeOut]",
+        "type": "object"
+      },
+      "DashboardCreateIn": {
+        "additionalProperties": false,
+        "description": "建大屏。",
+        "properties": {
+          "chrome_json": {
+            "additionalProperties": true,
+            "title": "Chrome Json",
+            "type": "object"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "design_height": {
+            "default": 1080,
+            "maximum": 20000.0,
+            "minimum": 320.0,
+            "title": "Design Height",
+            "type": "integer"
+          },
+          "design_width": {
+            "default": 1920,
+            "maximum": 20000.0,
+            "minimum": 320.0,
+            "title": "Design Width",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "theme_json": {
+            "additionalProperties": true,
+            "title": "Theme Json",
+            "type": "object"
+          }
+        },
+        "required": [
+          "project_id",
+          "name"
+        ],
+        "title": "DashboardCreateIn",
+        "type": "object"
+      },
+      "DashboardOut": {
+        "description": "加载一张大屏。运行时与编辑器共用同一份。\n\n`nodes` 是**扁平**一维数组，树由 `parent_id` 重建；顺序钉死在\n`(parent_id, z_index, id)`，两次读取逐字节相同。",
+        "properties": {
+          "chrome_json": {
+            "additionalProperties": true,
+            "title": "Chrome Json",
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "design_height": {
+            "title": "Design Height",
+            "type": "integer"
+          },
+          "design_width": {
+            "title": "Design Width",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_public": {
+            "title": "Is Public",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_count": {
+            "title": "Node Count",
+            "type": "integer"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/NodeOut"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "row_version": {
+            "title": "Row Version",
+            "type": "integer"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "theme_json": {
+            "additionalProperties": true,
+            "title": "Theme Json",
+            "type": "object"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "name",
+          "description",
+          "design_width",
+          "design_height",
+          "row_version",
+          "schema_version",
+          "is_public",
+          "node_count",
+          "created_at",
+          "updated_at",
+          "theme_json",
+          "chrome_json"
+        ],
+        "title": "DashboardOut",
+        "type": "object"
+      },
+      "DashboardSummaryOut": {
+        "description": "列表页的大屏条目：不带节点树。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "design_height": {
+            "title": "Design Height",
+            "type": "integer"
+          },
+          "design_width": {
+            "title": "Design Width",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_public": {
+            "title": "Is Public",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_count": {
+            "title": "Node Count",
+            "type": "integer"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "row_version": {
+            "title": "Row Version",
+            "type": "integer"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "name",
+          "description",
+          "design_width",
+          "design_height",
+          "row_version",
+          "schema_version",
+          "is_public",
+          "node_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DashboardSummaryOut",
+        "type": "object"
+      },
+      "DashboardUpdateIn": {
+        "additionalProperties": false,
+        "description": "改大屏元数据。节点树不走这里，走 `:replace-layout` 或逐节点端点。",
+        "properties": {
+          "chrome_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chrome Json"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "design_height": {
+            "anyOf": [
+              {
+                "maximum": 20000.0,
+                "minimum": 320.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Design Height"
+          },
+          "design_width": {
+            "anyOf": [
+              {
+                "maximum": 20000.0,
+                "minimum": 320.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Design Width"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "schema_version": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema Version"
+          },
+          "theme_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theme Json"
+          }
+        },
+        "title": "DashboardUpdateIn",
         "type": "object"
       },
       "DatasetOut": {
@@ -1825,6 +3986,170 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HistoryPointOut": {
+        "description": "一条历史读数。\n\n⚠ `value` 是测量值走 JSON number，不包 string：传感器精度本来就低于\nfloat64，包一层是纯负担（api-contract §6）。",
+        "properties": {
+          "node_key": {
+            "title": "Node Key",
+            "type": "string"
+          },
+          "quality": {
+            "enum": [
+              "good",
+              "uncertain",
+              "bad"
+            ],
+            "title": "Quality",
+            "type": "string"
+          },
+          "ts": {
+            "format": "date-time",
+            "title": "Ts",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "required": [
+          "node_key",
+          "ts",
+          "value",
+          "quality"
+        ],
+        "title": "HistoryPointOut",
+        "type": "object"
+      },
+      "LayoutIssueOut": {
+        "description": "自检发现的一处悬空引用。`field` 用点号与方括号表达路径。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "code",
+          "message"
+        ],
+        "title": "LayoutIssueOut",
+        "type": "object"
+      },
+      "LayoutNodeIn": {
+        "additionalProperties": false,
+        "description": "整树替换里的一个节点。\n\n`id` 缺省表示新增；给了就按它比对，服务端不重新生成 id。新节点也可以自带\nid，这样同一次替换里的子节点才写得出 `parent_id`。",
+        "properties": {
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/BindingCreateIn"
+            },
+            "title": "Bindings",
+            "type": "array"
+          },
+          "client_key": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Key"
+          },
+          "config_json": {
+            "additionalProperties": true,
+            "title": "Config Json",
+            "type": "object"
+          },
+          "h": {
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "H",
+            "type": "integer"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "is_visible": {
+            "default": true,
+            "title": "Is Visible",
+            "type": "boolean"
+          },
+          "module_type": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9-]*$",
+            "title": "Module Type",
+            "type": "string"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "w": {
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "W",
+            "type": "integer"
+          },
+          "x": {
+            "maximum": 100000.0,
+            "minimum": -100000.0,
+            "title": "X",
+            "type": "integer"
+          },
+          "y": {
+            "maximum": 100000.0,
+            "minimum": -100000.0,
+            "title": "Y",
+            "type": "integer"
+          },
+          "z_index": {
+            "default": 0,
+            "title": "Z Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "module_type",
+          "x",
+          "y",
+          "w",
+          "h"
+        ],
+        "title": "LayoutNodeIn",
         "type": "object"
       },
       "LiveReadingValuesOut": {
@@ -2297,6 +4622,490 @@
         "title": "ModelPredictionOut",
         "type": "object"
       },
+      "ModuleCatalogOut": {
+        "description": "整份模块清单。",
+        "properties": {
+          "catalog_version": {
+            "title": "Catalog Version",
+            "type": "integer"
+          },
+          "modules": {
+            "items": {
+              "$ref": "#/components/schemas/ModuleTypeOut"
+            },
+            "title": "Modules",
+            "type": "array"
+          }
+        },
+        "required": [
+          "catalog_version",
+          "modules"
+        ],
+        "title": "ModuleCatalogOut",
+        "type": "object"
+      },
+      "ModuleDefaultSizeOut": {
+        "description": "拖进画布时的初始尺寸，与节点几何同一套设计坐标系（像素）。",
+        "properties": {
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "min_height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Height"
+          },
+          "min_width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Width"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "width",
+          "height"
+        ],
+        "title": "ModuleDefaultSizeOut",
+        "type": "object"
+      },
+      "ModuleTypeOut": {
+        "description": "一个模块类型的清单，即前端 manifest 中与渲染无关的那部分。",
+        "properties": {
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/BindingSpecOut"
+            },
+            "title": "Bindings",
+            "type": "array"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "chrome": {
+            "default": "card",
+            "enum": [
+              "bare",
+              "card"
+            ],
+            "title": "Chrome",
+            "type": "string"
+          },
+          "config_schema": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigFieldOut"
+            },
+            "title": "Config Schema",
+            "type": "array"
+          },
+          "default_size": {
+            "$ref": "#/components/schemas/ModuleDefaultSizeOut"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "is_container": {
+            "default": false,
+            "title": "Is Container",
+            "type": "boolean"
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Keywords",
+            "type": "array"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "enum": [
+                  "footer",
+                  "header"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "version": {
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "type",
+          "display_name",
+          "category",
+          "default_size"
+        ],
+        "title": "ModuleTypeOut",
+        "type": "object"
+      },
+      "NodeCreateIn": {
+        "additionalProperties": false,
+        "description": "新增一个节点。",
+        "properties": {
+          "client_key": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Key"
+          },
+          "config_json": {
+            "additionalProperties": true,
+            "title": "Config Json",
+            "type": "object"
+          },
+          "h": {
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "H",
+            "type": "integer"
+          },
+          "is_visible": {
+            "default": true,
+            "title": "Is Visible",
+            "type": "boolean"
+          },
+          "module_type": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9-]*$",
+            "title": "Module Type",
+            "type": "string"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "w": {
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "W",
+            "type": "integer"
+          },
+          "x": {
+            "maximum": 100000.0,
+            "minimum": -100000.0,
+            "title": "X",
+            "type": "integer"
+          },
+          "y": {
+            "maximum": 100000.0,
+            "minimum": -100000.0,
+            "title": "Y",
+            "type": "integer"
+          },
+          "z_index": {
+            "default": 0,
+            "title": "Z Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "module_type",
+          "x",
+          "y",
+          "w",
+          "h"
+        ],
+        "title": "NodeCreateIn",
+        "type": "object"
+      },
+      "NodeOut": {
+        "description": "一个画布节点。id 一经创建永不改变，整树替换也按 id 三路比对。",
+        "properties": {
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/BindingOut"
+            },
+            "title": "Bindings",
+            "type": "array"
+          },
+          "client_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Key"
+          },
+          "config_json": {
+            "additionalProperties": true,
+            "title": "Config Json",
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dashboard_id": {
+            "format": "uuid",
+            "title": "Dashboard Id",
+            "type": "string"
+          },
+          "h": {
+            "title": "H",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_visible": {
+            "title": "Is Visible",
+            "type": "boolean"
+          },
+          "module_type": {
+            "title": "Module Type",
+            "type": "string"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "w": {
+            "title": "W",
+            "type": "integer"
+          },
+          "x": {
+            "title": "X",
+            "type": "integer"
+          },
+          "y": {
+            "title": "Y",
+            "type": "integer"
+          },
+          "z_index": {
+            "title": "Z Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "dashboard_id",
+          "parent_id",
+          "client_key",
+          "module_type",
+          "x",
+          "y",
+          "w",
+          "h",
+          "z_index",
+          "is_visible",
+          "config_json",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "NodeOut",
+        "type": "object"
+      },
+      "NodeUpdateIn": {
+        "additionalProperties": false,
+        "description": "改节点。缺省的字段表示本次不涉及；`parent_id: null` 表示升为顶层。",
+        "properties": {
+          "client_key": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Key"
+          },
+          "config_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config Json"
+          },
+          "h": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "H"
+          },
+          "is_visible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Visible"
+          },
+          "module_type": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Module Type"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "w": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "W"
+          },
+          "x": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": -100000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X"
+          },
+          "y": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": -100000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Y"
+          },
+          "z_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Z Index"
+          }
+        },
+        "title": "NodeUpdateIn",
+        "type": "object"
+      },
       "Page_AcUnitOut_": {
         "properties": {
           "items": {
@@ -2326,6 +5135,37 @@
           "total"
         ],
         "title": "Page[AcUnitOut]",
+        "type": "object"
+      },
+      "Page_DashboardSummaryOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardSummaryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total"
+        ],
+        "title": "Page[DashboardSummaryOut]",
         "type": "object"
       },
       "Page_ModelPredictionOut_": {
@@ -2359,6 +5199,68 @@
         "title": "Page[ModelPredictionOut]",
         "type": "object"
       },
+      "Page_PointOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PointOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total"
+        ],
+        "title": "Page[PointOut]",
+        "type": "object"
+      },
+      "Page_ProjectOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total"
+        ],
+        "title": "Page[ProjectOut]",
+        "type": "object"
+      },
       "Page_RoomOut_": {
         "properties": {
           "items": {
@@ -2390,6 +5292,37 @@
         "title": "Page[RoomOut]",
         "type": "object"
       },
+      "Page_SourceOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SourceOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total"
+        ],
+        "title": "Page[SourceOut]",
+        "type": "object"
+      },
       "Page_WorkshopOut_": {
         "properties": {
           "items": {
@@ -2419,6 +5352,401 @@
           "total"
         ],
         "title": "Page[WorkshopOut]",
+        "type": "object"
+      },
+      "PointBatchOut": {
+        "description": "一次批量建点的结果。\n\n⚠ `address_checks` 每条寻址串都有一项，没结论的那些标 `unverified`：\n漏掉它们，界面就分不清「校过且没问题」与「根本没校成」。",
+        "properties": {
+          "address_checks": {
+            "items": {
+              "$ref": "#/components/schemas/AddressCheckOut"
+            },
+            "title": "Address Checks",
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PointOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "address_checks"
+        ],
+        "title": "PointBatchOut",
+        "type": "object"
+      },
+      "PointCreateIn": {
+        "additionalProperties": false,
+        "description": "批量建点。\n\n⚠ 一批只能对一个数据源：寻址串校验要按数据源问采集侧，混着多个源就得发\n多次往返，而其中一次超时会让这一批处于「一半校过一半没校」的状态。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PointItemIn"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "items"
+        ],
+        "title": "PointCreateIn",
+        "type": "object"
+      },
+      "PointItemIn": {
+        "additionalProperties": false,
+        "description": "批量里的一个点位。数据源在批的层面上给，一批只对一个源。",
+        "properties": {
+          "address": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Address",
+            "type": "string"
+          },
+          "archive_enabled": {
+            "default": true,
+            "title": "Archive Enabled",
+            "type": "boolean"
+          },
+          "archive_max_interval_ms": {
+            "default": 60000,
+            "exclusiveMinimum": 0.0,
+            "title": "Archive Max Interval Ms",
+            "type": "integer"
+          },
+          "archive_retention_days": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Retention Days"
+          },
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "title": "Code",
+            "type": "string"
+          },
+          "data_type": {
+            "default": "float",
+            "enum": [
+              "bool",
+              "float",
+              "int",
+              "string"
+            ],
+            "title": "Data Type",
+            "type": "string"
+          },
+          "deadband": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Deadband",
+            "type": "number"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "sampling_interval_ms": {
+            "default": 1000,
+            "minimum": 50.0,
+            "title": "Sampling Interval Ms",
+            "type": "integer"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "address"
+        ],
+        "title": "PointItemIn",
+        "type": "object"
+      },
+      "PointOut": {
+        "description": "一个点位。`node_key` 是它在全系统里的身份。",
+        "properties": {
+          "address": {
+            "title": "Address",
+            "type": "string"
+          },
+          "archive_enabled": {
+            "title": "Archive Enabled",
+            "type": "boolean"
+          },
+          "archive_max_interval_ms": {
+            "title": "Archive Max Interval Ms",
+            "type": "integer"
+          },
+          "archive_retention_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Retention Days"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data_type": {
+            "enum": [
+              "bool",
+              "float",
+              "int",
+              "string"
+            ],
+            "title": "Data Type",
+            "type": "string"
+          },
+          "deadband": {
+            "title": "Deadband",
+            "type": "number"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_key": {
+            "title": "Node Key",
+            "type": "string"
+          },
+          "sampling_interval_ms": {
+            "title": "Sampling Interval Ms",
+            "type": "integer"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source_id",
+          "node_key",
+          "code",
+          "name",
+          "address",
+          "data_type",
+          "unit",
+          "sampling_interval_ms",
+          "deadband",
+          "archive_enabled",
+          "archive_max_interval_ms",
+          "archive_retention_days",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PointOut",
+        "type": "object"
+      },
+      "PointSavedOut": {
+        "description": "一次改点位的结果，带这次寻址串校验的结论。",
+        "properties": {
+          "address_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AddressCheckOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "point": {
+            "$ref": "#/components/schemas/PointOut"
+          }
+        },
+        "required": [
+          "point",
+          "address_check"
+        ],
+        "title": "PointSavedOut",
+        "type": "object"
+      },
+      "PointUpdateIn": {
+        "additionalProperties": false,
+        "description": "改点位。缺省的字段不动。\n\n⚠ `code` 不在这里：它是点位的身份，改名等于换身份，历史归旧编码\n（docs/COLLECT_DESIGN.md §2）。",
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "archive_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Enabled"
+          },
+          "archive_max_interval_ms": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Max Interval Ms"
+          },
+          "archive_retention_days": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Retention Days"
+          },
+          "data_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "bool",
+                  "float",
+                  "int",
+                  "string"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Type"
+          },
+          "deadband": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadband"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "sampling_interval_ms": {
+            "anyOf": [
+              {
+                "minimum": 50.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sampling Interval Ms"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "title": "PointUpdateIn",
         "type": "object"
       },
       "PredictIn": {
@@ -2587,6 +5915,163 @@
           }
         },
         "title": "PredictReadingsIn",
+        "type": "object"
+      },
+      "ProjectCreateIn": {
+        "additionalProperties": false,
+        "description": "建项目。",
+        "properties": {
+          "brand_json": {
+            "additionalProperties": true,
+            "title": "Brand Json",
+            "type": "object"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "theme_json": {
+            "additionalProperties": true,
+            "title": "Theme Json",
+            "type": "object"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ProjectCreateIn",
+        "type": "object"
+      },
+      "ProjectOut": {
+        "description": "项目详情。`dashboard_count` 让列表页一眼看出规模。",
+        "properties": {
+          "brand_json": {
+            "additionalProperties": true,
+            "title": "Brand Json",
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dashboard_count": {
+            "title": "Dashboard Count",
+            "type": "integer"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "theme_json": {
+            "additionalProperties": true,
+            "title": "Theme Json",
+            "type": "object"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "theme_json",
+          "brand_json",
+          "dashboard_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ProjectOut",
+        "type": "object"
+      },
+      "ProjectUpdateIn": {
+        "additionalProperties": false,
+        "description": "改项目。缺省的字段表示本次不涉及。",
+        "properties": {
+          "brand_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Json"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "theme_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theme Json"
+          }
+        },
+        "title": "ProjectUpdateIn",
         "type": "object"
       },
       "RawSampleOut": {
@@ -2987,6 +6472,43 @@
         "title": "RecommendOut",
         "type": "object"
       },
+      "ReplaceLayoutIn": {
+        "additionalProperties": false,
+        "description": "整树替换。\n\n⚠ `expected_version` 必填：不带版本断言的整树替换就是「最后写入者获胜」，\n人与 Agent 同时在场时一方的改动会被静默抹掉（ADR-0012 二）。",
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/LayoutNodeIn"
+            },
+            "maxItems": 2000,
+            "title": "Nodes",
+            "type": "array"
+          },
+          "schema_version": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema Version"
+          }
+        },
+        "required": [
+          "expected_version",
+          "nodes"
+        ],
+        "title": "ReplaceLayoutIn",
+        "type": "object"
+      },
       "RoomCreateIn": {
         "additionalProperties": false,
         "description": "建房间。房间必定属于某个车间。",
@@ -3134,6 +6656,85 @@
         "title": "SeriesPointOut",
         "type": "object"
       },
+      "SourceCreateIn": {
+        "additionalProperties": false,
+        "description": "新建一个数据源。",
+        "properties": {
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "title": "Code",
+            "type": "string"
+          },
+          "credential": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential"
+          },
+          "endpoint": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Endpoint",
+            "type": "string"
+          },
+          "is_enabled": {
+            "default": true,
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "options_json": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "maxProperties": 32,
+            "title": "Options Json",
+            "type": "object"
+          },
+          "poll_interval_ms": {
+            "default": 1000,
+            "minimum": 50.0,
+            "title": "Poll Interval Ms",
+            "type": "integer"
+          },
+          "protocol": {
+            "const": "opcua",
+            "title": "Protocol",
+            "type": "string"
+          },
+          "read_mode": {
+            "default": "subscribe",
+            "enum": [
+              "poll",
+              "subscribe"
+            ],
+            "title": "Read Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "code",
+          "protocol",
+          "endpoint"
+        ],
+        "title": "SourceCreateIn",
+        "type": "object"
+      },
       "SourceObjectOut": {
         "description": "外部库里一个可绑定的对象。`caption` 取不到时给 null。",
         "properties": {
@@ -3189,6 +6790,91 @@
         "title": "SourceObjectsOut",
         "type": "object"
       },
+      "SourceOut": {
+        "description": "一个数据源。\n\n⚠ 没有凭据字段：口令只进 `credential_enc`，任何出参都不回它。\n`has_credential` 只说「配没配过」，够界面判断了。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "endpoint": {
+            "title": "Endpoint",
+            "type": "string"
+          },
+          "has_credential": {
+            "title": "Has Credential",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "options_json": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Options Json",
+            "type": "object"
+          },
+          "point_count": {
+            "title": "Point Count",
+            "type": "integer"
+          },
+          "poll_interval_ms": {
+            "title": "Poll Interval Ms",
+            "type": "integer"
+          },
+          "protocol": {
+            "const": "opcua",
+            "title": "Protocol",
+            "type": "string"
+          },
+          "read_mode": {
+            "enum": [
+              "poll",
+              "subscribe"
+            ],
+            "title": "Read Mode",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "code",
+          "protocol",
+          "endpoint",
+          "has_credential",
+          "options_json",
+          "read_mode",
+          "poll_interval_ms",
+          "is_enabled",
+          "point_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SourceOut",
+        "type": "object"
+      },
       "SourceRangeOut": {
         "description": "外部数据源里实际有数据的那一段。",
         "properties": {
@@ -3208,6 +6894,106 @@
           "end"
         ],
         "title": "SourceRangeOut",
+        "type": "object"
+      },
+      "SourceUpdateIn": {
+        "additionalProperties": false,
+        "description": "改数据源。缺省的字段不动。\n\n⚠ `code` 不在这里：编码是数据源的身份，改名等于换身份，历史会断成两段\n（docs/COLLECT_DESIGN.md §2）。要换名字就新建一个。",
+        "properties": {
+          "credential": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential"
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
+          },
+          "is_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Enabled"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "options_json": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "maxProperties": 32,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options Json"
+          },
+          "poll_interval_ms": {
+            "anyOf": [
+              {
+                "minimum": 50.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poll Interval Ms"
+          },
+          "read_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "poll",
+                  "subscribe"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read Mode"
+          }
+        },
+        "title": "SourceUpdateIn",
         "type": "object"
       },
       "StartupBatchOut": {
@@ -3610,6 +7396,34 @@
         "title": "ValidationError",
         "type": "object"
       },
+      "ValidationReportOut": {
+        "description": "一次自检的结果。`is_valid` 为假时 `issues` 列全部问题，不止第一条。",
+        "properties": {
+          "dashboard_id": {
+            "format": "uuid",
+            "title": "Dashboard Id",
+            "type": "string"
+          },
+          "is_valid": {
+            "title": "Is Valid",
+            "type": "boolean"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/LayoutIssueOut"
+            },
+            "title": "Issues",
+            "type": "array"
+          }
+        },
+        "required": [
+          "dashboard_id",
+          "is_valid",
+          "issues"
+        ],
+        "title": "ValidationReportOut",
+        "type": "object"
+      },
       "WorkshopCreateIn": {
         "additionalProperties": false,
         "description": "建车间。",
@@ -3708,6 +7522,46 @@
           }
         },
         "title": "WorkshopUpdateIn",
+        "type": "object"
+      },
+      "WriteIn": {
+        "additionalProperties": false,
+        "description": "向现场下发一个写值。",
+        "properties": {
+          "value": {
+            "description": "写下去的值，类型由点位的 data_type 决定",
+            "title": "Value"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "title": "WriteIn",
+        "type": "object"
+      },
+      "WriteOut": {
+        "description": "一次下发的结论。",
+        "properties": {
+          "is_written": {
+            "title": "Is Written",
+            "type": "boolean"
+          },
+          "node_key": {
+            "title": "Node Key",
+            "type": "string"
+          },
+          "point_id": {
+            "format": "uuid",
+            "title": "Point Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "point_id",
+          "node_key",
+          "is_written"
+        ],
+        "title": "WriteOut",
         "type": "object"
       }
     }
@@ -5000,6 +8854,2064 @@
         ]
       }
     },
+    "/api/v1/platform/collect-points": {
+      "get": {
+        "description": "分页列出点位。`q` 按名字与编码模糊搜，Agent 找点用它。\n\nArgs: session, page, _viewer, source_id, q。",
+        "operationId": "list_points_api_v1_platform_collect_points_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "source_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Page_PointOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "点位列表",
+        "tags": [
+          "collect-point"
+        ]
+      },
+      "post": {
+        "description": "批量建点，保存前先让现场校验寻址串。支持 `Idempotency-Key`。\n\nArgs: payload, session, response, write。",
+        "operationId": "create_points_api_v1_platform_collect_points_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PointCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PointBatchOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "批量创建点位",
+        "tags": [
+          "collect-point"
+        ]
+      }
+    },
+    "/api/v1/platform/collect-points/{point_id}": {
+      "delete": {
+        "description": "删点位。被大屏绑着就 409 并列出那些大屏。\n\nArgs: point_id, session, write。",
+        "operationId": "delete_point_api_v1_platform_collect_points__point_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "point_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Point Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除点位",
+        "tags": [
+          "collect-point"
+        ]
+      },
+      "patch": {
+        "description": "改点位。改了寻址串就重新校验一次。\n\nArgs: point_id, payload, session, write。",
+        "operationId": "update_point_api_v1_platform_collect_points__point_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "point_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Point Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PointUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PointSavedOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "更新点位",
+        "tags": [
+          "collect-point"
+        ]
+      }
+    },
+    "/api/v1/platform/collect-points/{point_id}:write": {
+      "post": {
+        "description": "向现场下发一个写值。幂等键**必填**，超时按不可重试处理。\n\nArgs: point_id, payload, session, write。",
+        "operationId": "write_point_api_v1_platform_collect_points__point_id__write_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "point_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Point Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_WriteOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "下发写值",
+        "tags": [
+          "collect-point"
+        ]
+      }
+    },
+    "/api/v1/platform/collect-sources": {
+      "get": {
+        "description": "分页列出数据源。\n\nArgs: session, page, _viewer, q, protocol, is_enabled。",
+        "operationId": "list_sources_api_v1_platform_collect_sources_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "protocol",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Protocol"
+            }
+          },
+          {
+            "in": "query",
+            "name": "is_enabled",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Is Enabled"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Page_SourceOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "数据源列表",
+        "tags": [
+          "collect-source"
+        ]
+      },
+      "post": {
+        "description": "建数据源。支持 `Idempotency-Key`。\n\nArgs: payload, session, response, write。",
+        "operationId": "create_source_api_v1_platform_collect_sources_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_SourceOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "创建数据源",
+        "tags": [
+          "collect-source"
+        ]
+      }
+    },
+    "/api/v1/platform/collect-sources/{source_id}": {
+      "delete": {
+        "description": "删数据源。下面还有点位时先删点位。\n\nArgs: source_id, session, write。",
+        "operationId": "delete_source_api_v1_platform_collect_sources__source_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除数据源",
+        "tags": [
+          "collect-source"
+        ]
+      },
+      "get": {
+        "description": "数据源详情。\n\nArgs: source_id, session, _viewer。",
+        "operationId": "read_source_api_v1_platform_collect_sources__source_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_SourceOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "数据源详情",
+        "tags": [
+          "collect-source"
+        ]
+      },
+      "patch": {
+        "description": "改数据源。\n\nArgs: source_id, payload, session, write。",
+        "operationId": "update_source_api_v1_platform_collect_sources__source_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_SourceOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "更新数据源",
+        "tags": [
+          "collect-source"
+        ]
+      }
+    },
+    "/api/v1/platform/collect-sources/{source_id}:browse": {
+      "post": {
+        "description": "浏览地址空间。**平台侧不建连接**，由持有会话的采集进程执行。\n\nArgs: source_id, payload, session, write。",
+        "operationId": "browse_source_api_v1_platform_collect_sources__source_id__browse_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrowseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_BrowseOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "浏览地址空间",
+        "tags": [
+          "collect-source"
+        ]
+      }
+    },
+    "/api/v1/platform/collect-sources/{source_id}:test": {
+      "post": {
+        "description": "走命令总线问采集侧能不能连上。不可达也是 200 + 结论。\n\nArgs: source_id, session, write。",
+        "operationId": "test_source_api_v1_platform_collect_sources__source_id__test_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ConnectivityOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "连通性测试",
+        "tags": [
+          "collect-source"
+        ]
+      }
+    },
+    "/api/v1/platform/dashboard-bindings": {
+      "get": {
+        "description": "一个节点的全部绑定。集合有界（槽位由模块清单定死），故不分页。\n\nArgs: node_id, session, _viewer。",
+        "operationId": "list_bindings_api_v1_platform_dashboard_bindings_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Node Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_BindingOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "绑定列表",
+        "tags": [
+          "dashboard-binding"
+        ]
+      }
+    },
+    "/api/v1/platform/dashboard-bindings/{binding_id}": {
+      "delete": {
+        "description": "删绑定。\n\nArgs: binding_id, session, _write。",
+        "operationId": "delete_binding_api_v1_platform_dashboard_bindings__binding_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "binding_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Binding Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除绑定",
+        "tags": [
+          "dashboard-binding"
+        ]
+      },
+      "patch": {
+        "description": "改绑定。换槽要删了重建。\n\nArgs: binding_id, payload, session, write。",
+        "operationId": "update_binding_api_v1_platform_dashboard_bindings__binding_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "binding_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Binding Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindingUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_BindingOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "更新绑定",
+        "tags": [
+          "dashboard-binding"
+        ]
+      }
+    },
+    "/api/v1/platform/dashboard-nodes": {
+      "get": {
+        "description": "一张大屏的全部节点。集合有界（一屏节点数有上限），故不分页。\n\nArgs: dashboard_id, session, _viewer。",
+        "operationId": "list_nodes_api_v1_platform_dashboard_nodes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "dashboard_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Dashboard Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_NodeOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "节点列表",
+        "tags": [
+          "dashboard-node"
+        ]
+      }
+    },
+    "/api/v1/platform/dashboard-nodes/{node_id}": {
+      "delete": {
+        "description": "删节点，连它的子树。\n\nArgs: node_id, session, _write。",
+        "operationId": "delete_node_api_v1_platform_dashboard_nodes__node_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除节点",
+        "tags": [
+          "dashboard-node"
+        ]
+      },
+      "get": {
+        "description": "节点详情，连绑定一起给。\n\nArgs: node_id, session, _viewer。",
+        "operationId": "read_node_api_v1_platform_dashboard_nodes__node_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Node Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_NodeOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "节点详情",
+        "tags": [
+          "dashboard-node"
+        ]
+      },
+      "patch": {
+        "description": "改节点。id 不变。\n\nArgs: node_id, payload, session, write。",
+        "operationId": "update_node_api_v1_platform_dashboard_nodes__node_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NodeUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_NodeOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "更新节点",
+        "tags": [
+          "dashboard-node"
+        ]
+      }
+    },
+    "/api/v1/platform/dashboard-nodes/{node_id}/bindings": {
+      "post": {
+        "description": "建绑定。支持 `Idempotency-Key`。\n\nArgs: node_id, payload, session, response, write。",
+        "operationId": "create_binding_api_v1_platform_dashboard_nodes__node_id__bindings_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindingCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_BindingOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "新增绑定",
+        "tags": [
+          "dashboard-binding"
+        ]
+      }
+    },
+    "/api/v1/platform/dashboard-projects": {
+      "get": {
+        "description": "分页列出项目。\n\nArgs: session, page, _viewer, q, sort。",
+        "operationId": "list_projects_api_v1_platform_dashboard_projects_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Page_ProjectOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "项目列表",
+        "tags": [
+          "dashboard-project"
+        ]
+      },
+      "post": {
+        "description": "建项目。支持 `Idempotency-Key`。\n\nArgs: payload, session, response, write。",
+        "operationId": "create_project_api_v1_platform_dashboard_projects_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ProjectOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "创建项目",
+        "tags": [
+          "dashboard-project"
+        ]
+      }
+    },
+    "/api/v1/platform/dashboard-projects/{project_id}": {
+      "delete": {
+        "description": "删项目。下面还有大屏时先删大屏。\n\nArgs: project_id, session, _write。",
+        "operationId": "delete_project_api_v1_platform_dashboard_projects__project_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除项目",
+        "tags": [
+          "dashboard-project"
+        ]
+      },
+      "get": {
+        "description": "项目详情。\n\nArgs: project_id, session, _viewer。",
+        "operationId": "read_project_api_v1_platform_dashboard_projects__project_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ProjectOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "项目详情",
+        "tags": [
+          "dashboard-project"
+        ]
+      },
+      "patch": {
+        "description": "改项目。\n\nArgs: project_id, payload, session, _write。",
+        "operationId": "update_project_api_v1_platform_dashboard_projects__project_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ProjectOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "更新项目",
+        "tags": [
+          "dashboard-project"
+        ]
+      }
+    },
+    "/api/v1/platform/dashboards": {
+      "get": {
+        "description": "分页列出大屏，不带节点树。\n\nArgs: session, page, _viewer, project_id, q, sort。",
+        "operationId": "list_dashboards_api_v1_platform_dashboards_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Page_DashboardSummaryOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "大屏列表",
+        "tags": [
+          "dashboard"
+        ]
+      },
+      "post": {
+        "description": "建大屏。支持 `Idempotency-Key`。\n\nArgs: payload, session, response, write。",
+        "operationId": "create_dashboard_api_v1_platform_dashboards_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DashboardCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_DashboardOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "创建大屏",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
+    "/api/v1/platform/dashboards/{dashboard_id}": {
+      "delete": {
+        "description": "删大屏，节点与绑定一并消失。\n\nArgs: dashboard_id, session, _write。",
+        "operationId": "delete_dashboard_api_v1_platform_dashboards__dashboard_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dashboard_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Dashboard Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除大屏",
+        "tags": [
+          "dashboard"
+        ]
+      },
+      "get": {
+        "description": "加载一张大屏，运行时与编辑器共用。\n\nArgs: dashboard_id, session, _viewer。",
+        "operationId": "read_dashboard_api_v1_platform_dashboards__dashboard_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dashboard_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Dashboard Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_DashboardOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "加载大屏",
+        "tags": [
+          "dashboard"
+        ]
+      },
+      "patch": {
+        "description": "改大屏元数据。\n\nArgs: dashboard_id, payload, session, _write。",
+        "operationId": "update_dashboard_api_v1_platform_dashboards__dashboard_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dashboard_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Dashboard Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DashboardUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_DashboardOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "更新大屏元数据",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
+    "/api/v1/platform/dashboards/{dashboard_id}/nodes": {
+      "post": {
+        "description": "建节点。支持 `Idempotency-Key`。\n\nArgs: dashboard_id, payload, session, response, write。",
+        "operationId": "create_node_api_v1_platform_dashboards__dashboard_id__nodes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dashboard_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Dashboard Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NodeCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_NodeOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "新增节点",
+        "tags": [
+          "dashboard-node"
+        ]
+      }
+    },
+    "/api/v1/platform/dashboards/{dashboard_id}:replace-layout": {
+      "post": {
+        "description": "整棵树替换，必带 `expected_version`。\n\nArgs: dashboard_id, payload, session, write。",
+        "operationId": "replace_layout_api_v1_platform_dashboards__dashboard_id__replace_layout_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dashboard_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Dashboard Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceLayoutIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_DashboardOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "整树替换",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
+    "/api/v1/platform/dashboards/{dashboard_id}:validate": {
+      "post": {
+        "description": "列出这张大屏上全部悬空引用，不改任何东西。\n\nArgs: dashboard_id, session, context, _viewer。",
+        "operationId": "validate_dashboard_api_v1_platform_dashboards__dashboard_id__validate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dashboard_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Dashboard Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ValidationReportOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "大屏自检",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
     "/api/v1/platform/health": {
       "get": {
         "operationId": "health_api_v1_platform_health_get",
@@ -5016,6 +10928,206 @@
         "summary": "存活探针",
         "tags": [
           "probe"
+        ]
+      }
+    },
+    "/api/v1/platform/module-types": {
+      "get": {
+        "description": "全部模块类型及其配置字段与绑定槽。\n\nArgs: container, _viewer。",
+        "operationId": "list_module_types_api_v1_platform_module_types_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModuleCatalogOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "模块清单",
+        "tags": [
+          "module-type"
+        ]
+      }
+    },
+    "/api/v1/platform/module-types/{module_type}": {
+      "get": {
+        "description": "单个模块类型的配置字段与绑定槽。\n\nArgs: module_type, container, _viewer。",
+        "operationId": "read_module_type_api_v1_platform_module_types__module_type__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "module_type",
+            "required": true,
+            "schema": {
+              "title": "Module Type",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModuleTypeOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "模块清单详情",
+        "tags": [
+          "module-type"
+        ]
+      }
+    },
+    "/api/v1/platform/point-histories": {
+      "get": {
+        "description": "按点位与时间区间取历史读数。**游标分页**。\n\nArgs: source, page, _viewer, node_keys, range_start, range_end。",
+        "operationId": "list_history_api_v1_platform_point_histories_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "node_keys",
+            "required": true,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 50,
+              "title": "Node Keys",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "range_start",
+            "required": true,
+            "schema": {
+              "title": "Range Start",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "range_end",
+            "required": true,
+            "schema": {
+              "title": "Range End",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_CursorPage_HistoryPointOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "点位历史",
+        "tags": [
+          "point-history"
+        ]
+      }
+    },
+    "/api/v1/platform/point-histories:aggregate": {
+      "post": {
+        "description": "按窗口分桶聚合，响应回显它用的时区口径。\n\nArgs: payload, source, container, _viewer。",
+        "operationId": "aggregate_history_api_v1_platform_point_histories_aggregate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AggregateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AggregateOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "历史分桶聚合",
+        "tags": [
+          "point-history"
         ]
       }
     },

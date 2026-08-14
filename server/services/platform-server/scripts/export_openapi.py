@@ -34,6 +34,7 @@ def _export_settings() -> Settings:
         sqlserver_database=_PLACEHOLDER,
         redis_host=_PLACEHOLDER,
         edge_signing_secret=_PLACEHOLDER_SECRET,
+        edge_service_key=_PLACEHOLDER_SECRET,
     )
 
 
