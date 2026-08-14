@@ -64,6 +64,32 @@ function latest(): FakeSocket {
   return socket
 }
 
+/**
+ * 一条载荷帧，字段照 hub 的 `publisher.py::_envelope` 拼全。
+ *
+ * ⚠ 别在用例里手搓半截帧：少了 `ts`/`seq` 的帧 hub 根本发不出来，
+ * 拿它测「分发」等于在测一条现实中不存在的路径。
+ * Args: topic, payload。
+ */
+function dataFrame(topic: string, payload: unknown): string {
+  return JSON.stringify({
+    type: 'data',
+    topic,
+    ts: '2026-08-14T09:30:00.000Z',
+    seq: 1,
+    payload,
+    trace_id: '0af7651916cd43dd8448eb211c80319c',
+  })
+}
+
+/** 取最近一次发出的 `subscribe` 动作里的 topic。 */
+function sentTopics(socket: FakeSocket, action: string): string[] {
+  return socket.sent
+    .map((raw) => JSON.parse(raw) as Record<string, unknown>)
+    .filter((message) => message['action'] === action)
+    .map((message) => String(message['topic']))
+}
+
 beforeEach(() => {
   vi.useFakeTimers()
   setActivePinia(createPinia())
@@ -96,13 +122,9 @@ describe('实时通道', () => {
     const channel = useRealtimeChannel()
     latest().emit('open')
     const off = channel.subscribe('opcua:1', () => {})
-    expect(latest().sent).toContain(
-      JSON.stringify({ action: 'subscribe', topic: 'opcua:1' }),
-    )
+    expect(sentTopics(latest(), 'subscribe')).toContain('opcua:1')
     off()
-    expect(latest().sent).toContain(
-      JSON.stringify({ action: 'unsubscribe', topic: 'opcua:1' }),
-    )
+    expect(sentTopics(latest(), 'unsubscribe')).toContain('opcua:1')
   })
 
   it('⚠ 还有人在看时不退订', () => {
@@ -124,13 +146,7 @@ describe('实时通道', () => {
     const other: unknown[] = []
     channel.subscribe('opcua:1', (payload) => mine.push(payload))
     channel.subscribe('opcua:2', (payload) => other.push(payload))
-    latest().emit('message', {
-      data: JSON.stringify({
-        type: 'data',
-        topic: 'opcua:1',
-        payload: { items: [1] },
-      }),
-    })
+    latest().emit('message', { data: dataFrame('opcua:1', { items: [1] }) })
     expect(mine).toEqual([{ items: [1] }])
     expect(other).toEqual([])
   })
@@ -152,9 +168,68 @@ describe('实时通道', () => {
     latest().emit('close', { code: 1006 })
     vi.advanceTimersByTime(1000)
     latest().emit('open')
-    expect(latest().sent).toContain(
-      JSON.stringify({ action: 'subscribe', topic: 'opcua:1' }),
+    expect(sentTopics(latest(), 'subscribe')).toContain('opcua:1')
+  })
+
+  it('⚠ 收到 reauth_required 就换票，不然到期必被 4001 关掉', () => {
+    const channel = useRealtimeChannel()
+    latest().emit('open')
+    channel.subscribe('opcua:1', () => {})
+    latest().emit('message', {
+      data: JSON.stringify({ type: 'system', event: 'reauth_required' }),
+    })
+    const actions = latest().sent.map(
+      (raw) => (JSON.parse(raw) as Record<string, unknown>)['action'],
     )
+    expect(actions).toContain('reauth')
+  })
+
+  it('⚠ 服务端退掉的主题不许在重连时被重订', () => {
+    // 权限被收回后 hub 单方面退订；本地不删的话，每次重连都会再订一次
+    // 同一个必然被拒的主题，而本地还以为自己订着
+    const channel = useRealtimeChannel()
+    latest().emit('open')
+    channel.subscribe('opcua:1', () => {})
+    channel.subscribe('opcua:2', () => {})
+    latest().emit('message', {
+      data: JSON.stringify({
+        type: 'system',
+        event: 'unsubscribed',
+        topic: 'opcua:1',
+        reason: 'permission_revoked',
+      }),
+    })
+    latest().emit('close', { code: 1006 })
+    vi.advanceTimersByTime(1000)
+    latest().emit('open')
+    const resubscribed = sentTopics(latest(), 'subscribe')
+    expect(resubscribed).toContain('opcua:2')
+    expect(resubscribed).not.toContain('opcua:1')
+  })
+
+  it('⚠ 被退掉的主题也不再收到推送', () => {
+    const channel = useRealtimeChannel()
+    latest().emit('open')
+    const seen: unknown[] = []
+    channel.subscribe('opcua:1', (payload) => seen.push(payload))
+    latest().emit('message', {
+      data: JSON.stringify({
+        type: 'system',
+        event: 'unsubscribed',
+        topic: 'opcua:1',
+        reason: 'permission_revoked',
+      }),
+    })
+    latest().emit('message', { data: dataFrame('opcua:1', { items: [1] }) })
+    expect(seen).toEqual([])
+  })
+
+  it('⚠ 握手被拒（1008）不再重连——换票没用，要回登录态', () => {
+    // 拿同一张验不过的票重试，只会打满退避上限空转
+    useRealtimeChannel()
+    latest().emit('close', { code: 1008 })
+    vi.advanceTimersByTime(60_000)
+    expect(FakeSocket.instances).toHaveLength(1)
   })
 
   it('⚠ 重连退避：第二次要等更久', () => {
