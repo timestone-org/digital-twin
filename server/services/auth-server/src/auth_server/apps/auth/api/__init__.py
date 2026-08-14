@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from auth_server.apps.auth.api import (
+    api_keys,
     internal,
     permissions,
     roles,
@@ -14,6 +15,7 @@ from auth_server.apps.auth.api import (
 ROUTERS: tuple[APIRouter, ...] = (
     sessions.router,
     users.router,
+    api_keys.router,
     roles.router,
     permissions.router,
     route_rules.router,

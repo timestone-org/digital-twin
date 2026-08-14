@@ -1,6 +1,274 @@
 {
   "components": {
     "schemas": {
+      "ApiKeyCreateIn": {
+        "additionalProperties": false,
+        "description": "签发一枚密钥。\n\n⚠ `expires_in_days` 没有默认值，`null` 要显式写出来：一枚永不过期的密钥\n必须是有人主动选的，不能是漏填字段的结果。",
+        "properties": {
+          "expires_in_days": {
+            "anyOf": [
+              {
+                "maximum": 3650.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires In Days"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "expires_in_days"
+        ],
+        "title": "ApiKeyCreateIn",
+        "type": "object"
+      },
+      "ApiKeyOut": {
+        "description": "一枚密钥的元信息。`is_active` = 未吊销且未过期。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "prefix": {
+            "title": "Prefix",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "user_id",
+          "name",
+          "prefix",
+          "is_active",
+          "created_at"
+        ],
+        "title": "ApiKeyOut",
+        "type": "object"
+      },
+      "ApiKeySecretOut": {
+        "description": "签发结果。`secret` 是明文，**只此一次**。",
+        "properties": {
+          "api_key": {
+            "$ref": "#/components/schemas/ApiKeyOut"
+          },
+          "secret": {
+            "title": "Secret",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key",
+          "secret"
+        ],
+        "title": "ApiKeySecretOut",
+        "type": "object"
+      },
+      "ApiResponse_ApiKeyOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApiKeyOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ApiKeyOut]",
+        "type": "object"
+      },
+      "ApiResponse_ApiKeySecretOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApiKeySecretOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ApiKeySecretOut]",
+        "type": "object"
+      },
+      "ApiResponse_Page_ApiKeyOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page_ApiKeyOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Page[ApiKeyOut]]",
+        "type": "object"
+      },
       "ApiResponse_Page_RoleOut__": {
         "properties": {
           "code": {
@@ -516,6 +784,37 @@
           }
         },
         "title": "MeUpdateIn",
+        "type": "object"
+      },
+      "Page_ApiKeyOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ApiKeyOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total"
+        ],
+        "title": "Page[ApiKeyOut]",
         "type": "object"
       },
       "Page_RoleOut_": {
@@ -1708,6 +2007,224 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/auth/api-keys": {
+      "get": {
+        "description": "分页列出密钥。只出前缀，明文不在这里。\n\nArgs: session, container, page, filters, _viewer。",
+        "operationId": "list_api_keys_api_v1_auth_api_keys_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "should_include_revoked",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Should Include Revoked",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Page_ApiKeyOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "API 密钥列表",
+        "tags": [
+          "api-key"
+        ]
+      },
+      "post": {
+        "description": "签发。目标账号权限高于自己时拒绝。\n\nArgs: payload, session, container, operation, _manager。",
+        "operationId": "issue_api_key_api_v1_auth_api_keys_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiKeyCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ApiKeySecretOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "签发 API 密钥",
+        "tags": [
+          "api-key"
+        ]
+      }
+    },
+    "/api/v1/auth/api-keys/{key_id}:revoke": {
+      "post": {
+        "description": "吊销后立即失效，重复吊销无副作用。\n\nArgs: key_id, session, container, operation, _manager。",
+        "operationId": "revoke_api_key_api_v1_auth_api_keys__key_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Key Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ApiKeyOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "吊销 API 密钥",
+        "tags": [
+          "api-key"
+        ]
+      }
+    },
     "/api/v1/auth/health": {
       "get": {
         "operationId": "health_api_v1_auth_health_get",

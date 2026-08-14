@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from auth_server.apps.auth.services import (
+    ApiKeyService,
     AuthService,
     RouteRuleCache,
     TokenService,
@@ -25,6 +26,7 @@ class Container:
     cache: Cache
     hasher: PasswordHasher
     tokens: TokenService
+    api_keys: ApiKeyService
     auth: AuthService
     verify: VerifyService
     rules: RouteRuleCache
@@ -96,17 +98,26 @@ def build_container(settings: Settings, *, clock: Clock = utcnow) -> Container:
     hasher = PasswordHasher()
     tokens = _build_tokens(settings, cache)
     rules = RouteRuleCache(clock=clock)
+    api_keys = ApiKeyService(
+        hasher=hasher,
+        cache=cache,
+        clock=clock,
+        verify_cache_ttl_s=settings.api_key_verify_cache_ttl_s,
+        touch_interval_s=settings.api_key_touch_interval_s,
+    )
     return Container(
         settings=settings,
         database=_build_database(settings),
         cache=cache,
         hasher=hasher,
         tokens=tokens,
+        api_keys=api_keys,
         auth=_build_auth(
             settings, cache=cache, hasher=hasher, tokens=tokens, clock=clock
         ),
         verify=VerifyService(
             tokens=tokens,
+            api_keys=api_keys,
             rules=rules,
             signing_secret=(settings.edge_signing_secret.get_secret_value()),
             header_ttl_s=settings.edge_permission_ttl_s,

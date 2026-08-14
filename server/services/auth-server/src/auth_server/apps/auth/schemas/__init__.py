@@ -1,5 +1,11 @@
 """认证模块的对外模型。任何层都可读。"""
 
+from auth_server.apps.auth.schemas.api_key import (
+    ApiKeyCreateIn,
+    ApiKeyFilters,
+    ApiKeyOut,
+    ApiKeySecretOut,
+)
 from auth_server.apps.auth.schemas.common import (
     InputModel,
     OutputModel,
@@ -50,6 +56,10 @@ from auth_server.apps.auth.schemas.user import (
 )
 
 __all__ = [
+    "ApiKeyCreateIn",
+    "ApiKeyFilters",
+    "ApiKeyOut",
+    "ApiKeySecretOut",
     "AssignRoleIn",
     "ChangePasswordIn",
     "HttpMethod",

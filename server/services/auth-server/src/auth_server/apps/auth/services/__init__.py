@@ -3,6 +3,10 @@
 事务边界在这一层：crud 不提交，api 不写业务。
 """
 
+from auth_server.apps.auth.services.api_key_service import (
+    ApiKeyService,
+    looks_like_api_key,
+)
 from auth_server.apps.auth.services.auth_service import AuthService
 from auth_server.apps.auth.services.identity import (
     Identity,
@@ -30,6 +34,7 @@ from auth_server.apps.auth.services.token_service import (
 from auth_server.apps.auth.services.verify_service import VerifyService
 
 __all__ = [
+    "ApiKeyService",
     "AuthService",
     "Decision",
     "DecisionReason",
@@ -45,6 +50,7 @@ __all__ = [
     "is_redundant",
     "load_identity",
     "load_identity_by_id",
+    "looks_like_api_key",
     "normalize_path",
     "sort_key",
 ]
