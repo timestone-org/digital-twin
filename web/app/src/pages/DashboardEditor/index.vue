@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * @fileoverview 大屏编辑器：模块库 / 画布 / 图层树 / 属性与绑点四栏。
+ * @fileoverview 大屏编辑器：模块库与图层树（左）/ 画布（中）/ 属性与绑点（右）。
  *
  * ⚠ 整树替换必带 `expected_version`，409 走「重新加载」而不是静默覆盖（ADR-0012）。
  * ⚠ 节点与绑定的 id 由前端**创建时**给一次就不再变，保存前后顺序也不变——
@@ -11,11 +11,11 @@
 import type { ModuleManifest } from '@dt/contracts'
 import { getModule, listModules } from '@dt/modules'
 import { designSize } from '@dt/runtime'
-import { DtNotice, useConfirm, useToast } from '@dt/ui'
+import { useConfirm, useToast } from '@dt/ui'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
-import type { CollectPoint } from '@/api/collect'
+import { fetchPointHistory } from '@/api/pointHistories'
 import {
   installDashboardDataSources,
   installDashboardModules,
@@ -23,18 +23,27 @@ import {
 import { AppShell } from '@/components/layout'
 import { useDashboardDoc } from '@/composables/useDashboardDoc'
 import { useDashboardEditor } from '@/composables/useDashboardEditor'
+import { useDashboardValues } from '@/composables/useDashboardValues'
 import { useRealtimeChannel } from '@/composables/useRealtimeChannel'
-import { toLayoutInput } from '@/features/dashboard/editorDoc'
+import { snapStep } from '@/features/dashboard/canvasSnap'
+import type { CanvasZoom } from '@/features/dashboard/canvasZoom'
 import { dashboardTopic } from '@/runtime/pointFrames'
 import { createPointSubscribe } from '@/runtime/pointStream'
-import EditorCanvas from './components/EditorCanvas.vue'
-import EditorToolbar from './components/EditorToolbar.vue'
-import InspectorPane from './components/InspectorPane.vue'
-import ModuleLibrary from './components/ModuleLibrary.vue'
-import PointPickerDialog from './components/PointPickerDialog.vue'
 import { createEditorActions } from './editorActions'
-import { useDashboardValues } from './useDashboardValues'
-import { useEditorShortcuts } from './useEditorShortcuts'
+import { createArrangeActions } from './editorArrange'
+import { useEditorChrome } from './useEditorChrome'
+import { useEditorExtras } from './useEditorExtras'
+import { useEditorMeta } from './useEditorMeta'
+import { createEditorPageOps } from './useEditorPageOps'
+import { createEditorSurface } from './useEditorSurface'
+import EditorCanvas from './components/EditorCanvas.vue'
+import EditorNotices from './components/EditorNotices.vue'
+import EditorOverlays from './components/EditorOverlays.vue'
+import EditorToolbar from './components/EditorToolbar.vue'
+import ChromePanel from './components/ChromePanel.vue'
+import InspectorPane from './components/InspectorPane.vue'
+import LeftRail from './components/LeftRail.vue'
+import MultiSelectPanel from './components/MultiSelectPanel.vue'
 
 const route = useRoute()
 const toast = useToast()
@@ -55,15 +64,10 @@ installDashboardDataSources({
     const current = file.dashboard.value
     return current === null ? null : dashboardTopic(current.id)
   }),
+  fetchHistory: fetchPointHistory,
 })
 
 useDashboardValues(() => editor.nodes.value)
-
-const actions = createEditorActions({
-  editor,
-  dashboardId: () => file.dashboard.value?.id ?? null,
-  getManifest,
-})
 
 const dashboardId = computed(() => String(route.params.dashboardId ?? ''))
 
@@ -74,76 +78,68 @@ const design = computed(() =>
   ),
 )
 
-const selectedManifest = computed(() =>
-  editor.selected.value === null
-    ? undefined
-    : getManifest(editor.selected.value.moduleType),
-)
-
-async function removeNode(nodeId: string): Promise<void> {
-  const ok = await confirm.ask({
-    title: '删除节点',
-    message: '这个节点连同它的全部子节点与绑定都会被删掉，保存后不可恢复。',
-    confirmText: '删除',
-    danger: true,
-  })
-  if (ok) actions.removeNode(nodeId)
-}
-
-function removeSelected(): void {
-  const nodeId = editor.selectedId.value
-  if (nodeId !== null) void removeNode(nodeId)
-}
-
-useEditorShortcuts({
-  undo: editor.undo,
-  redo: editor.redo,
-  remove: removeSelected,
+const actions = createEditorActions({
+  editor,
+  dashboardId: () => file.dashboard.value?.id ?? null,
+  getManifest,
+  design: () => design.value,
 })
 
-function changeSelectedGeometry(
-  geometry: { x: number; y: number; w: number; h: number },
-  isContinuous: boolean,
-): void {
-  const nodeId = editor.selectedId.value
-  if (nodeId !== null) actions.changeGeometry(nodeId, geometry, isContinuous)
-}
+const meta = useEditorMeta(file.dashboard)
+const chrome = useEditorChrome(file.dashboard, meta)
+const { snap, grid } = chrome
+const zoom = ref<CanvasZoom>(null)
+const canvasRef = ref<InstanceType<typeof EditorCanvas> | null>(null)
+const fitScale = computed(() => canvasRef.value?.fitScale ?? 1)
 
-function toggleSelectedVisible(isVisible: boolean): void {
-  const nodeId = editor.selectedId.value
-  if (nodeId !== null) actions.toggleVisible(nodeId, isVisible)
-}
+const arrange = createArrangeActions({
+  editor,
+  getManifest,
+  design: () => design.value,
+  steps: () => snapStep(design.value, grid.value, snap.value),
+  dashboardId: () => file.dashboard.value?.id ?? null,
+})
 
-function pickPoint(point: CollectPoint): void {
-  const fieldKey = pickingFieldKey.value
-  if (fieldKey !== null) actions.applyPickedPoint(fieldKey, point.nodeKey)
-}
+const surface = createEditorSurface({
+  editor,
+  actions,
+  arrange,
+  getManifest,
+  onRejected: (message) => toast.error(message),
+})
 
-function closePicker(open: boolean): void {
-  if (!open) pickingFieldKey.value = null
-}
+const isMultiSelecting = computed(() => editor.selectedIds.value.length > 1)
 
-async function reload(): Promise<void> {
-  const loaded = await file.load(dashboardId.value)
-  if (loaded !== null) editor.reset(loaded.nodes)
-}
+const ops = createEditorPageOps({
+  editor,
+  actions,
+  arrange,
+  file,
+  meta,
+  confirm,
+  toast,
+  dashboardId: () => dashboardId.value,
+  pickingFieldKey,
+})
 
-async function save(): Promise<void> {
-  const current = file.dashboard.value
-  if (current === null) return
-  const saved = await file.save({
-    expectedVersion: current.rowVersion,
-    nodes: toLayoutInput(editor.nodes.value),
-  })
-  if (saved === null) {
-    toast.error(file.conflict.value ?? file.error.value ?? '保存失败')
-    return
-  }
-  editor.reset(saved.nodes)
-  toast.success('大屏已保存')
-}
+const extras = useEditorExtras({
+  editor,
+  arrange,
+  dashboard: file.dashboard,
+  design: () => design.value,
+  snap: () => snap.value,
+  grid: () => grid.value,
+  zoom,
+  fitScale: () => fitScale.value,
+  save: () => ops.save(),
+  removeSelected: () => void ops.removeSelected(),
+  consumePicker: () => ops.consumePicker(),
+  confirm,
+  stageEl: () => canvasRef.value?.stageRef ?? null,
+  onExportFailed: (message) => toast.error(message),
+})
 
-watch(dashboardId, () => void reload(), { immediate: true })
+watch(dashboardId, () => void ops.reload(), { immediate: true })
 
 onUnmounted(file.dispose)
 </script>
@@ -157,67 +153,99 @@ onUnmounted(file.dispose)
   >
     <template #actions>
       <EditorToolbar
-        :is-dirty="editor.isDirty.value"
+        :is-dirty="editor.isDirty.value || meta.isDirty.value"
         :can-undo="editor.canUndo.value"
         :can-redo="editor.canRedo.value"
         :saving="file.saving.value"
         :has-conflict="file.conflict.value !== null"
+        :zoom="zoom"
+        :fit-scale="fitScale"
+        :snap="snap"
+        :align-ready="arrange.alignReady()"
+        :distribute-ready="arrange.distributeReady()"
         @undo="editor.undo"
         @redo="editor.redo"
-        @reload="reload"
-        @save="save"
+        @reload="ops.reload"
+        @save="extras.saveWithThumbnail"
+        @update:zoom="zoom = $event"
+        @set-snap="snap = { ...snap, ...$event }"
+        @align="arrange.alignSelected"
+        @distribute="arrange.distributeSelected"
+        @tidy="arrange.tidyTopLevel"
+        @help="extras.helpOpen.value = true"
+        @preview="extras.previewOpen.value = true"
+        @export="extras.exportJson"
       />
     </template>
 
     <div class="flex h-full min-h-0 flex-col gap-3">
-      <DtNotice v-if="file.conflict.value" intent="danger" icon="alert-triangle">
-        {{ file.conflict.value }}
-      </DtNotice>
-      <DtNotice
-        v-else-if="file.error.value"
-        intent="danger"
-        icon="alert-circle"
-      >
-        {{ file.error.value }}
-      </DtNotice>
-      <DtNotice
-        v-if="editor.layout.value.detachedIds.length > 0"
-        intent="warning"
-        icon="alert-triangle"
-      >
-        有 {{ editor.layout.value.detachedIds.length }}
-        个节点的父节点不存在，它们不会被画出来。
-      </DtNotice>
+      <EditorNotices
+        :conflict="file.conflict.value"
+        :error="file.error.value"
+        :detached-count="editor.layout.value.detachedIds.length"
+      />
 
       <div class="grid min-h-0 flex-1 grid-cols-[15rem_1fr_20rem] gap-3">
         <section class="dt-editor__pane">
-          <ModuleLibrary :manifests="manifests" @add="actions.addModule" />
+          <LeftRail
+            :manifests="manifests"
+            :frames="editor.layout.value.frames"
+            :nodes="editor.nodes.value"
+            :selected-ids="editor.selectedIds.value"
+            :get-manifest="getManifest"
+            @add="ops.addModule"
+            @select="surface.onSelect"
+            @toggle="actions.toggleVisible"
+            @remove="ops.removeNode"
+            @rename="surface.onRename"
+            @move="surface.onMove"
+            @center="(nodeId) => canvasRef?.centerOn(nodeId)"
+            @front="surface.onFront"
+            @back="surface.onBack"
+          />
         </section>
 
         <EditorCanvas
+          ref="canvasRef"
           class="dt-editor__pane"
           :design="design"
           :frames="editor.layout.value.frames"
           :nodes="editor.nodes.value"
-          :selected-id="editor.selectedId.value"
+          :selected-ids="editor.selectedIds.value"
           :get-manifest="getManifest"
-          @select="editor.select"
+          :snap="snap"
+          :grid="grid"
+          :zoom="zoom"
+          @select="surface.onSelect"
+          @marquee="surface.onMarquee"
           @change="actions.changeGeometry"
+          @change-batch="surface.onChangeBatch"
+          @drop-node="surface.onDropNode"
+          @add-at="surface.onAddAt"
+          @update:zoom="zoom = $event"
         />
 
         <section class="dt-editor__pane">
+          <MultiSelectPanel
+            v-if="isMultiSelecting"
+            :count="editor.selectedIds.value.length"
+            :align-ready="arrange.alignReady()"
+            :distribute-ready="arrange.distributeReady()"
+            @align="arrange.alignSelected"
+            @distribute="arrange.distributeSelected"
+            @remove-all="ops.removeSelected"
+          />
           <InspectorPane
-            :nodes="editor.nodes.value"
-            :selected-id="editor.selectedId.value"
+            v-else-if="editor.selectedIds.value.length === 1"
             :selected="editor.selected.value"
-            :manifest="selectedManifest"
-            :get-manifest="getManifest"
-            @select="editor.select"
-            @toggle="actions.toggleVisible"
-            @remove="removeNode"
+            :manifest="
+              editor.selected.value === null
+                ? undefined
+                : getManifest(editor.selected.value.moduleType)
+            "
             @config="actions.changeConfig"
-            @geometry="changeSelectedGeometry"
-            @visible="toggleSelectedVisible"
+            @geometry="ops.changeSelectedGeometry"
+            @visible="ops.toggleSelectedVisible"
             @write="actions.writeBinding"
             @drop="actions.dropSlot"
             @bind="actions.bindSlot"
@@ -225,15 +253,35 @@ onUnmounted(file.dispose)
             @add-row="actions.addBindingRow"
             @remove-row="actions.removeBindingRow"
           />
+          <ChromePanel
+            v-else
+            :draft="meta.draft.value"
+            :snap="snap"
+            :grid="grid"
+            :nodes="editor.nodes.value"
+            :get-manifest="getManifest"
+            @set-field="chrome.setField"
+            @set-snap="chrome.setSnap"
+            @set-grid="chrome.setGrid"
+            @set-card="chrome.setCard"
+            @set-interactions="chrome.setInteractions"
+          />
         </section>
       </div>
     </div>
 
-    <PointPickerDialog
-      :model-value="pickingFieldKey !== null"
-      :field-key="pickingFieldKey"
-      @update:model-value="closePicker"
-      @pick="pickPoint"
+    <EditorOverlays
+      :picking-field-key="pickingFieldKey"
+      :help-open="extras.helpOpen.value"
+      :preview-open="extras.previewOpen.value"
+      :nodes="editor.nodes.value"
+      :design="design"
+      :get-manifest="getManifest"
+      :chrome-json="meta.draft.value?.chromeJson ?? {}"
+      @close-picker="ops.closePicker"
+      @pick="ops.pickPoint"
+      @update:help-open="extras.helpOpen.value = $event"
+      @close-preview="extras.previewOpen.value = false"
     />
   </AppShell>
 </template>

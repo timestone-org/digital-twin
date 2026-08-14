@@ -9,11 +9,7 @@ import {
   COMPUTE_OPS,
   POINT_QUALITIES,
 } from '../src/index'
-import type {
-  BindingSourceKind,
-  ComputeOp,
-  PointQuality,
-} from '../src/index'
+import type { BindingSourceKind, ComputeOp, PointQuality } from '../src/index'
 
 const BINDING_SOURCE_KIND_MEMBERS: Record<BindingSourceKind, true> = {
   opcua: true,

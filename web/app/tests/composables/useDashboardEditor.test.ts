@@ -18,7 +18,10 @@ const MANIFEST: ModuleManifest = {
   component: () => Promise.resolve({ default: {} }),
 }
 
-function node(id: string, over: Partial<DashboardNodePayload> = {}): DashboardNodePayload {
+function node(
+  id: string,
+  over: Partial<DashboardNodePayload> = {},
+): DashboardNodePayload {
   return {
     id,
     dashboardId: 'd1',
@@ -100,8 +103,12 @@ describe('选中', () => {
 
     editor.undo()
 
-    expect(editor.nodes.value.find((item) => item.id === 'b')?.configJson.t).toBeUndefined()
-    expect(editor.nodes.value.find((item) => item.id === 'a')?.configJson.t).toBe('甲')
+    expect(
+      editor.nodes.value.find((item) => item.id === 'b')?.configJson.t,
+    ).toBeUndefined()
+    expect(
+      editor.nodes.value.find((item) => item.id === 'a')?.configJson.t,
+    ).toBe('甲')
   })
 })
 
@@ -120,8 +127,58 @@ describe('排版', () => {
   })
 
   it('节点表始终按 (parentId, zIndex, id) 定序', () => {
-    const editor = editorWith([node('b', { zIndex: 2 }), node('a', { zIndex: 1 })])
+    const editor = editorWith([
+      node('b', { zIndex: 2 }),
+      node('a', { zIndex: 1 }),
+    ])
 
     expect(editor.nodes.value.map((item) => item.id)).toEqual(['a', 'b'])
+  })
+})
+
+describe('多选', () => {
+  it('单选清掉其余，toggle 累积且末位是主选中', () => {
+    const editor = editorWith([node('a'), node('b'), node('c')])
+
+    editor.select('a')
+    editor.toggleSelect('b')
+    expect(editor.selectedIds.value).toEqual(['a', 'b'])
+    expect(editor.selectedId.value).toBe('b')
+
+    editor.toggleSelect('a')
+    expect(editor.selectedIds.value).toEqual(['b'])
+
+    editor.select('c')
+    expect(editor.selectedIds.value).toEqual(['c'])
+  })
+
+  it('setSelection 剔除不存在的 id 并去重', () => {
+    const editor = editorWith([node('a'), node('b')])
+
+    editor.setSelection(['a', 'ghost', 'b', 'a'])
+
+    expect(editor.selectedIds.value).toEqual(['a', 'b'])
+    expect(editor.selectedNodes.value.map((item) => item.id)).toEqual([
+      'a',
+      'b',
+    ])
+  })
+
+  it('删掉节点后选中集自动收敛', () => {
+    const editor = editorWith([node('a'), node('b')])
+
+    editor.setSelection(['a', 'b'])
+    editor.apply((nodes) => nodes.filter((item) => item.id !== 'b'))
+
+    expect(editor.selectedIds.value).toEqual(['a'])
+  })
+
+  it('换基线时不存在的选中被清掉', () => {
+    const editor = editorWith([node('a'), node('b')])
+
+    editor.setSelection(['a', 'b'])
+    editor.reset([node('b')])
+
+    expect(editor.selectedIds.value).toEqual(['b'])
   })
 })

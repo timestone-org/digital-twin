@@ -19,10 +19,23 @@ const routes: RouteRecordRaw[] = [
     meta: { anonymous: true, title: '登录' },
   },
   {
+    // 公开大屏：拿链接就能看，**不需要登录**（ADR-0014）。
+    // ⚠ 全站唯一一条匿名的业务路由。授权凭据是地址里那个令牌，由后端按
+    // 「已发布」核对；前端这边不做任何判定，也不许在这里加权限码。
+    path: '/public/:publicToken',
+    name: 'public-dashboard',
+    component: () => import('@/pages/PublicDashboard/index.vue'),
+    meta: { anonymous: true, title: '大屏' },
+  },
+  {
+    // 工作台即大屏的管理面：项目与大屏都在这一页里管，没有另一张列表页。
+    // ⚠ 它是路由守卫的兜底目的地，因此**自身不能挂 meta.permissions**——
+    // 挂了就会「没权限 → 跳 403 → 403 也要鉴权 → 再跳」绕成死循环。
+    // 无权看大屏的账号由页面自己渲染空态。
     path: '/',
     name: 'home',
     component: () => import('@/pages/Home/index.vue'),
-    meta: { title: '控制台' },
+    meta: { title: '工作台' },
   },
   {
     path: '/profile',
@@ -31,17 +44,23 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '个人资料' },
   },
   {
+    // 旧的大屏列表页已并进工作台。留一条重定向而不是直接删：
+    // 收藏夹与外发链接里还躺着这个地址，直接删就是一个 404。
     path: '/dashboards',
-    name: 'dashboards',
-    component: () => import('@/pages/Dashboards/index.vue'),
+    redirect: { name: 'home' },
+  },
+  {
+    // 每张大屏一个的**运行态**路由，因此不进 NAV_ITEMS——那张表里每一项都要有
+    // 静态路径，且由契约测试钉着。
+    path: '/dashboards/:dashboardId',
+    name: 'dashboard-view',
+    component: () => import('@/pages/DashboardView/index.vue'),
     meta: {
       title: '大屏',
       permissions: [PERMISSION_CODES.dashboardView],
     },
   },
   {
-    // ⚠ 每张大屏一个的**编辑器**路由，因此不进 NAV_ITEMS——那张表里每一项都要有
-    // 静态路径，且由契约测试钉着。回列表靠 AppShell 的 backTo。
     path: '/dashboards/:dashboardId/edit',
     name: 'dashboard-editor',
     component: () => import('@/pages/DashboardEditor/index.vue'),

@@ -26,3 +26,33 @@ export function readToken(
   const value = getComputedStyle(target).getPropertyValue(name).trim()
   return value || fallback
 }
+
+/** 换肤只会动这两个属性：内联变量写在 style 上，明暗档位挂在 class 上。 */
+const THEME_ATTRS = ['style', 'class']
+
+/**
+ * 侦测换肤：主题引擎把 token 写成宿主元素的内联变量，任一祖先的 `style` /
+ * `class` 变了就意味着当前级联下的取值可能变了。返回取消观察的函数。
+ * ⚠ 从 `host` 的**父节点**起算：写变量的是舞台根而不是 host 自己，
+ * 只观察 host 会一次回调都收不到。
+ * @param host 起算元素，通常是组件根
+ * @param onChange 主题可能变化时的回调，同一批变更可能连着来多次
+ */
+export function observeThemeChange(
+  host: Element,
+  onChange: () => void,
+): () => void {
+  if (typeof MutationObserver === 'undefined') return () => {}
+  const observers: MutationObserver[] = []
+  let node = host.parentElement
+  while (node) {
+    const observer = new MutationObserver(onChange)
+    observer.observe(node, { attributes: true, attributeFilter: THEME_ATTRS })
+    observers.push(observer)
+    if (node === document.documentElement) break
+    node = node.parentElement
+  }
+  return () => {
+    for (const observer of observers) observer.disconnect()
+  }
+}

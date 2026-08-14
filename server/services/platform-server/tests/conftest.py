@@ -76,6 +76,9 @@ from platform_server.apps.hvac.datasets import (
 )
 from platform_server.apps.hvac.deps import get_ac_source_reader, get_session
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
+from platform_server.apps.runtime_params.deps import (
+    get_session as get_runtime_param_session,
+)
 from platform_server.container import Container
 from platform_server.settings import Settings
 from platform_server.stream import StreamEntry, StreamGroup
@@ -482,14 +485,17 @@ def _wire_fakes(
 ) -> None:
     """把会打网络的依赖换成假件。
 
-    ⚠ 每个 apps/<feature> 各有一份 `get_session`，三份都要换：漏一份那个模块
-    就打真库真提交，用例之间开始互相看见对方的数据。
+    ⚠ 每个 apps/<feature> 各有一份 `get_session`，**四份都要换**：漏一份那个
+    模块就打真库真提交，用例之间开始互相看见对方的数据。这不是假设——
+    `runtime_params` 那份漏过一次，表现是「单跑绿、连着跑红」，
+    而残留行会一直躺在库里毒下一次运行。
     Args: application, maker, ac_source, validation。
     """
     override = _session_override(maker)
     application.dependency_overrides[get_session] = override
     application.dependency_overrides[get_dashboard_session] = override
     application.dependency_overrides[get_collect_session] = override
+    application.dependency_overrides[get_runtime_param_session] = override
     application.dependency_overrides[get_ac_source_reader] = (
         lambda: AcSourceReader(source=ac_source, timezone=SOURCE_TIMEZONE)
     )

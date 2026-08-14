@@ -69,3 +69,10 @@ export function acceptsChildren(manifest: ModuleManifest | undefined): boolean {
 export function isPinnedRegion(manifest: ModuleManifest | undefined): boolean {
   return manifest?.region !== undefined
 }
+
+/**
+ * 模块库 → 画布拖放的 dataTransfer 类型；载荷是模块 type 字符串。
+ * ⚠ 用自定义 MIME 而不是 text/plain：后者会让从别处拖进来的任意文本都被
+ * 当成一次「添加模块」尝试。
+ */
+export const MODULE_DRAG_MIME = 'application/x-dt-module-type'

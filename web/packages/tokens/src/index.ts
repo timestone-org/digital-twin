@@ -1,4 +1,4 @@
-export { CONTROL_SIZE_PX, readToken } from './theme'
+export { CONTROL_SIZE_PX, observeThemeChange, readToken } from './theme'
 export {
   applyTheme,
   DEFAULT_THEME_ID,

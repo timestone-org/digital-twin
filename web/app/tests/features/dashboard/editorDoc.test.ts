@@ -3,7 +3,11 @@
  * 顺序钉死在 `(parentId, zIndex, id)`，整树替换的入参与这份顺序逐条对应（ADR-0012）。
  */
 import { describe, expect, it } from 'vitest'
-import type { BindingPayload, DashboardNodePayload, ModuleManifest } from '@dt/contracts'
+import type {
+  BindingPayload,
+  DashboardNodePayload,
+  ModuleManifest,
+} from '@dt/contracts'
 
 import {
   boundPointKeys,
@@ -382,10 +386,7 @@ describe('顺序与整树替换入参', () => {
   })
 
   it('整树替换入参逐条带上 id，且顺序与 sortNodes 一致', () => {
-    const nodes = [
-      node({ id: 'b', zIndex: 2 }),
-      node({ id: 'a', zIndex: 1 }),
-    ]
+    const nodes = [node({ id: 'b', zIndex: 2 }), node({ id: 'a', zIndex: 1 })]
 
     expect(toLayoutInput(nodes).map((item) => item.id)).toEqual(['a', 'b'])
   })

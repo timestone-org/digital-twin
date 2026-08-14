@@ -22,8 +22,12 @@ import type { SubscribePoints } from '@/runtime/pointStream'
 
 /** 应用壳注入给大屏子系统的口子。 */
 export interface DashboardRuntimePorts {
-  /** 订阅当前大屏主题上的点位推送。 */
-  subscribe: SubscribePoints
+  /**
+   * 订阅当前大屏主题上的点位推送。
+   * ⚠ 不注入时不装实时 provider——公开快照页走这条：它没有登录态，
+   * `opcua` 绑定如实显示为无实时数据，而不是假装订阅成功。
+   */
+  subscribe?: SubscribePoints
   /**
    * 读一段历史序列。
    * ⚠ 不注入时 `archive` 绑定一律拒绝取数：拿实时通道里收到过的那几个点
@@ -51,11 +55,16 @@ export function installDashboardModules(): void {
 export function installDashboardDataSources(
   ports: DashboardRuntimePorts,
 ): void {
-  registerProvider(createRealtimeProvider({ subscribe: ports.subscribe }))
+  const { subscribe } = ports
+  if (subscribe !== undefined) {
+    registerProvider(createRealtimeProvider({ subscribe }))
+  }
   registerProvider(createStaticProvider())
   registerProvider(createComputedProvider())
   if (ports.fetchHistory !== undefined) {
-    registerProvider(createHistoryProvider({ fetchHistory: ports.fetchHistory }))
+    registerProvider(
+      createHistoryProvider({ fetchHistory: ports.fetchHistory }),
+    )
   }
 }
 

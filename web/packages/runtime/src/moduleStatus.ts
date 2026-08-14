@@ -4,7 +4,7 @@
  * ⚠ 对来源类型**无感知**：只数各档槽有几个，不认识具体是哪种来源——
  * 认了的话，加一种来源就要改这台状态机（docs/DASHBOARD_DESIGN.md §5.5）。
  */
-import type { BindingPayload, BindingSpec, ModuleStatus } from '@dt/contracts'
+import type { BindingSpec, BindingView, ModuleStatus } from '@dt/contracts'
 
 import type { ModuleValuesTally } from './moduleValues'
 
@@ -33,7 +33,7 @@ function isConfigured(key: string, fieldKeys: readonly string[]): boolean {
  */
 export function countUnboundRequired(
   specs: readonly BindingSpec[],
-  bindings: readonly BindingPayload[],
+  bindings: readonly BindingView[],
 ): number {
   const fieldKeys = bindings.map((binding) => binding.fieldKey)
   return specs.filter(

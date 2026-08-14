@@ -171,6 +171,10 @@ jobs:
         run: pnpm format:check
       - name: Lint（eslint --max-warnings=0）
         working-directory: web
+        # eslint 全量遍历吃内存与仓库规模成正比，超过 node 缺省堆顶会以 OOM 假死；
+        # 抬堆不是放宽检查，规则一条没动
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: pnpm lint
       - name: 类型（vue-tsc）
         working-directory: web

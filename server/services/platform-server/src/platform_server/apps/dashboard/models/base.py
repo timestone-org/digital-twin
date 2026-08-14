@@ -8,3 +8,4 @@ from platform_server.settings import DB_SCHEMA
 Base = make_declarative_base(DB_SCHEMA)
 
 EMPTY_JSON = text("'{}'::jsonb")  # 空覆盖 = 回退内置默认
+EMPTY_JSON_ARRAY = text("'[]'::jsonb")  # 一个都还没建

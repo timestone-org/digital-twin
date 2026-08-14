@@ -11,8 +11,8 @@ import {
   TWIN_TINT_BINDING_KEY,
 } from '@dt/twin-config'
 import { isIconName } from '@dt/ui'
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import type { Component } from 'vue'
 import { beforeAll, describe, expect, it } from 'vitest'
 
@@ -24,7 +24,8 @@ import {
 } from '../src/shared/container'
 
 // ⚠ 用 cwd 而不是 import.meta.url：happy-dom 环境下后者不是 file: URL
-const MODULES_DIR = join(process.cwd(), 'packages', 'modules', 'src', 'modules')
+const SRC_DIR = join(process.cwd(), 'packages', 'modules', 'src')
+const MODULES_DIR = join(SRC_DIR, 'modules')
 
 // 组件按常量取键时，扫源码看到的是常量名——这张表把它翻回真正的键
 const KEY_CONSTANTS: Record<string, string> = {
@@ -35,15 +36,28 @@ const KEY_CONSTANTS: Record<string, string> = {
   TWIN_TINT_BINDING_KEY,
 }
 
+// 一跳前缀（`props.config.x` / `opts.config.x`）也算读：模块的 option 里配置常常
+// 是包在上下文对象里往下传的
 const ACCESS =
-  /props\.(?<bag>config|values)(?:\.(?<dot>[A-Za-z_$][\w$]*)|\[\s*(?:'(?<quoted>[^']+)'|(?<ident>[A-Za-z_$][\w$]*))\s*\])/g
+  /(?:[A-Za-z_$][\w$]*\s*\.\s*)?\b(?<bag>config|values)(?:\.(?<dot>[A-Za-z_$][\w$]*)|\[\s*(?:'(?<quoted>[^']+)'|(?<ident>[A-Za-z_$][\w$]*))\s*\])/g
 
 const STATIC_THREE = /from\s*['"]@dt\/three-core/
 
-/** 组件源码里真正读到的 `config` / `values` 键。 */
+/** 相对 import 的路径，用来沿着模块目录走到它调用的公共文件。 */
+const RELATIVE_IMPORT =
+  /from\s+['"](\.[^'"]+)['"]|import\(\s*['"](\.[^'"]+)['"]\s*\)/g
+
+/** 抹掉注释：文件头里提到 `config.data` 是说明，不是消费。 */
+function code(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1 ')
+}
+
+/** 源码里真正读到的 `config` / `values` 键。 */
 function readKeys(source: string, bag: 'config' | 'values'): string[] {
   const found = new Set<string>()
-  for (const match of source.matchAll(ACCESS)) {
+  for (const match of code(source).matchAll(ACCESS)) {
     const groups = match.groups
     if (groups?.bag !== bag) continue
     const ident = groups.ident
@@ -56,6 +70,58 @@ function readKeys(source: string, bag: 'config' | 'values'): string[] {
     if (key !== undefined) found.add(key)
   }
   return [...found].sort()
+}
+
+/** 一个模块目录里的渲染侧源文件。清单是声明的那一半，不算消费方。 */
+function moduleFiles(type: string): string[] {
+  const dir = join(MODULES_DIR, type)
+  return readdirSync(dir)
+    .filter((name) => name !== 'manifest.ts')
+    .filter((name) => name.endsWith('.ts') || name.endsWith('.vue'))
+    .map((name) => join(dir, name))
+}
+
+/** 把一条相对 import 解析成真实文件；解析不到给 null。 */
+function resolveImport(spec: string, from: string): string | null {
+  const base = resolve(dirname(from), spec)
+  for (const candidate of [base, `${base}.ts`, `${base}.vue`]) {
+    if (existsSync(candidate) && statSync(candidate).isFile()) return candidate
+  }
+  return null
+}
+
+/**
+ * 从模块目录出发沿相对 import 收集包内可达的源文件。
+ * ⚠ 「有没有人读这个配置键」必须问到可达集：图表族的 `title` 由公共壳读、
+ * `unit` / `palette` 由 chartKit 读，只问模块目录会把它们全判成死字段。
+ */
+function reachableFiles(seeds: readonly string[]): string[] {
+  const seen = new Set<string>()
+  const stack = [...seeds]
+  while (stack.length > 0) {
+    const file = stack.pop()
+    if (file === undefined || seen.has(file)) continue
+    seen.add(file)
+    const source = readFileSync(file, 'utf8')
+    for (const match of source.matchAll(RELATIVE_IMPORT)) {
+      const spec = match[1] ?? match[2]
+      const target = spec === undefined ? null : resolveImport(spec, file)
+      if (target !== null && target.startsWith(SRC_DIR)) stack.push(target)
+    }
+  }
+  return [...seen]
+}
+
+/** 一组文件里读到的键的并集。 */
+function keysOf(
+  files: readonly string[],
+  bag: 'config' | 'values',
+): Set<string> {
+  const found = new Set<string>()
+  for (const file of files) {
+    for (const key of readKeys(readFileSync(file, 'utf8'), bag)) found.add(key)
+  }
+  return found
 }
 
 function duplicated(keys: readonly string[]): string[] {
@@ -104,7 +170,14 @@ beforeAll(() => {
 
 describe('一个模块 = 一个目录', () => {
   it('扫到的目录不是空的，扫描本身没有空转', () => {
-    expect(directories).toEqual(['header', 'twin-view'])
+    expect(directories).toEqual([
+      'container',
+      'footer',
+      'header',
+      'image-block',
+      'text-block',
+      'twin-view',
+    ])
   })
 
   it('每个目录都有清单与渲染组件两个文件', () => {
@@ -192,37 +265,46 @@ describe('清单自身的不变量', () => {
   })
 })
 
-describe('声明的键与组件真正读的键', () => {
-  it('配置键两侧逐一对上', () => {
-    const drift = listModules().map((manifest) => {
-      const source = readFileSync(
-        join(MODULES_DIR, manifest.type, 'Component.vue'),
-        'utf8',
-      )
-      return {
-        type: manifest.type,
-        declared: manifest.configSchema.map((field) => field.key).sort(),
-        read: readKeys(source, 'config'),
-      }
+describe('声明的键与渲染侧真正读的键', () => {
+  it('扫描本身没有空转——每个模块都扫到了源文件，也扫出了键', () => {
+    const scans = listModules().map((manifest) => ({
+      type: manifest.type,
+      files: moduleFiles(manifest.type).length,
+      keys: keysOf(reachableFiles(moduleFiles(manifest.type)), 'config').size,
+    }))
+
+    expect(scans.filter((item) => item.files === 0)).toEqual([])
+    expect(scans.filter((item) => item.keys === 0)).toEqual([])
+  })
+
+  it('没有声明了却没人读的死字段', () => {
+    const dead = listModules().flatMap((manifest) => {
+      const read = keysOf(reachableFiles(moduleFiles(manifest.type)), 'config')
+      return manifest.configSchema
+        .filter((field) => !read.has(field.key))
+        .map((field) => `${manifest.type}.${field.key}`)
     })
 
-    expect(drift.map((item) => item.read)).toEqual(
-      drift.map((item) => item.declared),
-    )
+    expect(dead).toEqual([])
+  })
+
+  it('没有读了却没声明的暗键', () => {
+    const dark = listModules().flatMap((manifest) => {
+      const declared = new Set(manifest.configSchema.map((field) => field.key))
+      return [...keysOf(moduleFiles(manifest.type), 'config')]
+        .filter((key) => !declared.has(key))
+        .map((key) => `${manifest.type}.${key}`)
+    })
+
+    expect(dark).toEqual([])
   })
 
   it('绑定槽键两侧逐一对上', () => {
-    const drift = listModules().map((manifest) => {
-      const source = readFileSync(
-        join(MODULES_DIR, manifest.type, 'Component.vue'),
-        'utf8',
-      )
-      return {
-        type: manifest.type,
-        declared: manifest.bindings.map((spec) => spec.key).sort(),
-        read: readKeys(source, 'values'),
-      }
-    })
+    const drift = listModules().map((manifest) => ({
+      type: manifest.type,
+      declared: manifest.bindings.map((spec) => spec.key).sort(),
+      read: [...keysOf(moduleFiles(manifest.type), 'values')].sort(),
+    }))
 
     expect(drift.map((item) => item.read)).toEqual(
       drift.map((item) => item.declared),
@@ -238,6 +320,24 @@ describe('声明的键与组件真正读的键', () => {
 
     expect(readKeys(source, 'config')).toEqual(['showTitle', 'title'])
     expect(readKeys(source, 'values')).toEqual(['tintValues'])
+  })
+
+  it('扫描器也认得裸的与包在上下文里的取法', () => {
+    const source = [
+      'readText(config.unit)',
+      'readBoolean(opts.config.smooth)',
+    ].join('\n')
+
+    expect(readKeys(source, 'config')).toEqual(['smooth', 'unit'])
+  })
+
+  it('扫描器不把注释里提到的键算成消费', () => {
+    const source = [
+      '// 说明：config.ghost 只是一句散文',
+      'readText(config.unit)',
+    ].join('\n')
+
+    expect(readKeys(source, 'config')).toEqual(['unit'])
   })
 
   it('扫描器遇到没登记的键常量会报出来而不是当没看见', () => {

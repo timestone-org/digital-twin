@@ -53,6 +53,45 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+/**
+ * 改多键值形状（字体、样式槽）里的一个子键：给了值就写，没设置就把这个键**删掉**。
+ * ⚠ 删而不是留 `undefined`：`{ size: undefined }` 落库后是一个存在的键，
+ * 而这些形状的渲染端按「键在不在」决定跟不跟随主题，物化出来的空键会被
+ * 认成「配过了」，主题再怎么换这一项都不动。
+ */
+export function patchKey(
+  base: Record<string, unknown>,
+  key: string,
+  next: unknown,
+): Record<string, unknown> {
+  const merged = { ...base }
+  if (next === undefined || next === null || next === '') {
+    delete merged[key]
+    return merged
+  }
+  merged[key] = next
+  return merged
+}
+
+/** 值形状上某个子键的字符串，读不出来给空串。 */
+export function subText(value: Record<string, unknown>, key: string): string {
+  const raw = value[key]
+  return typeof raw === 'string' ? raw : ''
+}
+
+/**
+ * 值形状上某个子键的有限数。
+ * ⚠ 读不出来给 `undefined` 而不是 0：0 是合法字号与合法不透明度，
+ * 拿它冒充「没配」会让数值框把一个空键显示成实配的 0。
+ */
+export function subNumber(
+  value: Record<string, unknown>,
+  key: string,
+): number | undefined {
+  const raw = value[key]
+  return typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined
+}
+
 /** 一行数组项的标题：优先取 `itemLabelKey` 指的那个子字段。 */
 export function rowLabel(field: ConfigField, row: unknown, at: number): string {
   const key = field.itemLabelKey

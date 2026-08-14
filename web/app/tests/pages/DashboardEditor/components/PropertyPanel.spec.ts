@@ -16,7 +16,13 @@ const MANIFEST: ModuleManifest = {
   category: '演示',
   defaultSize: { width: 100, height: 100 },
   configSchema: [
-    { key: 'title', label: '标题', type: 'string', group: '标题', default: '缺省标题' },
+    {
+      key: 'title',
+      label: '标题',
+      type: 'string',
+      group: '标题',
+      default: '缺省标题',
+    },
     { key: 'showBar', label: '显示条', type: 'boolean', group: '标题' },
     {
       key: 'note',

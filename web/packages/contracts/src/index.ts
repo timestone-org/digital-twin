@@ -155,29 +155,71 @@ export type {
   ConfigFieldSpan,
   ConfigFieldType,
   ConfigOption,
+  ConfigPreset,
+  FontValue,
   ModuleChrome,
   ModuleComponentProps,
+  ModuleConnectionState,
   ModuleDefaultSize,
   ModuleManifest,
   ModuleMeta,
   ModulePreview,
   ModuleRegion,
   ModuleStatus,
+  StyleSlotValue,
 } from './module'
 export {
   BINDING_DATA_TYPES,
   CONFIG_FIELD_SPANS,
   CONFIG_FIELD_TYPES,
   MODULE_CHROMES,
+  MODULE_CONNECTION_STATES,
   MODULE_REGIONS,
   MODULE_STATUSES,
 } from './module'
 export type {
+  CardChrome,
+  ChromeKey,
+  ChromeKeySpec,
+  ChromeKeyType,
+} from './chrome'
+export { CHROME_KEYS, isChromeKey } from './chrome'
+export type {
+  InteractionAction,
+  InteractionCloseModalAction,
+  InteractionEvent,
+  InteractionEventName,
+  InteractionOpenModalAction,
+  InteractionRule,
+  InteractionSetActiveAction,
+  InteractionShowAction,
+} from './interaction'
+export { INTERACTION_EVENTS } from './interaction'
+export type {
   BindingPayload,
+  BindingView,
   DashboardNodePayload,
+  DashboardNodeView,
   DashboardPayload,
   ProjectPayload,
 } from './dashboard'
+export type {
+  DashboardExportPayload,
+  DashboardImportResult,
+  ExportBindingPayload,
+  ExportNodePayload,
+  UnresolvedBinding,
+} from './transfer'
+export type {
+  DashboardTemplateDetail,
+  DashboardTemplateSummary,
+} from './template'
+export type { DashboardPublication, PublicDashboardPayload } from './share'
+export type { DashboardThumbnail } from './thumbnail'
+export type { ProjectThemeMode, ProjectThemePayload } from './theme'
+export { PROJECT_THEME_MODES } from './theme'
+export type { RuntimeParamItem, RuntimeParamSection } from './runtimeParam'
+export { RUNTIME_PARAM_SECTIONS } from './runtimeParam'
 export type {
   ArchiveBindingDetail,
   BindingSourceKind,

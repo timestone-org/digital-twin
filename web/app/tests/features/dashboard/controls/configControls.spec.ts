@@ -12,7 +12,9 @@ import { DtSelect } from '@dt/ui'
 import { installConfigControls } from '@/features/dashboard/configControls'
 import ConfigFieldControl from '@/features/dashboard/controls/ConfigFieldControl.vue'
 
-function field(over: Partial<ConfigField> & Pick<ConfigField, 'type'>): ConfigField {
+function field(
+  over: Partial<ConfigField> & Pick<ConfigField, 'type'>,
+): ConfigField {
   return { key: 'demo', label: '演示', ...over }
 }
 
@@ -99,9 +101,9 @@ describe('开关与枚举', () => {
   it('只认真正的布尔，字符串 true 一律按关', () => {
     const wrapper = mountField(field({ type: 'boolean' }), 'true')
 
-    expect(wrapper.find('button[role="switch"]').attributes('aria-checked')).toBe(
-      'false',
-    )
+    expect(
+      wrapper.find('button[role="switch"]').attributes('aria-checked'),
+    ).toBe('false')
   })
 
   it('枚举写回原始取值而不是它的字符串键', async () => {

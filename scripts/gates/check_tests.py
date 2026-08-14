@@ -209,15 +209,34 @@ def check_python_tests_are_layered() -> list[Violation]:
 def _balanced(text: str, start: int) -> int:
     """从 `(` 起找到配对的 `)`，返回其后一位；找不到返回 -1。
 
+    ⚠ 必须跳过字符串字面量里的括号。用例名里出现不配对的括号是常事
+    （`'取值落在 [0, 1)'`、`'名字(带括号)的情形'`），把它们算进深度会有两种
+    后果，且都是静默的：多一个 `)` 时用例体在名字处就截断，那条用例被判成
+    「没有断言」；多一个 `(` 时反而会**越过**用例体一路吞到后面，借到别的
+    用例的断言——于是一条真的没有断言的用例安然过闸。
+
     Args: text, start。
     """
     depth = 0
-    for index in range(start, len(text)):
+    quote = ""
+    index = start
+    while index < len(text):
         char = text[index]
-        depth += char == "("
-        depth -= char == ")"
-        if depth == 0:
-            return index + 1
+        if quote:
+            # 反斜杠转义：跳过下一个字符，免得 `'\\''` 这种把引号数错
+            if char == "\\":
+                index += 2
+                continue
+            if char == quote:
+                quote = ""
+        elif char in {"'", '"', "`"}:
+            quote = char
+        else:
+            depth += char == "("
+            depth -= char == ")"
+            if depth == 0:
+                return index + 1
+        index += 1
     return -1
 
 
@@ -275,6 +294,36 @@ def check_ts_test_hygiene() -> list[Violation]:
     return found
 
 
+def check_the_case_splitter_survives_brackets_in_names() -> list[Violation]:
+    """本闸自检：切用例体时不许把名字里的括号算进配对深度。
+
+    ⚠ 这条守的是**上面那条闸自己**。`_balanced` 一旦把字符串里的括号算进去，
+    表现分两种、都静默：名字里多一个 `)` 会让用例体在名字处截断，那条用例被
+    误判成没有断言；多一个 `(` 则会越过用例体一路吞到后面，**借到别的用例的
+    断言**——于是真正没有断言的用例安然过闸，而这道闸的全部意义就是拦它。
+    """
+    cases = (
+        ("it('取值落在 [0, 1)', () => { expect(v).toBe(1) })", True),
+        ("it('名字带一个 ( 括号', () => { expect(v).toBe(1) })", True),
+        ("it('什么都不断言', () => { mount(Thing) })", False),
+    )
+    found: list[Violation] = []
+    for source, wants_assertion in cases:
+        blocks = _case_blocks(source)
+        detected = bool(blocks) and any(
+            mark in blocks[0][1] for mark in ASSERTIONS
+        )
+        if detected is not wants_assertion:
+            found.append(
+                Violation(
+                    "用例体切分被名字里的括号带歪",
+                    at(Path(__file__)),
+                    source[:40],
+                )
+            )
+    return found
+
+
 CHECKS = (
     check_python_tests_assert_something,
     check_test_names_state_a_contract,
@@ -284,6 +333,7 @@ CHECKS = (
     check_python_tests_are_layered,
     check_ts_tests_assert_something,
     check_ts_test_hygiene,
+    check_the_case_splitter_survives_brackets_in_names,
 )
 
 

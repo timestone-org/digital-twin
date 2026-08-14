@@ -1,4 +1,4 @@
-"""闸 1 对组态大屏那 23 条 `/api/v1/platform` 路由的判定钉死。
+"""闸 1 对组态大屏那 42 条 `/api/v1/platform` 路由的判定钉死。
 
 ⚠ 这一层守的是**顺序**。闸 1 首条命中即终局，而 `fnmatch` 的 `*` 跨斜杠，
 所以「动作端点」与「前缀兜底」的相对次序一旦写反，表现不是报错而是：
@@ -21,6 +21,7 @@ PROJECT = f"{PLATFORM_PREFIX}/dashboard-projects/{SAMPLE_ID}"
 DASHBOARD = f"{PLATFORM_PREFIX}/dashboards/{SAMPLE_ID}"
 NODE = f"{PLATFORM_PREFIX}/dashboard-nodes/{SAMPLE_ID}"
 BINDING = f"{PLATFORM_PREFIX}/dashboard-bindings/{SAMPLE_ID}"
+TEMPLATE = f"{PLATFORM_PREFIX}/dashboard-templates/{SAMPLE_ID}"
 
 VIEW = frozenset({catalog.DASHBOARD_VIEW})
 EDIT = frozenset({catalog.DASHBOARD_EDIT})
@@ -41,6 +42,8 @@ EXPECTED: tuple[tuple[str, str, frozenset[str]], ...] = (
     (DASHBOARD, "DELETE", MANAGE),
     (f"{DASHBOARD}:replace-layout", "POST", EDIT),
     (f"{DASHBOARD}:validate", "POST", VIEW),
+    (f"{DASHBOARD}:publish", "POST", MANAGE),
+    (f"{DASHBOARD}:unpublish", "POST", MANAGE),
     (f"{DASHBOARD}/nodes", "POST", EDIT),
     (f"{PLATFORM_PREFIX}/dashboard-nodes", "GET", VIEW),
     (NODE, "GET", VIEW),
@@ -52,10 +55,37 @@ EXPECTED: tuple[tuple[str, str, frozenset[str]], ...] = (
     (BINDING, "DELETE", EDIT),
     (f"{PLATFORM_PREFIX}/module-types", "GET", VIEW),
     (f"{PLATFORM_PREFIX}/module-types/twin-view", "GET", VIEW),
+    # 复制与导入都建出一张新屏，与建屏同档；导出什么都不改，走读面
+    (f"{DASHBOARD}:duplicate", "POST", MANAGE),
+    (f"{DASHBOARD}:export", "POST", VIEW),
+    (f"{PLATFORM_PREFIX}/dashboards:import", "POST", MANAGE),
+    # 缩略图：读随大屏读面，写随大屏编辑面
+    (f"{DASHBOARD}/thumbnail", "GET", VIEW),
+    (f"{DASHBOARD}/thumbnail", "PUT", EDIT),
+    # 项目自定义主题，整组读写都落在项目下
+    (f"{PROJECT}/themes", "GET", VIEW),
+    (f"{PROJECT}/themes", "POST", EDIT),
+    (f"{PROJECT}/themes/{SAMPLE_ID}", "PATCH", EDIT),
+    (f"{PROJECT}/themes/{SAMPLE_ID}", "DELETE", EDIT),
+    # 模板全局可见：建删归 manage，读与实例化各自一档
+    (f"{PLATFORM_PREFIX}/dashboard-templates", "GET", VIEW),
+    (f"{PLATFORM_PREFIX}/dashboard-templates", "POST", MANAGE),
+    (TEMPLATE, "GET", VIEW),
+    (TEMPLATE, "DELETE", MANAGE),
+    (f"{TEMPLATE}:instantiate", "POST", MANAGE),
+    # 运行参数：看得见节拍不等于能改
+    (f"{PLATFORM_PREFIX}/runtime-params", "GET", VIEW),
+    (f"{PLATFORM_PREFIX}/runtime-params/dashboard", "PUT", EDIT),
+    (f"{PLATFORM_PREFIX}/runtime-params/dashboard:reset", "POST", EDIT),
 )
 
 # 大屏面对外端点的条数。写死是为了让「加了端点没加规则」在这里红
-DASHBOARD_ROUTE_COUNT = 23
+DASHBOARD_ROUTE_COUNT = 42
+# 公开只读面。它不在 EXPECTED 里：那批断言的前提是「每条恰好要一个大屏码」，
+# 而这条要的是零个码
+PUBLIC_DASHBOARD = (
+    f"{PLATFORM_PREFIX}/public-dashboards/dGVzdC1wdWJsaWMtdG9rZW4"
+)
 
 
 def test_the_documented_face_covers_every_dashboard_route() -> None:
@@ -109,13 +139,19 @@ def test_no_read_endpoint_demands_a_write_code() -> None:
 
 
 def test_no_mutating_endpoint_is_satisfied_by_the_read_code() -> None:
-    """改数据的端点不许只要 view，`:validate` 除外——它什么都不改。"""
+    """改数据的端点不许只要 view。
+
+    `:validate` 与 `:export` 除外——两者都什么都不改，是 POST 只因为动作端点
+    一律 POST。⚠ 往这张豁免名单里加东西前先确认它真的是只读：加错一条，
+    就是让写操作只凭读码通过。
+    """
+    read_only_actions = (":validate", ":export")
     leaky = [
         f"{method} {path}"
         for path, method, expected in EXPECTED
         if method != "GET"
         and expected == VIEW
-        and not path.endswith(":validate")
+        and not path.endswith(read_only_actions)
     ]
     assert leaky == []
 
@@ -186,3 +222,40 @@ def test_an_editor_cannot_delete_a_dashboard() -> None:
     rule = find_rule(catalog_rule_views(), path=DASHBOARD, method="DELETE")
     assert rule is not None
     assert not rule.permission_codes <= editor
+
+
+def test_an_editor_cannot_publish_a_dashboard() -> None:
+    """发布是把一张屏交给全互联网，编辑权限不够。
+
+    ⚠ 少了 920 那两条窄规则，`:publish` 会落回 `dashboard*` 的写兜底，
+    于是任何编辑者都能悄悄把内网大屏挂上公网，而这件事没有任何提示。
+    """
+    editor = VIEW | EDIT
+    for path in (f"{DASHBOARD}:publish", f"{DASHBOARD}:unpublish"):
+        rule = find_rule(catalog_rule_views(), path=path, method="POST")
+        assert rule is not None
+        assert rule.permission_codes == MANAGE
+        assert not rule.permission_codes <= editor
+
+
+def test_the_public_face_is_not_swallowed_by_the_hvac_catch_all() -> None:
+    """公开只读面命中它自己那条空码规则，而不是按方法兜底的 `ac:view`。
+
+    ⚠ 落到兜底上的表现是：登录用户里只有持 `ac:view` 的人打得开公开链接，
+    而这条链接本该是给未登录访客的。
+    """
+    rule = find_rule(catalog_rule_views(), path=PUBLIC_DASHBOARD, method="GET")
+    assert rule is not None
+    assert rule.path_pattern == f"{PLATFORM_PREFIX}/public-dashboards/*"
+    assert rule.permission_codes == frozenset()
+
+
+def test_the_public_prefix_holds_for_every_method() -> None:
+    """公开前缀下的写方法也留在那条空码规则上，不落进大屏的写码。
+
+    ⚠ 这里断的是「不会有人以为公开前缀下的 POST 被 `dashboard:edit` 挡着」：
+    它根本没被任何权限码挡，挡它的是那里压根没有写端点。
+    """
+    rule = find_rule(catalog_rule_views(), path=PUBLIC_DASHBOARD, method="POST")
+    assert rule is not None
+    assert rule.permission_codes == frozenset()

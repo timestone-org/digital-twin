@@ -19,17 +19,18 @@
     "@dt/tokens": "workspace:*",
     "@dt/twin-config": "workspace:*",
     "@dt/ui": "workspace:*",
+    "html-to-image": "^1.11.13",
     "pinia": "^2.3.0",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.1.0",
+    "@types/node": "^22.10.0",
     "@vitejs/plugin-vue": "^5.2.1",
     "sass-embedded": "^1.83.0",
-    "vite": "^6.0.7",
-    "vue-tsc": "^2.2.0",
-    "@types/node": "^22.10.0",
     "tailwindcss": "^4.1.0",
-    "@tailwindcss/vite": "^4.1.0"
+    "vite": "^6.0.7",
+    "vue-tsc": "^2.2.0"
   }
 }

@@ -1,6 +1,7 @@
 /**
- * @fileoverview 其余页面的渲染与关键交互契约：首页按权限显隐、个人资料的两个
+ * @fileoverview 其余页面的渲染与关键交互契约：个人资料的身份/权限一览与两个
  * 表单、403/404 的返回入口、登录页遥测面板的定时器清理。
+ * 工作台自己的取数与交互在 `app/tests/pages/home/` 下。
  */
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -60,51 +61,6 @@ afterEach(() => {
 })
 
 describe('首页', () => {
-  it('列出角色权限与直权', () => {
-    signIn(['user:view', 'role:manage'])
-    const wrapper = mount(HomePage)
-    expect(wrapper.text()).toContain('user:view')
-    expect(wrapper.text()).toContain('role:manage')
-  })
-
-  it('没有任何权限码时给出空态', () => {
-    signIn([])
-    expect(mount(HomePage).text()).toContain('当前账号没有任何权限码')
-  })
-
-  it('身份卡给出角色与启用状态', () => {
-    signIn(['user:view'])
-    const text = mount(HomePage).text()
-    expect(text).toContain('管理员')
-    expect(text).toContain('已启用')
-  })
-
-  it('三个计数把「来自角色」与「单独授予」分开', () => {
-    signIn(['user:view', 'role:manage'], ['user:grant'])
-    // 按可访问名称定位，不按 class——class 属于实现细节
-    const counts = mount(HomePage).find('[aria-label="权限计数"]').findAll('dd')
-    // 有效 3 / 角色 2 / 直权 1
-    expect(counts.map((n) => n.text())).toEqual(['3', '2', '1'])
-  })
-
-  it('持 user:view 时快捷入口列出用户管理', () => {
-    signIn(['user:view'])
-    expect(mount(HomePage).text()).toContain('用户管理')
-  })
-
-  it('一个模块权限都没有时快捷入口给空态而不是空白', () => {
-    signIn([])
-    const text = mount(HomePage).text()
-    expect(text).toContain('没有可进入的模块')
-    expect(text).not.toContain('用户管理')
-  })
-
-  it('挂载时对齐一次权限', () => {
-    signIn(['user:view'])
-    mount(HomePage)
-    expect(authApi.fetchMe).toHaveBeenCalledTimes(1)
-  })
-
   it('退出入口在左侧导航条上，点了跳登录页', async () => {
     signIn(['user:view'])
     vi.spyOn(authApi, 'revokeSession').mockResolvedValue()
@@ -113,6 +69,43 @@ describe('首页', () => {
     await wrapper.find('[aria-label="退出登录"]').trigger('click')
     await flushPromises()
     expect(replace).toHaveBeenCalledWith({ name: 'login' })
+  })
+})
+
+describe('个人资料页 · 身份与权限', () => {
+  it('列出角色权限与直权', () => {
+    signIn(['user:view', 'role:manage'])
+    const wrapper = mount(ProfilePage)
+    expect(wrapper.text()).toContain('user:view')
+    expect(wrapper.text()).toContain('role:manage')
+  })
+
+  it('没有任何权限码时给出空态', () => {
+    signIn([])
+    expect(mount(ProfilePage).text()).toContain('当前账号没有任何权限码')
+  })
+
+  it('身份卡给出角色与启用状态', () => {
+    signIn(['user:view'])
+    const text = mount(ProfilePage).text()
+    expect(text).toContain('管理员')
+    expect(text).toContain('已启用')
+  })
+
+  it('三个计数把「来自角色」与「单独授予」分开', () => {
+    signIn(['user:view', 'role:manage'], ['user:grant'])
+    // 按可访问名称定位，不按 class——class 属于实现细节
+    const counts = mount(ProfilePage)
+      .find('[aria-label="权限计数"]')
+      .findAll('dd')
+    // 有效 3 / 角色 2 / 直权 1
+    expect(counts.map((n) => n.text())).toEqual(['3', '2', '1'])
+  })
+
+  it('挂载时对齐一次权限', () => {
+    signIn(['user:view'])
+    mount(ProfilePage)
+    expect(authApi.fetchMe).toHaveBeenCalledTimes(1)
   })
 })
 

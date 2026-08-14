@@ -35,9 +35,17 @@ from platform_server.apps.hvac.deps import (
     REQUIRED_CODES_ATTR,
     REQUIRED_MODE_ATTR,
 )
+from platform_server.apps.runtime_params.api import (
+    ROUTERS as RUNTIME_PARAM_ROUTERS,
+)
 from platform_server.settings import API_PREFIX, INTERNAL_PREFIX
 
-ROUTERS = (*HVAC_ROUTERS, *DASHBOARD_ROUTERS, *COLLECT_ROUTERS)
+ROUTERS = (
+    *HVAC_ROUTERS,
+    *DASHBOARD_ROUTERS,
+    *COLLECT_ROUTERS,
+    *RUNTIME_PARAM_ROUTERS,
+)
 
 SAMPLE_ID = "3fa85f64-5717-4562-b3fc-2c963f66afa6"
 _PARAM = re.compile(r"\{[^}]+\}")
@@ -68,6 +76,7 @@ NARROWED_IN_GATE_ONE: dict[tuple[str, str], frozenset[str]] = {
 # 兜底的那四条）。⚠ 与上面同理，这里只是复述 auth-server catalog 的口径。
 DASHBOARD_PREFIXES = (
     f"{API_PREFIX}/dashboard-projects",
+    f"{API_PREFIX}/dashboard-templates",
     f"{API_PREFIX}/dashboards",
     f"{API_PREFIX}/dashboard-nodes",
     f"{API_PREFIX}/dashboard-bindings",
@@ -80,10 +89,22 @@ DASHBOARD_MANAGED = (
     (f"{API_PREFIX}/dashboard-projects/{{project_id}}", "DELETE"),
     (f"{API_PREFIX}/dashboards", "POST"),
     (f"{API_PREFIX}/dashboards/{{dashboard_id}}", "DELETE"),
+    # 复制与导入都**建出一张新屏**，与「建大屏」同一类，不是「改内容」
+    (f"{API_PREFIX}/dashboards/{{dashboard_id}}:duplicate", "POST"),
+    (f"{API_PREFIX}/dashboards:import", "POST"),
+    # 公开一张屏是把它交给全互联网，与改一行配置不是同一类操作
+    (f"{API_PREFIX}/dashboards/{{dashboard_id}}:publish", "POST"),
+    (f"{API_PREFIX}/dashboards/{{dashboard_id}}:unpublish", "POST"),
+    # 模板全局可见：建一份等于给所有项目加一个可复制的起点，删一份影响全部引用方
+    (f"{API_PREFIX}/dashboard-templates", "POST"),
+    (f"{API_PREFIX}/dashboard-templates/{{template_id}}", "DELETE"),
+    (f"{API_PREFIX}/dashboard-templates/{{template_id}}:instantiate", "POST"),
 )
-# 自检不改任何东西，是 POST 只因为它是动作端点，故按读面放行
+# 什么都不改，是 POST 只因为动作端点一律 POST，故按读面放行。
+# ⚠ 漏登记一条的表现不是报错，是只读用户点下去收 403——而他明明看得见那张屏
 DASHBOARD_READ_ACTIONS = (
     (f"{API_PREFIX}/dashboards/{{dashboard_id}}:validate", "POST"),
+    (f"{API_PREFIX}/dashboards/{{dashboard_id}}:export", "POST"),
 )
 
 
@@ -119,6 +140,25 @@ def collect_expectation(path: str, method: str) -> frozenset[str] | None:
     return frozenset({COLLECT_MANAGE})
 
 
+# 运行参数自成一段。⚠ 它既不匹配 `dashboard*` 也不匹配 `collect-*`，闸 1 里
+# 靠 925/927 两条专门的规则托住；少了那两条它会掉进 900 的方法兜底，
+# 表现是「改大屏推送节拍要 `ac:manage`」——管空调的人能调，管大屏的人反而不能。
+RUNTIME_PARAM_PREFIX = f"{API_PREFIX}/runtime-params"
+
+
+def runtime_param_expectation(path: str, method: str) -> frozenset[str] | None:
+    """运行参数某条路由该要哪个码；不是这一面的路由给 None。
+
+    Args: path, method。
+    """
+    if not path.startswith(RUNTIME_PARAM_PREFIX):
+        return None
+    # 看得见节拍不等于能改，故读写分两个码
+    if method == "GET":
+        return frozenset({DASHBOARD_VIEW})
+    return frozenset({DASHBOARD_EDIT})
+
+
 def dashboard_expectation(path: str, method: str) -> frozenset[str] | None:
     """大屏面某条路由该要哪个码；不是大屏面的路由给 None。
 
@@ -143,6 +183,10 @@ STRICTER_THAN_GATE_ONE: dict[tuple[str, str], frozenset[str]] = {
     ),
 }
 
+# 公开大屏：全服务唯一一条**业务**匿名端点（ADR-0014）。凭据是 URL 里的
+# 公开令牌，由端点自己按「已发布」核对，故它没有、也不该有任何权限码。
+PUBLIC_DASHBOARD_PATH = f"{API_PREFIX}/public-dashboards/{{public_token}}"
+
 # 探针与文档不吃身份头，它们在边缘走免认证 location
 UNGUARDED = frozenset(
     {
@@ -151,6 +195,7 @@ UNGUARDED = frozenset(
         f"{API_PREFIX}/docs",
         f"{API_PREFIX}/redoc",
         f"{API_PREFIX}/openapi.json",
+        PUBLIC_DASHBOARD_PATH,
     }
 )
 
@@ -258,6 +303,7 @@ def test_gate_two_requires_the_code_gate_one_requires(
     expected = (
         dashboard_expectation(path, method)
         or collect_expectation(path, method)
+        or runtime_param_expectation(path, method)
         or STRICTER_THAN_GATE_ONE.get(
             (path, method),
             NARROWED_IN_GATE_ONE.get((path, method), EXPECTED[method]),
@@ -295,7 +341,7 @@ def test_the_dashboard_face_was_actually_covered() -> None:
         for path, method in ROUTE_CASES
         if dashboard_expectation(path, method) is not None
     ]
-    assert len(covered) == 23
+    assert len(covered) == 39
 
 
 def test_every_manage_entry_still_points_at_a_live_route() -> None:
@@ -323,6 +369,32 @@ def test_no_public_route_is_left_unguarded() -> None:
         )[0]
     ]
     assert unguarded == []
+
+
+def test_the_anonymous_business_surface_is_exactly_one_route() -> None:
+    """⚠ 免认证的业务端点只许有公开大屏这一条（ADR-0014）。
+
+    `UNGUARDED` 是一张手写的豁免名单，往里加一行就能让任何端点绕开上面全部
+    契约——加的人多半只是想让红灯变绿。这条把名单本身钉住：探针与文档之外，
+    匿名可达的只能是公开大屏。要再开一条，先写 ADR 说明配额与凭据怎么办。
+    """
+    probes = {
+        f"{API_PREFIX}/health",
+        f"{API_PREFIX}/ready",
+        f"{API_PREFIX}/docs",
+        f"{API_PREFIX}/redoc",
+        f"{API_PREFIX}/openapi.json",
+    }
+
+    assert UNGUARDED - probes == {PUBLIC_DASHBOARD_PATH}
+
+
+def test_the_public_dashboard_route_really_exists() -> None:
+    # 端点改路径后豁免名单会静默失效：那条路由重新落回上面的断言、当场红，
+    # 而这条则回答「是不是整条公开面被人删了却没人发现」
+    paths = {route.path for route in iter_routes(build_app())}
+
+    assert PUBLIC_DASHBOARD_PATH in paths
 
 
 def test_action_endpoints_are_post_only() -> None:

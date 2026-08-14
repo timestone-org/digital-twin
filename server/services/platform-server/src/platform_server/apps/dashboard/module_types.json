@@ -203,6 +203,526 @@
           "data_type": "string"
         }
       ]
+    },
+    {
+      "type": "footer",
+      "display_name": "页脚",
+      "category": "布局",
+      "icon": "panel-bottom",
+      "keywords": ["footer", "页脚", "底部"],
+      "default_size": {
+        "width": 1920,
+        "height": 72,
+        "min_width": 240,
+        "min_height": 40
+      },
+      "chrome": "bare",
+      "is_container": true,
+      "region": "footer",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "default": "",
+          "group": "标题",
+          "span": "full",
+          "when": { "key": "show_title", "in": [true] },
+          "placeholder": "留空则标题条上没有文字"
+        },
+        {
+          "key": "show_title",
+          "label": "显示标题条",
+          "type": "boolean",
+          "default": false,
+          "group": "标题",
+          "span": "half"
+        },
+        {
+          "key": "accent",
+          "label": "强调色",
+          "type": "color",
+          "default": "var(--accent-primary)",
+          "group": "外观",
+          "span": "half"
+        },
+        {
+          "key": "background",
+          "label": "背景",
+          "type": "color",
+          "default": "",
+          "group": "外观",
+          "span": "half",
+          "placeholder": "留空 = 透明，继承大屏背景"
+        },
+        {
+          "key": "container",
+          "label": "内部布局",
+          "type": "object",
+          "default": { "pad": 8 },
+          "group": "布局",
+          "help": "子节点摆在内容区里，内边距决定内容区比页脚矩形小多少",
+          "fields": [
+            {
+              "key": "pad",
+              "label": "内边距 (px)",
+              "type": "number",
+              "default": 8,
+              "min": 0,
+              "max": 64,
+              "step": 1
+            }
+          ]
+        }
+      ],
+      "bindings": []
+    },
+    {
+      "type": "container",
+      "display_name": "容器",
+      "category": "布局",
+      "icon": "layout-template",
+      "keywords": ["container", "容器", "分组"],
+      "default_size": {
+        "width": 640,
+        "height": 432,
+        "min_width": 120,
+        "min_height": 80
+      },
+      "chrome": "bare",
+      "is_container": true,
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "default": "",
+          "group": "标题",
+          "span": "full",
+          "when": { "key": "show_title", "in": [true] },
+          "placeholder": "留空则标题条上没有文字"
+        },
+        {
+          "key": "show_title",
+          "label": "显示标题条",
+          "type": "boolean",
+          "default": true,
+          "group": "标题",
+          "span": "half"
+        },
+        {
+          "key": "accent",
+          "label": "强调色",
+          "type": "color",
+          "default": "var(--accent-primary)",
+          "group": "外观",
+          "span": "half"
+        },
+        {
+          "key": "background",
+          "label": "背景",
+          "type": "color",
+          "default": "",
+          "group": "外观",
+          "span": "half",
+          "placeholder": "留空 = 透明，继承大屏背景"
+        },
+        {
+          "key": "background_image",
+          "label": "背景图 / 渐变",
+          "type": "string",
+          "default": "",
+          "group": "外观",
+          "span": "full",
+          "placeholder": "留空 = 无；填 CSS：linear-gradient(…) 或 url(…)"
+        },
+        {
+          "key": "show_dot_grid",
+          "label": "点阵底纹",
+          "type": "boolean",
+          "default": true,
+          "group": "外观",
+          "span": "half"
+        },
+        {
+          "key": "container",
+          "label": "内部布局",
+          "type": "object",
+          "default": { "pad": 8 },
+          "group": "布局",
+          "help": "子节点摆在内容区里，内边距决定内容区比容器矩形小多少",
+          "fields": [
+            {
+              "key": "pad",
+              "label": "内边距 (px)",
+              "type": "number",
+              "default": 8,
+              "min": 0,
+              "max": 64,
+              "step": 1
+            }
+          ]
+        }
+      ],
+      "bindings": []
+    },
+    {
+      "type": "text-block",
+      "display_name": "文本块",
+      "category": "装饰",
+      "icon": "type",
+      "keywords": ["text", "文本", "文字"],
+      "default_size": {
+        "width": 320,
+        "height": 72,
+        "min_width": 40,
+        "min_height": 24
+      },
+      "chrome": "bare",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "default": "",
+          "group": "内容",
+          "span": "full",
+          "placeholder": "留空则不画标题栏"
+        },
+        {
+          "key": "text",
+          "label": "文字",
+          "type": "string",
+          "default": "示例文本",
+          "group": "内容",
+          "span": "full",
+          "help": "按行换行；行内连续空格原样保留"
+        },
+        {
+          "key": "font_size",
+          "label": "字号 (px)",
+          "type": "range",
+          "default": 16,
+          "group": "文本",
+          "span": "half",
+          "min": 8,
+          "max": 120,
+          "step": 1
+        },
+        {
+          "key": "line_height",
+          "label": "行高",
+          "type": "range",
+          "default": 1.4,
+          "group": "文本",
+          "span": "half",
+          "min": 1,
+          "max": 3,
+          "step": 0.1
+        },
+        {
+          "key": "weight",
+          "label": "字重",
+          "type": "range",
+          "default": 400,
+          "group": "文本",
+          "span": "half",
+          "min": 100,
+          "max": 900,
+          "step": 100
+        },
+        {
+          "key": "letter_spacing",
+          "label": "字间距 (px)",
+          "type": "range",
+          "default": 0,
+          "group": "文本",
+          "span": "half",
+          "min": 0,
+          "max": 40,
+          "step": 0.5
+        },
+        {
+          "key": "font_family",
+          "label": "字体",
+          "type": "enum",
+          "default": "sans",
+          "group": "文本",
+          "span": "half",
+          "options": [
+            { "value": "sans", "label": "默认（继承正文）" },
+            { "value": "display", "label": "标题体" },
+            { "value": "mono", "label": "等宽体" }
+          ]
+        },
+        {
+          "key": "color",
+          "label": "颜色",
+          "type": "color",
+          "default": "var(--text-primary)",
+          "group": "文本",
+          "span": "half"
+        },
+        {
+          "key": "align",
+          "label": "水平对齐",
+          "type": "enum",
+          "default": "left",
+          "group": "文本",
+          "span": "half",
+          "options": [
+            { "value": "left", "label": "左" },
+            { "value": "center", "label": "中" },
+            { "value": "right", "label": "右" }
+          ]
+        },
+        {
+          "key": "v_align",
+          "label": "垂直对齐",
+          "type": "enum",
+          "default": "center",
+          "group": "文本",
+          "span": "half",
+          "options": [
+            { "value": "top", "label": "上" },
+            { "value": "center", "label": "中" },
+            { "value": "bottom", "label": "下" }
+          ]
+        },
+        {
+          "key": "padding",
+          "label": "内边距 (px)",
+          "type": "range",
+          "default": 8,
+          "group": "外观",
+          "span": "half",
+          "min": 0,
+          "max": 48,
+          "step": 1
+        },
+        {
+          "key": "opacity",
+          "label": "不透明度",
+          "type": "range",
+          "default": 1,
+          "group": "外观",
+          "span": "half",
+          "min": 0,
+          "max": 1,
+          "step": 0.05
+        },
+        {
+          "key": "background",
+          "label": "背景色",
+          "type": "color",
+          "default": "",
+          "group": "外观",
+          "span": "half",
+          "placeholder": "留空 = 透明"
+        },
+        {
+          "key": "overflow",
+          "label": "溢出",
+          "type": "enum",
+          "default": "hidden",
+          "group": "外观",
+          "span": "half",
+          "options": [
+            { "value": "hidden", "label": "裁剪" },
+            { "value": "scroll", "label": "滚动" },
+            { "value": "ellipsis", "label": "省略号" }
+          ]
+        },
+        {
+          "key": "glow",
+          "label": "辉光",
+          "type": "boolean",
+          "default": false,
+          "group": "外观",
+          "span": "half"
+        }
+      ],
+      "bindings": []
+    },
+    {
+      "type": "image-block",
+      "display_name": "图片块",
+      "category": "装饰",
+      "icon": "image",
+      "keywords": ["image", "图片", "logo"],
+      "default_size": {
+        "width": 240,
+        "height": 108,
+        "min_width": 40,
+        "min_height": 24
+      },
+      "chrome": "bare",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "default": "",
+          "group": "内容",
+          "span": "full",
+          "placeholder": "留空则不画标题栏"
+        },
+        {
+          "key": "src",
+          "label": "图片",
+          "type": "string",
+          "default": "",
+          "group": "内容",
+          "span": "full",
+          "help": "填图片地址按图片画；填 CSS 值（渐变 / url() / var()）按背景画",
+          "placeholder": "https://… 或 linear-gradient(…)"
+        },
+        {
+          "key": "alt",
+          "label": "替代文字",
+          "type": "string",
+          "default": "",
+          "group": "内容",
+          "span": "full"
+        },
+        {
+          "key": "fit",
+          "label": "填充方式",
+          "type": "enum",
+          "default": "contain",
+          "group": "画面",
+          "span": "half",
+          "options": [
+            { "value": "contain", "label": "完整" },
+            { "value": "cover", "label": "裁剪填满" },
+            { "value": "fill", "label": "拉伸" }
+          ]
+        },
+        {
+          "key": "position",
+          "label": "裁剪定位",
+          "type": "enum",
+          "default": "center",
+          "group": "画面",
+          "span": "half",
+          "options": [
+            { "value": "center", "label": "居中" },
+            { "value": "top", "label": "上" },
+            { "value": "bottom", "label": "下" },
+            { "value": "left", "label": "左" },
+            { "value": "right", "label": "右" }
+          ]
+        },
+        {
+          "key": "opacity",
+          "label": "不透明度 (%)",
+          "type": "range",
+          "default": 100,
+          "group": "画面",
+          "span": "half",
+          "min": 0,
+          "max": 100,
+          "step": 1
+        },
+        {
+          "key": "rounded",
+          "label": "圆角 (px)",
+          "type": "range",
+          "default": 0,
+          "group": "画面",
+          "span": "half",
+          "min": 0,
+          "max": 400,
+          "step": 1
+        },
+        {
+          "key": "rotate",
+          "label": "旋转 (°)",
+          "type": "range",
+          "default": 0,
+          "group": "画面",
+          "span": "half",
+          "min": -180,
+          "max": 180,
+          "step": 1
+        },
+        {
+          "key": "flip_x",
+          "label": "水平翻转",
+          "type": "boolean",
+          "default": false,
+          "group": "画面",
+          "span": "half"
+        },
+        {
+          "key": "flip_y",
+          "label": "垂直翻转",
+          "type": "boolean",
+          "default": false,
+          "group": "画面",
+          "span": "half"
+        },
+        {
+          "key": "blur",
+          "label": "模糊 (px)",
+          "type": "range",
+          "default": 0,
+          "group": "滤镜",
+          "span": "half",
+          "min": 0,
+          "max": 50,
+          "step": 0.5
+        },
+        {
+          "key": "grayscale",
+          "label": "灰度 (%)",
+          "type": "range",
+          "default": 0,
+          "group": "滤镜",
+          "span": "half",
+          "min": 0,
+          "max": 100,
+          "step": 1
+        },
+        {
+          "key": "brightness",
+          "label": "亮度 (%)",
+          "type": "range",
+          "default": 100,
+          "group": "滤镜",
+          "span": "half",
+          "min": 0,
+          "max": 300,
+          "step": 1
+        },
+        {
+          "key": "contrast",
+          "label": "对比度 (%)",
+          "type": "range",
+          "default": 100,
+          "group": "滤镜",
+          "span": "half",
+          "min": 0,
+          "max": 300,
+          "step": 1
+        },
+        {
+          "key": "saturate",
+          "label": "饱和度 (%)",
+          "type": "range",
+          "default": 100,
+          "group": "滤镜",
+          "span": "half",
+          "min": 0,
+          "max": 300,
+          "step": 1
+        }
+      ],
+      "bindings": []
     }
   ]
 }

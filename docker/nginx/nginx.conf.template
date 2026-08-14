@@ -28,6 +28,8 @@ http {
 
   # 公开面是可枚举凭据的爆破面，必须限流
   limit_req_zone $binary_remote_addr zone=login:10m rate=10r/m;
+  # 公开大屏免认证且每次都打一次库，同样要有闸
+  limit_req_zone $binary_remote_addr zone=public_dashboard:10m rate=60r/m;
 
   # WebSocket 升级要的 Connection 头：只有客户端确实在升级时才置 upgrade，
   # 恒置的话普通请求的连接复用会被打断
@@ -100,6 +102,17 @@ http {
     location = /api/v1/platform/redoc  { proxy_pass http://platform_server; }
     location = /api/v1/platform/openapi.json {
       proxy_pass http://platform_server;
+    }
+
+    # 公开大屏。⚠ 这是一条**免认证** location，不是漏了 auth-inject：链接的
+    # 持有者就是未登录的访客，挂上 auth_request 会让每个公开链接一律 401。
+    # 授权凭据是 URL 里那个令牌，由 platform 自己按「已发布」核对。
+    # ⚠ `^~` 不能省：少了它，下面 /api/v1/platform/ 那条更短的前缀在存在正则
+    # location 时会重新参与竞争，公开链接又会被要求登录。
+    location ^~ /api/v1/platform/public-dashboards/ {
+      limit_req zone=public_dashboard burst=20 nodelay;
+      proxy_pass http://platform_server;
+      include /etc/nginx/conf.d/proxy-common.conf;
     }
 
     # —— 受保护面 ——

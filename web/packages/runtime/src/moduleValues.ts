@@ -1,14 +1,10 @@
 /**
- * @fileoverview 绑定求值：`BindingPayload[]` → 注入渲染组件的 `values`。**纯函数**，
+ * @fileoverview 绑定求值：`BindingView[]` → 注入渲染组件的 `values`。**纯函数**，
  * 清单绑定槽与「读一条绑定」的能力都由调用方注入，本文件不查任何注册表、不发任何请求。
  * ⚠ 它也不认识来源种类：派生槽由 `computeJson` 这条**声明**认出来，
  * 加一种来源不必碰这里（docs/DASHBOARD_DESIGN.md §5.5）。
  */
-import type {
-  BindingPayload,
-  BindingSpec,
-  BindingTransform,
-} from '@dt/contracts'
+import type { BindingView, BindingSpec, BindingTransform } from '@dt/contracts'
 
 /**
  * 一条绑定当前的取数结果。
@@ -35,7 +31,7 @@ export type BindingSlot =
  * @param siblings 同节点内已求值的槽，键是 `fieldKey`，供派生槽运算
  */
 export type BindingValueReader = (
-  binding: BindingPayload,
+  binding: BindingView,
   siblings: Readonly<Record<string, unknown>>,
 ) => BindingSlot
 
@@ -70,7 +66,7 @@ export interface ModuleValuesInput {
   /** 模块清单声明的绑定槽（注入，不查注册表）。 */
   specs: readonly BindingSpec[]
   /** 该节点的全部绑定。 */
-  bindings: readonly BindingPayload[]
+  bindings: readonly BindingView[]
   read: BindingValueReader
 }
 
@@ -195,7 +191,7 @@ export function computeModuleValues(input: ModuleValuesInput): ModuleValues {
     tally: { bound: 0, ok: 0, empty: 0, pending: 0, error: 0, stale: 0 },
     valueTimeMs: null,
   }
-  const derived: BindingPayload[] = []
+  const derived: BindingView[] = []
   for (const binding of input.bindings) {
     if (binding.computeJson === null) resolveBinding(binding, input, state)
     else derived.push(binding)
@@ -211,7 +207,7 @@ export function computeModuleValues(input: ModuleValuesInput): ModuleValues {
 
 /** 读一条绑定并把结果记进各档计数。 */
 function resolveBinding(
-  binding: BindingPayload,
+  binding: BindingView,
   input: ModuleValuesInput,
   state: EvaluationState,
 ): void {
@@ -255,15 +251,15 @@ function noteTimestamp(
  * 派生槽可以引用派生槽，所以不能一遍过；剩下的就是成环。
  */
 function resolveDerived(
-  derived: readonly BindingPayload[],
+  derived: readonly BindingView[],
   input: ModuleValuesInput,
   state: EvaluationState,
 ): void {
   const unresolved = new Set(derived.map((binding) => binding.fieldKey))
-  let pending: readonly BindingPayload[] = derived
+  let pending: readonly BindingView[] = derived
   while (pending.length > 0) {
-    const waiting: BindingPayload[] = []
-    const ready: BindingPayload[] = []
+    const waiting: BindingView[] = []
+    const ready: BindingView[] = []
     for (const binding of pending) {
       if (waitsForSibling(binding, unresolved)) waiting.push(binding)
       else ready.push(binding)
@@ -279,7 +275,7 @@ function resolveDerived(
 }
 
 function waitsForSibling(
-  binding: BindingPayload,
+  binding: BindingView,
   unresolved: ReadonlySet<string>,
 ): boolean {
   return (binding.computeJson?.inputs ?? []).some(
@@ -288,7 +284,7 @@ function waitsForSibling(
 }
 
 /** 成环的槽诚实给 null，并把原因写进 errors——空着看上去和「本来就没值」一样。 */
-function reportCycle(binding: BindingPayload, state: EvaluationState): void {
+function reportCycle(binding: BindingView, state: EvaluationState): void {
   state.tally.bound += 1
   state.tally.error += 1
   state.errors[binding.fieldKey] = CYCLE_MESSAGE

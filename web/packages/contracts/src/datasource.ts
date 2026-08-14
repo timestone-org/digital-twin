@@ -54,10 +54,7 @@ export type PointSample = PointReadingSample | PointErrorSample
 export type Unsubscribe = () => void
 
 /** 每收到一个新值调用一次。 */
-export type PointValueListener = (
-  nodeKey: string,
-  sample: PointSample,
-) => void
+export type PointValueListener = (nodeKey: string, sample: PointSample) => void
 
 /** 一次历史取数。 */
 export interface HistoryQuery {

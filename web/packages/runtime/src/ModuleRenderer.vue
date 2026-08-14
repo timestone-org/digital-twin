@@ -6,10 +6,16 @@
  * 三条失败边界各自只影响一格：清单缺失 → 占位；渲染抛错 → `onErrorCaptured` 阻断冒泡；
  * 异步 chunk 加载失败 → 重试一次后占位。
  */
-import type { BindingPayload, ModuleMeta } from '@dt/contracts'
+import type {
+  BindingView,
+  CardChrome,
+  InteractionEvent,
+  ModuleMeta,
+} from '@dt/contracts'
 import {
   computed,
   defineAsyncComponent,
+  inject,
   onErrorCaptured,
   ref,
   shallowRef,
@@ -17,6 +23,8 @@ import {
   type Component,
 } from 'vue'
 
+import { resolveCardChrome } from './cardVars'
+import { INTERACTION_KEY } from './interactionRuntime'
 import ModuleFallback from './ModuleFallback.vue'
 import ModuleStatusOverlay from './ModuleStatusOverlay.vue'
 import { computeModuleStatus, countUnboundRequired } from './moduleStatus'
@@ -28,9 +36,11 @@ const props = defineProps<{
   moduleType: string
   /** 节点落库的配置；清单缺省在这里铺底。 */
   config?: Record<string, unknown>
-  bindings?: readonly BindingPayload[]
+  bindings?: readonly BindingView[]
   /** 画布节点 id，透传进 `meta` 供模块与调试用。 */
   nodeId?: string
+  /** 大屏级卡片外观缺省；模块级覆盖在 `config.__cardStyle`，同键模块赢。 */
+  cardChrome?: CardChrome | undefined
   /**
    * 注入式清单解析器。
    * ⚠ 必填而不是可选：本包不查注册表，注册表由应用壳持有；给成可选就会有人忘了传，
@@ -142,6 +152,40 @@ function firstReason(errors: Readonly<Record<string, string>>): string {
   return first === undefined ? '' : `${first[0]}：${first[1]}`
 }
 
+// 联动运行时可选：没 provide（设计态画布、独立渲染）就没有可点击外观也不转发
+const interaction = inject(INTERACTION_KEY, null)
+
+// 真配了以本节点为源的规则才算可交互——只有开关没有规则就是「点了没反应」
+const interactive = computed(
+  () =>
+    interaction !== null &&
+    props.nodeId !== undefined &&
+    interaction.hasRules(props.nodeId),
+)
+
+/** 模块自己上抛的联动事件，转发给引擎；无引擎时静默丢弃。 */
+function forwardInteraction(event: InteractionEvent): void {
+  if (interaction === null || props.nodeId === undefined) return
+  interaction.dispatch(props.nodeId, event)
+}
+
+// 整块可点由宿主统一接管，模块本身零改动
+const hostClickable = computed(
+  () => manifest.value?.hostClickable === true && interactive.value,
+)
+
+function onHostClick(): void {
+  if (hostClickable.value) forwardInteraction({ event: 'click' })
+}
+
+function onHostKeydown(event: KeyboardEvent): void {
+  if (!hostClickable.value) return
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    forwardInteraction({ event: 'click' })
+  }
+}
+
 const meta = computed<ModuleMeta>(() => {
   const value: ModuleMeta = { status: status.value }
   if (props.nodeId !== undefined) value.nodeId = props.nodeId
@@ -150,15 +194,38 @@ const meta = computed<ModuleMeta>(() => {
   }
   const reason = firstReason(evaluated.value.errors)
   if (reason !== '') value.errorMessage = reason
+  if (interaction !== null && props.nodeId !== undefined) {
+    value.interactive = interactive.value
+  }
   return value
 })
 
 /** 渲染根要不要套卡片框，由清单声明，不按模块类型判断。 */
 const isCard = computed(() => (manifest.value?.chrome ?? 'card') === 'card')
+
+// 大屏级缺省 + 模块级覆盖 → 这一格的卡片外观。没配任何 chrome 键时 style 是
+// undefined，一个变量都不注入 = 渲染完全走平台默认，这是 chrome 的铁律
+const chrome = computed(() =>
+  resolveCardChrome(props.cardChrome, props.config?.__cardStyle, isCard.value),
+)
 </script>
 
 <template>
-  <div class="dt-module" :class="{ 'dt-module--card': isCard }">
+  <div
+    class="dt-module"
+    :class="[
+      chrome.classes,
+      {
+        'dt-module--card': chrome.isFramed,
+        'dt-module--clickable': hostClickable,
+      },
+    ]"
+    :style="chrome.style"
+    :role="hostClickable ? 'button' : undefined"
+    :tabindex="hostClickable ? 0 : undefined"
+    @click="onHostClick"
+    @keydown="onHostKeydown"
+  >
     <ModuleFallback
       v-if="fallback"
       :title="fallback.title"
@@ -171,6 +238,7 @@ const isCard = computed(() => (manifest.value?.chrome ?? 'card') === 'card')
         :config="resolvedConfig"
         :values="evaluated.values"
         :meta="meta"
+        @interaction="forwardInteraction"
       >
         <slot />
       </component>
@@ -192,9 +260,35 @@ const isCard = computed(() => (manifest.value?.chrome ?? 'card') === 'card')
   overflow: hidden;
 }
 
+// 每一项都可被 chrome 顶掉，而每个 var() 的兜底值就是平台默认观感——
+// 「没配这一项」与「配成默认值」因此走同一条渲染路径
 .dt-module--card {
   border: 1px solid var(--card-border);
+  // ⚠ 必须排在 border 简写之后：单边描边的值是 border-width 简写串，写在前面会被重置
+  border-width: var(--card-border-side, 1px);
   border-radius: var(--card-radius);
   background: var(--card-bg);
+  animation: var(--card-anim, none);
+  // ⚠ 缺省必须是 none：非 none 的 backdrop-filter 会新建合成层与层叠上下文，
+  // 还会改掉内部绝对定位元素的包含块
+  backdrop-filter: var(--card-backdrop-blur, none);
+  transition: transform var(--card-hover-lift-dur, 0s) ease;
+}
+
+// ⚠ 故意不给 var() 兜底：未注入时整条声明「计算值时失效」→ transform 回到 none。
+// 写成 0px 会得到 translateY(0)，那仍是非 none 的 transform，会在悬停瞬间凭空
+// 造出层叠上下文与包含块
+.dt-module--card:hover {
+  transform: translateY(calc(-1 * var(--card-hover-lift)));
+}
+
+// 整块可点的宿主外观：手型 + 键盘焦点环都在这一处，模块不必各写一遍
+.dt-module--clickable {
+  cursor: pointer;
+}
+
+.dt-module--clickable:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
 }
 </style>

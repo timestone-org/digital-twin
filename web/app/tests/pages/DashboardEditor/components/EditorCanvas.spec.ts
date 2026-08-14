@@ -1,12 +1,20 @@
 /**
- * @fileoverview 契约：画布按排版结果摆节点、选中与拖动抛出事件，
- * 且**卸载时把 ResizeObserver 断开**——大屏一开就是几天，漏一次就持续累积一份。
+ * @fileoverview 契约：画布按排版结果摆节点，点选/Shift 多选/右键/模块库拖放各自
+ * 抛出对应事件，钉位节点点得中却拖不动，且**卸载时把拖动的 window 监听摘掉**——
+ * 大屏一开就是几天，漏一次就留下一副永远跟着鼠标走的监听。
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
 import type { DashboardNodePayload, ModuleManifest } from '@dt/contracts'
+import { mount } from '@vue/test-utils'
+import { describe, expect, it } from 'vitest'
+import { nextTick } from 'vue'
 
+import {
+  normalizeEditorGrid,
+  normalizeSnapConfig,
+  type SnapConfig,
+} from '@/features/dashboard/canvasSnap'
 import { layoutFrames } from '@/features/dashboard/editorLayout'
+import { MODULE_DRAG_MIME } from '@/features/dashboard/moduleLibrary'
 import EditorCanvas from '@/pages/DashboardEditor/components/EditorCanvas.vue'
 
 const MANIFEST: ModuleManifest = {
@@ -21,11 +29,26 @@ const MANIFEST: ModuleManifest = {
   component: () => Promise.resolve({ default: { template: '<i />' } }),
 }
 
-function getManifest(): ModuleManifest {
-  return MANIFEST
+const PINNED: ModuleManifest = { ...MANIFEST, type: 'pinned', region: 'header' }
+const CONTAINER: ModuleManifest = {
+  ...MANIFEST,
+  type: 'box',
+  isContainer: true,
 }
 
-function node(id: string, over: Partial<DashboardNodePayload> = {}): DashboardNodePayload {
+function getManifest(moduleType: string): ModuleManifest {
+  if (moduleType === 'pinned') return PINNED
+  return moduleType === 'box' ? CONTAINER : MANIFEST
+}
+
+/** 步进 10 的像素吸附：栅格档的周期是小数，断言会被浮点噪声淹掉。 */
+const SNAP: SnapConfig = normalizeSnapConfig({ mode: 'px', step: 10 })
+const GRID = normalizeEditorGrid()
+
+function node(
+  id: string,
+  over: Partial<DashboardNodePayload> = {},
+): DashboardNodePayload {
   return {
     id,
     dashboardId: 'd1',
@@ -46,126 +69,275 @@ function node(id: string, over: Partial<DashboardNodePayload> = {}): DashboardNo
   }
 }
 
-const disconnect = vi.fn()
-const observe = vi.fn()
-
-class FakeObserver {
-  observe = observe
-  disconnect = disconnect
-  unobserve = vi.fn()
-}
-
-beforeEach(() => {
-  disconnect.mockClear()
-  observe.mockClear()
-  vi.stubGlobal('ResizeObserver', FakeObserver)
-})
-
-afterEach(() => {
-  vi.unstubAllGlobals()
-})
-
-function mountCanvas(nodes: DashboardNodePayload[], selectedId: string | null = null) {
+function mountCanvas(
+  nodes: DashboardNodePayload[],
+  selectedIds: string[] = [],
+  snap: SnapConfig = SNAP,
+) {
   return mount(EditorCanvas, {
     props: {
       design: { width: 1920, height: 1080 },
       frames: layoutFrames(nodes, getManifest).frames,
       nodes,
-      selectedId,
+      selectedIds,
       getManifest,
+      snap,
+      grid: GRID,
+      zoom: null,
     },
   })
+}
+
+function pointer(type: string, clientX: number, clientY: number): void {
+  window.dispatchEvent(new MouseEvent(type, { clientX, clientY }))
 }
 
 describe('摆节点', () => {
   it('一个节点一格，位置来自排版结果', () => {
     const wrapper = mountCanvas([node('a')])
-    const box = wrapper.find('.dt-canvas__node')
 
+    const box = wrapper.find('.dt-node')
     expect(box.attributes('style')).toContain('left: 10px')
     expect(box.attributes('style')).toContain('top: 20px')
   })
 
-  it('选中的那一格挂上选中样式', () => {
-    const wrapper = mountCanvas([node('a'), node('b', { zIndex: 1 })], 'b')
-    const boxes = wrapper.findAll('.dt-canvas__node')
-
-    expect(boxes[0]?.classes()).not.toContain('dt-canvas__node--selected')
-    expect(boxes[1]?.classes()).toContain('dt-canvas__node--selected')
-  })
-
-  it('隐藏的节点在设计态仍然画出来，只是标成隐藏——不然没法把它改回可见', () => {
+  it('隐藏的节点在设计态仍然画出来，只是标成隐藏', () => {
     const wrapper = mountCanvas([node('a', { isVisible: false })])
 
-    expect(wrapper.find('.dt-canvas__node').classes()).toContain(
-      'dt-canvas__node--hidden',
-    )
+    expect(wrapper.find('.dt-node').classes()).toContain('dt-node--hidden')
   })
 
-  it('只有选中的那一格有缩放把手', () => {
-    const wrapper = mountCanvas([node('a')], 'a')
+  it('选中的那一格挂上选中样式，没选中的不挂', () => {
+    const wrapper = mountCanvas([node('a'), node('b', { zIndex: 1 })], ['b'])
 
-    expect(wrapper.findAll('.dt-canvas__handle')).toHaveLength(1)
+    const boxes = wrapper.findAll('.dt-node')
+    expect(boxes[0]?.classes()).not.toContain('dt-node--selected')
+    expect(boxes[1]?.classes()).toContain('dt-node--selected')
+  })
+
+  it('单选的那一格给 8 个手柄，没选中的一个都没有', () => {
+    const wrapper = mountCanvas([node('a'), node('b', { zIndex: 1 })], ['a'])
+
+    expect(wrapper.findAll('.dt-node__handle')).toHaveLength(8)
+  })
+
+  it('多选时不出手柄——拖手柄该改谁的尺寸没有定义', () => {
+    const wrapper = mountCanvas(
+      [node('a'), node('b', { zIndex: 1 })],
+      ['a', 'b'],
+    )
+
+    expect(wrapper.findAll('.dt-node__handle')).toHaveLength(0)
+  })
+
+  it('钉位节点只给一个手柄，且只许动高', () => {
+    const wrapper = mountCanvas(
+      [node('h', { moduleType: 'pinned', x: 0, y: 0, w: 1920, h: 80 })],
+      ['h'],
+    )
+
+    expect(wrapper.findAll('.dt-node__handle')).toHaveLength(1)
   })
 })
 
-describe('选中与拖动', () => {
-  it('按下一格就选中它', async () => {
+describe('点选', () => {
+  it('按下一格就选中它，且不是累加', async () => {
     const wrapper = mountCanvas([node('a')])
 
-    await wrapper.find('.dt-canvas__node').trigger('pointerdown')
+    await wrapper
+      .find('.dt-node__surface')
+      .trigger('pointerdown', { button: 0 })
 
-    expect(wrapper.emitted('select')?.[0]).toEqual(['a'])
+    expect(wrapper.emitted('select')?.[0]).toEqual(['a', false])
   })
 
-  it('按在空白处清掉选中', async () => {
-    const wrapper = mountCanvas([node('a')], 'a')
+  it('按住 Shift 点选是累加，且不起手拖动', async () => {
+    const wrapper = mountCanvas([node('a')])
 
-    await wrapper.find('.dt-canvas').trigger('pointerdown')
+    await wrapper
+      .find('.dt-node__surface')
+      .trigger('pointerdown', { button: 0, shiftKey: true })
+    pointer('pointermove', 40, 0)
 
-    expect(wrapper.emitted('select')?.at(-1)).toEqual([null])
+    expect(wrapper.emitted('select')?.[0]).toEqual(['a', true])
+    expect(wrapper.emitted('change')).toBeUndefined()
   })
 
-  it('拖动过程中抛出连续的几何变更', async () => {
-    const wrapper = mountCanvas([node('a')], 'a')
+  it('在空白处按下再松手清掉选中', async () => {
+    const wrapper = mountCanvas([node('a')], ['a'])
 
-    await wrapper.find('.dt-canvas__node').trigger('pointerdown', {
+    await wrapper.find('.dt-canvas__grid').trigger('pointerdown', { button: 0 })
+    pointer('pointerup', 0, 0)
+
+    expect(wrapper.emitted('select')?.at(-1)).toEqual([null, false])
+  })
+
+  it('右键未选中的节点：先单选它再上抛画布菜单的 client 坐标', async () => {
+    const wrapper = mountCanvas([node('a')])
+
+    await wrapper
+      .find('.dt-node__surface')
+      .trigger('contextmenu', { clientX: 30, clientY: 40 })
+
+    expect(wrapper.emitted('select')?.[0]).toEqual(['a', false])
+    expect(wrapper.emitted('canvas-menu')?.[0]).toEqual([{ x: 30, y: 40 }, 'a'])
+  })
+
+  it('右键空白处只上抛菜单，节点 id 为空', async () => {
+    const wrapper = mountCanvas([node('a')])
+
+    await wrapper
+      .find('.dt-canvas__grid')
+      .trigger('contextmenu', { clientX: 12, clientY: 8 })
+
+    expect(wrapper.emitted('canvas-menu')?.[0]).toEqual([{ x: 12, y: 8 }, null])
+  })
+})
+
+describe('拖动', () => {
+  it('拖动过程中连续抛出几何，松手那一下抛一次收尾', async () => {
+    const wrapper = mountCanvas([node('a')], ['a'])
+
+    await wrapper.find('.dt-node__surface').trigger('pointerdown', {
+      button: 0,
       clientX: 0,
       clientY: 0,
     })
-    window.dispatchEvent(
-      new MouseEvent('pointermove', { clientX: 30, clientY: 0 }),
-    )
-    window.dispatchEvent(new MouseEvent('pointerup', { clientX: 30, clientY: 0 }))
+    pointer('pointermove', 30, 0)
+    pointer('pointerup', 30, 0)
 
     const changes = wrapper.emitted('change') ?? []
     expect(changes).toHaveLength(2)
     expect(changes[1]).toEqual(['a', { x: 40, y: 20, w: 100, h: 50 }, false])
   })
-})
 
-describe('卸载清理', () => {
-  it('挂载时接上 ResizeObserver，卸载时断开', () => {
-    const wrapper = mountCanvas([node('a')])
-    expect(observe).toHaveBeenCalledTimes(1)
+  it('钉位节点点得中却拖不动', async () => {
+    const nodes = [
+      node('h', { moduleType: 'pinned', x: 0, y: 0, w: 1920, h: 80 }),
+    ]
+    const wrapper = mountCanvas(nodes)
 
-    wrapper.unmount()
+    await wrapper.find('.dt-node__surface').trigger('pointerdown', {
+      button: 0,
+      clientX: 0,
+      clientY: 0,
+    })
+    pointer('pointermove', 40, 40)
+    pointer('pointerup', 40, 40)
 
-    expect(disconnect).toHaveBeenCalledTimes(1)
+    expect(wrapper.emitted('select')?.[0]).toEqual(['h', false])
+    expect(wrapper.emitted('change')).toBeUndefined()
   })
 
   it('卸载之后再动鼠标不再抛出几何变更', async () => {
-    const wrapper = mountCanvas([node('a')], 'a')
-    await wrapper.find('.dt-canvas__node').trigger('pointerdown', {
+    const wrapper = mountCanvas([node('a')], ['a'])
+    await wrapper.find('.dt-node__surface').trigger('pointerdown', {
+      button: 0,
       clientX: 0,
       clientY: 0,
     })
     wrapper.unmount()
 
-    window.dispatchEvent(
-      new MouseEvent('pointermove', { clientX: 90, clientY: 90 }),
-    )
+    pointer('pointermove', 90, 90)
+    pointer('pointerup', 90, 90)
 
     expect(wrapper.emitted('change')).toBeUndefined()
+  })
+})
+
+describe('框选与参考线', () => {
+  it('空白处拖出框：与框相交的顶层节点整批选中', async () => {
+    const wrapper = mountCanvas([node('a')])
+
+    await wrapper.find('.dt-canvas__grid').trigger('pointerdown', {
+      button: 0,
+      clientX: 0,
+      clientY: 0,
+    })
+    pointer('pointermove', 200, 200)
+    pointer('pointerup', 200, 200)
+
+    expect(wrapper.emitted('marquee')?.[0]).toEqual([['a'], false])
+  })
+
+  it('拖到与兄弟对齐时画出参考线', async () => {
+    const nodes = [node('a'), node('b', { x: 200, zIndex: 1 })]
+    const wrapper = mountCanvas(nodes, ['a'])
+
+    await wrapper.findAll('.dt-node__surface')[0]?.trigger('pointerdown', {
+      button: 0,
+      clientX: 0,
+      clientY: 0,
+    })
+    pointer('pointermove', 0, 3)
+    await nextTick()
+
+    expect(wrapper.findAll('.dt-guides line').length).toBeGreaterThan(0)
+  })
+})
+
+describe('换父', () => {
+  it('松手落进容器时抛换父，坐标换算成容器内的局部值', async () => {
+    const nodes = [
+      node('a'),
+      node('box', {
+        moduleType: 'box',
+        x: 200,
+        y: 200,
+        w: 400,
+        h: 300,
+        zIndex: 1,
+      }),
+    ]
+    const wrapper = mountCanvas(
+      nodes,
+      ['a'],
+      normalizeSnapConfig({ mode: 'px', step: 10, guides: false }),
+    )
+
+    await wrapper.findAll('.dt-node__surface')[0]?.trigger('pointerdown', {
+      button: 0,
+      clientX: 0,
+      clientY: 0,
+    })
+    pointer('pointermove', 300, 300)
+    pointer('pointerup', 300, 300)
+
+    expect(wrapper.emitted('drop-node')?.[0]).toEqual([
+      'a',
+      'box',
+      { x: 100, y: 110, w: 100, h: 50 },
+    ])
+  })
+})
+
+describe('模块库拖放', () => {
+  it('落在顶层：按落点吸附后上抛模块类型与坐标', async () => {
+    const wrapper = mountCanvas([node('a')])
+
+    await wrapper.find('.dt-canvas__stage').trigger('drop', {
+      clientX: 104,
+      clientY: 47,
+      dataTransfer: {
+        getData: (type: string) => (type === MODULE_DRAG_MIME ? 'demo' : ''),
+      },
+    })
+
+    expect(wrapper.emitted('add-at')?.[0]).toEqual([
+      'demo',
+      { parentId: null, x: 100, y: 50 },
+    ])
+  })
+
+  it('拖进来的不是模块就什么都不发', async () => {
+    const wrapper = mountCanvas([node('a')])
+
+    await wrapper.find('.dt-canvas__stage').trigger('drop', {
+      clientX: 10,
+      clientY: 10,
+      dataTransfer: { getData: () => '' },
+    })
+
+    expect(wrapper.emitted('add-at')).toBeUndefined()
   })
 })

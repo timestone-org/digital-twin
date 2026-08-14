@@ -5,9 +5,11 @@
  * ⚠ 不可见节点根本**不挂载**（不是 `v-show`）：隐藏的模块要停止绑定求值、
  * 停掉 3D 与图表的副作用，藏起来继续跑等于白付一份算力。
  */
+import type { CardChrome } from '@dt/contracts'
 import { resolveContentInset } from '@dt/modules'
-import { computed, type CSSProperties } from 'vue'
+import { computed, inject, type CSSProperties } from 'vue'
 
+import { INTERACTION_KEY } from './interactionRuntime'
 import ModuleRenderer from './ModuleRenderer.vue'
 import {
   containerGeometry,
@@ -25,8 +27,15 @@ const props = defineProps<{
   design: DesignSize
   /** 注入式清单解析器，原样透传给每一格。 */
   getManifest: GetModuleManifest
+  /** 大屏级卡片外观缺省，逐层原样透传；每格的模块级覆盖在自己的 config 里。 */
+  cardChrome?: CardChrome | undefined
   /** 递归深度，顶层不传。 */
   depth?: number
+  /**
+   * 本层节点无条件渲染（节点弹窗的根用）：弹窗目标通常配成初始不可见，
+   * 不掀开的话弹窗里就是一片空白。只作用于本层，子层照常按可见性走。
+   */
+  rootAlwaysVisible?: boolean
 }>()
 
 /** 递归层数上限：异常深的树停在这里，不把浏览器拖死。 */
@@ -36,8 +45,16 @@ const currentDepth = computed(() => props.depth ?? 0)
 
 const canRecurse = computed(() => currentDepth.value < MAX_DEPTH)
 
+// 联动运行时可选：没 provide（编辑器画布、独立渲染）就按持久显隐走
+const interaction = inject(INTERACTION_KEY, null)
+
 const visibleNodes = computed(() =>
-  props.nodes.filter((node) => node.isVisible),
+  props.nodes.filter((node) => {
+    if (props.rootAlwaysVisible === true) return true
+    return interaction === null
+      ? node.isVisible
+      : interaction.isVisible(node.id)
+  }),
 )
 
 const layerStyle = computed<CSSProperties>(() => ({
@@ -84,12 +101,14 @@ function childDesignOf(node: RuntimeNode): DesignSize {
         :bindings="node.bindings"
         :node-id="node.id"
         :get-manifest="getManifest"
+        :card-chrome="cardChrome"
       >
         <NodeTree
           v-if="node.isContainer && canRecurse"
           :nodes="node.children"
           :design="childDesignOf(node)"
           :get-manifest="getManifest"
+          :card-chrome="cardChrome"
           :depth="currentDepth + 1"
         />
       </ModuleRenderer>

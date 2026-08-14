@@ -1,11 +1,14 @@
 /**
  * @fileoverview 契约：模块库的内容完全来自注册表——分组、搜索与图标都读清单声明，
  * 库里没有任何模块类型字面量，第三方在启动期注册的清单会自动出现在这里。
+ * ⚠ 拖到画布用的是自定义 MIME：换成 text/plain 的话，从别处拖进来的任意文本
+ * 都会被当成一次「添加模块」。
  */
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type { ModuleManifest } from '@dt/contracts'
 
+import { MODULE_DRAG_MIME } from '@/features/dashboard/moduleLibrary'
 import ModuleLibrary from '@/pages/DashboardEditor/components/ModuleLibrary.vue'
 
 function manifest(over: Partial<ModuleManifest> = {}): ModuleManifest {
@@ -22,8 +25,18 @@ function manifest(over: Partial<ModuleManifest> = {}): ModuleManifest {
 }
 
 const MANIFESTS = [
-  manifest({ type: 'a', displayName: '折线卡片', category: '图表', icon: 'activity' }),
-  manifest({ type: 'b', displayName: '页头', category: '布局', keywords: ['yetou'] }),
+  manifest({
+    type: 'a',
+    displayName: '折线卡片',
+    category: '图表',
+    icon: 'activity',
+  }),
+  manifest({
+    type: 'b',
+    displayName: '页头',
+    category: '布局',
+    keywords: ['yetou'],
+  }),
 ]
 
 describe('列出模块', () => {
@@ -69,5 +82,43 @@ describe('搜索', () => {
     await wrapper.find('.dt-input__el').setValue('不存在')
 
     expect(wrapper.text()).toContain('没有匹配的模块')
+  })
+})
+
+describe('被取代的模块', () => {
+  it('声明了 replacedBy 的模块不进库，但别的照列', () => {
+    const wrapper = mount(ModuleLibrary, {
+      props: {
+        manifests: [
+          ...MANIFESTS,
+          manifest({ type: 'old', displayName: '旧页头', replacedBy: 'b' }),
+        ],
+      },
+    })
+
+    expect(wrapper.text()).not.toContain('旧页头')
+    expect(wrapper.findAll('.dt-lib__item')).toHaveLength(MANIFESTS.length)
+  })
+})
+
+describe('拖到画布', () => {
+  it('每一项都可拖，载荷是模块类型且走自定义 MIME', () => {
+    const wrapper = mount(ModuleLibrary, { props: { manifests: MANIFESTS } })
+    const item = wrapper.find('[data-test="module-a"]')
+    const written: Record<string, string> = {}
+    const transfer = {
+      setData: (mime: string, value: string) => {
+        written[mime] = value
+      },
+      effectAllowed: '',
+    }
+    const event = new Event('dragstart', { bubbles: true })
+    Object.defineProperty(event, 'dataTransfer', { value: transfer })
+
+    expect(item.attributes('draggable')).toBe('true')
+    item.element.dispatchEvent(event)
+
+    expect(written[MODULE_DRAG_MIME]).toBe('a')
+    expect(transfer.effectAllowed).toBe('copy')
   })
 })

@@ -107,15 +107,16 @@ describe('删一行', () => {
       binding('other'),
     ]
 
-    expect(withRowRemoved(bindings, 'rows', 1).map((item) => item.fieldKey)).toEqual([
-      'rows[0].value',
-      'rows[1].value',
-      'other',
-    ])
+    expect(
+      withRowRemoved(bindings, 'rows', 1).map((item) => item.fieldKey),
+    ).toEqual(['rows[0].value', 'rows[1].value', 'other'])
   })
 
   it('前移不改 id——绑定 id 一经创建永不改变', () => {
-    const bindings = [binding('rows[0].value', 'b0'), binding('rows[1].value', 'b1')]
+    const bindings = [
+      binding('rows[0].value', 'b0'),
+      binding('rows[1].value', 'b1'),
+    ]
 
     expect(withRowRemoved(bindings, 'rows', 0)).toEqual([
       expect.objectContaining({ id: 'b1', fieldKey: 'rows[0].value' }),
@@ -125,8 +126,8 @@ describe('删一行', () => {
   it('删最后一行时其余不动', () => {
     const bindings = [binding('rows[0].value'), binding('rows[1].value')]
 
-    expect(withRowRemoved(bindings, 'rows', 1).map((item) => item.fieldKey)).toEqual([
-      'rows[0].value',
-    ])
+    expect(
+      withRowRemoved(bindings, 'rows', 1).map((item) => item.fieldKey),
+    ).toEqual(['rows[0].value'])
   })
 })

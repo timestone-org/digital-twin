@@ -87,10 +87,7 @@ describe('常量', () => {
   })
 
   it('布尔槽用开关，关掉写回 false 而不是没配', async () => {
-    const wrapper = mountEditor(
-      binding({ staticValueJson: true }),
-      'boolean',
-    )
+    const wrapper = mountEditor(binding({ staticValueJson: true }), 'boolean')
 
     await wrapper.find('button[role="switch"]').trigger('click')
 

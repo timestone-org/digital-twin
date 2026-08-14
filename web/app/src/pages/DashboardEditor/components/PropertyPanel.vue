@@ -4,7 +4,11 @@
  * ⚠ 这里没有一行针对某个具体模块的表单代码——控件按 `ConfigField.type` 查注册表，
  * 分组与条件显示按清单声明走，新增模块自动获得完整属性面板（DASHBOARD_DESIGN §5.2）。
  */
-import type { ConfigField, DashboardNodePayload, ModuleManifest } from '@dt/contracts'
+import type {
+  ConfigField,
+  DashboardNodePayload,
+  ModuleManifest,
+} from '@dt/contracts'
 import { resolveModuleConfig } from '@dt/runtime'
 import { DtEmpty, DtField, DtNumberInput, DtSwitch } from '@dt/ui'
 import { computed } from 'vue'
@@ -47,7 +51,10 @@ function geometryOf(node: DashboardNodePayload): NodeGeometry {
   return { x: node.x, y: node.y, w: node.w, h: node.h }
 }
 
-function writeGeometry(key: keyof NodeGeometry, next: number | undefined): void {
+function writeGeometry(
+  key: keyof NodeGeometry,
+  next: number | undefined,
+): void {
   const node = props.node
   if (node === null || next === undefined) return
   emit('geometry', { ...geometryOf(node), [key]: next }, true)
@@ -91,7 +98,11 @@ function writeField(field: ConfigField, value: unknown, live: boolean): void {
         />
       </DtField>
 
-      <section v-for="group in groups" :key="group.title" class="flex flex-col gap-3">
+      <section
+        v-for="group in groups"
+        :key="group.title"
+        class="flex flex-col gap-3"
+      >
         <h3 class="m-0 text-2xs tracking-wide text-text-disabled">
           {{ group.title }}
         </h3>
@@ -106,7 +117,9 @@ function writeField(field: ConfigField, value: unknown, live: boolean): void {
             :field="field"
             :value="resolved[field.key]"
             :depth="0"
-            @update="(value: unknown, live: boolean) => writeField(field, value, live)"
+            @update="
+              (value: unknown, live: boolean) => writeField(field, value, live)
+            "
           />
         </DtField>
       </section>

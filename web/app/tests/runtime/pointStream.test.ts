@@ -9,10 +9,7 @@ import { createPointSubscribe, type PointChannel } from '@/runtime/pointStream'
 
 /** 记下订过哪些主题的假通道。 */
 function fakeChannel() {
-  const handlers = new Map<
-    string,
-    (payload: Record<string, unknown>) => void
-  >()
+  const handlers = new Map<string, (payload: Record<string, unknown>) => void>()
   const unsubscribe = vi.fn()
   const channel: PointChannel = {
     subscribe: (topic, handler) => {

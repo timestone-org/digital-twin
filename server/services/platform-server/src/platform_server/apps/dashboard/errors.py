@@ -85,6 +85,66 @@ class ModuleTypeNotFound(AppError):
     http_status = 404
 
 
+class ExportPayloadInvalid(AppError):
+    """导入包不是本系统导出的形状：缺字段、节点父子指向不存在的 client_key。"""
+
+    code = 41013
+    http_status = 400
+
+
+class ImportTargetMismatch(AppError):
+    """要覆盖的大屏不在目标项目下。"""
+
+    code = 41014
+    http_status = 409
+
+
+class TemplateNotFound(AppError):
+    """模板不存在。"""
+
+    code = 41015
+    http_status = 404
+
+
+class DashboardNotPublished(AppError):
+    """这个公开令牌没有对应的已发布大屏。
+
+    ⚠ 「令牌不存在」与「已取消发布」共用这一个 404：分开回会让人拿旧链接
+    试出「这张屏确实存在过」。
+    """
+
+    code = 41016
+    http_status = 404
+
+
+class ThumbnailNotFound(AppError):
+    """这张大屏还没有缩略图。"""
+
+    code = 41017
+    http_status = 404
+
+
+class ThumbnailTooLarge(AppError):
+    """缩略图超出体积上限。"""
+
+    code = 41018
+    http_status = 413
+
+
+class ThemeNotFound(AppError):
+    """项目下没有这个自定义主题。"""
+
+    code = 41019
+    http_status = 404
+
+
+class RuntimeParamUnknown(AppError):
+    """参数目录里没有这一项。"""
+
+    code = 41020
+    http_status = 400
+
+
 class ModuleCatalogUnreadable(AppError):
     """模块清单文件损坏或缺失，属于部署产物问题。"""
 

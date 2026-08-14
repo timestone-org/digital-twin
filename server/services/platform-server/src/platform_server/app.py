@@ -11,6 +11,9 @@ from lib.web import ReadinessProbe, Runtime, create_app
 from platform_server.apps.collect.api import ROUTERS as COLLECT_ROUTERS
 from platform_server.apps.dashboard.api import ROUTERS as DASHBOARD_ROUTERS
 from platform_server.apps.hvac.api import ROUTERS as HVAC_ROUTERS
+from platform_server.apps.runtime_params.api import (
+    ROUTERS as RUNTIME_PARAM_ROUTERS,
+)
 from platform_server.container import Container, build_container
 from platform_server.settings import API_PREFIX, Settings
 
@@ -33,7 +36,12 @@ def build_app(settings: Settings) -> FastAPI:
     app = create_app(
         title="DigitalTwin Platform Server",
         prefix=API_PREFIX,
-        routers=(*HVAC_ROUTERS, *DASHBOARD_ROUTERS, *COLLECT_ROUTERS),
+        routers=(
+            *HVAC_ROUTERS,
+            *DASHBOARD_ROUTERS,
+            *COLLECT_ROUTERS,
+            *RUNTIME_PARAM_ROUTERS,
+        ),
         runtime=Runtime(
             lifespan_hooks=_hooks(container),
             readiness_probes=_probes(container),

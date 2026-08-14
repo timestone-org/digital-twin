@@ -20,14 +20,9 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: readonly NavItem[] = [
-  { key: 'home', label: '工作台', icon: 'home', to: '/' },
-  {
-    key: 'dashboards',
-    label: '大屏',
-    icon: 'layout-grid',
-    to: '/dashboards',
-    permission: [PERMISSION_CODES.dashboardView],
-  },
+  // 大屏没有独立入口：项目与大屏都在工作台里管，再挂一项「大屏」会让
+  // 「新建大屏」在两个地方各有一个入口，且两处的项目上下文对不上
+  { key: 'home', label: '工作台', icon: 'layout-grid', to: '/' },
   {
     key: 'hvac',
     label: '空调管理',

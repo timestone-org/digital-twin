@@ -30,8 +30,17 @@ _UNION = re.compile(
 )
 _MEMBER = re.compile(r"'([^']+)'")
 
-# 一期只有这两个模块：一个纯配置无绑定，一个带 3D 资源与数组绑定
-EXPECTED_TYPES = frozenset({"header", "twin-view"})
+# 一期的模块：两个钉位/通用容器、两个装饰块、一个纯配置页头、一个带 3D 资源与数组绑定
+EXPECTED_TYPES = frozenset(
+    {
+        "container",
+        "footer",
+        "header",
+        "image-block",
+        "text-block",
+        "twin-view",
+    }
+)
 
 
 def frontend_unions(file_name: str) -> dict[str, frozenset[str]]:

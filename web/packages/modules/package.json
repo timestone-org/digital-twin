@@ -14,7 +14,8 @@
     "@dt/three-core": "workspace:*",
     "@dt/tokens": "workspace:*",
     "@dt/twin-config": "workspace:*",
-    "@dt/ui": "workspace:*"
+    "@dt/ui": "workspace:*",
+    "echarts": "^6.1.0"
   },
   "peerDependencies": {
     "vue": "^3.5.0"

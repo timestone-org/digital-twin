@@ -11,7 +11,9 @@ import { describe, expect, it } from 'vitest'
 import { TransportError } from '@/api/client'
 import {
   fromArchiveDetail,
+  fromComputeSpec,
   fromHistoryRange,
+  fromTransform,
   toBinding,
   toDashboard,
   toDashboardSummary,
@@ -132,7 +134,7 @@ describe('绑定', () => {
     expect(without.computeJson?.precision).toBeUndefined()
   })
 
-  it('派生规格的 inputs 只留字符串', () => {
+  it('派生规格的 inputs 只留字符串，整个不是数组时给空', () => {
     expect(
       toBinding(
         bindingWire({
@@ -141,6 +143,15 @@ describe('绑定', () => {
         }),
       ).computeJson?.inputs,
     ).toEqual(['a'])
+
+    expect(
+      toBinding(
+        bindingWire({
+          source_kind: 'computed',
+          compute_json: { op: 'sum', inputs: 'a' },
+        }),
+      ).computeJson?.inputs,
+    ).toEqual([])
   })
 
   it('定值变换的三项逐个窄化成有限数，脏值给 null', () => {
@@ -207,6 +218,40 @@ describe('时间范围', () => {
   })
 })
 
+describe('派生规格与定值变换写回线形', () => {
+  it('派生规格带小数位时写出去，不带就不写这个键', () => {
+    expect(fromComputeSpec({ op: 'avg', inputs: ['a'], precision: 2 })).toEqual(
+      {
+        op: 'avg',
+        inputs: ['a'],
+        precision: 2,
+      },
+    )
+    expect(fromComputeSpec({ op: 'sum', inputs: ['a', 'b'] })).toEqual({
+      op: 'sum',
+      inputs: ['a', 'b'],
+    })
+  })
+
+  it('定值变换的三项都写出去，缺席的写 null', () => {
+    expect(fromTransform({ scale: 2 })).toEqual({
+      scale: 2,
+      offset: null,
+      round: null,
+    })
+    expect(fromTransform({ offset: 1, round: 2 })).toEqual({
+      scale: null,
+      offset: 1,
+      round: 2,
+    })
+  })
+
+  it('没有规格 / 没有变换时给 null', () => {
+    expect(fromComputeSpec(null)).toBeNull()
+    expect(fromTransform(null)).toBeNull()
+  })
+})
+
 describe('节点与大屏', () => {
   it('节点的几何与配置原样带过来，绑定跟着转', () => {
     expect(toNode(nodeWire())).toMatchObject({
@@ -231,7 +276,7 @@ describe('节点与大屏', () => {
     expect(payload.nodes).toHaveLength(1)
   })
 
-  it('公开令牌恒为 null——一期不开公开分享面，编一个会让「已公开」看上去是真的', () => {
+  it('公开令牌恒为 null——详情不带这一列，编一个会让「已公开」看上去是真的', () => {
     expect(toDashboard(dashboardWire()).publicToken).toBeNull()
   })
 

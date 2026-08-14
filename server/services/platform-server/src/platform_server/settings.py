@@ -28,6 +28,13 @@ ROLE_PUBLISHER = "publisher"
 PUBLISH_WINDOW_FLOOR_MS = 100
 # 租约存活期的下限。低于它时一次网络抖动就会丢主
 LEASE_TTL_FLOOR_S = 5
+# 单帧条目数的上界，取 realtime-hub 的 `max_payload_items` **默认值**（500）。
+# ⚠ 只在 hint 里写一句「别超过 hub」是不够的：超了是 hub 那边直接 413 丢整批，
+# 现场表现成「大屏少了一半点位」，而排查要走到另一个服务里去。宁可在本进程
+# 启动时就拒绝，也不要把错误推到运行期的另一端。
+# ⚠ 两边同口径，改一边就要改另一边：hub 自己还能被配到 PAYLOAD_ITEM_CEILING
+# （5000），故把 hub 调大之后这里也要跟着放，届时它会明确地拒绝启动而不是静默
+PUBLISH_MAX_ITEMS_CEILING = 500
 
 
 class Settings(AppSettings, PostgresSettings, RedisSettings, SqlServerSettings):
@@ -75,8 +82,11 @@ class Settings(AppSettings, PostgresSettings, RedisSettings, SqlServerSettings):
     # 载荷可以合并」就又长出业务知识了（ADR-0007）
     publish_window_ms: int = Field(default=1000, ge=PUBLISH_WINDOW_FLOOR_MS)
     # 单条推送的条目上限。⚠ 必须 ≤ hub 的 REALTIME_MAX_PAYLOAD_ITEMS，超了
-    # hub 直接 413——分片是推送方的事，hub 不替谁拆
-    publish_max_items: int = Field(default=200, ge=1)
+    # hub 直接 413——分片是推送方的事，hub 不替谁拆。上界见
+    # `PUBLISH_MAX_ITEMS_CEILING`，越界即拒绝启动
+    publish_max_items: int = Field(
+        default=200, ge=1, le=PUBLISH_MAX_ITEMS_CEILING
+    )
     # 快照多旧就算陈旧。⚠ 陈旧值照推但标注为陈旧，不许当成现值
     publish_stale_after_ms: int = Field(default=15_000, ge=1)
     # 单活租约的存活期，续期在每一拍（远快于它）

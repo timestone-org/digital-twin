@@ -114,7 +114,8 @@ export interface DashboardSummary {
   updatedAt: string
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+/** 普通对象（不含数组与 null）。绑定各处的 JSON blob 都先过它。 */
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
@@ -137,9 +138,9 @@ function isComputeOp(value: unknown): value is ComputeOp {
  * 静默按某一种处理会让整屏数据看上去正常而实际全错。
  * @param raw 线上的来源种类
  */
-function toSourceKind(raw: unknown): BindingSourceKind {
+export function toSourceKind(raw: unknown): BindingSourceKind {
   if (isSourceKind(raw)) return raw
-  throw new TransportError(0, `服务端返回了未知的绑定来源：${String(raw)}`)
+  throw new TransportError(0, `未知的绑定来源：${String(raw)}`)
 }
 
 /**
@@ -147,8 +148,8 @@ function toSourceKind(raw: unknown): BindingSourceKind {
  * 求值层会把它渲染成一条说得出原因的错误槽。
  * @param raw 线上的 `compute_json`
  */
-function toComputeSpec(raw: Record<string, unknown> | null): ComputeSpec | null {
-  if (raw === null || !isComputeOp(raw.op)) return null
+export function toComputeSpec(raw: unknown): ComputeSpec | null {
+  if (!isRecord(raw) || !isComputeOp(raw.op)) return null
   const inputs = Array.isArray(raw.inputs) ? raw.inputs : []
   const spec: ComputeSpec = {
     op: raw.op,
@@ -160,17 +161,43 @@ function toComputeSpec(raw: Record<string, unknown> | null): ComputeSpec | null 
 }
 
 /**
+ * 派生规格写回线上形状。
+ * @param spec 载荷侧的派生规格
+ */
+export function fromComputeSpec(
+  spec: ComputeSpec | null,
+): Record<string, unknown> | null {
+  if (spec === null) return null
+  const out: Record<string, unknown> = { op: spec.op, inputs: [...spec.inputs] }
+  if (spec.precision !== undefined) out.precision = spec.precision
+  return out
+}
+
+/**
  * 定值变换。
  * @param raw 线上的 `transform_json`
  */
-function toTransform(
-  raw: Record<string, unknown> | null,
-): BindingTransform | null {
-  if (raw === null) return null
+export function toTransform(raw: unknown): BindingTransform | null {
+  if (!isRecord(raw)) return null
   return {
     scale: finite(raw.scale),
     offset: finite(raw.offset),
     round: finite(raw.round),
+  }
+}
+
+/**
+ * 定值变换写回线上形状。
+ * @param transform 载荷侧的定值变换
+ */
+export function fromTransform(
+  transform: BindingTransform | null,
+): Record<string, unknown> | null {
+  if (transform === null) return null
+  return {
+    scale: transform.scale ?? null,
+    offset: transform.offset ?? null,
+    round: transform.round ?? null,
   }
 }
 
@@ -214,10 +241,8 @@ export function fromHistoryRange(
  * 由求值层报「历史绑定没有取数说明」，而不是在这里凭空补一个点位。
  * @param raw 线上的 `detail_json`
  */
-function toArchiveDetail(
-  raw: Record<string, unknown> | null,
-): ArchiveBindingDetail | null {
-  if (raw === null || typeof raw.node_key !== 'string') return null
+export function toArchiveDetail(raw: unknown): ArchiveBindingDetail | null {
+  if (!isRecord(raw) || typeof raw.node_key !== 'string') return null
   return { nodeKey: raw.node_key, range: toHistoryRange(raw.range) }
 }
 
@@ -277,8 +302,8 @@ export function toNode(wire: NodeWire): DashboardNodePayload {
 
 /**
  * 一张大屏的载荷。
- * ⚠ `publicToken` 恒为 null：一期不开放公开分享面，接口里根本没有这一列，
- * 编造一个 token 会让「这张屏已经公开了」看上去是真的（DASHBOARD_DESIGN §8）。
+ * ⚠ `publicToken` 恒为 null：大屏详情不带这一列，令牌只在发布端点的出参里
+ * （见 `dashboardShare.ts`）。在这里编一个会让「这张屏已经公开了」看上去是真的。
  * @param wire 线上的大屏
  */
 export function toDashboard(wire: DashboardWire): DashboardPayload {
@@ -295,7 +320,9 @@ export function toDashboard(wire: DashboardWire): DashboardPayload {
  * 列表项的载荷。
  * @param wire 线上的大屏条目
  */
-export function toDashboardSummary(wire: DashboardSummaryWire): DashboardSummary {
+export function toDashboardSummary(
+  wire: DashboardSummaryWire,
+): DashboardSummary {
   return {
     id: wire.id,
     projectId: wire.project_id,

@@ -7,23 +7,40 @@
  * 一次撤销把两个节点的改动一起撤掉。
  */
 import type { BindingPayload, ModuleManifest } from '@dt/contracts'
-import type { GetModuleManifest } from '@dt/runtime'
+import type { DesignSize, GetModuleManifest } from '@dt/runtime'
 
 import type { DashboardEditor } from '@/composables/useDashboardEditor'
-import { arrayRowCount, withRowRemoved } from '@/features/dashboard/bindingSlots'
+import {
+  arrayRowCount,
+  withRowRemoved,
+} from '@/features/dashboard/bindingSlots'
 import type { ConfigPath } from '@/features/dashboard/configPath'
 import * as doc from '@/features/dashboard/editorDoc'
-import { acceptsChildren } from '@/features/dashboard/moduleLibrary'
+import {
+  acceptsChildren,
+  isPinnedRegion,
+} from '@/features/dashboard/moduleLibrary'
 
 export interface EditorActionDeps {
   editor: DashboardEditor
   /** 当前大屏 id；还没加载出来时给 null。 */
   dashboardId: () => string | null
   getManifest: GetModuleManifest
+  /** 顶层设计尺寸；钉位模块的几何按它铺满横向。 */
+  design: () => DesignSize
 }
 
 export interface NodeActions {
-  addModule: (manifest: ModuleManifest) => void
+  /**
+   * 添加模块；钉位模块（页头/页脚）每屏最多一个，撞单例时不加并返回 false，
+   * 由调用方提示——静默不加的表现是「点了没反应」。
+   */
+  addModule: (manifest: ModuleManifest) => boolean
+  /** 拖到画布某个落点添加；`parentId` 是命中的容器，顶层给 null。 */
+  addModuleAt: (
+    manifest: ModuleManifest,
+    at: { parentId: string | null; x: number; y: number },
+  ) => boolean
   removeNode: (nodeId: string) => void
   toggleVisible: (nodeId: string, isVisible: boolean) => void
   changeGeometry: (
@@ -31,7 +48,11 @@ export interface NodeActions {
     geometry: doc.NodeGeometry,
     isContinuous: boolean,
   ) => void
-  changeConfig: (path: ConfigPath, value: unknown, isContinuous: boolean) => void
+  changeConfig: (
+    path: ConfigPath,
+    value: unknown,
+    isContinuous: boolean,
+  ) => void
 }
 
 export interface BindingActions {
@@ -58,24 +79,68 @@ function hostOf(deps: EditorActionDeps): string | null {
   return acceptsChildren(deps.getManifest(host.moduleType)) ? host.id : null
 }
 
+/**
+ * 钉位模块的落位几何：横向铺满、页头钉顶、页脚钉底，只留高度可调。
+ */
+function pinnedGeometry(
+  manifest: ModuleManifest,
+  design: DesignSize,
+): doc.NodeGeometry {
+  const h = manifest.defaultSize.height
+  return {
+    x: 0,
+    y: manifest.region === 'footer' ? Math.max(0, design.height - h) : 0,
+    w: design.width,
+    h,
+  }
+}
+
+/** 插入一个新节点；钉位撞单例时不插并返回 false。 */
+function insertModule(
+  deps: EditorActionDeps,
+  manifest: ModuleManifest,
+  at: { parentId: string | null; x: number; y: number } | null,
+): boolean {
+  const dashboardId = deps.dashboardId()
+  if (dashboardId === null) return false
+  const pinned = isPinnedRegion(manifest)
+  if (
+    pinned &&
+    deps.editor.nodes.value.some(
+      (node) => deps.getManifest(node.moduleType)?.region === manifest.region,
+    )
+  ) {
+    return false
+  }
+  // 钉位模块永远落顶层：钉进容器既没有「顶」也没有「底」可言
+  const parentId = pinned ? null : (at?.parentId ?? hostOf(deps))
+  deps.editor.apply((nodes) => {
+    const created = doc.createNode({
+      dashboardId,
+      manifest,
+      parentId,
+      siblingCount: doc.siblingCount(nodes, parentId),
+      zIndex: doc.nextZIndex(nodes, parentId),
+    })
+    const geometry = pinned
+      ? pinnedGeometry(manifest, deps.design())
+      : at === null
+        ? null
+        : { x: at.x, y: at.y, w: created.w, h: created.h }
+    return doc.setGeometry(
+      [...nodes, created],
+      created.id,
+      geometry ?? { x: created.x, y: created.y, w: created.w, h: created.h },
+    )
+  })
+  return true
+}
+
 function createNodeActions(deps: EditorActionDeps): NodeActions {
   const { editor } = deps
   return {
-    addModule: (manifest) => {
-      const dashboardId = deps.dashboardId()
-      if (dashboardId === null) return
-      const parentId = hostOf(deps)
-      editor.apply((nodes) => [
-        ...nodes,
-        doc.createNode({
-          dashboardId,
-          manifest,
-          parentId,
-          siblingCount: doc.siblingCount(nodes, parentId),
-          zIndex: doc.nextZIndex(nodes, parentId),
-        }),
-      ])
-    },
+    addModule: (manifest) => insertModule(deps, manifest, null),
+    addModuleAt: (manifest, at) => insertModule(deps, manifest, at),
     removeNode: (nodeId) => {
       editor.apply((nodes) => doc.removeSubtree(nodes, nodeId))
       if (editor.selectedId.value === nodeId) editor.select(null)
@@ -104,10 +169,7 @@ function createNodeActions(deps: EditorActionDeps): NodeActions {
 }
 
 /** 写一条绑定；同一个槽的连续输入并成一笔。 */
-function writeBindingIn(
-  deps: EditorActionDeps,
-  binding: BindingPayload,
-): void {
+function writeBindingIn(deps: EditorActionDeps, binding: BindingPayload): void {
   const nodeId = deps.editor.selectedId.value
   if (nodeId === null) return
   deps.editor.apply(

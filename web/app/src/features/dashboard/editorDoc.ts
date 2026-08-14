@@ -10,6 +10,7 @@
 import type {
   BindingPayload,
   DashboardNodePayload,
+  DashboardNodeView,
   ModuleManifest,
 } from '@dt/contracts'
 
@@ -60,7 +61,10 @@ export function normalizeGeometry(geometry: NodeGeometry): NodeGeometry {
   }
 }
 
-function isSameGeometry(node: DashboardNodePayload, next: NodeGeometry): boolean {
+function isSameGeometry(
+  node: DashboardNodePayload,
+  next: NodeGeometry,
+): boolean {
   return (
     node.x === next.x &&
     node.y === next.y &&
@@ -145,6 +149,26 @@ export function subtreeIds(
   return [...found]
 }
 
+/**
+ * 选中集里剔除「祖先也被选中」后剩下的最上层节点 id。
+ * 复制与批量拖动都以它为根：子树跟着根走，选中的后代不再单独动一次。
+ */
+export function topMostIds(
+  nodes: readonly DashboardNodePayload[],
+  selectedIds: readonly string[],
+): readonly string[] {
+  const selected = new Set(selectedIds)
+  const byId = new Map(nodes.map((node) => [node.id, node] as const))
+  return selectedIds.filter((id) => {
+    let cursor = byId.get(id)?.parentId ?? null
+    while (cursor !== null) {
+      if (selected.has(cursor)) return false
+      cursor = byId.get(cursor)?.parentId ?? null
+    }
+    return true
+  })
+}
+
 /** 删一个节点连它的子树。 */
 export function removeSubtree(
   nodes: readonly DashboardNodePayload[],
@@ -196,6 +220,99 @@ export function setZIndex(
   zIndex: number,
 ): DashboardNodePayload[] {
   return replaceNode(nodes, nodeId, (node) => ({ ...node, zIndex }))
+}
+
+/** 批量改几何：对齐/分布/多选拖动一次落一笔，撤销也只有一步。 */
+export function setGeometryBatch(
+  nodes: readonly DashboardNodePayload[],
+  changes: ReadonlyMap<string, NodeGeometry>,
+): DashboardNodePayload[] {
+  return nodes.map((node) => {
+    const change = changes.get(node.id)
+    if (change === undefined) return node
+    const next = normalizeGeometry(change)
+    return isSameGeometry(node, next) ? node : { ...node, ...next }
+  })
+}
+
+/** 同层兄弟按当前 z 序重排成 0..n-1；`placed` 给谁就把谁钉到指定位置。 */
+function rerankSiblings(
+  nodes: readonly DashboardNodePayload[],
+  parentId: string | null,
+  placed?: { nodeId: string; at: 'front' | 'back' | number },
+): DashboardNodePayload[] {
+  const siblings = nodes
+    .filter((node) => node.parentId === parentId)
+    .sort((a, b) => a.zIndex - b.zIndex || a.id.localeCompare(b.id))
+  let order = siblings.map((node) => node.id)
+  if (placed !== undefined) {
+    order = order.filter((id) => id !== placed.nodeId)
+    if (placed.at === 'front') order.push(placed.nodeId)
+    else if (placed.at === 'back') order.unshift(placed.nodeId)
+    else
+      order.splice(
+        Math.max(0, Math.min(placed.at, order.length)),
+        0,
+        placed.nodeId,
+      )
+  }
+  const zOf = new Map(order.map((id, index) => [id, index] as const))
+  return nodes.map((node) => {
+    const z = zOf.get(node.id)
+    return z === undefined || node.zIndex === z ? node : { ...node, zIndex: z }
+  })
+}
+
+/** 置顶：同层重排后排在最后（画得最晚 = 盖在最上）。 */
+export function bringToFront(
+  nodes: readonly DashboardNodePayload[],
+  nodeId: string,
+): DashboardNodePayload[] {
+  const node = nodes.find((item) => item.id === nodeId)
+  if (node === undefined) return [...nodes]
+  return rerankSiblings(nodes, node.parentId, { nodeId, at: 'front' })
+}
+
+/** 置底。 */
+export function sendToBack(
+  nodes: readonly DashboardNodePayload[],
+  nodeId: string,
+): DashboardNodePayload[] {
+  const node = nodes.find((item) => item.id === nodeId)
+  if (node === undefined) return [...nodes]
+  return rerankSiblings(nodes, node.parentId, { nodeId, at: 'back' })
+}
+
+/**
+ * 挪一个节点到新父层（或同层新位置）。
+ * ⚠ 目标是自己或自己的后代时原样返回——挪进自己的子树会造出一个环，
+ * 排版的递归会在这个环上转不出来。
+ * @param at 目标层内的落位；缺省排到最后
+ */
+export function moveNode(
+  nodes: readonly DashboardNodePayload[],
+  nodeId: string,
+  newParentId: string | null,
+  at?: number,
+): DashboardNodePayload[] {
+  const node = nodes.find((item) => item.id === nodeId)
+  if (node === undefined) return [...nodes]
+  if (newParentId !== null && subtreeIds(nodes, nodeId).includes(newParentId)) {
+    return [...nodes]
+  }
+  const oldParentId = node.parentId
+  const reparented = replaceNode(nodes, nodeId, (item) => ({
+    ...item,
+    parentId: newParentId,
+  }))
+  const placedTarget = rerankSiblings(reparented, newParentId, {
+    nodeId,
+    at: at ?? 'front',
+  })
+  // 老层也要收拢：留洞的话后续「按 z 找相邻」会踩空
+  return oldParentId === newParentId
+    ? placedTarget
+    : rerankSiblings(placedTarget, oldParentId)
 }
 
 /** 按路径改配置。 */
@@ -299,6 +416,17 @@ function sortBindings(bindings: readonly BindingPayload[]): BindingPayload[] {
   )
 }
 
+/** 两份节点表逐项同引用即视为没改动；配合不可变操作可当作零成本判等。 */
+export function isSameNodeList(
+  next: readonly DashboardNodePayload[],
+  current: readonly DashboardNodePayload[],
+): boolean {
+  return (
+    next.length === current.length &&
+    next.every((node, at) => node === current[at])
+  )
+}
+
 /**
  * 节点序 `(parentId, zIndex, id)`，与服务端返回的顺序一致。
  * ⚠ 顶层的 `parentId` 是 null，排在有父节点的前面——空串比任何 uuid 小。
@@ -324,7 +452,9 @@ function toBindingInput(binding: BindingPayload): LayoutBindingInput {
     static_value_json: binding.staticValueJson,
     compute_json: binding.computeJson,
     detail_json:
-      binding.detailJson === null ? null : fromArchiveDetail(binding.detailJson),
+      binding.detailJson === null
+        ? null
+        : fromArchiveDetail(binding.detailJson),
     transform_json: binding.transformJson,
   }
 }
@@ -354,9 +484,9 @@ export function toLayoutInput(
   }))
 }
 
-/** 这张大屏上全部 `opcua` 绑定的点位身份，去重。 */
+/** 这张大屏上全部 `opcua` 绑定的点位身份，去重。收渲染子集，公开快照页也能用。 */
 export function boundPointKeys(
-  nodes: readonly DashboardNodePayload[],
+  nodes: readonly Pick<DashboardNodeView, 'bindings'>[],
 ): readonly string[] {
   const keys = new Set<string>()
   for (const node of nodes) {

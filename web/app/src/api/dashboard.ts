@@ -91,6 +91,10 @@ export interface DashboardPatchInput {
   description?: string | null | undefined
   designWidth?: number | undefined
   designHeight?: number | undefined
+  /** 大屏主题覆盖；整包替换，不是逐键合并。 */
+  themeJson?: Record<string, unknown> | undefined
+  /** 页面级外观袋子（卡片缺省/屏幕特效/编辑器吸附等段都住这里）；整包替换。 */
+  chromeJson?: Record<string, unknown> | undefined
 }
 
 /** 自检发现的一处悬空引用。`field` 用点号与方括号表达路径。 */
@@ -112,13 +116,13 @@ interface ValidationReportWire {
   issues: LayoutIssue[]
 }
 
-/** 给一次调用补上 platform 前缀。 */
-function onPlatform(options: RequestOptions = {}): RequestOptions {
+/** 给一次调用补上 platform 前缀。打 platform 的每个 api 模块都用它。 */
+export function onPlatform(options: RequestOptions = {}): RequestOptions {
   return { ...options, baseUrl: PLATFORM_BASE_URL }
 }
 
 /** 写操作的幂等头：网络抖动导致的重试不该建出第二张大屏。 */
-function idempotent(key: string): Record<'Idempotency-Key', string> {
+export function idempotent(key: string): Record<'Idempotency-Key', string> {
   return { 'Idempotency-Key': key }
 }
 
@@ -145,6 +149,43 @@ export async function createProject(
     }),
   )
   return toProject(created)
+}
+
+/**
+ * 改项目的可改字段。
+ * ⚠ `description` 的 `null` 与 `undefined` 不是一回事：`null` 是「清空描述」，
+ * `undefined` 是「这次不动它」。合并成一个会让清空描述这件事做不到。
+ */
+export interface ProjectPatchInput {
+  name?: string | undefined
+  description?: string | null | undefined
+  themeJson?: Record<string, unknown> | undefined
+  brandJson?: Record<string, unknown> | undefined
+}
+
+export async function updateProject(
+  projectId: string,
+  patch: ProjectPatchInput,
+  key: string = newIdempotencyKey(),
+): Promise<ProjectSummary> {
+  const body: Record<string, unknown> = {}
+  if (patch.name !== undefined) body.name = patch.name
+  if (patch.description !== undefined) body.description = patch.description
+  if (patch.themeJson !== undefined) body.theme_json = patch.themeJson
+  if (patch.brandJson !== undefined) body.brand_json = patch.brandJson
+  const wire = await requestData<ProjectWire>(
+    `/dashboard-projects/${projectId}`,
+    onPlatform({ method: 'PATCH', body, headers: idempotent(key) }),
+  )
+  return toProject(wire)
+}
+
+/** 删项目。⚠ 级联删掉它下面的全部大屏，调用方必须先做二次确认。 */
+export async function deleteProject(projectId: string): Promise<void> {
+  await request<null>(
+    `/dashboard-projects/${projectId}`,
+    onPlatform({ method: 'DELETE' }),
+  )
 }
 
 export async function listDashboards(
@@ -208,6 +249,8 @@ export async function updateDashboard(
   if (patch.description !== undefined) body.description = patch.description
   if (patch.designWidth !== undefined) body.design_width = patch.designWidth
   if (patch.designHeight !== undefined) body.design_height = patch.designHeight
+  if (patch.themeJson !== undefined) body.theme_json = patch.themeJson
+  if (patch.chromeJson !== undefined) body.chrome_json = patch.chromeJson
   const wire = await requestData<DashboardWire>(
     `/dashboards/${dashboardId}`,
     onPlatform({ method: 'PATCH', body, headers: idempotent(key) }),
