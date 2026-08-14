@@ -368,3 +368,26 @@ describe('派生槽', () => {
     expect(result.errors).toEqual({})
   })
 })
+
+describe('enum 映射的键口径', () => {
+  it('⚠ 后端来的映射是字符串键，数值读数照样查得到', () => {
+    // enum_map 在 JSON 里的键永远是字符串，这里原样模拟收到的形状
+    const spec: BindingSpec = {
+      key: 'mode',
+      label: '状态',
+      dataType: 'enum',
+      enumMap: { '0': '离线', '1': '运行' },
+    }
+    const read = readerOf({ mode: { state: 'ok', value: 1 } })
+
+    const result = computeModuleValues({
+      specs: [spec],
+      bindings: [
+        fakeBinding({ id: 'b1', fieldKey: 'mode', sourceKind: 'opcua' }),
+      ],
+      read,
+    })
+
+    expect(result.values).toEqual({ mode: '运行' })
+  })
+})

@@ -83,7 +83,13 @@ export interface BindingSpec {
   /** 必绑：没配来源时模块状态为 `unbound`。 */
   isRequired?: boolean
   /** `dataType: 'enum'` 的取值映射，例 `{ 0: '离线', 1: '运行' }`。 */
-  enumMap?: Record<number, string>
+  /**
+   * 数值 → 文案的映射，例 `{ '0': '离线', '1': '运行' }`。
+   * ⚠ 键是**字符串**，与后端 `enum_map: dict[str, str]` 一致——JSON 的键永远是
+   * 字符串。标成 `Record<number, string>` 时下标取值照样能work（JS 会把数字下标
+   * 转成字符串），但 `Object.entries` 出来的键与数值点位值比较会静默不相等。
+   */
+  enumMap?: Record<string, string>
   /**
    * 数组槽：一个槽对应 N 行，各行按 `key[索引].子槽键` 落成 N 条绑定。
    * ⚠ 索引必须连续且从 0 起，服务端会校验（DASHBOARD_DESIGN §4.2）。

@@ -179,7 +179,8 @@ function applyTransform(
 function applyEnumMap(value: unknown, spec: BindingSpec | undefined): unknown {
   const enumMap = spec?.enumMap
   if (enumMap === undefined || typeof value !== 'number') return value
-  return enumMap[value] ?? value
+  // ⚠ 显式转字符串：映射的键来自 JSON，永远是字符串
+  return enumMap[String(value)] ?? value
 }
 
 /**
