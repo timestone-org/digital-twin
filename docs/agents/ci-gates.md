@@ -90,7 +90,7 @@ E2E、a11y、变异测试不进 PR 闸门是 `testing-standard-*.md` §9 的明�
 | testing-standard-* §5.1 无断言/§2 命名/§6 skip 与 xfail/§1 分层 | `check_tests.py` |
 | 同 §4.1 覆盖率阈值 | `pyproject.toml` 的 `fail_under` · `vitest.config.ts` 的 `thresholds` |
 | 同 §4.2 棘轮（不低于基线，基线按 90%/80% 封顶） | `check_coverage.py` + `coverage-baseline.json` |
-| 同 §4.1 增量覆盖 ≥85% | `diff-cover`（只在 PR 上跑） |
+| 同 §4.1 增量覆盖 ≥85% | `diff-cover`（只在 PR 上跑）；前端 lcov 的 SF 路径口径由 `check_lcov_paths.py` 先验（对不上时 diff-cover 只报「0 行」照样放行） |
 | 同 §4.3 `--cov=` 点号模块名、§6.2 禁外网、CI 里禁 skip | `check_pytest_run.py`（读 junit 与日志） |
 | 同 §6.3 L2/L3 打真实 Postgres | `server-test` 的服务容器 |
 | 同 §8 首屏包体预算 | `check_bundle_budget.py`（读真实产物） |
@@ -150,6 +150,10 @@ docstring 不去，它可能被程序读走。
 - **测试运行结果自检**（`check_pytest_run.py`）：CI 里出现任何 skip 即红。
   ⚠ 本仓踩过：一条契约用例因为参数化列表为空被 pytest 标成 skip，
   它守的「闸 1 与闸 2 口径一致」于是长期空跑。
+- **lcov 路径口径自检**（`check_lcov_paths.py`）：SF 路径必须能在仓库根解析到真实文件。
+  ⚠ 本仓踩过（#59）：vitest 默认把 SF 写成 `web/` 相对路径，与 git diff 的
+  `web/...` 前缀对不上，diff-cover 不报错、只报「0 行」——前端增量覆盖闸对
+  **每个** PR 都静默放行。
 - **CI 不配置任何重试**（`check_ci_hygiene.py` 扫 `continue-on-error` 与重试 Action）。
   重试会把不确定性藏起来；偶发失败按 P1 缺陷处理。
 

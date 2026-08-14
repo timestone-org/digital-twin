@@ -26,7 +26,16 @@ export default defineConfig({
     ],
     coverage: {
       provider: 'v8',
-      reporter: ['text-summary', 'html', 'lcov'],
+      // ⚠ SF 必须仓库根相对：diff-cover 在仓库根拿 SF 与 git diff 比对，
+      // 写成 web/ 相对会整份对不上、增量覆盖闸静默空转（#59）
+      reporter: [
+        'text-summary',
+        'html',
+        [
+          'lcov',
+          { projectRoot: fileURLToPath(new URL('..', import.meta.url)) },
+        ],
+      ],
       reportsDirectory: './coverage',
       include: ['packages/**/src/**/*.{ts,vue}', 'app/src/**/*.{ts,vue}'],
       exclude: [

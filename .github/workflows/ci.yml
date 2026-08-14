@@ -424,6 +424,12 @@ jobs:
         working-directory: web
         run: pnpm test:coverage
 
+      # SF 与 diff 对不上时 diff-cover 不报错、只报「0 行」照样放行——先验口径
+      - name: lcov 路径口径自检
+        run: |
+          uv run --project server python scripts/gates/check_lcov_paths.py \
+            web/coverage/lcov.info
+
       - name: 覆盖率棘轮
         run: |
           uv run --project server python scripts/gates/check_coverage.py \
