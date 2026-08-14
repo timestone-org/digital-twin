@@ -97,3 +97,38 @@ def test_read_decodes_the_text_column_as_json(
 )
 def test_read_returns_undecodable_text_verbatim(value_text: str) -> None:
     assert read_value(None, value_text) == value_text
+
+
+@pytest.mark.parametrize(
+    "value",
+    [float("nan"), float("inf"), float("-inf")],
+    ids=["NaN", "正无穷", "负无穷"],
+)
+def test_split_treats_a_non_finite_number_as_no_value(value: float) -> None:
+    # 读侧的 JSON 序列化是 allow_nan=False：这一行进了 value_num，
+    # 凡窗口内含它的历史请求就整个 500
+    assert split_value(value) == (None, None)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [float("nan"), float("inf")],
+    ids=["NaN", "无穷"],
+)
+def test_a_non_finite_number_does_not_land_in_the_text_column(
+    value: float,
+) -> None:
+    # ⚠ 只把它从数值列拿掉是不够的：落文本列会写出 NaN 字面量，
+    # 读回来还是 nan，问题只是换了个列
+    _, value_text = split_value(value)
+    assert value_text is None
+
+
+def test_split_drops_a_container_holding_a_non_finite_number() -> None:
+    # json 会把它写成 `Infinity`，那不是合法 JSON——Python 自己读得回来，
+    # SQL 的 ::jsonb 与任何非 Python 读者都会炸
+    assert split_value([1.0, float("inf")]) == (None, None)
+
+
+def test_split_keeps_a_container_of_finite_numbers() -> None:
+    assert split_value([1.0, 2.5]) == (None, "[1.0, 2.5]")

@@ -11,8 +11,6 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-from timeseries import QUALITIES
-
 revision: str = "9b7d4e2a61c8"
 down_revision: str | None = "4c1e8a92b7d3"
 branch_labels: str | Sequence[str] | None = None
@@ -20,7 +18,12 @@ depends_on: str | Sequence[str] | None = None
 
 TABLE = "point_history"
 QUALIFIED = f"collect.{TABLE}"
-_QUALITY_LITERALS = ", ".join(f"'{quality}'" for quality in QUALITIES)
+# ⚠ 质量位在这里是**写死的字面量**，不许改成 import `timeseries.QUALITIES`：
+# 迁移是冻结件，而那是个活常量——将来给 Quality 加第四档，同一个 revision
+# 在旧库建出三档、在新建库建出四档，且没有任何东西会报错。
+# 两侧不许漂由 tests/contract/test_history_ddl_literals.py 盯着
+QUALITY_LITERALS = ("good", "uncertain", "bad")
+_QUALITY_LITERALS = ", ".join(f"'{quality}'" for quality in QUALITY_LITERALS)
 
 # ⚠ 6 小时而不是 1 天：1 天的块实测 4109 MB 堆 + 约 9100 MB 索引，超内存预算
 # 4.59×；6 小时同时给出最好的压缩比（10.28×）。前提是宿主机 ≥16 GB 内存
