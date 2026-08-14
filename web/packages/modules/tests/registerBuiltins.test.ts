@@ -25,22 +25,32 @@ afterEach(() => {
   __resetModules()
 })
 
+/** 目录即清单，故这份名单与 `src/modules/` 下的目录一一对应。 */
+const BUILTIN_TYPES = [
+  'container',
+  'footer',
+  'header',
+  'image-block',
+  'text-block',
+  'twin-view',
+]
+
 describe('内置模块的自动发现', () => {
-  it('一期的两个模块都被注册', () => {
+  it('每个内置模块目录都被注册', () => {
     registerBuiltinModules()
 
     expect(
       listModules()
         .map((item) => item.type)
         .sort(),
-    ).toEqual(['header', 'twin-view'])
+    ).toEqual(BUILTIN_TYPES)
   })
 
   it('重复调用不会把模块注册成两份', () => {
     registerBuiltinModules()
     registerBuiltinModules()
 
-    expect(listModules()).toHaveLength(2)
+    expect(listModules()).toHaveLength(BUILTIN_TYPES.length)
   })
 
   it('注册顺序按文件路径排序，两次运行一致', () => {

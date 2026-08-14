@@ -8,6 +8,8 @@ from platform_server.apps.dashboard.models.binding import DashboardBinding
 from platform_server.apps.dashboard.models.dashboard import Dashboard
 from platform_server.apps.dashboard.models.node import DashboardNode
 from platform_server.apps.dashboard.models.project import DashboardProject
+from platform_server.apps.dashboard.models.template import DashboardTemplate
+from platform_server.apps.dashboard.models.thumbnail import DashboardThumbnail
 
 __all__ = [
     "Base",
@@ -15,4 +17,6 @@ __all__ = [
     "DashboardBinding",
     "DashboardNode",
     "DashboardProject",
+    "DashboardTemplate",
+    "DashboardThumbnail",
 ]

@@ -81,6 +81,44 @@ describe('项目', () => {
     expect(options.body).toEqual({ name: '园区', description: null })
     expect(options.headers).toEqual({ 'Idempotency-Key': 'key-1' })
   })
+
+  it('改名只发 name，没动的字段不出现在 body 里', async () => {
+    await dashboards.updateProject('p1', { name: '新名' }, 'key-2')
+    const [path, options] = call()
+
+    expect(path).toBe('/dashboard-projects/p1')
+    expect(options.method).toBe('PATCH')
+    expect(options.body).toEqual({ name: '新名' })
+    expect(options.headers).toEqual({ 'Idempotency-Key': 'key-2' })
+  })
+
+  // ⚠ null 是「清空描述」、undefined 是「这次不动它」。两者合并会让清空做不到
+  it('描述给 null 是清空，会真的发出去', async () => {
+    await dashboards.updateProject('p1', { description: null }, 'key-3')
+
+    expect(call()[1].body).toEqual({ description: null })
+  })
+
+  it('主题与品牌转成 snake_case 落到 body 上', async () => {
+    await dashboards.updateProject(
+      'p1',
+      { themeJson: { accent: '#0f0' }, brandJson: {} },
+      'key-4',
+    )
+
+    expect(call()[1].body).toEqual({
+      theme_json: { accent: '#0f0' },
+      brand_json: {},
+    })
+  })
+
+  it('删项目走 DELETE', async () => {
+    await dashboards.deleteProject('p1')
+    const [path, options] = call()
+
+    expect(path).toBe('/dashboard-projects/p1')
+    expect(options.method).toBe('DELETE')
+  })
 })
 
 describe('大屏', () => {
@@ -185,5 +223,21 @@ describe('整树替换与自检', () => {
 
   it('版本冲突的错误码按码分支，不按文案', () => {
     expect(dashboards.DASHBOARD_VERSION_CONFLICT_CODE).toBe(41007)
+  })
+})
+
+describe('元数据轴', () => {
+  it('theme_json 与 chrome_json 只在显式给了时下发', async () => {
+    await dashboards.updateDashboard('d1', { chromeJson: { card: {} } }, 'k1')
+    const [, options] = call()
+    expect(options.body).toEqual({ chrome_json: { card: {} } })
+
+    await dashboards.updateDashboard(
+      'd1',
+      { themeJson: { accent: 'x' }, name: '新名' },
+      'k2',
+    )
+    const [, second] = call()
+    expect(second.body).toEqual({ theme_json: { accent: 'x' }, name: '新名' })
   })
 })

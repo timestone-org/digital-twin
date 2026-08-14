@@ -53,11 +53,11 @@ describe('取数 provider', () => {
   it('四种来源里至少装上实时 / 常量 / 派生三种', () => {
     installDashboardDataSources({ subscribe })
 
-    expect(listProviders().map((provider) => provider.kind).sort()).toEqual([
-      'computed',
-      'opcua',
-      'static',
-    ])
+    expect(
+      listProviders()
+        .map((provider) => provider.kind)
+        .sort(),
+    ).toEqual(['computed', 'opcua', 'static'])
   })
 
   it('实时 provider 用的是注入进来的订阅函数', () => {
@@ -75,7 +75,9 @@ describe('取数 provider', () => {
         Promise.resolve({ points: [], isTruncated: false, isStale: false }),
     })
 
-    expect(listProviders().map((provider) => provider.kind)).toContain('archive')
+    expect(listProviders().map((provider) => provider.kind)).toContain(
+      'archive',
+    )
   })
 
   it('没注入历史取数时不装它——拿实时通道里那几个点冒充历史会画出假曲线', () => {
@@ -96,5 +98,15 @@ describe('取数 provider', () => {
 
     expect(older).not.toHaveBeenCalled()
     expect(newer).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('匿名快照页的装配', () => {
+  it('不注入订阅时不装实时 provider，常量与派生照常', () => {
+    installDashboardDataSources({})
+
+    expect(listProviders()).not.toContain('opcua')
+    expect(getProvider('static')).toBeDefined()
+    expect(getProvider('computed')).toBeDefined()
   })
 })

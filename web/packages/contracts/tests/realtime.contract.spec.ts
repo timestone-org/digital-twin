@@ -82,8 +82,7 @@ describe('hub 发出的帧', () => {
       seq: 128,
       payload: { items: [1, 2] },
       trace_id: '4bf92f3577b34da6a3ce929d0e0e4736',
-      traceparent:
-        '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
+      traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
     }
 
     expect(Object.keys(frame).sort()).toEqual([
@@ -154,9 +153,11 @@ describe('hub 发出的帧', () => {
       reason: 'permission_revoked',
     }
 
-    expect(frame.type === 'system' && frame.event === 'unsubscribed'
-      ? frame.topic
-      : '').toBe(TOPIC)
+    expect(
+      frame.type === 'system' && frame.event === 'unsubscribed'
+        ? frame.topic
+        : '',
+    ).toBe(TOPIC)
   })
 
   it('催换票的 system 帧只有 type 与 event', () => {
@@ -190,11 +191,7 @@ describe('hub 发出的帧', () => {
 
 describe('客户端消息', () => {
   it('动作是订阅、退订、重新鉴权三种', () => {
-    expect([...CLIENT_ACTIONS]).toEqual([
-      'subscribe',
-      'unsubscribe',
-      'reauth',
-    ])
+    expect([...CLIENT_ACTIONS]).toEqual(['subscribe', 'unsubscribe', 'reauth'])
   })
 
   it('动作的类型成员与运行时常量对齐', () => {

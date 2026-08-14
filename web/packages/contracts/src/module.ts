@@ -15,6 +15,11 @@ export const CONFIG_FIELD_TYPES = [
   'range',
   'array',
   'object',
+  'font',
+  'style',
+  'image',
+  'json',
+  'dashboard-ref',
 ] as const
 export type ConfigFieldType = (typeof CONFIG_FIELD_TYPES)[number]
 
@@ -63,6 +68,27 @@ export interface ConfigField {
   maxItems?: number
   /** `type: 'object'` 的子表单字段。 */
   fields?: ConfigField[]
+}
+
+/** `type: 'font'` 字段落库的值形状，键都可缺席——缺席即「跟随主题」。 */
+export interface FontValue {
+  family?: string
+  /** 设计坐标系像素。 */
+  size?: number
+  weight?: number | string
+  letterSpacing?: number
+  color?: string
+}
+
+/** `type: 'style'` 字段落库的值形状。与 FontValue 同理，缺席键不写样式。 */
+export interface StyleSlotValue {
+  color?: string
+  background?: string
+  border?: string
+  borderRadius?: number
+  boxShadow?: string
+  padding?: string
+  opacity?: number
 }
 
 /** 绑定槽期望的数据类型。绑点面板据此过滤可选点位。 */
@@ -122,6 +148,23 @@ export interface ModuleDefaultSize {
   minHeight?: number
 }
 
+/**
+ * 模块级「外观预设」：一次显式写入一整套 config 字段。
+ * 与 `ConfigField.default` 的语义刻意不同——default 是不落库的渲染兜底，
+ * 预设是用户点了按钮后**浅合并落库**的一笔（一步撤销），未列出的键原样保留。
+ * 存在的理由：有些观感是十几个字段的组合，逐个照抄必漏、漏了也看不出漏在哪。
+ */
+export interface ConfigPreset {
+  /** 稳定 id，用于 key 与测试断言，不展示。 */
+  id: string
+  /** 按钮文案，2–6 字为宜。 */
+  label: string
+  /** 一句话说明这套预设把模块变成什么样。 */
+  hint?: string
+  /** 逐键浅合并进 config 的值，可含 schema 之外的段。 */
+  config: Record<string, unknown>
+}
+
 /** 设计态预览：拖进画布立刻看得到像样的排版，不落库、不参与保存。 */
 export interface ModulePreview {
   /** 用户尚未配置的键注入的演示配置。 */
@@ -147,14 +190,45 @@ export interface ModuleManifest {
   keywords?: string[]
   defaultSize: ModuleDefaultSize
   configSchema: ConfigField[]
+  /** 属性面板顶部的一排预设按钮，缺省不显示。只放「整套观感」级的组合。 */
+  configPresets?: ConfigPreset[]
+  /**
+   * 新建节点时种入 config 的初始值（深克隆落库）。与 `ConfigField.default` 的
+   * 区别同 `ConfigPreset` 注释：这里是显式落库的出厂配置，用于 schema 之外的段，
+   * 保证属性面板显示与实际渲染一致。只影响新节点，存量不变。
+   */
+  defaultConfig?: Record<string, unknown>
   bindings: BindingSpec[]
   /** 缺省 `card`。 */
   chrome?: ModuleChrome
+  /**
+   * 允许在属性面板配置统一卡片外观，缺省 true。
+   * 个别纯装饰/控件模块显式置 false 退出外观配置。
+   */
+  chromeConfigurable?: boolean
+  /**
+   * 模块自己 `emit('interaction', InteractionEvent)` 上抛事件（控件类，或按
+   * 子项带 value 上抛的展示类：图表点图元、列表点行）。
+   * ⚠ 按子项上抛的模块必须同时吞掉冒泡（`@click.stop`）：否则同一次点击会再被
+   * `hostClickable` 的整块兜底捕获一次，toggle 类动作当场自我抵消。
+   */
+  emitsInteractions?: boolean
+  /**
+   * 整块可点：由渲染宿主统一接管点击与键盘上抛 `{ event: 'click' }`，模块本身
+   * 零改动。与 `emitsInteractions` 正交、可同时开；都只在真配了联动规则时生效。
+   * ⚠ 内部有拖拽手势的模块（3D 孪生/地图漫游）不要开：拖拽松手也会派发 click。
+   */
+  hostClickable?: boolean
   /** 容器模块：自己只画壳，子节点由运行时按节点树递归注入。 */
   isContainer?: boolean
   region?: ModuleRegion
   /** 清单版本，缺省 1。仅元数据，注册表仍按 `type` 单键索引。 */
   version?: number
+  /**
+   * 被哪个新 type 取代。设置后模块库隐藏本模块，但注册照常、
+   * 已存大屏照常渲染——行为完全不变，只挡新增。
+   */
+  replacedBy?: string
   /** ⚠ 只在编辑器画布生效，运行时绝不读取。 */
   preview?: ModulePreview
   /**
@@ -179,6 +253,16 @@ export const MODULE_STATUSES = [
 ] as const
 export type ModuleStatus = (typeof MODULE_STATUSES)[number]
 
+/** 实时通道的连接态，connection-status 这类指示型模块据此画在线/离线。 */
+export const MODULE_CONNECTION_STATES = [
+  'connecting',
+  'open',
+  'reconnecting',
+  'closed',
+  'error',
+] as const
+export type ModuleConnectionState = (typeof MODULE_CONNECTION_STATES)[number]
+
 /** 运行时透传给渲染组件的状态。 */
 export interface ModuleMeta {
   status?: ModuleStatus
@@ -191,6 +275,15 @@ export interface ModuleMeta {
   valueTimeMs?: number
   /** `status: 'error'` 时的原因。取不到就说取不到，不许静默留白。 */
   errorMessage?: string
+  /** 实时通道连接态；设计态与独立渲染时缺席。 */
+  connectionState?: ModuleConnectionState
+  /**
+   * 本节点是否真配了以它为 source 的联动规则（由运行时按规则表推导）。
+   * `emitsInteractions` 的展示型模块据此决定要不要摆出可点击外观——配了规则才像
+   * 能点。之所以不另给模块加「可点击」配置开关：两个开关只开其一必然是
+   * 「点了没反应」。无联动运行时缺席。
+   */
+  interactive?: boolean
 }
 
 /**

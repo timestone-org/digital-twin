@@ -12,11 +12,16 @@ import type { Component } from 'vue'
 import ArrayControl from './controls/ArrayControl.vue'
 import BooleanControl from './controls/BooleanControl.vue'
 import ColorControl from './controls/ColorControl.vue'
+import DashboardRefControl from './controls/DashboardRefControl.vue'
 import EnumControl from './controls/EnumControl.vue'
+import FontControl from './controls/FontControl.vue'
+import ImageControl from './controls/ImageControl.vue'
+import JsonControl from './controls/JsonControl.vue'
 import NumberControl from './controls/NumberControl.vue'
 import ObjectControl from './controls/ObjectControl.vue'
 import RangeControl from './controls/RangeControl.vue'
 import StringControl from './controls/StringControl.vue'
+import StyleControl from './controls/StyleControl.vue'
 
 const CONTROLS: Record<ConfigFieldType, Component> = {
   string: StringControl,
@@ -27,6 +32,11 @@ const CONTROLS: Record<ConfigFieldType, Component> = {
   range: RangeControl,
   array: ArrayControl,
   object: ObjectControl,
+  font: FontControl,
+  style: StyleControl,
+  image: ImageControl,
+  json: JsonControl,
+  'dashboard-ref': DashboardRefControl,
 }
 
 /** 登记全部控件。重复调用是幂等的（同档后登记者生效，组件是同一个）。 */

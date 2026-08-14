@@ -40,7 +40,7 @@ vi.mock('@dt/ui', async () => {
 })
 
 const copySpy = vi.fn<(text: string) => Promise<boolean>>()
-vi.mock('@/pages/Tools/OpcuaServerDetail/clipboard', () => ({
+vi.mock('@/utils/clipboard', () => ({
   copyText: (text: string) => copySpy(text),
 }))
 

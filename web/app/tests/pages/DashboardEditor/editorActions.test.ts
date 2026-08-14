@@ -44,7 +44,10 @@ function getManifest(moduleType: string): ModuleManifest | undefined {
   return undefined
 }
 
-function node(id: string, over: Partial<DashboardNodePayload> = {}): DashboardNodePayload {
+function node(
+  id: string,
+  over: Partial<DashboardNodePayload> = {},
+): DashboardNodePayload {
   return {
     id,
     dashboardId: 'd1',
@@ -72,6 +75,7 @@ function setup(nodes: DashboardNodePayload[] = []) {
     editor,
     dashboardId: () => 'd1',
     getManifest,
+    design: () => ({ width: 1920, height: 1080 }),
   })
   return { editor, actions }
 }
@@ -92,9 +96,9 @@ describe('加模块', () => {
 
     actions.addModule(LEAF)
 
-    expect(
-      editor.nodes.value.find((item) => item.id !== 'box')?.parentId,
-    ).toBe('box')
+    expect(editor.nodes.value.find((item) => item.id !== 'box')?.parentId).toBe(
+      'box',
+    )
   })
 
   it('选中的不是容器时仍落到顶层', () => {
@@ -115,6 +119,7 @@ describe('加模块', () => {
       editor,
       dashboardId: () => null,
       getManifest,
+      design: () => ({ width: 1920, height: 1080 }),
     })
 
     actions.addModule(LEAF)
@@ -339,5 +344,64 @@ describe('绑定', () => {
     actions.applyPickedPoint('title', 's1:temp')
 
     expect(editor.nodes.value[0]?.bindings).toEqual([])
+  })
+})
+
+describe('钉位与落点', () => {
+  const PINNED: ModuleManifest = {
+    ...LEAF,
+    type: 'demo-header',
+    region: 'header',
+    bindings: [],
+  }
+  const resolve = (moduleType: string): ModuleManifest | undefined =>
+    moduleType === PINNED.type ? PINNED : getManifest(moduleType)
+
+  function setupPinned(nodes: DashboardNodePayload[] = []) {
+    const editor = useDashboardEditor(resolve)
+    editor.reset(nodes)
+    const actions = createEditorActions({
+      editor,
+      dashboardId: () => 'd1',
+      getManifest: resolve,
+      design: () => ({ width: 1920, height: 1080 }),
+    })
+    return { editor, actions }
+  }
+
+  it('钉位模块横向铺满钉在顶上', () => {
+    const { editor, actions } = setupPinned()
+
+    expect(actions.addModule(PINNED)).toBe(true)
+
+    const added = editor.nodes.value[0]
+    expect(added?.x).toBe(0)
+    expect(added?.y).toBe(0)
+    expect(added?.w).toBe(1920)
+    expect(added?.h).toBe(60)
+  })
+
+  it('同区域第二个被拒并返回 false', () => {
+    const { editor, actions } = setupPinned([
+      node('h', { moduleType: 'demo-header' }),
+    ])
+
+    expect(actions.addModule(PINNED)).toBe(false)
+    expect(editor.nodes.value).toHaveLength(1)
+  })
+
+  it('落点添加落在指定位置与指定父层', () => {
+    const { editor, actions } = setupPinned([
+      node('box', { moduleType: BOX.type }),
+    ])
+
+    expect(actions.addModuleAt(LEAF, { parentId: 'box', x: 40, y: 30 })).toBe(
+      true,
+    )
+
+    const added = editor.nodes.value.find((item) => item.parentId === 'box')
+    expect(added?.x).toBe(40)
+    expect(added?.y).toBe(30)
+    expect(added?.w).toBe(120)
   })
 })

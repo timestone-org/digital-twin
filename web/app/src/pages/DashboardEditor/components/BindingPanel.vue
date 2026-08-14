@@ -4,7 +4,12 @@
  * ⚠ 面板里没有任何模块类型字面量——槽位完全来自清单声明，
  * 新增模块自动获得绑点面板（DASHBOARD_DESIGN §5.2）。
  */
-import type { BindingPayload, BindingSpec, DashboardNodePayload, ModuleManifest } from '@dt/contracts'
+import type {
+  BindingPayload,
+  BindingSpec,
+  DashboardNodePayload,
+  ModuleManifest,
+} from '@dt/contracts'
 import { DtButton, DtEmpty, DtTag } from '@dt/ui'
 import { computed } from 'vue'
 

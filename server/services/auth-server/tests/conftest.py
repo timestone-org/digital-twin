@@ -74,6 +74,7 @@ async def container(settings: Settings) -> AsyncIterator[Container]:
         cache=built.cache,
         hasher=TEST_HASHER,
         tokens=built.tokens,
+        api_keys=built.api_keys,
         auth=built.auth,
         verify=built.verify,
         rules=built.rules,
@@ -149,8 +150,16 @@ def _with_test_doubles(built: Container) -> Container:
         signup_default_role=built.auth.signup_default_role,
         clock=built.auth.clock,
     )
+    api_keys = built.api_keys.__class__(
+        hasher=TEST_HASHER,
+        cache=cache,
+        clock=built.api_keys.clock,
+        verify_cache_ttl_s=built.api_keys.verify_cache_ttl_s,
+        touch_interval_s=built.api_keys.touch_interval_s,
+    )
     verify = built.verify.__class__(
         tokens=tokens,
+        api_keys=api_keys,
         rules=built.rules,
         signing_secret=built.verify.signing_secret,
         header_ttl_s=built.verify.header_ttl_s,
@@ -162,6 +171,7 @@ def _with_test_doubles(built: Container) -> Container:
         cache=built.cache,
         hasher=TEST_HASHER,
         tokens=tokens,
+        api_keys=api_keys,
         auth=auth,
         verify=verify,
         rules=built.rules,

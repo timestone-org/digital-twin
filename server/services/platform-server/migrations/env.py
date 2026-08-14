@@ -14,6 +14,7 @@ from lib.config import load_settings_or_exit
 from platform_server.apps.collect.models import Base as CollectBase
 from platform_server.apps.dashboard.models import Base as DashboardBase
 from platform_server.apps.hvac.models import Base as HvacBase
+from platform_server.apps.runtime_params.models import Base as RuntimeParamsBase
 from platform_server.settings import DB_SCHEMA, Settings
 
 config = context.config
@@ -23,6 +24,7 @@ target_metadata = [
     HvacBase.metadata,
     DashboardBase.metadata,
     CollectBase.metadata,
+    RuntimeParamsBase.metadata,
 ]
 
 _settings = load_settings_or_exit(Settings)

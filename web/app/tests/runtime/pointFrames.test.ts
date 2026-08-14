@@ -105,8 +105,12 @@ describe('一条条目', () => {
   })
 
   it('缺点位身份、缺时刻、状态认不出来的一律丢掉', () => {
-    expect(decodePointItem({ state: 'ok', value: 1, timestampMs: 1 })).toBeNull()
-    expect(decodePointItem({ nodeKey: '', state: 'ok', timestampMs: 1 })).toBeNull()
+    expect(
+      decodePointItem({ state: 'ok', value: 1, timestampMs: 1 }),
+    ).toBeNull()
+    expect(
+      decodePointItem({ nodeKey: '', state: 'ok', timestampMs: 1 }),
+    ).toBeNull()
     expect(
       decodePointItem({ nodeKey: 's:1', state: 'ok', value: 1 }),
     ).toBeNull()
@@ -127,7 +131,13 @@ describe('一整帧的载荷', () => {
   it('解出全部合法条目，丢掉不合法的那些', () => {
     const decoded = decodePointItems({
       items: [
-        { nodeKey: 's:1', state: 'ok', value: 1, timestampMs: 1, quality: 'good' },
+        {
+          nodeKey: 's:1',
+          state: 'ok',
+          value: 1,
+          timestampMs: 1,
+          quality: 'good',
+        },
         { state: 'ok', value: 2, timestampMs: 2, quality: 'good' },
         { nodeKey: 's:2', state: 'error', errorMessage: '读不到' },
       ],

@@ -9,7 +9,9 @@ import {
   BINDING_DATA_TYPES,
   CONFIG_FIELD_SPANS,
   CONFIG_FIELD_TYPES,
+  INTERACTION_EVENTS,
   MODULE_CHROMES,
+  MODULE_CONNECTION_STATES,
   MODULE_REGIONS,
   MODULE_STATUSES,
 } from '../src/index'
@@ -17,7 +19,9 @@ import type {
   BindingDataType,
   ConfigFieldSpan,
   ConfigFieldType,
+  InteractionEventName,
   ModuleChrome,
+  ModuleConnectionState,
   ModuleRegion,
   ModuleStatus,
 } from '../src/index'
@@ -32,6 +36,11 @@ const CONFIG_FIELD_TYPE_MEMBERS: Record<ConfigFieldType, true> = {
   range: true,
   array: true,
   object: true,
+  font: true,
+  style: true,
+  image: true,
+  json: true,
+  'dashboard-ref': true,
 }
 const CONFIG_FIELD_SPAN_MEMBERS: Record<ConfigFieldSpan, true> = {
   half: true,
@@ -59,9 +68,21 @@ const MODULE_STATUS_MEMBERS: Record<ModuleStatus, true> = {
   unbound: true,
   error: true,
 }
+const MODULE_CONNECTION_STATE_MEMBERS: Record<ModuleConnectionState, true> = {
+  connecting: true,
+  open: true,
+  reconnecting: true,
+  closed: true,
+  error: true,
+}
+const INTERACTION_EVENT_MEMBERS: Record<InteractionEventName, true> = {
+  click: true,
+  change: true,
+  select: true,
+}
 
 describe('配置字段', () => {
-  it('控件类型是这八档', () => {
+  it('控件类型是这十三档', () => {
     expect([...CONFIG_FIELD_TYPES]).toEqual([
       'string',
       'number',
@@ -71,6 +92,11 @@ describe('配置字段', () => {
       'range',
       'array',
       'object',
+      'font',
+      'style',
+      'image',
+      'json',
+      'dashboard-ref',
     ])
   })
 
@@ -142,5 +168,19 @@ describe('模块状态', () => {
   it('陈旧与空值是两档，不许合并', () => {
     expect(MODULE_STATUSES).toContain('stale')
     expect(MODULE_STATUSES).toContain('empty')
+  })
+
+  it('连接态的类型成员与运行时常量对齐', () => {
+    expect(Object.keys(MODULE_CONNECTION_STATE_MEMBERS).sort()).toEqual(
+      [...MODULE_CONNECTION_STATES].sort(),
+    )
+  })
+})
+
+describe('节点联动', () => {
+  it('联动事件的类型成员与运行时常量对齐', () => {
+    expect(Object.keys(INTERACTION_EVENT_MEMBERS).sort()).toEqual(
+      [...INTERACTION_EVENTS].sort(),
+    )
   })
 })

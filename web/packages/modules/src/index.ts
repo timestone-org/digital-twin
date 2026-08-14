@@ -31,3 +31,8 @@ export {
   resolveContentInset,
 } from './shared/container'
 export type { ContainerLayout, ContentInset } from './shared/container'
+export {
+  __resetTagSource,
+  configureTagSource,
+  readTagSnapshots,
+} from './shared/tagSource'

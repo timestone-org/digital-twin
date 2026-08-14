@@ -39,17 +39,25 @@ describe('帧解析', () => {
   })
 
   it('event 帧与 data 帧同形，一并认', () => {
-    const frame = parseServerFrame(JSON.stringify({ ...PAYLOAD, type: 'event' }))
+    const frame = parseServerFrame(
+      JSON.stringify({ ...PAYLOAD, type: 'event' }),
+    )
     expect(frame?.type).toBe('event')
   })
 
   it('ack 帧要有 req_id 与 action', () => {
-    const raw = JSON.stringify({ type: 'ack', req_id: 'c1', action: 'subscribe' })
+    const raw = JSON.stringify({
+      type: 'ack',
+      req_id: 'c1',
+      action: 'subscribe',
+    })
     expect(parseServerFrame(raw)?.type).toBe('ack')
   })
 
   it('⚠ error 帧只有 message 也认——帧不是合法 JSON 时 hub 就只回这两个键', () => {
-    const frame = parseServerFrame(JSON.stringify({ type: 'error', message: '坏了' }))
+    const frame = parseServerFrame(
+      JSON.stringify({ type: 'error', message: '坏了' }),
+    )
     expect(frame?.type).toBe('error')
   })
 

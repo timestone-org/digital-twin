@@ -57,6 +57,21 @@ AUTH_RULES: tuple[RouteRuleSpec, ...] = (
         description="覆盖式写用户直权",
     ),
     RouteRuleSpec(
+        f"{_P}/api-keys*",
+        "GET",
+        codes=(USER_VIEW,),
+        priority=968,
+        description="API 密钥列表。⚠ 只出前缀，明文签发后不再出现在任何读面",
+    ),
+    RouteRuleSpec(
+        f"{_P}/api-keys*",
+        "POST",
+        codes=(USER_MANAGE,),
+        priority=968,
+        description="签发与吊销 API 密钥。⚠ 与重置他人密码同档：拿到密钥"
+        "就等于能以该账号的身份行事",
+    ),
+    RouteRuleSpec(
         f"{_P}/users*",
         "GET",
         codes=(USER_VIEW,),

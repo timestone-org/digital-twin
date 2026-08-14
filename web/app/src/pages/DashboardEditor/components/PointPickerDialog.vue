@@ -4,7 +4,16 @@
  * ⚠ 关键字连着敲会连着发请求，取数在 `usePointPicker` 里防了竞态；
  * 这里只负责在打开时搜一次、关闭时把在途请求掐掉。
  */
-import { DtButton, DtEmpty, DtIcon, DtInput, DtModal, DtNotice, DtSpinner, DtTag } from '@dt/ui'
+import {
+  DtButton,
+  DtEmpty,
+  DtIcon,
+  DtInput,
+  DtModal,
+  DtNotice,
+  DtSpinner,
+  DtTag,
+} from '@dt/ui'
 import { onUnmounted, watch } from 'vue'
 
 import type { CollectPoint } from '@/api/collect'

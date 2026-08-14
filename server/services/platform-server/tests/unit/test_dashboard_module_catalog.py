@@ -14,7 +14,16 @@ from platform_server.apps.dashboard.services.module_catalog import (
 
 def test_the_committed_catalog_registers_the_first_phase_modules() -> None:
     catalog = load_module_catalog()
-    assert catalog.known_types() == frozenset({"header", "twin-view"})
+    assert catalog.known_types() == frozenset(
+        {
+            "container",
+            "footer",
+            "header",
+            "image-block",
+            "text-block",
+            "twin-view",
+        }
+    )
 
 
 def test_an_unknown_type_has_no_manifest() -> None:

@@ -101,6 +101,14 @@ export const ICONS = {
     'M16 6a6 6 0 1 1 0 12H8A6 6 0 1 1 8 6Z',
     'M19 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
   ],
+  'align-left': ['M4 3v18', 'M8 6h12v4H8Z', 'M8 14h7v4H8Z'],
+  'align-center-horizontal': ['M12 3v18', 'M5 6h14v4H5Z', 'M8 14h8v4H8Z'],
+  'align-right': ['M20 3v18', 'M8 6h8v4H8Z', 'M13 14h7v4h-7Z'],
+  'align-top': ['M3 4h18', 'M6 8h4v12H6Z', 'M14 8h4v7h-4Z'],
+  'align-center-vertical': ['M3 12h18', 'M6 5h4v14H6Z', 'M14 8h4v8h-4Z'],
+  'align-bottom': ['M3 20h18', 'M6 8h4v8H6Z', 'M14 9h4v7h-4Z'],
+  'distribute-horizontal': ['M4 4v16', 'M12 4v16', 'M20 4v16'],
+  'distribute-vertical': ['M4 4h16', 'M4 12h16', 'M4 20h16'],
   'layout-grid': [
     'M4 4h7v7H4z',
     'M13 4h7v7h-7z',
@@ -176,6 +184,47 @@ export const ICONS = {
     'M5 17v4',
     'M7 19H3',
   ],
+  folder: [
+    'M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z',
+  ],
+  'folder-open': [
+    'M3 19V7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v1',
+    'M3 19l2.5-7a2 2 0 0 1 1.9-1.4H22l-2.5 7A2 2 0 0 1 17.6 19Z',
+  ],
+  play: ['M8 5v14l11-7Z'],
+  share: [
+    'M18 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6',
+    'M6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6',
+    'M18 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6',
+    'm8.6 13.5 6.8 4',
+    'm15.4 6.5-6.8 4',
+  ],
+  download: ['M12 3v12', 'm7 10 5 5 5-5', 'M4 20h16'],
+  layers: ['m12 2 9 5-9 5-9-5Z', 'm3 12 9 5 9-5', 'm3 17 9 5 9-5'],
+  save: [
+    'M5 3h11l3 3v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z',
+    'M8 3v5h7V3',
+    'M7 14h10v7H7z',
+  ],
+  'chart-line': ['M4 4v16h16', 'm7 14 3-4 3 3 5-6'],
+  'chart-column': ['M4 4v16h16', 'M8 17v-5', 'M12 17v-8', 'M16 17v-4'],
+  'chart-pie': [
+    'M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18',
+    'M12 12V3',
+    'm12 12 7.8 4.5',
+  ],
+  'chart-mixed': ['M4 4v16h16', 'M8 17v-5', 'M13 17v-8', 'm7 9 5-3 6 5'],
+  gauge: [
+    'M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18',
+    'm12 12 4.5-4.5',
+    'M12 12h.01',
+  ],
+  'trending-up': ['m3 16 5.5-5.5 3.5 3.5L21 5', 'M15 5h6v6'],
+  'panel-bottom': ['M4 4h16v16H4z', 'M4 15h16'],
+  'layout-template': ['M4 4h16v5H4z', 'M4 13h7v7H4z', 'M13 13h7v7h-7z'],
+  type: ['M5 6V5h14v1', 'M12 5v14', 'M9 19h6'],
+  // 只用直线：圆弧鼓出多少从字面坐标上看不出来，越出视框会被静默裁掉
+  image: ['M4 4h16v16H4z', 'm5 16 4-4 3 3 4-4 3 3', 'M9 9h.01'],
 } as const satisfies Record<string, readonly string[]>
 
 export type IconName = keyof typeof ICONS

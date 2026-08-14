@@ -13,7 +13,21 @@ export type {
   NodeBox,
   StageGeometry,
 } from './dashboardGeometry'
-export { buildNodeTree, resolveModuleConfig } from './nodeTree'
+export {
+  CARD_BORDER_STYLE_OPTIONS,
+  cardChromeClasses,
+  cardVars,
+  isChromeFrameless,
+  mergeCardChrome,
+  normalizeCardBorderStyle,
+  resolveCardChrome,
+} from './cardVars'
+export type { CardBorderStyle, CardChromeRender } from './cardVars'
+export {
+  buildModalSubtree,
+  buildNodeTree,
+  resolveModuleConfig,
+} from './nodeTree'
 export type { GetModuleManifest, NodeTreeView, RuntimeNode } from './nodeTree'
 export {
   computeModuleValues,
@@ -36,5 +50,17 @@ export {
   useRuntimeData,
 } from './runtimeData'
 export type { RuntimeDataSource } from './runtimeData'
+export {
+  INTERACTION_KEY,
+  createInteractionRuntime,
+  reconcileSetActiveGroups,
+} from './interactionRuntime'
+export type {
+  ActiveModal,
+  InitialSelection,
+  InteractionNode,
+  InteractionRuntime,
+} from './interactionRuntime'
 export { default as ModuleRenderer } from './ModuleRenderer.vue'
+export { default as NodeModal } from './NodeModal.vue'
 export { default as NodeTree } from './NodeTree.vue'

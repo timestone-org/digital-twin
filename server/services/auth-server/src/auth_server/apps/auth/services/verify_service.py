@@ -16,6 +16,10 @@ from auth_server.apps.auth.errors import (
     PermissionRequired,
     TokenInvalid,
 )
+from auth_server.apps.auth.services.api_key_service import (
+    ApiKeyService,
+    looks_like_api_key,
+)
 from auth_server.apps.auth.services.identity import (
     Identity,
     load_identity_by_id,
@@ -54,6 +58,7 @@ class VerifyService:
     """边缘鉴权。签名把「权限集合」从客户端可控输入变回服务端断言。"""
 
     tokens: TokenService
+    api_keys: ApiKeyService
     rules: RouteRuleCache
     signing_secret: str
     header_ttl_s: int
@@ -114,11 +119,23 @@ class VerifyService:
     async def _authenticate(
         self, session: AsyncSession, authorization: str | None
     ) -> Identity:
+        """两种凭据同一个出口：短期 JWT，或第三方系统的常驻 API 密钥。
+
+        ⚠ 两条分支收敛成同一个 `Identity` 之后，下游（签名头、规则表、各服务
+        的闸 2）完全不知道调用方用的是哪一种——密钥不是第二套权限体系，
+        它只是同一个账号的另一把钥匙。
+
+        Args: session, authorization。
+        """
         token = parse_bearer(authorization)
         if token is None:
             raise TokenInvalid("未提供访问令牌")
-        claims = self.tokens.decode_access(token)
-        identity = await load_identity_by_id(session, _subject(claims.subject))
+        user_id = (
+            await self.api_keys.authenticate(session, token)
+            if looks_like_api_key(token)
+            else _subject(self.tokens.decode_access(token).subject)
+        )
+        identity = await load_identity_by_id(session, user_id)
         if identity is None:
             raise TokenInvalid("令牌对应的账号不存在")
         if not identity.user.is_active:

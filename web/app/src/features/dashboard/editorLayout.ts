@@ -67,7 +67,9 @@ function childOrigin(
   if (manifest?.isContainer !== true) {
     return { left: frame.left, top: frame.top }
   }
-  const inset = resolveContentInset(resolveModuleConfig(manifest, node.configJson))
+  const inset = resolveContentInset(
+    resolveModuleConfig(manifest, node.configJson),
+  )
   return { left: frame.left + inset.left, top: frame.top + inset.top }
 }
 

@@ -17,10 +17,7 @@ import { ref, type Ref } from 'vue'
 
 import { newClientUuid } from '@/api/idempotency'
 import { dispatchFrame } from '@/runtime/realtimeDispatch'
-import {
-  createTopicRegistry,
-  type TopicHandler,
-} from '@/runtime/topicRegistry'
+import { createTopicRegistry, type TopicHandler } from '@/runtime/topicRegistry'
 import type { DispatchPorts } from '@/runtime/realtimeDispatch'
 import { useAuthStore } from '@/stores/auth'
 

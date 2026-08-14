@@ -34,10 +34,15 @@ class NodeOut(OutputModel):
     parent_id: uuid.UUID | None
     client_key: str | None
     module_type: str
-    x_px: int = Field(serialization_alias="x")
-    y_px: int = Field(serialization_alias="y")
-    width_px: int = Field(serialization_alias="w")
-    height_px: int = Field(serialization_alias="h")
+    # ⚠ 两个别名都要给，缺一不可：
+    # 只给 serialization_alias 时，dump 出 `x` 而 validate 只认 `x_px`，于是
+    # 幂等缓存的「dump 进去 → validate 取回」在重放时必炸 500；
+    # 只给 alias 时，pyright 会把合成 __init__ 的形参名换成别名，presenter 里
+    # 按字段名构造当场报「No parameter named "x_px"」。
+    x_px: int = Field(validation_alias="x", serialization_alias="x")
+    y_px: int = Field(validation_alias="y", serialization_alias="y")
+    width_px: int = Field(validation_alias="w", serialization_alias="w")
+    height_px: int = Field(validation_alias="h", serialization_alias="h")
     z_index: int
     is_visible: bool
     config_json: dict[str, Any]

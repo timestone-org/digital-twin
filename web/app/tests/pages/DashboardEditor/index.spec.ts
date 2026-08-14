@@ -15,7 +15,11 @@ import { VERSION_CONFLICT_MESSAGE } from '@/composables/useDashboardDoc'
 import DashboardEditor from '@/pages/DashboardEditor/index.vue'
 import { useAuthStore } from '@/stores/auth'
 
-const route = { path: '/dashboards/db1/edit', params: { dashboardId: 'db1' }, query: {} }
+const route = {
+  path: '/dashboards/db1/edit',
+  params: { dashboardId: 'db1' },
+  query: {},
+}
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
@@ -94,8 +98,17 @@ async function mountEditor() {
   return wrapper
 }
 
-function buttonWith(wrapper: Awaited<ReturnType<typeof mountEditor>>, text: string) {
-  return wrapper.findAll('button').find((item) => item.text().includes(text))
+function buttonWith(
+  wrapper: Awaited<ReturnType<typeof mountEditor>>,
+  text: string,
+) {
+  // 图标键没有文字，按 aria-label 兜底认
+  return wrapper
+    .findAll('button')
+    .find(
+      (item) =>
+        item.text().includes(text) || item.attributes('aria-label') === text,
+    )
 }
 
 beforeEach(() => {
@@ -222,7 +235,7 @@ describe('撤销与删除', () => {
     await buttonWith(wrapper, '撤销')?.trigger('click')
     await flushPromises()
 
-    expect(wrapper.findAll('.dt-canvas__node')).toHaveLength(0)
+    expect(wrapper.findAll('.dt-node')).toHaveLength(0)
     expect(buttonWith(wrapper, '重做')?.attributes('disabled')).toBeUndefined()
   })
 
@@ -231,17 +244,17 @@ describe('撤销与删除', () => {
       payload({ nodes: [node('n1')] }),
     )
     const wrapper = await mountEditor()
+    await buttonWith(wrapper, '图层')?.trigger('click')
     const trash = wrapper
       .findAll('button')
       .find((item) => item.attributes('aria-label') === '删除这个节点')
+    expect(trash).toBeDefined()
 
     await trash?.trigger('click')
     await flushPromises()
 
-    expect(confirmSpy.mock.calls[0]?.[0].message).toContain(
-      '全部子节点与绑定',
-    )
-    expect(wrapper.findAll('.dt-canvas__node')).toHaveLength(1)
+    expect(confirmSpy.mock.calls[0]?.[0].message).toContain('全部子节点与绑定')
+    expect(wrapper.findAll('.dt-node')).toHaveLength(1)
   })
 
   it('确认之后节点真的没了', async () => {
@@ -250,14 +263,16 @@ describe('撤销与删除', () => {
       payload({ nodes: [node('n1')] }),
     )
     const wrapper = await mountEditor()
+    await buttonWith(wrapper, '图层')?.trigger('click')
     const trash = wrapper
       .findAll('button')
       .find((item) => item.attributes('aria-label') === '删除这个节点')
+    expect(trash).toBeDefined()
 
     await trash?.trigger('click')
     await flushPromises()
 
-    expect(wrapper.findAll('.dt-canvas__node')).toHaveLength(0)
+    expect(wrapper.findAll('.dt-node')).toHaveLength(0)
   })
 })
 
@@ -268,7 +283,7 @@ describe('属性与绑点', () => {
     )
     const wrapper = await mountEditor()
 
-    await wrapper.find('.dt-canvas__node').trigger('pointerdown')
+    await wrapper.find('.dt-node__surface').trigger('pointerdown')
     await flushPromises()
 
     expect(wrapper.text()).toContain('初始可见')
@@ -279,7 +294,7 @@ describe('属性与绑点', () => {
       payload({ nodes: [node('n1')] }),
     )
     const wrapper = await mountEditor()
-    await wrapper.find('.dt-canvas__node').trigger('pointerdown')
+    await wrapper.find('.dt-node__surface').trigger('pointerdown')
 
     const tab = wrapper
       .findAll('button')

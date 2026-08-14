@@ -129,9 +129,7 @@ export interface ServerReauthRequiredFrame {
 }
 
 export type ServerSystemFrame =
-  | ServerConnectedFrame
-  | ServerUnsubscribedFrame
-  | ServerReauthRequiredFrame
+  ServerConnectedFrame | ServerUnsubscribedFrame | ServerReauthRequiredFrame
 
 export type ServerFrame<TPayload = unknown> =
   | ServerPayloadFrame<TPayload>

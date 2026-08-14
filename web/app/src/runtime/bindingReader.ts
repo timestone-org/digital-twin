@@ -8,7 +8,7 @@
  * ⚠ 取不到就说取不到：没有快照就是 `pending`，取数失败就是 `error`，
  * 绝不拿 `null` 冒充「现场报的就是空」。
  */
-import type { BindingPayload, PointSample } from '@dt/contracts'
+import type { BindingView, PointSample } from '@dt/contracts'
 import { computeValue, resolveStaticValue } from '@dt/datasources'
 import type { BindingSlot, BindingValueReader } from '@dt/runtime'
 
@@ -42,7 +42,7 @@ function slotOfSample(sample: PointSample): BindingSlot {
 export function createBindingReader(
   readPoint: ReadPointSample,
 ): BindingValueReader {
-  return (binding: BindingPayload, siblings): BindingSlot => {
+  return (binding: BindingView, siblings): BindingSlot => {
     const kind = binding.sourceKind
     if (kind === 'opcua') {
       if (binding.nodeKey === null) {

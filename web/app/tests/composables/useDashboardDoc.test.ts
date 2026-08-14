@@ -154,7 +154,12 @@ describe('保存', () => {
   it('版本冲突按码识别，落成「你的版本旧了」而不是普通错误', async () => {
     vi.spyOn(dashboardApi, 'getDashboard').mockResolvedValue(payload('d1'))
     vi.spyOn(dashboardApi, 'replaceLayout').mockRejectedValue(
-      new BizError(dashboardApi.DASHBOARD_VERSION_CONFLICT_CODE, '版本冲突', 409, 't'),
+      new BizError(
+        dashboardApi.DASHBOARD_VERSION_CONFLICT_CODE,
+        '版本冲突',
+        409,
+        't',
+      ),
     )
     const doc = useDashboardDoc()
     await doc.load('d1')

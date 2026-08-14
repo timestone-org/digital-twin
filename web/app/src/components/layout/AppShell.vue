@@ -10,6 +10,10 @@
  * ⚠ `<main>` 是 flex 列 + overflow-hidden，**自己不滚**：滚动交给页面里的
  * DtDataView，表体才能铺满剩余高度并把分页器钉在底部。页面根节点因此必须是
  * `h-full flex flex-col min-h-0`，否则内容会被裁掉。
+ *
+ * ⚠ 想要第二列侧栏的页面一律填 `#sidebar` 插槽，**不要绕过这层壳自己拼**
+ * `AppNavRail + AppTopbar`：绕过一次，之后每个带侧栏的页面都会各拼一份，
+ * 顶栏与导航就开始各走各的。不传插槽时 DOM 与不带侧栏时完全一致。
  */
 import AppNavRail from './AppNavRail.vue'
 import AppTopbar from './AppTopbar.vue'
@@ -28,6 +32,8 @@ defineProps<{
     class="dt-grid-bg flex h-screen w-screen overflow-hidden bg-surface-base"
   >
     <AppNavRail />
+
+    <slot name="sidebar" />
 
     <div class="flex min-w-0 flex-1 flex-col">
       <AppTopbar

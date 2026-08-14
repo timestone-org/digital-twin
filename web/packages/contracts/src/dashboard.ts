@@ -60,11 +60,17 @@ export interface DashboardPayload {
   nodes: DashboardNodePayload[]
 }
 
-/** 画布上的一个渲染单元。容器也是节点——万物皆节点，节点可套节点。 */
-export interface DashboardNodePayload {
+/**
+ * 渲染一个节点要用到的字段。
+ *
+ * ⚠ 单抽这一层是因为**公开面比管理面窄**：按公开令牌读到的节点没有
+ * `dashboardId` / `createdAt` / `updatedAt`（公开面不回内部信息，ADR-0014）。
+ * 两边共用同一套渲染，所以渲染入口一律收这个子集，而不是收管理面的整形状
+ * ——收整形状的后果不是编译报错，是公开页上那三个字段悄悄变成 `undefined`。
+ */
+export interface DashboardNodeView {
   /** 一经创建永不改变，整树替换也按 id 三路比对（ADR-0012 二）。 */
   id: string
-  dashboardId: string
   /** 父节点 id。⚠ `null` 是「顶层节点」这个明确语义，不是「还不知道」。 */
   parentId: string | null
   /** 编辑器的本地稳定键，`(dashboardId, clientKey)` 唯一，撞键 409 而不是先到先得。 */
@@ -84,22 +90,28 @@ export interface DashboardNodePayload {
   isVisible: boolean
   /** 用户配置，键对应该模块 `configSchema` 里的 `ConfigField.key`。 */
   configJson: Record<string, unknown>
+  /** 该节点的全部绑定，顺序钉死在 `(fieldKey, id)`。 */
+  bindings: BindingView[]
+}
+
+/** 画布上的一个渲染单元。容器也是节点——万物皆节点，节点可套节点。 */
+export interface DashboardNodePayload extends DashboardNodeView {
+  dashboardId: string
   createdAt: string
   updatedAt: string
-  /** 该节点的全部绑定，顺序钉死在 `(fieldKey, id)`。 */
   bindings: BindingPayload[]
 }
 
 /**
- * 把节点的一个绑定槽接到一个数据来源上。
- * ⚠ `nodeId` 是**画布节点**的 id，`nodeKey` 是**采集点位**的身份——两个 node
- * 不是一回事（DASHBOARD_DESIGN §1），当成同一个东西会绑出永不产数据的槽。
+ * 求值一条绑定要用到的字段。
+ *
+ * ⚠ 与 `DashboardNodeView` 同一个理由单抽一层：公开面的绑定没有 `nodeId` /
+ * `createdAt` / `updatedAt`（它已经嵌在所属节点下面了）。求值与渲染一律收这个
+ * 子集——收整形状的后果不是编译报错，是公开页上那三个字段悄悄变成 `undefined`。
  */
-export interface BindingPayload {
+export interface BindingView {
   /** 一经创建永不改变：实时推送以它作关联键，重生成会让关联每次保存断一次。 */
   id: string
-  /** 所属画布节点。 */
-  nodeId: string
   /**
    * 绑定槽键，必须是该模块声明过的 `BindingSpec.key`，
    * 数组槽形如 `rows[0].value`。`(nodeId, fieldKey)` 唯一。
@@ -120,6 +132,16 @@ export interface BindingPayload {
   detailJson: ArchiveBindingDetail | null
   /** 取到值之后的定值变换。 */
   transformJson: BindingTransform | null
+}
+
+/**
+ * 管理面读到的一条绑定。
+ * ⚠ `nodeId` 是**画布节点**的 id，`nodeKey` 是**采集点位**的身份——两个 node
+ * 不是一回事（DASHBOARD_DESIGN §1），当成同一个东西会绑出永不产数据的槽。
+ */
+export interface BindingPayload extends BindingView {
+  /** 所属画布节点。 */
+  nodeId: string
   createdAt: string
   updatedAt: string
 }

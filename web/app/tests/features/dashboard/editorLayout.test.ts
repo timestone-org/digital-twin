@@ -6,7 +6,11 @@ import { describe, expect, it } from 'vitest'
 import type { DashboardNodePayload, ModuleManifest } from '@dt/contracts'
 import { CONTAINER_CONFIG_KEY } from '@dt/modules'
 
-import { contentSizeOf, hitTest, layoutFrames } from '@/features/dashboard/editorLayout'
+import {
+  contentSizeOf,
+  hitTest,
+  layoutFrames,
+} from '@/features/dashboard/editorLayout'
 
 const PAD = 10
 
@@ -21,7 +25,11 @@ const CONTAINER: ModuleManifest = {
   component: () => Promise.resolve({ default: {} }),
 }
 
-const LEAF: ModuleManifest = { ...CONTAINER, type: 'demo-leaf', isContainer: false }
+const LEAF: ModuleManifest = {
+  ...CONTAINER,
+  type: 'demo-leaf',
+  isContainer: false,
+}
 
 function getManifest(moduleType: string): ModuleManifest | undefined {
   if (moduleType === CONTAINER.type) return CONTAINER
@@ -145,7 +153,15 @@ describe('命中测试', () => {
     [
       node({ id: 'under', x: 0, y: 0, w: 200, h: 200, zIndex: 0 }),
       node({ id: 'over', x: 50, y: 50, w: 50, h: 50, zIndex: 1 }),
-      node({ id: 'gone', x: 0, y: 0, w: 200, h: 200, zIndex: 2, isVisible: false }),
+      node({
+        id: 'gone',
+        x: 0,
+        y: 0,
+        w: 200,
+        h: 200,
+        zIndex: 2,
+        isVisible: false,
+      }),
     ],
     getManifest,
   ).frames

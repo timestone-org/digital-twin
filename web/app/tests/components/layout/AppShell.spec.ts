@@ -87,4 +87,29 @@ describe('AppShell', () => {
   it('左侧导航常驻', () => {
     expect(mount(AppShell).find('aside').exists()).toBe(true)
   })
+
+  it('不填 sidebar 槽时不多出任何节点', () => {
+    const wrapper = mount(AppShell, { attachTo: document.body })
+    const root = document.querySelector('.dt-grid-bg')
+    // 导航条 + 内容列，不多不少：空插槽不许留下一个占位节点，否则 flex 会多一格
+    expect(root?.children).toHaveLength(2)
+    wrapper.unmount()
+  })
+
+  it('sidebar 槽渲染在导航条与内容列之间', () => {
+    const wrapper = mount(AppShell, {
+      attachTo: document.body,
+      slots: { sidebar: '<nav class="probe">项目栏</nav>' },
+    })
+    const root = document.querySelector('.dt-grid-bg')
+    const children = root === null ? [] : [...root.children]
+    const sidebar = document.querySelector('.probe')
+    const main = document.querySelector('main')
+
+    expect(children).toHaveLength(3)
+    expect(sidebar === null ? -1 : children.indexOf(sidebar)).toBe(1)
+    // 顶栏与主内容仍在最后那一列里，侧栏不许挤进那一列
+    expect(main !== null && children[2]?.contains(main)).toBe(true)
+    wrapper.unmount()
+  })
 })

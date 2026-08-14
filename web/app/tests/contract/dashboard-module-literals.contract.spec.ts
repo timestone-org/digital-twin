@@ -17,7 +17,8 @@ const WEB_ROOT = process.cwd()
 /** 要扫的目录：编辑器页面、大屏特性、运行态适配、启动装配，以及运行时包本身。 */
 const SCANNED = [
   join(WEB_ROOT, 'app', 'src', 'pages', 'DashboardEditor'),
-  join(WEB_ROOT, 'app', 'src', 'pages', 'Dashboards'),
+  join(WEB_ROOT, 'app', 'src', 'pages', 'DashboardView'),
+  join(WEB_ROOT, 'app', 'src', 'pages', 'Home'),
   join(WEB_ROOT, 'app', 'src', 'features', 'dashboard'),
   join(WEB_ROOT, 'app', 'src', 'runtime'),
   join(WEB_ROOT, 'app', 'src', 'bootstrap'),
@@ -34,6 +35,7 @@ const SCANNED_FILES = [
   join(WEB_ROOT, 'app', 'src', 'composables', 'useDashboardEditor.ts'),
   join(WEB_ROOT, 'app', 'src', 'composables', 'useEditorHistory.ts'),
   join(WEB_ROOT, 'app', 'src', 'composables', 'usePointPicker.ts'),
+  join(WEB_ROOT, 'app', 'src', 'composables', 'useDashboardValues.ts'),
   join(WEB_ROOT, 'app', 'src', 'api', 'dashboard.ts'),
   join(WEB_ROOT, 'app', 'src', 'api', 'dashboardWire.ts'),
 ]
@@ -64,6 +66,26 @@ const SOURCES = [
   ...SCANNED_FILES,
 ]
 
+// ⚠ `region === 'footer'` 用的是同一个字面量，但它是**区域**不是模块类型。
+// 只放过紧跟在 region 比较/赋值后面的那一处，不是整行：按行放过的话，任何一行
+// 只要提到 region 就能把同一行的模块类型判断一起夹带过闸
+const REGION_QUALIFIED = /\bregion\b\s*(?:={1,3}|!==?|:)\s*$/
+
+/** 一段源码里真正当模块类型用的那些字面量。 */
+function typeLiteralsIn(source: string, types: readonly string[]): string[] {
+  const found: string[] = []
+  for (const line of source.split('\n')) {
+    for (const type of types) {
+      const quoted = new RegExp(`['"\`]${type}['"\`]`, 'g')
+      for (const match of line.matchAll(quoted)) {
+        const before = line.slice(0, match.index)
+        if (REGION_QUALIFIED.exec(before) === null) found.push(type)
+      }
+    }
+  }
+  return found
+}
+
 describe('模块类型字面量', () => {
   it('确实扫到了源码，也确实有已注册的模块类型', () => {
     expect(SOURCES.length).toBeGreaterThan(15)
@@ -77,19 +99,39 @@ describe('模块类型字面量', () => {
   })
 
   it('运行时与编辑器的源码里一个都不出现', () => {
-    const offenders: string[] = []
-    for (const file of SOURCES) {
-      const body = code(readFileSync(file, 'utf8'))
-      for (const type of MODULE_TYPES) {
-        for (const quote of ["'", '"', '`']) {
-          if (body.includes(`${quote}${type}${quote}`)) {
-            offenders.push(`${type} @ ${file}`)
-          }
-        }
-      }
-    }
+    const offenders = SOURCES.flatMap((file) =>
+      typeLiteralsIn(code(readFileSync(file, 'utf8')), MODULE_TYPES).map(
+        (type) => `${type} @ ${file}`,
+      ),
+    )
 
     expect(offenders).toEqual([])
+  })
+
+  it('扫描器认得出真有字面量的那一行', () => {
+    expect(
+      typeLiteralsIn("if (node.moduleType === 'header') {", MODULE_TYPES),
+    ).toEqual(['header'])
+  })
+
+  it('把字面量当区域值用的那一处放行', () => {
+    expect(
+      typeLiteralsIn("const y = manifest.region === 'footer' ? 1 : 0", [
+        'footer',
+      ]),
+    ).toEqual([])
+    expect(
+      typeLiteralsIn("const pinned = { region: 'footer' }", ['footer']),
+    ).toEqual([])
+  })
+
+  it('同一行里夹带的模块类型判断不跟着区域值一起放行', () => {
+    expect(
+      typeLiteralsIn(
+        "if (m.region === 'footer' && node.moduleType === 'header') {",
+        ['footer', 'header'],
+      ),
+    ).toEqual(['header'])
   })
 })
 

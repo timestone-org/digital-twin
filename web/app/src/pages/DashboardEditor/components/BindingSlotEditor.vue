@@ -4,7 +4,11 @@
  * ⚠ 换来源要把上一种来源的取值一起清掉：留着的话服务端看到的是「opcua 绑定却
  * 带着 compute_json」，那是一条它无从判断该信哪个的记录。
  */
-import type { BindingPayload, BindingSourceKind, DtSelectOption } from '@dt/contracts'
+import type {
+  BindingPayload,
+  BindingSourceKind,
+  DtSelectOption,
+} from '@dt/contracts'
 import { BINDING_SOURCE_KINDS } from '@dt/contracts'
 import { DtButton, DtField, DtSelect } from '@dt/ui'
 

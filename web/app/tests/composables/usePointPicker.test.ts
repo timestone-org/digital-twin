@@ -56,9 +56,7 @@ describe('搜索', () => {
   })
 
   it('关键字与数据源都传下去', async () => {
-    const list = vi
-      .spyOn(collectApi, 'listPoints')
-      .mockResolvedValue(page([]))
+    const list = vi.spyOn(collectApi, 'listPoints').mockResolvedValue(page([]))
     const picker = usePointPicker()
     picker.keyword.value = '  温度  '
     picker.sourceId.value = 's1'

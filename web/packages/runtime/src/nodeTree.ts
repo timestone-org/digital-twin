@@ -5,8 +5,8 @@
  * 恒为 false，容器不渲染内容区，**它的子节点全部静默消失**。
  */
 import type {
-  BindingPayload,
-  DashboardNodePayload,
+  BindingView,
+  DashboardNodeView,
   ModuleManifest,
 } from '@dt/contracts'
 import { configDefaults } from '@dt/modules'
@@ -30,7 +30,7 @@ export interface RuntimeNode {
   isContainer: boolean
   /** 清单缺省铺底后的配置。 */
   config: Record<string, unknown>
-  bindings: readonly BindingPayload[]
+  bindings: readonly BindingView[]
   children: readonly RuntimeNode[]
 }
 
@@ -46,7 +46,7 @@ export interface NodeTreeView {
   detachedIds: readonly string[]
 }
 
-type NodesByParent = Map<string | null, DashboardNodePayload[]>
+type NodesByParent = Map<string | null, DashboardNodeView[]>
 
 /**
  * 清单缺省铺底 + 用户配置覆盖。
@@ -70,7 +70,7 @@ export function resolveModuleConfig(
  * @param getManifest 注入式清单解析器；不传则一个容器都认不出来
  */
 export function buildNodeTree(
-  nodes: readonly DashboardNodePayload[],
+  nodes: readonly DashboardNodeView[],
   getManifest?: GetModuleManifest,
 ): NodeTreeView {
   const byParent = groupByParent(nodes)
@@ -86,7 +86,7 @@ export function buildNodeTree(
 }
 
 /** 按父节点分桶，桶内定序。 */
-function groupByParent(nodes: readonly DashboardNodePayload[]): NodesByParent {
+function groupByParent(nodes: readonly DashboardNodeView[]): NodesByParent {
   const byParent: NodesByParent = new Map()
   for (const node of nodes) {
     const bucket = byParent.get(node.parentId)
@@ -99,8 +99,8 @@ function groupByParent(nodes: readonly DashboardNodePayload[]): NodesByParent {
 
 /** 同层顺序 `(zIndex, id)`：两次读取同一张未修改的大屏渲染顺序逐字相同。 */
 function byLayerOrder(
-  left: DashboardNodePayload,
-  right: DashboardNodePayload,
+  left: DashboardNodeView,
+  right: DashboardNodeView,
 ): number {
   return left.zIndex - right.zIndex || left.id.localeCompare(right.id)
 }
@@ -122,7 +122,7 @@ function buildLevel(
 }
 
 function toRuntimeNode(
-  payload: DashboardNodePayload,
+  payload: DashboardNodeView,
   byParent: NodesByParent,
   attached: Set<string>,
   getManifest: GetModuleManifest | undefined,
@@ -139,4 +139,37 @@ function toRuntimeNode(
     bindings: payload.bindings,
     children: buildLevel(payload.id, byParent, attached, getManifest),
   }
+}
+
+/**
+ * 裁出以 `rootId` 为根的整棵子树并把根搬到 (0,0)：节点弹窗的内容就是它。
+ * 根的 `isVisible` 强制为真——弹窗目标通常配成初始不可见（免得屏上弹窗各一份），
+ * 不掀开的话弹窗里就是一片空白。找不到根时给空数组。
+ */
+export function buildModalSubtree(
+  nodes: readonly DashboardNodeView[],
+  rootId: string,
+  getManifest?: GetModuleManifest,
+): readonly RuntimeNode[] {
+  const root = nodes.find((node) => node.id === rootId)
+  if (root === undefined) return []
+  const wanted = new Set<string>([rootId])
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const node of nodes) {
+      if (node.parentId === null || wanted.has(node.id)) continue
+      if (!wanted.has(node.parentId)) continue
+      wanted.add(node.id)
+      grew = true
+    }
+  }
+  const subtree = nodes
+    .filter((node) => wanted.has(node.id))
+    .map((node) =>
+      node.id === rootId
+        ? { ...node, parentId: null, x: 0, y: 0, isVisible: true }
+        : node,
+    )
+  return buildNodeTree(subtree, getManifest).roots
 }

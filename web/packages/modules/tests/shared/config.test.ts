@@ -8,10 +8,13 @@ import { describe, expect, it } from 'vitest'
 
 import {
   configDefaults,
+  readArray,
   readBoolean,
+  readEnum,
   readNumber,
   readRecord,
   readText,
+  readTrimmedText,
 } from '../../src/shared/config'
 
 describe('readText', () => {
@@ -55,6 +58,63 @@ describe('readNumber', () => {
 
   it('数字形状的字符串不算数', () => {
     expect(readNumber('12', 8)).toBe(8)
+  })
+})
+
+describe('readTrimmedText', () => {
+  it('去掉首尾空白', () => {
+    expect(readTrimmedText('  大屏 ')).toBe('大屏')
+  })
+
+  it('一串空格与空串等价，用来判「配了没有」', () => {
+    expect(readTrimmedText('   ')).toBe('')
+    expect(readTrimmedText('')).toBe('')
+  })
+
+  it('非字符串回落', () => {
+    expect(readTrimmedText(42, '兜底')).toBe('兜底')
+    expect(readTrimmedText(undefined)).toBe('')
+  })
+})
+
+describe('readEnum', () => {
+  const MODES = ['line', 'bar', 'pie'] as const
+
+  it('名单内的原样取回', () => {
+    expect(readEnum('bar', MODES, 'line')).toBe('bar')
+  })
+
+  it('名单外的一律回落', () => {
+    expect(readEnum('scatter', MODES, 'line')).toBe('line')
+    expect(readEnum('', MODES, 'pie')).toBe('pie')
+  })
+
+  it('缺键走回落', () => {
+    expect(readEnum(undefined, MODES, 'line')).toBe('line')
+    expect(readEnum(null, MODES, 'line')).toBe('line')
+  })
+
+  it('只认字符串字面量，不把别的类型字符串化', () => {
+    expect(readEnum(0, ['0', '1'] as const, '1')).toBe('1')
+    expect(readEnum(true, ['true'] as const, 'true')).toBe('true')
+  })
+})
+
+describe('readArray', () => {
+  it('数组原样取回', () => {
+    const rows = [{ key: 'a' }, { key: 'b' }]
+
+    expect(readArray(rows)).toBe(rows)
+  })
+
+  it('空数组不被当成缺失', () => {
+    expect(readArray([])).toEqual([])
+  })
+
+  it('非数组一律空数组', () => {
+    expect(readArray(undefined)).toEqual([])
+    expect(readArray({ 0: 'a', length: 1 })).toEqual([])
+    expect(readArray('[]')).toEqual([])
   })
 })
 

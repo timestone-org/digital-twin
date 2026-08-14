@@ -4,9 +4,23 @@
  * ⚠ 常量的 `0` / `false` / `''` 都是合法取值：清空输入写的是 `null`（= 没配过），
  * 不许把 falsy 当成「没配」，否则一整屏的零值会消失。
  */
-import type { BindingPayload, BindingSpec, ComputeOp, DtSelectOption } from '@dt/contracts'
+import type {
+  BindingPayload,
+  BindingSpec,
+  ComputeOp,
+  DtSelectOption,
+} from '@dt/contracts'
 import { COMPUTE_OPS } from '@dt/contracts'
-import { DtButton, DtCheckbox, DtField, DtInput, DtNumberInput, DtSelect, DtSwitch, DtTag } from '@dt/ui'
+import {
+  DtButton,
+  DtCheckbox,
+  DtField,
+  DtInput,
+  DtNumberInput,
+  DtSelect,
+  DtSwitch,
+  DtTag,
+} from '@dt/ui'
 import { computed } from 'vue'
 
 const props = defineProps<{
@@ -67,7 +81,8 @@ function toggleInput(key: string, on: boolean): void {
 }
 
 function writeWindow(text: string): void {
-  const nodeKey = props.binding.detailJson?.nodeKey ?? props.binding.nodeKey ?? ''
+  const nodeKey =
+    props.binding.detailJson?.nodeKey ?? props.binding.nodeKey ?? ''
   emit('write', {
     ...props.binding,
     detailJson: { nodeKey, range: { lastWindow: text } },
@@ -83,7 +98,12 @@ function writeWindow(text: string): void {
           {{ binding.nodeKey }}
         </DtTag>
         <span v-else class="text-2xs text-text-disabled">还没挑点位</span>
-        <DtButton size="sm" variant="outline" icon="search" @click="emit('pick')">
+        <DtButton
+          size="sm"
+          variant="outline"
+          icon="search"
+          @click="emit('pick')"
+        >
           挑点位
         </DtButton>
       </div>
@@ -138,7 +158,12 @@ function writeWindow(text: string): void {
           {{ binding.detailJson.nodeKey }}
         </DtTag>
         <span v-else class="text-2xs text-text-disabled">还没挑点位</span>
-        <DtButton size="sm" variant="outline" icon="search" @click="emit('pick')">
+        <DtButton
+          size="sm"
+          variant="outline"
+          icon="search"
+          @click="emit('pick')"
+        >
           挑点位
         </DtButton>
       </div>

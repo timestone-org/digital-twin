@@ -1,14 +1,15 @@
 /**
- * @fileoverview 契约：撤销/重做/删除的快捷键在输入框里不接管，
- * 且 window 监听在卸载时被摘掉——留下的监听会在别的页面上继续吞掉撤销键。
+ * @fileoverview 契约：全套手势的判定口径与让位规则——表单获焦让出编辑类手势
+ * 但保留 ⌘S 与缩放；挂起态只认 Esc；window 监听卸载即摘。
  */
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, ref } from 'vue'
 
 import {
   shortcutOf,
   useEditorShortcuts,
+  type EditorShortcutHandlers,
 } from '@/pages/DashboardEditor/useEditorShortcuts'
 
 function keyEvent(
@@ -18,66 +19,86 @@ function keyEvent(
   return new KeyboardEvent('keydown', { key, bubbles: true, ...over })
 }
 
-/** 把事件的 target 指到一个真实元素上。 */
-function firedOn(element: Element, event: KeyboardEvent): KeyboardEvent {
-  element.dispatchEvent(event)
-  return event
-}
-
 describe('按键判定', () => {
-  it('⌘/Ctrl + Z 是撤销，加 Shift 是重做', () => {
-    expect(shortcutOf(keyEvent('z', { metaKey: true }))).toBe('undo')
-    expect(shortcutOf(keyEvent('Z', { ctrlKey: true }))).toBe('undo')
-    expect(shortcutOf(keyEvent('z', { metaKey: true, shiftKey: true }))).toBe(
-      'redo',
+  it('编辑五件套：撤销/重做/复制/粘贴/再制', () => {
+    expect(shortcutOf(keyEvent('z', { metaKey: true }), false)).toBe('undo')
+    expect(
+      shortcutOf(keyEvent('z', { metaKey: true, shiftKey: true }), false),
+    ).toBe('redo')
+    expect(shortcutOf(keyEvent('y', { ctrlKey: true }), false)).toBe('redo')
+    expect(shortcutOf(keyEvent('c', { metaKey: true }), false)).toBe('copy')
+    expect(shortcutOf(keyEvent('v', { metaKey: true }), false)).toBe('paste')
+    expect(shortcutOf(keyEvent('d', { metaKey: true }), false)).toBe(
+      'duplicate',
     )
   })
 
-  it('Delete 与 Backspace 是删除选中节点', () => {
-    expect(shortcutOf(keyEvent('Delete'))).toBe('remove')
-    expect(shortcutOf(keyEvent('Backspace'))).toBe('remove')
+  it('删除、全选、帮助与方向键', () => {
+    expect(shortcutOf(keyEvent('Delete'), false)).toBe('remove')
+    expect(shortcutOf(keyEvent('Backspace'), false)).toBe('remove')
+    expect(shortcutOf(keyEvent('a', { metaKey: true }), false)).toBe(
+      'selectAll',
+    )
+    expect(shortcutOf(keyEvent('?'), false)).toBe('help')
+    expect(shortcutOf(keyEvent('F1'), false)).toBe('help')
+    expect(shortcutOf(keyEvent('ArrowLeft'), false)).toBe('nudge')
   })
 
-  it('带修饰键的 Delete 不算删除', () => {
-    expect(shortcutOf(keyEvent('Delete', { metaKey: true }))).toBeNull()
-  })
-
-  it('其余按键一律不接管', () => {
-    expect(shortcutOf(keyEvent('a'))).toBeNull()
-  })
-
-  it('焦点在输入框里时按键归输入框自己', () => {
-    const input = document.createElement('input')
-    document.body.appendChild(input)
-
+  it('缩放手势与 Esc', () => {
+    expect(shortcutOf(keyEvent('+', { metaKey: true }), false)).toBe('zoomStep')
+    expect(shortcutOf(keyEvent('=', { metaKey: true }), false)).toBe('zoomStep')
+    expect(shortcutOf(keyEvent('-', { metaKey: true }), false)).toBe('zoomStep')
+    expect(shortcutOf(keyEvent('0', { metaKey: true }), false)).toBe(
+      'zoomReset',
+    )
     expect(
-      shortcutOf(firedOn(input, keyEvent('z', { metaKey: true }))),
-    ).toBeNull()
-    expect(shortcutOf(firedOn(input, keyEvent('Backspace')))).toBeNull()
-
-    input.remove()
+      shortcutOf(keyEvent('0', { metaKey: true, shiftKey: true }), false),
+    ).toBe('zoomFit')
+    expect(shortcutOf(keyEvent('Escape'), false)).toBe('escape')
   })
 
-  it('焦点在可编辑区域里同样不接管', () => {
-    const box = document.createElement('div')
-    box.setAttribute('contenteditable', 'true')
-    document.body.appendChild(box)
+  it('表单获焦时编辑类让位，⌘S 与缩放保留', () => {
+    expect(shortcutOf(keyEvent('z', { metaKey: true }), true)).toBeNull()
+    expect(shortcutOf(keyEvent('Delete'), true)).toBeNull()
+    expect(shortcutOf(keyEvent('ArrowLeft'), true)).toBeNull()
+    expect(shortcutOf(keyEvent('s', { metaKey: true }), true)).toBe('save')
+    expect(shortcutOf(keyEvent('0', { metaKey: true }), true)).toBe('zoomReset')
+    expect(shortcutOf(keyEvent('Escape'), true)).toBe('escape')
+  })
 
-    expect(shortcutOf(firedOn(box, keyEvent('Delete')))).toBeNull()
-
-    box.remove()
+  it('带修饰键的 Delete 与普通字母不接管', () => {
+    expect(shortcutOf(keyEvent('Delete', { metaKey: true }), false)).toBeNull()
+    expect(shortcutOf(keyEvent('a'), false)).toBeNull()
   })
 })
 
-describe('监听的生死', () => {
-  function mountShortcuts() {
+function handlerSpy(calls: string[]): EditorShortcutHandlers {
+  return {
+    save: () => calls.push('save'),
+    undo: () => calls.push('undo'),
+    redo: () => calls.push('redo'),
+    copy: () => calls.push('copy'),
+    paste: () => calls.push('paste'),
+    duplicate: () => calls.push('duplicate'),
+    remove: () => calls.push('remove'),
+    selectAll: () => calls.push('selectAll'),
+    escape: () => calls.push('escape'),
+    nudge: (dx, dy, fine) => calls.push(`nudge:${dx},${dy},${String(fine)}`),
+    zoomStep: (direction) => calls.push(`zoomStep:${direction}`),
+    zoomReset: () => calls.push('zoomReset'),
+    zoomFit: () => calls.push('zoomFit'),
+    help: () => calls.push('help'),
+  }
+}
+
+describe('监听的生死与挂起', () => {
+  function mountShortcuts(suspended?: () => boolean) {
     const calls: string[] = []
     const host = defineComponent({
       setup() {
         useEditorShortcuts({
-          undo: () => calls.push('undo'),
-          redo: () => calls.push('redo'),
-          remove: () => calls.push('remove'),
+          handlers: handlerSpy(calls),
+          ...(suspended === undefined ? {} : { suspended }),
         })
         return () => h('div')
       },
@@ -85,14 +106,26 @@ describe('监听的生死', () => {
     return { wrapper: mount(host), calls }
   }
 
-  it('挂载后按键触发对应动作', () => {
+  it('挂载后按键触发对应动作，方向键带上 Alt 精调标记', () => {
     const { wrapper, calls } = mountShortcuts()
 
     window.dispatchEvent(keyEvent('z', { metaKey: true }))
-    window.dispatchEvent(keyEvent('z', { metaKey: true, shiftKey: true }))
-    window.dispatchEvent(keyEvent('Delete'))
+    window.dispatchEvent(keyEvent('ArrowRight', { altKey: true }))
+    window.dispatchEvent(keyEvent('-', { metaKey: true }))
 
-    expect(calls).toEqual(['undo', 'redo', 'remove'])
+    expect(calls).toEqual(['undo', 'nudge:1,0,true', 'zoomStep:-1'])
+    wrapper.unmount()
+  })
+
+  it('挂起态只认 Esc', () => {
+    const on = ref(true)
+    const { wrapper, calls } = mountShortcuts(() => on.value)
+
+    window.dispatchEvent(keyEvent('z', { metaKey: true }))
+    window.dispatchEvent(keyEvent('s', { metaKey: true }))
+    window.dispatchEvent(keyEvent('Escape'))
+
+    expect(calls).toEqual(['escape'])
     wrapper.unmount()
   })
 

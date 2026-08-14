@@ -34,7 +34,10 @@ function writeKey(key: string, next: unknown, isContinuous: boolean): void {
     :disabled="disabled"
     @update="(next: unknown, live: boolean) => emit('update', next, live)"
   />
-  <div v-else class="flex flex-col gap-3 rounded border border-border-subtle p-3">
+  <div
+    v-else
+    class="flex flex-col gap-3 rounded border border-border-subtle p-3"
+  >
     <DtField
       v-for="sub in fields"
       :key="sub.key"
