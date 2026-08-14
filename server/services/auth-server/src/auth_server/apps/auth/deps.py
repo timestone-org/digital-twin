@@ -22,6 +22,7 @@ from auth_server.apps.auth.services import (
     Identity,
     Operation,
     load_identity_by_id,
+    looks_like_api_key,
 )
 from auth_server.apps.auth.services.token_service import parse_bearer
 from auth_server.container import Container
@@ -64,11 +65,17 @@ async def get_identity(
     ⚠ 本服务**不读** `X-Auth-*` 头来认证自己的端点：那些头由边缘在调过
     `/verify` 之后注入，用它认证会让 auth-server 的鉴权依赖边缘配置正确。
 
+    ⚠ 本服务的管理面**只认账号令牌**，API 密钥一律拒绝。密钥是给机器调业务
+    接口用的；放它进来，一枚被盗的密钥就能给自己再签一枚，吊销永远追不上
+    签发。这里显式判前缀而不是让它掉进「令牌无效」，是为了让现象贴着原因。
+
     Args: session, container, authorization。
     """
     token = parse_bearer(authorization)
     if token is None:
         raise TokenInvalid("未提供访问令牌")
+    if looks_like_api_key(token):
+        raise TokenInvalid("API 密钥不能用于账号管理面，请改用账号令牌")
     claims = container.tokens.decode_access(token)
     identity = await load_identity_by_id(session, _as_uuid(claims.subject))
     if identity is None:

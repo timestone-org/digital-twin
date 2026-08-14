@@ -43,6 +43,14 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     edge_service_key: SecretStr = Field(min_length=32)
     edge_permission_ttl_s: int = 60
 
+    # API 密钥的 argon2 校验结果缓存窗口。⚠ 缓存的只是「这串明文的散列对得上」，
+    # 吊销、过期、账号停用每次认证都回库判定，不受它影响。
+    # 不缓存的话，`/verify` 那 500ms 的超时挡不住 argon2，全站会整片按拒绝处理。
+    api_key_verify_cache_ttl_s: int = Field(default=60, ge=1)
+    # `last_used_at` 的写库节流。每次认证一次 UPDATE 会把全站前置的读链路
+    # 变成写链路，而这个字段只需要回答「这枚密钥还有人用吗」。
+    api_key_touch_interval_s: int = Field(default=60, ge=1)
+
     login_max_attempts: int = 10
     login_window_s: int = 300
 

@@ -3,10 +3,18 @@
 放在 service 边界而不是 api 层：转换要读权限集合，那是业务知识。
 """
 
+from datetime import datetime
 from typing import cast
 
-from auth_server.apps.auth.models import Permission, Role, RouteRule, User
+from auth_server.apps.auth.models import (
+    ApiKey,
+    Permission,
+    Role,
+    RouteRule,
+    User,
+)
 from auth_server.apps.auth.schemas import (
+    ApiKeyOut,
     HttpMethod,
     MatchMode,
     PermissionOut,
@@ -106,6 +114,24 @@ def to_permission_out(permission: Permission) -> PermissionOut:
     Args: permission。
     """
     return PermissionOut.model_validate(permission)
+
+
+def to_api_key_out(key: ApiKey, *, now: datetime) -> ApiKeyOut:
+    """API 密钥的元信息。⚠ 明文不在这里，也不在任何读面。
+
+    Args: key, now（算 `is_active` 要一个此刻）。
+    """
+    return ApiKeyOut(
+        id=key.id,
+        user_id=key.user_id,
+        name=key.name,
+        prefix=key.prefix,
+        is_active=key.is_usable(now),
+        expires_at=key.expires_at,
+        last_used_at=key.last_used_at,
+        revoked_at=key.revoked_at,
+        created_at=key.created_at,
+    )
 
 
 def to_route_rule_out(rule: RouteRule) -> RouteRuleOut:
