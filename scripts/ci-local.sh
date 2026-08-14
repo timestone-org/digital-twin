@@ -32,6 +32,7 @@ gates=(
   check_logging
   check_config_secrets
   check_migrations
+  check_docker_workspace
   check_api_contract
   check_tests
   check_licenses

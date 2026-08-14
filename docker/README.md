@@ -60,12 +60,17 @@ docker compose up -d --build
 容器起来**不会**自己建表。每个服务各有一条迁移链，各自只碰自己的 schema：
 
 ```bash
-docker compose run --rm auth-server     alembic upgrade head
-docker compose run --rm auth-server     python -m scripts.seed
-docker compose run --rm platform-server alembic upgrade head
-docker compose run --rm opcua-server    alembic upgrade head
-docker compose run --rm realtime-hub    alembic upgrade head
+docker compose run --rm auth-server      alembic upgrade head
+docker compose run --rm auth-server      python -m scripts.seed
+docker compose run --rm platform-server  alembic upgrade head
+docker compose run --rm opcua-server     alembic upgrade head
+docker compose run --rm realtime-hub     alembic upgrade head
+docker compose run --rm collector-server alembic upgrade head
 ```
+
+⚠ **`collector-server` 那条别漏。** 它建的是独立的 `collect` schema 与点位历史超表，
+建表时会 `CREATE EXTENSION timescaledb`；漏跑的表现是采集容器健康、日志也不报错，
+但一条历史都落不进去。
 
 ⚠ **每次上新功能都要重跑种子。** 权限码与路由规则表（闸 1）存在**数据库里**，
 由 auth-server 的种子脚本全量覆盖（可重复执行；人工新建的规则不受影响）。

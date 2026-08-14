@@ -63,7 +63,16 @@ cd ../platform-server
 cp .env.example .env          # 至少填 PLATFORM_POSTGRES_*、PLATFORM_SQLSERVER_*
                               # 与 PLATFORM_EDGE_SIGNING_SECRET（与 auth 同值）
 uv run alembic upgrade head   # 建 platform schema 与全部表
+
+cd ../collector-server
+cp .env.example .env          # 至少填 COLLECT_POSTGRES_*、COLLECT_REDIS_*
+                              # 与 COLLECT_EDGE_SERVICE_KEY（与 auth 同值）
+uv run alembic upgrade head   # 建 collect schema 与点位历史超表
 ```
+
+⚠ **`collect` 是独立 schema，漏了它采集起不来。** 归档表是 TimescaleDB 超表，
+建表时会 `CREATE EXTENSION timescaledb`——装不上就响亮失败，不会退化成普通大表
+（那种退化要等到表涨到几亿行才会被发现）。
 
 ⚠ **加了端点就要重跑一次 `scripts.seed`。** 闸 1 的路由规则存在数据库里，种子脚本
 全量覆盖内置规则；漏跑的表现是新端点在边缘一律 403，而直连服务端口却是好的——

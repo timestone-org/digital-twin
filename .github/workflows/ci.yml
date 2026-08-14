@@ -110,6 +110,9 @@ jobs:
         run: uv run --python 3.12 --no-project python scripts/gates/check_config_secrets.py
       - name: 数据库迁移
         run: uv run --python 3.12 --no-project python scripts/gates/check_migrations.py
+
+      - name: 镜像的 workspace 成员
+        run: uv run --python 3.12 --no-project python scripts/gates/check_docker_workspace.py
       - name: 对外契约（URL 形状、序列化口径、错误码）
         run: uv run --python 3.12 --no-project python scripts/gates/check_api_contract.py
       - name: 测试质量（无断言用例、分层、skip）

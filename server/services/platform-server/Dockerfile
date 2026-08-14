@@ -14,11 +14,16 @@ WORKDIR /src
 # 先只拷元数据装依赖：源码改动不会让依赖层失效
 COPY pyproject.toml uv.lock ./
 COPY lib/pyproject.toml lib/
+# ⚠ 依赖里有哪个 workspace 成员，这里就要拷它的 pyproject：`--frozen` 按锁文件
+# 找本地成员，缺一个就是 `Distribution not found at file:///src/...`，
+# 而报错发生在装依赖那层，与「谁依赖了它」隔着两个文件
+COPY domain/timeseries/pyproject.toml domain/timeseries/
 COPY services/platform-server/pyproject.toml services/platform-server/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --package platform-server --frozen --no-install-project --no-dev
 
 COPY lib/ lib/
+COPY domain/timeseries/ domain/timeseries/
 COPY services/platform-server/ services/platform-server/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --package platform-server --frozen --no-dev
