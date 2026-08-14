@@ -20,6 +20,7 @@ export type {
   UserListItem,
 } from './auth'
 export { PERMISSION_CODES, PERMISSION_KINDS } from './auth'
+export type { ApiKey, ApiKeyFilters, ApiKeySecret } from './apiKey'
 export type {
   HttpMethod,
   MatchMode,

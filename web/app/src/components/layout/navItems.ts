@@ -110,6 +110,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
         to: '/system/route-rules',
         permission: [PERMISSION_CODES.routeRuleView],
       },
+      {
+        key: 'api-keys',
+        label: 'API 密钥',
+        icon: 'lock',
+        to: '/system/api-keys',
+        permission: [PERMISSION_CODES.userView],
+      },
     ],
   },
 ]

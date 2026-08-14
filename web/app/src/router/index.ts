@@ -198,6 +198,16 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
+    // 读面挂 userView 与用户管理同档：列表只出前缀，不出明文
+    path: '/system/api-keys',
+    name: 'system-api-keys',
+    component: () => import('@/pages/System/ApiKeys/index.vue'),
+    meta: {
+      title: 'API 密钥',
+      permissions: [PERMISSION_CODES.userView],
+    },
+  },
+  {
     path: '/forbidden',
     name: 'forbidden',
     component: () => import('@/pages/Forbidden/index.vue'),

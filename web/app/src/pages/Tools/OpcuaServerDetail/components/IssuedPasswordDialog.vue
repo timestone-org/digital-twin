@@ -11,7 +11,7 @@
  */
 import { DtButton, DtIcon, DtModal, DtNotice, useToast } from '@dt/ui'
 
-import { copyText } from '../clipboard'
+import { copyText } from '@/utils/clipboard'
 
 const props = defineProps<{
   /** 非 null 时弹出。用户名与明文口令。 */

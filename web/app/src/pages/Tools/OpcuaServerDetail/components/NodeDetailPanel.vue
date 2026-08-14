@@ -27,7 +27,7 @@ import {
 import * as opcua from '@/api/opcua'
 import PermGuard from '@/components/PermGuard.vue'
 import { describeError } from '@/composables/useAsyncList'
-import { copyText } from '../clipboard'
+import { copyText } from '@/utils/clipboard'
 import {
   accessLabels,
   displayValue,
