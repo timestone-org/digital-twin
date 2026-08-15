@@ -1,0 +1,194 @@
+// 页头的七档背景花纹，一档一个修饰类。
+// 由 Component.vue 的 scoped 块 @use 进来——摊在同一个文件里会把它撑过行数闸门。
+// 花纹与标题装饰是两条正交的轴：这里只管背景与边框，不碰 deco。
+
+// 默认：顶部辉光 + 对角斜纹
+.dt-header--default {
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      color-mix(in srgb, var(--dt-header-accent) 7%, transparent) 0,
+      color-mix(in srgb, var(--dt-header-accent) 7%, transparent) 1px,
+      transparent 1px,
+      transparent 9px
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--dt-header-accent) 14%, transparent) 0%,
+      transparent 78%
+    );
+}
+
+// 翼形：顶部弧光 + 斜纹
+.dt-header--winged {
+  background-image:
+    radial-gradient(
+      circle at 50% 0,
+      color-mix(in srgb, var(--dt-header-accent) 26%, transparent),
+      transparent 48%
+    ),
+    repeating-linear-gradient(
+      45deg,
+      color-mix(in srgb, var(--dt-header-accent) 8%, transparent) 0,
+      color-mix(in srgb, var(--dt-header-accent) 8%, transparent) 1px,
+      transparent 1px,
+      transparent 10px
+    );
+}
+
+// 玻璃：磨砂点阵 + 顶部高光
+.dt-header--glass {
+  border-top: 1px solid
+    color-mix(in srgb, var(--dt-header-accent) 20%, transparent);
+  background-image:
+    radial-gradient(
+      color-mix(in srgb, var(--dt-header-accent) 18%, transparent) 1px,
+      transparent 1.4px
+    ),
+    linear-gradient(180deg, var(--fx-sheen), transparent 44%);
+  background-size:
+    14px 14px,
+    auto;
+}
+
+// 极简：干净无底纹，只把下边线加重
+.dt-header--minimal {
+  --dt-header-line: color-mix(
+    in srgb,
+    var(--dt-header-accent) 40%,
+    transparent
+  );
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--dt-header-accent) 8%, transparent),
+    transparent 64%
+  );
+}
+
+// 飘带：人字纹 + 两侧渐变
+.dt-header--ribbon {
+  background-image:
+    repeating-linear-gradient(
+      -45deg,
+      color-mix(in srgb, var(--dt-header-accent) 9%, transparent) 0,
+      color-mix(in srgb, var(--dt-header-accent) 9%, transparent) 2px,
+      transparent 2px,
+      transparent 8px
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--dt-header-accent) 18%, transparent),
+      transparent 24%,
+      transparent 76%,
+      color-mix(in srgb, var(--dt-header-accent) 18%, transparent)
+    );
+}
+
+// 素净：无花纹、无扫描线、无底部辉光线（两侧装饰由 deco 单独管）
+.dt-header--plain {
+  background-image: none;
+}
+
+.dt-header--plain::before,
+.dt-header--plain::after {
+  display: none;
+}
+
+// 翼台：花纹全部由底图层承担；下沿是轮廓自己的收口，
+// 再叠一条贯通全宽的分隔线会把翼形切成一截直边
+.dt-header--podium {
+  --dt-header-line: transparent;
+  background-image: none;
+}
+
+.dt-header--podium::before {
+  display: none;
+}
+
+// 翼台轮廓：整宽横带 + 中央下凸梯形舞台 + 两侧翼片，纯 CSS。
+// 要随页头宽高等比伸缩，故横纵一律用 %，只有倒角用小量 px。关键几何：
+//   · 横带下沿 y=44%   · 翼片 x=28~36% 与 64~72%、下沿 y=66%
+//   · 中央舞台 x=36~64%、下沿 y=90%、下沿两角各内收 22px   · 上沿倒角 32×24px
+.dt-header__bg--podium {
+  background:
+    // ① 翼片深色底：高 22% 的窄带贴在横带下沿，横向硬停只在两块翼片区间出色。
+    // 纵向 % 按 (100% - 22%) 折算：顶边要落在 44% → 44/78 ≈ 56.4%
+    linear-gradient(
+        90deg,
+        transparent 0 28%,
+        color-mix(in srgb, var(--dt-header-accent) 34%, transparent) 28% 36%,
+        transparent 36% 64%,
+        color-mix(in srgb, var(--dt-header-accent) 34%, transparent) 64% 72%,
+        transparent 72% 100%
+      )
+      0 56.4% / 100% 22% no-repeat,
+    // ② 上亮下沉的纵向压光，做出金属横带的厚度感
+    linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--dt-header-accent) 26%, transparent) 0%,
+        color-mix(in srgb, var(--dt-header-accent) 10%, transparent) 100%
+      ),
+    // ③ 横向色偏：左淡右浓，免得整条横带死板
+    linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--dt-header-accent) 8%, transparent),
+        color-mix(in srgb, var(--dt-header-accent) 20%, transparent)
+      );
+  clip-path: polygon(
+    0 24px,
+    32px 0,
+    calc(100% - 32px) 0,
+    100% 24px,
+    100% 44%,
+    72% 44%,
+    calc(72% - 10px) 66%,
+    64% 66%,
+    64% 72%,
+    calc(64% - 22px) 90%,
+    calc(36% + 22px) 90%,
+    36% 72%,
+    36% 66%,
+    calc(28% + 10px) 66%,
+    28% 44%,
+    0 44%
+  );
+}
+
+// 两枚翼片各内嵌 3 颗发光圆点。芯色由强调色向白偏移，四成处开始淡出成微辉
+.dt-header__bg--podium::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(
+      circle 3px at 30% 55%,
+      color-mix(in srgb, var(--dt-header-accent) 30%, var(--fx-const-lighten)) 0 40%,
+      transparent 100%
+    ),
+    radial-gradient(
+      circle 3px at 32% 55%,
+      color-mix(in srgb, var(--dt-header-accent) 30%, var(--fx-const-lighten)) 0 40%,
+      transparent 100%
+    ),
+    radial-gradient(
+      circle 3px at 34% 55%,
+      color-mix(in srgb, var(--dt-header-accent) 30%, var(--fx-const-lighten)) 0 40%,
+      transparent 100%
+    ),
+    radial-gradient(
+      circle 3px at 66% 55%,
+      color-mix(in srgb, var(--dt-header-accent) 30%, var(--fx-const-lighten)) 0 40%,
+      transparent 100%
+    ),
+    radial-gradient(
+      circle 3px at 68% 55%,
+      color-mix(in srgb, var(--dt-header-accent) 30%, var(--fx-const-lighten)) 0 40%,
+      transparent 100%
+    ),
+    radial-gradient(
+      circle 3px at 70% 55%,
+      color-mix(in srgb, var(--dt-header-accent) 30%, var(--fx-const-lighten)) 0 40%,
+      transparent 100%
+    );
+  pointer-events: none;
+}

@@ -6,6 +6,8 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import Component from '../../../src/modules/container/Component.vue'
+import manifest from '../../../src/modules/container/manifest'
+import { configDefaults } from '../../../src/shared/config'
 import { resolveContentInset } from '../../../src/shared/container'
 
 const CHILD = '<b class="child">读数子节点</b>'
@@ -102,5 +104,81 @@ describe('容器外观', () => {
     expect(
       render({ showDotGrid: false }).get('.dt-container__content').classes(),
     ).not.toContain('dt-container__content--dotted')
+  })
+})
+
+describe('容器可配的观感', () => {
+  function shellStyle(config: Record<string, unknown>): string {
+    return render(config).get('.dt-container').attributes('style') ?? ''
+  }
+
+  it('空配置注入的观感变量就是容器现值', () => {
+    const style = shellStyle({})
+
+    expect(style).toContain('--dt-container-radius: 4px')
+    expect(style).toContain('--dt-container-border-w: 0px')
+    expect(style).toContain('--dt-container-dot-size: 1px')
+    expect(style).toContain('--dt-container-dot-gap: 16px')
+    expect(style).toContain('--dt-container-dot-opacity: 12%')
+  })
+
+  // ⚠ 只比外壳样式而不是整段 html：容器缺省开着标题条，而空配置一律按关着算，
+  //   两者的**结构**本就不同（shared/container.ts），能比的是观感变量
+  it('空配置与清单缺省摊出来的配置注入同一份观感变量', () => {
+    const fromDefaults = shellStyle(configDefaults(manifest.configSchema))
+
+    expect(fromDefaults).toBe(shellStyle({}))
+  })
+
+  it('圆角可配，脏值回落 4px', () => {
+    expect(shellStyle({ radius: 12 })).toContain('--dt-container-radius: 12px')
+    expect(shellStyle({ radius: '12' })).toContain('--dt-container-radius: 4px')
+  })
+
+  it('描边关着时线宽恒 0，粗细旋钮不生效', () => {
+    expect(shellStyle({ borderWidth: 4 })).toContain(
+      '--dt-container-border-w: 0px',
+    )
+    expect(shellStyle({ showBorder: false, borderWidth: 4 })).toContain(
+      '--dt-container-border-w: 0px',
+    )
+  })
+
+  it('开了描边才有线宽，缺省 1px', () => {
+    expect(shellStyle({ showBorder: true })).toContain(
+      '--dt-container-border-w: 1px',
+    )
+    expect(shellStyle({ showBorder: true, borderWidth: 2 })).toContain(
+      '--dt-container-border-w: 2px',
+    )
+  })
+
+  it('点阵的点径、点距、浓度三个旋钮各自落到变量上', () => {
+    const style = shellStyle({ dotSize: 2, dotGap: 24, dotOpacity: 0.35 })
+
+    expect(style).toContain('--dt-container-dot-size: 2px')
+    expect(style).toContain('--dt-container-dot-gap: 24px')
+    expect(style).toContain('--dt-container-dot-opacity: 35%')
+  })
+
+  it('点阵浓度按百分比注入，浮点尾数不外泄', () => {
+    expect(shellStyle({ dotOpacity: 0.07 })).toContain(
+      '--dt-container-dot-opacity: 7%',
+    )
+    expect(shellStyle({ dotOpacity: 0 })).toContain(
+      '--dt-container-dot-opacity: 0%',
+    )
+  })
+
+  it('点阵三项是脏值时逐项回落现值', () => {
+    const style = shellStyle({
+      dotSize: '2',
+      dotGap: null,
+      dotOpacity: Number.NaN,
+    })
+
+    expect(style).toContain('--dt-container-dot-size: 1px')
+    expect(style).toContain('--dt-container-dot-gap: 16px')
+    expect(style).toContain('--dt-container-dot-opacity: 12%')
   })
 })

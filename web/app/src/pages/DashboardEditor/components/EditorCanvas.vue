@@ -4,7 +4,7 @@
  * 绝对矩形摆上去；点选、框选、拖动缩放、换父、缩放平移与模块库拖放都在这里装配，
  * 几何算术全在 `canvasDrag` / `canvasLayers` / `canvasViewport` 三个纯模块里。
  */
-import type { DashboardNodePayload } from '@dt/contracts'
+import type { CardChrome, DashboardNodePayload } from '@dt/contracts'
 import type { DesignSize, GetModuleManifest, NodeBox } from '@dt/runtime'
 import { computed } from 'vue'
 
@@ -44,6 +44,8 @@ const props = defineProps<{
   nodes: readonly DashboardNodePayload[]
   selectedIds: readonly string[]
   getManifest: GetModuleManifest
+  /** 大屏级卡片外观缺省，透传给每一格；不传设计态就与运行态两套观感。 */
+  cardChrome: CardChrome
   snap: SnapConfig
   grid: EditorGridConfig
   zoom: CanvasZoom
@@ -236,6 +238,7 @@ defineExpose({ centerOn, fitScale, stageRef })
           :frame="item.placement.frame"
           :node="item.placement.node"
           :get-manifest="getManifest"
+          :card-chrome="cardChrome"
           :is-selected="item.isSelected"
           :has-handles="selectedIds.length === 1"
           :pinned-edge="item.pinnedEdge"

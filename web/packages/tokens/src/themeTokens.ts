@@ -49,6 +49,8 @@ export interface ThemeTokens {
     scrim: string
     shadowModal: string
     shadowMenu: string
+    shadowInset: string
+    sheen: string
     transition: string
   }
 }

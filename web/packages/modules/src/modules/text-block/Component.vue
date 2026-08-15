@@ -13,6 +13,7 @@ import {
   readEnum,
   readNumber,
   readText,
+  readTrimmedText,
 } from '../../shared/config'
 
 const props = defineProps<{
@@ -30,14 +31,32 @@ const V_ALIGNS = {
   bottom: 'flex-end',
 } as const
 
-// 'sans' 不在表里：它的语义是「不注入 font-family、继承外层正文字体」
+const FONT_FAMILY_KINDS = ['sans', 'display', 'mono', 'custom'] as const
+type FontFamilyKind = (typeof FONT_FAMILY_KINDS)[number]
+
+// 'sans' 与 'custom' 都不在表里：前者的语义是「不注入 font-family、继承外层正文
+// 字体」，后者的字体名由 fontFamilyCustom 直接给
 const FONT_FAMILIES = {
   display: 'var(--font-display)',
   mono: 'var(--font-mono)',
 } as const
 
+/** 辉光的颜色与形状写在样式表里，只有半径这一个数值由配置给。 */
+type TextBlockStyle = CSSProperties & { '--dt-text-glow-radius'?: string }
+
 function clamp(value: number, low: number, high: number): number {
   return Math.min(high, Math.max(low, value))
+}
+
+/**
+ * 要注入的 font-family；空串 = 不注入，继承外层正文字体。
+ * @param kind 字体档
+ * @param custom 自定义档填的字体名，留空即回到「继承」
+ */
+function fontFamilyOf(kind: FontFamilyKind, custom: string): string {
+  if (kind === 'sans') return ''
+  if (kind === 'custom') return custom
+  return FONT_FAMILIES[kind]
 }
 
 const title = computed(() => readText(props.config.title))
@@ -63,18 +82,25 @@ const overflow = computed(() =>
 
 const isGlowing = computed(() => readBoolean(props.config.glow))
 
-const style = computed<CSSProperties>(() => {
+const glowRadius = computed(() =>
+  clamp(readNumber(props.config.glowRadius, 10), 0, 40),
+)
+
+const style = computed<TextBlockStyle>(() => {
   const background = readText(props.config.background)
   const letterSpacing = clamp(readNumber(props.config.letterSpacing, 0), 0, 40)
   const opacity = clamp(readNumber(props.config.opacity, 1), 0, 1)
-  const family = readEnum(
-    props.config.fontFamily,
-    ['sans', 'display', 'mono'] as const,
-    'sans',
+  const family = fontFamilyOf(
+    readEnum(props.config.fontFamily, FONT_FAMILY_KINDS, 'sans'),
+    readTrimmedText(props.config.fontFamilyCustom),
   )
-  const value: CSSProperties = {
+  const value: TextBlockStyle = {
     padding: `${clamp(readNumber(props.config.padding, 8), 0, 48)}px`,
-    color: readText(props.config.color, 'var(--text-primary)'),
+    // 兜底与清单里的 default 必须逐字同值：先看画布的正文字色，画布也没配才走主题色
+    color: readText(
+      props.config.color,
+      'var(--card-text, var(--text-primary))',
+    ),
     fontSize: `${clamp(readNumber(props.config.fontSize, 16), 8, 120)}px`,
     fontWeight: clamp(readNumber(props.config.weight, 400), 100, 900),
     lineHeight: clamp(readNumber(props.config.lineHeight, 1.4), 1, 3),
@@ -96,9 +122,12 @@ const style = computed<CSSProperties>(() => {
   }
   // 以下四项一律「没配 = 不注入」：注入了就再也继承不到外层的排版
   if (background !== '') value.background = background
+  // ⚠ 字距的 0 是「沿用样式表里的 0.02em」，不是真的 0：改成真 0 会让所有没配过
+  //   字距的存量大屏一起变窄，故哨兵语义只增不改（理由见清单里这一项的 help）
   if (letterSpacing > 0) value.letterSpacing = `${letterSpacing}px`
   if (opacity < 1) value.opacity = opacity
-  if (family !== 'sans') value.fontFamily = FONT_FAMILIES[family]
+  if (family !== '') value.fontFamily = family
+  if (isGlowing.value) value['--dt-text-glow-radius'] = `${glowRadius.value}px`
   return value
 })
 </script>
@@ -142,8 +171,8 @@ const style = computed<CSSProperties>(() => {
   text-overflow: ellipsis;
 }
 
-// 辉光取文字自己的颜色，换肤时跟着一起走
+// 辉光取文字自己的颜色，换肤时跟着一起走；半径的兜底与清单里的 default 同值
 .dt-text-block--glow {
-  text-shadow: 0 0 10px currentcolor;
+  text-shadow: 0 0 var(--dt-text-glow-radius, 10px) currentcolor;
 }
 </style>

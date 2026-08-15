@@ -19,9 +19,12 @@ from platform_server.apps.dashboard.schemas.module_type import (
 )
 
 CATALOG_FILE = Path(__file__).resolve().parent.parent / "module_types.json"
-# 数组槽的 `field_key` 形状：`hotspots[0].value`
+# 数组槽的 `field_key` 形状：`anchorValues[0].value`
 ARRAY_KEY_SEPARATOR = "]."
-_SLOT_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
+# 槽名随前端清单，是 camelCase；首字母仍限小写，好把类型名一类的东西挡在外面。
+# ⚠ 收成纯 snake_case 会把 `anchorValues` 判成非法槽，而表现是绑定保存被拒、
+# 拒的理由却写成「模块没有这个绑定槽」——看着像清单缺声明，其实是解析器不认。
+_SLOT_NAME = re.compile(r"^[a-z][A-Za-z0-9_]*$")
 
 
 @dataclass(frozen=True)
@@ -86,7 +89,7 @@ class ParsedFieldKey:
 
 
 def parse_field_key(field_key: str) -> ParsedFieldKey | None:
-    """把 `hotspots[0].value` 拆成槽名、索引与子槽；形状不符给 None。
+    """把 `anchorValues[0].value` 拆成槽名、索引与子槽；形状不符给 None。
 
     Args: field_key。
     """

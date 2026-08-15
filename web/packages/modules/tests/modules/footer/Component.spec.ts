@@ -92,19 +92,101 @@ describe('页脚外观', () => {
     )
   })
 
-  it('背景留空时不写背景样式', () => {
-    const wrapper = render({ background: '' })
+  it('背景色与背景图都留空时一个都不注入', () => {
+    const style = render({}).get('.dt-footer').attributes('style') ?? ''
 
-    expect(wrapper.get('.dt-footer').attributes('style')).not.toContain(
-      'background',
-    )
+    expect(style).not.toContain('background')
   })
 
   it('填了背景才写背景样式', () => {
     const wrapper = render({ background: 'var(--surface-panel)' })
 
     expect(wrapper.get('.dt-footer').attributes('style')).toContain(
-      'background: var(--surface-panel)',
+      'background-color: var(--surface-panel)',
+    )
+  })
+
+  it('只填了背景图时不连带写死背景色', () => {
+    const wrapper = render({
+      backgroundImage: 'linear-gradient(var(--accent-primary), transparent)',
+    })
+    const style = wrapper.get('.dt-footer').attributes('style') ?? ''
+
+    expect(style).toContain('background-image: linear-gradient')
+    expect(style).not.toContain('background-color')
+  })
+
+  it('缺省不铺点阵，开了才铺', () => {
+    expect(render({}).get('.dt-footer__content').classes()).not.toContain(
+      'dt-footer__content--dotted',
+    )
+    expect(
+      render({ showDotGrid: true }).get('.dt-footer__content').classes(),
+    ).toContain('dt-footer__content--dotted')
+  })
+})
+
+describe('页脚可配的观感', () => {
+  function shellStyle(config: Record<string, unknown>): string {
+    return render(config).get('.dt-footer').attributes('style') ?? ''
+  }
+
+  it('空配置注入的观感变量就是页脚现值', () => {
+    const style = shellStyle({})
+
+    expect(style).toContain('--dt-footer-divider-w: 1px')
+    expect(style).toContain('--dt-footer-sweep-opacity: 60%')
+    expect(style).toContain('--dt-footer-title-justify: center')
+  })
+
+  it('分隔线关掉后线宽落到 0，粗细旋钮跟着不生效', () => {
+    expect(shellStyle({ showDivider: false, dividerWidth: 4 })).toContain(
+      '--dt-footer-divider-w: 0px',
+    )
+  })
+
+  it('分隔线开着时粗细可配', () => {
+    expect(shellStyle({ dividerWidth: 3 })).toContain(
+      '--dt-footer-divider-w: 3px',
+    )
+  })
+
+  it('分隔线粗细是脏值时回落 1px', () => {
+    expect(shellStyle({ dividerWidth: '3' })).toContain(
+      '--dt-footer-divider-w: 1px',
+    )
+  })
+
+  it('扫光缺省开着，关掉后整条伪元素退场', () => {
+    expect(render({}).get('.dt-footer').classes()).not.toContain(
+      'dt-footer--sweepless',
+    )
+    expect(render({ showSweep: false }).get('.dt-footer').classes()).toContain(
+      'dt-footer--sweepless',
+    )
+  })
+
+  it('扫光浓度按百分比注入，浮点尾数不外泄', () => {
+    expect(shellStyle({ sweepOpacity: 0.35 })).toContain(
+      '--dt-footer-sweep-opacity: 35%',
+    )
+    expect(shellStyle({ sweepOpacity: 0 })).toContain(
+      '--dt-footer-sweep-opacity: 0%',
+    )
+  })
+
+  it('标题对齐三档各自落到 flex 主轴对齐值上', () => {
+    expect(shellStyle({ titleAlign: 'left' })).toContain(
+      '--dt-footer-title-justify: flex-start',
+    )
+    expect(shellStyle({ titleAlign: 'right' })).toContain(
+      '--dt-footer-title-justify: flex-end',
+    )
+  })
+
+  it('标题对齐是名单外的值时回落居中', () => {
+    expect(shellStyle({ titleAlign: 'justify' })).toContain(
+      '--dt-footer-title-justify: center',
     )
   })
 })

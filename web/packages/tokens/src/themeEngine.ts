@@ -54,6 +54,8 @@ export const TOKEN_CSS_VAR: Record<TokenPath, string> = {
   'fx.scrim': '--fx-scrim',
   'fx.shadowModal': '--fx-shadow-modal',
   'fx.shadowMenu': '--fx-shadow-menu',
+  'fx.shadowInset': '--fx-shadow-inset',
+  'fx.sheen': '--fx-sheen',
   'fx.transition': '--fx-transition',
 }
 

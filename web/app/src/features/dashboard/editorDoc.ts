@@ -32,6 +32,12 @@ export interface NodeGeometry {
   h: number
 }
 
+/** 节点在同层兄弟里排第几；`index` 越大越靠上。 */
+export interface LayerPosition {
+  index: number
+  total: number
+}
+
 /** 坐标与边长的绝对值上限（设计像素），与服务端 `LayoutNodeIn` 同一套。 */
 const GEOMETRY_LIMIT_PX = 100000
 
@@ -106,7 +112,10 @@ export function createNode(input: {
     h: input.manifest.defaultSize.height,
     zIndex: input.zIndex,
     isVisible: true,
-    configJson: {},
+    // 出厂配置**深克隆**落库。⚠ 与 `ConfigField.default` 不是一回事：那个是不落库的
+    // 渲染兜底，这里是显式写进节点的初值，给的是 schema 之外的段（`__cardStyle` 一类），
+    // 少了它属性面板显示的与实际渲染的会对不上。只影响新节点，存量不变
+    configJson: structuredClone(input.manifest.defaultConfig ?? {}),
     createdAt: moment,
     updatedAt: moment,
     bindings: [],
@@ -235,16 +244,24 @@ export function setGeometryBatch(
   })
 }
 
+/** 同层兄弟按 `(zIndex, id)` 定序后的 id 列，队首在最下面。 */
+function siblingOrder(
+  nodes: readonly DashboardNodePayload[],
+  parentId: string | null,
+): string[] {
+  return nodes
+    .filter((node) => node.parentId === parentId)
+    .sort((a, b) => a.zIndex - b.zIndex || a.id.localeCompare(b.id))
+    .map((node) => node.id)
+}
+
 /** 同层兄弟按当前 z 序重排成 0..n-1；`placed` 给谁就把谁钉到指定位置。 */
 function rerankSiblings(
   nodes: readonly DashboardNodePayload[],
   parentId: string | null,
   placed?: { nodeId: string; at: 'front' | 'back' | number },
 ): DashboardNodePayload[] {
-  const siblings = nodes
-    .filter((node) => node.parentId === parentId)
-    .sort((a, b) => a.zIndex - b.zIndex || a.id.localeCompare(b.id))
-  let order = siblings.map((node) => node.id)
+  let order = siblingOrder(nodes, parentId)
   if (placed !== undefined) {
     order = order.filter((id) => id !== placed.nodeId)
     if (placed.at === 'front') order.push(placed.nodeId)
@@ -281,6 +298,52 @@ export function sendToBack(
   const node = nodes.find((item) => item.id === nodeId)
   if (node === undefined) return [...nodes]
   return rerankSiblings(nodes, node.parentId, { nodeId, at: 'back' })
+}
+
+/** 节点在同层里的层序位置；0 是最下面，`total - 1` 是最上面。不在表里给 null。 */
+export function layerPositionOf(
+  nodes: readonly DashboardNodePayload[],
+  nodeId: string,
+): LayerPosition | null {
+  const node = nodes.find((item) => item.id === nodeId)
+  if (node === undefined) return null
+  const order = siblingOrder(nodes, node.parentId)
+  return { index: order.indexOf(nodeId), total: order.length }
+}
+
+/**
+ * 与紧邻的那个兄弟换位。已经在这一头就原样返回——层序动不了时不该记一笔撤销。
+ * ⚠ 落位下标直接用「换位后的位置」：`rerankSiblings` 先摘再插，
+ * 摘掉自己之后上/下一位正好落在这个下标上。
+ * @param step 1 = 上移一层（更靠上），-1 = 下移一层
+ */
+function stepLayer(
+  nodes: readonly DashboardNodePayload[],
+  nodeId: string,
+  step: 1 | -1,
+): DashboardNodePayload[] {
+  const node = nodes.find((item) => item.id === nodeId)
+  if (node === undefined) return [...nodes]
+  const order = siblingOrder(nodes, node.parentId)
+  const at = order.indexOf(nodeId) + step
+  if (at < 0 || at >= order.length) return [...nodes]
+  return rerankSiblings(nodes, node.parentId, { nodeId, at })
+}
+
+/** 上移一层：盖住原本压在它上面的那个兄弟。 */
+export function bringForward(
+  nodes: readonly DashboardNodePayload[],
+  nodeId: string,
+): DashboardNodePayload[] {
+  return stepLayer(nodes, nodeId, 1)
+}
+
+/** 下移一层。 */
+export function sendBackward(
+  nodes: readonly DashboardNodePayload[],
+  nodeId: string,
+): DashboardNodePayload[] {
+  return stepLayer(nodes, nodeId, -1)
 }
 
 /**

@@ -6,11 +6,9 @@ import { describe, expect, it } from 'vitest'
 
 import {
   clamp,
-  clamp01,
   finiteOr,
   finiteValue,
   isRecord,
-  lerpHexColor,
   normalizeColorSpec,
   normalizeHexColor,
   stringList,
@@ -99,12 +97,6 @@ describe('clamp', () => {
     expect(clamp(11, 0, 10)).toBe(10)
     expect(clamp(5, 0, 10)).toBe(5)
   })
-
-  it('clamp01 夹到单位区间', () => {
-    expect(clamp01(-0.5)).toBe(0)
-    expect(clamp01(1.5)).toBe(1)
-    expect(clamp01(0.25)).toBe(0.25)
-  })
 })
 
 describe('trimmedString', () => {
@@ -161,22 +153,3 @@ describe('normalizeColorSpec', () => {
   })
 })
 
-describe('lerpHexColor', () => {
-  it('中点逐通道取整', () => {
-    expect(lerpHexColor('#000000', '#ffffff', 0.5)).toBe('#808080')
-  })
-
-  it('比例超出单位区间时夹到两端', () => {
-    expect(lerpHexColor('#000000', '#ffffff', -1)).toBe('#000000')
-    expect(lerpHexColor('#000000', '#ffffff', 2)).toBe('#ffffff')
-  })
-
-  it('非有限比例按起点算而不是印出 NaN', () => {
-    expect(lerpHexColor('#000000', '#ffffff', Number.NaN)).toBe('#000000')
-  })
-
-  it('任一端非法为 null', () => {
-    expect(lerpHexColor('--token', '#ffffff', 0.5)).toBeNull()
-    expect(lerpHexColor('#000000', 'nope', 0.5)).toBeNull()
-  })
-})

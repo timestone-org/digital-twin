@@ -3,7 +3,11 @@
  * 抛出对应事件，钉位节点点得中却拖不动，且**卸载时把拖动的 window 监听摘掉**——
  * 大屏一开就是几天，漏一次就留下一副永远跟着鼠标走的监听。
  */
-import type { DashboardNodePayload, ModuleManifest } from '@dt/contracts'
+import type {
+  CardChrome,
+  DashboardNodePayload,
+  ModuleManifest,
+} from '@dt/contracts'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import { nextTick } from 'vue'
@@ -73,6 +77,7 @@ function mountCanvas(
   nodes: DashboardNodePayload[],
   selectedIds: string[] = [],
   snap: SnapConfig = SNAP,
+  cardChrome: CardChrome = {},
 ) {
   return mount(EditorCanvas, {
     props: {
@@ -81,6 +86,7 @@ function mountCanvas(
       nodes,
       selectedIds,
       getManifest,
+      cardChrome,
       snap,
       grid: GRID,
       zoom: null,
@@ -339,5 +345,22 @@ describe('模块库拖放', () => {
     })
 
     expect(wrapper.emitted('add-at')).toBeUndefined()
+  })
+})
+
+describe('大屏级卡片外观', () => {
+  // ⚠ 画布不套外观的话，右栏改了边框只有预览页看得见，用户读到的是「配了没生效」
+  it('注入到画布上每一格的渲染根', () => {
+    const wrapper = mountCanvas([node('a')], [], SNAP, { radius: 12 })
+
+    expect(wrapper.get('.dt-module').attributes('style')).toContain(
+      '--card-radius: 12px',
+    )
+  })
+
+  it('一个键都没配时一格也不注入', () => {
+    const wrapper = mountCanvas([node('a')])
+
+    expect(wrapper.get('.dt-module').attributes('style')).toBeUndefined()
   })
 })

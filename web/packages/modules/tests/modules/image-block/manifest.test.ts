@@ -57,16 +57,43 @@ describe('图片块清单的取值范围', () => {
     ])
   })
 
+  it('平铺四档与组件的白名单逐一对上，缺省是不平铺', () => {
+    expect(optionValues('repeat')).toEqual([
+      'no-repeat',
+      'repeat',
+      'repeat-x',
+      'repeat-y',
+    ])
+    expect(field('repeat')?.default).toBe('no-repeat')
+  })
+
+  it('两句占位文案的缺省与组件里的兜底逐字同值', () => {
+    expect(field('emptyText')?.default).toBe('未设置图片')
+    expect(field('errorText')?.default).toBe('图片加载失败')
+  })
+
   it('百分比档的缺省就是「不加这一档滤镜」', () => {
     expect(field('brightness')).toMatchObject({ default: 100, max: 300 })
     expect(field('contrast')).toMatchObject({ default: 100, max: 300 })
     expect(field('saturate')).toMatchObject({ default: 100, max: 300 })
     expect(field('grayscale')).toMatchObject({ default: 0, max: 100 })
     expect(field('blur')).toMatchObject({ default: 0, max: 50 })
+    expect(field('invert')).toMatchObject({ default: 0, min: 0, max: 100 })
+    expect(field('sepia')).toMatchObject({ default: 0, min: 0, max: 100 })
   })
 
-  it('旋转覆盖整圈的两个方向', () => {
+  it('旋转与色相都覆盖整圈的两个方向', () => {
     expect(field('rotate')).toMatchObject({ default: 0, min: -180, max: 180 })
+    expect(field('hueRotate')).toMatchObject({
+      default: 0,
+      min: -180,
+      max: 180,
+    })
+  })
+
+  // ⚠ 文本块的同名字段是 0–1，两个模块的量纲不一样且都不许改，只能靠 help 说清
+  it('不透明度的 help 写明量纲是 0–100', () => {
+    expect(field('opacity')?.help).toContain('0–100')
   })
 })
 

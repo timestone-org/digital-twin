@@ -42,6 +42,20 @@ export default defineModule({
       span: 'half',
     },
     {
+      key: 'titleAlign',
+      label: '标题对齐',
+      type: 'enum',
+      group: '标题',
+      default: 'center',
+      span: 'half',
+      options: [
+        { value: 'left', label: '靠左' },
+        { value: 'center', label: '居中' },
+        { value: 'right', label: '靠右' },
+      ],
+      when: { key: SHOW_TITLE_CONFIG_KEY, in: [true] },
+    },
+    {
       key: 'accent',
       label: '强调色',
       type: 'color',
@@ -58,6 +72,68 @@ export default defineModule({
       default: '',
       span: 'half',
       placeholder: '留空 = 透明，继承大屏背景',
+    },
+    {
+      key: 'backgroundImage',
+      label: '背景图 / 渐变',
+      type: 'string',
+      group: '外观',
+      default: '',
+      span: 'full',
+      placeholder: '留空 = 无；填 CSS：linear-gradient(…) 或 url(…)',
+      help: '叠在背景色之上的 CSS background-image 值；留空不注入，纯色背景不受影响。',
+    },
+    {
+      key: 'showDivider',
+      label: '顶部分隔线',
+      type: 'boolean',
+      group: '外观',
+      default: true,
+      span: 'half',
+    },
+    {
+      key: 'dividerWidth',
+      label: '分隔线粗细 (px)',
+      type: 'number',
+      group: '外观',
+      default: 1,
+      min: 0,
+      max: 8,
+      step: 1,
+      span: 'half',
+      when: { key: 'showDivider', in: [true] },
+    },
+    {
+      key: 'showSweep',
+      label: '顶边扫光',
+      type: 'boolean',
+      group: '外观',
+      default: true,
+      span: 'half',
+      help: '顶边一条由强调色渐隐的高光带，纯装饰。',
+    },
+    {
+      key: 'sweepOpacity',
+      label: '扫光浓度',
+      type: 'number',
+      group: '外观',
+      default: 0.6,
+      min: 0,
+      max: 1,
+      step: 0.05,
+      span: 'half',
+      when: { key: 'showSweep', in: [true] },
+    },
+    {
+      key: 'showDotGrid',
+      label: '点阵底纹',
+      type: 'boolean',
+      group: '外观',
+      // ⚠ 与容器相反，这里缺省是**关**：页脚一直没有点阵，回落成开会给存量大屏
+      //   的每一条页脚凭空铺一层底纹
+      default: false,
+      span: 'half',
+      help: '内容区铺一层点阵，示意子节点的可放置范围。',
     },
     {
       key: CONTAINER_CONFIG_KEY,
@@ -82,6 +158,7 @@ export default defineModule({
   ],
   // 页脚自己不取数：版权、状态灯、按钮都是子节点，各自绑各自的
   bindings: [],
-  preview: { config: { title: '运行状态', showTitle: true } },
+  // ⚠ 不给演示配置：预览只铺没配过的键，凡是与 configSchema 缺省不一致的一项，
+  //   都会让刚拖进画布的页脚与保存后的运行态长得不一样（标题条那 28px 尤其明显）
   component: () => import('./Component.vue'),
 })

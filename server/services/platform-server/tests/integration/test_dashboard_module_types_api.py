@@ -34,27 +34,24 @@ async def test_a_single_module_carries_its_config_and_slots(
     module = data_of(response)
     assert module["display_name"] == "数字孪生"
     assert module["default_size"] == {
-        "width": 1200,
+        "width": 1280,
         "height": 720,
         "min_width": 320,
         "min_height": 240,
     }
-    assert [spec["key"] for spec in module["bindings"]] == [
-        "hotspots",
-        "scene_status",
-    ]
+    assert [spec["key"] for spec in module["bindings"]] == ["anchorValues"]
 
 
 async def test_a_conditional_config_field_keeps_its_wire_name(
     app_client: httpx.AsyncClient,
 ) -> None:
     response = await app_client.get(f"{MODULE_TYPES_URL}/header")
-    clock_format = next(
+    title = next(
         field
         for field in data_of(response)["config_schema"]
-        if field["key"] == "clock_format"
+        if field["key"] == "title"
     )
-    assert clock_format["when"] == {"key": "is_clock_shown", "in": [True]}
+    assert title["when"] == {"key": "showTitle", "in": [True]}
 
 
 async def test_an_unregistered_type_answers_not_found(

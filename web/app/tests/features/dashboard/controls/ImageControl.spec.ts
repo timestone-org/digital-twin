@@ -7,7 +7,7 @@ import { mount } from '@vue/test-utils'
 import type { ConfigField } from '@dt/contracts'
 
 import ImageControl from '@/features/dashboard/controls/ImageControl.vue'
-import { imageSourceKind } from '@/features/dashboard/controls/imageSource'
+import { imageSourceKind } from '@dt/modules'
 
 const FIELD: ConfigField = { key: 'bg', label: '背景图', type: 'image' }
 

@@ -73,6 +73,45 @@ describe('容器清单与容器几何的对齐', () => {
   })
 })
 
+describe('容器可配观感的声明', () => {
+  it('圆角缺省与容器现值同值', () => {
+    expect(field('radius')).toMatchObject({
+      default: 4,
+      min: 0,
+      max: 32,
+      step: 1,
+    })
+  })
+
+  it('描边缺省是关的——容器一直没有边框，存量不能凭空多一圈线', () => {
+    expect(field('showBorder')?.default).toBe(false)
+    expect(field('borderWidth')).toMatchObject({
+      default: 1,
+      min: 0,
+      max: 8,
+      step: 1,
+    })
+    expect(field('borderWidth')?.when).toEqual({
+      key: 'showBorder',
+      in: [true],
+    })
+  })
+
+  it('点阵三项的缺省与现值逐字相同，且都只在点阵开着时露出来', () => {
+    expect(field('dotSize')).toMatchObject({ default: 1, min: 1, max: 6 })
+    expect(field('dotGap')).toMatchObject({ default: 16, min: 4, max: 64 })
+    expect(field('dotOpacity')).toMatchObject({
+      default: 0.12,
+      min: 0,
+      max: 1,
+      step: 0.01,
+    })
+    for (const key of ['dotSize', 'dotGap', 'dotOpacity']) {
+      expect(field(key)?.when).toEqual({ key: 'showDotGrid', in: [true] })
+    }
+  })
+})
+
 describe('容器清单的渲染组件', () => {
   it('渲染组件是异步装载的，清单本身不把它拽进首屏包体', async () => {
     const loaded = await vi.waitFor(() => manifest.component())

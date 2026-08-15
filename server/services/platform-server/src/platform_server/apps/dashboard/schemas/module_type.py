@@ -11,7 +11,19 @@ from pydantic import Field
 from platform_server.apps.dashboard.schemas.common import OutputModel
 
 ConfigFieldType = Literal[
-    "array", "boolean", "color", "enum", "number", "object", "range", "string"
+    "array",
+    "boolean",
+    "color",
+    "dashboard-ref",
+    "enum",
+    "font",
+    "image",
+    "json",
+    "number",
+    "object",
+    "range",
+    "string",
+    "style",
 ]
 ConfigFieldSpan = Literal["full", "half"]
 BindingDataType = Literal["boolean", "enum", "number", "string"]

@@ -28,7 +28,11 @@ describe('卡片外观的注入', () => {
     const wrapper = mountCell('card-module')
 
     expect(wrapper.attributes('style')).toBeUndefined()
-    expect(wrapper.classes()).toEqual(['dt-module', 'dt-module--card'])
+    expect(wrapper.classes()).toEqual([
+      'dt-module',
+      'dt-corners',
+      'dt-module--card',
+    ])
   })
 
   it('大屏级缺省注入到渲染根上', () => {
@@ -90,5 +94,35 @@ describe('卡片外观的注入', () => {
 
     expect(wrapper.attributes('style')).toBeUndefined()
     expect(wrapper.classes()).toContain('dt-module--card')
+  })
+})
+
+describe('裸模块的描边浮层', () => {
+  it('没配边框样式就不出这一层', () => {
+    expect(mountCell('bare-module').find('.dt-module__border').exists()).toBe(
+      false,
+    )
+  })
+
+  it('配了边框样式就铺一层，且按样式挂类', () => {
+    const overlay = mountCell('bare-module', { borderStyle: 'glow' }).find(
+      '.dt-module__border',
+    )
+
+    expect(overlay.exists()).toBe(true)
+    expect(overlay.classes()).toContain('dt-card-border--glow')
+    expect(overlay.classes()).toContain('dt-corners')
+  })
+
+  // 卡片模块的边框走渲染根，再叠一层浮层就是双框
+  it('卡片模块不叠这一层', () => {
+    const wrapper = mountCell('card-module', { borderStyle: 'glow' })
+
+    expect(wrapper.find('.dt-module__border').exists()).toBe(false)
+    expect(wrapper.classes()).toContain('dt-card-border--glow')
+  })
+
+  it('下两角的载体元素跟着卡片框走', () => {
+    expect(mountCell('card-module').find('.dt-corner-b').exists()).toBe(true)
   })
 })

@@ -6,9 +6,13 @@
 import { computed, nextTick } from 'vue'
 import { DT_CONTROL_DEFAULT_SIZE } from '@dt/contracts'
 import type { DtNumberRange, DtSize } from '@dt/contracts'
+import { useHostAttrs } from '../../composables/useHostAttrs'
 import DtField from '../DtField/DtField.vue'
 
 defineOptions({ inheritAttrs: false })
+
+// class / style 归外壳、其余原生属性归里面的原生元素；混作一处的后果见 useHostAttrs
+const { hostClass, hostStyle, nativeAttrs } = useHostAttrs()
 
 const DEFAULT_BOUNDS = { min: 0, max: 100, step: 1 } as const
 
@@ -85,6 +89,8 @@ function onInput(event: Event): void {
 
 <template>
   <DtField
+    :class="hostClass"
+    :style="hostStyle"
     :label="label"
     :hint="hint"
     :error="error"
@@ -98,7 +104,7 @@ function onInput(event: Event): void {
       >
         <input
           :id="id"
-          v-bind="$attrs"
+          v-bind="nativeAttrs"
           class="dt-slider__el"
           type="range"
           :min="bounds.min"

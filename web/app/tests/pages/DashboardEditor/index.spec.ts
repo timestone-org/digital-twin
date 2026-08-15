@@ -289,7 +289,24 @@ describe('属性与绑点', () => {
     expect(wrapper.text()).toContain('初始可见')
   })
 
-  it('切到绑点页时读清单摆槽位', async () => {
+  // 不取数的模块不给「绑定」页：点进去只能看到一句「不取数」的空页签，
+  // 比少一个页签更像是坏了
+  it('不取数的模块不出绑定页签', async () => {
+    vi.spyOn(dashboardApi, 'getDashboard').mockResolvedValue(
+      payload({ nodes: [node('n1')] }),
+    )
+    const wrapper = await mountEditor()
+
+    await wrapper.find('.dt-node__surface').trigger('pointerdown')
+    await flushPromises()
+
+    const labels = wrapper.findAll('button').map((item) => item.text().trim())
+    expect(labels).toContain('通用')
+    expect(labels).toContain('联动')
+    expect(labels).not.toContain('绑定')
+  })
+
+  it('切到联动页：整屏没有能点的模块时给一句空态', async () => {
     vi.spyOn(dashboardApi, 'getDashboard').mockResolvedValue(
       payload({ nodes: [node('n1')] }),
     )
@@ -298,10 +315,46 @@ describe('属性与绑点', () => {
 
     const tab = wrapper
       .findAll('button')
-      .find((item) => item.text().trim() === '绑点')
+      .find((item) => item.text().trim() === '联动')
     await tab?.trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('这个模块不取数')
+    expect(wrapper.text()).toContain('没有可交互的模块')
+  })
+})
+
+// 守画布上抛的 `canvas-menu` 真有人接：没人接时右键静默不出菜单，也不报错
+describe('画布右键菜单', () => {
+  function menuLabels(wrapper: Awaited<ReturnType<typeof mountEditor>>) {
+    return wrapper
+      .findAll('[role="menuitem"]')
+      .map((item) => item.attributes('aria-label'))
+  }
+
+  it('右键空白处开出画布那套', async () => {
+    const wrapper = await mountEditor()
+
+    await wrapper.find('.dt-canvas__grid').trigger('contextmenu')
+
+    expect(menuLabels(wrapper)).toEqual(['粘贴', '全选', '适应窗口'])
+  })
+
+  it('右键节点开出节点那套，「删除」仍走二次确认', async () => {
+    vi.spyOn(dashboardApi, 'getDashboard').mockResolvedValue(
+      payload({ nodes: [node('n1')] }),
+    )
+    const wrapper = await mountEditor()
+
+    await wrapper.find('.dt-node__surface').trigger('contextmenu')
+    expect(menuLabels(wrapper)).toContain('置顶')
+
+    const remove = wrapper
+      .findAll('[role="menuitem"]')
+      .find((item) => item.attributes('aria-label') === '删除')
+    await remove?.trigger('click')
+    await flushPromises()
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    expect(wrapper.findAll('[role="menuitem"]')).toHaveLength(0)
   })
 })

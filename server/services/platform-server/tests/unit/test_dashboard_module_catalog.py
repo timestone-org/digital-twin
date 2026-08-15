@@ -32,8 +32,8 @@ def test_an_unknown_type_has_no_manifest() -> None:
 
 def test_slots_split_scalar_and_array_entries() -> None:
     slots = load_module_catalog().slots("twin-view")
-    assert slots.scalar_keys == frozenset({"scene_status"})
-    assert slots.array_fields == {"hotspots": frozenset({"value", "state"})}
+    assert slots.scalar_keys == frozenset()
+    assert slots.array_fields == {"anchorValues": frozenset({"value"})}
 
 
 def test_an_unknown_type_has_no_slots() -> None:
@@ -43,10 +43,10 @@ def test_an_unknown_type_has_no_slots() -> None:
 
 
 def test_a_scalar_key_parses_without_an_index() -> None:
-    parsed = parse_field_key("scene_status")
+    parsed = parse_field_key("sceneStatus")
     assert parsed is not None
     assert (parsed.slot, parsed.array_index, parsed.sub_key) == (
-        "scene_status",
+        "sceneStatus",
         None,
         None,
     )
@@ -58,6 +58,18 @@ def test_an_array_key_parses_into_slot_index_and_sub_key() -> None:
     assert (parsed.slot, parsed.array_index, parsed.sub_key) == (
         "hotspots",
         12,
+        "value",
+    )
+
+
+# ⚠ 槽名在前端清单里是 camelCase：解析器只认 snake_case 的话，
+# `anchorValues[0].value` 会被判成「模块没有这个绑定槽」而整条保存被拒
+def test_a_camel_case_slot_parses() -> None:
+    parsed = parse_field_key("anchorValues[0].value")
+    assert parsed is not None
+    assert (parsed.slot, parsed.array_index, parsed.sub_key) == (
+        "anchorValues",
+        0,
         "value",
     )
 

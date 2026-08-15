@@ -5,7 +5,7 @@
  * ⚠ 预览整块 `pointer-events: none`：不关的话模块自己的按钮会吃掉 pointerdown，
  * 表现是「有些模块拖不动」，而拖不动的是哪几个取决于它们内部长什么样。
  */
-import type { DashboardNodePayload } from '@dt/contracts'
+import type { CardChrome, DashboardNodePayload } from '@dt/contracts'
 import { ModuleRenderer, type GetModuleManifest } from '@dt/runtime'
 import { computed, type CSSProperties } from 'vue'
 
@@ -16,6 +16,12 @@ const props = defineProps<{
   frame: EditorFrame
   node: DashboardNodePayload
   getManifest: GetModuleManifest
+  /**
+   * 大屏级卡片外观缺省。
+   * ⚠ 不传的话设计态与运行态两套观感：右栏改边框 / 标题条只有预览页看得见，
+   * 画布上纹丝不动，用户读到的是「配了没生效」。
+   */
+  cardChrome: CardChrome
   isSelected: boolean
   /** 单选时才给手柄：多选状态下拖手柄改谁的尺寸没有定义。 */
   hasHandles: boolean
@@ -125,6 +131,7 @@ const config = computed<Record<string, unknown>>(() => ({
     <ModuleRenderer
       class="dt-node__module"
       :module-type="node.moduleType"
+      :card-chrome="cardChrome"
       :config="config"
       :bindings="node.bindings"
       :node-id="node.id"

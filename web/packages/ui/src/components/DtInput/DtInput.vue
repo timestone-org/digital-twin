@@ -6,12 +6,13 @@
 import { computed, ref } from 'vue'
 import { DT_CONTROL_DEFAULT_SIZE } from '@dt/contracts'
 import type { DtSize } from '@dt/contracts'
+import { useHostAttrs } from '../../composables/useHostAttrs'
 import DtField from '../DtField/DtField.vue'
 
 defineOptions({ inheritAttrs: false })
 
 // ⚠ placeholder / name / autocomplete / readonly 刻意不声明成 prop：
-// 它们是原生 input 属性，由下面的 `v-bind="$attrs"` 直接落到 <input> 上。
+// 它们是原生 input 属性，由下面的 `v-bind="nativeAttrs"` 直接落到 <input> 上。
 // 声明一遍只是把同一件事写两份，还会把 props 数量推过上限。
 withDefaults(
   defineProps<{
@@ -40,6 +41,9 @@ const emit = defineEmits<{
   enter: []
   keystate: [event: KeyboardEvent]
 }>()
+
+// class / style 归外壳、其余原生属性归 <input>；混作一处的后果见 useHostAttrs
+const { hostClass, hostStyle, nativeAttrs } = useHostAttrs()
 
 const inputEl = ref<HTMLInputElement | null>(null)
 let isComposing = false
@@ -72,6 +76,8 @@ defineExpose({ inputEl: exposed })
 
 <template>
   <DtField
+    :class="hostClass"
+    :style="hostStyle"
     :label="label"
     :hint="hint"
     :error="error"
@@ -92,7 +98,7 @@ defineExpose({ inputEl: exposed })
         <input
           :id="id"
           ref="inputEl"
-          v-bind="$attrs"
+          v-bind="nativeAttrs"
           class="dt-input__el"
           :type="type"
           :value="modelValue"

@@ -250,35 +250,6 @@ describe('装载', () => {
 })
 
 describe('实时值', () => {
-  it('染色值更新后落到模型材质上', async () => {
-    const model = fakeModel()
-    const mesh = model.children[0] as THREE.Mesh
-    seam.loadTwinModel.mockResolvedValue(model)
-    const tinted = config({
-      tints: [
-        {
-          id: 'rule-1',
-          name: '运行状态',
-          partIds: ['part-pump'],
-          mode: 'status',
-          statusColors: { running: '#00ff00' },
-        },
-      ],
-    })
-    const wrapper = mountScene({ config: tinted, tintValues: {} })
-    await flushPromises()
-
-    await wrapper.setProps({
-      tintValues: { 'rule-1': { value: null, status: 'running' } },
-    })
-    await flushPromises()
-
-    expect(
-      (mesh.material as THREE.MeshStandardMaterial).color.getHexString(),
-    ).toBe('00ff00')
-    wrapper.unmount()
-  })
-
   it('锚点读数更新后写进标签文本', async () => {
     const wrapper = mountScene({
       config: config({

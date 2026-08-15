@@ -1,0 +1,347 @@
+// 大屏一格的卡片外观（chrome）：卡片框、八种边框样式、四角括号、纯描边浮层。
+//
+// ⚠ 这份**不能是 scoped**。`--card-anim` 注入的是 `dt-card-breathe …` 这种动画名，
+// Vue 的 scoped 改写只认同一块里的**字面量** animation-name，名字从 CSS 变量来时
+// 100% 失配——呼吸描边会静默地一动不动。keyframes 同理，必须是全局的。
+//
+// 消费方是 `packages/runtime/src/cardVars.ts` 发射的 `--card-*` 变量与修饰类：
+// 每个 `var()` 的兜底值就是平台默认观感，「没配这一项」与「配成默认值」因此走同一条
+// 渲染路径。改这里之前先读那份文件的注释。
+
+@layer components {
+  // 卡片框：背景 + 描边 + 圆角。bare 模块不套这层，只在显式配了边框样式时挂下面的浮层。
+  .dt-module--card {
+    border: 1px solid var(--card-border);
+    // ⚠ 必须排在 border 简写之后：单边描边的值是 border-width 简写串，写在前面会被重置
+    border-width: var(--card-border-side, 1px);
+    border-radius: var(--card-radius);
+    background: var(--card-bg);
+    // 常驻动效（呼吸描边）。值是完整 animation 简写串，任何描边样式都能叠
+    animation: var(--card-anim, none);
+    // ⚠ 缺省必须是 none：非 none 的 backdrop-filter 会新建合成层与层叠上下文，
+    // 还会改掉内部绝对定位元素的包含块
+    backdrop-filter: var(--card-backdrop-blur, none);
+    transition:
+      border-color 0.5s ease,
+      box-shadow 0.5s ease,
+      transform var(--card-hover-lift-dur, 0s) ease;
+  }
+
+  // ⚠ 故意不给 var() 兜底：未注入时整条声明「计算值时失效」→ transform 回到 none。
+  // 写成 0px 会得到 translateY(0)，那仍是非 none 的 transform，会在悬停瞬间凭空
+  // 造出层叠上下文与包含块
+  .dt-module--card:hover {
+    transform: translateY(calc(-1 * var(--card-hover-lift)));
+  }
+
+  // 悬停双层辉光。**用修饰类而不是纯变量做开关**：写成
+  // `:hover{box-shadow:var(--card-hover-glow)}` 的话，变量缺席时整条声明失效成 none，
+  // 反而把 glow / double / dashed 自带的阴影在悬停时抹掉。
+  .dt-module--hover-glow:hover {
+    box-shadow:
+      0 5.4px 28.8px rgba(var(--accent-primary-rgb), 0.15),
+      inset 0 0 15.36px rgba(var(--accent-primary-rgb), 0.1);
+  }
+
+  // 纯描边浮层：bare 模块（页头、文本块、3D 孪生……）用它拿到同一套边框语言。
+  // 绝对铺满、只描边、不加背景、不吃指针，模块自己的画布在其下全幅。
+  // ⚠ 刻意**不接** `--card-backdrop-blur`：这层盖在模块画布**之上**，接了就是拿画布
+  // 自己当背景去糊自己。卡片框那层糊的是身后的舞台底色，才是「毛玻璃」该有的语义。
+  .dt-module__border {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    pointer-events: none;
+    border: 1px solid var(--card-border);
+    border-width: var(--card-border-side, 1px);
+    border-radius: var(--card-radius);
+    animation: var(--card-anim, none);
+    transition:
+      border-color 0.5s ease,
+      box-shadow 0.5s ease;
+  }
+
+  .dt-module--card.dt-card-border--solid,
+  .dt-module__border.dt-card-border--solid {
+    border-style: solid;
+  }
+
+  // 呼吸描边：实线 + 明暗呼吸（--card-border ⇄ --card-border-hover）。
+  // **刻意不叠 box-shadow**——这正是它与 glow（常亮外发光）的根本区别。
+  .dt-module--card.dt-card-border--breathe,
+  .dt-module__border.dt-card-border--breathe {
+    border-style: solid;
+    --card-anim: dt-card-breathe var(--card-pulse-dur, 6s) ease-in-out infinite;
+  }
+
+  .dt-module--card.dt-card-border--glow,
+  .dt-module__border.dt-card-border--glow {
+    border-color: var(--card-border-hover);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--card-corner-color) 18%, transparent),
+      0 0 22px -9px var(--card-corner-color),
+      inset 0 0 22px -18px var(--card-corner-color);
+  }
+
+  .dt-module--card.dt-card-border--double,
+  .dt-module__border.dt-card-border--double {
+    border-color: color-mix(
+      in srgb,
+      var(--card-border-hover) 72%,
+      var(--card-border)
+    );
+    outline: 1px solid
+      color-mix(in srgb, var(--card-corner-color) 32%, transparent);
+    outline-offset: -5px;
+    box-shadow: inset 0 0 0 1px
+      color-mix(in srgb, var(--card-border) 28%, transparent);
+  }
+
+  .dt-module--card.dt-card-border--dashed,
+  .dt-module__border.dt-card-border--dashed {
+    border-style: dashed;
+    border-color: color-mix(
+      in srgb,
+      var(--card-corner-color) 52%,
+      var(--card-border)
+    );
+    box-shadow: inset 0 0 18px -16px var(--card-corner-color);
+  }
+
+  // 角括号：四角 L 形，用背景渐变画，全程在元素内、不被 overflow:hidden 裁掉。
+  // 卡片版用 --dt-bracket-fill 保住卡片底色；浮层版留透明，画布全幅。
+  .dt-module--card.dt-card-border--bracket,
+  .dt-module__border.dt-card-border--bracket {
+    --dt-bracket-color: color-mix(
+      in srgb,
+      var(--card-corner-color) 88%,
+      transparent
+    );
+    --dt-bracket-th: 2px;
+    --dt-bracket-len: 18px;
+    --dt-bracket-fill: transparent;
+    border-color: transparent;
+    border-radius: 0;
+    box-shadow: none;
+    background:
+      linear-gradient(var(--dt-bracket-color), var(--dt-bracket-color)) left top /
+        var(--dt-bracket-len) var(--dt-bracket-th) no-repeat,
+      linear-gradient(var(--dt-bracket-color), var(--dt-bracket-color)) left top /
+        var(--dt-bracket-th) var(--dt-bracket-len) no-repeat,
+      linear-gradient(var(--dt-bracket-color), var(--dt-bracket-color)) right top /
+        var(--dt-bracket-len) var(--dt-bracket-th) no-repeat,
+      linear-gradient(var(--dt-bracket-color), var(--dt-bracket-color)) right top /
+        var(--dt-bracket-th) var(--dt-bracket-len) no-repeat,
+      linear-gradient(var(--dt-bracket-color), var(--dt-bracket-color)) left
+        bottom / var(--dt-bracket-len) var(--dt-bracket-th) no-repeat,
+      linear-gradient(var(--dt-bracket-color), var(--dt-bracket-color)) left
+        bottom / var(--dt-bracket-th) var(--dt-bracket-len) no-repeat,
+      linear-gradient(var(--dt-bracket-color), var(--dt-bracket-color)) right
+        bottom / var(--dt-bracket-len) var(--dt-bracket-th) no-repeat,
+      linear-gradient(var(--dt-bracket-color), var(--dt-bracket-color)) right
+        bottom / var(--dt-bracket-th) var(--dt-bracket-len) no-repeat,
+      linear-gradient(var(--dt-bracket-fill), var(--dt-bracket-fill));
+  }
+
+  .dt-module--card.dt-card-border--bracket {
+    --dt-bracket-fill: var(--card-bg);
+  }
+
+  // 切角：浮层版只切边框、不盖画布，故底色留透明
+  .dt-module__border.dt-card-border--cut {
+    background: transparent;
+    border: 1px solid
+      color-mix(in srgb, var(--card-corner-color) 60%, var(--card-border));
+    clip-path: polygon(
+      10px 0,
+      100% 0,
+      100% calc(100% - 10px),
+      calc(100% - 10px) 100%,
+      0 100%,
+      0 10px
+    );
+  }
+
+  .dt-module--card.dt-card-border--cut {
+    border-color: transparent;
+    background:
+      linear-gradient(var(--card-bg), var(--card-bg)) padding-box,
+      linear-gradient(
+          135deg,
+          color-mix(in srgb, var(--card-corner-color) 72%, transparent),
+          color-mix(in srgb, var(--card-border) 34%, transparent) 42%,
+          color-mix(in srgb, var(--card-corner-color) 60%, transparent)
+        )
+        border-box;
+    clip-path: polygon(
+      10px 0,
+      100% 0,
+      100% calc(100% - 10px),
+      calc(100% - 10px) 100%,
+      0 100%,
+      0 10px
+    );
+  }
+
+  // 浮层是透明的，而一格是 overflow:hidden——向外扩散的 box-shadow 会被裁掉，
+  // 故 glow / double 在浮层上改走 inset 与实线。这两条排在卡片版之后、特异度相同，
+  // 只对浮层生效，绝不影响卡片。
+  .dt-module__border.dt-card-border--glow {
+    border-color: var(--card-border-hover);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--card-corner-color) 34%, transparent),
+      inset 0 0 22px -4px
+        color-mix(in srgb, var(--card-corner-color) 62%, transparent);
+  }
+
+  .dt-module__border.dt-card-border--double {
+    border-color: color-mix(
+      in srgb,
+      var(--card-border-hover) 85%,
+      var(--card-border)
+    );
+    outline: 1px solid
+      color-mix(in srgb, var(--card-corner-color) 46%, transparent);
+    outline-offset: -5px;
+    box-shadow: none;
+  }
+
+  // 四角发光角标。形状 / 尺寸 / 辉光 / 透明度 / 偏移全部变量化，每个兜底就是平台现值。
+  // box-sizing 显式写出：dot 变体「尺寸含 1px 边框」的语义不该依赖 preflight。
+  .dt-corners::before,
+  .dt-corners::after,
+  .dt-corners > .dt-corner-b::before,
+  .dt-corners > .dt-corner-b::after {
+    content: '';
+    position: absolute;
+    display: var(--card-corner-display);
+    box-sizing: border-box;
+    width: var(--card-corner-size, 10px);
+    height: var(--card-corner-size, 10px);
+    border: 0 solid var(--card-corner-color);
+    box-shadow: 0 0 var(--card-corner-glow, 5px) var(--card-corner-color);
+    opacity: var(--card-corner-opacity, 0.9);
+    pointer-events: none;
+  }
+
+  .dt-corners::before {
+    top: var(--card-corner-off, -1px);
+    left: var(--card-corner-off, -1px);
+    border-top-width: 1px;
+    border-left-width: 1px;
+  }
+
+  .dt-corners::after {
+    top: var(--card-corner-off, -1px);
+    right: var(--card-corner-off, -1px);
+    border-top-width: 1px;
+    border-right-width: 1px;
+  }
+
+  // 伪元素一个盒子只有两个，下面两角得再借一层空元素
+  .dt-corners > .dt-corner-b {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .dt-corners > .dt-corner-b::before {
+    bottom: var(--card-corner-off, -1px);
+    left: var(--card-corner-off, -1px);
+    border-bottom-width: 1px;
+    border-left-width: 1px;
+  }
+
+  .dt-corners > .dt-corner-b::after {
+    right: var(--card-corner-off, -1px);
+    bottom: var(--card-corner-off, -1px);
+    border-bottom-width: 1px;
+    border-right-width: 1px;
+  }
+
+  // 小方点变体：结构一行不动，只把四边描出来——配 box-sizing:border-box，
+  // 1px 边框从四面吃满 4px 的盒子，就成了一个实心发光小方块。
+  // ⚠ 跨文件约定：正因为同一个变量在 L 形与方点下要有两套兜底，tokens 里**刻意不声明**
+  // --card-corner-size / -opacity / -off。声明了这三行兜底就全成死代码，
+  // 方点会退化成 10px / -1px 的大角标。
+  .dt-corners--dot::before,
+  .dt-corners--dot::after,
+  .dt-corners--dot > .dt-corner-b::before,
+  .dt-corners--dot > .dt-corner-b::after {
+    width: var(--card-corner-size, 4px);
+    height: var(--card-corner-size, 4px);
+    border-width: 1px;
+    opacity: var(--card-corner-opacity, 0.8);
+  }
+
+  // 方点的偏移兜底改 0（贴框内沿）：一格是 overflow:hidden，出框的方点连辉光一起被裁掉。
+  // 只改 var() 的兜底、不写 `.dt-corners--dot{--card-corner-off:0}`——后者在「类挂在浮层、
+  // 变量注入在根」时会用直接匹配压掉继承来的用户值。
+  .dt-corners--dot::before {
+    top: var(--card-corner-off, 0px);
+    left: var(--card-corner-off, 0px);
+  }
+
+  .dt-corners--dot::after {
+    top: var(--card-corner-off, 0px);
+    right: var(--card-corner-off, 0px);
+  }
+
+  .dt-corners--dot > .dt-corner-b::before {
+    bottom: var(--card-corner-off, 0px);
+    left: var(--card-corner-off, 0px);
+  }
+
+  .dt-corners--dot > .dt-corner-b::after {
+    right: var(--card-corner-off, 0px);
+    bottom: var(--card-corner-off, 0px);
+  }
+
+  // 常驻动效整条关掉：压到 0.001ms 仍可能停在中间态
+  @media (prefers-reduced-motion: reduce) {
+    .dt-module--card,
+    .dt-module__border {
+      animation: none;
+    }
+  }
+}
+
+// ⚠ keyframes 不能进 @layer：层只影响声明的级联优先级，@keyframes 放进去在部分
+// 浏览器里会被跳过。三个名字由 cardVars 以字符串注入，改名要两边一起改。
+
+// 描边呼吸。不写死色值，在两个既有 token 之间插值，换肤时呼吸的两端自动跟随主题。
+@keyframes dt-card-breathe {
+  0%,
+  100% {
+    border-color: var(--card-border);
+  }
+
+  50% {
+    border-color: var(--card-border-hover);
+  }
+}
+
+// 标题竖条主辅色脉动。两端必须是两个独立变量：有的主题主辅色差极小、
+// 有的（绿 ⇄ 粉 / 蓝 ⇄ 紫）差异巨大，合成一个字段会丢掉一半效果。
+@keyframes dt-title-pulse {
+  0%,
+  100% {
+    background: var(--card-title-bar, var(--accent-primary));
+  }
+
+  50% {
+    background: var(--card-title-bar-alt, var(--accent-secondary));
+  }
+}
+
+// 标题文字辉光呼吸：只有模糊半径在动，色值全程跟着主题走。
+@keyframes dt-title-glow-pulse {
+  0%,
+  100% {
+    text-shadow: 0 0 8px var(--fx-glow-title);
+  }
+
+  50% {
+    text-shadow: 0 0 11.5px var(--fx-glow-title);
+  }
+}

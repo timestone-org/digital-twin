@@ -66,7 +66,7 @@ async def test_a_realtime_binding_on_a_known_point_is_created(
         app_client,
         node_id,
         {
-            "field_key": "scene_status",
+            "field_key": "anchorValues[0].value",
             "source_kind": "opcua",
             "node_key": KNOWN_KEY,
         },
@@ -83,7 +83,7 @@ async def test_a_binding_on_a_point_nobody_collects_is_refused(
         app_client,
         node_id,
         {
-            "field_key": "scene_status",
+            "field_key": "anchorValues[0].value",
             "source_kind": "opcua",
             "node_key": f"{SEEDED_SOURCE_ID}:nowhere",
         },
@@ -100,7 +100,7 @@ async def test_the_point_error_carries_the_source_domain_code(
         app_client,
         node_id,
         {
-            "field_key": "scene_status",
+            "field_key": "anchorValues[0].value",
             "source_kind": "opcua",
             "node_key": f"{SEEDED_SOURCE_ID}:nowhere",
         },
@@ -115,7 +115,7 @@ async def test_a_misspelled_source_kind_never_reaches_the_table(
     response = await bind(
         app_client,
         node_id,
-        {"field_key": "scene_status", "source_kind": "opuca"},
+        {"field_key": "anchorValues[0].value", "source_kind": "opuca"},
     )
     assert response.status_code == HTTP_BAD_REQUEST
 
@@ -137,7 +137,7 @@ async def test_binding_one_slot_twice_conflicts(
 ) -> None:
     node_id = await make_twin_node(app_client)
     body = {
-        "field_key": "scene_status",
+        "field_key": "anchorValues[0].value",
         "source_kind": "static",
         "static_value_json": "运行",
     }
@@ -155,7 +155,7 @@ async def test_an_array_slot_must_start_at_zero(
         app_client,
         node_id,
         {
-            "field_key": "hotspots[3].value",
+            "field_key": "anchorValues[3].value",
             "source_kind": "opcua",
             "node_key": KNOWN_KEY,
         },
@@ -171,7 +171,7 @@ async def test_a_contiguous_array_run_is_accepted(
         app_client,
         node_id,
         {
-            "field_key": "hotspots[0].value",
+            "field_key": "anchorValues[0].value",
             "source_kind": "opcua",
             "node_key": KNOWN_KEY,
         },
@@ -180,7 +180,7 @@ async def test_a_contiguous_array_run_is_accepted(
         app_client,
         node_id,
         {
-            "field_key": "hotspots[1].value",
+            "field_key": "anchorValues[1].value",
             "source_kind": "opcua",
             "node_key": OTHER_KEY,
         },
@@ -199,7 +199,7 @@ async def test_an_update_keeps_the_binding_id(
         app_client,
         node_id,
         {
-            "field_key": "scene_status",
+            "field_key": "anchorValues[0].value",
             "source_kind": "opcua",
             "node_key": KNOWN_KEY,
         },
@@ -220,7 +220,7 @@ async def test_an_update_onto_a_point_nobody_collects_is_refused(
         app_client,
         node_id,
         {
-            "field_key": "scene_status",
+            "field_key": "anchorValues[0].value",
             "source_kind": "opcua",
             "node_key": KNOWN_KEY,
         },
@@ -240,7 +240,7 @@ async def test_the_binding_listing_is_ordered_by_slot(
         app_client,
         node_id,
         {
-            "field_key": "scene_status",
+            "field_key": "anchorValues[0].value",
             "source_kind": "static",
             "static_value_json": "运行",
         },
@@ -249,14 +249,14 @@ async def test_the_binding_listing_is_ordered_by_slot(
         app_client,
         node_id,
         {
-            "field_key": "hotspots[0].value",
+            "field_key": "anchorValues[1].value",
             "source_kind": "opcua",
             "node_key": KNOWN_KEY,
         },
     )
     response = await app_client.get(BINDINGS_URL, params={"node_id": node_id})
     keys = [item["field_key"] for item in response.json()["data"]]
-    assert keys == ["hotspots[0].value", "scene_status"]
+    assert keys == ["anchorValues[0].value", "anchorValues[1].value"]
 
 
 async def test_a_deleted_binding_is_gone(
@@ -267,7 +267,7 @@ async def test_a_deleted_binding_is_gone(
         app_client,
         node_id,
         {
-            "field_key": "scene_status",
+            "field_key": "anchorValues[0].value",
             "source_kind": "static",
             "static_value_json": 1,
         },
@@ -297,7 +297,7 @@ async def test_bindings_under_a_missing_node_answer_not_found(
         app_client,
         str(uuid.uuid4()),
         {
-            "field_key": "scene_status",
+            "field_key": "anchorValues[0].value",
             "source_kind": "static",
             "static_value_json": 1,
         },
@@ -319,7 +319,7 @@ async def test_changing_a_module_type_reports_the_slots_it_orphans(
         app_client,
         str(node["id"]),
         {
-            "field_key": "scene_status",
+            "field_key": "anchorValues[0].value",
             "source_kind": "static",
             "static_value_json": 1,
         },
@@ -341,7 +341,7 @@ async def test_a_derived_binding_needs_a_registered_operator(
         app_client,
         node_id,
         {
-            "field_key": "scene_status",
+            "field_key": "anchorValues[0].value",
             "source_kind": "computed",
             "compute_json": {"op": "median", "inputs": ["a"]},
         },
@@ -354,7 +354,7 @@ async def test_the_same_idempotency_key_creates_one_binding(
 ) -> None:
     node_id = await make_twin_node(app_client)
     body = {
-        "field_key": "scene_status",
+        "field_key": "anchorValues[0].value",
         "source_kind": "static",
         "static_value_json": 1,
     }
@@ -382,7 +382,7 @@ async def test_adding_a_binding_advances_the_dashboard_version(
         app_client,
         str(node["id"]),
         {
-            "field_key": "scene_status",
+            "field_key": "anchorValues[0].value",
             "source_kind": "static",
             "static_value_json": 1,
         },

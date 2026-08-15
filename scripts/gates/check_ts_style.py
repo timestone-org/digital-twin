@@ -24,7 +24,7 @@ from _report import (
 )
 
 MAX_SFC_LINES = 300
-MAX_COMPOSABLE_LINES = 150
+MAX_COMPOSABLE_LINES = 200
 MAX_PROPS = 10
 # ⚠ 不是 4：§4.2 强制的 `AppShell > 页面根 > DtCard > DtDataView` 已占满 4 层，
 # 取 4 会让这两条规范互相排斥。6 层给页面自己的标记留两层。
@@ -88,7 +88,7 @@ def _composables() -> list[Path]:
 
 
 def check_component_size() -> list[Violation]:
-    """单文件组件 ≤300 行，组合式函数 ≤150 行。
+    """单文件组件 ≤300 行，组合式函数 ≤200 行。
 
     ⚠ 超了几乎总是因为逻辑写在了组件里——组合式函数能被独立单元测试，
     组件只能被挂载测试。

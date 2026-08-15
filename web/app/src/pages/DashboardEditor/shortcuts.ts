@@ -19,8 +19,8 @@ export interface ShortcutGroup {
   items: ShortcutItem[]
 }
 
-/** 全量手势清单；`mod` 由 `modLabel` 决定。 */
-export function shortcutGroups(mod: string): ShortcutGroup[] {
+/** 文件、编辑与层序三组。 */
+function editingGroups(mod: string): ShortcutGroup[] {
   return [
     {
       title: '文件',
@@ -40,6 +40,20 @@ export function shortcutGroups(mod: string): ShortcutGroup[] {
         { keys: 'Delete  /  ⌫', desc: '删除选中节点' },
       ],
     },
+    {
+      title: '层序',
+      items: [
+        { keys: `${mod} ]  /  ${mod} [`, desc: '上移一层 / 下移一层' },
+        { keys: `${mod} ⇧ ]  /  ${mod} ⇧ [`, desc: '置顶 / 置底' },
+        { keys: '图层树拖拽', desc: '拖到某一行之上 = 盖住它' },
+      ],
+    },
+  ]
+}
+
+/** 选择、画布与缩放三组。 */
+function viewGroups(mod: string): ShortcutGroup[] {
+  return [
     {
       title: '选择',
       items: [
@@ -69,4 +83,9 @@ export function shortcutGroups(mod: string): ShortcutGroup[] {
       ],
     },
   ]
+}
+
+/** 全量手势清单；`mod` 由 `modLabel` 决定。 */
+export function shortcutGroups(mod: string): ShortcutGroup[] {
+  return [...editingGroups(mod), ...viewGroups(mod)]
 }

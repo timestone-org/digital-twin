@@ -130,6 +130,29 @@ describe('文本块「没配就不注入」的那几项', () => {
     )
   })
 
+  it('自定义档把填的字体名注入 font-family', () => {
+    expect(
+      boxStyle({ fontFamily: 'custom', fontFamilyCustom: 'Impact' }),
+    ).toContain('font-family: Impact')
+    // ⚠ 带空格的字体名会被 CSSOM 补上引号，断言只认名字本身
+    expect(
+      boxStyle({ fontFamily: 'custom', fontFamilyCustom: 'Source Han Sans' }),
+    ).toContain('Source Han Sans')
+  })
+
+  it('自定义档留空（含一串空白）时不注入，回到继承正文', () => {
+    expect(boxStyle({ fontFamily: 'custom' })).not.toContain('font-family')
+    expect(
+      boxStyle({ fontFamily: 'custom', fontFamilyCustom: '   ' }),
+    ).not.toContain('font-family')
+  })
+
+  it('没选自定义档时填了字体名也不生效', () => {
+    expect(
+      boxStyle({ fontFamily: 'mono', fontFamilyCustom: 'Comic Sans MS' }),
+    ).toContain('font-family: var(--font-mono)')
+  })
+
   it('背景留空不注入，填了才写', () => {
     expect(boxStyle({})).not.toContain('background')
     expect(boxStyle({ background: 'var(--surface-panel)' })).toContain(
@@ -162,6 +185,29 @@ describe('文本块的溢出与辉光', () => {
     expect(render({ glow: true }).get('.dt-text-block').classes()).toContain(
       'dt-text-block--glow',
     )
+  })
+
+  it('辉光半径按配置上屏，越界先夹回区间', () => {
+    expect(boxStyle({ glow: true, glowRadius: 24 })).toContain(
+      '--dt-text-glow-radius: 24px',
+    )
+    expect(boxStyle({ glow: true, glowRadius: 999 })).toContain(
+      '--dt-text-glow-radius: 40px',
+    )
+    expect(boxStyle({ glow: true, glowRadius: -5 })).toContain(
+      '--dt-text-glow-radius: 0px',
+    )
+  })
+
+  it('没配半径时与样式表里的兜底同值，存量辉光的观感不变', () => {
+    expect(boxStyle({ glow: true })).toContain('--dt-text-glow-radius: 10px')
+    expect(boxStyle({ glow: true, glowRadius: 10 })).toBe(
+      boxStyle({ glow: true }),
+    )
+  })
+
+  it('辉光关着时不注入半径，免得留一个没人用的自定义属性', () => {
+    expect(boxStyle({ glowRadius: 24 })).not.toContain('--dt-text-glow-radius')
   })
 
   it('空配置与清单缺省摊出来的配置渲染逐字相同', () => {

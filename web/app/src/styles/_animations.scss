@@ -65,6 +65,19 @@
     }
   }
 
+  // 页头横向扫光带：整条从画布左外侧掠到右外侧。
+  // ⚠ 动的是 left 而不是 transform——光带宽度由 `--dt-scan-w` 按页头宽度的百分比给，
+  // 用 translateX 的话百分比换算的是元素自身宽度，行程会随宽度设置一起变。
+  @keyframes dt-header-scan {
+    0% {
+      left: -30%;
+    }
+
+    100% {
+      left: 130%;
+    }
+  }
+
   @keyframes dt-spin {
     to {
       transform: rotate(360deg);

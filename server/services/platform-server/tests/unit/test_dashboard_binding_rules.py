@@ -7,6 +7,11 @@ import uuid
 from typing import Any
 
 from lib.utils.ids import uuid7
+from platform_server.apps.dashboard.schemas.module_type import (
+    BindingSpecOut,
+    ModuleDefaultSizeOut,
+    ModuleTypeOut,
+)
 from platform_server.apps.dashboard.services.binding_rules import (
     check_field_keys,
     check_sources,
@@ -14,10 +19,58 @@ from platform_server.apps.dashboard.services.binding_rules import (
 )
 from platform_server.apps.dashboard.services.drafts import BindingDraft
 from platform_server.apps.dashboard.services.module_catalog import (
-    load_module_catalog,
+    ModuleCatalog,
 )
 
-CATALOG = load_module_catalog()
+
+def _fixture_catalog() -> ModuleCatalog:
+    """一标量槽 + 一数组槽（两个子槽）+ 一个不取数的模块。
+
+    ⚠ 刻意不读提交进仓的目录：校验规则与「此刻恰好注册了哪些模块」无关，
+    读真目录会让这批用例随模块增删莫名其妙地红。
+    """
+    size = ModuleDefaultSizeOut(width=100, height=100)
+    return ModuleCatalog(
+        catalog_version=1,
+        modules=(
+            ModuleTypeOut(
+                type="probe-view",
+                display_name="试验件",
+                category="试验",
+                default_size=size,
+                bindings=[
+                    BindingSpecOut(
+                        key="sceneStatus",
+                        label="场景状态",
+                        data_type="string",
+                    ),
+                    BindingSpecOut(
+                        key="hotspots",
+                        label="热点",
+                        data_type="number",
+                        is_array=True,
+                        array_fields=[
+                            BindingSpecOut(
+                                key="value", label="读数", data_type="number"
+                            ),
+                            BindingSpecOut(
+                                key="state", label="状态", data_type="enum"
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+            ModuleTypeOut(
+                type="probe-block",
+                display_name="不取数的件",
+                category="试验",
+                default_size=size,
+            ),
+        ),
+    )
+
+
+CATALOG = _fixture_catalog()
 SOURCE_ID = "0192f0c0-0000-7000-8000-00000000abcd"
 KNOWN_KEY = f"{SOURCE_ID}:outlet_temp"
 KNOWN = frozenset({KNOWN_KEY})
@@ -59,8 +112,8 @@ def codes(issues: list[Any]) -> list[str]:
 def test_a_declared_scalar_slot_passes() -> None:
     node_id = uuid7()
     issues = check_field_keys(
-        [binding(node_id, "scene_status")],
-        module_types={node_id: "twin-view"},
+        [binding(node_id, "sceneStatus")],
+        module_types={node_id: "probe-view"},
         catalog=CATALOG,
     )
     assert issues == []
@@ -70,7 +123,7 @@ def test_a_slot_the_module_never_declared_is_rejected() -> None:
     node_id = uuid7()
     issues = check_field_keys(
         [binding(node_id, "title")],
-        module_types={node_id: "twin-view"},
+        module_types={node_id: "probe-view"},
         catalog=CATALOG,
     )
     assert codes(list(issues)) == ["field_key_unknown"]
@@ -79,8 +132,8 @@ def test_a_slot_the_module_never_declared_is_rejected() -> None:
 def test_a_module_without_slots_rejects_every_binding() -> None:
     node_id = uuid7()
     issues = check_field_keys(
-        [binding(node_id, "scene_status")],
-        module_types={node_id: "header"},
+        [binding(node_id, "sceneStatus")],
+        module_types={node_id: "probe-block"},
         catalog=CATALOG,
     )
     assert codes(list(issues)) == ["field_key_unknown"]
@@ -94,7 +147,7 @@ def test_array_slots_accept_declared_sub_keys() -> None:
             binding(node_id, "hotspots[0].state"),
             binding(node_id, "hotspots[1].value"),
         ],
-        module_types={node_id: "twin-view"},
+        module_types={node_id: "probe-view"},
         catalog=CATALOG,
     )
     assert issues == []
@@ -104,7 +157,7 @@ def test_an_array_sub_key_outside_the_manifest_is_rejected() -> None:
     node_id = uuid7()
     issues = check_field_keys(
         [binding(node_id, "hotspots[0].pressure")],
-        module_types={node_id: "twin-view"},
+        module_types={node_id: "probe-view"},
         catalog=CATALOG,
     )
     assert codes(list(issues)) == ["field_key_unknown"]
@@ -114,7 +167,7 @@ def test_an_array_index_that_skips_zero_is_rejected() -> None:
     node_id = uuid7()
     issues = check_field_keys(
         [binding(node_id, "hotspots[7].value")],
-        module_types={node_id: "twin-view"},
+        module_types={node_id: "probe-view"},
         catalog=CATALOG,
     )
     assert codes(list(issues)) == ["array_index_gap"]
@@ -127,7 +180,7 @@ def test_a_gap_inside_an_array_run_is_rejected() -> None:
             binding(node_id, "hotspots[0].value"),
             binding(node_id, "hotspots[2].value"),
         ],
-        module_types={node_id: "twin-view"},
+        module_types={node_id: "probe-view"},
         catalog=CATALOG,
     )
     assert codes(list(issues)) == ["array_index_gap"]
@@ -136,8 +189,8 @@ def test_a_gap_inside_an_array_run_is_rejected() -> None:
 def test_binding_one_slot_twice_conflicts() -> None:
     node_id = uuid7()
     issues = check_field_keys(
-        [binding(node_id, "scene_status"), binding(node_id, "scene_status")],
-        module_types={node_id: "twin-view"},
+        [binding(node_id, "sceneStatus"), binding(node_id, "sceneStatus")],
+        module_types={node_id: "probe-view"},
         catalog=CATALOG,
     )
     assert codes(list(issues)) == ["field_key_taken"]
@@ -147,7 +200,7 @@ def test_a_field_key_that_does_not_parse_is_rejected() -> None:
     node_id = uuid7()
     issues = check_field_keys(
         [binding(node_id, "hotspots.value")],
-        module_types={node_id: "twin-view"},
+        module_types={node_id: "probe-view"},
         catalog=CATALOG,
     )
     assert codes(list(issues)) == ["field_key_unknown"]
@@ -155,7 +208,7 @@ def test_a_field_key_that_does_not_parse_is_rejected() -> None:
 
 def test_bindings_on_an_unknown_node_are_left_to_the_node_rules() -> None:
     issues = check_field_keys(
-        [binding(uuid7(), "scene_status")],
+        [binding(uuid7(), "sceneStatus")],
         module_types={},
         catalog=CATALOG,
     )
@@ -164,7 +217,7 @@ def test_bindings_on_an_unknown_node_are_left_to_the_node_rules() -> None:
 
 def test_a_misspelled_source_kind_is_rejected() -> None:
     issues = check_sources(
-        [binding(uuid7(), "scene_status", source_kind="opuca")],
+        [binding(uuid7(), "sceneStatus", source_kind="opuca")],
         known_node_keys=KNOWN,
     )
     assert codes(list(issues)) == ["source_kind_unknown"]
@@ -172,7 +225,7 @@ def test_a_misspelled_source_kind_is_rejected() -> None:
 
 def test_a_realtime_binding_without_a_point_is_rejected() -> None:
     issues = check_sources(
-        [binding(uuid7(), "scene_status", source_kind="opcua")],
+        [binding(uuid7(), "sceneStatus", source_kind="opcua")],
         known_node_keys=KNOWN,
     )
     assert codes(list(issues)) == ["source_payload_missing"]
@@ -183,7 +236,7 @@ def test_a_realtime_binding_on_a_known_point_passes() -> None:
         [
             binding(
                 uuid7(),
-                "scene_status",
+                "sceneStatus",
                 source_kind="opcua",
                 payload={"node_key": KNOWN_KEY},
             )
@@ -198,7 +251,7 @@ def test_a_point_outside_the_catalog_is_rejected() -> None:
         [
             binding(
                 uuid7(),
-                "scene_status",
+                "sceneStatus",
                 source_kind="opcua",
                 payload={"node_key": f"{SOURCE_ID}:missing"},
             )
@@ -213,7 +266,7 @@ def test_a_point_identity_without_a_source_uuid_is_rejected() -> None:
         [
             binding(
                 uuid7(),
-                "scene_status",
+                "sceneStatus",
                 source_kind="opcua",
                 payload={"node_key": "outlet_temp"},
             )
@@ -228,7 +281,7 @@ def test_a_history_binding_reads_its_point_out_of_the_detail() -> None:
         [
             binding(
                 uuid7(),
-                "scene_status",
+                "sceneStatus",
                 source_kind="archive",
                 payload={
                     "detail_json": {
@@ -248,7 +301,7 @@ def test_a_history_binding_pointing_nowhere_is_rejected() -> None:
         [
             binding(
                 uuid7(),
-                "scene_status",
+                "sceneStatus",
                 source_kind="archive",
                 payload={"detail_json": {"node_key": f"{SOURCE_ID}:missing"}},
             )
@@ -265,7 +318,7 @@ def test_a_derived_binding_needs_a_registered_operator() -> None:
         [
             binding(
                 uuid7(),
-                "scene_status",
+                "sceneStatus",
                 source_kind="computed",
                 payload={"compute_json": {"op": "median", "inputs": ["a"]}},
             )
@@ -280,7 +333,7 @@ def test_a_derived_binding_needs_non_empty_inputs() -> None:
         [
             binding(
                 uuid7(),
-                "scene_status",
+                "sceneStatus",
                 source_kind="computed",
                 payload={"compute_json": {"op": "sum", "inputs": []}},
             )
@@ -295,7 +348,7 @@ def test_a_well_formed_derived_binding_passes() -> None:
         [
             binding(
                 uuid7(),
-                "scene_status",
+                "sceneStatus",
                 source_kind="computed",
                 payload={"compute_json": {"op": "sum", "inputs": ["a", "b"]}},
             )
@@ -309,7 +362,7 @@ def test_only_point_backed_sources_are_looked_up() -> None:
     node_id = uuid7()
     keys = referenced_node_keys(
         [
-            binding(node_id, "scene_status"),
+            binding(node_id, "sceneStatus"),
             binding(
                 node_id,
                 "hotspots[0].value",

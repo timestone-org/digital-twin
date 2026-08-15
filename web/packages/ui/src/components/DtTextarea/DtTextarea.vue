@@ -6,9 +6,13 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { DT_CONTROL_DEFAULT_SIZE } from '@dt/contracts'
 import type { DtSize } from '@dt/contracts'
+import { useHostAttrs } from '../../composables/useHostAttrs'
 import DtField from '../DtField/DtField.vue'
 
 defineOptions({ inheritAttrs: false })
+
+// class / style 归外壳、其余原生属性归里面的原生元素；混作一处的后果见 useHostAttrs
+const { hostClass, hostStyle, nativeAttrs } = useHostAttrs()
 
 const props = withDefaults(
   defineProps<{
@@ -113,6 +117,8 @@ defineExpose({ textareaEl })
 
 <template>
   <DtField
+    :class="hostClass"
+    :style="hostStyle"
     :label="label"
     :hint="hint"
     :error="error"
@@ -135,7 +141,7 @@ defineExpose({ textareaEl })
         <textarea
           :id="id"
           ref="textareaEl"
-          v-bind="$attrs"
+          v-bind="nativeAttrs"
           class="dt-textarea__el"
           :value="modelValue"
           :maxlength="maxlength"

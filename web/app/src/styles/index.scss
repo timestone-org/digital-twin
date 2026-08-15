@@ -9,6 +9,9 @@
 // docs/agents/project-structure-typescript.md §4.3，由结构闸执行。
 
 @use '@dt/tokens/tokens.scss';
+// 大屏一格的卡片外观。⚠ 必须是全局的：动画名由 CSS 变量注入，scoped 改写认不出来，
+// 少了这一句「边框样式 / 四角 / 呼吸描边」全部静默不生效（理由见该文件头）。
+@use '@dt/runtime/chrome.scss';
 @use 'base';
 @use 'animations';
 @use 'components';

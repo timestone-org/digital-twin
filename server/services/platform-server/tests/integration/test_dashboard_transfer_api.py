@@ -94,7 +94,7 @@ async def fill_screen(client: httpx.AsyncClient, dashboard_id: str) -> None:
                     "h": 300,
                     "bindings": [
                         {
-                            "field_key": "scene_status",
+                            "field_key": "anchorValues[0].value",
                             "source_kind": "opcua",
                             "node_key": KNOWN_KEY,
                         }
@@ -248,7 +248,7 @@ async def test_a_copy_carries_the_whole_tree_and_its_bindings(
         for binding in node["bindings"]
     ]
     assert len(copied["nodes"]) == 2
-    assert slots == ["scene_status"]
+    assert slots == ["anchorValues[0].value"]
 
 
 async def test_copying_leaves_the_source_screen_untouched(
@@ -501,7 +501,7 @@ async def test_a_binding_to_a_missing_point_is_reported_not_dropped(
     assert data_of(response)["unresolved_bindings"] == [
         {
             "node_key": MISSING_KEY,
-            "field_key": "scene_status",
+            "field_key": "anchorValues[0].value",
             "source_kind": "opcua",
             "reason": "point_not_found",
         }

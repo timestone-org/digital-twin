@@ -1,12 +1,15 @@
 <script setup lang="ts">
 /**
- * @fileoverview 编辑器的三个浮层：挑点弹窗、快捷键帮助、全屏预览。
+ * @fileoverview 编辑器的四个浮层：挑点弹窗、快捷键帮助、全屏预览、画布右键菜单。
  * 只做转发；开关状态归页面持有。
  */
 import type { DashboardNodePayload } from '@dt/contracts'
 import type { DesignSize, GetModuleManifest } from '@dt/runtime'
 
 import type { CollectPoint } from '@/api/collect'
+import type { ContextMenuAction } from '../contextMenuItems'
+import type { ContextMenuState } from '../useEditorContextMenu'
+import CanvasContextMenu from './CanvasContextMenu.vue'
 import EditorPreview from './EditorPreview.vue'
 import PointPickerDialog from './PointPickerDialog.vue'
 import ShortcutsDialog from './ShortcutsDialog.vue'
@@ -19,6 +22,7 @@ defineProps<{
   design: DesignSize
   getManifest: GetModuleManifest
   chromeJson: Record<string, unknown>
+  contextMenu: ContextMenuState | null
 }>()
 
 const emit = defineEmits<{
@@ -26,6 +30,8 @@ const emit = defineEmits<{
   pick: [point: CollectPoint]
   'update:helpOpen': [open: boolean]
   'close-preview': []
+  'menu-pick': [action: ContextMenuAction]
+  'close-menu': []
 }>()
 </script>
 
@@ -47,5 +53,10 @@ const emit = defineEmits<{
     :get-manifest="getManifest"
     :chrome-json="chromeJson"
     @close="emit('close-preview')"
+  />
+  <CanvasContextMenu
+    :menu="contextMenu"
+    @pick="emit('menu-pick', $event)"
+    @close="emit('close-menu')"
   />
 </template>

@@ -120,6 +120,62 @@ describe('同父守卫', () => {
   })
 })
 
+describe('逐层挪', () => {
+  function zOf(
+    editor: ReturnType<typeof useDashboardEditor>,
+    id: string,
+  ): number {
+    return byId(editor, id)?.zIndex ?? -1
+  }
+
+  it('单选上移一层：只与紧邻的那个换位', () => {
+    const { editor, actions } = setup([
+      node('a', { zIndex: 0 }),
+      node('b', { zIndex: 1 }),
+      node('c', { zIndex: 2 }),
+    ])
+    editor.setSelection(['a'])
+
+    actions.bringSelectedForward()
+
+    expect([zOf(editor, 'a'), zOf(editor, 'b'), zOf(editor, 'c')]).toEqual([
+      1, 0, 2,
+    ])
+  })
+
+  it('多选一起挪：两个选中的都往上走一格，没互相顶掉', () => {
+    const { editor, actions } = setup([
+      node('a', { zIndex: 0 }),
+      node('b', { zIndex: 1 }),
+      node('c', { zIndex: 2 }),
+      node('d', { zIndex: 3 }),
+    ])
+    editor.setSelection(['a', 'b'])
+
+    actions.bringSelectedForward()
+
+    expect([
+      zOf(editor, 'a'),
+      zOf(editor, 'b'),
+      zOf(editor, 'c'),
+      zOf(editor, 'd'),
+    ]).toEqual([1, 2, 0, 3])
+  })
+
+  it('到底了就不动，也不记撤销', () => {
+    const { editor, actions } = setup([
+      node('a', { zIndex: 0 }),
+      node('b', { zIndex: 1 }),
+    ])
+    editor.setSelection(['a'])
+
+    actions.sendSelectedBackward()
+
+    expect([zOf(editor, 'a'), zOf(editor, 'b')]).toEqual([0, 1])
+    expect(editor.canUndo.value).toBe(false)
+  })
+})
+
 describe('整理', () => {
   it('只动顶层普通节点：钉位与容器子节点原样', () => {
     const { editor, actions } = setup([

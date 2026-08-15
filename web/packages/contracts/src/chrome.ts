@@ -107,6 +107,15 @@ export const CHROME_KEYS = [
   { key: 'titleRuleHeight', type: 'number' }, // 装饰带高度
   { key: 'titleRuleOpacity', type: 'number' }, // 装饰带透明度
 
+  /* 文字：整格的正文排版缺省，靠继承往下走。模块自己配了的一律赢过它 */
+  {
+    key: 'fontFamily',
+    type: 'enum',
+    values: ['sans', 'display', 'mono'],
+  }, // 正文字体
+  { key: 'fontSize', type: 'number' }, // 正文字号
+  { key: 'textColor', type: 'color' }, // 正文字色
+
   /* 交互 */
   { key: 'backdropBlur', type: 'number' }, // 毛玻璃模糊
   { key: 'hoverLift', type: 'number' }, // 悬停上浮

@@ -1,7 +1,7 @@
 /**
  * @fileoverview 锁住归一化的三条契约：缺字段给缺省、非法值丢弃而不抛、结果幂等。
  * 幂等是绑定行对齐的前提——归一化跑两遍会挪动实体下标的话，
- * 编辑器派生的 `tintValues[i]` 与运行时读的第 i 条规则就不是同一条了。
+ * 编辑器派生的 `anchorValues[i]` 与运行时读的第 i 个锚点就不是同一个了。
  */
 import { describe, expect, it } from 'vitest'
 
@@ -28,19 +28,6 @@ const MESSY_CONFIG = {
     { decimals: '2.6' },
     'not-an-object',
   ],
-  tints: [
-    {
-      id: 't-1',
-      partIds: [' p-fan ', 'p-fan', ''],
-      mode: 'gradient',
-      gradient: { lo: '#0F0', hi: '#F00', min: '10', max: 40 },
-      alarmStatus: [' Alarm ', 'alarm'],
-    },
-    {
-      mode: 'nonsense',
-      statusColors: { ' run ': '#0f0', bad: 'red', '': '#fff' },
-    },
-  ],
 }
 
 describe('normalizeTwinConfig 的缺省', () => {
@@ -57,7 +44,6 @@ describe('normalizeTwinConfig 的缺省', () => {
       },
       parts: [],
       anchors: [],
-      tints: [],
     })
   })
 
@@ -139,48 +125,9 @@ describe('normalizeTwinConfig 的实体', () => {
     ).toBe(10)
   })
 
-  it('染色规则的部件引用与告警状态都去重去空白', () => {
-    const rule = normalizeTwinConfig(MESSY_CONFIG).tints[0]
-    expect(rule?.partIds).toEqual(['p-fan'])
-    expect(rule?.alarmStatus).toEqual(['Alarm', 'alarm'])
-  })
-
-  it('未知模式回落到状态染色', () => {
-    expect(normalizeTwinConfig(MESSY_CONFIG).tints[1]?.mode).toBe('status')
-  })
-
-  it('非对象的染色规则与锚点条目一并丢掉', () => {
-    expect(normalizeTwinConfig({ tints: ['x', 3, null] }).tints).toEqual([])
+  it('非对象的部件与锚点条目一并丢掉', () => {
+    expect(normalizeTwinConfig({ parts: ['x', 3, null] }).parts).toEqual([])
     expect(normalizeTwinConfig({ anchors: [[]] }).anchors).toEqual([])
-  })
-
-  it('状态取色表丢掉非法颜色与空状态名', () => {
-    expect(normalizeTwinConfig(MESSY_CONFIG).tints[1]?.statusColors).toEqual({
-      run: '#00ff00',
-    })
-  })
-
-  it('渐变两端缺一即整块作废', () => {
-    expect(normalizeTwinConfig(MESSY_CONFIG).tints[0]?.gradient).toEqual({
-      lo: '#00ff00',
-      hi: '#ff0000',
-      min: 10,
-      max: 40,
-    })
-    expect(
-      normalizeTwinConfig({ tints: [{ gradient: { lo: '#0f0' } }] }).tints[0]
-        ?.gradient,
-    ).toBeNull()
-    expect(
-      normalizeTwinConfig({ tints: [{ gradient: 'nope' }] }).tints[0]?.gradient,
-    ).toBeNull()
-  })
-
-  it('渐变区间缺数值时给出缺省量程', () => {
-    expect(
-      normalizeTwinConfig({ tints: [{ gradient: { lo: '#0f0', hi: '#f00' } }] })
-        .tints[0]?.gradient,
-    ).toEqual({ lo: '#00ff00', hi: '#ff0000', min: 0, max: 100 })
   })
 })
 

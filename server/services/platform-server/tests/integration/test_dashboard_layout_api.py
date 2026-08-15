@@ -118,7 +118,7 @@ async def test_a_binding_keeps_its_id_across_a_replace(
     binding_id = str(uuid.uuid4())
     binding = {
         "id": binding_id,
-        "field_key": "scene_status",
+        "field_key": "anchorValues[0].value",
         "source_kind": "opcua",
         "node_key": KNOWN_KEY,
     }
@@ -260,7 +260,7 @@ async def test_the_batch_path_checks_binding_slots_too(
                 module_type="header",
                 bindings=[
                     {
-                        "field_key": "scene_status",
+                        "field_key": "anchorValues[0].value",
                         "source_kind": "static",
                         "static_value_json": 1,
                     }
@@ -286,7 +286,7 @@ async def test_the_batch_path_checks_points_too(
                 module_type="twin-view",
                 bindings=[
                     {
-                        "field_key": "scene_status",
+                        "field_key": "anchorValues[0].value",
                         "source_kind": "opcua",
                         "node_key": f"{SEEDED_SOURCE_ID}:nowhere",
                     }
@@ -366,7 +366,7 @@ async def test_a_dangling_binding_shows_up_in_the_self_check(
                 module_type="twin-view",
                 bindings=[
                     {
-                        "field_key": "scene_status",
+                        "field_key": "anchorValues[0].value",
                         "source_kind": "opcua",
                         "node_key": KNOWN_KEY,
                     }

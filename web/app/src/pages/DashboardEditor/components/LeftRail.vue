@@ -27,8 +27,6 @@ const emit = defineEmits<{
   rename: [nodeId: string, name: string]
   move: [nodeId: string, parentId: string | null, at?: number]
   center: [nodeId: string]
-  front: [nodeId: string]
-  back: [nodeId: string]
 }>()
 
 const TABS = [
@@ -40,7 +38,13 @@ const tab = ref('library')
 
 <template>
   <div class="flex h-full min-h-0 flex-col gap-2">
-    <DtSegmented v-model="tab" :options="TABS" size="sm" />
+    <DtSegmented
+      v-model="tab"
+      :options="TABS"
+      size="sm"
+      block
+      aria-label="左栏分页"
+    />
     <ModuleLibrary
       v-if="tab === 'library'"
       class="min-h-0 flex-1"
@@ -60,8 +64,6 @@ const tab = ref('library')
       @rename="(nodeId, name) => emit('rename', nodeId, name)"
       @move="(nodeId, parentId, at) => emit('move', nodeId, parentId, at)"
       @center="emit('center', $event)"
-      @front="emit('front', $event)"
-      @back="emit('back', $event)"
     />
   </div>
 </template>

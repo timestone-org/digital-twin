@@ -271,6 +271,38 @@ const TITLE_FIELDS: readonly CardField[] = [
   },
 ]
 
+/**
+ * 文字组：整格的正文排版缺省，靠 CSS 继承往下走。
+ * ⚠ 只是**缺省**：模块自己有字号 / 字色控件的（文本块），它填的值天然赢过这里。
+ */
+const TEXT_FIELDS: readonly CardField[] = [
+  {
+    key: 'fontFamily',
+    label: '正文字体',
+    kind: 'enum',
+    options: [
+      { value: '', label: '跟随主题（默认）' },
+      { value: 'sans', label: '无衬线' },
+      { value: 'display', label: '标题体' },
+      { value: 'mono', label: '等宽' },
+    ],
+  },
+  {
+    key: 'fontSize',
+    label: '正文字号',
+    kind: 'num',
+    placeholder: '跟随主题',
+    range: { min: 8, max: 72 },
+    hint: 'px',
+  },
+  {
+    key: 'textColor',
+    label: '正文字色',
+    kind: 'color',
+    help: '模块没有自己的颜色设置时用这个色；文本块这类有专属颜色控件的，以它自己的为准。',
+  },
+]
+
 /** 交互组：卡片框整体质感，全部模块共享。 */
 const FX_FIELDS: readonly CardField[] = [
   // 非 0 会新建合成层，整屏开启前请实测性能
@@ -312,6 +344,7 @@ export const CARD_FIELD_GROUPS: readonly CardFieldGroup[] = [
   { id: 'border', label: '边框', fields: BORDER_FIELDS },
   { id: 'corner', label: '四角', fields: CORNER_FIELDS },
   { id: 'title', label: '标题条', fields: TITLE_FIELDS },
+  { id: 'text', label: '文字', fields: TEXT_FIELDS },
   { id: 'fx', label: '交互', fields: FX_FIELDS },
 ]
 

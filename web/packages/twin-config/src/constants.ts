@@ -14,22 +14,15 @@ export const TWIN_CONFIG_KEY = 'twin'
  */
 export const TWIN_CONFIG_VERSION = 1
 
-/** 状态染色的数组绑定槽键。 */
-export const TWIN_TINT_BINDING_KEY = 'tintValues'
-
 /** 锚点读数的数组绑定槽键。 */
 export const TWIN_ANCHOR_BINDING_KEY = 'anchorValues'
-
-/** 染色行的子槽。 */
-export const TWIN_TINT_ROW_SLOTS = ['value', 'status'] as const
-export type TwinTintRowSlot = (typeof TWIN_TINT_ROW_SLOTS)[number]
 
 /** 锚点行的子槽。 */
 export const TWIN_ANCHOR_ROW_SLOTS = ['value'] as const
 export type TwinAnchorRowSlot = (typeof TWIN_ANCHOR_ROW_SLOTS)[number]
 
 /** 任意数组行子槽，缝合读值按它取。 */
-export type TwinRowSlot = TwinTintRowSlot | TwinAnchorRowSlot
+export type TwinRowSlot = TwinAnchorRowSlot
 
 /**
  * 数组绑定第 index 行、第 sub 个子槽的 fieldKey。
@@ -47,11 +40,6 @@ export function arrayRowFieldKey(
   return `${slotKey}[${index}].${sub}`
 }
 
-/** 第 index 条染色规则某个子槽的 fieldKey。 */
-export function tintRowFieldKey(index: number, sub: TwinTintRowSlot): string {
-  return arrayRowFieldKey(TWIN_TINT_BINDING_KEY, index, sub)
-}
-
 /** 第 index 个锚点读数的 fieldKey。 */
 export function anchorRowFieldKey(index: number): string {
   return arrayRowFieldKey(TWIN_ANCHOR_BINDING_KEY, index, 'value')
@@ -63,16 +51,6 @@ export function anchorRowFieldKey(index: number): string {
  * 拼错的那一份既不报错也永远取不到值。
  */
 export const TWIN_VIEW_BINDINGS: readonly BindingSpec[] = [
-  {
-    key: TWIN_TINT_BINDING_KEY,
-    label: '状态染色',
-    dataType: 'string',
-    isArray: true,
-    arrayFields: [
-      { key: 'value', label: '数值', dataType: 'number' },
-      { key: 'status', label: '状态', dataType: 'string' },
-    ],
-  },
   {
     key: TWIN_ANCHOR_BINDING_KEY,
     label: '锚点读数',

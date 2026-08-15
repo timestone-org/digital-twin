@@ -44,6 +44,9 @@ export interface ArrangeActions {
   tidyTopLevel: () => void
   bringSelectedToFront: () => void
   sendSelectedToBack: () => void
+  /** 逐层挪：只与紧邻的兄弟换位，到头了就什么都不做。 */
+  bringSelectedForward: () => void
+  sendSelectedBackward: () => void
   moveNode: (nodeId: string, parentId: string | null, at?: number) => void
   /** 方向键微调：动选中集里的最上层节点，子树跟着根走。 */
   nudgeSelected: (dx: number, dy: number) => void
@@ -52,6 +55,10 @@ export interface ArrangeActions {
     changes: ReadonlyMap<string, NodeGeometry>,
     isContinuous: boolean,
   ) => void
+  /** 选中集里有没有可复制的根；右键菜单据此置灰「复制」。 */
+  canCopy: () => boolean
+  /** 剪贴板里有没有东西；右键菜单据此置灰「粘贴」。 */
+  canPaste: () => boolean
   copySelected: () => boolean
   /** 粘贴到目标层（选中容器则粘入其中）；返回是否粘出了东西。 */
   pasteClipboard: () => boolean
@@ -244,16 +251,52 @@ function nudgeBy(editor: DashboardEditor, dx: number, dy: number): void {
   )
 }
 
+/**
+ * 逐层挪整个选中集。
+ * ⚠ 先动挪向那一头最外侧的那个：反过来的话，同层的两个选中节点会在换位时
+ * 互相顶掉一格，看起来像「按一下只动了一个」。
+ * @param step 1 = 上移一层，-1 = 下移一层
+ */
+function stepSelected(deps: ArrangeDeps, step: 1 | -1): void {
+  const { editor } = deps
+  const nodes = editor.nodes.value
+  const indexOf = (id: string): number =>
+    doc.layerPositionOf(nodes, id)?.index ?? 0
+  const ids = [...doc.topMostIds(nodes, editor.selectedIds.value)].sort(
+    (left, right) =>
+      step > 0
+        ? indexOf(right) - indexOf(left)
+        : indexOf(left) - indexOf(right),
+  )
+  editor.apply((current) =>
+    ids.reduce(
+      (acc, id) =>
+        step > 0 ? doc.bringForward(acc, id) : doc.sendBackward(acc, id),
+      [...current],
+    ),
+  )
+}
+
 /** 层序与换父。 */
 function orderActions(
   deps: ArrangeDeps,
 ): Pick<
   ArrangeActions,
-  'bringSelectedToFront' | 'sendSelectedToBack' | 'moveNode'
+  | 'bringSelectedToFront'
+  | 'sendSelectedToBack'
+  | 'bringSelectedForward'
+  | 'sendSelectedBackward'
+  | 'moveNode'
 > {
   const { editor } = deps
 
   return {
+    bringSelectedForward: () => {
+      stepSelected(deps, 1)
+    },
+    sendSelectedBackward: () => {
+      stepSelected(deps, -1)
+    },
     bringSelectedToFront: () => {
       const ids = doc.topMostIds(editor.nodes.value, editor.selectedIds.value)
       editor.apply((nodes) =>
@@ -323,9 +366,15 @@ function clipboardActions(
   deps: ArrangeDeps,
 ): Pick<
   ArrangeActions,
-  'copySelected' | 'pasteClipboard' | 'duplicateSelected'
+  | 'canCopy'
+  | 'canPaste'
+  | 'copySelected'
+  | 'pasteClipboard'
+  | 'duplicateSelected'
 > {
   return {
+    canCopy: () => payloadOf(deps) !== null,
+    canPaste: () => clipboard.readClipboard() !== null,
     copySelected: () => {
       const payload = payloadOf(deps)
       if (payload === null) return false

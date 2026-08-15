@@ -5,7 +5,6 @@
 // app/tests/contract/startup-graph.contract.spec.ts。
 export { default as TwinScene } from './TwinScene.vue'
 export { AnchorLayer } from './anchorLayer'
-export { TintLayer } from './tintLayer'
 export {
   EMPTY_NODE_INDEX,
   applyPartVisibility,

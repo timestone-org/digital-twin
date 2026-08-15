@@ -40,6 +40,8 @@ export interface EditorSurface {
   onMove: (nodeId: string, parentId: string | null, at?: number) => void
   onFront: (nodeId: string) => void
   onBack: (nodeId: string) => void
+  onForward: (nodeId: string) => void
+  onBackward: (nodeId: string) => void
 }
 
 /** 画布抛上来的四个事件：选中、框选、批量几何、跨层拖放。 */
@@ -86,7 +88,13 @@ function treeHandlers(
   deps: EditorSurfaceDeps,
 ): Pick<
   EditorSurface,
-  'onAddAt' | 'onRename' | 'onMove' | 'onFront' | 'onBack'
+  | 'onAddAt'
+  | 'onRename'
+  | 'onMove'
+  | 'onFront'
+  | 'onBack'
+  | 'onForward'
+  | 'onBackward'
 > {
   const { editor, actions, arrange } = deps
 
@@ -114,6 +122,12 @@ function treeHandlers(
     },
     onBack: (nodeId) => {
       editor.apply((nodes) => doc.sendToBack(nodes, nodeId))
+    },
+    onForward: (nodeId) => {
+      editor.apply((nodes) => doc.bringForward(nodes, nodeId))
+    },
+    onBackward: (nodeId) => {
+      editor.apply((nodes) => doc.sendBackward(nodes, nodeId))
     },
   }
 }

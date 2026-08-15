@@ -5,11 +5,7 @@
  * ⚠ 这几类错法 typecheck 与 lint 双双放行，表现只是「这一项永远没反应」。
  */
 import type { BindingSpec, ConfigField } from '@dt/contracts'
-import {
-  TWIN_ANCHOR_BINDING_KEY,
-  TWIN_CONFIG_KEY,
-  TWIN_TINT_BINDING_KEY,
-} from '@dt/twin-config'
+import { TWIN_ANCHOR_BINDING_KEY, TWIN_CONFIG_KEY } from '@dt/twin-config'
 import { isIconName } from '@dt/ui'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -33,7 +29,6 @@ const KEY_CONSTANTS: Record<string, string> = {
   SHOW_TITLE_CONFIG_KEY,
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_CONFIG_KEY,
-  TWIN_TINT_BINDING_KEY,
 }
 
 // 一跳前缀（`props.config.x` / `opts.config.x`）也算读：模块的 option 里配置常常
@@ -263,6 +258,22 @@ describe('清单自身的不变量', () => {
 
     expect(offenders).toEqual([])
   })
+
+  /**
+   * 演示配置只走渲染那条路，算子节点原点的排版走的是**不含**它的原始 config。
+   * 于是拿它去改标题条或内边距，画布上子节点被顶下去、保存后运行态又是另一个样子——
+   * 两边都不报错，只能靠这道闸。
+   */
+  it('预览不许改容器几何', () => {
+    const geometryKeys = new Set([SHOW_TITLE_CONFIG_KEY, CONTAINER_CONFIG_KEY])
+    const offenders = listModules().flatMap((manifest) =>
+      Object.keys(manifest.preview?.config ?? {})
+        .filter((key) => geometryKeys.has(key))
+        .map((key) => `${manifest.type}.${key}`),
+    )
+
+    expect(offenders).toEqual([])
+  })
 })
 
 describe('声明的键与渲染侧真正读的键', () => {
@@ -315,11 +326,11 @@ describe('声明的键与渲染侧真正读的键', () => {
     const source = [
       'readText(props.config.title)',
       "readBoolean(props.config['showTitle'])",
-      'stitch(props.values[TWIN_TINT_BINDING_KEY])',
+      'stitch(props.values[TWIN_ANCHOR_BINDING_KEY])',
     ].join('\n')
 
     expect(readKeys(source, 'config')).toEqual(['showTitle', 'title'])
-    expect(readKeys(source, 'values')).toEqual(['tintValues'])
+    expect(readKeys(source, 'values')).toEqual(['anchorValues'])
   })
 
   it('扫描器也认得裸的与包在上下文里的取法', () => {

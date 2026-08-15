@@ -9,22 +9,38 @@ import type { ModuleMeta } from '@dt/contracts'
 import {
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_CONFIG_KEY,
-  TWIN_TINT_BINDING_KEY,
-  isTintAlarm,
   normalizeTwinConfig,
   stitchAnchorValues,
-  stitchTintValues,
 } from '@dt/twin-config'
 import { DtNotice } from '@dt/ui'
-import { computed, defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent, type CSSProperties } from 'vue'
 
-import { readBoolean, readText } from '../../shared/config'
+import { readEnum, readNumber, readText } from '../../shared/config'
 
 const props = defineProps<{
   config: Record<string, unknown>
   values: Record<string, unknown>
   meta?: ModuleMeta
 }>()
+
+const CORNERS = [
+  'top-left',
+  'top-right',
+  'bottom-left',
+  'bottom-right',
+] as const
+
+// 四角的偏移量与 3D 画布的边距同一套：12px 压上下、16px 压左右
+const CORNER_OFFSETS: Record<(typeof CORNERS)[number], CSSProperties> = {
+  'top-left': { top: '12px', left: '16px' },
+  'top-right': { top: '12px', right: '16px' },
+  'bottom-left': { bottom: '12px', left: '16px' },
+  'bottom-right': { bottom: '12px', right: '16px' },
+}
+
+function clamp(value: number, low: number, high: number): number {
+  return Math.min(high, Math.max(low, value))
+}
 
 const TwinScene = defineAsyncComponent(async () => {
   const core = await import('@dt/three-core')
@@ -35,13 +51,7 @@ const TwinScene = defineAsyncComponent(async () => {
 // 就地改字段不会重绘，而 computed 只在 config 换了对象时才产出新引用
 const scene = computed(() => normalizeTwinConfig(props.config[TWIN_CONFIG_KEY]))
 const title = computed(() => readText(props.config.title))
-const isAlarmSummaryShown = computed(() =>
-  readBoolean(props.config.showAlarmSummary),
-)
 
-const tintValues = computed(() =>
-  stitchTintValues(scene.value.tints, props.values[TWIN_TINT_BINDING_KEY]),
-)
 const anchorValues = computed(() =>
   stitchAnchorValues(
     scene.value.anchors,
@@ -49,11 +59,10 @@ const anchorValues = computed(() =>
   ),
 )
 
-const alarms = computed(() =>
-  scene.value.tints.filter((rule) =>
-    isTintAlarm(rule, tintValues.value[rule.id]),
-  ),
-)
+const titleStyle = computed<CSSProperties>(() => ({
+  ...CORNER_OFFSETS[readEnum(props.config.titlePosition, CORNERS, 'top-left')],
+  fontSize: `${clamp(readNumber(props.config.titleFontSize, 16), 8, 72)}px`,
+}))
 
 // 取不到就说取不到：绝不留一块什么都不说的空画布（DASHBOARD_DESIGN §4.3）
 const errorMessage = computed(() =>
@@ -65,21 +74,10 @@ const errorMessage = computed(() =>
 
 <template>
   <div class="dt-twin">
-    <TwinScene
-      :config="scene"
-      :tint-values="tintValues"
-      :anchor-values="anchorValues"
-    />
-    <p v-if="title !== ''" class="dt-twin__title">{{ title }}</p>
-    <ul
-      v-if="isAlarmSummaryShown && alarms.length > 0"
-      class="dt-twin__alarms"
-      aria-label="告警汇总"
-    >
-      <li v-for="rule in alarms" :key="rule.id" class="dt-twin__alarm">
-        {{ rule.name }}
-      </li>
-    </ul>
+    <TwinScene :config="scene" :anchor-values="anchorValues" />
+    <p v-if="title !== ''" class="dt-twin__title" :style="titleStyle">
+      {{ title }}
+    </p>
     <DtNotice v-if="errorMessage !== ''" class="dt-twin__error" intent="danger">
       {{ errorMessage }}
     </DtNotice>
@@ -94,38 +92,14 @@ const errorMessage = computed(() =>
   overflow: hidden;
 }
 
+// 四角定位与字号由内联样式给，其余观感跟主题走
 .dt-twin__title {
   position: absolute;
-  top: 12px;
-  left: 16px;
   margin: 0;
   color: var(--text-primary);
   font-family: var(--font-display);
-  font-size: 16px;
   letter-spacing: 0.06em;
   text-shadow: var(--fx-glow-title);
-}
-
-.dt-twin__alarms {
-  position: absolute;
-  top: 12px;
-  right: 16px;
-  display: flex;
-  max-width: 40%;
-  flex-direction: column;
-  padding: 6px 10px;
-  border: 1px solid var(--state-danger);
-  border-radius: var(--radius-sm);
-  margin: 0;
-  background: var(--surface-overlay);
-  gap: 4px;
-  list-style: none;
-}
-
-.dt-twin__alarm {
-  color: var(--state-danger);
-  font-size: 12px;
-  line-height: 1.6;
 }
 
 .dt-twin__error {

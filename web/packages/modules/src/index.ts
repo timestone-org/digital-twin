@@ -15,6 +15,8 @@ export {
   missingConfigControls,
   registerConfigControl,
 } from './configControls'
+export { bannerBackground, imageSourceKind } from './shared/background'
+export type { ImageSourceKind } from './shared/background'
 export {
   configDefaults,
   readBoolean,
