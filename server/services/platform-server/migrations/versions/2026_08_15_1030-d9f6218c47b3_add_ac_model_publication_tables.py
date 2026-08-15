@@ -11,7 +11,7 @@
 表说的必须是同一台实例，这一点不能靠应用记得同步。
 
 Revision ID: d9f6218c47b3
-Revises: c8e5301fa9d7
+Revises: d9f6412ab73c
 """
 
 from collections.abc import Sequence
@@ -21,7 +21,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "d9f6218c47b3"
-down_revision: str | None = "c8e5301fa9d7"
+down_revision: str | None = "d9f6412ab73c"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

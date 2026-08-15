@@ -57,6 +57,12 @@ describe('权限码', () => {
     expect(PERMISSION_CODES.collectManage).toBe('collect:manage')
   })
 
+  // 素材是跨大屏的公共资源，故与大屏面分开成两档
+  it('素材面是看、管理两档', () => {
+    expect(PERMISSION_CODES.assetView).toBe('asset:view')
+    expect(PERMISSION_CODES.assetManage).toBe('asset:manage')
+  })
+
   it('先前已发布的码一字未改', () => {
     expect(PERMISSION_CODES).toMatchObject(PUBLISHED)
   })

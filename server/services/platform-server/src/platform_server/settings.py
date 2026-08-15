@@ -12,6 +12,7 @@ from lib.config import (
     RedisSettings,
     SqlServerSettings,
 )
+from lib.objectstore import ObjectStoreSettings
 
 SERVICE_NAME = "platform-server"
 API_PREFIX = "/api/v1/platform"
@@ -37,7 +38,13 @@ LEASE_TTL_FLOOR_S = 5
 PUBLISH_MAX_ITEMS_CEILING = 500
 
 
-class Settings(AppSettings, PostgresSettings, RedisSettings, SqlServerSettings):
+class Settings(
+    AppSettings,
+    PostgresSettings,
+    RedisSettings,
+    SqlServerSettings,
+    ObjectStoreSettings,
+):
     """进程启动时构造一次并冻结。"""
 
     model_config = SettingsConfigDict(

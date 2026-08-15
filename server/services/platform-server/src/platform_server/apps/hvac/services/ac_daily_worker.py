@@ -253,9 +253,7 @@ class DailyConsumer:
         try:
             entries = await self._fetch()
         except DependencyUnavailable as error:
-            _logger.warning(
-                "ac_daily_fetch_failed", "取消息失败", error=error
-            )
+            _logger.warning("ac_daily_fetch_failed", "取消息失败", error=error)
             await asyncio.sleep(self._options.block_ms / 1000)
             return
         for entry in entries:
@@ -327,9 +325,7 @@ class DailyConsumer:
             return
         _log_run(message, run)
 
-    async def _run_one(
-        self, message: ac_daily_queue.DailyMessage
-    ) -> DailyRun:
+    async def _run_one(self, message: ac_daily_queue.DailyMessage) -> DailyRun:
         async with self._database.session() as session:
             return await append_day(
                 session,

@@ -70,6 +70,16 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
+    // 素材是跨大屏的公共资源，故不挂在某张大屏或某个项目下面
+    path: '/assets',
+    name: 'assets',
+    component: () => import('@/pages/Assets/index.vue'),
+    meta: {
+      title: '素材库',
+      permissions: [PERMISSION_CODES.assetView],
+    },
+  },
+  {
     path: '/hvac/units',
     name: 'hvac-units',
     component: () => import('@/pages/Hvac/Units/index.vue'),

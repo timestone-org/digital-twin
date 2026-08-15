@@ -6,6 +6,15 @@ export type {
   Page,
 } from './envelope'
 export { ERROR_CODES, SUCCESS_CODE } from './envelope'
+export type { AssetKind } from './asset'
+export {
+  ASSET_KINDS,
+  ASSET_REF_PREFIX,
+  assetObjectKey,
+  assetRef,
+  assetUrl,
+  parseAssetRef,
+} from './asset'
 export type {
   AuthUser,
   PermissionCatalog,

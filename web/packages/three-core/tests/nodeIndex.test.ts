@@ -16,7 +16,13 @@ import {
 } from '../src/nodeIndex'
 
 function part(id: string, nodes: string[], visible = true): TwinPart {
-  return { id, name: id, nodes, visible }
+  return {
+    id,
+    name: id,
+    nodes,
+    visibility: { visible, hideBelow: null, hideAbove: null, fade: null },
+    clickDistance: { min: null, max: null, farThreshold: null },
+  }
 }
 
 /** 根 → 泵体（含两个同名网格 shell）→ 阀门 */
@@ -81,7 +87,7 @@ describe('按名字取对象', () => {
 })
 
 describe('部件显隐', () => {
-  it('按部件的 visible 设置命中的每个对象', () => {
+  it('按部件的基线显隐设置命中的每个对象', () => {
     const model = buildModel()
     const index = buildNodeIndex(model)
 

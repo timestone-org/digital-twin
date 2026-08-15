@@ -12,7 +12,13 @@ services:
     ports: ['${EDGE_HTTP_PORT:-8080}:80']
     environment:
       AUTH_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填：/internal/ 的服务级密钥}
-      NGINX_ENVSUBST_FILTER: '^AUTH_'
+      OSS_BUCKET: ${OSS_BUCKET:-digitaltwin}
+      # 素材字节面的上游。⚠ 只能是 host:port——upstream 指令不认 scheme，
+      # 带上 http:// 是 nginx 直接起不来，整个站跟着一起没。
+      # ⚠ 对象存储在本编排之外（与库同档），故这里不是服务名而是取自 .env
+      OSS_UPSTREAM: ${OSS_UPSTREAM:?必填：对象存储的 host:port，不带 scheme}
+      # ⚠ 过滤器必须收窄：放开的话 $uri / $host 这些 nginx 变量会被一起替换成空
+      NGINX_ENVSUBST_FILTER: '^(AUTH_|OSS_)'
       NGINX_ENVSUBST_OUTPUT_DIR: /etc/nginx
     volumes:
       - ./nginx/nginx.conf.template:/etc/nginx/templates/nginx.conf.template:ro
@@ -90,6 +96,14 @@ services:
       PLATFORM_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       PLATFORM_ACSTARTUP_STREAM: ${ACSTARTUP_STREAM:-platform:ac-startup:shards}
       PLATFORM_ACSTARTUP_GROUP: ${ACSTARTUP_GROUP:-ac-startup-workers}
+      # 素材字节面。⚠ 凭据与对象存储自己的 root 凭据同源，两边必须一致：
+      # 分叉的表现是直传凭证签得出来、浏览器一传就 403，而两边的配置单看都对
+      PLATFORM_OBJECTSTORE_ENDPOINT: ${OSS_ENDPOINT:?必填}
+      PLATFORM_OBJECTSTORE_BUCKET: ${OSS_BUCKET:-digitaltwin}
+      PLATFORM_OBJECTSTORE_ACCESS_KEY: ${OSS_ACCESS_KEY:?必填}
+      PLATFORM_OBJECTSTORE_SECRET_KEY: ${OSS_SECRET_KEY:?必填}
+      # 浏览器侧的直传落点，由边缘反代到桶根
+      PLATFORM_OBJECTSTORE_PUBLIC_BASE: ${OSS_PUBLIC_BASE:-/oss/}
     expose: ['8005']
     healthcheck:
       test: ['CMD', 'python', '-c', "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8005/api/v1/platform/health')"]
@@ -97,6 +111,32 @@ services:
       timeout: 3s
       retries: 3
     restart: unless-stopped
+
+  # 素材字节面的建桶脚本：建桶并把三个公开前缀设成匿名可读；跑完即退出。
+  # ⚠ 对象存储本身与 PostgreSQL / Redis 同档——它是**外部部署单元**，不由本编排
+  # 起停（ADR-0015），故这里连的是 OSS_ENDPOINT 而不是某个服务名。它的数据目录
+  # 与数据库同级纳入备份清单：素材没了，存量大屏里的每一个 asset: 引用都会变成
+  # 「取不到」。
+  # ⚠ `staging/` 刻意不在列：未验证的字节不许有一个本站链接。
+  # ⚠ 失败即退出、不重试：桶策略配歪了要当场看见，让它悄悄重试的结果是
+  # 匿名前缀没设上，而现象要等到现场大屏机取模型时才是一个 403。
+  minio-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    environment:
+      OSS_ENDPOINT: ${OSS_ENDPOINT:?必填：对象存储地址，带 scheme}
+      OSS_BUCKET: ${OSS_BUCKET:-digitaltwin}
+      OSS_ACCESS_KEY: ${OSS_ACCESS_KEY:?必填}
+      OSS_SECRET_KEY: ${OSS_SECRET_KEY:?必填}
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        set -e
+        mc alias set dt "$$OSS_ENDPOINT" "$$OSS_ACCESS_KEY" "$$OSS_SECRET_KEY"
+        mc mb --ignore-existing "dt/$$OSS_BUCKET"
+        for prefix in models images icons; do
+          mc anonymous set download "dt/$$OSS_BUCKET/$$prefix"
+        done
+    restart: 'no'
 
   # ⚠ 与其它服务不同，这个服务**自己对外开端口**：opc.tcp 是二进制 TCP，
   # nginx 只有 http block，转不了。只有 8008 的 HTTP 管理面走边缘。
@@ -174,6 +214,14 @@ services:
       PLATFORM_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       PLATFORM_ACSTARTUP_STREAM: ${ACSTARTUP_STREAM:-platform:ac-startup:shards}
       PLATFORM_ACSTARTUP_GROUP: ${ACSTARTUP_GROUP:-ac-startup-workers}
+      # ⚠ 三个角色共用一份 Settings，故这四项**每个角色都要给全**，哪怕本角色
+      # 一个字节都不读：启动即全量校验，少给一处就是这个角色起不来，而现象是
+      # 「api 好好的，抽取任务全不动」
+      PLATFORM_OBJECTSTORE_ENDPOINT: ${OSS_ENDPOINT:?必填}
+      PLATFORM_OBJECTSTORE_BUCKET: ${OSS_BUCKET:-digitaltwin}
+      PLATFORM_OBJECTSTORE_ACCESS_KEY: ${OSS_ACCESS_KEY:?必填}
+      PLATFORM_OBJECTSTORE_SECRET_KEY: ${OSS_SECRET_KEY:?必填}
+      PLATFORM_OBJECTSTORE_PUBLIC_BASE: ${OSS_PUBLIC_BASE:-/oss/}
     restart: unless-stopped
 
   # 同一份镜像的 publisher 角色：只跑大屏实时发布循环。
@@ -217,6 +265,12 @@ services:
       PLATFORM_PUBLISH_MAX_ITEMS: ${DASHBOARD_PUBLISH_MAX_ITEMS:-200}
       # 快照多旧就算陈旧。陈旧值照推但标注为陈旧，不许当成现值
       PLATFORM_PUBLISH_STALE_AFTER_MS: ${DASHBOARD_PUBLISH_STALE_AFTER_MS:-15000}
+      # ⚠ 同上：本角色不读字节，但共用的 Settings 校验这四项，少给就起不来
+      PLATFORM_OBJECTSTORE_ENDPOINT: ${OSS_ENDPOINT:?必填}
+      PLATFORM_OBJECTSTORE_BUCKET: ${OSS_BUCKET:-digitaltwin}
+      PLATFORM_OBJECTSTORE_ACCESS_KEY: ${OSS_ACCESS_KEY:?必填}
+      PLATFORM_OBJECTSTORE_SECRET_KEY: ${OSS_SECRET_KEY:?必填}
+      PLATFORM_OBJECTSTORE_PUBLIC_BASE: ${OSS_PUBLIC_BASE:-/oss/}
     restart: unless-stopped
 
   # 采集运行时：唯一持有现场连接的进程。

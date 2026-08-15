@@ -190,13 +190,22 @@ export function renderScene(core: SceneCore): void {
 }
 
 /**
+ * 摆放三件套。⚠ 只要这三样而不是整个 `TwinModelRef`：多要一个字段就多一处
+ * 「加了字段却要改调用点」，而摆放本身与素材、特效、动画毫无关系。
+ */
+export type ModelPlacement = Pick<
+  TwinModelRef,
+  'scale' | 'position' | 'rotation'
+>
+
+/**
  * 把配置里的摆放落到模型根上；旋转角配置里是度，three 要弧度。
  * @param root 模型根对象
- * @param model 归一化后的模型引用
+ * @param model 归一化后的摆放
  */
 export function applyModelPlacement(
   root: THREE.Object3D,
-  model: TwinModelRef,
+  model: ModelPlacement,
 ): void {
   const [rx, ry, rz] = model.rotation
   root.scale.setScalar(model.scale)

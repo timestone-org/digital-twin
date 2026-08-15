@@ -6,7 +6,49 @@
 import { describe, expect, it } from 'vitest'
 
 import { TWIN_CONFIG_VERSION } from '../src/constants'
-import { normalizeTwinConfig } from '../src/types'
+import { normalizeTwinConfig } from '../src/normalize'
+import { NO_CLICK_LIMIT } from '../src/normalizeRules'
+import type { TwinModelRef, TwinVisibilityRule } from '../src/types'
+
+/** 只置基线显隐的一份规则。 */
+function shown(visible: boolean): TwinVisibilityRule {
+  return { visible, hideBelow: null, hideAbove: null, fade: null }
+}
+
+/** 一份什么都没配的模型：缺省即「不叠任何东西」。 */
+const EMPTY_MODEL: TwinModelRef = {
+  asset: '',
+  scale: 1,
+  position: [0, 0, 0],
+  rotation: [0, 0, 0],
+  autoRotate: false,
+  background: '',
+  showGroundGrid: false,
+  originalMaterials: false,
+  animations: { enabled: false, clips: [], speed: 1 },
+  sceneEffects: {
+    starfield: { enabled: false, density: 1, speed: 1, nebula: false },
+    pedestal: {
+      enabled: false,
+      color: '#00d5ff',
+      ring: true,
+      grid: true,
+      gradientGround: true,
+      contactShadow: true,
+      reflection: 'none',
+      radius: 1.6,
+    },
+    lightColumn: {
+      enabled: false,
+      mode: 'dome',
+      color: '#00d5ff',
+      intensity: 1,
+      speed: 1,
+      height: 1.15,
+      rise: 'loop',
+    },
+  },
+}
 
 const MESSY_CONFIG = {
   version: 99,
@@ -28,22 +70,31 @@ const MESSY_CONFIG = {
     { decimals: '2.6' },
     'not-an-object',
   ],
+  cameras: [
+    { id: ' c-1 ', position: [1, 2, 3], fov: 999, isDefault: true },
+    { fov: 'wide' },
+    null,
+  ],
+  viewpoints: { enabled: true, mode: 'nonsense', items: [' c-1 ', ''] },
 }
 
 describe('normalizeTwinConfig 的缺省', () => {
   it('完全没有输入时给出一份可渲染的空配置', () => {
     expect(normalizeTwinConfig(undefined)).toEqual({
       version: TWIN_CONFIG_VERSION,
-      model: {
-        asset: '',
-        scale: 1,
-        position: [0, 0, 0],
-        rotation: [0, 0, 0],
-        autoRotate: false,
-        background: '',
-      },
+      model: EMPTY_MODEL,
       parts: [],
       anchors: [],
+      cameras: [],
+      viewpoints: {
+        enabled: false,
+        mode: 'buttons',
+        keyboard: false,
+        items: [],
+      },
+      panels: [],
+      arrows: [],
+      flows: [],
     })
   })
 
@@ -103,8 +154,21 @@ describe('normalizeTwinConfig 的模型引用', () => {
 describe('normalizeTwinConfig 的实体', () => {
   it('丢掉非对象条目，幸存者的铸造 id 仍带原始下标', () => {
     expect(normalizeTwinConfig(MESSY_CONFIG).parts).toEqual([
-      { id: 'part-1', name: '主机', nodes: ['pump'], visible: true },
-      { id: 'p-fan', name: '', nodes: [], visible: false },
+      {
+        id: 'part-1',
+        name: '主机',
+        nodes: ['pump'],
+        visibility: shown(true),
+        clickDistance: NO_CLICK_LIMIT,
+      },
+      {
+        id: 'p-fan',
+        name: '',
+        nodes: [],
+        // 老写法 `visible: false` 仍然读得进来：存量手写配置不该一升级就全亮
+        visibility: shown(false),
+        clickDistance: NO_CLICK_LIMIT,
+      },
     ])
   })
 
@@ -117,7 +181,7 @@ describe('normalizeTwinConfig 的实体', () => {
       label: '出口',
       unit: '℃',
       decimals: null,
-      visible: true,
+      visibility: shown(true),
     })
     expect(anchors[1]?.decimals).toBe(3)
     expect(

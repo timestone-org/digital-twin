@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from lib.lifespan import LifespanHook
 from lib.logging import configure_logging, get_logger
 from lib.web import ReadinessProbe, Runtime, create_app
+from platform_server.apps.assets.api import ROUTERS as ASSET_ROUTERS
 from platform_server.apps.collect.api import ROUTERS as COLLECT_ROUTERS
 from platform_server.apps.dashboard.api import ROUTERS as DASHBOARD_ROUTERS
 from platform_server.apps.hvac.api import ROUTERS as HVAC_ROUTERS
@@ -41,6 +42,7 @@ def build_app(settings: Settings) -> FastAPI:
             *DASHBOARD_ROUTERS,
             *COLLECT_ROUTERS,
             *RUNTIME_PARAM_ROUTERS,
+            *ASSET_ROUTERS,
         ),
         runtime=Runtime(
             lifespan_hooks=_hooks(container),

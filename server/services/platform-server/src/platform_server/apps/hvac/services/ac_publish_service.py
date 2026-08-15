@@ -67,6 +67,7 @@ class Sessions(Protocol):
 
     def session(self) -> AbstractAsyncContextManager[AsyncSession]: ...
 
+
 # `last_error` 会显示在页面上，太长的原因把整行撑爆
 _MAX_ERROR = 500
 

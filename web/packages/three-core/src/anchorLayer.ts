@@ -77,7 +77,8 @@ export class AnchorLayer {
    */
   build(anchors: readonly TwinAnchor[]): void {
     this.clear()
-    const shown = anchors.filter((anchor) => anchor.visible)
+    // 只认作者直接置的显隐；随距离派生的那部分归取景层，不在这里算
+    const shown = anchors.filter((anchor) => anchor.visibility.visible)
     if (shown.length === 0) return
     const geometry = new THREE.SphereGeometry(1, DOT_SEGMENTS_H, DOT_SEGMENTS_V)
     this.geometry = geometry

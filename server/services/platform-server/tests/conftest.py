@@ -9,8 +9,8 @@ import contextlib
 import os
 import socket
 import uuid
-from collections.abc import AsyncIterator, Callable, Iterable, Mapping
-from dataclasses import dataclass, field, replace
+from collections.abc import AsyncIterator, Callable, Iterable
+from dataclasses import dataclass, replace
 from datetime import datetime
 
 import httpx
@@ -19,13 +19,13 @@ from fastapi import FastAPI
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from unit.ac_source_fakes import FakeAcSource, full_shape
 from unit.collect_fakes import (
     FakeChannelPublisher,
     FakeCommandTransport,
     FakeHistorySource,
 )
 from unit.opcua_fakes import FakeNodeWriter
+from unit.source_fakes import FakeAcSource, InMemoryStream, full_shape
 
 from lib.auth import (
     SignedContext,
@@ -36,9 +36,15 @@ from lib.auth import (
 from lib.config import load_settings
 from lib.db import Database
 from lib.logging import configure_logging
-from lib.testing import InMemoryCache
+from lib.testing import FakeObjectStore, InMemoryCache
 from lib.utils.timeutils import utcnow
 from platform_server.app import build_app
+from platform_server.apps.assets.deps import (
+    get_object_store,
+)
+from platform_server.apps.assets.deps import (
+    get_session as get_asset_session,
+)
 from platform_server.apps.collect.catalog import (
     COLLECT_MANAGE,
     COLLECT_OPERATE,
@@ -83,7 +89,6 @@ from platform_server.apps.runtime_params.deps import (
 )
 from platform_server.container import Container
 from platform_server.settings import Settings
-from platform_server.stream import StreamEntry, StreamGroup
 from timeseries import HISTORY_SCHEMA
 
 # 与 auth-server 的 AUTH_EDGE_PERMISSION_TTL_S 同量级，用例不依赖它的确切取值
@@ -118,64 +123,6 @@ SOURCE_TIMEZONE = "Asia/Shanghai"
 SEEDED_OBJECTS = ("KTStartData_K01", "KTStartData_K02", "KTStartData_K03")
 
 SignHeaders = Callable[..., dict[str, str]]
-
-
-@dataclass
-class InMemoryStream:
-    """进程内的流假件，满足 `StreamLike`。
-
-    ⚠ `lib.testing` 的 `InMemoryCache` 满足的是 `CacheLike`，那上面没有任何流
-    操作，故这里另造一件而不是复用。它刻意保留待确认表：不确认的消息能被再取
-    一次，「重复投递」这条才测得出来。
-    """
-
-    entries: list[StreamEntry] = field(default_factory=list[StreamEntry])
-    pending: list[StreamEntry] = field(default_factory=list[StreamEntry])
-    acked: list[str] = field(default_factory=list[str])
-    groups: list[str] = field(default_factory=list[str])
-    reads: list[tuple[str, int, int]] = field(
-        default_factory=list[tuple[str, int, int]]
-    )
-    claims: list[tuple[str, int, int]] = field(
-        default_factory=list[tuple[str, int, int]]
-    )
-    failure: Exception | None = None
-    _serial: int = 0
-
-    async def publish(self, stream: str, fields: Mapping[str, str]) -> str:
-        self._serial += 1
-        entry_id = f"{stream}:{self._serial}"
-        self.entries.append(StreamEntry(entry_id=entry_id, fields=dict(fields)))
-        return entry_id
-
-    async def ensure_group(self, target: StreamGroup) -> None:
-        self.groups.append(target.group)
-
-    async def read_group(
-        self, target: StreamGroup, *, count: int, block_ms: int
-    ) -> list[StreamEntry]:
-        self.reads.append((target.group, count, block_ms))
-        if self.failure is not None:
-            raise self.failure
-        taken = self.entries[:count]
-        del self.entries[:count]
-        self.pending.extend(taken)
-        return taken
-
-    async def claim_stale(
-        self, target: StreamGroup, *, min_idle_ms: int, count: int
-    ) -> list[StreamEntry]:
-        self.claims.append((target.group, min_idle_ms, count))
-        return []
-
-    async def ack(self, target: StreamGroup, entry_id: str) -> None:
-        self.acked.append(f"{target.group}:{entry_id}")
-        self.pending = [
-            item for item in self.pending if item.entry_id != entry_id
-        ]
-
-    async def close(self) -> None:
-        self.entries.clear()
 
 
 @pytest.fixture
@@ -340,6 +287,8 @@ class AppContext:
 
     client: httpx.AsyncClient
     session: AsyncSession
+    """素材字节的进程内替身；用例据它断言「搬没搬」「删没删」。"""
+    object_store: FakeObjectStore
 
 
 @dataclass(frozen=True)
@@ -459,27 +408,29 @@ def _wire_fakes(
     application: FastAPI,
     *,
     maker: async_sessionmaker[AsyncSession],
-    ac_source: FakeAcSource,
+    fakes: ExternalFakes,
     validation: ValidationContext,
-    nodes: FakeNodeWriter,
+    object_store: FakeObjectStore,
 ) -> None:
     """把会打网络的依赖换成假件。
 
-    ⚠ 每个 apps/<feature> 各有一份 `get_session`，**四份都要换**：漏一份那个
+    ⚠ 每个 apps/<feature> 各有一份 `get_session`，**五份都要换**：漏一份那个
     模块就打真库真提交，用例之间开始互相看见对方的数据。这不是假设——
     `runtime_params` 那份漏过一次，表现是「单跑绿、连着跑红」，
     而残留行会一直躺在库里毒下一次运行。
-    Args: application, maker, ac_source, validation, nodes。
+    Args: application, maker, fakes, validation, object_store。
     """
     override = _session_override(maker)
     application.dependency_overrides[get_session] = override
     application.dependency_overrides[get_dashboard_session] = override
     application.dependency_overrides[get_collect_session] = override
     application.dependency_overrides[get_runtime_param_session] = override
+    application.dependency_overrides[get_asset_session] = override
+    application.dependency_overrides[get_object_store] = lambda: object_store
     application.dependency_overrides[get_ac_source_reader] = lambda: (
-        AcSourceReader(source=ac_source, timezone=SOURCE_TIMEZONE)
+        AcSourceReader(source=fakes.ac_source, timezone=SOURCE_TIMEZONE)
     )
-    application.dependency_overrides[get_node_writer] = lambda: nodes
+    application.dependency_overrides[get_node_writer] = lambda: fakes.nodes
     application.dependency_overrides[get_sessions] = lambda: MakerSessions(
         maker
     )
@@ -535,14 +486,15 @@ async def app_context(
         expire_on_commit=False,
         join_transaction_mode="create_savepoint",
     )
+    object_store = FakeObjectStore()
     _wire_fakes(
         application,
         maker=maker,
-        ac_source=external_fakes.ac_source,
+        fakes=external_fakes,
         validation=ValidationContext(
             catalog=container.module_catalog, points=external_fakes.points
         ),
-        nodes=external_fakes.nodes,
+        object_store=object_store,
     )
     transport = httpx.ASGITransport(app=application)
     async with (
@@ -552,7 +504,9 @@ async def app_context(
         maker() as session,
     ):
         client.headers.update(sign())
-        yield AppContext(client=client, session=session)
+        yield AppContext(
+            client=client, session=session, object_store=object_store
+        )
 
     await transaction.rollback()
     await connection.close()
@@ -572,3 +526,13 @@ async def db_session(app_context: AppContext) -> AsyncSession:
 async def app_client(app_context: AppContext) -> httpx.AsyncClient:
     """整装应用的客户端，默认带全权身份头。"""
     return app_context.client
+
+
+@pytest.fixture
+async def object_store(app_context: AppContext) -> FakeObjectStore:
+    """与应用同一个字节面替身。
+
+    ⚠ 与 `app_client` 必须是同一个实例：各造一个的话，用例断言的是一个
+    从来没被应用碰过的空桶，而断言「没搬过去」会恒真。
+    """
+    return app_context.object_store

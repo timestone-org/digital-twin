@@ -14,7 +14,7 @@ import {
   arrayRowFieldKey,
 } from '../src/constants'
 import { stitchAnchorValues } from '../src/twinMath'
-import { normalizeTwinConfig } from '../src/types'
+import { normalizeTwinConfig } from '../src/normalize'
 
 function specOf(key: string): BindingSpec {
   const found = TWIN_VIEW_BINDINGS.find((spec) => spec.key === key)

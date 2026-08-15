@@ -287,9 +287,7 @@ async def _resolve(
             instance_id=instance_id, node_ids=node_ids
         )
     except OpcuaCallFailed as error:
-        raise OpcuaUnavailable(
-            f"校验点位时{error}，请稍后重试"
-        ) from error
+        raise OpcuaUnavailable(f"校验点位时{error}，请稍后重试") from error
     return {item.id: item for item in resolved}
 
 

@@ -86,7 +86,7 @@ export function applyPartVisibility(
 ): void {
   for (const part of parts) {
     for (const object of objectsOfNames(index, part.nodes)) {
-      object.visible = part.visible
+      object.visible = part.visibility.visible
     }
   }
 }

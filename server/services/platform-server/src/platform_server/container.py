@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from lib.cache import Cache, PubSub
 from lib.db import Database, PoolProfile, ReadOnlySqlSource, SourceProfile
+from lib.objectstore import ObjectStore, create_object_store
 from platform_server.apps.collect.crud import HistorySource
 from platform_server.apps.collect.services import (
     CommandBus,
@@ -69,6 +70,7 @@ class Container:
     ac_publish_lease: Lease
     ac_daily_lease: Lease
     nodes: NodeWriter
+    object_store: ObjectStore
 
 
 def build_container(settings: Settings) -> Container:
@@ -113,6 +115,8 @@ def build_container(settings: Settings) -> Container:
         ac_publish_lease=_build_lease(settings, AC_PUBLISH_LEASE_KEY),
         ac_daily_lease=_build_lease(settings, AC_DAILY_LEASE_KEY),
         nodes=_build_nodes(settings),
+        # ⚠ 构造不连网：桶不存在要到第一次真正读写时才报，不在启动期误判
+        object_store=create_object_store(settings),
     )
 
 

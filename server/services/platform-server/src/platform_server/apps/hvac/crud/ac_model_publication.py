@@ -98,9 +98,7 @@ class AcModelSetBindingCrud(CrudBase[AcModelSetBinding]):
         )
         return list(result.scalars().all())
 
-    async def clear(
-        self, session: AsyncSession, model_id: uuid.UUID
-    ) -> None:
+    async def clear(self, session: AsyncSession, model_id: uuid.UUID) -> None:
         """删光一个模型的组合绑定。
 
         ⚠ 改实例之前必须先调它：复合外键指着「模型 + 实例」，实例先变会让

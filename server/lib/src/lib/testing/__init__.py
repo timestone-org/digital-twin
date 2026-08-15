@@ -5,5 +5,11 @@
 
 from lib.testing.clock import FrozenClock
 from lib.testing.fake_cache import InMemoryCache, UnavailableCache
+from lib.testing.fake_objectstore import FakeObjectStore
 
-__all__ = ["FrozenClock", "InMemoryCache", "UnavailableCache"]
+__all__ = [
+    "FakeObjectStore",
+    "FrozenClock",
+    "InMemoryCache",
+    "UnavailableCache",
+]
