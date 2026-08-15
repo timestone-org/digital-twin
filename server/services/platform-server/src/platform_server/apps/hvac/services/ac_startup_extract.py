@@ -45,7 +45,7 @@ from platform_server.apps.hvac.services.ac_startup_rules import (
     extract_episodes,
 )
 from platform_server.apps.hvac.services.ac_startup_shards import (
-    ShardRange,
+    ExtractRange,
     shard_range,
 )
 from platform_server.apps.hvac.startups import (
@@ -119,7 +119,9 @@ async def run_shard(
         window_end=batch.window_end,
         rules=context.rules,
     )
-    episodes = await _extract(session, context, batch=batch, window=window)
+    episodes = await extract_window(
+        session, context, room_id=batch.room_id, window=window
+    )
     await ac_startup_episode_crud.upsert_many(
         session,
         [_to_row(batch, episode) for episode in episodes],
@@ -151,18 +153,21 @@ async def _skip(
     return ShardRun(outcome=SHARD_RUN_SKIPPED, reason=reason)
 
 
-async def _extract(
+async def extract_window(
     session: AsyncSession,
     context: ExtractionContext,
     *,
-    batch: AcStartupBatch,
-    window: ShardRange,
+    room_id: uuid.UUID,
+    window: ExtractRange,
 ) -> list[Episode]:
-    """把一片的取数区间跑成事件，并只留归本片写的那些。
+    """把一个取数区间跑成事件，并只留归这个区间写的那些。
 
-    Args: session, context, batch, window。
+    ⚠ 抽取的核心只有这一份：月分片与每日增量共用它，两边各写一份的话，
+    「向两侧越界取数、按起始时刻归属」这条口径迟早只在一边成立。
+
+    Args: session, context, room_id, window。
     """
-    units = await load_bound_units(session, batch.room_id)
+    units = await load_bound_units(session, room_id)
     if not units:
         return []
     rows = {

@@ -11,6 +11,12 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from lib.logging import configure_logging, get_logger
+from platform_server.apps.hvac.services.ac_daily_worker import (
+    DailyConsumer,
+    DailyConsumerOptions,
+    DailyScheduler,
+    SchedulerOptions,
+)
 from platform_server.apps.hvac.services.ac_model_worker import (
     TrainerOptions,
     TrainerPool,
@@ -75,14 +81,7 @@ def build_consumer(container: Container) -> ShardConsumer:
     return ShardConsumer(
         database=container.database,
         stream=container.stream,
-        context=ExtractionContext(
-            reader=AcSourceReader(
-                source=container.ac_source,
-                timezone=settings.acsource_timezone,
-            ),
-            rules=ExtractionRules(),
-            max_rows=settings.acstartup_max_rows,
-        ),
+        context=_extraction_context(container),
         options=ConsumerOptions(
             target=StreamGroup(
                 stream=settings.acstartup_stream,
@@ -146,6 +145,73 @@ def build_publish_loop(container: Container) -> PublishLoop:
             budget_s=settings.acpublish_budget_s,
             model_timeout_s=settings.acpublish_model_timeout_s,
         ),
+    )
+
+
+def build_daily_scheduler(container: Container) -> DailyScheduler:
+    """按配置装出日增量的调度器。**它只入队，抽取在消费者那边。**
+
+    Args: container。
+    """
+    settings = container.settings
+    return DailyScheduler(
+        database=container.database,
+        stream=container.stream,
+        lease=container.ac_daily_lease,
+        options=SchedulerOptions(
+            target=_daily_target(container),
+            interval_s=settings.acdaily_scheduler_interval_s,
+            timezone=settings.acsource_timezone,
+        ),
+    )
+
+
+def build_daily_consumer(container: Container) -> DailyConsumer:
+    """按配置装出日增量的消费者。
+
+    Args: container。
+    """
+    settings = container.settings
+    return DailyConsumer(
+        database=container.database,
+        stream=container.stream,
+        context=_extraction_context(container),
+        options=DailyConsumerOptions(
+            target=_daily_target(container),
+            prefetch=settings.acdaily_prefetch,
+            block_ms=settings.acdaily_block_ms,
+            claim_idle_ms=settings.acdaily_claim_idle_ms,
+            run_timeout_s=settings.acdaily_timeout_s,
+            timezone=settings.acsource_timezone,
+        ),
+    )
+
+
+def _daily_target(container: Container) -> StreamGroup:
+    """日增量流的消费组坐标。
+
+    Args: container。
+    """
+    settings = container.settings
+    return StreamGroup(
+        stream=settings.acdaily_stream,
+        group=settings.acdaily_group,
+        consumer=settings.app_instance,
+    )
+
+
+def _extraction_context(container: Container) -> ExtractionContext:
+    """抽取要用的协作对象与参数。分片与日增量共用同一份。
+
+    Args: container。
+    """
+    settings = container.settings
+    return ExtractionContext(
+        reader=AcSourceReader(
+            source=container.ac_source, timezone=settings.acsource_timezone
+        ),
+        rules=ExtractionRules(),
+        max_rows=settings.acstartup_max_rows,
     )
 
 
@@ -223,6 +289,7 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
     # 单 worker 进程池：训练一次只跑一个，防止两次训练互相抢核
     pool = TrainerPool()
     publisher = build_publish_loop(container)
+    scheduler = build_daily_scheduler(container)
     try:
         await run_until_stopped(
             WorkerRuntime(
@@ -230,8 +297,10 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
                     build_consumer(container),
                     build_trainer(container, pool=pool),
                     publisher,
+                    scheduler,
+                    build_daily_consumer(container),
                 ),
-                leaseholders=(publisher,),
+                leaseholders=(publisher, scheduler),
                 container=container,
                 wait=wait,
             ),

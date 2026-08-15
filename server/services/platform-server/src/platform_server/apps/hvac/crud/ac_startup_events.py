@@ -15,6 +15,7 @@ from platform_server.apps.hvac.models import (
     AcStartupEpisode,
     AcStartupExclusion,
 )
+from platform_server.apps.hvac.schemas import TimeWindow
 from platform_server.apps.hvac.startups import OUTCOME_USABLE
 
 
@@ -65,6 +66,54 @@ class AcStartupEpisodeCrud(CrudBase[AcStartupEpisode]):
                 },
             )
         )
+
+    async def replace_window(
+        self,
+        session: AsyncSession,
+        *,
+        batch_id: uuid.UUID,
+        window: TimeWindow,
+        episodes: Sequence[AcStartupEpisode],
+    ) -> int:
+        """整窗替换：先删掉这一段里已有的事件，再写这一次算出来的。
+
+        ⚠ 只 upsert 不删是不够的：带着更完整的数据重判一次，某次开机的**起始
+        时刻会平移**（状态机认定的第一帧变了），旧那一行的键还在，于是同一次
+        开机在库里留下两条（docs/AC_PUBLISH_DESIGN.md §6.3）。
+        ⚠ 人工排除挂在 `(room_id, started_at)` 自然键上，不随事件行删除而丢失
+        ——这正是当初把它挂在自然键上的理由。
+
+        Args: session, batch_id, window, episodes。
+        """
+        stale = await session.execute(
+            select(AcStartupEpisode.id).where(
+                AcStartupEpisode.batch_id == batch_id,
+                AcStartupEpisode.started_at >= window.start,
+                AcStartupEpisode.started_at < window.end,
+            )
+        )
+        found = list(stale.scalars().all())
+        await session.execute(
+            delete(AcStartupEpisode).where(AcStartupEpisode.id.in_(found))
+        )
+        await session.flush()
+        session.add_all(episodes)
+        await session.flush()
+        return len(found)
+
+    async def count_by_batch(
+        self, session: AsyncSession, batch_id: uuid.UUID
+    ) -> int:
+        """一个批次里的事件总数。
+
+        Args: session, batch_id。
+        """
+        result = await session.execute(
+            select(func.count())
+            .select_from(AcStartupEpisode)
+            .where(AcStartupEpisode.batch_id == batch_id)
+        )
+        return int(result.scalar_one())
 
     async def list_by_batch(
         self, session: AsyncSession, batch_id: uuid.UUID
