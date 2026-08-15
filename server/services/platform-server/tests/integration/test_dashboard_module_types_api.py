@@ -48,7 +48,14 @@ async def test_a_single_module_carries_its_config_and_slots(
         "min_width": 320,
         "min_height": 240,
     }
-    assert [spec["key"] for spec in module["bindings"]] == ["anchorValues"]
+    # 逐字列全：槽多一个少一个都得在这里改，免得清单悄悄漂了没人知道
+    assert [spec["key"] for spec in module["bindings"]] == [
+        "anchorValues",
+        "panelValues",
+        "arrowValues",
+        "flowValues",
+        "hierValues",
+    ]
 
 
 async def test_a_conditional_config_field_keeps_its_wire_name(

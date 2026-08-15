@@ -38,6 +38,7 @@ def test_slots_split_scalar_and_array_entries() -> None:
         "panelValues": frozenset({"value"}),
         "arrowValues": frozenset({"value"}),
         "flowValues": frozenset({"intensity", "active"}),
+        "hierValues": frozenset({"value"}),
     }
 
 
