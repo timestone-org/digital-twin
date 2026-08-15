@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from lib.cache import Cache, PubSub
 from lib.db import Database, PoolProfile, ReadOnlySqlSource, SourceProfile
+from lib.objectstore import ObjectStore, create_object_store
 from platform_server.apps.collect.crud import HistorySource
 from platform_server.apps.collect.services import (
     CommandBus,
@@ -60,6 +61,7 @@ class Container:
     viewer_database: Database
     realtime: RealtimeClient
     lease: Lease
+    object_store: ObjectStore
 
 
 def build_container(settings: Settings) -> Container:
@@ -101,6 +103,8 @@ def build_container(settings: Settings) -> Container:
         viewer_database=viewer_database,
         realtime=_build_realtime(settings),
         lease=_build_lease(settings),
+        # ⚠ 构造不连网：桶不存在要到第一次真正读写时才报，不在启动期误判
+        object_store=create_object_store(settings),
     )
 
 

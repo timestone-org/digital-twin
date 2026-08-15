@@ -16,13 +16,27 @@ export const TWIN_CONFIG_VERSION = 1
 
 /** 锚点读数的数组绑定槽键。 */
 export const TWIN_ANCHOR_BINDING_KEY = 'anchorValues'
+/** 信息牌字段读数的数组绑定槽键。 */
+export const TWIN_PANEL_BINDING_KEY = 'panelValues'
+/** 箭头读数的数组绑定槽键。 */
+export const TWIN_ARROW_BINDING_KEY = 'arrowValues'
+/** 能量流读数的数组绑定槽键。 */
+export const TWIN_FLOW_BINDING_KEY = 'flowValues'
 
-/** 锚点行的子槽。 */
-export const TWIN_ANCHOR_ROW_SLOTS = ['value'] as const
-export type TwinAnchorRowSlot = (typeof TWIN_ANCHOR_ROW_SLOTS)[number]
+/** 只有一个数值的那三类元素共用这一份子槽。 */
+export const TWIN_VALUE_ROW_SLOTS = ['value'] as const
+export type TwinValueRowSlot = (typeof TWIN_VALUE_ROW_SLOTS)[number]
+
+/** 能量流行的子槽：强度驱动粒子，激活决定流不流。 */
+export const TWIN_FLOW_ROW_SLOTS = ['intensity', 'active'] as const
+export type TwinFlowRowSlot = (typeof TWIN_FLOW_ROW_SLOTS)[number]
 
 /** 任意数组行子槽，缝合读值按它取。 */
-export type TwinRowSlot = TwinAnchorRowSlot
+export type TwinRowSlot = TwinValueRowSlot | TwinFlowRowSlot
+
+/** 锚点行的子槽（历史名字，与 `TWIN_VALUE_ROW_SLOTS` 同一份）。 */
+export const TWIN_ANCHOR_ROW_SLOTS = TWIN_VALUE_ROW_SLOTS
+export type TwinAnchorRowSlot = TwinValueRowSlot
 
 /**
  * 数组绑定第 index 行、第 sub 个子槽的 fieldKey。
@@ -45,10 +59,29 @@ export function anchorRowFieldKey(index: number): string {
   return arrayRowFieldKey(TWIN_ANCHOR_BINDING_KEY, index, 'value')
 }
 
+/** 扁平化后第 index 个信息牌字段的 fieldKey。 */
+export function panelRowFieldKey(index: number): string {
+  return arrayRowFieldKey(TWIN_PANEL_BINDING_KEY, index, 'value')
+}
+
+/** 第 index 个箭头读数的 fieldKey。 */
+export function arrowRowFieldKey(index: number): string {
+  return arrayRowFieldKey(TWIN_ARROW_BINDING_KEY, index, 'value')
+}
+
+/** 第 index 条能量流某个子槽的 fieldKey。 */
+export function flowRowFieldKey(index: number, sub: TwinFlowRowSlot): string {
+  return arrayRowFieldKey(TWIN_FLOW_BINDING_KEY, index, sub)
+}
+
 /**
  * twin-view 模块声明的绑定槽。
  * ⚠ 模块 manifest 直接摊开它，不许再抄一份键名：槽键在清单与缝合两处各写一遍时，
  * 拼错的那一份既不报错也永远取不到值。
+ *
+ * ⚠ **只登记渲染层真正消费的槽**。信息牌 / 箭头 / 能量流的键与缝合函数上面都已
+ * 备好，但渲染层还没有它们的图元——现在就摆出槽位，用户绑完点位看到的是
+ * 「绑了没反应」，那比缺一个功能更难查。渲染层落地时连同这里一起加。
  */
 export const TWIN_VIEW_BINDINGS: readonly BindingSpec[] = [
   {

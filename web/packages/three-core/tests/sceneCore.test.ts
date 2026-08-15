@@ -130,12 +130,9 @@ describe('模型摆放与取景', () => {
     const root = new THREE.Group()
 
     applyModelPlacement(root, {
-      asset: 'asset:a',
       scale: 2,
       position: [1, 2, 3],
       rotation: [90, 0, 180],
-      autoRotate: false,
-      background: '',
     })
 
     expect(root.scale.x).toBe(2)

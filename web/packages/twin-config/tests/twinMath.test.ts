@@ -10,7 +10,7 @@ import {
   formatAnchorText,
   stitchAnchorValues,
 } from '../src/twinMath'
-import { normalizeTwinConfig } from '../src/types'
+import { normalizeTwinConfig } from '../src/normalize'
 import type { TwinAnchor } from '../src/types'
 
 const CONFIG = normalizeTwinConfig({

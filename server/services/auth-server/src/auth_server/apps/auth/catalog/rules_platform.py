@@ -7,6 +7,8 @@
 from auth_server.apps.auth.catalog.permissions import (
     AC_MANAGE,
     AC_VIEW,
+    ASSET_MANAGE,
+    ASSET_VIEW,
     COLLECT_MANAGE,
     COLLECT_OPERATE,
     COLLECT_VIEW,
@@ -381,11 +383,40 @@ _COLLECT_RULES: tuple[RouteRuleSpec, ...] = (
     ),
 )
 
+# 素材库。阶梯：921 写兜底 → 922 读。两条都必须压过 900 那五条按方法兜底的
+# 规则——`{_PLATFORM}/*` 的 `*` **跨斜杠**，不压过去就成了拿 `ac:manage` 删素材。
+# ⚠ 直传凭证与 finalize 都是 POST，落在 921 的写兜底里，正是它们要的 manage：
+# 单列一条动作规则反而会在将来新增动作端点时漏掉那一个
+_ASSET_RULES: tuple[RouteRuleSpec, ...] = (
+    RouteRuleSpec(
+        f"{_PLATFORM}/assets*",
+        "*",
+        codes=(ASSET_MANAGE,),
+        priority=921,
+        description=(
+            "素材面写操作的兜底：申请直传凭证、确认上传、删除。"
+            "⚠ 用 `*` 方法而不是逐个方法列，是为了让将来新增的方法也落在素材"
+            "自己的码上"
+        ),
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/assets*",
+        "GET",
+        codes=(ASSET_VIEW,),
+        priority=922,
+        description=(
+            "素材列表、详情与类型目录。必须压过上面那条写兜底——那条用的是 "
+            "`*` 方法，会把 GET 一并收进 manage，只读用户于是连素材名都看不到"
+        ),
+    ),
+)
+
 PLATFORM_RULES: tuple[RouteRuleSpec, ...] = (
     *_PROBE_RULES,
     *_HVAC_RULES,
     *_DASHBOARD_RULES,
     *_RUNTIME_PARAM_RULES,
     *_COLLECT_RULES,
+    *_ASSET_RULES,
     *_PUBLIC_RULES,
 )

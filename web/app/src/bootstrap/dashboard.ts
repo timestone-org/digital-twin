@@ -6,6 +6,8 @@
  * （docs/DASHBOARD_DESIGN.md §7）。
  * ⚠ 模块注册只做一次：`registerBuiltinModules` 里的 glob 是 eager 的，
  * 重复调用不会出错但会把同一份清单反复覆盖，告警槽里就多出一串噪音。
+ * ⚠ 模型地址解析必须走深路径 `@dt/three-core/host`：桶文件第一行就静态依赖
+ * 整个 three，从桶进来会把 three 拖进首屏 chunk（startup-graph 契约测试守着）。
  */
 import type { HistoryQuery, HistoryResult } from '@dt/contracts'
 import {
@@ -16,6 +18,10 @@ import {
   registerProvider,
 } from '@dt/datasources'
 import { registerBuiltinModules } from '@dt/modules'
+import { configureTwinModelHost } from '@dt/three-core/host'
+import { assetUrl } from '@dt/contracts'
+
+import { ASSET_BASE_URL } from '@/config/app'
 
 import { installConfigControls } from '@/features/dashboard/configControls'
 import type { SubscribePoints } from '@/runtime/pointStream'
@@ -44,6 +50,18 @@ export function installDashboardModules(): void {
   modulesInstalled = true
   registerBuiltinModules()
   installConfigControls()
+  installTwinModelHost()
+}
+
+/**
+ * 告诉 3D 宿主怎么把 `asset:<uuid>` 变成一个能 fetch 的地址。
+ * ⚠ 不装它的话 `resolveModelUrl` 恒回空串——孪生模块**永远加载不出模型**，
+ * 而画布上显示的是一句「模型地址解析失败」，看着像素材坏了。
+ */
+function installTwinModelHost(): void {
+  configureTwinModelHost({
+    resolveModelUrl: (ref) => assetUrl(ASSET_BASE_URL, 'model', ref),
+  })
 }
 
 /**

@@ -11,7 +11,7 @@ from pydantic import SecretStr
 
 from lib.cache import Cache, PubSub
 from lib.db import Database, ReadOnlySqlSource
-from lib.testing import InMemoryCache
+from lib.testing import FakeObjectStore, InMemoryCache
 from platform_server.apps.collect.services import CommandBus, PlanNotifier
 from platform_server.apps.collect.services.command_transport import (
     RedisCommandTransport,
@@ -109,6 +109,10 @@ def build_settings(
         redis_host=PLACEHOLDER,
         edge_signing_secret=SecretStr("x" * 32),
         edge_service_key=SecretStr("y" * 32),
+        objectstore_endpoint="http://placeholder:9000",
+        objectstore_bucket=PLACEHOLDER,
+        objectstore_access_key=SecretStr(PLACEHOLDER),
+        objectstore_secret_key=SecretStr("z" * 12),
     )
 
 
@@ -154,4 +158,5 @@ def build_container(ledger: list[str], *, settings: Settings) -> Container:
             timeout_s=1.0,
         ),
         lease=cast(Lease, LedgerLease(ledger=ledger)),
+        object_store=FakeObjectStore(),
     )

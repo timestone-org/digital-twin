@@ -33,6 +33,10 @@ def base_fields() -> dict[str, Any]:
         "redis_host": PLACEHOLDER,
         "edge_signing_secret": SecretStr("x" * 32),
         "edge_service_key": SecretStr("y" * 32),
+        "objectstore_endpoint": "http://placeholder:9000",
+        "objectstore_bucket": PLACEHOLDER,
+        "objectstore_access_key": SecretStr(PLACEHOLDER),
+        "objectstore_secret_key": SecretStr("z" * 12),
     }
 
 

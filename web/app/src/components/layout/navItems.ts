@@ -23,6 +23,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // 大屏没有独立入口：项目与大屏都在工作台里管，再挂一项「大屏」会让
   // 「新建大屏」在两个地方各有一个入口，且两处的项目上下文对不上
   { key: 'home', label: '工作台', icon: 'layout-grid', to: '/' },
+  // 素材是跨大屏的公共资源，不属于系统管理那一组：那一组管的是账号与权限
+  {
+    key: 'assets',
+    label: '素材库',
+    icon: 'image',
+    to: '/assets',
+    permission: [PERMISSION_CODES.assetView],
+  },
   {
     key: 'hvac',
     label: '空调管理',

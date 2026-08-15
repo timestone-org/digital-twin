@@ -16,6 +16,9 @@ dev = [
     "ruff>=0.8",
     "pyright>=1.1.390",
     "diff-cover>=9.2",
+    # 仅类型检查期：boto3 不带类型，缺了它 pyright strict 在 S3 客户端上
+    # 看到的全是 Unknown
+    "boto3-stubs[s3]>=1.35",
 ]
 
 [tool.black]

@@ -35,6 +35,10 @@ def _export_settings() -> Settings:
         redis_host=_PLACEHOLDER,
         edge_signing_secret=_PLACEHOLDER_SECRET,
         edge_service_key=_PLACEHOLDER_SECRET,
+        objectstore_endpoint="http://openapi-export:9000",
+        objectstore_bucket=_PLACEHOLDER,
+        objectstore_access_key=SecretStr(_PLACEHOLDER),
+        objectstore_secret_key=_PLACEHOLDER_SECRET,
     )
 
 

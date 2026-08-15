@@ -30,6 +30,7 @@ export {
   resizeScene,
 } from './sceneCore'
 export type {
+  ModelPlacement,
   SceneCore,
   SceneCoreOptions,
   SceneRenderer,

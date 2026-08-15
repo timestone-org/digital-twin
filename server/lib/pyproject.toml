@@ -17,6 +17,8 @@ db = [
 ]
 mssql = ["pymssql>=2.3.13"]
 redis = ["redis>=5.2"]
+# S3 兼容对象存储。boto3 是协议的参考实现，自建服务端都对着它测
+s3 = ["boto3>=1.35"]
 web = ["fastapi>=0.115", "uvicorn[standard]>=0.32"]
 auth = ["pyjwt>=2.10", "argon2-cffi>=23.1"]
 
