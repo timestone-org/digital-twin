@@ -2,6 +2,8 @@
  * @fileoverview DtSegmented 的行为契约：选中态同时给 aria-pressed（只靠颜色
  * 对读屏与色觉障碍都不成立）、iconOnly 必须留可访问名称、点击抛值不自己改。
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { DtSegmentedOption } from '@dt/contracts'
@@ -76,5 +78,42 @@ describe('撑满与选中态的标记', () => {
       .map((item) => item.classes().includes('is-active'))
 
     expect(active).toEqual([false, true])
+  })
+})
+
+describe('两档长相', () => {
+  it('缺省是 control：它是控件，与旁边的按钮下拉同属一排', () => {
+    expect(render().classes()).toContain('dt-segmented--control')
+  })
+
+  it('给了 tabs 就换成页签那一档', () => {
+    const wrapper = mount(DtSegmented, {
+      props: { modelValue: 'table', options: OPTIONS, variant: 'tabs' },
+    })
+    expect(wrapper.classes()).toContain('dt-segmented--tabs')
+    expect(wrapper.classes()).not.toContain('dt-segmented--control')
+  })
+
+  it('⚠ tabs 的量值必须与 AppTabNav 逐一对上', () => {
+    // 两处是刻意的重复：AppTabNav 是应用壳里的 RouterLink 导航、用 Tailwind，
+    // 本组件在 @dt/ui 里一律 scoped SCSS，跨包共用不了同一份声明。改一边没改
+    // 另一边的表现是「系统管理的页签与页内页签长得不一样」，而两边单看都对。
+    // ⚠ 用 process.cwd()（= web/）而不是 import.meta.url：happy-dom 下
+    // 后者不是 file URL，readFileSync 会当场炸
+    const read = (part: string): string =>
+      readFileSync(join(process.cwd(), part), 'utf8')
+    const style = read('packages/ui/src/components/DtSegmented/DtSegmented.vue')
+    const nav = read('app/src/components/layout/AppTabNav.vue')
+    // gap-1=4px / pb-2=8px / py-1.5=6px / px-3=12px / text-[13px]
+    expect(style).toContain('$tab-gap: 4px')
+    expect(style).toContain('$tab-rule-gap: 8px')
+    expect(style).toContain('$tab-py: 6px')
+    expect(style).toContain('$tab-px: 12px')
+    expect(style).toContain('$tab-fs: 13px')
+    expect(nav).toContain('gap-1 border-b border-border-subtle pb-2')
+    expect(nav).toContain('rounded-md px-3 py-1.5 text-[13px]')
+    // 选中态：一成透明度的强调底 + 强调字色，两边同一套
+    expect(style).toContain('background: rgba(var(--accent-primary-rgb), 0.1)')
+    expect(nav).toContain('bg-accent-primary/10 text-accent-on-surface')
   })
 })

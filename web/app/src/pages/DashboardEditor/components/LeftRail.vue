@@ -43,6 +43,7 @@ const tab = ref('library')
       :options="TABS"
       size="sm"
       block
+      variant="tabs"
       aria-label="左栏分页"
     />
     <ModuleLibrary

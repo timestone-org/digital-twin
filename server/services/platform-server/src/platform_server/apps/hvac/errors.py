@@ -176,9 +176,42 @@ class ModelArtifactUnusable(AppError):
     http_status = 409
 
 
+class PublicationNotFound(AppError):
+    """这个模型还没有配过预测下发。"""
+
+    code = 41625
+    http_status = 404
+
+
+class PublicationBindingInvalid(AppError):
+    """点位绑定不合法：组合不在服务组合里、节点已不存在，或数据类型不对。"""
+
+    code = 41626
+    http_status = 422
+
+
+class PublicationNodeTaken(AppError):
+    """这个点位已经被别的模型绑走了。
+
+    ⚠ 不许两个模型写同一个点位：上位机读到的值会在两者之间反复横跳，
+    而两边的日志都报成功。
+    """
+
+    code = 41627
+    http_status = 409
+
+
 class SourceUnavailable(AppError):
     """外部数据源不可用。⚠ 不返回陈旧数据兜底——查不到就明确说查不到。"""
 
     code = 51601
+    http_status = 503
+    is_retryable = True
+
+
+class OpcuaUnavailable(AppError):
+    """opcua-server 不可达，这一次绑定校验或下发做不了。"""
+
+    code = 51602
     http_status = 503
     is_retryable = True

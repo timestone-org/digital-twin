@@ -41,6 +41,15 @@ from platform_server.apps.hvac.schemas.ac_model import (
     RecommendIn,
     RecommendOut,
 )
+from platform_server.apps.hvac.schemas.ac_publication import (
+    MAX_SET_BINDINGS,
+    PublicationOut,
+    PublicationPutIn,
+    PublishItemOut,
+    PublishOut,
+    SetBindingIn,
+    SetBindingOut,
+)
 from platform_server.apps.hvac.schemas.ac_startup import (
     MAX_EXCLUSION_REASON,
     MAX_FILTER_SERIALS,
@@ -90,6 +99,7 @@ __all__ = [
     "MAX_METRIC_LIMITS",
     "MAX_RELOCATE_BATCH",
     "MAX_SERIES_POINTS",
+    "MAX_SET_BINDINGS",
     "MIN_SERIES_POINTS",
     "AcDataBindingOut",
     "AcDataBindingPutIn",
@@ -125,6 +135,10 @@ __all__ = [
     "PredictIn",
     "PredictOut",
     "PredictReadingsIn",
+    "PublicationOut",
+    "PublicationPutIn",
+    "PublishItemOut",
+    "PublishOut",
     "RawSampleOut",
     "RawSeriesOut",
     "RecommendEntryOut",
@@ -136,6 +150,8 @@ __all__ = [
     "RoomUpdateIn",
     "SeriesOptions",
     "SeriesPointOut",
+    "SetBindingIn",
+    "SetBindingOut",
     "SourceObjectOut",
     "SourceObjectsOut",
     "SourceRangeOut",

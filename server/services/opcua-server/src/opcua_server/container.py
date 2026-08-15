@@ -13,6 +13,7 @@ from opcua_server.apps.instance.runtime.valuewatch import OnValueChange
 from opcua_server.apps.instance.services import (
     IdempotencyStore,
     InstanceService,
+    NodeBatchService,
     NodeService,
     RealtimeClient,
     SecurityService,
@@ -32,6 +33,7 @@ class Container:
     supervisor: InstanceSupervisor
     instances: InstanceService
     nodes: NodeService
+    node_batch: NodeBatchService
     security: SecurityService
     idempotency: IdempotencyStore
     realtime: RealtimeClient
@@ -114,6 +116,7 @@ def build_container(settings: Settings) -> Container:
             realtime=realtime,
         ),
         nodes=NodeService(database=database, supervisor=supervisor),
+        node_batch=NodeBatchService(database=database, supervisor=supervisor),
         security=SecurityService(
             database=database,
             supervisor=supervisor,

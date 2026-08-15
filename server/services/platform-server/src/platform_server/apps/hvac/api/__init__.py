@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from platform_server.apps.hvac.api import (
     ac_data,
     ac_models,
+    ac_publications,
     ac_startups,
     ac_units,
     rooms,
@@ -18,6 +19,7 @@ ROUTERS: tuple[APIRouter, ...] = (
     ac_data.router,
     ac_startups.router,
     ac_models.router,
+    ac_publications.router,
 )
 
 __all__ = ["ROUTERS"]

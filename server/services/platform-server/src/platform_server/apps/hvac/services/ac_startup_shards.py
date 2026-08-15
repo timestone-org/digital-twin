@@ -15,25 +15,31 @@ _MONTHS_IN_YEAR = 12
 
 
 @dataclass(frozen=True)
-class ShardRange:
-    """一片的两个区间。
+class ExtractRange:
+    """一次抽取的两个区间。
 
     ⚠ **归属区间决定写哪些事件，取数区间决定读哪些数据，两者不是同一个。**
     写按起始时刻归属，读必须向两侧越界：向前够判冷启动、向后够判达标上限。
     """
 
-    month: str
     write_start: datetime
     write_end: datetime
     read_start: datetime
     read_end: datetime
 
     def owns(self, started_at: datetime) -> bool:
-        """这次开机的起始时刻归不归本片写。左闭右开。
+        """这次开机的起始时刻归不归本次写。左闭右开。
 
         Args: started_at。
         """
         return self.write_start <= started_at < self.write_end
+
+
+@dataclass(frozen=True)
+class ShardRange(ExtractRange):
+    """一片的区间，外加它是哪个月。"""
+
+    month: str
 
 
 def month_key(moment: datetime) -> str:
@@ -105,4 +111,27 @@ def shard_range(
         write_end=write_end,
         read_start=write_start - timedelta(minutes=lookback),
         read_end=write_end + timedelta(minutes=rules.compliance_cap_minutes),
+    )
+
+
+def daily_range(
+    day_start: datetime, day_end: datetime, *, rules: ExtractionRules
+) -> ExtractRange:
+    """一天增量的归属区间与取数区间。
+
+    ⚠ **归属区间的左端要往回退一个达标上限**，这是这段代码里最关键的一行。
+    00:00 触发时，当天最后 100 分钟里开的机还没跑完——判达标要向后读 100 分钟，
+    而那 100 分钟的数据尚未产生。不往回退的话，每天 22:20 之后的开机会被永久
+    判成「没达标」并就此定格。往回退一个达标上限，昨夜那一段就在今晚被带着
+    完整数据**重判一次**，结论覆盖旧的（docs/AC_PUBLISH_DESIGN.md §6.2）。
+
+    Args: day_start, day_end, rules。
+    """
+    lookback = max(rules.cold_off_minutes, rules.idle_lookback_minutes)
+    write_start = day_start - timedelta(minutes=rules.compliance_cap_minutes)
+    return ExtractRange(
+        write_start=write_start,
+        write_end=day_end,
+        read_start=write_start - timedelta(minutes=lookback),
+        read_end=day_end + timedelta(minutes=rules.compliance_cap_minutes),
     )

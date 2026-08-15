@@ -2335,6 +2335,96 @@
         "title": "ApiResponse[PublicDashboardOut]",
         "type": "object"
       },
+      "ApiResponse_PublicationOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicationOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[PublicationOut]",
+        "type": "object"
+      },
+      "ApiResponse_PublishOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublishOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[PublishOut]",
+        "type": "object"
+      },
       "ApiResponse_RawSeriesOut_": {
         "properties": {
           "code": {
@@ -7659,6 +7749,272 @@
         "title": "PublicNodeOut",
         "type": "object"
       },
+      "PublicationOut": {
+        "description": "一个模型的发布配置与它此刻的心跳。",
+        "properties": {
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "is_fully_bound": {
+            "title": "Is Fully Bound",
+            "type": "boolean"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Published At"
+          },
+          "last_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Status"
+          },
+          "model_id": {
+            "format": "uuid",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "opcua_instance_id": {
+            "format": "uuid",
+            "title": "Opcua Instance Id",
+            "type": "string"
+          },
+          "recommendation_identifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation Identifier"
+          },
+          "recommendation_node_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation Node Id"
+          },
+          "set_bindings": {
+            "items": {
+              "$ref": "#/components/schemas/SetBindingOut"
+            },
+            "title": "Set Bindings",
+            "type": "array"
+          },
+          "unbound_set_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unbound Set Keys",
+            "type": "array"
+          }
+        },
+        "required": [
+          "model_id",
+          "opcua_instance_id",
+          "recommendation_node_id",
+          "recommendation_identifier",
+          "is_enabled",
+          "is_fully_bound",
+          "unbound_set_keys",
+          "set_bindings",
+          "last_published_at",
+          "last_status",
+          "last_error"
+        ],
+        "title": "PublicationOut",
+        "type": "object"
+      },
+      "PublicationPutIn": {
+        "additionalProperties": false,
+        "description": "整份保存发布配置。\n\n⚠ 整份保存不是补丁：绑定是一组必须同时成立的东西——换了实例，底下每一个\n节点 id 都得跟着换，逐字段 PATCH 会让中间态出现「节点属于旧实例」。",
+        "properties": {
+          "is_enabled": {
+            "default": false,
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "opcua_instance_id": {
+            "format": "uuid",
+            "title": "Opcua Instance Id",
+            "type": "string"
+          },
+          "recommendation_node_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation Node Id"
+          },
+          "set_bindings": {
+            "items": {
+              "$ref": "#/components/schemas/SetBindingIn"
+            },
+            "maxItems": 64,
+            "title": "Set Bindings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "opcua_instance_id"
+        ],
+        "title": "PublicationPutIn",
+        "type": "object"
+      },
+      "PublishItemOut": {
+        "description": "一次下发里一个点位的去向。",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "identifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identifier"
+          },
+          "is_written": {
+            "title": "Is Written",
+            "type": "boolean"
+          },
+          "set_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Set Key"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "set_key",
+          "identifier",
+          "value",
+          "is_written",
+          "error"
+        ],
+        "title": "PublishItemOut",
+        "type": "object"
+      },
+      "PublishOut": {
+        "description": "一次下发的结果。\n\n⚠ `status` 三档分开：`degraded` 是「写进去了但写的是哨兵值」，\n`failed` 是「一个字节都没写进去」——后者上位机读到的还是旧值。",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PublishItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "model_id": {
+            "format": "uuid",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "written_count": {
+            "title": "Written Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model_id",
+          "status",
+          "published_at",
+          "written_count",
+          "items",
+          "error"
+        ],
+        "title": "PublishOut",
+        "type": "object"
+      },
       "RawSampleOut": {
         "description": "原始数据表格里的一行：一个时刻上的 19 个测点原值。\n\n⚠ 测点值走 JSON number 而非字符串（api-contract §6：传感器精度本身低于\nfloat64），且 `null` 一律保持 `null`——把它折成 0 会让数据断档被读成一次\n真实的停机。字段名必须与目录逐一对应，由契约测试锁死。",
         "properties": {
@@ -8423,6 +8779,59 @@
           "values"
         ],
         "title": "SeriesPointOut",
+        "type": "object"
+      },
+      "SetBindingIn": {
+        "additionalProperties": false,
+        "description": "一个服务组合绑一个数字点位。",
+        "properties": {
+          "node_id": {
+            "format": "uuid",
+            "title": "Node Id",
+            "type": "string"
+          },
+          "set_key": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Set Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "set_key",
+          "node_id"
+        ],
+        "title": "SetBindingIn",
+        "type": "object"
+      },
+      "SetBindingOut": {
+        "description": "一个组合绑定的对外形态。\n\n⚠ `is_serving` 为假表示模型改过服务组合、这条绑定落空了。绑定**留着不删**\n（改回去时还在），但必须在页面上说出来。",
+        "properties": {
+          "identifier": {
+            "title": "Identifier",
+            "type": "string"
+          },
+          "is_serving": {
+            "title": "Is Serving",
+            "type": "boolean"
+          },
+          "node_id": {
+            "format": "uuid",
+            "title": "Node Id",
+            "type": "string"
+          },
+          "set_key": {
+            "title": "Set Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "set_key",
+          "node_id",
+          "identifier",
+          "is_serving"
+        ],
+        "title": "SetBindingOut",
         "type": "object"
       },
       "SourceCreateIn": {
@@ -10176,6 +10585,181 @@
         "summary": "折外预测与实际的逐条对比",
         "tags": [
           "ac-models"
+        ]
+      }
+    },
+    "/api/v1/platform/ac-models/{model_id}/publication": {
+      "delete": {
+        "description": "解绑。没配过也算成功——DELETE 必须幂等。\n\n⚠ 只删配置，**不动点位上此刻的值**：现场读到的还是最后一次写进去的那个数。\n\nArgs: model_id, session, _manager。",
+        "operationId": "delete_publication_api_v1_platform_ac_models__model_id__publication_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Model Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "解绑预测下发",
+        "tags": [
+          "ac-publications"
+        ]
+      },
+      "get": {
+        "description": "这个模型往哪台实例、哪些点位下发，以及上一拍的去向。\n\nArgs: model_id, session, _viewer。",
+        "operationId": "read_publication_api_v1_platform_ac_models__model_id__publication_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Model Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PublicationOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "预测下发配置",
+        "tags": [
+          "ac-publications"
+        ]
+      },
+      "put": {
+        "description": "整份保存。保存前会问一遍 opcua-server：节点还在不在、类型对不对。\n\nArgs: model_id, payload, session, nodes, _manager。",
+        "operationId": "put_publication_api_v1_platform_ac_models__model_id__publication_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Model Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicationPutIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PublicationOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "保存预测下发配置",
+        "tags": [
+          "ac-publications"
+        ]
+      }
+    },
+    "/api/v1/platform/ac-models/{model_id}/publication:publish": {
+      "post": {
+        "description": "按当前实时工况算一次并写进点位。\n\n⚠ 走的是与每分钟那条循环**完全相同**的代码路径，只是不经租约。两条路\n分开写的话，页面上试通了、循环里还是不通。\n\nArgs: model_id, container, reader, nodes, _manager。",
+        "operationId": "publish_now_api_v1_platform_ac_models__model_id__publication_publish_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Model Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PublishOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "立刻下发一次",
+        "tags": [
+          "ac-publications"
         ]
       }
     },

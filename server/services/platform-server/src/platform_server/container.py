@@ -25,6 +25,7 @@ from platform_server.apps.dashboard.services import (
     load_module_catalog,
 )
 from platform_server.lease import Lease, RedisLease
+from platform_server.opcua import NodeWriter, OpcuaClient
 from platform_server.realtime import RealtimeClient
 from platform_server.settings import Settings
 from platform_server.stream import RedisStream
@@ -36,6 +37,9 @@ STREAM_READ_MARGIN_S = 2.0
 # 单活租约的键。⚠ 全系统只有一个大屏发布者，键名写死而不是配置项：让它可配
 # 等于让两份配置各选出一个主，而两个主会对同一个主题各推各的
 PUBLISHER_LEASE_KEY = "platform:publisher:leader"
+# 预测下发与每日增量各自的单活租约键。理由同上：写死不可配
+AC_PUBLISH_LEASE_KEY = "platform:ac-publish:leader"
+AC_DAILY_LEASE_KEY = "platform:ac-startup-daily:leader"
 
 
 @dataclass(frozen=True)
@@ -61,6 +65,11 @@ class Container:
     viewer_database: Database
     realtime: RealtimeClient
     lease: Lease
+    # ⚠ 三把租约互不相干：大屏发布、预测下发、每日增量各自单活。共用一把
+    # 会让「大屏发布器在跑」顺带决定「今晚抽不抽增量」
+    ac_publish_lease: Lease
+    ac_daily_lease: Lease
+    nodes: NodeWriter
     object_store: ObjectStore
 
 
@@ -102,9 +111,24 @@ def build_container(settings: Settings) -> Container:
         ),
         viewer_database=viewer_database,
         realtime=_build_realtime(settings),
-        lease=_build_lease(settings),
+        lease=_build_lease(settings, PUBLISHER_LEASE_KEY),
+        ac_publish_lease=_build_lease(settings, AC_PUBLISH_LEASE_KEY),
+        ac_daily_lease=_build_lease(settings, AC_DAILY_LEASE_KEY),
+        nodes=_build_nodes(settings),
         # ⚠ 构造不连网：桶不存在要到第一次真正读写时才报，不在启动期误判
         object_store=create_object_store(settings),
+    )
+
+
+def _build_nodes(settings: Settings) -> NodeWriter:
+    """打 opcua-server 内部端点的客户端。⚠ 构造不连网。
+
+    Args: settings。
+    """
+    return OpcuaClient(
+        base_url=settings.opcua_base_url,
+        service_key=settings.edge_service_key.get_secret_value(),
+        timeout_s=settings.opcua_timeout_s,
     )
 
 
@@ -120,17 +144,17 @@ def _build_realtime(settings: Settings) -> RealtimeClient:
     )
 
 
-def _build_lease(settings: Settings) -> Lease:
-    """publisher 角色的单活租约。⚠ 构造不连网。
+def _build_lease(settings: Settings, key: str) -> Lease:
+    """一把单活租约。⚠ 构造不连网。
 
-    Args: settings。
+    Args: settings, key。
     """
     return RedisLease(
         url=settings.url(),
-        key=PUBLISHER_LEASE_KEY,
+        key=key,
         # ⚠ 令牌必须每个进程唯一：两个副本同名就会互相续到对方的租约上
         token=settings.app_instance,
-        ttl_s=settings.publish_lease_ttl_s,
+        ttl_s=_ttl_of(settings, key),
         timeout_s=settings.redis_timeout_s,
     )
 
@@ -246,3 +270,18 @@ def _build_stream(settings: Settings) -> RedisStream:
         url=settings.url(),
         timeout_s=max(settings.redis_timeout_s, block_s + STREAM_READ_MARGIN_S),
     )
+
+
+def _ttl_of(settings: Settings, key: str) -> int:
+    """这把租约的存活期。
+
+    ⚠ 三条循环的节奏差着一个量级（大屏一秒一拍、下发一分钟一拍、增量一天
+    一次），共用一个 TTL 会让慢的那条在两拍之间就把租约丢了。
+
+    Args: settings, key。
+    """
+    if key == AC_PUBLISH_LEASE_KEY:
+        return settings.acpublish_lease_ttl_s
+    if key == AC_DAILY_LEASE_KEY:
+        return settings.acdaily_lease_ttl_s
+    return settings.publish_lease_ttl_s

@@ -130,3 +130,32 @@ class Settings(
     # 一次训练的总预算。⚠ 真实房间全史上万条可用事件，18 次拟合在竞争负载下
     # 是分钟级；这条线是硬故障线，穿了按不可重试标失败
     acmodel_train_timeout_s: float = 900.0
+
+    # 预测下发，见 docs/AC_PUBLISH_DESIGN.md §5
+    # opcua-server 的地址。⚠ 直连不经边缘：边缘对 `/internal/` 一律 deny。
+    # ⚠ 端口是 **8008** 不是 8000——8000 是 realtime-hub 的，两个抄串了的表现是
+    # 「校验点位时 opcua-server 不可达」，而两个服务都活得好好的
+    opcua_base_url: str = "http://opcua-server:8008"
+    opcua_timeout_s: float = Field(default=5.0, gt=0)
+    # 一拍多久。⚠ 不做成可配的现场差异——EMS 是逐分钟写入的，调到 5 秒只会
+    # 让同一份数据被反复算，并把外库压垮
+    acpublish_interval_s: float = Field(default=60.0, gt=0)
+    # 一拍的总预算。⚠ 必须小于一拍：跑过头会让下一拍从一开始就迟到，
+    # 而迟到会累积。到点即止，没轮到的模型下一拍再说
+    acpublish_budget_s: float = Field(default=45.0, gt=0)
+    # 单模型一拍的预算，含读 EMS 与写 opcua 两段
+    acpublish_model_timeout_s: float = Field(default=20.0, gt=0)
+    # 单活租约的存活期，续期在每一拍（远快于它）
+    acpublish_lease_ttl_s: int = Field(default=180, ge=LEASE_TTL_FLOOR_S)
+
+    # 开机事件的每日增量，见 docs/AC_PUBLISH_DESIGN.md §6
+    acdaily_stream: str = "platform:ac-startup:daily"
+    acdaily_group: str = "ac-startup-daily-workers"
+    acdaily_block_ms: int = 5000
+    acdaily_claim_idle_ms: int = 300000
+    acdaily_prefetch: int = 1
+    # 一天的窗口比一个月的分片小得多，但仍要大于它内部全部外库查询之和
+    acdaily_timeout_s: float = 300.0
+    # 调度器多久醒一次看「跨天了没有」。⚠ 它只入队不干活：锁内禁长 IO
+    acdaily_scheduler_interval_s: float = Field(default=60.0, gt=0)
+    acdaily_lease_ttl_s: int = Field(default=180, ge=LEASE_TTL_FLOOR_S)

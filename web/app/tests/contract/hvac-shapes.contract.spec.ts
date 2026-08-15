@@ -11,6 +11,9 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type {
   AcModel,
+  AcModelPublication,
+  AcModelPublicationInput,
+  AcModelSetBinding,
   AcUnitLiveReading,
   AcUnitReadingValues,
   RoomLiveReadings,
@@ -19,6 +22,8 @@ import type {
   ModelMetricsBlock,
   ModelPrediction,
   ModelPredictResult,
+  ModelPublishItem,
+  ModelPublishResult,
   ModelRecommendEntry,
   ModelRecommendResult,
   AcDataBinding,
@@ -457,6 +462,51 @@ const SHAPES: Record<string, Record<string, true>> = {
     size: true,
     total: true,
   } satisfies Keys<Page<ModelPrediction>>,
+
+  PublicationOut: {
+    model_id: true,
+    opcua_instance_id: true,
+    recommendation_node_id: true,
+    recommendation_identifier: true,
+    is_enabled: true,
+    is_fully_bound: true,
+    unbound_set_keys: true,
+    set_bindings: true,
+    last_published_at: true,
+    last_status: true,
+    last_error: true,
+  } satisfies Keys<AcModelPublication>,
+
+  SetBindingOut: {
+    set_key: true,
+    node_id: true,
+    identifier: true,
+    is_serving: true,
+  } satisfies Keys<AcModelSetBinding>,
+
+  PublicationPutIn: {
+    opcua_instance_id: true,
+    recommendation_node_id: true,
+    set_bindings: true,
+    is_enabled: true,
+  } satisfies Keys<AcModelPublicationInput>,
+
+  PublishOut: {
+    model_id: true,
+    status: true,
+    published_at: true,
+    written_count: true,
+    items: true,
+    error: true,
+  } satisfies Keys<ModelPublishResult>,
+
+  PublishItemOut: {
+    set_key: true,
+    identifier: true,
+    value: true,
+    is_written: true,
+    error: true,
+  } satisfies Keys<ModelPublishItem>,
 }
 
 describe('@dt/contracts 与 platform openapi.json 的字段一致', () => {

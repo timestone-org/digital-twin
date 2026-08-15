@@ -5,6 +5,7 @@ L2/L3 打真实 Postgres（SQLite 上全绿的迁移可以在生产直接失败�
 下发形状完全一致的签名头——用例因此走的是与生产同一条鉴权路径。
 """
 
+import contextlib
 import os
 import socket
 import uuid
@@ -23,6 +24,7 @@ from unit.collect_fakes import (
     FakeCommandTransport,
     FakeHistorySource,
 )
+from unit.opcua_fakes import FakeNodeWriter
 from unit.source_fakes import FakeAcSource, InMemoryStream, full_shape
 
 from lib.auth import (
@@ -75,7 +77,12 @@ from platform_server.apps.dashboard.services import (
     ValidationContext,
 )
 from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
-from platform_server.apps.hvac.deps import get_ac_source_reader, get_session
+from platform_server.apps.hvac.deps import (
+    get_ac_source_reader,
+    get_node_writer,
+    get_session,
+    get_sessions,
+)
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.apps.runtime_params.deps import (
     get_session as get_runtime_param_session,
@@ -245,6 +252,31 @@ def _session_override(
     return override
 
 
+@dataclass(frozen=True)
+class MakerSessions:
+    """把用例那条回滚事务的会话工厂包成「开短事务」的最小面。
+
+    ⚠ 必须与 HTTP 那侧共用同一条连接：分开连就是两个事务，用例经接口种下的
+    绑定在下发那边根本看不见，而现象是「模型不存在」，看着像业务逻辑写错了。
+    工厂本身用的是 `join_transaction_mode="create_savepoint"`，故这里的提交
+    只落到保存点，外层事务最后整体回滚。
+    """
+
+    maker: async_sessionmaker[AsyncSession]
+
+    @contextlib.asynccontextmanager
+    async def session(self) -> AsyncIterator[AsyncSession]:
+        """开一个落在保存点上的短事务。"""
+        async with self.maker() as opened:
+            try:
+                yield opened
+            except Exception:
+                await opened.rollback()
+                raise
+            else:
+                await opened.commit()
+
+
 @dataclass
 class AppContext:
     """整装应用的客户端与一个**同连接**的会话。
@@ -344,6 +376,7 @@ class ExternalFakes:
     ac_source: FakeAcSource
     points: StaticPointCatalog
     collect: CollectFakes
+    nodes: FakeNodeWriter
 
 
 @pytest.fixture
@@ -351,21 +384,31 @@ def external_fakes(
     ac_source: FakeAcSource,
     point_catalog: StaticPointCatalog,
     collect_fakes: CollectFakes,
+    node_writer: FakeNodeWriter,
 ) -> ExternalFakes:
-    """把三组假件收成一包给 `app_context`。
+    """把四组假件收成一包给 `app_context`。
 
-    Args: ac_source, point_catalog, collect_fakes。
+    Args: ac_source, point_catalog, collect_fakes, node_writer。
     """
     return ExternalFakes(
-        ac_source=ac_source, points=point_catalog, collect=collect_fakes
+        ac_source=ac_source,
+        points=point_catalog,
+        collect=collect_fakes,
+        nodes=node_writer,
     )
+
+
+@pytest.fixture
+def node_writer() -> FakeNodeWriter:
+    """假下发面。默认一个节点都没有——要绑点位的用例自己 `add`。"""
+    return FakeNodeWriter()
 
 
 def _wire_fakes(
     application: FastAPI,
     *,
     maker: async_sessionmaker[AsyncSession],
-    ac_source: FakeAcSource,
+    fakes: ExternalFakes,
     validation: ValidationContext,
     object_store: FakeObjectStore,
 ) -> None:
@@ -375,7 +418,7 @@ def _wire_fakes(
     模块就打真库真提交，用例之间开始互相看见对方的数据。这不是假设——
     `runtime_params` 那份漏过一次，表现是「单跑绿、连着跑红」，
     而残留行会一直躺在库里毒下一次运行。
-    Args: application, maker, ac_source, validation, object_store。
+    Args: application, maker, fakes, validation, object_store。
     """
     override = _session_override(maker)
     application.dependency_overrides[get_session] = override
@@ -385,7 +428,11 @@ def _wire_fakes(
     application.dependency_overrides[get_asset_session] = override
     application.dependency_overrides[get_object_store] = lambda: object_store
     application.dependency_overrides[get_ac_source_reader] = lambda: (
-        AcSourceReader(source=ac_source, timezone=SOURCE_TIMEZONE)
+        AcSourceReader(source=fakes.ac_source, timezone=SOURCE_TIMEZONE)
+    )
+    application.dependency_overrides[get_node_writer] = lambda: fakes.nodes
+    application.dependency_overrides[get_sessions] = lambda: MakerSessions(
+        maker
     )
     application.dependency_overrides[get_dashboard_validation_context] = (
         lambda: validation
@@ -400,6 +447,7 @@ def _faked_container(built: Container, fakes: ExternalFakes) -> Container:
     """
     return replace(
         built,
+        nodes=fakes.nodes,
         idempotency=IdempotencyStore(cache=InMemoryCache()),
         command_bus=CommandBus(
             transport=fakes.collect.bus,
@@ -442,7 +490,7 @@ async def app_context(
     _wire_fakes(
         application,
         maker=maker,
-        ac_source=external_fakes.ac_source,
+        fakes=external_fakes,
         validation=ValidationContext(
             catalog=container.module_catalog, points=external_fakes.points
         ),
