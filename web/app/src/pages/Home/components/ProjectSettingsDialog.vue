@@ -136,6 +136,7 @@ function save(): void {
       <DtSegmented
         :model-value="tab"
         :options="TABS"
+        variant="tabs"
         aria-label="设置分组"
         @update:model-value="tab = $event"
       />

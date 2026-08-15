@@ -248,7 +248,7 @@ describe('点位绑定页签', () => {
   it('绑齐时把「已绑几个」说出来', async () => {
     vi.spyOn(hvac, 'getModelPublication').mockResolvedValue(publication())
     const wrapper = await openTab()
-    expect(wrapper.text()).toContain('2 个组合已绑 2 个')
+    expect(wrapper.text()).toContain('2 / 2 个组合已绑')
     expect(wrapper.text()).not.toContain('绑齐之前不会自动下发')
   })
 
@@ -268,7 +268,7 @@ describe('点位绑定页签', () => {
       }),
     )
     const wrapper = await openTab()
-    expect(wrapper.text()).toContain('2 个组合已绑 1 个')
+    expect(wrapper.text()).toContain('1 / 2 个组合已绑')
     expect(wrapper.text()).toContain('绑齐之前不会自动下发')
   })
 
@@ -277,7 +277,7 @@ describe('点位绑定页签', () => {
       new Error('not found'),
     )
     const wrapper = await openTab()
-    expect(wrapper.text()).toContain('还没有下发过')
+    expect(wrapper.text()).toContain('还没下发过')
     expect(wrapper.text()).not.toContain('not found')
   })
 

@@ -77,6 +77,20 @@ export interface DtSegmentedOption {
   iconOnly?: boolean
 }
 
+/**
+ * 分段切换器的两种长相。它们表达的是两件不同的事，别按好看与否挑：
+ *
+ * - `control`：**同一块内容换个呈现或参数**（表格↔卡片、坐标刻度、吸附模式）。
+ *   长成一个凹槽里浮着选中块的控件——它是控件，与旁边的按钮、下拉同属一排。
+ * - `tabs`：**切的是不同内容块**（页内分区）。长成一条页签，与
+ *   `AppTabNav`（那条走 RouterLink 的导航页签）同一套观感。
+ *
+ * ⚠ 一个页面里同时出现两种长相不是问题，前提是它们表达的确实是两件事；
+ * 真正的问题是同一件事在两个页面上长得不一样。
+ */
+export const DT_SEGMENTED_VARIANTS = ['control', 'tabs'] as const
+export type DtSegmentedVariant = (typeof DT_SEGMENTED_VARIANTS)[number]
+
 export interface DtSelectOption {
   value: string
   label: string

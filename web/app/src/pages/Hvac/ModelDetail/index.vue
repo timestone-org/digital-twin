@@ -220,7 +220,12 @@ async function remove(): Promise<void> {
           {{ model.error }}
         </DtNotice>
 
-        <DtSegmented v-model="tab" :options="TABS" aria-label="模型详情页签" />
+        <DtSegmented
+          v-model="tab"
+          :options="TABS"
+          variant="tabs"
+          aria-label="模型详情页签"
+        />
 
         <template v-if="tab === TAB_PUBLICATION">
           <PublicationPanel

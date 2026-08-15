@@ -1,7 +1,10 @@
 <script setup lang="ts">
 /**
- * @fileoverview 点位绑定页签：选实例 → 绑区域点位 → 逐个组合绑时间点位。
+ * @fileoverview 点位绑定页签：往哪台实例、哪些点位下发。
  *
+ * ⚠ 版面上只有**一张绑定表**：区域推荐点位与各组合的时间点位是同一件事
+ * （一个目标 → 一个点位），差别只在数据类型。拆成两块的话，同一件事在页面上
+ * 有两种排布，眼睛得来回换一次坐标系。
  * ⚠ **「没绑齐就不发布」必须在这里说出来**：后端确实会跳过，但页面上开关是
  * 开的、点位是空的，没有任何地方讲过它其实没在发。
  * ⚠ 节点选择器只列类型对得上、且可写的那些：让用户点了保存才被拒，等于让他
@@ -9,10 +12,8 @@
  */
 import { computed } from 'vue'
 import type { DtSelectOption } from '@dt/contracts'
-import { MODEL_NO_PREDICTION } from '@dt/contracts'
 import {
   DtButton,
-  DtCard,
   DtNotice,
   DtSelect,
   DtSpinner,
@@ -27,7 +28,12 @@ import {
   orphanedBindings,
   recommendationOptions,
 } from '@/features/hvac/publication'
+import { formatSince } from '@/utils/datetime'
+import PublishResultList from './PublishResultList.vue'
 import type { PublicationController } from '../usePublication'
+
+/** 区域推荐那一行的行键。⚠ 与任何 set_key 都不会撞：组合键里没有空格。 */
+const REGION_ROW = ' region '
 
 const props = defineProps<{ publication: PublicationController }>()
 const emit = defineEmits<{ saved: []; unbound: []; published: [] }>()
@@ -37,13 +43,40 @@ const state = computed(() => props.publication)
 const instanceOptions = computed<DtSelectOption[]>(() =>
   state.value.instances.value.map((instance) => ({
     value: instance.id,
-    label: `${instance.name}${instance.is_running ? '' : '（未运行）'}`,
+    label: instance.name,
   })),
 )
-const regionOptions = computed(() =>
-  recommendationOptions(state.value.nodes.value),
-)
-const durationChoices = computed(() => durationOptions(state.value.nodes.value))
+
+/** 一行绑定：绑什么、只能绑什么类型、现在绑到了哪个点位。 */
+interface BindingRow {
+  key: string
+  target: string
+  dataType: string
+  options: DtSelectOption[]
+  nodeId: string
+}
+
+const rows = computed<BindingRow[]>(() => {
+  const region: BindingRow = {
+    key: REGION_ROW,
+    target: '区域推荐',
+    dataType: 'string',
+    options: recommendationOptions(state.value.nodes.value),
+    nodeId: state.value.draft.value.recommendationNodeId,
+  }
+  const durations = durationOptions(state.value.nodes.value)
+  return [
+    region,
+    ...state.value.servingKeys.value.map((key) => ({
+      key,
+      target: key,
+      dataType: 'double',
+      options: durations,
+      nodeId: state.value.draft.value.setNodes[key] ?? '',
+    })),
+  ]
+})
+
 const orphans = computed(() => orphanedBindings(state.value.saved.value))
 const bound = computed(() =>
   boundCount(state.value.draft.value, state.value.servingKeys.value),
@@ -53,6 +86,10 @@ const lastStatus = computed(() => {
   const status = state.value.saved.value?.last_status
   return status ? PUBLISH_STATUS_VIEW[status] : null
 })
+const lastSince = computed(() => {
+  const at = state.value.saved.value?.last_published_at
+  return at ? formatSince(at) : '还没下发过'
+})
 /** 选中实例此刻在不在跑——不在跑时写值会整条失败。 */
 const isInstanceStopped = computed(() => {
   const chosen = state.value.instances.value.find(
@@ -60,6 +97,11 @@ const isInstanceStopped = computed(() => {
   )
   return chosen !== undefined && !chosen.is_running
 })
+
+function pick(key: string, nodeId: string): void {
+  if (key === REGION_ROW) state.value.selectRecommendationNode(nodeId)
+  else state.value.selectSetNode(key, nodeId)
+}
 
 async function save(): Promise<void> {
   if (await state.value.save()) emit('saved')
@@ -80,141 +122,126 @@ async function publishNow(): Promise<void> {
       {{ state.error.value }}
     </DtNotice>
 
-    <DtCard class="min-w-0">
-      <div class="flex flex-wrap items-center gap-3">
+    <!-- 下发目标：实例、开关与心跳收在一条里，它们回答的是同一个问题 -->
+    <section
+      class="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-border-subtle p-3"
+    >
+      <label class="flex items-center gap-2">
+        <span class="shrink-0 text-xs text-text-disabled">实例</span>
         <DtSelect
-          class="min-w-64"
-          label="OPC UA 实例"
+          class="w-56"
+          size="sm"
           :model-value="state.draft.value.instanceId"
           :options="instanceOptions"
+          aria-label="OPC UA 实例"
           :display="{ placeholder: '选择一台服务器' }"
           @update:model-value="state.selectInstance($event)"
         />
-        <label class="flex items-center gap-2 text-sm text-text-primary">
-          <DtSwitch
-            :model-value="state.draft.value.isEnabled"
-            @update:model-value="state.setEnabled($event)"
-          />
-          自动下发（每 60 秒一拍）
-        </label>
-        <div class="ml-auto flex items-center gap-2 text-xs">
-          <DtTag v-if="lastStatus" size="sm" :intent="lastStatus.intent">
-            {{ lastStatus.label }}
-          </DtTag>
-          <span class="text-text-secondary">
-            {{
-              state.saved.value?.last_published_at
-                ? `上次下发 ${state.saved.value.last_published_at}`
-                : '还没有下发过'
-            }}
-          </span>
-        </div>
+      </label>
+
+      <label class="flex items-center gap-2">
+        <DtSwitch
+          :model-value="state.draft.value.isEnabled"
+          @update:model-value="state.setEnabled($event)"
+        />
+        <span class="text-xs text-text-secondary">自动下发 · 每 60 秒</span>
+      </label>
+
+      <div class="ml-auto flex items-center gap-2">
+        <DtSpinner v-if="state.isLoading.value" :size="12" />
+        <DtTag v-if="lastStatus" size="sm" :intent="lastStatus.intent">
+          {{ lastStatus.label }}
+        </DtTag>
+        <span class="text-2xs text-text-disabled">{{ lastSince }}</span>
       </div>
+    </section>
 
-      <DtNotice
-        v-if="state.saved.value?.last_error"
-        class="mt-2"
-        intent="danger"
-      >
-        {{ state.saved.value.last_error }}
-      </DtNotice>
-      <DtNotice v-if="isInstanceStopped" class="mt-2" intent="warning">
-        这台实例没在运行，下发会整条失败——先在「OPC UA 服务端」把它起起来。
-      </DtNotice>
-      <DtNotice
-        v-if="state.isNodeListTruncated.value"
-        class="mt-2"
-        intent="info"
-      >
-        这台实例的节点太多，下面只列出了前 200 个。
-      </DtNotice>
-    </DtCard>
+    <DtNotice v-if="isInstanceStopped" intent="warning" icon="alert-triangle">
+      这台实例没在运行，下发会整条失败——先在「OPC UA 服务端」把它起起来。
+    </DtNotice>
+    <DtNotice v-if="state.saved.value?.last_error" intent="danger">
+      {{ state.saved.value.last_error }}
+    </DtNotice>
 
-    <DtCard v-if="state.draft.value.instanceId" class="min-w-0">
-      <h2 class="mb-2 text-sm font-semibold text-text-primary">
-        区域推荐点位
-        <span class="ml-1 text-xs font-normal text-text-secondary">
-          字符串型；每一拍写进第一名那个组合的名字，如「K11+K12+K14」
+    <!-- 绑定表。⚠ 三列用 grid 而不是每行各自 flex：只有共享列宽，
+         目标、类型与选择器在行与行之间才对得齐 -->
+    <section
+      v-if="state.draft.value.instanceId"
+      class="flex flex-col gap-2 rounded-md border border-border-subtle p-3"
+    >
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-xs text-text-disabled">点位绑定</span>
+        <span
+          class="text-2xs"
+          :class="
+            state.isFullyBound.value
+              ? 'text-text-disabled'
+              : 'text-state-warning'
+          "
+        >
+          {{ bound }} / {{ total }} 个组合已绑
+          {{ state.isFullyBound.value ? '' : '· 绑齐之前不会自动下发' }}
         </span>
-      </h2>
-      <DtSelect
-        class="max-w-xl"
-        :model-value="state.draft.value.recommendationNodeId"
-        :options="regionOptions"
-        aria-label="区域推荐点位"
-        :display="{
-          placeholder: '选择一个字符串点位',
-          emptyText: '这台实例上没有可写的字符串点位',
-        }"
-        @update:model-value="state.selectRecommendationNode($event)"
-      />
-    </DtCard>
-
-    <DtCard v-if="state.draft.value.instanceId" class="min-w-0">
-      <h2 class="mb-2 text-sm font-semibold text-text-primary">
-        服务组合 → 预测时间点位
-        <span class="ml-1 text-xs font-normal text-text-secondary">
-          浮点型；每一拍写进这个组合的 p50 达标分钟数
-        </span>
-      </h2>
+      </div>
 
       <DtNotice v-if="total === 0" intent="warning">
         这个模型没有服务组合，没有可下发的数。
       </DtNotice>
 
-      <ul v-else class="flex flex-col gap-2">
-        <li
-          v-for="key in state.servingKeys.value"
-          :key="key"
-          class="flex flex-wrap items-center gap-2"
-        >
-          <span class="w-48 shrink-0 font-mono text-xs text-text-primary">
-            {{ key }}
+      <div
+        v-else
+        class="grid items-center gap-x-3 gap-y-1.5"
+        style="grid-template-columns: max-content max-content 18rem"
+      >
+        <template v-for="row in rows" :key="row.key">
+          <span class="truncate font-mono text-xs text-text-primary">
+            {{ row.target }}
           </span>
+          <DtTag mono size="sm">{{ row.dataType }}</DtTag>
           <DtSelect
-            class="min-w-80 flex-1"
-            :model-value="state.draft.value.setNodes[key] ?? ''"
-            :options="durationChoices"
-            :aria-label="`组合 ${key} 的预测时间点位`"
+            size="sm"
+            :model-value="row.nodeId"
+            :options="row.options"
+            :aria-label="`${row.target} 的点位`"
             :display="{
               placeholder: '未绑定',
-              emptyText: '这台实例上没有可写的浮点点位',
+              emptyText: `这台实例上没有可写的 ${row.dataType} 点位`,
             }"
-            @update:model-value="state.selectSetNode(key, $event)"
+            @update:model-value="pick(row.key, $event)"
           />
-        </li>
-      </ul>
+        </template>
+      </div>
 
       <p
-        class="mt-3 text-xs"
-        :class="
-          state.isFullyBound.value
-            ? 'text-text-secondary'
-            : 'text-state-warning'
-        "
+        v-if="state.isNodeListTruncated.value"
+        class="m-0 text-2xs text-text-disabled"
       >
-        {{ total }} 个组合已绑 {{ bound }} 个{{
-          state.isFullyBound.value ? '' : ' → 绑齐之前不会自动下发'
-        }}
+        这台实例的节点太多，上面只列出了前 200 个。
       </p>
-    </DtCard>
+    </section>
 
-    <DtCard v-if="orphans.length > 0" class="min-w-0">
-      <h2 class="mb-2 text-sm font-semibold text-state-warning">
+    <section
+      v-if="orphans.length > 0"
+      class="flex flex-col gap-1 rounded-md border border-border-subtle p-3"
+    >
+      <span class="text-xs text-state-warning">
         已落空的绑定
-        <span class="ml-1 text-xs font-normal text-text-secondary">
-          模型改过服务组合，这些键已经不在其中；保存一次即可清掉它们
+        <span class="ml-1 text-2xs font-normal text-text-disabled">
+          模型改过服务组合，这些键已不在其中；保存一次即可清掉
         </span>
-      </h2>
-      <ul class="flex flex-col gap-1 text-xs text-text-secondary">
-        <li v-for="item in orphans" :key="item.set_key" class="font-mono">
-          {{ item.set_key }} → {{ item.identifier }}
-        </li>
-      </ul>
-    </DtCard>
+      </span>
+      <span
+        v-for="item in orphans"
+        :key="item.set_key"
+        class="font-mono text-2xs text-text-disabled"
+      >
+        {{ item.set_key }} → {{ item.identifier }}
+      </span>
+    </section>
 
     <div class="flex flex-wrap items-center gap-2">
       <DtButton
+        size="sm"
         :disabled="
           !state.isDirty.value ||
           state.isSaving.value ||
@@ -225,7 +252,8 @@ async function publishNow(): Promise<void> {
         保存绑定
       </DtButton>
       <DtButton
-        variant="ghost"
+        size="sm"
+        variant="outline"
         :disabled="
           state.saved.value === null ||
           !state.saved.value.is_fully_bound ||
@@ -233,9 +261,12 @@ async function publishNow(): Promise<void> {
         "
         @click="publishNow"
       >
+        <DtSpinner v-if="state.isPublishing.value" :size="12" />
         立刻下发一次
       </DtButton>
       <DtButton
+        class="ml-auto"
+        size="sm"
         variant="ghost"
         danger
         :disabled="state.saved.value === null || state.isSaving.value"
@@ -243,32 +274,11 @@ async function publishNow(): Promise<void> {
       >
         解绑
       </DtButton>
-      <DtSpinner v-if="state.isLoading.value" :size="14" />
     </div>
 
-    <DtCard v-if="state.publishResult.value" class="min-w-0">
-      <h2 class="mb-2 text-sm font-semibold text-text-primary">
-        这一次下发
-        <span class="ml-1 text-xs font-normal text-text-secondary">
-          {{ MODEL_NO_PREDICTION }} 表示「这一拍算不出数」——它不是 0， 而 0
-          是「多半一开机就达标」
-        </span>
-      </h2>
-      <ul class="flex flex-col gap-1 text-xs">
-        <li
-          v-for="(item, at) in state.publishResult.value.items"
-          :key="`${item.set_key ?? 'region'}-${at}`"
-          class="flex flex-wrap items-center gap-2"
-        >
-          <span class="w-48 shrink-0 font-mono text-text-secondary">
-            {{ item.set_key ?? '区域推荐' }}
-          </span>
-          <span class="font-mono text-text-primary">{{ item.value }}</span>
-          <span v-if="!item.is_written" class="text-state-danger">
-            {{ item.error }}
-          </span>
-        </li>
-      </ul>
-    </DtCard>
+    <PublishResultList
+      v-if="state.publishResult.value"
+      :result="state.publishResult.value"
+    />
   </div>
 </template>
