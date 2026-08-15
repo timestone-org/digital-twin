@@ -81,14 +81,24 @@ function toggleItem(id: string, on: boolean): void {
   write({ items })
 }
 
-/** 在清单里挪一位。⚠ 顺序就是运行态的显示序，不只是这张表的排版。 */
+/**
+ * 在清单里挪一位。⚠ 顺序就是运行态的显示序，不只是这张表的排版。
+ *
+ * ⚠ 只交换两个**现存**视点占的位置，不许按可见清单整份重写 `items`：那样会把
+ * 指向已删视点的悬空 id 顺手抹掉，上面那句「有 N 个视点已经被删掉了」也跟着
+ * 消失——用户只是点了一下上移，却在毫无提示的情况下丢掉了一条待处理的记录。
+ * 悬空引用一律留着由诊断报出来，这里与删实体的口径一致。
+ */
 function move(order: number, delta: number): void {
-  const items = picked.value.map((camera) => camera.id)
-  const target = order + delta
-  const moved = items[order]
-  if (moved === undefined || target < 0 || target >= items.length) return
-  items.splice(order, 1)
-  items.splice(target, 0, moved)
+  const items = [...props.modelValue.items]
+  const liveIndexes = items
+    .map((id, index) => ({ id, index }))
+    .filter((entry) => props.cameras.some((camera) => camera.id === entry.id))
+  const from = liveIndexes[order]
+  const to = liveIndexes[order + delta]
+  if (from === undefined || to === undefined) return
+  items[from.index] = to.id
+  items[to.index] = from.id
   write({ items })
 }
 

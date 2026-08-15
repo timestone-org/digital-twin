@@ -137,6 +137,18 @@ describe('挑视点', () => {
     expect(lastSwitcher(wrapper).items).toEqual(['c2', 'c1'])
   })
 
+  // ⚠ 按可见清单整份重写 items 会顺手抹掉悬空 id，连带上面那句警告一起消失——
+  //   用户只是点了一下上移，却在毫无提示的情况下丢掉一条待处理的记录
+  it('挪一位不会顺手清掉指向已删视点的那一项', async () => {
+    const wrapper = mountSwitcher(makeSwitcher({ items: ['c1', '没了', 'c2'] }))
+
+    await iconButton(wrapper, '下移 全景').trigger('click')
+
+    const items = lastSwitcher(wrapper).items
+    expect(items).toContain('没了')
+    expect(items.indexOf('c2')).toBeLessThan(items.indexOf('c1'))
+  })
+
   it('第一个不给上移、最后一个不给下移', () => {
     const wrapper = mountSwitcher(makeSwitcher({ items: ['c1', 'c2'] }))
 
