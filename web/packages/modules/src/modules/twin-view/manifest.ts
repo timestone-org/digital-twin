@@ -64,6 +64,13 @@ export default defineModule({
       help: '模型、部件与锚点，整块由孪生子编辑器写入。',
     },
   ],
+  // 属性面板只读这份声明来决定出不出入口，故这里的路由名写错 = 入口点了没反应
+  subEditor: {
+    configKey: TWIN_CONFIG_KEY,
+    routeName: 'twin-editor',
+    label: '打开孪生编辑器',
+    hint: '模型摆放、部件、锚点、信息牌与能量流都在那里配。',
+  },
   bindings: [...TWIN_VIEW_BINDINGS],
   // 刻意不给 preview：3D 演示要有模型素材才看得见，编造一份只会在画布上留一块空白
   component: () => import('./Component.vue'),

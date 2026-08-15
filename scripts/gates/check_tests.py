@@ -30,7 +30,10 @@ PROVENANCE_WORDS = frozenset(
     {"fix", "fixes", "fixed", "bug", "bugfix", "issue", "regression"}
 )
 PROVENANCE_TEXT = re.compile(r"回归|修复|复现|#\d+")
-TS_CASE = re.compile(r"\b(?P<kind>it|test)(?P<each>\.each)?\s*(?=\()")
+# ⚠ 前面必须挡掉 `.`：`RE.test(x)` / `obj.it(...)` 里的 `test` / `it` 是成员调用，
+# 认成用例之后会把它后面的括号当用例体切走，那一段里没有断言，于是凭空多出一条
+# 「测试必须有断言」的违规——而被指的行根本不是一条用例。
+TS_CASE = re.compile(r"(?<![.\w$])(?P<kind>it|test)(?P<each>\.each)?\s*(?=\()")
 TS_FOCUS = re.compile(r"\b(?:it|test|describe)\.only\s*\(")
 TS_SKIP = re.compile(r"\b(?:it|test|describe)\.skip\s*\(|\bxit\s*\(")
 # 大颗粒快照证明不了任何契约，改一点就整体失效然后被无脑 -u 更新
@@ -324,6 +327,35 @@ def check_the_case_splitter_survives_brackets_in_names() -> list[Violation]:
     return found
 
 
+def check_the_case_splitter_ignores_member_calls() -> list[Violation]:
+    """本闸自检：`RE.test(x)` 这类成员调用不是用例。
+
+    ⚠ 认成用例之后，被切走的那一段里没有断言，于是凭空多出一条「测试必须有
+    断言」——而它指的行根本不是用例，写测试的人只能靠改写无关代码来绕开。
+    """
+    not_cases = (
+        "const ok = PATTERN.test(name)",
+        "if (new RegExp(x).test(source)) return",
+        "suite.it(name)",
+    )
+    found: list[Violation] = []
+    for source in not_cases:
+        if _case_blocks(source):
+            found.append(
+                Violation(
+                    "成员调用被误认成用例",
+                    at(Path(__file__)),
+                    source[:40],
+                )
+            )
+    # 真用例仍要认得出来，别把上面那条挡过头
+    if not _case_blocks("it('真用例', () => { expect(1).toBe(1) })"):
+        found.append(
+            Violation("挡过头了，真用例也认不出", at(Path(__file__)), "it(...)")
+        )
+    return found
+
+
 CHECKS = (
     check_python_tests_assert_something,
     check_test_names_state_a_contract,
@@ -334,6 +366,7 @@ CHECKS = (
     check_ts_tests_assert_something,
     check_ts_test_hygiene,
     check_the_case_splitter_survives_brackets_in_names,
+    check_the_case_splitter_ignores_member_calls,
 )
 
 

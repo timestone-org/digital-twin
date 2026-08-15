@@ -1,16 +1,28 @@
 <script setup lang="ts">
 /**
- * @fileoverview 孪生场景宿主：渲染循环、模型装载与进度、部件显隐、锚点标签。
+ * @fileoverview 孪生场景宿主：渲染循环、模型装载与进度、部件显隐、锚点、箭头、信息牌、能量流与场景特效。
  * ⚠ 本组件静态依赖整个 three，只能被异步加载（DASHBOARD_DESIGN §5.4）。
  */
-import type { TwinAnchorValues, TwinConfig } from '@dt/twin-config'
-import { EMPTY_ANCHOR_VALUES } from '@dt/twin-config'
+import type {
+  TwinAnchorValues,
+  TwinArrowValues,
+  TwinConfig,
+  TwinFlowValues,
+  TwinPanelValues,
+} from '@dt/twin-config'
+import {
+  EMPTY_ANCHOR_VALUES,
+  EMPTY_ARROW_VALUES,
+  EMPTY_FLOW_VALUES,
+  EMPTY_PANEL_VALUES,
+} from '@dt/twin-config'
 import { DtNotice, DtSpinner } from '@dt/ui'
 import type { Object3D } from 'three'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import { AnchorLayer } from './anchorLayer'
 import { resolveTwinModelUrl } from './host'
+import { createFrameClock } from './frameClock'
+import { SceneLayers, type SceneLayerValues } from './sceneLayers'
 import { loadTwinModel } from './modelLoader'
 import {
   EMPTY_NODE_INDEX,
@@ -37,6 +49,9 @@ const props = defineProps<{
   /** ⚠ 必须是 `normalizeTwinConfig` 的输出：这里按引用比对，就地改字段不会重绘。 */
   config: TwinConfig
   anchorValues?: TwinAnchorValues
+  arrowValues?: TwinArrowValues
+  panelValues?: TwinPanelValues
+  flowValues?: TwinFlowValues
 }>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
@@ -48,7 +63,8 @@ const missingNodes = ref<readonly string[]>([])
 let core: SceneCore | null = null
 /** 已挂上的模型根，配置改了要按新的摆放重置它。 */
 let modelObject: Object3D | null = null
-let anchorLayer: AnchorLayer | null = null
+let layers: SceneLayers | null = null
+const clock = createFrameClock()
 let nodeIndex: NodeIndex = EMPTY_NODE_INDEX
 let observer: ResizeObserver | null = null
 let frameHandle = 0
@@ -57,6 +73,9 @@ let loadAbort: AbortController | null = null
 
 const modelAsset = computed(() => props.config.model.asset)
 const anchors = computed(() => props.anchorValues ?? EMPTY_ANCHOR_VALUES)
+const arrows = computed(() => props.arrowValues ?? EMPTY_ARROW_VALUES)
+const panels = computed(() => props.panelValues ?? EMPTY_PANEL_VALUES)
+const flows = computed(() => props.flowValues ?? EMPTY_FLOW_VALUES)
 const overlayMessage = computed(() =>
   status.value === 'error' ? errorMessage.value : '未选择模型',
 )
@@ -72,8 +91,15 @@ const backgroundStyle = computed(() => {
   return { background: spec.startsWith('--') ? `var(${spec})` : spec }
 })
 
-function tick(): void {
+/** 把这一帧的时长交给需要动的那两层。 */
+function animate(delta: number): void {
+  if (delta <= 0) return
+  layers?.update(delta)
+}
+
+function tick(now: number): void {
   if (core === null) return
+  animate(clock.tick(now))
   renderScene(core)
   frameHandle = requestAnimationFrame(tick)
 }
@@ -84,6 +110,16 @@ function measure(): void {
   resizeScene(core, element.clientWidth, element.clientHeight)
 }
 
+/** 当前这一拍的五路实时值。 */
+function liveValues(): SceneLayerValues {
+  return {
+    anchors: anchors.value,
+    arrows: arrows.value,
+    panels: panels.value,
+    flows: flows.value,
+  }
+}
+
 function refreshLayers(): void {
   if (core === null) return
   core.controls.autoRotate = props.config.model.autoRotate
@@ -91,15 +127,14 @@ function refreshLayers(): void {
   // 会一直到换模型才生效，中间那段是「调了没反应」
   placeModel()
   applyPartVisibility(nodeIndex, props.config.parts)
-  anchorLayer?.build(props.config.anchors)
-  anchorLayer?.setValues(anchors.value)
+  layers?.build(props.config, liveValues())
 }
 
 /** 把配置里的摆放落到模型上，并按新体量重算锚点小球尺寸。 */
 function placeModel(): void {
   if (modelObject === null) return
   applyModelPlacement(modelObject, props.config.model)
-  anchorLayer?.setWorldScale(boundingDiagonal(modelObject))
+  layers?.setWorldScale(boundingDiagonal(modelObject))
 }
 
 function clearModel(): void {
@@ -166,11 +201,12 @@ onMounted(() => {
   const renderer = createWebGLRenderer()
   if (renderer === null) return fail(WEBGL_UNAVAILABLE_MESSAGE)
   core = createSceneCore({ container: element, renderer })
-  anchorLayer = new AnchorLayer(element)
-  core.scene.add(anchorLayer.group)
+  layers = new SceneLayers(element)
+  layers.addTo(core.scene)
   observer = new ResizeObserver(measure)
   observer.observe(element)
   measure()
+  clock.reset()
   frameHandle = requestAnimationFrame(tick)
   void load()
 })
@@ -183,8 +219,8 @@ onBeforeUnmount(() => {
   cancelAnimationFrame(frameHandle)
   observer?.disconnect()
   observer = null
-  anchorLayer?.dispose()
-  anchorLayer = null
+  layers?.dispose()
+  layers = null
   if (core !== null) disposeScene(core)
   core = null
   modelObject = null
@@ -193,7 +229,7 @@ onBeforeUnmount(() => {
 
 watch(modelAsset, () => void load())
 watch(() => props.config, refreshLayers)
-watch(anchors, (value) => anchorLayer?.setValues(value))
+watch(liveValues, (values) => layers?.setValues(values))
 </script>
 
 <template>

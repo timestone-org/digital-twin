@@ -5,10 +5,15 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
-import type { DashboardNodePayload, ModuleManifest } from '@dt/contracts'
+import type {
+  DashboardNodePayload,
+  ModuleManifest,
+  ModuleSubEditor,
+} from '@dt/contracts'
 import { __resetConfigControls } from '@dt/modules'
 
 import { installConfigControls } from '@/features/dashboard/configControls'
+import { EDITOR_SUB_EDITOR_KEY } from '@/features/dashboard/editorContext'
 import PropertyPanel from '@/pages/DashboardEditor/components/PropertyPanel.vue'
 
 const MANIFEST: ModuleManifest = {
@@ -141,5 +146,94 @@ describe('抛出的改动', () => {
 
     expect(wrapper.emitted('config')?.[0]).toEqual([['title'], '新标题', true])
   })
+})
 
+// ⚠ 声明了子编辑器却仍画通用控件，用户就会在一个 JSON 框里改本该图形化配的东西，
+//   而且改完与子编辑器互相覆盖——两处都不报错
+describe('子编辑器入口', () => {
+  const WITH_SUB: ModuleManifest = {
+    ...MANIFEST,
+    configSchema: [
+      { key: 'title', label: '标题', type: 'string', group: '标题' },
+      { key: 'scene', label: '场景', type: 'object', group: '场景' },
+    ],
+    subEditor: {
+      configKey: 'scene',
+      routeName: 'demo-editor',
+      label: '打开场景编辑器',
+      hint: '模型与锚点在那里配。',
+    },
+  }
+
+  it('被接管的字段画成入口按钮，不再画通用控件', () => {
+    const opened: ModuleSubEditor[] = []
+    const wrapper = mount(PropertyPanel, {
+      props: { node: NODE, manifest: WITH_SUB },
+      global: {
+        provide: {
+          [EDITOR_SUB_EDITOR_KEY as symbol]: (sub: ModuleSubEditor) => {
+            opened.push(sub)
+          },
+        },
+      },
+    })
+
+    const button = wrapper
+      .findAll('button')
+      .find((item) => item.text() === '打开场景编辑器')
+    expect(button).toBeDefined()
+    expect(wrapper.text()).toContain('模型与锚点在那里配')
+    expect(wrapper.text()).toContain('尚未配置')
+  })
+
+  // 不在编辑器里挂载（没人下发入口）时不该画一个点了没反应的按钮
+  it('没人下发入口时不画按钮', () => {
+    const wrapper = mount(PropertyPanel, {
+      props: { node: NODE, manifest: WITH_SUB },
+    })
+
+    expect(
+      wrapper.findAll('button').some((item) => item.text() === '打开场景编辑器'),
+    ).toBe(false)
+  })
+
+  it('点入口把这份声明原样交上去', async () => {
+    const opened: ModuleSubEditor[] = []
+    const wrapper = mount(PropertyPanel, {
+      props: { node: NODE, manifest: WITH_SUB },
+      global: {
+        provide: {
+          [EDITOR_SUB_EDITOR_KEY as symbol]: (sub: ModuleSubEditor) => {
+            opened.push(sub)
+          },
+        },
+      },
+    })
+
+    const button = wrapper
+      .findAll('button')
+      .find((item) => item.text() === '打开场景编辑器')
+    await button?.trigger('click')
+
+    expect(opened).toEqual([WITH_SUB.subEditor])
+  })
+
+  it('其余字段照旧走通用控件', () => {
+    const wrapper = mount(PropertyPanel, {
+      props: { node: NODE, manifest: WITH_SUB },
+    })
+
+    expect(wrapper.find('input').exists()).toBe(true)
+  })
+
+  it('配过之后入口上说得出来', () => {
+    const wrapper = mount(PropertyPanel, {
+      props: {
+        node: { ...NODE, configJson: { scene: { anchors: [] } } },
+        manifest: WITH_SUB,
+      },
+    })
+
+    expect(wrapper.text()).toContain('已配置')
+  })
 })

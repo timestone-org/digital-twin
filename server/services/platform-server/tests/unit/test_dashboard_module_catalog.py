@@ -33,7 +33,12 @@ def test_an_unknown_type_has_no_manifest() -> None:
 def test_slots_split_scalar_and_array_entries() -> None:
     slots = load_module_catalog().slots("twin-view")
     assert slots.scalar_keys == frozenset()
-    assert slots.array_fields == {"anchorValues": frozenset({"value"})}
+    assert slots.array_fields == {
+        "anchorValues": frozenset({"value"}),
+        "panelValues": frozenset({"value"}),
+        "arrowValues": frozenset({"value"}),
+        "flowValues": frozenset({"intensity", "active"}),
+    }
 
 
 def test_an_unknown_type_has_no_slots() -> None:

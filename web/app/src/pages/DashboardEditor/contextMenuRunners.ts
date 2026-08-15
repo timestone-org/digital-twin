@@ -9,10 +9,7 @@ import type { Ref } from 'vue'
 import type { DashboardEditor } from '@/composables/useDashboardEditor'
 import type { CanvasZoom } from '@/features/dashboard/canvasZoom'
 import { layerPositionOf } from '@/features/dashboard/editorDoc'
-import type {
-  ContextMenuAction,
-  ContextMenuInput,
-} from './contextMenuItems'
+import type { ContextMenuAction, ContextMenuInput } from './contextMenuItems'
 import type { EditorActions } from './editorActions'
 import type { ArrangeActions } from './editorArrange'
 import { modLabel } from './shortcuts'

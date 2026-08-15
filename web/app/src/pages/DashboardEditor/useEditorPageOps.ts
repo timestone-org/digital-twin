@@ -13,6 +13,7 @@ import type { EditorActions } from './editorActions'
 import type { ArrangeActions } from './editorArrange'
 import { saveDashboard } from './editorSave'
 import type { EditorMeta } from './useEditorMeta'
+import { useSubEditorEntry } from './useSubEditorEntry'
 
 interface ConfirmPort {
   ask: (input: {
@@ -103,7 +104,18 @@ async function save(deps: EditorPageOpsDeps): Promise<void> {
 }
 
 export function createEditorPageOps(deps: EditorPageOpsDeps): EditorPageOps {
-  const { editor, actions, toast } = deps
+  const { editor, actions, meta, toast } = deps
+
+  // 子编辑器入口挂在这里而不是页面上：它要的东西（选中、脏、保存、提示、路由参数）
+  // 与本工厂完全重合，搬到页面上等于把同一批依赖再列一遍
+  useSubEditorEntry({
+    dashboardId: deps.dashboardId,
+    selectedId: editor.selectedId,
+    isDirty: () => editor.isDirty.value || meta.isDirty.value,
+    save: () => save(deps),
+    confirm: deps.confirm,
+    toast,
+  })
 
   return {
     addModule: (manifest) => {

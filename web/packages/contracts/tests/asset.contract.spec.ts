@@ -18,7 +18,7 @@ const ID = '0192f0aa-0000-7000-8000-000000000001'
 
 describe('素材引用', () => {
   it('构造与解析是一对', () => {
-    expect(parseAssetRef(assetRef(ID))) .toBe(ID)
+    expect(parseAssetRef(assetRef(ID))).toBe(ID)
   })
 
   it('容忍首尾空白：配置往返一趟常常带上它', () => {

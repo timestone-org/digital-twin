@@ -21,6 +21,13 @@ export type {
   TwinRowSlot,
   TwinValueRowSlot,
 } from './constants'
+export {
+  remapBindingRows,
+  remapTwinBindings,
+  twinBindingRows,
+  twinRowLabels,
+} from './bindingRows'
+export type { TwinBindingRow } from './bindingRows'
 export { flattenPanelFields } from './normalizeElements'
 export type { FlatPanelField } from './normalizeElements'
 export {
@@ -94,10 +101,13 @@ export {
   EMPTY_FLOW_VALUES,
   EMPTY_PANEL_VALUES,
   formatAnchorText,
+  formatArrowText,
+  formatValueText,
   stitchAnchorValues,
   stitchArrowValues,
   stitchFlowValues,
   stitchPanelValues,
 } from './twinMath'
+export type { ValueFormat } from './twinMath'
 export { TWIN_CONFIG_ISSUE_KINDS, collectTwinConfigIssues } from './issues'
 export type { TwinConfigIssue, TwinConfigIssueKind } from './issues'

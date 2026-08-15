@@ -8,9 +8,16 @@
 import type { ModuleMeta } from '@dt/contracts'
 import {
   TWIN_ANCHOR_BINDING_KEY,
+  TWIN_ARROW_BINDING_KEY,
   TWIN_CONFIG_KEY,
+  TWIN_FLOW_BINDING_KEY,
+  TWIN_PANEL_BINDING_KEY,
+  flattenPanelFields,
   normalizeTwinConfig,
   stitchAnchorValues,
+  stitchArrowValues,
+  stitchFlowValues,
+  stitchPanelValues,
 } from '@dt/twin-config'
 import { DtNotice } from '@dt/ui'
 import { computed, defineAsyncComponent, type CSSProperties } from 'vue'
@@ -58,6 +65,19 @@ const anchorValues = computed(() =>
     props.values[TWIN_ANCHOR_BINDING_KEY],
   ),
 )
+const arrowValues = computed(() =>
+  stitchArrowValues(scene.value.arrows, props.values[TWIN_ARROW_BINDING_KEY]),
+)
+// ⚠ 必须喂扁平化后的字段序：按「第 i 张牌」对齐会让多字段的牌之后整体错位
+const panelValues = computed(() =>
+  stitchPanelValues(
+    flattenPanelFields(scene.value.panels),
+    props.values[TWIN_PANEL_BINDING_KEY],
+  ),
+)
+const flowValues = computed(() =>
+  stitchFlowValues(scene.value.flows, props.values[TWIN_FLOW_BINDING_KEY]),
+)
 
 const titleStyle = computed<CSSProperties>(() => ({
   ...CORNER_OFFSETS[readEnum(props.config.titlePosition, CORNERS, 'top-left')],
@@ -74,7 +94,13 @@ const errorMessage = computed(() =>
 
 <template>
   <div class="dt-twin">
-    <TwinScene :config="scene" :anchor-values="anchorValues" />
+    <TwinScene
+      :config="scene"
+      :anchor-values="anchorValues"
+      :arrow-values="arrowValues"
+      :panel-values="panelValues"
+      :flow-values="flowValues"
+    />
     <p v-if="title !== ''" class="dt-twin__title" :style="titleStyle">
       {{ title }}
     </p>

@@ -12,7 +12,7 @@ import type {
 } from '@dt/contracts'
 import { DtSelect } from '@dt/ui'
 
-import BindingPanel from '@/pages/DashboardEditor/components/BindingPanel.vue'
+import BindingPanel from '@/components/binding/BindingPanel.vue'
 
 const MANIFEST: ModuleManifest = {
   type: 'demo',
@@ -34,6 +34,23 @@ const MANIFEST: ModuleManifest = {
 }
 
 const BARE: ModuleManifest = { ...MANIFEST, bindings: [] }
+
+/** 一行两个子槽，用来钉死「行名的键是这一行第一个子槽」。 */
+const PAIR: ModuleManifest = {
+  ...MANIFEST,
+  bindings: [
+    {
+      key: 'rows',
+      label: '多行',
+      dataType: 'number',
+      isArray: true,
+      arrayFields: [
+        { key: 'value', label: '数值', dataType: 'number' },
+        { key: 'unit', label: '单位', dataType: 'string' },
+      ],
+    },
+  ],
+}
 
 function binding(over: Partial<BindingPayload> = {}): BindingPayload {
   return {
@@ -167,6 +184,62 @@ describe('数组槽的行', () => {
     await remove?.trigger('click')
 
     expect(wrapper.emitted('removeRow')?.[0]).toEqual(['rows', 0])
+  })
+})
+
+describe('数组槽的行名', () => {
+  it('给了 rowLabels 就拿它当组标题', () => {
+    const wrapper = mount(BindingPanel, {
+      props: {
+        node: node([binding({ id: 'b2', fieldKey: 'rows[0].value' })]),
+        manifest: MANIFEST,
+        rowLabels: { 'rows[0].value': '一号锚点' },
+      },
+    })
+
+    expect(wrapper.text()).toContain('一号锚点')
+    expect(wrapper.text()).not.toContain('第 1 行')
+  })
+
+  it('不给 rowLabels 时还是「第 N 行」', () => {
+    const wrapper = mount(BindingPanel, {
+      props: {
+        node: node([binding({ id: 'b2', fieldKey: 'rows[0].value' })]),
+        manifest: MANIFEST,
+      },
+    })
+
+    expect(wrapper.text()).toContain('第 1 行')
+  })
+
+  it('只给了一部分行时，逐行各自回落', () => {
+    const wrapper = mount(BindingPanel, {
+      props: {
+        node: node([
+          binding({ id: 'b2', fieldKey: 'rows[0].value' }),
+          binding({ id: 'b3', fieldKey: 'rows[1].value' }),
+        ]),
+        manifest: MANIFEST,
+        rowLabels: { 'rows[0].value': '一号锚点' },
+      },
+    })
+
+    expect(wrapper.text()).toContain('一号锚点')
+    expect(wrapper.text()).toContain('第 2 行')
+    expect(wrapper.text()).not.toContain('第 1 行')
+  })
+
+  it('行名的键是这一行第一个子槽，认错键就回落', () => {
+    const wrapper = mount(BindingPanel, {
+      props: {
+        node: node([binding({ id: 'b2', fieldKey: 'rows[0].value' })]),
+        manifest: PAIR,
+        rowLabels: { 'rows[0].unit': '一号锚点' },
+      },
+    })
+
+    expect(wrapper.text()).toContain('第 1 行')
+    expect(wrapper.text()).not.toContain('一号锚点')
   })
 })
 

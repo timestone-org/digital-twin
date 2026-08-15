@@ -9,9 +9,16 @@ import { describe, expect, it } from 'vitest'
 import {
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_ANCHOR_ROW_SLOTS,
+  TWIN_ARROW_BINDING_KEY,
+  TWIN_FLOW_BINDING_KEY,
+  TWIN_FLOW_ROW_SLOTS,
+  TWIN_PANEL_BINDING_KEY,
   TWIN_VIEW_BINDINGS,
   anchorRowFieldKey,
   arrayRowFieldKey,
+  arrowRowFieldKey,
+  flowRowFieldKey,
+  panelRowFieldKey,
 } from '../src/constants'
 import { stitchAnchorValues } from '../src/twinMath'
 import { normalizeTwinConfig } from '../src/normalize'
@@ -34,11 +41,30 @@ describe('绑定槽清单', () => {
   it('清单里的槽与槽键常量逐一对上', () => {
     expect(TWIN_VIEW_BINDINGS.map((spec) => spec.key)).toEqual([
       TWIN_ANCHOR_BINDING_KEY,
+      TWIN_PANEL_BINDING_KEY,
+      TWIN_ARROW_BINDING_KEY,
+      TWIN_FLOW_BINDING_KEY,
     ])
   })
 
-  it('锚点槽是数组槽', () => {
+  it('三个槽都是数组槽', () => {
     expect(specOf(TWIN_ANCHOR_BINDING_KEY).isArray).toBe(true)
+    expect(specOf(TWIN_PANEL_BINDING_KEY).isArray).toBe(true)
+    expect(specOf(TWIN_ARROW_BINDING_KEY).isArray).toBe(true)
+  })
+
+  // ⚠ 只许登记渲染层真正消费的槽：没有图元就摆槽位，用户绑完点位看到的是
+  //   「绑了没反应」。四个槽此刻各有一层图元在消费，加第五个必须与渲染层同轮落地
+  it('清单里的每个槽都有渲染层在消费', () => {
+    expect(TWIN_VIEW_BINDINGS).toHaveLength(4)
+  })
+
+  it('能量流那一行有强度与激活两个子槽', () => {
+    expect(
+      (specOf(TWIN_FLOW_BINDING_KEY).arrayFields ?? []).map(
+        (field) => field.key,
+      ),
+    ).toEqual([...TWIN_FLOW_ROW_SLOTS])
   })
 
   it('清单声明的行内子槽与子槽常量逐一对上', () => {
@@ -55,8 +81,11 @@ describe('数组行 fieldKey', () => {
     expect(arrayRowFieldKey('rows', 0, 'value')).toBe('rows[0].value')
   })
 
-  it('锚点的构造函数走同一套形状', () => {
+  it('四类的构造函数走同一套形状', () => {
     expect(anchorRowFieldKey(3)).toBe('anchorValues[3].value')
+    expect(panelRowFieldKey(1)).toBe('panelValues[1].value')
+    expect(arrowRowFieldKey(2)).toBe('arrowValues[2].value')
+    expect(flowRowFieldKey(0, 'intensity')).toBe('flowValues[0].intensity')
   })
 
   it('构造出的槽键前缀就是清单里的槽', () => {

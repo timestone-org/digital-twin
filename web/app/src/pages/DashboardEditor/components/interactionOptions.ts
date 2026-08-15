@@ -123,7 +123,10 @@ function actionTargets(action: InteractionAction): readonly string[] {
  * @param rule 一条规则
  * @param nodeId 当前选中的节点
  */
-export function ruleTouchesNode(rule: InteractionRule, nodeId: string): boolean {
+export function ruleTouchesNode(
+  rule: InteractionRule,
+  nodeId: string,
+): boolean {
   return (
     rule.source.nodeId === nodeId || actionTargets(rule.action).includes(nodeId)
   )

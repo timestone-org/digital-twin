@@ -10,10 +10,7 @@ import { isFormFocused } from './isFormFocused'
 import { ARROWS, shortcutOf, type ShortcutAction } from './shortcutKeys'
 
 export { shortcutOf } from './shortcutKeys'
-export type {
-  EditorShortcutHandlers,
-  ShortcutAction,
-} from './shortcutKeys'
+export type { EditorShortcutHandlers, ShortcutAction } from './shortcutKeys'
 
 import type { EditorShortcutHandlers } from './shortcutKeys'
 

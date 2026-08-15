@@ -132,7 +132,9 @@ function removeRule(id: string): void {
         class="m-0 text-2xs text-text-disabled"
         data-test="ix-no-rule"
       >
-        {{ focusNodeId === undefined ? '还没有联动规则' : '这个模块还没有联动' }}
+        {{
+          focusNodeId === undefined ? '还没有联动规则' : '这个模块还没有联动'
+        }}
       </p>
       <InteractionRuleCard
         v-for="rule in visibleRules"

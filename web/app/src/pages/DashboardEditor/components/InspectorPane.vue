@@ -23,7 +23,7 @@ import {
   layerPositionOf,
   type NodeGeometry,
 } from '@/features/dashboard/editorDoc'
-import BindingPanel from './BindingPanel.vue'
+import BindingPanel from '@/components/binding/BindingPanel.vue'
 import InteractionEditor from './InteractionEditor.vue'
 import NodeCommonPanel from './NodeCommonPanel.vue'
 import PropertyPanel from './PropertyPanel.vue'

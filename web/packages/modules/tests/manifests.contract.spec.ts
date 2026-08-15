@@ -5,7 +5,13 @@
  * ⚠ 这几类错法 typecheck 与 lint 双双放行，表现只是「这一项永远没反应」。
  */
 import type { BindingSpec, ConfigField } from '@dt/contracts'
-import { TWIN_ANCHOR_BINDING_KEY, TWIN_CONFIG_KEY } from '@dt/twin-config'
+import {
+  TWIN_ANCHOR_BINDING_KEY,
+  TWIN_ARROW_BINDING_KEY,
+  TWIN_CONFIG_KEY,
+  TWIN_FLOW_BINDING_KEY,
+  TWIN_PANEL_BINDING_KEY,
+} from '@dt/twin-config'
 import { isIconName } from '@dt/ui'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -28,7 +34,10 @@ const KEY_CONSTANTS: Record<string, string> = {
   CONTAINER_CONFIG_KEY,
   SHOW_TITLE_CONFIG_KEY,
   TWIN_ANCHOR_BINDING_KEY,
+  TWIN_ARROW_BINDING_KEY,
   TWIN_CONFIG_KEY,
+  TWIN_FLOW_BINDING_KEY,
+  TWIN_PANEL_BINDING_KEY,
 }
 
 // 一跳前缀（`props.config.x` / `opts.config.x`）也算读：模块的 option 里配置常常

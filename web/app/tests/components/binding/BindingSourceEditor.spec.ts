@@ -8,7 +8,7 @@ import { mount } from '@vue/test-utils'
 import type { BindingPayload, BindingSpec } from '@dt/contracts'
 import { DtSelect } from '@dt/ui'
 
-import BindingSourceEditor from '@/pages/DashboardEditor/components/BindingSourceEditor.vue'
+import BindingSourceEditor from '@/components/binding/BindingSourceEditor.vue'
 
 function binding(over: Partial<BindingPayload> = {}): BindingPayload {
   return {

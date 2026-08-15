@@ -79,9 +79,8 @@ export function flowRowFieldKey(index: number, sub: TwinFlowRowSlot): string {
  * ⚠ 模块 manifest 直接摊开它，不许再抄一份键名：槽键在清单与缝合两处各写一遍时，
  * 拼错的那一份既不报错也永远取不到值。
  *
- * ⚠ **只登记渲染层真正消费的槽**。信息牌 / 箭头 / 能量流的键与缝合函数上面都已
- * 备好，但渲染层还没有它们的图元——现在就摆出槽位，用户绑完点位看到的是
- * 「绑了没反应」，那比缺一个功能更难查。渲染层落地时连同这里一起加。
+ * ⚠ 这里只许登记**渲染层真正消费的槽**：没有图元就摆槽位，用户绑完点位看到的
+ * 是「绑了没反应」，那比缺一个功能更难查。加槽必须与渲染层同一轮落地。
  */
 export const TWIN_VIEW_BINDINGS: readonly BindingSpec[] = [
   {
@@ -90,5 +89,29 @@ export const TWIN_VIEW_BINDINGS: readonly BindingSpec[] = [
     dataType: 'number',
     isArray: true,
     arrayFields: [{ key: 'value', label: '数值', dataType: 'number' }],
+  },
+  {
+    key: TWIN_PANEL_BINDING_KEY,
+    label: '信息牌字段',
+    dataType: 'number',
+    isArray: true,
+    arrayFields: [{ key: 'value', label: '数值', dataType: 'number' }],
+  },
+  {
+    key: TWIN_ARROW_BINDING_KEY,
+    label: '箭头读数',
+    dataType: 'number',
+    isArray: true,
+    arrayFields: [{ key: 'value', label: '数值', dataType: 'number' }],
+  },
+  {
+    key: TWIN_FLOW_BINDING_KEY,
+    label: '能量流',
+    dataType: 'number',
+    isArray: true,
+    arrayFields: [
+      { key: 'intensity', label: '强度', dataType: 'number' },
+      { key: 'active', label: '激活', dataType: 'boolean' },
+    ],
   },
 ]

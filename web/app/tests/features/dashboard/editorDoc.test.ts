@@ -114,7 +114,9 @@ describe('新建节点', () => {
     expect(first.configJson).toEqual({ __cardStyle: { corners: false } })
     // ⚠ 浅拷贝会让两个节点共用同一只 __cardStyle：改一个另一个跟着变，且改的还是清单本身
     expect(first.configJson.__cardStyle).not.toBe(second.configJson.__cardStyle)
-    expect(first.configJson.__cardStyle).not.toBe(manifest.defaultConfig.__cardStyle)
+    expect(first.configJson.__cardStyle).not.toBe(
+      manifest.defaultConfig.__cardStyle,
+    )
   })
 
   it('清单没给出厂配置时是空袋子', () => {

@@ -152,4 +152,3 @@ describe('normalizeColorSpec', () => {
     expect(normalizeColorSpec('')).toBeNull()
   })
 })
-

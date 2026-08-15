@@ -301,6 +301,54 @@ describe('实时值', () => {
   })
 })
 
+describe('箭头与信息牌', () => {
+  it('箭头读数更新后写进标签', async () => {
+    const wrapper = mountScene({
+      config: config({ arrows: [{ id: 'ar1', labelText: '进气', unit: 'm/s' }] }),
+    })
+    await flushPromises()
+
+    await wrapper.setProps({ arrowValues: { ar1: { value: 12 } } })
+    await flushPromises()
+
+    expect(document.body.textContent).toContain('进气 12 m/s')
+    // ⚠ 必须卸载：这份 spec 没开自动卸载，留下的场景会被后面按
+    //   `document.querySelector` 找元素的用例捡到，红在一个毫不相干的地方
+    wrapper.unmount()
+  })
+
+  it('信息牌字段按 牌id::字段key 取值', async () => {
+    const wrapper = mountScene({
+      config: config({
+        panels: [{ id: 'p1', name: '泵组', fields: [{ key: 'temp', label: '温度' }] }],
+      }),
+    })
+    await flushPromises()
+
+    await wrapper.setProps({ panelValues: { 'p1::temp': { value: 36 } } })
+    await flushPromises()
+
+    expect(document.body.textContent).toContain('36')
+    wrapper.unmount()
+  })
+
+  // ⚠ 三层的 CSS2D 元素都挂在标签层容器里，卸载不摘就留在页面上飘着
+  it('卸载后箭头与信息牌的 DOM 一个不剩', async () => {
+    const wrapper = mountScene({
+      config: config({
+        arrows: [{ id: 'ar1', labelText: '进气' }],
+        panels: [{ id: 'p1', name: '泵组' }],
+      }),
+    })
+    await flushPromises()
+
+    wrapper.unmount()
+
+    expect(document.body.textContent).not.toContain('进气')
+    expect(document.body.textContent).not.toContain('泵组')
+  })
+})
+
 describe('快速切模型的竞态', () => {
   it('慢的那次后返回时结果被丢弃，且它的 GPU 资源被释放', async () => {
     const first = deferred<THREE.Object3D>()

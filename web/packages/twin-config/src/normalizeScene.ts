@@ -1,7 +1,14 @@
 /**
  * @fileoverview 场景层的归一化：模型摆放、内置动画、场景特效、视点与切换控件。
  */
-import { boolOr, clampedOr, entityId, oneOf, vec3, ORIGIN } from './normalizeShared'
+import {
+  boolOr,
+  clampedOr,
+  entityId,
+  oneOf,
+  vec3,
+  ORIGIN,
+} from './normalizeShared'
 import {
   isRecord,
   normalizeColorSpec,
@@ -97,7 +104,12 @@ function normalizeLightColumn(raw: unknown): TwinLightColumn {
     intensity: clampedOr(source.intensity, 1, 0, MAX_EFFECT_SCALE),
     speed: clampedOr(source.speed, 1, 0, MAX_EFFECT_SCALE),
     // 略高于模型 = 包裹感；等高会把顶盖切平
-    height: clampedOr(source.height, 1.15, MIN_COLUMN_HEIGHT, MAX_COLUMN_HEIGHT),
+    height: clampedOr(
+      source.height,
+      1.15,
+      MIN_COLUMN_HEIGHT,
+      MAX_COLUMN_HEIGHT,
+    ),
     rise: oneOf(source.rise, TWIN_LIGHT_COLUMN_RISES, 'loop'),
   }
 }
@@ -140,12 +152,7 @@ export function normalizeCamera(
     name: trimmedString(raw.name),
     position: vec3(raw.position, ORIGIN),
     target: vec3(raw.target, ORIGIN),
-    fov: clampedOr(
-      raw.fov,
-      DEFAULT_CAMERA_FOV,
-      MIN_CAMERA_FOV,
-      MAX_CAMERA_FOV,
-    ),
+    fov: clampedOr(raw.fov, DEFAULT_CAMERA_FOV, MIN_CAMERA_FOV, MAX_CAMERA_FOV),
     isDefault: raw.isDefault === true,
   }
 }

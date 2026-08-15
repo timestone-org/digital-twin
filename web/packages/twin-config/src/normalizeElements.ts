@@ -4,7 +4,14 @@
  * ⚠ 三者的实时值都走**数组绑定按文档序对齐**，所以这里产出的顺序就是取值的
  * 行号。插一个元素会让它之后的每一行整体后移一格——编辑器改完必须重派绑定行。
  */
-import { clampedOr, entityId, normalizeList, oneOf, vec3, ORIGIN } from './normalizeShared'
+import {
+  clampedOr,
+  entityId,
+  normalizeList,
+  oneOf,
+  vec3,
+  ORIGIN,
+} from './normalizeShared'
 import { normalizeVisibility } from './normalizeRules'
 import {
   isRecord,
@@ -22,6 +29,7 @@ import {
   type TwinPanel,
   type TwinPanelField,
   type TwinPanelStyle,
+  type Vec3,
 } from './types'
 
 const MAX_DECIMALS = 10
@@ -87,6 +95,20 @@ export function normalizePanel(raw: unknown, index: number): TwinPanel | null {
   }
 }
 
+/** 朝上的缺省方向。 */
+const UP: Vec3 = [0, 1, 0]
+
+/**
+ * 箭头朝向。
+ * ⚠ 零向量在这里就换成 +Y，不留给渲染层：`normalize()` 一个零向量得到的是
+ * NaN，整个箭头连同它的标签会从画面上消失，而控制台一声不吭。
+ */
+function usableDirection(raw: unknown): Vec3 {
+  const built = vec3(raw, UP)
+  const isZero = built.every((axis) => axis === 0)
+  return isZero ? [...UP] : built
+}
+
 /** 一个立体箭头。 */
 export function normalizeArrow(raw: unknown, index: number): TwinArrow | null {
   if (!isRecord(raw)) return null
@@ -94,8 +116,7 @@ export function normalizeArrow(raw: unknown, index: number): TwinArrow | null {
     id: entityId(raw.id, 'arrow', index),
     name: trimmedString(raw.name),
     position: vec3(raw.position, ORIGIN),
-    // 缺省朝 +Y：零向量 normalize 出 NaN，整个箭头会从画面上消失
-    direction: vec3(raw.direction, [0, 1, 0]),
+    direction: usableDirection(raw.direction),
     length: clampedOr(raw.length, 1, MIN_GEOMETRY, MAX_GEOMETRY),
     width: clampedOr(raw.width, 1, MIN_GEOMETRY, MAX_GEOMETRY),
     labelText: trimmedString(raw.labelText),

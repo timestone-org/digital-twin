@@ -1365,6 +1365,50 @@
               "data_type": "number"
             }
           ]
+        },
+        {
+          "key": "panelValues",
+          "label": "信息牌字段",
+          "data_type": "number",
+          "is_array": true,
+          "array_fields": [
+            {
+              "key": "value",
+              "label": "数值",
+              "data_type": "number"
+            }
+          ]
+        },
+        {
+          "key": "arrowValues",
+          "label": "箭头读数",
+          "data_type": "number",
+          "is_array": true,
+          "array_fields": [
+            {
+              "key": "value",
+              "label": "数值",
+              "data_type": "number"
+            }
+          ]
+        },
+        {
+          "key": "flowValues",
+          "label": "能量流",
+          "data_type": "number",
+          "is_array": true,
+          "array_fields": [
+            {
+              "key": "intensity",
+              "label": "强度",
+              "data_type": "number"
+            },
+            {
+              "key": "active",
+              "label": "激活",
+              "data_type": "boolean"
+            }
+          ]
         }
       ]
     }
