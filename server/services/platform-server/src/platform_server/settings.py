@@ -125,8 +125,10 @@ class Settings(AppSettings, PostgresSettings, RedisSettings, SqlServerSettings):
     acmodel_train_timeout_s: float = 900.0
 
     # 预测下发，见 docs/AC_PUBLISH_DESIGN.md §5
-    # opcua-server 的地址。⚠ 直连不经边缘：边缘对 `/internal/` 一律 deny
-    opcua_base_url: str = "http://opcua-server:8000"
+    # opcua-server 的地址。⚠ 直连不经边缘：边缘对 `/internal/` 一律 deny。
+    # ⚠ 端口是 **8008** 不是 8000——8000 是 realtime-hub 的，两个抄串了的表现是
+    # 「校验点位时 opcua-server 不可达」，而两个服务都活得好好的
+    opcua_base_url: str = "http://opcua-server:8008"
     opcua_timeout_s: float = Field(default=5.0, gt=0)
     # 一拍多久。⚠ 不做成可配的现场差异——EMS 是逐分钟写入的，调到 5 秒只会
     # 让同一份数据被反复算，并把外库压垮

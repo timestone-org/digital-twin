@@ -79,6 +79,8 @@ services:
       # ⚠ /internal/ 的服务级密钥，与 collector 取同一个值：
       # 分叉就是 collector 永远拉不到采集计划，而两侧代码单看都对
       PLATFORM_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
+      # ⚠ 8008 不是 8000——8000 是 realtime-hub 的
+      PLATFORM_OPCUA_BASE_URL: http://opcua-server:8008
       # 采集计划变更的广播频道，collector 订阅同一个
       PLATFORM_COLLECT_PLAN_CHANNEL: ${COLLECT_PLAN_CHANNEL:-collect:plan:changed}
       PLATFORM_COLLECT_BUCKET_TIMEZONE: ${COLLECT_BUCKET_TIMEZONE:-Asia/Shanghai}
@@ -165,6 +167,8 @@ services:
       # ⚠ 回退链必须与 platform-server 逐字一致：少写一处就是非对称失效
       PLATFORM_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
       PLATFORM_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
+      # ⚠ 8008 不是 8000——8000 是 realtime-hub 的
+      PLATFORM_OPCUA_BASE_URL: http://opcua-server:8008
       PLATFORM_REDIS_HOST: ${REDIS_HOST:?必填}
       PLATFORM_REDIS_PORT: ${REDIS_PORT:-6379}
       PLATFORM_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
