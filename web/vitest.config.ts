@@ -19,6 +19,11 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     globals: false,
+    // ⚠ 默认的 5s 对这套规模（近六千条，大半要 mount 组件）在 CPU 受限的
+    // 容器里不够：卡顿时随机哪一条都可能撞上，且每轮撞的是不同的几条——
+    // 看着像四处冒出来的 flaky，其实是同一个阈值太紧。超时只是防死循环的
+    // 保护上限，不是性能断言；正常用例是毫秒级，永远碰不到 15s。
+    testTimeout: 15_000,
     // 用例只从各成员的 tests/ 收；src/ 下不许出现测试文件（结构闸会拦）
     include: [
       '{app,packages}/*/tests/**/*.{test,spec}.ts',
