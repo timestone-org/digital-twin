@@ -23,8 +23,8 @@ import {
 import type { Object3D } from 'three'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import { createFrameClock } from './frameClock'
 import { GroundGridLayer } from './groundGrid'
+import { ModelAnimations } from './modelAnimations'
 import TwinRoamControls from './TwinRoamControls.vue'
 import { useRoamTour } from './useRoamTour'
 import { SceneLayers, type SceneLayerValues } from './sceneLayers'
@@ -33,6 +33,7 @@ import type { TwinPartClick } from './partPicking'
 import TwinSceneOverlay from './TwinSceneOverlay.vue'
 import TwinViewpointBar from './TwinViewpointBar.vue'
 import { usePartClick } from './usePartClick'
+import { useRenderLoop } from './useRenderLoop'
 import { useTwinModelLoad } from './useTwinModelLoad'
 import { useViewpointSwitch } from './useViewpointSwitch'
 import { EMPTY_NODE_INDEX, type NodeIndex } from './nodeIndex'
@@ -45,8 +46,6 @@ import {
   createWebGLRenderer,
   disposeScene,
   frameObject,
-  renderScene,
-  resizeScene,
   type SceneCore,
 } from './sceneCore'
 
@@ -72,18 +71,20 @@ const containerRef = ref<HTMLDivElement | null>(null)
 let core: SceneCore | null = null
 let layers: SceneLayers | null = null
 let groundGrid: GroundGridLayer | null = null
-const clock = createFrameClock()
+let animations: ModelAnimations | null = null
 let nodeIndex: NodeIndex = EMPTY_NODE_INDEX
-let observer: ResizeObserver | null = null
-let frameHandle = 0
 
 const model = useTwinModelLoad({
   core: () => core,
   asset: () => props.config.model.asset,
   parts: () => props.config.parts,
-  onReady: (root, index) => {
+  onReady: (asset, index) => {
     nodeIndex = index
-    applyInitialPose(root)
+    // 动画属于模型，换模型整层重建；只换配置走 refreshLayers 里的 apply
+    animations?.dispose()
+    animations = new ModelAnimations(asset.root, asset.clips)
+    animations.apply(props.config.model.animations)
+    applyInitialPose(asset.root)
     refreshLayers()
   },
 })
@@ -120,33 +121,22 @@ const backgroundStyle = computed(() => {
   return { background: spec.startsWith('--') ? `var(${spec})` : spec }
 })
 
-/** 把这一帧的时长交给需要动的那两层。 */
-function animate(delta: number): void {
-  if (delta <= 0) return
-  layers?.update(delta)
-}
-
 /** 一帧多少毫秒；帧钟给的是秒。 */
 const MS_PER_S = 1000
 
-function tick(now: number): void {
-  if (core === null) return
-  const delta = clock.tick(now)
-  animate(delta)
-  // ⚠ 用帧钟夹过的时长，不用 rAF 的原始时刻：切走标签页再回来那一帧有几十秒，
-  // 直接算下去会一帧飞完整条轨迹
-  roam.advance(delta * MS_PER_S)
-  // ⚠ 每帧都要算：镜头一直在动，距离规则的成立与否随时在变
-  layers?.applyDistanceRules(distanceContextOf(core))
-  renderScene(core)
-  frameHandle = requestAnimationFrame(tick)
-}
-
-function measure(): void {
-  const element = containerRef.value
-  if (core === null || element === null) return
-  resizeScene(core, element.clientWidth, element.clientHeight)
-}
+const loop = useRenderLoop({
+  core: () => core,
+  element: () => containerRef.value,
+  onFrame: (deltaS) => {
+    if (deltaS > 0) {
+      layers?.update(deltaS)
+      animations?.update(deltaS)
+    }
+    roam.advance(deltaS * MS_PER_S)
+    // ⚠ 每帧都要算：镜头一直在动，距离规则的成立与否随时在变
+    if (core !== null) layers?.applyDistanceRules(distanceContextOf(core))
+  },
+})
 
 /** 当前这一拍的五路实时值。 */
 function liveValues(): SceneLayerValues {
@@ -165,6 +155,7 @@ function refreshLayers(): void {
   // 会一直到换模型才生效，中间那段是「调了没反应」
   placeModel()
   syncGroundGrid()
+  animations?.apply(props.config.model.animations)
   layers?.build(props.config, liveValues(), nodeIndex)
   // ⚠ 建完立刻按当前机位算一次：等下一帧的话，配了近距隐藏的元素会先露一帧
   layers?.applyDistanceRules(distanceContextOf(core))
@@ -215,28 +206,28 @@ onMounted(() => {
   layers.addTo(core.scene)
   groundGrid = new GroundGridLayer(core.scene, element)
   syncGroundGrid()
-  observer = new ResizeObserver(measure)
-  observer.observe(element)
-  measure()
-  clock.reset()
-  frameHandle = requestAnimationFrame(tick)
+  loop.start()
   // ⚠ 必须等 core 建好再装：漫游要往轨道控制器上挂监听，早一步挂不上去
   roam.attach()
   viewpoints.attach()
   void model.load()
 })
 
-onBeforeUnmount(() => {
-  // ⚠ 先让在途装载作废再释放：晚一步回来的那次会往已 dispose 的场景里挂模型
-  model.abort()
-  cancelAnimationFrame(frameHandle)
-  observer?.disconnect()
-  observer = null
-  viewpoints.detach()
+/** 三层各自持有 GPU 资源，卸载时一个都不能漏。 */
+function disposeLayers(): void {
   layers?.dispose()
   layers = null
   groundGrid?.dispose()
   groundGrid = null
+  animations?.dispose()
+  animations = null
+}
+
+onBeforeUnmount(() => {
+  // ⚠ 先让在途装载作废再释放：晚一步回来的那次会往已 dispose 的场景里挂模型
+  model.abort()
+  viewpoints.detach()
+  disposeLayers()
   if (core !== null) disposeScene(core)
   core = null
   nodeIndex = EMPTY_NODE_INDEX

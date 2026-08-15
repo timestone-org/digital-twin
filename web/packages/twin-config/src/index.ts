@@ -30,6 +30,7 @@ export {
   twinRowLabels,
 } from './bindingRows'
 export type { TwinBindingRow } from './bindingRows'
+export { defaultCameraOf } from './cameraSelect'
 export { flattenPanelFields } from './normalizeElements'
 export type { FlatPanelField } from './normalizeElements'
 export {
@@ -62,7 +63,6 @@ export {
   MAX_ROAM_TOUR_SEGMENT_MS,
   MIN_CAMERA_FOV,
   MIN_ROAM_TOUR_STOPS,
-  defaultCameraOf,
   normalizeRoamTour,
 } from './normalizeScene'
 export { applyRoamEasing, interpTwinPose } from './roamPose'

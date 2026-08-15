@@ -7,11 +7,11 @@
  */
 import { describe, expect, it } from 'vitest'
 
+import { defaultCameraOf } from '../src/cameraSelect'
 import {
   DEFAULT_CAMERA_FOV,
   MAX_CAMERA_FOV,
   MIN_CAMERA_FOV,
-  defaultCameraOf,
   normalizeCamera,
   normalizeModel,
   normalizeViewpoints,

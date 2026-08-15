@@ -46,9 +46,23 @@ describe('模型装载', () => {
   it('解析成功时把 gltf 的场景交出去', async () => {
     const root = scene()
 
-    await expect(loadTwinModel('/m.glb', {}, sourceOf(root))).resolves.toBe(
-      root,
-    )
+    await expect(
+      loadTwinModel('/m.glb', {}, sourceOf(root)),
+    ).resolves.toStrictEqual({ root, clips: [] })
+  })
+
+  // ⚠ `gltf.animations` 与 `gltf.scene` 是并列的两半，只取 scene 的话 GLB 里的
+  // 内置动画就此丢失，而模型看着是正常加载出来的
+  it('模型自带的动画剪辑跟着交出来，不被丢掉', async () => {
+    const root = scene()
+    const clip = new THREE.AnimationClip('转动', -1, [])
+    const source = {
+      loadAsync: () => Promise.resolve({ scene: root, animations: [clip] }),
+    }
+
+    const asset = await loadTwinModel('/m.glb', {}, source)
+
+    expect(asset.clips).toEqual([clip])
   })
 
   it('进度按已下载与总字节回传', async () => {

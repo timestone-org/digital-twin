@@ -7,7 +7,7 @@ import type { Object3D } from 'three'
 import { ref, type Ref } from 'vue'
 
 import { resolveTwinModelUrl } from './host'
-import { loadTwinModel } from './modelLoader'
+import { loadTwinModel, type TwinModelAsset } from './modelLoader'
 import {
   EMPTY_NODE_INDEX,
   buildNodeIndex,
@@ -25,8 +25,8 @@ export interface TwinModelLoadOptions {
   asset: () => string
   /** 部件清单，用来报「配了但模型里没有」的节点名。 */
   parts: () => readonly TwinPart[]
-  /** 模型挂好了：宿主据此摆放、建层、取景。 */
-  onReady: (root: Object3D, index: NodeIndex) => void
+  /** 模型挂好了：宿主据此摆放、建层、取景、装动画。 */
+  onReady: (asset: TwinModelAsset, index: NodeIndex) => void
 }
 
 export interface TwinModelLoad {
@@ -79,16 +79,16 @@ export function useTwinModelLoad(options: TwinModelLoadOptions): TwinModelLoad {
     errorMessage.value = message
   }
 
-  function mount(root: Object3D): void {
+  function mount(asset: TwinModelAsset): void {
     const core = options.core()
     if (core === null) return
     clear()
-    modelObject = root
-    core.modelRoot.add(root)
-    nodeIndex = buildNodeIndex(root)
+    modelObject = asset.root
+    core.modelRoot.add(asset.root)
+    nodeIndex = buildNodeIndex(asset.root)
     missingNodes.value = unmatchedNodeNames(nodeIndex, options.parts())
     status.value = 'ready'
-    options.onReady(root, nodeIndex)
+    options.onReady(asset, nodeIndex)
   }
 
   function reportProgress(seq: number, loaded: number, total: number): void {
@@ -108,13 +108,13 @@ export function useTwinModelLoad(options: TwinModelLoadOptions): TwinModelLoad {
     status.value = 'loading'
     progressPercent.value = 0
     try {
-      const root = await loadTwinModel(url, {
+      const asset = await loadTwinModel(url, {
         signal: controller.signal,
         onProgress: (loaded, total) => reportProgress(mine, loaded, total),
       })
       // ⚠ 慢的那次后返回时要连同它的 GPU 资源一起丢掉：只 return 是一次纯泄漏
-      if (mine !== loadSeq) return disposeSceneGraph(root)
-      mount(root)
+      if (mine !== loadSeq) return disposeSceneGraph(asset.root)
+      mount(asset)
     } catch (error) {
       if (mine !== loadSeq) return
       fail(error instanceof Error ? error.message : '模型加载失败')

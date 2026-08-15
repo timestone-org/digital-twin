@@ -173,17 +173,6 @@ export function normalizeViewpoints(raw: unknown): TwinViewpointSwitcher {
 }
 
 /**
- * 打开大屏时用的机位；一个都没标默认就用文档序第一个，一个视点都没有给 null。
- * ⚠ 多个都标了只认第一个：让「最后一个赢」会让人在列表里改顺序时莫名换镜头。
- * @param cameras 归一化后的视点
- */
-export function defaultCameraOf(
-  cameras: readonly TwinCamera[],
-): TwinCamera | null {
-  return cameras.find((item) => item.isDefault) ?? cameras[0] ?? null
-}
-
-/**
  * 漫游的两段时长与闲置延时的缺省与上限，ms。
  * ⚠ 上限不是排版洁癖：一段配到几分钟时，用户只会看到「镜头卡住不动了」，
  * 而画面上没有任何东西说明它其实正在以极慢的速度飞。

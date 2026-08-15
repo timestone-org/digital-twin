@@ -13,7 +13,18 @@ export interface GltfSource {
   loadAsync(
     url: string,
     onProgress?: (event: ProgressEvent) => void,
-  ): Promise<{ scene: THREE.Object3D }>
+  ): Promise<{ scene: THREE.Object3D; animations?: THREE.AnimationClip[] }>
+}
+
+/**
+ * 装载结果。
+ * ⚠ 动画剪辑必须跟着场景一起交出来：`gltf.animations` 与 `gltf.scene` 是并列的两半，
+ * 只取 scene 的话 GLB 里的内置动画就此丢失，而模型看着是正常加载出来的。
+ */
+export interface TwinModelAsset {
+  root: THREE.Object3D
+  /** GLB 自带的动画剪辑；没有动画的模型是空数组。 */
+  clips: readonly THREE.AnimationClip[]
 }
 
 export interface TwinModelLoadOptions {
@@ -47,7 +58,7 @@ export async function loadTwinModel(
   url: string,
   options: TwinModelLoadOptions = {},
   source: GltfSource = createGltfSource(),
-): Promise<THREE.Object3D> {
+): Promise<TwinModelAsset> {
   if (isAborted(options.signal)) throw abortError()
   const gltf = await source.loadAsync(url, (event) => {
     options.onProgress?.(event.loaded, event.lengthComputable ? event.total : 0)
@@ -56,5 +67,5 @@ export async function loadTwinModel(
     disposeSceneGraph(gltf.scene)
     throw abortError()
   }
-  return gltf.scene
+  return { root: gltf.scene, clips: gltf.animations ?? [] }
 }

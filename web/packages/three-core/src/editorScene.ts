@@ -539,7 +539,9 @@ export class EditorScene {
     }
     this.on.status('loading', '')
     try {
-      const root = await loadTwinModel(
+      // 编辑视口不播模型内置动画：镜头与配置一直在动，再叠一层自走的动画
+      // 只会让「我刚改的东西生效了吗」变得看不出来
+      const { root } = await loadTwinModel(
         url,
         { signal: controller.signal },
         this.gltfSource,

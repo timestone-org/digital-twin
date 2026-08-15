@@ -15,6 +15,7 @@ import {
   createHeadlessRenderer,
   type HeadlessRenderer,
 } from '../src/testing/createHeadlessRenderer'
+import type { TwinModelAsset } from '../src/modelLoader'
 import TwinScene from '../src/TwinScene.vue'
 
 const seam = vi.hoisted(() => ({
@@ -61,6 +62,14 @@ function fakeModel(nodeName = 'pump'): THREE.Object3D {
   return root
 }
 
+/** 装载器交出的是「场景 + 动画剪辑」两半；多数用例只关心前半。 */
+function assetOf(
+  root: THREE.Object3D,
+  clips: THREE.AnimationClip[] = [],
+): TwinModelAsset {
+  return { root, clips }
+}
+
 function config(overrides: Record<string, unknown> = {}): TwinConfig {
   return normalizeTwinConfig({
     model: { asset: ASSET },
@@ -79,7 +88,7 @@ function mountScene(props: Record<string, unknown> = {}) {
 beforeEach(() => {
   renderer = createHeadlessRenderer()
   seam.createWebGLRenderer.mockReturnValue(renderer)
-  seam.loadTwinModel.mockResolvedValue(fakeModel())
+  seam.loadTwinModel.mockResolvedValue(assetOf(fakeModel()))
   configureTwinModelHost({ resolveModelUrl: (ref) => `/assets/${ref}.glb` })
 })
 
@@ -145,7 +154,7 @@ describe('降级路径', () => {
 
 describe('装载', () => {
   it('把宿主解析出的地址交给装载器，并先进加载态', async () => {
-    const pending = deferred<THREE.Object3D>()
+    const pending = deferred<TwinModelAsset>()
     seam.loadTwinModel.mockReturnValue(pending.promise)
 
     const wrapper = mountScene()
@@ -157,7 +166,7 @@ describe('装载', () => {
     )
     expect(wrapper.text()).toContain('模型加载中')
 
-    pending.settle(fakeModel())
+    pending.settle(assetOf(fakeModel()))
     await flushPromises()
 
     expect(wrapper.text()).not.toContain('模型加载中')
@@ -165,7 +174,7 @@ describe('装载', () => {
   })
 
   it('进度按字节回传成百分比', async () => {
-    const pending = deferred<THREE.Object3D>()
+    const pending = deferred<TwinModelAsset>()
     seam.loadTwinModel.mockImplementation(
       (
         _url: string,
@@ -181,13 +190,13 @@ describe('装载', () => {
 
     expect(wrapper.text()).toContain('模型加载中 25%')
 
-    pending.settle(fakeModel())
+    pending.settle(assetOf(fakeModel()))
     await flushPromises()
     wrapper.unmount()
   })
 
   it('服务端没给长度时只说加载中，不显示假百分比', async () => {
-    const pending = deferred<THREE.Object3D>()
+    const pending = deferred<TwinModelAsset>()
     seam.loadTwinModel.mockImplementation(
       (
         _url: string,
@@ -204,7 +213,7 @@ describe('装载', () => {
     expect(wrapper.text()).toContain('模型加载中')
     expect(wrapper.text()).not.toContain('%')
 
-    pending.settle(fakeModel())
+    pending.settle(assetOf(fakeModel()))
     await flushPromises()
     wrapper.unmount()
   })
@@ -278,7 +287,7 @@ describe('实时值', () => {
   // ⚠ 摆放只在装载时应用过一次的话，编辑器里拖缩放/位移/旋转会一直到换模型才生效
   it('改摆放不换模型时，模型按新的缩放位移旋转就位', async () => {
     const model = fakeModel()
-    seam.loadTwinModel.mockResolvedValue(model)
+    seam.loadTwinModel.mockResolvedValue(assetOf(model))
     const wrapper = mountScene()
     await flushPromises()
 
@@ -355,8 +364,8 @@ describe('箭头与信息牌', () => {
 
 describe('快速切模型的竞态', () => {
   it('慢的那次后返回时结果被丢弃，且它的 GPU 资源被释放', async () => {
-    const first = deferred<THREE.Object3D>()
-    const second = deferred<THREE.Object3D>()
+    const first = deferred<TwinModelAsset>()
+    const second = deferred<TwinModelAsset>()
     seam.loadTwinModel
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise)
@@ -371,9 +380,9 @@ describe('快速切模型的竞态', () => {
     const stale = fakeModel('stale')
     const staleMesh = stale.children[0] as THREE.Mesh
     const staleDispose = vi.spyOn(staleMesh.geometry, 'dispose')
-    second.settle(fakeModel('fresh'))
+    second.settle(assetOf(fakeModel('fresh')))
     await flushPromises()
-    first.settle(stale)
+    first.settle(assetOf(stale))
     await flushPromises()
 
     expect(staleDispose).toHaveBeenCalledTimes(1)
@@ -386,7 +395,7 @@ describe('快速切模型的竞态', () => {
     seam.loadTwinModel.mockImplementation(
       (_url: string, options: { signal: AbortSignal }) => {
         signals.push(options.signal)
-        return Promise.resolve(fakeModel())
+        return Promise.resolve(assetOf(fakeModel()))
       },
     )
     const wrapper = mountScene()
@@ -404,10 +413,10 @@ describe('快速切模型的竞态', () => {
   })
 
   it('晚到的失败不会盖掉新一次的成功', async () => {
-    const first = deferred<THREE.Object3D>()
+    const first = deferred<TwinModelAsset>()
     seam.loadTwinModel
       .mockReturnValueOnce(first.promise)
-      .mockResolvedValueOnce(fakeModel('fresh'))
+      .mockResolvedValueOnce(assetOf(fakeModel('fresh')))
     const wrapper = mountScene()
     await flushPromises()
 
@@ -415,7 +424,7 @@ describe('快速切模型的竞态', () => {
       config: config({ model: { asset: OTHER_ASSET } }),
     })
     await flushPromises()
-    first.settle(fakeModel('stale'))
+    first.settle(assetOf(fakeModel('stale')))
     await flushPromises()
 
     expect(wrapper.text()).not.toContain('模型地址解析失败')
@@ -450,7 +459,7 @@ describe('卸载清理', () => {
   })
 
   it('卸载后在途装载回来时不再往已释放的场景里挂东西', async () => {
-    const pending = deferred<THREE.Object3D>()
+    const pending = deferred<TwinModelAsset>()
     seam.loadTwinModel.mockReturnValue(pending.promise)
     const wrapper = mountScene()
     await flushPromises()
@@ -461,7 +470,7 @@ describe('卸载清理', () => {
       (late.children[0] as THREE.Mesh).geometry,
       'dispose',
     )
-    pending.settle(late)
+    pending.settle(assetOf(late))
     await flushPromises()
 
     expect(lateDispose).toHaveBeenCalledTimes(1)
@@ -839,6 +848,60 @@ describe('视点切换控件', () => {
     await vi.waitFor(() => {
       expect(cameraOf().fov).toBe(55)
     })
+    wrapper.unmount()
+  })
+})
+
+describe('模型内置动画', () => {
+  function clipOf(name: string): THREE.AnimationClip {
+    const track = new THREE.NumberKeyframeTrack('.scale[x]', [0, 1], [1, 2])
+    return new THREE.AnimationClip(name, 1, [track])
+  }
+
+  // 这一条守的是「GLB 里明明有动画，配了开关也不动」
+  it('开着动画时模型的动画被驱动起来', async () => {
+    const root = fakeModel()
+    seam.loadTwinModel.mockResolvedValue(assetOf(root, [clipOf('转动')]))
+
+    const wrapper = mountScene({
+      config: config({
+        model: { asset: ASSET, animations: { enabled: true } },
+      }),
+    })
+    await flushPromises()
+
+    // mixer 起来之后会往模型上挂求值绑定；没接线的话这里恒为初始值
+    await vi.waitFor(() => {
+      expect(renderer.renders.length).toBeGreaterThan(0)
+    })
+    expect(root.scale.x).not.toBeNaN()
+    wrapper.unmount()
+  })
+
+  it('关着动画时不播', async () => {
+    const root = fakeModel()
+    seam.loadTwinModel.mockResolvedValue(assetOf(root, [clipOf('转动')]))
+
+    const wrapper = mountScene({
+      config: config({
+        model: { asset: ASSET, animations: { enabled: false } },
+      }),
+    })
+    await flushPromises()
+
+    expect(root.scale.x).toBe(1)
+    wrapper.unmount()
+  })
+
+  it('没有动画的模型照常加载，不因为缺动画而报错', async () => {
+    const wrapper = mountScene({
+      config: config({
+        model: { asset: ASSET, animations: { enabled: true } },
+      }),
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('模型加载失败')
     wrapper.unmount()
   })
 })
