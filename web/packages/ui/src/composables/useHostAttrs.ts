@@ -9,10 +9,7 @@ import type { ComputedRef, StyleValue } from 'vue'
 
 /** `class` 的全部合法写法：串、对象、以及它们的嵌套数组。 */
 export type ClassValue =
-  | string
-  | undefined
-  | Record<string, boolean | undefined>
-  | ClassValue[]
+  string | undefined | Record<string, boolean | undefined> | ClassValue[]
 
 export interface HostAttrs {
   /** 挂到外壳上的 class。 */

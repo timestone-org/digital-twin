@@ -10721,7 +10721,7 @@
     },
     "/api/v1/platform/ac-models/{model_id}/publication:publish": {
       "post": {
-        "description": "按当前实时工况算一次并写进点位。\n\n⚠ 走的是与每分钟那条循环**完全相同**的代码路径，只是不经租约。两条路\n分开写的话，页面上试通了、循环里还是不通。\n\nArgs: model_id, container, reader, nodes, _manager。",
+        "description": "按当前实时工况算一次并写进点位。\n\n⚠ 走的是与每分钟那条循环**完全相同**的代码路径，只是不经租约。两条路\n分开写的话，页面上试通了、循环里还是不通。\n\nArgs: model_id, sessions, reader, nodes, _manager。",
         "operationId": "publish_now_api_v1_platform_ac_models__model_id__publication_publish_post",
         "parameters": [
           {

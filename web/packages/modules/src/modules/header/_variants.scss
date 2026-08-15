@@ -162,32 +162,38 @@
   background-image:
     radial-gradient(
       circle 3px at 30% 55%,
-      color-mix(in srgb, var(--dt-header-accent) 30%, var(--fx-const-lighten)) 0 40%,
+      color-mix(in srgb, var(--dt-header-accent) 30%, var(--fx-const-lighten)) 0
+        40%,
       transparent 100%
     ),
     radial-gradient(
       circle 3px at 32% 55%,
-      color-mix(in srgb, var(--dt-header-accent) 30%, var(--fx-const-lighten)) 0 40%,
+      color-mix(in srgb, var(--dt-header-accent) 30%, var(--fx-const-lighten)) 0
+        40%,
       transparent 100%
     ),
     radial-gradient(
       circle 3px at 34% 55%,
-      color-mix(in srgb, var(--dt-header-accent) 30%, var(--fx-const-lighten)) 0 40%,
+      color-mix(in srgb, var(--dt-header-accent) 30%, var(--fx-const-lighten)) 0
+        40%,
       transparent 100%
     ),
     radial-gradient(
       circle 3px at 66% 55%,
-      color-mix(in srgb, var(--dt-header-accent) 30%, var(--fx-const-lighten)) 0 40%,
+      color-mix(in srgb, var(--dt-header-accent) 30%, var(--fx-const-lighten)) 0
+        40%,
       transparent 100%
     ),
     radial-gradient(
       circle 3px at 68% 55%,
-      color-mix(in srgb, var(--dt-header-accent) 30%, var(--fx-const-lighten)) 0 40%,
+      color-mix(in srgb, var(--dt-header-accent) 30%, var(--fx-const-lighten)) 0
+        40%,
       transparent 100%
     ),
     radial-gradient(
       circle 3px at 70% 55%,
-      color-mix(in srgb, var(--dt-header-accent) 30%, var(--fx-const-lighten)) 0 40%,
+      color-mix(in srgb, var(--dt-header-accent) 30%, var(--fx-const-lighten)) 0
+        40%,
       transparent 100%
     );
   pointer-events: none;

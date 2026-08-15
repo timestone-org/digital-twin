@@ -82,7 +82,8 @@ const gridRef = panes.hostRef
 const zoom = ref<CanvasZoom>(null)
 const canvasRef = ref<InstanceType<typeof EditorCanvas> | null>(null)
 const fitScale = computed(() => canvasRef.value?.fitScale ?? 1)
-const centerOn = (nodeId: string): void => void canvasRef.value?.centerOn(nodeId)
+const centerOn = (nodeId: string): void =>
+  void canvasRef.value?.centerOn(nodeId)
 
 const arrange = createArrangeActions({
   editor,

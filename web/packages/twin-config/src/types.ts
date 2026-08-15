@@ -31,8 +31,7 @@ export interface TwinStarfield {
 
 /** 底座的反射档。`none` 之外两档更费，低配机器上要能关掉。 */
 export const TWIN_PEDESTAL_REFLECTIONS = ['none', 'soft', 'mirror'] as const
-export type TwinPedestalReflection =
-  (typeof TWIN_PEDESTAL_REFLECTIONS)[number]
+export type TwinPedestalReflection = (typeof TWIN_PEDESTAL_REFLECTIONS)[number]
 
 /** 底座舞台：模型脚下那一圈。 */
 export interface TwinPedestal {
@@ -98,7 +97,6 @@ export interface TwinModelRef {
   animations: TwinModelAnimations
   sceneEffects: TwinSceneEffects
 }
-
 
 /**
  * 距离参考系。
@@ -183,7 +181,6 @@ export interface TwinAnchor {
   decimals: number | null
   visibility: TwinVisibilityRule
 }
-
 
 /** 信息牌风格变体。 */
 export const TWIN_PANEL_VARIANTS = [

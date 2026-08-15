@@ -116,7 +116,9 @@ describe('页头的花纹、扫光与装饰', () => {
     expect(render({}).find('.dt-header__scan').exists()).toBe(false)
     expect(render({ scan: true }).find('.dt-header__scan').exists()).toBe(true)
     expect(
-      render({ scan: true, variant: 'plain' }).find('.dt-header__scan').exists(),
+      render({ scan: true, variant: 'plain' })
+        .find('.dt-header__scan')
+        .exists(),
     ).toBe(false)
   })
 

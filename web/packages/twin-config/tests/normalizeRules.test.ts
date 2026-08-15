@@ -77,7 +77,9 @@ describe('可见性规则', () => {
   })
 
   it('淡出缺了阈值整条作废——半条规则插不出透明度', () => {
-    expect(normalizeVisibility({ fade: { direction: 'below' } }).fade).toBeNull()
+    expect(
+      normalizeVisibility({ fade: { direction: 'below' } }).fade,
+    ).toBeNull()
   })
 
   it('淡出的透明度夹在 [0,1]，方向缺省是远处淡', () => {
@@ -92,7 +94,9 @@ describe('可见性规则', () => {
   })
 
   it('淡出的透明度缺省是全透明：配了淡出却不给值时该淡掉', () => {
-    expect(normalizeVisibility({ fade: { at: { value: 10 } } }).fade?.opacity).toBe(0)
+    expect(
+      normalizeVisibility({ fade: { at: { value: 10 } } }).fade?.opacity,
+    ).toBe(0)
   })
 })
 

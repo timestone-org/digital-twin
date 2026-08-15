@@ -39,7 +39,7 @@ describe('整宽贴底的横幅铺法', () => {
   it('地址包成整宽贴底', () => {
     expect(bannerBackground('/a.png')).toBe(
       'url("/a.png") center bottom / 100% 100% no-repeat',
-    );
+    )
   })
 
   it('地址里的引号 / 反斜杠 / 换行一律剔掉，免得截断声明', () => {

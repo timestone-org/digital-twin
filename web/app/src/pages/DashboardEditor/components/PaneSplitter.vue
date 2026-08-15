@@ -4,11 +4,7 @@
  * ⚠ 它是 `role="separator"` 而不是按钮：读屏要能报出「现在多宽、能拖到多宽」，
  * 所以 `aria-valuenow` / `min` / `max` 三个都得给，且键盘也要能挪。
  */
-import {
-  NUDGE_COARSE_PX,
-  NUDGE_PX,
-  type PaneLimits,
-} from '../paneWidths'
+import { NUDGE_COARSE_PX, NUDGE_PX, type PaneLimits } from '../paneWidths'
 
 const props = defineProps<{
   label: string

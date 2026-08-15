@@ -209,6 +209,8 @@ async def test_permission_catalog_is_readable_and_grouped(
     body = (
         await app_client.get(f"{API_PREFIX}/permissions", headers=headers)
     ).json()["data"]
+    # ⚠ 加功能面就要同步改这条：权限目录是授权界面的全部内容，静默变长意味着
+    # 新面的权限没人复核就出现在了角色勾选框里
     assert {group["code"] for group in body["groups"]} == {
         "user",
         "system",
@@ -216,5 +218,6 @@ async def test_permission_catalog_is_readable_and_grouped(
         "opcua",
         "dashboard",
         "collect",
+        "asset",
     }
     assert all(item["kind"] for item in body["items"])

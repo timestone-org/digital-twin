@@ -61,7 +61,9 @@ describe('信息牌', () => {
   })
 
   it('不认识的变体与朝向都回落到缺省', () => {
-    const style = panel({ style: { variant: 'neon', orient: 'diagonal' } }).style
+    const style = panel({
+      style: { variant: 'neon', orient: 'diagonal' },
+    }).style
     expect(style.variant).toBe('card')
     expect(style.orient).toBe('center')
   })

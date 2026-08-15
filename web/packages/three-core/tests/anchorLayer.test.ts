@@ -2,7 +2,11 @@
  * @fileoverview 守锚点层的契约：只建可见锚点、读数取不到时显示占位符而不是空白、
  * 标签文本只走 textContent（不给注入留口子）、dispose 连 CSS2D 的 DOM 一起带走。
  */
-import type { TwinAnchor, TwinVisibilityRule, TwinAnchorValues } from '@dt/twin-config'
+import type {
+  TwinAnchor,
+  TwinVisibilityRule,
+  TwinAnchorValues,
+} from '@dt/twin-config'
 import * as THREE from 'three'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 

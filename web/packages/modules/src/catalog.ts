@@ -17,14 +17,19 @@ export const MODULE_CATALOG_VERSION = 1
 
 /** 序列化后的一层 JSON；键是 snake_case，与服务端 pydantic 模型逐字对应。 */
 export type CatalogJson = { [key: string]: CatalogValue }
-type CatalogValue = string | number | boolean | null | CatalogValue[] | CatalogJson
+type CatalogValue =
+  string | number | boolean | null | CatalogValue[] | CatalogJson
 
 /**
  * 只放进有值的键。
  * ⚠ 不许把缺席写成 `null`：服务端的可选字段缺省就是「没有」，
  * 显式 null 与缺席在 pydantic 里是同一结果，但会让两份 JSON 的 diff 全是噪声。
  */
-function put(into: CatalogJson, key: string, value: CatalogValue | undefined): void {
+function put(
+  into: CatalogJson,
+  key: string,
+  value: CatalogValue | undefined,
+): void {
   if (value !== undefined) into[key] = value
 }
 

@@ -84,7 +84,6 @@ function onRenameKeydown(event: KeyboardEvent): void {
   event.preventDefault()
   renamingId.value = null
 }
-
 </script>
 
 <template>

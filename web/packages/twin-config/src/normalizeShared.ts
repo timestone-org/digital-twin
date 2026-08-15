@@ -24,7 +24,11 @@ export function vec3(value: unknown, fallback: Vec3): Vec3 {
  * ⚠ 不用随机 id：铸出来的 id 必须可复现，否则归一化跑两遍结果就不同，
  * 而数组绑定的文档序对齐正是靠「跑两遍一样」成立的。
  */
-export function entityId(value: unknown, prefix: string, index: number): string {
+export function entityId(
+  value: unknown,
+  prefix: string,
+  index: number,
+): string {
   const id = trimmedString(value)
   return id === '' ? `${prefix}-${index}` : id
 }

@@ -12,11 +12,14 @@ import {
   normalizeFlow,
   normalizePanel,
 } from './normalizeElements'
+import { normalizeClickDistance, normalizeVisibility } from './normalizeRules'
 import {
-  normalizeClickDistance,
-  normalizeVisibility,
-} from './normalizeRules'
-import { clampedOr, entityId, normalizeList, vec3, ORIGIN } from './normalizeShared'
+  clampedOr,
+  entityId,
+  normalizeList,
+  vec3,
+  ORIGIN,
+} from './normalizeShared'
 import { isRecord, stringList, toFiniteNumber, trimmedString } from './sanitize'
 import type { TwinAnchor, TwinConfig, TwinPart } from './types'
 

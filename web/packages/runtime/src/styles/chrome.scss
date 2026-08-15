@@ -124,14 +124,14 @@
     border-radius: 0;
     box-shadow: none;
     background:
-      linear-gradient(var(--dt-bracket-color), var(--dt-bracket-color)) left top /
-        var(--dt-bracket-len) var(--dt-bracket-th) no-repeat,
-      linear-gradient(var(--dt-bracket-color), var(--dt-bracket-color)) left top /
-        var(--dt-bracket-th) var(--dt-bracket-len) no-repeat,
-      linear-gradient(var(--dt-bracket-color), var(--dt-bracket-color)) right top /
-        var(--dt-bracket-len) var(--dt-bracket-th) no-repeat,
-      linear-gradient(var(--dt-bracket-color), var(--dt-bracket-color)) right top /
-        var(--dt-bracket-th) var(--dt-bracket-len) no-repeat,
+      linear-gradient(var(--dt-bracket-color), var(--dt-bracket-color)) left
+        top / var(--dt-bracket-len) var(--dt-bracket-th) no-repeat,
+      linear-gradient(var(--dt-bracket-color), var(--dt-bracket-color)) left
+        top / var(--dt-bracket-th) var(--dt-bracket-len) no-repeat,
+      linear-gradient(var(--dt-bracket-color), var(--dt-bracket-color)) right
+        top / var(--dt-bracket-len) var(--dt-bracket-th) no-repeat,
+      linear-gradient(var(--dt-bracket-color), var(--dt-bracket-color)) right
+        top / var(--dt-bracket-th) var(--dt-bracket-len) no-repeat,
       linear-gradient(var(--dt-bracket-color), var(--dt-bracket-color)) left
         bottom / var(--dt-bracket-len) var(--dt-bracket-th) no-repeat,
       linear-gradient(var(--dt-bracket-color), var(--dt-bracket-color)) left
@@ -189,7 +189,8 @@
   .dt-module__border.dt-card-border--glow {
     border-color: var(--card-border-hover);
     box-shadow:
-      inset 0 0 0 1px color-mix(in srgb, var(--card-corner-color) 34%, transparent),
+      inset 0 0 0 1px
+        color-mix(in srgb, var(--card-corner-color) 34%, transparent),
       inset 0 0 22px -4px
         color-mix(in srgb, var(--card-corner-color) 62%, transparent);
   }

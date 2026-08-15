@@ -4,7 +4,14 @@
  * ⚠ 三者的实时值都走**数组绑定按文档序对齐**，所以这里产出的顺序就是取值的
  * 行号。插一个元素会让它之后的每一行整体后移一格——编辑器改完必须重派绑定行。
  */
-import { clampedOr, entityId, normalizeList, oneOf, vec3, ORIGIN } from './normalizeShared'
+import {
+  clampedOr,
+  entityId,
+  normalizeList,
+  oneOf,
+  vec3,
+  ORIGIN,
+} from './normalizeShared'
 import { normalizeVisibility } from './normalizeRules'
 import {
   isRecord,

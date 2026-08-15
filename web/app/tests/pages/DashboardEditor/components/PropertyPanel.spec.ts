@@ -141,5 +141,4 @@ describe('抛出的改动', () => {
 
     expect(wrapper.emitted('config')?.[0]).toEqual([['title'], '新标题', true])
   })
-
 })

@@ -39,6 +39,7 @@ from lib.logging import configure_logging
 from lib.testing import FakeObjectStore, InMemoryCache
 from lib.utils.timeutils import utcnow
 from platform_server.app import build_app
+from platform_server.apps.assets.catalog import ASSET_MANAGE, ASSET_VIEW
 from platform_server.apps.assets.deps import (
     get_object_store,
 )
@@ -93,6 +94,8 @@ from timeseries import HISTORY_SCHEMA
 
 # 与 auth-server 的 AUTH_EDGE_PERMISSION_TTL_S 同量级，用例不依赖它的确切取值
 HEADER_TTL_S = 60
+# ⚠ 每加一个受权限守着的功能面都要往这里补：漏了不是「那面没被测到」，
+# 而是那面**全部用例整片 403**，而失败信息只说不可迭代 None
 FULL_CODES = (
     AC_VIEW,
     AC_MANAGE,
@@ -102,6 +105,8 @@ FULL_CODES = (
     COLLECT_VIEW,
     COLLECT_OPERATE,
     COLLECT_MANAGE,
+    ASSET_VIEW,
+    ASSET_MANAGE,
 )
 # 命令总线的两档预算，用例里固定住，断言里的信封才是可手写的常量
 BROWSE_TIMEOUT_S = 10.0
