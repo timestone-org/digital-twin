@@ -64,6 +64,10 @@ export default defineModule({
       help: '模型、部件与锚点，整块由孪生子编辑器写入。',
     },
   ],
+  // 点中部件时上抛 `{ event: 'click', value: 部件 id }`
+  emitsInteractions: true,
+  // ⚠ `hostClickable` 刻意不开：3D 视口内部有拖拽手势，整块可点会让每次
+  //   转完镜头松手都派发一次 click（清单里 `hostClickable` 的注释写了这条）
   // 属性面板只读这份声明来决定出不出入口，故这里的路由名写错 = 入口点了没反应
   subEditor: {
     configKey: TWIN_CONFIG_KEY,

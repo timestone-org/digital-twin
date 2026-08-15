@@ -65,6 +65,22 @@ function clampOpacity(value: number): number {
 }
 
 /**
+ * 距离越过了阈值的哪一侧。规则没配、距离取不到，一律算「没越过」。
+ * @param rule 阈值与它的参考系
+ * @param distanceOf 按参考系取距离
+ * @param side `below` = 近于阈值，`above` = 远于阈值
+ */
+function crosses(
+  rule: TwinDistanceRule | null,
+  distanceOf: DistanceResolver,
+  side: 'below' | 'above',
+): boolean {
+  const distance = distanceFor(rule, distanceOf)
+  if (distance === null || rule === null) return false
+  return side === 'below' ? distance < rule.value : distance > rule.value
+}
+
+/**
  * 这一帧的显隐与不透明度。
  *
  * ⚠ 距离取不到时**不隐藏**：算不出来就不该动它。反过来做的话，模型还没加载完
@@ -79,26 +95,14 @@ export function resolveVisibility(
 ): TwinVisibilityState {
   // 作者直接关掉的，距离再怎么样也不显示
   if (!rule.visible) return HIDDEN
-
-  const below = distanceFor(rule.hideBelow, distanceOf)
-  if (below !== null && rule.hideBelow !== null && below < rule.hideBelow.value) {
-    return HIDDEN
-  }
-  const above = distanceFor(rule.hideAbove, distanceOf)
-  if (above !== null && rule.hideAbove !== null && above > rule.hideAbove.value) {
-    return HIDDEN
-  }
+  if (crosses(rule.hideBelow, distanceOf, 'below')) return HIDDEN
+  if (crosses(rule.hideAbove, distanceOf, 'above')) return HIDDEN
 
   const fade = rule.fade
   if (fade === null) return FULLY_VISIBLE
-  const at = distanceFor(fade.at, distanceOf)
-  if (at === null) return FULLY_VISIBLE
   // 「淡出」是一档不是一段渐变：契约里只有一个阈值，没有渐变区间的起止
-  const faded =
-    fade.direction === 'below' ? at < fade.at.value : at > fade.at.value
-  return faded
-    ? { visible: true, opacity: clampOpacity(fade.opacity) }
-    : FULLY_VISIBLE
+  if (!crosses(fade.at, distanceOf, fade.direction)) return FULLY_VISIBLE
+  return { visible: true, opacity: clampOpacity(fade.opacity) }
 }
 
 /** 一条门禁阈值成立吗；阈值 ≤ 0 或距离取不到一律不成立（= 不限制）。 */

@@ -8,6 +8,8 @@ import { formatAnchorText } from '@dt/twin-config'
 import * as THREE from 'three'
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
 
+import { distanceResolver, type DistanceContext } from './distanceContext'
+import { resolveVisibility } from './distanceRules'
 import { ACCENT_COLOR_TOKEN, resolveColorSpec } from './themeColor'
 
 /** 没有读数时的占位符 */
@@ -24,10 +26,14 @@ const MAX_DOT_RADIUS = 0.6
 const LABEL_LIFT = 2.2
 /** 锚点压在模型之上 */
 const ANCHOR_RENDER_ORDER = 920
+/** 小球自带的不透明度，距离淡出在它之上再乘一个系数 */
+const DOT_OPACITY = 0.95
 
 interface AnchorEntry {
   anchor: TwinAnchor
   dot: THREE.Mesh
+  /** 小球材质，淡出按 `DOT_OPACITY` 成比例缩。 */
+  material: THREE.MeshBasicMaterial
   label: CSS2DObject
   valueEl: HTMLElement
 }
@@ -102,6 +108,25 @@ export class AnchorLayer {
   }
 
   /**
+   * 按这一帧的取景状态更新显隐与淡出。
+   * ⚠ CSS2D 的标签靠 `object.visible` 隐藏（CSS2DRenderer 会跟着把元素
+   * `display: none`），改元素的 class 是没用的。
+   * @param context 这一帧的相机与轨道中心
+   */
+  applyDistance(context: DistanceContext): void {
+    for (const entry of this.entries) {
+      const state = resolveVisibility(
+        entry.anchor.visibility,
+        distanceResolver(context, entry.anchor.position, null),
+      )
+      entry.dot.visible = state.visible
+      entry.label.visible = state.visible
+      entry.material.opacity = DOT_OPACITY * state.opacity
+      entry.label.element.style.opacity = String(state.opacity)
+    }
+  }
+
+  /**
    * 小球尺寸跟模型体量走，否则大模型上它小成一个点、小模型上糊成一片。
    * @param modelDiagonal 模型包围盒对角线长度
    */
@@ -127,7 +152,7 @@ export class AnchorLayer {
     const material = new THREE.MeshBasicMaterial({
       color,
       transparent: true,
-      opacity: 0.95,
+      opacity: DOT_OPACITY,
       depthTest: false,
     })
     const dot = new THREE.Mesh(geometry, material)
@@ -142,7 +167,7 @@ export class AnchorLayer {
     styleLabel(element, valueEl)
     const label = new CSS2DObject(element)
     this.group.add(dot, label)
-    return { anchor, dot, label, valueEl }
+    return { anchor, dot, material, label, valueEl }
   }
 
   private applyRadius(): void {
@@ -156,15 +181,11 @@ export class AnchorLayer {
   // ⚠ CSS2D 的 DOM 元素挂在标签层容器里，光从场景图上摘下对象带不走它——
   // 漏了这一步，卸载后标签还留在页面上飘着
   private clear(): void {
-    const materials = new Set<THREE.Material>()
     for (const entry of this.entries) {
       entry.label.element.remove()
       this.group.remove(entry.dot, entry.label)
-      if (entry.dot.material instanceof THREE.Material) {
-        materials.add(entry.dot.material)
-      }
+      entry.material.dispose()
     }
-    for (const material of materials) material.dispose()
     this.geometry?.dispose()
     this.geometry = null
     this.entries = []

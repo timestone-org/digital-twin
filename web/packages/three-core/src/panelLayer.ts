@@ -17,6 +17,9 @@ import { EMPTY_PANEL_VALUES, formatValueText } from '@dt/twin-config'
 import * as THREE from 'three'
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
 
+import { distanceResolver, type DistanceContext } from './distanceContext'
+import { resolveVisibility } from './distanceRules'
+
 /** 没有读数、也没有静态文案时的占位符 */
 const NO_VALUE_TEXT = '—'
 
@@ -31,6 +34,8 @@ interface PanelEntry {
   label: CSS2DObject
   fields: FieldEntry[]
 }
+
+/** 牌的落点已经在 `label.position` 上，距离规则直接读它，不再算第二遍。 */
 
 /**
  * 牌的落点：锚点优先，锚点找不到时退回自己的坐标。
@@ -142,6 +147,23 @@ export class PanelLayer {
       for (const field of entry.fields) {
         field.valueEl.textContent = fieldText(field, values)
       }
+    }
+  }
+
+  /**
+   * 按这一帧的取景状态更新显隐与淡出。
+   * ⚠ 卡片是 CSS2D，靠 `object.visible` 隐藏（CSS2DRenderer 会跟着把元素
+   * `display: none`）；不透明度只能落在元素的 style 上，材质那条路这里没有。
+   * @param context 这一帧的相机与轨道中心
+   */
+  applyDistance(context: DistanceContext): void {
+    for (const entry of this.entries) {
+      const state = resolveVisibility(
+        entry.panel.visibility,
+        distanceResolver(context, entry.label.position, null),
+      )
+      entry.label.visible = state.visible
+      entry.label.element.style.opacity = String(state.opacity)
     }
   }
 

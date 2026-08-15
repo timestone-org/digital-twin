@@ -16,7 +16,6 @@ import {
   EMPTY_FLOW_VALUES,
   EMPTY_PANEL_VALUES,
 } from '@dt/twin-config'
-import { DtNotice, DtSpinner } from '@dt/ui'
 import type { Object3D } from 'three'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
@@ -24,9 +23,12 @@ import { resolveTwinModelUrl } from './host'
 import { createFrameClock } from './frameClock'
 import { SceneLayers, type SceneLayerValues } from './sceneLayers'
 import { loadTwinModel } from './modelLoader'
+import { distanceContextOf } from './distanceContext'
+import type { TwinPartClick } from './partPicking'
+import TwinSceneOverlay from './TwinSceneOverlay.vue'
+import { usePartClick } from './usePartClick'
 import {
   EMPTY_NODE_INDEX,
-  applyPartVisibility,
   buildNodeIndex,
   unmatchedNodeNames,
   type NodeIndex,
@@ -54,6 +56,9 @@ const props = defineProps<{
   flowValues?: TwinFlowValues
 }>()
 
+/** 点中了某个部件，且通过了距离门禁。 */
+const emit = defineEmits<{ partClick: [TwinPartClick] }>()
+
 const containerRef = ref<HTMLDivElement | null>(null)
 const status = ref<'empty' | 'loading' | 'ready' | 'error'>('empty')
 const progressPercent = ref(0)
@@ -68,6 +73,13 @@ const clock = createFrameClock()
 let nodeIndex: NodeIndex = EMPTY_NODE_INDEX
 let observer: ResizeObserver | null = null
 let frameHandle = 0
+
+usePartClick({
+  element: () => containerRef.value,
+  core: () => core,
+  parts: () => layers?.parts ?? null,
+  onPartClick: (part) => emit('partClick', part),
+})
 let loadSeq = 0
 let loadAbort: AbortController | null = null
 
@@ -76,15 +88,6 @@ const anchors = computed(() => props.anchorValues ?? EMPTY_ANCHOR_VALUES)
 const arrows = computed(() => props.arrowValues ?? EMPTY_ARROW_VALUES)
 const panels = computed(() => props.panelValues ?? EMPTY_PANEL_VALUES)
 const flows = computed(() => props.flowValues ?? EMPTY_FLOW_VALUES)
-const overlayMessage = computed(() =>
-  status.value === 'error' ? errorMessage.value : '未选择模型',
-)
-const progressText = computed(() =>
-  progressPercent.value > 0
-    ? `模型加载中 ${progressPercent.value}%`
-    : '模型加载中',
-)
-const missingText = computed(() => missingNodes.value.join('、'))
 const backgroundStyle = computed(() => {
   const spec = props.config.model.background
   if (spec === '') return undefined
@@ -100,6 +103,8 @@ function animate(delta: number): void {
 function tick(now: number): void {
   if (core === null) return
   animate(clock.tick(now))
+  // ⚠ 每帧都要算：镜头一直在动，距离规则的成立与否随时在变
+  layers?.applyDistanceRules(distanceContextOf(core))
   renderScene(core)
   frameHandle = requestAnimationFrame(tick)
 }
@@ -126,8 +131,9 @@ function refreshLayers(): void {
   // ⚠ 摆放要跟着配置重算：只在装载时应用的话，编辑器里改缩放/位移/旋转
   // 会一直到换模型才生效，中间那段是「调了没反应」
   placeModel()
-  applyPartVisibility(nodeIndex, props.config.parts)
-  layers?.build(props.config, liveValues())
+  layers?.build(props.config, liveValues(), nodeIndex)
+  // ⚠ 建完立刻按当前机位算一次：等下一帧的话，配了近距隐藏的元素会先露一帧
+  layers?.applyDistanceRules(distanceContextOf(core))
 }
 
 /** 把配置里的摆放落到模型上，并按新体量重算锚点小球尺寸。 */
@@ -234,22 +240,12 @@ watch(liveValues, (values) => layers?.setValues(values))
 
 <template>
   <div ref="containerRef" class="twin-scene" :style="backgroundStyle">
-    <div v-if="status === 'loading'" class="twin-scene__overlay">
-      <DtSpinner />
-      <span class="twin-scene__progress">{{ progressText }}</span>
-    </div>
-    <div v-else-if="status !== 'ready'" class="twin-scene__overlay">
-      <DtNotice :intent="status === 'error' ? 'danger' : 'neutral'">
-        {{ overlayMessage }}
-      </DtNotice>
-    </div>
-    <DtNotice
-      v-if="missingNodes.length > 0"
-      class="twin-scene__issue"
-      intent="warning"
-    >
-      模型里没有这些部件节点：{{ missingText }}
-    </DtNotice>
+    <TwinSceneOverlay
+      :status="status"
+      :progress-percent="progressPercent"
+      :error-message="errorMessage"
+      :missing-nodes="missingNodes"
+    />
   </div>
 </template>
 
@@ -259,29 +255,5 @@ watch(liveValues, (values) => layers?.setValues(values))
   width: 100%;
   height: 100%;
   overflow: hidden;
-
-  &__overlay {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-  }
-
-  &__progress {
-    font-size: 12px;
-    color: var(--text-secondary);
-  }
-
-  &__issue {
-    position: absolute;
-    right: 8px;
-    bottom: 8px;
-    left: 8px;
-    justify-content: center;
-  }
 }
 </style>

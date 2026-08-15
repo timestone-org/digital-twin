@@ -8,6 +8,8 @@ import { formatArrowText } from '@dt/twin-config'
 import * as THREE from 'three'
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
 
+import { distanceResolver, type DistanceContext } from './distanceContext'
+import { resolveVisibility } from './distanceRules'
 import { resolveColorSpec } from './themeColor'
 
 /** 没有读数时的占位符 */
@@ -30,11 +32,15 @@ const MIN_LENGTH = 0.1
 const MAX_LENGTH = 20
 /** 箭头压在模型之上，与锚点同档 */
 const ARROW_RENDER_ORDER = 920
+/** 箭头自带的不透明度，距离淡出在它之上再乘一个系数 */
+const ARROW_OPACITY = 0.95
 /** 圆柱与圆锥的本地轴 */
 const LOCAL_AXIS = new THREE.Vector3(0, 1, 0)
 
 interface ArrowEntry {
   arrow: TwinArrow
+  /** 杆与头共用的材质，淡出按 `ARROW_OPACITY` 成比例缩。 */
+  material: THREE.MeshBasicMaterial
   /** 杆与头收在一个 pivot 下：定向与缩放只改这一个对象。 */
   pivot: THREE.Group
   shaft: THREE.Mesh
@@ -119,6 +125,23 @@ export class ArrowLayer {
   }
 
   /**
+   * 按这一帧的取景状态更新显隐与淡出。
+   * @param context 这一帧的相机与轨道中心
+   */
+  applyDistance(context: DistanceContext): void {
+    for (const entry of this.entries) {
+      const state = resolveVisibility(
+        entry.arrow.visibility,
+        distanceResolver(context, entry.arrow.position, null),
+      )
+      entry.pivot.visible = state.visible
+      entry.label.visible = state.visible
+      entry.material.opacity = ARROW_OPACITY * state.opacity
+      entry.labelEl.style.opacity = String(state.opacity)
+    }
+  }
+
+  /**
    * 箭头尺寸跟模型体量走，否则大模型上它细成一根线、小模型上盖住整个场景。
    * @param modelDiagonal 模型包围盒对角线长度
    */
@@ -145,7 +168,7 @@ export class ArrowLayer {
     const material = new THREE.MeshBasicMaterial({
       color,
       transparent: true,
-      opacity: 0.95,
+      opacity: ARROW_OPACITY,
       depthTest: false,
     })
     // 断言的理由：`build` 里刚建好这两份几何，进不到这里时它们必不为 null
@@ -164,7 +187,7 @@ export class ArrowLayer {
     styleLabel(element)
     const label = new CSS2DObject(element)
     this.group.add(pivot, label)
-    return { arrow, pivot, shaft, head, label, labelEl: element }
+    return { arrow, material, pivot, shaft, head, label, labelEl: element }
   }
 
   /** 长度与粗细都按「基准 × 本箭头的倍率」算，几何本身恒为单位大小。 */

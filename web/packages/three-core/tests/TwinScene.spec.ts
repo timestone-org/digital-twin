@@ -463,3 +463,107 @@ describe('卸载清理', () => {
     expect(lateDispose).toHaveBeenCalledTimes(1)
   })
 })
+
+/**
+ * 取视口根元素并给它一个确定的尺寸。
+ * ⚠ 不给尺寸的话 happy-dom 下 rect 全是 0，射线打哪儿都说不准。
+ */
+function viewportOf(): HTMLElement {
+  const element = document.querySelector<HTMLElement>('.twin-scene')
+  if (element === null) throw new Error('视口没挂上')
+  element.getBoundingClientRect = () =>
+    ({ left: 0, top: 0, width: 100, height: 100 }) as DOMRect
+  return element
+}
+
+function press(element: HTMLElement, x: number, y: number): void {
+  element.dispatchEvent(
+    new MouseEvent('pointerdown', { clientX: x, clientY: y, bubbles: true }),
+  )
+}
+
+function release(element: HTMLElement, x: number, y: number): void {
+  element.dispatchEvent(
+    new MouseEvent('pointerup', { clientX: x, clientY: y, bubbles: true }),
+  )
+}
+
+describe('部件点击', () => {
+  async function scene(parts: Record<string, unknown>) {
+    const wrapper = mountScene({
+      config: config({
+        parts: [{ id: 'part-pump', name: '泵', nodes: ['pump'], ...parts }],
+      }),
+    })
+    await flushPromises()
+    return { wrapper, element: viewportOf() }
+  }
+
+  it('点中部件时上抛它的 id', async () => {
+    const { wrapper, element } = await scene({})
+
+    press(element, 50, 50)
+    release(element, 50, 50)
+
+    expect(wrapper.emitted('partClick')?.[0]).toEqual([
+      { partId: 'part-pump', partName: '泵' },
+    ])
+    wrapper.unmount()
+  })
+
+  // ⚠ 转一圈镜头松手若算点击，运行态就会凭空触发一次联动
+  it('拖动之后松手不算点击', async () => {
+    const { wrapper, element } = await scene({})
+
+    press(element, 50, 50)
+    release(element, 90, 90)
+
+    expect(wrapper.emitted('partClick')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('点在空处不上抛', async () => {
+    const { wrapper, element } = await scene({})
+
+    press(element, 0, 0)
+    release(element, 0, 0)
+
+    expect(wrapper.emitted('partClick')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('距离门禁挡住时不上抛', async () => {
+    const { wrapper, element } = await scene({
+      clickDistance: { max: { ref: 'orbit', value: 0.001 } },
+    })
+
+    press(element, 50, 50)
+    release(element, 50, 50)
+
+    expect(wrapper.emitted('partClick')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  // 两段式：远于分界的第一下只把镜头拉近，不该被下游当成一次真点击
+  it('两段式的第一下只拉近镜头，不上抛', async () => {
+    const { wrapper, element } = await scene({
+      clickDistance: { farThreshold: { ref: 'orbit', value: 0.001 } },
+    })
+
+    press(element, 50, 50)
+    release(element, 50, 50)
+
+    expect(wrapper.emitted('partClick')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('没被任何部件覆盖的模型部位点不出事件', async () => {
+    const { wrapper, element } = await scene({ nodes: ['别的名字'] })
+
+    press(element, 50, 50)
+    release(element, 50, 50)
+
+    expect(wrapper.emitted('partClick')).toBeUndefined()
+    wrapper.unmount()
+  })
+})

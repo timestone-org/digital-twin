@@ -12,7 +12,7 @@ import type {
   TwinPart,
   TwinVisibilityRule,
 } from '@dt/twin-config'
-import { DtButton, DtInput } from '@dt/ui'
+import { DtButton, DtField, DtInput } from '@dt/ui'
 
 import DistanceField from '../fields/DistanceField.vue'
 import InspectorSection from '../fields/InspectorSection.vue'
@@ -72,6 +72,12 @@ function togglePick(): void {
         size="sm"
         @update:model-value="write({ name: $event })"
       />
+      <DtField label="部件 id" size="sm" hint="点这个部件时联动规则收到的值就是它。">
+        <code
+          class="block truncate rounded bg-surface-sunken px-2 py-1 text-xs text-text-secondary"
+          >{{ modelValue.id }}</code
+        >
+      </DtField>
     </InspectorSection>
 
     <InspectorSection title="关联节点">

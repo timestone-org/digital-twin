@@ -9,6 +9,8 @@ import type { TwinAnchor, TwinFlowLink, TwinFlowValues } from '@dt/twin-config'
 import { toFiniteNumber } from '@dt/twin-config'
 import * as THREE from 'three'
 
+import { distanceResolver, type DistanceContext } from './distanceContext'
+import { resolveVisibility } from './distanceRules'
 import { resolveColorSpec } from './themeColor'
 
 /** 种类不认得时的兜底色，只影响外观、不影响任何读数 */
@@ -76,6 +78,11 @@ interface FlowEntry {
   /** 带符号的速度因子，−1..1；0 = 静止 */
   speed: number
   active: boolean
+  /** 距离淡出系数，0..1。⚠ 必须存在条目上：`applyTone` 每次都整份重写
+   *  不透明度，不带上它的话，一次 `setValues` 就把淡出效果抹平了。 */
+  distanceOpacity: number
+  /** 路径中点，`self` 参考系按它算距离。 */
+  midpoint: THREE.Vector3
 }
 
 function clamp(value: number, low: number, high: number): number {
@@ -173,10 +180,11 @@ function placeParticles(entry: FlowEntry): void {
 
 /** 颜色与透明度只有「在流」与「停流」两档。 */
 function applyTone(entry: FlowEntry): void {
-  entry.tubeMaterial.opacity = entry.active ? TUBE_OPACITY : INACTIVE_OPACITY
-  entry.particleMaterial.opacity = entry.active
-    ? PARTICLE_OPACITY
-    : INACTIVE_OPACITY
+  const fade = entry.distanceOpacity
+  entry.tubeMaterial.opacity =
+    (entry.active ? TUBE_OPACITY : INACTIVE_OPACITY) * fade
+  entry.particleMaterial.opacity =
+    (entry.active ? PARTICLE_OPACITY : INACTIVE_OPACITY) * fade
   if (entry.active) {
     entry.tubeMaterial.color.copy(entry.color)
     entry.particleMaterial.color.copy(entry.color)
@@ -264,6 +272,23 @@ export class FlowLayer {
   }
 
   /**
+   * 按这一帧的取景状态更新显隐与淡出。
+   * @param context 这一帧的相机与轨道中心
+   */
+  applyDistance(context: DistanceContext): void {
+    for (const entry of this.entries) {
+      const state = resolveVisibility(
+        entry.flow.visibility,
+        distanceResolver(context, entry.midpoint, null),
+      )
+      entry.tube.visible = state.visible
+      for (const particle of entry.particles) particle.visible = state.visible
+      entry.distanceOpacity = state.opacity
+      applyTone(entry)
+    }
+  }
+
+  /**
    * 推进粒子。
    * @param deltaSeconds 距上一帧的秒数
    */
@@ -323,6 +348,9 @@ export class FlowLayer {
       phase: 0,
       speed: 0,
       active: true,
+      distanceOpacity: 1,
+      // 一条流没有单一坐标，取路径中点当它的位置
+      midpoint: curve.getPointAt(0.5),
     }
     this.applyEntryScale(entry)
     placeParticles(entry)

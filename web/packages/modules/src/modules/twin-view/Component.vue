@@ -5,7 +5,7 @@
  * ⚠ three 只能异步进：静态 import 会把整个 three 焊进任何引用本模块的入口静态图，
  * 不开孪生的大屏也要为它付首屏包体（DASHBOARD_DESIGN §5.4）。
  */
-import type { ModuleMeta } from '@dt/contracts'
+import type { InteractionEvent, ModuleMeta } from '@dt/contracts'
 import {
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_ARROW_BINDING_KEY,
@@ -29,6 +29,17 @@ const props = defineProps<{
   values: Record<string, unknown>
   meta?: ModuleMeta
 }>()
+
+const emit = defineEmits<{ interaction: [InteractionEvent] }>()
+
+/**
+ * 点中部件时上抛联动事件，`value` 是**部件 id**。
+ * ⚠ 不上抛部件名：名字随时可改，而联动规则里存的那份不会跟着改，
+ * 改完名字规则就静默失配——只表现为「点了没反应」。
+ */
+function onPartClick(part: { partId: string }): void {
+  emit('interaction', { event: 'click', value: part.partId })
+}
 
 const CORNERS = [
   'top-left',
@@ -100,6 +111,7 @@ const errorMessage = computed(() =>
       :arrow-values="arrowValues"
       :panel-values="panelValues"
       :flow-values="flowValues"
+      @part-click="onPartClick"
     />
     <p v-if="title !== ''" class="dt-twin__title" :style="titleStyle">
       {{ title }}

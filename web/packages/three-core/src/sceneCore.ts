@@ -232,7 +232,15 @@ export function boundingDiagonal(object: THREE.Object3D): number {
  * @param object 要取景的对象
  */
 export function frameObject(core: SceneCore, object: THREE.Object3D): void {
-  const box = new THREE.Box3().setFromObject(object)
+  frameBox(core, new THREE.Box3().setFromObject(object))
+}
+
+/**
+ * 把镜头对到一个包围盒上。部件由多个对象组成，框它们要先并出一个盒。
+ * @param core 场景核心
+ * @param box 世界坐标下的包围盒；空盒直接返回，不把镜头甩到原点
+ */
+export function frameBox(core: SceneCore, box: THREE.Box3): void {
   if (box.isEmpty()) return
   const center = box.getCenter(new THREE.Vector3())
   const radius = Math.max(

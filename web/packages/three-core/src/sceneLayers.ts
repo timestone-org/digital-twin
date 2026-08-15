@@ -16,8 +16,11 @@ import type * as THREE from 'three'
 
 import { AnchorLayer } from './anchorLayer'
 import { ArrowLayer } from './arrowLayer'
+import type { DistanceContext } from './distanceContext'
 import { FlowLayer } from './flowLayer'
+import type { NodeIndex } from './nodeIndex'
 import { PanelLayer } from './panelLayer'
+import { PartDistanceLayer } from './partDistance'
 import { SceneEffectsLayer } from './sceneEffects'
 
 /** 五路实时值，缺席的那一路由调用方填空引用。 */
@@ -35,6 +38,8 @@ export class SceneLayers {
   readonly panels: PanelLayer
   readonly flows: FlowLayer
   readonly effects: SceneEffectsLayer
+  /** 部件的距离显隐与淡出；它不往场景里加对象，改的是模型自己的节点。 */
+  readonly parts = new PartDistanceLayer()
 
   /** 宿主元素，CSS2D 标签与主题色解析都要用它。 */
   private readonly host: HTMLElement | null
@@ -64,7 +69,12 @@ export class SceneLayers {
    * @param config 归一化后的孪生配置
    * @param values 五路实时值
    */
-  build(config: TwinConfig, values: SceneLayerValues): void {
+  build(
+    config: TwinConfig,
+    values: SceneLayerValues,
+    nodeIndex: NodeIndex,
+  ): void {
+    this.parts.build(nodeIndex, config.parts)
     this.anchors.build(config.anchors)
     this.arrows.build(config.arrows)
     this.panels.build(config.panels, config.anchors)
@@ -82,6 +92,23 @@ export class SceneLayers {
     this.arrows.setValues(values.arrows)
     this.panels.setValues(values.panels)
     this.flows.setValues(values.flows)
+  }
+
+  /**
+   * 按这一帧的取景状态更新五处的距离显隐与淡出。
+   *
+   * ⚠ 每帧都调，故这里只算距离、不重建任何对象。配置变了走 `build`。
+   * ⚠ 少调一处，那一类元素上配的距离规则就完全不生效——而它既不报错，
+   * 也不会在别处露出任何痕迹。
+   *
+   * @param context 这一帧的相机与轨道中心
+   */
+  applyDistanceRules(context: DistanceContext): void {
+    this.parts.apply(context)
+    this.anchors.applyDistance(context)
+    this.arrows.applyDistance(context)
+    this.panels.applyDistance(context)
+    this.flows.applyDistance(context)
   }
 
   /**
@@ -106,6 +133,7 @@ export class SceneLayers {
 
   /** 五层全部释放。⚠ 少一行就是一处只在「用久了变卡」时才看得见的泄漏。 */
   dispose(): void {
+    this.parts.dispose()
     this.anchors.dispose()
     this.arrows.dispose()
     this.panels.dispose()

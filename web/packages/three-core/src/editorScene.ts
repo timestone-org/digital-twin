@@ -361,7 +361,10 @@ export class EditorScene {
     // ⚠ 只认作者直接置的 `visible`，不套任何距离派生的显隐：编辑时镜头到处飞，
     // 套上规则会让人「刚配好的东西一转镜头就不见了」
     applyPartVisibility(this.nodeIndex, this.config.parts)
-    this.layers?.build(this.config, EMPTY_LAYER_VALUES)
+    // ⚠ 传空索引是有意的：编辑态不套距离规则，部件层不该在这里建条目——
+    // 建了它会为配了淡出的部件克隆材质（并打开透明通道），而这些克隆在编辑器里
+    // 永远不会被 apply 到，白改一遍模型的材质
+    this.layers?.build(this.config, EMPTY_LAYER_VALUES, EMPTY_NODE_INDEX)
     this.picks?.build(this.config)
     this.applySelectionHighlight()
   }
