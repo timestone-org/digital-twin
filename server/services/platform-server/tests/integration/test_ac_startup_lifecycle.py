@@ -288,3 +288,24 @@ async def test_replaying_a_message_writes_no_duplicate(
         db_session, plan.batch.id
     )
     assert counts[SHARD_STATUS_DONE] == 1
+
+
+async def test_a_shard_persists_the_idle_minutes_it_counted(
+    db_session: AsyncSession,
+) -> None:
+    """⚠ 分片写事件走的是 Core 路径的取值表，漏一列不会报错。
+
+    状态机数出来的全停时长（AC_MODEL_DESIGN §2.5）如果停在那张表外面，
+    蓄热特征就永远是 NaN——训练照跑、指标照出，只是少了一个特征，
+    而没有任何地方会说起这件事。
+    """
+    room_id = await make_room(db_session, "蓄热")
+    plan = await request_rebuild(
+        db_session, room_id=room_id, window=WINDOW, rules=RULES
+    )
+    for message in plan.messages:
+        await run_shard(db_session, context_for(crossing_rows()), message)
+    episodes = await ac_startup_episode_crud.list_by_batch(
+        db_session, plan.batch.id
+    )
+    assert [item.idle_minutes for item in episodes] == [40]

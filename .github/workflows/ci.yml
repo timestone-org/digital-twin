@@ -250,6 +250,13 @@ jobs:
       # 少了它 Settings 构造不出来，`settings` 夹具会整包 skip——而 CI 里
       # skip 等于没跑，本地有 .env 兜着更看不出来
       PLATFORM_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
+      # 对象存储在 CI 里没有实例，素材用例一律打假存储。⚠ endpoint 写成解析不出来
+      # 的名字：真有用例去连它，要当场炸而不是连到别的什么东西上。
+      # 迁移那步也要它们——alembic 的 env.py 装载完整 Settings，缺一项就退出。
+      PLATFORM_OBJECTSTORE_ENDPOINT: http://objectstore-not-used-in-this-job:9000
+      PLATFORM_OBJECTSTORE_BUCKET: ci-bucket
+      PLATFORM_OBJECTSTORE_ACCESS_KEY: ci-only-objectstore-access
+      PLATFORM_OBJECTSTORE_SECRET_KEY: ci-only-objectstore-0123456789abcdef
 
       OPCUA_POSTGRES_HOST: localhost
       OPCUA_POSTGRES_PORT: '55432'
@@ -491,6 +498,13 @@ jobs:
       PLATFORM_SQLSERVER_DATABASE: ci
       PLATFORM_REDIS_HOST: redis-not-used-in-this-job
       PLATFORM_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
+      PLATFORM_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
+      # 这一段只导 openapi 与跑迁移，一个字节都不读；但配置是启动即全量校验，
+      # 少一项就在导出那步退出。⚠ endpoint 同样写成解析不出来的名字
+      PLATFORM_OBJECTSTORE_ENDPOINT: http://objectstore-not-used-in-this-job:9000
+      PLATFORM_OBJECTSTORE_BUCKET: ci-bucket
+      PLATFORM_OBJECTSTORE_ACCESS_KEY: ci-only-objectstore-access
+      PLATFORM_OBJECTSTORE_SECRET_KEY: ci-only-objectstore-0123456789abcdef
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup-server

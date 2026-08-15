@@ -129,6 +129,7 @@ function onTab(value: string): void {
         :options="tabs"
         size="sm"
         block
+        variant="tabs"
         aria-label="属性面板分页"
         @update:model-value="onTab"
       />

@@ -174,6 +174,7 @@ def _with_fake_cache(built: Container) -> Container:
         supervisor=built.supervisor,
         instances=built.instances,
         nodes=built.nodes,
+        node_batch=built.node_batch,
         security=built.security,
         idempotency=type(built.idempotency)(cache=cache),
         realtime=built.realtime,

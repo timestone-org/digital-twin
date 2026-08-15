@@ -4,6 +4,7 @@ from opcua_server.apps.instance.services.idempotency import IdempotencyStore
 from opcua_server.apps.instance.services.instance_service import (
     InstanceService,
 )
+from opcua_server.apps.instance.services.node_batch import NodeBatchService
 from opcua_server.apps.instance.services.node_service import NodeService
 from opcua_server.apps.instance.services.presenter import (
     endpoint_url_of,
@@ -30,6 +31,7 @@ from opcua_server.apps.instance.services.value_publisher import (
 __all__ = [
     "IdempotencyStore",
     "InstanceService",
+    "NodeBatchService",
     "NodeService",
     "RealtimeClient",
     "SecurityService",

@@ -2,10 +2,16 @@
 
 from fastapi import APIRouter
 
-from opcua_server.apps.instance.api import instances, nodes, security
+from opcua_server.apps.instance.api import (
+    instances,
+    internal,
+    nodes,
+    security,
+)
 
 ROUTERS: tuple[APIRouter, ...] = (
     instances.router,
+    internal.router,
     nodes.router,
     security.router,
 )

@@ -5,14 +5,52 @@
 """
 
 import asyncio
+import signal
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
+from types import FrameType
 
 from lib.logging.logger import get_logger
 
 _logger = get_logger("lib.lifespan")
 
 AsyncAction = Callable[[], Awaitable[None]]
+
+# 进程该收摊了的两个信号
+TERMINATION_SIGNALS = (signal.SIGTERM, signal.SIGINT)
+
+
+async def wait_for_termination() -> None:
+    """等 SIGTERM / SIGINT，收到即返回，由调用方按顺序收摊。"""
+    loop = asyncio.get_running_loop()
+    stopped = asyncio.Event()
+    for number in TERMINATION_SIGNALS:
+        _install_handler(loop, number, stopped)
+    await stopped.wait()
+
+
+def _install_handler(
+    loop: asyncio.AbstractEventLoop,
+    number: signal.Signals,
+    stopped: asyncio.Event,
+) -> None:
+    """装一个信号回调；事件循环不支持就退回 stdlib 的同步 handler。
+
+    ⚠ 只有 Unix 的事件循环实现了 `add_signal_handler`，Windows 上它直接抛
+    `NotImplementedError`——不接住的话不监听端口的那几个角色一起来就崩在这里，
+    而 api 角色因为走 uvicorn 自带的信号处理毫发无伤，故容器里怎么跑都看不见。
+    ⚠ 退回的这条路必须经 `call_soon_threadsafe`：同步 handler 不在事件循环里
+    跑，直接 `set` 既不线程安全，也叫不醒正空闲着的循环。
+    Args: loop, number, stopped。
+    """
+    try:
+        loop.add_signal_handler(number, stopped.set)
+    except NotImplementedError:
+
+        def _handle(_number: int, _frame: FrameType | None) -> None:
+            loop.call_soon_threadsafe(stopped.set)
+
+        signal.signal(number, _handle)
 
 
 @dataclass(frozen=True)

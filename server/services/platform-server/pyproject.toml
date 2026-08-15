@@ -12,6 +12,11 @@ dependencies = [
     # ⚠ 必须自己声明：httpx 在工作区根的 dev 组里，本地与全部用例都 import 得到，
     # 只有按自己声明的依赖装的镜像会启动即崩。
     "httpx>=0.28",
+    # 时区数据库。本服务的桶时区、外库时刻换算、开机事件日界都要 ZoneInfo。
+    # ⚠ 必须自己带一份：zoneinfo 读的是**操作系统**的 tz 库，Debian 基镜像里有、
+    # Windows 上根本没有，故不带它的话同一份代码在容器里一切正常，装在 Windows
+    # 上却会在第一次读外库时炸 `ZoneInfoNotFoundError: 'Asia/Shanghai'`。
+    "tzdata>=2025.2",
 ]
 
 [project.scripts]

@@ -10,6 +10,12 @@ from platform_server.apps.hvac.models.ac_model_artifact import AcModelArtifact
 from platform_server.apps.hvac.models.ac_model_prediction import (
     AcModelPrediction,
 )
+from platform_server.apps.hvac.models.ac_model_publication import (
+    AcModelPublication,
+)
+from platform_server.apps.hvac.models.ac_model_set_binding import (
+    AcModelSetBinding,
+)
 from platform_server.apps.hvac.models.ac_startup_batch import AcStartupBatch
 from platform_server.apps.hvac.models.ac_startup_episode import (
     AcStartupEpisode,
@@ -29,6 +35,8 @@ __all__ = [
     "AcModel",
     "AcModelArtifact",
     "AcModelPrediction",
+    "AcModelPublication",
+    "AcModelSetBinding",
     "AcStartupBatch",
     "AcStartupEpisode",
     "AcStartupExclusion",

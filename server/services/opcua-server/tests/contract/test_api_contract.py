@@ -22,6 +22,7 @@ from opcua_server.apps.instance.deps import (
     PERM_OPERATE,
     PERM_VIEW,
     REQUIRED_CODES_ATTR,
+    require_service_key,
 )
 from opcua_server.apps.instance.models.instance import (
     DESIRED_STATES,
@@ -38,7 +39,7 @@ from opcua_server.apps.instance.schemas.node import (
     IdentifierKind,
     NodeClass,
 )
-from opcua_server.settings import API_PREFIX
+from opcua_server.settings import API_PREFIX, INTERNAL_PREFIX
 from scripts.export_openapi import OUTPUT, build_schema, render
 
 # 探针不属于业务面，它们按设计免鉴权
@@ -102,8 +103,17 @@ ROUTES = sorted(
         for route in iter_routes(build_app())
         for method in sorted(route.methods or set())
         if route.path not in PROBE_PATHS
+        and not route.path.startswith(INTERNAL_PREFIX)
     ),
     key=lambda item: (item[0], item[1]),
+)
+
+# 内部面另算：它挡的是「任何人」，走服务级密钥而不是权限码（ADR-0005）
+INTERNAL_ROUTES = sorted(
+    (route.path, method)
+    for route in iter_routes(build_app())
+    for method in sorted(route.methods or set())
+    if route.path.startswith(INTERNAL_PREFIX)
 )
 
 
@@ -114,6 +124,40 @@ def test_route_table_is_not_empty() -> None:
     表现是「契约测试全绿」而实际一条都没跑。
     """
     assert len(ROUTES) >= 20
+
+
+def test_the_internal_face_was_actually_scanned() -> None:
+    """⚠ 前缀写错时下面那条会空跑而全绿，内部面就此无人守。"""
+    assert len(INTERNAL_ROUTES) == 2
+
+
+@pytest.mark.parametrize(
+    ("path", "method"),
+    INTERNAL_ROUTES,
+    ids=[f"{method} {path}" for path, method in INTERNAL_ROUTES],
+)
+def test_every_internal_route_demands_the_service_key(
+    path: str, method: str
+) -> None:
+    """内部面必须挂服务级密钥。
+
+    ⚠ 漏挂这道依赖，任何能连到端口的进程都能改上位机读到的现场数据——
+    而权限码那道闸对它毫无作用：权限码挂在人身上，内部调用方不是人。
+
+    Args: path, method。
+    """
+    route = next(
+        item
+        for item in iter_routes(build_app())
+        if item.path == path and method in (item.methods or set())
+    )
+    guards = {dependency.call for dependency in route.dependant.dependencies}
+    assert require_service_key in guards
+
+
+def test_no_internal_route_leaks_into_the_public_face() -> None:
+    """内部面不许出现在公开面的 openapi 里。"""
+    assert [path for path, _, _ in ROUTES if INTERNAL_PREFIX in path] == []
 
 
 @pytest.mark.parametrize(("path", "method", "codes"), ROUTES)

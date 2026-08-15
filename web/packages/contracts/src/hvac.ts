@@ -487,3 +487,77 @@ export interface RoomLiveReadings {
 export const MODEL_HALF_LIFE_MIN_DAYS = 7
 export const MODEL_HALF_LIFE_MAX_DAYS = 3650
 export const MODEL_HALF_LIFE_DEFAULT_DAYS = 180
+
+/* 预测下发 —— 模型的预测写进哪些 OPC UA 点位（docs/AC_PUBLISH_DESIGN.md） */
+
+/** 一次下发的去向。⚠ 三档分开，理由见 `ModelPublishResult`。 */
+export const MODEL_PUBLISH_STATUSES = ['ok', 'degraded', 'failed'] as const
+export type ModelPublishStatus = (typeof MODEL_PUBLISH_STATUSES)[number]
+
+/**
+ * 「这一拍算不出数」的哨兵值，与后端逐字一致。
+ * ⚠ 绝不能是 0：0 是合法预测值（一开机就已达标，现网占 48.7%），
+ * 拿它当「没算出来」会让上位机把两件事读反。
+ */
+export const MODEL_NO_PREDICTION = -1
+
+/** 区域推荐点位收文本；组合时间点位收浮点。⚠ 整数型放不下 12.4。 */
+export const MODEL_RECOMMENDATION_DATA_TYPE = 'string'
+export const MODEL_DURATION_DATA_TYPES = ['float', 'double'] as const
+
+/** 一个服务组合绑的那个数字点位。 */
+export interface AcModelSetBinding {
+  set_key: string
+  node_id: string
+  identifier: string
+  /** 假 = 模型改过服务组合，这条绑定落空了。⚠ 留着不删，但要标出来。 */
+  is_serving: boolean
+}
+
+/** 一个模型的预测下发配置与它此刻的心跳。 */
+export interface AcModelPublication {
+  model_id: string
+  opcua_instance_id: string
+  recommendation_node_id: string | null
+  recommendation_identifier: string | null
+  is_enabled: boolean
+  /** 实例 + 区域点位 + 每一个服务组合都绑齐了才会发布。 */
+  is_fully_bound: boolean
+  /** 还差哪几个组合没绑，set_key 升序。 */
+  unbound_set_keys: string[]
+  set_bindings: AcModelSetBinding[]
+  last_published_at: string | null
+  last_status: ModelPublishStatus | null
+  last_error: string | null
+}
+
+/** 保存绑定的入参。⚠ 整份保存不是补丁，理由见后端 `PublicationPutIn`。 */
+export interface AcModelPublicationInput {
+  opcua_instance_id: string
+  recommendation_node_id?: string | null
+  set_bindings: { set_key: string; node_id: string }[]
+  is_enabled: boolean
+}
+
+/** 一次下发里一个点位的去向。`set_key` 为 null 即区域推荐点位。 */
+export interface ModelPublishItem {
+  set_key: string | null
+  identifier: string | null
+  value: string | number | null
+  is_written: boolean
+  error: string | null
+}
+
+/**
+ * 一次下发的结果。
+ * ⚠ `degraded` 是「写进去了但写的是哨兵值」，`failed` 是「一个字节都没写进去」
+ * ——后者上位机读到的还是旧值，而没有任何迹象说明它不新鲜了。
+ */
+export interface ModelPublishResult {
+  model_id: string
+  status: ModelPublishStatus
+  published_at: string
+  written_count: number
+  items: ModelPublishItem[]
+  error: string | null
+}

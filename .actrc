@@ -26,7 +26,11 @@
 # 攒出来的 PATH，而不是镜像的默认 PATH——setup-uv 往 PATH 里加过东西之后
 # node 就找不着了，一个全绿的作业会被报成 "Post 装 uv" 失败。
 # 把镜像自带的 node 目录显式补回去。版本随镜像升级要一起改。
---env=PATH=/opt/acttoolcache/node/24.19.0/x64/bin:/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# ⚠ 后两段是 pnpm/action-setup 的安装位置（它的 `dest` / `bin_dest` 输出）：
+# 那个 action 偶发地只出 set-output、不出 add-path，于是下一步就是一句
+# `pnpm: command not found`——同一份代码上一轮还全绿，看着像流水线红了。
+# 显式补进 PATH 之后它出不出 add-path 都不影响。
+--env=PATH=/opt/acttoolcache/node/24.19.0/x64/bin:/root/.local/bin:/root/setup-pnpm/node_modules/.bin:/root/setup-pnpm/node_modules/.bin/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # ⚠ 保持 act 默认的 host 网络：它把服务容器的端口映射到宿主，作业于是能用
 # `localhost` 访问——与 GitHub 的服务容器完全一致，流水线里不必为本地另写

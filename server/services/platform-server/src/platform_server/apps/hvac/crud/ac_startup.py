@@ -70,6 +70,23 @@ class AcStartupBatchCrud(CrudBase[AcStartupBatch]):
         )
         return result.scalar_one_or_none()
 
+    async def rooms_with_current(
+        self, session: AsyncSession
+    ) -> list[uuid.UUID]:
+        """有当前批次的全部房间，按 id 升序。
+
+        ⚠ 排序是为了让每晚的入队次序稳定：不排序时日志里房间的先后每天都变，
+        而「今晚是不是漏了一个房间」正要靠比对这份清单来看。
+
+        Args: session。
+        """
+        result = await session.execute(
+            select(AcStartupBatch.room_id)
+            .where(AcStartupBatch.is_current.is_(True))
+            .order_by(AcStartupBatch.room_id.asc())
+        )
+        return list(result.scalars().all())
+
     async def find_running(
         self, session: AsyncSession, room_id: uuid.UUID
     ) -> AcStartupBatch | None:

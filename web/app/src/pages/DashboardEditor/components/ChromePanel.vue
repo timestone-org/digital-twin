@@ -124,6 +124,7 @@ function cardOf(draft: EditorMetaDraft | null): CardChrome {
       :options="PANEL_TABS"
       size="sm"
       block
+      variant="tabs"
       aria-label="页面设置分页"
     />
     <InteractionEditor

@@ -32,6 +32,7 @@ from unit.collect_fakes import (
     FakeCommandTransport,
     FakeHistorySource,
 )
+from unit.opcua_fakes import FakeNodeWriter
 from unit.publish_fakes import FakeSnapshotSource, FakeViewerSource
 
 PLACEHOLDER = "wiring-test"
@@ -158,5 +159,8 @@ def build_container(ledger: list[str], *, settings: Settings) -> Container:
             timeout_s=1.0,
         ),
         lease=cast(Lease, LedgerLease(ledger=ledger)),
+        ac_publish_lease=cast(Lease, LedgerLease(ledger=ledger)),
+        ac_daily_lease=cast(Lease, LedgerLease(ledger=ledger)),
+        nodes=FakeNodeWriter(),
         object_store=FakeObjectStore(),
     )

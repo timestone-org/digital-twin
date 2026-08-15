@@ -5,16 +5,26 @@
 """
 
 import asyncio
-import signal
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Protocol
 
+from lib.lifespan import wait_for_termination
 from lib.logging import configure_logging, get_logger
+from platform_server.apps.hvac.services.ac_daily_worker import (
+    DailyConsumer,
+    DailyConsumerOptions,
+    DailyScheduler,
+    SchedulerOptions,
+)
 from platform_server.apps.hvac.services.ac_model_worker import (
     TrainerOptions,
     TrainerPool,
     TrainingConsumer,
+)
+from platform_server.apps.hvac.services.ac_publish_worker import (
+    PublishLoop,
+    PublishLoopOptions,
 )
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.apps.hvac.services.ac_startup_extract import (
@@ -44,11 +54,20 @@ class Consumer(Protocol):
     async def drain(self, timeout_s: float) -> None: ...
 
 
+class LeaseHolder(Protocol):
+    """持着单活租约的那些循环：关停时要主动让位。"""
+
+    async def release(self) -> None: ...
+
+
 @dataclass(frozen=True)
 class WorkerRuntime:
     """一次 worker 运行：跑什么、等什么信号、到点关谁。"""
 
     consumers: tuple[Consumer, ...]
+    # ⚠ 与 `consumers` 有重叠：持租约的循环同时也是消费循环。分开列是因为
+    # 关停时它们多一步「让租约」，而那一步的位置是硬约束（见 run_until_stopped）
+    leaseholders: tuple[LeaseHolder, ...]
     container: Container
     wait: Wait
 
@@ -62,14 +81,7 @@ def build_consumer(container: Container) -> ShardConsumer:
     return ShardConsumer(
         database=container.database,
         stream=container.stream,
-        context=ExtractionContext(
-            reader=AcSourceReader(
-                source=container.ac_source,
-                timezone=settings.acsource_timezone,
-            ),
-            rules=ExtractionRules(),
-            max_rows=settings.acstartup_max_rows,
-        ),
+        context=_extraction_context(container),
         options=ConsumerOptions(
             target=StreamGroup(
                 stream=settings.acstartup_stream,
@@ -112,6 +124,97 @@ def build_trainer(
     )
 
 
+def build_publish_loop(container: Container) -> PublishLoop:
+    """按配置装出预测下发循环。
+
+    ⚠ 它与另两条消费循环并列跑在同一个事件循环上，故每一段都必须有超时：
+    一次卡住的外库查询会把分片消费与训练消费一起拖住。
+
+    Args: container。
+    """
+    settings = container.settings
+    return PublishLoop(
+        database=container.database,
+        lease=container.ac_publish_lease,
+        reader=AcSourceReader(
+            source=container.ac_source, timezone=settings.acsource_timezone
+        ),
+        nodes=container.nodes,
+        options=PublishLoopOptions(
+            interval_s=settings.acpublish_interval_s,
+            budget_s=settings.acpublish_budget_s,
+            model_timeout_s=settings.acpublish_model_timeout_s,
+        ),
+    )
+
+
+def build_daily_scheduler(container: Container) -> DailyScheduler:
+    """按配置装出日增量的调度器。**它只入队，抽取在消费者那边。**
+
+    Args: container。
+    """
+    settings = container.settings
+    return DailyScheduler(
+        database=container.database,
+        stream=container.stream,
+        lease=container.ac_daily_lease,
+        options=SchedulerOptions(
+            target=_daily_target(container),
+            interval_s=settings.acdaily_scheduler_interval_s,
+            timezone=settings.acsource_timezone,
+        ),
+    )
+
+
+def build_daily_consumer(container: Container) -> DailyConsumer:
+    """按配置装出日增量的消费者。
+
+    Args: container。
+    """
+    settings = container.settings
+    return DailyConsumer(
+        database=container.database,
+        stream=container.stream,
+        context=_extraction_context(container),
+        options=DailyConsumerOptions(
+            target=_daily_target(container),
+            prefetch=settings.acdaily_prefetch,
+            block_ms=settings.acdaily_block_ms,
+            claim_idle_ms=settings.acdaily_claim_idle_ms,
+            run_timeout_s=settings.acdaily_timeout_s,
+            timezone=settings.acsource_timezone,
+        ),
+    )
+
+
+def _daily_target(container: Container) -> StreamGroup:
+    """日增量流的消费组坐标。
+
+    Args: container。
+    """
+    settings = container.settings
+    return StreamGroup(
+        stream=settings.acdaily_stream,
+        group=settings.acdaily_group,
+        consumer=settings.app_instance,
+    )
+
+
+def _extraction_context(container: Container) -> ExtractionContext:
+    """抽取要用的协作对象与参数。分片与日增量共用同一份。
+
+    Args: container。
+    """
+    settings = container.settings
+    return ExtractionContext(
+        reader=AcSourceReader(
+            source=container.ac_source, timezone=settings.acsource_timezone
+        ),
+        rules=ExtractionRules(),
+        max_rows=settings.acstartup_max_rows,
+    )
+
+
 async def selfcheck(container: Container) -> None:
     """启动自检：把依赖可达性写进日志，不可达不阻断启动。
 
@@ -135,8 +238,11 @@ async def run_until_stopped(
 ) -> None:
     """跑起全部消费循环，收到信号后按顺序收摊。
 
-    ⚠ 顺序不能换：先停收新活，再等手上那条跑完，最后才关连接池。反过来会让
-    在途任务拿着一个已经关掉的连接池，跑到一半失败而消息已经确认。
+    ⚠ 顺序不能换：先停收新活，再等手上那条跑完，然后让租约，最后才关连接池。
+    反过来会让在途任务拿着一个已经关掉的连接池，跑到一半失败而消息已经确认；
+    而让租约排在关资源**之前**，是因为让位要连得上 Redis——排在后面就只能等它
+    自然过期，接任的副本白等一整个 TTL。让租约排在 drain **之后**，是因为
+    让位时手上那一拍必须已经写完，否则接任者会与我们同时往一个点位写。
     Args: runtime, drain_timeout_s。
     """
     tasks = [
@@ -153,7 +259,10 @@ async def run_until_stopped(
         )
         for task in tasks:
             task.cancel()
-        # 3 让资源：队列 → 外库 → 连接池，连接池最后关
+        # 3 让租约（要连得上 Redis，故排在关资源之前）
+        for holder in runtime.leaseholders:
+            await holder.release()
+        # 4 让资源：队列 → 外库 → 连接池，连接池最后关
         await _release(runtime.container)
     _logger.info("worker_stopped", "worker 已退出")
 
@@ -164,6 +273,8 @@ async def _release(container: Container) -> None:
     Args: container。
     """
     await container.stream.close()
+    await container.ac_publish_lease.close()
+    await container.ac_daily_lease.close()
     await container.ac_source.dispose()
     await container.database.dispose()
 
@@ -177,13 +288,19 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
     await selfcheck(container)
     # 单 worker 进程池：训练一次只跑一个，防止两次训练互相抢核
     pool = TrainerPool()
+    publisher = build_publish_loop(container)
+    scheduler = build_daily_scheduler(container)
     try:
         await run_until_stopped(
             WorkerRuntime(
                 consumers=(
                     build_consumer(container),
                     build_trainer(container, pool=pool),
+                    publisher,
+                    scheduler,
+                    build_daily_consumer(container),
                 ),
+                leaseholders=(publisher, scheduler),
                 container=container,
                 wait=wait,
             ),
@@ -191,15 +308,6 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
         )
     finally:
         pool.shutdown()
-
-
-async def wait_for_signal() -> None:  # pragma: no cover - 要真实进程信号
-    """等 SIGTERM / SIGINT。收到即返回，由调用方按顺序收摊。"""
-    loop = asyncio.get_running_loop()
-    stopped = asyncio.Event()
-    for name in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(name, stopped.set)
-    await stopped.wait()
 
 
 def run(settings: Settings) -> None:  # pragma: no cover - 进程入口
@@ -214,4 +322,4 @@ def run(settings: Settings) -> None:  # pragma: no cover - 进程入口
         level=settings.app_log_level,
         log_format=settings.app_log_format,
     )
-    asyncio.run(serve(settings, wait=wait_for_signal))
+    asyncio.run(serve(settings, wait=wait_for_termination))
