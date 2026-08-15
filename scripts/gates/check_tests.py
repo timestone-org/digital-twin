@@ -30,9 +30,9 @@ PROVENANCE_WORDS = frozenset(
     {"fix", "fixes", "fixed", "bug", "bugfix", "issue", "regression"}
 )
 PROVENANCE_TEXT = re.compile(r"回归|修复|复现|#\d+")
-# ⚠ 前面必须挡掉 `.`：`RE.test(x)` / `obj.it(...)` 里的 `test` / `it` 是成员调用，
-# 认成用例之后会把它后面的括号当用例体切走，那一段里没有断言，于是凭空多出一条
-# 「测试必须有断言」的违规——而被指的行根本不是一条用例。
+# ⚠ 前面必须挡掉 `.`：`RE.test(x)` / `obj.it(...)` 里的 `test` / `it`
+# 是成员调用，认成用例之后会把它后面的括号当用例体切走，那一段里没有断言，
+# 于是凭空多出一条「测试必须有断言」的违规——而被指的行根本不是一条用例。
 TS_CASE = re.compile(r"(?<![.\w$])(?P<kind>it|test)(?P<each>\.each)?\s*(?=\()")
 TS_FOCUS = re.compile(r"\b(?:it|test|describe)\.only\s*\(")
 TS_SKIP = re.compile(r"\b(?:it|test|describe)\.skip\s*\(|\bxit\s*\(")
@@ -338,16 +338,11 @@ def check_the_case_splitter_ignores_member_calls() -> list[Violation]:
         "if (new RegExp(x).test(source)) return",
         "suite.it(name)",
     )
-    found: list[Violation] = []
-    for source in not_cases:
-        if _case_blocks(source):
-            found.append(
-                Violation(
-                    "成员调用被误认成用例",
-                    at(Path(__file__)),
-                    source[:40],
-                )
-            )
+    found: list[Violation] = [
+        Violation("成员调用被误认成用例", at(Path(__file__)), source[:40])
+        for source in not_cases
+        if _case_blocks(source)
+    ]
     # 真用例仍要认得出来，别把上面那条挡过头
     if not _case_blocks("it('真用例', () => { expect(1).toBe(1) })"):
         found.append(
