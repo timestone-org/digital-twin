@@ -1,14 +1,10 @@
 <script setup lang="ts">
 /**
- * @fileoverview 孪生场景宿主：渲染循环、模型装载与进度、部件染色、锚点标签。
+ * @fileoverview 孪生场景宿主：渲染循环、模型装载与进度、部件显隐、锚点标签。
  * ⚠ 本组件静态依赖整个 three，只能被异步加载（DASHBOARD_DESIGN §5.4）。
  */
-import type {
-  TwinAnchorValues,
-  TwinConfig,
-  TwinTintValues,
-} from '@dt/twin-config'
-import { EMPTY_ANCHOR_VALUES, EMPTY_TINT_VALUES } from '@dt/twin-config'
+import type { TwinAnchorValues, TwinConfig } from '@dt/twin-config'
+import { EMPTY_ANCHOR_VALUES } from '@dt/twin-config'
 import { DtNotice, DtSpinner } from '@dt/ui'
 import type { Object3D } from 'three'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -36,12 +32,10 @@ import {
   resizeScene,
   type SceneCore,
 } from './sceneCore'
-import { TintLayer } from './tintLayer'
 
 const props = defineProps<{
   /** ⚠ 必须是 `normalizeTwinConfig` 的输出：这里按引用比对，就地改字段不会重绘。 */
   config: TwinConfig
-  tintValues?: TwinTintValues
   anchorValues?: TwinAnchorValues
 }>()
 
@@ -54,7 +48,6 @@ const missingNodes = ref<readonly string[]>([])
 let core: SceneCore | null = null
 /** 已挂上的模型根，配置改了要按新的摆放重置它。 */
 let modelObject: Object3D | null = null
-let tintLayer: TintLayer | null = null
 let anchorLayer: AnchorLayer | null = null
 let nodeIndex: NodeIndex = EMPTY_NODE_INDEX
 let observer: ResizeObserver | null = null
@@ -63,7 +56,6 @@ let loadSeq = 0
 let loadAbort: AbortController | null = null
 
 const modelAsset = computed(() => props.config.model.asset)
-const tints = computed(() => props.tintValues ?? EMPTY_TINT_VALUES)
 const anchors = computed(() => props.anchorValues ?? EMPTY_ANCHOR_VALUES)
 const overlayMessage = computed(() =>
   status.value === 'error' ? errorMessage.value : '未选择模型',
@@ -99,7 +91,6 @@ function refreshLayers(): void {
   // 会一直到换模型才生效，中间那段是「调了没反应」
   placeModel()
   applyPartVisibility(nodeIndex, props.config.parts)
-  tintLayer?.apply(props.config, tints.value)
   anchorLayer?.build(props.config.anchors)
   anchorLayer?.setValues(anchors.value)
 }
@@ -112,8 +103,6 @@ function placeModel(): void {
 }
 
 function clearModel(): void {
-  tintLayer?.dispose()
-  tintLayer = null
   if (core !== null) disposeSceneGraph(core.modelRoot)
   modelObject = null
   nodeIndex = EMPTY_NODE_INDEX
@@ -136,7 +125,6 @@ function mountModel(root: Object3D): void {
   core.modelRoot.add(root)
   nodeIndex = buildNodeIndex(root)
   missingNodes.value = unmatchedNodeNames(nodeIndex, props.config.parts)
-  tintLayer = new TintLayer(nodeIndex, containerRef.value)
   frameObject(core, root)
   status.value = 'ready'
   refreshLayers()
@@ -195,8 +183,6 @@ onBeforeUnmount(() => {
   cancelAnimationFrame(frameHandle)
   observer?.disconnect()
   observer = null
-  tintLayer?.dispose()
-  tintLayer = null
   anchorLayer?.dispose()
   anchorLayer = null
   if (core !== null) disposeScene(core)
@@ -207,7 +193,6 @@ onBeforeUnmount(() => {
 
 watch(modelAsset, () => void load())
 watch(() => props.config, refreshLayers)
-watch(tints, (value) => tintLayer?.apply(props.config, value))
 watch(anchors, (value) => anchorLayer?.setValues(value))
 </script>
 

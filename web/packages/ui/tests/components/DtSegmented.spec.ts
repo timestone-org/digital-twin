@@ -57,3 +57,24 @@ describe('DtSegmented', () => {
     )
   })
 })
+
+describe('撑满与选中态的标记', () => {
+  it('缺省抱内容宽，给了 block 才撑满', () => {
+    expect(render().classes()).not.toContain('dt-segmented--block')
+    expect(
+      mount(DtSegmented, {
+        props: { modelValue: 'table', options: OPTIONS, block: true },
+      }).classes(),
+    ).toContain('dt-segmented--block')
+  })
+
+  // 观感全挂在 is-active 上（渐变底 + 底部指示条 + 强调色文字）；
+  // 类掉了就只剩 aria-pressed，视觉上分不出当前在哪一页
+  it('选中项挂 is-active，其余不挂', () => {
+    const active = render('card')
+      .findAll('button')
+      .map((item) => item.classes().includes('is-active'))
+
+    expect(active).toEqual([false, true])
+  })
+})

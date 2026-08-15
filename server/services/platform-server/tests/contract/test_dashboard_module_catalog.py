@@ -174,14 +174,11 @@ def test_the_twin_module_declares_the_array_slot_the_editor_needs() -> None:
         for module in catalog_json()["modules"]
         if module["type"] == "twin-view"
     )
-    hotspots = next(
-        spec for spec in twin["bindings"] if spec["key"] == "hotspots"
+    anchors = next(
+        spec for spec in twin["bindings"] if spec["key"] == "anchorValues"
     )
-    assert hotspots["is_array"] is True
-    assert [item["key"] for item in hotspots["array_fields"]] == [
-        "value",
-        "state",
-    ]
+    assert anchors["is_array"] is True
+    assert [item["key"] for item in anchors["array_fields"]] == ["value"]
 
 
 def test_no_two_modules_claim_the_same_type() -> None:

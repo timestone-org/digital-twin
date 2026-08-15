@@ -15,35 +15,29 @@ import { useConfirm, useToast } from '@dt/ui'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
-import { fetchPointHistory } from '@/api/pointHistories'
-import {
-  installDashboardDataSources,
-  installDashboardModules,
-} from '@/bootstrap/dashboard'
+import { installDashboardModules } from '@/bootstrap/dashboard'
 import { AppShell } from '@/components/layout'
 import { useDashboardDoc } from '@/composables/useDashboardDoc'
 import { useDashboardEditor } from '@/composables/useDashboardEditor'
-import { useDashboardValues } from '@/composables/useDashboardValues'
-import { useRealtimeChannel } from '@/composables/useRealtimeChannel'
 import { snapStep } from '@/features/dashboard/canvasSnap'
 import type { CanvasZoom } from '@/features/dashboard/canvasZoom'
-import { dashboardTopic } from '@/runtime/pointFrames'
-import { createPointSubscribe } from '@/runtime/pointStream'
 import { createEditorActions } from './editorActions'
+import { useEditorDataSources } from './useEditorDataSources'
 import { createArrangeActions } from './editorArrange'
 import { useEditorChrome } from './useEditorChrome'
 import { useEditorExtras } from './useEditorExtras'
 import { useEditorMeta } from './useEditorMeta'
 import { createEditorPageOps } from './useEditorPageOps'
+import { createEditorInspector } from './useEditorInspector'
+import { useEditorPanes } from './useEditorPanes'
 import { createEditorSurface } from './useEditorSurface'
 import EditorCanvas from './components/EditorCanvas.vue'
 import EditorNotices from './components/EditorNotices.vue'
 import EditorOverlays from './components/EditorOverlays.vue'
 import EditorToolbar from './components/EditorToolbar.vue'
-import ChromePanel from './components/ChromePanel.vue'
-import InspectorPane from './components/InspectorPane.vue'
+import EditorSplitter from './components/EditorSplitter.vue'
 import LeftRail from './components/LeftRail.vue'
-import MultiSelectPanel from './components/MultiSelectPanel.vue'
+import RightRail from './components/RightRail.vue'
 
 const route = useRoute()
 const toast = useToast()
@@ -59,15 +53,7 @@ const file = useDashboardDoc()
 const editor = useDashboardEditor(getManifest)
 const pickingFieldKey = ref<string | null>(null)
 
-installDashboardDataSources({
-  subscribe: createPointSubscribe(useRealtimeChannel(), () => {
-    const current = file.dashboard.value
-    return current === null ? null : dashboardTopic(current.id)
-  }),
-  fetchHistory: fetchPointHistory,
-})
-
-useDashboardValues(() => editor.nodes.value)
+useEditorDataSources(file.dashboard, () => editor.nodes.value)
 
 const dashboardId = computed(() => String(route.params.dashboardId ?? ''))
 
@@ -88,9 +74,15 @@ const actions = createEditorActions({
 const meta = useEditorMeta(file.dashboard)
 const chrome = useEditorChrome(file.dashboard, meta)
 const { snap, grid } = chrome
+
+// 左右两栏可拖拽改宽；宽度记在本机，取值域见 paneWidths
+const panes = useEditorPanes()
+const gridRef = panes.hostRef
+
 const zoom = ref<CanvasZoom>(null)
 const canvasRef = ref<InstanceType<typeof EditorCanvas> | null>(null)
 const fitScale = computed(() => canvasRef.value?.fitScale ?? 1)
+const centerOn = (nodeId: string): void => void canvasRef.value?.centerOn(nodeId)
 
 const arrange = createArrangeActions({
   editor,
@@ -108,7 +100,13 @@ const surface = createEditorSurface({
   onRejected: (message) => toast.error(message),
 })
 
-const isMultiSelecting = computed(() => editor.selectedIds.value.length > 1)
+const inspector = createEditorInspector({
+  editor,
+  actions,
+  surface,
+  meta,
+  centerOn,
+})
 
 const ops = createEditorPageOps({
   editor,
@@ -124,6 +122,7 @@ const ops = createEditorPageOps({
 
 const extras = useEditorExtras({
   editor,
+  actions,
   arrange,
   dashboard: file.dashboard,
   design: () => design.value,
@@ -136,6 +135,7 @@ const extras = useEditorExtras({
   consumePicker: () => ops.consumePicker(),
   confirm,
   stageEl: () => canvasRef.value?.stageRef ?? null,
+  centerOn,
   onExportFailed: (message) => toast.error(message),
 })
 
@@ -185,25 +185,28 @@ onUnmounted(file.dispose)
         :detached-count="editor.layout.value.detachedIds.length"
       />
 
-      <div class="grid min-h-0 flex-1 grid-cols-[15rem_1fr_20rem] gap-3">
-        <section class="dt-editor__pane">
-          <LeftRail
-            :manifests="manifests"
-            :frames="editor.layout.value.frames"
-            :nodes="editor.nodes.value"
-            :selected-ids="editor.selectedIds.value"
-            :get-manifest="getManifest"
-            @add="ops.addModule"
-            @select="surface.onSelect"
-            @toggle="actions.toggleVisible"
-            @remove="ops.removeNode"
-            @rename="surface.onRename"
-            @move="surface.onMove"
-            @center="(nodeId) => canvasRef?.centerOn(nodeId)"
-            @front="surface.onFront"
-            @back="surface.onBack"
-          />
-        </section>
+      <div
+        ref="gridRef"
+        class="grid min-h-0 flex-1"
+        :style="panes.gridStyle.value"
+      >
+        <LeftRail
+          class="dt-editor__pane"
+          :manifests="manifests"
+          :frames="editor.layout.value.frames"
+          :nodes="editor.nodes.value"
+          :selected-ids="editor.selectedIds.value"
+          :get-manifest="getManifest"
+          @add="ops.addModule"
+          @select="surface.onSelect"
+          @toggle="actions.toggleVisible"
+          @remove="ops.removeNode"
+          @rename="surface.onRename"
+          @move="surface.onMove"
+          @center="centerOn"
+        />
+
+        <EditorSplitter side="left" label="模块栏宽度" :panes="panes" />
 
         <EditorCanvas
           ref="canvasRef"
@@ -213,6 +216,7 @@ onUnmounted(file.dispose)
           :nodes="editor.nodes.value"
           :selected-ids="editor.selectedIds.value"
           :get-manifest="getManifest"
+          :card-chrome="inspector.cardChrome.value"
           :snap="snap"
           :grid="grid"
           :zoom="zoom"
@@ -223,50 +227,44 @@ onUnmounted(file.dispose)
           @drop-node="surface.onDropNode"
           @add-at="surface.onAddAt"
           @update:zoom="zoom = $event"
+          @canvas-menu="extras.contextMenu.open"
         />
 
-        <section class="dt-editor__pane">
-          <MultiSelectPanel
-            v-if="isMultiSelecting"
-            :count="editor.selectedIds.value.length"
-            :align-ready="arrange.alignReady()"
-            :distribute-ready="arrange.distributeReady()"
-            @align="arrange.alignSelected"
-            @distribute="arrange.distributeSelected"
-            @remove-all="ops.removeSelected"
-          />
-          <InspectorPane
-            v-else-if="editor.selectedIds.value.length === 1"
-            :selected="editor.selected.value"
-            :manifest="
-              editor.selected.value === null
-                ? undefined
-                : getManifest(editor.selected.value.moduleType)
-            "
-            @config="actions.changeConfig"
-            @geometry="ops.changeSelectedGeometry"
-            @visible="ops.toggleSelectedVisible"
-            @write="actions.writeBinding"
-            @drop="actions.dropSlot"
-            @bind="actions.bindSlot"
-            @pick="pickingFieldKey = $event"
-            @add-row="actions.addBindingRow"
-            @remove-row="actions.removeBindingRow"
-          />
-          <ChromePanel
-            v-else
-            :draft="meta.draft.value"
-            :snap="snap"
-            :grid="grid"
-            :nodes="editor.nodes.value"
-            :get-manifest="getManifest"
-            @set-field="chrome.setField"
-            @set-snap="chrome.setSnap"
-            @set-grid="chrome.setGrid"
-            @set-card="chrome.setCard"
-            @set-interactions="chrome.setInteractions"
-          />
-        </section>
+        <EditorSplitter side="right" label="配置栏宽度" :panes="panes" />
+
+        <RightRail
+          class="dt-editor__pane"
+          :selected-ids="editor.selectedIds.value"
+          :selected="editor.selected.value"
+          :nodes="editor.nodes.value"
+          :get-manifest="getManifest"
+          :rules="inspector.rules.value"
+          :draft="meta.draft.value"
+          :snap="snap"
+          :grid="grid"
+          :align-ready="arrange.alignReady()"
+          :distribute-ready="arrange.distributeReady()"
+          @align="arrange.alignSelected"
+          @distribute="arrange.distributeSelected"
+          @remove-all="ops.removeSelected"
+          @config="actions.changeConfig"
+          @geometry="ops.changeSelectedGeometry"
+          @visible="ops.toggleSelectedVisible"
+          @rename="inspector.rename"
+          @order="inspector.order"
+          @preset="inspector.applyPreset"
+          @interactions="chrome.setInteractions"
+          @write="actions.writeBinding"
+          @drop="actions.dropSlot"
+          @bind="actions.bindSlot"
+          @pick="pickingFieldKey = $event"
+          @add-row="actions.addBindingRow"
+          @remove-row="actions.removeBindingRow"
+          @set-field="chrome.setField"
+          @set-snap="chrome.setSnap"
+          @set-grid="chrome.setGrid"
+          @set-card="chrome.setCard"
+        />
       </div>
     </div>
 
@@ -278,10 +276,13 @@ onUnmounted(file.dispose)
       :design="design"
       :get-manifest="getManifest"
       :chrome-json="meta.draft.value?.chromeJson ?? {}"
+      :context-menu="extras.contextMenu.state.value"
       @close-picker="ops.closePicker"
       @pick="ops.pickPoint"
       @update:help-open="extras.helpOpen.value = $event"
       @close-preview="extras.previewOpen.value = false"
+      @menu-pick="extras.contextMenu.run"
+      @close-menu="extras.contextMenu.close"
     />
   </AppShell>
 </template>

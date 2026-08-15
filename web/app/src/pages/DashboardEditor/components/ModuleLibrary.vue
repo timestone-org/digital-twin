@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * @fileoverview 模块库：按清单的 `category` 分组列出全部已注册模块，
- * 支持点击添加与拖到画布落位。
+ * @fileoverview 模块库：按清单的 `category` 分组，把每个模块列成一张卡片，
+ * 支持点击添加与拖到画布落位；卡片列数随侧栏宽度自适应。
  * ⚠ 这里没有任何模块类型字面量——库的内容完全来自注册表，
  * 第三方在启动期注册的清单会自动出现在这里（DASHBOARD_DESIGN §5.3 陷阱 ①③）。
  */
@@ -47,47 +47,107 @@ function onDragStart(event: DragEvent, manifest: ModuleManifest): void {
         hint="换个关键字，或检查模块是否已注册"
       />
       <section v-for="group in groups" :key="group.category">
-        <h3 class="m-0 mb-2 text-2xs tracking-wide text-text-disabled">
-          {{ group.category }}
+        <h3 class="dt-lib__cat">
+          <span class="truncate">{{ group.category }}</span>
+          <span class="dt-lib__count">{{ group.items.length }}</span>
         </h3>
-        <button
-          v-for="manifest in group.items"
-          :key="manifest.type"
-          type="button"
-          class="dt-lib__item"
-          draggable="true"
-          :data-test="`module-${manifest.type}`"
-          @click="emit('add', manifest)"
-          @dragstart="onDragStart($event, manifest)"
-        >
-          <DtIcon :name="manifest.icon ?? 'layout-grid'" :size="16" />
-          <span class="truncate">{{ manifest.displayName }}</span>
-        </button>
+        <div class="dt-lib__grid">
+          <button
+            v-for="manifest in group.items"
+            :key="manifest.type"
+            type="button"
+            class="dt-lib__item"
+            draggable="true"
+            :title="`${manifest.displayName} · 拖入或点击添加`"
+            :data-test="`module-${manifest.type}`"
+            @click="emit('add', manifest)"
+            @dragstart="onDragStart($event, manifest)"
+          >
+            <DtIcon
+              :name="manifest.icon ?? 'layout-grid'"
+              :size="18"
+              class="text-accent-primary"
+            />
+            <span class="dt-lib__name">{{ manifest.displayName }}</span>
+          </button>
+        </div>
       </section>
     </div>
   </div>
 </template>
 
 <style scoped lang="scss">
+/** 卡片最窄多少，也就是列数换挡的刻度。 */
+$card-min: 84px;
+
+.dt-lib__cat {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.dt-lib__count {
+  flex: none;
+  margin-left: auto;
+  padding: 0 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  font-size: 10px;
+}
+
+// 列数交给 auto-fill 自己算：侧栏是可拖的，钉死列数就只有一个宽度好看
+.dt-lib__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax($card-min, 1fr));
+  gap: 6px;
+}
+
 .dt-lib__item {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
   align-items: center;
-  width: 100%;
-  padding: 6px 8px;
+  padding: 12px 6px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  background: var(--surface-panel);
+  background: var(--surface-sunken);
   color: var(--text-primary);
-  text-align: left;
-  cursor: pointer;
-
-  & + & {
-    margin-top: 6px;
-  }
+  cursor: grab;
+  transition:
+    border-color 0.15s ease,
+    transform 0.12s ease,
+    box-shadow 0.15s ease;
 
   &:hover {
-    border-color: var(--accent-primary);
+    border-color: color-mix(in srgb, var(--accent-primary) 50%, transparent);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px -10px var(--accent-primary);
+  }
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.dt-lib__name {
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dt-lib__item {
+    transition: none;
+
+    &:hover {
+      transform: none;
+    }
   }
 }
 </style>

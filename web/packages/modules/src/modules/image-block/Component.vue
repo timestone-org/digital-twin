@@ -14,7 +14,7 @@ import {
   readText,
   readTrimmedText,
 } from '../../shared/config'
-import { imageSourceKind } from './source'
+import { imageSourceKind } from '../../shared/background'
 
 const props = defineProps<{
   config: Record<string, unknown>
@@ -24,6 +24,7 @@ const props = defineProps<{
 
 const FITS = ['contain', 'cover', 'fill'] as const
 const POSITIONS = ['center', 'top', 'bottom', 'left', 'right'] as const
+const REPEATS = ['no-repeat', 'repeat', 'repeat-x', 'repeat-y'] as const
 // CSS 值那条路用 background-size 表达同一套语义，'fill' 没有对应关键字，得写成两轴拉满
 const BACKGROUND_SIZES = {
   contain: 'contain',
@@ -41,23 +42,33 @@ const position = computed(() =>
   readEnum(props.config.position, POSITIONS, 'center'),
 )
 
-/** 百分比档的滤镜：等于 100 就不写，免得给浏览器一条恒等的滤镜去算。 */
+/** 以 100% 为恒等的滤镜：等于 100 就不写，免得给浏览器一条恒等的滤镜去算。 */
 function percentFilter(name: string, raw: unknown): string | null {
   const value = Math.max(0, readNumber(raw, 100))
   return value === 100 ? null : `${name}(${value}%)`
 }
 
+/** 以 0% 为恒等的滤镜（灰度、反相、褪色这一类），同样等于恒等就不写。 */
+function amountFilter(name: string, raw: unknown): string | null {
+  const value = Math.max(0, readNumber(raw, 0))
+  return value === 0 ? null : `${name}(${value}%)`
+}
+
 const filter = computed(() => {
   const blur = Math.max(0, readNumber(props.config.blur, 0))
-  const grayscale = Math.max(0, readNumber(props.config.grayscale, 0))
+  // 色相是角度不是数量，负值合法，所以不跟着百分比档一起夹到 0
+  const hueRotate = readNumber(props.config.hueRotate, 0)
   // ⚠ 负值必须先夹掉：`brightness(-10%)` 会让**整条** filter 声明作废，
   //   表现是其他几档滤镜一起失效，而不是这一档不生效
   const parts = [
     blur > 0 ? `blur(${blur}px)` : null,
-    grayscale > 0 ? `grayscale(${grayscale}%)` : null,
+    amountFilter('grayscale', props.config.grayscale),
     percentFilter('brightness', props.config.brightness),
     percentFilter('contrast', props.config.contrast),
     percentFilter('saturate', props.config.saturate),
+    hueRotate === 0 ? null : `hue-rotate(${hueRotate}deg)`,
+    amountFilter('invert', props.config.invert),
+    amountFilter('sepia', props.config.sepia),
   ].filter((part) => part !== null)
   return parts.join(' ')
 })
@@ -99,7 +110,7 @@ const cssStyle = computed<CSSProperties>(() => ({
   backgroundImage: source.value,
   backgroundSize: BACKGROUND_SIZES[fit.value],
   backgroundPosition: position.value,
-  backgroundRepeat: 'no-repeat',
+  backgroundRepeat: readEnum(props.config.repeat, REPEATS, 'no-repeat'),
 }))
 
 // 取不回图时换成占位；换了地址要复位，否则新地址永远显示上一张的失败
@@ -108,8 +119,11 @@ watch(source, () => {
   hasFailed.value = false
 })
 
+// 两句兜底与清单里的 default 逐字同值；配成空串即「占位时一个字都不显示」
 const placeholder = computed(() =>
-  hasFailed.value ? '图片加载失败' : '未设置图片',
+  hasFailed.value
+    ? readText(props.config.errorText, '图片加载失败')
+    : readText(props.config.emptyText, '未设置图片'),
 )
 </script>
 

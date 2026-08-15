@@ -95,6 +95,40 @@ describe('新建节点', () => {
     expect(created.moduleType).toBe('demo-card')
   })
 
+  it('清单的出厂配置深克隆落库，两个新节点互不共享同一只袋子', () => {
+    const manifest = {
+      ...MANIFEST,
+      defaultConfig: { __cardStyle: { corners: false } },
+    }
+    const input = {
+      dashboardId: 'd1',
+      manifest,
+      parentId: null,
+      siblingCount: 0,
+      zIndex: 0,
+    }
+
+    const first = createNode(input)
+    const second = createNode(input)
+
+    expect(first.configJson).toEqual({ __cardStyle: { corners: false } })
+    // ⚠ 浅拷贝会让两个节点共用同一只 __cardStyle：改一个另一个跟着变，且改的还是清单本身
+    expect(first.configJson.__cardStyle).not.toBe(second.configJson.__cardStyle)
+    expect(first.configJson.__cardStyle).not.toBe(manifest.defaultConfig.__cardStyle)
+  })
+
+  it('清单没给出厂配置时是空袋子', () => {
+    const created = createNode({
+      dashboardId: 'd1',
+      manifest: MANIFEST,
+      parentId: null,
+      siblingCount: 0,
+      zIndex: 0,
+    })
+
+    expect(created.configJson).toEqual({})
+  })
+
   it('不给 client_key——id 已经唯一，再造一个本地键只是多一处会撞的东西', () => {
     const created = createNode({
       dashboardId: 'd1',

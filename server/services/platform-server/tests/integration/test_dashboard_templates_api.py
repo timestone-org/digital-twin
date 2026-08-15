@@ -40,7 +40,7 @@ TEMPLATE_NAME = "光伏总览模板"
 TEMPLATE_NOT_FOUND = 41015
 EDITOR = (DASHBOARD_VIEW, DASHBOARD_EDIT)
 BINDING = {
-    "field_key": "scene_status",
+    "field_key": "anchorValues[0].value",
     "source_kind": "opcua",
     "node_key": KNOWN_KEY,
 }
@@ -524,7 +524,7 @@ async def test_a_binding_to_a_missing_point_is_reported_not_dropped(
     assert data_of(response)["unresolved_bindings"] == [
         {
             "node_key": MISSING_KEY,
-            "field_key": "scene_status",
+            "field_key": "anchorValues[0].value",
             "source_kind": "opcua",
             "reason": "point_not_found",
         }

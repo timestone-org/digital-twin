@@ -156,13 +156,7 @@ describe('渲染', () => {
 
   it('行内每个图标键都真的画出了图标', () => {
     const wrapper = mountTree([node('a')])
-    const labels = [
-      '移到画布中心',
-      '置顶',
-      '置底',
-      '隐藏这个节点',
-      '删除这个节点',
-    ]
+    const labels = ['移到画布中心', '隐藏这个节点', '删除这个节点']
 
     for (const label of labels) {
       expect(buttonBy(wrapper, label)?.find('.dt-icon').exists()).toBe(true)
@@ -221,16 +215,27 @@ describe('选中与行内动作', () => {
     expect(wrapper.emitted('select')).toBeUndefined()
   })
 
-  it('置顶 / 置底 / 居中各抛各的', async () => {
+  it('居中抛 center', async () => {
     const wrapper = mountTree([node('a')])
 
-    await buttonBy(wrapper, '置顶')?.trigger('click')
-    await buttonBy(wrapper, '置底')?.trigger('click')
     await buttonBy(wrapper, '移到画布中心')?.trigger('click')
 
-    expect(wrapper.emitted('front')?.[0]).toEqual(['a'])
-    expect(wrapper.emitted('back')?.[0]).toEqual(['a'])
     expect(wrapper.emitted('center')?.[0]).toEqual(['a'])
+  })
+
+  // 层序键从行里挪进了右栏「通用配置」：15rem 的左栏摆不下第四、第五个键，
+  // 摆下了就没有地方显示节点名与模块类型
+  it('行里不再有置顶 / 置底键', () => {
+    const wrapper = mountTree([node('a')])
+
+    expect(buttonBy(wrapper, '置顶')).toBeUndefined()
+    expect(buttonBy(wrapper, '置底')).toBeUndefined()
+  })
+
+  it('行上显示节点名与模块类型', () => {
+    const wrapper = mountTree([node('a')])
+
+    expect(rowsOf(wrapper)[0]?.text()).toContain('demo')
   })
 })
 
@@ -293,7 +298,8 @@ describe('重命名', () => {
 })
 
 describe('拖拽换父与排序', () => {
-  it('拖到某行上半 = 排到它前面', () => {
+  // 树是倒序列的：rows[0] 是 z 最大的那个（'b'），rows[1] 才是 'a'
+  it('拖到某行上半 = 盖住它', () => {
     const wrapper = mountTree([node('a'), node('b', { zIndex: 1 })])
     const rows = rowsOf(wrapper)
     const target = rows[0]?.element
@@ -303,10 +309,10 @@ describe('拖拽换父与排序', () => {
     fireDrag(rows[1]?.element as Element, 'dragstart')
     fireDrag(target, 'drop', { clientY: 2 })
 
-    expect(wrapper.emitted('move')?.[0]).toEqual(['b', null, 0])
+    expect(wrapper.emitted('move')?.[0]).toEqual(['a', null, 1])
   })
 
-  it('拖到某行下半 = 排到它后面', () => {
+  it('拖到某行下半 = 被它压住', () => {
     const wrapper = mountTree([node('a'), node('b', { zIndex: 1 })])
     const rows = rowsOf(wrapper)
     const target = rows[0]?.element
@@ -316,13 +322,13 @@ describe('拖拽换父与排序', () => {
     fireDrag(rows[1]?.element as Element, 'dragstart')
     fireDrag(target, 'drop', { clientY: 28 })
 
-    expect(wrapper.emitted('move')?.[0]).toEqual(['b', null, 1])
+    expect(wrapper.emitted('move')?.[0]).toEqual(['a', null, 0])
   })
 
   it('拖到容器行中部 = 放进容器', () => {
     const wrapper = mountTree([
-      node('box', { moduleType: 'box' }),
-      node('a', { zIndex: 1 }),
+      node('box', { moduleType: 'box', zIndex: 1 }),
+      node('a'),
     ])
     const rows = rowsOf(wrapper)
     const target = rows[0]?.element

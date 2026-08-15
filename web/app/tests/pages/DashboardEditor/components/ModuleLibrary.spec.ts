@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type { ModuleManifest } from '@dt/contracts'
+import { DtIcon } from '@dt/ui'
 
 import { MODULE_DRAG_MIME } from '@/features/dashboard/moduleLibrary'
 import ModuleLibrary from '@/pages/DashboardEditor/components/ModuleLibrary.vue'
@@ -63,6 +64,42 @@ describe('列出模块', () => {
     const wrapper = mount(ModuleLibrary, { props: { manifests: [] } })
 
     expect(wrapper.text()).toContain('没有匹配的模块')
+  })
+})
+
+describe('卡片栅格', () => {
+  it('一组模块只有一个栅格容器，列数交给 CSS 按栏宽算', () => {
+    const wrapper = mount(ModuleLibrary, {
+      props: {
+        manifests: [
+          ...MANIFESTS,
+          manifest({ type: 'c', displayName: '页脚', category: '布局' }),
+        ],
+      },
+    })
+
+    const grids = wrapper.findAll('.dt-lib__grid')
+
+    expect(grids).toHaveLength(2)
+    expect(grids[1]?.findAll('.dt-lib__item')).toHaveLength(2)
+  })
+
+  it('每张卡片都有图标与名字，缺 icon 声明时回落到通用图标', () => {
+    const wrapper = mount(ModuleLibrary, { props: { manifests: MANIFESTS } })
+    const cards = wrapper.findAll('.dt-lib__item')
+
+    expect(cards[0]?.findComponent(DtIcon).props('name')).toBe('activity')
+    expect(cards[0]?.find('.dt-lib__name').text()).toBe('折线卡片')
+    expect(cards[1]?.findComponent(DtIcon).props('name')).toBe('layout-grid')
+  })
+
+  it('组名旁标出这一组有几个模块', () => {
+    const wrapper = mount(ModuleLibrary, { props: { manifests: MANIFESTS } })
+
+    expect(wrapper.findAll('.dt-lib__count').map((el) => el.text())).toEqual([
+      '1',
+      '1',
+    ])
   })
 })
 

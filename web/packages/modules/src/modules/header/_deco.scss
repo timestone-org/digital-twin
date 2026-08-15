@@ -1,0 +1,95 @@
+// 页头标题两侧的对称装饰，五档形状。
+// 由 Component.vue 的 scoped 块 @use 进来——摊在同一个文件里会把它撑过行数闸门。
+// 五档共用同一副骨架（居中留缝 + 左右两条），每档只改形状，不各画一套 DOM。
+
+.dt-header__deco {
+  position: absolute;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inset: 0;
+  // 中间给标题留空；没配中缝时随宽度自适应
+  gap: var(--dt-deco-gap, clamp(180px, 38%, 460px));
+  pointer-events: none;
+}
+
+.dt-header__deco-bar {
+  position: relative;
+  height: 2px;
+  flex: 0 1 clamp(48px, 12%, 150px);
+  // 左右的镜像靠渐变方向做：两条都朝中心渐亮
+  background: linear-gradient(90deg, transparent, var(--dt-header-accent));
+  box-shadow: 0 0 8px
+    color-mix(in srgb, var(--dt-header-accent) 50%, transparent);
+}
+
+.dt-header__deco-bar--r {
+  background: linear-gradient(90deg, var(--dt-header-accent), transparent);
+}
+
+// 斜切条：加粗后倾斜
+.dt-header__deco--slash .dt-header__deco-bar {
+  height: 6px;
+  border-radius: 1px;
+  transform: skewX(-22deg);
+}
+
+.dt-header__deco--slash .dt-header__deco-bar--r {
+  transform: skewX(22deg);
+}
+
+// 箭头：指向标题的双箭头
+.dt-header__deco--chevron .dt-header__deco-bar {
+  height: 13px;
+  flex-basis: clamp(20px, 5%, 60px);
+  background: var(--dt-header-accent);
+  box-shadow: 0 0 8px
+    color-mix(in srgb, var(--dt-header-accent) 55%, transparent);
+  clip-path: polygon(0 0, 55% 0, 100% 50%, 55% 100%, 0 100%, 42% 50%);
+}
+
+.dt-header__deco--chevron .dt-header__deco-bar--r {
+  background: var(--dt-header-accent);
+  clip-path: polygon(100% 0, 45% 0, 0 50%, 45% 100%, 100% 100%, 58% 50%);
+}
+
+// 菱标：细线末端缀一颗发光菱形
+.dt-header__deco--diamond .dt-header__deco-bar {
+  height: 1.5px;
+}
+
+.dt-header__deco--diamond .dt-header__deco-bar::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -4px;
+  width: 8px;
+  height: 8px;
+  background: var(--dt-header-accent);
+  box-shadow: 0 0 8px var(--dt-header-accent);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.dt-header__deco--diamond .dt-header__deco-bar--r::after {
+  right: auto;
+  left: -4px;
+}
+
+// 分段线：等距刻度，外端淡出
+.dt-header__deco--dashed .dt-header__deco-bar {
+  height: 2px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--dt-header-accent) 0,
+    var(--dt-header-accent) 9px,
+    transparent 9px,
+    transparent 15px
+  );
+  box-shadow: none;
+  mask-image: linear-gradient(90deg, transparent, var(--fx-const-opaque) 45%);
+}
+
+.dt-header__deco--dashed .dt-header__deco-bar--r {
+  mask-image: linear-gradient(90deg, var(--fx-const-opaque) 55%, transparent);
+}

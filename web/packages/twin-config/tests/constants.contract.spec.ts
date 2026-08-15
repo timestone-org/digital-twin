@@ -9,14 +9,11 @@ import { describe, expect, it } from 'vitest'
 import {
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_ANCHOR_ROW_SLOTS,
-  TWIN_TINT_BINDING_KEY,
-  TWIN_TINT_ROW_SLOTS,
   TWIN_VIEW_BINDINGS,
   anchorRowFieldKey,
   arrayRowFieldKey,
-  tintRowFieldKey,
 } from '../src/constants'
-import { stitchAnchorValues, stitchTintValues } from '../src/twinMath'
+import { stitchAnchorValues } from '../src/twinMath'
 import { normalizeTwinConfig } from '../src/types'
 
 function specOf(key: string): BindingSpec {
@@ -31,30 +28,20 @@ function rowOf(spec: BindingSpec): Record<string, unknown> {
   )
 }
 
-const CONFIG = normalizeTwinConfig({
-  anchors: [{ id: 'a1' }],
-  tints: [{ id: 't1' }],
-})
+const CONFIG = normalizeTwinConfig({ anchors: [{ id: 'a1' }] })
 
 describe('绑定槽清单', () => {
   it('清单里的槽与槽键常量逐一对上', () => {
     expect(TWIN_VIEW_BINDINGS.map((spec) => spec.key)).toEqual([
-      TWIN_TINT_BINDING_KEY,
       TWIN_ANCHOR_BINDING_KEY,
     ])
   })
 
-  it('两个槽都是数组槽', () => {
-    expect(specOf(TWIN_TINT_BINDING_KEY).isArray).toBe(true)
+  it('锚点槽是数组槽', () => {
     expect(specOf(TWIN_ANCHOR_BINDING_KEY).isArray).toBe(true)
   })
 
   it('清单声明的行内子槽与子槽常量逐一对上', () => {
-    expect(
-      (specOf(TWIN_TINT_BINDING_KEY).arrayFields ?? []).map(
-        (field) => field.key,
-      ),
-    ).toEqual([...TWIN_TINT_ROW_SLOTS])
     expect(
       (specOf(TWIN_ANCHOR_BINDING_KEY).arrayFields ?? []).map(
         (field) => field.key,
@@ -68,26 +55,16 @@ describe('数组行 fieldKey', () => {
     expect(arrayRowFieldKey('rows', 0, 'value')).toBe('rows[0].value')
   })
 
-  it('染色与锚点的构造函数走同一套形状', () => {
-    expect(tintRowFieldKey(2, 'status')).toBe('tintValues[2].status')
+  it('锚点的构造函数走同一套形状', () => {
     expect(anchorRowFieldKey(3)).toBe('anchorValues[3].value')
   })
 
   it('构造出的槽键前缀就是清单里的槽', () => {
-    expect(tintRowFieldKey(0, 'value').startsWith(TWIN_TINT_BINDING_KEY)).toBe(
-      true,
-    )
     expect(anchorRowFieldKey(0).startsWith(TWIN_ANCHOR_BINDING_KEY)).toBe(true)
   })
 })
 
 describe('缝合读的子槽就是清单声明的子槽', () => {
-  it('染色行里每个声明过的子槽都被读到', () => {
-    expect(
-      stitchTintValues(CONFIG.tints, [rowOf(specOf(TWIN_TINT_BINDING_KEY))]),
-    ).toEqual({ t1: { value: '填入:value', status: '填入:status' } })
-  })
-
   it('锚点行里每个声明过的子槽都被读到', () => {
     expect(
       stitchAnchorValues(CONFIG.anchors, [

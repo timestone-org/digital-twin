@@ -6,6 +6,7 @@
 import { computed, nextTick, ref, useAttrs, watch } from 'vue'
 import { DT_CONTROL_DEFAULT_SIZE, DT_CONTROL_ICON_PX } from '@dt/contracts'
 import type { DtNumberRange, DtSize } from '@dt/contracts'
+import { useHostAttrs } from '../../composables/useHostAttrs'
 import DtField from '../DtField/DtField.vue'
 import DtIcon from '../DtIcon/DtIcon.vue'
 import { formatValue, normalize, parseInput, stepFrom } from './number'
@@ -59,6 +60,9 @@ const stepBase = computed(() => {
 })
 
 const attrs = useAttrs()
+
+// class / style 归外壳、其余原生属性归里面的原生元素；混作一处的后果见 useHostAttrs
+const { hostClass, hostStyle, nativeAttrs } = useHostAttrs()
 
 /**
  * ⚠ `readonly` 经 $attrs 进来，它只挡得住键入——步进键与上下方向键是另外两条
@@ -125,6 +129,8 @@ function onChange(): void {
 
 <template>
   <DtField
+    :class="hostClass"
+    :style="hostStyle"
     :label="label"
     :hint="hint"
     :error="error"
@@ -153,7 +159,7 @@ function onChange(): void {
         </button>
         <input
           :id="id"
-          v-bind="$attrs"
+          v-bind="nativeAttrs"
           class="dt-number__el"
           type="text"
           inputmode="decimal"

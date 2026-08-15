@@ -75,7 +75,10 @@ export default defineModule({
       max: 40,
       step: 0.5,
       span: 'half',
-      help: '0 = 沿用内置字间距；大于 0 时按 px 覆盖。',
+      // ⚠ 0 是哨兵不是零：它表示沿用样式表里的 0.02em（16px 字号下约 0.32px）。
+      //   改成「0 = 真的 0」会把每一张没配过字距的存量大屏一起改窄，而两者的差
+      //   小到看不出来——真正够不着的是负字距，那条路留给日后单开一个字段
+      help: '0 = 沿用内置字间距（约字号的 2%）；大于 0 时按 px 覆盖，填 0 不等于零字距。',
     },
     {
       key: 'fontFamily',
@@ -84,19 +87,32 @@ export default defineModule({
       group: '文本',
       default: 'sans',
       span: 'half',
-      help: '默认继承正文字体；另两档取主题的标题体与等宽体，不引入额外字体资源。',
+      help: '默认继承正文字体；中间两档取主题的标题体与等宽体，不引入额外字体资源。',
       options: [
         { value: 'sans', label: '默认（继承正文）' },
         { value: 'display', label: '标题体' },
         { value: 'mono', label: '等宽体' },
+        { value: 'custom', label: '自定义' },
       ],
+    },
+    {
+      key: 'fontFamilyCustom',
+      label: '自定义字体',
+      type: 'string',
+      group: '文本',
+      default: '',
+      span: 'half',
+      when: { key: 'fontFamily', in: ['custom'] },
+      placeholder: '如 Source Han Sans, sans-serif',
+      help: '直接写 CSS font-family 值；字体要在放大屏的机器上装好，装不到会回落系统字体。留空 = 继承正文。',
     },
     {
       key: 'color',
       label: '颜色',
       type: 'color',
       group: '文本',
-      default: 'var(--text-primary)',
+      // 先看画布的「正文字色」，画布也没配才走主题色
+      default: 'var(--card-text, var(--text-primary))',
       span: 'half',
     },
     {
@@ -146,7 +162,9 @@ export default defineModule({
       max: 1,
       step: 0.05,
       span: 'half',
-      help: '调小可整体压暗，页头一类的次要信息常用 0.7。',
+      // ⚠ 量纲是 0–1，与图片块同名字段的 0–100 不是一回事：两边各自锁死，
+      //   改任何一边的取值范围都会改存量大屏的渲染
+      help: '取值 0–1（1 = 完全不透明）。调小可整体压暗，页头一类的次要信息常用 0.7。',
     },
     {
       key: 'background',
@@ -179,6 +197,19 @@ export default defineModule({
       default: false,
       span: 'half',
       help: '给文字加一层与文字同色的辉光。',
+    },
+    {
+      key: 'glowRadius',
+      label: '辉光半径 (px)',
+      type: 'range',
+      group: '外观',
+      default: 10,
+      min: 0,
+      max: 40,
+      step: 1,
+      span: 'half',
+      when: { key: 'glow', in: [true] },
+      help: '辉光的扩散半径；0 = 只贴着笔画一圈。',
     },
   ],
   // 装饰文本不取数：要显示读数请用读数类模块，那边才有单位与阈值

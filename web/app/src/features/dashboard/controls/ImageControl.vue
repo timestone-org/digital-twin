@@ -1,13 +1,12 @@
 <script setup lang="ts">
 /**
  * @fileoverview `type: 'image'` 的控件：填图片 URL 或 CSS background 值，左侧给一张预览。
- * ⚠ 预览按来源分两条路画（见 `imageSource.ts`），塞错了看着就像素材坏了。
+ * ⚠ 预览按来源分两条路画（判别在 `@dt/modules` 的 shared/background），塞错了看着就像素材坏了。
  */
-import { readText } from '@dt/modules'
+import { imageSourceKind, readText } from '@dt/modules'
 import { DtIcon, DtInput } from '@dt/ui'
 import { computed } from 'vue'
 
-import { imageSourceKind } from './imageSource'
 import type { ConfigControlEmits, ConfigControlProps } from './controlProps'
 
 const props = defineProps<ConfigControlProps>()

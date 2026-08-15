@@ -72,6 +72,62 @@ describe('页脚清单与容器几何的对齐', () => {
   })
 })
 
+describe('页脚清单的设计态预览', () => {
+  it('预览不提任何与缺省不一致的键——刚拖进画布与保存后必须长得一样', () => {
+    const defaults = configDefaults(manifest.configSchema)
+    const drift = Object.entries(manifest.preview?.config ?? {}).filter(
+      ([key, value]) => defaults[key] !== value,
+    )
+
+    expect(drift).toEqual([])
+  })
+
+  it('预览铺过一遍之后内容区内缩不变，子节点不会被顶下去', () => {
+    const dragged = {
+      ...configDefaults(manifest.configSchema),
+      ...(manifest.preview?.config ?? {}),
+    }
+
+    expect(resolveContentInset(dragged).top).toBe(8)
+  })
+})
+
+describe('页脚可配观感的声明', () => {
+  it('分隔线与扫光缺省开着，兜底就是页脚现值', () => {
+    expect(field('showDivider')?.default).toBe(true)
+    expect(field('dividerWidth')).toMatchObject({
+      default: 1,
+      min: 0,
+      max: 8,
+      step: 1,
+    })
+    expect(field('showSweep')?.default).toBe(true)
+    expect(field('sweepOpacity')).toMatchObject({
+      default: 0.6,
+      min: 0,
+      max: 1,
+      step: 0.05,
+    })
+  })
+
+  it('标题缺省居中，三档都摆进了面板', () => {
+    expect(field('titleAlign')?.default).toBe('center')
+    expect(field('titleAlign')?.options?.map((item) => item.value)).toEqual([
+      'left',
+      'center',
+      'right',
+    ])
+  })
+
+  it('点阵缺省是关的——页脚一直没有底纹，存量不能凭空多一层', () => {
+    expect(field('showDotGrid')?.default).toBe(false)
+  })
+
+  it('背景图缺省留空，不注入就不影响纯色背景', () => {
+    expect(field('backgroundImage')?.default).toBe('')
+  })
+})
+
 describe('页脚清单的渲染组件', () => {
   it('渲染组件是异步装载的，清单本身不把它拽进首屏包体', async () => {
     const loaded = await vi.waitFor(() => manifest.component())

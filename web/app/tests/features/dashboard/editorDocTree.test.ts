@@ -6,8 +6,11 @@ import { describe, expect, it } from 'vitest'
 import type { DashboardNodePayload } from '@dt/contracts'
 
 import {
+  bringForward,
   bringToFront,
+  layerPositionOf,
   moveNode,
+  sendBackward,
   sendToBack,
   setGeometryBatch,
   topMostIds,
@@ -71,6 +74,55 @@ describe('置顶置底', () => {
 
   it('不存在的节点原样返回', () => {
     expect(bringToFront(nodes, 'ghost')).toEqual(nodes)
+  })
+})
+
+describe('逐层挪', () => {
+  const nodes = [node('a', null, 0), node('b', null, 1), node('c', null, 2)]
+
+  it('上移一层只与紧邻的那个换位，第三个不动', () => {
+    const next = bringForward(nodes, 'a')
+    expect([zOf(next, 'a'), zOf(next, 'b'), zOf(next, 'c')]).toEqual([1, 0, 2])
+  })
+
+  it('下移一层同理', () => {
+    const next = sendBackward(nodes, 'c')
+    expect([zOf(next, 'a'), zOf(next, 'b'), zOf(next, 'c')]).toEqual([0, 2, 1])
+  })
+
+  it('已经在这一头就原样返回，不该白记一笔撤销', () => {
+    expect(bringForward(nodes, 'c')).toEqual(nodes)
+    expect(sendBackward(nodes, 'a')).toEqual(nodes)
+    expect(bringForward(nodes, 'ghost')).toEqual(nodes)
+  })
+
+  it('只在同一个父层里比较，别层的兄弟不参与', () => {
+    const mixed = [
+      node('a', null, 0),
+      node('b', null, 1),
+      node('kid1', 'a', 0),
+      node('kid2', 'a', 1),
+    ]
+
+    const next = bringForward(mixed, 'kid1')
+
+    expect([zOf(next, 'kid1'), zOf(next, 'kid2')]).toEqual([1, 0])
+    expect([zOf(next, 'a'), zOf(next, 'b')]).toEqual([0, 1])
+  })
+})
+
+describe('层序位置', () => {
+  const nodes = [node('a', null, 0), node('b', null, 1), node('c', null, 2)]
+
+  it('0 是最下面，total - 1 是最上面', () => {
+    expect(layerPositionOf(nodes, 'a')).toEqual({ index: 0, total: 3 })
+    expect(layerPositionOf(nodes, 'c')).toEqual({ index: 2, total: 3 })
+  })
+
+  it('只数同层兄弟；不存在的节点给 null', () => {
+    const mixed = [node('a', null, 0), node('kid', 'a', 0)]
+    expect(layerPositionOf(mixed, 'kid')).toEqual({ index: 0, total: 1 })
+    expect(layerPositionOf(mixed, 'ghost')).toBeNull()
   })
 })
 

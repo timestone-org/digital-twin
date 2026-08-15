@@ -141,7 +141,7 @@ async def bind_static(client: httpx.AsyncClient, node_id: str) -> None:
     response = await client.post(
         f"{NODES_URL}/{node_id}/bindings",
         json={
-            "field_key": "scene_status",
+            "field_key": "anchorValues[0].value",
             "source_kind": "static",
             "static_value_json": "运行中",
         },
@@ -285,7 +285,7 @@ async def test_the_public_payload_carries_the_node_tree(
     strip_identity(app_client)
     payload = data_of(await app_client.get(f"{PUBLIC_URL}/{token}"))
     assert [item["module_type"] for item in payload["nodes"]] == ["twin-view"]
-    assert field_keys_of(payload) == ["scene_status"]
+    assert field_keys_of(payload) == ["anchorValues[0].value"]
 
 
 async def test_the_public_node_hides_its_owning_dashboard(

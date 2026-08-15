@@ -281,3 +281,58 @@ describe('联动规则编辑面', () => {
     )
   })
 })
+
+describe('按选中节点过滤', () => {
+  const OTHER = rule({
+    id: 'r2',
+    source: { nodeId: 'n2', event: 'change' },
+    action: { type: 'hide', targets: ['n2'] },
+  })
+
+  function mountFocused(nodeId: string) {
+    return mount(InteractionEditor, {
+      props: {
+        rules: [rule(), OTHER],
+        nodes: NODES,
+        getManifest,
+        focusNodeId: nodeId,
+      },
+    })
+  }
+
+  it('当触发源的规则列出来', () => {
+    expect(mountFocused('n1').findAll('[data-test="ix-rule"]')).toHaveLength(1)
+  })
+
+  it('被别人控制的规则也列出来——它自己不能当触发源也一样', () => {
+    const wrapper = mountFocused('n3')
+
+    expect(wrapper.findAll('[data-test="ix-rule"]')).toHaveLength(1)
+    expect(wrapper.find('[data-test="ix-empty"]').exists()).toBe(false)
+  })
+
+  it('与自己无关的规则不列', () => {
+    const summaries = mountFocused('n3')
+      .findAll('[data-test="ix-summary"]')
+      .map((item) => item.text())
+
+    expect(summaries).toEqual(['整块可点 · 点击 → 显示目标（1 个）'])
+  })
+
+  // ⚠ 过滤只影响看得见哪几条：按可见子集写回会把别人的规则整批删掉
+  it('删掉可见的那条时，别的节点的规则原样留着', async () => {
+    const wrapper = mountFocused('n1')
+
+    await wrapper.get('[data-test="ix-remove"]').trigger('click')
+
+    expect(lastRules(wrapper).map((item) => item.id)).toEqual(['r2'])
+  })
+
+  it('新规则默认从选中的这个节点出发', async () => {
+    const wrapper = mountFocused('n2')
+
+    await wrapper.get('[data-test="ix-add"]').trigger('click')
+
+    expect(lastRules(wrapper).at(-1)?.source.nodeId).toBe('n2')
+  })
+})

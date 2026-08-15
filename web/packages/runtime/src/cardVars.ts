@@ -246,6 +246,34 @@ function titleMotionVars(chrome: CardChrome): Record<string, string> {
   return out
 }
 
+/**
+ * 字体档 → 主题里的字体族 token。
+ * ⚠ 三档都得进表：这里表达的是「强制走这一族」，而「跟随主题」是**删键**，不是一个档位。
+ */
+const FONT_FAMILY_VAR: Record<string, string> = {
+  sans: 'var(--font-sans)',
+  display: 'var(--font-display)',
+  mono: 'var(--font-mono)',
+}
+
+/**
+ * 整格的正文排版缺省。
+ * 这三条靠 CSS 继承往下走，模块自己写死或配过的排版一律赢过它们——
+ * 「画布定基调、模块按需覆盖」就是这么落地的，没有第二套合并逻辑。
+ */
+function textVars(chrome: CardChrome): Record<string, string> {
+  const out: Record<string, string> = {}
+  const family = chrome.fontFamily
+  put(
+    out,
+    '--card-font',
+    typeof family === 'string' ? FONT_FAMILY_VAR[family] : undefined,
+  )
+  put(out, '--card-font-size', pxOf(chrome, 'fontSize'))
+  put(out, '--card-text', rawOf(chrome, 'textColor'))
+  return out
+}
+
 /** 卡片框整体质感：毛玻璃与悬停上浮。 */
 function fxVars(chrome: CardChrome): Record<string, string> {
   const out: Record<string, string> = {}
@@ -280,6 +308,7 @@ export function cardVars(chrome: CardChrome): Record<string, string> {
     ...cornerVars(chrome),
     ...titleVars(chrome),
     ...titleMotionVars(chrome),
+    ...textVars(chrome),
     ...fxVars(chrome),
   }
 }
@@ -293,7 +322,9 @@ export function cardVars(chrome: CardChrome): Record<string, string> {
  * @param chrome 已合并的 chrome 袋子
  */
 export function cardChromeClasses(chrome: CardChrome): string[] {
-  const classes: string[] = []
+  // 四角恒挂：显隐由 `--card-corner-display` 管，那条变量只在显式关闭时才注入。
+  // 靠类名开关的话，「大屏关了、这个模块想开」就没有表达方式了
+  const classes: string[] = ['dt-corners']
   const border = chrome.borderStyle
   // 未设置就不写类：观感完全交给基类，与「未设置 = 不写值」同一条铁律。
   // 无边框档也不写：那一档是整个卡片框退场，由宿主去掉卡片类表达
@@ -305,31 +336,58 @@ export function cardChromeClasses(chrome: CardChrome): string[] {
   return classes
 }
 
+/**
+ * 裸渲染模块的纯描边浮层要挂的类；不描边时给空表。
+ *
+ * 裸模块（页头、文本块、3D 孪生……）没有卡片框可修饰，边框只能靠一层铺满的透明浮层。
+ * ⚠ **只有显式配了边框样式才画**：默认给一圈实线的话，存量大屏里每一个裸模块都会
+ * 凭空长出边框——那是改渲染，不是修 bug。
+ * @param chrome 已合并的 chrome 袋子
+ */
+export function bareBorderClasses(chrome: CardChrome): string[] {
+  const border = chrome.borderStyle
+  if (border == null || border === '' || isChromeFrameless(chrome)) return []
+  const classes = [
+    'dt-module__border',
+    `dt-card-border--${normalizeCardBorderStyle(border)}`,
+    // 有描边就跟着有四角，与卡片版观感统一；关不关由 corners 开关的 --card-corner-display 管
+    'dt-corners',
+  ]
+  if (chrome.cornerStyle === 'dot') classes.push('dt-corners--dot')
+  return classes
+}
+
 /** 一格的卡片外观渲染结果：内联变量 + 修饰类 + 还套不套卡片框。 */
 export interface CardChromeRender {
   isFramed: boolean
   /** ⚠ 一个键都没配时是 `undefined` 而不是空对象：空 style 属性就不再是零注入。 */
   style: Record<string, string> | undefined
   classes: string[]
+  /** 裸模块的描边浮层；空表 = 不画这一层。 */
+  overlay: string[]
 }
 
 /**
  * 两级 chrome 合并后算出这一格要挂的东西，是渲染侧唯一的入口。
  * @param base 大屏级 `chrome_json.card`
  * @param override 模块级 `config_json.__cardStyle`
- * @param isCard 清单声明本模块套卡片框（裸渲染模块没有框可修饰）
+ * @param isCard 清单声明本模块套卡片框（裸渲染模块改走描边浮层）
+ * @param isConfigurable 清单允许配统一外观；关掉的模块两条路都不走
  */
 export function resolveCardChrome(
   base: unknown,
   override: unknown,
   isCard: boolean,
+  isConfigurable = true,
 ): CardChromeRender {
   const chrome = mergeCardChrome(base, override)
-  const isFramed = isCard && !isChromeFrameless(chrome)
+  const isFramed = isConfigurable && isCard && !isChromeFrameless(chrome)
   const vars = cardVars(chrome)
+  const isBare = isConfigurable && !isCard
   return {
     isFramed,
     style: Object.keys(vars).length === 0 ? undefined : vars,
     classes: isFramed ? cardChromeClasses(chrome) : [],
+    overlay: isBare ? bareBorderClasses(chrome) : [],
   }
 }

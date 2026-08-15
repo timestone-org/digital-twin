@@ -59,11 +59,24 @@
   --fx-corner-color: #00deff;
   --fx-scanline: rgba(0, 0, 0, 0.04);
   --fx-grid-line: rgba(0, 206, 252, 0.05);
+  /* 装饰位图的主题重着色滤镜——「一套素材多套主题」的做法：不换图，靠 filter 整体偏色。
+     本主题就是素材原色，故 none：零滤镜、零开销、零色差。 */
+  --fx-decor-filter: none;
+  /* 内置装饰位图在同目录的 decor.scss，理由见那份文件头。 */
   --fx-transition: 0.5s ease;
   /* 弹层遮罩与投影：硬编码在组件里换肤时第一个露馅 */
   --fx-scrim: rgba(0, 0, 0, 0.6);
   --fx-shadow-modal: 0 24px 64px -16px rgba(0, 0, 0, 0.7);
   --fx-shadow-menu: 0 12px 32px rgba(0, 0, 0, 0.45);
+  /* 凹槽轨道的内阴影：分段控件一类「按下去的槽」靠它把底压出深度 */
+  --fx-shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.28);
+  /* 上沿的一层高光薄膜 */
+  --fx-sheen: rgba(255, 255, 255, 0.06);
+  /* ⚠ `--fx-const-*` 是常量不是配色，故**不进主题轴**：
+     一个是遮罩渐变的不透明端（那里只有 alpha 有意义），一个是 color-mix 的提亮端
+     （只表示往哪个方向调）。跟着主题变的话，遮罩会缺一块、提亮会变成染色。 */
+  --fx-const-opaque: #000;
+  --fx-const-lighten: #fff;
 
   /* —— radius —— */
   --radius-sm: 4px;

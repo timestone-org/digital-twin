@@ -1,7 +1,8 @@
 /**
  * @fileoverview 契约：图层树的行清单与拖放落位。
- * ⚠ 落位下标按**去掉被拖节点之后**的同层序列算——与 `moveNode`「先摘再插」
- * 同一口径，差一格的话同层往前拖会稳定地落错位置，而结果看起来只是「没生效」。
+ * ⚠ 树是按 z **倒序**列的（上面的行 = 画布上盖在上面的那个），落位下标反过来算；
+ * 认成顺序的话，往上拖会把节点压到目标下面，而结果看起来只是「拖反了」。
+ * ⚠ 下标按**去掉被拖节点之后**的同层序列算——与 `moveNode`「先摘再插」同一口径。
  */
 import { describe, expect, it } from 'vitest'
 import type { DashboardNodePayload, ModuleManifest } from '@dt/contracts'
@@ -64,6 +65,26 @@ function rowsOf(nodes: DashboardNodePayload[], collapsed: string[] = []) {
 }
 
 describe('行清单', () => {
+  it('同层按 z 倒序列：排在上面的行就是画布上盖在上面的那个', () => {
+    const rows = rowsOf([
+      node('bottom', { zIndex: 0 }),
+      node('middle', { zIndex: 1 }),
+      node('top', { zIndex: 2 }),
+    ])
+
+    expect(rows.map((row) => row.id)).toEqual(['top', 'middle', 'bottom'])
+  })
+
+  it('子层跟在自己的父行下面，父与父之间仍是倒序', () => {
+    const rows = rowsOf([
+      node('low', { moduleType: 'box', zIndex: 0 }),
+      node('high', { moduleType: 'box', zIndex: 1 }),
+      node('kid', { parentId: 'low' }),
+    ])
+
+    expect(rows.map((row) => row.id)).toEqual(['high', 'low', 'kid'])
+  })
+
   it('折叠一层会连它的孙层一起收走', () => {
     const nodes = [
       node('box', { moduleType: 'box' }),
@@ -121,21 +142,21 @@ describe('落位换算', () => {
     node('c', { zIndex: 2 }),
   ]
 
-  it('拖到某行之前 = 它在去掉自己后的下标', () => {
+  it('落在某行上方 = 压住它：z 序里排到它后面一位', () => {
     expect(
       resolveDrop(SIBLINGS, 'c', { id: 'b', parentId: null }, 'before'),
     ).toEqual({
       parentId: null,
-      at: 1,
+      at: 2,
     })
   })
 
-  it('同层往后拖时下标不把自己算进去', () => {
+  it('落在某行下方 = 被它压住，且下标不把自己算进去', () => {
     expect(
       resolveDrop(SIBLINGS, 'a', { id: 'c', parentId: null }, 'after'),
     ).toEqual({
       parentId: null,
-      at: 2,
+      at: 1,
     })
   })
 

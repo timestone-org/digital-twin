@@ -203,10 +203,20 @@ const meta = computed<ModuleMeta>(() => {
 /** 渲染根要不要套卡片框，由清单声明，不按模块类型判断。 */
 const isCard = computed(() => (manifest.value?.chrome ?? 'card') === 'card')
 
+/** 缺省 true：只有显式退出统一外观的模块才两条路都不走。 */
+const isChromeConfigurable = computed(
+  () => manifest.value?.chromeConfigurable !== false,
+)
+
 // 大屏级缺省 + 模块级覆盖 → 这一格的卡片外观。没配任何 chrome 键时 style 是
 // undefined，一个变量都不注入 = 渲染完全走平台默认，这是 chrome 的铁律
 const chrome = computed(() =>
-  resolveCardChrome(props.cardChrome, props.config?.__cardStyle, isCard.value),
+  resolveCardChrome(
+    props.cardChrome,
+    props.config?.__cardStyle,
+    isCard.value,
+    isChromeConfigurable.value,
+  ),
 )
 </script>
 
@@ -247,6 +257,12 @@ const chrome = computed(() =>
         :message="meta.errorMessage ?? ''"
       />
     </template>
+    <!-- 下两角：一个盒子只有 ::before / ::after 两个伪元素，下面两角得再借一层 -->
+    <i v-if="chrome.isFramed" class="dt-corner-b" />
+    <!-- 裸模块的纯描边浮层：只描边、不加背景，模块自己的画布在其下全幅 -->
+    <i v-else-if="chrome.overlay.length > 0" :class="chrome.overlay">
+      <i class="dt-corner-b" />
+    </i>
   </div>
 </template>
 
@@ -258,29 +274,15 @@ const chrome = computed(() =>
   height: 100%;
   min-height: 0;
   overflow: hidden;
+  // 画布级正文缺省：三条都靠继承往下走，未注入时 inherit = 完全不改变现有渲染。
+  // 模块自己写死或配过的排版天然赢过继承来的值，不需要第二套合并逻辑
+  font-family: var(--card-font, inherit);
+  font-size: var(--card-font-size, inherit);
+  color: var(--card-text, inherit);
 }
 
-// 每一项都可被 chrome 顶掉，而每个 var() 的兜底值就是平台默认观感——
-// 「没配这一项」与「配成默认值」因此走同一条渲染路径
-.dt-module--card {
-  border: 1px solid var(--card-border);
-  // ⚠ 必须排在 border 简写之后：单边描边的值是 border-width 简写串，写在前面会被重置
-  border-width: var(--card-border-side, 1px);
-  border-radius: var(--card-radius);
-  background: var(--card-bg);
-  animation: var(--card-anim, none);
-  // ⚠ 缺省必须是 none：非 none 的 backdrop-filter 会新建合成层与层叠上下文，
-  // 还会改掉内部绝对定位元素的包含块
-  backdrop-filter: var(--card-backdrop-blur, none);
-  transition: transform var(--card-hover-lift-dur, 0s) ease;
-}
-
-// ⚠ 故意不给 var() 兜底：未注入时整条声明「计算值时失效」→ transform 回到 none。
-// 写成 0px 会得到 translateY(0)，那仍是非 none 的 transform，会在悬停瞬间凭空
-// 造出层叠上下文与包含块
-.dt-module--card:hover {
-  transform: translateY(calc(-1 * var(--card-hover-lift)));
-}
+// ⚠ 卡片框、八种边框样式、四角与呼吸动画**不在这里**，在 runtime 的全局
+// `styles/chrome.scss`：动画名由 CSS 变量注入，scoped 改写认不出来，写在这儿会静默失效。
 
 // 整块可点的宿主外观：手型 + 键盘焦点环都在这一处，模块不必各写一遍
 .dt-module--clickable {

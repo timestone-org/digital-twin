@@ -11,6 +11,7 @@
 import { computed } from 'vue'
 import { DT_CONTROL_DEFAULT_SIZE, DT_CONTROL_ICON_PX } from '@dt/contracts'
 import type { DtSize } from '@dt/contracts'
+import { useHostAttrs } from '../../composables/useHostAttrs'
 import DtField from '../DtField/DtField.vue'
 import DtIcon from '../DtIcon/DtIcon.vue'
 import DtPopover from '../DtPopover/DtPopover.vue'
@@ -18,6 +19,9 @@ import DateTimePanel from './DateTimePanel.vue'
 import { fromLocalMinuteInput, toLocalMinuteInput } from '../../shared/datetime'
 
 defineOptions({ inheritAttrs: false })
+
+// class / style 归外壳、其余原生属性归里面的原生元素；混作一处的后果见 useHostAttrs
+const { hostClass, hostStyle, nativeAttrs } = useHostAttrs()
 
 const props = withDefaults(
   defineProps<{
@@ -64,6 +68,8 @@ function onPick(local: string): void {
 
 <template>
   <DtField
+    :class="hostClass"
+    :style="hostStyle"
     :label="label"
     :hint="hint"
     :error="error"
@@ -85,7 +91,7 @@ function onPick(local: string): void {
           >
             <input
               :id="id"
-              v-bind="$attrs"
+              v-bind="nativeAttrs"
               class="dt-datetime__el"
               type="datetime-local"
               step="60"

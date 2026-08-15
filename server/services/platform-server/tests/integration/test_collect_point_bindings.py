@@ -30,7 +30,7 @@ from platform_server.apps.dashboard.services import dashboards_binding
 
 pytestmark = pytest.mark.requires_postgres
 
-BINDING_SLOT = "scene_status"
+BINDING_SLOT = "anchorValues[0].value"
 
 
 @dataclass(frozen=True)

@@ -35,9 +35,30 @@ export interface DropTarget {
   at: number | null
 }
 
+/** 一行的静态部分。 */
+function rowOf(
+  frame: EditorFrame,
+  node: DashboardNodePayload,
+  getManifest: GetModuleManifest,
+  hasChildren: boolean,
+): LayerRow {
+  const manifest = getManifest(node.moduleType)
+  return {
+    id: frame.id,
+    depth: frame.depth,
+    node,
+    label: nodeLabelOf(node, getManifest),
+    icon: manifest?.icon ?? 'layout-grid',
+    isContainer: manifest?.isContainer === true,
+    hasChildren,
+    isDimmed: !frame.isVisible,
+  }
+}
+
 /**
  * 摊成行清单：折叠掉的子树整段不出现。
- * ⚠ 依赖 `frames` 的先序（父一定排在子前面），换成别的顺序会漏折叠后代。
+ * ⚠ 同层**按 z 倒序**列：排在上面的行就是画布上盖在上面的那个，
+ * 顺着列的话「往上拖」得到的是往下压，这条视觉约定错了整棵树都读反。
  * @param collapsed 已折叠的节点 id
  */
 export function layerRows(
@@ -47,32 +68,26 @@ export function layerRows(
   collapsed: ReadonlySet<string>,
 ): LayerRow[] {
   const byId = new Map(nodes.map((node) => [node.id, node] as const))
-  const parents = new Set(nodes.map((node) => node.parentId))
-  const folded = new Set<string>()
-  const rows: LayerRow[] = []
+  const byParent = new Map<string | null, EditorFrame[]>()
   for (const frame of frames) {
     const node = byId.get(frame.id)
     if (node === undefined) continue
-    const parentId = node.parentId
-    if (
-      parentId !== null &&
-      (folded.has(parentId) || collapsed.has(parentId))
-    ) {
-      folded.add(frame.id)
-      continue
-    }
-    const manifest = getManifest(node.moduleType)
-    rows.push({
-      id: frame.id,
-      depth: frame.depth,
-      node,
-      label: nodeLabelOf(node, getManifest),
-      icon: manifest?.icon ?? 'layout-grid',
-      isContainer: manifest?.isContainer === true,
-      hasChildren: parents.has(frame.id),
-      isDimmed: !frame.isVisible,
-    })
+    const bucket = byParent.get(node.parentId)
+    if (bucket === undefined) byParent.set(node.parentId, [frame])
+    else bucket.push(frame)
   }
+  const rows: LayerRow[] = []
+  const walk = (parentId: string | null): void => {
+    const bucket = byParent.get(parentId) ?? []
+    for (let index = bucket.length - 1; index >= 0; index -= 1) {
+      const frame = bucket[index]
+      const node = frame === undefined ? undefined : byId.get(frame.id)
+      if (frame === undefined || node === undefined) continue
+      rows.push(rowOf(frame, node, getManifest, byParent.has(frame.id)))
+      if (!collapsed.has(frame.id)) walk(frame.id)
+    }
+  }
+  walk(null)
   return rows
 }
 
@@ -130,5 +145,6 @@ export function resolveDrop(
     .map((node) => node.id)
   const index = order.indexOf(target.id)
   if (index < 0) return null
-  return { parentId: target.parentId, at: pos === 'before' ? index : index + 1 }
+  // ⚠ 树是倒序列的：落在目标行**上方**要的是更靠上的层，也就是 z 序里排在它后面
+  return { parentId: target.parentId, at: pos === 'before' ? index + 1 : index }
 }

@@ -49,14 +49,16 @@ ModuleType = Annotated[
         pattern=r"^[a-z][a-z0-9-]*$",
     ),
 ]
-# 绑定槽键，数组槽形如 `hotspots[0].value`
+# 绑定槽键，数组槽形如 `anchorValues[0].value`。
+# ⚠ 槽名随前端清单是 camelCase：收成纯 snake_case 会让这类槽在入参就被拒，
+# 而报出的是一句字段格式错，看不出「服务端与清单对槽名的写法不是一套」。
 FieldKey = Annotated[
     str,
     StringConstraints(
         strip_whitespace=True,
         min_length=1,
         max_length=128,
-        pattern=r"^[a-z][a-z0-9_]*(\[\d+\]\.[a-z][a-z0-9_]*)?$",
+        pattern=r"^[a-z][A-Za-z0-9_]*(\[\d+\]\.[a-z][A-Za-z0-9_]*)?$",
     ),
 ]
 # 点位身份 `{source_id}:{point_code}`

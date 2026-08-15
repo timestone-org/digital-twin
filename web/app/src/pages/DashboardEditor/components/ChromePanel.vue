@@ -119,7 +119,13 @@ function cardOf(draft: EditorMetaDraft | null): CardChrome {
 
 <template>
   <div class="flex h-full min-h-0 flex-col gap-3">
-    <DtSegmented v-model="panelTab" :options="PANEL_TABS" size="sm" />
+    <DtSegmented
+      v-model="panelTab"
+      :options="PANEL_TABS"
+      size="sm"
+      block
+      aria-label="页面设置分页"
+    />
     <InteractionEditor
       v-if="panelTab === 'interaction'"
       class="min-h-0 flex-1 overflow-y-auto pr-1"

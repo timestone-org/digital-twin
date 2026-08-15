@@ -1,6 +1,6 @@
 /**
- * @fileoverview 编辑器周边件的接线：全屏预览态、导出 JSON、本地自动草稿、
- * 保存后 best-effort 截图。收在一处让页面只剩绑定。
+ * @fileoverview 编辑器周边件的接线：全屏预览态、画布右键菜单、导出 JSON、
+ * 本地自动草稿、保存后 best-effort 截图。收在一处让页面只剩绑定。
  */
 import { ref, type Ref } from 'vue'
 import type { DashboardPayload } from '@dt/contracts'
@@ -14,14 +14,20 @@ import type {
 } from '@/features/dashboard/canvasSnap'
 import type { CanvasZoom } from '@/features/dashboard/canvasZoom'
 import { downloadJson } from '@/utils/downloadJson'
+import type { EditorActions } from './editorActions'
 import type { ArrangeActions } from './editorArrange'
 import { useEditorHotkeys } from './useEditorHotkeys'
+import {
+  useEditorContextMenu,
+  type EditorContextMenu,
+} from './useEditorContextMenu'
 import { clearDraft } from './editorDraft'
 import { useEditorDraftFlow } from './useEditorDraftFlow'
 import { captureThumbnail } from './editorThumbnail'
 
 export interface EditorExtrasDeps {
   editor: DashboardEditor
+  actions: EditorActions
   arrange: ArrangeActions
   dashboard: Ref<DashboardPayload | null>
   design: () => DesignSize
@@ -46,15 +52,30 @@ export interface EditorExtrasDeps {
   }
   /** 截图取景元素。 */
   stageEl: () => HTMLElement | null
+  /** 把节点滚进视口中央，由画布提供。 */
+  centerOn: (nodeId: string) => void
   onExportFailed: (message: string) => void
 }
 
 export interface EditorExtras {
   previewOpen: Ref<boolean>
   helpOpen: Ref<boolean>
+  contextMenu: EditorContextMenu
   /** 工具栏保存入口：保存成功后顺手截缩略图并清草稿。 */
   saveWithThumbnail: () => Promise<void>
   exportJson: () => Promise<void>
+}
+
+/** 右键菜单与快捷键共用同一批动作出口，删除同样先过确认弹窗。 */
+function contextMenuOf(deps: EditorExtrasDeps): EditorContextMenu {
+  return useEditorContextMenu({
+    editor: deps.editor,
+    actions: deps.actions,
+    arrange: deps.arrange,
+    centerOn: deps.centerOn,
+    removeSelected: deps.removeSelected,
+    zoom: deps.zoom,
+  })
 }
 
 export function useEditorExtras(deps: EditorExtrasDeps): EditorExtras {
@@ -105,5 +126,11 @@ export function useEditorExtras(deps: EditorExtrasDeps): EditorExtras {
     },
   })
 
-  return { previewOpen, helpOpen, saveWithThumbnail, exportJson }
+  return {
+    previewOpen,
+    helpOpen,
+    contextMenu: contextMenuOf(deps),
+    saveWithThumbnail,
+    exportJson,
+  }
 }

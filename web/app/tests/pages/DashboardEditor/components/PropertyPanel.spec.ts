@@ -1,6 +1,7 @@
 /**
- * @fileoverview 契约：属性面板完全由 `configSchema` 泛型渲染——面板里没有一行
+ * @fileoverview 契约：「专属配置」页完全由 `configSchema` 泛型渲染——面板里没有一行
  * 针对具体模块的表单代码，换一份清单就换一套表单，且缺省会铺进控件的当前值。
+ * 几何 / 显隐 / 卡片外观归「通用配置」页，见 NodeCommonPanel.spec.ts。
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -60,13 +61,13 @@ beforeEach(() => {
   installConfigControls()
 })
 
-describe('没有选中节点', () => {
+describe('没有专属配置的模块', () => {
   it('给一句能看的空态，而不是一片空白', () => {
     const wrapper = mount(PropertyPanel, {
-      props: { node: null, manifest: undefined },
+      props: { node: NODE, manifest: undefined },
     })
 
-    expect(wrapper.text()).toContain('没有选中节点')
+    expect(wrapper.text()).toContain('这个模块没有专属配置')
   })
 })
 
@@ -105,24 +106,28 @@ describe('泛型渲染', () => {
     expect((input.element as HTMLInputElement).value).toBe('缺省标题')
   })
 
-  it('几何四项按节点当前坐标显示', () => {
+  it('清单声明了预设就摆出预设按钮，点一下整套抛上去', async () => {
+    const preset = { id: 'p1', label: '极简', config: { title: 'x' } }
+    const wrapper = mount(PropertyPanel, {
+      props: {
+        node: NODE,
+        manifest: { ...MANIFEST, configPresets: [preset] },
+      },
+    })
+
+    await wrapper.get('.dt-prop__preset').trigger('click')
+
+    expect(wrapper.emitted('preset')?.[0]).toEqual([preset])
+  })
+
+  // 几何与显隐搬去「通用配置」页了，这里再出现就是两页各画一份
+  it('不再画几何与显隐', () => {
     const wrapper = mount(PropertyPanel, {
       props: { node: NODE, manifest: MANIFEST },
     })
-    const numbers = wrapper
-      .findAll('.dt-number__el')
-      .map((input) => (input.element as HTMLInputElement).value)
 
-    expect(numbers).toContain('12')
-    expect(numbers).toContain('78')
-  })
-
-  it('没有清单时只剩几何与显隐，不崩', () => {
-    const wrapper = mount(PropertyPanel, {
-      props: { node: NODE, manifest: undefined },
-    })
-
-    expect(wrapper.text()).toContain('初始可见')
+    expect(wrapper.text()).not.toContain('初始可见')
+    expect(wrapper.findAll('.dt-number__el')).toHaveLength(0)
   })
 })
 
@@ -137,28 +142,4 @@ describe('抛出的改动', () => {
     expect(wrapper.emitted('config')?.[0]).toEqual([['title'], '新标题', true])
   })
 
-  it('改几何抛 geometry，且是连续输入', async () => {
-    const wrapper = mount(PropertyPanel, {
-      props: { node: NODE, manifest: MANIFEST },
-    })
-    const numberInput = wrapper.findAll('.dt-number__el')[0]
-
-    await numberInput?.setValue('99')
-
-    expect(wrapper.emitted('geometry')?.[0]).toEqual([
-      { x: 99, y: 34, w: 56, h: 78 },
-      true,
-    ])
-  })
-
-  it('改显隐抛 visible', async () => {
-    const wrapper = mount(PropertyPanel, {
-      props: { node: NODE, manifest: MANIFEST },
-    })
-    const toggles = wrapper.findAll('button[role="switch"]')
-
-    await toggles[0]?.trigger('click')
-
-    expect(wrapper.emitted('visible')?.[0]).toEqual([false])
-  })
 })

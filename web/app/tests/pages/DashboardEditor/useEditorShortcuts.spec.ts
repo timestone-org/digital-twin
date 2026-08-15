@@ -44,6 +44,23 @@ describe('按键判定', () => {
     expect(shortcutOf(keyEvent('ArrowLeft'), false)).toBe('nudge')
   })
 
+  it('层序：⌘] / ⌘[ 逐层挪，加 Shift 一步到顶 / 到底', () => {
+    expect(shortcutOf(keyEvent(']', { metaKey: true }), false)).toBe(
+      'orderForward',
+    )
+    expect(shortcutOf(keyEvent('[', { metaKey: true }), false)).toBe(
+      'orderBackward',
+    )
+    // ⚠ 按住 Shift 后浏览器给的 key 是 } 与 {，不是加了 shiftKey 的方括号
+    expect(
+      shortcutOf(keyEvent('}', { metaKey: true, shiftKey: true }), false),
+    ).toBe('orderFront')
+    expect(
+      shortcutOf(keyEvent('{', { metaKey: true, shiftKey: true }), false),
+    ).toBe('orderBack')
+    expect(shortcutOf(keyEvent(']'), false)).toBeNull()
+  })
+
   it('缩放手势与 Esc', () => {
     expect(shortcutOf(keyEvent('+', { metaKey: true }), false)).toBe('zoomStep')
     expect(shortcutOf(keyEvent('=', { metaKey: true }), false)).toBe('zoomStep')
@@ -88,6 +105,10 @@ function handlerSpy(calls: string[]): EditorShortcutHandlers {
     zoomReset: () => calls.push('zoomReset'),
     zoomFit: () => calls.push('zoomFit'),
     help: () => calls.push('help'),
+    orderForward: () => calls.push('orderForward'),
+    orderBackward: () => calls.push('orderBackward'),
+    orderFront: () => calls.push('orderFront'),
+    orderBack: () => calls.push('orderBack'),
   }
 }
 

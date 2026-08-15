@@ -15,9 +15,9 @@ import {
 } from '../src/cardVars'
 
 describe('未设置 = 不写值', () => {
-  it('空袋子一个变量、一个修饰类都不产出', () => {
+  it('空袋子一个变量都不产出，只剩四角那个恒挂的载体类', () => {
     expect(cardVars({})).toEqual({})
-    expect(cardChromeClasses({})).toEqual([])
+    expect(cardChromeClasses({})).toEqual(['dt-corners'])
   })
 
   it('空串与 null 一律当作没填', () => {
@@ -178,31 +178,34 @@ describe('简写串与逐档特例', () => {
 
 describe('修饰类', () => {
   it('边框样式未设置就不写类，观感完全交给基类', () => {
-    expect(cardChromeClasses({ borderStyle: '' })).toEqual([])
+    expect(cardChromeClasses({ borderStyle: '' })).toEqual(['dt-corners'])
   })
 
   it('登记过的样式写成类，白名单外的脏值回退标准细线', () => {
     expect(cardChromeClasses({ borderStyle: 'dashed' })).toEqual([
+      'dt-corners',
       'dt-card-border--dashed',
     ])
     expect(cardChromeClasses({ borderStyle: 'wobble' })).toEqual([
+      'dt-corners',
       'dt-card-border--solid',
     ])
   })
 
   it('无边框档不写边框类，那一档是整个卡片框退场', () => {
-    expect(cardChromeClasses({ borderStyle: 'none' })).toEqual([])
+    expect(cardChromeClasses({ borderStyle: 'none' })).toEqual(['dt-corners'])
     expect(isChromeFrameless({ borderStyle: 'none' })).toBe(true)
     expect(isChromeFrameless({})).toBe(false)
   })
 
   it('角标形状与悬停辉光走类，取值不对就不写', () => {
     expect(cardChromeClasses({ cornerStyle: 'dot', hoverGlow: true })).toEqual([
+      'dt-corners',
       'dt-corners--dot',
       'dt-module--hover-glow',
     ])
     expect(cardChromeClasses({ cornerStyle: 'bracket', hoverGlow: 1 })).toEqual(
-      [],
+      ['dt-corners'],
     )
   })
 
@@ -234,7 +237,8 @@ describe('整格结论', () => {
     expect(resolveCardChrome(null, null, true)).toEqual({
       isFramed: true,
       style: undefined,
-      classes: [],
+      classes: ['dt-corners'],
+      overlay: [],
     })
   })
 
@@ -243,6 +247,38 @@ describe('整格结论', () => {
     expect(bare.isFramed).toBe(false)
     expect(bare.classes).toEqual([])
     expect(bare.style).toEqual({ '--card-radius': '4px' })
+  })
+
+  // ⚠ 只有显式配了样式才画：默认给一圈实线的话，存量大屏里每个裸模块都会凭空长出边框
+  it('裸模块没配边框样式就不画描边浮层', () => {
+    expect(resolveCardChrome({ radius: 4 }, null, false).overlay).toEqual([])
+    expect(
+      resolveCardChrome({ borderStyle: 'none' }, null, false).overlay,
+    ).toEqual([])
+  })
+
+  it('裸模块配了边框样式就挂一层描边浮层，四角跟着来', () => {
+    expect(
+      resolveCardChrome({ borderStyle: 'glow' }, null, false).overlay,
+    ).toEqual(['dt-module__border', 'dt-card-border--glow', 'dt-corners'])
+    expect(
+      resolveCardChrome(
+        { borderStyle: 'glow', cornerStyle: 'dot' },
+        null,
+        false,
+      ).overlay,
+    ).toEqual([
+      'dt-module__border',
+      'dt-card-border--glow',
+      'dt-corners',
+      'dt-corners--dot',
+    ])
+  })
+
+  it('清单退出统一外观的模块两条路都不走', () => {
+    const off = resolveCardChrome({ borderStyle: 'glow' }, null, false, false)
+    expect(off.overlay).toEqual([])
+    expect(resolveCardChrome({}, null, true, false).isFramed).toBe(false)
   })
 
   it('无边框档去掉卡片框', () => {

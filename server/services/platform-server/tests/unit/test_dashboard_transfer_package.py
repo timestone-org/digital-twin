@@ -65,7 +65,7 @@ def sample_node() -> ExportNodeIn:
         config_json={"title": "主屏"},
         bindings=[
             ExportBindingIn(
-                field_key="scene_status",
+                field_key="anchorValues[0].value",
                 source_kind="opcua",
                 node_key=KNOWN_KEY,
             )
@@ -161,7 +161,7 @@ def test_an_import_result_survives_the_idempotency_cache_round_trip() -> None:
 def test_an_unresolved_binding_names_the_point_it_could_not_find() -> None:
     entry = UnresolvedBindingOut(
         node_key=KNOWN_KEY,
-        field_key="scene_status",
+        field_key="anchorValues[0].value",
         source_kind="opcua",
         reason="point_not_found",
     )
@@ -170,7 +170,7 @@ def test_an_unresolved_binding_names_the_point_it_could_not_find() -> None:
 
 def test_a_realtime_binding_reports_the_point_it_points_at() -> None:
     entry = ExportBindingIn(
-        field_key="scene_status", source_kind="opcua", node_key=KNOWN_KEY
+        field_key="anchorValues[0].value", source_kind="opcua", node_key=KNOWN_KEY
     )
     assert point_key_of(entry) == KNOWN_KEY
 
@@ -178,7 +178,7 @@ def test_a_realtime_binding_reports_the_point_it_points_at() -> None:
 def test_a_history_binding_reports_the_point_hidden_in_its_detail() -> None:
     # 历史绑定的点位写在取数说明里，只看 node_key 会把它报成「没指点位」
     entry = ExportBindingIn(
-        field_key="scene_status",
+        field_key="anchorValues[0].value",
         source_kind="archive",
         detail_json={"node_key": KNOWN_KEY},
     )
@@ -187,7 +187,7 @@ def test_a_history_binding_reports_the_point_hidden_in_its_detail() -> None:
 
 def test_a_constant_binding_points_at_no_point_at_all() -> None:
     entry = ExportBindingIn(
-        field_key="scene_status", source_kind="static", static_value_json=1
+        field_key="anchorValues[0].value", source_kind="static", static_value_json=1
     )
     assert point_key_of(entry) == ""
 

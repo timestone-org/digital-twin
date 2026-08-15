@@ -248,6 +248,9 @@ describe('注入面与 tokens.scss 对得上', () => {
     const companions = new Set([...injected].map((name) => `${name}-rgb`))
 
     function reachable(name: string): boolean {
+      // `--fx-const-*` 按约定是常量不是配色：遮罩渐变的不透明端、color-mix 的提亮端。
+      // 它们长得像颜色，但换主题时**必须**纹丝不动，否则遮罩缺一块、提亮变染色
+      if (name.startsWith('--fx-const-')) return true
       if (injected.has(name)) return true
       if (viaExtraVars.has(name)) return true
       if (companions.has(name)) return true

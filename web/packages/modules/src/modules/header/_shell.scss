@@ -1,0 +1,141 @@
+/* 页头外壳自身的样式：容器、底部辉光线、背景层、扫光带、标题条与子节点层。
+ *
+ * ⚠ 必须最后一个 @use：风格档（_variants）与花纹（_deco）里有同特异度的规则，
+ * 排在它们之前的话这里的取值会被后来者盖掉，而两边看起来都「写了」。
+ * ⚠ 层叠次序是这份文件的要点，别按字母序重排：装饰 1 < 扫描线 2 < 扫光 3 < 子节点 4，
+ * 子节点恒在最上——它是内容，其余都是氛围。
+ */
+.dt-header {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+  // ⚠ 线色走变量而不是让风格档去覆盖 border-bottom：风格类由 @use 排在本规则之前，
+  // 同特异度下覆盖不掉，改颜色只能从这个变量进
+  border-bottom: 1px solid
+    var(
+      --dt-header-line,
+      color-mix(in srgb, var(--dt-header-accent) 32%, transparent)
+    );
+  // 扫描线那层是 ::after，把它关在外壳内，别外溢盖住兄弟层
+  isolation: isolate;
+}
+
+// ⚠ CRT 扫描线的全局规则挂在 --z-sticky(100) 上，那是给整页浮层用的高度。
+// 页头的子节点在本组件的 slot 里、也在同一个层叠上下文内，不压下来的话这层
+// 4% 的黑纹会盖在每个子节点上面。参考项目里子节点是外壳的兄弟层，没有这个问题
+.dt-header.dt-scanlines::after {
+  z-index: 2;
+}
+
+// 底部辉光分隔线
+.dt-header::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  right: var(--dt-glowline-inset, 0);
+  bottom: 0;
+  left: var(--dt-glowline-inset, 0);
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--dt-header-accent) 70%, transparent),
+    transparent
+  );
+  // 外发光只在显式关掉时被注入的 none 顶掉
+  box-shadow: var(
+    --dt-glowline-shadow,
+    0 0 8px color-mix(in srgb, var(--dt-header-accent) 50%, transparent)
+  );
+  pointer-events: none;
+}
+
+.dt-header__bg {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  background: var(--dt-header-bg, none);
+  // 没自定义就跟随主题的装饰滤镜；主题没定义这个 token 时不加滤镜
+  filter: var(--dt-header-bg-filter, var(--fx-decor-filter, none));
+  transition: filter var(--fx-transition, 0.5s ease);
+}
+
+.dt-header__scan {
+  position: absolute;
+  top: 0;
+  // 静止起点整条藏在左侧画布外：万一 keyframes 缺席也只是不可见，不会突兀停在画面中间
+  left: calc(0px - var(--dt-scan-w, 30%));
+  z-index: 1;
+  width: var(--dt-scan-w, 30%);
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--dt-scan-color, var(--card-border)),
+    transparent
+  );
+  // ⚠ keyframes 定义在 app 的全局 _animations.scss。scoped 块里**不许**写同名
+  // @keyframes，写了 Vue 会给它加 hash，而这里引用的是字面量，必然失配
+  animation: dt-header-scan var(--dt-scan-dur, 4s) linear infinite;
+  pointer-events: none;
+}
+
+// 升到花纹与扫描线之上，得到「光扫过标题」的手感。
+// ⚠ 仍在子节点之下：子节点是内容，光带是氛围，压住读数就本末倒置了
+.dt-header__scan--above {
+  z-index: 3;
+}
+
+.dt-header__bar {
+  display: flex;
+  height: var(--dt-header-bar-height);
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--dt-header-accent) 28%, transparent);
+}
+
+.dt-header__bar-accent {
+  width: var(--card-title-bar-w, 3px);
+  height: 13px;
+  flex: none;
+  border-radius: var(--card-title-bar-radius, var(--radius-pill));
+  background: var(--card-title-bar, var(--dt-header-accent));
+  box-shadow: 0 0 var(--card-title-bar-glow, 6px)
+    var(--card-title-bar, var(--dt-header-accent));
+}
+
+.dt-header__title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--card-title-color, var(--text-primary));
+  // 画布配了统一字体就跟着走，没配才用标题体
+  font-family: var(--card-font, var(--font-display));
+  font-size: var(--card-title-size, 18px);
+  font-weight: var(--card-title-weight, 600);
+  letter-spacing: var(--card-title-ls, 0.08em);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// 子节点在这一层里绝对定位；内缩已经由 padding 让出来，运行时不要再算一次。
+// z 恒为外壳内最高：装饰、扫描线、扫光都是氛围层，谁都不该盖住子节点
+.dt-header__content {
+  position: relative;
+  z-index: 4;
+  min-height: 0;
+  flex: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dt-header__scan {
+    animation: none;
+  }
+}

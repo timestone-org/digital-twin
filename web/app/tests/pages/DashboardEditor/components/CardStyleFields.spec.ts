@@ -25,7 +25,7 @@ async function openGroup(wrapper: Wrapper, label: string): Promise<void> {
 }
 
 async function openAll(wrapper: Wrapper): Promise<void> {
-  for (const label of ['边框', '四角', '标题条', '交互']) {
+  for (const label of ['边框', '四角', '标题条', '文字', '交互']) {
     await openGroup(wrapper, label)
   }
 }
@@ -89,7 +89,7 @@ describe('不动控件就不写值', () => {
       .findAllComponents(DtSelect)
       .filter((item) => item.props('label') !== '外观风格')
 
-    expect(enums.length).toBe(6)
+    expect(enums.length).toBe(7)
     for (const item of enums) expect(item.props('modelValue')).toBe('')
   })
 
@@ -103,17 +103,19 @@ describe('不动控件就不写值', () => {
 })
 
 describe('分组折叠', () => {
-  it('四个高级分组默认只展开「边框」', () => {
+  it('五个高级分组默认只展开「边框」', () => {
     const heads = mountFields().findAll('.card-style__group')
 
     expect(heads.map((head) => head.text())).toEqual([
       '边框',
       '四角',
       '标题条',
+      '文字',
       '交互',
     ])
     expect(heads.map((head) => head.attributes('aria-expanded'))).toEqual([
       'true',
+      'false',
       'false',
       'false',
       'false',

@@ -107,6 +107,28 @@ export function ruleSummary(
   return `${source} → ${actionSummary(rule.action, labelOf)}`
 }
 
+/** 这个动作会作用到哪些节点上。`closeModal` 不指名任何节点，故给空表。 */
+function actionTargets(action: InteractionAction): readonly string[] {
+  if (action.type === 'closeModal') return []
+  if (action.type === 'openModal') return [action.target]
+  if (action.type === 'setActive') {
+    return action.groups.flatMap((group) => group.targets)
+  }
+  return action.targets
+}
+
+/**
+ * 这条规则跟这个节点有没有关系——它当触发源，或者它是被控制的一方。
+ * 选中某个模块时的联动页只列出这些，整屏几十条规则里翻自己那几条翻不动。
+ * @param rule 一条规则
+ * @param nodeId 当前选中的节点
+ */
+export function ruleTouchesNode(rule: InteractionRule, nodeId: string): boolean {
+  return (
+    rule.source.nodeId === nodeId || actionTargets(rule.action).includes(nodeId)
+  )
+}
+
 /**
  * 换动作类型后的新动作：同族能沿用的沿用（显隐三档共用一张目标表，
  * 互斥切换换来换去保住已配的组），其余给空。

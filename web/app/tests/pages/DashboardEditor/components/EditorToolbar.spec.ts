@@ -168,6 +168,23 @@ describe('吸附', () => {
     ])
   })
 
+  // 两个开关是图标键，开着关着只差配色——不给 aria-pressed 的话读屏读到的
+  // 两种状态一模一样
+  it('吸附与参考线报出按下状态', () => {
+    const on = mountBar()
+    const off = mountBar({
+      snap: { ...SNAP, enabled: false, guides: false },
+    })
+
+    const pressed = (bar: ReturnType<typeof mountBar>, key: string): string =>
+      bar.find(`[data-test="${key}"]`).attributes('aria-pressed') ?? ''
+
+    expect(pressed(on, 'snap-enabled')).toBe('true')
+    expect(pressed(on, 'snap-guides')).toBe('true')
+    expect(pressed(off, 'snap-enabled')).toBe('false')
+    expect(pressed(off, 'snap-guides')).toBe('false')
+  })
+
   it('切到像素模式抛的是模式补丁', async () => {
     const wrapper = mountBar()
     const modes = wrapper.findAll('[data-test="snap-mode"] button')
@@ -212,6 +229,28 @@ describe('画布缩放', () => {
     const items = await openMenu(wrapper, 'zoom')
 
     expect(items).toHaveLength(ZOOM_PRESETS.length + 1)
+  })
+
+  // ⚠ 档位数正好压在 DtSelect「≥8 自动给搜索框」的线上，不显式关掉就会冒出来。
+  // 七个两三字的档位摆在眼前，搜索框只是挡路
+  it('不给搜索框', async () => {
+    const wrapper = mountBar()
+
+    await openMenu(wrapper, 'zoom')
+
+    expect(document.body.querySelector('.dt-select-menu__search')).toBeNull()
+  })
+
+  // ⚠ 定宽：不定的话宽度跟着当前档的字数走，切档时整条工具栏右半边横着跳一下
+  it('宽度写死，不随当前档的字数变', () => {
+    const narrow = mountBar({ zoom: 1 })
+    const wide = mountBar({ zoom: null, fitScale: 0.46 })
+
+    const classesOf = (bar: ReturnType<typeof mountBar>): string[] =>
+      bar.find('[data-test="zoom"]').classes()
+
+    expect(classesOf(narrow)).toContain('w-36')
+    expect(classesOf(wide)).toContain('w-36')
   })
 
   it('选一个固定档位抛出倍率数字', async () => {

@@ -1,13 +1,17 @@
 /**
  * @fileoverview 守图片块的渲染契约：URL 与 CSS 值走各自的画法、取不回图时画占位而不是
- * 碎图、滤镜里的负值先夹掉（一项非法会让整条 filter 声明作废，表现是其他几档一起失效）。
+ * 碎图、平铺只在 CSS 值那条路上有意义、滤镜里的负值先夹掉（一项非法会让整条 filter
+ * 声明作废，表现是其他几档一起失效），以及清单缺省摊出来的配置与空配置渲染逐字相同。
  */
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import Component from '../../../src/modules/image-block/Component.vue'
+import imageBlockManifest from '../../../src/modules/image-block/manifest'
+import { configDefaults } from '../../../src/shared/config'
 
 const URL_SRC = 'https://example.com/plant.png'
+const CSS_SRC = 'url(/tile.png)'
 
 function render(config: Record<string, unknown> = {}) {
   return mount(Component, { props: { config, values: {} } })
@@ -17,12 +21,31 @@ function imageStyle(config: Record<string, unknown>): string {
   return render(config).get('img').attributes('style') ?? ''
 }
 
+function cssStyle(config: Record<string, unknown>): string {
+  return (
+    render({ src: CSS_SRC, ...config })
+      .get('.dt-image-block__css')
+      .attributes('style') ?? ''
+  )
+}
+
 describe('图片块的来源', () => {
   it('没填时画占位，不渲染必然加载失败的图', () => {
     const wrapper = render({})
 
     expect(wrapper.find('img').exists()).toBe(false)
     expect(wrapper.get('.dt-image-block__empty').text()).toBe('未设置图片')
+  })
+
+  it('未配图的占位文案可改写，留空则一个字都不显示', () => {
+    expect(
+      render({ emptyText: '待接入监控画面' })
+        .get('.dt-image-block__empty')
+        .text(),
+    ).toBe('待接入监控画面')
+    expect(render({ emptyText: '' }).get('.dt-image-block__empty').text()).toBe(
+      '',
+    )
   })
 
   it('一串空白算没填', () => {
@@ -58,6 +81,17 @@ describe('图片块的取数失败', () => {
 
     expect(wrapper.find('img').exists()).toBe(false)
     expect(wrapper.get('.dt-image-block__empty').text()).toBe('图片加载失败')
+  })
+
+  it('加载失败的占位文案可改写，与未配图那句各说各的', async () => {
+    const wrapper = render({
+      src: URL_SRC,
+      errorText: '相机离线',
+      emptyText: '未接相机',
+    })
+    await wrapper.get('img').trigger('error')
+
+    expect(wrapper.get('.dt-image-block__empty').text()).toBe('相机离线')
   })
 
   it('换了地址就重新试一次，不把上一张的失败带过来', async () => {
@@ -123,6 +157,22 @@ describe('图片块的画面调节', () => {
     )
   })
 
+  it('CSS 值那条路缺省不平铺，配了才铺', () => {
+    expect(cssStyle({})).toContain('background-repeat: no-repeat')
+    expect(cssStyle({ repeat: 'repeat' })).toContain(
+      'background-repeat: repeat',
+    )
+    expect(cssStyle({ repeat: 'repeat-x' })).toContain(
+      'background-repeat: repeat-x',
+    )
+  })
+
+  it('清单里没有的平铺档回落不平铺，不让脏值把底纹铺满', () => {
+    expect(cssStyle({ repeat: 'round' })).toContain(
+      'background-repeat: no-repeat',
+    )
+  })
+
   it('翻转与旋转拼成一条 transform', () => {
     const style = imageStyle({
       src: URL_SRC,
@@ -162,6 +212,52 @@ describe('图片块的滤镜', () => {
 
     expect(style).toContain('filter: brightness(0%)')
     expect(style).not.toContain('blur')
+  })
+
+  it('色相、反相、褪色三档接在原有几档后面', () => {
+    const style = imageStyle({
+      src: URL_SRC,
+      saturate: 150,
+      hueRotate: 90,
+      invert: 30,
+      sepia: 20,
+    })
+
+    expect(style).toContain(
+      'filter: saturate(150%) hue-rotate(90deg) invert(30%) sepia(20%)',
+    )
+  })
+
+  it('色相是角度不是数量，负值原样写进去', () => {
+    expect(imageStyle({ src: URL_SRC, hueRotate: -45 })).toContain(
+      'filter: hue-rotate(-45deg)',
+    )
+  })
+
+  it('三档的缺省都是恒等，一条滤镜都不写', () => {
+    expect(
+      imageStyle({ src: URL_SRC, hueRotate: 0, invert: 0, sepia: 0 }),
+    ).not.toContain('filter')
+  })
+
+  it('反相与褪色的负值先夹到 0，不整条作废', () => {
+    expect(imageStyle({ src: URL_SRC, invert: -10, sepia: -10 })).not.toContain(
+      'filter',
+    )
+  })
+})
+
+describe('图片块的存量渲染', () => {
+  it('空配置与清单缺省摊出来的配置渲染逐字相同', () => {
+    const defaults = configDefaults(imageBlockManifest.configSchema)
+
+    expect(render(defaults).html()).toBe(render({}).html())
+    expect(render({ ...defaults, src: URL_SRC }).html()).toBe(
+      render({ src: URL_SRC }).html(),
+    )
+    expect(render({ ...defaults, src: CSS_SRC }).html()).toBe(
+      render({ src: CSS_SRC }).html(),
+    )
   })
 })
 

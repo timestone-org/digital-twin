@@ -13,7 +13,10 @@ import {
 } from '@/features/dashboard/canvasSnap'
 import { stepZoom, type CanvasZoom } from '@/features/dashboard/canvasZoom'
 import type { ArrangeActions } from './editorArrange'
-import { useEditorShortcuts } from './useEditorShortcuts'
+import {
+  useEditorShortcuts,
+  type EditorShortcutHandlers,
+} from './useEditorShortcuts'
 
 export interface EditorHotkeyDeps {
   editor: DashboardEditor
@@ -34,6 +37,54 @@ export interface EditorHotkeyDeps {
   escapeFirst: () => boolean
 }
 
+/** 方向键微调：Alt 精调恒 1px，其余按吸附口径。 */
+function nudgeBy(
+  deps: EditorHotkeyDeps,
+  dx: number,
+  dy: number,
+  fine: boolean,
+): void {
+  const step = fine
+    ? { x: 1, y: 1 }
+    : snapStep(deps.design(), deps.grid(), deps.snap())
+  deps.arrange.nudgeSelected(Math.round(dx * step.x), Math.round(dy * step.y))
+}
+
+/** 层序四个手势：与右键菜单落到同一批出口上，两条路径不会各自漂。 */
+function orderHandlers(
+  arrange: ArrangeActions,
+): Pick<
+  EditorShortcutHandlers,
+  'orderForward' | 'orderBackward' | 'orderFront' | 'orderBack'
+> {
+  return {
+    orderForward: arrange.bringSelectedForward,
+    orderBackward: arrange.sendSelectedBackward,
+    orderFront: arrange.bringSelectedToFront,
+    orderBack: arrange.sendSelectedToBack,
+  }
+}
+
+/** 缩放三挡。 */
+function zoomHandlers(
+  deps: EditorHotkeyDeps,
+): Pick<EditorShortcutHandlers, 'zoomStep' | 'zoomReset' | 'zoomFit'> {
+  return {
+    zoomStep: (direction) => {
+      deps.zoom.value = stepZoom(
+        deps.zoom.value ?? deps.fitScale?.() ?? 1,
+        direction,
+      )
+    },
+    zoomReset: () => {
+      deps.zoom.value = 1
+    },
+    zoomFit: () => {
+      deps.zoom.value = null
+    },
+  }
+}
+
 export function useEditorHotkeys(deps: EditorHotkeyDeps): {
   helpOpen: Ref<boolean>
 } {
@@ -48,14 +99,6 @@ export function useEditorHotkeys(deps: EditorHotkeyDeps): {
     deps.editor.select(null)
   }
 
-  // 方向键微调：Alt 精调恒 1px，其余按吸附口径
-  function nudgeBy(dx: number, dy: number, fine: boolean): void {
-    const step = fine
-      ? { x: 1, y: 1 }
-      : snapStep(deps.design(), deps.grid(), deps.snap())
-    deps.arrange.nudgeSelected(Math.round(dx * step.x), Math.round(dy * step.y))
-  }
-
   useEditorShortcuts({
     handlers: {
       save: deps.save,
@@ -67,19 +110,11 @@ export function useEditorHotkeys(deps: EditorHotkeyDeps): {
       remove: deps.removeSelected,
       selectAll: deps.arrange.selectAllTop,
       escape: onEscape,
-      nudge: nudgeBy,
-      zoomStep: (direction) => {
-        deps.zoom.value = stepZoom(
-          deps.zoom.value ?? deps.fitScale?.() ?? 1,
-          direction,
-        )
+      nudge: (dx, dy, fine) => {
+        nudgeBy(deps, dx, dy, fine)
       },
-      zoomReset: () => {
-        deps.zoom.value = 1
-      },
-      zoomFit: () => {
-        deps.zoom.value = null
-      },
+      ...orderHandlers(deps.arrange),
+      ...zoomHandlers(deps),
       help: () => {
         helpOpen.value = true
       },

@@ -11,10 +11,6 @@ const CSS_VAR_RE = /^var\(\s*(--[a-z0-9-]+)\s*\)$/i
 const TOKEN_RE = /^--[a-z0-9-]+$/i
 /** 缩写 hex 的位数 */
 const SHORTHAND_HEX_LENGTH = 3
-/** 颜色通道数 */
-const RGB_CHANNELS = 3
-/** 十六进制 */
-const HEX_RADIX = 16
 
 const EMPTY_ARRAY: readonly unknown[] = Object.freeze([])
 
@@ -63,10 +59,6 @@ export function clamp(value: number, lo: number, hi: number): number {
   return value < lo ? lo : value > hi ? hi : value
 }
 
-export function clamp01(value: number): number {
-  return clamp(value, 0, 1)
-}
-
 /** 去空白的字符串；非字符串 → 空串。 */
 export function trimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -105,30 +97,4 @@ export function normalizeColorSpec(value: unknown): string | null {
   const wrapped = CSS_VAR_RE.exec(text)
   if (wrapped !== null) return (wrapped[1] ?? '').toLowerCase()
   return TOKEN_RE.test(text) ? text.toLowerCase() : null
-}
-
-function hexChannel(hex: string, index: number): number {
-  return Number.parseInt(hex.slice(1 + index * 2, 3 + index * 2), HEX_RADIX)
-}
-
-/** 两个 hex 按 t∈[0,1] 逐通道插值；任一端非法 → null。 */
-export function lerpHexColor(
-  from: string,
-  to: string,
-  t: number,
-): string | null {
-  const start = normalizeHexColor(from)
-  const end = normalizeHexColor(to)
-  if (start === null || end === null) return null
-  // ⚠ 非有限的 t 会一路走到 toString(16) 变成字面的 "NaN"，先收成 0
-  const ratio = clamp01(finiteOr(t, 0))
-  let out = '#'
-  for (let index = 0; index < RGB_CHANNELS; index++) {
-    const lo = hexChannel(start, index)
-    const hi = hexChannel(end, index)
-    out += Math.round(lo + (hi - lo) * ratio)
-      .toString(HEX_RADIX)
-      .padStart(2, '0')
-  }
-  return out
 }

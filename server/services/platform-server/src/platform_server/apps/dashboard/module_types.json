@@ -2,14 +2,25 @@
   "catalog_version": 1,
   "modules": [
     {
-      "type": "header",
-      "display_name": "页头",
+      "type": "container",
+      "display_name": "容器",
       "category": "布局",
-      "icon": "layout-header",
-      "keywords": ["header", "页头", "标题栏"],
-      "default_size": { "width": 1920, "height": 96 },
+      "icon": "layout-template",
+      "keywords": [
+        "container",
+        "rongqi",
+        "容器",
+        "分组",
+        "面板"
+      ],
+      "default_size": {
+        "width": 640,
+        "height": 432,
+        "min_width": 120,
+        "min_height": 80
+      },
       "chrome": "bare",
-      "region": "header",
+      "is_container": true,
       "version": 1,
       "config_schema": [
         {
@@ -17,199 +28,185 @@
           "label": "标题",
           "type": "string",
           "default": "",
-          "group": "文案",
+          "placeholder": "留空则标题条上没有文字",
+          "group": "标题",
           "span": "full",
-          "placeholder": "大屏标题"
+          "when": {
+            "key": "showTitle",
+            "in": [
+              true
+            ]
+          }
         },
         {
-          "key": "subtitle",
-          "label": "副标题",
+          "key": "showTitle",
+          "label": "显示标题条",
+          "type": "boolean",
+          "default": true,
+          "group": "标题",
+          "span": "half"
+        },
+        {
+          "key": "accent",
+          "label": "强调色",
+          "type": "color",
+          "default": "var(--accent-primary)",
+          "group": "外观",
+          "help": "标题竖条与内容区点阵取这个色。",
+          "span": "half"
+        },
+        {
+          "key": "background",
+          "label": "背景",
+          "type": "color",
+          "default": "",
+          "placeholder": "留空 = 透明，继承大屏背景",
+          "group": "外观",
+          "span": "half"
+        },
+        {
+          "key": "backgroundImage",
+          "label": "背景图 / 渐变",
           "type": "string",
           "default": "",
-          "group": "文案",
+          "placeholder": "留空 = 无；填 CSS：linear-gradient(…) 或 url(…)",
+          "group": "外观",
+          "help": "叠在背景色之上的 CSS background-image 值；留空不注入，纯色背景不受影响。",
           "span": "full"
         },
         {
-          "key": "align",
-          "label": "对齐",
-          "type": "enum",
-          "default": "center",
-          "group": "版式",
-          "span": "half",
-          "options": [
-            { "value": "left", "label": "左对齐" },
-            { "value": "center", "label": "居中" },
-            { "value": "right", "label": "右对齐" }
-          ]
-        },
-        {
-          "key": "is_clock_shown",
-          "label": "显示时钟",
-          "type": "boolean",
-          "default": true,
-          "group": "版式",
-          "span": "half"
-        },
-        {
-          "key": "clock_format",
-          "label": "时钟格式",
-          "type": "enum",
-          "default": "date_time",
-          "group": "版式",
-          "span": "half",
-          "when": { "key": "is_clock_shown", "in": [true] },
-          "options": [
-            { "value": "date_time", "label": "日期与时间" },
-            { "value": "time_only", "label": "只显示时间" },
-            { "value": "date_only", "label": "只显示日期" }
-          ]
-        },
-        {
-          "key": "accent_color",
-          "label": "强调色",
-          "type": "color",
-          "default": "",
+          "key": "radius",
+          "label": "圆角 (px)",
+          "type": "number",
+          "default": 4,
           "group": "外观",
           "span": "half",
-          "help": "留空则跟随大屏主题"
-        }
-      ],
-      "bindings": []
-    },
-    {
-      "type": "twin-view",
-      "display_name": "数字孪生",
-      "category": "孪生",
-      "icon": "cube",
-      "keywords": ["twin", "孪生", "三维", "3d"],
-      "default_size": {
-        "width": 1200,
-        "height": 720,
-        "min_width": 320,
-        "min_height": 240
-      },
-      "chrome": "card",
-      "version": 1,
-      "config_schema": [
-        {
-          "key": "scene_asset",
-          "label": "场景资源",
-          "type": "string",
-          "default": "",
-          "group": "场景",
-          "span": "full",
-          "help": "场景文件的素材标识"
+          "min": 0,
+          "max": 32,
+          "step": 1
         },
         {
-          "key": "camera_preset",
-          "label": "相机机位",
-          "type": "enum",
-          "default": "default",
-          "group": "场景",
-          "span": "half",
-          "options": [
-            { "value": "default", "label": "默认" },
-            { "value": "top", "label": "俯视" },
-            { "value": "front", "label": "正视" },
-            { "value": "free", "label": "自由" }
-          ]
-        },
-        {
-          "key": "is_auto_rotate_enabled",
-          "label": "自动旋转",
+          "key": "showBorder",
+          "label": "描边",
           "type": "boolean",
           "default": false,
-          "group": "场景",
-          "span": "half"
-        },
-        {
-          "key": "background_color",
-          "label": "背景色",
-          "type": "color",
-          "default": "",
           "group": "外观",
+          "help": "描边颜色取卡片外观里的边框色。",
           "span": "half"
         },
         {
-          "key": "ambient_intensity",
-          "label": "环境光强度",
+          "key": "borderWidth",
+          "label": "描边粗细 (px)",
           "type": "number",
           "default": 1,
           "group": "外观",
           "span": "half",
+          "when": {
+            "key": "showBorder",
+            "in": [
+              true
+            ]
+          },
           "min": 0,
-          "max": 5,
-          "step": 0.1
+          "max": 8,
+          "step": 1
         },
         {
-          "key": "hotspots",
-          "label": "热点",
-          "type": "array",
-          "group": "热点",
-          "span": "full",
-          "item_label_key": "label",
-          "min_items": 0,
-          "max_items": 32,
-          "item_schema": [
+          "key": "showDotGrid",
+          "label": "点阵底纹",
+          "type": "boolean",
+          "default": true,
+          "group": "外观",
+          "help": "内容区铺一层点阵，示意子节点的可放置范围。",
+          "span": "half"
+        },
+        {
+          "key": "dotSize",
+          "label": "点径 (px)",
+          "type": "number",
+          "default": 1,
+          "group": "外观",
+          "span": "half",
+          "when": {
+            "key": "showDotGrid",
+            "in": [
+              true
+            ]
+          },
+          "min": 1,
+          "max": 6,
+          "step": 1
+        },
+        {
+          "key": "dotGap",
+          "label": "点距 (px)",
+          "type": "number",
+          "default": 16,
+          "group": "外观",
+          "span": "half",
+          "when": {
+            "key": "showDotGrid",
+            "in": [
+              true
+            ]
+          },
+          "min": 4,
+          "max": 64,
+          "step": 1
+        },
+        {
+          "key": "dotOpacity",
+          "label": "点阵浓度",
+          "type": "number",
+          "default": 0.12,
+          "group": "外观",
+          "span": "half",
+          "when": {
+            "key": "showDotGrid",
+            "in": [
+              true
+            ]
+          },
+          "min": 0,
+          "max": 1,
+          "step": 0.01
+        },
+        {
+          "key": "__container",
+          "label": "内部布局",
+          "type": "object",
+          "default": {
+            "pad": 8
+          },
+          "group": "布局",
+          "help": "子节点摆在内容区里，内边距决定内容区比容器矩形小多少。",
+          "fields": [
             {
-              "key": "label",
-              "label": "名称",
-              "type": "string",
-              "default": "",
-              "span": "half"
-            },
-            {
-              "key": "anchor",
-              "label": "锚点",
-              "type": "string",
-              "default": "",
-              "span": "half",
-              "help": "场景里的对象名"
-            },
-            {
-              "key": "unit",
-              "label": "单位",
-              "type": "string",
-              "default": "",
-              "span": "half"
+              "key": "pad",
+              "label": "内边距 (px)",
+              "type": "number",
+              "default": 8,
+              "min": 0,
+              "max": 64,
+              "step": 1
             }
           ]
         }
       ],
-      "bindings": [
-        {
-          "key": "hotspots",
-          "label": "热点读数",
-          "data_type": "number",
-          "is_array": true,
-          "array_fields": [
-            {
-              "key": "value",
-              "label": "读数",
-              "data_type": "number",
-              "is_required": true
-            },
-            {
-              "key": "state",
-              "label": "状态",
-              "data_type": "enum",
-              "enum_map": { "0": "离线", "1": "运行", "2": "故障" }
-            }
-          ]
-        },
-        {
-          "key": "scene_status",
-          "label": "场景状态",
-          "data_type": "string"
-        }
-      ]
+      "bindings": []
     },
     {
       "type": "footer",
       "display_name": "页脚",
       "category": "布局",
       "icon": "panel-bottom",
-      "keywords": ["footer", "页脚", "底部"],
+      "keywords": [
+        "footer",
+        "yejiao",
+        "页脚",
+        "底部",
+        "页尾"
+      ],
       "default_size": {
         "width": 1920,
         "height": 72,
@@ -226,13 +223,18 @@
           "label": "标题",
           "type": "string",
           "default": "",
+          "placeholder": "留空则标题条上没有文字",
           "group": "标题",
           "span": "full",
-          "when": { "key": "show_title", "in": [true] },
-          "placeholder": "留空则标题条上没有文字"
+          "when": {
+            "key": "showTitle",
+            "in": [
+              true
+            ]
+          }
         },
         {
-          "key": "show_title",
+          "key": "showTitle",
           "label": "显示标题条",
           "type": "boolean",
           "default": false,
@@ -240,77 +242,32 @@
           "span": "half"
         },
         {
-          "key": "accent",
-          "label": "强调色",
-          "type": "color",
-          "default": "var(--accent-primary)",
-          "group": "外观",
-          "span": "half"
-        },
-        {
-          "key": "background",
-          "label": "背景",
-          "type": "color",
-          "default": "",
-          "group": "外观",
-          "span": "half",
-          "placeholder": "留空 = 透明，继承大屏背景"
-        },
-        {
-          "key": "container",
-          "label": "内部布局",
-          "type": "object",
-          "default": { "pad": 8 },
-          "group": "布局",
-          "help": "子节点摆在内容区里，内边距决定内容区比页脚矩形小多少",
-          "fields": [
+          "key": "titleAlign",
+          "label": "标题对齐",
+          "type": "enum",
+          "default": "center",
+          "options": [
             {
-              "key": "pad",
-              "label": "内边距 (px)",
-              "type": "number",
-              "default": 8,
-              "min": 0,
-              "max": 64,
-              "step": 1
+              "value": "left",
+              "label": "靠左"
+            },
+            {
+              "value": "center",
+              "label": "居中"
+            },
+            {
+              "value": "right",
+              "label": "靠右"
             }
-          ]
-        }
-      ],
-      "bindings": []
-    },
-    {
-      "type": "container",
-      "display_name": "容器",
-      "category": "布局",
-      "icon": "layout-template",
-      "keywords": ["container", "容器", "分组"],
-      "default_size": {
-        "width": 640,
-        "height": 432,
-        "min_width": 120,
-        "min_height": 80
-      },
-      "chrome": "bare",
-      "is_container": true,
-      "version": 1,
-      "config_schema": [
-        {
-          "key": "title",
-          "label": "标题",
-          "type": "string",
-          "default": "",
+          ],
           "group": "标题",
-          "span": "full",
-          "when": { "key": "show_title", "in": [true] },
-          "placeholder": "留空则标题条上没有文字"
-        },
-        {
-          "key": "show_title",
-          "label": "显示标题条",
-          "type": "boolean",
-          "default": true,
-          "group": "标题",
-          "span": "half"
+          "span": "half",
+          "when": {
+            "key": "showTitle",
+            "in": [
+              true
+            ]
+          }
         },
         {
           "key": "accent",
@@ -318,6 +275,7 @@
           "type": "color",
           "default": "var(--accent-primary)",
           "group": "外观",
+          "help": "顶部分隔线与扫光取这个色。",
           "span": "half"
         },
         {
@@ -325,224 +283,439 @@
           "label": "背景",
           "type": "color",
           "default": "",
+          "placeholder": "留空 = 透明，继承大屏背景",
           "group": "外观",
-          "span": "half",
-          "placeholder": "留空 = 透明，继承大屏背景"
+          "span": "half"
         },
         {
-          "key": "background_image",
+          "key": "backgroundImage",
           "label": "背景图 / 渐变",
           "type": "string",
           "default": "",
+          "placeholder": "留空 = 无；填 CSS：linear-gradient(…) 或 url(…)",
           "group": "外观",
-          "span": "full",
-          "placeholder": "留空 = 无；填 CSS：linear-gradient(…) 或 url(…)"
+          "help": "叠在背景色之上的 CSS background-image 值；留空不注入，纯色背景不受影响。",
+          "span": "full"
         },
         {
-          "key": "show_dot_grid",
-          "label": "点阵底纹",
+          "key": "showDivider",
+          "label": "顶部分隔线",
           "type": "boolean",
           "default": true,
           "group": "外观",
           "span": "half"
         },
         {
-          "key": "container",
-          "label": "内部布局",
-          "type": "object",
-          "default": { "pad": 8 },
-          "group": "布局",
-          "help": "子节点摆在内容区里，内边距决定内容区比容器矩形小多少",
-          "fields": [
-            {
-              "key": "pad",
-              "label": "内边距 (px)",
-              "type": "number",
-              "default": 8,
-              "min": 0,
-              "max": 64,
-              "step": 1
-            }
-          ]
-        }
-      ],
-      "bindings": []
-    },
-    {
-      "type": "text-block",
-      "display_name": "文本块",
-      "category": "装饰",
-      "icon": "type",
-      "keywords": ["text", "文本", "文字"],
-      "default_size": {
-        "width": 320,
-        "height": 72,
-        "min_width": 40,
-        "min_height": 24
-      },
-      "chrome": "bare",
-      "version": 1,
-      "config_schema": [
-        {
-          "key": "title",
-          "label": "标题",
-          "type": "string",
-          "default": "",
-          "group": "内容",
-          "span": "full",
-          "placeholder": "留空则不画标题栏"
-        },
-        {
-          "key": "text",
-          "label": "文字",
-          "type": "string",
-          "default": "示例文本",
-          "group": "内容",
-          "span": "full",
-          "help": "按行换行；行内连续空格原样保留"
-        },
-        {
-          "key": "font_size",
-          "label": "字号 (px)",
-          "type": "range",
-          "default": 16,
-          "group": "文本",
-          "span": "half",
-          "min": 8,
-          "max": 120,
-          "step": 1
-        },
-        {
-          "key": "line_height",
-          "label": "行高",
-          "type": "range",
-          "default": 1.4,
-          "group": "文本",
-          "span": "half",
-          "min": 1,
-          "max": 3,
-          "step": 0.1
-        },
-        {
-          "key": "weight",
-          "label": "字重",
-          "type": "range",
-          "default": 400,
-          "group": "文本",
-          "span": "half",
-          "min": 100,
-          "max": 900,
-          "step": 100
-        },
-        {
-          "key": "letter_spacing",
-          "label": "字间距 (px)",
-          "type": "range",
-          "default": 0,
-          "group": "文本",
-          "span": "half",
-          "min": 0,
-          "max": 40,
-          "step": 0.5
-        },
-        {
-          "key": "font_family",
-          "label": "字体",
-          "type": "enum",
-          "default": "sans",
-          "group": "文本",
-          "span": "half",
-          "options": [
-            { "value": "sans", "label": "默认（继承正文）" },
-            { "value": "display", "label": "标题体" },
-            { "value": "mono", "label": "等宽体" }
-          ]
-        },
-        {
-          "key": "color",
-          "label": "颜色",
-          "type": "color",
-          "default": "var(--text-primary)",
-          "group": "文本",
-          "span": "half"
-        },
-        {
-          "key": "align",
-          "label": "水平对齐",
-          "type": "enum",
-          "default": "left",
-          "group": "文本",
-          "span": "half",
-          "options": [
-            { "value": "left", "label": "左" },
-            { "value": "center", "label": "中" },
-            { "value": "right", "label": "右" }
-          ]
-        },
-        {
-          "key": "v_align",
-          "label": "垂直对齐",
-          "type": "enum",
-          "default": "center",
-          "group": "文本",
-          "span": "half",
-          "options": [
-            { "value": "top", "label": "上" },
-            { "value": "center", "label": "中" },
-            { "value": "bottom", "label": "下" }
-          ]
-        },
-        {
-          "key": "padding",
-          "label": "内边距 (px)",
-          "type": "range",
-          "default": 8,
-          "group": "外观",
-          "span": "half",
-          "min": 0,
-          "max": 48,
-          "step": 1
-        },
-        {
-          "key": "opacity",
-          "label": "不透明度",
-          "type": "range",
+          "key": "dividerWidth",
+          "label": "分隔线粗细 (px)",
+          "type": "number",
           "default": 1,
           "group": "外观",
           "span": "half",
+          "when": {
+            "key": "showDivider",
+            "in": [
+              true
+            ]
+          },
+          "min": 0,
+          "max": 8,
+          "step": 1
+        },
+        {
+          "key": "showSweep",
+          "label": "顶边扫光",
+          "type": "boolean",
+          "default": true,
+          "group": "外观",
+          "help": "顶边一条由强调色渐隐的高光带，纯装饰。",
+          "span": "half"
+        },
+        {
+          "key": "sweepOpacity",
+          "label": "扫光浓度",
+          "type": "number",
+          "default": 0.6,
+          "group": "外观",
+          "span": "half",
+          "when": {
+            "key": "showSweep",
+            "in": [
+              true
+            ]
+          },
           "min": 0,
           "max": 1,
           "step": 0.05
         },
         {
-          "key": "background",
-          "label": "背景色",
-          "type": "color",
-          "default": "",
-          "group": "外观",
-          "span": "half",
-          "placeholder": "留空 = 透明"
-        },
-        {
-          "key": "overflow",
-          "label": "溢出",
-          "type": "enum",
-          "default": "hidden",
-          "group": "外观",
-          "span": "half",
-          "options": [
-            { "value": "hidden", "label": "裁剪" },
-            { "value": "scroll", "label": "滚动" },
-            { "value": "ellipsis", "label": "省略号" }
-          ]
-        },
-        {
-          "key": "glow",
-          "label": "辉光",
+          "key": "showDotGrid",
+          "label": "点阵底纹",
           "type": "boolean",
           "default": false,
           "group": "外观",
+          "help": "内容区铺一层点阵，示意子节点的可放置范围。",
           "span": "half"
+        },
+        {
+          "key": "__container",
+          "label": "内部布局",
+          "type": "object",
+          "default": {
+            "pad": 8
+          },
+          "group": "布局",
+          "help": "子节点摆在内容区里，内边距决定内容区比页脚矩形小多少。",
+          "fields": [
+            {
+              "key": "pad",
+              "label": "内边距 (px)",
+              "type": "number",
+              "default": 8,
+              "min": 0,
+              "max": 64,
+              "step": 1
+            }
+          ]
+        }
+      ],
+      "bindings": []
+    },
+    {
+      "type": "header",
+      "display_name": "页头",
+      "category": "布局",
+      "icon": "layout-grid",
+      "keywords": [
+        "header",
+        "yetou",
+        "页头",
+        "顶部",
+        "标题栏"
+      ],
+      "default_size": {
+        "width": 1920,
+        "height": 108,
+        "min_width": 240,
+        "min_height": 48
+      },
+      "chrome": "bare",
+      "is_container": true,
+      "region": "header",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "default": "",
+          "placeholder": "留空则标题条上没有文字",
+          "group": "标题",
+          "span": "full",
+          "when": {
+            "key": "showTitle",
+            "in": [
+              true
+            ]
+          }
+        },
+        {
+          "key": "showTitle",
+          "label": "显示标题条",
+          "type": "boolean",
+          "default": false,
+          "group": "标题",
+          "span": "half"
+        },
+        {
+          "key": "variant",
+          "label": "风格",
+          "type": "enum",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "默认（斜纹）"
+            },
+            {
+              "value": "winged",
+              "label": "翼形"
+            },
+            {
+              "value": "glass",
+              "label": "玻璃（点阵）"
+            },
+            {
+              "value": "minimal",
+              "label": "极简"
+            },
+            {
+              "value": "ribbon",
+              "label": "飘带（人字纹）"
+            },
+            {
+              "value": "plain",
+              "label": "素净（无花纹）"
+            },
+            {
+              "value": "podium",
+              "label": "翼台"
+            }
+          ],
+          "group": "外观"
+        },
+        {
+          "key": "deco",
+          "label": "标题装饰",
+          "type": "enum",
+          "default": "bars",
+          "options": [
+            {
+              "value": "none",
+              "label": "无"
+            },
+            {
+              "value": "bars",
+              "label": "横线"
+            },
+            {
+              "value": "slash",
+              "label": "斜切条"
+            },
+            {
+              "value": "chevron",
+              "label": "箭头"
+            },
+            {
+              "value": "diamond",
+              "label": "菱标"
+            },
+            {
+              "value": "dashed",
+              "label": "分段线"
+            }
+          ],
+          "group": "外观",
+          "help": "标题两侧的对称装饰；选「无」即不添加。"
+        },
+        {
+          "key": "decoGap",
+          "label": "装饰中缝",
+          "type": "number",
+          "default": 0,
+          "group": "外观",
+          "help": "两侧装饰之间给标题留的空 (px)；0 = 随宽度自适应。子节点较宽或屏幕较窄时调大它避免重叠。",
+          "when": {
+            "key": "deco",
+            "in": [
+              "bars",
+              "slash",
+              "chevron",
+              "diamond",
+              "dashed"
+            ]
+          },
+          "min": 0,
+          "max": 800,
+          "step": 10
+        },
+        {
+          "key": "accent",
+          "label": "强调色",
+          "type": "color",
+          "default": "var(--accent-primary)",
+          "group": "外观",
+          "help": "花纹、装饰条、底部分隔线与标题辉光都取这个色。",
+          "span": "half"
+        },
+        {
+          "key": "background",
+          "label": "背景",
+          "type": "color",
+          "default": "",
+          "placeholder": "留空 = 透明，继承大屏背景",
+          "group": "外观",
+          "span": "half"
+        },
+        {
+          "key": "bgImage",
+          "label": "背景底图",
+          "type": "image",
+          "default": "",
+          "placeholder": "留空 = 用风格自带花纹",
+          "group": "外观",
+          "help": "可填图片地址（自动铺成整宽贴底），也可直接填 CSS background 简写 / 渐变；填 var(--fx-decor-topbg) 用内置的倒角横带底图。",
+          "span": "full"
+        },
+        {
+          "key": "bgFilter",
+          "label": "底图滤镜",
+          "type": "string",
+          "default": "",
+          "placeholder": "留空 = 跟随主题装饰滤镜",
+          "group": "外观",
+          "help": "只作用在底图那一层上。留空时走主题的 var(--fx-decor-filter)；也可自填 hue-rotate(30deg) 之类。",
+          "span": "full"
+        },
+        {
+          "key": "glowLineInset",
+          "label": "底线内缩",
+          "type": "number",
+          "default": 0,
+          "group": "外观",
+          "help": "底部辉光分隔线左右各内缩的百分比。0 = 整条贯通；填 10 则只有中间八成有线。",
+          "when": {
+            "key": "variant",
+            "in": [
+              "default",
+              "winged",
+              "glass",
+              "minimal",
+              "ribbon"
+            ]
+          },
+          "min": 0,
+          "max": 49,
+          "step": 1
+        },
+        {
+          "key": "glowLineGlow",
+          "label": "底线外发光",
+          "type": "boolean",
+          "default": true,
+          "group": "外观",
+          "help": "关掉后只剩 1px 渐变线本体，观感更硬朗。",
+          "when": {
+            "key": "variant",
+            "in": [
+              "default",
+              "winged",
+              "glass",
+              "minimal",
+              "ribbon"
+            ]
+          }
+        },
+        {
+          "key": "scanlines",
+          "label": "CRT 扫描线",
+          "type": "boolean",
+          "default": true,
+          "group": "动效",
+          "help": "页头表面的横向扫描线纹理。",
+          "when": {
+            "key": "variant",
+            "in": [
+              "default",
+              "winged",
+              "glass",
+              "minimal",
+              "ribbon",
+              "podium"
+            ]
+          }
+        },
+        {
+          "key": "scan",
+          "label": "横向扫光",
+          "type": "boolean",
+          "default": false,
+          "group": "动效",
+          "help": "一条自左向右循环掠过页头的渐变光带。",
+          "when": {
+            "key": "variant",
+            "in": [
+              "default",
+              "winged",
+              "glass",
+              "minimal",
+              "ribbon",
+              "podium"
+            ]
+          }
+        },
+        {
+          "key": "scanWidth",
+          "label": "扫光宽度",
+          "type": "number",
+          "default": 30,
+          "group": "动效",
+          "help": "光带宽度占页头宽度的百分比。行程固定为 -30% → 130%，宽度偏离 30 太多时两端会有跳入感。",
+          "when": {
+            "key": "scan",
+            "in": [
+              true
+            ]
+          },
+          "min": 1,
+          "max": 100,
+          "step": 1
+        },
+        {
+          "key": "scanDuration",
+          "label": "扫光周期",
+          "type": "number",
+          "default": 4,
+          "group": "动效",
+          "help": "光带匀速跑完一趟的秒数，循环播放。",
+          "when": {
+            "key": "scan",
+            "in": [
+              true
+            ]
+          },
+          "min": 0.5,
+          "max": 60,
+          "step": 0.5
+        },
+        {
+          "key": "scanColor",
+          "label": "扫光颜色",
+          "type": "color",
+          "default": "var(--card-border)",
+          "group": "动效",
+          "help": "光带中心色，两端自动淡出为透明。",
+          "when": {
+            "key": "scan",
+            "in": [
+              true
+            ]
+          }
+        },
+        {
+          "key": "scanAbove",
+          "label": "扫光置顶",
+          "type": "boolean",
+          "default": true,
+          "group": "动效",
+          "help": "开着时光带盖在花纹与扫描线之上，是「光扫过标题」的手感；关掉则沉到花纹层附近。子节点始终在光带之上。",
+          "when": {
+            "key": "scan",
+            "in": [
+              true
+            ]
+          }
+        },
+        {
+          "key": "__container",
+          "label": "内部布局",
+          "type": "object",
+          "default": {
+            "pad": 8
+          },
+          "group": "布局",
+          "help": "子节点摆在内容区里，内边距决定内容区比页头矩形小多少。",
+          "fields": [
+            {
+              "key": "pad",
+              "label": "内边距 (px)",
+              "type": "number",
+              "default": 8,
+              "min": 0,
+              "max": 64,
+              "step": 1
+            }
+          ]
         }
       ],
       "bindings": []
@@ -552,7 +725,14 @@
       "display_name": "图片块",
       "category": "装饰",
       "icon": "image",
-      "keywords": ["image", "图片", "logo"],
+      "keywords": [
+        "image",
+        "picture",
+        "tupian",
+        "图片",
+        "图",
+        "logo"
+      ],
       "default_size": {
         "width": 240,
         "height": 108,
@@ -567,19 +747,19 @@
           "label": "标题",
           "type": "string",
           "default": "",
+          "placeholder": "留空则不画标题栏",
           "group": "内容",
-          "span": "full",
-          "placeholder": "留空则不画标题栏"
+          "span": "full"
         },
         {
           "key": "src",
           "label": "图片",
-          "type": "string",
+          "type": "image",
           "default": "",
+          "placeholder": "https://… 或 linear-gradient(…)",
           "group": "内容",
-          "span": "full",
-          "help": "填图片地址按图片画；填 CSS 值（渐变 / url() / var()）按背景画",
-          "placeholder": "https://… 或 linear-gradient(…)"
+          "help": "填图片地址按图片画；填 CSS 值（渐变 / url() / var()）按背景画。",
+          "span": "full"
         },
         {
           "key": "alt",
@@ -587,35 +767,106 @@
           "type": "string",
           "default": "",
           "group": "内容",
+          "help": "读屏时念出来的一句话；纯装饰图留空即可。",
           "span": "full"
+        },
+        {
+          "key": "emptyText",
+          "label": "未配图文案",
+          "type": "string",
+          "default": "未设置图片",
+          "group": "内容",
+          "help": "没填图片时画在方块里的一句话；留空则一个字都不显示。",
+          "span": "half"
+        },
+        {
+          "key": "errorText",
+          "label": "加载失败文案",
+          "type": "string",
+          "default": "图片加载失败",
+          "group": "内容",
+          "help": "取不回图时画在方块里的一句话；留空则一个字都不显示。",
+          "span": "half"
         },
         {
           "key": "fit",
           "label": "填充方式",
           "type": "enum",
           "default": "contain",
-          "group": "画面",
-          "span": "half",
           "options": [
-            { "value": "contain", "label": "完整" },
-            { "value": "cover", "label": "裁剪填满" },
-            { "value": "fill", "label": "拉伸" }
-          ]
+            {
+              "value": "contain",
+              "label": "完整"
+            },
+            {
+              "value": "cover",
+              "label": "裁剪填满"
+            },
+            {
+              "value": "fill",
+              "label": "拉伸"
+            }
+          ],
+          "group": "画面",
+          "span": "half"
         },
         {
           "key": "position",
           "label": "裁剪定位",
           "type": "enum",
           "default": "center",
-          "group": "画面",
-          "span": "half",
           "options": [
-            { "value": "center", "label": "居中" },
-            { "value": "top", "label": "上" },
-            { "value": "bottom", "label": "下" },
-            { "value": "left", "label": "左" },
-            { "value": "right", "label": "右" }
-          ]
+            {
+              "value": "center",
+              "label": "居中"
+            },
+            {
+              "value": "top",
+              "label": "上"
+            },
+            {
+              "value": "bottom",
+              "label": "下"
+            },
+            {
+              "value": "left",
+              "label": "左"
+            },
+            {
+              "value": "right",
+              "label": "右"
+            }
+          ],
+          "group": "画面",
+          "help": "「裁剪填满」时保住画面的哪一侧。",
+          "span": "half"
+        },
+        {
+          "key": "repeat",
+          "label": "平铺",
+          "type": "enum",
+          "default": "no-repeat",
+          "options": [
+            {
+              "value": "no-repeat",
+              "label": "不平铺"
+            },
+            {
+              "value": "repeat",
+              "label": "双向平铺"
+            },
+            {
+              "value": "repeat-x",
+              "label": "横向平铺"
+            },
+            {
+              "value": "repeat-y",
+              "label": "纵向平铺"
+            }
+          ],
+          "group": "画面",
+          "help": "仅当图片填的是 CSS 值（渐变 / url()）时生效，用来铺底纹。",
+          "span": "half"
         },
         {
           "key": "opacity",
@@ -623,6 +874,7 @@
           "type": "range",
           "default": 100,
           "group": "画面",
+          "help": "取值 0–100（100 = 完全不透明）。",
           "span": "half",
           "min": 0,
           "max": 100,
@@ -651,7 +903,7 @@
           "step": 1
         },
         {
-          "key": "flip_x",
+          "key": "flipX",
           "label": "水平翻转",
           "type": "boolean",
           "default": false,
@@ -659,7 +911,7 @@
           "span": "half"
         },
         {
-          "key": "flip_y",
+          "key": "flipY",
           "label": "垂直翻转",
           "type": "boolean",
           "default": false,
@@ -720,9 +972,401 @@
           "min": 0,
           "max": 300,
           "step": 1
+        },
+        {
+          "key": "hueRotate",
+          "label": "色相旋转 (°)",
+          "type": "range",
+          "default": 0,
+          "group": "滤镜",
+          "help": "整幅画面的色相沿色轮转一个角度，可正可负；0 = 不动。",
+          "span": "half",
+          "min": -180,
+          "max": 180,
+          "step": 1
+        },
+        {
+          "key": "invert",
+          "label": "反相 (%)",
+          "type": "range",
+          "default": 0,
+          "group": "滤镜",
+          "help": "100 = 完全反色，常用来把黑底图标翻成白底。",
+          "span": "half",
+          "min": 0,
+          "max": 100,
+          "step": 1
+        },
+        {
+          "key": "sepia",
+          "label": "褪色 (%)",
+          "type": "range",
+          "default": 0,
+          "group": "滤镜",
+          "help": "100 = 全幅老照片色调。",
+          "span": "half",
+          "min": 0,
+          "max": 100,
+          "step": 1
         }
       ],
       "bindings": []
+    },
+    {
+      "type": "text-block",
+      "display_name": "文本块",
+      "category": "装饰",
+      "icon": "type",
+      "keywords": [
+        "text",
+        "wenben",
+        "文本",
+        "文字",
+        "说明",
+        "标注"
+      ],
+      "default_size": {
+        "width": 320,
+        "height": 72,
+        "min_width": 40,
+        "min_height": 24
+      },
+      "chrome": "bare",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "default": "",
+          "placeholder": "留空则不画标题栏",
+          "group": "内容",
+          "span": "full"
+        },
+        {
+          "key": "text",
+          "label": "文字",
+          "type": "string",
+          "default": "示例文本",
+          "group": "内容",
+          "help": "按行换行；行内连续空格原样保留，可以拿空格排版。",
+          "span": "full"
+        },
+        {
+          "key": "fontSize",
+          "label": "字号 (px)",
+          "type": "range",
+          "default": 16,
+          "group": "文本",
+          "span": "half",
+          "min": 8,
+          "max": 120,
+          "step": 1
+        },
+        {
+          "key": "lineHeight",
+          "label": "行高",
+          "type": "range",
+          "default": 1.4,
+          "group": "文本",
+          "span": "half",
+          "min": 1,
+          "max": 3,
+          "step": 0.1
+        },
+        {
+          "key": "weight",
+          "label": "字重",
+          "type": "range",
+          "default": 400,
+          "group": "文本",
+          "span": "half",
+          "min": 100,
+          "max": 900,
+          "step": 100
+        },
+        {
+          "key": "letterSpacing",
+          "label": "字间距 (px)",
+          "type": "range",
+          "default": 0,
+          "group": "文本",
+          "help": "0 = 沿用内置字间距（约字号的 2%）；大于 0 时按 px 覆盖，填 0 不等于零字距。",
+          "span": "half",
+          "min": 0,
+          "max": 40,
+          "step": 0.5
+        },
+        {
+          "key": "fontFamily",
+          "label": "字体",
+          "type": "enum",
+          "default": "sans",
+          "options": [
+            {
+              "value": "sans",
+              "label": "默认（继承正文）"
+            },
+            {
+              "value": "display",
+              "label": "标题体"
+            },
+            {
+              "value": "mono",
+              "label": "等宽体"
+            },
+            {
+              "value": "custom",
+              "label": "自定义"
+            }
+          ],
+          "group": "文本",
+          "help": "默认继承正文字体；中间两档取主题的标题体与等宽体，不引入额外字体资源。",
+          "span": "half"
+        },
+        {
+          "key": "fontFamilyCustom",
+          "label": "自定义字体",
+          "type": "string",
+          "default": "",
+          "placeholder": "如 Source Han Sans, sans-serif",
+          "group": "文本",
+          "help": "直接写 CSS font-family 值；字体要在放大屏的机器上装好，装不到会回落系统字体。留空 = 继承正文。",
+          "span": "half",
+          "when": {
+            "key": "fontFamily",
+            "in": [
+              "custom"
+            ]
+          }
+        },
+        {
+          "key": "color",
+          "label": "颜色",
+          "type": "color",
+          "default": "var(--card-text, var(--text-primary))",
+          "group": "文本",
+          "span": "half"
+        },
+        {
+          "key": "align",
+          "label": "水平对齐",
+          "type": "enum",
+          "default": "left",
+          "options": [
+            {
+              "value": "left",
+              "label": "左"
+            },
+            {
+              "value": "center",
+              "label": "中"
+            },
+            {
+              "value": "right",
+              "label": "右"
+            }
+          ],
+          "group": "文本",
+          "span": "half"
+        },
+        {
+          "key": "vAlign",
+          "label": "垂直对齐",
+          "type": "enum",
+          "default": "center",
+          "options": [
+            {
+              "value": "top",
+              "label": "上"
+            },
+            {
+              "value": "center",
+              "label": "中"
+            },
+            {
+              "value": "bottom",
+              "label": "下"
+            }
+          ],
+          "group": "文本",
+          "span": "half"
+        },
+        {
+          "key": "padding",
+          "label": "内边距 (px)",
+          "type": "range",
+          "default": 8,
+          "group": "外观",
+          "span": "half",
+          "min": 0,
+          "max": 48,
+          "step": 1
+        },
+        {
+          "key": "opacity",
+          "label": "不透明度",
+          "type": "range",
+          "default": 1,
+          "group": "外观",
+          "help": "取值 0–1（1 = 完全不透明）。调小可整体压暗，页头一类的次要信息常用 0.7。",
+          "span": "half",
+          "min": 0,
+          "max": 1,
+          "step": 0.05
+        },
+        {
+          "key": "background",
+          "label": "背景色",
+          "type": "color",
+          "default": "",
+          "placeholder": "留空 = 透明",
+          "group": "外观",
+          "span": "half"
+        },
+        {
+          "key": "overflow",
+          "label": "溢出",
+          "type": "enum",
+          "default": "hidden",
+          "options": [
+            {
+              "value": "hidden",
+              "label": "裁剪"
+            },
+            {
+              "value": "scroll",
+              "label": "滚动"
+            },
+            {
+              "value": "ellipsis",
+              "label": "省略号"
+            }
+          ],
+          "group": "外观",
+          "help": "文字超出模块矩形时：裁掉 / 可滚动 / 逐行省略号。",
+          "span": "half"
+        },
+        {
+          "key": "glow",
+          "label": "辉光",
+          "type": "boolean",
+          "default": false,
+          "group": "外观",
+          "help": "给文字加一层与文字同色的辉光。",
+          "span": "half"
+        },
+        {
+          "key": "glowRadius",
+          "label": "辉光半径 (px)",
+          "type": "range",
+          "default": 10,
+          "group": "外观",
+          "help": "辉光的扩散半径；0 = 只贴着笔画一圈。",
+          "span": "half",
+          "when": {
+            "key": "glow",
+            "in": [
+              true
+            ]
+          },
+          "min": 0,
+          "max": 40,
+          "step": 1
+        }
+      ],
+      "bindings": []
+    },
+    {
+      "type": "twin-view",
+      "display_name": "数字孪生",
+      "category": "孪生",
+      "icon": "building",
+      "keywords": [
+        "twin",
+        "luansheng",
+        "孪生",
+        "三维",
+        "3d",
+        "模型"
+      ],
+      "default_size": {
+        "width": 1280,
+        "height": 720,
+        "min_width": 320,
+        "min_height": 240
+      },
+      "chrome": "bare",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "placeholder": "留空则画布上不叠标题",
+          "group": "标题",
+          "span": "full"
+        },
+        {
+          "key": "titlePosition",
+          "label": "标题位置",
+          "type": "enum",
+          "default": "top-left",
+          "options": [
+            {
+              "value": "top-left",
+              "label": "左上"
+            },
+            {
+              "value": "top-right",
+              "label": "右上"
+            },
+            {
+              "value": "bottom-left",
+              "label": "左下"
+            },
+            {
+              "value": "bottom-right",
+              "label": "右下"
+            }
+          ],
+          "group": "标题",
+          "span": "half"
+        },
+        {
+          "key": "titleFontSize",
+          "label": "标题字号 (px)",
+          "type": "range",
+          "default": 16,
+          "group": "标题",
+          "span": "half",
+          "min": 8,
+          "max": 72,
+          "step": 1
+        },
+        {
+          "key": "twin",
+          "label": "孪生场景",
+          "type": "object",
+          "group": "模型",
+          "help": "模型、部件与锚点，整块由孪生子编辑器写入。"
+        }
+      ],
+      "bindings": [
+        {
+          "key": "anchorValues",
+          "label": "锚点读数",
+          "data_type": "number",
+          "is_array": true,
+          "array_fields": [
+            {
+              "key": "value",
+              "label": "数值",
+              "data_type": "number"
+            }
+          ]
+        }
+      ]
     }
   ]
 }

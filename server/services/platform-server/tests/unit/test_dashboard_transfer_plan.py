@@ -147,7 +147,7 @@ def test_binding_drafts_carry_the_nested_path() -> None:
                     module_type="twin-view",
                     bindings=[
                         ExportBindingIn(
-                            field_key="scene_status",
+                            field_key="anchorValues[0].value",
                             source_kind="static",
                             static_value_json="on",
                         )
@@ -170,7 +170,7 @@ def test_a_binding_draft_reports_the_node_it_hangs_on() -> None:
                     module_type="twin-view",
                     bindings=[
                         ExportBindingIn(
-                            field_key="scene_status",
+                            field_key="anchorValues[0].value",
                             source_kind="static",
                             static_value_json="on",
                         )

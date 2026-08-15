@@ -47,8 +47,30 @@ describe('文本块清单的取值范围', () => {
     expect(optionValues('vAlign')).toEqual(['top', 'center', 'bottom'])
   })
 
-  it('字体只给不引入额外资源的三档', () => {
-    expect(optionValues('fontFamily')).toEqual(['sans', 'display', 'mono'])
+  it('字体三档不引入额外资源，第四档把字体名交给用户自己填', () => {
+    expect(optionValues('fontFamily')).toEqual([
+      'sans',
+      'display',
+      'mono',
+      'custom',
+    ])
+  })
+
+  it('自定义字体名只在选了自定义那一档时才露出来', () => {
+    expect(field('fontFamilyCustom')).toMatchObject({
+      type: 'string',
+      default: '',
+      when: { key: 'fontFamily', in: ['custom'] },
+    })
+  })
+
+  it('辉光半径的范围就是组件的夹取区间，且只在辉光开着时露出来', () => {
+    expect(field('glowRadius')).toMatchObject({
+      default: 10,
+      min: 0,
+      max: 40,
+      when: { key: 'glow', in: [true] },
+    })
   })
 
   it('溢出三档：裁剪、滚动、逐行省略号', () => {
@@ -68,6 +90,18 @@ describe('文本块清单的取值范围', () => {
 
   it('文字缺省与组件里的兜底同值，脱开运行时也看得到示例文本', () => {
     expect(field('text')?.default).toBe('示例文本')
+  })
+
+  // ⚠ 图片块的同名字段是 0–100，两个模块的量纲不一样且都不许改，只能靠 help 说清
+  it('不透明度的 help 写明量纲是 0–1', () => {
+    expect(field('opacity')?.help).toContain('0–1')
+  })
+
+  it('字间距的 help 写明 0 是「沿用内置」而不是零字距', () => {
+    const help = field('letterSpacing')?.help ?? ''
+
+    expect(help).toContain('沿用内置字间距')
+    expect(help).toContain('填 0 不等于零字距')
   })
 })
 

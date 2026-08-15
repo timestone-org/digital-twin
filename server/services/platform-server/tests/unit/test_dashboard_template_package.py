@@ -53,7 +53,7 @@ def document() -> DashboardExportOut:
                 height_px=300,
                 bindings=[
                     ExportBindingIn(
-                        field_key="scene_status",
+                        field_key="anchorValues[0].value",
                         source_kind="static",
                         static_value_json="on",
                     )
@@ -110,7 +110,7 @@ def test_the_package_keeps_the_tree_and_its_bindings() -> None:
     package = package_of(template())
     assert [node.parent_key for node in package.nodes] == [None, "top"]
     assert [binding.field_key for binding in package.nodes[1].bindings] == [
-        "scene_status"
+        "anchorValues[0].value"
     ]
 
 

@@ -5,7 +5,7 @@
  * ⚠ 版本冲突时**保存被挡住**：这条路径的唯一出口是「重新加载」（ADR-0012）。
  */
 import type { DtSegmentedOption, DtSelectOption } from '@dt/contracts'
-import { DtButton, DtSegmented, DtSelect, DtSwitch, DtTag } from '@dt/ui'
+import { DtButton, DtSegmented, DtSelect, DtTag } from '@dt/ui'
 import { computed } from 'vue'
 
 import ToolbarArrange from './ToolbarArrange.vue'
@@ -90,7 +90,7 @@ function pickStep(value: string): void {
       <DtButton
         size="sm"
         variant="ghost"
-        icon="chevron-left"
+        icon="undo"
         aria-label="撤销"
         title="撤销"
         data-test="undo"
@@ -100,7 +100,7 @@ function pickStep(value: string): void {
       <DtButton
         size="sm"
         variant="ghost"
-        icon="chevron-right"
+        icon="redo"
         aria-label="重做"
         title="重做"
         data-test="redo"
@@ -120,13 +120,16 @@ function pickStep(value: string): void {
     </div>
 
     <div class="dt-toolbar__group">
-      <DtSwitch
+      <DtButton
         size="sm"
-        label="吸附"
+        :variant="snap.enabled ? 'soft' : 'ghost'"
+        :intent="snap.enabled ? 'primary' : 'neutral'"
+        icon="magnet"
         aria-label="吸附总开关"
+        title="吸附总开关"
         data-test="snap-enabled"
-        :model-value="snap.enabled"
-        @update:model-value="emit('set-snap', { enabled: $event })"
+        :aria-pressed="snap.enabled"
+        @click="emit('set-snap', { enabled: !snap.enabled })"
       />
       <DtSegmented
         size="sm"
@@ -145,33 +148,31 @@ function pickStep(value: string): void {
         :disabled="snap.mode !== 'px'"
         @update:model-value="pickStep"
       />
-      <DtSwitch
+      <DtButton
         size="sm"
-        label="参考线"
+        :variant="snap.guides ? 'soft' : 'ghost'"
+        :intent="snap.guides ? 'primary' : 'neutral'"
+        icon="guides"
         aria-label="智能参考线"
+        title="智能参考线"
         data-test="snap-guides"
-        :model-value="snap.guides"
-        @update:model-value="emit('set-snap', { guides: $event })"
+        :aria-pressed="snap.guides"
+        @click="emit('set-snap', { guides: !snap.guides })"
       />
     </div>
 
     <div class="dt-toolbar__group">
+      <!-- ⚠ 定宽：不定的话下拉宽度跟着当前档的字数走，从「适应窗口 62%」切到
+           「100%」整条工具栏右半边会横着跳一下。宽度按最长的那档「适应窗口 100%」留 -->
       <DtSelect
         size="sm"
+        class="w-36 shrink-0"
         aria-label="画布缩放"
         data-test="zoom"
         :model-value="zoomValue"
         :options="zoomOptions"
+        :display="{ searchable: false }"
         @update:model-value="pickZoom"
-      />
-      <DtButton
-        size="sm"
-        variant="ghost"
-        icon="circle-question"
-        aria-label="快捷键帮助"
-        title="快捷键帮助"
-        data-test="help"
-        @click="emit('help')"
       />
       <DtButton
         size="sm"
@@ -183,6 +184,20 @@ function pickStep(value: string): void {
         data-test="preview"
         @click="emit('preview')"
       />
+      <DtButton
+        size="sm"
+        variant="ghost"
+        intent="neutral"
+        icon="keyboard"
+        aria-label="快捷键帮助"
+        title="快捷键帮助"
+        data-test="help"
+        @click="emit('help')"
+      />
+    </div>
+
+    <!-- 文件组：出入与落盘。保存是全条唯一的实心键，它是这里的终点 -->
+    <div class="dt-toolbar__group">
       <DtButton
         size="sm"
         variant="ghost"
@@ -222,20 +237,23 @@ function pickStep(value: string): void {
 .dt-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
   align-items: center;
+  row-gap: 6px;
 
   &__group {
     display: flex;
     gap: 4px;
     align-items: center;
-    padding-right: 8px;
-    border-right: 1px solid var(--border-subtle);
+  }
 
-    &:last-child {
-      padding-right: 0;
-      border-right: 0;
-    }
+  // 组间那道竖线只有 16px 高、两侧各留 8px：整条边框会把每一组框成一个盒子，
+  // 一排盒子挨着看反而更乱
+  &__group:not(:last-child)::after {
+    content: '';
+    width: 1px;
+    height: 16px;
+    margin: 0 8px;
+    background: var(--border-subtle);
   }
 }
 </style>
