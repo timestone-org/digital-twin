@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.logging import get_logger
 from platform_server.apps.hvac.crud import (
+    ac_model_crud,
     ac_model_publication_crud,
     ac_model_set_binding_crud,
 )
@@ -41,11 +42,16 @@ _logger = get_logger("platform.hvac.ac_publication")
 
 @dataclass(frozen=True)
 class PublicationView:
-    """一份发布配置连同判定「绑齐没有」所需的全部事实。"""
+    """一份发布配置连同判定「绑齐没有」所需的全部事实。
+
+    ⚠ `room_id` 在这里带出来而不是让调用方回查模型：下发时要用它取实时读数，
+    而那一步跑在事务之外。
+    """
 
     publication: AcModelPublication
     bindings: list[AcModelSetBinding]
     serving_keys: tuple[str, ...]
+    room_id: uuid.UUID
 
     @property
     def bound_keys(self) -> frozenset[str]:
@@ -88,6 +94,7 @@ async def get_view(
             session, model_id
         ),
         serving_keys=serving_keys_of(model),
+        room_id=model.room_id,
     )
 
 
@@ -97,6 +104,78 @@ def serving_keys_of(model: AcModel) -> tuple[str, ...]:
     Args: model。
     """
     return tuple(sorted({set_key(serving) for serving in model.serving_sets}))
+
+
+@dataclass(frozen=True)
+class SkippedModel:
+    """已启用但发不出去的一个模型，连同为什么。"""
+
+    model_id: uuid.UUID
+    reason: str
+
+
+@dataclass(frozen=True)
+class DueModels:
+    """这一拍该发的与该跳过的。
+
+    ⚠ 跳过的必须带出来单独记一条日志：跳过与发布成功混成一条 event 的话，
+    一个从来没发布过的模型在日志里与正常发布的一模一样。
+    """
+
+    ready: tuple[uuid.UUID, ...]
+    skipped: tuple[SkippedModel, ...]
+
+
+async def due_models(session: AsyncSession) -> DueModels:
+    """这一拍要发哪些模型。
+
+    ⚠ 一次把三张表取全，不逐个模型回查：发布循环每分钟跑一次，N+1 在这里
+    就是每分钟 N 次往返。
+
+    Args: session。
+    """
+    rows = await ac_model_publication_crud.list_enabled(session)
+    model_ids = [row.model_id for row in rows]
+    keys = {
+        model.id: serving_keys_of(model)
+        for model in await ac_model_crud.list_by_ids(session, model_ids)
+    }
+    bindings = await ac_model_set_binding_crud.list_of_models(
+        session, model_ids
+    )
+    bound: dict[uuid.UUID, set[str]] = {}
+    for binding in bindings:
+        bound.setdefault(binding.model_id, set()).add(binding.set_key)
+    ready: list[uuid.UUID] = []
+    skipped: list[SkippedModel] = []
+    for row in rows:
+        reason = _skip_reason(row, keys.get(row.model_id), bound)
+        if reason is None:
+            ready.append(row.model_id)
+        else:
+            skipped.append(SkippedModel(model_id=row.model_id, reason=reason))
+    return DueModels(ready=tuple(ready), skipped=tuple(skipped))
+
+
+def _skip_reason(
+    row: AcModelPublication,
+    serving: tuple[str, ...] | None,
+    bound: dict[uuid.UUID, set[str]],
+) -> str | None:
+    """这个模型这一拍发不出去的原因；发得出去给 None。
+
+    Args: row, serving, bound。
+    """
+    if serving is None:
+        return "模型已不存在"
+    if row.recommendation_node_id is None:
+        return "区域推荐点位还没绑"
+    if not serving:
+        return "模型没有服务组合"
+    missing = sorted(set(serving) - bound.get(row.model_id, set()))
+    if missing:
+        return f"这些组合还没绑点位：{'、'.join(missing)}"
+    return None
 
 
 async def put_publication(

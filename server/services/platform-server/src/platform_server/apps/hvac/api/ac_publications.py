@@ -17,19 +17,28 @@ from lib.auth import CallerContext
 from lib.web import ApiResponse, ok
 from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
 from platform_server.apps.hvac.deps import (
+    get_ac_source_reader,
     get_node_writer,
     get_session,
+    get_sessions,
     require,
 )
 from platform_server.apps.hvac.schemas import (
     PublicationOut,
     PublicationPutIn,
+    PublishItemOut,
+    PublishOut,
     SetBindingOut,
 )
-from platform_server.apps.hvac.services import ac_publication_service
+from platform_server.apps.hvac.services import (
+    ac_publication_service,
+    ac_publish_service,
+)
 from platform_server.apps.hvac.services.ac_publication_service import (
     PublicationView,
 )
+from platform_server.apps.hvac.services.ac_publish_service import Sessions
+from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.opcua import NodeWriter
 from platform_server.settings import API_PREFIX
 
@@ -37,6 +46,8 @@ router = APIRouter(prefix=API_PREFIX, tags=["ac-publications"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 NodesDep = Annotated[NodeWriter, Depends(get_node_writer)]
+ReaderDep = Annotated[AcSourceReader, Depends(get_ac_source_reader)]
+SessionsDep = Annotated[Sessions, Depends(get_sessions)]
 ViewDep = Annotated[CallerContext, Depends(require(AC_VIEW))]
 ManageDep = Annotated[CallerContext, Depends(require(AC_MANAGE))]
 
@@ -100,6 +111,55 @@ async def delete_publication(
     """
     await ac_publication_service.delete_publication(session, model_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    f"{_PUBLICATION}:publish",
+    response_model=ApiResponse[PublishOut],
+    summary="立刻下发一次",
+)
+async def publish_now(
+    model_id: uuid.UUID,
+    sessions: SessionsDep,
+    reader: ReaderDep,
+    nodes: NodesDep,
+    _manager: ManageDep,
+) -> ApiResponse[PublishOut]:
+    """按当前实时工况算一次并写进点位。
+
+    ⚠ 走的是与每分钟那条循环**完全相同**的代码路径，只是不经租约。两条路
+    分开写的话，页面上试通了、循环里还是不通。
+
+    Args: model_id, sessions, reader, nodes, _manager。
+    """
+    outcome = await ac_publish_service.publish_once(
+        sessions, reader, nodes, model_id=model_id
+    )
+    return ok(_published(outcome))
+
+
+def _published(outcome: ac_publish_service.PublishOutcome) -> PublishOut:
+    """一次下发的结论 → 对外模型。
+
+    Args: outcome。
+    """
+    return PublishOut(
+        model_id=outcome.model_id,
+        status=outcome.status,
+        published_at=outcome.published_at,
+        written_count=outcome.written_count,
+        items=[
+            PublishItemOut(
+                set_key=item.set_key,
+                identifier=item.identifier,
+                value=item.value,
+                is_written=item.is_written,
+                error=item.error,
+            )
+            for item in outcome.items
+        ],
+        error=outcome.error,
+    )
 
 
 def _present(view: PublicationView) -> PublicationOut:

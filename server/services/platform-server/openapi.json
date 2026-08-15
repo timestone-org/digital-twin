@@ -2335,6 +2335,51 @@
         "title": "ApiResponse[PublicationOut]",
         "type": "object"
       },
+      "ApiResponse_PublishOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublishOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[PublishOut]",
+        "type": "object"
+      },
       "ApiResponse_RawSeriesOut_": {
         "properties": {
           "code": {
@@ -7529,6 +7574,122 @@
         "title": "PublicationPutIn",
         "type": "object"
       },
+      "PublishItemOut": {
+        "description": "一次下发里一个点位的去向。",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "identifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identifier"
+          },
+          "is_written": {
+            "title": "Is Written",
+            "type": "boolean"
+          },
+          "set_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Set Key"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "set_key",
+          "identifier",
+          "value",
+          "is_written",
+          "error"
+        ],
+        "title": "PublishItemOut",
+        "type": "object"
+      },
+      "PublishOut": {
+        "description": "一次下发的结果。\n\n⚠ `status` 三档分开：`degraded` 是「写进去了但写的是哨兵值」，\n`failed` 是「一个字节都没写进去」——后者上位机读到的还是旧值。",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PublishItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "model_id": {
+            "format": "uuid",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "written_count": {
+            "title": "Written Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model_id",
+          "status",
+          "published_at",
+          "written_count",
+          "items",
+          "error"
+        ],
+        "title": "PublishOut",
+        "type": "object"
+      },
       "RawSampleOut": {
         "description": "原始数据表格里的一行：一个时刻上的 19 个测点原值。\n\n⚠ 测点值走 JSON number 而非字符串（api-contract §6：传感器精度本身低于\nfloat64），且 `null` 一律保持 `null`——把它折成 0 会让数据断档被读成一次\n真实的停机。字段名必须与目录逐一对应，由契约测试锁死。",
         "properties": {
@@ -10195,6 +10356,50 @@
           }
         },
         "summary": "保存预测下发配置",
+        "tags": [
+          "ac-publications"
+        ]
+      }
+    },
+    "/api/v1/platform/ac-models/{model_id}/publication:publish": {
+      "post": {
+        "description": "按当前实时工况算一次并写进点位。\n\n⚠ 走的是与每分钟那条循环**完全相同**的代码路径，只是不经租约。两条路\n分开写的话，页面上试通了、循环里还是不通。\n\nArgs: model_id, container, reader, nodes, _manager。",
+        "operationId": "publish_now_api_v1_platform_ac_models__model_id__publication_publish_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Model Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PublishOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "立刻下发一次",
         "tags": [
           "ac-publications"
         ]

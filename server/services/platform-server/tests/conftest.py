@@ -5,6 +5,7 @@ L2/L3 打真实 Postgres（SQLite 上全绿的迁移可以在生产直接失败�
 下发形状完全一致的签名头——用例因此走的是与生产同一条鉴权路径。
 """
 
+import contextlib
 import os
 import socket
 import uuid
@@ -74,6 +75,7 @@ from platform_server.apps.hvac.deps import (
     get_ac_source_reader,
     get_node_writer,
     get_session,
+    get_sessions,
 )
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.apps.runtime_params.deps import (
@@ -303,6 +305,31 @@ def _session_override(
     return override
 
 
+@dataclass(frozen=True)
+class MakerSessions:
+    """把用例那条回滚事务的会话工厂包成「开短事务」的最小面。
+
+    ⚠ 必须与 HTTP 那侧共用同一条连接：分开连就是两个事务，用例经接口种下的
+    绑定在下发那边根本看不见，而现象是「模型不存在」，看着像业务逻辑写错了。
+    工厂本身用的是 `join_transaction_mode="create_savepoint"`，故这里的提交
+    只落到保存点，外层事务最后整体回滚。
+    """
+
+    maker: async_sessionmaker[AsyncSession]
+
+    @contextlib.asynccontextmanager
+    async def session(self) -> AsyncIterator[AsyncSession]:
+        """开一个落在保存点上的短事务。"""
+        async with self.maker() as opened:
+            try:
+                yield opened
+            except Exception:
+                await opened.rollback()
+                raise
+            else:
+                await opened.commit()
+
+
 @dataclass
 class AppContext:
     """整装应用的客户端与一个**同连接**的会话。
@@ -453,6 +480,9 @@ def _wire_fakes(
         AcSourceReader(source=ac_source, timezone=SOURCE_TIMEZONE)
     )
     application.dependency_overrides[get_node_writer] = lambda: nodes
+    application.dependency_overrides[get_sessions] = lambda: MakerSessions(
+        maker
+    )
     application.dependency_overrides[get_dashboard_validation_context] = (
         lambda: validation
     )

@@ -116,6 +116,8 @@ def build_container(
             timeout_s=1.0,
         ),
         lease=cast(Lease, FakeDependency()),
+        ac_publish_lease=cast(Lease, FakeDependency()),
+        ac_daily_lease=cast(Lease, FakeDependency()),
         nodes=FakeNodeWriter(),
     )
     return container, database, source

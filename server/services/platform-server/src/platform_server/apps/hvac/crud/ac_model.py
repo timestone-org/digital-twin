@@ -1,7 +1,7 @@
 """模型、工件与折外预测的数据访问。"""
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 
 from sqlalchemy import Select, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +33,23 @@ class AcModelCrud(CrudBase[AcModel]):
             .where(AcModel.name == name)
         )
         return result.scalar_one_or_none()
+
+    async def list_by_ids(
+        self, session: AsyncSession, ids: Collection[uuid.UUID]
+    ) -> list[AcModel]:
+        """按 id 批量取模型。
+
+        ⚠ 发布循环一拍要看多个模型的服务组合，逐个回查就是 N+1，
+        而它每分钟跑一次。
+
+        Args: session, ids。
+        """
+        if not ids:
+            return []
+        result = await session.execute(
+            select(AcModel).where(AcModel.id.in_(set(ids)))
+        )
+        return list(result.scalars().all())
 
     async def lock(
         self, session: AsyncSession, model_id: uuid.UUID

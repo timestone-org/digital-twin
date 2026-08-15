@@ -63,6 +63,8 @@ async def seed_room(session: AsyncSession) -> Seeded:
     """
     suffix = uuid.uuid4().hex[:6]
     serials = (f"K11-{suffix}", f"K12-{suffix}")
+    # ⚠ 数据源对象名必须是合法的裸标识符（`quote_identifier` 会拒带横杠的），
+    # 而 serial 里有横杠——真去读一次外库的用例会在这里炸，而现象是 500
     workshop = Workshop(name=f"车间{suffix}")
     session.add(workshop)
     await session.flush()
@@ -77,7 +79,7 @@ async def seed_room(session: AsyncSession) -> Seeded:
             AcDataBinding(
                 ac_unit_id=unit.id,
                 dataset="raw_minute",
-                source_object=f"v_{serial}",
+                source_object=f"v_{serial.replace('-', '_')}",
             )
         )
         session.add(

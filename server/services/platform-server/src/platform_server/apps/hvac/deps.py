@@ -24,6 +24,7 @@ from platform_server.apps.hvac.services.ac_model_queue import TrainMessage
 from platform_server.apps.hvac.services.ac_model_service import (
     dispatch_training,
 )
+from platform_server.apps.hvac.services.ac_publish_service import Sessions
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.apps.hvac.services.ac_startup_service import (
     ShardDispatch,
@@ -141,6 +142,18 @@ def get_ac_source_reader(
         source=container.ac_source,
         timezone=container.settings.acsource_timezone,
     )
+
+
+def get_sessions(
+    container: Annotated[Container, Depends(get_container)],
+) -> Sessions:
+    """开短事务的那一面。预测下发要开三个互不相干的短事务，不能借请求那条。
+
+    ⚠ 测试用 `dependency_overrides` 换成用例那条回滚事务。
+
+    Args: container。
+    """
+    return container.database
 
 
 def get_node_writer(

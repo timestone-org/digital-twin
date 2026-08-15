@@ -23,6 +23,7 @@ from platform_server.container import Container
 from platform_server.settings import ROLE_API, ROLE_WORKER, Settings
 from platform_server.worker import (
     Consumer,
+    LeaseHolder,
     WorkerRuntime,
     build_consumer,
     build_trainer,
@@ -51,6 +52,16 @@ class FakeConsumer:
     async def drain(self, timeout_s: float) -> None:
         self.ledger.append("drain")
         self.drained.append(timeout_s)
+
+
+@dataclass
+class FakeLeaseholder:
+    """记下让位的时机。"""
+
+    ledger: list[str]
+
+    async def release(self) -> None:
+        self.ledger.append("released")
 
 
 def build_settings() -> Settings:
@@ -115,12 +126,21 @@ async def test_shutdown_stops_intake_then_drains_then_releases() -> None:
     await run_until_stopped(
         WorkerRuntime(
             consumers=(cast(Consumer, consumer),),
+            leaseholders=(),
             container=container,
             wait=_immediate,
         ),
         drain_timeout_s=1.5,
     )
-    assert ledger == ["stop", "drain", "stream", "ac_source", "database"]
+    assert ledger == [
+        "stop",
+        "drain",
+        "stream",
+        "lease",
+        "lease",
+        "ac_source",
+        "database",
+    ]
     assert consumer.drained == [1.5]
 
 
@@ -133,6 +153,7 @@ async def test_every_consumer_stops_before_any_resource_closes() -> None:
     await run_until_stopped(
         WorkerRuntime(
             consumers=(cast(Consumer, first), cast(Consumer, second)),
+            leaseholders=(),
             container=container,
             wait=_immediate,
         ),
@@ -140,7 +161,13 @@ async def test_every_consumer_stops_before_any_resource_closes() -> None:
     )
     assert ledger[:2] == ["stop", "stop"]
     assert sorted(ledger[2:4]) == ["drain", "drain"]
-    assert ledger[4:] == ["stream", "ac_source", "database"]
+    assert ledger[4:] == [
+        "stream",
+        "lease",
+        "lease",
+        "ac_source",
+        "database",
+    ]
 
 
 async def test_resources_are_released_even_when_the_wait_blows_up() -> None:
@@ -150,12 +177,43 @@ async def test_resources_are_released_even_when_the_wait_blows_up() -> None:
         await run_until_stopped(
             WorkerRuntime(
                 consumers=(cast(Consumer, FakeConsumer(ledger)),),
+                leaseholders=(),
                 container=build_container(ledger),
                 wait=_explode,
             ),
             drain_timeout_s=0.1,
         )
-    assert ledger == ["stop", "drain", "stream", "ac_source", "database"]
+    assert ledger == [
+        "stop",
+        "drain",
+        "stream",
+        "lease",
+        "lease",
+        "ac_source",
+        "database",
+    ]
+
+
+async def test_the_lease_is_handed_back_before_any_resource_closes() -> None:
+    """⚠ 让位必须排在关资源之前：让位要连得上 Redis。
+
+    排在后面就只能等它自然过期，而接任的副本会白等一整个 TTL——那一整段时间
+    现场的点位停在旧值，且没有任何地方说过它不新鲜了。
+    """
+    ledger: list[str] = []
+    container = build_container(ledger)
+    holder = FakeLeaseholder(ledger)
+    await run_until_stopped(
+        WorkerRuntime(
+            consumers=(cast(Consumer, FakeConsumer(ledger)),),
+            leaseholders=(cast(LeaseHolder, holder),),
+            container=container,
+            wait=_immediate,
+        ),
+        drain_timeout_s=0.1,
+    )
+    assert ledger.index("released") < ledger.index("database")
+    assert ledger.index("drain") < ledger.index("released")
 
 
 async def _immediate() -> None:
@@ -189,7 +247,13 @@ async def test_serving_wires_the_container_and_shuts_it_down(
     await worker.serve(build_settings(), wait=_immediate)
     assert ledger[:2] == ["stop", "stop"]
     assert sorted(ledger[2:4]) == ["drain", "drain"]
-    assert ledger[4:] == ["stream", "ac_source", "database"]
+    assert ledger[4:] == [
+        "stream",
+        "lease",
+        "lease",
+        "ac_source",
+        "database",
+    ]
 
 
 def test_the_worker_role_runs_the_consumer_not_uvicorn(

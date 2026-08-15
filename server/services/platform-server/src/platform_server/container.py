@@ -64,6 +64,10 @@ class Container:
     viewer_database: Database
     realtime: RealtimeClient
     lease: Lease
+    # ⚠ 三把租约互不相干：大屏发布、预测下发、每日增量各自单活。共用一把
+    # 会让「大屏发布器在跑」顺带决定「今晚抽不抽增量」
+    ac_publish_lease: Lease
+    ac_daily_lease: Lease
     nodes: NodeWriter
 
 
@@ -105,7 +109,9 @@ def build_container(settings: Settings) -> Container:
         ),
         viewer_database=viewer_database,
         realtime=_build_realtime(settings),
-        lease=_build_lease(settings),
+        lease=_build_lease(settings, PUBLISHER_LEASE_KEY),
+        ac_publish_lease=_build_lease(settings, AC_PUBLISH_LEASE_KEY),
+        ac_daily_lease=_build_lease(settings, AC_DAILY_LEASE_KEY),
         nodes=_build_nodes(settings),
     )
 
@@ -134,17 +140,17 @@ def _build_realtime(settings: Settings) -> RealtimeClient:
     )
 
 
-def _build_lease(settings: Settings) -> Lease:
-    """publisher 角色的单活租约。⚠ 构造不连网。
+def _build_lease(settings: Settings, key: str) -> Lease:
+    """一把单活租约。⚠ 构造不连网。
 
-    Args: settings。
+    Args: settings, key。
     """
     return RedisLease(
         url=settings.url(),
-        key=PUBLISHER_LEASE_KEY,
+        key=key,
         # ⚠ 令牌必须每个进程唯一：两个副本同名就会互相续到对方的租约上
         token=settings.app_instance,
-        ttl_s=settings.publish_lease_ttl_s,
+        ttl_s=_ttl_of(settings, key),
         timeout_s=settings.redis_timeout_s,
     )
 
@@ -260,3 +266,18 @@ def _build_stream(settings: Settings) -> RedisStream:
         url=settings.url(),
         timeout_s=max(settings.redis_timeout_s, block_s + STREAM_READ_MARGIN_S),
     )
+
+
+def _ttl_of(settings: Settings, key: str) -> int:
+    """这把租约的存活期。
+
+    ⚠ 三条循环的节奏差着一个量级（大屏一秒一拍、下发一分钟一拍、增量一天
+    一次），共用一个 TTL 会让慢的那条在两拍之间就把租约丢了。
+
+    Args: settings, key。
+    """
+    if key == AC_PUBLISH_LEASE_KEY:
+        return settings.acpublish_lease_ttl_s
+    if key == AC_DAILY_LEASE_KEY:
+        return settings.acdaily_lease_ttl_s
+    return settings.publish_lease_ttl_s
