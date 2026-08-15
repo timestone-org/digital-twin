@@ -9,28 +9,30 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { AcModel, ModelPrediction } from '@dt/contracts'
-import { DtCard, DtNotice, DtTag, useConfirm, useToast } from '@dt/ui'
+import { DtNotice, DtSegmented, DtTag, useConfirm, useToast } from '@dt/ui'
 
 import * as hvac from '@/api/hvac'
 import { AppShell } from '@/components/layout'
 import { describeError, useAsyncList } from '@/composables/useAsyncList'
 import DetailActions from './components/DetailActions.vue'
+import MetricsPanel from './components/MetricsPanel.vue'
+import PublicationPanel from './components/PublicationPanel.vue'
 import LiveTestDialog from './components/LiveTestDialog.vue'
-import MetricsSummary from './components/MetricsSummary.vue'
-import OutOfFoldCard from './components/OutOfFoldCard.vue'
-import PredictionTable from './components/PredictionTable.vue'
-import ProvenanceStrip from './components/ProvenanceStrip.vue'
-import SetMetricsTable from './components/SetMetricsTable.vue'
 import { useOutOfFold } from './useOutOfFold'
-import {
-  MODEL_STATUS_VIEW,
-  isModelBusy,
-  toSetRows,
-} from '@/features/hvac/modelView'
+import { usePublication } from './usePublication'
+import { MODEL_STATUS_VIEW, isModelBusy } from '@/features/hvac/modelView'
 
 // 训练中的刷新间隔；一页逐条对比的行数
 const POLL_INTERVAL_MS = 5000
 const PREDICTION_PAGE_SIZE = 20
+
+/** 两个页签。⚠ 与下面 `v-if` 的取值逐字一致，写错就是一块空白页。 */
+const TAB_METRICS = 'metrics'
+const TAB_PUBLICATION = 'publication'
+const TABS = [
+  { value: TAB_METRICS, label: '评估' },
+  { value: TAB_PUBLICATION, label: '点位绑定' },
+] as const
 
 const route = useRoute()
 const router = useRouter()
@@ -41,6 +43,7 @@ const modelId = computed(() => String(route.params['modelId'] ?? ''))
 const model = ref<AcModel | null>(null)
 const error = ref<string | null>(null)
 const isLiveTestOpen = ref(false)
+const tab = ref<string>(TAB_METRICS)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 /** 全页唯一的组合过滤；空串 = 全部。组合键是 `+` 拼的，后端要逗号分隔。 */
@@ -50,6 +53,16 @@ const outOfFold = useOutOfFold(
   () => modelId.value,
   () => setFilter.value,
 )
+
+const publication = usePublication(
+  () => modelId.value,
+  () => model.value,
+)
+
+// 页签是懒加载的：不点进去就不去打 opcua-server
+watch(tab, (value) => {
+  if (value === TAB_PUBLICATION) void publication.load()
+})
 
 const predictions = useAsyncList<ModelPrediction>(
   (query) =>
@@ -70,9 +83,6 @@ watch(setFilter, () => {
 
 const statusView = computed(() =>
   model.value ? MODEL_STATUS_VIEW[model.value.status] : null,
-)
-const setRows = computed(() =>
-  model.value?.metrics ? toSetRows(model.value.metrics.by_set) : [],
 )
 /** 一行要说的那件最要紧的事；失败原因单独有 DtNotice，不进这里。 */
 const staleNotice = computed(() => {
@@ -210,57 +220,25 @@ async function remove(): Promise<void> {
           {{ model.error }}
         </DtNotice>
 
-        <ProvenanceStrip :model="model" />
+        <DtSegmented v-model="tab" :options="TABS" aria-label="模型详情页签" />
 
-        <MetricsSummary
-          v-if="model.metrics"
-          :overall="model.metrics.overall"
-          :sample="model.sample_count"
-        />
-        <DtNotice v-else-if="!isModelBusy(model)" intent="info">
-          还没有一次成功的训练。
-        </DtNotice>
-
-        <template v-if="model.metrics">
-          <OutOfFoldCard
-            :out-of-fold="outOfFold"
-            :sets="model.serving_sets"
-            :filter="setFilter"
-            @update:filter="setFilter = $event"
+        <template v-if="tab === TAB_PUBLICATION">
+          <PublicationPanel
+            :publication="publication"
+            @saved="toast.success('绑定已保存')"
+            @unbound="toast.success('已解绑')"
+            @published="toast.success('已下发一次')"
           />
-
-          <DtCard v-if="setRows.length > 0" class="min-w-0">
-            <h2 class="mb-2 text-sm font-semibold text-text-primary">
-              按服务组合
-              <span class="ml-1 text-xs font-normal text-text-secondary">
-                点一行把上面的图与下面的表都筛到它
-              </span>
-            </h2>
-            <SetMetricsTable
-              :rows="setRows"
-              :selected="setFilter"
-              @select="setFilter = $event"
-            />
-          </DtCard>
-
-          <DtCard class="min-w-0">
-            <h2 class="mb-2 text-sm font-semibold text-text-primary">
-              折外逐条
-              <span class="ml-1 text-xs font-normal text-text-secondary">
-                「折」= 这一折训练时模型没见过它，所以这条预测是可信的
-              </span>
-            </h2>
-            <PredictionTable
-              :rows="predictions.items.value"
-              :loading="predictions.loading.value"
-              :error="predictions.error.value"
-              :pager="predictions.pager.value"
-              @update:page="predictions.goToPage($event)"
-              @update:size="predictions.setSize($event)"
-              @retry="predictions.reload()"
-            />
-          </DtCard>
         </template>
+
+        <MetricsPanel
+          v-else
+          :model="model"
+          :out-of-fold="outOfFold"
+          :predictions="predictions"
+          :filter="setFilter"
+          @update:filter="setFilter = $event"
+        />
       </template>
     </div>
 

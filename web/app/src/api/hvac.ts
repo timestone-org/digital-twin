@@ -9,6 +9,9 @@
 import type {
   AcDataBinding,
   AcModel,
+  AcModelPublication,
+  AcModelPublicationInput,
+  ModelPublishResult,
   ModelPredictInput,
   ModelPredictResult,
   ModelPrediction,
@@ -37,6 +40,7 @@ import type {
 import { PLATFORM_BASE_URL } from '@/config/app'
 
 import { request, requestData, type RequestOptions } from './client'
+import { newIdempotencyKey } from './idempotency'
 
 export type PageQuery = {
   page?: number | undefined
@@ -525,5 +529,55 @@ export async function recommendWithAcModel(
   return await requestData<ModelRecommendResult>(
     `/ac-models/${modelId}:recommend`,
     onPlatform({ method: 'POST', body: input }),
+  )
+}
+
+/* 预测下发 —— 模型的预测写进哪些 OPC UA 点位 */
+
+/** 这个模型往哪台实例、哪些点位下发。⚠ 没配过是 404，不是一份空配置。 */
+export async function getModelPublication(
+  modelId: string,
+): Promise<AcModelPublication> {
+  return await requestData<AcModelPublication>(
+    `/ac-models/${modelId}/publication`,
+    onPlatform(),
+  )
+}
+
+/**
+ * 整份保存绑定。
+ * ⚠ 不是补丁：换了实例，底下每一个 node_id 都得跟着换，逐字段改会留下
+ * 「节点属于旧实例」的中间态，而它每分钟往现场写一次。
+ */
+export async function putModelPublication(
+  modelId: string,
+  input: AcModelPublicationInput,
+): Promise<AcModelPublication> {
+  return await requestData<AcModelPublication>(
+    `/ac-models/${modelId}/publication`,
+    onPlatform({ method: 'PUT', body: input }),
+  )
+}
+
+/** 解绑。⚠ 只删配置，不动点位上此刻的值。 */
+export async function deleteModelPublication(modelId: string): Promise<void> {
+  await request(
+    `/ac-models/${modelId}/publication`,
+    onPlatform({ method: 'DELETE' }),
+  )
+}
+
+/**
+ * 立刻下发一次。走的是与每分钟那条循环完全相同的代码路径。
+ * ⚠ 必须带 `Idempotency-Key`：网络抖动导致的重试在没有它时会向上位机可见的
+ * 点位写两次。
+ */
+export async function publishModelNow(
+  modelId: string,
+  key: string = newIdempotencyKey(),
+): Promise<ModelPublishResult> {
+  return await requestData<ModelPublishResult>(
+    `/ac-models/${modelId}/publication:publish`,
+    onPlatform({ method: 'POST', headers: { 'Idempotency-Key': key } }),
   )
 }
