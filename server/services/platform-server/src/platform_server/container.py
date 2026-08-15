@@ -24,6 +24,7 @@ from platform_server.apps.dashboard.services import (
     load_module_catalog,
 )
 from platform_server.lease import Lease, RedisLease
+from platform_server.opcua import NodeWriter, OpcuaClient
 from platform_server.realtime import RealtimeClient
 from platform_server.settings import Settings
 from platform_server.stream import RedisStream
@@ -35,6 +36,9 @@ STREAM_READ_MARGIN_S = 2.0
 # 单活租约的键。⚠ 全系统只有一个大屏发布者，键名写死而不是配置项：让它可配
 # 等于让两份配置各选出一个主，而两个主会对同一个主题各推各的
 PUBLISHER_LEASE_KEY = "platform:publisher:leader"
+# 预测下发与每日增量各自的单活租约键。理由同上：写死不可配
+AC_PUBLISH_LEASE_KEY = "platform:ac-publish:leader"
+AC_DAILY_LEASE_KEY = "platform:ac-startup-daily:leader"
 
 
 @dataclass(frozen=True)
@@ -60,6 +64,7 @@ class Container:
     viewer_database: Database
     realtime: RealtimeClient
     lease: Lease
+    nodes: NodeWriter
 
 
 def build_container(settings: Settings) -> Container:
@@ -101,6 +106,19 @@ def build_container(settings: Settings) -> Container:
         viewer_database=viewer_database,
         realtime=_build_realtime(settings),
         lease=_build_lease(settings),
+        nodes=_build_nodes(settings),
+    )
+
+
+def _build_nodes(settings: Settings) -> NodeWriter:
+    """打 opcua-server 内部端点的客户端。⚠ 构造不连网。
+
+    Args: settings。
+    """
+    return OpcuaClient(
+        base_url=settings.opcua_base_url,
+        service_key=settings.edge_service_key.get_secret_value(),
+        timeout_s=settings.opcua_timeout_s,
     )
 
 

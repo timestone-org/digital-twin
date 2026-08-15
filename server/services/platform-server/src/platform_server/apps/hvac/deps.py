@@ -30,6 +30,7 @@ from platform_server.apps.hvac.services.ac_startup_service import (
     dispatch_shards,
 )
 from platform_server.container import Container
+from platform_server.opcua import NodeWriter
 from platform_server.stream import StreamGroup, StreamLike
 
 # 端点声明自己要的权限码，契约测试遍历路由时读它
@@ -140,6 +141,16 @@ def get_ac_source_reader(
         source=container.ac_source,
         timezone=container.settings.acsource_timezone,
     )
+
+
+def get_node_writer(
+    container: Annotated[Container, Depends(get_container)],
+) -> NodeWriter:
+    """opcua-server 的下发面。测试用 `dependency_overrides` 换成假件。
+
+    Args: container。
+    """
+    return container.nodes
 
 
 async def get_caller(

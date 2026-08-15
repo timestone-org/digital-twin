@@ -8,7 +8,7 @@ L2/L3 打真实 Postgres（SQLite 上全绿的迁移可以在生产直接失败�
 import os
 import socket
 import uuid
-from collections.abc import AsyncIterator, Callable, Iterable, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 
@@ -18,11 +18,13 @@ from fastapi import FastAPI
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from unit.ac_source_fakes import FakeAcSource, full_shape
 from unit.collect_fakes import (
     FakeChannelPublisher,
     FakeCommandTransport,
     FakeHistorySource,
 )
+from unit.opcua_fakes import FakeNodeWriter
 
 from lib.auth import (
     SignedContext,
@@ -68,13 +70,11 @@ from platform_server.apps.dashboard.services import (
     ValidationContext,
 )
 from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
-from platform_server.apps.hvac.datasets import (
-    DATASET_RAW_MINUTE,
-    SOURCE_TIME_COLUMN,
-    find_dataset,
-    metric_keys,
+from platform_server.apps.hvac.deps import (
+    get_ac_source_reader,
+    get_node_writer,
+    get_session,
 )
-from platform_server.apps.hvac.deps import get_ac_source_reader, get_session
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.apps.runtime_params.deps import (
     get_session as get_runtime_param_session,
@@ -116,60 +116,6 @@ SOURCE_TIMEZONE = "Asia/Shanghai"
 SEEDED_OBJECTS = ("KTStartData_K01", "KTStartData_K02", "KTStartData_K03")
 
 SignHeaders = Callable[..., dict[str, str]]
-
-
-def full_shape() -> dict[str, str]:
-    """一个形状齐备的对象：时间列 + 目录里的全部指标列。"""
-    dataset = find_dataset(DATASET_RAW_MINUTE)
-    assert dataset is not None
-    columns = {SOURCE_TIME_COLUMN: "datetime"}
-    columns.update(dict.fromkeys(metric_keys(dataset), "float"))
-    return columns
-
-
-@dataclass
-class FakeAcSource:
-    """替掉驱动的假外库：按 SQL 里的特征串分派，不解析 SQL。
-
-    ⚠ 它替的是**驱动**，不是被测逻辑——SQL 文本、时区换算与行映射走的都还是
-    真的 `AcSourceReader`，故用例仍然能拦住取数口径写错。
-    """
-
-    columns: dict[str, dict[str, str]] = field(default_factory=dict)
-    shaped_objects: list[str] = field(default_factory=list)
-    captions: list[dict[str, object]] = field(default_factory=list)
-    extent: list[dict[str, object]] = field(default_factory=list)
-    samples: list[dict[str, object]] = field(default_factory=list)
-    buckets: list[dict[str, object]] = field(default_factory=list)
-    queries: list[tuple[str, dict[str, object]]] = field(default_factory=list)
-    failure: Exception | None = None
-
-    async def fetch_all(
-        self, sql: str, params: Mapping[str, object]
-    ) -> list[dict[str, object]]:
-        self.queries.append((sql, dict(params)))
-        if self.failure is not None:
-            raise self.failure
-        if "INFORMATION_SCHEMA.COLUMNS" in sql:
-            return [{"object_name": name} for name in self.shaped_objects]
-        if "KTInfo" in sql:
-            return list(self.captions)
-        if "MIN(" in sql:
-            return list(self.extent)
-        if "DATEADD" in sql:
-            return list(self.buckets)
-        return list(self.samples)[: _row_limit(params)]
-
-    async def describe_columns(
-        self, object_names: Sequence[str]
-    ) -> dict[str, dict[str, str]]:
-        if self.failure is not None:
-            raise self.failure
-        return {
-            name: self.columns[name]
-            for name in object_names
-            if name in self.columns
-        }
 
 
 @dataclass
@@ -234,11 +180,6 @@ class InMemoryStream:
 def stream() -> InMemoryStream:
     """一条空的进程内流。"""
     return InMemoryStream()
-
-
-def _row_limit(params: Mapping[str, object]) -> int:
-    limit = params.get("row_limit")
-    return limit if isinstance(limit, int) else 0
 
 
 def _reachable(host: str, port: int) -> bool:
@@ -459,6 +400,7 @@ class ExternalFakes:
     ac_source: FakeAcSource
     points: StaticPointCatalog
     collect: CollectFakes
+    nodes: FakeNodeWriter
 
 
 @pytest.fixture
@@ -466,14 +408,24 @@ def external_fakes(
     ac_source: FakeAcSource,
     point_catalog: StaticPointCatalog,
     collect_fakes: CollectFakes,
+    node_writer: FakeNodeWriter,
 ) -> ExternalFakes:
-    """把三组假件收成一包给 `app_context`。
+    """把四组假件收成一包给 `app_context`。
 
-    Args: ac_source, point_catalog, collect_fakes。
+    Args: ac_source, point_catalog, collect_fakes, node_writer。
     """
     return ExternalFakes(
-        ac_source=ac_source, points=point_catalog, collect=collect_fakes
+        ac_source=ac_source,
+        points=point_catalog,
+        collect=collect_fakes,
+        nodes=node_writer,
     )
+
+
+@pytest.fixture
+def node_writer() -> FakeNodeWriter:
+    """假下发面。默认一个节点都没有——要绑点位的用例自己 `add`。"""
+    return FakeNodeWriter()
 
 
 def _wire_fakes(
@@ -482,6 +434,7 @@ def _wire_fakes(
     maker: async_sessionmaker[AsyncSession],
     ac_source: FakeAcSource,
     validation: ValidationContext,
+    nodes: FakeNodeWriter,
 ) -> None:
     """把会打网络的依赖换成假件。
 
@@ -489,16 +442,17 @@ def _wire_fakes(
     模块就打真库真提交，用例之间开始互相看见对方的数据。这不是假设——
     `runtime_params` 那份漏过一次，表现是「单跑绿、连着跑红」，
     而残留行会一直躺在库里毒下一次运行。
-    Args: application, maker, ac_source, validation。
+    Args: application, maker, ac_source, validation, nodes。
     """
     override = _session_override(maker)
     application.dependency_overrides[get_session] = override
     application.dependency_overrides[get_dashboard_session] = override
     application.dependency_overrides[get_collect_session] = override
     application.dependency_overrides[get_runtime_param_session] = override
-    application.dependency_overrides[get_ac_source_reader] = (
-        lambda: AcSourceReader(source=ac_source, timezone=SOURCE_TIMEZONE)
+    application.dependency_overrides[get_ac_source_reader] = lambda: (
+        AcSourceReader(source=ac_source, timezone=SOURCE_TIMEZONE)
     )
+    application.dependency_overrides[get_node_writer] = lambda: nodes
     application.dependency_overrides[get_dashboard_validation_context] = (
         lambda: validation
     )
@@ -512,6 +466,7 @@ def _faked_container(built: Container, fakes: ExternalFakes) -> Container:
     """
     return replace(
         built,
+        nodes=fakes.nodes,
         idempotency=IdempotencyStore(cache=InMemoryCache()),
         command_bus=CommandBus(
             transport=fakes.collect.bus,
@@ -557,6 +512,7 @@ async def app_context(
         validation=ValidationContext(
             catalog=container.module_catalog, points=external_fakes.points
         ),
+        nodes=external_fakes.nodes,
     )
     transport = httpx.ASGITransport(app=application)
     async with (

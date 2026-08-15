@@ -14,6 +14,12 @@ from platform_server.apps.hvac.crud.ac_model import (
     ac_model_crud,
     ac_model_prediction_crud,
 )
+from platform_server.apps.hvac.crud.ac_model_publication import (
+    AcModelPublicationCrud,
+    AcModelSetBindingCrud,
+    ac_model_publication_crud,
+    ac_model_set_binding_crud,
+)
 from platform_server.apps.hvac.crud.ac_startup import (
     AcStartupBatchCrud,
     AcStartupShardCrud,
@@ -44,6 +50,8 @@ __all__ = [
     "AcModelArtifactCrud",
     "AcModelCrud",
     "AcModelPredictionCrud",
+    "AcModelPublicationCrud",
+    "AcModelSetBindingCrud",
     "AcStartupBatchCrud",
     "AcStartupEpisodeCrud",
     "AcStartupExclusionCrud",
@@ -58,6 +66,8 @@ __all__ = [
     "ac_model_artifact_crud",
     "ac_model_crud",
     "ac_model_prediction_crud",
+    "ac_model_publication_crud",
+    "ac_model_set_binding_crud",
     "ac_startup_batch_crud",
     "ac_startup_episode_crud",
     "ac_startup_exclusion_crud",

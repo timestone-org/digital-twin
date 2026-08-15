@@ -35,6 +35,7 @@ from unit.collect_fakes import (
     FakeCommandTransport,
     FakeHistorySource,
 )
+from unit.opcua_fakes import FakeNodeWriter
 from unit.publish_fakes import FakeSnapshotSource, FakeViewerSource
 
 PLACEHOLDER = "wiring-test"
@@ -115,6 +116,7 @@ def build_container(
             timeout_s=1.0,
         ),
         lease=cast(Lease, FakeDependency()),
+        nodes=FakeNodeWriter(),
     )
     return container, database, source
 
