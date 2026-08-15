@@ -62,6 +62,7 @@ class AcStartupEpisodeCrud(CrudBase[AcStartupEpisode]):
                     "duration_minutes": statement.excluded.duration_minutes,
                     "outcome": statement.excluded.outcome,
                     "readings": statement.excluded.readings,
+                    "idle_minutes": statement.excluded.idle_minutes,
                     "updated_at": func.now(),
                 },
             )
@@ -338,6 +339,9 @@ def _episode_values(episode: AcStartupEpisode) -> dict[str, object]:
         "duration_minutes": episode.duration_minutes,
         "outcome": episode.outcome,
         "readings": dict(episode.readings),
+        # ⚠ 少了这一列，蓄热特征（AC_MODEL_DESIGN §2.5）永远是 NaN——状态机
+        # 明明数出来了，却停在 Core 路径的取值表外面，而没有任何地方会报错
+        "idle_minutes": episode.idle_minutes,
     }
 
 
