@@ -2,6 +2,8 @@
 /**
  * @fileoverview 孪生场景宿主：渲染循环、模型装载与进度、部件显隐、锚点、箭头、信息牌、能量流与场景特效。
  * ⚠ 本组件静态依赖整个 three，只能被异步加载（DASHBOARD_DESIGN §5.4）。
+ * ⚠ 根元素上的 `tabindex` 不是装饰：没有它这个 div 收不到 keydown，视点的数字键
+ * 快捷方式整片失效，而按钮照常显示——界面上看不出快捷键为什么不响应。
  */
 import type {
   TwinAnchorValues,
@@ -16,26 +18,24 @@ import {
   EMPTY_ARROW_VALUES,
   EMPTY_FLOW_VALUES,
   EMPTY_PANEL_VALUES,
+  defaultCameraOf,
 } from '@dt/twin-config'
 import type { Object3D } from 'three'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import { resolveTwinModelUrl } from './host'
 import { createFrameClock } from './frameClock'
+import { GroundGridLayer } from './groundGrid'
 import TwinRoamControls from './TwinRoamControls.vue'
 import { useRoamTour } from './useRoamTour'
 import { SceneLayers, type SceneLayerValues } from './sceneLayers'
-import { loadTwinModel } from './modelLoader'
 import { distanceContextOf } from './distanceContext'
 import type { TwinPartClick } from './partPicking'
 import TwinSceneOverlay from './TwinSceneOverlay.vue'
+import TwinViewpointBar from './TwinViewpointBar.vue'
 import { usePartClick } from './usePartClick'
-import {
-  EMPTY_NODE_INDEX,
-  buildNodeIndex,
-  unmatchedNodeNames,
-  type NodeIndex,
-} from './nodeIndex'
+import { useTwinModelLoad } from './useTwinModelLoad'
+import { useViewpointSwitch } from './useViewpointSwitch'
+import { EMPTY_NODE_INDEX, type NodeIndex } from './nodeIndex'
 import {
   WEBGL_UNAVAILABLE_MESSAGE,
   applyCameraPose,
@@ -44,7 +44,6 @@ import {
   createSceneCore,
   createWebGLRenderer,
   disposeScene,
-  disposeSceneGraph,
   frameObject,
   renderScene,
   resizeScene,
@@ -69,19 +68,25 @@ const props = defineProps<{
 const emit = defineEmits<{ partClick: [TwinPartClick] }>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
-const status = ref<'empty' | 'loading' | 'ready' | 'error'>('empty')
-const progressPercent = ref(0)
-const errorMessage = ref('')
-const missingNodes = ref<readonly string[]>([])
 
 let core: SceneCore | null = null
-/** 已挂上的模型根，配置改了要按新的摆放重置它。 */
-let modelObject: Object3D | null = null
 let layers: SceneLayers | null = null
+let groundGrid: GroundGridLayer | null = null
 const clock = createFrameClock()
 let nodeIndex: NodeIndex = EMPTY_NODE_INDEX
 let observer: ResizeObserver | null = null
 let frameHandle = 0
+
+const model = useTwinModelLoad({
+  core: () => core,
+  asset: () => props.config.model.asset,
+  parts: () => props.config.parts,
+  onReady: (root, index) => {
+    nodeIndex = index
+    applyInitialPose(root)
+    refreshLayers()
+  },
+})
 
 usePartClick({
   element: () => containerRef.value,
@@ -93,10 +98,18 @@ const roam = useRoamTour({
   core: () => core,
   config: () => props.config,
 })
-let loadSeq = 0
-let loadAbort: AbortController | null = null
+const viewpoints = useViewpointSwitch({
+  element: () => containerRef.value,
+  config: () => props.config,
+  onSwitch: (camera) => {
+    // 手动切视点即打断漫游：否则下一帧轨迹又把镜头拽走，看着像点了没反应
+    roam.pause()
+    if (core === null) return
+    applyCameraPose(core, camera)
+    core.controls.update()
+  },
+})
 
-const modelAsset = computed(() => props.config.model.asset)
 const anchors = computed(() => props.anchorValues ?? EMPTY_ANCHOR_VALUES)
 const arrows = computed(() => props.arrowValues ?? EMPTY_ARROW_VALUES)
 const panels = computed(() => props.panelValues ?? EMPTY_PANEL_VALUES)
@@ -151,6 +164,7 @@ function refreshLayers(): void {
   // ⚠ 摆放要跟着配置重算：只在装载时应用的话，编辑器里改缩放/位移/旋转
   // 会一直到换模型才生效，中间那段是「调了没反应」
   placeModel()
+  syncGroundGrid()
   layers?.build(props.config, liveValues(), nodeIndex)
   // ⚠ 建完立刻按当前机位算一次：等下一帧的话，配了近距隐藏的元素会先露一帧
   layers?.applyDistanceRules(distanceContextOf(core))
@@ -158,77 +172,49 @@ function refreshLayers(): void {
 
 /** 把配置里的摆放落到模型上，并按新体量重算锚点小球尺寸。 */
 function placeModel(): void {
-  if (modelObject === null) return
-  applyModelPlacement(modelObject, props.config.model)
-  layers?.setWorldScale(boundingDiagonal(modelObject))
-}
-
-function clearModel(): void {
-  if (core !== null) disposeSceneGraph(core.modelRoot)
-  modelObject = null
-  nodeIndex = EMPTY_NODE_INDEX
-  missingNodes.value = []
-  errorMessage.value = ''
-  status.value = 'empty'
-}
-
-function fail(message: string): void {
-  clearModel()
-  status.value = 'error'
-  errorMessage.value = message
-}
-
-function mountModel(root: Object3D): void {
-  if (core === null) return
-  clearModel()
-  modelObject = root
+  const root = model.root()
+  if (root === null) return
   applyModelPlacement(root, props.config.model)
-  core.modelRoot.add(root)
-  nodeIndex = buildNodeIndex(root)
-  missingNodes.value = unmatchedNodeNames(nodeIndex, props.config.parts)
-  frameObject(core, root)
-  status.value = 'ready'
-  refreshLayers()
+  layers?.setWorldScale(boundingDiagonal(root))
 }
 
-function reportProgress(seq: number, loaded: number, total: number): void {
-  if (seq !== loadSeq || total <= 0) return
-  progressPercent.value = Math.round((loaded / total) * 100)
+/**
+ * 地面网格按开关建删，尺寸随模型体量。
+ * ⚠ 不跟着 `placeModel` 走：那一支在没有模型时直接返回，而网格是独立于模型的
+ * 参考面——没挑模型时打开开关也该画得出来。
+ */
+function syncGroundGrid(): void {
+  const root = model.root()
+  groundGrid?.sync(
+    props.config.model.showGroundGrid,
+    root === null ? 0 : boundingDiagonal(root),
+  )
 }
 
-async function load(): Promise<void> {
-  const mine = ++loadSeq
-  loadAbort?.abort()
-  const controller = new AbortController()
-  loadAbort = controller
-  const asset = modelAsset.value
-  if (asset === '') return clearModel()
-  const url = resolveTwinModelUrl(asset)
-  if (url === '') return fail('模型地址解析失败：素材引用无效或宿主未注入')
-  status.value = 'loading'
-  progressPercent.value = 0
-  try {
-    const root = await loadTwinModel(url, {
-      signal: controller.signal,
-      onProgress: (loaded, total) => reportProgress(mine, loaded, total),
-    })
-    // ⚠ 慢的那次后返回时要连同它的 GPU 资源一起丢掉：只 return 是一次纯泄漏
-    if (mine !== loadSeq) return disposeSceneGraph(root)
-    mountModel(root)
-  } catch (error) {
-    if (mine !== loadSeq) return
-    fail(error instanceof Error ? error.message : '模型加载失败')
-  }
+/**
+ * 模型装好后的初始取景：有视点就用标了默认的那个（没标则用第一个），
+ * 一个视点都没配才把整个模型框进画面。
+ * ⚠ 只在装载时用一次，不跟着配置每次重算——否则用户在运行态转了镜头，
+ * 任何一次配置变更都会把镜头拽回默认机位。
+ */
+function applyInitialPose(root: Object3D): void {
+  if (core === null) return
+  const camera = defaultCameraOf(props.config.cameras)
+  if (camera === null) return frameObject(core, root)
+  applyCameraPose(core, camera)
+  core.controls.update()
 }
 
 onMounted(() => {
   const element = containerRef.value
   if (element === null) return
   const renderer = createWebGLRenderer()
-  if (renderer === null) return fail(WEBGL_UNAVAILABLE_MESSAGE)
+  if (renderer === null) return model.fail(WEBGL_UNAVAILABLE_MESSAGE)
   core = createSceneCore({ container: element, renderer })
   layers = new SceneLayers(element)
   layers.addTo(core.scene)
+  groundGrid = new GroundGridLayer(core.scene, element)
+  syncGroundGrid()
   observer = new ResizeObserver(measure)
   observer.observe(element)
   measure()
@@ -236,22 +222,23 @@ onMounted(() => {
   frameHandle = requestAnimationFrame(tick)
   // ⚠ 必须等 core 建好再装：漫游要往轨道控制器上挂监听，早一步挂不上去
   roam.attach()
-  void load()
+  viewpoints.attach()
+  void model.load()
 })
 
 onBeforeUnmount(() => {
   // ⚠ 先让在途装载作废再释放：晚一步回来的那次会往已 dispose 的场景里挂模型
-  loadSeq += 1
-  loadAbort?.abort()
-  loadAbort = null
+  model.abort()
   cancelAnimationFrame(frameHandle)
   observer?.disconnect()
   observer = null
+  viewpoints.detach()
   layers?.dispose()
   layers = null
+  groundGrid?.dispose()
+  groundGrid = null
   if (core !== null) disposeScene(core)
   core = null
-  modelObject = null
   nodeIndex = EMPTY_NODE_INDEX
 })
 
@@ -262,19 +249,35 @@ function applyFocusView(view: TwinModalView | null | undefined): void {
   core.controls.update()
 }
 
-watch(modelAsset, () => void load())
+watch(
+  () => props.config.model.asset,
+  () => void model.load(),
+)
 watch(() => props.focusView, applyFocusView)
 watch(() => props.config, refreshLayers)
 watch(liveValues, (values) => layers?.setValues(values))
 </script>
 
 <template>
-  <div ref="containerRef" class="twin-scene" :style="backgroundStyle">
+  <div
+    ref="containerRef"
+    class="twin-scene"
+    tabindex="-1"
+    :style="backgroundStyle"
+  >
     <TwinSceneOverlay
-      :status="status"
-      :progress-percent="progressPercent"
-      :error-message="errorMessage"
-      :missing-nodes="missingNodes"
+      :status="model.status.value"
+      :progress-percent="model.progressPercent.value"
+      :error-message="model.errorMessage.value"
+      :missing-nodes="model.missingNodes.value"
+    />
+    <TwinViewpointBar
+      v-if="viewpoints.items.value.length > 0"
+      :items="viewpoints.items.value"
+      :active-id="viewpoints.activeId.value"
+      :mode="config.viewpoints.mode"
+      :keyboard="config.viewpoints.keyboard"
+      @pick="viewpoints.switchTo($event)"
     />
     <TwinRoamControls
       v-if="roam.showControls.value"

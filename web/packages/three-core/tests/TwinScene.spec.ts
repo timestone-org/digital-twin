@@ -617,3 +617,228 @@ describe('钻取取景', () => {
     wrapper.unmount()
   })
 })
+
+describe('打开大屏时的初始机位', () => {
+  function cameraOf(): THREE.PerspectiveCamera {
+    const last = renderer.renders[renderer.renders.length - 1]?.camera
+    if (!(last instanceof THREE.PerspectiveCamera)) {
+      throw new Error('还没有渲染过一帧')
+    }
+    return last
+  }
+
+  // 这一条是「标了默认视点却不生效」的防线：编辑器能标、契约有字段，
+  // 渲染层不读的话用户完全看不出配置去哪了
+  it('标了默认的视点被用作开屏机位', async () => {
+    const wrapper = mountScene({
+      config: config({
+        cameras: [
+          { id: 'c1', name: '总览', position: [1, 1, 1], target: [0, 0, 0] },
+          {
+            id: 'c2',
+            name: '特写',
+            position: [9, 8, 7],
+            target: [1, 2, 3],
+            fov: 33,
+            isDefault: true,
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+
+    await vi.waitFor(() => {
+      expect(cameraOf().fov).toBe(33)
+    })
+    expect(cameraOf().position.x).toBeCloseTo(9)
+    expect(cameraOf().position.z).toBeCloseTo(7)
+    wrapper.unmount()
+  })
+
+  it('一个都没标时用第一个视点', async () => {
+    const wrapper = mountScene({
+      config: config({
+        cameras: [
+          {
+            id: 'c1',
+            name: '总览',
+            position: [5, 5, 5],
+            target: [0, 0, 0],
+            fov: 41,
+          },
+          { id: 'c2', name: '特写', position: [9, 9, 9], target: [0, 0, 0] },
+        ],
+      }),
+    })
+    await flushPromises()
+
+    await vi.waitFor(() => {
+      expect(cameraOf().fov).toBe(41)
+    })
+    wrapper.unmount()
+  })
+
+  // 没配视点时仍要自动取景，否则模型可能整个在画面外
+  it('一个视点都没配时把模型框进画面', async () => {
+    const wrapper = mountScene()
+    await flushPromises()
+
+    await vi.waitFor(() => {
+      expect(renderer.renders.length).toBeGreaterThan(0)
+    })
+    const distance = cameraOf().position.length()
+    expect(distance).toBeGreaterThan(0)
+    wrapper.unmount()
+  })
+})
+
+describe('地面网格', () => {
+  function gridInScene(): THREE.Object3D | undefined {
+    const last = renderer.renders[renderer.renders.length - 1]?.scene
+    return last?.getObjectByName('twin-ground-grid')
+  }
+
+  it('开关打开时网格进渲染树', async () => {
+    const wrapper = mountScene({
+      config: config({ model: { asset: ASSET, showGroundGrid: true } }),
+    })
+    await flushPromises()
+
+    await vi.waitFor(() => {
+      expect(gridInScene()).toBeDefined()
+    })
+    wrapper.unmount()
+  })
+
+  it('开关关着时渲染树里没有它', async () => {
+    const wrapper = mountScene()
+    await flushPromises()
+
+    await vi.waitFor(() => {
+      expect(renderer.renders.length).toBeGreaterThan(0)
+    })
+    expect(gridInScene()).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  // 这一条是用户报的「地面网格隐藏不了」：改配置必须当场生效
+  it('把开关关掉后网格当场消失', async () => {
+    const wrapper = mountScene({
+      config: config({ model: { asset: ASSET, showGroundGrid: true } }),
+    })
+    await flushPromises()
+    await vi.waitFor(() => {
+      expect(gridInScene()).toBeDefined()
+    })
+
+    await wrapper.setProps({
+      config: config({ model: { asset: ASSET, showGroundGrid: false } }),
+    })
+    await flushPromises()
+
+    await vi.waitFor(() => {
+      expect(gridInScene()).toBeUndefined()
+    })
+    wrapper.unmount()
+  })
+})
+
+describe('视点切换控件', () => {
+  function withViewpoints(extra: Record<string, unknown> = {}): TwinConfig {
+    return config({
+      cameras: [
+        {
+          id: 'c1',
+          name: '总览',
+          position: [1, 1, 1],
+          target: [0, 0, 0],
+          fov: 40,
+        },
+        {
+          id: 'c2',
+          name: '侧面',
+          position: [8, 8, 8],
+          target: [0, 0, 0],
+          fov: 55,
+        },
+      ],
+      viewpoints: { enabled: true, keyboard: true, ...extra },
+    })
+  }
+
+  function cameraOf(): THREE.PerspectiveCamera {
+    const last = renderer.renders[renderer.renders.length - 1]?.camera
+    if (!(last instanceof THREE.PerspectiveCamera)) {
+      throw new Error('还没有渲染过一帧')
+    }
+    return last
+  }
+
+  // 这一条守的是「配了视点切换却什么都没出现」
+  it('开关打开时画出控件，每个视点一个按钮', async () => {
+    const wrapper = mountScene({ config: withViewpoints() })
+    await flushPromises()
+
+    const bar = wrapper.find('[data-test="twin-viewpoint-bar"]')
+    expect(bar.exists()).toBe(true)
+    expect(bar.findAll('button')).toHaveLength(2)
+    expect(bar.text()).toContain('总览')
+    wrapper.unmount()
+  })
+
+  it('开关关着时一个控件都不画', async () => {
+    const wrapper = mountScene()
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="twin-viewpoint-bar"]').exists()).toBe(
+      false,
+    )
+    wrapper.unmount()
+  })
+
+  it('点一个视点把镜头搬过去', async () => {
+    const wrapper = mountScene({ config: withViewpoints() })
+    await flushPromises()
+
+    const buttons = wrapper
+      .find('[data-test="twin-viewpoint-bar"]')
+      .findAll('button')
+    await buttons[1]?.trigger('click')
+
+    await vi.waitFor(() => {
+      expect(cameraOf().fov).toBe(55)
+    })
+    expect(cameraOf().position.x).toBeCloseTo(8)
+    wrapper.unmount()
+  })
+
+  it('下拉档画的是一个 select 而不是一排按钮', async () => {
+    const wrapper = mountScene({ config: withViewpoints({ mode: 'dropdown' }) })
+    await flushPromises()
+
+    // DtSelect 刻意不用原生 select（系统绘制的选项列表跟不上深色工业风），
+    // 它画的是一个 combobox；这里认的是「不是那一排视点按钮」
+    const bar = wrapper.find('[data-test="twin-viewpoint-bar"]')
+    expect(bar.find('[role="combobox"]').exists()).toBe(true)
+    expect(bar.findAll('.twin-viewpoints__btn')).toHaveLength(0)
+    wrapper.unmount()
+  })
+
+  it('数字键把镜头搬到对应视点', async () => {
+    const wrapper = mountScene({ config: withViewpoints() })
+    await flushPromises()
+
+    wrapper.element.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: '2',
+        cancelable: true,
+        bubbles: true,
+      }),
+    )
+
+    await vi.waitFor(() => {
+      expect(cameraOf().fov).toBe(55)
+    })
+    wrapper.unmount()
+  })
+})

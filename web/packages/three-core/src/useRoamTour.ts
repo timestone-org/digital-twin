@@ -43,6 +43,12 @@ export interface RoamTourController {
   toggle: () => void
   next: () => void
   prev: () => void
+  /**
+   * 停在当前位姿上。
+   * ⚠ 手动切视点时必须先叫它：否则下一帧轨迹又把镜头拽走，
+   * 用户看到的是「点了视点没反应」。
+   */
+  pause: () => void
 }
 
 /**
@@ -189,5 +195,6 @@ export function useRoamTour(deps: RoamTourDeps): RoamTourController {
     toggle: () => runner.toggle(),
     next: () => runner.step(1),
     prev: () => runner.step(-1),
+    pause: () => runner.pause(),
   }
 }
