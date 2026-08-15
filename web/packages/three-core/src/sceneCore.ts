@@ -3,7 +3,7 @@
  * ⚠ three 的 GPU 资源 GC 收不走，释放全部收口在 `disposeScene`——它是本包
  * 「卸载必须清理」这条的落点（code-style-typescript §5.2）。
  */
-import type { TwinModelRef } from '@dt/twin-config'
+import type { TwinModelRef, TwinPose } from '@dt/twin-config'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
@@ -260,6 +260,20 @@ export function frameBox(core: SceneCore, box: THREE.Box3): void {
   core.camera.updateProjectionMatrix()
   core.controls.target.copy(center)
   core.controls.update()
+}
+
+/**
+ * 把一个机位落到相机与轨道中心上。
+ * ⚠ 不在这里调 `controls.update()`：渲染循环每帧已经调过一次，漫游逐帧落位姿
+ * 时再调一次等于把阻尼多衰减一遍，转起来会发涩。要立刻生效的调用方自己补一次。
+ * @param core 场景内核
+ * @param pose 机位、注视点与视野
+ */
+export function applyCameraPose(core: SceneCore, pose: TwinPose): void {
+  core.camera.position.set(...pose.position)
+  core.camera.fov = pose.fov
+  core.camera.updateProjectionMatrix()
+  core.controls.target.set(...pose.target)
 }
 
 type Renderable = THREE.Mesh | THREE.Line | THREE.Points

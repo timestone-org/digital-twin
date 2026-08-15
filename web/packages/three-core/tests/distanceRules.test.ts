@@ -12,15 +12,10 @@ import type {
 } from '@dt/twin-config'
 import { describe, expect, it } from 'vitest'
 
-import {
-  resolveClickGate,
-  resolveVisibility,
-} from '../src/distanceRules'
+import { resolveClickGate, resolveVisibility } from '../src/distanceRules'
 
 /** 三种参考系各给一个不同的距离，好验出用错参考系。 */
-function distances(
-  over: Partial<Record<TwinDistanceRef, number | null>> = {},
-) {
+function distances(over: Partial<Record<TwinDistanceRef, number | null>> = {}) {
   const table: Record<TwinDistanceRef, number | null> = {
     orbit: 10,
     self: 20,
@@ -48,9 +43,9 @@ function clickRule(
 
 describe('显隐', () => {
   it('作者直接关掉的，距离再合适也不显示', () => {
-    expect(resolveVisibility(rule({ visible: false }), distances()).visible).toBe(
-      false,
-    )
+    expect(
+      resolveVisibility(rule({ visible: false }), distances()).visible,
+    ).toBe(false)
   })
 
   it('一条规则都没配时完全显示', () => {
@@ -102,9 +97,9 @@ describe('显隐', () => {
   it('距离取不到时不隐藏', () => {
     const near = rule({ hideBelow: { ref: 'orbit', value: 999 } })
 
-    expect(
-      resolveVisibility(near, distances({ orbit: null })).visible,
-    ).toBe(true)
+    expect(resolveVisibility(near, distances({ orbit: null })).visible).toBe(
+      true,
+    )
   })
 
   it('距离是 NaN 时同样不隐藏', () => {
@@ -126,7 +121,11 @@ describe('显隐', () => {
 describe('淡出', () => {
   it('近处淡出：近于阈值时用配的不透明度', () => {
     const faded = rule({
-      fade: { at: { ref: 'orbit', value: 15 }, direction: 'below', opacity: 0.2 },
+      fade: {
+        at: { ref: 'orbit', value: 15 },
+        direction: 'below',
+        opacity: 0.2,
+      },
     })
 
     expect(resolveVisibility(faded, distances())).toEqual({
@@ -137,7 +136,11 @@ describe('淡出', () => {
 
   it('远处淡出：远于阈值时用配的不透明度', () => {
     const faded = rule({
-      fade: { at: { ref: 'orbit', value: 5 }, direction: 'above', opacity: 0.3 },
+      fade: {
+        at: { ref: 'orbit', value: 5 },
+        direction: 'above',
+        opacity: 0.3,
+      },
     })
 
     expect(resolveVisibility(faded, distances()).opacity).toBe(0.3)
@@ -145,7 +148,11 @@ describe('淡出', () => {
 
   it('不在淡出那一侧时完全不透明', () => {
     const faded = rule({
-      fade: { at: { ref: 'orbit', value: 5 }, direction: 'below', opacity: 0.2 },
+      fade: {
+        at: { ref: 'orbit', value: 5 },
+        direction: 'below',
+        opacity: 0.2,
+      },
     })
 
     expect(resolveVisibility(faded, distances()).opacity).toBe(1)
@@ -154,7 +161,11 @@ describe('淡出', () => {
   it('已经被隐藏的元素不再谈淡出', () => {
     const both = rule({
       hideAbove: { ref: 'orbit', value: 5 },
-      fade: { at: { ref: 'orbit', value: 5 }, direction: 'above', opacity: 0.3 },
+      fade: {
+        at: { ref: 'orbit', value: 5 },
+        direction: 'above',
+        opacity: 0.3,
+      },
     })
 
     expect(resolveVisibility(both, distances()).visible).toBe(false)
@@ -165,9 +176,7 @@ describe('淡出', () => {
       fade: { at: { ref: 'self', value: 999 }, direction: 'below', opacity: 0 },
     })
 
-    expect(
-      resolveVisibility(faded, distances({ self: null })).opacity,
-    ).toBe(1)
+    expect(resolveVisibility(faded, distances({ self: null })).opacity).toBe(1)
   })
 
   // ⚠ NaN 进了 opacity 会让整块画面消失，且没有任何报错
@@ -188,7 +197,11 @@ describe('淡出', () => {
       fade: { at: { ref: 'orbit', value: 15 }, direction: 'below', opacity: 5 },
     })
     const under = rule({
-      fade: { at: { ref: 'orbit', value: 15 }, direction: 'below', opacity: -2 },
+      fade: {
+        at: { ref: 'orbit', value: 15 },
+        direction: 'below',
+        opacity: -2,
+      },
     })
 
     expect(resolveVisibility(over, distances()).opacity).toBe(1)
@@ -248,9 +261,9 @@ describe('点击门禁', () => {
   it('距离取不到时一律放行', () => {
     const gate = clickRule({ max: { ref: 'part-center', value: 1 } })
 
-    expect(
-      resolveClickGate(gate, distances({ 'part-center': null })),
-    ).toBe('allow')
+    expect(resolveClickGate(gate, distances({ 'part-center': null }))).toBe(
+      'allow',
+    )
   })
 
   it('距离是 NaN 时同样放行', () => {

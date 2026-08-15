@@ -24,6 +24,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   select: [TwinSelection]
   add: [TwinEntityKind]
+  /** 从模型节点批量建部件。 */
+  bulkAdd: []
   remove: [{ kind: TwinEntityKind; id: string }]
   duplicate: [{ kind: TwinEntityKind; id: string }]
   move: [{ kind: TwinEntityKind; id: string; delta: number }]
@@ -117,6 +119,18 @@ function confirmRemove(row: TwinOutlineRow): void {
             <span class="text-3xs text-text-disabled">{{
               section.rows.length
             }}</span>
+          </button>
+          <!-- 一个模型几十个节点，逐个建部件再逐个填节点名是这里最费手的一段 -->
+          <button
+            v-if="section.kind === 'parts'"
+            type="button"
+            :class="ACT"
+            aria-label="从模型节点批量建部件"
+            title="从模型节点批量建部件"
+            data-test="section-bulk"
+            @click="emit('bulkAdd')"
+          >
+            <DtIcon name="layers" :size="12" />
           </button>
           <button
             type="button"

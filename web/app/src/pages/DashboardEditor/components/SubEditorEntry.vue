@@ -41,7 +41,10 @@ const configured = computed(
       >
         {{ subEditor.label }}
       </DtButton>
-      <span class="text-xs" :class="configured ? 'text-text-secondary' : 'text-text-disabled'">
+      <span
+        class="text-xs"
+        :class="configured ? 'text-text-secondary' : 'text-text-disabled'"
+      >
         {{ configured ? '已配置' : '尚未配置' }}
       </span>
     </div>

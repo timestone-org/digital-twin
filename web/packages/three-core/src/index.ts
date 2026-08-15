@@ -4,6 +4,7 @@
 // 渲染组件由模块清单异步 import。守这条的用例在
 // app/tests/contract/startup-graph.contract.spec.ts。
 export { default as TwinScene } from './TwinScene.vue'
+export { default as TwinHierDrill } from './TwinHierDrill.vue'
 export { AnchorLayer } from './anchorLayer'
 export { ArrowLayer } from './arrowLayer'
 export { FlowLayer } from './flowLayer'
@@ -26,6 +27,7 @@ export { createGltfSource, loadTwinModel } from './modelLoader'
 export type { GltfSource, TwinModelLoadOptions } from './modelLoader'
 export {
   WEBGL_UNAVAILABLE_MESSAGE,
+  applyCameraPose,
   applyModelPlacement,
   boundingDiagonal,
   clampPixelRatio,
@@ -60,3 +62,5 @@ export type {
   TwinPickMode,
 } from './editorScene'
 export type { TwinSceneEntityKind, TwinSceneSelection } from './pickTargets'
+export { useRoamTour } from './useRoamTour'
+export type { RoamTourController, RoamTourDeps } from './useRoamTour'

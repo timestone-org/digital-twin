@@ -33,8 +33,10 @@ export class ClickGesture {
     const start = this.start
     this.start = null
     if (start === null) return false
-    return Math.hypot(event.clientX - start.x, event.clientY - start.y) <=
+    return (
+      Math.hypot(event.clientX - start.x, event.clientY - start.y) <=
       DRAG_SLOP_PX
+    )
   }
 
   /** 指针离开或被系统取消时丢掉起点，免得下一次松手借用上一次的起点。 */
@@ -127,7 +129,12 @@ export function resolvePartClick(deps: {
   parts: PartClickParts
   context: DistanceContext
 }): PartClickOutcome {
-  const object = pickObject(deps.event, deps.element, deps.camera, deps.modelRoot)
+  const object = pickObject(
+    deps.event,
+    deps.element,
+    deps.camera,
+    deps.modelRoot,
+  )
   if (object === null) return NOTHING
   const part = deps.parts.partAt(object)
   if (part === null) return NOTHING

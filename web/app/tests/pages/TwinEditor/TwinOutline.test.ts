@@ -58,11 +58,11 @@ function headerOf(wrapper: Wrapper, title: string) {
 }
 
 describe('渲染', () => {
-  it('八个分组都在，两个单例段是可点的整行', () => {
+  it('实体段各成一节，单例段是可点的整行', () => {
     const wrapper = mountOutline()
 
-    expect(wrapper.findAll('[data-test="outline-section"]')).toHaveLength(6)
-    expect(wrapper.findAll('[data-test="outline-single"]')).toHaveLength(2)
+    expect(wrapper.findAll('[data-test="outline-section"]')).toHaveLength(7)
+    expect(wrapper.findAll('[data-test="outline-single"]')).toHaveLength(3)
   })
 
   it('单例段读得出自己的名字', () => {
@@ -321,5 +321,22 @@ describe('删除的二次确认', () => {
     const text = wrapper.find('[data-test="row-remove-confirm"]').text()
     expect(text).toContain('删除「主机」')
     expect(text).not.toContain('悬空')
+  })
+})
+
+describe('批量建部件入口', () => {
+  it('只有部件分组给批量入口——别的实体没有「一个模型节点一个」的对应关系', () => {
+    const wrapper = mountOutline()
+
+    const bulk = wrapper.findAll('[data-test="section-bulk"]')
+    expect(bulk).toHaveLength(1)
+  })
+
+  it('点了抛 bulkAdd，由页面去开挑选面', async () => {
+    const wrapper = mountOutline()
+
+    await wrapper.get('[data-test="section-bulk"]').trigger('click')
+
+    expect(wrapper.emitted('bulkAdd')).toHaveLength(1)
   })
 })

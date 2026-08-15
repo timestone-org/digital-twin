@@ -4,21 +4,25 @@
  * 八种检查器共用同一个外壳，免得每种自己画一套标题、深浅与间距。
  */
 import { DtIcon } from '@dt/ui'
-import { ref } from 'vue'
+import { computed } from 'vue'
+
+import { isSectionOpen, setSectionOpen } from '../../sectionCollapse'
 
 const props = defineProps<{
   title: string
-  /** 初始是否展开，缺省展开。 */
+  /** 用户没点过这一节时的初值，缺省展开。 */
   collapsed?: boolean
 }>()
 
-// ⚠ 只取一次当初值，之后由用户点开点合：这是刻意的「非响应式」，
-//   props 后来变了也不该把用户手动展开的一节合回去
-function initiallyOpen(): boolean {
-  return props.collapsed !== true
-}
+// 折叠态存在页面级记忆里：切换选中实体会重挂本组件，存组件内就每次都复位，
+// 配二十个部件要展开二十次同一节
+const open = computed(() =>
+  isSectionOpen(props.title, props.collapsed !== true),
+)
 
-const open = ref(initiallyOpen())
+function toggle(): void {
+  setSectionOpen(props.title, !open.value)
+}
 </script>
 
 <template>
@@ -27,7 +31,7 @@ const open = ref(initiallyOpen())
       type="button"
       class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-medium text-text-secondary hover:text-text-primary"
       :aria-expanded="open"
-      @click="open = !open"
+      @click="toggle"
     >
       <span>{{ title }}</span>
       <DtIcon :name="open ? 'chevron-down' : 'chevron-right'" :size="14" />

@@ -8,6 +8,7 @@ import type { TwinConfig, TwinConfigIssue } from '@dt/twin-config'
 import {
   TWIN_ENTITY_LABELS,
   TWIN_SELECT_MODEL,
+  TWIN_SELECT_ROAM,
   TWIN_SELECT_VIEWPOINTS,
 } from './types'
 import type { TwinEntityKind, TwinSelection } from './types'
@@ -54,6 +55,18 @@ export interface TwinRemoveImpact {
   panels: number
   flows: number
   viewpoints: number
+  /** 上一层没了的下级钻取节点：它们会各自变成一个根。 */
+  hierChildren: number
+  /** 点击动作指向它的部件：点了不会再打开钻取。 */
+  parts: number
+}
+
+const NO_IMPACT: TwinRemoveImpact = {
+  panels: 0,
+  flows: 0,
+  viewpoints: 0,
+  hierChildren: 0,
+  parts: 0,
 }
 
 const SECTION_ICON: Readonly<Record<TwinEntityKind, string>> = {
@@ -63,18 +76,24 @@ const SECTION_ICON: Readonly<Record<TwinEntityKind, string>> = {
   panels: 'layout-template',
   arrows: 'arrow-right',
   flows: 'activity',
+  hierNodes: 'folder',
 }
 
-/** 八个分组的顺序；两个单例段夹在实体段中间。 */
-const SECTION_ORDER: readonly (TwinEntityKind | 'model' | 'viewpoints')[] = [
+/** 单例段：没有行、点了就选自己的那几节。 */
+type TwinSingleKey = 'model' | 'viewpoints' | 'roam'
+
+/** 十个分组的顺序；三个单例段夹在实体段中间。 */
+const SECTION_ORDER: readonly (TwinEntityKind | TwinSingleKey)[] = [
   'model',
   'parts',
   'anchors',
   'cameras',
   'viewpoints',
+  'roam',
   'panels',
   'arrows',
   'flows',
+  'hierNodes',
 ]
 
 const ENTITY_KINDS: readonly TwinEntityKind[] = [
@@ -84,9 +103,10 @@ const ENTITY_KINDS: readonly TwinEntityKind[] = [
   'panels',
   'arrows',
   'flows',
+  'hierNodes',
 ]
 
-/** 四种问题的短标签。 */
+/** 每种问题的短标签。 */
 export const TWIN_ISSUE_LABELS: Readonly<
   Record<TwinConfigIssue['kind'], string>
 > = {
@@ -94,6 +114,10 @@ export const TWIN_ISSUE_LABELS: Readonly<
   'dangling-camera': '视点丢失',
   'dangling-anchor': '锚点丢失',
   'flow-too-short': '流画不出',
+  'dangling-hier-parent': '上一层丢失',
+  'dangling-hier-node': '钻取节点丢失',
+  'hier-cycle': '钻取成环',
+  'roam-too-short': '漫游飞不起来',
 }
 
 /** 一行渲染所需的、与实体种类无关的那几个值。 */
@@ -105,7 +129,7 @@ interface RowInput {
   visible: boolean | null
 }
 
-/** 六类实体各自怎么摊成行。⚠ 视点没有 visibility，它的 `visible` 恒为 null。 */
+/** 七类实体各自怎么摊成行。⚠ 视点与钻取节点没有 visibility，`visible` 恒为 null。 */
 const ROW_INPUTS: Readonly<
   Record<TwinEntityKind, (config: TwinConfig) => RowInput[]>
 > = {
@@ -157,6 +181,14 @@ const ROW_INPUTS: Readonly<
       meta: `${flow.pathAnchors.length} 锚点`,
       visible: flow.visibility.visible,
     })),
+  hierNodes: (config) =>
+    config.hierNodes.map((node) => ({
+      kind: 'hierNodes',
+      id: node.id,
+      name: node.name,
+      meta: `${node.fields.length} 字段`,
+      visible: null,
+    })),
 }
 
 function buildRows(
@@ -178,22 +210,33 @@ function buildRows(
   }))
 }
 
-function singleSection(key: 'model' | 'viewpoints'): TwinOutlineSection {
-  if (key === 'model') {
-    return {
-      key,
-      title: '模型与场景',
-      icon: 'building',
-      selection: TWIN_SELECT_MODEL,
-      kind: null,
-      rows: [],
-    }
-  }
-  return {
-    key,
+/** 三个单例段各自的标题、图标与选中值。 */
+const SINGLE_SECTIONS: Readonly<
+  Record<
+    TwinSingleKey,
+    { title: string; icon: string; selection: TwinSelection }
+  >
+> = {
+  model: {
+    title: '模型与场景',
+    icon: 'building',
+    selection: TWIN_SELECT_MODEL,
+  },
+  viewpoints: {
     title: '视点切换',
     icon: 'list-checks',
     selection: TWIN_SELECT_VIEWPOINTS,
+  },
+  roam: { title: '自动漫游', icon: 'route', selection: TWIN_SELECT_ROAM },
+}
+
+function singleSection(key: TwinSingleKey): TwinOutlineSection {
+  const meta = SINGLE_SECTIONS[key]
+  return {
+    key,
+    title: meta.title,
+    icon: meta.icon,
+    selection: meta.selection,
     kind: null,
     rows: [],
   }
@@ -240,20 +283,27 @@ export function twinRemoveImpact(
 ): TwinRemoveImpact {
   if (kind === 'anchors') {
     return {
+      ...NO_IMPACT,
       panels: config.panels.filter((panel) => panel.anchorId === id).length,
       flows: config.flows.filter((flow) => flow.pathAnchors.includes(id))
         .length,
-      viewpoints: 0,
     }
   }
   if (kind === 'cameras') {
     return {
-      panels: 0,
-      flows: 0,
+      ...NO_IMPACT,
       viewpoints: config.viewpoints.items.filter((item) => item === id).length,
     }
   }
-  return { panels: 0, flows: 0, viewpoints: 0 }
+  if (kind === 'hierNodes') {
+    return {
+      ...NO_IMPACT,
+      hierChildren: config.hierNodes.filter((node) => node.parentId === id)
+        .length,
+      parts: config.parts.filter((part) => part.clickHierNode === id).length,
+    }
+  }
+  return NO_IMPACT
 }
 
 /**
@@ -273,6 +323,9 @@ export function twinRemoveImpactText(
   if (impact.flows > 0) clauses.push(`${impact.flows} 条能量流`)
   if (impact.viewpoints > 0)
     clauses.push(`视点切换里的 ${impact.viewpoints} 项`)
+  if (impact.hierChildren > 0)
+    clauses.push(`${impact.hierChildren} 个下级钻取节点`)
+  if (impact.parts > 0) clauses.push(`${impact.parts} 个部件的点击动作`)
   if (clauses.length === 0) return ''
   return `${clauses.join('、')}会悬空，需要自己改绑`
 }
@@ -288,6 +341,7 @@ export function twinIssueSelection(
 ): TwinSelection | null {
   const head = /^[a-zA-Z]+/.exec(issue.path)?.[0] ?? ''
   if (head === 'viewpoints') return TWIN_SELECT_VIEWPOINTS
+  if (head === 'roamTour') return TWIN_SELECT_ROAM
   if (!isEntityKind(head)) return null
   return { kind: head, id: issue.entityId }
 }

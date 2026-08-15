@@ -147,7 +147,10 @@ describe('重排', () => {
 describe('改字段', () => {
   it('只改点名的那个，其余原样', () => {
     const config = normalizeTwinConfig({
-      anchors: [{ id: 'a1', name: '旧' }, { id: 'a2', name: '别动' }],
+      anchors: [
+        { id: 'a1', name: '旧' },
+        { id: 'a2', name: '别动' },
+      ],
     })
 
     const next = updateEntity(config, 'anchors', 'a1', { name: '新' })

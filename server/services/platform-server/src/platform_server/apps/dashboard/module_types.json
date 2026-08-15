@@ -1409,6 +1409,19 @@
               "data_type": "boolean"
             }
           ]
+        },
+        {
+          "key": "hierValues",
+          "label": "钻取节点字段",
+          "data_type": "number",
+          "is_array": true,
+          "array_fields": [
+            {
+              "key": "value",
+              "label": "数值",
+              "data_type": "number"
+            }
+          ]
         }
       ]
     }

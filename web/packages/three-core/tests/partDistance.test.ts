@@ -100,7 +100,11 @@ describe('距离显隐', () => {
 describe('淡出', () => {
   const FADED = {
     visibility: {
-      fade: { at: { ref: 'orbit', value: 5 }, direction: 'above', opacity: 0.25 },
+      fade: {
+        at: { ref: 'orbit', value: 5 },
+        direction: 'above',
+        opacity: 0.25,
+      },
     },
   }
 

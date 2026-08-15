@@ -9,10 +9,13 @@
 import type {
   TwinClickDistanceRule,
   TwinDistanceRule,
+  TwinHierNode,
   TwinPart,
   TwinVisibilityRule,
 } from '@dt/twin-config'
-import { DtButton, DtField, DtInput } from '@dt/ui'
+import { hierPathOf } from '@dt/twin-config'
+import { DtButton, DtField, DtInput, DtNotice, DtSelect } from '@dt/ui'
+import { computed } from 'vue'
 
 import DistanceField from '../fields/DistanceField.vue'
 import InspectorSection from '../fields/InspectorSection.vue'
@@ -23,6 +26,8 @@ const props = defineProps<{
   modelValue: TwinPart
   /** 模型里全部节点名，视口加载完给的。空数组 = 模型还没加载。 */
   nodeNames: readonly string[]
+  /** 全部钻取节点；点击动作从里面挑一层。空数组 = 还没配层级钻取。 */
+  hierNodes: readonly TwinHierNode[]
   /** 视口正处在「点模型拾取节点」模式。 */
   picking: boolean
 }>()
@@ -57,6 +62,24 @@ function writeFarThreshold(farThreshold: TwinDistanceRule | null): void {
   writeClick({ farThreshold })
 }
 
+/** 钻取节点的下拉选项，标签用完整钻取路径，重名的两层才分得开。 */
+const hierOptions = computed(() => [
+  { value: '', label: '（不打开钻取）' },
+  ...props.hierNodes.map((item, index) => ({
+    value: item.id,
+    label:
+      hierPathOf(props.hierNodes, item.id).join(' / ') ||
+      `钻取节点 ${index + 1}`,
+  })),
+])
+
+/** 选中的那一层已经被删了：点这个部件不会有任何反应。 */
+const danglingHierNode = computed(
+  () =>
+    props.modelValue.clickHierNode !== '' &&
+    !props.hierNodes.some((item) => item.id === props.modelValue.clickHierNode),
+)
+
 function togglePick(): void {
   if (props.picking) emit('cancelPick')
   else emit('requestPickNode')
@@ -72,7 +95,11 @@ function togglePick(): void {
         size="sm"
         @update:model-value="write({ name: $event })"
       />
-      <DtField label="部件 id" size="sm" hint="点这个部件时联动规则收到的值就是它。">
+      <DtField
+        label="部件 id"
+        size="sm"
+        hint="点这个部件时联动规则收到的值就是它。"
+      >
         <code
           class="block truncate rounded bg-surface-sunken px-2 py-1 text-xs text-text-secondary"
           >{{ modelValue.id }}</code
@@ -107,6 +134,28 @@ function togglePick(): void {
         :model-value="modelValue.visibility"
         @update:model-value="writeVisibility"
       />
+    </InspectorSection>
+
+    <InspectorSection title="点击动作">
+      <DtField
+        label="打开层级钻取并定位到"
+        hint="留空 = 只上抛联动事件"
+        size="sm"
+      >
+        <DtSelect
+          :model-value="modelValue.clickHierNode"
+          :options="hierOptions"
+          aria-label="打开层级钻取并定位到"
+          size="sm"
+          @update:model-value="write({ clickHierNode: $event })"
+        />
+      </DtField>
+      <DtNotice v-if="danglingHierNode" intent="danger" icon="alert-circle">
+        钻取节点 {{ modelValue.clickHierNode }} 不存在，点这个部件不会打开钻取。
+      </DtNotice>
+      <p v-else-if="hierNodes.length === 0" class="text-xs text-text-disabled">
+        还没有钻取节点。先在左栏「层级」页签里建一个，这里才挑得到。
+      </p>
     </InspectorSection>
 
     <InspectorSection title="点击距离">

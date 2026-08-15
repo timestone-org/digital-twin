@@ -74,6 +74,17 @@ const hasOwnConfig = computed(() => {
 
 const hasBindings = computed(() => (manifest.value?.bindings ?? []).length > 0)
 
+/**
+ * 数组槽的行名，由清单自述——本面板不认识任何具体模块。
+ * 清单没给或算不出来时给 undefined，绑点面板退回「第 N 行」。
+ */
+const rowLabels = computed<Readonly<Record<string, string>> | undefined>(() => {
+  const resolve = manifest.value?.bindingRowLabels
+  const node = props.selected
+  if (resolve === undefined || node === null) return undefined
+  return resolve(node.configJson)
+})
+
 /** 页签表。通用与联动恒在：任何节点都能被联动显隐，也都有几何与外观。 */
 const tabs = computed(() => {
   const items: { value: TabKey; label: string }[] = [
@@ -144,6 +155,7 @@ function onTab(value: string): void {
         v-else-if="tab === 'binding'"
         :node="selected"
         :manifest="manifest"
+        :row-labels="rowLabels"
         @write="emit('write', $event)"
         @drop="emit('drop', $event)"
         @bind="emit('bind', $event)"

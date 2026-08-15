@@ -8,6 +8,7 @@ import type {
   TwinArrowValues,
   TwinConfig,
   TwinFlowValues,
+  TwinModalView,
   TwinPanelValues,
 } from '@dt/twin-config'
 import {
@@ -21,6 +22,8 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { resolveTwinModelUrl } from './host'
 import { createFrameClock } from './frameClock'
+import TwinRoamControls from './TwinRoamControls.vue'
+import { useRoamTour } from './useRoamTour'
 import { SceneLayers, type SceneLayerValues } from './sceneLayers'
 import { loadTwinModel } from './modelLoader'
 import { distanceContextOf } from './distanceContext'
@@ -35,6 +38,7 @@ import {
 } from './nodeIndex'
 import {
   WEBGL_UNAVAILABLE_MESSAGE,
+  applyCameraPose,
   applyModelPlacement,
   boundingDiagonal,
   createSceneCore,
@@ -54,6 +58,11 @@ const props = defineProps<{
   arrowValues?: TwinArrowValues
   panelValues?: TwinPanelValues
   flowValues?: TwinFlowValues
+  /**
+   * 钻取取景；null / 不给 = 不动镜头。
+   * ⚠ 只在它换引用时飞一次，不每帧套——套住的话镜头就转不动了。
+   */
+  focusView?: TwinModalView | null
 }>()
 
 /** 点中了某个部件，且通过了距离门禁。 */
@@ -80,6 +89,10 @@ usePartClick({
   parts: () => layers?.parts ?? null,
   onPartClick: (part) => emit('partClick', part),
 })
+const roam = useRoamTour({
+  core: () => core,
+  config: () => props.config,
+})
 let loadSeq = 0
 let loadAbort: AbortController | null = null
 
@@ -100,9 +113,16 @@ function animate(delta: number): void {
   layers?.update(delta)
 }
 
+/** 一帧多少毫秒；帧钟给的是秒。 */
+const MS_PER_S = 1000
+
 function tick(now: number): void {
   if (core === null) return
-  animate(clock.tick(now))
+  const delta = clock.tick(now)
+  animate(delta)
+  // ⚠ 用帧钟夹过的时长，不用 rAF 的原始时刻：切走标签页再回来那一帧有几十秒，
+  // 直接算下去会一帧飞完整条轨迹
+  roam.advance(delta * MS_PER_S)
   // ⚠ 每帧都要算：镜头一直在动，距离规则的成立与否随时在变
   layers?.applyDistanceRules(distanceContextOf(core))
   renderScene(core)
@@ -214,6 +234,8 @@ onMounted(() => {
   measure()
   clock.reset()
   frameHandle = requestAnimationFrame(tick)
+  // ⚠ 必须等 core 建好再装：漫游要往轨道控制器上挂监听，早一步挂不上去
+  roam.attach()
   void load()
 })
 
@@ -233,7 +255,15 @@ onBeforeUnmount(() => {
   nodeIndex = EMPTY_NODE_INDEX
 })
 
+/** 把一个取景快照落到相机上。 */
+function applyFocusView(view: TwinModalView | null | undefined): void {
+  if (core === null || view === null || view === undefined) return
+  applyCameraPose(core, view)
+  core.controls.update()
+}
+
 watch(modelAsset, () => void load())
+watch(() => props.focusView, applyFocusView)
 watch(() => props.config, refreshLayers)
 watch(liveValues, (values) => layers?.setValues(values))
 </script>
@@ -245,6 +275,13 @@ watch(liveValues, (values) => layers?.setValues(values))
       :progress-percent="progressPercent"
       :error-message="errorMessage"
       :missing-nodes="missingNodes"
+    />
+    <TwinRoamControls
+      v-if="roam.showControls.value"
+      :playing="roam.playing.value"
+      @toggle="roam.toggle()"
+      @next="roam.next()"
+      @prev="roam.prev()"
     />
   </div>
 </template>

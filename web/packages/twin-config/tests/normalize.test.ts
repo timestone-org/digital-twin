@@ -8,6 +8,11 @@ import { describe, expect, it } from 'vitest'
 import { TWIN_CONFIG_VERSION } from '../src/constants'
 import { normalizeTwinConfig } from '../src/normalize'
 import { NO_CLICK_LIMIT } from '../src/normalizeRules'
+import {
+  DEFAULT_ROAM_TOUR_IDLE_DELAY_MS,
+  DEFAULT_ROAM_TOUR_PAUSE_MS,
+  DEFAULT_ROAM_TOUR_SEGMENT_MS,
+} from '../src/normalizeScene'
 import type { TwinModelRef, TwinVisibilityRule } from '../src/types'
 
 /** 只置基线显隐的一份规则。 */
@@ -92,9 +97,22 @@ describe('normalizeTwinConfig 的缺省', () => {
         keyboard: false,
         items: [],
       },
+      roamTour: {
+        enabled: false,
+        autoplay: false,
+        idleAutoplay: false,
+        idleAutoplayDelayMs: DEFAULT_ROAM_TOUR_IDLE_DELAY_MS,
+        loop: true,
+        showControls: true,
+        items: [],
+        segmentMs: DEFAULT_ROAM_TOUR_SEGMENT_MS,
+        pauseMs: DEFAULT_ROAM_TOUR_PAUSE_MS,
+        segmentSettings: {},
+      },
       panels: [],
       arrows: [],
       flows: [],
+      hierNodes: [],
     })
   })
 
@@ -160,6 +178,7 @@ describe('normalizeTwinConfig 的实体', () => {
         nodes: ['pump'],
         visibility: shown(true),
         clickDistance: NO_CLICK_LIMIT,
+        clickHierNode: '',
       },
       {
         id: 'p-fan',
@@ -168,6 +187,7 @@ describe('normalizeTwinConfig 的实体', () => {
         // 老写法 `visible: false` 仍然读得进来：存量手写配置不该一升级就全亮
         visibility: shown(false),
         clickDistance: NO_CLICK_LIMIT,
+        clickHierNode: '',
       },
     ])
   })

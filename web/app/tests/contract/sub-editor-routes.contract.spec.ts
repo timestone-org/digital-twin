@@ -36,11 +36,11 @@ describe('子编辑器的声明', () => {
     expect(route?.path).toContain(':nodeId')
   })
 
-  it.each(declared)('$type 声明的 configKey 在它自己的 schema 里', ({
-    manifest,
-    subEditor,
-  }) => {
-    const keys = manifest.configSchema.map((field) => field.key)
-    expect(keys).toContain(subEditor.configKey)
-  })
+  it.each(declared)(
+    '$type 声明的 configKey 在它自己的 schema 里',
+    ({ manifest, subEditor }) => {
+      const keys = manifest.configSchema.map((field) => field.key)
+      expect(keys).toContain(subEditor.configKey)
+    },
+  )
 })

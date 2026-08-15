@@ -18,17 +18,18 @@ import * as THREE from 'three'
 import { ACCENT_COLOR_TOKEN, resolveColorSpec } from './themeColor'
 
 /**
- * `TwinConfig` 上六个可增删实体集合的名字。
+ * `TwinConfig` 上七个可增删实体集合的名字。
  * ⚠ 本包看不见编辑器页面，这里与页面侧的 `TwinSelection` 是**结构性对齐**的两份声明。
  * 对不上不会静默：视口组件把两者直接接在一起，差一个成员就是编译期错误。
  */
 export type TwinSceneEntityKind =
-  'parts' | 'anchors' | 'cameras' | 'panels' | 'arrows' | 'flows'
+  'parts' | 'anchors' | 'cameras' | 'panels' | 'arrows' | 'flows' | 'hierNodes'
 
-/** 编辑视口认得的选中；`model` 与 `viewpoints` 是单例段，没有 id。 */
+/** 编辑视口认得的选中；`model` / `viewpoints` / `roam` 是单例段，没有 id。 */
 export type TwinSceneSelection =
   | { kind: 'model' }
   | { kind: 'viewpoints' }
+  | { kind: 'roam' }
   | { kind: TwinSceneEntityKind; id: string }
 
 /** 视口里能直接点中的四类实体。部件靠模型网格命中，视点没有实体。 */

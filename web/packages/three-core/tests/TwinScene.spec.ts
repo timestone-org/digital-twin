@@ -304,7 +304,9 @@ describe('实时值', () => {
 describe('箭头与信息牌', () => {
   it('箭头读数更新后写进标签', async () => {
     const wrapper = mountScene({
-      config: config({ arrows: [{ id: 'ar1', labelText: '进气', unit: 'm/s' }] }),
+      config: config({
+        arrows: [{ id: 'ar1', labelText: '进气', unit: 'm/s' }],
+      }),
     })
     await flushPromises()
 
@@ -320,7 +322,9 @@ describe('箭头与信息牌', () => {
   it('信息牌字段按 牌id::字段key 取值', async () => {
     const wrapper = mountScene({
       config: config({
-        panels: [{ id: 'p1', name: '泵组', fields: [{ key: 'temp', label: '温度' }] }],
+        panels: [
+          { id: 'p1', name: '泵组', fields: [{ key: 'temp', label: '温度' }] },
+        ],
       }),
     })
     await flushPromises()
@@ -564,6 +568,52 @@ describe('部件点击', () => {
     release(element, 50, 50)
 
     expect(wrapper.emitted('partClick')).toBeUndefined()
+    wrapper.unmount()
+  })
+})
+
+describe('钻取取景', () => {
+  /** 相机是渲染器记账里的那一台；场景核心本身不外露。 */
+  function cameraOf(): THREE.PerspectiveCamera {
+    const last = renderer.renders[renderer.renders.length - 1]?.camera
+    if (!(last instanceof THREE.PerspectiveCamera)) {
+      throw new Error('还没有渲染过一帧')
+    }
+    return last
+  }
+
+  it('给了取景就把机位、注视点与视野一次搬过去', async () => {
+    const wrapper = mountScene()
+    await flushPromises()
+
+    await wrapper.setProps({
+      focusView: { position: [3, 4, 5], target: [1, 1, 1], fov: 30 },
+    })
+    await vi.waitFor(() => {
+      expect(cameraOf().fov).toBe(30)
+    })
+
+    // OrbitControls 每帧重投一次机位，末位会差一个浮点
+    expect(cameraOf().position.x).toBeCloseTo(3)
+    expect(cameraOf().position.z).toBeCloseTo(5)
+    wrapper.unmount()
+  })
+
+  // ⚠ 取景只在换引用那一下飞一次：每帧套住的话镜头就再也转不动了
+  it('取景清成 null 时停在原地，不把镜头拽回去', async () => {
+    const wrapper = mountScene()
+    await flushPromises()
+    await wrapper.setProps({
+      focusView: { position: [3, 4, 5], target: [1, 1, 1], fov: 30 },
+    })
+    await vi.waitFor(() => {
+      expect(cameraOf().fov).toBe(30)
+    })
+
+    await wrapper.setProps({ focusView: null })
+    await flushPromises()
+
+    expect(cameraOf().fov).toBe(30)
     wrapper.unmount()
   })
 })

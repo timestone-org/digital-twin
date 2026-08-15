@@ -69,8 +69,9 @@ function anchor(id: string, position: [number, number, number]): TwinAnchor {
 
 function cards(layer: PanelLayer): HTMLElement[] {
   return layer.group.children
-    .filter((child): child is typeof child & { element: HTMLElement } =>
-      'element' in child,
+    .filter(
+      (child): child is typeof child & { element: HTMLElement } =>
+        'element' in child,
     )
     .map((child) => child.element)
 }

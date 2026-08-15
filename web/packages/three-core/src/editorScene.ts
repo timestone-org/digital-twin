@@ -2,16 +2,20 @@
  * @fileoverview 孪生编辑视口的命令式内核：装配场景、装载模型、维护拾取与选中高亮，
  * 并把「选中了什么 / 点中了哪个节点 / 相机停在哪」回调给宿主组件。纯 TS，不依赖 Vue。
  *
- * ⚠ 与运行态渲染器（`TwinScene`）刻意不同的四处，理由都写在各自落点上：
- * 只认 `visibility.visible`、地面网格恒显、自动旋转恒关、覆盖层实时值一律喂空。
+ * ⚠ 与运行态渲染器（`TwinScene`）刻意不同的五处，理由都写在各自落点上：
+ * 只认 `visibility.visible`、地面网格恒显、自动旋转恒关、覆盖层实时值一律喂空、
+ * 漫游只在用户点「预览」时才飞（绝不自动开播）。
  */
-import type { TwinConfig, Vec3 } from '@dt/twin-config'
+import type { TwinConfig, TwinPose, Vec3 } from '@dt/twin-config'
 import {
   DEFAULT_CAMERA_FOV,
   EMPTY_ANCHOR_VALUES,
   EMPTY_ARROW_VALUES,
   EMPTY_FLOW_VALUES,
   EMPTY_PANEL_VALUES,
+  RoamTimeline,
+  buildRoamSegments,
+  hierEffectiveNodes,
 } from '@dt/twin-config'
 import * as THREE from 'three'
 
@@ -37,6 +41,7 @@ import {
 } from './pickTargets'
 import {
   WEBGL_UNAVAILABLE_MESSAGE,
+  applyCameraPose,
   applyModelPlacement,
   boundingDiagonal,
   createSceneCore,
@@ -58,14 +63,10 @@ export type EditorSceneStatus = 'empty' | 'loading' | 'ready' | 'error'
 /** 拾取模式。null = 普通浏览，点选实体。 */
 export type TwinPickMode = 'node' | 'position' | null
 
-/** 一个机位快照。 */
-export interface TwinCameraPose {
-  position: Vec3
-  target: Vec3
-  fov: number
-}
+/** 一个机位快照；与漫游插值用的位姿是同一样东西，两份声明必然漂。 */
+export type TwinCameraPose = TwinPose
 
-/** 视口向宿主回传的六件事，与组件的 emits 一一对应。 */
+/** 视口向宿主回传的七件事，与组件的 emits 一一对应。 */
 export interface EditorSceneCallbacks {
   select: (selection: TwinSceneSelection | null) => void
   pickNode: (nodeName: string) => void
@@ -73,6 +74,8 @@ export interface EditorSceneCallbacks {
   modelNodes: (names: readonly string[]) => void
   cameraChange: (pose: TwinCameraPose) => void
   status: (status: EditorSceneStatus, message: string) => void
+  /** 漫游预览的开停；用户一碰镜头它会自己停，面板上的按钮要跟着回落。 */
+  roamPreview: (playing: boolean) => void
 }
 
 export interface EditorSceneOptions {
@@ -89,6 +92,8 @@ export interface EditorSceneOptions {
 
 /** 位移超过它就算拖拽而不是点击，像素 */
 const CLICK_DRAG_THRESHOLD_PX = 5
+/** 帧钟给的是秒，漫游时间线收的是毫秒 */
+const MS_PER_S = 1000
 const GRID_SIZE = 10
 const GRID_DIVISIONS = 10
 const MIN_HELPER_SCALE = 0.05
@@ -204,6 +209,8 @@ export class EditorScene {
   private downX = 0
   private downY = 0
   private downValid = false
+  /** 漫游预览的时间线；没在预览时是 null，编辑态绝不自己造一条开播。 */
+  private roam: RoamTimeline | null = null
 
   constructor(options: EditorSceneOptions) {
     this.container = options.container
@@ -274,10 +281,36 @@ export class EditorScene {
     }
   }
 
+  /**
+   * 按当前配置飞一遍漫游轨迹，看完即停。可用视点不足两个时返回 false，
+   * 宿主据此告诉用户「先去多存几个机位」。
+   * ⚠ 编辑态只有这一个入口会自动移镜头：绝不跟着 `autoplay` 自己开播——
+   * 配置的时候镜头一直在飘，就没法把锚点摆到位。
+   */
+  playRoamPreview(): boolean {
+    const segments = buildRoamSegments(
+      this.config.cameras,
+      this.config.roamTour,
+    )
+    if (segments.length === 0) return false
+    this.roam = new RoamTimeline(segments, this.config.roamTour.loop)
+    this.roam.play()
+    this.on.roamPreview(true)
+    return true
+  }
+
+  /** 停下预览，镜头停在当前这一帧上（幂等）。 */
+  stopRoamPreview(): void {
+    if (this.roam === null) return
+    this.roam = null
+    this.on.roamPreview(false)
+  }
+
   /** 卸载收口：在途装载、rAF、Observer、监听与全部 three 资源逐个释放。 */
   dispose(): void {
     // ⚠ 先让在途装载作废再释放：晚一步回来的那次会往已 dispose 的场景里挂模型
     this.loadSeq += 1
+    this.roam = null
     this.loadAbort?.abort()
     this.loadAbort = null
     cancelAnimationFrame(this.frameHandle)
@@ -384,9 +417,7 @@ export class EditorScene {
     const helper = this.selectionBox
     if (helper === null) return
     const box =
-      this.selection?.kind === 'parts'
-        ? this.boxOfPart(this.selection.id)
-        : null
+      this.selection === null ? null : this.boxOfHighlight(this.selection)
     if (box === null) {
       helper.visible = false
       return
@@ -396,9 +427,22 @@ export class EditorScene {
     helper.updateMatrixWorld(true)
   }
 
+  /** 选中框只画在有几何的两类上：部件与钻取节点。 */
+  private boxOfHighlight(selection: TwinSceneSelection): THREE.Box3 | null {
+    if (selection.kind === 'parts') return this.boxOfPart(selection.id)
+    if (selection.kind === 'hierNodes') return this.boxOfHier(selection.id)
+    return null
+  }
+
   private boxOfSelection(selection: TwinSceneSelection): THREE.Box3 | null {
     if (selection.kind === 'parts') return this.boxOfPart(selection.id)
-    if (selection.kind === 'model' || selection.kind === 'viewpoints') {
+    if (selection.kind === 'hierNodes') return this.boxOfHier(selection.id)
+    // 三个单例段没有自己的几何，取景一律退回整个模型
+    if (
+      selection.kind === 'model' ||
+      selection.kind === 'viewpoints' ||
+      selection.kind === 'roam'
+    ) {
       return this.modelObject === null
         ? null
         : new THREE.Box3().setFromObject(this.modelObject)
@@ -414,11 +458,25 @@ export class EditorScene {
     )
   }
 
+  /**
+   * 一个钻取节点的包围盒。
+   * ⚠ 走的是**有效节点**：上层自己往往一个节点都没配，取景要落在子孙的并集上，
+   * 否则在厂区、车间这种层上选中即取景等于什么都不发生。
+   */
+  private boxOfHier(id: string): THREE.Box3 | null {
+    return this.boxOfNames(hierEffectiveNodes(this.config.hierNodes, id))
+  }
+
   private boxOfPart(id: string): THREE.Box3 | null {
     const part = this.config.parts.find((item) => item.id === id)
     if (part === undefined) return null
+    return this.boxOfNames(part.nodes)
+  }
+
+  /** 一组模型节点名的包围盒；一个都没命中给 null。 */
+  private boxOfNames(names: readonly string[]): THREE.Box3 | null {
     const box = new THREE.Box3()
-    for (const object of objectsOfNames(this.nodeIndex, part.nodes)) {
+    for (const object of objectsOfNames(this.nodeIndex, names)) {
       box.expandByObject(object)
     }
     return box.isEmpty() ? null : box
@@ -444,12 +502,18 @@ export class EditorScene {
     const core = this.core
     const camera = this.config.cameras.find((item) => item.id === id)
     if (core === null || camera === undefined) return
-    core.camera.position.set(...camera.position)
-    core.camera.fov = camera.fov
-    core.camera.updateProjectionMatrix()
-    core.controls.target.set(...camera.target)
+    applyCameraPose(core, camera)
     core.controls.update()
     this.emitCamera()
+  }
+
+  /** 预览这一帧：把时间线算出的位姿落到相机上；走完了就自己收尾。 */
+  private advanceRoam(deltaMs: number, core: SceneCore): void {
+    const timeline = this.roam
+    if (timeline === null) return
+    const pose: TwinPose | null = timeline.advance(deltaMs)
+    if (pose !== null) applyCameraPose(core, pose)
+    if (!timeline.isPlaying) this.stopRoamPreview()
   }
 
   private emitCamera(): void {
@@ -531,6 +595,8 @@ export class EditorScene {
     if (core === null) return
     const delta = this.clock.tick(now)
     if (delta > 0) this.layers?.update(delta)
+    // ⚠ 喂帧钟夹过的时长：标签页切走再回来那一帧有几十秒，直接算下去预览会一帧飞完
+    this.advanceRoam(delta * MS_PER_S, core)
     // ⚠ 宿主被折叠（clientHeight 为 0）时不换算标记尺寸：拿 0 当视口高度算出来的
     // 世界尺寸会把相机整个包进标记球里，之后连点都点不中，而画面上什么异常都看不出
     const height = this.container.clientHeight
@@ -553,6 +619,8 @@ export class EditorScene {
   }
 
   private readonly onPointerDown = (event: PointerEvent): void => {
+    // ⚠ 用户一碰视口就停预览：镜头还自己往前飞会变成两个人抢方向盘
+    this.stopRoamPreview()
     this.downValid = event.button === 0
     this.downX = event.clientX
     this.downY = event.clientY

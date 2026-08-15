@@ -61,7 +61,9 @@ export function useSubEditorEntry(deps: SubEditorEntryDeps): void {
     try {
       await router.push(target)
     } catch {
-      deps.toast.error(`打不开「${subEditor.label}」：路由 ${subEditor.routeName} 不存在`)
+      deps.toast.error(
+        `打不开「${subEditor.label}」：路由 ${subEditor.routeName} 不存在`,
+      )
     }
   }
 

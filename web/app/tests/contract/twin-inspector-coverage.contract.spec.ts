@@ -15,7 +15,14 @@ import { describe, expect, it } from 'vitest'
 // ⚠ 用 cwd 而不是 import.meta.url：happy-dom 环境下后者不是 file: URL
 const WEB_ROOT = process.cwd()
 const TYPES = join(WEB_ROOT, 'packages', 'twin-config', 'src', 'types.ts')
-const COMPONENTS = join(WEB_ROOT, 'app', 'src', 'pages', 'TwinEditor', 'components')
+const COMPONENTS = join(
+  WEB_ROOT,
+  'app',
+  'src',
+  'pages',
+  'TwinEditor',
+  'components',
+)
 
 /** 每个契约接口由哪个（或哪几个）文件负责让人改。 */
 const OWNERS: Readonly<Record<string, readonly string[]>> = {
@@ -30,11 +37,19 @@ const OWNERS: Readonly<Record<string, readonly string[]>> = {
   TwinAnchor: ['inspector/AnchorInspector.vue'],
   TwinCamera: ['inspector/CameraInspector.vue'],
   TwinViewpointSwitcher: ['inspector/ViewpointsInspector.vue'],
+  TwinRoamTour: [
+    'inspector/RoamTourInspector.vue',
+    'fields/RoamStopList.vue',
+    'fields/RoamSegmentFields.vue',
+  ],
+  TwinRoamTourSegment: ['fields/RoamSegmentFields.vue'],
   TwinPanel: ['inspector/PanelInspector.vue'],
-  TwinPanelStyle: ['inspector/PanelInspector.vue'],
+  TwinPanelStyle: ['inspector/PanelStyleFields.vue'],
   TwinPanelField: ['fields/PanelFieldList.vue'],
   TwinArrow: ['inspector/ArrowInspector.vue'],
   TwinFlowLink: ['inspector/FlowInspector.vue'],
+  TwinHierNode: ['inspector/HierNodeInspector.vue', 'fields/HierFieldList.vue'],
+  TwinModalView: ['inspector/HierNodeInspector.vue'],
   TwinVisibilityRule: ['fields/VisibilityFields.vue'],
   TwinVisibilityFade: ['fields/VisibilityFields.vue'],
   TwinDistanceRule: ['fields/DistanceField.vue'],
@@ -45,9 +60,7 @@ const NOT_EDITABLE = new Set(['id', 'version'])
 
 function interfaceFields(source: string): Map<string, string[]> {
   const found = new Map<string, string[]>()
-  for (const block of source.matchAll(
-    /export interface (\w+) \{(.*?)\n\}/gs,
-  )) {
+  for (const block of source.matchAll(/export interface (\w+) \{(.*?)\n\}/gs)) {
     const [, name = '', body = ''] = block
     found.set(
       name,
@@ -81,8 +94,7 @@ describe('检查器覆盖了整份孪生契约', () => {
       .join('\n')
     const missing = fields.filter(
       (field) =>
-        !NOT_EDITABLE.has(field) &&
-        !new RegExp(`\\b${field}\\b`).test(sources),
+        !NOT_EDITABLE.has(field) && !new RegExp(`\\b${field}\\b`).test(sources),
     )
 
     expect(missing).toEqual([])

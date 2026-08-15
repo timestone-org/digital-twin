@@ -12,9 +12,11 @@ import type {
   TwinCamera,
   TwinConfig,
   TwinFlowLink,
+  TwinHierNode,
   TwinModelRef,
   TwinPanel,
   TwinPart,
+  TwinRoamTour,
   TwinViewpointSwitcher,
 } from '@dt/twin-config'
 import { DtEmpty } from '@dt/ui'
@@ -25,9 +27,11 @@ import AnchorInspector from './inspector/AnchorInspector.vue'
 import ArrowInspector from './inspector/ArrowInspector.vue'
 import CameraInspector from './inspector/CameraInspector.vue'
 import FlowInspector from './inspector/FlowInspector.vue'
+import HierNodeInspector from './inspector/HierNodeInspector.vue'
 import ModelInspector from './inspector/ModelInspector.vue'
 import PanelInspector from './inspector/PanelInspector.vue'
 import PartInspector from './inspector/PartInspector.vue'
+import RoamTourInspector from './inspector/RoamTourInspector.vue'
 import ViewpointsInspector from './inspector/ViewpointsInspector.vue'
 
 const props = defineProps<{
@@ -36,6 +40,8 @@ const props = defineProps<{
   /** 模型里的全部节点名；空数组 = 模型还没加载。 */
   modelNodes: readonly string[]
   picking: boolean
+  /** 视口里正在飞漫游预览。 */
+  roamPreviewing: boolean
 }>()
 
 const emit = defineEmits<{
@@ -43,6 +49,9 @@ const emit = defineEmits<{
   requestPick: ['node' | 'position']
   cancelPick: []
   captureCamera: [string]
+  captureHierView: [string]
+  previewRoam: []
+  stopRoamPreview: []
 }>()
 
 /** 选中的实体 id；单例段没有 id。 */
@@ -62,13 +71,19 @@ const camera = computed(
     props.config.cameras.find((item) => item.id === selectedId.value) ?? null,
 )
 const panel = computed(
-  () => props.config.panels.find((item) => item.id === selectedId.value) ?? null,
+  () =>
+    props.config.panels.find((item) => item.id === selectedId.value) ?? null,
 )
 const arrow = computed(
-  () => props.config.arrows.find((item) => item.id === selectedId.value) ?? null,
+  () =>
+    props.config.arrows.find((item) => item.id === selectedId.value) ?? null,
 )
 const flow = computed(
   () => props.config.flows.find((item) => item.id === selectedId.value) ?? null,
+)
+const hierNode = computed(
+  () =>
+    props.config.hierNodes.find((item) => item.id === selectedId.value) ?? null,
 )
 
 /** 按 id 换掉数组里的一项，整份数组重建。 */
@@ -84,6 +99,9 @@ function writeModel(next: TwinModelRef): void {
 }
 function writeViewpoints(next: TwinViewpointSwitcher): void {
   emit('patch', { viewpoints: next })
+}
+function writeRoamTour(next: TwinRoamTour): void {
+  emit('patch', { roamTour: next })
 }
 function writePart(next: TwinPart): void {
   emit('patch', { parts: [...replaced(props.config.parts, next)] })
@@ -103,6 +121,9 @@ function writeArrow(next: TwinArrow): void {
 function writeFlow(next: TwinFlowLink): void {
   emit('patch', { flows: [...replaced(props.config.flows, next)] })
 }
+function writeHierNode(next: TwinHierNode): void {
+  emit('patch', { hierNodes: [...replaced(props.config.hierNodes, next)] })
+}
 </script>
 
 <template>
@@ -118,10 +139,20 @@ function writeFlow(next: TwinFlowLink): void {
       :cameras="config.cameras"
       @update:model-value="writeViewpoints"
     />
+    <RoamTourInspector
+      v-else-if="selection.kind === 'roam'"
+      :model-value="config.roamTour"
+      :cameras="config.cameras"
+      :previewing="roamPreviewing"
+      @update:model-value="writeRoamTour"
+      @preview="emit('previewRoam')"
+      @stop-preview="emit('stopRoamPreview')"
+    />
     <PartInspector
       v-else-if="part !== null"
       :model-value="part"
       :node-names="modelNodes"
+      :hier-nodes="config.hierNodes"
       :picking="picking"
       @update:model-value="writePart"
       @request-pick-node="emit('requestPick', 'node')"
@@ -160,6 +191,18 @@ function writeFlow(next: TwinFlowLink): void {
       :model-value="flow"
       :anchors="config.anchors"
       @update:model-value="writeFlow"
+    />
+    <HierNodeInspector
+      v-else-if="hierNode !== null"
+      :model-value="hierNode"
+      :nodes="config.hierNodes"
+      :cameras="config.cameras"
+      :node-names="modelNodes"
+      :picking="picking"
+      @update:model-value="writeHierNode"
+      @request-pick-node="emit('requestPick', 'node')"
+      @cancel-pick="emit('cancelPick')"
+      @capture-view="emit('captureHierView', $event)"
     />
     <DtEmpty v-else title="选中的东西已经不在了" />
   </div>

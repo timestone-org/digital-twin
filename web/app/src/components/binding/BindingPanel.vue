@@ -28,7 +28,7 @@ const props = defineProps<{
    * 数组槽每一行的显示名，键是该行第一个子槽的 `fieldKey`。
    * 不给就退回「第 N 行」。
    */
-  rowLabels?: Readonly<Record<string, string>>
+  rowLabels?: Readonly<Record<string, string>> | undefined
 }>()
 
 const emit = defineEmits<{

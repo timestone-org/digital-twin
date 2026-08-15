@@ -49,7 +49,7 @@ function sectionOf(config: TwinConfig, key: string) {
 }
 
 describe('分组', () => {
-  it('八个分组按固定顺序摊开，两个单例段夹在实体段中间', () => {
+  it('分组按固定顺序摊开，单例段夹在实体段中间', () => {
     const keys = buildTwinOutline(makeConfig(), new Set()).map((s) => s.key)
 
     expect(keys).toEqual([
@@ -58,9 +58,11 @@ describe('分组', () => {
       'anchors',
       'cameras',
       'viewpoints',
+      'roam',
       'panels',
       'arrows',
       'flows',
+      'hierNodes',
     ])
   })
 
@@ -170,7 +172,7 @@ describe('行', () => {
 
 describe('删除的连带影响', () => {
   it('删锚点数出引用它的信息牌与能量流', () => {
-    expect(twinRemoveImpact(makeConfig(), 'anchors', 'a1')).toEqual({
+    expect(twinRemoveImpact(makeConfig(), 'anchors', 'a1')).toMatchObject({
       panels: 1,
       flows: 1,
       viewpoints: 0,
@@ -178,7 +180,7 @@ describe('删除的连带影响', () => {
   })
 
   it('删视点数出视点切换里引用它的项', () => {
-    expect(twinRemoveImpact(makeConfig(), 'cameras', 'c1')).toEqual({
+    expect(twinRemoveImpact(makeConfig(), 'cameras', 'c1')).toMatchObject({
       panels: 0,
       flows: 0,
       viewpoints: 1,
@@ -190,7 +192,32 @@ describe('删除的连带影响', () => {
       panels: 0,
       flows: 0,
       viewpoints: 0,
+      hierChildren: 0,
+      parts: 0,
     })
+  })
+
+  it('删钻取节点数出会变成根的下级，与点它就打开钻取的部件', () => {
+    const config = makeConfig({
+      parts: [{ id: 'p1', clickHierNode: 'plant' }],
+      hierNodes: [{ id: 'plant' }, { id: 'shop', parentId: 'plant' }],
+    })
+
+    expect(twinRemoveImpact(config, 'hierNodes', 'plant')).toMatchObject({
+      hierChildren: 1,
+      parts: 1,
+    })
+  })
+
+  it('删钻取节点的确认文案点名下级与部件', () => {
+    const config = makeConfig({
+      parts: [{ id: 'p1', clickHierNode: 'plant' }],
+      hierNodes: [{ id: 'plant' }, { id: 'shop', parentId: 'plant' }],
+    })
+    const text = twinRemoveImpactText(config, 'hierNodes', 'plant')
+
+    expect(text).toContain('1 个下级钻取节点')
+    expect(text).toContain('1 个部件的点击动作')
   })
 
   it('没人引用的锚点删了也不牵连别人', () => {

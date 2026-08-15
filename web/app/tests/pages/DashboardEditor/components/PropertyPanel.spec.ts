@@ -193,7 +193,9 @@ describe('子编辑器入口', () => {
     })
 
     expect(
-      wrapper.findAll('button').some((item) => item.text() === '打开场景编辑器'),
+      wrapper
+        .findAll('button')
+        .some((item) => item.text() === '打开场景编辑器'),
     ).toBe(false)
   })
 

@@ -22,6 +22,7 @@ function part(id: string, nodes: string[], visible = true): TwinPart {
     nodes,
     visibility: { visible, hideBelow: null, hideAbove: null, fade: null },
     clickDistance: { min: null, max: null, farThreshold: null },
+    clickHierNode: '',
   }
 }
 

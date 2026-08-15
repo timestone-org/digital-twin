@@ -7,7 +7,7 @@
  * 以及两段式点击的语义必须写在旁边。
  */
 import { normalizeTwinConfig } from '@dt/twin-config'
-import type { TwinPart } from '@dt/twin-config'
+import type { TwinHierNode, TwinPart } from '@dt/twin-config'
 import { DtSelect } from '@dt/ui'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
@@ -26,8 +26,11 @@ function mountPart(
   modelValue: TwinPart = makePart(),
   nodeNames: readonly string[] = ['Cube', 'Pump_01'],
   picking = false,
+  hierNodes: readonly TwinHierNode[] = [],
 ) {
-  return mount(PartInspector, { props: { modelValue, nodeNames, picking } })
+  return mount(PartInspector, {
+    props: { modelValue, nodeNames, picking, hierNodes },
+  })
 }
 
 type Wrapper = ReturnType<typeof mountPart>

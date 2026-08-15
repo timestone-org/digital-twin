@@ -13,6 +13,7 @@ import {
   flattenPanelFields,
 } from '@dt/twin-config'
 import {
+  DtDropdownMenu,
   DtButton,
   DtIcon,
   DtInput,
@@ -20,7 +21,10 @@ import {
   DtNumberInput,
   DtSwitch,
 } from '@dt/ui'
+import type { DtMenuItem } from '@dt/contracts'
 import { computed } from 'vue'
+
+import { PANEL_FIELD_PRESETS } from '../../panelFieldPresets'
 
 const props = defineProps<{
   panel: TwinPanel
@@ -80,6 +84,31 @@ function freshKey(): string {
   let serial = props.panel.fields.length + 1
   while (taken.has(`f${serial}`)) serial += 1
   return `f${serial}`
+}
+
+/** 常用测点菜单：点一项就按它的展示口径加一个字段。 */
+const presetItems = computed<DtMenuItem[]>(() =>
+  PANEL_FIELD_PRESETS.map((preset) => ({
+    value: preset.id,
+    label:
+      preset.unit === '' ? preset.label : `${preset.label}（${preset.unit}）`,
+  })),
+)
+
+function addPreset(item: DtMenuItem): void {
+  const preset = PANEL_FIELD_PRESETS.find((entry) => entry.id === item.value)
+  if (preset === undefined) return
+  write([
+    ...props.panel.fields,
+    {
+      key: freshKey(),
+      label: preset.label,
+      unit: preset.unit,
+      prefix: '',
+      decimals: preset.decimals,
+      staticText: '',
+    },
+  ])
 }
 
 function add(): void {
@@ -245,8 +274,19 @@ function toggleDecimals(index: number, on: boolean): void {
       静态文本纯展示、不进求值，与「常量绑定」不是一回事。
     </p>
 
-    <DtButton variant="soft" size="sm" icon="plus" block @click="add">
-      添加字段
-    </DtButton>
+    <div class="flex items-center gap-2">
+      <DtButton variant="soft" size="sm" icon="plus" block @click="add">
+        添加字段
+      </DtButton>
+      <!-- 现场牌面上多半就是这十来种量，省掉逐个填标签单位小数位 -->
+      <DtDropdownMenu
+        size="sm"
+        label="常用测点"
+        icon="list-checks"
+        :items="presetItems"
+        data-test="panel-field-presets"
+        @select="addPreset"
+      />
+    </div>
   </div>
 </template>

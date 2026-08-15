@@ -64,7 +64,8 @@ function normalizePanelStyle(raw: unknown): TwinPanelStyle {
   }
 }
 
-function normalizePanelField(
+/** 信息牌与钻取节点共用的一个读数字段。 */
+export function normalizePanelField(
   raw: unknown,
   index: number,
 ): TwinPanelField | null {

@@ -74,7 +74,9 @@ function styleCard(element: HTMLElement, panel: TwinPanel): void {
   element.style.borderRadius = 'var(--radius-md)'
   element.style.border = `1px solid ${cssColor(style.accent)}`
   element.style.background =
-    style.background === '' ? 'var(--surface-overlay)' : cssColor(style.background)
+    style.background === ''
+      ? 'var(--surface-overlay)'
+      : cssColor(style.background)
   element.style.color = 'var(--text-primary)'
   element.style.fontSize = `${(11 * style.fontScale).toFixed(1)}px`
   element.style.lineHeight = '1.5'

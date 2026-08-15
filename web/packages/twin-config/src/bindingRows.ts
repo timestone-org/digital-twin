@@ -10,9 +10,11 @@ import {
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_ARROW_BINDING_KEY,
   TWIN_FLOW_BINDING_KEY,
+  TWIN_HIER_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
   arrayRowFieldKey,
 } from './constants'
+import { flattenHierFields } from './hierTree'
 import { flattenPanelFields } from './normalizeElements'
 import type { TwinConfig } from './types'
 
@@ -76,11 +78,28 @@ export function twinBindingRows(config: TwinConfig): TwinBindingRow[] {
     ...rowsOf(TWIN_PANEL_BINDING_KEY, panels, 'value'),
     ...rowsOf(TWIN_ARROW_BINDING_KEY, arrows, 'value'),
     ...rowsOf(TWIN_FLOW_BINDING_KEY, flows, 'intensity'),
+    ...rowsOf(TWIN_HIER_BINDING_KEY, hierEntities(config), 'value'),
   ]
 }
 
 function panelNameOf(config: TwinConfig, panelId: string): string {
   return config.panels.find((item) => item.id === panelId)?.name ?? ''
+}
+
+/**
+ * 钻取节点的行：按**扁平化后**的字段序，一行名字是「节点名 · 字段标签」。
+ * ⚠ 顺序是文档序不是树序：拖着改父子会把树序整片重排，而那会静默地让每一条
+ * 绑定改喂另一个字段。
+ */
+function hierEntities(config: TwinConfig): { id: string; label: string }[] {
+  return flattenHierFields(config.hierNodes).map((entry) => ({
+    id: entry.valueKey,
+    label: `${nameOr(hierNameOf(config, entry.nodeId), entry.nodeId)} · ${nameOr(entry.field.label, entry.field.key)}`,
+  }))
+}
+
+function hierNameOf(config: TwinConfig, nodeId: string): string {
+  return config.hierNodes.find((item) => item.id === nodeId)?.name ?? ''
 }
 
 /** 绑定行的组标题表，键是 fieldKey。绑点面板直接用。 */
@@ -90,12 +109,13 @@ export function twinRowLabels(config: TwinConfig): Record<string, string> {
   return labels
 }
 
-/** 四个数组槽，重映射逐个走一遍。 */
+/** 五个数组槽，重映射逐个走一遍。 */
 const ARRAY_SLOTS = [
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
   TWIN_ARROW_BINDING_KEY,
   TWIN_FLOW_BINDING_KEY,
+  TWIN_HIER_BINDING_KEY,
 ] as const
 
 /** 一份配置里某个槽的实体 id，按文档序。 */
@@ -106,7 +126,7 @@ function entityIdsOf(config: TwinConfig, slotKey: string): string[] {
 }
 
 /**
- * 配置改动前后对比，把四个槽的绑定一次全搬到位。
+ * 配置改动前后对比，把五个槽的绑定一次全搬到位。
  *
  * ⚠ 编辑器每一次写配置都要过这里，别挑「看起来会影响绑定」的那几个动作调用——
  * 会影响的动作比直觉多：给某张信息牌插一个字段，会让**后面每一张牌**的每一行

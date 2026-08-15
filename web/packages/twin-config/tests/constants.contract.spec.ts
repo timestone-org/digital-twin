@@ -12,6 +12,7 @@ import {
   TWIN_ARROW_BINDING_KEY,
   TWIN_FLOW_BINDING_KEY,
   TWIN_FLOW_ROW_SLOTS,
+  TWIN_HIER_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
   TWIN_VIEW_BINDINGS,
   anchorRowFieldKey,
@@ -44,6 +45,7 @@ describe('绑定槽清单', () => {
       TWIN_PANEL_BINDING_KEY,
       TWIN_ARROW_BINDING_KEY,
       TWIN_FLOW_BINDING_KEY,
+      TWIN_HIER_BINDING_KEY,
     ])
   })
 
@@ -54,9 +56,10 @@ describe('绑定槽清单', () => {
   })
 
   // ⚠ 只许登记渲染层真正消费的槽：没有图元就摆槽位，用户绑完点位看到的是
-  //   「绑了没反应」。四个槽此刻各有一层图元在消费，加第五个必须与渲染层同轮落地
+  //   「绑了没反应」。五个槽此刻各有一处在消费（钻取字段在钻取面板上），
+  //   加第六个必须与渲染层同轮落地
   it('清单里的每个槽都有渲染层在消费', () => {
-    expect(TWIN_VIEW_BINDINGS).toHaveLength(4)
+    expect(TWIN_VIEW_BINDINGS).toHaveLength(5)
   })
 
   it('能量流那一行有强度与激活两个子槽', () => {

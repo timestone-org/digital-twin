@@ -30,6 +30,8 @@ const emit = defineEmits<{
   modelNodes: [readonly string[]]
   cameraChange: [TwinCameraPose]
   status: [EditorSceneStatus]
+  /** 漫游预览开停；用户一碰镜头它会自己停，面板上的按钮要跟着回落。 */
+  roamPreview: [boolean]
 }>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
@@ -93,6 +95,7 @@ onMounted(() => {
       modelNodes: (value) => emit('modelNodes', value),
       cameraChange: (value) => emit('cameraChange', value),
       status: applyStatus,
+      roamPreview: (value) => emit('roamPreview', value),
     },
   })
   scene.setSelection(props.selection)
@@ -117,7 +120,20 @@ watch(
   (value) => scene?.setPickMode(value),
 )
 
-defineExpose({ focus, snapshot })
+/**
+ * 按当前配置飞一遍漫游轨迹；可用站点不足两个时返回 false。
+ * ⚠ 编辑视口只有这一个入口会自动移镜头，绝不跟着 `autoplay` 自己开播。
+ */
+function playRoamPreview(): boolean {
+  return scene?.playRoamPreview() ?? false
+}
+
+/** 停下预览，镜头停在当前这一帧上。 */
+function stopRoamPreview(): void {
+  scene?.stopRoamPreview()
+}
+
+defineExpose({ focus, snapshot, playRoamPreview, stopRoamPreview })
 </script>
 
 <template>

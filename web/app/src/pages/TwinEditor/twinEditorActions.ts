@@ -14,24 +14,34 @@ import {
   removeEntity,
   updateEntity,
 } from './entityOps'
+import { addPartsFromNodes } from './bulkParts'
+import { addHierNode, moveHierSibling, reparentHierNode } from './hierOps'
 import type { TwinDoc } from './twinDoc'
 import type { TwinEntityKind, TwinSelection } from './types'
 
 export interface TwinEditorActions {
   add: (kind: TwinEntityKind) => void
+  /** 按模型节点名批量建部件；选中最后建出来的那个。 */
+  addParts: (nodeNames: readonly string[]) => void
   remove: (kind: TwinEntityKind, id: string) => void
   duplicate: (kind: TwinEntityKind, id: string) => void
   move: (kind: TwinEntityKind, id: string, delta: number) => void
   /** 换掉配置里的某个单例段（模型、视点切换控件）。 */
   patchConfig: (patch: Partial<TwinConfig>) => void
   toggleVisible: (kind: TwinEntityKind, id: string) => void
+  /** 新建一个钻取节点；`parentId` 为 null 时建的是根。 */
+  addHier: (parentId: string | null) => void
+  /** 同一层里前挪一位或后挪一位。 */
+  moveHier: (id: string, delta: number) => void
+  /** 换一个钻取节点的上一层；拖进自己的子树时什么都不做。 */
+  reparentHier: (id: string, parentId: string | null) => void
 }
 
-/** 带 `visibility` 的五类；视点没有这一段。 */
-type VisibleKind = Exclude<TwinEntityKind, 'cameras'>
+/** 带 `visibility` 的五类；视点与钻取节点没有这一段。 */
+type VisibleKind = Exclude<TwinEntityKind, 'cameras' | 'hierNodes'>
 
 function hasVisibility(kind: TwinEntityKind): kind is VisibleKind {
-  return kind !== 'cameras'
+  return kind !== 'cameras' && kind !== 'hierNodes'
 }
 
 /** 取某个实体当前的显隐规则；没有这一段给 null。 */
@@ -45,6 +55,33 @@ function visibilityOf(
   return list.find((item) => item.id === id)?.visibility ?? null
 }
 
+/** 钻取树的三个动作：它们不按 `kind` 分派，与其余动作形状不同，单独收一处。 */
+type TwinHierActions = Pick<
+  TwinEditorActions,
+  'addHier' | 'moveHier' | 'reparentHier'
+>
+
+function createHierActions(
+  doc: TwinDoc,
+  select: (selection: TwinSelection) => void,
+): TwinHierActions {
+  return {
+    addHier: (parentId) => {
+      const { config, id } = addHierNode(doc.config.value, parentId)
+      doc.commit(config)
+      select({ kind: 'hierNodes', id })
+    },
+
+    moveHier: (id, delta) => {
+      doc.commit(moveHierSibling(doc.config.value, id, delta))
+    },
+
+    reparentHier: (id, parentId) => {
+      doc.commit(reparentHierNode(doc.config.value, id, parentId))
+    },
+  }
+}
+
 /**
  * 装上动作集。
  * @param doc 文档态
@@ -55,10 +92,20 @@ export function createTwinEditorActions(
   select: (selection: TwinSelection) => void,
 ): TwinEditorActions {
   return {
+    ...createHierActions(doc, select),
+
     add: (kind) => {
       const { config, id } = addEntity(doc.config.value, kind)
       doc.commit(config)
       select({ kind, id })
+    },
+
+    addParts: (nodeNames) => {
+      const { config, ids } = addPartsFromNodes(doc.config.value, nodeNames)
+      if (ids.length === 0) return
+      doc.commit(config)
+      const last = ids[ids.length - 1]
+      if (last !== undefined) select({ kind: 'parts', id: last })
     },
 
     remove: (kind, id) => {

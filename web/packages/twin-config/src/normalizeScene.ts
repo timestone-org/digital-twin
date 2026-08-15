@@ -1,5 +1,6 @@
 /**
- * @fileoverview 场景层的归一化：模型摆放、内置动画、场景特效、视点与切换控件。
+ * @fileoverview 场景层的归一化：模型摆放、内置动画、场景特效、视点、切换控件与
+ * 自动漫游轨迹。
  */
 import {
   boolOr,
@@ -13,6 +14,7 @@ import {
   isRecord,
   normalizeColorSpec,
   stringList,
+  toFiniteNumber,
   trimmedString,
 } from './sanitize'
 import {
@@ -25,6 +27,8 @@ import {
   type TwinModelAnimations,
   type TwinModelRef,
   type TwinPedestal,
+  type TwinRoamTour,
+  type TwinRoamTourSegment,
   type TwinSceneEffects,
   type TwinStarfield,
   type TwinViewpointSwitcher,
@@ -177,4 +181,89 @@ export function defaultCameraOf(
   cameras: readonly TwinCamera[],
 ): TwinCamera | null {
   return cameras.find((item) => item.isDefault) ?? cameras[0] ?? null
+}
+
+/**
+ * 漫游的两段时长与闲置延时的缺省与上限，ms。
+ * ⚠ 上限不是排版洁癖：一段配到几分钟时，用户只会看到「镜头卡住不动了」，
+ * 而画面上没有任何东西说明它其实正在以极慢的速度飞。
+ */
+export const DEFAULT_ROAM_TOUR_SEGMENT_MS = 1800
+export const MAX_ROAM_TOUR_SEGMENT_MS = 30000
+export const DEFAULT_ROAM_TOUR_PAUSE_MS = 0
+export const MAX_ROAM_TOUR_PAUSE_MS = 10000
+export const DEFAULT_ROAM_TOUR_IDLE_DELAY_MS = 180000
+export const MAX_ROAM_TOUR_IDLE_DELAY_MS = 3600000
+
+/** 一条轨迹至少要这么多个可用视点才飞得起来。 */
+export const MIN_ROAM_TOUR_STOPS = 2
+
+/** 可缺省的毫秒数：取不到给 null（= 用全局值），取到就取整并夹进 [0, max]。 */
+function optionalMs(value: unknown, max: number): number | null {
+  const parsed = toFiniteNumber(value)
+  return parsed === null ? null : clampedOr(Math.round(parsed), 0, 0, max)
+}
+
+/** 一段的时长覆盖；两项都没配返回 null，让这条覆盖整个从表里消失。 */
+function normalizeRoamSegment(raw: unknown): TwinRoamTourSegment | null {
+  if (!isRecord(raw)) return null
+  const segmentMs = optionalMs(raw.segmentMs, MAX_ROAM_TOUR_SEGMENT_MS)
+  const pauseMs = optionalMs(raw.pauseMs, MAX_ROAM_TOUR_PAUSE_MS)
+  return segmentMs === null && pauseMs === null ? null : { segmentMs, pauseMs }
+}
+
+function normalizeSegmentSettings(
+  raw: unknown,
+): Record<string, TwinRoamTourSegment> {
+  if (!isRecord(raw)) return {}
+  const out: Record<string, TwinRoamTourSegment> = {}
+  for (const [key, value] of Object.entries(raw)) {
+    const id = key.trim()
+    const segment = normalizeRoamSegment(value)
+    if (id !== '' && segment !== null) out[id] = segment
+  }
+  return out
+}
+
+/**
+ * 自动漫游轨迹。
+ * ⚠ `items` 里指向已删视点的 id **不在这里剔除**：归一化只管形状，悬空引用一律
+ * 留着由 `collectTwinConfigIssues` 报出来，与视点切换、信息牌锚点同一个口径。
+ * 静默清掉的话，用户只会看到轨迹凭空少了两站而没有任何提示。
+ * ⚠ 逐段覆盖的键同样不与 `items` 对账：把一个视点暂时挪出轨迹，不该顺手抹掉
+ * 它那一段配好的时长。
+ * @param raw 落库的 roamTour 块
+ */
+export function normalizeRoamTour(raw: unknown): TwinRoamTour {
+  const source = isRecord(raw) ? raw : {}
+  return {
+    enabled: source.enabled === true,
+    autoplay: source.autoplay === true,
+    idleAutoplay: source.idleAutoplay === true,
+    idleAutoplayDelayMs: clampedOr(
+      source.idleAutoplayDelayMs,
+      DEFAULT_ROAM_TOUR_IDLE_DELAY_MS,
+      0,
+      MAX_ROAM_TOUR_IDLE_DELAY_MS,
+    ),
+    // 这两项缺省开：轨迹配出来就是要循环播、要能让人按停的
+    loop: boolOr(source.loop, true),
+    showControls: boolOr(source.showControls, true),
+    // ⚠ 同一个视点在轨迹里只留第一次出现：逐段覆盖按视点 id 索引，
+    // 允许重复会让两段抢同一条覆盖
+    items: stringList(source.items),
+    segmentMs: clampedOr(
+      source.segmentMs,
+      DEFAULT_ROAM_TOUR_SEGMENT_MS,
+      0,
+      MAX_ROAM_TOUR_SEGMENT_MS,
+    ),
+    pauseMs: clampedOr(
+      source.pauseMs,
+      DEFAULT_ROAM_TOUR_PAUSE_MS,
+      0,
+      MAX_ROAM_TOUR_PAUSE_MS,
+    ),
+    segmentSettings: normalizeSegmentSettings(source.segmentSettings),
+  }
 }

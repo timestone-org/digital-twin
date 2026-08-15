@@ -96,9 +96,9 @@ describe('collectTwinConfigIssues', () => {
       anchors: [{ id: 'a1' }],
       flows: [{ id: 'f1', pathAnchors: ['a1'] }],
     })
-    expect(
-      collectTwinConfigIssues(config).map((issue) => issue.kind),
-    ).toEqual(['flow-too-short'])
+    expect(collectTwinConfigIssues(config).map((issue) => issue.kind)).toEqual([
+      'flow-too-short',
+    ])
   })
 
   it('两个点都在时不报太短', () => {

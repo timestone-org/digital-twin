@@ -134,7 +134,9 @@ export function useTwinEditorPage(
     loading: file.loading,
     saving: file.saving,
     error: computed(() =>
-      missing.value ? '这张大屏上没有这个节点，可能已被删除。' : file.error.value,
+      missing.value
+        ? '这张大屏上没有这个节点，可能已被删除。'
+        : file.error.value,
     ),
     conflict: file.conflict,
     save,

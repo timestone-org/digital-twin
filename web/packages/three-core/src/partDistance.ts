@@ -122,7 +122,9 @@ export class PartDistanceLayer {
    * @param partId 部件 id
    */
   centerOf(partId: string): THREE.Vector3 | null {
-    return this.entries.find((entry) => entry.part.id === partId)?.center ?? null
+    return (
+      this.entries.find((entry) => entry.part.id === partId)?.center ?? null
+    )
   }
 
   /**

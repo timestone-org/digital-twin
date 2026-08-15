@@ -15,13 +15,19 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 
 import { AppShell } from '@/components/layout'
 
+import BulkPartsDialog from './components/BulkPartsDialog.vue'
 import TwinDiagnosticsPanel from './components/TwinDiagnosticsPanel.vue'
 import TwinEditorToolbar from './components/TwinEditorToolbar.vue'
 import TwinInspector from './components/TwinInspector.vue'
-import TwinOutline from './components/TwinOutline.vue'
+import TwinLeftPane from './components/TwinLeftPane.vue'
 import TwinViewport from './components/TwinViewport.vue'
+import { bulkPartCandidates } from './bulkParts'
 import { createTwinEditorActions } from './twinEditorActions'
-import { TWIN_SELECT_MODEL, type TwinEntityKind, type TwinSelection } from './types'
+import {
+  TWIN_SELECT_MODEL,
+  type TwinEntityKind,
+  type TwinSelection,
+} from './types'
 import { useTwinEditorPage } from './useTwinEditorPage'
 
 const route = useRoute()
@@ -47,20 +53,33 @@ const pending = ref<{
   id: string
   what: 'node' | 'position'
 } | null>(null)
+/** 视口里正在飞漫游预览；它会被用户一碰镜头就停，所以由视口回传而不是这里说了算。 */
+const roamPreviewing = ref(false)
 
 /**
- * 视口对外的两个命令。
+ * 视口对外的四个命令。
  * ⚠ 手工与 `TwinViewport` 的 `defineExpose` 对齐：`InstanceType<typeof 组件>`
  * 取不到 `defineExpose` 的类型（会塌成 any），写错了 typecheck 与 lint 都不拦。
  */
 interface TwinViewportHandle {
   focus: (selection: TwinSelection) => void
   snapshot: () => { position: Vec3; target: Vec3; fov: number }
+  playRoamPreview: () => boolean
+  stopRoamPreview: () => void
 }
 
 const viewportRef = ref<TwinViewportHandle | null>(null)
 
 const config = computed(() => page.doc.value?.config.value ?? null)
+
+const bulkOpen = ref(false)
+
+/** 批量建部件的候选：模型节点配上「已被谁认领」。 */
+const bulkCandidates = computed(() =>
+  config.value === null
+    ? []
+    : bulkPartCandidates(config.value, modelNodes.value),
+)
 const issues = computed(() =>
   config.value === null ? [] : collectTwinConfigIssues(config.value),
 )
@@ -106,14 +125,26 @@ function applyPick(patch: Record<string, unknown>): void {
   })
 }
 
+/** 带 `nodes` 的两类：部件与钻取节点。其余种类拾取节点名没有意义。 */
+function nodesOf(kind: TwinEntityKind, id: string): readonly string[] | null {
+  const current = config.value
+  if (current === null) return null
+  if (kind === 'parts') {
+    return current.parts.find((item) => item.id === id)?.nodes ?? null
+  }
+  if (kind === 'hierNodes') {
+    return current.hierNodes.find((item) => item.id === id)?.nodes ?? null
+  }
+  return null
+}
+
 function onPickNode(name: string): void {
   const target = pending.value
-  if (target === null || config.value === null) return
-  const part = config.value.parts.find((item) => item.id === target.id)
-  if (part === undefined) return
+  if (target === null) return
+  const nodes = nodesOf(target.kind, target.id)
+  if (nodes === null) return
   // 同一个节点点两次不该塞两条进去
-  const nodes = part.nodes.includes(name) ? part.nodes : [...part.nodes, name]
-  applyPick({ nodes })
+  applyPick({ nodes: nodes.includes(name) ? [...nodes] : [...nodes, name] })
 }
 
 async function save(): Promise<void> {
@@ -130,6 +161,25 @@ function captureCamera(id: string): void {
   act.patchConfig({
     cameras: config.value.cameras.map((item) =>
       item.id === id ? { ...item, ...snapshot } : item,
+    ),
+  })
+}
+
+/** 在编辑视口里试飞一遍轨迹；飞不起来（站点不够）就直说，不留一个没反应的按钮。 */
+function previewRoam(): void {
+  if (viewportRef.value?.playRoamPreview() === false) {
+    toast.error('轨迹上可用的视点不足两个，先去加几站')
+  }
+}
+
+/** 把当前机位存进某个钻取节点的取景快照。 */
+function captureHierView(id: string): void {
+  const act = actions.value
+  const snapshot = viewportRef.value?.snapshot()
+  if (act === null || snapshot === undefined || config.value === null) return
+  act.patchConfig({
+    hierNodes: config.value.hierNodes.map((item) =>
+      item.id === id ? { ...item, view: snapshot } : item,
     ),
   })
 }
@@ -154,10 +204,7 @@ onBeforeRouteLeave(async () => {
 </script>
 
 <template>
-  <AppShell
-    title="孪生编辑器"
-    :subtitle="page.dashboard.value?.name ?? ''"
-  >
+  <AppShell title="孪生编辑器" :subtitle="page.dashboard.value?.name ?? ''">
     <div class="flex h-full flex-col">
       <TwinEditorToolbar
         :is-dirty="page.doc.value?.isDirty.value ?? false"
@@ -174,23 +221,29 @@ onBeforeRouteLeave(async () => {
       />
 
       <DtPageState
-        v-if="page.loading.value || page.error.value !== null || config === null"
+        v-if="
+          page.loading.value || page.error.value !== null || config === null
+        "
         :loading="page.loading.value"
         :error="page.error.value"
         :empty="false"
       />
       <div v-else class="flex min-h-0 flex-1">
-        <TwinOutline
-          class="w-64 shrink-0 overflow-y-auto border-r border-border-subtle"
+        <TwinLeftPane
+          class="w-64 shrink-0 border-r border-border-subtle"
           :config="config"
           :selection="selection"
           :flagged-ids="flaggedIds"
           @select="select"
           @add="actions?.add($event)"
+          @bulk-add="bulkOpen = true"
           @remove="actions?.remove($event.kind, $event.id)"
           @duplicate="actions?.duplicate($event.kind, $event.id)"
           @move="actions?.move($event.kind, $event.id, $event.delta)"
           @toggle-visible="actions?.toggleVisible($event.kind, $event.id)"
+          @add-hier="actions?.addHier($event)"
+          @move-hier="actions?.moveHier($event.id, $event.delta)"
+          @reparent-hier="actions?.reparentHier($event.id, $event.parentId)"
         />
 
         <div class="flex min-w-0 flex-1 flex-col">
@@ -204,6 +257,7 @@ onBeforeRouteLeave(async () => {
             @pick-node="onPickNode"
             @pick-position="(position: Vec3) => applyPick({ position })"
             @model-nodes="modelNodes = $event"
+            @roam-preview="roamPreviewing = $event"
           />
           <TwinDiagnosticsPanel
             v-if="showIssues"
@@ -219,12 +273,23 @@ onBeforeRouteLeave(async () => {
           :selection="selection"
           :model-nodes="modelNodes"
           :picking="pending !== null"
+          :roam-previewing="roamPreviewing"
           @patch="actions?.patchConfig($event)"
           @request-pick="requestPick"
           @cancel-pick="pending = null"
           @capture-camera="captureCamera"
+          @capture-hier-view="captureHierView"
+          @preview-roam="previewRoam"
+          @stop-roam-preview="viewportRef?.stopRoamPreview()"
         />
       </div>
     </div>
+
+    <BulkPartsDialog
+      :open="bulkOpen"
+      :candidates="bulkCandidates"
+      @update:open="bulkOpen = $event"
+      @confirm="actions?.addParts($event)"
+    />
   </AppShell>
 </template>

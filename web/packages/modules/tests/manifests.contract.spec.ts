@@ -10,6 +10,7 @@ import {
   TWIN_ARROW_BINDING_KEY,
   TWIN_CONFIG_KEY,
   TWIN_FLOW_BINDING_KEY,
+  TWIN_HIER_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
 } from '@dt/twin-config'
 import { isIconName } from '@dt/ui'
@@ -37,6 +38,7 @@ const KEY_CONSTANTS: Record<string, string> = {
   TWIN_ARROW_BINDING_KEY,
   TWIN_CONFIG_KEY,
   TWIN_FLOW_BINDING_KEY,
+  TWIN_HIER_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
 }
 
