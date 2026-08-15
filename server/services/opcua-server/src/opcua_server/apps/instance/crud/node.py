@@ -1,6 +1,7 @@
 """地址空间节点数据访问。"""
 
 import uuid
+from collections.abc import Collection
 
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,6 +37,29 @@ class NodeCrud(CrudBase[Node]):
             )
         )
         return result.scalars().one_or_none()
+
+    async def list_by_ids(
+        self,
+        session: AsyncSession,
+        *,
+        instance_id: uuid.UUID,
+        ids: Collection[uuid.UUID],
+    ) -> list[Node]:
+        """按行 id 批量取同一实例下的节点。
+
+        ⚠ 结果**可能比入参少**：问到的 id 里有已删除的、或属于别的实例的。
+        调用方按 id 自己对齐，不许按下标对齐。
+
+        Args: session, instance_id, ids。
+        """
+        if not ids:
+            return []
+        result = await session.execute(
+            select(Node).where(
+                Node.instance_id == instance_id, Node.id.in_(ids)
+            )
+        )
+        return list(result.scalars().all())
 
     async def list_of_instance(
         self, session: AsyncSession, instance_id: uuid.UUID

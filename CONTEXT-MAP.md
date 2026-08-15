@@ -20,6 +20,7 @@
 - 服务划分与部署形态：[`docs/ARCHITECTURE_MICROSERVICES.md`](docs/ARCHITECTURE_MICROSERVICES.md)
 - 数据采集与归档：[`docs/COLLECT_DESIGN.md`](docs/COLLECT_DESIGN.md)
 - 大屏组态与实时：[`docs/DASHBOARD_DESIGN.md`](docs/DASHBOARD_DESIGN.md)
+- 预测下发与每日增量：[`docs/AC_PUBLISH_DESIGN.md`](docs/AC_PUBLISH_DESIGN.md)
 - 对外接口口径：[`docs/agents/api-contract.md`](docs/agents/api-contract.md)
 - 各语言的结构、风格、注释、测试规范：[`docs/agents/`](docs/agents/)
 - 架构决策：[`docs/adr/`](docs/adr/)
