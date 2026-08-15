@@ -84,3 +84,23 @@ describe('孪生清单的渲染组件', () => {
     expect(loaded.default).toBeDefined()
   })
 })
+
+describe('绑点面板的行名', () => {
+  it('按配置里的实体名给出每一行的名字，而不是让人数行号', () => {
+    const labels = manifest.bindingRowLabels?.({
+      twin: {
+        anchors: [
+          { id: 'a1', name: '一号机组', position: [0, 0, 0] },
+          { id: 'a2', name: '二号机组', position: [1, 0, 0] },
+        ],
+      },
+    })
+
+    expect(labels?.['anchorValues[0].value']).toContain('一号机组')
+    expect(labels?.['anchorValues[1].value']).toContain('二号机组')
+  })
+
+  it('配置为空时给一张空表，绑点面板自己退回「第 N 行」', () => {
+    expect(manifest.bindingRowLabels?.({})).toEqual({})
+  })
+})

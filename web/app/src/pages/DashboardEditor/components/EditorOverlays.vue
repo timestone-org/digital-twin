@@ -9,9 +9,9 @@ import type { DesignSize, GetModuleManifest } from '@dt/runtime'
 import type { CollectPoint } from '@/api/collect'
 import type { ContextMenuAction } from '../contextMenuItems'
 import type { ContextMenuState } from '../useEditorContextMenu'
+import PointPickerDialog from '@/components/binding/PointPickerDialog.vue'
 import CanvasContextMenu from './CanvasContextMenu.vue'
 import EditorPreview from './EditorPreview.vue'
-import PointPickerDialog from './PointPickerDialog.vue'
 import ShortcutsDialog from './ShortcutsDialog.vue'
 
 defineProps<{

@@ -3,7 +3,12 @@
  * 绑定槽直接摊开 `TWIN_VIEW_BINDINGS`，不在这里抄一份键名——槽键写两遍时，
  * 拼错的那一份既不报错也永远取不到值（twin-config/constants.ts）。
  */
-import { TWIN_CONFIG_KEY, TWIN_VIEW_BINDINGS } from '@dt/twin-config'
+import {
+  TWIN_CONFIG_KEY,
+  TWIN_VIEW_BINDINGS,
+  normalizeTwinConfig,
+  twinRowLabels,
+} from '@dt/twin-config'
 
 import { defineModule } from '../../registry'
 
@@ -64,7 +69,22 @@ export default defineModule({
       help: '模型、部件与锚点，整块由孪生子编辑器写入。',
     },
   ],
+  // 点中部件时上抛 `{ event: 'click', value: 部件 id }`
+  emitsInteractions: true,
+  // ⚠ `hostClickable` 刻意不开：3D 视口内部有拖拽手势，整块可点会让每次
+  //   转完镜头松手都派发一次 click（清单里 `hostClickable` 的注释写了这条）
+  // 属性面板只读这份声明来决定出不出入口，故这里的路由名写错 = 入口点了没反应
+  subEditor: {
+    configKey: TWIN_CONFIG_KEY,
+    routeName: 'twin-editor',
+    label: '打开孪生编辑器',
+    hint: '模型摆放、部件、锚点、信息牌与能量流都在那里配。',
+  },
   bindings: [...TWIN_VIEW_BINDINGS],
+  // 绑点面板按它把「第 3 行」显示成「3 号机组温度」——行号与实体的对应关系
+  // 只有归一化后的配置知道，所以由清单自己算
+  bindingRowLabels: (config) =>
+    twinRowLabels(normalizeTwinConfig(config[TWIN_CONFIG_KEY])),
   // 刻意不给 preview：3D 演示要有模型素材才看得见，编造一份只会在画布上留一块空白
   component: () => import('./Component.vue'),
 })

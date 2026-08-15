@@ -167,6 +167,12 @@ export interface TwinPart {
   nodes: string[]
   visibility: TwinVisibilityRule
   clickDistance: TwinClickDistanceRule
+  /**
+   * 点它时打开层级钻取并落在这个钻取节点上；空串 = 只上抛联动事件、不开钻取。
+   * ⚠ 指到一个已删掉的钻取节点时，钻取弹窗打不开，表现是「点了没反应」——
+   * 这种悬空由 `collectTwinConfigIssues` 报出来，渲染层不猜。
+   */
+  clickHierNode: string
 }
 
 /** 锚点：世界坐标上的一个读数标签。 */
@@ -336,6 +342,96 @@ export interface TwinViewpointSwitcher {
   items: string[]
 }
 
+/**
+ * 钻取弹窗的取景快照：一个机位加一个注视点。
+ * ⚠ 与 `TwinCamera` 同形却不是同一个东西：视点是场上共享的预设、能在切换条上
+ * 露面，这一份只属于某个钻取节点、不进切换条。共用一个类型会让「删掉一个视点」
+ * 顺手把某个钻取节点的取景也删了。
+ */
+export interface TwinModalView {
+  position: Vec3
+  /** 注视点。 */
+  target: Vec3
+  /** 透视视野，度。 */
+  fov: number
+}
+
+/**
+ * 层级钻取树上的一个节点：厂区 → 车间 → 设备这类逐层下钻的一层。
+ *
+ * ⚠ `parentId` 成环时整棵树建不出来，那几个节点会从钻取里整体消失——成环由
+ * `collectTwinConfigIssues` 报出来，`buildHierTree` 只保证自己不会无限递归。
+ * ⚠ `order` 决定同级次序，与**文档序**是两回事：文档序定的是 `hierValues`
+ * 第几行喂哪个字段，拖着改父子或调同级次序都不动它。
+ */
+export interface TwinHierNode {
+  id: string
+  /** 上一层的节点 id；null = 这是一个根。 */
+  parentId: string | null
+  name: string
+  /** 同级次序，小的在前；相同时按文档序。 */
+  order: number
+  /** 卡片上的图标名；空串 = 不画图标。 */
+  icon: string
+  /** 这一层对应的 3D 节点名；空数组 = 取全部子孙的并集。 */
+  nodes: string[]
+  /** 钻进来时的取景；null = 不改机位。优先级高于 `cameraId`。 */
+  view: TwinModalView | null
+  /** 钻进来时切到这个预设视点；空串 = 不切。⚠ `view` 有值时它不生效。 */
+  cameraId: string
+  /** 这一层要显示的读数字段。 */
+  fields: TwinPanelField[]
+  /** 父层卡片上摘要显示哪几个字段的 key；空数组 = 取 `fields` 前两个。 */
+  summaryFieldKeys: string[]
+  /** 钻取页标题；空串 = 用根到本节点的钻取路径。 */
+  title: string
+  /** 藏起子项卡片列表，只能在 3D 上点部件钻进下一层。 */
+  hideChildList: boolean
+}
+
+/**
+ * 一段漫游的时长覆盖。
+ * ⚠ `null` 表示这一项没覆盖、用轨迹的全局值，不是「覆盖成 0」：后者是
+ * 「这一段瞬移过去 / 到站不停」，两者的画面完全不同。
+ */
+export interface TwinRoamTourSegment {
+  /** 本段飞行时长 ms。 */
+  segmentMs: number | null
+  /** 本段到站后的停留时长 ms。 */
+  pauseMs: number | null
+}
+
+/**
+ * 自动漫游：镜头按一串视点连续飞过去。
+ * ⚠ `items` 里指向已删视点的 id 一律留着，由 `collectTwinConfigIssues` 报出来，
+ * 运行态跳过那一站——与视点切换控件同一个口径，归一化不做静默清理。
+ */
+export interface TwinRoamTour {
+  enabled: boolean
+  /** 进运行态就开播。 */
+  autoplay: boolean
+  /** 用户不操作到点后自动开播。 */
+  idleAutoplay: boolean
+  /** 闲置多久才自动开播，ms。 */
+  idleAutoplayDelayMs: number
+  /** 走完最后一站回到第一站接着飞。 */
+  loop: boolean
+  /** 运行态显示播放控件。 */
+  showControls: boolean
+  /** 轨迹经过的视点 id，按顺序。 */
+  items: string[]
+  /** 每段飞行时长 ms。 */
+  segmentMs: number
+  /** 每站停留时长 ms。 */
+  pauseMs: number
+  /**
+   * 逐段覆盖，键 = 该段**起始**视点 id。
+   * ⚠ 停留算在飞完那一段的尾巴上，所以「到 B 停 5 秒」配在 A→B 那段、也就是
+   * 键 A 上；配到 B 上改的是 B→C 那段的停留。
+   */
+  segmentSettings: Record<string, TwinRoamTourSegment>
+}
+
 /** 一份孪生场景配置。 */
 export interface TwinConfig {
   version: number
@@ -344,9 +440,11 @@ export interface TwinConfig {
   anchors: TwinAnchor[]
   cameras: TwinCamera[]
   viewpoints: TwinViewpointSwitcher
+  roamTour: TwinRoamTour
   panels: TwinPanel[]
   arrows: TwinArrow[]
   flows: TwinFlowLink[]
+  hierNodes: TwinHierNode[]
 }
 
 /** 一个锚点的实时值。 */
@@ -387,3 +485,15 @@ export interface TwinFlowValue {
 
 /** 能量流实时值，按流 id 索引。 */
 export type TwinFlowValues = Readonly<Record<string, TwinFlowValue>>
+
+/** 一个钻取节点字段的实时值。 */
+export interface TwinHierValue {
+  value: unknown
+}
+
+/**
+ * 钻取节点字段的实时值，按 `<节点 id>::<字段 key>` 索引。
+ * ⚠ 键里必须带节点 id：两层上都有一个叫 `power` 的字段是常事，
+ * 只用字段 key 会让后一层的值盖掉前一层的。
+ */
+export type TwinHierValues = Readonly<Record<string, TwinHierValue>>

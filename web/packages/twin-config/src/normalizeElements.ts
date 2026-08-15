@@ -29,6 +29,7 @@ import {
   type TwinPanel,
   type TwinPanelField,
   type TwinPanelStyle,
+  type Vec3,
 } from './types'
 
 const MAX_DECIMALS = 10
@@ -63,7 +64,8 @@ function normalizePanelStyle(raw: unknown): TwinPanelStyle {
   }
 }
 
-function normalizePanelField(
+/** 信息牌与钻取节点共用的一个读数字段。 */
+export function normalizePanelField(
   raw: unknown,
   index: number,
 ): TwinPanelField | null {
@@ -94,6 +96,20 @@ export function normalizePanel(raw: unknown, index: number): TwinPanel | null {
   }
 }
 
+/** 朝上的缺省方向。 */
+const UP: Vec3 = [0, 1, 0]
+
+/**
+ * 箭头朝向。
+ * ⚠ 零向量在这里就换成 +Y，不留给渲染层：`normalize()` 一个零向量得到的是
+ * NaN，整个箭头连同它的标签会从画面上消失，而控制台一声不吭。
+ */
+function usableDirection(raw: unknown): Vec3 {
+  const built = vec3(raw, UP)
+  const isZero = built.every((axis) => axis === 0)
+  return isZero ? [...UP] : built
+}
+
 /** 一个立体箭头。 */
 export function normalizeArrow(raw: unknown, index: number): TwinArrow | null {
   if (!isRecord(raw)) return null
@@ -101,8 +117,7 @@ export function normalizeArrow(raw: unknown, index: number): TwinArrow | null {
     id: entityId(raw.id, 'arrow', index),
     name: trimmedString(raw.name),
     position: vec3(raw.position, ORIGIN),
-    // 缺省朝 +Y：零向量 normalize 出 NaN，整个箭头会从画面上消失
-    direction: vec3(raw.direction, [0, 1, 0]),
+    direction: usableDirection(raw.direction),
     length: clampedOr(raw.length, 1, MIN_GEOMETRY, MAX_GEOMETRY),
     width: clampedOr(raw.width, 1, MIN_GEOMETRY, MAX_GEOMETRY),
     labelText: trimmedString(raw.labelText),

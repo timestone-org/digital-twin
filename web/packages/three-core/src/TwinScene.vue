@@ -1,26 +1,44 @@
 <script setup lang="ts">
 /**
- * @fileoverview 孪生场景宿主：渲染循环、模型装载与进度、部件显隐、锚点标签。
+ * @fileoverview 孪生场景宿主：渲染循环、模型装载与进度、部件显隐、锚点、箭头、信息牌、能量流与场景特效。
  * ⚠ 本组件静态依赖整个 three，只能被异步加载（DASHBOARD_DESIGN §5.4）。
  */
-import type { TwinAnchorValues, TwinConfig } from '@dt/twin-config'
-import { EMPTY_ANCHOR_VALUES } from '@dt/twin-config'
-import { DtNotice, DtSpinner } from '@dt/ui'
+import type {
+  TwinAnchorValues,
+  TwinArrowValues,
+  TwinConfig,
+  TwinFlowValues,
+  TwinModalView,
+  TwinPanelValues,
+} from '@dt/twin-config'
+import {
+  EMPTY_ANCHOR_VALUES,
+  EMPTY_ARROW_VALUES,
+  EMPTY_FLOW_VALUES,
+  EMPTY_PANEL_VALUES,
+} from '@dt/twin-config'
 import type { Object3D } from 'three'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import { AnchorLayer } from './anchorLayer'
 import { resolveTwinModelUrl } from './host'
+import { createFrameClock } from './frameClock'
+import TwinRoamControls from './TwinRoamControls.vue'
+import { useRoamTour } from './useRoamTour'
+import { SceneLayers, type SceneLayerValues } from './sceneLayers'
 import { loadTwinModel } from './modelLoader'
+import { distanceContextOf } from './distanceContext'
+import type { TwinPartClick } from './partPicking'
+import TwinSceneOverlay from './TwinSceneOverlay.vue'
+import { usePartClick } from './usePartClick'
 import {
   EMPTY_NODE_INDEX,
-  applyPartVisibility,
   buildNodeIndex,
   unmatchedNodeNames,
   type NodeIndex,
 } from './nodeIndex'
 import {
   WEBGL_UNAVAILABLE_MESSAGE,
+  applyCameraPose,
   applyModelPlacement,
   boundingDiagonal,
   createSceneCore,
@@ -37,7 +55,18 @@ const props = defineProps<{
   /** ⚠ 必须是 `normalizeTwinConfig` 的输出：这里按引用比对，就地改字段不会重绘。 */
   config: TwinConfig
   anchorValues?: TwinAnchorValues
+  arrowValues?: TwinArrowValues
+  panelValues?: TwinPanelValues
+  flowValues?: TwinFlowValues
+  /**
+   * 钻取取景；null / 不给 = 不动镜头。
+   * ⚠ 只在它换引用时飞一次，不每帧套——套住的话镜头就转不动了。
+   */
+  focusView?: TwinModalView | null
 }>()
+
+/** 点中了某个部件，且通过了距离门禁。 */
+const emit = defineEmits<{ partClick: [TwinPartClick] }>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
 const status = ref<'empty' | 'loading' | 'ready' | 'error'>('empty')
@@ -48,32 +77,54 @@ const missingNodes = ref<readonly string[]>([])
 let core: SceneCore | null = null
 /** 已挂上的模型根，配置改了要按新的摆放重置它。 */
 let modelObject: Object3D | null = null
-let anchorLayer: AnchorLayer | null = null
+let layers: SceneLayers | null = null
+const clock = createFrameClock()
 let nodeIndex: NodeIndex = EMPTY_NODE_INDEX
 let observer: ResizeObserver | null = null
 let frameHandle = 0
+
+usePartClick({
+  element: () => containerRef.value,
+  core: () => core,
+  parts: () => layers?.parts ?? null,
+  onPartClick: (part) => emit('partClick', part),
+})
+const roam = useRoamTour({
+  core: () => core,
+  config: () => props.config,
+})
 let loadSeq = 0
 let loadAbort: AbortController | null = null
 
 const modelAsset = computed(() => props.config.model.asset)
 const anchors = computed(() => props.anchorValues ?? EMPTY_ANCHOR_VALUES)
-const overlayMessage = computed(() =>
-  status.value === 'error' ? errorMessage.value : '未选择模型',
-)
-const progressText = computed(() =>
-  progressPercent.value > 0
-    ? `模型加载中 ${progressPercent.value}%`
-    : '模型加载中',
-)
-const missingText = computed(() => missingNodes.value.join('、'))
+const arrows = computed(() => props.arrowValues ?? EMPTY_ARROW_VALUES)
+const panels = computed(() => props.panelValues ?? EMPTY_PANEL_VALUES)
+const flows = computed(() => props.flowValues ?? EMPTY_FLOW_VALUES)
 const backgroundStyle = computed(() => {
   const spec = props.config.model.background
   if (spec === '') return undefined
   return { background: spec.startsWith('--') ? `var(${spec})` : spec }
 })
 
-function tick(): void {
+/** 把这一帧的时长交给需要动的那两层。 */
+function animate(delta: number): void {
+  if (delta <= 0) return
+  layers?.update(delta)
+}
+
+/** 一帧多少毫秒；帧钟给的是秒。 */
+const MS_PER_S = 1000
+
+function tick(now: number): void {
   if (core === null) return
+  const delta = clock.tick(now)
+  animate(delta)
+  // ⚠ 用帧钟夹过的时长，不用 rAF 的原始时刻：切走标签页再回来那一帧有几十秒，
+  // 直接算下去会一帧飞完整条轨迹
+  roam.advance(delta * MS_PER_S)
+  // ⚠ 每帧都要算：镜头一直在动，距离规则的成立与否随时在变
+  layers?.applyDistanceRules(distanceContextOf(core))
   renderScene(core)
   frameHandle = requestAnimationFrame(tick)
 }
@@ -84,22 +135,32 @@ function measure(): void {
   resizeScene(core, element.clientWidth, element.clientHeight)
 }
 
+/** 当前这一拍的五路实时值。 */
+function liveValues(): SceneLayerValues {
+  return {
+    anchors: anchors.value,
+    arrows: arrows.value,
+    panels: panels.value,
+    flows: flows.value,
+  }
+}
+
 function refreshLayers(): void {
   if (core === null) return
   core.controls.autoRotate = props.config.model.autoRotate
   // ⚠ 摆放要跟着配置重算：只在装载时应用的话，编辑器里改缩放/位移/旋转
   // 会一直到换模型才生效，中间那段是「调了没反应」
   placeModel()
-  applyPartVisibility(nodeIndex, props.config.parts)
-  anchorLayer?.build(props.config.anchors)
-  anchorLayer?.setValues(anchors.value)
+  layers?.build(props.config, liveValues(), nodeIndex)
+  // ⚠ 建完立刻按当前机位算一次：等下一帧的话，配了近距隐藏的元素会先露一帧
+  layers?.applyDistanceRules(distanceContextOf(core))
 }
 
 /** 把配置里的摆放落到模型上，并按新体量重算锚点小球尺寸。 */
 function placeModel(): void {
   if (modelObject === null) return
   applyModelPlacement(modelObject, props.config.model)
-  anchorLayer?.setWorldScale(boundingDiagonal(modelObject))
+  layers?.setWorldScale(boundingDiagonal(modelObject))
 }
 
 function clearModel(): void {
@@ -166,12 +227,15 @@ onMounted(() => {
   const renderer = createWebGLRenderer()
   if (renderer === null) return fail(WEBGL_UNAVAILABLE_MESSAGE)
   core = createSceneCore({ container: element, renderer })
-  anchorLayer = new AnchorLayer(element)
-  core.scene.add(anchorLayer.group)
+  layers = new SceneLayers(element)
+  layers.addTo(core.scene)
   observer = new ResizeObserver(measure)
   observer.observe(element)
   measure()
+  clock.reset()
   frameHandle = requestAnimationFrame(tick)
+  // ⚠ 必须等 core 建好再装：漫游要往轨道控制器上挂监听，早一步挂不上去
+  roam.attach()
   void load()
 })
 
@@ -183,37 +247,42 @@ onBeforeUnmount(() => {
   cancelAnimationFrame(frameHandle)
   observer?.disconnect()
   observer = null
-  anchorLayer?.dispose()
-  anchorLayer = null
+  layers?.dispose()
+  layers = null
   if (core !== null) disposeScene(core)
   core = null
   modelObject = null
   nodeIndex = EMPTY_NODE_INDEX
 })
 
+/** 把一个取景快照落到相机上。 */
+function applyFocusView(view: TwinModalView | null | undefined): void {
+  if (core === null || view === null || view === undefined) return
+  applyCameraPose(core, view)
+  core.controls.update()
+}
+
 watch(modelAsset, () => void load())
+watch(() => props.focusView, applyFocusView)
 watch(() => props.config, refreshLayers)
-watch(anchors, (value) => anchorLayer?.setValues(value))
+watch(liveValues, (values) => layers?.setValues(values))
 </script>
 
 <template>
   <div ref="containerRef" class="twin-scene" :style="backgroundStyle">
-    <div v-if="status === 'loading'" class="twin-scene__overlay">
-      <DtSpinner />
-      <span class="twin-scene__progress">{{ progressText }}</span>
-    </div>
-    <div v-else-if="status !== 'ready'" class="twin-scene__overlay">
-      <DtNotice :intent="status === 'error' ? 'danger' : 'neutral'">
-        {{ overlayMessage }}
-      </DtNotice>
-    </div>
-    <DtNotice
-      v-if="missingNodes.length > 0"
-      class="twin-scene__issue"
-      intent="warning"
-    >
-      模型里没有这些部件节点：{{ missingText }}
-    </DtNotice>
+    <TwinSceneOverlay
+      :status="status"
+      :progress-percent="progressPercent"
+      :error-message="errorMessage"
+      :missing-nodes="missingNodes"
+    />
+    <TwinRoamControls
+      v-if="roam.showControls.value"
+      :playing="roam.playing.value"
+      @toggle="roam.toggle()"
+      @next="roam.next()"
+      @prev="roam.prev()"
+    />
   </div>
 </template>
 
@@ -223,29 +292,5 @@ watch(anchors, (value) => anchorLayer?.setValues(value))
   width: 100%;
   height: 100%;
   overflow: hidden;
-
-  &__overlay {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-  }
-
-  &__progress {
-    font-size: 12px;
-    color: var(--text-secondary);
-  }
-
-  &__issue {
-    position: absolute;
-    right: 8px;
-    bottom: 8px;
-    left: 8px;
-    justify-content: center;
-  }
 }
 </style>

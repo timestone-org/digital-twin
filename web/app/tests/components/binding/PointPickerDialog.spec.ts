@@ -8,7 +8,7 @@ import type { Page } from '@dt/contracts'
 
 import * as collectApi from '@/api/collect'
 import type { CollectPoint } from '@/api/collect'
-import PointPickerDialog from '@/pages/DashboardEditor/components/PointPickerDialog.vue'
+import PointPickerDialog from '@/components/binding/PointPickerDialog.vue'
 
 function point(code: string): CollectPoint {
   return {

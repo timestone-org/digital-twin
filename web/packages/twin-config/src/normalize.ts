@@ -5,6 +5,7 @@ import { TWIN_CONFIG_VERSION } from './constants'
 import {
   normalizeCamera,
   normalizeModel,
+  normalizeRoamTour,
   normalizeViewpoints,
 } from './normalizeScene'
 import {
@@ -12,6 +13,7 @@ import {
   normalizeFlow,
   normalizePanel,
 } from './normalizeElements'
+import { normalizeHierNode } from './normalizeHier'
 import { normalizeClickDistance, normalizeVisibility } from './normalizeRules'
 import {
   clampedOr,
@@ -33,6 +35,7 @@ function normalizePart(raw: unknown, index: number): TwinPart | null {
     nodes: stringList(raw.nodes),
     visibility: normalizeVisibility(raw.visibility, raw.visible),
     clickDistance: normalizeClickDistance(raw.clickDistance),
+    clickHierNode: trimmedString(raw.clickHierNode),
   }
 }
 
@@ -69,8 +72,10 @@ export function normalizeTwinConfig(raw: unknown): TwinConfig {
     anchors: normalizeList(source.anchors, normalizeAnchor),
     cameras: normalizeList(source.cameras, normalizeCamera),
     viewpoints: normalizeViewpoints(source.viewpoints),
+    roamTour: normalizeRoamTour(source.roamTour),
     panels: normalizeList(source.panels, normalizePanel),
     arrows: normalizeList(source.arrows, normalizeArrow),
     flows: normalizeList(source.flows, normalizeFlow),
+    hierNodes: normalizeList(source.hierNodes, normalizeHierNode),
   }
 }

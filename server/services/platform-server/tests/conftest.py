@@ -92,8 +92,11 @@ from platform_server.container import Container
 from platform_server.settings import Settings
 from timeseries import HISTORY_SCHEMA
 
-# 与 auth-server 的 AUTH_EDGE_PERMISSION_TTL_S 同量级，用例不依赖它的确切取值
-HEADER_TTL_S = 60
+# 与 auth-server 的 AUTH_EDGE_PERMISSION_TTL_S 同量级，用例不依赖它的确切取值。
+# ⚠ 别往下调：身份头在夹具里签一次给整条用例用，CPU 受限的容器里从签发到发请求
+# 撑过这个数就是一片 40100，且每轮红的是不同的几条——看着像认证坏了，其实是慢。
+# 测过期的用例显式传 `lifetime_s=-1`，不吃这个默认值。
+HEADER_TTL_S = 300
 # ⚠ 每加一个受权限守着的功能面都要往这里补：漏了不是「那面没被测到」，
 # 而是那面**全部用例整片 403**，而失败信息只说不可迭代 None
 FULL_CODES = (

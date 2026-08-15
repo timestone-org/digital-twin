@@ -183,6 +183,7 @@ export type {
   ModuleConnectionState,
   ModuleDefaultSize,
   ModuleManifest,
+  ModuleSubEditor,
   ModuleMeta,
   ModulePreview,
   ModuleRegion,

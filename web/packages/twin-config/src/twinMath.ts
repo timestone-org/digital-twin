@@ -3,6 +3,7 @@
  * 锚点读数格式化。无 Vue、无 three、无 DOM。
  */
 import type { TwinRowSlot } from './constants'
+import type { FlatHierField } from './hierTree'
 import type { FlatPanelField } from './normalizeElements'
 import { finiteValue, isRecord, toArray, toFiniteNumber } from './sanitize'
 import type {
@@ -15,6 +16,8 @@ import type {
   TwinFlowLink,
   TwinFlowValue,
   TwinFlowValues,
+  TwinHierValue,
+  TwinHierValues,
   TwinPanelValue,
   TwinPanelValues,
 } from './types'
@@ -28,6 +31,7 @@ export const EMPTY_ANCHOR_VALUES: TwinAnchorValues = Object.freeze({})
 export const EMPTY_PANEL_VALUES: TwinPanelValues = Object.freeze({})
 export const EMPTY_ARROW_VALUES: TwinArrowValues = Object.freeze({})
 export const EMPTY_FLOW_VALUES: TwinFlowValues = Object.freeze({})
+export const EMPTY_HIER_VALUES: TwinHierValues = Object.freeze({})
 
 /** 第 index 行的 sub 子槽；行不是对象一律按无值处理。 */
 function readRowSlot(rows: unknown, index: number, sub: TwinRowSlot): unknown {
@@ -114,6 +118,26 @@ export function stitchFlowValues(
   return Object.keys(out).length === 0 ? EMPTY_FLOW_VALUES : out
 }
 
+/**
+ * 钻取字段数组行 → `<节点 id>::<字段 key>` 映射。
+ * ⚠ 行号是**扁平化后**的文档序，必须喂 `flattenHierFields` 的输出：
+ * 按「第 i 个节点」对齐会让多字段的节点之后的每一行整体错位。
+ * @param fields `flattenHierFields` 的输出
+ * @param rows 模块 values 里 `hierValues` 槽的整个数组
+ */
+export function stitchHierValues(
+  fields: readonly FlatHierField[] | undefined,
+  rows: unknown,
+): TwinHierValues {
+  const out: Record<string, TwinHierValue> = {}
+  ;(fields ?? []).forEach((entry, index) => {
+    const value = readRowSlot(rows, index, 'value')
+    if (value === undefined) return
+    out[entry.valueKey] = { value }
+  })
+  return Object.keys(out).length === 0 ? EMPTY_HIER_VALUES : out
+}
+
 function formatReading(value: unknown, decimals: number | null): string {
   if (typeof value === 'boolean') return String(value)
   const parsed = toFiniteNumber(value)
@@ -125,6 +149,36 @@ function formatReading(value: unknown, decimals: number | null): string {
   return parsed.toFixed(decimals)
 }
 
+/** 拼一段读数所需的三样：前缀、单位、小数位。 */
+export interface ValueFormat {
+  prefix: string
+  unit: string
+  decimals: number | null
+}
+
+/**
+ * `前缀 数值 单位` 三段按需拼接，空的那段不占位。
+ * ⚠ 先过 `finiteValue`：NaN / ±Infinity 会被原样上屏分支逐字打印成 "NaN"。
+ * @param format 前缀、单位与小数位
+ * @param value 实时值
+ */
+export function formatValueText(format: ValueFormat, value: unknown): string {
+  const reading = formatReading(finiteValue(value), format.decimals)
+  return [format.prefix, reading, format.unit]
+    .filter((part) => part !== '')
+    .join(' ')
+}
+
+/**
+ * 箭头标签文本：固定文案与读数之间空一格，两者都空时给空串。
+ * @param arrow 归一化后的箭头
+ * @param value 该箭头的实时值
+ */
+export function formatArrowText(arrow: TwinArrow, value: unknown): string {
+  const reading = formatValueText(arrow, value)
+  return [arrow.labelText, reading].filter((part) => part !== '').join(' ')
+}
+
 /**
  * 锚点标签文本，`label 数值 unit` 三段按需拼接。
  * ⚠ 先过 `finiteValue`：NaN / ±Infinity 会被下面的原样上屏分支逐字打印成 "NaN"。
@@ -132,8 +186,9 @@ function formatReading(value: unknown, decimals: number | null): string {
  * @param value 该锚点的实时值
  */
 export function formatAnchorText(anchor: TwinAnchor, value: unknown): string {
-  const reading = formatReading(finiteValue(value), anchor.decimals)
-  return [anchor.label, reading, anchor.unit]
-    .filter((part) => part !== '')
-    .join(' ')
+  // 锚点的 label 就是别处的 prefix：同一套拼装，两处各写一份必漂
+  return formatValueText(
+    { prefix: anchor.label, unit: anchor.unit, decimals: anchor.decimals },
+    value,
+  )
 }

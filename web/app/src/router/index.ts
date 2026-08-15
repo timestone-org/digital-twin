@@ -11,7 +11,7 @@ import { PERMISSION_CODES } from '@dt/contracts'
 
 import { installAuthGuard } from './guards'
 
-const routes: RouteRecordRaw[] = [
+export const routes: RouteRecordRaw[] = [
   {
     path: '/login',
     name: 'login',
@@ -66,6 +66,16 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/pages/DashboardEditor/index.vue'),
     meta: {
       title: '大屏编辑器',
+      permissions: [PERMISSION_CODES.dashboardEdit],
+    },
+  },
+  {
+    // 挂在大屏编辑器下面：改的是某个节点的一段 config，权限与它同一档
+    path: '/dashboards/:dashboardId/edit/twin/:nodeId',
+    name: 'twin-editor',
+    component: () => import('@/pages/TwinEditor/index.vue'),
+    meta: {
+      title: '孪生编辑器',
       permissions: [PERMISSION_CODES.dashboardEdit],
     },
   },

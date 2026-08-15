@@ -135,6 +135,8 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-unsafe-assignment': 'off',
       'max-lines-per-function': 'off',
+      // 测 provide/inject 必须有父子两个组件——一个组件 inject 不到自己 provide 的东西
+      'vue/one-component-per-file': 'off',
     },
   },
   {

@@ -4,7 +4,16 @@
 // 渲染组件由模块清单异步 import。守这条的用例在
 // app/tests/contract/startup-graph.contract.spec.ts。
 export { default as TwinScene } from './TwinScene.vue'
+export { default as TwinHierDrill } from './TwinHierDrill.vue'
 export { AnchorLayer } from './anchorLayer'
+export { ArrowLayer } from './arrowLayer'
+export { FlowLayer } from './flowLayer'
+export { PanelLayer } from './panelLayer'
+export { SceneEffectsLayer } from './sceneEffects'
+export { MAX_FRAME_S, createFrameClock } from './frameClock'
+export type { FrameClock } from './frameClock'
+export { SceneLayers } from './sceneLayers'
+export type { SceneLayerValues } from './sceneLayers'
 export {
   EMPTY_NODE_INDEX,
   applyPartVisibility,
@@ -18,6 +27,7 @@ export { createGltfSource, loadTwinModel } from './modelLoader'
 export type { GltfSource, TwinModelLoadOptions } from './modelLoader'
 export {
   WEBGL_UNAVAILABLE_MESSAGE,
+  applyCameraPose,
   applyModelPlacement,
   boundingDiagonal,
   clampPixelRatio,
@@ -43,3 +53,14 @@ export {
   resolveTwinModelUrl,
 } from './host'
 export type { TwinModelHost } from './host'
+export { EditorScene } from './editorScene'
+export type {
+  EditorSceneCallbacks,
+  EditorSceneOptions,
+  EditorSceneStatus,
+  TwinCameraPose,
+  TwinPickMode,
+} from './editorScene'
+export type { TwinSceneEntityKind, TwinSceneSelection } from './pickTargets'
+export { useRoamTour } from './useRoamTour'
+export type { RoamTourController, RoamTourDeps } from './useRoamTour'

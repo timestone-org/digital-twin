@@ -178,6 +178,24 @@ export interface ModulePreview {
  * 与渲染无关的那部分由前端在构建期导出给服务端，两侧一致性靠契约测试锁死
  * （ADR-0012 五）。
  */
+/**
+ * 某个 config 键由一个整页子编辑器接管。
+ *
+ * ⚠ 这是「按类型分支」的替代品，不是它的补充：属性面板只读这份声明来决定
+ * 要不要出入口按钮，绝不写 `if (type === 'twin-view')`。写了那一句，
+ * 第三方模块就永远开不出自己的子编辑器，而且既不报错也不失败。
+ */
+export interface ModuleSubEditor {
+  /** 接管这个键；属性面板在这个字段的位置出入口，不再画通用控件。 */
+  configKey: string
+  /** 跳去哪个路由。⚠ 路由须接 `dashboardId` + `nodeId` 两个参数。 */
+  routeName: string
+  /** 入口按钮上的字。 */
+  label: string
+  /** 按钮下的一行说明；讲清楚这段配置为什么不在这里改。 */
+  hint?: string
+}
+
 export interface ModuleManifest {
   /** 唯一类型 id，例 `header` / `twin-view`；节点的 `moduleType` 存的就是它。 */
   type: string
@@ -221,6 +239,19 @@ export interface ModuleManifest {
   hostClickable?: boolean
   /** 容器模块：自己只画壳，子节点由运行时按节点树递归注入。 */
   isContainer?: boolean
+  /** 有一段 config 复杂到两列表单表达不了，交给一个整页子编辑器。 */
+  subEditor?: ModuleSubEditor
+  /**
+   * 数组绑定槽每一行叫什么名字：键是该行第一个子槽的 `fieldKey`，值是显示名。
+   * 只有模块自己知道第 3 行对应的是哪个实体（孪生的第 3 个锚点、表格的第 3 列），
+   * 绑点面板不认识任何具体模块，故由清单自述。
+   * ⚠ 不给就退回「第 N 行」——十几行的配置在绑点时就全靠数数认，
+   * 那是这套面板最容易接错对象的地方。
+   * @param config 该节点落库的配置（未铺清单缺省）
+   */
+  bindingRowLabels?: (
+    config: Record<string, unknown>,
+  ) => Readonly<Record<string, string>>
   region?: ModuleRegion
   /** 清单版本，缺省 1。仅元数据，注册表仍按 `type` 单键索引。 */
   version?: number

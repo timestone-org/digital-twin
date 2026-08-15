@@ -301,6 +301,58 @@ describe('实时值', () => {
   })
 })
 
+describe('箭头与信息牌', () => {
+  it('箭头读数更新后写进标签', async () => {
+    const wrapper = mountScene({
+      config: config({
+        arrows: [{ id: 'ar1', labelText: '进气', unit: 'm/s' }],
+      }),
+    })
+    await flushPromises()
+
+    await wrapper.setProps({ arrowValues: { ar1: { value: 12 } } })
+    await flushPromises()
+
+    expect(document.body.textContent).toContain('进气 12 m/s')
+    // ⚠ 必须卸载：这份 spec 没开自动卸载，留下的场景会被后面按
+    //   `document.querySelector` 找元素的用例捡到，红在一个毫不相干的地方
+    wrapper.unmount()
+  })
+
+  it('信息牌字段按 牌id::字段key 取值', async () => {
+    const wrapper = mountScene({
+      config: config({
+        panels: [
+          { id: 'p1', name: '泵组', fields: [{ key: 'temp', label: '温度' }] },
+        ],
+      }),
+    })
+    await flushPromises()
+
+    await wrapper.setProps({ panelValues: { 'p1::temp': { value: 36 } } })
+    await flushPromises()
+
+    expect(document.body.textContent).toContain('36')
+    wrapper.unmount()
+  })
+
+  // ⚠ 三层的 CSS2D 元素都挂在标签层容器里，卸载不摘就留在页面上飘着
+  it('卸载后箭头与信息牌的 DOM 一个不剩', async () => {
+    const wrapper = mountScene({
+      config: config({
+        arrows: [{ id: 'ar1', labelText: '进气' }],
+        panels: [{ id: 'p1', name: '泵组' }],
+      }),
+    })
+    await flushPromises()
+
+    wrapper.unmount()
+
+    expect(document.body.textContent).not.toContain('进气')
+    expect(document.body.textContent).not.toContain('泵组')
+  })
+})
+
 describe('快速切模型的竞态', () => {
   it('慢的那次后返回时结果被丢弃，且它的 GPU 资源被释放', async () => {
     const first = deferred<THREE.Object3D>()
@@ -413,5 +465,155 @@ describe('卸载清理', () => {
     await flushPromises()
 
     expect(lateDispose).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * 取视口根元素并给它一个确定的尺寸。
+ * ⚠ 不给尺寸的话 happy-dom 下 rect 全是 0，射线打哪儿都说不准。
+ */
+function viewportOf(): HTMLElement {
+  const element = document.querySelector<HTMLElement>('.twin-scene')
+  if (element === null) throw new Error('视口没挂上')
+  element.getBoundingClientRect = () =>
+    ({ left: 0, top: 0, width: 100, height: 100 }) as DOMRect
+  return element
+}
+
+function press(element: HTMLElement, x: number, y: number): void {
+  element.dispatchEvent(
+    new MouseEvent('pointerdown', { clientX: x, clientY: y, bubbles: true }),
+  )
+}
+
+function release(element: HTMLElement, x: number, y: number): void {
+  element.dispatchEvent(
+    new MouseEvent('pointerup', { clientX: x, clientY: y, bubbles: true }),
+  )
+}
+
+describe('部件点击', () => {
+  async function scene(parts: Record<string, unknown>) {
+    const wrapper = mountScene({
+      config: config({
+        parts: [{ id: 'part-pump', name: '泵', nodes: ['pump'], ...parts }],
+      }),
+    })
+    await flushPromises()
+    return { wrapper, element: viewportOf() }
+  }
+
+  it('点中部件时上抛它的 id', async () => {
+    const { wrapper, element } = await scene({})
+
+    press(element, 50, 50)
+    release(element, 50, 50)
+
+    expect(wrapper.emitted('partClick')?.[0]).toEqual([
+      { partId: 'part-pump', partName: '泵' },
+    ])
+    wrapper.unmount()
+  })
+
+  // ⚠ 转一圈镜头松手若算点击，运行态就会凭空触发一次联动
+  it('拖动之后松手不算点击', async () => {
+    const { wrapper, element } = await scene({})
+
+    press(element, 50, 50)
+    release(element, 90, 90)
+
+    expect(wrapper.emitted('partClick')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('点在空处不上抛', async () => {
+    const { wrapper, element } = await scene({})
+
+    press(element, 0, 0)
+    release(element, 0, 0)
+
+    expect(wrapper.emitted('partClick')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('距离门禁挡住时不上抛', async () => {
+    const { wrapper, element } = await scene({
+      clickDistance: { max: { ref: 'orbit', value: 0.001 } },
+    })
+
+    press(element, 50, 50)
+    release(element, 50, 50)
+
+    expect(wrapper.emitted('partClick')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  // 两段式：远于分界的第一下只把镜头拉近，不该被下游当成一次真点击
+  it('两段式的第一下只拉近镜头，不上抛', async () => {
+    const { wrapper, element } = await scene({
+      clickDistance: { farThreshold: { ref: 'orbit', value: 0.001 } },
+    })
+
+    press(element, 50, 50)
+    release(element, 50, 50)
+
+    expect(wrapper.emitted('partClick')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('没被任何部件覆盖的模型部位点不出事件', async () => {
+    const { wrapper, element } = await scene({ nodes: ['别的名字'] })
+
+    press(element, 50, 50)
+    release(element, 50, 50)
+
+    expect(wrapper.emitted('partClick')).toBeUndefined()
+    wrapper.unmount()
+  })
+})
+
+describe('钻取取景', () => {
+  /** 相机是渲染器记账里的那一台；场景核心本身不外露。 */
+  function cameraOf(): THREE.PerspectiveCamera {
+    const last = renderer.renders[renderer.renders.length - 1]?.camera
+    if (!(last instanceof THREE.PerspectiveCamera)) {
+      throw new Error('还没有渲染过一帧')
+    }
+    return last
+  }
+
+  it('给了取景就把机位、注视点与视野一次搬过去', async () => {
+    const wrapper = mountScene()
+    await flushPromises()
+
+    await wrapper.setProps({
+      focusView: { position: [3, 4, 5], target: [1, 1, 1], fov: 30 },
+    })
+    await vi.waitFor(() => {
+      expect(cameraOf().fov).toBe(30)
+    })
+
+    // OrbitControls 每帧重投一次机位，末位会差一个浮点
+    expect(cameraOf().position.x).toBeCloseTo(3)
+    expect(cameraOf().position.z).toBeCloseTo(5)
+    wrapper.unmount()
+  })
+
+  // ⚠ 取景只在换引用那一下飞一次：每帧套住的话镜头就再也转不动了
+  it('取景清成 null 时停在原地，不把镜头拽回去', async () => {
+    const wrapper = mountScene()
+    await flushPromises()
+    await wrapper.setProps({
+      focusView: { position: [3, 4, 5], target: [1, 1, 1], fov: 30 },
+    })
+    await vi.waitFor(() => {
+      expect(cameraOf().fov).toBe(30)
+    })
+
+    await wrapper.setProps({ focusView: null })
+    await flushPromises()
+
+    expect(cameraOf().fov).toBe(30)
+    wrapper.unmount()
   })
 })

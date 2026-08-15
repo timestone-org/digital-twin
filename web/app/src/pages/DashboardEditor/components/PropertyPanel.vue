@@ -19,6 +19,7 @@ import { computed } from 'vue'
 import type { ConfigPath } from '@/features/dashboard/configPath'
 import { formGroups } from '@/features/dashboard/configForm'
 import ConfigFieldControl from '@/features/dashboard/controls/ConfigFieldControl.vue'
+import SubEditorEntry from './SubEditorEntry.vue'
 
 const props = defineProps<{
   node: DashboardNodePayload
@@ -41,6 +42,9 @@ const groups = computed(() =>
 const presets = computed<readonly ConfigPreset[]>(
   () => props.manifest?.configPresets ?? [],
 )
+
+// 声明了子编辑器的那个字段不画通用控件，改画入口；其余字段照旧
+const subEditor = computed(() => props.manifest?.subEditor ?? null)
 
 function writeField(field: ConfigField, value: unknown, live: boolean): void {
   emit('config', [field.key], value, live)
@@ -84,7 +88,13 @@ function writeField(field: ConfigField, value: unknown, live: boolean): void {
           :hint="field.help"
           size="sm"
         >
+          <SubEditorEntry
+            v-if="subEditor !== null && subEditor.configKey === field.key"
+            :sub-editor="subEditor"
+            :value="resolved[field.key]"
+          />
           <ConfigFieldControl
+            v-else
             :field="field"
             :value="resolved[field.key]"
             :depth="0"

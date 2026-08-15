@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * @fileoverview 绑点面板：读模块清单的 `bindings` 自动摆槽位，数组槽摆成 N 行。
+ * @fileoverview 绑点面板：读模块清单的 `bindings` 自动摆槽位，数组槽摆成 N 行，
+ * 行名可由调用方按 `fieldKey` 指定。
  * ⚠ 面板里没有任何模块类型字面量——槽位完全来自清单声明，
  * 新增模块自动获得绑点面板（DASHBOARD_DESIGN §5.2）。
  */
@@ -23,6 +24,11 @@ import BindingSlotEditor from './BindingSlotEditor.vue'
 const props = defineProps<{
   node: DashboardNodePayload | null
   manifest: ModuleManifest | undefined
+  /**
+   * 数组槽每一行的显示名，键是该行第一个子槽的 `fieldKey`。
+   * 不给就退回「第 N 行」。
+   */
+  rowLabels?: Readonly<Record<string, string>> | undefined
 }>()
 
 const emit = defineEmits<{
@@ -47,10 +53,24 @@ const bindings = computed<readonly BindingPayload[]>(
   () => props.node?.bindings ?? [],
 )
 
+/**
+ * 一组的标题：调用方给了这一行的名字就用它，取不到才回落「第 N 行」。
+ * @param group 一个数组槽的一行（普通槽无标题）
+ */
+function titleOf(group: BindingSlotGroup): string | null {
+  if (group.title === null) return null
+  const first = group.rows[0]
+  const named =
+    first === undefined ? undefined : props.rowLabels?.[first.fieldKey]
+  return named ?? group.title
+}
+
 const sections = computed<SlotSection[]>(() =>
   specs.value.map((spec) => ({
     spec,
-    groups: slotGroups(spec, arrayRowCount(bindings.value, spec.key)),
+    groups: slotGroups(spec, arrayRowCount(bindings.value, spec.key)).map(
+      (group) => ({ ...group, title: titleOf(group) }),
+    ),
   })),
 )
 
@@ -106,7 +126,12 @@ function bindingOf(fieldKey: string): BindingPayload | null {
           :key="group.rowIndex ?? section.spec.key"
           class="flex flex-col gap-2"
         >
-          <div v-if="group.title" class="flex items-center justify-between">
+          <!-- ⚠ 判 `!== null` 不判真假：行名给成空串时按真假判会把删除键一起藏掉，
+               那一行就再也删不掉了 -->
+          <div
+            v-if="group.title !== null"
+            class="flex items-center justify-between"
+          >
             <span class="text-2xs text-text-disabled">{{ group.title }}</span>
             <DtButton
               size="sm"
