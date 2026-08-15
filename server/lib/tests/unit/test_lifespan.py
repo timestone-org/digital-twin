@@ -3,10 +3,18 @@
 """
 
 import asyncio
+import contextlib
+import signal
+from unittest import mock
 
 import pytest
 
-from lib.lifespan import LifespanHook, LifespanRunner, ReadinessGate
+from lib.lifespan import (
+    LifespanHook,
+    LifespanRunner,
+    ReadinessGate,
+    wait_for_termination,
+)
 
 
 def recorder() -> tuple[list[str], object]:
@@ -118,3 +126,54 @@ def test_gate_reports_the_reason_it_was_closed() -> None:
     gate.open()
     gate.close("draining")
     assert (gate.is_ready, gate.reason) == (False, "draining")
+
+
+async def test_termination_wait_survives_loops_without_signal_support() -> None:
+    """⚠ Windows 的事件循环 `add_signal_handler` 直接抛 NotImplementedError。
+
+    不接住的话 worker / publisher 这类不监听端口的角色一起来就崩在这一行，
+    而走 uvicorn 的 api 角色毫发无伤，故容器里怎么跑都验不出来。
+    """
+    loop = asyncio.get_running_loop()
+    installed: list[int] = []
+
+    def refuse(number: int, handler: object) -> None:
+        raise NotImplementedError
+
+    def record(number: int, _handler: object) -> None:
+        installed.append(number)
+
+    with (
+        mock.patch.object(loop, "add_signal_handler", refuse),
+        mock.patch.object(signal, "signal", record),
+    ):
+        waiting = asyncio.ensure_future(wait_for_termination())
+        await asyncio.sleep(0)
+        assert installed == [signal.SIGTERM, signal.SIGINT]
+        waiting.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await waiting
+
+
+async def test_termination_wait_returns_once_the_signal_arrives() -> None:
+    loop = asyncio.get_running_loop()
+    handlers: dict[int, object] = {}
+
+    def refuse(number: int, handler: object) -> None:
+        raise NotImplementedError
+
+    def record(number: int, handler: object) -> None:
+        handlers[number] = handler
+
+    with (
+        mock.patch.object(loop, "add_signal_handler", refuse),
+        mock.patch.object(signal, "signal", record),
+    ):
+        waiting = asyncio.ensure_future(wait_for_termination())
+        await asyncio.sleep(0)
+        handle = handlers[signal.SIGTERM]
+        assert callable(handle)
+        # 同步 handler 不在事件循环里跑，故它只能把置位排进循环
+        handle(int(signal.SIGTERM), None)
+        async with asyncio.timeout(1):
+            await waiting

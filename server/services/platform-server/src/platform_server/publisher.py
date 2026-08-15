@@ -14,11 +14,11 @@ TTL，热备能立刻接管，而不是让大屏静默一整个 TTL。
 
 import asyncio
 import contextlib
-import signal
 from collections.abc import Awaitable, Callable
 from contextvars import Token
 from dataclasses import dataclass
 
+from lib.lifespan import wait_for_termination
 from lib.logging import (
     LogContext,
     bind_log_context,
@@ -310,15 +310,6 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
     )
 
 
-async def wait_for_signal() -> None:  # pragma: no cover - 要真实进程信号
-    """等 SIGTERM / SIGINT。收到即返回，由调用方按顺序收摊。"""
-    loop = asyncio.get_running_loop()
-    stopped = asyncio.Event()
-    for name in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(name, stopped.set)
-    await stopped.wait()
-
-
 def run(settings: Settings) -> None:  # pragma: no cover - 进程入口
     """publisher 角色的入口。
 
@@ -331,4 +322,4 @@ def run(settings: Settings) -> None:  # pragma: no cover - 进程入口
         level=settings.app_log_level,
         log_format=settings.app_log_format,
     )
-    asyncio.run(serve(settings, wait=wait_for_signal))
+    asyncio.run(serve(settings, wait=wait_for_termination))
