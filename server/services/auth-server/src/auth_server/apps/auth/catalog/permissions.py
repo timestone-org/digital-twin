@@ -28,6 +28,11 @@ DASHBOARD_MANAGE = "dashboard:manage"
 COLLECT_VIEW = "collect:view"
 COLLECT_OPERATE = "collect:operate"
 COLLECT_MANAGE = "collect:manage"
+# platform-server 的 apps/assets 复述一份，同上。素材是跨大屏的公共资源，
+# 故自成一族而不是挂在 dashboard 下：把删素材的权力顺带发给每个能编大屏的人，
+# 一次误删会同时打穿引用它的每一张屏
+ASSET_VIEW = "asset:view"
+ASSET_MANAGE = "asset:manage"
 
 PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(
@@ -214,6 +219,30 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
         description=(
             "增删改数据源与点位，含接入凭据、采集周期、死区与归档保留期。"
             "改完即广播新采集计划，采集进程随之改变它在现场读什么"
+        ),
+    ),
+    PermissionSpec(
+        code=ASSET_VIEW,
+        name="查看素材",
+        kind="view",
+        group_code="asset",
+        group_label="素材库",
+        sort_order=10,
+        description=(
+            "素材列表与详情、可上传的类型与大小上限。"
+            "字节本身由边缘直接反代对象存储，不经过本码"
+        ),
+    ),
+    PermissionSpec(
+        code=ASSET_MANAGE,
+        name="管理素材",
+        kind="manage",
+        group_code="asset",
+        group_label="素材库",
+        sort_order=20,
+        description=(
+            "上传与删除素材。⚠ 删除不做引用检查：一个模型可能被多张大屏引用，"
+            "删掉之后那些屏上会显示「取不到」"
         ),
     ),
 )

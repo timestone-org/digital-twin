@@ -11,6 +11,7 @@ from sqlalchemy import Connection, pool, text
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from lib.config import load_settings_or_exit
+from platform_server.apps.assets.models import Base as AssetsBase
 from platform_server.apps.collect.models import Base as CollectBase
 from platform_server.apps.dashboard.models import Base as DashboardBase
 from platform_server.apps.hvac.models import Base as HvacBase
@@ -25,6 +26,7 @@ target_metadata = [
     DashboardBase.metadata,
     CollectBase.metadata,
     RuntimeParamsBase.metadata,
+    AssetsBase.metadata,
 ]
 
 _settings = load_settings_or_exit(Settings)

@@ -105,7 +105,7 @@
 
 ### 5.1 `/api/v1/platform` 的三面共存
 
-这个前缀下住着三套码，靠 priority 分层。**读上一行要先读下一行**：
+这个前缀下住着四套码，靠 priority 分层。**读上一行要先读下一行**：
 
 | priority | 模式 | 码 |
 |---|---|---|
@@ -113,6 +113,8 @@
 | 940 | `point-histories:aggregate` | `collect:view` |
 | 932 | `collect-*` · `point-histories*`（GET） | `collect:view` |
 | 930 | `collect-*` · `point-histories*`（`*` 方法） | `collect:manage` |
+| 922 | `assets*`（GET） | `asset:view` |
+| 921 | `assets*`（`*` 方法） | `asset:manage` |
 | 920 | `dashboards/*:validate` | `dashboard:view` |
 | 915 | `dashboard-projects` 与 `dashboards` 的建删 | `dashboard:manage` |
 | 912 | `dashboard*` · `module-types*`（GET） | `dashboard:view` |
@@ -123,8 +125,11 @@
 ⚠ 动作端点（含 `:verb`）必须排在前缀兜底之上：`*` 跨斜杠，`dashboard*` 同样
 匹配 `…:validate` 的完整路径，排反了就是「只读用户点自检被 403」。
 
-⚠ 两条写兜底用 `*` 方法而不是逐个方法列：漏一种方法它就落到 900 那五条上，
-表现是「持 `ac:manage` 的账号能改大屏与采集配置」。
+⚠ 三条写兜底用 `*` 方法而不是逐个方法列：漏一种方法它就落到 900 那五条上，
+表现是「持 `ac:manage` 的账号能改大屏、改采集配置、删素材」。
+
+⚠ 素材自成一族而不是挂在 `dashboard:*` 下：一个模型可以被十张大屏引用，
+把删素材的权力顺带发给每个能编大屏的人，一次误删会同时打穿那十张屏。
 
 ⚠ `:replace-layout` 要的正是 910 那个码，故**不另立规则**——一条判定相同的
 窄规则会被冗余自检判成噪音。「没写」不等于「漏了」，由契约测试证明。

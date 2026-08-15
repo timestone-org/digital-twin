@@ -2,7 +2,7 @@
  * @fileoverview 守锚点层的契约：只建可见锚点、读数取不到时显示占位符而不是空白、
  * 标签文本只走 textContent（不给注入留口子）、dispose 连 CSS2D 的 DOM 一起带走。
  */
-import type { TwinAnchor, TwinAnchorValues } from '@dt/twin-config'
+import type { TwinAnchor, TwinVisibilityRule, TwinAnchorValues } from '@dt/twin-config'
 import * as THREE from 'three'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -41,9 +41,14 @@ function anchor(overrides: Partial<TwinAnchor> = {}): TwinAnchor {
     label: '',
     unit: '℃',
     decimals: 1,
-    visible: true,
+    visibility: visibility(true),
     ...overrides,
   }
+}
+
+/** 只置基线显隐的一份规则；距离那几条不在本层的关注范围里。 */
+function visibility(visible: boolean): TwinVisibilityRule {
+  return { visible, hideBelow: null, hideAbove: null, fade: null }
 }
 
 function labelTexts(layer: AnchorLayer): string[] {
@@ -67,7 +72,7 @@ describe('建锚点', () => {
   it('不可见的锚点一个对象都不建', () => {
     const layer = layerOn(host())
 
-    layer.build([anchor({ visible: false })])
+    layer.build([anchor({ visibility: visibility(false) })])
 
     expect(layer.group.children).toHaveLength(0)
   })

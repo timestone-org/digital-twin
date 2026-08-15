@@ -73,7 +73,9 @@ async def test_another_dashboards_bindings_stay_out_of_the_plan(
     dashboard_id, node_id = await make_twin_node(app_client)
     await bind(app_client, node_id, "anchorValues[0].value", "opcua", KNOWN_KEY)
     _other_id, other_node = await make_twin_node(app_client)
-    await bind(app_client, other_node, "anchorValues[0].value", "opcua", ANOTHER_KEY)
+    await bind(
+        app_client, other_node, "anchorValues[0].value", "opcua", ANOTHER_KEY
+    )
     plans = DatabasePlanSource(database=SessionDatabase(db_session))
     lookup = await plans.load(uuid.UUID(dashboard_id), None)
     assert lookup.plan is not None
@@ -99,7 +101,9 @@ async def test_a_new_binding_bumps_the_version_and_forces_a_reread(
     await bind(app_client, node_id, "anchorValues[0].value", "opcua", KNOWN_KEY)
     plans = DatabasePlanSource(database=SessionDatabase(db_session))
     first = await plans.load(uuid.UUID(dashboard_id), None)
-    await bind(app_client, node_id, "anchorValues[1].value", "opcua", ANOTHER_KEY)
+    await bind(
+        app_client, node_id, "anchorValues[1].value", "opcua", ANOTHER_KEY
+    )
     second = await plans.load(uuid.UUID(dashboard_id), first.plan)
     assert second.is_reloaded is True
     assert second.plan is not None
@@ -166,7 +170,9 @@ async def test_a_node_under_another_node_still_contributes_its_points(
     )
     assert child.status_code == HTTP_CREATED
     child_id = str(data_of(child)["id"])
-    await bind(app_client, child_id, "anchorValues[0].value", "opcua", ANOTHER_KEY)
+    await bind(
+        app_client, child_id, "anchorValues[0].value", "opcua", ANOTHER_KEY
+    )
     plans = DatabasePlanSource(database=SessionDatabase(db_session))
     lookup = await plans.load(uuid.UUID(dashboard_id), None)
     assert lookup.plan is not None

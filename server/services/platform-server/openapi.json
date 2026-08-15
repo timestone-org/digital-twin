@@ -940,6 +940,51 @@
         "title": "ApiResponse[AggregateOut]",
         "type": "object"
       },
+      "ApiResponse_AssetOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssetOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[AssetOut]",
+        "type": "object"
+      },
       "ApiResponse_BindingOut_": {
         "properties": {
           "code": {
@@ -2785,6 +2830,51 @@
         "title": "ApiResponse[ThumbnailOut]",
         "type": "object"
       },
+      "ApiResponse_UploadTicketOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UploadTicketOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[UploadTicketOut]",
+        "type": "object"
+      },
       "ApiResponse_ValidationReportOut_": {
         "properties": {
           "code": {
@@ -2967,6 +3057,104 @@
           }
         },
         "title": "ApiResponse[list[AcModelOut]]",
+        "type": "object"
+      },
+      "ApiResponse_list_AssetKindOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AssetKindOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[list[AssetKindOut]]",
+        "type": "object"
+      },
+      "ApiResponse_list_AssetOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AssetOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[list[AssetOut]]",
         "type": "object"
       },
       "ApiResponse_list_BindingOut__": {
@@ -3165,6 +3353,94 @@
         "title": "ApiResponse[list[ThemeOut]]",
         "type": "object"
       },
+      "AssetKindOut": {
+        "description": "一类素材的登记信息，给前端做文件选择器的 accept 与预检。\n\n⚠ 上限随目录一起下发，不让界面自己写一份：两边各写一份时前端放行的文件\n会在上传那一刻被存储端拒掉，而用户看到的只是一个含糊的失败。",
+        "properties": {
+          "content_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Content Types",
+            "type": "array"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "max_bytes": {
+            "title": "Max Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "content_types",
+          "max_bytes"
+        ],
+        "title": "AssetKindOut",
+        "type": "object"
+      },
+      "AssetOut": {
+        "description": "一个素材。\n\n`ref` 是**唯一合法的落库形态**：大屏配置里存它而不是 URL——URL 会随部署\n地址与构建产物变，存进去下次就 404。取回地址由前端单点拼装。",
+        "properties": {
+          "checksum": {
+            "title": "Checksum",
+            "type": "string"
+          },
+          "content_type": {
+            "title": "Content Type",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "ref",
+          "kind",
+          "name",
+          "content_type",
+          "size_bytes",
+          "checksum",
+          "created_at",
+          "created_by"
+        ],
+        "title": "AssetOut",
+        "type": "object"
+      },
       "BindingCreateIn": {
         "additionalProperties": false,
         "description": "新增一条绑定。`id` 由调用方自带时用它，便于批量替换里指名道姓。",
@@ -3196,7 +3472,7 @@
           "field_key": {
             "maxLength": 128,
             "minLength": 1,
-            "pattern": "^[a-z][a-z0-9_]*(\\[\\d+\\]\\.[a-z][a-z0-9_]*)?$",
+            "pattern": "^[a-z][A-Za-z0-9_]*(\\[\\d+\\]\\.[a-z][A-Za-z0-9_]*)?$",
             "title": "Field Key",
             "type": "string"
           },
@@ -3795,11 +4071,16 @@
               "array",
               "boolean",
               "color",
+              "dashboard-ref",
               "enum",
+              "font",
+              "image",
+              "json",
               "number",
               "object",
               "range",
-              "string"
+              "string",
+              "style"
             ],
             "title": "Type",
             "type": "string"
@@ -4796,7 +5077,7 @@
           "field_key": {
             "maxLength": 128,
             "minLength": 1,
-            "pattern": "^[a-z][a-z0-9_]*(\\[\\d+\\]\\.[a-z][a-z0-9_]*)?$",
+            "pattern": "^[a-z][A-Za-z0-9_]*(\\[\\d+\\]\\.[a-z][A-Za-z0-9_]*)?$",
             "title": "Field Key",
             "type": "string"
           },
@@ -4958,6 +5239,23 @@
           "message"
         ],
         "title": "FieldErrorOut",
+        "type": "object"
+      },
+      "FinalizeUploadIn": {
+        "additionalProperties": false,
+        "description": "确认一次直传已完成。\n\n⚠ 刻意只收显示名：类型从对象键里读回来，大小与校验和以存储端读到的为准。\n多收一样就多一个与真实字节对不上的机会，而对不上时没有任何一处会报错。",
+        "properties": {
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "FinalizeUploadIn",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -6931,6 +7229,38 @@
           }
         },
         "title": "PredictReadingsIn",
+        "type": "object"
+      },
+      "PresignUploadIn": {
+        "additionalProperties": false,
+        "description": "申请一次直传凭证。\n\n⚠ `size_bytes` 是**声明**不是事实：真实大小由存储端按签进 policy 的区间\n强制，并在 finalize 时以存储端读到的为准落库。这里只用来提前拒掉明显超限\n的文件，省掉一次上传。\n⚠ 刻意不收显示名：签凭证不落行，收了也无处可存；名字在 finalize 时才给。",
+        "properties": {
+          "content_type": {
+            "maxLength": 128,
+            "minLength": 3,
+            "pattern": "^[a-z]+/[A-Za-z0-9.+-]+$",
+            "title": "Content Type",
+            "type": "string"
+          },
+          "kind": {
+            "maxLength": 32,
+            "minLength": 1,
+            "pattern": "^[a-z]+$",
+            "title": "Kind",
+            "type": "string"
+          },
+          "size_bytes": {
+            "exclusiveMinimum": 0.0,
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "content_type",
+          "size_bytes"
+        ],
+        "title": "PresignUploadIn",
         "type": "object"
       },
       "ProjectCreateIn": {
@@ -9230,6 +9560,39 @@
         "title": "UnresolvedBindingOut",
         "type": "object"
       },
+      "UploadTicketOut": {
+        "description": "一次直传的表单凭证。\n\n⚠ `fields` 必须原样按序写进 multipart 表单，且**文件字段排在最后**：\nS3 的 POST 语义是「文件之后的字段一律忽略」，把签名排到文件后面，\n存储端读到的就是一份缺字段的表单，报出来的是含糊的 403。",
+        "properties": {
+          "asset_id": {
+            "format": "uuid",
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "expires_seconds": {
+            "title": "Expires Seconds",
+            "type": "integer"
+          },
+          "fields": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Fields",
+            "type": "object"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_id",
+          "url",
+          "fields",
+          "expires_seconds"
+        ],
+        "title": "UploadTicketOut",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -10725,6 +11088,276 @@
         "summary": "批量改派空调所在房间",
         "tags": [
           "ac-unit"
+        ]
+      }
+    },
+    "/api/v1/platform/assets": {
+      "get": {
+        "description": "按类型列素材，新的在前。\n\nArgs: session, _viewer, kind, limit, offset。",
+        "operationId": "list_all_api_v1_platform_assets_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_AssetOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "素材列表",
+        "tags": [
+          "asset"
+        ]
+      }
+    },
+    "/api/v1/platform/assets/kinds": {
+      "get": {
+        "description": "列出可上传的素材类型与各自的类型/大小闸。\n\nArgs: _viewer。",
+        "operationId": "list_kinds_api_v1_platform_assets_kinds_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_AssetKindOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "素材类型目录",
+        "tags": [
+          "asset"
+        ]
+      }
+    },
+    "/api/v1/platform/assets/{asset_id}": {
+      "delete": {
+        "description": "删素材：先删字节再删行。删不存在的素材同样是 204。\n\nArgs: session, store, actor, asset_id。",
+        "operationId": "remove_one_api_v1_platform_assets__asset_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除素材",
+        "tags": [
+          "asset"
+        ]
+      },
+      "get": {
+        "description": "取一个素材。\n\nArgs: session, _viewer, asset_id。",
+        "operationId": "get_one_api_v1_platform_assets__asset_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AssetOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "素材详情",
+        "tags": [
+          "asset"
+        ]
+      }
+    },
+    "/api/v1/platform/assets/{asset_id}:finalize": {
+      "post": {
+        "description": "把字节搬进正式前缀并落行。重复调用返回同一个素材。\n\nArgs: session, store, actor, asset_id, body。",
+        "operationId": "finalize_api_v1_platform_assets__asset_id__finalize_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinalizeUploadIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AssetOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "确认直传完成",
+        "tags": [
+          "asset"
+        ]
+      }
+    },
+    "/api/v1/platform/assets:presign-upload": {
+      "post": {
+        "description": "铸一个素材 id 并签一张把键、类型与大小都钉死的直传表单。\n\n⚠ 本步**不落行**：没传成的素材不会在库里留下半条记录。\nArgs: store, actor, body。",
+        "operationId": "presign_api_v1_platform_assets_presign_upload_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresignUploadIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_UploadTicketOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "申请直传凭证",
+        "tags": [
+          "asset"
         ]
       }
     },

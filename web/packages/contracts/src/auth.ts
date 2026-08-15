@@ -28,6 +28,8 @@ export const PERMISSION_CODES = {
   collectView: 'collect:view',
   collectOperate: 'collect:operate',
   collectManage: 'collect:manage',
+  assetView: 'asset:view',
+  assetManage: 'asset:manage',
 } as const
 
 export type PermissionCode =

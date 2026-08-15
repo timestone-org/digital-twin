@@ -44,6 +44,12 @@ http {
   # http block 转不了，由编排层直接映射端口段，不经边缘（见 ADR-0006）。
   upstream opcua_server { server opcua-server:8008; }
   upstream realtime_hub { server realtime-hub:8000; }
+  # 素材字节面。⚠ 字节永远不穿过 platform：一个 200MB 的模型经过 API 进程
+  # 会把一个 worker 占住几十秒。
+  # ⚠ 对象存储在本编排之外（与库同档），故这里是取自环境的 host:port 而不是
+  # 服务名；upstream 指令不认 scheme，取值带上 http:// 是 nginx 起不来，
+  # 而它一起不来整个站都没了。
+  upstream object_store { server ${OSS_UPSTREAM}; }
 
   # 鉴权子请求要回答的是「客户端在访问哪条路径」。
   # ⚠ 子请求里 $uri 是子请求自己的 /_auth，拿它去问规则表一律 no_matching_rule → 全站 403；
@@ -113,6 +119,31 @@ http {
       limit_req zone=public_dashboard burst=20 nodelay;
       proxy_pass http://platform_server;
       include /etc/nginx/conf.d/proxy-common.conf;
+    }
+
+    # 素材字节。⚠ 这是一条**免认证** location，不是漏了 auth-inject：
+    # 大屏是给现场大屏机看的，模型与图片必须像别的静态资源一样能被匿名取到，
+    # 而桶里只有三个已验证的前缀是匿名可读的（`staging/` 不在列）。
+    # 上传走同一条路：POST 到 /oss/ 落在桶根，凭证里的 policy 自己就是授权。
+    # ⚠ `^~` 不能省：存在正则 location 时短前缀会重新参与竞争。
+    location ^~ /oss/ {
+      # 桶名不出现在对外地址里：换桶只改一个环境变量，存量 asset: 引用不受影响
+      rewrite ^/oss/(.*)$ /${OSS_BUCKET}/$1 break;
+      proxy_pass http://object_store;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_http_version 1.1;
+      # ⚠ 刻意**不** include proxy-common.conf：那份的 25s 读超时对 200MB 的
+      # 模型上传来说太短，而超时切断表现成「传到一半永远卡住」
+      proxy_connect_timeout 5s;
+      proxy_read_timeout 300s;
+      proxy_send_timeout 300s;
+      # ⚠ 必须关掉请求缓冲：开着的话 nginx 会把整个上传先落到自己的临时盘上，
+      # 大模型于是需要双份磁盘，且首字节延迟等于整份上传时间
+      proxy_request_buffering off;
+      client_max_body_size 512m;
     }
 
     # —— 受保护面 ——
@@ -210,7 +241,11 @@ http {
 
     location / {
       root /usr/share/nginx/html;
-      try_files $uri $uri/ /index.html;
+      # ⚠ 刻意**不**试 `$uri/`：构建产物里有个真实的 `assets/` 目录，而前端也有
+      # 一条 `/assets` 路由（素材库）。试目录的话 nginx 会先 301 到 `/assets/`
+      # 再因为没有索引页回 403——直接输地址与刷新页面都进不去，而站内点导航
+      # 却是好的，于是看着像「只有刷新会坏」。单页应用没有目录索引可言。
+      try_files $uri /index.html;
     }
   }
 }
