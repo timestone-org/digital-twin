@@ -37,6 +37,7 @@ function callbacks(
     roamPreview,
     entityTransform: vi.fn(),
     entityTransformEnd: vi.fn(),
+    marqueeNodes: vi.fn(),
   }
 }
 

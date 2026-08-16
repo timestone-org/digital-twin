@@ -13,7 +13,6 @@ interface ToolbarProps {
   canUndo: boolean
   canRedo: boolean
   issueCount: number
-  backLabel: string
 }
 
 function mountToolbar(over: Partial<ToolbarProps> = {}) {
@@ -24,20 +23,18 @@ function mountToolbar(over: Partial<ToolbarProps> = {}) {
       canUndo: false,
       canRedo: false,
       issueCount: 0,
-      backLabel: '返回大屏',
       ...over,
     },
   })
 }
 
-describe('返回与撤销重做', () => {
-  it('返回键显示传进来的文案，点了抛 back', async () => {
+describe('撤销重做', () => {
+  // ⚠ 返回入口由 AppShell 出，工具栏不自带一个——同一行上两个「返回」，
+  // 点哪个都对但用户得先分辨一次
+  it('工具栏里没有返回键', () => {
     const wrapper = mountToolbar()
 
-    expect(wrapper.find('[data-test="back"]').text()).toContain('返回大屏')
-    await wrapper.find('[data-test="back"]').trigger('click')
-
-    expect(wrapper.emitted('back')).toHaveLength(1)
+    expect(wrapper.find('[data-test="back"]').exists()).toBe(false)
   })
 
   it('没得撤销时撤销键禁用，点不出事件', async () => {
@@ -70,7 +67,7 @@ describe('返回与撤销重做', () => {
   // ⚠ 没登记的图标名不报错、只是什么都不画，只能靠这一条兜
   it('每个键都真的画出了图标', () => {
     const wrapper = mountToolbar({ issueCount: 2 })
-    const keys = ['back', 'undo', 'redo', 'issues', 'save']
+    const keys = ['undo', 'redo', 'issues', 'save']
 
     for (const key of keys) {
       expect(

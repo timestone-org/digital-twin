@@ -56,6 +56,8 @@ import {
   type SceneCore,
   type SceneRendererFactory,
 } from './sceneCore'
+import { MarqueeGesture } from './marqueeGesture'
+import { nodeNamesInRect, type ScreenRect } from './marqueeSelect'
 import { SceneLayers, type SceneLayerValues } from './sceneLayers'
 import {
   TransformGizmo,
@@ -91,6 +93,8 @@ export interface EditorSceneCallbacks {
   entityTransform: (change: GizmoChange) => void
   /** 手柄松手了；宿主据此把这一次拖动合成一条撤销。 */
   entityTransformEnd: () => void
+  /** 按住 Shift 框选拿到的模型节点名，已去重排序；一个都没框中时不来。 */
+  marqueeNodes: (names: readonly string[]) => void
 }
 
 export interface EditorSceneOptions {
@@ -212,6 +216,7 @@ export class EditorScene {
   private selectionBox: THREE.Box3Helper | null = null
   private gizmo: TransformGizmo | null = null
   private gizmoMode: GizmoMode = 'translate'
+  private marquee: MarqueeGesture | null = null
   private focusProxy: THREE.Mesh | null = null
   private modelObject: THREE.Object3D | null = null
   private nodeIndex: NodeIndex = EMPTY_NODE_INDEX
@@ -352,6 +357,8 @@ export class EditorScene {
     this.picks = null
     this.gizmo?.dispose()
     this.gizmo = null
+    this.marquee?.dispose()
+    this.marquee = null
     if (this.core !== null) disposeScene(this.core)
     this.core = null
     this.modelObject = null
@@ -381,6 +388,10 @@ export class EditorScene {
       this.container,
     )
     this.focusProxy = createFocusProxy()
+    this.marquee = new MarqueeGesture({
+      host: () => this.container,
+      onFinish: (rect) => this.finishMarquee(rect),
+    })
     this.gizmo = new TransformGizmo({
       core,
       onChange: (change) => this.on.entityTransform(change),
@@ -404,6 +415,7 @@ export class EditorScene {
     const surface = core.renderer.domElement
     this.surface = surface
     surface.addEventListener('pointerdown', this.onPointerDown)
+    surface.addEventListener('pointermove', this.onPointerMove)
     surface.addEventListener('pointerup', this.onPointerUp)
     surface.addEventListener('pointercancel', this.onPointerCancel)
     core.controls.addEventListener('end', this.onControlsEnd)
@@ -415,6 +427,7 @@ export class EditorScene {
     const surface = this.surface
     if (surface !== null) {
       surface.removeEventListener('pointerdown', this.onPointerDown)
+      surface.removeEventListener('pointermove', this.onPointerMove)
       surface.removeEventListener('pointerup', this.onPointerUp)
       surface.removeEventListener('pointercancel', this.onPointerCancel)
     }
@@ -692,14 +705,46 @@ export class EditorScene {
   private readonly onPointerDown = (event: PointerEvent): void => {
     // ⚠ 用户一碰视口就停预览：镜头还自己往前飞会变成两个人抢方向盘
     this.stopRoamPreview()
+    // Shift 拖是框选：这期间要把轨道控制器让开，否则一边画框一边转镜头
+    if (this.marquee?.down(event) === true) {
+      this.setOrbitEnabled(false)
+      this.downValid = false
+      return
+    }
     this.downValid = event.button === 0
     this.downX = event.clientX
     this.downY = event.clientY
   }
 
+  private readonly onPointerMove = (event: PointerEvent): void => {
+    this.marquee?.move(event)
+  }
+
+  /** 框选期间关掉轨道控制；两套操作抢同一个指针时框会画不出来。 */
+  private setOrbitEnabled(enabled: boolean): void {
+    if (this.core !== null) this.core.controls.enabled = enabled
+  }
+
+  /** 框完了：算出框中哪些节点，交给宿主。 */
+  private finishMarquee(rect: ScreenRect): void {
+    const core = this.core
+    const root = this.modelObject
+    if (core === null || root === null) return
+    core.camera.updateMatrixWorld()
+    root.updateMatrixWorld(true)
+    const viewport = core.renderer.domElement.getBoundingClientRect()
+    const names = nodeNamesInRect(root, rect, core.camera, viewport)
+    if (names.length > 0) this.on.marqueeNodes(names)
+  }
+
   // ⚠ 拖过视口不算点击：轨道相机的拖拽同样以 pointerup 收尾，不设位移阈值的话
   // 每次转镜头松手都会顺手把选中改掉
   private readonly onPointerUp = (event: PointerEvent): void => {
+    if (this.marquee?.up(event) === true) {
+      this.setOrbitEnabled(true)
+      return
+    }
+    this.setOrbitEnabled(true)
     if (!this.downValid || event.button !== 0) return
     this.downValid = false
     const moved = Math.hypot(
@@ -712,6 +757,8 @@ export class EditorScene {
 
   private readonly onPointerCancel = (): void => {
     this.downValid = false
+    this.marquee?.cancel()
+    this.setOrbitEnabled(true)
   }
 
   private handleClick(clientX: number, clientY: number): void {

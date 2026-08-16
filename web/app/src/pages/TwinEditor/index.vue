@@ -11,7 +11,7 @@
 import { collectTwinConfigIssues, type Vec3 } from '@dt/twin-config'
 import { DtPageState, useConfirm, useToast } from '@dt/ui'
 import { computed, ref } from 'vue'
-import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute } from 'vue-router'
 
 import { AppShell } from '@/components/layout'
 
@@ -21,18 +21,17 @@ import TwinEditorToolbar from './components/TwinEditorToolbar.vue'
 import TwinInspector from './components/TwinInspector.vue'
 import TwinLeftPane from './components/TwinLeftPane.vue'
 import TwinViewport from './components/TwinViewport.vue'
-import { bulkPartCandidates } from './bulkParts'
 import { createTwinEditorActions } from './twinEditorActions'
 import {
   TWIN_SELECT_MODEL,
   type TwinEntityKind,
   type TwinSelection,
 } from './types'
+import { useBulkParts } from './useBulkParts'
 import { useGizmoMode } from './useGizmoMode'
 import { useTwinEditorPage } from './useTwinEditorPage'
 
 const route = useRoute()
-const router = useRouter()
 const toast = useToast()
 const confirm = useConfirm()
 
@@ -72,14 +71,11 @@ interface TwinViewportHandle {
 const viewportRef = ref<TwinViewportHandle | null>(null)
 
 const config = computed(() => page.doc.value?.config.value ?? null)
-const bulkOpen = ref(false)
-const gizmoMode = useGizmoMode(() => selection.value)
-/** 批量建部件的候选：模型节点配上「已被谁认领」。 */
-const bulkCandidates = computed(() =>
-  config.value === null
-    ? []
-    : bulkPartCandidates(config.value, modelNodes.value),
+const bulk = useBulkParts(
+  () => config.value,
+  () => modelNodes.value,
 )
+const gizmoMode = useGizmoMode(() => selection.value)
 const issues = computed(() =>
   config.value === null ? [] : collectTwinConfigIssues(config.value),
 )
@@ -184,12 +180,8 @@ function captureHierView(id: string): void {
   })
 }
 
-function back(): void {
-  void router.push({
-    name: 'dashboard-editor',
-    params: { dashboardId: dashboardId.value },
-  })
-}
+/** 返回大屏编辑器；外壳的返回入口按站内路径走。 */
+const backTo = computed(() => `/dashboards/${dashboardId.value}/edit`)
 
 // ⚠ 走之前必须问：这一页的改动只在内存里，直接离开就没了，且没有任何提示
 onBeforeRouteLeave(async () => {
@@ -204,22 +196,27 @@ onBeforeRouteLeave(async () => {
 </script>
 
 <template>
-  <AppShell title="孪生编辑器" :subtitle="page.dashboard.value?.name ?? ''">
-    <div class="flex h-full flex-col">
+  <AppShell
+    title="孪生编辑器"
+    :subtitle="page.dashboard.value?.name ?? ''"
+    :back-to="backTo"
+    :back-label="page.dashboard.value?.name ?? '返回大屏编辑器'"
+  >
+    <template #actions>
       <TwinEditorToolbar
         :is-dirty="page.doc.value?.isDirty.value ?? false"
         :is-saving="page.saving.value"
         :can-undo="page.doc.value?.canUndo.value ?? false"
         :can-redo="page.doc.value?.canRedo.value ?? false"
         :issue-count="issues.length"
-        :back-label="page.dashboard.value?.name ?? '返回大屏编辑器'"
         @save="save"
         @undo="page.doc.value?.undo()"
         @redo="page.doc.value?.redo()"
-        @back="back"
         @toggle-issues="showIssues = !showIssues"
       />
+    </template>
 
+    <div class="flex h-full flex-col">
       <DtPageState
         v-if="
           page.loading.value || page.error.value !== null || config === null
@@ -236,7 +233,7 @@ onBeforeRouteLeave(async () => {
           :flagged-ids="flaggedIds"
           @select="select"
           @add="actions?.add($event)"
-          @bulk-add="bulkOpen = true"
+          @bulk-add="bulk.openBlank()"
           @remove="actions?.remove($event.kind, $event.id)"
           @duplicate="actions?.duplicate($event.kind, $event.id)"
           @move="actions?.move($event.kind, $event.id, $event.delta)"
@@ -262,6 +259,7 @@ onBeforeRouteLeave(async () => {
             @roam-preview="roamPreviewing = $event"
             @entity-transform="actions?.transformEntity($event)"
             @entity-transform-end="actions?.endTransform()"
+            @marquee-nodes="bulk.openWith($event)"
           />
           <TwinDiagnosticsPanel
             v-if="showIssues"
@@ -291,9 +289,10 @@ onBeforeRouteLeave(async () => {
     </div>
 
     <BulkPartsDialog
-      :open="bulkOpen"
-      :candidates="bulkCandidates"
-      @update:open="bulkOpen = $event"
+      :open="bulk.open.value"
+      :candidates="bulk.candidates.value"
+      :preselect="bulk.preselect.value"
+      @update:open="bulk.open.value = $event"
       @confirm="actions?.addParts($event)"
     />
   </AppShell>

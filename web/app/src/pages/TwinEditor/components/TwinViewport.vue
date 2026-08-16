@@ -46,6 +46,8 @@ const emit = defineEmits<{
   entityTransform: [GizmoChange]
   /** 手柄松手了；宿主据此把这一次拖动合成一条撤销。 */
   entityTransformEnd: []
+  /** 按住 Shift 框选拿到的模型节点名。 */
+  marqueeNodes: [readonly string[]]
 }>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
@@ -130,6 +132,7 @@ onMounted(() => {
       roamPreview: (value) => emit('roamPreview', value),
       entityTransform: (change) => emit('entityTransform', change),
       entityTransformEnd: () => emit('entityTransformEnd'),
+      marqueeNodes: (names) => emit('marqueeNodes', names),
     },
   })
   scene.setSelection(props.selection)

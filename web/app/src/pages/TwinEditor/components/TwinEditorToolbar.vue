@@ -1,6 +1,8 @@
 <script setup lang="ts">
 /**
- * @fileoverview 孪生编辑器顶栏：返回大屏、撤销重做、诊断计数与保存。
+ * @fileoverview 孪生编辑器的顶栏动作：撤销重做、诊断计数与保存。
+ * 挂在 `AppShell` 的 actions 插槽里，与大屏编辑器同一处；返回入口由外壳出，
+ * 这里不再自带一个，免得同一行上有两个「返回」。
  * 工具栏自己不改文档，只把动作抛给页面统一编排。
  */
 import { DtButton, DtTag } from '@dt/ui'
@@ -12,15 +14,12 @@ const props = defineProps<{
   canUndo: boolean
   canRedo: boolean
   issueCount: number
-  /** 返回大屏编辑器用。 */
-  backLabel: string
 }>()
 
 const emit = defineEmits<{
   save: []
   undo: []
   redo: []
-  back: []
   toggleIssues: []
 }>()
 
@@ -29,19 +28,6 @@ const hasIssues = computed(() => props.issueCount > 0)
 
 <template>
   <div class="dt-twin-bar" role="toolbar" aria-label="孪生编辑器工具条">
-    <DtButton
-      size="sm"
-      variant="ghost"
-      intent="neutral"
-      icon="chevron-left"
-      data-test="back"
-      @click="emit('back')"
-    >
-      {{ backLabel }}
-    </DtButton>
-
-    <span class="dt-twin-bar__sep" />
-
     <DtButton
       size="sm"
       variant="ghost"
@@ -81,8 +67,6 @@ const hasIssues = computed(() => props.issueCount > 0)
       {{ issueCount }}
     </DtButton>
 
-    <span class="dt-twin-bar__spacer" />
-
     <DtTag v-if="isDirty" size="sm" intent="warning">未保存</DtTag>
     <DtButton
       size="sm"
@@ -102,18 +86,12 @@ const hasIssues = computed(() => props.issueCount > 0)
   display: flex;
   gap: 4px;
   align-items: center;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--border-subtle);
 
   &__sep {
     width: 1px;
     height: 16px;
     margin: 0 4px;
     background: var(--border-subtle);
-  }
-
-  &__spacer {
-    flex: 1;
   }
 }
 </style>
