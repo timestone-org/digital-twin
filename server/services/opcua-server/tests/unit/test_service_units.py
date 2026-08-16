@@ -1,18 +1,17 @@
-"""不依赖真库与真服务器的那部分：配置校验、幂等占坑、自检、服务密钥。"""
+"""不依赖真库与真服务器的那部分：配置校验、幂等、节点自检。"""
 
+import asyncio
 import logging
 import uuid
-from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
 from pydantic import BaseModel, SecretStr, ValidationError
 
-from lib.errors import Conflict, Unauthenticated
+from lib.errors import Conflict
+from lib.idempotency import IdempotencyStore
 from lib.testing import InMemoryCache
-from opcua_server.apps.instance.deps import require_service_key
 from opcua_server.apps.instance.errors import NodeNotFound
-from opcua_server.apps.instance.services.idempotency import IdempotencyStore
 from opcua_server.apps.instance.services.node_service import (
     NodeRuntimeSync,
 )
@@ -20,7 +19,6 @@ from opcua_server.apps.instance.services.presenter import (
     unwrap_value,
     wrap_value,
 )
-from opcua_server.container import Container
 from opcua_server.settings import Settings
 
 SECRET = SecretStr("x" * 32)
@@ -32,13 +30,9 @@ class _Payload(BaseModel):
     value: int
 
 
-def _container() -> Container:
-    """只带 settings 的最小容器替身。
-
-    ⚠ `require_service_key` 只读 `settings.edge_service_key`；造一整个真容器
-    要连库连缓存，那会把一条纯逻辑用例变成集成用例。
-    """
-    return cast(Container, SimpleNamespace(settings=_settings()))
+def _store() -> IdempotencyStore:
+    """一个打进程内缓存的幂等存储。"""
+    return IdempotencyStore(cache=InMemoryCache(), namespace="opcua")
 
 
 def _settings(**overrides: object) -> Settings:
@@ -104,7 +98,7 @@ def test_value_wrapping_round_trips() -> None:
 
 async def test_idempotency_without_a_key_just_runs() -> None:
     """没给幂等键就照常执行——键是可选的。"""
-    store = IdempotencyStore(cache=InMemoryCache())
+    store = _store()
     calls: list[int] = []
 
     async def action() -> _Payload:
@@ -130,11 +124,31 @@ async def test_idempotency_without_a_key_just_runs() -> None:
 
 async def test_concurrent_same_key_is_a_conflict() -> None:
     """同键请求还在处理中时冲突，而不是并发执行两次。"""
-    store = IdempotencyStore(cache=InMemoryCache())
+    store = _store()
     caller = uuid.uuid4()
-    await store.claim(endpoint="e", key="k", caller=caller)
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def slow() -> _Payload:
+        started.set()
+        await release.wait()
+        return _Payload(value=1)
+
+    async def quick() -> _Payload:  # pragma: no cover - 冲突时不该跑到
+        return _Payload(value=2)
+
+    first = asyncio.create_task(
+        store.run_once(
+            endpoint="e", key="k", caller=caller, model=_Payload, action=slow
+        )
+    )
+    await started.wait()
     with pytest.raises(Conflict):
-        await store.claim(endpoint="e", key="k", caller=caller)
+        await store.run_once(
+            endpoint="e", key="k", caller=caller, model=_Payload, action=quick
+        )
+    release.set()
+    assert (await first).value == 1
 
 
 async def test_failed_action_releases_the_claim() -> None:
@@ -142,11 +156,14 @@ async def test_failed_action_releases_the_claim() -> None:
 
     ⚠ 不放开的话，一次偶发失败会把这个键永久钉死，而调用方无从得知该等多久。
     """
-    store = IdempotencyStore(cache=InMemoryCache())
+    store = _store()
     caller = uuid.uuid4()
 
     async def failing() -> _Payload:
         raise RuntimeError("下游抖了一下")
+
+    async def succeeding() -> _Payload:
+        return _Payload(value=7)
 
     with pytest.raises(RuntimeError):
         await store.run_once(
@@ -156,27 +173,14 @@ async def test_failed_action_releases_the_claim() -> None:
             model=_Payload,
             action=failing,
         )
-    # 放开了才能再占一次
-    await store.claim(endpoint="e", key="k", caller=caller)
-
-
-async def test_service_key_missing_is_rejected() -> None:
-    """服务级密钥缺失一律拒绝，不是放行。"""
-    with pytest.raises(Unauthenticated):
-        await require_service_key(_container(), x_service_key=None)
-
-
-async def test_service_key_mismatch_is_rejected() -> None:
-    """服务级密钥不符时拒绝。"""
-    with pytest.raises(Unauthenticated):
-        await require_service_key(_container(), x_service_key="wrong")
-
-
-async def test_service_key_match_passes() -> None:
-    """密钥逐字相符才放行，且依赖返回 None（它只做校验，不产出身份）。"""
-    assert (
-        await require_service_key(_container(), x_service_key="x" * 32) is None
+    retried = await store.run_once(
+        endpoint="e",
+        key="k",
+        caller=caller,
+        model=_Payload,
+        action=succeeding,
     )
+    assert retried.value == 7
 
 
 class _BrokenDatabase:

@@ -17,9 +17,6 @@ from platform_server.apps.dashboard.services import (
     node_service,
     project_service,
 )
-from platform_server.apps.dashboard.services.idempotency import (
-    IdempotencyStore,
-)
 from platform_server.apps.dashboard.services.module_catalog import (
     ModuleCatalog,
     load_module_catalog,
@@ -48,7 +45,6 @@ from platform_server.apps.dashboard.services.viewers import (
 __all__ = [
     "SUBSCRIPTION_SCHEMA",
     "BoundDashboard",
-    "IdempotencyStore",
     "ModuleCatalog",
     "PointCatalog",
     "ReadOnlyViewerSource",

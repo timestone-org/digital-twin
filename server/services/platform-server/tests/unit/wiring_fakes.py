@@ -10,7 +10,9 @@ from typing import cast
 from pydantic import SecretStr
 
 from lib.cache import Cache, PubSub
+from lib.cache.protocol import CacheLike
 from lib.db import Database, ReadOnlySqlSource
+from lib.idempotency import IdempotencyStore
 from lib.testing import FakeObjectStore, InMemoryCache
 from platform_server.apps.collect.services import (
     CommandBus,
@@ -22,12 +24,11 @@ from platform_server.apps.collect.services.command_transport import (
     RedisCommandTransport,
 )
 from platform_server.apps.dashboard.services import (
-    IdempotencyStore,
     StaticPointCatalog,
     SubscriptionViewers,
     load_module_catalog,
 )
-from platform_server.container import Container
+from platform_server.container import IDEMPOTENCY_NAMESPACE, Container
 from platform_server.lease import Lease
 from platform_server.realtime import RealtimeClient
 from platform_server.settings import ROLE_WORKER, Settings
@@ -123,6 +124,14 @@ def build_settings(
     )
 
 
+def _idempotency(cache: CacheLike) -> IdempotencyStore:
+    """幂等结果的缓存面，命名空间与生产装配一致。
+
+    Args: cache。
+    """
+    return IdempotencyStore(cache=cache, namespace=IDEMPOTENCY_NAMESPACE)
+
+
 def build_container(ledger: list[str], *, settings: Settings) -> Container:
     """一个装着假依赖的组合根。
 
@@ -135,7 +144,7 @@ def build_container(ledger: list[str], *, settings: Settings) -> Container:
         ac_source=cast(ReadOnlySqlSource, FakeDependency("ac_source", ledger)),
         stream=cast(RedisStream, FakeDependency("stream", ledger)),
         cache=cast(Cache, FakeDependency("cache", ledger)),
-        idempotency=IdempotencyStore(cache=InMemoryCache()),
+        idempotency=_idempotency(InMemoryCache()),
         module_catalog=load_module_catalog(),
         points=StaticPointCatalog(),
         history=FakeHistorySource(),

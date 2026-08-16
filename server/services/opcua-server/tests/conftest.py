@@ -25,11 +25,12 @@ from lib.auth import (
 )
 from lib.config import load_settings
 from lib.db import Database, PoolProfile
+from lib.idempotency import IdempotencyStore
 from lib.logging import configure_logging
 from lib.testing import InMemoryCache
 from lib.utils.timeutils import utcnow
 from opcua_server.app import build_app
-from opcua_server.container import Container
+from opcua_server.container import IDEMPOTENCY_NAMESPACE, Container
 from opcua_server.settings import Settings
 
 # 五张表都挂在实例上，CASCADE 一条就够；显式列出是为了让加表的人看得见这里
@@ -176,7 +177,9 @@ def _with_fake_cache(built: Container) -> Container:
         nodes=built.nodes,
         node_batch=built.node_batch,
         security=built.security,
-        idempotency=type(built.idempotency)(cache=cache),
+        idempotency=IdempotencyStore(
+            cache=cache, namespace=IDEMPOTENCY_NAMESPACE
+        ),
         realtime=built.realtime,
         values=built.values,
         reconciler=built.reconciler,

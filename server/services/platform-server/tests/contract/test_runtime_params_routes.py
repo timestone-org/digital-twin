@@ -17,10 +17,7 @@ from platform_server.apps.dashboard.catalog import (
     DASHBOARD_VIEW,
 )
 from platform_server.apps.runtime_params.api import ROUTERS
-from platform_server.apps.runtime_params.deps import (
-    REQUIRED_CODES_ATTR,
-    REQUIRED_MODE_ATTR,
-)
+from platform_server.deps import REQUIRED_CODES_ATTR, REQUIRED_MODE_ATTR
 from platform_server.settings import API_PREFIX
 
 RUNTIME_PARAMS = f"{API_PREFIX}/runtime-params"

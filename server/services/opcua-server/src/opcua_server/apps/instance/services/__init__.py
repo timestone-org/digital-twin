@@ -1,6 +1,5 @@
 """业务与事务边界。CRUD 不提交，事务由这一层持有。"""
 
-from opcua_server.apps.instance.services.idempotency import IdempotencyStore
 from opcua_server.apps.instance.services.instance_service import (
     InstanceService,
 )
@@ -29,7 +28,6 @@ from opcua_server.apps.instance.services.value_publisher import (
 )
 
 __all__ = [
-    "IdempotencyStore",
     "InstanceService",
     "NodeBatchService",
     "NodeService",

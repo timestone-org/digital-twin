@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from lib.cache import Cache, PubSub
 from lib.db import Database, PoolProfile, ReadOnlySqlSource, SourceProfile
+from lib.idempotency import IdempotencyStore
 from lib.objectstore import ObjectStore, create_object_store
 from platform_server.apps.collect.crud import HistorySource
 from platform_server.apps.collect.services import (
@@ -19,7 +20,6 @@ from platform_server.apps.collect.services import (
 )
 from platform_server.apps.dashboard.services import (
     SUBSCRIPTION_SCHEMA,
-    IdempotencyStore,
     ModuleCatalog,
     PointCatalog,
     ReadOnlyViewerSource,
@@ -42,6 +42,11 @@ PUBLISHER_LEASE_KEY = "platform:publisher:leader"
 # 预测下发与每日增量各自的单活租约键。理由同上：写死不可配
 AC_PUBLISH_LEASE_KEY = "platform:ac-publish:leader"
 AC_DAILY_LEASE_KEY = "platform:ac-startup-daily:leader"
+
+# 幂等记录的键前缀。⚠ **不许随手改**：它是已经在 Redis 里的键，改了等于把一批
+# 还在有效期内（24h）的幂等记录一次作废，而作废的后果是客户端的一次重试真的
+# 又执行了一遍——建两个大屏、或者向 PLC 写两次
+IDEMPOTENCY_NAMESPACE = "platform:dashboard"
 
 
 @dataclass(frozen=True)
@@ -97,7 +102,7 @@ def build_container(settings: Settings) -> Container:
         ac_source=_build_ac_source(settings),
         stream=_build_stream(settings),
         cache=cache,
-        idempotency=IdempotencyStore(cache=cache),
+        idempotency=_build_idempotency(cache),
         module_catalog=load_module_catalog(),
         # 绑点的存在性由采集配置面的点位表回答：绑一个不存在的点位当场 400
         # 并指到字段，而不是静默放行一条永不产数据的绑定
@@ -129,6 +134,14 @@ def build_container(settings: Settings) -> Container:
         object_store=create_object_store(settings),
         credential_cipher=_build_cipher(settings),
     )
+
+
+def _build_idempotency(cache: Cache) -> IdempotencyStore:
+    """幂等结果的缓存面。命名空间见 `IDEMPOTENCY_NAMESPACE` 的告诫。
+
+    Args: cache。
+    """
+    return IdempotencyStore(cache=cache, namespace=IDEMPOTENCY_NAMESPACE)
 
 
 def _build_cipher(settings: Settings) -> CredentialCipher:

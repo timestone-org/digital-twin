@@ -35,6 +35,7 @@ from lib.auth import (
 )
 from lib.config import load_settings
 from lib.db import Database
+from lib.idempotency import IdempotencyStore
 from lib.logging import configure_logging
 from lib.testing import FakeObjectStore, InMemoryCache
 from lib.utils.timeutils import utcnow
@@ -72,7 +73,6 @@ from platform_server.apps.dashboard.deps import (
 )
 from platform_server.apps.dashboard.services import (
     SUBSCRIPTION_SCHEMA,
-    IdempotencyStore,
     ReadOnlyViewerSource,
     StaticPointCatalog,
     ValidationContext,
@@ -88,7 +88,7 @@ from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.apps.runtime_params.deps import (
     get_session as get_runtime_param_session,
 )
-from platform_server.container import Container
+from platform_server.container import IDEMPOTENCY_NAMESPACE, Container
 from platform_server.settings import Settings
 from timeseries import HISTORY_SCHEMA
 
@@ -457,7 +457,9 @@ def _faked_container(built: Container, fakes: ExternalFakes) -> Container:
     return replace(
         built,
         nodes=fakes.nodes,
-        idempotency=IdempotencyStore(cache=InMemoryCache()),
+        idempotency=IdempotencyStore(
+            cache=InMemoryCache(), namespace=IDEMPOTENCY_NAMESPACE
+        ),
         command_bus=CommandBus(
             transport=fakes.collect.bus,
             browse_timeout_s=BROWSE_TIMEOUT_S,

@@ -10,7 +10,9 @@ from typing import cast
 from pydantic import SecretStr
 
 from lib.cache import Cache, PubSub
+from lib.cache.protocol import CacheLike
 from lib.db import Database, ReadOnlySqlSource
+from lib.idempotency import IdempotencyStore
 from lib.testing import FakeObjectStore, InMemoryCache
 from platform_server.app import _hooks, _probes, _selfcheck
 from platform_server.apps.collect.services import (
@@ -23,14 +25,13 @@ from platform_server.apps.collect.services.command_transport import (
     RedisCommandTransport,
 )
 from platform_server.apps.dashboard.services import (
-    IdempotencyStore,
     StaticPointCatalog,
     SubscriptionViewers,
     load_module_catalog,
 )
 from platform_server.apps.hvac.deps import get_ac_source_reader
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
-from platform_server.container import Container
+from platform_server.container import IDEMPOTENCY_NAMESPACE, Container
 from platform_server.lease import Lease
 from platform_server.realtime import RealtimeClient
 from platform_server.settings import Settings
@@ -85,6 +86,14 @@ def build_settings() -> Settings:
     )
 
 
+def _idempotency(cache: CacheLike) -> IdempotencyStore:
+    """幂等结果的缓存面，命名空间与生产装配一致。
+
+    Args: cache。
+    """
+    return IdempotencyStore(cache=cache, namespace=IDEMPOTENCY_NAMESPACE)
+
+
 def build_container(
     *, is_database_up: bool = True, is_source_up: bool = True
 ) -> tuple[Container, FakeDependency, FakeDependency]:
@@ -102,7 +111,7 @@ def build_container(
         ac_source=cast(ReadOnlySqlSource, source),
         stream=cast(RedisStream, FakeDependency()),
         cache=cast(Cache, FakeDependency()),
-        idempotency=IdempotencyStore(cache=cache),
+        idempotency=_idempotency(cache),
         module_catalog=load_module_catalog(),
         points=StaticPointCatalog(),
         history=FakeHistorySource(),

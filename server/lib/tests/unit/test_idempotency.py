@@ -9,10 +9,16 @@ import pytest
 from pydantic import BaseModel
 
 from lib.errors import Conflict
+from lib.idempotency import IdempotencyStore
 from lib.testing import InMemoryCache
-from platform_server.apps.dashboard.services import IdempotencyStore
 
 CALLER = uuid.UUID("0192f0c0-0000-7000-8000-0000000000aa")
+NAMESPACE = "svc"
+
+
+def build_store() -> IdempotencyStore:
+    """一个打进程内缓存的幂等存储。"""
+    return IdempotencyStore(cache=InMemoryCache(), namespace=NAMESPACE)
 
 
 class Result(BaseModel):
@@ -22,7 +28,7 @@ class Result(BaseModel):
 
 
 async def test_without_a_key_every_call_runs() -> None:
-    store = IdempotencyStore(cache=InMemoryCache())
+    store = build_store()
     calls: list[int] = []
 
     async def action() -> Result:
@@ -39,7 +45,7 @@ async def test_without_a_key_every_call_runs() -> None:
 
 
 async def test_the_same_key_replays_the_first_result() -> None:
-    store = IdempotencyStore(cache=InMemoryCache())
+    store = build_store()
     calls: list[int] = []
 
     async def action() -> Result:
@@ -56,7 +62,7 @@ async def test_the_same_key_replays_the_first_result() -> None:
 
 
 async def test_a_different_caller_does_not_share_the_key() -> None:
-    store = IdempotencyStore(cache=InMemoryCache())
+    store = build_store()
     other = uuid.UUID("0192f0c0-0000-7000-8000-0000000000bb")
 
     async def action() -> Result:
@@ -78,7 +84,7 @@ async def test_a_different_caller_does_not_share_the_key() -> None:
 
 
 async def test_a_failed_call_lets_the_same_key_be_retried() -> None:
-    store = IdempotencyStore(cache=InMemoryCache())
+    store = build_store()
 
     async def failing() -> Result:
         raise RuntimeError("下游抖了一下")
@@ -106,7 +112,7 @@ async def test_a_failed_call_lets_the_same_key_be_retried() -> None:
 
 
 async def test_a_key_still_in_flight_conflicts() -> None:
-    store = IdempotencyStore(cache=InMemoryCache())
+    store = build_store()
     await store._claim(endpoint="create", key="k1", caller=CALLER)
 
     async def action() -> Result:
@@ -120,3 +126,23 @@ async def test_a_key_still_in_flight_conflicts() -> None:
             model=Result,
             action=action,
         )
+
+
+async def test_two_namespaces_do_not_replay_each_other() -> None:
+    """⚠ 共用一个缓存的两个服务，同一个端点名撞上同一个键时不许串结果。"""
+    cache = InMemoryCache()
+    first = IdempotencyStore(cache=cache, namespace="one")
+    second = IdempotencyStore(cache=cache, namespace="two")
+    calls: list[int] = []
+
+    async def action() -> Result:
+        calls.append(1)
+        return Result(value=len(calls))
+
+    started = await first.run_once(
+        endpoint="e", key="k", caller=CALLER, model=Result, action=action
+    )
+    other = await second.run_once(
+        endpoint="e", key="k", caller=CALLER, model=Result, action=action
+    )
+    assert (started.value, other.value) == (1, 2)

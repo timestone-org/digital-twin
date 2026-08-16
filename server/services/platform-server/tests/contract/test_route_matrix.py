@@ -31,13 +31,10 @@ from platform_server.apps.dashboard.catalog import (
 )
 from platform_server.apps.hvac.api import ROUTERS as HVAC_ROUTERS
 from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
-from platform_server.apps.hvac.deps import (
-    REQUIRED_CODES_ATTR,
-    REQUIRED_MODE_ATTR,
-)
 from platform_server.apps.runtime_params.api import (
     ROUTERS as RUNTIME_PARAM_ROUTERS,
 )
+from platform_server.deps import REQUIRED_CODES_ATTR, REQUIRED_MODE_ATTR
 from platform_server.settings import API_PREFIX, INTERNAL_PREFIX
 
 ROUTERS = (

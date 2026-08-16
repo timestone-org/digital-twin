@@ -235,7 +235,6 @@ apps/dashboard/
 │   ├── layout_service       三路比对写回
 │   ├── module_catalog       模块清单的装载与槽键解析
 │   ├── point_catalog        点位存在性的查询口（Protocol）
-│   ├── idempotency          幂等键
 │   ├── state · drafts       当前状态与校验形态
 │   └── presenters · changes
 ├── crud/         只做数据访问，不提交
@@ -244,7 +243,7 @@ apps/dashboard/
 ├── schemas/      入参出参（⚠ 几何四列对外叫 x/y/w/h，Python 侧写全名）
 ├── module_types.json  模块清单（前端构建期的导出产物，见下）
 ├── source_kinds.py    绑定来源的闭合集合
-├── deps.py       闸 2 与写上下文
+├── deps.py       大屏面自己的校验依据与两档写上下文
 ├── catalog.py    权限码字面量
 └── errors.py     错误码领域号 10
 
@@ -255,7 +254,6 @@ apps/hvac/
 │   ├── ac_reading_service   区间校验、游标、桶档位、指标白名单
 │   ├── ac_source_reader     外库适配：SQL 形状、时区换算、驱动异常收敛
 │   ├── ac_unit_service · room_service · workshop_service
-│   ├── edge_identity        身份头验签的纯函数
 │   ├── presenters           ORM → 对外模型
 │   └── changes              PATCH 的「没给就是不改」
 ├── crud/         只做数据访问，不提交
@@ -263,14 +261,16 @@ apps/hvac/
 │                 · hvac_ac_data_bindings · hvac_ac_metric_limits
 ├── schemas/      入参出参
 ├── datasets.py   数据集与指标目录（外部视图形状的唯一真源）
-├── deps.py       闸 2（依赖注入件）与外库读取面的装配
+├── deps.py       空调面自己的分片投递、外库读取面与写值口
 ├── catalog.py    权限码字面量
 └── errors.py     错误码领域号 16
 ```
 
-⚠ `deps.py` 与 `edge_identity.py` 其实是**服务级**而非模块级的东西，现在放在
-`apps/hvac/` 里是因为它只有一个消费方。第二个功能模块出现时，跨模块 import 会被
-结构闸挡下——那就是把它们上移的信号，不要靠放宽白名单绕过去。
+⚠ 组合根、事务、闸 2 与幂等键是**服务级**件，住在服务根的 `platform_server/deps.py`，
+其中闸 2 的算法与装配又在 `lib.web.authdeps`（`opcua-server` 用同一份，见
+[ADR-0018](../../../docs/adr/0018-闸2与幂等存储收进lib并按参数注入服务差异.md)）。
+功能模块的 `deps.py` 只写自己的上下文，**不许**为了拿一件基础设施去 import
+另一个功能模块。
 
 ⚠ `module_types.json` 是一处**有意的重复**：模块清单的唯一真源在**前端**
 （渲染组件与 manifest 同处一地才不会漂），服务端这份是前端在构建期导出的产物，

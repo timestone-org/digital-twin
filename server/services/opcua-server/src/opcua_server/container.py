@@ -6,12 +6,12 @@ from dataclasses import dataclass
 from lib.auth import PasswordHasher
 from lib.cache import Cache
 from lib.db import Database, PoolProfile
+from lib.idempotency import IdempotencyStore
 from opcua_server.apps.instance.runtime.pki import PkiStore
 from opcua_server.apps.instance.runtime.ports import PortAllocator
 from opcua_server.apps.instance.runtime.supervisor import InstanceSupervisor
 from opcua_server.apps.instance.runtime.valuewatch import OnValueChange
 from opcua_server.apps.instance.services import (
-    IdempotencyStore,
     InstanceService,
     NodeBatchService,
     NodeService,
@@ -21,6 +21,11 @@ from opcua_server.apps.instance.services import (
     ValuePublisher,
 )
 from opcua_server.settings import Settings
+
+# 幂等记录的键前缀。⚠ **不许随手改**：它是已经在 Redis 里的键，改了等于把一批
+# 还在有效期内（24h）的幂等记录一次作废，而作废的后果是客户端的一次重试真的
+# 又执行了一遍——建两个实例、或者向上位机可见的地址空间写两次
+IDEMPOTENCY_NAMESPACE = "opcua"
 
 
 @dataclass(frozen=True)
@@ -122,7 +127,9 @@ def build_container(settings: Settings) -> Container:
             supervisor=supervisor,
             hasher=PasswordHasher(),
         ),
-        idempotency=IdempotencyStore(cache=cache),
+        idempotency=IdempotencyStore(
+            cache=cache, namespace=IDEMPOTENCY_NAMESPACE
+        ),
         realtime=realtime,
         values=values,
         reconciler=TopicReconciler(database=database, realtime=realtime),

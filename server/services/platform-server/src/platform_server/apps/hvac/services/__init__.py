@@ -19,9 +19,6 @@ from platform_server.apps.hvac.services import (
     room_service,
     workshop_service,
 )
-from platform_server.apps.hvac.services.edge_identity import (
-    caller_from_headers,
-)
 
 __all__ = [
     "ac_daily_queue",
@@ -36,7 +33,6 @@ __all__ = [
     "ac_startup_rules",
     "ac_startup_service",
     "ac_unit_service",
-    "caller_from_headers",
     "room_service",
     "workshop_service",
 ]
