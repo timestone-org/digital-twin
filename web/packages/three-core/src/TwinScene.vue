@@ -30,11 +30,13 @@ import { distanceContextOf } from './distanceContext'
 import type { TwinPartClick } from './partPicking'
 import TwinSceneOverlay from './TwinSceneOverlay.vue'
 import TwinSceneTools from './TwinSceneTools.vue'
+import TwinStructurePanel from './TwinStructurePanel.vue'
 import TwinViewpointBar from './TwinViewpointBar.vue'
 import { usePartClick } from './usePartClick'
 import { useRenderLoop } from './useRenderLoop'
 import { useSceneCamera } from './useSceneCamera'
 import { useSceneTools } from './useSceneTools'
+import { useStructureTree } from './useStructureTree'
 import { useTwinModelLoad } from './useTwinModelLoad'
 import { useViewpointSwitch } from './useViewpointSwitch'
 import { EMPTY_NODE_INDEX, type NodeIndex } from './nodeIndex'
@@ -64,6 +66,8 @@ const props = defineProps<{
   showSceneTools?: boolean
   /** 截图文件名用的标题。 */
   sceneTitle?: string
+  /** 显示只读结构树：浏览层级、勾选显隐、点击定位。 */
+  showStructureTree?: boolean
 }>()
 
 /** 点中了某个部件，且通过了距离门禁。 */
@@ -93,6 +97,7 @@ const model = useTwinModelLoad({
     animations = new ModelAnimations(asset.root, asset.clips)
     animations.apply(props.config.model.animations)
     sceneCamera.applyInitial(asset.root)
+    structure.rebuild()
     refreshLayers()
   },
 })
@@ -126,6 +131,11 @@ usePartClick({
   onPartClick: (part) => emit('partClick', part),
   intercept: tools.interceptClick,
 })
+const structure = useStructureTree({
+  core: () => core,
+  enabled: () => props.showStructureTree === true,
+})
+
 const anchors = computed(() => props.anchorValues ?? EMPTY_ANCHOR_VALUES)
 const arrows = computed(() => props.arrowValues ?? EMPTY_ARROW_VALUES)
 const panels = computed(() => props.panelValues ?? EMPTY_PANEL_VALUES)
@@ -257,6 +267,7 @@ watch(liveValues, (values) => layers?.setValues(values))
       :missing-nodes="model.missingNodes.value"
     />
     <TwinSceneTools v-if="showSceneTools === true" :tools="tools" />
+    <TwinStructurePanel v-if="showStructureTree === true" :tree="structure" />
     <TwinViewpointBar
       v-if="viewpoints.items.value.length > 0"
       :items="viewpoints.items.value"

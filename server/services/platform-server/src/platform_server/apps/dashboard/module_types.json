@@ -1353,6 +1353,14 @@
           "span": "full"
         },
         {
+          "key": "showStructureTree",
+          "label": "结构树",
+          "type": "boolean",
+          "group": "运行态",
+          "help": "运行态左下角提供只读的模型结构树：浏览层级、勾选显隐、点击定位。勾选显隐只影响当前会话，不写回配置。",
+          "span": "full"
+        },
+        {
           "key": "twin",
           "label": "孪生场景",
           "type": "object",

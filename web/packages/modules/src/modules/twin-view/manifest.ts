@@ -68,6 +68,15 @@ export default defineModule({
       help: '运行态左上角提供场景内搜索定位、当前画面 PNG 截图、两点测量、颜色图例与剖切面。',
     },
     {
+      key: 'showStructureTree',
+      label: '结构树',
+      type: 'boolean',
+      group: '运行态',
+      // ⚠ 同样刻意不给 default：缺省即 false = 不显示，存量大屏零回归
+      span: 'full',
+      help: '运行态左下角提供只读的模型结构树：浏览层级、勾选显隐、点击定位。勾选显隐只影响当前会话，不写回配置。',
+    },
+    {
       key: TWIN_CONFIG_KEY,
       label: '孪生场景',
       type: 'object',

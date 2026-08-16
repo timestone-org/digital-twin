@@ -98,6 +98,9 @@ const TwinHierDrill = defineAsyncComponent(async () => {
 const scene = computed(() => normalizeTwinConfig(props.config[TWIN_CONFIG_KEY]))
 const title = computed(() => readText(props.config.title))
 const showSceneTools = computed(() => readBoolean(props.config.showSceneTools))
+const showStructureTree = computed(() =>
+  readBoolean(props.config.showStructureTree),
+)
 
 const anchorValues = computed(() =>
   stitchAnchorValues(
@@ -165,6 +168,7 @@ const errorMessage = computed(() =>
       :flow-values="flowValues"
       :focus-view="drillView"
       :show-scene-tools="showSceneTools"
+      :show-structure-tree="showStructureTree"
       :scene-title="title"
       @part-click="onPartClick"
     />
