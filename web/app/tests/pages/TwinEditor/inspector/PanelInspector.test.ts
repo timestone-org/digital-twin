@@ -53,6 +53,7 @@ function panelOf(over: Partial<TwinPanel> = {}): TwinPanel {
       background: '',
       width: 0,
       fontScale: 1,
+      scale: 1,
       animate: false,
       pulse: false,
     },

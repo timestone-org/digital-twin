@@ -6,6 +6,8 @@
 import {
   EditorScene,
   type EditorSceneStatus,
+  type GizmoChange,
+  type GizmoMode,
   type TwinCameraPose,
   type TwinPickMode,
 } from '@dt/three-core'
@@ -21,6 +23,14 @@ const props = defineProps<{
   config: TwinConfig
   selection: TwinSelection | null
   pickMode: TwinPickMode
+  /** 坐标轴手柄的模式；只有箭头用得上 `rotate`。 */
+  gizmoMode?: GizmoMode
+  /**
+   * 这块孪生在大屏上占多大（设计像素）；给了就按它的宽高比留边。
+   * ⚠ 不留边的话编辑视口与大屏格子的宽高比不同，相机 aspect 跟着不同，
+   * 同一份配置在两边取景不一样——用户看到的是「牌与模型的大小对不上」。
+   */
+  targetSize?: { width: number; height: number } | undefined
 }>()
 
 const emit = defineEmits<{
@@ -32,6 +42,12 @@ const emit = defineEmits<{
   status: [EditorSceneStatus]
   /** 漫游预览开停；用户一碰镜头它会自己停，面板上的按钮要跟着回落。 */
   roamPreview: [boolean]
+  /** 用户拖坐标轴手柄改了某个实体的位置 / 朝向。 */
+  entityTransform: [GizmoChange]
+  /** 手柄松手了；宿主据此把这一次拖动合成一条撤销。 */
+  entityTransformEnd: []
+  /** 按住 Shift 框选拿到的模型节点名。 */
+  marqueeNodes: [readonly string[]]
 }>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
@@ -50,6 +66,24 @@ const pickHint = computed(() => {
   if (props.pickMode === 'position') return '点模型表面或地面，取世界坐标'
   return ''
 })
+/**
+ * 按目标格子的宽高比留边；没给尺寸就铺满。
+ * 编辑区左右都有面板、通常比大屏格子更宽，所以按高度撑满推宽度；
+ * 真遇上更窄的编辑区时多出的部分由舞台裁掉，不会把画面挤没。
+ */
+const frameStyle = computed(() => {
+  const size = props.targetSize
+  if (size === undefined || size.width <= 0 || size.height <= 0)
+    return undefined
+  // ⚠ 高度撑满、宽度由比例推：两个方向都写 auto 的话，视口里只有绝对定位的
+  // canvas、没有流内容，auto 会双双塌成 0——画面整个消失，且不报任何错
+  return {
+    width: 'auto',
+    height: '100%',
+    aspectRatio: `${size.width} / ${size.height}`,
+  }
+})
+
 const backgroundStyle = computed(() => {
   const spec = props.config.model.background
   if (spec === '') return undefined
@@ -96,6 +130,9 @@ onMounted(() => {
       cameraChange: (value) => emit('cameraChange', value),
       status: applyStatus,
       roamPreview: (value) => emit('roamPreview', value),
+      entityTransform: (change) => emit('entityTransform', change),
+      entityTransformEnd: () => emit('entityTransformEnd'),
+      marqueeNodes: (names) => emit('marqueeNodes', names),
     },
   })
   scene.setSelection(props.selection)
@@ -119,6 +156,10 @@ watch(
   () => props.pickMode,
   (value) => scene?.setPickMode(value),
 )
+watch(
+  () => props.gizmoMode,
+  (value) => scene?.setGizmoMode(value ?? 'translate'),
+)
 
 /**
  * 按当前配置飞一遍漫游轨迹；可用站点不足两个时返回 false。
@@ -137,21 +178,40 @@ defineExpose({ focus, snapshot, playRoamPreview, stopRoamPreview })
 </script>
 
 <template>
-  <div ref="containerRef" class="twin-viewport" :style="backgroundStyle">
-    <div v-if="status === 'loading'" class="twin-viewport__overlay">
-      <DtSpinner />
-      <span class="twin-viewport__hint">模型加载中</span>
+  <div class="twin-viewport__stage">
+    <div
+      ref="containerRef"
+      class="twin-viewport"
+      :style="[backgroundStyle, frameStyle]"
+    >
+      <div v-if="status === 'loading'" class="twin-viewport__overlay">
+        <DtSpinner />
+        <span class="twin-viewport__hint">模型加载中</span>
+      </div>
+      <div v-else-if="status !== 'ready'" class="twin-viewport__overlay">
+        <DtNotice :intent="status === 'error' ? 'danger' : 'neutral'">
+          {{ overlayMessage }}
+        </DtNotice>
+      </div>
+      <p v-if="pickHint !== ''" class="twin-viewport__pick">{{ pickHint }}</p>
     </div>
-    <div v-else-if="status !== 'ready'" class="twin-viewport__overlay">
-      <DtNotice :intent="status === 'error' ? 'danger' : 'neutral'">
-        {{ overlayMessage }}
-      </DtNotice>
-    </div>
-    <p v-if="pickHint !== ''" class="twin-viewport__pick">{{ pickHint }}</p>
   </div>
 </template>
 
 <style scoped lang="scss">
+// 舞台把视口居中；视口自己按目标格子的宽高比留边
+// 舞台把视口居中；比例超出可用宽度时由它裁掉，不让画面挤没
+.twin-viewport__stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface-sunken);
+}
+
 .twin-viewport {
   position: relative;
   width: 100%;

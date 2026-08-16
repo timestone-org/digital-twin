@@ -43,6 +43,7 @@ const Host = defineComponent({
     controller = useRoamTour({
       core: () => core,
       config: () => props.config,
+      span: () => 10,
     })
     return () => h('div')
   },

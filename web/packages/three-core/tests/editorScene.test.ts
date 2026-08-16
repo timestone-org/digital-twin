@@ -32,6 +32,9 @@ interface Events {
   cameraChange: ReturnType<typeof vi.fn>
   status: ReturnType<typeof vi.fn>
   roamPreview: ReturnType<typeof vi.fn>
+  entityTransform: ReturnType<typeof vi.fn>
+  entityTransformEnd: ReturnType<typeof vi.fn>
+  marqueeNodes: ReturnType<typeof vi.fn>
 }
 
 interface Harness {
@@ -58,6 +61,9 @@ function createEvents(): Events {
     cameraChange: vi.fn(),
     status: vi.fn(),
     roamPreview: vi.fn(),
+    entityTransform: vi.fn(),
+    entityTransformEnd: vi.fn(),
+    marqueeNodes: vi.fn(),
   }
 }
 

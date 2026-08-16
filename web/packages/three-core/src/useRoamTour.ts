@@ -29,6 +29,8 @@ export interface RoamTourDeps {
   core: () => SceneCore | null
   /** ⚠ 必须是 `normalizeTwinConfig` 的输出：这里按引用比对，就地改字段不重建轨迹。 */
   config: () => TwinConfig
+  /** 模型包围盒对角线；剪裁面要罩得住星空那一层壳。 */
+  span: () => number
 }
 
 /** 宿主要用到的四个动作与两个状态。 */
@@ -43,6 +45,8 @@ export interface RoamTourController {
   toggle: () => void
   next: () => void
   prev: () => void
+  /** 停在当前位姿上。⚠ 手动切视点时必须先叫它，否则下一帧轨迹又把镜头拽走。 */
+  pause: () => void
 }
 
 /**
@@ -130,7 +134,7 @@ class RoamRunner {
   private applyPose(pose: TwinPose | null): void {
     const core = this.deps.core()
     if (core === null || pose === null) return
-    applyCameraPose(core, pose)
+    applyCameraPose(core, pose, this.deps.span())
   }
 
   private clearIdleTimer(): void {
@@ -150,11 +154,8 @@ class RoamRunner {
     }, tour.idleAutoplayDelayMs)
   }
 
-  /**
-   * 用户碰了轨道控制器。
-   * ⚠ 立刻停播，不等这一段飞完：用户已经在手动看别处了，镜头还自己往前飞
-   * 会变成两个人抢方向盘。
-   */
+  // ⚠ 立刻停播、不等这一段飞完：用户已经在手动看别处了，镜头还自己往前飞
+  // 会变成两个人抢方向盘
   private readonly onUserInput = (): void => {
     this.pause()
     this.armIdleTimer()
@@ -185,9 +186,10 @@ export function useRoamTour(deps: RoamTourDeps): RoamTourController {
     showControls,
     playing: runner.playing,
     attach: () => runner.attach(),
-    advance: (deltaMs) => runner.advance(deltaMs),
+    advance: (ms) => runner.advance(ms),
     toggle: () => runner.toggle(),
     next: () => runner.step(1),
     prev: () => runner.step(-1),
+    pause: () => runner.pause(),
   }
 }

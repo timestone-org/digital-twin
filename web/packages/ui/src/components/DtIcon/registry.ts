@@ -255,6 +255,8 @@ export const ICONS = {
   type: ['M5 6V5h14v1', 'M12 5v14', 'M9 19h6'],
   // 只用直线：圆弧鼓出多少从字面坐标上看不出来，越出视框会被静默裁掉
   image: ['M4 4h16v16H4z', 'm5 16 4-4 3 3 4-4 3 3', 'M9 9h.01'],
+  // 两点测量：一把带刻度的尺
+  ruler: ['M3 8h18v8H3z', 'M7 8v4', 'M11 8v4', 'M15 8v4'],
 } as const satisfies Record<string, readonly string[]>
 
 export type IconName = keyof typeof ICONS

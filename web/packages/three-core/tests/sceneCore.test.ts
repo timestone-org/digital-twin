@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  applyCameraPose,
   applyModelPlacement,
   boundingDiagonal,
   clampPixelRatio,
@@ -281,5 +282,70 @@ describe('卸载收口', () => {
     disposeScene(core)
 
     expect(core.scene.background).toBeNull()
+  })
+})
+
+describe('位姿也要重算剪裁面', () => {
+  function coreOf() {
+    const container = document.createElement('div')
+    document.body.append(container)
+    return createSceneCore({ container, renderer: createHeadlessRenderer() })
+  }
+
+  const POSE = {
+    position: [30, 30, 30] as [number, number, number],
+    target: [0, 0, 0] as [number, number, number],
+    fov: 45,
+  }
+
+  // ⚠ 这条守的是一次真实的回归：`frameBox` 会重算剪裁面而这条路不算，
+  // 相机于是停在初始的 0.01/5000 上——大模型上星空整片被远剪裁面裁掉，
+  // 画面突然变成纯色底，而没有任何一处报错
+  it('远剪裁面罩得住星空那层壳', () => {
+    const core = coreOf()
+
+    // 星空壳是模型对角线的 6 倍：对角线 1000 时它在 6000 外
+    applyCameraPose(core, POSE, 1000)
+
+    expect(core.camera.far).toBeGreaterThan(6000)
+  })
+
+  it('近剪裁面跟着取景距离收紧，不留死板的 0.01', () => {
+    const core = coreOf()
+
+    applyCameraPose(core, POSE, 1000)
+
+    expect(core.camera.near).toBeGreaterThan(0.01)
+  })
+
+  it('不给体量时只按取景距离算，小模型上不浪费深度精度', () => {
+    const core = coreOf()
+
+    applyCameraPose(core, POSE)
+
+    // 机位到注视点约 52，far 取它的二十倍
+    expect(core.camera.far).toBeCloseTo(52 * 20, -2)
+  })
+
+  it('机位与注视点重合时不产出 0 或 NaN 的剪裁面', () => {
+    const core = coreOf()
+
+    applyCameraPose(core, { ...POSE, position: [0, 0, 0] })
+
+    expect(core.camera.near).toBeGreaterThan(0)
+    expect(core.camera.far).toBeGreaterThan(core.camera.near)
+  })
+
+  it('自动取景那条路同样罩得住星空', () => {
+    const core = coreOf()
+    const big = new THREE.Mesh(
+      new THREE.BoxGeometry(600, 600, 600),
+      new THREE.MeshBasicMaterial(),
+    )
+
+    frameObject(core, big)
+
+    // 对角线约 1039，星空壳在 6235 外
+    expect(core.camera.far).toBeGreaterThan(6235)
   })
 })

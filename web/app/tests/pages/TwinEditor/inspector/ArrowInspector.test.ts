@@ -30,7 +30,9 @@ function arrowOf(over: Partial<TwinArrow> = {}): TwinArrow {
 }
 
 function mountInspector(arrow: TwinArrow, picking = false) {
-  return mount(ArrowInspector, { props: { modelValue: arrow, picking } })
+  return mount(ArrowInspector, {
+    props: { modelValue: arrow, picking, gizmoMode: 'translate' as const },
+  })
 }
 
 type Wrapper = ReturnType<typeof mountInspector>

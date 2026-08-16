@@ -21,6 +21,12 @@ export interface TwinEditorPage {
   doc: ComputedRef<TwinDoc | null>
   dashboard: Ref<DashboardPayload | null>
   node: ComputedRef<DashboardNodePayload | null>
+  /**
+   * 这块孪生在大屏上占多大（设计像素）；节点还没读出来时是 undefined。
+   * ⚠ 编辑视口按它留边：不留的话编辑区与大屏格子的宽高比不同，相机 aspect
+   * 跟着不同，同一份配置在两边取景不一样——看起来就是「牌与模型的大小对不上」。
+   */
+  targetSize: ComputedRef<{ width: number; height: number } | undefined>
   loading: Ref<boolean>
   saving: Ref<boolean>
   /** 取数失败、或这张屏上根本没有这个节点。 */
@@ -83,6 +89,28 @@ function nodesWithTwin(
  * @param dashboardId 大屏 id
  * @param nodeId 要编辑的节点 id
  */
+/**
+ * 把这一份孪生配置写回它所在的大屏节点。
+ * @param file 大屏文档态
+ * @param editing 当前的孪生文档；null = 还没读出来
+ * @param nodeId 节点 id
+ */
+async function saveTwin(
+  file: ReturnType<typeof useDashboardDoc>,
+  editing: TwinDoc | null,
+  nodeId: string,
+): Promise<boolean> {
+  const current = file.dashboard.value
+  if (current === null || editing === null) return false
+  const saved = await file.save({
+    expectedVersion: current.rowVersion,
+    nodes: toLayoutInput(nodesWithTwin(current, nodeId, editing)),
+  })
+  if (saved === null) return false
+  editing.markSaved()
+  return true
+}
+
 export function useTwinEditorPage(
   dashboardId: () => string,
   nodeId: () => string,
@@ -113,24 +141,17 @@ export function useTwinEditorPage(
 
   watch([dashboardId, nodeId], ([id]) => void reload(id), { immediate: true })
 
-  async function save(): Promise<boolean> {
-    const current = file.dashboard.value
-    const editing = doc.value
-    if (current === null || editing === null) return false
-
-    const saved = await file.save({
-      expectedVersion: current.rowVersion,
-      nodes: toLayoutInput(nodesWithTwin(current, nodeId(), editing)),
-    })
-    if (saved === null) return false
-    editing.markSaved()
-    return true
-  }
-
   return {
     doc: computed(() => doc.value),
+    save: () => saveTwin(file, doc.value, nodeId()),
     dashboard: file.dashboard,
     node,
+    targetSize: computed(() => {
+      const current = node.value
+      return current === null
+        ? undefined
+        : { width: current.w, height: current.h }
+    }),
     loading: file.loading,
     saving: file.saving,
     error: computed(() =>
@@ -139,7 +160,6 @@ export function useTwinEditorPage(
         : file.error.value,
     ),
     conflict: file.conflict,
-    save,
     dispose: file.dispose,
   }
 }

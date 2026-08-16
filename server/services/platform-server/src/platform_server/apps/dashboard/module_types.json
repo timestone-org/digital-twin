@@ -1345,6 +1345,22 @@
           "step": 1
         },
         {
+          "key": "showSceneTools",
+          "label": "场景工具条",
+          "type": "boolean",
+          "group": "运行态",
+          "help": "运行态左上角提供场景内搜索定位、当前画面 PNG 截图、两点测量、颜色图例与剖切面。",
+          "span": "full"
+        },
+        {
+          "key": "showStructureTree",
+          "label": "结构树",
+          "type": "boolean",
+          "group": "运行态",
+          "help": "运行态左下角提供只读的模型结构树：浏览层级、勾选显隐、点击定位。勾选显隐只影响当前会话，不写回配置。",
+          "span": "full"
+        },
+        {
           "key": "twin",
           "label": "孪生场景",
           "type": "object",

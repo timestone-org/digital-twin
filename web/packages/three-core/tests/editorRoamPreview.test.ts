@@ -35,6 +35,9 @@ function callbacks(
     cameraChange: vi.fn(),
     status: vi.fn(),
     roamPreview,
+    entityTransform: vi.fn(),
+    entityTransformEnd: vi.fn(),
+    marqueeNodes: vi.fn(),
   }
 }
 

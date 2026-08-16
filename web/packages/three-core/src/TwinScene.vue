@@ -2,6 +2,8 @@
 /**
  * @fileoverview 孪生场景宿主：渲染循环、模型装载与进度、部件显隐、锚点、箭头、信息牌、能量流与场景特效。
  * ⚠ 本组件静态依赖整个 three，只能被异步加载（DASHBOARD_DESIGN §5.4）。
+ * ⚠ 根元素上的 `tabindex` 不是装饰：没有它这个 div 收不到 keydown，视点的数字键
+ * 快捷方式整片失效，而按钮照常显示——界面上看不出快捷键为什么不响应。
  */
 import type {
   TwinAnchorValues,
@@ -17,37 +19,34 @@ import {
   EMPTY_FLOW_VALUES,
   EMPTY_PANEL_VALUES,
 } from '@dt/twin-config'
-import type { Object3D } from 'three'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 
-import { resolveTwinModelUrl } from './host'
-import { createFrameClock } from './frameClock'
+import { GroundGridLayer } from './groundGrid'
+import { ModelAnimations } from './modelAnimations'
 import TwinRoamControls from './TwinRoamControls.vue'
 import { useRoamTour } from './useRoamTour'
 import { SceneLayers, type SceneLayerValues } from './sceneLayers'
-import { loadTwinModel } from './modelLoader'
 import { distanceContextOf } from './distanceContext'
 import type { TwinPartClick } from './partPicking'
 import TwinSceneOverlay from './TwinSceneOverlay.vue'
+import TwinSceneTools from './TwinSceneTools.vue'
+import TwinStructurePanel from './TwinStructurePanel.vue'
+import TwinViewpointBar from './TwinViewpointBar.vue'
 import { usePartClick } from './usePartClick'
-import {
-  EMPTY_NODE_INDEX,
-  buildNodeIndex,
-  unmatchedNodeNames,
-  type NodeIndex,
-} from './nodeIndex'
+import { useRenderLoop } from './useRenderLoop'
+import { useSceneCamera } from './useSceneCamera'
+import { SCENE_TOOLS_KEY, useSceneTools } from './useSceneTools'
+import { useStructureTree } from './useStructureTree'
+import { useTwinModelLoad } from './useTwinModelLoad'
+import { useViewpointSwitch } from './useViewpointSwitch'
+import { EMPTY_NODE_INDEX, type NodeIndex } from './nodeIndex'
 import {
   WEBGL_UNAVAILABLE_MESSAGE,
-  applyCameraPose,
   applyModelPlacement,
   boundingDiagonal,
   createSceneCore,
   createWebGLRenderer,
   disposeScene,
-  disposeSceneGraph,
-  frameObject,
-  renderScene,
-  resizeScene,
   type SceneCore,
 } from './sceneCore'
 
@@ -63,40 +62,89 @@ const props = defineProps<{
    * ⚠ 只在它换引用时飞一次，不每帧套——套住的话镜头就转不动了。
    */
   focusView?: TwinModalView | null
+  /** 显示场景工具条（搜索定位 / 截图 / 测量 / 图例 / 剖切）。 */
+  showSceneTools?: boolean
+  /** 截图文件名用的标题。 */
+  sceneTitle?: string
+  /** 显示只读结构树：浏览层级、勾选显隐、点击定位。 */
+  showStructureTree?: boolean
 }>()
 
 /** 点中了某个部件，且通过了距离门禁。 */
 const emit = defineEmits<{ partClick: [TwinPartClick] }>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
-const status = ref<'empty' | 'loading' | 'ready' | 'error'>('empty')
-const progressPercent = ref(0)
-const errorMessage = ref('')
-const missingNodes = ref<readonly string[]>([])
 
 let core: SceneCore | null = null
-/** 已挂上的模型根，配置改了要按新的摆放重置它。 */
-let modelObject: Object3D | null = null
 let layers: SceneLayers | null = null
-const clock = createFrameClock()
+let groundGrid: GroundGridLayer | null = null
+let animations: ModelAnimations | null = null
 let nodeIndex: NodeIndex = EMPTY_NODE_INDEX
-let observer: ResizeObserver | null = null
-let frameHandle = 0
+
+/** 模型包围盒对角线；相机、图层与剪裁面都按它定尺度。 */
+function modelSpan(): number {
+  const root = model.root()
+  return root === null ? 0 : boundingDiagonal(root)
+}
+const sceneCamera = useSceneCamera({
+  core: () => core,
+  config: () => props.config,
+  span: modelSpan,
+})
+
+const model = useTwinModelLoad({
+  core: () => core,
+  asset: () => props.config.model.asset,
+  parts: () => props.config.parts,
+  onReady: (asset, index) => {
+    nodeIndex = index
+    // 动画属于模型，换模型整层重建；只换配置走 refreshLayers 里的 apply
+    animations?.dispose()
+    animations = new ModelAnimations(asset.root, asset.clips)
+    animations.apply(props.config.model.animations)
+    sceneCamera.applyInitial(asset.root)
+    structure.rebuild()
+    refreshLayers()
+  },
+})
+
+const roam = useRoamTour({
+  core: () => core,
+  config: () => props.config,
+  span: modelSpan,
+})
+const viewpoints = useViewpointSwitch({
+  element: () => containerRef.value,
+  config: () => props.config,
+  onSwitch: (camera) => {
+    // 手动切视点即打断漫游：否则下一帧轨迹又把镜头拽走，看着像点了没反应
+    roam.pause()
+    sceneCamera.applyCamera(camera)
+  },
+})
+
+const tools = useSceneTools({
+  core: () => core,
+  element: () => containerRef.value,
+  config: () => props.config,
+  nodeIndex: () => nodeIndex,
+  title: () => props.sceneTitle ?? '',
+})
+// 工具条是这套状态的视图，走注入而不是 prop——里面几个 ref 本就是给人改的
+provide(SCENE_TOOLS_KEY, tools)
 
 usePartClick({
   element: () => containerRef.value,
   core: () => core,
   parts: () => layers?.parts ?? null,
   onPartClick: (part) => emit('partClick', part),
+  intercept: tools.interceptClick,
 })
-const roam = useRoamTour({
+const structure = useStructureTree({
   core: () => core,
-  config: () => props.config,
+  enabled: () => props.showStructureTree === true,
 })
-let loadSeq = 0
-let loadAbort: AbortController | null = null
 
-const modelAsset = computed(() => props.config.model.asset)
 const anchors = computed(() => props.anchorValues ?? EMPTY_ANCHOR_VALUES)
 const arrows = computed(() => props.arrowValues ?? EMPTY_ARROW_VALUES)
 const panels = computed(() => props.panelValues ?? EMPTY_PANEL_VALUES)
@@ -107,33 +155,20 @@ const backgroundStyle = computed(() => {
   return { background: spec.startsWith('--') ? `var(${spec})` : spec }
 })
 
-/** 把这一帧的时长交给需要动的那两层。 */
-function animate(delta: number): void {
-  if (delta <= 0) return
-  layers?.update(delta)
-}
-
 /** 一帧多少毫秒；帧钟给的是秒。 */
 const MS_PER_S = 1000
 
-function tick(now: number): void {
-  if (core === null) return
-  const delta = clock.tick(now)
-  animate(delta)
-  // ⚠ 用帧钟夹过的时长，不用 rAF 的原始时刻：切走标签页再回来那一帧有几十秒，
-  // 直接算下去会一帧飞完整条轨迹
-  roam.advance(delta * MS_PER_S)
-  // ⚠ 每帧都要算：镜头一直在动，距离规则的成立与否随时在变
-  layers?.applyDistanceRules(distanceContextOf(core))
-  renderScene(core)
-  frameHandle = requestAnimationFrame(tick)
-}
-
-function measure(): void {
-  const element = containerRef.value
-  if (core === null || element === null) return
-  resizeScene(core, element.clientWidth, element.clientHeight)
-}
+const loop = useRenderLoop({
+  core: () => core,
+  element: () => containerRef.value,
+  onFrame: (deltaS) => {
+    if (core !== null) layers?.update(deltaS, core.camera)
+    if (deltaS > 0) animations?.update(deltaS)
+    roam.advance(deltaS * MS_PER_S)
+    // ⚠ 每帧都要算：镜头一直在动，距离规则的成立与否随时在变
+    if (core !== null) layers?.applyDistanceRules(distanceContextOf(core))
+  },
+})
 
 /** 当前这一拍的五路实时值。 */
 function liveValues(): SceneLayerValues {
@@ -151,130 +186,94 @@ function refreshLayers(): void {
   // ⚠ 摆放要跟着配置重算：只在装载时应用的话，编辑器里改缩放/位移/旋转
   // 会一直到换模型才生效，中间那段是「调了没反应」
   placeModel()
+  animations?.apply(props.config.model.animations)
   layers?.build(props.config, liveValues(), nodeIndex)
   // ⚠ 建完立刻按当前机位算一次：等下一帧的话，配了近距隐藏的元素会先露一帧
   layers?.applyDistanceRules(distanceContextOf(core))
 }
 
-/** 把配置里的摆放落到模型上，并按新体量重算锚点小球尺寸。 */
+/**
+ * 把摆放落到模型上，并按新体量重算锚点小球与地面网格。
+ * ⚠ 网格那一支不能跟着「有没有模型」早退：它是独立于模型的参考面，
+ * 没挑模型时打开开关也该画得出来。
+ */
 function placeModel(): void {
-  if (modelObject === null) return
-  applyModelPlacement(modelObject, props.config.model)
-  layers?.setWorldScale(boundingDiagonal(modelObject))
-}
-
-function clearModel(): void {
-  if (core !== null) disposeSceneGraph(core.modelRoot)
-  modelObject = null
-  nodeIndex = EMPTY_NODE_INDEX
-  missingNodes.value = []
-  errorMessage.value = ''
-  status.value = 'empty'
-}
-
-function fail(message: string): void {
-  clearModel()
-  status.value = 'error'
-  errorMessage.value = message
-}
-
-function mountModel(root: Object3D): void {
-  if (core === null) return
-  clearModel()
-  modelObject = root
-  applyModelPlacement(root, props.config.model)
-  core.modelRoot.add(root)
-  nodeIndex = buildNodeIndex(root)
-  missingNodes.value = unmatchedNodeNames(nodeIndex, props.config.parts)
-  frameObject(core, root)
-  status.value = 'ready'
-  refreshLayers()
-}
-
-function reportProgress(seq: number, loaded: number, total: number): void {
-  if (seq !== loadSeq || total <= 0) return
-  progressPercent.value = Math.round((loaded / total) * 100)
-}
-
-async function load(): Promise<void> {
-  const mine = ++loadSeq
-  loadAbort?.abort()
-  const controller = new AbortController()
-  loadAbort = controller
-  const asset = modelAsset.value
-  if (asset === '') return clearModel()
-  const url = resolveTwinModelUrl(asset)
-  if (url === '') return fail('模型地址解析失败：素材引用无效或宿主未注入')
-  status.value = 'loading'
-  progressPercent.value = 0
-  try {
-    const root = await loadTwinModel(url, {
-      signal: controller.signal,
-      onProgress: (loaded, total) => reportProgress(mine, loaded, total),
-    })
-    // ⚠ 慢的那次后返回时要连同它的 GPU 资源一起丢掉：只 return 是一次纯泄漏
-    if (mine !== loadSeq) return disposeSceneGraph(root)
-    mountModel(root)
-  } catch (error) {
-    if (mine !== loadSeq) return
-    fail(error instanceof Error ? error.message : '模型加载失败')
+  const root = model.root()
+  if (root !== null) {
+    applyModelPlacement(root, props.config.model)
+    layers?.setWorldScale(modelSpan())
   }
+  groundGrid?.sync(props.config.model.showGroundGrid, modelSpan())
 }
 
 onMounted(() => {
   const element = containerRef.value
   if (element === null) return
   const renderer = createWebGLRenderer()
-  if (renderer === null) return fail(WEBGL_UNAVAILABLE_MESSAGE)
+  if (renderer === null) return model.fail(WEBGL_UNAVAILABLE_MESSAGE)
   core = createSceneCore({ container: element, renderer })
   layers = new SceneLayers(element)
   layers.addTo(core.scene)
-  observer = new ResizeObserver(measure)
-  observer.observe(element)
-  measure()
-  clock.reset()
-  frameHandle = requestAnimationFrame(tick)
+  groundGrid = new GroundGridLayer(core.scene, element)
+  placeModel()
+  loop.start()
   // ⚠ 必须等 core 建好再装：漫游要往轨道控制器上挂监听，早一步挂不上去
   roam.attach()
-  void load()
+  viewpoints.attach()
+  void model.load()
 })
+
+/** 三层各自持有 GPU 资源，卸载时一个都不能漏。 */
+function disposeLayers(): void {
+  layers?.dispose()
+  layers = null
+  groundGrid?.dispose()
+  groundGrid = null
+  animations?.dispose()
+  animations = null
+}
 
 onBeforeUnmount(() => {
   // ⚠ 先让在途装载作废再释放：晚一步回来的那次会往已 dispose 的场景里挂模型
-  loadSeq += 1
-  loadAbort?.abort()
-  loadAbort = null
-  cancelAnimationFrame(frameHandle)
-  observer?.disconnect()
-  observer = null
-  layers?.dispose()
-  layers = null
+  model.abort()
+  viewpoints.detach()
+  disposeLayers()
   if (core !== null) disposeScene(core)
   core = null
-  modelObject = null
   nodeIndex = EMPTY_NODE_INDEX
 })
 
-/** 把一个取景快照落到相机上。 */
-function applyFocusView(view: TwinModalView | null | undefined): void {
-  if (core === null || view === null || view === undefined) return
-  applyCameraPose(core, view)
-  core.controls.update()
-}
-
-watch(modelAsset, () => void load())
-watch(() => props.focusView, applyFocusView)
+watch(
+  () => props.config.model.asset,
+  () => void model.load(),
+)
+watch(() => props.focusView, sceneCamera.applyView)
 watch(() => props.config, refreshLayers)
 watch(liveValues, (values) => layers?.setValues(values))
 </script>
 
 <template>
-  <div ref="containerRef" class="twin-scene" :style="backgroundStyle">
+  <div
+    ref="containerRef"
+    class="twin-scene"
+    tabindex="-1"
+    :style="backgroundStyle"
+  >
     <TwinSceneOverlay
-      :status="status"
-      :progress-percent="progressPercent"
-      :error-message="errorMessage"
-      :missing-nodes="missingNodes"
+      :status="model.status.value"
+      :progress-percent="model.progressPercent.value"
+      :error-message="model.errorMessage.value"
+      :missing-nodes="model.missingNodes.value"
+    />
+    <TwinSceneTools v-if="showSceneTools === true" />
+    <TwinStructurePanel v-if="showStructureTree === true" :tree="structure" />
+    <TwinViewpointBar
+      v-if="viewpoints.items.value.length > 0"
+      :items="viewpoints.items.value"
+      :active-id="viewpoints.activeId.value"
+      :mode="config.viewpoints.mode"
+      :keyboard="config.viewpoints.keyboard"
+      @pick="viewpoints.switchTo($event)"
     />
     <TwinRoamControls
       v-if="roam.showControls.value"

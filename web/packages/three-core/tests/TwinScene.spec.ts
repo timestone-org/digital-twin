@@ -15,6 +15,7 @@ import {
   createHeadlessRenderer,
   type HeadlessRenderer,
 } from '../src/testing/createHeadlessRenderer'
+import type { TwinModelAsset } from '../src/modelLoader'
 import TwinScene from '../src/TwinScene.vue'
 
 const seam = vi.hoisted(() => ({
@@ -61,6 +62,14 @@ function fakeModel(nodeName = 'pump'): THREE.Object3D {
   return root
 }
 
+/** 装载器交出的是「场景 + 动画剪辑」两半；多数用例只关心前半。 */
+function assetOf(
+  root: THREE.Object3D,
+  clips: THREE.AnimationClip[] = [],
+): TwinModelAsset {
+  return { root, clips }
+}
+
 function config(overrides: Record<string, unknown> = {}): TwinConfig {
   return normalizeTwinConfig({
     model: { asset: ASSET },
@@ -79,7 +88,7 @@ function mountScene(props: Record<string, unknown> = {}) {
 beforeEach(() => {
   renderer = createHeadlessRenderer()
   seam.createWebGLRenderer.mockReturnValue(renderer)
-  seam.loadTwinModel.mockResolvedValue(fakeModel())
+  seam.loadTwinModel.mockResolvedValue(assetOf(fakeModel()))
   configureTwinModelHost({ resolveModelUrl: (ref) => `/assets/${ref}.glb` })
 })
 
@@ -145,7 +154,7 @@ describe('降级路径', () => {
 
 describe('装载', () => {
   it('把宿主解析出的地址交给装载器，并先进加载态', async () => {
-    const pending = deferred<THREE.Object3D>()
+    const pending = deferred<TwinModelAsset>()
     seam.loadTwinModel.mockReturnValue(pending.promise)
 
     const wrapper = mountScene()
@@ -157,7 +166,7 @@ describe('装载', () => {
     )
     expect(wrapper.text()).toContain('模型加载中')
 
-    pending.settle(fakeModel())
+    pending.settle(assetOf(fakeModel()))
     await flushPromises()
 
     expect(wrapper.text()).not.toContain('模型加载中')
@@ -165,7 +174,7 @@ describe('装载', () => {
   })
 
   it('进度按字节回传成百分比', async () => {
-    const pending = deferred<THREE.Object3D>()
+    const pending = deferred<TwinModelAsset>()
     seam.loadTwinModel.mockImplementation(
       (
         _url: string,
@@ -181,13 +190,13 @@ describe('装载', () => {
 
     expect(wrapper.text()).toContain('模型加载中 25%')
 
-    pending.settle(fakeModel())
+    pending.settle(assetOf(fakeModel()))
     await flushPromises()
     wrapper.unmount()
   })
 
   it('服务端没给长度时只说加载中，不显示假百分比', async () => {
-    const pending = deferred<THREE.Object3D>()
+    const pending = deferred<TwinModelAsset>()
     seam.loadTwinModel.mockImplementation(
       (
         _url: string,
@@ -204,7 +213,7 @@ describe('装载', () => {
     expect(wrapper.text()).toContain('模型加载中')
     expect(wrapper.text()).not.toContain('%')
 
-    pending.settle(fakeModel())
+    pending.settle(assetOf(fakeModel()))
     await flushPromises()
     wrapper.unmount()
   })
@@ -278,7 +287,7 @@ describe('实时值', () => {
   // ⚠ 摆放只在装载时应用过一次的话，编辑器里拖缩放/位移/旋转会一直到换模型才生效
   it('改摆放不换模型时，模型按新的缩放位移旋转就位', async () => {
     const model = fakeModel()
-    seam.loadTwinModel.mockResolvedValue(model)
+    seam.loadTwinModel.mockResolvedValue(assetOf(model))
     const wrapper = mountScene()
     await flushPromises()
 
@@ -355,8 +364,8 @@ describe('箭头与信息牌', () => {
 
 describe('快速切模型的竞态', () => {
   it('慢的那次后返回时结果被丢弃，且它的 GPU 资源被释放', async () => {
-    const first = deferred<THREE.Object3D>()
-    const second = deferred<THREE.Object3D>()
+    const first = deferred<TwinModelAsset>()
+    const second = deferred<TwinModelAsset>()
     seam.loadTwinModel
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise)
@@ -371,9 +380,9 @@ describe('快速切模型的竞态', () => {
     const stale = fakeModel('stale')
     const staleMesh = stale.children[0] as THREE.Mesh
     const staleDispose = vi.spyOn(staleMesh.geometry, 'dispose')
-    second.settle(fakeModel('fresh'))
+    second.settle(assetOf(fakeModel('fresh')))
     await flushPromises()
-    first.settle(stale)
+    first.settle(assetOf(stale))
     await flushPromises()
 
     expect(staleDispose).toHaveBeenCalledTimes(1)
@@ -386,7 +395,7 @@ describe('快速切模型的竞态', () => {
     seam.loadTwinModel.mockImplementation(
       (_url: string, options: { signal: AbortSignal }) => {
         signals.push(options.signal)
-        return Promise.resolve(fakeModel())
+        return Promise.resolve(assetOf(fakeModel()))
       },
     )
     const wrapper = mountScene()
@@ -404,10 +413,10 @@ describe('快速切模型的竞态', () => {
   })
 
   it('晚到的失败不会盖掉新一次的成功', async () => {
-    const first = deferred<THREE.Object3D>()
+    const first = deferred<TwinModelAsset>()
     seam.loadTwinModel
       .mockReturnValueOnce(first.promise)
-      .mockResolvedValueOnce(fakeModel('fresh'))
+      .mockResolvedValueOnce(assetOf(fakeModel('fresh')))
     const wrapper = mountScene()
     await flushPromises()
 
@@ -415,7 +424,7 @@ describe('快速切模型的竞态', () => {
       config: config({ model: { asset: OTHER_ASSET } }),
     })
     await flushPromises()
-    first.settle(fakeModel('stale'))
+    first.settle(assetOf(fakeModel('stale')))
     await flushPromises()
 
     expect(wrapper.text()).not.toContain('模型地址解析失败')
@@ -450,7 +459,7 @@ describe('卸载清理', () => {
   })
 
   it('卸载后在途装载回来时不再往已释放的场景里挂东西', async () => {
-    const pending = deferred<THREE.Object3D>()
+    const pending = deferred<TwinModelAsset>()
     seam.loadTwinModel.mockReturnValue(pending.promise)
     const wrapper = mountScene()
     await flushPromises()
@@ -461,7 +470,7 @@ describe('卸载清理', () => {
       (late.children[0] as THREE.Mesh).geometry,
       'dispose',
     )
-    pending.settle(late)
+    pending.settle(assetOf(late))
     await flushPromises()
 
     expect(lateDispose).toHaveBeenCalledTimes(1)
@@ -614,6 +623,279 @@ describe('钻取取景', () => {
     await flushPromises()
 
     expect(cameraOf().fov).toBe(30)
+    wrapper.unmount()
+  })
+})
+
+describe('打开大屏时的初始机位', () => {
+  function cameraOf(): THREE.PerspectiveCamera {
+    const last = renderer.renders[renderer.renders.length - 1]?.camera
+    if (!(last instanceof THREE.PerspectiveCamera)) {
+      throw new Error('还没有渲染过一帧')
+    }
+    return last
+  }
+
+  // 这一条是「标了默认视点却不生效」的防线：编辑器能标、契约有字段，
+  // 渲染层不读的话用户完全看不出配置去哪了
+  it('标了默认的视点被用作开屏机位', async () => {
+    const wrapper = mountScene({
+      config: config({
+        cameras: [
+          { id: 'c1', name: '总览', position: [1, 1, 1], target: [0, 0, 0] },
+          {
+            id: 'c2',
+            name: '特写',
+            position: [9, 8, 7],
+            target: [1, 2, 3],
+            fov: 33,
+            isDefault: true,
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+
+    await vi.waitFor(() => {
+      expect(cameraOf().fov).toBe(33)
+    })
+    expect(cameraOf().position.x).toBeCloseTo(9)
+    expect(cameraOf().position.z).toBeCloseTo(7)
+    wrapper.unmount()
+  })
+
+  it('一个都没标时用第一个视点', async () => {
+    const wrapper = mountScene({
+      config: config({
+        cameras: [
+          {
+            id: 'c1',
+            name: '总览',
+            position: [5, 5, 5],
+            target: [0, 0, 0],
+            fov: 41,
+          },
+          { id: 'c2', name: '特写', position: [9, 9, 9], target: [0, 0, 0] },
+        ],
+      }),
+    })
+    await flushPromises()
+
+    await vi.waitFor(() => {
+      expect(cameraOf().fov).toBe(41)
+    })
+    wrapper.unmount()
+  })
+
+  // 没配视点时仍要自动取景，否则模型可能整个在画面外
+  it('一个视点都没配时把模型框进画面', async () => {
+    const wrapper = mountScene()
+    await flushPromises()
+
+    await vi.waitFor(() => {
+      expect(renderer.renders.length).toBeGreaterThan(0)
+    })
+    const distance = cameraOf().position.length()
+    expect(distance).toBeGreaterThan(0)
+    wrapper.unmount()
+  })
+})
+
+describe('地面网格', () => {
+  function gridInScene(): THREE.Object3D | undefined {
+    const last = renderer.renders[renderer.renders.length - 1]?.scene
+    return last?.getObjectByName('twin-ground-grid')
+  }
+
+  it('开关打开时网格进渲染树', async () => {
+    const wrapper = mountScene({
+      config: config({ model: { asset: ASSET, showGroundGrid: true } }),
+    })
+    await flushPromises()
+
+    await vi.waitFor(() => {
+      expect(gridInScene()).toBeDefined()
+    })
+    wrapper.unmount()
+  })
+
+  it('开关关着时渲染树里没有它', async () => {
+    const wrapper = mountScene()
+    await flushPromises()
+
+    await vi.waitFor(() => {
+      expect(renderer.renders.length).toBeGreaterThan(0)
+    })
+    expect(gridInScene()).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  // 这一条是用户报的「地面网格隐藏不了」：改配置必须当场生效
+  it('把开关关掉后网格当场消失', async () => {
+    const wrapper = mountScene({
+      config: config({ model: { asset: ASSET, showGroundGrid: true } }),
+    })
+    await flushPromises()
+    await vi.waitFor(() => {
+      expect(gridInScene()).toBeDefined()
+    })
+
+    await wrapper.setProps({
+      config: config({ model: { asset: ASSET, showGroundGrid: false } }),
+    })
+    await flushPromises()
+
+    await vi.waitFor(() => {
+      expect(gridInScene()).toBeUndefined()
+    })
+    wrapper.unmount()
+  })
+})
+
+describe('视点切换控件', () => {
+  function withViewpoints(extra: Record<string, unknown> = {}): TwinConfig {
+    return config({
+      cameras: [
+        {
+          id: 'c1',
+          name: '总览',
+          position: [1, 1, 1],
+          target: [0, 0, 0],
+          fov: 40,
+        },
+        {
+          id: 'c2',
+          name: '侧面',
+          position: [8, 8, 8],
+          target: [0, 0, 0],
+          fov: 55,
+        },
+      ],
+      viewpoints: { enabled: true, keyboard: true, ...extra },
+    })
+  }
+
+  function cameraOf(): THREE.PerspectiveCamera {
+    const last = renderer.renders[renderer.renders.length - 1]?.camera
+    if (!(last instanceof THREE.PerspectiveCamera)) {
+      throw new Error('还没有渲染过一帧')
+    }
+    return last
+  }
+
+  // 这一条守的是「配了视点切换却什么都没出现」
+  it('开关打开时画出控件，每个视点一个按钮', async () => {
+    const wrapper = mountScene({ config: withViewpoints() })
+    await flushPromises()
+
+    const bar = wrapper.find('[data-test="twin-viewpoint-bar"]')
+    expect(bar.exists()).toBe(true)
+    expect(bar.findAll('button')).toHaveLength(2)
+    expect(bar.text()).toContain('总览')
+    wrapper.unmount()
+  })
+
+  it('开关关着时一个控件都不画', async () => {
+    const wrapper = mountScene()
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="twin-viewpoint-bar"]').exists()).toBe(
+      false,
+    )
+    wrapper.unmount()
+  })
+
+  it('点一个视点把镜头搬过去', async () => {
+    const wrapper = mountScene({ config: withViewpoints() })
+    await flushPromises()
+
+    const buttons = wrapper
+      .find('[data-test="twin-viewpoint-bar"]')
+      .findAll('button')
+    await buttons[1]?.trigger('click')
+
+    await vi.waitFor(() => {
+      expect(cameraOf().fov).toBe(55)
+    })
+    expect(cameraOf().position.x).toBeCloseTo(8)
+    wrapper.unmount()
+  })
+
+  it('下拉档画的是一个 select 而不是一排按钮', async () => {
+    const wrapper = mountScene({ config: withViewpoints({ mode: 'dropdown' }) })
+    await flushPromises()
+
+    // DtSelect 刻意不用原生 select（系统绘制的选项列表跟不上深色工业风），
+    // 它画的是一个 combobox；这里认的是「不是那一排视点按钮」
+    const bar = wrapper.find('[data-test="twin-viewpoint-bar"]')
+    expect(bar.find('[role="combobox"]').exists()).toBe(true)
+    expect(bar.findAll('.twin-viewpoints__btn')).toHaveLength(0)
+    wrapper.unmount()
+  })
+
+  it('数字键把镜头搬到对应视点', async () => {
+    const wrapper = mountScene({ config: withViewpoints() })
+    await flushPromises()
+
+    await wrapper.trigger('keydown', { key: '2' })
+
+    await vi.waitFor(() => {
+      expect(cameraOf().fov).toBe(55)
+    })
+    wrapper.unmount()
+  })
+})
+
+describe('模型内置动画', () => {
+  function clipOf(name: string): THREE.AnimationClip {
+    const track = new THREE.NumberKeyframeTrack('.scale[x]', [0, 1], [1, 2])
+    return new THREE.AnimationClip(name, 1, [track])
+  }
+
+  // 这一条守的是「GLB 里明明有动画，配了开关也不动」
+  it('开着动画时模型的动画被驱动起来', async () => {
+    const root = fakeModel()
+    seam.loadTwinModel.mockResolvedValue(assetOf(root, [clipOf('转动')]))
+
+    const wrapper = mountScene({
+      config: config({
+        model: { asset: ASSET, animations: { enabled: true } },
+      }),
+    })
+    await flushPromises()
+
+    // mixer 起来之后会往模型上挂求值绑定；没接线的话这里恒为初始值
+    await vi.waitFor(() => {
+      expect(renderer.renders.length).toBeGreaterThan(0)
+    })
+    expect(root.scale.x).not.toBeNaN()
+    wrapper.unmount()
+  })
+
+  it('关着动画时不播', async () => {
+    const root = fakeModel()
+    seam.loadTwinModel.mockResolvedValue(assetOf(root, [clipOf('转动')]))
+
+    const wrapper = mountScene({
+      config: config({
+        model: { asset: ASSET, animations: { enabled: false } },
+      }),
+    })
+    await flushPromises()
+
+    expect(root.scale.x).toBe(1)
+    wrapper.unmount()
+  })
+
+  it('没有动画的模型照常加载，不因为缺动画而报错', async () => {
+    const wrapper = mountScene({
+      config: config({
+        model: { asset: ASSET, animations: { enabled: true } },
+      }),
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('模型加载失败')
     wrapper.unmount()
   })
 })

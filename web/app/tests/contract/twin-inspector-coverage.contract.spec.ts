@@ -58,6 +58,18 @@ const OWNERS: Readonly<Record<string, readonly string[]>> = {
 /** id 由编辑器生成、不给人改；version 是格式版本。 */
 const NOT_EDITABLE = new Set(['id', 'version'])
 
+/**
+ * 当前渲染方式下画不出来、因而刻意不给控件的字段。
+ * ⚠ 契约字段本身留着（存量数据照常读得出来），撤的只是那个不生效的开关——
+ * 摆一个配了没反应的控件比没有更糟。要往这里加，先确认「用户配了它画面上会变吗」，
+ * 会变就是缺陷不是豁免。同一批字段在 `twin-config-consumed.contract.spec.ts`
+ * 的 KNOWN_DEAD 里各有一条对应的原因。
+ */
+const NO_CONTROL_ON_PURPOSE = new Set([
+  // 本项目从不做统一提亮，这个开关恒等于 true 的行为
+  'originalMaterials',
+])
+
 function interfaceFields(source: string): Map<string, string[]> {
   const found = new Map<string, string[]>()
   for (const block of source.matchAll(/export interface (\w+) \{(.*?)\n\}/gs)) {
@@ -94,7 +106,9 @@ describe('检查器覆盖了整份孪生契约', () => {
       .join('\n')
     const missing = fields.filter(
       (field) =>
-        !NOT_EDITABLE.has(field) && !new RegExp(`\\b${field}\\b`).test(sources),
+        !NOT_EDITABLE.has(field) &&
+        !NO_CONTROL_ON_PURPOSE.has(field) &&
+        !new RegExp(`\\b${field}\\b`).test(sources),
     )
 
     expect(missing).toEqual([])

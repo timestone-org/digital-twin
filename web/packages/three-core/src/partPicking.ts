@@ -89,12 +89,31 @@ export function pickObject(
   camera: THREE.Camera,
   root: THREE.Object3D,
 ): THREE.Object3D | null {
+  return pickIntersection(event, element, camera, root)?.object ?? null
+}
+
+/**
+ * 射线求最近的命中，连同**交点的世界坐标**一起给出来；没打中给 null。
+ * 两点测量要的是落点而不是命中了谁，所以不能只回对象。
+ *
+ * @param event 指针事件
+ * @param element 视口元素，用来把屏幕坐标换成 NDC
+ * @param camera 当前相机
+ * @param root 只在这棵子树里找（模型根，不含覆盖层）
+ */
+export function pickIntersection(
+  event: PointerEvent,
+  element: HTMLElement,
+  camera: THREE.Camera,
+  root: THREE.Object3D,
+): { object: THREE.Object3D; point: THREE.Vector3 } | null {
   const raycaster = new THREE.Raycaster()
   raycaster.setFromCamera(ndcOf(event, element), camera)
   const hit = raycaster
     .intersectObject(root, true)
     .find((item) => isRenderable(item.object))
-  return hit?.object ?? null
+  if (hit === undefined) return null
+  return { object: hit.object, point: hit.point }
 }
 
 /** 点中一个部件（且通过了距离门禁）时上抛的东西。 */

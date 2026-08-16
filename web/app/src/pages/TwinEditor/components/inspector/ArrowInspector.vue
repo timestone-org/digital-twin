@@ -5,6 +5,7 @@
  * ⚠ `direction` 渲染前会 normalize，零向量当没配（归一化会替成 +Y）。面板上得当场
  * 说出来，否则用户改成 0,0,0 之后只会看到箭头朝上，以为是别处配错了。
  */
+import type { GizmoMode } from '@dt/three-core'
 import type { TwinArrow } from '@dt/twin-config'
 import {
   DtButton,
@@ -13,6 +14,7 @@ import {
   DtInput,
   DtNotice,
   DtNumberInput,
+  DtSegmented,
   DtSwitch,
 } from '@dt/ui'
 import { computed } from 'vue'
@@ -25,13 +27,27 @@ const props = defineProps<{
   modelValue: TwinArrow
   /** 视口正在等用户点一个位置。 */
   picking: boolean
+  /** 视口里坐标轴手柄当前的模式。 */
+  gizmoMode: GizmoMode
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [TwinArrow]
   requestPickPosition: []
   cancelPick: []
+  'update:gizmoMode': [GizmoMode]
 }>()
+
+const GIZMO_OPTIONS = [
+  { value: 'translate', label: '拖位置' },
+  { value: 'rotate', label: '拖朝向' },
+] as const
+
+/** 分段控件给回来的是裸字符串，对不上就当没改。 */
+function writeGizmoMode(next: string): void {
+  const found = GIZMO_OPTIONS.find((item) => item.value === next)
+  if (found !== undefined) emit('update:gizmoMode', found.value)
+}
 
 // 归一化把长宽夹在 [0.01, 100]：负数与零都画不出东西
 const SIZE_RANGE = { min: 0.01, max: 100, step: 0.1 }
@@ -100,6 +116,16 @@ function togglePick(): void {
       <DtNotice v-if="isZeroDirection" intent="warning" icon="alert-triangle">
         零向量不是一个方向：这样保存后会被当成没配，箭头回退成朝上（+Y）。
       </DtNotice>
+      <DtField label="视口里怎么拖" hint="在 3D 里直接拖坐标轴手柄" size="sm">
+        <DtSegmented
+          :model-value="gizmoMode"
+          :options="GIZMO_OPTIONS"
+          aria-label="视口里怎么拖"
+          size="sm"
+          block
+          @update:model-value="writeGizmoMode"
+        />
+      </DtField>
     </InspectorSection>
 
     <InspectorSection title="尺寸与颜色">

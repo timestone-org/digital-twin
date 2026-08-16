@@ -208,8 +208,13 @@ export const TWIN_PANEL_ORIENTS = [
 ] as const
 export type TwinPanelOrient = (typeof TWIN_PANEL_ORIENTS)[number]
 
-/** 朝向：始终朝相机，还是钉死在世界坐标系里。 */
-export const TWIN_BILLBOARD_MODES = ['face', 'fixed'] as const
+/**
+ * 牌的朝向。
+ * - `face` 始终正对相机，怎么转都看得清
+ * - `horizontal` 只绕竖轴跟随：牌永远是竖着的，俯视时不会躺下去
+ * - `fixed` 钉死在世界坐标系里，转到侧面就看成一条线
+ */
+export const TWIN_BILLBOARD_MODES = ['face', 'horizontal', 'fixed'] as const
 export type TwinBillboardMode = (typeof TWIN_BILLBOARD_MODES)[number]
 
 /** 信息牌外观。 */
@@ -224,6 +229,13 @@ export interface TwinPanelStyle {
   width: number
   /** 字号缩放。 */
   fontScale: number
+  /**
+   * 牌在 3D 里的整体大小倍率。
+   * ⚠ 与 `width` / `fontScale` 是两个层次：那两个决定卡片这张 DOM 长什么样
+   * （多宽、字多大），这个决定那张 DOM 摆进三维世界后占多大地方。默认按模型
+   * 体量自动定，倍率在此之上乘——换模型时不用重调，场景需要时又调得动。
+   */
+  scale: number
   animate: boolean
   /** 锚点光环脉冲。 */
   pulse: boolean

@@ -35,6 +35,9 @@ import {
 const MAX_DECIMALS = 10
 /** 卡片宽度 0 = 自适应；上限防手滑输成一屏宽 */
 const MAX_PANEL_WIDTH = 1200
+/** 牌整体大小的倍率区间；1 = 按模型体量自动定的那个大小。 */
+const MIN_PANEL_SCALE = 0.2
+const MAX_PANEL_SCALE = 5
 const MIN_FONT_SCALE = 0.5
 const MAX_FONT_SCALE = 3
 /** 箭头与流的几何倍率：负数与零都画不出东西 */
@@ -59,6 +62,7 @@ function normalizePanelStyle(raw: unknown): TwinPanelStyle {
     background: normalizeColorSpec(source.background) ?? '',
     width: clampedOr(source.width, 0, 0, MAX_PANEL_WIDTH),
     fontScale: clampedOr(source.fontScale, 1, MIN_FONT_SCALE, MAX_FONT_SCALE),
+    scale: clampedOr(source.scale, 1, MIN_PANEL_SCALE, MAX_PANEL_SCALE),
     animate: source.animate === true,
     pulse: source.pulse === true,
   }

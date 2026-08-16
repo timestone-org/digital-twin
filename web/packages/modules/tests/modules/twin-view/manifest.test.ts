@@ -1,6 +1,6 @@
 /**
  * @fileoverview 守孪生清单的声明：3D 画布不套卡片框、绑定槽直接摊开公共常量、
- * 标题那几档的取值范围与组件的白名单是同一份，以及配置面按标题/模型分组。
+ * 标题那几档的取值范围与组件的白名单是同一份，以及配置面按标题/运行态/模型分组。
  * ⚠ 分组名等于模块名时属性面板等于没分组——一个折叠段装下全部字段。
  */
 import { TWIN_CONFIG_KEY, TWIN_VIEW_BINDINGS } from '@dt/twin-config'
@@ -39,11 +39,16 @@ describe('孪生清单的声明', () => {
 })
 
 describe('孪生清单的分组', () => {
-  it('配置面按标题、模型两组分开，没有一组叫模块名', () => {
+  it('配置面按标题、运行态、模型三组分开，没有一组叫模块名', () => {
     const groups = [...new Set(manifest.configSchema.map((item) => item.group))]
 
-    expect(groups).toEqual(['标题', '模型'])
+    expect(groups).toEqual(['标题', '运行态', '模型'])
     expect(groups).not.toContain(manifest.displayName)
+  })
+
+  // ⚠ 给了 default 会 materialize 进每一次渲染，等于把存量大屏统统打开工具条
+  it('工具条开关刻意不给 default，缺省即不显示', () => {
+    expect(field('showSceneTools')?.default).toBeUndefined()
   })
 
   it('每个字段都落在自己那一组里', () => {

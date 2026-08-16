@@ -26,7 +26,12 @@ import {
 import { DtNotice } from '@dt/ui'
 import { computed, defineAsyncComponent, ref, type CSSProperties } from 'vue'
 
-import { readEnum, readNumber, readText } from '../../shared/config'
+import {
+  readBoolean,
+  readEnum,
+  readNumber,
+  readText,
+} from '../../shared/config'
 
 const props = defineProps<{
   config: Record<string, unknown>
@@ -92,6 +97,10 @@ const TwinHierDrill = defineAsyncComponent(async () => {
 // 就地改字段不会重绘，而 computed 只在 config 换了对象时才产出新引用
 const scene = computed(() => normalizeTwinConfig(props.config[TWIN_CONFIG_KEY]))
 const title = computed(() => readText(props.config.title))
+const showSceneTools = computed(() => readBoolean(props.config.showSceneTools))
+const showStructureTree = computed(() =>
+  readBoolean(props.config.showStructureTree),
+)
 
 const anchorValues = computed(() =>
   stitchAnchorValues(
@@ -158,6 +167,9 @@ const errorMessage = computed(() =>
       :panel-values="panelValues"
       :flow-values="flowValues"
       :focus-view="drillView"
+      :show-scene-tools="showSceneTools"
+      :show-structure-tree="showStructureTree"
+      :scene-title="title"
       @part-click="onPartClick"
     />
     <TwinHierDrill

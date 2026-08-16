@@ -24,6 +24,11 @@ export interface PartClickDeps {
   parts: () => PartClickParts | null
   /** 通过了距离门禁的那一次点击。 */
   onPartClick: (part: TwinPartClick) => void
+  /**
+   * 这一下被别的工具截走了吗（如两点测量）——返回 true 就不再判部件点击。
+   * ⚠ 测量开着时还去触发部件联动的话，用户量个尺寸会顺手打开一个弹窗。
+   */
+  intercept?: (event: PointerEvent) => boolean
 }
 
 /**
@@ -47,6 +52,7 @@ export function usePartClick(deps: PartClickDeps): void {
     const parts = deps.parts()
     if (element === null || core === null || parts === null) return
     if (!gesture.isClick(event)) return
+    if (deps.intercept?.(event) === true) return
 
     const outcome = resolvePartClick({
       event,

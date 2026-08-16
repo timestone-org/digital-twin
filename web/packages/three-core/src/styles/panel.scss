@@ -1,0 +1,185 @@
+// 信息牌的观感：基础版式 + 五种变体。
+//
+// ⚠ 必须是全局样式，不能 scoped：牌是 CSS2DObject 的 DOM，挂在标签层容器里，
+// 不在任何组件的 scoped 作用域内——写成 scoped 会一条都不生效。
+// ⚠ 逐牌不同的取色、宽度与字号由 `panelLayer` 写成 CSS 变量传进来；
+// 这里绝不反过来去内联它们，否则变体又会被内联优先级压死。
+
+.twin-panel {
+  --tp-accent: var(--accent-primary);
+  --tp-bg: var(--surface-overlay);
+  --tp-font-size: 11px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: var(--tp-width, auto);
+  padding: 8px 10px;
+  color: var(--text-primary);
+  font-size: var(--tp-font-size);
+  line-height: 1.5;
+  white-space: nowrap;
+  border-radius: var(--radius-md);
+  user-select: none;
+
+  &__title {
+    color: var(--tp-accent);
+    font-weight: 700;
+  }
+
+  &__row {
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+  }
+
+  &__label {
+    color: var(--text-secondary);
+  }
+
+  &__value {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+// 卡片：圆角 + accent 描边 + 一层柔光，最中性的一档
+.twin-panel--card {
+  background: var(--tp-bg);
+  border: 1px solid color-mix(in srgb, var(--tp-accent) 50%, transparent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--tp-accent) 18%, transparent);
+}
+
+// 战术：切角 + 顶部一道光条
+.twin-panel--hud {
+  position: relative;
+  background: var(--tp-bg);
+  border: 1px solid color-mix(in srgb, var(--tp-accent) 55%, transparent);
+  border-radius: 0;
+  clip-path: polygon(
+    0 7px,
+    7px 0,
+    100% 0,
+    100% calc(100% - 7px),
+    calc(100% - 7px) 100%,
+    0 100%
+  );
+
+  &::before {
+    position: absolute;
+    top: 0;
+    right: 7px;
+    left: 7px;
+    height: 2px;
+    background: var(--tp-accent);
+    box-shadow: 0 0 6px var(--tp-accent);
+    content: '';
+  }
+}
+
+// 玻璃：重磨砂 + 柔角 + 低对比描边
+.twin-panel--glass {
+  background: color-mix(in srgb, var(--tp-bg) 58%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tp-accent) 22%, transparent);
+  border-radius: 11px;
+  box-shadow:
+    var(--fx-shadow-modal),
+    inset 0 1px 0 color-mix(in srgb, var(--text-primary) 8%, transparent);
+  backdrop-filter: blur(10px) saturate(1.2);
+}
+
+// 角标：底完全透明，只在四角画发光括号
+.twin-panel--bracket {
+  position: relative;
+  padding: 9px 13px;
+  background: transparent;
+  border: none;
+
+  .twin-panel__title {
+    text-shadow: 0 0 8px color-mix(in srgb, var(--tp-accent) 45%, transparent);
+  }
+
+  // 八条渐变各画一段：四个角、每角两笔
+  &::before {
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(var(--tp-accent), var(--tp-accent)) 0 0 / 11px 1.5px
+        no-repeat,
+      linear-gradient(var(--tp-accent), var(--tp-accent)) 0 0 / 1.5px 11px
+        no-repeat,
+      linear-gradient(var(--tp-accent), var(--tp-accent)) 100% 0 / 11px 1.5px
+        no-repeat,
+      linear-gradient(var(--tp-accent), var(--tp-accent)) 100% 0 / 1.5px 11px
+        no-repeat,
+      linear-gradient(var(--tp-accent), var(--tp-accent)) 0 100% / 11px 1.5px
+        no-repeat,
+      linear-gradient(var(--tp-accent), var(--tp-accent)) 0 100% / 1.5px 11px
+        no-repeat,
+      linear-gradient(var(--tp-accent), var(--tp-accent)) 100% 100% / 11px 1.5px
+        no-repeat,
+      linear-gradient(var(--tp-accent), var(--tp-accent)) 100% 100% / 1.5px 11px
+        no-repeat;
+    filter: drop-shadow(
+      0 0 4px color-mix(in srgb, var(--tp-accent) 55%, transparent)
+    );
+    pointer-events: none;
+    content: '';
+  }
+}
+
+// 标牌：实心标题条压在内容条上
+.twin-panel--tag {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--tp-bg);
+  border: 1px solid color-mix(in srgb, var(--tp-accent) 38%, transparent);
+  border-radius: 5px;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--tp-accent) 16%, transparent);
+
+  .twin-panel__title {
+    padding: 4px 11px;
+    // ⚠ 标题条是实心 accent 底，字色必须换成反色轴那一档：
+    // 沿用 --tp-accent 会是同色叠同色，整行看不见
+    color: var(--text-inverse);
+    letter-spacing: 0.05em;
+    background: var(--tp-accent);
+  }
+
+  .twin-panel__row {
+    padding: 4px 11px;
+  }
+}
+
+// 行为：入场动画与锚点脉冲
+.twin-panel[data-animate='on'] {
+  animation: twin-panel-in 0.34s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+.twin-panel[data-pulse='on'] {
+  animation: twin-panel-pulse 1.7s ease-in-out infinite;
+}
+
+@keyframes twin-panel-in {
+  from {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes twin-panel-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 10px color-mix(in srgb, var(--tp-accent) 15%, transparent);
+  }
+
+  50% {
+    box-shadow: 0 0 20px color-mix(in srgb, var(--tp-accent) 45%, transparent);
+  }
+}

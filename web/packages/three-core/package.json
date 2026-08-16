@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./panel.scss": "./src/styles/panel.scss",
     "./host": "./src/host.ts",
     "./testing": "./src/testing/createHeadlessRenderer.ts"
   },

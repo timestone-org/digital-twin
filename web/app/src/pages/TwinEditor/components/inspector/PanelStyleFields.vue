@@ -39,6 +39,8 @@ const emit = defineEmits<{ 'update:modelValue': [style: TwinPanelStyle] }>()
 
 const WIDTH_RANGE = { min: 1, max: 1200, step: 10 }
 const FONT_RANGE = { min: 0.5, max: 3, step: 0.05 }
+// 牌在 3D 里的整体大小；1 = 按模型体量自动定的那个大小
+const SCALE_RANGE = { min: 0.2, max: 5, step: 0.1 }
 
 const autoWidth = computed(() => props.modelValue.width === 0)
 
@@ -158,6 +160,19 @@ function toggleAutoWidth(auto: boolean): void {
         :range="FONT_RANGE"
         show-value
         @update:model-value="writeStyle({ fontScale: $event })"
+      />
+    </DtField>
+
+    <DtField
+      label="整体大小"
+      hint="1 = 按模型体量自动定；换模型时不用重调"
+      size="sm"
+    >
+      <DtSlider
+        :model-value="modelValue.scale"
+        :range="SCALE_RANGE"
+        show-value
+        @update:model-value="writeStyle({ scale: $event })"
       />
     </DtField>
 

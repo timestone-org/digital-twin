@@ -15,6 +15,8 @@ import {
   EMPTY_PANEL_VALUES,
   RoamTimeline,
   buildRoamSegments,
+  defaultCameraOf,
+  gizmoTargetOf,
   hierEffectiveNodes,
 } from '@dt/twin-config'
 import * as THREE from 'three'
@@ -54,7 +56,14 @@ import {
   type SceneCore,
   type SceneRendererFactory,
 } from './sceneCore'
+import { MarqueeGesture } from './marqueeGesture'
+import { nodeNamesInRect, type ScreenRect } from './marqueeSelect'
 import { SceneLayers, type SceneLayerValues } from './sceneLayers'
+import {
+  TransformGizmo,
+  type GizmoChange,
+  type GizmoMode,
+} from './transformGizmo'
 import { ACCENT_COLOR_TOKEN, resolveColorSpec } from './themeColor'
 
 /** 视口自己的状态机；宿主据此画空态 / 加载 / 出错的覆盖层。 */
@@ -76,6 +85,16 @@ export interface EditorSceneCallbacks {
   status: (status: EditorSceneStatus, message: string) => void
   /** 漫游预览的开停；用户一碰镜头它会自己停，面板上的按钮要跟着回落。 */
   roamPreview: (playing: boolean) => void
+  /**
+   * 用户拖坐标轴手柄改了某个实体的位置 / 朝向。
+   * ⚠ 拖动期间持续回传，宿主要按「一次拖动一条撤销」去合并，
+   * 逐帧各记一条的话撤销一次只退回一帧。
+   */
+  entityTransform: (change: GizmoChange) => void
+  /** 手柄松手了；宿主据此把这一次拖动合成一条撤销。 */
+  entityTransformEnd: () => void
+  /** 按住 Shift 框选拿到的模型节点名，已去重排序；一个都没框中时不来。 */
+  marqueeNodes: (names: readonly string[]) => void
 }
 
 export interface EditorSceneOptions {
@@ -195,6 +214,9 @@ export class EditorScene {
   private picks: PickTargets | null = null
   private helpers: THREE.Group | null = null
   private selectionBox: THREE.Box3Helper | null = null
+  private gizmo: TransformGizmo | null = null
+  private gizmoMode: GizmoMode = 'translate'
+  private marquee: MarqueeGesture | null = null
   private focusProxy: THREE.Mesh | null = null
   private modelObject: THREE.Object3D | null = null
   private nodeIndex: NodeIndex = EMPTY_NODE_INDEX
@@ -251,6 +273,17 @@ export class EditorScene {
   setPickMode(mode: TwinPickMode): void {
     this.pickMode = mode
     this.container.style.cursor = mode === null ? '' : 'crosshair'
+    this.syncGizmo()
+  }
+
+  /**
+   * 切手柄的模式；只有箭头用得上 `rotate`。
+   * @param mode 平移还是旋转
+   */
+  setGizmoMode(mode: GizmoMode): void {
+    if (mode === this.gizmoMode) return
+    this.gizmoMode = mode
+    this.syncGizmo()
   }
 
   /**
@@ -322,6 +355,10 @@ export class EditorScene {
     this.layers = null
     this.picks?.dispose()
     this.picks = null
+    this.gizmo?.dispose()
+    this.gizmo = null
+    this.marquee?.dispose()
+    this.marquee = null
     if (this.core !== null) disposeScene(this.core)
     this.core = null
     this.modelObject = null
@@ -351,6 +388,15 @@ export class EditorScene {
       this.container,
     )
     this.focusProxy = createFocusProxy()
+    this.marquee = new MarqueeGesture({
+      host: () => this.container,
+      onFinish: (rect) => this.finishMarquee(rect),
+    })
+    this.gizmo = new TransformGizmo({
+      core,
+      onChange: (change) => this.on.entityTransform(change),
+      onDragEnd: () => this.on.entityTransformEnd(),
+    })
     core.scene.add(
       this.picks.group,
       this.helpers,
@@ -369,6 +415,7 @@ export class EditorScene {
     const surface = core.renderer.domElement
     this.surface = surface
     surface.addEventListener('pointerdown', this.onPointerDown)
+    surface.addEventListener('pointermove', this.onPointerMove)
     surface.addEventListener('pointerup', this.onPointerUp)
     surface.addEventListener('pointercancel', this.onPointerCancel)
     core.controls.addEventListener('end', this.onControlsEnd)
@@ -380,6 +427,7 @@ export class EditorScene {
     const surface = this.surface
     if (surface !== null) {
       surface.removeEventListener('pointerdown', this.onPointerDown)
+      surface.removeEventListener('pointermove', this.onPointerMove)
       surface.removeEventListener('pointerup', this.onPointerUp)
       surface.removeEventListener('pointercancel', this.onPointerCancel)
     }
@@ -414,6 +462,7 @@ export class EditorScene {
   /** 选中反馈：部件画描边框，其余四类把自己的拾取标记放大加亮。 */
   private applySelectionHighlight(): void {
     this.picks?.setSelected(this.selection)
+    this.syncGizmo()
     const helper = this.selectionBox
     if (helper === null) return
     const box =
@@ -425,6 +474,19 @@ export class EditorScene {
     this.selectionBoxTarget.copy(box)
     helper.visible = true
     helper.updateMatrixWorld(true)
+  }
+
+  /**
+   * 把手柄挂到当前选中的实体上；不该有手柄的一律收起。
+   * ⚠ 拾取模式下收起：那时用户点的是「一个位置」或「一个节点」，
+   * 摆着手柄会挡住要点的东西，且两套交互抢同一个指针。
+   */
+  private syncGizmo(): void {
+    const gizmo = this.gizmo
+    if (gizmo === null) return
+    if (this.pickMode !== null) return gizmo.detach()
+    const target = gizmoTargetOf(this.config, this.selection)
+    gizmo.attach(target, this.gizmoMode)
   }
 
   /** 选中框只画在有几何的两类上：部件与钻取节点。 */
@@ -502,7 +564,7 @@ export class EditorScene {
     const core = this.core
     const camera = this.config.cameras.find((item) => item.id === id)
     if (core === null || camera === undefined) return
-    applyCameraPose(core, camera)
+    applyCameraPose(core, camera, this.modelSpan)
     core.controls.update()
     this.emitCamera()
   }
@@ -512,7 +574,7 @@ export class EditorScene {
     const timeline = this.roam
     if (timeline === null) return
     const pose: TwinPose | null = timeline.advance(deltaMs)
-    if (pose !== null) applyCameraPose(core, pose)
+    if (pose !== null) applyCameraPose(core, pose, this.modelSpan)
     if (!timeline.isPlaying) this.stopRoamPreview()
   }
 
@@ -539,7 +601,9 @@ export class EditorScene {
     }
     this.on.status('loading', '')
     try {
-      const root = await loadTwinModel(
+      // 编辑视口不播模型内置动画：镜头与配置一直在动，再叠一层自走的动画
+      // 只会让「我刚改的东西生效了吗」变得看不出来
+      const { root } = await loadTwinModel(
         url,
         { signal: controller.signal },
         this.gltfSource,
@@ -556,6 +620,24 @@ export class EditorScene {
     }
   }
 
+  /**
+   * 装载后的初始取景，与运行态走同一条路：有视点就用标了默认的那个，
+   * 一个都没配才把整个模型框进画面。
+   * ⚠ 两边必须一致：编辑器恒自动取景、运行态用默认视点的话，镜头距离不同，
+   * 同一张信息牌在两边看起来一大一小——用户会以为是牌的尺寸配错了。
+   */
+  private applyInitialPose(root: THREE.Object3D): void {
+    const core = this.core
+    if (core === null) return
+    const camera = defaultCameraOf(this.config.cameras)
+    if (camera === null) {
+      frameObject(core, root)
+      return
+    }
+    applyCameraPose(core, camera, this.modelSpan)
+    core.controls.update()
+  }
+
   private mountModel(root: THREE.Object3D): void {
     const core = this.core
     if (core === null) {
@@ -567,7 +649,7 @@ export class EditorScene {
     core.modelRoot.add(root)
     this.nodeIndex = buildNodeIndex(root)
     this.refresh()
-    frameObject(core, root)
+    this.applyInitialPose(root)
     this.on.modelNodes(this.nodeIndex.namedNodes)
     this.on.status('ready', '')
     this.emitCamera()
@@ -594,7 +676,9 @@ export class EditorScene {
     const core = this.core
     if (core === null) return
     const delta = this.clock.tick(now)
-    if (delta > 0) this.layers?.update(delta)
+    // ⚠ 时长为 0 也要走：信息牌的朝向在这一支里摆，只在 delta > 0 时调的话
+    // 刚建完那一帧的牌是歪的
+    this.layers?.update(delta, core.camera)
     // ⚠ 喂帧钟夹过的时长：标签页切走再回来那一帧有几十秒，直接算下去预览会一帧飞完
     this.advanceRoam(delta * MS_PER_S, core)
     // ⚠ 宿主被折叠（clientHeight 为 0）时不换算标记尺寸：拿 0 当视口高度算出来的
@@ -621,14 +705,46 @@ export class EditorScene {
   private readonly onPointerDown = (event: PointerEvent): void => {
     // ⚠ 用户一碰视口就停预览：镜头还自己往前飞会变成两个人抢方向盘
     this.stopRoamPreview()
+    // Shift 拖是框选：这期间要把轨道控制器让开，否则一边画框一边转镜头
+    if (this.marquee?.down(event) === true) {
+      this.setOrbitEnabled(false)
+      this.downValid = false
+      return
+    }
     this.downValid = event.button === 0
     this.downX = event.clientX
     this.downY = event.clientY
   }
 
+  private readonly onPointerMove = (event: PointerEvent): void => {
+    this.marquee?.move(event)
+  }
+
+  /** 框选期间关掉轨道控制；两套操作抢同一个指针时框会画不出来。 */
+  private setOrbitEnabled(enabled: boolean): void {
+    if (this.core !== null) this.core.controls.enabled = enabled
+  }
+
+  /** 框完了：算出框中哪些节点，交给宿主。 */
+  private finishMarquee(rect: ScreenRect): void {
+    const core = this.core
+    const root = this.modelObject
+    if (core === null || root === null) return
+    core.camera.updateMatrixWorld()
+    root.updateMatrixWorld(true)
+    const viewport = core.renderer.domElement.getBoundingClientRect()
+    const names = nodeNamesInRect(root, rect, core.camera, viewport)
+    if (names.length > 0) this.on.marqueeNodes(names)
+  }
+
   // ⚠ 拖过视口不算点击：轨道相机的拖拽同样以 pointerup 收尾，不设位移阈值的话
   // 每次转镜头松手都会顺手把选中改掉
   private readonly onPointerUp = (event: PointerEvent): void => {
+    if (this.marquee?.up(event) === true) {
+      this.setOrbitEnabled(true)
+      return
+    }
+    this.setOrbitEnabled(true)
     if (!this.downValid || event.button !== 0) return
     this.downValid = false
     const moved = Math.hypot(
@@ -641,6 +757,8 @@ export class EditorScene {
 
   private readonly onPointerCancel = (): void => {
     this.downValid = false
+    this.marquee?.cancel()
+    this.setOrbitEnabled(true)
   }
 
   private handleClick(clientX: number, clientY: number): void {

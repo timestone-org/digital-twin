@@ -45,10 +45,6 @@ const ORIENT_LABELS: Readonly<Record<TwinPanelOrient, string>> = {
   left: '左侧',
   right: '右侧',
 }
-const BILLBOARD_LABELS: Readonly<Record<TwinBillboardMode, string>> = {
-  face: '始终朝相机',
-  fixed: '钉死在世界系',
-}
 
 /** 关掉自适应时给的初始宽度。 */
 const FIXED_WIDTH = 240
@@ -57,13 +53,18 @@ const variantOptions = TWIN_PANEL_VARIANTS.map((value) => ({
   value,
   label: VARIANT_LABELS[value],
 }))
-const orientOptions = TWIN_PANEL_ORIENTS.map((value) => ({
-  value,
-  label: ORIENT_LABELS[value],
-}))
+const BILLBOARD_LABELS: Readonly<Record<TwinBillboardMode, string>> = {
+  face: '始终朝相机',
+  horizontal: '只水平跟随',
+  fixed: '钉死朝向',
+}
 const billboardOptions = TWIN_BILLBOARD_MODES.map((value) => ({
   value,
   label: BILLBOARD_LABELS[value],
+}))
+const orientOptions = TWIN_PANEL_ORIENTS.map((value) => ({
+  value,
+  label: ORIENT_LABELS[value],
 }))
 
 const anchorOptions = computed(() => [
@@ -87,14 +88,10 @@ function write(patch: Partial<TwinPanel>): void {
   emit('update:modelValue', { ...props.modelValue, ...patch })
 }
 
-/** 下拉给回来的是裸字符串，在这里收窄回联合类型；对不上就当没改。 */
-function pickOf<T extends string>(list: readonly T[], value: string): T | null {
-  return list.find((item) => item === value) ?? null
-}
-
+/** 分段控件给回来的是裸字符串，对不上就当没改。 */
 function writeBillboard(next: string): void {
-  const billboard = pickOf(TWIN_BILLBOARD_MODES, next)
-  if (billboard !== null) write({ billboard })
+  const found = TWIN_BILLBOARD_MODES.find((item) => item === next)
+  if (found !== undefined) write({ billboard: found })
 }
 </script>
 
@@ -144,7 +141,11 @@ function writeBillboard(next: string): void {
         />
       </DtField>
 
-      <DtField label="朝向" size="sm">
+      <DtField
+        label="朝向"
+        hint="只水平跟随 = 牌永远竖着，俯视时不会躺下去"
+        size="sm"
+      >
         <DtSegmented
           :model-value="modelValue.billboard"
           :options="billboardOptions"

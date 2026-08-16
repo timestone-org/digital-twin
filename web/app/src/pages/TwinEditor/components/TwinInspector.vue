@@ -22,6 +22,8 @@ import type {
 import { DtEmpty } from '@dt/ui'
 import { computed } from 'vue'
 
+import type { GizmoMode } from '@dt/three-core'
+
 import type { TwinSelection } from '../types'
 import AnchorInspector from './inspector/AnchorInspector.vue'
 import ArrowInspector from './inspector/ArrowInspector.vue'
@@ -42,6 +44,8 @@ const props = defineProps<{
   picking: boolean
   /** 视口里正在飞漫游预览。 */
   roamPreviewing: boolean
+  /** 视口里坐标轴手柄当前的模式。 */
+  gizmoMode: GizmoMode
 }>()
 
 const emit = defineEmits<{
@@ -52,6 +56,7 @@ const emit = defineEmits<{
   captureHierView: [string]
   previewRoam: []
   stopRoamPreview: []
+  'update:gizmoMode': [GizmoMode]
 }>()
 
 /** 选中的实体 id；单例段没有 id。 */
@@ -182,9 +187,11 @@ function writeHierNode(next: TwinHierNode): void {
       v-else-if="arrow !== null"
       :model-value="arrow"
       :picking="picking"
+      :gizmo-mode="gizmoMode"
       @update:model-value="writeArrow"
       @request-pick-position="emit('requestPick', 'position')"
       @cancel-pick="emit('cancelPick')"
+      @update:gizmo-mode="emit('update:gizmoMode', $event)"
     />
     <FlowInspector
       v-else-if="flow !== null"

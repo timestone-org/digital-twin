@@ -118,17 +118,28 @@ export class SceneLayers {
   setWorldScale(modelDiagonal: number): void {
     this.anchors.setWorldScale(modelDiagonal)
     this.arrows.setWorldScale(modelDiagonal)
+    this.panels.setWorldScale(modelDiagonal)
     this.flows.setWorldScale(modelDiagonal)
     this.effects.setWorldScale(modelDiagonal)
   }
 
   /**
-   * 推进一帧。只有会动的那两层要。
+   * 推进一帧：会动的两层各走一步，信息牌按当前相机重摆朝向。
+   *
+   * ⚠ 朝向挂在这里而不是 `applyDistanceRules`：编辑视口**有意不套距离规则**
+   * （编辑时镜头到处飞，套上规则会让刚配好的东西一转镜头就不见了），挂在那边
+   * 的话编辑器里的牌永远不转，而它既不报错也没有别的痕迹。
+   * ⚠ 时长为 0 也要走完：那是刚建完还没跑起来的第一帧，牌的朝向得先摆对。
+   *
    * @param deltaSeconds 这一帧的时长，秒
+   * @param camera 当前相机
    */
-  update(deltaSeconds: number): void {
-    this.flows.update(deltaSeconds)
-    this.effects.update(deltaSeconds)
+  update(deltaSeconds: number, camera: THREE.Camera): void {
+    if (deltaSeconds > 0) {
+      this.flows.update(deltaSeconds)
+      this.effects.update(deltaSeconds)
+    }
+    this.panels.faceCamera(camera)
   }
 
   /** 五层全部释放。⚠ 少一行就是一处只在「用久了变卡」时才看得见的泄漏。 */

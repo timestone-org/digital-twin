@@ -12,6 +12,8 @@ import type { BulkPartCandidate } from '../bulkParts'
 const props = defineProps<{
   open: boolean
   candidates: readonly BulkPartCandidate[]
+  /** 打开时先替用户勾上的那些（视口里框选来的）。 */
+  preselect?: readonly string[]
 }>()
 
 const emit = defineEmits<{
@@ -28,7 +30,13 @@ watch(
   (open) => {
     if (open) {
       keyword.value = ''
-      chosen.value = []
+      // 框选来的先勾上，但已被别的部件认领的要滤掉——那些勾了也建不出来
+      const taken = new Set(
+        props.candidates
+          .filter((item) => item.takenBy !== null)
+          .map((item) => item.name),
+      )
+      chosen.value = (props.preselect ?? []).filter((name) => !taken.has(name))
     }
   },
 )

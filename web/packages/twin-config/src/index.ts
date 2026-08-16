@@ -30,6 +30,32 @@ export {
   twinRowLabels,
 } from './bindingRows'
 export type { TwinBindingRow } from './bindingRows'
+export { defaultCameraOf, isUsablePose } from './cameraSelect'
+export { GIZMO_KINDS, gizmoTargetOf } from './gizmoTarget'
+export type { TwinGizmoKind, TwinGizmoTarget } from './gizmoTarget'
+export {
+  FLOW_COLOR_FALLBACK,
+  FLOW_KIND_COLORS,
+  flowKindColor,
+  flowKindToken,
+} from './flowColors'
+export {
+  TWIN_CLIP_AXES,
+  clipPlaneFor,
+  collectSceneLegend,
+  formatMeasureDistance,
+  measureDistance,
+  screenshotFileName,
+  screenshotStamp,
+  searchSceneEntities,
+} from './sceneTools'
+export type {
+  TwinClipAxis,
+  TwinClipPlane,
+  TwinLegendEntry,
+  TwinSearchHit,
+  TwinSearchSource,
+} from './sceneTools'
 export { flattenPanelFields } from './normalizeElements'
 export type { FlatPanelField } from './normalizeElements'
 export {
@@ -62,7 +88,6 @@ export {
   MAX_ROAM_TOUR_SEGMENT_MS,
   MIN_CAMERA_FOV,
   MIN_ROAM_TOUR_STOPS,
-  defaultCameraOf,
   normalizeRoamTour,
 } from './normalizeScene'
 export { applyRoamEasing, interpTwinPose } from './roamPose'

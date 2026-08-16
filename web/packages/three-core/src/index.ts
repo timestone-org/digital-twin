@@ -54,6 +54,8 @@ export {
 } from './host'
 export type { TwinModelHost } from './host'
 export { EditorScene } from './editorScene'
+export { TransformGizmo } from './transformGizmo'
+export type { GizmoChange, GizmoKind, GizmoMode } from './transformGizmo'
 export type {
   EditorSceneCallbacks,
   EditorSceneOptions,
