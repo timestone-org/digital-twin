@@ -167,19 +167,22 @@ function buildRow(field: TwinPanelField): {
 }
 
 /**
- * 卡片在世界里占多大：一张 200px 宽的牌，缩放后约等于模型对角线的这个比例。
+ * 世界缩放与模型体量的比例：一张约 200px 的牌缩放后占模型对角线的一成上下。
  * ⚠ CSS3D 里 1px 就是 1 个世界单位，不缩的话一张牌能盖住整个厂区。
+ * ⚠ 这是个**纯比例**，不该早早封顶：封顶之后模型越大牌的占比越小，
+ * 大厂区上就成了一个看不清的小点——牌该始终占模型的固定份额。
  */
-const CARD_WIDTH_RATIO = 0.0016
-/** 缩放上下限，模型极大或极小时牌都要还看得清。 */
-const MIN_CARD_SCALE = 0.002
-const MAX_CARD_SCALE = 0.08
+const CARD_WIDTH_RATIO = 0.0005
+/** 兜底区间，只挡住体量为 0 或畸形值那两种极端。 */
+const MIN_CARD_SCALE = 1e-4
+const MAX_CARD_SCALE = 10
 
 /** 信息牌层。一个实例绑一份场景，换配置时 `build` 重建。 */
 export class PanelLayer {
   readonly group = new THREE.Group()
   private entries: PanelEntry[] = []
-  private cardScale = MIN_CARD_SCALE
+  /** 按模型体量算出来的基准缩放；每张牌在它之上再乘自己的倍率。 */
+  private baseScale = MIN_CARD_SCALE
 
   constructor() {
     this.group.name = 'twin-panels'
@@ -194,13 +197,18 @@ export class PanelLayer {
   setWorldScale(modelDiagonal: number): void {
     const usable =
       Number.isFinite(modelDiagonal) && modelDiagonal > 0 ? modelDiagonal : 1
-    this.cardScale = Math.min(
+    this.baseScale = Math.min(
       MAX_CARD_SCALE,
       Math.max(MIN_CARD_SCALE, usable * CARD_WIDTH_RATIO),
     )
     for (const entry of this.entries) {
-      entry.label.scale.setScalar(this.cardScale)
+      this.applyScale(entry)
     }
+  }
+
+  /** 基准缩放乘这张牌自己的倍率。 */
+  private applyScale(entry: PanelEntry): void {
+    entry.label.scale.setScalar(this.baseScale * entry.panel.style.scale)
   }
 
   /**
@@ -285,7 +293,7 @@ export class PanelLayer {
     }
     const label = new CSS3DObject(element)
     label.position.set(...positionOf(panel, anchors))
-    label.scale.setScalar(this.cardScale)
+    label.scale.setScalar(this.baseScale * panel.style.scale)
     this.group.add(label)
     return { panel, label, fields }
   }

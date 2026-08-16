@@ -46,6 +46,7 @@ function panelOf(fields: TwinPanelField[]): TwinPanel {
       background: '',
       width: 0,
       fontScale: 1,
+      scale: 1,
       animate: false,
       pulse: false,
     },

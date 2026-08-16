@@ -25,6 +25,7 @@ const STYLE = {
   background: '',
   width: 0,
   fontScale: 1,
+  scale: 1,
   animate: false,
   pulse: false,
 } as const
@@ -363,16 +364,58 @@ describe('随模型缩放', () => {
     layer.dispose()
   })
 
-  it('缩放夹在上下限内，极大极小的模型上都还看得清', () => {
+  it('畸形体量被兜底区间挡住，不产出爆炸或塌缩的缩放', () => {
     const layer = new PanelLayer()
     layer.build([panel()], [])
 
     layer.setWorldScale(1e9)
-    expect(scaleOf(layer)).toBeLessThanOrEqual(0.08)
+    expect(scaleOf(layer)).toBeLessThanOrEqual(10)
 
     layer.setWorldScale(1e-9)
-    expect(scaleOf(layer)).toBeGreaterThanOrEqual(0.002)
+    expect(scaleOf(layer)).toBeGreaterThanOrEqual(1e-4)
     layer.dispose()
+  })
+
+  // ⚠ 早早封顶的话，模型越大牌的占比越小，大厂区上就成了一个看不清的小点
+  it('大模型上不封顶：牌与模型的比例保持住', () => {
+    const layer = new PanelLayer()
+    layer.build([panel()], [])
+
+    layer.setWorldScale(100)
+    const atHundred = scaleOf(layer)
+    layer.setWorldScale(1000)
+
+    // 体量翻十倍，缩放也该跟着翻十倍——封顶了的话这个比值会明显小于 10
+    expect(scaleOf(layer) / atHundred).toBeCloseTo(10, 1)
+    layer.dispose()
+  })
+
+  it('整体大小倍率乘在自动缩放之上', () => {
+    const big = new PanelLayer()
+    const normal = new PanelLayer()
+    big.build([panel({ style: { ...STYLE, scale: 3 } })], [])
+    normal.build([panel()], [])
+
+    big.setWorldScale(100)
+    normal.setWorldScale(100)
+
+    expect(scaleOf(big)).toBeCloseTo(scaleOf(normal) * 3)
+    big.dispose()
+    normal.dispose()
+  })
+
+  it('倍率也落到后建的牌上', () => {
+    const layer = new PanelLayer()
+    layer.setWorldScale(100)
+
+    layer.build([panel({ style: { ...STYLE, scale: 2 } })], [])
+
+    const one = new PanelLayer()
+    one.setWorldScale(100)
+    one.build([panel()], [])
+    expect(scaleOf(layer)).toBeCloseTo(scaleOf(one) * 2)
+    layer.dispose()
+    one.dispose()
   })
 
   it('体量取不到时按 1 算，不产出 0 或 NaN 缩放', () => {

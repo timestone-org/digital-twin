@@ -229,6 +229,13 @@ export interface TwinPanelStyle {
   width: number
   /** 字号缩放。 */
   fontScale: number
+  /**
+   * 牌在 3D 里的整体大小倍率。
+   * ⚠ 与 `width` / `fontScale` 是两个层次：那两个决定卡片这张 DOM 长什么样
+   * （多宽、字多大），这个决定那张 DOM 摆进三维世界后占多大地方。默认按模型
+   * 体量自动定，倍率在此之上乘——换模型时不用重调，场景需要时又调得动。
+   */
+  scale: number
   animate: boolean
   /** 锚点光环脉冲。 */
   pulse: boolean
