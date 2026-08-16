@@ -30,6 +30,12 @@ const MIN_FRAME_RADIUS = 0.5
 const NEAR_RATIO = 1 / 1000
 /** 远剪裁面相对相机距离的倍数 */
 const FAR_FACTOR = 20
+/**
+ * 远剪裁面至少要罩住的场景内容倍数（相对模型对角线）。
+ * ⚠ 星空壳是对角线的 6 倍：只按相机距离算 far 的话，凑近看某个部件时
+ * 星空会整片被裁掉——画面突然变成纯色底，而没有任何一处报错。
+ */
+const CONTENT_FAR_RATIO = 10
 const WHITE = 0xffffff
 /** 半球灯天空色 */
 const SKY_COLOR = 0xbfe6ff
@@ -282,8 +288,7 @@ export function frameBox(core: SceneCore, box: THREE.Box3): void {
   core.camera.position.copy(center).add(offset)
   // ⚠ 剪裁面必须跟着包围盒走：固定的 0.01/5000 在大模型上深度精度不够，
   // 表面会互相穿插闪烁，而这既不报错也不好归因
-  core.camera.near = Math.max(distance * NEAR_RATIO, INITIAL_NEAR)
-  core.camera.far = distance * FAR_FACTOR
+  applyClipPlanes(core, distance, radius * 2)
   core.camera.updateProjectionMatrix()
   core.controls.target.copy(center)
   core.controls.update()
@@ -296,11 +301,43 @@ export function frameBox(core: SceneCore, box: THREE.Box3): void {
  * @param core 场景内核
  * @param pose 机位、注视点与视野
  */
-export function applyCameraPose(core: SceneCore, pose: TwinPose): void {
+export function applyCameraPose(
+  core: SceneCore,
+  pose: TwinPose,
+  contentSpan = 0,
+): void {
   core.camera.position.set(...pose.position)
   core.camera.fov = pose.fov
-  core.camera.updateProjectionMatrix()
   core.controls.target.set(...pose.target)
+  // ⚠ 剪裁面必须跟着一起换：`frameBox` 那条路会重算，这条路不算的话，
+  // 相机停在初始的 0.01/5000 上——大模型上远处连同星空一起被裁掉，
+  // 小模型上近处则因精度不足互相穿插闪烁
+  const distance = Math.hypot(
+    pose.position[0] - pose.target[0],
+    pose.position[1] - pose.target[1],
+    pose.position[2] - pose.target[2],
+  )
+  applyClipPlanes(core, distance, contentSpan)
+  core.camera.updateProjectionMatrix()
+}
+
+/**
+ * 按取景距离与场景内容体量定近远剪裁面。
+ * @param core 场景内核
+ * @param distance 相机到注视点的距离
+ * @param contentSpan 场景内容的体量（模型包围盒对角线）；0 = 只按距离算
+ */
+function applyClipPlanes(
+  core: SceneCore,
+  distance: number,
+  contentSpan: number,
+): void {
+  const usable = Number.isFinite(distance) && distance > 0 ? distance : 1
+  core.camera.near = Math.max(usable * NEAR_RATIO, INITIAL_NEAR)
+  core.camera.far = Math.max(
+    usable * FAR_FACTOR,
+    contentSpan * CONTENT_FAR_RATIO,
+  )
 }
 
 type Renderable = THREE.Mesh | THREE.Line | THREE.Points

@@ -551,7 +551,7 @@ export class EditorScene {
     const core = this.core
     const camera = this.config.cameras.find((item) => item.id === id)
     if (core === null || camera === undefined) return
-    applyCameraPose(core, camera)
+    applyCameraPose(core, camera, this.modelSpan)
     core.controls.update()
     this.emitCamera()
   }
@@ -561,7 +561,7 @@ export class EditorScene {
     const timeline = this.roam
     if (timeline === null) return
     const pose: TwinPose | null = timeline.advance(deltaMs)
-    if (pose !== null) applyCameraPose(core, pose)
+    if (pose !== null) applyCameraPose(core, pose, this.modelSpan)
     if (!timeline.isPlaying) this.stopRoamPreview()
   }
 
@@ -621,7 +621,7 @@ export class EditorScene {
       frameObject(core, root)
       return
     }
-    applyCameraPose(core, camera)
+    applyCameraPose(core, camera, this.modelSpan)
     core.controls.update()
   }
 

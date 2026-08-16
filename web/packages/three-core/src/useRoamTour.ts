@@ -29,6 +29,8 @@ export interface RoamTourDeps {
   core: () => SceneCore | null
   /** ⚠ 必须是 `normalizeTwinConfig` 的输出：这里按引用比对，就地改字段不重建轨迹。 */
   config: () => TwinConfig
+  /** 模型包围盒对角线；剪裁面要罩得住星空那一层壳。 */
+  span: () => number
 }
 
 /** 宿主要用到的四个动作与两个状态。 */
@@ -136,7 +138,7 @@ class RoamRunner {
   private applyPose(pose: TwinPose | null): void {
     const core = this.deps.core()
     if (core === null || pose === null) return
-    applyCameraPose(core, pose)
+    applyCameraPose(core, pose, this.deps.span())
   }
 
   private clearIdleTimer(): void {

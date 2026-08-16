@@ -81,9 +81,16 @@ let groundGrid: GroundGridLayer | null = null
 let animations: ModelAnimations | null = null
 let nodeIndex: NodeIndex = EMPTY_NODE_INDEX
 
+/** 模型包围盒对角线；相机与图层都要按它定尺度。 */
+function modelSpan(): number {
+  const root = model.root()
+  return root === null ? 0 : boundingDiagonal(root)
+}
+
 const sceneCamera = useSceneCamera({
   core: () => core,
   config: () => props.config,
+  span: modelSpan,
 })
 
 const model = useTwinModelLoad({
@@ -105,6 +112,7 @@ const model = useTwinModelLoad({
 const roam = useRoamTour({
   core: () => core,
   config: () => props.config,
+  span: modelSpan,
 })
 const viewpoints = useViewpointSwitch({
   element: () => containerRef.value,

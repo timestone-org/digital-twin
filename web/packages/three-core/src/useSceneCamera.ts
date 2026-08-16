@@ -12,6 +12,8 @@ import { applyCameraPose, frameObject, type SceneCore } from './sceneCore'
 export interface SceneCameraOptions {
   core: () => SceneCore | null
   config: () => TwinConfig
+  /** 模型包围盒对角线；剪裁面要罩得住星空那一层壳。 */
+  span: () => number
 }
 
 export interface SceneCamera {
@@ -34,7 +36,7 @@ export function useSceneCamera(options: SceneCameraOptions): SceneCamera {
   function applyCamera(camera: TwinCamera): void {
     const core = options.core()
     if (core === null) return
-    applyCameraPose(core, camera)
+    applyCameraPose(core, camera, options.span())
     core.controls.update()
   }
 
@@ -55,7 +57,7 @@ export function useSceneCamera(options: SceneCameraOptions): SceneCamera {
     applyView: (view) => {
       const core = options.core()
       if (core === null || view === null || view === undefined) return
-      applyCameraPose(core, view)
+      applyCameraPose(core, view, options.span())
       core.controls.update()
     },
   }
