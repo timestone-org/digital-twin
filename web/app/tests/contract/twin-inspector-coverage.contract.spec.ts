@@ -66,8 +66,6 @@ const NOT_EDITABLE = new Set(['id', 'version'])
  * 的 KNOWN_DEAD 里各有一条对应的原因。
  */
 const NO_CONTROL_ON_PURPOSE = new Set([
-  // 信息牌走 CSS2DObject，它本质上永远面向相机，fixed 档画不出来
-  'billboard',
   // 本项目从不做统一提亮，这个开关恒等于 true 的行为
   'originalMaterials',
 ])

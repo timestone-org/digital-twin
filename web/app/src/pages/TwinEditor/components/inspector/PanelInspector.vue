@@ -1,23 +1,21 @@
 <script setup lang="ts">
 /**
- * @fileoverview 信息牌检查器：锚定 / 偏移 / 外观 / 字段 / 显隐。
- *
- * ⚠ 不给配「朝向」：信息牌走 CSS2DObject，它是叠在屏幕上的 DOM，本质上永远
- * 面向相机，契约里的 `fixed` 档在这个渲染方式下画不出来。摆一个不生效的开关
- * 比没有更糟。字段本身留着，存量数据照常读得出来。
+ * @fileoverview 信息牌检查器：锚定 / 偏移 / 朝向 / 外观 / 字段 / 显隐。
  *
  * ⚠ `anchorId` 与 `position` 二选一，**前者优先**：两个都给时按锚点走，
  * `position` 那份静默不生效。用户配了没反应会找不到原因，所以面板上必须摆明。
  */
 import {
+  TWIN_BILLBOARD_MODES,
   TWIN_PANEL_ORIENTS,
   TWIN_PANEL_VARIANTS,
   type TwinAnchor,
+  type TwinBillboardMode,
   type TwinPanel,
   type TwinPanelOrient,
   type TwinPanelVariant,
 } from '@dt/twin-config'
-import { DtField, DtInput, DtNotice, DtSelect } from '@dt/ui'
+import { DtField, DtInput, DtNotice, DtSegmented, DtSelect } from '@dt/ui'
 import { computed } from 'vue'
 
 import InspectorSection from '../fields/InspectorSection.vue'
@@ -55,6 +53,15 @@ const variantOptions = TWIN_PANEL_VARIANTS.map((value) => ({
   value,
   label: VARIANT_LABELS[value],
 }))
+const BILLBOARD_LABELS: Readonly<Record<TwinBillboardMode, string>> = {
+  face: '始终朝相机',
+  horizontal: '只水平跟随',
+  fixed: '钉死朝向',
+}
+const billboardOptions = TWIN_BILLBOARD_MODES.map((value) => ({
+  value,
+  label: BILLBOARD_LABELS[value],
+}))
 const orientOptions = TWIN_PANEL_ORIENTS.map((value) => ({
   value,
   label: ORIENT_LABELS[value],
@@ -79,6 +86,12 @@ const danglingAnchor = computed(
 
 function write(patch: Partial<TwinPanel>): void {
   emit('update:modelValue', { ...props.modelValue, ...patch })
+}
+
+/** 分段控件给回来的是裸字符串，对不上就当没改。 */
+function writeBillboard(next: string): void {
+  const found = TWIN_BILLBOARD_MODES.find((item) => item === next)
+  if (found !== undefined) write({ billboard: found })
 }
 </script>
 
@@ -125,6 +138,21 @@ function write(patch: Partial<TwinPanel>): void {
         <Vec3Field
           :model-value="modelValue.offset"
           @update:model-value="write({ offset: $event })"
+        />
+      </DtField>
+
+      <DtField
+        label="朝向"
+        hint="只水平跟随 = 牌永远竖着，俯视时不会躺下去"
+        size="sm"
+      >
+        <DtSegmented
+          :model-value="modelValue.billboard"
+          :options="billboardOptions"
+          aria-label="朝向"
+          size="sm"
+          block
+          @update:model-value="writeBillboard"
         />
       </DtField>
     </InspectorSection>

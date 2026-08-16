@@ -5,8 +5,9 @@
  * 用户就得到一个配了永远不生效的开关——typecheck 与 lint 双双放行，界面上
  * 也没有任何迹象。这个文件是它们唯一的防线。
  *
- * 三处历史欠账正是这么来的：`isDefault` 的选择函数写好了却只有测试在用、
- * `showGroundGrid` 全仓只有一句「不看这个开关」的注释、`viewpoints` 整块零实现。
+ * 几处历史欠账正是这么来的：`isDefault` 的选择函数写好了却只有测试在用、
+ * `showGroundGrid` 全仓只有一句「不看这个开关」的注释、`viewpoints` 整块零实现、
+ * `billboard` 因为牌是 CSS2D 而画不出来（后来把牌换成 CSS3D 才补上）。
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
@@ -40,10 +41,6 @@ const EDITOR_ONLY = new Set([
  * ⚠ 不是「以后再说」的清单：留在这里的每一条都要说清为什么画不出来。
  */
 const KNOWN_DEAD = new Map<string, string>([
-  [
-    'billboard',
-    '信息牌走 CSS2DObject，它本质上永远面向相机，fixed 档画不出来（参照项目同样没实现）',
-  ],
   [
     'originalMaterials',
     '本项目从不做统一提亮，恒等于 true 的行为；要让 false 有意义得先有材质增强',

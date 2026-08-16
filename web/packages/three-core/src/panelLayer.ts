@@ -1,13 +1,18 @@
 /**
- * @fileoverview 信息牌层：锚定在锚点或世界坐标上的一张 CSS2D 卡片。
+ * @fileoverview 信息牌层：锚定在锚点或世界坐标上的一张卡片。
  *
+ * ⚠ 卡片是 **CSS3D** 不是 CSS2D：后者是叠在屏幕上的 DOM，恒定像素大小、永远
+ * 正对屏幕，于是「随模型缩放」与「钉死朝向」两件事都做不到。换成 CSS3D 之后
+ * DOM 真进 3D 空间，代价是它与 WebGL 几何之间没有深度遮挡——牌永远画在模型
+ * 之上，被挡住的牌也看得见。
  * ⚠ 全部文本走 `textContent`——牌名、字段标签、单位与静态文案都是用户可控文本，
  * 拼进 `innerHTML` 就是一个注入点（code-style-typescript §10）。
  * ⚠ 本层不建任何 GPU 几何：卡片是 DOM。要清的只有 DOM，但它一定要清——
- * 从场景图上摘下 CSS2D 对象带不走它的元素。
+ * 从场景图上摘下对象带不走它的元素。
  */
 import type {
   TwinAnchor,
+  TwinBillboardMode,
   TwinPanel,
   TwinPanelField,
   TwinPanelValues,
@@ -15,7 +20,7 @@ import type {
 } from '@dt/twin-config'
 import { EMPTY_PANEL_VALUES, formatValueText } from '@dt/twin-config'
 import * as THREE from 'three'
-import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
+import { CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js'
 
 import { distanceResolver, type DistanceContext } from './distanceContext'
 import { resolveVisibility } from './distanceRules'
@@ -31,7 +36,7 @@ interface FieldEntry {
 
 interface PanelEntry {
   panel: TwinPanel
-  label: CSS2DObject
+  label: CSS3DObject
   fields: FieldEntry[]
 }
 
@@ -55,39 +60,89 @@ function positionOf(panel: TwinPanel, anchors: readonly TwinAnchor[]): Vec3 {
   ]
 }
 
-/** 一个字段当前该显示什么：有实时值用实时值，没有就退回静态文案。 */
+/**
+ * 一个字段当前该显示什么：有实时值用实时值，没有就退回静态文案或占位符。
+ *
+ * ⚠ 没有读数时也要把前缀与单位拼上：编辑器里五路实时值恒空，只显示一个占位符
+ * 的话，用户配了前缀和单位完全看不到反馈，只能保存后到大屏上去猜配对没配对。
+ * 运行态同理——绑定还没上数的那一段，牌上至少要看得出这一格是什么量。
+ */
 function fieldText(entry: FieldEntry, values: TwinPanelValues): string {
   const live = values[entry.valueKey]
   if (live !== undefined) {
     const text = formatValueText(entry.field, live.value)
     if (text !== '') return text
   }
-  return entry.field.staticText === '' ? NO_VALUE_TEXT : entry.field.staticText
+  const reading =
+    entry.field.staticText === '' ? NO_VALUE_TEXT : entry.field.staticText
+  return [entry.field.prefix, reading, entry.field.unit]
+    .filter((part) => part !== '')
+    .join(' ')
 }
 
+/** 卡片基准字号，px；`fontScale` 乘在它上面。 */
+const BASE_FONT_PX = 11
+
+/**
+ * 把这张牌的个性写成 CSS 变量，观感交给样式表按变体分。
+ *
+ * ⚠ 绝不在这里内联 border / background / border-radius / padding：内联样式的
+ * 优先级压过样式表里的任何选择器，五种变体会全部长成一个样——这正是它们
+ * 之前「配了不生效」的原因。逐牌不同的只有取色、宽度与字号，一律走变量。
+ */
 function styleCard(element: HTMLElement, panel: TwinPanel): void {
   const { style } = panel
-  element.style.display = 'flex'
-  element.style.flexDirection = 'column'
-  element.style.gap = '4px'
-  element.style.padding = '8px 10px'
-  element.style.borderRadius = 'var(--radius-md)'
-  element.style.border = `1px solid ${cssColor(style.accent)}`
-  element.style.background =
+  element.classList.add('twin-panel', `twin-panel--${style.variant}`)
+  element.style.setProperty('--tp-accent', cssColor(style.accent))
+  element.style.setProperty(
+    '--tp-bg',
     style.background === ''
       ? 'var(--surface-overlay)'
-      : cssColor(style.background)
-  element.style.color = 'var(--text-primary)'
-  element.style.fontSize = `${(11 * style.fontScale).toFixed(1)}px`
-  element.style.lineHeight = '1.5'
-  element.style.whiteSpace = 'nowrap'
-  element.style.userSelect = 'none'
-  if (style.width > 0) element.style.width = `${style.width}px`
-  // 变体只改一个 data 属性，具体观感交给样式表——层里不堆五份内联样式
-  element.dataset.variant = style.variant
+      : cssColor(style.background),
+  )
+  element.style.setProperty(
+    '--tp-font-size',
+    `${(BASE_FONT_PX * style.fontScale).toFixed(1)}px`,
+  )
+  if (style.width > 0) {
+    element.style.setProperty('--tp-width', `${style.width}px`)
+  }
   element.dataset.orient = style.orient
   if (style.pulse) element.dataset.pulse = 'on'
   if (style.animate) element.dataset.animate = 'on'
+}
+
+/** 竖轴，`horizontal` 档绕它转。 */
+const UP = new THREE.Vector3(0, 1, 0)
+
+/**
+ * 把一张牌摆成它该有的朝向。
+ * @param label 牌对象
+ * @param mode 朝向档
+ * @param camera 当前相机
+ */
+function applyBillboard(
+  label: THREE.Object3D,
+  mode: TwinBillboardMode,
+  camera: THREE.Camera,
+): void {
+  if (mode === 'fixed') return
+  if (mode === 'face') {
+    // 直接抄相机的姿态：牌与成像平面平行，怎么转都是正面
+    label.quaternion.copy(camera.quaternion)
+    return
+  }
+  // horizontal：只在水平面内转向相机，牌因此永远是竖着的
+  const toCamera = camera.position.clone().sub(label.position)
+  toCamera.y = 0
+  // 相机正好在牌的正上方 / 正下方时水平分量是零，没有方向可言——保持上一帧的
+  // 朝向，硬转会让牌在俯视那一瞬间乱甩
+  if (toCamera.lengthSq() === 0) return
+  label.quaternion.setFromUnitVectors(
+    new THREE.Vector3(0, 0, 1),
+    toCamera.normalize(),
+  )
+  label.up.copy(UP)
 }
 
 /** 色规格 → 能写进 style 的字符串；token 要包一层 `var()`。 */
@@ -100,27 +155,64 @@ function buildRow(field: TwinPanelField): {
   valueEl: HTMLElement
 } {
   const row = document.createElement('div')
-  row.style.display = 'flex'
-  row.style.justifyContent = 'space-between'
-  row.style.gap = '12px'
+  row.className = 'twin-panel__row'
   const labelEl = document.createElement('span')
+  labelEl.className = 'twin-panel__label'
   labelEl.textContent = field.label
-  labelEl.style.color = 'var(--text-secondary)'
   const valueEl = document.createElement('span')
+  valueEl.className = 'twin-panel__value'
   valueEl.textContent = NO_VALUE_TEXT
-  valueEl.style.fontWeight = '700'
-  valueEl.style.fontVariantNumeric = 'tabular-nums'
   row.append(labelEl, valueEl)
   return { row, valueEl }
 }
+
+/**
+ * 卡片在世界里占多大：一张 200px 宽的牌，缩放后约等于模型对角线的这个比例。
+ * ⚠ CSS3D 里 1px 就是 1 个世界单位，不缩的话一张牌能盖住整个厂区。
+ */
+const CARD_WIDTH_RATIO = 0.0016
+/** 缩放上下限，模型极大或极小时牌都要还看得清。 */
+const MIN_CARD_SCALE = 0.002
+const MAX_CARD_SCALE = 0.08
 
 /** 信息牌层。一个实例绑一份场景，换配置时 `build` 重建。 */
 export class PanelLayer {
   readonly group = new THREE.Group()
   private entries: PanelEntry[] = []
+  private cardScale = MIN_CARD_SCALE
 
   constructor() {
     this.group.name = 'twin-panels'
+  }
+
+  /**
+   * 按模型体量重算卡片大小。
+   * ⚠ 这是「牌不随模型缩放」的落点：CSS3D 的元素在世界里有真实尺寸，
+   * 模型换了体量却不跟着缩，小模型上牌能盖满全屏、大模型上牌小成一个点。
+   * @param modelDiagonal 模型包围盒对角线长度
+   */
+  setWorldScale(modelDiagonal: number): void {
+    const usable =
+      Number.isFinite(modelDiagonal) && modelDiagonal > 0 ? modelDiagonal : 1
+    this.cardScale = Math.min(
+      MAX_CARD_SCALE,
+      Math.max(MIN_CARD_SCALE, usable * CARD_WIDTH_RATIO),
+    )
+    for (const entry of this.entries) {
+      entry.label.scale.setScalar(this.cardScale)
+    }
+  }
+
+  /**
+   * 按这一帧的相机摆每张牌的朝向。
+   * ⚠ 每帧都要调：`face` 与 `horizontal` 两档是跟着相机转的，只在建的时候
+   * 摆一次的话，镜头一动牌就斜了。
+   * @param camera 当前相机
+   */
+  faceCamera(camera: THREE.Camera): void {
+    for (const entry of this.entries) {
+      applyBillboard(entry.label, entry.panel.billboard, camera)
+    }
   }
 
   /**
@@ -154,8 +246,8 @@ export class PanelLayer {
 
   /**
    * 按这一帧的取景状态更新显隐与淡出。
-   * ⚠ 卡片是 CSS2D，靠 `object.visible` 隐藏（CSS2DRenderer 会跟着把元素
-   * `display: none`）；不透明度只能落在元素的 style 上，材质那条路这里没有。
+   * ⚠ 卡片是 DOM，靠 `object.visible` 隐藏（渲染器会跟着把元素 `display: none`）；
+   * 不透明度只能落在元素的 style 上，材质那条路这里没有。
    * @param context 这一帧的相机与轨道中心
    */
   applyDistance(context: DistanceContext): void {
@@ -181,9 +273,8 @@ export class PanelLayer {
     styleCard(element, panel)
     if (panel.name !== '') {
       const title = document.createElement('div')
+      title.className = 'twin-panel__title'
       title.textContent = panel.name
-      title.style.color = cssColor(panel.style.accent)
-      title.style.fontWeight = '700'
       element.append(title)
     }
     const fields: FieldEntry[] = []
@@ -192,8 +283,9 @@ export class PanelLayer {
       element.append(row)
       fields.push({ field, valueKey: `${panel.id}::${field.key}`, valueEl })
     }
-    const label = new CSS2DObject(element)
+    const label = new CSS3DObject(element)
     label.position.set(...positionOf(panel, anchors))
+    label.scale.setScalar(this.cardScale)
     this.group.add(label)
     return { panel, label, fields }
   }

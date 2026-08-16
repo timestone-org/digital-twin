@@ -108,6 +108,9 @@ export class SceneLayers {
     this.anchors.applyDistance(context)
     this.arrows.applyDistance(context)
     this.panels.applyDistance(context)
+    // ⚠ 与距离规则同一拍：牌的朝向要跟着相机每帧重摆，只在建的时候摆一次
+    // 的话，镜头一动牌就斜了
+    this.panels.faceCamera(context.camera)
     this.flows.applyDistance(context)
   }
 
@@ -118,6 +121,7 @@ export class SceneLayers {
   setWorldScale(modelDiagonal: number): void {
     this.anchors.setWorldScale(modelDiagonal)
     this.arrows.setWorldScale(modelDiagonal)
+    this.panels.setWorldScale(modelDiagonal)
     this.flows.setWorldScale(modelDiagonal)
     this.effects.setWorldScale(modelDiagonal)
   }

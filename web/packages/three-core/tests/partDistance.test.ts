@@ -12,11 +12,19 @@ import type { DistanceContext } from '../src/distanceContext'
 import { buildNodeIndex } from '../src/nodeIndex'
 import { PartDistanceLayer } from '../src/partDistance'
 
+/** 造一台摆在指定位置的相机；朝向断言不看它，只有信息牌摆朝向要用。 */
+function cameraAt(x: number, y = 0, z = 0): THREE.Camera {
+  const camera = new THREE.PerspectiveCamera()
+  camera.position.set(x, y, z)
+  return camera
+}
+
 /** 相机在 x 轴上，轨道中心在原点；部件盒也在原点，故三种参考系距离都是 x。 */
 function context(cameraX: number): DistanceContext {
   return {
     cameraPosition: new THREE.Vector3(cameraX, 0, 0),
     orbitTarget: new THREE.Vector3(0, 0, 0),
+    camera: cameraAt(cameraX, 0, 0),
   }
 }
 

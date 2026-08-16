@@ -7,6 +7,7 @@ import type { TwinModelRef, TwinPose } from '@dt/twin-config'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
+import { CSS3DRenderer } from 'three/examples/jsm/renderers/CSS3DRenderer.js'
 
 /** WebGL 不可用时的统一文案，降级提示由宿主渲染。 */
 export const WEBGL_UNAVAILABLE_MESSAGE =
@@ -69,6 +70,12 @@ export interface SceneCore {
   readonly renderer: SceneRenderer
   readonly controls: OrbitControls
   readonly labelRenderer: CSS2DRenderer
+  /**
+   * 3D 空间里的 DOM 层，信息牌用它。
+   * ⚠ 与 `labelRenderer` 是两回事：那一层是屏幕空间的，元素恒定像素大小、
+   * 永远正对屏幕；这一层的元素真进 3D，会随距离透视、也能摆任意朝向。
+   */
+  readonly spatialRenderer: CSS3DRenderer
   /** 模型挂载点：换模型只清空它，灯光与锚点层不受影响。 */
   readonly modelRoot: THREE.Group
 }
@@ -157,6 +164,10 @@ export function createSceneCore(options: SceneCoreOptions): SceneCore {
   fillContainer(labelRenderer.domElement, false)
   container.appendChild(labelRenderer.domElement)
 
+  const spatialRenderer = new CSS3DRenderer()
+  fillContainer(spatialRenderer.domElement, false)
+  container.appendChild(spatialRenderer.domElement)
+
   const controls = new OrbitControls(camera, renderer.domElement)
   controls.enableDamping = true
 
@@ -164,7 +175,15 @@ export function createSceneCore(options: SceneCoreOptions): SceneCore {
   modelRoot.name = 'twin-model-root'
   scene.add(createLighting(), modelRoot)
 
-  return { scene, camera, renderer, controls, labelRenderer, modelRoot }
+  return {
+    scene,
+    camera,
+    renderer,
+    controls,
+    labelRenderer,
+    spatialRenderer,
+    modelRoot,
+  }
 }
 
 /**
@@ -186,6 +205,7 @@ export function resizeScene(
   core.camera.updateProjectionMatrix()
   core.renderer.setSize(w, h)
   core.labelRenderer.setSize(w, h)
+  core.spatialRenderer.setSize(w, h)
 }
 
 /** 渲染一帧：阻尼需要每帧 update，否则惯性停在半路。 */
@@ -193,6 +213,7 @@ export function renderScene(core: SceneCore): void {
   core.controls.update()
   core.renderer.render(core.scene, core.camera)
   core.labelRenderer.render(core.scene, core.camera)
+  core.spatialRenderer.render(core.scene, core.camera)
 }
 
 /**
@@ -338,6 +359,7 @@ function disposeIfTexture(value: THREE.Texture | THREE.Color | null): void {
 export function disposeScene(core: SceneCore): void {
   core.controls.dispose()
   core.labelRenderer.domElement.remove()
+  core.spatialRenderer.domElement.remove()
   disposeIfTexture(core.scene.environment)
   core.scene.environment = null
   disposeIfTexture(core.scene.background)

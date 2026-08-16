@@ -15,6 +15,12 @@ export interface DistanceContext {
   cameraPosition: THREE.Vector3
   /** 轨道中心（OrbitControls 的 target）。 */
   orbitTarget: THREE.Vector3
+  /**
+   * 相机本身，信息牌摆朝向要用它的姿态。
+   * ⚠ 放在这里而不是让宿主另调一次：两个视口各调一遍的话，漏掉一个就是
+   * 「那个视口里的牌不跟着转」，而它既不报错也没有别的痕迹。
+   */
+  camera: THREE.Camera
 }
 
 const SCRATCH = new THREE.Vector3()
@@ -27,6 +33,7 @@ export function distanceContextOf(core: {
   return {
     cameraPosition: core.camera.position,
     orbitTarget: core.controls.target,
+    camera: core.camera,
   }
 }
 
