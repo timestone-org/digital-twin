@@ -5,7 +5,7 @@
  * OrbitControls 就收不到拖拽了。
  */
 import type { TwinCamera, TwinViewpointMode } from '@dt/twin-config'
-import { DtSelect } from '@dt/ui'
+import { DtButton, DtSelect } from '@dt/ui'
 import { computed } from 'vue'
 
 const props = defineProps<{
@@ -52,19 +52,21 @@ function hintOf(index: number): string | undefined {
       size="sm"
       @update:model-value="emit('pick', $event)"
     />
-    <button
+    <DtButton
       v-for="(camera, index) in items"
       v-else
       :key="camera.id"
-      type="button"
-      class="twin-viewpoints__btn"
-      :class="{ 'is-active': camera.id === activeId }"
+      :variant="camera.id === activeId ? 'solid' : 'soft'"
+      intent="neutral"
+      size="sm"
+      block
       :title="hintOf(index)"
+      class="twin-viewpoints__btn"
       @click="emit('pick', camera.id)"
     >
       <span class="twin-viewpoints__index">{{ index + 1 }}</span>
       <span class="twin-viewpoints__name">{{ labelOf(camera, index) }}</span>
-    </button>
+    </DtButton>
   </div>
 </template>
 
@@ -79,27 +81,10 @@ function hintOf(index: number): string | undefined {
   align-items: stretch;
   max-width: 12rem;
 
+  // 外观交给 DtButton，这里只管内容的排布
   &__btn {
-    display: flex;
+    justify-content: flex-start;
     gap: 6px;
-    align-items: center;
-    padding: 4px 8px;
-    color: var(--text-secondary);
-    font-size: var(--font-size-xs);
-    background: var(--surface-sunken);
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-
-    &:hover {
-      color: var(--text-primary);
-      border-color: var(--border-strong);
-    }
-
-    &.is-active {
-      color: var(--text-primary);
-      border-color: var(--accent-primary);
-    }
   }
 
   &__index {

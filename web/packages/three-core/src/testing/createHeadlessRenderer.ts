@@ -24,6 +24,7 @@ export function createHeadlessRenderer(): HeadlessRenderer {
   const canvas = document.createElement('canvas')
   return {
     domElement: canvas,
+    clippingPlanes: [],
     renders: [],
     sizes: [],
     pixelRatios: [],

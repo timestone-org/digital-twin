@@ -46,6 +46,12 @@ const FILL_LIGHT_INTENSITY = 0.9
  */
 export interface SceneRenderer {
   readonly domElement: HTMLCanvasElement
+  /**
+   * 全局剖切面；空数组 = 不剖切。
+   * ⚠ 是可写属性不是方法：three 的 `WebGLRenderer` 就是这么用的，包一层 setter
+   * 会让替身与真渲染器的用法分叉。
+   */
+  clippingPlanes: THREE.Plane[]
   render(scene: THREE.Object3D, camera: THREE.Camera): void
   setSize(width: number, height: number): void
   setPixelRatio(value: number): void

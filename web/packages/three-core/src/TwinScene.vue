@@ -18,9 +18,7 @@ import {
   EMPTY_ARROW_VALUES,
   EMPTY_FLOW_VALUES,
   EMPTY_PANEL_VALUES,
-  defaultCameraOf,
 } from '@dt/twin-config'
-import type { Object3D } from 'three'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { GroundGridLayer } from './groundGrid'
@@ -31,21 +29,22 @@ import { SceneLayers, type SceneLayerValues } from './sceneLayers'
 import { distanceContextOf } from './distanceContext'
 import type { TwinPartClick } from './partPicking'
 import TwinSceneOverlay from './TwinSceneOverlay.vue'
+import TwinSceneTools from './TwinSceneTools.vue'
 import TwinViewpointBar from './TwinViewpointBar.vue'
 import { usePartClick } from './usePartClick'
 import { useRenderLoop } from './useRenderLoop'
+import { useSceneCamera } from './useSceneCamera'
+import { useSceneTools } from './useSceneTools'
 import { useTwinModelLoad } from './useTwinModelLoad'
 import { useViewpointSwitch } from './useViewpointSwitch'
 import { EMPTY_NODE_INDEX, type NodeIndex } from './nodeIndex'
 import {
   WEBGL_UNAVAILABLE_MESSAGE,
-  applyCameraPose,
   applyModelPlacement,
   boundingDiagonal,
   createSceneCore,
   createWebGLRenderer,
   disposeScene,
-  frameObject,
   type SceneCore,
 } from './sceneCore'
 
@@ -61,6 +60,10 @@ const props = defineProps<{
    * ⚠ 只在它换引用时飞一次，不每帧套——套住的话镜头就转不动了。
    */
   focusView?: TwinModalView | null
+  /** 显示场景工具条（搜索定位 / 截图 / 测量 / 图例 / 剖切）。 */
+  showSceneTools?: boolean
+  /** 截图文件名用的标题。 */
+  sceneTitle?: string
 }>()
 
 /** 点中了某个部件，且通过了距离门禁。 */
@@ -74,6 +77,11 @@ let groundGrid: GroundGridLayer | null = null
 let animations: ModelAnimations | null = null
 let nodeIndex: NodeIndex = EMPTY_NODE_INDEX
 
+const sceneCamera = useSceneCamera({
+  core: () => core,
+  config: () => props.config,
+})
+
 const model = useTwinModelLoad({
   core: () => core,
   asset: () => props.config.model.asset,
@@ -84,17 +92,11 @@ const model = useTwinModelLoad({
     animations?.dispose()
     animations = new ModelAnimations(asset.root, asset.clips)
     animations.apply(props.config.model.animations)
-    applyInitialPose(asset.root)
+    sceneCamera.applyInitial(asset.root)
     refreshLayers()
   },
 })
 
-usePartClick({
-  element: () => containerRef.value,
-  core: () => core,
-  parts: () => layers?.parts ?? null,
-  onPartClick: (part) => emit('partClick', part),
-})
 const roam = useRoamTour({
   core: () => core,
   config: () => props.config,
@@ -105,12 +107,25 @@ const viewpoints = useViewpointSwitch({
   onSwitch: (camera) => {
     // 手动切视点即打断漫游：否则下一帧轨迹又把镜头拽走，看着像点了没反应
     roam.pause()
-    if (core === null) return
-    applyCameraPose(core, camera)
-    core.controls.update()
+    sceneCamera.applyCamera(camera)
   },
 })
 
+const tools = useSceneTools({
+  core: () => core,
+  element: () => containerRef.value,
+  config: () => props.config,
+  nodeIndex: () => nodeIndex,
+  title: () => props.sceneTitle ?? '',
+})
+
+usePartClick({
+  element: () => containerRef.value,
+  core: () => core,
+  parts: () => layers?.parts ?? null,
+  onPartClick: (part) => emit('partClick', part),
+  intercept: tools.interceptClick,
+})
 const anchors = computed(() => props.anchorValues ?? EMPTY_ANCHOR_VALUES)
 const arrows = computed(() => props.arrowValues ?? EMPTY_ARROW_VALUES)
 const panels = computed(() => props.panelValues ?? EMPTY_PANEL_VALUES)
@@ -182,20 +197,6 @@ function syncGroundGrid(): void {
   )
 }
 
-/**
- * 模型装好后的初始取景：有视点就用标了默认的那个（没标则用第一个），
- * 一个视点都没配才把整个模型框进画面。
- * ⚠ 只在装载时用一次，不跟着配置每次重算——否则用户在运行态转了镜头，
- * 任何一次配置变更都会把镜头拽回默认机位。
- */
-function applyInitialPose(root: Object3D): void {
-  if (core === null) return
-  const camera = defaultCameraOf(props.config.cameras)
-  if (camera === null) return frameObject(core, root)
-  applyCameraPose(core, camera)
-  core.controls.update()
-}
-
 onMounted(() => {
   const element = containerRef.value
   if (element === null) return
@@ -233,18 +234,11 @@ onBeforeUnmount(() => {
   nodeIndex = EMPTY_NODE_INDEX
 })
 
-/** 把一个取景快照落到相机上。 */
-function applyFocusView(view: TwinModalView | null | undefined): void {
-  if (core === null || view === null || view === undefined) return
-  applyCameraPose(core, view)
-  core.controls.update()
-}
-
 watch(
   () => props.config.model.asset,
   () => void model.load(),
 )
-watch(() => props.focusView, applyFocusView)
+watch(() => props.focusView, sceneCamera.applyView)
 watch(() => props.config, refreshLayers)
 watch(liveValues, (values) => layers?.setValues(values))
 </script>
@@ -262,6 +256,7 @@ watch(liveValues, (values) => layers?.setValues(values))
       :error-message="model.errorMessage.value"
       :missing-nodes="model.missingNodes.value"
     />
+    <TwinSceneTools v-if="showSceneTools === true" :tools="tools" />
     <TwinViewpointBar
       v-if="viewpoints.items.value.length > 0"
       :items="viewpoints.items.value"

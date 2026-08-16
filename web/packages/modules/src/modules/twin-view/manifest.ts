@@ -59,6 +59,15 @@ export default defineModule({
       span: 'half',
     },
     {
+      key: 'showSceneTools',
+      label: '场景工具条',
+      type: 'boolean',
+      group: '运行态',
+      // ⚠ 同样刻意不给 default：缺省即 false = 不显示，存量大屏零回归
+      span: 'full',
+      help: '运行态左上角提供场景内搜索定位、当前画面 PNG 截图、两点测量、颜色图例与剖切面。',
+    },
+    {
       key: TWIN_CONFIG_KEY,
       label: '孪生场景',
       type: 'object',
