@@ -6,7 +6,7 @@
  * 所以外部数一律经 `toFiniteNumber` 与 `usableStep` 进来。
  */
 import type { TwinAnchor, TwinFlowLink, TwinFlowValues } from '@dt/twin-config'
-import { toFiniteNumber } from '@dt/twin-config'
+import { flowKindColor, flowKindToken, toFiniteNumber } from '@dt/twin-config'
 import * as THREE from 'three'
 
 import { distanceResolver, type DistanceContext } from './distanceContext'
@@ -14,23 +14,8 @@ import { resolveVisibility } from './distanceRules'
 import { resolveColorSpec } from './themeColor'
 
 /** 种类不认得时的兜底色，只影响外观、不影响任何读数 */
-const COLOR_FALLBACK = '#00cefc'
 /** 停流时的灰显色 */
 const INACTIVE_COLOR = '#6b7686'
-/** 各能源种类的内置配色；主题里配了 `--flow-<kind>` 时以主题为准 */
-const KIND_COLORS: Readonly<Record<string, string>> = {
-  water: '#4cc9ff',
-  steam: '#dde5f2',
-  electricity: '#ffd166',
-  power: '#ffd166',
-  gas: '#f78c6b',
-  oil: '#c9a227',
-  heat: '#ff6b6b',
-  cold: '#8ecae6',
-  air: '#8fe3a5',
-}
-/** 只有这个形状的种类名才拿去拼 CSS 变量名 */
-const KIND_TOKEN_RE = /^[a-z0-9-]+$/
 /** 停流时的透明度，两种材质共用 */
 const INACTIVE_OPACITY = 0.12
 const TUBE_OPACITY = 0.28
@@ -374,13 +359,15 @@ export class FlowLayer {
     }
   }
 
-  /** 种类配色：主题 token 优先，其次内置色，都没有就用缺省色。 */
+  /**
+   * 种类配色：主题 token 优先，其次内置色，都没有就用缺省色。
+   * ⚠ 色表来自 `@dt/twin-config`，与图例共用一份：两边各存一份的话，
+   * 图例上的色块与画面上的管线会悄悄分叉，而用户正是照着图例认颜色的。
+   */
   private colorOf(kind: string): THREE.Color {
-    const key = kind.trim().toLowerCase()
-    const themed = KIND_TOKEN_RE.test(key)
-      ? resolveColorSpec(`--flow-${key}`, this.host)
-      : null
-    return themed ?? new THREE.Color(KIND_COLORS[key] ?? COLOR_FALLBACK)
+    const token = flowKindToken(kind)
+    const themed = token === null ? null : resolveColorSpec(token, this.host)
+    return themed ?? new THREE.Color(flowKindColor(kind))
   }
 
   // ⚠ 管线几何是一条流一份（形状就是那条路径，共用不了），漏掉它的 dispose

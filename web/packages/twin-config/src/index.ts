@@ -31,6 +31,29 @@ export {
 } from './bindingRows'
 export type { TwinBindingRow } from './bindingRows'
 export { defaultCameraOf } from './cameraSelect'
+export {
+  FLOW_COLOR_FALLBACK,
+  FLOW_KIND_COLORS,
+  flowKindColor,
+  flowKindToken,
+} from './flowColors'
+export {
+  TWIN_CLIP_AXES,
+  clipPlaneFor,
+  collectSceneLegend,
+  formatMeasureDistance,
+  measureDistance,
+  screenshotFileName,
+  screenshotStamp,
+  searchSceneEntities,
+} from './sceneTools'
+export type {
+  TwinClipAxis,
+  TwinClipPlane,
+  TwinLegendEntry,
+  TwinSearchHit,
+  TwinSearchSource,
+} from './sceneTools'
 export { flattenPanelFields } from './normalizeElements'
 export type { FlatPanelField } from './normalizeElements'
 export {

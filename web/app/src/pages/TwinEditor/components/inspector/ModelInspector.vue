@@ -6,6 +6,8 @@
  * 存的那一份没有任何一处会报错，表现只是这张屏上的模型不见了。
  * ⚠ 收整份 `TwinModelRef`、回整份：就地改 props 的那次界面照常刷新，
  * 但上层按引用比对时会当成「没变」，撤销栈里前后两帧指向同一个对象。
+ * ⚠ 不给配「保留原始材质」：本项目从不做统一提亮，一律用 GLB 自带的 PBR，
+ * 那个开关关掉也没有另一档行为。字段本身留着，存量数据照常读得出来。
  */
 import type { TwinModelRef, Vec3 } from '@dt/twin-config'
 import { DtButton, DtColorInput, DtIcon, DtNumberInput, DtSwitch } from '@dt/ui'
@@ -170,15 +172,6 @@ function toggleBackground(opaque: boolean): void {
         size="sm"
         @update:model-value="write({ showGroundGrid: $event })"
       />
-      <DtSwitch
-        :model-value="modelValue.originalMaterials"
-        label="保留原始材质"
-        size="sm"
-        @update:model-value="write({ originalMaterials: $event })"
-      />
-      <p class="text-xs text-text-disabled">
-        保留原始材质 = 用 GLB 自带的 PBR，不做统一提亮。
-      </p>
     </InspectorSection>
 
     <InspectorSection title="内置动画">
