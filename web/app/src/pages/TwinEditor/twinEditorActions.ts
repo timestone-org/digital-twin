@@ -92,6 +92,30 @@ function createHierActions(
 }
 
 /**
+ * 把手柄拖出来的位置 / 朝向落进配置。
+ * ⚠ 走合并写入：一次拖动逐帧来几十条，各记一条撤销的话撤销一次只退回一帧。
+ * @param doc 文档态
+ * @param change 手柄回传的改动
+ */
+function applyTransform(doc: TwinDoc, change: GizmoChange): void {
+  const config = doc.config.value
+  const list = config[change.kind]
+  const patch =
+    change.direction === null
+      ? { position: change.position }
+      : { position: change.position, direction: change.direction }
+  doc.commitMerged(
+    {
+      ...config,
+      [change.kind]: list.map((item) =>
+        item.id === change.id ? { ...item, ...patch } : item,
+      ),
+    },
+    `gizmo:${change.kind}:${change.id}`,
+  )
+}
+
+/**
  * 装上动作集。
  * @param doc 文档态
  * @param select 动作产生新实体时把选中挪过去
@@ -136,24 +160,7 @@ export function createTwinEditorActions(
       doc.commit({ ...doc.config.value, ...patch })
     },
 
-    transformEntity: (change) => {
-      const config = doc.config.value
-      const list = config[change.kind]
-      const patch =
-        change.direction === null
-          ? { position: change.position }
-          : { position: change.position, direction: change.direction }
-      doc.commitMerged(
-        {
-          ...config,
-          [change.kind]: list.map((item) =>
-            item.id === change.id ? { ...item, ...patch } : item,
-          ),
-        },
-        `gizmo:${change.kind}:${change.id}`,
-      )
-    },
-
+    transformEntity: (change) => applyTransform(doc, change),
     endTransform: () => doc.endMerge(),
 
     toggleVisible: (kind, id) => {

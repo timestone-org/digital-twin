@@ -26,6 +26,14 @@ export interface ViewpointSwitch {
 /** 数字键只到 9：再往上没有对应的键，第 10 个之后只能点或用方括号翻。 */
 const MAX_DIGIT_SHORTCUT = 9
 
+/** 前后翻的按键；方括号与翻页键各给一档。 */
+const STEP_KEYS: Readonly<Record<string, number>> = {
+  ']': 1,
+  PageDown: 1,
+  '[': -1,
+  PageUp: -1,
+}
+
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   const tag = target.tagName
@@ -35,6 +43,29 @@ function isTypingTarget(target: EventTarget | null): boolean {
     tag === 'SELECT' ||
     target.isContentEditable
   )
+}
+
+/**
+ * 这一下按键要切到哪个视点；不是切换键给 null。
+ * ⚠ 前后翻时没停在任何视点上就从第一个开始，而不是当成「找不到」放弃——
+ * 用户刚打开大屏还没切过，按一下方括号该有反应。
+ * @param key 按键
+ * @param items 当前显示的视点
+ * @param activeId 当前停在哪个视点上
+ */
+function keyTarget(
+  key: string,
+  items: readonly TwinCamera[],
+  activeId: string,
+): string | null {
+  if (key >= '1' && key <= String(MAX_DIGIT_SHORTCUT)) {
+    return items[Number(key) - 1]?.id ?? null
+  }
+  const delta = STEP_KEYS[key]
+  if (delta === undefined || items.length === 0) return null
+  const current = items.findIndex((item) => item.id === activeId)
+  const from = current < 0 ? 0 : current
+  return items[(from + delta + items.length) % items.length]?.id ?? null
 }
 
 /**
@@ -69,21 +100,11 @@ export function useViewpointSwitch(
     options.onSwitch(camera)
   }
 
-  /** 按当前位置前后翻一个；没停在任何视点上时从第一个开始。 */
-  function step(delta: number): void {
-    const list = items.value
-    if (list.length === 0) return
-    const current = list.findIndex((item) => item.id === activeId.value)
-    const from = current < 0 ? 0 : current
-    const next = list[(from + delta + list.length) % list.length]
-    if (next !== undefined) switchTo(next.id)
-  }
-
-  function onDigit(key: string): boolean {
-    const index = Number(key) - 1
-    const camera = items.value[index]
-    if (camera === undefined) return false
-    switchTo(camera.id)
+  /** 这一下按的是什么；接住了给 true。 */
+  function handleKey(key: string): boolean {
+    const id = keyTarget(key, items.value, activeId.value)
+    if (id === null) return false
+    switchTo(id)
     return true
   }
 
@@ -92,17 +113,7 @@ export function useViewpointSwitch(
     if (isTypingTarget(event.target)) return
     if (!options.config().viewpoints.keyboard) return
     if (items.value.length === 0) return
-    const key = event.key
-    let handled = false
-    if (key >= '1' && key <= String(MAX_DIGIT_SHORTCUT)) handled = onDigit(key)
-    else if (key === ']' || key === 'PageDown') {
-      step(1)
-      handled = true
-    } else if (key === '[' || key === 'PageUp') {
-      step(-1)
-      handled = true
-    }
-    if (handled) event.preventDefault()
+    if (handleKey(event.key)) event.preventDefault()
   }
 
   function attach(): void {

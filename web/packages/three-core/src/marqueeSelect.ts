@@ -62,15 +62,30 @@ export function projectedBoxInRect(
       y === 0 ? box.min.y : box.max.y,
       z === 0 ? box.min.z : box.max.z,
     )
-    point.project(camera)
-    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return false
-    if (point.z < -1 || point.z > 1) return false
-    const screenX = viewport.left + ((point.x + 1) / 2) * viewport.width
-    const screenY = viewport.top + ((1 - point.y) / 2) * viewport.height
-    if (screenX < rect.left || screenX > rect.left + rect.width) return false
-    if (screenY < rect.top || screenY > rect.top + rect.height) return false
+    if (!cornerInRect(point, rect, camera, viewport)) return false
   }
   return true
+}
+
+/** 一个角投影之后落在框里吗；投不出来或出了视锥都算不在。 */
+function cornerInRect(
+  point: THREE.Vector3,
+  rect: ScreenRect,
+  camera: THREE.Camera,
+  viewport: ScreenRect,
+): boolean {
+  point.project(camera)
+  if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return false
+  // ⚠ 出了视锥就整体不算：那说明对象横跨近裁面，投影坐标已经翻折
+  if (point.z < -1 || point.z > 1) return false
+  const screenX = viewport.left + ((point.x + 1) / 2) * viewport.width
+  const screenY = viewport.top + ((1 - point.y) / 2) * viewport.height
+  return (
+    screenX >= rect.left &&
+    screenX <= rect.left + rect.width &&
+    screenY >= rect.top &&
+    screenY <= rect.top + rect.height
+  )
 }
 
 /** 包围盒的八个角，按三个轴各取 min / max。 */

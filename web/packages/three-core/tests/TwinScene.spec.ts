@@ -837,13 +837,7 @@ describe('视点切换控件', () => {
     const wrapper = mountScene({ config: withViewpoints() })
     await flushPromises()
 
-    wrapper.element.dispatchEvent(
-      new KeyboardEvent('keydown', {
-        key: '2',
-        cancelable: true,
-        bubbles: true,
-      }),
-    )
+    await wrapper.trigger('keydown', { key: '2' })
 
     await vi.waitFor(() => {
       expect(cameraOf().fov).toBe(55)

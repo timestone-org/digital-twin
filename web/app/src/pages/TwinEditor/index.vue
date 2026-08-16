@@ -270,13 +270,13 @@ onBeforeRouteLeave(async () => {
         </div>
 
         <TwinInspector
+          v-model:gizmo-mode="gizmoMode"
           class="w-80 shrink-0 overflow-y-auto border-l border-border-subtle"
           :config="config"
           :selection="selection"
           :model-nodes="modelNodes"
           :picking="pending !== null"
           :roam-previewing="roamPreviewing"
-          v-model:gizmo-mode="gizmoMode"
           @patch="actions?.patchConfig($event)"
           @request-pick="requestPick"
           @cancel-pick="pending = null"

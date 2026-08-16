@@ -8,7 +8,7 @@
 import type { BindingPayload } from '@dt/contracts'
 import { type TwinConfig, remapTwinBindings } from '@dt/twin-config'
 import { computed, ref, shallowRef } from 'vue'
-import type { ComputedRef } from 'vue'
+import type { ComputedRef, Ref } from 'vue'
 
 /** 撤销栈上限。⚠ 每一帧存的是整份配置，不封顶时长会话能吃掉几十兆。 */
 export const TWIN_HISTORY_LIMIT = 100
@@ -49,6 +49,49 @@ export interface TwinDoc {
 }
 
 /**
+ * 压一帧进历史。
+ * ⚠ 撤销之后再改，被撤掉的那些帧就此丢弃——这是所有编辑器的既定行为。
+ * ⚠ 溢出时从头砍；砍掉的帧里如果含着「已保存」那一帧，脏标记要跟着失效。
+ */
+function pushFrame(history: History, frame: TwinFrame): void {
+  const { frames, index, savedIndex } = history
+  const kept = frames.value.slice(0, index.value + 1)
+  kept.push(frame)
+  const overflow = Math.max(0, kept.length - TWIN_HISTORY_LIMIT)
+  frames.value = overflow > 0 ? kept.slice(overflow) : kept
+  index.value = frames.value.length - 1
+  savedIndex.value -= overflow
+}
+
+/** 同一段连续动作：换掉当前这一帧，历史长度不变。 */
+function replaceFrame(history: History, frame: TwinFrame): void {
+  const kept = history.frames.value.slice(0, history.index.value)
+  kept.push(frame)
+  history.frames.value = kept
+  history.index.value = kept.length - 1
+}
+
+/** 配置没换引用就不记一帧；换了则连绑定一起搬到新行号上。 */
+function nextFrame(previous: TwinFrame, next: TwinConfig): TwinFrame | null {
+  return next === previous.config ? null : frameOf(previous, next)
+}
+
+/** 撤销栈的三件套；收成一个对象是为了让上面几支不必逐个传。 */
+interface History {
+  frames: Ref<TwinFrame[]>
+  index: Ref<number>
+  savedIndex: Ref<number>
+}
+
+/** 换一份配置，并把绑定搬到新的行号上。 */
+function frameOf(previous: TwinFrame, next: TwinConfig): TwinFrame {
+  return {
+    config: next,
+    bindings: remapTwinBindings(previous.config, next, previous.bindings),
+  }
+}
+
+/**
  * 造一份文档态。
  * @param initial 从节点上读出来的配置与绑定
  */
@@ -57,6 +100,7 @@ export function createTwinDoc(initial: TwinFrame): TwinDoc {
   const frames = shallowRef<TwinFrame[]>([initial])
   const index = ref(0)
   const savedIndex = ref(0)
+  const history: History = { frames, index, savedIndex }
   /** 当前正在合并的那段连续动作；null = 没有。 */
   let mergeKey: string | null = null
 
@@ -65,17 +109,6 @@ export function createTwinDoc(initial: TwinFrame): TwinDoc {
     // 越界只可能是本文件自己算错了下标；回退到第一帧而不是抛，避免整页白屏
     return frame ?? initial
   })
-
-  function push(frame: TwinFrame): void {
-    // 撤销之后再改，被撤掉的那些帧就此丢弃——这是所有编辑器的既定行为
-    const kept = frames.value.slice(0, index.value + 1)
-    kept.push(frame)
-    // 溢出时从头砍；砍掉的帧里如果含着「已保存」那一帧，脏标记要跟着失效
-    const overflow = Math.max(0, kept.length - TWIN_HISTORY_LIMIT)
-    frames.value = overflow > 0 ? kept.slice(overflow) : kept
-    index.value = frames.value.length - 1
-    savedIndex.value -= overflow
-  }
 
   return {
     config: computed(() => current.value.config),
@@ -86,33 +119,19 @@ export function createTwinDoc(initial: TwinFrame): TwinDoc {
     canRedo: computed(() => index.value < frames.value.length - 1),
 
     commit: (next) => {
-      const previous = current.value
-      if (next === previous.config) return
+      const frame = nextFrame(current.value, next)
+      if (frame === null) return
       // 普通写入打断合并段：中间插了别的操作，再拖就该另起一帧
       mergeKey = null
-      push({
-        config: next,
-        bindings: remapTwinBindings(previous.config, next, previous.bindings),
-      })
+      pushFrame(history, frame)
     },
 
     commitMerged: (next, key) => {
-      const previous = current.value
-      if (next === previous.config) return
-      const frame: TwinFrame = {
-        config: next,
-        bindings: remapTwinBindings(previous.config, next, previous.bindings),
-      }
-      if (mergeKey === key) {
-        // 同一段动作：换掉当前这一帧，历史长度不变
-        const kept = frames.value.slice(0, index.value)
-        kept.push(frame)
-        frames.value = kept
-        index.value = kept.length - 1
-        return
-      }
+      const frame = nextFrame(current.value, next)
+      if (frame === null) return
+      if (mergeKey === key) return replaceFrame(history, frame)
       mergeKey = key
-      push(frame)
+      pushFrame(history, frame)
     },
 
     endMerge: () => {
@@ -120,7 +139,10 @@ export function createTwinDoc(initial: TwinFrame): TwinDoc {
     },
 
     commitBindings: (next) => {
-      push({ config: current.value.config, bindings: [...next] })
+      pushFrame(history, {
+        config: current.value.config,
+        bindings: [...next],
+      })
     },
 
     undo: () => {

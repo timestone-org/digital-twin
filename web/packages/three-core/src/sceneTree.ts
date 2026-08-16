@@ -22,6 +22,12 @@ export interface SceneTreeNode {
   children: SceneTreeNode[]
 }
 
+// ⚠ 必须显式标返回类型：`instanceof` 就地收窄出来的是 `Mesh<any, any, any>`，
+// 三个 any 会一路漏到调用方，把几何与材质的类型检查全部关掉（同 nodeIndex）
+function isMesh(object: THREE.Object3D): object is THREE.Mesh {
+  return object instanceof THREE.Mesh
+}
+
 function triangleCount(mesh: THREE.Mesh): number {
   const geometry = mesh.geometry
   const index = geometry.getIndex()
@@ -31,7 +37,7 @@ function triangleCount(mesh: THREE.Mesh): number {
 }
 
 function walk(object: THREE.Object3D, uid: string): SceneTreeNode {
-  const mesh = object instanceof THREE.Mesh ? object : null
+  const mesh = isMesh(object) ? object : null
   const children = object.children.map((child, index) =>
     walk(child, `${uid}/${index}`),
   )

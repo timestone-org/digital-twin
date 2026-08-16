@@ -31,6 +31,25 @@ export interface StructureTree {
   rebuild: () => void
 }
 
+/** 在集合里加一个或去一个，回一份新的。 */
+function toggled(set: ReadonlySet<string>, uid: string): Set<string> {
+  const next = new Set(set)
+  if (!next.delete(uid)) next.add(uid)
+  return next
+}
+
+/** 把手动勾掉的那些恢复可见。 */
+function restoreHidden(
+  core: SceneCore | null,
+  hidden: ReadonlySet<string>,
+): void {
+  if (core === null) return
+  for (const uid of hidden) {
+    const object = objectAtUid(core.modelRoot, uid)
+    if (object !== null) object.visible = true
+  }
+}
+
 /**
  * 装上结构树。
  * @param options 场景内核与开关
@@ -48,52 +67,33 @@ export function useStructureTree(options: StructureTreeOptions): StructureTree {
     return buildSceneTree(core.modelRoot)
   })
 
-  function toggleOn(set: ReadonlySet<string>, uid: string): Set<string> {
-    const next = new Set(set)
-    if (!next.delete(uid)) next.add(uid)
-    return next
-  }
-
-  function toggleVisible(uid: string): void {
-    const core = options.core()
-    if (core === null) return
-    const object = objectAtUid(core.modelRoot, uid)
-    if (object === null) return
-    const next = toggleOn(hidden.value, uid)
-    object.visible = !next.has(uid)
-    hidden.value = next
-  }
-
-  function locate(uid: string): void {
-    const core = options.core()
-    if (core === null) return
-    const object = objectAtUid(core.modelRoot, uid)
-    if (object === null) return
-    frameBox(core, new THREE.Box3().setFromObject(object))
-  }
-
-  function restore(): void {
-    const core = options.core()
-    if (core === null) return
-    for (const uid of hidden.value) {
-      const object = objectAtUid(core.modelRoot, uid)
-      if (object !== null) object.visible = true
-    }
-  }
-
   return {
     nodes,
     expanded,
     hidden,
     toggleExpand: (uid) => {
-      expanded.value = toggleOn(expanded.value, uid)
+      expanded.value = toggled(expanded.value, uid)
     },
-    toggleVisible,
-    locate,
+
+    toggleVisible: (uid) => {
+      const core = options.core()
+      const object = core === null ? null : objectAtUid(core.modelRoot, uid)
+      if (object === null) return
+      const next = toggled(hidden.value, uid)
+      object.visible = !next.has(uid)
+      hidden.value = next
+    },
+
+    locate: (uid) => {
+      const core = options.core()
+      const object = core === null ? null : objectAtUid(core.modelRoot, uid)
+      if (core === null || object === null) return
+      frameBox(core, new THREE.Box3().setFromObject(object))
+    },
     rebuild: () => {
       // ⚠ 先把手动隐藏的恢复再清记录：换模型时不恢复的话，那些对象带着
       // `visible = false` 被留在旧场景里，而记录已经没了，谁也开不回来
-      restore()
+      restoreHidden(options.core(), hidden.value)
       hidden.value = new Set()
       expanded.value = new Set()
       version.value += 1

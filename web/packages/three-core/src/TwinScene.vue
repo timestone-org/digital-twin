@@ -19,7 +19,7 @@ import {
   EMPTY_FLOW_VALUES,
   EMPTY_PANEL_VALUES,
 } from '@dt/twin-config'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 
 import { GroundGridLayer } from './groundGrid'
 import { ModelAnimations } from './modelAnimations'
@@ -35,7 +35,7 @@ import TwinViewpointBar from './TwinViewpointBar.vue'
 import { usePartClick } from './usePartClick'
 import { useRenderLoop } from './useRenderLoop'
 import { useSceneCamera } from './useSceneCamera'
-import { useSceneTools } from './useSceneTools'
+import { SCENE_TOOLS_KEY, useSceneTools } from './useSceneTools'
 import { useStructureTree } from './useStructureTree'
 import { useTwinModelLoad } from './useTwinModelLoad'
 import { useViewpointSwitch } from './useViewpointSwitch'
@@ -130,6 +130,8 @@ const tools = useSceneTools({
   nodeIndex: () => nodeIndex,
   title: () => props.sceneTitle ?? '',
 })
+// 工具条是这套状态的视图，走注入而不是 prop——里面几个 ref 本就是给人改的
+provide(SCENE_TOOLS_KEY, tools)
 
 usePartClick({
   element: () => containerRef.value,
@@ -263,7 +265,7 @@ watch(liveValues, (values) => layers?.setValues(values))
       :error-message="model.errorMessage.value"
       :missing-nodes="model.missingNodes.value"
     />
-    <TwinSceneTools v-if="showSceneTools === true" :tools="tools" />
+    <TwinSceneTools v-if="showSceneTools === true" />
     <TwinStructurePanel v-if="showStructureTree === true" :tree="structure" />
     <TwinViewpointBar
       v-if="viewpoints.items.value.length > 0"

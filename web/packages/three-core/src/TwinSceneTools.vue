@@ -3,17 +3,20 @@
  * @fileoverview 运行态场景工具条：搜索定位、截图、两点测量、颜色图例、剖切。
  *
  * ⚠ 要吃指针事件，所以只占左上角一小块——铺满的话 OrbitControls 就收不到拖拽了。
- * ⚠ 收整个 `SceneTools` 而不是把八个字段摊成 prop：这个组件就是那个对象的视图，
- * 一一对应；摊开之后每加一件工具都要在两处各改一遍，漏一处不报错、只是不生效。
+ * ⚠ 从 provide 取整套 `SceneTools`，不摊成八个 prop：这个组件就是那个对象的
+ * 视图，一一对应；摊开之后每加一件工具都要在两处各改一遍，漏一处不报错、
+ * 只是不生效。走注入而不是 prop，是因为里面几个 ref 本就是给人改的。
  */
-import type { TwinClipAxis, TwinSearchHit } from '@dt/twin-config'
+import type { TwinSearchHit } from '@dt/twin-config'
 import { formatMeasureDistance } from '@dt/twin-config'
 import { DtButton, DtInput, DtSelect, DtSlider } from '@dt/ui'
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
 
-import type { SceneTools } from './useSceneTools'
+import { SCENE_TOOLS_KEY, type SceneTools } from './useSceneTools'
 
-const props = defineProps<{ tools: SceneTools }>()
+// 宿主一定 provide 过才会渲染这个组件；取不到就是接线漏了，当场报比静默好
+const tools = inject(SCENE_TOOLS_KEY) as SceneTools
+const { query, clipAxis, clipRatio, legendOpen } = tools
 
 const KIND_LABELS: Readonly<Record<TwinSearchHit['kind'], string>> = {
   part: '部件',
@@ -33,19 +36,18 @@ const CLIP_RANGE = { min: 0, max: 1, step: 0.01 }
 
 /** 截断了多少条没显示；0 = 全都列出来了。 */
 const hidden = computed(() =>
-  Math.max(0, props.tools.total.value - props.tools.hits.value.length),
+  Math.max(0, tools.total.value - tools.hits.value.length),
 )
 
 const measureText = computed(() => {
-  const value = props.tools.measured.value
+  const value = tools.measured.value
   return Number.isFinite(value) ? formatMeasureDistance(value) : ''
 })
 
 /** 下拉给回来的是裸字符串，在这里收窄回联合类型；对不上就当没改。 */
 function onAxis(next: string): void {
   const found = AXIS_OPTIONS.find((item) => item.value === next)
-  if (found !== undefined)
-    props.tools.clipAxis.value = found.value as TwinClipAxis
+  if (found !== undefined) clipAxis.value = found.value
 }
 </script>
 
@@ -53,13 +55,13 @@ function onAxis(next: string): void {
   <div class="twin-tools" data-test="twin-scene-tools">
     <div class="twin-tools__row">
       <DtInput
-        :model-value="tools.query.value"
+        :model-value="query"
         type="search"
         size="sm"
         aria-label="场景内搜索"
         placeholder="搜部件 / 层级 / 节点"
         class="twin-tools__grow"
-        @update:model-value="tools.query.value = $event"
+        @update:model-value="query = $event"
       />
       <DtButton
         variant="soft"
@@ -81,19 +83,19 @@ function onAxis(next: string): void {
       />
       <DtButton
         v-if="tools.legend.value.length > 0"
-        :variant="tools.legendOpen.value ? 'solid' : 'soft'"
+        :variant="legendOpen ? 'solid' : 'soft'"
         intent="neutral"
         size="sm"
         icon="palette"
         aria-label="颜色图例"
         title="颜色图例：这些颜色分别代表什么"
-        @click="tools.legendOpen.value = !tools.legendOpen.value"
+        @click="legendOpen = !legendOpen"
       />
     </div>
 
     <div class="twin-tools__row">
       <DtSelect
-        :model-value="tools.clipAxis.value"
+        :model-value="clipAxis"
         :options="AXIS_OPTIONS"
         aria-label="剖切轴"
         size="sm"
@@ -101,13 +103,13 @@ function onAxis(next: string): void {
         @update:model-value="onAxis"
       />
       <DtSlider
-        v-if="tools.clipAxis.value !== 'none'"
-        :model-value="tools.clipRatio.value"
+        v-if="clipAxis !== 'none'"
+        :model-value="clipRatio"
         :range="CLIP_RANGE"
         label="剖切位置"
         size="sm"
         class="twin-tools__grow"
-        @update:model-value="tools.clipRatio.value = $event"
+        @update:model-value="clipRatio = $event"
       />
     </div>
 
@@ -117,7 +119,7 @@ function onAxis(next: string): void {
       }}
     </p>
 
-    <dl v-if="tools.legendOpen.value" class="twin-tools__legend">
+    <dl v-if="legendOpen" class="twin-tools__legend">
       <div
         v-for="entry in tools.legend.value"
         :key="entry.label"

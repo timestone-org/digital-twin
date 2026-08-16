@@ -42,21 +42,31 @@ export function gizmoTargetOf(
   if (selection === null || selection.id === undefined) return null
   const { kind, id } = selection
   if (!isGizmoKind(kind)) return null
+  if (kind === 'anchors') return anchorTarget(config, id)
+  if (kind === 'arrows') return arrowTarget(config, id)
+  return panelTarget(config, id)
+}
 
-  if (kind === 'anchors') {
-    const anchor = config.anchors.find((item) => item.id === id)
-    return anchor === undefined
-      ? null
-      : { kind, id, position: anchor.position, direction: null }
-  }
+function anchorTarget(config: TwinConfig, id: string): TwinGizmoTarget | null {
+  const anchor = config.anchors.find((item) => item.id === id)
+  return anchor === undefined
+    ? null
+    : { kind: 'anchors', id, position: anchor.position, direction: null }
+}
 
-  if (kind === 'arrows') {
-    const arrow = config.arrows.find((item) => item.id === id)
-    return arrow === undefined
-      ? null
-      : { kind, id, position: arrow.position, direction: arrow.direction }
-  }
+function arrowTarget(config: TwinConfig, id: string): TwinGizmoTarget | null {
+  const arrow = config.arrows.find((item) => item.id === id)
+  return arrow === undefined
+    ? null
+    : {
+        kind: 'arrows',
+        id,
+        position: arrow.position,
+        direction: arrow.direction,
+      }
+}
 
+function panelTarget(config: TwinConfig, id: string): TwinGizmoTarget | null {
   const panel = config.panels.find((item) => item.id === id)
   if (panel === undefined) return null
   // 锚定生效时位置由锚点定，拖 position 不会有任何反应
@@ -65,5 +75,5 @@ export function gizmoTargetOf(
     config.anchors.some((item) => item.id === panel.anchorId)
   return anchored
     ? null
-    : { kind, id, position: panel.position, direction: null }
+    : { kind: 'panels', id, position: panel.position, direction: null }
 }
