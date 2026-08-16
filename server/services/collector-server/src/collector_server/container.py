@@ -14,6 +14,7 @@ from collector_server.apps.collect.archive.writer import (
 from collector_server.apps.collect.bus.consumer import CommandConsumer
 from collector_server.apps.collect.drivers.base import DriverTimeouts
 from collector_server.apps.collect.drivers.registry import create_driver
+from collector_server.apps.collect.plan.adapt import to_connection
 from collector_server.apps.collect.plan.client import PlanClient
 from collector_server.apps.collect.plan.store import PlanStore
 from collector_server.apps.collect.runtime.session import (
@@ -28,7 +29,6 @@ from collector_server.apps.collect.runtime.supervisor import (
     SessionBuilder,
     SupervisorOptions,
 )
-from collector_server.apps.collect.schemas.plan import PlanSource
 from collector_server.apps.collect.services import (
     PointHistoryService,
     SourceStateService,
@@ -38,6 +38,7 @@ from collector_server.lease import RedisLease
 from collector_server.settings import Settings
 from collector_server.snapshot import RedisSnapshotStore
 from collector_server.stream import RedisArchiveStream
+from collectwire import PlanSource
 from lib.db import Database, PoolProfile
 from lib.utils.ids import uuid7
 
@@ -111,7 +112,7 @@ def _build_session_builder(
         return SourceSession(
             source=source,
             driver=create_driver(
-                source.protocol, source.to_connection(DRIVER_TIMEOUTS)
+                source.protocol, to_connection(source, DRIVER_TIMEOUTS)
             ),
             # 一条读数并联进快照与归档两条支线（COLLECT_DESIGN.md §4.3 的 ②③）
             sink=fan_out(

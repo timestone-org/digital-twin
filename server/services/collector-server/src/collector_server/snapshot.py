@@ -1,5 +1,6 @@
 """Redis 快照面：一个数据源一个哈希键。
 
+键名的唯一真源是 `collectwire`，读侧 platform-publisher 用同一份（ADR-0017）。
 零业务逻辑——编码归 sink，本模块只搬字符串并统一收敛 Redis 异常。
 """
 
@@ -10,20 +11,11 @@ from uuid import UUID
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
+from collectwire import snapshot_key
 from lib.errors import DependencyUnavailable
 from lib.logging import get_logger
 
 _logger = get_logger("collect.snapshot")
-
-KEY_PREFIX = "collect:snapshot"
-
-
-def snapshot_key(source_id: UUID) -> str:
-    """一个数据源的快照键。
-
-    Args: source_id。
-    """
-    return f"{KEY_PREFIX}:{source_id}"
 
 
 class SnapshotStore(Protocol):

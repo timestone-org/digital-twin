@@ -11,12 +11,8 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from collector_server.apps.collect.models.base import Base
+from collectwire import ERROR_CATEGORIES, STATE_TABLE_NAME, STATES
 from lib.db import TimestampMixin
-
-# 与 runtime/session.py 的 STATES 逐字一致
-STATES = ("connecting", "online", "offline")
-# 与 drivers/base.py 的 ErrorCategory 逐字一致
-ERROR_CATEGORIES = ("transient", "config", "auth")
 
 _STATE_LITERALS = ", ".join(f"'{state}'" for state in STATES)
 _CATEGORY_LITERALS = ", ".join(f"'{item}'" for item in ERROR_CATEGORIES)
@@ -25,7 +21,7 @@ _CATEGORY_LITERALS = ", ".join(f"'{item}'" for item in ERROR_CATEGORIES)
 class SourceState(TimestampMixin, Base):
     """一个数据源的采集运行态。"""
 
-    __tablename__ = "collect_source_states"
+    __tablename__ = STATE_TABLE_NAME
 
     # ⚠ 主键就是 platform 那边的数据源 id，不另生成一个：一个数据源只有一行
     # 运行态，用自然键才能靠 ON CONFLICT 幂等地覆盖

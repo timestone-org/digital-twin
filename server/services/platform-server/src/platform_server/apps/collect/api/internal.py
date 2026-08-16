@@ -10,13 +10,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from collectwire import CollectPlan
 from lib.web import ApiResponse, ok
 from platform_server.apps.collect.deps import (
     get_container,
     get_session,
     require_service_key,
 )
-from platform_server.apps.collect.schemas import CollectPlanOut
 from platform_server.apps.collect.services import (
     CredentialCipher,
     plan_service,
@@ -49,12 +49,12 @@ CipherDep = Annotated[CredentialCipher, Depends(get_cipher)]
 
 @router.get(
     "/collect-plan",
-    response_model=ApiResponse[CollectPlanOut],
+    response_model=ApiResponse[CollectPlan],
     summary="全量采集计划",
 )
 async def read_collect_plan(
     session: SessionDep, cipher: CipherDep
-) -> ApiResponse[CollectPlanOut]:
+) -> ApiResponse[CollectPlan]:
     """给 collector 拉全量计划。带内容摘要版本号。
 
     ⚠ 只有全量、没有增量：增量消息丢一条就永久错位，而错位的采集会写出看似

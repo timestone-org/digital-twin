@@ -7,9 +7,9 @@
 import uuid
 from datetime import UTC, datetime
 
+from collectwire import STATE_UNKNOWN
 from platform_server.apps.collect.errors import HistoryUnavailable
 from platform_server.apps.collect.services.state_source import (
-    STATE_UNKNOWN,
     UNKNOWN,
     SourceStateSource,
     decode_rows,

@@ -8,7 +8,8 @@ import json
 
 import pytest
 
-from collector_server.commands import BLOCK_SOCKET_MARGIN_S, _decode
+from collector_server.commands import _decode
+from collectwire import BLOCK_SOCKET_MARGIN_S
 
 GOOD = json.dumps({"request_id": "req-1", "action": "browse"})
 

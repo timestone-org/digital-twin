@@ -10,12 +10,9 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
-from collector_server.apps.collect.runtime.session import (
-    STATE_OFFLINE,
-    STATE_ONLINE,
-    SourceStatus,
-)
+from collector_server.apps.collect.runtime.session import SourceStatus
 from collector_server.apps.collect.services import SourceStateService
+from collectwire import STATE_OFFLINE, STATE_ONLINE
 from lib.db import Database
 
 pytestmark = pytest.mark.requires_postgres

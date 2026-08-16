@@ -11,13 +11,15 @@ from collections.abc import AsyncIterator, Mapping
 import pytest
 from redis.asyncio import Redis
 
-from lib.errors import DependencyUnavailable
-from platform_server.apps.collect.services.snapshot_source import (
+from collectwire import (
     FIELD_QUALITY,
     FIELD_TIMESTAMP_MS,
     FIELD_VALUE,
-    RedisSnapshotSource,
     snapshot_key,
+)
+from lib.errors import DependencyUnavailable
+from platform_server.apps.collect.services.snapshot_source import (
+    RedisSnapshotSource,
 )
 from timeseries import compose_node_key
 

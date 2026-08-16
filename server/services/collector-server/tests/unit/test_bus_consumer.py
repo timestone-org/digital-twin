@@ -7,18 +7,18 @@
 from typing import Any
 from uuid import UUID, uuid4
 
-from collector_server.apps.collect.bus.consumer import (
+from collector_server.apps.collect.bus.consumer import CommandConsumer
+from collector_server.apps.collect.drivers.base import (
+    BrowseItem,
+    DriverCapabilities,
+)
+from collectwire import (
     ACTION_BROWSE,
     ACTION_BROWSE_SUBTREE,
     ACTION_READ,
     ACTION_WRITE,
     STATUS_ERROR,
     STATUS_OK,
-    CommandConsumer,
-)
-from collector_server.apps.collect.drivers.base import (
-    BrowseItem,
-    DriverCapabilities,
 )
 
 NOW_MS = 1_767_323_045_000

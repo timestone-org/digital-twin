@@ -335,6 +335,15 @@ jobs:
             --junitxml=../../../timeseries-junit.xml 2>&1 \
             | tee ../../../timeseries-pytest.log
 
+      - name: domain/collectwire 单元 + 契约
+        working-directory: server/domain/collectwire
+        run: |
+          set -o pipefail
+          uv run pytest -q --cov=collectwire --cov-branch \
+            --cov-report=xml:../../../collectwire-coverage.xml \
+            --junitxml=../../../collectwire-junit.xml 2>&1 \
+            | tee ../../../collectwire-pytest.log
+
       - name: auth-server 全层
         working-directory: server/services/auth-server
         run: |
@@ -383,6 +392,8 @@ jobs:
           uv run --project server python scripts/gates/check_pytest_run.py \
             timeseries-junit.xml timeseries-pytest.log
           uv run --project server python scripts/gates/check_pytest_run.py \
+            collectwire-junit.xml collectwire-pytest.log
+          uv run --project server python scripts/gates/check_pytest_run.py \
             auth-junit.xml auth-pytest.log
           uv run --project server python scripts/gates/check_pytest_run.py \
             platform-junit.xml platform-pytest.log
@@ -399,6 +410,8 @@ jobs:
           uv run --project server python scripts/gates/check_coverage.py \
             timeseries timeseries-coverage.xml
           uv run --project server python scripts/gates/check_coverage.py \
+            collectwire collectwire-coverage.xml
+          uv run --project server python scripts/gates/check_coverage.py \
             auth-server auth-coverage.xml
           uv run --project server python scripts/gates/check_coverage.py \
             platform-server platform-coverage.xml
@@ -412,7 +425,8 @@ jobs:
         run: |
           git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
           uv run --project server diff-cover \
-            lib-coverage.xml timeseries-coverage.xml auth-coverage.xml \
+            lib-coverage.xml timeseries-coverage.xml \
+            collectwire-coverage.xml auth-coverage.xml \
             platform-coverage.xml opcua-coverage.xml \
             collector-coverage.xml \
             --compare-branch "origin/${{ github.base_ref }}" --fail-under=85

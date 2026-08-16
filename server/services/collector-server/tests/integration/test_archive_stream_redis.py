@@ -12,12 +12,12 @@ from uuid import uuid4
 import pytest
 from redis.asyncio import Redis
 
-from collector_server.commands import TRACEPARENT_KEY
 from collector_server.stream import (
     ROWS_FIELD,
     RedisArchiveStream,
     stream_key,
 )
+from collectwire import TRACEPARENT_KEY
 
 TS_MS = 1_767_323_045_000
 MAXLEN = 1000

@@ -6,6 +6,8 @@ requires-python = ">=3.12"
 dependencies = [
     "lib[auth,db,mssql,redis,s3,web]",
     "timeseries",
+    # 计划、命令信封、快照键与运行态列名的唯一真源，与 collector 共用（ADR-0017）
+    "collectwire",
     "numpy>=2.1",
     "scikit-learn>=1.7",
     # publisher 角色打 realtime-hub 的主题登记与批推（docs/DASHBOARD_DESIGN.md §6）。
@@ -26,6 +28,7 @@ platform-server = "platform_server.__main__:main"
 [tool.uv.sources]
 lib = { workspace = true }
 timeseries = { workspace = true }
+collectwire = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

@@ -12,14 +12,26 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from collectwire import (
+    ACTION_BROWSE,
+    ACTION_BROWSE_SUBTREE,
+    ACTION_READ,
+    ACTION_VALIDATE,
+    ACTION_WRITE,
+)
 from lib.errors import DependencyUnavailable
 
-# 假件按动作预置应答，键就是命令总线上的动作名
-ACTION_BROWSE = "browse"
-ACTION_BROWSE_SUBTREE = "browse_subtree"
-ACTION_READ = "read"
-ACTION_WRITE = "write"
-ACTION_VALIDATE = "validate"
+__all__ = [
+    "ACTION_BROWSE",
+    "ACTION_BROWSE_SUBTREE",
+    "ACTION_READ",
+    "ACTION_VALIDATE",
+    "ACTION_WRITE",
+    "FakeChannelPublisher",
+    "FakeCommandTransport",
+    "FakeHistorySource",
+    "unreachable_transport",
+]
 
 
 @dataclass

@@ -9,7 +9,7 @@ import contextlib
 from collections.abc import Sequence
 from urllib.parse import urlparse
 
-from collector_server.apps.collect.schemas.plan import PlanSource
+from collectwire import PlanSource
 
 # 与 collector → PLC 连接的预算一致（runtime-resilience §3.1）
 PROBE_TIMEOUT_S = 5.0

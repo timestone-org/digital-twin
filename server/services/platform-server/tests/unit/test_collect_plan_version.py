@@ -6,18 +6,18 @@
 
 import uuid
 
-from platform_server.apps.collect.schemas import PlanPointOut, PlanSourceOut
+from collectwire import PlanPoint, PlanSource
 from platform_server.apps.collect.services.plan_service import plan_version
 
 SOURCE_ID = uuid.UUID("0192f0c0-0000-7000-8000-0000000000e1")
 
 
-def build_source(*point_codes: str) -> PlanSourceOut:
+def build_source(*point_codes: str) -> PlanSource:
     """一个带若干点位的计划数据源。
 
     Args: point_codes。
     """
-    return PlanSourceOut(
+    return PlanSource(
         source_id=SOURCE_ID,
         code="line-1",
         protocol="opcua",
@@ -26,7 +26,7 @@ def build_source(*point_codes: str) -> PlanSourceOut:
         poll_interval_ms=1000,
         options={},
         points=[
-            PlanPointOut(
+            PlanPoint(
                 point_code=code,
                 address=f"ns=2;s={code}",
                 sampling_interval_ms=1000,
@@ -63,8 +63,9 @@ def test_removing_a_point_changes_the_version() -> None:
 
 def test_changing_an_address_changes_the_version() -> None:
     before = plan_version([build_source("outlet_temp")], {})
-    changed = build_source("outlet_temp")
-    changed.points[0].address = "ns=3;s=other"
+    source = build_source("outlet_temp")
+    moved = source.points[0].model_copy(update={"address": "ns=3;s=other"})
+    changed = source.model_copy(update={"points": (moved,)})
     assert plan_version([changed], {}) != before
 
 
@@ -82,8 +83,13 @@ def test_a_param_override_changes_the_version() -> None:
 
 
 def test_a_password_change_changes_the_version() -> None:
-    # 凭据变了连接参数就变了，supervisor 按版本比对整条重建会话
+    """⚠ 凭据变了连接参数就变了，supervisor 按版本比对整条重建会话。
+
+    这条也是计划里的口令**不能用 SecretStr** 的理由：摘要按 `model_dump` 算，
+    遮成星号之后改口令算不出新版本，采集侧就永远不会拿新凭据重连。
+    """
     before = plan_version([build_source("outlet_temp")], {})
-    changed = build_source("outlet_temp")
-    changed.password = "secret"
+    changed = build_source("outlet_temp").model_copy(
+        update={"password": "secret"}
+    )
     assert plan_version([changed], {}) != before

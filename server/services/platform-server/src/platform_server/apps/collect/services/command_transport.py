@@ -1,8 +1,6 @@
 """命令总线的传输面：Redis list 做的一问一答，platform 是**发起端**。
 
-请求进 `collect:cmd:req`，应答进 `collect:cmd:reply:{request_id}`。键名与信封
-字段与 collector-server 的 `commands.py` 逐字一致——服务之间不许互相 import，
-故只能两边各写一份，改一边就要改另一边（docs/COLLECT_DESIGN.md §5.3）。
+键名与信封字段的唯一真源是 `collectwire`，采集侧用的是同一份（ADR-0017）。
 零业务逻辑：载荷怎么解释归 `command_bus.py`。
 """
 
@@ -13,40 +11,17 @@ from typing import Any, Protocol, cast
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
+from collectwire import (
+    BLOCK_SOCKET_MARGIN_S,
+    REPLY_PAIR_LENGTH,
+    REQUEST_KEY,
+    TRACEPARENT_KEY,
+    reply_key,
+)
 from lib.errors import DependencyUnavailable
-from lib.logging import current_log_context, get_logger
-from lib.web.middleware import new_span_id, new_trace_id
+from lib.logging import current_traceparent, get_logger
 
 _logger = get_logger("platform.collect.bus")
-
-# 信封里承载链路的键名，与 api-contract §10 的消息契约同名
-TRACEPARENT_KEY = "traceparent"
-
-REQUEST_KEY = "collect:cmd:req"
-REPLY_PREFIX = "collect:cmd:reply"
-
-# ⚠ 阻塞等应答的连接不能用 1s 的 socket 超时：BLPOP 阻塞满一拍就会被驱动层判成
-# 读超时抛出来，于是「现场还没答复」被报成「Redis 坏了」。socket 超时必须比阻塞
-# 时长再宽一点
-BLOCK_SOCKET_MARGIN_S = 5.0
-# BLPOP 回包里 `(键名, 内容)` 这一对的长度
-_PAIR = 2
-
-
-def reply_key(request_id: str) -> str:
-    """一次请求的应答键。
-
-    Args: request_id。
-    """
-    return f"{REPLY_PREFIX}:{request_id}"
-
-
-def current_traceparent() -> str:
-    """当前上下文的 W3C traceparent；没有上下文就现开一条链路。"""
-    context = current_log_context()
-    trace_id = context.trace_id or new_trace_id()
-    span_id = context.span_id or new_span_id()
-    return f"00-{trace_id}-{span_id}-01"
 
 
 class CommandTransport(Protocol):
@@ -136,7 +111,7 @@ def _decode(raw: object) -> dict[str, Any] | None:
     if not isinstance(raw, list | tuple):
         return None
     fields = tuple(cast("Sequence[object]", raw))
-    if len(fields) < _PAIR or not isinstance(fields[1], str):
+    if len(fields) < REPLY_PAIR_LENGTH or not isinstance(fields[1], str):
         return None
     try:
         decoded: object = json.loads(fields[1])

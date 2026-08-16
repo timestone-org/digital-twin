@@ -10,11 +10,10 @@ from typing import Any, cast
 import pytest
 from redis.exceptions import RedisError
 
+from collectwire import REQUEST_KEY, reply_key
 from lib.errors import DependencyUnavailable
 from platform_server.apps.collect.services.command_transport import (
-    REQUEST_KEY,
     RedisCommandTransport,
-    reply_key,
 )
 
 REQUEST_ID = "req-1"

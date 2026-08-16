@@ -13,6 +13,8 @@ dependencies = [
     "lib[db,redis,web]",
     # 点位身份与归档值编解码的唯一真源，采集侧写、平台侧读（ADR-0004）
     "timeseries",
+    # 计划、命令信封、快照键与运行态列名的唯一真源，与 platform 共用（ADR-0017）
+    "collectwire",
     # ⚠ 钉死而非范围：workspace 共用一个锁文件，opcua-server 也钉在这个版本，
     # 两处写不同范围只会让升级时其中一个静默变版本。本服务只用文档化的
     # `Client` 面，且 asyncua **只允许出现在 drivers/opcua/ 下**（CONTEXT.md §3）。
@@ -29,6 +31,7 @@ collector-server = "collector_server.__main__:main"
 [tool.uv.sources]
 lib = { workspace = true }
 timeseries = { workspace = true }
+collectwire = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

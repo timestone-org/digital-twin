@@ -7,7 +7,7 @@
 from typing import Protocol
 
 from collector_server.apps.collect.errors import PlanUnavailable
-from collector_server.apps.collect.schemas.plan import CollectPlan
+from collectwire import CollectPlan
 from lib.logging import get_logger
 
 _logger = get_logger("collect.plan.store")

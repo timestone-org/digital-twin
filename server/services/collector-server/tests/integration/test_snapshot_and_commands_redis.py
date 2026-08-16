@@ -11,13 +11,14 @@ from uuid import uuid4
 import pytest
 from redis.asyncio import Redis
 
-from collector_server.commands import (
+from collector_server.commands import RedisCommandTransport
+from collector_server.snapshot import RedisSnapshotStore
+from collectwire import (
     REQUEST_KEY,
     TRACEPARENT_KEY,
-    RedisCommandTransport,
     reply_key,
+    snapshot_key,
 )
-from collector_server.snapshot import RedisSnapshotStore, snapshot_key
 
 TTL_S = 30
 TS_MS = 1_767_323_045_000

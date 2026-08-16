@@ -3,13 +3,13 @@
 守的是「一条坏应答与现场没答复对调用方是同一件事」。
 """
 
-from platform_server.apps.collect.services.command_transport import (
+from collectwire import (
     BLOCK_SOCKET_MARGIN_S,
     REPLY_PREFIX,
     REQUEST_KEY,
-    _decode,
     reply_key,
 )
+from platform_server.apps.collect.services.command_transport import _decode
 
 
 def test_the_request_key_matches_the_collector_side() -> None:

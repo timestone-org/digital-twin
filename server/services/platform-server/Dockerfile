@@ -18,12 +18,14 @@ COPY lib/pyproject.toml lib/
 # 找本地成员，缺一个就是 `Distribution not found at file:///src/...`，
 # 而报错发生在装依赖那层，与「谁依赖了它」隔着两个文件
 COPY domain/timeseries/pyproject.toml domain/timeseries/
+COPY domain/collectwire/pyproject.toml domain/collectwire/
 COPY services/platform-server/pyproject.toml services/platform-server/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --package platform-server --frozen --no-install-project --no-dev
 
 COPY lib/ lib/
 COPY domain/timeseries/ domain/timeseries/
+COPY domain/collectwire/ domain/collectwire/
 COPY services/platform-server/ services/platform-server/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --package platform-server --frozen --no-dev

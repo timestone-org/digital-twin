@@ -11,9 +11,14 @@ from uuid import UUID
 
 from collector_server.apps.collect import tuning
 from collector_server.apps.collect.drivers.base import Sample, ValueSink
-from collector_server.apps.collect.schemas.plan import CollectPlan
 from collector_server.apps.collect.tuning import PlanView
 from collector_server.snapshot import SnapshotStore
+from collectwire import (
+    FIELD_QUALITY,
+    FIELD_TIMESTAMP_MS,
+    FIELD_VALUE,
+    CollectPlan,
+)
 from lib.errors import AppError
 from lib.logging import get_logger
 from timeseries import Quality
@@ -76,16 +81,17 @@ def fan_out(first: ValueSink, second: ValueSink) -> ValueSink:
 
 
 def encode_fields(pending: Mapping[str, Sample]) -> dict[str, str]:
-    """把一窗读数编成哈希字段。
-
-    ⚠ 字段形状是 collector 与 platform-publisher 之间的契约
-    （DASHBOARD_DESIGN.md §6），改它要先改契约测试。
+    """把一窗读数编成哈希字段。字段名取自 `collectwire`，读侧用的是同一份。
 
     Args: pending。
     """
     return {
         point_code: json.dumps(
-            {"value": value, "ts_ms": ts_ms, "quality": quality},
+            {
+                FIELD_VALUE: value,
+                FIELD_TIMESTAMP_MS: ts_ms,
+                FIELD_QUALITY: quality,
+            },
             ensure_ascii=False,
             separators=(",", ":"),
             # 现场可能给出 datetime 一类不可序列化的值，落成字符串好过丢掉整窗

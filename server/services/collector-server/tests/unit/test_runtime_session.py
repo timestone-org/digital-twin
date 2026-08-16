@@ -15,13 +15,12 @@ from collector_server.apps.collect.drivers.base import (
 )
 from collector_server.apps.collect.runtime.session import (
     BASE_BACKOFF_S,
-    STATE_OFFLINE,
     SessionOptions,
     SourceSession,
     backoff_delay_s,
     jitter,
 )
-from collector_server.apps.collect.schemas.plan import READ_MODE_POLL
+from collectwire import READ_MODE_POLL, STATE_OFFLINE
 
 OPTIONS = SessionOptions(heartbeat_interval_s=0.01, max_backoff_s=30.0)
 NO_ABILITIES = DriverCapabilities(

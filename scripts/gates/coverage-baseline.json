@@ -26,5 +26,9 @@
   "web": {
     "lines": 99.31,
     "branches": 95.55
+  },
+  "collectwire": {
+    "lines": 100.0,
+    "branches": 100.0
   }
 }

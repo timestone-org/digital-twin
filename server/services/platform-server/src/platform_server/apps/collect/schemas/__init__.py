@@ -8,11 +8,6 @@ from platform_server.apps.collect.schemas.history import (
     AggregateOut,
     HistoryPointOut,
 )
-from platform_server.apps.collect.schemas.plan import (
-    CollectPlanOut,
-    PlanPointOut,
-    PlanSourceOut,
-)
 from platform_server.apps.collect.schemas.point import (
     CHECK_PASSED,
     CHECK_REJECTED,
@@ -53,11 +48,8 @@ __all__ = [
     "BrowseIn",
     "BrowseItemOut",
     "BrowseOut",
-    "CollectPlanOut",
     "ConnectivityOut",
     "HistoryPointOut",
-    "PlanPointOut",
-    "PlanSourceOut",
     "PointBatchOut",
     "PointCreateIn",
     "PointItemIn",

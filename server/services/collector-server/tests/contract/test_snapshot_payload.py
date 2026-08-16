@@ -1,14 +1,14 @@
-"""守快照的跨服务契约：键名、字段名与载荷形状。
+"""守快照的编码：字段名是点位编码，值是那三项组成的 JSON。
 
-collector 写、`platform-publisher` 读（DASHBOARD_DESIGN.md §6）。改这里等于改
-一个已经上线的口径，必须先改这份契约。
+collector 写、`platform-publisher` 读（DASHBOARD_DESIGN.md §6）。键名与字段名
+本身的取值由 `collectwire` 的契约用例守，这里守的是编码这一步。
 """
 
 import json
 from uuid import UUID
 
 from collector_server.apps.collect.runtime.sink import encode_fields
-from collector_server.snapshot import KEY_PREFIX, snapshot_key
+from collectwire import snapshot_key
 
 SOURCE_ID = UUID("0192f000-0000-7000-8000-000000000001")
 TS_MS = 1_767_323_045_000
@@ -19,10 +19,6 @@ def test_snapshot_key_is_one_hash_per_source() -> None:
         snapshot_key(SOURCE_ID)
         == "collect:snapshot:0192f000-0000-7000-8000-000000000001"
     )
-
-
-def test_key_prefix_is_namespaced_by_the_owning_context() -> None:
-    assert KEY_PREFIX == "collect:snapshot"
 
 
 def test_field_name_is_the_point_code() -> None:

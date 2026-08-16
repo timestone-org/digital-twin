@@ -15,7 +15,6 @@ from collector_server.apps.collect.crud.point_history import (
     MAX_INSERT_ROWS,
 )
 from collector_server.apps.collect.models.point_history import PointHistory
-from collector_server.commands import TRACEPARENT_KEY
 from collector_server.stream import (
     KEY_PREFIX,
     ROWS_FIELD,
@@ -23,6 +22,7 @@ from collector_server.stream import (
     source_of,
     stream_key,
 )
+from collectwire import TRACEPARENT_KEY
 from timeseries import (
     CHUNK_INTERVAL,
     HISTORY_COLUMNS,

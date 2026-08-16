@@ -137,7 +137,9 @@
 21. **数组槽的索引必须连续且从 0 起**。`rows[7]` 在没有 `rows[0..6]` 时存在，
     渲染出来是一列全空的行。
 
-### 2.2 采集配置面的不变量（[ADR-0001](../../../docs/adr/0001-采集运行时独立成服务而配置面留在平台.md)、[ADR-0011](../../../docs/adr/0011-采集按驱动适配器分协议而采集计划保持协议无关.md)）
+### 2.2 采集配置面的不变量（[ADR-0001](../../../docs/adr/0001-采集运行时独立成服务而配置面留在平台.md)、[ADR-0011](../../../docs/adr/0011-采集按驱动适配器分协议而采集计划保持协议无关.md)、[ADR-0017](../../../docs/adr/0017-采集控制面的跨进程线形收进domain共享包.md)）
+
+⚠ 与 collector 之间的四条线形口径（计划、命令信封、快照键、运行态列名）**不在本服务里声明**，两侧 import `domain/collectwire` 的同一份。本服务只留传输实现与出参映射。
 
 22. **平台侧绝不建立任何现场连接**。浏览地址空间、连通性测试、寻址串校验、下发
     写值，四件都经 Redis 命令总线交给持有会话的 collector 执行。自己也开一条连接
@@ -151,7 +153,9 @@
     标 `unverified` 并如实回给调用方；只有被现场明确拒掉才 400。
 26. **采集计划的版本号是内容摘要**，不是 `max(updated_at)`。删掉一个点位不会让任何
     一行的时刻变新，用时间戳做版本删除就永远推不下去，而 collector 会继续采一个
-    已经删掉的点位。
+    已经删掉的点位。⚠ 摘要按 `model_dump` 算，所以计划里的口令是裸 `str` 加
+    `repr=False`，**不是 `SecretStr`**——遮成星号之后改口令算不出新版本号，
+    collector 就永远不会拿新凭据重连（ADR-0017）。
 27. **归档宽表跨 schema 只读**：`collect.point_history` 归 collector 写独占，本服务
     走独立只读连接池 + `SET TRANSACTION READ ONLY`，**不跨 schema JOIN、不建外键、
     不共用事务**。
@@ -299,7 +303,7 @@ apps/collect/
 │                 · point_histories（含 :aggregate）· internal（采集计划）
 ├── services/     事务边界
 │   ├── command_bus          命令总线发起端：信封、traceparent、结论翻译
-│   ├── command_transport    Redis list 传输面，键名与 collector 逐字一致
+│   ├── command_transport    Redis list 传输面，键名取自 domain/collectwire
 │   ├── address_check        寻址串校验的三档结论
 │   ├── binding_guard        删点位前问大屏绑定（只走 dashboard 的 services 公开面）
 │   ├── credentials          数据源口令的 Fernet 收发，密钥由配置派生
@@ -308,7 +312,8 @@ apps/collect/
 │   ├── runtime_param_face   采集/归档两组运行参数，复用 apps/runtime_params
 │   ├── history_service      游标分页与分桶聚合
 │   ├── history_source       归档库的只读连接
-│   ├── state_source         采集运行态的只读面（跨 schema 读 collector 写的表）
+│   ├── state_source         采集运行态的只读面（跨 schema 读 collector 写的表，
+│   │                        表名与列名取自 domain/collectwire）
 │   ├── point_catalog        大屏绑定问的那张点位台账（PointCatalog 的真实现）
 │   └── transactions         跨进程调用之前放掉只读事务
 ├── crud/         source · point · history（跨 schema 只读 SQL）

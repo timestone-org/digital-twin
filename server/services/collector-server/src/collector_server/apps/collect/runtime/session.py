@@ -18,20 +18,18 @@ from collector_server.apps.collect.drivers.base import (
     PointSpec,
     ValueSink,
 )
+from collector_server.apps.collect.plan.adapt import specs_of
 from collector_server.apps.collect.runtime.poller import PollLoop, PollOptions
-from collector_server.apps.collect.schemas.plan import (
+from collectwire import (
     READ_MODE_SUBSCRIBE,
+    STATE_CONNECTING,
+    STATE_OFFLINE,
+    STATE_ONLINE,
     PlanSource,
 )
 from lib.logging import get_logger
 
 _logger = get_logger("collect.session")
-
-# 运行态三档，字符串常量（禁数字枚举）
-STATE_CONNECTING = "connecting"
-STATE_ONLINE = "online"
-STATE_OFFLINE = "offline"
-STATES = (STATE_CONNECTING, STATE_ONLINE, STATE_OFFLINE)
 
 # 首次退避的基数，之后指数增长到上限
 BASE_BACKOFF_S = 1.0
@@ -185,7 +183,7 @@ class SourceSession:
         ⚠ 驱动不支持订阅时**自动降级为轮询**，降级方向是显式的：宁可多问
         几次，也不要静默变成一个不产值的会话（COLLECT_DESIGN.md §4.1）。
         """
-        specs = self._source.specs()
+        specs = specs_of(self._source)
         self._driver.load_points(specs)
         if self._wants_subscribe():
             await self._subscribe(

@@ -1,7 +1,6 @@
 """点位当前值的读侧：从 collector 写的 Redis 快照里按点位取读数。
 
-键与字段形状是 collector 与本服务之间的契约（COLLECT_DESIGN §4.3 的 ⑤），
-由 `tests/contract/test_snapshot_wire.py` 两侧比对。
+键与字段形状的唯一真源是 `collectwire`，写侧用的是同一份（ADR-0017）。
 ⚠ 只 HMGET 要用的字段，**绝不 HGETALL**：一个数据源下可能挂着上万个点位，
 而一张大屏只绑其中十几个。
 """
@@ -15,6 +14,12 @@ from uuid import UUID
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
+from collectwire import (
+    FIELD_QUALITY,
+    FIELD_TIMESTAMP_MS,
+    FIELD_VALUE,
+    snapshot_key,
+)
 from lib.errors import DependencyUnavailable
 from lib.logging import get_logger
 from timeseries import (
@@ -26,22 +31,6 @@ from timeseries import (
 )
 
 _logger = get_logger("platform.collect.snapshot")
-
-# 一个数据源一个哈希键，与 collector 的 `snapshot_key()` 逐字一致
-KEY_PREFIX = "collect:snapshot"
-# 哈希值里的三个字段，与 collector 的 `encode_fields()` 逐字一致
-FIELD_VALUE = "value"
-FIELD_TIMESTAMP_MS = "ts_ms"
-FIELD_QUALITY = "quality"
-SNAPSHOT_FIELDS = (FIELD_QUALITY, FIELD_TIMESTAMP_MS, FIELD_VALUE)
-
-
-def snapshot_key(source_id: UUID) -> str:
-    """一个数据源的快照键。
-
-    Args: source_id。
-    """
-    return f"{KEY_PREFIX}:{source_id}"
 
 
 @dataclass(frozen=True)

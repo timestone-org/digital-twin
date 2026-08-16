@@ -9,11 +9,11 @@ import json
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from collectwire import CollectPlan, PlanSource
 from platform_server.apps.collect.crud import point_crud, source_crud
 from platform_server.apps.collect.models import CollectPoint, CollectSource
-from platform_server.apps.collect.schemas import CollectPlanOut, PlanSourceOut
 from platform_server.apps.collect.services.credentials import CredentialCipher
-from platform_server.apps.collect.services.presenters import to_plan_source_out
+from platform_server.apps.collect.services.presenters import to_plan_source
 from platform_server.apps.runtime_params.services import param_service
 
 PlanParams = dict[str, dict[str, bool | int | float]]
@@ -21,7 +21,7 @@ PlanParams = dict[str, dict[str, bool | int | float]]
 
 async def build_plan(
     session: AsyncSession, *, cipher: CredentialCipher
-) -> CollectPlanOut:
+) -> CollectPlan:
     """读出全量计划。只下发已启用的数据源。
 
     ⚠ 停用的源整条不下发，而不是下发一个「停用」标记：collector 的收敛逻辑
@@ -36,7 +36,7 @@ async def build_plan(
     for point in points:
         grouped.setdefault(str(point.source_id), []).append(point)
     rendered = [
-        to_plan_source_out(
+        to_plan_source(
             source,
             points=grouped.get(str(source.id), []),
             password=_password_of(cipher, source),
@@ -45,9 +45,9 @@ async def build_plan(
         if source.is_enabled
     ]
     params = await param_service.overrides_for_plan(session)
-    return CollectPlanOut(
+    return CollectPlan(
         version=plan_version(rendered, params),
-        sources=rendered,
+        sources=tuple(rendered),
         params=params,
     )
 
@@ -62,7 +62,7 @@ def _password_of(cipher: CredentialCipher, source: CollectSource) -> str | None:
     return cipher.decrypt(source.credential_enc)
 
 
-def plan_version(sources: list[PlanSourceOut], params: PlanParams) -> str:
+def plan_version(sources: list[PlanSource], params: PlanParams) -> str:
     """按计划内容算摘要。
 
     ⚠ 不用 `max(updated_at)`：删掉一个点位不会让任何一行的时刻变新，用时间戳

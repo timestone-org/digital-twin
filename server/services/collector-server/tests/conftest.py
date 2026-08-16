@@ -28,13 +28,13 @@ from collector_server.apps.collect.drivers.base import (
     ValueSink,
 )
 from collector_server.apps.collect.runtime.session import SourceStatus
-from collector_server.apps.collect.schemas.plan import (
+from collector_server.settings import Settings
+from collector_server.stream import StreamEntry, stream_key
+from collectwire import (
     CollectPlan,
     PlanPoint,
     PlanSource,
 )
-from collector_server.settings import Settings
-from collector_server.stream import StreamEntry, stream_key
 from lib.db import Database, PoolProfile
 from lib.logging import configure_logging
 

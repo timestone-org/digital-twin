@@ -9,11 +9,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from uuid import UUID
 
+from collector_server.apps.collect.plan.adapt import without_points
 from collector_server.apps.collect.plan.store import PlanStore
 from collector_server.apps.collect.runtime.session import SourceSession
-from collector_server.apps.collect.schemas.plan import PlanSource
 from collector_server.clock import Clock, utc_now_ms
 from collector_server.lease import Lease
+from collectwire import PlanSource
 from lib.logging import get_logger
 
 _logger = get_logger("collect.supervisor")
@@ -162,10 +163,9 @@ class CollectSupervisor:
         if running is None:
             await self._launch(source)
             return
-        is_rebuilt = (
-            applied is None
-            or applied.without_points() != source.without_points()
-        )
+        is_rebuilt = applied is None or without_points(
+            applied
+        ) != without_points(source)
         if is_rebuilt:
             # 连接参数变了：整条重建，光换点位救不回来
             await self._drop(source.source_id)

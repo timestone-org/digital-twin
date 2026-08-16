@@ -29,21 +29,28 @@ from collector_server.apps.collect.services.subtree import (
 )
 from collector_server.clock import Clock, utc_now_ms
 from collector_server.commands import CommandTransport
+from collectwire import (
+    ACTION_BROWSE,
+    ACTION_BROWSE_SUBTREE,
+    ACTION_READ,
+    ACTION_WRITE,
+    REASON_DRIVER_FAILED,
+    STATUS_ERROR,
+    STATUS_OK,
+)
 from lib.logging import get_logger
 
 _logger = get_logger("collect.bus")
 
-# 动作名是稳定字面量，与 platform 侧逐字一致（禁数字枚举）
-ACTION_BROWSE = "browse"
-# 一次收齐整棵子树。⚠ 与 browse 是两个动作而不是一个带开关的参数：两者的
-# 设备负载差着两个数量级、预算也不是一档，混在一起迟早有人拿它当浏览用
-ACTION_BROWSE_SUBTREE = "browse_subtree"
-ACTION_READ = "read"
-ACTION_WRITE = "write"
-ACTIONS = (ACTION_BROWSE, ACTION_BROWSE_SUBTREE, ACTION_READ, ACTION_WRITE)
-
-STATUS_OK = "ok"
-STATUS_ERROR = "error"
+# 本服务**实现**了的动作。⚠ 它是 `ACTIONS` 的子集而不等于它：线上存在但这里
+# 没实现的动作（一期是 `validate`）一律回 `unknown_action`，发起方据此把结论
+# 记成「未校验」——那与「通过」是两回事（ADR-0011 的代价三）
+SUPPORTED_ACTIONS = (
+    ACTION_BROWSE,
+    ACTION_BROWSE_SUBTREE,
+    ACTION_READ,
+    ACTION_WRITE,
+)
 
 # Redis 抖动后等一拍再取，避免空转打满 CPU
 RETRY_PAUSE_S = 1.0
@@ -173,7 +180,7 @@ class CommandConsumer:
             return
         except Exception as error:
             await self._reply_error(
-                request, "driver_failed", type(error).__name__
+                request, REASON_DRIVER_FAILED, type(error).__name__
             )
             return
         await self._transport.reply(

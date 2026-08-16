@@ -18,12 +18,14 @@ WORKDIR /src
 COPY pyproject.toml uv.lock ./
 COPY lib/pyproject.toml lib/
 COPY domain/timeseries/pyproject.toml domain/timeseries/
+COPY domain/collectwire/pyproject.toml domain/collectwire/
 COPY services/collector-server/pyproject.toml services/collector-server/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --package collector-server --frozen --no-install-project --no-dev
 
 COPY lib/ lib/
 COPY domain/timeseries/ domain/timeseries/
+COPY domain/collectwire/ domain/collectwire/
 COPY services/collector-server/ services/collector-server/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --package collector-server --frozen --no-dev

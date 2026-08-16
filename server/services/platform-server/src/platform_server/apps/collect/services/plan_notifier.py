@@ -9,11 +9,8 @@
 from dataclasses import dataclass
 from typing import Protocol
 
-from lib.logging import get_logger
-from platform_server.apps.collect.services.command_transport import (
-    TRACEPARENT_KEY,
-    current_traceparent,
-)
+from collectwire import TRACEPARENT_KEY
+from lib.logging import current_traceparent, get_logger
 
 _logger = get_logger("platform.collect.plan")
 

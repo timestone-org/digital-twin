@@ -7,7 +7,7 @@ Options / Settings 默认值。分组与键名和 platform 的参数目录**逐�
 
 from typing import Protocol
 
-from collector_server.apps.collect.schemas.plan import CollectPlan
+from collectwire import CollectPlan
 
 SECTION_COLLECT = "collect"
 SECTION_ARCHIVE = "archive"

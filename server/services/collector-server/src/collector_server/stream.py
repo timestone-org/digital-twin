@@ -13,9 +13,9 @@ from uuid import UUID
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
-from collector_server.commands import TRACEPARENT_KEY, current_traceparent
+from collectwire import TRACEPARENT_KEY
 from lib.errors import DependencyUnavailable
-from lib.logging import get_logger
+from lib.logging import current_traceparent, get_logger
 
 _logger = get_logger("collect.stream")
 

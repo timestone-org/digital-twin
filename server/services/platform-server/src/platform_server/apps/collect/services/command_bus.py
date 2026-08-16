@@ -10,8 +10,23 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
+from collectwire import (
+    ACTION_BROWSE,
+    ACTION_BROWSE_SUBTREE,
+    ACTION_READ,
+    ACTION_VALIDATE,
+    ACTION_WRITE,
+    REASON_BROWSE_UNSUPPORTED,
+    REASON_COLLECTOR_UNREACHABLE,
+    REASON_MALFORMED_REPLY,
+    REASON_SOURCE_OFFLINE,
+    REASON_UNKNOWN_ACTION,
+    REASON_WRITE_UNSUPPORTED,
+    STATUS_OK,
+    TRACEPARENT_KEY,
+)
 from lib.errors import DependencyUnavailable
-from lib.logging import get_logger
+from lib.logging import current_traceparent, get_logger
 from lib.utils.ids import uuid7
 from lib.utils.timeutils import utcnow
 from platform_server.apps.collect.errors import (
@@ -22,34 +37,10 @@ from platform_server.apps.collect.errors import (
     WriteUnsupported,
 )
 from platform_server.apps.collect.services.command_transport import (
-    TRACEPARENT_KEY,
     CommandTransport,
-    current_traceparent,
 )
 
 _logger = get_logger("platform.collect.command")
-
-# 动作名是稳定字面量，与 collector-server 的 `bus/consumer.py` 逐字一致
-ACTION_BROWSE = "browse"
-# 一次收齐整棵子树，勾上层节点用。⚠ 与 browse 分成两个动作：两者的设备负载
-# 差着两个数量级，预算不是一档
-ACTION_BROWSE_SUBTREE = "browse_subtree"
-ACTION_READ = "read"
-ACTION_WRITE = "write"
-# ⚠ 一期 collector 还不认识它，会回 `unknown_action`。那与超时同档：结论是
-# 「未校验」，绝不是「通过」（ADR-0011 的代价三）
-ACTION_VALIDATE = "validate"
-
-STATUS_OK = "ok"
-
-# collector 的 `errors.py` 里那组稳定 `reason` 字面量
-REASON_SOURCE_OFFLINE = "source_offline"
-REASON_BROWSE_UNSUPPORTED = "browse_unsupported"
-REASON_WRITE_UNSUPPORTED = "write_unsupported"
-REASON_UNKNOWN_ACTION = "unknown_action"
-# 本层自造的两条：应答里根本没有 status 字段 / 采集侧一句话都没回
-REASON_MALFORMED = "malformed_reply"
-REASON_NO_COLLECTOR = "collector_unreachable"
 
 _MS_PER_S = 1000
 
@@ -172,7 +163,7 @@ class CommandBus:
                 fields={"point_codes": []},
             )
         except CollectorUnreachable:
-            return REASON_NO_COLLECTOR
+            return REASON_COLLECTOR_UNREACHABLE
         return None if outcome.is_ok else outcome.reason
 
     async def verify_addresses(
@@ -195,7 +186,7 @@ class CommandBus:
             )
         except CollectorUnreachable:
             outcome = CommandOutcome(
-                is_ok=False, data={}, reason=REASON_NO_COLLECTOR
+                is_ok=False, data={}, reason=REASON_COLLECTOR_UNREACHABLE
             )
         if not outcome.is_ok:
             _logger.warning(
@@ -285,7 +276,7 @@ def _outcome(reply: dict[str, Any]) -> CommandOutcome:
     return CommandOutcome(
         is_ok=False,
         data={},
-        reason=reason if isinstance(reason, str) else REASON_MALFORMED,
+        reason=reason if isinstance(reason, str) else REASON_MALFORMED_REPLY,
     )
 
 

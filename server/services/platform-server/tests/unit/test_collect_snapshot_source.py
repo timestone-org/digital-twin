@@ -7,15 +7,17 @@
 import json
 import uuid
 
-from platform_server.apps.collect.services.snapshot_source import (
+from collectwire import (
     FIELD_QUALITY,
     FIELD_TIMESTAMP_MS,
     FIELD_VALUE,
+    snapshot_key,
+)
+from platform_server.apps.collect.services.snapshot_source import (
     PointReading,
     decode_reading,
     decode_rows,
     group_by_source,
-    snapshot_key,
 )
 
 SOURCE = uuid.UUID("0198f0c0-0000-7000-8000-00000000abcd")

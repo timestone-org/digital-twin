@@ -13,9 +13,9 @@ from uuid import UUID
 
 from collector_server.apps.collect import tuning
 from collector_server.apps.collect.drivers.base import ValueSink
-from collector_server.apps.collect.schemas.plan import CollectPlan
 from collector_server.apps.collect.tuning import PlanView
 from collector_server.stream import ArchiveStream
+from collectwire import CollectPlan
 from lib.logging import get_logger
 from timeseries import Quality
 

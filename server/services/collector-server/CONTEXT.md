@@ -2,6 +2,8 @@
 
 采集运行时：唯一持有现场连接的进程。按采集计划建会话、订阅采样、写实时快照与历史归档，并执行来自 platform 的浏览与读写命令。数据在 `collect` schema，写独占（[ADR-0003](../../../docs/adr/0003-一库多schema且写独占读放行.md)）。切线见 [ADR-0001](../../../docs/adr/0001-采集运行时独立成服务而配置面留在平台.md)，驱动分层见 [ADR-0011](../../../docs/adr/0011-采集按驱动适配器分协议而采集计划保持协议无关.md)。
 
+⚠ 与 platform 之间的四条线形口径（计划、命令信封、快照键、运行态列名）**不在本服务里声明**，两侧 import `domain/collectwire` 的同一份（[ADR-0017](../../../docs/adr/0017-采集控制面的跨进程线形收进domain共享包.md)）。本服务只留传输实现与驱动适配。
+
 ---
 
 ## 1. 通用语言
@@ -42,6 +44,8 @@
 | `capabilities.supports_subscribe` | `capabilities.is_subscribe_supported` | 命名闸要求布尔带 `is_/has_/should_` 前缀（`browse` / `write` 同理） |
 | （未列） | `load_points(points)` | 轮询模式不订阅，而 `read_many` / `write` 只认已登记的 `point_code`。这不是给未来协议预留的字段，是 OPC UA 今天就需要的能力 |
 
+计划到驱动那一步的换手在 `apps/collect/plan/adapt.py`：`to_connection` / `specs_of` / `without_points`。**共享的计划形状上不许挂驱动方法**——那会让协议知识出现在协议无关的那一侧。
+
 **不为未来协议预留字段。** 接口只覆盖 OPC UA 已经需要的能力；第二个驱动进来时按实测差异改接口——那时有两个实现可以互相校验，改漏了会编译失败。
 
 ## 4. 关停顺序
@@ -66,7 +70,9 @@
 | 归档流 | `collect:archive:{source_id}` Stream，一条条目 = 一批行 | 只有本服务（writer 读完即 `XDEL`） |
 | 命令总线 | 请求 `collect:cmd:req`，应答 `collect:cmd:reply:{request_id}` | platform 发、本服务应 |
 
-快照字段的载荷是 `{"value":…, "ts_ms":…, "quality":…}`，与 publisher 之间的契约由 `tests/contract/test_snapshot_payload.py` 锁死；归档条目的信封（`rows` + `traceparent`）与流键由 `tests/contract/test_archive_envelope.py` 锁死。
+快照字段的载荷是 `{"value":…, "ts_ms":…, "quality":…}`。**键名与字段名取自 `collectwire`，读侧用的是同一份**，故不再有两侧比对的用例，编码这一步由 `tests/contract/test_snapshot_payload.py` 守；归档条目的信封（`rows` + `traceparent`）与流键只有本服务读写，由 `tests/contract/test_archive_envelope.py` 锁死。
+
+⚠ 运行态表是唯一还需要比对的一条：ORM 的列名从**属性名**推出来，两侧 import 同一份常量**拦不住属性改名**。`tests/contract/test_source_state_columns.py` 靠 `__table__` 反射守住这个缺口。
 
 ⚠ 归档条目**必须带 `traceparent`**：落库发生在另一拍、可能在另一个副本上，漏了它链路就在异步处齐断。
 ⚠ writer 靠 `SCAN collect:archive:*` 找流，不按计划列举：数据源从计划里删掉之后，它留在流里的行仍然必须落库。
@@ -87,6 +93,7 @@
 | 归档的 continuous aggregate | 先让原始表跑起来，聚合查询直接扫原始表（COLLECT_DESIGN §8） |
 | 按点位的保留期执行 | 全局压缩策略在迁移里，按点位的清理归 `platform-worker` 夜间批处理——迁移里禁止回填与删数据 |
 | 采集侧的 consumer group | 单活租约已经保证单消费者 |
+| 命令总线的 `validate` 动作 | 线上已有这个动作（platform 会发），本服务一期不实现，回 `unknown_action`；发起方据此记「未校验」而不是「通过」（ADR-0011 代价三）。实现集是 `SUPPORTED_ACTIONS`，它是 `collectwire.ACTIONS` 的真子集 |
 | 直接推 WebSocket | 只写 Redis 快照，推送归 `platform-publisher`（ADR-0005） |
 
 ## 8. 数据

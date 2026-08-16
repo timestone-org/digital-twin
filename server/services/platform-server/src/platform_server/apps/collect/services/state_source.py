@@ -6,8 +6,8 @@
 
 ⚠ 跨 schema **只读**：`collect` 归 collector-server 写独占，走归档那条独立
 只读连接池 + `SET TRANSACTION READ ONLY`，不 JOIN、不建外键、不共用事务。
-⚠ 表名与列名复述自 collector 的 `models/source_state.py`，跨 schema 不许共享
-ORM 模型，故由契约测试两侧比对。
+⚠ 表名与列名的唯一真源是 `collectwire`，写侧的 ORM 模型用的是同一份
+（ADR-0017）——跨 schema 仍然不共享 ORM 模型，共享的只是名字。
 """
 
 import uuid
@@ -15,6 +15,19 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
+from collectwire import (
+    ERROR_CATEGORY_COLUMN,
+    ERROR_DETAIL_COLUMN,
+    LEADER_COLUMN,
+    POINT_COUNT_COLUMN,
+    SOURCE_COLUMN,
+    STATE_COLUMN,
+    STATE_COLUMNS,
+    STATE_TABLE_NAME,
+    STATE_UNKNOWN,
+    STATES,
+    UPDATED_COLUMN,
+)
 from lib.logging import get_logger
 from platform_server.apps.collect.crud import HistorySource
 from platform_server.apps.collect.errors import HistoryUnavailable
@@ -22,28 +35,13 @@ from timeseries import HISTORY_SCHEMA
 
 _logger = get_logger("platform.collect.state")
 
-STATE_TABLE = f"{HISTORY_SCHEMA}.collect_source_states"
-SOURCE_COLUMN = "source_id"
-STATE_COLUMN = "state"
-POINT_COUNT_COLUMN = "point_count"
-ERROR_CATEGORY_COLUMN = "error_category"
-ERROR_DETAIL_COLUMN = "error_detail"
-LEADER_COLUMN = "leader_instance"
-UPDATED_COLUMN = "updated_at"
+# schema 前缀在这一侧补：共享口径只给表名，schema 是各服务自己的配置
+STATE_TABLE = f"{HISTORY_SCHEMA}.{STATE_TABLE_NAME}"
 
-# 与 collector 的 `models/source_state.py` 的 STATES 逐字一致
-STATES: tuple[str, ...] = ("connecting", "offline", "online")
-# 采集侧从没写过这一行时对外的取值。⚠ 不叫 offline：「采集器压根没接手过它」
-# 与「接手了但连不上」是两件事，处置完全不同——前者去看 collector 活没活，
-# 后者去看现场
-STATE_UNKNOWN = "unknown"
-
-# 抑制 S608 的理由 —— 拼进 SQL 的只有本模块的表名与列名常量，唯一的外部输入
-# 是 `:source_ids` 绑定参数
+# 抑制 S608 的理由 —— 拼进 SQL 的只有共享口径里的表名与列名常量，唯一的
+# 外部输入是 `:source_ids` 绑定参数
 _SELECT = (
-    f"SELECT {SOURCE_COLUMN}, {STATE_COLUMN}, {POINT_COUNT_COLUMN},"  # noqa: S608
-    f" {ERROR_CATEGORY_COLUMN}, {ERROR_DETAIL_COLUMN}, {LEADER_COLUMN},"
-    f" {UPDATED_COLUMN}"
+    f"SELECT {', '.join(STATE_COLUMNS)}"  # noqa: S608
     f" FROM {STATE_TABLE}"
     f" WHERE {SOURCE_COLUMN} = ANY(:source_ids)"
 )

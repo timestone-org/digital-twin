@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 
+from collectwire import PlanPoint, PlanSource
 from platform_server.apps.collect.models import CollectPoint, CollectSource
 from platform_server.apps.collect.protocols import (
     as_data_type,
@@ -10,8 +11,6 @@ from platform_server.apps.collect.protocols import (
 )
 from platform_server.apps.collect.schemas import (
     BrowseItemOut,
-    PlanPointOut,
-    PlanSourceOut,
     PointOut,
     SourceOut,
     SourceRuntimeOut,
@@ -126,17 +125,17 @@ def to_subtree_item_out(item: SubtreeEntry) -> SubtreeItemOut:
     )
 
 
-def to_plan_source_out(
+def to_plan_source(
     source: CollectSource,
     *,
     points: Sequence[CollectPoint],
     password: str | None = None,
-) -> PlanSourceOut:
+) -> PlanSource:
     """一个数据源在采集计划里的形态。
 
     Args: source, points, password（已解密的口令；只该来自计划构建那条内部路）。
     """
-    return PlanSourceOut(
+    return PlanSource(
         source_id=source.id,
         code=source.code,
         protocol=source.protocol,
@@ -146,8 +145,8 @@ def to_plan_source_out(
         options=_text_options(source),
         username=source.username,
         password=password,
-        points=[
-            PlanPointOut(
+        points=tuple(
+            PlanPoint(
                 point_code=point.code,
                 address=point.address,
                 sampling_interval_ms=point.sampling_interval_ms,
@@ -156,7 +155,7 @@ def to_plan_source_out(
                 archive_max_interval_ms=point.archive_max_interval_ms,
             )
             for point in points
-        ],
+        ),
     )
 
 

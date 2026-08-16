@@ -8,19 +8,21 @@ from typing import Any
 from uuid import UUID
 
 from collector_server.apps.collect.bus.consumer import (
-    ACTIONS,
-    STATUS_ERROR,
-    STATUS_OK,
+    SUPPORTED_ACTIONS,
     CommandConsumer,
     CommandRequest,
 )
-from collector_server.commands import (
+from collectwire import (
+    ACTION_VALIDATE,
+    ACTIONS,
     REPLY_PREFIX,
     REQUEST_KEY,
+    STATUS_ERROR,
+    STATUS_OK,
     TRACEPARENT_KEY,
-    current_traceparent,
     reply_key,
 )
+from lib.logging import current_traceparent
 
 SOURCE_ID = UUID("0192f000-0000-7000-8000-000000000001")
 NOW_MS = 1_767_323_045_000
@@ -71,8 +73,16 @@ def test_reply_key_is_per_request() -> None:
     assert reply_key("req-9") == "collect:cmd:reply:req-9"
 
 
-def test_the_four_actions_are_stable_strings() -> None:
-    assert ACTIONS == ("browse", "browse_subtree", "read", "write")
+def test_the_implemented_actions_are_a_subset_of_the_wire() -> None:
+    """⚠ 线上存在但本服务没实现的动作要回 `unknown_action`，不能假装支持。"""
+    assert set(SUPPORTED_ACTIONS) < set(ACTIONS)
+    assert SUPPORTED_ACTIONS == ("browse", "browse_subtree", "read", "write")
+
+
+def test_validate_is_on_the_wire_but_not_implemented_here_yet() -> None:
+    """一期没实现它，发起方据此把结论记成「未校验」而不是「通过」。"""
+    assert ACTION_VALIDATE in ACTIONS
+    assert ACTION_VALIDATE not in SUPPORTED_ACTIONS
 
 
 def test_request_needs_an_absolute_deadline() -> None:
