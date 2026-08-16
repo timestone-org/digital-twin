@@ -12,8 +12,9 @@ import DtCheckbox from '../../src/components/DtCheckbox/DtCheckbox.vue'
 
 describe('三态', () => {
   it('未勾时既不选中也不半选', () => {
-    const el = mount(DtCheckbox, { props: { modelValue: false } }).find('input')
-      .element
+    const el = mount(DtCheckbox, { props: { modelValue: false } }).find(
+      'input',
+    ).element
     expect([el.checked, el.indeterminate]).toEqual([false, false])
   })
 

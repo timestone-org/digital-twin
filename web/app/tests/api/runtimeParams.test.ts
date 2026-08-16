@@ -12,17 +12,29 @@ import { toRuntimeParamItem } from '@/api/runtimeParamsWire'
 
 const PLATFORM_PREFIX = '/api/v1/platform'
 
+// ⚠ 字段名以 openapi 的 RuntimeParamOut 为准（default_value / is_overridden）：
+// 此前这里的假件写的是 `default` / `overridden`，与后端从未一致——假件与线形
+// 一起漂，单测因此全绿而弹窗在真环境里读不到默认值
 const ITEM_WIRE = {
   section: 'dashboard',
   key: 'publish_window_ms',
   env_name: 'PLATFORM_PUBLISH_WINDOW_MS',
+  write_code: 'dashboard:edit',
   label: '发布节拍（毫秒）',
+  hint: '发布循环多久醒一次。',
+  kind: 'int',
+  unit: 'ms',
+  step: 100,
+  minimum: 100,
+  maximum: 60_000,
+  tier: 'instant',
+  danger: null,
   value: 500,
-  default: 1000,
-  overridden: true,
+  default_value: 1000,
+  previous_value: 1000,
+  is_overridden: true,
   updated_by: 'admin',
   updated_at: '2026-08-14T00:00:00Z',
-  previous_value: 1000,
 }
 
 let requestMock: ReturnType<typeof vi.fn>
@@ -48,7 +60,16 @@ describe('线形映射', () => {
       section: 'dashboard',
       key: 'publish_window_ms',
       envName: 'PLATFORM_PUBLISH_WINDOW_MS',
+      writeCode: 'dashboard:edit',
       label: '发布节拍（毫秒）',
+      hint: '发布循环多久醒一次。',
+      kind: 'int',
+      unit: 'ms',
+      step: 100,
+      minimum: 100,
+      maximum: 60_000,
+      tier: 'instant',
+      danger: null,
       value: 500,
       defaultValue: 1000,
       overridden: true,
@@ -62,7 +83,7 @@ describe('线形映射', () => {
     expect(
       toRuntimeParamItem({
         ...ITEM_WIRE,
-        overridden: false,
+        is_overridden: false,
         updated_by: null,
         updated_at: null,
         previous_value: null,
@@ -106,6 +127,22 @@ describe('读写与恢复默认', () => {
     expect(path).toBe('/runtime-params/dashboard:reset')
     expect(options.method).toBe('POST')
     expect(items).toHaveLength(1)
+  })
+})
+
+describe('采集分组走自己的路由', () => {
+  it('collect / archive 打在 /collect-runtime-params 上——写码不同，发错前缀就是 400', async () => {
+    await runtimeParams.listRuntimeParams('archive')
+    const [listPath] = call()
+    expect(listPath).toBe('/collect-runtime-params')
+
+    await runtimeParams.saveRuntimeParams('archive', { enabled: false })
+    const [savePath] = call()
+    expect(savePath).toBe('/collect-runtime-params/archive')
+
+    await runtimeParams.resetRuntimeParams('collect')
+    const [resetPath] = call()
+    expect(resetPath).toBe('/collect-runtime-params/collect:reset')
   })
 })
 

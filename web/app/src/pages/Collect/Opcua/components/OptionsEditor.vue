@@ -63,7 +63,7 @@ const isEmpty = computed(() => rows.value.length === 0)
 
 <template>
   <div class="flex flex-col gap-2">
-    <p v-if="isEmpty" class="text-xs text-muted">还没有连接参数。</p>
+    <p v-if="isEmpty" class="text-xs text-text-secondary">还没有连接参数。</p>
     <div
       v-for="(row, index) in rows"
       :key="`option-${index}`"

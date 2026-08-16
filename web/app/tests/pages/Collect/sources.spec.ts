@@ -1,11 +1,12 @@
 /**
- * @fileoverview 采集数据源列表页的行为契约。
+ * @fileoverview OPC UA 采集主从单页的行为契约。
  *
- * ⚠ 这一页最要紧的不是渲染对不对，而是三条口径：
+ * ⚠ 这一页最要紧的不是渲染对不对，而是四条口径：
  * 1. 「配置启用」与「此刻真在采」是两件事，不许合成一个状态灯。
- * 2. 连通性测试连不上时也是成功返回，结论在 `is_reachable` 里——把它当成
- *    「测试成功」会让人以为设备是通的。
- * 3. 删除前的确认文案要说清「点位不级联删」，否则用户会以为删源就干净了。
+ * 2. 「连接 / 断开」按钮改的是 `is_enabled`——本架构没有手动会话动作，
+ *    采集器按计划自动收敛。
+ * 3. 连通性测试连不上时也是成功返回，结论在 `is_reachable` 里。
+ * 4. 删除走「引用守卫」两级弹窗：409 时给出强制删除入口并说清后果。
  */
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -13,8 +14,9 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import type { CollectSource, CollectSourceRuntime } from '@dt/contracts'
 
+import { BizError } from '@/api/client'
 import * as collectApi from '@/api/collect'
-import CollectSourcesPage from '@/pages/Collect/OpcuaSources/index.vue'
+import CollectOpcuaPage from '@/pages/Collect/Opcua/index.vue'
 import { useAuthStore } from '@/stores/auth'
 
 vi.mock('vue-router', () => ({
@@ -23,20 +25,12 @@ vi.mock('vue-router', () => ({
   RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
 }))
 
-interface ConfirmAsk {
-  title: string
-  message: string
-  confirmText?: string
-  danger?: boolean
-}
-const confirmSpy = vi.fn<(request: ConfirmAsk) => Promise<boolean>>()
 const toastError = vi.fn()
 const toastSuccess = vi.fn()
 vi.mock('@dt/ui', async () => {
   const actual = await vi.importActual<Record<string, unknown>>('@dt/ui')
   return {
     ...actual,
-    useConfirm: () => ({ ask: confirmSpy }),
     useToast: () => ({
       success: toastSuccess,
       error: toastError,
@@ -46,7 +40,25 @@ vi.mock('@dt/ui', async () => {
   }
 })
 
-function runtime(over: Partial<CollectSourceRuntime> = {}): CollectSourceRuntime {
+// 右栏的浏览树与点位表各有自己的 spec，这里桩掉免得整页测试被它们的请求淹没
+vi.mock('@/pages/Collect/Opcua/components/BrowsePanel.vue', () => ({
+  default: {
+    name: 'BrowsePanel',
+    props: ['source'],
+    template: '<div data-test="browse-panel-stub" />',
+  },
+}))
+vi.mock('@/pages/Collect/Opcua/components/NodeTable.vue', () => ({
+  default: {
+    name: 'NodeTable',
+    props: ['source'],
+    template: '<div data-test="node-table-stub" />',
+  },
+}))
+
+function runtime(
+  over: Partial<CollectSourceRuntime> = {},
+): CollectSourceRuntime {
   return {
     state: 'online',
     point_count: 3,
@@ -63,8 +75,10 @@ function source(over: Partial<CollectSource> = {}): CollectSource {
     id: 's1',
     name: '一号车间 PLC',
     code: 'plant1',
+    description: null,
     protocol: 'opcua',
     endpoint: 'opc.tcp://10.0.0.2:4840',
+    username: null,
     has_credential: false,
     options_json: {},
     read_mode: 'subscribe',
@@ -95,10 +109,11 @@ async function render(rows: CollectSource[]): Promise<VueWrapper> {
   vi.spyOn(collectApi, 'listSources').mockResolvedValue({
     items: rows,
     page: 1,
-    size: 20,
+    size: 100,
     total: rows.length,
   })
-  const wrapper = mount(CollectSourcesPage, {
+  const wrapper = mount(CollectOpcuaPage, {
+    attachTo: document.body,
     global: {
       stubs: { RouterLink: { props: ['to'], template: '<a><slot /></a>' } },
     },
@@ -114,14 +129,23 @@ function clickByText(wrapper: VueWrapper, label: string): Promise<void> {
     : button.trigger('click').then(() => undefined)
 }
 
+/** 弹窗 teleport 在 body 上，`wrapper.findAll` 看不见它。 */
+function bodyButton(label: string): HTMLButtonElement {
+  const found = [...document.body.querySelectorAll('button')].find(
+    (one) => one.textContent?.trim() === label,
+  )
+  if (found === undefined) throw new Error(`弹窗里没有按钮「${label}」`)
+  return found
+}
+
 enableAutoUnmount(afterEach)
 
 beforeEach(() => {
   setActivePinia(createPinia())
   vi.useFakeTimers()
-  confirmSpy.mockReset().mockResolvedValue(true)
   toastError.mockReset()
   toastSuccess.mockReset()
+  document.body.innerHTML = ''
   signIn(['collect:view', 'collect:operate', 'collect:manage'])
 })
 
@@ -130,14 +154,54 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('列表', () => {
-  it('列出名称、编码与端点', async () => {
+describe('主从布局', () => {
+  it('左栏列出名称与端点，右栏详情头带编码', async () => {
     const text = (await render([source()])).text()
     expect(text).toContain('一号车间 PLC')
     expect(text).toContain('plant1')
     expect(text).toContain('opc.tcp://10.0.0.2:4840')
   })
 
+  it('默认选中第一个源，右栏直接是它的详情', async () => {
+    const wrapper = await render([
+      source(),
+      source({ id: 's2', name: '二号车间 PLC', code: 'plant2' }),
+    ])
+    expect(wrapper.find('[data-test="active-source-name"]').text()).toBe(
+      '一号车间 PLC',
+    )
+  })
+
+  it('点左栏条目切换右栏详情', async () => {
+    const wrapper = await render([
+      source(),
+      source({ id: 's2', name: '二号车间 PLC', code: 'plant2' }),
+    ])
+    const item = wrapper
+      .findAll('button')
+      .find((one) => one.text().includes('二号车间 PLC'))
+    await item?.trigger('click')
+    expect(wrapper.find('[data-test="active-source-name"]').text()).toBe(
+      '二号车间 PLC',
+    )
+  })
+
+  it('空列表给引导语而不是空白', async () => {
+    expect((await render([])).text()).toContain('还没有数据源')
+  })
+
+  it('描述与账户展示在详情头里', async () => {
+    const text = (
+      await render([
+        source({ description: '车间主 PLC', username: 'operator' }),
+      ])
+    ).text()
+    expect(text).toContain('车间主 PLC')
+    expect(text).toContain('operator')
+  })
+})
+
+describe('状态口径', () => {
   it('采集中与已断开分别成一档', async () => {
     expect((await render([source()])).text()).toContain('采集中')
     const offline = await render([
@@ -163,6 +227,15 @@ describe('列表', () => {
     expect(text).toContain('已停用')
   })
 
+  it('⚠ 配了 10 个只订上 8 个时，差额要写在界面上', async () => {
+    const text = (
+      await render([
+        source({ point_count: 10, runtime: runtime({ point_count: 8 }) }),
+      ])
+    ).text()
+    expect(text).toContain('2 个没订上')
+  })
+
   it('配了点位却没在采时，页顶给一条汇总提醒', async () => {
     const text = (
       await render([source({ runtime: runtime({ state: 'offline' }) })])
@@ -173,18 +246,27 @@ describe('列表', () => {
   it('都在采时不出那条提醒', async () => {
     expect((await render([source()])).text()).not.toContain('不在采集')
   })
+})
 
-  it('⚠ 配了 10 个只订上 8 个时，差额要写在界面上', async () => {
-    const text = (
-      await render([
-        source({ point_count: 10, runtime: runtime({ point_count: 8 }) }),
-      ])
-    ).text()
-    expect(text).toContain('2 个没订上')
+describe('连接与断开（= 启停采集）', () => {
+  it('已停用的源给「连接」，点下去把 is_enabled 拨成 true', async () => {
+    const update = vi
+      .spyOn(collectApi, 'updateSource')
+      .mockResolvedValue(source({ is_enabled: true }))
+    const wrapper = await render([source({ is_enabled: false })])
+    await clickByText(wrapper, '连接')
+    await flushPromises()
+    expect(update).toHaveBeenCalledWith('s1', { is_enabled: true })
   })
 
-  it('空列表给条目数而不是空白', async () => {
-    expect((await render([])).text()).toContain('共 0 个数据源')
+  it('启用中的源给「断开」，点下去把 is_enabled 拨成 false', async () => {
+    const update = vi
+      .spyOn(collectApi, 'updateSource')
+      .mockResolvedValue(source({ is_enabled: false }))
+    const wrapper = await render([source()])
+    await clickByText(wrapper, '断开')
+    await flushPromises()
+    expect(update).toHaveBeenCalledWith('s1', { is_enabled: false })
   })
 })
 
@@ -196,7 +278,7 @@ describe('连通性测试', () => {
       detail: null,
     })
     const wrapper = await render([source()])
-    await clickByText(wrapper, '测试')
+    await clickByText(wrapper, '连通性测试')
     await flushPromises()
     expect(toastSuccess).toHaveBeenCalled()
   })
@@ -208,49 +290,78 @@ describe('连通性测试', () => {
       detail: '端点无响应',
     })
     const wrapper = await render([source()])
-    await clickByText(wrapper, '测试')
+    await clickByText(wrapper, '连通性测试')
     await flushPromises()
     expect(toastSuccess).not.toHaveBeenCalled()
     expect(toastError).toHaveBeenCalledWith('端点无响应')
   })
 })
 
-describe('删除', () => {
-  it('⚠ 下面还有点位时，确认文案要说清点位不级联删', async () => {
-    vi.spyOn(collectApi, 'deleteSource').mockResolvedValue()
-    const wrapper = await render([source({ point_count: 12 })])
-    await clickByText(wrapper, '删除')
+describe('删除（引用守卫 + 强删）', () => {
+  async function openDelete(rows: CollectSource[]): Promise<VueWrapper> {
+    const wrapper = await render(rows)
+    const trash = wrapper
+      .findAll('button')
+      .find((one) => one.attributes('aria-label') === '删除')
+    if (trash === undefined) throw new Error('没有删除按钮')
+    await trash.trigger('click')
     await flushPromises()
-    const asked = confirmSpy.mock.calls[0]?.[0]
-    expect(asked?.message).toContain('12')
-    expect(asked?.message).toContain('先把点位删干净')
+    return wrapper
+  }
+
+  it('一级确认说清「点位一起删」，确认后带 force=false', async () => {
+    const remove = vi.spyOn(collectApi, 'deleteSource').mockResolvedValue()
+    await openDelete([source()])
+    expect(document.body.textContent).toContain('已导入点位')
+    bodyButton('删除').click()
+    await flushPromises()
+    expect(remove).toHaveBeenCalledWith('s1', false)
   })
 
-  it('取消确认时什么都不做', async () => {
-    confirmSpy.mockResolvedValue(false)
+  it('⚠ 409 时升级为强制删除，文案要说清点位数与绑定失效', async () => {
+    const remove = vi
+      .spyOn(collectApi, 'deleteSource')
+      .mockRejectedValueOnce(
+        new BizError(41104, '这个数据源下还有点位，请先删除点位', 409, 't1'),
+      )
+      .mockResolvedValueOnce()
+    await openDelete([source({ point_count: 12 })])
+    bodyButton('删除').click()
+    await flushPromises()
+
+    expect(document.body.textContent).toContain('12 个点位')
+    expect(document.body.textContent).toContain('失效')
+    bodyButton('强制删除').click()
+    await flushPromises()
+    expect(remove).toHaveBeenLastCalledWith('s1', true)
+  })
+
+  it('取消时什么都不删', async () => {
     const remove = vi.spyOn(collectApi, 'deleteSource').mockResolvedValue()
-    const wrapper = await render([source()])
-    await clickByText(wrapper, '删除')
+    await openDelete([source()])
+    bodyButton('取消').click()
     await flushPromises()
     expect(remove).not.toHaveBeenCalled()
   })
 })
 
 describe('权限', () => {
-  it('只读账号看不到写入口', async () => {
+  it('只读账号看不到写入口，但能看到运行参数入口', async () => {
     signIn(['collect:view'])
     const wrapper = await render([source()])
     const labels = wrapper.findAll('button').map((one) => one.text())
-    expect(labels).not.toContain('删除')
-    expect(labels).not.toContain('新建数据源')
+    expect(labels).not.toContain('新增数据源')
+    expect(labels).not.toContain('断开')
+    expect(labels).toContain('采集参数')
+    expect(labels).toContain('归档参数')
   })
 
   it('⚠ 触碰设备的动作单包 operate 码，不跟着 manage 一起放行', async () => {
     signIn(['collect:view', 'collect:manage'])
     const wrapper = await render([source()])
     const labels = wrapper.findAll('button').map((one) => one.text())
-    expect(labels).toContain('编辑')
-    expect(labels).not.toContain('测试')
+    expect(labels).toContain('断开')
+    expect(labels).not.toContain('连通性测试')
   })
 })
 

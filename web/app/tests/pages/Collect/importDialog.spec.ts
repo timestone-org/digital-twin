@@ -13,7 +13,7 @@ import type { CollectPoint } from '@dt/contracts'
 import { DtFilePicker } from '@dt/ui'
 
 import * as collectApi from '@/api/collect'
-import ImportPointsDialog from '@/pages/Collect/OpcuaSourceDetail/components/ImportPointsDialog.vue'
+import ImportPointsDialog from '@/pages/Collect/Opcua/components/ImportPointsDialog.vue'
 
 const HEADER = '点位编码,名称,寻址串'
 

@@ -23,6 +23,8 @@ import type {
   CollectPointSaved,
   CollectSource,
   CollectSourceRuntime,
+  CollectSubtreeItem,
+  CollectSubtreeResult,
   CollectWriteResult,
   Page,
 } from '@dt/contracts'
@@ -60,8 +62,10 @@ const SHAPES: Record<string, Record<string, true>> = {
     id: true,
     name: true,
     code: true,
+    description: true,
     protocol: true,
     endpoint: true,
+    username: true,
     has_credential: true,
     options_json: true,
     read_mode: true,
@@ -99,6 +103,19 @@ const SHAPES: Record<string, Record<string, true>> = {
   BrowseOut: {
     items: true,
   } satisfies Keys<CollectBrowseResult>,
+
+  SubtreeItemOut: {
+    parent: true,
+    address: true,
+    name: true,
+    has_children: true,
+    is_variable: true,
+  } satisfies Keys<CollectSubtreeItem>,
+
+  SubtreeOut: {
+    items: true,
+    is_truncated: true,
+  } satisfies Keys<CollectSubtreeResult>,
 
   PointOut: {
     id: true,
@@ -181,11 +198,7 @@ function literalsOf(schemaName: string, field: string): string[] {
 }
 
 /** 从 openapi 里取一个字段的数值约束。 */
-function constraintOf(
-  schemaName: string,
-  field: string,
-  key: string,
-): unknown {
+function constraintOf(schemaName: string, field: string, key: string): unknown {
   const property = schemas[schemaName]?.properties?.[field]
   if (typeof property !== 'object' || property === null) return undefined
   return Reflect.get(property, key)

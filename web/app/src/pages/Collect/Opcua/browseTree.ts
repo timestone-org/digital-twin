@@ -13,7 +13,11 @@
  * `outlet_temp` 很好用，但推出来的东西撞了名就得让用户改。推不出合法编码时
  * 一律留空，让用户自己填——胡乱补一个 `point_1` 会让点表半年后没人看得懂。
  */
-import type { CollectBrowseItem, CollectPointItemInput } from '@dt/contracts'
+import type {
+  CollectBrowseItem,
+  CollectPointItemInput,
+  CollectSubtreeItem,
+} from '@dt/contracts'
 
 /** 树上的一个节点。 */
 export interface TreeNode {
@@ -38,7 +42,11 @@ export type NodeSelection = 'none' | 'some' | 'all'
 
 /** 把一层浏览结果转成树节点。 */
 export function toNodes(items: readonly CollectBrowseItem[]): TreeNode[] {
-  return items.map((item) => ({
+  return items.map(toNode)
+}
+
+function toNode(item: CollectBrowseItem): TreeNode {
+  return {
     address: item.address,
     name: item.name,
     hasChildren: item.has_children,
@@ -47,7 +55,57 @@ export function toNodes(items: readonly CollectBrowseItem[]): TreeNode[] {
     isOpen: false,
     isLoading: false,
     error: null,
-  }))
+  }
+}
+
+/**
+ * 把一次子树遍历的结果接回树上——采集侧一趟走完，这里一次拼回层级。
+ *
+ * ⚠ 已经在树上的节点**原样留用**，只换它的子层：新造一遍会把用户展开着的那
+ * 几层一起收起来，而他刚刚才逐层点开。
+ *
+ * ⚠ `isWhole` 决定「没收到子层」怎么解释：整棵走全了，那就是这个节点下面本来
+ * 就空的（驱动把「不是变量」一律当成「有子节点」，空文件夹因此也长着一个箭头
+ * 和一个勾选框）——就地纠正成没有子节点。没走全时不敢下这个结论，留着 `null`
+ * 让它继续显示为「还没拉过」。
+ *
+ * @param root 这次走的那棵子树的根
+ * @param items 平铺回来的节点，每一项都说了自己挂在谁下面
+ * @param isWhole 采集侧是否把整棵子树走全了
+ */
+export function graftSubtree(
+  root: TreeNode,
+  items: readonly CollectSubtreeItem[],
+  isWhole: boolean,
+): void {
+  const byParent = new Map<string, CollectSubtreeItem[]>()
+  for (const item of items) {
+    if (item.parent === null) continue
+    const siblings = byParent.get(item.parent)
+    if (siblings === undefined) byParent.set(item.parent, [item])
+    else siblings.push(item)
+  }
+  attach(root, byParent, isWhole)
+}
+
+function attach(
+  node: TreeNode,
+  byParent: ReadonlyMap<string, readonly CollectSubtreeItem[]>,
+  isWhole: boolean,
+): void {
+  const items = byParent.get(node.address)
+  if (items === undefined) {
+    if (isWhole && !node.isVariable) {
+      node.children = []
+      node.hasChildren = false
+    }
+    return
+  }
+  const kept = new Map((node.children ?? []).map((one) => [one.address, one]))
+  const children = items.map((item) => kept.get(item.address) ?? toNode(item))
+  node.children = children
+  node.hasChildren = true
+  for (const child of children) attach(child, byParent, isWhole)
 }
 
 /** 深度优先找一个节点；找不到返回 null。 */
@@ -57,7 +115,8 @@ export function findNode(
 ): TreeNode | null {
   for (const node of nodes) {
     if (node.address === address) return node
-    const found = node.children === null ? null : findNode(node.children, address)
+    const found =
+      node.children === null ? null : findNode(node.children, address)
     if (found !== null) return found
   }
   return null

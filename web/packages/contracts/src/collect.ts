@@ -65,14 +65,18 @@ export interface CollectSourceRuntime {
   updated_at: string | null
 }
 
-/** 一个采集数据源。⚠ 没有凭据字段：后端任何出参都不回它。 */
+/** 一个采集数据源。⚠ 没有口令字段：后端任何出参都不回它。 */
 export interface CollectSource {
   id: string
   name: string
   /** 身份，建好就不可改：改名等于换身份，历史会断成两段。 */
   code: string
+  /** 备注用途；没填是 null。 */
+  description: string | null
   protocol: CollectProtocol
   endpoint: string
+  /** 连接现场设备的账号名；匿名连接是 null。口令不回，只回 has_credential。 */
+  username: string | null
   has_credential: boolean
   options_json: Record<string, string>
   read_mode: CollectReadMode
@@ -90,8 +94,10 @@ export interface CollectSource {
 export interface CollectSourceCreateInput {
   name: string
   code: string
+  description?: string | undefined
   protocol: CollectProtocol
   endpoint: string
+  username?: string | undefined
   credential?: string | undefined
   options_json?: Record<string, string> | undefined
   read_mode?: CollectReadMode | undefined
@@ -107,7 +113,11 @@ export interface CollectSourceCreateInput {
  */
 export interface CollectSourceUpdateInput {
   name?: string | undefined
+  /** 给 `null` 是清空备注，不给是不动。 */
+  description?: string | null | undefined
   endpoint?: string | undefined
+  /** 给 `null` 是改回匿名连接，不给是不动。 */
+  username?: string | null | undefined
   credential?: string | null | undefined
   options_json?: Record<string, string> | undefined
   read_mode?: CollectReadMode | undefined
@@ -133,6 +143,27 @@ export interface CollectBrowseItem {
 
 export interface CollectBrowseResult {
   items: CollectBrowseItem[]
+}
+
+/**
+ * 一次子树遍历里的一项。
+ * ⚠ `parent` 不能省：整棵子树是**平铺**回来的，客户端要靠它拼回层级。
+ * 根一层的 `parent` 是 `null`。
+ */
+export interface CollectSubtreeItem extends CollectBrowseItem {
+  parent: string | null
+}
+
+/**
+ * 一次子树遍历的结果。
+ * ⚠ 不限条数：勾一个通道要的就是它下面的全部点位。唯一的约束是这次请求的
+ * 时间预算，到点没走完才置 `is_truncated`。
+ * ⚠ `is_truncated` 为真时界面**必须**说出来：不说的话用户会把「只收到一半」
+ * 当成「这个通道就这么多点位」。
+ */
+export interface CollectSubtreeResult {
+  items: CollectSubtreeItem[]
+  is_truncated: boolean
 }
 
 /** 一个采集点位。`node_key` 是它在全系统里的身份 `{source_id}:{code}`。 */

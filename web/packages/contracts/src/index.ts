@@ -240,8 +240,20 @@ export type { DashboardPublication, PublicDashboardPayload } from './share'
 export type { DashboardThumbnail } from './thumbnail'
 export type { ProjectThemeMode, ProjectThemePayload } from './theme'
 export { PROJECT_THEME_MODES } from './theme'
-export type { RuntimeParamItem, RuntimeParamSection } from './runtimeParam'
-export { RUNTIME_PARAM_SECTIONS } from './runtimeParam'
+export type {
+  RuntimeParamDanger,
+  RuntimeParamItem,
+  RuntimeParamKind,
+  RuntimeParamSection,
+  RuntimeParamTier,
+} from './runtimeParam'
+export {
+  COLLECT_RUNTIME_PARAM_SECTIONS,
+  RUNTIME_PARAM_DANGERS,
+  RUNTIME_PARAM_KINDS,
+  RUNTIME_PARAM_SECTIONS,
+  RUNTIME_PARAM_TIERS,
+} from './runtimeParam'
 export type {
   ArchiveBindingDetail,
   BindingSourceKind,
@@ -287,6 +299,8 @@ export type {
   CollectSourceRuntime,
   CollectSourceState,
   CollectSourceUpdateInput,
+  CollectSubtreeItem,
+  CollectSubtreeResult,
   CollectWriteResult,
 } from './collect'
 export {

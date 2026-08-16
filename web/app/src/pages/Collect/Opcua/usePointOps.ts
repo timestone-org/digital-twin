@@ -49,7 +49,10 @@ export interface PointOps {
  * ⚠ `unverified` 不是「通过」：采集侧离线或超时都落这一档，静默当成通过会让
  * 一条根本读不到的寻址串看起来完全正常。
  */
-function warnUnverified(deps: Deps, checks: readonly { status: string }[]): void {
+function warnUnverified(
+  deps: Deps,
+  checks: readonly { status: string }[],
+): void {
   if (checks.some((check) => check.status === 'unverified')) {
     deps.toast.warning('寻址串这次没能到现场确认，采集起来之后请核对是否有值')
   }
@@ -97,7 +100,10 @@ async function updatePoint(
 ): Promise<boolean> {
   try {
     const saved = await collect.updatePoint(pointId, input)
-    warnUnverified(deps, saved.address_check === null ? [] : [saved.address_check])
+    warnUnverified(
+      deps,
+      saved.address_check === null ? [] : [saved.address_check],
+    )
     deps.toast.success('点位已保存')
     return true
   } catch (caught) {

@@ -14,7 +14,7 @@ import {
   pointsToCsv,
   splitCsvLine,
   templateCsv,
-} from '@/pages/Collect/OpcuaSourceDetail/pointCsv'
+} from '@/pages/Collect/Opcua/pointCsv'
 
 const BOM = '﻿'
 const HEADER = '点位编码,名称,寻址串,数据类型,单位,采样周期(ms)'
@@ -43,7 +43,9 @@ describe('拆行', () => {
 
 describe('表头', () => {
   it('带 BOM 的表头照样认得出——不剥它就整表判成缺列', () => {
-    const result = parsePointCsv(`${BOM}${csv('t1,温度,ns=2;s=T1,float,℃,1000')}`)
+    const result = parsePointCsv(
+      `${BOM}${csv('t1,温度,ns=2;s=T1,float,℃,1000')}`,
+    )
     expect(result.fatal).toBeNull()
     expect(result.rows[0]?.item?.code).toBe('t1')
   })

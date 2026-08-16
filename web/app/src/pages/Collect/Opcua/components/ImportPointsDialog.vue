@@ -139,7 +139,7 @@ async function submit(): Promise<void> {
         <DtTag v-if="fileName" mono size="sm">{{ fileName }}</DtTag>
       </div>
 
-      <p class="m-0 text-xs text-muted">
+      <p class="m-0 text-xs text-text-secondary">
         模板是带 BOM 的 UTF-8 CSV，Excel 双击即可打开；改完仍另存为 CSV。
         必填列：{{ REQUIRED_LABELS }}。
       </p>
@@ -168,7 +168,8 @@ async function submit(): Promise<void> {
         </div>
 
         <DtNotice v-if="isBlocked" intent="danger" icon="alert-triangle">
-          文件里有重复的点位编码（{{ duplicated.slice(0, 5).join('、') }}{{
+          文件里有重复的点位编码（{{ duplicated.slice(0, 5).join('、')
+          }}{{
             duplicated.length > 5 ? ' 等' : ''
           }}）。同一个数据源下编码必须唯一，请先在文件里改掉再导入。
         </DtNotice>
@@ -201,7 +202,7 @@ async function submit(): Promise<void> {
 
       <template v-if="busy || outcome">
         <DtProgress :value="percent" show-label />
-        <p class="m-0 text-xs text-muted">
+        <p class="m-0 text-xs text-text-secondary">
           已提交 {{ progress.done }} / {{ progress.total }} 条
         </p>
       </template>

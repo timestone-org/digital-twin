@@ -50,7 +50,12 @@ export interface CsvPreflight {
 /** 由「解析结果 + 库里已有编码 + 跳过开关」派生出来的那几件。 */
 type Derived = Pick<
   CsvPreflight,
-  'goodCount' | 'errorRows' | 'duplicated' | 'conflicting' | 'submittable' | 'isBlocked'
+  | 'goodCount'
+  | 'errorRows'
+  | 'duplicated'
+  | 'conflicting'
+  | 'submittable'
+  | 'isBlocked'
 >
 
 function derive(

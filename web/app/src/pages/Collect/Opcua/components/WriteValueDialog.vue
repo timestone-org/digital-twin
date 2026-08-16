@@ -101,14 +101,14 @@ function submit(): void {
       </DtNotice>
 
       <dl class="m-0 grid grid-cols-[5rem_1fr] gap-x-3 gap-y-1.5 text-sm">
-        <dt class="text-muted">点位</dt>
+        <dt class="text-text-secondary">点位</dt>
         <dd class="m-0">
           {{ point.name }}
           <DtTag class="ml-1" mono size="sm">{{ point.code }}</DtTag>
         </dd>
-        <dt class="text-muted">寻址串</dt>
+        <dt class="text-text-secondary">寻址串</dt>
         <dd class="m-0 break-all font-mono text-xs">{{ point.address }}</dd>
-        <dt class="text-muted">当前值</dt>
+        <dt class="text-text-secondary">当前值</dt>
         <dd class="m-0 font-mono">{{ current.text }}</dd>
       </dl>
 

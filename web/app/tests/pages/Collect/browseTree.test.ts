@@ -5,11 +5,12 @@
  * 编码时必须跳过而不是补一个 `point_1`（半年后没人看得懂那张点表）。
  */
 import { describe, expect, it } from 'vitest'
-import type { CollectBrowseItem } from '@dt/contracts'
+import type { CollectBrowseItem, CollectSubtreeItem } from '@dt/contracts'
 
-import type { TreeNode } from '@/pages/Collect/OpcuaSourceDetail/browseTree'
+import type { TreeNode } from '@/pages/Collect/Opcua/browseTree'
 import {
   findNode,
+  graftSubtree,
   selectionStates,
   suggestCode,
   toNodes,
@@ -17,7 +18,7 @@ import {
   unloadedUnder,
   variableIndex,
   variablesUnder,
-} from '@/pages/Collect/OpcuaSourceDetail/browseTree'
+} from '@/pages/Collect/Opcua/browseTree'
 
 function browsed(
   address: string,
@@ -138,7 +139,6 @@ describe('勾中的节点转成点位', () => {
   })
 })
 
-
 describe('子树里的变量与待补拉的层', () => {
   function subtree(): TreeNode {
     const [root] = toNodes([
@@ -236,5 +236,109 @@ describe('勾选态', () => {
     const states = selectionStates(loaded(), new Set(['ns=2;s=Line1.Temp']))
     expect(states.get('ns=2;s=Line1.Temp')).toBe('all')
     expect(states.get('ns=2;s=Line1.Flow')).toBe('none')
+  })
+})
+
+describe('把一次子树遍历接回树上', () => {
+  function walked(
+    parent: string | null,
+    address: string,
+    overrides: Partial<CollectSubtreeItem> = {},
+  ): CollectSubtreeItem {
+    return { ...browsed(address, overrides), parent }
+  }
+
+  function root(): TreeNode {
+    const node = toNodes([
+      browsed('ns=2;s=L1', { has_children: true, is_variable: false }),
+    ])[0]
+    if (node === undefined) throw new Error('夹具不对')
+    return node
+  }
+
+  it('平铺的结果按 parent 拼回层级', () => {
+    const node = root()
+
+    graftSubtree(
+      node,
+      [
+        walked('ns=2;s=L1', 'ns=2;s=L1.Dev', {
+          has_children: true,
+          is_variable: false,
+        }),
+        walked('ns=2;s=L1.Dev', 'ns=2;s=L1.Dev.T'),
+      ],
+      true,
+    )
+
+    expect(node.children?.[0]?.address).toBe('ns=2;s=L1.Dev')
+    expect(node.children?.[0]?.children?.[0]?.address).toBe('ns=2;s=L1.Dev.T')
+    expect(unloadedUnder(node)).toEqual([])
+  })
+
+  it('⚠ 已经在树上的节点原样留用，展开着的层不会被收起来', () => {
+    const node = root()
+    node.children = toNodes([
+      browsed('ns=2;s=L1.Dev', { has_children: true, is_variable: false }),
+    ])
+    const kept = node.children[0]
+    if (kept === undefined) throw new Error('夹具不对')
+    kept.isOpen = true
+
+    graftSubtree(
+      node,
+      [
+        walked('ns=2;s=L1', 'ns=2;s=L1.Dev', {
+          has_children: true,
+          is_variable: false,
+        }),
+        walked('ns=2;s=L1.Dev', 'ns=2;s=L1.Dev.T'),
+      ],
+      true,
+    )
+
+    expect(node.children[0]).toBe(kept)
+    expect(kept.isOpen).toBe(true)
+  })
+
+  it('⚠ 整棵走全了，没子层就是真没有——就地纠正掉那个骗人的箭头', () => {
+    // 驱动把「不是变量」一律当成「有子节点」，空文件夹因此也长着箭头和勾选框
+    const node = root()
+
+    graftSubtree(node, [], true)
+
+    expect(node.hasChildren).toBe(false)
+    expect(node.children).toEqual([])
+  })
+
+  it('⚠ 没走全时不敢下这个结论，留着「还没拉过」', () => {
+    const node = root()
+
+    graftSubtree(node, [], false)
+
+    expect(node.hasChildren).toBe(true)
+    expect(node.children).toBeNull()
+  })
+
+  it('⚠ 没走全的那一枝留在「还没拉过」，上层因此只能算半选', () => {
+    const node = root()
+
+    graftSubtree(
+      node,
+      [
+        walked('ns=2;s=L1', 'ns=2;s=L1.Dev', {
+          has_children: true,
+          is_variable: false,
+        }),
+        walked('ns=2;s=L1', 'ns=2;s=L1.T'),
+      ],
+      false,
+    )
+
+    expect(unloadedUnder(node).map((one) => one.address)).toEqual([
+      'ns=2;s=L1.Dev',
+    ])
+    const states = selectionStates([node], new Set(['ns=2;s=L1.T']))
+    expect(states.get('ns=2;s=L1')).toBe('some')
   })
 })

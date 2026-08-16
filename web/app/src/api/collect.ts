@@ -19,6 +19,7 @@ import type {
   CollectSource,
   CollectSourceCreateInput,
   CollectSourceUpdateInput,
+  CollectSubtreeResult,
   CollectWriteResult,
   Page,
 } from '@dt/contracts'
@@ -100,11 +101,21 @@ export async function updateSource(
   )
 }
 
-/** 删数据源。⚠ 下面还有点位时后端 409——不级联删，点位要一条条过绑定检查。 */
-export async function deleteSource(sourceId: string): Promise<void> {
+/**
+ * 删数据源。⚠ 下面还有点位时后端 409——不级联删，点位要一条条过绑定检查。
+ * `force` 显式跳过守卫：点位随外键 CASCADE 一起删，仍绑着它们的大屏引用
+ * 就此失效——调用方要在二次确认里把这句话说出来。
+ */
+export async function deleteSource(
+  sourceId: string,
+  force = false,
+): Promise<void> {
   await request(
     `/collect-sources/${sourceId}`,
-    onPlatform({ method: 'DELETE' }),
+    onPlatform({
+      method: 'DELETE',
+      query: { force: force ? 'true' : undefined },
+    }),
   )
 }
 
@@ -131,6 +142,32 @@ export async function browseSource(
 ): Promise<CollectBrowseResult> {
   return await requestData<CollectBrowseResult>(
     `/collect-sources/${sourceId}:browse`,
+    onPlatform({
+      method: 'POST',
+      body: { parent },
+      ...(signal === undefined ? {} : { signal }),
+    }),
+  )
+}
+
+/**
+ * 一次收齐一棵子树：勾上层节点时用。
+ *
+ * ⚠ 递归在**采集侧**做，不由这里逐层拉：逐层拉一个几百节点的通道就是几百个
+ * 串行请求，每一个都要过一遍边缘、总线与设备，而现场看到的只是界面卡住。
+ * ⚠ 结果是**平铺**的，每一项带 `parent`，由调用方拼回层级。
+ * ⚠ 采集侧有刹车：`is_truncated` 为真时只收到了一部分，界面必须说出来。
+ * @param sourceId 数据源
+ * @param parent 从哪个节点往下收；不给表示从根开始
+ * @param signal 取消信号
+ */
+export async function browseSubtree(
+  sourceId: string,
+  parent: string | null,
+  signal?: AbortSignal,
+): Promise<CollectSubtreeResult> {
+  return await requestData<CollectSubtreeResult>(
+    `/collect-sources/${sourceId}:browse-subtree`,
     onPlatform({
       method: 'POST',
       body: { parent },
@@ -188,9 +225,22 @@ export async function updatePoint(
   )
 }
 
-/** 删点位。⚠ 被大屏绑着时后端 409 并列出那些大屏。 */
-export async function deletePoint(pointId: string): Promise<void> {
-  await request(`/collect-points/${pointId}`, onPlatform({ method: 'DELETE' }))
+/**
+ * 删点位。⚠ 被大屏绑着时后端 409 并列出那些大屏。
+ * `force` 显式跳过绑定守卫：仍绑着它的大屏槽会静默失去数据源——
+ * 调用方要在二次确认里把这句话说出来。
+ */
+export async function deletePoint(
+  pointId: string,
+  force = false,
+): Promise<void> {
+  await request(
+    `/collect-points/${pointId}`,
+    onPlatform({
+      method: 'DELETE',
+      query: { force: force ? 'true' : undefined },
+    }),
+  )
 }
 
 /**

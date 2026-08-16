@@ -7,8 +7,12 @@
 import { describe, expect, it } from 'vitest'
 import type { PointSample } from '@dt/contracts'
 
-import { formatSample } from '@/pages/Collect/OpcuaSourceDetail/liveFormat'
-import { errorSummary, missingPoints, stateLook } from '@/pages/Collect/OpcuaSources/sourceState'
+import { formatSample } from '@/pages/Collect/Opcua/liveFormat'
+import {
+  errorSummary,
+  missingPoints,
+  stateLook,
+} from '@/pages/Collect/Opcua/sourceState'
 
 const AT_MS = Date.UTC(2026, 7, 16, 2, 0, 0)
 

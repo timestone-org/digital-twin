@@ -14,7 +14,7 @@ import { ref } from 'vue'
 import type { CollectPoint, CollectSource } from '@dt/contracts'
 
 import * as collectApi from '@/api/collect'
-import PointsPanel from '@/pages/Collect/OpcuaSourceDetail/components/PointsPanel.vue'
+import NodeTable from '@/pages/Collect/Opcua/components/NodeTable.vue'
 import { useAuthStore } from '@/stores/auth'
 
 vi.mock('vue-router', () => ({
@@ -50,7 +50,10 @@ const isConnected = ref(true)
 vi.mock('@/composables/useRealtimeChannel', () => ({
   useRealtimeChannel: () => ({
     isConnected,
-    subscribe: (topic: string, handler: (p: Record<string, unknown>) => void) => {
+    subscribe: (
+      topic: string,
+      handler: (p: Record<string, unknown>) => void,
+    ) => {
       subscribed.push(topic)
       pushFrame = handler
       return () => unsubscribed.push(topic)
@@ -64,7 +67,9 @@ function source(over: Partial<CollectSource> = {}): CollectSource {
     name: '一号车间 PLC',
     code: 'plant1',
     protocol: 'opcua',
+    description: null,
     endpoint: 'opc.tcp://10.0.0.2:4840',
+    username: null,
     has_credential: false,
     options_json: {},
     read_mode: 'subscribe',
@@ -129,7 +134,7 @@ async function render(
     size: 20,
     total: rows.length,
   })
-  const wrapper = mount(PointsPanel, {
+  const wrapper = mount(NodeTable, {
     props: { source: source(over) },
     attachTo: document.body,
     global: {
@@ -365,8 +370,12 @@ describe('权限', () => {
 
   it('⚠ 下发写值单包 operate，不跟着 manage 一起放行', async () => {
     signIn(['collect:view', 'collect:manage'])
-    const labels = (await render()).findAll('button').map((one) => one.text())
-    expect(labels).toContain('编辑')
+    const wrapper = await render()
+    const ariaLabels = wrapper
+      .findAll('button')
+      .map((one) => one.attributes('aria-label') ?? '')
+    expect(ariaLabels.some((label) => label.startsWith('点位设置'))).toBe(true)
+    const labels = wrapper.findAll('button').map((one) => one.text())
     expect(labels).not.toContain('写值')
   })
 

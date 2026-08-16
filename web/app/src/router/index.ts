@@ -90,51 +90,15 @@ export const routes: RouteRecordRaw[] = [
     },
   },
   {
-    // 数据采集：一期只有 OPC UA 一种协议，故路径里带协议名。第二个驱动进来
+    // 数据采集：一个协议一个页面（主从单页，左列表右详情）。第二个驱动进来
     // 时它是同级的另一条，而不是把这条改成通配——协议不同，配置字段就不同
     path: '/collect/opcua',
     name: 'collect-opcua',
-    component: () => import('@/pages/Collect/OpcuaSources/index.vue'),
+    component: () => import('@/pages/Collect/Opcua/index.vue'),
     meta: {
       title: 'OPC UA 采集',
       permissions: [PERMISSION_CODES.collectView],
     },
-  },
-  {
-    // 每个数据源一个的**详情**路由，因此不进 NAV_ITEMS——那张表里每一项都要有
-    // 静态路径，且由契约测试钉着。回列表靠 AppShell 的 backTo。
-    // ⚠ 子路由不重复写 permissions：`to.meta` 是全部匹配记录的合并，父级这一条
-    // 就管住了整棵子树，两处各写一份反而会漂。
-    path: '/collect/opcua/:sourceId',
-    component: () => import('@/pages/Collect/OpcuaSourceDetail/index.vue'),
-    meta: {
-      title: '采集数据源',
-      permissions: [PERMISSION_CODES.collectView],
-    },
-    children: [
-      {
-        path: '',
-        name: 'collect-source-detail',
-        redirect: (to) => ({
-          name: 'collect-source-points',
-          params: { sourceId: to.params.sourceId },
-        }),
-      },
-      {
-        path: 'points',
-        name: 'collect-source-points',
-        component: () =>
-          import('@/pages/Collect/OpcuaSourceDetail/components/PointsPanel.vue'),
-        meta: { title: '点位' },
-      },
-      {
-        path: 'browse',
-        name: 'collect-source-browse',
-        component: () =>
-          import('@/pages/Collect/OpcuaSourceDetail/components/BrowsePanel.vue'),
-        meta: { title: '地址空间' },
-      },
-    ],
   },
   {
     path: '/hvac/units',

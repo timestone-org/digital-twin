@@ -53,7 +53,7 @@ function choose(point: CollectPoint): void {
     width="40rem"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <div class="flex max-h-[24rem] flex-col gap-3">
+    <div class="flex max-h-96 flex-col gap-3">
       <DtInput
         v-model="picker.keyword.value"
         size="sm"

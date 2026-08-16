@@ -30,6 +30,8 @@ const look = computed(() => formatSample(props.sample, props.unit))
         {{ look.badge }}
       </DtTag>
     </div>
-    <span v-if="look.at" class="text-2xs text-muted">{{ look.at }}</span>
+    <span v-if="look.at" class="text-2xs text-text-secondary">{{
+      look.at
+    }}</span>
   </div>
 </template>

@@ -146,8 +146,7 @@ watch(
 const dataTypeValue = computed<string>({
   get: () => dataType.value,
   set: (next) => {
-    dataType.value =
-      COLLECT_DATA_TYPES.find((type) => type === next) ?? 'float'
+    dataType.value = COLLECT_DATA_TYPES.find((type) => type === next) ?? 'float'
   },
 })
 
@@ -181,7 +180,8 @@ function submit(): void {
     archive_retention_days:
       retentionDays.value > 0 ? retentionDays.value : null,
   }
-  if (props.point === null) emit('create', { code: code.value.trim(), ...shared })
+  if (props.point === null)
+    emit('create', { code: code.value.trim(), ...shared })
   else emit('update', shared)
 }
 </script>
@@ -238,10 +238,7 @@ function submit(): void {
 
       <div class="grid grid-cols-2 gap-3">
         <DtField label="采样周期（毫秒）">
-          <DtNumberInput
-            v-model="samplingIntervalMs"
-            :range="SAMPLING_RANGE"
-          />
+          <DtNumberInput v-model="samplingIntervalMs" :range="SAMPLING_RANGE" />
         </DtField>
         <DtField
           v-if="isNumeric"
@@ -266,10 +263,7 @@ function submit(): void {
             :range="HEARTBEAT_RANGE"
           />
         </DtField>
-        <DtField
-          label="保留天数"
-          hint="填 0 表示跟随全局保留策略。"
-        >
+        <DtField label="保留天数" hint="填 0 表示跟随全局保留策略。">
           <DtNumberInput v-model="retentionDays" :range="RETENTION_RANGE" />
         </DtField>
       </div>

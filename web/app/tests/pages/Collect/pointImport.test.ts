@@ -10,10 +10,7 @@ import { COLLECT_POINT_BATCH_MAX } from '@dt/contracts'
 
 import { BizError } from '@/api/client'
 import * as collect from '@/api/collect'
-import {
-  chunk,
-  importPoints,
-} from '@/pages/Collect/OpcuaSourceDetail/pointImport'
+import { chunk, importPoints } from '@/pages/Collect/Opcua/pointImport'
 
 function item(code: string): CollectPointItemInput {
   return { code, name: code, address: `ns=2;s=${code}` }
@@ -87,7 +84,9 @@ describe('逐批提交', () => {
   })
 
   it('一批失败不带走其它批——前面几批是真的已经进库了', async () => {
-    createMock.mockRejectedValueOnce(new BizError(41104, '编码已存在', 409, 't'))
+    createMock.mockRejectedValueOnce(
+      new BizError(41104, '编码已存在', 409, 't'),
+    )
     const outcome = await importPoints('s1', items(COLLECT_POINT_BATCH_MAX + 1))
 
     expect(outcome.failures).toHaveLength(1)
@@ -95,7 +94,9 @@ describe('逐批提交', () => {
   })
 
   it('失败里带上这一批的编码，用户才回得去文件里找', async () => {
-    createMock.mockRejectedValueOnce(new BizError(41104, '编码已存在', 409, 't'))
+    createMock.mockRejectedValueOnce(
+      new BizError(41104, '编码已存在', 409, 't'),
+    )
     const outcome = await importPoints('s1', items(2))
 
     expect(outcome.failures[0]?.codes).toEqual(['p0', 'p1'])

@@ -17,12 +17,22 @@ import { toRuntimeParamItem } from './runtimeParamsWire'
  */
 export const RUNTIME_PARAM_UNKNOWN_CODE = 41020
 
+/**
+ * 分组落在哪条路由上。
+ * ⚠ 两条路由不是冗余：写权限码不同（dashboard:edit vs collect:manage），
+ * 后端按码把分组拆开了，发错前缀就是 400。
+ * @param section 参数分组
+ */
+function baseOf(section: RuntimeParamSection): string {
+  return section === 'dashboard' ? '/runtime-params' : '/collect-runtime-params'
+}
+
 /** 读一组运行参数的当前有效值。 */
 export async function listRuntimeParams(
   section: RuntimeParamSection,
 ): Promise<RuntimeParamItem[]> {
   const rows = await requestData<RuntimeParamItemWire[]>(
-    '/runtime-params',
+    baseOf(section),
     onPlatform({ query: { section } }),
   )
   return rows.map(toRuntimeParamItem)
@@ -38,7 +48,7 @@ export async function saveRuntimeParams(
   values: Record<string, unknown>,
 ): Promise<RuntimeParamItem[]> {
   const rows = await requestData<RuntimeParamItemWire[]>(
-    `/runtime-params/${section}`,
+    `${baseOf(section)}/${section}`,
     onPlatform({ method: 'PUT', body: { values } }),
   )
   return rows.map(toRuntimeParamItem)
@@ -49,7 +59,7 @@ export async function resetRuntimeParams(
   section: RuntimeParamSection,
 ): Promise<RuntimeParamItem[]> {
   const rows = await requestData<RuntimeParamItemWire[]>(
-    `/runtime-params/${section}:reset`,
+    `${baseOf(section)}/${section}:reset`,
     onPlatform({ method: 'POST' }),
   )
   return rows.map(toRuntimeParamItem)

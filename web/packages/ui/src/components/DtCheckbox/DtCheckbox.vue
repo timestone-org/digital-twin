@@ -35,17 +35,27 @@ const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 const id = useId()
 const inputEl = ref<HTMLInputElement | null>(null)
 
-function applyIndeterminate(): void {
-  if (inputEl.value !== null) inputEl.value.indeterminate = props.indeterminate
+/** 把 DOM 拨回 props 说的样子。 */
+function sync(): void {
+  const element = inputEl.value
+  if (element === null) return
+  element.checked = props.modelValue
+  element.indeterminate = props.indeterminate
 }
 
 // ⚠ 挂载时先设一次，再监听后续变化：只写 watchEffect 的话，首次求值时模板 ref
 // 还是 null，半选要等下一拍才生效——首帧画出来的是「没勾」
-onMounted(applyIndeterminate)
-watch(() => props.indeterminate, applyIndeterminate)
+onMounted(sync)
+watch(() => [props.modelValue, props.indeterminate], sync)
 
 function onChange(event: Event): void {
-  emit('update:modelValue', (event.target as HTMLInputElement).checked)
+  const next = (event.target as HTMLInputElement).checked
+  // ⚠ 先把 DOM 拨回受控值再抛事件：浏览器点一下就地改了 checked 并清掉了
+  // indeterminate，而 Vue **只在绑定值变化时**才打补丁。父组件如果没改值
+  // （这一下什么都没选上、或者是一次异步操作），DOM 就停在浏览器改出来的
+  // 样子——看起来勾上了，实际什么都没发生。真值到了自会由上面那个 watch 拨过来
+  sync()
+  emit('update:modelValue', next)
 }
 </script>
 

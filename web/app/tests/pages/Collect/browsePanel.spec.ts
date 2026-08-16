@@ -10,6 +10,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { DOMWrapper, VueWrapper } from '@vue/test-utils'
+import { ROOT, walkFixture } from '@/testing/collectAddressSpace'
 import type {
   CollectBrowseItem,
   CollectPoint,
@@ -17,7 +18,7 @@ import type {
 } from '@dt/contracts'
 
 import * as collectApi from '@/api/collect'
-import BrowsePanel from '@/pages/Collect/OpcuaSourceDetail/components/BrowsePanel.vue'
+import BrowsePanel from '@/pages/Collect/Opcua/components/BrowsePanel.vue'
 import { useAuthStore } from '@/stores/auth'
 
 vi.mock('vue-router', () => ({
@@ -29,6 +30,7 @@ vi.mock('vue-router', () => ({
 const toastError = vi.fn()
 const toastSuccess = vi.fn()
 const toastWarning = vi.fn()
+const toastInfo = vi.fn()
 vi.mock('@dt/ui', async () => {
   const actual = await vi.importActual<Record<string, unknown>>('@dt/ui')
   return {
@@ -37,14 +39,11 @@ vi.mock('@dt/ui', async () => {
     useToast: () => ({
       success: toastSuccess,
       error: toastError,
-      info: vi.fn(),
+      info: toastInfo,
       warning: toastWarning,
     }),
   }
 })
-
-/** 根那一层在夹具里的键。 */
-const ROOT = '__root__'
 
 function source(): CollectSource {
   return {
@@ -52,7 +51,9 @@ function source(): CollectSource {
     name: '一号车间 PLC',
     code: 'plant1',
     protocol: 'opcua',
+    description: null,
     endpoint: 'opc.tcp://10.0.0.2:4840',
+    username: null,
     has_credential: false,
     options_json: {},
     read_mode: 'subscribe',
@@ -131,18 +132,26 @@ function signIn(): void {
  * ⚠ 用真实的按 parent 分派而不是每次回同一批：只回同一批的话，「补拉了没有」
  * 这条断言永远成立，等于没测。
  */
-function browseTree(tree: Record<string, CollectBrowseItem[]>): void {
+function browseTree(
+  tree: Record<string, CollectBrowseItem[]>,
+  maxNodes: number,
+): void {
   vi.spyOn(collectApi, 'browseSource').mockImplementation(
     (_sourceId: string, parent: string | null) =>
       Promise.resolve({ items: tree[parent ?? ROOT] ?? [] }),
+  )
+  vi.spyOn(collectApi, 'browseSubtree').mockImplementation(
+    (_sourceId: string, parent: string | null) =>
+      Promise.resolve(walkFixture(tree, parent, maxNodes)),
   )
 }
 
 async function render(
   tree: Record<string, CollectBrowseItem[]>,
   existing: CollectPoint[] = [],
+  maxNodes = 500,
 ): Promise<VueWrapper> {
-  browseTree(tree)
+  browseTree(tree, maxNodes)
   vi.spyOn(collectApi, 'listPoints').mockResolvedValue({
     items: existing,
     page: 1,
@@ -208,6 +217,7 @@ beforeEach(() => {
   toastError.mockReset()
   toastSuccess.mockReset()
   toastWarning.mockReset()
+  toastInfo.mockReset()
   signIn()
 })
 
@@ -259,7 +269,7 @@ describe('逐个勾选', () => {
 
     await check(box(wrapper, 'Temp'))
 
-    expect(wrapper.text()).toContain('已选 1 个变量')
+    expect(wrapper.text()).toContain('已选 1')
     expect(element(wrapper, 'Flow').checked).toBe(false)
   })
 
@@ -297,25 +307,60 @@ describe('按子树批量勾选', () => {
 
     await check(box(wrapper, 'Line1'))
 
-    expect(wrapper.text()).toContain('已选 2 个变量')
+    expect(wrapper.text()).toContain('已选 2')
     expect(element(wrapper, 'Temp').checked).toBe(true)
     expect(element(wrapper, 'Flow').checked).toBe(true)
   })
 
-  it('⚠ 没展开过也能勾——会把下面的层补拉回来', async () => {
+  it('⚠ 没展开过也能勾——整棵子树由采集侧一次收齐', async () => {
+    // ⚠ 这里守的是「一次请求」：逐层补拉的老做法在这棵三层的树上要打三趟，
+    // 真实通道上就是几百趟串行请求，而现场只看到界面卡住
     const wrapper = await render({
       [ROOT]: [branch('Line1')],
       'ns=2;s=Line1': [branch('Zone'), leaf('Temp')],
       'ns=2;s=Zone': [leaf('Deep')],
     })
+    const browse = vi.mocked(collectApi.browseSource)
+    const afterRoot = browse.mock.calls.length
 
     await check(box(wrapper, 'Line1'))
 
-    expect(wrapper.text()).toContain('已选 2 个变量')
-    expect(vi.mocked(collectApi.browseSource)).toHaveBeenCalledWith(
+    expect(wrapper.text()).toContain('已选 2')
+    expect(vi.mocked(collectApi.browseSubtree)).toHaveBeenCalledExactlyOnceWith(
       's1',
-      'ns=2;s=Zone',
+      'ns=2;s=Line1',
     )
+    expect(browse.mock.calls.length).toBe(afterRoot)
+  })
+
+  it('⚠ 收齐之后层级还在，不是一张平铺的清单', async () => {
+    const wrapper = await render({
+      [ROOT]: [branch('Line1')],
+      'ns=2;s=Line1': [branch('Zone')],
+      'ns=2;s=Zone': [leaf('Deep')],
+    })
+
+    await check(box(wrapper, 'Line1'))
+    // 勾完只展开一层：深处的节点在数据里，但要点开才看得见
+    expect(wrapper.text()).toContain('ns=2;s=Zone')
+    expect(wrapper.text()).not.toContain('ns=2;s=Deep')
+
+    await click(chevron(wrapper, 1))
+
+    expect(wrapper.text()).toContain('ns=2;s=Deep')
+    expect(element(wrapper, 'Deep').checked).toBe(true)
+  })
+
+  it('⚠ 已经全在手上时不再打设备——逐层展开过的那些再问一遍是白跑', async () => {
+    const wrapper = await render({
+      [ROOT]: [branch('Line1')],
+      'ns=2;s=Line1': [leaf('Temp')],
+    })
+    await click(chevron(wrapper))
+
+    await check(box(wrapper, 'Line1'))
+
+    expect(vi.mocked(collectApi.browseSubtree)).not.toHaveBeenCalled()
   })
 
   it('已经全勾上时再点是取消，且不再打设备', async () => {
@@ -370,27 +415,67 @@ describe('按子树批量勾选', () => {
 
     await check(box(wrapper, 'Line1'))
 
-    expect(wrapper.text()).toContain('已选 1 个变量')
+    expect(wrapper.text()).toContain('已选 1')
     expect(element(wrapper, 'Flow').checked).toBe(true)
   })
 
-  it('⚠ 补拉超过上限就停下并说出来，不静默只勾一半', async () => {
-    // 一条比上限更深的链：每一层都还有下一层，永远拉不完
+  it('⚠ 采集侧没走完时要说出来，不静默只勾一半', async () => {
+    // 唯一的刹车是这次请求的时间：模拟它到点，界面必须转达
     const deep: Record<string, CollectBrowseItem[]> = { [ROOT]: [branch('n0')] }
-    for (let index = 0; index < 600; index += 1) {
+    for (let index = 0; index < 10; index += 1) {
       deep[`ns=2;s=n${index}`] = [branch(`n${index + 1}`), leaf(`v${index}`)]
     }
-    const wrapper = await render(deep)
+    const wrapper = await render(deep, [], 3)
 
     await check(box(wrapper, 'n0'))
 
     expect(toastWarning).toHaveBeenCalledTimes(1)
-    expect(toastWarning.mock.calls[0]?.[0]).toContain('500')
+    expect(toastWarning.mock.calls[0]?.[0]).toContain('没走完')
+  })
+
+  it('⚠ 勾了一个空节点要说出来，不许一声不吭', async () => {
+    // 驱动把「不是变量」一律当成「有子节点」，空文件夹因此也长着一个勾选框
+    const wrapper = await render({
+      [ROOT]: [branch('Empty')],
+      'ns=2;s=Empty': [],
+    })
+
+    await check(box(wrapper, 'Empty'))
+
+    expect(toastInfo).toHaveBeenCalledTimes(1)
+    expect(toastInfo.mock.calls[0]?.[0]).toContain('没有可选的点位')
+    expect(wrapper.text()).not.toContain('已选')
+  })
+
+  it('⚠ 下面的点位全建过了也要说出来', async () => {
+    const wrapper = await render(
+      {
+        [ROOT]: [branch('Line1')],
+        'ns=2;s=Line1': [leaf('Temp')],
+      },
+      [point('ns=2;s=Temp', 'temp')],
+    )
+
+    await check(box(wrapper, 'Line1'))
+
+    expect(toastInfo).toHaveBeenCalledTimes(1)
+    expect(toastInfo.mock.calls[0]?.[0]).toContain('都已经建过了')
+  })
+
+  it('⚠ 空节点收齐之后连勾选框都不该留着', async () => {
+    const wrapper = await render({
+      [ROOT]: [branch('Empty')],
+      'ns=2;s=Empty': [],
+    })
+
+    await click(chevron(wrapper))
+
+    expect(hasBox(wrapper, 'Empty')).toBe(false)
   })
 })
 
-describe('建成点位', () => {
-  it('勾中的变量一起提交，寻址串原样带过去', async () => {
+describe('导入选中', () => {
+  it('先开导入弹窗统一设采样与归档默认，确认后寻址串原样带过去', async () => {
     const wrapper = await render({ [ROOT]: [leaf('Temp'), leaf('Flow')] })
     const create = vi.spyOn(collectApi, 'createPoints').mockResolvedValue({
       items: [],
@@ -399,16 +484,28 @@ describe('建成点位', () => {
 
     await check(box(wrapper, 'Temp'))
     await check(box(wrapper, 'Flow'))
-    const button = wrapper
+    const open = wrapper
       .findAll('button')
-      .find((one) => one.text() === '建成点位')
-    if (button === undefined) throw new Error('没有「建成点位」按钮')
-    await click(button)
+      .find((one) => one.text().startsWith('导入选中'))
+    if (open === undefined) throw new Error('没有「导入选中」按钮')
+    await click(open)
+
+    // 弹窗 teleport 在 body 上，wrapper.findAll 看不见它
+    const confirm = [...document.body.querySelectorAll('button')].find((one) =>
+      /^导入 \d+ 个节点$/.test(one.textContent?.trim() ?? ''),
+    )
+    if (confirm === undefined) throw new Error('弹窗里没有「导入」按钮')
+    confirm.click()
+    await flushPromises()
 
     expect(create).toHaveBeenCalledTimes(1)
-    expect(create.mock.calls[0]?.[0]?.items.map((one) => one.address)).toEqual([
+    const items = create.mock.calls[0]?.[0]?.items ?? []
+    expect(items.map((one) => one.address)).toEqual([
       'ns=2;s=Temp',
       'ns=2;s=Flow',
     ])
+    // 弹窗里的统一默认（采样间隔 / 记录历史）套到了每一项上
+    expect(items.every((one) => one.sampling_interval_ms === 1000)).toBe(true)
+    expect(items.every((one) => one.archive_enabled === true)).toBe(true)
   })
 })

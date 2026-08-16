@@ -40,7 +40,9 @@ const isLocked = computed(
 )
 
 const boxLabel = computed(() =>
-  props.node.isVariable ? props.node.name : `全选「${props.node.name}」下的点位`,
+  props.node.isVariable
+    ? props.node.name
+    : `全选「${props.node.name}」下的点位`,
 )
 
 function onExpand(): void {
@@ -91,14 +93,14 @@ function onExpand(): void {
 
       <DtTag v-if="node.isVariable" size="sm" intent="info">变量</DtTag>
       <DtTag v-if="taken.has(node.address)" size="sm">已建</DtTag>
-      <span class="truncate font-mono text-2xs text-muted">
+      <span class="truncate font-mono text-2xs text-text-secondary">
         {{ node.address }}
       </span>
     </div>
 
     <p
       v-if="node.error"
-      class="m-0 py-0.5 text-xs text-danger"
+      class="m-0 py-0.5 text-xs text-state-danger"
       :style="{ paddingInlineStart: `${(depth + 1) * 1.1}rem` }"
     >
       {{ node.error }}
