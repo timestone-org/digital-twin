@@ -40,7 +40,8 @@ export interface UploadTicket {
   expiresSeconds: number
 }
 
-interface AssetWire {
+/** 一个素材的线形。⚠ 键名以 openapi 的 `AssetOut` 为准，由契约用例钉住。 */
+export interface AssetWire {
   id: string
   ref: string
   kind: string
@@ -50,6 +51,22 @@ interface AssetWire {
   checksum: string
   created_at: string
   created_by: string
+}
+
+/** 一类素材登记的线形。 */
+export interface AssetKindWire {
+  kind: string
+  label: string
+  content_types: string[]
+  max_bytes: number
+}
+
+/** 一次直传凭证的线形。 */
+export interface UploadTicketWire {
+  asset_id: string
+  url: string
+  fields: Record<string, string>
+  expires_seconds: number
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

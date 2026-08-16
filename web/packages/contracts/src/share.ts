@@ -8,7 +8,7 @@ import type { DashboardNodeView } from './dashboard'
  * ⚠ 每次发布都换一个新令牌：取消发布再发布必须让旧链接失效，否则「撤回」是假的。
  */
 export interface DashboardPublication {
-  id: string
+  dashboardId: string
   isPublic: boolean
   /** 未公开时为 null。 */
   publicToken: string | null

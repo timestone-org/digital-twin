@@ -46,17 +46,28 @@ function call(): [string, Record<string, unknown>] {
   return [args?.[0] as string, (args?.[1] ?? {}) as Record<string, unknown>]
 }
 
+const UPDATED_AT = '2026-08-17T00:00:00.000Z'
+
 describe('线形映射', () => {
   it('发布态字段名转成 camelCase', () => {
     expect(
-      toPublication({ id: 'db1', is_public: true, public_token: 'tok' }),
-    ).toEqual({ id: 'db1', isPublic: true, publicToken: 'tok' })
+      toPublication({
+        dashboard_id: 'db1',
+        is_public: true,
+        public_token: 'tok',
+        updated_at: UPDATED_AT,
+      }),
+    ).toEqual({ dashboardId: 'db1', isPublic: true, publicToken: 'tok' })
   })
 
   it('撤回后令牌是 null，不是空串——空串会被当成一条能用的链接拼出去', () => {
     expect(
-      toPublication({ id: 'db1', is_public: false, public_token: null })
-        .publicToken,
+      toPublication({
+        dashboard_id: 'db1',
+        is_public: false,
+        public_token: null,
+        updated_at: UPDATED_AT,
+      }).publicToken,
     ).toBeNull()
   })
 

@@ -17,6 +17,7 @@ import type { ModelPrediction } from '@dt/contracts'
 
 import * as hvac from '@/api/hvac'
 import { describeError } from '@/composables/useAsyncList'
+import { useRacedFetch } from '@/composables/useRacedFetch'
 import { formatSet, isCovered } from '@/features/hvac/modelView'
 import {
   foldStatsOf,
@@ -63,40 +64,38 @@ function usePagedRows(modelId: () => string) {
   const total = ref(0)
   const loading = ref(false)
   const error = ref<string | null>(null)
-  // ⚠ 自增序号防竞态：换模型或重训完成会重新拉，慢的那次后返回会把上一个
-  // 模型的点混进来；卸载时也靠作废它让在途的循环自己退出
-  let token = 0
+  // ⚠ 换模型或重训完成会重新拉，慢的那次后返回会把上一个模型的点混进来；
+  // 卸载时也靠作废它让在途的翻页循环自己退出
+  const raced = useRacedFetch()
 
-  onBeforeUnmount(() => {
-    token += 1
-  })
+  onBeforeUnmount(() => raced.cancel())
 
   async function run(): Promise<void> {
-    const mine = ++token
     rows.value = []
     total.value = 0
     error.value = null
     if (modelId() === '') return
     loading.value = true
-    try {
-      await pull(mine)
-    } catch (caught) {
-      if (mine !== token) return
-      error.value = describeError(caught)
-      rows.value = []
-    } finally {
-      if (mine === token) loading.value = false
-    }
+    await raced.run(pull, {
+      ok: () => {},
+      fail: (caught) => {
+        error.value = describeError(caught)
+        rows.value = []
+      },
+      settled: () => (loading.value = false),
+    })
   }
 
-  async function pull(mine: number): Promise<void> {
+  // ⚠ 逐页往 rows 里追加而不是攒齐再写：散点图边翻边显形，攒齐再写会让用户
+  // 对着一张空图等上十次请求。判「自己还算不算数」因此靠 signal，不靠回调。
+  async function pull(signal: AbortSignal): Promise<void> {
     let page = 1
     for (;;) {
       const got = await hvac.listModelPredictions(modelId(), {
         page,
         size: OUT_OF_FOLD_PAGE_SIZE,
       })
-      if (mine !== token) return
+      if (signal.aborted) return
       rows.value = [...rows.value, ...got.items]
       total.value = got.total
       const drained = page * OUT_OF_FOLD_PAGE_SIZE >= got.total

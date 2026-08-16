@@ -110,7 +110,7 @@ export interface ValidationReport {
   issues: LayoutIssue[]
 }
 
-interface ValidationReportWire {
+export interface ValidationReportWire {
   dashboard_id: string
   is_valid: boolean
   issues: LayoutIssue[]

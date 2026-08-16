@@ -146,6 +146,12 @@ typecheck 与 lint 对下面这些**双双放行**，只能靠契约测试：
 - `DtIcon` 传入未登记的图标名 → 图标位置空着，控制台无声
   （由 `DtIcon.contract.spec.ts` 扫模板里的字面量名字兜住）
 - 后端字段改名 → `@dt/contracts` 的手写类型不会自己变
+  （每个出参形状都必须有一条把它钉在 `openapi.json` 上的用例，由
+  `scripts/gates/check_wire_shapes.py` 守着「有没有人想到写」，
+  见 [ADR-0019](../docs/adr/0019-前端线形先补覆盖闸而不是改成生成.md)）
+- 手搓一份竞态防护 → 慢的那次后返回覆盖快的那次，界面显示过期数据且不报错
+  （`app/` 下只许用 `useRacedFetch`；要作废在飞的那次用它的 `cancel()`，
+  见 [ADR-0020](../docs/adr/0020-写动作不抽公共外壳而竞态防护只留一份.md)）
 
 ## 8. 本地命令
 

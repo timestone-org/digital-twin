@@ -10,6 +10,7 @@ import type { CollectPoint } from '@dt/contracts'
 
 import { listPoints } from '@/api/collect'
 import { describeError } from '@/composables/useAsyncList'
+import { useRacedFetch } from '@/composables/useRacedFetch'
 
 /** 一次最多列这么多点位；再多就该靠关键字缩小范围。 */
 const PAGE_SIZE = 50
@@ -33,44 +34,40 @@ export function usePointPicker(): PointPicker {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  let sequence = 0
-  let inFlight: AbortController | null = null
+  const raced = useRacedFetch()
 
   async function search(): Promise<void> {
-    inFlight?.abort()
-    const controller = new AbortController()
-    inFlight = controller
-    sequence += 1
-    const mine = sequence
     loading.value = true
     error.value = null
-    try {
-      const page = await listPoints(
-        {
-          q: keyword.value.trim() === '' ? undefined : keyword.value.trim(),
-          sourceId: sourceId.value === '' ? undefined : sourceId.value,
-          page: 1,
-          size: PAGE_SIZE,
+    await raced.run(
+      (signal) =>
+        listPoints(
+          {
+            q: keyword.value.trim() === '' ? undefined : keyword.value.trim(),
+            sourceId: sourceId.value === '' ? undefined : sourceId.value,
+            page: 1,
+            size: PAGE_SIZE,
+          },
+          signal,
+        ),
+      {
+        ok: (page) => (items.value = page.items),
+        fail: (caught) => {
+          error.value = describeError(caught)
+          items.value = []
         },
-        controller.signal,
-      )
-      // ⚠ 只有最后一次发起的查询能写结果
-      if (mine !== sequence) return
-      items.value = page.items
-    } catch (caught) {
-      if (mine !== sequence) return
-      error.value = describeError(caught)
-      items.value = []
-    } finally {
-      if (mine === sequence) loading.value = false
-    }
+        settled: () => (loading.value = false),
+      },
+    )
   }
 
-  function dispose(): void {
-    inFlight?.abort()
-    inFlight = null
-    sequence += 1
+  return {
+    keyword,
+    sourceId,
+    items,
+    loading,
+    error,
+    search,
+    dispose: raced.cancel,
   }
-
-  return { keyword, sourceId, items, loading, error, search, dispose }
 }

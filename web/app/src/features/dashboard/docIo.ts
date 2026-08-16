@@ -16,6 +16,7 @@ import {
   type ReplaceLayoutInput,
 } from '@/api/dashboard'
 import { describeError } from '@/composables/useAsyncList'
+import { useRacedFetch } from '@/composables/useRacedFetch'
 
 /** 版本冲突时给用户看的一句话。 */
 export const VERSION_CONFLICT_MESSAGE =
@@ -45,41 +46,29 @@ export function createLoader(state: DocState): {
   load: (dashboardId: string) => Promise<DashboardPayload | null>
   dispose: () => void
 } {
-  let sequence = 0
-  let inFlight: AbortController | null = null
+  const raced = useRacedFetch()
 
   async function load(dashboardId: string): Promise<DashboardPayload | null> {
-    inFlight?.abort()
-    const controller = new AbortController()
-    inFlight = controller
-    sequence += 1
-    const mine = sequence
     state.loading.value = true
     state.error.value = null
     state.conflict.value = null
-    try {
-      const loaded = await getDashboard(dashboardId, controller.signal)
-      if (mine !== sequence) return null
-      state.dashboard.value = loaded
-      return loaded
-    } catch (caught) {
-      if (mine !== sequence) return null
-      state.error.value = describeError(caught)
-      state.dashboard.value = null
-      return null
-    } finally {
-      if (mine === sequence) state.loading.value = false
-    }
+    // 只有仍是最后一次的那回合会写它，故它就是本次调用该返回的东西
+    let settled: DashboardPayload | null = null
+    await raced.run((signal) => getDashboard(dashboardId, signal), {
+      ok: (loaded) => {
+        state.dashboard.value = loaded
+        settled = loaded
+      },
+      fail: (caught) => {
+        state.error.value = describeError(caught)
+        state.dashboard.value = null
+      },
+      settled: () => (state.loading.value = false),
+    })
+    return settled
   }
 
-  function dispose(): void {
-    inFlight?.abort()
-    inFlight = null
-    // ⚠ 推进序号：卸载后才返回的那次不许再写状态
-    sequence += 1
-  }
-
-  return { load, dispose }
+  return { load, dispose: raced.cancel }
 }
 
 /** 一次保存动作的公共外壳：忙碌态、409 与其余错误的口径都在这里。 */

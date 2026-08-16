@@ -20,6 +20,7 @@ import * as collect from '@/api/collect'
 import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
 import { describeError } from '@/composables/useAsyncList'
+import { useRacedFetch } from '@/composables/useRacedFetch'
 import { useForceDelete } from './useForceDelete'
 import { useSourceOps } from './useSourceOps'
 import BrowsePanel from './components/BrowsePanel.vue'
@@ -43,7 +44,7 @@ const sourcesLoading = ref(false)
 const sourcesError = ref<string | null>(null)
 const activeId = ref<string | null>(null)
 /** 乱序响应防护：只认最新一次加载。 */
-let loadSeq = 0
+const raced = useRacedFetch()
 
 const activeSource = computed(
   () => sources.value.find((one) => one.id === activeId.value) ?? null,
@@ -59,22 +60,19 @@ const stalledCount = computed(
 )
 
 async function loadSources(): Promise<void> {
-  const seq = ++loadSeq
   sourcesLoading.value = true
-  try {
-    const page = await collect.listSources({ size: LIST_SIZE })
-    if (seq !== loadSeq) return
-    sources.value = page.items
-    sourcesError.value = null
-    // 默认选中第一个，便于直接看到详情
-    if (!page.items.some((one) => one.id === activeId.value)) {
-      activeId.value = page.items[0]?.id ?? null
-    }
-  } catch (caught) {
-    if (seq === loadSeq) sourcesError.value = describeError(caught)
-  } finally {
-    if (seq === loadSeq) sourcesLoading.value = false
-  }
+  await raced.run(() => collect.listSources({ size: LIST_SIZE }), {
+    ok: (page) => {
+      sources.value = page.items
+      sourcesError.value = null
+      // 默认选中第一个，便于直接看到详情
+      if (!page.items.some((one) => one.id === activeId.value)) {
+        activeId.value = page.items[0]?.id ?? null
+      }
+    },
+    fail: (caught) => (sourcesError.value = describeError(caught)),
+    settled: () => (sourcesLoading.value = false),
+  })
 }
 
 function selectSource(id: string): void {
@@ -124,6 +122,8 @@ onMounted(() => {
 onUnmounted(() => {
   if (timer !== null) clearInterval(timer)
   timer = null
+  // ⚠ 不作废的话，卸载后才返回的那一拍还会写进一个已经没人看的页面
+  raced.cancel()
 })
 </script>
 

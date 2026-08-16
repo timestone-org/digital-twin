@@ -10,6 +10,7 @@ import type { Ref } from 'vue'
 
 import type { Asset, AssetKindSpec } from '@/api/assets'
 import { listAssetKinds, listAssets } from '@/api/assets'
+import { useRacedFetch } from '@/composables/useRacedFetch'
 
 /** 一页多少条。⚠ 与服务端 `DEFAULT_PAGE_SIZE` 同值，取满才说明还有下一页。 */
 export const PAGE_SIZE = 50
@@ -77,27 +78,25 @@ function appended(
 export function createLoader(
   state: LibraryState,
 ): (kind: AssetKind, mode: LoadMode) => Promise<void> {
-  let seq = 0
+  const raced = useRacedFetch()
   return async (kind, mode) => {
-    const mine = ++seq
     state.activeKind.value = kind
     state.isLoading.value = true
     state.error.value = ''
     await ensureKinds(state)
     const offset = mode === 'append' ? state.loaded.value : 0
-    try {
-      const rows = await listAssets(kind, { limit: PAGE_SIZE, offset })
+    await raced.run(() => listAssets(kind, { limit: PAGE_SIZE, offset }), {
       // 慢的那次后返回时整个丢弃：写回去就是「点了图标却出模型」
-      if (mine !== seq) return
-      state.assets.value =
-        mode === 'append' ? appended(state.assets.value, rows) : rows
-      state.loaded.value = offset + rows.length
-      state.hasMore.value = rows.length === PAGE_SIZE
-    } catch (caught) {
-      if (mine !== seq) return
-      state.error.value = messageOf(caught, '素材列表取不到')
-    } finally {
-      if (mine === seq) state.isLoading.value = false
-    }
+      ok: (rows) => {
+        state.assets.value =
+          mode === 'append' ? appended(state.assets.value, rows) : rows
+        state.loaded.value = offset + rows.length
+        state.hasMore.value = rows.length === PAGE_SIZE
+      },
+      fail: (caught) => {
+        state.error.value = messageOf(caught, '素材列表取不到')
+      },
+      settled: () => (state.isLoading.value = false),
+    })
   }
 }

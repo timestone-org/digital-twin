@@ -115,6 +115,9 @@ jobs:
         run: uv run --python 3.12 --no-project python scripts/gates/check_docker_workspace.py
       - name: 对外契约（URL 形状、序列化口径、错误码）
         run: uv run --python 3.12 --no-project python scripts/gates/check_api_contract.py
+
+      - name: 线形覆盖（出参形状都有契约用例钉住）
+        run: uv run --python 3.12 --no-project python scripts/gates/check_wire_shapes.py
       - name: 测试质量（无断言用例、分层、skip）
         run: uv run --python 3.12 --no-project python scripts/gates/check_tests.py
 

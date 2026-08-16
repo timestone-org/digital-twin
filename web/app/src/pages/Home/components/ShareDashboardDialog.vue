@@ -15,6 +15,8 @@ import {
   useToast,
 } from '@dt/ui'
 
+import type { DashboardPublication } from '@dt/contracts'
+
 import { getDashboard } from '@/api/dashboard'
 import { publishDashboard, unpublishDashboard } from '@/api/dashboardShare'
 import type { DashboardSummary } from '@/api/dashboardWire'
@@ -27,9 +29,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:open': [open: boolean]
-  updated: [
-    payload: { id: string; isPublic: boolean; publicToken: string | null },
-  ]
+  updated: [payload: DashboardPublication]
 }>()
 
 const confirm = useConfirm()
@@ -77,11 +77,7 @@ onUnmounted(() => {
   disposed = true
 })
 
-function absorb(result: {
-  id: string
-  isPublic: boolean
-  publicToken: string | null
-}): void {
+function absorb(result: DashboardPublication): void {
   isPublic.value = result.isPublic
   token.value = result.publicToken
   emit('updated', result)

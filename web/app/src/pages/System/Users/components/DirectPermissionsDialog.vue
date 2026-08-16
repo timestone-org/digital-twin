@@ -13,6 +13,7 @@ import { DtButton, DtModal, DtNotice, DtSpinner } from '@dt/ui'
 
 import * as admin from '@/api/admin'
 import { describeError } from '@/composables/useAsyncList'
+import { useRacedFetch } from '@/composables/useRacedFetch'
 import PermissionCodePicker from '@/features/permissions/PermissionCodePicker.vue'
 import { usePermissionCatalog } from '@/features/permissions/usePermissionCatalog'
 
@@ -30,39 +31,38 @@ const error = ref<string | null>(null)
 
 // ⚠ 竞态防护：连着点两行时，慢的那次后返回会盖掉快的那次的勾选，
 // 结果是对着 A 的界面提交 B 的权限集——覆盖式写，错一次就是错到底。
-let sequence = 0
+const raced = useRacedFetch()
 
 watch(
   () => props.user,
   async (user) => {
-    const mine = ++sequence
     error.value = null
     ready.value = false
     selected.value = new Set()
     roleCodes.value = new Set()
-    if (!user) return
-    loading.value = true
-    try {
-      const [detail] = await Promise.all([
-        admin.getUser(user.id),
-        catalog.ensure(),
-      ])
-      if (mine !== sequence) return
-      // ⚠ catalog.ensure() 自己吞了异常只写进 catalog.error，从不 reject——
-      // 不显式检查的话目录 500 时弹窗正文是空白的，而保存按钮还是启用的。
-      if (catalog.error.value !== null) {
-        error.value = catalog.error.value
-        return
-      }
-      selected.value = new Set(detail.direct_permissions)
-      roleCodes.value = new Set(detail.role_permissions)
-      ready.value = true
-    } catch (caught) {
-      if (mine !== sequence) return
-      error.value = describeError(caught)
-    } finally {
-      if (mine === sequence) loading.value = false
+    if (!user) {
+      raced.cancel()
+      return
     }
+    loading.value = true
+    await raced.run(
+      () => Promise.all([admin.getUser(user.id), catalog.ensure()]),
+      {
+        ok: ([detail]) => {
+          // ⚠ catalog.ensure() 自己吞了异常只写进 catalog.error，从不 reject——
+          // 不显式检查的话目录 500 时弹窗正文是空白的，而保存按钮还是启用的。
+          if (catalog.error.value !== null) {
+            error.value = catalog.error.value
+            return
+          }
+          selected.value = new Set(detail.direct_permissions)
+          roleCodes.value = new Set(detail.role_permissions)
+          ready.value = true
+        },
+        fail: (caught) => (error.value = describeError(caught)),
+        settled: () => (loading.value = false),
+      },
+    )
   },
   // ⚠ immediate：组件在「已经是打开态」时被挂载（深链、或标记与挂载同一 tick）
   // 时，只监听变化的 watch 一次都不会跑，表单会是空的。

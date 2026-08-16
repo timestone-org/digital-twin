@@ -49,12 +49,12 @@ async function clickText(
 
 beforeEach(() => {
   vi.spyOn(shareApi, 'publishDashboard').mockResolvedValue({
-    id: 'd1',
+    dashboardId: 'd1',
     isPublic: true,
     publicToken: 'tok-new',
   })
   vi.spyOn(shareApi, 'unpublishDashboard').mockResolvedValue({
-    id: 'd1',
+    dashboardId: 'd1',
     isPublic: false,
     publicToken: null,
   })
@@ -81,7 +81,7 @@ describe('未公开', () => {
 
     expect(shareApi.publishDashboard).toHaveBeenCalledWith('d1')
     expect(wrapper.emitted('updated')).toEqual([
-      [{ id: 'd1', isPublic: true, publicToken: 'tok-new' }],
+      [{ dashboardId: 'd1', isPublic: true, publicToken: 'tok-new' }],
     ])
     expect(wrapper.find('input').element.value).toBe(
       `${location.origin}/public/tok-new`,
@@ -173,7 +173,7 @@ describe('已公开', () => {
 
     expect(shareApi.unpublishDashboard).toHaveBeenCalledWith('d1')
     expect(wrapper.emitted('updated')).toEqual([
-      [{ id: 'd1', isPublic: false, publicToken: null }],
+      [{ dashboardId: 'd1', isPublic: false, publicToken: null }],
     ])
     expect(wrapper.text()).toContain('还没有公开')
   })

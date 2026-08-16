@@ -3,7 +3,7 @@
  *
  * ⚠ 换实例要立刻换掉节点清单，而换清单是一次异步请求——**必须防竞态**：
  * 连点两个实例时，先发的那次可能后回来，把 B 的清单换成 A 的，而用户看到的
- * 实例名是 B。这里用一个自增的世代号挡住，回来时世代对不上就整份丢弃。
+ * 实例名是 B。
  */
 import type {
   AcModelPublication,
@@ -14,6 +14,7 @@ import type {
 import * as hvac from '@/api/hvac'
 import * as opcua from '@/api/opcua'
 import { describeError } from '@/composables/useAsyncList'
+import { useRacedFetch } from '@/composables/useRacedFetch'
 import {
   draftOf,
   emptyDraft,
@@ -30,16 +31,15 @@ export function createPublicationActions(
   derived: PublicationDerived,
   modelId: () => string,
 ) {
-  // 节点清单的防竞态世代号，见文件头
-  let generation = 0
+  const nodes = useRacedFetch()
 
   async function loadNodes(instanceId: string): Promise<void> {
-    generation += 1
-    const mine = generation
-    const found = await fetchNodes(state, instanceId)
-    // ⚠ 回来时世代对不上就整份丢弃：这一份属于上一个实例
-    if (mine !== generation) return
-    apply(state, found)
+    // ⚠ 回来时不再是最后一次就整份丢弃：这一份属于上一个实例
+    await nodes.run(() => fetchNodes(state, instanceId), {
+      ok: (found) => apply(state, found),
+      fail: () => {},
+      settled: () => {},
+    })
   }
 
   return {

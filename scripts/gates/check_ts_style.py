@@ -31,6 +31,14 @@ MAX_PROPS = 10
 MAX_TEMPLATE_DEPTH = 6
 
 TOKENS_PACKAGE = "tokens"
+# 手搓的序号法竞态防护。⚠ 认的是「领号 + 拿自己的号跟当前号比」这一对：
+# 单独出现的 `sequence` 只是个普通变量，配上比较才是在自己实现竞态防护
+SEQUENCE_CLAIM = re.compile(
+    r"(?:const|let)\s+(?P<own>\w*[Mm]ine\w*|\w*[Ss]eq\w*)\s*="
+    r"\s*(?:\+\+\s*)?(?P<counter>\w+)"
+)
+SEQUENCE_COMPARE = re.compile(r"\b(\w*[Mm]ine\w*)\s*[!=]==\s*(\w+)")
+RACED_FETCH = "useRacedFetch"
 # 生命周期长于渲染的东西，都必须在卸载时清理
 LONG_LIVED = re.compile(
     r"\bsetInterval\s*\(|\bsetTimeout\s*\(|addEventListener\s*\("
@@ -225,6 +233,36 @@ def check_unmount_cleans_up() -> list[Violation]:
     return found
 
 
+def check_race_guards_come_from_one_place() -> list[Violation]:
+    """⚠ 手搓的竞态防护每份都可能漏一条路径，而漏了不会报错。
+
+    只会表现为「界面偶尔显示上一次的结果」，且没有任何报错——所以口径必须
+    只有 `useRacedFetch` 一份。要作废在飞的那一次，用它的 `cancel()`。
+
+    ⚠ 只扫应用壳：`useRacedFetch` 住在 `app/`，而 `packages/*` 不许依赖 `app/`
+    （web/CONTEXT.md §2 的四条铁律之一），包里够不到它。第三个包侧消费方出现
+    时就该把它下沉成一个零依赖包，那时这条闸再放开扫描范围。
+    """
+    found: list[Violation] = []
+    for path in web_sources():
+        if "app" not in path.parts:
+            continue
+        text = strip_ts_comments(read(path))
+        if RACED_FETCH in text:
+            continue
+        claim = SEQUENCE_CLAIM.search(text)
+        if claim is None or not SEQUENCE_COMPARE.search(text):
+            continue
+        found.append(
+            Violation(
+                "竞态防护只许用 useRacedFetch",
+                at(path),
+                f"{claim.group(0)}；手搓一份就会漏路径，而漏了不报错",
+            )
+        )
+    return found
+
+
 def check_formatting_is_centralised() -> list[Violation]:
     """时间与数字的格式化集中在一处，组件只调用。"""
     found: list[Violation] = []
@@ -281,6 +319,7 @@ CHECKS = (
     check_template_nesting,
     check_v_for_key_is_stable,
     check_unmount_cleans_up,
+    check_race_guards_come_from_one_place,
     check_formatting_is_centralised,
     check_no_hardcoded_colors,
 )

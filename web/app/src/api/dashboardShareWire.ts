@@ -15,11 +15,12 @@ import {
   toTransform,
 } from './dashboardWire'
 
-/** 发布 / 取消发布的出参。 */
+/** 发布 / 取消发布的出参。⚠ 这里的主键叫 `dashboard_id`，没有 `id`。 */
 export interface DashboardPublicationWire {
-  id: string
+  dashboard_id: string
   is_public: boolean
   public_token: string | null
+  updated_at: string
 }
 
 /**
@@ -82,7 +83,7 @@ export function toPublication(
   wire: DashboardPublicationWire,
 ): DashboardPublication {
   return {
-    id: wire.id,
+    dashboardId: wire.dashboard_id,
     isPublic: wire.is_public,
     publicToken: wire.public_token,
   }
