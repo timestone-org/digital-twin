@@ -81,12 +81,11 @@ let groundGrid: GroundGridLayer | null = null
 let animations: ModelAnimations | null = null
 let nodeIndex: NodeIndex = EMPTY_NODE_INDEX
 
-/** 模型包围盒对角线；相机与图层都要按它定尺度。 */
+/** 模型包围盒对角线；相机、图层与剪裁面都按它定尺度。 */
 function modelSpan(): number {
   const root = model.root()
   return root === null ? 0 : boundingDiagonal(root)
 }
-
 const sceneCamera = useSceneCamera({
   core: () => core,
   config: () => props.config,
@@ -185,32 +184,24 @@ function refreshLayers(): void {
   // ⚠ 摆放要跟着配置重算：只在装载时应用的话，编辑器里改缩放/位移/旋转
   // 会一直到换模型才生效，中间那段是「调了没反应」
   placeModel()
-  syncGroundGrid()
   animations?.apply(props.config.model.animations)
   layers?.build(props.config, liveValues(), nodeIndex)
   // ⚠ 建完立刻按当前机位算一次：等下一帧的话，配了近距隐藏的元素会先露一帧
   layers?.applyDistanceRules(distanceContextOf(core))
 }
 
-/** 把配置里的摆放落到模型上，并按新体量重算锚点小球尺寸。 */
+/**
+ * 把摆放落到模型上，并按新体量重算锚点小球与地面网格。
+ * ⚠ 网格那一支不能跟着「有没有模型」早退：它是独立于模型的参考面，
+ * 没挑模型时打开开关也该画得出来。
+ */
 function placeModel(): void {
   const root = model.root()
-  if (root === null) return
-  applyModelPlacement(root, props.config.model)
-  layers?.setWorldScale(boundingDiagonal(root))
-}
-
-/**
- * 地面网格按开关建删，尺寸随模型体量。
- * ⚠ 不跟着 `placeModel` 走：那一支在没有模型时直接返回，而网格是独立于模型的
- * 参考面——没挑模型时打开开关也该画得出来。
- */
-function syncGroundGrid(): void {
-  const root = model.root()
-  groundGrid?.sync(
-    props.config.model.showGroundGrid,
-    root === null ? 0 : boundingDiagonal(root),
-  )
+  if (root !== null) {
+    applyModelPlacement(root, props.config.model)
+    layers?.setWorldScale(modelSpan())
+  }
+  groundGrid?.sync(props.config.model.showGroundGrid, modelSpan())
 }
 
 onMounted(() => {
@@ -222,7 +213,7 @@ onMounted(() => {
   layers = new SceneLayers(element)
   layers.addTo(core.scene)
   groundGrid = new GroundGridLayer(core.scene, element)
-  syncGroundGrid()
+  placeModel()
   loop.start()
   // ⚠ 必须等 core 建好再装：漫游要往轨道控制器上挂监听，早一步挂不上去
   roam.attach()

@@ -45,11 +45,7 @@ export interface RoamTourController {
   toggle: () => void
   next: () => void
   prev: () => void
-  /**
-   * 停在当前位姿上。
-   * ⚠ 手动切视点时必须先叫它：否则下一帧轨迹又把镜头拽走，
-   * 用户看到的是「点了视点没反应」。
-   */
+  /** 停在当前位姿上。⚠ 手动切视点时必须先叫它，否则下一帧轨迹又把镜头拽走。 */
   pause: () => void
 }
 
@@ -158,11 +154,8 @@ class RoamRunner {
     }, tour.idleAutoplayDelayMs)
   }
 
-  /**
-   * 用户碰了轨道控制器。
-   * ⚠ 立刻停播，不等这一段飞完：用户已经在手动看别处了，镜头还自己往前飞
-   * 会变成两个人抢方向盘。
-   */
+  // ⚠ 立刻停播、不等这一段飞完：用户已经在手动看别处了，镜头还自己往前飞
+  // 会变成两个人抢方向盘
   private readonly onUserInput = (): void => {
     this.pause()
     this.armIdleTimer()
@@ -193,7 +186,7 @@ export function useRoamTour(deps: RoamTourDeps): RoamTourController {
     showControls,
     playing: runner.playing,
     attach: () => runner.attach(),
-    advance: (deltaMs) => runner.advance(deltaMs),
+    advance: (ms) => runner.advance(ms),
     toggle: () => runner.toggle(),
     next: () => runner.step(1),
     prev: () => runner.step(-1),
