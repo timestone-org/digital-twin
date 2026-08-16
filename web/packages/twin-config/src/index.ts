@@ -30,7 +30,7 @@ export {
   twinRowLabels,
 } from './bindingRows'
 export type { TwinBindingRow } from './bindingRows'
-export { defaultCameraOf } from './cameraSelect'
+export { defaultCameraOf, isUsablePose } from './cameraSelect'
 export { GIZMO_KINDS, gizmoTargetOf } from './gizmoTarget'
 export type { TwinGizmoKind, TwinGizmoTarget } from './gizmoTarget'
 export {

@@ -152,27 +152,51 @@ describe('视点', () => {
 })
 
 describe('默认机位', () => {
+  /** 站得住的视点：机位与注视点分得开。 */
+  function usable(overrides: Record<string, unknown> = {}) {
+    return camera({ position: [5, 5, 5], target: [0, 0, 0], ...overrides })
+  }
+
   it('标了默认就用它', () => {
-    const cameras = [camera({ id: 'a' }), camera({ id: 'b', isDefault: true })]
+    const cameras = [usable({ id: 'a' }), usable({ id: 'b', isDefault: true })]
     expect(defaultCameraOf(cameras)?.id).toBe('b')
   })
 
   it('一个都没标时用文档序第一个', () => {
-    const cameras = [camera({ id: 'a' }), camera({ id: 'b' })]
+    const cameras = [usable({ id: 'a' }), usable({ id: 'b' })]
     expect(defaultCameraOf(cameras)?.id).toBe('a')
   })
 
   // 让「最后一个赢」会让人在列表里改顺序时莫名换镜头
   it('多个都标了只认第一个', () => {
     const cameras = [
-      camera({ id: 'a', isDefault: true }),
-      camera({ id: 'b', isDefault: true }),
+      usable({ id: 'a', isDefault: true }),
+      usable({ id: 'b', isDefault: true }),
     ]
     expect(defaultCameraOf(cameras)?.id).toBe('a')
   })
 
   it('一个视点都没有时给 null，不编一个出来', () => {
     expect(defaultCameraOf([])).toBeNull()
+  })
+
+  // ⚠ 一个刚新建、还没「取当前机位」的视点，两个坐标都是原点：飞过去就是
+  // 相机在看自己，画面要么全黑要么乱转。这时候该退回自动取景
+  it('机位与注视点重合时当没有默认视点，退回自动取景', () => {
+    const cameras = [
+      camera({ id: 'a', position: [0, 0, 0], target: [0, 0, 0] }),
+    ]
+
+    expect(defaultCameraOf(cameras)).toBeNull()
+  })
+
+  it('只有退化视点时也给 null，不硬挑一个', () => {
+    const cameras = [
+      camera({ id: 'a', position: [1, 1, 1], target: [1, 1, 1] }),
+      camera({ id: 'b', position: [2, 2, 2], target: [2, 2, 2] }),
+    ]
+
+    expect(defaultCameraOf(cameras)).toBeNull()
   })
 })
 

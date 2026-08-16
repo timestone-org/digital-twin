@@ -292,6 +292,19 @@ describe('按大屏格子留边', () => {
     wrapper.unmount()
   })
 
+  // ⚠ 这条守的是一次真实的回归：宽高都写 auto 时，视口里只有绝对定位的
+  // canvas、没有流内容，两个方向双双塌成 0——模型整个不显示且不报任何错
+  it('高度撑满而不是 auto，宽度才有的推', () => {
+    const wrapper = mountViewport({
+      targetSize: { width: 1280, height: 720 },
+    })
+
+    const style = wrapper.find('.twin-viewport').attributes('style') ?? ''
+    expect(style).toContain('height: 100%')
+    expect(style).not.toContain('height: auto')
+    wrapper.unmount()
+  })
+
   it('没给尺寸时铺满，不凭空锁一个比例', () => {
     const wrapper = mountViewport()
 
