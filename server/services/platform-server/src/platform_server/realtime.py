@@ -11,19 +11,12 @@ from typing import Any, Protocol
 import httpx
 from pydantic import BaseModel, ValidationError
 
-from lib.logging import get_logger
-from lib.logging.context import current_log_context
+from lib.logging import current_traceparent, get_logger
 
 _logger = get_logger("platform.realtime")
 
 TOPICS_PATH = "/internal/v1/realtime/topics"
 PUBLISH_PATH = "/internal/v1/realtime/publish"
-
-# W3C traceparent 的版本与采样标志位
-_TRACE_VERSION = "00"
-_TRACE_FLAGS = "01"
-_TRACE_ID_LENGTH = 32
-_SPAN_ID_LENGTH = 16
 
 
 class FramePublisher(Protocol):
@@ -207,23 +200,6 @@ class RealtimeClient:
             "X-Service-Key": self._service_key,
             "traceparent": traceparent or current_traceparent(),
         }
-
-
-def current_traceparent() -> str:
-    """把当前日志上下文压成一条 W3C traceparent。
-
-    ⚠ 发布循环必须在每一拍开头绑一次新的 trace 再调它：contextvars 不跨任务
-    传播，没绑就取到一串全零，链路在这一跳齐断。
-    """
-    context = current_log_context()
-    trace_id = (context.trace_id or "").replace("-", "")
-    span_id = (context.span_id or "").replace("-", "")
-    return (
-        f"{_TRACE_VERSION}"
-        f"-{trace_id.rjust(_TRACE_ID_LENGTH, '0')[:_TRACE_ID_LENGTH]}"
-        f"-{span_id.rjust(_SPAN_ID_LENGTH, '0')[:_SPAN_ID_LENGTH]}"
-        f"-{_TRACE_FLAGS}"
-    )
 
 
 class _TopicsData(BaseModel):

@@ -10,7 +10,7 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import Database
-from lib.logging import get_logger
+from lib.logging import current_traceparent, get_logger
 from lib.utils.timeutils import format_rfc3339
 from platform_server.apps.hvac.crud import (
     ac_startup_batch_crud,
@@ -41,7 +41,6 @@ from platform_server.apps.hvac.services.ac_startup_extract import (
 )
 from platform_server.apps.hvac.services.ac_startup_queue import (
     ShardMessage,
-    current_traceparent,
     publish_shards,
 )
 from platform_server.apps.hvac.services.ac_startup_rules import (

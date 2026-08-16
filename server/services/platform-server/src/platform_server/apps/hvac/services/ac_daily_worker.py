@@ -15,9 +15,13 @@ from datetime import date, timedelta
 
 from lib.db import Database
 from lib.errors import DependencyUnavailable
-from lib.logging import bind_log_context, get_logger, reset_log_context
+from lib.logging import (
+    bind_log_context,
+    get_logger,
+    parse_traceparent,
+    reset_log_context,
+)
 from lib.utils.timeutils import utcnow
-from lib.web.middleware import parse_traceparent
 from platform_server.apps.hvac.services import ac_daily_queue
 from platform_server.apps.hvac.services.ac_startup_daily import (
     DAILY_RUN_APPENDED,

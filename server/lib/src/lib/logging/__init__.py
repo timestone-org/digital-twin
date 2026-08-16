@@ -11,13 +11,25 @@ from lib.logging.logger import (
     configure_logging,
     get_logger,
 )
+from lib.logging.trace import (
+    compose_traceparent,
+    current_traceparent,
+    new_span_id,
+    new_trace_id,
+    parse_traceparent,
+)
 
 __all__ = [
     "ContextLogger",
     "LogContext",
     "bind_log_context",
+    "compose_traceparent",
     "configure_logging",
     "current_log_context",
+    "current_traceparent",
     "get_logger",
+    "new_span_id",
+    "new_trace_id",
+    "parse_traceparent",
     "reset_log_context",
 ]

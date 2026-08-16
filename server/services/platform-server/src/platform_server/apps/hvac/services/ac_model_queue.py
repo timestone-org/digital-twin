@@ -9,9 +9,7 @@ import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from platform_server.apps.hvac.services.ac_startup_queue import (
-    current_traceparent,
-)
+from lib.logging import current_traceparent
 from platform_server.stream import StreamGroup, StreamLike
 
 # 信封版本。字段改形状时 +1，消费端据此拒掉读不懂的消息而不是猜

@@ -12,8 +12,12 @@ from dataclasses import dataclass
 
 from lib.db import Database
 from lib.errors import DependencyUnavailable
-from lib.logging import bind_log_context, get_logger, reset_log_context
-from lib.web.middleware import parse_traceparent
+from lib.logging import (
+    bind_log_context,
+    get_logger,
+    parse_traceparent,
+    reset_log_context,
+)
 from platform_server.apps.hvac.services import ac_model_queue
 from platform_server.apps.hvac.services.ac_model_trainer import (
     TRAIN_RUN_FAILED,

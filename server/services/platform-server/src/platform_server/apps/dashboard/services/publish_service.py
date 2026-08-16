@@ -17,7 +17,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
 from lib.errors import DependencyUnavailable
-from lib.logging import get_logger
+from lib.logging import current_traceparent, get_logger
 from platform_server.apps.collect.services import SnapshotSource
 from platform_server.apps.collect.services.point_frames import (
     UNAVAILABLE_REASON,
@@ -35,7 +35,7 @@ from platform_server.apps.dashboard.services.publish_plan import (
 )
 from platform_server.apps.dashboard.services.topics import topic_of
 from platform_server.apps.dashboard.services.viewers import SubscriptionViewers
-from platform_server.realtime import FramePublisher, current_traceparent
+from platform_server.realtime import FramePublisher
 
 _logger = get_logger("platform.dashboard.publish")
 

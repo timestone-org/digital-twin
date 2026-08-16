@@ -13,8 +13,7 @@ import uuid
 import httpx
 from pydantic import BaseModel, ValidationError
 
-from lib.logging import get_logger
-from lib.logging.context import current_log_context
+from lib.logging import current_traceparent, get_logger
 
 _logger = get_logger("opcua.realtime")
 
@@ -26,10 +25,6 @@ PUBLISHER_NAME = "opcua-server"
 
 TOPICS_PATH = "/internal/v1/realtime/topics"
 PUBLISH_PATH = "/internal/v1/realtime/publish"
-
-# W3C traceparent 的版本与采样标志位
-_TRACE_VERSION = "00"
-_TRACE_FLAGS = "01"
 
 
 def topic_of(instance_id: uuid.UUID) -> str:
@@ -213,18 +208,6 @@ class RealtimeClient:
             "X-Service-Key": self._service_key,
             "traceparent": traceparent or current_traceparent(),
         }
-
-
-def current_traceparent() -> str:
-    """把当前日志上下文压成一条 W3C traceparent。
-
-    ⚠ 在后台任务里调它得到的是一串全零：contextvars 不跨任务传播。要保住
-    链路，得在**还在请求上下文里**的时候取一次并带着走。
-    """
-    context = current_log_context()
-    trace_id = (context.trace_id or "").replace("-", "").rjust(32, "0")[:32]
-    span_id = (context.span_id or "").replace("-", "").rjust(16, "0")[:16]
-    return f"{_TRACE_VERSION}-{trace_id}-{span_id}-{_TRACE_FLAGS}"
 
 
 class _TopicsData(BaseModel):

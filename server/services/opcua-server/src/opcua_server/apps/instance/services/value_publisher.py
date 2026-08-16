@@ -12,12 +12,9 @@ import contextlib
 import uuid
 from typing import Any
 
-from lib.logging import get_logger
+from lib.logging import current_traceparent, get_logger
 from lib.utils.timeutils import utcnow
-from opcua_server.apps.instance.services.realtime import (
-    RealtimeClient,
-    current_traceparent,
-)
+from opcua_server.apps.instance.services.realtime import RealtimeClient
 
 _logger = get_logger("opcua.value_publisher")
 

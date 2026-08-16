@@ -81,6 +81,7 @@ ignore = [
 known-first-party = [
     "lib",
     "timeseries",
+    "collectwire",
     "auth_server",
     "collector_server",
     "opcua_server",
@@ -117,5 +118,10 @@ typeCheckingMode = "strict"
 reportMissingTypeStubs = false
 # ⚠ 必须写 `**`：pyright 的单个 `*` 匹配不到 `services/<svc>/src` 这一层，
 # 写成 `services/*/src` 时它一个服务文件都不看，而输出仍是「0 errors」。
-include = ["lib/src", "services/**/src", "services/**/scripts"]
+include = [
+    "lib/src",
+    "domain/**/src",
+    "services/**/src",
+    "services/**/scripts",
+]
 exclude = ["**/__pycache__", "**/.venv", "**/migrations/versions"]

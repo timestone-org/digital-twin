@@ -3,8 +3,6 @@
 W3C Trace Context 继承、耗时统计、日志级别按状态码分档。
 """
 
-import os
-import re
 import time
 from collections.abc import Awaitable, Callable
 
@@ -15,36 +13,13 @@ from starlette.types import ASGIApp
 
 from lib.logging.context import bind_log_context, reset_log_context
 from lib.logging.logger import get_logger
+from lib.logging.trace import new_span_id, new_trace_id, parse_traceparent
 
 TRACEPARENT_HEADER = "traceparent"
-_TRACEPARENT_RE = re.compile(
-    r"^00-(?P<trace>[0-9a-f]{32})-(?P<span>[0-9a-f]{16})-[0-9a-f]{2}$"
-)
 
 SERVER_ERROR_STATUS = 500  # 5xx 起点
 
 _logger = get_logger("lib.web.access")
-
-
-def new_trace_id() -> str:
-    """生成 32 位十六进制 trace id。"""
-    return os.urandom(16).hex()
-
-
-def new_span_id() -> str:
-    """生成 16 位十六进制 span id。"""
-    return os.urandom(8).hex()
-
-
-def parse_traceparent(raw: str | None) -> str | None:
-    """从 `traceparent` 头取 trace id；格式不合法返回 None。
-
-    Args: raw。
-    """
-    if not raw:
-        return None
-    matched = _TRACEPARENT_RE.match(raw.strip().lower())
-    return matched.group("trace") if matched else None
 
 
 def _route_template(request: Request) -> str:

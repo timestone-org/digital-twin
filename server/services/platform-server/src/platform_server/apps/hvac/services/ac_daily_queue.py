@@ -10,12 +10,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 
+from lib.logging import current_traceparent
 from platform_server.apps.hvac.services.ac_startup_daily import (
     format_business_date,
     parse_business_date,
-)
-from platform_server.apps.hvac.services.ac_startup_queue import (
-    current_traceparent,
 )
 from platform_server.stream import StreamGroup, StreamLike
 

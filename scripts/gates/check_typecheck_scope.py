@@ -19,7 +19,12 @@ from _report import PY, SERVER, Violation, iter_files, main, read
 
 REQUIRED_ARGS = 2
 # 被 include 覆盖的目录，与 server/pyproject.toml 的 [tool.pyright] include 对应
-SCOPES = ("lib/src", "services/*/src", "services/*/scripts")
+SCOPES = (
+    "lib/src",
+    "domain/*/src",
+    "services/*/src",
+    "services/*/scripts",
+)
 EXCLUDED = ("migrations",)
 
 

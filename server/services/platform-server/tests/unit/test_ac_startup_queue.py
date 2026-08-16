@@ -6,11 +6,14 @@
 
 import uuid
 
-from lib.logging import bind_log_context, reset_log_context
+from lib.logging import (
+    bind_log_context,
+    current_traceparent,
+    reset_log_context,
+)
 from platform_server.apps.hvac.services.ac_startup_queue import (
     ENVELOPE_VERSION,
     ShardMessage,
-    current_traceparent,
     decode,
 )
 

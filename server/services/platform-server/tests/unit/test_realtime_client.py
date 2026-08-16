@@ -9,11 +9,11 @@ from typing import Any
 
 import httpx
 
+from lib.logging import current_traceparent
 from platform_server.realtime import (
     PUBLISH_PATH,
     TOPICS_PATH,
     RealtimeClient,
-    current_traceparent,
 )
 
 SERVICE_KEY = "k" * 32

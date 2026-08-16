@@ -18,7 +18,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
 from lib.errors import DependencyUnavailable
-from lib.logging import get_logger
+from lib.logging import current_traceparent, get_logger
 from platform_server.apps.collect.services.live_plan import (
     LivePlan,
     LivePlanSource,
@@ -38,7 +38,7 @@ from platform_server.apps.collect.services.snapshot_source import (
 )
 from platform_server.apps.collect.services.topics import topic_of
 from platform_server.apps.collect.services.watchers import SubscriptionWatchers
-from platform_server.realtime import FramePublisher, current_traceparent
+from platform_server.realtime import FramePublisher
 
 _logger = get_logger("platform.collect.live")
 

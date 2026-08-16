@@ -9,8 +9,6 @@ import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from lib.logging import current_log_context
-from lib.web.middleware import new_span_id, new_trace_id
 from platform_server.stream import StreamGroup, StreamLike
 
 # 信封版本。字段改形状时 +1，消费端据此拒掉读不懂的消息而不是猜
@@ -45,14 +43,6 @@ class ShardMessage:
             _FIELD_MONTH: self.month,
             _FIELD_TRACEPARENT: self.traceparent,
         }
-
-
-def current_traceparent() -> str:
-    """当前上下文的 W3C traceparent；没有上下文就现开一条链路。"""
-    context = current_log_context()
-    trace_id = context.trace_id or new_trace_id()
-    span_id = context.span_id or new_span_id()
-    return f"00-{trace_id}-{span_id}-01"
 
 
 def decode(fields: Mapping[str, str]) -> ShardMessage | None:

@@ -17,8 +17,7 @@ from typing import Any, Protocol
 import httpx
 from pydantic import BaseModel, ValidationError
 
-from lib.logging import get_logger
-from platform_server.realtime import current_traceparent
+from lib.logging import current_traceparent, get_logger
 
 _logger = get_logger("platform.opcua")
 
