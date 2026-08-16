@@ -25,6 +25,12 @@ const props = defineProps<{
   pickMode: TwinPickMode
   /** 坐标轴手柄的模式；只有箭头用得上 `rotate`。 */
   gizmoMode?: GizmoMode
+  /**
+   * 这块孪生在大屏上占多大（设计像素）；给了就按它的宽高比留边。
+   * ⚠ 不留边的话编辑视口与大屏格子的宽高比不同，相机 aspect 跟着不同，
+   * 同一份配置在两边取景不一样——用户看到的是「牌与模型的大小对不上」。
+   */
+  targetSize?: { width: number; height: number } | undefined
 }>()
 
 const emit = defineEmits<{
@@ -58,6 +64,24 @@ const pickHint = computed(() => {
   if (props.pickMode === 'position') return '点模型表面或地面，取世界坐标'
   return ''
 })
+/**
+ * 按目标格子的宽高比留边；没给尺寸就铺满。
+ * ⚠ `aspect-ratio` 配 `max-` 两条：宽高比固定之后，长边由可用空间定、
+ * 短边跟着算，两个方向都不会溢出容器。
+ */
+const frameStyle = computed(() => {
+  const size = props.targetSize
+  if (size === undefined || size.width <= 0 || size.height <= 0)
+    return undefined
+  return {
+    width: 'auto',
+    height: 'auto',
+    aspectRatio: `${size.width} / ${size.height}`,
+    maxWidth: '100%',
+    maxHeight: '100%',
+  }
+})
+
 const backgroundStyle = computed(() => {
   const spec = props.config.model.background
   if (spec === '') return undefined
@@ -151,21 +175,38 @@ defineExpose({ focus, snapshot, playRoamPreview, stopRoamPreview })
 </script>
 
 <template>
-  <div ref="containerRef" class="twin-viewport" :style="backgroundStyle">
-    <div v-if="status === 'loading'" class="twin-viewport__overlay">
-      <DtSpinner />
-      <span class="twin-viewport__hint">模型加载中</span>
+  <div class="twin-viewport__stage">
+    <div
+      ref="containerRef"
+      class="twin-viewport"
+      :style="[backgroundStyle, frameStyle]"
+    >
+      <div v-if="status === 'loading'" class="twin-viewport__overlay">
+        <DtSpinner />
+        <span class="twin-viewport__hint">模型加载中</span>
+      </div>
+      <div v-else-if="status !== 'ready'" class="twin-viewport__overlay">
+        <DtNotice :intent="status === 'error' ? 'danger' : 'neutral'">
+          {{ overlayMessage }}
+        </DtNotice>
+      </div>
+      <p v-if="pickHint !== ''" class="twin-viewport__pick">{{ pickHint }}</p>
     </div>
-    <div v-else-if="status !== 'ready'" class="twin-viewport__overlay">
-      <DtNotice :intent="status === 'error' ? 'danger' : 'neutral'">
-        {{ overlayMessage }}
-      </DtNotice>
-    </div>
-    <p v-if="pickHint !== ''" class="twin-viewport__pick">{{ pickHint }}</p>
   </div>
 </template>
 
 <style scoped lang="scss">
+// 舞台把视口居中；视口自己按目标格子的宽高比留边
+.twin-viewport__stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--surface-sunken);
+}
+
 .twin-viewport {
   position: relative;
   width: 100%;

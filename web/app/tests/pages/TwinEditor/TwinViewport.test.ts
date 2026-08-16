@@ -100,7 +100,10 @@ describe('接线', () => {
 
     // ⚠ 只能比结构：测试工具把 props 深响应式包了一层，进到场景里的是它的代理
     expect(scene().options.config).toStrictEqual(config)
-    expect(scene().options.container).toBe(wrapper.element)
+    // ⚠ 场景挂的是内层视口不是外层舞台：舞台只负责按目标格子的宽高比居中留边
+    expect(scene().options.container).toBe(
+      wrapper.find('.twin-viewport').element,
+    )
     expect(scene().setSelection).toHaveBeenCalledWith({
       kind: 'anchors',
       id: 'a1',
@@ -238,7 +241,9 @@ describe('覆盖层', () => {
       }),
     })
 
-    expect(wrapper.attributes('style')).toContain('var(--surface-base)')
+    expect(wrapper.find('.twin-viewport').attributes('style')).toContain(
+      'var(--surface-base)',
+    )
     wrapper.unmount()
   })
 })
@@ -270,6 +275,36 @@ describe('暴露给页面的两个方法', () => {
     const wrapper = mountViewport()
 
     expect(wrapper.vm.snapshot()).toEqual(seam.pose)
+    wrapper.unmount()
+  })
+})
+
+describe('按大屏格子留边', () => {
+  // ⚠ 不留边的话编辑区与大屏格子的宽高比不同，相机 aspect 跟着不同，
+  // 同一份配置在两边取景不一样——看起来就是「牌与模型的大小对不上」
+  it('给了目标尺寸就按它的宽高比锁住视口', () => {
+    const wrapper = mountViewport({
+      targetSize: { width: 1280, height: 720 },
+    })
+
+    const style = wrapper.find('.twin-viewport').attributes('style') ?? ''
+    expect(style).toContain('aspect-ratio: 1280 / 720')
+    wrapper.unmount()
+  })
+
+  it('没给尺寸时铺满，不凭空锁一个比例', () => {
+    const wrapper = mountViewport()
+
+    const style = wrapper.find('.twin-viewport').attributes('style') ?? ''
+    expect(style).not.toContain('aspect-ratio')
+    wrapper.unmount()
+  })
+
+  it('尺寸不合法时当没给', () => {
+    const wrapper = mountViewport({ targetSize: { width: 0, height: 720 } })
+
+    const style = wrapper.find('.twin-viewport').attributes('style') ?? ''
+    expect(style).not.toContain('aspect-ratio')
     wrapper.unmount()
   })
 })

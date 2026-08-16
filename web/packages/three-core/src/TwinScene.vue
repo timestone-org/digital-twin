@@ -153,10 +153,8 @@ const loop = useRenderLoop({
   core: () => core,
   element: () => containerRef.value,
   onFrame: (deltaS) => {
-    if (deltaS > 0) {
-      layers?.update(deltaS)
-      animations?.update(deltaS)
-    }
+    if (core !== null) layers?.update(deltaS, core.camera)
+    if (deltaS > 0) animations?.update(deltaS)
     roam.advance(deltaS * MS_PER_S)
     // ⚠ 每帧都要算：镜头一直在动，距离规则的成立与否随时在变
     if (core !== null) layers?.applyDistanceRules(distanceContextOf(core))

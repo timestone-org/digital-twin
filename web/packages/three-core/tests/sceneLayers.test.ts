@@ -39,19 +39,11 @@ function host(): HTMLElement {
   return element
 }
 
-/** 造一台摆在指定位置的相机；朝向断言不看它，只有信息牌摆朝向要用。 */
-function cameraAt(x: number, y = 0, z = 0): THREE.Camera {
-  const camera = new THREE.PerspectiveCamera()
-  camera.position.set(x, y, z)
-  return camera
-}
-
 /** 相机远在 x 轴上；下面每一类都配了「远于 5 就隐藏」。 */
 function farAway(): DistanceContext {
   return {
     cameraPosition: new THREE.Vector3(500, 0, 0),
     orbitTarget: new THREE.Vector3(0, 0, 0),
-    camera: cameraAt(500, 0, 0),
   }
 }
 
@@ -59,7 +51,6 @@ function nearby(): DistanceContext {
   return {
     cameraPosition: new THREE.Vector3(1, 0, 0),
     orbitTarget: new THREE.Vector3(0, 0, 0),
-    camera: cameraAt(1, 0, 0),
   }
 }
 

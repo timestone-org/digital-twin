@@ -72,7 +72,6 @@ interface TwinViewportHandle {
 const viewportRef = ref<TwinViewportHandle | null>(null)
 
 const config = computed(() => page.doc.value?.config.value ?? null)
-
 const bulkOpen = ref(false)
 const gizmoMode = useGizmoMode(() => selection.value)
 /** 批量建部件的候选：模型节点配上「已被谁认领」。 */
@@ -254,7 +253,8 @@ onBeforeRouteLeave(async () => {
             :config="config"
             :selection="selection"
             :pick-mode="pickMode"
-            v-model:gizmo-mode="gizmoMode"
+            :gizmo-mode="gizmoMode"
+            :target-size="page.targetSize.value"
             @select="selection = $event ?? TWIN_SELECT_MODEL"
             @pick-node="onPickNode"
             @pick-position="(position: Vec3) => applyPick({ position })"

@@ -21,6 +21,12 @@ export interface TwinEditorPage {
   doc: ComputedRef<TwinDoc | null>
   dashboard: Ref<DashboardPayload | null>
   node: ComputedRef<DashboardNodePayload | null>
+  /**
+   * 这块孪生在大屏上占多大（设计像素）；节点还没读出来时是 undefined。
+   * ⚠ 编辑视口按它留边：不留的话编辑区与大屏格子的宽高比不同，相机 aspect
+   * 跟着不同，同一份配置在两边取景不一样——看起来就是「牌与模型的大小对不上」。
+   */
+  targetSize: ComputedRef<{ width: number; height: number } | undefined>
   loading: Ref<boolean>
   saving: Ref<boolean>
   /** 取数失败、或这张屏上根本没有这个节点。 */
@@ -131,6 +137,12 @@ export function useTwinEditorPage(
     doc: computed(() => doc.value),
     dashboard: file.dashboard,
     node,
+    targetSize: computed(() => {
+      const current = node.value
+      return current === null
+        ? undefined
+        : { width: current.w, height: current.h }
+    }),
     loading: file.loading,
     saving: file.saving,
     error: computed(() =>

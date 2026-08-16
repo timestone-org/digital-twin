@@ -15,6 +15,7 @@ import {
   EMPTY_PANEL_VALUES,
   RoamTimeline,
   buildRoamSegments,
+  defaultCameraOf,
   gizmoTargetOf,
   hierEffectiveNodes,
 } from '@dt/twin-config'
@@ -606,6 +607,24 @@ export class EditorScene {
     }
   }
 
+  /**
+   * 装载后的初始取景，与运行态走同一条路：有视点就用标了默认的那个，
+   * 一个都没配才把整个模型框进画面。
+   * ⚠ 两边必须一致：编辑器恒自动取景、运行态用默认视点的话，镜头距离不同，
+   * 同一张信息牌在两边看起来一大一小——用户会以为是牌的尺寸配错了。
+   */
+  private applyInitialPose(root: THREE.Object3D): void {
+    const core = this.core
+    if (core === null) return
+    const camera = defaultCameraOf(this.config.cameras)
+    if (camera === null) {
+      frameObject(core, root)
+      return
+    }
+    applyCameraPose(core, camera)
+    core.controls.update()
+  }
+
   private mountModel(root: THREE.Object3D): void {
     const core = this.core
     if (core === null) {
@@ -617,7 +636,7 @@ export class EditorScene {
     core.modelRoot.add(root)
     this.nodeIndex = buildNodeIndex(root)
     this.refresh()
-    frameObject(core, root)
+    this.applyInitialPose(root)
     this.on.modelNodes(this.nodeIndex.namedNodes)
     this.on.status('ready', '')
     this.emitCamera()
@@ -644,7 +663,9 @@ export class EditorScene {
     const core = this.core
     if (core === null) return
     const delta = this.clock.tick(now)
-    if (delta > 0) this.layers?.update(delta)
+    // ⚠ 时长为 0 也要走：信息牌的朝向在这一支里摆，只在 delta > 0 时调的话
+    // 刚建完那一帧的牌是歪的
+    this.layers?.update(delta, core.camera)
     // ⚠ 喂帧钟夹过的时长：标签页切走再回来那一帧有几十秒，直接算下去预览会一帧飞完
     this.advanceRoam(delta * MS_PER_S, core)
     // ⚠ 宿主被折叠（clientHeight 为 0）时不换算标记尺寸：拿 0 当视口高度算出来的
