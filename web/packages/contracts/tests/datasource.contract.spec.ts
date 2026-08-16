@@ -1,6 +1,6 @@
 /**
  * @fileoverview 契约：`PointSample` 能表达 publisher 真推的三档条目
- * （platform-server `services/publish_items.py`）——`ok` / `stale` 带值，
+ * （platform-server `apps/collect/services/point_frames.py`）——`ok` / `stale` 带值，
  * `error` 只带原因。
  * ⚠ 少了 `state` 这一档判别，「取不到」与「陈旧」在客户端就只剩「没有值」一种表现，
  * 而 `ModuleStatus` 的 stale / error 正是靠它们区分的。

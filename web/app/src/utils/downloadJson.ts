@@ -1,5 +1,5 @@
 /**
- * @fileoverview 把一份 JSON 存成本地文件。
+ * @fileoverview 把一份数据存成本地文件（JSON 与 CSV 两种）。
  * ⚠ 对象 URL 用完必须 revoke：不释放的话这块 Blob 会一直挂在文档上，
  * 而工作台是长时间开着的页面，导出几次就攒下几份整包。
  */
@@ -24,13 +24,31 @@ export function toFileName(name: string): string {
  * @param name 文件名（不含扩展名），会先做字符规整
  */
 export function downloadJson(data: unknown, name: string): void {
-  const blob = new Blob([JSON.stringify(data, null, 2)], {
-    type: 'application/json',
-  })
+  downloadBlob(
+    new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }),
+    `${toFileName(name)}.json`,
+  )
+}
+
+/**
+ * 触发浏览器下载一份 CSV。
+ * ⚠ MIME 带 `charset=utf-8`，且正文自带 BOM（见 `pointCsv.ts`）：两者缺一，
+ * Excel 会按本地代码页解，中文列全是乱码。
+ * @param text CSV 正文
+ * @param name 文件名（不含扩展名），会先做字符规整
+ */
+export function downloadCsv(text: string, name: string): void {
+  downloadBlob(
+    new Blob([text], { type: 'text/csv;charset=utf-8' }),
+    `${toFileName(name)}.csv`,
+  )
+}
+
+function downloadBlob(blob: Blob, fileName: string): void {
   const href = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = href
-  anchor.download = `${toFileName(name)}.json`
+  anchor.download = fileName
   anchor.click()
   URL.revokeObjectURL(href)
 }

@@ -2,11 +2,12 @@
  * @fileoverview 契约：推送条目解成 `PointSample` 时，`error` 档只带原因、
  * `stale` 档保留旧值的时刻，形状不对的条目直接丢——**绝不退化成一个 value 是
  * undefined 的 ok**，那与「现场报了空值」长得一模一样。
- * 条目形状的真源是 platform-server 的 `services/publish_items.py`。
+ * 条目形状的真源是 platform-server 的 `apps/collect/services/point_frames.py`。
  */
 import { describe, expect, it } from 'vitest'
 
 import {
+  collectTopic,
   dashboardTopic,
   decodePointItem,
   decodePointItems,
@@ -154,9 +155,17 @@ describe('一整帧的载荷', () => {
 })
 
 describe('主题', () => {
+  const ID = '0198c0f6-1c2f-7a10-9f3d-2c9b6b3a5e41'
+
   it('一张大屏一个主题，形状是 `dashboard:{id}`', () => {
-    expect(dashboardTopic('0198c0f6-1c2f-7a10-9f3d-2c9b6b3a5e41')).toBe(
-      'dashboard:0198c0f6-1c2f-7a10-9f3d-2c9b6b3a5e41',
-    )
+    expect(dashboardTopic(ID)).toBe(`dashboard:${ID}`)
+  })
+
+  it('一个采集数据源一个主题，形状是 `collect:{id}`', () => {
+    expect(collectTopic(ID)).toBe(`collect:${ID}`)
+  })
+
+  it('⚠ 两个前缀不许撞——写串了 hub 会以「主题未登记」拒订，而页面只表现为「永远没有值」', () => {
+    expect(collectTopic(ID)).not.toBe(dashboardTopic(ID))
   })
 })

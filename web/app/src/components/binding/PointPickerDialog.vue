@@ -16,7 +16,7 @@ import {
 } from '@dt/ui'
 import { onUnmounted, watch } from 'vue'
 
-import type { CollectPoint } from '@/api/collect'
+import type { CollectPoint } from '@dt/contracts'
 import { usePointPicker } from '@/composables/usePointPicker'
 
 const props = defineProps<{ modelValue: boolean; fieldKey: string | null }>()

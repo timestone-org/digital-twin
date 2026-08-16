@@ -1,6 +1,6 @@
 /**
  * @fileoverview 把 publisher 推来的条目解成 `PointSample`。
- * 条目形状由 platform-server 的 `services/publish_items.py` 定：
+ * 条目形状由 platform-server 的 `apps/collect/services/point_frames.py` 定：
  * `{nodeKey, state, value, timestampMs, quality}`，**`error` 档不带 value**。
  *
  * ⚠ 逐字段窄化，不写 `as`：推送方与前端各改各的时，断言会让错形状一路流进
@@ -84,4 +84,15 @@ export function decodePointItems(payload: unknown): DecodedPoint[] {
  */
 export function dashboardTopic(dashboardId: string): string {
   return `dashboard:${dashboardId}`
+}
+
+/**
+ * 一个采集数据源的推送主题，与 platform-server 的 `apps/collect/services/
+ * topics.py` 同形。
+ * ⚠ 与 `dashboardTopic` 是两个前缀、两个推送方：写串了 hub 会以「主题未登记」
+ * 拒订，而页面只表现为「永远没有值」。
+ * @param sourceId 数据源 id
+ */
+export function collectTopic(sourceId: string): string {
+  return `collect:${sourceId}`
 }

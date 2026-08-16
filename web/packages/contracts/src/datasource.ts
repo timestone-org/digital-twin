@@ -4,7 +4,7 @@
  * `@dt/datasources` 的原因（依赖表见 docs/agents/project-structure-typescript.md §2）。
  * ⚠ `PointSample` 是**按 `state` 判别的联合**而不是「必填三件套 + 可选 state」：
  * publisher 的 error 档条目根本不带 `value` / `timestampMs` / `quality`
- * （platform-server `services/publish_items.py`），做成可选字段的话，
+ * （platform-server `apps/collect/services/point_frames.py`），做成可选字段的话，
  * 取不到的点位会带着 `undefined` 值流进渲染层，而那与「现场报了空值」长得一样。
  */
 import type {

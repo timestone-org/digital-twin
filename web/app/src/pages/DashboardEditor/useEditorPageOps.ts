@@ -5,7 +5,7 @@
 import type { Ref } from 'vue'
 import type { ModuleManifest } from '@dt/contracts'
 
-import type { CollectPoint } from '@/api/collect'
+import type { CollectPoint } from '@dt/contracts'
 import type { DashboardEditor } from '@/composables/useDashboardEditor'
 import type { useDashboardDoc } from '@/composables/useDashboardDoc'
 import type { NodeGeometry } from '@/features/dashboard/editorDoc'
@@ -138,7 +138,7 @@ export function createEditorPageOps(deps: EditorPageOpsDeps): EditorPageOps {
     },
     pickPoint: (point) => {
       const fieldKey = deps.pickingFieldKey.value
-      if (fieldKey !== null) actions.applyPickedPoint(fieldKey, point.nodeKey)
+      if (fieldKey !== null) actions.applyPickedPoint(fieldKey, point.node_key)
     },
     closePicker: (open) => {
       if (!open) deps.pickingFieldKey.value = null

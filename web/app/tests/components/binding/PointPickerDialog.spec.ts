@@ -7,18 +7,26 @@ import { flushPromises, mount } from '@vue/test-utils'
 import type { Page } from '@dt/contracts'
 
 import * as collectApi from '@/api/collect'
-import type { CollectPoint } from '@/api/collect'
+import type { CollectPoint } from '@dt/contracts'
 import PointPickerDialog from '@/components/binding/PointPickerDialog.vue'
 
 function point(code: string): CollectPoint {
   return {
     id: code,
-    sourceId: 's1',
-    nodeKey: `s1:${code}`,
+    source_id: 's1',
+    node_key: `s1:${code}`,
     code,
     name: `点位 ${code}`,
-    dataType: 'float',
+    address: `ns=2;s=${code}`,
+    data_type: 'float',
     unit: null,
+    sampling_interval_ms: 1000,
+    deadband: 0,
+    archive_enabled: true,
+    archive_max_interval_ms: 60000,
+    archive_retention_days: null,
+    created_at: '2026-08-16T00:00:00.000Z',
+    updated_at: '2026-08-16T00:00:00.000Z',
   }
 }
 
@@ -96,7 +104,7 @@ describe('选中', () => {
     await wrapper.find('.dt-pick__item').trigger('click')
 
     expect(wrapper.emitted('pick')?.[0]?.[0]).toMatchObject({
-      nodeKey: 's1:temp',
+      node_key: 's1:temp',
     })
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([false])
   })

@@ -6,7 +6,7 @@
 import type { DashboardNodePayload } from '@dt/contracts'
 import type { DesignSize, GetModuleManifest } from '@dt/runtime'
 
-import type { CollectPoint } from '@/api/collect'
+import type { CollectPoint } from '@dt/contracts'
 import type { ContextMenuAction } from '../contextMenuItems'
 import type { ContextMenuState } from '../useEditorContextMenu'
 import PointPickerDialog from '@/components/binding/PointPickerDialog.vue'

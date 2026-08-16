@@ -6,7 +6,9 @@
 
 import { ref, type Ref } from 'vue'
 
-import { listPoints, type CollectPoint } from '@/api/collect'
+import type { CollectPoint } from '@dt/contracts'
+
+import { listPoints } from '@/api/collect'
 import { describeError } from '@/composables/useAsyncList'
 
 /** 一次最多列这么多点位；再多就该靠关键字缩小范围。 */

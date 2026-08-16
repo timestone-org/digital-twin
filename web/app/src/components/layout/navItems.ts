@@ -32,6 +32,22 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permission: [PERMISSION_CODES.assetView],
   },
   {
+    // 采集是「去连现场设备读写点位」，与「工具 / OPC UA 服务端」方向相反：
+    // 那边本平台是服务端、被上位机连。两组刻意不合并（COLLECT_DESIGN §1）
+    key: 'collect',
+    label: '数据采集',
+    icon: 'gauge',
+    children: [
+      {
+        key: 'collect-opcua',
+        label: 'OPC UA',
+        icon: 'activity',
+        to: '/collect/opcua',
+        permission: [PERMISSION_CODES.collectView],
+      },
+    ],
+  },
+  {
     key: 'hvac',
     label: '空调管理',
     icon: 'snowflake',

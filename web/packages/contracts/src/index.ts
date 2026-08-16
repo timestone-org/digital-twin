@@ -267,6 +267,39 @@ export type {
 } from './datasource'
 export { POINT_QUALITIES, POINT_STATES } from './datasource'
 export type {
+  CollectAddressCheck,
+  CollectBrowseItem,
+  CollectBrowseResult,
+  CollectCheckStatus,
+  CollectConnectivity,
+  CollectDataType,
+  CollectErrorCategory,
+  CollectPoint,
+  CollectPointBatch,
+  CollectPointCreateInput,
+  CollectPointItemInput,
+  CollectPointSaved,
+  CollectPointUpdateInput,
+  CollectProtocol,
+  CollectReadMode,
+  CollectSource,
+  CollectSourceCreateInput,
+  CollectSourceRuntime,
+  CollectSourceState,
+  CollectSourceUpdateInput,
+  CollectWriteResult,
+} from './collect'
+export {
+  COLLECT_CHECK_STATUSES,
+  COLLECT_DATA_TYPES,
+  COLLECT_ERROR_CATEGORIES,
+  COLLECT_MIN_INTERVAL_MS,
+  COLLECT_POINT_BATCH_MAX,
+  COLLECT_PROTOCOLS,
+  COLLECT_READ_MODES,
+  COLLECT_SOURCE_STATES,
+} from './collect'
+export type {
   ClientAction,
   ClientMessage,
   ServerAckFrame,
