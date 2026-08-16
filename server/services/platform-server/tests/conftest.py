@@ -41,19 +41,11 @@ from lib.testing import FakeObjectStore, InMemoryCache
 from lib.utils.timeutils import utcnow
 from platform_server.app import build_app
 from platform_server.apps.assets.catalog import ASSET_MANAGE, ASSET_VIEW
-from platform_server.apps.assets.deps import (
-    get_object_store,
-)
-from platform_server.apps.assets.deps import (
-    get_session as get_asset_session,
-)
+from platform_server.apps.assets.deps import get_object_store
 from platform_server.apps.collect.catalog import (
     COLLECT_MANAGE,
     COLLECT_OPERATE,
     COLLECT_VIEW,
-)
-from platform_server.apps.collect.deps import (
-    get_session as get_collect_session,
 )
 from platform_server.apps.collect.services import (
     CommandBus,
@@ -64,9 +56,6 @@ from platform_server.apps.dashboard.catalog import (
     DASHBOARD_EDIT,
     DASHBOARD_MANAGE,
     DASHBOARD_VIEW,
-)
-from platform_server.apps.dashboard.deps import (
-    get_session as get_dashboard_session,
 )
 from platform_server.apps.dashboard.deps import (
     get_validation_context as get_dashboard_validation_context,
@@ -81,14 +70,11 @@ from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
 from platform_server.apps.hvac.deps import (
     get_ac_source_reader,
     get_node_writer,
-    get_session,
     get_sessions,
 )
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
-from platform_server.apps.runtime_params.deps import (
-    get_session as get_runtime_param_session,
-)
 from platform_server.container import IDEMPOTENCY_NAMESPACE, Container
+from platform_server.deps import get_session
 from platform_server.settings import Settings
 from timeseries import HISTORY_SCHEMA
 
@@ -423,18 +409,14 @@ def _wire_fakes(
 ) -> None:
     """把会打网络的依赖换成假件。
 
-    ⚠ 每个 apps/<feature> 各有一份 `get_session`，**五份都要换**：漏一份那个
-    模块就打真库真提交，用例之间开始互相看见对方的数据。这不是假设——
-    `runtime_params` 那份漏过一次，表现是「单跑绿、连着跑红」，
-    而残留行会一直躺在库里毒下一次运行。
+    ⚠ 事务件只有一份（`platform_server.deps.get_session`），换一次就够。
+    它此前是每个功能模块各一份、五份都要换，而 `runtime_params` 那份漏过一次，
+    表现是「单跑绿、连着跑红」——那个模块打真库真提交，残留行躺在库里毒下一次
+    运行。收成一份之后这类漏换不可能再发生，由
+    `tests/contract/test_route_matrix.py` 守住不许再分叉。
     Args: application, maker, fakes, validation, object_store。
     """
-    override = _session_override(maker)
-    application.dependency_overrides[get_session] = override
-    application.dependency_overrides[get_dashboard_session] = override
-    application.dependency_overrides[get_collect_session] = override
-    application.dependency_overrides[get_runtime_param_session] = override
-    application.dependency_overrides[get_asset_session] = override
+    application.dependency_overrides[get_session] = _session_override(maker)
     application.dependency_overrides[get_object_store] = lambda: object_store
     application.dependency_overrides[get_ac_source_reader] = lambda: (
         AcSourceReader(source=fakes.ac_source, timezone=SOURCE_TIMEZONE)

@@ -34,7 +34,11 @@ from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
 from platform_server.apps.runtime_params.api import (
     ROUTERS as RUNTIME_PARAM_ROUTERS,
 )
-from platform_server.deps import REQUIRED_CODES_ATTR, REQUIRED_MODE_ATTR
+from platform_server.deps import (
+    REQUIRED_CODES_ATTR,
+    REQUIRED_MODE_ATTR,
+    get_session,
+)
 from platform_server.settings import API_PREFIX, INTERNAL_PREFIX
 
 ROUTERS = (
@@ -471,3 +475,22 @@ def test_every_field_action_still_points_at_a_live_route() -> None:
     # 端点改名后这张表会静默失效，那条路由于是悄悄退回 manage 的口径
     assert set(COLLECT_OPERATED) <= set(ROUTE_CASES)
     assert set(COLLECT_READ_ACTIONS) <= set(ROUTE_CASES)
+
+
+def test_every_route_takes_its_session_from_the_one_place() -> None:
+    """事务件只许有一份。
+
+    ⚠ 分叉出第二份的代价是真发生过的：某个功能模块自带一份 `get_session` 时，
+    夹具漏换了它，那个模块于是打**真库真提交**——表现是「单跑绿、连着跑红」，
+    而残留行会一直躺在库里毒下一次运行。
+    """
+    seen: set[object] = set()
+    for route in iter_routes(build_app()):
+        pending = list(route.dependant.dependencies)
+        while pending:
+            dependency = pending.pop()
+            name = getattr(dependency.call, "__name__", "")
+            if name == "get_session":
+                seen.add(dependency.call)
+            pending.extend(dependency.dependencies)
+    assert seen == {get_session}
