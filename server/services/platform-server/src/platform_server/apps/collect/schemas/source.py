@@ -21,6 +21,27 @@ from platform_server.apps.collect.schemas.common import (
 MAX_OPTIONS = 32
 
 
+class SourceRuntimeOut(OutputModel):
+    """一个数据源此刻的采集运行态：collector 写、平台只读。
+
+    ⚠ 与 `is_enabled` 不是一回事：前者是「配置说它该采」，这里是「它此刻真
+    在采吗」。把两者显示成同一个状态灯，是现场最常见的一种误判。
+    """
+
+    # `connecting` / `online` / `offline`，外加平台侧的 `unknown`
+    # （采集侧还没写过这一行，通常意味着 collector 没起来）
+    state: str
+    # 采集侧此刻真的挂着的点位数。与 `SourceOut.point_count`（配置了多少个）
+    # 对不上时，差额就是没订上的那些
+    point_count: int
+    # `transient` / `config` / `auth`，没有错就是 null
+    error_category: str | None
+    # 异常类型名，不是异常原文——原文可能带凭据与请求体
+    error_detail: str | None
+    leader_instance: str | None
+    updated_at: Utc | None
+
+
 class SourceOut(OutputModel):
     """一个数据源。
 
@@ -39,6 +60,10 @@ class SourceOut(OutputModel):
     poll_interval_ms: int
     is_enabled: bool
     point_count: int
+    # 实时值最多覆盖多少个点位。⚠ 由服务端回而不是前端写死一份：两处各写一个
+    # 数字，调大配置之后界面还在按旧数字提示「只覆盖前 N 个」
+    live_point_limit: int
+    runtime: SourceRuntimeOut
     created_at: Utc
     updated_at: Utc
 

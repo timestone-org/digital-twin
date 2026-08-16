@@ -53,16 +53,22 @@
 ⚠ **`code` 是身份、`address` 是配置**：换协议只改 `address`，历史曲线是连续的
 一条；`code` 改名等于换身份，故**不提供改名接口**（COLLECT_DESIGN §2）。
 
-### 1.4 大屏实时发布（`publisher` 角色）
+### 1.4 实时发布（`publisher` 角色，两条链路）
 
 | 词 | 指什么 | 不叫什么 |
 |---|---|---|
-| **主题** `topic` | `dashboard:{dashboard_id}`，hub 眼里的一个不透明键 | 不叫频道 |
+| **链路** `Lane` | 一个对账器 + 一个发布器。眼下两条：大屏、采集配置页 | 不叫角色（两条共用同一个进程与同一把租约） |
+| **主题** `topic` | `dashboard:{dashboard_id}` 或 `collect:{source_id}`，hub 眼里的一个不透明键 | 不叫频道 |
 | **观看者** `viewer` | hub 那张订阅表里的一条**连接**，不是一个人 | 不叫用户（一人可以开三个标签页） |
-| **活跃大屏** | 此刻至少有一条连接订着它的主题的大屏 | 不叫在线大屏 |
-| **发布计划** `DashboardPlan` | 一张大屏当前要推的点位身份 + 它的行版本 | 不叫采集计划（那是下发给 collector 的） |
+| **活跃大屏 / 活跃数据源** | 此刻至少有一条连接订着它的主题的那些 | 不叫在线大屏 |
+| **发布计划** `DashboardPlan` / `LivePlan` | 一张大屏 / 一个数据源当前要推的点位身份 | 不叫采集计划（那是下发给 collector 的） |
 | **条目** `item` | 一个点位的一条推送记录：身份 + 状态 + 值 + 时刻 + 质量 | 不叫消息（消息是 hub 那层的信封） |
-| **全量帧 / 增量帧** | 带上本屏全部点位 / 只带与上一次不同的那些 | 两者形状相同，客户端按 `nodeKey` 合并 |
+| **全量帧 / 增量帧** | 带上整份点位清单 / 只带与上一次不同的那些 | 两者形状相同，客户端按 `nodeKey` 合并 |
+| **采集运行态** `SourceRuntime` | collector 写的「这个数据源此刻连没连上」 | 不叫启用态（`is_enabled` 是配置说它该采） |
+
+⚠ 两条链路的**推送方名字必须不同**（`platform-publisher` / `platform-collect`）：
+对账靠「向 hub 要我名下的主题，多出来的注销掉」收敛，同名就会互相注销光。
+⚠ 两条链路**各自兜错**：配置页那条读库失败，不许顺带让全厂大屏这一拍不更新。
 
 ### 1.5 数据面
 
@@ -299,6 +305,7 @@ apps/collect/
 │   ├── plan_notifier        计划变更广播（加速器，不是保证）
 │   ├── history_service      游标分页与分桶聚合
 │   ├── history_source       归档库的只读连接
+│   ├── state_source         采集运行态的只读面（跨 schema 读 collector 写的表）
 │   ├── point_catalog        大屏绑定问的那张点位台账（PointCatalog 的真实现）
 │   └── transactions         跨进程调用之前放掉只读事务
 ├── crud/         source · point · history（跨 schema 只读 SQL）
@@ -306,28 +313,44 @@ apps/collect/
 └── protocols.py  protocol / read_mode / data_type 三组闭合集合
 ```
 
+⚠ **采集运行态在事务外贴**：它来自 collect schema 的另一条只读连接，在业务事务
+里读它就是「事务内做外部 IO」。故写路径一律先 commit、再 `attach_runtime`。
+
 ⚠ **两处刻意的重复**，都由「服务之间不许互相 import」逼出来，改一边就要改另一边：
 `services/command_transport.py` 的键名与信封字段复述自 collector-server 的
 `commands.py`；`schemas/plan.py` 的字段名复述自它的 `apps/collect/schemas/plan.py`
 （那边是 `extra="ignore"`，漂了不会报错，只会让某个采样参数怎么改都不生效）。
 
-### 4.2 大屏实时发布的解剖（`publisher` 角色）
+### 4.2 实时发布的解剖（`publisher` 角色，两条链路）
 
 ```
 publisher.py                 角色装配 + 发布循环（租约、合并窗口、对账节奏、关停）
+                             ⚠ 循环持有 Lane 元组，逐条跑并**逐条兜错**
 lease.py                     Redis 租约（⚠ 与 collector-server 同源的刻意重复）
 realtime.py                  hub 内部端点的瘦客户端 + FramePublisher/TopicRegistrar 协议
-apps/dashboard/services/
+apps/dashboard/services/     —— 大屏那条链路
 ├── topics                   `dashboard:{id}` 的命名与解析、它要求的权限码
 ├── viewers                  活跃大屏（跨 schema 只读 realtime.subscription）
 ├── publish_plan             一屏要推哪些点位 + 行版本；大屏清单（对账用）
-├── publish_items            条目组装：ok / stale / error、增量比对、分片
 ├── publish_service          一拍：活跃集 → 计划 → 取值 → 批推
 └── topic_reconcile          主题登记的周期对账
-apps/collect/services/
-└── snapshot_source          点位当前值的读侧（Redis HMGET，⚠ 绝不 HGETALL）
+apps/collect/services/       —— 采集配置页那条链路 + 两者共用的件
+├── point_frames             条目组装：ok / stale / error、增量比对、分片（两条链路共用）
+├── snapshot_source          点位当前值的读侧（Redis HMGET，⚠ 绝不 HGETALL）
+├── topics                   `collect:{id}` 的命名与解析、它要求的权限码
+├── watchers                 活跃数据源（同一张订阅表，另一个主题前缀）
+├── live_plan                一个数据源要推哪些点位（TTL 重读 + 逐条比对）
+├── live_publisher           一拍：活跃集 → 清单 → 取值 → 批推
+└── topic_reconcile          采集主题登记的周期对账
 apps/dashboard/crud/publish   三条只读查询：大屏清单、行版本、实时绑定的点位身份
 ```
+
+⚠ **`point_frames` 住在 `apps/collect` 而不是 `apps/dashboard`**：它的输入是
+`PointReading`、输出是点位条目，一个大屏名词也没有。放在大屏那边会让采集链路
+反向 import，而那是一个 import 期的环。
+
+⚠ **采集点位表没有行版本可比**，故 `live_plan` 靠周期重读 + 逐条比对收敛。
+到期重读**不等于**清单变了：不比对就会每个 TTL 推一帧全量。
 
 **活跃大屏怎么来，以及它为什么没让 hub 长出业务知识**：hub 的
 `realtime.subscription` 里只有「连接 × 主题」两列，主题对它是不透明键；本服务

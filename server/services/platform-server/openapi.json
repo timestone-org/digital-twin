@@ -8997,6 +8997,10 @@
             "title": "Is Enabled",
             "type": "boolean"
           },
+          "live_point_limit": {
+            "title": "Live Point Limit",
+            "type": "integer"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -9029,6 +9033,9 @@
             "title": "Read Mode",
             "type": "string"
           },
+          "runtime": {
+            "$ref": "#/components/schemas/SourceRuntimeOut"
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -9047,6 +9054,8 @@
           "poll_interval_ms",
           "is_enabled",
           "point_count",
+          "live_point_limit",
+          "runtime",
           "created_at",
           "updated_at"
         ],
@@ -9072,6 +9081,74 @@
           "end"
         ],
         "title": "SourceRangeOut",
+        "type": "object"
+      },
+      "SourceRuntimeOut": {
+        "description": "一个数据源此刻的采集运行态：collector 写、平台只读。\n\n⚠ 与 `is_enabled` 不是一回事：前者是「配置说它该采」，这里是「它此刻真\n在采吗」。把两者显示成同一个状态灯，是现场最常见的一种误判。",
+        "properties": {
+          "error_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Category"
+          },
+          "error_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Detail"
+          },
+          "leader_instance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leader Instance"
+          },
+          "point_count": {
+            "title": "Point Count",
+            "type": "integer"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "state",
+          "point_count",
+          "error_category",
+          "error_detail",
+          "leader_instance",
+          "updated_at"
+        ],
+        "title": "SourceRuntimeOut",
         "type": "object"
       },
       "SourceUpdateIn": {
@@ -12286,9 +12363,32 @@
     },
     "/api/v1/platform/collect-sources": {
       "get": {
-        "description": "分页列出数据源。\n\nArgs: session, page, _viewer, q, protocol, is_enabled。",
+        "description": "分页列出数据源，每行带上采集运行态。\n\nArgs: session, context, page, _viewer, filters。",
         "operationId": "list_sources_api_v1_platform_collect_sources_get",
         "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          },
           {
             "in": "query",
             "name": "q",
@@ -12336,29 +12436,6 @@
               ],
               "title": "Is Enabled"
             }
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "required": false,
-            "schema": {
-              "default": 1,
-              "minimum": 1,
-              "title": "Page",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "size",
-            "required": false,
-            "schema": {
-              "default": 20,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Size",
-              "type": "integer"
-            }
           }
         ],
         "responses": {
@@ -12389,7 +12466,7 @@
         ]
       },
       "post": {
-        "description": "建数据源。支持 `Idempotency-Key`。\n\nArgs: payload, session, response, write。",
+        "description": "建数据源。支持 `Idempotency-Key`。\n\nArgs: payload, session, context, response, write。",
         "operationId": "create_source_api_v1_platform_collect_sources_post",
         "parameters": [
           {
@@ -12500,7 +12577,7 @@
         ]
       },
       "get": {
-        "description": "数据源详情。\n\nArgs: source_id, session, _viewer。",
+        "description": "数据源详情，带采集运行态。\n\nArgs: source_id, session, context, _viewer。",
         "operationId": "read_source_api_v1_platform_collect_sources__source_id__get",
         "parameters": [
           {
@@ -12542,7 +12619,7 @@
         ]
       },
       "patch": {
-        "description": "改数据源。\n\nArgs: source_id, payload, session, write。",
+        "description": "改数据源。\n\nArgs: source_id, payload, session, context, write。",
         "operationId": "update_source_api_v1_platform_collect_sources__source_id__patch",
         "parameters": [
           {

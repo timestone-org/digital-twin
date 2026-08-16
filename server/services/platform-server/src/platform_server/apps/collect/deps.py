@@ -26,6 +26,10 @@ from platform_server.apps.collect.catalog import (
 )
 from platform_server.apps.collect.errors import IdempotencyKeyRequired
 from platform_server.apps.collect.services import CommandBus, PlanNotifier
+from platform_server.apps.collect.services.source_service import SourceContext
+from platform_server.apps.collect.services.state_source import (
+    SourceStateSource,
+)
 
 # ⚠ 幂等存储与边缘身份头的解码都是服务级公共件，眼下住在别的功能模块的
 # services 公开面里；跨功能模块只走 services 公开面，故这里取的是它们
@@ -59,6 +63,19 @@ async def get_session(
     """
     async with container.database.session() as session:
         yield session
+
+
+def get_source_context(
+    container: Annotated[Container, Depends(get_container)],
+) -> SourceContext:
+    """数据源出参要的旁路信息。测试用 `dependency_overrides` 换成假件。
+
+    Args: container。
+    """
+    return SourceContext(
+        states=SourceStateSource(history=container.history),
+        live_point_limit=container.settings.collect_live_max_points,
+    )
 
 
 def get_idempotency_key(

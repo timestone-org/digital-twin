@@ -7,14 +7,18 @@
 2. **陈旧必须标注为陈旧**：值太旧时照推，但标 `state: "stale"`，且
    `timestampMs` 照实是**旧值**的时刻，不用当前墙钟顶替。
 3. **条目自描述、按键合并**：全量帧与增量帧是同一种形状，客户端不必区分——
-   前者只是恰好带上了本屏全部点位。
+   前者只是恰好带上了整份点位清单。
+
+⚠ 本模块住在 `apps/collect` 而不是 `apps/dashboard`：它的输入是 `PointReading`、
+输出是点位条目，一个大屏名词也没有。大屏发布与采集配置页两条推送链路共用它，
+放在其中一条那边会让另一条反向 import，而那是一个 import 期的环。
 """
 
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
 from lib.utils.timeutils import utcnow
-from platform_server.apps.collect.services import PointReading
+from platform_server.apps.collect.services.snapshot_source import PointReading
 
 # 条目的状态，闭合集合。⚠ 字符串不是数字：数字枚举在两个仓之间对不上号时
 # 没有任何提示（api-contract §4.2）

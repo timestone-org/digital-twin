@@ -4,20 +4,31 @@
 比对守**：路径或字段名漂了不会有类型错误，只会让每一次推送都 404 / 422，而
 现象是「大屏没有实时值」，与真实原因隔得极远。
 
-⚠ 最后两条守的是 ADR-0007 的核心断言：hub 不认识大屏。
+⚠ 最后几条守的是 ADR-0007 的核心断言：hub 既不认识大屏，也不认识采集数据源。
+两条链路的推送方名字还必须不同——同名的话，一方对账会把另一方的主题全注销掉。
 """
 
 import re
 from pathlib import Path
 
-from platform_server.apps.dashboard.services.publish_items import (
+from platform_server.apps.collect.services.point_frames import (
     KEY_ERROR,
     KEY_QUALITY,
     KEY_TIMESTAMP_MS,
     KEY_VALUE,
     POINT_STATES,
 )
+from platform_server.apps.collect.services.topics import (
+    PUBLISHER_NAME as COLLECT_PUBLISHER,
+)
+from platform_server.apps.collect.services.topics import (
+    TOPIC_PREFIX as COLLECT_PREFIX,
+)
+from platform_server.apps.collect.services.topics import (
+    TOPIC_REQUIRED_CODE as COLLECT_CODE,
+)
 from platform_server.apps.dashboard.services.topics import (
+    PUBLISHER_NAME,
     TOPIC_PREFIX,
     TOPIC_REQUIRED_CODE,
     TOPIC_SEPARATOR,
@@ -109,3 +120,27 @@ def test_the_hub_does_not_know_the_code_that_guards_dashboards() -> None:
         TOPIC_REQUIRED_CODE not in hub_text(path)
         for path in sorted(HUB.rglob("*.py"))
     )
+
+
+def test_the_hub_does_not_know_the_collect_topic_namespace() -> None:
+    # 与大屏那条同理：`collect:` 开头的主题是一个采集数据源，只有本服务知道
+    namespace = f"{COLLECT_PREFIX}{TOPIC_SEPARATOR}"
+    assert all(
+        namespace not in hub_text(path) for path in sorted(HUB.rglob("*.py"))
+    )
+
+
+def test_the_hub_does_not_know_the_code_that_guards_collect_sources() -> None:
+    assert all(
+        COLLECT_CODE not in hub_text(path) for path in sorted(HUB.rglob("*.py"))
+    )
+
+
+def test_the_two_lanes_reconcile_under_different_publisher_names() -> None:
+    # ⚠ 同名的话，一方对账时会把另一方的主题当成「多出来的」全部注销掉，
+    # 表现是两边的实时值交替消失，而两条链路各自看都没问题
+    assert PUBLISHER_NAME != COLLECT_PUBLISHER
+
+
+def test_the_two_topic_namespaces_do_not_collide() -> None:
+    assert TOPIC_PREFIX != COLLECT_PREFIX

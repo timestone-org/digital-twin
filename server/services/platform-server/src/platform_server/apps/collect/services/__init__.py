@@ -8,6 +8,7 @@ from platform_server.apps.collect.services import (
     field_service,
     history_service,
     plan_service,
+    point_frames,
     point_service,
     source_service,
 )
@@ -28,6 +29,7 @@ from platform_server.apps.collect.services.snapshot_source import (
     RedisSnapshotSource,
     SnapshotSource,
 )
+from platform_server.apps.collect.services.watchers import SubscriptionWatchers
 
 __all__ = [
     "CommandBus",
@@ -39,10 +41,12 @@ __all__ = [
     "RedisCommandTransport",
     "RedisSnapshotSource",
     "SnapshotSource",
+    "SubscriptionWatchers",
     "binding_guard",
     "field_service",
     "history_service",
     "plan_service",
+    "point_frames",
     "point_service",
     "source_service",
 ]

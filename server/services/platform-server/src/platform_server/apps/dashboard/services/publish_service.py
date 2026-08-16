@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from lib.errors import DependencyUnavailable
 from lib.logging import get_logger
 from platform_server.apps.collect.services import SnapshotSource
-from platform_server.apps.dashboard.services.publish_items import (
+from platform_server.apps.collect.services.point_frames import (
     UNAVAILABLE_REASON,
     Item,
     build_items,

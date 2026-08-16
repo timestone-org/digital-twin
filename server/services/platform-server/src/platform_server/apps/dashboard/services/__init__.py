@@ -2,12 +2,12 @@
 
 事务边界在这一层：crud 不提交，api 不写业务。
 
-⚠ **发布面（`publish_service` / `publish_items`）刻意不进这份清单**：它要读
-`apps/collect` 的快照公开面，而 `apps/collect` 的公开面又要读本模块的
-`point_usage`（删点位前问大屏绑定）。两份 `__init__` 互相 import 就是一个
-**import 期的环**，表现是「partially initialized module」而不是任何业务错误。
-两个方向都是真实的领域依赖，删不掉；出路是让其中一份清单不参与，故发布面的
-消费方（组合根与 publisher 角色）按子模块精确 import。
+⚠ **发布面（`publish_service`）刻意不进这份清单**：它要读 `apps/collect` 的
+快照公开面，而 `apps/collect` 的公开面又要读本模块的 `point_usage`（删点位
+前问大屏绑定）。两份 `__init__` 互相 import 就是一个 **import 期的环**，表现是
+「partially initialized module」而不是任何业务错误。两个方向都是真实的领域依赖，
+删不掉；出路是让其中一份清单不参与，故发布面的消费方（组合根与 publisher 角色）
+按子模块精确 import。
 """
 
 from platform_server.apps.dashboard.services import (

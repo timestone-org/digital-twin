@@ -14,6 +14,7 @@ from platform_server.apps.collect.services import (
     RedisCommandTransport,
     RedisSnapshotSource,
     SnapshotSource,
+    SubscriptionWatchers,
 )
 from platform_server.apps.dashboard.services import (
     SUBSCRIPTION_SCHEMA,
@@ -62,6 +63,9 @@ class Container:
     pubsub: PubSub
     snapshots: SnapshotSource
     viewers: SubscriptionViewers
+    # 采集配置页的活跃集合。⚠ 与 `viewers` 读的是同一张订阅表、同一个只读连接
+    # 池，只是把主题解释成了另一种实体——两条链路各自解释自己的主题前缀
+    collect_watchers: SubscriptionWatchers
     viewer_database: Database
     realtime: RealtimeClient
     lease: Lease
@@ -107,6 +111,9 @@ def build_container(settings: Settings) -> Container:
             url=settings.url(), timeout_s=settings.redis_timeout_s
         ),
         viewers=SubscriptionViewers(
+            source=ReadOnlyViewerSource(database=viewer_database)
+        ),
+        collect_watchers=SubscriptionWatchers(
             source=ReadOnlyViewerSource(database=viewer_database)
         ),
         viewer_database=viewer_database,

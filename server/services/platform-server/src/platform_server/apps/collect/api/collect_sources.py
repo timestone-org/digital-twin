@@ -15,6 +15,7 @@ from platform_server.apps.collect.deps import (
     get_manage_context,
     get_operate_context,
     get_session,
+    get_source_context,
     require,
 )
 from platform_server.apps.collect.schemas import (
@@ -29,6 +30,7 @@ from platform_server.apps.collect.services import (
     field_service,
     source_service,
 )
+from platform_server.apps.collect.services.source_service import SourceContext
 from platform_server.settings import API_PREFIX
 
 router = APIRouter(
@@ -39,10 +41,30 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 PageDep = Annotated[PageParams, Depends(page_params)]
 ViewDep = Annotated[CallerContext, Depends(require(COLLECT_VIEW))]
 ManageDep = Annotated[WriteContext, Depends(get_manage_context)]
+ContextDep = Annotated[SourceContext, Depends(get_source_context)]
 OperateDep = Annotated[WriteContext, Depends(get_operate_context)]
 
 # 计划变更的原因，稳定字面量（日志与广播共用）
 REASON_SOURCE_CHANGED = "source_changed"
+
+
+def list_filters(
+    q: str | None = None,
+    protocol: str | None = None,
+    is_enabled: bool | None = None,
+) -> tuple[str | None, str | None, bool | None]:
+    """列表页的三个筛选条件。
+
+    ⚠ 收成一个依赖而不是三个形参：路由函数的形参上限是 5，而本条路由还要
+    会话、出参上下文、分页与调用者四件。
+    Args: q, protocol, is_enabled。
+    """
+    return q, protocol, is_enabled
+
+
+FilterDep = Annotated[
+    tuple[str | None, str | None, bool | None], Depends(list_filters)
+]
 
 
 @router.get(
@@ -50,19 +72,18 @@ REASON_SOURCE_CHANGED = "source_changed"
 )
 async def list_sources(
     session: SessionDep,
+    context: ContextDep,
     page: PageDep,
     _viewer: ViewDep,
-    q: str | None = None,
-    protocol: str | None = None,
-    is_enabled: bool | None = None,
+    filters: FilterDep,
 ) -> ApiResponse[Page[SourceOut]]:
-    """分页列出数据源。
+    """分页列出数据源，每行带上采集运行态。
 
-    Args: session, page, _viewer, q, protocol, is_enabled。
+    Args: session, context, page, _viewer, filters。
     """
     return ok(
         await source_service.list_sources(
-            session, filters=(q, protocol, is_enabled), page=page, sort=None
+            session, context, filters=filters, page=page, sort=None
         )
     )
 
@@ -76,21 +97,45 @@ async def list_sources(
 async def create_source(
     payload: SourceCreateIn,
     session: SessionDep,
+    context: ContextDep,
     response: Response,
     write: ManageDep,
 ) -> ApiResponse[SourceOut]:
     """建数据源。支持 `Idempotency-Key`。
 
-    Args: payload, session, response, write。
+    Args: payload, session, context, response, write。
     """
-    created = await write.run_once(
+    created = await _create_once(payload, session, context, write)
+    await write.plans.notify(reason=REASON_SOURCE_CHANGED)
+    _set_location(response, created.id)
+    return ok(created, message="数据源已创建")
+
+
+async def _create_once(
+    payload: SourceCreateIn,
+    session: AsyncSession,
+    context: SourceContext,
+    write: WriteContext,
+) -> SourceOut:
+    """带幂等键时只建一次。
+
+    Args: payload, session, context, write。
+    """
+    return await write.run_once(
         endpoint="create_collect_source",
         model=SourceOut,
-        action=lambda: source_service.create_source(session, payload=payload),
+        action=lambda: source_service.create_source(
+            session, context, payload=payload
+        ),
     )
-    await write.plans.notify(reason=REASON_SOURCE_CHANGED)
-    response.headers["Location"] = f"{API_PREFIX}/collect-sources/{created.id}"
-    return ok(created, message="数据源已创建")
+
+
+def _set_location(response: Response, source_id: uuid.UUID) -> None:
+    """201 要带上新资源的地址。
+
+    Args: response, source_id。
+    """
+    response.headers["Location"] = f"{API_PREFIX}/collect-sources/{source_id}"
 
 
 @router.get(
@@ -99,13 +144,16 @@ async def create_source(
     summary="数据源详情",
 )
 async def read_source(
-    source_id: uuid.UUID, session: SessionDep, _viewer: ViewDep
+    source_id: uuid.UUID,
+    session: SessionDep,
+    context: ContextDep,
+    _viewer: ViewDep,
 ) -> ApiResponse[SourceOut]:
-    """数据源详情。
+    """数据源详情，带采集运行态。
 
-    Args: source_id, session, _viewer。
+    Args: source_id, session, context, _viewer。
     """
-    return ok(await source_service.get_source(session, source_id))
+    return ok(await source_service.get_source(session, context, source_id))
 
 
 @router.patch(
@@ -117,14 +165,15 @@ async def update_source(
     source_id: uuid.UUID,
     payload: SourceUpdateIn,
     session: SessionDep,
+    context: ContextDep,
     write: ManageDep,
 ) -> ApiResponse[SourceOut]:
     """改数据源。
 
-    Args: source_id, payload, session, write。
+    Args: source_id, payload, session, context, write。
     """
     updated = await source_service.update_source(
-        session, source_id=source_id, payload=payload
+        session, context, source_id=source_id, payload=payload
     )
     await write.plans.notify(reason=REASON_SOURCE_CHANGED)
     return ok(updated, message="数据源已更新")

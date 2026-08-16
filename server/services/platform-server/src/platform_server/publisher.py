@@ -1,5 +1,11 @@
 """publisher 角色的进程装配、发布循环与关停编排。
 
+一个循环带**两条推送链路**：大屏（`dashboard:{id}`）与采集配置页
+（`collect:{source_id}`）。合用一个进程与一把租约，是因为两者的单活理由完全
+相同，而拆成两个角色会多出一份部署单元与一把互不相干的租约。
+⚠ 两条链路各自兜错：一条出问题不许把另一条一起带走——现场大屏比配置页重要
+得多，而配置页的一次读库失败没有理由让整屏停更。
+
 **全局单活**：靠 Redis 租约选主（ARCHITECTURE §2.2），热备只是在等租约。
 ⚠ Redis 不可达一律判非 leader（runtime-resilience §6.2）——宁可这一拍没人推，
 也不要两个进程对同一个主题各推各的。
@@ -27,6 +33,17 @@ from lib.logging import (
     reset_log_context,
 )
 from lib.utils.ids import uuid7
+from platform_server.apps.collect.services.live_plan import (
+    DatabaseLivePlanSource,
+)
+from platform_server.apps.collect.services.live_publisher import (
+    LiveOptions,
+    SourceLivePublisher,
+)
+from platform_server.apps.collect.services.topic_reconcile import (
+    CollectTopicReconciler,
+    DatabaseSourceIndex,
+)
 from platform_server.apps.dashboard.services import TopicReconciler
 
 # ⚠ 按子模块 import 而不是走 services 清单：发布面反向依赖 apps/collect 的
@@ -61,24 +78,38 @@ class LoopOptions:
     reconcile_interval_s: float
 
 
+@dataclass(frozen=True)
+class Lane:
+    """一条推送链路：一个对账器 + 一个发布器，共用循环的节奏与租约。
+
+    ⚠ `name` 进日志字段而不是拼进 `event`：`event` 必须是稳定字面量，拼了
+    变量就再也 group by 不了（observability §1）。
+    """
+
+    name: str
+    reconcile: Callable[[], Awaitable[object]]
+    # ⚠ 不叫 `publish`：可观测性闸把 `.publish(` 一律当成「往队列投消息」，
+    # 于是这一层会被要求带 traceparent，而真正投递发生在发布器内部
+    tick: Callable[[], Awaitable[None]]
+    forget_all: Callable[[], None]
+
+
 class PublisherRuntime:
-    """发布循环：持租约 → 对账主题 → 推一拍。"""
+    """发布循环：持租约 → 逐条链路对账 → 逐条链路推一拍。"""
 
     def __init__(
         self,
         *,
         lease: Lease,
-        publisher: DashboardPublisher,
-        reconciler: TopicReconciler,
+        lanes: tuple[Lane, ...],
         options: LoopOptions,
     ) -> None:
-        """按租约、发布器与对账器初始化，构造时不做 IO。
+        """按租约与各条链路初始化，构造时不做 IO。
 
-        Args: lease, publisher, reconciler, options。
+        Args: lease, lanes, options。
         """
         self._lease = lease
-        self._publisher = publisher
-        self._reconciler = reconciler
+        self._lanes = lanes
         self._options = options
         self._stopped = asyncio.Event()
         self._idle = asyncio.Event()
@@ -112,7 +143,7 @@ class PublisherRuntime:
             await self._pause(self._options.window_s)
 
     async def tick(self) -> None:
-        """跑一拍：续租约 → 到点对账 → 推一批。
+        """跑一拍：续租约 → 每条链路各自对账并推一批。
 
         ⚠ 每一拍开头换一条 trace：一条几天不停的循环共用一个 trace_id，等于
         没有 trace（observability §3.2）。
@@ -121,18 +152,30 @@ class PublisherRuntime:
         try:
             if not await self._hold_lease():
                 return
-            if self._is_reconcile_due():
-                await self._reconciler.reconcile()
-            report = await self._publisher.publish_once()
-            if report.items:
-                _logger.info(
-                    "dashboard_values_published",
-                    "大屏实时值已推送",
-                    dashboards=report.dashboards,
-                    items=report.items,
-                )
+            is_due = self._is_reconcile_due()
+            for lane in self._lanes:
+                await self._run_lane(lane, is_reconcile_due=is_due)
         finally:
             reset_log_context(token)
+
+    async def _run_lane(self, lane: Lane, *, is_reconcile_due: bool) -> None:
+        """跑一条链路。
+
+        ⚠ 就地兜错、不往外抛：抛出去就是「配置页那条链路读库失败，顺带让全
+        厂大屏这一拍不更新」。哪条链路坏了由 `lane` 字段说清。
+        Args: lane, is_reconcile_due。
+        """
+        try:
+            if is_reconcile_due:
+                await lane.reconcile()
+            await lane.tick()
+        except Exception as error:
+            _logger.error(
+                "publisher_lane_failed",
+                "一条推送链路这一拍出错，另一条不受影响",
+                lane=lane.name,
+                error_type=type(error).__name__,
+            )
 
     def stop(self) -> None:
         """停收新活。⚠ 只置位，不等待——等在 `drain` 里做。"""
@@ -151,9 +194,14 @@ class PublisherRuntime:
         if not self._is_leader:
             return
         self._is_leader = False
-        self._publisher.forget_all()
+        self._forget_all()
         await self._lease.release()
-        _logger.info("publisher_lease_released", "已让出大屏发布租约")
+        _logger.info("publisher_lease_released", "已让出发布租约")
+
+    def _forget_all(self) -> None:
+        """丢掉每条链路的进程内缓存。"""
+        for lane in self._lanes:
+            lane.forget_all()
 
     async def _hold_lease(self) -> bool:
         """续或抢租约，返回此刻是不是 leader。
@@ -165,13 +213,13 @@ class PublisherRuntime:
             if await self._lease.renew():
                 return True
             self._is_leader = False
-            self._publisher.forget_all()
+            self._forget_all()
             _logger.error("publisher_lease_lost", "租约续期失败，立刻停止推送")
             return False
         is_acquired = await self._lease.acquire()
         if is_acquired:
             _logger.info(
-                "publisher_lease_acquired", "接管大屏发布，本副本成为 leader"
+                "publisher_lease_acquired", "接管实时发布，本副本成为 leader"
             )
         self._is_leader = is_acquired
         return is_acquired
@@ -201,25 +249,100 @@ def build_runtime(container: Container) -> PublisherRuntime:
     settings = container.settings
     return PublisherRuntime(
         lease=container.lease,
-        publisher=DashboardPublisher(
-            plans=DatabasePlanSource(database=container.database),
-            viewers=container.viewers,
-            snapshots=container.snapshots,
-            realtime=container.realtime,
-            options=PublishOptions(
-                max_items=settings.publish_max_items,
-                stale_after_ms=settings.publish_stale_after_ms,
-            ),
-        ),
-        reconciler=TopicReconciler(
-            dashboards=DatabaseDashboardIndex(database=container.database),
-            realtime=container.realtime,
-        ),
+        lanes=(_dashboard_lane(container), _collect_lane(container)),
         options=LoopOptions(
             window_s=settings.publish_window_ms / MS_PER_S,
             reconcile_interval_s=settings.publish_reconcile_interval_s,
         ),
     )
+
+
+def _dashboard_lane(container: Container) -> Lane:
+    """大屏那条链路。
+
+    Args: container。
+    """
+    settings = container.settings
+    publisher = DashboardPublisher(
+        plans=DatabasePlanSource(database=container.database),
+        viewers=container.viewers,
+        snapshots=container.snapshots,
+        realtime=container.realtime,
+        options=PublishOptions(
+            max_items=settings.publish_max_items,
+            stale_after_ms=settings.publish_stale_after_ms,
+        ),
+    )
+    reconciler = TopicReconciler(
+        dashboards=DatabaseDashboardIndex(database=container.database),
+        realtime=container.realtime,
+    )
+    return Lane(
+        name="dashboard",
+        reconcile=reconciler.reconcile,
+        tick=lambda: _publish_dashboards(publisher),
+        forget_all=publisher.forget_all,
+    )
+
+
+def _collect_lane(container: Container) -> Lane:
+    """采集配置页那条链路。
+
+    Args: container。
+    """
+    settings = container.settings
+    publisher = SourceLivePublisher(
+        plans=DatabaseLivePlanSource(database=container.database),
+        watchers=container.collect_watchers,
+        snapshots=container.snapshots,
+        realtime=container.realtime,
+        options=LiveOptions(
+            max_items=settings.publish_max_items,
+            stale_after_ms=settings.publish_stale_after_ms,
+            max_points=settings.collect_live_max_points,
+            plan_ttl_s=settings.collect_live_plan_ttl_s,
+        ),
+    )
+    reconciler = CollectTopicReconciler(
+        sources=DatabaseSourceIndex(database=container.database),
+        realtime=container.realtime,
+    )
+    return Lane(
+        name="collect",
+        reconcile=reconciler.reconcile,
+        tick=lambda: _publish_collect(publisher),
+        forget_all=publisher.forget_all,
+    )
+
+
+async def _publish_dashboards(publisher: DashboardPublisher) -> None:
+    """推一拍大屏并记账。
+
+    Args: publisher。
+    """
+    report = await publisher.publish_once()
+    if report.items:
+        _logger.info(
+            "dashboard_values_published",
+            "大屏实时值已推送",
+            dashboards=report.dashboards,
+            items=report.items,
+        )
+
+
+async def _publish_collect(publisher: SourceLivePublisher) -> None:
+    """推一拍采集实时值并记账。
+
+    Args: publisher。
+    """
+    report = await publisher.publish_once()
+    if report.items:
+        _logger.info(
+            "collect_values_published",
+            "采集实时值已推送",
+            sources=report.sources,
+            items=report.items,
+        )
 
 
 async def selfcheck(container: Container) -> None:

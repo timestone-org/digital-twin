@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 
 from lib.errors import DependencyUnavailable
 from platform_server.apps.collect.services import PointReading
-from platform_server.apps.dashboard.services.publish_items import (
+from platform_server.apps.collect.services.point_frames import (
     KEY_NODE,
     KEY_STATE,
     KEY_VALUE,

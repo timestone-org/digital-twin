@@ -56,6 +56,23 @@ class PointCrud(CrudBase[CollectPoint]):
         )
         return frozenset(rows.scalars().all())
 
+    async def codes_of(
+        self, session: AsyncSession, source_id: uuid.UUID, *, limit: int
+    ) -> list[str]:
+        """一个数据源下前 `limit` 个点位编码，按编码升序。
+
+        ⚠ 排序必须写死：实时推送按这个顺序取前 N 个点位，顺序不定就等于
+        「每次重读换一批点位有实时值」，而界面上看不出任何原因。
+        Args: session, source_id, limit。
+        """
+        rows = await session.execute(
+            select(CollectPoint.code)
+            .where(CollectPoint.source_id == source_id)
+            .order_by(CollectPoint.code.asc(), CollectPoint.id.asc())
+            .limit(limit)
+        )
+        return list(rows.scalars().all())
+
     async def count_by_source(
         self, session: AsyncSession, source_id: uuid.UUID
     ) -> int:

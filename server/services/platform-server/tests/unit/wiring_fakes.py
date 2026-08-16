@@ -12,7 +12,11 @@ from pydantic import SecretStr
 from lib.cache import Cache, PubSub
 from lib.db import Database, ReadOnlySqlSource
 from lib.testing import FakeObjectStore, InMemoryCache
-from platform_server.apps.collect.services import CommandBus, PlanNotifier
+from platform_server.apps.collect.services import (
+    CommandBus,
+    PlanNotifier,
+    SubscriptionWatchers,
+)
 from platform_server.apps.collect.services.command_transport import (
     RedisCommandTransport,
 )
@@ -150,6 +154,7 @@ def build_container(ledger: list[str], *, settings: Settings) -> Container:
         pubsub=cast(PubSub, FakeDependency("pubsub", ledger)),
         snapshots=LedgerSnapshotSource(ledger=ledger),
         viewers=SubscriptionViewers(source=FakeViewerSource()),
+        collect_watchers=SubscriptionWatchers(source=FakeViewerSource()),
         viewer_database=cast(
             Database, FakeDependency("viewer_database", ledger)
         ),

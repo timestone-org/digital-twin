@@ -80,6 +80,13 @@ class Settings(
     # 按天/月聚合的业务时区。⚠ 不带 timezone 的 time_bucket 按 UNIX 纪元对齐，
     # 东八区的日桶会从当地 08:00 开始（docs/COLLECT_DESIGN.md §6）
     collect_bucket_timezone: str = "Asia/Shanghai"
+    # 采集配置页的实时值：一个数据源最多推多少个点位（按 code 升序取前 N）。
+    # ⚠ 有上限不是省流量：一台设备挂上万个点位时，配置页一屏只看得见几十行，
+    # 而全量推会把整条 WS 通道占满。超出的部分由 `SourceOut.live_point_limit`
+    # 如实告诉界面，让它说「实时值只覆盖前 N 个点位」——静默截断才是坑
+    collect_live_max_points: int = Field(default=1000, ge=1)
+    # 点位清单的重读周期。它同时是「新建的点位多久之后开始有实时值」的上界
+    collect_live_plan_ttl_s: float = Field(default=10.0, gt=0)
 
     # 大屏实时发布（publisher 角色），见 docs/DASHBOARD_DESIGN.md §6
     # realtime-hub 的地址。主题登记/注销与批推都打它

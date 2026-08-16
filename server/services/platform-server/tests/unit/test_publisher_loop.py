@@ -2,15 +2,14 @@
 
 ⚠ renew-or-die 少一步都不行：续不上还继续推，就是两个副本对同一个主题各推
 各的，客户端在同一段 seq 里收到两份不同的值。
+⚠ 两条链路（大屏 / 采集配置页）必须互不牵连：一条炸了另一条照跑，否则配置页
+的一次读库失败会顺带让全厂大屏这一拍不更新。
 """
 
 import asyncio
 from dataclasses import dataclass, field
 
-from platform_server.apps.dashboard.services.publish_service import (
-    PublishReport,
-)
-from platform_server.publisher import LoopOptions, PublisherRuntime
+from platform_server.publisher import Lane, LoopOptions, PublisherRuntime
 from unit.publish_fakes import FakeLease
 
 WINDOW_S = 0.01
@@ -18,50 +17,53 @@ RECONCILE_INTERVAL_S = 30.0
 
 
 @dataclass
-class SpyPublisher:
+class SpyLane:
     """记下被调了几拍、被清了几次缓存，并在跑够拍数时给一个完成信号。
 
     ⚠ 用信号而不是轮询等：轮询在慢机器上要么假红要么白等满超时。
     """
 
+    name: str = "dashboard"
     ticks: int = 0
     forgotten: int = 0
     failure: Exception | None = None
     target_ticks: int = 1
+    rounds: list[tuple[int, int]] = field(default_factory=list[tuple[int, int]])
     reached: asyncio.Event = field(default_factory=asyncio.Event)
 
-    async def publish_once(self) -> PublishReport:
+    async def publish(self) -> None:
         self.ticks += 1
         if self.ticks >= self.target_ticks:
             self.reached.set()
         if self.failure is not None:
             raise self.failure
-        return PublishReport(dashboards=1, items=2)
-
-    def forget_all(self) -> None:
-        self.forgotten += 1
-
-
-@dataclass
-class SpyReconciler:
-    """记下对账跑了几轮。"""
-
-    rounds: list[tuple[int, int]] = field(default_factory=list[tuple[int, int]])
 
     async def reconcile(self) -> tuple[int, int]:
         result = (0, 0)
         self.rounds.append(result)
         return result
 
+    def forget_all(self) -> None:
+        self.forgotten += 1
+
+    def as_lane(self) -> Lane:
+        return Lane(
+            name=self.name,
+            reconcile=self.reconcile,
+            tick=self.publish,
+            forget_all=self.forget_all,
+        )
+
 
 @dataclass
 class Harness:
-    """一套装好的循环与它的三件假件。"""
+    """一套装好的循环与它的假件。"""
 
     runtime: PublisherRuntime
     lease: FakeLease
-    publisher: SpyPublisher
-    reconciler: SpyReconciler
+    publisher: SpyLane
+    reconciler: SpyLane
+    collect: SpyLane
 
 
 def build_harness(
@@ -70,18 +72,16 @@ def build_harness(
     is_renewable: bool = True,
     reconcile_interval_s: float = RECONCILE_INTERVAL_S,
 ) -> Harness:
-    """装一套循环。
+    """装一套循环，两条链路各一件假件。
 
     Args: is_grantable, is_renewable, reconcile_interval_s。
     """
     lease = FakeLease(is_grantable=is_grantable, is_renewable=is_renewable)
-    publisher = SpyPublisher()
-    reconciler = SpyReconciler()
-    # cast 不必要：三件假件都满足被替代者的最小面，运行期按结构用
+    dashboards = SpyLane(name="dashboard")
+    collect = SpyLane(name="collect")
     runtime = PublisherRuntime(
         lease=lease,
-        publisher=publisher,  # pyright: ignore[reportArgumentType]
-        reconciler=reconciler,  # pyright: ignore[reportArgumentType]
+        lanes=(dashboards.as_lane(), collect.as_lane()),
         options=LoopOptions(
             window_s=WINDOW_S, reconcile_interval_s=reconcile_interval_s
         ),
@@ -89,8 +89,9 @@ def build_harness(
     return Harness(
         runtime=runtime,
         lease=lease,
-        publisher=publisher,
-        reconciler=reconciler,
+        publisher=dashboards,
+        reconciler=dashboards,
+        collect=collect,
     )
 
 
@@ -160,6 +161,27 @@ async def test_a_failed_tick_does_not_kill_the_loop() -> None:
     harness.runtime.stop()
     await task
     assert harness.publisher.ticks >= 2
+
+
+async def test_both_lanes_publish_on_the_same_tick() -> None:
+    harness = build_harness()
+    await harness.runtime.tick()
+    assert (harness.publisher.ticks, harness.collect.ticks) == (1, 1)
+
+
+async def test_a_broken_lane_does_not_stop_the_other_one() -> None:
+    # 配置页那条链路读库失败，不许顺带让全厂大屏这一拍不更新
+    harness = build_harness()
+    harness.publisher.failure = RuntimeError("大屏这条炸了")
+    await harness.runtime.tick()
+    assert harness.collect.ticks == 1
+
+
+async def test_losing_the_lease_drops_every_lane_cache() -> None:
+    harness = build_harness(is_renewable=False)
+    await harness.runtime.tick()
+    await harness.runtime.tick()
+    assert (harness.publisher.forgotten, harness.collect.forgotten) == (1, 1)
 
 
 async def test_stopping_the_loop_lets_it_finish_the_tick_in_hand() -> None:

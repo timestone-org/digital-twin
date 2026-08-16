@@ -14,6 +14,8 @@ from platform_server import publisher, worker
 from platform_server.container import Container
 from platform_server.publisher import (
     PublisherProcess,
+    _publish_collect,
+    _publish_dashboards,
     build_runtime,
     run_until_stopped,
     selfcheck,
@@ -69,6 +71,89 @@ async def _immediate() -> None:
 async def _explode() -> None:
     """模拟等待期间的意外。"""
     raise RuntimeError("等待被打断")
+
+
+@dataclass
+class OneShotPublisher:
+    """回一份固定报告的发布器。用来钉住两条链路各自的记账口径。"""
+
+    report: object
+
+    async def publish_once(self) -> object:
+        return self.report
+
+
+@dataclass(frozen=True)
+class DashboardReport:
+    dashboards: int
+    items: int
+
+
+@dataclass(frozen=True)
+class CollectReport:
+    sources: int
+    items: int
+
+
+@dataclass
+class SpyLogger:
+    """记下 `info` 的事件名。⚠ 只认事件名：它必须是稳定字面量。"""
+
+    events: list[str] = field(default_factory=list[str])
+
+    def info(self, event: str, message: str, **fields: object) -> None:
+        del message, fields
+        self.events.append(event)
+
+
+def spy_on_logger(monkeypatch: pytest.MonkeyPatch) -> SpyLogger:
+    """把 publisher 的日志器换成记账假件。
+
+    Args: monkeypatch。
+    """
+    spy = SpyLogger()
+    monkeypatch.setattr(publisher, "_logger", spy)
+    return spy
+
+
+async def test_the_dashboard_lane_logs_only_when_it_pushed_something(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 一拍没推东西也记一条，日志里就全是「推了 0 条」，真事故淹在里面
+    spy = spy_on_logger(monkeypatch)
+    # pyright: ignore 的理由 —— 假件满足发布器的最小面，函数不做类型校验
+    await _publish_dashboards(  # pyright: ignore[reportArgumentType]
+        OneShotPublisher(report=DashboardReport(dashboards=0, items=0))
+    )
+    assert spy.events == []
+
+    await _publish_dashboards(  # pyright: ignore[reportArgumentType]
+        OneShotPublisher(report=DashboardReport(dashboards=1, items=3))
+    )
+    assert spy.events == ["dashboard_values_published"]
+
+
+async def test_the_collect_lane_logs_only_when_it_pushed_something(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    spy = spy_on_logger(monkeypatch)
+    await _publish_collect(  # pyright: ignore[reportArgumentType]
+        OneShotPublisher(report=CollectReport(sources=0, items=0))
+    )
+    assert spy.events == []
+
+    await _publish_collect(  # pyright: ignore[reportArgumentType]
+        OneShotPublisher(report=CollectReport(sources=1, items=2))
+    )
+    # ⚠ 两条链路各有各的事件名：共用一个，日志里就分不出是哪一条在推
+    assert spy.events == ["collect_values_published"]
+
+
+def test_both_lanes_are_wired_and_named_apart() -> None:
+    # ⚠ 同名的话，一方对账会把另一方的主题当成「多出来的」全部注销掉
+    runtime = build_runtime(build_container([], settings=publisher_settings()))
+    lanes = runtime._lanes  # 理由 —— 断言装配出的链路
+    assert [lane.name for lane in lanes] == ["dashboard", "collect"]
 
 
 def test_the_publisher_takes_its_pace_from_config() -> None:
