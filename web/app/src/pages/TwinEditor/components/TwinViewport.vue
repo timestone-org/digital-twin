@@ -6,6 +6,8 @@
 import {
   EditorScene,
   type EditorSceneStatus,
+  type GizmoChange,
+  type GizmoMode,
   type TwinCameraPose,
   type TwinPickMode,
 } from '@dt/three-core'
@@ -21,6 +23,8 @@ const props = defineProps<{
   config: TwinConfig
   selection: TwinSelection | null
   pickMode: TwinPickMode
+  /** 坐标轴手柄的模式；只有箭头用得上 `rotate`。 */
+  gizmoMode?: GizmoMode
 }>()
 
 const emit = defineEmits<{
@@ -32,6 +36,10 @@ const emit = defineEmits<{
   status: [EditorSceneStatus]
   /** 漫游预览开停；用户一碰镜头它会自己停，面板上的按钮要跟着回落。 */
   roamPreview: [boolean]
+  /** 用户拖坐标轴手柄改了某个实体的位置 / 朝向。 */
+  entityTransform: [GizmoChange]
+  /** 手柄松手了；宿主据此把这一次拖动合成一条撤销。 */
+  entityTransformEnd: []
 }>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
@@ -96,6 +104,8 @@ onMounted(() => {
       cameraChange: (value) => emit('cameraChange', value),
       status: applyStatus,
       roamPreview: (value) => emit('roamPreview', value),
+      entityTransform: (change) => emit('entityTransform', change),
+      entityTransformEnd: () => emit('entityTransformEnd'),
     },
   })
   scene.setSelection(props.selection)
@@ -118,6 +128,10 @@ watch(
 watch(
   () => props.pickMode,
   (value) => scene?.setPickMode(value),
+)
+watch(
+  () => props.gizmoMode,
+  (value) => scene?.setGizmoMode(value ?? 'translate'),
 )
 
 /**

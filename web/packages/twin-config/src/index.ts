@@ -31,6 +31,8 @@ export {
 } from './bindingRows'
 export type { TwinBindingRow } from './bindingRows'
 export { defaultCameraOf } from './cameraSelect'
+export { GIZMO_KINDS, gizmoTargetOf } from './gizmoTarget'
+export type { TwinGizmoKind, TwinGizmoTarget } from './gizmoTarget'
 export {
   FLOW_COLOR_FALLBACK,
   FLOW_KIND_COLORS,

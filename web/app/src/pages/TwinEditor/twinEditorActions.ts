@@ -5,6 +5,7 @@
  * 改配置的话，删一个实体就会让它后面每一条绑定改喂前一个实体——界面上完全
  * 看不出来（见 `remapTwinBindings`）。
  */
+import type { GizmoChange } from '@dt/three-core'
 import type { TwinConfig, TwinVisibilityRule } from '@dt/twin-config'
 
 import {
@@ -35,6 +36,14 @@ export interface TwinEditorActions {
   moveHier: (id: string, delta: number) => void
   /** 换一个钻取节点的上一层；拖进自己的子树时什么都不做。 */
   reparentHier: (id: string, parentId: string | null) => void
+  /**
+   * 坐标轴手柄拖出来的位置 / 朝向。
+   * ⚠ 走合并写入：一次拖动逐帧来几十条，各记一条撤销的话，
+   * 撤销一次只退回一帧。
+   */
+  transformEntity: (change: GizmoChange) => void
+  /** 手柄松手了；下一次拖动重新开一帧撤销。 */
+  endTransform: () => void
 }
 
 /** 带 `visibility` 的五类；视点与钻取节点没有这一段。 */
@@ -126,6 +135,26 @@ export function createTwinEditorActions(
     patchConfig: (patch) => {
       doc.commit({ ...doc.config.value, ...patch })
     },
+
+    transformEntity: (change) => {
+      const config = doc.config.value
+      const list = config[change.kind]
+      const patch =
+        change.direction === null
+          ? { position: change.position }
+          : { position: change.position, direction: change.direction }
+      doc.commitMerged(
+        {
+          ...config,
+          [change.kind]: list.map((item) =>
+            item.id === change.id ? { ...item, ...patch } : item,
+          ),
+        },
+        `gizmo:${change.kind}:${change.id}`,
+      )
+    },
+
+    endTransform: () => doc.endMerge(),
 
     toggleVisible: (kind, id) => {
       if (!hasVisibility(kind)) return

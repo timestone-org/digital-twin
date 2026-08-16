@@ -28,6 +28,18 @@ export interface TwinDoc {
   canRedo: ComputedRef<boolean>
   /** 写配置的唯一入口；顺带把绑定搬到新的行号上。 */
   commit: (next: TwinConfig) => void
+  /**
+   * 与上一帧合并的写入：`key` 相同就替换那一帧，不新增历史。
+   *
+   * ⚠ 给连续动作用（拖坐标轴手柄、拖滑块）：逐帧各记一条的话，撤销一次只
+   * 退回一帧，用户要按几十下才回得到原位。一段连续动作结束时调 `endMerge`，
+   * 下一段才会重新开一帧。
+   * @param next 新配置
+   * @param key 这一段连续动作的标识
+   */
+  commitMerged: (next: TwinConfig, key: string) => void
+  /** 一段连续动作结束了；下一次 `commitMerged` 重新开一帧。 */
+  endMerge: () => void
   /** 只改绑定不动配置（绑点面板写回）。 */
   commitBindings: (next: readonly BindingPayload[]) => void
   undo: () => void
@@ -45,6 +57,8 @@ export function createTwinDoc(initial: TwinFrame): TwinDoc {
   const frames = shallowRef<TwinFrame[]>([initial])
   const index = ref(0)
   const savedIndex = ref(0)
+  /** 当前正在合并的那段连续动作；null = 没有。 */
+  let mergeKey: string | null = null
 
   const current = computed<TwinFrame>(() => {
     const frame = frames.value[index.value]
@@ -74,10 +88,35 @@ export function createTwinDoc(initial: TwinFrame): TwinDoc {
     commit: (next) => {
       const previous = current.value
       if (next === previous.config) return
+      // 普通写入打断合并段：中间插了别的操作，再拖就该另起一帧
+      mergeKey = null
       push({
         config: next,
         bindings: remapTwinBindings(previous.config, next, previous.bindings),
       })
+    },
+
+    commitMerged: (next, key) => {
+      const previous = current.value
+      if (next === previous.config) return
+      const frame: TwinFrame = {
+        config: next,
+        bindings: remapTwinBindings(previous.config, next, previous.bindings),
+      }
+      if (mergeKey === key) {
+        // 同一段动作：换掉当前这一帧，历史长度不变
+        const kept = frames.value.slice(0, index.value)
+        kept.push(frame)
+        frames.value = kept
+        index.value = kept.length - 1
+        return
+      }
+      mergeKey = key
+      push(frame)
+    },
+
+    endMerge: () => {
+      mergeKey = null
     },
 
     commitBindings: (next) => {

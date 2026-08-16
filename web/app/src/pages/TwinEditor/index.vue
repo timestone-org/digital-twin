@@ -28,6 +28,7 @@ import {
   type TwinEntityKind,
   type TwinSelection,
 } from './types'
+import { useGizmoMode } from './useGizmoMode'
 import { useTwinEditorPage } from './useTwinEditorPage'
 
 const route = useRoute()
@@ -73,7 +74,7 @@ const viewportRef = ref<TwinViewportHandle | null>(null)
 const config = computed(() => page.doc.value?.config.value ?? null)
 
 const bulkOpen = ref(false)
-
+const gizmoMode = useGizmoMode(() => selection.value)
 /** 批量建部件的候选：模型节点配上「已被谁认领」。 */
 const bulkCandidates = computed(() =>
   config.value === null
@@ -253,11 +254,14 @@ onBeforeRouteLeave(async () => {
             :config="config"
             :selection="selection"
             :pick-mode="pickMode"
+            v-model:gizmo-mode="gizmoMode"
             @select="selection = $event ?? TWIN_SELECT_MODEL"
             @pick-node="onPickNode"
             @pick-position="(position: Vec3) => applyPick({ position })"
             @model-nodes="modelNodes = $event"
             @roam-preview="roamPreviewing = $event"
+            @entity-transform="actions?.transformEntity($event)"
+            @entity-transform-end="actions?.endTransform()"
           />
           <TwinDiagnosticsPanel
             v-if="showIssues"
@@ -274,6 +278,7 @@ onBeforeRouteLeave(async () => {
           :model-nodes="modelNodes"
           :picking="pending !== null"
           :roam-previewing="roamPreviewing"
+          v-model:gizmo-mode="gizmoMode"
           @patch="actions?.patchConfig($event)"
           @request-pick="requestPick"
           @cancel-pick="pending = null"

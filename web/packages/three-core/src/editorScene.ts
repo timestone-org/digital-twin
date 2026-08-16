@@ -15,6 +15,7 @@ import {
   EMPTY_PANEL_VALUES,
   RoamTimeline,
   buildRoamSegments,
+  gizmoTargetOf,
   hierEffectiveNodes,
 } from '@dt/twin-config'
 import * as THREE from 'three'
@@ -55,6 +56,11 @@ import {
   type SceneRendererFactory,
 } from './sceneCore'
 import { SceneLayers, type SceneLayerValues } from './sceneLayers'
+import {
+  TransformGizmo,
+  type GizmoChange,
+  type GizmoMode,
+} from './transformGizmo'
 import { ACCENT_COLOR_TOKEN, resolveColorSpec } from './themeColor'
 
 /** 视口自己的状态机；宿主据此画空态 / 加载 / 出错的覆盖层。 */
@@ -76,6 +82,14 @@ export interface EditorSceneCallbacks {
   status: (status: EditorSceneStatus, message: string) => void
   /** 漫游预览的开停；用户一碰镜头它会自己停，面板上的按钮要跟着回落。 */
   roamPreview: (playing: boolean) => void
+  /**
+   * 用户拖坐标轴手柄改了某个实体的位置 / 朝向。
+   * ⚠ 拖动期间持续回传，宿主要按「一次拖动一条撤销」去合并，
+   * 逐帧各记一条的话撤销一次只退回一帧。
+   */
+  entityTransform: (change: GizmoChange) => void
+  /** 手柄松手了；宿主据此把这一次拖动合成一条撤销。 */
+  entityTransformEnd: () => void
 }
 
 export interface EditorSceneOptions {
@@ -195,6 +209,8 @@ export class EditorScene {
   private picks: PickTargets | null = null
   private helpers: THREE.Group | null = null
   private selectionBox: THREE.Box3Helper | null = null
+  private gizmo: TransformGizmo | null = null
+  private gizmoMode: GizmoMode = 'translate'
   private focusProxy: THREE.Mesh | null = null
   private modelObject: THREE.Object3D | null = null
   private nodeIndex: NodeIndex = EMPTY_NODE_INDEX
@@ -251,6 +267,17 @@ export class EditorScene {
   setPickMode(mode: TwinPickMode): void {
     this.pickMode = mode
     this.container.style.cursor = mode === null ? '' : 'crosshair'
+    this.syncGizmo()
+  }
+
+  /**
+   * 切手柄的模式；只有箭头用得上 `rotate`。
+   * @param mode 平移还是旋转
+   */
+  setGizmoMode(mode: GizmoMode): void {
+    if (mode === this.gizmoMode) return
+    this.gizmoMode = mode
+    this.syncGizmo()
   }
 
   /**
@@ -322,6 +349,8 @@ export class EditorScene {
     this.layers = null
     this.picks?.dispose()
     this.picks = null
+    this.gizmo?.dispose()
+    this.gizmo = null
     if (this.core !== null) disposeScene(this.core)
     this.core = null
     this.modelObject = null
@@ -351,6 +380,11 @@ export class EditorScene {
       this.container,
     )
     this.focusProxy = createFocusProxy()
+    this.gizmo = new TransformGizmo({
+      core,
+      onChange: (change) => this.on.entityTransform(change),
+      onDragEnd: () => this.on.entityTransformEnd(),
+    })
     core.scene.add(
       this.picks.group,
       this.helpers,
@@ -414,6 +448,7 @@ export class EditorScene {
   /** 选中反馈：部件画描边框，其余四类把自己的拾取标记放大加亮。 */
   private applySelectionHighlight(): void {
     this.picks?.setSelected(this.selection)
+    this.syncGizmo()
     const helper = this.selectionBox
     if (helper === null) return
     const box =
@@ -425,6 +460,19 @@ export class EditorScene {
     this.selectionBoxTarget.copy(box)
     helper.visible = true
     helper.updateMatrixWorld(true)
+  }
+
+  /**
+   * 把手柄挂到当前选中的实体上；不该有手柄的一律收起。
+   * ⚠ 拾取模式下收起：那时用户点的是「一个位置」或「一个节点」，
+   * 摆着手柄会挡住要点的东西，且两套交互抢同一个指针。
+   */
+  private syncGizmo(): void {
+    const gizmo = this.gizmo
+    if (gizmo === null) return
+    if (this.pickMode !== null) return gizmo.detach()
+    const target = gizmoTargetOf(this.config, this.selection)
+    gizmo.attach(target, this.gizmoMode)
   }
 
   /** 选中框只画在有几何的两类上：部件与钻取节点。 */
