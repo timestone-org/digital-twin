@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import type { CollectPoint } from '@dt/contracts'
+import { DtFilePicker } from '@dt/ui'
 
 import * as collectApi from '@/api/collect'
 import ImportPointsDialog from '@/pages/Collect/OpcuaSourceDetail/components/ImportPointsDialog.vue'
@@ -62,10 +63,13 @@ async function render(existing: CollectPoint[] = []): Promise<VueWrapper> {
   return wrapper
 }
 
-/** 选一份 CSV 进去。DtFilePicker 抛 `select`，这里直接触发它。 */
+/**
+ * 选一份 CSV 进去。
+ * ⚠ 按组件本体找而不是按名字找：名字是字符串，写错了 `findComponent` 会回一个
+ * 空壳而不是报错，用例于是「什么都没选」却照样绿。
+ */
 async function select(wrapper: VueWrapper, body: string): Promise<void> {
-  const picker = wrapper.findComponent({ name: 'DtFilePicker' })
-  picker.vm.$emit('select', [csvFile(body)])
+  wrapper.findComponent(DtFilePicker).vm.$emit('select', [csvFile(body)])
   await flushPromises()
 }
 

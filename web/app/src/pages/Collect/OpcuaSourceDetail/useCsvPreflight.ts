@@ -47,43 +47,54 @@ export interface CsvPreflight {
 }
 
 /** 造一套预检状态。 */
+/** 由「解析结果 + 库里已有编码 + 跳过开关」派生出来的那几件。 */
+type Derived = Pick<
+  CsvPreflight,
+  'goodCount' | 'errorRows' | 'duplicated' | 'conflicting' | 'submittable' | 'isBlocked'
+>
+
+function derive(
+  parsed: Ref<ParseResult | null>,
+  existing: Ref<Set<string>>,
+  isSkipping: Ref<boolean>,
+): Derived {
+  const rows = computed(() => parsed.value?.rows ?? [])
+  const good = computed(() =>
+    rows.value.flatMap((row) => (row.item === null ? [] : [row.item])),
+  )
+  const duplicated = computed(() => duplicatedCodes(rows.value))
+  return {
+    goodCount: computed(() => good.value.length),
+    errorRows: computed(() =>
+      rows.value
+        .filter((row) => row.error !== null)
+        .map((row) => ({
+          id: String(row.line),
+          line: row.line,
+          error: row.error ?? '',
+        })),
+    ),
+    duplicated,
+    conflicting: computed(() =>
+      good.value
+        .filter((item) => existing.value.has(item.code))
+        .map((item) => item.code),
+    ),
+    submittable: computed(() =>
+      good.value.filter(
+        (item) => !isSkipping.value || !existing.value.has(item.code),
+      ),
+    ),
+    isBlocked: computed(() => duplicated.value.length > 0),
+  }
+}
+
 export function useCsvPreflight(): CsvPreflight {
   const fileName = ref('')
   const parsed = ref<ParseResult | null>(null)
   const scanError = ref<string | null>(null)
   const isSkippingExisting = ref(true)
   const existingCodes = ref(new Set<string>())
-
-  const goodRows = computed(() =>
-    (parsed.value?.rows ?? []).flatMap((row) =>
-      row.item === null ? [] : [row.item],
-    ),
-  )
-
-  const errorRows = computed<ErrorRow[]>(() =>
-    (parsed.value?.rows ?? [])
-      .filter((row) => row.error !== null)
-      .map((row) => ({
-        id: String(row.line),
-        line: row.line,
-        error: row.error ?? '',
-      })),
-  )
-
-  const duplicated = computed(() => duplicatedCodes(parsed.value?.rows ?? []))
-
-  const conflicting = computed(() =>
-    goodRows.value
-      .filter((item) => existingCodes.value.has(item.code))
-      .map((item) => item.code),
-  )
-
-  const submittable = computed(() =>
-    goodRows.value.filter(
-      (item) =>
-        !isSkippingExisting.value || !existingCodes.value.has(item.code),
-    ),
-  )
 
   async function reset(sourceId: string): Promise<void> {
     fileName.value = ''
@@ -105,12 +116,7 @@ export function useCsvPreflight(): CsvPreflight {
     parsed,
     scanError,
     isSkippingExisting,
-    goodCount: computed(() => goodRows.value.length),
-    errorRows,
-    duplicated,
-    conflicting,
-    submittable,
-    isBlocked: computed(() => duplicated.value.length > 0),
+    ...derive(parsed, existingCodes, isSkippingExisting),
     reset,
     take,
   }
