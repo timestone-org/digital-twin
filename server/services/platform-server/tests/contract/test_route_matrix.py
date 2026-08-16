@@ -113,13 +113,16 @@ DASHBOARD_READ_ACTIONS = (
 COLLECT_PREFIXES = (
     f"{API_PREFIX}/collect-sources",
     f"{API_PREFIX}/collect-points",
+    # 采集/归档两组运行参数：读 view、写 manage，与采集配置面同一套码
+    f"{API_PREFIX}/collect-runtime-params",
     f"{API_PREFIX}/point-histories",
 )
-# 触碰现场设备的三条动作端点归 operate：它们会在物理设备上产生一次真实往返，
+# 触碰现场设备的四条动作端点归 operate：它们会在物理设备上产生一次真实往返，
 # 与「改一行配置」不是同一类风险
 COLLECT_OPERATED = (
     (f"{API_PREFIX}/collect-sources/{{source_id}}:test", "POST"),
     (f"{API_PREFIX}/collect-sources/{{source_id}}:browse", "POST"),
+    (f"{API_PREFIX}/collect-sources/{{source_id}}:browse-subtree", "POST"),
     (f"{API_PREFIX}/collect-points/{{point_id}}:write", "POST"),
 )
 # 聚合不改任何东西，是 POST 只因为它是动作端点，故按读面放行
@@ -463,7 +466,8 @@ def test_the_collect_face_was_actually_covered() -> None:
         for path, method in ROUTE_CASES
         if collect_expectation(path, method) is not None
     ]
-    assert len(covered) == 14
+    # 15 条配置/动作面 + 3 条采集运行参数面
+    assert len(covered) == 18
 
 
 def test_every_field_action_still_points_at_a_live_route() -> None:

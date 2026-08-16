@@ -15,8 +15,12 @@ from platform_server.apps.collect.schemas import (
     PointOut,
     SourceOut,
     SourceRuntimeOut,
+    SubtreeItemOut,
 )
-from platform_server.apps.collect.services.command_bus import BrowseEntry
+from platform_server.apps.collect.services.command_bus import (
+    BrowseEntry,
+    SubtreeEntry,
+)
 from platform_server.apps.collect.services.state_source import (
     UNKNOWN,
     SourceRuntime,
@@ -39,8 +43,10 @@ def to_source_out(
         id=source.id,
         name=source.name,
         code=source.code,
+        description=source.description,
         protocol=as_protocol(source.protocol),
         endpoint=source.endpoint,
+        username=source.username,
         has_credential=source.credential_enc is not None,
         options_json=_text_options(source),
         read_mode=as_read_mode(source.read_mode),
@@ -106,12 +112,29 @@ def to_browse_item_out(entry: BrowseEntry) -> BrowseItemOut:
     )
 
 
+def to_subtree_item_out(item: SubtreeEntry) -> SubtreeItemOut:
+    """一条子树结果的对外形态，带上它挂在谁下面。
+
+    Args: item。
+    """
+    return SubtreeItemOut(
+        parent=item.parent,
+        address=item.entry.address,
+        name=item.entry.name,
+        has_children=item.entry.has_children,
+        is_variable=item.entry.is_variable,
+    )
+
+
 def to_plan_source_out(
-    source: CollectSource, *, points: Sequence[CollectPoint]
+    source: CollectSource,
+    *,
+    points: Sequence[CollectPoint],
+    password: str | None = None,
 ) -> PlanSourceOut:
     """一个数据源在采集计划里的形态。
 
-    Args: source, points。
+    Args: source, points, password（已解密的口令；只该来自计划构建那条内部路）。
     """
     return PlanSourceOut(
         source_id=source.id,
@@ -121,6 +144,8 @@ def to_plan_source_out(
         read_mode=source.read_mode,
         poll_interval_ms=source.poll_interval_ms,
         options=_text_options(source),
+        username=source.username,
+        password=password,
         points=[
             PlanPointOut(
                 point_code=point.code,

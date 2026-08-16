@@ -10,6 +10,7 @@ from platform_server.apps.collect.services import (
     plan_service,
     point_frames,
     point_service,
+    runtime_param_face,
     source_service,
 )
 from platform_server.apps.collect.services.command_bus import CommandBus
@@ -17,6 +18,7 @@ from platform_server.apps.collect.services.command_transport import (
     CommandTransport,
     RedisCommandTransport,
 )
+from platform_server.apps.collect.services.credentials import CredentialCipher
 from platform_server.apps.collect.services.history_source import (
     ReadOnlyHistorySource,
 )
@@ -34,6 +36,7 @@ from platform_server.apps.collect.services.watchers import SubscriptionWatchers
 __all__ = [
     "CommandBus",
     "CommandTransport",
+    "CredentialCipher",
     "DatabasePointCatalog",
     "PlanNotifier",
     "PointReading",
@@ -48,5 +51,6 @@ __all__ = [
     "plan_service",
     "point_frames",
     "point_service",
+    "runtime_param_face",
     "source_service",
 ]

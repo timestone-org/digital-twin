@@ -40,33 +40,50 @@ def build_source(*point_codes: str) -> PlanSourceOut:
 
 
 def test_the_same_plan_hashes_to_the_same_version() -> None:
-    first = plan_version([build_source("outlet_temp")])
-    second = plan_version([build_source("outlet_temp")])
+    first = plan_version([build_source("outlet_temp")], {})
+    second = plan_version([build_source("outlet_temp")], {})
     assert first == second
 
 
 def test_a_sha256_digest_is_64_hex_characters() -> None:
-    assert len(plan_version([build_source("outlet_temp")])) == 64
+    assert len(plan_version([build_source("outlet_temp")], {})) == 64
 
 
 def test_adding_a_point_changes_the_version() -> None:
-    before = plan_version([build_source("outlet_temp")])
-    after = plan_version([build_source("outlet_temp", "inlet_temp")])
+    before = plan_version([build_source("outlet_temp")], {})
+    after = plan_version([build_source("outlet_temp", "inlet_temp")], {})
     assert before != after
 
 
 def test_removing_a_point_changes_the_version() -> None:
-    before = plan_version([build_source("outlet_temp", "inlet_temp")])
-    after = plan_version([build_source("outlet_temp")])
+    before = plan_version([build_source("outlet_temp", "inlet_temp")], {})
+    after = plan_version([build_source("outlet_temp")], {})
     assert before != after
 
 
 def test_changing_an_address_changes_the_version() -> None:
-    before = plan_version([build_source("outlet_temp")])
+    before = plan_version([build_source("outlet_temp")], {})
     changed = build_source("outlet_temp")
     changed.points[0].address = "ns=3;s=other"
-    assert plan_version([changed]) != before
+    assert plan_version([changed], {}) != before
 
 
 def test_an_empty_plan_still_has_a_version() -> None:
-    assert len(plan_version([])) == 64
+    assert len(plan_version([], {})) == 64
+
+
+def test_a_param_override_changes_the_version() -> None:
+    # 拨一个运行参数旋钮也要触发一次重新收敛，否则改了等于没改
+    before = plan_version([build_source("outlet_temp")], {})
+    after = plan_version(
+        [build_source("outlet_temp")], {"archive": {"enabled": False}}
+    )
+    assert before != after
+
+
+def test_a_password_change_changes_the_version() -> None:
+    # 凭据变了连接参数就变了，supervisor 按版本比对整条重建会话
+    before = plan_version([build_source("outlet_temp")], {})
+    changed = build_source("outlet_temp")
+    changed.password = "secret"
+    assert plan_version([changed], {}) != before

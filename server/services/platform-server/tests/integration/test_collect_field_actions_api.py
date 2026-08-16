@@ -7,7 +7,12 @@
 import httpx
 import pytest
 from conftest import CollectFakes
-from unit.collect_fakes import ACTION_BROWSE, ACTION_READ, ACTION_WRITE
+from unit.collect_fakes import (
+    ACTION_BROWSE,
+    ACTION_BROWSE_SUBTREE,
+    ACTION_READ,
+    ACTION_WRITE,
+)
 
 from integration.collect_helpers import (
     POINTS,
@@ -114,6 +119,75 @@ async def test_browsing_a_silent_collector_answers_503(
     )
     assert response.status_code == 503
     assert envelope(response)["code"] == 51101
+
+
+async def test_a_subtree_comes_back_in_one_call_with_its_layers(
+    app_client: httpx.AsyncClient, collect_fakes: CollectFakes
+) -> None:
+    # ⚠ 一次请求换掉逐层浏览的几百次：`parent` 是界面拼回层级的唯一依据
+    source = await create_source(app_client)
+    collect_fakes.bus.replies[ACTION_BROWSE_SUBTREE] = {
+        "status": "ok",
+        "data": {
+            "items": [
+                {
+                    "parent": "ns=2;s=Ch",
+                    "address": "ns=2;s=Ch.Dev",
+                    "name": "Dev",
+                    "has_children": True,
+                    "is_variable": False,
+                },
+                {
+                    "parent": "ns=2;s=Ch.Dev",
+                    "address": "ns=2;s=Ch.Dev.Temp",
+                    "name": "出口温度",
+                    "has_children": False,
+                    "is_variable": True,
+                },
+            ],
+            "is_truncated": False,
+        },
+    }
+    response = await app_client.post(
+        f"{SOURCES}/{source['id']}:browse-subtree",
+        json={"parent": "ns=2;s=Ch"},
+    )
+    assert response.status_code == 200
+    result = payload(response)
+    assert result["is_truncated"] is False
+    assert [one["parent"] for one in result["items"]] == [
+        "ns=2;s=Ch",
+        "ns=2;s=Ch.Dev",
+    ]
+    assert (
+        collect_fakes.bus.envelopes_of(ACTION_BROWSE_SUBTREE)[0]["parent"]
+        == "ns=2;s=Ch"
+    )
+
+
+async def test_a_truncated_subtree_says_so_instead_of_looking_complete(
+    app_client: httpx.AsyncClient, collect_fakes: CollectFakes
+) -> None:
+    # 采集侧踩了刹车却不说，界面会把「只收到一半」显示成「就这么多点位」
+    source = await create_source(app_client)
+    collect_fakes.bus.replies[ACTION_BROWSE_SUBTREE] = {
+        "status": "ok",
+        "data": {"items": [], "is_truncated": True},
+    }
+    response = await app_client.post(
+        f"{SOURCES}/{source['id']}:browse-subtree", json={}
+    )
+    assert payload(response)["is_truncated"] is True
+
+
+async def test_a_subtree_on_a_silent_collector_answers_503(
+    app_client: httpx.AsyncClient,
+) -> None:
+    source = await create_source(app_client)
+    response = await app_client.post(
+        f"{SOURCES}/{source['id']}:browse-subtree", json={}
+    )
+    assert response.status_code == 503
 
 
 async def test_browsing_an_unknown_source_reads_back_404(

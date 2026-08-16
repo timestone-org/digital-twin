@@ -278,8 +278,9 @@ _RUNTIME_PARAM_RULES: tuple[RouteRuleSpec, ...] = (
         codes=(DASHBOARD_EDIT,),
         priority=925,
         description=(
-            "改运行参数与恢复默认。本轮只有看板组一个 section，故取"
-            " `dashboard:edit`；将来加别的 section 要在这之上加更窄的规则"
+            "改运行参数与恢复默认。本前缀只服务看板 scope，故取"
+            " `dashboard:edit`；采集/归档两组挂在 `collect-runtime-params`"
+            " 前缀下，由 930/932 的采集兜底给出 collect:* 口径"
         ),
     ),
     RouteRuleSpec(
@@ -373,6 +374,18 @@ _COLLECT_RULES: tuple[RouteRuleSpec, ...] = (
         codes=(COLLECT_OPERATE,),
         priority=940,
         description="浏览地址空间，同样会在现场设备上产生一次真实往返",
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/collect-sources/*:browse-subtree",
+        "POST",
+        codes=(COLLECT_OPERATE,),
+        priority=940,
+        description=(
+            "一次收齐一棵子树，会在现场设备上产生几百次往返。"
+            "⚠ 必须单列一条：上面那条 `*:browse` 是**全串**匹配，"
+            "`:browse-subtree` 落不进去，会掉到 930 的写兜底上——"
+            "表现是持 `collect:operate` 的现场人员勾不了上层节点"
+        ),
     ),
     RouteRuleSpec(
         f"{_PLATFORM}/collect-points/*:write",

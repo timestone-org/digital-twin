@@ -294,15 +294,18 @@ apps/hvac/
 
 ```
 apps/collect/
-├── api/          collect_sources（含 :test / :browse）· collect_points（含 :write）
+├── api/          collect_sources（含 :test / :browse / :browse-subtree）
+│                 · collect_points（含 :write）· collect_runtime_params
 │                 · point_histories（含 :aggregate）· internal（采集计划）
 ├── services/     事务边界
 │   ├── command_bus          命令总线发起端：信封、traceparent、结论翻译
 │   ├── command_transport    Redis list 传输面，键名与 collector 逐字一致
 │   ├── address_check        寻址串校验的三档结论
 │   ├── binding_guard        删点位前问大屏绑定（只走 dashboard 的 services 公开面）
+│   ├── credentials          数据源口令的 Fernet 收发，密钥由配置派生
 │   ├── plan_service         全量计划 + 内容摘要版本
 │   ├── plan_notifier        计划变更广播（加速器，不是保证）
+│   ├── runtime_param_face   采集/归档两组运行参数，复用 apps/runtime_params
 │   ├── history_service      游标分页与分桶聚合
 │   ├── history_source       归档库的只读连接
 │   ├── state_source         采集运行态的只读面（跨 schema 读 collector 写的表）
@@ -315,6 +318,10 @@ apps/collect/
 
 ⚠ **采集运行态在事务外贴**：它来自 collect schema 的另一条只读连接，在业务事务
 里读它就是「事务内做外部 IO」。故写路径一律先 commit、再 `attach_runtime`。
+
+⚠ **口令只在 `/internal/` 那一处解密**：对外出参一律只回一个「配没配」的布尔，
+密文不出库、明文不进日志。解不开就按未配置下发并响亮记日志——静默回退成匿名
+连接会让现场以为口令还在生效。
 
 ⚠ **两处刻意的重复**，都由「服务之间不许互相 import」逼出来，改一边就要改另一边：
 `services/command_transport.py` 的键名与信封字段复述自 collector-server 的

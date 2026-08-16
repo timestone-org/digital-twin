@@ -9,6 +9,10 @@ from typing import Any
 import pytest
 from pydantic import SecretStr, ValidationError
 
+from platform_server.apps.collect.catalog import (
+    COLLECT_MANAGE,
+    COLLECT_VIEW,
+)
 from platform_server.apps.dashboard.catalog import (
     DASHBOARD_EDIT,
     DASHBOARD_VIEW,
@@ -33,6 +37,7 @@ def base_fields() -> dict[str, Any]:
         "redis_host": PLACEHOLDER,
         "edge_signing_secret": SecretStr("x" * 32),
         "edge_service_key": SecretStr("y" * 32),
+        "collect_credential_secret": SecretStr("c" * 32),
         "objectstore_endpoint": "http://placeholder:9000",
         "objectstore_bucket": PLACEHOLDER,
         "objectstore_access_key": SecretStr(PLACEHOLDER),
@@ -59,10 +64,22 @@ def test_the_restated_view_code_matches_the_dashboard_module() -> None:
     assert catalog.DASHBOARD_VIEW == DASHBOARD_VIEW
 
 
-def test_all_sections_still_share_a_single_write_code() -> None:
-    # 出现第二个写码时写面必须按分组拆路由：闸 2 的声明是路由上的静态属性，
-    # 它看不见路径参数里的分组名，一条路由声明不出两个码
-    assert len(set(catalog.SECTION_WRITE_CODES.values())) == 1
+def test_the_restated_collect_codes_match_the_collect_module() -> None:
+    assert catalog.COLLECT_MANAGE == COLLECT_MANAGE
+    assert catalog.COLLECT_VIEW == COLLECT_VIEW
+
+
+def test_the_collect_scope_is_written_with_the_collect_manage_code() -> None:
+    # ⚠ 写码已不止一个，路由按 scope 拆开；分组配错码 = 拿大屏的码改采集参数
+    for name in catalog.COLLECT_SCOPE:
+        assert catalog.SECTION_WRITE_CODES[name] == COLLECT_MANAGE
+
+
+def test_the_two_scopes_partition_the_catalog() -> None:
+    # 一个分组恰好落在一条路由上：落两条是双份写码，落零条是永远改不了
+    scoped = [*catalog.DASHBOARD_SCOPE, *catalog.COLLECT_SCOPE]
+    assert sorted(scoped) == sorted(catalog.sections())
+    assert len(scoped) == len(set(scoped))
 
 
 def test_every_section_has_a_write_code() -> None:
@@ -74,14 +91,30 @@ def test_every_section_has_a_write_code() -> None:
     assert missing == []
 
 
-def test_every_spec_reads_the_field_that_its_key_names() -> None:
+def test_every_dashboard_spec_reads_the_field_that_its_key_names() -> None:
+    # 采集/归档分组不在此列：它们的消费者在 collector-server，`read` 回的是
+    # 出厂值常量，对应字段根本不在本进程的 Settings 上
     settings = build_settings()
     mismatched = [
         spec.key
-        for spec in _all_specs()
+        for name in catalog.DASHBOARD_SCOPE
+        for spec in catalog.specs_of(name) or ()
         if spec.read(settings) != getattr(settings, spec.key)
     ]
     assert mismatched == []
+
+
+def test_every_collect_spec_names_the_collector_env_var() -> None:
+    # 采集/归档的键住在 collector-server 上：环境变量名必须显式给出
+    # （COLLECT_*），否则界面会指着不存在的 PLATFORM_* 变量让运维去对 .env
+    unnamed = [
+        spec.key
+        for name in catalog.COLLECT_SCOPE
+        for spec in catalog.specs_of(name) or ()
+        if spec.env_override is None
+        or not spec.env_override.startswith("COLLECT_")
+    ]
+    assert unnamed == []
 
 
 def test_every_default_sits_inside_the_declared_range() -> None:

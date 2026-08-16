@@ -75,6 +75,7 @@ def get_source_context(
     return SourceContext(
         states=SourceStateSource(history=container.history),
         live_point_limit=container.settings.collect_live_max_points,
+        cipher=container.credential_cipher,
     )
 
 

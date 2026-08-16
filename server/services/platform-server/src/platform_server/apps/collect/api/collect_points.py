@@ -4,7 +4,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
@@ -120,13 +120,18 @@ async def update_point(
     summary="删除点位",
 )
 async def delete_point(
-    point_id: uuid.UUID, session: SessionDep, write: ManageDep
+    point_id: uuid.UUID,
+    session: SessionDep,
+    write: ManageDep,
+    is_forced: Annotated[bool, Query(alias="force")] = False,
 ) -> Response:
-    """删点位。被大屏绑着就 409 并列出那些大屏。
+    """删点位。被大屏绑着就 409 并列出那些大屏；`force` 跳过绑定守卫。
 
-    Args: point_id, session, write。
+    Args: point_id, session, write, is_forced。
     """
-    await point_service.delete_point(session, point_id=point_id)
+    await point_service.delete_point(
+        session, point_id=point_id, is_forced=is_forced
+    )
     await write.plans.notify(reason=REASON_POINT_CHANGED)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

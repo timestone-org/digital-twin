@@ -13,6 +13,7 @@ import re
 from pathlib import Path
 
 from platform_server.apps.collect.schemas.plan import (
+    CollectPlanOut,
     PlanPointOut,
     PlanSourceOut,
 )
@@ -32,13 +33,9 @@ COLLECTOR_PLAN = (
 )
 
 # collector 侧声明了、但 platform 有意不下发的字段，每条都要有理由。
-# 不在这张表里的缺失即为漏发。
-INTENTIONALLY_NOT_SENT = {
-    # 一期不下发凭据明文：credential_enc 的解密与轮换尚未落地，
-    # 下发一个假的比不下发更糟（见 schemas/plan.py 的 PlanSourceOut）
-    "username",
-    "password",
-}
+# 不在这张表里的缺失即为漏发。凭据（username/password）已随计划下发——
+# 解密在 /internal/ 端点就地做，走服务级密钥的内部 HTTP，不经 Redis。
+INTENTIONALLY_NOT_SENT: set[str] = set()
 
 _FIELD = re.compile(r"^    (?P<name>[a-z][a-z0-9_]*)\s*:", re.MULTILINE)
 
@@ -94,3 +91,18 @@ def test_archive_policy_is_carried_per_point() -> None:
     assert "archive_enabled" in fields
     assert "deadband" in fields
     assert "archive_max_interval_ms" in fields
+
+
+def test_credentials_are_now_carried_by_the_plan() -> None:
+    """凭据随计划下发：少了这两个字段，采集器只能永远匿名连接。"""
+    fields = set(PlanSourceOut.model_fields)
+    assert "username" in fields
+    assert "password" in fields
+
+
+def test_runtime_param_overrides_are_carried_by_the_plan() -> None:
+    """运行参数覆盖值挂在计划顶层的 `params` 上，两侧字段名必须一致。"""
+    assert "params" in CollectPlanOut.model_fields
+    collector_source = COLLECTOR_PLAN.read_text(encoding="utf-8")
+    expected = _declared_fields(collector_source, "CollectPlan")
+    assert "params" in expected

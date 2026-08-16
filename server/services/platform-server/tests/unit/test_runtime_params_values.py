@@ -82,15 +82,37 @@ def test_the_boundaries_themselves_are_accepted() -> None:
 
 
 def test_a_stored_boolean_is_not_read_back_as_a_number() -> None:
-    assert param_service.stored_number(True) is None
+    assert param_service.stored_value(spec_of(WINDOW_KEY), True) is None
 
 
 def test_a_stored_string_is_not_read_back_as_a_number() -> None:
-    assert param_service.stored_number("2000") is None
+    assert param_service.stored_value(spec_of(WINDOW_KEY), "2000") is None
 
 
 def test_a_stored_integer_survives_the_round_trip() -> None:
-    assert param_service.stored_number(2000) == 2000
+    assert param_service.stored_value(spec_of(WINDOW_KEY), 2000) == 2000
+
+
+def test_a_switch_only_reads_back_booleans() -> None:
+    # 开关项存进去的必须是 bool；数字 1 不算「开」——bool 是 int 的子类，
+    # 方向反过来也一样要挡
+    switch = _switch_spec()
+    assert param_service.stored_value(switch, True) is True
+    assert param_service.stored_value(switch, 1) is None
+
+
+def test_a_switch_rejects_numbers_on_write() -> None:
+    switch = _switch_spec()
+    with pytest.raises(ValidationFailed):
+        param_service.validated(switch, 1)
+    assert param_service.validated(switch, False) is False
+
+
+def _switch_spec() -> catalog.ParamSpec:
+    """归档总开关：目录里唯一的 switch 项，够所有开关分支用。"""
+    spec = catalog.spec_of(catalog.SECTION_ARCHIVE, "enabled")
+    assert spec is not None
+    return spec
 
 
 def test_without_an_override_the_environment_default_wins() -> None:

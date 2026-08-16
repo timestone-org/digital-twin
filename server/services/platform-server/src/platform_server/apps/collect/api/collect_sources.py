@@ -4,7 +4,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
@@ -25,6 +25,7 @@ from platform_server.apps.collect.schemas import (
     SourceCreateIn,
     SourceOut,
     SourceUpdateIn,
+    SubtreeOut,
 )
 from platform_server.apps.collect.services import (
     field_service,
@@ -185,13 +186,18 @@ async def update_source(
     summary="删除数据源",
 )
 async def delete_source(
-    source_id: uuid.UUID, session: SessionDep, write: ManageDep
+    source_id: uuid.UUID,
+    session: SessionDep,
+    write: ManageDep,
+    is_forced: Annotated[bool, Query(alias="force")] = False,
 ) -> Response:
-    """删数据源。下面还有点位时先删点位。
+    """删数据源。下面还有点位时先删点位；`force` 连点位一起删。
 
-    Args: source_id, session, write。
+    Args: source_id, session, write, is_forced。
     """
-    await source_service.delete_source(session, source_id=source_id)
+    await source_service.delete_source(
+        session, source_id=source_id, is_forced=is_forced
+    )
     await write.plans.notify(reason=REASON_SOURCE_CHANGED)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -238,3 +244,28 @@ async def browse_source(
             parent=payload.parent,
         )
     )
+
+
+@router.post(
+    "/{source_id}:browse-subtree",
+    response_model=ApiResponse[SubtreeOut],
+    summary="一次收齐一棵子树",
+)
+async def browse_subtree(
+    source_id: uuid.UUID,
+    payload: BrowseIn,
+    session: SessionDep,
+    write: OperateDep,
+) -> ApiResponse[SubtreeOut]:
+    """勾一个上层节点时用：把它下面的整棵子树一次收齐。
+
+    ⚠ 递归在**持有会话的采集进程**里做，不由客户端逐层拉：逐层拉一个几百
+    节点的通道就是几百个串行请求，每一个都要过一遍边缘、总线与设备。
+    ⚠ 不限条数，只受这次请求的时间预算约束；到点没走完 `is_truncated`
+    为真——界面必须说出来。
+    Args: source_id, payload, session, write。
+    """
+    outcome = await field_service.browse_subtree(
+        session, bus=write.bus, source_id=source_id, parent=payload.parent
+    )
+    return ok(outcome)

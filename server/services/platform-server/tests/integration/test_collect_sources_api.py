@@ -8,6 +8,7 @@ import pytest
 from conftest import CollectFakes
 
 from integration.collect_helpers import (
+    POINTS,
     SOURCES,
     create_points,
     create_source,
@@ -228,3 +229,47 @@ async def test_the_list_filters_by_enabled_state(
     response = await app_client.get(SOURCES, params={"is_enabled": "false"})
     codes = [item["code"] for item in payload(response)["items"]]
     assert codes == ["line-2"]
+
+
+async def test_description_and_username_round_trip(
+    app_client: httpx.AsyncClient,
+) -> None:
+    source = await create_source(
+        app_client, description="一号车间的主 PLC", username="operator"
+    )
+    assert source["description"] == "一号车间的主 PLC"
+    assert source["username"] == "operator"
+    read = await app_client.get(f"{SOURCES}/{source['id']}")
+    assert payload(read)["description"] == "一号车间的主 PLC"
+    assert payload(read)["username"] == "operator"
+
+
+async def test_a_null_clears_the_description_and_username(
+    app_client: httpx.AsyncClient,
+) -> None:
+    source = await create_source(
+        app_client, description="备注", username="operator"
+    )
+    response = await app_client.patch(
+        f"{SOURCES}/{source['id']}",
+        json={"description": None, "username": None},
+    )
+    assert response.status_code == 200
+    assert payload(response)["description"] is None
+    assert payload(response)["username"] is None
+
+
+async def test_force_delete_takes_the_points_with_the_source(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # ⚠ 默认拒删非空源；force 让点位随外键 CASCADE 一起走
+    source = await create_source(app_client)
+    await create_points(app_client, source["id"])
+    refused = await app_client.delete(f"{SOURCES}/{source['id']}")
+    assert refused.status_code == 409
+    forced = await app_client.delete(
+        f"{SOURCES}/{source['id']}", params={"force": "true"}
+    )
+    assert forced.status_code == 204
+    listed = await app_client.get(POINTS, params={"source_id": source["id"]})
+    assert payload(listed)["items"] == []

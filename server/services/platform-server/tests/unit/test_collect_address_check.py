@@ -32,7 +32,10 @@ def build_bus(transport: FakeCommandTransport) -> CommandBus:
     Args: transport。
     """
     return CommandBus(
-        transport=transport, browse_timeout_s=10.0, command_timeout_s=5.0
+        transport=transport,
+        browse_timeout_s=10.0,
+        command_timeout_s=5.0,
+        subtree_timeout_s=15.0,
     )
 
 

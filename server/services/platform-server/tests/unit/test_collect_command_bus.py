@@ -17,6 +17,7 @@ from platform_server.apps.collect.errors import (
 from platform_server.apps.collect.services.command_bus import CommandBus
 from unit.collect_fakes import (
     ACTION_BROWSE,
+    ACTION_BROWSE_SUBTREE,
     ACTION_READ,
     ACTION_VALIDATE,
     ACTION_WRITE,
@@ -27,6 +28,7 @@ from unit.collect_fakes import (
 SOURCE_ID = uuid.UUID("0192f0c0-0000-7000-8000-0000000000a1")
 BROWSE_TIMEOUT_S = 10.0
 COMMAND_TIMEOUT_S = 5.0
+SUBTREE_TIMEOUT_S = 15.0
 
 
 def build_bus(transport: FakeCommandTransport) -> CommandBus:
@@ -38,6 +40,7 @@ def build_bus(transport: FakeCommandTransport) -> CommandBus:
         transport=transport,
         browse_timeout_s=BROWSE_TIMEOUT_S,
         command_timeout_s=COMMAND_TIMEOUT_S,
+        subtree_timeout_s=SUBTREE_TIMEOUT_S,
     )
 
 
@@ -287,3 +290,99 @@ async def test_browsing_gets_the_wider_budget() -> None:
     await bus.browse(SOURCE_ID, None)
     await bus.write(SOURCE_ID, "setpoint", 1)
     assert transport.budgets == [BROWSE_TIMEOUT_S, COMMAND_TIMEOUT_S]
+
+
+async def test_walking_a_subtree_gets_a_budget_of_its_own() -> None:
+    # ⚠ 走一棵子树是几百趟设备往返，按浏览一层的预算去等一定等不到
+    transport = FakeCommandTransport(
+        replies={
+            ACTION_BROWSE_SUBTREE: {
+                "status": "ok",
+                "data": {"items": [], "is_truncated": False},
+            }
+        }
+    )
+    await build_bus(transport).browse_subtree(SOURCE_ID, "ns=2;s=Ch")
+    assert transport.budgets == [SUBTREE_TIMEOUT_S]
+
+
+async def test_a_subtree_entry_remembers_who_it_hangs_under() -> None:
+    transport = FakeCommandTransport(
+        replies={
+            ACTION_BROWSE_SUBTREE: {
+                "status": "ok",
+                "data": {
+                    "items": [
+                        {
+                            "parent": "ns=2;s=Ch",
+                            "address": "ns=2;s=Ch.Temp",
+                            "name": "出口温度",
+                            "has_children": False,
+                            "is_variable": True,
+                        }
+                    ],
+                    "is_truncated": True,
+                },
+            }
+        }
+    )
+    outcome = await build_bus(transport).browse_subtree(SOURCE_ID, "ns=2;s=Ch")
+    assert outcome.entries[0].parent == "ns=2;s=Ch"
+    assert outcome.entries[0].entry.address == "ns=2;s=Ch.Temp"
+    assert outcome.is_truncated is True
+
+
+async def test_a_subtree_item_without_a_parent_hangs_on_the_root() -> None:
+    # ⚠ 缺 parent 要落到 None（挂在根上），落成空串就成了一个不存在的寻址串
+    transport = FakeCommandTransport(
+        replies={
+            ACTION_BROWSE_SUBTREE: {
+                "status": "ok",
+                "data": {
+                    "items": [
+                        {
+                            "address": "ns=2;s=Ch",
+                            "name": "通道",
+                            "has_children": True,
+                            "is_variable": False,
+                        }
+                    ]
+                },
+            }
+        }
+    )
+    outcome = await build_bus(transport).browse_subtree(SOURCE_ID, None)
+    assert outcome.entries[0].parent is None
+    assert outcome.is_truncated is False
+
+
+async def test_an_old_collector_reads_as_a_version_gap_not_a_device_fault() -> (
+    None
+):
+    # ⚠ 新平台 + 旧采集：不说清是版本对不齐，现场会照着设备与网络查一整天
+    transport = FakeCommandTransport(
+        replies={
+            ACTION_BROWSE_SUBTREE: {
+                "status": "error",
+                "reason": "unknown_action",
+            }
+        }
+    )
+    with pytest.raises(CommandFailed) as raised:
+        await build_bus(transport).browse_subtree(SOURCE_ID, "ns=2;s=Ch")
+    assert "升到同版本" in str(raised.value)
+
+
+async def test_a_subtree_on_an_offline_source_reads_the_same_as_browse() -> (
+    None
+):
+    transport = FakeCommandTransport(
+        replies={
+            ACTION_BROWSE_SUBTREE: {
+                "status": "error",
+                "reason": "source_offline",
+            }
+        }
+    )
+    with pytest.raises(SourceOffline):
+        await build_bus(transport).browse_subtree(SOURCE_ID, "ns=2;s=Ch")

@@ -8,6 +8,7 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.logging import get_logger
@@ -29,6 +30,7 @@ from platform_server.apps.collect.schemas import (
     SourceUpdateIn,
 )
 from platform_server.apps.collect.services.changes import given_changes
+from platform_server.apps.collect.services.credentials import CredentialCipher
 from platform_server.apps.collect.services.presenters import (
     to_runtime_out,
     to_source_out,
@@ -43,14 +45,10 @@ from platform_server.apps.collect.services.transactions import (
 
 _logger = get_logger("platform.collect.source")
 
-# 凭据在库里的占位。⚠ 一期还没有密钥管理，先存一个不可逆的标记而不是明文：
-# 存明文一旦上线就再也收不回来，而标记至少让「配没配过」是诚实的
-CREDENTIAL_PLACEHOLDER = "configured"
-
 
 @dataclass(frozen=True)
 class SourceContext:
-    """出参装配要的两件旁路信息：运行态读侧与实时值的点位上限。
+    """数据源面的旁路依赖：运行态读侧、实时值点位上限与口令加解密器。
 
     ⚠ 打成一包不是为了好看：函数形参上限是 5，而列表面本来就已经有
     「过滤 / 分页 / 排序」三件。
@@ -58,6 +56,7 @@ class SourceContext:
 
     states: SourceStateSource
     live_point_limit: int
+    cipher: CredentialCipher
 
 
 async def list_sources(
@@ -148,9 +147,11 @@ async def create_source(
     source = CollectSource(
         name=payload.name,
         code=payload.code,
+        description=payload.description,
         protocol=payload.protocol,
         endpoint=payload.endpoint,
-        credential_enc=_credential_of(payload.credential is not None),
+        username=payload.username,
+        credential_enc=_encrypted(context.cipher, payload.credential),
         options_json=dict(payload.options_json),
         read_mode=payload.read_mode,
         poll_interval_ms=payload.poll_interval_ms,
@@ -181,7 +182,7 @@ async def update_source(
     changes = given_changes(payload)
     credential = changes.pop("credential", None)
     if "credential" in payload.model_fields_set:
-        changes["credential_enc"] = _credential_of(credential is not None)
+        changes["credential_enc"] = _encrypted(context.cipher, credential)
     source_crud.apply_changes(source, changes)
     await session.flush()
     presented = await _present(session, source, context)
@@ -192,18 +193,27 @@ async def update_source(
     return (await attach_runtime(context.states, [presented]))[0]
 
 
-async def delete_source(session: AsyncSession, *, source_id: uuid.UUID) -> None:
-    """删数据源。下面还有点位时拒绝。
+async def delete_source(
+    session: AsyncSession, *, source_id: uuid.UUID, is_forced: bool = False
+) -> None:
+    """删数据源。下面还有点位时拒绝；`is_forced` 连点位一起删。
 
-    ⚠ 不级联删点位：点位一走，绑着它的大屏就悄悄失去数据源，而删除操作本身
-    看起来完全成功。点位要一条条删，每条都过绑定检查。
-    Args: session, source_id。
+    ⚠ 默认不级联删点位：点位一走，绑着它的大屏就悄悄失去数据源，而删除操作
+    本身看起来完全成功。点位要一条条删，每条都过绑定检查。
+    ⚠ `is_forced` 是显式跳过这道守卫：点位随外键 CASCADE 一起删，仍绑着它们
+    的大屏引用就此失效——界面要在二次确认里把这句话说出来。
+    Args: session, source_id, is_forced。
     """
     source = await require_source(session, source_id)
-    if await point_crud.count_by_source(session, source.id) > 0:
+    point_count = await point_crud.count_by_source(session, source.id)
+    if point_count > 0 and not is_forced:
         raise SourceNotEmpty("这个数据源下还有点位，请先删除点位")
     _logger.info(
-        "collect_source_deleted", "数据源已删除", source_id=str(source.id)
+        "collect_source_deleted",
+        "数据源已删除",
+        source_id=str(source.id),
+        point_count=point_count,
+        is_forced=is_forced,
     )
     await source_crud.delete(session, source)
     await _commit(session)
@@ -233,8 +243,14 @@ async def _commit(session: AsyncSession) -> None:
     await session.commit()
 
 
-def _credential_of(has_credential: bool) -> str | None:
-    return CREDENTIAL_PLACEHOLDER if has_credential else None
+def _encrypted(cipher: CredentialCipher, credential: object) -> str | None:
+    """口令入库前加密；没给或清空就是 None。
+
+    Args: cipher, credential（`SecretStr` 或 None）。
+    """
+    if not isinstance(credential, SecretStr):
+        return None
+    return cipher.encrypt(credential.get_secret_value())
 
 
 async def _present(

@@ -14,6 +14,7 @@ from lib.db import Database, ReadOnlySqlSource
 from lib.testing import FakeObjectStore, InMemoryCache
 from platform_server.apps.collect.services import (
     CommandBus,
+    CredentialCipher,
     PlanNotifier,
     SubscriptionWatchers,
 )
@@ -114,6 +115,7 @@ def build_settings(
         redis_host=PLACEHOLDER,
         edge_signing_secret=SecretStr("x" * 32),
         edge_service_key=SecretStr("y" * 32),
+        collect_credential_secret=SecretStr("c" * 32),
         objectstore_endpoint="http://placeholder:9000",
         objectstore_bucket=PLACEHOLDER,
         objectstore_access_key=SecretStr(PLACEHOLDER),
@@ -144,6 +146,7 @@ def build_container(ledger: list[str], *, settings: Settings) -> Container:
             transport=FakeCommandTransport(),
             browse_timeout_s=10.0,
             command_timeout_s=5.0,
+            subtree_timeout_s=15.0,
         ),
         command_transport=cast(
             RedisCommandTransport, FakeDependency("command_bus", ledger)
@@ -168,4 +171,5 @@ def build_container(ledger: list[str], *, settings: Settings) -> Container:
         ac_daily_lease=cast(Lease, LedgerLease(ledger=ledger)),
         nodes=FakeNodeWriter(),
         object_store=FakeObjectStore(),
+        credential_cipher=CredentialCipher("c" * 32),
     )

@@ -33,9 +33,9 @@ class PlanPointOut(OutputModel):
 class PlanSourceOut(OutputModel):
     """计划里的一个数据源。
 
-    ⚠ 没有 `password` 字段：一期不下发凭据明文——`credential_enc` 的解密与
-    轮换还没有落地，先下发一个假的比不下发更糟。collector 拿不到凭据时按
-    匿名连接，连不上会响亮失败。
+    ⚠ `password` 是解密后的明文，**只**走这条内部 HTTP（服务级密钥 + 集群网），
+    不经 Redis、不进日志、不进任何对外出参。解不开（换过密钥或一期占位行）就
+    是 None——collector 按匿名连接，连不上会以 auth 类错误响亮失败。
     """
 
     source_id: uuid.UUID
@@ -45,6 +45,8 @@ class PlanSourceOut(OutputModel):
     read_mode: str
     poll_interval_ms: int
     options: dict[str, str]
+    username: str | None = None
+    password: str | None = None
     points: list[PlanPointOut]
 
 
@@ -54,7 +56,13 @@ class CollectPlanOut(OutputModel):
     ⚠ `version` 是**内容摘要**不是时间戳：collector 只按它判断要不要重新收敛，
     而删掉一个点位并不会让任何一行的 `updated_at` 变新——用时间戳做版本，
     删除就永远推不下去。
+    ⚠ `params` 是运行参数的**覆盖值**（稀疏，`{分组: {键: 值}}`）：没覆盖的键
+    不下发，collector 回落到自己的环境变量默认值。它参与版本摘要——改一个
+    旋钮就该触发一次重新收敛。
     """
 
     version: str = Field(min_length=1)
     sources: list[PlanSourceOut]
+    params: dict[str, dict[str, float | int | bool]] = Field(
+        default_factory=dict
+    )

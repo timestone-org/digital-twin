@@ -2785,6 +2785,51 @@
         "title": "ApiResponse[StartupRebuildOut]",
         "type": "object"
       },
+      "ApiResponse_SubtreeOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubtreeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[SubtreeOut]",
+        "type": "object"
+      },
       "ApiResponse_TemplateOut_": {
         "properties": {
           "code": {
@@ -8568,10 +8613,24 @@
         "type": "object"
       },
       "RuntimeParamOut": {
-        "description": "一项运行参数的登记信息与当前状态。\n\n`value` 是**有效值**：有覆盖行就是覆盖值，没有就是环境变量给的默认值。\n`env_name` 给运维对着 .env 看——界面上改的和文件里写的是同一件事。\n\n⚠ `minimum` / `maximum` 随取值一起下发，不让界面自己写一份：两边各写一份\n时前端放行的值会被服务端 422 挡回来，而用户看不出自己错在哪。",
+        "description": "一项运行参数的登记信息与当前状态。\n\n`value` 是**有效值**：有覆盖行就是覆盖值，没有就是环境变量给的默认值。\n`env_name` 给运维对着 .env 看——界面上改的和文件里写的是同一件事。\n\n⚠ `minimum` / `maximum` 随取值一起下发，不让界面自己写一份：两边各写一份\n时前端放行的值会被服务端 422 挡回来，而用户看不出自己错在哪。\n`tier` 是生效档位（instant / reconnect / restart），非即时档界面要如实说\n「保存了但还没生效」；`danger` 是危险方向（off / decrease），命中方向的\n改动界面要求二次确认。",
         "properties": {
+          "danger": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Danger"
+          },
           "default_value": {
             "anyOf": [
+              {
+                "type": "boolean"
+              },
               {
                 "type": "integer"
               },
@@ -8600,7 +8659,8 @@
           "kind": {
             "enum": [
               "int",
-              "float"
+              "float",
+              "switch"
             ],
             "title": "Kind",
             "type": "string"
@@ -8634,6 +8694,9 @@
           "previous_value": {
             "anyOf": [
               {
+                "type": "boolean"
+              },
+              {
                 "type": "integer"
               },
               {
@@ -8659,6 +8722,10 @@
               }
             ],
             "title": "Step"
+          },
+          "tier": {
+            "title": "Tier",
+            "type": "string"
           },
           "unit": {
             "title": "Unit",
@@ -8690,6 +8757,9 @@
           "value": {
             "anyOf": [
               {
+                "type": "boolean"
+              },
+              {
                 "type": "integer"
               },
               {
@@ -8715,6 +8785,8 @@
           "step",
           "minimum",
           "maximum",
+          "tier",
+          "danger",
           "value",
           "default_value",
           "previous_value",
@@ -8732,6 +8804,9 @@
           "values": {
             "additionalProperties": {
               "anyOf": [
+                {
+                  "type": "boolean"
+                },
                 {
                   "type": "integer"
                 },
@@ -8858,6 +8933,19 @@
             ],
             "title": "Credential"
           },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
           "endpoint": {
             "maxLength": 256,
             "minLength": 1,
@@ -8902,6 +8990,19 @@
             ],
             "title": "Read Mode",
             "type": "string"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
           }
         },
         "required": [
@@ -8980,6 +9081,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
           "endpoint": {
             "title": "Endpoint",
             "type": "string"
@@ -9040,14 +9152,27 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
           }
         },
         "required": [
           "id",
           "name",
           "code",
+          "description",
           "protocol",
           "endpoint",
+          "username",
           "has_credential",
           "options_json",
           "read_mode",
@@ -9168,6 +9293,19 @@
             ],
             "title": "Credential"
           },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
           "endpoint": {
             "anyOf": [
               {
@@ -9246,6 +9384,19 @@
               }
             ],
             "title": "Read Mode"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
           }
         },
         "title": "SourceUpdateIn",
@@ -9609,6 +9760,69 @@
           "is_clamped"
         ],
         "title": "StartupRebuildOut",
+        "type": "object"
+      },
+      "SubtreeItemOut": {
+        "description": "子树里的一项，外加它挂在谁下面。\n\n⚠ `parent` 不能省：整棵子树是平铺回来的，客户端要靠它拼回层级。",
+        "properties": {
+          "address": {
+            "title": "Address",
+            "type": "string"
+          },
+          "has_children": {
+            "title": "Has Children",
+            "type": "boolean"
+          },
+          "is_variable": {
+            "title": "Is Variable",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent"
+          }
+        },
+        "required": [
+          "address",
+          "name",
+          "has_children",
+          "is_variable",
+          "parent"
+        ],
+        "title": "SubtreeItemOut",
+        "type": "object"
+      },
+      "SubtreeOut": {
+        "description": "一次子树遍历的结果。\n\n⚠ 不限条数：勾一个通道要的就是它下面的全部点位。唯一的约束是这次请求的\n时间预算，到点没走完才置 `is_truncated`。\n⚠ `is_truncated` 为真时**必须**在界面上说出来：不说的话用户会把\n「只收到一半」当成「这个通道就这么多点位」。",
+        "properties": {
+          "is_truncated": {
+            "title": "Is Truncated",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SubtreeItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "is_truncated"
+        ],
+        "title": "SubtreeOut",
         "type": "object"
       },
       "TemplateCreateIn": {
@@ -12172,7 +12386,7 @@
     },
     "/api/v1/platform/collect-points/{point_id}": {
       "delete": {
-        "description": "删点位。被大屏绑着就 409 并列出那些大屏。\n\nArgs: point_id, session, write。",
+        "description": "删点位。被大屏绑着就 409 并列出那些大屏；`force` 跳过绑定守卫。\n\nArgs: point_id, session, write, is_forced。",
         "operationId": "delete_point_api_v1_platform_collect_points__point_id__delete",
         "parameters": [
           {
@@ -12183,6 +12397,16 @@
               "format": "uuid",
               "title": "Point Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "force",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Force",
+              "type": "boolean"
             }
           },
           {
@@ -12361,6 +12585,184 @@
         ]
       }
     },
+    "/api/v1/platform/collect-runtime-params": {
+      "get": {
+        "description": "列出采集与归档两组运行参数。给了 `section` 就只回那一组。\n\nArgs: session, settings, _viewer, section。",
+        "operationId": "list_collect_runtime_params_api_v1_platform_collect_runtime_params_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "section",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Section"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_RuntimeParamOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "采集/归档运行参数目录与当前取值",
+        "tags": [
+          "collect-source"
+        ]
+      }
+    },
+    "/api/v1/platform/collect-runtime-params/{section}": {
+      "put": {
+        "description": "改一个分组里的若干项，改完通知采集计划变更。\n\nArgs: section, payload, session, settings, write。",
+        "operationId": "replace_collect_runtime_params_api_v1_platform_collect_runtime_params__section__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "section",
+            "required": true,
+            "schema": {
+              "title": "Section",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimeParamWriteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_RuntimeParamOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "修改一组采集/归档运行参数",
+        "tags": [
+          "collect-source"
+        ]
+      }
+    },
+    "/api/v1/platform/collect-runtime-params/{section}:reset": {
+      "post": {
+        "description": "删掉该分组的覆盖行，此后重新跟随采集器的环境变量。\n\nArgs: section, session, settings, write。",
+        "operationId": "reset_collect_runtime_params_api_v1_platform_collect_runtime_params__section__reset_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "section",
+            "required": true,
+            "schema": {
+              "title": "Section",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_RuntimeParamOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "恢复一组采集/归档运行参数的默认值",
+        "tags": [
+          "collect-source"
+        ]
+      }
+    },
     "/api/v1/platform/collect-sources": {
       "get": {
         "description": "分页列出数据源，每行带上采集运行态。\n\nArgs: session, context, page, _viewer, filters。",
@@ -12526,7 +12928,7 @@
     },
     "/api/v1/platform/collect-sources/{source_id}": {
       "delete": {
-        "description": "删数据源。下面还有点位时先删点位。\n\nArgs: source_id, session, write。",
+        "description": "删数据源。下面还有点位时先删点位；`force` 连点位一起删。\n\nArgs: source_id, session, write, is_forced。",
         "operationId": "delete_source_api_v1_platform_collect_sources__source_id__delete",
         "parameters": [
           {
@@ -12537,6 +12939,16 @@
               "format": "uuid",
               "title": "Source Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "force",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Force",
+              "type": "boolean"
             }
           },
           {
@@ -12752,6 +13164,76 @@
           }
         },
         "summary": "浏览地址空间",
+        "tags": [
+          "collect-source"
+        ]
+      }
+    },
+    "/api/v1/platform/collect-sources/{source_id}:browse-subtree": {
+      "post": {
+        "description": "勾一个上层节点时用：把它下面的整棵子树一次收齐。\n\n⚠ 递归在**持有会话的采集进程**里做，不由客户端逐层拉：逐层拉一个几百\n节点的通道就是几百个串行请求，每一个都要过一遍边缘、总线与设备。\n⚠ 不限条数，只受这次请求的时间预算约束；到点没走完 `is_truncated`\n为真——界面必须说出来。\nArgs: source_id, payload, session, write。",
+        "operationId": "browse_subtree_api_v1_platform_collect_sources__source_id__browse_subtree_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrowseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_SubtreeOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "一次收齐一棵子树",
         "tags": [
           "collect-source"
         ]

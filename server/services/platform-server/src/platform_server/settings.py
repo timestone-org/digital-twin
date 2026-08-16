@@ -67,10 +67,16 @@ class Settings(
     edge_service_key: SecretStr = Field(min_length=32)
 
     # 采集配置面，见 docs/COLLECT_DESIGN.md §5
+    # 数据源口令的加密密钥（Fernet 密钥由它派生）。⚠ 密钥类无默认值——缺失即
+    # 拒绝启动。换钥后旧密文解不开：计划按未配置凭据下发并响亮记日志，重填即恢复
+    collect_credential_secret: SecretStr = Field(min_length=32)
     # 计划变更的广播频道。⚠ pub/sub 即发即弃，collector 仍按周期全量重拉兜底
     collect_plan_channel: str = "collect:plan:changed"
     # 浏览地址空间要走一趟现场设备，预算比别的命令宽
     collect_browse_timeout_s: float = 10.0
+    # 一次收齐一棵子树是几百趟设备往返，再单列一档。⚠ 它必须小于浏览器那侧的
+    # 请求预算（web 的 `REQUEST_TIMEOUT_MS`），否则界面先放弃、这边还在打设备
+    collect_subtree_timeout_s: float = 15.0
     # 连通性测试、寻址串校验、下发写值共用的命令预算
     collect_command_timeout_s: float = 5.0
     # 归档宽表的只读连接池。⚠ 与写库分池：一次跨月扫描不该把写连接一起占住

@@ -45,6 +45,10 @@ Code = Annotated[
 Address = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=256)
 ]
+# 备注类自由文本（数据源描述等）。空串不收——「清空」用显式 null 表达
+Note = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=256)
+]
 # 点位身份 `{source_id}:{point_code}`
 NodeKey = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=3, max_length=256)

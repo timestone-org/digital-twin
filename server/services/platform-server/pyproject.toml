@@ -17,6 +17,7 @@ dependencies = [
     # Windows 上根本没有，故不带它的话同一份代码在容器里一切正常，装在 Windows
     # 上却会在第一次读外库时炸 `ZoneInfoNotFoundError: 'Asia/Shanghai'`。
     "tzdata>=2025.2",
+    "cryptography>=43",
 ]
 
 [project.scripts]

@@ -1130,6 +1130,7 @@ name = "platform-server"
 version = "0.1.0"
 source = { editable = "services/platform-server" }
 dependencies = [
+    { name = "cryptography" },
     { name = "httpx" },
     { name = "lib", extra = ["auth", "db", "mssql", "redis", "s3", "web"] },
     { name = "numpy" },
@@ -1140,6 +1141,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cryptography", specifier = ">=43" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "lib", extras = ["auth", "db", "mssql", "redis", "s3", "web"], editable = "lib" },
     { name = "numpy", specifier = ">=2.1" },

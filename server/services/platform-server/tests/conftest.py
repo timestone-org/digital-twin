@@ -114,6 +114,7 @@ FULL_CODES = (
 # 命令总线的两档预算，用例里固定住，断言里的信封才是可手写的常量
 BROWSE_TIMEOUT_S = 10.0
 COMMAND_TIMEOUT_S = 5.0
+SUBTREE_TIMEOUT_S = 15.0
 PLAN_CHANNEL = "collect:plan:changed"
 
 # 大屏绑定用例引用的点位。⚠ 采集配置面未落地，故点位台账在用例里是一份名单假件
@@ -461,6 +462,7 @@ def _faked_container(built: Container, fakes: ExternalFakes) -> Container:
             transport=fakes.collect.bus,
             browse_timeout_s=BROWSE_TIMEOUT_S,
             command_timeout_s=COMMAND_TIMEOUT_S,
+            subtree_timeout_s=SUBTREE_TIMEOUT_S,
         ),
         plan_notifier=PlanNotifier(
             publisher=fakes.collect.plans, channel=PLAN_CHANNEL

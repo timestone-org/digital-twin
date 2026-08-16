@@ -1,6 +1,6 @@
-"""要往现场跑一趟的三件事：连通性测试、地址空间浏览、下发写值。
+"""要往现场跑一趟的四件事：连通性测试、浏览一层、一次收齐一棵子树、下发写值。
 
-⚠ 三件都由 collector 执行，platform 只发命令（ADR-0001 理由三）。每一件都先
+⚠ 四件都由 collector 执行，platform 只发命令（ADR-0001 理由三）。每一件都先
 把要用的行读出来、放掉只读事务，再去总线上等——事务里禁止外部 IO。
 """
 
@@ -12,6 +12,7 @@ from lib.logging import get_logger
 from platform_server.apps.collect.schemas import (
     BrowseOut,
     ConnectivityOut,
+    SubtreeOut,
     WriteOut,
 )
 from platform_server.apps.collect.services import (
@@ -19,7 +20,10 @@ from platform_server.apps.collect.services import (
     source_service,
 )
 from platform_server.apps.collect.services.command_bus import CommandBus
-from platform_server.apps.collect.services.presenters import to_browse_item_out
+from platform_server.apps.collect.services.presenters import (
+    to_browse_item_out,
+    to_subtree_item_out,
+)
 from platform_server.apps.collect.services.transactions import (
     release_read_transaction,
 )
@@ -68,6 +72,36 @@ async def browse_source(
     await release_read_transaction(session)
     entries = await bus.browse(resolved, parent)
     return BrowseOut(items=[to_browse_item_out(item) for item in entries])
+
+
+async def browse_subtree(
+    session: AsyncSession,
+    *,
+    bus: CommandBus,
+    source_id: uuid.UUID,
+    parent: str | None,
+) -> SubtreeOut:
+    """一次收齐一棵子树，勾上层节点用。
+
+    ⚠ 不限条数，只受这次请求的时间预算约束。到点没走完只标 `is_truncated`
+    而不抛：收到一半的地址空间仍然有用，但用户必须知道它是一半。
+    Args: session, bus, source_id, parent。
+    """
+    source = await source_service.require_source(session, source_id)
+    resolved = source.id
+    await release_read_transaction(session)
+    outcome = await bus.browse_subtree(resolved, parent)
+    _logger.info(
+        "collect_subtree_browsed",
+        "子树浏览完成",
+        source_id=str(resolved),
+        item_count=len(outcome.entries),
+        is_truncated=outcome.is_truncated,
+    )
+    return SubtreeOut(
+        items=[to_subtree_item_out(item) for item in outcome.entries],
+        is_truncated=outcome.is_truncated,
+    )
 
 
 async def write_point(

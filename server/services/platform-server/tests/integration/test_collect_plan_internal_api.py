@@ -79,13 +79,34 @@ async def test_the_plan_carries_the_source_and_its_points(
     assert codes == ["inlet_temp", "outlet_temp"]
 
 
-async def test_the_plan_never_carries_a_credential(
+async def test_the_plan_carries_the_decrypted_credential(
     app_client: httpx.AsyncClient,
 ) -> None:
-    await create_source(app_client, credential="s3cr3t-p@ss")
+    # 凭据只走这条 /internal/ 服务级密钥端点：库里是密文，计划里就地解密。
+    # ⚠ 密文列名（credential）不许出现——出参里只有解密后的 password 字段
+    source = await create_source(app_client, credential="s3cr3t-p@ss")
     response = await app_client.get(PLAN, headers=service_headers())
-    assert "s3cr3t" not in response.text
+    found = [
+        item
+        for item in payload(response)["sources"]
+        if item["source_id"] == source["id"]
+    ]
+    assert found[0]["password"] == "s3cr3t-p@ss"
     assert "credential" not in response.text
+
+
+async def test_a_source_without_a_credential_plans_anonymous(
+    app_client: httpx.AsyncClient,
+) -> None:
+    source = await create_source(app_client)
+    response = await app_client.get(PLAN, headers=service_headers())
+    found = [
+        item
+        for item in payload(response)["sources"]
+        if item["source_id"] == source["id"]
+    ]
+    assert found[0]["password"] is None
+    assert found[0]["username"] is None
 
 
 async def test_a_disabled_source_is_left_out_of_the_plan(

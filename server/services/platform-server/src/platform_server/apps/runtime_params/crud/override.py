@@ -6,7 +6,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from platform_server.apps.runtime_params.catalog import Number
+from platform_server.apps.runtime_params.catalog import ParamValue
 from platform_server.apps.runtime_params.models import RuntimeParamOverride
 
 
@@ -20,8 +20,8 @@ class OverrideWrite:
 
     section: str
     key: str
-    value: Number
-    previous: Number
+    value: ParamValue
+    previous: ParamValue
     actor: str
 
 

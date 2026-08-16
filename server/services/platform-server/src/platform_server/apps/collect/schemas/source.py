@@ -12,6 +12,7 @@ from platform_server.apps.collect.schemas.common import (
     Code,
     InputModel,
     Label,
+    Note,
     OutputModel,
     UpdateModel,
     Utc,
@@ -52,8 +53,11 @@ class SourceOut(OutputModel):
     id: uuid.UUID
     name: str
     code: str
+    description: str | None
     protocol: Protocol
     endpoint: str
+    # 连接现场设备的账号名。⚠ 只回账号名，口令任何出参都不回
+    username: str | None
     has_credential: bool
     options_json: dict[str, str]
     read_mode: ReadMode
@@ -73,8 +77,10 @@ class SourceCreateIn(InputModel):
 
     name: Label
     code: Code
+    description: Note | None = None
     protocol: Protocol
     endpoint: Address
+    username: Label | None = None
     # ⚠ SecretStr：口令要经过日志、校验错误、异常三条路，裸 str 早晚被打出去
     credential: SecretStr | None = None
     options_json: dict[str, str] = Field(
@@ -104,7 +110,10 @@ class SourceUpdateIn(UpdateModel):
     )
 
     name: Label | None = None
+    description: Note | None = None
     endpoint: Address | None = None
+    # 账号名给 null 是清空（改回匿名连接），不给是不动
+    username: Label | None = None
     credential: SecretStr | None = None
     options_json: dict[str, str] | None = Field(
         default=None, max_length=MAX_OPTIONS
@@ -134,6 +143,28 @@ class BrowseOut(OutputModel):
     """一次浏览的结果。"""
 
     items: list[BrowseItemOut]
+
+
+class SubtreeItemOut(BrowseItemOut):
+    """子树里的一项，外加它挂在谁下面。
+
+    ⚠ `parent` 不能省：整棵子树是平铺回来的，客户端要靠它拼回层级。
+    """
+
+    parent: str | None
+
+
+class SubtreeOut(OutputModel):
+    """一次子树遍历的结果。
+
+    ⚠ 不限条数：勾一个通道要的就是它下面的全部点位。唯一的约束是这次请求的
+    时间预算，到点没走完才置 `is_truncated`。
+    ⚠ `is_truncated` 为真时**必须**在界面上说出来：不说的话用户会把
+    「只收到一半」当成「这个通道就这么多点位」。
+    """
+
+    items: list[SubtreeItemOut]
+    is_truncated: bool
 
 
 class ConnectivityOut(OutputModel):

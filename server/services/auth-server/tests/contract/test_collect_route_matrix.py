@@ -1,4 +1,4 @@
-"""闸 1 对数据采集那 14 条 `/api/v1/platform` 路由的判定钉死。
+"""闸 1 对数据采集那 15 条 `/api/v1/platform` 路由的判定钉死。
 
 ⚠ 这一层守的是**顺序**。闸 1 首条命中即终局，而 `fnmatch` 的 `*` 跨斜杠，
 所以 `:test` / `:browse` / `:write` 一旦排在前缀兜底之后，就会被当成一次
@@ -35,6 +35,7 @@ EXPECTED: tuple[tuple[str, str, frozenset[str]], ...] = (
     (SOURCE, "DELETE", MANAGE),
     (f"{SOURCE}:test", "POST", OPERATE),
     (f"{SOURCE}:browse", "POST", OPERATE),
+    (f"{SOURCE}:browse-subtree", "POST", OPERATE),
     (f"{PLATFORM_PREFIX}/collect-points", "GET", VIEW),
     (f"{PLATFORM_PREFIX}/collect-points", "POST", MANAGE),
     (POINT, "PATCH", MANAGE),
@@ -42,14 +43,24 @@ EXPECTED: tuple[tuple[str, str, frozenset[str]], ...] = (
     (f"{POINT}:write", "POST", OPERATE),
     (HISTORIES, "GET", VIEW),
     (f"{HISTORIES}:aggregate", "POST", VIEW),
+    # 采集/归档运行参数：`collect-*` 前缀的 930/932 两条兜底正好给出
+    # 读 view、写 manage 的口径，不必为它添新规则
+    (f"{PLATFORM_PREFIX}/collect-runtime-params", "GET", VIEW),
+    (f"{PLATFORM_PREFIX}/collect-runtime-params/archive", "PUT", MANAGE),
+    (
+        f"{PLATFORM_PREFIX}/collect-runtime-params/archive:reset",
+        "POST",
+        MANAGE,
+    ),
 )
 
 # 采集面对外端点的条数。写死是为了让「加了端点没加规则」在这里红
-COLLECT_ROUTE_COUNT = 14
-# 会在现场设备上产生一次真实往返的三条
+COLLECT_ROUTE_COUNT = 18
+# 会在现场设备上产生真实往返的四条
 FIELD_ACTIONS = (
     (f"{SOURCE}:test", "POST"),
     (f"{SOURCE}:browse", "POST"),
+    (f"{SOURCE}:browse-subtree", "POST"),
     (f"{POINT}:write", "POST"),
 )
 

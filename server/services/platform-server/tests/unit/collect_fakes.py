@@ -16,6 +16,7 @@ from lib.errors import DependencyUnavailable
 
 # 假件按动作预置应答，键就是命令总线上的动作名
 ACTION_BROWSE = "browse"
+ACTION_BROWSE_SUBTREE = "browse_subtree"
 ACTION_READ = "read"
 ACTION_WRITE = "write"
 ACTION_VALIDATE = "validate"

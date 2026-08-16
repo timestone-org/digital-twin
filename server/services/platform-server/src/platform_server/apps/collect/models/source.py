@@ -25,8 +25,12 @@ class CollectSource(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
     name: Mapped[str] = mapped_column(Text, nullable=False)
     code: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    # 备注用途，可空；不参与任何身份或计划比对
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     protocol: Mapped[str] = mapped_column(Text, nullable=False)
     endpoint: Mapped[str] = mapped_column(Text, nullable=False)
+    # 连接现场设备的账号名。⚠ 与口令分列：账号名要回显在界面上，口令绝不回
+    username: Mapped[str | None] = mapped_column(Text, nullable=True)
     # ⚠ 凭据密文列。明文口令绝不进这张表，也绝不出现在任何出参里
     credential_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 协议特有连接参数，对采集计划的加载与比对不透明

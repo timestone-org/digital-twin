@@ -34,6 +34,8 @@ from platform_server.apps.collect.schemas.source import (
     SourceOut,
     SourceRuntimeOut,
     SourceUpdateIn,
+    SubtreeItemOut,
+    SubtreeOut,
     WriteIn,
     WriteOut,
 )
@@ -66,6 +68,8 @@ __all__ = [
     "SourceOut",
     "SourceRuntimeOut",
     "SourceUpdateIn",
+    "SubtreeItemOut",
+    "SubtreeOut",
     "WriteIn",
     "WriteOut",
 ]

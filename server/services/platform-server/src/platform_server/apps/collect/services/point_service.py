@@ -121,17 +121,27 @@ async def update_point(
     return saved
 
 
-async def delete_point(session: AsyncSession, *, point_id: uuid.UUID) -> str:
+async def delete_point(
+    session: AsyncSession, *, point_id: uuid.UUID, is_forced: bool = False
+) -> str:
     """删点位，返回它的 `node_key`。
 
     ⚠ 先问「有没有大屏绑着它」：被绑着就 409 并列出那些大屏。删掉一个还被绑
     着的点位，大屏上那个槽会静默变成永远没有数据。
-    Args: session, point_id。
+    ⚠ `is_forced` 是显式跳过这道守卫：仍绑着它的大屏引用就此失效——界面要
+    在二次确认里把这句话说出来。
+    Args: session, point_id, is_forced。
     """
     point = await require_point(session, point_id)
     node_key = compose_node_key(point.source_id, point.code)
-    await binding_guard.raise_if_bound(session, node_key=node_key)
-    _logger.info("collect_point_deleted", "点位已删除", point_id=str(point.id))
+    if not is_forced:
+        await binding_guard.raise_if_bound(session, node_key=node_key)
+    _logger.info(
+        "collect_point_deleted",
+        "点位已删除",
+        point_id=str(point.id),
+        is_forced=is_forced,
+    )
     await point_crud.delete(session, point)
     await _commit(session)
     return node_key

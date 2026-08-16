@@ -144,7 +144,7 @@ apps/collect/
 ├── plan/
 │   ├── client.py        从 platform 拉全量计划（HTTP，5s 超时）
 │   └── store.py         本地缓存 + 版本比对
-├── bus/consumer.py      命令总线消费端（browse / read / write）
+├── bus/consumer.py      命令总线消费端（browse / browse_subtree / read / write）
 └── models/, migrations/ collect schema
 ```
 
@@ -205,8 +205,18 @@ TimescaleDB collect.point_history
 
 ### 5.1 表（schema `platform`）
 
-`collect_sources`：`id`、`name`、`code`（唯一）、`protocol`、`endpoint`、`credential_enc`、
-`options_json`（协议特有连接参数）、`read_mode`、`poll_interval_ms`、`is_enabled`、时间戳。
+`collect_sources`：`id`、`name`、`code`（唯一）、`description`、`protocol`、`endpoint`、
+`username`、`credential_enc`、`options_json`（协议特有连接参数）、`read_mode`、
+`poll_interval_ms`、`is_enabled`、时间戳。
+
+**凭据真实生效**：`credential_enc` 是 Fernet 密文（密钥由
+`PLATFORM_COLLECT_CREDENTIAL_SECRET` 派生，缺失即拒绝启动）。计划构建时在
+`/internal/` 端点**就地解密**，`username` / `password` 随计划走服务级密钥的内部
+HTTP 下发——不经 Redis、不进日志、不进任何对外出参。解不开（换过密钥或一期的
+"configured" 占位行）按未配置下发并响亮记日志：采集器匿名连接，连不上以 auth 类
+错误暴露，重填一次口令即恢复。安全模式/安全策略存在 `options_json` 的
+`security_mode` / `security_policy` 两个键里，驱动按自身能力消费，暂不支持的
+取值只存不生效。
 
 `collect_points`：`id`、`source_id`、`code`、`name`、`address`、`data_type`、`unit`、
 `sampling_interval_ms`、`deadband`、`archive_enabled`、`archive_max_interval_ms`、
@@ -221,21 +231,43 @@ GET    /api/v1/platform/collect-sources                  分页
 POST   /api/v1/platform/collect-sources                  Idempotency-Key
 GET    /api/v1/platform/collect-sources/{id}
 PATCH  /api/v1/platform/collect-sources/{id}
-DELETE /api/v1/platform/collect-sources/{id}
+DELETE /api/v1/platform/collect-sources/{id}?force=     force 连点位一起删（CASCADE）
 POST   /api/v1/platform/collect-sources/{id}:test        连通性测试（走命令总线）
-POST   /api/v1/platform/collect-sources/{id}:browse      地址空间浏览（10s 超时）
+POST   /api/v1/platform/collect-sources/{id}:browse      地址空间浏览一层（10s 超时）
+POST   /api/v1/platform/collect-sources/{id}:browse-subtree  一次收齐一棵子树（15s 超时）
 
 GET    /api/v1/platform/collect-points?source_id=&q=      分页 + 搜索（Agent 按名字找点用）
 POST   /api/v1/platform/collect-points                   支持批量
 PATCH  /api/v1/platform/collect-points/{id}
-DELETE /api/v1/platform/collect-points/{id}
+DELETE /api/v1/platform/collect-points/{id}?force=      force 跳过绑定守卫（引用失效）
 POST   /api/v1/platform/collect-points/{id}:write        下发写值，必须带 Idempotency-Key
+
+GET    /api/v1/platform/collect-runtime-params            采集/归档两组运行参数目录与取值
+PUT    /api/v1/platform/collect-runtime-params/{section}  写覆盖值（写完通知计划变更）
+POST   /api/v1/platform/collect-runtime-params/{section}:reset  整组恢复默认
 
 GET    /api/v1/platform/point-history?node_keys=&from=&to=&limit=      游标分页
 GET    /api/v1/platform/point-history:aggregate?node_keys=&interval=&agg=
 
 GET    /internal/v1/platform/collect-plan                collector 拉计划，服务级密钥
 ```
+
+**勾一个上层节点时，递归在采集侧做**（`:browse-subtree`）。前端逐层拉的代价是
+「一层一个请求」：一次 HTTP + 一趟命令总线 + 一趟设备往返，勾一个几百节点的通道
+就是几百个串行请求，而现场看到的只是界面卡住。子树接口一趟走完、**平铺**回来，
+每一项带 `parent`，由客户端拼回层级。
+
+**不设条数上限。** 勾一个通道要的就是它下面的全部点位，按条数掐断等于替用户
+决定他只要前 N 个，而他多半要到建完点位才发现少了。遍历一定会终止——按寻址串
+去重 + 地址空间是有限集合，不靠计数刹车兜底。唯一的刹车是发起方给的**绝对
+墙钟**（`PLATFORM_COLLECT_SUBTREE_TIMEOUT_S`，采集侧留 500ms 余量编应答）。
+到点了把 `is_truncated` 置真——**界面必须说出来**，静默只回一半会让用户以为
+这个通道就这么点点位。
+
+⚠ 这一趟会**占住采集副本的命令循环**（消费端一次只处理一条）：走子树期间，
+同一副本上的写值与连通性测试要排队。预算因此不能无限放大，且整条链必须逐级
+收窄——采集侧墙钟 < platform 预算 < 浏览器请求预算 < 边缘的
+`proxy_read_timeout`。
 
 **数据源出参带两件旁路信息**（没有为它们另开端点：界面每次都要，另开一个就是
 每列一行多一次往返）：
@@ -253,7 +285,17 @@ GET    /internal/v1/platform/collect-plan                collector 拉计划，�
 
 - **时序集合一律游标分页。** 页码分页在持续写入的表上会静默重复与漏行。
 - **删除点位前检查大屏绑定**，被绑着就 `409` 并列出绑定它的大屏——
-  这正是配置面必须留在 platform 的理由（ADR-0001）。
+  这正是配置面必须留在 platform 的理由（ADR-0001）。`force=true` 是**显式**跳过
+  这道守卫（界面上是二级「强制删除」确认）：点位强删后仍绑着它的大屏槽失效；
+  数据源强删连点位一起（外键 CASCADE）。守卫是默认档，强删是给「确实要清场」
+  的人留的门，不是常规路径。
+- **采集/归档运行参数**复用 `apps/runtime_params` 的目录与覆盖表，但挂在
+  `collect-runtime-params` 前缀下：写码是 `collect:manage` 不是 `dashboard:edit`，
+  而闸 2 的静态声明挂在路由上，一条路由声明不出两个码。覆盖值（稀疏）随采集
+  计划的 `params` 段下发并参与版本摘要；没覆盖的键由 collector 自己的环境变量
+  兜底（`tuning.py`）。生效档位：即时档在下一个计划刷新周期内生效（默认 30s），
+  重连档等该数据源下次重连（界面上「断开→连接」即可立刻换新值），重启档等
+  采集进程下次启动。
 - **`:write` 是写操作，超时按不可重试处理。** 写超时不代表没写成功，
   盲目重试可能向 PLC 下发两次。幂等键是唯一的解。
 
@@ -323,9 +365,19 @@ collector **不直接推 WebSocket**。它只写 Redis 快照。
 
 ## 9. 配置面（前端）与它的实时通道
 
-配置页在 `web/app/src/pages/Collect/`，左栏「数据采集 → OPC UA」。
+配置页在 `web/app/src/pages/Collect/Opcua/`，左栏「数据采集 → OPC UA」。
 权限沿用 §5 的三个码：进页面 `collect:view`，增删改 `collect:manage`，
 连通性测试 / 地址空间浏览 / 下发写值 `collect:operate`。
+
+**一个协议一个主从单页**（`/collect/opcua`，不再有 `:sourceId` 详情子路由）：
+左栏数据源列表，右栏详情头 + 「在线浏览」与「已导入节点」两块并排。第二个
+驱动进来时是同级的另一页，不是把这页改成通配——协议不同，配置字段就不同，
+表单里因此也没有协议选择。详情头上的「连接 / 断开」按钮改的是 `is_enabled`
+（采集器按计划自动收敛，见 §4.4），状态徽标显示的是真实运行态——两件事在
+按钮与徽标上各说各的（§9.2）。顶栏的「采集参数 / 归档参数」两个弹窗读写
+`collect-runtime-params`（§5.2），字段清单、上下界与危险方向全部来自后端目录，
+前端不手写一份。删除（数据源 / 点位）走「引用守卫」两级弹窗：普通删除 409 时
+升级出「强制删除」，后果写在冲突文案里。
 
 ### 9.1 实时值：主题 `collect:{source_id}`
 

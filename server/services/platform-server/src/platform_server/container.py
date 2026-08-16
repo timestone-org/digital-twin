@@ -8,6 +8,7 @@ from lib.objectstore import ObjectStore, create_object_store
 from platform_server.apps.collect.crud import HistorySource
 from platform_server.apps.collect.services import (
     CommandBus,
+    CredentialCipher,
     DatabasePointCatalog,
     PlanNotifier,
     ReadOnlyHistorySource,
@@ -75,6 +76,8 @@ class Container:
     ac_daily_lease: Lease
     nodes: NodeWriter
     object_store: ObjectStore
+    # 数据源口令的加解密器。密钥派生只在装配时做一次
+    credential_cipher: CredentialCipher
 
 
 def build_container(settings: Settings) -> Container:
@@ -124,6 +127,17 @@ def build_container(settings: Settings) -> Container:
         nodes=_build_nodes(settings),
         # ⚠ 构造不连网：桶不存在要到第一次真正读写时才报，不在启动期误判
         object_store=create_object_store(settings),
+        credential_cipher=_build_cipher(settings),
+    )
+
+
+def _build_cipher(settings: Settings) -> CredentialCipher:
+    """数据源口令的加解密器。密钥派生只在装配时做一次。
+
+    Args: settings。
+    """
+    return CredentialCipher(
+        settings.collect_credential_secret.get_secret_value()
     )
 
 
@@ -212,10 +226,17 @@ def _build_history_database(settings: Settings) -> Database:
 def _build_command_transport(settings: Settings) -> RedisCommandTransport:
     """命令总线的传输面。⚠ 构造不连网。
 
+    ⚠ `block_s` 取**最长**的那一档预算，不是浏览那一档：socket 超时是按它算
+    出来的，比实际阻塞时长短就会在等应答等满一拍时被驱动层判成读超时——于是
+    「现场还没答复」被报成「Redis 坏了」。
     Args: settings。
     """
     return RedisCommandTransport(
-        url=settings.url(), block_s=settings.collect_browse_timeout_s
+        url=settings.url(),
+        block_s=max(
+            settings.collect_browse_timeout_s,
+            settings.collect_subtree_timeout_s,
+        ),
     )
 
 
@@ -230,6 +251,7 @@ def _build_command_bus(
         transport=transport,
         browse_timeout_s=settings.collect_browse_timeout_s,
         command_timeout_s=settings.collect_command_timeout_s,
+        subtree_timeout_s=settings.collect_subtree_timeout_s,
     )
 
 

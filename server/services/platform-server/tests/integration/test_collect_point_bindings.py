@@ -158,3 +158,21 @@ async def test_asking_about_no_points_costs_no_query(
     db_session: AsyncSession,
 ) -> None:
     assert await dashboards_binding(db_session, []) == {}
+
+
+async def test_force_delete_removes_a_bound_point(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # ⚠ force 是显式跳过绑定守卫：仍绑着它的大屏引用就此失效，
+    # 界面要在二次确认里把这句话说出来
+    source = await create_source(app_client)
+    batch = await create_points(app_client, source["id"])
+    point = batch["items"][0]
+    await bind_point(app_client, node_key=point["node_key"], name="一号大屏")
+    response = await app_client.delete(
+        f"{POINTS}/{point['id']}", params={"force": "true"}
+    )
+    assert response.status_code == 204
+    listed = await app_client.get(POINTS, params={"source_id": source["id"]})
+    ids = [item["id"] for item in payload(listed)["items"]]
+    assert point["id"] not in ids

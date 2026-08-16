@@ -1,8 +1,9 @@
-"""运行参数面。读用 `dashboard:view`，写用各分组自己的码。
+"""运行参数面（大屏 scope）。读用 `dashboard:view`，写用 `dashboard:edit`。
 
-⚠ 眼下全部分组共用 `dashboard:edit`，故写面能用一条静态声明兜住。出现第二个
-不同的写码时必须按分组拆路由——闸 2 的声明是挂在路由上的静态属性，它看不见
-路径参数里的分组名，一条路由声明不出两个码。
+⚠ 分组已按写权限码拆成两条路由：本文件只服务 `DASHBOARD_SCOPE`，采集/归档
+两组走 `apps/collect/api/collect_runtime_params.py`（`collect:*` 码）。闸 2 的
+声明是挂在路由上的静态属性，它看不见路径参数里的分组名，一条路由声明不出
+两个码——分组落错路由就是拿大屏的码改采集参数。
 """
 
 from typing import Annotated
@@ -14,6 +15,7 @@ from lib.auth import CallerContext
 from lib.web import ApiResponse, ok
 from platform_server.apps.runtime_params.catalog import (
     DASHBOARD_EDIT,
+    DASHBOARD_SCOPE,
     DASHBOARD_VIEW,
 )
 from platform_server.apps.runtime_params.deps import (
@@ -55,7 +57,7 @@ async def list_runtime_params(
     """
     return ok(
         await param_service.read_items(
-            session, settings=settings, section=section
+            session, settings=settings, section=section, scope=DASHBOARD_SCOPE
         )
     )
 
@@ -76,6 +78,7 @@ async def replace_runtime_params(
 
     Args: section, payload, session, settings, writer。
     """
+    param_service.require_in_scope(section, DASHBOARD_SCOPE)
     state = await param_service.write_section(
         session,
         settings=settings,
@@ -101,6 +104,7 @@ async def reset_runtime_params(
 
     Args: section, session, settings, writer。
     """
+    param_service.require_in_scope(section, DASHBOARD_SCOPE)
     state = await param_service.reset_section(
         session, settings=settings, section=section, actor=str(writer.user_id)
     )

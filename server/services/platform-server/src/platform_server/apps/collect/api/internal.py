@@ -12,11 +12,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.web import ApiResponse, ok
 from platform_server.apps.collect.deps import (
+    get_container,
     get_session,
     require_service_key,
 )
 from platform_server.apps.collect.schemas import CollectPlanOut
-from platform_server.apps.collect.services import plan_service
+from platform_server.apps.collect.services import (
+    CredentialCipher,
+    plan_service,
+)
+from platform_server.container import Container
 from platform_server.settings import INTERNAL_PREFIX
 
 router = APIRouter(
@@ -29,19 +34,32 @@ router = APIRouter(
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
+def get_cipher(
+    container: Annotated[Container, Depends(get_container)],
+) -> CredentialCipher:
+    """取口令加解密器（计划下发时就地解密）。
+
+    Args: container。
+    """
+    return container.credential_cipher
+
+
+CipherDep = Annotated[CredentialCipher, Depends(get_cipher)]
+
+
 @router.get(
     "/collect-plan",
     response_model=ApiResponse[CollectPlanOut],
     summary="全量采集计划",
 )
 async def read_collect_plan(
-    session: SessionDep,
+    session: SessionDep, cipher: CipherDep
 ) -> ApiResponse[CollectPlanOut]:
     """给 collector 拉全量计划。带内容摘要版本号。
 
     ⚠ 只有全量、没有增量：增量消息丢一条就永久错位，而错位的采集会写出看似
     正常的错误历史（ADR-0001）。collector 按 `version` 判断要不要重新收敛。
 
-    Args: session。
+    Args: session, cipher。
     """
-    return ok(await plan_service.build_plan(session))
+    return ok(await plan_service.build_plan(session, cipher=cipher))

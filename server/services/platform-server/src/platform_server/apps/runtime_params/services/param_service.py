@@ -16,12 +16,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lib.errors import FieldError, ValidationFailed
 from lib.logging import get_logger
 from platform_server.apps.runtime_params.catalog import (
+    COLLECT_SCOPE,
     INT_KIND,
     SECTION_WRITE_CODES,
-    Number,
+    SWITCH_KIND,
     ParamSpec,
+    ParamValue,
     env_name_of,
-    sections,
     spec_of,
     specs_of,
 )
@@ -44,29 +45,46 @@ _logger = get_logger("platform.runtime_params")
 class Effective:
     """一项此刻的有效值与它的来历。没有覆盖行时后三个字段都是 None。"""
 
-    value: Number
-    previous: Number | None
+    value: ParamValue
+    previous: ParamValue | None
     updated_at: datetime | None
     updated_by: str | None
 
 
 async def read_items(
-    session: AsyncSession, *, settings: Settings, section: str | None
+    session: AsyncSession,
+    *,
+    settings: Settings,
+    section: str | None,
+    scope: tuple[str, ...],
 ) -> list[RuntimeParamOut]:
     """列出运行参数。给了 `section` 就只回那一组，给了不认识的名字即 400。
 
-    Args: session, settings, section。
+    ⚠ `scope` 是这条路由服务的分组集合：分组按写权限码拆在两条路由上
+    （/runtime-params 与 /collect-runtime-params），越界的分组名按不存在处理，
+    否则拿大屏读码就能看采集参数。
+    Args: session, settings, section, scope。
     """
     if section is None:
-        names = sections()
+        names = scope
     else:
-        require_specs(section)
+        require_in_scope(section, scope)
         names = (section,)
     grouped = [
         await section_items(session, settings=settings, section=name)
         for name in names
     ]
     return [item for items in grouped for item in items]
+
+
+def require_in_scope(section: str, scope: tuple[str, ...]) -> None:
+    """分组必须在这条路由的服务范围内，否则按不存在处理。
+
+    Args: section, scope。
+    """
+    if section not in scope:
+        raise RuntimeParamUnknown(f"没有名为「{section}」的运行参数分组")
+    require_specs(section)
 
 
 async def section_items(
@@ -146,6 +164,29 @@ async def reset_section(
     return await section_items(session, settings=settings, section=section)
 
 
+async def overrides_for_plan(
+    session: AsyncSession,
+) -> dict[str, dict[str, ParamValue]]:
+    """采集/归档分组当前的覆盖值（稀疏），给采集计划下发用。
+
+    ⚠ 只回**覆盖值**不回默认值：没覆盖的键由 collector 自己的环境变量兜底。
+    形状与登记类型不符的行按未覆盖处理（与读面同一条口径）。
+    Args: session。
+    """
+    out: dict[str, dict[str, ParamValue]] = {}
+    for section in COLLECT_SCOPE:
+        stored = await stored_rows(session, section)
+        values = {
+            key: value
+            for key, row in stored.items()
+            if (spec := spec_of(section, key)) is not None
+            and (value := stored_value(spec, row.value_json)) is not None
+        }
+        if values:
+            out[section] = values
+    return out
+
+
 async def stored_rows(
     session: AsyncSession, section: str
 ) -> dict[str, RuntimeParamOverride]:
@@ -177,6 +218,8 @@ def to_param_out(
         step=spec.step,
         minimum=spec.minimum,
         maximum=spec.maximum,
+        tier=spec.tier,
+        danger=spec.danger,
         value=current.value,
         default_value=spec.read(settings),
         previous_value=current.previous,
@@ -194,31 +237,33 @@ def effective_of(
     Args: spec, settings, row。
     """
     default = spec.read(settings)
-    number = None if row is None else stored_number(row.value_json)
-    if row is None or number is None:
+    stored = None if row is None else stored_value(spec, row.value_json)
+    if row is None or stored is None:
         if row is not None:
             _logger.warning(
                 "runtime_param_override_unreadable",
-                "覆盖值的形状不是数，本项按未覆盖处理",
+                "覆盖值的形状与登记类型不符，本项按未覆盖处理",
                 section=spec.section,
                 key=spec.key,
             )
         return _untouched(default)
     return Effective(
-        value=number,
-        previous=stored_number(row.previous_value_json),
+        value=stored,
+        previous=stored_value(spec, row.previous_value_json),
         updated_at=row.updated_at,
         updated_by=row.updated_by or None,
     )
 
 
-def stored_number(raw: Any) -> Number | None:
-    """把 JSONB 里的覆盖值收敛成数；形状不对给 None。
+def stored_value(spec: ParamSpec, raw: Any) -> ParamValue | None:
+    """把 JSONB 里的覆盖值按登记类型收敛；形状不对给 None。
 
-    ⚠ `Any` 只在这一处：JSONB 出来就是无类型的。布尔要单独挡掉——它在 Python
-    里是 int 的子类，不挡就会让一个 `true` 悄悄变成 1。
-    Args: raw。
+    ⚠ `Any` 只在这一处：JSONB 出来就是无类型的。布尔要按类型分流——它在
+    Python 里是 int 的子类，不挡就会让一个 `true` 悄悄变成 1，或反过来。
+    Args: spec, raw。
     """
+    if spec.kind == SWITCH_KIND:
+        return raw if isinstance(raw, bool) else None
     if isinstance(raw, bool) or not isinstance(raw, int | float):
         return None
     return raw
@@ -246,11 +291,17 @@ def require_spec(section: str, key: str) -> ParamSpec:
     return spec
 
 
-def validated(spec: ParamSpec, value: Number) -> Number:
+def validated(spec: ParamSpec, value: ParamValue) -> ParamValue:
     """过登记的类型与范围闸。越界一律拒绝，**不静默夹到边界**。
 
     Args: spec, value。
     """
+    if spec.kind == SWITCH_KIND:
+        if not isinstance(value, bool):
+            raise _rejected(
+                spec, "runtime_param_not_a_switch", "这一项只接受开或关"
+            )
+        return value
     if isinstance(value, bool):
         raise _rejected(spec, "runtime_param_not_a_number", "这一项要的是数字")
     if spec.kind == INT_KIND and not isinstance(value, int):
@@ -266,7 +317,7 @@ def validated(spec: ParamSpec, value: Number) -> Number:
     return value
 
 
-def _untouched(default: Number) -> Effective:
+def _untouched(default: ParamValue) -> Effective:
     """没有覆盖行时的有效值。
 
     Args: default。

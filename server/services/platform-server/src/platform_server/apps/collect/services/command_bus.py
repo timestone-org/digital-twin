@@ -31,6 +31,9 @@ _logger = get_logger("platform.collect.command")
 
 # 动作名是稳定字面量，与 collector-server 的 `bus/consumer.py` 逐字一致
 ACTION_BROWSE = "browse"
+# 一次收齐整棵子树，勾上层节点用。⚠ 与 browse 分成两个动作：两者的设备负载
+# 差着两个数量级，预算不是一档
+ACTION_BROWSE_SUBTREE = "browse_subtree"
 ACTION_READ = "read"
 ACTION_WRITE = "write"
 # ⚠ 一期 collector 还不认识它，会回 `unknown_action`。那与超时同档：结论是
@@ -62,6 +65,30 @@ class BrowseEntry:
 
 
 @dataclass(frozen=True)
+class SubtreeEntry:
+    """子树里的一项，外加它挂在谁下面。
+
+    ⚠ `parent` 不能省：调用方要靠它把平铺的结果拼回树。丢了层级，界面就只剩
+    一张几千行的清单，用户无从判断这些点位分别属于哪台设备。
+    """
+
+    parent: str | None
+    entry: BrowseEntry
+
+
+@dataclass(frozen=True)
+class SubtreeOutcome:
+    """一次子树遍历的结论。
+
+    ⚠ `is_truncated` 与条目同等重要：采集侧在预算内没走完却不说，界面就会把
+    「只收到一半」显示成「这个通道就这么多点位」。
+    """
+
+    entries: tuple[SubtreeEntry, ...]
+    is_truncated: bool
+
+
+@dataclass(frozen=True)
 class AddressVerdict:
     """一条寻址串在现场的结论。"""
 
@@ -86,6 +113,8 @@ class CommandBus:
     transport: CommandTransport
     browse_timeout_s: float
     command_timeout_s: float
+    # 走一棵子树是几百趟设备往返，与浏览一层不能共用一档预算
+    subtree_timeout_s: float
 
     async def browse(
         self, source_id: uuid.UUID, parent: str | None
@@ -103,6 +132,30 @@ class CommandBus:
         if not outcome.is_ok:
             raise _browse_error(outcome.reason)
         return [_browse_entry(item) for item in _items(outcome.data, "items")]
+
+    async def browse_subtree(
+        self, source_id: uuid.UUID, parent: str | None
+    ) -> SubtreeOutcome:
+        """一次收齐一棵子树下的全部节点。
+
+        ⚠ 递归在采集侧做。这一跳看着只是「多一个动作」，但它替掉的是前端逐层
+        浏览时打出的**几百个串行请求**——每一个都要过一遍边缘、总线与设备。
+        Args: source_id, parent（协议寻址串，None 表示根）。
+        """
+        outcome = await self._call(
+            action=ACTION_BROWSE_SUBTREE,
+            source_id=source_id,
+            timeout_s=self.subtree_timeout_s,
+            fields={"parent": parent},
+        )
+        if not outcome.is_ok:
+            raise _browse_error(outcome.reason)
+        return SubtreeOutcome(
+            entries=tuple(
+                _subtree_entry(item) for item in _items(outcome.data, "items")
+            ),
+            is_truncated=bool(outcome.data.get("is_truncated", False)),
+        )
 
     async def probe(self, source_id: uuid.UUID) -> str | None:
         """连通性测试：能答上话就返回 None，否则给一句不可达的原因。
@@ -261,6 +314,20 @@ def _browse_entry(item: dict[str, Any]) -> BrowseEntry:
     )
 
 
+def _subtree_entry(item: dict[str, Any]) -> SubtreeEntry:
+    """把一条子树结果收敛成有类型的项。
+
+    ⚠ `parent` 缺省是 None（挂在根上），不是空串：空串会被当成一个真实存在
+    的寻址串，拼树时那一枝就永远接不上。
+    Args: item。
+    """
+    parent = item.get("parent")
+    return SubtreeEntry(
+        parent=parent if isinstance(parent, str) else None,
+        entry=_browse_entry(item),
+    )
+
+
 def _verdict(item: dict[str, Any]) -> AddressVerdict:
     detail = item.get("detail")
     return AddressVerdict(
@@ -279,6 +346,10 @@ def _browse_error(reason: str) -> Exception:
         return BrowseUnsupported("这个协议没有可浏览的地址空间")
     if reason == REASON_SOURCE_OFFLINE:
         return SourceOffline("采集侧还没连上这个数据源")
+    if reason == REASON_UNKNOWN_ACTION:
+        # ⚠ 只在两侧版本对不齐时出现（新平台 + 旧采集）。说清楚是版本问题，
+        # 否则现场只看到一句「执行失败」，会照着设备与网络查一整天
+        return CommandFailed("采集侧不认识这个动作，请先把采集进程升到同版本")
     return CommandFailed("采集侧执行浏览失败")
 
 

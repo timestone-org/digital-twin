@@ -2,7 +2,11 @@
 
 from pydantic import Field
 
-from platform_server.apps.runtime_params.catalog import Number, ParamKind
+from platform_server.apps.runtime_params.catalog import (
+    Number,
+    ParamKind,
+    ParamValue,
+)
 from platform_server.apps.runtime_params.schemas.common import (
     InputModel,
     OutputModel,
@@ -18,6 +22,9 @@ class RuntimeParamOut(OutputModel):
 
     ⚠ `minimum` / `maximum` 随取值一起下发，不让界面自己写一份：两边各写一份
     时前端放行的值会被服务端 422 挡回来，而用户看不出自己错在哪。
+    `tier` 是生效档位（instant / reconnect / restart），非即时档界面要如实说
+    「保存了但还没生效」；`danger` 是危险方向（off / decrease），命中方向的
+    改动界面要求二次确认。
     """
 
     section: str
@@ -31,9 +38,11 @@ class RuntimeParamOut(OutputModel):
     step: Number
     minimum: Number
     maximum: Number
-    value: Number
-    default_value: Number
-    previous_value: Number | None
+    tier: str
+    danger: str | None
+    value: ParamValue
+    default_value: ParamValue
+    previous_value: ParamValue | None
     is_overridden: bool
     updated_at: Utc | None
     updated_by: str | None
@@ -46,4 +55,4 @@ class RuntimeParamWriteIn(InputModel):
     存等值行会让这一项从此不再跟随环境变量，而界面上看不出任何区别。
     """
 
-    values: dict[str, Number] = Field(min_length=1)
+    values: dict[str, ParamValue] = Field(min_length=1)
