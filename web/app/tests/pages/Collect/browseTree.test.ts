@@ -7,12 +7,16 @@
 import { describe, expect, it } from 'vitest'
 import type { CollectBrowseItem } from '@dt/contracts'
 
+import type { TreeNode } from '@/pages/Collect/OpcuaSourceDetail/browseTree'
 import {
   findNode,
+  selectionStates,
   suggestCode,
   toNodes,
   toPointItems,
+  unloadedUnder,
   variableIndex,
+  variablesUnder,
 } from '@/pages/Collect/OpcuaSourceDetail/browseTree'
 
 function browsed(
@@ -131,5 +135,106 @@ describe('勾中的节点转成点位', () => {
   it('不在索引里的地址（比如对象节点）直接忽略', () => {
     const { items } = toPointItems(['ns=2;s=Nope'], index, new Set())
     expect(items).toEqual([])
+  })
+})
+
+
+describe('子树里的变量与待补拉的层', () => {
+  function subtree(): TreeNode {
+    const [root] = toNodes([
+      browsed('ns=2;s=Line1', { is_variable: false, has_children: true }),
+    ])
+    if (root === undefined) throw new Error('夹具坏了')
+    root.children = toNodes([
+      browsed('ns=2;s=Line1.Temp'),
+      browsed('ns=2;s=Line1.Zone', { is_variable: false, has_children: true }),
+    ])
+    return root
+  }
+
+  it('收得到已加载的变量，跳过对象节点', () => {
+    expect(variablesUnder(subtree()).map((one) => one.address)).toEqual([
+      'ns=2;s=Line1.Temp',
+    ])
+  })
+
+  it('没拉过子层的对象节点会被列出来——它们就是「全选」要补拉的', () => {
+    expect(unloadedUnder(subtree()).map((one) => one.address)).toEqual([
+      'ns=2;s=Line1.Zone',
+    ])
+  })
+
+  it('全部拉过之后没有待补拉的', () => {
+    const root = subtree()
+    const zone = findNode([root], 'ns=2;s=Line1.Zone')
+    if (zone !== null) zone.children = []
+    expect(unloadedUnder(root)).toEqual([])
+  })
+})
+
+describe('勾选态', () => {
+  /** 一层：Line1 下两个变量，且 Line1 已经拉全。 */
+  function loaded(): TreeNode[] {
+    const nodes = toNodes([
+      browsed('ns=2;s=Line1', { is_variable: false, has_children: true }),
+    ])
+    const root = nodes[0]
+    if (root === undefined) throw new Error('夹具坏了')
+    root.children = toNodes([
+      browsed('ns=2;s=Line1.Temp'),
+      browsed('ns=2;s=Line1.Flow'),
+    ])
+    return nodes
+  }
+
+  it('一个都没勾是 none', () => {
+    const states = selectionStates(loaded(), new Set())
+    expect(states.get('ns=2;s=Line1')).toBe('none')
+  })
+
+  it('勾了一部分是 some', () => {
+    const states = selectionStates(loaded(), new Set(['ns=2;s=Line1.Temp']))
+    expect(states.get('ns=2;s=Line1')).toBe('some')
+  })
+
+  it('全勾且已拉全是 all', () => {
+    const states = selectionStates(
+      loaded(),
+      new Set(['ns=2;s=Line1.Temp', 'ns=2;s=Line1.Flow']),
+    )
+    expect(states.get('ns=2;s=Line1')).toBe('all')
+  })
+
+  it('⚠ 下面还有没拉过的层时最多只能是 some', () => {
+    const nodes = loaded()
+    const root = nodes[0]
+    root?.children?.push(
+      ...toNodes([
+        browsed('ns=2;s=Line1.Zone', {
+          is_variable: false,
+          has_children: true,
+        }),
+      ]),
+    )
+    const states = selectionStates(
+      nodes,
+      new Set(['ns=2;s=Line1.Temp', 'ns=2;s=Line1.Flow']),
+    )
+    expect(states.get('ns=2;s=Line1')).toBe('some')
+  })
+
+  it('⚠ 已建过点位的变量不算「该勾而没勾」，否则上层永远停在半选', () => {
+    const states = selectionStates(
+      loaded(),
+      new Set(['ns=2;s=Line1.Temp']),
+      new Set(['ns=2;s=Line1.Flow']),
+    )
+    expect(states.get('ns=2;s=Line1')).toBe('all')
+  })
+
+  it('变量自己的态就是勾没勾', () => {
+    const states = selectionStates(loaded(), new Set(['ns=2;s=Line1.Temp']))
+    expect(states.get('ns=2;s=Line1.Temp')).toBe('all')
+    expect(states.get('ns=2;s=Line1.Flow')).toBe('none')
   })
 })

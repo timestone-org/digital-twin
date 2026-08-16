@@ -1,8 +1,13 @@
 /**
- * @fileoverview 地址空间浏览树的纯逻辑：懒加载一层、勾选变量节点、生成点位。
+ * @fileoverview 地址空间浏览树的纯逻辑：懒加载一层、勾选、按子树批量勾选、
+ * 生成点位。
  *
- * ⚠ 只有变量节点能当点位，对象节点只用来往下走。勾一个对象节点等于建一个
- * 永远读不到值的点位——所以勾选框只出现在变量节点上。
+ * ⚠ 只有变量节点能当点位，对象节点只用来往下走。勾一个对象节点**不是**把它
+ * 自己建成点位（那会建出一个永远读不到值的配置），而是把它**下面的变量**全勾上。
+ *
+ * ⚠ 「已加载」与「展开着」是两件事，故 `children` 与 `isOpen` 分开存：合成一个
+ * 的话，收起一次就等于把子树丢掉，再展开又要打一趟设备——而地址空间浏览对 PLC
+ * 是实打实的负载。
  *
  * ⚠ 从寻址串推出来的编码只是**建议**：`ns=2;s=Plant1.Line1.OutletTemp` 推出
  * `outlet_temp` 很好用，但推出来的东西撞了名就得让用户改。推不出合法编码时
@@ -10,16 +15,26 @@
  */
 import type { CollectBrowseItem, CollectPointItemInput } from '@dt/contracts'
 
-/** 树上的一个节点。`children` 为 null 表示还没展开过。 */
+/** 树上的一个节点。 */
 export interface TreeNode {
   address: string
   name: string
   hasChildren: boolean
   isVariable: boolean
+  /** `null` 表示这一层还没拉过；拉过之后即使收起也留着。 */
   children: TreeNode[] | null
+  /** 拉过之后是否展开显示。 */
+  isOpen: boolean
   isLoading: boolean
   error: string | null
 }
+
+/**
+ * 一个节点的勾选态。
+ * ⚠ `some` 同时表达两件事：「勾了一部分」与「下面还有没拉回来的、不敢说全勾」。
+ * 把后者显示成 `all` 是在替用户担保他没看过的那些点位。
+ */
+export type NodeSelection = 'none' | 'some' | 'all'
 
 /** 把一层浏览结果转成树节点。 */
 export function toNodes(items: readonly CollectBrowseItem[]): TreeNode[] {
@@ -29,6 +44,7 @@ export function toNodes(items: readonly CollectBrowseItem[]): TreeNode[] {
     hasChildren: item.has_children,
     isVariable: item.is_variable,
     children: null,
+    isOpen: false,
     isLoading: false,
     error: null,
   }))
@@ -57,6 +73,91 @@ export function variableIndex(
     if (node.children !== null) variableIndex(node.children, found)
   }
   return found
+}
+
+/**
+ * 一棵子树（含自己）里**已经拉回来的**变量节点。
+ * @param node 子树的根
+ */
+export function variablesUnder(node: TreeNode): TreeNode[] {
+  const found: TreeNode[] = []
+  walk(node, (one) => {
+    if (one.isVariable) found.push(one)
+  })
+  return found
+}
+
+/**
+ * 一棵子树里还没拉过子层的节点（含自己）。它们就是「全选」要补拉的那些。
+ * @param node 子树的根
+ */
+export function unloadedUnder(node: TreeNode): TreeNode[] {
+  const found: TreeNode[] = []
+  walk(node, (one) => {
+    if (one.hasChildren && one.children === null) found.push(one)
+  })
+  return found
+}
+
+function walk(node: TreeNode, visit: (one: TreeNode) => void): void {
+  visit(node)
+  for (const child of node.children ?? []) walk(child, visit)
+}
+
+/**
+ * 一棵树上每个节点的勾选态，一趟后序算完。
+ *
+ * ⚠ 不做成「每个节点各自递归求一次」：那是 O(n²)，几千个节点的地址空间上
+ * 每次勾选都要卡一下。
+ * @param nodes 树的根一层
+ * @param selected 已勾选的寻址串
+ * @param taken 已经建过点位的寻址串，不计入「该勾而没勾」
+ */
+export function selectionStates(
+  nodes: readonly TreeNode[],
+  selected: ReadonlySet<string>,
+  taken: ReadonlySet<string> = new Set(),
+): Map<string, NodeSelection> {
+  const states = new Map<string, NodeSelection>()
+  for (const node of nodes) fill(node, selected, taken, states)
+  return states
+}
+
+/** 后序填一个节点的态，返回 (可选的变量数, 已勾的变量数, 是否全拉过)。 */
+function fill(
+  node: TreeNode,
+  selected: ReadonlySet<string>,
+  taken: ReadonlySet<string>,
+  states: Map<string, NodeSelection>,
+): { total: number; picked: number; isComplete: boolean } {
+  if (node.isVariable) {
+    const isPicked = selected.has(node.address)
+    states.set(node.address, isPicked ? 'all' : 'none')
+    // 已建过点位的不算「该勾而没勾」，否则它会让上层永远停在半选
+    const total = taken.has(node.address) ? 0 : 1
+    return { total, picked: isPicked && total === 1 ? 1 : 0, isComplete: true }
+  }
+  let total = 0
+  let picked = 0
+  let isComplete = !node.hasChildren || node.children !== null
+  for (const child of node.children ?? []) {
+    const part = fill(child, selected, taken, states)
+    total += part.total
+    picked += part.picked
+    isComplete = isComplete && part.isComplete
+  }
+  states.set(node.address, verdict(total, picked, isComplete))
+  return { total, picked, isComplete }
+}
+
+function verdict(
+  total: number,
+  picked: number,
+  isComplete: boolean,
+): NodeSelection {
+  if (picked === 0) return 'none'
+  // 子树没拉全时最多只能说「勾了一部分」——说 all 就是替用户担保他没看过的那些
+  return picked === total && isComplete ? 'all' : 'some'
 }
 
 /** 编码里允许的字符；其余一律当分隔符。 */
