@@ -100,12 +100,17 @@ class CollectPlan(BaseModel):
 
     ⚠ 只按 `version` 判断要不要重新收敛，**不做增量**：增量消息丢一条就
     永久错位，而错位的采集会写出看似正常的错误历史（ADR-0001）。
+    ⚠ `params` 是运行参数的**覆盖值**（稀疏，`{分组: {键: 值}}`）：没覆盖的
+    键不下发，取值方回落到本进程的环境变量默认值（见 `tuning.py`）。
     """
 
     model_config = ConfigDict(frozen=True, extra="ignore")
 
     version: str = Field(min_length=1)
     sources: tuple[PlanSource, ...] = ()
+    params: dict[str, dict[str, bool | int | float]] = Field(
+        default_factory=dict
+    )
 
     def source_ids(self) -> frozenset[UUID]:
         """计划里的数据源 id 集合。"""

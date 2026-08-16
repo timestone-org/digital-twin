@@ -13,6 +13,8 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 from uuid import UUID
 
+from collector_server.apps.collect import tuning
+from collector_server.apps.collect.tuning import PlanView
 from collector_server.stream import ArchiveStream, StreamEntry, source_of
 from lib.logging import get_logger
 from timeseries import normalize_quality, split_value
@@ -94,16 +96,18 @@ class ArchiveWriter:
         stream: ArchiveStream,
         store: HistoryStore,
         options: WriterOptions,
+        plan: PlanView | None = None,
     ) -> None:
         """按流、落库面与节奏初始化，构造时不做 IO。
 
-        Args: stream, store, options。
+        `options` 是环境变量给的默认节奏；给了 `plan` 时每一拍先看计划里的
+        运行参数覆盖值（即时档：不必重启就生效）。
+        Args: stream, store, options, plan。
         """
         self._stream = stream
         self._store = store
-        self._interval_s = (
-            max(options.flush_interval_ms, MIN_FLUSH_INTERVAL_MS) / 1000
-        )
+        self._flush_interval_ms = options.flush_interval_ms
+        self._plan = plan
         self._stopped = asyncio.Event()
         # ⚠ 强引用：事件循环只持有任务的弱引用，丢了引用的任务可能随时消失
         self._task: asyncio.Task[None] | None = None
@@ -242,11 +246,23 @@ class ArchiveWriter:
             dropped_total=self._dropped,
         )
 
+    def _interval_s_now(self) -> float:
+        """此刻的落库周期：计划覆盖值优先，环境变量兜底。"""
+        override = tuning.int_param(
+            None if self._plan is None else self._plan.current,
+            tuning.SECTION_ARCHIVE,
+            tuning.KEY_WRITER_FLUSH_MS,
+        )
+        interval_ms = (
+            override if override is not None else self._flush_interval_ms
+        )
+        return max(interval_ms, MIN_FLUSH_INTERVAL_MS) / 1000
+
     async def _loop(self) -> None:
         """按周期排流，直到被叫停。"""
         while not self._stopped.is_set():
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(
-                    self._stopped.wait(), timeout=self._interval_s
+                    self._stopped.wait(), timeout=self._interval_s_now()
                 )
             await self.flush_once()

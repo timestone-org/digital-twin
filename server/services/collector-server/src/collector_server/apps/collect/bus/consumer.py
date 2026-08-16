@@ -23,6 +23,10 @@ from collector_server.apps.collect.errors import (
     UnknownAction,
 )
 from collector_server.apps.collect.runtime.session import SourceSession
+from collector_server.apps.collect.services.subtree import (
+    SubtreeResult,
+    walk_subtree,
+)
 from collector_server.clock import Clock, utc_now_ms
 from collector_server.commands import CommandTransport
 from lib.logging import get_logger
@@ -31,9 +35,12 @@ _logger = get_logger("collect.bus")
 
 # 动作名是稳定字面量，与 platform 侧逐字一致（禁数字枚举）
 ACTION_BROWSE = "browse"
+# 一次收齐整棵子树。⚠ 与 browse 是两个动作而不是一个带开关的参数：两者的
+# 设备负载差着两个数量级、预算也不是一档，混在一起迟早有人拿它当浏览用
+ACTION_BROWSE_SUBTREE = "browse_subtree"
 ACTION_READ = "read"
 ACTION_WRITE = "write"
-ACTIONS = (ACTION_BROWSE, ACTION_READ, ACTION_WRITE)
+ACTIONS = (ACTION_BROWSE, ACTION_BROWSE_SUBTREE, ACTION_READ, ACTION_WRITE)
 
 STATUS_OK = "ok"
 STATUS_ERROR = "error"
@@ -188,6 +195,15 @@ class CommandConsumer:
         if request.action == ACTION_BROWSE:
             items = await driver.browse(request.parent)
             return {"items": [_browse_payload(item) for item in items]}
+        if request.action == ACTION_BROWSE_SUBTREE:
+            return _subtree_payload(
+                await walk_subtree(
+                    driver.browse,
+                    request.parent,
+                    deadline_ms=request.deadline_ms,
+                    clock=self._clock,
+                )
+            )
         if request.action == ACTION_READ:
             samples = await driver.read_many(request.point_codes)
             return {
@@ -271,6 +287,22 @@ def _browse_payload(item: BrowseItem) -> dict[str, Any]:
         "name": item.name,
         "has_children": item.has_children,
         "is_variable": item.is_variable,
+    }
+
+
+def _subtree_payload(result: SubtreeResult) -> dict[str, Any]:
+    """把一次子树遍历编成应答字段。
+
+    ⚠ `is_truncated` 与条目同等重要：漏了它，界面只会显示「就这么多点位」，
+    而实际上刹车提前踩了。
+    Args: result。
+    """
+    return {
+        "items": [
+            {"parent": entry.parent, **_browse_payload(entry.item)}
+            for entry in result.entries
+        ],
+        "is_truncated": result.is_truncated,
     }
 
 

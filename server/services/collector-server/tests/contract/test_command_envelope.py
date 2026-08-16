@@ -71,8 +71,8 @@ def test_reply_key_is_per_request() -> None:
     assert reply_key("req-9") == "collect:cmd:reply:req-9"
 
 
-def test_the_three_actions_are_stable_strings() -> None:
-    assert ACTIONS == ("browse", "read", "write")
+def test_the_four_actions_are_stable_strings() -> None:
+    assert ACTIONS == ("browse", "browse_subtree", "read", "write")
 
 
 def test_request_needs_an_absolute_deadline() -> None:

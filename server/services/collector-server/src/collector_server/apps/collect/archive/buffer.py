@@ -9,11 +9,12 @@ import contextlib
 from collections import deque
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Protocol
 from uuid import UUID
 
+from collector_server.apps.collect import tuning
 from collector_server.apps.collect.drivers.base import ValueSink
 from collector_server.apps.collect.schemas.plan import CollectPlan
+from collector_server.apps.collect.tuning import PlanView
 from collector_server.stream import ArchiveStream
 from lib.logging import get_logger
 from timeseries import Quality
@@ -60,13 +61,6 @@ class ArchiveRow:
             "ts_ms": self.ts_ms,
             "quality": self.quality,
         }
-
-
-class PlanView(Protocol):
-    """当前计划的只读面。真实现是 `PlanStore`。"""
-
-    @property
-    def current(self) -> CollectPlan | None: ...
 
 
 def policies_of(plan: CollectPlan) -> dict[PointKey, ArchivePolicy]:
@@ -171,12 +165,14 @@ class AdmissionGate:
 
 @dataclass(frozen=True)
 class ArchiveOptions:
-    """缓冲的容量与节奏。"""
+    """缓冲的容量与节奏（环境变量给的默认值；计划里的运行参数覆盖它们）。"""
 
     flush_interval_ms: int
     max_rows: int
     batch_rows: int
     stream_maxlen: int
+    # 归档总开关的环境变量默认值。⚠ 关掉之后完全没有报错，只是从此不再归档
+    is_enabled: bool = True
 
 
 class ArchiveBuffer:
@@ -255,11 +251,13 @@ class ArchiveBuffer:
 
         Args: source_id, point_code, value, ts_ms, quality。
         """
+        if not self._enabled_now():
+            return
         key = (source_id, point_code)
         policy = self._policies.get(key, DEFAULT_POLICY)
         if not self._gate.admit(key, policy, (value, ts_ms, quality)):
             return
-        if len(self._rows) == self._options.max_rows:
+        if len(self._rows) == self._rows.maxlen:
             self._dropped += 1
             self._overflowed += 1
         self._rows.append(
@@ -301,10 +299,47 @@ class ArchiveBuffer:
         self._report_overflow()
 
     def _swap(self) -> list[tuple[UUID, ArchiveRow]]:
-        """取走这一窗的全部行，并换上一个空队列。"""
+        """取走这一窗的全部行，并换上一个空队列。
+
+        容量在这里现取：运行参数把上限改了，下一窗就按新上限走。
+        """
         pending = list(self._rows)
-        self._rows = deque(maxlen=self._options.max_rows)
+        self._rows = deque(maxlen=self._max_rows_now())
         return pending
+
+    def _enabled_now(self) -> bool:
+        """此刻归档总开关：计划覆盖值优先，环境变量兜底。"""
+        override = tuning.bool_param(
+            self._plan.current,
+            tuning.SECTION_ARCHIVE,
+            tuning.KEY_ARCHIVE_ENABLED,
+        )
+        return override if override is not None else self._options.is_enabled
+
+    def _max_rows_now(self) -> int:
+        """此刻的缓冲行数上限。"""
+        override = tuning.int_param(
+            self._plan.current,
+            tuning.SECTION_ARCHIVE,
+            tuning.KEY_BUFFER_MAX_ROWS,
+        )
+        return override if override is not None else self._options.max_rows
+
+    def _batch_rows_now(self) -> int:
+        """此刻的单批行数。"""
+        override = tuning.int_param(
+            self._plan.current, tuning.SECTION_ARCHIVE, tuning.KEY_BATCH_ROWS
+        )
+        return override if override is not None else self._options.batch_rows
+
+    def _stream_maxlen_now(self) -> int:
+        """此刻的流上限。"""
+        override = tuning.int_param(
+            self._plan.current,
+            tuning.SECTION_ARCHIVE,
+            tuning.KEY_STREAM_MAXLEN,
+        )
+        return override if override is not None else self._options.stream_maxlen
 
     async def _append(
         self, source_id: UUID, rows: Sequence[ArchiveRow]
@@ -321,13 +356,14 @@ class ArchiveBuffer:
 
         Args: source_id, rows。
         """
-        batches = list(_batched(rows, self._options.batch_rows))
+        stream_maxlen = self._stream_maxlen_now()
+        batches = list(_batched(rows, self._batch_rows_now()))
         for index, batch in enumerate(batches):
             try:
                 length = await self._stream.append(
                     source_id,
                     encode_rows(batch),
-                    maxlen=self._options.stream_maxlen,
+                    maxlen=stream_maxlen,
                 )
             except Exception as error:
                 lost = sum(len(item) for item in batches[index:])
@@ -341,21 +377,23 @@ class ArchiveBuffer:
                     error_type=type(error).__name__,
                 )
                 return
-            self._warn_if_full(source_id, length)
+            self._warn_if_full(source_id, length, maxlen=stream_maxlen)
 
-    def _warn_if_full(self, source_id: UUID, length: int) -> None:
+    def _warn_if_full(
+        self, source_id: UUID, length: int, *, maxlen: int
+    ) -> None:
         """流顶到上限就等于在丢最旧的历史，必须响亮。
 
-        Args: source_id, length。
+        Args: source_id, length, maxlen。
         """
-        if length < self._options.stream_maxlen:
+        if length < maxlen:
             return
         _logger.error(
             "archive_stream_full",
             "归档流已达上限，最旧的条目正在被裁掉，检查落库是否卡住",
             source_id=str(source_id),
             stream_length=length,
-            stream_maxlen=self._options.stream_maxlen,
+            stream_maxlen=maxlen,
         )
 
     def _report_overflow(self) -> None:
@@ -367,7 +405,7 @@ class ArchiveBuffer:
             "归档缓冲超出上限，最旧的行已被挤掉",
             dropped=self._overflowed - self._reported_overflows,
             dropped_total=self._dropped,
-            buffer_max=self._options.max_rows,
+            buffer_max=self._max_rows_now(),
         )
         self._reported_overflows = self._overflowed
 

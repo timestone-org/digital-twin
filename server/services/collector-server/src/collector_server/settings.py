@@ -70,6 +70,9 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     # 没有它，大屏会拿着一份永不更新的旧值当实时值看
     snapshot_ttl_s: int = Field(default=60, ge=1)
 
+    # 归档总开关的环境变量默认值；界面上的运行参数覆盖值压过它。
+    # ⚠ 关掉之后完全没有报错，只是从此不再记录任何历史
+    archive_enabled: bool = True
     # 归档缓冲落 Redis Stream 与 Stream 落库之间的两级节奏，见
     # COLLECT_DESIGN.md §4.3 的 ⑥⑦
     archive_flush_ms: int = Field(default=5000, ge=100)

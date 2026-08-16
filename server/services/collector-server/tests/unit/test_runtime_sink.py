@@ -185,4 +185,4 @@ def test_flush_interval_never_goes_below_the_floor(interval_ms: int) -> None:
         store=RecordingStore(), interval_ms=interval_ms, ttl_s=60
     )
     # 周期下限没有公开面，只能读内部
-    assert sink._interval_s == 0.05
+    assert sink._interval_s_now() == 0.05

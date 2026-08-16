@@ -1,4 +1,4 @@
-"""守命令总线：三个动作各自的应答、超期直接丢、失败也要回一条。
+"""守命令总线：四个动作各自的应答、超期直接丢、失败也要回一条。
 
 ⚠ 失败不回应答的话，发起方只能等到自己超时，而「超时」与「这个点位不存在」
 在页面上长得一模一样。
@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 
 from collector_server.apps.collect.bus.consumer import (
     ACTION_BROWSE,
+    ACTION_BROWSE_SUBTREE,
     ACTION_READ,
     ACTION_WRITE,
     STATUS_ERROR,
@@ -100,6 +101,37 @@ async def test_browse_returns_the_address_space_items(driver: Any) -> None:
     _, payload = transport.replies[0]
     assert payload["status"] == STATUS_OK
     assert payload["data"]["items"][0]["address"] == "ns=2;s=Dev"
+
+
+async def test_browse_subtree_replies_flat_items_that_know_their_parent(
+    driver: Any,
+) -> None:
+    # ⚠ 平铺回来的结果必须带 parent，否则界面拼不回层级，只剩一张长清单
+    driver.items = [
+        BrowseItem(
+            address="ns=2;s=Dev",
+            name="Dev",
+            has_children=True,
+            is_variable=False,
+        ),
+        BrowseItem(
+            address="ns=2;s=Dev.Temp",
+            name="Temp",
+            has_children=False,
+            is_variable=True,
+        ),
+    ]
+    transport = FakeTransport(
+        [_request(ACTION_BROWSE_SUBTREE, parent="ns=2;s=Ch")]
+    )
+    consumer = _consumer(transport, {SOURCE_ID: FakeSession(driver)})
+    await consumer.handle_once()
+    data = transport.replies[0][1]["data"]
+    assert [(one["parent"], one["address"]) for one in data["items"]] == [
+        ("ns=2;s=Ch", "ns=2;s=Dev"),
+        ("ns=2;s=Ch", "ns=2;s=Dev.Temp"),
+    ]
+    assert data["is_truncated"] is False
 
 
 async def test_read_replies_one_sample_per_requested_point(driver: Any) -> None:

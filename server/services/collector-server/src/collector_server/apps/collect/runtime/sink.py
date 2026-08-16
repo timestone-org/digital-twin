@@ -9,7 +9,10 @@ import json
 from collections.abc import Mapping
 from uuid import UUID
 
+from collector_server.apps.collect import tuning
 from collector_server.apps.collect.drivers.base import Sample, ValueSink
+from collector_server.apps.collect.schemas.plan import CollectPlan
+from collector_server.apps.collect.tuning import PlanView
 from collector_server.snapshot import SnapshotStore
 from lib.errors import AppError
 from lib.logging import get_logger
@@ -96,15 +99,23 @@ class SnapshotSink:
     """全部数据源的窗口缓冲，加一条定期落 Redis 的循环。"""
 
     def __init__(
-        self, *, store: SnapshotStore, interval_ms: int, ttl_s: int
+        self,
+        *,
+        store: SnapshotStore,
+        interval_ms: int,
+        ttl_s: int,
+        plan: PlanView | None = None,
     ) -> None:
         """按存储面与周期初始化，构造时不起任何任务。
 
-        Args: store, interval_ms, ttl_s。
+        `interval_ms` / `ttl_s` 是环境变量给的默认值；给了 `plan` 时每一拍
+        先看计划里的运行参数覆盖值（即时档：不必重启就生效）。
+        Args: store, interval_ms, ttl_s, plan。
         """
         self._store = store
-        self._interval_s = max(interval_ms, MIN_FLUSH_INTERVAL_MS) / 1000
+        self._interval_ms = interval_ms
         self._ttl_s = ttl_s
+        self._plan = plan
         self._buffers: dict[UUID, ValueBuffer] = {}
         self._stopped = asyncio.Event()
         # ⚠ 强引用：事件循环只持有任务的弱引用，丢了引用的任务可能随时消失
@@ -173,7 +184,7 @@ class SnapshotSink:
         """
         try:
             await self._store.write(
-                source_id, encode_fields(pending), ttl_s=self._ttl_s
+                source_id, encode_fields(pending), ttl_s=self._ttl_s_now()
             )
         except Exception as error:
             self._dropped += len(pending)
@@ -187,10 +198,32 @@ class SnapshotSink:
             )
 
     async def _loop(self) -> None:
-        """按周期 flush，直到被叫停。"""
+        """按周期 flush，直到被叫停。周期每拍现取，运行参数改了下一拍就生效。"""
         while not self._stopped.is_set():
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(
-                    self._stopped.wait(), timeout=self._interval_s
+                    self._stopped.wait(), timeout=self._interval_s_now()
                 )
             await self.flush_once()
+
+    def _interval_s_now(self) -> float:
+        """此刻的 flush 周期：计划覆盖值优先，环境变量兜底。"""
+        override = tuning.int_param(
+            self._current_plan(),
+            tuning.SECTION_COLLECT,
+            tuning.KEY_SNAPSHOT_FLUSH_MS,
+        )
+        interval_ms = override if override is not None else self._interval_ms
+        return max(interval_ms, MIN_FLUSH_INTERVAL_MS) / 1000
+
+    def _ttl_s_now(self) -> int:
+        """此刻的快照 TTL：计划覆盖值优先，环境变量兜底。"""
+        override = tuning.int_param(
+            self._current_plan(),
+            tuning.SECTION_COLLECT,
+            tuning.KEY_SNAPSHOT_TTL_S,
+        )
+        return override if override is not None else self._ttl_s
+
+    def _current_plan(self) -> CollectPlan | None:
+        return None if self._plan is None else self._plan.current

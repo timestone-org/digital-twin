@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from collector_server.apps.collect import tuning
 from collector_server.apps.collect.archive.buffer import (
     ArchiveBuffer,
     ArchiveOptions,
@@ -96,13 +97,14 @@ def _lease_token(settings: Settings) -> str:
 
 def _build_session_builder(
     settings: Settings,
+    plan: PlanStore,
     sink: SnapshotSink,
     archive: ArchiveBuffer,
     state: SourceStateService,
 ) -> SessionBuilder:
     """造一个「按计划里的数据源产出会话」的工厂。
 
-    Args: settings, sink, archive, state。
+    Args: settings, plan, sink, archive, state。
     """
 
     def build(source: PlanSource) -> SourceSession:
@@ -116,15 +118,37 @@ def _build_session_builder(
                 sink.sink_for(source.source_id),
                 archive.sink_for(source.source_id),
             ),
-            options=SessionOptions(
-                heartbeat_interval_s=settings.heartbeat_interval_s,
-                max_backoff_s=settings.reconnect_max_backoff_s,
-                timeouts=DRIVER_TIMEOUTS,
-            ),
+            # 会话预算在**建会话时**现取：运行参数改了，已建立的会话继续用
+            # 旧值，下次重连才换——这正是「下次重连生效」档的语义
+            options=_session_options(settings, plan),
             reporter=state,
         )
 
     return build
+
+
+def _session_options(settings: Settings, plan: PlanStore) -> SessionOptions:
+    """一条会话的时间预算：计划覆盖值优先，环境变量兜底。
+
+    Args: settings, plan。
+    """
+    heartbeat = tuning.float_param(
+        plan.current, tuning.SECTION_COLLECT, tuning.KEY_HEARTBEAT_S
+    )
+    backoff = tuning.float_param(
+        plan.current, tuning.SECTION_COLLECT, tuning.KEY_MAX_BACKOFF_S
+    )
+    return SessionOptions(
+        heartbeat_interval_s=(
+            heartbeat
+            if heartbeat is not None
+            else settings.heartbeat_interval_s
+        ),
+        max_backoff_s=(
+            backoff if backoff is not None else settings.reconnect_max_backoff_s
+        ),
+        timeouts=DRIVER_TIMEOUTS,
+    )
 
 
 def _build_plan(settings: Settings) -> PlanStore:
@@ -176,6 +200,7 @@ def _build_archive(
             max_rows=settings.archive_buffer_max,
             batch_rows=settings.archive_batch_rows,
             stream_maxlen=settings.archive_stream_maxlen,
+            is_enabled=settings.archive_enabled,
         ),
     )
 
@@ -207,11 +232,14 @@ def _build_redis(settings: Settings) -> RedisFaces:
 
 
 def _build_writer(
-    settings: Settings, stream: RedisArchiveStream, database: Database
+    settings: Settings,
+    stream: RedisArchiveStream,
+    database: Database,
+    plan: PlanStore,
 ) -> ArchiveWriter:
     """落库端：Stream → TimescaleDB，写成功才删条目。
 
-    Args: settings, stream, database。
+    Args: settings, stream, database, plan。
     """
     return ArchiveWriter(
         stream=stream,
@@ -219,6 +247,7 @@ def _build_writer(
             database=database, batch_rows=settings.archive_batch_rows
         ),
         options=WriterOptions(flush_interval_ms=settings.archive_flush_ms),
+        plan=plan,
     )
 
 
@@ -229,12 +258,13 @@ def build_container(settings: Settings) -> Container:
     """
     database = _build_database(settings)
     redis = _build_redis(settings)
+    plan = _build_plan(settings)
     sink = SnapshotSink(
         store=redis.snapshot,
         interval_ms=settings.flush_interval_ms,
         ttl_s=settings.snapshot_ttl_s,
+        plan=plan,
     )
-    plan = _build_plan(settings)
     archive = _build_archive(settings, redis.stream, plan)
     state = SourceStateService(
         database=database, instance=settings.app_instance
@@ -243,7 +273,7 @@ def build_container(settings: Settings) -> Container:
         settings,
         redis.lease,
         plan,
-        _build_session_builder(settings, sink, archive, state),
+        _build_session_builder(settings, plan, sink, archive, state),
     )
     return Container(
         settings=settings,
@@ -252,7 +282,7 @@ def build_container(settings: Settings) -> Container:
         plan=plan,
         sink=sink,
         archive=archive,
-        writer=_build_writer(settings, redis.stream, database),
+        writer=_build_writer(settings, redis.stream, database, plan),
         supervisor=supervisor,
         consumer=CommandConsumer(
             transport=redis.transport,
