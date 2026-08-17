@@ -68,7 +68,29 @@ describe('值本身', () => {
   })
 
   it('有单位时跟在值后面', () => {
-    expect(formatSample(ok(1.5), 'kPa').text).toBe('1.5 kPa')
+    expect(formatSample(ok(1.5), 'kPa').text).toBe('1.50 kPa')
+  })
+})
+
+describe('小数位', () => {
+  it('⚠ 小数一律两位：现场是 32 位浮点，原样摆出来是一长串换算噪声', () => {
+    expect(formatSample(ok(56.59676742553711), null).text).toBe('56.60')
+  })
+
+  it('⚠ 整数不补小数位：开关量与状态码写成 1.00 会被当成测量值', () => {
+    expect(formatSample(ok(1), null).text).toBe('1')
+    expect(formatSample(ok(0), null).text).toBe('0')
+  })
+
+  it('⚠ 非有限值不冒充读数', () => {
+    expect(formatSample(ok(Number.NaN), null).text).toBe('NaN')
+    expect(formatSample(ok(Number.POSITIVE_INFINITY), null).text).toBe(
+      'Infinity',
+    )
+  })
+
+  it('字符串读数原样显示，不当数字截位', () => {
+    expect(formatSample(ok('1.23456'), null).text).toBe('1.23456')
   })
 })
 

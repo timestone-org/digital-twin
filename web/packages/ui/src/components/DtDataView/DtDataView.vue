@@ -29,6 +29,11 @@ export interface DtDataViewEmpty {
 
 export interface DtDataViewLayout {
   minWidth?: string | undefined
+  /**
+   * 表格视图按 `column.width` 严格排布。列数多、又有一列长文本时必须开——
+   * 不开的话浏览器按内容重排，写好的列宽形同虚设（细节见 DtTable）。
+   */
+  fixedLayout?: boolean | undefined
   /** 关掉内置切换器：多块数据共用页面上一个切换器时用。 */
   toggle?: boolean | undefined
   /** 卡片视图每行**最多**几张。够宽才铺满，窄了自己降列。 */
@@ -89,6 +94,7 @@ const layout = computed(() => {
   const given: DtDataViewLayout = props.layout ?? {}
   return {
     minWidth: orDefault(given.minWidth, '52rem'),
+    fixedLayout: orDefault(given.fixedLayout, false),
     toggle: orDefault(given.toggle, true),
     cardColumns: orDefault(given.cardColumns, 2),
     cardMinWidth: orDefault(given.cardMinWidth, '18rem'),
@@ -184,6 +190,7 @@ const fieldColumns = computed(() =>
           :rows="rows"
           :sort="sort"
           :min-width="layout.minWidth"
+          :fixed-layout="layout.fixedLayout"
           :fill="layout.fill"
           @update:sort="emit('update:sort', $event)"
         >
