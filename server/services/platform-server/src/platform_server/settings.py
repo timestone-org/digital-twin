@@ -100,7 +100,7 @@ class Settings(
     realtime_timeout_s: float = Field(default=2.0, gt=0)
     # 合并窗口：一拍读一次快照、推一批。⚠ 节流归推送方，hub 一旦知道「哪些
     # 载荷可以合并」就又长出业务知识了（ADR-0007）
-    publish_window_ms: int = Field(default=1000, ge=PUBLISH_WINDOW_FLOOR_MS)
+    publish_window_ms: int = Field(default=2000, ge=PUBLISH_WINDOW_FLOOR_MS)
     # 单条推送的条目上限。⚠ 必须 ≤ hub 的 REALTIME_MAX_PAYLOAD_ITEMS，超了
     # hub 直接 413——分片是推送方的事，hub 不替谁拆。上界见
     # `PUBLISH_MAX_ITEMS_CEILING`，越界即拒绝启动

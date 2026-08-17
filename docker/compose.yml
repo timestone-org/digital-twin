@@ -263,8 +263,9 @@ services:
       PLATFORM_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       # 主题登记/注销与批推都打它。⚠ 不可达时降级为「没有实时通道」
       PLATFORM_REALTIME_BASE_URL: http://realtime-hub:8000
-      # 合并窗口：一拍读一次快照、推一批。节流归推送方，不归 hub
-      PLATFORM_PUBLISH_WINDOW_MS: ${DASHBOARD_PUBLISH_WINDOW_MS:-1000}
+      # 合并窗口：一拍读一次快照、推一批。节流归推送方，不归 hub。
+      # 它是全平台实时数据的时间分辨率上限，可在 系统 → 运行参数 里在线改
+      PLATFORM_PUBLISH_WINDOW_MS: ${DASHBOARD_PUBLISH_WINDOW_MS:-2000}
       # ⚠ 必须 ≤ hub 的条目上限（默认 500），超了每一批都会被 413
       PLATFORM_PUBLISH_MAX_ITEMS: ${DASHBOARD_PUBLISH_MAX_ITEMS:-200}
       # 快照多旧就算陈旧。陈旧值照推但标注为陈旧，不许当成现值
