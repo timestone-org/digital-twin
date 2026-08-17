@@ -36,11 +36,13 @@ const ALL = [
 ]
 
 describe('分组', () => {
-  it('按 category 分组，组与组内都定序', () => {
+  // ⚠ 期望的是**拼音**序（布 bu < 图 tu、折 zhe < 柱 zhu），不是码位序：
+  // 定序器钉死了 zh-CN，换成默认 locale 这条用例会随机器语言红绿翻转
+  it('按 category 分组，组与组内都按拼音定序', () => {
     const groups = groupModules(ALL)
 
-    expect(groups.map((group) => group.category)).toEqual(['图表', '布局'])
-    expect(groups[0]?.items.map((item) => item.type)).toEqual([
+    expect(groups.map((group) => group.category)).toEqual(['布局', '图表'])
+    expect(groups[1]?.items.map((item) => item.type)).toEqual([
       'a-card',
       'b-card',
     ])

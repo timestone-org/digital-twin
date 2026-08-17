@@ -79,6 +79,10 @@ function onChange(event: Event): void {
 
 <style scoped lang="scss">
 .dt-checkbox {
+  // 隐藏的原生 input 是 absolute；必须把它关在当前 label 里。否则复选框位于
+  // 可滚动长列表时，input 会越过列表定位到外层卡片，撑大整页的 scrollHeight，
+  // 聚焦靠后项还会把页面外层一起滚走。
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 8px;
