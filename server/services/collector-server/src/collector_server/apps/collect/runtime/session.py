@@ -130,8 +130,12 @@ class SourceSession:
         return self._is_online
 
     async def run(self) -> None:
-        """跑到被叫停为止：断了就退避重连。"""
-        self._stopped.clear()
+        """跑到被叫停为止：断了就退避重连。
+
+        ⚠ 开头不许 `clear()`：`create_task` 之后这个任务不一定已经跑起来，
+        叫停要是落在这之前就会被抹掉，于是会话一直重连下去，而 supervisor
+        正等着它退出——拆不掉的会话会把现场设备的会话上限占死。
+        """
         attempt = 0
         while not self._stopped.is_set():
             delay_s = 0.0
@@ -168,6 +172,10 @@ class SourceSession:
             self._subscribed -= set(removed)
         if self._is_online:
             await self._attach()
+            # ⚠ 这一次补报不能省：运行态只在建连那一刻写过一次，而点位往往是
+            # 之后才导进来的。不补，那一行就永远停在建连时的点位数，界面报
+            # 「全都没订上」，而现场其实一直在推值——一个不报错的假故障
+            await self._reporter.report(self._status(STATE_ONLINE))
 
     async def _open(self) -> None:
         """建连并挂上取数。"""
@@ -308,14 +316,30 @@ class SourceSession:
         error_category: str | None = None,
         error_detail: str | None = None,
     ) -> SourceStatus:
-        """按当前配置造一条运行态。
+        """按此刻真实的挂载造一条运行态。
+
+        ⚠ 只有 online 才可能挂着东西：connecting 与 offline 一律报 0，否则
+        断线期间界面会显示「点位全都还订着」。
 
         Args: state, error_category, error_detail。
         """
         return SourceStatus(
             source_id=self.source_id,
             state=state,
-            point_count=len(self._source.points),
+            point_count=self._attached_count() if state == STATE_ONLINE else 0,
             error_category=error_category,
             error_detail=error_detail,
         )
+
+    def _attached_count(self) -> int:
+        """此刻真的在取数的点位数。
+
+        ⚠ 报的是「挂上了几个」而不是「配了几个」：寻址串写错的点位留在计划里
+        却一个值都不产，把它们算进去等于把故障算成正常，而界面正是靠这个数与
+        配置数的差额说出「几个没订上」（platform 的 SourceRuntimeOut 口径）。
+        轮询没有「被拒」这回事——读不到的点位每轮回一个 bad 质量的样本，仍然
+        在取数，故轮询报的就是在读的那些。
+        """
+        if self._wants_subscribe():
+            return len(self._subscribed)
+        return len(self._source.points)
