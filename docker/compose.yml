@@ -8,7 +8,17 @@ name: digitaltwin
 services:
   edge-gateway:
     image: nginx:1.27-alpine
-    depends_on: [auth-server, platform-server, opcua-server, realtime-hub]
+    # 首屏必经的两个服务等到**真的能应答**再放边缘出来：裸依赖只等到容器进程被
+    # 拉起，而 Python 服务还要几秒到几十秒才开始监听，这段窗口里 /api 一律 502，
+    # 而首屏正好落在窗口里。
+    # ⚠ opcua 与 realtime 刻意只用裸依赖：给它们挂 service_healthy 的话，任何一个
+    # 起不来都会让**边缘整个不启动**，于是「一个次要服务坏」放大成「全站打不开」。
+    # 降级方向必须逐项显式——它们不可达时坏的只是自己那片，登录与大屏照常。
+    depends_on:
+      auth-server: {condition: service_healthy}
+      platform-server: {condition: service_healthy}
+      opcua-server: {condition: service_started}
+      realtime-hub: {condition: service_started}
     ports: ['${EDGE_HTTP_PORT:-8080}:80']
     environment:
       AUTH_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填：/internal/ 的服务级密钥}
@@ -30,6 +40,9 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+    # ⚠ 与后端同档。少了它，宿主机重启后后端全自动起来、唯独入口不起来，
+    # 表现是整站打不开而每个服务单看都健康。
+    restart: unless-stopped
 
   auth-server:
     build:
