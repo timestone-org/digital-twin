@@ -16,6 +16,7 @@ from realtime_hub.apps.channel.services.session import (
     Handshake,
     SessionService,
 )
+from realtime_hub.apps.channel.services.user_codes import UserCodeSource
 
 __all__ = [
     "AuthenticationRejected",
@@ -30,4 +31,5 @@ __all__ = [
     "SessionService",
     "SubscriptionJournal",
     "TopicRegistry",
+    "UserCodeSource",
 ]

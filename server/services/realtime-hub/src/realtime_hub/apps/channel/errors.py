@@ -54,6 +54,18 @@ class CodeCatalogUnavailable(AppError):
     http_status = 503
 
 
+class UserCodesUnavailable(AppError):
+    """auth-server 不可达，取不到这个用户此刻持有的权限码。
+
+    ⚠ fail-closed：拒绝握手，不许按空码放行。空码集合在授权那一步的表现是
+    「每个主题都没权限」，客户端收到的是 403 而不是 503——它会当成「我确实
+    没权限」而不再重连，于是 auth 恢复之后通道也不会自己回来。
+    """
+
+    code = 52002
+    http_status = 503
+
+
 class PayloadTooLarge(AppError):
     """单条推送的条目数超过上限。
 
