@@ -8,25 +8,25 @@
  * ⚠ 视口里不套距离派生的显隐，只认 `visibility.visible`——编辑时镜头到处飞，
  * 套上规则会让人「刚配好的东西一转镜头就不见了」。
  */
-import { collectTwinConfigIssues, type Vec3 } from '@dt/twin-config'
+import { collectTwinConfigIssues } from '@dt/twin-config'
 import { DtPageState, useConfirm, useToast } from '@dt/ui'
 import { computed, ref } from 'vue'
 import { onBeforeRouteLeave, useRoute } from 'vue-router'
 
 import { AppShell } from '@/components/layout'
 
+import PointPickerDialog from '@/components/binding/PointPickerDialog.vue'
+
 import BulkPartsDialog from './components/BulkPartsDialog.vue'
 import TwinDiagnosticsPanel from './components/TwinDiagnosticsPanel.vue'
 import TwinEditorToolbar from './components/TwinEditorToolbar.vue'
-import TwinInspector from './components/TwinInspector.vue'
 import TwinLeftPane from './components/TwinLeftPane.vue'
+import TwinRightPane from './components/TwinRightPane.vue'
 import TwinViewport from './components/TwinViewport.vue'
 import { createTwinEditorActions } from './twinEditorActions'
-import {
-  TWIN_SELECT_MODEL,
-  type TwinEntityKind,
-  type TwinSelection,
-} from './types'
+import { createTwinViewportOps } from './twinViewportOps'
+import { useTwinBindings } from './useTwinBindings'
+import { TWIN_SELECT_MODEL, type TwinSelection } from './types'
 import { useBulkParts } from './useBulkParts'
 import { useGizmoMode } from './useGizmoMode'
 import { useTwinEditorPage } from './useTwinEditorPage'
@@ -47,28 +47,8 @@ const selection = ref<TwinSelection>(TWIN_SELECT_MODEL)
 const showIssues = ref(false)
 /** 模型里的全部节点名，视口加载完给的；部件检查器要用。 */
 const modelNodes = ref<readonly string[]>([])
-/** 正在等视口里点一下：点完把结果写回这个实体的哪个字段。 */
-const pending = ref<{
-  kind: TwinEntityKind
-  id: string
-  what: 'node' | 'position'
-} | null>(null)
 /** 视口里正在飞漫游预览；它会被用户一碰镜头就停，所以由视口回传而不是这里说了算。 */
 const roamPreviewing = ref(false)
-
-/**
- * 视口对外的四个命令。
- * ⚠ 手工与 `TwinViewport` 的 `defineExpose` 对齐：`InstanceType<typeof 组件>`
- * 取不到 `defineExpose` 的类型（会塌成 any），写错了 typecheck 与 lint 都不拦。
- */
-interface TwinViewportHandle {
-  focus: (selection: TwinSelection) => void
-  snapshot: () => { position: Vec3; target: Vec3; fov: number }
-  playRoamPreview: () => boolean
-  stopRoamPreview: () => void
-}
-
-const viewportRef = ref<TwinViewportHandle | null>(null)
 
 const config = computed(() => page.doc.value?.config.value ?? null)
 const bulk = useBulkParts(
@@ -92,92 +72,36 @@ const actions = computed(() => {
       })
 })
 
-const pickMode = computed(() => pending.value?.what ?? null)
+// 编辑视口里的读数与大屏走同一条链路：同一个推送主题、同一份缝合
+const binding = useTwinBindings(
+  () => page.doc.value,
+  () => dashboardId.value,
+  () => page.node.value?.id ?? '',
+  () => config.value,
+)
+
+const viewport = createTwinViewportOps({
+  config: () => config.value,
+  actions: () => actions.value,
+  selection: () => selection.value,
+  onRoamUnavailable: () =>
+    toast.error('轨迹上可用的视点不足两个，先去加几站'),
+})
+
+// ⚠ 模板里的 `ref="viewportRef"` 只认得顶层绑定，写成 `viewport.viewportRef`
+// 会被当成一个字符串 ref 名，视口句柄永远是 null
+const viewportRef = viewport.viewportRef
 
 function select(next: TwinSelection): void {
   selection.value = next
   // 选中即取景：在大纲里点一个锚点，视口该把镜头带过去
-  viewportRef.value?.focus(next)
-}
-
-function requestPick(what: 'node' | 'position'): void {
-  const current = selection.value
-  if (!('id' in current)) return
-  pending.value = { kind: current.kind, id: current.id, what }
-}
-
-function applyPick(patch: Record<string, unknown>): void {
-  const target = pending.value
-  const act = actions.value
-  pending.value = null
-  if (target === null || act === null || config.value === null) return
-  const list: readonly { id: string }[] = config.value[target.kind]
-  const entity = list.find((item) => item.id === target.id)
-  if (entity === undefined) return
-  act.patchConfig({
-    [target.kind]: list.map((item) =>
-      item.id === target.id ? { ...item, ...patch } : item,
-    ),
-  })
-}
-
-/** 带 `nodes` 的两类：部件与钻取节点。其余种类拾取节点名没有意义。 */
-function nodesOf(kind: TwinEntityKind, id: string): readonly string[] | null {
-  const current = config.value
-  if (current === null) return null
-  if (kind === 'parts') {
-    return current.parts.find((item) => item.id === id)?.nodes ?? null
-  }
-  if (kind === 'hierNodes') {
-    return current.hierNodes.find((item) => item.id === id)?.nodes ?? null
-  }
-  return null
-}
-
-function onPickNode(name: string): void {
-  const target = pending.value
-  if (target === null) return
-  const nodes = nodesOf(target.kind, target.id)
-  if (nodes === null) return
-  // 同一个节点点两次不该塞两条进去
-  applyPick({ nodes: nodes.includes(name) ? [...nodes] : [...nodes, name] })
+  viewport.focus(next)
 }
 
 async function save(): Promise<void> {
   const ok = await page.save()
   if (ok) toast.success('孪生场景已保存')
   else toast.error(page.conflict.value ?? '保存失败，请重试')
-}
-
-/** 把当前机位存进某个视点。 */
-function captureCamera(id: string): void {
-  const act = actions.value
-  const snapshot = viewportRef.value?.snapshot()
-  if (act === null || snapshot === undefined || config.value === null) return
-  act.patchConfig({
-    cameras: config.value.cameras.map((item) =>
-      item.id === id ? { ...item, ...snapshot } : item,
-    ),
-  })
-}
-
-/** 在编辑视口里试飞一遍轨迹；飞不起来（站点不够）就直说，不留一个没反应的按钮。 */
-function previewRoam(): void {
-  if (viewportRef.value?.playRoamPreview() === false) {
-    toast.error('轨迹上可用的视点不足两个，先去加几站')
-  }
-}
-
-/** 把当前机位存进某个钻取节点的取景快照。 */
-function captureHierView(id: string): void {
-  const act = actions.value
-  const snapshot = viewportRef.value?.snapshot()
-  if (act === null || snapshot === undefined || config.value === null) return
-  act.patchConfig({
-    hierNodes: config.value.hierNodes.map((item) =>
-      item.id === id ? { ...item, view: snapshot } : item,
-    ),
-  })
 }
 
 /** 返回大屏编辑器；外壳的返回入口按站内路径走。 */
@@ -249,12 +173,13 @@ onBeforeRouteLeave(async () => {
             class="min-h-0 flex-1"
             :config="config"
             :selection="selection"
-            :pick-mode="pickMode"
+            :pick-mode="viewport.pickMode.value"
             :gizmo-mode="gizmoMode"
             :target-size="page.targetSize.value"
+            :values="binding.liveValues.value"
             @select="selection = $event ?? TWIN_SELECT_MODEL"
-            @pick-node="onPickNode"
-            @pick-position="(position: Vec3) => applyPick({ position })"
+            @pick-node="viewport.onPickNode"
+            @pick-position="viewport.onPickPosition"
             @model-nodes="modelNodes = $event"
             @roam-preview="roamPreviewing = $event"
             @entity-transform="actions?.transformEntity($event)"
@@ -269,21 +194,28 @@ onBeforeRouteLeave(async () => {
           />
         </div>
 
-        <TwinInspector
+        <TwinRightPane
           v-model:gizmo-mode="gizmoMode"
-          class="w-80 shrink-0 overflow-y-auto border-l border-border-subtle"
+          class="w-80 shrink-0 border-l border-border-subtle"
           :config="config"
           :selection="selection"
           :model-nodes="modelNodes"
-          :picking="pending !== null"
+          :picking="viewport.isPicking.value"
           :roam-previewing="roamPreviewing"
+          :bindings="binding.bindings.value"
+          :is-dirty="page.doc.value?.isDirty.value ?? false"
           @patch="actions?.patchConfig($event)"
-          @request-pick="requestPick"
-          @cancel-pick="pending = null"
-          @capture-camera="captureCamera"
-          @capture-hier-view="captureHierView"
-          @preview-roam="previewRoam"
-          @stop-roam-preview="viewportRef?.stopRoamPreview()"
+          @request-pick="viewport.requestPick"
+          @cancel-pick="viewport.cancelPick"
+          @capture-camera="viewport.captureCamera"
+          @capture-hier-view="viewport.captureHierView"
+          @preview-roam="viewport.previewRoam"
+          @stop-roam-preview="viewport.stopRoamPreview"
+          @write-binding="binding.write"
+          @drop-binding="binding.drop"
+          @add-binding="binding.bind"
+          @pick-point="binding.pickingFieldKey.value = $event"
+          @remove-binding-row="binding.removeRow"
         />
       </div>
     </div>
@@ -294,6 +226,13 @@ onBeforeRouteLeave(async () => {
       :preselect="bulk.preselect.value"
       @update:open="bulk.open.value = $event"
       @confirm="actions?.addParts($event)"
+    />
+
+    <PointPickerDialog
+      :model-value="binding.pickingFieldKey.value !== null"
+      :field-key="binding.pickingFieldKey.value"
+      @update:model-value="binding.closePicker"
+      @pick="binding.pickPoint"
     />
   </AppShell>
 </template>

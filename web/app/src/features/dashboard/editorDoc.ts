@@ -9,6 +9,7 @@
  */
 import type {
   BindingPayload,
+  BindingView,
   DashboardNodePayload,
   DashboardNodeView,
   ModuleManifest,
@@ -470,8 +471,14 @@ export function removeBinding(
   }))
 }
 
-/** 绑定序 `(fieldKey, id)`，与服务端一致。 */
-function sortBindings(bindings: readonly BindingPayload[]): BindingPayload[] {
+/**
+ * 绑定序 `(fieldKey, id)`，与服务端一致。
+ * ⚠ 自己持有一份扁平绑定的编辑面（孪生子编辑器）也走它：各排各的序时，
+ * 从两个入口改同一份绑定会在保存载荷里留下一整片纯顺序的假差异。
+ */
+export function sortBindings(
+  bindings: readonly BindingPayload[],
+): BindingPayload[] {
   return [...bindings].sort(
     (left, right) =>
       left.fieldKey.localeCompare(right.fieldKey) ||
@@ -547,17 +554,26 @@ export function toLayoutInput(
   }))
 }
 
+/**
+ * 一份绑定里全部 `opcua` 绑定的点位身份，去重且定序。
+ * ⚠ 排序不是为了好看：调用方按这串是否变化决定要不要重订，
+ * 不定序的话每次求值都得到一串新次序，于是每次都白退订重订一遍。
+ */
+export function boundPointKeysOf(
+  bindings: readonly BindingView[],
+): readonly string[] {
+  const keys = new Set<string>()
+  for (const binding of bindings) {
+    if (binding.sourceKind === 'opcua' && binding.nodeKey !== null) {
+      keys.add(binding.nodeKey)
+    }
+  }
+  return [...keys].sort()
+}
+
 /** 这张大屏上全部 `opcua` 绑定的点位身份，去重。收渲染子集，公开快照页也能用。 */
 export function boundPointKeys(
   nodes: readonly Pick<DashboardNodeView, 'bindings'>[],
 ): readonly string[] {
-  const keys = new Set<string>()
-  for (const node of nodes) {
-    for (const binding of node.bindings) {
-      if (binding.sourceKind === 'opcua' && binding.nodeKey !== null) {
-        keys.add(binding.nodeKey)
-      }
-    }
-  }
-  return [...keys].sort()
+  return boundPointKeysOf(nodes.flatMap((node) => node.bindings))
 }

@@ -8,6 +8,7 @@ import {
   type EditorSceneStatus,
   type GizmoChange,
   type GizmoMode,
+  type SceneLayerValues,
   type TwinCameraPose,
   type TwinPickMode,
 } from '@dt/three-core'
@@ -31,6 +32,12 @@ const props = defineProps<{
    * 同一份配置在两边取景不一样——用户看到的是「牌与模型的大小对不上」。
    */
   targetSize?: { width: number; height: number } | undefined
+  /**
+   * 缝合好的五路实时值；不给就是一片占位符。
+   * ⚠ 编辑视口显示的读数与大屏是同一条链路（同一个推送主题、同一份缝合），
+   * 所以在这里核对过的对应关系，到大屏上就是那个结果。
+   */
+  values?: SceneLayerValues | undefined
 }>()
 
 const emit = defineEmits<{
@@ -137,6 +144,8 @@ onMounted(() => {
   })
   scene.setSelection(props.selection)
   scene.setPickMode(props.pickMode)
+  // 挂载时视口已经错过了此前的每一次 watch，首帧值要在这里补一次
+  if (props.values !== undefined) scene.setValues(props.values)
 })
 
 onBeforeUnmount(() => {
@@ -159,6 +168,12 @@ watch(
 watch(
   () => props.gizmoMode,
   (value) => scene?.setGizmoMode(value ?? 'translate'),
+)
+watch(
+  () => props.values,
+  (value) => {
+    if (value !== undefined) scene?.setValues(value)
+  },
 )
 
 /**
