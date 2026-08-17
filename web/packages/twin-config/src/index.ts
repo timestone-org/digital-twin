@@ -29,6 +29,7 @@ export {
   twinBindingRows,
   twinRowCounts,
   twinRowLabels,
+  twinRowsOfEntity,
 } from './bindingRows'
 export type { TwinBindingRow } from './bindingRows'
 export { defaultCameraOf, isUsablePose } from './cameraSelect'

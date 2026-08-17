@@ -1,10 +1,9 @@
 <script setup lang="ts">
 /**
- * @fileoverview 右栏的顶层分页：属性（跟着选中走）/ 绑定（整段孪生一份）。
+ * @fileoverview 右栏的顶层分页：属性 / 绑定，两页都跟着当前选中走。
  *
- * ⚠ 两页的作用域刻意不同：属性页跟着当前选中的那一个实体，绑定页是整段孪生的
- * 全部绑定。放在同一层分页里是因为它们抢的是同一块屏幕；分页状态归本组件持有，
- * 换选中不该把用户从绑定页踢回属性页。
+ * ⚠ 分页状态归本组件持有：换选中不该把用户从绑定页踢回属性页——绑一串实体时
+ * 每选一个都被踢回去，等于每绑一个点位都要多点一次。
  */
 import type { BindingPayload } from '@dt/contracts'
 import type { GizmoMode } from '@dt/three-core'
@@ -96,6 +95,7 @@ function onTab(value: string): void {
       class="min-h-0 flex-1 overflow-y-auto"
       :config="config"
       :bindings="bindings"
+      :selection="selection"
       :is-dirty="isDirty"
       @write="emit('writeBinding', $event)"
       @drop="emit('dropBinding', $event)"

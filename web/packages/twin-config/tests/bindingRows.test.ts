@@ -13,6 +13,7 @@ import {
   twinBindingRows,
   twinRowCounts,
   twinRowLabels,
+  twinRowsOfEntity,
 } from '../src/bindingRows'
 import { normalizeTwinConfig } from '../src/normalize'
 import { flattenPanelFields } from '../src/normalizeElements'
@@ -316,5 +317,86 @@ describe('实体删掉之后的重映射', () => {
       'flowValues[0].intensity',
       'flowValues[0].active',
     ])
+  })
+})
+
+/**
+ * ⚠ 这一组守的是「只看选中的那一个」。给的必须是**文档序的行号**，不是过滤后
+ * 的位置——数组绑定的 fieldKey 由行号拼出来，重新编号会让每一条绑定都改喂另一
+ * 个实体，而界面上看不出任何异常。
+ */
+describe('某个实体占了哪几行', () => {
+  const MANY = normalizeTwinConfig({
+    anchors: [
+      { id: 'a1', name: '进口' },
+      { id: 'a2', name: '出口' },
+    ],
+    panels: [
+      { id: 'p1', name: '泵组', fields: [{ key: 'temp', label: '温度' }] },
+      {
+        id: 'p2',
+        name: '风机',
+        fields: [
+          { key: 'rpm', label: '转速' },
+          { key: 'amp', label: '电流' },
+        ],
+      },
+    ],
+    arrows: [{ id: 'ar1', name: '进气' }],
+  })
+
+  it('⚠ 信息牌摊成多行，一张牌的全部字段都要给上', () => {
+    expect(twinRowsOfEntity(MANY, 'panels', 'p2')).toEqual({
+      panelValues: [1, 2],
+    })
+  })
+
+  it('⚠ 给的是文档序行号，不是过滤后重排的位置', () => {
+    // p2 的两个字段在摊平后排第 2、3 位；按过滤后编号会变成 0、1
+    const rows = twinRowsOfEntity(MANY, 'panels', 'p2')?.panelValues ?? []
+    const all = twinBindingRows(MANY).filter(
+      (row) => row.slotKey === 'panelValues',
+    )
+    expect(rows.map((index) => all[index]?.entityId)).toEqual([
+      'p2::rpm',
+      'p2::amp',
+    ])
+  })
+
+  it('一个实体一行的那几类，只给它自己那一行', () => {
+    expect(twinRowsOfEntity(MANY, 'anchors', 'a2')).toEqual({
+      anchorValues: [1],
+    })
+  })
+
+  it('⚠ 只出现自己那个槽：别的槽整段不该摆出来', () => {
+    expect(Object.keys(twinRowsOfEntity(MANY, 'arrows', 'ar1') ?? {})).toEqual([
+      'arrowValues',
+    ])
+  })
+
+  it('⚠ 不取数的实体回 null，与「取数但一行都没有」分开', () => {
+    // 前者该退回整段孪生的全部绑定，后者该说这个实体没有可绑的字段
+    expect(twinRowsOfEntity(MANY, 'parts', 'whatever')).toBeNull()
+    expect(twinRowsOfEntity(MANY, 'cameras', 'whatever')).toBeNull()
+  })
+
+  it('没有字段的信息牌给一张空表，不是 null', () => {
+    const bare = normalizeTwinConfig({
+      panels: [{ id: 'p9', name: '空牌', fields: [] }],
+    })
+    expect(twinRowsOfEntity(bare, 'panels', 'p9')).toEqual({ panelValues: [] })
+  })
+
+  it('⚠ id 前缀相同的实体不许互相串行', () => {
+    const tricky = normalizeTwinConfig({
+      anchors: [
+        { id: 'a', name: '甲' },
+        { id: 'a1', name: '乙' },
+      ],
+    })
+    expect(twinRowsOfEntity(tricky, 'anchors', 'a')).toEqual({
+      anchorValues: [0],
+    })
   })
 })

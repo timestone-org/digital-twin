@@ -42,6 +42,15 @@ const props = defineProps<{
    * 那几条绑定既看不见也删不掉，而它们永远喂不到任何东西。
    */
   rowCounts?: Readonly<Record<string, number>> | undefined
+  /**
+   * 只摆这些行，键是槽键、值是**行号**。不给就摆全部。
+   *
+   * ⚠ 收的是行号不是过滤后的行：数组绑定的 fieldKey 由行号拼出来，按过滤后的
+   * 位置重新编号会让每一条绑定都改喂另一个实体。
+   * ⚠ 表里没有的槽整段不摆——「这个槽一行都不看」与「这个槽还没给限定」是两件
+   * 事，用空数组表达前者。
+   */
+  visibleRows?: Readonly<Record<string, readonly number[]>> | undefined
 }>()
 
 const emit = defineEmits<{
@@ -110,15 +119,35 @@ function groupsOf(spec: BindingSpec, pinned: number | undefined): PanelGroup[] {
   )
 }
 
+/** 这个槽此刻要摆哪几行；没有限定就是全摆。 */
+function keepRows(spec: BindingSpec, groups: PanelGroup[]): PanelGroup[] {
+  const allowed = props.visibleRows?.[spec.key]
+  if (allowed === undefined) return groups
+  return groups.filter((group) => allowed.includes(group.rowIndex ?? 0))
+}
+
 const sections = computed<SlotSection[]>(() =>
-  props.specs.map((spec) => {
-    const pinned = props.rowCounts?.[spec.key]
-    return {
-      spec,
-      isPinned: pinned !== undefined,
-      groups: groupsOf(spec, pinned),
-    }
-  }),
+  props.specs
+    // 限定表里没有的槽整段不摆
+    .filter(
+      (spec) =>
+        props.visibleRows === undefined || spec.key in props.visibleRows,
+    )
+    .map((spec) => {
+      const pinned = props.rowCounts?.[spec.key]
+      return {
+        spec,
+        isPinned: pinned !== undefined,
+        groups: keepRows(spec, groupsOf(spec, pinned)),
+      }
+    }),
+)
+
+/** 限定之后一行都不剩：要说出来，否则看着像面板没加载出来。 */
+const isFilteredEmpty = computed(
+  () =>
+    props.specs.length > 0 &&
+    sections.value.every((section) => section.groups.length === 0),
 )
 
 const siblingKeys = computed(() =>
@@ -137,6 +166,12 @@ function bindingOf(fieldKey: string): BindingPayload | null {
       icon="activity"
       title="这个面不取数"
       hint="它没有声明任何绑定槽"
+    />
+    <DtEmpty
+      v-else-if="isFilteredEmpty"
+      icon="activity"
+      title="选中的这一个没有可绑的数据"
+      hint="给它加上字段之后再来绑，或切回全部查看这段孪生的其它绑定。"
     />
     <template v-else>
       <section

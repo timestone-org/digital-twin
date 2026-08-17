@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 
 import TwinBindingPane from '@/pages/TwinEditor/components/TwinBindingPane.vue'
+import { TWIN_SELECT_MODEL, type TwinSelection } from '@/pages/TwinEditor/types'
 
 const CONFIG = normalizeTwinConfig({
   anchors: [{ id: 'a1', name: '进口' }],
@@ -43,9 +44,13 @@ function binding(fieldKey: string): BindingPayload {
   }
 }
 
-function mountPane(bindings: BindingPayload[] = [], isDirty = false) {
+function mountPane(
+  bindings: BindingPayload[] = [],
+  isDirty = false,
+  selection: TwinSelection = TWIN_SELECT_MODEL,
+) {
   return mount(TwinBindingPane, {
-    props: { config: CONFIG, bindings, isDirty },
+    props: { config: CONFIG, bindings, isDirty, selection },
   })
 }
 
@@ -108,5 +113,73 @@ describe('没保存的提醒', () => {
 
   it('干净时不摆这条提醒', () => {
     expect(mountPane([], false).text()).not.toContain('保存之后才会开始推送')
+  })
+})
+
+/**
+ * ⚠ 这一组守的是「点谁就是谁」。一段孪生上百行绑定是常态（信息牌按字段摊平），
+ * 全摆出来时「这一行是谁的」只能靠行名一行行认。
+ */
+describe('只看选中的那一个', () => {
+  it('⚠ 选中一张信息牌，只摆这张牌的字段，别的实体一个都不摆', () => {
+    const wrapper = mountPane([], false, { kind: 'panels', id: 'p1' })
+
+    expect(wrapper.text()).toContain('泵组 · 温度')
+    expect(wrapper.text()).toContain('泵组 · 流量')
+    expect(wrapper.text()).not.toContain('进口')
+  })
+
+  it('⚠ 收窄了要说出来，否则一个短短的绑定页看着像别的绑定丢了', () => {
+    const wrapper = mountPane([], false, { kind: 'panels', id: 'p1' })
+
+    expect(wrapper.text()).toContain('只看选中的信息牌')
+  })
+
+  it('点「显示全部」切回整段孪生', async () => {
+    const wrapper = mountPane([], false, { kind: 'panels', id: 'p1' })
+    const all = wrapper
+      .findAll('button')
+      .find((item) => item.text().includes('显示全部'))
+
+    await all?.trigger('click')
+
+    expect(wrapper.text()).toContain('进口')
+  })
+
+  it('⚠ 换选中要复位回收窄：收窄才是默认，不是一次性的', async () => {
+    const wrapper = mountPane([], false, { kind: 'panels', id: 'p1' })
+    await wrapper
+      .findAll('button')
+      .find((item) => item.text().includes('显示全部'))
+      ?.trigger('click')
+
+    await wrapper.setProps({ selection: { kind: 'anchors', id: 'a1' } })
+
+    expect(wrapper.text()).toContain('进口')
+    expect(wrapper.text()).not.toContain('泵组 · 温度')
+  })
+
+  it('⚠ 选中不取数的东西时退回全部，不是空白一片', () => {
+    // 部件与视点没有绑定行；收窄成空会让人以为绑定丢了
+    const wrapper = mountPane([], false, { kind: 'parts', id: 'whatever' })
+
+    expect(wrapper.text()).toContain('进口')
+    expect(wrapper.text()).toContain('泵组 · 温度')
+    expect(wrapper.text()).not.toContain('只看选中的')
+  })
+
+  it('选中的信息牌一个字段都没有时，老实说它没有可绑的数据', () => {
+    const wrapper = mount(TwinBindingPane, {
+      props: {
+        config: normalizeTwinConfig({
+          panels: [{ id: 'p9', name: '空牌', fields: [] }],
+        }),
+        bindings: [],
+        isDirty: false,
+        selection: { kind: 'panels', id: 'p9' },
+      },
+    })
+
+    expect(wrapper.text()).toContain('没有可绑的数据')
   })
 })
