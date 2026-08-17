@@ -121,6 +121,56 @@ export function twinRowLabels(
   return labels
 }
 
+/**
+ * 有绑定的五类实体各自落在哪个数组槽。键是 `TwinConfig` 上的数组字段名。
+ * ⚠ 部件与视点**不在表里**：它们不取数，选中它们时没有「只看这一个」可言。
+ */
+const SLOT_OF_KIND: Readonly<Record<string, string>> = {
+  anchors: TWIN_ANCHOR_BINDING_KEY,
+  panels: TWIN_PANEL_BINDING_KEY,
+  arrows: TWIN_ARROW_BINDING_KEY,
+  flows: TWIN_FLOW_BINDING_KEY,
+  hierNodes: TWIN_HIER_BINDING_KEY,
+}
+
+/**
+ * 一行是不是属于某个实体。
+ *
+ * ⚠ 信息牌与钻取节点一个实体摊成多行，行的 id 是 `<实体 id>::<字段 key>`；
+ * 锚点/箭头/能量流一个实体一行，行的 id 就是实体 id。两种都要认。
+ * @param rowEntityId 行上记的实体标识
+ * @param entityId 实体 id
+ */
+function isRowOf(rowEntityId: string, entityId: string): boolean {
+  return rowEntityId === entityId || rowEntityId.startsWith(`${entityId}::`)
+}
+
+/**
+ * 某个实体占了哪几行，键是槽键、值是行号。绑点面板据它只摆这一个实体的行。
+ *
+ * ⚠ 给的是**行号**不是过滤后的行：数组绑定的 fieldKey 是 `槽[行号].子键`，
+ * 按过滤后的位置重新编号会让每一条绑定都改喂另一个实体。
+ * ⚠ 这类实体不取数时回 `null`（部件、视点，以及模型/视点控件/漫游这些单例段），
+ * 与「取数但一行都没有」的空表分开：前者该退回整段孪生的全部绑定，后者该老实
+ * 说这个实体没有可绑的字段。
+ *
+ * @param config 归一化后的孪生配置
+ * @param kind 实体集合名，与 `TwinConfig` 的数组字段同名
+ * @param entityId 实体 id
+ */
+export function twinRowsOfEntity(
+  config: TwinConfig,
+  kind: string,
+  entityId: string,
+): Record<string, number[]> | null {
+  const slotKey = SLOT_OF_KIND[kind]
+  if (slotKey === undefined) return null
+  const rows = twinBindingRows(config)
+    .filter((row) => row.slotKey === slotKey && isRowOf(row.entityId, entityId))
+    .map((row) => row.index)
+  return { [slotKey]: rows }
+}
+
 /** 五个数组槽，重映射与行数统计逐个走一遍。 */
 const ARRAY_SLOTS = [
   TWIN_ANCHOR_BINDING_KEY,
