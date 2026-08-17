@@ -170,6 +170,7 @@ export {
 } from './control'
 export type {
   BindingDataType,
+  BindingRowLabel,
   BindingSpec,
   ConfigField,
   ConfigFieldCondition,

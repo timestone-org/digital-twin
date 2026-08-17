@@ -6,6 +6,8 @@
  * 都会安静地改喂前一个实体。绑定还在、值也还在，只是全接错了对象，界面上看不出来。
  * 编辑器每次增删/重排实体，都必须拿 `remapBindingRows` 把绑定跟着搬一次。
  */
+import type { BindingRowLabel } from '@dt/contracts'
+
 import {
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_ARROW_BINDING_KEY,
@@ -102,14 +104,24 @@ function hierNameOf(config: TwinConfig, nodeId: string): string {
   return config.hierNodes.find((item) => item.id === nodeId)?.name ?? ''
 }
 
-/** 绑定行的组标题表，键是 fieldKey。绑点面板直接用。 */
-export function twinRowLabels(config: TwinConfig): Record<string, string> {
-  const labels: Record<string, string> = {}
-  for (const row of twinBindingRows(config)) labels[row.fieldKey] = row.label
+/**
+ * 绑定行的组标题表，键是 fieldKey。绑点面板直接用。
+ *
+ * ⚠ `id` 给的就是 `entityId`——信息牌字段是 `<牌 id>::<字段 key>`，与信息牌
+ * 字段列表上显示的那一份**逐字相同**。两边显示不同的标识时，用户没有任何办法
+ * 确认第 7 行绑的到底是哪个字段，只能一行行数。
+ */
+export function twinRowLabels(
+  config: TwinConfig,
+): Record<string, BindingRowLabel> {
+  const labels: Record<string, BindingRowLabel> = {}
+  for (const row of twinBindingRows(config)) {
+    labels[row.fieldKey] = { title: row.label, id: row.entityId }
+  }
   return labels
 }
 
-/** 五个数组槽，重映射逐个走一遍。 */
+/** 五个数组槽，重映射与行数统计逐个走一遍。 */
 const ARRAY_SLOTS = [
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
@@ -117,6 +129,20 @@ const ARRAY_SLOTS = [
   TWIN_FLOW_BINDING_KEY,
   TWIN_HIER_BINDING_KEY,
 ] as const
+
+/**
+ * 五个数组槽各应有几行，键是槽键。绑点面板据它把行钉在实体上。
+ * ⚠ 一个实体都没有的槽也要出现在表里、值为 0：漏掉的槽会被面板当成
+ * 「行数由用户手工增删」，于是摆出一个加了也喂不到任何东西的「新增一行」。
+ */
+export function twinRowCounts(config: TwinConfig): Record<string, number> {
+  const counts: Record<string, number> = {}
+  for (const slotKey of ARRAY_SLOTS) counts[slotKey] = 0
+  for (const row of twinBindingRows(config)) {
+    counts[row.slotKey] = (counts[row.slotKey] ?? 0) + 1
+  }
+  return counts
+}
 
 /** 一份配置里某个槽的实体 id，按文档序。 */
 function entityIdsOf(config: TwinConfig, slotKey: string): string[] {

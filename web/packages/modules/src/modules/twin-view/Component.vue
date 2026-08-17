@@ -14,14 +14,8 @@ import {
   TWIN_FLOW_BINDING_KEY,
   TWIN_HIER_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
-  flattenHierFields,
-  flattenPanelFields,
   normalizeTwinConfig,
-  stitchAnchorValues,
-  stitchArrowValues,
-  stitchFlowValues,
-  stitchHierValues,
-  stitchPanelValues,
+  twinSceneValues,
 } from '@dt/twin-config'
 import { DtNotice } from '@dt/ui'
 import { computed, defineAsyncComponent, ref, type CSSProperties } from 'vue'
@@ -102,29 +96,23 @@ const showStructureTree = computed(() =>
   readBoolean(props.config.showStructureTree),
 )
 
-const anchorValues = computed(() =>
-  stitchAnchorValues(
-    scene.value.anchors,
-    props.values[TWIN_ANCHOR_BINDING_KEY],
-  ),
-)
-const arrowValues = computed(() =>
-  stitchArrowValues(scene.value.arrows, props.values[TWIN_ARROW_BINDING_KEY]),
-)
-// ⚠ 必须喂扁平化后的字段序：按「第 i 张牌」对齐会让多字段的牌之后整体错位
-const panelValues = computed(() =>
-  stitchPanelValues(
-    flattenPanelFields(scene.value.panels),
-    props.values[TWIN_PANEL_BINDING_KEY],
-  ),
-)
-// ⚠ 必须喂扁平化后的字段序：按「第 i 个节点」对齐会让多字段的节点之后整体错位
-const hierValues = computed(() =>
-  stitchHierValues(
-    flattenHierFields(scene.value.hierNodes),
-    props.values[TWIN_HIER_BINDING_KEY],
-  ),
-)
+/**
+ * 本模块消费的五个槽。
+ * ⚠ 键在这里显式列一遍、不把整袋直接递下去：清单声明的槽键与渲染侧真正消费的
+ * 槽键由契约测试逐一对上，而它只看得见本文件里的 `values[...]` 取法。
+ * 少列一个键的表现是「那一路读数永远不来」，两边都不报错。
+ */
+const rows = computed(() => ({
+  [TWIN_ANCHOR_BINDING_KEY]: props.values[TWIN_ANCHOR_BINDING_KEY],
+  [TWIN_PANEL_BINDING_KEY]: props.values[TWIN_PANEL_BINDING_KEY],
+  [TWIN_ARROW_BINDING_KEY]: props.values[TWIN_ARROW_BINDING_KEY],
+  [TWIN_FLOW_BINDING_KEY]: props.values[TWIN_FLOW_BINDING_KEY],
+  [TWIN_HIER_BINDING_KEY]: props.values[TWIN_HIER_BINDING_KEY],
+}))
+
+// ⚠ 缝合只走 `twinSceneValues` 这一处：对齐顺序在编辑视口那边也要用同一份，
+// 各写各的就会「编辑器里核对过的对应关系，到大屏上全接错对象」
+const live = computed(() => twinSceneValues(scene.value, rows.value))
 
 /**
  * 钻进这一层时的取景：自己的快照优先，没有就退回它引用的预设视点。
@@ -140,10 +128,6 @@ const drillView = computed<TwinModalView | null>(() => {
   if (camera === undefined) return null
   return { position: camera.position, target: camera.target, fov: camera.fov }
 })
-
-const flowValues = computed(() =>
-  stitchFlowValues(scene.value.flows, props.values[TWIN_FLOW_BINDING_KEY]),
-)
 
 const titleStyle = computed<CSSProperties>(() => ({
   ...CORNER_OFFSETS[readEnum(props.config.titlePosition, CORNERS, 'top-left')],
@@ -162,10 +146,10 @@ const errorMessage = computed(() =>
   <div class="dt-twin">
     <TwinScene
       :config="scene"
-      :anchor-values="anchorValues"
-      :arrow-values="arrowValues"
-      :panel-values="panelValues"
-      :flow-values="flowValues"
+      :anchor-values="live.anchors"
+      :arrow-values="live.arrows"
+      :panel-values="live.panels"
+      :flow-values="live.flows"
       :focus-view="drillView"
       :show-scene-tools="showSceneTools"
       :show-structure-tree="showStructureTree"
@@ -177,7 +161,7 @@ const errorMessage = computed(() =>
       class="dt-twin__drill"
       :nodes="scene.hierNodes"
       :node-id="drillNodeId"
-      :values="hierValues"
+      :values="live.hier"
       @update:node-id="drillNodeId = $event"
       @close="drillNodeId = ''"
     />

@@ -27,6 +27,7 @@ export {
   remapBindingRows,
   remapTwinBindings,
   twinBindingRows,
+  twinRowCounts,
   twinRowLabels,
 } from './bindingRows'
 export type { TwinBindingRow } from './bindingRows'
@@ -173,5 +174,7 @@ export {
   stitchPanelValues,
 } from './twinMath'
 export type { ValueFormat } from './twinMath'
+export { twinSceneValues } from './sceneValues'
+export type { TwinSceneValues } from './sceneValues'
 export { TWIN_CONFIG_ISSUE_KINDS, collectTwinConfigIssues } from './issues'
 export type { TwinConfigIssue, TwinConfigIssueKind } from './issues'

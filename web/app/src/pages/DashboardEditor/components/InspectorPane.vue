@@ -8,6 +8,7 @@
  */
 import type {
   BindingPayload,
+  BindingRowLabel,
   ConfigPreset,
   DashboardNodePayload,
   InteractionRule,
@@ -78,8 +79,21 @@ const hasBindings = computed(() => (manifest.value?.bindings ?? []).length > 0)
  * 数组槽的行名，由清单自述——本面板不认识任何具体模块。
  * 清单没给或算不出来时给 undefined，绑点面板退回「第 N 行」。
  */
-const rowLabels = computed<Readonly<Record<string, string>> | undefined>(() => {
+const rowLabels = computed<
+  Readonly<Record<string, BindingRowLabel>> | undefined
+>(() => {
   const resolve = manifest.value?.bindingRowLabels
+  const node = props.selected
+  if (resolve === undefined || node === null) return undefined
+  return resolve(node.configJson)
+})
+
+/**
+ * 数组槽各应有几行；清单声明了就表示行与实体一一对应，面板不摆手工增删键。
+ * 不声明就是老口径：行由用户手工增删。
+ */
+const rowCounts = computed<Readonly<Record<string, number>> | undefined>(() => {
+  const resolve = manifest.value?.bindingRowCounts
   const node = props.selected
   if (resolve === undefined || node === null) return undefined
   return resolve(node.configJson)
@@ -154,9 +168,10 @@ function onTab(value: string): void {
       />
       <BindingPanel
         v-else-if="tab === 'binding'"
-        :node="selected"
-        :manifest="manifest"
+        :specs="manifest?.bindings ?? []"
+        :bindings="selected.bindings"
         :row-labels="rowLabels"
+        :row-counts="rowCounts"
         @write="emit('write', $event)"
         @drop="emit('drop', $event)"
         @bind="emit('bind', $event)"

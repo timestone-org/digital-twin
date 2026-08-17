@@ -131,6 +131,23 @@ export interface BindingSpec {
   isTimeSeries?: boolean
 }
 
+/**
+ * 数组绑定槽某一行落在哪个实体上，绑点面板拿它当组标题。
+ *
+ * ⚠ `id` 与 `title` 都要：光有名字时，两个同名实体在绑点面板上长得一模一样，
+ * 而实体清单那边（如孪生的信息牌字段列表）显示的是 id——两边对不上号，
+ * 用户就只能靠数行号确认自己绑对了没有。
+ */
+export interface BindingRowLabel {
+  /** 给人看的名字，如「1 号机组 · 温度」。 */
+  title: string
+  /**
+   * 与实体清单里显示的那一份逐字相同的标识；没有稳定标识时给空串。
+   * ⚠ 它只用于人工核对，不参与取值对齐——对齐永远按行号（`fieldKey`）走。
+   */
+  id: string
+}
+
 /** 渲染根要不要套大屏的默认卡片框。 */
 export const MODULE_CHROMES = ['card', 'bare'] as const
 export type ModuleChrome = (typeof MODULE_CHROMES)[number]
@@ -242,7 +259,7 @@ export interface ModuleManifest {
   /** 有一段 config 复杂到两列表单表达不了，交给一个整页子编辑器。 */
   subEditor?: ModuleSubEditor
   /**
-   * 数组绑定槽每一行叫什么名字：键是该行第一个子槽的 `fieldKey`，值是显示名。
+   * 数组绑定槽每一行对应哪个实体：键是该行第一个子槽的 `fieldKey`。
    * 只有模块自己知道第 3 行对应的是哪个实体（孪生的第 3 个锚点、表格的第 3 列），
    * 绑点面板不认识任何具体模块，故由清单自述。
    * ⚠ 不给就退回「第 N 行」——十几行的配置在绑点时就全靠数数认，
@@ -251,7 +268,18 @@ export interface ModuleManifest {
    */
   bindingRowLabels?: (
     config: Record<string, unknown>,
-  ) => Readonly<Record<string, string>>
+  ) => Readonly<Record<string, BindingRowLabel>>
+  /**
+   * 数组绑定槽各应有几行，键是槽键。声明了就表示**行与实体一一对应**：
+   * 行数跟着配置里的实体走，绑点面板不摆手工增删键。
+   * ⚠ 一个实体都没有的槽也要给 0，别把键漏掉——漏掉的槽会被面板当成
+   * 「行数由用户手工增删」，于是摆出一个加了也喂不到任何东西的「新增一行」。
+   * 不给这一支就是老口径：行由用户手工增删。
+   * @param config 该节点落库的配置（未铺清单缺省）
+   */
+  bindingRowCounts?: (
+    config: Record<string, unknown>,
+  ) => Readonly<Record<string, number>>
   region?: ModuleRegion
   /** 清单版本，缺省 1。仅元数据，注册表仍按 `type` 单键索引。 */
   version?: number

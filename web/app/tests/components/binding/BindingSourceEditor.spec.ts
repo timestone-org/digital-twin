@@ -5,7 +5,12 @@
  */
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
-import type { BindingPayload, BindingSpec } from '@dt/contracts'
+import type {
+  BindingPayload,
+  BindingSourceKind,
+  BindingSpec,
+} from '@dt/contracts'
+import { BINDING_SOURCE_KINDS } from '@dt/contracts'
 import { DtSelect } from '@dt/ui'
 
 import BindingSourceEditor from '@/components/binding/BindingSourceEditor.vue'
@@ -188,5 +193,32 @@ describe('历史序列', () => {
       ?.trigger('click')
 
     expect(wrapper.emitted('pick')).toHaveLength(1)
+  })
+})
+
+/**
+ * ⚠ 这一段守的是「加第五种来源时这里必须跟着改」。分支用 `v-else` 兜底的话，
+ * 新来源会安静地画成上一种的表单——用户填得完也存得下，只是存的是另一种来源
+ * 的字段，而 typecheck 与 lint 双双放行。
+ */
+describe('来源逐档显式', () => {
+  it('每一种登记过的来源都画得出自己的表单', () => {
+    const blank = BINDING_SOURCE_KINDS.filter((kind) => {
+      const wrapper = mountEditor(binding({ sourceKind: kind }))
+      const text = wrapper.text()
+      const hasControl = wrapper.findAll('input, button, select').length > 0
+      return !hasControl && text.trim() === ''
+    })
+
+    expect(blank).toEqual([])
+  })
+
+  it('没登记过的来源响亮报错，而不是画成别的来源', () => {
+    // 服务端只收登记过的四种，能走到这里的只有「本仓加了第五种却漏改本组件」
+    const wrapper = mountEditor(
+      binding({ sourceKind: 'mqtt' as BindingSourceKind }),
+    )
+
+    expect(wrapper.text()).toContain('没有认出的绑定来源')
   })
 })
