@@ -118,9 +118,21 @@ export interface BindingSpec {
   enumMap?: Record<string, string>
   /**
    * 数组槽：一个槽对应 N 行，各行按 `key[索引].子槽键` 落成 N 条绑定。
-   * ⚠ 索引必须连续且从 0 起，服务端会校验（DASHBOARD_DESIGN §4.2）。
+   * ⚠ 索引必须连续且从 0 起，服务端会校验（DASHBOARD_DESIGN §4.2）；
+   * `isEntityPinned` 的槽除外。
    */
   isArray?: boolean
+  /**
+   * 数组槽的行**钉在实体上**：第 i 行喂配置里文档序第 i 个实体，行数由配置
+   * 决定，不由绑定条数决定。仅 `isArray: true` 时有意义。
+   *
+   * ⚠ 只有这种槽允许索引留空。绑一部分实体是常态——孪生里有几十个锚点却只有
+   * 三个接了点位——空出来的行只表示「这个实体没接数据源」，缝合时按下标读，
+   * 不会让后面的整体移位。
+   * ⚠ 列表式数组槽（行由用户增删、行数就是数组长度）**必须**连续：那里空一格
+   * 会实打实渲染出一串空行。两种槽的差别只在这个标记上，服务端据它分流。
+   */
+  isEntityPinned?: boolean
   /** 数组槽每一行的子槽，仅 `isArray: true` 时有意义。 */
   arrayFields?: BindingSpec[]
   /**

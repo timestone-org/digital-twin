@@ -1374,6 +1374,7 @@
           "label": "锚点读数",
           "data_type": "number",
           "is_array": true,
+          "is_entity_pinned": true,
           "array_fields": [
             {
               "key": "value",
@@ -1387,6 +1388,7 @@
           "label": "信息牌字段",
           "data_type": "number",
           "is_array": true,
+          "is_entity_pinned": true,
           "array_fields": [
             {
               "key": "value",
@@ -1400,6 +1402,7 @@
           "label": "箭头读数",
           "data_type": "number",
           "is_array": true,
+          "is_entity_pinned": true,
           "array_fields": [
             {
               "key": "value",
@@ -1413,6 +1416,7 @@
           "label": "能量流",
           "data_type": "number",
           "is_array": true,
+          "is_entity_pinned": true,
           "array_fields": [
             {
               "key": "intensity",
@@ -1431,6 +1435,7 @@
           "label": "钻取节点字段",
           "data_type": "number",
           "is_array": true,
+          "is_entity_pinned": true,
           "array_fields": [
             {
               "key": "value",

@@ -95,6 +95,7 @@ export const TWIN_VIEW_BINDINGS: readonly BindingSpec[] = [
     label: '锚点读数',
     dataType: 'number',
     isArray: true,
+    isEntityPinned: true,
     arrayFields: [{ key: 'value', label: '数值', dataType: 'number' }],
   },
   {
@@ -102,6 +103,7 @@ export const TWIN_VIEW_BINDINGS: readonly BindingSpec[] = [
     label: '信息牌字段',
     dataType: 'number',
     isArray: true,
+    isEntityPinned: true,
     arrayFields: [{ key: 'value', label: '数值', dataType: 'number' }],
   },
   {
@@ -109,6 +111,7 @@ export const TWIN_VIEW_BINDINGS: readonly BindingSpec[] = [
     label: '箭头读数',
     dataType: 'number',
     isArray: true,
+    isEntityPinned: true,
     arrayFields: [{ key: 'value', label: '数值', dataType: 'number' }],
   },
   {
@@ -116,6 +119,7 @@ export const TWIN_VIEW_BINDINGS: readonly BindingSpec[] = [
     label: '能量流',
     dataType: 'number',
     isArray: true,
+    isEntityPinned: true,
     arrayFields: [
       { key: 'intensity', label: '强度', dataType: 'number' },
       { key: 'active', label: '激活', dataType: 'boolean' },
@@ -126,6 +130,7 @@ export const TWIN_VIEW_BINDINGS: readonly BindingSpec[] = [
     label: '钻取节点字段',
     dataType: 'number',
     isArray: true,
+    isEntityPinned: true,
     arrayFields: [{ key: 'value', label: '数值', dataType: 'number' }],
   },
 ]

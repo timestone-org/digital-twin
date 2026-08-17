@@ -87,6 +87,9 @@ function bindingSpec(spec: BindingSpec): CatalogJson {
   put(out, 'is_required', spec.isRequired)
   put(out, 'enum_map', spec.enumMap)
   put(out, 'is_array', spec.isArray)
+  // ⚠ 这一项必须导出：服务端据它决定要不要对这个槽套「索引连续且从 0 起」，
+  // 漏了的话行钉在实体上的槽会被当成列表式，只绑第 2 个实体就存不下去
+  put(out, 'is_entity_pinned', spec.isEntityPinned)
   put(out, 'array_fields', spec.arrayFields?.map(bindingSpec))
   put(out, 'is_time_series', spec.isTimeSeries)
   return out

@@ -147,9 +147,12 @@ async def test_binding_one_slot_twice_conflicts(
     assert response.json()["code"] == 41006
 
 
-async def test_an_array_slot_must_start_at_zero(
+async def test_a_twin_slot_may_bind_one_entity_without_the_ones_before_it(
     app_client: httpx.AsyncClient,
 ) -> None:
+    # ⚠ 孪生的数组槽行钉在实体上：第 i 行喂文档序第 i 个实体。场上几十个锚点
+    # 只给其中一个接点位是常态配法，套「索引连续且从 0 起」会让它存不下去，
+    # 而错误文案说的是索引不连续，与用户做的事完全对不上号
     node_id = await make_twin_node(app_client)
     response = await bind(
         app_client,
@@ -160,7 +163,7 @@ async def test_an_array_slot_must_start_at_zero(
             "node_key": KNOWN_KEY,
         },
     )
-    assert issue_fields(response) == [("field_key", "array_index_gap")]
+    assert response.status_code == HTTP_CREATED
 
 
 async def test_a_contiguous_array_run_is_accepted(

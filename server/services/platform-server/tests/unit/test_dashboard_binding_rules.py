@@ -23,48 +23,76 @@ from platform_server.apps.dashboard.services.module_catalog import (
 )
 
 
+SIZE = ModuleDefaultSizeOut(width=100, height=100)
+
+
+def _list_style_module() -> ModuleTypeOut:
+    """一标量槽 + 一个**列表式**数组槽：行由用户增删，索引必须连续。"""
+    return ModuleTypeOut(
+        type="probe-view",
+        display_name="试验件",
+        category="试验",
+        default_size=SIZE,
+        bindings=[
+            BindingSpecOut(
+                key="sceneStatus", label="场景状态", data_type="string"
+            ),
+            BindingSpecOut(
+                key="hotspots",
+                label="热点",
+                data_type="number",
+                is_array=True,
+                array_fields=[
+                    BindingSpecOut(
+                        key="value", label="读数", data_type="number"
+                    ),
+                    BindingSpecOut(key="state", label="状态", data_type="enum"),
+                ],
+            ),
+        ],
+    )
+
+
+def _entity_pinned_module() -> ModuleTypeOut:
+    """行钉在实体上的那一类：行数由配置里的实体数决定，索引不必连续。"""
+    return ModuleTypeOut(
+        type="probe-scene",
+        display_name="带实体的试验件",
+        category="试验",
+        default_size=SIZE,
+        bindings=[
+            BindingSpecOut(
+                key="anchorValues",
+                label="锚点读数",
+                data_type="number",
+                is_array=True,
+                is_entity_pinned=True,
+                array_fields=[
+                    BindingSpecOut(
+                        key="value", label="读数", data_type="number"
+                    ),
+                ],
+            ),
+        ],
+    )
+
+
 def _fixture_catalog() -> ModuleCatalog:
-    """一标量槽 + 一数组槽（两个子槽）+ 一个不取数的模块。
+    """两种数组槽各一个模块，外加一个不取数的模块。
 
     ⚠ 刻意不读提交进仓的目录：校验规则与「此刻恰好注册了哪些模块」无关，
     读真目录会让这批用例随模块增删莫名其妙地红。
     """
-    size = ModuleDefaultSizeOut(width=100, height=100)
     return ModuleCatalog(
         catalog_version=1,
         modules=(
-            ModuleTypeOut(
-                type="probe-view",
-                display_name="试验件",
-                category="试验",
-                default_size=size,
-                bindings=[
-                    BindingSpecOut(
-                        key="sceneStatus",
-                        label="场景状态",
-                        data_type="string",
-                    ),
-                    BindingSpecOut(
-                        key="hotspots",
-                        label="热点",
-                        data_type="number",
-                        is_array=True,
-                        array_fields=[
-                            BindingSpecOut(
-                                key="value", label="读数", data_type="number"
-                            ),
-                            BindingSpecOut(
-                                key="state", label="状态", data_type="enum"
-                            ),
-                        ],
-                    ),
-                ],
-            ),
+            _list_style_module(),
+            _entity_pinned_module(),
             ModuleTypeOut(
                 type="probe-block",
                 display_name="不取数的件",
                 category="试验",
-                default_size=size,
+                default_size=SIZE,
             ),
         ),
     )
@@ -372,3 +400,55 @@ def test_only_point_backed_sources_are_looked_up() -> None:
         ]
     )
     assert keys == frozenset({KNOWN_KEY})
+
+
+def test_an_entity_pinned_slot_may_skip_rows() -> None:
+    # ⚠ 行钉在实体上时，「只绑第 4 个锚点」是正常配法：行数由配置里的实体数
+    # 决定，空出来的那几行只表示那些实体没接数据源。套连续性会让这条存不下去，
+    # 而错误文案说的是索引不连续，与用户做的事对不上号
+    node_id = uuid7()
+    issues = check_field_keys(
+        [binding(node_id, "anchorValues[3].value")],
+        module_types={node_id: "probe-scene"},
+        catalog=CATALOG,
+    )
+    assert issues == []
+
+
+def test_an_entity_pinned_slot_may_leave_a_hole_in_the_middle() -> None:
+    node_id = uuid7()
+    issues = check_field_keys(
+        [
+            binding(node_id, "anchorValues[0].value"),
+            binding(node_id, "anchorValues[2].value"),
+        ],
+        module_types={node_id: "probe-scene"},
+        catalog=CATALOG,
+    )
+    assert issues == []
+
+
+def test_an_entity_pinned_slot_still_rejects_a_duplicate_row() -> None:
+    # 免掉的只有连续性这一条，撞键照拦
+    node_id = uuid7()
+    issues = check_field_keys(
+        [
+            binding(node_id, "anchorValues[1].value"),
+            binding(node_id, "anchorValues[1].value"),
+        ],
+        module_types={node_id: "probe-scene"},
+        catalog=CATALOG,
+    )
+    assert codes(list(issues)) == ["field_key_taken"]
+
+
+def test_an_unknown_module_type_keeps_the_contiguity_check() -> None:
+    # ⚠ 认不出模块就按列表式处理：宁可多拦一条，也不要因为清单读不出来
+    # 就把这道闸整个放掉
+    node_id = uuid7()
+    issues = check_field_keys(
+        [binding(node_id, "anchorValues[3].value")],
+        module_types={node_id: "never-registered"},
+        catalog=CATALOG,
+    )
+    assert "array_index_gap" in codes(list(issues))
