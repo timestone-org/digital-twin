@@ -1,7 +1,8 @@
 # edge-gateway —— 唯一的入口。
 #
 # ⚠ 这是 envsubst 模板：官方 nginx 镜像在启动时渲染 /etc/nginx/templates/*.template。
-# 必须设 NGINX_ENVSUBST_FILTER=^AUTH_ ，否则 $uri / $host 这些 nginx 变量会被一起替换成空。
+# 必须设 NGINX_ENVSUBST_FILTER='^(AUTH_|OSS_)'，且过滤器只能这么窄：放开的话
+# $uri / $host / $request_uri 这些 nginx 变量会被一起替换成空串。
 # 它做且只做：TLS 终结、按前缀反代、auth_request 前置鉴权、公开面限流、静态资源发布。
 # 它不做：业务逻辑、数据聚合、协议转换。
 
@@ -38,18 +39,31 @@ http {
     ''      close;
   }
 
-  upstream auth_server { server auth-server:8004; }
-  upstream platform_server { server platform-server:8005; }
+  # Docker 内嵌 DNS。上游地址一律走**运行期解析**，见下方 $*_upstream 的说明。
+  # ⚠ ipv6=off 不能省：内嵌 DNS 会回 AAAA，而容器没有 IPv6 路由，
+  # 连过去只能等到超时，表现是每个请求都慢几秒后 502。
+  resolver 127.0.0.11 valid=10s ipv6=off;
+  # ⚠ 解析超时不受 proxy_connect_timeout 管，默认 30s 会让 /_auth 那条
+  # 500ms 的预算形同虚设——DNS 一抖动，全站请求挂在解析上。
+  resolver_timeout 2s;
+
+  # 上游地址。⚠ 刻意**不用** `upstream {}` 块：开源版 nginx 对块里的主机名是
+  # 启动时解析一次、把 IP 固化进内存，之后永不重查。后端容器一被重建就换 IP，
+  # 而边缘不参与后端镜像的构建、`up -d --build` 不会重建它，于是它抱着一个
+  # 已经不存在的地址一直打，全站 /api 一律 502 且**不会自愈**，只有重启边缘才好。
+  # 写成变量后 proxy_pass 走 resolver，每 10s 重新解析一次，IP 漂移自愈。
+  # ⚠ 变量式 proxy_pass 不会自动补请求 URI，每处都要显式写 $request_uri。
+  map $host $auth_upstream     { default 'auth-server:8004'; }
+  map $host $platform_upstream { default 'platform-server:8005'; }
   # ⚠ 只有 opcua-server 的 HTTP 管理面在这里。实例的 opc.tcp 端口是二进制 TCP，
   # http block 转不了，由编排层直接映射端口段，不经边缘（见 ADR-0006）。
-  upstream opcua_server { server opcua-server:8008; }
-  upstream realtime_hub { server realtime-hub:8000; }
+  map $host $opcua_upstream    { default 'opcua-server:8008'; }
+  map $host $realtime_upstream { default 'realtime-hub:8000'; }
   # 素材字节面。⚠ 字节永远不穿过 platform：一个 200MB 的模型经过 API 进程
   # 会把一个 worker 占住几十秒。
   # ⚠ 对象存储在本编排之外（与库同档），故这里是取自环境的 host:port 而不是
-  # 服务名；upstream 指令不认 scheme，取值带上 http:// 是 nginx 起不来，
-  # 而它一起不来整个站都没了。
-  upstream object_store { server ${OSS_UPSTREAM}; }
+  # 服务名；取值带上 http:// 会拼成 `http://http://…`，表现是 /oss/ 一律 502。
+  map $host $oss_upstream      { default '${OSS_UPSTREAM}'; }
 
   # 鉴权子请求要回答的是「客户端在访问哪条路径」。
   # ⚠ 子请求里 $uri 是子请求自己的 /_auth，拿它去问规则表一律 no_matching_rule → 全站 403；
@@ -80,34 +94,34 @@ http {
     # 匿名可达性只由这几条 location 保证；删掉任何一条都会导致全站无法登录。
     location = /api/v1/auth/sessions {
       limit_req zone=login burst=5 nodelay;
-      proxy_pass http://auth_server;
+      proxy_pass http://$auth_upstream$request_uri;
       include /etc/nginx/conf.d/proxy-common.conf;
     }
     location = /api/v1/auth/sessions:refresh {
-      proxy_pass http://auth_server;
+      proxy_pass http://$auth_upstream$request_uri;
       include /etc/nginx/conf.d/proxy-common.conf;
     }
     location = /api/v1/auth/sessions:revoke {
-      proxy_pass http://auth_server;
+      proxy_pass http://$auth_upstream$request_uri;
       include /etc/nginx/conf.d/proxy-common.conf;
     }
     location = /api/v1/auth/registrations {
       limit_req zone=login burst=3 nodelay;
-      proxy_pass http://auth_server;
+      proxy_pass http://$auth_upstream$request_uri;
       include /etc/nginx/conf.d/proxy-common.conf;
     }
-    location = /api/v1/auth/health { proxy_pass http://auth_server; }
-    location = /api/v1/auth/ready  { proxy_pass http://auth_server; }
-    location = /api/v1/auth/docs   { proxy_pass http://auth_server; }
-    location = /api/v1/auth/redoc  { proxy_pass http://auth_server; }
-    location = /api/v1/auth/openapi.json { proxy_pass http://auth_server; }
+    location = /api/v1/auth/health { proxy_pass http://$auth_upstream$request_uri; }
+    location = /api/v1/auth/ready  { proxy_pass http://$auth_upstream$request_uri; }
+    location = /api/v1/auth/docs   { proxy_pass http://$auth_upstream$request_uri; }
+    location = /api/v1/auth/redoc  { proxy_pass http://$auth_upstream$request_uri; }
+    location = /api/v1/auth/openapi.json { proxy_pass http://$auth_upstream$request_uri; }
 
-    location = /api/v1/platform/health { proxy_pass http://platform_server; }
-    location = /api/v1/platform/ready  { proxy_pass http://platform_server; }
-    location = /api/v1/platform/docs   { proxy_pass http://platform_server; }
-    location = /api/v1/platform/redoc  { proxy_pass http://platform_server; }
+    location = /api/v1/platform/health { proxy_pass http://$platform_upstream$request_uri; }
+    location = /api/v1/platform/ready  { proxy_pass http://$platform_upstream$request_uri; }
+    location = /api/v1/platform/docs   { proxy_pass http://$platform_upstream$request_uri; }
+    location = /api/v1/platform/redoc  { proxy_pass http://$platform_upstream$request_uri; }
     location = /api/v1/platform/openapi.json {
-      proxy_pass http://platform_server;
+      proxy_pass http://$platform_upstream$request_uri;
     }
 
     # 公开大屏。⚠ 这是一条**免认证** location，不是漏了 auth-inject：链接的
@@ -117,7 +131,7 @@ http {
     # location 时会重新参与竞争，公开链接又会被要求登录。
     location ^~ /api/v1/platform/public-dashboards/ {
       limit_req zone=public_dashboard burst=20 nodelay;
-      proxy_pass http://platform_server;
+      proxy_pass http://$platform_upstream$request_uri;
       include /etc/nginx/conf.d/proxy-common.conf;
     }
 
@@ -129,7 +143,9 @@ http {
     location ^~ /oss/ {
       # 桶名不出现在对外地址里：换桶只改一个环境变量，存量 asset: 引用不受影响
       rewrite ^/oss/(.*)$ /${OSS_BUCKET}/$1 break;
-      proxy_pass http://object_store;
+      # ⚠ 这里是 $uri 不是 $request_uri：上一行 rewrite 刚把路径改写成带桶名的，
+      # 而 $request_uri 是改写**前**的原始值，用它等于把桶名丢掉，一律 404。
+      proxy_pass http://$oss_upstream$uri$is_args$args;
       proxy_set_header Host $host;
       proxy_set_header X-Real-IP $remote_addr;
       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -149,7 +165,7 @@ http {
     # —— 受保护面 ——
     location /api/v1/auth/ {
       include /etc/nginx/conf.d/auth-inject.conf;
-      proxy_pass http://auth_server;
+      proxy_pass http://$auth_upstream$request_uri;
       include /etc/nginx/conf.d/proxy-common.conf;
     }
 
@@ -157,16 +173,16 @@ http {
     # 这个 location 漏了 auth-inject，整个业务面就是一律 401。
     location /api/v1/platform/ {
       include /etc/nginx/conf.d/auth-inject.conf;
-      proxy_pass http://platform_server;
+      proxy_pass http://$platform_upstream$request_uri;
       include /etc/nginx/conf.d/proxy-common.conf;
     }
 
     # OPC UA 服务端的探针与文档，与 auth 同档免认证
-    location = /api/v1/opcua/health { proxy_pass http://opcua_server; }
-    location = /api/v1/opcua/ready  { proxy_pass http://opcua_server; }
-    location = /api/v1/opcua/docs   { proxy_pass http://opcua_server; }
-    location = /api/v1/opcua/redoc  { proxy_pass http://opcua_server; }
-    location = /api/v1/opcua/openapi.json { proxy_pass http://opcua_server; }
+    location = /api/v1/opcua/health { proxy_pass http://$opcua_upstream$request_uri; }
+    location = /api/v1/opcua/ready  { proxy_pass http://$opcua_upstream$request_uri; }
+    location = /api/v1/opcua/docs   { proxy_pass http://$opcua_upstream$request_uri; }
+    location = /api/v1/opcua/redoc  { proxy_pass http://$opcua_upstream$request_uri; }
+    location = /api/v1/opcua/openapi.json { proxy_pass http://$opcua_upstream$request_uri; }
 
     location /api/v1/opcua/ {
       auth_request /_auth;
@@ -186,23 +202,23 @@ http {
       proxy_set_header X-Auth-Exp       $opcua_exp;
       proxy_set_header X-Auth-Sig       $opcua_sig;
 
-      proxy_pass http://opcua_server;
+      proxy_pass http://$opcua_upstream$request_uri;
       include /etc/nginx/conf.d/proxy-common.conf;
     }
 
     # —— 实时通道 ——
-    location = /api/v1/realtime/health { proxy_pass http://realtime_hub; }
-    location = /api/v1/realtime/ready  { proxy_pass http://realtime_hub; }
-    location = /api/v1/realtime/docs   { proxy_pass http://realtime_hub; }
-    location = /api/v1/realtime/redoc  { proxy_pass http://realtime_hub; }
-    location = /api/v1/realtime/openapi.json { proxy_pass http://realtime_hub; }
+    location = /api/v1/realtime/health { proxy_pass http://$realtime_upstream$request_uri; }
+    location = /api/v1/realtime/ready  { proxy_pass http://$realtime_upstream$request_uri; }
+    location = /api/v1/realtime/docs   { proxy_pass http://$realtime_upstream$request_uri; }
+    location = /api/v1/realtime/redoc  { proxy_pass http://$realtime_upstream$request_uri; }
+    location = /api/v1/realtime/openapi.json { proxy_pass http://$realtime_upstream$request_uri; }
 
     # WebSocket 端点。⚠ 这是一条**免认证** location，不是漏了 auth_request：
     # token 走 Sec-WebSocket-Protocol 子协议，`auth_request` 的子请求带不上它，
     # 挂上去的结果是所有握手一律 401。认证在 hub 内部完成（它自己验签名、
     # 验过期、按主题判权限），见 realtime-hub/CONTEXT.md §6。
     location = /api/v1/realtime/ws {
-      proxy_pass http://realtime_hub;
+      proxy_pass http://$realtime_upstream$request_uri;
       # ⚠ 刻意**不** include proxy-common.conf：那份是给请求-响应用的，
       # 里面的 proxy_read_timeout 25s 会切断长连接，而 nginx 不允许在同一个
       # location 里重复声明同一条指令——想覆盖就只能不 include，逐条写全。
@@ -228,7 +244,7 @@ http {
     # 鉴权子请求。⚠ auth_request 只能发 GET，故 /verify 是 GET。
     location = /_auth {
       internal;
-      proxy_pass http://auth_server/internal/v1/verify;
+      proxy_pass http://$auth_upstream/internal/v1/verify;
       proxy_pass_request_body off;
       proxy_set_header Content-Length "";
       proxy_set_header X-Original-URI    $original_path;
