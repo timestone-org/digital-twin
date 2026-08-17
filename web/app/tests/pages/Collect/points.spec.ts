@@ -227,7 +227,7 @@ describe('当前值的四种情形', () => {
     expect(text).not.toContain('0 ℃')
   })
 
-  it('收到现值时带单位显示', async () => {
+  it('收到现值时带单位显示，小数补齐两位', async () => {
     const wrapper = await render()
     await push({
       nodeKey: 's1:outlet_temp',
@@ -236,7 +236,7 @@ describe('当前值的四种情形', () => {
       timestampMs: Date.UTC(2026, 7, 16, 2, 0),
       quality: 'good',
     })
-    expect(wrapper.text()).toContain('36.5 ℃')
+    expect(wrapper.text()).toContain('36.50 ℃')
   })
 
   it('⚠ 0 是合法读数，不当成「没有值」', async () => {
@@ -297,6 +297,40 @@ describe('实时值的覆盖范围', () => {
 
   it('没超上限时不出这条', async () => {
     expect((await render()).text()).not.toContain('实时值只覆盖')
+  })
+})
+
+/**
+ * ⚠ 这一组守的是「一屏能看几行」。寻址串没有空格，一旦允许换行就只能按字符断，
+ * 一条 76 字符的串会把行撑到 200px 以上——一屏只剩两三行，而这不会报任何错。
+ * ⚠ 只能断言到类名与属性：happy-dom 不做布局，量不到盒高与列宽。
+ */
+describe('寻址串那一列', () => {
+  const LONG = 'ns=2;s=DLS01.IFIX.Server.Tags.Analog Input.K01_X.Value.F_CV'
+
+  function addressCell(wrapper: VueWrapper) {
+    return wrapper.find('tbody tr td:nth-child(4) span')
+  }
+
+  it('⚠ 单行截断，绝不按字符换行', async () => {
+    const cell = addressCell(await render([point({ address: LONG })]))
+
+    expect(cell.classes()).toContain('truncate')
+    // block 不能少：truncate 那三件套对行内盒不生效
+    expect(cell.classes()).toContain('block')
+    expect(cell.classes()).not.toContain('break-all')
+  })
+
+  it('截断了也要够得着完整值——鼠标悬停看 title', async () => {
+    const cell = addressCell(await render([point({ address: LONG })]))
+
+    expect(cell.attributes('title')).toBe(LONG)
+  })
+
+  it('⚠ 表格必须开固定列宽，否则列宽只是建议、这一列会被挤没', async () => {
+    const table = (await render()).find('table')
+
+    expect(table.classes()).toContain('is-fixed')
   })
 })
 

@@ -35,14 +35,33 @@ const MISSING: SampleLook = {
   reason: null,
 }
 
+/** 小数位数。现场的模拟量是 32 位浮点，原样显示会摆出一长串换算噪声。 */
+const DECIMALS = 2
+
+/**
+ * 数值转成能显示的一段。
+ *
+ * ⚠ 整数不补小数位：开关量、计数器、状态码都是整数点位，把它们写成 `1.00`
+ * 会让人以为那是一个测量值。
+ * ⚠ 非有限值原样透出：`toFixed` 会把 NaN 写成 `"NaN"` 而把 Infinity 写成
+ * `"Infinity"`，两者都不该冒充成一个读数。
+ * @param value 读数
+ */
+function numberText(value: number): string {
+  if (!Number.isFinite(value) || Number.isInteger(value)) return String(value)
+  return value.toFixed(DECIMALS)
+}
+
 /** 值转成能显示的一行。⚠ `0` / `false` / `''` 都是合法读数，不当成「没有值」。 */
 function textOf(value: unknown, unit: string | null | undefined): string {
   if (value === null) return 'null'
   if (typeof value === 'boolean') return value ? 'true' : 'false'
   const body =
-    typeof value === 'number' || typeof value === 'string'
-      ? String(value)
-      : JSON.stringify(value)
+    typeof value === 'number'
+      ? numberText(value)
+      : typeof value === 'string'
+        ? value
+        : JSON.stringify(value)
   return unit === null || unit === undefined || unit === ''
     ? body
     : `${body} ${unit}`

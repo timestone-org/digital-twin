@@ -165,6 +165,16 @@ describe('DtDataView', () => {
     expect(wrapper.find('table').attributes('style')).toContain('70rem')
   })
 
+  // ⚠ prop 名写错不会报错，只会静默走回 auto 布局——而那正是列宽失效的样子
+  it('固定列宽透传给表格，默认不开', () => {
+    expect(render().find('table').classes()).not.toContain('is-fixed')
+    expect(
+      render({ layout: { fixedLayout: true } })
+        .find('table')
+        .classes(),
+    ).toContain('is-fixed')
+  })
+
   it('卡片列数落到栅格类名上', () => {
     const wrapper = render({ view: 'card', layout: { cardColumns: 3 } })
     expect(wrapper.find('.dt-data-view__grid').classes()).toContain('is-cols-3')

@@ -68,6 +68,16 @@ describe('DtTable', () => {
     expect(wrapper.find('table').attributes('style')).toContain('70rem')
   })
 
+  it('⚠ 默认不开固定列宽：开着会改掉全仓每一张表的列宽排布', () => {
+    expect(render().find('table').classes()).not.toContain('is-fixed')
+  })
+
+  it('要了固定列宽才给——不给的话 column.width 只是个建议，浏览器按内容重排', () => {
+    expect(render({ fixedLayout: true }).find('table').classes()).toContain(
+      'is-fixed',
+    )
+  })
+
   it('caption 给了才渲染——读屏靠它知道这张表是什么', () => {
     expect(render().find('caption').exists()).toBe(false)
     expect(render({ caption: '用户列表' }).find('caption').text()).toBe(

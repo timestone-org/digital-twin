@@ -14,6 +14,17 @@ const props = withDefaults(
     sort?: DtTableSort | null | undefined
     /** 表格最小宽度，窄屏下由滚动容器横向滚动。 */
     minWidth?: string | undefined
+    /**
+     * 列宽按 `column.width` 严格排布（`table-layout: fixed`）。
+     *
+     * ⚠ 默认的 auto 布局下 `column.width` **只是建议**：浏览器按内容重新分配，
+     * 实测一列写着 10rem 却排出 206px、另一列没写宽度就被压到 76px。开着它，
+     * 写多少就是多少，没写宽度的那些列平分剩余空间——想让某一列吃掉剩余空间，
+     * 就只留它一列不写宽度。
+     * ⚠ 开了它，单元格不再被内容撑开，长文本必须自己 truncate，否则会溢出到
+     * 相邻列上（组件不给 td 加 overflow: hidden——那会连按钮的焦点环一起裁掉）。
+     */
+    fixedLayout?: boolean | undefined
     caption?: string | undefined
     /**
      * 吃满外层给的高度、超出部分在自己的滚动容器里滚。
@@ -21,7 +32,7 @@ const props = withDefaults(
      */
     fill?: boolean | undefined
   }>(),
-  { sort: null, minWidth: '52rem', fill: false },
+  { sort: null, minWidth: '52rem', fixedLayout: false, fill: false },
 )
 
 const emit = defineEmits<{ 'update:sort': [value: DtTableSort] }>()
@@ -45,7 +56,11 @@ function onSort(column: DtTableColumn): void {
 
 <template>
   <div class="dt-table__scroll" :class="{ 'is-fill': fill }">
-    <table class="dt-table" :style="{ minWidth }">
+    <table
+      class="dt-table"
+      :class="{ 'is-fixed': fixedLayout }"
+      :style="{ minWidth }"
+    >
       <caption v-if="caption" class="dt-table__caption">
         {{
           caption
@@ -123,6 +138,10 @@ function onSort(column: DtTableColumn): void {
   border-collapse: collapse;
   font-size: 13px;
   line-height: 1.5;
+
+  &.is-fixed {
+    table-layout: fixed;
+  }
 
   &__caption {
     padding: 0 0 8px;

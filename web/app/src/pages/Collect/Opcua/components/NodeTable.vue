@@ -19,7 +19,6 @@ import {
   DtCard,
   DtCheckbox,
   DtDataView,
-  DtNotice,
   DtSwitch,
   DtTag,
 } from '@dt/ui'
@@ -38,6 +37,7 @@ import { usePointOps } from '../usePointOps'
 import BatchArchiveBar from './BatchArchiveBar.vue'
 import ForceDeleteDialog from './ForceDeleteDialog.vue'
 import ImportPointsDialog from './ImportPointsDialog.vue'
+import NodeTableNotices from './NodeTableNotices.vue'
 import NodeTableToolbar from './NodeTableToolbar.vue'
 import PointFormDialog from './PointFormDialog.vue'
 import PointValueCell from './PointValueCell.vue'
@@ -72,11 +72,6 @@ const removal = useForceDelete<CollectPoint>(
   (point, force) => collect.deletePoint(point.id, force),
   (_point, message) => `${message}。强制删除会让那些大屏上的绑定就此失效。`,
   () => list.reload(),
-)
-
-/** 配的点位比实时推送的上限多，超出的那些没有实时值。 */
-const isTruncated = computed(
-  () => props.source.point_count > props.source.live_point_limit,
 )
 
 const hasPoints = computed(() => list.total.value > 0)
@@ -127,19 +122,10 @@ watch(list.items, () => archive.clearSelection())
     </template>
 
     <div class="flex min-h-0 flex-1 flex-col gap-3">
-      <DtNotice
-        v-if="!live.isConnected.value"
-        intent="warning"
-        icon="alert-triangle"
-      >
-        实时通道未连接，下面的「实时值」可能不是现值。
-      </DtNotice>
-
-      <DtNotice v-if="isTruncated" intent="info" icon="alert-circle">
-        这个数据源配了 {{ source.point_count }} 个点位，实时值只覆盖按编码升序
-        的前 {{ source.live_point_limit }} 个；其余点位照常采集与归档，只是这
-        一页看不到它们的现值。
-      </DtNotice>
+      <NodeTableNotices
+        :source="source"
+        :is-connected="live.isConnected.value"
+      />
 
       <BatchArchiveBar
         v-if="hasSelection"
@@ -161,7 +147,12 @@ watch(list.items, () => archive.clearSelection())
           title: '尚未导入点位',
           hint: '在左侧浏览树中勾选变量节点并导入，或用 CSV 批量导入。',
         }"
-        :layout="{ minWidth: '64rem', cardColumns: 3, cardMinWidth: '22rem' }"
+        :layout="{
+          minWidth: '76rem',
+          fixedLayout: true,
+          cardColumns: 3,
+          cardMinWidth: '22rem',
+        }"
         @update:page="list.goToPage"
         @update:size="list.setSize"
         @retry="list.reload()"
@@ -189,16 +180,24 @@ watch(list.items, () => archive.clearSelection())
           />
         </template>
 
+        <!-- ⚠ 这三个单元格的 `block` 不能省：`truncate` 是
+             `overflow/text-overflow/white-space` 三件套，而它们对行内盒不生效。
+             表格开着 fixedLayout、单元格不再被内容撑开，不截就直接压到相邻列上 -->
         <template #cell-name="{ row }">
-          <span class="truncate" :title="row.name">{{ row.name }}</span>
+          <span class="block truncate" :title="row.name">{{ row.name }}</span>
         </template>
 
         <template #cell-code="{ row }">
-          <DtTag mono size="sm">{{ row.code }}</DtTag>
+          <DtTag mono size="sm" class="max-w-full truncate">
+            {{ row.code }}
+          </DtTag>
         </template>
 
+        <!-- ⚠ 寻址串一律单行截断，绝不换行：它没有空格，换行只能按字符断
+             （`break-all`），一条 76 字符的寻址串会把行撑到 200px 以上，一屏就只
+             剩两三行。完整值挂在 title 上，卡片视图里也摆得下 -->
         <template #cell-address="{ row }">
-          <span class="break-all font-mono text-xs" :title="row.address">
+          <span class="block truncate font-mono text-xs" :title="row.address">
             {{ row.address }}
           </span>
         </template>
