@@ -47,8 +47,12 @@ class PollLoop:
         self._stopped = asyncio.Event()
 
     async def run(self) -> None:
-        """一直轮到被叫停。"""
-        self._stopped.clear()
+        """一直轮到被叫停。
+
+        ⚠ 开头不许 `clear()`：`create_task` 之后这个任务不一定已经跑起来，
+        叫停要是落在这之前就会被抹掉，于是循环永远转下去，而 `_stop_polling`
+        正等着它退出——一条会话拆不掉，整个收敛循环跟着卡住。
+        """
         while not self._stopped.is_set():
             await self.tick()
             with contextlib.suppress(TimeoutError):

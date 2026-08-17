@@ -91,6 +91,22 @@ async def test_stop_ends_the_loop_without_waiting_a_full_period() -> None:
     assert driver.calls >= 1
 
 
+async def test_stop_before_the_task_starts_is_not_swallowed() -> None:
+    # ⚠ 没有 `sleep(0)`：叫停落在任务真正跑起来之前。`run()` 开头要是把停止位
+    # 清掉，这个循环就永远转下去，而调用方正 await 它退出——一处死锁
+    driver = StubDriver([(1.0, TS_MS, "good")])
+    loop = PollLoop(
+        driver=driver,
+        sink=lambda *_: None,
+        options=PollOptions(point_codes=("a",), interval_ms=60_000),
+    )
+    task = asyncio.create_task(loop.run())
+    loop.stop()
+    async with asyncio.timeout(1):
+        await task
+    assert driver.calls == 0
+
+
 def test_poll_interval_never_goes_below_the_floor() -> None:
     loop = PollLoop(
         driver=StubDriver([]),

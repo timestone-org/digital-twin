@@ -20,7 +20,12 @@ from collector_server.apps.collect.runtime.session import (
     backoff_delay_s,
     jitter,
 )
-from collectwire import READ_MODE_POLL, STATE_OFFLINE
+from collectwire import (
+    READ_MODE_POLL,
+    STATE_CONNECTING,
+    STATE_OFFLINE,
+    STATE_ONLINE,
+)
 
 OPTIONS = SessionOptions(heartbeat_interval_s=0.01, max_backoff_s=30.0)
 NO_ABILITIES = DriverCapabilities(
@@ -123,6 +128,59 @@ async def test_rejected_points_do_not_stop_the_accepted_ones(
     assert session.is_online is True
 
 
+async def test_online_counts_only_the_points_the_field_accepted(
+    driver: Any, reporter: Any, build_source: Any, build_point: Any
+) -> None:
+    driver.rejected = (RejectedPoint("broken", "BadNodeIdUnknown"),)
+    session = _session(
+        build_source(points=(build_point("a"), build_point("broken"))),
+        driver,
+        reporter,
+    )
+    await session._open()
+    assert reporter.reported[-1].point_count == 1
+
+
+async def test_connecting_counts_nothing_yet(
+    driver: Any, reporter: Any, build_source: Any
+) -> None:
+    session = _session(build_source(), driver, reporter)
+    await session._open()
+    connecting = next(
+        status
+        for status in reporter.reported
+        if status.state == STATE_CONNECTING
+    )
+    assert connecting.point_count == 0
+
+
+async def test_going_offline_counts_nothing(
+    driver: Any, reporter: Any, build_source: Any
+) -> None:
+    session = _session(build_source(), driver, reporter)
+    await session._open()
+    await session._on_failure(TimeoutError(), 1)
+    assert reporter.reported[-1].state == STATE_OFFLINE
+    assert reporter.reported[-1].point_count == 0
+
+
+async def test_polling_counts_every_point_it_reads(
+    driver: Any, reporter: Any, build_source: Any, build_point: Any
+) -> None:
+    # 轮询没有「被拒」这回事：读不到的点位每轮回一个 bad 样本，仍然在取数
+    session = _session(
+        build_source(
+            read_mode=READ_MODE_POLL,
+            points=(build_point("a"), build_point("b")),
+        ),
+        driver,
+        reporter,
+    )
+    await session._open()
+    await session.stop()
+    assert reporter.reported[1].point_count == 2
+
+
 async def test_adding_a_point_does_not_reconnect(
     driver: Any, reporter: Any, build_source: Any, build_point: Any
 ) -> None:
@@ -133,6 +191,28 @@ async def test_adding_a_point_does_not_reconnect(
     )
     assert driver.is_connected is True
     assert driver.subscribed == ["outlet_temp", "flow"]
+
+
+async def test_points_added_after_connecting_are_reported(
+    driver: Any, reporter: Any, build_source: Any, build_point: Any
+) -> None:
+    # 现场就是这么坏的：源先空着连上，点位随后才导进来。不补这一次上报，运行态
+    # 行会永远停在建连那一刻的 0，界面报「全都没订上」而现场其实一直在推值
+    session = _session(build_source(points=()), driver, reporter)
+    await session._open()
+    await session.apply(
+        build_source(points=(build_point("a"), build_point("b")))
+    )
+    assert reporter.reported[-1].state == STATE_ONLINE
+    assert reporter.reported[-1].point_count == 2
+
+
+async def test_a_source_that_is_not_connected_reports_nothing_on_apply(
+    driver: Any, reporter: Any, build_source: Any, build_point: Any
+) -> None:
+    session = _session(build_source(), driver, reporter)
+    await session.apply(build_source(points=(build_point("a"),)))
+    assert reporter.reported == []
 
 
 async def test_removing_a_point_unsubscribes_only_that_one(
@@ -174,6 +254,19 @@ async def test_stopping_closes_the_connection(
     await session._open()
     await session.stop()
     assert driver.is_connected is False
+    assert session.is_online is False
+
+
+async def test_stop_before_the_task_starts_is_not_swallowed(
+    driver: Any, reporter: Any, build_source: Any
+) -> None:
+    # ⚠ 中间不许有 `sleep(0)`：叫停落在任务真正跑起来之前。`run()` 开头要是把
+    # 停止位清掉，这条会话就一直重连下去，而 supervisor 正 await 它退出
+    session = _session(build_source(), driver, reporter)
+    task = asyncio.create_task(session.run())
+    await session.stop()
+    async with asyncio.timeout(2):
+        await task
     assert session.is_online is False
 
 

@@ -357,10 +357,17 @@ class FakeDriver:
     async def subscribe(
         self, points: list[PointSpec], on_value: ValueSink
     ) -> SubscribeResult:
+        # ⚠ 被拒的点位不许进 accepted：真驱动就是这个形状
+        # （opcua/driver.py 的 merge_handles），假件放宽的话「没订上几个」
+        # 这条口径在测试里会永远对得上
         self.sink = on_value
         codes = [point.point_code for point in points]
         self.subscribed.extend(codes)
-        return SubscribeResult(accepted=tuple(codes), rejected=self.rejected)
+        refused = {item.point_code for item in self.rejected}
+        return SubscribeResult(
+            accepted=tuple(code for code in codes if code not in refused),
+            rejected=self.rejected,
+        )
 
     async def unsubscribe(self, point_codes: list[str]) -> int:
         self.unsubscribed.extend(point_codes)
