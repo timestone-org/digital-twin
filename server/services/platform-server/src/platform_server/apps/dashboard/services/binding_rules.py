@@ -1,7 +1,13 @@
 """绑定的校验：绑定槽、数组索引连续性、来源种类与来源载荷。
 
-⚠ 索引必须连续且从 0 起：参考实现不校验，`rows[7]` 可以在没有 `rows[0..6]`
-的情况下存在，于是渲染出一列全空的行（docs/DASHBOARD_DESIGN.md §4.2）。
+⚠ **列表式**数组槽的索引必须连续且从 0 起：参考实现不校验，`rows[7]` 可以在
+没有 `rows[0..6]` 的情况下存在，于是渲染出一列全空的行
+（docs/DASHBOARD_DESIGN.md §4.2）。
+
+⚠ 行钉在实体上的数组槽（清单里标 `isEntityPinned`）**不受这条约束**：
+它的行数由配置里的实体数决定而不是由绑定条数决定，绑一部分实体是常态——孪生
+里几十个锚点只有三个接了点位。对它们套连续性，表现是「只绑第 2 个锚点就存不
+下去」，而错误文案说的是索引不连续，与用户做的事对不上号。
 """
 
 import uuid
@@ -40,14 +46,16 @@ def check_field_keys(
     module_types: dict[uuid.UUID, str],
     catalog: ModuleCatalog,
 ) -> list[FieldError]:
-    """绑定槽必须是所属模块声明过的槽，数组索引必须连续且从 0 起。
+    """绑定槽必须是所属模块声明过的槽，列表式数组槽的索引必须连续且从 0 起。
 
     Args: bindings, module_types, catalog。
     """
     return [
         *_check_slots(bindings, module_types=module_types, catalog=catalog),
         *_check_duplicates(bindings),
-        *_check_array_runs(bindings),
+        *_check_array_runs(
+            bindings, module_types=module_types, catalog=catalog
+        ),
     ]
 
 
@@ -103,7 +111,7 @@ def _check_slots(
                     field=at_field(binding.field_path, "field_key"),
                     code="field_key_unknown",
                     message=(
-                        f"模块 {module_type} 没有绑定槽 " f"{binding.field_key}"
+                        f"模块 {module_type} 没有绑定槽 {binding.field_key}"
                     ),
                 )
             )
@@ -138,12 +146,44 @@ def _check_duplicates(bindings: Sequence[BindingDraft]) -> list[FieldError]:
     return found
 
 
-def _check_array_runs(bindings: Sequence[BindingDraft]) -> list[FieldError]:
+def _is_entity_pinned(
+    node_id: uuid.UUID,
+    slot: str,
+    *,
+    module_types: dict[uuid.UUID, str],
+    catalog: ModuleCatalog,
+) -> bool:
+    """这个槽的行是不是钉在实体上。
+
+    ⚠ 认不出模块类型时按**列表式**处理（返回 False）：宁可多拦一条，也不要
+    因为清单读不出来就把连续性这道闸整个放掉。
+
+    Args: node_id, slot, module_types, catalog。
+    """
+    module_type = module_types.get(node_id)
+    if module_type is None:
+        return False
+    return slot in catalog.slots(module_type).entity_pinned
+
+
+def _check_array_runs(
+    bindings: Sequence[BindingDraft],
+    *,
+    module_types: dict[uuid.UUID, str],
+    catalog: ModuleCatalog,
+) -> list[FieldError]:
     used: defaultdict[tuple[uuid.UUID, str], set[int]] = defaultdict(set)
     anchors: dict[tuple[uuid.UUID, str], BindingDraft] = {}
     for binding in bindings:
         parsed = parse_field_key(binding.field_key)
         if parsed is None or parsed.array_index is None:
+            continue
+        if _is_entity_pinned(
+            binding.node_id,
+            parsed.slot,
+            module_types=module_types,
+            catalog=catalog,
+        ):
             continue
         slot = (binding.node_id, parsed.slot)
         used[slot].add(parsed.array_index)

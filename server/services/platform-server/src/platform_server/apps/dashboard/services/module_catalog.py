@@ -33,6 +33,9 @@ class ModuleSlots:
 
     scalar_keys: frozenset[str]
     array_fields: dict[str, frozenset[str]]
+    # 行钉在实体上的那些数组槽。⚠ 只有它们允许索引留空：行数由配置里的实体数
+    # 决定，绑一部分实体是常态，空出来的行只表示那个实体没接数据源
+    entity_pinned: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -72,6 +75,11 @@ class ModuleCatalog:
                 for spec in module.bindings
                 if spec.is_array
             },
+            entity_pinned=frozenset(
+                spec.key
+                for spec in module.bindings
+                if spec.is_array and spec.is_entity_pinned
+            ),
         )
 
 

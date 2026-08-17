@@ -89,6 +89,9 @@ class BindingSpecOut(OutputModel):
     is_required: bool = False
     enum_map: dict[str, str] | None = None
     is_array: bool = False
+    # 行钉在实体上：第 i 行喂配置里文档序第 i 个实体。⚠ 只有这种槽允许索引留空，
+    # 见 `binding_rules._check_array_runs`
+    is_entity_pinned: bool = False
     array_fields: list["BindingSpecOut"] | None = None
     is_time_series: bool = False
 
