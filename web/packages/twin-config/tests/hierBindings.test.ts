@@ -51,8 +51,8 @@ describe('钻取绑定行', () => {
   it('行名是「节点名 · 字段标签」，标签空着退回字段 key', () => {
     const labels = twinRowLabels(configOf(TWO_NODES))
 
-    expect(labels[hierRowFieldKey(0)]).toBe('车间 · 功率')
-    expect(labels[hierRowFieldKey(2)]).toBe('泵组 · q')
+    expect(labels[hierRowFieldKey(0)]?.title).toBe('车间 · 功率')
+    expect(labels[hierRowFieldKey(2)]?.title).toBe('泵组 · q')
   })
 
   it('节点名空着时行名退回节点 id', () => {
@@ -62,7 +62,7 @@ describe('钻取绑定行', () => {
       }),
     )
 
-    expect(labels[hierRowFieldKey(0)]).toBe('n1 · A')
+    expect(labels[hierRowFieldKey(0)]).toEqual({ title: 'n1 · A', id: 'n1::a' })
   })
 
   it('新增槽排在四个老槽之后，老槽的行号一个都不动', () => {

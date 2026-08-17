@@ -3,6 +3,9 @@
  * @fileoverview 一条绑定按来源种类要填的那几项。
  * ⚠ 常量的 `0` / `false` / `''` 都是合法取值：清空输入写的是 `null`（= 没配过），
  * 不许把 falsy 当成「没配」，否则一整屏的零值会消失。
+ * ⚠ 四种来源**逐档显式列出**，末尾那一档是「没有认出的来源」而不是某一种来源：
+ * 用 `v-else` 兜底的话，将来加第五种来源会安静地画成上一种的表单，
+ * 用户填得完、也存得下，只是存的是另一种来源的字段。契约测试逐档钉死。
  */
 import type {
   BindingPayload,
@@ -12,16 +15,17 @@ import type {
 } from '@dt/contracts'
 import { COMPUTE_OPS } from '@dt/contracts'
 import {
-  DtButton,
   DtCheckbox,
   DtField,
   DtInput,
+  DtNotice,
   DtNumberInput,
   DtSelect,
   DtSwitch,
-  DtTag,
 } from '@dt/ui'
 import { computed } from 'vue'
+
+import PointRefField from './PointRefField.vue'
 
 const props = defineProps<{
   spec: BindingSpec
@@ -93,20 +97,7 @@ function writeWindow(text: string): void {
 <template>
   <div class="flex flex-col gap-2">
     <template v-if="binding.sourceKind === 'opcua'">
-      <div class="flex items-center gap-2">
-        <DtTag v-if="binding.nodeKey" size="sm" intent="info">
-          {{ binding.nodeKey }}
-        </DtTag>
-        <span v-else class="text-2xs text-text-disabled">还没挑点位</span>
-        <DtButton
-          size="sm"
-          variant="outline"
-          icon="search"
-          @click="emit('pick')"
-        >
-          挑点位
-        </DtButton>
-      </div>
+      <PointRefField :node-key="binding.nodeKey ?? ''" @pick="emit('pick')" />
     </template>
 
     <template v-else-if="binding.sourceKind === 'static'">
@@ -152,21 +143,11 @@ function writeWindow(text: string): void {
       />
     </template>
 
-    <template v-else>
-      <div class="flex items-center gap-2">
-        <DtTag v-if="binding.detailJson" size="sm" intent="info">
-          {{ binding.detailJson.nodeKey }}
-        </DtTag>
-        <span v-else class="text-2xs text-text-disabled">还没挑点位</span>
-        <DtButton
-          size="sm"
-          variant="outline"
-          icon="search"
-          @click="emit('pick')"
-        >
-          挑点位
-        </DtButton>
-      </div>
+    <template v-else-if="binding.sourceKind === 'archive'">
+      <PointRefField
+        :node-key="binding.detailJson?.nodeKey ?? ''"
+        @pick="emit('pick')"
+      />
       <DtField label="相对窗（如 1h / 7d）" size="sm">
         <DtInput
           :model-value="window"
@@ -176,5 +157,9 @@ function writeWindow(text: string): void {
         />
       </DtField>
     </template>
+
+    <DtNotice v-else intent="danger" icon="alert-triangle">
+      没有认出的绑定来源「{{ binding.sourceKind }}」，这条绑定填不了。
+    </DtNotice>
   </div>
 </template>

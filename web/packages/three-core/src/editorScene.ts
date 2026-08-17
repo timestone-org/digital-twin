@@ -2,9 +2,10 @@
  * @fileoverview 孪生编辑视口的命令式内核：装配场景、装载模型、维护拾取与选中高亮，
  * 并把「选中了什么 / 点中了哪个节点 / 相机停在哪」回调给宿主组件。纯 TS，不依赖 Vue。
  *
- * ⚠ 与运行态渲染器（`TwinScene`）刻意不同的五处，理由都写在各自落点上：
- * 只认 `visibility.visible`、地面网格恒显、自动旋转恒关、覆盖层实时值一律喂空、
+ * ⚠ 与运行态渲染器（`TwinScene`）刻意不同的四处，理由都写在各自落点上：
+ * 只认 `visibility.visible`、地面网格恒显、自动旋转恒关、
  * 漫游只在用户点「预览」时才飞（绝不自动开播）。
+ * 实时值由宿主 `setValues` 喂进来，没喂就是一片占位符——绝不拿旧值冒充。
  */
 import type { TwinConfig, TwinPose, Vec3 } from '@dt/twin-config'
 import {
@@ -129,7 +130,7 @@ const MIN_ENTITY_SPAN = 1
 /** 没命中模型时位置拾取落在这张地面上 */
 const GROUND_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
 
-// ⚠ 编辑器不接数据源，五路实时值恒空：读数位置显示占位符，而不是拿旧值冒充
+// 宿主没喂实时值时的那一份：读数位置显示占位符，而不是拿旧值冒充
 const EMPTY_LAYER_VALUES: SceneLayerValues = {
   anchors: EMPTY_ANCHOR_VALUES,
   arrows: EMPTY_ARROW_VALUES,
@@ -209,6 +210,8 @@ export class EditorScene {
   private readonly selectionBoxTarget = new THREE.Box3()
 
   private config: TwinConfig
+  /** 宿主最近一次喂进来的五路实时值；重建覆盖层时按它重放。 */
+  private liveValues: SceneLayerValues = EMPTY_LAYER_VALUES
   private core: SceneCore | null = null
   private layers: SceneLayers | null = null
   private picks: PickTargets | null = null
@@ -254,6 +257,17 @@ export class EditorScene {
     // 去刷的话，覆盖层与拾取标记会一直停在上一份配置上
     this.refresh()
     if (changedAsset) void this.load()
+  }
+
+  /**
+   * 换一份实时值，只换值不重建覆盖层。
+   * ⚠ 必须记在实例上：`refresh()` 会把覆盖层整片重建，重建时不重放这一份的话，
+   * 改一下配置就会把读数全刷回占位符，而下一帧数据到来之前它一直是那样。
+   * @param values 缝合好的五路实时值
+   */
+  setValues(values: SceneLayerValues): void {
+    this.liveValues = values
+    this.layers?.setValues(values)
   }
 
   /**
@@ -445,7 +459,7 @@ export class EditorScene {
     // ⚠ 传空索引是有意的：编辑态不套距离规则，部件层不该在这里建条目——
     // 建了它会为配了淡出的部件克隆材质（并打开透明通道），而这些克隆在编辑器里
     // 永远不会被 apply 到，白改一遍模型的材质
-    this.layers?.build(this.config, EMPTY_LAYER_VALUES, EMPTY_NODE_INDEX)
+    this.layers?.build(this.config, this.liveValues, EMPTY_NODE_INDEX)
     this.picks?.build(this.config)
     this.applySelectionHighlight()
   }

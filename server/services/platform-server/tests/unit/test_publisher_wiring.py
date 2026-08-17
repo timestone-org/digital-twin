@@ -160,7 +160,8 @@ def test_the_publisher_takes_its_pace_from_config() -> None:
     container = build_container([], settings=publisher_settings())
     runtime = build_runtime(container)
     options = runtime._options  # 理由 —— 断言装配出的取值
-    assert options.window_s == 1.0
+    # 出厂节拍 2s：它是全平台实时数据的时间分辨率上限，各数据源只会比它慢
+    assert options.window_s == 2.0
     assert options.reconcile_interval_s == 5.0
 
 

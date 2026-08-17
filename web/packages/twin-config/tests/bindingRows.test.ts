@@ -11,6 +11,7 @@ import {
   remapBindingRows,
   remapTwinBindings,
   twinBindingRows,
+  twinRowCounts,
   twinRowLabels,
 } from '../src/bindingRows'
 import { normalizeTwinConfig } from '../src/normalize'
@@ -65,24 +66,71 @@ describe('绑定行的推导', () => {
 
   it('信息牌的行名带上牌名与字段名', () => {
     const labels = twinRowLabels(CONFIG)
-    expect(labels['panelValues[0].value']).toBe('泵组 · 温度')
+    expect(labels['panelValues[0].value']).toEqual({
+      title: '泵组 · 温度',
+      // ⚠ 与信息牌字段列表上显示的那一份逐字相同：绑的时候靠它核对
+      id: 'p1::temp',
+    })
   })
 
   // ⚠ 一行没有任何标识时用户只能数第几行，而数错了不会有任何提示
   it('没起名的实体退回它的 id，不留一行空标题', () => {
     const config = normalizeTwinConfig({ anchors: [{ id: 'a9' }] })
-    expect(twinRowLabels(config)['anchorValues[0].value']).toBe('a9')
+    expect(twinRowLabels(config)['anchorValues[0].value']).toEqual({
+      title: 'a9',
+      id: 'a9',
+    })
   })
 
   it('箭头没起名时退回标签文案', () => {
     const config = normalizeTwinConfig({
       arrows: [{ id: 'ar9', labelText: '回风' }],
     })
-    expect(twinRowLabels(config)['arrowValues[0].value']).toBe('回风')
+    expect(twinRowLabels(config)['arrowValues[0].value']).toEqual({
+      title: '回风',
+      id: 'ar9',
+    })
   })
 
   it('一个实体都没有时一行都不出', () => {
     expect(twinBindingRows(normalizeTwinConfig({}))).toEqual([])
+  })
+})
+
+describe('每个槽应有几行', () => {
+  it('按实体数给，信息牌与钻取节点按扁平化后的字段数', () => {
+    const counts = twinRowCounts(
+      normalizeTwinConfig({
+        anchors: [{ id: 'a1' }, { id: 'a2' }],
+        panels: [
+          { id: 'p1', fields: [{ key: 'a' }, { key: 'b' }] },
+          { id: 'p2', fields: [{ key: 'c' }] },
+        ],
+      }),
+    )
+
+    expect(counts.anchorValues).toBe(2)
+    expect(counts.panelValues).toBe(3)
+  })
+
+  // ⚠ 漏掉的槽会被绑点面板当成「行数由用户手工增删」，于是摆出一个
+  //   加了也喂不到任何东西的「新增一行」
+  it('一个实体都没有的槽也出现在表里、值为 0', () => {
+    expect(twinRowCounts(normalizeTwinConfig({}))).toEqual({
+      anchorValues: 0,
+      panelValues: 0,
+      arrowValues: 0,
+      flowValues: 0,
+      hierValues: 0,
+    })
+  })
+
+  it('能量流一条流算一行，不按子槽数翻倍', () => {
+    const counts = twinRowCounts(
+      normalizeTwinConfig({ flows: [{ id: 'f1' }, { id: 'f2' }] }),
+    )
+
+    expect(counts.flowValues).toBe(2)
   })
 })
 

@@ -101,11 +101,41 @@ describe('绑点面板的行名', () => {
       },
     })
 
-    expect(labels?.['anchorValues[0].value']).toContain('一号机组')
-    expect(labels?.['anchorValues[1].value']).toContain('二号机组')
+    expect(labels?.['anchorValues[0].value']?.title).toContain('一号机组')
+    expect(labels?.['anchorValues[1].value']?.title).toContain('二号机组')
+    // id 与实体自己的 id 一致，绑的时候靠它核对对应关系
+    expect(labels?.['anchorValues[0].value']?.id).toBe('a1')
   })
 
   it('配置为空时给一张空表，绑点面板自己退回「第 N 行」', () => {
     expect(manifest.bindingRowLabels?.({})).toEqual({})
+  })
+})
+
+/**
+ * ⚠ 孪生的行**不是**用户随手加的：行号就是实体的文档序。不声明行数的话，
+ * 绑点面板会摆出「新增一行」，而加出来的那一行永远喂不到任何东西。
+ */
+describe('绑点面板的行数', () => {
+  it('按实体数给，信息牌按摊平后的字段数', () => {
+    const counts = manifest.bindingRowCounts?.({
+      twin: {
+        anchors: [{ id: 'a1' }, { id: 'a2' }],
+        panels: [{ id: 'p1', fields: [{ key: 'a' }, { key: 'b' }] }],
+      },
+    })
+
+    expect(counts?.anchorValues).toBe(2)
+    expect(counts?.panelValues).toBe(2)
+  })
+
+  it('配置为空时五个槽全是 0，而不是漏掉键', () => {
+    expect(manifest.bindingRowCounts?.({})).toEqual({
+      anchorValues: 0,
+      panelValues: 0,
+      arrowValues: 0,
+      flowValues: 0,
+      hierValues: 0,
+    })
   })
 })

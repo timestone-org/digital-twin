@@ -5,7 +5,11 @@
  */
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
-import type { DashboardNodePayload, ModuleManifest } from '@dt/contracts'
+import type {
+  BindingRowLabel,
+  DashboardNodePayload,
+  ModuleManifest,
+} from '@dt/contracts'
 
 import InspectorPane from '@/pages/DashboardEditor/components/InspectorPane.vue'
 
@@ -27,12 +31,17 @@ const NAMED: ModuleManifest = {
   bindings: [ARRAY_BINDING],
   bindingRowLabels: (config) => {
     const names = Array.isArray(config.names) ? config.names : []
-    const labels: Record<string, string> = {}
+    const labels: Record<string, BindingRowLabel> = {}
     names.forEach((name, index) => {
-      if (typeof name === 'string') labels[`rows[${index}].value`] = name
+      if (typeof name === 'string') {
+        labels[`rows[${index}].value`] = { title: name, id: `unit-${index}` }
+      }
     })
     return labels
   },
+  bindingRowCounts: (config) => ({
+    rows: Array.isArray(config.names) ? config.names.length : 0,
+  }),
   component: () => Promise.resolve({ default: {} }),
 }
 
@@ -120,6 +129,35 @@ describe('行名转发', () => {
 
     expect(wrapper.text()).toContain('第 1 行')
     expect(wrapper.text()).not.toContain('一号机组')
+    wrapper.unmount()
+  })
+})
+
+/**
+ * ⚠ 行跟着实体走的模块（孪生）如果这条接线断了，面板会摆出「新增一行」——
+ * 加出来的那一行没有对应实体、永远喂不到任何东西，绑完看着是配好了，
+ * 画面上一点反应都没有。
+ */
+describe('行数转发', () => {
+  it('清单声明了行数就不摆手工增删键', async () => {
+    const wrapper = mountAt(NAMED)
+
+    await openBindingTab(wrapper)
+
+    expect(
+      wrapper.findAll('button').some((item) => item.text().includes('新增一行')),
+    ).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('清单没声明时还是手工增删', async () => {
+    const wrapper = mountAt(PLAIN)
+
+    await openBindingTab(wrapper)
+
+    expect(
+      wrapper.findAll('button').some((item) => item.text().includes('新增一行')),
+    ).toBe(true)
     wrapper.unmount()
   })
 })

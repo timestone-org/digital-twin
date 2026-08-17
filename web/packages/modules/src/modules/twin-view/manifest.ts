@@ -7,6 +7,7 @@ import {
   TWIN_CONFIG_KEY,
   TWIN_VIEW_BINDINGS,
   normalizeTwinConfig,
+  twinRowCounts,
   twinRowLabels,
 } from '@dt/twin-config'
 
@@ -103,6 +104,11 @@ export default defineModule({
   // 只有归一化后的配置知道，所以由清单自己算
   bindingRowLabels: (config) =>
     twinRowLabels(normalizeTwinConfig(config[TWIN_CONFIG_KEY])),
+  // ⚠ 孪生的行**不是**用户随手加的：行号就是实体的文档序。不声明行数的话，
+  //   绑点面板会摆出「新增一行」，而加出来的那一行没有对应实体、永远喂不到
+  //   任何东西——绑完看着是配好了，画面上一点反应都没有
+  bindingRowCounts: (config) =>
+    twinRowCounts(normalizeTwinConfig(config[TWIN_CONFIG_KEY])),
   // 刻意不给 preview：3D 演示要有模型素材才看得见，编造一份只会在画布上留一块空白
   component: () => import('./Component.vue'),
 })

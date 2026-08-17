@@ -1,7 +1,8 @@
 /**
  * @fileoverview 守编辑视口内核的契约：降级路径不白屏、快速换模型时慢的那次被丢弃且资源释放、
- * 编辑态四条与运行态刻意不同的行为（只认 visible / 网格恒显 / 自动旋转恒关 / 实时值恒空）、
- * 拖动过视口不算点击，以及卸载后 rAF、Observer、监听与渲染上下文都停掉。
+ * 编辑态三条与运行态刻意不同的行为（只认 visible / 网格恒显 / 自动旋转恒关）、
+ * 实时值由宿主喂进来且重建覆盖层时会重放、拖动过视口不算点击，
+ * 以及卸载后 rAF、Observer、监听与渲染上下文都停掉。
  */
 import type { GltfSource } from '../src/modelLoader'
 import { configureTwinModelHost, resetTwinModelHost } from '../src/host'
@@ -10,7 +11,15 @@ import {
   createHeadlessRenderer,
   type HeadlessRenderer,
 } from '../src/testing/createHeadlessRenderer'
-import { normalizeTwinConfig, type TwinConfig } from '@dt/twin-config'
+import {
+  EMPTY_ANCHOR_VALUES,
+  EMPTY_ARROW_VALUES,
+  EMPTY_FLOW_VALUES,
+  normalizeTwinConfig,
+  type TwinConfig,
+} from '@dt/twin-config'
+
+import type { SceneLayerValues } from '../src/sceneLayers'
 import { flushPromises } from '@vue/test-utils'
 import * as THREE from 'three'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -149,6 +158,33 @@ async function renderedScene(harness: Harness): Promise<THREE.Object3D> {
   const last = harness.renderer.renders.at(-1)
   if (last === undefined) throw new Error('渲染循环没有跑过任何一帧')
   return last.scene
+}
+
+/** CSS2D 覆盖层的对象自带一个 DOM 元素，牌面文本从它上面读。 */
+function hasElement(
+  object: THREE.Object3D,
+): object is THREE.Object3D & { element: HTMLElement } {
+  return 'element' in object
+}
+
+/** 场景里全部覆盖层卡片的文本，拼成一串。 */
+async function cardText(harness: Harness): Promise<string> {
+  const scene = await renderedScene(harness)
+  const texts: string[] = []
+  scene.traverse((object) => {
+    if (hasElement(object)) texts.push(object.element.textContent ?? '')
+  })
+  return texts.join(' ')
+}
+
+/** 只喂信息牌那一路，其余四路给空引用。 */
+function panelValues(value: number): SceneLayerValues {
+  return {
+    anchors: EMPTY_ANCHOR_VALUES,
+    arrows: EMPTY_ARROW_VALUES,
+    panels: { 'p1::temp': { value } },
+    flows: EMPTY_FLOW_VALUES,
+  }
 }
 
 function press(
@@ -371,6 +407,38 @@ describe('编辑态刻意与运行态不同的地方', () => {
     )
 
     expect(model.getObjectByName('pump')?.visible).toBe(false)
+  })
+})
+
+describe('宿主喂进来的实时值', () => {
+  const PANEL = {
+    panels: [
+      { id: 'p1', name: '泵组', fields: [{ key: 'temp', label: '温度' }] },
+    ],
+  }
+
+  it('没喂之前读数位置是占位符，不拿旧值冒充', async () => {
+    const harness = await ready(twinConfig(PANEL))
+
+    expect(await cardText(harness)).not.toContain('42')
+  })
+
+  it('喂一次就把读数刷上牌面', async () => {
+    const harness = await ready(twinConfig(PANEL))
+
+    harness.scene.setValues(panelValues(42))
+
+    expect(await cardText(harness)).toContain('42')
+  })
+
+  // ⚠ 不重放的话，改一下配置就把读数全刷回占位符，而下一帧数据到来之前一直是那样
+  it('换配置重建覆盖层之后，最近一次的读数会重放上去', async () => {
+    const harness = await ready(twinConfig(PANEL))
+    harness.scene.setValues(panelValues(42))
+
+    harness.scene.setConfig(twinConfig(PANEL))
+
+    expect(await cardText(harness)).toContain('42')
   })
 })
 
