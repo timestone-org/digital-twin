@@ -8,7 +8,7 @@
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, cast
+from typing import Any
 
 from lib.auth import JwtCodec, TokenError
 from lib.errors import AppError
@@ -21,13 +21,12 @@ from realtime_hub.apps.channel.services.connections import (
 )
 from realtime_hub.apps.channel.services.journal import SubscriptionJournal
 from realtime_hub.apps.channel.services.registry import TopicRegistry
+from realtime_hub.apps.channel.services.user_codes import UserCodeSource
 
 _logger = get_logger("realtime.session")
 
 # auth-server 签的访问令牌类型，与它的 ACCESS_TYPE 逐字一致
 ACCESS_TYPE = "access"
-# 令牌载荷里放权限码的键，与 auth-server 的签发口径一致
-CLAIM_PERMISSIONS = "permissions"
 
 # 客户端 → 服务端的动作
 ACTION_SUBSCRIBE = "subscribe"
@@ -64,21 +63,28 @@ class SessionService:
         self,
         *,
         codec: JwtCodec,
+        codes: UserCodeSource,
         registry: TopicRegistry,
         connections: ConnectionRegistry,
         journal: SubscriptionJournal,
     ) -> None:
         self._codec = codec
+        self._codes = codes
         self._registry = registry
         self._connections = connections
         self._journal = journal
 
-    def authenticate(self, token: str) -> Handshake:
-        """验一枚访问令牌，解出身份与权限码。
+    async def authenticate(self, token: str) -> Handshake:
+        """验一枚访问令牌，解出身份，再向 auth-server 取该用户此刻的权限码。
 
         ⚠ 这条路径与 HTTP 完全不同：token 在**子协议**里，`Authorization`
         头上的鉴权中间件对它不生效，必须单独实现、单独测试
         （testing-standard-python.md §7.1）。
+
+        ⚠ 权限码只能现查，不能从令牌载荷里读：auth-server 签的 token 只带主体
+        与到期，权限是它在 `/verify` 那一步现查后以签名头下发的，载荷里没有。
+        读载荷的话每条连接都拿着空码集合，而空码在授权那一步的表现是**每一次
+        订阅都被拒**（42005）、HTTP 面却一切正常——最难往这上面想的一种故障。
 
         ⚠ 解不出来一律拒绝握手，不许「先连上再说」：连上之后才发现没身份，
         错误要经 WS 帧回给客户端，而那时它已经在等数据了。
@@ -89,9 +95,10 @@ class SessionService:
             claims = self._codec.decode(token, expected_type=ACCESS_TYPE)
         except TokenError as error:
             raise AuthenticationRejected(str(error)) from error
+        user_id = _as_uuid(claims.subject)
         return Handshake(
-            user_id=_as_uuid(claims.subject),
-            codes=_permissions_of(claims.extra),
+            user_id=user_id,
+            codes=await self._codes.codes_of(user_id),
             expires_at=claims.expires_at,
         )
 
@@ -202,7 +209,7 @@ class SessionService:
         """
         if not isinstance(token, str) or not token:
             raise BadRequest("reauth 缺少 token")
-        handshake = self.authenticate(token)
+        handshake = await self.authenticate(token)
         if handshake.user_id != connection.user_id:
             # ⚠ 不许换成别人的票：那等于在一条已建立的连接上换了主体，
             # 而订阅关系还挂在原来那个人身上
@@ -282,21 +289,3 @@ def _as_uuid(raw: str) -> uuid.UUID:
         return uuid.UUID(raw)
     except ValueError as error:
         raise AuthenticationRejected("令牌主体不是合法标识") from error
-
-
-def _permissions_of(extra: object) -> frozenset[str]:
-    """从令牌载荷里取权限码集合。
-
-    ⚠ 取不到时给**空集**而不是抛：空集意味着这个人什么主题都订不了，
-    这正是安全的方向；抛的话，一枚少了可选字段的合法令牌会连不上。
-
-    Args: extra。
-    """
-    if not isinstance(extra, dict):
-        return frozenset()
-    claims = cast("dict[str, object]", extra)
-    codes = claims.get(CLAIM_PERMISSIONS)
-    if not isinstance(codes, list):
-        return frozenset()
-    items = cast("list[object]", codes)
-    return frozenset(item for item in items if isinstance(item, str))

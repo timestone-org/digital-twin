@@ -50,6 +50,28 @@ class FakeCatalog:
         return KNOWN_CODES
 
 
+class FakeUserCodes:
+    """按用户回权限码的假件，替下真的 auth-server 回查。
+
+    ⚠ 答案由 `token` 工厂在签票时登记，用例照旧写 `token(codes=…)`。这一层
+    **不许**从令牌里读码：真实链路里签发方压根不往令牌里放它，假件跟着读的话
+    这一整条授权路径就又只有测试自己验证自己了。
+    """
+
+    def __init__(self) -> None:
+        self.granted: dict[str, frozenset[str]] = {}
+        self.error: Exception | None = None
+
+    def grant(self, subject: str, codes: frozenset[str]) -> None:
+        """登记某个用户持有的码。"""
+        self.granted[subject] = codes
+
+    async def codes_of(self, user_id: object) -> frozenset[str]:
+        if self.error is not None:
+            raise self.error
+        return self.granted.get(str(user_id), frozenset())
+
+
 def _reachable(host: str, port: int) -> bool:
     try:
         with socket.create_connection((host, port), timeout=2):
@@ -97,11 +119,21 @@ def codec(settings: Settings) -> JwtCodec:
 
 
 @pytest.fixture
-def token(codec: JwtCodec) -> TokenFactory:
-    """签一枚访问令牌。
+def user_codes() -> FakeUserCodes:
+    """替下 auth-server 回查的假件。`token(codes=…)` 会往它里面登记。"""
+    return FakeUserCodes()
+
+
+@pytest.fixture
+def token(codec: JwtCodec, user_codes: FakeUserCodes) -> TokenFactory:
+    """签一枚访问令牌，并把该用户持有的码登记进 `user_codes`。
 
     ⚠ 默认签的是**合法**票；伪造、过期、alg:none 那几种由用例自己构造，
     不在这里提供便利——那些是安全用例要显式写出来的东西。
+
+    ⚠ 码**不进令牌载荷**：真实的 auth-server 只签主体与到期，权限由 hub 现查。
+    这里跟着现查，才不会重演「夹具自己往票里塞一个签发方从没写过的声明、于是
+    每条用例都绿而线上每次订阅都 403」。
     """
 
     def issue(
@@ -111,11 +143,9 @@ def token(codec: JwtCodec) -> TokenFactory:
         ttl_s: int = TOKEN_TTL_S,
     ) -> str:
         raw, _claims = codec.issue(
-            subject=subject,
-            token_type="access",
-            ttl_s=ttl_s,
-            extra={"permissions": list(codes)},
+            subject=subject, token_type="access", ttl_s=ttl_s
         )
+        user_codes.grant(subject, frozenset(codes))
         return raw
 
     return issue
@@ -123,17 +153,17 @@ def token(codec: JwtCodec) -> TokenFactory:
 
 @pytest.fixture
 async def application(
-    settings: Settings, postgres_available: bool
+    settings: Settings, postgres_available: bool, user_codes: FakeUserCodes
 ) -> AsyncIterator[FastAPI]:
     """整装应用本体。WS 用例要它——TestClient 收的是 app，不是 transport。
 
-    Args: settings, postgres_available。
+    Args: settings, postgres_available, user_codes。
     """
     if not postgres_available:
         pytest.skip("本机连不到 Postgres")
     built_app = build_app(settings)
     built: Container = built_app.state.container
-    built_app.state.container = _with_fake_catalog(built)
+    built_app.state.container = _with_fake_catalog(built, user_codes)
     yield built_app
     await built.fanout.stop()
     await built.pubsub.close()
@@ -143,20 +173,20 @@ async def application(
 
 @pytest.fixture
 async def app(
-    settings: Settings, postgres_available: bool
+    settings: Settings, postgres_available: bool, user_codes: FakeUserCodes
 ) -> AsyncIterator[httpx.ASGITransport]:
     """整装应用。
 
     ⚠ 不起扇出后台任务：那条路径由集成用例单独驱动，让它在每个用例里都跑
     会把 Redis 的连接与任务生命周期混进无关的断言里。
 
-    Args: settings, postgres_available。
+    Args: settings, postgres_available, user_codes。
     """
     if not postgres_available:
         pytest.skip("本机连不到 Postgres")
     application = build_app(settings)
     built: Container = application.state.container
-    application.state.container = _with_fake_catalog(built)
+    application.state.container = _with_fake_catalog(built, user_codes)
     yield httpx.ASGITransport(app=application)
     await built.fanout.stop()
     await built.pubsub.close()
@@ -164,13 +194,16 @@ async def app(
     await built.cache.close()
 
 
-def _with_fake_catalog(built: Container) -> Container:
-    """把跨服务的目录换成假件，其余原样。
+def _with_fake_catalog(
+    built: Container, user_codes: FakeUserCodes
+) -> Container:
+    """把两处跨服务调用都换成假件，其余原样。
 
     ⚠ registry 与 session 都要一起换：session 持有的是同一个 registry 实例，
     只换前者的话 WS 那条路径仍然会去打 auth。
+    ⚠ 权限回查也要换：不换的话每条 WS 用例都要求 auth-server 起着。
 
-    Args: built。
+    Args: built, user_codes。
     """
     registry = TopicRegistry(
         database=built.database,
@@ -187,6 +220,7 @@ def _with_fake_catalog(built: Container) -> Container:
         registry=registry,
         session=SessionService(
             codec=codec,
+            codes=user_codes,  # type: ignore[arg-type]  # 结构相同的假件
             registry=registry,
             connections=built.connections,
             journal=built.journal,

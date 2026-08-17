@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from lib.logging import get_logger
 from lib.utils.timeutils import utcnow
 from realtime_hub.apps.channel.deps import get_container
+from realtime_hub.apps.channel.errors import UserCodesUnavailable
 from realtime_hub.apps.channel.services import (
     AuthenticationRejected,
     Handshake,
@@ -42,6 +43,9 @@ AUTH_SUBPROTOCOL = "dt.auth"
 # 握手不合法时的关闭码。⚠ 用 1008 而不是 4001：4001 的语义是「票过期了，
 # 换一张再来」，而这里是「压根没给票」，客户端的处置完全不同
 CLOSE_UNAUTHENTICATED = 1008
+# 依赖不可达时的关闭码。⚠ 与 1008 分开：1008 的语义是「你不该连」，客户端据此
+# 停止重连；而这里是我们自己查不到权限，它该退避后再来
+CLOSE_DEPENDENCY_DOWN = 1013
 # 握手要报的两个子协议：标记 + token，缺一不可
 SUBPROTOCOL_COUNT = 2
 
@@ -100,9 +104,15 @@ async def _handshake(
         await websocket.close(code=CLOSE_UNAUTHENTICATED)
         return None
     try:
-        handshake = container.session.authenticate(token)
+        handshake = await container.session.authenticate(token)
     except AuthenticationRejected:
         await websocket.close(code=CLOSE_UNAUTHENTICATED)
+        return None
+    except UserCodesUnavailable:
+        # ⚠ 与「票不对」分开：这是我们自己查不到权限，客户端该过一会儿再连。
+        # 混成 1008 的话，一次 auth 抖动会让所有客户端认定自己没权限而不再
+        # 重连，于是 auth 恢复了通道也不会自己回来
+        await websocket.close(code=CLOSE_DEPENDENCY_DOWN)
         return None
     await websocket.accept(subprotocol=AUTH_SUBPROTOCOL)
     return handshake

@@ -8,7 +8,10 @@ import uuid
 from datetime import timedelta
 
 import pytest
-from realtime_hub.apps.channel.errors import SubscriptionDenied
+from realtime_hub.apps.channel.errors import (
+    SubscriptionDenied,
+    UserCodesUnavailable,
+)
 from realtime_hub.apps.channel.services import (
     AuthenticationRejected,
     Connection,
@@ -74,26 +77,47 @@ def _codec() -> JwtCodec:
     )
 
 
+# 「auth-server 说某个用户持有哪些码」。⚠ 由 `_token` 在签票时写入：真实链路
+# 里码不在令牌载荷里，假件跟着从票里读的话，这条授权路径就只有测试自己验证自己
+_GRANTED: dict[str, frozenset[str]] = {}
+
+
+class FakeUserCodes:
+    """按用户回权限码的假件。`error` 一设就模拟 auth-server 不可达。"""
+
+    def __init__(self) -> None:
+        self.error: Exception | None = None
+
+    async def codes_of(self, user_id: object) -> frozenset[str]:
+        if self.error is not None:
+            raise self.error
+        return _GRANTED.get(str(user_id), frozenset())
+
+
 def _service(
     registry: FakeRegistry | None = None,
+    codes: FakeUserCodes | None = None,
 ) -> tuple[SessionService, ConnectionRegistry]:
     connections = ConnectionRegistry()
     service = SessionService(
         codec=_codec(),
-        registry=registry or FakeRegistry(),  # type: ignore[arg-type]  # 结构相同的假件
+        codes=codes or FakeUserCodes(),  # type: ignore[arg-type]  # 结构相同的假件
+        registry=registry or FakeRegistry(),  # type: ignore[arg-type]  # 同上
         connections=connections,
         journal=FakeJournal(),  # type: ignore[arg-type]  # 同上
     )
     return service, connections
 
 
-def _token(codes: tuple[str, ...] = ("opcua:view",), ttl_s: int = 900) -> str:
+def _token(
+    codes: tuple[str, ...] = ("opcua:view",),
+    ttl_s: int = 900,
+    subject: str = USER,
+) -> str:
     raw, _claims = _codec().issue(
-        subject=USER,
-        token_type="access",
-        ttl_s=ttl_s,
-        extra={"permissions": list(codes)},
+        subject=subject, token_type="access", ttl_s=ttl_s
     )
+    _GRANTED[subject] = frozenset(codes)
     return raw
 
 
@@ -105,14 +129,14 @@ async def _open(
     async def send(message: dict[str, object]) -> None:
         sent.append(message)
 
-    handshake = service.authenticate(_token())
+    handshake = await service.authenticate(_token())
     connection = await service.open(handshake, send=send)
     return connection, sent
 
 
 async def test_handshake_yields_the_subject_and_its_codes() -> None:
     service, _connections = _service()
-    handshake = service.authenticate(_token(codes=("opcua:view", "a:b")))
+    handshake = await service.authenticate(_token(codes=("opcua:view", "a:b")))
     assert str(handshake.user_id) == USER
     assert handshake.codes == frozenset({"opcua:view", "a:b"})
 
@@ -218,11 +242,44 @@ async def test_reauth_without_a_token_is_rejected() -> None:
     assert sent[-1]["type"] == TYPE_ERROR
 
 
-async def test_a_token_without_permissions_yields_an_empty_set() -> None:
-    # ⚠ 空集意味着什么都订不了——安全的方向；抛的话合法票会连不上
+async def test_permissions_come_from_auth_not_from_the_token() -> None:
+    # ⚠ 码只认 auth-server 的回查，令牌载荷里塞什么都不作数：签发方压根不往
+    # 载荷里放权限，读它等于每条连接都拿着空码集合——而空码的表现是每一次订阅
+    # 都被拒 42005、HTTP 面却完全正常
     service, _connections = _service()
-    raw, _claims = _codec().issue(subject=USER, token_type="access", ttl_s=900)
-    assert service.authenticate(raw).codes == frozenset()
+    raw, _claims = _codec().issue(
+        subject=USER,
+        token_type="access",
+        ttl_s=900,
+        extra={"permissions": ["forged:code"]},
+    )
+    _GRANTED[USER] = frozenset({"opcua:view"})
+
+    handshake = await service.authenticate(raw)
+
+    assert handshake.codes == frozenset({"opcua:view"})
+
+
+async def test_a_user_auth_grants_nothing_to_gets_an_empty_set() -> None:
+    # ⚠ 空集意味着什么都订不了——安全的方向
+    service, _connections = _service()
+    stranger = "3fa85f64-5717-4562-b3fc-2c963f66af00"
+    _GRANTED.pop(stranger, None)
+    raw, _claims = _codec().issue(
+        subject=stranger, token_type="access", ttl_s=900
+    )
+    assert (await service.authenticate(raw)).codes == frozenset()
+
+
+async def test_auth_being_unreachable_fails_the_handshake_closed() -> None:
+    # ⚠ 绝不能退化成空码放行：空码在授权那一步长得跟「你没权限」一模一样，
+    # 客户端会据此不再重连，于是 auth 恢复了通道也不会自己回来
+    codes = FakeUserCodes()
+    codes.error = UserCodesUnavailable("auth 不可达")
+    service, _connections = _service(codes=codes)
+
+    with pytest.raises(UserCodesUnavailable):
+        await service.authenticate(_token())
 
 
 def test_expiry_and_reauth_windows() -> None:
@@ -254,4 +311,4 @@ async def test_a_forged_token_is_rejected() -> None:
     )
     raw, _claims = forged.issue(subject=USER, token_type="access", ttl_s=900)
     with pytest.raises(AuthenticationRejected):
-        service.authenticate(raw)
+        await service.authenticate(raw)

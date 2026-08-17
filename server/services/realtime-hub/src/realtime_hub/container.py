@@ -15,6 +15,7 @@ from realtime_hub.apps.channel.services import (
     SessionService,
     SubscriptionJournal,
     TopicRegistry,
+    UserCodeSource,
 )
 from realtime_hub.settings import Settings
 
@@ -78,6 +79,11 @@ def build_container(settings: Settings) -> Container:
         connections=connections,
         registry=registry,
         pubsub=pubsub,
+        user_codes=UserCodeSource(
+            base_url=settings.auth_base_url,
+            service_key=settings.edge_service_key.get_secret_value(),
+            timeout_s=settings.auth_timeout_s,
+        ),
     )
     return _assemble(settings, parts)
 
@@ -92,6 +98,7 @@ class _Parts:
     connections: ConnectionRegistry
     registry: TopicRegistry
     pubsub: PubSub
+    user_codes: UserCodeSource
 
 
 def _assemble(settings: Settings, parts: _Parts) -> Container:
@@ -132,6 +139,8 @@ def _assemble(settings: Settings, parts: _Parts) -> Container:
                 verification_keys=settings.verification_keys(),
                 issuer=settings.jwt_issuer,
             ),
+            # ⚠ 权限码现查，不从令牌里读：签发方压根不往令牌里放它
+            codes=parts.user_codes,
             registry=registry,
             connections=connections,
             journal=journal,
