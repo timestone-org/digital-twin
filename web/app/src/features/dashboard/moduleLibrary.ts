@@ -11,6 +11,14 @@ export interface ModuleGroup {
   items: readonly ModuleManifest[]
 }
 
+/**
+ * 组名与模块名的定序器。
+ * ⚠ locale 必须钉死：`localeCompare` 不给 locale 时用运行环境的默认区域，
+ * 同一份清单在 en 机器上按码位排、在 zh 机器上按拼音排——本地绿 CI 红，
+ * 而用户看到的顺序还随浏览器语言变。界面是中文的，按拼音排才是对的。
+ */
+const COLLATOR = new Intl.Collator('zh-CN')
+
 /** 一条清单的可搜文本。 */
 function searchText(manifest: ModuleManifest): string {
   return [
@@ -24,7 +32,7 @@ function searchText(manifest: ModuleManifest): string {
 }
 
 /**
- * 按关键字筛，再按 `category` 分组。组与组内都按名字定序，两次渲染顺序一致。
+ * 按关键字筛，再按 `category` 分组。组与组内都按名字的拼音定序，两次渲染顺序一致。
  * @param manifests 已注册的全部清单
  * @param keyword 搜索关键字，空串表示不筛
  */
@@ -46,10 +54,10 @@ export function groupModules(
     .map(([category, items]) => ({
       category,
       items: [...items].sort((left, right) =>
-        left.displayName.localeCompare(right.displayName),
+        COLLATOR.compare(left.displayName, right.displayName),
       ),
     }))
-    .sort((left, right) => left.category.localeCompare(right.category))
+    .sort((left, right) => COLLATOR.compare(left.category, right.category))
 }
 
 /**

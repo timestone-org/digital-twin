@@ -49,10 +49,12 @@ describe('列出模块', () => {
     expect(wrapper.findAll('.dt-lib__item')).toHaveLength(2)
   })
 
+  // ⚠ 按 data-test 取而不是按下标：卡片顺序由拼音定序决定，拿下标定位会让
+  // 「点了哪一张」随组名的取值漂走，而这条用例要验的是载荷形状
   it('点一项抛出整份清单，而不是它的类型字符串', async () => {
     const wrapper = mount(ModuleLibrary, { props: { manifests: MANIFESTS } })
 
-    await wrapper.findAll('.dt-lib__item')[0]?.trigger('click')
+    await wrapper.find('[data-test="module-a"]').trigger('click')
 
     expect(wrapper.emitted('add')?.[0]?.[0]).toMatchObject({
       type: 'a',
@@ -80,17 +82,20 @@ describe('卡片栅格', () => {
 
     const grids = wrapper.findAll('.dt-lib__grid')
 
-    expect(grids).toHaveLength(2)
-    expect(grids[1]?.findAll('.dt-lib__item')).toHaveLength(2)
+    // 一组一个栅格，两组共两个；条数按组名的拼音序对上（布局 2 张、图表 1 张）
+    expect(grids.map((grid) => grid.findAll('.dt-lib__item').length)).toEqual([
+      2, 1,
+    ])
   })
 
   it('每张卡片都有图标与名字，缺 icon 声明时回落到通用图标', () => {
     const wrapper = mount(ModuleLibrary, { props: { manifests: MANIFESTS } })
-    const cards = wrapper.findAll('.dt-lib__item')
+    const declared = wrapper.find('[data-test="module-a"]')
+    const fallback = wrapper.find('[data-test="module-b"]')
 
-    expect(cards[0]?.findComponent(DtIcon).props('name')).toBe('activity')
-    expect(cards[0]?.find('.dt-lib__name').text()).toBe('折线卡片')
-    expect(cards[1]?.findComponent(DtIcon).props('name')).toBe('layout-grid')
+    expect(declared.findComponent(DtIcon).props('name')).toBe('activity')
+    expect(declared.find('.dt-lib__name').text()).toBe('折线卡片')
+    expect(fallback.findComponent(DtIcon).props('name')).toBe('layout-grid')
   })
 
   it('组名旁标出这一组有几个模块', () => {

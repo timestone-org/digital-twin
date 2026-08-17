@@ -14,7 +14,7 @@
  *
  * 每个动作都是模块级函数、显式收一个 `Ctx`：composable 只负责把几个 ref 接起来。
  */
-import type { ComputedRef, Ref } from 'vue'
+import type { Ref } from 'vue'
 
 import * as collect from '@/api/collect'
 import { describeError } from '@/composables/useAsyncList'
@@ -36,7 +36,7 @@ export interface Ctx {
   loading: Ref<boolean>
   error: Ref<string | null>
   selected: Ref<Set<string>>
-  states: ComputedRef<Map<string, NodeSelection>>
+  states: ReadonlyMap<string, NodeSelection>
 }
 
 /**
@@ -158,7 +158,7 @@ export async function toggle(
     return { isWhole: true, changed: 1, total: 1, error: null }
   }
   // 已经全勾上时取消，不必再打设备
-  if (ctx.states.value.get(address) === 'all') {
+  if (ctx.states.get(address) === 'all') {
     return outcomeOf(true, pick(ctx, node, false), node)
   }
   const loaded = await loadSubtree(ctx, node)

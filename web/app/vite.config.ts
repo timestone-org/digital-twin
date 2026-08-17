@@ -32,7 +32,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': { target: DEV_API_TARGET, changeOrigin: true },
+      // ⚠ `ws` 不能省：少了它 vite 只代普通请求，`/api/v1/realtime/ws` 的
+      // Upgrade 根本不会转给边缘——它落到 vite 自己那条只认 `vite-hmr` 的
+      // 升级处理上，被静默丢掉。表现是开发期握手永远不完成、全部实时推送
+      // （大屏 / 采集配置页 / OPC UA 节点值）一起没有值，而 HTTP 面完全正常。
+      '/api': { target: DEV_API_TARGET, changeOrigin: true, ws: true },
       '/oss': { target: DEV_API_TARGET, changeOrigin: true },
     },
   },

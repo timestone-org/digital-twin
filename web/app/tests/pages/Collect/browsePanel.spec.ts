@@ -19,6 +19,7 @@ import type {
 
 import * as collectApi from '@/api/collect'
 import BrowsePanel from '@/pages/Collect/Opcua/components/BrowsePanel.vue'
+import BrowseTreeNode from '@/pages/Collect/Opcua/components/BrowseTreeNode.vue'
 import { useAuthStore } from '@/stores/auth'
 
 vi.mock('vue-router', () => ({
@@ -507,5 +508,23 @@ describe('导入选中', () => {
     // 弹窗里的统一默认（采样间隔 / 记录历史）套到了每一项上
     expect(items.every((one) => one.sampling_interval_ms === 1000)).toBe(true)
     expect(items.every((one) => one.archive_enabled === true)).toBe(true)
+  })
+})
+
+/**
+ * ⚠ 这一组守的是「树的规模」：现场一个通道就有几万个点位，而采集侧刻意不设条数
+ * 上限（`subtree.py`），所以这棵树在几万个节点上必须还能用。
+ */
+describe('几万点位的文件夹', () => {
+  it('⚠ 勾一下不许换掉那张勾选态表：换一张就是让树上每个节点都重渲染一遍', async () => {
+    const wrapper = await render({ [ROOT]: [leaf('Temp'), leaf('Flow')] })
+    const first = wrapper.findComponent(BrowseTreeNode)
+    const before: unknown = first.props('states')
+
+    await check(box(wrapper, 'Temp'))
+
+    expect(first.props('states')).toBe(before)
+    // 身份没换，但内容确实更新了——不然「不换」只是因为它压根没算
+    expect(element(wrapper, 'Temp').checked).toBe(true)
   })
 })

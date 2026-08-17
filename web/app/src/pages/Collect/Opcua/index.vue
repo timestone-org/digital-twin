@@ -162,7 +162,13 @@ onUnmounted(() => {
       </PermGuard>
     </template>
 
-    <div class="flex h-full min-h-0 flex-col gap-4">
+    <!-- ⚠ 这一页必须自己能滚：窄屏（<xl）时左栏 15rem + 浏览 20rem + 点位表
+         30rem 是竖着堆的，加起来必然高过视口，而 AppShell 的 `<main>` 是
+         overflow-hidden、自己不滚。装不下又没处滚，多出来的部分既看不见也够
+         不着；更糟的是 overflow-hidden **能被程序滚动**——点一下裁切线以下
+         的勾选框，浏览器会把 `<main>` 滚过去露出焦点元素，而它没有滚动条，
+         用户只看到整页内容凭空消失且再也回不来。 -->
+    <div class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto">
       <DtNotice
         v-if="stalledCount !== 0"
         intent="warning"
@@ -172,13 +178,13 @@ onUnmounted(() => {
         个已启用的数据源当前不在采集，它们的点位不会产生任何数据。
       </DtNotice>
 
+      <!-- ⚠ `flex-1` 只在 ≥xl 给：窄屏时要让这块按内容撑开，交给外面那层滚，
+           否则栅格行被压扁、内容溢出到行外，滚动条也就无从出现 -->
       <div
-        class="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[20rem_minmax(0,1fr)]"
+        class="grid min-h-0 grid-cols-1 gap-4 xl:flex-1 xl:grid-cols-[20rem_minmax(0,1fr)]"
       >
         <!-- 左栏：数据源列表 -->
-        <aside
-          class="flex h-[15rem] min-w-0 shrink-0 flex-col xl:h-auto xl:min-h-0"
-        >
+        <aside class="flex h-60 min-w-0 shrink-0 flex-col xl:h-auto xl:min-h-0">
           <SourceListPanel
             :sources="sources"
             :loading="sourcesLoading"
@@ -210,13 +216,13 @@ onUnmounted(() => {
               class="grid min-h-0 grid-cols-1 gap-4 xl:flex-1 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:grid-rows-1"
             >
               <BrowsePanel
-                class="h-[20rem] shrink-0 xl:h-auto"
+                class="h-80 shrink-0 xl:h-auto"
                 :source="activeSource"
                 @imported="onImported"
               />
               <NodeTable
                 ref="nodeTableRef"
-                class="h-[30rem] shrink-0 xl:h-auto"
+                class="h-120 shrink-0 xl:h-auto"
                 :source="activeSource"
               />
             </div>
