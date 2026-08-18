@@ -97,3 +97,41 @@ export function fmtKwh(raw: unknown, precision = 2): string {
     ? `${sign}${fmtTrim(abs / KILO, precision)}k`
     : `${sign}${fmtTrim(abs, 0)}`
 }
+
+/**
+ * 定点小数，位数固定；`grouping` 决定要不要千分位。缺值给「—」。
+ * ⚠ 与 `fmtNumber` 的分工是刻意的：那一档是「最多几位」，尾随零会被抹掉，
+ * 于是同一列里 63.40 与 63.4 并排出现，看着像两个精度不同的表。仪表读数要的是
+ * 逐行对齐，故这一档补零。
+ * @param raw 待格式化的原值
+ * @param digits 小数位
+ * @param grouping 整数部分要不要千分位
+ */
+export function fmtDecimal(raw: unknown, digits = 1, grouping = false): string {
+  if (!isPresent(raw)) return NO_DATA
+  const fixed = clampDigits(digits, 1)
+  return unsignZero(raw).toLocaleString('en-US', {
+    minimumFractionDigits: fixed,
+    maximumFractionDigits: fixed,
+    useGrouping: grouping,
+  })
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0')
+}
+
+/**
+ * 采样时刻 → 本地时的 `HH:mm:ss`，缺值给「—」。
+ * ⚠ 到**秒**而不是到分：本仓的点位周期低到 10 秒，按分钟显示时「还在动」与
+ * 「一分钟前就停了」是同一个字样，而这一列存在的全部意义就是分开这两件事。
+ * ⚠ 只格式化、不判新旧：值有多旧由看的人决定，不在这里降档
+ * （DASHBOARD_DESIGN §4.3）。
+ * @param epochMs 采样时刻，UTC 毫秒
+ */
+export function fmtClock(epochMs: unknown): string {
+  if (!isPresent(epochMs)) return NO_DATA
+  const at = new Date(epochMs)
+  if (Number.isNaN(at.getTime())) return NO_DATA
+  return `${pad2(at.getHours())}:${pad2(at.getMinutes())}:${pad2(at.getSeconds())}`
+}
