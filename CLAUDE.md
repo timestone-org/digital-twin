@@ -61,7 +61,7 @@ TypeScript：tsconfig 开满（含 `noUncheckedIndexedAccess`）；禁 `any`/`!`
 
 ### CI gates
 
-规范不是靠记的，是靠红灯守的。五段串行的流水线在 `.github/workflows/ci.yml`（main 的 push 与每个 PR 都跑，分支 push 不重复触发），PR 规模与提交约定在 `pr-policy.yml`，慢闸门（E2E / a11y / 变异 / 镜像断言）在 `nightly.yml`。闸门脚本在 `scripts/gates/`，本地用 `scripts/ci-local.sh` 跑（`--fast` 秒级，其余走 act）。**规范条目 → 作业 → 命令的对照表见 `docs/agents/ci-gates.md`**。闸门自己也被守：`pyright` 的覆盖范围、CI 里的 skip、以及「禁止任何重试」都各有一道自检。
+规范不是靠记的，是靠红灯守的。五段串行的流水线在 `.github/workflows/ci.yml`，**只在 main 的 push 上跑**；PR 规模与提交约定在 `pr-policy.yml`，慢闸门（E2E / a11y / 变异 / 镜像断言）在 `nightly.yml`。闸门脚本在 `scripts/gates/`，本地用 `scripts/ci-local.sh` 跑（`--fast` 秒级，其余走 act）。**⚠ 开发期不要推分支等 GitHub 的 CI——分支与 PR 上根本不触发流水线**：改完在本地过闸，推送或合并前跑一遍 `scripts/ci-local.sh --all`（act 跑的就是同一份 `ci.yml`），合并进 main 后再盯一眼那轮流水线，红了当场修或回滚。**规范条目 → 作业 → 命令的对照表见 `docs/agents/ci-gates.md`**。闸门自己也被守：`pyright` 的覆盖范围、CI 里的 skip、以及「禁止任何重试」都各有一道自检。
 
 ### Engineering workflow
 

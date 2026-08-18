@@ -1,9 +1,15 @@
-# 主流水线。main 的 push 与每个 PR 都跑，分五段，前一段绿了才跑后一段。
+# 主流水线。**只跑 main 的 push**：改动进了主干之后在真运行器上验一次，
+# 分五段，前一段绿了才跑后一段。
 #
-# ⚠ push 只收 main：分支的验证走 pull_request 事件。两个触发器都收全部
-# 分支时，一个开着 PR 的分支每推一次会跑**两条**完整流水线（push 与
-# pull_request 分属不同 concurrency 组，互不取消），自托管 runner 会被
-# 队列拖死——真发生过，45 个 run 积压 9 小时。
+# ⚠ 不收 pull_request：分支上的验证在本地，`scripts/ci-local.sh --all` 用 act
+# 跑的就是这条流水线（同一份 YAML、同一批闸门脚本），改一次就能当场知道红绿，
+# 不必推一次等一轮自托管 runner 的队列。两个触发器都收全部分支还会让一个开着
+# PR 的分支每推一次跑**两条**完整流水线（push 与 pull_request 分属不同
+# concurrency 组，互不取消），队列会被拖死——真发生过，45 个 run 积压 9 小时。
+#
+# ⚠ 因此 `5·全部闸门` 不能设成分支保护里的必需检查：PR 上没有这条流水线，
+# 设成必需就是永远 pending、永远合不进去。合并前的绿灯由本地那条负责，
+# 合并后这条红了按「main 永远可发布」当即修或回滚。见 ci-gates.md §5。
 #
 # 分段的意义是**反馈时序**：秒级的闸门（机密、结构、注释）先跑，它们红了
 # 就不必再花几分钟装依赖跑测试；慢闸门（测试、构建、供应链）排在后面，
@@ -16,12 +22,16 @@ name: CI
 on:
   push:
     branches: [main]
-  pull_request:
+  # 手动补跑：改了流水线本身、或要在真运行器上验一次分支时用。
+  # 平时不用——开发期的验证是 scripts/ci-local.sh --all
+  workflow_dispatch:
 
-# 同一分支的新推送取消上一轮，避免排队堆积
+# ⚠ main 上**不取消**在跑的那一轮：它是唯一一次真运行器上的验证，接连合两个
+# PR 时取消掉前一轮，就等于前一个改动谁都没验过。同组的下一轮排队等着跑，
+# 主干于是逐个提交都验过。手动补跑的分支照旧取消，避免排队堆积。
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -423,16 +433,26 @@ jobs:
           uv run --project server python scripts/gates/check_coverage.py \
             collector-server collector-coverage.xml
 
+      # 基线是**本次推送前的 main**（`github.event.before`）：刚合进来的那一坨
+      # 改动正好落在这段区间里。⚠ 没有 before（分支首推、手动补跑）时无基线
+      # 可比，只能不判——本地 `ci-local.sh --all` 会把它填成与 origin/main 的
+      # 合并基，于是合并前在本地判的与合并后在这里判的是同一段 diff
       - name: 增量覆盖 ≥85%
-        if: github.event_name == 'pull_request'
+        env:
+          BASELINE: ${{ github.event.before }}
         run: |
-          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          if ! [[ "${BASELINE}" =~ ^[0-9a-f]{40}$ ]] || [[ "${BASELINE}" =~ ^0+$ ]]; then
+            echo '::notice::没有可比的基线提交，本轮不判增量覆盖'
+            exit 0
+          fi
+          git cat-file -e "${BASELINE}^{commit}" 2>/dev/null \
+            || git fetch --no-tags origin "${BASELINE}"
           uv run --project server diff-cover \
             lib-coverage.xml timeseries-coverage.xml \
             collectwire-coverage.xml auth-coverage.xml \
             platform-coverage.xml opcua-coverage.xml \
             collector-coverage.xml \
-            --compare-branch "origin/${{ github.base_ref }}" --fail-under=85
+            --compare-branch "${BASELINE}" --fail-under=85
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always() && !env.ACT
@@ -468,12 +488,19 @@ jobs:
           uv run --project server python scripts/gates/check_coverage.py \
             web web/coverage/lcov.info
 
+      # 基线口径与后端那步同一条，理由见那里
       - name: 增量覆盖 ≥85%
-        if: github.event_name == 'pull_request'
+        env:
+          BASELINE: ${{ github.event.before }}
         run: |
-          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          if ! [[ "${BASELINE}" =~ ^[0-9a-f]{40}$ ]] || [[ "${BASELINE}" =~ ^0+$ ]]; then
+            echo '::notice::没有可比的基线提交，本轮不判增量覆盖'
+            exit 0
+          fi
+          git cat-file -e "${BASELINE}^{commit}" 2>/dev/null \
+            || git fetch --no-tags origin "${BASELINE}"
           uv run --project server diff-cover web/coverage/lcov.info \
-            --compare-branch "origin/${{ github.base_ref }}" --fail-under=85
+            --compare-branch "${BASELINE}" --fail-under=85
 
   # ============ 第 4 段：契约、构建与供应链 ============
   contracts:
