@@ -53,6 +53,29 @@ GENERATED = ("openapi.json", "/dist/", "/coverage/")
 NUMSTAT_FIELDS = 3
 # `server/services/<svc>/…` —— 取服务名要有三段以上
 SERVICE_PATH_DEPTH = 2
+# 大屏模块的两处落脚点
+MODULES_SRC = "web/packages/modules/src/modules/"
+MODULES_TESTS = "web/packages/modules/tests/modules/"
+# `web/packages/modules/src/modules/<type>/<文件>` —— 取模块名要有七段
+MODULE_PATH_DEPTH = 6
+# 模块名在第几段
+MODULE_NAME_INDEX = 5
+# 注册一个模块必然要动的几处：前端两份花名册、服务端目录与它的两份花名册。
+# ⚠ 这不是「顺手带进来的无关改动」，而是「一行注册」这一步本身
+MODULE_REGISTRY = frozenset(
+    {
+        "web/packages/modules/tests/manifests.contract.spec.ts",
+        "web/packages/modules/tests/registerBuiltins.test.ts",
+        "server/services/platform-server/src/platform_server/apps/dashboard"
+        "/module_types.json",
+        "server/services/platform-server/tests/contract"
+        "/test_dashboard_module_catalog.py",
+        "server/services/platform-server/tests/unit"
+        "/test_dashboard_module_catalog.py",
+    }
+)
+# 模块自己的设计文档
+MODULE_DOC = re.compile(r"^docs/MODULE_[\w-]+\.md$")
 
 
 def _reviewable(name: str) -> bool:
@@ -124,14 +147,64 @@ def _is_landing_commit() -> bool:
     )
 
 
+def _new_module() -> str | None:
+    """本次改动首次落下某个大屏模块的目录；否则返回 None。
+
+    判据与 `_new_code_unit` 同源：`web/packages/modules/src/modules/<type>/`
+    在 base 上不存在——**不看 PR 标题**，标题可以随手写，仓库历史不能。
+    """
+    added = {
+        Path(name).parts[MODULE_NAME_INDEX]
+        for name in git(
+            "diff", "--diff-filter=A", "--name-only", diff_range()
+        ).splitlines()
+        if name.startswith(MODULES_SRC)
+        and len(Path(name).parts) > MODULE_PATH_DEPTH
+    }
+    fresh = {
+        module
+        for module in added
+        if not git(
+            "ls-tree", "--name-only", diff_base(), f"{MODULES_SRC}{module}/"
+        )
+    }
+    return next(iter(fresh)) if len(fresh) == 1 else None
+
+
+def _is_module_landing() -> bool:
+    """新模块的首次落地：改动只在这个模块自己的目录、文档与注册处里。
+
+    一个模块的完整落地 = 清单 + 渲染组件 + 取值逻辑 + 测试 + 设计文档 + 重新
+    生成的服务端目录，加起来必然过千行，而少任何一样都不满足「一个模块 =
+    一个目录 + 一行注册」那条判据（DASHBOARD_DESIGN §5.1）。硬拆只能拆成
+    「没有测试的一半」与「一堆没有实现的测试」，那比一个大 PR 更难评审。
+
+    ⚠ 边界与 `_is_landing_commit` 同样机械：只认 base 上**不存在**的模块目录
+    （故一个模块只能用一次——第二个 PR 里它已经存在），且**只要有一个文件
+    落在允许集合外就整体不豁免**（故触及既有代码的改动一条都带不进来）。
+    """
+    module = _new_module()
+    if module is None:
+        return False
+    own = (f"{MODULES_SRC}{module}/", f"{MODULES_TESTS}{module}/")
+    return all(
+        name.startswith(own)
+        or name in MODULE_REGISTRY
+        or MODULE_DOC.match(name) is not None
+        for name in changed_files()
+        if _reviewable(name)
+    )
+
+
 def check_pr_size() -> list[Violation]:
     """改动 ≤400 行、≤20 个文件。超了就拆成多个 PR。
 
-    两类例外：机械化改动（标题标记），以及新代码单元的首次落地提交
-    （[ADR-0006](../../docs/adr/0006-opcua服务端独立成代码单元.md)）——
-    后者不看标题，只看「是不是全部落在一个 base 上尚不存在的服务目录里」。
+    三类例外：机械化改动（标题标记）、新代码单元的首次落地提交
+    （[ADR-0006](../../docs/adr/0006-opcua服务端独立成代码单元.md)），
+    以及新大屏模块的首次落地（`_is_module_landing`）——后两者都不看标题，
+    只看「是不是全部落在一个 base 上尚不存在的目录（及其注册处）里」。
     """
-    if _is_mechanical() or _is_landing_commit():
+    if _is_mechanical() or _is_landing_commit() or _is_module_landing():
         return []
     files = [name for name in changed_files() if _reviewable(name)]
     lines = _changed_lines()
