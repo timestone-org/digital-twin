@@ -20,9 +20,9 @@ import DashboardGridEmpty from './components/DashboardGridEmpty.vue'
 import ProjectSidebar from './components/ProjectSidebar.vue'
 import WorkbenchDialogs from './components/WorkbenchDialogs.vue'
 import WorkbenchToolbar from './components/WorkbenchToolbar.vue'
-import { useCardActions } from './composables/useCardActions'
-import { useWorkbench } from './composables/useWorkbench'
-import { useWorkbenchDialogs } from './composables/useWorkbenchDialogs'
+import { useCardActions } from './scripts/useCardActions'
+import { useWorkbench } from './scripts/useWorkbench'
+import { useWorkbenchDialogs } from './scripts/useWorkbenchDialogs'
 
 const VIEW_CODES = [PERMISSION_CODES.dashboardView]
 const MANAGE_CODES = [PERMISSION_CODES.dashboardManage]

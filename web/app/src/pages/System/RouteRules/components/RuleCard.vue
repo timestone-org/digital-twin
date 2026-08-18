@@ -9,7 +9,7 @@ import { computed } from 'vue'
 import type { RouteRule } from '@dt/contracts'
 import { DtCard } from '@dt/ui'
 
-import { INACTIVE_CARD_VARS } from '../../components/cardVars'
+import { INACTIVE_CARD_VARS } from '../../scripts/cardVars'
 import MethodTag from './MethodTag.vue'
 import RuleBadges from './RuleBadges.vue'
 import RuleCodes from './RuleCodes.vue'

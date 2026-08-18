@@ -27,7 +27,7 @@ import { isModelBusy } from '@/features/hvac/modelView'
 import { formatTimeAt } from '@/utils/datetime'
 import LiveReadingsTable from './LiveReadingsTable.vue'
 import RecommendEntryCard from './RecommendEntryCard.vue'
-import { useLiveTest } from '../useLiveTest'
+import { useLiveTest } from '../scripts/useLiveTest'
 
 const props = defineProps<{ open: boolean; model: AcModel | null }>()
 

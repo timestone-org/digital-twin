@@ -20,8 +20,8 @@ import RelocateBar from './components/RelocateBar.vue'
 import RoomBoard from './components/RoomBoard.vue'
 import SpaceNameDialog from './components/SpaceNameDialog.vue'
 import WorkshopRail from './components/WorkshopRail.vue'
-import { copyOf, submitTask, type SpaceTask } from './spaceTask'
-import { useSpaceBoard } from './useSpaceBoard'
+import { copyOf, submitTask, type SpaceTask } from './scripts/spaceTask'
+import { useSpaceBoard } from './scripts/useSpaceBoard'
 
 const toast = useToast()
 const confirm = useConfirm()

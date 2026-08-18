@@ -18,8 +18,8 @@ import DetailActions from './components/DetailActions.vue'
 import MetricsPanel from './components/MetricsPanel.vue'
 import PublicationPanel from './components/PublicationPanel.vue'
 import LiveTestDialog from './components/LiveTestDialog.vue'
-import { useOutOfFold } from './useOutOfFold'
-import { usePublication } from './usePublication'
+import { useOutOfFold } from './scripts/useOutOfFold'
+import { usePublication } from './scripts/usePublication'
 import { MODEL_STATUS_VIEW, isModelBusy } from '@/features/hvac/modelView'
 
 // 训练中的刷新间隔；一页逐条对比的行数

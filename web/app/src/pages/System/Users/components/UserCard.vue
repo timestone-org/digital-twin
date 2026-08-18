@@ -8,7 +8,7 @@ import type { UserListItem } from '@dt/contracts'
 import { DtCard, DtTag } from '@dt/ui'
 
 import { formatDateTime } from '@/utils/datetime'
-import { INACTIVE_CARD_VARS } from '../../components/cardVars'
+import { INACTIVE_CARD_VARS } from '../../scripts/cardVars'
 import DirectGrantTag from './DirectGrantTag.vue'
 import UserRowActions from './UserRowActions.vue'
 

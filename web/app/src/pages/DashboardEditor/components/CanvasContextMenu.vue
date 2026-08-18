@@ -9,9 +9,9 @@
  */
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 
-import type { ContextMenuAction } from '../contextMenuItems'
-import { clampContextMenu } from '../contextMenuPosition'
-import type { ContextMenuState } from '../useEditorContextMenu'
+import type { ContextMenuAction } from '../scripts/contextMenuItems'
+import { clampContextMenu } from '../scripts/contextMenuPosition'
+import type { ContextMenuState } from '../scripts/useEditorContextMenu'
 
 const props = defineProps<{ menu: ContextMenuState | null }>()
 const emit = defineEmits<{ pick: [action: ContextMenuAction]; close: [] }>()

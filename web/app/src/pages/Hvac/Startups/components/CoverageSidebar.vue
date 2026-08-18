@@ -15,7 +15,7 @@ import { computed } from 'vue'
 import type { CombinationCoverage } from '@dt/contracts'
 import { DtEmpty, DtProgress, DtTag } from '@dt/ui'
 
-import { THIN_THRESHOLD, coverageRows } from '../startupView'
+import { THIN_THRESHOLD, coverageRows } from '../scripts/startupView'
 
 const props = defineProps<{
   items: readonly CombinationCoverage[]

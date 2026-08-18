@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CollectBrowseItem, CollectSubtreeItem } from '@dt/contracts'
 
-import type { TreeNode } from '@/pages/Collect/Opcua/browseTree'
+import type { TreeNode } from '@/pages/Collect/Opcua/scripts/browseTree'
 import {
   findNode,
   graftSubtree,
@@ -18,7 +18,7 @@ import {
   unloadedUnder,
   variableIndex,
   variablesUnder,
-} from '@/pages/Collect/Opcua/browseTree'
+} from '@/pages/Collect/Opcua/scripts/browseTree'
 
 function browsed(
   address: string,

@@ -10,7 +10,7 @@ import type { RoleSummary } from '@dt/contracts'
 import { DtCard, DtTag } from '@dt/ui'
 
 import CodeChips from '../../components/CodeChips.vue'
-import { sortCodes } from '../../components/codes'
+import { sortCodes } from '../../scripts/codes'
 import RoleRowActions from './RoleRowActions.vue'
 
 const props = defineProps<{ role: RoleSummary }>()

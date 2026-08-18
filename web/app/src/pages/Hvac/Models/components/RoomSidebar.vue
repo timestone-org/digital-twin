@@ -13,7 +13,7 @@ import {
   filterRooms,
   groupByWorkshop,
   type RoomEntry,
-} from '../roomGroups'
+} from '../scripts/roomGroups'
 import RoomSidebarItem from './RoomSidebarItem.vue'
 
 const props = defineProps<{

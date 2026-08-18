@@ -7,8 +7,8 @@
 import type { TwinConfigIssue } from '@dt/twin-config'
 import { DtIcon } from '@dt/ui'
 
-import { TWIN_ISSUE_LABELS, twinIssueSelection } from '../outlineNodes'
-import type { TwinSelection } from '../types'
+import { TWIN_ISSUE_LABELS, twinIssueSelection } from '../scripts/outlineNodes'
+import type { TwinSelection } from '../scripts/types'
 
 defineProps<{ issues: readonly TwinConfigIssue[] }>()
 

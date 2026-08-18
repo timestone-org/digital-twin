@@ -28,6 +28,7 @@ WEB = ROOT / "web"
 PACKAGES = WEB / "packages"
 APP = WEB / "app"
 
+SCRIPT = frozenset({".ts", ".tsx"})
 TEST_SUFFIX = re.compile(r"\.(test|spec)\.[cm]?[jt]sx?$")
 DEEP_LINK = re.compile(r"""from\s+['"]@dt/[a-z-]+/src/""")
 APP_IMPORT = re.compile(r"""from\s+['"](@/|.*\bapp/src/)""")
@@ -148,7 +149,8 @@ def check_page_directories() -> list[Violation]:
     """页面目录：`PascalCase` + `index.vue`，一个目录一个路由。
 
     允许**分组目录**（如 `pages/System/`）：它自己没有 index.vue，只装子页面目录
-    与共用的 `components/`。分组只是给一批同前缀路由分个家，不代表一条路由。
+    与共用的 `components/`、`scripts/`。分组只是给一批同前缀路由分个家，
+    不代表一条路由。
 
     ⚠ 目录名写成 kebab-case 或主组件叫 `LoginPage.vue` 都不会报错，
     只会让「路由 → 文件」从机械映射退化成要靠记的事。
@@ -160,7 +162,7 @@ def check_page_directories() -> list[Violation]:
 def _check_page_dir(parent: Path) -> list[Violation]:
     found: list[Violation] = []
     for entry in sorted(parent.iterdir()):
-        if entry.name == "components":
+        if entry.name in {"components", "scripts"}:
             continue
         if not entry.is_dir():
             found.append(
@@ -183,6 +185,54 @@ def _check_leaf_page(page: Path) -> list[Violation]:
         Violation("页面私有组件放本目录的 components/", at(extra), extra.name)
         for extra in sorted(page.glob("*.vue"))
         if extra.name != "index.vue"
+    ]
+
+
+def check_page_scripts_in_one_dir() -> list[Violation]:
+    """页面的 .ts 一律收在本页面的 `scripts/` 里。
+
+    平铺在页面根目录、或混进 `components/` 里，都会让一个页面目录长到几十个
+    文件后「哪个是组件、哪个是逻辑」只能靠文件名前缀猜。分组目录同理，
+    它的共用脚本归自己的 `scripts/`，不归任何一个子页面。
+
+    ⚠ 这一条违反了不会报错也不会有类型错误，只会一点点散回去。
+    """
+    pages = APP / "src" / "pages"
+    if not pages.is_dir():
+        return []
+    return [
+        Violation("页面脚本放本目录的 scripts/", at(path), path.name)
+        for owner in _page_owners(pages)
+        for path in _owned_scripts(owner)
+        if path.parent != owner / "scripts"
+    ]
+
+
+def _page_owners(parent: Path) -> list[Path]:
+    """页面目录与分组目录——.ts 归属的最小单位。
+
+    Args: parent。
+    """
+    owners: list[Path] = []
+    for entry in sorted(parent.iterdir()):
+        if not entry.is_dir() or entry.name in {"components", "scripts"}:
+            continue
+        owners.append(entry)
+        if not (entry / "index.vue").is_file():
+            owners.extend(_page_owners(entry))
+    return owners
+
+
+def _owned_scripts(owner: Path) -> list[Path]:
+    """owner 名下的 .ts——不跨进子页面，那是下一个 owner 的事。
+
+    Args: owner。
+    """
+    nested = _page_owners(owner) if not (owner / "index.vue").is_file() else []
+    return [
+        path
+        for path in sorted(iter_files(owner, SCRIPT))
+        if not any(sub in path.parents for sub in nested)
     ]
 
 
@@ -209,6 +259,7 @@ CHECKS = (
     check_production_avoids_testing_dir,
     check_barrels_only_reexport,
     check_page_directories,
+    check_page_scripts_in_one_dir,
     check_package_names,
 )
 

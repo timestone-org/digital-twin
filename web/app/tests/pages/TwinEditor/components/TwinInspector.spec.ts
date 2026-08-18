@@ -25,7 +25,7 @@ import PartInspector from '@/pages/TwinEditor/components/inspector/PartInspector
 import RoamTourInspector from '@/pages/TwinEditor/components/inspector/RoamTourInspector.vue'
 import ViewpointsInspector from '@/pages/TwinEditor/components/inspector/ViewpointsInspector.vue'
 import TwinInspector from '@/pages/TwinEditor/components/TwinInspector.vue'
-import type { TwinSelection } from '@/pages/TwinEditor/types'
+import type { TwinSelection } from '@/pages/TwinEditor/scripts/types'
 
 // 七类实体各两个：只有两个才验得出「换掉一项」有没有把另一项一起带走
 const CONFIG: TwinConfig = normalizeTwinConfig({

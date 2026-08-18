@@ -9,7 +9,7 @@ import { computed } from 'vue'
 import type { CombinationCoverage, DtSelectOption } from '@dt/contracts'
 import { DtSelect } from '@dt/ui'
 
-import { combinationOptions, outcomeOptions } from '../startupView'
+import { combinationOptions, outcomeOptions } from '../scripts/startupView'
 
 const props = defineProps<{
   workshopId: string

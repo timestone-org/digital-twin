@@ -23,7 +23,7 @@ import {
 } from '@dt/ui'
 
 import { newIdempotencyKey } from '@/api/idempotency'
-import { formatSample } from '../liveFormat'
+import { formatSample } from '../scripts/liveFormat'
 
 const props = defineProps<{
   modelValue: boolean

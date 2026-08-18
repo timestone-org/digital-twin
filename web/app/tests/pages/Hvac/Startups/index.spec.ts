@@ -21,7 +21,7 @@ import { DtConfirmHost, DtToastHost, useConfirm, useToast } from '@dt/ui'
 
 import * as hvac from '@/api/hvac'
 import StartupsPage from '@/pages/Hvac/Startups/index.vue'
-import { EPISODE_PAGE_SIZE } from '@/pages/Hvac/Startups/startupView'
+import { EPISODE_PAGE_SIZE } from '@/pages/Hvac/Startups/scripts/startupView'
 import { useAuthStore } from '@/stores/auth'
 
 vi.mock('vue-router', () => ({

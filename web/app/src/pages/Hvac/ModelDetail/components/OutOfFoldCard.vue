@@ -23,7 +23,7 @@ import ErrorHistogram from './ErrorHistogram.vue'
 import FoldStabilityBar from './FoldStabilityBar.vue'
 import PredictionScatter from './PredictionScatter.vue'
 import TopErrorList from './TopErrorList.vue'
-import { SCATTER_MAX_ROWS, type OutOfFold } from '../useOutOfFold'
+import { SCATTER_MAX_ROWS, type OutOfFold } from '../scripts/useOutOfFold'
 
 const CAP_HELP =
   `图上最多画 ${SCATTER_MAX_ROWS} 条：再多画下去点会糊成一片，浏览器也开始卡。` +

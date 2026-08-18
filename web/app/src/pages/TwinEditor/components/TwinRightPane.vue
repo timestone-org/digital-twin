@@ -11,7 +11,7 @@ import type { TwinConfig } from '@dt/twin-config'
 import { DtSegmented } from '@dt/ui'
 import { ref } from 'vue'
 
-import type { TwinSelection } from '../types'
+import type { TwinSelection } from '../scripts/types'
 import TwinBindingPane from './TwinBindingPane.vue'
 import TwinInspector from './TwinInspector.vue'
 

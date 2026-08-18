@@ -12,8 +12,8 @@ import {
   contextMenuGroups,
   type ContextMenuAction,
   type ContextMenuInput,
-} from '@/pages/DashboardEditor/contextMenuItems'
-import type { ContextMenuState } from '@/pages/DashboardEditor/useEditorContextMenu'
+} from '@/pages/DashboardEditor/scripts/contextMenuItems'
+import type { ContextMenuState } from '@/pages/DashboardEditor/scripts/useEditorContextMenu'
 
 function stateOf(
   nodeId: string | null,

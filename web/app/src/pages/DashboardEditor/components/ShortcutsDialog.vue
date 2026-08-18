@@ -7,7 +7,7 @@
 import { DtModal } from '@dt/ui'
 import { computed } from 'vue'
 
-import { modLabel, shortcutGroups } from '../shortcuts'
+import { modLabel, shortcutGroups } from '../scripts/shortcuts'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ 'update:open': [open: boolean] }>()

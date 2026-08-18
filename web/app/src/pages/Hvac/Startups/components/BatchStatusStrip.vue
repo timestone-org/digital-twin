@@ -30,7 +30,7 @@ import {
   formatWindow,
   isFullHistory,
   rebuildRangeProblem,
-} from '../startupView'
+} from '../scripts/startupView'
 
 const props = defineProps<{
   batch: StartupBatch | null

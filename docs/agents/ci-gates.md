@@ -44,7 +44,7 @@ E2E、a11y、变异测试不进 PR 闸门是 `testing-standard-*.md` §9 的明�
 | 规范 | 闸门 |
 |---|---|
 | project-structure-python §7 八条铁律 | `check_structure_python.py`（13 项） |
-| project-structure-typescript §7 布局类 | `check_structure_web.py`（8 项） |
+| project-structure-typescript §7 布局类 | `check_structure_web.py`（9 项） |
 | 同 §4.2/§4.3 样式与页面布局 | `check_web_styles.py`（5 项） |
 | 同 §2 分层依赖表、零环 | `check_web_deps.py`（3 项） |
 

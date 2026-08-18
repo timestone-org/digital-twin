@@ -24,9 +24,9 @@ import {
 import * as collect from '@/api/collect'
 import PermGuard from '@/components/PermGuard.vue'
 import { describeError } from '@/composables/useAsyncList'
-import { toPointItems } from '../browseTree'
-import { importPoints } from '../pointImport'
-import { useBrowseTree } from '../useBrowseTree'
+import { toPointItems } from '../scripts/browseTree'
+import { importPoints } from '../scripts/pointImport'
+import { useBrowseTree } from '../scripts/useBrowseTree'
 import BrowseTreeNode from './BrowseTreeNode.vue'
 import ImportNodesDialog from './ImportNodesDialog.vue'
 

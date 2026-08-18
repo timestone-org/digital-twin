@@ -6,7 +6,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { PermissionCatalog, RoleSummary } from '@dt/contracts'
-import type { RoleFormTask } from '@/pages/System/Roles/roleFormTask'
+import type { RoleFormTask } from '@/pages/System/Roles/scripts/roleFormTask'
 
 import * as admin from '@/api/admin'
 import * as authApi from '@/api/auth'

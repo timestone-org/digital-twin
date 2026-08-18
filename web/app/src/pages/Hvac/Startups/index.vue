@@ -30,9 +30,9 @@ import {
   rebuildRangeProblem,
   toEpisodeRows,
   type EpisodeRow,
-} from './startupView'
-import { useEpisodeCurve } from './useEpisodeCurve'
-import { useStartupBatches } from './useStartupBatches'
+} from './scripts/startupView'
+import { useEpisodeCurve } from './scripts/useEpisodeCurve'
+import { useStartupBatches } from './scripts/useStartupBatches'
 
 const toast = useToast()
 const confirm = useConfirm()

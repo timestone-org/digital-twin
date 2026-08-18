@@ -20,8 +20,8 @@ import {
   useToast,
 } from '@dt/ui'
 
-import { implausibleWarnings } from '../acLimitForm'
-import { useAcDataConfig } from '../useAcDataConfig'
+import { implausibleWarnings } from '../scripts/acLimitForm'
+import { useAcDataConfig } from '../scripts/useAcDataConfig'
 
 const props = defineProps<{
   modelValue: boolean

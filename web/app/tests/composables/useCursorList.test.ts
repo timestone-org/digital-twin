@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { CursorPage } from '@dt/contracts'
 
 import { BizError } from '@/api/client'
-import { describeAcDataError } from '@/pages/Hvac/AcData/acDataError'
+import { describeAcDataError } from '@/pages/Hvac/AcData/scripts/acDataError'
 import { useCursorList } from '@/composables/useCursorList'
 
 function page(items: string[], next: string | null = null): CursorPage<string> {

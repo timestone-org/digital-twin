@@ -9,7 +9,7 @@ import { computed } from 'vue'
 import { DtHelpTip, DtProgress } from '@dt/ui'
 
 import { formatMinutes } from '@/features/hvac/modelView'
-import type { FoldStat } from '../foldStats'
+import type { FoldStat } from '../scripts/foldStats'
 
 const FOLD_HELP =
   '评估按开机时间切成连续的几段，每段轮流当「模型没见过」的那一折。' +

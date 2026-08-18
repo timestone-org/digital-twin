@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 
 import TwinRightPane from '@/pages/TwinEditor/components/TwinRightPane.vue'
-import { TWIN_SELECT_MODEL } from '@/pages/TwinEditor/types'
+import { TWIN_SELECT_MODEL } from '@/pages/TwinEditor/scripts/types'
 
 const CONFIG = normalizeTwinConfig({
   anchors: [

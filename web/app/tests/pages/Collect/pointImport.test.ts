@@ -10,7 +10,7 @@ import { COLLECT_POINT_BATCH_MAX } from '@dt/contracts'
 
 import { BizError } from '@/api/client'
 import * as collect from '@/api/collect'
-import { chunk, importPoints } from '@/pages/Collect/Opcua/pointImport'
+import { chunk, importPoints } from '@/pages/Collect/Opcua/scripts/pointImport'
 
 function item(code: string): CollectPointItemInput {
   return { code, name: code, address: `ns=2;s=${code}` }

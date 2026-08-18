@@ -19,7 +19,7 @@ import {
 } from '@dt/ui'
 import { computed } from 'vue'
 
-import { hierChildCount, hierParentCandidates } from '../../hierRows'
+import { hierChildCount, hierParentCandidates } from '../../scripts/hierRows'
 import HierFieldList from '../fields/HierFieldList.vue'
 import IconPicker from '../fields/IconPicker.vue'
 import InspectorSection from '../fields/InspectorSection.vue'

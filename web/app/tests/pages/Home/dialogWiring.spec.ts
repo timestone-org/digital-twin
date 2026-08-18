@@ -15,7 +15,7 @@ import HomePage from '@/pages/Home/index.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const open = vi.fn()
-vi.mock('@/pages/Home/composables/useWorkbenchDialogs', () => ({
+vi.mock('@/pages/Home/scripts/useWorkbenchDialogs', () => ({
   useWorkbenchDialogs: () => ({
     openName: { value: null },
     target: { value: null },

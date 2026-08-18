@@ -19,7 +19,7 @@ import {
   roamMsOrNull,
   roamSeconds,
   roamSecondsOrUndefined,
-} from '../../roamTiming'
+} from '../../scripts/roamTiming'
 
 const props = defineProps<{
   tour: TwinRoamTour

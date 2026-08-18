@@ -14,8 +14,8 @@ import { nextTick, ref, watch } from 'vue'
 
 import { DtIcon, DtTag } from '@dt/ui'
 
-import { iconOfClass } from '../nodeFacts'
-import type { NodeTreeRow } from '../nodeTree'
+import { iconOfClass } from '../scripts/nodeFacts'
+import type { NodeTreeRow } from '../scripts/nodeTree'
 
 const props = defineProps<{
   rows: readonly NodeTreeRow[]

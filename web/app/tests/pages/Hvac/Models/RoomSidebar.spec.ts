@@ -7,7 +7,7 @@ import { enableAutoUnmount, mount } from '@vue/test-utils'
 import type { Room } from '@dt/contracts'
 
 import RoomSidebar from '@/pages/Hvac/Models/components/RoomSidebar.vue'
-import { buildRoomListing } from '@/pages/Hvac/Models/roomGroups'
+import { buildRoomListing } from '@/pages/Hvac/Models/scripts/roomGroups'
 import { STAMP } from '@/testing/modelFixtures'
 
 const WEST = { id: 'w2', name: '西车间' }

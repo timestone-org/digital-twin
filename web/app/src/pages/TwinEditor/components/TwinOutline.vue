@@ -9,10 +9,10 @@ import type { TwinConfig } from '@dt/twin-config'
 import { DtIcon } from '@dt/ui'
 import { computed, ref } from 'vue'
 
-import { buildTwinOutline, twinRemoveImpactText } from '../outlineNodes'
-import type { TwinOutlineRow, TwinOutlineSection } from '../outlineNodes'
-import { isSameSelection } from '../types'
-import type { TwinEntityKind, TwinSelection } from '../types'
+import { buildTwinOutline, twinRemoveImpactText } from '../scripts/outlineNodes'
+import type { TwinOutlineRow, TwinOutlineSection } from '../scripts/outlineNodes'
+import { isSameSelection } from '../scripts/types'
+import type { TwinEntityKind, TwinSelection } from '../scripts/types'
 
 const props = defineProps<{
   config: TwinConfig

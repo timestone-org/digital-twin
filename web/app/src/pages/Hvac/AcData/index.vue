@@ -22,12 +22,12 @@ import {
   recentRange,
   rangeProblem,
   toggleMetric,
-} from './acDataQuery'
-import { describeAcDataError } from './acDataError'
-import { toSampleColumns, toSampleRow } from './sampleTable'
-import { useAcDataView } from './useAcDataView'
+} from './scripts/acDataQuery'
+import { describeAcDataError } from './scripts/acDataError'
+import { toSampleColumns, toSampleRow } from './scripts/sampleTable'
+import { useAcDataView } from './scripts/useAcDataView'
 import { useCursorList } from '@/composables/useCursorList'
-import { useRawSeries } from './useRawSeries'
+import { useRawSeries } from './scripts/useRawSeries'
 import AcDataToolbar from './components/AcDataToolbar.vue'
 import RawSampleTable from './components/RawSampleTable.vue'
 import RawSeriesChart from './components/RawSeriesChart.vue'

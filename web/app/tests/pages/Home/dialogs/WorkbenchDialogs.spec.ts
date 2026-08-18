@@ -27,7 +27,7 @@ import * as runtimeApi from '@/api/runtimeParams'
 import ImportFilePicker from '@/pages/Home/components/ImportFilePicker.vue'
 import NewDashboardDialog from '@/pages/Home/components/NewDashboardDialog.vue'
 import WorkbenchDialogs from '@/pages/Home/components/WorkbenchDialogs.vue'
-import type { WorkbenchDialogName } from '@/pages/Home/dialogs'
+import type { WorkbenchDialogName } from '@/pages/Home/scripts/dialogs'
 import { useAuthStore } from '@/stores/auth'
 
 const push = vi.fn()

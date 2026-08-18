@@ -30,7 +30,7 @@ import {
 } from '@/features/hvac/publication'
 import { formatSince } from '@/utils/datetime'
 import PublishResultList from './PublishResultList.vue'
-import type { PublicationController } from '../usePublication'
+import type { PublicationController } from '../scripts/usePublication'
 
 /** 区域推荐那一行的行键。⚠ 与任何 set_key 都不会撞：组合键里没有空格。 */
 const REGION_ROW = ' region '

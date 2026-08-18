@@ -10,7 +10,7 @@ import type { AcMetric } from '@dt/contracts'
 import { DtCheckbox, DtLineChart, DtNotice } from '@dt/ui'
 import type { DtChartSeries } from '@dt/ui'
 
-import { MAX_CHARTED_METRICS } from '../acDataQuery'
+import { MAX_CHARTED_METRICS } from '../scripts/acDataQuery'
 
 const props = defineProps<{
   metrics: readonly AcMetric[]

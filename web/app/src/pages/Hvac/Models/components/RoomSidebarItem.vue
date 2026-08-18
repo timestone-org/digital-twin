@@ -8,7 +8,7 @@
  */
 import { DtBadge, DtTag } from '@dt/ui'
 
-import type { RoomEntry } from '../roomGroups'
+import type { RoomEntry } from '../scripts/roomGroups'
 
 const props = defineProps<{
   room: RoomEntry

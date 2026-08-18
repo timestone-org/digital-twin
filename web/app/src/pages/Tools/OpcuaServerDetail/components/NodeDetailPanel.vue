@@ -33,8 +33,8 @@ import {
   displayValue,
   isWritable,
   valueRankLabel,
-} from '../nodeFacts'
-import { useNodeValue } from '../useNodeValue'
+} from '../scripts/nodeFacts'
+import { useNodeValue } from '../scripts/useNodeValue'
 
 const props = defineProps<{
   instanceId: string

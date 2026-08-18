@@ -13,7 +13,7 @@ import NodeTree from '@/pages/Tools/OpcuaServerDetail/components/NodeTree.vue'
 import {
   buildNodeTree,
   visibleRows,
-} from '@/pages/Tools/OpcuaServerDetail/nodeTree'
+} from '@/pages/Tools/OpcuaServerDetail/scripts/nodeTree'
 
 function node(over: Partial<OpcuaNode> = {}): OpcuaNode {
   return {

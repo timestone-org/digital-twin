@@ -6,7 +6,7 @@
 import { computed, ref } from 'vue'
 import { DtButton, DtInput } from '@dt/ui'
 
-import { CONFIRM_WORD } from '../runtimeParamsMeta'
+import { CONFIRM_WORD } from '../scripts/runtimeParamsMeta'
 
 defineProps<{ messages: readonly string[] }>()
 

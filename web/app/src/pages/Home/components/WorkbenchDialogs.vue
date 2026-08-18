@@ -17,12 +17,12 @@ import type { DashboardTemplateSummary } from '@dt/contracts'
 
 import type { DashboardSummary, ProjectSummary } from '@/api/dashboardWire'
 import { useAuthStore } from '@/stores/auth'
-import type { WorkbenchDialogName } from '../dialogs'
+import type { WorkbenchDialogName } from '../scripts/dialogs'
 import type {
   NewDashboardPayload,
   NewProjectPayload,
   ProjectSettingsPayload,
-} from '../payloads'
+} from '../scripts/payloads'
 import ImportDashboardDialog from './ImportDashboardDialog.vue'
 import ImportFilePicker from './ImportFilePicker.vue'
 import NewDashboardDialog from './NewDashboardDialog.vue'
@@ -34,16 +34,16 @@ import ShareDashboardDialog from './ShareDashboardDialog.vue'
 import TemplateLibraryDialog from './TemplateLibraryDialog.vue'
 import UnresolvedBindingsDialog from './UnresolvedBindingsDialog.vue'
 import ValidateBindingsDialog from './ValidateBindingsDialog.vue'
-import { useDashboardDialogFlow } from './useDashboardDialogFlow'
-import { useProjectDialogFlow } from './useProjectDialogFlow'
-import { useCopySources } from './useCopySources'
-import { useProjectThemes } from './useProjectThemes'
+import { useDashboardDialogFlow } from '../scripts/useDashboardDialogFlow'
+import { useProjectDialogFlow } from '../scripts/useProjectDialogFlow'
+import { useCopySources } from '../scripts/useCopySources'
+import { useProjectThemes } from '../scripts/useProjectThemes'
 import {
   useTemplateDialogFlow,
   type TemplateDraft,
-} from './useTemplateDialogFlow'
-import { groupByProject, hasNameClash, toImportTargets } from './workbenchViews'
-import type { ImportChoice } from './workbenchWrites'
+} from '../scripts/useTemplateDialogFlow'
+import { groupByProject, hasNameClash, toImportTargets } from '../scripts/workbenchViews'
+import type { ImportChoice } from '../scripts/workbenchWrites'
 
 const props = defineProps<{
   openName: WorkbenchDialogName | null

@@ -10,7 +10,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import TwinOutline from '@/pages/TwinEditor/components/TwinOutline.vue'
-import type { TwinSelection } from '@/pages/TwinEditor/types'
+import type { TwinSelection } from '@/pages/TwinEditor/scripts/types'
 
 function makeConfig(over: Record<string, unknown> = {}): TwinConfig {
   return normalizeTwinConfig({

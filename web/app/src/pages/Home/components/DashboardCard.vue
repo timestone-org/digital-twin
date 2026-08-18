@@ -19,9 +19,9 @@ import {
   CARD_MENU,
   toCardMenuAction,
   type CardMenuAction,
-} from '../cardActions'
+} from '../scripts/cardActions'
 import DashboardThumbnail from './DashboardThumbnail.vue'
-import { aspectLabel } from './ratioPresets'
+import { aspectLabel } from '../scripts/ratioPresets'
 import InlineRenameField from './InlineRenameField.vue'
 
 const props = withDefaults(

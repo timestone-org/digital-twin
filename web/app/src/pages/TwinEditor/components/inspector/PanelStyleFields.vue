@@ -24,7 +24,7 @@ import {
   TWIN_PANEL_PRESETS,
   matchedPanelPreset,
   type TwinPanelPreset,
-} from '../../panelPresets'
+} from '../../scripts/panelPresets'
 import InspectorSection from '../fields/InspectorSection.vue'
 
 const props = defineProps<{

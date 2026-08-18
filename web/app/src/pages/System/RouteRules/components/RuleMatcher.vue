@@ -14,7 +14,7 @@ import { HTTP_METHODS } from '@dt/contracts'
 import { DtButton, DtInput, DtModal, DtNotice, DtSelect, DtTag } from '@dt/ui'
 
 import { useAuthStore } from '@/stores/auth'
-import { decide } from '../matcher'
+import { decide } from '../scripts/matcher'
 
 const props = defineProps<{ rules: readonly RouteRule[] }>()
 

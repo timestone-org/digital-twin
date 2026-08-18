@@ -9,7 +9,7 @@
  */
 import { DtButton, DtDataView, DtSpinner } from '@dt/ui'
 
-import type { SampleColumn, SampleRow } from '../sampleTable'
+import type { SampleColumn, SampleRow } from '../scripts/sampleTable'
 
 defineProps<{
   columns: readonly SampleColumn[]
