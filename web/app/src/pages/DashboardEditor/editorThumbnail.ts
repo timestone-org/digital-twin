@@ -48,6 +48,10 @@ export async function captureThumbnail(
       toPng(stage, {
         pixelRatio: CAPTURE_WIDTH_PX / width,
         cacheBust: true,
+        // ⚠ 舞台身上带着编辑器此刻的缩放，而截图库克隆节点时把计算样式原样复制
+        // 过去——留着它，画布仍是设计尺寸而内容只画在左上角那一小块，四周全是空。
+        // 缩到 640 宽这件事由 pixelRatio 一个人负责。
+        style: { transform: 'none' },
       }),
       CAPTURE_TIMEOUT_MS,
     )
