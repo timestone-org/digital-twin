@@ -223,15 +223,18 @@ A 一旦被删或改了绑定，B 屏当场没数据，且现场看不出这跟�
 
 | 模块 | 怎么触发 | 上抛的值 |
 |---|---|---|
+| `action-button` | 原生 `<button>`，`emitsInteractions`（含 Enter/Space 与禁用语义） | 配了「联动值」就有 |
 | `text-block` / `image-block` | 清单 `hostClickable`，整块可点由渲染宿主接管（含 Enter/Space） | 无 → 只能配 `navigate` |
 | `metric-card` | 整块可点 + 逐行 `rowClickEmitter` 上抛 `{event:'click', value}` | 有 → `navigateByValue` 的主要用户 |
 | `twin-view` | `emitsInteractions`（3D 里点对象） | 有 |
 
-配了以某节点为源的规则，`meta.interactive` 会为真，模块自动摆出可点击外观——
+配了以某节点为源的规则，`meta.interactive` 会为真，展示类模块自动摆出可点击外观——
 「配了规则才像能点」这条既有口径对跳转一样成立，不用另加开关。
+⚠ 按钮不走这条：可点是它的本性，没配规则时点了没反应属于配置没写完，
+在右栏的联动页当场看得见。
 
-⚠ 想要一个"看起来就是按钮"的入口，现在的答案是 `text-block` + 卡片外观。
-真要一个 `button` 模块是另一件事，不在这份设计里。
+一个"看起来就是按钮"的入口用 `action-button`，设计见
+[MODULE_ACTION_BUTTON_DESIGN](MODULE_ACTION_BUTTON_DESIGN.md)。
 
 ---
 
