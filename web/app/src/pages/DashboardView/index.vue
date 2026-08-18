@@ -17,7 +17,7 @@ import {
   createInteractionRuntime,
   type GetModuleManifest,
 } from '@dt/runtime'
-import { DtButton, DtPageState } from '@dt/ui'
+import { DtButton, DtPageState, DtSpinner } from '@dt/ui'
 import {
   computed,
   onBeforeUnmount,
@@ -68,7 +68,12 @@ installDashboardDataSources({
 })
 
 const nodes = computed(() => file.dashboard.value?.nodes ?? [])
-useDashboardValues(() => nodes.value)
+// ⚠ 取当前**已加载**的那张屏而不是地址栏里的 id：切屏期间地址已经换了、文档还没到，
+// 按地址走会让上一屏的画面配上新屏的订阅
+useDashboardValues(
+  () => nodes.value,
+  () => file.dashboard.value?.id ?? '',
+)
 
 const tree = computed(() => buildNodeTree(nodes.value, getManifest))
 
@@ -77,8 +82,21 @@ const cardChrome = computed(() =>
   mergeCardChrome(file.dashboard.value?.chromeJson.card, null),
 )
 
+/**
+ * 跨屏跳转：全仓只有这一处知道「怎么跳」——引擎只算出目标句柄。
+ * ⚠ 自跳挡在这里而不是引擎里：`push` 到同一路由既不重载也不报错，
+ * 表现正好是「点了没反应」，而引擎不该认识「当前是哪张屏」这件事。
+ */
+function goToDashboard(handle: string): void {
+  if (handle === '' || handle === file.dashboard.value?.id) return
+  void router.push({
+    name: 'dashboard-view',
+    params: { dashboardId: handle },
+  })
+}
+
 // 联动引擎：规则来自 chromeJson，节点表一换整套易失态清零重放
-const interaction = createInteractionRuntime()
+const interaction = createInteractionRuntime({ navigate: goToDashboard })
 provide(INTERACTION_KEY, interaction)
 watch(
   () => file.dashboard.value,
@@ -133,7 +151,7 @@ function back(): void {
   void router.push('/')
 }
 
-// 地址栏里换一张屏（导航模块跨页切换）也要重新加载，不能只在挂载时取一次
+// 地址栏里换一张屏（联动的跨屏跳转）也要重新加载，不能只在挂载时取一次
 watch(
   () => dashboardId(),
   (id) => {
@@ -165,15 +183,17 @@ onBeforeUnmount(() => {
     class="relative h-screen w-screen overflow-hidden bg-surface-base"
     @mousemove="keepChromeAwake"
   >
+    <!-- ⚠ 整屏的加载/错误态只留给「手上一张都没有」：跨屏跳转时把画面整片换掉，
+         墙上每跳一次先白一下。取数失败时 docIo 会把文档置空，于是照样落到这里 -->
     <DtPageState
-      v-if="file.loading.value || file.error.value"
+      v-if="file.dashboard.value === null"
       :loading="file.loading.value"
       :error="file.error.value"
       :empty="false"
       @retry="file.load(dashboardId())"
     />
 
-    <div v-else-if="file.dashboard.value" :style="stageStyle">
+    <div v-else data-test="dashboard-stage" :style="stageStyle">
       <NodeTree
         :nodes="tree.roots"
         :design="design"
@@ -189,6 +209,18 @@ onBeforeUnmount(() => {
         :get-manifest="getManifest"
         @close="interaction.closeModal"
       />
+    </div>
+
+    <!-- 换屏期间上一屏留在原地，所以必须说出来：不声不响地留着，就成了
+         「看起来在跑、实际停在上一张」。同样摆在 chrome 的淡出之外 -->
+    <div
+      v-if="file.loading.value && file.dashboard.value !== null"
+      data-test="dashboard-switching"
+      class="absolute right-4 top-4 flex items-center gap-2 rounded-md bg-surface-raised/80 px-3 py-1.5 text-xs text-text-secondary"
+      role="status"
+    >
+      <DtSpinner :size="14" label="" />
+      正在切换大屏…
     </div>
 
     <!-- ⚠ 摆在 chrome 的淡出之外：这条是故障告知，不是装饰 -->

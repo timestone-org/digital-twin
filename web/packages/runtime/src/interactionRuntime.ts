@@ -1,5 +1,9 @@
 /**
- * @fileoverview 节点联动的运行时引擎：显隐/互斥切换/节点弹窗。
+ * @fileoverview 节点联动的运行时引擎：显隐/互斥切换/节点弹窗/跨屏跳转。
+ *
+ * ⚠ 跳转本身**不在这里实现**：引擎只算出目标句柄，交给宿主传进来的导航口
+ * （`InteractionPorts.navigate`）。引擎不认识路由、不认识登录态与公开态，
+ * 也不判目标存不存在——认了任何一样，公开态与设计态就要在这里分叉。
  *
  * 铁律：运行时态与持久态严格分离——
  * 持久初始显隐是 `isVisible`（入库），联动产生的显隐是易失覆盖态（永不入库），
@@ -10,13 +14,25 @@
  */
 import { reactive, shallowRef, type InjectionKey, type ShallowRef } from 'vue'
 import type {
+  DashboardHandle,
   InteractionAction,
   InteractionEvent,
   InteractionEventName,
+  InteractionNavigateByValueAction,
   InteractionRule,
   InteractionSetActiveAction,
   InteractionShowAction,
 } from '@dt/contracts'
+
+/**
+ * 宿主给引擎的口子。
+ * ⚠ 缺席即静默 no-op：设计态画布、独立渲染与测试都不该跳走，而它们本来就
+ * 不下发这个口——不给缺省实现，就不会有人靠「跳到哪去了」才发现忘了接。
+ */
+export interface InteractionPorts {
+  /** 跳到某张大屏。句柄的含义由宿主自己解释（`DashboardHandle`）。 */
+  navigate?: (handle: DashboardHandle) => void
+}
 
 /** 参与联动的一个节点：id 与它的持久初始显隐。 */
 export interface InteractionNode {
@@ -97,6 +113,7 @@ interface RuntimeState {
   rules: ShallowRef<readonly InteractionRule[]>
   activeModal: ShallowRef<ActiveModal | null>
   nodes: readonly InteractionNode[]
+  ports: InteractionPorts
 }
 
 function persistedVisible(state: RuntimeState, nodeId: string): boolean {
@@ -153,6 +170,30 @@ function applyVisibility(
   }
 }
 
+/**
+ * navigate：把句柄原样交给宿主。
+ * ⚠ 空句柄是「还没挑目标」而不是一个能跳的地方，直接不叫宿主——
+ * 叫了的话宿主要么跳去一个 404，要么自己再判一次空，判漏就是「点了没反应」。
+ */
+function applyNavigate(state: RuntimeState, target: DashboardHandle): void {
+  if (target === '') return
+  state.ports.navigate?.(target)
+}
+
+/** navigateByValue：按事件携带值挑一条路由，比不中就不跳。 */
+function applyNavigateByValue(
+  state: RuntimeState,
+  action: InteractionNavigateByValueAction,
+  event: InteractionEvent,
+): void {
+  const selected = selectedKey(event.value)
+  // ⚠ 没带值的事件一律不跳：整块可点（`hostClickable`）上抛的 click 没有 value，
+  // 不挡的话它会命中「值留空」的那条路由，表现成随手点一下就换屏
+  if (selected === '') return
+  const hit = action.routes.find((route) => route.value === selected)
+  if (hit !== undefined) applyNavigate(state, hit.target)
+}
+
 function applyAction(
   state: RuntimeState,
   action: InteractionAction,
@@ -174,6 +215,14 @@ function applyAction(
   }
   if (action.type === 'setActive') {
     applySetActive(state, action, event)
+    return
+  }
+  if (action.type === 'navigate') {
+    applyNavigate(state, action.target)
+    return
+  }
+  if (action.type === 'navigateByValue') {
+    applyNavigateByValue(state, action, event)
     return
   }
   applyVisibility(state, action)
@@ -235,13 +284,19 @@ function hasRulesIn(
   )
 }
 
-/** 创建一个联动运行时实例；覆盖态与弹窗态只存内存。 */
-export function createInteractionRuntime(): InteractionRuntime {
+/**
+ * 创建一个联动运行时实例；覆盖态与弹窗态只存内存。
+ * @param ports 宿主的口子；不给就是「跳转这一档静默不生效」
+ */
+export function createInteractionRuntime(
+  ports: InteractionPorts = {},
+): InteractionRuntime {
   const state: RuntimeState = {
     overrides: reactive<Record<string, boolean>>({}),
     rules: shallowRef<readonly InteractionRule[]>([]),
     activeModal: shallowRef<ActiveModal | null>(null),
     nodes: [],
+    ports,
   }
 
   return {

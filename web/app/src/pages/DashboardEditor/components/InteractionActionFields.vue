@@ -1,16 +1,28 @@
 <script setup lang="ts">
 /**
  * @fileoverview 按动作类型出编辑面：显隐三档给目标多选，互斥切换给「值 + 目标」
- * 的组列表，弹窗给内容节点与标题，关闭弹窗没有字段。改完整条动作上抛。
+ * 的组列表，弹窗给内容节点与标题，两档跳转给大屏选择器，关闭弹窗没有字段。
+ * 改完整条动作上抛。
+ *
+ * ⚠ 跳转的目标只能从**本项目的大屏**里挑（`dashboard-ref` 控件），不是一个能填
+ * 任意地址的框：能配 URL 的大屏等于一个站内跳板（开放重定向）。
  */
-import { computed, ref, watch } from 'vue'
-import type { DtSelectOption, InteractionAction } from '@dt/contracts'
-import { DtButton, DtInput, DtSelect } from '@dt/ui'
+import { computed } from 'vue'
+import type {
+  DtSelectOption,
+  InteractionAction,
+  InteractionNavigateByValueAction,
+} from '@dt/contracts'
+import { DtButton, DtField, DtInput, DtNotice, DtSelect } from '@dt/ui'
 
-import { newClientUuid } from '@/api/idempotency'
+import DashboardRefControl from '@/features/dashboard/controls/DashboardRefControl.vue'
 import InteractionTargetPicker from './InteractionTargetPicker.vue'
+import InteractionValueRoutes from './InteractionValueRoutes.vue'
+import { NAVIGATE_TARGET_FIELD } from '../scripts/interactionOptions'
+import { useRowKeys } from '../scripts/rowKeys'
 
 type ActiveGroup = { value: string; targets: string[] }
+type ValueRoute = InteractionNavigateByValueAction['routes'][number]
 
 const props = defineProps<{
   action: InteractionAction
@@ -27,6 +39,10 @@ const groups = computed<readonly ActiveGroup[]>(() =>
   props.action.type === 'setActive' ? props.action.groups : [],
 )
 
+const routes = computed<readonly ValueRoute[]>(() =>
+  props.action.type === 'navigateByValue' ? props.action.routes : [],
+)
+
 const modalTarget = computed(() =>
   props.action.type === 'openModal' ? props.action.target : '',
 )
@@ -35,25 +51,15 @@ const modalTitle = computed(() =>
   props.action.type === 'openModal' ? (props.action.title ?? '') : '',
 )
 
-/**
- * 组行的稳定 key：落库的组只有 `{ value, targets }` 没有 id，拿 value 当 key
- * 会在改名的那一刻整行重挂、输入框当场丢焦点；故本地另存一份与组等长的 uid。
- * ⚠ 删中间一组必须连着 splice 掉它那把 uid：只靠下面按长度补齐的话，尾部会被
- * 截掉，余下各行拿到的是前一行的 key，本地状态整体错位。
- */
-const groupKeys = ref<string[]>([])
+const navigateTarget = computed(() =>
+  props.action.type === 'navigate' ? props.action.target : '',
+)
 
-function syncGroupKeys(count: number): void {
-  const keys = groupKeys.value
-  while (keys.length < count) keys.push(newClientUuid())
-  if (keys.length > count) keys.splice(count)
-}
-
-watch(() => groups.value.length, syncGroupKeys, { immediate: true })
+const groupKeys = useRowKeys(() => groups.value.length)
 
 const groupRows = computed(() =>
   groups.value.map((group, index) => ({
-    key: groupKeys.value[index] ?? `group-${index}`,
+    key: groupKeys.keys.value[index] ?? `group-${index}`,
     group,
   })),
 )
@@ -68,23 +74,19 @@ function writeGroups(next: ActiveGroup[]): void {
   emit('update', { type: 'setActive', groups: next })
 }
 
-function indexOfKey(key: string): number {
-  return groupKeys.value.indexOf(key)
-}
-
 function addGroup(): void {
   writeGroups([...groups.value, { value: '', targets: [] }])
 }
 
 function removeGroup(key: string): void {
-  const index = indexOfKey(key)
+  const index = groupKeys.indexOf(key)
   if (index < 0) return
-  groupKeys.value.splice(index, 1)
+  groupKeys.removeAt(index)
   writeGroups(groups.value.filter((_group, at) => at !== index))
 }
 
 function patchGroup(key: string, patch: Partial<ActiveGroup>): void {
-  const index = indexOfKey(key)
+  const index = groupKeys.indexOf(key)
   if (index < 0) return
   writeGroups(
     groups.value.map((group, at) =>
@@ -101,6 +103,10 @@ function onGroupTargets(key: string, next: string[]): void {
   patchGroup(key, { targets: next })
 }
 
+function writeRoutes(next: ValueRoute[]): void {
+  emit('update', { type: 'navigateByValue', routes: next })
+}
+
 function onModalTarget(target: string): void {
   if (props.action.type !== 'openModal') return
   emit('update', { ...props.action, target })
@@ -114,6 +120,13 @@ function onModalTitle(raw: string): void {
     type: 'openModal',
     target: props.action.target,
     ...(title === '' ? {} : { title }),
+  })
+}
+
+function onNavigateTarget(raw: unknown): void {
+  emit('update', {
+    type: 'navigate',
+    target: typeof raw === 'string' ? raw : '',
   })
 }
 </script>
@@ -192,6 +205,28 @@ function onModalTitle(raw: string): void {
         @update:model-value="onModalTitle"
       />
     </template>
+    <template v-else-if="action.type === 'navigate'">
+      <DtField label="目标大屏" size="sm">
+        <DashboardRefControl
+          :field="NAVIGATE_TARGET_FIELD"
+          :value="navigateTarget"
+          data-test="ix-navigate-target"
+          @update="onNavigateTarget"
+        />
+      </DtField>
+      <DtNotice
+        v-if="navigateTarget === ''"
+        intent="warning"
+        icon="alert-triangle"
+      >
+        还没挑目标，这条规则点了不会跳。
+      </DtNotice>
+    </template>
+    <InteractionValueRoutes
+      v-else-if="action.type === 'navigateByValue'"
+      :routes="routes"
+      @update="writeRoutes"
+    />
     <p v-else class="m-0 text-2xs text-text-disabled">
       关闭当前弹窗，不需要额外字段。
     </p>

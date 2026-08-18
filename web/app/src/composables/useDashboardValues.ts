@@ -22,11 +22,13 @@ export interface DashboardValues {
  * 装上取数源并跟着绑定变化重订。须在 setup 内调用。
  * 收渲染子集：编辑器给的是全量草稿节点，公开快照页给的是窄面，都能装。
  * @param nodes 当前大屏的全部节点
+ * @param scope 当前是哪张屏；跨屏跳转时订阅与快照都要跟着翻篇（见 usePointSamples）
  */
 export function useDashboardValues(
   nodes: () => readonly DashboardNodeView[],
+  scope: () => string,
 ): DashboardValues {
-  const samples = usePointSamples(() => boundPointKeys(nodes()))
+  const samples = usePointSamples(() => boundPointKeys(nodes()), scope)
 
   provideRuntimeData({
     readBinding: () => createBindingReader(samples.read),

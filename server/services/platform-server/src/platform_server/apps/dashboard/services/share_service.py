@@ -7,6 +7,7 @@
 import secrets
 import uuid
 from collections.abc import Sequence
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +34,9 @@ _logger = get_logger("platform.dashboard.share")
 
 # 令牌熵：32 字节经 urlsafe base64 得 43 个字符
 TOKEN_BYTES = 32
+# 外观袋里存联动规则的那一段。⚠ 键名与前端的
+# `web/app/src/features/dashboard/interactionRules.ts` 各写一份，改名要一起改
+INTERACTIONS_CHROME_KEY = "interactions"
 # 令牌长度上限。超长的一律当作查不到，而不是让它去打一次库
 MAX_TOKEN_CHARS = 128
 
@@ -131,6 +135,22 @@ async def find_by_public_token(
     return rows.scalars().one_or_none()
 
 
+def to_public_chrome(chrome_json: dict[str, Any]) -> dict[str, Any]:
+    """公开面的外观袋：联动规则整段不下发，其余原样。
+
+    ⚠ 跨屏跳转的规则里存着**别的大屏的 id**，而公开面不回任何能定位它在库里
+    位置的信息（ADR-0014）。公开页也确实不跑联动——它压根不装联动引擎，
+    下发这一段只是让那些 id 白白出一趟门。
+    ⚠ 只剥这一个键：外观袋其余的段是渲染要用的，剥多了公开页就跟登录态不一样。
+    Args: chrome_json。
+    """
+    return {
+        key: value
+        for key, value in chrome_json.items()
+        if key != INTERACTIONS_CHROME_KEY
+    }
+
+
 def to_share_out(dashboard: Dashboard) -> DashboardShareOut:
     """发布状态的对外形态。
 
@@ -189,7 +209,7 @@ def to_public_dashboard_out(
         design_height=dashboard.design_height,
         schema_version=dashboard.schema_version,
         theme_json=dashboard.theme_json,
-        chrome_json=dashboard.chrome_json,
+        chrome_json=to_public_chrome(dashboard.chrome_json),
         updated_at=dashboard.updated_at,
         nodes=list(nodes),
     )

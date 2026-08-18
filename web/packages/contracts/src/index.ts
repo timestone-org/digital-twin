@@ -210,10 +210,13 @@ export type {
 } from './chrome'
 export { CHROME_KEYS, isChromeKey } from './chrome'
 export type {
+  DashboardHandle,
   InteractionAction,
   InteractionCloseModalAction,
   InteractionEvent,
   InteractionEventName,
+  InteractionNavigateAction,
+  InteractionNavigateByValueAction,
   InteractionOpenModalAction,
   InteractionRule,
   InteractionSetActiveAction,

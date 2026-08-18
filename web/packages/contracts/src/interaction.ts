@@ -1,5 +1,5 @@
 /**
- * @fileoverview 节点联动契约：控件事件 → 显隐/互斥切换/弹窗。
+ * @fileoverview 节点联动契约：控件事件 → 显隐/互斥切换/弹窗/跨屏跳转。
  * 运行态与持久态严格分离——联动只改易失的运行时显隐，绝不写回节点配置；
  * 规则存大屏级 `chromeJson.interactions`。
  *
@@ -51,11 +51,46 @@ export interface InteractionCloseModalAction {
   type: 'closeModal'
 }
 
+/**
+ * 跳到哪张大屏。**登录态是大屏 id，公开态是目标屏的公开令牌**——
+ * 含义由渲染这棵树的宿主决定，联动引擎只搬运不解释。
+ *
+ * ⚠ 它**不是 URL**：能配任意地址的大屏等于一个站内跳板（开放重定向），
+ * 与路由守卫 `safeReturnTarget` 只放行站内相对路径是同一个理由。
+ * ⚠ 也不许拿它跟当前大屏 id 比对——那样公开态那条路（句柄是令牌）就再也接不上。
+ */
+export type DashboardHandle = string
+
+/**
+ * navigate：离开本屏，跳到另一张大屏。
+ * ⚠ 这是唯一一档**跨文档**的动作：同一条事件上再配显隐类动作没有意义，页面都换了。
+ */
+export interface InteractionNavigateAction {
+  type: 'navigate'
+  target: DashboardHandle
+}
+
+/**
+ * navigateByValue：按控件上抛的值分流跳转（一块卡片六个指标，各进各的明细屏）。
+ *
+ * 形状照 `setActive` 的 `groups` 抄：那是本仓已有的「按值分派」口径，
+ * 再造一套只会让两处的空值语义各漂各的。
+ * ⚠ **没带值的事件一律不跳**：整块可点的模块（`hostClickable`）上抛的 click
+ * 是没有 value 的，不挡的话它会命中「值留空」的那条路由，表现成随手点一下就换屏。
+ * ⚠ 同一个 value 出现两次时取**第一条**命中，后面那条永远不生效——编辑面要能看出重复。
+ */
+export interface InteractionNavigateByValueAction {
+  type: 'navigateByValue'
+  routes: { value: string; target: DashboardHandle }[]
+}
+
 export type InteractionAction =
   | InteractionShowAction
   | InteractionSetActiveAction
   | InteractionOpenModalAction
   | InteractionCloseModalAction
+  | InteractionNavigateAction
+  | InteractionNavigateByValueAction
 
 /** 一条联动规则。 */
 export interface InteractionRule {

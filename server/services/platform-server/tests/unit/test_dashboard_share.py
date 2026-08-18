@@ -1,9 +1,11 @@
-"""发布面的三条口径：令牌每次换新、公开出参不带内部字段、形状不合就不打库。
+"""发布面的四条口径：令牌每次换新、公开出参不带内部字段、外观袋里的联动规则
+整段不下发、形状不合就不打库。
 
 ⚠ 「公开出参不带内部字段」这条只能靠逐字断言键集合：出参模型多一个字段不会
 报错，只会让公开链接开始外发项目 id 与创建时刻。
 """
 
+import json
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -180,6 +182,51 @@ def test_the_public_dashboard_never_echoes_the_token_back() -> None:
     )
     assert "public_token" not in payload
     assert "is_public" not in payload
+
+
+def test_the_public_chrome_drops_the_interaction_rules() -> None:
+    # 跨屏跳转的联动规则里存着**别的大屏的 id**，而公开面不回任何能定位库里
+    # 位置的东西（ADR-0014）。公开页本来也不装联动引擎，下发只是让 id 白出门
+    dashboard = make_dashboard()
+    dashboard.chrome_json = {
+        "card": {"radius": 8},
+        "interactions": [
+            {
+                "id": "r-1",
+                "source": {"nodeId": "n-1", "event": "click"},
+                "action": {"type": "navigate", "target": str(DASHBOARD_ID)},
+            }
+        ],
+    }
+
+    payload = dumped(
+        share_service.to_public_dashboard_out(dashboard, nodes=[])
+    )
+
+    assert payload["chrome_json"] == {"card": {"radius": 8}}
+    assert str(DASHBOARD_ID) not in json.dumps(payload)
+
+
+def test_the_stripped_chrome_key_matches_the_frontend_one() -> None:
+    # ⚠ 键名是两侧各写一份的字面量：前端在
+    # web/app/src/features/dashboard/interactionRules.ts 里叫同一个名字。
+    # 漂开的表现是这里照常剥一个不存在的键，而真规则连着 id 一起出门，全程零报错
+    assert share_service.INTERACTIONS_CHROME_KEY == "interactions"
+
+
+def test_the_public_chrome_keeps_everything_else_verbatim() -> None:
+    # 只剥这一段：外观袋里其余的键是渲染要用的，剥多了公开页就长得跟登录态不一样
+    dashboard = make_dashboard()
+    dashboard.chrome_json = {"card": {"radius": 8}, "editor": {"grid": 8}}
+
+    payload = dumped(
+        share_service.to_public_dashboard_out(dashboard, nodes=[])
+    )
+
+    assert payload["chrome_json"] == {
+        "card": {"radius": 8},
+        "editor": {"grid": 8},
+    }
 
 
 def test_the_public_node_keeps_the_geometry_aliases() -> None:
