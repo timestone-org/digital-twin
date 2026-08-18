@@ -10,7 +10,10 @@ import { DtIcon } from '@dt/ui'
 import { computed, ref } from 'vue'
 
 import { buildTwinOutline, twinRemoveImpactText } from '../scripts/outlineNodes'
-import type { TwinOutlineRow, TwinOutlineSection } from '../scripts/outlineNodes'
+import type {
+  TwinOutlineRow,
+  TwinOutlineSection,
+} from '../scripts/outlineNodes'
 import { isSameSelection } from '../scripts/types'
 import type { TwinEntityKind, TwinSelection } from '../scripts/types'
 

@@ -12,7 +12,10 @@ import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 
 import TwinBindingPane from '@/pages/TwinEditor/components/TwinBindingPane.vue'
-import { TWIN_SELECT_MODEL, type TwinSelection } from '@/pages/TwinEditor/scripts/types'
+import {
+  TWIN_SELECT_MODEL,
+  type TwinSelection,
+} from '@/pages/TwinEditor/scripts/types'
 
 const CONFIG = normalizeTwinConfig({
   anchors: [{ id: 'a1', name: '进口' }],

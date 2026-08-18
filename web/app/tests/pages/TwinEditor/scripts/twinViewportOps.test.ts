@@ -16,7 +16,10 @@ import {
   type TwinViewportHandle,
 } from '@/pages/TwinEditor/scripts/twinViewportOps'
 import type { TwinEditorActions } from '@/pages/TwinEditor/scripts/twinEditorActions'
-import { TWIN_SELECT_MODEL, type TwinSelection } from '@/pages/TwinEditor/scripts/types'
+import {
+  TWIN_SELECT_MODEL,
+  type TwinSelection,
+} from '@/pages/TwinEditor/scripts/types'
 
 const CONFIG = normalizeTwinConfig({
   parts: [{ id: 'part-1', nodes: ['pump'] }],

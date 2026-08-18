@@ -7,7 +7,10 @@ import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
 
-import { PANE_DEFAULTS, PANE_MIN_PX } from '@/pages/DashboardEditor/scripts/paneWidths'
+import {
+  PANE_DEFAULTS,
+  PANE_MIN_PX,
+} from '@/pages/DashboardEditor/scripts/paneWidths'
 import {
   useEditorPanes,
   type EditorPanes,

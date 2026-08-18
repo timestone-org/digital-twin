@@ -4,7 +4,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { STORAGE_KEYS } from '@/config/storage'
-import { readLastProject, writeLastProject } from '@/pages/Home/scripts/lastProject'
+import {
+  readLastProject,
+  writeLastProject,
+} from '@/pages/Home/scripts/lastProject'
 
 beforeEach(() => {
   localStorage.clear()

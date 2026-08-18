@@ -24,6 +24,7 @@ async def test_the_listing_names_every_registered_module(
         "footer",
         "header",
         "image-block",
+        "metric-card",
         "text-block",
         "twin-view",
     }

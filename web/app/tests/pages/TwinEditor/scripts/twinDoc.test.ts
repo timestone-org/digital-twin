@@ -8,7 +8,10 @@ import type { BindingPayload } from '@dt/contracts'
 import { normalizeTwinConfig } from '@dt/twin-config'
 import { describe, expect, it } from 'vitest'
 
-import { TWIN_HISTORY_LIMIT, createTwinDoc } from '@/pages/TwinEditor/scripts/twinDoc'
+import {
+  TWIN_HISTORY_LIMIT,
+  createTwinDoc,
+} from '@/pages/TwinEditor/scripts/twinDoc'
 
 function binding(fieldKey: string): BindingPayload {
   return {

@@ -3,7 +3,10 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { modLabel, shortcutGroups } from '@/pages/DashboardEditor/scripts/shortcuts'
+import {
+  modLabel,
+  shortcutGroups,
+} from '@/pages/DashboardEditor/scripts/shortcuts'
 
 describe('修饰键', () => {
   it('Mac 系是 ⌘，其余是 Ctrl', () => {

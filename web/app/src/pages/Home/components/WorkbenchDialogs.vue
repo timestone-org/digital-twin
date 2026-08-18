@@ -42,7 +42,11 @@ import {
   useTemplateDialogFlow,
   type TemplateDraft,
 } from '../scripts/useTemplateDialogFlow'
-import { groupByProject, hasNameClash, toImportTargets } from '../scripts/workbenchViews'
+import {
+  groupByProject,
+  hasNameClash,
+  toImportTargets,
+} from '../scripts/workbenchViews'
 import type { ImportChoice } from '../scripts/workbenchWrites'
 
 const props = defineProps<{
