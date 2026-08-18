@@ -77,20 +77,16 @@ watch(hasContent, (available) => {
 </template>
 
 <style scoped lang="scss">
-$arrow: 8px;
+@use '../../styles/bubble' as bubble;
 
 .dt-tooltip {
   display: inline-flex;
 
   &__bubble {
     display: block;
-    max-width: 15rem;
+    max-width: 18rem;
     width: max-content;
     padding: 6px 10px;
-    background: var(--surface-overlay);
-    color: var(--text-primary);
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-sm);
     font-family: var(--font-sans);
     font-size: var(--ctl-hint-fs-lg);
     line-height: 1.4;
@@ -98,43 +94,8 @@ $arrow: 8px;
     // 气泡不接收指针事件，否则它会挡住触发器、把 mouseleave 提前触发成闪烁
     pointer-events: none;
 
-    &::after {
-      content: '';
-      position: absolute;
-      width: $arrow;
-      height: $arrow;
-      background: var(--surface-overlay);
-      border: 1px solid var(--border-default);
-      transform: rotate(45deg);
-    }
-
-    &--bottom::after {
-      top: calc(#{-$arrow} / 2 - 1px);
-      left: calc(var(--_arrow) - #{$arrow} / 2);
-      border-right: none;
-      border-bottom: none;
-    }
-
-    &--top::after {
-      bottom: calc(#{-$arrow} / 2 - 1px);
-      left: calc(var(--_arrow) - #{$arrow} / 2);
-      border-top: none;
-      border-left: none;
-    }
-
-    &--right::after {
-      left: calc(#{-$arrow} / 2 - 1px);
-      top: calc(var(--_arrow) - #{$arrow} / 2);
-      border-top: none;
-      border-right: none;
-    }
-
-    &--left::after {
-      right: calc(#{-$arrow} / 2 - 1px);
-      top: calc(var(--_arrow) - #{$arrow} / 2);
-      border-bottom: none;
-      border-left: none;
-    }
+    @include bubble.bubble-surface;
+    @include bubble.bubble-arrow;
   }
 }
 </style>
