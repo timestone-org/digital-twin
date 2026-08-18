@@ -199,9 +199,7 @@ def test_the_public_chrome_drops_the_interaction_rules() -> None:
         ],
     }
 
-    payload = dumped(
-        share_service.to_public_dashboard_out(dashboard, nodes=[])
-    )
+    payload = dumped(share_service.to_public_dashboard_out(dashboard, nodes=[]))
 
     assert payload["chrome_json"] == {"card": {"radius": 8}}
     assert str(DASHBOARD_ID) not in json.dumps(payload)
@@ -219,9 +217,7 @@ def test_the_public_chrome_keeps_everything_else_verbatim() -> None:
     dashboard = make_dashboard()
     dashboard.chrome_json = {"card": {"radius": 8}, "editor": {"grid": 8}}
 
-    payload = dumped(
-        share_service.to_public_dashboard_out(dashboard, nodes=[])
-    )
+    payload = dumped(share_service.to_public_dashboard_out(dashboard, nodes=[]))
 
     assert payload["chrome_json"] == {
         "card": {"radius": 8},
