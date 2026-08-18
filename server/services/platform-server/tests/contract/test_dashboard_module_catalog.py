@@ -34,6 +34,7 @@ _MEMBER = re.compile(r"'([^']+)'")
 # 一个带 3D 资源与数组绑定，以及一个多点位读数模块
 EXPECTED_TYPES = frozenset(
     {
+        "action-button",
         "container",
         "footer",
         "header",

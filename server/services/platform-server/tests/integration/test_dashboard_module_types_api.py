@@ -20,6 +20,7 @@ async def test_the_listing_names_every_registered_module(
     # ⚠ 清单的真源在前端，这里是逐字副本（module_catalog.py 文件头）。加模块要
     # 同步改这条：它是 Agent 看得见的对外契约，静默变长等于契约无人把关
     assert types == {
+        "action-button",
         "container",
         "footer",
         "header",
