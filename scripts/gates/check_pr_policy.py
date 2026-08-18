@@ -72,6 +72,10 @@ MODULE_REGISTRY = frozenset(
         "/test_dashboard_module_catalog.py",
         "server/services/platform-server/tests/unit"
         "/test_dashboard_module_catalog.py",
+        # 对外清单接口的那份逐字副本：它同样是「加一个模块必然要改」的一处，
+        # 漏了它的后果不是宽松而是**过严**——落地 PR 拿不到豁免，只能撞规模闸
+        "server/services/platform-server/tests/integration"
+        "/test_dashboard_module_types_api.py",
     }
 )
 # 模块自己的设计文档
