@@ -1013,6 +1013,334 @@
       "bindings": []
     },
     {
+      "type": "metric-card",
+      "display_name": "实时数值",
+      "category": "数据",
+      "icon": "gauge",
+      "keywords": [
+        "metric",
+        "shuzhi",
+        "数值",
+        "指标",
+        "读数",
+        "实时",
+        "kpi"
+      ],
+      "default_size": {
+        "width": 420,
+        "height": 180,
+        "min_width": 120,
+        "min_height": 64
+      },
+      "chrome": "card",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "default": "",
+          "placeholder": "留空则不画标题栏",
+          "group": "内容",
+          "span": "full"
+        },
+        {
+          "key": "items",
+          "label": "指标",
+          "type": "array",
+          "default": [
+            {
+              "label": "指标 1",
+              "unit": "",
+              "kind": "number",
+              "precision": 1
+            }
+          ],
+          "group": "内容",
+          "help": "每一项在绑点面板上是一行。⚠ 删掉中间一项，它之后每一行的绑定都会改喂前一个指标——删完请核对绑点面板。",
+          "item_schema": [
+            {
+              "key": "label",
+              "label": "名称",
+              "type": "string",
+              "default": "",
+              "placeholder": "留空显示「指标 N」"
+            },
+            {
+              "key": "kind",
+              "label": "值的类型",
+              "type": "enum",
+              "default": "number",
+              "options": [
+                {
+                  "value": "number",
+                  "label": "数值"
+                },
+                {
+                  "value": "boolean",
+                  "label": "开关量"
+                },
+                {
+                  "value": "text",
+                  "label": "文本"
+                }
+              ]
+            },
+            {
+              "key": "unit",
+              "label": "单位",
+              "type": "string",
+              "default": "",
+              "placeholder": "如 °C / kV / MW"
+            },
+            {
+              "key": "precision",
+              "label": "小数位",
+              "type": "range",
+              "default": 1,
+              "when": {
+                "key": "kind",
+                "in": [
+                  "number"
+                ]
+              },
+              "min": 0,
+              "max": 6,
+              "step": 1
+            },
+            {
+              "key": "trueText",
+              "label": "真值文案",
+              "type": "string",
+              "default": "运行",
+              "help": "点位值非 0 时显示它；点位是 0/1 数值也算开关量。",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "boolean"
+                ]
+              }
+            },
+            {
+              "key": "falseText",
+              "label": "假值文案",
+              "type": "string",
+              "default": "停止",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "boolean"
+                ]
+              }
+            },
+            {
+              "key": "dangerBelow",
+              "label": "危险下限",
+              "type": "number",
+              "help": "低于它标红。留空 = 这一侧不判。"
+            },
+            {
+              "key": "warnBelow",
+              "label": "预警下限",
+              "type": "number",
+              "help": "低于它标黄。留空 = 这一侧不判。"
+            },
+            {
+              "key": "warnAbove",
+              "label": "预警上限",
+              "type": "number",
+              "help": "高于它标黄。留空 = 这一侧不判。"
+            },
+            {
+              "key": "dangerAbove",
+              "label": "危险上限",
+              "type": "number",
+              "help": "高于它标红。留空 = 这一侧不判。"
+            },
+            {
+              "key": "key",
+              "label": "联动值",
+              "type": "string",
+              "default": "",
+              "help": "点这一格时上抛的值，留空则这一格点了不上抛。"
+            }
+          ],
+          "item_label_key": "label",
+          "min_items": 1
+        },
+        {
+          "key": "layout",
+          "label": "排布",
+          "type": "enum",
+          "default": "auto",
+          "options": [
+            {
+              "value": "auto",
+              "label": "自动"
+            },
+            {
+              "value": "grid",
+              "label": "网格"
+            },
+            {
+              "value": "list",
+              "label": "列表行"
+            }
+          ],
+          "group": "排布",
+          "help": "自动：只有一项时大字居中，多项时按网格。",
+          "span": "half"
+        },
+        {
+          "key": "columns",
+          "label": "列数",
+          "type": "range",
+          "default": 2,
+          "group": "排布",
+          "span": "half",
+          "when": {
+            "key": "layout",
+            "in": [
+              "grid"
+            ]
+          },
+          "min": 1,
+          "max": 6,
+          "step": 1
+        },
+        {
+          "key": "density",
+          "label": "疏密",
+          "type": "enum",
+          "default": "normal",
+          "options": [
+            {
+              "value": "compact",
+              "label": "紧凑"
+            },
+            {
+              "value": "normal",
+              "label": "标准"
+            },
+            {
+              "value": "loose",
+              "label": "宽松"
+            }
+          ],
+          "group": "排布",
+          "span": "half"
+        },
+        {
+          "key": "align",
+          "label": "格内对齐",
+          "type": "enum",
+          "default": "left",
+          "options": [
+            {
+              "value": "left",
+              "label": "左"
+            },
+            {
+              "value": "center",
+              "label": "中"
+            }
+          ],
+          "group": "排布",
+          "span": "half",
+          "when": {
+            "key": "layout",
+            "in": [
+              "auto",
+              "grid"
+            ]
+          }
+        },
+        {
+          "key": "valueSize",
+          "label": "读数字号 (px)",
+          "type": "range",
+          "default": 0,
+          "group": "文字",
+          "help": "0 = 跟着格子大小自动缩放。",
+          "span": "half",
+          "min": 0,
+          "max": 96,
+          "step": 1
+        },
+        {
+          "key": "labelSize",
+          "label": "名称字号 (px)",
+          "type": "range",
+          "default": 12,
+          "group": "文字",
+          "span": "half",
+          "min": 8,
+          "max": 32,
+          "step": 1
+        },
+        {
+          "key": "valueColor",
+          "label": "读数颜色",
+          "type": "color",
+          "default": "var(--card-text, var(--text-primary))",
+          "group": "文字",
+          "help": "命中阈值的那一格改用严重度颜色，这里配的是没有告警时的颜色。",
+          "span": "half"
+        },
+        {
+          "key": "grouping",
+          "label": "千分位",
+          "type": "boolean",
+          "default": false,
+          "group": "文字",
+          "span": "half"
+        },
+        {
+          "key": "emptyText",
+          "label": "无数据占位",
+          "type": "string",
+          "default": "—",
+          "group": "文字",
+          "help": "⚠ 别填 0：墙上的「0」与「没有数据」长得一样时，停机与归零就再也分不出来。",
+          "span": "half"
+        },
+        {
+          "key": "showStatusDot",
+          "label": "状态点",
+          "type": "boolean",
+          "default": true,
+          "group": "状态",
+          "help": "配了阈值边界的指标才有状态点：没有判据就连「正常」都不该说。",
+          "span": "half"
+        },
+        {
+          "key": "showUpdatedAt",
+          "label": "更新时刻",
+          "type": "boolean",
+          "default": false,
+          "group": "状态",
+          "help": "显示这一格读数的采样时刻（时:分:秒），用来看现场还动不动。",
+          "span": "half"
+        }
+      ],
+      "bindings": [
+        {
+          "key": "itemValues",
+          "label": "指标读数",
+          "data_type": "number",
+          "is_array": true,
+          "is_entity_pinned": true,
+          "array_fields": [
+            {
+              "key": "value",
+              "label": "读数",
+              "data_type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "type": "text-block",
       "display_name": "文本块",
       "category": "装饰",
