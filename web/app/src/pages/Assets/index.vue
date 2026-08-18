@@ -138,6 +138,17 @@ onMounted(() => void library.reload(kind.value))
         {{ library.error.value }}
       </DtNotice>
 
+      <!-- 素材类型切的是三批互不相干的内容，故用 tabs 档而不是塞进 DtDataView
+           的工具条：那格与右侧的视图切换同排居中，页签的底线只横跨工具条自身
+           宽度就断掉，看着像画歪了 -->
+      <DtSegmented
+        :model-value="kind"
+        :options="kindOptions"
+        variant="tabs"
+        aria-label="素材类型"
+        @update:model-value="onKind"
+      />
+
       <DtDataView
         v-model:view="view"
         class="min-h-0 flex-1"
@@ -150,15 +161,6 @@ onMounted(() => void library.reload(kind.value))
           hint: '在右上角传一个。传上来的文件会有一串 asset: 引用，配置里存的就是它',
         }"
       >
-        <template #toolbar>
-          <DtSegmented
-            :model-value="kind"
-            :options="kindOptions"
-            aria-label="素材类型"
-            @update:model-value="onKind"
-          />
-        </template>
-
         <template #summary>
           已加载 {{ library.assets.value.length }} 项{{
             maxHint === '' ? '' : `・${maxHint}`
