@@ -1,6 +1,6 @@
 /**
  * @fileoverview 契约：联动面只把清单标了可交互的节点列进事件源，增删改一律整包
- * 上抛，弹窗标题留空不落键。
+ * 上抛，弹窗标题留空不落键，跨屏跳转只从大屏里挑目标且永不命中的路由要标出来。
  * ⚠ 两条静默的坑由这里钉住：源过滤放宽会让「配了却永远不触发」的规则混进来，
  * 删中间一组若按下标错位，剩下那组会连着别人的目标表一起搬家。
  */
@@ -253,6 +253,93 @@ describe('联动规则编辑面', () => {
     expect(firstAction(wrapper)).toStrictEqual({
       type: 'openModal',
       target: 'n2',
+    })
+  })
+
+  it('挑了目标大屏之后整条动作上抛 navigate', async () => {
+    const wrapper = mountEditor([
+      rule({ action: { type: 'navigate', target: '' } }),
+    ])
+
+    await wrapper.find('[data-test="ix-navigate-target"] input').setValue('d-2')
+
+    expect(firstAction(wrapper)).toEqual({ type: 'navigate', target: 'd-2' })
+  })
+
+  it('还没挑目标就说出来——这条规则点了不会跳', () => {
+    const wrapper = mountEditor([
+      rule({ action: { type: 'navigate', target: '' } }),
+    ])
+
+    expect(wrapper.text()).toContain('还没挑目标')
+  })
+
+  it('按值跳转添一条给出空值空目标的新路由', async () => {
+    const wrapper = mountEditor([
+      rule({ action: { type: 'navigateByValue', routes: [] } }),
+    ])
+
+    await wrapper.find('[data-test="ix-route-add"]').trigger('click')
+
+    expect(firstAction(wrapper)).toEqual({
+      type: 'navigateByValue',
+      routes: [{ value: '', target: '' }],
+    })
+  })
+
+  it('值留空与值重复的路由都标成永不命中', () => {
+    const routes = [
+      { value: '', target: 'd-1' },
+      { value: 'pv', target: 'd-2' },
+      { value: 'pv', target: 'd-3' },
+    ]
+    const wrapper = mountEditor([
+      rule({ action: { type: 'navigateByValue', routes } }),
+    ])
+
+    const warnings = wrapper
+      .findAll('[data-test="ix-route-warning"]')
+      .map((item) => item.text())
+
+    expect(warnings).toHaveLength(2)
+    expect(warnings[0]).toContain('值留空')
+    expect(warnings[1]).toContain('重复')
+  })
+
+  it('给某一条路由挑目标只改那一条', async () => {
+    const routes = [
+      { value: 'pv', target: '' },
+      { value: 'ac', target: '' },
+    ]
+    const wrapper = mountEditor([
+      rule({ action: { type: 'navigateByValue', routes } }),
+    ])
+
+    await wrapper
+      .findAll('[data-test="ix-route-target"] input')[1]
+      ?.setValue('d-ac')
+
+    expect(firstAction(wrapper)).toEqual({
+      type: 'navigateByValue',
+      routes: [routes[0], { value: 'ac', target: 'd-ac' }],
+    })
+  })
+
+  it('删中间一条路由不动其余条', async () => {
+    const routes = [
+      { value: 'a', target: 'd-1' },
+      { value: 'b', target: 'd-2' },
+      { value: 'c', target: 'd-3' },
+    ]
+    const wrapper = mountEditor([
+      rule({ action: { type: 'navigateByValue', routes } }),
+    ])
+
+    await wrapper.findAll('[data-test="ix-route-remove"]')[1]?.trigger('click')
+
+    expect(firstAction(wrapper)).toEqual({
+      type: 'navigateByValue',
+      routes: [routes[0], routes[2]],
     })
   })
 

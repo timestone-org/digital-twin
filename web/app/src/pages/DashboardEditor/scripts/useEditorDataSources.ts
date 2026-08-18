@@ -27,5 +27,5 @@ export function useEditorDataSources(
     }),
     fetchHistory: fetchPointHistory,
   })
-  useDashboardValues(nodes)
+  useDashboardValues(nodes, () => dashboard.value?.id ?? '')
 }

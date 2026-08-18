@@ -1,8 +1,8 @@
 /**
  * @fileoverview 联动引擎契约：易失覆盖不碰持久态、init 清零、互斥切换、
- * 弹窗目标失效不开、陈旧组 reconcile。
+ * 弹窗目标失效不开、陈旧组 reconcile、跨屏跳转只搬运句柄。
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { InteractionRule } from '@dt/contracts'
 
 import {
@@ -168,5 +168,120 @@ describe('reconcileSetActiveGroups', () => {
       expect(first.action.groups.map((group) => group.value)).toEqual(['a'])
     }
     expect(next[1]).toBe(rules[1])
+  })
+})
+
+describe('跨屏跳转', () => {
+  function navigateRule(target: string): InteractionRule {
+    return {
+      id: 'r-nav',
+      source: { nodeId: 'btn', event: 'click' },
+      action: { type: 'navigate', target },
+    }
+  }
+
+  function byValueRule(): InteractionRule {
+    return {
+      id: 'r-nav-v',
+      source: { nodeId: 'btn', event: 'click' },
+      action: {
+        type: 'navigateByValue',
+        routes: [
+          { value: 'pv', target: 'd-pv' },
+          { value: 'ac', target: 'd-ac' },
+        ],
+      },
+    }
+  }
+
+  it('把句柄原样交给宿主，自己一点都不解释', () => {
+    const navigate = vi.fn()
+    const runtime = createInteractionRuntime({ navigate })
+    runtime.init([navigateRule('d-2')], NODES)
+
+    runtime.dispatch('btn', { event: 'click' })
+
+    expect(navigate).toHaveBeenCalledWith('d-2')
+  })
+
+  it('没装导航口时静默不跳——设计态画布与独立渲染走这条', () => {
+    const runtime = createInteractionRuntime()
+    runtime.init([navigateRule('d-2')], NODES)
+
+    expect(() => runtime.dispatch('btn', { event: 'click' })).not.toThrow()
+  })
+
+  it('目标是空串时不叫宿主：那是「还没挑目标」，不是一个能跳的地方', () => {
+    const navigate = vi.fn()
+    const runtime = createInteractionRuntime({ navigate })
+    runtime.init([navigateRule('')], NODES)
+
+    runtime.dispatch('btn', { event: 'click' })
+
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('按值分流取命中的那一条', () => {
+    const navigate = vi.fn()
+    const runtime = createInteractionRuntime({ navigate })
+    runtime.init([byValueRule()], NODES)
+
+    runtime.dispatch('btn', { event: 'click', value: 'ac' })
+
+    expect(navigate).toHaveBeenCalledWith('d-ac')
+  })
+
+  it('值比不中任何一条就不跳，而不是回落到第一条', () => {
+    const navigate = vi.fn()
+    const runtime = createInteractionRuntime({ navigate })
+    runtime.init([byValueRule()], NODES)
+
+    runtime.dispatch('btn', { event: 'click', value: '不认识' })
+
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('没带值的事件一律不跳——整块可点的 click 不该撞上「值留空」的路由', () => {
+    const navigate = vi.fn()
+    const runtime = createInteractionRuntime({ navigate })
+    runtime.init(
+      [
+        {
+          id: 'r-blank',
+          source: { nodeId: 'btn', event: 'click' },
+          action: {
+            type: 'navigateByValue',
+            routes: [{ value: '', target: 'd-blank' }],
+          },
+        },
+      ],
+      NODES,
+    )
+
+    runtime.dispatch('btn', { event: 'click' })
+
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('数字值按字符串比，与互斥切换同一套口径', () => {
+    const navigate = vi.fn()
+    const runtime = createInteractionRuntime({ navigate })
+    runtime.init(
+      [
+        {
+          id: 'r-num',
+          source: { nodeId: 'btn', event: 'click' },
+          action: {
+            type: 'navigateByValue',
+            routes: [{ value: '7', target: 'd-7' }],
+          },
+        },
+      ],
+      NODES,
+    )
+
+    runtime.dispatch('btn', { event: 'click', value: 7 })
+
+    expect(navigate).toHaveBeenCalledWith('d-7')
   })
 })

@@ -46,7 +46,10 @@ export function useTwinLiveValues(
     }),
   })
 
-  const samples = usePointSamples(() => boundPointKeysOf(bindings()))
+  const samples = usePointSamples(
+    () => boundPointKeysOf(bindings()),
+    dashboardId,
+  )
 
   // ⚠ 在 computed 里调用读取器：对快照缓存的响应式依赖由这次调用建立
   const values = computed(

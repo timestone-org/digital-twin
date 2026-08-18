@@ -68,6 +68,7 @@ export type {
   ActiveModal,
   InitialSelection,
   InteractionNode,
+  InteractionPorts,
   InteractionRuntime,
 } from './interactionRuntime'
 export { default as ModuleRenderer } from './ModuleRenderer.vue'

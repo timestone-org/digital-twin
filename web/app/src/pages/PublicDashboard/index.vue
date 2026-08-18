@@ -52,8 +52,12 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 
 const nodes = computed(() => dashboard.value?.nodes ?? [])
-// 没装实时 provider 时它只注入读取器不订阅，static 绑定照常出值
-useDashboardValues(() => nodes.value)
+// 没装实时 provider 时它只注入读取器不订阅，static 绑定照常出值。
+// 这一页的「哪张屏」就是地址里那个令牌——公开面没有大屏 id（ADR-0014）
+useDashboardValues(
+  () => nodes.value,
+  () => publicToken(),
+)
 const tree = computed(() => buildNodeTree(nodes.value, getManifest))
 
 // 大屏级卡片外观缺省；模块级覆盖由渲染宿主自己读 config.__cardStyle
