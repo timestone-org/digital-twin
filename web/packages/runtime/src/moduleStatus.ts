@@ -55,3 +55,20 @@ export function computeModuleStatus(input: ModuleStatusInput): ModuleStatus {
   if (tally.bound > 0 && tally.ok === 0) return 'empty'
   return 'connected'
 }
+
+/**
+ * 这一格要不要盖整格状态浮层。
+ *
+ * ⚠ 读的是清单上的自述，不是模块类型：按类型分支的话，第三方的多点位模块
+ * 永远得不到这条待遇，而且既不报错也不失败（DASHBOARD_DESIGN §5.3 陷阱 ③）。
+ * ⚠ `unbound` 那一档照盖：必绑槽一条来源都没配时，模块连布局都摆不出来，
+ * 让它自己画等于画一片空白。
+ * @param ownsStatusDisplay 模块自报「逐格状态我自己交代」
+ * @param status 折出来的整块状态
+ */
+export function showsStatusOverlay(
+  ownsStatusDisplay: boolean,
+  status: ModuleStatus,
+): boolean {
+  return !ownsStatusDisplay || status === 'unbound'
+}

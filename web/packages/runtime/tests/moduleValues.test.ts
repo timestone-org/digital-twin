@@ -267,6 +267,53 @@ const arithmeticReader: BindingValueReader = (binding, siblings) => {
   }
 }
 
+describe('逐槽结论', () => {
+  it('三档各记一条，键就是 fieldKey', () => {
+    const bindings = [
+      fakeBinding({ id: 'b1', fieldKey: 'a', sourceKind: 'opcua' }),
+      fakeBinding({ id: 'b2', fieldKey: 'b', sourceKind: 'opcua' }),
+      fakeBinding({ id: 'b3', fieldKey: 'c', sourceKind: 'opcua' }),
+    ]
+
+    const result = computeModuleValues({
+      specs: [],
+      bindings,
+      read: readerOf({
+        a: { state: 'ok', value: 1, timestampMs: 1700 },
+        b: { state: 'error', message: '快照读不到' },
+      }),
+    })
+
+    expect(result.slots).toEqual({
+      a: { state: 'ok', timestampMs: 1700 },
+      b: { state: 'error', message: '快照读不到' },
+      c: { state: 'pending' },
+    })
+  })
+
+  it('没配来源的槽压根不在里面——「没接」与「接了取不到」因此分得开', () => {
+    const result = computeModuleValues({
+      specs: [ROWS_SPEC],
+      bindings: [],
+      read: readerOf({}),
+    })
+
+    expect(result.slots).toEqual({})
+  })
+
+  it('没有采样时刻时不编一个：那一列是判断现场动没动的唯一依据', () => {
+    const result = computeModuleValues({
+      specs: [],
+      bindings: [
+        fakeBinding({ id: 'b1', fieldKey: 'a', sourceKind: 'static' }),
+      ],
+      read: readerOf({ a: { state: 'ok', value: 7 } }),
+    })
+
+    expect(result.slots.a).toEqual({ state: 'ok' })
+  })
+})
+
 describe('派生槽', () => {
   it('拿得到同节点内已求值的兄弟槽', () => {
     // ⚠ 兄弟袋是同一个对象，逐次求值就地填；要比对每次调用时的样子只能当场复制一份

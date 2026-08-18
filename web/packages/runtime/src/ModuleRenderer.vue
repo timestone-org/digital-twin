@@ -6,12 +6,7 @@
  * 三条失败边界各自只影响一格：清单缺失 → 占位；渲染抛错 → `onErrorCaptured` 阻断冒泡；
  * 异步 chunk 加载失败 → 重试一次后占位。
  */
-import type {
-  BindingView,
-  CardChrome,
-  InteractionEvent,
-  ModuleMeta,
-} from '@dt/contracts'
+import type { BindingView, CardChrome, InteractionEvent } from '@dt/contracts'
 import {
   computed,
   defineAsyncComponent,
@@ -27,10 +22,9 @@ import { resolveCardChrome } from './cardVars'
 import { INTERACTION_KEY } from './interactionRuntime'
 import ModuleFallback from './ModuleFallback.vue'
 import ModuleStatusOverlay from './ModuleStatusOverlay.vue'
-import { computeModuleStatus, countUnboundRequired } from './moduleStatus'
-import { computeModuleValues } from './moduleValues'
 import { resolveModuleConfig, type GetModuleManifest } from './nodeTree'
 import { useRuntimeData } from './runtimeData'
+import { useModuleEvaluation } from './useModuleEvaluation'
 
 const props = defineProps<{
   moduleType: string
@@ -126,32 +120,6 @@ const resolvedConfig = computed(() =>
   resolveModuleConfig(manifest.value, props.config),
 )
 
-// ⚠ 在 computed 里调用注入的读取器：对取数源的响应式依赖由这次调用建立
-const evaluated = computed(() =>
-  computeModuleValues({
-    specs: manifest.value?.bindings ?? [],
-    bindings: props.bindings ?? [],
-    read: runtimeData.readBinding(),
-  }),
-)
-
-const status = computed(() =>
-  computeModuleStatus({
-    hasRenderError: fallback.value !== null,
-    unboundRequiredCount: countUnboundRequired(
-      manifest.value?.bindings ?? [],
-      props.bindings ?? [],
-    ),
-    tally: evaluated.value.tally,
-  }),
-)
-
-/** 状态条只放得下一句，取第一条槽的原因；逐槽原因在求值结果里。 */
-function firstReason(errors: Readonly<Record<string, string>>): string {
-  const [first] = Object.entries(errors)
-  return first === undefined ? '' : `${first[0]}：${first[1]}`
-}
-
 // 联动运行时可选：没 provide（设计态画布、独立渲染）就没有可点击外观也不转发
 const interaction = inject(INTERACTION_KEY, null)
 
@@ -186,19 +154,20 @@ function onHostKeydown(event: KeyboardEvent): void {
   }
 }
 
-const meta = computed<ModuleMeta>(() => {
-  const value: ModuleMeta = { status: status.value }
-  if (props.nodeId !== undefined) value.nodeId = props.nodeId
-  if (evaluated.value.valueTimeMs !== null) {
-    value.valueTimeMs = evaluated.value.valueTimeMs
-  }
-  const reason = firstReason(evaluated.value.errors)
-  if (reason !== '') value.errorMessage = reason
-  if (interaction !== null && props.nodeId !== undefined) {
-    value.interactive = interactive.value
-  }
-  return value
+// ⚠ 读取器在 computed 里调用：对取数源的响应式依赖由那次调用建立
+const { evaluated, meta, showStatusOverlay } = useModuleEvaluation({
+  manifest: () => manifest.value,
+  bindings: () => props.bindings ?? [],
+  nodeId: () => props.nodeId,
+  read: () => runtimeData.readBinding(),
+  hasRenderError: () => fallback.value !== null,
+  interactive: () =>
+    interaction !== null && props.nodeId !== undefined
+      ? interactive.value
+      : undefined,
 })
+
+const status = computed(() => meta.value.status ?? 'connected')
 
 /** 渲染根要不要套卡片框，由清单声明，不按模块类型判断。 */
 const isCard = computed(() => (manifest.value?.chrome ?? 'card') === 'card')
@@ -253,6 +222,7 @@ const chrome = computed(() =>
         <slot />
       </component>
       <ModuleStatusOverlay
+        v-if="showStatusOverlay"
         :status="status"
         :message="meta.errorMessage ?? ''"
       />

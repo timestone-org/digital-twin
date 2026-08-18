@@ -71,6 +71,24 @@ const namespaced = fakeManifest({
     }),
 })
 
+/** 自报「逐格状态我自己交代」的多点位模块。 */
+const owns = fakeManifest({
+  type: 'owns-status',
+  bindings: [{ key: 'power', label: '功率', dataType: 'number' }],
+  ownsStatusDisplay: true,
+  component: () => asAsyncModule(fakeModuleComponent({ mark: 'owns' })),
+})
+
+/** 同上，但必绑：`unbound` 那一档仍归浮层。 */
+const ownsStrict = fakeManifest({
+  type: 'owns-strict',
+  bindings: [
+    { key: 'power', label: '功率', dataType: 'number', isRequired: true },
+  ],
+  ownsStatusDisplay: true,
+  component: () => asAsyncModule(fakeModuleComponent({ mark: 'owns' })),
+})
+
 const catalog = fakeCatalog([
   simple,
   strict,
@@ -78,6 +96,8 @@ const catalog = fakeCatalog([
   silentBoom,
   brokenChunk,
   namespaced,
+  owns,
+  ownsStrict,
 ])
 
 const PENDING_READER: BindingValueReader = () => ({ state: 'pending' })
@@ -230,6 +250,53 @@ describe('状态的交代', () => {
     expect(wrapper.get('.dt-module-status__message').text()).toBe(
       'power：归档服务超时',
     )
+  })
+})
+
+describe('自己交代状态的模块', () => {
+  it('取不到时不盖整格——十个指标坏一个不该让另外九个一起看不见', async () => {
+    const wrapper = mountCells(
+      [{ moduleType: 'owns-status', bindings: [POWER_BINDING] }],
+      () => ({ state: 'error', message: '快照读不到' }),
+    )
+    await flushPromises()
+
+    expect(wrapper.find('.dt-module-status').exists()).toBe(false)
+    expect(wrapper.find('.owns').exists()).toBe(true)
+  })
+
+  it('等首帧时也不盖，模块自己画「等待首帧」', async () => {
+    const wrapper = mountCells([
+      { moduleType: 'owns-status', bindings: [POWER_BINDING] },
+    ])
+    await flushPromises()
+
+    expect(wrapper.find('.dt-module-status').exists()).toBe(false)
+  })
+
+  it('必绑槽一条都没配时照盖：那时模块连布局都摆不出来', async () => {
+    const wrapper = mountCells([{ moduleType: 'owns-strict' }])
+    await flushPromises()
+
+    expect(wrapper.get('.dt-module-status--cover').text()).toContain(
+      '未绑定数据来源',
+    )
+  })
+
+  it('逐槽结论只下发给自报的模块，其余模块的 meta 里没有这一项', async () => {
+    const wrapper = mountCells(
+      [
+        { moduleType: 'owns-status', bindings: [POWER_BINDING] },
+        { moduleType: 'simple', bindings: [POWER_BINDING] },
+      ],
+      () => ({ state: 'error', message: '快照读不到' }),
+    )
+    await flushPromises()
+
+    expect(wrapper.get('.owns').attributes('data-meta')).toContain(
+      '"slots":{"power":{"state":"error","message":"快照读不到"}}',
+    )
+    expect(wrapper.get('.seen').attributes('data-meta')).not.toContain('slots')
   })
 })
 
