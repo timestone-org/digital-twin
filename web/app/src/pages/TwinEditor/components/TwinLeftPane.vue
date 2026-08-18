@@ -10,7 +10,7 @@ import type { TwinConfig } from '@dt/twin-config'
 import { DtSegmented } from '@dt/ui'
 import { ref } from 'vue'
 
-import type { TwinEntityKind, TwinSelection } from '../types'
+import type { TwinEntityKind, TwinSelection } from '../scripts/types'
 import TwinHierarchyPanel from './TwinHierarchyPanel.vue'
 import TwinOutline from './TwinOutline.vue'
 

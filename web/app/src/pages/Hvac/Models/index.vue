@@ -20,7 +20,7 @@ import { useViewMode } from '@/composables/useViewMode'
 import CreateModelDialog from './components/CreateModelDialog.vue'
 import ModelTable from './components/ModelTable.vue'
 import RoomSidebar from './components/RoomSidebar.vue'
-import { buildRoomListing, resolveRoomId } from './roomGroups'
+import { buildRoomListing, resolveRoomId } from './scripts/roomGroups'
 import {
   isModelBusy,
   sortModelRows,

@@ -20,7 +20,7 @@
 
 ### Project structure
 
-后端整体在 `server/`（uv workspace 根），与 `web/` 左右对称，分三层：基础设施只有一份在 `server/lib/`，领域共享包在 `server/domain/*`，服务在 `server/services/<svc>/` 各出一个入口函数，依赖方向 `services → domain → lib`。**`lib` 内零项目名词**（数字孪生/大屏/点位/台账等一律不许出现，产品差异靠参数注入）；`domain` 可含项目名词，但**不许含 ORM 模型/CRUD**，也不许互相 import，入场券是「已有 ≥ 2 个服务真实消费」。`lib` 不许 import domain 与服务、服务之间不许互相 import、服务下不许再出现 `core/`|`config/`|`utils/`。业务只写在 `apps/<feature>/`，依赖方向 `api → services → crud → models`。前端 `web/` 是 pnpm workspace，`@dt/*` 包分四层无环，`packages/*` 不许依赖 `app/`，不许深链包内部路径。
+后端整体在 `server/`（uv workspace 根），与 `web/` 左右对称，分三层：基础设施只有一份在 `server/lib/`，领域共享包在 `server/domain/*`，服务在 `server/services/<svc>/` 各出一个入口函数，依赖方向 `services → domain → lib`。**`lib` 内零项目名词**（数字孪生/大屏/点位/台账等一律不许出现，产品差异靠参数注入）；`domain` 可含项目名词，但**不许含 ORM 模型/CRUD**，也不许互相 import，入场券是「已有 ≥ 2 个服务真实消费」。`lib` 不许 import domain 与服务、服务之间不许互相 import、服务下不许再出现 `core/`|`config/`|`utils/`。业务只写在 `apps/<feature>/`，依赖方向 `api → services → crud → models`。前端 `web/` 是 pnpm workspace，`@dt/*` 包分四层无环，`packages/*` 不许依赖 `app/`，不许深链包内部路径。页面一个路由一个目录，主组件固定 `index.vue`，**私有组件只放 `components/`（只 .vue）、脚本只放 `scripts/`（只 .ts，组合式函数与纯逻辑同一个文件夹）**，页面根目录不许平铺 `.ts`。
 按语言见 `docs/agents/project-structure-python.md` 与 `docs/agents/project-structure-typescript.md`；镜像构建见 `docs/agents/docker-build.md`。
 
 ### API contract

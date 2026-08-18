@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AcUnit, Page, Room } from '@dt/contracts'
 
-import { describePartial, groupByRoom } from '@/pages/Hvac/Spaces/boardData'
+import { describePartial, groupByRoom } from '@/pages/Hvac/Spaces/scripts/boardData'
 
 function unit(id: string, roomId: string): AcUnit {
   return {

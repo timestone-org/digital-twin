@@ -111,7 +111,7 @@ app/src/
 ### 3.2 页面目录
 
 **一个路由一个目录，目录名 `PascalCase`；页面主组件固定叫 `index.vue`；
-只服务本页面的子组件放本目录的 `components/`。**
+只服务本页面的子组件放本目录的 `components/`，脚本放本目录的 `scripts/`。**
 
 ```
 pages/
@@ -121,13 +121,15 @@ pages/
 │       └── LoginBrandPanel.vue ← 只服务登录页，不外泄
 ├── Datasets/
 │   ├── index.vue
-│   ├── components/
-│   └── composables/
+│   ├── components/             ← 只放 .vue
+│   └── scripts/                ← 只放 .ts：组合式函数与纯逻辑都在这里
+│       ├── datasetColumns.ts
+│       └── useDatasetList.ts
 └── NotFound/
     └── index.vue
 ```
 
-三条约定：
+五条约定：
 
 1. **主组件名固定 `index.vue`**。让「路由 → 文件」是一条机械映射：
    路由 `/datasets` 对应 `pages/datasets/index.vue`，不用记这个页面当初
@@ -140,12 +142,19 @@ pages/
    是常见的偷懒，代价是这个目录再也无法与某条路由对应。
    同前缀的一批路由可以放进**分组目录**（`pages/System/Users/`、
    `pages/System/Roles/`）：分组目录自己没有 `index.vue`，只装子页面目录
-   与它们共用的 `components/`。
+   与它们共用的 `components/`、`scripts/`。
 4. **目录名用 `PascalCase`**——这是 §5「目录一律 kebab-case」的**唯一例外**：
    页面目录代表的是一个组件（`Login/index.vue` 就是 `Login` 组件），
    与 `PascalCase.vue` 的组件文件同一档，写成 `login/` 会让它在文件树里
    与 `composables/`、`components/` 这些「装东西的目录」混成一类。
    路由路径仍是小写连字符（`/not-found` ↔ `pages/NotFound/`）。
+5. **页面的 `.ts` 一律收在本目录的 `scripts/`**——组合式函数与纯逻辑同一个
+   文件夹，不按 `composables/` 与 `utils/` 再切一刀。判据是**归属**而不是
+   形态：这个文件只服务这一个页面。切了之后每加一个文件都要先判一次
+   「它算不算组合式函数」，而 `useX.ts` 这个前缀本来就已经把形态说清楚了。
+   页面根目录与 `components/` 下都不许再出现 `.ts`：一个页面动辄三四十个
+   文件，混在一起时「哪个是组件、哪个是逻辑」只能靠文件名猜。
+   分组目录的共用脚本归它自己的 `scripts/`，不塞进任何一个子页面。
 
 对应的测试在 `app/tests/pages/<Route>/`（目录名同样 `PascalCase`，镜像 `src/`），
 **不与源码同目录**，见 §4.1。

@@ -9,7 +9,7 @@ import { computed } from 'vue'
 import type { PointSample } from '@dt/contracts'
 import { DtTag, DtTooltip } from '@dt/ui'
 
-import { formatSample } from '../liveFormat'
+import { formatSample } from '../scripts/liveFormat'
 
 const props = defineProps<{
   sample: PointSample | undefined

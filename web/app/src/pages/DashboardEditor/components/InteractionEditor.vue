@@ -16,7 +16,7 @@ import {
   nodeOptionsOf,
   ruleSummary,
   ruleTouchesNode,
-} from './interactionOptions'
+} from '../scripts/interactionOptions'
 
 const props = defineProps<{
   rules: readonly InteractionRule[]

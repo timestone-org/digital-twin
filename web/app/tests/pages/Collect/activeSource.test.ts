@@ -14,7 +14,7 @@ import {
   SOURCE_QUERY_KEY,
   useActiveSource,
   type ActiveSource,
-} from '@/pages/Collect/Opcua/useActiveSource'
+} from '@/pages/Collect/Opcua/scripts/useActiveSource'
 
 const PAGE = '/collect/opcua'
 

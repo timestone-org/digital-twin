@@ -7,7 +7,7 @@ import type { AcUnit, DtSegmentedOption } from '@dt/contracts'
 import { DtLineChart, DtModal, DtNotice, DtSegmented } from '@dt/ui'
 import type { DtChartSeries } from '@dt/ui'
 
-import type { EpisodeRow } from '../startupView'
+import type { EpisodeRow } from '../scripts/startupView'
 
 defineProps<{
   modelValue: boolean

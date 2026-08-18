@@ -7,12 +7,12 @@
 import { describe, expect, it } from 'vitest'
 import type { PointSample } from '@dt/contracts'
 
-import { formatSample } from '@/pages/Collect/Opcua/liveFormat'
+import { formatSample } from '@/pages/Collect/Opcua/scripts/liveFormat'
 import {
   errorSummary,
   missingPoints,
   stateLook,
-} from '@/pages/Collect/Opcua/sourceState'
+} from '@/pages/Collect/Opcua/scripts/sourceState'
 
 const AT_MS = Date.UTC(2026, 7, 16, 2, 0, 0)
 /** 一天前的采样时刻。用来验「值没变不等于读数有问题」。 */

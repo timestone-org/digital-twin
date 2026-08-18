@@ -19,7 +19,7 @@ import { DtEmpty, DtSegmented } from '@dt/ui'
 import { computed, ref, watch } from 'vue'
 
 import type { ConfigPath } from '@/features/dashboard/configPath'
-import type { OrderKind } from '../useEditorInspector'
+import type { OrderKind } from '../scripts/useEditorInspector'
 import {
   layerPositionOf,
   type NodeGeometry,

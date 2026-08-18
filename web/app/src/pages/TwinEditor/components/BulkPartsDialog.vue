@@ -7,7 +7,7 @@
 import { DtButton, DtCheckbox, DtInput, DtModal, DtTag } from '@dt/ui'
 import { computed, ref, watch } from 'vue'
 
-import type { BulkPartCandidate } from '../bulkParts'
+import type { BulkPartCandidate } from '../scripts/bulkParts'
 
 const props = defineProps<{
   open: boolean

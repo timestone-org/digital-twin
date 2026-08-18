@@ -13,12 +13,12 @@ import {
   CARD_COMMON_FIELDS,
   CARD_FIELD_GROUPS,
   DEFAULT_OPEN_GROUP,
-} from './cardStyleFields'
+} from '../scripts/cardStyleFields'
 import {
   CARD_STYLE_VARIANTS,
   CUSTOM_STYLE_ID,
   matchCardStyle,
-} from './cardStyleVariants'
+} from '../scripts/cardStyleVariants'
 
 const props = defineProps<{ modelValue: CardChrome }>()
 

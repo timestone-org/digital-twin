@@ -6,8 +6,8 @@
 import type { DtSegmentedOption, DtSelectOption } from '@dt/contracts'
 import { DtButton, DtDateTimeInput, DtSegmented, DtSelect } from '@dt/ui'
 
-import type { AcDataView } from '../useAcDataView'
-import type { RangePreset } from '../acDataQuery'
+import type { AcDataView } from '../scripts/useAcDataView'
+import type { RangePreset } from '../scripts/acDataQuery'
 
 const VIEW_OPTIONS: readonly DtSegmentedOption[] = [
   { value: 'table', label: '表格' },

@@ -16,7 +16,7 @@ import type {
 import type { CanvasZoom } from '@/features/dashboard/canvasZoom'
 import { topMostIds, type NodeGeometry } from '@/features/dashboard/editorDoc'
 import type { EditorFrame } from '@/features/dashboard/editorLayout'
-import type { DragKind, DropTarget } from '../canvasDrag'
+import type { DragKind, DropTarget } from '../scripts/canvasDrag'
 import {
   buildPlacements,
   buildSession,
@@ -25,16 +25,16 @@ import {
   marqueeHits,
   renderItems,
   type CanvasPlacement,
-} from '../canvasLayers'
+} from '../scripts/canvasLayers'
 import {
   gridBackgroundStyle,
   rectStyleOf,
   type ClientPoint,
-} from '../canvasViewport'
-import { useCanvasDrag } from '../useCanvasDrag'
-import { useCanvasViewport } from '../useCanvasViewport'
-import { useMarquee } from '../useMarquee'
-import { usePaletteDrop } from '../usePaletteDrop'
+} from '../scripts/canvasViewport'
+import { useCanvasDrag } from '../scripts/useCanvasDrag'
+import { useCanvasViewport } from '../scripts/useCanvasViewport'
+import { useMarquee } from '../scripts/useMarquee'
+import { usePaletteDrop } from '../scripts/usePaletteDrop'
 import CanvasGuides from './CanvasGuides.vue'
 import CanvasNode from './CanvasNode.vue'
 

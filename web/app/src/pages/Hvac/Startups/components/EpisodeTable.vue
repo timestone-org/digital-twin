@@ -13,7 +13,7 @@ import { PERMISSION_CODES } from '@dt/contracts'
 import { DtButton, DtCursorPager, DtDataView, DtTag } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
-import type { EpisodeRow } from '../startupView'
+import type { EpisodeRow } from '../scripts/startupView'
 
 const COLUMNS: readonly DtDataColumn[] = [
   { key: 'started', label: '起始时刻', width: '12rem', card: 'title' },

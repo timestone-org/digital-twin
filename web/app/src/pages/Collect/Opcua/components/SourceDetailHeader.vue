@@ -13,7 +13,7 @@ import { DtButton, DtCard, DtIcon, DtTag } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
 import { formatDateTime } from '@/utils/datetime'
-import { errorSummary, missingPoints } from '../sourceState'
+import { errorSummary, missingPoints } from '../scripts/sourceState'
 import SourceStateTag from './SourceStateTag.vue'
 
 const props = defineProps<{

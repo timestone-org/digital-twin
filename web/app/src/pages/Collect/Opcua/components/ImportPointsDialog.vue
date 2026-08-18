@@ -22,9 +22,9 @@ import {
 } from '@dt/ui'
 
 import { downloadCsv } from '@/utils/downloadJson'
-import { CSV_COLUMNS, templateCsv } from '../pointCsv'
-import { importPoints, type ImportOutcome } from '../pointImport'
-import { useCsvPreflight } from '../useCsvPreflight'
+import { CSV_COLUMNS, templateCsv } from '../scripts/pointCsv'
+import { importPoints, type ImportOutcome } from '../scripts/pointImport'
+import { useCsvPreflight } from '../scripts/useCsvPreflight'
 
 const props = defineProps<{
   modelValue: boolean

@@ -23,7 +23,7 @@ import {
 } from 'vitest'
 
 import TwinViewport from '@/pages/TwinEditor/components/TwinViewport.vue'
-import type { TwinSelection } from '@/pages/TwinEditor/types'
+import type { TwinSelection } from '@/pages/TwinEditor/scripts/types'
 
 interface SceneStub {
   options: EditorSceneOptions

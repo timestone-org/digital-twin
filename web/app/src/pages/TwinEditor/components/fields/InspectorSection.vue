@@ -6,7 +6,7 @@
 import { DtIcon } from '@dt/ui'
 import { computed } from 'vue'
 
-import { isSectionOpen, setSectionOpen } from '../../sectionCollapse'
+import { isSectionOpen, setSectionOpen } from '../../scripts/sectionCollapse'
 
 const props = defineProps<{
   title: string

@@ -32,8 +32,8 @@ import {
   clampDesignSize,
   findPreset,
   presetIdFor,
-} from './ratioPresets'
-import type { NewDashboardPayload } from '../payloads'
+} from '../scripts/ratioPresets'
+import type { NewDashboardPayload } from '../scripts/payloads'
 
 const props = withDefaults(
   defineProps<{

@@ -28,8 +28,8 @@ import type {
   ProjectThemePatchInput,
 } from '@/api/projectThemes'
 import CustomThemeManager from './CustomThemeManager.vue'
-import { readText } from './themeFields'
-import type { ProjectSettingsPayload } from '../payloads'
+import { readText } from '../scripts/themeFields'
+import type { ProjectSettingsPayload } from '../scripts/payloads'
 
 const props = withDefaults(
   defineProps<{

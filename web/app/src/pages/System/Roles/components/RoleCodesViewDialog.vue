@@ -13,7 +13,7 @@ import { DtButton, DtModal, DtNotice, DtTag } from '@dt/ui'
 import PermGuard from '@/components/PermGuard.vue'
 import PermissionCodeList from '@/features/permissions/PermissionCodeList.vue'
 import { usePermissionCatalog } from '@/features/permissions/usePermissionCatalog'
-import { sortCodes } from '../../components/codes'
+import { sortCodes } from '../../scripts/codes'
 
 const props = defineProps<{ role: RoleSummary | null }>()
 const emit = defineEmits<{ close: []; clone: [role: RoleSummary] }>()

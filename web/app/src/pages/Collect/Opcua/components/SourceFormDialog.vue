@@ -37,13 +37,13 @@ import {
   SECURITY_MODES,
   SECURITY_POLICIES,
   splitOptions,
-} from '../sourceFormOptions'
+} from '../scripts/sourceFormOptions'
 import {
   toCreateInput,
   toUpdateInput,
   validateSourceForm,
   type SourceFormValues,
-} from '../sourceFormPayload'
+} from '../scripts/sourceFormPayload'
 import OptionsEditor from './OptionsEditor.vue'
 import SourceCredentialFields from './SourceCredentialFields.vue'
 

@@ -27,7 +27,7 @@ import {
 } from '@/api/runtimeParams'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import { useAuthStore } from '@/stores/auth'
-import { DANGER_TEXT, isDangerousChange } from '../runtimeParamsMeta'
+import { DANGER_TEXT, isDangerousChange } from '../scripts/runtimeParamsMeta'
 import DangerConfirmPanel from './DangerConfirmPanel.vue'
 import RuntimeParamRow from './RuntimeParamRow.vue'
 

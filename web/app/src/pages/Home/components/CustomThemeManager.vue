@@ -20,7 +20,7 @@ import {
   buildTokens,
   readColors,
   themeAccent,
-} from './themeFields'
+} from '../scripts/themeFields'
 
 const props = withDefaults(
   defineProps<{

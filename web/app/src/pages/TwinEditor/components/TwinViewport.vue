@@ -17,7 +17,7 @@ import { DEFAULT_CAMERA_FOV } from '@dt/twin-config'
 import { DtNotice, DtSpinner } from '@dt/ui'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import type { TwinSelection } from '../types'
+import type { TwinSelection } from '../scripts/types'
 
 const props = defineProps<{
   /** ⚠ 必须是 `normalizeTwinConfig` 的输出：视口按引用比对，就地改字段不会重绘。 */

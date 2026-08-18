@@ -7,8 +7,8 @@
  */
 import PaneSplitter from './PaneSplitter.vue'
 
-import type { EditorPanes } from '../useEditorPanes'
-import type { PaneSide } from '../paneWidths'
+import type { EditorPanes } from '../scripts/useEditorPanes'
+import type { PaneSide } from '../scripts/paneWidths'
 
 const props = defineProps<{
   side: PaneSide

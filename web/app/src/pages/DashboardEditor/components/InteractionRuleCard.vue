@@ -17,7 +17,7 @@ import {
   actionForType,
   isActionType,
   isEventName,
-} from './interactionOptions'
+} from '../scripts/interactionOptions'
 
 const props = defineProps<{
   rule: InteractionRule

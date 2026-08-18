@@ -8,8 +8,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
 import EditorSplitter from '@/pages/DashboardEditor/components/EditorSplitter.vue'
-import type { EditorPanes } from '@/pages/DashboardEditor/useEditorPanes'
-import type { PaneSide } from '@/pages/DashboardEditor/paneWidths'
+import type { EditorPanes } from '@/pages/DashboardEditor/scripts/useEditorPanes'
+import type { PaneSide } from '@/pages/DashboardEditor/scripts/paneWidths'
 
 function fakePanes() {
   const startDrag = vi.fn()

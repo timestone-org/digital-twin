@@ -11,9 +11,9 @@ import { DtIcon, DtInput } from '@dt/ui'
 import { computed, ref } from 'vue'
 
 import type { EditorFrame } from '@/features/dashboard/editorLayout'
-import { layerRows } from '../layerTree'
-import type { LayerRow } from '../layerTree'
-import { useLayerDrag } from '../useLayerDrag'
+import { layerRows } from '../scripts/layerTree'
+import type { LayerRow } from '../scripts/layerTree'
+import { useLayerDrag } from '../scripts/useLayerDrag'
 
 const props = defineProps<{
   frames: readonly EditorFrame[]

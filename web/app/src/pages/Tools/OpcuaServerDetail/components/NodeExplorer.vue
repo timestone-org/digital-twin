@@ -29,14 +29,14 @@ import * as opcua from '@/api/opcua'
 import PermGuard from '@/components/PermGuard.vue'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
-import { pendingSummary } from '../../OpcuaServers/pendingFields'
+import { pendingSummary } from '../../OpcuaServers/scripts/pendingFields'
 import {
   ancestorIds,
   buildNodeTree,
   expandableIds,
   filterNodeTree,
   visibleRows,
-} from '../nodeTree'
+} from '../scripts/nodeTree'
 import NodeDetailPanel from './NodeDetailPanel.vue'
 import NodeFormDialog from './NodeFormDialog.vue'
 import NodeTree from './NodeTree.vue'

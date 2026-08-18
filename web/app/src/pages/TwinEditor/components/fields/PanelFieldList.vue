@@ -24,7 +24,7 @@ import {
 import type { DtMenuItem } from '@dt/contracts'
 import { computed } from 'vue'
 
-import { PANEL_FIELD_PRESETS } from '../../panelFieldPresets'
+import { PANEL_FIELD_PRESETS } from '../../scripts/panelFieldPresets'
 
 const props = defineProps<{
   panel: TwinPanel

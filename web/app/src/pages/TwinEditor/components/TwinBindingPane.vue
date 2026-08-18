@@ -26,7 +26,7 @@ import { DtButton, DtNotice, DtTag } from '@dt/ui'
 import { computed, ref, watch } from 'vue'
 
 import BindingPanel from '@/components/binding/BindingPanel.vue'
-import { TWIN_ENTITY_LABELS, type TwinSelection } from '../types'
+import { TWIN_ENTITY_LABELS, type TwinSelection } from '../scripts/types'
 
 const props = defineProps<{
   config: TwinConfig

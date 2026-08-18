@@ -16,7 +16,7 @@ import {
   TITLE_PAD_DEFAULT,
   TITLE_PAD_LABELS,
   type CardField,
-} from './cardStyleFields'
+} from '../scripts/cardStyleFields'
 
 const props = defineProps<{ field: CardField; value: unknown }>()
 

@@ -16,7 +16,7 @@ import OutOfFoldCard from './OutOfFoldCard.vue'
 import PredictionTable from './PredictionTable.vue'
 import ProvenanceStrip from './ProvenanceStrip.vue'
 import SetMetricsTable from './SetMetricsTable.vue'
-import type { useOutOfFold } from '../useOutOfFold'
+import type { useOutOfFold } from '../scripts/useOutOfFold'
 
 const props = defineProps<{
   model: AcModel

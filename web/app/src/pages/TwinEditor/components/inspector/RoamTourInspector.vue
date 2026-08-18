@@ -22,7 +22,7 @@ import {
 import { DtButton, DtNotice, DtNumberInput, DtSwitch } from '@dt/ui'
 import { computed } from 'vue'
 
-import { ROAM_SECONDS_STEP, roamMs, roamSeconds } from '../../roamTiming'
+import { ROAM_SECONDS_STEP, roamMs, roamSeconds } from '../../scripts/roamTiming'
 import InspectorSection from '../fields/InspectorSection.vue'
 import RoamSegmentFields from '../fields/RoamSegmentFields.vue'
 import RoamStopList from '../fields/RoamStopList.vue'

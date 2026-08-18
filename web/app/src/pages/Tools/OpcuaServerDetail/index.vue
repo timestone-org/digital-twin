@@ -26,7 +26,7 @@ import { AppShell, AppTabNav } from '@/components/layout'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import InstanceStatusTag from '../OpcuaServers/components/InstanceStatusTag.vue'
-import { pendingFieldLabels } from '../OpcuaServers/pendingFields'
+import { pendingFieldLabels } from '../OpcuaServers/scripts/pendingFields'
 
 const route = useRoute()
 const toast = useToast()

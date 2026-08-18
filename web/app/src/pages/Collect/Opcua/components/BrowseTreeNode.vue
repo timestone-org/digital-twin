@@ -12,7 +12,7 @@
 import { computed } from 'vue'
 import { DtButton, DtCheckbox, DtIcon, DtSpinner, DtTag } from '@dt/ui'
 
-import type { NodeSelection, TreeNode } from '../browseTree'
+import type { NodeSelection, TreeNode } from '../scripts/browseTree'
 
 const props = defineProps<{
   node: TreeNode

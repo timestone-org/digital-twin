@@ -24,7 +24,7 @@ import { computed } from 'vue'
 
 import type { GizmoMode } from '@dt/three-core'
 
-import type { TwinSelection } from '../types'
+import type { TwinSelection } from '../scripts/types'
 import AnchorInspector from './inspector/AnchorInspector.vue'
 import ArrowInspector from './inspector/ArrowInspector.vue'
 import CameraInspector from './inspector/CameraInspector.vue'

@@ -9,10 +9,10 @@ import type { TwinConfig } from '@dt/twin-config'
 import { DtButton, DtIcon } from '@dt/ui'
 import { computed, ref } from 'vue'
 
-import { buildHierRows, canDropHierOn } from '../hierRows'
-import type { TwinHierRow } from '../hierRows'
-import { isSameSelection } from '../types'
-import type { TwinSelection } from '../types'
+import { buildHierRows, canDropHierOn } from '../scripts/hierRows'
+import type { TwinHierRow } from '../scripts/hierRows'
+import { isSameSelection } from '../scripts/types'
+import type { TwinSelection } from '../scripts/types'
 
 const props = defineProps<{
   config: TwinConfig

@@ -16,7 +16,7 @@ import { useFormDirty } from '@/composables/useFormDirty'
 
 import * as admin from '@/api/admin'
 import { describeError } from '@/composables/useAsyncList'
-import type { RoleFormTask } from '../roleFormTask'
+import type { RoleFormTask } from '../scripts/roleFormTask'
 import RolePermissionsField from './RolePermissionsField.vue'
 
 const props = defineProps<{ task: RoleFormTask | null }>()

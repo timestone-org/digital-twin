@@ -31,7 +31,7 @@ import {
 } from '@dt/ui'
 import { useFormDirty } from '@/composables/useFormDirty'
 
-import { usePortPool } from '../usePortPool'
+import { usePortPool } from '../scripts/usePortPool'
 
 const props = defineProps<{
   modelValue: boolean

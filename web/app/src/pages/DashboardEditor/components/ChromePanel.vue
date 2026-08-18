@@ -31,7 +31,7 @@ import {
   type SnapConfig,
 } from '@/features/dashboard/canvasSnap'
 import { parseInteractionRules } from '@/features/dashboard/interactionRules'
-import type { EditorMetaDraft } from '../useEditorMeta'
+import type { EditorMetaDraft } from '../scripts/useEditorMeta'
 import CardStyleFields from './CardStyleFields.vue'
 import InteractionEditor from './InteractionEditor.vue'
 

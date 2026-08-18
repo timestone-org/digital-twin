@@ -9,7 +9,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { DtIcon } from '@dt/ui'
 
 import { getDashboardThumbnail } from '@/api/dashboardThumbnail'
-import { placeholderBlocks } from '../thumbnailPlaceholder'
+import { placeholderBlocks } from '../scripts/thumbnailPlaceholder'
 
 const props = defineProps<{ dashboardId: string }>()
 

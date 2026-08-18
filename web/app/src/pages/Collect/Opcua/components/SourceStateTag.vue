@@ -9,7 +9,7 @@ import { computed } from 'vue'
 import type { CollectSourceRuntime } from '@dt/contracts'
 import { DtTag, DtTooltip } from '@dt/ui'
 
-import { errorSummary, stateLook } from '../sourceState'
+import { errorSummary, stateLook } from '../scripts/sourceState'
 
 const props = defineProps<{
   runtime: CollectSourceRuntime

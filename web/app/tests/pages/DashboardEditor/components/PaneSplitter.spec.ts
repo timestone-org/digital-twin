@@ -5,7 +5,7 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
-import { NUDGE_COARSE_PX, NUDGE_PX } from '@/pages/DashboardEditor/paneWidths'
+import { NUDGE_COARSE_PX, NUDGE_PX } from '@/pages/DashboardEditor/scripts/paneWidths'
 import PaneSplitter from '@/pages/DashboardEditor/components/PaneSplitter.vue'
 
 function render(width = 240) {

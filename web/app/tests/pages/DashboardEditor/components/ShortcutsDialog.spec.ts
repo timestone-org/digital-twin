@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 
-import { modLabel, shortcutGroups } from '@/pages/DashboardEditor/shortcuts'
+import { modLabel, shortcutGroups } from '@/pages/DashboardEditor/scripts/shortcuts'
 import ShortcutsDialog from '@/pages/DashboardEditor/components/ShortcutsDialog.vue'
 
 function stubPlatform(platform: string, userAgent: string): void {

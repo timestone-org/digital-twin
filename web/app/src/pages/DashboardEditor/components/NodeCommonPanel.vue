@@ -20,7 +20,7 @@ import type {
   NodeGeometry,
 } from '@/features/dashboard/editorDoc'
 import { nodeLabelOf } from '@/features/dashboard/nodeLabel'
-import type { OrderKind } from '../useEditorInspector'
+import type { OrderKind } from '../scripts/useEditorInspector'
 import CardStyleFields from './CardStyleFields.vue'
 
 const props = defineProps<{
