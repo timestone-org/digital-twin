@@ -239,7 +239,7 @@ describe('用户管理页', () => {
     expect(document.body.textContent).toContain('目标账号的权限高于你')
   })
 
-  it('列表为空时给出空态', async () => {
+  it('一个账号都没有时，引导去新建', async () => {
     vi.spyOn(admin, 'listUsers').mockResolvedValue({
       items: [],
       page: 1,
@@ -247,7 +247,25 @@ describe('用户管理页', () => {
       total: 0,
     })
     const wrapper = await render(['user:view'])
-    expect(wrapper.text()).toContain('暂无数据')
+    expect(wrapper.text()).toContain('还没有账号')
+  })
+
+  it('⚠ 筛出来是空的时候不许说「还没有账号」：那与事实相反', async () => {
+    vi.spyOn(admin, 'listUsers').mockResolvedValue({
+      items: [],
+      page: 1,
+      size: 50,
+      total: 0,
+    })
+    const wrapper = await render(['user:view'])
+
+    await wrapper
+      .find('input[placeholder="搜索用户名 / 邮箱 / 姓名"]')
+      .setValue('zzz')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('没有匹配的账号')
+    expect(wrapper.text()).not.toContain('还没有账号')
   })
 
   it('取数失败时给出错误态与重试入口', async () => {

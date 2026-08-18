@@ -74,7 +74,12 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div class="relative z-10 ml-auto flex items-center gap-4">
+    <!--
+      min-w-0：actions 槽里可能坐着一条很宽的工具条（大屏编辑器）。不给它，
+      这一半就永远按内容宽度撑着，工具条自己的横向滚动一次也不会触发，而是
+      整条顶栏被顶出可视区。
+    -->
+    <div class="relative z-10 ml-auto flex min-w-0 items-center gap-4">
       <slot name="actions" />
       <!-- 换肤是外壳常驻功能，不走 actions 槽——那个槽归页面自己 -->
       <ThemeSwitcher />

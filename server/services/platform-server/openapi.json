@@ -3818,6 +3818,11 @@
             "title": "Is Array",
             "type": "boolean"
           },
+          "is_entity_pinned": {
+            "default": false,
+            "title": "Is Entity Pinned",
+            "type": "boolean"
+          },
           "is_required": {
             "default": false,
             "title": "Is Required",

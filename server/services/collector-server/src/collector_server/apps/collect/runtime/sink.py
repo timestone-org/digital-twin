@@ -6,7 +6,7 @@
 import asyncio
 import contextlib
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from uuid import UUID
 
 from collector_server.apps.collect import tuning
@@ -123,6 +123,9 @@ class SnapshotSink:
         self._ttl_s = ttl_s
         self._plan = plan
         self._buffers: dict[UUID, ValueBuffer] = {}
+        # ⚠ flush 与清理互斥：写键与删键走的是两条连接，交错了就会让一个已经
+        # 停采的数据源被自己的尾帧重新写回去，那份值还要再当一个 TTL 的实时值
+        self._lock = asyncio.Lock()
         self._stopped = asyncio.Event()
         # ⚠ 强引用：事件循环只持有任务的弱引用，丢了引用的任务可能随时消失
         self._task: asyncio.Task[None] | None = None
@@ -140,15 +143,6 @@ class SnapshotSink:
         """
         buffer = self._buffers.setdefault(source_id, ValueBuffer())
         return buffer.record
-
-    async def forget(self, source_id: UUID) -> None:
-        """数据源不再采了：连缓冲带快照一起清掉。
-
-        Args: source_id。
-        """
-        self._buffers.pop(source_id, None)
-        with contextlib.suppress(AppError):
-            await self._store.drop(source_id)
 
     async def start(self) -> None:
         """起 flush 循环。"""
@@ -168,11 +162,88 @@ class SnapshotSink:
         await self.flush_once()
 
     async def flush_once(self) -> None:
-        """把每个数据源这一窗的读数写进 Redis。"""
-        for source_id, buffer in list(self._buffers.items()):
-            pending = buffer.swap()
-            if pending:
-                await self._write(source_id, pending)
+        """清掉退出计划的数据源，再把每个数据源这一窗的读数写进 Redis。"""
+        async with self._lock:
+            await self._prune()
+            quiet: list[UUID] = []
+            for source_id, buffer in list(self._buffers.items()):
+                pending = buffer.swap()
+                if pending:
+                    await self._write(source_id, pending)
+                else:
+                    quiet.append(source_id)
+            await self._keepalive(quiet)
+
+    async def _keepalive(self, source_ids: Sequence[UUID]) -> None:
+        """给这一窗没有新读数的数据源续一次存活期。
+
+        ⚠ 少了这一步，一个「一天变一次」的点位会在 TTL 到期时**整片消失**：
+        订阅只在值变化时回调，值不变就没有写入、也就没人续期，而界面分不清
+        「这个点位没有值」与「它的值一直没变」。
+        ⚠ 续期不等于凭空造键：EXPIRE 打在不存在的键上什么都不做，所以从没上报
+        过读数的数据源不会因为保活冒出一个空快照。
+        ⚠ 只要采集进程还活着就续：因此「键还在」说的是「collector 还在管这个
+        数据源」，**不是**「现场设备此刻连着」——设备断没断由数据源运行态说
+        （`SourceStatus`），不由值的年龄猜。
+
+        Args: source_ids。
+        """
+        if not source_ids:
+            return
+        try:
+            await self._store.touch(source_ids, ttl_s=self._ttl_s_now())
+        except Exception as error:
+            _logger.warning(
+                "snapshot_keepalive_failed",
+                "快照续期失败，静默的数据源可能在 TTL 到期后暂时读不到",
+                sources=len(source_ids),
+                error_type=type(error).__name__,
+            )
+
+    async def _prune(self) -> None:
+        """把已经不在计划里的数据源连缓冲带快照一起清掉。
+
+        ⚠ 停采的数据源必须**立刻**没有当前值，不能只等 TTL 到期：那段时间里
+        大屏与配置页上它看起来还在实时刷新，而现场其实早就断开了——「返回陈旧
+        数据必须标注为陈旧」，而已经停采的值连标注的资格都没有
+        （runtime-resilience §9）。下一次启用时值由重新建立的会话现产。
+        ⚠ 依据是计划而不是会话有没有拆完：会话拆除有它自己的时序与失败，而计划
+        是唯一真源，每一拍都按它对一次账。
+        ⚠ 拿不到计划就什么都不清：那时「计划里没有它」说的是我们不知道，不是
+        它不该被采（ADR-0001）。
+        """
+        plan = self._current_plan()
+        if plan is None:
+            return
+        wanted = {source.source_id for source in plan.sources}
+        for source_id in list(self._buffers):
+            if source_id not in wanted:
+                await self._forget(source_id)
+
+    async def _forget(self, source_id: UUID) -> None:
+        """丢掉一个数据源的缓冲，并删掉它在 Redis 上的快照。
+
+        ⚠ 删不掉只记日志不抛：清理失败不该带走整条 flush 循环。缓冲已经丢了，
+        没人再续它的 TTL，那把键回收的就是 TTL 本身。
+
+        Args: source_id。
+        """
+        self._buffers.pop(source_id, None)
+        try:
+            await self._store.drop(source_id)
+        except AppError as error:
+            _logger.warning(
+                "snapshot_drop_failed",
+                "停采数据源的快照没能删掉，改由 TTL 到期回收",
+                source_id=str(source_id),
+                error_type=type(error).__name__,
+            )
+            return
+        _logger.info(
+            "snapshot_dropped",
+            "数据源已退出计划，快照已清除",
+            source_id=str(source_id),
+        )
 
     async def _write(
         self, source_id: UUID, pending: Mapping[str, Sample]

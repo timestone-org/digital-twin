@@ -8,7 +8,7 @@
  * 做决定。⚠ 卡片视图按宽度铺成多列，位置本身表达不了判定序，
  * 该语义**全靠每张卡上的 `#n`**（`orderOf` 算的全局序，不是页内下标）。
  */
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import type { DtDataColumn, RouteRule } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import {
@@ -22,6 +22,7 @@ import {
 } from '@dt/ui'
 
 import * as admin from '@/api/admin'
+import { listEmptyState } from '@/utils/listEmpty'
 import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
 import { describeError, useAsyncList } from '@/composables/useAsyncList'
@@ -55,6 +56,19 @@ const toast = useToast()
 const confirm = useConfirm()
 
 const keyword = ref('')
+
+// ⚠ 搜不到与「一条规则都没有」是两回事：后者要引导去建，前者只该让人改词
+const emptyState = computed(() =>
+  listEmptyState({
+    isFiltered: keyword.value.trim() !== '',
+    subject: '规则',
+    keyword: keyword.value,
+    blank: {
+      title: '还没有路由规则',
+      hint: '规则决定边缘按什么顺序判定一条请求该不该放行。',
+    },
+  }),
+)
 const view = useViewMode('system-route-rules')
 
 const list = useAsyncList<RouteRule>((query) =>
@@ -126,7 +140,7 @@ onMounted(() => {
       <div class="flex items-center gap-2">
         <!-- 试算不改数据，故不套 PermGuard：能看这张表的人就该能试 -->
         <RuleMatcher :rules="list.items.value" />
-        <PermGuard :codes="[PERMISSION_CODES.routeRuleManage]">
+        <PermGuard :codes="[PERMISSION_CODES.routeRuleManage]" explain>
           <DtButton size="sm" icon="plus" @click="openCreate">
             新增规则
           </DtButton>
@@ -147,6 +161,7 @@ onMounted(() => {
 
       <DtDataView
         v-model:view="view"
+        :empty="emptyState"
         class="min-h-0 flex-1"
         :columns="COLUMNS"
         :rows="list.items.value"

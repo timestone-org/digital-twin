@@ -4,8 +4,11 @@
  * ⚠ 三档必须分得开，合并任意两档都会造出一条假读数：
  * - **没收到过**：采集侧还没上报过它。空着，不写 0、不写「—」以外的任何值。
  * - **取不到**（`error`）：连原因一起摆出来。
- * - **陈旧**（`stale`）：值照显示但标成陈旧，且时刻是**旧值**的时刻——
- *   拿当前墙钟顶替，陈旧值在界面上就与新值完全一样（runtime-resilience §9）。
+ * - **有值**（`ok`）：值与它的**采样时刻**一起摆出来。时刻不许用当前墙钟
+ *   顶替——顶替之后每个点位都显示「刚刚」，而那一列正是判断现场还动不动的
+ *   唯一依据（runtime-resilience §9）。
+ * ⚠ 时刻旧不构成一档状态：订阅只在值变化时回调，一个一天变一次的点位按时刻
+ *   判就会每天被标 23 小时，而它的值一直是对的。
  */
 import type { DtIntent, PointQuality, PointSample } from '@dt/contracts'
 
@@ -91,12 +94,10 @@ export function formatSample(
     }
   }
   const quality = QUALITY_LABELS[sample.quality]
-  const isStale = sample.state === 'stale'
   return {
     text: textOf(sample.value, unit),
-    // 陈旧优先于质量位：值太旧时，它是不是「好质量」已经不重要了
-    badge: isStale ? '陈旧' : quality === '' ? null : quality,
-    intent: isStale || quality !== '' ? 'warning' : 'success',
+    badge: quality === '' ? null : quality,
+    intent: quality === '' ? 'success' : 'warning',
     at: timeOf(sample.timestampMs),
     reason: null,
   }

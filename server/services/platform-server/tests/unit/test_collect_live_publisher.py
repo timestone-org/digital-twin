@@ -29,7 +29,6 @@ CONNECTION_2 = uuid.UUID("0199b000-0000-7000-8000-000000000002")
 KEY_A = f"{SOURCE_ID}:temp"
 KEY_B = f"{SOURCE_ID}:flow"
 NOW_MS = 1_700_000_000_000
-STALE_AFTER_MS = 15_000
 
 
 @dataclass
@@ -108,12 +107,8 @@ def build_harness(
         snapshots=snapshots,
         realtime=realtime,
         options=LiveOptions(
-            max_items=max_items,
-            stale_after_ms=STALE_AFTER_MS,
-            max_points=1000,
-            plan_ttl_s=plan_ttl_s,
+            max_items=max_items, max_points=1000, plan_ttl_s=plan_ttl_s
         ),
-        clock=lambda: NOW_MS,
         ticker=ticker,
     )
     return Harness(

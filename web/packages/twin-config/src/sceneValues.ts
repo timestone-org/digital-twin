@@ -51,7 +51,10 @@ export function twinSceneValues(
   values: Record<string, unknown>,
 ): TwinSceneValues {
   return {
-    anchors: stitchAnchorValues(config.anchors, values[TWIN_ANCHOR_BINDING_KEY]),
+    anchors: stitchAnchorValues(
+      config.anchors,
+      values[TWIN_ANCHOR_BINDING_KEY],
+    ),
     arrows: stitchArrowValues(config.arrows, values[TWIN_ARROW_BINDING_KEY]),
     // ⚠ 必须喂扁平化后的字段序：按「第 i 张牌」对齐会让多字段的牌之后整体错位
     panels: stitchPanelValues(

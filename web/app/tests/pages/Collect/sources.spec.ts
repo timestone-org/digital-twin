@@ -19,8 +19,12 @@ import * as collectApi from '@/api/collect'
 import CollectOpcuaPage from '@/pages/Collect/Opcua/index.vue'
 import { useAuthStore } from '@/stores/auth'
 
+// ⚠ 共用一份 spy 而不是每次 useRouter() 现造一个：现造的那个拿不到手，
+// 「选中要写进地址栏」这条接线就没人守——而模板上的事件名写错，
+// typecheck 与 lint 双双放行
+const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }))
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useRouter: () => router,
   useRoute: () => ({ path: '/collect/opcua', query: {} }),
   RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
 }))
@@ -145,6 +149,8 @@ beforeEach(() => {
   vi.useFakeTimers()
   toastError.mockReset()
   toastSuccess.mockReset()
+  router.replace.mockReset()
+  router.push.mockReset()
   document.body.innerHTML = ''
   signIn(['collect:view', 'collect:operate', 'collect:manage'])
 })
@@ -184,6 +190,21 @@ describe('主从布局', () => {
     expect(wrapper.find('[data-test="active-source-name"]').text()).toBe(
       '二号车间 PLC',
     )
+  })
+
+  it('选中哪个源写进地址栏：刷新回得来，链接发得出去', async () => {
+    const wrapper = await render([
+      source(),
+      source({ id: 's2', name: '二号车间 PLC', code: 'plant2' }),
+    ])
+    router.replace.mockClear()
+
+    const item = wrapper
+      .findAll('button')
+      .find((one) => one.text().includes('二号车间 PLC'))
+    await item?.trigger('click')
+
+    expect(router.replace).toHaveBeenCalledWith({ query: { source: 's2' } })
   })
 
   it('空列表给引导语而不是空白', async () => {

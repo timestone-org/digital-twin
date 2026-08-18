@@ -4,6 +4,11 @@
  *
  * ⚠ 三条无障碍硬要求：打开时焦点进入弹窗、Tab 不许跑出去、关闭后焦点归还
  * 触发元素。少任何一条，键盘用户都会在弹窗打开后「焦点消失」。
+ *
+ * ⚠ `dirty` 是给**填了一半的表单**用的：那时误关一次就是十几个字段全没了，
+ * 而这两条路径都不是「我要关掉它」的意思——点弹窗外面纯属误触，一律不关；
+ * Esc 可能只是习惯性动作，所以第一次只提示、再按一次才真的丢。
+ * 「关闭」按钮与页面自己的取消键不在此列：那是瞄准了才点得中的目标。
  */
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import DtButton from '../DtButton/DtButton.vue'
@@ -15,13 +20,17 @@ const props = withDefaults(
     description?: string | undefined
     width?: string
     closeOnBackdrop?: boolean
+    /** 里面有还没提交的内容。 */
+    dirty?: boolean
   }>(),
-  { width: '30rem', closeOnBackdrop: true },
+  { width: '30rem', closeOnBackdrop: true, dirty: false },
 )
 
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 
 const panel = ref<HTMLElement | null>(null)
+/** 已经拦下过一次误关，提示条正挂着；再按一次 Esc 就放行。 */
+const isGuardShown = ref(false)
 let previouslyFocused: HTMLElement | null = null
 
 const FOCUSABLE =
@@ -32,6 +41,25 @@ function close(): void {
   emit('update:modelValue', false)
 }
 
+/** 点弹窗外面：脏着就只提示，永远不关——这条路径没有一次是故意的。 */
+function onBackdrop(): void {
+  if (!props.closeOnBackdrop) return
+  if (props.dirty) {
+    isGuardShown.value = true
+    return
+  }
+  close()
+}
+
+/** Esc：脏着且还没提示过就先提示一次，再按才关。 */
+function onEscape(): void {
+  if (props.dirty && !isGuardShown.value) {
+    isGuardShown.value = true
+    return
+  }
+  close()
+}
+
 function focusables(): HTMLElement[] {
   return Array.from(panel.value?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])
 }
@@ -40,7 +68,7 @@ function focusables(): HTMLElement[] {
 function onKeydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') {
     event.stopPropagation()
-    close()
+    onEscape()
     return
   }
   if (event.key !== 'Tab') return
@@ -61,6 +89,8 @@ function onKeydown(event: KeyboardEvent): void {
 watch(
   () => props.modelValue,
   async (open) => {
+    // 重开一次就重新拦一次：上一次的「再按一次就丢」不该跨着一次打开继续有效
+    isGuardShown.value = false
     if (open) {
       previouslyFocused = document.activeElement as HTMLElement | null
       await nextTick()
@@ -81,7 +111,7 @@ onBeforeUnmount(() => {
 <template>
   <Teleport to="body">
     <div v-if="modelValue" class="dt-modal" @keydown="onKeydown">
-      <div class="dt-modal__backdrop" @click="closeOnBackdrop && close()" />
+      <div class="dt-modal__backdrop" @click="onBackdrop" />
       <div
         ref="panel"
         class="dt-modal__panel"
@@ -105,6 +135,11 @@ onBeforeUnmount(() => {
             @click="close"
           />
         </header>
+
+        <!-- 提示挂在正文外面：正文能滚，滚下去之后这条就看不见了 -->
+        <p v-if="isGuardShown && dirty" class="dt-modal__guard" role="alert">
+          有还没提交的内容。点弹窗外面不会关闭它；再按一次 Esc 会放弃这些内容。
+        </p>
 
         <div class="dt-modal__body"><slot /></div>
 
@@ -167,6 +202,15 @@ onBeforeUnmount(() => {
     margin: 4px 0 0;
     font-size: 12px;
     color: var(--text-disabled);
+  }
+
+  &__guard {
+    margin: 0;
+    padding: 8px 20px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: color-mix(in srgb, var(--state-warning) 12%, transparent);
+    color: var(--state-warning);
+    font-size: 12px;
   }
 
   &__body {

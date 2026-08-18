@@ -13,7 +13,7 @@
 """
 
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from lib.errors import DependencyUnavailable
@@ -26,7 +26,6 @@ from platform_server.apps.collect.services.point_frames import (
     changed_items,
     error_items,
     index_by_node_key,
-    now_ms,
     shards,
 )
 from platform_server.apps.dashboard.services.publish_plan import (
@@ -39,15 +38,12 @@ from platform_server.realtime import FramePublisher
 
 _logger = get_logger("platform.dashboard.publish")
 
-Clock = Callable[[], int]
-
 
 @dataclass(frozen=True)
 class PublishOptions:
     """一拍的节流参数。窗口本身归调用方的循环。"""
 
     max_items: int
-    stale_after_ms: int
 
 
 @dataclass(frozen=True)
@@ -67,7 +63,6 @@ class DashboardPublisher:
     snapshots: SnapshotSource
     realtime: FramePublisher
     options: PublishOptions
-    clock: Clock = now_ms
     _watchers: dict[uuid.UUID, frozenset[uuid.UUID]] = field(
         default_factory=dict[uuid.UUID, frozenset[uuid.UUID]], init=False
     )
@@ -141,12 +136,7 @@ class DashboardPublisher:
                 points=len(plan.node_keys),
             )
             return error_items(plan.node_keys, reason=UNAVAILABLE_REASON)
-        return build_items(
-            plan.node_keys,
-            readings,
-            at_ms=self.clock(),
-            stale_after_ms=self.options.stale_after_ms,
-        )
+        return build_items(plan.node_keys, readings)
 
     async def _send(self, dashboard_id: uuid.UUID, outgoing: list[Item]) -> int:
         """分片推给 hub，返回推成功的条目数。

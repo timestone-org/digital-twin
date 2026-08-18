@@ -12,10 +12,7 @@ export {
 export { default as DtConfirmHost } from './components/DtConfirmHost/DtConfirmHost.vue'
 export { default as DtCursorPager } from './components/DtCursorPager/DtCursorPager.vue'
 export { default as DtDataView } from './components/DtDataView/DtDataView.vue'
-export type {
-  DtDataViewEmpty,
-  DtDataViewLayout,
-} from './components/DtDataView/DtDataView.vue'
+export type { DtDataViewLayout } from './components/DtDataView/DtDataView.vue'
 export { default as DtDateTimeInput } from './components/DtDateTimeInput/DtDateTimeInput.vue'
 export { default as DtDigits } from './components/DtDigits/DtDigits.vue'
 export { default as DtDropdownMenu } from './components/DtDropdownMenu/DtDropdownMenu.vue'

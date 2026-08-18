@@ -5,7 +5,8 @@
 
 import asyncio
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -23,7 +24,7 @@ WAIT_S = 5.0
 
 
 class ExplodingStore:
-    """第一次写就以**非** AppError 炸掉，之后正常。只有 write 会被用到。
+    """第一次写就以**非** AppError 炸掉，之后正常。
 
     ⚠ Redis 客户端不只抛 RedisError：连接池用坏、回包形状不对都是别的类型，
     而那类异常一旦逃出 flush，整条快照循环就此停摆而进程仍然绿着。
@@ -31,6 +32,7 @@ class ExplodingStore:
 
     def __init__(self) -> None:
         self.writes: list[tuple[UUID, dict[str, str]]] = []
+        self.touched: list[UUID] = []
         self.ttl_s = 0
         self.exploded = asyncio.Event()
         self.settled = asyncio.Event()
@@ -45,14 +47,27 @@ class ExplodingStore:
         self.writes.append((source_id, dict(fields)))
         self.settled.set()
 
+    async def touch(self, source_ids: Sequence[UUID], *, ttl_s: int) -> None:
+        self.ttl_s = ttl_s
+        self.touched.extend(source_ids)
+
 
 class RecordingStore:
     """记下每一次写入的假快照面。"""
 
-    def __init__(self, *, failures: int = 0) -> None:
+    def __init__(
+        self,
+        *,
+        failures: int = 0,
+        drop_failures: int = 0,
+        touch_failures: int = 0,
+    ) -> None:
         self.writes: list[tuple[UUID, dict[str, str]]] = []
         self.dropped: list[UUID] = []
+        self.touched: list[tuple[UUID, ...]] = []
         self.failures = failures
+        self.drop_failures = drop_failures
+        self.touch_failures = touch_failures
 
     async def write(
         self, source_id: UUID, fields: Mapping[str, str], *, ttl_s: int
@@ -63,8 +78,56 @@ class RecordingStore:
         self.ttl_s = ttl_s
         self.writes.append((source_id, dict(fields)))
 
+    async def touch(self, source_ids: Sequence[UUID], *, ttl_s: int) -> None:
+        if self.touch_failures > 0:
+            self.touch_failures -= 1
+            raise RuntimeError("Redis 客户端炸了")
+        self.ttl_s = ttl_s
+        self.touched.append(tuple(source_ids))
+
     async def drop(self, source_id: UUID) -> None:
+        if self.drop_failures > 0:
+            self.drop_failures -= 1
+            raise DependencyUnavailable("缓存服务暂时不可用")
         self.dropped.append(source_id)
+
+    async def ping(self) -> bool:
+        return True
+
+    async def close(self) -> None:
+        return None
+
+
+class BlockingStore:
+    """写入会卡在半路的假快照面，用来看清删键与写键的先后。"""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, UUID]] = []
+        self.written: dict[str, str] = {}
+        self.ttl_s = 0
+        self.entered = asyncio.Event()
+        self.released = asyncio.Event()
+
+    @property
+    def order(self) -> list[str]:
+        """只看动作的先后，不看落在哪个数据源上。"""
+        return [name for name, _ in self.calls]
+
+    async def write(
+        self, source_id: UUID, fields: Mapping[str, str], *, ttl_s: int
+    ) -> None:
+        self.entered.set()
+        await self.released.wait()
+        self.written = dict(fields)
+        self.ttl_s = ttl_s
+        self.calls.append(("write", source_id))
+
+    async def touch(self, source_ids: Sequence[UUID], *, ttl_s: int) -> None:
+        self.ttl_s = ttl_s
+        self.calls.extend(("touch", source_id) for source_id in source_ids)
+
+    async def drop(self, source_id: UUID) -> None:
+        self.calls.append(("drop", source_id))
 
     async def ping(self) -> bool:
         return True
@@ -147,15 +210,115 @@ async def test_stop_flushes_the_tail_frame() -> None:
     assert store.writes[-1][0] == source_id
 
 
-async def test_forgetting_a_source_drops_its_snapshot() -> None:
+async def test_a_source_with_no_new_readings_keeps_its_snapshot_alive() -> None:
     store = RecordingStore()
     sink = SnapshotSink(store=store, interval_ms=50, ttl_s=60)
     source_id = uuid4()
     sink.sink_for(source_id)("temp", 1.0, TS_MS, "good")
-    await sink.forget(source_id)
     await sink.flush_once()
-    assert store.dropped == [source_id]
+    # 值一天才变一次的点位，这一窗就是空的——没人续期它的快照就会到期消失
+    await sink.flush_once()
+    assert store.touched == [(source_id,)]
+
+
+async def test_a_source_that_just_wrote_is_not_touched_again() -> None:
+    store = RecordingStore()
+    sink = SnapshotSink(store=store, interval_ms=50, ttl_s=60)
+    sink.sink_for(uuid4())("temp", 1.0, TS_MS, "good")
+    await sink.flush_once()
+    # 写入自己就带了续期，再补一次 EXPIRE 是白跑一个往返
+    assert store.touched == []
+
+
+async def test_a_keepalive_failure_of_any_kind_never_kills_the_flush() -> None:
+    store = RecordingStore(touch_failures=1)
+    sink = SnapshotSink(store=store, interval_ms=50, ttl_s=60)
+    first, second = uuid4(), uuid4()
+    sink.sink_for(first)
+    sink.sink_for(second)("temp", 1.0, TS_MS, "good")
+    await sink.flush_once()
+    assert [source_id for source_id, _ in store.writes] == [second]
+
+
+async def test_a_source_that_left_the_plan_loses_its_snapshot(
+    build_plan: Any, build_plan_view: Any
+) -> None:
+    store = RecordingStore()
+    gone = uuid4()
+    sink = SnapshotSink(
+        store=store,
+        interval_ms=50,
+        ttl_s=60,
+        plan=build_plan_view(build_plan()),
+    )
+    sink.sink_for(gone)("temp", 1.0, TS_MS, "good")
+    await sink.flush_once()
+    assert store.dropped == [gone]
+    # 停采的读数不许再落一次：写回去等于让它再当一个 TTL 的实时值
     assert store.writes == []
+
+
+async def test_a_source_still_in_the_plan_keeps_its_snapshot(
+    build_plan: Any, build_plan_view: Any
+) -> None:
+    store = RecordingStore()
+    plan = build_plan()
+    sink = SnapshotSink(
+        store=store, interval_ms=50, ttl_s=60, plan=build_plan_view(plan)
+    )
+    source_id = plan.sources[0].source_id
+    sink.sink_for(source_id)("temp", 1.0, TS_MS, "good")
+    await sink.flush_once()
+    assert store.dropped == []
+    assert [written for written, _ in store.writes] == [source_id]
+
+
+async def test_without_a_plan_no_snapshot_is_cleared(
+    build_plan_view: Any,
+) -> None:
+    store = RecordingStore()
+    sink = SnapshotSink(
+        store=store, interval_ms=50, ttl_s=60, plan=build_plan_view()
+    )
+    source_id = uuid4()
+    sink.sink_for(source_id)("temp", 1.0, TS_MS, "good")
+    await sink.flush_once()
+    # 拉不到计划时「计划里没有它」说的是我们不知道，不是它不该被采
+    assert store.dropped == []
+    assert [written for written, _ in store.writes] == [source_id]
+
+
+async def test_a_drop_never_lands_while_a_write_is_in_flight(
+    build_plan: Any, build_plan_view: Any
+) -> None:
+    store = BlockingStore()
+    plan = build_plan()
+    view = build_plan_view(plan)
+    sink = SnapshotSink(store=store, interval_ms=50, ttl_s=60, plan=view)
+    sink.sink_for(plan.sources[0].source_id)("temp", 1.0, TS_MS, "good")
+    writing = asyncio.create_task(sink.flush_once())
+    await asyncio.wait_for(store.entered.wait(), timeout=WAIT_S)
+    view.replace(build_plan(version="v2", sources=()))
+    pruning = asyncio.create_task(sink.flush_once())
+    store.released.set()
+    await asyncio.gather(writing, pruning)
+    # 反过来的话，删掉的键会被那次在途的写重新建出来
+    assert store.order == ["write", "drop"]
+
+
+async def test_a_snapshot_that_cannot_be_dropped_never_kills_the_flush(
+    build_plan: Any, build_plan_view: Any
+) -> None:
+    store = RecordingStore(drop_failures=1)
+    sink = SnapshotSink(
+        store=store,
+        interval_ms=50,
+        ttl_s=60,
+        plan=build_plan_view(build_plan()),
+    )
+    sink.sink_for(uuid4())("temp", 1.0, TS_MS, "good")
+    await sink.flush_once()
+    assert store.dropped == []
 
 
 async def test_a_write_failure_of_any_kind_is_counted_and_keeps_the_loop() -> (

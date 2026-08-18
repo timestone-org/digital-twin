@@ -7,6 +7,7 @@
 import { computed, ref, watch } from 'vue'
 import type { RoleSummary, UserBase } from '@dt/contracts'
 import { DtButton, DtInput, DtModal, DtNotice, DtSelect } from '@dt/ui'
+import { useFormDirty } from '@/composables/useFormDirty'
 
 import * as admin from '@/api/admin'
 import { describeError } from '@/composables/useAsyncList'
@@ -47,6 +48,12 @@ function toForm(user: UserBase | null, fallbackRoleId: string) {
 const form = ref({ ...BLANK_FORM })
 const busy = ref(false)
 const error = ref<string | null>(null)
+
+// ⚠ 填了一半误点遮罩就全没了；脏着时由 DtModal 拦下误关
+const { isDirty } = useFormDirty(
+  () => form.value,
+  () => props.modelValue,
+)
 
 const isEdit = computed(() => props.user !== null)
 const roleOptions = computed(() =>
@@ -99,6 +106,7 @@ async function onSubmit(): Promise<void> {
 <template>
   <DtModal
     :model-value="modelValue"
+    :dirty="isDirty"
     :title="isEdit ? '编辑资料' : '新建用户'"
     :description="isEdit ? '角色与直权请走各自的授权入口' : undefined"
     @update:model-value="emit('update:modelValue', $event)"

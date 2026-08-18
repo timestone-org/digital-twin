@@ -15,6 +15,7 @@ import { __resetProviders, listProviders } from '@dt/datasources'
 import type { DashboardPayload } from '@dt/contracts'
 
 import { __resetDashboardBootstrap } from '@/bootstrap/dashboard'
+import { OFFLINE_GRACE_MS } from '@/composables/useRealtimeOffline'
 import DashboardView from '@/pages/DashboardView/index.vue'
 
 vi.mock('vue-router', () => ({
@@ -26,8 +27,10 @@ vi.mock('vue-router', () => ({
 }))
 
 // ⚠ 通道必须打桩：不桩的话挂载页面就真的开一条 WebSocket
+const isConnected = ref(true)
 vi.mock('@/composables/useRealtimeChannel', () => ({
   useRealtimeChannel: () => ({
+    isConnected,
     subscribe: vi.fn(() => () => undefined),
     onSystem: vi.fn(() => () => undefined),
   }),
@@ -83,6 +86,7 @@ vi.mock('@/composables/useDashboardDoc', () => ({
 }))
 
 beforeEach(() => {
+  isConnected.value = true
   __resetModules()
   __resetConfigControls()
   __resetProviders()
@@ -113,5 +117,36 @@ describe('自装配', () => {
     expect(kinds).toContain('static')
     expect(kinds).toContain('computed')
     wrapper.unmount()
+  })
+})
+
+describe('通道断了要说出来', () => {
+  // ⚠ 这一页是挂在墙上的：数值停住而屏上一切如常，是这套系统最危险的失效。
+  // 靠制作者记得摆一个 connection-status 模块，等于把它交给最容易忘的一环
+  it('连着的时候不画任何角标', async () => {
+    const wrapper = mount(DashboardView)
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="realtime-offline"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('断够宽限期后角标出现，且说的是后果不是协议名', async () => {
+    vi.useFakeTimers()
+    try {
+      const wrapper = mount(DashboardView)
+      await flushPromises()
+
+      isConnected.value = false
+      await vi.advanceTimersByTimeAsync(OFFLINE_GRACE_MS)
+      await flushPromises()
+
+      const badge = wrapper.find('[data-test="realtime-offline"]')
+      expect(badge.exists()).toBe(true)
+      expect(badge.text()).toContain('数值停在断开前')
+      wrapper.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

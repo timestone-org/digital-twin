@@ -305,3 +305,34 @@ describe('空调台账页', () => {
     expect(wrapper.text()).toContain('空间配置')
   })
 })
+
+describe('两种空态', () => {
+  it('台账真是空的时候，引导先去建车间与房间', async () => {
+    vi.mocked(hvac.listAcUnits).mockResolvedValue({
+      items: [],
+      page: 1,
+      size: 20,
+      total: 0,
+    })
+    const wrapper = await render(['ac:view'])
+
+    expect(wrapper.text()).toContain('还没有空调')
+  })
+
+  it('⚠ 筛出来是空的时候不许说「先去建车间」：车间早就建好了', async () => {
+    vi.mocked(hvac.listAcUnits).mockResolvedValue({
+      items: [],
+      page: 1,
+      size: 20,
+      total: 0,
+    })
+    const wrapper = await render(['ac:view'])
+
+    await pickInSelect(wrapper, 0, '东车间')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('没有匹配的空调')
+    // ⚠ 断在引导原文上：「空间配置」四个字在左侧导航里也有一条同名菜单
+    expect(wrapper.text()).not.toContain('再来这里逐台建档')
+  })
+})

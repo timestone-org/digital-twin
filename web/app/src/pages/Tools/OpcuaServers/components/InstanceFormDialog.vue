@@ -12,11 +12,9 @@
 import { computed, ref, watch } from 'vue'
 import type {
   DtRadioOption,
-  DtSelectOption,
   OpcuaInstance,
   OpcuaInstanceCreateInput,
   OpcuaInstanceUpdateInput,
-  OpcuaPortPool,
   OpcuaSecurityPolicy,
 } from '@dt/contracts'
 import { OPCUA_SECURITY_POLICIES } from '@dt/contracts'
@@ -31,9 +29,9 @@ import {
   DtSelect,
   DtSwitch,
 } from '@dt/ui'
+import { useFormDirty } from '@/composables/useFormDirty'
 
-import * as opcua from '@/api/opcua'
-import { describeError } from '@/composables/useAsyncList'
+import { usePortPool } from '../usePortPool'
 
 const props = defineProps<{
   modelValue: boolean
@@ -67,30 +65,25 @@ const PORT_MODES: readonly DtRadioOption[] = [
 
 const portMode = ref('auto')
 const port = ref('')
-const pool = ref<OpcuaPortPool | null>(null)
-const poolError = ref<string | null>(null)
+const pool = usePortPool()
+/** 池子的容量数字，模板里要摆好几处。 */
+const poolInfo = computed(() => pool.current.value)
 
-const portOptions = computed<DtSelectOption[]>(() =>
-  (pool.value?.free_ports ?? []).map((value) => ({
-    value: String(value),
-    label: String(value),
-  })),
+// ⚠ 填了一半误点遮罩就全没了；脏着时由 DtModal 拦下误关
+const { isDirty } = useFormDirty(
+  [
+    name,
+    description,
+    endpointPath,
+    namespaceUri,
+    policies,
+    anonymous,
+    autostart,
+    portMode,
+    port,
+  ],
+  () => props.modelValue,
 )
-
-/** 池子空了就没得选，此时连「指定端口」这个选项都不该给。 */
-const canPickPort = computed(() => portOptions.value.length > 0)
-
-async function loadPool(): Promise<void> {
-  try {
-    pool.value = await opcua.getPortPool()
-    poolError.value = null
-    // 池子拿回来之后给一个默认选中项，省掉「切到指定端口却是空的」这一步
-    port.value = pool.value.free_ports[0]?.toString() ?? ''
-  } catch (caught) {
-    pool.value = null
-    poolError.value = describeError(caught)
-  }
-}
 
 interface FormValues {
   name: string
@@ -146,7 +139,7 @@ watch(
     portMode.value = 'auto'
     port.value = ''
     // 编辑时改不了端口，没必要去问池子
-    if (target === null) void loadPool()
+    if (target === null) void pool.load(port)
   },
   { immediate: true },
 )
@@ -190,6 +183,7 @@ function submit(): void {
 <template>
   <DtModal
     :model-value="modelValue"
+    :dirty="isDirty"
     :title="isEdit ? '编辑实例' : '新建实例'"
     @update:model-value="emit('update:modelValue', $event)"
   >
@@ -207,22 +201,23 @@ function submit(): void {
       </DtField>
 
       <template v-if="!isEdit">
-        <DtNotice v-if="poolError" intent="danger" icon="alert-triangle">
-          取不到端口池：{{ poolError }}
+        <DtNotice v-if="pool.error.value" intent="danger" icon="alert-triangle">
+          取不到端口池：{{ pool.error.value }}
         </DtNotice>
         <DtNotice
-          v-else-if="pool && !canPickPort"
+          v-else-if="pool.error.value === null && !pool.canPick.value"
           intent="warning"
           icon="alert-triangle"
         >
-          端口池已用尽（{{ pool.used }} / {{ pool.total }}），建不了新实例。
+          端口池已用尽（{{ poolInfo?.used }} /
+          {{ poolInfo?.total }}），建不了新实例。
           扩池是部署期的事——容器的端口段映射要跟着一起改。
         </DtNotice>
 
         <DtField
-          v-else-if="pool"
+          v-else-if="poolInfo"
           label="端口"
-          :hint="`池内 ${pool.total} 个端口，已用 ${pool.used}，可选 ${pool.available}；实例上限 ${pool.max_instances}`"
+          :hint="`池内 ${poolInfo.total} 个端口，已用 ${poolInfo.used}，可选 ${poolInfo.available}；实例上限 ${poolInfo.max_instances}`"
         >
           <div class="flex flex-col gap-2">
             <DtRadioGroup
@@ -234,7 +229,7 @@ function submit(): void {
             <DtSelect
               v-if="portMode === 'manual'"
               v-model="port"
-              :options="portOptions"
+              :options="pool.options.value"
               aria-label="端口"
             />
           </div>

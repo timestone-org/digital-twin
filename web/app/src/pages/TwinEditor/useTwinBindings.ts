@@ -50,14 +50,16 @@ export function useTwinBindings(
 
   const actions = computed(() => {
     const current = doc()
-    return current === null
-      ? null
-      : createTwinBindingActions(current, nodeId)
+    return current === null ? null : createTwinBindingActions(current, nodeId)
   })
 
   const pickingFieldKey = ref<string | null>(null)
 
-  const liveValues = useTwinLiveValues(dashboardId, config, () => bindings.value)
+  const liveValues = useTwinLiveValues(
+    dashboardId,
+    config,
+    () => bindings.value,
+  )
 
   return {
     bindings,

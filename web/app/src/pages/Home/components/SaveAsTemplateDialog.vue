@@ -6,6 +6,8 @@
 import { computed, ref, watch } from 'vue'
 import { DtButton, DtInput, DtModal, DtNotice, DtTextarea } from '@dt/ui'
 
+import { useFormDirty } from '@/composables/useFormDirty'
+
 import type { DashboardSummary } from '@/api/dashboardWire'
 
 const props = withDefaults(
@@ -25,6 +27,12 @@ const emit = defineEmits<{
 const name = ref('')
 const category = ref('')
 const description = ref('')
+
+// ⚠ 填了一半误点遮罩就全没了；脏着时由 DtModal 拦下误关
+const { isDirty } = useFormDirty(
+  [name, category, description],
+  () => props.open,
+)
 
 const canSubmit = computed(() => name.value.trim().length > 0 && !props.loading)
 
@@ -53,6 +61,7 @@ function submit(): void {
 <template>
   <DtModal
     :model-value="open"
+    :dirty="isDirty"
     title="另存为模板"
     :description="dashboard === null ? undefined : `源屏：${dashboard.name}`"
     width="34rem"

@@ -46,6 +46,8 @@ export function decodePointItem(item: unknown): DecodedPoint | null {
       },
     }
   }
+  // ⚠ 'stale' 也按有值收下：推送方仍可能带着这一档（旧标签页、回滚窗口），
+  // 而整条丢掉会让那个点位在屏上凭空消失，比原样显示它的值糟得多
   if (state !== 'ok' && state !== 'stale') return null
   const timestampMs = item.timestampMs
   if (typeof timestampMs !== 'number' || !Number.isFinite(timestampMs)) {
@@ -54,7 +56,7 @@ export function decodePointItem(item: unknown): DecodedPoint | null {
   return {
     nodeKey,
     sample: {
-      state,
+      state: 'ok',
       value: item.value,
       timestampMs,
       quality: toQuality(item.quality),

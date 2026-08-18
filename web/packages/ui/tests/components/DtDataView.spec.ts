@@ -102,10 +102,17 @@ describe('DtDataView', () => {
     expect(wrapper.find('.dt-segmented').exists()).toBe(false)
   })
 
-  it('加载中只显示加载态，不把空列表当成没数据', () => {
+  it('首屏加载只显示加载态，不把空列表当成没数据', () => {
     const wrapper = render({ loading: true, rows: [] })
     expect(wrapper.find('.dt-spinner').exists()).toBe(true)
     expect(wrapper.text()).not.toContain('暂无数据')
+  })
+
+  it('⚠ 手里已经有行时刷新不许盖住表：每几秒刷一次的页面会一直在闪', () => {
+    const wrapper = render({ loading: true })
+
+    expect(wrapper.find('.dt-spinner').exists()).toBe(false)
+    expect(wrapper.text()).toContain('第一条')
   })
 
   it('出错时给原因与重试入口', async () => {

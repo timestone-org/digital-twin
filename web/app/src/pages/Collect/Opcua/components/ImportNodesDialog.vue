@@ -20,6 +20,8 @@ import {
   DtSwitch,
 } from '@dt/ui'
 
+import { useFormDirty } from '@/composables/useFormDirty'
+
 const props = withDefaults(
   defineProps<{
     modelValue: boolean
@@ -49,6 +51,12 @@ const samplingIntervalMs = ref(1000)
 const archiveEnabled = ref(true)
 const deadband = ref(0)
 const retentionDays = ref(0)
+
+// ⚠ 填了一半误点遮罩就全没了；脏着时由 DtModal 拦下误关
+const { isDirty } = useFormDirty(
+  [samplingIntervalMs, archiveEnabled, deadband, retentionDays],
+  () => props.modelValue,
+)
 
 watch(
   () => props.modelValue,
@@ -85,6 +93,7 @@ function confirm(): void {
 <template>
   <DtModal
     :model-value="modelValue"
+    :dirty="isDirty"
     title="导入选中节点"
     width="36rem"
     :close-on-backdrop="!isBusy"

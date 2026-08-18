@@ -30,7 +30,6 @@ from platform_server.apps.collect.services.point_frames import (
     changed_items,
     error_items,
     index_by_node_key,
-    now_ms,
     shards,
 )
 from platform_server.apps.collect.services.snapshot_source import (
@@ -42,7 +41,6 @@ from platform_server.realtime import FramePublisher
 
 _logger = get_logger("platform.collect.live")
 
-Clock = Callable[[], int]
 # 单调时钟，秒。⚠ 不能用墙钟：改系统时间会让重读周期一次跳过或永远不到期
 Ticker = Callable[[], float]
 
@@ -52,7 +50,6 @@ class LiveOptions:
     """一拍的节流与截断参数。窗口本身归调用方的循环。"""
 
     max_items: int
-    stale_after_ms: int
     max_points: int
     plan_ttl_s: float
 
@@ -83,7 +80,6 @@ class SourceLivePublisher:
     snapshots: SnapshotSource
     realtime: FramePublisher
     options: LiveOptions
-    clock: Clock = now_ms
     ticker: Ticker = time.monotonic
     _watched: dict[uuid.UUID, frozenset[uuid.UUID]] = field(
         default_factory=dict[uuid.UUID, frozenset[uuid.UUID]], init=False
@@ -150,12 +146,7 @@ class SourceLivePublisher:
                 points=len(node_keys),
             )
             return error_items(node_keys, reason=UNAVAILABLE_REASON)
-        return build_items(
-            node_keys,
-            readings,
-            at_ms=self.clock(),
-            stale_after_ms=self.options.stale_after_ms,
-        )
+        return build_items(node_keys, readings)
 
     async def _send(
         self, source_id: uuid.UUID, entry: _Cached, outgoing: list[Item]

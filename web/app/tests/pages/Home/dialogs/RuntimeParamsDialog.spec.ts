@@ -1,5 +1,5 @@
 /**
- * @fileoverview 契约：运行参数弹窗自己取数、四项旋钮与后端目录逐字对齐、
+ * @fileoverview 契约：运行参数弹窗自己取数、三项旋钮与后端目录逐字对齐、
  * 每项显示 env 名，且「恢复默认」的文案说的是删覆盖值重新跟随环境变量。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -40,8 +40,7 @@ function item(
 
 const ROWS: RuntimeParamItem[] = [
   item('publish_window_ms', 1000),
-  item('publish_max_items', 200),
-  item('publish_stale_after_ms', 15000, true),
+  item('publish_max_items', 200, true),
   item('publish_reconcile_interval_s', 5),
 ]
 
@@ -90,13 +89,12 @@ describe('取数', () => {
     expect(runtimeApi.listRuntimeParams).toHaveBeenCalledWith('dashboard')
   })
 
-  it('四项旋钮都画出来，且各自带上 env 名供对照 .env', async () => {
+  it('三项旋钮都画出来，且各自带上 env 名供对照 .env', async () => {
     const wrapper = mountDialog(true)
     await flushPromises()
 
     expect(wrapper.text()).toContain('推送合并窗口')
     expect(wrapper.text()).toContain('单帧最多点位数')
-    expect(wrapper.text()).toContain('判陈旧的时长')
     expect(wrapper.text()).toContain('订阅对账间隔')
     expect(wrapper.text()).toContain('PLATFORM_PUBLISH_WINDOW_MS')
   })
@@ -132,7 +130,7 @@ describe('取数', () => {
 })
 
 describe('保存与恢复默认', () => {
-  it('保存把当前四项的取值整组提交上去', async () => {
+  it('保存把当前三项的取值整组提交上去', async () => {
     const wrapper = mountDialog(true)
     await flushPromises()
 
@@ -142,7 +140,6 @@ describe('保存与恢复默认', () => {
     expect(runtimeApi.saveRuntimeParams).toHaveBeenCalledWith('dashboard', {
       publish_window_ms: 1000,
       publish_max_items: 200,
-      publish_stale_after_ms: 15000,
       publish_reconcile_interval_s: 5,
     })
   })

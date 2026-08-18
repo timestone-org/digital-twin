@@ -15,6 +15,8 @@ import {
 } from '@/pages/Collect/Opcua/sourceState'
 
 const AT_MS = Date.UTC(2026, 7, 16, 2, 0, 0)
+/** 一天前的采样时刻。用来验「值没变不等于读数有问题」。 */
+const A_DAY_AGO_MS = AT_MS - 86_400_000
 
 function ok(value: unknown): PointSample {
   return { state: 'ok', value, timestampMs: AT_MS, quality: 'good' }
@@ -36,13 +38,14 @@ describe('读数的三档', () => {
     expect(look.reason).toBe('点位暂无快照值')
   })
 
-  it('陈旧值照显示但标成陈旧', () => {
+  it('很久没变的值照显示，不因为时刻旧就挂徽标', () => {
+    // 订阅只在值变化时回调，一天变一次的点位每天有 23 小时时刻是「旧」的
     const look = formatSample(
-      { state: 'stale', value: 12, timestampMs: AT_MS, quality: 'good' },
+      { state: 'ok', value: 12, timestampMs: A_DAY_AGO_MS, quality: 'good' },
       '℃',
     )
     expect(look.text).toBe('12 ℃')
-    expect(look.badge).toBe('陈旧')
+    expect(look.badge).toBeNull()
   })
 
   it('正常现值没有徽标', () => {
@@ -103,12 +106,12 @@ describe('质量位', () => {
     expect(look.badge).toBe('质量存疑')
   })
 
-  it('陈旧压过质量位——值太旧时它是不是好质量已经不重要', () => {
+  it('质量不可用照说出来，值仍然摆着', () => {
     const look = formatSample(
-      { state: 'stale', value: 1, timestampMs: AT_MS, quality: 'bad' },
+      { state: 'ok', value: 1, timestampMs: AT_MS, quality: 'bad' },
       null,
     )
-    expect(look.badge).toBe('陈旧')
+    expect([look.text, look.badge]).toEqual(['1', '质量不可用'])
   })
 })
 

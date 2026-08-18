@@ -30,6 +30,7 @@ import { TWIN_SELECT_MODEL, type TwinSelection } from './types'
 import { useBulkParts } from './useBulkParts'
 import { useGizmoMode } from './useGizmoMode'
 import { useTwinEditorPage } from './useTwinEditorPage'
+import { useUnsavedGuard } from './useUnsavedGuard'
 
 const route = useRoute()
 const toast = useToast()
@@ -84,8 +85,7 @@ const viewport = createTwinViewportOps({
   config: () => config.value,
   actions: () => actions.value,
   selection: () => selection.value,
-  onRoamUnavailable: () =>
-    toast.error('轨迹上可用的视点不足两个，先去加几站'),
+  onRoamUnavailable: () => toast.error('轨迹上可用的视点不足两个，先去加几站'),
 })
 
 // ⚠ 模板里的 `ref="viewportRef"` 只认得顶层绑定，写成 `viewport.viewportRef`
@@ -107,7 +107,8 @@ async function save(): Promise<void> {
 /** 返回大屏编辑器；外壳的返回入口按站内路径走。 */
 const backTo = computed(() => `/dashboards/${dashboardId.value}/edit`)
 
-// ⚠ 走之前必须问：这一页的改动只在内存里，直接离开就没了，且没有任何提示
+// ⚠ 走之前必须问：这一页的改动只在内存里，直接离开就没了，且没有任何提示。
+// 站内跳转拦在这里，关标签页 / 刷新那一半拦在 `useUnsavedGuard`
 onBeforeRouteLeave(async () => {
   if (page.doc.value?.isDirty.value !== true) return true
   return await confirm.ask({
@@ -117,6 +118,8 @@ onBeforeRouteLeave(async () => {
     danger: true,
   })
 })
+
+useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
 </script>
 
 <template>

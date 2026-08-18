@@ -177,3 +177,23 @@ describe('编辑', () => {
     expect(updatedPayload(wrapper).credential).toBe('new-secret')
   })
 })
+
+describe('误关保护', () => {
+  it('还没动过时点外面照常关得掉', async () => {
+    const wrapper = await render(null)
+
+    await wrapper.find('.dt-modal__backdrop').trigger('click')
+
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([false])
+  })
+
+  it('⚠ 填过之后点外面不关：这一屏十几个字段，误触一次就全没了', async () => {
+    const wrapper = await render(null)
+
+    await fill(wrapper, '1号生产线', '一号车间 PLC')
+    await wrapper.find('.dt-modal__backdrop').trigger('click')
+
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(wrapper.text()).toContain('有还没提交的内容')
+  })
+})

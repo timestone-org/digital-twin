@@ -8,25 +8,17 @@
 import { computed, onMounted, ref } from 'vue'
 import type { DtDataColumn, OpcuaInstance } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import {
-  DtButton,
-  DtDataView,
-  DtIcon,
-  DtInput,
-  DtNotice,
-  DtTag,
-  useConfirm,
-  useToast,
-} from '@dt/ui'
+import { DtButton, DtDataView, DtIcon, DtInput, DtNotice, DtTag } from '@dt/ui'
 
 import * as opcua from '@/api/opcua'
+import { listEmptyState } from '@/utils/listEmpty'
 import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
-import { describeError, useAsyncList } from '@/composables/useAsyncList'
+import { useAsyncList } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
 import InstanceFormDialog from './components/InstanceFormDialog.vue'
 import InstanceStatusTag from './components/InstanceStatusTag.vue'
-import { pendingSummary } from './pendingFields'
+import { useInstanceOps } from './useInstanceOps'
 
 const COLUMNS: readonly DtDataColumn[] = [
   { key: 'name', label: '名称', card: 'title' },
@@ -43,112 +35,32 @@ const COLUMNS: readonly DtDataColumn[] = [
   },
 ]
 
-const toast = useToast()
-const confirm = useConfirm()
-
 const keyword = ref('')
+
+// ⚠ 搜不到与「一台都没建过」是两回事：合成一种的话，关键词打错一个字，
+// 界面就在劝人再建一个实例（见 utils/listEmpty）
+const emptyState = computed(() =>
+  listEmptyState({
+    isFiltered: keyword.value.trim() !== '',
+    subject: '实例',
+    keyword: keyword.value,
+    blank: {
+      title: '还没有实例',
+      hint: '建一个实例，把选中的点位按 opc.tcp 端点暴露给上位系统。',
+    },
+  }),
+)
 const view = useViewMode('tools-opcua-servers')
 
 const list = useAsyncList<OpcuaInstance>((query) =>
   opcua.listInstances({ q: keyword.value || undefined, ...query }),
 )
 
-const formOpen = ref(false)
-const editing = ref<OpcuaInstance | null>(null)
+const ops = useInstanceOps(() => list.reload())
 
 const pendingCount = computed(
   () => list.items.value.filter((item) => item.has_pending_restart).length,
 )
-
-function openCreate(): void {
-  editing.value = null
-  formOpen.value = true
-}
-
-function openEdit(instance: OpcuaInstance): void {
-  editing.value = instance
-  formOpen.value = true
-}
-
-async function afterWrite(message: string): Promise<void> {
-  formOpen.value = false
-  toast.success(message)
-  await list.reload()
-}
-
-async function create(
-  input: Parameters<typeof opcua.createInstance>[0],
-): Promise<void> {
-  try {
-    await opcua.createInstance(input)
-    await afterWrite('实例已创建')
-  } catch (caught) {
-    toast.error(describeError(caught))
-  }
-}
-
-async function update(
-  input: Parameters<typeof opcua.updateInstance>[1],
-): Promise<void> {
-  const target = editing.value
-  if (target === null) return
-  try {
-    const saved = await opcua.updateInstance(target.id, input)
-    await afterWrite(
-      saved.pending_fields.length > 0
-        ? pendingSummary(saved.pending_fields)
-        : '实例已保存',
-    )
-  } catch (caught) {
-    toast.error(describeError(caught))
-  }
-}
-
-/** 起停。⚠ 停与重启的确认文案必须说清「会断开全部上位机会话」。 */
-async function act(
-  instance: OpcuaInstance,
-  verb: 'start' | 'stop' | 'restart',
-): Promise<void> {
-  if (verb !== 'start') {
-    const ok = await confirm.ask({
-      title: verb === 'stop' ? '停止实例' : '重启实例',
-      message:
-        `「${instance.name}」上当前有 ${instance.session_count} 个上位机会话，` +
-        '这些连接会全部断开，需要对方自行重连。',
-      confirmText: verb === 'stop' ? '停止' : '重启',
-      danger: true,
-    })
-    if (!ok) return
-  }
-  try {
-    await opcua.actOnInstance(instance.id, verb)
-    toast.success(
-      { start: '实例已启动', stop: '实例已停止', restart: '实例已重启' }[verb],
-    )
-    await list.reload()
-  } catch (caught) {
-    toast.error(describeError(caught))
-  }
-}
-
-async function remove(instance: OpcuaInstance): Promise<void> {
-  const ok = await confirm.ask({
-    title: '删除实例',
-    message:
-      `删除「${instance.name}」会一并删掉它的 ${instance.node_count} 个节点、` +
-      '接入凭据与信任证书，且端口会退回池中。此操作不可恢复。',
-    confirmText: '删除',
-    danger: true,
-  })
-  if (!ok) return
-  try {
-    await opcua.deleteInstance(instance.id)
-    toast.success('实例已删除')
-    await list.reload()
-  } catch (caught) {
-    toast.error(describeError(caught))
-  }
-}
 
 onMounted(() => {
   void list.reload()
@@ -159,8 +71,8 @@ onMounted(() => {
   <AppShell title="OPC UA 服务端" subtitle="对上位系统暴露的 opc.tcp 端点">
     <template #actions>
       <div class="flex items-center gap-2">
-        <PermGuard :codes="[PERMISSION_CODES.opcuaManage]">
-          <DtButton size="sm" icon="plus" @click="openCreate">
+        <PermGuard :codes="[PERMISSION_CODES.opcuaManage]" explain>
+          <DtButton size="sm" icon="plus" @click="ops.openCreate">
             新建实例
           </DtButton>
         </PermGuard>
@@ -176,6 +88,7 @@ onMounted(() => {
 
       <DtDataView
         v-model:view="view"
+        :empty="emptyState"
         class="min-h-0 flex-1"
         :columns="COLUMNS"
         :rows="list.items.value"
@@ -259,7 +172,7 @@ onMounted(() => {
                 v-if="!row.is_running"
                 size="sm"
                 variant="ghost"
-                @click="act(row, 'start')"
+                @click="ops.act(row, 'start')"
               >
                 启动
               </DtButton>
@@ -267,20 +180,20 @@ onMounted(() => {
                 v-else
                 size="sm"
                 variant="ghost"
-                @click="act(row, 'stop')"
+                @click="ops.act(row, 'stop')"
               >
                 停止
               </DtButton>
             </PermGuard>
             <PermGuard :codes="[PERMISSION_CODES.opcuaManage]">
-              <DtButton size="sm" variant="ghost" @click="openEdit(row)">
+              <DtButton size="sm" variant="ghost" @click="ops.openEdit(row)">
                 编辑
               </DtButton>
               <DtButton
                 size="sm"
                 variant="ghost"
                 intent="danger"
-                @click="remove(row)"
+                @click="ops.remove(row)"
               >
                 删除
               </DtButton>
@@ -291,10 +204,10 @@ onMounted(() => {
     </div>
 
     <InstanceFormDialog
-      v-model="formOpen"
-      :instance="editing"
-      @create="create"
-      @update="update"
+      v-model="ops.formOpen.value"
+      :instance="ops.editing.value"
+      @create="ops.create"
+      @update="ops.update"
     />
   </AppShell>
 </template>

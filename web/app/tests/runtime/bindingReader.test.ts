@@ -59,30 +59,20 @@ describe('实时点位', () => {
     expect(slot).toEqual({ state: 'pending' })
   })
 
-  it('ok 档给值与时刻，且不标陈旧', () => {
+  it('ok 档给值与采样时刻', () => {
     const slot = readerOf({
       's:1': { state: 'ok', value: 7, timestampMs: 99, quality: 'good' },
     })(binding({ sourceKind: 'opcua', nodeKey: 's:1' }), {})
 
-    expect(slot).toEqual({
-      state: 'ok',
-      value: 7,
-      timestampMs: 99,
-      isStale: false,
-    })
+    expect(slot).toEqual({ state: 'ok', value: 7, timestampMs: 99 })
   })
 
-  it('stale 档照给值但标注为陈旧，时刻仍是旧值的时刻', () => {
+  it('时刻很旧的读数照给值，时刻原样带出不换成墙钟', () => {
     const slot = readerOf({
-      's:1': { state: 'stale', value: 7, timestampMs: 42, quality: 'good' },
+      's:1': { state: 'ok', value: 7, timestampMs: 42, quality: 'good' },
     })(binding({ sourceKind: 'opcua', nodeKey: 's:1' }), {})
 
-    expect(slot).toEqual({
-      state: 'ok',
-      value: 7,
-      timestampMs: 42,
-      isStale: true,
-    })
+    expect(slot).toEqual({ state: 'ok', value: 7, timestampMs: 42 })
   })
 
   it('error 档给原因，不拿 null 冒充读数', () => {
@@ -167,12 +157,12 @@ describe('历史序列', () => {
 describe('通到模块状态', () => {
   const realtime = [binding({ sourceKind: 'opcua', nodeKey: 's:1' })]
 
-  it('陈旧的快照让模块显示成 stale', () => {
+  it('很久没变的快照照样让模块显示成 connected', () => {
     expect(
       statusOf(realtime, {
-        's:1': { state: 'stale', value: 1, timestampMs: 1, quality: 'good' },
+        's:1': { state: 'ok', value: 1, timestampMs: 1, quality: 'good' },
       }),
-    ).toBe('stale')
+    ).toBe('connected')
   })
 
   it('取不到的快照让模块显示成 error', () => {

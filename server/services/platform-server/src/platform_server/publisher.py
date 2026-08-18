@@ -268,10 +268,7 @@ def _dashboard_lane(container: Container) -> Lane:
         viewers=container.viewers,
         snapshots=container.snapshots,
         realtime=container.realtime,
-        options=PublishOptions(
-            max_items=settings.publish_max_items,
-            stale_after_ms=settings.publish_stale_after_ms,
-        ),
+        options=PublishOptions(max_items=settings.publish_max_items),
     )
     reconciler = TopicReconciler(
         dashboards=DatabaseDashboardIndex(database=container.database),
@@ -298,7 +295,6 @@ def _collect_lane(container: Container) -> Lane:
         realtime=container.realtime,
         options=LiveOptions(
             max_items=settings.publish_max_items,
-            stale_after_ms=settings.publish_stale_after_ms,
             max_points=settings.collect_live_max_points,
             plan_ttl_s=settings.collect_live_plan_ttl_s,
         ),

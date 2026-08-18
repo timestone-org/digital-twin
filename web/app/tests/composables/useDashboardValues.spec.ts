@@ -160,7 +160,6 @@ describe('取数源', () => {
       state: 'ok',
       value: 21,
       timestampMs: 99,
-      isStale: false,
     })
   })
 

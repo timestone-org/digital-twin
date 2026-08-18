@@ -145,7 +145,9 @@ describe('行数转发', () => {
     await openBindingTab(wrapper)
 
     expect(
-      wrapper.findAll('button').some((item) => item.text().includes('新增一行')),
+      wrapper
+        .findAll('button')
+        .some((item) => item.text().includes('新增一行')),
     ).toBe(false)
     wrapper.unmount()
   })
@@ -156,7 +158,9 @@ describe('行数转发', () => {
     await openBindingTab(wrapper)
 
     expect(
-      wrapper.findAll('button').some((item) => item.text().includes('新增一行')),
+      wrapper
+        .findAll('button')
+        .some((item) => item.text().includes('新增一行')),
     ).toBe(true)
     wrapper.unmount()
   })

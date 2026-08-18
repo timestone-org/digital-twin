@@ -30,7 +30,10 @@ vi.mock('@/composables/useRealtimeChannel', () => ({
 // 应用壳把整屏的一帧筛成「本次要的那几个点位」，这里只需要拿到回调本身
 vi.mock('@/runtime/pointStream', () => ({
   createPointSubscribe:
-    (channel: { subscribe: (topic: string) => () => void }, topicOf: () => string | null) =>
+    (
+      channel: { subscribe: (topic: string) => () => void },
+      topicOf: () => string | null,
+    ) =>
     (_keys: readonly string[], onValue: PointValueListener) => {
       const topic = topicOf()
       if (topic === null) return () => undefined

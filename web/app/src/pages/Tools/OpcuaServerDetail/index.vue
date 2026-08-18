@@ -116,7 +116,7 @@ onMounted(() => {
 <template>
   <AppShell :title="instance?.name ?? 'OPC UA 实例'" subtitle="实例详情">
     <template #actions>
-      <PermGuard :codes="[PERMISSION_CODES.opcuaOperate]">
+      <PermGuard :codes="[PERMISSION_CODES.opcuaOperate]" explain>
         <div v-if="instance" class="flex items-center gap-2">
           <DtButton v-if="!instance.is_running" size="sm" @click="act('start')">
             启动

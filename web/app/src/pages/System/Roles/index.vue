@@ -89,12 +89,17 @@ async function afterWrite(message: string): Promise<void> {
 }
 
 async function removeRole(role: RoleSummary): Promise<void> {
+  // ⚠ 删不成就别问：一个注定被拒的请求换不来任何信息，只换来一条报错
+  if (role.user_count > 0) {
+    toast.warning(
+      `角色「${role.name}」下还有 ${role.user_count} 个账号，` +
+        '先把它们改派到别的角色才能删这个角色。',
+    )
+    return
+  }
   const ok = await confirm.ask({
     title: '删除角色',
-    message:
-      role.user_count > 0
-        ? `角色「${role.name}」下还有 ${role.user_count} 个账号，删除会被后端拒绝。`
-        : `将删除角色「${role.name}」，且不可恢复。`,
+    message: `将删除角色「${role.name}」，且不可恢复。`,
     confirmText: '删除',
     danger: true,
   })
@@ -115,7 +120,7 @@ onMounted(() => {
 <template>
   <AppShell title="角色管理" subtitle="岗位与它持有的权限码">
     <template #actions>
-      <PermGuard :codes="[PERMISSION_CODES.roleManage]">
+      <PermGuard :codes="[PERMISSION_CODES.roleManage]" explain>
         <DtButton size="sm" icon="plus" @click="openCreate">新建角色</DtButton>
       </PermGuard>
     </template>

@@ -1,16 +1,17 @@
 <script setup lang="ts">
 /**
- * @fileoverview 编辑器动作条：撤销重做、对齐分布与整理、吸附控件、画布缩放、
+ * @fileoverview 编辑器动作条：撤销重做、吸附控件与整理、画布缩放、
  * 快捷键帮助与保存。工具条自己不改文档，只把动作抛给页面统一编排。
+ *
  * ⚠ 版本冲突时**保存被挡住**：这条路径的唯一出口是「重新加载」（ADR-0012）。
+ * ⚠ 只放**任何时候都可能用**的入口。对齐与分布要先多选才成立，多选时右栏
+ * 本来就摆着它们（`MultiSelectPanel`），摆在这里等于让一排常年禁用的键
+ * 占着顶栏最贵的横向空间。
  */
 import type { DtSegmentedOption, DtSelectOption } from '@dt/contracts'
 import { DtButton, DtSegmented, DtSelect, DtTag } from '@dt/ui'
 import { computed } from 'vue'
 
-import ToolbarArrange from './ToolbarArrange.vue'
-
-import type { AlignKind } from '@/features/dashboard/canvasAlign'
 import { SNAP_STEP_PRESETS } from '@/features/dashboard/canvasSnap'
 import type { SnapConfig } from '@/features/dashboard/canvasSnap'
 import { ZOOM_PRESETS, zoomPercent } from '@/features/dashboard/canvasZoom'
@@ -27,10 +28,6 @@ const props = defineProps<{
   /** 适应窗口的实际倍率，「适应」那一档要显示它才知道被压到了多少。 */
   fitScale: number
   snap: SnapConfig
-  /** 同层级选中 ≥2 个。 */
-  alignReady: boolean
-  /** 同层级选中 ≥3 个。 */
-  distributeReady: boolean
 }>()
 
 const emit = defineEmits<{
@@ -40,15 +37,12 @@ const emit = defineEmits<{
   reload: []
   'update:zoom': [zoom: CanvasZoom]
   'set-snap': [patch: Partial<SnapConfig>]
-  align: [kind: AlignKind]
-  distribute: [axis: 'x' | 'y']
   tidy: []
   help: []
   preview: []
   export: []
 }>()
 
-/** 对齐六键：文字取一个字，读屏与悬浮提示读全名。 */
 const SNAP_MODES: readonly DtSegmentedOption[] = [
   { value: 'grid', label: '栅格' },
   { value: 'px', label: '像素' },
@@ -110,16 +104,6 @@ function pickStep(value: string): void {
     </div>
 
     <div class="dt-toolbar__group">
-      <ToolbarArrange
-        :align-ready="alignReady"
-        :distribute-ready="distributeReady"
-        @align="emit('align', $event)"
-        @distribute="(axis) => emit('distribute', axis)"
-        @tidy="emit('tidy')"
-      />
-    </div>
-
-    <div class="dt-toolbar__group">
       <DtButton
         size="sm"
         :variant="snap.enabled ? 'soft' : 'ghost'"
@@ -158,6 +142,17 @@ function pickStep(value: string): void {
         data-test="snap-guides"
         :aria-pressed="snap.guides"
         @click="emit('set-snap', { guides: !snap.guides })"
+      />
+      <!-- 整理与吸附同类：都是「让东西摆整齐」，且都不要求先选中什么 -->
+      <DtButton
+        size="sm"
+        variant="ghost"
+        intent="neutral"
+        icon="layout-grid"
+        aria-label="整理布局"
+        title="整理布局：消重叠并钳回边界"
+        data-test="tidy"
+        @click="emit('tidy')"
       />
     </div>
 
@@ -234,14 +229,29 @@ function pickStep(value: string): void {
 </template>
 
 <style scoped lang="scss">
+// 窄屏时横向滚动，**不换行**：顶栏是定高的一行，换行会把第二行挤出可视区，
+// 于是保存键在窄屏上直接消失——而滚动至少还够得着。
 .dt-toolbar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  row-gap: 6px;
+  overflow-x: auto;
+  // ⚠ 必须显式写 overflow-y：只给 overflow-x 时另一轴会被算成 auto，焦点圈
+  // （全局是 outline 2px + offset 2px）一露头就冒出一条竖滚动条
+  overflow-y: hidden;
+  // 上下各让出焦点圈那 4px，再用负外边距抵掉——否则 hidden 会把圈裁掉半边
+  padding-block: 4px;
+  margin-block: -4px;
+
+  // 顶栏只有 64px 高，全局那条 10px 的滚动条在这儿太占地方
+  &::-webkit-scrollbar {
+    height: 6px;
+  }
 
   &__group {
     display: flex;
+    // ⚠ 不许压缩：压缩了图标键会先被挤成一条缝，而不是滚起来
+    flex: none;
     gap: 4px;
     align-items: center;
   }

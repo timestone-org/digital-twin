@@ -27,7 +27,6 @@ WINDOW_KEY = "publish_window_ms"
 EXPECTED_KEYS = {
     "publish_window_ms",
     "publish_max_items",
-    "publish_stale_after_ms",
     "publish_reconcile_interval_s",
 }
 

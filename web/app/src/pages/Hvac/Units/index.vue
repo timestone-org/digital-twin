@@ -6,7 +6,7 @@
  * ⚠ 建档必须先有车间与房间——空调不允许处于没有归属的中间态，后端
  * `room_id` NOT NULL。空间本身在「空间配置」页维护，这里只选不建。
  */
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { AcUnit, DtDataColumn } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import {
@@ -25,6 +25,7 @@ import { describeError, useAsyncList } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
 import { useLocationPicker } from '@/features/hvac/useLocationPicker'
 import { formatDateTime } from '@/utils/datetime'
+import { listEmptyState } from '@/utils/listEmpty'
 import AcDataDialog from './components/AcDataDialog.vue'
 import AcUnitFormDialog from './components/AcUnitFormDialog.vue'
 import AcUnitRowActions from './components/AcUnitRowActions.vue'
@@ -44,7 +45,7 @@ const COLUMNS: readonly DtDataColumn[] = [
   },
 ]
 
-const EMPTY = {
+const BLANK_EMPTY = {
   title: '还没有空调',
   hint: '先在「空间配置」建好车间与房间，再来这里逐台建档。',
 }
@@ -96,6 +97,20 @@ watch([workshopId, roomId], () => {
   void list.reloadFromFirstPage()
 })
 
+// ⚠ 筛出来是空的不等于台账是空的：合成一种的话，选了个没空调的房间，
+// 界面会去劝人「先建车间」，而车间早就建好了（见 utils/listEmpty）
+const emptyState = computed(() =>
+  listEmptyState({
+    isFiltered:
+      keyword.value.trim() !== '' ||
+      workshopId.value !== '' ||
+      roomId.value !== '',
+    subject: '空调',
+    keyword: keyword.value,
+    blank: BLANK_EMPTY,
+  }),
+)
+
 function openCreate(): void {
   editing.value = null
   isFormOpen.value = true
@@ -141,7 +156,7 @@ onMounted(() => {
 <template>
   <AppShell title="空调台账" subtitle="全场空调的建档与检索">
     <template #actions>
-      <PermGuard :codes="[PERMISSION_CODES.acManage]">
+      <PermGuard :codes="[PERMISSION_CODES.acManage]" explain>
         <DtButton size="sm" icon="plus" @click="openCreate">新建空调</DtButton>
       </PermGuard>
     </template>
@@ -158,7 +173,7 @@ onMounted(() => {
         :loading="list.loading.value"
         :error="list.error.value"
         :pagination="list.pager.value"
-        :empty="EMPTY"
+        :empty="emptyState"
         :layout="{ minWidth: '52rem', cardColumns: 3, cardMinWidth: '18rem' }"
         @update:page="list.goToPage"
         @update:size="list.setSize"

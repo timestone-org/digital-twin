@@ -18,6 +18,8 @@ import {
   DtSelect,
 } from '@dt/ui'
 
+import { useFormDirty } from '@/composables/useFormDirty'
+
 import * as admin from '@/api/admin'
 import { describeError } from '@/composables/useAsyncList'
 import PermissionCodePicker from '@/features/permissions/PermissionCodePicker.vue'
@@ -69,6 +71,9 @@ const selected = ref<Set<string>>(new Set())
 const busy = ref(false)
 const error = ref<string | null>(null)
 
+// ⚠ 填了一半误点遮罩就全没了；脏着时由 DtModal 拦下误关
+const { isDirty } = useFormDirty([form, selected], () => props.modelValue)
+
 const isEdit = computed(() => props.rule !== null)
 
 watch(
@@ -118,6 +123,7 @@ async function onSubmit(): Promise<void> {
 <template>
   <DtModal
     :model-value="modelValue"
+    :dirty="isDirty"
     :title="isEdit ? '修改规则' : '新增规则'"
     width="34rem"
     description="改动即改变全系统鉴权矩阵，最长约 10 秒后各副本生效"

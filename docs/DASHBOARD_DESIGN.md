@@ -148,7 +148,12 @@ archive    → 历史序列，detail_json {node_key, range}
 ### 4.3 取不到就说取不到
 
 绑定求值失败一律返回 `state: "error"` 加原因，**绝不推空序列冒充"这段时间没数据"**。
-陈旧数据必须标注为陈旧（[runtime-resilience](agents/runtime-resilience.md) §9）。
+
+**值有多旧不构成一档状态**：`timestampMs` 照实是采样时刻，界面据它显示「更新于」，
+但不许按「比现在旧多久」把值降档——订阅只在值变化时回调，一个一天变一次的点位
+按年龄判会每天被误标 23 小时，而它的值一直是对的。真正读不到时快照键会到期，
+落进上面的 `error` 一档（[runtime-resilience](agents/runtime-resilience.md) §9
+说的「不许拿陈旧数据冒充实时」，在这条链路上是靠 TTL 而不是靠标注实现的）。
 
 ### 4.4 `detail_json` 里的时间窗用纪元毫秒——一条显式豁免
 

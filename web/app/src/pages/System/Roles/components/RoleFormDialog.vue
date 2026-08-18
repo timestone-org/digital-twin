@@ -12,6 +12,8 @@ import { computed, ref, watch } from 'vue'
 import type { RoleSummary } from '@dt/contracts'
 import { DtButton, DtInput, DtModal, DtNotice } from '@dt/ui'
 
+import { useFormDirty } from '@/composables/useFormDirty'
+
 import * as admin from '@/api/admin'
 import { describeError } from '@/composables/useAsyncList'
 import type { RoleFormTask } from '../roleFormTask'
@@ -25,6 +27,9 @@ const codes = ref<Set<string>>(new Set())
 const codesReady = ref(true)
 const busy = ref(false)
 const error = ref<string | null>(null)
+
+// ⚠ 填了一半误点遮罩就全没了；脏着时由 DtModal 拦下误关
+const { isDirty } = useFormDirty([form, codes], () => props.task !== null)
 
 const isEdit = computed(() => props.task?.mode === 'edit')
 const nameLocked = computed(
@@ -113,6 +118,7 @@ async function onSubmit(): Promise<void> {
 <template>
   <DtModal
     :model-value="task !== null"
+    :dirty="isDirty"
     :title="isEdit ? '编辑角色' : '新建角色'"
     :description="description"
     width="34rem"

@@ -146,6 +146,7 @@ export type {
   DtButtonVariant,
   DtDataCardRole,
   DtDataColumn,
+  DtDataViewEmpty,
   DtDataViewMode,
   DtIntent,
   DtMenuItem,

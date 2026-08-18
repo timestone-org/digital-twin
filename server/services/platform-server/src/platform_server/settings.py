@@ -107,8 +107,6 @@ class Settings(
     publish_max_items: int = Field(
         default=200, ge=1, le=PUBLISH_MAX_ITEMS_CEILING
     )
-    # 快照多旧就算陈旧。⚠ 陈旧值照推但标注为陈旧，不许当成现值
-    publish_stale_after_ms: int = Field(default=15_000, ge=1)
     # 单活租约的存活期，续期在每一拍（远快于它）
     publish_lease_ttl_s: int = Field(default=15, ge=LEASE_TTL_FLOOR_S)
     # 主题登记与大屏表的对账周期。⚠ 它同时是「新建的大屏多久之后可被订阅」

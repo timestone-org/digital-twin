@@ -1,6 +1,6 @@
 /**
  * @fileoverview 契约：工具条只抛事件不改文档——每个入口点下去父组件收到什么，
- * 以及对齐 / 分布在条件不满足时**仍然渲染、只是禁用**（藏起来会让人以为功能没了）。
+ * 条内只摆随时可用的入口（要先选中才成立的动作归右栏），且窄了要能滚不能换行。
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -24,8 +24,6 @@ function mountBar(over: Partial<Props> = {}) {
       zoom: null,
       fitScale: 0.46,
       snap: SNAP,
-      alignReady: true,
-      distributeReady: true,
       ...over,
     },
   })
@@ -108,50 +106,15 @@ describe('文档动作', () => {
   })
 })
 
-describe('对齐与分布', () => {
-  it('六个方向各抛自己的那一档', async () => {
-    const wrapper = mountBar()
-    const kinds = ['left', 'hcenter', 'right', 'top', 'vcenter', 'bottom']
-
-    for (const kind of kinds) {
-      await wrapper.find(`[data-test="align-${kind}"]`).trigger('click')
-    }
-
-    expect(wrapper.emitted('align')?.map(([kind]) => kind)).toEqual(kinds)
-  })
-
-  it('两个轴各抛自己的那一档', async () => {
+describe('条上只摆随时可用的入口', () => {
+  // 对齐 / 分布要先多选才成立，多选时右栏的 MultiSelectPanel 本来就摆着它们。
+  // 摆在顶栏等于让一排常年禁用的键占着最贵的横向空间
+  it('对齐与分布不在条上', () => {
     const wrapper = mountBar()
 
-    await wrapper.find('[data-test="distribute-x"]').trigger('click')
-    await wrapper.find('[data-test="distribute-y"]').trigger('click')
-
-    expect(wrapper.emitted('distribute')).toEqual([['x'], ['y']])
-  })
-
-  it('条件不满足时六键仍在，只是禁用', async () => {
-    const wrapper = mountBar({ alignReady: false, distributeReady: false })
-
-    const buttons = ['align-left', 'align-bottom', 'distribute-x']
-    for (const key of buttons) {
-      expect(wrapper.find(`[data-test="${key}"]`).exists()).toBe(true)
-      expect(wrapper.find(`[data-test="${key}"]`).attributes('disabled')).toBe(
-        '',
-      )
+    for (const key of ['align-left', 'align-bottom', 'distribute-x']) {
+      expect(wrapper.find(`[data-test="${key}"]`).exists()).toBe(false)
     }
-    await wrapper.find('[data-test="align-left"]').trigger('click')
-    expect(wrapper.emitted('align')).toBeUndefined()
-  })
-
-  it('禁用时的悬浮提示说清还差什么', () => {
-    const wrapper = mountBar({ alignReady: false, distributeReady: false })
-
-    expect(
-      wrapper.find('[data-test="align-left"]').attributes('title'),
-    ).toContain('≥2')
-    expect(
-      wrapper.find('[data-test="distribute-x"]').attributes('title'),
-    ).toContain('≥3')
   })
 })
 

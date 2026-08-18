@@ -22,7 +22,6 @@ from platform_server.apps.dashboard.services.module_catalog import (
     ModuleCatalog,
 )
 
-
 SIZE = ModuleDefaultSizeOut(width=100, height=100)
 
 

@@ -165,7 +165,11 @@ describe('行数跟着实体走（rowCounts）', () => {
 
   it('超出实体数的存量行照样摆出来，标成孤行且能删', async () => {
     const wrapper = mount(BindingPanel, {
-      props: { specs: SPECS, bindings: [row(0), row(1)], rowCounts: { rows: 1 } },
+      props: {
+        specs: SPECS,
+        bindings: [row(0), row(1)],
+        rowCounts: { rows: 1 },
+      },
     })
 
     expect(wrapper.text()).toContain('没有对应的实体')
@@ -184,7 +188,9 @@ describe('行数跟着实体走（rowCounts）', () => {
     })
 
     expect(
-      wrapper.findAll('button').some((item) => item.text().includes('新增一行')),
+      wrapper
+        .findAll('button')
+        .some((item) => item.text().includes('新增一行')),
     ).toBe(false)
     expect(wrapper.text()).toContain('还没有可绑的行')
   })

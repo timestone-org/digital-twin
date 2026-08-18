@@ -18,19 +18,23 @@ export const POINT_QUALITIES = ['good', 'uncertain', 'bad'] as const
 export type PointQuality = (typeof POINT_QUALITIES)[number]
 
 /**
- * 一次读数的三档结论，与 publisher 推送条目的 `state` 逐字一致。
- * `ok` 现值、`stale` 值太旧、`error` 取不到。
+ * 一次读数的两档结论，与 publisher 推送条目的 `state` 逐字一致。
+ * `ok` 有值、`error` 取不到。
+ * ⚠ 没有「值太旧」这一档：订阅只在值变化时回调，一个一天变一次的点位按时刻
+ * 判就会每天有 23 小时被降档，而它的值一直是对的。采集停了则整个快照到期，
+ * 落进 `error`。
  */
-export const POINT_STATES = ['ok', 'stale', 'error'] as const
+export const POINT_STATES = ['ok', 'error'] as const
 export type PointState = (typeof POINT_STATES)[number]
 
 /**
  * 取到了值的一次读数。
- * ⚠ `stale` 档的 `timestampMs` 是**旧值**的时刻，不许用当前墙钟顶替——
- * 顶替之后陈旧值在界面上与新值完全一样（runtime-resilience §9）。
+ * ⚠ `timestampMs` 是**采样时刻**，不许用当前墙钟顶替——顶替之后，界面上
+ * 「更新于」这一列会对每个点位都显示「刚刚」，而它正是判断现场还动不动的
+ * 唯一依据（runtime-resilience §9）。
  */
 export interface PointReadingSample {
-  state: 'ok' | 'stale'
+  state: 'ok'
   /** ⚠ `0` / `false` / `''` 都是合法读数，不许当成「还没有值」。 */
   value: unknown
   /** 采样时刻，UTC 毫秒。 */

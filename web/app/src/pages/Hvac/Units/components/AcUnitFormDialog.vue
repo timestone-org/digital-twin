@@ -9,6 +9,8 @@ import { computed, ref, watch } from 'vue'
 import type { AcUnit } from '@dt/contracts'
 import { DtButton, DtInput, DtModal, DtNotice, DtSelect } from '@dt/ui'
 
+import { useFormDirty } from '@/composables/useFormDirty'
+
 import * as hvac from '@/api/hvac'
 import { describeError } from '@/composables/useAsyncList'
 import { useLocationPicker } from '@/features/hvac/useLocationPicker'
@@ -37,6 +39,12 @@ const serial = ref('')
 const name = ref('')
 const busy = ref(false)
 const error = ref<string | null>(null)
+
+// ⚠ 填了一半误点遮罩就全没了；脏着时由 DtModal 拦下误关
+const { isDirty } = useFormDirty(
+  [serial, name, workshopId, roomId],
+  () => props.modelValue,
+)
 
 const isEdit = computed(() => props.unit !== null)
 const canSubmit = computed(
@@ -94,6 +102,7 @@ async function save(): Promise<void> {
 <template>
   <DtModal
     :model-value="props.modelValue"
+    :dirty="isDirty"
     :title="isEdit ? '编辑空调' : '新建空调'"
     description="序号是全场唯一的设备编号，不是排序号"
     @update:model-value="emit('update:modelValue', $event)"

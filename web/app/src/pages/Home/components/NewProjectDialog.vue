@@ -6,6 +6,8 @@
 import { computed, ref, watch } from 'vue'
 import { DtButton, DtIcon, DtInput, DtModal, DtTextarea } from '@dt/ui'
 
+import { useFormDirty } from '@/composables/useFormDirty'
+
 const props = withDefaults(
   defineProps<{ open: boolean; loading?: boolean }>(),
   { loading: false },
@@ -18,6 +20,9 @@ const emit = defineEmits<{
 
 const name = ref('')
 const description = ref('')
+
+// ⚠ 填了一半误点遮罩就全没了；脏着时由 DtModal 拦下误关
+const { isDirty } = useFormDirty([name, description], () => props.open)
 
 const canSubmit = computed(() => name.value.trim().length > 0 && !props.loading)
 
@@ -43,6 +48,7 @@ function submit(): void {
 <template>
   <DtModal
     :model-value="open"
+    :dirty="isDirty"
     title="新建项目"
     description="项目是一组大屏的容器，主题与品牌按项目继承。"
     width="34rem"

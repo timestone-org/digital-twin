@@ -200,14 +200,14 @@ describe('状态的交代', () => {
     expect(wrapper.get('.dt-module-status--cover').text()).toContain('加载中')
   })
 
-  it('陈旧的值照常显示，但角上标出来', async () => {
+  it('很久没变的值照常显示，正常态什么都不画', async () => {
     const wrapper = mountCells(
       [{ moduleType: 'simple', bindings: [POWER_BINDING] }],
-      () => ({ state: 'ok', value: 42, isStale: true }),
+      () => ({ state: 'ok', value: 42, timestampMs: 1_700_000_000_000 }),
     )
     await flushPromises()
 
-    expect(wrapper.get('.dt-module-status--badge').text()).toBe('数据陈旧')
+    expect(wrapper.find('.dt-module-status').exists()).toBe(false)
     expect(wrapper.find('.seen').exists()).toBe(true)
   })
 

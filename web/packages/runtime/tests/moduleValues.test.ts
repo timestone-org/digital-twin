@@ -200,7 +200,6 @@ describe('取不到的槽', () => {
       empty: 0,
       pending: 0,
       error: 1,
-      stale: 0,
     })
   })
 
@@ -217,17 +216,20 @@ describe('取不到的槽', () => {
     expect(result.tally.pending).toBe(1)
   })
 
-  it('陈旧的值照常注入，但单独计数', () => {
+  it('很久没变的值照常注入，也照常算成取到了', () => {
     const result = computeModuleValues({
       specs: [],
       bindings: [
         fakeBinding({ id: 'b1', fieldKey: 'power', sourceKind: 'opcua' }),
       ],
-      read: readerOf({ power: { state: 'ok', value: 42, isStale: true } }),
+      read: readerOf({
+        power: { state: 'ok', value: 42, timestampMs: 1_700_000_000_000 },
+      }),
     })
 
     expect(result.values).toEqual({ power: 42 })
-    expect(result.tally.stale).toBe(1)
+    expect(result.tally.ok).toBe(1)
+    expect(result.valueTimeMs).toBe(1_700_000_000_000)
   })
 
   it('取到的空值算「绑了但没有值」，不算取不到', () => {

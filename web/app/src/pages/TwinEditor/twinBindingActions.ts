@@ -52,10 +52,7 @@ function upsert(
  * 挑到的点位落到哪个字段上：历史序列写 `detailJson`，其余写 `nodeKey`。
  * ⚠ 写错字段的表现是「挑完了、标签也变了，但永远取不到值」。
  */
-function withPoint(
-  current: BindingPayload,
-  pointKey: string,
-): BindingPayload {
+function withPoint(current: BindingPayload, pointKey: string): BindingPayload {
   if (current.sourceKind !== 'archive') return { ...current, nodeKey: pointKey }
   return {
     ...current,

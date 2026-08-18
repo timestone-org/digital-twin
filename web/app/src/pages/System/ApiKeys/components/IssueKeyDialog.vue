@@ -12,6 +12,8 @@ import { computed, ref, watch } from 'vue'
 import type { DtSelectOption, UserListItem } from '@dt/contracts'
 import { DtButton, DtInput, DtModal, DtNotice, DtSelect, DtTag } from '@dt/ui'
 
+import { useFormDirty } from '@/composables/useFormDirty'
+
 import * as apiKeys from '@/api/apiKeys'
 import { describeError } from '@/composables/useAsyncList'
 
@@ -40,6 +42,9 @@ const name = ref('')
 const ttl = ref('365')
 const busy = ref(false)
 const error = ref<string | null>(null)
+
+// ⚠ 填了一半误点遮罩就全没了；脏着时由 DtModal 拦下误关
+const { isDirty } = useFormDirty([userId, name, ttl], () => props.modelValue)
 
 const userOptions = computed<readonly DtSelectOption[]>(() =>
   props.users.map((user) => ({
@@ -94,6 +99,7 @@ async function onSubmit(): Promise<void> {
 <template>
   <DtModal
     :model-value="props.modelValue"
+    :dirty="isDirty"
     title="签发 API 密钥"
     description="给第三方系统用的常驻凭据。权限完全继承所选账号。"
     @update:model-value="emit('update:modelValue', $event)"

@@ -44,7 +44,7 @@ describe('一条条目', () => {
     })
 
     expect(decoded?.sample).toEqual({
-      state: 'stale',
+      state: 'ok',
       value: 3,
       timestampMs: 1_700_000_000_000,
       quality: 'uncertain',

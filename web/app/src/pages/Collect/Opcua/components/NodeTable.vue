@@ -11,7 +11,7 @@
  *
  * 多选与记录历史开关的口径在 `useArchiveOps`，两级删除在 `useForceDelete`。
  */
-import { computed, ref, watch } from 'vue'
+import { computed, watch } from 'vue'
 import type { CollectPoint, CollectSource } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import {
@@ -25,7 +25,6 @@ import {
 
 import * as collect from '@/api/collect'
 import PermGuard from '@/components/PermGuard.vue'
-import { useAsyncList } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
 import { useAuthStore } from '@/stores/auth'
 import { nodeTableColumns } from '../nodeTableColumns'
@@ -33,6 +32,7 @@ import { useArchiveOps } from '../useArchiveOps'
 import { useForceDelete } from '../useForceDelete'
 import { useLiveValues } from '../useLiveValues'
 import { usePointEditing } from '../usePointEditing'
+import { usePointList } from '../usePointList'
 import { usePointOps } from '../usePointOps'
 import BatchArchiveBar from './BatchArchiveBar.vue'
 import ForceDeleteDialog from './ForceDeleteDialog.vue'
@@ -53,16 +53,9 @@ const canManage = computed(() =>
 const COLUMNS = computed(() => nodeTableColumns(canManage.value))
 
 const sourceId = computed(() => props.source.id)
-const keyword = ref('')
 const view = useViewMode('collect-points')
 
-const list = useAsyncList<CollectPoint>((query) =>
-  collect.listPoints({
-    sourceId: sourceId.value,
-    q: keyword.value || undefined,
-    ...query,
-  }),
-)
+const { keyword, list, emptyState } = usePointList(() => sourceId.value)
 
 const live = useLiveValues(sourceId)
 const ops = usePointOps(() => sourceId.value)
@@ -99,16 +92,8 @@ function selectPage(): void {
 
 defineExpose({ reload })
 
-// 换源：清空搜索与多选、回到第 1 页重拉
-watch(
-  sourceId,
-  () => {
-    keyword.value = ''
-    archive.clearSelection()
-    void list.reloadFromFirstPage()
-  },
-  { immediate: true },
-)
+// 换源要清多选；搜索词与重拉由 usePointList 自己管
+watch(sourceId, () => archive.clearSelection(), { immediate: true })
 
 watch(list.items, () => archive.clearSelection())
 </script>
@@ -143,10 +128,7 @@ watch(list.items, () => archive.clearSelection())
         :loading="list.loading.value"
         :error="list.error.value"
         :pagination="list.pager.value"
-        :empty="{
-          title: '尚未导入点位',
-          hint: '在左侧浏览树中勾选变量节点并导入，或用 CSV 批量导入。',
-        }"
+        :empty="emptyState"
         :layout="{
           minWidth: '76rem',
           fixedLayout: true,

@@ -43,7 +43,7 @@ export function countUnboundRequired(
 
 /**
  * 折成单一状态，高优先级在前：
- * 渲染失败 → 必绑没配 → 有槽取不到 → 有槽陈旧 → 有槽在等首帧 → 绑了但一个值都没有 → 正常。
+ * 渲染失败 → 必绑没配 → 有槽取不到 → 有槽在等首帧 → 绑了但一个值都没有 → 正常。
  * @param input 渲染失败标记、必绑缺口与各档槽计数
  */
 export function computeModuleStatus(input: ModuleStatusInput): ModuleStatus {
@@ -51,8 +51,6 @@ export function computeModuleStatus(input: ModuleStatusInput): ModuleStatus {
   if (input.hasRenderError === true) return 'error'
   if (input.unboundRequiredCount > 0) return 'unbound'
   if (tally.error > 0) return 'error'
-  // 陈旧排在等首帧之前：手里有旧值时用户该看到的是「这是旧的」，不是「正在加载」
-  if (tally.stale > 0) return 'stale'
   if (tally.pending > 0) return 'loading'
   if (tally.bound > 0 && tally.ok === 0) return 'empty'
   return 'connected'

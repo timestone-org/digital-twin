@@ -112,22 +112,6 @@ _DASHBOARD_SPECS: tuple[ParamSpec, ...] = (
     ),
     ParamSpec(
         section=SECTION_DASHBOARD,
-        key="publish_stale_after_ms",
-        kind=INT_KIND,
-        unit="ms",
-        step=1_000,
-        minimum=1_000,
-        maximum=600_000,
-        label="快照陈旧判定",
-        hint=(
-            "快照多旧就算陈旧。陈旧值照推但会标注为陈旧，前端据此把读数"
-            "置灰。调得比采集周期还小会让整屏长期显示为陈旧，调得过大则会"
-            "让停止上报的点位看起来仍然正常。"
-        ),
-        read=lambda settings: settings.publish_stale_after_ms,
-    ),
-    ParamSpec(
-        section=SECTION_DASHBOARD,
         key="publish_reconcile_interval_s",
         kind=FLOAT_KIND,
         unit="s",

@@ -22,6 +22,8 @@ import {
   DtSelect,
 } from '@dt/ui'
 
+import { useFormDirty } from '@/composables/useFormDirty'
+
 import * as hvac from '@/api/hvac'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
@@ -51,6 +53,12 @@ const coverageError = ref<string | null>(null)
 const picked = ref<Set<string>>(new Set())
 const busy = ref(false)
 const problem = ref<string | null>(null)
+
+// ⚠ 填了一半误点遮罩就全没了；脏着时由 DtModal 拦下误关
+const { isDirty } = useFormDirty(
+  [pickedRoom, name, description, halfLife, picked],
+  () => props.open,
+)
 
 const roomOptions = computed(() =>
   props.rooms
@@ -157,6 +165,7 @@ async function submit(): Promise<void> {
 <template>
   <DtModal
     :model-value="props.open"
+    :dirty="isDirty"
     title="新建模型"
     description="一个房间一个模型；训练用房间的全部可用事件，勾选的组合是要重点评估与试算的那几个。"
     width="34rem"

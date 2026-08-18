@@ -16,7 +16,6 @@ const EMPTY_TALLY: ModuleValuesTally = {
   empty: 0,
   pending: 0,
   error: 0,
-  stale: 0,
 }
 
 function tally(patch: Partial<ModuleValuesTally>): ModuleValuesTally {
@@ -98,22 +97,23 @@ describe('状态阶梯', () => {
     ).toBe('loading')
   })
 
-  it('手里有陈旧值时压过加载态：该说的是这是旧的，不是正在加载', () => {
+  it('有槽取不到时压过等首帧：读不到比还没到更该说', () => {
     expect(
       computeModuleStatus({
         unboundRequiredCount: 0,
-        tally: tally({ bound: 2, ok: 2, stale: 1, pending: 1 }),
-      }),
-    ).toBe('stale')
-  })
-
-  it('有槽取不到时压过陈旧', () => {
-    expect(
-      computeModuleStatus({
-        unboundRequiredCount: 0,
-        tally: tally({ bound: 2, ok: 1, error: 1, stale: 1 }),
+        tally: tally({ bound: 2, ok: 1, error: 1, pending: 1 }),
       }),
     ).toBe('error')
+  })
+
+  it('值很久没变不影响状态：有值就是正常', () => {
+    // 一天变一次的点位照样是 connected——时刻旧不构成一档状态
+    expect(
+      computeModuleStatus({
+        unboundRequiredCount: 0,
+        tally: tally({ bound: 2, ok: 2 }),
+      }),
+    ).toBe('connected')
   })
 
   it('必绑槽没配压过取数失败：先把没配的配上，取数才谈得上', () => {

@@ -31,14 +31,21 @@ import {
   DtSwitch,
 } from '@dt/ui'
 
+import { useFormDirty } from '@/composables/useFormDirty'
 import {
   READ_MODES,
   SECURITY_MODES,
   SECURITY_POLICIES,
-  mergeOptions,
   splitOptions,
 } from '../sourceFormOptions'
+import {
+  toCreateInput,
+  toUpdateInput,
+  validateSourceForm,
+  type SourceFormValues,
+} from '../sourceFormPayload'
 import OptionsEditor from './OptionsEditor.vue'
+import SourceCredentialFields from './SourceCredentialFields.vue'
 
 const props = defineProps<{
   modelValue: boolean
@@ -76,6 +83,26 @@ const isEnabled = ref(true)
 const extraOptions = ref<Record<string, string>>({})
 
 const error = ref<string | null>(null)
+
+// ⚠ 这一屏十几个字段，误点一下遮罩就全没了；脏着时由 DtModal 拦下误关
+const { isDirty } = useFormDirty(
+  [
+    name,
+    code,
+    description,
+    endpoint,
+    securityMode,
+    securityPolicy,
+    readMode,
+    pollIntervalMs,
+    username,
+    credential,
+    isCredentialCleared,
+    isEnabled,
+    extraOptions,
+  ],
+  () => props.modelValue,
+)
 
 function reset(target: CollectSource | null): void {
   error.value = null
@@ -128,54 +155,31 @@ const readModeValue = computed<string>({
   },
 })
 
-function validate(): string | null {
-  if (name.value.trim() === '') return '请填写名称'
-  if (!isEdit.value && !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(code.value.trim()))
-    return '编码只能用字母、数字与 . _ -，且以字母或数字开头'
-  if (endpoint.value.trim() === '') return '请填写 Endpoint 地址'
-  if (pollIntervalMs.value < COLLECT_MIN_INTERVAL_MS)
-    return `轮询周期不能小于 ${COLLECT_MIN_INTERVAL_MS} 毫秒`
-  return null
-}
-
-/** 口令三态落到请求体上：不动就整个字段都不带。 */
-function credentialChange(): { credential?: string | null } {
-  if (isCredentialCleared.value) return { credential: null }
-  if (credential.value !== '') return { credential: credential.value }
-  return {}
+/** 表单此刻的取值，交给纯函数去校验与组装请求体。 */
+function values(): SourceFormValues {
+  return {
+    name: name.value,
+    code: code.value,
+    description: description.value,
+    endpoint: endpoint.value,
+    securityMode: securityMode.value,
+    securityPolicy: securityPolicy.value,
+    readMode: readMode.value,
+    pollIntervalMs: pollIntervalMs.value,
+    username: username.value,
+    credential: credential.value,
+    isCredentialCleared: isCredentialCleared.value,
+    isEnabled: isEnabled.value,
+    extraOptions: extraOptions.value,
+  }
 }
 
 function submit(): void {
-  error.value = validate()
+  const current = values()
+  error.value = validateSourceForm(current, isEdit.value)
   if (error.value !== null) return
-  const shared = {
-    name: name.value.trim(),
-    description:
-      description.value.trim() === '' ? null : description.value.trim(),
-    endpoint: endpoint.value.trim(),
-    username: username.value.trim() === '' ? null : username.value.trim(),
-    options_json: mergeOptions(
-      extraOptions.value,
-      securityMode.value,
-      securityPolicy.value,
-    ),
-    read_mode: readMode.value,
-    poll_interval_ms: pollIntervalMs.value,
-    is_enabled: isEnabled.value,
-  }
-  if (props.source === null) {
-    emit('create', {
-      ...shared,
-      code: code.value.trim(),
-      protocol: 'opcua',
-      // 新建时 null 直接省略：三态只在编辑时才有意义
-      description: shared.description ?? undefined,
-      username: shared.username ?? undefined,
-      credential: credential.value === '' ? undefined : credential.value,
-    })
-    return
-  }
-  emit('update', { ...shared, ...credentialChange() })
+  if (props.source === null) emit('create', toCreateInput(current))
+  else emit('update', toUpdateInput(current))
 }
 </script>
 
@@ -184,6 +188,7 @@ function submit(): void {
     :model-value="modelValue"
     :title="isEdit ? '编辑数据源' : '新增数据源'"
     width="36rem"
+    :dirty="isDirty"
     @update:model-value="emit('update:modelValue', $event)"
   >
     <div class="flex flex-col gap-3">
@@ -250,28 +255,13 @@ function submit(): void {
         </DtField>
       </div>
 
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <DtField label="用户名" hint="匿名连接可留空。">
-          <DtInput v-model="username" placeholder="匿名连接可留空" />
-        </DtField>
-        <DtField
-          label="密码"
-          :hint="
-            isEdit ? '留空保持原密码。' : '只以密文入库，任何接口都不会回它。'
-          "
-        >
-          <DtInput
-            v-model="credential"
-            type="password"
-            :disabled="isCredentialCleared"
-            :placeholder="isEdit ? '留空表示不修改' : '匿名连接可留空'"
-          />
-        </DtField>
-      </div>
-
-      <DtField v-if="isEdit && source?.has_credential" label="清空密码">
-        <DtSwitch v-model="isCredentialCleared" label="删掉已配置的密码" />
-      </DtField>
+      <SourceCredentialFields
+        v-model:username="username"
+        v-model:credential="credential"
+        v-model:is-cleared="isCredentialCleared"
+        :is-edit="isEdit"
+        :has-credential="source?.has_credential ?? false"
+      />
 
       <DtField
         label="其它连接参数"

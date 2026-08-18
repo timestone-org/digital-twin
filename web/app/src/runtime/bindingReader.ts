@@ -29,9 +29,8 @@ function slotOfSample(sample: PointSample): BindingSlot {
   return {
     state: 'ok',
     value: sample.value,
+    // ⚠ 照实带上采样时刻：模块要显示「更新于」全靠它，而值有多旧不由这里判
     timestampMs: sample.timestampMs,
-    // ⚠ 陈旧必须标注为陈旧，否则界面上它与现值完全一样
-    isStale: sample.state === 'stale',
   }
 }
 

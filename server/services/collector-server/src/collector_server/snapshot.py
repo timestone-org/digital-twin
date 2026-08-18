@@ -4,7 +4,7 @@
 零业务逻辑——编码归 sink，本模块只搬字符串并统一收敛 Redis 异常。
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any, Protocol, cast
 from uuid import UUID
 
@@ -23,6 +23,10 @@ class SnapshotStore(Protocol):
 
     async def write(
         self, source_id: UUID, fields: Mapping[str, str], *, ttl_s: int
+    ) -> None: ...
+
+    async def touch(
+        self, source_ids: Sequence[UUID], *, ttl_s: int
     ) -> None: ...
 
     async def drop(self, source_id: UUID) -> None: ...
@@ -65,6 +69,21 @@ class RedisSnapshotStore:
         # cast 的理由 —— redis-py 的 mapping 形参用了自己的编码类型变量
         pipeline.hset(key, mapping=cast("Any", dict(fields)))
         pipeline.expire(key, ttl_s)
+        await self._run(pipeline.execute())
+
+    async def touch(self, source_ids: Sequence[UUID], *, ttl_s: int) -> None:
+        """只续存活期，一个往返续一批。没有这个键就什么都不做。
+
+        ⚠ 给「这一窗没有新读数」的数据源用：订阅只在值变化时回调，一个一天
+        变一次的点位不会有写入，没人续期它的快照就会到期消失。
+
+        Args: source_ids, ttl_s。
+        """
+        if not source_ids:
+            return
+        pipeline = self._client.pipeline()
+        for source_id in source_ids:
+            pipeline.expire(snapshot_key(source_id), ttl_s)
         await self._run(pipeline.execute())
 
     async def drop(self, source_id: UUID) -> None:

@@ -17,6 +17,18 @@ import SessionsPanel from '@/pages/Tools/OpcuaServerDetail/components/SessionsPa
 import InstanceStatusTag from '@/pages/Tools/OpcuaServers/components/InstanceStatusTag.vue'
 import OpcuaServersPage from '@/pages/Tools/OpcuaServers/index.vue'
 import { useAuthStore } from '@/stores/auth'
+import type * as RealtimeChannel from '@/composables/useRealtimeChannel'
+
+// ⚠ 通道必须打桩：不桩的话挂载就真的开一条 WebSocket，它排下的重连定时器
+// 会在测试环境拆掉之后到点，整轮 vitest 因此报一条未处理异常（见 testing/realtimeChannel）
+vi.mock('@/composables/useRealtimeChannel', async () => {
+  const actual = await vi.importActual<typeof RealtimeChannel>(
+    '@/composables/useRealtimeChannel',
+  )
+  const { fakeRealtimeChannel } = await import('@/testing/realtimeChannel')
+  const channel = fakeRealtimeChannel()
+  return { ...actual, useRealtimeChannel: () => channel }
+})
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),

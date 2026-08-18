@@ -68,6 +68,15 @@ export interface DtDataColumn extends DtTableColumn {
 export const DT_DATA_VIEW_MODES = ['table', 'card'] as const
 export type DtDataViewMode = (typeof DT_DATA_VIEW_MODES)[number]
 
+/**
+ * 列表空着时说什么。两种空必须分开：筛出来是空的那一种，不许留「去新建」
+ * 一类的引导——那时候用户要的是改条件，照着引导走只会建出重复的东西。
+ */
+export interface DtDataViewEmpty {
+  title?: string | undefined
+  hint?: string | undefined
+}
+
 export interface DtSegmentedOption {
   value: string
   label: string

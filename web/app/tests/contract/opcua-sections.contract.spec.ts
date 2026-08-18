@@ -6,7 +6,7 @@
  * `instance`，把某个分区的 prop 改名成别的，编译一路绿，运行时那个分区
  * 收到 undefined，页面白掉——没有任何一道现成的闸门会响。
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import AppTabNav from '@/components/layout/AppTabNav.vue'
 import NodeExplorer from '@/pages/Tools/OpcuaServerDetail/components/NodeExplorer.vue'
@@ -15,6 +15,18 @@ import SecurityPanel from '@/pages/Tools/OpcuaServerDetail/components/SecurityPa
 import SessionsPanel from '@/pages/Tools/OpcuaServerDetail/components/SessionsPanel.vue'
 import NodeDetailPanel from '@/pages/Tools/OpcuaServerDetail/components/NodeDetailPanel.vue'
 import { router } from '@/router'
+import type * as RealtimeChannel from '@/composables/useRealtimeChannel'
+
+// ⚠ 通道必须打桩：不桩的话挂载就真的开一条 WebSocket，它排下的重连定时器
+// 会在测试环境拆掉之后到点，整轮 vitest 因此报一条未处理异常（见 testing/realtimeChannel）
+vi.mock('@/composables/useRealtimeChannel', async () => {
+  const actual = await vi.importActual<typeof RealtimeChannel>(
+    '@/composables/useRealtimeChannel',
+  )
+  const { fakeRealtimeChannel } = await import('@/testing/realtimeChannel')
+  const channel = fakeRealtimeChannel()
+  return { ...actual, useRealtimeChannel: () => channel }
+})
 
 /**
  * 读组件对外面上的某个名字表。`<script setup>` 编译出来的 props / emits

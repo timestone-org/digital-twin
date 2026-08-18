@@ -54,13 +54,6 @@ const DASHBOARD_PARAM_FIELDS: readonly ParamField[] = [
     range: { min: 1, step: 10, precision: 0 },
   },
   {
-    key: 'publish_stale_after_ms',
-    label: '判陈旧的时长',
-    hint: '超过这个时长没更新的点位在屏上标成陈旧值，而不是继续当新值显示。',
-    unit: 'ms',
-    range: { min: 1, step: 1000, precision: 0 },
-  },
-  {
     key: 'publish_reconcile_interval_s',
     label: '订阅对账间隔',
     hint: '每隔这么久核一次订阅集合，把漏订与多订的补齐清掉。',

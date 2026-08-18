@@ -63,7 +63,6 @@ const MODULE_REGION_MEMBERS: Record<ModuleRegion, true> = {
 const MODULE_STATUS_MEMBERS: Record<ModuleStatus, true> = {
   loading: true,
   connected: true,
-  stale: true,
   empty: true,
   unbound: true,
   error: true,
@@ -148,11 +147,10 @@ describe('模块清单', () => {
 })
 
 describe('模块状态', () => {
-  it('六档各自对应一种「现在为什么长这样」', () => {
+  it('五档各自对应一种「现在为什么长这样」', () => {
     expect([...MODULE_STATUSES]).toEqual([
       'loading',
       'connected',
-      'stale',
       'empty',
       'unbound',
       'error',
@@ -165,9 +163,10 @@ describe('模块状态', () => {
     )
   })
 
-  it('陈旧与空值是两档，不许合并', () => {
-    expect(MODULE_STATUSES).toContain('stale')
+  it('「还没收到值」与「取不到」是两档，不许合并', () => {
+    // 合并了就分不清「配好了在等第一帧」和「这个点位根本读不到」
     expect(MODULE_STATUSES).toContain('empty')
+    expect(MODULE_STATUSES).toContain('error')
   })
 
   it('连接态的类型成员与运行时常量对齐', () => {

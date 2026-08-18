@@ -13,6 +13,8 @@ import {
   DtSelect,
   DtTextarea,
 } from '@dt/ui'
+
+import { useFormDirty } from '@/composables/useFormDirty'
 import { listThemes } from '@dt/tokens'
 import type {
   DtSegmentedOption,
@@ -68,6 +70,12 @@ const productName = ref('')
 const logoUrl = ref('')
 const footerNote = ref('')
 const themeBase = ref('')
+
+// ⚠ 填了一半误点遮罩就全没了；脏着时由 DtModal 拦下误关
+const { isDirty } = useFormDirty(
+  [name, description, productName, logoUrl, footerNote, themeBase],
+  () => props.open,
+)
 
 const themeOptions = computed<DtSelectOption[]>(() => [
   { value: '', label: '内置默认' },
@@ -126,6 +134,7 @@ function save(): void {
 <template>
   <DtModal
     :model-value="open"
+    :dirty="isDirty"
     title="项目设置"
     :description="project?.name"
     width="46rem"

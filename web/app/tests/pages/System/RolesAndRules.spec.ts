@@ -483,9 +483,10 @@ describe('危险操作的二次确认', () => {
 
   it('确认后才真的删角色，并弹一条成功消息', async () => {
     const remove = vi.spyOn(admin, 'deleteRole').mockResolvedValue()
+    // 名下还有账号的角色根本不该问（见下面那一条），所以这里用一个空角色
     const wrapper = await renderRoles(
       ['role:manage'],
-      [role({ is_builtin: false })],
+      [role({ is_builtin: false, user_count: 0 })],
     )
     mountHosts()
     await wrapper.find('[aria-label="删除角色"]').trigger('click')
@@ -508,8 +509,11 @@ describe('危险操作的二次确认', () => {
 })
 
 describe('角色管理页 · 交互', () => {
-  async function open(codes: string[]) {
-    const wrapper = await renderRoles(codes, [role({ is_builtin: false })])
+  async function open(codes: string[], items?: RoleSummary[]) {
+    const wrapper = await renderRoles(
+      codes,
+      items ?? [role({ is_builtin: false })],
+    )
     mountHosts()
     return wrapper
   }
@@ -557,16 +561,37 @@ describe('角色管理页 · 交互', () => {
     expect(save).toHaveBeenCalledWith('r1', ['user:view'])
   })
 
+  // ⚠ 名下还有账号时删除必被拒：摆一个红色「删除」让人点，只换来一条报错，
+  // 而他真正需要的是「先把账号改派走」
+  it('名下还有账号时不弹确认，也不发请求', async () => {
+    const remove = vi.spyOn(admin, 'deleteRole').mockResolvedValue()
+    const wrapper = await open(
+      ['role:manage'],
+      [role({ is_builtin: false, user_count: 2 })],
+    )
+
+    await wrapper.find('[aria-label="删除角色"]').trigger('click')
+    await flushPromises()
+
+    expect(remove).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('先把它们改派到别的角色')
+    expect(document.body.textContent).not.toContain('不可恢复')
+  })
+
   it('删除被后端拒绝时把原因弹出来', async () => {
+    // 前端拦不住的那类拒绝（并发改动、后端另有约束）仍要如实吐出来
     const { BizError } = await import('@/api/client')
     vi.spyOn(admin, 'deleteRole').mockRejectedValue(
-      new BizError(40004, '角色下还有账号', 409, 't'),
+      new BizError(40004, '角色仍被引用', 409, 't'),
     )
-    const wrapper = await open(['role:manage'])
+    const wrapper = await open(
+      ['role:manage'],
+      [role({ is_builtin: false, user_count: 0 })],
+    )
     await wrapper.find('[aria-label="删除角色"]').trigger('click')
     await flushPromises()
     await clickInConfirm('删除')
-    expect(document.body.textContent).toContain('角色下还有账号')
+    expect(document.body.textContent).toContain('角色仍被引用')
   })
 
   it('可以切成表格视图', async () => {

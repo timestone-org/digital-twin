@@ -4,7 +4,11 @@
  * ⚠ 拾取必须先记下「写回谁」：不记的话视口只知道用户点了哪个东西，
  * 不知道那一下是给谁点的，落下去就会改到别的实体上。
  */
-import { normalizeTwinConfig, type TwinConfig, type Vec3 } from '@dt/twin-config'
+import {
+  normalizeTwinConfig,
+  type TwinConfig,
+  type Vec3,
+} from '@dt/twin-config'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -66,7 +70,9 @@ describe('两段式拾取', () => {
     ops.onPickNode('tank')
 
     expect(patchConfig).toHaveBeenCalledWith({
-      parts: [expect.objectContaining({ id: 'part-1', nodes: ['pump', 'tank'] })],
+      parts: [
+        expect.objectContaining({ id: 'part-1', nodes: ['pump', 'tank'] }),
+      ],
     })
   })
 
@@ -139,7 +145,10 @@ describe('取当前机位', () => {
 
     expect(patchConfig).toHaveBeenCalledWith({
       hierNodes: [
-        expect.objectContaining({ id: 'h1', view: expect.objectContaining({ fov: 50 }) }),
+        expect.objectContaining({
+          id: 'h1',
+          view: expect.objectContaining({ fov: 50 }),
+        }),
       ],
     })
   })

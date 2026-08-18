@@ -14,7 +14,7 @@ from platform_server.apps.collect.services.point_frames import (
     KEY_STATE,
     KEY_VALUE,
     POINT_STATE_ERROR,
-    POINT_STATE_STALE,
+    POINT_STATE_OK,
     UNAVAILABLE_REASON,
 )
 from platform_server.apps.dashboard.services.publish_plan import (
@@ -44,7 +44,8 @@ SOURCE = "0198f0c0-0000-7000-8000-00000000abcd"
 OUTLET = f"{SOURCE}:outlet_temp"
 INLET = f"{SOURCE}:inlet_temp"
 NOW_MS = 1_760_000_000_000
-STALE_AFTER_MS = 15_000
+# 一天。用来验「很久没变的值照样是正常值」
+A_DAY_MS = 86_400_000
 
 
 @dataclass
@@ -122,7 +123,7 @@ def build_harness(
     readings: dict[str, PointReading] | None = None,
     max_items: int = 100,
 ) -> Harness:
-    """装一套发布器，时钟固定在 `NOW_MS`。
+    """装一套发布器。
 
     Args: readings, max_items。
     """
@@ -135,10 +136,7 @@ def build_harness(
         viewers=SubscriptionViewers(source=source),
         snapshots=snapshots,
         realtime=realtime,
-        options=PublishOptions(
-            max_items=max_items, stale_after_ms=STALE_AFTER_MS
-        ),
-        clock=lambda: NOW_MS,
+        options=PublishOptions(max_items=max_items),
     )
     return Harness(
         publisher=publisher,
@@ -235,14 +233,15 @@ async def test_a_point_without_a_snapshot_is_pushed_as_unreadable() -> None:
     assert states == [POINT_STATE_ERROR, POINT_STATE_ERROR]
 
 
-async def test_an_old_snapshot_is_pushed_and_labelled_stale() -> None:
-    harness = build_harness(
-        readings={OUTLET: reading(21.5, age_ms=STALE_AFTER_MS + 1)}
-    )
+async def test_a_value_that_has_not_changed_all_day_is_pushed_as_normal() -> (
+    None
+):
+    # 一天才变一次的点位不许因为「时刻旧」被降档：现场没停，只是值没变
+    harness = build_harness(readings={OUTLET: reading(21.5, age_ms=A_DAY_MS)})
     harness.watch((DASHBOARD, VIEWER))
     await harness.publisher.publish_once()
     first = harness.frames()[0][0]
-    assert first[KEY_STATE] == POINT_STATE_STALE
+    assert first[KEY_STATE] == POINT_STATE_OK
     assert first[KEY_VALUE] == 21.5
 
 

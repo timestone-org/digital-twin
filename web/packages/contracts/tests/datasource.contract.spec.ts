@@ -17,7 +17,6 @@ import type {
 
 const POINT_STATE_MEMBERS: Record<PointState, true> = {
   ok: true,
-  stale: true,
   error: true,
 }
 const POINT_QUALITY_MEMBERS: Record<PointQuality, true> = {
@@ -27,8 +26,8 @@ const POINT_QUALITY_MEMBERS: Record<PointQuality, true> = {
 }
 
 describe('读数的取值集合', () => {
-  it('三档状态与 publisher 的 POINT_STATES 逐字一致', () => {
-    expect([...POINT_STATES]).toEqual(['ok', 'stale', 'error'])
+  it('两档状态与 publisher 的 POINT_STATES 逐字一致', () => {
+    expect([...POINT_STATES]).toEqual(['ok', 'error'])
   })
 
   it('状态的类型成员与运行时常量对齐', () => {
@@ -61,15 +60,15 @@ describe('一次读数的形状', () => {
     ])
   })
 
-  it('stale 档的时刻仍是旧值的时刻，不是当前墙钟', () => {
+  it('时刻是采样时刻，不是收到帧的墙钟', () => {
     const sample: PointSample = {
-      state: 'stale',
+      state: 'ok',
       value: 21.5,
       timestampMs: 1_764_000_000_000,
       quality: 'good',
     }
 
-    expect(sample.state === 'stale' ? sample.timestampMs : 0).toBe(
+    expect(sample.state === 'ok' ? sample.timestampMs : 0).toBe(
       1_764_000_000_000,
     )
   })
@@ -83,10 +82,10 @@ describe('一次读数的形状', () => {
     expect(Object.keys(sample).sort()).toEqual(['errorMessage', 'state'])
   })
 
-  it('按 state 判别后三档各自窄化得出来', () => {
+  it('按 state 判别后两档各自窄化得出来', () => {
     const samples: PointSample[] = [
       { state: 'ok', value: 0, timestampMs: 1, quality: 'good' },
-      { state: 'stale', value: false, timestampMs: 2, quality: 'uncertain' },
+      { state: 'ok', value: false, timestampMs: 2, quality: 'uncertain' },
       { state: 'error', errorMessage: '点位快照暂时读不到' },
     ]
 

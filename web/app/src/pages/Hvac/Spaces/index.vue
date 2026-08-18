@@ -82,12 +82,18 @@ async function submitName(name: string): Promise<void> {
 }
 
 async function removeWorkshop(workshop: Workshop): Promise<void> {
+  // ⚠ 删不成就别问：摆一个红色「删除」去发一个注定被拒的请求，等于教人做一件
+  // 做不成的事。这时候该说的是「为什么不行、先做什么」
+  if (workshop.room_count > 0) {
+    toast.warning(
+      `车间「${workshop.name}」下还有 ${workshop.room_count} 个房间，` +
+        '先把房间移走或删掉才能删车间。',
+    )
+    return
+  }
   const confirmed = await confirm.ask({
     title: '删除车间',
-    message:
-      workshop.room_count > 0
-        ? `车间「${workshop.name}」下还有 ${workshop.room_count} 个房间，删除会被后端拒绝。`
-        : `将删除车间「${workshop.name}」，且不可恢复。`,
+    message: `将删除车间「${workshop.name}」，且不可恢复。`,
     confirmText: '删除',
     danger: true,
   })
@@ -97,12 +103,16 @@ async function removeWorkshop(workshop: Workshop): Promise<void> {
 
 async function removeRoom(room: Room): Promise<void> {
   const count = board.unitsByRoom.value.get(room.id)?.length ?? 0
+  if (count > 0) {
+    toast.warning(
+      `房间「${room.name}」里还有 ${count} 台空调，` +
+        '先把它们改派到别的房间才能删这个房间。',
+    )
+    return
+  }
   const confirmed = await confirm.ask({
     title: '删除房间',
-    message:
-      count > 0
-        ? `房间「${room.name}」里还有 ${count} 台空调，删除会被后端拒绝。先把它们改派到别的房间。`
-        : `将删除房间「${room.name}」，且不可恢复。`,
+    message: `将删除房间「${room.name}」，且不可恢复。`,
     confirmText: '删除',
     danger: true,
   })
@@ -154,7 +164,7 @@ onMounted(() => {
     subtitle="车间 → 房间 → 空调；同一房间内的空调会互相影响"
   >
     <template #actions>
-      <PermGuard :codes="[PERMISSION_CODES.acManage]">
+      <PermGuard :codes="[PERMISSION_CODES.acManage]" explain>
         <DtButton
           size="sm"
           icon="plus"

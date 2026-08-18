@@ -92,11 +92,11 @@ beforeEach(() => {
     Promise.resolve({
       items:
         query.workshop_id === 'w1'
-          ? [room('r1', '注塑房'), room('r2', '装配房')]
+          ? [room('r1', '注塑房'), room('r2', '装配房'), room('r3', '备件房')]
           : [],
       page: 1,
       size: 200,
-      total: query.workshop_id === 'w1' ? 2 : 0,
+      total: query.workshop_id === 'w1' ? 3 : 0,
     }),
   )
   vi.spyOn(hvac, 'listAcUnits').mockImplementation((query = {}) =>
@@ -143,7 +143,7 @@ describe('空间配置页', () => {
   it('每个房间画成一个容器，空房间也照样画', async () => {
     const wrapper = await render(['ac:view'])
     const groups = wrapper.findAll('.room-group')
-    expect(groups).toHaveLength(2)
+    expect(groups).toHaveLength(3)
     expect(wrapper.text()).toContain('注塑房')
     expect(wrapper.text()).toContain('装配房')
   })
@@ -297,10 +297,11 @@ describe('空间配置页', () => {
   it('确认后才真的删房间，删完两栏一起重取', async () => {
     const remove = vi.spyOn(hvac, 'deleteRoom').mockResolvedValue()
     const wrapper = await renderWithHosts(['ac:view', 'ac:manage'])
-    await wrapper.findAll('[aria-label="删除房间"]')[1]?.trigger('click')
+    // 空房间才走得到确认这一步：里面还有空调的房间根本不该问（见下面那一组）
+    await wrapper.findAll('[aria-label="删除房间"]')[2]?.trigger('click')
     await flushPromises()
     await clickInBody('删除')
-    expect(remove).toHaveBeenCalledWith('r2')
+    expect(remove).toHaveBeenCalledWith('r3')
     expect(hvac.listWorkshops).toHaveBeenCalledTimes(2)
   })
 
@@ -316,9 +317,10 @@ describe('空间配置页', () => {
   })
 
   it('删除被后端拒绝时把原因吐给用户', async () => {
+    // 前端拦不住的那类拒绝（并发改动、后端另有约束）仍要如实吐出来
     vi.spyOn(hvac, 'deleteRoom').mockRejectedValue(new Error('boom'))
     const wrapper = await renderWithHosts(['ac:view', 'ac:manage'])
-    await wrapper.find('[aria-label="删除房间"]').trigger('click')
+    await wrapper.findAll('[aria-label="删除房间"]')[2]?.trigger('click')
     await flushPromises()
     await clickInBody('删除')
     expect(document.body.textContent).toContain('请求失败')
@@ -457,3 +459,30 @@ async function clickByText(
   await button?.trigger('click')
   await flushPromises()
 }
+
+describe('删不成的时候不问，直接说清下一步', () => {
+  // ⚠ 摆一个红色「删除」去发一个注定被拒的请求，等于教人做一件做不成的事：
+  // 用户点完只换来一条报错，而他真正需要的是「先做什么」
+  it('房间里还有空调时不弹确认，也不发请求', async () => {
+    const remove = vi.spyOn(hvac, 'deleteRoom').mockResolvedValue()
+    const wrapper = await renderWithHosts(['ac:view', 'ac:manage'])
+
+    await wrapper.findAll('[aria-label="删除房间"]')[0]?.trigger('click')
+    await flushPromises()
+
+    expect(remove).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('先把它们改派到别的房间')
+    expect(document.body.textContent).not.toContain('不可恢复')
+  })
+
+  it('车间下还有房间时不弹确认，也不发请求', async () => {
+    const remove = vi.spyOn(hvac, 'deleteWorkshop').mockResolvedValue()
+    const wrapper = await renderWithHosts(['ac:view', 'ac:manage'])
+
+    await wrapper.find('[aria-label="删除 东车间"]').trigger('click')
+    await flushPromises()
+
+    expect(remove).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('先把房间移走或删掉')
+  })
+})

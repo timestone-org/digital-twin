@@ -115,7 +115,7 @@ onMounted(async () => {
 <template>
   <AppShell title="API 密钥" subtitle="第三方系统的常驻凭据">
     <template #actions>
-      <PermGuard :codes="[PERMISSION_CODES.userManage]">
+      <PermGuard :codes="[PERMISSION_CODES.userManage]" explain>
         <DtButton size="sm" icon="plus" @click="issueOpen = true">
           签发密钥
         </DtButton>

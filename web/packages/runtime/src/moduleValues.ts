@@ -17,8 +17,6 @@ export type BindingSlot =
       value: unknown
       /** 采样时刻，UTC 毫秒。 */
       timestampMs?: number
-      /** 走了降级路径的值。陈旧必须标注为陈旧。 */
-      isStale?: boolean
     }
   /** 还没有首帧。 */
   | { state: 'pending' }
@@ -47,8 +45,6 @@ export interface ModuleValuesTally {
   pending: number
   /** 取不到。 */
   error: number
-  /** 取到了，但标注为陈旧。 */
-  stale: number
 }
 
 /** 一次求值的全部产物。 */
@@ -188,7 +184,7 @@ export function computeModuleValues(input: ModuleValuesInput): ModuleValues {
     values: {},
     errors: {},
     siblings: {},
-    tally: { bound: 0, ok: 0, empty: 0, pending: 0, error: 0, stale: 0 },
+    tally: { bound: 0, ok: 0, empty: 0, pending: 0, error: 0 },
     valueTimeMs: null,
   }
   const derived: BindingView[] = []
@@ -222,7 +218,6 @@ function resolveBinding(
     state.errors[binding.fieldKey] = slot.message
     return
   }
-  if (slot.isStale === true) state.tally.stale += 1
   noteTimestamp(state, slot.timestampMs)
   const spec = resolveBindingSpec(input.specs, binding.fieldKey)
   const value = applyEnumMap(

@@ -310,14 +310,15 @@ export interface ModuleManifest {
 }
 
 /**
- * 模块的运行状态。六档各自对应一种「现在看到的东西为什么长这样」：
- * `loading` 尚无首帧、`connected` 正常、`stale` 通道断了现值可能过期、
- * `empty` 已绑但还没收到值、`unbound` 必绑槽没配来源、`error` 取数或渲染失败。
+ * 模块的运行状态。五档各自对应一种「现在看到的东西为什么长这样」：
+ * `loading` 尚无首帧、`connected` 正常、`empty` 已绑但还没收到值、
+ * `unbound` 必绑槽没配来源、`error` 取数或渲染失败。
+ * ⚠ 没有「值过期」这一档：值有多旧由 `valueTimeMs` 照实说，模块自己决定
+ * 要不要显示——一个一天变一次的点位不该因为时刻旧就被整格降档。
  */
 export const MODULE_STATUSES = [
   'loading',
   'connected',
-  'stale',
   'empty',
   'unbound',
   'error',
@@ -341,7 +342,8 @@ export interface ModuleMeta {
   nodeId?: string
   /**
    * 这批值的采样时刻，UTC 毫秒。
-   * ⚠ `status: 'stale'` 时它是**旧值**的时刻，照实显示，不许用当前墙钟顶替。
+   * ⚠ 是**采样**的时刻而不是收到帧的时刻，照实显示，不许用当前墙钟顶替：
+   * 它是界面上唯一能看出「现场还动不动」的东西。
    */
   valueTimeMs?: number
   /** `status: 'error'` 时的原因。取不到就说取不到，不许静默留白。 */

@@ -14,13 +14,14 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { CollectSource, CollectSourceCreateInput } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtCard, DtEmpty, DtNotice, DtTag, useToast } from '@dt/ui'
+import { DtButton, DtCard, DtEmpty, DtNotice, useToast } from '@dt/ui'
 
 import * as collect from '@/api/collect'
 import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
+import { useActiveSource } from './useActiveSource'
 import { useForceDelete } from './useForceDelete'
 import { useSourceOps } from './useSourceOps'
 import BrowsePanel from './components/BrowsePanel.vue'
@@ -42,7 +43,8 @@ const toast = useToast()
 const sources = ref<CollectSource[]>([])
 const sourcesLoading = ref(false)
 const sourcesError = ref<string | null>(null)
-const activeId = ref<string | null>(null)
+// 选中哪个源同步在地址栏上：刷新不丢、链接可分享（见 useActiveSource）
+const { activeId, select: selectSource, reconcile } = useActiveSource()
 /** 乱序响应防护：只认最新一次加载。 */
 const raced = useRacedFetch()
 
@@ -65,18 +67,12 @@ async function loadSources(): Promise<void> {
     ok: (page) => {
       sources.value = page.items
       sourcesError.value = null
-      // 默认选中第一个，便于直接看到详情
-      if (!page.items.some((one) => one.id === activeId.value)) {
-        activeId.value = page.items[0]?.id ?? null
-      }
+      // 地址栏指的源没了（被删或链接过期）就落到第一个，便于直接看到详情
+      reconcile(page.items.map((one) => one.id))
     },
     fail: (caught) => (sourcesError.value = describeError(caught)),
     settled: () => (sourcesLoading.value = false),
   })
-}
-
-function selectSource(id: string): void {
-  activeId.value = id
 }
 
 /* ---------------- 源上的写动作（启停 / 测试 / 建改） ---------------- */
@@ -84,7 +80,7 @@ const ops = useSourceOps(() => loadSources())
 
 async function create(input: CollectSourceCreateInput): Promise<void> {
   const createdId = await ops.create(input)
-  if (createdId !== null) activeId.value = createdId
+  if (createdId !== null) selectSource(createdId)
 }
 
 /* ---------------- 删除源（带引用守卫，可强删） ---------------- */
@@ -151,14 +147,11 @@ onUnmounted(() => {
           归档参数
         </DtButton>
       </PermGuard>
-      <PermGuard :codes="[PERMISSION_CODES.collectManage]">
+      <!-- explain：只读账号看不到写入口，这里如实说明原因，免得以为功能没做 -->
+      <PermGuard :codes="[PERMISSION_CODES.collectManage]" explain>
         <DtButton size="sm" icon="plus" @click="ops.openCreate">
           新增数据源
         </DtButton>
-        <!-- 只读账号看不到写入口，这里如实说明原因，免得以为功能没做 -->
-        <template #fallback>
-          <DtTag size="sm">只读 · 当前账号仅可查看</DtTag>
-        </template>
       </PermGuard>
     </template>
 

@@ -36,6 +36,7 @@ import {
 } from '@/bootstrap/dashboard'
 import { useDashboardDoc } from '@/composables/useDashboardDoc'
 import { parseInteractionRules } from '@/features/dashboard/interactionRules'
+import RealtimeOfflineNotice from '@/components/RealtimeOfflineNotice.vue'
 import { useDashboardValues } from '@/composables/useDashboardValues'
 import { useRealtimeChannel } from '@/composables/useRealtimeChannel'
 import { dashboardTopic } from '@/runtime/pointFrames'
@@ -189,6 +190,9 @@ onBeforeUnmount(() => {
         @close="interaction.closeModal"
       />
     </div>
+
+    <!-- ⚠ 摆在 chrome 的淡出之外：这条是故障告知，不是装饰 -->
+    <RealtimeOfflineNotice />
 
     <div
       class="absolute left-4 top-4 transition-opacity duration-300"

@@ -183,6 +183,13 @@ async function push(item: Record<string, unknown>): Promise<void> {
   await flushPromises()
 }
 
+/** 在工具栏的搜索框里打字。 */
+async function search(wrapper: VueWrapper, text: string): Promise<void> {
+  const input = wrapper.find('input[placeholder="搜索名称或编码"]')
+  await input.setValue(text)
+  await flushPromises()
+}
+
 enableAutoUnmount(afterEach)
 
 beforeEach(() => {
@@ -252,16 +259,17 @@ describe('当前值的四种情形', () => {
     expect(wrapper.text()).not.toContain('未上报')
   })
 
-  it('陈旧值照显示但标成陈旧', async () => {
+  it('很久没变的值照显示，不因为时刻旧就标出来', async () => {
     const wrapper = await render()
     await push({
       nodeKey: 's1:outlet_temp',
-      state: 'stale',
+      state: 'ok',
       value: 36.5,
-      timestampMs: Date.UTC(2026, 7, 16, 2, 0),
+      timestampMs: Date.UTC(2026, 7, 15, 2, 0),
       quality: 'good',
     })
-    expect(wrapper.text()).toContain('陈旧')
+    expect(wrapper.text()).toContain('36.5')
+    expect(wrapper.text()).not.toContain('陈旧')
   })
 
   it('取不到时标「取不到」，不留着上一个值', async () => {
@@ -417,5 +425,23 @@ describe('权限', () => {
     signIn(['collect:view'])
     const labels = (await render()).findAll('button').map((one) => one.text())
     expect(labels).toContain('导出 CSV')
+  })
+})
+
+describe('两种空态', () => {
+  it('一个点位都没导过时，引导去浏览树里勾选', async () => {
+    const wrapper = await render([])
+
+    expect(wrapper.text()).toContain('尚未导入点位')
+  })
+
+  it('⚠ 搜不到时不许说「尚未导入」：那会让人把同一批点位再导一遍', async () => {
+    const wrapper = await render([])
+
+    await search(wrapper, 'zzz')
+
+    expect(wrapper.text()).toContain('没有匹配的点位')
+    expect(wrapper.text()).not.toContain('尚未导入点位')
+    expect(wrapper.text()).not.toContain('CSV 批量导入')
   })
 })

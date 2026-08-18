@@ -120,7 +120,7 @@ onMounted(() => void library.reload(kind.value))
 <template>
   <AppShell title="素材库" subtitle="大屏与孪生共用的图片、图标与三维模型">
     <template #actions>
-      <PermGuard :codes="[PERMISSION_CODES.assetManage]">
+      <PermGuard :codes="[PERMISSION_CODES.assetManage]" explain>
         <DtFilePicker
           :accept="accept"
           :disabled="library.isUploading.value"

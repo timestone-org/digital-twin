@@ -10,6 +10,7 @@
 import { computed } from 'vue'
 import type {
   DtDataColumn,
+  DtDataViewEmpty,
   DtDataViewMode,
   DtSegmentedOption,
   DtTableSort,
@@ -21,11 +22,6 @@ import DtPagination from '../DtPagination/DtPagination.vue'
 import type { DtPaginationState } from '../DtPagination/pages'
 import DtSegmented from '../DtSegmented/DtSegmented.vue'
 import DtTable from '../DtTable/DtTable.vue'
-
-export interface DtDataViewEmpty {
-  title?: string | undefined
-  hint?: string | undefined
-}
 
 export interface DtDataViewLayout {
   minWidth?: string | undefined
@@ -74,6 +70,15 @@ const props = withDefaults(
     pagination: null,
   },
 )
+
+/**
+ * 只有「还没有东西可显示」时才让加载态盖住整块。
+ *
+ * ⚠ 手里已经有行还盖，一次后台轮询就会把整张表闪掉换成转圈：会话表、模型表
+ * 这类每几秒刷一次的页面会一直在闪，而闪的那一下既读不到也点不着。刷新是不是
+ * 在进行中，由各页工具条上自己的刷新键去说。
+ */
+const isFirstLoad = computed(() => props.loading && props.rows.length === 0)
 
 const empty = computed(() => ({
   title: props.empty?.title ?? '暂无数据',
@@ -178,7 +183,7 @@ const fieldColumns = computed(() =>
     <!-- 三态统一由 DtPageState 给；空态从 rows 推导，不另开会和数据打架的 prop -->
     <DtCard v-if="view === 'table'" class="dt-data-view__panel" padding="none">
       <DtPageState
-        :loading="loading"
+        :loading="isFirstLoad"
         :error="error"
         :empty="rows.length === 0"
         :empty-title="empty.title"
@@ -207,7 +212,7 @@ const fieldColumns = computed(() =>
 
     <DtPageState
       v-else
-      :loading="loading"
+      :loading="isFirstLoad"
       :error="error"
       :empty="rows.length === 0"
       :empty-title="empty.title"

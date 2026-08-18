@@ -9,7 +9,7 @@
  * ⚠ 排序抛给后端做：列表是服务端分页的，只排当前页等于按页各排各的。
  * `SORT_FIELDS` 必须落在后端 `USER_SORTABLE` 白名单内，多写一个就是 400。
  */
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import type {
   DtDataColumn,
   DtTableSort,
@@ -20,6 +20,7 @@ import { PERMISSION_CODES } from '@dt/contracts'
 import { DtButton, DtDataView, DtTag, useConfirm, useToast } from '@dt/ui'
 
 import * as admin from '@/api/admin'
+import { listEmptyState } from '@/utils/listEmpty'
 import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
 import { describeError, useAsyncList } from '@/composables/useAsyncList'
@@ -60,6 +61,23 @@ const toast = useToast()
 const confirm = useConfirm()
 
 const filters = ref({ q: '', roleId: '', active: '' })
+
+// ⚠ 筛出来是空的 ≠ 一个账号都没有：后者在这套系统里几乎不可能（你自己就是
+// 一个），所以含混地写「换个筛选或新建一个」等于两头都没说清
+const emptyState = computed(() =>
+  listEmptyState({
+    isFiltered:
+      filters.value.q.trim() !== '' ||
+      filters.value.roleId !== '' ||
+      filters.value.active !== '',
+    subject: '账号',
+    keyword: filters.value.q,
+    blank: {
+      title: '还没有账号',
+      hint: '新建一个账号，并给它派一个角色。',
+    },
+  }),
+)
 const roles = ref<RoleSummary[]>([])
 const view = useViewMode('system-users')
 const sort = ref<DtTableSort>({ key: 'lastLogin', desc: true })
@@ -146,7 +164,7 @@ onMounted(async () => {
 <template>
   <AppShell title="用户管理" subtitle="账号、角色与直权">
     <template #actions>
-      <PermGuard :codes="[PERMISSION_CODES.userManage]">
+      <PermGuard :codes="[PERMISSION_CODES.userManage]" explain>
         <DtButton size="sm" icon="plus" @click="openCreate">新建用户</DtButton>
       </PermGuard>
     </template>
@@ -166,7 +184,7 @@ onMounted(async () => {
         :sort="sort"
         :pagination="list.pager.value"
         :layout="{ minWidth: '64rem', cardColumns: 3, cardMinWidth: '19rem' }"
-        :empty="{ hint: '换个筛选条件试试，或新建一个账号' }"
+        :empty="emptyState"
         @update:sort="onSort"
         @update:page="list.goToPage"
         @update:size="list.setSize"

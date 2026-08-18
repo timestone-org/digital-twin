@@ -63,6 +63,34 @@ async def test_snapshot_key_always_carries_an_expiry(
         await store.close()
 
 
+async def test_touching_pushes_the_expiry_out_without_new_readings(
+    redis_url: str, client: Any
+) -> None:
+    store = RedisSnapshotStore(url=redis_url)
+    source_id = uuid4()
+    try:
+        await store.write(source_id, {"a": "1"}, ttl_s=1)
+        await store.touch([source_id], ttl_s=TTL_S)
+        # 值一天才变一次的点位靠这一步活着，否则整个键会到期消失
+        assert await client.ttl(snapshot_key(source_id)) > 1
+    finally:
+        await store.drop(source_id)
+        await store.close()
+
+
+async def test_touching_an_absent_source_creates_nothing(
+    redis_url: str, client: Any
+) -> None:
+    store = RedisSnapshotStore(url=redis_url)
+    source_id = uuid4()
+    try:
+        await store.touch([source_id], ttl_s=TTL_S)
+        # 续期不许凭空造键：那会造出一个没有任何点位的空快照
+        assert await client.exists(snapshot_key(source_id)) == 0
+    finally:
+        await store.close()
+
+
 async def test_dropping_a_source_removes_its_snapshot(
     redis_url: str, client: Any
 ) -> None:
