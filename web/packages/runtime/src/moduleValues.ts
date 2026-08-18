@@ -4,7 +4,12 @@
  * ⚠ 它也不认识来源种类：派生槽由 `computeJson` 这条**声明**认出来，
  * 加一种来源不必碰这里（docs/DASHBOARD_DESIGN.md §5.5）。
  */
-import type { BindingView, BindingSpec, BindingTransform } from '@dt/contracts'
+import type {
+  BindingView,
+  BindingSpec,
+  BindingTransform,
+  ModuleSlotMeta,
+} from '@dt/contracts'
 
 /**
  * 一条绑定当前的取数结果。
@@ -53,6 +58,12 @@ export interface ModuleValues {
   values: Record<string, unknown>
   /** 逐槽的失败原因，键是 `fieldKey`。 */
   errors: Record<string, string>
+  /**
+   * 逐槽的取数结论，键是 `fieldKey`。
+   * ⚠ 只有**配过来源**的槽在这里有键：没配的槽压根不是一条绑定，
+   * 「这一格没接数据源」与「接了但取不到」因此靠键在不在分得开。
+   */
+  slots: Record<string, ModuleSlotMeta>
   tally: ModuleValuesTally
   /** 这批值里最新的采样时刻，UTC 毫秒；一个都没有则 null。 */
   valueTimeMs: number | null
@@ -76,6 +87,7 @@ const ARRAY_FIELD_KEY =
 interface EvaluationState {
   values: Record<string, unknown>
   errors: Record<string, string>
+  slots: Record<string, ModuleSlotMeta>
   siblings: Record<string, unknown>
   tally: ModuleValuesTally
   valueTimeMs: number | null
@@ -183,6 +195,7 @@ export function computeModuleValues(input: ModuleValuesInput): ModuleValues {
   const state: EvaluationState = {
     values: {},
     errors: {},
+    slots: {},
     siblings: {},
     tally: { bound: 0, ok: 0, empty: 0, pending: 0, error: 0 },
     valueTimeMs: null,
@@ -196,6 +209,7 @@ export function computeModuleValues(input: ModuleValuesInput): ModuleValues {
   return {
     values: state.values,
     errors: state.errors,
+    slots: state.slots,
     tally: state.tally,
     valueTimeMs: state.valueTimeMs,
   }
@@ -211,14 +225,24 @@ function resolveBinding(
   const slot = input.read(binding, state.siblings)
   if (slot.state === 'pending') {
     state.tally.pending += 1
+    state.slots[binding.fieldKey] = { state: 'pending' }
     return
   }
   if (slot.state === 'error') {
     state.tally.error += 1
     state.errors[binding.fieldKey] = slot.message
+    state.slots[binding.fieldKey] = { state: 'error', message: slot.message }
     return
   }
   noteTimestamp(state, slot.timestampMs)
+  state.slots[binding.fieldKey] = {
+    state: 'ok',
+    // ⚠ 逐槽各带各的时刻：整块只留最新的那一个，而多点位模块里「哪一格不动了」
+    //   正是要靠各自的时刻才看得出来
+    ...(slot.timestampMs !== undefined
+      ? { timestampMs: slot.timestampMs }
+      : {}),
+  }
   const spec = resolveBindingSpec(input.specs, binding.fieldKey)
   const value = applyEnumMap(
     applyTransform(slot.value, binding.transformJson),
@@ -283,6 +307,7 @@ function reportCycle(binding: BindingView, state: EvaluationState): void {
   state.tally.bound += 1
   state.tally.error += 1
   state.errors[binding.fieldKey] = CYCLE_MESSAGE
+  state.slots[binding.fieldKey] = { state: 'error', message: CYCLE_MESSAGE }
   state.siblings[binding.fieldKey] = null
   injectFieldValue(state.values, binding.fieldKey, null)
 }

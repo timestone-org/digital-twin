@@ -1,0 +1,60 @@
+// 浮层气泡的共用皮肤：面与箭头。Tooltip / Popover / 全局 title 气泡同出一处，
+// 各抄一遍就会漂成三种圆角、三种箭头，而这种参差只有把它们摆在一起才看得出。
+
+/// 气泡的面：底、字、描边、圆角与投影。
+/// @param $radius 圆角变量
+/// @param $shadow 投影变量
+@mixin bubble-surface(
+  $radius: var(--radius-sm),
+  $shadow: var(--fx-shadow-menu)
+) {
+  background: var(--surface-overlay);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  border-radius: $radius;
+  box-shadow: $shadow;
+  backdrop-filter: blur(6px);
+}
+
+/// 旋转 45° 的方块箭头，只留朝外的两条边，接缝处正好被面压住。
+/// 调用处要给 `--_arrow`（箭头沿气泡起边的偏移）与 `&--<方向>` 修饰类。
+/// @param $size 箭头方块边长
+@mixin bubble-arrow($size: 8px) {
+  &::after {
+    content: '';
+    position: absolute;
+    width: $size;
+    height: $size;
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-default);
+    transform: rotate(45deg);
+  }
+
+  &--bottom::after {
+    top: calc(#{-$size} / 2 - 1px);
+    left: calc(var(--_arrow) - #{$size} / 2);
+    border-right: none;
+    border-bottom: none;
+  }
+
+  &--top::after {
+    bottom: calc(#{-$size} / 2 - 1px);
+    left: calc(var(--_arrow) - #{$size} / 2);
+    border-top: none;
+    border-left: none;
+  }
+
+  &--right::after {
+    left: calc(#{-$size} / 2 - 1px);
+    top: calc(var(--_arrow) - #{$size} / 2);
+    border-top: none;
+    border-right: none;
+  }
+
+  &--left::after {
+    right: calc(#{-$size} / 2 - 1px);
+    top: calc(var(--_arrow) - #{$size} / 2);
+    border-bottom: none;
+    border-left: none;
+  }
+}

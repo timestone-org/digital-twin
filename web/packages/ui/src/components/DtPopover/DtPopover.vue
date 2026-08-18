@@ -136,9 +136,8 @@ defineExpose({ open: requestOpen, close: requestClose, toggle })
 </template>
 
 <style scoped lang="scss">
+@use '../../styles/bubble' as bubble;
 @use '../../styles/control' as ctl;
-
-$arrow: 8px;
 
 .dt-popover {
   display: inline-flex;
@@ -146,55 +145,12 @@ $arrow: 8px;
   &__panel {
     max-width: 22rem;
     padding: 10px 12px;
-    background: var(--surface-overlay);
-    color: var(--text-primary);
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-md);
-    box-shadow: var(--fx-shadow-menu);
-    backdrop-filter: blur(6px);
     font-size: var(--ctl-fs-sm);
     line-height: 1.5;
 
+    @include bubble.bubble-surface(var(--radius-md));
+    @include bubble.bubble-arrow;
     @include ctl.focus-ring;
-
-    // 箭头是旋转 45° 的方块，只留朝外的两条边，接缝处正好被面板压住
-    &::after {
-      content: '';
-      position: absolute;
-      width: $arrow;
-      height: $arrow;
-      background: var(--surface-overlay);
-      border: 1px solid var(--border-default);
-      transform: rotate(45deg);
-    }
-
-    &--bottom::after {
-      top: calc(#{-$arrow} / 2 - 1px);
-      left: calc(var(--_arrow) - #{$arrow} / 2);
-      border-right: none;
-      border-bottom: none;
-    }
-
-    &--top::after {
-      bottom: calc(#{-$arrow} / 2 - 1px);
-      left: calc(var(--_arrow) - #{$arrow} / 2);
-      border-top: none;
-      border-left: none;
-    }
-
-    &--right::after {
-      left: calc(#{-$arrow} / 2 - 1px);
-      top: calc(var(--_arrow) - #{$arrow} / 2);
-      border-top: none;
-      border-right: none;
-    }
-
-    &--left::after {
-      right: calc(#{-$arrow} / 2 - 1px);
-      top: calc(var(--_arrow) - #{$arrow} / 2);
-      border-bottom: none;
-      border-left: none;
-    }
   }
 }
 </style>

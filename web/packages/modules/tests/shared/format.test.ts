@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
   NO_DATA,
+  fmtClock,
+  fmtDecimal,
   fmtFixed,
   fmtKwh,
   fmtNumber,
@@ -137,5 +139,48 @@ describe('fmtKwh', () => {
 
   it('压缩档的小数位可调', () => {
     expect(fmtKwh(1234, 1)).toBe('1.2k')
+  })
+})
+
+describe('fmtDecimal', () => {
+  it('位数固定、尾随零补齐：仪表读数要的是逐行对齐', () => {
+    expect(fmtDecimal(63.4, 2)).toBe('63.40')
+    expect(fmtDecimal(63, 1)).toBe('63.0')
+  })
+
+  it('千分位由开关决定，缺省不加', () => {
+    expect(fmtDecimal(12345.67, 1)).toBe('12345.7')
+    expect(fmtDecimal(12345.67, 1, true)).toBe('12,345.7')
+  })
+
+  it('真实 0 照显 0，缺值才给占位符', () => {
+    expect(fmtDecimal(0, 2)).toBe('0.00')
+    expect(fmtDecimal(null, 2)).toBe(NO_DATA)
+    expect(fmtDecimal(Number.NaN, 2)).toBe(NO_DATA)
+  })
+
+  it('配置来的小数位越界先夹后用，不抛 RangeError', () => {
+    expect(() => fmtDecimal(1.234, -5)).not.toThrow()
+    expect(() => fmtDecimal(1.234, 500)).not.toThrow()
+  })
+
+  it('-0 归一成 0，不显成「-0」', () => {
+    expect(fmtDecimal(-0, 1)).toBe('0.0')
+  })
+})
+
+describe('fmtClock', () => {
+  it('给出本地时的时:分:秒，逐位补零', () => {
+    // ⚠ 用本地时构造：写死一个纪元毫秒的话，CI 与开发机的时区不同就会各断各的
+    const at = new Date(2026, 0, 2, 3, 4, 5)
+
+    expect(fmtClock(at.getTime())).toBe('03:04:05')
+  })
+
+  it('缺值与非有限数一律给占位符，不编一个时刻出来', () => {
+    expect(fmtClock(null)).toBe(NO_DATA)
+    expect(fmtClock(undefined)).toBe(NO_DATA)
+    expect(fmtClock(Number.NaN)).toBe(NO_DATA)
+    expect(fmtClock('刚刚')).toBe(NO_DATA)
   })
 })
