@@ -183,6 +183,7 @@ beforeAll(() => {
 describe('一个模块 = 一个目录', () => {
   it('扫到的目录不是空的，扫描本身没有空转', () => {
     expect(directories).toEqual([
+      'action-button',
       'container',
       'footer',
       'header',

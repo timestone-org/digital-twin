@@ -27,6 +27,7 @@ afterEach(() => {
 
 /** 目录即清单，故这份名单与 `src/modules/` 下的目录一一对应。 */
 const BUILTIN_TYPES = [
+  'action-button',
   'container',
   'footer',
   'header',
