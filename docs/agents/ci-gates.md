@@ -29,7 +29,7 @@
 
 | 文件 | 触发 | 管什么 |
 |---|---|---|
-| `pr-policy.yml` | 只在 PR | 规模 ≤400 行 / ≤20 文件 / ≤1 服务、提交信息、分支名、锁文件单独成 PR、PR 描述、抽取逻辑版本 |
+| `pr-policy.yml` | 只在 PR | 规模 ≤400 行 / ≤20 文件 / ≤1 服务（三类豁免见 [engineering-workflow §3.1](engineering-workflow.md)）、提交信息、分支名、锁文件单独成 PR、PR 描述、抽取逻辑版本 |
 | `nightly.yml` | 每日定时 | 变异测试、可访问性全站扫描、镜像内容断言。**失败开 issue，不阻断合并** |
 
 E2E、a11y、变异测试不进 PR 闸门是 `testing-standard-*.md` §9 的明确要求——它们太慢，
