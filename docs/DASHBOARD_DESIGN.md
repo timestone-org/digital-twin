@@ -368,6 +368,11 @@ ModuleSlotMeta = { state: 'ok' | 'pending' | 'error', message?, timestampMs? }
 行与配置里的指标一一对应，绑点面板因此与孪生同一套口径。它也是 §5.6 那条
 自述的第一个使用者，设计见 [MODULE_METRIC_CARD_DESIGN](MODULE_METRIC_CARD_DESIGN.md)。
 
+`action-button`（按钮）是第一个**控件**类模块：它不取任何数，只把点击上抛成
+联动事件，显隐 / 弹窗 / 跨屏跳转由规则决定。它也是 `chromeConfigurable: false`
+（退出平台卡片外观）的第一个使用者，设计见
+[MODULE_ACTION_BUTTON_DESIGN](MODULE_ACTION_BUTTON_DESIGN.md)。
+
 ---
 
 ## 6. 实时链路
