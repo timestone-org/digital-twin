@@ -5,10 +5,11 @@
  * 孪生场景那种 `Vec3` + `Record<string,string>` 混着的形状，两列通用表单表达不了，
  * 但「表达不了」不等于「不给改」。
  */
-import { readRecord } from '@dt/modules'
+import { configDefaults, readRecord } from '@dt/modules'
 import { DtField } from '@dt/ui'
 import { computed } from 'vue'
 
+import { isFieldVisible } from '@/features/dashboard/configForm'
 import ConfigFieldControl from './ConfigFieldControl.vue'
 import JsonControl from './JsonControl.vue'
 import type { ConfigControlEmits, ConfigControlProps } from './controlProps'
@@ -19,6 +20,12 @@ const emit = defineEmits<ConfigControlEmits>()
 const record = computed(() => readRecord(props.value))
 const fields = computed(() => props.field.fields ?? [])
 const depth = computed(() => (props.depth ?? 0) + 1)
+
+// 子字段的 `when` 判的是**这一块子对象**里的同级取值，不是整块配置
+const visibleFields = computed(() => {
+  const values = { ...configDefaults(fields.value), ...record.value }
+  return fields.value.filter((sub) => isFieldVisible(sub, values))
+})
 
 function writeKey(key: string, next: unknown, isContinuous: boolean): void {
   emit('update', { ...record.value, [key]: next }, isContinuous)
@@ -39,7 +46,7 @@ function writeKey(key: string, next: unknown, isContinuous: boolean): void {
     class="flex flex-col gap-3 rounded border border-border-subtle p-3"
   >
     <DtField
-      v-for="sub in fields"
+      v-for="sub in visibleFields"
       :key="sub.key"
       :label="sub.label"
       :hint="sub.help"

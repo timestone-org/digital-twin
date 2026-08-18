@@ -1,13 +1,18 @@
 <script setup lang="ts">
 /**
  * @fileoverview `type: 'array'` 的控件：按 `itemSchema` 递归摊出每一行。
+ * ⚠ 行内字段的 `when` 判的是**这一行自己**的取值：条件字段与被控字段同在一行，
+ * 拿整块配置去判的话，「只有开关量指标才有真值文案」这类声明会永远不成立。
  * ⚠ 增删行是**结构性**改动，各成一笔撤销；行内字段的输入才按连续输入合并。
  * ⚠ 行的 key 用「行内容 + 序号」拼不出稳定值，所以这里给每行发一个本地 id
  * 并跟着行走——直接用索引做 key 的话，删掉中间一行会让其余行的输入框内容整体错位。
  */
+import type { ConfigField } from '@dt/contracts'
+import { configDefaults } from '@dt/modules'
 import { DtButton, DtField, DtNotice } from '@dt/ui'
 import { computed, ref } from 'vue'
 
+import { isFieldVisible } from '@/features/dashboard/configForm'
 import ConfigFieldControl from './ConfigFieldControl.vue'
 import { asRows, rowLabel } from './coerce'
 import type { ConfigControlEmits, ConfigControlProps } from './controlProps'
@@ -35,6 +40,21 @@ function keyOf(at: number): number {
   nextRowKey += 1
   rowKeys.value = [...rowKeys.value, nextRowKey]
   return nextRowKey
+}
+
+// 行内 `when` 判的是**本行**的取值：条件字段与被控字段是同一行里的同级
+const rowDefaults = computed(() => configDefaults(itemSchema.value))
+
+/** 这一行现在该摆哪几个字段。 */
+function visibleCells(row: unknown): ConfigField[] {
+  const values = { ...rowDefaults.value, ...asRecord(row) }
+  return itemSchema.value.filter((sub) => isFieldVisible(sub, values))
+}
+
+function asRecord(row: unknown): Record<string, unknown> {
+  return typeof row === 'object' && row !== null && !Array.isArray(row)
+    ? { ...row }
+    : {}
 }
 
 function readCell(row: unknown, key: string): unknown {
@@ -102,7 +122,7 @@ function removeRow(at: number): void {
         />
       </div>
       <DtField
-        v-for="sub in itemSchema"
+        v-for="sub in visibleCells(row)"
         :key="sub.key"
         :label="sub.label"
         size="sm"
