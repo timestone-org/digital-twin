@@ -61,7 +61,10 @@ function changeKind(raw: string): void {
     <div class="flex flex-col gap-2">
       <div class="flex items-center gap-2">
         <template v-if="binding">
+          <!-- 宽度钉死：跟着「常量」/「历史序列」的字数伸缩的话，
+               换一次来源整行控件就横着跳一次 -->
           <DtSelect
+            class="w-28 shrink-0"
             :model-value="binding.sourceKind"
             :options="SOURCE_OPTIONS"
             size="sm"
@@ -69,6 +72,7 @@ function changeKind(raw: string): void {
             @update:model-value="changeKind"
           />
           <DtButton
+            class="ml-auto"
             size="sm"
             variant="ghost"
             intent="danger"
