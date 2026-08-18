@@ -189,6 +189,7 @@ export type {
   ModuleMeta,
   ModulePreview,
   ModuleRegion,
+  ModuleSlotMeta,
   ModuleStatus,
   StyleSlotValue,
 } from './module'

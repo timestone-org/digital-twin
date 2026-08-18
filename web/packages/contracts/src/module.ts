@@ -268,6 +268,18 @@ export interface ModuleManifest {
   hostClickable?: boolean
   /** 容器模块：自己只画壳，子节点由运行时按节点树递归注入。 */
   isContainer?: boolean
+  /**
+   * 模块自己逐格交代取数状态，运行时因此不给它盖整格状态浮层。
+   *
+   * ⚠ 一格一个点位的模块**不要开**：那时「取不到」确实没有别的东西可画，
+   * 盖住整格并说明原因才是对的。
+   * ⚠ 多点位模块**必须开**：不开的话，十个指标里坏掉一个就会让整块被
+   * 「取数失败」盖住，另外九个明明有值却一个都看不见。
+   * ⚠ 开了就得自己把四档都画出来（没配来源／等首帧／取不到／有值），
+   * 逐槽结论由 `ModuleMeta.slots` 下发。少画一档就是静默留白。
+   * ⚠ `unbound` 一档仍归浮层：必绑槽一条都没配时模块连布局都摆不出来。
+   */
+  ownsStatusDisplay?: boolean
   /** 有一段 config 复杂到两列表单表达不了，交给一个整页子编辑器。 */
   subEditor?: ModuleSubEditor
   /**
@@ -335,11 +347,33 @@ export const MODULE_CONNECTION_STATES = [
 ] as const
 export type ModuleConnectionState = (typeof MODULE_CONNECTION_STATES)[number]
 
+/**
+ * 一条绑定槽此刻的取数结论。
+ *
+ * ⚠ 三档缺一不可。模块光看 `values` 分不出这三种情况——它们在注入袋里长得
+ * 一模一样（键都不存在）：这一行**没配来源**、配了但**还没首帧**、配了但
+ * **取不到**。整块状态那一档说不出是哪一格坏了，所以逐格交代的模块必须拿到
+ * 这份逐槽结论（DASHBOARD_DESIGN §4.3）。
+ */
+export interface ModuleSlotMeta {
+  state: 'ok' | 'pending' | 'error'
+  /** `state: 'error'` 时的原因。 */
+  message?: string
+  /** 采样时刻，UTC 毫秒；只有 `ok` 档有。 */
+  timestampMs?: number
+}
+
 /** 运行时透传给渲染组件的状态。 */
 export interface ModuleMeta {
   status?: ModuleStatus
   /** 节点 id，对应 `DashboardNodePayload.id`。 */
   nodeId?: string
+  /**
+   * 逐槽的取数结论，键是绑定的 `fieldKey`（数组槽形如 `itemValues[0].value`）。
+   * ⚠ 只在模块自报 `ownsStatusDisplay` 时下发：其余模块的状态由整格浮层交代，
+   * 逐槽细节读了也没有地方画，白算一遍还多一份响应式依赖。
+   */
+  slots?: Readonly<Record<string, ModuleSlotMeta>>
   /**
    * 这批值的采样时刻，UTC 毫秒。
    * ⚠ 是**采样**的时刻而不是收到帧的时刻，照实显示，不许用当前墙钟顶替：

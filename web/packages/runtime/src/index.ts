@@ -41,7 +41,16 @@ export type {
   ModuleValuesInput,
   ModuleValuesTally,
 } from './moduleValues'
-export { computeModuleStatus, countUnboundRequired } from './moduleStatus'
+export {
+  computeModuleStatus,
+  countUnboundRequired,
+  showsStatusOverlay,
+} from './moduleStatus'
+export { useModuleEvaluation } from './useModuleEvaluation'
+export type {
+  ModuleEvaluation,
+  ModuleEvaluationInput,
+} from './useModuleEvaluation'
 export type { ModuleStatusInput } from './moduleStatus'
 export {
   RUNTIME_DATA_KEY,
