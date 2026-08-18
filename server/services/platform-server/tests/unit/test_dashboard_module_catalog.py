@@ -12,7 +12,7 @@ from platform_server.apps.dashboard.services.module_catalog import (
 )
 
 
-def test_the_committed_catalog_registers_the_first_phase_modules() -> None:
+def test_the_committed_catalog_registers_the_known_modules() -> None:
     catalog = load_module_catalog()
     assert catalog.known_types() == frozenset(
         {
@@ -20,10 +20,22 @@ def test_the_committed_catalog_registers_the_first_phase_modules() -> None:
             "footer",
             "header",
             "image-block",
+            "metric-card",
             "text-block",
             "twin-view",
         }
     )
+
+
+def test_the_metric_card_slot_is_an_entity_pinned_array() -> None:
+    """读数槽的行钉在配置里的指标上，故免掉「索引连续」那条校验。
+
+    ⚠ 漏了这个标记的话，只绑第 2 个指标就会被服务端拒掉，而现象是
+    「绑点面板上填好了，保存报 422」。
+    """
+    slots = load_module_catalog().slots("metric-card")
+    assert slots.array_fields == {"itemValues": frozenset({"value"})}
+    assert slots.entity_pinned == frozenset({"itemValues"})
 
 
 def test_an_unknown_type_has_no_manifest() -> None:

@@ -31,6 +31,7 @@ const BUILTIN_TYPES = [
   'footer',
   'header',
   'image-block',
+  'metric-card',
   'text-block',
   'twin-view',
 ]
