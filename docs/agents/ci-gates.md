@@ -9,7 +9,7 @@
 
 ## 1. 流水线分段
 
-`.github/workflows/ci.yml`，main 的 push 与每个 PR 都跑（分支 push 不单独触发——PR 事件已经验过同一份代码，双触发只会把自托管 runner 的队列拖死），五段串行：
+`.github/workflows/ci.yml`，**只在 main 的 push 上跑**（分支与 PR 上都不触发，理由见 §1.1），五段串行：
 
 ```
 1 秒级闸门        机密扫描 / 仓库卫生 / 结构与规范闸        ← 只读源码，最便宜的红灯
@@ -34,6 +34,23 @@
 
 E2E、a11y、变异测试不进 PR 闸门是 `testing-standard-*.md` §9 的明确要求——它们太慢，
 每个 PR 都等十几分钟的代价大于收益。
+
+### 1.1 ⚠ 开发期不等 GitHub 的 CI
+
+**功能分支推上去不会有任何流水线结果，PR 页面上也不会有**——那不是 CI 坏了，
+是它按设计只在 main 的 push 上跑。
+
+于是规矩是两条，且没有例外：
+
+1. **改完先在本地过闸**：秒级的用 `scripts/ci-local.sh --fast`，
+   推送或合并之前用 `scripts/ci-local.sh --all`（act 跑的就是 `ci.yml` 本身，
+   同一份 YAML、同一批闸门脚本，与合并后在 GitHub 上跑的是同一件事）。
+2. **合并进 main 之后盯一眼那轮流水线**：它是最后一道真运行器上的验证，
+   红了按「main 永远可发布」当场修或回滚，不许拖到下一个 PR。
+
+理由是反馈时长：本地 act 改一次就当场知道红绿，而推一次要排一轮自托管 runner
+的队列。要在真运行器上补跑一次分支，用 `ci.yml` 的 `workflow_dispatch` 手动触发，
+不要为了触发 CI 去造一次推送。
 
 ---
 
@@ -90,7 +107,7 @@ E2E、a11y、变异测试不进 PR 闸门是 `testing-standard-*.md` §9 的明�
 | testing-standard-* §5.1 无断言/§2 命名/§6 skip 与 xfail/§1 分层 | `check_tests.py` |
 | 同 §4.1 覆盖率阈值 | `pyproject.toml` 的 `fail_under` · `vitest.config.ts` 的 `thresholds` |
 | 同 §4.2 棘轮（不低于基线，基线按 90%/80% 封顶） | `check_coverage.py` + `coverage-baseline.json` |
-| 同 §4.1 增量覆盖 ≥85% | `diff-cover`（只在 PR 上跑）；前端 lcov 的 SF 路径口径由 `check_lcov_paths.py` 先验（对不上时 diff-cover 只报「0 行」照样放行） |
+| 同 §4.1 增量覆盖 ≥85% | `diff-cover`，基线是本次推送前的 main（`github.event.before`）；本地跑时是与 `origin/main` 的合并基，两者判的是同一段 diff。前端 lcov 的 SF 路径口径由 `check_lcov_paths.py` 先验（对不上时 diff-cover 只报「0 行」照样放行） |
 | 同 §4.3 `--cov=` 点号模块名、§6.2 禁外网、CI 里禁 skip | `check_pytest_run.py`（读 junit 与日志） |
 | 同 §6.3 L2/L3 打真实 Postgres | `server-test` 的服务容器 |
 | 同 §8 首屏包体预算 | `check_bundle_budget.py`（读真实产物） |
@@ -161,12 +178,19 @@ docstring 不去，它可能被程序读走。
 
 ## 4. 本地怎么跑
 
+**开发期的每一次验证都在这里**（§1.1）：GitHub 上只有 main 的 push 会触发流水线，
+分支上没有 CI 可等。
+
 ```bash
 scripts/ci-local.sh --fast          # 只跑闸门脚本，秒级，不起容器
 scripts/ci-local.sh                 # act 跑第 1–2 段
 scripts/ci-local.sh -j server-test  # act 跑指定作业（含服务容器）
-scripts/ci-local.sh --all           # act 跑整条 push 流水线
+scripts/ci-local.sh --all           # act 跑整条流水线 —— 推送/合并前必须绿
 ```
+
+⚠ 脚本给 act 喂一份写死 `ref: refs/heads/main` 的 push 负载：流水线的触发条件是
+`push: branches: [main]`，不喂负载就得指望当前分支正好叫 main。负载里的 `before`
+填的是与 `origin/main` 的合并基，增量覆盖那步于是按「这条分支相对 main 改了什么」判。
 
 `act` 的参数在 `.actrc` 里，三处与默认不同的取值都写了理由：镜像必须是带完整
 工具链的那档、串行跑（Docker Desktop 并发建容器会偶发失败）、以及显式补上
@@ -180,14 +204,16 @@ node 的 PATH（否则 JS action 的 post 步骤会把一个全绿的作业报�
 
 ## 5. 分支保护怎么配
 
-只把 **`5·全部闸门`** 设成必需的状态检查。它 `needs` 全部上游作业，
-任一失败**或被跳过**都会让它失败——跳过的闸门不算通过。
+⚠ **没有必需的状态检查可设**：主流水线在 PR 上不跑，把 `5·全部闸门` 设成必需
+只会让每个 PR 永远卡在 pending。合并前的绿灯由 `scripts/ci-local.sh --all` 出，
+合并后 main 上的那一轮是**事后**的守门人——它 `needs` 全部上游作业，任一失败
+**或被跳过**都会让它失败（跳过的闸门不算通过），红了当场修或回滚。
 
-另外：禁止直推 `main`、禁止管理员绕过、要求分支为最新再合并。
+仍然要配的：禁止直推 `main`、禁止管理员绕过、要求分支为最新再合并。
 
-⚠ **`pr-policy.yml` 的三个作业都不在必需之列，红了不拦合并**。它们只报不拦，
-包括 §2「领域不变量」那条 `check_logic_version.py`——一条不拦的闸只有在被人看的
-时候才有用，别把它当成在拦。要真拦得住，得在分支保护里把它们也设成必需检查。
+⚠ **`pr-policy.yml` 的三个作业照常在 PR 上跑**（都是秒级的，不用等），
+**但红了不拦合并**，包括 §2「领域不变量」那条 `check_logic_version.py`——
+一条不拦的闸只有在被人看的时候才有用，别把它当成在拦。
 
 ---
 
