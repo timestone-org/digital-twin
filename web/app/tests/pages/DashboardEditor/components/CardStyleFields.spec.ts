@@ -180,12 +180,12 @@ describe('写值语义', () => {
     expect(written(wrapper)).toEqual({ borderHover: 'var(--accent-primary)' })
   })
 
-  it('0 与负数是合法值，角标偏移的平台现值就是 -1', async () => {
+  it('0 是合法值不是「没填」，存量的负内缩照常回填', async () => {
     const wrapper = mountFields({ cornerOffset: -1 })
     await openGroup(wrapper, '四角')
-    expect(numField(wrapper, '角标偏移').props('modelValue')).toBe(-1)
+    expect(numField(wrapper, '角标内缩').props('modelValue')).toBe(-1)
 
-    numField(wrapper, '角标偏移').vm.$emit('update:modelValue', 0)
+    numField(wrapper, '角标内缩').vm.$emit('update:modelValue', 0)
 
     expect(written(wrapper)).toEqual({ cornerOffset: 0 })
   })
@@ -311,7 +311,7 @@ describe('字段覆盖面', () => {
     '角标尺寸',
     '角标辉光',
     '角标透明度',
-    '角标偏移',
+    '角标内缩',
     '纵向对齐',
     '标题内边距',
     '竖条与文字间距',

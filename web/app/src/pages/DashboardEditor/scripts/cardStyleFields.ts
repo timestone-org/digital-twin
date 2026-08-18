@@ -117,6 +117,7 @@ const CORNER_FIELDS: readonly CardField[] = [
     placeholder: '10',
     range: { min: 0, max: 60 },
     hint: 'px',
+    help: '「角括号」边框的括号长度、「切角边框」的切角大小也读这一项——那两档的四角与角标是同一处装饰，分开配必然对不齐。',
   },
   {
     key: 'cornerGlow',
@@ -125,6 +126,7 @@ const CORNER_FIELDS: readonly CardField[] = [
     placeholder: '5',
     range: { min: 0, max: 40 },
     hint: 'px',
+    help: '「角括号」与「切角边框」两档不吃这一项：那两档的四角画在卡片自身上，加辉光描出来的是整张卡片的轮廓光。',
   },
   {
     key: 'cornerOpacity',
@@ -134,14 +136,15 @@ const CORNER_FIELDS: readonly CardField[] = [
     range: { min: 0, max: 1, step: 0.1, precision: 2 },
     hint: '0–1',
   },
-  // 角标相对边框的偏移。平台现值 -1px（骑在边框上、略微出框）；小方点建议 0 贴框内沿，
-  // 因为这一格是 overflow:hidden，出框的角标与辉光会被裁掉
+  // 角标从框沿往里缩多少。⚠ 只收 0 及以上：一格是 overflow:hidden，负数会把角标连辉光
+  // 一起裁到框外，屏幕上一点痕迹都不剩
   {
     key: 'cornerOffset',
-    label: '角标偏移',
+    label: '角标内缩',
     kind: 'num',
-    placeholder: '-1',
-    hint: 'px，小方点用 0',
+    placeholder: '0',
+    range: { min: 0, max: 40 },
+    hint: 'px，贴框内沿',
   },
 ]
 
