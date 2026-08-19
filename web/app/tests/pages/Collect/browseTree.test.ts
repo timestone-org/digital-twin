@@ -1,8 +1,9 @@
 /**
- * @fileoverview 地址空间树的纯逻辑：找节点、收变量、猜编码、生成点位。
+ * @fileoverview 地址空间树的纯逻辑：找节点、收变量、猜编码。
  *
  * ⚠ 两条口径钉在这里：对象节点不能当点位（建了永远读不到值），猜不出合法
- * 编码时必须跳过而不是补一个 `point_1`（半年后没人看得懂那张点表）。
+ * 编码时留空而不是补一个 `point_1`（半年后没人看得懂那张点表）。勾中的节点
+ * 怎么变成待建点位在 `importDrafts.test.ts`。
  */
 import { describe, expect, it } from 'vitest'
 import type { CollectBrowseItem, CollectSubtreeItem } from '@dt/contracts'
@@ -14,7 +15,6 @@ import {
   selectionStates,
   suggestCode,
   toNodes,
-  toPointItems,
   unloadedUnder,
   variableIndex,
   variablesUnder,
@@ -86,57 +86,23 @@ describe('从寻址串猜编码', () => {
     expect(suggestCode('ns=2;i=1024')).toBe('1024')
   })
 
-  it('全是中文时猜不出，返回空串交给人填', () => {
+  it('没有转写函数时中文名猜不出，返回空串交给人填', () => {
     expect(suggestCode('ns=2;s=出口温度')).toBe('')
   })
-})
 
-describe('勾中的节点转成点位', () => {
-  const nodes = toNodes([
-    browsed('ns=2;s=A.Temp', { name: '温度' }),
-    browsed('ns=2;s=B.Temp', { name: '温度二' }),
-    browsed('ns=2;s=出口温度', { name: '中文点' }),
-  ])
-  const index = variableIndex(nodes)
-
-  it('名字来自节点、寻址串原样带过去', () => {
-    const { items } = toPointItems(['ns=2;s=A.Temp'], index, new Set())
-    expect(items).toEqual([
-      { code: 'temp', name: '温度', address: 'ns=2;s=A.Temp' },
-    ])
-  })
-
-  it('同批里撞码时挂序号，不让整批被 400 打回', () => {
-    const { items } = toPointItems(
-      ['ns=2;s=A.Temp', 'ns=2;s=B.Temp'],
-      index,
-      new Set(),
+  it('给了转写函数就按它推，中文名也有个能看懂的编码', () => {
+    expect(suggestCode('ns=2;s=测试.出口温度', () => 'chu_kou_wen_du')).toBe(
+      'chu_kou_wen_du',
     )
-    expect(items.map((one) => one.code)).toEqual(['temp', 'temp_2'])
   })
 
-  it('与库里已有的编码撞了同样挂序号', () => {
-    const { items } = toPointItems(
-      ['ns=2;s=A.Temp'],
-      index,
-      new Set(['temp', 'temp_2']),
-    )
-    expect(items[0]?.code).toBe('temp_3')
+  it('⚠ 中英混排整段转写：只把中文当分隔符扔掉会只剩一个 1', () => {
+    const romanize = (text: string) => (text === '温度1' ? 'wen_du_1' : '')
+    expect(suggestCode('ns=2;s=A.温度1', romanize)).toBe('wen_du_1')
   })
 
-  it('猜不出编码的跳过并如实报出来，不补一个看不懂的名字', () => {
-    const { items, skipped } = toPointItems(
-      ['ns=2;s=出口温度'],
-      index,
-      new Set(),
-    )
-    expect(items).toEqual([])
-    expect(skipped).toEqual(['ns=2;s=出口温度'])
-  })
-
-  it('不在索引里的地址（比如对象节点）直接忽略', () => {
-    const { items } = toPointItems(['ns=2;s=Nope'], index, new Set())
-    expect(items).toEqual([])
+  it('转写不出来（字典没加载上）时仍然留空，不退回那个 1', () => {
+    expect(suggestCode('ns=2;s=A.温度1')).toBe('')
   })
 })
 

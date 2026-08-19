@@ -1,6 +1,6 @@
 /**
  * @fileoverview 地址空间浏览树的纯逻辑：懒加载一层、勾选、按子树批量勾选、
- * 生成点位。
+ * 从寻址串推点位编码。勾中的节点怎么变成待建点位在 `importDrafts.ts`。
  *
  * ⚠ 只有变量节点能当点位，对象节点只用来往下走。勾一个对象节点**不是**把它
  * 自己建成点位（那会建出一个永远读不到值的配置），而是把它**下面的变量**全勾上。
@@ -11,11 +11,12 @@
  *
  * ⚠ 从寻址串推出来的编码只是**建议**：`ns=2;s=Plant1.Line1.OutletTemp` 推出
  * `outlet_temp` 很好用，但推出来的东西撞了名就得让用户改。推不出合法编码时
- * 一律留空，让用户自己填——胡乱补一个 `point_1` 会让点表半年后没人看得懂。
+ * 一律留空让用户在导入弹窗里填——胡乱补一个 `point_1` 会让点表半年后没人
+ * 看得懂，而**跳过它**等于把中文命名的现场整台设备挡在门外。
  */
 import type {
   CollectBrowseItem,
-  CollectPointItemInput,
+  CollectDataType,
   CollectSubtreeItem,
 } from '@dt/contracts'
 
@@ -25,6 +26,8 @@ export interface TreeNode {
   name: string
   hasChildren: boolean
   isVariable: boolean
+  /** 现场说它是什么类型；`null` = 没读到，建点位时不预选。 */
+  dataType: CollectDataType | null
   /** `null` 表示这一层还没拉过；拉过之后即使收起也留着。 */
   children: TreeNode[] | null
   /** 拉过之后是否展开显示。 */
@@ -51,6 +54,7 @@ function toNode(item: CollectBrowseItem): TreeNode {
     name: item.name,
     hasChildren: item.has_children,
     isVariable: item.is_variable,
+    dataType: item.data_type,
     children: null,
     isOpen: false,
     isLoading: false,
@@ -221,58 +225,36 @@ function verdict(
 
 /** 编码里允许的字符；其余一律当分隔符。 */
 const SEPARATORS = /[^A-Za-z0-9]+/g
+/** 有一个非 ASCII 字符就得先转写：`温度1` 直接归一化只剩一个 `1`。 */
+const NON_ASCII = /[^\u0020-\u007e]/
+
+/** 把中文转写成拉丁字母；转不出来给空串。 */
+export type Romanize = (text: string) => string
 
 /**
  * 从寻址串猜一个点位编码；猜不出合法的就返回空串。
  *
  * 取最后一段（`ns=2;s=A.B.OutletTemp` → `OutletTemp`）再转成下划线小写。
+ * ⚠ 带中文的先整段转写再归一化，不能只把中文当分隔符扔掉：`温度1` 那样只会
+ * 剩下一个 `1`，而一张全是 `1`/`2`/`3` 的点表比留空更难查。
  * @param address 协议寻址串
+ * @param romanize 中文转写；缺省不转写，于是中文名一律留空交给人填
  */
-export function suggestCode(address: string): string {
-  const tail = address.split(/[.;/]/).at(-1) ?? ''
-  const body = tail
-    .replace(/^[A-Za-z]+=/, '')
-    .replace(SEPARATORS, '_')
-    .replace(/^_+|_+$/g, '')
-    .toLowerCase()
+export function suggestCode(
+  address: string,
+  romanize: Romanize = () => '',
+): string {
+  // ⚠ `s=` 这类标识符前缀要在转写**之前**剥掉：`ns=2;s=出口温度` 只有一段，
+  // 连着前缀转写出来是 `s_chu_kou_wen_du`
+  const tail = (address.split(/[.;/]/).at(-1) ?? '').replace(/^[A-Za-z]+=/, '')
+  const body = normalize(NON_ASCII.test(tail) ? romanize(tail) : tail)
   return /^[a-z0-9]/.test(body) ? body : ''
 }
 
-/**
- * 把勾选的变量节点转成可提交的点位。
- * @param selected 勾选的地址
- * @param index 地址 → 节点
- * @param taken 已被占用的编码（库里已有 + 本次已生成）
- */
-export function toPointItems(
-  selected: readonly string[],
-  index: ReadonlyMap<string, TreeNode>,
-  taken: ReadonlySet<string>,
-): { items: CollectPointItemInput[]; skipped: string[] } {
-  const items: CollectPointItemInput[] = []
-  const skipped: string[] = []
-  const used = new Set(taken)
-  for (const address of selected) {
-    const node = index.get(address)
-    if (node === undefined) continue
-    const code = uniqueCode(suggestCode(address), used)
-    if (code === '') {
-      skipped.push(address)
-      continue
-    }
-    used.add(code)
-    items.push({ code, name: node.name, address })
-  }
-  return { items, skipped }
-}
-
-/** 撞名时挂一个序号后缀；猜不出编码时返回空串交给调用方跳过。 */
-function uniqueCode(base: string, used: ReadonlySet<string>): string {
-  if (base === '') return ''
-  if (!used.has(base)) return base
-  for (let suffix = 2; suffix < 1000; suffix += 1) {
-    const candidate = `${base}_${suffix}`
-    if (!used.has(candidate)) return candidate
-  }
-  return ''
+/** 归一化成 `[a-z0-9_]`：非字母数字并成下划线，去掉两头的。 */
+function normalize(text: string): string {
+  return text
+    .replace(SEPARATORS, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase()
 }

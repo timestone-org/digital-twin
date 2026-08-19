@@ -109,11 +109,12 @@ describe('弹窗的对外面', () => {
     ])
   })
 
-  it('浏览导入弹窗收解析好的待导入项，确认时抛完整的点位输入', () => {
+  it('浏览导入弹窗收草稿与已用编码——判重要同时看本批与库里', () => {
     expect(propNames(ImportNodesDialog).sort()).toEqual([
-      'items',
+      'drafts',
       'loading',
       'modelValue',
+      'takenCodes',
     ])
     expect(emitNames(ImportNodesDialog).sort()).toEqual([
       'confirm',

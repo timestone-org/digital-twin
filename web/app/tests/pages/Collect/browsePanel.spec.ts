@@ -7,7 +7,15 @@
  * 的是谁全看渲染顺序，用例会因为点错了框而**蒙对**。
  */
 import { createPinia, setActivePinia } from 'pinia'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { DOMWrapper, VueWrapper } from '@vue/test-utils'
 import { ROOT, walkFixture } from '@/testing/collectAddressSpace'
@@ -477,6 +485,45 @@ describe('按子树批量勾选', () => {
   })
 })
 
+/** 弹窗 teleport 在 body 上，wrapper.findAll 看不见它。 */
+function dialogButton(pattern: RegExp): HTMLButtonElement | undefined {
+  return [...document.body.querySelectorAll('button')].find((one) =>
+    pattern.test(one.textContent?.trim() ?? ''),
+  )
+}
+
+/** 弹窗里的编码输入框，按渲染顺序。 */
+function codeInputs(): HTMLInputElement[] {
+  return [
+    ...document.body.querySelectorAll<HTMLInputElement>(
+      'input[aria-label$="的点位编码"]',
+    ),
+  ]
+}
+
+// ⚠ 先把拼音字典加载好：组件里那次 `import()` 是动态的，冷加载要几拍才回来，
+// 而「等几拍」正是 flaky 的来源。预热之后它从模块缓存里同步命中
+beforeAll(async () => {
+  await import('pinyin-pro')
+})
+
+/**
+ * 点「导入选中」并等弹窗真的开出来。
+ * ⚠ 要多等一拍：拼音字典是动态加载的，`click` 里那次 flush 还没到。
+ */
+async function openImport(wrapper: VueWrapper): Promise<void> {
+  const open = wrapper
+    .findAll('button')
+    .find((one) => one.text().startsWith('导入选中'))
+  if (open === undefined) throw new Error('没有「导入选中」按钮')
+  await click(open)
+  for (let tries = 0; tries < 20; tries += 1) {
+    if (dialogButton(/^导入 \d+ 个节点$/) !== undefined) return
+    await flushPromises()
+  }
+  throw new Error('弹窗没有开出来')
+}
+
 describe('导入选中', () => {
   it('先开导入弹窗统一设采样与归档默认，确认后寻址串原样带过去', async () => {
     const wrapper = await render({ [ROOT]: [leaf('Temp'), leaf('Flow')] })
@@ -487,18 +534,9 @@ describe('导入选中', () => {
 
     await check(box(wrapper, 'Temp'))
     await check(box(wrapper, 'Flow'))
-    const open = wrapper
-      .findAll('button')
-      .find((one) => one.text().startsWith('导入选中'))
-    if (open === undefined) throw new Error('没有「导入选中」按钮')
-    await click(open)
+    await openImport(wrapper)
 
-    // 弹窗 teleport 在 body 上，wrapper.findAll 看不见它
-    const confirm = [...document.body.querySelectorAll('button')].find((one) =>
-      /^导入 \d+ 个节点$/.test(one.textContent?.trim() ?? ''),
-    )
-    if (confirm === undefined) throw new Error('弹窗里没有「导入」按钮')
-    confirm.click()
+    dialogButton(/^导入 \d+ 个节点$/)?.click()
     await flushPromises()
 
     expect(create).toHaveBeenCalledTimes(1)
@@ -510,6 +548,65 @@ describe('导入选中', () => {
     // 弹窗里的统一默认（采样间隔 / 记录历史）套到了每一项上
     expect(items.every((one) => one.sampling_interval_ms === 1000)).toBe(true)
     expect(items.every((one) => one.archive_enabled === true)).toBe(true)
+  })
+
+  it('现场读到的类型跟着点位建下去，不再一律 float', async () => {
+    const wrapper = await render({
+      [ROOT]: [{ ...leaf('Note'), data_type: 'string' }],
+    })
+    const create = vi.spyOn(collectApi, 'createPoints').mockResolvedValue({
+      items: [],
+      address_checks: [],
+    })
+
+    await check(box(wrapper, 'Note'))
+    await openImport(wrapper)
+    dialogButton(/^导入 \d+ 个节点$/)?.click()
+    await flushPromises()
+
+    expect(create.mock.calls[0]?.[0]?.items[0]?.data_type).toBe('string')
+  })
+
+  it('⚠ 中文名的节点照样进弹窗，编码按拼音推出来', async () => {
+    const wrapper = await render({ [ROOT]: [leaf('出口温度')] })
+    const create = vi.spyOn(collectApi, 'createPoints').mockResolvedValue({
+      items: [],
+      address_checks: [],
+    })
+
+    await check(box(wrapper, '出口温度'))
+    await openImport(wrapper)
+
+    expect(codeInputs().map((one) => one.value)).toEqual(['chu_kou_wen_du'])
+    dialogButton(/^导入 \d+ 个节点$/)?.click()
+    await flushPromises()
+
+    expect(create.mock.calls[0]?.[0]?.items[0]?.code).toBe('chu_kou_wen_du')
+    // ⚠ 以前这里是一句「已跳过，请到点位表手工添加」，一个点位也建不出来
+    expect(toastWarning).not.toHaveBeenCalled()
+  })
+
+  it('⚠ 编码改成不合法的就不许提交：后端一批原子，一条不合规是整批被拒', async () => {
+    const wrapper = await render({ [ROOT]: [leaf('Temp')] })
+    const create = vi.spyOn(collectApi, 'createPoints').mockResolvedValue({
+      items: [],
+      address_checks: [],
+    })
+
+    await check(box(wrapper, 'Temp'))
+    await openImport(wrapper)
+
+    const input = codeInputs()[0]
+    if (input === undefined) throw new Error('弹窗里没有编码输入框')
+    input.value = '出口温度'
+    input.dispatchEvent(new Event('input'))
+    await flushPromises()
+
+    const confirm = dialogButton(/^导入 \d+ 个节点$/)
+    expect(confirm?.disabled).toBe(true)
+    confirm?.click()
+    await flushPromises()
+    expect(create).not.toHaveBeenCalled()
   })
 })
 
