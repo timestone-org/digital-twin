@@ -45,6 +45,10 @@ class Container:
     publisher: PublishService
     session: SessionService
     journal: SubscriptionJournal
+    # ⚠ 两份打 auth-server 的客户端各持一个连接池：装了就要关，否则退出时
+    # 留下两组还开着的 socket
+    user_codes: UserCodeSource
+    code_catalog: CodeCatalog
     # 本副本的标识。⚠ 用主机名：容器重启后它不变，正好用来清自己残留的订阅行
     replica: str
 
@@ -98,6 +102,7 @@ def build_container(settings: Settings) -> Container:
             service_key=settings.edge_service_key.get_secret_value(),
             timeout_s=settings.auth_timeout_s,
         ),
+        code_catalog=catalog,
     )
     return _assemble(settings, parts)
 
@@ -114,6 +119,7 @@ class _Parts:
     grants: PublicGrantRegistry
     pubsub: PubSub
     user_codes: UserCodeSource
+    code_catalog: CodeCatalog
 
 
 def _assemble(settings: Settings, parts: _Parts) -> Container:
@@ -151,6 +157,8 @@ def _assemble(settings: Settings, parts: _Parts) -> Container:
         ),
         session=SessionService(_session_deps(settings, parts)),
         journal=parts.journal,
+        user_codes=parts.user_codes,
+        code_catalog=parts.code_catalog,
         replica=socket.gethostname(),
     )
 

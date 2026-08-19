@@ -61,6 +61,7 @@ class UserCodeSource:
         # 传输层留成可替换的：用例要验的是解析与失败处置，不是 httpx 本身。
         # ⚠ 生产路径上它恒为 None，走 httpx 自己的默认传输。
         self._transport: httpx.AsyncBaseTransport | None = None
+        self._http: httpx.AsyncClient | None = None
 
     async def codes_of(self, user_id: uuid.UUID) -> frozenset[str]:
         """取一个用户此刻的有效权限码。
@@ -74,18 +75,14 @@ class UserCodeSource:
         Args: user_id。
         """
         try:
-            async with httpx.AsyncClient(
-                base_url=self._base_url,
-                timeout=self._timeout_s,
-                transport=self._transport,
-            ) as client:
-                response = await client.get(
-                    USER_CODES_PATH.format(user_id=user_id),
-                    headers={"X-Service-Key": self._service_key},
-                )
-                response.raise_for_status()
-                envelope = _UserEnvelope.model_validate(response.json())
-                return frozenset(envelope.data.permissions)
+            client = self._client()
+            response = await client.get(
+                USER_CODES_PATH.format(user_id=user_id),
+                headers={"X-Service-Key": self._service_key},
+            )
+            response.raise_for_status()
+            envelope = _UserEnvelope.model_validate(response.json())
+            return frozenset(envelope.data.permissions)
         except (httpx.HTTPError, ValidationError, ValueError) as error:
             # ⚠ 不记异常里的响应体：它可能带着别的服务的内部信息
             _logger.error(
@@ -95,3 +92,26 @@ class UserCodeSource:
                 error_type=type(error).__name__,
             )
             raise UserCodesUnavailable("无法确认权限，请稍后重连") from error
+
+    def _client(self) -> httpx.AsyncClient:
+        """取那份长活的客户端；第一次要用时才建。
+
+        ⚠ **一个进程一份，不是一次调用一份**：`httpx.AsyncClient` 自带连接池，
+        每次调用现造一个再关掉，等于每次调用都重新握一次 TCP 手——而本客户端
+        挂在**每一次 WS 握手与每一次换票**上，一面大屏墙重连就是一串握手。
+        ⚠ 懒建而不是在 `__init__` 里建：装配跑在事件循环之外，而且传输层是
+        构造之后才被替换的（用例注入假件那一步）。
+        """
+        if self._http is None:
+            self._http = httpx.AsyncClient(
+                base_url=self._base_url,
+                timeout=self._timeout_s,
+                transport=self._transport,
+            )
+        return self._http
+
+    async def close(self) -> None:
+        """关掉连接池。关停钩子里调，关完再用会现建一份新的。"""
+        http, self._http = self._http, None
+        if http is not None:
+            await http.aclose()
