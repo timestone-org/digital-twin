@@ -582,7 +582,7 @@ describe('导入选中', () => {
     await flushPromises()
 
     expect(create.mock.calls[0]?.[0]?.items[0]?.code).toBe('chu_kou_wen_du')
-    // ⚠ 以前这里是一句「已跳过，请到点位表手工添加」，一个点位也建不出来
+    // ⚠ 不许提示「已跳过」：中文名的节点被跳过时，这一勾一个点位也建不出来
     expect(toastWarning).not.toHaveBeenCalled()
   })
 
