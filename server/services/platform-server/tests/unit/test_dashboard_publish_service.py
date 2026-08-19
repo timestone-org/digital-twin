@@ -5,6 +5,7 @@
 """
 
 import uuid
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 from lib.errors import DependencyUnavailable
@@ -56,8 +57,23 @@ class FakePlanSource:
         default_factory=dict[uuid.UUID, DashboardPlan]
     )
     loads: list[uuid.UUID] = field(default_factory=list[uuid.UUID])
+    # 每一拍问了哪一批。批数 = 这一拍开了几个会话
+    batches: list[tuple[uuid.UUID, ...]] = field(
+        default_factory=list[tuple[uuid.UUID, ...]]
+    )
 
-    async def load(
+    async def load_many(
+        self,
+        dashboard_ids: Sequence[uuid.UUID],
+        cached: Mapping[uuid.UUID, DashboardPlan],
+    ) -> dict[uuid.UUID, PlanLookup]:
+        self.batches.append(tuple(dashboard_ids))
+        return {
+            dashboard_id: self._lookup(dashboard_id, cached.get(dashboard_id))
+            for dashboard_id in dashboard_ids
+        }
+
+    def _lookup(
         self, dashboard_id: uuid.UUID, cached: DashboardPlan | None
     ) -> PlanLookup:
         self.loads.append(dashboard_id)
@@ -343,3 +359,26 @@ async def test_a_dashboard_left_alone_is_forgotten() -> None:
     harness.watch((DASHBOARD, VIEWER))
     await harness.publisher.publish_once()
     assert harness.node_keys() == [[OUTLET, INLET], [OUTLET, INLET]]
+
+
+async def test_one_tick_asks_the_plan_source_one_batch() -> None:
+    """一拍一批，与在看的屏数无关。
+
+    ⚠ 按屏各问一次的话，真实现那边就是按屏各开一个只读会话——在看的屏有多少
+    张，每一拍就有多少次 BEGIN/COMMIT，而绝大多数拍里一张都没变。
+    """
+    harness = build_harness(readings={OUTLET: reading(21.5)})
+    harness.plans.plans[OTHER_DASHBOARD] = plan_of(OUTLET)
+    harness.watch((DASHBOARD, VIEWER), (OTHER_DASHBOARD, SECOND_VIEWER))
+
+    await harness.publisher.publish_once()
+
+    assert len(harness.plans.batches) == 1
+    assert set(harness.plans.batches[0]) == {DASHBOARD, OTHER_DASHBOARD}
+
+
+async def test_a_tick_with_nobody_watching_asks_for_an_empty_batch() -> None:
+    # ⚠ 空批必须由真实现自己短路掉，不许换成一条 `IN ()` 查询
+    harness = build_harness(readings={OUTLET: reading(21.5)})
+    await harness.publisher.publish_once()
+    assert harness.plans.batches == [()]

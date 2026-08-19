@@ -5,6 +5,7 @@
 """
 
 import contextlib
+import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
@@ -20,6 +21,11 @@ from integration.dashboard_helpers import (
     make_dashboard,
     make_project,
     node_body,
+)
+from platform_server.apps.dashboard.services.publish_plan import (
+    DashboardPlan,
+    DatabasePlanSource,
+    PlanLookup,
 )
 
 KNOWN_KEY = f"{SEEDED_SOURCE_ID}:outlet_temp"
@@ -77,3 +83,18 @@ async def bind(
         }
     response = await client.post(f"{NODES_URL}/{node_id}/bindings", json=body)
     assert response.status_code == HTTP_CREATED
+
+
+async def load_one(
+    plans: DatabasePlanSource,
+    dashboard_id: uuid.UUID,
+    cached: DashboardPlan | None = None,
+) -> PlanLookup:
+    """按一张大屏问一次计划面。批量那条口径下，单张只是一批里的一条。
+
+    Args: plans, dashboard_id, cached。
+    """
+    lookups = await plans.load_many(
+        [dashboard_id], {} if cached is None else {dashboard_id: cached}
+    )
+    return lookups[dashboard_id]
