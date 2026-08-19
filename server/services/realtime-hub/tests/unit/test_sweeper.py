@@ -54,6 +54,9 @@ def _anonymous(
     async def send(_message: dict[str, object]) -> None:
         return None
 
+    async def send_frame(_frame: str) -> None:
+        return None
+
     async def close(code: int) -> None:
         closed.append(code)
 
@@ -65,6 +68,7 @@ def _anonymous(
         expires_at=now + timedelta(seconds=ttl_s),
         checked_at=now,
         send=send,
+        send_frame=send_frame,
         grant=GrantedTopic(
             ticket_hash=ticket_fingerprint(ticket),
             alias=public_alias(ticket),
@@ -79,6 +83,9 @@ def _logged_in() -> Connection:
     async def send(_message: dict[str, object]) -> None:
         return None
 
+    async def send_frame(_frame: str) -> None:
+        return None
+
     async def close(_code: int) -> None:
         raise AssertionError("登录态连接不该被授权复核关掉")
 
@@ -91,6 +98,7 @@ def _logged_in() -> Connection:
         expires_at=now - timedelta(seconds=1),
         checked_at=now,
         send=send,
+        send_frame=send_frame,
         close=close,
     )
 
@@ -238,6 +246,9 @@ async def test_a_connection_that_cannot_be_closed_is_skipped() -> None:
     async def send(_message: dict[str, object]) -> None:
         return None
 
+    async def send_frame(_frame: str) -> None:
+        return None
+
     async def close(_code: int) -> None:
         raise ConnectionResetError("socket 已死")
 
@@ -251,6 +262,7 @@ async def test_a_connection_that_cannot_be_closed_is_skipped() -> None:
             expires_at=now + timedelta(seconds=60),
             checked_at=now,
             send=send,
+            send_frame=send_frame,
             grant=GrantedTopic(
                 ticket_hash=ticket_fingerprint(TICKET),
                 alias=public_alias(TICKET),
@@ -269,6 +281,9 @@ async def test_a_connection_without_a_close_port_is_skipped() -> None:
     async def send(_message: dict[str, object]) -> None:
         return None
 
+    async def send_frame(_frame: str) -> None:
+        return None
+
     now = utcnow()
     connections = ConnectionRegistry()
     await connections.add(
@@ -279,6 +294,7 @@ async def test_a_connection_without_a_close_port_is_skipped() -> None:
             expires_at=now + timedelta(seconds=60),
             checked_at=now,
             send=send,
+            send_frame=send_frame,
             grant=GrantedTopic(
                 ticket_hash=ticket_fingerprint(TICKET),
                 alias=public_alias(TICKET),

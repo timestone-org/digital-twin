@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import json
 import uuid
 from collections.abc import AsyncIterator, Sequence
 from datetime import timedelta
@@ -15,6 +16,7 @@ from realtime_hub.apps.channel.services import (
     ConnectionRegistry,
     FanoutListener,
 )
+from realtime_hub.apps.channel.services.fanout import encode_per_name
 
 from lib.utils.timeutils import utcnow
 
@@ -36,9 +38,13 @@ def _connection(
     sink: list[dict[str, object]], *, is_broken: bool = False
 ) -> Connection:
     async def send(message: dict[str, object]) -> None:
+        sink.append(message)
+
+    async def send_frame(frame: str) -> None:
+        # 扇出发的是已经编码好的一帧；解回字典只为让断言仍然比结构
         if is_broken:
             raise ConnectionResetError("socket 已死")
-        sink.append(message)
+        sink.append(json.loads(frame))
 
     now = utcnow()
     return Connection(
@@ -48,6 +54,7 @@ def _connection(
         expires_at=now + timedelta(minutes=15),
         checked_at=now,
         send=send,
+        send_frame=send_frame,
     )
 
 
@@ -148,3 +155,49 @@ async def test_an_aliased_connection_sees_its_own_topic_name() -> None:
     await _drain(_listener([{"topic": "dashboard:d1", "seq": 3}], connections))
 
     assert sink == [{"topic": "public:tok-1", "seq": 3}]
+
+
+def _target(alias: str | None) -> Connection:
+    """一条只用来问「它看到的主题名是什么」的连接。
+
+    Args: alias。
+    """
+    connection = _connection([])
+    if alias is not None:
+        connection.aliases["dashboard:d1"] = alias
+    return connection
+
+
+def test_one_name_is_encoded_once_however_many_connections_hold_it() -> None:
+    """一份信封按**名字**编码，不按连接编码。
+
+    ⚠ 一帧最多 500 个条目，一面墙上二十块屏订同一张公开大屏——逐条
+    `send_json` 就是同一段 JSON 序列化二十遍。
+    """
+    envelope = {"topic": "dashboard:d1", "seq": 7}
+    targets = [_target(None), _target(None), _target("public:tok-1")]
+
+    frames = encode_per_name(envelope, "dashboard:d1", targets)
+
+    assert sorted(frames) == ["dashboard:d1", "public:tok-1"]
+
+
+def test_an_aliased_frame_never_carries_the_real_topic() -> None:
+    # ⚠ 真主题一个字都不许出门（ADR-0014）
+    envelope = {"topic": "dashboard:d1", "seq": 7}
+
+    frames = encode_per_name(envelope, "dashboard:d1", [_target("public:t")])
+
+    assert "dashboard:d1" not in frames["public:t"]
+    assert json.loads(frames["public:t"])["topic"] == "public:t"
+
+
+def test_an_encoded_frame_is_byte_identical_to_what_send_json_would_write() -> (
+    None
+):
+    # ⚠ 这一层只该省掉重复的序列化，不该改线上帧的字节
+    envelope = {"topic": "dashboard:d1", "seq": 7, "payload": {"名": "值"}}
+
+    frames = encode_per_name(envelope, "dashboard:d1", [_target(None)])
+
+    assert frames["dashboard:d1"] == json.dumps(envelope, separators=(",", ":"))

@@ -4,6 +4,7 @@
 真主题一个字都不出门；别名比对只要放松成前缀匹配，一枚票据就能去订别人的。
 """
 
+import json
 import uuid
 from datetime import timedelta
 
@@ -125,8 +126,12 @@ async def _open(
     async def send(message: dict[str, object]) -> None:
         sent.append(message)
 
+    async def send_frame(frame: str) -> None:
+        sent.append(json.loads(frame))
+
     handshake = await service.authenticate_public(ticket)
-    return await service.open(handshake, send=send), sent
+    opened = await service.open(handshake, send=send, send_frame=send_frame)
+    return opened, sent
 
 
 async def _act(

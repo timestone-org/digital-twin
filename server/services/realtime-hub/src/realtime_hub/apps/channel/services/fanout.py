@@ -8,6 +8,8 @@
 
 import asyncio
 import contextlib
+import json
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from lib.cache import PubSub
@@ -85,8 +87,12 @@ class FanoutListener:
             return
         # ⚠ 并发发送并**逐条兜住异常**：一条慢或已死的连接不该拖住同主题的
         # 其它订阅者，更不该让这一轮扇出整个失败
+        frames = encode_per_name(envelope, topic, targets)
         results = await asyncio.gather(
-            *(self._send(item, envelope) for item in targets),
+            *(
+                item.send_frame(frames[item.outgoing_topic(topic)])
+                for item in targets
+            ),
             return_exceptions=True,
         )
         failed = sum(1 for item in results if isinstance(item, BaseException))
@@ -99,18 +105,27 @@ class FanoutListener:
                 failed=failed,
             )
 
-    @staticmethod
-    async def _send(connection: Connection, envelope: dict[str, Any]) -> None:
-        """往一条连接发一份信封，主题按这条连接的口径改名。
 
-        ⚠ 改名不能省：匿名连接订的是它自己那个别名，而信封上写的是真主题。
-        不改的话客户端按别名登记的处理器一条也匹配不上——连着、有数据、屏上
-        全空——而且真主题就这么随帧出门了（`GrantedTopic`）。
+def encode_per_name(
+    envelope: Mapping[str, Any], topic: str, targets: Sequence[Connection]
+) -> dict[str, str]:
+    """按「这条连接看到的主题名」把信封各编码一次，返回名字 → 已编码的帧。
 
-        Args: connection, envelope。
-        """
-        outgoing = dict(envelope)
-        topic = outgoing.get("topic")
-        if isinstance(topic, str):
-            outgoing["topic"] = connection.outgoing_topic(topic)
-        await connection.send(outgoing)
+    ⚠ 一个**名字**编一次，不是一条**连接**编一次：同一份帧最多 500 个条目，
+    发给一面墙上的二十块屏，逐条 `send_json` 就是同一段 JSON 序列化二十遍。
+    ⚠ 但也不能全场只编一次：匿名连接订的是它自己那张票的别名，而信封上写的
+    是真主题。不改名的话客户端按别名登记的处理器一条也匹配不上——连着、有
+    数据、屏上全空——而且真主题就这么随帧出门了（`GrantedTopic`）。
+    ⚠ 编码口径与 `WebSocket.send_json` 逐字一致（`separators=(",", ":")`、
+    转义非 ASCII）：改它就是改线上帧的字节，而这一层只该省掉重复的序列化。
+
+    Args: envelope, topic（信封上的真主题）, targets。
+    """
+    frames: dict[str, str] = {}
+    for connection in targets:
+        name = connection.outgoing_topic(topic)
+        if name not in frames:
+            frames[name] = json.dumps(
+                {**envelope, "topic": name}, separators=(",", ":")
+            )
+    return frames
