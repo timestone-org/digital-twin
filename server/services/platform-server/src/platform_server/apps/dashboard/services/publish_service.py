@@ -30,6 +30,7 @@ from platform_server.apps.collect.services.point_frames import (
 )
 from platform_server.apps.dashboard.services.publish_plan import (
     DashboardPlan,
+    PlanLookup,
     PlanSource,
 )
 from platform_server.apps.dashboard.services.topics import topic_of
@@ -82,10 +83,15 @@ class DashboardPublisher:
         """
         watchers = await self.viewers.active()
         self._forget_gone(watchers)
+        # ⚠ 整批问一次计划：按屏逐个问的话，在看的屏有多少张，每一拍就有多少
+        # 个只读会话与多少次 BEGIN/COMMIT
+        lookups = await self.plans.load_many(tuple(watchers), self._plans)
         total = 0
         for dashboard_id, connections in watchers.items():
             is_full = self._is_new_audience(dashboard_id, connections)
-            total += await self._publish_one(dashboard_id, is_full=is_full)
+            total += await self._publish_one(
+                dashboard_id, lookups.get(dashboard_id), is_full=is_full
+            )
             self._watchers[dashboard_id] = connections
         return PublishReport(dashboards=len(watchers), items=total)
 
@@ -96,13 +102,17 @@ class DashboardPublisher:
         self._sent.clear()
 
     async def _publish_one(
-        self, dashboard_id: uuid.UUID, *, is_full: bool
+        self,
+        dashboard_id: uuid.UUID,
+        lookup: PlanLookup | None,
+        *,
+        is_full: bool,
     ) -> int:
         """推一张大屏，返回真正推出去的条目数。
 
-        Args: dashboard_id, is_full。
+        Args: dashboard_id, lookup（整批查询里属于它的那一条）, is_full。
         """
-        plan, is_reloaded = await self._plan_of(dashboard_id)
+        plan, is_reloaded = self._plan_of(dashboard_id, lookup)
         if plan is None or not plan.node_keys:
             return 0
         is_full_frame = is_full or is_reloaded
@@ -165,17 +175,14 @@ class DashboardPublisher:
             total += len(shard)
         return total
 
-    async def _plan_of(
-        self, dashboard_id: uuid.UUID
+    def _plan_of(
+        self, dashboard_id: uuid.UUID, lookup: PlanLookup | None
     ) -> tuple[DashboardPlan | None, bool]:
-        """取一张大屏的绑定计划，返回 (计划, 这一拍是否重读过)。
+        """认一张大屏这一拍的计划，返回 (计划, 这一拍是否重读过)。
 
-        Args: dashboard_id。
+        Args: dashboard_id, lookup（查不到这一条就当这张大屏已经没了）。
         """
-        lookup = await self.plans.load(
-            dashboard_id, self._plans.get(dashboard_id)
-        )
-        if lookup.plan is None:
+        if lookup is None or lookup.plan is None:
             # 大屏没了：主题对账那一支会把它的主题注销掉
             self._forget(dashboard_id)
             return None, False

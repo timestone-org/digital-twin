@@ -5,8 +5,11 @@
 """
 
 import uuid
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import Database
 from platform_server.apps.dashboard.crud import publish_crud
@@ -33,11 +36,17 @@ class PlanLookup:
 
 
 class PlanSource(Protocol):
-    """发布计划的最小查询面。真实现打库，测试用进程内假件。"""
+    """发布计划的最小查询面。真实现打库，测试用进程内假件。
 
-    async def load(
-        self, dashboard_id: uuid.UUID, cached: DashboardPlan | None
-    ) -> PlanLookup: ...
+    ⚠ 只有批量这一个形状：发布循环每一拍都要问一遍全部在看的大屏，留一个
+    单张的重载就会有人在循环里逐张调它。
+    """
+
+    async def load_many(
+        self,
+        dashboard_ids: Sequence[uuid.UUID],
+        cached: Mapping[uuid.UUID, DashboardPlan],
+    ) -> dict[uuid.UUID, PlanLookup]: ...
 
 
 class DashboardIndex(Protocol):
@@ -62,32 +71,56 @@ class DatabaseDashboardIndex:
 class DatabasePlanSource:
     """打本服务库的计划查询。
 
-    ⚠ 版本与绑定在**同一个只读会话**里读：分成两次连接的话，中间的一次保存
+    ⚠ 一拍**一个会话、一条版本查询**：在看的屏有多少张，按张各开一个会话就是
+    每一拍多少次 BEGIN/COMMIT，而绝大多数拍里一张都没变——只有版本真的变了
+    的那几张才值得再读一遍绑定。
+    ⚠ 版本与绑定仍在**同一个会话**里读：分成两次连接的话，中间的一次保存
     会让我们拿到新版本号配旧绑定，而那份错配会一直缓存到下一次版本变化。
     """
 
     database: Database
 
-    async def load(
-        self, dashboard_id: uuid.UUID, cached: DashboardPlan | None
-    ) -> PlanLookup:
-        """取一张大屏的计划；版本没变就原样把缓存还回去。
+    async def load_many(
+        self,
+        dashboard_ids: Sequence[uuid.UUID],
+        cached: Mapping[uuid.UUID, DashboardPlan],
+    ) -> dict[uuid.UUID, PlanLookup]:
+        """取一批大屏的计划；版本没变的原样把缓存还回去。
 
-        Args: dashboard_id, cached。
+        Args: dashboard_ids, cached（上一拍留下的计划，按大屏索引）。
         """
+        if not dashboard_ids:
+            return {}
         async with self.database.session() as session:
-            versions = await publish_crud.versions_of(session, [dashboard_id])
-            row_version = versions.get(dashboard_id)
-            if row_version is None:
-                return PlanLookup(plan=None, is_reloaded=False)
-            if cached is not None and cached.row_version == row_version:
-                return PlanLookup(plan=cached, is_reloaded=False)
-            node_keys = await publish_crud.realtime_node_keys_of(
-                session, dashboard_id
-            )
-        return PlanLookup(
-            plan=DashboardPlan(
-                row_version=row_version, node_keys=tuple(node_keys)
-            ),
-            is_reloaded=True,
-        )
+            versions = await publish_crud.versions_of(session, dashboard_ids)
+            lookups: dict[uuid.UUID, PlanLookup] = {}
+            for dashboard_id in dashboard_ids:
+                lookups[dashboard_id] = await _lookup_of(
+                    session,
+                    dashboard_id,
+                    row_version=versions.get(dashboard_id),
+                    cached=cached.get(dashboard_id),
+                )
+        return lookups
+
+
+async def _lookup_of(
+    session: AsyncSession,
+    dashboard_id: uuid.UUID,
+    *,
+    row_version: int | None,
+    cached: DashboardPlan | None,
+) -> PlanLookup:
+    """一张大屏的查询结果：查不到版本 = 它已经被删了。
+
+    Args: session, dashboard_id, row_version, cached。
+    """
+    if row_version is None:
+        return PlanLookup(plan=None, is_reloaded=False)
+    if cached is not None and cached.row_version == row_version:
+        return PlanLookup(plan=cached, is_reloaded=False)
+    node_keys = await publish_crud.realtime_node_keys_of(session, dashboard_id)
+    return PlanLookup(
+        plan=DashboardPlan(row_version=row_version, node_keys=tuple(node_keys)),
+        is_reloaded=True,
+    )
