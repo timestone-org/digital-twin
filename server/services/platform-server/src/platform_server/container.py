@@ -27,7 +27,7 @@ from platform_server.apps.dashboard.services import (
     load_module_catalog,
 )
 from platform_server.lease import Lease, RedisLease
-from platform_server.opcua import NodeWriter, OpcuaClient
+from platform_server.opcua import OpcuaClient
 from platform_server.realtime import RealtimeClient
 from platform_server.settings import Settings
 from platform_server.stream import RedisStream
@@ -79,7 +79,7 @@ class Container:
     # 会让「大屏发布器在跑」顺带决定「今晚抽不抽增量」
     ac_publish_lease: Lease
     ac_daily_lease: Lease
-    nodes: NodeWriter
+    nodes: OpcuaClient
     object_store: ObjectStore
     # 数据源口令的加解密器。密钥派生只在装配时做一次
     credential_cipher: CredentialCipher
@@ -154,7 +154,7 @@ def _build_cipher(settings: Settings) -> CredentialCipher:
     )
 
 
-def _build_nodes(settings: Settings) -> NodeWriter:
+def _build_nodes(settings: Settings) -> OpcuaClient:
     """打 opcua-server 内部端点的客户端。⚠ 构造不连网。
 
     Args: settings。

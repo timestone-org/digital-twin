@@ -33,6 +33,7 @@ from platform_server.apps.hvac.deps import get_ac_source_reader
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.container import IDEMPOTENCY_NAMESPACE, Container
 from platform_server.lease import Lease
+from platform_server.opcua import OpcuaClient
 from platform_server.realtime import RealtimeClient
 from platform_server.settings import Settings
 from platform_server.stream import RedisStream
@@ -139,7 +140,7 @@ def build_container(
         lease=cast(Lease, FakeDependency()),
         ac_publish_lease=cast(Lease, FakeDependency()),
         ac_daily_lease=cast(Lease, FakeDependency()),
-        nodes=FakeNodeWriter(),
+        nodes=cast(OpcuaClient, FakeNodeWriter()),
         object_store=FakeObjectStore(),
         credential_cipher=CredentialCipher("c" * 32),
     )
@@ -168,6 +169,8 @@ def test_the_external_source_is_closed_before_the_connection_pool() -> None:
         "pubsub",
         "snapshots",
         "lease",
+        "realtime",
+        "opcua",
         "ac_source",
         "history_database",
         "viewer_database",

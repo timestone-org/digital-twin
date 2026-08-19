@@ -36,6 +36,13 @@ class FakeNodeWriter:
     failure: Exception | None = None
     write_errors: dict[uuid.UUID, str] = field(default_factory=dict)
 
+    # 关停钩子会关它——假件也得关得掉，否则「装了就要关」那条契约测不出来
+    is_closed: bool = False
+
+    async def close(self) -> None:
+        """记下自己被关过。"""
+        self.is_closed = True
+
     def add(
         self,
         instance_id: uuid.UUID,

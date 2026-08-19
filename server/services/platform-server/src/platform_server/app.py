@@ -62,6 +62,7 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
             startup_order=10,
         ),
         *_client_hooks(container),
+        *_http_hooks(container),
         *_pool_hooks(container),
     )
 
@@ -102,6 +103,28 @@ def _client_hooks(container: Container) -> tuple[LifespanHook, ...]:
         LifespanHook(
             name="lease",
             shutdown=container.lease.close,
+            shutdown_order=97,
+        ),
+    )
+
+
+def _http_hooks(container: Container) -> tuple[LifespanHook, ...]:
+    """与 Redis 那批同批关的：两份内部 HTTP 客户端。
+
+    ⚠ 它们各持一个连接池、一个进程一份且长活，不关就是退出时留下两组还开着
+    的 socket。
+
+    Args: container。
+    """
+    return (
+        LifespanHook(
+            name="realtime",
+            shutdown=container.realtime.close,
+            shutdown_order=97,
+        ),
+        LifespanHook(
+            name="opcua",
+            shutdown=container.nodes.close,
             shutdown_order=97,
         ),
     )

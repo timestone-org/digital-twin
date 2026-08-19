@@ -273,6 +273,7 @@ async def _release(container: Container) -> None:
     Args: container。
     """
     await container.stream.close()
+    await container.nodes.close()
     await container.ac_publish_lease.close()
     await container.ac_daily_lease.close()
     await container.ac_source.dispose()
