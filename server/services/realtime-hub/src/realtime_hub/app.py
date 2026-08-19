@@ -51,7 +51,11 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
 
     Args: container。
     """
-    return _channel_hooks(container) + _store_hooks(container)
+    return (
+        _channel_hooks(container)
+        + _client_hooks(container)
+        + _store_hooks(container)
+    )
 
 
 def _channel_hooks(container: Container) -> tuple[LifespanHook, ...]:
@@ -88,6 +92,28 @@ def _channel_hooks(container: Container) -> tuple[LifespanHook, ...]:
             name="connections",
             shutdown=container.connections.close_all,
             shutdown_order=10,
+        ),
+    )
+
+
+def _client_hooks(container: Container) -> tuple[LifespanHook, ...]:
+    """两份打 auth-server 的 HTTP 客户端。
+
+    ⚠ 它们各持一个连接池、一个进程一份且长活，不关就是退出时留下两组还开着
+    的 socket。停在连接摘完之后：还在握手的那几条要用它取权限码。
+
+    Args: container。
+    """
+    return (
+        LifespanHook(
+            name="user_codes",
+            shutdown=container.user_codes.close,
+            shutdown_order=20,
+        ),
+        LifespanHook(
+            name="code_catalog",
+            shutdown=container.code_catalog.close,
+            shutdown_order=20,
         ),
     )
 

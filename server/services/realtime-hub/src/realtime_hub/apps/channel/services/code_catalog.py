@@ -52,6 +52,7 @@ class CodeCatalog:
         # 传输层留成可替换的：用例要验的是解析与失败处置，不是 httpx 本身。
         # ⚠ 生产路径上它恒为 None，走 httpx 自己的默认传输。
         self._transport: httpx.AsyncBaseTransport | None = None
+        self._http: httpx.AsyncClient | None = None
 
     async def known_codes(self) -> frozenset[str]:
         """取全部已登记的权限码。
@@ -61,17 +62,13 @@ class CodeCatalog:
         ⚠ 只重试**这一层不做**：一条链路只有一层负责重试，重试归推送方。
         """
         try:
-            async with httpx.AsyncClient(
-                base_url=self._base_url,
-                timeout=self._timeout_s,
-                transport=self._transport,
-            ) as client:
-                response = await client.get(
-                    CODES_PATH, headers={"X-Service-Key": self._service_key}
-                )
-                response.raise_for_status()
-                envelope = _CodesEnvelope.model_validate(response.json())
-                return frozenset(envelope.data.codes)
+            client = self._client()
+            response = await client.get(
+                CODES_PATH, headers={"X-Service-Key": self._service_key}
+            )
+            response.raise_for_status()
+            envelope = _CodesEnvelope.model_validate(response.json())
+            return frozenset(envelope.data.codes)
         except (httpx.HTTPError, ValidationError, ValueError) as error:
             # ⚠ 不记异常里的响应体：它可能带着别的服务的内部信息
             _logger.error(
@@ -83,3 +80,26 @@ class CodeCatalog:
             raise CodeCatalogUnavailable(
                 "无法校验权限码，请稍后重试"
             ) from error
+
+    def _client(self) -> httpx.AsyncClient:
+        """取那份长活的客户端；第一次要用时才建。
+
+        ⚠ **一个进程一份，不是一次调用一份**：`httpx.AsyncClient` 自带连接池，
+        每次调用现造一个再关掉，等于每次调用都重新握一次 TCP 手——而本客户端
+        挂在推送方**每一次登记主题**的同步路径上。
+        ⚠ 懒建而不是在 `__init__` 里建：装配跑在事件循环之外，而且传输层是
+        构造之后才被替换的（用例注入假件那一步）。
+        """
+        if self._http is None:
+            self._http = httpx.AsyncClient(
+                base_url=self._base_url,
+                timeout=self._timeout_s,
+                transport=self._transport,
+            )
+        return self._http
+
+    async def close(self) -> None:
+        """关掉连接池。关停钩子里调，关完再用会现建一份新的。"""
+        http, self._http = self._http, None
+        if http is not None:
+            await http.aclose()
