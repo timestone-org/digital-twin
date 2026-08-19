@@ -110,15 +110,21 @@
 
   // 角括号：四角 L 形，用背景渐变画，全程在元素内、不被 overflow:hidden 裁掉。
   // 卡片版用 --dt-bracket-fill 保住卡片底色；浮层版留透明，画布全幅。
+  // 长度与配色接「四角」那组旋钮：另起一套写死值的话，这一档下角标尺寸 / 角标色 /
+  // 角标透明度三个旋钮全成了「调了没反应」。
   .dt-module--card.dt-card-border--bracket,
   .dt-module__border.dt-card-border--bracket {
+    // 这一档自己就是一套四角画法，再叠 .dt-corners 的小角标就是同一处画两遍
+    --card-corner-display: none;
+    // ⚠ 角标辉光这一档接不了：drop-shadow 只能挂在卡片自己身上，描出来的是整张卡片的
+    // 轮廓光而不是四角光
     --dt-bracket-color: color-mix(
       in srgb,
-      var(--card-corner-color) 88%,
+      var(--card-corner-color) calc(var(--card-corner-opacity, 0.88) * 100%),
       transparent
     );
     --dt-bracket-th: 2px;
-    --dt-bracket-len: 18px;
+    --dt-bracket-len: var(--card-corner-size, 18px);
     --dt-bracket-fill: transparent;
     border-color: transparent;
     border-radius: 0;
@@ -147,40 +153,58 @@
     --dt-bracket-fill: var(--card-bg);
   }
 
-  // 切角：浮层版只切边框、不盖画布，故底色留透明
+  // 切角：左上 / 右下各削平一角。四条直边走 border-image（只画在边框区），两条斜边由
+  // 背景渐变补上，卡片版再在最底下垫一层卡片底色。
+  // ⚠ 描边**不能**用「padding-box 底色 + border-box 渐变」那套渐变描边写法：卡片底色是
+  // 半透明的，垫在下面那层渐变会整片透上来，把卡片糊成一块亮面而不是一圈描边。
+  .dt-module--card.dt-card-border--cut,
   .dt-module__border.dt-card-border--cut {
-    background: transparent;
-    border: 1px solid
-      color-mix(in srgb, var(--card-corner-color) 60%, var(--card-border));
-    clip-path: polygon(
-      10px 0,
-      100% 0,
-      100% calc(100% - 10px),
-      calc(100% - 10px) 100%,
-      0 100%,
-      0 10px
+    // 切角尺寸与角标尺寸同一个旋钮：这一档下两者是同一处装饰，各走各的必然对不齐
+    --dt-cut-len: var(--card-corner-size, 10px);
+    --dt-cut-stroke: color-mix(
+      in srgb,
+      var(--card-corner-color) 66%,
+      var(--card-border)
     );
+    // 一条压在斜切边上的 1px 线：135° 的渐变轴垂直于斜边，故 50% 处正是那条边
+    --dt-cut-edge: linear-gradient(
+      135deg,
+      transparent calc(50% - 0.5px),
+      var(--dt-cut-stroke) calc(50% - 0.5px),
+      var(--dt-cut-stroke) calc(50% + 0.5px),
+      transparent calc(50% + 0.5px)
+    );
+    --dt-cut-edges:
+      var(--dt-cut-edge) left top / var(--dt-cut-len) var(--dt-cut-len)
+        no-repeat,
+      var(--dt-cut-edge) right bottom / var(--dt-cut-len) var(--dt-cut-len)
+        no-repeat;
+    border-style: solid;
+    // border-image 不认圆角，斜角也由 clip-path 切，故显式归零
+    border-radius: 0;
+    border-image: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--card-corner-color) 80%, transparent),
+        color-mix(in srgb, var(--card-border) 60%, transparent) 45%,
+        color-mix(in srgb, var(--card-corner-color) 68%, transparent)
+      )
+      1;
+    box-shadow: none;
+    clip-path: polygon(
+      var(--dt-cut-len) 0,
+      100% 0,
+      100% calc(100% - var(--dt-cut-len)),
+      calc(100% - var(--dt-cut-len)) 100%,
+      0 100%,
+      0 var(--dt-cut-len)
+    );
+    background: var(--dt-cut-edges);
   }
 
+  // 卡片版在两条斜边之下再垫一层卡片底色；浮层版不垫，模块画布在其下全幅
   .dt-module--card.dt-card-border--cut {
-    border-color: transparent;
     background:
-      linear-gradient(var(--card-bg), var(--card-bg)) padding-box,
-      linear-gradient(
-          135deg,
-          color-mix(in srgb, var(--card-corner-color) 72%, transparent),
-          color-mix(in srgb, var(--card-border) 34%, transparent) 42%,
-          color-mix(in srgb, var(--card-corner-color) 60%, transparent)
-        )
-        border-box;
-    clip-path: polygon(
-      10px 0,
-      100% 0,
-      100% calc(100% - 10px),
-      calc(100% - 10px) 100%,
-      0 100%,
-      0 10px
-    );
+      var(--dt-cut-edges), linear-gradient(var(--card-bg), var(--card-bg));
   }
 
   // 浮层是透明的，而一格是 overflow:hidden——向外扩散的 box-shadow 会被裁掉，
@@ -209,6 +233,14 @@
 
   // 四角发光角标。形状 / 尺寸 / 辉光 / 透明度 / 偏移全部变量化，每个兜底就是平台现值。
   // box-sizing 显式写出：dot 变体「尺寸含 1px 边框」的语义不该依赖 preflight。
+  //
+  // ⚠ 偏移必须夹到 0 以上：一格是 overflow:hidden，负偏移会把 L 的两条笔画连同辉光整个
+  // 裁到框外，屏幕上一点痕迹都不剩，表现是「四角怎么调都没变化」。@dt/ui 的 DtCard 那套
+  // -1px 骑在边框上的写法只在不裁剪的容器里成立，照搬进这里就是全裁光。
+  .dt-corners {
+    --dt-corner-off: max(0px, var(--card-corner-off, 0px));
+  }
+
   .dt-corners::before,
   .dt-corners::after,
   .dt-corners > .dt-corner-b::before,
@@ -220,21 +252,26 @@
     width: var(--card-corner-size, 10px);
     height: var(--card-corner-size, 10px);
     border: 0 solid var(--card-corner-color);
-    box-shadow: 0 0 var(--card-corner-glow, 5px) var(--card-corner-color);
+    // ⚠ 辉光走 drop-shadow 而不是 box-shadow：box-shadow 描的是整只 10×10 盒子的方形
+    // 轮廓，而角标只画了其中两条边，糊出来的是一团与形状对不上的方光晕；drop-shadow
+    // 取的是渲染后的 alpha，光晕才贴着 L 形（与小方点）走
+    filter: drop-shadow(
+      0 0 var(--card-corner-glow, 5px) var(--card-corner-color)
+    );
     opacity: var(--card-corner-opacity, 0.9);
     pointer-events: none;
   }
 
   .dt-corners::before {
-    top: var(--card-corner-off, -1px);
-    left: var(--card-corner-off, -1px);
+    top: var(--dt-corner-off);
+    left: var(--dt-corner-off);
     border-top-width: 1px;
     border-left-width: 1px;
   }
 
   .dt-corners::after {
-    top: var(--card-corner-off, -1px);
-    right: var(--card-corner-off, -1px);
+    top: var(--dt-corner-off);
+    right: var(--dt-corner-off);
     border-top-width: 1px;
     border-right-width: 1px;
   }
@@ -247,55 +284,34 @@
   }
 
   .dt-corners > .dt-corner-b::before {
-    bottom: var(--card-corner-off, -1px);
-    left: var(--card-corner-off, -1px);
+    bottom: var(--dt-corner-off);
+    left: var(--dt-corner-off);
     border-bottom-width: 1px;
     border-left-width: 1px;
   }
 
   .dt-corners > .dt-corner-b::after {
-    right: var(--card-corner-off, -1px);
-    bottom: var(--card-corner-off, -1px);
+    right: var(--dt-corner-off);
+    bottom: var(--dt-corner-off);
     border-bottom-width: 1px;
     border-right-width: 1px;
   }
 
-  // 小方点变体：结构一行不动，只把四边描出来——配 box-sizing:border-box，
-  // 1px 边框从四面吃满 4px 的盒子，就成了一个实心发光小方块。
+  // 小方点变体：结构一行不动，把 L 的两条笔画换成一整块实心底色。
+  // ⚠ 底色而不是「四边各描 1px」：描边法只在 4px 这一档看着像实心，尺寸一调大就露出
+  // 中间的空心，成了个小方框——而那正是「角标尺寸」这个旋钮最常被调的方向。
   // ⚠ 跨文件约定：正因为同一个变量在 L 形与方点下要有两套兜底，tokens 里**刻意不声明**
-  // --card-corner-size / -opacity / -off。声明了这三行兜底就全成死代码，
-  // 方点会退化成 10px / -1px 的大角标。
+  // --card-corner-size / --card-corner-opacity。声明了这两行兜底就全成死代码，
+  // 方点会退化成 10px 的大角标。
   .dt-corners--dot::before,
   .dt-corners--dot::after,
   .dt-corners--dot > .dt-corner-b::before,
   .dt-corners--dot > .dt-corner-b::after {
     width: var(--card-corner-size, 4px);
     height: var(--card-corner-size, 4px);
-    border-width: 1px;
+    border-width: 0;
+    background: var(--card-corner-color);
     opacity: var(--card-corner-opacity, 0.8);
-  }
-
-  // 方点的偏移兜底改 0（贴框内沿）：一格是 overflow:hidden，出框的方点连辉光一起被裁掉。
-  // 只改 var() 的兜底、不写 `.dt-corners--dot{--card-corner-off:0}`——后者在「类挂在浮层、
-  // 变量注入在根」时会用直接匹配压掉继承来的用户值。
-  .dt-corners--dot::before {
-    top: var(--card-corner-off, 0px);
-    left: var(--card-corner-off, 0px);
-  }
-
-  .dt-corners--dot::after {
-    top: var(--card-corner-off, 0px);
-    right: var(--card-corner-off, 0px);
-  }
-
-  .dt-corners--dot > .dt-corner-b::before {
-    bottom: var(--card-corner-off, 0px);
-    left: var(--card-corner-off, 0px);
-  }
-
-  .dt-corners--dot > .dt-corner-b::after {
-    right: var(--card-corner-off, 0px);
-    bottom: var(--card-corner-off, 0px);
   }
 
   // 常驻动效整条关掉：压到 0.001ms 仍可能停在中间态
