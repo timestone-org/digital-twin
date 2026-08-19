@@ -67,13 +67,12 @@ async def load_identity(session: AsyncSession, user: User) -> Identity:
     Args: session, user。
     """
     await _ensure_role_loaded(session, user)
-    effective = await user_crud.load_permissions(session, user)
-    builtin = await permission_crud.builtin_codes(session)
+    effective = await user_crud.load_authorization(session, user)
     return Identity(
         user=user,
         role_codes=effective.role_codes,
         direct_codes=effective.direct_codes,
-        builtin_codes=builtin,
+        builtin_codes=effective.builtin_codes,
     )
 
 

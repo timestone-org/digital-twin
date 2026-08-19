@@ -42,13 +42,6 @@ class PermissionCrud(CrudBase[Permission]):
         )
         return {row.code: row.id for row in rows.all()}
 
-    async def builtin_codes(self, session: AsyncSession) -> frozenset[str]:
-        """内置码集合。全权判定以它为基准，手工建码不影响判定。"""
-        result = await session.execute(
-            select(Permission.code).where(Permission.is_builtin.is_(True))
-        )
-        return frozenset(result.scalars().all())
-
     async def count_builtin(self, session: AsyncSession) -> int:
         """内置码数量。全权账号计数用它做门槛。"""
         result = await session.execute(

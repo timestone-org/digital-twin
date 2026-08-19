@@ -1,11 +1,12 @@
 """用户数据访问。只做查询与挂载，不提交——事务边界归 service 层。"""
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 from auth_server.apps.auth.models import (
@@ -26,10 +27,12 @@ DEFAULT_ORDER = (User.created_at.desc(), User.id.desc())
 
 @dataclass(frozen=True)
 class EffectivePermissions:
-    """一个用户的权限来源拆分。`all_codes` 是两者的并集。"""
+    """一个用户的权限来源拆分，外加全权判定的基准码集。"""
 
     role_codes: frozenset[str]
     direct_codes: frozenset[str]
+    # 内置码全集。全权判定以它为基准，与前两列同一条语句取回
+    builtin_codes: frozenset[str]
 
     @property
     def all_codes(self) -> frozenset[str]:
@@ -47,11 +50,16 @@ class UserCrud(CrudBase[User]):
     ) -> User | None:
         """按主键取用户并预加载角色，避免序列化时触发惰性加载。
 
+        ⚠ 单行的多对一用 `joinedload` 而不是 `selectinload`：后者是**另发一条
+        语句**去捞角色，而本方法在 `/verify` 里被每一个请求各走一次——省下的
+        那一次往返乘的是全站请求量。列表面仍用 selectinload（见
+        `build_query`）：那里一条 IN 查询就带回整页的角色。
+
         Args: session, user_id。
         """
         result = await session.execute(
             select(User)
-            .options(selectinload(User.role))
+            .options(joinedload(User.role))
             .where(User.id == user_id)
         )
         return result.scalars().one_or_none()
@@ -106,33 +114,21 @@ class UserCrud(CrudBase[User]):
         )
         return int(result.scalar_one())
 
-    async def load_permissions(
+    async def load_authorization(
         self, session: AsyncSession, user: User
     ) -> EffectivePermissions:
-        """取该用户的角色权限码与直权码。
+        """一条语句取回角色码、直权码与内置码基准。
+
+        ⚠ 三者合成一条而不是各查一遍：这三次查询原本挂在 `/verify` 上，而
+        `/verify` 是边缘对**每一个**请求都要打的子请求——省下的两次往返乘的
+        是全站请求量。合并不改语义：三列各自独立判定，互不影响。
 
         Args: session, user。
         """
-        role_rows = await session.execute(
-            select(Permission.code)
-            .join(
-                RolePermission,
-                RolePermission.permission_id == Permission.id,
-            )
-            .where(RolePermission.role_id == user.role_id)
+        result = await session.execute(
+            _authorization_query(role_id=user.role_id, user_id=user.id)
         )
-        direct_rows = await session.execute(
-            select(Permission.code)
-            .join(
-                UserPermission,
-                UserPermission.permission_id == Permission.id,
-            )
-            .where(UserPermission.user_id == user.id)
-        )
-        return EffectivePermissions(
-            role_codes=frozenset(role_rows.scalars().all()),
-            direct_codes=frozenset(direct_rows.scalars().all()),
-        )
+        return _split_codes(result.tuples().all())
 
     async def replace_direct_permissions(
         self,
@@ -215,6 +211,65 @@ class UserCrud(CrudBase[User]):
             .where(func.lower(column) == value.strip().lower())
         )
         return int(result.scalar_one()) > 0
+
+
+def _authorization_query(
+    *, role_id: uuid.UUID, user_id: uuid.UUID
+) -> Select[tuple[str, bool, bool, bool]]:
+    """选出「该角色的 ∪ 该用户直授的 ∪ 内置的」权限码，并标出各自的来源。
+
+    ⚠ 两条关联表走 `LEFT JOIN` 且把身份条件写进 ON 而不是 WHERE：写进 WHERE
+    会把没被这个人持有的内置码一起筛掉，于是全权判定的基准凭空缩水。
+
+    Args: role_id, user_id。
+    """
+    return (
+        select(
+            Permission.code,
+            Permission.is_builtin,
+            RolePermission.role_id.is_not(None).label("by_role"),
+            UserPermission.user_id.is_not(None).label("by_user"),
+        )
+        .outerjoin(
+            RolePermission,
+            (RolePermission.permission_id == Permission.id)
+            & (RolePermission.role_id == role_id),
+        )
+        .outerjoin(
+            UserPermission,
+            (UserPermission.permission_id == Permission.id)
+            & (UserPermission.user_id == user_id),
+        )
+        .where(
+            Permission.is_builtin.is_(True)
+            | RolePermission.role_id.is_not(None)
+            | UserPermission.user_id.is_not(None)
+        )
+    )
+
+
+def _split_codes(
+    rows: Sequence[tuple[str, bool, bool, bool]],
+) -> EffectivePermissions:
+    """把带来源标记的行摊成三个码集。
+
+    Args: rows。
+    """
+    role_codes: set[str] = set()
+    direct_codes: set[str] = set()
+    builtin_codes: set[str] = set()
+    for code, is_builtin, by_role, by_user in rows:
+        if by_role:
+            role_codes.add(code)
+        if by_user:
+            direct_codes.add(code)
+        if is_builtin:
+            builtin_codes.add(code)
+    return EffectivePermissions(
+        role_codes=frozenset(role_codes),
+        direct_codes=frozenset(direct_codes),
+        builtin_codes=frozenset(builtin_codes),
+    )
 
 
 user_crud = UserCrud()
