@@ -34,7 +34,7 @@ function editingGroups(mod: string): ShortcutGroup[] {
       items: [
         { keys: `${mod} Z`, desc: '撤销' },
         { keys: `${mod} ⇧ Z  /  ${mod} Y`, desc: '重做' },
-        { keys: `${mod} C`, desc: '复制选中节点' },
+        { keys: `${mod} C`, desc: '复制选中节点（可切到别的大屏粘贴）' },
         { keys: `${mod} V`, desc: '粘贴（选中容器时粘入其中）' },
         { keys: `${mod} D`, desc: '再制选中节点' },
         { keys: 'Delete  /  ⌫', desc: '删除选中节点' },

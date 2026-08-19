@@ -3,7 +3,7 @@
  * 双向同步，加上设置面各改动到元数据草稿的落笔。
  * ⚠ 只在大屏 id 变化时从载荷重播吸附配置：保存后重播会把用户刚改的吸附又弹回去。
  */
-import { computed, provide, ref, watch, type Ref } from 'vue'
+import { computed, provide, ref, watch, type ComputedRef, type Ref } from 'vue'
 import type {
   CardChrome,
   DashboardPayload,
@@ -18,11 +18,14 @@ import {
   type SnapConfig,
 } from '@/features/dashboard/canvasSnap'
 import { EDITOR_PROJECT_ID_KEY } from '@/features/dashboard/editorContext'
+import { parseInteractionRules } from '@/features/dashboard/interactionRules'
 import type { EditorMeta } from './useEditorMeta'
 
 export interface EditorChrome {
   snap: Ref<SnapConfig>
   grid: Ref<EditorGridConfig>
+  /** 联动规则表：右栏读它，跨屏复制也读它——单一真源是元数据草稿。 */
+  rules: ComputedRef<InteractionRule[]>
   setSnap: (patch: Partial<SnapConfig>) => void
   setGrid: (patch: Partial<EditorGridConfig>) => void
   setField: (
@@ -92,6 +95,12 @@ export function useEditorChrome(
 ): EditorChrome {
   const snap = ref(normalizeSnapConfig(null))
   const grid = ref(normalizeEditorGrid(null))
+  // 规则住在大屏级 chromeJson；读**草稿**而不是已保存的载荷，右栏一改画布当场跟着变
+  const rules = computed(() =>
+    meta.draft.value === null
+      ? []
+      : parseInteractionRules(meta.draft.value.chromeJson),
+  )
 
   // 属性面板里按项目取数的控件（挑另一张大屏这类）只认这个注入键
   provide(
@@ -121,6 +130,7 @@ export function useEditorChrome(
   return {
     snap,
     grid,
+    rules,
     setSnap: (patch) => {
       snap.value = normalizeSnapConfig({ ...snap.value, ...patch })
       persist()

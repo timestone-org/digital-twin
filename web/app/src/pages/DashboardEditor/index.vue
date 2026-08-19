@@ -91,6 +91,8 @@ const arrange = createArrangeActions({
   design: () => design.value,
   steps: () => snapStep(design.value, grid.value, snap.value),
   dashboardId: () => file.dashboard.value?.id ?? null,
+  chrome,
+  notify: (message) => toast.success(message),
 })
 
 const surface = createEditorSurface({
@@ -235,7 +237,7 @@ onUnmounted(file.dispose)
           :selected="editor.selected.value"
           :nodes="editor.nodes.value"
           :get-manifest="getManifest"
-          :rules="inspector.rules.value"
+          :rules="chrome.rules.value"
           :draft="meta.draft.value"
           :snap="snap"
           :grid="grid"
