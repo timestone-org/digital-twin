@@ -19,7 +19,7 @@ permissions:
 jobs:
   mutation:
     name: 变异测试（核心域逻辑）
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup-server
@@ -47,7 +47,7 @@ jobs:
 
   a11y:
     name: 可访问性全站扫描
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup-web
@@ -68,7 +68,7 @@ jobs:
 
   images:
     name: 镜像内容断言
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -109,7 +109,7 @@ jobs:
     name: 失败即开 issue
     if: failure()
     needs: [mutation, a11y, images]
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: 开 issue

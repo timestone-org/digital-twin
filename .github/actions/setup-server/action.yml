@@ -14,11 +14,10 @@ runs:
       uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9
       with:
         version: '0.11.28'
-        # ⚠ 自托管运行器是常驻的，`~/.cache/uv` 本来就留在盘上，装依赖照样是
-        # 从本地 store 硬链。再叠一层 Actions 缓存只会把归档解到**已经存在**
-        # 的文件上：tar 报 `Cannot open: File exists` + 退出码 2，
-        # 每轮一条红字警告，而它什么也没加速。
-        enable-cache: false
+        # ⚠ 运行器是一次性的，`~/.cache/uv` 每轮从零开始——这层缓存省的是整份
+        # 依赖的下载。缓存键跟着锁文件走，锁文件不变才命中。
+        enable-cache: true
+        cache-dependency-glob: 'server/uv.lock'
 
     # ⚠ --frozen：锁文件与 pyproject 不一致时直接失败，而不是悄悄解出另一套版本
     - name: 装依赖

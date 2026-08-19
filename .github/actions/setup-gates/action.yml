@@ -4,15 +4,15 @@ description: 只装 uv 与一个 3.12 解释器。闸门脚本只用标准库，
 runs:
   using: composite
   steps:
-    # ⚠ 不能用运行器自带的 `python3`：自托管运行器上它可能是 3.9/3.10，
-    # 而闸门脚本用了 3.12 的语法（`type` 别名、`X | Y` 形式的 isinstance）。
-    # GitHub 托管镜像上它恰好是 3.12，于是这类差异只会在自托管上炸。
+    # ⚠ 不靠运行器自带的 `python3`：闸门脚本用了 3.12 的语法（`type` 别名、
+    # `X | Y` 形式的 isinstance），而镜像里那个版本随镜像换。自己装一个钉死的，
+    # 差异就不会跟着 runner 镜像升级悄悄出现。
     - name: 装 uv
       uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9
       with:
         version: '0.11.28'
-        # 理由同 setup-server：常驻运行器上这层缓存只会解压失败
-        enable-cache: false
+        # 运行器是一次性的，装什么都得重下——这层缓存是净赚
+        enable-cache: true
 
     - name: 备一个 3.12
       shell: bash

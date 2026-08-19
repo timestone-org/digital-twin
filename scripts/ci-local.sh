@@ -5,10 +5,12 @@
 # 绿灯由这里出**，`--all` 跑的就是那条流水线本身（同一份 ci.yml、同一批闸门
 # 脚本）。规矩见 docs/agents/ci-gates.md §4。
 #
-# ⚠ 流水线跑在自托管运行器上（runs-on: [self-hosted, Linux, X64]），
-# .actrc 里把这组标签映射到同档次的本地镜像。
-# act 与真实运行器的唯一实质差异是服务容器的健康检查：GitHub 会等 health-cmd
-# 通过再跑步骤，act 不会——流水线里因此有一步 wait_for_deps.py 显式等待。
+# ⚠ 流水线跑在 GitHub 托管运行器上（runs-on: ubuntu-24.04），.actrc 里把这个
+# 标签映射到同一档的本地镜像。
+# act 与真实运行器有两处实质差异：一是服务容器的健康检查——GitHub 会等
+# health-cmd 通过再跑步骤，act 不会，流水线里因此有一步 wait_for_deps.py 显式
+# 等待；二是 act 没有真的缓存后端，`enable-cache` / `cache: pnpm` 那几层在本地
+# 既不命中也不保存，只有推上去才验得到。
 #
 #   scripts/ci-local.sh --fast          只跑闸门脚本（秒级，不起容器）
 #   scripts/ci-local.sh                 act 逐个跑第 1–2 段的作业

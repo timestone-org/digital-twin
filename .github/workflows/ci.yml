@@ -3,7 +3,7 @@
 #
 # ⚠ 不收 pull_request：分支上的验证在本地，`scripts/ci-local.sh --all` 用 act
 # 跑的就是这条流水线（同一份 YAML、同一批闸门脚本），改一次就能当场知道红绿，
-# 不必推一次等一轮自托管 runner 的队列。两个触发器都收全部分支还会让一个开着
+# 不必推一次等一轮排队。两个触发器都收全部分支还会让一个开着
 # PR 的分支每推一次跑**两条**完整流水线（push 与 pull_request 分属不同
 # concurrency 组，互不取消），队列会被拖死——真发生过，45 个 run 积压 9 小时。
 #
@@ -40,21 +40,11 @@ jobs:
   # ============ 第 1 段：秒级闸门 ============
   secrets:
     name: 1·机密扫描
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-
-      # ⚠ 自托管 runner 的工作目录是**持久**的，`refs/pull/*` 只增不减。压缩合并
-      # 会给同一份内容换一个 SHA，于是原始提交作为孤儿留在这里——它们在仓库里
-      # 根本不存在，却每次都被扫。后果是按指纹豁免的误报永远对不上号（指纹钉的
-      # 是压缩后的那个 SHA），红灯一直亮着，而仓库本身是干净的。
-      # 实测：留着这些 ref 扫 155 个提交报 2 条，删掉后扫 134 个提交、0 条。
-      - name: 清掉 runner 上残留的 PR ref
-        run: |
-          git for-each-ref --format='delete %(refname)' refs/pull refs/remotes/pull \
-            | git update-ref --stdin
 
       # 写进版本库的密钥等于泄漏的密钥，而且历史层删不掉——扫全历史
       - name: gitleaks
@@ -66,23 +56,9 @@ jobs:
 
   hygiene:
     name: 1·仓库卫生
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      # ⚠ 自托管运行器不像 GitHub 托管镜像那样什么都预装好：缺一样就是一条
-      # 与「闸门真的红了」长得一样的失败。先把前提说清楚。
-      - name: 运行器工具自检
-        run: |
-          missing=()
-          for tool in git curl tar docker node; do
-            command -v "$tool" > /dev/null 2>&1 || missing+=("$tool")
-          done
-          if [ ${#missing[@]} -gt 0 ]; then
-            echo "::error::运行器缺少：${missing[*]}（见 docs/agents/ci-gates.md §6）"
-            exit 1
-          fi
-          echo "运行器工具齐全"
 
       - uses: ./.github/actions/setup-gates
       - name: 供应链与仓库卫生（Action 按 SHA 固定、禁 latest、锁文件在仓）
@@ -90,7 +66,7 @@ jobs:
 
   structure:
     name: 1·结构与规范闸
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup-gates
@@ -135,7 +111,7 @@ jobs:
   server-static:
     name: 2·后端格式/lint/类型
     needs: [secrets, hygiene, structure]
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup-server
@@ -174,7 +150,7 @@ jobs:
   web-static:
     name: 2·前端格式/lint/类型
     needs: [secrets, hygiene, structure]
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup-web
@@ -197,7 +173,7 @@ jobs:
   server-test:
     name: 3·后端测试与覆盖率
     needs: [server-static]
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
 
     # ⚠ L2/L3 必须打真实 Postgres：在 SQLite 上全绿的迁移与查询可以在生产上
     # 直接失败，而这类「测试通过但线上炸」是公网发布最不可接受的失败模式
@@ -496,7 +472,7 @@ jobs:
   web-test:
     name: 3·前端测试与覆盖率
     needs: [web-static]
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -538,7 +514,7 @@ jobs:
   contracts:
     name: 4·契约与迁移可逆性
     needs: [server-test]
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: timescale/timescaledb:2.17.2-pg16
@@ -663,7 +639,7 @@ jobs:
   web-build:
     name: 4·前端构建与包体预算
     needs: [web-test]
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup-web
@@ -683,7 +659,7 @@ jobs:
   supply-chain:
     name: 4·依赖漏洞与许可证
     needs: [server-static, web-static]
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup-server
@@ -721,7 +697,7 @@ jobs:
       - contracts
       - web-build
       - supply-chain
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
     steps:
       # 只有这个作业需要设成分支保护里的必需检查：任一上游没成功即失败，
       # 包括被跳过的——跳过的闸门不算通过
