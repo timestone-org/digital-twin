@@ -4,6 +4,7 @@
 信封字典出，传输由调用方注入。真实连接那条路径另有契约用例守。
 """
 
+import json
 import uuid
 from datetime import timedelta
 
@@ -161,8 +162,11 @@ async def _open(
     async def send(message: dict[str, object]) -> None:
         sent.append(message)
 
+    async def send_frame(frame: str) -> None:
+        sent.append(json.loads(frame))
+
     handshake = await service.authenticate(_token())
-    connection = await service.open(handshake, send=send)
+    connection = await service.open(handshake, send=send, send_frame=send_frame)
     return connection, sent
 
 
@@ -321,6 +325,9 @@ def test_expiry_and_reauth_windows() -> None:
     async def send(_message: dict[str, object]) -> None:
         return None
 
+    async def send_frame(_frame: str) -> None:
+        return None
+
     connection = Connection(
         id=uuid.uuid4(),
         user_id=uuid.uuid4(),
@@ -328,6 +335,7 @@ def test_expiry_and_reauth_windows() -> None:
         expires_at=now + timedelta(seconds=REAUTH_LEAD_S - 1),
         checked_at=now,
         send=send,
+        send_frame=send_frame,
     )
     assert needs_reauth(connection, now=now)
     assert not is_expired(connection, now=now)

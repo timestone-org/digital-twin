@@ -8,6 +8,7 @@ from realtime_hub.apps.channel.services.connections import (
     ConnectionRegistry,
     GrantedTopic,
     SendFn,
+    SendFrameFn,
 )
 from realtime_hub.apps.channel.services.fanout import FanoutListener
 from realtime_hub.apps.channel.services.grants import (
@@ -51,6 +52,7 @@ __all__ = [
     "PublicGrantRejected",
     "PublishService",
     "SendFn",
+    "SendFrameFn",
     "SessionDeps",
     "SessionService",
     "SubscriptionJournal",

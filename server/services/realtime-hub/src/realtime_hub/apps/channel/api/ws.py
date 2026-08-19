@@ -90,9 +90,16 @@ async def _serve(
     async def send(message: dict[str, object]) -> None:
         await websocket.send_json(message)
 
+    async def send_frame(frame: str) -> None:
+        # ⚠ 数据帧已经在扇出那一层编码过了，这里只负责发出去：再走一次
+        # `send_json` 就等于把同一段 JSON 序列化两遍
+        await websocket.send_text(frame)
+
     session = container.session
     try:
-        connection = await session.open(handshake, send=send)
+        connection = await session.open(
+            handshake, send=send, send_frame=send_frame
+        )
     except AnonymousQuotaExceeded:  # pragma: no cover - 并发抢名额的窄窗口
         # ⚠ 名额在 accept 之前已经问过一次，走到这里的是两条并发握手抢同一个
         # 名额那个窄窗口——驱动不出来，但漏了它就是一次未捕获异常。关闭码仍用

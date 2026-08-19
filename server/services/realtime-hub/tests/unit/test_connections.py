@@ -5,6 +5,7 @@
 长大，大屏一开几天就是纯泄漏）。
 """
 
+import json
 import uuid
 from datetime import timedelta
 
@@ -24,6 +25,9 @@ def _connection() -> tuple[Connection, list[dict[str, object]]]:
     async def send(message: dict[str, object]) -> None:
         sent.append(message)
 
+    async def send_frame(frame: str) -> None:
+        sent.append(json.loads(frame))
+
     now = utcnow()
     return (
         Connection(
@@ -33,6 +37,7 @@ def _connection() -> tuple[Connection, list[dict[str, object]]]:
             expires_at=now + timedelta(minutes=15),
             checked_at=now,
             send=send,
+            send_frame=send_frame,
         ),
         sent,
     )
@@ -110,6 +115,9 @@ def _anonymous(ticket_hash: str) -> Connection:
     async def send(_message: dict[str, object]) -> None:
         return None
 
+    async def send_frame(_frame: str) -> None:
+        return None
+
     now = utcnow()
     return Connection(
         id=uuid.uuid4(),
@@ -118,6 +126,7 @@ def _anonymous(ticket_hash: str) -> Connection:
         expires_at=now + timedelta(minutes=15),
         checked_at=now,
         send=send,
+        send_frame=send_frame,
         grant=GrantedTopic(
             ticket_hash=ticket_hash,
             alias=f"public:{ticket_hash}",

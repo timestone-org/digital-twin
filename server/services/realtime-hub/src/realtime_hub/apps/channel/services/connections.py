@@ -18,6 +18,10 @@ _logger = get_logger("realtime.connections")
 # 往这条连接发一条消息。⚠ 只声明成一个可等待的函数，不把 WebSocket 类型
 # 带进来——这一层不该认识传输，测试也才能拿一个 list.append 顶上。
 type SendFn = Callable[[dict[str, object]], Awaitable[None]]
+# 往这条连接发一帧**已经编码好的** JSON。⚠ 扇出走它而不是走 `SendFn`：一份
+# 信封最多 500 个条目，发给一面墙上的二十块屏，`send_json` 就是同一段
+# 序列化重来二十遍。控制帧仍走 `SendFn`——它们小且稀疏，不值得多一层。
+type SendFrameFn = Callable[[str], Awaitable[None]]
 # 按给定的关闭码断掉这条连接。复核任务要摘掉授权已被撤回的匿名连接，而它
 # 手上只有连接对象。⚠ 同样不认识 WebSocket。
 type CloseFn = Callable[[int], Awaitable[None]]
@@ -61,6 +65,7 @@ class Connection:
     # 上一次复核权限的时刻
     checked_at: datetime
     send: SendFn
+    send_frame: SendFrameFn
     # 匿名连接的授权；登录态连接为 None
     grant: GrantedTopic | None = None
     topics: set[str] = field(default_factory=set[str])

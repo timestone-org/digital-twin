@@ -26,6 +26,7 @@ from realtime_hub.apps.channel.services.connections import (
     ConnectionRegistry,
     GrantedTopic,
     SendFn,
+    SendFrameFn,
 )
 from realtime_hub.apps.channel.services.grants import (
     PublicGrantRegistry,
@@ -193,13 +194,19 @@ class SessionService:
         """
         return await self._connections.has_room(handshake.grant, self._quota)
 
-    async def open(self, handshake: Handshake, *, send: SendFn) -> Connection:
+    async def open(
+        self,
+        handshake: Handshake,
+        *,
+        send: SendFn,
+        send_frame: SendFrameFn,
+    ) -> Connection:
         """登记一条已鉴权的连接。
 
         ⚠ 匿名连接要过名额：一枚泄露的票据能开的连接数必须有上限，否则公开
         链接就是一条谁都能用的连接池耗尽通道（ADR-0021）。
 
-        Args: handshake, send。
+        Args: handshake, send（控制帧）, send_frame（已编码的数据帧）。
         """
         now = utcnow()
         connection = Connection(
@@ -209,6 +216,7 @@ class SessionService:
             expires_at=handshake.expires_at,
             checked_at=now,
             send=send,
+            send_frame=send_frame,
             grant=handshake.grant,
         )
         is_added = await self._connections.add(connection, quota=self._quota)
