@@ -13,9 +13,11 @@ runs:
       uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
       with:
         node-version: '24'
-        # ⚠ 不开 `cache: pnpm`：常驻运行器上 pnpm 的 store 本来就在盘上，
-        # 装依赖是从它硬链过来的。Actions 缓存这一层解压到已存在的文件上会
-        # 失败（tar 退出码 2），加速为零、噪音为一条警告。
+        # ⚠ 运行器是一次性的，pnpm 的 store 每轮从零开始——缓存它省的是整份
+        # 依赖的下载。⚠ 必须指到 `web/` 下那份锁文件：仓库根没有锁文件，
+        # 不指路 setup-node 会以「找不到锁文件」直接失败。
+        cache: pnpm
+        cache-dependency-path: web/pnpm-lock.yaml
 
     # ⚠ --frozen-lockfile：锁文件与 package.json 不一致时失败，
     # 而不是就地改锁文件——那会让 CI 装的和本地装的不是同一套

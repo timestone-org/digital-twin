@@ -48,8 +48,7 @@ E2E、a11y、变异测试不进 PR 闸门是 `testing-standard-*.md` §9 的明�
 2. **合并进 main 之后盯一眼那轮流水线**：它是最后一道真运行器上的验证，
    红了按「main 永远可发布」当场修或回滚，不许拖到下一个 PR。
 
-理由是反馈时长：本地 act 改一次就当场知道红绿，而推一次要排一轮自托管 runner
-的队列。要在真运行器上补跑一次分支，用 `ci.yml` 的 `workflow_dispatch` 手动触发，
+理由是反馈时长：本地 act 改一次就当场知道红绿，而推一次要等一轮完整流水线。要在真运行器上补跑一次分支，用 `ci.yml` 的 `workflow_dispatch` 手动触发，
 不要为了触发 CI 去造一次推送。
 
 ---
@@ -217,71 +216,39 @@ node 的 PATH（否则 JS action 的 post 步骤会把一个全绿的作业报�
 
 ---
 
-## 6. 自托管运行器的前提
+## 6. 运行器与它的前提
 
-三条流水线都跑在 `runs-on: [self-hosted, Linux, X64]` 上。自托管运行器**不像
-GitHub 托管镜像那样什么都预装好**，缺一样就是一条与「闸门真的红了」长得一样的
-失败，因此 `hygiene` 作业的第一步就是运行器工具自检。
+三条流水线都跑在 **GitHub 托管运行器**上：`runs-on: ubuntu-24.04`。
 
-必须装在运行器上的：
+⚠ **钉版本，不写 `ubuntu-latest`**：`latest` 会跟着 GitHub 换镜像悄悄漂移，
+而漂移带来的失败长得跟「闸门真的红了」一模一样。同一个理由也让 `.actrc` 里
+只留这一个标签映射——act 的标签要与 workflow 里写的**逐字一致**，写错了它会
+**静默跳过**那个作业，输出里看着像它压根不存在。
 
-| 工具 | 谁要用 | 缺了会怎样 |
-|---|---|---|
-| `git` | checkout、PR 规模、覆盖率增量 | 什么都跑不了 |
-| `curl` + `tar` | 取 gitleaks 二进制 | 机密扫描起不来 |
-| `docker` | 服务容器（Postgres/Redis）、镜像断言 | 第 3 段与每日的镜像作业全废 |
-| `node` | 全部 JS 版 Action、pyright | Action 一律跑不起来 |
+托管镜像自带 `git` / `curl` / `tar` / `docker` / `node`，流水线不必自检。
+**Python、uv、pnpm 一律由流水线自己装**，版本也由它钉死。
 
-**不需要**预装 Python、uv、pnpm：流水线自己装，版本也由它钉死。
+三处仍然成立的取舍：
 
-三处为自托管做的取舍：
-
-1. **闸门脚本用 uv 提供的 3.12，不用运行器自带的 `python3`。**
+1. **闸门脚本用 uv 装的 3.12，不用运行器自带的 `python3`。**
    ⚠ 闸门脚本用了 3.12 的语法（`type` 别名、`X | Y` 形式的 isinstance）。
-   GitHub 托管镜像上 `python3` 恰好是 3.12，自托管上可能是 3.9/3.10——
-   这类差异只会在自托管上炸，而且报的是语法错误，看不出是环境问题。
+   镜像里那个 `python3` 的版本随镜像走——自己装一个钉死的，差异就不会跟着
+   runner 镜像升级悄悄冒出来。
 2. **服务容器映射到 55432 / 56379，不是 5432 / 6379。**
-   ⚠ 自托管运行器往往就是开发机，本地十有八九已经有一个 Postgres 占着 5432；
-   端口冲突会让服务容器起不来，而报错停在「连不上数据库」这一层。
+   ⚠ 理由现在只剩本地那一半：`scripts/ci-local.sh` 用 act 在开发机上跑同一份
+   YAML，而开发机十有八九已经有一个 Postgres 占着 5432。两边用同一组端口，
+   流水线里才不必为本地另写一套地址。
 3. **不依赖 `jq`。** pyright 原始输出的切分与逐条报错都在 `check_pyright.py` 里。
 
-⚠ **Actions 缓存一律关掉**（`enable-cache: false`，setup-node 不带 `cache:`）。
-`actions/checkout` 默认 `git clean -ffdx`，每轮会清掉工作区里的 `node_modules/`
-与 `.venv/`；但真正省时间的是**工作区之外**的 `~/.cache/uv` 与 pnpm store，
-它们在常驻运行器上本来就留在盘上，装依赖照样是从本地硬链。再叠一层 Actions
-缓存只会把归档解到已经存在的文件上——tar 报 `Cannot open: File exists`
-并以退出码 2 结束，每轮留一条红字警告，而它一点也没加速。
+### 依赖缓存
 
-⚠ **服务容器的镜像拉取受运行器 Docker 的 registry mirror 影响**。
-`Docker pull failed with exit code 1, back off … before retry` 这条警告的来源是
-宿主 `/etc/docker/daemon.json` 里配的镜像源超时（runner 会自动重试，所以只是
-警告不是失败）。它**修不到仓库里**——换掉不稳的 mirror 或直连 Docker Hub
-才是解，见 §7。
+托管运行器是**一次性**的：`~/.cache/uv` 与 pnpm 的 store 每轮从零开始，所以
+`setup-uv` 开 `enable-cache`、`setup-node` 开 `cache: pnpm`，省的是整份依赖的
+下载。缓存键跟着锁文件走，锁文件不变才命中。
 
----
+⚠ **`cache-dependency-path: web/pnpm-lock.yaml` 不能省**：仓库根没有锁文件，
+不指路 setup-node 会以「找不到锁文件」直接失败。
 
-## 7. 那条 docker pull 警告怎么根治
-
-```
-Docker pull failed with exit code 1, back off 1.743 seconds before retry.
-Error response from daemon: Head "https://docker.m.daocloud.io/v2/library/redis/…":
-  net/http: request canceled (Client.Timeout exceeded while awaiting headers)
-```
-
-runner 的 Docker 配了 `docker.m.daocloud.io` 作镜像源，它偶发超时。runner 会
-自动重试并成功，所以是**警告不是失败**——但每次起服务容器都赌一次，而输的那次
-很贵：实测同一个作业，快的时候 `Initialize containers` 3 秒，慢的时候
-**952 秒**（后端测试作业因此从 4m58s 变成 18m25s，其中真正跑测试只有 17 秒）。
-
-⚠ 镜像**已经在本地**也躲不掉：日志里明明是 `Status: Image is up to date`，
-那 952 秒仍然花在 `docker pull` 上——Docker 要先向 registry 查一次摘要确认
-本地这份是不是最新，卡住的正是这一步。所以「预先 pull 好」不是解。
-
-在**运行器宿主**上处理，仓库里改不到：
-
-```bash
-# 看当前配的是哪个源
-sudo cat /etc/docker/daemon.json
-# 换成可靠的源，或直接删掉 registry-mirrors 直连 Docker Hub
-sudo systemctl restart docker
-```
+⚠ **这一层本地验不到**：act 没有真的缓存后端，`enable-cache` 与 `cache: pnpm`
+在本地既不命中也不保存。`ci-local.sh --all` 全绿也不代表缓存那几步在 GitHub 上
+是对的——第一次推上去要单独看一眼这几步的日志。

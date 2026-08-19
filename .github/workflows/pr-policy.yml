@@ -22,7 +22,7 @@ permissions:
 jobs:
   policy:
     name: PR 规模与提交约定
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -46,7 +46,7 @@ jobs:
   # 数据当成当前的。它同样要拿基线比，所以也只在 PR 上跑。
   logic-version:
     name: 抽取逻辑版本
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -65,7 +65,7 @@ jobs:
   # PR 描述必须能回答「为什么改、怎么验的、出问题怎么退」
   description:
     name: PR 描述完整性
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
     steps:
       - name: 检查必填段落
         env:
