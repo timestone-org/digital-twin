@@ -46,6 +46,7 @@ class RealtimeClient:
         self._timeout_s = timeout_s
         # 传输层留成可替换的：用例要验的是调用形状与失败处置，不是 httpx 本身
         self._transport: httpx.AsyncBaseTransport | None = None
+        self._http: httpx.AsyncClient | None = None
 
     async def declare(self, instance_id: uuid.UUID) -> bool:
         """登记实例的主题。返回是否登记成功。
@@ -76,15 +77,15 @@ class RealtimeClient:
 
         """
         try:
-            async with self._client() as client:
-                response = await client.get(
-                    TOPICS_PATH,
-                    params={"publisher": PUBLISHER_NAME},
-                    headers=self._headers(),
-                )
-                response.raise_for_status()
-                envelope = _TopicsEnvelope.model_validate(response.json())
-                return list(envelope.data.topics)
+            client = self._client()
+            response = await client.get(
+                TOPICS_PATH,
+                params={"publisher": PUBLISHER_NAME},
+                headers=self._headers(),
+            )
+            response.raise_for_status()
+            envelope = _TopicsEnvelope.model_validate(response.json())
+            return list(envelope.data.topics)
         except (httpx.HTTPError, ValidationError, ValueError) as error:
             _logger.warning(
                 "topic_list_failed",
@@ -99,11 +100,11 @@ class RealtimeClient:
         Args: topic。
         """
         try:
-            async with self._client() as client:
-                response = await client.delete(
-                    f"{TOPICS_PATH}/{topic}", headers=self._headers()
-                )
-                response.raise_for_status()
+            client = self._client()
+            response = await client.delete(
+                f"{TOPICS_PATH}/{topic}", headers=self._headers()
+            )
+            response.raise_for_status()
         except httpx.HTTPError as error:
             _logger.error(
                 "topic_revoke_failed",
@@ -121,11 +122,11 @@ class RealtimeClient:
         """
         topic = topic_of(instance_id)
         try:
-            async with self._client() as client:
-                response = await client.delete(
-                    f"{TOPICS_PATH}/{topic}", headers=self._headers()
-                )
-                response.raise_for_status()
+            client = self._client()
+            response = await client.delete(
+                f"{TOPICS_PATH}/{topic}", headers=self._headers()
+            )
+            response.raise_for_status()
         except httpx.HTTPError as error:
             _logger.error(
                 "topic_revoke_failed",
@@ -171,13 +172,13 @@ class RealtimeClient:
         Args: path, payload, action, traceparent。
         """
         try:
-            async with self._client() as client:
-                response = await client.post(
-                    path,
-                    json=payload,
-                    headers=self._headers(traceparent=traceparent),
-                )
-                response.raise_for_status()
+            client = self._client()
+            response = await client.post(
+                path,
+                json=payload,
+                headers=self._headers(traceparent=traceparent),
+            )
+            response.raise_for_status()
         except httpx.HTTPError as error:
             _logger.error(
                 "realtime_call_failed",
@@ -189,11 +190,28 @@ class RealtimeClient:
         return True
 
     def _client(self) -> httpx.AsyncClient:
-        return httpx.AsyncClient(
-            base_url=self._base_url,
-            timeout=self._timeout_s,
-            transport=self._transport,
-        )
+        """取那份长活的客户端；第一次要用时才建。
+
+        ⚠ **一个进程一份，不是一次调用一份**：`httpx.AsyncClient` 自带连接池，
+        每次调用现造一个再关掉，等于每次调用都重新握一次 TCP 手——而值变化
+        推送每个窗口（默认 1000ms）对每个有变化的实例各打一次，本服务一次
+        可以起满一整段端口的实例。
+        ⚠ 懒建而不是在 `__init__` 里建：装配跑在事件循环之外，而且传输层是
+        构造之后才被替换的（用例注入假件那一步）。
+        """
+        if self._http is None:
+            self._http = httpx.AsyncClient(
+                base_url=self._base_url,
+                timeout=self._timeout_s,
+                transport=self._transport,
+            )
+        return self._http
+
+    async def close(self) -> None:
+        """关掉连接池。关停钩子里调，关完再用会现建一份新的。"""
+        http, self._http = self._http, None
+        if http is not None:
+            await http.aclose()
 
     def _headers(self, *, traceparent: str | None = None) -> dict[str, str]:
         """服务级密钥 + traceparent。
