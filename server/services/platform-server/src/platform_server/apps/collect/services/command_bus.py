@@ -24,6 +24,7 @@ from collectwire import (
     REASON_WRITE_UNSUPPORTED,
     STATUS_OK,
     TRACEPARENT_KEY,
+    DataType,
 )
 from lib.errors import DependencyUnavailable
 from lib.logging import current_traceparent, get_logger
@@ -35,6 +36,10 @@ from platform_server.apps.collect.errors import (
     CommandFailed,
     SourceOffline,
     WriteUnsupported,
+)
+from platform_server.apps.collect.protocols import (
+    UnknownLiteral,
+    as_data_type,
 )
 from platform_server.apps.collect.services.command_transport import (
     CommandTransport,
@@ -53,6 +58,8 @@ class BrowseEntry:
     name: str
     has_children: bool
     is_variable: bool
+    # 现场说这个变量是什么类型；`None` = 采集侧没读到，不是「不是数」
+    data_type: DataType | None = None
 
 
 @dataclass(frozen=True)
@@ -302,7 +309,24 @@ def _browse_entry(item: dict[str, Any]) -> BrowseEntry:
         name=str(item.get("name", "")),
         has_children=bool(item.get("has_children", False)),
         is_variable=bool(item.get("is_variable", False)),
+        data_type=_data_type(item.get("data_type")),
     )
+
+
+def _data_type(value: object) -> DataType | None:
+    """回包里的值类型；不在闭合集合里的一律当没读到。
+
+    ⚠ 不抛：采集侧翻出一个本侧不认识的字面量时，用户该看到的是一棵没预选
+    类型的树，而不是整个浏览 500。
+
+    Args: value。
+    """
+    if not isinstance(value, str):
+        return None
+    try:
+        return as_data_type(value)
+    except UnknownLiteral:
+        return None
 
 
 def _subtree_entry(item: dict[str, Any]) -> SubtreeEntry:

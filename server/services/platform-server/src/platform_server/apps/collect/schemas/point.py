@@ -4,8 +4,8 @@ import uuid
 
 from pydantic import Field
 
+from collectwire import DataType
 from platform_server.apps.collect.models import MIN_INTERVAL_MS
-from platform_server.apps.collect.protocols import DataType
 from platform_server.apps.collect.schemas.common import (
     Address,
     Code,

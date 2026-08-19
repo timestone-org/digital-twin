@@ -98,6 +98,7 @@ const SHAPES: Record<string, Record<string, true>> = {
     name: true,
     has_children: true,
     is_variable: true,
+    data_type: true,
   } satisfies Keys<CollectBrowseItem>,
 
   BrowseOut: {
@@ -110,6 +111,7 @@ const SHAPES: Record<string, Record<string, true>> = {
     name: true,
     has_children: true,
     is_variable: true,
+    data_type: true,
   } satisfies Keys<CollectSubtreeItem>,
 
   SubtreeOut: {

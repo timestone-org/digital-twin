@@ -81,6 +81,7 @@ async def test_browsing_asks_the_collector_and_maps_the_items(
                     "name": "出口温度",
                     "has_children": False,
                     "is_variable": True,
+                    "data_type": "float",
                 }
             ]
         },
@@ -89,7 +90,10 @@ async def test_browsing_asks_the_collector_and_maps_the_items(
         f"{SOURCES}/{source['id']}:browse", json={"parent": "ns=2;s=Root"}
     )
     assert response.status_code == 200
-    assert payload(response)["items"][0]["address"] == "ns=2;s=Temp1"
+    item = payload(response)["items"][0]
+    assert item["address"] == "ns=2;s=Temp1"
+    # 建点位时按它预选类型；采集侧没读到时这里是 null，不是缺省的 float
+    assert item["data_type"] == "float"
     envelope_sent = collect_fakes.bus.envelopes_of(ACTION_BROWSE)[0]
     assert envelope_sent["parent"] == "ns=2;s=Root"
     assert envelope_sent["source_id"] == source["id"]

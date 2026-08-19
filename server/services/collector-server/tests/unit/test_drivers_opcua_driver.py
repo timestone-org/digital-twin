@@ -78,6 +78,10 @@ class FakeClient:
         self.subscription = FakeSubscription()
         self.values: list[ua.DataValue] = []
         self.built: dict[str, FakeNode] = {}
+        # 寻址串 → 现场说它是哪个内建类型；表里没有的回一条坏读数
+        self.types: dict[str, int] = {}
+        self.type_error: Exception | None = None
+        self.asked: list[tuple[int, list[str]]] = []
 
     async def connect(self) -> None:
         self.is_connected = True
@@ -92,9 +96,26 @@ class FakeClient:
         return self.built.setdefault(node_id.to_string(), FakeNode(node_id))
 
     async def read_attributes(
-        self, nodes: list[FakeNode]
+        self,
+        nodes: list[FakeNode],
+        attribute: ua.AttributeIds = ua.AttributeIds.Value,
     ) -> list[ua.DataValue]:
-        return self.values[: len(nodes)]
+        addresses = [node.nodeid.to_string() for node in nodes]
+        self.asked.append((int(attribute), addresses))
+        if attribute != ua.AttributeIds.DataType:
+            return self.values[: len(nodes)]
+        if self.type_error is not None:
+            raise self.type_error
+        return [self._type_of(address) for address in addresses]
+
+    def _type_of(self, address: str) -> ua.DataValue:
+        found = self.types.get(address)
+        if found is None:
+            return ua.DataValue(StatusCode_=ua.StatusCode(0x80000000))
+        return ua.DataValue(
+            Value=ua.Variant(ua.NodeId(found), ua.VariantType.NodeId),
+            StatusCode_=ua.StatusCode(0),
+        )
 
     async def create_subscription(
         self, period: ua.Duration, handler: object
@@ -334,6 +355,84 @@ async def test_browse_from_the_root_uses_the_objects_folder() -> None:
     ]
     items = await made.browse(None)
     assert [item.address for item in items] == ["ns=2;s=Dev"]
+
+
+def _child(name: str, *, is_variable: bool) -> ua.ReferenceDescription:
+    """浏览回包里的一项。"""
+    return ua.ReferenceDescription(
+        NodeId=ua.ExpandedNodeId(Identifier=name, NamespaceIndex=2),
+        BrowseName=ua.QualifiedName(name, 2),
+        NodeClass_=(
+            ua.NodeClass.Variable if is_variable else ua.NodeClass.Object
+        ),
+    )
+
+
+async def test_browse_asks_the_field_what_type_each_variable_is() -> None:
+    made, built = _driver()
+    await made.connect()
+    built[0].nodes.objects.children = [
+        _child("Temp", is_variable=True),
+        _child("Name", is_variable=True),
+        _child("Dev", is_variable=False),
+    ]
+    built[0].types = {
+        "ns=2;s=Temp": ua.ObjectIds.Double,
+        "ns=2;s=Name": ua.ObjectIds.String,
+    }
+    items = await made.browse(None)
+    assert [(item.address, item.data_type) for item in items] == [
+        ("ns=2;s=Temp", "float"),
+        ("ns=2;s=Name", "string"),
+        ("ns=2;s=Dev", None),
+    ]
+
+
+async def test_browse_only_asks_about_the_variables() -> None:
+    """⚠ 对象节点当不了点位，问它的类型是白花一次设备往返。"""
+    made, built = _driver()
+    await made.connect()
+    built[0].nodes.objects.children = [
+        _child("Temp", is_variable=True),
+        _child("Dev", is_variable=False),
+    ]
+    await made.browse(None)
+    assert built[0].asked == [(int(ua.AttributeIds.DataType), ["ns=2;s=Temp"])]
+
+
+async def test_a_layer_without_variables_costs_no_extra_round_trip() -> None:
+    made, built = _driver()
+    await made.connect()
+    built[0].nodes.objects.children = [_child("Dev", is_variable=False)]
+    await made.browse(None)
+    assert built[0].asked == []
+
+
+async def test_the_type_read_is_split_into_batches() -> None:
+    """⚠ 服务端的 MaxNodesPerRead 一超就是整批被拒，不是截断。"""
+    made, built = _driver()
+    await made.connect()
+    count = opcua_driver.DATA_TYPE_CHUNK + 1
+    built[0].nodes.objects.children = [
+        _child(f"T{index}", is_variable=True) for index in range(count)
+    ]
+    await made.browse(None)
+    assert [len(addresses) for _, addresses in built[0].asked] == [
+        opcua_driver.DATA_TYPE_CHUNK,
+        1,
+    ]
+
+
+async def test_the_tree_still_comes_back_when_types_cannot_be_read() -> None:
+    """⚠ 类型只是建点位时的预选值：为它让整棵地址空间浏览不出来是本末倒置。"""
+    made, built = _driver()
+    await made.connect()
+    built[0].nodes.objects.children = [_child("Temp", is_variable=True)]
+    built[0].type_error = TimeoutError()
+    items = await made.browse(None)
+    assert [(item.address, item.data_type) for item in items] == [
+        ("ns=2;s=Temp", None)
+    ]
 
 
 async def test_browse_from_a_parent_addresses_that_node() -> None:

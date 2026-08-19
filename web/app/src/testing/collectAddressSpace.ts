@@ -12,6 +12,13 @@ import type { CollectBrowseItem, CollectSubtreeItem } from '@dt/contracts'
 /** 根那一层的键。 */
 export const ROOT = '__root__'
 
+/**
+ * 夹具里记的是这棵树的**形状**，不含值类型。
+ * ⚠ 类型另外补（`typed`）：这份切面是照着现场的浏览回包抄的，而那时的浏览
+ * 还不回类型；用它测形状，不用它测类型预选。
+ */
+type FixtureItem = Omit<CollectBrowseItem, 'data_type'>
+
 /** `父寻址串 → 这一层的条目` 的夹具形状。 */
 export type FixtureTree = Record<string, CollectBrowseItem[]>
 
@@ -55,8 +62,13 @@ function absorb(
   }
 }
 
+/** 变量一律按数值补类型；对象节点没有类型。 */
+function typed(item: FixtureItem): CollectBrowseItem {
+  return { ...item, data_type: item.is_variable ? 'float' : null }
+}
+
 /** `父寻址串 → 这一层的条目`。缺键表示这一层浏览回来是空的。 */
-export const REAL_TREE: Record<string, CollectBrowseItem[]> = {
+const SHAPE: Record<string, FixtureItem[]> = {
   __root__: [
     {
       address: 'i=2253',
@@ -314,3 +326,7 @@ export const REAL_TREE: Record<string, CollectBrowseItem[]> = {
     },
   ],
 }
+
+export const REAL_TREE: FixtureTree = Object.fromEntries(
+  Object.entries(SHAPE).map(([parent, items]) => [parent, items.map(typed)]),
+)

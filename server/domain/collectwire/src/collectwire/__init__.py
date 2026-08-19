@@ -31,6 +31,7 @@ from collectwire.commands import (
     TRACEPARENT_KEY,
     reply_key,
 )
+from collectwire.datatypes import DATA_TYPES, DataType
 from collectwire.plan import (
     MIN_SAMPLING_INTERVAL_MS,
     READ_MODE_POLL,
@@ -77,6 +78,7 @@ __all__ = [
     "ACTION_VALIDATE",
     "ACTION_WRITE",
     "BLOCK_SOCKET_MARGIN_S",
+    "DATA_TYPES",
     "ERROR_CATEGORIES",
     "ERROR_CATEGORY_AUTH",
     "ERROR_CATEGORY_COLUMN",
@@ -122,6 +124,7 @@ __all__ = [
     "TRACEPARENT_KEY",
     "UPDATED_COLUMN",
     "CollectPlan",
+    "DataType",
     "PlanPoint",
     "PlanSource",
     "reply_key",

@@ -24,8 +24,10 @@ import {
 import * as collect from '@/api/collect'
 import PermGuard from '@/components/PermGuard.vue'
 import { describeError } from '@/composables/useAsyncList'
-import { toPointItems } from '../scripts/browseTree'
+import type { ImportDraft } from '../scripts/importDrafts'
+import { toDrafts } from '../scripts/importDrafts'
 import { importPoints } from '../scripts/pointImport'
+import { loadRomanize } from '../scripts/romanize'
 import { useBrowseTree } from '../scripts/useBrowseTree'
 import BrowseTreeNode from './BrowseTreeNode.vue'
 import ImportNodesDialog from './ImportNodesDialog.vue'
@@ -39,8 +41,8 @@ const emit = defineEmits<{ imported: [count: number] }>()
 const toast = useToast()
 const busy = ref(false)
 const importOpen = ref(false)
-/** 经编码去重后待导入的项；推不出编码的节点在开弹窗前已剔除并提示。 */
-const pending = ref<CollectPointItemInput[]>([])
+/** 待导入的草稿；编码在弹窗里逐行确认，推不出来的等人填。 */
+const pending = ref<ImportDraft[]>([])
 
 /** 库里已经建过点位的寻址串与编码。重复建会以 409 整批被拒。 */
 const takenAddresses = ref(new Set<string>())
@@ -99,21 +101,27 @@ async function scanExisting(): Promise<void> {
   takenCodes.value = codes
 }
 
-/** 打开导入弹窗：先把勾选的节点解析成待导入项（编码由寻址串推）。 */
-function openImport(): void {
-  if (tree.selectedCount.value === 0) return
-  const { items, skipped } = toPointItems(
-    [...tree.selected.value],
-    tree.index.value,
-    takenCodes.value,
-  )
-  if (skipped.length > 0) {
-    toast.warning(
-      `${skipped.length} 个节点推不出合法编码，已跳过，请到点位表手工添加`,
+/**
+ * 打开导入弹窗：先把勾选的节点解析成草稿（编码由寻址串推，中文名按拼音推）。
+ *
+ * ⚠ 拼音字典是按需加载的，故这一步是异步的；加载不动就退回「推不出编码」，
+ * 那些行在弹窗里留空等人填，而**不是**把节点丢掉。
+ */
+async function openImport(): Promise<void> {
+  if (tree.selectedCount.value === 0 || busy.value) return
+  busy.value = true
+  try {
+    const romanize = await loadRomanize()
+    pending.value = toDrafts(
+      [...tree.selected.value],
+      tree.index.value,
+      takenCodes.value,
+      romanize,
     )
+  } finally {
+    busy.value = false
   }
-  if (items.length === 0) return
-  pending.value = items
+  if (pending.value.length === 0) return
   importOpen.value = true
 }
 
@@ -236,7 +244,8 @@ onMounted(() => {
 
     <ImportNodesDialog
       v-model="importOpen"
-      :items="pending"
+      :drafts="pending"
+      :taken-codes="takenCodes"
       :loading="busy"
       @confirm="doImport"
     />

@@ -6,6 +6,8 @@
 
 from typing import Literal, get_args
 
+from collectwire import DataType
+
 # 一期只实现 OPC UA 驱动；第二个协议进来时这里加一项，迁移里跟一条 CHECK
 Protocol = Literal["opcua"]
 
@@ -16,10 +18,8 @@ ReadMode = Literal["poll", "subscribe"]
 
 READ_MODES: tuple[str, ...] = tuple(sorted(get_args(ReadMode)))
 
-# 点位的值类型，协议无关。驱动按它决定怎么解协议原始值
-DataType = Literal["bool", "float", "int", "string"]
-
-DATA_TYPES: tuple[str, ...] = tuple(sorted(get_args(DataType)))
+# 点位的值类型不在这里：采集侧的驱动也要按它翻现场类型，故那份闭合集合在
+# `collectwire.datatypes`，两侧共用。本模块只负责把库里的字符串收窄回去。
 
 
 def sql_values(values: tuple[str, ...]) -> str:

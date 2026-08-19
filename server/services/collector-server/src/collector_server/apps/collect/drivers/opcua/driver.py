@@ -7,7 +7,7 @@
 import asyncio
 import hashlib
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import cast
 
 from asyncua import Client, Node, ua
@@ -31,6 +31,7 @@ from collector_server.apps.collect.drivers.opcua.notifier import (
     DataChangeNotifier,
 )
 from collector_server.clock import Clock, utc_now_ms
+from collectwire import DataType
 from lib.logging import get_logger
 
 _logger = get_logger("collect.driver.opcua")
@@ -47,6 +48,9 @@ MIN_PUBLISH_INTERVAL_MS = 100
 QUEUE_SIZE = 1
 # 指纹里口令那一段的长度。留指纹不留口令：指纹进得了日志，口令进不了
 DIGEST_LENGTH = 16
+# 一次问多少个节点的类型。⚠ 服务端普遍有 MaxNodesPerRead 上限，超了是整批回
+# BadTooManyOperations 而不是截断——切批是唯一的解
+DATA_TYPE_CHUNK = 100
 
 ClientFactory = Callable[[DriverConnection], Client]
 
@@ -196,6 +200,61 @@ def browse_items(
             )
         )
     return items
+
+
+async def typed_items(
+    client: Client, items: list[BrowseItem], *, timeout_s: float
+) -> list[BrowseItem]:
+    """给这一层的变量节点补上现场的值类型。
+
+    ⚠ 浏览本身回不出类型（引用描述里没有这一项），只能再读一趟 DataType
+    属性——一层一趟，不是一个节点一趟。
+    ⚠ 读不到就整层留空并照常回树：类型只是建点位时的预选值，为它让整棵
+    地址空间浏览不出来是本末倒置。
+
+    Args: client, items, timeout_s（一趟读的预算）。
+    """
+    addresses = [item.address for item in items if item.is_variable]
+    if not addresses:
+        return items
+    found = await data_types_of(client, addresses, timeout_s=timeout_s)
+    return [
+        (
+            replace(item, data_type=found.get(item.address))
+            if item.is_variable
+            else item
+        )
+        for item in items
+    ]
+
+
+async def data_types_of(
+    client: Client, addresses: Sequence[str], *, timeout_s: float
+) -> dict[str, DataType]:
+    """问一批变量的值类型；问不到的不进结果。
+
+    Args: client, addresses, timeout_s。
+    """
+    found: dict[str, DataType] = {}
+    try:
+        for start in range(0, len(addresses), DATA_TYPE_CHUNK):
+            batch = addresses[start : start + DATA_TYPE_CHUNK]
+            nodes = [
+                client.get_node(mapping.node_id_of(address))
+                for address in batch
+            ]
+            async with asyncio.timeout(timeout_s):
+                values = await client.read_attributes(
+                    nodes, ua.AttributeIds.DataType
+                )
+            found.update(mapping.data_types_of(batch, values))
+    except Exception as error:
+        _logger.warning(
+            "browse_data_types_unread",
+            "这一层的值类型没读到，建点位时不预选类型",
+            error_type=type(error).__name__,
+        )
+    return found
 
 
 class OpcuaDriver:
@@ -380,7 +439,11 @@ class OpcuaDriver:
         )
         async with asyncio.timeout(self._connection.timeouts.browse_s):
             descriptions = await node.get_children_descriptions()
-        return browse_items(descriptions)
+        return await typed_items(
+            client,
+            browse_items(descriptions),
+            timeout_s=self._connection.timeouts.request_s,
+        )
 
     async def _ensure_subscription(
         self, resolved: Sequence[ResolvedPoint], on_value: ValueSink

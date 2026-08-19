@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import Field, SecretStr
 
+from collectwire import DataType
 from platform_server.apps.collect.models import MIN_INTERVAL_MS
 from platform_server.apps.collect.protocols import Protocol, ReadMode
 from platform_server.apps.collect.schemas.common import (
@@ -131,6 +132,9 @@ class BrowseItemOut(OutputModel):
     has_children: bool
     # 只有变量节点能当点位；对象节点只用来往下走
     is_variable: bool
+    # ⚠ `null` 是「现场没读到」，不是「不是数」：建点位时按它预选类型，
+    # 读不到就让人自己选。兜一个 float 会让文本点位按数值聚合
+    data_type: DataType | None = None
 
 
 class BrowseIn(InputModel):

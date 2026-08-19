@@ -5,6 +5,7 @@
 契约，必须先改这份用例。
 """
 
+from typing import get_args
 from uuid import UUID
 
 from collectwire import (
@@ -14,6 +15,7 @@ from collectwire import (
     ACTION_VALIDATE,
     ACTION_WRITE,
     ACTIONS,
+    DATA_TYPES,
     ERROR_CATEGORIES,
     REPLY_PREFIX,
     REQUEST_KEY,
@@ -26,6 +28,7 @@ from collectwire import (
     STATUS_ERROR,
     STATUS_OK,
     TRACEPARENT_KEY,
+    DataType,
     reply_key,
     snapshot_key,
 )
@@ -112,3 +115,13 @@ def test_the_unknown_state_is_not_one_of_the_stored_states() -> None:
 
 def test_the_error_categories_are_the_ones_in_the_check_constraint() -> None:
     assert ERROR_CATEGORIES == ("transient", "config", "auth")
+
+
+def test_the_data_types_are_the_ones_in_the_check_constraint() -> None:
+    """顺序即 CHECK 约束的字面量顺序，与建点位表的迁移逐字一致。"""
+    assert DATA_TYPES == ("bool", "float", "int", "string")
+
+
+def test_the_data_type_literal_and_the_tuple_cannot_drift() -> None:
+    """⚠ 一份给类型检查、一份给 CHECK 约束，漏改一边不会报错。"""
+    assert set(get_args(DataType)) == set(DATA_TYPES)
