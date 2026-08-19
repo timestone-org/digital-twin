@@ -99,6 +99,12 @@ def _shutdown_hooks(container: Container) -> tuple[LifespanHook, ...]:
             shutdown=container.supervisor.stop_all,
             shutdown_order=10,
         ),
+        # ⚠ 停在实例之后、缓存之前：值发布器冲刷最后一批时还要用它
+        LifespanHook(
+            name="realtime",
+            shutdown=container.realtime.close,
+            shutdown_order=20,
+        ),
         LifespanHook(
             name="cache",
             shutdown=container.cache.close,
