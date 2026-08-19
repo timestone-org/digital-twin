@@ -103,6 +103,32 @@ async def test_browse_returns_the_address_space_items(driver: Any) -> None:
     assert payload["data"]["items"][0]["address"] == "ns=2;s=Dev"
 
 
+async def test_browse_carries_the_value_type_of_each_variable(
+    driver: Any,
+) -> None:
+    """⚠ null 是「现场没读到」：发起方据此不预选类型，不许在线上兜成 float。"""
+    driver.items = [
+        BrowseItem(
+            address="ns=2;s=Temp",
+            name="Temp",
+            has_children=False,
+            is_variable=True,
+            data_type="float",
+        ),
+        BrowseItem(
+            address="ns=2;s=Note",
+            name="Note",
+            has_children=False,
+            is_variable=True,
+        ),
+    ]
+    transport = FakeTransport([_request(ACTION_BROWSE)])
+    consumer = _consumer(transport, {SOURCE_ID: FakeSession(driver)})
+    await consumer.handle_once()
+    items = transport.replies[0][1]["data"]["items"]
+    assert [one["data_type"] for one in items] == ["float", None]
+
+
 async def test_browse_subtree_replies_flat_items_that_know_their_parent(
     driver: Any,
 ) -> None:

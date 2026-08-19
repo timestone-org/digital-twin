@@ -287,6 +287,9 @@ def _require_point(request: CommandRequest) -> str:
 def _browse_payload(item: BrowseItem) -> dict[str, Any]:
     """把一条浏览结果编成应答字段。
 
+    ⚠ `data_type` 为 null 是「现场没读到」，发起方据此不预选类型——它与
+    「读出来是 float」不是一回事，不许在这里兜一个缺省值。
+
     Args: item。
     """
     return {
@@ -294,6 +297,7 @@ def _browse_payload(item: BrowseItem) -> dict[str, Any]:
         "name": item.name,
         "has_children": item.has_children,
         "is_variable": item.is_variable,
+        "data_type": item.data_type,
     }
 
 

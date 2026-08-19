@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
 from collector_server.apps.collect.errors import CollectError
+from collectwire import DataType
 from timeseries import Quality
 
 # 回调签名：point_code、value、ts_ms、quality。
@@ -110,6 +111,9 @@ class BrowseItem:
     has_children: bool
     # 只有变量节点能当点位；对象节点只用来往下走
     is_variable: bool
+    # 现场说这个变量是什么类型。⚠ `None` 是「没读到」，不是「不是数」：
+    # 建点位时按它预选类型，读不到就让人自己选，别替他猜一个
+    data_type: DataType | None = None
 
 
 @dataclass(frozen=True)
