@@ -1,8 +1,10 @@
 /**
  * @fileoverview 排布与剪贴板动作：对齐/分布/整理/层序/批量拖动/复制粘贴再制。
+ * 复制粘贴同时搬两条轴：节点树在编辑器里，联动规则在大屏级 chromeJson 里。
  * 与 `editorActions.ts` 同构——改动全是纯函数，这里只翻译界面操作并定合并键。
  * ⚠ 对齐与分布只对**同父**选中集生效：跨父层坐标系不同，硬算出来的是错位。
  */
+import type { InteractionRule } from '@dt/contracts'
 import type { DesignSize, GetModuleManifest } from '@dt/runtime'
 
 import type { DashboardEditor } from '@/composables/useDashboardEditor'
@@ -22,6 +24,10 @@ import {
   isPinnedRegion,
 } from '@/features/dashboard/moduleLibrary'
 import type { NodeGeometry } from '@/features/dashboard/editorDoc'
+import type { EditorChrome } from './useEditorChrome'
+
+/** 剪贴板动作要用到的外观轴那一小片：读规则表、整表写回。 */
+export type ArrangeChrome = Pick<EditorChrome, 'rules' | 'setInteractions'>
 
 export interface ArrangeDeps {
   editor: DashboardEditor
@@ -32,6 +38,10 @@ export interface ArrangeDeps {
   steps: () => { x: number; y: number }
   /** 当前大屏 id；还没加载出来时给 null。 */
   dashboardId: () => string | null
+  /** 大屏级外观轴：复制粘贴要连联动规则一起搬。 */
+  chrome: ArrangeChrome
+  /** 复制结果的提示出口，页面接 toast。 */
+  notify: (message: string) => void
 }
 
 export interface ArrangeActions {
@@ -119,6 +129,7 @@ function pasteInto(
   if (dashboardId === null) return false
   const target = pasteTarget(deps)
   let pastedIds: readonly string[] = []
+  let pastedRules: readonly InteractionRule[] = []
   deps.editor.apply((nodes) => {
     const result = clipboard.pasteNodes({
       nodes,
@@ -129,6 +140,7 @@ function pasteInto(
       zIndexStart: doc.nextZIndex(nodes, target.parentId),
     })
     pastedIds = result.pastedIds
+    pastedRules = result.rules
     // 根钳回目标层边界，免得反复粘贴把节点排到画布外找不回来
     const clamped = new Map<string, NodeGeometry>()
     for (const id of result.pastedIds) {
@@ -145,6 +157,11 @@ function pasteInto(
     return doc.setGeometryBatch(result.nodes, clamped)
   })
   if (pastedIds.length > 0) deps.editor.setSelection(pastedIds)
+  // ⚠ 规则走的是元数据轴，与节点各记各的撤销：撤销粘贴只退掉节点，规则留在表里
+  // 指向已不存在的节点——与「删掉一个被联动指向的节点」是同一种既有状态，不渲染也不报错
+  if (pastedRules.length > 0) {
+    deps.chrome.setInteractions([...deps.chrome.rules.value, ...pastedRules])
+  }
   return pastedIds.length > 0
 }
 
@@ -352,13 +369,28 @@ function batchActions(
   }
 }
 
-/** 由当前选中集构建剪贴板 payload；没有可复制的根时给 null。 */
-function payloadOf(deps: ArrangeDeps): clipboard.ClipboardPayload | null {
+/** 由当前选中集构建剪贴板草稿；没有可复制的根时给 null。 */
+function draftOf(deps: ArrangeDeps): clipboard.ClipboardDraft | null {
   return clipboard.buildClipboardPayload(
     deps.editor.nodes.value,
     deps.editor.selectedIds.value,
     (moduleType) => isRegionType(deps, moduleType),
+    deps.chrome.rules.value,
   )
+}
+
+/** 复制的回执：带走了什么，以及有没有联动规则没跟过来。 */
+function copyMessage(draft: clipboard.ClipboardDraft): string {
+  const roots = draft.payload.nodes.filter(
+    (item) => item.parentCk === null,
+  ).length
+  const rules = draft.payload.rules.length
+  const carried = rules === 0 ? '' : `与 ${rules} 条联动规则`
+  const dropped =
+    draft.droppedRules === 0
+      ? ''
+      : `；另有 ${draft.droppedRules} 条联动规则指向没一起复制的模块，没跟过来`
+  return `已复制 ${roots} 个模块${carried}，可切到其他大屏粘贴${dropped}`
 }
 
 /** 复制、粘贴与再制。 */
@@ -373,12 +405,13 @@ function clipboardActions(
   | 'duplicateSelected'
 > {
   return {
-    canCopy: () => payloadOf(deps) !== null,
+    canCopy: () => draftOf(deps) !== null,
     canPaste: () => clipboard.readClipboard() !== null,
     copySelected: () => {
-      const payload = payloadOf(deps)
-      if (payload === null) return false
-      clipboard.writeClipboard(payload)
+      const draft = draftOf(deps)
+      if (draft === null) return false
+      clipboard.writeClipboard(draft.payload)
+      deps.notify(copyMessage(draft))
       return true
     },
     pasteClipboard: () => {
@@ -388,8 +421,8 @@ function clipboardActions(
     },
     duplicateSelected: () => {
       // 再制不动剪贴板：⌘C 复制的东西在 ⌘D 之后还应当粘得出来
-      const payload = payloadOf(deps)
-      if (payload !== null) pasteInto(deps, payload, 16)
+      const draft = draftOf(deps)
+      if (draft !== null) pasteInto(deps, draft.payload, 16)
     },
   }
 }

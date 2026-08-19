@@ -1,13 +1,12 @@
 /**
- * @fileoverview 右栏四页签要用的那几样：大屏级卡片外观缺省、按节点过滤的联动规则，
- * 以及「改名 / 层序 / 应用预设」三个只作用于当前选中节点的动作。
+ * @fileoverview 右栏四页签要用的那几样：大屏级卡片外观缺省，以及
+ * 「改名 / 层序 / 应用预设」三个只作用于当前选中节点的动作。
  * 页面只负责接线，判定全在这里，这样「一次操作 = 一笔撤销」的口径仍只有一处。
  */
-import type { CardChrome, ConfigPreset, InteractionRule } from '@dt/contracts'
+import type { CardChrome, ConfigPreset } from '@dt/contracts'
 import { mergeCardChrome } from '@dt/runtime'
 import { computed, type ComputedRef } from 'vue'
 
-import { parseInteractionRules } from '@/features/dashboard/interactionRules'
 import type { DashboardEditor } from '@/composables/useDashboardEditor'
 import type { EditorActions } from './editorActions'
 import type { EditorMeta } from './useEditorMeta'
@@ -27,7 +26,6 @@ export interface EditorInspectorDeps {
 
 export interface EditorInspector {
   cardChrome: ComputedRef<CardChrome>
-  rules: ComputedRef<InteractionRule[]>
   rename: (name: string) => void
   order: (kind: OrderKind) => void
   applyPreset: (preset: ConfigPreset) => void
@@ -45,13 +43,6 @@ export function createEditorInspector(
      */
     cardChrome: computed(() =>
       mergeCardChrome(meta.draft.value?.chromeJson.card, null),
-    ),
-
-    /** 联动规则住在大屏级 chromeJson，按不按节点过滤由右栏自己决定。 */
-    rules: computed(() =>
-      meta.draft.value === null
-        ? []
-        : parseInteractionRules(meta.draft.value.chromeJson),
     ),
 
     rename: (name) => {

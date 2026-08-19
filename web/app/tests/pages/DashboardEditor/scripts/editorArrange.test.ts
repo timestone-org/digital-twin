@@ -1,15 +1,21 @@
 /**
  * @fileoverview 排布动作契约：同父守卫、整理跳过钉位与子层、
- * 粘贴选中新节点且根钳回边界、再制不动剪贴板。
+ * 粘贴选中新节点且根钳回边界、再制不动剪贴板、联动规则跟着复制粘贴走。
  */
-import { afterEach, describe, expect, it } from 'vitest'
-import type { DashboardNodePayload, ModuleManifest } from '@dt/contracts'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type {
+  DashboardNodePayload,
+  InteractionRule,
+  ModuleManifest,
+} from '@dt/contracts'
+import { computed, ref } from 'vue'
 
 import { useDashboardEditor } from '@/composables/useDashboardEditor'
 import { __resetClipboard } from '@/features/dashboard/editorClipboard'
 import {
   createArrangeActions,
   type ArrangeActions,
+  type ArrangeChrome,
 } from '@/pages/DashboardEditor/scripts/editorArrange'
 
 const PLAIN: ModuleManifest = {
@@ -64,20 +70,53 @@ function node(
   }
 }
 
-function setup(nodes: DashboardNodePayload[]): {
+/** 大屏级外观轴的最小实现：只有联动规则这一段被剪贴板动作用到。 */
+function chromeOf(rules: InteractionRule[]): ArrangeChrome & {
+  table: { value: InteractionRule[] }
+} {
+  const table = ref(rules)
+  return {
+    table,
+    rules: computed(() => table.value),
+    setInteractions: (next) => {
+      table.value = next
+    },
+  }
+}
+
+function setup(
+  nodes: DashboardNodePayload[],
+  rules: InteractionRule[] = [],
+  dashboardId = 'd-1',
+): {
   editor: ReturnType<typeof useDashboardEditor>
   actions: ArrangeActions
+  chrome: ReturnType<typeof chromeOf>
+  notify: ReturnType<typeof vi.fn>
 } {
   const editor = useDashboardEditor((type) => MANIFESTS[type])
   editor.reset(nodes)
+  const chrome = chromeOf(rules)
+  const notify = vi.fn()
   const actions = createArrangeActions({
     editor,
     getManifest: (type) => MANIFESTS[type],
     design: () => ({ width: 1000, height: 800 }),
     steps: () => ({ x: 100, y: 100 }),
-    dashboardId: () => 'd-1',
+    dashboardId: () => dashboardId,
+    chrome,
+    notify,
   })
-  return { editor, actions }
+  return { editor, actions, chrome, notify }
+}
+
+/** 一条显隐规则：`from` 点一下，`targets` 跟着显示。 */
+function rule(id: string, from: string, targets: string[]): InteractionRule {
+  return {
+    id,
+    source: { nodeId: from, event: 'click' },
+    action: { type: 'show', targets },
+  }
 }
 
 function byId(
@@ -259,6 +298,89 @@ describe('复制粘贴', () => {
     const { editor, actions } = setup([node('h', { moduleType: 'header' })])
     editor.select('h')
     expect(actions.copySelected()).toBe(false)
+  })
+
+  it('复制给出回执，说清可以粘到别的大屏', () => {
+    const { editor, actions, notify } = setup([node('a')])
+    editor.select('a')
+
+    actions.copySelected()
+
+    expect(notify).toHaveBeenCalledWith('已复制 1 个模块，可切到其他大屏粘贴')
+  })
+
+  it('指向没一起复制的模块的规则不跟着走，回执里报数', () => {
+    const { editor, actions, notify } = setup(
+      [node('a'), node('b', { zIndex: 1 })],
+      [rule('r-1', 'a', ['b'])],
+    )
+    editor.select('a')
+
+    actions.copySelected()
+
+    expect(notify).toHaveBeenCalledWith(
+      '已复制 1 个模块，可切到其他大屏粘贴；另有 1 条联动规则指向没一起复制的模块，没跟过来',
+    )
+  })
+})
+
+describe('联动规则跟着复制粘贴走', () => {
+  it('同屏粘贴：规则追加一条，指到新粘出来的那对节点', () => {
+    const { editor, actions, chrome } = setup(
+      [node('a'), node('b', { zIndex: 1 })],
+      [rule('r-1', 'a', ['b'])],
+    )
+    editor.setSelection(['a', 'b'])
+    actions.copySelected()
+    editor.select(null)
+
+    actions.pasteClipboard()
+
+    expect(chrome.table.value).toHaveLength(2)
+    const added = chrome.table.value[1]
+    const pasted = editor.selectedIds.value
+    expect(added?.id).not.toBe('r-1')
+    expect(added?.source.nodeId).toBe(pasted[0])
+    expect(added?.action).toEqual({ type: 'show', targets: [pasted[1]] })
+    // 原来那条一个字没动
+    expect(chrome.table.value[0]).toEqual(rule('r-1', 'a', ['b']))
+  })
+
+  it('粘到另一张大屏：节点认新大屏，规则落进新大屏的规则表', () => {
+    const source = setup(
+      [node('a'), node('b', { zIndex: 1 })],
+      [rule('r-1', 'a', ['b'])],
+    )
+    source.editor.setSelection(['a', 'b'])
+    source.actions.copySelected()
+
+    const target = setup([], [], 'd-2')
+    expect(target.actions.pasteClipboard()).toBe(true)
+
+    expect(
+      target.editor.nodes.value.every((item) => item.dashboardId === 'd-2'),
+    ).toBe(true)
+    expect(target.chrome.table.value).toHaveLength(1)
+    const moved = target.chrome.table.value[0]
+    expect(moved?.source.nodeId).toBe(target.editor.selectedIds.value[0])
+    expect(moved?.action).toEqual({
+      type: 'show',
+      targets: [target.editor.selectedIds.value[1]],
+    })
+    // 源屏的规则表没被动过
+    expect(source.chrome.table.value).toHaveLength(1)
+  })
+
+  it('没有规则跟着走时不碰规则表', () => {
+    const { editor, actions, chrome } = setup([node('a')])
+    const before = chrome.table.value
+    editor.select('a')
+    actions.copySelected()
+    editor.select(null)
+
+    actions.pasteClipboard()
+
+    expect(chrome.table.value).toBe(before)
   })
 })
 

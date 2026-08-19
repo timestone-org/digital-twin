@@ -5,7 +5,7 @@
 import type { DashboardNodePayload, ModuleManifest } from '@dt/contracts'
 import { designSize } from '@dt/runtime'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 import { useDashboardEditor } from '@/composables/useDashboardEditor'
 import { __resetClipboard } from '@/features/dashboard/editorClipboard'
@@ -59,6 +59,8 @@ function setup(nodes: DashboardNodePayload[] = [node('a'), node('b')]) {
     ...shared,
     design: () => DESIGN,
     steps: () => ({ x: 10, y: 10 }),
+    chrome: { rules: computed(() => []), setInteractions: vi.fn() },
+    notify: vi.fn(),
   })
   const centerOn = vi.fn()
   const removeSelected = vi.fn()
