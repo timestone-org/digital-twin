@@ -30,6 +30,7 @@ from platform_server.apps.dashboard.services import (
 )
 from platform_server.container import IDEMPOTENCY_NAMESPACE, Container
 from platform_server.lease import Lease
+from platform_server.opcua import OpcuaClient
 from platform_server.realtime import RealtimeClient
 from platform_server.settings import ROLE_WORKER, Settings
 from platform_server.stream import RedisStream
@@ -178,7 +179,7 @@ def build_container(ledger: list[str], *, settings: Settings) -> Container:
         lease=cast(Lease, LedgerLease(ledger=ledger)),
         ac_publish_lease=cast(Lease, LedgerLease(ledger=ledger)),
         ac_daily_lease=cast(Lease, LedgerLease(ledger=ledger)),
-        nodes=FakeNodeWriter(),
+        nodes=cast(OpcuaClient, FakeNodeWriter()),
         object_store=FakeObjectStore(),
         credential_cipher=CredentialCipher("c" * 32),
     )

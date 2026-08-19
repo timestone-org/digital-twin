@@ -95,6 +95,7 @@ class OpcuaClient:
         self._timeout_s = timeout_s
         # 传输层留成可替换的：用例验的是调用形状与失败处置，不是 httpx 本身
         self._transport: httpx.AsyncBaseTransport | None = None
+        self._http: httpx.AsyncClient | None = None
 
     async def resolve(
         self, *, instance_id: uuid.UUID, node_ids: Sequence[uuid.UUID]
@@ -152,12 +153,12 @@ class OpcuaClient:
         Args: path, payload, action, key。
         """
         try:
-            async with self._client() as client:
-                response = await client.post(
-                    path, json=payload, headers=self._headers(key)
-                )
-                response.raise_for_status()
-                return _envelope_data(response.json())
+            client = self._client()
+            response = await client.post(
+                path, json=payload, headers=self._headers(key)
+            )
+            response.raise_for_status()
+            return _envelope_data(response.json())
         except (httpx.HTTPError, ValidationError, ValueError) as error:
             _logger.error(
                 "opcua_call_failed",
@@ -168,11 +169,27 @@ class OpcuaClient:
             raise OpcuaCallFailed(_reason(error)) from error
 
     def _client(self) -> httpx.AsyncClient:
-        return httpx.AsyncClient(
-            base_url=self._base_url,
-            timeout=self._timeout_s,
-            transport=self._transport,
-        )
+        """取那份长活的客户端；第一次要用时才建。
+
+        ⚠ **一个进程一份，不是一次调用一份**：`httpx.AsyncClient` 自带连接池，
+        每次调用现造一个再关掉，等于每次调用都重新握一次 TCP 手，keep-alive
+        一次都用不上。
+        ⚠ 懒建而不是在 `__init__` 里建：装配跑在事件循环之外，而且传输层是
+        构造之后才被替换的（用例注入假件那一步）。
+        """
+        if self._http is None:
+            self._http = httpx.AsyncClient(
+                base_url=self._base_url,
+                timeout=self._timeout_s,
+                transport=self._transport,
+            )
+        return self._http
+
+    async def close(self) -> None:
+        """关掉连接池。关停钩子里调，关完再用会现建一份新的。"""
+        http, self._http = self._http, None
+        if http is not None:
+            await http.aclose()
 
     def _headers(self, key: str | None) -> dict[str, str]:
         """服务级密钥 + traceparent（+ 幂等键）。

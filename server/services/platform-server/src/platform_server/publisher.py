@@ -423,6 +423,7 @@ async def _release(container: Container) -> None:
     """
     await container.snapshots.close()
     await container.lease.close()
+    await container.realtime.close()
     await container.viewer_database.dispose()
     await container.database.dispose()
 
