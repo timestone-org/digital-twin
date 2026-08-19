@@ -27,6 +27,30 @@ async def live_dashboard_ids(session: AsyncSession) -> list[uuid.UUID]:
     return list(rows.scalars().all())
 
 
+async def published_dashboards(
+    session: AsyncSession,
+) -> list[tuple[uuid.UUID, str]]:
+    """仍在公开中的大屏及其当前令牌，按 id 升序。匿名授权对账拿它当权威。
+
+    ⚠ 只取 `is_public` 且令牌非空的行：撤回把令牌置空，而对账的方向是「库里
+    有什么，hub 上就该有什么」——多取一行就是一条撤不掉的公开授权。
+    Args: session。
+    """
+    rows = await session.execute(
+        select(Dashboard.id, Dashboard.public_token)
+        .where(
+            Dashboard.is_public.is_(True),
+            Dashboard.public_token.is_not(None),
+        )
+        .order_by(Dashboard.id)
+    )
+    return [
+        (row.id, row.public_token)
+        for row in rows.all()
+        if row.public_token is not None
+    ]
+
+
 async def versions_of(
     session: AsyncSession, dashboard_ids: Sequence[uuid.UUID]
 ) -> dict[uuid.UUID, int]:

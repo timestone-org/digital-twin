@@ -101,8 +101,16 @@ class FanoutListener:
 
     @staticmethod
     async def _send(connection: Connection, envelope: dict[str, Any]) -> None:
-        """往一条连接发一份信封。
+        """往一条连接发一份信封，主题按这条连接的口径改名。
+
+        ⚠ 改名不能省：匿名连接订的是它自己那个别名，而信封上写的是真主题。
+        不改的话客户端按别名登记的处理器一条也匹配不上——连着、有数据、屏上
+        全空——而且真主题就这么随帧出门了（`GrantedTopic`）。
 
         Args: connection, envelope。
         """
-        await connection.send(dict(envelope))
+        outgoing = dict(envelope)
+        topic = outgoing.get("topic")
+        if isinstance(topic, str):
+            outgoing["topic"] = connection.outgoing_topic(topic)
+        await connection.send(outgoing)

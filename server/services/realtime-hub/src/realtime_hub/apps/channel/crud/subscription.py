@@ -21,7 +21,7 @@ class SubscriptionCrud(CrudBase[Subscription]):
         session: AsyncSession,
         *,
         connection_id: uuid.UUID,
-        user_id: uuid.UUID,
+        user_id: uuid.UUID | None,
         topic: str,
         replica: str,
     ) -> None:

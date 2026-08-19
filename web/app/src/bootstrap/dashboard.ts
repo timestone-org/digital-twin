@@ -30,8 +30,9 @@ import type { SubscribePoints } from '@/runtime/pointStream'
 export interface DashboardRuntimePorts {
   /**
    * 订阅当前大屏主题上的点位推送。
-   * ⚠ 不注入时不装实时 provider——公开快照页走这条：它没有登录态，
-   * `opcua` 绑定如实显示为无实时数据，而不是假装订阅成功。
+   * ⚠ 不注入时不装实时 provider：`opcua` 绑定如实显示为无实时数据，而不是
+   * 假装订阅成功。公开页**注入**它（凭据是公开令牌，ADR-0021），只有独立
+   * 渲染与用例走「不注入」这条。
    */
   subscribe?: SubscribePoints
   /**

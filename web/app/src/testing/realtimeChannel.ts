@@ -11,6 +11,8 @@ import { ref, type Ref } from 'vue'
 
 export interface FakeChannel {
   isConnected: Ref<boolean>
+  /** 服务端明确拒绝了这条连接（公开票据无效或已撤回）。 */
+  isRejected: Ref<boolean>
   /** 订过的主题，按调用顺序。 */
   topics: string[]
   subscribe: (topic: string, handler: (payload: object) => void) => () => void
@@ -26,6 +28,7 @@ export function fakeRealtimeChannel(isConnected = true): FakeChannel {
 
   return {
     isConnected: connected,
+    isRejected: ref(false),
     topics,
     subscribe: (topic, handler) => {
       topics.push(topic)

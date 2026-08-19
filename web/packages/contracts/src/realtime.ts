@@ -47,6 +47,30 @@ export const REALTIME_AUTH_EXPIRED_CLOSE_CODE = 4001
 export const REALTIME_HANDSHAKE_REJECTED_CLOSE_CODE = 1008
 
 /**
+ * 公开票据没有（或不再有）授权时服务端的关闭码（ADR-0021）。
+ * ⚠ 与 1008 分开，且这一档**可重试**：撤回与「推送方还没把这枚新票据对账到
+ * hub」在客户端看来一模一样，而后者只要等一轮对账。当成 1008 处理的话，
+ * 刚发布出去的公开链接会在那几秒的窗口里被判成永久失败，此后一次也不再连。
+ */
+export const REALTIME_PUBLIC_GRANT_CLOSE_CODE = 4003
+
+/**
+ * 匿名连接名额用尽时服务端的关闭码（ADR-0021）。
+ * ⚠ 它是拥挤不是拒绝：照常退避重连。
+ */
+export const REALTIME_QUOTA_CLOSE_CODE = 4029
+
+/** 握手时报的第一个子协议：登录态。凭据是 access token。 */
+export const REALTIME_AUTH_SUBPROTOCOL = 'dt.auth'
+
+/**
+ * 握手时报的第一个子协议：公开链接。凭据是公开令牌本身（ADR-0021）。
+ * ⚠ 与上面分成两个标记而不是「先当 token 试、不行再当票据试」：试探式的鉴权
+ * 会让一次形状变化静默地走进另一条路径。
+ */
+export const REALTIME_PUBLIC_SUBPROTOCOL = 'dt.public'
+
+/**
  * 载荷帧：hub 的推送路径拼出来的那一种。
  * ⚠ 目前 hub 只发 `data`（`publisher.py` 的 `MESSAGE_TYPE_DATA`）；
  * `event` 是 api-contract §10 预留的同形状帧，客户端按同一条分支处理即可。

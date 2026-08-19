@@ -24,9 +24,12 @@ class SubscriptionJournal:
         self._replica = replica
 
     async def record(
-        self, *, connection_id: uuid.UUID, user_id: uuid.UUID, topic: str
+        self, *, connection_id: uuid.UUID, user_id: uuid.UUID | None, topic: str
     ) -> None:
         """记一条订阅。重复记是幂等的。
+
+        ⚠ 匿名连接的 `user_id` 是 None，不是哨兵：公开链接的持有者不是任何
+        一个人，塞一个编出来的 UUID 会让对账把它读成一个真实用户。
 
         Args: connection_id, user_id, topic。
         """

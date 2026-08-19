@@ -38,8 +38,10 @@ class Subscription(UuidPrimaryKeyMixin, TimestampMixin, Base):
     connection_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), nullable=False
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), nullable=False
+    # ⚠ 匿名连接（公开链接）没有用户，故可空。哨兵 UUID 不行：那会让对账
+    # 与排查把一个编出来的标识读成真实用户（ADR-0021）
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
     )
     topic: Mapped[str] = mapped_column(
         # ⚠ 类型必须排在 ForeignKey 之前：反过来 SQLAlchemy 会把长度当成

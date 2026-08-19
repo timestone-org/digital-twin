@@ -8,7 +8,12 @@
 import uuid
 from datetime import timedelta
 
-from realtime_hub.apps.channel.services import Connection, ConnectionRegistry
+from realtime_hub.apps.channel.services import (
+    AnonymousQuota,
+    Connection,
+    ConnectionRegistry,
+    GrantedTopic,
+)
 
 from lib.utils.timeutils import utcnow
 
@@ -99,3 +104,64 @@ async def test_refreshing_codes_replaces_the_held_set() -> None:
     assert refreshed is not None
     assert refreshed.codes == frozenset({"opcua:manage"})
     assert refreshed.checked_at == now
+
+
+def _anonymous(ticket_hash: str) -> Connection:
+    async def send(_message: dict[str, object]) -> None:
+        return None
+
+    now = utcnow()
+    return Connection(
+        id=uuid.uuid4(),
+        user_id=None,
+        codes=frozenset(),
+        expires_at=now + timedelta(minutes=15),
+        checked_at=now,
+        send=send,
+        grant=GrantedTopic(
+            ticket_hash=ticket_hash,
+            alias=f"public:{ticket_hash}",
+            topic="dashboard:d1",
+        ),
+    )
+
+
+async def test_one_ticket_cannot_take_more_than_its_share() -> None:
+    registry = ConnectionRegistry()
+    quota = AnonymousQuota(max_total=9, max_per_ticket=2)
+    for _ in range(2):
+        assert await registry.add(_anonymous("aa"), quota=quota)
+
+    assert not await registry.add(_anonymous("aa"), quota=quota)
+    # 别的票据不受它连累
+    assert await registry.add(_anonymous("bb"), quota=quota)
+
+
+async def test_the_replica_wide_cap_stops_a_flood_of_tickets() -> None:
+    registry = ConnectionRegistry()
+    quota = AnonymousQuota(max_total=2, max_per_ticket=9)
+    for name in ("aa", "bb"):
+        assert await registry.add(_anonymous(name), quota=quota)
+
+    assert not await registry.add(_anonymous("cc"), quota=quota)
+
+
+async def test_logged_in_connections_ignore_the_anonymous_quota() -> None:
+    registry = ConnectionRegistry()
+    quota = AnonymousQuota(max_total=1, max_per_ticket=1)
+    await registry.add(_anonymous("aa"), quota=quota)
+    connection, _sent = _connection()
+
+    # ⚠ 名额只约束匿名连接：拿它去挡登录用户，一条泄露的公开链接就能把整站
+    # 的实时通道关掉
+    assert await registry.add(connection, quota=quota)
+
+
+async def test_unbinding_forgets_the_alias_too() -> None:
+    registry = ConnectionRegistry()
+    connection = _anonymous("aa")
+    await registry.add(connection)
+    await registry.bind(connection.id, "dashboard:d1", alias="public:aa")
+    await registry.unbind(connection.id, "dashboard:d1")
+
+    assert connection.outgoing_topic("dashboard:d1") == "dashboard:d1"

@@ -11,7 +11,12 @@ import json
 
 import pytest
 from fastapi import FastAPI
-from realtime_hub.settings import API_PREFIX
+from realtime_hub.apps.channel.services import ticket_fingerprint
+from realtime_hub.apps.channel.services.session import (
+    CLOSE_ANONYMOUS_QUOTA,
+    CLOSE_PUBLIC_GRANT_REVOKED,
+)
+from realtime_hub.settings import API_PREFIX, INTERNAL_PREFIX, Settings
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
@@ -21,6 +26,10 @@ pytestmark = pytest.mark.requires_postgres
 
 WS_PATH = f"{API_PREFIX}/ws"
 AUTH_SUBPROTOCOL = "dt.auth"
+# 公开链接那条路的标记，凭据是票据不是令牌（ADR-0021）
+PUBLIC_SUBPROTOCOL = "dt.public"
+PUBLIC_TICKET = "public-ticket-for-tests"
+PUBLIC_TOPIC = "opcua:9f8e7d6c"
 # 握手不合法的关闭码。⚠ 与「票过期」的 4001 分开，客户端的处置完全不同
 CLOSE_UNAUTHENTICATED = 1008
 
@@ -136,3 +145,109 @@ def test_the_alg_none_trick_is_refused(application: FastAPI) -> None:
 def _b64(payload: dict[str, object]) -> str:
     raw = json.dumps(payload, separators=(",", ":")).encode()
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+
+def _grant(client: TestClient, service_key: str) -> None:
+    """给 `PUBLIC_TICKET` 登记「能订 PUBLIC_TOPIC」的匿名授权，主题一并登记。
+
+    ⚠ 走内部端点而不是直接调 container：容器里的库连接属于 TestClient 那条
+    事件循环，在用例自己的循环里碰它会以「Future attached to a different
+    loop」炸在启动阶段——而报出来的位置与真正的原因隔得极远。
+
+    Args: client, service_key。
+    """
+    headers = {"X-Service-Key": service_key}
+    declared = client.post(
+        f"{INTERNAL_PREFIX}/realtime/topics",
+        json={
+            "topic": PUBLIC_TOPIC,
+            "required_code": "opcua:view",
+            "publisher": "tests",
+        },
+        headers=headers,
+    )
+    granted = client.post(
+        f"{INTERNAL_PREFIX}/realtime/public-grants",
+        json={
+            "ticket_hash": ticket_fingerprint(PUBLIC_TICKET),
+            "topic": PUBLIC_TOPIC,
+            "publisher": "tests",
+        },
+        headers=headers,
+    )
+    assert (declared.status_code, granted.status_code) == (200, 200)
+
+
+@pytest.mark.usefixtures("_clean")
+def test_a_granted_public_ticket_completes_the_handshake(
+    application: FastAPI, settings: Settings
+) -> None:
+    protocols = [PUBLIC_SUBPROTOCOL, PUBLIC_TICKET]
+    with TestClient(application) as client:
+        _grant(client, settings.edge_service_key.get_secret_value())
+        with client.websocket_connect(
+            WS_PATH, subprotocols=protocols
+        ) as socket:
+            hello = socket.receive_json()
+            # ⚠ 服务端必须回客户端报过的那个标记，否则浏览器判握手失败
+            assert socket.accepted_subprotocol == PUBLIC_SUBPROTOCOL
+            socket.send_json(
+                {
+                    "action": "subscribe",
+                    "topic": f"public:{PUBLIC_TICKET}",
+                    "req_id": "r1",
+                }
+            )
+            ack = socket.receive_json()
+    assert hello["event"] == "connected"
+    assert ack["type"] == "ack"
+
+
+@pytest.mark.usefixtures("_clean")
+def test_an_unknown_public_ticket_is_refused_but_retryably(
+    application: FastAPI,
+) -> None:
+    # ⚠ 与 1008 分开：撤回与「推送方还没对账到这枚新票据」长得一样，而后者只
+    # 要等一轮对账——合成 1008 会让刚发布的链接被客户端判成永久失败
+    with (
+        TestClient(application) as client,
+        pytest.raises(WebSocketDisconnect) as refused,
+    ):
+        _connect(client, PUBLIC_SUBPROTOCOL, "never-granted-ticket")
+    assert refused.value.code == CLOSE_PUBLIC_GRANT_REVOKED
+
+
+@pytest.mark.usefixtures("_clean")
+def test_a_public_ticket_cannot_subscribe_the_real_topic(
+    application: FastAPI, settings: Settings
+) -> None:
+    protocols = [PUBLIC_SUBPROTOCOL, PUBLIC_TICKET]
+    with TestClient(application) as client:
+        _grant(client, settings.edge_service_key.get_secret_value())
+        with client.websocket_connect(
+            WS_PATH, subprotocols=protocols
+        ) as socket:
+            socket.receive_json()
+            socket.send_json(
+                {"action": "subscribe", "topic": PUBLIC_TOPIC, "req_id": "r1"}
+            )
+            denied = socket.receive_json()
+    # 匿名连接只说得出自己那个别名，真主题一个字都不出门
+    assert denied["type"] == "error"
+
+
+@pytest.mark.usefixtures("_clean")
+def test_a_ticket_past_its_quota_is_turned_away_retryably(
+    crowded_application: FastAPI, settings: Settings
+) -> None:
+    # ⚠ 一枚泄露的公开令牌不许把连接池吃满（ADR-0014 §四 点名的三件事之一）。
+    # 关闭码用可重试的那一档：拥挤不是拒绝
+    protocols = [PUBLIC_SUBPROTOCOL, PUBLIC_TICKET]
+    with TestClient(crowded_application) as client:
+        _grant(client, settings.edge_service_key.get_secret_value())
+        with (
+            client.websocket_connect(WS_PATH, subprotocols=protocols),
+            pytest.raises(WebSocketDisconnect) as refused,
+        ):
+            _connect(client, *protocols)
+    assert refused.value.code == CLOSE_ANONYMOUS_QUOTA

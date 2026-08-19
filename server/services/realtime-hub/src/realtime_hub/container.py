@@ -6,12 +6,21 @@ from dataclasses import dataclass
 from lib.auth import JwtCodec
 from lib.cache import Cache, PubSub
 from lib.db import Database, PoolProfile
-from realtime_hub.apps.channel.crud import SubscriptionCrud, TopicCrud
+from realtime_hub.apps.channel.crud import (
+    PublicGrantCrud,
+    SubscriptionCrud,
+    TopicCrud,
+)
 from realtime_hub.apps.channel.services import (
+    AnonymousQuota,
     CodeCatalog,
     ConnectionRegistry,
     FanoutListener,
+    PublicAccess,
+    PublicConnectionSweeper,
+    PublicGrantRegistry,
     PublishService,
+    SessionDeps,
     SessionService,
     SubscriptionJournal,
     TopicRegistry,
@@ -31,6 +40,8 @@ class Container:
     connections: ConnectionRegistry
     fanout: FanoutListener
     registry: TopicRegistry
+    grants: PublicGrantRegistry
+    sweeper: PublicConnectionSweeper
     publisher: PublishService
     session: SessionService
     journal: SubscriptionJournal
@@ -78,6 +89,9 @@ def build_container(settings: Settings) -> Container:
         journal=journal,
         connections=connections,
         registry=registry,
+        grants=PublicGrantRegistry(
+            database=database, grants=PublicGrantCrud(), topics=topics
+        ),
         pubsub=pubsub,
         user_codes=UserCodeSource(
             base_url=settings.auth_base_url,
@@ -97,6 +111,7 @@ class _Parts:
     journal: SubscriptionJournal
     connections: ConnectionRegistry
     registry: TopicRegistry
+    grants: PublicGrantRegistry
     pubsub: PubSub
     user_codes: UserCodeSource
 
@@ -109,9 +124,6 @@ def _assemble(settings: Settings, parts: _Parts) -> Container:
     database = parts.database
     pubsub = parts.pubsub
     connections = parts.connections
-    registry = parts.registry
-    journal = parts.journal
-    topics = parts.topics
     return Container(
         settings=settings,
         database=database,
@@ -123,28 +135,51 @@ def _assemble(settings: Settings, parts: _Parts) -> Container:
             connections=connections,
             channel=settings.fanout_channel,
         ),
-        registry=registry,
+        registry=parts.registry,
+        grants=parts.grants,
+        sweeper=PublicConnectionSweeper(
+            connections=connections,
+            grants=parts.grants,
+            interval_s=settings.public_recheck_interval_s,
+        ),
         publisher=PublishService(
             database=database,
             pubsub=pubsub,
-            topics=topics,
+            topics=parts.topics,
             channel=settings.fanout_channel,
             max_items=settings.max_payload_items,
         ),
-        session=SessionService(
-            # ⚠ 只验不签：签发方是 auth-server，本服务拿不到也不需要签名密钥
-            # 之外的任何东西。signing_key 传同一枚是 JwtCodec 的形状要求。
-            codec=JwtCodec(
-                signing_key=settings.jwt_secret.get_secret_value(),
-                verification_keys=settings.verification_keys(),
-                issuer=settings.jwt_issuer,
-            ),
-            # ⚠ 权限码现查，不从令牌里读：签发方压根不往令牌里放它
-            codes=parts.user_codes,
-            registry=registry,
-            connections=connections,
-            journal=journal,
-        ),
-        journal=journal,
+        session=SessionService(_session_deps(settings, parts)),
+        journal=parts.journal,
         replica=socket.gethostname(),
+    )
+
+
+def _session_deps(settings: Settings, parts: _Parts) -> SessionDeps:
+    """会话逻辑的协作件。
+
+    Args: settings, parts。
+    """
+    return SessionDeps(
+        # ⚠ 只验不签：签发方是 auth-server，本服务拿不到也不需要签名密钥之外
+        # 的任何东西。signing_key 传同一枚是 JwtCodec 的形状要求
+        codec=JwtCodec(
+            signing_key=settings.jwt_secret.get_secret_value(),
+            verification_keys=settings.verification_keys(),
+            issuer=settings.jwt_issuer,
+        ),
+        # ⚠ 权限码现查，不从令牌里读：签发方压根不往令牌里放它
+        codes=parts.user_codes,
+        registry=parts.registry,
+        connections=parts.connections,
+        journal=parts.journal,
+        # ⚠ 匿名授权查的是本服务的库，不回调业务服务（ADR-0021）
+        public=PublicAccess(
+            grants=parts.grants,
+            quota=AnonymousQuota(
+                max_total=settings.public_max_connections,
+                max_per_ticket=settings.public_max_connections_per_ticket,
+            ),
+            ttl_s=settings.public_grant_ttl_s,
+        ),
     )

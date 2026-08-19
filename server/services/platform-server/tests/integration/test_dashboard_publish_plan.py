@@ -178,3 +178,37 @@ async def test_a_node_under_another_node_still_contributes_its_points(
     assert lookup.plan is not None
     assert lookup.plan.node_keys == (ANOTHER_KEY,)
     assert NODES_URL.endswith("dashboard-nodes")
+
+
+async def test_only_published_dashboards_carry_a_ticket(
+    app_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    # 匿名授权对账拿这条查询当权威：多取一行就是一条撤不掉的公开授权
+    project_id = await make_project(app_client, name="发布态项目")
+    published = await make_dashboard(app_client, project_id=project_id)
+    hidden = await make_dashboard(
+        app_client, project_id=project_id, name="没发布的"
+    )
+    minted = await app_client.post(
+        f"{DASHBOARDS_URL}/{published['id']}:publish"
+    )
+    token = data_of(minted)["public_token"]
+
+    rows = await publish_crud.published_dashboards(db_session)
+
+    assert (uuid.UUID(str(published["id"])), token) in rows
+    assert uuid.UUID(str(hidden["id"])) not in [row[0] for row in rows]
+
+
+async def test_a_withdrawn_dashboard_drops_out_of_the_ticket_list(
+    app_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    project_id = await make_project(app_client, name="撤回项目")
+    dashboard = await make_dashboard(app_client, project_id=project_id)
+    await app_client.post(f"{DASHBOARDS_URL}/{dashboard['id']}:publish")
+    await app_client.post(f"{DASHBOARDS_URL}/{dashboard['id']}:unpublish")
+
+    rows = await publish_crud.published_dashboards(db_session)
+
+    # 撤回把令牌置空，这一行必须当场消失，否则 hub 上那条授权注销不掉
+    assert uuid.UUID(str(dashboard["id"])) not in [row[0] for row in rows]

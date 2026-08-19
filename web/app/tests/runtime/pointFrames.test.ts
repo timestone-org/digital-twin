@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest'
 import {
   collectTopic,
   dashboardTopic,
+  publicTopic,
   decodePointItem,
   decodePointItems,
 } from '@/runtime/pointFrames'
@@ -165,7 +166,16 @@ describe('主题', () => {
     expect(collectTopic(ID)).toBe(`collect:${ID}`)
   })
 
-  it('⚠ 两个前缀不许撞——写串了 hub 会以「主题未登记」拒订，而页面只表现为「永远没有值」', () => {
+  it('一条公开链接一个别名，形状是 `public:{令牌}`', () => {
+    expect(publicTopic('tok-1')).toBe('public:tok-1')
+  })
+
+  it('⚠ 公开面订的是别名不是大屏主题——公开面拿不到大屏 id', () => {
+    expect(publicTopic(ID)).not.toBe(dashboardTopic(ID))
+  })
+
+  it('⚠ 三个前缀不许撞——写串了 hub 会以「主题未登记」拒订，而页面只表现为「永远没有值」', () => {
     expect(collectTopic(ID)).not.toBe(dashboardTopic(ID))
+    expect(publicTopic(ID)).not.toBe(collectTopic(ID))
   })
 })

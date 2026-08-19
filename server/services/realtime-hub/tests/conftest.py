@@ -21,7 +21,13 @@ import pytest
 from fastapi import FastAPI
 from realtime_hub.app import build_app
 from realtime_hub.apps.channel.crud import TopicCrud
-from realtime_hub.apps.channel.services import SessionService, TopicRegistry
+from realtime_hub.apps.channel.services import (
+    AnonymousQuota,
+    PublicAccess,
+    SessionDeps,
+    SessionService,
+    TopicRegistry,
+)
 from realtime_hub.container import Container
 from realtime_hub.settings import Settings
 from sqlalchemy import text
@@ -32,7 +38,7 @@ from lib.db import Database, PoolProfile
 from lib.logging import configure_logging
 from lib.utils.timeutils import utcnow
 
-TABLES = ("subscription", "topic_declaration")
+TABLES = ("subscription", "public_grant", "topic_declaration")
 # 用例里签票的默认存活时长，取值本身不参与断言
 TOKEN_TTL_S = 900
 
@@ -172,6 +178,31 @@ async def application(
 
 
 @pytest.fixture
+async def crowded_application(
+    settings: Settings, postgres_available: bool, user_codes: FakeUserCodes
+) -> AsyncIterator[FastAPI]:
+    """把匿名名额压到 1 的整装应用，用来验「名额用尽」那条握手路径。
+
+    ⚠ 单独一份配置而不是改全局：名额是安全口径，别的用例不该跟着它变。
+
+    Args: settings, postgres_available, user_codes。
+    """
+    if not postgres_available:
+        pytest.skip("本机连不到 Postgres")
+    crowded = settings.model_copy(
+        update={"public_max_connections_per_ticket": 1}
+    )
+    built_app = build_app(crowded)
+    built: Container = built_app.state.container
+    built_app.state.container = _with_fake_catalog(built, user_codes)
+    yield built_app
+    await built.fanout.stop()
+    await built.pubsub.close()
+    await built.database.dispose()
+    await built.cache.close()
+
+
+@pytest.fixture
 async def app(
     settings: Settings, postgres_available: bool, user_codes: FakeUserCodes
 ) -> AsyncIterator[httpx.ASGITransport]:
@@ -219,11 +250,24 @@ def _with_fake_catalog(
         built,
         registry=registry,
         session=SessionService(
-            codec=codec,
-            codes=user_codes,  # type: ignore[arg-type]  # 结构相同的假件
-            registry=registry,
-            connections=built.connections,
-            journal=built.journal,
+            SessionDeps(
+                codec=codec,
+                codes=user_codes,  # type: ignore[arg-type]  # 结构相同的假件
+                registry=registry,
+                connections=built.connections,
+                journal=built.journal,
+                # ⚠ 匿名授权用真的：它查的是本服务的库，没有跨服务调用要挡
+                public=PublicAccess(
+                    grants=built.grants,
+                    quota=AnonymousQuota(
+                        max_total=built.settings.public_max_connections,
+                        max_per_ticket=(
+                            built.settings.public_max_connections_per_ticket
+                        ),
+                    ),
+                    ttl_s=built.settings.public_grant_ttl_s,
+                ),
+            )
         ),
     )
 

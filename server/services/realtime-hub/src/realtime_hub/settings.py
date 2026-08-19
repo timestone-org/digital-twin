@@ -17,6 +17,8 @@ DB_SCHEMA = "realtime"
 PERMISSION_TTL_FLOOR_S = 5
 # 一条推送里最多带几个条目。再多就该由推送方分片——分片是推送方的事
 PAYLOAD_ITEM_CEILING = 5000
+# 匿名连接存活时长的下限。再短就是每分钟重连一次，而重连要走一次握手
+PUBLIC_TTL_FLOOR_S = 60
 
 
 class MigrationSettings(PostgresSettings):
@@ -88,6 +90,19 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     # 那个竞态便宜。真到扛不住时的出路是 psubscribe 按前缀订，仍不必动这里
     # 的消息格式。
     fanout_channel: str = "realtime.fanout"
+
+    # —— 匿名连接（公开链接）—— 口径见 ADR-0021
+    # 一条匿名连接最长活多久。到点由复核任务关掉，客户端拿同一枚票据重连，
+    # 于是授权被重新验一次。⚠ 不给到期的话，一条连上的匿名连接会一直活到
+    # 进程重启，撤回对它永远不生效
+    public_grant_ttl_s: int = Field(default=3600, ge=PUBLIC_TTL_FLOOR_S)
+    # 匿名连接的复核周期。撤回一枚票据之后，已连着的那些最多这么久被断掉
+    public_recheck_interval_s: float = Field(default=15.0, gt=0)
+    # 本副本的匿名连接总数上限。⚠ 按副本计：它防的是一枚泄露的票据把单个
+    # 副本的连接池吃满，副本之间本来就靠负载均衡分摊
+    public_max_connections: int = Field(default=500, ge=1)
+    # 同一枚票据的匿名连接数上限
+    public_max_connections_per_ticket: int = Field(default=50, ge=1)
 
     def verification_keys(self) -> tuple[str, ...]:
         """验签用的密钥序列，轮换期两枚都试。"""

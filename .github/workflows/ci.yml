@@ -282,6 +282,20 @@ jobs:
       OPCUA_REDIS_HOST: localhost
       OPCUA_REDIS_PORT: '56379'
 
+      # ⚠ realtime-hub 的 JWT 密钥必须与 AUTH_JWT_SECRET 同值：它只验不签，
+      # 分叉的表现是每一次 WS 握手都被判成伪造令牌
+      REALTIME_POSTGRES_HOST: localhost
+      REALTIME_POSTGRES_PORT: '55432'
+      REALTIME_POSTGRES_USER: dt
+      REALTIME_POSTGRES_PASSWORD: dt
+      REALTIME_POSTGRES_DB: dt
+      REALTIME_POSTGRES_SCHEMA: realtime
+      REALTIME_REDIS_HOST: localhost
+      REALTIME_REDIS_PORT: '56379'
+      REALTIME_JWT_SECRET: ci-only-jwt-secret-0123456789abcdef
+      REALTIME_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
+      REALTIME_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
+
       COLLECT_POSTGRES_HOST: localhost
       COLLECT_POSTGRES_PORT: '55432'
       COLLECT_POSTGRES_USER: dt
@@ -328,6 +342,10 @@ jobs:
 
       - name: 建 collect schema
         working-directory: server/services/collector-server
+        run: uv run alembic upgrade head
+
+      - name: 建 realtime schema
+        working-directory: server/services/realtime-hub
         run: uv run alembic upgrade head
 
       # ⚠ --cov 必须用点号模块名：写成路径形式时 coverage 静默跳过、数字虚高
@@ -397,6 +415,16 @@ jobs:
             --junitxml=../../../collector-junit.xml 2>&1 \
             | tee ../../../collector-pytest.log
 
+      # ⚠ 匿名订阅那条路（ADR-0021）只有真库能验：授权表、外键级联与真实握手
+      - name: realtime-hub 全层
+        working-directory: server/services/realtime-hub
+        run: |
+          set -o pipefail
+          uv run pytest -q --cov=realtime_hub --cov-branch \
+            --cov-report=xml:../../../realtime-coverage.xml \
+            --junitxml=../../../realtime-junit.xml 2>&1 \
+            | tee ../../../realtime-pytest.log
+
       # CI 里 skip 掉的用例等于没跑：环境能力由服务容器保证，缺了就该红
       - name: 运行结果自检（无 skip、无外网、覆盖率口径）
         run: |
@@ -414,6 +442,8 @@ jobs:
             opcua-junit.xml opcua-pytest.log
           uv run --project server python scripts/gates/check_pytest_run.py \
             collector-junit.xml collector-pytest.log
+          uv run --project server python scripts/gates/check_pytest_run.py \
+            realtime-junit.xml realtime-pytest.log
 
       # 整体覆盖率不许低于基线——哪怕仍在阈值之上
       - name: 覆盖率棘轮
@@ -432,6 +462,8 @@ jobs:
             opcua-server opcua-coverage.xml
           uv run --project server python scripts/gates/check_coverage.py \
             collector-server collector-coverage.xml
+          uv run --project server python scripts/gates/check_coverage.py \
+            realtime-hub realtime-coverage.xml
 
       # 基线是**本次推送前的 main**（`github.event.before`）：刚合进来的那一坨
       # 改动正好落在这段区间里。⚠ 没有 before（分支首推、手动补跑）时无基线
@@ -451,7 +483,7 @@ jobs:
             lib-coverage.xml timeseries-coverage.xml \
             collectwire-coverage.xml auth-coverage.xml \
             platform-coverage.xml opcua-coverage.xml \
-            collector-coverage.xml \
+            collector-coverage.xml realtime-coverage.xml \
             --compare-branch "${BASELINE}" --fail-under=85
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -609,6 +641,20 @@ jobs:
           OPCUA_POSTGRES_PASSWORD: dt
           OPCUA_POSTGRES_DB: dt
           OPCUA_POSTGRES_SCHEMA: opcua
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+
+      - name: realtime-hub 的迁移 upgrade → downgrade → upgrade
+        working-directory: server/services/realtime-hub
+        env:
+          REALTIME_POSTGRES_HOST: localhost
+          REALTIME_POSTGRES_PORT: '55432'
+          REALTIME_POSTGRES_USER: dt
+          REALTIME_POSTGRES_PASSWORD: dt
+          REALTIME_POSTGRES_DB: dt
+          REALTIME_POSTGRES_SCHEMA: realtime
         run: |
           uv run alembic upgrade head
           uv run alembic downgrade base

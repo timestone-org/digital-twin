@@ -18,6 +18,32 @@ _logger = get_logger("realtime.connections")
 # 往这条连接发一条消息。⚠ 只声明成一个可等待的函数，不把 WebSocket 类型
 # 带进来——这一层不该认识传输，测试也才能拿一个 list.append 顶上。
 type SendFn = Callable[[dict[str, object]], Awaitable[None]]
+# 按给定的关闭码断掉这条连接。复核任务要摘掉授权已被撤回的匿名连接，而它
+# 手上只有连接对象。⚠ 同样不认识 WebSocket。
+type CloseFn = Callable[[int], Awaitable[None]]
+
+
+@dataclass(frozen=True)
+class GrantedTopic:
+    """匿名连接握手时拿到的那一条授权。
+
+    ⚠ `alias` 是这条连接对外唯一说得出口的主题名，由票据本身派生；真主题
+    `topic` 一个字都不出门。少了这层改名，匿名访客就能从帧里读出主题标识，
+    而那正是 ADR-0014「公开面不回任何能定位它在库里位置的信息」挡的东西。
+    """
+
+    ticket_hash: str
+    alias: str
+    topic: str
+
+
+@dataclass(frozen=True)
+class AnonymousQuota:
+    """匿名连接的名额。⚠ 按副本计，不是全集群——它防的是一枚泄露的票据把
+    单个副本的连接池吃满，而副本之间本来就靠负载均衡分摊。"""
+
+    max_total: int
+    max_per_ticket: int
 
 
 @dataclass
@@ -25,7 +51,9 @@ class Connection:
     """一条已完成鉴权的客户端连接。"""
 
     id: uuid.UUID
-    user_id: uuid.UUID
+    # ⚠ 匿名连接没有用户：公开链接的持有者不是任何一个人（ADR-0021）。
+    # 用哨兵 UUID 顶替的话，订阅表里会出现一个不存在的「用户」
+    user_id: uuid.UUID | None
     # 该连接当前持有的权限码。⚠ 它会随 TTL 复核而变，不是握手时定死的
     codes: frozenset[str]
     # token 的到期时刻，逾期未 reauth 即关连接（close 4001）
@@ -33,7 +61,19 @@ class Connection:
     # 上一次复核权限的时刻
     checked_at: datetime
     send: SendFn
+    # 匿名连接的授权；登录态连接为 None
+    grant: GrantedTopic | None = None
     topics: set[str] = field(default_factory=set[str])
+    # 真主题 → 这条连接对外看到的名字。只有匿名连接有条目
+    aliases: dict[str, str] = field(default_factory=dict[str, str])
+    close: CloseFn | None = None
+
+    def outgoing_topic(self, topic: str) -> str:
+        """一帧发给这条连接时，信封上该写哪个主题名。
+
+        Args: topic。
+        """
+        return self.aliases.get(topic, topic)
 
 
 class ConnectionRegistry:
@@ -49,13 +89,57 @@ class ConnectionRegistry:
         # ⚠ 单锁保护两张表：它们必须一起改，否则反向索引会指向已经关掉的连接
         self._lock = asyncio.Lock()
 
-    async def add(self, connection: Connection) -> None:
-        """登记一条新连接。
+    async def add(
+        self, connection: Connection, *, quota: AnonymousQuota | None = None
+    ) -> bool:
+        """登记一条新连接；名额不够时不登记并返回 False。
 
-        Args: connection。
+        ⚠ 名额在锁内判：判完再加的话，同一枚票据并发握手会一起看到「还有
+        名额」，于是名额形同虚设——而这正是一枚泄露的票据会做的事。
+
+        Args: connection, quota。
         """
         async with self._lock:
+            if quota is not None and not self._has_room(
+                connection.grant, quota
+            ):
+                return False
             self._by_id[connection.id] = connection
+        return True
+
+    async def has_room(
+        self, grant: GrantedTopic | None, quota: AnonymousQuota
+    ) -> bool:
+        """这枚票据还开得起一条连接吗。握手在 accept **之前**先问它。
+
+        ⚠ 问完再登记之间有一个窄窗口，登记那一步会在锁内再判一次。两处都要：
+        只在登记那一步判的话，拒绝就发生在 accept 之后——而 accept 之后再关，
+        客户端的退避已经归零，表现是每秒一次的空转重连。
+
+        Args: grant, quota。
+        """
+        async with self._lock:
+            return self._has_room(grant, quota)
+
+    def _has_room(
+        self, grant: GrantedTopic | None, quota: AnonymousQuota
+    ) -> bool:
+        """匿名名额还够不够。⚠ 只在锁内调。
+
+        Args: grant, quota。
+        """
+        if grant is None:
+            return True
+        anonymous = [item for item in self._by_id.values() if item.grant]
+        if len(anonymous) >= quota.max_total:
+            return False
+        same = sum(
+            1
+            for item in anonymous
+            if item.grant is not None
+            and item.grant.ticket_hash == grant.ticket_hash
+        )
+        return same < quota.max_per_ticket
 
     async def remove(self, connection_id: uuid.UUID) -> None:
         """摘掉一条连接及它在反向索引里的全部占位。
@@ -77,16 +161,20 @@ class ConnectionRegistry:
                 if not holders:
                     del self._by_topic[topic]
 
-    async def bind(self, connection_id: uuid.UUID, topic: str) -> None:
+    async def bind(
+        self, connection_id: uuid.UUID, topic: str, *, alias: str | None = None
+    ) -> None:
         """把连接挂到主题上。重复挂是幂等的。
 
-        Args: connection_id, topic。
+        Args: connection_id, topic, alias（匿名连接对外看到的名字）。
         """
         async with self._lock:
             connection = self._by_id.get(connection_id)
             if connection is None:
                 return
             connection.topics.add(topic)
+            if alias is not None:
+                connection.aliases[topic] = alias
             self._by_topic.setdefault(topic, set()).add(connection_id)
 
     async def unbind(self, connection_id: uuid.UUID, topic: str) -> None:
@@ -98,6 +186,7 @@ class ConnectionRegistry:
             connection = self._by_id.get(connection_id)
             if connection is not None:
                 connection.topics.discard(topic)
+                connection.aliases.pop(topic, None)
             holders = self._by_topic.get(topic)
             if holders is None:
                 return
@@ -131,6 +220,13 @@ class ConnectionRegistry:
         """本副本上的全部连接快照，供 TTL 复核逐条走一遍。"""
         async with self._lock:
             return tuple(self._by_id.values())
+
+    async def anonymous(self) -> tuple[Connection, ...]:
+        """本副本上的全部匿名连接快照。授权复核只看这些。"""
+        async with self._lock:
+            return tuple(
+                item for item in self._by_id.values() if item.grant is not None
+            )
 
     async def refresh_codes(
         self,

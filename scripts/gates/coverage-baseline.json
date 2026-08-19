@@ -7,7 +7,7 @@
     "lines": 98.06,
     "branches": 90.88
   },
-  "timeseries": {
+  "collectwire": {
     "lines": 100.0,
     "branches": 100.0
   },
@@ -23,12 +23,16 @@
     "lines": 98.1,
     "branches": 85.2
   },
+  "realtime-hub": {
+    "lines": 94.26,
+    "branches": 77.14
+  },
+  "timeseries": {
+    "lines": 100.0,
+    "branches": 100.0
+  },
   "web": {
     "lines": 99.31,
     "branches": 95.55
-  },
-  "collectwire": {
-    "lines": 100.0,
-    "branches": 100.0
   }
 }

@@ -1,15 +1,16 @@
 """客户端 WebSocket 端点。
 
-⚠ 鉴权路径与 HTTP 完全不同：token 走**子协议**，`Authorization` 头上的
+⚠ 鉴权路径与 HTTP 完全不同：凭据走**子协议**，`Authorization` 头上的
 中间件对它不生效，闸 1 也认不出它——匿名可达性由边缘免认证 location 保证，
 认证在这里完成（testing-standard-python.md §7.1 要求它单独测）。
 
-握手约定：客户端把两个子协议一起报上来
+握手约定：客户端把两个子协议一起报上来，第一个是标记、第二个是凭据
 
-    Sec-WebSocket-Protocol: dt.auth, <access token>
+    Sec-WebSocket-Protocol: dt.auth, <access token>      ← 登录态
+    Sec-WebSocket-Protocol: dt.public, <公开票据>        ← 公开链接（ADR-0021）
 
-服务端只回 `dt.auth`。⚠ 必须回一个客户端报过的值，否则浏览器判握手失败；
-而回 token 本身等于把它写进响应头，会落进代理与浏览器的日志。
+服务端**回客户端报过的那个标记**。⚠ 必须回一个客户端报过的值，否则浏览器判
+握手失败；而回凭据本身等于把它写进响应头，会落进代理与浏览器的日志。
 """
 
 import json
@@ -23,13 +24,19 @@ from lib.utils.timeutils import utcnow
 from realtime_hub.apps.channel.deps import get_container
 from realtime_hub.apps.channel.errors import UserCodesUnavailable
 from realtime_hub.apps.channel.services import (
+    AnonymousQuotaExceeded,
     AuthenticationRejected,
     Handshake,
+    PublicGrantRejected,
 )
 from realtime_hub.apps.channel.services.session import (
+    CLOSE_ANONYMOUS_QUOTA,
+    CLOSE_PUBLIC_GRANT_REVOKED,
     CLOSE_TOKEN_EXPIRED,
     TYPE_ERROR,
     TYPE_SYSTEM,
+    is_expired,
+    needs_reauth,
 )
 from realtime_hub.container import Container
 from realtime_hub.settings import API_PREFIX
@@ -38,15 +45,19 @@ _logger = get_logger("realtime.ws")
 
 router = APIRouter(prefix=API_PREFIX, tags=["realtime"])
 
-# 与 token 一起报上来的子协议标记，服务端回它
+# 与 access token 一起报上来的子协议标记，服务端回它
 AUTH_SUBPROTOCOL = "dt.auth"
+# 与公开票据一起报上来的子协议标记。⚠ 与上面分成两个而不是「先当 token 试、
+# 不行再当票据试」：试探式的鉴权会让一次形状变化静默地走进另一条路径
+PUBLIC_SUBPROTOCOL = "dt.public"
+SUBPROTOCOL_MARKERS = (AUTH_SUBPROTOCOL, PUBLIC_SUBPROTOCOL)
 # 握手不合法时的关闭码。⚠ 用 1008 而不是 4001：4001 的语义是「票过期了，
 # 换一张再来」，而这里是「压根没给票」，客户端的处置完全不同
 CLOSE_UNAUTHENTICATED = 1008
 # 依赖不可达时的关闭码。⚠ 与 1008 分开：1008 的语义是「你不该连」，客户端据此
 # 停止重连；而这里是我们自己查不到权限，它该退避后再来
 CLOSE_DEPENDENCY_DOWN = 1013
-# 握手要报的两个子协议：标记 + token，缺一不可
+# 握手要报的两个子协议：标记 + 凭据，缺一不可
 SUBPROTOCOL_COUNT = 2
 
 
@@ -59,10 +70,10 @@ async def channel(
 
     Args: websocket, container。
     """
-    handshake = await _handshake(websocket, container)
-    if handshake is None:
+    accepted = await _handshake(websocket, container)
+    if accepted is None:
         return
-    await _serve(websocket, container, handshake)
+    await _serve(websocket, container, accepted)
 
 
 async def _serve(
@@ -80,7 +91,16 @@ async def _serve(
         await websocket.send_json(message)
 
     session = container.session
-    connection = await session.open(handshake, send=send)
+    try:
+        connection = await session.open(handshake, send=send)
+    except AnonymousQuotaExceeded:  # pragma: no cover - 并发抢名额的窄窗口
+        # ⚠ 名额在 accept 之前已经问过一次，走到这里的是两条并发握手抢同一个
+        # 名额那个窄窗口——驱动不出来，但漏了它就是一次未捕获异常。关闭码仍用
+        # 可重试的那一档
+        await websocket.close(code=CLOSE_ANONYMOUS_QUOTA)
+        return
+    # 复核任务要能主动断掉授权已被撤回的匿名连接，而它手上只有连接对象
+    connection.close = lambda code: websocket.close(code=code)
     try:
         await _pump(websocket, container, connection_id=connection.id)
     except WebSocketDisconnect:
@@ -92,30 +112,53 @@ async def _serve(
 async def _handshake(
     websocket: WebSocket, container: Container
 ) -> Handshake | None:
-    """验票并接受握手；不合法则在 accept **之前**关掉，返回 None。
+    """验凭据并接受握手；不合法则在 accept **之前**关掉，返回 None。
 
     ⚠ 必须在 accept 之前拒绝：accept 之后再关，客户端会先看到「连上了」
-    再被踢，重连逻辑会把它当成网络抖动一直重试。
+    再被踢——它的退避会在 open 那一刻归零，于是变成每秒一次的空转重连。
+    名额也因此要在这里问，而不是等到登记那一步。
 
     Args: websocket, container。
     """
-    token = _token_from_subprotocols(websocket)
-    if token is None:
+    offered = _credential_from_subprotocols(websocket)
+    if offered is None:
         await websocket.close(code=CLOSE_UNAUTHENTICATED)
         return None
+    marker, credential = offered
+    handshake = await _authenticate(websocket, container, marker, credential)
+    if handshake is None:
+        return None
+    if not await container.session.has_room(handshake):
+        await websocket.close(code=CLOSE_ANONYMOUS_QUOTA)
+        return None
+    await websocket.accept(subprotocol=marker)
+    return handshake
+
+
+async def _authenticate(
+    websocket: WebSocket, container: Container, marker: str, credential: str
+) -> Handshake | None:
+    """按标记走对应的那条验证路径；不通过则关掉连接并返回 None。
+
+    Args: websocket, container, marker, credential。
+    """
+    session = container.session
     try:
-        handshake = await container.session.authenticate(token)
+        if marker == PUBLIC_SUBPROTOCOL:
+            return await session.authenticate_public(credential)
+        return await session.authenticate(credential)
     except AuthenticationRejected:
         await websocket.close(code=CLOSE_UNAUTHENTICATED)
-        return None
+    except PublicGrantRejected:
+        # ⚠ 与 1008 分开：撤回与「推送方还没对账到这枚新票据」在这里长得一样，
+        # 而后者只要等一轮对账。合成 1008 会让刚发布的链接被客户端判成永久失败
+        await websocket.close(code=CLOSE_PUBLIC_GRANT_REVOKED)
     except UserCodesUnavailable:
         # ⚠ 与「票不对」分开：这是我们自己查不到权限，客户端该过一会儿再连。
         # 混成 1008 的话，一次 auth 抖动会让所有客户端认定自己没权限而不再
         # 重连，于是 auth 恢复了通道也不会自己回来
         await websocket.close(code=CLOSE_DEPENDENCY_DOWN)
-        return None
-    await websocket.accept(subprotocol=AUTH_SUBPROTOCOL)
-    return handshake
+    return None
 
 
 async def _pump(
@@ -133,7 +176,7 @@ async def _pump(
         connection = await container.connections.get(connection_id)
         if connection is None:  # pragma: no cover - 摘除与收帧竞争，极窄
             return
-        if session.is_expired(connection, now=utcnow()):
+        if is_expired(connection, now=utcnow()):
             # ⚠ 4001：票过期了，客户端该换票重连，而不是当成网络故障重试
             await websocket.close(code=CLOSE_TOKEN_EXPIRED)
             return
@@ -144,17 +187,19 @@ async def _pump(
             )
             continue
         await session.dispatch(connection, message)
-        if session.needs_reauth(connection, now=utcnow()):
+        if needs_reauth(connection, now=utcnow()):
             await connection.send(
                 {"type": TYPE_SYSTEM, "event": "reauth_required"}
             )
 
 
-def _token_from_subprotocols(websocket: WebSocket) -> str | None:
-    """从 `Sec-WebSocket-Protocol` 里取出 token。
+def _credential_from_subprotocols(
+    websocket: WebSocket,
+) -> tuple[str, str] | None:
+    """从 `Sec-WebSocket-Protocol` 里取出「标记 + 凭据」。
 
-    ⚠ 只认「`dt.auth` 之后的那一个」这种固定形状，不做模糊匹配：把任意看着
-    像 token 的子协议都当票收，会让一个拼错的协议名变成静默的鉴权绕过尝试。
+    ⚠ 只认「标记之后的那一个」这种固定形状，不做模糊匹配：把任意看着像凭据
+    的子协议都当票收，会让一个拼错的协议名变成静默的鉴权绕过尝试。
 
     Args: websocket。
     """
@@ -162,9 +207,12 @@ def _token_from_subprotocols(websocket: WebSocket) -> str | None:
     if not raw:
         return None
     offered = [item.strip() for item in raw.split(",") if item.strip()]
-    if len(offered) < SUBPROTOCOL_COUNT or offered[0] != AUTH_SUBPROTOCOL:
+    if len(offered) < SUBPROTOCOL_COUNT:
         return None
-    return offered[1]
+    marker = offered[0]
+    if marker not in SUBPROTOCOL_MARKERS:
+        return None
+    return marker, offered[1]
 
 
 def _decode(raw: str) -> dict[str, object] | None:

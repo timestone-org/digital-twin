@@ -17,6 +17,7 @@ _logger = get_logger("platform.realtime")
 
 TOPICS_PATH = "/internal/v1/realtime/topics"
 PUBLISH_PATH = "/internal/v1/realtime/publish"
+GRANTS_PATH = "/internal/v1/realtime/public-grants"
 
 
 class FramePublisher(Protocol):
@@ -41,6 +42,18 @@ class TopicRegistrar(Protocol):
     async def topics(self, publisher: str) -> list[str]: ...
 
     async def revoke(self, topic: str) -> bool: ...
+
+
+class PublicGrantRegistrar(Protocol):
+    """匿名授权面的最小契约。发布态对账只需要这三件。"""
+
+    async def declare_grant(
+        self, *, ticket_hash: str, topic: str, publisher: str
+    ) -> bool: ...
+
+    async def grants(self, publisher: str) -> list[str]: ...
+
+    async def revoke_grant(self, ticket_hash: str) -> bool: ...
 
 
 class RealtimeClient:
@@ -130,6 +143,74 @@ class RealtimeClient:
             return False
         return True
 
+    async def declare_grant(
+        self, *, ticket_hash: str, topic: str, publisher: str
+    ) -> bool:
+        """登记一枚公开票据对某个主题的匿名订阅授权。返回是否登记成功。
+
+        ⚠ 送的是**指纹**不是令牌：令牌是可直接使用的凭据，本方法的调用方
+        （`public_grants.py`）已经算好指纹，这里不认识原文。
+
+        Args: ticket_hash, topic, publisher。
+        """
+        return await self._post(
+            GRANTS_PATH,
+            {
+                "ticket_hash": ticket_hash,
+                "topic": topic,
+                "publisher": publisher,
+            },
+            action="declare_grant",
+        )
+
+    async def grants(self, publisher: str) -> list[str]:
+        """列出本推送方在 hub 上登记的全部匿名授权指纹。对账用。
+
+        ⚠ 取不到时返回**空列表**而不是抛，与 `topics` 同口径：空清单只会导致
+        补登记（幂等），不会导致注销——注销的方向以 hub 的清单为输入。
+
+        Args: publisher。
+        """
+        try:
+            async with self._client() as client:
+                response = await client.get(
+                    GRANTS_PATH,
+                    params={"publisher": publisher},
+                    headers=self._headers(),
+                )
+                response.raise_for_status()
+                envelope = _GrantsEnvelope.model_validate(response.json())
+                return list(envelope.data.ticket_hashes)
+        except (httpx.HTTPError, ValidationError, ValueError) as error:
+            _logger.warning(
+                "grant_list_failed",
+                "取匿名授权清单失败，本轮对账跳过",
+                error_type=type(error).__name__,
+            )
+            return []
+
+    async def revoke_grant(self, ticket_hash: str) -> bool:
+        """注销一枚票据的匿名授权。返回是否注销成功。
+
+        ⚠ 失败必须被看见：注销失败等于一条已经撤回的公开链接还能收实时值。
+
+        Args: ticket_hash。
+        """
+        try:
+            async with self._client() as client:
+                response = await client.delete(
+                    f"{GRANTS_PATH}/{ticket_hash}", headers=self._headers()
+                )
+                response.raise_for_status()
+        except httpx.HTTPError as error:
+            _logger.error(
+                "grant_revoke_failed",
+                "注销匿名授权失败，已撤回的公开链接仍能收到实时值",
+                error_type=type(error).__name__,
+            )
+            return False
+        return True
+
     async def publish(
         self,
         *,
@@ -200,6 +281,18 @@ class RealtimeClient:
             "X-Service-Key": self._service_key,
             "traceparent": traceparent or current_traceparent(),
         }
+
+
+class _GrantsData(BaseModel):
+    """信封里的 data 段。"""
+
+    ticket_hashes: list[str]
+
+
+class _GrantsEnvelope(BaseModel):
+    """hub 的统一信封，本地只取 data。理由同 `_TopicsEnvelope`。"""
+
+    data: _GrantsData
 
 
 class _TopicsData(BaseModel):
