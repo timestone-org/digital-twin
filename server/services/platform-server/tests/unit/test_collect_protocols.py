@@ -5,8 +5,8 @@
 
 import pytest
 
+from collectwire import DATA_TYPES
 from platform_server.apps.collect.protocols import (
-    DATA_TYPES,
     PROTOCOLS,
     READ_MODES,
     UnknownLiteral,
