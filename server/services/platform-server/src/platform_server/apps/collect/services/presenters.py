@@ -108,6 +108,7 @@ def to_browse_item_out(entry: BrowseEntry) -> BrowseItemOut:
         name=entry.name,
         has_children=entry.has_children,
         is_variable=entry.is_variable,
+        data_type=entry.data_type,
     )
 
 
@@ -122,6 +123,7 @@ def to_subtree_item_out(item: SubtreeEntry) -> SubtreeItemOut:
         name=item.entry.name,
         has_children=item.entry.has_children,
         is_variable=item.entry.is_variable,
+        data_type=item.entry.data_type,
     )
 
 

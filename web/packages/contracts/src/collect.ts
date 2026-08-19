@@ -139,6 +139,12 @@ export interface CollectBrowseItem {
   has_children: boolean
   /** 只有变量节点能当点位；对象节点只用来往下走。 */
   is_variable: boolean
+  /**
+   * 现场说这个变量是什么类型。
+   * ⚠ `null` 是「采集侧没读到」，不是「不是数」：建点位时按它预选类型，
+   * 读不到就让人自己选——兜一个 float 会让文本点位按数值聚合。
+   */
+  data_type: CollectDataType | null
 }
 
 export interface CollectBrowseResult {

@@ -159,6 +159,57 @@ async def test_browse_maps_every_field_of_an_entry() -> None:
     assert entries[0].is_variable is True
 
 
+@pytest.mark.parametrize(
+    ("wire", "expected"),
+    [
+        ("string", "string"),
+        ("bool", "bool"),
+        (None, None),
+        ("decimal", None),
+        (11, None),
+    ],
+    ids=["string", "bool", "null", "unknown-word", "not-a-word"],
+)
+async def test_the_value_type_comes_through_and_unknowns_become_none(
+    wire: object, expected: str | None
+) -> None:
+    """⚠ 采集侧翻出本侧不认识的字面量时不许 500：那会让整棵树浏览不出来。"""
+    transport = FakeCommandTransport(
+        replies={
+            ACTION_BROWSE: {
+                "status": "ok",
+                "data": {
+                    "items": [
+                        {
+                            "address": "ns=2;s=Note",
+                            "name": "Note",
+                            "has_children": False,
+                            "is_variable": True,
+                            "data_type": wire,
+                        }
+                    ]
+                },
+            }
+        }
+    )
+    entries = await build_bus(transport).browse(SOURCE_ID, None)
+    assert entries[0].data_type == expected
+
+
+async def test_an_item_without_a_value_type_reads_as_unknown() -> None:
+    """老采集器不带这一项，那是「没读到」而不是解析失败。"""
+    transport = FakeCommandTransport(
+        replies={
+            ACTION_BROWSE: {
+                "status": "ok",
+                "data": {"items": [{"address": "ns=2;s=A"}]},
+            }
+        }
+    )
+    entries = await build_bus(transport).browse(SOURCE_ID, None)
+    assert entries[0].data_type is None
+
+
 async def test_a_malformed_browse_item_is_dropped() -> None:
     transport = FakeCommandTransport(
         replies={

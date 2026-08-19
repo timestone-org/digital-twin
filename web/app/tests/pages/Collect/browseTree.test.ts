@@ -29,6 +29,7 @@ function browsed(
     name: address,
     has_children: false,
     is_variable: true,
+    data_type: null,
     ...overrides,
   }
 }

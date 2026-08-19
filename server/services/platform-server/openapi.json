@@ -3955,6 +3955,23 @@
             "title": "Address",
             "type": "string"
           },
+          "data_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "bool",
+                  "float",
+                  "int",
+                  "string"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Type"
+          },
           "has_children": {
             "title": "Has Children",
             "type": "boolean"
@@ -9773,6 +9790,23 @@
           "address": {
             "title": "Address",
             "type": "string"
+          },
+          "data_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "bool",
+                  "float",
+                  "int",
+                  "string"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Type"
           },
           "has_children": {
             "title": "Has Children",

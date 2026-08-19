@@ -82,6 +82,7 @@ function leaf(name: string): CollectBrowseItem {
     name,
     has_children: false,
     is_variable: true,
+    data_type: 'float',
   }
 }
 
@@ -92,6 +93,7 @@ function branch(name: string): CollectBrowseItem {
     name,
     has_children: true,
     is_variable: false,
+    data_type: null,
   }
 }
 
