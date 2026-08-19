@@ -31,7 +31,7 @@ from platform_server.apps.hvac.modeling.features import (
 )
 from platform_server.apps.hvac.modeling.folds import time_fold_ids
 from platform_server.apps.hvac.modeling.weights import decay_weights
-from platform_server.apps.hvac.services.ac_startup_frames import RoomUnit
+from platform_server.apps.hvac.rooms import RoomUnit
 
 # 可用样本少于这个数直接拒训；一个组合攒到这个数才配得上专属子模型。
 # 训一个看起来能用的坏模型比不训危险

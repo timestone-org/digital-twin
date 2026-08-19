@@ -8,6 +8,7 @@ import asyncio
 import uuid
 from collections.abc import AsyncIterator, Callable
 from concurrent.futures import Executor
+from concurrent.futures.process import BrokenProcessPool
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import cast
@@ -115,6 +116,29 @@ def entry(entry_id: str) -> StreamEntry:
             model_id=MODEL_ID, traceparent=TRACEPARENT
         ).to_fields(),
     )
+
+
+class FakeProcess:
+    """记下被杀过几次的假子进程。"""
+
+    def __init__(self) -> None:
+        self.killed = 0
+
+    def kill(self) -> None:
+        self.killed += 1
+
+
+class FakeExecutor:
+    """带 `_processes` 的假执行器：换池路径要杀的就是这本字典里的东西。"""
+
+    def __init__(self) -> None:
+        self.process = FakeProcess()
+        self._processes = {1: self.process}
+        self.shutdowns = 0
+
+    def shutdown(self, **kwargs: object) -> None:
+        del kwargs
+        self.shutdowns += 1
 
 
 class FakePool:
@@ -252,6 +276,50 @@ async def test_a_timeout_is_recorded_as_a_failure(
     assert stream.acked == ["3-3"]
     # ⚠ 掐断的拟合还在子进程里烧：必须换池，否则下一次训练排不上
     assert pool.recycled == 1
+
+
+async def test_a_broken_pool_is_replaced_not_kept(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 子进程猝死会把整池永久标记为坏：不换池，往后每次 submit 都秒抛。"""
+    failures: list[str] = []
+
+    async def broken(*args: object, **kwargs: object) -> TrainRun:
+        del args, kwargs
+        raise BrokenProcessPool("子进程没了")
+
+    async def record(
+        database: Database, model_id: uuid.UUID, *, reason: str
+    ) -> None:
+        del database, model_id
+        failures.append(reason)
+
+    monkeypatch.setattr(ac_model_worker, "run_training", broken)
+    monkeypatch.setattr(ac_model_worker, "mark_failed", record)
+    stream = FakeStream(batches=[[entry("3-4")]])
+    pool = FakePool()
+    await build(stream, pool=pool)._tick()
+    assert failures == ["子进程没了"]
+    assert stream.acked == ["3-4"]
+    assert pool.recycled == 1
+
+
+def test_recycling_swaps_in_a_fresh_pool_and_kills_the_old_one() -> None:
+    """⚠ 换池必须真把旧子进程杀掉：单工池被僵尸拟合占着，下一次训练排不上。"""
+    made: list[FakeExecutor] = []
+
+    def factory() -> Executor:
+        made.append(FakeExecutor())
+        return cast(Executor, made[-1])
+
+    pool = TrainerPool(factory)
+    first = pool.executor
+    pool.recycle()
+    assert pool.executor is not first
+    assert made[0].process.killed == 1
+    assert made[0].shutdowns == 1
+    pool.shutdown()
+    assert made[1].process.killed == 1
 
 
 def test_the_envelope_round_trips() -> None:

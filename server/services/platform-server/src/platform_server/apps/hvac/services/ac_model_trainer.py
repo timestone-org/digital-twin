@@ -49,10 +49,10 @@ from platform_server.apps.hvac.models import (
     AcStartupBatch,
     AcStartupEpisode,
 )
+from platform_server.apps.hvac.rooms import RoomUnit
 from platform_server.apps.hvac.services.ac_startup_extract import (
     load_bound_units,
 )
-from platform_server.apps.hvac.services.ac_startup_frames import RoomUnit
 from platform_server.apps.hvac.startups import OUTCOME_USABLE
 
 

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from platform_server.apps.hvac.services.ac_startup_frames import (
+from platform_server.apps.hvac.rooms import (
     METRIC_WORKSHOP_HUMIDITY,
     METRIC_WORKSHOP_TEMP,
     RoomUnit,

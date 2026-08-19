@@ -33,7 +33,7 @@ from platform_server.apps.hvac.models import (
     Room,
     Workshop,
 )
-from platform_server.apps.hvac.services.ac_startup_frames import (
+from platform_server.apps.hvac.rooms import (
     MetricBand,
     RoomUnit,
 )

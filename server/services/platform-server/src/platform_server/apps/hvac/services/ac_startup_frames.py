@@ -5,19 +5,24 @@
 """
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal
 
+from platform_server.apps.hvac.rooms import (
+    METRIC_FAN_FREQUENCY,
+    METRIC_WORKSHOP_HUMIDITY,
+    METRIC_WORKSHOP_TEMP,
+    MetricBand,
+    RoomUnit,
+)
 from platform_server.apps.hvac.services.ac_source_reader import SourceRow
 from platform_server.apps.hvac.services.ac_startup_rules import (
     Frame,
     Readings,
 )
 
-METRIC_FAN_FREQUENCY = "fan_frequency"
-METRIC_WORKSHOP_TEMP = "workshop_temp_avg"
-METRIC_WORKSHOP_HUMIDITY = "workshop_humidity_avg"
+# ⚠ 存量工件的 pickle 里写死了这两个类在**本模块**下的路径：定义可以搬家，
+# 旧名必须留在这里，解析不到就是所有已训模型一起拒载（AC_MODEL_DESIGN §4）
+__all__ = ["MetricBand", "RoomUnit"]
 
 # 三个决定判定的指标：一个定运行、两个定达标。它们缺一帧就废一帧，其余 16 个
 # 指标只是随事件一起留档，缺了不影响判定
@@ -30,35 +35,6 @@ DECISION_METRICS = (
 # 车间温度的合理区间，超出即判为尖峰（实测有 273305 这类值）
 MIN_PLAUSIBLE_CELSIUS = -20.0
 MAX_PLAUSIBLE_CELSIUS = 60.0
-
-
-@dataclass(frozen=True)
-class MetricBand:
-    """一个指标的达标范围。⚠ 单边为 None 表示该侧不限制，不表示 0。"""
-
-    lower: Decimal | None
-    upper: Decimal | None
-
-    def contains(self, value: float) -> bool:
-        """值是否落在闭区间内。
-
-        Args: value。
-        """
-        if self.lower is not None and value < float(self.lower):
-            return False
-        return self.upper is None or value <= float(self.upper)
-
-
-@dataclass(frozen=True)
-class RoomUnit:
-    """房间里的一台空调：序号，加上它自己那几条达标范围。
-
-    ⚠ 达标要求**每一台**各自落在**它自己**配置的范围内；没配范围的指标视为
-    该指标不限制。
-    """
-
-    serial: str
-    bands: Mapping[str, MetricBand]
 
 
 def build_frames(

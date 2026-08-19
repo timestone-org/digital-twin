@@ -7,7 +7,7 @@ at-least-once（docs/agents/runtime-resilience.md §5）。
 
 import asyncio
 from collections.abc import Callable
-from concurrent.futures import Executor, ProcessPoolExecutor
+from concurrent.futures import BrokenExecutor, Executor, ProcessPoolExecutor
 from dataclasses import dataclass
 
 from lib.db import Database
@@ -33,7 +33,7 @@ _logger = get_logger("platform.hvac.ac_model_worker")
 
 
 class TrainerPool:
-    """训练用的进程池，超时后整池换新。
+    """训练用的进程池，超时或整池损坏后换新。
 
     ⚠ `ProcessPoolExecutor` 没有公开的「杀掉在跑任务」的口：cancel 只对还没
     开跑的生效，`shutdown(cancel_futures=True)` 也一样。超时被掐断的拟合会
@@ -52,7 +52,7 @@ class TrainerPool:
         return self._executor
 
     def recycle(self) -> None:
-        """杀掉旧池里的子进程并换新池。超时路径专用。"""
+        """杀掉旧池里的子进程并换新池。超时与整池损坏都走它。"""
         old = self._executor
         self._executor = self._factory()
         self._terminate(old)
@@ -63,7 +63,9 @@ class TrainerPool:
 
     @staticmethod
     def _terminate(executor: Executor) -> None:
-        for process in getattr(executor, "_processes", {}).values():
+        # ⚠ 先拍成列表再遍历：池坏掉时管理线程正在清这本字典，边清边遍历会抛
+        # 「dictionary changed size」，而这一句正跑在消费循环的异常出口上
+        for process in list(getattr(executor, "_processes", {}).values()):
             process.kill()
         executor.shutdown(wait=False, cancel_futures=True)
 
@@ -210,6 +212,18 @@ class TrainingConsumer:
             self._pool.recycle()
             reason = f"训练超过 {self._options.train_timeout_s:.0f} 秒被掐断"
             await self._record_failure(message, reason=reason)
+            return
+        except BrokenExecutor as error:
+            # ⚠ 子进程猝死（如它自己 import 就炸）会把整池永久标记为坏：不换
+            # 池，这个 worker 进程往后每一次 submit 都秒抛，训练面就此哑掉
+            self._pool.recycle()
+            _logger.error(
+                "ac_model_pool_broken",
+                "训练子进程猝死，已换新池",
+                model_id=str(message.model_id),
+                error=error,
+            )
+            await self._record_failure(message, reason=str(error))
             return
         except Exception as error:
             _logger.error(

@@ -28,16 +28,13 @@ from platform_server.apps.hvac.models import (
     AcStartupShard,
     AcUnit,
 )
+from platform_server.apps.hvac.rooms import MetricBand, RoomUnit
 from platform_server.apps.hvac.schemas import TimeWindow
 from platform_server.apps.hvac.services.ac_source_reader import (
     AcSourceReader,
     SourceExtent,
 )
-from platform_server.apps.hvac.services.ac_startup_frames import (
-    MetricBand,
-    RoomUnit,
-    build_frames,
-)
+from platform_server.apps.hvac.services.ac_startup_frames import build_frames
 from platform_server.apps.hvac.services.ac_startup_queue import ShardMessage
 from platform_server.apps.hvac.services.ac_startup_rules import (
     Episode,

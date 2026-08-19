@@ -16,6 +16,11 @@ from platform_server.apps.hvac.datasets import (
     GROUP_TEMPERATURE,
     RAW_MINUTE_METRICS,
 )
+from platform_server.apps.hvac.rooms import (
+    METRIC_FAN_FREQUENCY,
+    METRIC_WORKSHOP_HUMIDITY,
+    METRIC_WORKSHOP_TEMP,
+)
 from platform_server.apps.hvac.schemas import (
     LiveReadingsOut,
     LiveReadingValuesOut,
@@ -31,9 +36,6 @@ from platform_server.apps.hvac.services.ac_startup_extract import (
     load_bound_units,
 )
 from platform_server.apps.hvac.services.ac_startup_frames import (
-    METRIC_FAN_FREQUENCY,
-    METRIC_WORKSHOP_HUMIDITY,
-    METRIC_WORKSHOP_TEMP,
     is_plausible_celsius,
     is_zeroed_row,
     numeric_values,

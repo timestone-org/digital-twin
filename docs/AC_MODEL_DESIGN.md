@@ -167,6 +167,18 @@ jsonb（组合列表，每个组合是 serial 升序数组）· `half_life_days`
   另一条消费循环与租约心跳（async 里禁阻塞、线程池救不了 GIL）。进程池单
   worker，喂纯数据（特征矩阵 + 配置），收纯数据（工件字节 + 指标 + 逐条预测），
   两头都可 pickle。
+- ⚠ **子进程是 spawn 起的**（Windows 上只有 spawn）：它的 `sys.modules` 是空的，
+  喂进去的函数与入参在那边**从零 import**。故 `modeling/*` 必须是不指回
+  `services/` 的叶子——`services/__init__.py` 是桶式公开面，一条反向边就绕成
+  循环 import，子进程解 pickle 时当场死掉。房间机组与达标范围的值对象因此放在
+  `apps/hvac/rooms.py`。父进程与 Linux（fork）都撞不上这条：前者 services 早已
+  装好，后者直接继承父进程的 `sys.modules`。
+- ⚠ **池坏了必须换池**：子进程一旦猝死，`ProcessPoolExecutor` 就被永久标记为
+  坏，此后每次 `submit` 都秒抛 `BrokenProcessPool`，这个 worker 进程再也训不了
+  任何模型。超时与整池损坏两条路径都走 `TrainerPool.recycle()`。
+- 工件的 pickle 里写死了成员类的模块路径（`RoomUnit` / `MetricBand`）：类可以
+  搬家，但旧路径下必须留得住同名的名字，否则存量工件一起拒载。形状与语义没变
+  就不动 `FORMAT_VERSION`——为一次搬家逼所有房间重训是白付的代价。
 - 消息只带 `model_id`（+ traceparent）。消费者幂等：重复消息=按行里的当前配置
   再训一次，结果覆盖写，收敛到同一状态。⚠ 消息不带配置快照：以行为准，改配置
   后的重复旧消息训出来的就是新配置的结果，这正是想要的。

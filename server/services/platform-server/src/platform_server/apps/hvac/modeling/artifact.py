@@ -13,7 +13,7 @@ from platform_server.apps.hvac.modeling.estimators import (
     ZeroClassifier,
     sklearn_version,
 )
-from platform_server.apps.hvac.services.ac_startup_frames import RoomUnit
+from platform_server.apps.hvac.rooms import RoomUnit
 
 # 工件的序列化格式版本。改 ModelBundle 的形状**或成员的预测语义**就 +1，
 # 老工件拒载并提示重训。
