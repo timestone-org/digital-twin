@@ -12,12 +12,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 import {
-  AUTH_SUBPROTOCOL,
   CLOSE_TOKEN_EXPIRED,
   closeRealtimeChannel,
+  usePublicRealtimeChannel,
   useRealtimeChannel,
 } from '@/composables/useRealtimeChannel'
-import { REALTIME_AUTH_EXPIRED_CLOSE_CODE } from '@dt/contracts'
+import {
+  REALTIME_AUTH_EXPIRED_CLOSE_CODE,
+  REALTIME_AUTH_SUBPROTOCOL as AUTH_SUBPROTOCOL,
+  REALTIME_PUBLIC_GRANT_CLOSE_CODE,
+  REALTIME_PUBLIC_SUBPROTOCOL as PUBLIC_SUBPROTOCOL,
+} from '@dt/contracts'
 import { STORAGE_KEYS } from '@dt/security'
 
 type Listener = (event: unknown) => void
@@ -304,5 +309,69 @@ describe('实时通道', () => {
     socket.emit('close', { code: 1006 })
     vi.advanceTimersByTime(60_000)
     expect(FakeSocket.instances).toHaveLength(1)
+  })
+})
+
+describe('公开链接', () => {
+  it('⚠ 报的是公开标记与令牌本身，不是 access token', () => {
+    usePublicRealtimeChannel('tok-public')
+    expect(latest().protocols).toEqual([PUBLIC_SUBPROTOCOL, 'tok-public'])
+  })
+
+  it('⚠ 即使当前登录着也用公开票据：公开页订的是别名主题', () => {
+    // 拿登录态的票去握手会连上，但那条连接订别名主题一律被拒——表现是
+    // 「连着、没有值」，而排查会一路走到后端去
+    localStorage.setItem(STORAGE_KEYS.accessToken, 'tok-1')
+    usePublicRealtimeChannel('tok-public')
+    expect(latest().protocols[1]).toBe('tok-public')
+  })
+
+  it('换一枚票据要重连——授权在握手那一刻定死', () => {
+    usePublicRealtimeChannel('tok-a')
+    const first = latest()
+    usePublicRealtimeChannel('tok-b')
+    expect(first.closed).toBe(true)
+    expect(latest().protocols).toEqual([PUBLIC_SUBPROTOCOL, 'tok-b'])
+  })
+
+  it('⚠ 同一枚票据不重复建连', () => {
+    usePublicRealtimeChannel('tok-a')
+    usePublicRealtimeChannel('tok-a')
+    expect(FakeSocket.instances).toHaveLength(1)
+  })
+
+  it('⚠ 4003 是可重试的：撤回与「还没对账到」在客户端看来一样', () => {
+    const channel = usePublicRealtimeChannel('tok-public')
+    latest().emit('close', { code: REALTIME_PUBLIC_GRANT_CLOSE_CODE })
+    expect(channel.isRejected.value).toBe(true)
+    vi.advanceTimersByTime(1000)
+    // 停下不再连的话，刚发布出去的链接会在那几秒的对账窗口里被判成永久失败
+    expect(FakeSocket.instances).toHaveLength(2)
+  })
+
+  it('⚠ 1008 才是「别再连了」', () => {
+    const channel = usePublicRealtimeChannel('tok-public')
+    latest().emit('close', { code: 1008 })
+    vi.advanceTimersByTime(60_000)
+    expect(channel.isRejected.value).toBe(true)
+    expect(FakeSocket.instances).toHaveLength(1)
+  })
+
+  it('重新连上就把「被拒」这件事收回去', () => {
+    const channel = usePublicRealtimeChannel('tok-public')
+    latest().emit('close', { code: REALTIME_PUBLIC_GRANT_CLOSE_CODE })
+    vi.advanceTimersByTime(1000)
+    latest().emit('open')
+    expect(channel.isRejected.value).toBe(false)
+  })
+
+  it('⚠ 关闭时票据也要清掉，否则回到登录态还在报公开子协议', () => {
+    usePublicRealtimeChannel('tok-public')
+    closeRealtimeChannel()
+    localStorage.setItem(STORAGE_KEYS.accessToken, 'tok-1')
+
+    useRealtimeChannel()
+
+    expect(latest().protocols).toEqual([AUTH_SUBPROTOCOL, 'tok-1'])
   })
 })

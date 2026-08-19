@@ -51,6 +51,14 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
 
     Args: container。
     """
+    return _channel_hooks(container) + _store_hooks(container)
+
+
+def _channel_hooks(container: Container) -> tuple[LifespanHook, ...]:
+    """通道自己那几件：清残留、扇出、匿名复核、连接。
+
+    Args: container。
+    """
     return (
         LifespanHook(
             name="drop_stale_subscriptions",
@@ -68,10 +76,28 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
             shutdown_order=5,
         ),
         LifespanHook(
+            name="public_sweeper",
+            startup=container.sweeper.start,
+            # 复核在扇出之后起，先后无所谓：它只读库与内存索引
+            startup_order=30,
+            # ⚠ 停在连接之前：连接都摘光之后再复核只是空转一轮
+            shutdown=container.sweeper.stop,
+            shutdown_order=6,
+        ),
+        LifespanHook(
             name="connections",
             shutdown=container.connections.close_all,
             shutdown_order=10,
         ),
+    )
+
+
+def _store_hooks(container: Container) -> tuple[LifespanHook, ...]:
+    """外部存储：在途请求还要用它们，所以最后关。
+
+    Args: container。
+    """
+    return (
         LifespanHook(
             name="pubsub",
             shutdown=container.pubsub.close,

@@ -134,3 +134,17 @@ async def test_stopping_a_listener_that_never_started_is_safe() -> None:
     await listener.stop()
     # 没起过也能安全停：关停路径不该依赖启动是否发生过
     assert tuple(ConnectionRegistry().topics()) == ()
+
+
+async def test_an_aliased_connection_sees_its_own_topic_name() -> None:
+    # ⚠ 匿名连接订的是别名、信封上写的是真主题。不改名的话：客户端按别名登记
+    # 的处理器一条也匹配不上（连着、有数据、屏上全空），而真主题还随帧出门了
+    connections = ConnectionRegistry()
+    sink: list[dict[str, object]] = []
+    item = _connection(sink)
+    await connections.add(item)
+    await connections.bind(item.id, "dashboard:d1", alias="public:tok-1")
+
+    await _drain(_listener([{"topic": "dashboard:d1", "seq": 3}], connections))
+
+    assert sink == [{"topic": "public:tok-1", "seq": 3}]

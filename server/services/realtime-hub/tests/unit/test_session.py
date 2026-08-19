@@ -13,10 +13,16 @@ from realtime_hub.apps.channel.errors import (
     UserCodesUnavailable,
 )
 from realtime_hub.apps.channel.services import (
+    AnonymousQuota,
     AuthenticationRejected,
     Connection,
     ConnectionRegistry,
+    PublicAccess,
+    SessionDeps,
     SessionService,
+    is_expired,
+    needs_reauth,
+    ticket_fingerprint,
 )
 from realtime_hub.apps.channel.services.session import (
     REAUTH_LEAD_S,
@@ -71,6 +77,23 @@ class FakeRegistry:
         return self.code
 
 
+class FakeGrants:
+    """按票据回主题的假授权表。`resolve` 认不出就是「没有授权」。"""
+
+    def __init__(self, granted: dict[str, str] | None = None) -> None:
+        self.granted = granted or {}
+
+    async def resolve(self, ticket: str) -> str | None:
+        return self.granted.get(ticket)
+
+    async def alive(self, ticket_hashes: frozenset[str]) -> dict[str, str]:
+        return {
+            ticket_fingerprint(ticket): topic
+            for ticket, topic in self.granted.items()
+            if ticket_fingerprint(ticket) in ticket_hashes
+        }
+
+
 def _codec() -> JwtCodec:
     return JwtCodec(
         signing_key=SECRET, verification_keys=(SECRET,), issuer="auth-server"
@@ -97,14 +120,23 @@ class FakeUserCodes:
 def _service(
     registry: FakeRegistry | None = None,
     codes: FakeUserCodes | None = None,
+    grants: FakeGrants | None = None,
+    quota: AnonymousQuota | None = None,
 ) -> tuple[SessionService, ConnectionRegistry]:
     connections = ConnectionRegistry()
     service = SessionService(
-        codec=_codec(),
-        codes=codes or FakeUserCodes(),  # type: ignore[arg-type]  # 结构相同的假件
-        registry=registry or FakeRegistry(),  # type: ignore[arg-type]  # 同上
-        connections=connections,
-        journal=FakeJournal(),  # type: ignore[arg-type]  # 同上
+        SessionDeps(
+            codec=_codec(),
+            codes=codes or FakeUserCodes(),  # type: ignore[arg-type]  # 结构相同的假件
+            registry=registry or FakeRegistry(),  # type: ignore[arg-type]  # 同上
+            connections=connections,
+            journal=FakeJournal(),  # type: ignore[arg-type]  # 同上
+            public=PublicAccess(
+                grants=grants or FakeGrants(),  # type: ignore[arg-type]  # 同上
+                quota=quota or AnonymousQuota(max_total=100, max_per_ticket=10),
+                ttl_s=3600,
+            ),
+        )
     )
     return service, connections
 
@@ -283,7 +315,7 @@ async def test_auth_being_unreachable_fails_the_handshake_closed() -> None:
 
 
 def test_expiry_and_reauth_windows() -> None:
-    service, _connections = _service()
+    _service_unused, _connections = _service()
     now = utcnow()
 
     async def send(_message: dict[str, object]) -> None:
@@ -297,9 +329,9 @@ def test_expiry_and_reauth_windows() -> None:
         checked_at=now,
         send=send,
     )
-    assert service.needs_reauth(connection, now=now)
-    assert not service.is_expired(connection, now=now)
-    assert service.is_expired(connection, now=connection.expires_at)
+    assert needs_reauth(connection, now=now)
+    assert not is_expired(connection, now=now)
+    assert is_expired(connection, now=connection.expires_at)
 
 
 async def test_a_forged_token_is_rejected() -> None:

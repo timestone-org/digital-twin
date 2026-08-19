@@ -15,9 +15,15 @@ from platform_server.apps.dashboard.models import (
     DashboardBinding,
     DashboardNode,
 )
-from platform_server.apps.dashboard.services import share_service
+from platform_server.apps.dashboard.services import (
+    public_interactions,
+    share_service,
+)
 
 DASHBOARD_ID = uuid.UUID("0198f0c0-0000-7000-8000-0000000000c1")
+# 跳转规则指向的那张屏。⚠ 与本屏分开：拿同一个 id 当目标会让「改写成令牌」
+# 与「自跳」两件事混在一条断言里
+TARGET_ID = uuid.UUID("0198f0c0-0000-7000-8000-0000000000c2")
 PROJECT_ID = uuid.UUID("0198f0c0-0000-7000-8000-0000000000c2")
 NODE_ID = uuid.UUID("0198f0c0-0000-7000-8000-0000000000c3")
 BINDING_ID = uuid.UUID("0198f0c0-0000-7000-8000-0000000000c4")
@@ -184,9 +190,9 @@ def test_the_public_dashboard_never_echoes_the_token_back() -> None:
     assert "is_public" not in payload
 
 
-def test_the_public_chrome_drops_the_interaction_rules() -> None:
-    # 跨屏跳转的联动规则里存着**别的大屏的 id**，而公开面不回任何能定位库里
-    # 位置的东西（ADR-0014）。公开页本来也不装联动引擎，下发只是让 id 白出门
+def test_the_public_chrome_rewrites_a_jump_into_the_targets_token() -> None:
+    # 登录态的句柄是**别的大屏的 id**，公开面既不该下发它、拿着它也跳不动
+    # （公开路由要的是令牌）。改写成目标屏自己的公开令牌（ADR-0021）
     dashboard = make_dashboard()
     dashboard.chrome_json = {
         "card": {"radius": 8},
@@ -194,26 +200,55 @@ def test_the_public_chrome_drops_the_interaction_rules() -> None:
             {
                 "id": "r-1",
                 "source": {"nodeId": "n-1", "event": "click"},
-                "action": {"type": "navigate", "target": str(DASHBOARD_ID)},
+                "action": {"type": "navigate", "target": str(TARGET_ID)},
             }
         ],
     }
 
-    payload = dumped(share_service.to_public_dashboard_out(dashboard, nodes=[]))
+    payload = dumped(
+        share_service.to_public_dashboard_out(
+            dashboard, nodes=[], tokens={TARGET_ID: "tok-target"}
+        )
+    )
 
-    assert payload["chrome_json"] == {"card": {"radius": 8}}
-    assert str(DASHBOARD_ID) not in json.dumps(payload)
+    rules = payload["chrome_json"]["interactions"]
+    assert rules[0]["action"] == {"type": "navigate", "target": "tok-target"}
+    # 内部标识一个字都不出门
+    assert str(TARGET_ID) not in json.dumps(payload)
 
 
-def test_the_stripped_chrome_key_matches_the_frontend_one() -> None:
+def test_a_jump_to_an_unpublished_screen_takes_the_whole_rule_away() -> None:
+    # ⚠ 不是把目标改成空串：留着规则，源控件仍摆出可点击外观、点下去什么也不
+    # 发生——「点了没反应」正是本仓一路在躲的那种表现
+    dashboard = make_dashboard()
+    dashboard.chrome_json = {
+        "interactions": [
+            {
+                "id": "r-1",
+                "source": {"nodeId": "n-1", "event": "click"},
+                "action": {"type": "navigate", "target": str(TARGET_ID)},
+            }
+        ]
+    }
+
+    payload = dumped(
+        share_service.to_public_dashboard_out(dashboard, nodes=[], tokens={})
+    )
+
+    assert payload["chrome_json"] == {}
+
+
+def test_the_interaction_chrome_key_matches_the_frontend_one() -> None:
     # ⚠ 键名是两侧各写一份的字面量：前端在
     # web/app/src/features/dashboard/interactionRules.ts 里叫同一个名字。
-    # 漂开的表现是这里照常剥一个不存在的键，而真规则连着 id 一起出门，全程零报错
-    assert share_service.INTERACTIONS_CHROME_KEY == "interactions"
+    # 漂开的表现是这里照常改写一个不存在的键，而真规则连着 id 一起出门，
+    # 全程零报错
+    assert public_interactions.INTERACTIONS_CHROME_KEY == "interactions"
 
 
 def test_the_public_chrome_keeps_everything_else_verbatim() -> None:
-    # 只剥这一段：外观袋里其余的键是渲染要用的，剥多了公开页就长得跟登录态不一样
+    # 只动联动这一段：外观袋里其余的键是渲染要用的，动多了公开页就长得跟登录态
+    # 不一样
     dashboard = make_dashboard()
     dashboard.chrome_json = {"card": {"radius": 8}, "editor": {"grid": 8}}
 

@@ -571,7 +571,7 @@ export function boundPointKeysOf(
   return [...keys].sort()
 }
 
-/** 这张大屏上全部 `opcua` 绑定的点位身份，去重。收渲染子集，公开快照页也能用。 */
+/** 这张大屏上全部 `opcua` 绑定的点位身份，去重。收渲染子集，公开页也能用。 */
 export function boundPointKeys(
   nodes: readonly Pick<DashboardNodeView, 'bindings'>[],
 ): readonly string[] {

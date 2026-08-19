@@ -82,6 +82,11 @@ class FakeRealtime:
         default_factory=list[tuple[str, str, str]]
     )
     revoked: list[str] = field(default_factory=list[str])
+    known_grants: list[str] = field(default_factory=list[str])
+    granted: list[tuple[str, str, str]] = field(
+        default_factory=list[tuple[str, str, str]]
+    )
+    revoked_grants: list[str] = field(default_factory=list[str])
     published: list[tuple[str, list[dict[str, Any]], str | None]] = field(
         default_factory=list[tuple[str, list[dict[str, Any]], str | None]]
     )
@@ -104,6 +109,25 @@ class FakeRealtime:
         self.revoked.append(topic)
         if self.is_reachable and topic in self.known_topics:
             self.known_topics.remove(topic)
+        return self.is_reachable
+
+    async def declare_grant(
+        self, *, ticket_hash: str, topic: str, publisher: str
+    ) -> bool:
+        self.granted.append((ticket_hash, topic, publisher))
+        if self.is_reachable:
+            self.known_grants.append(ticket_hash)
+        return self.is_reachable
+
+    async def grants(self, publisher: str) -> list[str]:
+        del publisher
+        # ⚠ 不可达时回空列表，与真实现一致：只会补登记，不会注销
+        return list(self.known_grants) if self.is_reachable else []
+
+    async def revoke_grant(self, ticket_hash: str) -> bool:
+        self.revoked_grants.append(ticket_hash)
+        if self.is_reachable and ticket_hash in self.known_grants:
+            self.known_grants.remove(ticket_hash)
         return self.is_reachable
 
     async def publish(

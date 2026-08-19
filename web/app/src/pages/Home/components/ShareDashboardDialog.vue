@@ -158,6 +158,8 @@ async function copyLink(): Promise<void> {
     <div class="flex flex-col gap-4">
       <DtNotice v-if="isPublic" intent="success" icon="share">
         这张屏已公开，任何人拿到下面的链接都能匿名只读访问，不需要登录。
+        画面上的数值是<strong>实时</strong>的；配了跳转的目标屏若也已发布，
+        同样能从这条链接点进去。
       </DtNotice>
       <DtNotice v-else icon="circle-question">
         还没有公开。发布后会生成一条匿名可读的链接，随时可以撤回。

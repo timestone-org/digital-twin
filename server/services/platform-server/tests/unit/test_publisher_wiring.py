@@ -16,6 +16,7 @@ from platform_server.publisher import (
     PublisherProcess,
     _publish_collect,
     _publish_dashboards,
+    _reconcile_dashboards,
     build_runtime,
     run_until_stopped,
     selfcheck,
@@ -147,6 +148,28 @@ async def test_the_collect_lane_logs_only_when_it_pushed_something(
     )
     # ⚠ 两条链路各有各的事件名：共用一个，日志里就分不出是哪一条在推
     assert spy.events == ["collect_values_published"]
+
+
+async def test_the_dashboard_lane_reconciles_topics_before_grants() -> None:
+    # ⚠ 顺序不能反：授权指向的主题必须先登记，否则 hub 以「主题未登记」拒掉
+    # 这次登记，新发布的公开链接要多等一轮才订得上
+    ledger: list[str] = []
+
+    @dataclass
+    class Recording:
+        name: str
+
+        async def reconcile(self) -> tuple[int, int]:
+            ledger.append(self.name)
+            return 0, 0
+
+    # pyright: ignore 的理由 —— 假件满足对账器的最小面，函数不做类型校验
+    await _reconcile_dashboards(
+        Recording("topics"),  # pyright: ignore[reportArgumentType]
+        Recording("grants"),  # pyright: ignore[reportArgumentType]
+    )
+
+    assert ledger == ["topics", "grants"]
 
 
 def test_both_lanes_are_wired_and_named_apart() -> None:

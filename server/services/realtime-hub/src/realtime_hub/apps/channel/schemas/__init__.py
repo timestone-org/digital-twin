@@ -1,5 +1,10 @@
 """对外模型。"""
 
+from realtime_hub.apps.channel.schemas.grant import (
+    PublicGrantDeclareIn,
+    PublicGrantListOut,
+    PublicGrantRevokeOut,
+)
 from realtime_hub.apps.channel.schemas.topic import (
     PublishIn,
     PublishOut,
@@ -9,6 +14,9 @@ from realtime_hub.apps.channel.schemas.topic import (
 )
 
 __all__ = [
+    "PublicGrantDeclareIn",
+    "PublicGrantListOut",
+    "PublicGrantRevokeOut",
     "PublishIn",
     "PublishOut",
     "TopicDeclareIn",

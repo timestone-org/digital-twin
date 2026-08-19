@@ -299,3 +299,110 @@ async def test_the_public_node_hides_its_owning_dashboard(
     node = payload["nodes"][0]
     assert "dashboard_id" not in node
     assert (node["x"], node["y"], node["w"], node["h"]) == (0, 0, 1920, 96)
+
+
+async def set_navigate_rule(
+    client: httpx.AsyncClient, dashboard_id: str, target_id: str
+) -> None:
+    """给一张屏配一条「点它跳到另一张屏」的联动规则。
+
+    Args: client, dashboard_id, target_id。
+    """
+    response = await client.patch(
+        f"{DASHBOARDS_URL}/{dashboard_id}",
+        json={
+            "chrome_json": {
+                "card": {"radius": 8},
+                "interactions": [
+                    {
+                        "id": "r-1",
+                        "source": {"nodeId": "n-1", "event": "click"},
+                        "action": {"type": "navigate", "target": target_id},
+                    }
+                ],
+            }
+        },
+    )
+    assert response.status_code == HTTP_OK
+
+
+async def public_payload(
+    client: httpx.AsyncClient, token: str
+) -> dict[str, Any]:
+    """匿名读一张公开屏。
+
+    Args: client, token。
+    """
+    response = await client.get(f"{PUBLIC_URL}/{token}")
+    assert response.status_code == HTTP_OK
+    return data_of(response)
+
+
+async def test_a_jump_target_comes_back_as_the_targets_public_token(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # 登录态的句柄是目标屏的 id：原样下发既泄露内部标识，公开态也跳不动
+    # （公开路由要的是令牌）。改写成目标屏自己的令牌（ADR-0021）
+    target_id, target_token = await make_published(app_client)
+    source_id = await make_blank(app_client)
+    await set_navigate_rule(app_client, source_id, target_id)
+    source_token = await published_token(app_client, source_id)
+
+    payload = await public_payload(app_client, source_token)
+
+    rules = payload["chrome_json"]["interactions"]
+    assert rules[0]["action"]["target"] == target_token
+    assert target_id not in str(payload)
+
+
+async def test_a_jump_to_an_unpublished_screen_is_not_offered_at_all(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # ⚠ 不是改成空串：留着规则，源控件仍摆出可点击外观、点下去什么也不发生
+    target_id = await make_blank(app_client)
+    source_id = await make_blank(app_client)
+    await set_navigate_rule(app_client, source_id, target_id)
+    source_token = await published_token(app_client, source_id)
+
+    payload = await public_payload(app_client, source_token)
+
+    assert "interactions" not in payload["chrome_json"]
+    assert payload["chrome_json"] == {"card": {"radius": 8}}
+
+
+async def test_withdrawing_the_target_closes_the_jump_immediately(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # 目标撤回之后，源屏的公开载荷当场就不该再带那条规则——令牌是现查的
+    target_id, _target_token = await make_published(app_client)
+    source_id = await make_blank(app_client)
+    await set_navigate_rule(app_client, source_id, target_id)
+    source_token = await published_token(app_client, source_id)
+    assert (
+        "interactions"
+        in (await public_payload(app_client, source_token))["chrome_json"]
+    )
+
+    await unpublish(app_client, target_id)
+
+    payload = await public_payload(app_client, source_token)
+    assert "interactions" not in payload["chrome_json"]
+
+
+async def test_republishing_the_target_hands_out_the_new_token(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # 每次发布都换令牌，旧链接当场失效。源屏里那条规则必须跟着换，否则它会
+    # 一直把人往一条已经作废的链接上送
+    target_id, first_token = await make_published(app_client)
+    source_id = await make_blank(app_client)
+    await set_navigate_rule(app_client, source_id, target_id)
+    source_token = await published_token(app_client, source_id)
+    second_token = await published_token(app_client, target_id)
+
+    payload = await public_payload(app_client, source_token)
+
+    assert second_token != first_token
+    assert payload["chrome_json"]["interactions"][0]["action"]["target"] == (
+        second_token
+    )

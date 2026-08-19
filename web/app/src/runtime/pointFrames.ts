@@ -89,6 +89,17 @@ export function dashboardTopic(dashboardId: string): string {
 }
 
 /**
+ * 一张**公开**大屏的推送主题：拿公开令牌换来的那个别名。
+ * ⚠ 它不是 `dashboard:{id}`：公开面拿不到大屏 id（ADR-0014），服务端按票据
+ * 把真主题换成这个别名，帧发出来时也用它（ADR-0021）。写成真主题的话订阅会
+ * 被拒，而页面只表现为「永远没有值」。
+ * @param publicToken 公开令牌，就是地址里的那一段
+ */
+export function publicTopic(publicToken: string): string {
+  return `public:${publicToken}`
+}
+
+/**
  * 一个采集数据源的推送主题，与 platform-server 的 `apps/collect/services/
  * topics.py` 同形。
  * ⚠ 与 `dashboardTopic` 是两个前缀、两个推送方：写串了 hub 会以「主题未登记」

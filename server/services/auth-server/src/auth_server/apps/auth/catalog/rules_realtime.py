@@ -21,7 +21,9 @@ REALTIME_RULES: tuple[RouteRuleSpec, ...] = (
         "GET",
         priority=990,
         description=(
-            "WebSocket 端点。任意已登录用户可连，能收到什么由每个主题声明的码"
+            "WebSocket 端点。任意已登录用户可连；拿着公开令牌的匿名访客同样"
+            "可连（ADR-0021），它能订的只有那枚令牌换来的一个别名主题。"
+            "能收到什么由每个主题声明的码"
             "另判：`opcua:*` 的主题声明 `opcua:view`，大屏主题声明"
             " `dashboard:view`，hub 在登记主题时校验那个码在本目录里，"
             "码没登记则主题登记不上、整条推送链路是哑的。"

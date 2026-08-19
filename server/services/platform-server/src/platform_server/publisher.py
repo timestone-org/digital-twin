@@ -45,6 +45,10 @@ from platform_server.apps.collect.services.topic_reconcile import (
     DatabaseSourceIndex,
 )
 from platform_server.apps.dashboard.services import TopicReconciler
+from platform_server.apps.dashboard.services.public_grants import (
+    DatabasePublishedIndex,
+    PublicGrantReconciler,
+)
 
 # ⚠ 按子模块 import 而不是走 services 清单：发布面反向依赖 apps/collect 的
 # 快照公开面，进清单就是一个 import 期的环（见该清单的文件头）
@@ -274,9 +278,13 @@ def _dashboard_lane(container: Container) -> Lane:
         dashboards=DatabaseDashboardIndex(database=container.database),
         realtime=container.realtime,
     )
+    grants = PublicGrantReconciler(
+        dashboards=DatabasePublishedIndex(database=container.database),
+        realtime=container.realtime,
+    )
     return Lane(
         name="dashboard",
-        reconcile=reconciler.reconcile,
+        reconcile=lambda: _reconcile_dashboards(reconciler, grants),
         tick=lambda: _publish_dashboards(publisher),
         forget_all=publisher.forget_all,
     )
@@ -309,6 +317,20 @@ def _collect_lane(container: Container) -> Lane:
         tick=lambda: _publish_collect(publisher),
         forget_all=publisher.forget_all,
     )
+
+
+async def _reconcile_dashboards(
+    topics: TopicReconciler, grants: PublicGrantReconciler
+) -> None:
+    """大屏那条链路的对账：先主题、后匿名授权。
+
+    ⚠ 顺序不能反：授权指向的主题必须先登记，否则 hub 以「主题未登记」拒掉
+    这次登记，新发布的公开链接要多等一轮才订得上。
+
+    Args: topics, grants。
+    """
+    await topics.reconcile()
+    await grants.reconcile()
 
 
 async def _publish_dashboards(publisher: DashboardPublisher) -> None:

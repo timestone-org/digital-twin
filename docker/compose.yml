@@ -353,6 +353,12 @@ services:
       # 本服务只验不签
       REALTIME_JWT_SECRET: ${AUTH_JWT_SECRET:?必填}
       REALTIME_AUTH_BASE_URL: http://auth-server:8004
+      # 匿名连接（公开大屏）的名额与复核。⚠ 名额按**副本**计：它防的是一枚
+      # 泄露的公开令牌把单个副本的连接池吃满（ADR-0021）
+      REALTIME_PUBLIC_MAX_CONNECTIONS: ${REALTIME_PUBLIC_MAX_CONNECTIONS:-500}
+      REALTIME_PUBLIC_MAX_CONNECTIONS_PER_TICKET: ${REALTIME_PUBLIC_MAX_CONNECTIONS_PER_TICKET:-50}
+      # 撤回一条公开链接之后，已经连着的那些最多这么久被断掉
+      REALTIME_PUBLIC_RECHECK_INTERVAL_S: ${REALTIME_PUBLIC_RECHECK_INTERVAL_S:-15}
     expose: ['8000']
     healthcheck:
       test: ['CMD', 'python', '-c', "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/api/v1/realtime/health')"]

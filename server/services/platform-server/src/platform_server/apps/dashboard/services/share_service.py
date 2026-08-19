@@ -6,8 +6,7 @@
 
 import secrets
 import uuid
-from collections.abc import Sequence
-from typing import Any
+from collections.abc import Mapping, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,15 +27,16 @@ from platform_server.apps.dashboard.schemas.share import (
 from platform_server.apps.dashboard.services.dashboard_service import (
     require_dashboard,
 )
+from platform_server.apps.dashboard.services.public_interactions import (
+    navigate_target_ids,
+    public_chrome,
+)
 from platform_server.apps.dashboard.services.state import load_state
 
 _logger = get_logger("platform.dashboard.share")
 
 # 令牌熵：32 字节经 urlsafe base64 得 43 个字符
 TOKEN_BYTES = 32
-# 外观袋里存联动规则的那一段。⚠ 键名与前端的
-# `web/app/src/features/dashboard/interactionRules.ts` 各写一份，改名要一起改
-INTERACTIONS_CHROME_KEY = "interactions"
 # 令牌长度上限。超长的一律当作查不到，而不是让它去打一次库
 MAX_TOKEN_CHARS = 128
 
@@ -114,6 +114,11 @@ async def get_public_dashboard(
             to_public_node_out(node, bindings=state.bindings_of(node.id))
             for node in state.nodes
         ],
+        # 跨屏跳转的目标要换成目标屏自己的公开令牌；没发布的目标跳不过去，
+        # 那条规则整条不下发（`public_interactions`）
+        tokens=await public_tokens_of(
+            session, navigate_target_ids(dashboard.chrome_json)
+        ),
     )
 
 
@@ -135,19 +140,30 @@ async def find_by_public_token(
     return rows.scalars().one_or_none()
 
 
-def to_public_chrome(chrome_json: dict[str, Any]) -> dict[str, Any]:
-    """公开面的外观袋：联动规则整段不下发，其余原样。
+async def public_tokens_of(
+    session: AsyncSession, dashboard_ids: set[uuid.UUID]
+) -> dict[uuid.UUID, str]:
+    """一批大屏里**仍在公开中**的那些，映射到它们当前的公开令牌。
 
-    ⚠ 跨屏跳转的规则里存着**别的大屏的 id**，而公开面不回任何能定位它在库里
-    位置的信息（ADR-0014）。公开页也确实不跑联动——它压根不装联动引擎，
-    下发这一段只是让那些 id 白白出一趟门。
-    ⚠ 只剥这一个键：外观袋其余的段是渲染要用的，剥多了公开页就跟登录态不一样。
-    Args: chrome_json。
+    ⚠ 现查不缓存：令牌每次发布都换新的，缓存一个旧的等于把已经撤回的链接
+    继续发出去（本模块头）。
+    ⚠ 没发布的目标压根不出现在结果里，调用方据此把那条规则整条丢掉。
+
+    Args: session, dashboard_ids。
     """
+    if not dashboard_ids:
+        return {}
+    rows = await session.execute(
+        select(Dashboard.id, Dashboard.public_token).where(
+            Dashboard.id.in_(sorted(dashboard_ids)),
+            Dashboard.is_public.is_(True),
+            Dashboard.public_token.is_not(None),
+        )
+    )
     return {
-        key: value
-        for key, value in chrome_json.items()
-        if key != INTERACTIONS_CHROME_KEY
+        row.id: row.public_token
+        for row in rows.all()
+        if row.public_token is not None
     }
 
 
@@ -196,11 +212,14 @@ def to_public_node_out(
 
 
 def to_public_dashboard_out(
-    dashboard: Dashboard, *, nodes: Sequence[PublicNodeOut]
+    dashboard: Dashboard,
+    *,
+    nodes: Sequence[PublicNodeOut],
+    tokens: Mapping[uuid.UUID, str] | None = None,
 ) -> PublicDashboardOut:
     """公开面的一张大屏。`nodes` 是扁平数组，树由 `parent_id` 重建。
 
-    Args: dashboard, nodes。
+    Args: dashboard, nodes, tokens（跳转目标 → 它的公开令牌）。
     """
     return PublicDashboardOut(
         name=dashboard.name,
@@ -209,7 +228,7 @@ def to_public_dashboard_out(
         design_height=dashboard.design_height,
         schema_version=dashboard.schema_version,
         theme_json=dashboard.theme_json,
-        chrome_json=to_public_chrome(dashboard.chrome_json),
+        chrome_json=public_chrome(dashboard.chrome_json, tokens=tokens or {}),
         updated_at=dashboard.updated_at,
         nodes=list(nodes),
     )

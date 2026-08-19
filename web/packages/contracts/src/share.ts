@@ -29,9 +29,10 @@ export interface PublicDashboardPayload {
   themeJson: Record<string, unknown>
   chromeJson: Record<string, unknown>
   /**
-   * 这份快照的数据截止时刻。
-   * ⚠ 公开页**不接实时推送**，页面必须把这个时刻显示出来（ADR-0014 四）——
-   * 一个看起来在跑、实际停在某一刻的大屏比明说自己是快照的危险得多。
+   * 这份文档的更新时刻，也是「通道没连上时画面停在哪一刻」的答案。
+   * ⚠ 公开页现在也接实时推送（ADR-0021），但通道没连上时它**必须**说自己是
+   * 快照并显示这个时刻——一个看起来在跑、实际停在某一刻的大屏，比明说自己是
+   * 快照的危险得多。
    */
   updatedAt: string
   /** 扁平一维数组，树由 `parentId` 重建。比登录态窄，见 `DashboardNodeView`。 */

@@ -11,6 +11,9 @@ from fastapi import APIRouter, Depends, Header
 from lib.web import ApiResponse, ok
 from realtime_hub.apps.channel.deps import get_container, require_service_key
 from realtime_hub.apps.channel.schemas import (
+    PublicGrantDeclareIn,
+    PublicGrantListOut,
+    PublicGrantRevokeOut,
     PublishIn,
     PublishOut,
     TopicDeclareIn,
@@ -62,6 +65,54 @@ async def list_topics(
     """
     topics = await container.registry.topics_of(publisher)
     return ok(TopicListOut(publisher=publisher, topics=topics))
+
+
+@router.post("/public-grants", summary="登记匿名授权")
+async def declare_public_grant(
+    payload: PublicGrantDeclareIn, container: ContainerDep
+) -> ApiResponse[PublicGrantDeclareIn]:
+    """登记「一枚票据的指纹 → 一个主题」的匿名订阅授权。
+
+    重复登记是幂等的。主题必须已经登记过——授权指向一个不存在的主题时，握手
+    会过、订阅会成功、而数据永远不来。
+
+    ⚠ 收的是指纹不是票据：票据是可直接使用的凭据，本服务不持有它。
+
+    Args: payload, container。
+    """
+    await container.grants.declare(
+        ticket_hash=payload.ticket_hash,
+        topic=payload.topic,
+        publisher=payload.publisher,
+    )
+    return ok(payload)
+
+
+@router.get("/public-grants", summary="列出某个推送方的匿名授权")
+async def list_public_grants(
+    publisher: str, container: ContainerDep
+) -> ApiResponse[PublicGrantListOut]:
+    """给推送方对账用：它那边的发布态是权威，这里只是投影。
+
+    Args: publisher, container。
+    """
+    hashes = await container.grants.hashes_of(publisher)
+    return ok(PublicGrantListOut(publisher=publisher, ticket_hashes=hashes))
+
+
+@router.delete("/public-grants/{ticket_hash}", summary="注销匿名授权")
+async def revoke_public_grant(
+    ticket_hash: str, container: ContainerDep
+) -> ApiResponse[PublicGrantRevokeOut]:
+    """注销一枚票据的授权。
+
+    ⚠ 注销只让**新的**握手订不上，已经连着的那些由本服务的复核任务摘掉——
+    少了那一半，「撤回」只对还没连上的人成立。
+
+    Args: ticket_hash, container。
+    """
+    removed = await container.grants.revoke(ticket_hash=ticket_hash)
+    return ok(PublicGrantRevokeOut(ticket_hash=ticket_hash, is_removed=removed))
 
 
 @router.delete("/topics/{topic}", summary="注销主题")

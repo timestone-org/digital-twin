@@ -11,6 +11,7 @@ import httpx
 
 from lib.logging import current_traceparent
 from platform_server.realtime import (
+    GRANTS_PATH,
     PUBLISH_PATH,
     TOPICS_PATH,
     RealtimeClient,
@@ -155,3 +156,66 @@ def test_the_traceparent_has_the_shape_the_hub_passes_through() -> None:
     assert len(parts[1]) == 32
     assert len(parts[2]) == 16
     assert parts[3] == "01"
+
+
+async def test_declaring_a_grant_posts_the_fingerprint_not_the_token() -> None:
+    calls: list[httpx.Request] = []
+    client = build_client(recorder(calls))
+
+    is_declared = await client.declare_grant(
+        ticket_hash="a" * 64, topic=TOPIC, publisher="platform-x"
+    )
+
+    assert is_declared is True
+    body = json.loads(calls[0].content)
+    assert calls[0].url.path == GRANTS_PATH
+    # ⚠ 送指纹不送令牌：令牌是可直接使用的凭据，不该在两个服务之间来回走
+    assert body == {
+        "ticket_hash": "a" * 64,
+        "topic": TOPIC,
+        "publisher": "platform-x",
+    }
+
+
+async def test_listing_grants_asks_for_this_publisher_only() -> None:
+    calls: list[httpx.Request] = []
+    client = build_client(
+        recorder(calls, body={"data": {"ticket_hashes": ["a" * 64]}})
+    )
+
+    hashes = await client.grants("platform-x")
+
+    assert hashes == ["a" * 64]
+    assert calls[0].url.params["publisher"] == "platform-x"
+
+
+async def test_an_unreachable_hub_yields_an_empty_grant_list() -> None:
+    # ⚠ 空清单只会导致补登记（幂等），不会导致注销——注销以 hub 的清单为输入
+    client = build_client(recorder([], status_code=503))
+
+    assert await client.grants("platform-x") == []
+
+
+async def test_a_malformed_grant_envelope_is_not_read_as_empty() -> None:
+    # 信封变形时要响亮失败并按「这一轮问不到」处理，而不是让空集合流下去
+    client = build_client(recorder([], body={"data": {"nope": []}}))
+
+    assert await client.grants("platform-x") == []
+
+
+async def test_revoking_a_grant_deletes_by_fingerprint() -> None:
+    calls: list[httpx.Request] = []
+    client = build_client(recorder(calls))
+
+    is_revoked = await client.revoke_grant("b" * 64)
+
+    assert is_revoked is True
+    assert calls[0].method == "DELETE"
+    assert calls[0].url.path == f"{GRANTS_PATH}/{'b' * 64}"
+
+
+async def test_a_failed_grant_revoke_is_reported_as_such() -> None:
+    # ⚠ 失败必须被看见：一条已经撤回的公开链接还能收实时值
+    client = build_client(recorder([], status_code=500))
+
+    assert await client.revoke_grant("b" * 64) is False
