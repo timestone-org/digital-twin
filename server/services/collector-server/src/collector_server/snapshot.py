@@ -21,8 +21,8 @@ _logger = get_logger("collect.snapshot")
 class SnapshotStore(Protocol):
     """快照写入面。真实现打 Redis，测试用进程内假件。"""
 
-    async def write(
-        self, source_id: UUID, fields: Mapping[str, str], *, ttl_s: int
+    async def write_many(
+        self, batch: Mapping[UUID, Mapping[str, str]], *, ttl_s: int
     ) -> None: ...
 
     async def touch(
@@ -54,21 +54,27 @@ class RedisSnapshotStore:
             )
         )
 
-    async def write(
-        self, source_id: UUID, fields: Mapping[str, str], *, ttl_s: int
+    async def write_many(
+        self, batch: Mapping[UUID, Mapping[str, str]], *, ttl_s: int
     ) -> None:
-        """整批写进哈希并续一次存活期。
+        """把一窗里各数据源的读数各写进自己的哈希，**一个往返写一批**。
 
+        ⚠ 按数据源逐个往返会让一拍的耗时随数据源数线性涨：快照窗口默认
+        300ms，而每一个往返都是串行等回包的。`touch` 早就是一批一个往返，
+        这里同理。
         ⚠ 每次 flush 都续 TTL：采集进程死掉后快照跟着过期，大屏于是拿不到值
         而不是拿着一份永不更新的旧值当实时值看。
 
-        Args: source_id, fields, ttl_s。
+        Args: batch（数据源 → 这一窗的字段表）, ttl_s。
         """
-        key = snapshot_key(source_id)
+        if not batch:
+            return
         pipeline = self._client.pipeline()
-        # cast 的理由 —— redis-py 的 mapping 形参用了自己的编码类型变量
-        pipeline.hset(key, mapping=cast("Any", dict(fields)))
-        pipeline.expire(key, ttl_s)
+        for source_id, fields in batch.items():
+            key = snapshot_key(source_id)
+            # cast 的理由 —— redis-py 的 mapping 形参用了自己的编码类型变量
+            pipeline.hset(key, mapping=cast("Any", dict(fields)))
+            pipeline.expire(key, ttl_s)
         await self._run(pipeline.execute())
 
     async def touch(self, source_ids: Sequence[UUID], *, ttl_s: int) -> None:

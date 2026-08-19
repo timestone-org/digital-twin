@@ -162,16 +162,18 @@ class SnapshotSink:
         await self.flush_once()
 
     async def flush_once(self) -> None:
-        """清掉退出计划的数据源，再把每个数据源这一窗的读数写进 Redis。"""
+        """清掉退出计划的数据源，再把这一窗的读数整批写进 Redis。"""
         async with self._lock:
             await self._prune()
+            pending: dict[UUID, dict[str, Sample]] = {}
             quiet: list[UUID] = []
             for source_id, buffer in list(self._buffers.items()):
-                pending = buffer.swap()
-                if pending:
-                    await self._write(source_id, pending)
+                window = buffer.swap()
+                if window:
+                    pending[source_id] = window
                 else:
                     quiet.append(source_id)
+            await self._write(pending)
             await self._keepalive(quiet)
 
     async def _keepalive(self, source_ids: Sequence[UUID]) -> None:
@@ -246,10 +248,13 @@ class SnapshotSink:
         )
 
     async def _write(
-        self, source_id: UUID, pending: Mapping[str, Sample]
+        self, pending: Mapping[UUID, Mapping[str, Sample]]
     ) -> None:
-        """写一个数据源的一窗。
+        """把这一窗各数据源的读数整批写出去。
 
+        ⚠ **一批一个往返**：按数据源逐个写会让一拍的耗时随数据源数线性涨，
+        而窗口默认只有 300ms。整批是一次 MULTI/EXEC，成败也因此是整批的——
+        日志记的是这一批盖了几个数据源，不再是哪一个失败了。
         ⚠ 写失败**绝不许抛回采集热路径**：采集断了是事故，快照断了是降级
         （COLLECT_DESIGN.md §4.3）。丢了多少条要计数上报——静默丢弃是参考
         实现里最难查的那类问题。
@@ -257,19 +262,26 @@ class SnapshotSink:
         而漏网的那一类会顺着 flush 逃出去带走整条循环——快照就此永久停摆，
         而进程还活着、探针还绿着。
 
-        Args: source_id, pending。
+        Args: pending（数据源 → 这一窗的读数）。
         """
+        if not pending:
+            return
         try:
-            await self._store.write(
-                source_id, encode_fields(pending), ttl_s=self._ttl_s_now()
+            await self._store.write_many(
+                {
+                    source_id: encode_fields(window)
+                    for source_id, window in pending.items()
+                },
+                ttl_s=self._ttl_s_now(),
             )
         except Exception as error:
-            self._dropped += len(pending)
+            dropped = sum(len(window) for window in pending.values())
+            self._dropped += dropped
             _logger.error(
                 "snapshot_write_failed",
                 "快照写入失败，本窗读数已丢弃",
-                source_id=str(source_id),
-                dropped=len(pending),
+                sources=len(pending),
+                dropped=dropped,
                 dropped_total=self._dropped,
                 error_type=type(error).__name__,
             )

@@ -38,9 +38,12 @@ async def test_snapshot_lands_as_one_hash_per_source(
     store = RedisSnapshotStore(url=redis_url)
     source_id = uuid4()
     try:
-        await store.write(
-            source_id,
-            {"outlet_temp": json.dumps({"value": 21.5, "ts_ms": TS_MS})},
+        await store.write_many(
+            {
+                source_id: {
+                    "outlet_temp": json.dumps({"value": 21.5, "ts_ms": TS_MS})
+                }
+            },
             ttl_s=TTL_S,
         )
         stored = await client.hget(snapshot_key(source_id), "outlet_temp")
@@ -56,7 +59,7 @@ async def test_snapshot_key_always_carries_an_expiry(
     store = RedisSnapshotStore(url=redis_url)
     source_id = uuid4()
     try:
-        await store.write(source_id, {"a": "1"}, ttl_s=TTL_S)
+        await store.write_many({source_id: {"a": "1"}}, ttl_s=TTL_S)
         assert 0 < await client.ttl(snapshot_key(source_id)) <= TTL_S
     finally:
         await store.drop(source_id)
@@ -69,7 +72,7 @@ async def test_touching_pushes_the_expiry_out_without_new_readings(
     store = RedisSnapshotStore(url=redis_url)
     source_id = uuid4()
     try:
-        await store.write(source_id, {"a": "1"}, ttl_s=1)
+        await store.write_many({source_id: {"a": "1"}}, ttl_s=1)
         await store.touch([source_id], ttl_s=TTL_S)
         # 值一天才变一次的点位靠这一步活着，否则整个键会到期消失
         assert await client.ttl(snapshot_key(source_id)) > 1
@@ -97,7 +100,7 @@ async def test_dropping_a_source_removes_its_snapshot(
     store = RedisSnapshotStore(url=redis_url)
     source_id = uuid4()
     try:
-        await store.write(source_id, {"a": "1"}, ttl_s=TTL_S)
+        await store.write_many({source_id: {"a": "1"}}, ttl_s=TTL_S)
         await store.drop(source_id)
         assert await client.exists(snapshot_key(source_id)) == 0
     finally:
