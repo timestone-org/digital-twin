@@ -37,14 +37,15 @@ class ExplodingStore:
         self.exploded = asyncio.Event()
         self.settled = asyncio.Event()
 
-    async def write(
-        self, source_id: UUID, fields: Mapping[str, str], *, ttl_s: int
+    async def write_many(
+        self, batch: Mapping[UUID, Mapping[str, str]], *, ttl_s: int
     ) -> None:
         if not self.exploded.is_set():
             self.exploded.set()
             raise RuntimeError("Redis 客户端炸了")
         self.ttl_s = ttl_s
-        self.writes.append((source_id, dict(fields)))
+        for source_id, fields in batch.items():
+            self.writes.append((source_id, dict(fields)))
         self.settled.set()
 
     async def touch(self, source_ids: Sequence[UUID], *, ttl_s: int) -> None:
@@ -63,20 +64,25 @@ class RecordingStore:
         touch_failures: int = 0,
     ) -> None:
         self.writes: list[tuple[UUID, dict[str, str]]] = []
+        # 每一拍写出去的是哪一批。批数 = 这一拍打了几次 Redis
+        self.batches: list[tuple[UUID, ...]] = []
         self.dropped: list[UUID] = []
         self.touched: list[tuple[UUID, ...]] = []
         self.failures = failures
         self.drop_failures = drop_failures
         self.touch_failures = touch_failures
 
-    async def write(
-        self, source_id: UUID, fields: Mapping[str, str], *, ttl_s: int
+    async def write_many(
+        self, batch: Mapping[UUID, Mapping[str, str]], *, ttl_s: int
     ) -> None:
         if self.failures > 0:
             self.failures -= 1
             raise DependencyUnavailable("缓存服务暂时不可用")
         self.ttl_s = ttl_s
-        self.writes.append((source_id, dict(fields)))
+        # 一批一个往返，但仍按数据源逐条记下来：断言看的是「写了什么」
+        self.batches.append(tuple(batch))
+        for source_id, fields in batch.items():
+            self.writes.append((source_id, dict(fields)))
 
     async def touch(self, source_ids: Sequence[UUID], *, ttl_s: int) -> None:
         if self.touch_failures > 0:
@@ -113,14 +119,15 @@ class BlockingStore:
         """只看动作的先后，不看落在哪个数据源上。"""
         return [name for name, _ in self.calls]
 
-    async def write(
-        self, source_id: UUID, fields: Mapping[str, str], *, ttl_s: int
+    async def write_many(
+        self, batch: Mapping[UUID, Mapping[str, str]], *, ttl_s: int
     ) -> None:
         self.entered.set()
         await self.released.wait()
-        self.written = dict(fields)
         self.ttl_s = ttl_s
-        self.calls.append(("write", source_id))
+        for source_id, fields in batch.items():
+            self.written = dict(fields)
+            self.calls.append(("write", source_id))
 
     async def touch(self, source_ids: Sequence[UUID], *, ttl_s: int) -> None:
         self.ttl_s = ttl_s
@@ -182,6 +189,33 @@ async def test_flush_writes_every_source_that_has_readings() -> None:
     assert sorted(source_id for source_id, _ in store.writes) == sorted(
         [first, second]
     )
+
+
+async def test_one_flush_writes_one_batch_whatever_the_source_count() -> None:
+    """一拍一个往返，与数据源数无关。
+
+    ⚠ 按数据源逐个 `await` 就是串行等回包：窗口默认 300ms，而数据源数是现场
+    给的——这条断言把「一拍打几次 Redis」钉住。
+    """
+    store = RecordingStore()
+    sink = SnapshotSink(store=store, interval_ms=50, ttl_s=60)
+    first, second, third = uuid4(), uuid4(), uuid4()
+    for source_id, code in ((first, "temp"), (second, "flow"), (third, "rpm")):
+        sink.sink_for(source_id)(code, 1.0, TS_MS, "good")
+
+    await sink.flush_once()
+
+    assert len(store.batches) == 1
+    assert set(store.batches[0]) == {first, second, third}
+
+
+async def test_a_flush_with_nothing_to_write_touches_no_batch() -> None:
+    # ⚠ 空批不许换成一次空的 MULTI/EXEC：那是白打一个往返
+    store = RecordingStore()
+    sink = SnapshotSink(store=store, interval_ms=50, ttl_s=60)
+    sink.sink_for(uuid4())
+    await sink.flush_once()
+    assert store.batches == []
 
 
 async def test_flush_skips_sources_without_new_readings() -> None:

@@ -46,7 +46,7 @@ def test_the_sink_handed_to_a_driver_is_the_plain_recorder() -> None:
     class Store:
         """什么都不做的快照面。"""
 
-        async def write(self, *_args: object, **_kwargs: object) -> None:
+        async def write_many(self, *_args: object, **_kwargs: object) -> None:
             return None
 
         async def drop(self, *_args: object) -> None:
