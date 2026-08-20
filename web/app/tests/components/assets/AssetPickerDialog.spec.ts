@@ -1,13 +1,16 @@
 /**
  * @fileoverview 契约：挑选器交出的是 `asset:` 引用，不是 URL。
  * ⚠ 交 URL 的话，存进大屏配置之后部署地址一换就 404，而没有任何一处会报错。
- * 另守两条：没选中不许确认（否则写进去一个空引用），取不到时要说出原因。
+ * 另守三条：没选中不许确认（否则写进去一个空引用），取不到时要说出原因，
+ * 删除必须二次确认（它删的是所有大屏共用的那份字节）。
  *
  * ⚠ 弹窗 teleport 到 body，断言一律查 `document.body`——查 wrapper 的话
  * 它永远是一对空的 teleport 注释，而「找不到」看着像组件没渲染。
  */
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { DtConfirmHost, useConfirm } from '@dt/ui'
 
 import AssetPickerDialog from '@/components/assets/AssetPickerDialog.vue'
 
@@ -37,6 +40,12 @@ const ASSET = {
 // ⚠ 必须自动卸载：宿主 teleport 到 body，上一条不卸载就直接清 body 时，
 // 下一次更新会撞上已被摘掉的 teleport 容器
 enableAutoUnmount(afterEach)
+
+// ⚠ 没结的确认框是单例队列上的一条，留着它下一条用例一 ask 就被顶掉，
+// 表现是那一条随机地「点了删除没反应」
+afterEach(() => {
+  useConfirm().resolve(false)
+})
 
 async function render(open = true) {
   const wrapper = mount(AssetPickerDialog, {
@@ -122,6 +131,7 @@ describe('打开与关闭', () => {
     expect(api.listAssets).toHaveBeenCalledWith('model', {
       limit: 50,
       offset: 0,
+      q: '',
     })
   })
 
@@ -147,12 +157,30 @@ describe('打开与关闭', () => {
 })
 
 describe('删除', () => {
-  it('删掉之后从列表里消失', async () => {
+  it('要二次确认，取消则一个字节都不动', async () => {
     api.deleteAsset.mockResolvedValue(undefined)
     await render()
+    mount(DtConfirmHost)
+    await flushPromises()
 
     await click(query(`[aria-label="删除 ${ASSET.name}"]`))
+    await click(buttonByText('取消'))
 
+    // ⚠ 这个弹窗是「挑素材」用的，旁边就是垃圾桶；手一滑删掉的是所有大屏
+    // 共用的那份字节，故这一条不是洁癖
+    expect(api.deleteAsset).not.toHaveBeenCalled()
+  })
+
+  it('确认之后从列表里消失', async () => {
+    api.deleteAsset.mockResolvedValue(undefined)
+    await render()
+    mount(DtConfirmHost)
+    await flushPromises()
+
+    await click(query(`[aria-label="删除 ${ASSET.name}"]`))
+    await click(buttonByText('删除'))
+
+    expect(api.deleteAsset).toHaveBeenCalledWith(ID)
     expect(document.body.textContent).toContain('还没有素材')
   })
 })

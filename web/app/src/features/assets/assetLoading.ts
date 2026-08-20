@@ -1,8 +1,9 @@
 /**
  * @fileoverview 素材列表的分页加载：带竞态防护，按位移一页页往下取。
  *
- * ⚠ 竞态防护是必须的：类型可以被快速连点，慢的那次后返回会把新类型的列表
- * 覆盖成旧类型的，而没有任何一处报错——看起来只是「点了图标却出模型」。
+ * ⚠ 竞态防护是必须的：类型可以被快速连点、搜索框可以一个字一个字敲，慢的那次
+ * 后返回会把新条件的列表覆盖成旧条件的，而没有任何一处报错——看起来只是
+ * 「点了图标却出模型」「搜索框里是 A 而列表是 B」。
  * ⚠ 服务端不回总数，所以「还有没有下一页」只能由「这一页是否取满」推断。
  */
 import type { AssetKind } from '@dt/contracts'
@@ -18,14 +19,15 @@ export const PAGE_SIZE = 50
 /** 重来一次还是接着往下取。 */
 export type LoadMode = 'reset' | 'append'
 
-/** 几个 ref 收成一包，好让加载与上传两段各自搬到模块层去写。 */
+/** 几个 ref 收成一包，好让加载那一段搬到模块层去写。 */
 export interface LibraryState {
   assets: Ref<readonly Asset[]>
   kinds: Ref<readonly AssetKindSpec[]>
   isLoading: Ref<boolean>
-  isUploading: Ref<boolean>
   error: Ref<string>
   activeKind: Ref<AssetKind | null>
+  /** 名字关键词；空串 = 不筛。⚠ 与 kind 一起构成「这一页是哪一页」。 */
+  keyword: Ref<string>
   hasMore: Ref<boolean>
   /** 已从服务端取到的条数。⚠ 不用 `assets.length`：本地的上传与删除会改它。 */
   loaded: Ref<number>
@@ -85,7 +87,8 @@ export function createLoader(
     state.error.value = ''
     await ensureKinds(state)
     const offset = mode === 'append' ? state.loaded.value : 0
-    await raced.run(() => listAssets(kind, { limit: PAGE_SIZE, offset }), {
+    const q = state.keyword.value
+    await raced.run(() => listAssets(kind, { limit: PAGE_SIZE, offset, q }), {
       // 慢的那次后返回时整个丢弃：写回去就是「点了图标却出模型」
       ok: (rows) => {
         state.assets.value =

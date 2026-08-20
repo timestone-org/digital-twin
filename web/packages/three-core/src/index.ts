@@ -24,7 +24,11 @@ export {
 } from './nodeIndex'
 export type { NodeIndex } from './nodeIndex'
 export { createGltfSource, loadTwinModel } from './modelLoader'
-export type { GltfSource, TwinModelLoadOptions } from './modelLoader'
+export type {
+  GltfSource,
+  TwinModelAsset,
+  TwinModelLoadOptions,
+} from './modelLoader'
 export {
   WEBGL_UNAVAILABLE_MESSAGE,
   applyCameraPose,
@@ -64,5 +68,7 @@ export type {
   TwinPickMode,
 } from './editorScene'
 export type { TwinSceneEntityKind, TwinSceneSelection } from './pickTargets'
+export { useRenderLoop } from './useRenderLoop'
+export type { RenderLoop, RenderLoopOptions } from './useRenderLoop'
 export { useRoamTour } from './useRoamTour'
 export type { RoamTourController, RoamTourDeps } from './useRoamTour'

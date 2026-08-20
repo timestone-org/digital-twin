@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * @fileoverview 素材库：按类型浏览、上传、删除大屏与孪生共用的字节。
+ * @fileoverview 素材库：按类型与名字浏览，上传、预览、改名、下载、删除大屏与
+ * 孪生共用的字节。
  *
  * ⚠ 字节从不经过本站 API：上传是浏览器凭签好的表单直传对象存储，预览与取回
  * 走边缘反代的 `/oss/`（ADR-0015）。这一页只管那张表与那几个按钮。
@@ -8,113 +9,55 @@
  * 地址或桶名一换，存量大屏里那条链接就 404，而没有任何一处会报错。
  * ⚠ 删除**不做引用检查**：逐一扫描配置 JSON 既慢又不完整（引用可出现在任意
  * 嵌套层），故二次确认里必须把「用它的大屏会显示取不到」说清楚。
+ * 交互编排在 `scripts/useAssetsPage.ts`，库状态在 `features/assets/`。
  */
-import { computed, onMounted, ref } from 'vue'
-import { ASSET_KINDS, PERMISSION_CODES } from '@dt/contracts'
-import type { AssetKind, DtDataColumn, DtSegmentedOption } from '@dt/contracts'
+import { onMounted } from 'vue'
+import { PERMISSION_CODES } from '@dt/contracts'
+import type { DtDataColumn } from '@dt/contracts'
 import {
   DtButton,
   DtDataView,
   DtFilePicker,
+  DtInput,
   DtNotice,
   DtSegmented,
-  useConfirm,
-  useToast,
 } from '@dt/ui'
 
-import type { Asset } from '@/api/assets'
 import { AppShell } from '@/components/layout'
 import PermGuard from '@/components/PermGuard.vue'
 import { useViewMode } from '@/composables/useViewMode'
-import { useAssetLibrary } from '@/features/assets/useAssetLibrary'
-import { copyText } from '@/utils/clipboard'
 import { formatDateTime } from '@/utils/datetime'
 import { formatSize } from '@/utils/filesize'
+import AssetDetailDialog from './components/AssetDetailDialog.vue'
 import AssetPreview from './components/AssetPreview.vue'
+import AssetUploadPanel from './components/AssetUploadPanel.vue'
+import { useAssetsPage } from './scripts/useAssetsPage'
 
+/**
+ * ⚠ 内容类型与校验和刻意不列在表里：它们把表撑得比视口还宽，而最右边正是
+ * 「操作」那一列——按钮在 DOM 里、点得到，用户却要横向拖才看得见，表现就是
+ * 「这个页面只能上传」。两样都在详情面里。
+ */
 const COLUMNS: readonly DtDataColumn[] = [
   { key: 'preview', label: '预览', width: '5rem', card: 'meta' },
   { key: 'name', label: '名称', card: 'title' },
   { key: 'size', label: '大小', width: '7rem', align: 'right' },
-  { key: 'contentType', label: '内容类型', width: '13rem' },
   { key: 'createdAt', label: '上传时间', width: '12rem' },
   { key: 'createdBy', label: '上传人', width: '8rem' },
   {
     key: 'actions',
     label: '操作',
     align: 'right',
-    width: '7rem',
+    width: '10rem',
     card: 'actions',
   },
 ]
 
-/** 类型页签的图标。标签取服务端目录，图标是纯呈现，留在前端。 */
-const KIND_ICONS: Record<AssetKind, string> = {
-  model: 'layers',
-  image: 'image',
-  icon: 'palette',
-}
-
-const toast = useToast()
-const confirm = useConfirm()
 const view = useViewMode('assets')
-const library = useAssetLibrary()
-const kind = ref<AssetKind>('image')
+const page = useAssetsPage()
+const library = page.library
 
-const kindOptions = computed<DtSegmentedOption[]>(() =>
-  ASSET_KINDS.map((value) => ({
-    value,
-    // 目录还没回来时先用类型本身顶着，回来之后就是服务端那份中文标签
-    label: library.kinds.value.find((s) => s.kind === value)?.label ?? value,
-    icon: KIND_ICONS[value],
-  })),
-)
-
-/** 选文件时的 accept 与大小提示，都来自服务端的类型目录。 */
-const accept = computed(() => library.spec.value?.contentTypes.join(',') ?? '')
-const maxHint = computed(() => {
-  const bytes = library.spec.value?.maxBytes ?? 0
-  return bytes === 0 ? '' : `单个文件最大 ${formatSize(bytes)}`
-})
-
-/**
- * 切类型。⚠ 收窄而不是断言：DtSegmented 抛的是 string。
- * @param next 页签的值
- */
-function onKind(next: string): void {
-  const found = ASSET_KINDS.find((item) => item === next)
-  if (found === undefined || found === kind.value) return
-  kind.value = found
-  void library.reload(found)
-}
-
-async function onFiles(files: File[]): Promise<void> {
-  const file = files[0]
-  if (file === undefined) return
-  const saved = await library.upload(kind.value, file)
-  if (saved !== null) toast.success(`已上传「${saved.name}」`)
-}
-
-async function onCopy(row: Asset): Promise<void> {
-  if (await copyText(row.ref)) toast.success('引用已复制')
-  else toast.error('复制失败，请手动选中')
-}
-
-async function onRemove(row: Asset): Promise<void> {
-  const ok = await confirm.ask({
-    title: '删除素材',
-    message:
-      `「${row.name}」的字节会一并删掉，不可恢复。⚠ 删除不检查有没有人在用：` +
-      '正在引用它的大屏会显示「取不到」，而不会有任何一处报错。',
-    confirmText: '删除',
-    danger: true,
-  })
-  if (!ok) return
-  await library.remove(row.id)
-  if (library.error.value === '') toast.success('素材已删除')
-}
-
-onMounted(() => void library.reload(kind.value))
+onMounted(() => void library.reload(page.kind.value))
 </script>
 
 <template>
@@ -122,11 +65,12 @@ onMounted(() => void library.reload(kind.value))
     <template #actions>
       <PermGuard :codes="[PERMISSION_CODES.assetManage]" explain>
         <DtFilePicker
-          :accept="accept"
+          :accept="page.accept.value"
+          multiple
           :disabled="library.isUploading.value"
           :label="library.isUploading.value ? '上传中…' : '上传素材'"
           size="sm"
-          @select="onFiles"
+          @select="page.addFiles"
         />
       </PermGuard>
     </template>
@@ -142,11 +86,18 @@ onMounted(() => void library.reload(kind.value))
            的工具条：那格与右侧的视图切换同排居中，页签的底线只横跨工具条自身
            宽度就断掉，看着像画歪了 -->
       <DtSegmented
-        :model-value="kind"
-        :options="kindOptions"
+        :model-value="page.kind.value"
+        :options="page.kindOptions.value"
         variant="tabs"
         aria-label="素材类型"
-        @update:model-value="onKind"
+        @update:model-value="page.selectKind"
+      />
+
+      <AssetUploadPanel
+        :jobs="library.uploads.value"
+        :finished="library.finishedUploads.value"
+        @cancel="library.abort"
+        @clear="library.clearFinishedUploads"
       />
 
       <DtDataView
@@ -155,15 +106,28 @@ onMounted(() => void library.reload(kind.value))
         :columns="COLUMNS"
         :rows="library.assets.value"
         :loading="library.isLoading.value"
-        :layout="{ minWidth: '62rem', cardColumns: 3, cardMinWidth: '18rem' }"
-        :empty="{
-          title: '这一类还没有素材',
-          hint: '在右上角传一个。传上来的文件会有一串 asset: 引用，配置里存的就是它',
+        :layout="{
+          minWidth: '54rem',
+          fixedLayout: true,
+          cardColumns: 3,
+          cardMinWidth: '18rem',
         }"
+        :empty="page.empty.value"
       >
+        <template #toolbar>
+          <DtInput
+            :model-value="page.draftKeyword.value"
+            type="search"
+            size="sm"
+            placeholder="按名字搜索"
+            aria-label="按名字搜索素材"
+            @update:model-value="page.typeKeyword"
+          />
+        </template>
+
         <template #summary>
           已加载 {{ library.assets.value.length }} 项{{
-            maxHint === '' ? '' : `・${maxHint}`
+            page.maxHint.value === '' ? '' : `・${page.maxHint.value}`
           }}
         </template>
 
@@ -171,19 +135,22 @@ onMounted(() => void library.reload(kind.value))
           <AssetPreview :asset="row" />
         </template>
 
+        <!-- 名字本身就是打开详情的入口：图标按钮再多加一个「查看」，操作列会
+             重新变宽，而这一格是全表最好点中的目标 -->
         <template #cell-name="{ row }">
-          <p class="m-0 text-text-primary">{{ row.name }}</p>
-          <!-- 配置里存的就是这一串，出问题时按它去大屏配置里搜 -->
-          <p class="m-0 font-mono text-2xs text-text-disabled">{{ row.ref }}</p>
+          <button
+            type="button"
+            class="dt-assets__open"
+            @click="page.openDetail(row)"
+          >
+            {{ row.name }}
+          </button>
+          <p class="dt-assets__ref">{{ row.ref }}</p>
         </template>
 
         <template #cell-size="{ row }">{{
           formatSize(row.sizeBytes)
         }}</template>
-
-        <template #cell-contentType="{ row }">
-          <span class="font-mono text-2xs">{{ row.contentType }}</span>
-        </template>
 
         <template #cell-createdAt="{ row }">
           {{ formatDateTime(row.createdAt) }}
@@ -195,10 +162,26 @@ onMounted(() => void library.reload(kind.value))
           <DtButton
             variant="ghost"
             size="sm"
+            icon="eye"
+            aria-label="预览"
+            title="预览与详情"
+            @click="page.openDetail(row)"
+          />
+          <DtButton
+            variant="ghost"
+            size="sm"
             icon="copy"
             aria-label="复制引用"
             title="复制引用"
-            @click="onCopy(row)"
+            @click="page.copyRef(row)"
+          />
+          <DtButton
+            variant="ghost"
+            size="sm"
+            icon="download"
+            aria-label="下载原件"
+            title="下载原件"
+            @click="page.download(row)"
           />
           <PermGuard :codes="[PERMISSION_CODES.assetManage]">
             <DtButton
@@ -208,7 +191,7 @@ onMounted(() => void library.reload(kind.value))
               icon="trash"
               aria-label="删除"
               title="删除"
-              @click="onRemove(row)"
+              @click="page.remove(row)"
             />
           </PermGuard>
         </template>
@@ -227,5 +210,47 @@ onMounted(() => void library.reload(kind.value))
         </DtButton>
       </div>
     </div>
+
+    <AssetDetailDialog
+      :model-value="page.detail.value !== null"
+      :asset="page.detail.value"
+      :can-manage="page.canManage.value"
+      :kind-label="page.kindLabel.value"
+      @update:model-value="page.closeDetail"
+      @rename="page.rename"
+      @copy="page.copyDetail"
+      @download="page.downloadDetail"
+      @remove="page.removeDetail"
+    />
   </AppShell>
 </template>
+
+<style scoped lang="scss">
+.dt-assets {
+  &__open {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+
+    &:hover {
+      color: var(--accent-primary);
+      text-decoration: underline;
+    }
+  }
+
+  // 配置里存的就是这一串，出问题时按它去大屏配置里搜
+  &__ref {
+    overflow: hidden;
+    margin: 0;
+    color: var(--text-disabled);
+    font-family: var(--font-mono);
+    font-size: var(--ctl-hint-fs-md);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+</style>

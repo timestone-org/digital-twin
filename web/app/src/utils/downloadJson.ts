@@ -1,5 +1,5 @@
 /**
- * @fileoverview 把一份数据存成本地文件（JSON 与 CSV 两种）。
+ * @fileoverview 把一份数据或一个同源地址存成本地文件（JSON / CSV / 原件）。
  * ⚠ 对象 URL 用完必须 revoke：不释放的话这块 Blob 会一直挂在文档上，
  * 而工作台是长时间开着的页面，导出几次就攒下几份整包。
  */
@@ -51,4 +51,18 @@ function downloadBlob(blob: Blob, fileName: string): void {
   anchor.download = fileName
   anchor.click()
   URL.revokeObjectURL(href)
+}
+
+/**
+ * 触发浏览器下载一个**同源**地址上的文件。
+ * ⚠ 只对同源地址有效：`download` 属性遇到跨源地址会被浏览器整个忽略，表现是
+ * 「点了下载却在新标签里打开了一张图」。素材走边缘反代的 `/oss/`，同源成立。
+ * @param href 文件地址
+ * @param fileName 存成的文件名，会先做字符规整
+ */
+export function downloadUrl(href: string, fileName: string): void {
+  const anchor = document.createElement('a')
+  anchor.href = href
+  anchor.download = toFileName(fileName)
+  anchor.click()
 }

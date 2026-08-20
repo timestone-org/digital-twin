@@ -91,14 +91,27 @@ describe('素材面的前缀', () => {
     expect(bases.every((base) => base === PLATFORM_PREFIX)).toBe(true)
   })
 
-  it('分页参数走 query，不自己拼查询串', async () => {
-    await assets.listAssets('image', { limit: 50, offset: 100 })
+  it('分页与关键词都走 query，不自己拼查询串', async () => {
+    await assets.listAssets('image', { limit: 50, offset: 100, q: '机组' })
 
     expect(lastCall(requestData)[0]).toBe('/assets')
     expect(lastCall(requestData)[1].query).toEqual({
       kind: 'image',
+      q: '机组',
       limit: 50,
       offset: 100,
+    })
+  })
+
+  it('空关键词收成 undefined，不发一个 `q=` 出去', async () => {
+    await assets.listAssets('image', { q: '' })
+
+    // 服务端把 `q=` 当「不筛」，原样发的话同一份结果对应两个不同的 URL
+    expect(lastCall(requestData)[1].query).toEqual({
+      kind: 'image',
+      q: undefined,
+      limit: undefined,
+      offset: undefined,
     })
   })
 
@@ -107,9 +120,22 @@ describe('素材面的前缀', () => {
 
     expect(lastCall(requestData)[1].query).toEqual({
       kind: undefined,
+      q: undefined,
       limit: undefined,
       offset: undefined,
     })
+  })
+
+  it('改名走 PATCH，打在这个素材自己的路径上', async () => {
+    requestData.mockResolvedValue(ASSET_WIRE)
+
+    await assets.renameAsset('a1', '新名')
+
+    const [path, options] = lastCall(requestData)
+    expect(path).toBe('/assets/a1')
+    expect(options.method).toBe('PATCH')
+    expect(options.body).toEqual({ name: '新名' })
+    expect(options.baseUrl).toBe(PLATFORM_PREFIX)
   })
 
   it('删除用 DELETE，且走不要求 data 的那条', async () => {
