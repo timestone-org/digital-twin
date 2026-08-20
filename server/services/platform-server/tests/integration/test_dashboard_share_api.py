@@ -264,6 +264,78 @@ async def test_an_editor_cannot_unpublish_a_dashboard(
     assert response.status_code == HTTP_FORBIDDEN
 
 
+async def read_publication(
+    client: httpx.AsyncClient,
+    dashboard_id: str,
+    headers: dict[str, str] | None = None,
+) -> httpx.Response:
+    """读一张屏此刻的发布态。
+
+    Args: client, dashboard_id, headers。
+    """
+    return await client.get(
+        f"{DASHBOARDS_URL}/{dashboard_id}/publication", headers=headers
+    )
+
+
+async def test_the_publication_read_hands_back_the_live_link(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # 没有这条读面，已公开的屏重开分享面就再也拿不到自己那条链接——
+    # 只能靠再发布一次，而再发布会把已经发出去的那条当场作废
+    dashboard_id, token = await make_published(app_client)
+    response = await read_publication(app_client, dashboard_id)
+    assert response.status_code == HTTP_OK
+    assert data_of(response)["is_public"] is True
+    assert data_of(response)["public_token"] == token
+
+
+async def test_the_publication_read_follows_a_republish(
+    app_client: httpx.AsyncClient,
+) -> None:
+    dashboard_id, first = await make_published(app_client)
+    second = await published_token(app_client, dashboard_id)
+    assert second != first
+    payload = data_of(await read_publication(app_client, dashboard_id))
+    assert payload["public_token"] == second
+
+
+async def test_the_publication_read_of_a_withdrawn_screen_is_empty(
+    app_client: httpx.AsyncClient,
+) -> None:
+    dashboard_id, _ = await make_withdrawn(app_client)
+    payload = data_of(await read_publication(app_client, dashboard_id))
+    assert payload["is_public"] is False
+    assert payload["public_token"] is None
+
+
+async def test_the_dashboard_detail_still_hides_the_public_token(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # 令牌只走发布面：详情面归 view，把它带上等于让只读用户也能把屏发出去
+    dashboard_id, _ = await make_published(app_client)
+    detail = data_of(await app_client.get(f"{DASHBOARDS_URL}/{dashboard_id}"))
+    assert "public_token" not in detail
+
+
+async def test_an_editor_cannot_read_the_public_link(
+    app_client: httpx.AsyncClient, sign: SignHeaders
+) -> None:
+    # 看得见这张屏与能把它交给全互联网不是同一件事
+    dashboard_id, _ = await make_published(app_client)
+    editor = sign([DASHBOARD_VIEW, DASHBOARD_EDIT])
+    response = await read_publication(app_client, dashboard_id, editor)
+    assert response.status_code == HTTP_FORBIDDEN
+
+
+async def test_reading_the_publication_of_a_missing_dashboard_is_a_404(
+    app_client: httpx.AsyncClient,
+) -> None:
+    response = await read_publication(app_client, MISSING_ID)
+    assert response.status_code == HTTP_NOT_FOUND
+    assert response.json()["code"] == CODE_DASHBOARD_NOT_FOUND
+
+
 async def test_the_public_payload_carries_no_internal_fields(
     app_client: httpx.AsyncClient,
 ) -> None:

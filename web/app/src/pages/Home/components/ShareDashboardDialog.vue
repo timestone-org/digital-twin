@@ -4,6 +4,8 @@
  *
  * ⚠ 每次发布都换一个新令牌，旧链接当场失效。「再点一次发布」不是幂等的——
  * 它会把已经发出去的那条链接全废掉，所以再次发布走二次确认而不是直接发。
+ * ⚠ 正因如此，「读当前链接」必须有自己的端点：拿重新发布去凑，等于每看一眼
+ * 链接就把它换掉一次。
  */
 import { computed, onUnmounted, ref, watch } from 'vue'
 import {
@@ -17,10 +19,14 @@ import {
 
 import type { DashboardPublication } from '@dt/contracts'
 
-import { getDashboard } from '@/api/dashboard'
-import { publishDashboard, unpublishDashboard } from '@/api/dashboardShare'
+import {
+  getDashboardPublication,
+  publishDashboard,
+  unpublishDashboard,
+} from '@/api/dashboardShare'
 import type { DashboardSummary } from '@/api/dashboardWire'
 import { useRacedFetch } from '@/composables/useRacedFetch'
+import { copyText } from '@/utils/clipboard'
 
 const props = defineProps<{
   open: boolean
@@ -37,9 +43,11 @@ const toast = useToast()
 
 const isPublic = ref(false)
 const token = ref<string | null>(null)
+/** 当前链接还在取的路上。⚠ 取完仍然没有链接要另说一句：把「正在取」一直
+ * 挂着的话，一次失败的读看上去和一条永远加载不完的链接一模一样。 */
+const loading = ref(false)
 const busy = ref(false)
 const raced = useRacedFetch()
-let disposed = false
 
 /** ⚠ 公开面的路径是 `/public/<token>`，与登录态的 `/dashboards/:id` 不是同一条。 */
 const link = computed(() =>
@@ -47,16 +55,20 @@ const link = computed(() =>
 )
 
 /**
- * 列表项里没有 `publicToken`（那是详情才有的字段），已公开的屏得再拉一次详情
- * 才拿得到链接。拉不到就只是没有链接可展示，不当成错误打断用户。
+ * 取这张屏此刻的发布态。列表项里只有 `isPublic`，令牌得单独问发布面要。
+ * @param dashboardId 大屏 id
  */
-async function loadToken(dashboardId: string): Promise<void> {
-  await raced.run(() => getDashboard(dashboardId), {
-    ok: (detail) => {
-      if (!disposed) token.value = detail.publicToken
+async function loadPublication(dashboardId: string): Promise<void> {
+  loading.value = true
+  await raced.run((signal) => getDashboardPublication(dashboardId, signal), {
+    ok: (publication) => {
+      isPublic.value = publication.isPublic
+      token.value = publication.publicToken
     },
     fail: () => undefined,
-    settled: () => undefined,
+    settled: () => {
+      loading.value = false
+    },
   })
 }
 
@@ -64,18 +76,43 @@ watch(
   () => [props.open, props.dashboard?.id] as const,
   ([open]) => {
     const target = props.dashboard
+    // 关掉时作废在飞的那一次：不作废的话它之后返回，会写进一个已经没人看的
+    // 状态，下次打开还没取完就先闪一条上一张屏的链接
+    raced.cancel()
     if (!open || target === null) return
     isPublic.value = target.isPublic
     token.value = null
-    if (target.isPublic) void loadToken(target.id)
+    if (target.isPublic) void loadPublication(target.id)
   },
   { immediate: true },
 )
 
-// 弹窗开着时被卸载（切走页面），在途那次回来仍会写一个已经不在的状态
 onUnmounted(() => {
-  disposed = true
+  raced.cancel()
 })
+
+/**
+ * 开始一次写。
+ * ⚠ 必须先作废在飞的那次读：发布换发的新令牌是这一刻的真相，而先发出去的读
+ * 回来的是换发**之前**那一个，晚一步落地就把新链接盖回旧的——链接看着没变，
+ * 复制出去的那条已经作废了。
+ */
+function beginWrite(): void {
+  raced.cancel()
+  loading.value = false
+  busy.value = true
+}
+
+/**
+ * 问完之后，弹窗还开着、且还指着同一张屏。
+ * ⚠ 每条二次确认之后都要查一次：等回答的这段时间里弹窗可能已经被关掉。答
+ * 「确定」于是变成对着一张已经不在眼前的屏换链接——人回到工作台，只知道旧链接
+ * 没了，新的那条压根没露过面。
+ * @param target 发起这次操作时瞄准的那张屏
+ */
+function stillTargets(target: DashboardSummary): boolean {
+  return props.open && props.dashboard?.id === target.id
+}
 
 function absorb(result: DashboardPublication): void {
   isPublic.value = result.isPublic
@@ -102,7 +139,8 @@ async function publish(): Promise<void> {
   ) {
     return
   }
-  busy.value = true
+  if (!stillTargets(target)) return
+  beginWrite()
   try {
     absorb(await publishDashboard(target.id))
     toast.success('已生成公开链接')
@@ -123,8 +161,8 @@ async function unpublish(): Promise<void> {
     confirmText: '撤回',
     danger: true,
   })
-  if (!agreed) return
-  busy.value = true
+  if (!agreed || !stillTargets(target)) return
+  beginWrite()
   try {
     absorb(await unpublishDashboard(target.id))
     toast.success('已撤回，链接立即失效')
@@ -135,14 +173,16 @@ async function unpublish(): Promise<void> {
   }
 }
 
+/**
+ * 复制公开链接。
+ * ⚠ 走 `copyText` 而不是直接 `navigator.clipboard`：本平台按内网 IP 走纯
+ * HTTP 交付，那里 `navigator.clipboard` 是 undefined——开发机（localhost）
+ * 是安全上下文，永远复现不了。
+ */
 async function copyLink(): Promise<void> {
   if (link.value === '') return
-  try {
-    await navigator.clipboard.writeText(link.value)
-    toast.success('链接已复制')
-  } catch {
-    toast.error('复制失败，请手动选中链接复制')
-  }
+  if (await copyText(link.value)) toast.success('链接已复制')
+  else toast.error('复制失败，请手动选中链接复制')
 }
 </script>
 
@@ -171,8 +211,12 @@ async function copyLink(): Promise<void> {
         label="公开链接"
         readonly
       />
-      <DtNotice v-else-if="isPublic" icon="circle-question">
+      <DtNotice v-else-if="isPublic && loading" icon="circle-question">
         正在取这张屏当前的公开链接。
+      </DtNotice>
+      <DtNotice v-else-if="isPublic" intent="warning" icon="alert-triangle">
+        取不到这张屏当前的公开链接。「重新发布」能换一条新的，
+        但已经发出去的那条会立即失效。
       </DtNotice>
 
       <DtNotice intent="warning" icon="alert-triangle">

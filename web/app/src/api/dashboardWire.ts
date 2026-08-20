@@ -302,8 +302,9 @@ export function toNode(wire: NodeWire): DashboardNodePayload {
 
 /**
  * 一张大屏的载荷。
- * ⚠ `publicToken` 恒为 null：大屏详情不带这一列，令牌只在发布端点的出参里
- * （见 `dashboardShare.ts`）。在这里编一个会让「这张屏已经公开了」看上去是真的。
+ * ⚠ 不带 `publicToken`：详情端点没有这一列，令牌只在发布面
+ * （`dashboardShare.ts`）回。在这里补一个恒为 null 的字段，会让调用方以为
+ * 「读一次详情就能拿到当前链接」——它读到的永远是 null，而且不报错。
  * @param wire 线上的大屏
  */
 export function toDashboard(wire: DashboardWire): DashboardPayload {
@@ -311,7 +312,6 @@ export function toDashboard(wire: DashboardWire): DashboardPayload {
     ...toDashboardSummary(wire),
     themeJson: wire.theme_json,
     chromeJson: wire.chrome_json,
-    publicToken: null,
     nodes: wire.nodes.map(toNode),
   }
 }

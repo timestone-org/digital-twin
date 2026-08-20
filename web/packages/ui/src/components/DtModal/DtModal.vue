@@ -5,6 +5,10 @@
  * ⚠ 三条无障碍硬要求：打开时焦点进入弹窗、Tab 不许跑出去、关闭后焦点归还
  * 触发元素。少任何一条，键盘用户都会在弹窗打开后「焦点消失」。
  *
+ * ⚠ 叠在另一个弹窗之上时必须调高 `layer`：同一层的弹窗 z-index 相同，谁在上
+ * 只由 body 里的先后决定，而全局宿主（App.vue 里的确认框）挂得比页面里的弹窗
+ * 早——同层的话一定是后开的那个把先挂的盖住，表现是「点了没反应」。
+ *
  * ⚠ `dirty` 是给**填了一半的表单**用的：那时误关一次就是十几个字段全没了，
  * 而这两条路径都不是「我要关掉它」的意思——点弹窗外面纯属误触，一律不关；
  * Esc 可能只是习惯性动作，所以第一次只提示、再按一次才真的丢。
@@ -22,8 +26,10 @@ const props = withDefaults(
     closeOnBackdrop?: boolean
     /** 里面有还没提交的内容。 */
     dirty?: boolean
+    /** 叠放层级。`confirm` 给二次确认——它必须盖在把它问出来的那个弹窗之上。 */
+    layer?: 'modal' | 'confirm'
   }>(),
-  { width: '30rem', closeOnBackdrop: true, dirty: false },
+  { width: '30rem', closeOnBackdrop: true, dirty: false, layer: 'modal' },
 )
 
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
@@ -110,7 +116,12 @@ onBeforeUnmount(() => {
 
 <template>
   <Teleport to="body">
-    <div v-if="modelValue" class="dt-modal" @keydown="onKeydown">
+    <div
+      v-if="modelValue"
+      class="dt-modal"
+      :class="`dt-modal--${layer}`"
+      @keydown="onKeydown"
+    >
       <div class="dt-modal__backdrop" @click="onBackdrop" />
       <div
         ref="panel"
@@ -155,11 +166,18 @@ onBeforeUnmount(() => {
 .dt-modal {
   position: fixed;
   inset: 0;
-  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
+
+  &--modal {
+    z-index: var(--z-modal);
+  }
+
+  &--confirm {
+    z-index: var(--z-confirm);
+  }
 
   &__backdrop {
     position: absolute;

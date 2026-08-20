@@ -101,6 +101,11 @@ DASHBOARD_MANAGED = (
     (f"{API_PREFIX}/dashboard-templates/{{template_id}}", "DELETE"),
     (f"{API_PREFIX}/dashboard-templates/{{template_id}}:instantiate", "POST"),
 )
+# 读面里唯一一条要 manage 的：读到的就是那条谁拿到谁能看的公开链接。
+# ⚠ 能看见一张屏与能把它发给全互联网不是同一件事，故它不随 GET 落到 view
+DASHBOARD_MANAGED_READS = (
+    (f"{API_PREFIX}/dashboards/{{dashboard_id}}/publication", "GET"),
+)
 # 什么都不改，是 POST 只因为动作端点一律 POST，故按读面放行。
 # ⚠ 漏登记一条的表现不是报错，是只读用户点下去收 403——而他明明看得见那张屏
 DASHBOARD_READ_ACTIONS = (
@@ -170,6 +175,8 @@ def dashboard_expectation(path: str, method: str) -> frozenset[str] | None:
     """
     if not any(path.startswith(prefix) for prefix in DASHBOARD_PREFIXES):
         return None
+    if (path, method) in DASHBOARD_MANAGED_READS:
+        return frozenset({DASHBOARD_MANAGE})
     if method == "GET" or (path, method) in DASHBOARD_READ_ACTIONS:
         return frozenset({DASHBOARD_VIEW})
     if (path, method) in DASHBOARD_MANAGED:
@@ -345,12 +352,13 @@ def test_the_dashboard_face_was_actually_covered() -> None:
         for path, method in ROUTE_CASES
         if dashboard_expectation(path, method) is not None
     ]
-    assert len(covered) == 39
+    assert len(covered) == 40
 
 
 def test_every_manage_entry_still_points_at_a_live_route() -> None:
     # 端点改名后这张表会静默失效，那条路由于是悄悄退回 edit 的宽口径
     assert set(DASHBOARD_MANAGED) <= set(ROUTE_CASES)
+    assert set(DASHBOARD_MANAGED_READS) <= set(ROUTE_CASES)
     assert set(DASHBOARD_READ_ACTIONS) <= set(ROUTE_CASES)
 
 

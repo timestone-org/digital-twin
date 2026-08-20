@@ -34,7 +34,6 @@ function payload(rowVersion: number): DashboardPayload {
     rowVersion,
     schemaVersion: 1,
     isPublic: false,
-    publicToken: null,
     createdAt: '',
     updatedAt: '',
     nodes: [

@@ -2,13 +2,17 @@
  * @fileoverview 契约：分享弹窗自己发布 / 撤回，链接形状是
  * `<origin>/public/<token>`，重新发布与撤回都要先过二次确认——「再点一次发布」
  * 不是幂等的，它会把已经发出去的链接全废掉。
+ *
+ * ⚠ 当前链接必须从**发布面**取（`getDashboardPublication`）：大屏详情不带
+ * 令牌，从那里读永远是 null，而这件事在打桩的用例里看不出来——桩比真实现宽。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import { useConfirm } from '@dt/ui'
+import { DtToastHost, useConfirm } from '@dt/ui'
+import type { DashboardPublication } from '@dt/contracts'
 
-import * as dashboardApi from '@/api/dashboard'
 import * as shareApi from '@/api/dashboardShare'
+import * as clipboard from '@/utils/clipboard'
 import type { DashboardSummary } from '@/api/dashboardWire'
 import ShareDashboardDialog from '@/pages/Home/components/ShareDashboardDialog.vue'
 
@@ -102,26 +106,14 @@ describe('未公开', () => {
 
 describe('已公开', () => {
   beforeEach(() => {
-    vi.spyOn(dashboardApi, 'getDashboard').mockResolvedValue({
-      id: 'd1',
-      projectId: 'p1',
-      name: '光伏总览',
-      description: null,
-      designWidth: 1920,
-      designHeight: 1080,
-      themeJson: {},
-      chromeJson: {},
-      rowVersion: 1,
-      schemaVersion: 1,
+    vi.spyOn(shareApi, 'getDashboardPublication').mockResolvedValue({
+      dashboardId: 'd1',
       isPublic: true,
       publicToken: 'tok-old',
-      createdAt: '2026-08-01T00:00:00Z',
-      updatedAt: '2026-08-01T00:00:00Z',
-      nodes: [],
     })
   })
 
-  it('打开时补一次详情，把当前那条链接显示出来', async () => {
+  it('打开时向发布面要一次当前链接，并把它显示出来', async () => {
     const wrapper = mountDialog(true)
     await flushPromises()
 
@@ -176,5 +168,106 @@ describe('已公开', () => {
       [{ dashboardId: 'd1', isPublic: false, publicToken: null }],
     ])
     expect(wrapper.text()).toContain('还没有公开')
+  })
+})
+
+describe('问确认的过程中弹窗被关掉', () => {
+  beforeEach(() => {
+    vi.spyOn(shareApi, 'getDashboardPublication').mockResolvedValue({
+      dashboardId: 'd1',
+      isPublic: true,
+      publicToken: 'tok-old',
+    })
+  })
+
+  it('答「确定」也不发布——旧链接不该在人已经离开这个面之后被换掉', async () => {
+    const wrapper = mountDialog(true)
+    await flushPromises()
+
+    await clickText(wrapper, '重新发布')
+    await wrapper.setProps({ open: false, dashboard: null })
+    useConfirm().resolve(true)
+    await flushPromises()
+
+    expect(shareApi.publishDashboard).not.toHaveBeenCalled()
+  })
+
+  it('撤回同理：弹窗已经不在了，就不许悄悄把链接关掉', async () => {
+    const wrapper = mountDialog(true)
+    await flushPromises()
+
+    await clickText(wrapper, '撤回公开')
+    await wrapper.setProps({ open: false, dashboard: null })
+    useConfirm().resolve(true)
+    await flushPromises()
+
+    expect(shareApi.unpublishDashboard).not.toHaveBeenCalled()
+  })
+})
+
+describe('取当前链接与发布抢着写', () => {
+  it('慢的那次读回来，不许把刚换发的新令牌盖回旧的', async () => {
+    // ⚠ 这是「重新发布之后链接又变回旧的」的成因：读是打开弹窗就发的，
+    // 发布是后按的，先发的那条后回来，落地的就是换发**之前**那一个
+    let settle: (publication: DashboardPublication) => void = () => undefined
+    vi.spyOn(shareApi, 'getDashboardPublication').mockReturnValue(
+      new Promise((resolve) => {
+        settle = resolve
+      }),
+    )
+    const wrapper = mountDialog(true)
+
+    await clickText(wrapper, '重新发布')
+    useConfirm().resolve(true)
+    await flushPromises()
+    settle({ dashboardId: 'd1', isPublic: true, publicToken: 'tok-old' })
+    await flushPromises()
+
+    expect(wrapper.find('input').element.value).toBe(
+      `${location.origin}/public/tok-new`,
+    )
+  })
+
+  it('读不出当前链接时说出来，而不是一直挂着「正在取」', async () => {
+    vi.spyOn(shareApi, 'getDashboardPublication').mockRejectedValue(
+      new Error('炸了'),
+    )
+    const wrapper = mountDialog(true)
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('正在取')
+    expect(wrapper.text()).toContain('取不到这张屏当前的公开链接')
+  })
+})
+
+describe('复制链接', () => {
+  beforeEach(() => {
+    vi.spyOn(shareApi, 'getDashboardPublication').mockResolvedValue({
+      dashboardId: 'd1',
+      isPublic: true,
+      publicToken: 'tok-old',
+    })
+  })
+
+  it('走 copyText——现场是纯 HTTP，navigator.clipboard 在那里不存在', async () => {
+    const copy = vi.spyOn(clipboard, 'copyText').mockResolvedValue(true)
+    const wrapper = mountDialog(true)
+    await flushPromises()
+
+    await clickText(wrapper, '复制链接')
+
+    expect(copy).toHaveBeenCalledWith(`${location.origin}/public/tok-old`)
+  })
+
+  it('复制失败时告诉人手动选中，而不是假装成功', async () => {
+    vi.spyOn(clipboard, 'copyText').mockResolvedValue(false)
+    mount(DtToastHost)
+    const wrapper = mountDialog(true)
+    await flushPromises()
+
+    await clickText(wrapper, '复制链接')
+    await flushPromises()
+
+    expect(document.body.textContent).toContain('请手动选中')
   })
 })
