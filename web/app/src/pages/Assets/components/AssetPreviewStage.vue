@@ -59,7 +59,9 @@ watch(
 <style scoped lang="scss">
 .dt-asset-stage {
   display: flex;
-  min-height: 20rem;
+  // ⚠ 别再抬高：预览、改名、元信息三段加起来已经顶到一屏，抬一档正文就只能靠滚
+  min-height: 16rem;
+  max-height: 22rem;
   flex: 1;
   align-items: center;
   justify-content: center;
@@ -94,7 +96,7 @@ watch(
 
   &__image {
     max-width: 100%;
-    max-height: 26rem;
+    max-height: 20rem;
     object-fit: contain;
   }
 }

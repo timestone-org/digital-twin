@@ -135,16 +135,19 @@ onMounted(() => void library.reload(page.kind.value))
           <AssetPreview :asset="row" />
         </template>
 
-        <!-- 名字本身就是打开详情的入口：图标按钮再多加一个「查看」，操作列会
-             重新变宽，而这一格是全表最好点中的目标 -->
+        <!-- 名字本身就是打开详情的入口：这一格是全表最好点中的目标。
+             ⚠ 用 DtButton 而不是自己画一个 `<button>`：手搓的那颗要自带焦点环、
+             禁用态与换肤色，而这三样漏哪一样都不报错 -->
         <template #cell-name="{ row }">
-          <button
-            type="button"
+          <DtButton
+            variant="ghost"
+            intent="neutral"
+            size="sm"
             class="dt-assets__open"
             @click="page.openDetail(row)"
           >
             {{ row.name }}
-          </button>
+          </DtButton>
           <p class="dt-assets__ref">{{ row.ref }}</p>
         </template>
 
@@ -227,19 +230,12 @@ onMounted(() => void library.reload(page.kind.value))
 
 <style scoped lang="scss">
 .dt-assets {
+  // DtButton 是照按钮的尺寸档排的，塞进表格行要把左右内边距收掉，
+  // 否则名字会比同一行的其它列各缩进一截
   &__open {
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--text-primary);
-    cursor: pointer;
-    font: inherit;
-    text-align: left;
-
-    &:hover {
-      color: var(--accent-primary);
-      text-decoration: underline;
-    }
+    max-width: 100%;
+    justify-content: flex-start;
+    padding-inline: 0;
   }
 
   // 配置里存的就是这一串，出问题时按它去大屏配置里搜

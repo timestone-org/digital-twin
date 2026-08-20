@@ -4,9 +4,14 @@
  *
  * ⚠ 改名做成就地编辑而不是再开一个弹窗：叠在弹窗之上的弹窗必须调高 `layer`，
  * 而同层时谁在上只由 body 里的先后决定——那条路径极易变成「点了改名没反应」。
+ * ⚠ 保存键挂在 `DtInput` 的 `trailing` 插槽里，不做输入框的兄弟节点：`DtInput`
+ * 自带 `DtField`（标签 + 提示 + 控件三行），兄弟节点对齐的是整个字段而不是控件
+ * 那一行，于是按钮永远和输入框错开半行。
+ * ⚠ 元信息整块**一个字号**（`text-sm`）：标签与值分两档时，14px 的标签压着
+ * 11px 的等宽值，看着像标题压脚注（同 `WriteValueDialog` 的写法）。
  * ⚠ 删除的二次确认走全局宿主（`layer="confirm"`，z 比本弹窗高），故可以从这里问。
  */
-import { DtButton, DtField, DtInput, DtModal } from '@dt/ui'
+import { DtButton, DtInput, DtModal, DtTag } from '@dt/ui'
 import { computed, ref, watch } from 'vue'
 
 import type { Asset } from '@/api/assets'
@@ -47,28 +52,15 @@ const nameError = computed(() => {
     ? `不许超过 ${MAX_NAME_LEN} 个字`
     : ''
 })
-
-/** 元信息表。收成一份数组是为了让模板只有一层 v-for，而不是七段重复标记。 */
-const facts = computed<readonly { label: string; value: string }[]>(() => {
-  const asset = props.asset
-  if (asset === null) return []
-  return [
-    { label: '类型', value: props.kindLabel },
-    { label: '大小', value: formatSize(asset.sizeBytes) },
-    { label: '内容类型', value: asset.contentType },
-    { label: '上传时间', value: formatDateTime(asset.createdAt) },
-    { label: '上传人', value: asset.createdBy },
-    { label: '校验和', value: asset.checksum },
-    { label: '引用', value: asset.ref },
-  ]
-})
+/** 改过、且改得合法，才有得存。 */
+const canSave = computed(() => isDirty.value && nameError.value === '')
 
 function close(): void {
   emit('update:modelValue', false)
 }
 
 function submit(): void {
-  if (!isDirty.value || nameError.value !== '') return
+  if (!canSave.value) return
   emit('rename', trimmed.value)
 }
 
@@ -89,33 +81,51 @@ watch(
     :dirty="isDirty"
     @update:model-value="close"
   >
-    <div v-if="asset" class="dt-asset-detail">
+    <div v-if="asset" class="flex flex-col gap-4">
       <AssetPreviewStage :asset="asset" />
 
-      <DtField
+      <DtInput
         v-if="canManage"
+        v-model="draft"
         label="显示名"
         :error="nameError"
         hint="只改库里的名字，字节与引用都不动，用它的大屏无感"
+        :maxlength="MAX_NAME_LEN"
+        @enter="submit"
       >
-        <div class="dt-asset-detail__rename">
-          <DtInput
-            v-model="draft"
-            :error="nameError"
-            :maxlength="MAX_NAME_LEN"
-            @enter="submit"
+        <!-- 改过才出现：没改的时候摆一颗灰按钮，用户还得先分辨它为什么是灰的 -->
+        <template v-if="isDirty" #trailing>
+          <DtButton
+            size="sm"
+            variant="ghost"
+            icon="check"
+            :disabled="!canSave"
+            aria-label="保存新名字"
+            title="保存新名字（回车同效）"
+            @click="submit"
           />
-          <DtButton :disabled="!isDirty || nameError !== ''" @click="submit">
-            保存
-          </DtButton>
-        </div>
-      </DtField>
+        </template>
+      </DtInput>
 
-      <dl class="dt-asset-detail__facts">
-        <div v-for="fact in facts" :key="fact.label">
-          <dt>{{ fact.label }}</dt>
-          <dd>{{ fact.value }}</dd>
-        </div>
+      <!-- ⚠ 引用与校验和 `break-all` 整串铺开、不省略：出问题时要拿它去大屏配置
+           里逐字搜，截断的一串既搜不了也复制不全 -->
+      <dl class="m-0 grid grid-cols-[5.5rem_1fr] gap-x-3 gap-y-2 text-sm">
+        <dt class="text-text-secondary">类型</dt>
+        <dd class="m-0">{{ kindLabel }}</dd>
+        <dt class="text-text-secondary">大小</dt>
+        <dd class="m-0">{{ formatSize(asset.sizeBytes) }}</dd>
+        <dt class="text-text-secondary">内容类型</dt>
+        <dd class="m-0">
+          <DtTag mono size="sm">{{ asset.contentType }}</DtTag>
+        </dd>
+        <dt class="text-text-secondary">上传</dt>
+        <dd class="m-0">
+          {{ formatDateTime(asset.createdAt) }} · {{ asset.createdBy }}
+        </dd>
+        <dt class="text-text-secondary">引用</dt>
+        <dd class="m-0 break-all font-mono">{{ asset.ref }}</dd>
+        <dt class="text-text-secondary">校验和</dt>
+        <dd class="m-0 break-all font-mono">{{ asset.checksum }}</dd>
       </dl>
     </div>
 
@@ -141,51 +151,3 @@ watch(
     </template>
   </DtModal>
 </template>
-
-<style scoped lang="scss">
-.dt-asset-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-
-  &__rename {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-
-    // DtInput 自己不撑开，不给 flex 的话它会缩成一个几十像素的框
-    :first-child {
-      flex: 1;
-    }
-  }
-
-  &__facts {
-    display: grid;
-    padding: 0;
-    margin: 0;
-    gap: 8px 24px;
-    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-
-    div {
-      display: flex;
-      min-width: 0;
-      gap: 8px;
-    }
-
-    dt {
-      flex: none;
-      color: var(--text-secondary);
-    }
-
-    dd {
-      overflow: hidden;
-      margin: 0;
-      color: var(--text-primary);
-      font-family: var(--font-mono);
-      font-size: var(--ctl-hint-fs-md);
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-  }
-}
-</style>

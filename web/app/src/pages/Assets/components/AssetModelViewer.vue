@@ -20,7 +20,7 @@ import {
   useRenderLoop,
 } from '@dt/three-core'
 import type { SceneCore, TwinModelAsset } from '@dt/three-core'
-import { DtButton, DtNotice, DtProgress, DtSpinner } from '@dt/ui'
+import { DtButton, DtNotice, DtProgress, DtSpinner, DtTag } from '@dt/ui'
 import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 
 // ⚠ 从 three-core 的出参里取这个类型，而不是 `import type ... from 'three'`：
@@ -140,7 +140,9 @@ onBeforeUnmount(() => {
       <DtButton size="sm" variant="outline" @click="load()">重试</DtButton>
     </div>
 
-    <p v-else class="dt-model-viewer__tip">拖动旋转 · 滚轮缩放 · 右键平移</p>
+    <DtTag v-else class="dt-model-viewer__tip" size="sm">
+      拖动旋转 · 滚轮缩放 · 右键平移
+    </DtTag>
   </div>
 </template>
 
@@ -149,7 +151,7 @@ onBeforeUnmount(() => {
   position: relative;
   display: flex;
   overflow: hidden;
-  min-height: 20rem;
+  min-height: 16rem;
   flex: 1;
   border-radius: var(--radius-sm);
   background: var(--surface-sunken);
@@ -180,16 +182,11 @@ onBeforeUnmount(() => {
     font-size: var(--ctl-hint-fs-md);
   }
 
+  // 位置归本组件，样式归 DtTag——自己画一颗药丸就等于多一份要跟着换肤走的皮
   &__tip {
     position: absolute;
     right: 8px;
     bottom: 8px;
-    padding: 2px 8px;
-    border-radius: var(--radius-sm);
-    margin: 0;
-    background: var(--surface-raised);
-    color: var(--text-disabled);
-    font-size: var(--ctl-hint-fs-md);
     pointer-events: none;
   }
 }

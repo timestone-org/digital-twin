@@ -136,6 +136,17 @@ async function clickInConfirm(text: string): Promise<void> {
 }
 
 /**
+ * 点改名那颗保存键。它是图标键，只能按 aria-label 找。
+ * ⚠ 别改回按文案找：这颗键没有文字，而弹窗页脚上另有一颗写着「删除」的，
+ * 按文案找会点到隔壁去。
+ */
+async function clickSave(): Promise<void> {
+  const button = document.querySelector('[aria-label="保存新名字"]')
+  if (button instanceof HTMLElement) button.click()
+  await flushPromises()
+}
+
+/**
  * 点最后一个同名按钮。
  * ⚠ 详情面的页脚上也有一个「删除」，而确认框挂得比它晚——按文案取第一个会点回
  * 提问的那个按钮，于是确认框被反复重开，看着像「点了确定没反应」。
@@ -383,7 +394,7 @@ describe('详情与改名', () => {
     input.value = '新名.png'
     input.dispatchEvent(new Event('input'))
     await flushPromises()
-    await clickInConfirm('保存')
+    await clickSave()
 
     expect(api.renameAsset).toHaveBeenCalledWith(
       '0f9f0a2e-4a3b-4c1d-9f2e-8b7a6c5d4e3f',
@@ -400,9 +411,16 @@ describe('详情与改名', () => {
     input.value = '   '
     input.dispatchEvent(new Event('input'))
     await flushPromises()
-    await clickInConfirm('保存')
+    await clickSave()
 
     expect(api.renameAsset).not.toHaveBeenCalled()
+  })
+
+  it('没改动时不出现保存键——省得用户先分辨它为什么是灰的', async () => {
+    await openDetail()
+
+    expect(document.body.textContent).toContain('显示名')
+    expect(document.querySelector('[aria-label="保存新名字"]')).toBeNull()
   })
 
   it('只读账号在详情里没有改名与删除', async () => {
