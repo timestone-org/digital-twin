@@ -6,6 +6,7 @@
  */
 import { assetUrl } from '@dt/contracts'
 import { useConfirm, useToast } from '@dt/ui'
+import { ref } from 'vue'
 import type { Ref } from 'vue'
 
 import type { Asset } from '@/api/assets'
@@ -25,6 +26,9 @@ export interface AssetsActions {
   removeDetail: () => void
   /** 报一句成功。上传那一段也用它，免得两处各拿一个 toast。 */
   announce: (message: string) => void
+  /** 重压请求在途。 */
+  isRecompressing: Ref<boolean>
+  recompressDetail: () => void
 }
 
 /**
@@ -38,6 +42,7 @@ export function createAssetsActions(
 ): AssetsActions {
   const toast = useToast()
   const confirm = useConfirm()
+  const isRecompressing = ref(false)
 
   async function copyRef(row: Asset): Promise<void> {
     if (await copyText(row.ref)) toast.success('引用已复制')
@@ -89,6 +94,10 @@ export function createAssetsActions(
     downloadDetail: onDetail(download),
     removeDetail: onDetail(remove),
     announce: (message) => toast.success(message),
+    isRecompressing,
+    recompressDetail: onDetail((row) =>
+      recompressOne({ library, detail, toast, isRecompressing }, row),
+    ),
   }
 }
 
@@ -111,4 +120,31 @@ function askToDelete(
     confirmText: '删除',
     danger: true,
   })
+}
+
+/** `recompressOne` 要的那几样。收成一包是因为逐个铺开会顶破「参数 ≤5」。 */
+interface RecompressDeps {
+  library: AssetLibrary
+  detail: Ref<Asset | null>
+  toast: ReturnType<typeof useToast>
+  isRecompressing: Ref<boolean>
+}
+
+/**
+ * 把各档打回待压缩并重新排队。
+ * ⚠ 在途时直接返回：连点两下会排两次队，而 worker 那边是幂等的、第二次纯属浪费。
+ * @param deps 库状态、当前详情、提示与在途标志
+ * @param row 要重压的素材
+ */
+async function recompressOne(deps: RecompressDeps, row: Asset): Promise<void> {
+  if (deps.isRecompressing.value) return
+  deps.isRecompressing.value = true
+  try {
+    const saved = await deps.library.recompress(row.id)
+    if (saved === null) return
+    deps.detail.value = saved
+    deps.toast.success('已排进压缩队列，压好会自动出现')
+  } finally {
+    deps.isRecompressing.value = false
+  }
 }

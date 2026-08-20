@@ -18,6 +18,7 @@ import type { Asset } from '@/api/assets'
 import { formatDateTime } from '@/utils/datetime'
 import { formatSize } from '@/utils/filesize'
 import AssetPreviewStage from './AssetPreviewStage.vue'
+import AssetVariantList from './AssetVariantList.vue'
 
 /** 显示名的长度上限。⚠ 与服务端 `AssetName` 的 128 同值，两边分叉就是「存不进去却不说为什么」。 */
 const MAX_NAME_LEN = 128
@@ -30,6 +31,8 @@ const props = defineProps<{
   canManage: boolean
   /** 类型的中文标签，取服务端目录。 */
   kindLabel: string
+  /** 重压请求在途。 */
+  isRecompressing: boolean
 }>()
 
 const emit = defineEmits<{
@@ -38,6 +41,7 @@ const emit = defineEmits<{
   copy: []
   download: []
   remove: []
+  recompress: []
 }>()
 
 const draft = ref('')
@@ -106,6 +110,15 @@ watch(
           />
         </template>
       </DtInput>
+
+      <AssetVariantList
+        v-if="asset.kind === 'model'"
+        :variants="asset.variants"
+        :original-bytes="asset.sizeBytes"
+        :can-manage="canManage"
+        :is-busy="isRecompressing"
+        @recompress="emit('recompress')"
+      />
 
       <!-- ⚠ 引用与校验和 `break-all` 整串铺开、不省略：出问题时要拿它去大屏配置
            里逐字搜，截断的一串既搜不了也复制不全 -->

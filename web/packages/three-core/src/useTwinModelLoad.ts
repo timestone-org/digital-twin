@@ -6,6 +6,8 @@ import type { TwinPart } from '@dt/twin-config'
 import type { Object3D } from 'three'
 import { ref, type Ref } from 'vue'
 
+import type { ModelVariant } from '@dt/contracts'
+
 import { resolveTwinModelUrl } from './host'
 import { loadTwinModel, type TwinModelAsset } from './modelLoader'
 import {
@@ -23,6 +25,8 @@ export interface TwinModelLoadOptions {
   core: () => SceneCore | null
   /** 素材引用 `asset:<uuid>`；空串 = 还没挑。 */
   asset: () => string
+  /** 用哪一档压缩产物。不给按原件。 */
+  variant?: () => ModelVariant
   /** 部件清单，用来报「配了但模型里没有」的节点名。 */
   parts: () => readonly TwinPart[]
   /** 模型挂好了：宿主据此摆放、建层、取景、装动画。 */
@@ -91,8 +95,8 @@ function mountModel(
  * 素材引用 → 地址；空引用给 null（还没挑模型），解析不出来给空串。
  * ⚠ 两者要分开：前者是空态，后者是配错了要报出来的错。
  */
-function urlOf(asset: string): string | null {
-  return asset === '' ? null : resolveTwinModelUrl(asset)
+function urlOf(asset: string, variant: ModelVariant): string | null {
+  return asset === '' ? null : resolveTwinModelUrl(asset, variant)
 }
 
 /** 进度只认当前这一次装载的序号，晚到的那次不许改百分比。 */
@@ -149,7 +153,7 @@ export function useTwinModelLoad(options: TwinModelLoadOptions): TwinModelLoad {
     state.abort?.abort()
     const controller = new AbortController()
     state.abort = controller
-    const url = urlOf(options.asset())
+    const url = urlOf(options.asset(), options.variant?.() ?? 'original')
     if (url === null) return clearModel(state, options.core())
     if (url === '') return fail('模型地址解析失败：素材引用无效或宿主未注入')
     state.status.value = 'loading'

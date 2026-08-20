@@ -19,7 +19,7 @@ import {
 } from '@dt/datasources'
 import { registerBuiltinModules } from '@dt/modules'
 import { configureTwinModelHost } from '@dt/three-core/host'
-import { assetUrl } from '@dt/contracts'
+import { modelVariantUrl } from '@dt/contracts'
 
 import { ASSET_BASE_URL } from '@/config/app'
 
@@ -61,7 +61,8 @@ export function installDashboardModules(): void {
  */
 function installTwinModelHost(): void {
   configureTwinModelHost({
-    resolveModelUrl: (ref) => assetUrl(ASSET_BASE_URL, 'model', ref),
+    resolveModelUrl: (ref, variant) =>
+      modelVariantUrl(ASSET_BASE_URL, ref, variant),
   })
 }
 

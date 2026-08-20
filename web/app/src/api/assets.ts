@@ -18,7 +18,13 @@ import type { RequestOptions } from './client'
 import type { Asset, AssetKindSpec, UploadTicket } from './assetsWire'
 import { toAsset, toAssetKindSpec, toUploadTicket } from './assetsWire'
 
-export type { Asset, AssetKindSpec, UploadTicket } from './assetsWire'
+export type {
+  Asset,
+  AssetKindSpec,
+  AssetVariant,
+  UploadTicket,
+  VariantStatus,
+} from './assetsWire'
 
 /** 没等到上传的字节（领域 15）。⚠ 按码分支，不按 message。 */
 export const ASSET_UPLOAD_MISSING_CODE = 41505
@@ -60,6 +66,21 @@ export async function listAssets(
     }),
   )
   return rows.map(toAsset)
+}
+
+/**
+ * 把这个模型的各档打回待压缩并重新排队。
+ * ⚠ 这是**唯一的重试入口**：worker 压不动时不自动重试（一个压不动的模型重试
+ * 一万次也压不动），由人在界面上按这一下。
+ * @param assetId 素材 id
+ */
+export async function recompressAsset(assetId: string): Promise<Asset> {
+  return toAsset(
+    await requestData<unknown>(
+      `${ASSETS_PATH}/${assetId}:recompress`,
+      onPlatform({ method: 'POST' }),
+    ),
+  )
 }
 
 /**

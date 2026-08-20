@@ -7,7 +7,6 @@
  */
 import type { ModelVariant } from '@dt/contracts'
 
-
 /** 世界坐标 / 欧拉角三元组。 */
 export type Vec3 = [number, number, number]
 

@@ -68,6 +68,7 @@ function asset(over: Partial<Asset> = {}): Asset {
     checksum: 'abc',
     createdAt: '2026-08-15T02:00:00.000Z',
     createdBy: 'heyufan',
+    variants: [],
     ...over,
   }
 }

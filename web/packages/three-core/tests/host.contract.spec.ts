@@ -12,6 +12,9 @@ const PACKAGE_ROOT = join(process.cwd(), 'packages', 'three-core', 'src')
 const HOST_SOURCE = readFileSync(join(PACKAGE_ROOT, 'host.ts'), 'utf8')
 const BARREL_SOURCE = readFileSync(join(PACKAGE_ROOT, 'index.ts'), 'utf8')
 const IMPORT_SPECIFIER = /(?:import|export)[\s\S]*?from\s*'(?<target>[^']+)'/g
+// ⚠ `import type` 会被 TypeScript 整条擦除，产物里一个字节都不留，故它进不了
+// 任何 chunk。值导入才是这条闸真正要拦的东西。
+const VALUE_IMPORT = /^\s*import\s+(?!type\s)[\s\S]*?from\s*'[^']+'/gm
 
 function specifiersOf(source: string): string[] {
   return [...source.matchAll(IMPORT_SPECIFIER)].map(
@@ -20,8 +23,11 @@ function specifiersOf(source: string): string[] {
 }
 
 describe('注入接缝的依赖面', () => {
-  it('host.ts 一条 import 都没有', () => {
-    expect(specifiersOf(HOST_SOURCE)).toEqual([])
+  it('host.ts 没有任何**值**导入', () => {
+    // 这条守的是「启动期从这里进不会拖进运行时代码」。`import type` 编译期就
+    // 被整条擦掉，进不了任何 chunk，故放行；值导入一律不许——它会跟着
+    // 启动图一路走进首屏 chunk，而超预算是在 build 之后才发现的
+    expect([...HOST_SOURCE.matchAll(VALUE_IMPORT)]).toEqual([])
   })
 
   it('host.ts 的正文里不出现 three', () => {

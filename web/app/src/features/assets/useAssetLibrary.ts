@@ -11,11 +11,11 @@ import { computed, onUnmounted, ref } from 'vue'
 import type { ComputedRef, Ref } from 'vue'
 
 import type { Asset, AssetKindSpec } from '@/api/assets'
-import { deleteAsset, renameAsset } from '@/api/assets'
-import { createLoader, messageOf } from './assetLoading'
+import { createLoader } from './assetLoading'
 import type { LibraryState, LoadMode } from './assetLoading'
 import { createUploads } from './assetUploads'
-import type { AssetUploads, UploadJob } from './assetUploads'
+import type { UploadJob } from './assetUploads'
+import { createWrites } from './assetWrites'
 
 /** 取一页的动作，由 `createLoader` 造出来。 */
 type Load = (kind: AssetKind, mode: LoadMode) => Promise<void>
@@ -44,16 +44,11 @@ export interface AssetLibrary {
   clearFinishedUploads: () => void
   /** 改显示名；成了回 true，失败时原因落在 `error` 上。 */
   rename: (assetId: string, name: string) => Promise<boolean>
+  /** 把各档打回待压缩并重新排队；回换好的那一行，失败给 null。 */
+  recompress: (assetId: string) => Promise<Asset | null>
   remove: (assetId: string) => Promise<void>
   /** 中止在途上传；关闭弹窗与卸载时都要调。 */
   abort: () => void
-}
-
-/** 会改列表内容的三个动作。 */
-interface LibraryWrites {
-  upload: AssetLibrary['upload']
-  rename: AssetLibrary['rename']
-  remove: AssetLibrary['remove']
 }
 
 function emptyState(): LibraryState {
@@ -90,59 +85,6 @@ function createReads(
       await load(kind, 'append')
     },
   }
-}
-
-/**
- * 上传、改名、删除。三个都就地改列表，不重拉整页——重拉会把「加载更多」
- * 取回来的后几页悄悄丢掉。
- * @param state 素材库状态
- * @param uploads 上传队列
- */
-function createWrites(
-  state: LibraryState,
-  uploads: AssetUploads,
-): LibraryWrites {
-  async function upload(
-    kind: AssetKind,
-    files: readonly File[],
-  ): Promise<Asset[]> {
-    state.error.value = ''
-    const saved = await uploads.enqueue(kind, files)
-    // 只把当前类型的插进列表：队列可以跨类型排，插错了那一行会在这一页里
-    // 一直显示到下次刷新，而它根本不属于这一类
-    if (kind === state.activeKind.value && saved.length > 0) {
-      state.assets.value = [...saved, ...state.assets.value]
-    }
-    return saved
-  }
-
-  async function rename(assetId: string, name: string): Promise<boolean> {
-    state.error.value = ''
-    try {
-      const saved = await renameAsset(assetId, name)
-      state.assets.value = state.assets.value.map((item) =>
-        item.id === assetId ? saved : item,
-      )
-      return true
-    } catch (caught) {
-      state.error.value = messageOf(caught, '改名失败')
-      return false
-    }
-  }
-
-  async function remove(assetId: string): Promise<void> {
-    state.error.value = ''
-    try {
-      await deleteAsset(assetId)
-      state.assets.value = state.assets.value.filter(
-        (item) => item.id !== assetId,
-      )
-    } catch (caught) {
-      state.error.value = messageOf(caught, '删除失败')
-    }
-  }
-
-  return { upload, rename, remove }
 }
 
 /** 装一份素材库状态。 */

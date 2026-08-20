@@ -6,11 +6,7 @@ export type {
   Page,
 } from './envelope'
 export { ERROR_CODES, SUCCESS_CODE } from './envelope'
-export type {
-  AssetKind,
-  DerivedModelVariant,
-  ModelVariant,
-} from './asset'
+export type { AssetKind, DerivedModelVariant, ModelVariant } from './asset'
 export {
   ASSET_KINDS,
   MODEL_VARIANTS,
