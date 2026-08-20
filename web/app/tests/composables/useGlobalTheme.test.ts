@@ -71,11 +71,12 @@ describe('useGlobalTheme', () => {
     ).toBe('#ff8a3d')
   })
 
-  it('切回跟随系统（解析成默认深色）会把变量清干净', async () => {
+  it('切回默认深色会把变量清干净', async () => {
+    const { DEFAULT_THEME_ID } = await import('@dt/tokens')
     const { handle } = await mountInjector()
     handle.setPreference('emerald')
     await Promise.resolve()
-    handle.setPreference(null)
+    handle.setPreference(DEFAULT_THEME_ID)
     await Promise.resolve()
 
     expect(

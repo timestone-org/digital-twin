@@ -6,7 +6,11 @@
 import { computed } from 'vue'
 import { DtIcon, DtPopover } from '@dt/ui'
 
-import { useThemePreference } from '@/composables/useThemePreference'
+import {
+  SYSTEM_PREFERENCE,
+  useThemePreference,
+  type ThemePreference,
+} from '@/composables/useThemePreference'
 
 import ThemeOption from './ThemeOption.vue'
 
@@ -18,12 +22,12 @@ const activeName = computed(
 )
 
 const triggerLabel = computed(() =>
-  preference.value === null
+  preference.value === SYSTEM_PREFERENCE
     ? `主题外观 · 跟随系统（${activeName.value}）`
     : `主题外观 · ${activeName.value}`,
 )
 
-function pick(id: string | null, close: () => void): void {
+function pick(id: ThemePreference, close: () => void): void {
   setPreference(id)
   close()
 }
@@ -57,10 +61,10 @@ function pick(id: string | null, close: () => void): void {
         <button
           type="button"
           role="menuitemradio"
-          :aria-checked="preference === null"
+          :aria-checked="preference === SYSTEM_PREFERENCE"
           class="ts-follow"
-          :class="{ 'is-active': preference === null }"
-          @click="pick(null, close)"
+          :class="{ 'is-active': preference === SYSTEM_PREFERENCE }"
+          @click="pick(SYSTEM_PREFERENCE, close)"
         >
           <span class="ts-follow__glyph" aria-hidden="true">
             <DtIcon name="sun" :size="11" />
@@ -71,7 +75,7 @@ function pick(id: string | null, close: () => void): void {
             <span class="ts-follow__meta">随系统深浅自动切换</span>
           </span>
           <DtIcon
-            v-if="preference === null"
+            v-if="preference === SYSTEM_PREFERENCE"
             name="check"
             :size="14"
             class="ts-check"
