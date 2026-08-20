@@ -210,6 +210,17 @@ _DASHBOARD_RULES: tuple[RouteRuleSpec, ...] = (
         ),
     ),
     RouteRuleSpec(
+        f"{_PLATFORM}/dashboards/*/publication",
+        "GET",
+        codes=(DASHBOARD_MANAGE,),
+        priority=920,
+        description=(
+            "读一张屏此刻的公开令牌。⚠ 归 manage 且必须压过 912 那条读兜底："
+            "读到的就是那条谁拿到谁能看的链接，能不能发出去与能不能看见这张屏"
+            "不是同一件事"
+        ),
+    ),
+    RouteRuleSpec(
         f"{_PLATFORM}/dashboards/*:publish",
         "POST",
         codes=(DASHBOARD_MANAGE,),

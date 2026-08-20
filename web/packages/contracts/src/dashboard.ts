@@ -49,8 +49,10 @@ export interface DashboardPayload {
    */
   schemaVersion: number
   isPublic: boolean
-  /** 公开访问令牌；未公开时为 null。 */
-  publicToken: string | null
+  /**
+   * ⚠ 这里**没有** `publicToken`：详情面归 `dashboard:view`，令牌就是那条谁
+   * 拿到谁能看的公开链接，只能从发布面（`dashboardShare.ts`）取。
+   */
   createdAt: string
   updatedAt: string
   /**

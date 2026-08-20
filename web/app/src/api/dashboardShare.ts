@@ -1,5 +1,5 @@
 /**
- * @fileoverview 大屏的发布、取消发布，以及按公开令牌匿名读一张屏。
+ * @fileoverview 大屏的发布态读取、发布、取消发布，以及按公开令牌匿名读一张屏。
  *
  * ⚠ 每次发布都换一个新令牌，旧链接当场失效：界面上展示的令牌只能来自这一次
  * 发布的出参，缓存一个旧的会把已经撤回的链接继续发出去。
@@ -23,6 +23,24 @@ import { newIdempotencyKey } from './idempotency'
  * ⚠ 按码分支，不按 message：文案会改、会翻译。
  */
 export const DASHBOARD_NOT_PUBLISHED_CODE = 41016
+
+/**
+ * 读一张屏此刻的发布态与公开令牌。
+ * ⚠ 令牌只有这一条读面：大屏详情不带它。要展示「当前那条链接」时必须走这里，
+ * 拿再发布一次去顶替的话，已经发出去的链接会当场作废。
+ * @param dashboardId 大屏 id
+ * @param signal 取消信号
+ */
+export async function getDashboardPublication(
+  dashboardId: string,
+  signal?: AbortSignal,
+): Promise<DashboardPublication> {
+  const wire = await requestData<DashboardPublicationWire>(
+    `/dashboards/${dashboardId}/publication`,
+    onPlatform(signal === undefined ? {} : { signal }),
+  )
+  return toPublication(wire)
+}
 
 /**
  * 发布一张屏，拿到新的公开令牌。

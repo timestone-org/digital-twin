@@ -1,7 +1,7 @@
-"""大屏的发布与取消发布：一次发布换一个公开令牌。
+"""大屏的发布面：读发布态、发布、取消发布。一次发布换一个公开令牌。
 
-两条都归 `dashboard:manage`——公开一张屏是把它交给全互联网，与改一行配置
-不是同一类操作。
+三条都归 `dashboard:manage`——公开一张屏是把它交给全互联网，与改一行配置
+不是同一类操作；**读也归 manage**，因为读到的就是那条谁拿到谁能看的链接。
 """
 
 import uuid
@@ -10,11 +10,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lib.auth import CallerContext
 from lib.web import ApiResponse, ok
+from platform_server.apps.dashboard.catalog import DASHBOARD_MANAGE
 from platform_server.apps.dashboard.deps import (
     WriteContext,
     get_manage_context,
     get_session,
+    require,
 )
 from platform_server.apps.dashboard.schemas.share import DashboardShareOut
 from platform_server.apps.dashboard.services import share_service
@@ -24,6 +27,24 @@ router = APIRouter(prefix=f"{API_PREFIX}/dashboards", tags=["dashboard"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 ManageDep = Annotated[WriteContext, Depends(get_manage_context)]
+ManagerDep = Annotated[CallerContext, Depends(require(DASHBOARD_MANAGE))]
+
+
+@router.get(
+    "/{dashboard_id}/publication",
+    response_model=ApiResponse[DashboardShareOut],
+    summary="读大屏发布态",
+)
+async def read_dashboard_publication(
+    dashboard_id: uuid.UUID, session: SessionDep, _manager: ManagerDep
+) -> ApiResponse[DashboardShareOut]:
+    """读这张屏此刻的发布态与公开链接。
+
+    Args: dashboard_id, session, _manager。
+    """
+    return ok(
+        await share_service.get_publication(session, dashboard_id=dashboard_id)
+    )
 
 
 @router.post(

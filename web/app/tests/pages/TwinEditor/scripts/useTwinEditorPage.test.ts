@@ -50,7 +50,6 @@ function payload(nodes: DashboardNodePayload[]): DashboardPayload {
     isPublic: false,
     chromeJson: {},
     themeJson: {},
-    publicToken: null,
     createdAt: '',
     updatedAt: '',
     nodes,

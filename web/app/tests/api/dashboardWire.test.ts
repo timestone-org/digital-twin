@@ -276,8 +276,8 @@ describe('节点与大屏', () => {
     expect(payload.nodes).toHaveLength(1)
   })
 
-  it('公开令牌恒为 null——详情不带这一列，编一个会让「已公开」看上去是真的', () => {
-    expect(toDashboard(dashboardWire()).publicToken).toBeNull()
+  it('载荷里没有公开令牌——详情不带这一列，补一个恒 null 的会让调用方以为读得到', () => {
+    expect('publicToken' in toDashboard(dashboardWire())).toBe(false)
   })
 
   it('列表项只带规模，不带节点树', () => {

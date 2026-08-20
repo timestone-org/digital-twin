@@ -182,6 +182,32 @@ describe('线形映射', () => {
   })
 })
 
+describe('读当前发布态', () => {
+  it('是发布面下的子资源读，不是动作端点，也不带幂等键', async () => {
+    const publication = await share.getDashboardPublication('db1')
+    const [path, options] = call()
+
+    expect(path).toBe('/dashboards/db1/publication')
+    expect(options.baseUrl).toBe(PLATFORM_PREFIX)
+    expect(options.method).toBeUndefined()
+    expect(options.headers).toBeUndefined()
+    expect(publication.publicToken).toBe('tok-new')
+  })
+
+  it('带取消信号时把它透下去，关掉弹窗就掐得掉在途那次', async () => {
+    const controller = new AbortController()
+    await share.getDashboardPublication('db1', controller.signal)
+
+    expect(call()[1].signal).toBe(controller.signal)
+  })
+
+  it('不给取消信号时不往请求里塞一个 undefined', async () => {
+    await share.getDashboardPublication('db1')
+
+    expect('signal' in call()[1]).toBe(false)
+  })
+})
+
 describe('发布与撤回', () => {
   it('发布是动作端点，带幂等键，出参给出这一次的新令牌', async () => {
     const published = await share.publishDashboard('db1', 'key-1')

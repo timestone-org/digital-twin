@@ -74,7 +74,6 @@ function payload(over: Partial<DashboardPayload> = {}): DashboardPayload {
     rowVersion: 7,
     schemaVersion: 1,
     isPublic: false,
-    publicToken: null,
     createdAt: '',
     updatedAt: '',
     nodes: [],

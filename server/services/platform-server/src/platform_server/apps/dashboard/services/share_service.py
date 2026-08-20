@@ -75,6 +75,19 @@ async def publish_dashboard(
     return to_share_out(dashboard)
 
 
+async def get_publication(
+    session: AsyncSession, *, dashboard_id: uuid.UUID
+) -> DashboardShareOut:
+    """读一张屏此刻的发布态，含公开令牌。
+
+    ⚠ 必须有这条读面：令牌只在发布出参里回一次，没有它的话「已经公开的屏」
+    重开分享面就再也拿不到自己那条链接，只能靠再发布一次——而再发布会把已经
+    发出去的那条当场作废。
+    Args: session, dashboard_id。
+    """
+    return to_share_out(await require_dashboard(session, dashboard_id))
+
+
 async def unpublish_dashboard(
     session: AsyncSession, *, dashboard_id: uuid.UUID
 ) -> DashboardShareOut:

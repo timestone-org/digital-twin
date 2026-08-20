@@ -15036,6 +15036,50 @@
         ]
       }
     },
+    "/api/v1/platform/dashboards/{dashboard_id}/publication": {
+      "get": {
+        "description": "读这张屏此刻的发布态与公开链接。\n\nArgs: dashboard_id, session, _manager。",
+        "operationId": "read_dashboard_publication_api_v1_platform_dashboards__dashboard_id__publication_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dashboard_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Dashboard Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_DashboardShareOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "读大屏发布态",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
     "/api/v1/platform/dashboards/{dashboard_id}/thumbnail": {
       "get": {
         "description": "取缩略图。查不到回 404，前端据此显示占位图。\n\nArgs: dashboard_id, session, _viewer。",

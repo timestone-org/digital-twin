@@ -40,7 +40,6 @@ function payload(id: string, title: string): DashboardPayload {
     rowVersion: 1,
     schemaVersion: 1,
     isPublic: false,
-    publicToken: null,
     createdAt: '2026-08-18T00:00:00Z',
     updatedAt: '2026-08-18T00:00:00Z',
     nodes: [
