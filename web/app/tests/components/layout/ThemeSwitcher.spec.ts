@@ -7,16 +7,20 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
-import { listThemes } from '@dt/tokens'
+import { DEFAULT_THEME_ID, listThemes } from '@dt/tokens'
 
 import ThemeSwitcher from '@/components/layout/ThemeSwitcher.vue'
-import { useThemePreference } from '@/composables/useThemePreference'
+import {
+  SYSTEM_PREFERENCE,
+  useThemePreference,
+} from '@/composables/useThemePreference'
 
 beforeEach(() => {
-  localStorage.clear()
   // ⚠ 换肤意图是模块级单例，清 localStorage 清不掉内存里那份：
-  // 不显式归位的话，上一条用例选的主题会当成这一条的初始选中态
-  useThemePreference().setPreference(null)
+  // 不显式归位的话，上一条用例选的主题会当成这一条的初始选中态。
+  // ⚠ 归位在清存储之前：归位本身会落盘，反过来做的话存储里留着 dark-tech
+  useThemePreference().setPreference(DEFAULT_THEME_ID)
+  localStorage.clear()
   vi.stubGlobal(
     'matchMedia',
     vi.fn(() => ({ matches: false, addEventListener: () => undefined })),
@@ -52,15 +56,26 @@ describe('ThemeSwitcher · 触发器', () => {
     expect(trigger.attributes('aria-label')).toContain('主题外观')
   })
 
-  it('可读名称带上当前生效的主题，跟随系统时标注出来', async () => {
+  it('可读名称带上当前生效的主题，缺省报的是默认深色而不是跟随系统', async () => {
     const wrapper = mount(ThemeSwitcher)
-    expect(wrapper.get('button').attributes('aria-label')).toContain('跟随系统')
+    const label = wrapper.get('button').attributes('aria-label')
+    expect(label).toContain('深色科技')
+    expect(label).not.toContain('跟随系统')
 
     await open(wrapper)
     itemByName('翡翠绿').click()
     await wrapper.vm.$nextTick()
 
     expect(wrapper.get('button').attributes('aria-label')).toContain('翡翠绿')
+  })
+
+  it('显式选了跟随系统才标注出来', async () => {
+    const wrapper = mount(ThemeSwitcher)
+    await open(wrapper)
+    itemByName('跟随系统').click()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.get('button').attributes('aria-label')).toContain('跟随系统')
   })
 
   it('展开后 aria-expanded 翻成 true', async () => {
@@ -82,7 +97,7 @@ describe('ThemeSwitcher · 列表', () => {
     expect(itemByName('跟随系统')).toBeTruthy()
   })
 
-  it('缺省选中「跟随系统」，且选中态只有一处', async () => {
+  it('缺省选中默认深色，且选中态只有一处', async () => {
     const wrapper = mount(ThemeSwitcher)
     await open(wrapper)
 
@@ -90,7 +105,7 @@ describe('ThemeSwitcher · 列表', () => {
       (node) => node.getAttribute('aria-checked') === 'true',
     )
     expect(checked).toHaveLength(1)
-    expect(checked[0]?.textContent).toContain('跟随系统')
+    expect(checked[0]?.textContent).toContain('深色科技')
   })
 
   it('缩略预览用的是该主题自己的底色，不是当前主题的', async () => {
@@ -137,7 +152,7 @@ describe('ThemeSwitcher · 切换', () => {
     expect(checked[0]?.textContent).toContain('熔岩橙')
   })
 
-  it('点「跟随系统」清掉偏好', async () => {
+  it('点「跟随系统」存的是 system 这一档', async () => {
     const wrapper = mount(ThemeSwitcher)
     await open(wrapper)
     itemByName('钴蓝深海').click()
@@ -147,6 +162,6 @@ describe('ThemeSwitcher · 切换', () => {
     itemByName('跟随系统').click()
     await wrapper.vm.$nextTick()
 
-    expect(localStorage.getItem('dt.theme')).toBeNull()
+    expect(localStorage.getItem('dt.theme')).toBe(SYSTEM_PREFERENCE)
   })
 })
