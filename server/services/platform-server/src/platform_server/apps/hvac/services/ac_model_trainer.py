@@ -14,6 +14,7 @@ from functools import partial
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import Database
+from lib.logging import get_logger
 from lib.utils.timeutils import utcnow
 from platform_server.apps.hvac.crud import (
     ac_model_artifact_crud,
@@ -54,6 +55,8 @@ from platform_server.apps.hvac.services.ac_startup_extract import (
     load_bound_units,
 )
 from platform_server.apps.hvac.startups import OUTCOME_USABLE
+
+_logger = get_logger("platform.hvac.ac_model_trainer")
 
 
 class TrainingRejected(Exception):
@@ -117,8 +120,32 @@ async def run_training(
         )
     except (InsufficientSamples, TrainingRejected) as error:
         return await _mark_failed(database, model_id, reason=str(error))
+    _log_curation(model_id, room_id, trained)
     async with database.session() as session:
         return await _persist(session, model_id, inputs, trained)
+
+
+def _log_curation(
+    model_id: uuid.UUID, room_id: uuid.UUID, trained: TrainedModel
+) -> None:
+    """甄别数出对不上的标签就报出来。
+
+    ⚠ 这是批次过期目前唯一的迹象：达标范围与数据源绑定都不进批次指纹，改了
+    它们页面不会提醒重抽，可事件的标签当场就作废了。放宽范围造出前一个数、
+    收窄造出后一个，任一个不为零都该先去重算批次再训。
+    Args: model_id, room_id, trained。
+    """
+    if not trained.contradictory_count and not trained.unexplained_zero_count:
+        return
+    _logger.warning(
+        "ac_model_stale_labels_detected",
+        "开机事件的标签与当前达标范围对不上",
+        model_id=str(model_id),
+        room_id=str(room_id),
+        dropped_count=trained.contradictory_count,
+        unexplained_zero_count=trained.unexplained_zero_count,
+        trained_count=trained.sample_count,
+    )
 
 
 async def _load_inputs(session: AsyncSession, room_id: uuid.UUID) -> _Inputs:

@@ -38,6 +38,8 @@ class ExtractionRules:
 
     cold_off_minutes: int = 30
     combination_window_minutes: int = 10
+    # ⚠ 改成 >1 会让训练侧的样本甄别失准：`modeling/curation.py` 按「取值为 1」
+    # 推出「起始时刻已达标 ⇔ 时长 0」，改了这里要先去改那条口径
     compliance_frames: int = 1
     compliance_cap_minutes: int = 100
     max_gap_minutes: int = 3

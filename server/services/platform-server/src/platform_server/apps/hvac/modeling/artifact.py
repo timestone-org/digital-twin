@@ -27,7 +27,7 @@ QUANTILE_LEVELS = (0.1, 0.5, 0.9)
 
 @dataclass(frozen=True)
 class StagePair:
-    """一套两段混合模型：瞬时达标分类器 + 非零时长森林。
+    """一套两段混合模型：瞬时达标分类器 + 时长森林。
 
     ⚠ `duration_forest` 可为 None：训练集里一条非零时长都没有时，条件时长
     无从谈起，混合分布退化成「恒 0」。

@@ -21,7 +21,11 @@ from platform_server.apps.hvac.modeling.features import (
     EpisodeSample,
     StartConditions,
 )
-from platform_server.apps.hvac.modeling.training import MIN_SAMPLES, train
+from platform_server.apps.hvac.modeling.training import (
+    MIN_SAMPLES,
+    InsufficientSamples,
+    train,
+)
 from platform_server.apps.hvac.rooms import (
     METRIC_FAN_FREQUENCY,
     METRIC_WORKSHOP_HUMIDITY,
@@ -55,7 +59,12 @@ def units() -> list[RoomUnit]:
 
 
 def samples() -> list[EpisodeSample]:
-    """刚好够训的一批事件：零与非零时长都有，两段模型才都拟合得起来。"""
+    """刚好够训的一批事件：零与非零时长都有，两段模型才都拟合得起来。
+
+    ⚠ 时长必须与上面那条达标范围对得上：起始温度落在带内的记 0 分钟，超限的
+    按超限量给时长。带内开机却记着非零时长的事件会被训练入口的甄别剔掉
+    （`modeling/curation.py`），凑不够 `MIN_SAMPLES` 就根本训不起来。
+    """
     base = datetime(2026, 1, 5, tzinfo=UTC)
     return [
         EpisodeSample(
@@ -72,7 +81,7 @@ def samples() -> list[EpisodeSample]:
                     for serial in ("A", "B")
                 },
             ),
-            duration_minutes=at % 4,
+            duration_minutes=max(0, at % 5 - 1) * 4,
         )
         for at in range(MIN_SAMPLES)
     ]
@@ -106,6 +115,26 @@ def test_training_runs_through_a_real_spawned_process_pool() -> None:
     assert trained.sample_count == MIN_SAMPLES
     assert trained.artifact.payload
     assert trained.oof
+
+
+def test_a_refusal_survives_the_trip_back_from_the_subprocess() -> None:
+    """⚠ 拒训的原因要原样回到父进程：它会直接落到模型行上给操作员看。"""
+    fitted = partial(
+        train,
+        samples()[: MIN_SAMPLES - 1],
+        units=units(),
+        timezone=TZ,
+        half_life_days=HALF_LIFE_DAYS,
+    )
+    with (
+        ProcessPoolExecutor(
+            max_workers=1, mp_context=get_context("spawn")
+        ) as pool,
+        pytest.raises(InsufficientSamples) as caught,
+    ):
+        pool.submit(fitted).result(timeout=POOL_TIMEOUT_S)
+    assert caught.value.got == MIN_SAMPLES - 1
+    assert str(caught.value).count("可用事件只有") == 1
 
 
 def test_stored_artifacts_still_resolve_the_legacy_unit_path() -> None:

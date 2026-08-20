@@ -2,6 +2,8 @@
 
 合成口径照真实分布造：带内开机即瞬时达标（时长 0，约占四成），带外时长
 ≈ 8 × 温度超限量。两段混合要同时学会「哪些是 0」与「非零的多久」。
+⚠ 这批合成读数**不带湿度**，而 `UNITS` 配了湿度范围——于是每一条在
+`curation` 眼里都不是「开机即达标」，本模块因此只考拟合，不考甄别。
 """
 
 from datetime import UTC, datetime, timedelta
@@ -25,11 +27,14 @@ from platform_server.apps.hvac.modeling.training import (
     MIN_SAMPLES,
     InsufficientSamples,
     TrainedModel,
+    _zero_anchors,
     train,
 )
 from unit.test_ac_model_features import TZ, UNITS
 
 BASE = datetime(2026, 1, 5, 0, 0, tzinfo=UTC)
+# 合成数据里最短的那条热行：超限量 1 → 8 分钟
+SHORTEST_HOT_MINUTES = 8.0
 
 
 def sample(index: int) -> EpisodeSample:
@@ -74,6 +79,7 @@ def test_every_sample_gets_exactly_one_oof_prediction(
 ) -> None:
     """每条样本恰好有一次「模型没见过它」的预测。"""
     assert trained.sample_count == 80
+    assert trained.contradictory_count == 0
     assert len(trained.oof) == 80
     assert len({row.started_at for row in trained.oof}) == 80
 
@@ -103,12 +109,70 @@ def test_instant_and_delayed_starts_are_told_apart(
     assert delayed_hit > 0.8
 
 
+def test_stage_b_can_answer_below_the_shortest_hot_row(
+    trained: TrainedModel,
+) -> None:
+    """⚠ 只喂非零样本的阶段 B 在带内条件上也只能答一个 ≥ 最短热行的数：
+    掺进来的那一小撮零样本锚点就是为了让它答得下去（`ZERO_ANCHOR_SHARE`）。"""
+    bundle = load(
+        trained.artifact.payload,
+        digest=trained.artifact.digest,
+        format_version=trained.artifact.format_version,
+        trained_sklearn_version=trained.artifact.sklearn_version,
+    )
+    pair, _ = bundle.pair_for("K11")
+    assert pair.duration_forest is not None
+    instant = build_row(sample(0).conditions, units=UNITS, timezone=TZ)
+    (median,) = pair.duration_forest.quantiles_at(instant, [0.5])
+    assert median < SHORTEST_HOT_MINUTES
+
+
+def test_the_anchors_do_not_swamp_the_hot_rows(
+    trained: TrainedModel,
+) -> None:
+    """⚠ 锚点只是锚点：借得太多、太重，阶段 B 就改口在答另一个问题，
+    热行整段被拽向 0——漏报是这个模型最贵的那类错。"""
+    delayed = [row for row in trained.oof if row.actual_minutes >= 16]
+    assert sum(1 for row in delayed if row.p50 >= 5.0) / len(delayed) > 0.8
+
+
 def test_quantiles_are_ordered_and_non_negative(
     trained: TrainedModel,
 ) -> None:
     """⚠ 三条分位独立拟合会交叉：出口必须已排序且非负。"""
     for row in trained.oof:
         assert 0 <= row.p10 <= row.p50 <= row.p90
+
+
+def test_a_room_that_always_complies_instantly_has_no_stage_b() -> None:
+    """⚠ 一条非零时长都没有：阶段 B 缺席，混合退化成恒 0——不许拿零样本硬训
+    出一个「永远答 0」却看着很自信的森林。"""
+    rows = [
+        EpisodeSample(conditions=sample(index).conditions, duration_minutes=0)
+        for index in range(MIN_SAMPLES)
+    ]
+    trained = train(rows, units=UNITS, timezone=TZ, half_life_days=180.0)
+    bundle = load(
+        trained.artifact.payload,
+        digest=trained.artifact.digest,
+        format_version=trained.artifact.format_version,
+        trained_sklearn_version=trained.artifact.sklearn_version,
+    )
+    assert bundle.pooled.duration_forest is None
+
+
+def test_zero_anchors_are_spread_out_capped_and_repeatable() -> None:
+    """锚点的三条约定：等距摊开、要得比有的多就全给、同一份数据挑同一批行。"""
+    answers = [0.0 if at % 2 else 5.0 for at in range(20)]
+    picked = _zero_anchors(answers, wanted=5)
+    assert picked == _zero_anchors(answers, wanted=5)
+    assert len(picked) == 5
+    assert all(answers[at] == 0.0 for at in picked)
+    assert picked == sorted(picked)
+    # 要 99 条而只有 10 条零样本：全给，不报错也不重复
+    assert len(_zero_anchors(answers, wanted=99)) == 10
+    assert _zero_anchors(answers, wanted=0) == []
+    assert _zero_anchors([1.0, 2.0], wanted=3) == []
 
 
 def test_training_is_deterministic() -> None:

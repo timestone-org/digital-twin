@@ -41,3 +41,18 @@ class RoomUnit:
 
     serial: str
     bands: Mapping[str, MetricBand]
+
+    def is_in_band(self, values: Mapping[str, float | None]) -> bool:
+        """这台在某一刻的读数是不是各项都落在它自己配置的范围内。
+
+        ⚠ 缺测按不达标处理：读不到的指标不能替它作证。
+        ⚠ 与 `services/ac_startup_frames._is_in_band` 是同一口径的两份实现——
+        抽取引擎那两个文件被 `check_logic_version` 锁着，改一个字就要全量重抽；
+        两份由 `tests/contract/test_ac_compliance_predicate.py` 钉死一致。
+        Args: values。
+        """
+        for metric, band in self.bands.items():
+            value = values.get(metric)
+            if value is None or not band.contains(value):
+                return False
+        return True
