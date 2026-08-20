@@ -23,6 +23,9 @@ function shown(visible: boolean): TwinVisibilityRule {
 /** 一份什么都没配的模型：缺省即「不叠任何东西」。 */
 const EMPTY_MODEL: TwinModelRef = {
   asset: '',
+  // 存量配置没有这个字段，缺省必须落在原件上——给成别的档，既有大屏会在这次
+  // 发布之后集体去取一份可能还不存在的派生件
+  variant: 'original',
   scale: 1,
   position: [0, 0, 0],
   rotation: [0, 0, 0],

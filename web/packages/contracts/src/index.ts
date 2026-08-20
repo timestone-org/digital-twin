@@ -6,13 +6,21 @@ export type {
   Page,
 } from './envelope'
 export { ERROR_CODES, SUCCESS_CODE } from './envelope'
-export type { AssetKind } from './asset'
+export type {
+  AssetKind,
+  DerivedModelVariant,
+  ModelVariant,
+} from './asset'
 export {
   ASSET_KINDS,
+  MODEL_VARIANTS,
+  DERIVED_MODEL_VARIANTS,
   ASSET_REF_PREFIX,
   assetObjectKey,
   assetRef,
   assetUrl,
+  modelVariantKey,
+  modelVariantUrl,
   parseAssetRef,
 } from './asset'
 export type {

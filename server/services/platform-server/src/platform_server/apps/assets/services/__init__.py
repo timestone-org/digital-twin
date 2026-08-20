@@ -8,9 +8,11 @@ from platform_server.apps.assets.services.asset_service import (
     finalize_upload,
     kind_catalog,
     list_assets,
+    needs_compression,
     presign_upload,
     read_asset,
     rename_asset,
+    request_recompression,
 )
 
 __all__ = [
@@ -21,7 +23,9 @@ __all__ = [
     "finalize_upload",
     "kind_catalog",
     "list_assets",
+    "needs_compression",
     "presign_upload",
     "read_asset",
     "rename_asset",
+    "request_recompression",
 ]

@@ -14,6 +14,23 @@ from platform_server.apps.assets.schemas.common import (
 )
 
 
+class AssetVariantOut(OutputModel):
+    """一个模型素材的一档压缩产物。
+
+    ⚠ `size_bytes` 未压成时为 null，不是 0：给 0 的话界面会显示「0 B」，
+    那是一个看着像已经压完的假事实。
+    """
+
+    variant: str
+    label: str
+    hint: str
+    status: str
+    size_bytes: int | None
+    checksum: str | None
+    #: 失败原因；其余状态是空串
+    error: str
+
+
 class AssetOut(OutputModel):
     """一个素材。
 
@@ -30,6 +47,10 @@ class AssetOut(OutputModel):
     checksum: str
     created_at: Utc
     created_by: str
+    #: 压缩档。⚠ 只有模型类素材才有，其余一律空列表——图片与图标不分档
+    variants: list[AssetVariantOut] = Field(
+        default_factory=list[AssetVariantOut]
+    )
 
 
 class AssetKindOut(OutputModel):

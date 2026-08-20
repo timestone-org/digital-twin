@@ -2,6 +2,9 @@
  * @fileoverview 场景层的归一化：模型摆放、内置动画、场景特效、视点、切换控件与
  * 自动漫游轨迹。
  */
+import { MODEL_VARIANTS } from '@dt/contracts'
+import type { ModelVariant } from '@dt/contracts'
+
 import {
   boolOr,
   clampedOr,
@@ -133,6 +136,9 @@ export function normalizeModel(raw: unknown): TwinModelRef {
   const asset = trimmedString(source.asset)
   return {
     asset: asset.startsWith(ASSET_REF_PREFIX) ? asset : '',
+    // ⚠ 存量配置里没有这个字段，缺省必须是 `original`：给成别的档，既有大屏
+    // 会在这次发布之后集体去取一份可能还不存在的派生件
+    variant: oneOf<ModelVariant>(source.variant, MODEL_VARIANTS, 'original'),
     scale: clampedOr(source.scale, DEFAULT_SCALE, MIN_SCALE, MAX_SCALE),
     position: vec3(source.position, ORIGIN),
     rotation: vec3(source.rotation, ORIGIN),

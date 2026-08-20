@@ -16,6 +16,8 @@ from lib.objectstore import ObjectStore
 from lib.web import ApiResponse, ok
 from platform_server.apps.assets.catalog import ASSET_MANAGE, ASSET_VIEW
 from platform_server.apps.assets.deps import (
+    CompressDispatcher,
+    get_compress_dispatcher,
     get_object_store,
     get_session,
     require,
@@ -35,10 +37,13 @@ from platform_server.apps.assets.services import (
     finalize_upload,
     kind_catalog,
     list_assets,
+    needs_compression,
     presign_upload,
     read_asset,
     rename_asset,
+    request_recompression,
 )
+from platform_server.apps.assets.services.compress_queue import new_message
 from platform_server.settings import API_PREFIX
 
 router = APIRouter(prefix=f"{API_PREFIX}/assets", tags=["asset"])
@@ -47,6 +52,9 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 StoreDep = Annotated[ObjectStore, Depends(get_object_store)]
 ViewDep = Annotated[CallerContext, Depends(require(ASSET_VIEW))]
 ManageDep = Annotated[CallerContext, Depends(require(ASSET_MANAGE))]
+DispatchDep = Annotated[
+    CompressDispatcher, Depends(get_compress_dispatcher)
+]
 
 DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 200
@@ -134,22 +142,45 @@ async def presign(
 async def finalize(
     session: SessionDep,
     store: StoreDep,
+    *,
     actor: ManageDep,
+    dispatcher: DispatchDep,
     asset_id: uuid.UUID,
     body: FinalizeUploadIn,
 ) -> ApiResponse[AssetOut]:
     """把字节搬进正式前缀并落行。重复调用返回同一个素材。
 
-    Args: session, store, actor, asset_id, body。
+    模型类素材落行的同时排一次压缩，任务在**事务提交之后**才投。
+    Args: session, store, actor, dispatcher, asset_id, body。
     """
-    return ok(
-        await finalize_upload(
-            session,
-            store,
-            asset_id,
-            FinalizeRequest(name=body.name, actor=actor.username),
-        )
-    )
+    request = FinalizeRequest(name=body.name, actor=actor.username)
+    saved = await finalize_upload(session, store, asset_id, request)
+    if needs_compression(saved):
+        dispatcher.after_commit(new_message(asset_id))
+    return ok(saved)
+
+
+@router.post(
+    "/{asset_id}:recompress",
+    response_model=ApiResponse[AssetOut],
+    summary="重压压缩档",
+)
+async def recompress(
+    session: SessionDep,
+    actor: ManageDep,
+    dispatcher: DispatchDep,
+    asset_id: uuid.UUID,
+) -> ApiResponse[AssetOut]:
+    """把这个模型的各档打回待压缩并重新排队。
+
+    ⚠ 这是**唯一的重试入口**：worker 压不动时不自动重试（一个压不动的模型
+    重试一万次也压不动，而自动重试会把 worker 占满），由人在界面上按这一下。
+    Args: session, actor, dispatcher, asset_id。
+    """
+    del actor
+    saved = await request_recompression(session, asset_id)
+    dispatcher.after_commit(new_message(asset_id))
+    return ok(saved, message="已排进压缩队列")
 
 
 @router.patch(

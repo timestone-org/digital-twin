@@ -5,6 +5,8 @@
  * 形状就变了，而「往返之后少了一个键」这类差异在渲染层表现为某一项忽然回到缺省。
  * 缺省用具体值表达（空串 / 空数组 / null），不用「键不在」。
  */
+import type { ModelVariant } from '@dt/contracts'
+
 
 /** 世界坐标 / 欧拉角三元组。 */
 export type Vec3 = [number, number, number]
@@ -83,6 +85,14 @@ export interface TwinSceneEffects {
  */
 export interface TwinModelRef {
   asset: string
+  /**
+   * 用哪一档压缩产物。
+   * ⚠ 档位不编进 `asset:<uuid>` 引用串：那条语法在服务端、前端与删除时的反查里
+   * 各有一份实现，塞进去要同时改三处，漏一处只表现为「取不到」（ADR-0022）。
+   * ⚠ 选了一档不代表它已经压好；渲染侧取不到就**回落原件**，否则现场是一块
+   * 永远转圈的黑屏。
+   */
+  variant: ModelVariant
   scale: number
   position: Vec3
   /** 欧拉角，度。 */
