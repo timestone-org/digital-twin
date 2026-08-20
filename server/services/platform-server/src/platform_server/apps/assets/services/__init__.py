@@ -10,6 +10,7 @@ from platform_server.apps.assets.services.asset_service import (
     list_assets,
     presign_upload,
     read_asset,
+    rename_asset,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "list_assets",
     "presign_upload",
     "read_asset",
+    "rename_asset",
 ]

@@ -418,7 +418,7 @@ _ASSET_RULES: tuple[RouteRuleSpec, ...] = (
         codes=(ASSET_MANAGE,),
         priority=921,
         description=(
-            "素材面写操作的兜底：申请直传凭证、确认上传、删除。"
+            "素材面写操作的兜底：申请直传凭证、确认上传、改名、删除。"
             "⚠ 用 `*` 方法而不是逐个方法列，是为了让将来新增的方法也落在素材"
             "自己的码上"
         ),

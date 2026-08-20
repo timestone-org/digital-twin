@@ -236,18 +236,49 @@ async def read_asset(session: AsyncSession, asset_id: uuid.UUID) -> AssetOut:
 
 
 async def list_assets(
-    session: AsyncSession, *, kind: str | None, limit: int, offset: int
+    session: AsyncSession,
+    *,
+    kind: str | None,
+    keyword: str | None,
+    limit: int,
+    offset: int,
 ) -> list[AssetOut]:
-    """列素材，新的在前。
+    """按类型与名字关键词列素材，新的在前。
 
-    Args: session, kind（None = 全部）, limit, offset。
+    ⚠ 关键词只在这里收敛一次空白：调用方传的 `"  "` 与「没传」是同一个意思，
+    不折叠的话它会变成一次「名字里含两个空格」的搜索，返回空列表且看不出为什么。
+    Args: session, kind（None = 全部）, keyword, limit, offset。
     """
     if kind is not None and kind_spec_of(kind) is None:
         raise AssetKindUnknown(f"没有「{kind}」这类素材")
+    trimmed = keyword.strip() if keyword is not None else ""
     rows = await crud.list_by_kind(
-        session, kind=kind, limit=limit, offset=offset
+        session,
+        kind=kind,
+        keyword=trimmed or None,
+        limit=limit,
+        offset=offset,
     )
     return [_present(row) for row in rows]
+
+
+async def rename_asset(
+    session: AsyncSession, asset_id: uuid.UUID, name: str
+) -> AssetOut:
+    """改显示名；素材不存在即 404。
+
+    ⚠ 只改库里的显示名，**不碰对象键**：键由 `(kind, id)` 推导，改名要是连着
+    搬字节，存量配置里那些 `asset:<uuid>` 引用会在搬到一半的窗口里取不到，
+    而改名本该是一次纯元信息操作。
+    Args: session, asset_id, name。
+    """
+    found = await crud.get(session, asset_id)
+    if found is None:
+        raise AssetNotFound("素材不存在")
+    await crud.rename(session, asset_id, name)
+    await session.flush()
+    await session.refresh(found)
+    return _present(found)
 
 
 async def delete_asset(

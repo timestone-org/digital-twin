@@ -3576,6 +3576,23 @@
         "title": "AssetOut",
         "type": "object"
       },
+      "AssetUpdateIn": {
+        "additionalProperties": false,
+        "description": "改一个素材的显示名。\n\n⚠ 只收显示名：类型、大小与校验和都是**字节的事实**，由存储端读回来落库。\n放开它们等于允许库里的元信息与桶里的字节对不上，而对不上时没有任何一处\n会报错——界面上显示的体积与那个文件本身再无关系。",
+        "properties": {
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "AssetUpdateIn",
+        "type": "object"
+      },
       "BindingCreateIn": {
         "additionalProperties": false,
         "description": "新增一条绑定。`id` 由调用方自带时用它，便于批量替换里指名道姓。",
@@ -12007,7 +12024,7 @@
     },
     "/api/v1/platform/assets": {
       "get": {
-        "description": "按类型列素材，新的在前。\n\nArgs: session, _viewer, kind, limit, offset。",
+        "description": "按类型与名字关键词列素材，新的在前。\n\nArgs: session, _viewer, kind, q, limit, offset。",
         "operationId": "list_all_api_v1_platform_assets_get",
         "parameters": [
           {
@@ -12024,6 +12041,23 @@
                 }
               ],
               "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
             }
           },
           {
@@ -12174,6 +12208,58 @@
           }
         },
         "summary": "素材详情",
+        "tags": [
+          "asset"
+        ]
+      },
+      "patch": {
+        "description": "改显示名。字节与对象键都不动，故引用它的大屏无感。\n\nArgs: session, actor, asset_id, body。",
+        "operationId": "rename_one_api_v1_platform_assets__asset_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AssetOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "改素材名",
         "tags": [
           "asset"
         ]

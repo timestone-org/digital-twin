@@ -3,6 +3,7 @@
 from platform_server.apps.assets.schemas.asset import (
     AssetKindOut,
     AssetOut,
+    AssetUpdateIn,
     FinalizeUploadIn,
     PresignUploadIn,
     UploadTicketOut,
@@ -11,6 +12,7 @@ from platform_server.apps.assets.schemas.asset import (
 __all__ = [
     "AssetKindOut",
     "AssetOut",
+    "AssetUpdateIn",
     "FinalizeUploadIn",
     "PresignUploadIn",
     "UploadTicketOut",

@@ -1,4 +1,4 @@
-"""素材面：类型目录、直传三步、浏览与删除。
+"""素材面：类型目录、直传三步、浏览、改名与删除。
 
 ⚠ 字节不经过本服务：上传是浏览器凭签好的表单直传对象存储，下载是边缘把
 `/oss/<对象键>` 反代过去。让字节穿过 API 进程的话，一个 200MB 的模型会把
@@ -23,6 +23,7 @@ from platform_server.apps.assets.deps import (
 from platform_server.apps.assets.schemas import (
     AssetKindOut,
     AssetOut,
+    AssetUpdateIn,
     FinalizeUploadIn,
     PresignUploadIn,
     UploadTicketOut,
@@ -36,6 +37,7 @@ from platform_server.apps.assets.services import (
     list_assets,
     presign_upload,
     read_asset,
+    rename_asset,
 )
 from platform_server.settings import API_PREFIX
 
@@ -48,6 +50,8 @@ ManageDep = Annotated[CallerContext, Depends(require(ASSET_MANAGE))]
 
 DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 200
+# 名字关键词的长度上限，与 `AssetName` 同值
+MAX_KEYWORD_LEN = 128
 
 
 @router.get(
@@ -68,14 +72,19 @@ async def list_all(
     session: SessionDep,
     _viewer: ViewDep,
     kind: str | None = None,
+    q: str | None = Query(None, max_length=MAX_KEYWORD_LEN),
     limit: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     offset: int = Query(0, ge=0),
 ) -> ApiResponse[list[AssetOut]]:
-    """按类型列素材，新的在前。
+    """按类型与名字关键词列素材，新的在前。
 
-    Args: session, _viewer, kind, limit, offset。
+    Args: session, _viewer, kind, q, limit, offset。
     """
-    return ok(await list_assets(session, kind=kind, limit=limit, offset=offset))
+    return ok(
+        await list_assets(
+            session, kind=kind, keyword=q, limit=limit, offset=offset
+        )
+    )
 
 
 @router.get(
@@ -140,6 +149,28 @@ async def finalize(
             asset_id,
             FinalizeRequest(name=body.name, actor=actor.username),
         )
+    )
+
+
+@router.patch(
+    "/{asset_id}",
+    response_model=ApiResponse[AssetOut],
+    summary="改素材名",
+)
+async def rename_one(
+    session: SessionDep,
+    actor: ManageDep,
+    asset_id: uuid.UUID,
+    body: AssetUpdateIn,
+) -> ApiResponse[AssetOut]:
+    """改显示名。字节与对象键都不动，故引用它的大屏无感。
+
+    Args: session, actor, asset_id, body。
+    """
+    del actor
+    return ok(
+        await rename_asset(session, asset_id, body.name),
+        message="素材已改名",
     )
 
 

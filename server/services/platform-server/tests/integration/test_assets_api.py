@@ -1,4 +1,4 @@
-"""素材面的三步：签凭证 → 直传 → 确认落库，外加浏览与删除。
+"""素材面的三步：签凭证 → 直传 → 确认落库，外加浏览、搜索、改名与删除。
 
 ⚠ 这条链上有三处「不报错但错」：finalize 从请求体收 kind（字节会被搬到错误
 前缀，文件在但按 id 找不到）、元信息信调用方自报（界面显示的体积与文件无关）、
@@ -238,3 +238,94 @@ async def test_deleting_a_missing_asset_is_still_no_content(
         f"{ASSETS_URL}/0192f0aa-0000-7000-8000-0000000000ff"
     )
     assert response.status_code == HTTP_NO_CONTENT
+
+
+async def test_renaming_changes_only_the_display_name(
+    app_client: httpx.AsyncClient, object_store: FakeObjectStore
+) -> None:
+    asset = await make_asset(app_client, object_store, name="机组")
+
+    renamed = data_of(
+        await app_client.patch(
+            f"{ASSETS_URL}/{asset['id']}", json={"name": "一号机组"}
+        )
+    )
+
+    # ⚠ 改名是纯元信息操作：引用、对象键与校验和都不许跟着变，否则存量大屏里
+    # 那条 `asset:<uuid>` 会在改名那一刻取不到，而没有任何一处会报错
+    assert renamed["name"] == "一号机组"
+    assert renamed["ref"] == asset["ref"]
+    assert renamed["checksum"] == asset["checksum"]
+    key = keys.model_key(_uuid(asset["id"]))
+    assert await object_store.stat(key) is not None
+
+
+async def test_renaming_a_missing_asset_is_a_404(
+    app_client: httpx.AsyncClient,
+) -> None:
+    response = await app_client.patch(
+        f"{ASSETS_URL}/0192f0aa-0000-7000-8000-0000000000ff",
+        json={"name": "谁"},
+    )
+    assert (response.status_code, code_of(response)) == (HTTP_NOT_FOUND, 41504)
+
+
+async def test_an_empty_name_is_refused(
+    app_client: httpx.AsyncClient, object_store: FakeObjectStore
+) -> None:
+    asset = await make_asset(app_client, object_store)
+
+    # ⚠ 全空白也要被拒：`AssetName` 先 strip 再判长度，放过去的话列表里会出现
+    # 一行点不中、也搜不到的素材
+    # ⚠ 本仓的参数校验失败是 400/40001 而不是 FastAPI 缺省的 422
+    response = await app_client.patch(
+        f"{ASSETS_URL}/{asset['id']}", json={"name": "   "}
+    )
+    assert (response.status_code, code_of(response)) == (
+        HTTP_BAD_REQUEST,
+        40001,
+    )
+
+
+async def test_the_listing_filters_by_name_keyword(
+    app_client: httpx.AsyncClient, object_store: FakeObjectStore
+) -> None:
+    await make_asset(app_client, object_store, name="一号机组")
+    await make_asset(app_client, object_store, name="二号泵")
+
+    hits = data_of(await app_client.get(ASSETS_URL, params={"q": "机组"}))
+
+    assert [item["name"] for item in hits] == ["一号机组"]
+
+
+async def test_the_keyword_ignores_case(
+    app_client: httpx.AsyncClient, object_store: FakeObjectStore
+) -> None:
+    await make_asset(app_client, object_store, name="Pump.GLB")
+
+    hits = data_of(await app_client.get(ASSETS_URL, params={"q": "glb"}))
+
+    assert [item["name"] for item in hits] == ["Pump.GLB"]
+
+
+async def test_like_wildcards_in_the_keyword_are_literal(
+    app_client: httpx.AsyncClient, object_store: FakeObjectStore
+) -> None:
+    await make_asset(app_client, object_store, name="负荷 50% 工况")
+    await make_asset(app_client, object_store, name="别的东西")
+
+    # ⚠ 不转义的话 `%` 是通配符，这一搜会把整库列出来，而现象只是「搜索没生效」
+    hits = data_of(await app_client.get(ASSETS_URL, params={"q": "50%"}))
+
+    assert [item["name"] for item in hits] == ["负荷 50% 工况"]
+
+
+async def test_a_blank_keyword_means_no_filter(
+    app_client: httpx.AsyncClient, object_store: FakeObjectStore
+) -> None:
+    await make_asset(app_client, object_store, name="机组")
+
+    # 输入框清空后回传的是空串，它与「没传」是同一个意思
+    hits = data_of(await app_client.get(ASSETS_URL, params={"q": "  "}))
+
+    assert [item["name"] for item in hits] == ["机组"]

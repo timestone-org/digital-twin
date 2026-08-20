@@ -81,3 +81,14 @@ class FinalizeUploadIn(InputModel):
     """
 
     name: AssetName
+
+
+class AssetUpdateIn(InputModel):
+    """改一个素材的显示名。
+
+    ⚠ 只收显示名：类型、大小与校验和都是**字节的事实**，由存储端读回来落库。
+    放开它们等于允许库里的元信息与桶里的字节对不上，而对不上时没有任何一处
+    会报错——界面上显示的体积与那个文件本身再无关系。
+    """
+
+    name: AssetName
