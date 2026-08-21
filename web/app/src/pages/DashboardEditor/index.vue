@@ -249,6 +249,8 @@ onUnmounted(file.dispose)
           @config="actions.changeConfig"
           @geometry="ops.changeSelectedGeometry"
           @visible="ops.toggleSelectedVisible"
+          @select-type="editor.setSelection"
+          @size-batch="arrange.matchSelectedSize"
           @rename="inspector.rename"
           @order="inspector.order"
           @preset="inspector.applyPreset"

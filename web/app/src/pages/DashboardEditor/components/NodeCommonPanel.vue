@@ -7,19 +7,31 @@
  */
 import type {
   CardChrome,
-  ChromeKey,
   DashboardNodePayload,
   ModuleManifest,
 } from '@dt/contracts'
-import { DtField, DtHelpTip, DtInput, DtNumberInput, DtSwitch } from '@dt/ui'
+import { mergeCardChrome } from '@dt/runtime'
+import {
+  DtButton,
+  DtField,
+  DtHelpTip,
+  DtInput,
+  DtNumberInput,
+  DtSwitch,
+} from '@dt/ui'
 import { computed, ref, watch } from 'vue'
 
 import type { ConfigPath } from '@/features/dashboard/configPath'
+import { useCanvasCardDefault } from '@/features/dashboard/editorContext'
 import type {
   LayerPosition,
   NodeGeometry,
 } from '@/features/dashboard/editorDoc'
 import { nodeLabelOf } from '@/features/dashboard/nodeLabel'
+import {
+  chromeEntries,
+  type CardFieldContext,
+} from '../scripts/cardStyleFields'
 import type { OrderKind } from '../scripts/useEditorInspector'
 import CardStyleFields from './CardStyleFields.vue'
 
@@ -46,12 +58,15 @@ const GEOMETRY_FIELDS: readonly { key: keyof NodeGeometry; label: string }[] = [
   { key: 'h', label: '高 (px)' },
 ]
 
-const ORDER_ACTIONS: readonly { key: OrderKind; label: string }[] = [
+type OrderAction = { key: OrderKind; label: string; hint?: string }
+
+// center 是「视口滚动定位到节点」，不动节点几何，文案与提示都按定位说
+const ORDER_ACTIONS: readonly OrderAction[] = [
   { key: 'front', label: '置顶' },
   { key: 'forward', label: '上移一层' },
   { key: 'backward', label: '下移一层' },
   { key: 'back', label: '置底' },
-  { key: 'center', label: '居中' },
+  { key: 'center', label: '定位', hint: '定位到此节点' },
 ]
 
 /** 钉位节点（页头 / 页脚）横向锁死，只许改高。 */
@@ -124,6 +139,18 @@ const cardStyle = computed<CardChrome>(() => {
     : {}
 })
 
+const canvasCard = useCanvasCardDefault()
+
+/** 外观面板按模块能力适配的输入；开关判定用画布缺省 + 模块覆盖的有效值。 */
+const cardFieldContext = computed<CardFieldContext>(() => ({
+  chrome: props.manifest?.chrome ?? 'card',
+  unsupportedKeys: new Set(props.manifest?.unsupportedChromeKeys ?? []),
+  effective: mergeCardChrome(
+    canvasCard === null ? null : canvasCard.value,
+    cardStyle.value,
+  ),
+}))
+
 /**
  * 整袋写回。**空袋要删键**：留一只 `{}` 在配置里，导出的 JSON 会多一段永远
  * 读不出差别的噪声，而且看上去像「配过了」。
@@ -131,10 +158,10 @@ const cardStyle = computed<CardChrome>(() => {
  */
 function writeCardStyle(next: CardChrome): void {
   const cleaned: CardChrome = {}
-  for (const [key, value] of Object.entries(next)) {
+  for (const [key, value] of chromeEntries(next)) {
     // false 与 0 都是合法取值：前者是模块级压过画布级的显式关闭，后者是几何值
     if (value === undefined || value === null || value === '') continue
-    cleaned[key as ChromeKey] = value
+    cleaned[key] = value
   }
   const hasAny = Object.keys(cleaned).length > 0
   emit('config', ['__cardStyle'], hasAny ? cleaned : undefined, false)
@@ -190,17 +217,20 @@ function writeCardStyle(next: CardChrome): void {
         </span>
       </div>
       <div class="flex flex-wrap gap-1.5">
-        <button
+        <DtButton
           v-for="action in ORDER_ACTIONS"
           :key="action.key"
-          type="button"
-          class="dt-common__chip"
+          size="sm"
+          variant="outline"
+          intent="neutral"
+          :title="action.hint"
+          :aria-label="action.hint"
           :data-test="`order-${action.key}`"
           :disabled="isOrderDisabled(action.key)"
           @click="emit('order', action.key)"
         >
           {{ action.label }}
-        </button>
+        </DtButton>
       </div>
     </section>
 
@@ -225,6 +255,7 @@ function writeCardStyle(next: CardChrome): void {
       </h3>
       <CardStyleFields
         :model-value="cardStyle"
+        :context="cardFieldContext"
         @update:model-value="writeCardStyle"
       />
     </section>
@@ -247,29 +278,5 @@ function writeCardStyle(next: CardChrome): void {
   margin: 0;
   color: var(--text-disabled);
   font-size: 10px;
-}
-
-.dt-common__chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 8px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: 11px;
-  cursor: pointer;
-  transition:
-    color 0.15s ease,
-    border-color 0.15s ease;
-
-  &:hover:not(:disabled) {
-    color: var(--accent-primary);
-    border-color: var(--accent-primary);
-  }
-
-  &:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
 }
 </style>

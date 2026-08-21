@@ -141,7 +141,7 @@ watch(
             type="button"
             class="dt-assets__item"
             :class="{ 'is-active': asset.id === selectedId }"
-            :aria-pressed="asset.id === selectedId"
+            :aria-current="asset.id === selectedId ? 'true' : undefined"
             @click="selectedId = asset.id"
           >
             <span class="dt-assets__name">{{ asset.name }}</span>

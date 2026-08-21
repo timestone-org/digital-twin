@@ -2,7 +2,7 @@
 /**
  * @fileoverview 左栏里的一个房间。
  *
- * ⚠ 选中态不能只靠颜色：`aria-pressed` 管读屏，左侧竖条管色觉障碍。
+ * ⚠ 选中态不能只靠颜色：`aria-current` 管读屏，左侧竖条管色觉障碍。
  * ⚠ 与 CoverageSidebar 不同，点选中的那个**不取消**——主从布局必须始终有一个
  * 选中项，取消了右区就没东西可显示。
  */
@@ -28,7 +28,7 @@ const emit = defineEmits<{ select: [] }>()
           ? 'border-accent-primary bg-accent-primary/10 text-accent-primary'
           : 'border-transparent text-text-primary hover:bg-surface-raised'
       "
-      :aria-pressed="props.isSelected"
+      :aria-current="props.isSelected ? 'true' : undefined"
       :title="`${props.room.workshopName} · ${props.room.name}`"
       @click="emit('select')"
     >

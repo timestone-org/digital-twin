@@ -11,7 +11,7 @@ import type { CanvasZoom } from '@/features/dashboard/canvasZoom'
 import { layerPositionOf } from '@/features/dashboard/editorDoc'
 import type { ContextMenuAction, ContextMenuInput } from './contextMenuItems'
 import type { EditorActions } from './editorActions'
-import type { ArrangeActions } from './editorArrange'
+import type { ArrangeActions, PastePoint } from './editorArrange'
 import { modLabel } from './shortcuts'
 
 export interface EditorContextMenuDeps {
@@ -25,9 +25,15 @@ export interface EditorContextMenuDeps {
   zoom: Ref<CanvasZoom>
 }
 
-type Runner = (deps: EditorContextMenuDeps, nodeId: string | null) => void
+/** 一次菜单动作的落点上下文：目标节点与（空白处菜单的）粘贴落点。 */
+export interface ContextMenuTarget {
+  nodeId: string | null
+  pasteAt: PastePoint | null
+}
 
-/** 每个动作各指向一个既有出口；层序与删除按选中集走，居中与显隐按落点节点走。 */
+type Runner = (deps: EditorContextMenuDeps, target: ContextMenuTarget) => void
+
+/** 每个动作各指向一个既有出口；层序与删除按选中集走，定位与显隐按落点节点走。 */
 export const RUNNERS: Record<ContextMenuAction, Runner> = {
   front: (deps) => {
     deps.arrange.bringSelectedToFront()
@@ -41,20 +47,28 @@ export const RUNNERS: Record<ContextMenuAction, Runner> = {
   backward: (deps) => {
     deps.arrange.sendSelectedBackward()
   },
-  center: (deps, nodeId) => {
-    if (nodeId !== null) deps.centerOn(nodeId)
+  center: (deps, target) => {
+    if (target.nodeId !== null) deps.centerOn(target.nodeId)
   },
   copy: (deps) => {
     deps.arrange.copySelected()
   },
+  duplicate: (deps) => {
+    deps.arrange.duplicateSelected()
+  },
   remove: (deps) => {
     deps.removeSelected()
   },
-  hide: (deps, nodeId) => {
-    if (nodeId !== null) deps.actions.toggleVisible(nodeId, false)
+  hide: (deps, target) => {
+    if (target.nodeId !== null) {
+      deps.actions.toggleVisible(
+        target.nodeId,
+        !isNodeVisible(deps.editor, target.nodeId),
+      )
+    }
   },
-  paste: (deps) => {
-    deps.arrange.pasteClipboard()
+  paste: (deps, target) => {
+    deps.arrange.pasteClipboard(target.pasteAt ?? undefined)
   },
   'select-all': (deps) => {
     deps.arrange.selectAllTop()

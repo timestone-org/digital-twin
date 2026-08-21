@@ -157,8 +157,8 @@ function twoCombinations(): StartupBatches {
 
 /** 点左栏「组合覆盖」里的某一条。 */
 async function pickCombination(label: string): Promise<void> {
-  const row = [...document.querySelectorAll('button[aria-pressed]')].find(
-    (node) => node.textContent?.includes(label),
+  const row = [...document.querySelectorAll('aside li > button')].find((node) =>
+    node.textContent?.includes(label),
   )
   if (row === undefined) throw new Error(`左栏里没有「${label}」`)
   row.dispatchEvent(new MouseEvent('click', { bubbles: true }))

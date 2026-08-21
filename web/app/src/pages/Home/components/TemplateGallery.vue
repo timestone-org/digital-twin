@@ -91,7 +91,7 @@ defineExpose({ reload: load })
         <button
           type="button"
           class="dt-tpl__pick"
-          :aria-pressed="template.id === selectedId"
+          :aria-current="template.id === selectedId ? 'true' : undefined"
           @click="emit('select', template)"
         >
           <img

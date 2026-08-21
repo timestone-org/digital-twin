@@ -121,7 +121,7 @@ function onEdit(
               : live.readingsProblem.value.message
           }}
           <span class="ml-2 inline-flex gap-2">
-            <DtButton variant="ghost" size="sm" @click="live.reload()">
+            <DtButton variant="outline" size="sm" @click="live.reload()">
               重试
             </DtButton>
             <DtButton

@@ -21,6 +21,7 @@ import type {
 } from '@/features/dashboard/canvasSnap'
 import type { ConfigPath } from '@/features/dashboard/configPath'
 import type { NodeGeometry } from '@/features/dashboard/editorDoc'
+import type { SizeMatchMode } from '../scripts/editorArrange'
 import type { OrderKind } from '../scripts/useEditorInspector'
 import type { EditorMetaDraft } from '../scripts/useEditorMeta'
 import ChromePanel from './ChromePanel.vue'
@@ -63,9 +64,17 @@ const emit = defineEmits<{
   'set-snap': [patch: Partial<SnapConfig>]
   'set-grid': [patch: Partial<EditorGridConfig>]
   'set-card': [card: CardChrome]
+  'select-type': [ids: readonly string[]]
+  'size-batch': [mode: SizeMatchMode]
 }>()
 
 const count = computed(() => props.selectedIds.length)
+
+/** 选中集的节点（文档序）；多选面板的清单与批量表单都吃它。 */
+const selectedNodes = computed(() => {
+  const wanted = new Set(props.selectedIds)
+  return props.nodes.filter((node) => wanted.has(node.id))
+})
 
 function onDistribute(axis: 'x' | 'y'): void {
   emit('distribute', axis)
@@ -90,18 +99,42 @@ function onRemoveRow(slotKey: string, rowIndex: number): void {
 function onSetField(key: MetaField, value: string | number | null): void {
   emit('set-field', key, value)
 }
+
+function onSelectType(ids: readonly string[]): void {
+  emit('select-type', ids)
+}
+
+// 批量显隐与单选的「初始可见」走同一个 visible 事件：页面侧本就写整个选中集
+function onVisibleBatch(isVisible: boolean): void {
+  emit('visible', isVisible)
+}
+
+function onSizeBatch(mode: SizeMatchMode): void {
+  emit('size-batch', mode)
+}
+
+function onPreset(preset: ConfigPreset): void {
+  emit('preset', preset)
+}
 </script>
 
 <template>
   <section>
     <MultiSelectPanel
       v-if="count > 1"
-      :count="count"
+      :selected-nodes="selectedNodes"
+      :primary="selected"
+      :get-manifest="getManifest"
       :align-ready="alignReady"
       :distribute-ready="distributeReady"
       @align="emit('align', $event)"
       @distribute="onDistribute"
       @remove-all="emit('remove-all')"
+      @config="onConfig"
+      @preset="onPreset"
+      @select-type="onSelectType"
+      @visible-batch="onVisibleBatch"
+      @size-batch="onSizeBatch"
     />
     <InspectorPane
       v-else-if="count === 1"

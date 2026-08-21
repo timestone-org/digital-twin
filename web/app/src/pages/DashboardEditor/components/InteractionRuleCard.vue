@@ -3,18 +3,20 @@
  * @fileoverview 一条联动规则的编辑卡：头部是摘要与删除，下面是源节点 / 事件 /
  * 动作类型三档下拉，动作自己的字段交给 InteractionActionFields。
  */
+import { computed } from 'vue'
 import type {
   DtSelectOption,
   InteractionAction,
   InteractionRule,
+  ModuleManifest,
 } from '@dt/contracts'
 import { DtButton, DtSelect } from '@dt/ui'
 
 import InteractionActionFields from './InteractionActionFields.vue'
 import {
   ACTION_OPTIONS,
-  EVENT_OPTIONS,
   actionForType,
+  eventOptionsFor,
   isActionType,
   isEventName,
 } from '../scripts/interactionOptions'
@@ -24,12 +26,18 @@ const props = defineProps<{
   summary: string
   sourceOptions: readonly DtSelectOption[]
   targetOptions: readonly DtSelectOption[]
+  /** 源节点的模块清单，事件选项按它过滤；源节点已删 / 类型未注册时是 undefined。 */
+  sourceManifest: ModuleManifest | undefined
 }>()
 
 const emit = defineEmits<{
   update: [rule: InteractionRule]
   remove: [id: string]
 }>()
+
+const eventOptions = computed(() =>
+  eventOptionsFor(props.sourceManifest, props.rule.source.event),
+)
 
 function onSource(nodeId: string): void {
   emit('update', { ...props.rule, source: { ...props.rule.source, nodeId } })
@@ -95,7 +103,7 @@ function onRemove(): void {
       size="sm"
       label="触发事件"
       :model-value="rule.source.event"
-      :options="EVENT_OPTIONS"
+      :options="eventOptions"
       aria-label="触发事件"
       @update:model-value="onEvent"
     />

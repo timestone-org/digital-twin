@@ -18,7 +18,7 @@ import type {
 import { fromArchiveDetail } from '@/api/dashboardWire'
 import type { LayoutBindingInput, LayoutNodeInput } from '@/api/dashboard'
 import { newClientUuid } from '@/api/idempotency'
-import { writeConfigAt, type ConfigPath } from './configPath'
+import { readConfigAt, writeConfigAt, type ConfigPath } from './configPath'
 
 /** 新节点落在画布上的初始位置（设计像素），避免与已有节点完全重叠。 */
 const NEW_NODE_ORIGIN = { x: 80, y: 80 }
@@ -32,6 +32,9 @@ export interface NodeGeometry {
   w: number
   h: number
 }
+
+/** 几何的一个维度键，属性面板单维输入的撤销合并键按它细分。 */
+export type GeometryDimension = keyof NodeGeometry
 
 /** 节点在同层兄弟里排第几；`index` 越大越靠上。 */
 export interface LayerPosition {
@@ -223,6 +226,20 @@ export function setVisible(
   return replaceNode(nodes, nodeId, (node) => ({ ...node, isVisible }))
 }
 
+/** 批量改显隐：全部显示 / 全部隐藏一次落一笔，撤销也只有一步。 */
+export function setVisibleBatch(
+  nodes: readonly DashboardNodePayload[],
+  ids: readonly string[],
+  isVisible: boolean,
+): DashboardNodePayload[] {
+  const wanted = new Set(ids)
+  return nodes.map((node) =>
+    !wanted.has(node.id) || node.isVisible === isVisible
+      ? node
+      : { ...node, isVisible },
+  )
+}
+
 /** 改 z 序。 */
 export function setZIndex(
   nodes: readonly DashboardNodePayload[],
@@ -390,6 +407,46 @@ export function setConfigValue(
     ...node,
     configJson: writeConfigAt(node.configJson, path, value),
   }))
+}
+
+/**
+ * 批量改配置：同一条路径的同一个值写到多个节点，一次 apply 一步撤销。
+ * @param ids 目标节点 id
+ * @param path 配置路径
+ * @param value 新值
+ */
+export function setConfigValueBatch(
+  nodes: readonly DashboardNodePayload[],
+  ids: readonly string[],
+  path: ConfigPath,
+  value: unknown,
+): DashboardNodePayload[] {
+  const wanted = new Set(ids)
+  return nodes.map((node) => {
+    if (!wanted.has(node.id)) return node
+    // 值未变时原样返回该节点：与 setGeometryBatch 同一口径，点了没改不置脏
+    if (Object.is(readConfigAt(node.configJson, path), value)) return node
+    return { ...node, configJson: writeConfigAt(node.configJson, path, value) }
+  })
+}
+
+/**
+ * 批量浅合并配置（预设批量应用）：各节点在**自己**的 configJson 上合并，
+ * 预设没提到的键原样保留。
+ * @param ids 目标节点 id
+ * @param patch 逐键浅合并进 config 的值
+ */
+export function mergeConfigBatch(
+  nodes: readonly DashboardNodePayload[],
+  ids: readonly string[],
+  patch: Record<string, unknown>,
+): DashboardNodePayload[] {
+  const wanted = new Set(ids)
+  return nodes.map((node) =>
+    wanted.has(node.id)
+      ? { ...node, configJson: { ...node.configJson, ...patch } }
+      : node,
+  )
 }
 
 /** 整块替换配置（数组增删行走它）。 */

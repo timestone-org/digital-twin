@@ -239,6 +239,7 @@ onBeforeUnmount(() => {
           :title="interaction.activeModal.value.title"
           :design="design"
           :get-manifest="getManifest"
+          :card-chrome="cardChrome"
           @close="interaction.closeModal"
         />
       </div>

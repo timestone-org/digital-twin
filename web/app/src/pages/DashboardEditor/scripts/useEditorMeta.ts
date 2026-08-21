@@ -39,6 +39,7 @@ function draftOf(payload: DashboardPayload): EditorMetaDraft {
     description: payload.description,
     designWidth: payload.designWidth,
     designHeight: payload.designHeight,
+    // JSON 往返只做深拷贝：入参本就是 Record<string, unknown>，顶层形状不变
     chromeJson: JSON.parse(JSON.stringify(payload.chromeJson)) as Record<
       string,
       unknown

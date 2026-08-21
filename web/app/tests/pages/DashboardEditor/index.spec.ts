@@ -36,6 +36,8 @@ const route = {
 vi.mock('vue-router', () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
   useRoute: () => route,
+  // 草稿流会注册离开守卫；这里只验证「注册不炸」，守卫行为在 useEditorDraftFlow.spec 里守
+  onBeforeRouteLeave: vi.fn(),
   RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
 }))
 
@@ -331,6 +333,71 @@ describe('属性与绑点', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('没有可交互的模块')
+  })
+})
+
+// 守 index.vue 上新接的两条多选绑定（@size-batch / @select-type）真有人接：
+// 模板里绑错事件名 typecheck 与 lint 双双放行，只会「点了没反应」
+describe('多选面板的页面接线', () => {
+  function block(id: string, over: Partial<ReturnType<typeof node>> = {}) {
+    return { ...node(id), moduleType: 'text-block', ...over }
+  }
+
+  async function selectBoth(wrapper: Awaited<ReturnType<typeof mountEditor>>) {
+    const surfaces = wrapper.findAll('.dt-node__surface')
+    await surfaces[0]?.trigger('pointerdown', { button: 0 })
+    await surfaces[1]?.trigger('pointerdown', { button: 0, shiftKey: true })
+  }
+
+  it('统一尺寸一路打到文档：其余节点跟上主选中的宽高', async () => {
+    vi.spyOn(dashboardApi, 'getDashboard').mockResolvedValue(
+      payload({
+        nodes: [
+          block('n1', { w: 100, h: 50 }),
+          block('n2', { x: 300, w: 220, h: 90, zIndex: 1 }),
+        ],
+      }),
+    )
+    const wrapper = await mountEditor()
+    await selectBoth(wrapper)
+
+    await wrapper.find('[data-test="multi-size-both"]').trigger('click')
+
+    const styles = wrapper
+      .findAll('.dt-node')
+      .map((item) => item.attributes('style'))
+    expect(styles[0]).toContain('width: 220px')
+    expect(styles[0]).toContain('height: 90px')
+    // 主选中（后点的 n2）与各自的位置都不动
+    expect(styles[1]).toContain('width: 220px')
+    expect(styles[0]).toContain('left: 0px')
+  })
+
+  it('混合类型给「只选这一类」，点了选中集收敛到那一类', async () => {
+    vi.spyOn(dashboardApi, 'getDashboard').mockResolvedValue(
+      payload({
+        nodes: [
+          block('n1'),
+          block('n2', { x: 300, zIndex: 1 }),
+          { ...node('n3'), moduleType: 'metric-card', x: 600, zIndex: 2 },
+        ],
+      }),
+    )
+    const wrapper = await mountEditor()
+    const surfaces = wrapper.findAll('.dt-node__surface')
+    await surfaces[0]?.trigger('pointerdown', { button: 0 })
+    await surfaces[1]?.trigger('pointerdown', { button: 0, shiftKey: true })
+    await surfaces[2]?.trigger('pointerdown', { button: 0, shiftKey: true })
+
+    expect(wrapper.find('[data-test="multi-count"]').text()).toContain('3')
+
+    await wrapper
+      .find('[data-test="multi-select-type-text-block"]')
+      .trigger('click')
+
+    expect(wrapper.find('[data-test="multi-count"]').text()).toContain('2')
+    // 收敛成同类型后批量表单出现（混合类型时没有）
+    expect(wrapper.find('.dt-batch').exists()).toBe(true)
   })
 })
 

@@ -53,6 +53,18 @@ describe('AppNavGroupTree', () => {
     expect(wrapper.find('a[href="/system/users"]').exists()).toBe(false)
   })
 
+  // 触发键的高亮走 DtButton 按压态：路由在组内 = 按下（soft），不在 = 弹起（ghost）
+  it('路由在组内时触发键是按压态，离开后弹起', async () => {
+    const wrapper = render('/system/users')
+    const trigger = wrapper.get('[aria-controls="nav-group-system"]')
+    expect(trigger.attributes('aria-pressed')).toBe('true')
+    expect(trigger.classes()).toContain('dt-btn--soft')
+
+    await wrapper.setProps({ currentPath: '/' })
+    expect(trigger.attributes('aria-pressed')).toBe('false')
+    expect(trigger.classes()).toContain('dt-btn--ghost')
+  })
+
   it('子项没有目标时退回工作台，而不是渲染一个死链接', async () => {
     const wrapper = mount(AppNavGroupTree, {
       props: {

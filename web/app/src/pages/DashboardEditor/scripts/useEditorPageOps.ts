@@ -1,17 +1,21 @@
 /**
- * @fileoverview 页面级操作组：加载/保存/删除确认/选中项的几何与显隐/挑点回填。
- * 只做把状态层与动作层串起来这一件事，模板绑定全指到这里。
+ * @fileoverview 页面级操作组：加载/保存/删除确认/选中项的几何与显隐/挑点回填，
+ * 加上本地草稿流与离开守卫的装配。只做把状态层与动作层串起来这一件事。
  */
 import type { Ref } from 'vue'
-import type { ModuleManifest } from '@dt/contracts'
+import type { DashboardNodePayload, ModuleManifest } from '@dt/contracts'
 
 import type { CollectPoint } from '@dt/contracts'
 import type { DashboardEditor } from '@/composables/useDashboardEditor'
 import type { useDashboardDoc } from '@/composables/useDashboardDoc'
-import type { NodeGeometry } from '@/features/dashboard/editorDoc'
+import type {
+  GeometryDimension,
+  NodeGeometry,
+} from '@/features/dashboard/editorDoc'
 import type { EditorActions } from './editorActions'
 import type { ArrangeActions } from './editorArrange'
 import { saveDashboard } from './editorSave'
+import { useEditorDraftFlow } from './useEditorDraftFlow'
 import type { EditorMeta } from './useEditorMeta'
 import { useSubEditorEntry } from './useSubEditorEntry'
 
@@ -52,11 +56,25 @@ export interface EditorPageOps {
     geometry: NodeGeometry,
     isContinuous: boolean,
   ) => void
+  /** 改整个选中集的显隐；单选时就是主选中一个。 */
   toggleSelectedVisible: (isVisible: boolean) => void
   pickPoint: (point: CollectPoint) => void
   closePicker: (open: boolean) => void
   /** Esc 的前置出口：挑点面板开着就先关它并报告已消费。 */
   consumePicker: () => boolean
+}
+
+const GEOMETRY_DIMENSIONS: readonly GeometryDimension[] = ['x', 'y', 'w', 'h']
+
+/** 面板改的是哪一维：恰好一维在变时给维度键，几何合并键按它细分。 */
+function changedDimensionOf(
+  node: DashboardNodePayload,
+  geometry: NodeGeometry,
+): GeometryDimension | undefined {
+  const changed = GEOMETRY_DIMENSIONS.filter(
+    (key) => node[key] !== geometry[key],
+  )
+  return changed.length === 1 ? changed[0] : undefined
 }
 
 async function removeNode(
@@ -103,6 +121,17 @@ async function save(deps: EditorPageOpsDeps): Promise<void> {
   if (done) toast.success('大屏已保存')
 }
 
+/** 草稿流与离开守卫装在本工厂：要的（编辑器/载荷/元数据/确认框）恰与这里的依赖重合。 */
+function installDraftFlow(deps: EditorPageOpsDeps): void {
+  useEditorDraftFlow({
+    editor: deps.editor,
+    dashboard: deps.file.dashboard,
+    meta: deps.meta,
+    restoreEditorSection: deps.arrange.restoreEditorSection,
+    confirm: deps.confirm,
+  })
+}
+
 export function createEditorPageOps(deps: EditorPageOpsDeps): EditorPageOps {
   const { editor, actions, meta, toast } = deps
 
@@ -117,6 +146,8 @@ export function createEditorPageOps(deps: EditorPageOpsDeps): EditorPageOps {
     toast,
   })
 
+  installDraftFlow(deps)
+
   return {
     addModule: (manifest) => {
       if (!actions.addModule(manifest)) {
@@ -128,13 +159,17 @@ export function createEditorPageOps(deps: EditorPageOpsDeps): EditorPageOps {
     reload: () => reload(deps),
     save: () => save(deps),
     changeSelectedGeometry: (geometry, isContinuous) => {
-      const nodeId = editor.selectedId.value
-      if (nodeId !== null)
-        actions.changeGeometry(nodeId, geometry, isContinuous)
+      const node = editor.selected.value
+      if (node === null) return
+      actions.changeGeometry(
+        node.id,
+        geometry,
+        isContinuous,
+        changedDimensionOf(node, geometry),
+      )
     },
     toggleSelectedVisible: (isVisible) => {
-      const nodeId = editor.selectedId.value
-      if (nodeId !== null) actions.toggleVisible(nodeId, isVisible)
+      actions.setVisibleBatch(editor.selectedIds.value, isVisible)
     },
     pickPoint: (point) => {
       const fieldKey = deps.pickingFieldKey.value

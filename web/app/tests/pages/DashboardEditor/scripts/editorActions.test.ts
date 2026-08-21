@@ -236,6 +236,125 @@ describe('几何与配置的合并', () => {
   })
 })
 
+describe('几何合并键按维度细分', () => {
+  it('面板改 X 再改 W 各成一笔：第一次撤销只退 W', () => {
+    const { editor, actions } = setup([node('a')])
+
+    actions.changeGeometry('a', { x: 30, y: 0, w: 10, h: 10 }, true, 'x')
+    actions.changeGeometry('a', { x: 30, y: 0, w: 80, h: 10 }, true, 'w')
+
+    editor.undo()
+    expect(editor.nodes.value[0]).toMatchObject({ x: 30, w: 10 })
+
+    editor.undo()
+    expect(editor.nodes.value[0]).toMatchObject({ x: 0, w: 10 })
+  })
+
+  it('同一维的连续输入仍并成一笔', () => {
+    const { editor, actions } = setup([node('a')])
+
+    actions.changeGeometry('a', { x: 1, y: 0, w: 10, h: 10 }, true, 'x')
+    actions.changeGeometry('a', { x: 2, y: 0, w: 10, h: 10 }, true, 'x')
+    editor.undo()
+
+    expect(editor.nodes.value[0]?.x).toBe(0)
+  })
+
+  it('拖拽路径不传维度用整体键，与面板的维度键互不并笔', () => {
+    const { editor, actions } = setup([node('a')])
+
+    actions.changeGeometry('a', { x: 5, y: 0, w: 10, h: 10 }, true, 'x')
+    actions.changeGeometry('a', { x: 9, y: 0, w: 10, h: 10 }, true)
+
+    editor.undo()
+    expect(editor.nodes.value[0]?.x).toBe(5)
+  })
+})
+
+describe('批量改配置', () => {
+  it('多选且全同类型：一次写到全部选中节点', () => {
+    const { editor, actions } = setup([node('a'), node('b')])
+    editor.setSelection(['a', 'b'])
+
+    actions.changeConfig(['title'], '批', false)
+
+    expect(editor.nodes.value[0]?.configJson.title).toBe('批')
+    expect(editor.nodes.value[1]?.configJson.title).toBe('批')
+  })
+
+  it('批量写是一次 apply 一步撤销：撤销后全体退回', () => {
+    const { editor, actions } = setup([
+      node('a', { configJson: { title: '甲' } }),
+      node('b', { configJson: { title: '乙' } }),
+    ])
+    editor.setSelection(['a', 'b'])
+
+    actions.changeConfig(['title'], '批', false)
+    editor.undo()
+
+    expect(editor.nodes.value[0]?.configJson.title).toBe('甲')
+    expect(editor.nodes.value[1]?.configJson.title).toBe('乙')
+  })
+
+  it('混合类型多选只写主选中（选中集末位）', () => {
+    const { editor, actions } = setup([
+      node('a'),
+      node('box', { moduleType: BOX.type }),
+    ])
+    editor.setSelection(['a', 'box'])
+
+    actions.changeConfig(['title'], '主', false)
+
+    expect(editor.nodes.value.find((n) => n.id === 'a')?.configJson).toEqual({})
+    expect(
+      editor.nodes.value.find((n) => n.id === 'box')?.configJson.title,
+    ).toBe('主')
+  })
+
+  it('批量的连续输入按 multi:路径 并成一笔', () => {
+    const { editor, actions } = setup([node('a'), node('b')])
+    editor.setSelection(['a', 'b'])
+
+    actions.changeConfig(['title'], '北', true)
+    actions.changeConfig(['title'], '北京', true)
+    editor.undo()
+
+    expect(editor.nodes.value[0]?.configJson.title).toBeUndefined()
+    expect(editor.nodes.value[1]?.configJson.title).toBeUndefined()
+  })
+
+  it('选中集一变合并窗口就关：换选中后的输入另起一步', () => {
+    const { editor, actions } = setup([node('a'), node('b')])
+    editor.setSelection(['a', 'b'])
+    actions.changeConfig(['title'], '一', true)
+
+    editor.setSelection(['b', 'a'])
+    actions.changeConfig(['title'], '二', true)
+    editor.undo()
+
+    expect(editor.nodes.value[0]?.configJson.title).toBe('一')
+  })
+
+  it('批量改显隐一次落一笔，撤销一步全体退回', () => {
+    const { editor, actions } = setup([node('a'), node('b')])
+
+    actions.setVisibleBatch(['a', 'b'], false)
+
+    expect(editor.nodes.value.every((n) => !n.isVisible)).toBe(true)
+    editor.undo()
+    expect(editor.nodes.value.every((n) => n.isVisible)).toBe(true)
+  })
+
+  it('全体已是目标值时不置脏也不记撤销', () => {
+    const { editor, actions } = setup([node('a'), node('b')])
+
+    actions.setVisibleBatch(['a', 'b'], true)
+
+    expect(editor.isDirty.value).toBe(false)
+    expect(editor.canUndo.value).toBe(false)
+  })
+})
+
 describe('绑定', () => {
   it('绑一个槽会建出一条常量绑定', () => {
     const { editor, actions } = setup([node('a')])

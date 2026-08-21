@@ -14,6 +14,7 @@ import {
   stopDrag,
   type CanvasDrag,
   type CanvasDragOptions,
+  type DragReadout,
   type DragRuntime,
 } from './canvasDrag'
 
@@ -22,6 +23,7 @@ export function useCanvasDrag(options: CanvasDragOptions): CanvasDrag {
     options,
     isDragging: ref(false),
     guides: ref<GuideLine[]>([]),
+    readout: ref<DragReadout | null>(null),
     hoverContainerId: ref<string | null>(null),
     session: null,
     listeners: null,
@@ -32,6 +34,7 @@ export function useCanvasDrag(options: CanvasDragOptions): CanvasDrag {
   return {
     isDragging: runtime.isDragging,
     guides: runtime.guides,
+    readout: runtime.readout,
     hoverContainerId: runtime.hoverContainerId,
     start: (session) => startDrag(runtime, session),
     stop: () => stopDrag(runtime),

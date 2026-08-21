@@ -18,7 +18,12 @@ import {
   type CardField,
 } from '../scripts/cardStyleFields'
 
-const props = defineProps<{ field: CardField; value: unknown }>()
+const props = defineProps<{
+  field: CardField
+  value: unknown
+  /** 整组被别的开关关掉时置灰；原因由父级在组头下说明。 */
+  disabled?: boolean
+}>()
 
 const emit = defineEmits<{ update: [value: unknown] }>()
 
@@ -103,6 +108,7 @@ function onPad(index: number, next: number | undefined): void {
         <DtSwitch
           :model-value="on"
           :aria-label="field.label"
+          :disabled="disabled"
           size="sm"
           @update:model-value="emit('update', $event)"
         />
@@ -113,25 +119,33 @@ function onPad(index: number, next: number | undefined): void {
     </template>
 
     <!-- 枚举：首项恒为「（默认）」= 空串 = 删键 -->
-    <DtSelect
-      v-else-if="field.kind === 'enum'"
-      :model-value="text"
-      :options="field.options ?? []"
-      :label="field.label"
-      :hint="field.hint"
-      size="sm"
-      @update:model-value="emit('update', $event)"
-    />
+    <div v-else-if="field.kind === 'enum'" class="flex items-start gap-1">
+      <DtSelect
+        class="min-w-0 flex-1"
+        :model-value="text"
+        :options="field.options ?? []"
+        :label="field.label"
+        :hint="field.hint"
+        :disabled="disabled"
+        size="sm"
+        @update:model-value="emit('update', $event)"
+      />
+      <DtHelpTip v-if="field.help" :text="field.help" :label="field.label" />
+    </div>
 
     <!-- 颜色：留空 = 走主题 token -->
-    <DtColorInput
-      v-else-if="field.kind === 'color'"
-      :model-value="text"
-      :label="field.label"
-      :hint="field.hint"
-      size="sm"
-      @update:model-value="emit('update', $event)"
-    />
+    <div v-else-if="field.kind === 'color'" class="flex items-start gap-1">
+      <DtColorInput
+        class="min-w-0 flex-1"
+        :model-value="text"
+        :label="field.label"
+        :hint="field.hint"
+        :disabled="disabled"
+        size="sm"
+        @update:model-value="emit('update', $event)"
+      />
+      <DtHelpTip v-if="field.help" :text="field.help" :label="field.label" />
+    </div>
 
     <!-- 标题内边距：唯一的三值字段，窄栏放不下步进键 -->
     <template v-else-if="field.kind === 'pad3'">
@@ -145,6 +159,7 @@ function onPad(index: number, next: number | undefined): void {
           :placeholder="String(TITLE_PAD_DEFAULT[index])"
           :range="{ min: 0, max: 80 }"
           :steppers="false"
+          :disabled="disabled"
           size="sm"
           @update:model-value="onPad(index, $event)"
         />
@@ -153,15 +168,19 @@ function onPad(index: number, next: number | undefined): void {
     </template>
 
     <!-- 数值：占位符写的是平台现值，清空即删键 -->
-    <DtNumberInput
-      v-else
-      :model-value="num"
-      :label="field.label"
-      :hint="field.hint"
-      :placeholder="field.placeholder"
-      :range="field.range"
-      size="sm"
-      @update:model-value="emit('update', $event)"
-    />
+    <div v-else class="flex items-start gap-1">
+      <DtNumberInput
+        class="min-w-0 flex-1"
+        :model-value="num"
+        :label="field.label"
+        :hint="field.hint"
+        :placeholder="field.placeholder"
+        :range="field.range"
+        :disabled="disabled"
+        size="sm"
+        @update:model-value="emit('update', $event)"
+      />
+      <DtHelpTip v-if="field.help" :text="field.help" :label="field.label" />
+    </div>
   </div>
 </template>

@@ -1,18 +1,23 @@
 <script setup lang="ts">
 /**
- * @fileoverview 画布的辅助层：拖动命中的智能参考线与框选矩形，都是设计坐标系里的图形。
- * 整层不吃指针事件，免得盖住底下的节点。
+ * @fileoverview 画布的辅助层：拖动命中的智能参考线、框选矩形与拖动几何浮标，
+ * 都是设计坐标系里的图形。整层不吃指针事件，免得盖住底下的节点。
  */
 import type { NodeBox, DesignSize } from '@dt/runtime'
 import { computed, type CSSProperties } from 'vue'
 
 import type { GuideLine } from '@/features/dashboard/canvasSnap'
+import type { DragReadout } from '../scripts/canvasDrag'
 
 const props = defineProps<{
   guides: readonly GuideLine[]
   /** 正在拖的框选矩形；没在框选时为 null。 */
   marquee: NodeBox | null
   design: DesignSize
+  /** 拖动中的实时几何读数；没在拖时为 null。 */
+  readout: DragReadout | null
+  /** 画布生效倍率；浮标文字要反缩放保持可读。 */
+  scale: number
 }>()
 
 /** 一条参考线的稳定标识：位置与跨度一变就是另一条线。 */
@@ -26,6 +31,24 @@ const marqueeStyle = computed<CSSProperties>(() => ({
   width: `${props.marquee?.w ?? 0}px`,
   height: `${props.marquee?.h ?? 0}px`,
 }))
+
+const readoutText = computed(() => {
+  const current = props.readout
+  if (current === null) return ''
+  return current.kind === 'move'
+    ? `${Math.round(current.x)}, ${Math.round(current.y)}`
+    : `${Math.round(current.w)} × ${Math.round(current.h)}`
+})
+
+// 舞台整块被 scale：浮标先除回倍率再往上挪一个自身高度，贴在节点左上角上方
+const readoutStyle = computed<CSSProperties>(() => {
+  const divisor = props.scale > 0 ? props.scale : 1
+  return {
+    left: `${props.readout?.left ?? 0}px`,
+    top: `${props.readout?.top ?? 0}px`,
+    transform: `scale(${1 / divisor}) translate(0, calc(-100% - 4px))`,
+  }
+})
 </script>
 
 <template>
@@ -45,6 +68,9 @@ const marqueeStyle = computed<CSSProperties>(() => ({
     />
   </svg>
   <div v-if="marquee !== null" class="dt-marquee" :style="marqueeStyle"></div>
+  <div v-if="readout !== null" class="dt-readout" :style="readoutStyle">
+    {{ readoutText }}
+  </div>
 </template>
 
 <style scoped lang="scss">
@@ -72,5 +98,20 @@ const marqueeStyle = computed<CSSProperties>(() => ({
   pointer-events: none;
   border: 1px solid var(--accent-primary);
   background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+}
+
+.dt-readout {
+  position: absolute;
+  z-index: 99999;
+  padding: 2px 6px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  // 12px 与图层树同档：浮标是密集工具面板量级的读数，不走控件档位
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  transform-origin: top left;
 }
 </style>

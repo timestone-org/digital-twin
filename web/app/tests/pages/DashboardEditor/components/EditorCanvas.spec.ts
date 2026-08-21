@@ -144,6 +144,24 @@ describe('摆节点', () => {
 
     expect(wrapper.findAll('.dt-node__handle')).toHaveLength(1)
   })
+
+  it('一个节点都没有时出中央引导层，且挂在缩放变换的舞台之外', () => {
+    const wrapper = mountCanvas([])
+
+    const empty = wrapper.find('.dt-canvas__empty')
+    expect(empty.exists()).toBe(true)
+    expect(empty.text()).toContain('从左侧模块库拖入模块开始搭建')
+    // 挂在 stage 外：引导文字不随画布倍率缩放（pointer-events 在 SCSS 里，vitest 不编译）
+    expect(wrapper.find('.dt-canvas__stage .dt-canvas__empty').exists()).toBe(
+      false,
+    )
+  })
+
+  it('有节点时不出引导层', () => {
+    const wrapper = mountCanvas([node('a')])
+
+    expect(wrapper.find('.dt-canvas__empty').exists()).toBe(false)
+  })
 })
 
 describe('点选', () => {
@@ -178,7 +196,7 @@ describe('点选', () => {
     expect(wrapper.emitted('select')?.at(-1)).toEqual([null, false])
   })
 
-  it('右键未选中的节点：先单选它再上抛画布菜单的 client 坐标', async () => {
+  it('右键未选中的节点：先单选它再上抛画布菜单的 client 坐标，不带粘贴落点', async () => {
     const wrapper = mountCanvas([node('a')])
 
     await wrapper
@@ -186,17 +204,32 @@ describe('点选', () => {
       .trigger('contextmenu', { clientX: 30, clientY: 40 })
 
     expect(wrapper.emitted('select')?.[0]).toEqual(['a', false])
-    expect(wrapper.emitted('canvas-menu')?.[0]).toEqual([{ x: 30, y: 40 }, 'a'])
+    expect(wrapper.emitted('canvas-menu')?.[0]).toEqual([
+      { x: 30, y: 40, pasteAt: null },
+      'a',
+    ])
   })
 
-  it('右键空白处只上抛菜单，节点 id 为空', async () => {
+  it('右键空白处上抛菜单：节点 id 为空且带上命中层的粘贴落点', async () => {
     const wrapper = mountCanvas([node('a')])
 
     await wrapper
       .find('.dt-canvas__grid')
       .trigger('contextmenu', { clientX: 12, clientY: 8 })
 
-    expect(wrapper.emitted('canvas-menu')?.[0]).toEqual([{ x: 12, y: 8 }, null])
+    expect(wrapper.emitted('canvas-menu')?.[0]).toEqual([
+      {
+        x: 12,
+        y: 8,
+        pasteAt: {
+          parentId: null,
+          x: 12,
+          y: 8,
+          layer: { width: 1920, height: 1080 },
+        },
+      },
+      null,
+    ])
   })
 })
 
@@ -215,6 +248,39 @@ describe('拖动', () => {
     const changes = wrapper.emitted('change') ?? []
     expect(changes).toHaveLength(2)
     expect(changes[1]).toEqual(['a', { x: 40, y: 20, w: 100, h: 50 }, false])
+  })
+
+  it('拖动中出几何浮标显示实时位置，松手即收', async () => {
+    const wrapper = mountCanvas([node('a')], ['a'])
+
+    await wrapper.find('.dt-node__surface').trigger('pointerdown', {
+      button: 0,
+      clientX: 0,
+      clientY: 0,
+    })
+    pointer('pointermove', 30, 0)
+    await nextTick()
+
+    expect(wrapper.find('.dt-readout').text()).toBe('40, 20')
+
+    pointer('pointerup', 30, 0)
+    await nextTick()
+    expect(wrapper.find('.dt-readout').exists()).toBe(false)
+  })
+
+  it('原地单击不闪浮标', async () => {
+    const wrapper = mountCanvas([node('a')], ['a'])
+
+    await wrapper.find('.dt-node__surface').trigger('pointerdown', {
+      button: 0,
+      clientX: 0,
+      clientY: 0,
+    })
+    pointer('pointermove', 0, 0)
+    await nextTick()
+
+    expect(wrapper.find('.dt-readout').exists()).toBe(false)
+    pointer('pointerup', 0, 0)
   })
 
   it('钉位节点点得中却拖不动', async () => {

@@ -27,7 +27,7 @@ function open(
 describe('CoverageSidebar', () => {
   it('三十多个组合一条不少地列出来，样本少的照样看得见', () => {
     const wrapper = open(manyCombinations())
-    expect(wrapper.findAll('button[aria-pressed]')).toHaveLength(31)
+    expect(wrapper.findAll('li > button')).toHaveLength(31)
     expect(wrapper.text()).toContain('样本太少')
   })
 
@@ -52,13 +52,13 @@ describe('CoverageSidebar', () => {
 
   it('点一条抛出逗号连接的序号串，与工具条那个筛选器同口径', async () => {
     const wrapper = open([{ running_set: ['K02', 'K03'], usable_count: 9 }])
-    await wrapper.find('button[aria-pressed]').trigger('click')
+    await wrapper.find('li > button').trigger('click')
     expect(wrapper.emitted('select')).toEqual([['K02,K03']])
   })
 
   it('再点一次选中的那条就回到「全部组合」', async () => {
     const wrapper = open([{ running_set: ['K01'], usable_count: 9 }], 'K01')
-    await wrapper.find('button[aria-pressed]').trigger('click')
+    await wrapper.find('li > button').trigger('click')
     expect(wrapper.emitted('select')).toEqual([['']])
   })
 
@@ -70,17 +70,17 @@ describe('CoverageSidebar', () => {
       ],
       'K02',
     )
-    const rows = wrapper.findAll('button[aria-pressed]')
-    // 排序按条数从多到少，K01 在前
-    expect(rows[0]?.attributes('aria-pressed')).toBe('false')
-    expect(rows[1]?.attributes('aria-pressed')).toBe('true')
+    const rows = wrapper.findAll('li > button')
+    // 排序按条数从多到少，K01 在前；单选定位语义用 aria-current，未选中的不落属性
+    expect(rows[0]?.attributes('aria-current')).toBeUndefined()
+    expect(rows[1]?.attributes('aria-current')).toBe('true')
     expect(rows[1]?.classes()).toContain('bg-accent-primary/10')
   })
 
   it('一条事件都没有时说清是还没抽取，不是空白', () => {
     const wrapper = open([])
     expect(wrapper.text()).toContain('还没有可用事件')
-    expect(wrapper.findAll('button[aria-pressed]')).toHaveLength(0)
+    expect(wrapper.findAll('li > button')).toHaveLength(0)
   })
 
   it('自己那栏内部滚动，不把右边的事件挤到折叠线以下', () => {

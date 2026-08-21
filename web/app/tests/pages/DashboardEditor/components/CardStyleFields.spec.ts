@@ -3,14 +3,36 @@
  * 写进去就把当下的默认观感固化住，以后调整平台默认将影响不到这些大屏。
  * 这里锁住：挂载 / 展开分组零写入、清空即删键、布尔照实写、0 与负数不被空值逻辑吞掉。
  */
-import { DtColorInput, DtNumberInput, DtSelect, DtSwitch } from '@dt/ui'
+import {
+  DtColorInput,
+  DtHelpTip,
+  DtNumberInput,
+  DtSelect,
+  DtSwitch,
+} from '@dt/ui'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import CardStyleFields from '@/pages/DashboardEditor/components/CardStyleFields.vue'
+import type { CardFieldContext } from '@/pages/DashboardEditor/scripts/cardStyleFields'
 
-function mountFields(modelValue: Record<string, unknown> = {}) {
-  return mount(CardStyleFields, { props: { modelValue } })
+function mountFields(
+  modelValue: Record<string, unknown> = {},
+  context?: CardFieldContext,
+) {
+  return mount(CardStyleFields, {
+    props: context === undefined ? { modelValue } : { modelValue, context },
+  })
+}
+
+/** 造一份模块级适配输入。 */
+function contextOf(over: Partial<CardFieldContext> = {}): CardFieldContext {
+  return {
+    chrome: 'card',
+    unsupportedKeys: new Set<string>(),
+    effective: {},
+    ...over,
+  }
 }
 
 type Wrapper = ReturnType<typeof mountFields>
@@ -340,5 +362,150 @@ describe('字段覆盖面', () => {
     const text = wrapper.text()
 
     for (const label of REQUIRED_LABELS) expect(text).toContain(label)
+  })
+})
+
+describe('模块级适配：隐藏', () => {
+  it('清单声明不消费的键连控件带标签一起不渲染', () => {
+    const wrapper = mountFields(
+      {},
+      contextOf({ unsupportedKeys: new Set(['showTitle', 'titleColor']) }),
+    )
+
+    const switches = wrapper
+      .findAllComponents(DtSwitch)
+      .map((item) => item.props('ariaLabel'))
+    expect(switches).not.toContain('显示标题')
+    expect(wrapper.text()).not.toContain('标题色')
+    expect(switches).toContain('四角辉光')
+  })
+
+  it('整组都不消费时连组标题一起藏——空组比少一个组更像坏了', () => {
+    const titleKeys = [
+      'titleAlign',
+      'titlePadding',
+      'titleGap',
+      'titleFontSize',
+      'titleFontWeight',
+      'titleLetterSpacing',
+      'titleBarWidth',
+      'titleBarFull',
+      'titleBarRadius',
+      'titleBarGlow',
+      'titleBarColor',
+      'titleBarColorAlt',
+      'titlePulse',
+      'titlePulseDuration',
+      'titleRule',
+      'titleRuleHeight',
+      'titleRuleOpacity',
+    ]
+    const wrapper = mountFields(
+      {},
+      contextOf({ unsupportedKeys: new Set(titleKeys) }),
+    )
+
+    const heads = wrapper
+      .findAll('.card-style__group')
+      .map((head) => head.text())
+    expect(heads).toEqual(['边框', '四角', '文字', '交互'])
+  })
+
+  it('裸渲染壳隐藏框类四键，「交互」组因此整组消失', () => {
+    const wrapper = mountFields({}, contextOf({ chrome: 'bare' }))
+
+    expect(wrapper.text()).not.toContain('卡片背景')
+    const heads = wrapper
+      .findAll('.card-style__group')
+      .map((head) => head.text())
+    expect(heads).toEqual(['边框', '四角', '标题条', '文字'])
+  })
+
+  it('大屏级面板（不传 context）一个键都不许少', async () => {
+    const wrapper = mountFields()
+    await openAll(wrapper)
+
+    expect(wrapper.text()).toContain('卡片背景')
+    expect(wrapper.text()).toContain('毛玻璃模糊')
+    expect(
+      wrapper.findAll('.card-style__group').map((head) => head.text()),
+    ).toEqual(['边框', '四角', '标题条', '文字', '交互'])
+  })
+})
+
+describe('模块级适配：组级禁用', () => {
+  it('有效 corners=false 时四角组给原因行并整组置灰', async () => {
+    const wrapper = mountFields(
+      { cornerSize: 12 },
+      contextOf({ effective: { corners: false } }),
+    )
+    await openGroup(wrapper, '四角')
+
+    const reason = wrapper.find('[data-test="card-group-off-corner"]')
+    expect(reason.exists()).toBe(true)
+    expect(reason.text()).toContain('四角辉光')
+    expect(numField(wrapper, '角标尺寸').props('disabled')).toBe(true)
+  })
+
+  // 禁用只置灰不清值：解开开关后原配置原样回来，也不产生任何写回
+  it('禁用组照常回填已存值且一笔都不写回', async () => {
+    const wrapper = mountFields(
+      { cornerSize: 12 },
+      contextOf({ effective: { corners: false } }),
+    )
+    await openGroup(wrapper, '四角')
+
+    expect(numField(wrapper, '角标尺寸').props('modelValue')).toBe(12)
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+  })
+
+  it('有效 showTitle=false 时标题条组给原因行', async () => {
+    const wrapper = mountFields(
+      {},
+      contextOf({ effective: { showTitle: false } }),
+    )
+    await openGroup(wrapper, '标题条')
+
+    expect(wrapper.find('[data-test="card-group-off-title"]').text()).toContain(
+      '显示标题',
+    )
+  })
+
+  it('裸渲染没配边框样式时四角组说明要先选边框', async () => {
+    const wrapper = mountFields({}, contextOf({ chrome: 'bare' }))
+    await openGroup(wrapper, '四角')
+
+    expect(
+      wrapper.find('[data-test="card-group-off-corner"]').text(),
+    ).toContain('需先选择边框样式')
+  })
+
+  it('开关都开着时没有任何原因行，控件不置灰', async () => {
+    const wrapper = mountFields(
+      {},
+      contextOf({ effective: { corners: true, showTitle: true } }),
+    )
+    await openGroup(wrapper, '四角')
+
+    expect(wrapper.find('[data-test^="card-group-off-"]').exists()).toBe(false)
+    expect(numField(wrapper, '角标尺寸').props('disabled')).toBe(false)
+  })
+})
+
+describe('问号气泡', () => {
+  it('带 help 的数值 / 颜色 / 枚举字段都有气泡，没 help 的没有', async () => {
+    const wrapper = mountFields({}, contextOf())
+    await openGroup(wrapper, '四角')
+    await openGroup(wrapper, '文字')
+
+    const tips = wrapper
+      .findAllComponents(DtHelpTip)
+      .map((tip) => tip.props('label'))
+    // num 档：角标尺寸 / 角标辉光；color 档：正文字色；enum 档不在此三组时看呼吸描边（bool）之外
+    expect(tips).toContain('角标尺寸')
+    expect(tips).toContain('角标辉光')
+    expect(tips).toContain('正文字色')
+    expect(tips).not.toContain('圆角')
+    expect(tips).not.toContain('角标透明度')
   })
 })

@@ -9,6 +9,7 @@
 import { computed, ref } from 'vue'
 import type { DtSegmentedOption, DtSelectOption } from '@dt/contracts'
 import {
+  DtButton,
   DtCard,
   DtEmpty,
   DtHelpTip,
@@ -117,13 +118,14 @@ function onScale(value: string): void {
 
     <DtNotice v-if="props.outOfFold.error.value" intent="danger">
       {{ props.outOfFold.error.value }}
-      <button
-        type="button"
-        class="ml-2 underline"
+      <DtButton
+        class="ml-2"
+        variant="outline"
+        size="sm"
         @click="props.outOfFold.reload()"
       >
         重试
-      </button>
+      </DtButton>
     </DtNotice>
 
     <DtEmpty

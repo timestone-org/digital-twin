@@ -10,6 +10,7 @@ import type { BindingPayload, ModuleManifest } from '@dt/contracts'
 import type { DesignSize, GetModuleManifest } from '@dt/runtime'
 
 import type { DashboardEditor } from '@/composables/useDashboardEditor'
+import { isUniformType } from '@/features/dashboard/batchConfig'
 import {
   arrayRowCount,
   withRowRemoved,
@@ -43,11 +44,20 @@ export interface NodeActions {
   ) => boolean
   removeNode: (nodeId: string) => void
   toggleVisible: (nodeId: string, isVisible: boolean) => void
+  /** 批量改显隐：一次 apply 一步撤销。 */
+  setVisibleBatch: (ids: readonly string[], isVisible: boolean) => void
+  /**
+   * 改几何。
+   * @param dimension 面板单维输入时给出改的是哪一维，合并键按它细分——
+   * 改 X 再改 W 各成一笔；不给（拖拽路径）时用整体键，一次拖动仍并成一笔
+   */
   changeGeometry: (
     nodeId: string,
     geometry: doc.NodeGeometry,
     isContinuous: boolean,
+    dimension?: doc.GeometryDimension,
   ) => void
+  /** 改配置；多选且全同类型时写到全部选中节点，单选只写主选中。 */
   changeConfig: (
     path: ConfigPath,
     value: unknown,
@@ -70,6 +80,16 @@ export type EditorActions = NodeActions & BindingActions
 /** 连续输入的合并键。 */
 function mergeKeyOf(nodeId: string, field: string): string {
   return `${nodeId}:${field}`
+}
+
+/**
+ * 批量写配置的目标：多选且全同类型时给全部选中 id，否则 null（走主选中）。
+ * 选中集一变 select/toggleSelect/setSelection 都会 flush，合并窗口自动关。
+ */
+function batchConfigIds(editor: DashboardEditor): readonly string[] | null {
+  const nodes = editor.selectedNodes.value
+  if (nodes.length < 2 || !isUniformType(nodes)) return null
+  return editor.selectedIds.value
 }
 
 /** 新节点的落点：选中的是容器就进它，否则落到顶层。 */
@@ -148,21 +168,34 @@ function createNodeActions(deps: EditorActionDeps): NodeActions {
     toggleVisible: (nodeId, isVisible) => {
       editor.apply((nodes) => doc.setVisible(nodes, nodeId, isVisible))
     },
+    setVisibleBatch: (ids, isVisible) => {
+      editor.apply((nodes) => doc.setVisibleBatch(nodes, ids, isVisible))
+    },
     // ⚠ 松手那一下也并进同一笔再关窗口：把它当成独立的一笔会让一次拖动留下
     // 两条历史，第一次撤销只退回松手前那一帧，看着就像「撤销没反应」
-    changeGeometry: (nodeId, geometry, isContinuous) => {
+    changeGeometry: (nodeId, geometry, isContinuous, dimension) => {
+      const field =
+        dimension === undefined ? 'geometry' : `geometry.${dimension}`
       editor.apply(
         (nodes) => doc.setGeometry(nodes, nodeId, geometry),
-        mergeKeyOf(nodeId, 'geometry'),
+        mergeKeyOf(nodeId, field),
       )
       if (!isContinuous) editor.flush()
     },
     changeConfig: (path, value, isContinuous) => {
       const nodeId = editor.selectedId.value
       if (nodeId === null) return
+      const ids = batchConfigIds(editor)
+      if (ids === null) {
+        editor.apply(
+          (nodes) => doc.setConfigValue(nodes, nodeId, path, value),
+          isContinuous ? mergeKeyOf(nodeId, path.join('.')) : null,
+        )
+        return
+      }
       editor.apply(
-        (nodes) => doc.setConfigValue(nodes, nodeId, path, value),
-        isContinuous ? mergeKeyOf(nodeId, path.join('.')) : null,
+        (nodes) => doc.setConfigValueBatch(nodes, ids, path, value),
+        isContinuous ? `multi:${path.join('.')}` : null,
       )
     },
   }

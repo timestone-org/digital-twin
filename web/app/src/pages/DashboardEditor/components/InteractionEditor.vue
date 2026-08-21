@@ -4,7 +4,11 @@
  * 规则数组上抛，持久化由页面统一走大屏级 chromeJson。
  */
 import { computed } from 'vue'
-import type { DashboardNodePayload, InteractionRule } from '@dt/contracts'
+import type {
+  DashboardNodePayload,
+  InteractionRule,
+  ModuleManifest,
+} from '@dt/contracts'
 import type { GetModuleManifest } from '@dt/runtime'
 import { reconcileSetActiveGroups } from '@dt/runtime'
 import { DtButton, DtEmpty } from '@dt/ui'
@@ -57,6 +61,12 @@ function labelOf(nodeId: string): string {
 
 function summaryOf(rule: InteractionRule): string {
   return ruleSummary(rule, labelOf)
+}
+
+/** 规则源节点的清单，事件选项按它过滤；源节点已删 / 类型未注册时给 undefined。 */
+function manifestOf(rule: InteractionRule): ModuleManifest | undefined {
+  const node = props.nodes.find((item) => item.id === rule.source.nodeId)
+  return node === undefined ? undefined : props.getManifest(node.moduleType)
 }
 
 /**
@@ -143,6 +153,7 @@ function removeRule(id: string): void {
         :summary="summaryOf(rule)"
         :source-options="sourceOptions"
         :target-options="targetOptions"
+        :source-manifest="manifestOf(rule)"
         @update="updateRule"
         @remove="removeRule"
       />

@@ -26,6 +26,7 @@ export interface LayerDrag {
 
 /** 指针落在这一行的哪一段；行高得当场量，happy-dom 之外才有真实布局。 */
 function posOf(event: DragEvent, row: LayerRow): DropPos {
+  // currentTarget 是挂着本 handler 的行元素，恒为 HTMLElement；类型上只是 EventTarget | null
   const box = (event.currentTarget as HTMLElement).getBoundingClientRect()
   return dropPosition(event.clientY - box.top, box.height, row.isContainer)
 }

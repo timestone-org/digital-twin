@@ -16,8 +16,15 @@ function stub(testId: string, emits: string[]) {
 
 const InspectorStub = stub('inspector', ['interactions'])
 const ChromeStub = stub('chrome', ['set-interactions'])
+const MultiStub = stub('multi', [
+  'config',
+  'preset',
+  'select-type',
+  'visible-batch',
+  'size-batch',
+])
 const STUBS = {
-  MultiSelectPanel: stub('multi', []),
+  MultiSelectPanel: MultiStub,
   InspectorPane: InspectorStub,
   ChromePanel: ChromeStub,
 }
@@ -67,6 +74,33 @@ describe('按选中的个数三选一', () => {
       )
       expect(shown).toHaveLength(1)
     }
+  })
+})
+
+describe('多选面板的批量事件逐个转发', () => {
+  it('config / preset / select-type / size-batch 原样转出', () => {
+    const wrapper = render(['n1', 'n2'])
+    const multi = wrapper.findComponent(MultiStub)
+
+    multi.vm.$emit('config', ['title'], '值', true)
+    multi.vm.$emit('preset', { id: 'p', label: '预', config: {} })
+    multi.vm.$emit('select-type', ['n1'])
+    multi.vm.$emit('size-batch', 'both')
+
+    expect(wrapper.emitted('config')).toEqual([[['title'], '值', true]])
+    expect(wrapper.emitted('preset')).toEqual([
+      [{ id: 'p', label: '预', config: {} }],
+    ])
+    expect(wrapper.emitted('select-type')).toEqual([[['n1']]])
+    expect(wrapper.emitted('size-batch')).toEqual([['both']])
+  })
+
+  it('批量显隐并进单选的 visible 出口——页面侧本就写整个选中集', () => {
+    const wrapper = render(['n1', 'n2'])
+
+    wrapper.findComponent(MultiStub).vm.$emit('visible-batch', false)
+
+    expect(wrapper.emitted('visible')).toEqual([[false]])
   })
 })
 

@@ -120,9 +120,72 @@ describe('泛型渲染', () => {
       },
     })
 
-    await wrapper.get('.dt-prop__preset').trigger('click')
+    const pill = wrapper
+      .findAll('button.dt-btn')
+      .find((button) => button.text() === '极简')
+    expect(pill).toBeDefined()
+    await pill?.trigger('click')
 
     expect(wrapper.emitted('preset')?.[0]).toEqual([preset])
+  })
+
+  // 子集匹配：预设写过的键全部等于当前 resolved 值就点亮，多个同亮是正常的
+  it('命中的预设走 DtButton 按压态（aria-pressed + soft），未命中的是 ghost', () => {
+    const wrapper = mount(PropertyPanel, {
+      props: {
+        node: { ...NODE, configJson: { title: '缺省标题', showBar: true } },
+        manifest: {
+          ...MANIFEST,
+          configPresets: [
+            // 值恰等于清单缺省也算命中：resolved 铺过缺省后两者无从区分
+            {
+              id: 'hit-default',
+              label: '默认标题',
+              config: { title: '缺省标题' },
+            },
+            { id: 'hit-set', label: '开条', config: { showBar: true } },
+            { id: 'miss', label: '别的', config: { title: '完全不同' } },
+          ],
+        },
+      },
+    })
+
+    const stateOf = new Map(
+      wrapper.findAll('button[aria-pressed]').map((button) => [
+        button.text(),
+        {
+          pressed: button.attributes('aria-pressed'),
+          active: button.classes('dt-btn--soft'),
+        },
+      ]),
+    )
+
+    expect(stateOf.get('默认标题')).toEqual({ pressed: 'true', active: true })
+    expect(stateOf.get('开条')).toEqual({ pressed: 'true', active: true })
+    expect(stateOf.get('别的')).toEqual({ pressed: 'false', active: false })
+  })
+
+  // ⚠ span 是清单里的声明字段：面板不消费它时 typecheck 与 lint 双双放行，
+  //   声明 half 的字段只是静默占满整行。这条钉住「声明必须有消费方」
+  it('span:half 的字段带半行占位类、其余整行，分组是两列栅格', () => {
+    const wrapper = mount(PropertyPanel, {
+      props: {
+        node: NODE,
+        manifest: {
+          ...MANIFEST,
+          configSchema: [
+            { key: 'a', label: '甲', type: 'string', span: 'half' },
+            { key: 'b', label: '乙', type: 'string', span: 'full' },
+            { key: 'c', label: '丙', type: 'string' },
+          ],
+        },
+      },
+    })
+
+    const grid = wrapper.find('.dt-prop__grid')
+    expect(grid.exists()).toBe(true)
+    expect(grid.findAll('.dt-prop__cell--half')).toHaveLength(1)
+    expect(grid.find('.dt-prop__cell--half').text()).toContain('甲')
   })
 
   // 几何与显隐搬去「通用配置」页了，这里再出现就是两页各画一份

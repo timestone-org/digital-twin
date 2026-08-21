@@ -11,6 +11,7 @@ export type ContextMenuAction =
   | 'back'
   | 'center'
   | 'copy'
+  | 'duplicate'
   | 'remove'
   | 'hide'
   | 'paste'
@@ -61,7 +62,7 @@ function entry(
   return { action, label, keys, disabled, danger }
 }
 
-/** 右键落在节点上：层序一组，居中与复制删除一组，再单独一组显隐。 */
+/** 右键落在节点上：层序一组，定位/复制/再制/删除一组，再单独一组显隐切换。 */
 function nodeGroups(input: ContextMenuInput): ContextMenuGroup[] {
   return [
     {
@@ -76,14 +77,22 @@ function nodeGroups(input: ContextMenuInput): ContextMenuGroup[] {
     {
       key: 'node',
       items: [
-        entry('center', '移到画布中心', '', false),
+        entry('center', '定位到此节点', '', false),
         entry('copy', '复制', `${input.mod} C`, !input.canCopy),
+        entry('duplicate', '再制', `${input.mod} D`, !input.canCopy),
         entry('remove', '删除', 'Delete', false, true),
       ],
     },
     {
       key: 'node-visibility',
-      items: [entry('hide', '隐藏本节点', '', !input.isNodeVisible)],
+      items: [
+        entry(
+          'hide',
+          input.isNodeVisible ? '隐藏本节点' : '显示本节点',
+          '',
+          false,
+        ),
+      ],
     },
   ]
 }

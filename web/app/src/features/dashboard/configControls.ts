@@ -22,9 +22,11 @@ import ObjectControl from './controls/ObjectControl.vue'
 import RangeControl from './controls/RangeControl.vue'
 import StringControl from './controls/StringControl.vue'
 import StyleControl from './controls/StyleControl.vue'
+import TextareaControl from './controls/TextareaControl.vue'
 
 const CONTROLS: Record<ConfigFieldType, Component> = {
   string: StringControl,
+  textarea: TextareaControl,
   number: NumberControl,
   boolean: BooleanControl,
   enum: EnumControl,

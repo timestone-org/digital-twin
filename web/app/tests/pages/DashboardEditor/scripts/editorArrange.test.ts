@@ -70,7 +70,7 @@ function node(
   }
 }
 
-/** 大屏级外观轴的最小实现：只有联动规则这一段被剪贴板动作用到。 */
+/** 大屏级外观轴的最小实现：剪贴板用规则段，草稿恢复用吸附/栅格 setter。 */
 function chromeOf(rules: InteractionRule[]): ArrangeChrome & {
   table: { value: InteractionRule[] }
 } {
@@ -81,6 +81,8 @@ function chromeOf(rules: InteractionRule[]): ArrangeChrome & {
     setInteractions: (next) => {
       table.value = next
     },
+    setSnap: vi.fn(),
+    setGrid: vi.fn(),
   }
 }
 
@@ -324,6 +326,182 @@ describe('复制粘贴', () => {
   })
 })
 
+describe('落点粘贴', () => {
+  it('包围盒左上角平移到落点，组内相对位置不变，且不吃序号偏移', () => {
+    const { editor, actions } = setup([
+      node('a', { x: 100, y: 100 }),
+      node('b', { x: 300, y: 150, zIndex: 1 }),
+    ])
+    editor.setSelection(['a', 'b'])
+    actions.copySelected()
+    editor.select(null)
+
+    expect(
+      actions.pasteClipboard({
+        parentId: null,
+        x: 500,
+        y: 400,
+        layer: { width: 1000, height: 800 },
+      }),
+    ).toBe(true)
+
+    const pasted = editor.selectedIds.value.map((id) => byId(editor, id))
+    expect(pasted.map((item) => ({ x: item?.x, y: item?.y }))).toEqual([
+      { x: 500, y: 400 },
+      { x: 700, y: 450 },
+    ])
+  })
+
+  it('落点带目标层：粘进指定容器而不是当前选中', () => {
+    const { editor, actions } = setup([
+      node('a', { x: 100 }),
+      node('c', { moduleType: 'container', zIndex: 1 }),
+    ])
+    editor.select('a')
+    actions.copySelected()
+    // 选中的仍是 a（非容器）；落点指名容器 c
+    actions.pasteClipboard({
+      parentId: 'c',
+      x: 20,
+      y: 30,
+      layer: { width: 84, height: 34 },
+    })
+
+    const pasted = editor.nodes.value.find((item) => item.parentId === 'c')
+    expect(pasted).toBeDefined()
+  })
+
+  it('落点超界时根钳回目标层边界', () => {
+    const { editor, actions } = setup([node('a', { x: 100, y: 100 })])
+    editor.select('a')
+    actions.copySelected()
+    editor.select(null)
+
+    actions.pasteClipboard({
+      parentId: null,
+      x: 950,
+      y: 780,
+      layer: { width: 1000, height: 800 },
+    })
+
+    const pasted = byId(editor, editor.selectedIds.value[0] ?? '')
+    expect(pasted?.x).toBe(900)
+    expect(pasted?.y).toBe(750)
+  })
+
+  it('不带落点的粘贴行为不变：偏移递增、选中容器时粘入其中', () => {
+    const { editor, actions } = setup([node('a', { x: 100, y: 100 })])
+    editor.select('a')
+    actions.copySelected()
+    editor.select(null)
+
+    actions.pasteClipboard()
+
+    expect(byId(editor, editor.selectedIds.value[0] ?? '')?.x).toBe(116)
+  })
+})
+
+describe('空剪贴板', () => {
+  it('粘贴不出东西时走 toast 提示并返回 false', () => {
+    const { actions, notify } = setup([node('a')])
+
+    expect(actions.pasteClipboard()).toBe(false)
+
+    expect(notify).toHaveBeenCalledWith('剪贴板里没有可粘贴的模块')
+  })
+})
+
+describe('统一尺寸', () => {
+  it('等尺寸：基准是主选中（选中集末位），只写其余节点的宽高', () => {
+    const { editor, actions } = setup([
+      node('a', { x: 10, y: 20, w: 100, h: 50 }),
+      node('b', { x: 300, y: 40, w: 200, h: 80, zIndex: 1 }),
+    ])
+    editor.setSelection(['a', 'b'])
+
+    actions.matchSelectedSize('both')
+
+    expect(byId(editor, 'a')).toMatchObject({ x: 10, y: 20, w: 200, h: 80 })
+    expect(byId(editor, 'b')).toMatchObject({ x: 300, y: 40, w: 200, h: 80 })
+  })
+
+  it('等宽只改 w，等高只改 h', () => {
+    const { editor, actions } = setup([
+      node('a', { w: 100, h: 50 }),
+      node('b', { w: 200, h: 80, zIndex: 1 }),
+    ])
+    editor.setSelection(['a', 'b'])
+
+    actions.matchSelectedSize('width')
+    expect(byId(editor, 'a')).toMatchObject({ w: 200, h: 50 })
+
+    actions.matchSelectedSize('height')
+    expect(byId(editor, 'a')).toMatchObject({ w: 200, h: 80 })
+  })
+
+  it('不要求同父：容器里的选中项同样跟基准对齐', () => {
+    const { editor, actions } = setup([
+      node('c', { moduleType: 'container', zIndex: 0, w: 400, h: 300 }),
+      node('c1', { parentId: 'c', w: 50, h: 30 }),
+      node('t', { zIndex: 1, w: 120, h: 60 }),
+    ])
+    editor.setSelection(['c1', 't'])
+
+    actions.matchSelectedSize('both')
+
+    expect(byId(editor, 'c1')).toMatchObject({ w: 120, h: 60 })
+  })
+
+  it('一次落一笔：一步撤销全体回原尺寸', () => {
+    const { editor, actions } = setup([
+      node('a', { w: 100, h: 50 }),
+      node('b', { w: 200, h: 80, zIndex: 1 }),
+      node('d', { w: 300, h: 90, zIndex: 2 }),
+    ])
+    editor.setSelection(['a', 'b', 'd'])
+
+    actions.matchSelectedSize('both')
+    editor.undo()
+
+    expect(byId(editor, 'a')).toMatchObject({ w: 100, h: 50 })
+    expect(byId(editor, 'b')).toMatchObject({ w: 200, h: 80 })
+  })
+
+  it('没选中时什么也不做', () => {
+    const { editor, actions } = setup([node('a')])
+
+    actions.matchSelectedSize('both')
+
+    expect(editor.canUndo.value).toBe(false)
+  })
+})
+
+describe('草稿恢复的 editor 段回灌', () => {
+  it('把 snap 与 grid 两段经归一化 setter 写回', () => {
+    const { actions, chrome } = setup([])
+
+    actions.restoreEditorSection({
+      snap: { mode: 'px', step: 10 },
+      grid: { visible: true },
+    })
+
+    expect(chrome.setSnap).toHaveBeenCalledWith({ mode: 'px', step: 10 })
+    expect(chrome.setGrid).toHaveBeenCalledWith({ visible: true })
+  })
+
+  it('段不是对象（旧草稿脏数据）时按空补丁写回，不炸', () => {
+    const { actions, chrome } = setup([])
+
+    actions.restoreEditorSection('garbage')
+    actions.restoreEditorSection(null)
+    actions.restoreEditorSection([1, 2])
+
+    expect(chrome.setSnap).toHaveBeenCalledTimes(3)
+    expect(chrome.setSnap).toHaveBeenCalledWith({})
+    expect(chrome.setGrid).toHaveBeenCalledWith({})
+  })
+})
+
 describe('联动规则跟着复制粘贴走', () => {
   it('同屏粘贴：规则追加一条，指到新粘出来的那对节点', () => {
     const { editor, actions, chrome } = setup(
@@ -419,5 +597,29 @@ describe('层序与微调', () => {
     ])
     actions.selectAllTop()
     expect([...editor.selectedIds.value].sort()).toEqual(['a', 'c'])
+  })
+
+  it('删除所选：最上层根连各自子树一次删掉，一步撤销全回来', () => {
+    const { editor, actions } = setup([
+      node('a', { zIndex: 0 }),
+      node('c', { moduleType: 'container', zIndex: 1 }),
+      node('c1', { parentId: 'c' }),
+    ])
+    editor.setSelection(['a', 'c', 'c1'])
+
+    actions.removeSelected()
+    expect(editor.nodes.value).toEqual([])
+
+    editor.undo()
+    expect(editor.nodes.value).toHaveLength(3)
+  })
+
+  it('没选中时删除所选什么也不做', () => {
+    const { editor, actions } = setup([node('a')])
+
+    actions.removeSelected()
+
+    expect(editor.nodes.value).toHaveLength(1)
+    expect(editor.canUndo.value).toBe(false)
   })
 })

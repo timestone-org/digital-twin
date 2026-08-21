@@ -3,9 +3,13 @@
  * `when` 判定读的是**铺过缺省之后**的配置。
  */
 import { describe, expect, it } from 'vitest'
-import type { ConfigField } from '@dt/contracts'
+import type { ConfigField, ConfigPreset } from '@dt/contracts'
 
-import { formGroups, isFieldVisible } from '@/features/dashboard/configForm'
+import {
+  activePresetIds,
+  formGroups,
+  isFieldVisible,
+} from '@/features/dashboard/configForm'
 
 const SHOW: ConfigField = {
   key: 'showTitle',
@@ -67,5 +71,66 @@ describe('分段', () => {
     const groups = formGroups([TITLE], { showTitle: false })
 
     expect(groups).toEqual([])
+  })
+})
+
+describe('预设命中', () => {
+  function preset(id: string, config: Record<string, unknown>): ConfigPreset {
+    return { id, label: id, config }
+  }
+
+  it('预设写过的键全部与当前值相等才命中', () => {
+    const presets = [preset('a', { size: 12, color: 'red' })]
+
+    expect(activePresetIds(presets, { size: 12, color: 'red' })).toEqual(
+      new Set(['a']),
+    )
+    expect(activePresetIds(presets, { size: 12, color: 'blue' })).toEqual(
+      new Set(),
+    )
+  })
+
+  it('子集语义：预设之外的键不参与判定', () => {
+    const presets = [preset('a', { size: 12 })]
+
+    expect(activePresetIds(presets, { size: 12, other: '随便什么' })).toEqual(
+      new Set(['a']),
+    )
+  })
+
+  it('多个预设可以同时命中', () => {
+    const presets = [preset('a', { size: 12 }), preset('b', { color: 'red' })]
+
+    expect(activePresetIds(presets, { size: 12, color: 'red' })).toEqual(
+      new Set(['a', 'b']),
+    )
+  })
+
+  // 预设值恰好等于清单缺省时也要亮：resolved 是铺过缺省的，比较对它一视同仁
+  it('预设值与铺过缺省的取值相等即命中，不区分「配的」还是「缺省的」', () => {
+    const presets = [preset('a', { showBar: true })]
+
+    expect(activePresetIds(presets, { showBar: true })).toEqual(new Set(['a']))
+  })
+
+  it('对象与数组按深比较，不按引用', () => {
+    const presets = [preset('a', { pad: [8, 12, 6], font: { size: 14 } })]
+
+    expect(
+      activePresetIds(presets, { pad: [8, 12, 6], font: { size: 14 } }),
+    ).toEqual(new Set(['a']))
+    expect(
+      activePresetIds(presets, { pad: [8, 12, 7], font: { size: 14 } }),
+    ).toEqual(new Set())
+  })
+
+  it('预设键在 resolved 里缺席时不命中——undefined 不等于任何写过的值', () => {
+    const presets = [preset('a', { size: 12 })]
+
+    expect(activePresetIds(presets, {})).toEqual(new Set())
+  })
+
+  it('没有预设就给空集', () => {
+    expect(activePresetIds([], { size: 12 })).toEqual(new Set())
   })
 })

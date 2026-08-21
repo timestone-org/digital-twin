@@ -60,7 +60,10 @@ function viewGroups(mod: string): ShortcutGroup[] {
         { keys: `${mod} A`, desc: '全选顶层节点' },
         { keys: 'Shift 点击', desc: '累积多选（图层树同样适用）' },
         { keys: '空白处拖拽', desc: '框选' },
-        { keys: 'Esc', desc: '取消选中 / 关闭菜单与预览' },
+        {
+          keys: 'Esc',
+          desc: '取消选中 / 关闭菜单与预览（输入框内 = 先退出输入）',
+        },
       ],
     },
     {
@@ -68,7 +71,9 @@ function viewGroups(mod: string): ShortcutGroup[] {
       items: [
         { keys: '方向键', desc: '按吸附步进微调位置' },
         { keys: 'Alt 方向键', desc: '1px 精调（临时忽略吸附）' },
+        { keys: 'Shift 方向键', desc: '10 倍步进粗调' },
         { keys: 'Alt 拖拽', desc: '临时自由放置（不吸附、不认参考线）' },
+        { keys: 'Shift 拖拽', desc: '移动锁定主轴 / 缩放锁定宽高比' },
         { keys: '双击图层名', desc: '重命名节点' },
       ],
     },

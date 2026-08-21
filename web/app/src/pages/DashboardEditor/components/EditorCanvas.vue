@@ -1,40 +1,21 @@
 <script setup lang="ts">
 /**
  * @fileoverview 编辑器画布：设计坐标系整块一次 `transform: scale`，节点按排版好的
- * 绝对矩形摆上去；点选、框选、拖动缩放、换父、缩放平移与模块库拖放都在这里装配，
- * 几何算术全在 `canvasDrag` / `canvasLayers` / `canvasViewport` 三个纯模块里。
+ * 绝对矩形摆上去。装配（视口/拖动/框选/拖放/菜单落点）在 `useCanvasWiring`，
+ * 这里只剩 props/emits 与模板。
  */
 import type { CardChrome, DashboardNodePayload } from '@dt/contracts'
-import type { DesignSize, GetModuleManifest, NodeBox } from '@dt/runtime'
-import { computed } from 'vue'
+import type { DesignSize, GetModuleManifest } from '@dt/runtime'
+import { DtIcon } from '@dt/ui'
 
 import type {
   EditorGridConfig,
-  ResizeDir,
   SnapConfig,
 } from '@/features/dashboard/canvasSnap'
 import type { CanvasZoom } from '@/features/dashboard/canvasZoom'
-import { topMostIds, type NodeGeometry } from '@/features/dashboard/editorDoc'
 import type { EditorFrame } from '@/features/dashboard/editorLayout'
-import type { DragKind, DropTarget } from '../scripts/canvasDrag'
-import {
-  buildPlacements,
-  buildSession,
-  contentRectOf,
-  dropTargetOf,
-  marqueeHits,
-  renderItems,
-  type CanvasPlacement,
-} from '../scripts/canvasLayers'
-import {
-  gridBackgroundStyle,
-  rectStyleOf,
-  type ClientPoint,
-} from '../scripts/canvasViewport'
-import { useCanvasDrag } from '../scripts/useCanvasDrag'
-import { useCanvasViewport } from '../scripts/useCanvasViewport'
-import { useMarquee } from '../scripts/useMarquee'
-import { usePaletteDrop } from '../scripts/usePaletteDrop'
+import { rectStyleOf } from '../scripts/canvasViewport'
+import { useCanvasWiring, type CanvasEmit } from '../scripts/useCanvasWiring'
 import CanvasGuides from './CanvasGuides.vue'
 import CanvasNode from './CanvasNode.vue'
 
@@ -51,154 +32,31 @@ const props = defineProps<{
   zoom: CanvasZoom
 }>()
 
-const emit = defineEmits<{
-  select: [nodeId: string | null, additive: boolean]
-  marquee: [ids: string[], additive: boolean]
-  change: [nodeId: string, geometry: NodeGeometry, isContinuous: boolean]
-  'change-batch': [changes: Map<string, NodeGeometry>, isContinuous: boolean]
-  'drop-node': [nodeId: string, parentId: string | null, geometry: NodeGeometry]
-  'add-at': [
-    moduleType: string,
-    at: { parentId: string | null; x: number; y: number },
-  ]
-  'update:zoom': [zoom: CanvasZoom]
-  'canvas-menu': [at: { x: number; y: number }, nodeId: string | null]
-}>()
+const emit = defineEmits<CanvasEmit>()
 
-const viewport = useCanvasViewport({
-  design: () => props.design,
-  zoom: () => props.zoom,
-  onZoom: (zoom) => emit('update:zoom', zoom),
-})
-const { viewportRef, stageRef, fitScale, isPanMode, stageStyle, wrapStyle } =
-  viewport
-
-const placements = computed(() =>
-  buildPlacements({
-    nodes: props.nodes,
-    frames: props.frames,
-    design: props.design,
-    getManifest: props.getManifest,
-  }),
-)
-const selected = computed(() => new Set(props.selectedIds))
-const items = computed(() => renderItems(placements.value, props.selectedIds))
-
-function dropTargetAt(
-  at: ClientPoint,
-  excluded: ReadonlySet<string>,
-): DropTarget | null {
-  const point = viewport.pointerDesign(at)
-  if (point === null) return null
-  const placed = placements.value
-  const { design } = props
-  return dropTargetOf({ placements: placed, at: point, excluded, design })
-}
-
-const drag = useCanvasDrag({
-  scale: () => viewport.effScale.value,
-  dropTargetAt,
-  onChange: (nodeId, geometry, isContinuous) =>
-    emit('change', nodeId, geometry, isContinuous),
-  onChangeBatch: (changes, isContinuous) =>
-    emit('change-batch', changes, isContinuous),
-  onReparent: (nodeId, parentId, geometry) =>
-    emit('drop-node', nodeId, parentId, geometry),
-  onCollapse: (nodeId) => emit('select', nodeId, false),
-})
-const { guides } = drag
-
-const marquee = useMarquee({
-  pointerDesign: viewport.pointerDesign,
-  hitIds: (box: NodeBox) =>
-    topMostIds(props.nodes, marqueeHits(placements.value, box)).slice(),
-  onMarquee: (ids, additive) => emit('marquee', ids, additive),
-  onClear: () => emit('select', null, false),
-})
-const { box: marqueeBox } = marquee
-
-function startDrag(
-  placement: CanvasPlacement,
-  event: PointerEvent,
-  kind: DragKind,
-  dir: ResizeDir,
-): void {
-  const input = { placements: placements.value, placement, doc: props }
-  drag.start(buildSession({ ...input, kind, dir, event }))
-}
-
-function onNodeGrab(placement: CanvasPlacement, event: PointerEvent): void {
-  const nodeId = placement.node.id
-  // 右键：保持既有多选（在其上唤起菜单），未选中的先单选
-  if (event.button === 2) {
-    if (!selected.value.has(nodeId)) emit('select', nodeId, false)
-    return
-  }
-  if (event.button !== 0) return
-  if (event.shiftKey || event.ctrlKey || event.metaKey) {
-    emit('select', nodeId, true)
-    return
-  }
-  if (!selected.value.has(nodeId)) emit('select', nodeId, false)
-  // 钉位节点不许移动，点选照做
-  if (placement.isPinned) return
-  startDrag(placement, event, 'move', { x: 0, y: 0 })
-}
-
-function onNodeResize(
-  placement: CanvasPlacement,
-  dir: ResizeDir,
-  event: PointerEvent,
-): void {
-  if (event.button !== 0) return
-  startDrag(placement, event, 'resize', dir)
-}
-
-function onMenu(event: MouseEvent, placement: CanvasPlacement | null): void {
-  const nodeId = placement?.node.id ?? null
-  if (nodeId !== null && !selected.value.has(nodeId)) {
-    emit('select', nodeId, false)
-  }
-  emit('canvas-menu', { x: event.clientX, y: event.clientY }, nodeId)
-}
-
-function onBackgroundDown(event: PointerEvent): void {
-  if (event.button !== 0 || isPanMode.value) return
-  marquee.start(event)
-}
-
-function onViewportDown(event: PointerEvent): void {
-  // 平移期间不该再触发框选或拖动节点，所以在捕获阶段就拦下
-  if (!viewport.startPan(event)) return
-  event.preventDefault()
-  event.stopPropagation()
-}
-
-const palette = usePaletteDrop({
-  dropTargetAt,
-  pointerDesign: viewport.pointerDesign,
-  snap: () => props.snap,
-  grid: () => props.grid,
-  onAdd: (moduleType, at) => emit('add-at', moduleType, at),
-})
-
-/** 拖动或拖放经过的容器：画一圈高亮提示这一松手会落进去。 */
-const highlight = computed(() =>
-  contentRectOf(
-    placements.value,
-    drag.hoverContainerId.value ?? palette.containerId.value,
-  ),
-)
-
-const gridStyle = computed(() =>
-  gridBackgroundStyle(props.design, props.grid, props.snap),
-)
-
-/** 把某个节点滚进视口中央：图层树的「居中」用。 */
-function centerOn(nodeId: string): void {
-  const frame = props.frames.find((item) => item.id === nodeId)
-  if (frame !== undefined) viewport.centerOn(frame)
-}
+const {
+  viewportRef,
+  stageRef,
+  fitScale,
+  effScale,
+  isPanMode,
+  stageStyle,
+  wrapStyle,
+  items,
+  guides,
+  readout,
+  marqueeBox,
+  highlight,
+  gridStyle,
+  palette,
+  onWheel,
+  onViewportDown,
+  onBackgroundDown,
+  onNodeGrab,
+  onNodeResize,
+  onMenu,
+  centerOn,
+} = useCanvasWiring(props, emit)
 
 // stageRef 给保存后截图用：舞台元素是设计坐标系的根
 defineExpose({ centerOn, fitScale, stageRef })
@@ -209,7 +67,7 @@ defineExpose({ centerOn, fitScale, stageRef })
     ref="viewportRef"
     class="dt-canvas"
     :class="{ 'dt-canvas--pan': isPanMode, 'dt-canvas--fit': zoom === null }"
-    @wheel="viewport.onWheel"
+    @wheel="onWheel"
     @pointerdown.capture="onViewportDown"
   >
     <div class="dt-canvas__wrap" :style="wrapStyle">
@@ -247,7 +105,18 @@ defineExpose({ centerOn, fitScale, stageRef })
           @resize="(dir, event) => onNodeResize(item.placement, dir, event)"
           @menu="onMenu($event, item.placement)"
         />
-        <CanvasGuides :guides="guides" :marquee="marqueeBox" :design="design" />
+        <CanvasGuides
+          :guides="guides"
+          :marquee="marqueeBox"
+          :design="design"
+          :readout="readout"
+          :scale="effScale"
+        />
+      </div>
+      <!-- 空态引导挂在缩放变换之外：文字不随画布缩放，任何倍率下都可读 -->
+      <div v-if="nodes.length === 0" class="dt-canvas__empty">
+        <DtIcon name="layout-grid" :size="26" />
+        <p class="dt-canvas__empty-title">从左侧模块库拖入模块开始搭建</p>
       </div>
     </div>
   </div>
@@ -294,5 +163,25 @@ defineExpose({ centerOn, fitScale, stageRef })
   pointer-events: none;
   border: 1px dashed var(--accent-primary);
   background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+}
+
+// 不吃指针：拖放、框选与右键都要照常落在底下的舞台上
+.dt-canvas__empty {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-disabled);
+  pointer-events: none;
+}
+
+.dt-canvas__empty-title {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 </style>

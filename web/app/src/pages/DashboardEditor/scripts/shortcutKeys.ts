@@ -3,7 +3,11 @@
  * 装载在 `useEditorShortcuts.ts`，帮助清单在 `shortcuts.ts`，三处的动作名同一套。
  * ⚠ 表单获焦时编辑类手势要让给浏览器（撤销键该撤销输入框自己的文本），
  * 但 ⌘S 与缩放仍然全局接管——保存不该因为焦点在输入框里而变成「另存网页」。
+ * Esc 同理让位：表单里的 Esc 只该退出输入焦点，不清画布选中。
  */
+
+/** 方向键微调的三档：默认吸附步进 / Alt 1px 精调 / Shift 10 倍粗调。 */
+export type NudgeStep = 'step' | 'fine' | 'coarse'
 
 export interface EditorShortcutHandlers {
   save: () => void
@@ -15,8 +19,8 @@ export interface EditorShortcutHandlers {
   remove: () => void
   selectAll: () => void
   escape: () => void
-  /** 方向键微调；`fine` 为 Alt 按住的 1px 精调。 */
-  nudge: (dx: number, dy: number, fine: boolean) => void
+  /** 方向键微调。 */
+  nudge: (dx: number, dy: number, step: NudgeStep) => void
   /** 层序：逐层挪与一步到顶 / 到底。 */
   orderForward: () => void
   orderBackward: () => void
@@ -37,6 +41,12 @@ export const ARROWS: Record<string, [number, number]> = {
   ArrowRight: [1, 0],
   ArrowUp: [0, -1],
   ArrowDown: [0, 1],
+}
+
+/** 这次方向键微调走哪一档；Alt 与 Shift 同按时精调优先（更明确的意图）。 */
+export function nudgeStepOf(event: KeyboardEvent): NudgeStep {
+  if (event.altKey) return 'fine'
+  return event.shiftKey ? 'coarse' : 'step'
 }
 
 /** ⌘/Ctrl + 键 的全局手势；'0' 另按 Shift 分叉，见 `globalActionOf`。 */
@@ -115,7 +125,8 @@ export function shortcutOf(
   event: KeyboardEvent,
   formFocused: boolean,
 ): ShortcutAction | null {
-  if (event.key === 'Escape') return 'escape'
+  // 表单里的 Esc 不吃：由装载层把焦点收走（= 退出输入），选中与面板都不动
+  if (event.key === 'Escape') return formFocused ? null : 'escape'
   const withCommand = event.metaKey || event.ctrlKey
   const global = globalActionOf(event, withCommand)
   if (global !== null) return global

@@ -7,10 +7,19 @@
 import { onMounted, onUnmounted } from 'vue'
 
 import { isFormFocused } from './isFormFocused'
-import { ARROWS, shortcutOf, type ShortcutAction } from './shortcutKeys'
+import {
+  ARROWS,
+  nudgeStepOf,
+  shortcutOf,
+  type ShortcutAction,
+} from './shortcutKeys'
 
 export { shortcutOf } from './shortcutKeys'
-export type { EditorShortcutHandlers, ShortcutAction } from './shortcutKeys'
+export type {
+  EditorShortcutHandlers,
+  NudgeStep,
+  ShortcutAction,
+} from './shortcutKeys'
 
 import type { EditorShortcutHandlers } from './shortcutKeys'
 
@@ -31,7 +40,9 @@ export function useEditorShortcuts(options: EditorShortcutOptions): void {
   function run(action: ShortcutAction, event: KeyboardEvent): void {
     if (action === 'nudge') {
       const arrow = ARROWS[event.key]
-      if (arrow !== undefined) handlers.nudge(arrow[0], arrow[1], event.altKey)
+      if (arrow !== undefined) {
+        handlers.nudge(arrow[0], arrow[1], nudgeStepOf(event))
+      }
       return
     }
     if (action === 'zoomStep') {
@@ -46,7 +57,14 @@ export function useEditorShortcuts(options: EditorShortcutOptions): void {
       if (event.key === 'Escape') handlers.escape()
       return
     }
-    const action = shortcutOf(event, isFormFocused())
+    const formFocused = isFormFocused()
+    // 表单里的 Esc = 退出输入焦点：判定层不吃这一下，这里只把焦点收走
+    if (event.key === 'Escape' && formFocused) {
+      const active = document.activeElement
+      if (active instanceof HTMLElement) active.blur()
+      return
+    }
+    const action = shortcutOf(event, formFocused)
     if (action === null) return
     event.preventDefault()
     run(action, event)

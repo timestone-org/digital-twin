@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent, h, ref } from 'vue'
 
+import { nudgeStepOf } from '@/pages/DashboardEditor/scripts/shortcutKeys'
 import {
   shortcutOf,
   useEditorShortcuts,
@@ -80,7 +81,22 @@ describe('按键判定', () => {
     expect(shortcutOf(keyEvent('ArrowLeft'), true)).toBeNull()
     expect(shortcutOf(keyEvent('s', { metaKey: true }), true)).toBe('save')
     expect(shortcutOf(keyEvent('0', { metaKey: true }), true)).toBe('zoomReset')
-    expect(shortcutOf(keyEvent('Escape'), true)).toBe('escape')
+  })
+
+  it('表单里的 Esc 判定层不吃：只退出输入焦点，不落到清选中', () => {
+    expect(shortcutOf(keyEvent('Escape'), true)).toBeNull()
+    expect(shortcutOf(keyEvent('Escape'), false)).toBe('escape')
+  })
+
+  it('方向键三档：默认步进、Alt 精调、Shift 粗调，同按时精调赢', () => {
+    expect(nudgeStepOf(keyEvent('ArrowLeft'))).toBe('step')
+    expect(nudgeStepOf(keyEvent('ArrowLeft', { altKey: true }))).toBe('fine')
+    expect(nudgeStepOf(keyEvent('ArrowLeft', { shiftKey: true }))).toBe(
+      'coarse',
+    )
+    expect(
+      nudgeStepOf(keyEvent('ArrowLeft', { altKey: true, shiftKey: true })),
+    ).toBe('fine')
   })
 
   it('带修饰键的 Delete 与普通字母不接管', () => {
@@ -100,7 +116,7 @@ function handlerSpy(calls: string[]): EditorShortcutHandlers {
     remove: () => calls.push('remove'),
     selectAll: () => calls.push('selectAll'),
     escape: () => calls.push('escape'),
-    nudge: (dx, dy, fine) => calls.push(`nudge:${dx},${dy},${String(fine)}`),
+    nudge: (dx, dy, step) => calls.push(`nudge:${dx},${dy},${step}`),
     zoomStep: (direction) => calls.push(`zoomStep:${direction}`),
     zoomReset: () => calls.push('zoomReset'),
     zoomFit: () => calls.push('zoomFit'),
@@ -127,14 +143,39 @@ describe('监听的生死与挂起', () => {
     return { wrapper: mount(host), calls }
   }
 
-  it('挂载后按键触发对应动作，方向键带上 Alt 精调标记', () => {
+  it('挂载后按键触发对应动作，方向键带上三档步进标记', () => {
     const { wrapper, calls } = mountShortcuts()
 
     window.dispatchEvent(keyEvent('z', { metaKey: true }))
     window.dispatchEvent(keyEvent('ArrowRight', { altKey: true }))
+    window.dispatchEvent(keyEvent('ArrowDown', { shiftKey: true }))
+    window.dispatchEvent(keyEvent('ArrowUp'))
     window.dispatchEvent(keyEvent('-', { metaKey: true }))
 
-    expect(calls).toEqual(['undo', 'nudge:1,0,true', 'zoomStep:-1'])
+    expect(calls).toEqual([
+      'undo',
+      'nudge:1,0,fine',
+      'nudge:0,1,coarse',
+      'nudge:0,-1,step',
+      'zoomStep:-1',
+    ])
+    wrapper.unmount()
+  })
+
+  it('表单获焦按 Esc：只把焦点收走，不触发 escape 也不 preventDefault', () => {
+    const { wrapper, calls } = mountShortcuts()
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    input.focus()
+    expect(document.activeElement).toBe(input)
+
+    const event = keyEvent('Escape', { cancelable: true })
+    window.dispatchEvent(event)
+
+    expect(calls).toEqual([])
+    expect(document.activeElement).not.toBe(input)
+    expect(event.defaultPrevented).toBe(false)
+    input.remove()
     wrapper.unmount()
   })
 

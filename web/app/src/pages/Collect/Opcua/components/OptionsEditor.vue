@@ -8,7 +8,7 @@
  * 只会看到「参数不合法」而不知道是哪一行。
  */
 import { computed, ref, watch } from 'vue'
-import { DtButton, DtIcon, DtInput } from '@dt/ui'
+import { DtButton, DtEmpty, DtIcon, DtInput } from '@dt/ui'
 
 const props = defineProps<{ modelValue: Record<string, string> }>()
 const emit = defineEmits<{
@@ -63,7 +63,7 @@ const isEmpty = computed(() => rows.value.length === 0)
 
 <template>
   <div class="flex flex-col gap-2">
-    <p v-if="isEmpty" class="text-xs text-text-secondary">还没有连接参数。</p>
+    <DtEmpty v-if="isEmpty" size="inline" title="还没有连接参数。" />
     <div
       v-for="(row, index) in rows"
       :key="`option-${index}`"

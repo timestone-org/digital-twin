@@ -59,7 +59,7 @@ function toggle(key: string): void {
             : '',
         ]"
         :disabled="!row.hasSamples"
-        :aria-pressed="row.set === props.selected"
+        :aria-current="row.set === props.selected ? 'true' : undefined"
         :title="row.hasSamples ? undefined : '这个组合还没有可用事件'"
         @click="toggle(row.set)"
       >
