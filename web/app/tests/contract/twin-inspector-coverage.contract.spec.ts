@@ -53,6 +53,12 @@ const OWNERS: Readonly<Record<string, readonly string[]>> = {
   TwinVisibilityRule: ['fields/VisibilityFields.vue'],
   TwinVisibilityFade: ['fields/VisibilityFields.vue'],
   TwinDistanceRule: ['fields/DistanceField.vue'],
+  // 文件夹不走检查器，经大纲行菜单编辑；itemIds 的写入实现在 folderOps
+  TwinOutlineFolder: [
+    'OutlineFolderRow.vue',
+    'TwinOutline.vue',
+    '../scripts/folderOps.ts',
+  ],
 }
 
 /** id 由编辑器生成、不给人改；version 是格式版本。 */

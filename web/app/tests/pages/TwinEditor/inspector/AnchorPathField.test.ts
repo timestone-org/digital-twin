@@ -143,6 +143,9 @@ describe('锚点的显示名', () => {
   it('场景里一个锚点都没有时给一句能看的空态', () => {
     const wrapper = mountField([], [])
 
-    expect(wrapper.text()).toContain('还没有锚点')
+    // 面板寸土寸金：空态走行内单行档，不带图标
+    const empty = wrapper.get('.dt-empty--inline')
+    expect(empty.text()).toContain('还没有锚点')
+    expect(empty.find('svg').exists()).toBe(false)
   })
 })

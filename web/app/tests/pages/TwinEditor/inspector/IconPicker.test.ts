@@ -88,6 +88,43 @@ describe('挑与清', () => {
   })
 })
 
+describe('可访问状态', () => {
+  it('「更换/收起」键的按压态随面板开合翻转', async () => {
+    const wrapper = render()
+    const toggle = wrapper.get('[data-test="icon-toggle"]')
+    expect(toggle.attributes('aria-pressed')).toBe('false')
+
+    await openPanel(wrapper)
+    expect(toggle.attributes('aria-pressed')).toBe('true')
+    expect(toggle.classes()).toContain('dt-btn--soft')
+
+    await openPanel(wrapper)
+    expect(toggle.attributes('aria-pressed')).toBe('false')
+    expect(toggle.classes()).toContain('dt-btn--ghost')
+  })
+
+  it('网格里当前选中的那格 aria-pressed=true，其余是 false', async () => {
+    const first = Object.keys(ICONS)[0]
+    if (first === undefined) throw new Error('注册表是空的')
+    const wrapper = render(first)
+    await openPanel(wrapper)
+
+    const options = wrapper.findAll('[data-test="icon-option"]')
+    expect(options[0]?.attributes('aria-pressed')).toBe('true')
+    expect(options[1]?.attributes('aria-pressed')).toBe('false')
+  })
+
+  it('搜索空结果走行内空态：单行、不渲染图标', async () => {
+    const wrapper = render()
+    await openPanel(wrapper)
+    await wrapper.get('input[aria-label="搜索图标"]').setValue('没有这个东西')
+
+    const empty = wrapper.get('[data-test="icon-none"]')
+    expect(empty.classes()).toContain('dt-empty--inline')
+    expect(empty.find('svg').exists()).toBe(false)
+  })
+})
+
 describe('搜索', () => {
   it('按名字过滤', async () => {
     const wrapper = render()

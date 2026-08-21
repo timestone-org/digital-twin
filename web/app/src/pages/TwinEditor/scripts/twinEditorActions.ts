@@ -16,6 +16,13 @@ import {
   updateEntity,
 } from './entityOps'
 import { addPartsFromNodes } from './bulkParts'
+import {
+  addFolder,
+  moveIntoFolder,
+  removeFolder,
+  removeFromFolder,
+  renameFolder,
+} from './folderOps'
 import { addHierNode, moveHierSibling, reparentHierNode } from './hierOps'
 import type { TwinDoc } from './twinDoc'
 import type { TwinEntityKind, TwinSelection } from './types'
@@ -30,6 +37,15 @@ export interface TwinEditorActions {
   /** 换掉配置里的某个单例段（模型、视点切换控件）。 */
   patchConfig: (patch: Partial<TwinConfig>) => void
   toggleVisible: (kind: TwinEntityKind, id: string) => void
+  /** 在某段下新建一个空夹；返回夹 id，供上层立刻进入就地重命名。 */
+  addFolder: (kind: TwinEntityKind) => string
+  renameFolder: (id: string, name: string) => void
+  /** 删夹不删成员：成员回散行。 */
+  removeFolder: (id: string) => void
+  moveIntoFolder: (folderId: string, itemId: string) => void
+  removeFromFolder: (itemId: string) => void
+  /** 新建夹并把一个实体移进去，一笔撤销；返回夹 id。 */
+  addFolderWithItem: (kind: TwinEntityKind, itemId: string) => string
   /** 新建一个钻取节点；`parentId` 为 null 时建的是根。 */
   addHier: (parentId: string | null) => void
   /** 同一层里前挪一位或后挪一位。 */
@@ -62,6 +78,50 @@ function visibilityOf(
   const list: readonly { id: string; visibility: TwinVisibilityRule }[] =
     config[kind]
   return list.find((item) => item.id === id)?.visibility ?? null
+}
+
+/** 文件夹的六个动作：纯展示分组的增删改与成员进出，单独收一处。 */
+type TwinFolderActions = Pick<
+  TwinEditorActions,
+  | 'addFolder'
+  | 'renameFolder'
+  | 'removeFolder'
+  | 'moveIntoFolder'
+  | 'removeFromFolder'
+  | 'addFolderWithItem'
+>
+
+function createFolderActions(doc: TwinDoc): TwinFolderActions {
+  return {
+    addFolder: (kind) => {
+      const created = addFolder(doc.config.value, kind)
+      doc.commit(created.config)
+      return created.id
+    },
+
+    renameFolder: (id, name) => {
+      doc.commit(renameFolder(doc.config.value, id, name))
+    },
+
+    removeFolder: (id) => {
+      doc.commit(removeFolder(doc.config.value, id))
+    },
+
+    moveIntoFolder: (folderId, itemId) => {
+      doc.commit(moveIntoFolder(doc.config.value, folderId, itemId))
+    },
+
+    removeFromFolder: (itemId) => {
+      doc.commit(removeFromFolder(doc.config.value, itemId))
+    },
+
+    addFolderWithItem: (kind, itemId) => {
+      // 建夹 + 移入只 commit 一次：撤销一步就该回到「没这个夹」的状态
+      const created = addFolder(doc.config.value, kind)
+      doc.commit(moveIntoFolder(created.config, created.id, itemId))
+      return created.id
+    },
+  }
 }
 
 /** 钻取树的三个动作：它们不按 `kind` 分派，与其余动作形状不同，单独收一处。 */
@@ -126,6 +186,7 @@ export function createTwinEditorActions(
 ): TwinEditorActions {
   return {
     ...createHierActions(doc, select),
+    ...createFolderActions(doc),
 
     add: (kind) => {
       const { config, id } = addEntity(doc.config.value, kind)

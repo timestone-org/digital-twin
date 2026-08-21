@@ -12,7 +12,7 @@ import { HIER_SUMMARY_FALLBACK_COUNT, flattenHierFields } from '@dt/twin-config'
 import {
   DtButton,
   DtCheckbox,
-  DtIcon,
+  DtEmpty,
   DtInput,
   DtNotice,
   DtNumberInput,
@@ -168,36 +168,36 @@ function toggleDecimals(index: number, on: boolean): void {
         <span class="min-w-0 flex-1 truncate text-xs text-text-secondary">
           {{ rowLabel }} {{ row.row }} 行 · {{ row.valueKey }}
         </span>
-        <button
-          type="button"
-          class="text-text-secondary hover:text-accent-primary disabled:text-text-disabled"
+        <DtButton
+          size="xs"
+          variant="ghost"
+          intent="neutral"
+          icon="chevron-up"
           :disabled="row.index === 0"
           aria-label="上移字段"
           title="上移字段"
           @click="move(row.index, -1)"
-        >
-          <DtIcon name="chevron-up" :size="13" />
-        </button>
-        <button
-          type="button"
-          class="text-text-secondary hover:text-accent-primary disabled:text-text-disabled"
+        />
+        <DtButton
+          size="xs"
+          variant="ghost"
+          intent="neutral"
+          icon="chevron-down"
           :disabled="row.index === rows.length - 1"
           aria-label="下移字段"
           title="下移字段"
           @click="move(row.index, 1)"
-        >
-          <DtIcon name="chevron-down" :size="13" />
-        </button>
-        <button
-          type="button"
-          class="text-text-disabled hover:text-state-danger"
+        />
+        <DtButton
+          size="xs"
+          variant="ghost"
+          intent="danger"
+          icon="trash"
           aria-label="删除字段"
           title="删除字段"
           data-test="hier-field-remove"
           @click="removeAt(row.index)"
-        >
-          <DtIcon name="trash" :size="13" />
-        </button>
+        />
       </div>
 
       <div class="grid grid-cols-2 gap-1.5">
@@ -260,9 +260,11 @@ function toggleDecimals(index: number, on: boolean): void {
       </div>
     </div>
 
-    <p v-if="rows.length === 0" class="text-xs text-text-disabled">
-      这一层还没有字段，钻进来只有名字没有读数。
-    </p>
+    <DtEmpty
+      v-if="rows.length === 0"
+      size="inline"
+      title="这一层还没有字段，钻进来只有名字没有读数。"
+    />
     <p v-else-if="usingFallback" class="text-xs text-text-disabled">
       一个都没勾时，父层摘要卡片取前 {{ HIER_SUMMARY_FALLBACK_COUNT }} 个字段。
     </p>

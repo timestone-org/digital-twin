@@ -14,7 +14,7 @@ import {
   type TwinViewpointMode,
   type TwinViewpointSwitcher,
 } from '@dt/twin-config'
-import { DtButton, DtCheckbox, DtSegmented, DtSwitch } from '@dt/ui'
+import { DtButton, DtCheckbox, DtEmpty, DtSegmented, DtSwitch } from '@dt/ui'
 import { computed } from 'vue'
 
 import InspectorSection from '../fields/InspectorSection.vue'
@@ -148,9 +148,11 @@ function nameOf(camera: TwinCamera): string {
       </p>
 
       <template v-else>
-        <p v-if="cameras.length === 0" class="text-xs text-text-disabled">
-          还没有视点，先去大纲树里加一个。
-        </p>
+        <DtEmpty
+          v-if="cameras.length === 0"
+          size="inline"
+          title="还没有视点，先去大纲树里加一个。"
+        />
         <ul v-else class="flex flex-col gap-1">
           <li
             v-for="row in rows"

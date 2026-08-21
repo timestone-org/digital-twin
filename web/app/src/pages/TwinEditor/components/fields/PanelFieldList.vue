@@ -15,7 +15,7 @@ import {
 import {
   DtDropdownMenu,
   DtButton,
-  DtIcon,
+  DtEmpty,
   DtInput,
   DtNotice,
   DtNumberInput,
@@ -173,35 +173,35 @@ function toggleDecimals(index: number, on: boolean): void {
         <span class="min-w-0 flex-1 truncate text-xs text-text-secondary">
           {{ rowLabel }} {{ row.row }} 行 · {{ row.valueKey }}
         </span>
-        <button
-          type="button"
-          class="text-text-secondary hover:text-accent-primary disabled:text-text-disabled"
+        <DtButton
+          size="xs"
+          variant="ghost"
+          intent="neutral"
+          icon="chevron-up"
           :disabled="row.index === 0"
           aria-label="上移字段"
           title="上移字段"
           @click="move(row.index, -1)"
-        >
-          <DtIcon name="chevron-up" :size="13" />
-        </button>
-        <button
-          type="button"
-          class="text-text-secondary hover:text-accent-primary disabled:text-text-disabled"
+        />
+        <DtButton
+          size="xs"
+          variant="ghost"
+          intent="neutral"
+          icon="chevron-down"
           :disabled="row.index === rows.length - 1"
           aria-label="下移字段"
           title="下移字段"
           @click="move(row.index, 1)"
-        >
-          <DtIcon name="chevron-down" :size="13" />
-        </button>
-        <button
-          type="button"
-          class="text-text-disabled hover:text-state-danger"
+        />
+        <DtButton
+          size="xs"
+          variant="ghost"
+          intent="danger"
+          icon="trash"
           aria-label="删除字段"
           title="删除字段"
           @click="removeAt(row.index)"
-        >
-          <DtIcon name="trash" :size="13" />
-        </button>
+        />
       </div>
 
       <div class="grid grid-cols-2 gap-1.5">
@@ -267,9 +267,11 @@ function toggleDecimals(index: number, on: boolean): void {
       />
     </div>
 
-    <p v-if="rows.length === 0" class="text-xs text-text-disabled">
-      这张牌上还没有字段，画出来是一张空卡片。
-    </p>
+    <DtEmpty
+      v-if="rows.length === 0"
+      size="inline"
+      title="这张牌上还没有字段，画出来是一张空卡片。"
+    />
     <p v-else class="text-xs text-text-disabled">
       静态文本纯展示、不进求值，与「常量绑定」不是一回事。
     </p>
@@ -279,10 +281,10 @@ function toggleDecimals(index: number, on: boolean): void {
         添加字段
       </DtButton>
       <!-- 现场牌面上多半就是这十来种量，省掉逐个填标签单位小数位 -->
+      <!-- ⚠ DtDropdownMenu 没有 icon prop，想换触发图标只能自供 trigger 插槽 -->
       <DtDropdownMenu
         size="sm"
         label="常用测点"
-        icon="list-checks"
         :items="presetItems"
         data-test="panel-field-presets"
         @select="addPreset"

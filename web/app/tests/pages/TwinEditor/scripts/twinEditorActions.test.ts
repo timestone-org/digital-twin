@@ -191,3 +191,85 @@ describe('钻取树', () => {
     expect(doc.canUndo.value).toBe(false)
   })
 })
+
+describe('文件夹', () => {
+  const FOLDERED = {
+    anchors: [{ id: 'a1' }, { id: 'a2' }],
+    folders: [{ id: 'f1', kind: 'anchors', name: '温度组', itemIds: ['a1'] }],
+  }
+
+  it('建夹返回夹 id，供上层立刻进入就地重命名', () => {
+    const { actions, doc } = setup({})
+
+    const id = actions.addFolder('anchors')
+
+    expect(doc.config.value.folders[0]?.id).toBe(id)
+    expect(doc.canUndo.value).toBe(true)
+  })
+
+  it('重命名走 commit，可撤销', () => {
+    const { actions, doc } = setup(FOLDERED)
+
+    actions.renameFolder('f1', '进水段')
+
+    expect(doc.config.value.folders[0]?.name).toBe('进水段')
+    doc.undo()
+    expect(doc.config.value.folders[0]?.name).toBe('温度组')
+  })
+
+  // 改名弹框原样确认不该白吃一步撤销
+  it('名字没变时不记帧', () => {
+    const { actions, doc } = setup(FOLDERED)
+
+    actions.renameFolder('f1', ' 温度组 ')
+
+    expect(doc.canUndo.value).toBe(false)
+  })
+
+  it('删夹后成员回散行，实体数组不动', () => {
+    const { actions, doc } = setup(FOLDERED)
+
+    actions.removeFolder('f1')
+
+    expect(doc.config.value.folders).toEqual([])
+    expect(doc.config.value.anchors.map((item) => item.id)).toEqual([
+      'a1',
+      'a2',
+    ])
+  })
+
+  it('移入与移出各记一步，可分别撤销', () => {
+    const { actions, doc } = setup(FOLDERED)
+
+    actions.moveIntoFolder('f1', 'a2')
+    expect(doc.config.value.folders[0]?.itemIds).toEqual(['a1', 'a2'])
+
+    actions.removeFromFolder('a1')
+    expect(doc.config.value.folders[0]?.itemIds).toEqual(['a2'])
+
+    doc.undo()
+    expect(doc.config.value.folders[0]?.itemIds).toEqual(['a1', 'a2'])
+  })
+
+  it('建夹并移入是一笔：撤销一步就回到「没这个夹」', () => {
+    const { actions, doc } = setup({ anchors: [{ id: 'a1' }] })
+
+    const id = actions.addFolderWithItem('anchors', 'a1')
+
+    expect(doc.config.value.folders[0]).toMatchObject({
+      id,
+      itemIds: ['a1'],
+    })
+    doc.undo()
+    expect(doc.config.value.folders).toEqual([])
+    expect(doc.canUndo.value).toBe(false)
+  })
+
+  it('进出夹不搬绑定：文档序没变，绑定行原地不动', () => {
+    const { actions, doc } = setup(FOLDERED, [binding('anchorValues[1].value')])
+
+    actions.moveIntoFolder('f1', 'a2')
+
+    expect(doc.bindings.value[0]?.fieldKey).toBe('anchorValues[1].value')
+  })
+})

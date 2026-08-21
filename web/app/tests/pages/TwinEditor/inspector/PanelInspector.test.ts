@@ -184,3 +184,34 @@ describe('整份写回', () => {
     expect(wrapper.text()).toContain('不画标题行')
   })
 })
+
+describe('外观预设', () => {
+  it('命中的预设是按压态，未命中的弹起', () => {
+    const wrapper = mountInspector(panelOf())
+
+    expect(
+      wrapper
+        .get('[data-test="panel-preset-plain-card"]')
+        .attributes('aria-pressed'),
+    ).toBe('true')
+    expect(
+      wrapper
+        .get('[data-test="panel-preset-tech-hud"]')
+        .attributes('aria-pressed'),
+    ).toBe('false')
+  })
+
+  it('点一个预设把它那套开关整组写进 style', async () => {
+    const wrapper = mountInspector(panelOf())
+
+    await wrapper.get('[data-test="panel-preset-tech-hud"]').trigger('click')
+
+    const next = written(wrapper)
+    expect(next.style).toMatchObject({
+      variant: 'hud',
+      orient: 'top',
+      animate: true,
+      pulse: true,
+    })
+  })
+})

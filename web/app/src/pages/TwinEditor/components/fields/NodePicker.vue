@@ -7,7 +7,7 @@
  * 什么都不再命中，界面上不说的话，用户看到的只是「配了但没反应」。
  * ⚠ 候选为空不等于「都不存在」，那是「还不知道」（模型没加载），此时不判定缺失。
  */
-import { DtButton, DtIcon, DtInput, DtSelect } from '@dt/ui'
+import { DtButton, DtEmpty, DtIcon, DtInput, DtSelect } from '@dt/ui'
 import { computed, ref } from 'vue'
 
 const props = defineProps<{
@@ -96,7 +96,7 @@ function remove(name: string): void {
         />
       </li>
     </ul>
-    <p v-else class="text-xs text-text-disabled">还没有条目。</p>
+    <DtEmpty v-else size="inline" title="还没有条目。" />
 
     <p v-if="hasMissing" class="text-xs text-state-warning">
       标黄的名字在当前模型里没找到，它们不会命中任何东西。

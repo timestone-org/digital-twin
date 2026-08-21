@@ -7,7 +7,7 @@
  * ⚠ 存量配置里可能已经躺着一个非法名字（手写 JSON 来的），所以仍要把
  * 「这个名字不存在」当场红字说出来，并给一键清掉的出路。
  */
-import { DtButton, DtIcon, DtInput, ICONS, isIconName } from '@dt/ui'
+import { DtButton, DtEmpty, DtIcon, DtInput, ICONS, isIconName } from '@dt/ui'
 import { computed, ref } from 'vue'
 
 const props = defineProps<{
@@ -77,7 +77,7 @@ function toggle(): void {
         {{ modelValue === '' ? clearLabel : modelValue }}
       </span>
       <DtButton
-        :variant="open ? 'solid' : 'soft'"
+        :pressed="open"
         size="sm"
         data-test="icon-toggle"
         @click="toggle"
@@ -117,6 +117,7 @@ function toggle(): void {
               : ''
           "
           :aria-label="name"
+          :aria-pressed="name === modelValue"
           :title="name"
           data-test="icon-option"
           :data-name="name"
@@ -125,13 +126,12 @@ function toggle(): void {
           <DtIcon :name="name" :size="15" />
         </button>
       </div>
-      <p
+      <DtEmpty
         v-if="matched.length === 0"
-        class="px-1 py-2 text-center text-xs text-text-disabled"
+        size="inline"
+        title="没有匹配的图标名"
         data-test="icon-none"
-      >
-        没有匹配的图标名
-      </p>
+      />
       <DtButton
         v-if="modelValue !== ''"
         variant="ghost"

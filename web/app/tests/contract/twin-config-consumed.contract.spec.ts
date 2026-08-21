@@ -34,6 +34,10 @@ const NOT_CONSUMERS = ['types.ts', 'normalize', 'constants.ts', 'index.ts']
 const EDITOR_ONLY = new Set([
   // 大纲里的排序与命名，纯编辑期概念
   'order',
+  // 大纲文件夹：编辑器左栏的纯展示分组，渲染层本就不该读
+  'folders',
+  // 文件夹的成员表，同上
+  'itemIds',
 ])
 
 /**

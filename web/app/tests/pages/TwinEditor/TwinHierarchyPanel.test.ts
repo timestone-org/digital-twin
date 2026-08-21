@@ -83,16 +83,30 @@ describe('增删与挪位', () => {
     expect(wrapper.emitted('move')?.[0]).toEqual([{ id: 'shopB', delta: -1 }])
   })
 
-  it('删除要二次确认，确认前不抛事件', async () => {
+  // 叶子没有连带影响，直接删靠撤销兜底
+  it('删叶子直接抛 remove，不出确认框', async () => {
     const wrapper = render()
 
     await rowOf(wrapper, 'shopA')
       .get('[data-test="hier-remove"]')
       .trigger('click')
+
+    expect(wrapper.emitted('remove')?.[0]).toEqual(['shopA'])
+    expect(wrapper.find('[data-test="hier-remove-confirm"]').exists()).toBe(
+      false,
+    )
+  })
+
+  it('有子层的删除要二次确认，确认前不抛事件', async () => {
+    const wrapper = render()
+
+    await rowOf(wrapper, 'plant')
+      .get('[data-test="hier-remove"]')
+      .trigger('click')
     expect(wrapper.emitted('remove')).toBeUndefined()
 
     await wrapper.get('[data-test="hier-remove-yes"]').trigger('click')
-    expect(wrapper.emitted('remove')?.[0]).toEqual(['shopA'])
+    expect(wrapper.emitted('remove')?.[0]).toEqual(['plant'])
   })
 
   it('有子层时确认框里写明下级会各自变成一个根', async () => {
@@ -104,6 +118,20 @@ describe('增删与挪位', () => {
 
     expect(wrapper.get('[data-test="hier-remove-confirm"]').text()).toContain(
       '下级会各自变成一个根',
+    )
+  })
+
+  it('取消之后确认框收起，一条 remove 都不抛', async () => {
+    const wrapper = render()
+
+    await rowOf(wrapper, 'plant')
+      .get('[data-test="hier-remove"]')
+      .trigger('click')
+    await wrapper.get('[data-test="hier-remove-no"]').trigger('click')
+
+    expect(wrapper.emitted('remove')).toBeUndefined()
+    expect(wrapper.find('[data-test="hier-remove-confirm"]').exists()).toBe(
+      false,
     )
   })
 
@@ -127,6 +155,28 @@ describe('增删与挪位', () => {
       .trigger('click')
 
     expect(wrapper.findAll('[data-test="hier-row"]')).toHaveLength(1)
+  })
+})
+
+describe('行内动作键的显隐', () => {
+  // 键盘 Tab 到看不见的键是可用性缺陷：静息隐藏必须配 focus 现身，选中行常驻
+  it('未选中行的动作键静息隐藏，选中行的常驻', () => {
+    const wrapper = mount(TwinHierarchyPanel, {
+      props: {
+        config: configOf(TREE),
+        selection: { kind: 'hierNodes', id: 'shopA' },
+        flaggedIds: new Set<string>(),
+      },
+    })
+
+    const selected = rowOf(wrapper, 'shopA').get('[data-test="hier-remove"]')
+    expect(selected.classes()).not.toContain('opacity-0')
+    expect(selected.classes()).toContain('dt-btn--xs')
+
+    const resting = rowOf(wrapper, 'shopB').get('[data-test="hier-remove"]')
+    expect(resting.classes()).toContain('opacity-0')
+    expect(resting.classes()).toContain('group-hover:opacity-100')
+    expect(resting.classes()).toContain('group-focus-within:opacity-100')
   })
 })
 
