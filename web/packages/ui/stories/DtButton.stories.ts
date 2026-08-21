@@ -48,10 +48,6 @@ const meta = {
       description: '文字前的图标名（须已在注册表登记）',
     },
     iconRight: { control: 'text', description: '文字后的图标名' },
-    ariaLabel: {
-      control: 'text',
-      description: '⚠ 只有图标、没有文字时必须给，否则读屏读不出这个按钮叫什么',
-    },
   },
   args: {
     variant: 'solid',

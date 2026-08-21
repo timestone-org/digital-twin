@@ -1,7 +1,9 @@
 <script setup lang="ts">
 /**
  * @fileoverview DtButton —— 两条正交轴：variant（实心/柔和/幽灵/描边）×
- * intent（语义色），加统一 size。loading 自动禁用并内建 spinner。
+ * intent（语义色），加统一 size。loading 自动禁用并内建 spinner；
+ * pressed 提供开关按钮语义（外观 + aria-pressed）。
+ * ⚠ icon-only 按钮必须传 aria-label（透传到根 button），否则读屏读不到名称。
  */
 import { computed, useSlots } from 'vue'
 import { DT_CONTROL_DEFAULT_SIZE, DT_CONTROL_ICON_PX } from '@dt/contracts'
@@ -15,15 +17,19 @@ const props = withDefaults(
   defineProps<{
     variant?: DtButtonVariant
     intent?: DtIntent
-    size?: DtSize | undefined
+    /** `xs` 是 20×20 的微型图标键档，仅 icon-only 场景（塞进 20px 行高的行内动作）。 */
+    size?: DtSize | 'xs' | undefined
     type?: 'button' | 'submit' | 'reset'
     disabled?: boolean | undefined
     loading?: boolean
     block?: boolean
     icon?: string
     iconRight?: string
-    /** icon-only 按钮必须给，否则屏幕阅读器读不到名称。 */
-    ariaLabel?: string
+    /**
+     * 传了即为开关语义：true → soft/primary，false → ghost/neutral，并落
+     * aria-pressed。此时外观由 pressed 决定，显式传入的 variant/intent 被忽略。
+     */
+    pressed?: boolean | undefined
   }>(),
   {
     variant: 'solid',
@@ -33,6 +39,9 @@ const props = withDefaults(
     disabled: false,
     loading: false,
     block: false,
+    // ⚠ 必须显式 default undefined：不写会触发 Boolean prop 缺省强转成 false，
+    // 「不传 = 旧行为」分支变死代码，全仓普通按钮都会被当成未按下的开关
+    pressed: undefined,
   },
 )
 
@@ -40,7 +49,22 @@ const emit = defineEmits<{ click: [event: MouseEvent] }>()
 
 const slots = useSlots()
 const isDisabled = computed(() => props.disabled || props.loading)
-const iconSize = computed(() => DT_CONTROL_ICON_PX[props.size])
+
+const XS_ICON_PX = 12 // xs 档内嵌图标边长
+
+const iconSize = computed(() =>
+  props.size === 'xs' ? XS_ICON_PX : DT_CONTROL_ICON_PX[props.size],
+)
+
+/** 开关语义下外观由 pressed 决定，见 props.pressed 的注释。 */
+const effectiveVariant = computed<DtButtonVariant>(() => {
+  if (props.pressed === undefined) return props.variant
+  return props.pressed ? 'soft' : 'ghost'
+})
+const effectiveIntent = computed<DtIntent>(() => {
+  if (props.pressed === undefined) return props.intent
+  return props.pressed ? 'primary' : 'neutral'
+})
 /** 无文字内容时压成正方形，否则图标键会被文字档的横向内边距撑成扁矩形。 */
 const isIconOnly = computed(
   () => !slots.default && Boolean(props.icon || slots.leading),
@@ -56,7 +80,7 @@ const accentVars = computed<Record<string, string>>(() => {
     info: ['--state-info', '--state-info-rgb', '--text-on-emphasis'],
     neutral: ['--text-secondary', '--neutral-fg-rgb', '--text-primary'],
   }
-  const [accent, rgb, foreground] = table[props.intent]
+  const [accent, rgb, foreground] = table[effectiveIntent.value]
   return {
     '--_a': `var(${accent})`,
     '--_a-rgb': `var(${rgb})`,
@@ -75,7 +99,7 @@ function onClick(event: MouseEvent): void {
     :type="type"
     class="dt-btn"
     :class="[
-      `dt-btn--${variant}`,
+      `dt-btn--${effectiveVariant}`,
       `dt-btn--${size}`,
       {
         'dt-btn--block': block,
@@ -85,7 +109,7 @@ function onClick(event: MouseEvent): void {
     :style="accentVars"
     :disabled="isDisabled"
     :aria-busy="loading || undefined"
-    :aria-label="ariaLabel"
+    :aria-pressed="pressed"
     @click="onClick"
   >
     <span v-if="loading" class="dt-btn__spinner" aria-hidden="true" />
@@ -164,6 +188,15 @@ function onClick(event: MouseEvent): void {
     width: var(--ctl-h-#{$size});
     padding: 0;
   }
+}
+
+// xs 不在 --ctl-* 尺寸轴上：它只服务 icon-only 的行内动作键，20px 对齐行高
+.dt-btn--xs {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
 }
 
 .dt-btn--solid {
