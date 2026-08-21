@@ -9,8 +9,8 @@ import type { InteractionNavigateByValueAction } from '@dt/contracts'
 import { DtButton, DtField, DtInput } from '@dt/ui'
 
 import DashboardRefControl from '@/features/dashboard/controls/DashboardRefControl.vue'
+import { useRowKeys } from '@/features/dashboard/rowKeys'
 import { NAVIGATE_TARGET_FIELD } from '../scripts/interactionOptions'
-import { useRowKeys } from '../scripts/rowKeys'
 
 type ValueRoute = InteractionNavigateByValueAction['routes'][number]
 

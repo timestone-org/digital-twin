@@ -214,6 +214,7 @@ async function submit(): Promise<void> {
       <button
         type="button"
         class="self-start text-xs text-text-secondary hover:text-text-primary"
+        :aria-expanded="isAdvancedOpen"
         @click="isAdvancedOpen = !isAdvancedOpen"
       >
         {{ isAdvancedOpen ? '收起高级参数' : '高级参数…' }}

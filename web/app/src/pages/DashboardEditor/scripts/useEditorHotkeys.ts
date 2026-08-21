@@ -16,6 +16,7 @@ import type { ArrangeActions } from './editorArrange'
 import {
   useEditorShortcuts,
   type EditorShortcutHandlers,
+  type NudgeStep,
 } from './useEditorShortcuts'
 
 export interface EditorHotkeyDeps {
@@ -37,17 +38,24 @@ export interface EditorHotkeyDeps {
   escapeFirst: () => boolean
 }
 
-/** 方向键微调：Alt 精调恒 1px，其余按吸附口径。 */
+const COARSE_FACTOR = 10 // Shift 粗调的步进倍数
+
+/** 方向键微调三档：Alt 精调恒 1px、Shift 粗调 10 倍步进，其余按吸附口径。 */
 function nudgeBy(
   deps: EditorHotkeyDeps,
   dx: number,
   dy: number,
-  fine: boolean,
+  step: NudgeStep,
 ): void {
-  const step = fine
-    ? { x: 1, y: 1 }
-    : snapStep(deps.design(), deps.grid(), deps.snap())
-  deps.arrange.nudgeSelected(Math.round(dx * step.x), Math.round(dy * step.y))
+  const base =
+    step === 'fine'
+      ? { x: 1, y: 1 }
+      : snapStep(deps.design(), deps.grid(), deps.snap())
+  const factor = step === 'coarse' ? COARSE_FACTOR : 1
+  deps.arrange.nudgeSelected(
+    Math.round(dx * base.x * factor),
+    Math.round(dy * base.y * factor),
+  )
 }
 
 /** 层序四个手势：与右键菜单落到同一批出口上，两条路径不会各自漂。 */
@@ -110,8 +118,8 @@ export function useEditorHotkeys(deps: EditorHotkeyDeps): {
       remove: deps.removeSelected,
       selectAll: deps.arrange.selectAllTop,
       escape: onEscape,
-      nudge: (dx, dy, fine) => {
-        nudgeBy(deps, dx, dy, fine)
+      nudge: (dx, dy, step) => {
+        nudgeBy(deps, dx, dy, step)
       },
       ...orderHandlers(deps.arrange),
       ...zoomHandlers(deps),

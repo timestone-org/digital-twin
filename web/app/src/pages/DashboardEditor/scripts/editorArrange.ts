@@ -16,6 +16,10 @@ import {
   type AlignKind,
   type PlacedRect,
 } from '@/features/dashboard/canvasAlign'
+import type {
+  EditorGridConfig,
+  SnapConfig,
+} from '@/features/dashboard/canvasSnap'
 import * as clipboard from '@/features/dashboard/editorClipboard'
 import * as doc from '@/features/dashboard/editorDoc'
 import { contentSizeOf } from '@/features/dashboard/editorLayout'
@@ -26,8 +30,22 @@ import {
 import type { NodeGeometry } from '@/features/dashboard/editorDoc'
 import type { EditorChrome } from './useEditorChrome'
 
-/** 剪贴板动作要用到的外观轴那一小片：读规则表、整表写回。 */
-export type ArrangeChrome = Pick<EditorChrome, 'rules' | 'setInteractions'>
+/** 外观轴要用到的那一小片：规则表读写给剪贴板，吸附/栅格 setter 给草稿恢复。 */
+export type ArrangeChrome = Pick<
+  EditorChrome,
+  'rules' | 'setInteractions' | 'setSnap' | 'setGrid'
+>
+
+/** 统一尺寸的三档：等宽 / 等高 / 等尺寸。 */
+export type SizeMatchMode = 'width' | 'height' | 'both'
+
+/** 右键菜单粘贴的落点：目标层与该层局部坐标（包围盒左上角要挪到的位置）。 */
+export interface PastePoint {
+  parentId: string | null
+  x: number
+  y: number
+  layer: DesignSize
+}
 
 export interface ArrangeDeps {
   editor: DashboardEditor
@@ -40,7 +58,7 @@ export interface ArrangeDeps {
   dashboardId: () => string | null
   /** 大屏级外观轴：复制粘贴要连联动规则一起搬。 */
   chrome: ArrangeChrome
-  /** 复制结果的提示出口，页面接 toast。 */
+  /** 复制/粘贴结果的提示出口，页面接 toast。 */
   notify: (message: string) => void
 }
 
@@ -65,17 +83,24 @@ export interface ArrangeActions {
     changes: ReadonlyMap<string, NodeGeometry>,
     isContinuous: boolean,
   ) => void
+  /** 统一选中集的尺寸到主选中（选中集末位），只改 w/h 不动 x/y。 */
+  matchSelectedSize: (mode: SizeMatchMode) => void
   /** 选中集里有没有可复制的根；右键菜单据此置灰「复制」。 */
   canCopy: () => boolean
   /** 剪贴板里有没有东西；右键菜单据此置灰「粘贴」。 */
   canPaste: () => boolean
   copySelected: () => boolean
-  /** 粘贴到目标层（选中容器则粘入其中）；返回是否粘出了东西。 */
-  pasteClipboard: () => boolean
+  /**
+   * 粘贴；没粘出东西时提示并返回 false。
+   * @param at 右键菜单给的落点：粘到该层该点；不给时按选中容器/顶层加序号偏移
+   */
+  pasteClipboard: (at?: PastePoint) => boolean
   duplicateSelected: () => void
   selectAllTop: () => void
   /** 删掉选中集的最上层节点连各自子树，一次 apply 一步撤销；确认弹窗归页面。 */
   removeSelected: () => void
+  /** 草稿恢复的回灌口：chromeJson.editor 段（吸附/栅格）经 chrome 的归一化 setter 写回。 */
+  restoreEditorSection: (section: unknown) => void
 }
 
 /** 选中集里同父才能对齐；返回同父的选中节点，父不一致给 null。 */
@@ -120,14 +145,31 @@ function pasteTarget(deps: ArrangeDeps): {
   return { parentId: null, bounds: deps.design() }
 }
 
+/** 落点粘贴的整组平移量：载荷里根节点的包围盒左上角对齐到落点，组内相对位置不变。 */
+function pasteShift(
+  payload: clipboard.ClipboardPayload,
+  at: PastePoint,
+): { dx: number; dy: number } {
+  const roots = payload.nodes.filter((node) => node.parentCk === null)
+  if (roots.length === 0) return { dx: 0, dy: 0 }
+  const left = Math.min(...roots.map((node) => node.x))
+  const top = Math.min(...roots.map((node) => node.y))
+  return { dx: at.x - left, dy: at.y - top }
+}
+
 function pasteInto(
   deps: ArrangeDeps,
   payload: clipboard.ClipboardPayload,
   offset: number,
+  at?: PastePoint,
 ): boolean {
   const dashboardId = deps.dashboardId()
   if (dashboardId === null) return false
-  const target = pasteTarget(deps)
+  const target =
+    at === undefined
+      ? pasteTarget(deps)
+      : { parentId: at.parentId, bounds: at.layer }
+  const shift = at === undefined ? { dx: 0, dy: 0 } : pasteShift(payload, at)
   let pastedIds: readonly string[] = []
   let pastedRules: readonly InteractionRule[] = []
   deps.editor.apply((nodes) => {
@@ -149,7 +191,7 @@ function pasteInto(
       clamped.set(
         id,
         clampRect(
-          { x: node.x, y: node.y, w: node.w, h: node.h },
+          { x: node.x + shift.dx, y: node.y + shift.dy, w: node.w, h: node.h },
           target.bounds,
         ),
       )
@@ -332,12 +374,36 @@ function orderActions(
   }
 }
 
-/** 批量：方向键微调、拖动落笔、整层选中与删除。 */
+/** 选中集统一到主选中尺寸的几何改动表；基准自己不动。 */
+function sizeMatchChanges(
+  editor: DashboardEditor,
+  mode: SizeMatchMode,
+): Map<string, NodeGeometry> {
+  const base = editor.selected.value
+  const changes = new Map<string, NodeGeometry>()
+  if (base === null) return changes
+  for (const node of editor.selectedNodes.value) {
+    if (node.id === base.id) continue
+    changes.set(node.id, {
+      x: node.x,
+      y: node.y,
+      w: mode === 'height' ? node.w : base.w,
+      h: mode === 'width' ? node.h : base.h,
+    })
+  }
+  return changes
+}
+
+/** 批量：方向键微调、拖动落笔、统一尺寸、整层选中与删除。 */
 function batchActions(
   deps: ArrangeDeps,
 ): Pick<
   ArrangeActions,
-  'nudgeSelected' | 'changeGeometryBatch' | 'selectAllTop' | 'removeSelected'
+  | 'nudgeSelected'
+  | 'changeGeometryBatch'
+  | 'matchSelectedSize'
+  | 'selectAllTop'
+  | 'removeSelected'
 > {
   const { editor } = deps
 
@@ -351,6 +417,11 @@ function batchActions(
         'geometry-batch',
       )
       if (!isContinuous) editor.flush()
+    },
+    matchSelectedSize: (mode) => {
+      const changes = sizeMatchChanges(editor, mode)
+      if (changes.size === 0) return
+      editor.apply((nodes) => doc.setGeometryBatch(nodes, changes))
     },
     selectAllTop: () => {
       editor.setSelection(
@@ -414,10 +485,19 @@ function clipboardActions(
       deps.notify(copyMessage(draft))
       return true
     },
-    pasteClipboard: () => {
+    pasteClipboard: (at) => {
       const payload = clipboard.readClipboard()
-      if (payload === null) return false
-      return pasteInto(deps, payload, clipboard.nextPasteOffset())
+      // 落点粘贴不吃序号偏移：包围盒左上角就该落在指的那个点上
+      const pasted =
+        payload !== null &&
+        pasteInto(
+          deps,
+          payload,
+          at === undefined ? clipboard.nextPasteOffset() : 0,
+          at,
+        )
+      if (!pasted) deps.notify('剪贴板里没有可粘贴的模块')
+      return pasted
     },
     duplicateSelected: () => {
       // 再制不动剪贴板：⌘C 复制的东西在 ⌘D 之后还应当粘得出来
@@ -433,5 +513,18 @@ export function createArrangeActions(deps: ArrangeDeps): ArrangeActions {
     ...orderActions(deps),
     ...batchActions(deps),
     ...clipboardActions(deps),
+    restoreEditorSection: (section) => {
+      const isBag =
+        typeof section === 'object' &&
+        section !== null &&
+        !Array.isArray(section)
+      // 段内深形状交给 normalizeSnapConfig / normalizeEditorGrid 兜底，这里只挡非对象
+      const shape: {
+        snap?: Partial<SnapConfig>
+        grid?: Partial<EditorGridConfig>
+      } = isBag ? section : {}
+      deps.chrome.setSnap(shape.snap ?? {})
+      deps.chrome.setGrid(shape.grid ?? {})
+    },
   }
 }

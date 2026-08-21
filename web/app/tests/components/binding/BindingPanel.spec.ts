@@ -192,7 +192,10 @@ describe('行数跟着实体走（rowCounts）', () => {
         .findAll('button')
         .some((item) => item.text().includes('新增一行')),
     ).toBe(false)
-    expect(wrapper.text()).toContain('还没有可绑的行')
+    // 槽内空行走行内空态：单行、不带图标，不把整个槽撑成一张空卡片
+    const empty = wrapper.get('.dt-empty--inline')
+    expect(empty.text()).toContain('还没有可绑的行')
+    expect(empty.find('svg').exists()).toBe(false)
   })
 })
 

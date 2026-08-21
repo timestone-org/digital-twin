@@ -156,7 +156,7 @@ describe('渲染', () => {
 
   it('行内每个图标键都真的画出了图标', () => {
     const wrapper = mountTree([node('a')])
-    const labels = ['移到画布中心', '隐藏这个节点', '删除这个节点']
+    const labels = ['定位到此节点', '隐藏这个节点', '删除这个节点']
 
     for (const label of labels) {
       expect(buttonBy(wrapper, label)?.find('.dt-icon').exists()).toBe(true)
@@ -218,9 +218,48 @@ describe('选中与行内动作', () => {
   it('居中抛 center', async () => {
     const wrapper = mountTree([node('a')])
 
-    await buttonBy(wrapper, '移到画布中心')?.trigger('click')
+    await buttonBy(wrapper, '定位到此节点')?.trigger('click')
 
     expect(wrapper.emitted('center')?.[0]).toEqual(['a'])
+  })
+
+  // 动作键挂在会整行选中的行元素里，漏掉 .stop 的表现是「点显隐顺带换了选区」
+  it('定位与切显隐都不顺带选中那一行', async () => {
+    const wrapper = mountTree([node('a')])
+
+    await buttonBy(wrapper, '定位到此节点')?.trigger('click')
+    await buttonBy(wrapper, '隐藏这个节点')?.trigger('click')
+
+    expect(wrapper.emitted('select')).toBeUndefined()
+  })
+
+  it('行内动作键走 DtButton 的 xs 幽灵档，删除键是 danger 色', () => {
+    const wrapper = mountTree([node('a')])
+    const labels = ['定位到此节点', '隐藏这个节点', '删除这个节点']
+
+    for (const label of labels) {
+      const button = buttonBy(wrapper, label)
+      expect(button?.classes()).toContain('dt-btn--xs')
+      expect(button?.classes()).toContain('dt-btn--ghost')
+      expect(button?.classes()).toContain('dt-layer__act')
+    }
+    expect(buttonBy(wrapper, '删除这个节点')?.attributes('style')).toContain(
+      '--state-danger',
+    )
+  })
+
+  // 已隐藏节点的显隐键是当前状态的唯一提示：不能跟着静息隐藏，且要用警示色标出来
+  it('已隐藏的节点显隐键常显（--pinned）并转 warning 色', () => {
+    const hidden = mountTree([node('a', { isVisible: false })])
+    const shown = mountTree([node('a')])
+
+    const pinned = buttonBy(hidden, '显示这个节点')
+    expect(pinned?.classes()).toContain('dt-layer__act--pinned')
+    expect(pinned?.attributes('style')).toContain('--state-warning')
+
+    const resting = buttonBy(shown, '隐藏这个节点')
+    expect(resting?.classes()).not.toContain('dt-layer__act--pinned')
+    expect(resting?.attributes('style')).toContain('--text-secondary')
   })
 
   // 层序键从行里挪进了右栏「通用配置」：15rem 的左栏摆不下第四、第五个键，

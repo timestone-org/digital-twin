@@ -198,6 +198,20 @@ describe('对话框状态', () => {
     expect(findButton('建模并训练')?.disabled).toBe(true)
   })
 
+  // 折叠开关只改一段文案：不给 aria-expanded 的话，读屏用户不知道下面还有一截
+  it('「高级参数」开关带 aria-expanded，随开合翻转', async () => {
+    await open()
+    const toggle = findButton('高级参数…')
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false')
+
+    toggle?.click()
+    await flushPromises()
+
+    expect(findButton('收起高级参数')?.getAttribute('aria-expanded')).toBe(
+      'true',
+    )
+  })
+
   it('描述与高级参数一并进载荷', async () => {
     await open()
     await pickRoom('注塑房')

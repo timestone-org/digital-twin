@@ -19,6 +19,20 @@ export function useEditorProjectId(): Ref<string | null> | null {
   return inject(EDITOR_PROJECT_ID_KEY, null)
 }
 
+/**
+ * 画布级卡片外观缺省（元数据草稿里 `chromeJson.card` 的原值，未归一）。
+ * 模块级外观面板拿它与模块覆盖合成有效外观，判定开关联动；读草稿而不是已保存
+ * 载荷——右栏一改，面板的禁用态当场跟着变。
+ */
+export const EDITOR_CANVAS_CARD_KEY: InjectionKey<Ref<unknown>> = Symbol(
+  'dt-editor-canvas-card',
+)
+
+/** 取画布级卡片外观缺省；没人下发（不在编辑器里挂载）时给 `null`。 */
+export function useCanvasCardDefault(): Ref<unknown> | null {
+  return inject(EDITOR_CANVAS_CARD_KEY, null)
+}
+
 /** 打开某个模块的整页子编辑器。 */
 export type OpenSubEditor = (subEditor: ModuleSubEditor) => void
 

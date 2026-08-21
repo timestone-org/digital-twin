@@ -86,6 +86,8 @@ export interface DragInput {
   dy: number
   /** Alt 拖拽：本次不吸附也不出参考线。 */
   free: boolean
+  /** Shift 拖拽：移动锁主轴、缩放按起手宽高比锁定；逐事件读，可中途切换。 */
+  constrain?: boolean
   /** 智能吸附阈值（设计像素）。 */
   threshold: number
 }
@@ -121,9 +123,22 @@ export interface CanvasDragOptions {
   onCollapse: (nodeId: string) => void
 }
 
+/** 拖动几何浮标的数据：移动示 x,y、缩放示 w×h；left/top 是锚点矩形的画布绝对位置。 */
+export interface DragReadout {
+  kind: DragKind
+  x: number
+  y: number
+  w: number
+  h: number
+  left: number
+  top: number
+}
+
 export interface CanvasDrag {
   isDragging: Ref<boolean>
   guides: Ref<GuideLine[]>
+  /** 拖动中的实时几何读数；没在拖（或还没拖出位移）为 null。 */
+  readout: Ref<DragReadout | null>
   /** 拖动经过的容器：画高亮描边提示这一松手会落进去。 */
   hoverContainerId: Ref<string | null>
   start: (session: DragSession) => void
@@ -155,20 +170,34 @@ export function computeDrag(
   session: DragSession,
   input: DragInput,
 ): DragResult {
-  return session.kind === 'move'
-    ? moveDrag(session, input)
+  if (session.kind === 'move') return moveDrag(session, input)
+  return input.constrain === true
+    ? ratioResize(session, input)
     : resizeDrag(session, input)
+}
+
+/** 一根轴吸附后的落点：参考线命中优先，未命中退回步进吸附。 */
+function snappedAxis(
+  raw: number,
+  hitDelta: number | null,
+  stepped: number,
+): number {
+  return hitDelta === null ? stepped : raw + hitDelta
 }
 
 /**
  * 位移一帧：参考线命中的轴优先吸边线，未命中的轴退回步进吸附；
  * 锚点吸完的净位移原样施加到其余项，各自再夹回自己那一层。
+ * Shift 锁主轴：位移绝对值大的轴生效，另一轴回起点（起点值原样保留，绕过吸附）。
  */
 function moveDrag(session: DragSession, input: DragInput): DragResult {
   const anchor = session.anchor
   const smartOn = !input.free && session.snap.guides
-  const rawX = anchor.start.x + input.dx
-  const rawY = anchor.start.y + input.dy
+  const constrained = input.constrain === true
+  const lockY = constrained && Math.abs(input.dx) >= Math.abs(input.dy)
+  const lockX = constrained && !lockY
+  const rawX = anchor.start.x + (lockX ? 0 : input.dx)
+  const rawY = anchor.start.y + (lockY ? 0 : input.dy)
   const raw: NodeBox = {
     x: rawX,
     y: rawY,
@@ -186,8 +215,8 @@ function moveDrag(session: DragSession, input: DragInput): DragResult {
   })
   const placed = clampRect(
     {
-      x: hit.dx === null ? stepped.x : rawX + hit.dx,
-      y: hit.dy === null ? stepped.y : rawY + hit.dy,
+      x: lockX ? anchor.start.x : snappedAxis(rawX, hit.dx, stepped.x),
+      y: lockY ? anchor.start.y : snappedAxis(rawY, hit.dy, stepped.y),
       w: anchor.start.w,
       h: anchor.start.h,
     },
@@ -285,6 +314,68 @@ function pinnedBox(anchor: DragItem, rect: NodeBox): NodeBox {
   return anchor.isPinned ? { ...rect, x: 0, w: anchor.layer.width } : rect
 }
 
+/**
+ * 主导维先定，另一维按起手宽高比导出；最小边先等比放大兜底，
+ * 再按被钉住的对边等比缩回本层边界。位置：动起始边的把结束边钉在原处。
+ */
+function ratioBox(
+  anchor: DragItem,
+  dir: ResizeDir,
+  raw: NodeBox,
+  xLed: boolean,
+): NodeBox {
+  const start = anchor.start
+  const ratio = start.w > 0 && start.h > 0 ? start.w / start.h : 1
+  let w = xLed ? Math.max(raw.w, 1) : Math.max(raw.h, 1) * ratio
+  let h = w / ratio
+  const grow = Math.max(anchor.minW / w, anchor.minH / h, 1)
+  w *= grow
+  h *= grow
+  const maxW = dir.x === -1 ? start.x + start.w : anchor.layer.width - start.x
+  const maxH = dir.y === -1 ? start.y + start.h : anchor.layer.height - start.y
+  const shrink = Math.min(maxW / w, maxH / h, 1)
+  w *= shrink
+  h *= shrink
+  return {
+    x: dir.x === -1 ? start.x + start.w - w : start.x,
+    y: dir.y === -1 ? start.y + start.h - h : start.y,
+    w,
+    h,
+  }
+}
+
+/**
+ * Shift 缩放一帧：按**起手时**的宽高比锁定。主导轴 = 边手柄所在的轴，
+ * 角手柄取相对位移（|d|/边长）更大的轴；吸附与参考线整套让位——吸完的边凑不出精确比例。
+ */
+function ratioResize(session: DragSession, input: DragInput): DragResult {
+  const anchor = session.anchor
+  const dir = session.dir
+  const raw = applyResize({
+    start: anchor.start,
+    dir,
+    dx: input.dx,
+    dy: input.dy,
+    minW: anchor.minW,
+    minH: anchor.minH,
+    design: anchor.layer,
+    grid: session.grid,
+    snap: session.snap,
+    free: true,
+  })
+  const xLed =
+    dir.y === 0 ||
+    (dir.x !== 0 &&
+      Math.abs(input.dx) * anchor.start.h >=
+        Math.abs(input.dy) * anchor.start.w)
+  const rect = ratioBox(anchor, dir, raw, xLed)
+  const placed = pinnedBox(
+    anchor,
+    clampRect(rect, anchor.layer, anchor.minW, anchor.minH),
+  )
+  return { rects: new Map([[anchor.nodeId, placed]]), guides: [] }
+}
+
 /** 参考线命中时改写正在动的那条边，优先级高于步进吸附。 */
 function smartEdges(
   anchor: DragItem,
@@ -350,18 +441,20 @@ export interface DragRuntime {
   options: CanvasDragOptions
   isDragging: Ref<boolean>
   guides: Ref<GuideLine[]>
+  readout: Ref<DragReadout | null>
   hoverContainerId: Ref<string | null>
   session: DragSession | null
   listeners: AbortController | null
 }
 
-/** 收掉这一次拖动：监听、会话与两处提示状态一起清干净。 */
+/** 收掉这一次拖动：监听、会话与几处提示状态一起清干净。 */
 export function stopDrag(runtime: DragRuntime): void {
   runtime.listeners?.abort()
   runtime.listeners = null
   runtime.session = null
   runtime.isDragging.value = false
   runtime.guides.value = []
+  runtime.readout.value = null
   runtime.hoverContainerId.value = null
 }
 
@@ -380,8 +473,27 @@ function dragFrame(
     dx,
     dy,
     free: event.altKey,
+    constrain: event.shiftKey,
     threshold: SMART_SNAP_SCREEN_PX / scale,
   })
+}
+
+/** 这一帧的浮标数据；锚点矩形不在结果里（不该发生）时为 null。 */
+function readoutOf(
+  session: DragSession,
+  result: DragResult,
+): DragReadout | null {
+  const rect = result.rects.get(session.anchor.nodeId)
+  if (rect === undefined) return null
+  return {
+    kind: session.kind,
+    x: rect.x,
+    y: rect.y,
+    w: rect.w,
+    h: rect.h,
+    left: session.anchor.originX + rect.x,
+    top: session.anchor.originY + rect.y,
+  }
 }
 
 function reportDrag(
@@ -420,6 +532,8 @@ function onDragMove(runtime: DragRuntime, event: PointerEvent): void {
   if (current === null) return
   const result = dragFrame(runtime, current, event)
   runtime.guides.value = result.guides
+  // 原地未动不出浮标：单击不该闪一下读数
+  runtime.readout.value = current.moved ? readoutOf(current, result) : null
   runtime.hoverContainerId.value =
     dropOf(runtime, current, event)?.parentId ?? null
   reportDrag(runtime, current, result.rects, true)

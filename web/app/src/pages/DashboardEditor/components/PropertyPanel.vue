@@ -13,11 +13,11 @@ import type {
   ModuleManifest,
 } from '@dt/contracts'
 import { resolveModuleConfig } from '@dt/runtime'
-import { DtEmpty, DtField } from '@dt/ui'
+import { DtButton, DtEmpty, DtField } from '@dt/ui'
 import { computed } from 'vue'
 
 import type { ConfigPath } from '@/features/dashboard/configPath'
-import { formGroups } from '@/features/dashboard/configForm'
+import { activePresetIds, formGroups } from '@/features/dashboard/configForm'
 import ConfigFieldControl from '@/features/dashboard/controls/ConfigFieldControl.vue'
 import SubEditorEntry from './SubEditorEntry.vue'
 
@@ -43,6 +43,11 @@ const presets = computed<readonly ConfigPreset[]>(
   () => props.manifest?.configPresets ?? [],
 )
 
+// 子集匹配：预设写过的键全部与当前 resolved 值相等就点亮，多个同亮是正常的
+const activePresets = computed(() =>
+  activePresetIds(presets.value, resolved.value),
+)
+
 // 声明了子编辑器的那个字段不画通用控件，改画入口；其余字段照旧
 const subEditor = computed(() => props.manifest?.subEditor ?? null)
 
@@ -52,7 +57,7 @@ function writeField(field: ConfigField, value: unknown, live: boolean): void {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto pr-1">
+  <div class="dt-prop flex h-full min-h-0 flex-col gap-4 overflow-y-auto pr-1">
     <DtEmpty
       v-if="groups.length === 0 && presets.length === 0"
       icon="settings"
@@ -63,27 +68,24 @@ function writeField(field: ConfigField, value: unknown, live: boolean): void {
     <template v-else>
       <!-- 预设排在最上面：先定基调、再逐项微调，下面每一项都是在它的结果上做局部覆盖 -->
       <section v-if="presets.length > 0" class="flex flex-wrap gap-1.5">
-        <button
+        <DtButton
           v-for="preset in presets"
           :key="preset.id"
-          type="button"
-          class="dt-prop__preset"
+          size="sm"
+          :pressed="activePresets.has(preset.id)"
           :title="preset.hint"
           @click="emit('preset', preset)"
         >
           {{ preset.label }}
-        </button>
+        </DtButton>
       </section>
 
-      <section
-        v-for="group in groups"
-        :key="group.title"
-        class="flex flex-col gap-3"
-      >
+      <section v-for="group in groups" :key="group.title" class="dt-prop__grid">
         <h3 class="dt-prop__heading">{{ group.title }}</h3>
         <DtField
           v-for="field in group.fields"
           :key="field.key"
+          :class="{ 'dt-prop__cell--half': field.span === 'half' }"
           :label="field.label"
           :hint="field.help"
           size="sm"
@@ -109,6 +111,11 @@ function writeField(field: ConfigField, value: unknown, live: boolean): void {
 </template>
 
 <style scoped lang="scss">
+// 容器查询的量宽基准：右栏可拖宽窄，按面板实际宽度而非视口降级
+.dt-prop {
+  container-type: inline-size;
+}
+
 .dt-prop__heading {
   margin: 0;
   color: var(--text-disabled);
@@ -116,20 +123,25 @@ function writeField(field: ConfigField, value: unknown, live: boolean): void {
   letter-spacing: 0.08em;
 }
 
-.dt-prop__preset {
-  padding: 3px 10px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-pill);
-  color: var(--text-secondary);
-  font-size: 11px;
-  cursor: pointer;
-  transition:
-    color 0.15s ease,
-    border-color 0.15s ease;
+// 分组内两列栅格：字段缺省占整行，清单声明 span:'half' 的占半行
+.dt-prop__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 8px;
 
-  &:hover {
-    color: var(--accent-primary);
-    border-color: var(--accent-primary);
+  > * {
+    grid-column: 1 / -1;
+  }
+
+  > .dt-prop__cell--half {
+    grid-column: auto;
+  }
+}
+
+// 右栏拖窄时半行字段退回整行，控件不挤爆；不支持容器查询的环境保持两列
+@container (max-width: 259px) {
+  .dt-prop__grid > .dt-prop__cell--half {
+    grid-column: 1 / -1;
   }
 }
 </style>

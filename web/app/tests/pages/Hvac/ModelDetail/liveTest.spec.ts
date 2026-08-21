@@ -406,6 +406,10 @@ describe('相对时间的定时器', () => {
     await vi.advanceTimersByTimeAsync(0)
     expect(vi.getTimerCount()).toBeGreaterThan(0)
     await wrapper.setProps({ open: false })
+    // ⚠ Vue 首次建渲染器时 devtools 钩子会排一只一次性 3s timer：本测试若是
+    // 本文件第一个跑（乱序），它就落在假时钟里。推 3s 吃掉它——泄漏的 30s
+    // interval 是自续的，推完仍会被数出来，断言力度不变。
+    await vi.advanceTimersByTimeAsync(3_000)
     expect(vi.getTimerCount()).toBe(0)
   })
 })

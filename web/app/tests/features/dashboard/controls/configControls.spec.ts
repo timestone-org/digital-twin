@@ -6,7 +6,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type { ConfigField } from '@dt/contracts'
-import { __resetConfigControls } from '@dt/modules'
+import { __resetConfigControls, missingConfigControls } from '@dt/modules'
 import { DtSelect } from '@dt/ui'
 
 import { installConfigControls } from '@/features/dashboard/configControls'
@@ -31,6 +31,13 @@ function lastUpdate(wrapper: ReturnType<typeof mountField>): unknown[] {
 beforeEach(() => {
   __resetConfigControls()
   installConfigControls()
+})
+
+describe('登记表铺满', () => {
+  // ⚠ 缺一档的后果是那一档字段在面板上静默不出控件，用户看到「这一项没法改」
+  it('CONFIG_FIELD_TYPES 每一档都登记了控件', () => {
+    expect(missingConfigControls()).toEqual([])
+  })
 })
 
 describe('文本与颜色', () => {
@@ -59,6 +66,60 @@ describe('文本与颜色', () => {
     await wrapper.find('.dt-input__el').setValue('#202020')
 
     expect(lastUpdate(wrapper)).toEqual(['#202020', true])
+  })
+})
+
+describe('多行文本', () => {
+  it('读当前值，打字算连续输入', async () => {
+    const wrapper = mountField(field({ type: 'textarea' }), '第一行\n第二行')
+    const el = wrapper.find('textarea')
+
+    expect((el.element as HTMLTextAreaElement).value).toBe('第一行\n第二行')
+    await el.setValue('改过的\n两行')
+
+    expect(lastUpdate(wrapper)).toEqual(['改过的\n两行', true])
+  })
+
+  it('缺省三行高，占位符经清单声明透传', () => {
+    const wrapper = mountField(
+      field({ type: 'textarea', placeholder: '一行一条' }),
+      '',
+    )
+    const el = wrapper.find('textarea')
+
+    expect(el.attributes('rows')).toBe('3')
+    expect(el.attributes('placeholder')).toBe('一行一条')
+  })
+
+  it('值不是字符串时回落成空串，而不是把面板打不开', () => {
+    const wrapper = mountField(field({ type: 'textarea' }), { oops: true })
+
+    expect(
+      (wrapper.find('textarea').element as HTMLTextAreaElement).value,
+    ).toBe('')
+  })
+
+  // ⚠ IME 组合期上抛的是拼音半成品；写进 v-model 后被回填，中文就打不出来
+  it('IME 组合期间不上抛，组合结束才写一次', async () => {
+    const wrapper = mountField(field({ type: 'textarea' }), '')
+    const el = wrapper.find('textarea')
+
+    await el.trigger('compositionstart')
+    await el.setValue("zhong'wen")
+    expect(wrapper.emitted('update')).toBeUndefined()
+
+    ;(el.element as HTMLTextAreaElement).value = '中文'
+    await el.trigger('compositionend')
+
+    expect(wrapper.emitted('update')).toEqual([['中文', true]])
+  })
+
+  it('禁用态透传到原生元素', () => {
+    const wrapper = mount(ConfigFieldControl, {
+      props: { field: field({ type: 'textarea' }), value: '', disabled: true },
+    })
+
+    expect(wrapper.find('textarea').attributes('disabled')).toBeDefined()
   })
 })
 

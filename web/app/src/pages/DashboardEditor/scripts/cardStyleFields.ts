@@ -3,8 +3,30 @@
  * 平台现值（= 留空时的表现）」。键出自 `@dt/contracts` 的 `CHROME_KEYS`，
  * 这里只描述渲染方式，逐条手写 markup 会把面板撑到没法核对。
  */
-import type { ChromeKey, DtNumberRange, DtSelectOption } from '@dt/contracts'
-import { CARD_BORDER_STYLE_OPTIONS } from '@dt/runtime'
+import type {
+  CardChrome,
+  ChromeKey,
+  DtNumberRange,
+  DtSelectOption,
+  ModuleChrome,
+} from '@dt/contracts'
+import { isChromeKey } from '@dt/contracts'
+import {
+  CARD_BORDER_STYLE_OPTIONS,
+  bareBorderClasses,
+  normalizeCardBorderStyle,
+} from '@dt/runtime'
+
+/**
+ * 以类型化键遍历一只 chrome 袋子（含值为 undefined 的显式键，「平台默认」靠它删键）。
+ * ⚠ 袋子落库时是自由 JSON：没登记进 `CHROME_KEYS` 的键在这里被过滤掉。
+ * @param bag chrome 袋子
+ */
+export function chromeEntries(bag: CardChrome): [ChromeKey, unknown][] {
+  return Object.entries(bag).filter((entry): entry is [ChromeKey, unknown] =>
+    isChromeKey(entry[0]),
+  )
+}
 
 /** 一条可配字段。`pad3` 是唯一的 `number[3]`（标题内边距），三格数字并排。 */
 export interface CardField {
@@ -353,6 +375,91 @@ export const CARD_FIELD_GROUPS: readonly CardFieldGroup[] = [
 
 /** 无记录时默认只展开「边框」：呼吸描边是最常改的一项，其余高级字段常年收着。 */
 export const DEFAULT_OPEN_GROUP = 'border'
+
+/**
+ * 模块级面板的适配输入。大屏级面板（页面缺省）不构造它：那里的键对整套 card
+ * 模块都有效，一律全量摆出。
+ */
+export interface CardFieldContext {
+  /** 选中模块的壳形态。 */
+  chrome: ModuleChrome
+  /** 清单声明的壳不消费键（`unsupportedChromeKeys`）。 */
+  unsupportedKeys: ReadonlySet<string>
+  /** `mergeCardChrome(画布缺省, 模块覆盖)` 的有效外观，开关类判定用它。 */
+  effective: CardChrome
+}
+
+/** 只挂 `.dt-module--card` 的框类键（chrome.scss）：裸渲染壳没有消费点。 */
+const BARE_HIDDEN_KEYS: ReadonlySet<string> = new Set([
+  'bg',
+  'backdropBlur',
+  'hoverLift',
+  'hoverGlow',
+])
+
+/**
+ * 过滤出当前模块面板上可见的字段：清单声明不消费的键与裸渲染壳的框类键**隐藏**
+ * （结构性不支持）；被开关关掉的键归 `cardGroupDisabledReason`（禁用 + 说明）。
+ * @param fields 一组字段声明
+ * @param context 模块级适配输入；undefined = 大屏级面板，不过滤
+ */
+export function visibleCardFields(
+  fields: readonly CardField[],
+  context: CardFieldContext | undefined,
+): readonly CardField[] {
+  if (context === undefined) return fields
+  return fields.filter((field) => {
+    if (context.unsupportedKeys.has(field.key)) return false
+    return !(context.chrome === 'bare' && BARE_HIDDEN_KEYS.has(field.key))
+  })
+}
+
+/** 「角括号 / 切角」两档下角标键改喂边框画法，四角组不随 `corners` 开关死。 */
+function isCornerFedByBorder(effective: CardChrome): boolean {
+  const border = effective.borderStyle
+  if (border == null || border === '') return false
+  const style = normalizeCardBorderStyle(border)
+  return style === 'bracket' || style === 'cut'
+}
+
+/**
+ * 这一组字段此刻被哪个开关整组关掉了；null = 没被关。
+ * 判定按合成后的**有效**外观走：模块级留空 = 继承画布缺省。
+ * @param groupId `CARD_FIELD_GROUPS` 里的组 id
+ * @param context 模块级适配输入
+ */
+export function cardGroupDisabledReason(
+  groupId: string,
+  context: CardFieldContext,
+): string | null {
+  const effective = context.effective
+  if (groupId === 'corner') {
+    // 裸渲染壳只有配了边框样式才画描边浮层，四角跟着浮层走（bareBorderClasses）
+    if (
+      context.chrome === 'bare' &&
+      bareBorderClasses(effective).length === 0
+    ) {
+      return '需先选择边框样式：裸渲染模块配了边框样式才画四角'
+    }
+    if (
+      effective.corners === false &&
+      !context.unsupportedKeys.has('corners') &&
+      !isCornerFedByBorder(effective)
+    ) {
+      return '已被「四角辉光」开关关闭'
+    }
+  }
+  // ⚠ 开关自己被壳声明为不消费时不做联动禁用：容器/页头的标题条走各自的
+  // 「显示标题条」配置，chrome 的 showTitle 对它们本来就落不到任何地方
+  if (
+    groupId === 'title' &&
+    effective.showTitle === false &&
+    !context.unsupportedKeys.has('showTitle')
+  ) {
+    return '已被「显示标题」开关关闭'
+  }
+  return null
+}
 
 /** 标题内边距的平台现值：标题栏的 padding 8px 12px 6px。 */
 export const TITLE_PAD_DEFAULT: readonly number[] = [8, 12, 6]

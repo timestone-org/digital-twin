@@ -39,6 +39,7 @@ const EMITTER = manifest({
   type: 'emitter',
   displayName: '分段切换',
   emitsInteractions: true,
+  interactionEvents: ['click', 'select'],
 })
 
 function getManifest(moduleType: string): ModuleManifest | undefined {
@@ -111,6 +112,47 @@ function firstAction(wrapper: Editor) {
   if (first === undefined) throw new Error('上抛的规则表是空的')
   return first.action
 }
+
+describe('触发事件按源模块声明过滤', () => {
+  it('源清单没声明 interactionEvents 时只剩「点击」', () => {
+    const wrapper = mountEditor()
+
+    expect(selectOf(wrapper, '触发事件').props('options')).toEqual([
+      { value: 'click', label: '点击' },
+    ])
+  })
+
+  // ⚠ 静默吞掉存量事件等于悄悄改写规则；保留 + 标注才让人看得见问题
+  it('存量 change 规则不被吞：选项保留且标注源发不出', () => {
+    const wrapper = mountEditor([
+      rule({ source: { nodeId: 'n1', event: 'change' } }),
+    ])
+    const control = selectOf(wrapper, '触发事件')
+
+    expect(control.props('modelValue')).toBe('change')
+    expect(control.props('options')).toEqual([
+      { value: 'click', label: '点击' },
+      { value: 'change', label: '变化（该模块不会发出此事件）' },
+    ])
+  })
+
+  it('换到声明了更多事件的源节点，选项集跟着切换', async () => {
+    const wrapper = mountEditor([
+      rule({ source: { nodeId: 'n2', event: 'click' } }),
+    ])
+    expect(selectOf(wrapper, '触发事件').props('options')).toEqual([
+      { value: 'click', label: '点击' },
+      { value: 'select', label: '选项点击' },
+    ])
+
+    selectOf(wrapper, '事件源').vm.$emit('update:modelValue', 'n1')
+    await wrapper.setProps({ rules: lastRules(wrapper) })
+
+    expect(selectOf(wrapper, '触发事件').props('options')).toEqual([
+      { value: 'click', label: '点击' },
+    ])
+  })
+})
 
 describe('联动规则编辑面', () => {
   it('事件源只列清单标了可交互的节点', () => {

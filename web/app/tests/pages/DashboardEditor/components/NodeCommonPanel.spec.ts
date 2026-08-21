@@ -7,7 +7,9 @@
 import type { DashboardNodePayload, ModuleManifest } from '@dt/contracts'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import { ref, type Ref } from 'vue'
 
+import { EDITOR_CANVAS_CARD_KEY } from '@/features/dashboard/editorContext'
 import type { LayerPosition } from '@/features/dashboard/editorDoc'
 import CardStyleFields from '@/pages/DashboardEditor/components/CardStyleFields.vue'
 import NodeCommonPanel from '@/pages/DashboardEditor/components/NodeCommonPanel.vue'
@@ -47,9 +49,14 @@ function mountPanel(
   over: Partial<DashboardNodePayload> = {},
   manifest: ModuleManifest | undefined = MANIFEST,
   layer: LayerPosition | null = { index: 1, total: 3 },
+  canvasCard?: Ref<unknown>,
 ) {
   return mount(NodeCommonPanel, {
     props: { node: node(over), manifest, layer },
+    global:
+      canvasCard === undefined
+        ? {}
+        : { provide: { [EDITOR_CANVAS_CARD_KEY as symbol]: canvasCard } },
   })
 }
 
@@ -113,6 +120,15 @@ describe('几何与层序', () => {
 
   it('标出这一层排第几，方便对着画布数', () => {
     expect(mountPanel().text()).toContain('第 2 / 3 层')
+  })
+
+  // center 是「视口滚动定位到节点」，不动几何——文案照着定位说，别再叫「居中」
+  it('定位键的文案与无障碍名都说「定位」，档位键不变', () => {
+    const button = mountPanel().get('[data-test="order-center"]')
+
+    expect(button.text()).toBe('定位')
+    expect(button.attributes('aria-label')).toBe('定位到此节点')
+    expect(button.attributes('title')).toBe('定位到此节点')
   })
 
   it('已经在最上面时置顶与上移置灰，往下的两个照常', () => {
@@ -218,5 +234,70 @@ describe('模块级卡片外观', () => {
     const wrapper = mountPanel({}, { ...MANIFEST, chromeConfigurable: false })
 
     expect(wrapper.text()).not.toContain('卡片外观')
+  })
+
+  // ⚠ 刻意的语义变化：袋子落库是自由 JSON，没登记进 CHROME_KEYS 的野键
+  //   经面板任一次编辑写回后即被过滤，不再跟着这只袋子走
+  it('存量袋子里的野键在任一次写回时被过滤掉', async () => {
+    const wrapper = mountPanel({
+      configJson: { __cardStyle: { radius: 8, hack: 'boom' } },
+    })
+
+    await pushChrome(wrapper, { radius: 8, hack: 'boom', titleGap: 4 })
+
+    expect(wrapper.emitted('config')?.[0]).toEqual([
+      ['__cardStyle'],
+      { radius: 8, titleGap: 4 },
+      false,
+    ])
+  })
+})
+
+describe('画布缺省与禁用联动', () => {
+  it('画布缺省关了显示标题，模块级面板的标题条组即被禁用并说明', async () => {
+    const canvasCard = ref<unknown>({ showTitle: false })
+    const wrapper = mountPanel({}, MANIFEST, { index: 1, total: 3 }, canvasCard)
+
+    const head = wrapper
+      .findAll('.card-style__group')
+      .find((button) => button.text().includes('标题条'))
+    await head?.trigger('click')
+
+    expect(wrapper.find('[data-test="card-group-off-title"]').text()).toContain(
+      '显示标题',
+    )
+  })
+
+  it('右栏改画布缺省时禁用态即时跟着变，不用重新选中', async () => {
+    const canvasCard = ref<unknown>({ showTitle: false })
+    const wrapper = mountPanel({}, MANIFEST, { index: 1, total: 3 }, canvasCard)
+    const head = wrapper
+      .findAll('.card-style__group')
+      .find((button) => button.text().includes('标题条'))
+    await head?.trigger('click')
+    expect(wrapper.find('[data-test="card-group-off-title"]').exists()).toBe(
+      true,
+    )
+
+    canvasCard.value = {}
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-test="card-group-off-title"]').exists()).toBe(
+      false,
+    )
+  })
+
+  it('模块级显式 showTitle=false 也能自己锁掉标题条组——两级合成后判定', async () => {
+    const wrapper = mountPanel({
+      configJson: { __cardStyle: { showTitle: false } },
+    })
+    const head = wrapper
+      .findAll('.card-style__group')
+      .find((button) => button.text().includes('标题条'))
+    await head?.trigger('click')
+
+    expect(wrapper.find('[data-test="card-group-off-title"]').exists()).toBe(
+      true,
+    )
   })
 })

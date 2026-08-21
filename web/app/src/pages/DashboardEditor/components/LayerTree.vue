@@ -7,7 +7,7 @@
  */
 import type { DashboardNodePayload } from '@dt/contracts'
 import type { GetModuleManifest } from '@dt/runtime'
-import { DtIcon, DtInput } from '@dt/ui'
+import { DtButton, DtIcon, DtInput } from '@dt/ui'
 import { computed, ref } from 'vue'
 
 import type { EditorFrame } from '@/features/dashboard/editorLayout'
@@ -146,34 +146,37 @@ function onRenameKeydown(event: KeyboardEvent): void {
           <!-- 类型贴在名字后面：同类模块摆好几个时，只看名字分不出这一行是什么 -->
           <span class="dt-layer__type">{{ row.node.moduleType }}</span>
         </template>
-        <button
-          type="button"
+        <DtButton
+          size="xs"
+          variant="ghost"
+          intent="neutral"
+          icon="home"
           class="dt-layer__act"
-          aria-label="移到画布中心"
-          title="移到画布中心"
+          aria-label="定位到此节点"
+          title="定位到此节点"
           @click.stop="emit('center', row.id)"
-        >
-          <DtIcon name="home" :size="12" />
-        </button>
-        <button
-          type="button"
+        />
+        <DtButton
+          size="xs"
+          variant="ghost"
+          :intent="row.node.isVisible ? 'neutral' : 'warning'"
+          :icon="row.node.isVisible ? 'eye' : 'eye-off'"
           class="dt-layer__act"
           :class="{ 'dt-layer__act--pinned': !row.node.isVisible }"
           :aria-label="row.node.isVisible ? '隐藏这个节点' : '显示这个节点'"
           :title="row.node.isVisible ? '隐藏这个节点' : '显示这个节点'"
           @click.stop="emit('toggle', row.id, !row.node.isVisible)"
-        >
-          <DtIcon :name="row.node.isVisible ? 'eye' : 'eye-off'" :size="12" />
-        </button>
-        <button
-          type="button"
-          class="dt-layer__act dt-layer__act--danger"
+        />
+        <DtButton
+          size="xs"
+          variant="ghost"
+          intent="danger"
+          icon="trash"
+          class="dt-layer__act"
           aria-label="删除这个节点"
           title="删除这个节点"
           @click.stop="emit('remove', row.id)"
-        >
-          <DtIcon name="trash" :size="12" />
-        </button>
+        />
       </div>
     </li>
     <li
@@ -225,47 +228,34 @@ function onRenameKeydown(event: KeyboardEvent): void {
   }
 }
 
-// 折叠键与行内动作键：16 / 20px 的裸图标键，无背景、无边框。
+// 折叠键：16px 的裸图标键，无背景、无边框。
 // ⚠ 左栏只有 15rem，用控件档位（sm = 32px 见方）摆五个键就把名字挤没了，
-// 那正是「看不出这一行是什么模块」的原因。
-.dt-layer__fold,
-.dt-layer__act {
+// 那正是「看不出这一行是什么模块」的原因——行内动作键走 DtButton 的 xs 档。
+.dt-layer__fold {
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-}
-
-.dt-layer__fold {
   width: 16px;
   height: 16px;
   color: var(--text-secondary);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--accent-primary);
+  }
 }
 
 .dt-layer__act {
-  width: 20px;
-  height: 20px;
-  border-radius: var(--radius-sm);
-  color: var(--text-disabled);
+  flex: none;
   // 静息态藏起来，一行不被按钮占满；键盘走焦点时要现身，否则 Tab 到的是看不见的键
   opacity: 0;
   transition: opacity 0.15s ease;
 
-  &--danger:hover {
-    color: var(--state-danger);
-  }
-
   // 已隐藏的节点：这个键是当前状态的唯一提示，不能跟着藏
   &--pinned {
-    color: var(--state-warning);
     opacity: 1;
   }
-}
-
-.dt-layer__fold:hover,
-.dt-layer__act:hover {
-  color: var(--accent-primary);
 }
 
 .dt-layer__row:hover .dt-layer__act,

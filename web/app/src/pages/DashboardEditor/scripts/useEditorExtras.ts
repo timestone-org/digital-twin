@@ -1,6 +1,6 @@
 /**
  * @fileoverview 编辑器周边件的接线：全屏预览态、画布右键菜单、导出 JSON、
- * 本地自动草稿、保存后 best-effort 截图。收在一处让页面只剩绑定。
+ * 保存后 best-effort 截图。收在一处让页面只剩绑定；本地草稿流在 useEditorPageOps。
  */
 import { ref, type Ref } from 'vue'
 import type { DashboardPayload } from '@dt/contracts'
@@ -22,7 +22,6 @@ import {
   type EditorContextMenu,
 } from './useEditorContextMenu'
 import { clearDraft } from './editorDraft'
-import { useEditorDraftFlow } from './useEditorDraftFlow'
 import { captureThumbnail } from './editorThumbnail'
 
 export interface EditorExtrasDeps {
@@ -41,7 +40,7 @@ export interface EditorExtrasDeps {
   consumePicker: () => boolean
   /** ops.save；截图挂在它成功之后。 */
   save: () => Promise<void>
-  /** 草稿恢复的确认弹窗宿主。 */
+  /** 确认弹窗宿主；由页面统一注入。 */
   confirm: {
     ask: (input: {
       title: string
@@ -81,8 +80,6 @@ function contextMenuOf(deps: EditorExtrasDeps): EditorContextMenu {
 export function useEditorExtras(deps: EditorExtrasDeps): EditorExtras {
   const { editor, dashboard } = deps
   const previewOpen = ref(false)
-
-  useEditorDraftFlow({ editor, dashboard, confirm: deps.confirm })
 
   async function saveWithThumbnail(): Promise<void> {
     await deps.save()

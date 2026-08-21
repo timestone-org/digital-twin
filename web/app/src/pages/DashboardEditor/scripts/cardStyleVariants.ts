@@ -4,6 +4,8 @@
  */
 import type { CardChrome, ChromeKey } from '@dt/contracts'
 
+import { chromeEntries } from './cardStyleFields'
+
 /**
  * 「极简描边」：淡描边缓慢呼吸 + 无角标 + 小圆角 + 底对齐标题条。
  * 描边色用 `color-mix` 掺主题强调色而不是写死色值，换肤时才跟着走。
@@ -97,8 +99,8 @@ export function matchCardStyle(chrome: CardChrome): string {
   }
   if (!CARD_STYLE_KEYS.some(isSet)) return 'default'
   for (const [id, values] of Object.entries(STYLE_VALUES)) {
-    const hit = Object.entries(values).every(([key, value]) =>
-      sameValue(chrome[key as ChromeKey], value),
+    const hit = chromeEntries(values).every(([key, value]) =>
+      sameValue(chrome[key], value),
     )
     if (hit) return id
   }

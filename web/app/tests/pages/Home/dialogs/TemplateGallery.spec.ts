@@ -70,7 +70,7 @@ describe('呈现', () => {
     await flushPromises()
 
     expect(wrapper.find('.dt-tpl--on').exists()).toBe(true)
-    expect(wrapper.find('[aria-pressed="true"]').exists()).toBe(true)
+    expect(wrapper.find('[aria-current="true"]').exists()).toBe(true)
   })
 
   it('分类为空时写「未分类」，不是留一行空白', async () => {

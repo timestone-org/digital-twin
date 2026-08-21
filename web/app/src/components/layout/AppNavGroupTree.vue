@@ -29,8 +29,7 @@ function isActive(to: string | undefined): boolean {
   <div class="nav-tree">
     <DtButton
       class="nav-tree__trigger"
-      :variant="groupActive ? 'soft' : 'ghost'"
-      :intent="groupActive ? 'primary' : 'neutral'"
+      :pressed="groupActive"
       size="md"
       block
       :icon="item.icon"

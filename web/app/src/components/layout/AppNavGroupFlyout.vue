@@ -77,8 +77,7 @@ function onEsc(event: KeyboardEvent): void {
   >
     <span class="nav-trigger">
       <DtButton
-        :variant="groupActive ? 'soft' : 'ghost'"
-        :intent="groupActive ? 'primary' : 'neutral'"
+        :pressed="groupActive"
         :icon="item.icon"
         :aria-label="item.label"
         :aria-expanded="isOpen"

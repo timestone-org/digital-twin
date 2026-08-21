@@ -29,6 +29,16 @@ describe('清单', () => {
     expect(all.some((keys) => keys.includes('Ctrl'))).toBe(false)
   })
 
+  it('方向键三档与 Shift 拖拽锁定在清单里', () => {
+    const all = shortcutGroups('⌘')
+      .flatMap((group) => group.items)
+      .map((item) => `${item.keys} ${item.desc}`)
+      .join('\n')
+    expect(all).toContain('Alt 方向键 1px 精调（临时忽略吸附）')
+    expect(all).toContain('Shift 方向键 10 倍步进粗调')
+    expect(all).toContain('Shift 拖拽 移动锁定主轴 / 缩放锁定宽高比')
+  })
+
   it('保存与撤销这两条底线手势在清单里', () => {
     const all = shortcutGroups('Ctrl')
       .flatMap((group) => group.items)

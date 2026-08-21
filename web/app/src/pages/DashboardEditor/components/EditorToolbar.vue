@@ -106,13 +106,11 @@ function pickStep(value: string): void {
     <div class="dt-toolbar__group">
       <DtButton
         size="sm"
-        :variant="snap.enabled ? 'soft' : 'ghost'"
-        :intent="snap.enabled ? 'primary' : 'neutral'"
+        :pressed="snap.enabled"
         icon="magnet"
         aria-label="吸附总开关"
         title="吸附总开关"
         data-test="snap-enabled"
-        :aria-pressed="snap.enabled"
         @click="emit('set-snap', { enabled: !snap.enabled })"
       />
       <DtSegmented
@@ -134,13 +132,11 @@ function pickStep(value: string): void {
       />
       <DtButton
         size="sm"
-        :variant="snap.guides ? 'soft' : 'ghost'"
-        :intent="snap.guides ? 'primary' : 'neutral'"
+        :pressed="snap.guides"
         icon="guides"
         aria-label="智能参考线"
         title="智能参考线"
         data-test="snap-guides"
-        :aria-pressed="snap.guides"
         @click="emit('set-snap', { guides: !snap.guides })"
       />
       <!-- 整理与吸附同类：都是「让东西摆整齐」，且都不要求先选中什么 -->

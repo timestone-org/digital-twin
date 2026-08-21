@@ -9,6 +9,7 @@ import type {
   InteractionAction,
   InteractionEventName,
   InteractionRule,
+  ModuleManifest,
 } from '@dt/contracts'
 import { INTERACTION_EVENTS } from '@dt/contracts'
 import type { GetModuleManifest } from '@dt/runtime'
@@ -60,9 +61,29 @@ const ACTION_TYPES = [
   'navigateByValue',
 ] as const satisfies readonly InteractionActionType[]
 
-export const EVENT_OPTIONS: readonly DtSelectOption[] = INTERACTION_EVENTS.map(
-  (event) => ({ value: event, label: EVENT_LABELS[event] }),
-)
+/** 清单没声明 `interactionEvents` 时的缺省：全仓内置模块实际只上抛 click。 */
+const DEFAULT_INTERACTION_EVENTS: readonly InteractionEventName[] = ['click']
+
+/**
+ * 源节点的「触发事件」下拉项：按源模块清单声明的 `interactionEvents` 过滤。
+ * 存量规则引用了源发不出的事件时**保留该项并标注**，不许静默吞掉存量配置。
+ * @param manifest 源节点的模块清单；节点已删 / 类型未注册时给 undefined
+ * @param currentEvent 规则当前引用的事件
+ */
+export function eventOptionsFor(
+  manifest: ModuleManifest | undefined,
+  currentEvent: InteractionEventName,
+): DtSelectOption[] {
+  const supported = manifest?.interactionEvents ?? DEFAULT_INTERACTION_EVENTS
+  return INTERACTION_EVENTS.filter(
+    (event) => supported.includes(event) || event === currentEvent,
+  ).map((event) => ({
+    value: event,
+    label: supported.includes(event)
+      ? EVENT_LABELS[event]
+      : `${EVENT_LABELS[event]}（该模块不会发出此事件）`,
+  }))
+}
 
 export const ACTION_OPTIONS: readonly DtSelectOption[] = ACTION_TYPES.map(
   (type) => ({ value: type, label: ACTION_LABELS[type] }),

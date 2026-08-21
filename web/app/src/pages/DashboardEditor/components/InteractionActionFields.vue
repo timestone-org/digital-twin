@@ -16,10 +16,10 @@ import type {
 import { DtButton, DtField, DtInput, DtNotice, DtSelect } from '@dt/ui'
 
 import DashboardRefControl from '@/features/dashboard/controls/DashboardRefControl.vue'
+import { useRowKeys } from '@/features/dashboard/rowKeys'
 import InteractionTargetPicker from './InteractionTargetPicker.vue'
 import InteractionValueRoutes from './InteractionValueRoutes.vue'
 import { NAVIGATE_TARGET_FIELD } from '../scripts/interactionOptions'
-import { useRowKeys } from '../scripts/rowKeys'
 
 type ActiveGroup = { value: string; targets: string[] }
 type ValueRoute = InteractionNavigateByValueAction['routes'][number]

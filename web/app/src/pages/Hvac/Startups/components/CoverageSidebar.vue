@@ -61,7 +61,7 @@ function toggle(value: string): void {
               ? 'bg-accent-primary/10 text-accent-primary'
               : 'text-text-primary hover:bg-surface-raised'
           "
-          :aria-pressed="row.value === props.selected"
+          :aria-current="row.value === props.selected ? 'true' : undefined"
           :title="row.label"
           @click="toggle(row.value)"
         >

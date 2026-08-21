@@ -17,7 +17,10 @@ import {
   type EditorGridConfig,
   type SnapConfig,
 } from '@/features/dashboard/canvasSnap'
-import { EDITOR_PROJECT_ID_KEY } from '@/features/dashboard/editorContext'
+import {
+  EDITOR_CANVAS_CARD_KEY,
+  EDITOR_PROJECT_ID_KEY,
+} from '@/features/dashboard/editorContext'
 import { parseInteractionRules } from '@/features/dashboard/interactionRules'
 import type { EditorMeta } from './useEditorMeta'
 
@@ -106,6 +109,12 @@ export function useEditorChrome(
   provide(
     EDITOR_PROJECT_ID_KEY,
     computed(() => dashboard.value?.projectId ?? null),
+  )
+
+  // 模块级外观面板合成有效外观用；原值不归一，读侧自己容错（mergeCardChrome）
+  provide(
+    EDITOR_CANVAS_CARD_KEY,
+    computed(() => meta.draft.value?.chromeJson.card),
   )
 
   watch(

@@ -197,12 +197,11 @@ function bindingOf(fieldKey: string): BindingPayload | null {
           </DtButton>
         </header>
 
-        <p
+        <DtEmpty
           v-if="section.spec.isArray && section.groups.length === 0"
-          class="text-2xs text-text-disabled"
-        >
-          还没有可绑的行。
-        </p>
+          size="inline"
+          title="还没有可绑的行。"
+        />
 
         <div
           v-for="group in section.groups"

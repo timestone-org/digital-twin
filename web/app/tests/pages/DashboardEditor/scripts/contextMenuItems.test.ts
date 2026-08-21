@@ -37,14 +37,15 @@ function entryOf(action: string, over: Partial<ContextMenuInput> = {}) {
 }
 
 describe('条目表', () => {
-  it('落在节点上：层序自成一组，再是居中与复制删除，隐藏单独一组', () => {
+  it('落在节点上：层序自成一组，再是定位/复制/再制/删除，显隐单独一组', () => {
     expect(labels()).toEqual([
       '置顶',
       '上移一层',
       '下移一层',
       '置底',
-      '移到画布中心',
+      '定位到此节点',
       '复制',
+      '再制',
       '删除',
       '隐藏本节点',
     ])
@@ -83,9 +84,11 @@ describe('置灰', () => {
     expect(entryOf('front', { canBackward: false })?.disabled).toBe(false)
   })
 
-  it('选中集里没有可复制的根时复制置灰', () => {
+  it('选中集里没有可复制的根时复制与再制一起置灰', () => {
     expect(entryOf('copy')?.disabled).toBe(false)
     expect(entryOf('copy', { canCopy: false })?.disabled).toBe(true)
+    expect(entryOf('duplicate')?.disabled).toBe(false)
+    expect(entryOf('duplicate', { canCopy: false })?.disabled).toBe(true)
   })
 
   it('剪贴板空时粘贴置灰', () => {
@@ -108,8 +111,11 @@ describe('置灰', () => {
     expect(entryOf('fit', { ...blank, isFitted: true })?.disabled).toBe(true)
   })
 
-  it('节点本来就是隐藏的时候隐藏置灰', () => {
+  it('显隐是双向开关：已隐藏的节点给「显示本节点」且不置灰', () => {
+    expect(entryOf('hide')?.label).toBe('隐藏本节点')
     expect(entryOf('hide')?.disabled).toBe(false)
-    expect(entryOf('hide', { isNodeVisible: false })?.disabled).toBe(true)
+    const hidden = entryOf('hide', { isNodeVisible: false })
+    expect(hidden?.label).toBe('显示本节点')
+    expect(hidden?.disabled).toBe(false)
   })
 })

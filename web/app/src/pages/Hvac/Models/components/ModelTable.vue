@@ -105,13 +105,17 @@ const emit = defineEmits<{
 
     <template #cell-name="{ row }">
       <div class="flex min-w-0 flex-col">
-        <button
-          type="button"
-          class="truncate text-left text-accent-primary hover:underline"
+        <!-- 名字本身就是打开详情的入口。⚠ 用 DtButton 而不是自己画一个
+             `<button>`：手搓的那颗要自带焦点环、禁用态与换肤色，漏哪样都不报错 -->
+        <DtButton
+          variant="ghost"
+          intent="neutral"
+          size="sm"
+          class="dt-models__open"
           @click="emit('open', row)"
         >
           {{ row.name }}
-        </button>
+        </DtButton>
         <span
           v-if="row.notice"
           class="truncate text-2xs text-state-warning"
@@ -202,3 +206,13 @@ const emit = defineEmits<{
     </template>
   </DtDataView>
 </template>
+
+<style scoped lang="scss">
+// DtButton 按控件尺寸档排版，塞进表格行要收掉左右内边距并左对齐，
+// 否则名字会比同一行的其它列各缩进一截（同 Assets 列表页的先例）
+.dt-models__open {
+  max-width: 100%;
+  justify-content: flex-start;
+  padding-inline: 0;
+}
+</style>

@@ -17,6 +17,8 @@ export interface RowKeys {
   indexOf: (key: string) => number
   /** 删掉第 index 行那把 uid。 */
   removeAt: (index: number) => void
+  /** 交换第 a、b 行的 uid，配合行数据换位使用；任一越界不动。 */
+  swapAt: (a: number, b: number) => void
 }
 
 /**
@@ -39,5 +41,12 @@ export function useRowKeys(count: () => number): RowKeys {
     keys,
     indexOf: (key) => keys.value.indexOf(key),
     removeAt: (index) => keys.value.splice(index, 1),
+    swapAt: (a, b) => {
+      const left = keys.value[a]
+      const right = keys.value[b]
+      if (left === undefined || right === undefined) return
+      keys.value[a] = right
+      keys.value[b] = left
+    },
   }
 }

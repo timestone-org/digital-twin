@@ -116,6 +116,18 @@ describe('选用', () => {
 
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([false])
   })
+
+  // 单选定位语义：选中的落 aria-current，未选中的不落属性（而不是 false 一排）
+  it('选中的那条标 aria-current，未选中不落属性', async () => {
+    await render()
+    const item = query('.dt-assets__item')
+    expect(item.getAttribute('aria-current')).toBeNull()
+
+    await click(item)
+
+    expect(item.getAttribute('aria-current')).toBe('true')
+    expect(item.classList.contains('is-active')).toBe(true)
+  })
 })
 
 describe('打开与关闭', () => {

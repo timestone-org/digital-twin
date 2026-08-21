@@ -13,14 +13,17 @@ import {
   boundPointKeys,
   createBinding,
   createNode,
+  mergeConfigBatch,
   nextZIndex,
   removeBinding,
   removeSubtree,
   setBindings,
   setConfig,
   setConfigValue,
+  setConfigValueBatch,
   setGeometry,
   setVisible,
+  setVisibleBatch,
   setZIndex,
   siblingCount,
   sortNodes,
@@ -255,6 +258,98 @@ describe('改节点', () => {
     expect(setConfig(nodes, 'a', { title: '新' })[0]?.configJson).toEqual({
       title: '新',
     })
+  })
+})
+
+describe('批量改配置', () => {
+  it('同一条路径的同一个值写到全部目标节点，目标之外不动', () => {
+    const nodes = [
+      node({ id: 'a', configJson: { title: '甲' } }),
+      node({ id: 'b', configJson: { title: '乙' } }),
+      node({ id: 'c', configJson: { title: '丙' } }),
+    ]
+
+    const changed = setConfigValueBatch(nodes, ['a', 'b'], ['title'], '新')
+
+    expect(changed[0]?.configJson).toEqual({ title: '新' })
+    expect(changed[1]?.configJson).toEqual({ title: '新' })
+    expect(changed[2]).toBe(nodes[2])
+  })
+
+  it('值已经相等（Object.is）的节点原样返回引用，全体等值时整表不变', () => {
+    const nodes = [
+      node({ id: 'a', configJson: { title: '同' } }),
+      node({ id: 'b', configJson: { title: '同' } }),
+    ]
+
+    const unchanged = setConfigValueBatch(nodes, ['a', 'b'], ['title'], '同')
+
+    expect(unchanged[0]).toBe(nodes[0])
+    expect(unchanged[1]).toBe(nodes[1])
+  })
+
+  it('数组/对象字段批量写是整块替换：各节点共享同一个引用（现状钉住）', () => {
+    const nodes = [node({ id: 'a' }), node({ id: 'b' })]
+    const rows = [{ label: '一' }]
+
+    const changed = setConfigValueBatch(nodes, ['a', 'b'], ['rows'], rows)
+
+    expect(changed[0]?.configJson.rows).toBe(rows)
+    expect(changed[0]?.configJson.rows).toBe(changed[1]?.configJson.rows)
+  })
+
+  it('浅合并批量：各节点在自己的 configJson 上合并，预设没提到的键原样保留', () => {
+    const nodes = [
+      node({ id: 'a', configJson: { title: '甲', pad: 4 } }),
+      node({ id: 'b', configJson: { title: '乙' } }),
+      node({ id: 'c', configJson: {} }),
+    ]
+
+    const merged = mergeConfigBatch(nodes, ['a', 'b'], { accent: '#fff' })
+
+    expect(merged[0]?.configJson).toEqual({
+      title: '甲',
+      pad: 4,
+      accent: '#fff',
+    })
+    expect(merged[1]?.configJson).toEqual({ title: '乙', accent: '#fff' })
+    expect(merged[2]).toBe(nodes[2])
+  })
+
+  it('浅合并盖掉同名旧值', () => {
+    const nodes = [node({ id: 'a', configJson: { accent: '#000' } })]
+
+    expect(
+      mergeConfigBatch(nodes, ['a'], { accent: '#fff' })[0]?.configJson,
+    ).toEqual({ accent: '#fff' })
+  })
+})
+
+describe('批量改显隐', () => {
+  it('目标集合一次写到位，目标之外不动', () => {
+    const nodes = [
+      node({ id: 'a', isVisible: true }),
+      node({ id: 'b', isVisible: false }),
+      node({ id: 'c', isVisible: true }),
+    ]
+
+    const hidden = setVisibleBatch(nodes, ['a', 'b'], false)
+
+    expect(hidden[0]?.isVisible).toBe(false)
+    expect(hidden[1]?.isVisible).toBe(false)
+    expect(hidden[2]).toBe(nodes[2])
+  })
+
+  it('已是目标值的节点原样返回引用——全体已达标时整表逐项同引用，不该置脏', () => {
+    const nodes = [
+      node({ id: 'a', isVisible: false }),
+      node({ id: 'b', isVisible: false }),
+    ]
+
+    const unchanged = setVisibleBatch(nodes, ['a', 'b'], false)
+
+    expect(unchanged[0]).toBe(nodes[0])
+    expect(unchanged[1]).toBe(nodes[1])
   })
 })
 

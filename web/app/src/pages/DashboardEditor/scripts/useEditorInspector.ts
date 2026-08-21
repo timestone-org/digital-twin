@@ -8,6 +8,8 @@ import { mergeCardChrome } from '@dt/runtime'
 import { computed, type ComputedRef } from 'vue'
 
 import type { DashboardEditor } from '@/composables/useDashboardEditor'
+import { isUniformType } from '@/features/dashboard/batchConfig'
+import { mergeConfigBatch } from '@/features/dashboard/editorDoc'
 import type { EditorActions } from './editorActions'
 import type { EditorMeta } from './useEditorMeta'
 import type { EditorSurface } from './useEditorSurface'
@@ -63,10 +65,18 @@ export function createEditorInspector(
     /**
      * 外观预设：**浅合并**落库，预设没提到的键（标题、绑定、容器栅格）原样保留。
      * 整包替换会静默抹掉它们，而面板上看不出少了什么。
+     * 多选同类型时对全体各自浅合并——每个节点合的是**自己**的 configJson，
+     * 一次 apply 一步撤销。
      */
     applyPreset: (preset) => {
       const node = editor.selected.value
       if (node === null) return
+      const targets = editor.selectedNodes.value
+      if (targets.length > 1 && isUniformType(targets)) {
+        const ids = editor.selectedIds.value
+        editor.apply((nodes) => mergeConfigBatch(nodes, ids, preset.config))
+        return
+      }
       actions.changeConfig([], { ...node.configJson, ...preset.config }, false)
     },
   }

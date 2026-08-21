@@ -69,6 +69,9 @@ beforeEach(() => {
   setActivePinia(createPinia())
   signIn(['ac:view', 'ac:manage'])
   document.body.innerHTML = ''
+  // ⚠ 表格/卡片视图按页记在 localStorage：不清掉的话，切过卡片视图的用例
+  // 会把之后（乱序时在它后面）的用例全带进无 <table> 的卡片形态
+  localStorage.clear()
   useToast().clear()
   pushMock.mockClear()
   replaceMock.mockClear()
@@ -186,9 +189,7 @@ describe('列表', () => {
     ])
     const wrapper = await open()
     const names = (): string[] =>
-      wrapper
-        .findAll('td button.text-accent-primary')
-        .map((item) => item.text())
+      wrapper.findAll('td button.dt-models__open').map((item) => item.text())
     expect(names()).toEqual(['早班模型', '夜班模型'])
     const header = wrapper
       .findAll('button')
@@ -237,16 +238,16 @@ describe('左栏', () => {
     expect(wrapper.text()).toContain('另有 1 个房间没有空调，不能建模')
   })
 
-  it('选中的房间有 aria-pressed，点另一个会换右区', async () => {
+  it('选中的房间有 aria-current，点另一个会换右区', async () => {
     vi.mocked(hvac.listRooms).mockResolvedValue(
       page([room('r1', '注塑房', 2), room('r2', '喷涂房', 1)]),
     )
     const wrapper = await open()
-    const pressed = wrapper.findAll(
-      'nav[aria-label="房间"] [aria-pressed="true"]',
+    const current = wrapper.findAll(
+      'nav[aria-label="房间"] [aria-current="true"]',
     )
-    expect(pressed).toHaveLength(1)
-    expect(pressed[0]?.text()).toContain('注塑房')
+    expect(current).toHaveLength(1)
+    expect(current[0]?.text()).toContain('注塑房')
     const other = wrapper
       .findAll('button')
       .find((item) => item.text().includes('喷涂房'))

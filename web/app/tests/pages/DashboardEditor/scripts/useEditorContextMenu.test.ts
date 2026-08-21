@@ -59,7 +59,12 @@ function setup(nodes: DashboardNodePayload[] = [node('a'), node('b')]) {
     ...shared,
     design: () => DESIGN,
     steps: () => ({ x: 10, y: 10 }),
-    chrome: { rules: computed(() => []), setInteractions: vi.fn() },
+    chrome: {
+      rules: computed(() => []),
+      setInteractions: vi.fn(),
+      setSnap: vi.fn(),
+      setGrid: vi.fn(),
+    },
     notify: vi.fn(),
   })
   const centerOn = vi.fn()
@@ -128,7 +133,7 @@ describe('每一项落到既有动作上', () => {
     expect(back).toHaveBeenCalledTimes(1)
   })
 
-  it('移到画布中心把落点节点交给画布，不改文档', () => {
+  it('定位到此节点把落点节点交给画布，不改文档', () => {
     const ctx = openOn(setup(), 'a')
 
     ctx.menu.run('center')
@@ -145,6 +150,37 @@ describe('每一项落到既有动作上', () => {
     ctx.menu.run('paste')
 
     expect(ctx.editor.nodes.value).toHaveLength(3)
+  })
+
+  it('再制走排布动作的再制出口，不动剪贴板', () => {
+    const ctx = openOn(setup(), 'a')
+    const duplicate = vi.spyOn(ctx.arrange, 'duplicateSelected')
+
+    ctx.menu.run('duplicate')
+
+    expect(duplicate).toHaveBeenCalledTimes(1)
+    expect(ctx.editor.nodes.value).toHaveLength(3)
+    expect(ctx.arrange.canPaste()).toBe(false)
+  })
+
+  it('空白处菜单的粘贴带落点：包围盒左上角落在指的那个点上，不吃序号偏移', () => {
+    const ctx = openOn(setup(), 'a')
+    ctx.menu.run('copy')
+
+    ctx.menu.open(
+      {
+        x: 30,
+        y: 40,
+        pasteAt: { parentId: null, x: 300, y: 400, layer: DESIGN },
+      },
+      null,
+    )
+    ctx.menu.run('paste')
+
+    const pasted = ctx.editor.nodes.value.find(
+      (item) => item.id !== 'a' && item.id !== 'b',
+    )
+    expect(pasted).toMatchObject({ parentId: null, x: 300, y: 400 })
   })
 
   it('删除走带确认弹窗的那个出口，不直接改文档', () => {
@@ -216,8 +252,16 @@ describe('置灰读的是真实状态', () => {
     expect(entryOf(ctx, 'fit')?.disabled).toBe(true)
   })
 
-  it('节点已隐藏时隐藏置灰', () => {
+  it('节点已隐藏时给「显示本节点」，点下去把它显示回来', () => {
     const ctx = openOn(setup([node('a', { isVisible: false })]), 'a')
-    expect(entryOf(ctx, 'hide')?.disabled).toBe(true)
+    const entry = entryOf(ctx, 'hide')
+    expect(entry?.label).toBe('显示本节点')
+    expect(entry?.disabled).toBe(false)
+
+    ctx.menu.run('hide')
+
+    expect(
+      ctx.editor.nodes.value.find((item) => item.id === 'a')?.isVisible,
+    ).toBe(true)
   })
 })

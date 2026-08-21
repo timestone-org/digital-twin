@@ -4,7 +4,7 @@
  * ⚠ 铁律「未设置 = 不写值」：没动过的控件一条键都不写，清空控件 = 删键，
  * 渲染因此落回平台默认；写进去就等于把当下的默认观感固化进这张大屏。
  */
-import type { CardChrome, ChromeKey, DtSelectOption } from '@dt/contracts'
+import type { CardChrome, DtSelectOption } from '@dt/contracts'
 import { DtIcon, DtSelect } from '@dt/ui'
 import { computed, ref } from 'vue'
 
@@ -13,6 +13,10 @@ import {
   CARD_COMMON_FIELDS,
   CARD_FIELD_GROUPS,
   DEFAULT_OPEN_GROUP,
+  cardGroupDisabledReason,
+  chromeEntries,
+  visibleCardFields,
+  type CardFieldContext,
 } from '../scripts/cardStyleFields'
 import {
   CARD_STYLE_VARIANTS,
@@ -20,7 +24,14 @@ import {
   matchCardStyle,
 } from '../scripts/cardStyleVariants'
 
-const props = defineProps<{ modelValue: CardChrome }>()
+const props = defineProps<{
+  modelValue: CardChrome
+  /**
+   * 模块级面板的适配输入：结构性不支持的字段隐藏、被开关关掉的组禁用并说明。
+   * 大屏级面板（页面缺省）不传 = 全量摆出、不禁用。
+   */
+  context?: CardFieldContext | undefined
+}>()
 
 const emit = defineEmits<{ 'update:modelValue': [value: CardChrome] }>()
 
@@ -31,11 +42,11 @@ const emit = defineEmits<{ 'update:modelValue': [value: CardChrome] }>()
  */
 function applyPatch(patch: CardChrome): void {
   const next: CardChrome = { ...props.modelValue }
-  for (const [key, value] of Object.entries(patch)) {
+  for (const [key, value] of chromeEntries(patch)) {
     if (value === undefined || value === null || value === '') {
-      delete next[key as ChromeKey]
+      delete next[key]
     } else {
-      next[key as ChromeKey] = value
+      next[key] = value
     }
   }
   emit('update:modelValue', next)
@@ -75,6 +86,23 @@ function toggleGroup(id: string): void {
   if (openGroups.value.has(id)) openGroups.value.delete(id)
   else openGroups.value.add(id)
 }
+
+const commonFields = computed(() =>
+  visibleCardFields(CARD_COMMON_FIELDS, props.context),
+)
+
+// 整组字段都被壳声明不消费时连组标题一起藏：一个空组比少一个组更像坏了
+const groups = computed(() =>
+  CARD_FIELD_GROUPS.map((group) => ({
+    id: group.id,
+    label: group.label,
+    fields: visibleCardFields(group.fields, props.context),
+    reason:
+      props.context === undefined
+        ? null
+        : cardGroupDisabledReason(group.id, props.context),
+  })).filter((group) => group.fields.length > 0),
+)
 </script>
 
 <template>
@@ -91,7 +119,7 @@ function toggleGroup(id: string): void {
 
     <section class="grid grid-cols-2 gap-2">
       <CardStyleField
-        v-for="field in CARD_COMMON_FIELDS"
+        v-for="field in commonFields"
         :key="field.key"
         :field="field"
         :value="modelValue[field.key]"
@@ -100,7 +128,7 @@ function toggleGroup(id: string): void {
     </section>
 
     <section
-      v-for="group in CARD_FIELD_GROUPS"
+      v-for="group in groups"
       :key="group.id"
       class="flex flex-col gap-2 border-t border-border-subtle pt-3"
     >
@@ -117,15 +145,25 @@ function toggleGroup(id: string): void {
         {{ group.label }}
       </button>
 
-      <div v-if="openGroups.has(group.id)" class="grid grid-cols-2 gap-2">
-        <CardStyleField
-          v-for="field in group.fields"
-          :key="field.key"
-          :field="field"
-          :value="modelValue[field.key]"
-          @update="applyPatch({ [field.key]: $event })"
-        />
-      </div>
+      <template v-if="openGroups.has(group.id)">
+        <p
+          v-if="group.reason !== null"
+          class="m-0 text-2xs text-text-disabled"
+          :data-test="`card-group-off-${group.id}`"
+        >
+          {{ group.reason }}
+        </p>
+        <div class="grid grid-cols-2 gap-2">
+          <CardStyleField
+            v-for="field in group.fields"
+            :key="field.key"
+            :field="field"
+            :value="modelValue[field.key]"
+            :disabled="group.reason !== null"
+            @update="applyPatch({ [field.key]: $event })"
+          />
+        </div>
+      </template>
     </section>
   </div>
 </template>

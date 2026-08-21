@@ -3,16 +3,74 @@
  * 跳转的目标是大屏不是节点、摘要要让人一眼看出这条会走人。
  */
 import { describe, expect, it } from 'vitest'
-import type { InteractionRule } from '@dt/contracts'
+import type { InteractionRule, ModuleManifest } from '@dt/contracts'
 
 import {
   actionForType,
+  eventOptionsFor,
   ruleSummary,
   ruleTouchesNode,
 } from '@/pages/DashboardEditor/scripts/interactionOptions'
 
 /** 目标节点下拉的第一项，openModal 缺省落在它身上。 */
 const FALLBACK_NODE = 'n1'
+
+describe('触发事件下拉', () => {
+  function manifestWith(
+    interactionEvents?: readonly ('click' | 'change' | 'select')[],
+  ): ModuleManifest {
+    return {
+      type: 'demo',
+      displayName: '演示',
+      category: '演示',
+      defaultSize: { width: 10, height: 10 },
+      configSchema: [],
+      bindings: [],
+      component: () => Promise.resolve({ default: {} }),
+      ...(interactionEvents === undefined ? {} : { interactionEvents }),
+    }
+  }
+
+  it('清单没声明 interactionEvents 时只剩「点击」', () => {
+    expect(eventOptionsFor(manifestWith(), 'click')).toEqual([
+      { value: 'click', label: '点击' },
+    ])
+  })
+
+  it('节点已删 / 类型未注册（manifest undefined）同样按只发 click 处理', () => {
+    expect(eventOptionsFor(undefined, 'click')).toEqual([
+      { value: 'click', label: '点击' },
+    ])
+  })
+
+  it('按声明过滤，顺序跟契约的事件表走', () => {
+    expect(eventOptionsFor(manifestWith(['select', 'click']), 'click')).toEqual(
+      [
+        { value: 'click', label: '点击' },
+        { value: 'select', label: '选项点击' },
+      ],
+    )
+  })
+
+  // ⚠ 静默吞掉存量事件的话，规则会被悄悄改写；保留 + 标注才让人看得见问题
+  it('存量规则引用了源发不出的事件时保留该项并标注', () => {
+    const options = eventOptionsFor(manifestWith(['click']), 'change')
+
+    expect(options).toEqual([
+      { value: 'click', label: '点击' },
+      { value: 'change', label: '变化（该模块不会发出此事件）' },
+    ])
+  })
+
+  it('当前事件本来就在声明里时不重复也不标注', () => {
+    expect(
+      eventOptionsFor(manifestWith(['click', 'change']), 'change'),
+    ).toEqual([
+      { value: 'click', label: '点击' },
+      { value: 'change', label: '变化' },
+    ])
+  })
+})
 
 describe('换动作类型', () => {
   it('单目标换成按值分流时把已挑的大屏搬过来', () => {
