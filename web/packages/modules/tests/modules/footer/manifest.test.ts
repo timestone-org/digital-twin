@@ -128,6 +128,31 @@ describe('页脚可配观感的声明', () => {
   })
 })
 
+describe('页脚壳不消费的 chrome 键', () => {
+  // ⚠ 标题条自绘且开关走自己的「显示标题条」配置：chrome 的标题键在壳里没有
+  //   消费点，声明漏一个 = 面板上多一个「配了没反应」的控件
+  it('逐键声明：整套标题条 + showTitle，字体与字色照常消费', () => {
+    expect(manifest.unsupportedChromeKeys).toEqual([
+      'showTitle',
+      'titleAlign',
+      'titlePadding',
+      'titleGap',
+      'titleFontWeight',
+      'titleBarWidth',
+      'titleBarFull',
+      'titleBarRadius',
+      'titleBarGlow',
+      'titleBarColor',
+      'titleBarColorAlt',
+      'titlePulse',
+      'titlePulseDuration',
+      'titleRule',
+      'titleRuleHeight',
+      'titleRuleOpacity',
+    ])
+  })
+})
+
 describe('页脚清单的渲染组件', () => {
   it('渲染组件是异步装载的，清单本身不把它拽进首屏包体', async () => {
     const loaded = await vi.waitFor(() => manifest.component())

@@ -5,6 +5,7 @@
  * ⚠ 这几类错法 typecheck 与 lint 双双放行，表现只是「这一项永远没反应」。
  */
 import type { BindingSpec, ConfigField } from '@dt/contracts'
+import { INTERACTION_EVENTS, isChromeKey } from '@dt/contracts'
 import {
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_ARROW_BINDING_KEY,
@@ -398,6 +399,37 @@ describe('渲染组件的形状', () => {
           readFileSync(join(MODULES_DIR, name, 'Component.vue'), 'utf8'),
         ) !== null,
     )
+
+    expect(offenders).toEqual([])
+  })
+})
+
+describe('壳适配声明的不变量', () => {
+  // ⚠ 键名写错 typecheck 报不了（联合类型也挡不住漂移后的清单重排），
+  //   面板拿它去隐藏字段，错键 = 该藏的没藏、面板照常渲染
+  it('unsupportedChromeKeys 只登记 CHROME_KEYS 里的键，且不重复', () => {
+    const offenders = listModules().flatMap((manifest) => {
+      const keys = manifest.unsupportedChromeKeys ?? []
+      const stray = keys.filter((key) => !isChromeKey(key))
+      const duplicated = keys.length !== new Set(keys).size
+      return stray.length > 0 || duplicated
+        ? [`${manifest.type}: ${stray.join(',') || '重复键'}`]
+        : []
+    })
+
+    expect(offenders).toEqual([])
+  })
+
+  it('interactionEvents 只登记契约里的事件名，且不重复', () => {
+    const known = new Set<string>(INTERACTION_EVENTS)
+    const offenders = listModules().flatMap((manifest) => {
+      const events = manifest.interactionEvents ?? []
+      const stray = events.filter((event) => !known.has(event))
+      const duplicated = events.length !== new Set(events).size
+      return stray.length > 0 || duplicated
+        ? [`${manifest.type}: ${stray.join(',') || '重复事件'}`]
+        : []
+    })
 
     expect(offenders).toEqual([])
   })

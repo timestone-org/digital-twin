@@ -168,7 +168,9 @@ const contentStyle = computed<CSSProperties>(() => ({
 // ⚠ 字号兜底 14px 是**页脚自己的**，与页头那条 18px 各自独立，别统一
 .dt-footer__title {
   color: var(--card-title-color, var(--text-primary));
-  font-family: var(--card-title-font, var(--font-display));
+  // ⚠ 读 --card-font（cardVars 发射的字体变量就叫它，页头同款）：读别的名字
+  // 表现是「配了字体没反应」
+  font-family: var(--card-font, var(--font-display));
   font-size: var(--card-title-size, 14px);
   letter-spacing: var(--card-title-ls, 0.08em);
   text-shadow: var(--card-title-shadow, var(--fx-glow-title));

@@ -119,3 +119,24 @@ describe('容器清单的渲染组件', () => {
     expect(loaded.default).toBeDefined()
   })
 })
+
+describe('容器壳不消费的 chrome 键', () => {
+  // ⚠ 标题条自绘且开关走自己的「显示标题条」配置；字号 / 字距 / 竖条几何那几档
+  //   容器壳照常消费，不许一并声明掉
+  it('逐键声明：开关与标题条排布类，字号与竖条几何类照常消费', () => {
+    expect(manifest.unsupportedChromeKeys).toEqual([
+      'showTitle',
+      'titleAlign',
+      'titlePadding',
+      'titleGap',
+      'titleBarRadius',
+      'titleBarColor',
+      'titleBarColorAlt',
+      'titlePulse',
+      'titlePulseDuration',
+      'titleRule',
+      'titleRuleHeight',
+      'titleRuleOpacity',
+    ])
+  })
+})

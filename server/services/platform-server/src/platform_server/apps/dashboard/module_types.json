@@ -2030,7 +2030,7 @@
         {
           "key": "text",
           "label": "文字",
-          "type": "string",
+          "type": "textarea",
           "default": "示例文本",
           "group": "内容",
           "help": "按行换行；行内连续空格原样保留，可以拿空格排版。",

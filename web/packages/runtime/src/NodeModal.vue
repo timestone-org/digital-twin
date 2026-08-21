@@ -7,11 +7,13 @@
  * ⚠ 遮罩吞指针但**不**点击关闭：大屏常配触摸屏值班台，误触关掉明细很烦人，
  * 退路只有右上角关闭键与 Esc。
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId } from 'vue'
-import type { DashboardNodeView } from '@dt/contracts'
+import { computed, ref, useId } from 'vue'
+import type { CardChrome, DashboardNodeView } from '@dt/contracts'
+import { DtIcon } from '@dt/ui'
 
 import NodeTree from './NodeTree.vue'
 import { buildModalSubtree, type GetModuleManifest } from './nodeTree'
+import { useFocusTrap } from './useFocusTrap'
 import type { DesignSize } from './dashboardGeometry'
 
 const props = defineProps<{
@@ -24,6 +26,8 @@ const props = defineProps<{
   /** 舞台设计尺寸，把面板钳在舞台内。 */
   design: DesignSize
   getManifest: GetModuleManifest
+  /** 大屏级卡片外观缺省，原样透传给弹窗里的 NodeTree——弹窗与舞台同一副观感。 */
+  cardChrome?: CardChrome | undefined
 }>()
 
 const emit = defineEmits<{ close: [] }>()
@@ -64,38 +68,7 @@ const contentDesign = computed<DesignSize>(() => ({
 }))
 
 const panelRef = ref<HTMLElement | null>(null)
-let previouslyFocused: HTMLElement | null = null
-
-const FOCUSABLE =
-  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
-
-function focusables(): HTMLElement[] {
-  const panel = panelRef.value
-  if (panel === null) return []
-  return [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
-    (element) => element.offsetParent !== null || element === panel,
-  )
-}
-
-/** Tab 把焦点圈在面板内：走到头就折返，面板本身也算头。 */
-function trapTab(event: KeyboardEvent): void {
-  const list = focusables()
-  if (list.length === 0) {
-    event.preventDefault()
-    panelRef.value?.focus()
-    return
-  }
-  const first = list[0]
-  const last = list[list.length - 1]
-  const active = document.activeElement
-  const atEdge = event.shiftKey
-    ? active === first || active === panelRef.value
-    : active === last
-  if (!atEdge) return
-  event.preventDefault()
-  const wrapTo = event.shiftKey ? last : first
-  wrapTo?.focus()
-}
+const { trapTab } = useFocusTrap(panelRef)
 
 /** Esc 关闭；Tab 圈焦点，键盘到不了背后的大屏。 */
 function onKeydown(event: KeyboardEvent): void {
@@ -106,20 +79,6 @@ function onKeydown(event: KeyboardEvent): void {
   }
   if (event.key === 'Tab') trapTab(event)
 }
-
-onMounted(async () => {
-  previouslyFocused =
-    document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null
-  await nextTick()
-  panelRef.value?.focus()
-})
-
-onBeforeUnmount(() => {
-  // 焦点归还触发元素，键盘用户不被甩回文档开头
-  previouslyFocused?.focus()
-})
 </script>
 
 <template>
@@ -145,7 +104,8 @@ onBeforeUnmount(() => {
         aria-label="关闭"
         @click="emit('close')"
       >
-        ✕
+        <!-- ⚠ 名字必须在 DtIcon 注册表里：未登记名静默不画，这里注册的是 close 不是 x -->
+        <DtIcon name="close" :size="12" />
       </button>
 
       <div class="dt-node-modal__body" :style="contentStyle">
@@ -153,6 +113,7 @@ onBeforeUnmount(() => {
           :nodes="subtree"
           :design="contentDesign"
           :get-manifest="getManifest"
+          :card-chrome="cardChrome"
           root-always-visible
         />
       </div>

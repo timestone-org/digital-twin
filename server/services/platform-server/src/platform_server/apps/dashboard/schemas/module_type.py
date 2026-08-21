@@ -24,6 +24,7 @@ ConfigFieldType = Literal[
     "range",
     "string",
     "style",
+    "textarea",
 ]
 ConfigFieldSpan = Literal["full", "half"]
 BindingDataType = Literal["boolean", "enum", "number", "string"]

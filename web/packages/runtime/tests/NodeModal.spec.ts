@@ -2,12 +2,13 @@
  * @fileoverview 节点弹窗契约：子树重根渲染、初始不可见的根被掀开、
  * Esc 与关闭键收口、遮罩不点击关闭、尺寸钳进舞台。
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { h, type FunctionalComponent } from 'vue'
 import type { DashboardNodeView, ModuleManifest } from '@dt/contracts'
 
 import NodeModal from '../src/NodeModal.vue'
+import NodeTree from '../src/NodeTree.vue'
 import { buildModalSubtree } from '../src/nodeTree'
 
 // 桩件用函数式组件：只要渲染出可断言的标记，不需要自己的状态
@@ -114,6 +115,14 @@ describe('弹窗行为', () => {
     wrapper.unmount()
   })
 
+  // ⚠ DtIcon 拿到未登记的名字静默不画：关闭键一旦画不出图标就是一颗看不见的键
+  it('关闭键真的画出了图标，不是一颗空按钮', () => {
+    const wrapper = mountModal()
+
+    expect(wrapper.get('.dt-node-modal__close').find('svg').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
   it('Esc 与关闭键都抛 close；点遮罩不关', async () => {
     const wrapper = mountModal('x')
 
@@ -123,6 +132,66 @@ describe('弹窗行为', () => {
     await wrapper.get('[role="dialog"]').trigger('keydown', { key: 'Escape' })
     await wrapper.get('.dt-node-modal__close').trigger('click')
     expect(wrapper.emitted('close')).toHaveLength(2)
+    wrapper.unmount()
+  })
+
+  // ⚠ 弹窗渲染在舞台内却自起一棵 NodeTree：大屏级外观缺省不透传的话，
+  //   弹窗里的模块全部落回平台默认——同一个模块在屏上和弹窗里长两个样
+  it('大屏级卡片外观缺省原样透传给弹窗里的 NodeTree', () => {
+    const chrome = { titleColor: '#123456', corners: false }
+    const wrapper = mount(NodeModal, {
+      props: {
+        nodes: NODES,
+        rootId: 'root',
+        design: { width: 1920, height: 1080 },
+        getManifest,
+        cardChrome: chrome,
+      },
+    })
+
+    expect(wrapper.getComponent(NodeTree).props('cardChrome')).toEqual(chrome)
+    wrapper.unmount()
+  })
+
+  it('不传外观缺省时 NodeTree 拿到 undefined，走平台默认', () => {
+    const wrapper = mountModal()
+
+    expect(wrapper.getComponent(NodeTree).props('cardChrome')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('挂载后初始焦点落在面板上，关掉后归还触发元素', async () => {
+    const trigger = document.createElement('button')
+    document.body.append(trigger)
+    trigger.focus()
+
+    const wrapper = mountModal('x')
+    await vi.waitFor(() =>
+      expect(document.activeElement).toBe(
+        wrapper.get('.dt-node-modal__panel').element,
+      ),
+    )
+
+    wrapper.unmount()
+    expect(document.activeElement).toBe(trigger)
+    trigger.remove()
+  })
+
+  it('Tab 走到最后一个可聚焦元素后折返，键盘出不了弹窗', async () => {
+    const wrapper = mountModal('x')
+    // 先等初始聚焦落到面板，否则它会在断言前把焦点抢回去
+    await vi.waitFor(() =>
+      expect(document.activeElement).toBe(
+        wrapper.get('.dt-node-modal__panel').element,
+      ),
+    )
+    // 弹窗里唯一可聚焦的是关闭键：Tab 在它身上必须折回它自己
+    const close = wrapper.get('.dt-node-modal__close').element as HTMLElement
+    close.focus()
+
+    await wrapper.get('[role="dialog"]').trigger('keydown', { key: 'Tab' })
+
+    expect(document.activeElement).toBe(close)
     wrapper.unmount()
   })
 

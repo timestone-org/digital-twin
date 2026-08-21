@@ -18,6 +18,26 @@ export default defineModule({
   chrome: 'bare',
   isContainer: true,
   region: 'footer',
+  // 标题条自绘（Component.vue）：没有竖条也没有装饰带，只有标题色/字号/字距
+  // 走 --card-title-* 变量；其余标题键壳里没有对应消费点
+  unsupportedChromeKeys: [
+    'showTitle',
+    'titleAlign',
+    'titlePadding',
+    'titleGap',
+    'titleFontWeight',
+    'titleBarWidth',
+    'titleBarFull',
+    'titleBarRadius',
+    'titleBarGlow',
+    'titleBarColor',
+    'titleBarColorAlt',
+    'titlePulse',
+    'titlePulseDuration',
+    'titleRule',
+    'titleRuleHeight',
+    'titleRuleOpacity',
+  ],
   defaultSize: { width: 1920, height: 72, minWidth: 240, minHeight: 40 },
   configSchema: [
     {

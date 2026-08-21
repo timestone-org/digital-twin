@@ -84,6 +84,21 @@ export default defineModule({
   chrome: 'bare',
   isContainer: true,
   region: 'header',
+  // 标题条自绘（_shell.scss）：竖条宽/圆角/辉光/颜色与标题排版四件套是通的，
+  // 其余标题键壳里没有对应消费点
+  unsupportedChromeKeys: [
+    'showTitle',
+    'titleAlign',
+    'titlePadding',
+    'titleGap',
+    'titleBarFull',
+    'titleBarColorAlt',
+    'titlePulse',
+    'titlePulseDuration',
+    'titleRule',
+    'titleRuleHeight',
+    'titleRuleOpacity',
+  ],
   defaultSize: { width: 1920, height: 108, minWidth: 240, minHeight: 48 },
   // 出厂就落库的键。⚠ 四角辉光在整宽横条上观感突兀，出厂关掉；属性面板里能再开回来
   defaultConfig: {

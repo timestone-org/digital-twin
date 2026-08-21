@@ -29,6 +29,7 @@ import type {
 // 类型层把成员枚举一遍：多一个或少一个都过不了 typecheck
 const CONFIG_FIELD_TYPE_MEMBERS: Record<ConfigFieldType, true> = {
   string: true,
+  textarea: true,
   number: true,
   boolean: true,
   enum: true,
@@ -81,9 +82,10 @@ const INTERACTION_EVENT_MEMBERS: Record<InteractionEventName, true> = {
 }
 
 describe('配置字段', () => {
-  it('控件类型是这十三档', () => {
+  it('控件类型是这十四档', () => {
     expect([...CONFIG_FIELD_TYPES]).toEqual([
       'string',
+      'textarea',
       'number',
       'boolean',
       'enum',

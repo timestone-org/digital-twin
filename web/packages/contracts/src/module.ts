@@ -5,9 +5,13 @@
 // ⚠ 只许 import type：contracts 是 L0 零依赖层，type-only 导入编译后被完全擦除
 import type { Component } from 'vue'
 
+import type { ChromeKey } from './chrome'
+import type { InteractionEventName } from './interaction'
+
 /** 属性面板按它选控件。新增一档是非破坏的，删一档会让存量配置渲染不出控件。 */
 export const CONFIG_FIELD_TYPES = [
   'string',
+  'textarea',
   'number',
   'boolean',
   'enum',
@@ -253,6 +257,17 @@ export interface ModuleManifest {
    * 个别纯装饰/控件模块显式置 false 退出外观配置。
    */
   chromeConfigurable?: boolean
+  /**
+   * 模块壳**不消费**的统一卡片外观键：自绘标题条/外壳的模块声明它，编辑器把
+   * 对应字段从模块级外观面板里藏掉（大屏级缺省面板不受影响）。
+   * 只收「结构上画不出来」的键；被别的开关暂时关掉的键归面板的禁用逻辑。
+   */
+  unsupportedChromeKeys?: readonly ChromeKey[]
+  /**
+   * 该模块可能上抛的联动事件集合，**缺省视为 `['click']`**。
+   * 编辑器按它过滤「触发事件」选项——列出模块发不出的事件，配出来的规则永远不触发。
+   */
+  interactionEvents?: readonly InteractionEventName[]
   /**
    * 模块自己 `emit('interaction', InteractionEvent)` 上抛事件（控件类，或按
    * 子项带 value 上抛的展示类：图表点图元、列表点行）。

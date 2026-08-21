@@ -112,3 +112,14 @@ describe('文本块清单的渲染组件', () => {
     expect(loaded.default).toBeDefined()
   })
 })
+
+describe('文本块的正文控件', () => {
+  // 多行正文用 textarea 档：string 档一行输入框换行只能敲 \n，没人敲得出来
+  it('text 字段是 textarea 档，缺省与帮助文案原样保留', () => {
+    const text = field('text')
+
+    expect(text?.type).toBe('textarea')
+    expect(text?.default).toBe('示例文本')
+    expect(text?.help).toContain('按行换行')
+  })
+})

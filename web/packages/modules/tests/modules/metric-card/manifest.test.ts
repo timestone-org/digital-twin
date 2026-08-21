@@ -130,3 +130,10 @@ describe('实时数值清单的取值范围', () => {
     expect(field('items')?.minItems).toBe(1)
   })
 })
+
+describe('卡片模块的 chrome 消费面', () => {
+  // 套框数据模块吃全套 chrome 键：声明了不消费清单，面板就会平白藏字段
+  it('不声明 unsupportedChromeKeys，模块级外观面板全量摆出', () => {
+    expect(manifest.unsupportedChromeKeys).toBeUndefined()
+  })
+})

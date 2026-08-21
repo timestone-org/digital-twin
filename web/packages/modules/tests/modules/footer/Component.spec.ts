@@ -3,6 +3,8 @@
  * 缺 `showTitle` 时不画标题条，以及「空配置」与「清单缺省摊出来的配置」渲染逐字相同。
  */
 import { mount } from '@vue/test-utils'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import Component from '../../../src/modules/footer/Component.vue'
@@ -188,5 +190,30 @@ describe('页脚可配的观感', () => {
     expect(shellStyle({ titleAlign: 'justify' })).toContain(
       '--dt-footer-title-justify: center',
     )
+  })
+})
+
+// ⚠ vitest 不编译 scoped 样式块，字体变量接错只能对着源码钉：
+//   读了没人发射的变量名，配了 fontFamily 也永远走兜底字体，全程无报错
+describe('标题字体变量（源码契约）', () => {
+  const SOURCE = readFileSync(
+    join(
+      process.cwd(),
+      'packages',
+      'modules',
+      'src',
+      'modules',
+      'footer',
+      'Component.vue',
+    ),
+    'utf8',
+  )
+
+  it('标题读 cardVars 发射的 --card-font，留空兜底 --font-display', () => {
+    expect(SOURCE).toContain('var(--card-font, var(--font-display))')
+  })
+
+  it('没人发射的 --card-title-font 不许出现', () => {
+    expect(SOURCE).not.toContain('--card-title-font')
   })
 })
