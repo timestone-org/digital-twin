@@ -4319,7 +4319,8 @@
               "object",
               "range",
               "string",
-              "style"
+              "style",
+              "textarea"
             ],
             "title": "Type",
             "type": "string"
