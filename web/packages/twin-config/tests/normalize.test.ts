@@ -84,6 +84,17 @@ const MESSY_CONFIG = {
     null,
   ],
   viewpoints: { enabled: true, mode: 'nonsense', items: [' c-1 ', ''] },
+  folders: [
+    null,
+    { kind: 'nonsense', itemIds: [' a-1 '] },
+    {
+      id: ' f-keep ',
+      kind: 'anchors',
+      name: ' 温度 ',
+      itemIds: [' a-1 ', 'ghost', 'a-1'],
+    },
+    { kind: 'anchors', itemIds: ['a-1', 'anchor-1'] },
+  ],
 }
 
 describe('normalizeTwinConfig 的缺省', () => {
@@ -116,6 +127,7 @@ describe('normalizeTwinConfig 的缺省', () => {
       arrows: [],
       flows: [],
       hierNodes: [],
+      folders: [],
     })
   })
 
@@ -215,6 +227,13 @@ describe('normalizeTwinConfig 的实体', () => {
   it('非对象的部件与锚点条目一并丢掉', () => {
     expect(normalizeTwinConfig({ parts: ['x', 3, null] }).parts).toEqual([])
     expect(normalizeTwinConfig({ anchors: [[]] }).anchors).toEqual([])
+  })
+
+  it('文件夹剔掉非法夹与悬空成员，跨夹重复取先见者', () => {
+    expect(normalizeTwinConfig(MESSY_CONFIG).folders).toEqual([
+      { id: 'f-keep', kind: 'anchors', name: '温度', itemIds: ['a-1'] },
+      { id: 'fold-3', kind: 'anchors', name: '', itemIds: ['anchor-1'] },
+    ])
   })
 })
 

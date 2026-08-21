@@ -79,6 +79,8 @@ export {
   toFiniteNumber,
 } from './sanitize'
 export { normalizeTwinConfig } from './normalize'
+export { normalizeFolders } from './normalizeFolders'
+export type { TwinFolderHosts } from './normalizeFolders'
 export {
   DEFAULT_CAMERA_FOV,
   DEFAULT_ROAM_TOUR_IDLE_DELAY_MS,
@@ -106,6 +108,7 @@ export {
   TWIN_BILLBOARD_MODES,
   TWIN_DISTANCE_REFS,
   TWIN_FADE_DIRECTIONS,
+  TWIN_FOLDER_KINDS,
   TWIN_LIGHT_COLUMN_MODES,
   TWIN_LIGHT_COLUMN_RISES,
   TWIN_PANEL_ORIENTS,
@@ -130,6 +133,7 @@ export type {
   TwinFlowLink,
   TwinFlowValue,
   TwinFlowValues,
+  TwinFolderKind,
   TwinHierNode,
   TwinHierValue,
   TwinHierValues,
@@ -139,6 +143,7 @@ export type {
   TwinModalView,
   TwinModelAnimations,
   TwinModelRef,
+  TwinOutlineFolder,
   TwinPanel,
   TwinPanelField,
   TwinPanelOrient,
