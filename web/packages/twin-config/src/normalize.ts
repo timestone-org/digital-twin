@@ -13,6 +13,7 @@ import {
   normalizeFlow,
   normalizePanel,
 } from './normalizeElements'
+import { normalizeFolders } from './normalizeFolders'
 import { normalizeHierNode } from './normalizeHier'
 import { normalizeClickDistance, normalizeVisibility } from './normalizeRules'
 import {
@@ -65,17 +66,34 @@ function normalizeAnchor(raw: unknown, index: number): TwinAnchor | null {
  */
 export function normalizeTwinConfig(raw: unknown): TwinConfig {
   const source = isRecord(raw) ? raw : {}
+  // ⚠ 实体表先归一：文件夹按归一化后的实体 id 剔悬空成员，顺序倒了会把合法成员误剔
+  const parts = normalizeList(source.parts, normalizePart)
+  const anchors = normalizeList(source.anchors, normalizeAnchor)
+  const cameras = normalizeList(source.cameras, normalizeCamera)
+  const panels = normalizeList(source.panels, normalizePanel)
+  const arrows = normalizeList(source.arrows, normalizeArrow)
+  const flows = normalizeList(source.flows, normalizeFlow)
+  const hierNodes = normalizeList(source.hierNodes, normalizeHierNode)
   return {
     version: TWIN_CONFIG_VERSION,
     model: normalizeModel(source.model),
-    parts: normalizeList(source.parts, normalizePart),
-    anchors: normalizeList(source.anchors, normalizeAnchor),
-    cameras: normalizeList(source.cameras, normalizeCamera),
+    parts,
+    anchors,
+    cameras,
     viewpoints: normalizeViewpoints(source.viewpoints),
     roamTour: normalizeRoamTour(source.roamTour),
-    panels: normalizeList(source.panels, normalizePanel),
-    arrows: normalizeList(source.arrows, normalizeArrow),
-    flows: normalizeList(source.flows, normalizeFlow),
-    hierNodes: normalizeList(source.hierNodes, normalizeHierNode),
+    panels,
+    arrows,
+    flows,
+    hierNodes,
+    folders: normalizeFolders(source.folders, {
+      parts,
+      anchors,
+      cameras,
+      panels,
+      arrows,
+      flows,
+      hierNodes,
+    }),
   }
 }

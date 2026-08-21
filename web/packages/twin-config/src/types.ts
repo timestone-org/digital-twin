@@ -453,6 +453,31 @@ export interface TwinRoamTour {
   segmentSettings: Record<string, TwinRoamTourSegment>
 }
 
+/** 可分夹的实体集合名，与 `TwinConfig` 上七个实体数组字段逐字对应。 */
+export const TWIN_FOLDER_KINDS = [
+  'parts',
+  'anchors',
+  'cameras',
+  'panels',
+  'arrows',
+  'flows',
+  'hierNodes',
+] as const
+export type TwinFolderKind = (typeof TWIN_FOLDER_KINDS)[number]
+
+/**
+ * 大纲文件夹：编辑器左栏的纯展示分组，渲染层不读。
+ * ⚠ 它不动文档序：成员进出文件夹时实体数组一字不变，数组绑定的对齐位次
+ * （`anchorValues[i]` 喂第 i+1 行）因此与文件夹完全无关。
+ */
+export interface TwinOutlineFolder {
+  id: string
+  kind: TwinFolderKind
+  name: string
+  /** 成员实体 id；悬空与跨夹重复在归一化时剔除。 */
+  itemIds: string[]
+}
+
 /** 一份孪生场景配置。 */
 export interface TwinConfig {
   version: number
@@ -466,6 +491,7 @@ export interface TwinConfig {
   arrows: TwinArrow[]
   flows: TwinFlowLink[]
   hierNodes: TwinHierNode[]
+  folders: TwinOutlineFolder[]
 }
 
 /** 一个锚点的实时值。 */
