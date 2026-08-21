@@ -109,9 +109,7 @@ async def remove(session: AsyncSession, asset_id: uuid.UUID) -> None:
     await session.execute(delete(Asset).where(Asset.id == asset_id))
 
 
-async def rename(
-    session: AsyncSession, asset_id: uuid.UUID, name: str
-) -> None:
+async def rename(session: AsyncSession, asset_id: uuid.UUID, name: str) -> None:
     """改显示名。行在不在由 service 先判，这里只写。
 
     ⚠ 只动 name 一列：把整行 values 铺上去的话，某一次少传一个字段就会把它

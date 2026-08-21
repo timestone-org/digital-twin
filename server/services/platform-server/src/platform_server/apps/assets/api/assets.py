@@ -52,9 +52,7 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 StoreDep = Annotated[ObjectStore, Depends(get_object_store)]
 ViewDep = Annotated[CallerContext, Depends(require(ASSET_VIEW))]
 ManageDep = Annotated[CallerContext, Depends(require(ASSET_MANAGE))]
-DispatchDep = Annotated[
-    CompressDispatcher, Depends(get_compress_dispatcher)
-]
+DispatchDep = Annotated[CompressDispatcher, Depends(get_compress_dispatcher)]
 
 DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 200

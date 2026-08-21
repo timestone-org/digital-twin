@@ -385,9 +385,7 @@ def _present(
         # ⚠ 只有模型才有档。不看 kind 的话，图片与图标会凭空多出三行
         # 「压缩中」，而它们根本不进压缩队列——那三行会永远停在那儿
         variants=(
-            _present_variants(variant_rows or [])
-            if row.kind == "model"
-            else []
+            _present_variants(variant_rows or []) if row.kind == "model" else []
         ),
     )
 

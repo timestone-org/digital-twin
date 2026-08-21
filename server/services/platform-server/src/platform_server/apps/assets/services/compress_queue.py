@@ -45,9 +45,7 @@ def new_message(asset_id: uuid.UUID) -> CompressMessage:
 
     Args: asset_id。
     """
-    return CompressMessage(
-        asset_id=asset_id, traceparent=current_traceparent()
-    )
+    return CompressMessage(asset_id=asset_id, traceparent=current_traceparent())
 
 
 def decode(fields: Mapping[str, str]) -> CompressMessage | None:

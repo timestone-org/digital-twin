@@ -49,9 +49,7 @@ class AssetModelVariant(TimestampMixin, Base):
     size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     checksum: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 失败原因，直接给用户看。压成时清空
-    error: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=""
-    )
+    error: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
 
     __table_args__ = (
         CheckConstraint(

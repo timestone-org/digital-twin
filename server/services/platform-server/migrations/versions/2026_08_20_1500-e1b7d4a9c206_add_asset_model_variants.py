@@ -39,9 +39,7 @@ def upgrade() -> None:
             primary_key=True,
             nullable=False,
         ),
-        sa.Column(
-            "asset_id", postgresql.UUID(as_uuid=True), nullable=False
-        ),
+        sa.Column("asset_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("variant", sa.Text(), nullable=False),
         sa.Column(
             "status",

@@ -123,9 +123,7 @@ async def list_for_asset(
     Args: session, asset_id。
     """
     rows = await session.execute(
-        select(AssetModelVariant).where(
-            AssetModelVariant.asset_id == asset_id
-        )
+        select(AssetModelVariant).where(AssetModelVariant.asset_id == asset_id)
     )
     return list(rows.scalars().all())
 
@@ -154,7 +152,5 @@ async def remove_for_asset(session: AsyncSession, asset_id: uuid.UUID) -> None:
     Args: session, asset_id。
     """
     await session.execute(
-        delete(AssetModelVariant).where(
-            AssetModelVariant.asset_id == asset_id
-        )
+        delete(AssetModelVariant).where(AssetModelVariant.asset_id == asset_id)
     )
