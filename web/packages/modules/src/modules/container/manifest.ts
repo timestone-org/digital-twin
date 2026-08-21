@@ -17,6 +17,22 @@ export default defineModule({
   keywords: ['container', 'rongqi', '容器', '分组', '面板'],
   chrome: 'bare',
   isContainer: true,
+  // 标题条自绘（Component.vue）：竖条宽/高/辉光与标题字号字重字距字色走
+  // --card-title-* 变量是通的，其余标题键壳里没有对应消费点
+  unsupportedChromeKeys: [
+    'showTitle',
+    'titleAlign',
+    'titlePadding',
+    'titleGap',
+    'titleBarRadius',
+    'titleBarColor',
+    'titleBarColorAlt',
+    'titlePulse',
+    'titlePulseDuration',
+    'titleRule',
+    'titleRuleHeight',
+    'titleRuleOpacity',
+  ],
   defaultSize: { width: 640, height: 432, minWidth: 120, minHeight: 80 },
   configSchema: [
     {

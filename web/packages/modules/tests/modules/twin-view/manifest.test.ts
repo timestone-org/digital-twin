@@ -139,3 +139,33 @@ describe('绑点面板的行数', () => {
     })
   })
 })
+
+describe('孪生壳不消费的 chrome 键', () => {
+  // ⚠ 3D 画布没有标题条与正文排版的消费点：整套标题键 + 字体字色都要声明掉，
+  //   漏一个 = 面板上多一个「配了没反应」的控件
+  it('逐键声明：整套标题键与正文字体字色', () => {
+    expect(manifest.unsupportedChromeKeys).toEqual([
+      'showTitle',
+      'titleColor',
+      'titleAlign',
+      'titlePadding',
+      'titleGap',
+      'titleFontSize',
+      'titleFontWeight',
+      'titleLetterSpacing',
+      'titleBarWidth',
+      'titleBarFull',
+      'titleBarRadius',
+      'titleBarGlow',
+      'titleBarColor',
+      'titleBarColorAlt',
+      'titlePulse',
+      'titlePulseDuration',
+      'titleRule',
+      'titleRuleHeight',
+      'titleRuleOpacity',
+      'fontFamily',
+      'textColor',
+    ])
+  })
+})

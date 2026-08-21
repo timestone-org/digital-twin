@@ -26,7 +26,7 @@ export default defineModule({
     {
       key: 'text',
       label: '文字',
-      type: 'string',
+      type: 'textarea',
       group: '内容',
       default: '示例文本',
       span: 'full',

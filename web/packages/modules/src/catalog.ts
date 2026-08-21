@@ -51,6 +51,7 @@ function options(field: ConfigField): CatalogValue[] | undefined {
 function when(field: ConfigField): CatalogJson | undefined {
   const condition = field.when
   if (condition === undefined) return undefined
+  // ⚠ 条件取值是任意 JSON：布尔与数字都出现过，不许在这里 String() 掉
   return { key: condition.key, in: condition.in as CatalogValue[] }
 }
 
@@ -60,6 +61,7 @@ function configField(field: ConfigField): CatalogJson {
     label: field.label,
     type: field.type,
   }
+  // ⚠ 缺省值是任意 JSON：布尔与数字都出现过，不许在这里 String() 掉
   put(out, 'default', field.default as CatalogValue | undefined)
   put(out, 'options', options(field))
   put(out, 'placeholder', field.placeholder)

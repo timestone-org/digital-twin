@@ -15,6 +15,7 @@ export type {
 } from './dashboardGeometry'
 export {
   CARD_BORDER_STYLE_OPTIONS,
+  bareBorderClasses,
   cardChromeClasses,
   cardVars,
   isChromeFrameless,

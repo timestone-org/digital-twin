@@ -21,6 +21,31 @@ export default defineModule({
   keywords: ['twin', 'luansheng', '孪生', '三维', '3d', '模型'],
   // 3D 画布自己就是整块内容，套一层卡片框只会在四周切掉一圈可视范围
   chrome: 'bare',
+  // 标题自绘且样式写死（Component.vue 的 .dt-twin__title），整组标题键都无消费点；
+  // 正文字体/字色靠继承，但 3D 画布与钻取面板全都自定色，同样落不到任何地方
+  unsupportedChromeKeys: [
+    'showTitle',
+    'titleColor',
+    'titleAlign',
+    'titlePadding',
+    'titleGap',
+    'titleFontSize',
+    'titleFontWeight',
+    'titleLetterSpacing',
+    'titleBarWidth',
+    'titleBarFull',
+    'titleBarRadius',
+    'titleBarGlow',
+    'titleBarColor',
+    'titleBarColorAlt',
+    'titlePulse',
+    'titlePulseDuration',
+    'titleRule',
+    'titleRuleHeight',
+    'titleRuleOpacity',
+    'fontFamily',
+    'textColor',
+  ],
   defaultSize: { width: 1280, height: 720, minWidth: 320, minHeight: 240 },
   configSchema: [
     {

@@ -40,4 +40,15 @@ describe('模块清单的两侧一致', () => {
   it('服务端目录就是本仓清单的序列化结果', async () => {
     await expect(serialized()).toMatchFileSnapshot(CATALOG_FILE)
   })
+
+  // unsupportedChromeKeys / interactionEvents 是编辑器面板的适配声明，服务端
+  // 没有消费点——序列化它们只会让 module_types.json 平白多一段要跨仓同步的 diff
+  it('编辑器侧的适配声明不进服务端目录', () => {
+    const text = serialized()
+
+    expect(text).not.toContain('unsupported_chrome_keys')
+    expect(text).not.toContain('unsupportedChromeKeys')
+    expect(text).not.toContain('interaction_events')
+    expect(text).not.toContain('interactionEvents')
+  })
 })
