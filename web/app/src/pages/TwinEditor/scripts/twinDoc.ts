@@ -40,8 +40,15 @@ export interface TwinDoc {
   commitMerged: (next: TwinConfig, key: string) => void
   /** 一段连续动作结束了；下一次 `commitMerged` 重新开一帧。 */
   endMerge: () => void
-  /** 只改绑定不动配置（绑点面板写回）。 */
-  commitBindings: (next: readonly BindingPayload[]) => void
+  /**
+   * 只改绑定不动配置（绑点面板写回）。
+   *
+   * `mergeKey` 与 `commitMerged` 同一套合并语义：同 key 的连续写入替换当前帧
+   * （同一个槽的逐键输入并成一笔撤销），换 key / 不带 key 即断段另起一帧。
+   * @param next 整份新绑定
+   * @param mergeKey 这一段连续写入的标识（如 `binding:节点:槽键`）；一次性写入不传
+   */
+  commitBindings: (next: readonly BindingPayload[], mergeKey?: string) => void
   undo: () => void
   redo: () => void
   /** 保存成功后调；当前这一帧成为新的「干净」基准。 */
@@ -81,6 +88,26 @@ interface History {
   frames: Ref<TwinFrame[]>
   index: Ref<number>
   savedIndex: Ref<number>
+  /** 当前正在合并的那段连续动作；null = 没有。 */
+  mergeKey: string | null
+}
+
+/**
+ * 绑定帧落栈：同 key 替换当前帧（同一个槽的逐键输入并成一笔），
+ * 换 key / 不带 key 即断段另起一帧——不带 key 也要断，否则随后同 key 的
+ * `commitMerged` 会把这笔绑定写入连同它自己的帧一起并掉。
+ */
+function pushBindingsFrame(
+  history: History,
+  frame: TwinFrame,
+  key: string | undefined,
+): void {
+  if (key !== undefined && history.mergeKey === key) {
+    replaceFrame(history, frame)
+    return
+  }
+  history.mergeKey = key ?? null
+  pushFrame(history, frame)
 }
 
 /** 换一份配置，并把绑定搬到新的行号上。 */
@@ -100,9 +127,7 @@ export function createTwinDoc(initial: TwinFrame): TwinDoc {
   const frames = shallowRef<TwinFrame[]>([initial])
   const index = ref(0)
   const savedIndex = ref(0)
-  const history: History = { frames, index, savedIndex }
-  /** 当前正在合并的那段连续动作；null = 没有。 */
-  let mergeKey: string | null = null
+  const history: History = { frames, index, savedIndex, mergeKey: null }
 
   const current = computed<TwinFrame>(() => {
     const frame = frames.value[index.value]
@@ -122,27 +147,28 @@ export function createTwinDoc(initial: TwinFrame): TwinDoc {
       const frame = nextFrame(current.value, next)
       if (frame === null) return
       // 普通写入打断合并段：中间插了别的操作，再拖就该另起一帧
-      mergeKey = null
+      history.mergeKey = null
       pushFrame(history, frame)
     },
 
     commitMerged: (next, key) => {
       const frame = nextFrame(current.value, next)
       if (frame === null) return
-      if (mergeKey === key) return replaceFrame(history, frame)
-      mergeKey = key
+      if (history.mergeKey === key) return replaceFrame(history, frame)
+      history.mergeKey = key
       pushFrame(history, frame)
     },
 
     endMerge: () => {
-      mergeKey = null
+      history.mergeKey = null
     },
 
-    commitBindings: (next) => {
-      pushFrame(history, {
-        config: current.value.config,
-        bindings: [...next],
-      })
+    commitBindings: (next, key) => {
+      pushBindingsFrame(
+        history,
+        { config: current.value.config, bindings: [...next] },
+        key,
+      )
     },
 
     undo: () => {

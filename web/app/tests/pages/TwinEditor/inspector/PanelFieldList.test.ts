@@ -162,6 +162,32 @@ describe('增删改与调序', () => {
     ).toBeDefined()
   })
 
+  // ⚠ DtDropdownMenu 没有 icon prop：给它传一个只会静默丢弃。触发键与菜单
+  //   开合选中必须有用例钉住，否则这个键坏掉时 typecheck 与 lint 都不响
+  it('「常用测点」菜单能开、能选，选一项按预设口径加一行', async () => {
+    const wrapper = mountList(panelOf([fieldOf('a')]))
+    const trigger = wrapper.find(
+      '[data-test="panel-field-presets"] button[aria-haspopup="menu"]',
+    )
+    expect(trigger.exists()).toBe(true)
+    expect(trigger.find('.dt-icon').exists()).toBe(true)
+
+    await trigger.trigger('click')
+    const item = [
+      ...document.body.querySelectorAll<HTMLButtonElement>(
+        'button[role="menuitem"]',
+      ),
+    ].find((entry) => entry.textContent?.includes('温度'))
+    if (!item) throw new Error('菜单里没有「温度」')
+    item.click()
+    await wrapper.vm.$nextTick()
+
+    const next = written(wrapper)
+    expect(next).toHaveLength(2)
+    expect(next[1]).toMatchObject({ label: '温度', unit: '℃', decimals: 1 })
+    wrapper.unmount()
+  })
+
   it('改标签整份换新数组，不就地改 props', async () => {
     const fields = [fieldOf('a')]
     const wrapper = mountList(panelOf(fields))

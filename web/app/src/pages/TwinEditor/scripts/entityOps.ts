@@ -38,13 +38,12 @@ export function newEntityId(prefix: string): string {
   return `${prefix}-${random}`
 }
 
-/** 造一个在 `taken` 里不重名的 id。 */
-function freshId(
-  kind: TwinEntityKind,
+/** 造一个在 `taken` 里不重名的 id；`folderOps` 也用它铸夹 id。 */
+export function freshId(
+  prefix: string,
   taken: ReadonlySet<string>,
   makeId: TwinIdFactory,
 ): string {
-  const prefix = ID_PREFIX[kind]
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const candidate = makeId(prefix)
     if (!taken.has(candidate)) return candidate
@@ -95,7 +94,7 @@ export function addEntity(
   kind: TwinEntityKind,
   makeId: TwinIdFactory = newEntityId,
 ): { config: TwinConfig; id: string } {
-  const id = freshId(kind, idsOf(config, kind), makeId)
+  const id = freshId(ID_PREFIX[kind], idsOf(config, kind), makeId)
   const next = renormalize({
     ...config,
     [kind]: [...config[kind], blank(kind, id, config[kind].length)],
@@ -140,7 +139,7 @@ export function duplicateEntity(
   const source = list[index]
   if (source === undefined) return { config, id: null }
 
-  const nextId = freshId(kind, idsOf(config, kind), makeId)
+  const nextId = freshId(ID_PREFIX[kind], idsOf(config, kind), makeId)
   const copy = { ...source, id: nextId, name: `${source.name} 副本` }
   const nextList = [...list.slice(0, index + 1), copy, ...list.slice(index + 1)]
   return { config: renormalize({ ...config, [kind]: nextList }), id: nextId }

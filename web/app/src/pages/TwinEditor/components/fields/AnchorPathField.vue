@@ -7,7 +7,7 @@
  * 否则用户看到的是「配了一条流，画面上什么都没有」。
  */
 import type { TwinAnchor } from '@dt/twin-config'
-import { DtButton, DtIcon, DtNotice, DtSelect } from '@dt/ui'
+import { DtButton, DtEmpty, DtNotice, DtSelect } from '@dt/ui'
 import { computed, ref } from 'vue'
 
 const props = defineProps<{
@@ -113,40 +113,42 @@ function move(index: number, delta: number): void {
       >
         {{ stop.label }}
       </span>
-      <button
-        type="button"
-        class="text-text-secondary hover:text-accent-primary disabled:text-text-disabled"
+      <DtButton
+        size="xs"
+        variant="ghost"
+        intent="neutral"
+        icon="chevron-up"
         :disabled="stop.index === 0"
         aria-label="上移路径点"
         title="上移路径点"
         @click="move(stop.index, -1)"
-      >
-        <DtIcon name="chevron-up" :size="13" />
-      </button>
-      <button
-        type="button"
-        class="text-text-secondary hover:text-accent-primary disabled:text-text-disabled"
+      />
+      <DtButton
+        size="xs"
+        variant="ghost"
+        intent="neutral"
+        icon="chevron-down"
         :disabled="stop.index === stops.length - 1"
         aria-label="下移路径点"
         title="下移路径点"
         @click="move(stop.index, 1)"
-      >
-        <DtIcon name="chevron-down" :size="13" />
-      </button>
-      <button
-        type="button"
-        class="text-text-disabled hover:text-state-danger"
+      />
+      <DtButton
+        size="xs"
+        variant="ghost"
+        intent="danger"
+        icon="trash"
         aria-label="移除路径点"
         title="移除路径点"
         @click="removeAt(stop.index)"
-      >
-        <DtIcon name="trash" :size="13" />
-      </button>
+      />
     </div>
 
-    <p v-if="anchors.length === 0" class="text-xs text-text-disabled">
-      场景里还没有锚点，先加锚点再连能量流。
-    </p>
+    <DtEmpty
+      v-if="anchors.length === 0"
+      size="inline"
+      title="场景里还没有锚点，先加锚点再连能量流。"
+    />
     <div v-else class="grid grid-cols-[1fr_auto] gap-1.5">
       <DtSelect
         :model-value="picked"

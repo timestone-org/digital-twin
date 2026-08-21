@@ -10,6 +10,7 @@ import type { TwinConfig } from '@dt/twin-config'
 import { describe, expect, it } from 'vitest'
 
 import {
+  TWIN_SCENE_ENTRIES,
   buildTwinOutline,
   twinFlaggedIds,
   twinIssueSelection,
@@ -49,16 +50,13 @@ function sectionOf(config: TwinConfig, key: string) {
 }
 
 describe('分组', () => {
-  it('分组按固定顺序摊开，单例段夹在实体段中间', () => {
+  it('实体分组按固定顺序摊开，单例都在「场景」区不进分组', () => {
     const keys = buildTwinOutline(makeConfig(), new Set()).map((s) => s.key)
 
     expect(keys).toEqual([
-      'model',
       'parts',
       'anchors',
       'cameras',
-      'viewpoints',
-      'roam',
       'panels',
       'arrows',
       'flows',
@@ -66,18 +64,12 @@ describe('分组', () => {
     ])
   })
 
-  it('单例段带自己的选中值、没有集合名也就没有新增', () => {
-    const model = sectionOf(makeConfig(), 'model')
-
-    expect(model.selection).toEqual({ kind: 'model' })
-    expect(model.kind).toBeNull()
-    expect(model.rows).toEqual([])
-  })
-
-  it('视点切换段选中的是它自己，不是某个视点', () => {
-    expect(sectionOf(makeConfig(), 'viewpoints').selection).toEqual({
-      kind: 'viewpoints',
-    })
+  it('「场景」区三行各带自己的选中值', () => {
+    expect(TWIN_SCENE_ENTRIES.map((entry) => entry.selection)).toEqual([
+      { kind: 'model' },
+      { kind: 'viewpoints' },
+      { kind: 'roam' },
+    ])
   })
 
   it('实体段带集合名与中文标题', () => {
@@ -85,7 +77,6 @@ describe('分组', () => {
 
     expect(anchors.kind).toBe('anchors')
     expect(anchors.title).toBe('锚点')
-    expect(anchors.selection).toBeNull()
   })
 })
 
@@ -106,6 +97,17 @@ describe('行', () => {
 
   it('视点没有显隐字段，它的行不给显隐值', () => {
     expect(sectionOf(makeConfig(), 'cameras').rows[0]?.visible).toBeNull()
+  })
+
+  it('钻取节点的行也不给显隐值，meta 报字段数', () => {
+    const config = makeConfig({
+      hierNodes: [{ id: 'plant', name: '厂区', fields: [{ key: 'f1' }] }],
+    })
+    const rows = sectionOf(config, 'hierNodes').rows
+
+    expect(rows[0]?.visible).toBeNull()
+    expect(rows[0]?.meta).toBe('1 字段')
+    expect(rows[0]?.label).toBe('厂区')
   })
 
   it('其余五类都带显隐值', () => {
@@ -167,6 +169,96 @@ describe('行', () => {
     expect(sectionOf(config, 'flows').rows[0]?.meta).toBe('2 锚点')
     expect(sectionOf(config, 'cameras').rows[0]?.meta).toBe('默认')
     expect(sectionOf(config, 'anchors').rows[0]?.meta).toBe('℃')
+  })
+
+  it('非默认视点的 meta 是空串，不写「默认」', () => {
+    const config = makeConfig({ cameras: [{ id: 'c1', name: '侧视' }] })
+
+    expect(sectionOf(config, 'cameras').rows[0]?.meta).toBe('')
+  })
+})
+
+describe('夹视图', () => {
+  const FOLDERED = {
+    anchors: [
+      { id: 'a1', name: '进水温度' },
+      { id: 'a2', name: '回水温度' },
+      { id: 'a3', name: '流量' },
+    ],
+    folders: [
+      { id: 'f2', kind: 'anchors', name: '后段', itemIds: ['a3'] },
+      { id: 'f1', kind: 'anchors', name: '', itemIds: ['a1'] },
+      { id: 'fp', kind: 'parts', name: '整机', itemIds: ['p1'] },
+    ],
+  }
+
+  it('夹按夹表序排，只列自己段的夹', () => {
+    const anchors = sectionOf(makeConfig(FOLDERED), 'anchors')
+
+    expect(anchors.folders.map((folder) => folder.id)).toEqual(['f2', 'f1'])
+  })
+
+  it('夹的折叠键带 folder: 前缀，名字空着退回夹 id', () => {
+    const anchors = sectionOf(makeConfig(FOLDERED), 'anchors')
+
+    expect(anchors.folders[0]?.key).toBe('folder:f2')
+    expect(anchors.folders[0]?.label).toBe('后段')
+    expect(anchors.folders[1]?.label).toBe('f1')
+  })
+
+  it('成员进了夹就不再是散行，散行按文档序排在后', () => {
+    const anchors = sectionOf(makeConfig(FOLDERED), 'anchors')
+
+    expect(anchors.rows.map((row) => row.id)).toEqual(['a2'])
+  })
+
+  // 序号是数组绑定的对齐位次，进出夹都不改它
+  it('夹内行的序号仍是文档序，不按夹内位置重排', () => {
+    const anchors = sectionOf(makeConfig(FOLDERED), 'anchors')
+
+    expect(anchors.folders[0]?.rows.map((row) => row.index)).toEqual([3])
+    expect(anchors.folders[1]?.rows.map((row) => row.index)).toEqual([1])
+    expect(anchors.rows.map((row) => row.index)).toEqual([2])
+  })
+
+  it('夹内成员多于一个时按文档序排，不按成员表序', () => {
+    const config = makeConfig({
+      anchors: [{ id: 'a1' }, { id: 'a2' }, { id: 'a3' }],
+      folders: [{ id: 'f1', kind: 'anchors', itemIds: ['a3', 'a1'] }],
+    })
+    const anchors = sectionOf(config, 'anchors')
+
+    expect(anchors.folders[0]?.rows.map((row) => row.id)).toEqual(['a1', 'a3'])
+  })
+
+  it('段计数是夹内加散行的总数', () => {
+    expect(sectionOf(makeConfig(FOLDERED), 'anchors').count).toBe(3)
+  })
+
+  it('空夹留在夹表里，成员是空表', () => {
+    const config = makeConfig({
+      folders: [{ id: 'f-empty', kind: 'anchors', itemIds: [] }],
+    })
+
+    expect(sectionOf(config, 'anchors').folders[0]?.rows).toEqual([])
+  })
+
+  // id 允许重复（由诊断报出），两行进同一个夹、文档序不乱
+  it('重复 id 的两行进成员表指到的同一个夹', () => {
+    const config = makeConfig({
+      anchors: [
+        { id: 'same', name: '甲' },
+        { id: 'same', name: '乙' },
+      ],
+      folders: [{ id: 'f1', kind: 'anchors', itemIds: ['same'] }],
+    })
+    const anchors = sectionOf(config, 'anchors')
+
+    expect(anchors.folders[0]?.rows.map((row) => row.label)).toEqual([
+      '甲',
+      '乙',
+    ])
+    expect(anchors.rows).toEqual([])
   })
 })
 
@@ -298,6 +390,28 @@ describe('诊断到实体的映射', () => {
         kind: 'duplicate-id',
         entityId: 'x',
         path: 'model.asset',
+        detail: '',
+      }),
+    ).toBeNull()
+  })
+
+  it('漫游的问题跳到漫游段', () => {
+    expect(
+      twinIssueSelection({
+        kind: 'roam-too-short',
+        entityId: '',
+        path: 'roamTour.items',
+        detail: '',
+      }),
+    ).toEqual({ kind: 'roam' })
+  })
+
+  it('不以字母开头的路径不给跳', () => {
+    expect(
+      twinIssueSelection({
+        kind: 'duplicate-id',
+        entityId: 'x',
+        path: '0.bad',
         detail: '',
       }),
     ).toBeNull()

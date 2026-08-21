@@ -11,6 +11,7 @@ import { computed, ref } from 'vue'
 
 import { buildHierRows, canDropHierOn } from '../scripts/hierRows'
 import type { TwinHierRow } from '../scripts/hierRows'
+import { OUTLINE_ACT_HIDDEN } from '../scripts/outlineStyles'
 import { isSameSelection } from '../scripts/types'
 import type { TwinSelection } from '../scripts/types'
 
@@ -29,10 +30,6 @@ const emit = defineEmits<{
   reparent: [{ id: string; parentId: string | null }]
 }>()
 
-/** 行内图标键的样式，四个键共用一串。 */
-const ACT =
-  'flex h-5 w-5 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-text-disabled hover:text-accent-primary disabled:cursor-not-allowed disabled:opacity-30'
-
 /** 每一层缩进的像素数。 */
 const INDENT_PX = 12
 
@@ -47,6 +44,11 @@ const rows = computed(() =>
 
 function isSelected(row: TwinHierRow): boolean {
   return isSameSelection(props.selection, { kind: 'hierNodes', id: row.id })
+}
+
+/** 选中行的动作键常驻；其余静息隐藏、悬停 / 焦点现身。 */
+function actClass(row: TwinHierRow): string {
+  return isSelected(row) ? '' : OUTLINE_ACT_HIDDEN
 }
 
 function indentOf(row: TwinHierRow): string {
@@ -89,6 +91,15 @@ function isDropTarget(id: string | null): boolean {
 
 const pendingRemoveKey = ref<string | null>(null)
 
+/** 有下级才就地二次确认（删了它们各自成根）；叶子直接删，靠撤销兜底。 */
+function requestRemove(row: TwinHierRow): void {
+  if (!row.hasChildren) {
+    emit('remove', row.id)
+    return
+  }
+  pendingRemoveKey.value = row.key
+}
+
 function confirmRemove(row: TwinHierRow): void {
   pendingRemoveKey.value = null
   emit('remove', row.id)
@@ -104,16 +115,15 @@ function confirmRemove(row: TwinHierRow): void {
         钻取层级
       </span>
       <span class="text-3xs text-text-disabled">{{ rows.length }}</span>
-      <button
-        type="button"
-        :class="ACT"
+      <DtButton
+        size="xs"
+        variant="ghost"
+        intent="neutral"
+        icon="plus"
         aria-label="新建根节点"
-        title="新建根节点"
         data-test="hier-add-root"
         @click="emit('add', null)"
-      >
-        <DtIcon name="plus" :size="12" />
-      </button>
+      />
     </div>
 
     <div
@@ -138,7 +148,7 @@ function confirmRemove(row: TwinHierRow): void {
 
     <template v-for="row in rows" :key="row.key">
       <div
-        class="flex items-center gap-0.5 rounded-[var(--radius-sm)] pr-1 text-xs"
+        class="group flex items-center gap-0.5 rounded-[var(--radius-sm)] pr-1 text-xs"
         :class="[
           isSelected(row)
             ? 'bg-surface-raised text-accent-on-surface'
@@ -158,7 +168,7 @@ function confirmRemove(row: TwinHierRow): void {
         <button
           v-if="row.hasChildren"
           type="button"
-          :class="ACT"
+          class="flex h-5 w-5 shrink-0 items-center justify-center text-text-disabled hover:text-accent-primary"
           :aria-expanded="!row.collapsed"
           :aria-label="`展开或折叠${row.label}`"
           data-test="hier-toggle"
@@ -190,44 +200,48 @@ function confirmRemove(row: TwinHierRow): void {
           />
         </button>
 
-        <button
-          type="button"
-          :class="ACT"
+        <DtButton
+          size="xs"
+          variant="ghost"
+          intent="neutral"
+          icon="chevron-up"
+          :class="actClass(row)"
           :disabled="!row.canMoveUp"
           :aria-label="`上移${row.label}`"
           data-test="hier-up"
           @click="emit('move', { id: row.id, delta: -1 })"
-        >
-          <DtIcon name="chevron-up" :size="12" />
-        </button>
-        <button
-          type="button"
-          :class="ACT"
+        />
+        <DtButton
+          size="xs"
+          variant="ghost"
+          intent="neutral"
+          icon="chevron-down"
+          :class="actClass(row)"
           :disabled="!row.canMoveDown"
           :aria-label="`下移${row.label}`"
           data-test="hier-down"
           @click="emit('move', { id: row.id, delta: 1 })"
-        >
-          <DtIcon name="chevron-down" :size="12" />
-        </button>
-        <button
-          type="button"
-          :class="ACT"
+        />
+        <DtButton
+          size="xs"
+          variant="ghost"
+          intent="neutral"
+          icon="plus"
+          :class="actClass(row)"
           :aria-label="`在${row.label}下新建子节点`"
           data-test="hier-add-child"
           @click="emit('add', row.id)"
-        >
-          <DtIcon name="plus" :size="12" />
-        </button>
-        <button
-          type="button"
-          :class="ACT"
+        />
+        <DtButton
+          size="xs"
+          variant="ghost"
+          intent="neutral"
+          icon="trash"
+          :class="actClass(row)"
           :aria-label="`删除${row.label}`"
           data-test="hier-remove"
-          @click="pendingRemoveKey = row.key"
-        >
-          <DtIcon name="trash" :size="12" />
-        </button>
+          @click="requestRemove(row)"
+        />
       </div>
 
       <!-- 二次确认就地展开：连带影响写在这里，弹窗会把它挪出用户的视线 -->
@@ -237,7 +251,7 @@ function confirmRemove(row: TwinHierRow): void {
         data-test="hier-remove-confirm"
       >
         <span>删除「{{ row.label }}」？</span>
-        <span v-if="row.hasChildren" class="text-state-danger">
+        <span class="text-state-danger">
           下级会各自变成一个根，需要自己改挂
         </span>
         <button

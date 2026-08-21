@@ -71,9 +71,12 @@ describe('逐段列表', () => {
   })
 
   it('站点不够两个时说清没有可飞的段', () => {
-    expect(mountFields(makeTour({ items: ['c1'] })).text()).toContain(
-      '还没有可飞的段',
-    )
+    const wrapper = mountFields(makeTour({ items: ['c1'] }))
+
+    // 面板寸土寸金：空态走行内单行档，不带图标
+    const empty = wrapper.get('.dt-empty--inline')
+    expect(empty.text()).toContain('还没有可飞的段')
+    expect(empty.find('svg').exists()).toBe(false)
   })
 
   it('没配覆盖时输入框是空的，并提示用的是全局值', () => {

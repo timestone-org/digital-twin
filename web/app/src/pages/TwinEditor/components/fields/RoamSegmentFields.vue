@@ -11,7 +11,7 @@ import {
   type TwinRoamTour,
   type TwinRoamTourSegment,
 } from '@dt/twin-config'
-import { DtNumberInput } from '@dt/ui'
+import { DtEmpty, DtNumberInput } from '@dt/ui'
 import { computed } from 'vue'
 
 import {
@@ -90,9 +90,11 @@ function writeHold(id: string, seconds: number | undefined): void {
 
 <template>
   <div class="flex flex-col gap-2">
-    <p v-if="rows.length === 0" class="text-xs text-text-disabled">
-      轨迹上还没有可飞的段，先把站点凑够两个。
-    </p>
+    <DtEmpty
+      v-if="rows.length === 0"
+      size="inline"
+      title="轨迹上还没有可飞的段，先把站点凑够两个。"
+    />
     <div
       v-for="row in rows"
       :key="row.key"

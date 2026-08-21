@@ -149,7 +149,7 @@ function togglePick(): void {
       >
         <template #actions>
           <DtButton
-            :variant="picking ? 'solid' : 'soft'"
+            :pressed="picking"
             size="sm"
             icon="magnet"
             block

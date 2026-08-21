@@ -1,7 +1,7 @@
 /**
- * @fileoverview 大纲树的数据推导：一份配置摊成八个分组的行清单，外加「删了会
- * 连带影响什么」与「一条诊断落在哪个实体上」两处映射。判断全在这里、组件只管画，
- * 这些规则才测得动。
+ * @fileoverview 大纲树的数据推导：置顶的「场景」区（三个单例）、七个实体分组的
+ * 夹视图与散行清单，外加「删了会连带影响什么」与「一条诊断落在哪个实体上」两处
+ * 映射。判断全在这里、组件只管画，这些规则才测得动。
  */
 import type { TwinConfig, TwinConfigIssue } from '@dt/twin-config'
 
@@ -23,14 +23,13 @@ export interface TwinOutlineRow {
   key: string
   id: string
   kind: TwinEntityKind
-  /** 文档序号，从 1 起。⚠ 它就是数组绑定的对齐位次，不只是显示顺序。 */
+  /** 文档序号，从 1 起。⚠ 它就是数组绑定的对齐位次，进出文件夹都不改它。 */
   index: number
   /** 显示名；名字空着退回 id。 */
   label: string
   /** 名字后面的补充信息，可为空串。 */
   meta: string
-  icon: string
-  /** 显隐；null = 这一类没有显隐字段（视点）。 */
+  /** 显隐；null = 这一类没有显隐字段（视点、钻取节点）。 */
   visible: boolean | null
   /** 有诊断问题，行上打红点。 */
   flagged: boolean
@@ -38,17 +37,58 @@ export interface TwinOutlineRow {
   canMoveDown: boolean
 }
 
-/** 大纲树上的一个分组。 */
+/** 段内的一个文件夹视图：成员按文档序排。 */
+export interface TwinOutlineFolderView {
+  /** 折叠键 `folder:<id>`，进大纲树的本地折叠集。 */
+  key: string
+  id: string
+  kind: TwinEntityKind
+  /** 显示名；名字空着退回 id。 */
+  label: string
+  rows: readonly TwinOutlineRow[]
+}
+
+/** 大纲树上的一个实体分组：夹在前（按夹表序）、散行在后（按文档序）。 */
 export interface TwinOutlineSection {
   key: string
   title: string
-  icon: string
-  /** 单例段（模型与场景 / 视点切换）点了选它自己；实体段为 null。 */
-  selection: TwinSelection | null
-  /** 实体段的集合名；单例段为 null，也就没有「+」。 */
-  kind: TwinEntityKind | null
+  kind: TwinEntityKind
+  folders: readonly TwinOutlineFolderView[]
+  /** 不在任何夹里的散行。 */
   rows: readonly TwinOutlineRow[]
+  /** 段内实体总数（夹内 + 散行）。 */
+  count: number
 }
+
+/** 置顶「场景」区的一行：单例配置页的入口，点了选它自己。 */
+export interface TwinSceneEntry {
+  key: 'model' | 'viewpoints' | 'roam'
+  title: string
+  icon: string
+  selection: TwinSelection
+}
+
+/** 「场景」区的三行：模型摆放、视点切换、自动漫游。 */
+export const TWIN_SCENE_ENTRIES: readonly TwinSceneEntry[] = [
+  {
+    key: 'model',
+    title: '模型与场景',
+    icon: 'building',
+    selection: TWIN_SELECT_MODEL,
+  },
+  {
+    key: 'viewpoints',
+    title: '视点切换',
+    icon: 'list-checks',
+    selection: TWIN_SELECT_VIEWPOINTS,
+  },
+  {
+    key: 'roam',
+    title: '自动漫游',
+    icon: 'route',
+    selection: TWIN_SELECT_ROAM,
+  },
+]
 
 /** 删一个实体会连带悬空的引用条数。 */
 export interface TwinRemoveImpact {
@@ -69,33 +109,7 @@ const NO_IMPACT: TwinRemoveImpact = {
   parts: 0,
 }
 
-const SECTION_ICON: Readonly<Record<TwinEntityKind, string>> = {
-  parts: 'layers',
-  anchors: 'magnet',
-  cameras: 'play',
-  panels: 'layout-template',
-  arrows: 'arrow-right',
-  flows: 'activity',
-  hierNodes: 'folder',
-}
-
-/** 单例段：没有行、点了就选自己的那几节。 */
-type TwinSingleKey = 'model' | 'viewpoints' | 'roam'
-
-/** 十个分组的顺序；三个单例段夹在实体段中间。 */
-const SECTION_ORDER: readonly (TwinEntityKind | TwinSingleKey)[] = [
-  'model',
-  'parts',
-  'anchors',
-  'cameras',
-  'viewpoints',
-  'roam',
-  'panels',
-  'arrows',
-  'flows',
-  'hierNodes',
-]
-
+/** 七个实体分组的顺序。 */
 const ENTITY_KINDS: readonly TwinEntityKind[] = [
   'parts',
   'anchors',
@@ -202,7 +216,6 @@ function buildRows(
     index: index + 1,
     label: item.name === '' ? item.id : item.name,
     meta: item.meta,
-    icon: SECTION_ICON[item.kind],
     visible: item.visible,
     flagged: flaggedIds.has(item.id),
     canMoveUp: index > 0,
@@ -210,44 +223,45 @@ function buildRows(
   }))
 }
 
-/** 三个单例段各自的标题、图标与选中值。 */
-const SINGLE_SECTIONS: Readonly<
-  Record<
-    TwinSingleKey,
-    { title: string; icon: string; selection: TwinSelection }
-  >
-> = {
-  model: {
-    title: '模型与场景',
-    icon: 'building',
-    selection: TWIN_SELECT_MODEL,
-  },
-  viewpoints: {
-    title: '视点切换',
-    icon: 'list-checks',
-    selection: TWIN_SELECT_VIEWPOINTS,
-  },
-  roam: { title: '自动漫游', icon: 'route', selection: TWIN_SELECT_ROAM },
-}
-
-function singleSection(key: TwinSingleKey): TwinOutlineSection {
-  const meta = SINGLE_SECTIONS[key]
-  return {
-    key,
-    title: meta.title,
-    icon: meta.icon,
-    selection: meta.selection,
-    kind: null,
-    rows: [],
-  }
-}
-
 function isEntityKind(value: string): value is TwinEntityKind {
   return ENTITY_KINDS.some((kind) => kind === value)
 }
 
+function buildSection(
+  kind: TwinEntityKind,
+  config: TwinConfig,
+  flaggedIds: ReadonlySet<string>,
+): TwinOutlineSection {
+  const rows = buildRows(ROW_INPUTS[kind](config), flaggedIds)
+  const folders = config.folders.filter((folder) => folder.kind === kind)
+  const grouped = new Map<string, TwinOutlineRow[]>(
+    folders.map((folder) => [folder.id, []]),
+  )
+  const loose: TwinOutlineRow[] = []
+  for (const row of rows) {
+    // 行进哪个夹按成员表找先见的那一个；重复 id 的两行会进同一个夹，文档序不乱
+    const home = folders.find((folder) => folder.itemIds.includes(row.id))
+    const bucket = home === undefined ? loose : (grouped.get(home.id) ?? loose)
+    bucket.push(row)
+  }
+  return {
+    key: kind,
+    title: TWIN_ENTITY_LABELS[kind],
+    kind,
+    folders: folders.map((folder) => ({
+      key: `folder:${folder.id}`,
+      id: folder.id,
+      kind,
+      label: folder.name === '' ? folder.id : folder.name,
+      rows: grouped.get(folder.id) ?? [],
+    })),
+    rows: loose,
+    count: rows.length,
+  }
+}
+
 /**
- * 摊出八个分组。
+ * 摊出七个实体分组（夹视图 + 散行）。「场景」区是静态的 `TWIN_SCENE_ENTRIES`。
  * @param config 当前配置
  * @param flaggedIds 有诊断问题的实体 id
  */
@@ -255,17 +269,7 @@ export function buildTwinOutline(
   config: TwinConfig,
   flaggedIds: ReadonlySet<string>,
 ): TwinOutlineSection[] {
-  return SECTION_ORDER.map((key) => {
-    if (!isEntityKind(key)) return singleSection(key)
-    return {
-      key,
-      title: TWIN_ENTITY_LABELS[key],
-      icon: SECTION_ICON[key],
-      selection: null,
-      kind: key,
-      rows: buildRows(ROW_INPUTS[key](config), flaggedIds),
-    }
-  })
+  return ENTITY_KINDS.map((kind) => buildSection(kind, config, flaggedIds))
 }
 
 /**
@@ -308,6 +312,7 @@ export function twinRemoveImpact(
 
 /**
  * 删除确认里那句「会连带影响什么」；没有连带影响时返回空串。
+ * ⚠ 空串还决定要不要问：无连带的删除直接删、靠撤销兜底，只有非空才弹二次确认。
  * @param config 当前配置
  * @param kind 实体集合
  * @param id 要删的实体 id

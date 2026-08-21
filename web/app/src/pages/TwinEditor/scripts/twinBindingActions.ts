@@ -72,12 +72,22 @@ export function createTwinBindingActions(
   doc: TwinDoc,
   nodeId: () => string,
 ): TwinBindingActions {
-  function commit(next: readonly BindingPayload[]): void {
-    doc.commitBindings(next)
+  /**
+   * 写回文档态。带 `slotKey` 的是同一个槽的连续编辑（逐键输入、挑点覆写），
+   * 按 (节点, 槽) 并成一笔撤销——与大屏侧 `editorActions` 的绑定写入同口径；
+   * 增删这类一次性动作不传，各记各的一笔。
+   */
+  function commit(next: readonly BindingPayload[], slotKey?: string): void {
+    if (slotKey === undefined) {
+      doc.commitBindings(next)
+      return
+    }
+    doc.commitBindings(next, `binding:${nodeId()}:${slotKey}`)
   }
 
   return {
-    write: (binding) => commit(upsert(doc.bindings.value, binding)),
+    write: (binding) =>
+      commit(upsert(doc.bindings.value, binding), binding.fieldKey),
 
     bind: (fieldKey) =>
       commit(upsert(doc.bindings.value, createBinding(nodeId(), fieldKey))),
@@ -93,7 +103,7 @@ export function createTwinBindingActions(
         (item) => item.fieldKey === fieldKey,
       )
       if (current === undefined) return
-      commit(upsert(doc.bindings.value, withPoint(current, pointKey)))
+      commit(upsert(doc.bindings.value, withPoint(current, pointKey)), fieldKey)
     },
   }
 }

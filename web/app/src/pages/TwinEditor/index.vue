@@ -26,7 +26,11 @@ import TwinViewport from './components/TwinViewport.vue'
 import { createTwinEditorActions } from './scripts/twinEditorActions'
 import { createTwinViewportOps } from './scripts/twinViewportOps'
 import { useTwinBindings } from './scripts/useTwinBindings'
-import { TWIN_SELECT_MODEL, type TwinSelection } from './scripts/types'
+import {
+  TWIN_SELECT_MODEL,
+  type TwinEntityKind,
+  type TwinSelection,
+} from './scripts/types'
 import { useBulkParts } from './scripts/useBulkParts'
 import { useGizmoMode } from './scripts/useGizmoMode'
 import { useTwinEditorPage } from './scripts/useTwinEditorPage'
@@ -46,6 +50,8 @@ const page = useTwinEditorPage(
 
 const selection = ref<TwinSelection>(TWIN_SELECT_MODEL)
 const showIssues = ref(false)
+/** 刚建出来的夹 id；左栏大纲拿它立刻进入就地重命名。 */
+const renamingFolderId = ref<string | null>(null)
 /** 模型里的全部节点名，视口加载完给的；部件检查器要用。 */
 const modelNodes = ref<readonly string[]>([])
 /** 视口里正在飞漫游预览；它会被用户一碰镜头就停，所以由视口回传而不是这里说了算。 */
@@ -96,6 +102,15 @@ function select(next: TwinSelection): void {
   selection.value = next
   // 选中即取景：在大纲里点一个锚点，视口该把镜头带过去
   viewport.focus(next)
+}
+
+function addFolderIn(kind: TwinEntityKind): void {
+  renamingFolderId.value = actions.value?.addFolder(kind) ?? null
+}
+
+function createFolderWith(payload: { kind: TwinEntityKind; id: string }): void {
+  renamingFolderId.value =
+    actions.value?.addFolderWithItem(payload.kind, payload.id) ?? null
 }
 
 async function save(): Promise<void> {
@@ -158,6 +173,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
           :config="config"
           :selection="selection"
           :flagged-ids="flaggedIds"
+          :renaming-folder-id="renamingFolderId"
           @select="select"
           @add="actions?.add($event)"
           @bulk-add="bulk.openBlank()"
@@ -165,6 +181,14 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
           @duplicate="actions?.duplicate($event.kind, $event.id)"
           @move="actions?.move($event.kind, $event.id, $event.delta)"
           @toggle-visible="actions?.toggleVisible($event.kind, $event.id)"
+          @add-folder="addFolderIn"
+          @rename-folder="actions?.renameFolder($event.id, $event.name)"
+          @remove-folder="actions?.removeFolder($event)"
+          @move-into-folder="
+            actions?.moveIntoFolder($event.folderId, $event.id)
+          "
+          @remove-from-folder="actions?.removeFromFolder($event)"
+          @create-folder-with-item="createFolderWith"
           @add-hier="actions?.addHier($event)"
           @move-hier="actions?.moveHier($event.id, $event.delta)"
           @reparent-hier="actions?.reparentHier($event.id, $event.parentId)"

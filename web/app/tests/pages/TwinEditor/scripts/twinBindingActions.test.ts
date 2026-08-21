@@ -140,12 +140,97 @@ describe('写挑到的点位', () => {
     })
   })
 
+  it('历史序列还没配过相对窗时给缺省最近一小时', () => {
+    const { doc, actions } = setup([
+      binding('anchorValues[0].value', { sourceKind: 'archive' }),
+    ])
+
+    actions.applyPickedPoint('anchorValues[0].value', 'ns=2;s=T1')
+
+    expect(at(doc, 'anchorValues[0].value')?.detailJson).toEqual({
+      nodeKey: 'ns=2;s=T1',
+      range: { lastWindow: '1h' },
+    })
+  })
+
   it('槽上还没有绑定时什么都不做，不凭空造一条', () => {
     const { doc, actions } = setup()
 
     actions.applyPickedPoint('anchorValues[0].value', 'ns=2;s=T1')
 
     expect(doc.bindings.value).toEqual([])
+  })
+})
+
+describe('撤销粒度', () => {
+  /** 一路撤到底要几步。 */
+  function undoDepth(doc: ReturnType<typeof setup>['doc']): number {
+    let depth = 0
+    while (doc.canUndo.value) {
+      doc.undo()
+      depth += 1
+    }
+    return depth
+  }
+
+  // 同一个槽的逐键输入按 (节点, 槽) 并成一笔——逐帧各记的话撤销要按几十下
+  it('同槽连续 write 并成一笔，一次撤销回到写入前', () => {
+    const { doc, actions } = setup([binding('anchorValues[0].value')])
+
+    actions.write(binding('anchorValues[0].value', { nodeKey: 'ns=2;s=T' }))
+    actions.write(binding('anchorValues[0].value', { nodeKey: 'ns=2;s=T1' }))
+
+    expect(at(doc, 'anchorValues[0].value')?.nodeKey).toBe('ns=2;s=T1')
+    doc.undo()
+    expect(at(doc, 'anchorValues[0].value')?.nodeKey).toBe(
+      'anchorValues[0].value',
+    )
+    expect(doc.canUndo.value).toBe(false)
+  })
+
+  it('写完再挑点位仍是同一段——write 与 applyPickedPoint 共用槽 key', () => {
+    const { doc, actions } = setup([binding('anchorValues[0].value')])
+
+    actions.write(binding('anchorValues[0].value', { nodeKey: '手敲一半' }))
+    actions.applyPickedPoint('anchorValues[0].value', 'ns=2;s=T1')
+
+    expect(undoDepth(doc)).toBe(1)
+  })
+
+  it('换槽各成一笔，互不合并', () => {
+    const { doc, actions } = setup([
+      binding('anchorValues[0].value'),
+      binding('anchorValues[1].value'),
+    ])
+
+    actions.write(binding('anchorValues[0].value', { nodeKey: 'a' }))
+    actions.write(binding('anchorValues[1].value', { nodeKey: 'b' }))
+
+    expect(undoDepth(doc)).toBe(2)
+  })
+
+  // 增删是一次性动作：连着两笔绑定各自可撤，不许被并成一笔
+  it('bind / drop / removeRow 各记各的一笔', () => {
+    const { doc, actions } = setup([
+      binding('anchorValues[0].value'),
+      binding('anchorValues[1].value'),
+    ])
+
+    actions.bind('anchorValues[2].value')
+    actions.drop('anchorValues[0].value')
+    actions.removeRow('anchorValues', 0)
+
+    expect(undoDepth(doc)).toBe(3)
+  })
+
+  it('增删动作打断同槽的连续段，之后再写同槽另起一笔', () => {
+    const { doc, actions } = setup([binding('anchorValues[0].value')])
+
+    actions.write(binding('anchorValues[0].value', { nodeKey: 'a' }))
+    actions.bind('anchorValues[1].value')
+    actions.write(binding('anchorValues[0].value', { nodeKey: 'b' }))
+
+    expect(undoDepth(doc)).toBe(3)
   })
 })
 

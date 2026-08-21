@@ -14,7 +14,7 @@ import type {
   TwinVisibilityRule,
 } from '@dt/twin-config'
 import { hierPathOf } from '@dt/twin-config'
-import { DtButton, DtField, DtInput, DtNotice, DtSelect } from '@dt/ui'
+import { DtButton, DtEmpty, DtField, DtInput, DtNotice, DtSelect } from '@dt/ui'
 import { computed } from 'vue'
 
 import DistanceField from '../fields/DistanceField.vue'
@@ -117,7 +117,7 @@ function togglePick(): void {
       >
         <template #actions>
           <DtButton
-            :variant="picking ? 'solid' : 'soft'"
+            :pressed="picking"
             size="sm"
             icon="magnet"
             block
@@ -153,9 +153,11 @@ function togglePick(): void {
       <DtNotice v-if="danglingHierNode" intent="danger" icon="alert-circle">
         钻取节点 {{ modelValue.clickHierNode }} 不存在，点这个部件不会打开钻取。
       </DtNotice>
-      <p v-else-if="hierNodes.length === 0" class="text-xs text-text-disabled">
-        还没有钻取节点。先在左栏「层级」页签里建一个，这里才挑得到。
-      </p>
+      <DtEmpty
+        v-else-if="hierNodes.length === 0"
+        size="inline"
+        title="还没有钻取节点。先在左栏「层级」页签里建一个，这里才挑得到。"
+      />
     </InspectorSection>
 
     <InspectorSection title="点击距离">

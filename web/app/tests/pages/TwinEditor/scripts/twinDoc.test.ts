@@ -199,3 +199,123 @@ describe('只改绑定', () => {
     expect(doc.bindings.value).toHaveLength(3)
   })
 })
+
+describe('连续动作的并帧', () => {
+  it('同 key 的 commitMerged 替换当前帧，一次撤销回到拖动前', () => {
+    const doc = docWithThreeAnchors()
+
+    doc.commitMerged(normalizeTwinConfig({ anchors: [{ id: 'g1' }] }), 'gizmo')
+    doc.commitMerged(normalizeTwinConfig({ anchors: [{ id: 'g2' }] }), 'gizmo')
+
+    expect(doc.config.value.anchors[0]?.id).toBe('g2')
+    doc.undo()
+    expect(doc.config.value.anchors).toHaveLength(3)
+    expect(doc.canUndo.value).toBe(false)
+  })
+})
+
+describe('绑定写入的并帧', () => {
+  const ONE = [binding('anchorValues[0].value')]
+  const TWO = [
+    binding('anchorValues[0].value'),
+    binding('anchorValues[1].value'),
+  ]
+
+  /** 一路撤到底要几步。 */
+  function undoDepth(doc: ReturnType<typeof docWithThreeAnchors>): number {
+    let depth = 0
+    while (doc.canUndo.value) {
+      doc.undo()
+      depth += 1
+    }
+    return depth
+  }
+
+  it('同 key 的连续写入替换当前帧，一次撤销整段回退', () => {
+    const doc = docWithThreeAnchors()
+
+    doc.commitBindings(ONE, 'binding:n1:slot')
+    doc.commitBindings(TWO, 'binding:n1:slot')
+
+    expect(doc.bindings.value).toHaveLength(2)
+    doc.undo()
+    expect(doc.bindings.value).toHaveLength(3)
+    expect(doc.canUndo.value).toBe(false)
+  })
+
+  it('换 key 断段另起一帧，各成一笔撤销', () => {
+    const doc = docWithThreeAnchors()
+
+    doc.commitBindings(ONE, 'binding:n1:a')
+    doc.commitBindings(TWO, 'binding:n1:b')
+
+    expect(undoDepth(doc)).toBe(2)
+  })
+
+  // ⚠ 不带 key 也要断段：它还得把 mergeKey 清掉，否则随后的同 key
+  //   commitMerged 会把这笔绑定写入连同它自己的帧一起并掉
+  it('不带 key 的写入永远各成一帧', () => {
+    const doc = docWithThreeAnchors()
+
+    doc.commitBindings(ONE)
+    doc.commitBindings(TWO)
+
+    expect(undoDepth(doc)).toBe(2)
+  })
+
+  it('同 key 段被一笔不带 key 的写入打断后，再写同 key 是新的一帧', () => {
+    const doc = docWithThreeAnchors()
+
+    doc.commitBindings(ONE, 'binding:n1:slot')
+    doc.commitBindings(TWO)
+    doc.commitBindings(ONE, 'binding:n1:slot')
+
+    expect(undoDepth(doc)).toBe(3)
+  })
+
+  it('普通 commit 打断绑定并帧段', () => {
+    const doc = docWithThreeAnchors()
+
+    doc.commitBindings(ONE, 'binding:n1:slot')
+    doc.commit(normalizeTwinConfig({ anchors: [{ id: 'a1' }] }))
+    doc.commitBindings(TWO, 'binding:n1:slot')
+
+    expect(undoDepth(doc)).toBe(3)
+  })
+
+  it('endMerge 结束一段，再写同 key 另起一帧', () => {
+    const doc = docWithThreeAnchors()
+
+    doc.commitBindings(ONE, 'binding:n1:slot')
+    doc.endMerge()
+    doc.commitBindings(TWO, 'binding:n1:slot')
+
+    expect(undoDepth(doc)).toBe(2)
+  })
+
+  // ⚠ gizmo 连拖是 commitMerged 的合并段；中途插进一笔绑定写入必须把它打断，
+  //   否则随后的拖动帧会把绑定改动一起并掉——撤销一步连绑定也没了
+  it('gizmo 拖动中插一笔绑定写入，随后的拖动帧不并进原段', () => {
+    const doc = docWithThreeAnchors()
+
+    doc.commitMerged(normalizeTwinConfig({ anchors: [{ id: 'g1' }] }), 'gizmo')
+    doc.commitBindings(ONE, 'binding:n1:slot')
+    doc.commitMerged(normalizeTwinConfig({ anchors: [{ id: 'g2' }] }), 'gizmo')
+
+    // 三帧各自独立：拖动一 / 绑定写入 / 拖动二
+    expect(undoDepth(doc)).toBe(3)
+  })
+
+  it('并帧只替换当前帧，不吃掉更早的历史', () => {
+    const doc = docWithThreeAnchors()
+    doc.commit(normalizeTwinConfig({ anchors: [{ id: 'x' }] }))
+
+    doc.commitBindings(ONE, 'binding:n1:slot')
+    doc.commitBindings(TWO, 'binding:n1:slot')
+
+    doc.undo()
+    expect(doc.config.value.anchors[0]?.id).toBe('x')
+    doc.undo()
+    expect(doc.config.value.anchors).toHaveLength(3)
+  })
+})

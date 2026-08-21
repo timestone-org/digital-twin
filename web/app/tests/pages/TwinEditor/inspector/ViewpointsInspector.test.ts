@@ -180,7 +180,10 @@ describe('挑视点', () => {
   it('一个视点都没有时给去加一个的说法', () => {
     const wrapper = mountSwitcher(makeSwitcher({ items: ['c1'] }), [])
 
-    expect(wrapper.text()).toContain('还没有视点')
+    // 面板寸土寸金：空态走行内单行档，不带图标
+    const empty = wrapper.get('.dt-empty--inline')
+    expect(empty.text()).toContain('还没有视点')
+    expect(empty.find('svg').exists()).toBe(false)
   })
 })
 

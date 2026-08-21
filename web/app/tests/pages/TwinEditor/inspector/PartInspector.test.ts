@@ -99,6 +99,16 @@ describe('关联节点', () => {
     expect(wrapper.text()).not.toContain('在当前模型里没找到')
     expect(wrapper.text()).toContain('模型还没加载')
   })
+
+  it('一个钻取节点都没有时给行内空态：单行、不带图标', () => {
+    const wrapper = mountPart()
+
+    const empty = wrapper
+      .findAll('.dt-empty--inline')
+      .find((item) => item.text().includes('还没有钻取节点'))
+    if (!empty) throw new Error('没有钻取节点的行内空态')
+    expect(empty.find('svg').exists()).toBe(false)
+  })
 })
 
 describe('从视口拾取', () => {

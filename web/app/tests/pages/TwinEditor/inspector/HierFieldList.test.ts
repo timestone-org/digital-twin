@@ -151,6 +151,14 @@ describe('摘要勾选', () => {
       render({ ...THREE_FIELDS, summaryFieldKeys: ['p'] }).text(),
     ).not.toContain('取前 2 个字段')
   })
+
+  it('一个字段都没有时给行内空态：单行、不带图标', () => {
+    const wrapper = render({ id: 'pump', fields: [] })
+
+    const empty = wrapper.get('.dt-empty--inline')
+    expect(empty.text()).toContain('这一层还没有字段')
+    expect(empty.find('svg').exists()).toBe(false)
+  })
 })
 
 describe('空态', () => {

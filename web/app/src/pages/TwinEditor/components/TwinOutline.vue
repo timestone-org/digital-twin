@@ -1,28 +1,49 @@
 <script setup lang="ts">
 /**
- * @fileoverview 左栏大纲树：八个分组列出场景里的一切，管选中、增删、复制、
- * 重排与显隐。它自己不改文档，只抛事件，改配置一律由页面交给 `entityOps`。
+ * @fileoverview 左栏大纲树：搜索框 + 置顶「场景」区 + 七个实体分组（夹视图与
+ * 散行）。管搜索、折叠、选中、增删复制重排显隐与文件夹；它自己不改文档，只抛
+ * 事件，改配置一律由页面交给 `entityOps` / `folderOps`。
  * ⚠ 行上标的序号就是文档序，而文档序决定数组绑定的对齐（`anchorValues[2]`
- * 喂第 3 个锚点）——上移下移会连带改变相邻两行的取值来源。
+ * 喂第 3 个锚点）——上移下移会连带改变相邻两行的取值来源，进出文件夹则不会。
  */
 import type { TwinConfig } from '@dt/twin-config'
-import { DtIcon } from '@dt/ui'
-import { computed, ref } from 'vue'
+import { DtButton, DtEmpty } from '@dt/ui'
+import { computed, ref, watch } from 'vue'
 
-import { buildTwinOutline, twinRemoveImpactText } from '../scripts/outlineNodes'
+import { filterTwinOutline } from '../scripts/outlineFilter'
 import type {
-  TwinOutlineRow,
-  TwinOutlineSection,
+  TwinOutlineFolderRowView,
+  TwinOutlineSectionView,
+} from '../scripts/outlineFilter'
+import type { OutlineRowAction } from '../scripts/outlineMenus'
+import {
+  TWIN_SCENE_ENTRIES,
+  buildTwinOutline,
+  twinRemoveImpactText,
 } from '../scripts/outlineNodes'
+import type { TwinOutlineRow } from '../scripts/outlineNodes'
 import { isSameSelection } from '../scripts/types'
 import type { TwinEntityKind, TwinSelection } from '../scripts/types'
+import { useOutlineDrag } from '../scripts/useOutlineDrag'
+import OutlineFolderRow from './OutlineFolderRow.vue'
+import OutlineRow from './OutlineRow.vue'
+import OutlineSceneList from './OutlineSceneList.vue'
+import OutlineSearchBox from './OutlineSearchBox.vue'
+import OutlineSectionHeader from './OutlineSectionHeader.vue'
 
-const props = defineProps<{
-  config: TwinConfig
-  selection: TwinSelection | null
-  /** 有诊断问题的实体 id 集合，树上打红点。 */
-  flaggedIds: ReadonlySet<string>
-}>()
+const props = withDefaults(
+  defineProps<{
+    config: TwinConfig
+    selection: TwinSelection | null
+    /** 有诊断问题的实体 id 集合，树上打红点。 */
+    flaggedIds: ReadonlySet<string>
+    // ⚠ 显式 `| undefined`：exactOptionalPropertyTypes 下上游原样转发自己的
+    // 可选 prop 时必然带着 undefined，不接就整条 typecheck 红（同 DtButton.size）
+    /** 刚建出来的夹 id：上层置它，这里立刻进入就地重命名。 */
+    renamingFolderId?: string | null | undefined
+  }>(),
+  { renamingFolderId: null },
+)
 
 const emit = defineEmits<{
   select: [TwinSelection]
@@ -33,245 +54,234 @@ const emit = defineEmits<{
   duplicate: [{ kind: TwinEntityKind; id: string }]
   move: [{ kind: TwinEntityKind; id: string; delta: number }]
   toggleVisible: [{ kind: TwinEntityKind; id: string }]
+  addFolder: [TwinEntityKind]
+  renameFolder: [{ id: string; name: string }]
+  removeFolder: [string]
+  moveIntoFolder: [{ folderId: string; id: string }]
+  removeFromFolder: [string]
+  /** 新建夹并把这一行移进去（一笔撤销）。 */
+  createFolderWithItem: [{ kind: TwinEntityKind; id: string }]
 }>()
 
-/** 行内图标键的样式，五个键共用一串。 */
-const ACT =
-  'flex h-5 w-5 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-text-disabled hover:text-accent-primary disabled:cursor-not-allowed disabled:opacity-30'
-
+const query = ref('')
 const collapsed = ref<ReadonlySet<string>>(new Set())
 /** 正在等二次确认的那一行；同一时刻只有一行。 */
 const pendingRemoveKey = ref<string | null>(null)
+/** 正在就地重命名的夹。 */
+const renamingId = ref<string | null>(null)
 
-const sections = computed(() =>
-  buildTwinOutline(props.config, props.flaggedIds),
+const view = computed(() =>
+  filterTwinOutline(
+    buildTwinOutline(props.config, props.flaggedIds),
+    TWIN_SCENE_ENTRIES,
+    query.value,
+  ),
 )
 
-function toggleSection(key: string): void {
+const drag = useOutlineDrag((folderId, id) =>
+  emit('moveIntoFolder', { folderId, id }),
+)
+
+watch(
+  () => props.renamingFolderId,
+  (id) => {
+    if (id !== null) renamingId.value = id
+  },
+)
+
+/** 搜索态一律按展开算、不写折叠集：清词后用户自己的折叠状态原样回来。 */
+function isCollapsed(key: string): boolean {
+  return view.value.active ? false : collapsed.value.has(key)
+}
+
+function toggleCollapse(key: string): void {
   const next = new Set(collapsed.value)
   if (!next.delete(key)) next.add(key)
   collapsed.value = next
-}
-
-function selectSection(section: TwinOutlineSection): void {
-  if (section.selection !== null) emit('select', section.selection)
-}
-
-function isSectionSelected(section: TwinOutlineSection): boolean {
-  if (section.selection === null) return false
-  return isSameSelection(props.selection, section.selection)
 }
 
 function isRowSelected(row: TwinOutlineRow): boolean {
   return isSameSelection(props.selection, { kind: row.kind, id: row.id })
 }
 
-function addTo(kind: TwinEntityKind | null): void {
-  if (kind !== null) emit('add', kind)
+function sectionCount(sectionView: TwinOutlineSectionView): string {
+  const total = sectionView.section.count
+  return view.value.active ? `${sectionView.hitCount}/${total}` : `${total}`
 }
 
-/** 删除前那句「会连带影响什么」；空串表示删了不牵连别人。 */
+function folderCount(folderView: TwinOutlineFolderRowView): string {
+  const total = folderView.folder.rows.length
+  if (view.value.active) return `${folderView.rows.length}/${total}`
+  return total === 0 ? '空' : `${total}`
+}
+
 function removeImpact(row: TwinOutlineRow): string {
   return twinRemoveImpactText(props.config, row.kind, row.id)
 }
 
-function confirmRemove(row: TwinOutlineRow): void {
-  pendingRemoveKey.value = null
-  emit('remove', { kind: row.kind, id: row.id })
+function confirmTextFor(row: TwinOutlineRow): string | null {
+  return pendingRemoveKey.value === row.key ? removeImpact(row) : null
+}
+
+/** 有连带影响才就地二次确认；没有就直接删，靠撤销兜底。 */
+function requestRemove(row: TwinOutlineRow): void {
+  if (removeImpact(row) === '') {
+    emit('remove', { kind: row.kind, id: row.id })
+    return
+  }
+  pendingRemoveKey.value = row.key
+}
+
+function onRowAct(row: TwinOutlineRow, action: OutlineRowAction): void {
+  const target = { kind: row.kind, id: row.id }
+  if (action.type === 'select') emit('select', target)
+  else if (action.type === 'toggle-visible') emit('toggleVisible', target)
+  else if (action.type === 'duplicate') emit('duplicate', target)
+  else if (action.type === 'move')
+    emit('move', { ...target, delta: action.delta })
+  else onRowRemoveOrFolder(row, action)
+}
+
+function onRowRemoveOrFolder(
+  row: TwinOutlineRow,
+  action: OutlineRowAction,
+): void {
+  if (action.type === 'remove-request') requestRemove(row)
+  else if (action.type === 'remove-cancel') pendingRemoveKey.value = null
+  else if (action.type === 'remove-confirm') {
+    pendingRemoveKey.value = null
+    emit('remove', { kind: row.kind, id: row.id })
+  } else if (action.type === 'folder-into')
+    emit('moveIntoFolder', { folderId: action.folderId, id: row.id })
+  else if (action.type === 'folder-out') emit('removeFromFolder', row.id)
+  else if (action.type === 'folder-new')
+    emit('createFolderWithItem', { kind: row.kind, id: row.id })
+}
+
+function commitRename(id: string, name: string): void {
+  renamingId.value = null
+  emit('renameFolder', { id, name })
 }
 </script>
 
 <template>
-  <div class="flex flex-col gap-1 p-1" data-test="twin-outline">
-    <template v-for="section in sections" :key="section.key">
-      <button
-        v-if="section.selection !== null"
-        type="button"
-        class="flex items-center gap-1.5 rounded-[var(--radius-sm)] px-2 py-1.5 text-left text-xs"
-        :class="
-          isSectionSelected(section)
-            ? 'bg-surface-raised text-accent-on-surface'
-            : 'text-text-secondary hover:bg-surface-raised'
-        "
-        data-test="outline-single"
-        :data-key="section.key"
-        @click="selectSection(section)"
-      >
-        <DtIcon :name="section.icon" :size="13" />
-        <span class="truncate">{{ section.title }}</span>
-      </button>
+  <div class="flex flex-col gap-1 pb-1" data-test="twin-outline">
+    <OutlineSearchBox v-model="query" />
 
-      <div v-else class="rounded-[var(--radius-sm)]">
-        <div class="flex items-center gap-1 px-1" data-test="outline-section">
-          <button
-            type="button"
-            class="flex min-w-0 flex-1 items-center gap-1.5 py-1 text-left text-xs font-medium text-text-secondary hover:text-text-primary"
-            :aria-expanded="!collapsed.has(section.key)"
-            :aria-label="`展开或折叠${section.title}`"
-            :data-key="section.key"
-            @click="toggleSection(section.key)"
-          >
-            <DtIcon
-              :name="
-                collapsed.has(section.key) ? 'chevron-right' : 'chevron-down'
-              "
-              :size="12"
-            />
-            <DtIcon :name="section.icon" :size="12" />
-            <span class="truncate">{{ section.title }}</span>
-            <span class="text-3xs text-text-disabled">{{
-              section.rows.length
-            }}</span>
-          </button>
-          <!-- 一个模型几十个节点，逐个建部件再逐个填节点名是这里最费手的一段 -->
-          <button
-            v-if="section.kind === 'parts'"
-            type="button"
-            :class="ACT"
-            aria-label="从模型节点批量建部件"
-            title="从模型节点批量建部件"
-            data-test="section-bulk"
-            @click="emit('bulkAdd')"
-          >
-            <DtIcon name="layers" :size="12" />
-          </button>
-          <button
-            type="button"
-            :class="ACT"
-            :aria-label="`新增${section.title}`"
-            :title="`新增${section.title}`"
-            data-test="section-add"
-            @click="addTo(section.kind)"
-          >
-            <DtIcon name="plus" :size="12" />
-          </button>
-        </div>
+    <OutlineSceneList
+      v-if="view.scene.length > 0"
+      :entries="view.scene"
+      :selection="selection"
+      @select="emit('select', $event)"
+    />
 
-        <template v-if="!collapsed.has(section.key)">
-          <p
-            v-if="section.rows.length === 0"
-            class="px-2 py-1 text-3xs text-text-disabled"
+    <template
+      v-for="sectionView in view.sections"
+      :key="sectionView.section.key"
+    >
+      <OutlineSectionHeader
+        :kind="sectionView.section.kind"
+        :title="sectionView.section.title"
+        :slices="sectionView.slices"
+        :count-text="sectionCount(sectionView)"
+        :collapsed="isCollapsed(sectionView.section.key)"
+        @toggle="toggleCollapse(sectionView.section.key)"
+        @add="emit('add', sectionView.section.kind)"
+        @bulk-add="emit('bulkAdd')"
+        @folder-new="emit('addFolder', sectionView.section.kind)"
+      />
+      <template v-if="!isCollapsed(sectionView.section.key)">
+        <DtEmpty
+          v-if="!view.active && sectionView.section.count === 0"
+          size="inline"
+          class="px-4 py-0.5"
+          :title="`还没有${sectionView.section.title}`"
+          data-test="section-empty"
+        >
+          <button
+            type="button"
+            class="shrink-0 text-2xs text-accent-primary hover:underline"
+            data-test="section-empty-add"
+            @click="emit('add', sectionView.section.kind)"
           >
-            还没有{{ section.title }}
-          </p>
-          <template v-for="row in section.rows" :key="row.key">
+            新建
+          </button>
+        </DtEmpty>
+        <div
+          v-for="folderView in sectionView.folders"
+          :key="folderView.folder.key"
+          :class="
+            drag.dropFolderId.value === folderView.folder.id
+              ? 'rounded-[var(--radius-sm)] ring-1 ring-inset ring-accent-primary'
+              : ''
+          "
+          @dragover="drag.over(folderView.folder, $event)"
+          @drop="drag.drop(folderView.folder)"
+        >
+          <OutlineFolderRow
+            :folder="folderView.folder"
+            :collapsed="isCollapsed(folderView.folder.key)"
+            :renaming="renamingId === folderView.folder.id"
+            :slices="folderView.slices"
+            :count-text="folderCount(folderView)"
+            @toggle="toggleCollapse(folderView.folder.key)"
+            @rename-start="renamingId = folderView.folder.id"
+            @rename-commit="commitRename(folderView.folder.id, $event)"
+            @rename-cancel="renamingId = null"
+            @remove="emit('removeFolder', folderView.folder.id)"
+          />
+          <template v-if="!isCollapsed(folderView.folder.key)">
             <div
-              class="flex items-center gap-0.5 rounded-[var(--radius-sm)] pr-1 text-xs"
-              :class="
-                isRowSelected(row)
-                  ? 'bg-surface-raised text-accent-on-surface'
-                  : 'text-text-secondary hover:bg-surface-raised'
-              "
-              data-test="outline-row"
-              :data-id="row.id"
+              v-for="rowView in folderView.rows"
+              :key="rowView.row.key"
+              draggable="true"
+              @dragstart="drag.start(rowView.row, folderView.folder.id)"
+              @dragend="drag.end()"
             >
-              <button
-                type="button"
-                class="flex min-w-0 flex-1 items-center gap-1.5 px-1 py-1 text-left"
-                data-test="row-select"
-                @click="emit('select', { kind: row.kind, id: row.id })"
-              >
-                <!-- 序号不是装饰：数组绑定按这个位次对齐 -->
-                <span
-                  class="w-4 shrink-0 text-right text-3xs text-text-disabled"
-                  title="文档序号，数组绑定按它对齐"
-                >
-                  {{ row.index }}
-                </span>
-                <DtIcon :name="row.icon" :size="12" />
-                <span class="min-w-0 flex-1 truncate">{{ row.label }}</span>
-                <span
-                  v-if="row.meta !== ''"
-                  class="shrink-0 text-3xs text-text-disabled"
-                >
-                  {{ row.meta }}
-                </span>
-                <span
-                  v-if="row.flagged"
-                  class="h-1.5 w-1.5 shrink-0 rounded-full bg-state-danger"
-                  title="这一项有配置问题"
-                  data-test="row-flag"
-                />
-              </button>
-              <button
-                v-if="row.visible !== null"
-                type="button"
-                :class="ACT"
-                :aria-label="`${row.visible ? '隐藏' : '显示'}${row.label}`"
-                data-test="row-visible"
-                @click="emit('toggleVisible', { kind: row.kind, id: row.id })"
-              >
-                <DtIcon :name="row.visible ? 'eye' : 'eye-off'" :size="12" />
-              </button>
-              <button
-                type="button"
-                :class="ACT"
-                :disabled="!row.canMoveUp"
-                :aria-label="`上移${row.label}`"
-                data-test="row-up"
-                @click="emit('move', { kind: row.kind, id: row.id, delta: -1 })"
-              >
-                <DtIcon name="chevron-up" :size="12" />
-              </button>
-              <button
-                type="button"
-                :class="ACT"
-                :disabled="!row.canMoveDown"
-                :aria-label="`下移${row.label}`"
-                data-test="row-down"
-                @click="emit('move', { kind: row.kind, id: row.id, delta: 1 })"
-              >
-                <DtIcon name="chevron-down" :size="12" />
-              </button>
-              <button
-                type="button"
-                :class="ACT"
-                :aria-label="`复制${row.label}`"
-                data-test="row-copy"
-                @click="emit('duplicate', { kind: row.kind, id: row.id })"
-              >
-                <DtIcon name="copy" :size="12" />
-              </button>
-              <button
-                type="button"
-                :class="ACT"
-                :aria-label="`删除${row.label}`"
-                data-test="row-remove"
-                @click="pendingRemoveKey = row.key"
-              >
-                <DtIcon name="trash" :size="12" />
-              </button>
-            </div>
-            <!-- 二次确认就地展开：连带影响写在这里，弹窗会把它挪出用户的视线 -->
-            <div
-              v-if="pendingRemoveKey === row.key"
-              class="flex flex-wrap items-center gap-1 rounded-[var(--radius-sm)] bg-surface-raised px-2 py-1 text-3xs text-text-secondary"
-              data-test="row-remove-confirm"
-            >
-              <span>删除「{{ row.label }}」？</span>
-              <span v-if="removeImpact(row) !== ''" class="text-state-danger">
-                {{ removeImpact(row) }}
-              </span>
-              <button
-                type="button"
-                class="rounded-[var(--radius-sm)] px-1.5 py-0.5 text-state-danger hover:bg-state-danger/10"
-                data-test="row-remove-yes"
-                @click="confirmRemove(row)"
-              >
-                确认删除
-              </button>
-              <button
-                type="button"
-                class="rounded-[var(--radius-sm)] px-1.5 py-0.5 hover:text-text-primary"
-                data-test="row-remove-no"
-                @click="pendingRemoveKey = null"
-              >
-                取消
-              </button>
+              <OutlineRow
+                :row="rowView.row"
+                :selected="isRowSelected(rowView.row)"
+                :searching="view.active"
+                :slices="rowView.slices"
+                :folders="sectionView.section.folders"
+                :folder-id="folderView.folder.id"
+                :confirm-text="confirmTextFor(rowView.row)"
+                @act="onRowAct(rowView.row, $event)"
+              />
             </div>
           </template>
-        </template>
-      </div>
+        </div>
+        <div
+          v-for="rowView in sectionView.rows"
+          :key="rowView.row.key"
+          draggable="true"
+          @dragstart="drag.start(rowView.row, null)"
+          @dragend="drag.end()"
+        >
+          <OutlineRow
+            :row="rowView.row"
+            :selected="isRowSelected(rowView.row)"
+            :searching="view.active"
+            :slices="rowView.slices"
+            :folders="sectionView.section.folders"
+            :folder-id="null"
+            :confirm-text="confirmTextFor(rowView.row)"
+            @act="onRowAct(rowView.row, $event)"
+          />
+        </div>
+      </template>
     </template>
+
+    <DtEmpty
+      v-if="
+        view.active && view.scene.length === 0 && view.sections.length === 0
+      "
+      icon="search"
+      title="没有匹配的内容"
+      :hint="`没有找到「${query.trim()}」`"
+      data-test="outline-search-empty"
+    >
+      <DtButton variant="soft" size="sm" @click="query = ''">清除搜索</DtButton>
+    </DtEmpty>
   </div>
 </template>
