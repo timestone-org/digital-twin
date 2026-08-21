@@ -39,10 +39,14 @@ beforeEach(() => {
 
 describe('createChart', () => {
   it('只注册用得到的图表与组件，且多次建图只注册一次', async () => {
+    // ⚠ 「只注册一次」的闩是模块级状态：乱序执行时别的用例可能先建过图，
+    //   这里取一份全新模块，让本用例自己见证从零到一（mock 表不受 reset 影响）
+    vi.resetModules()
+    const fresh = await import('../../../src/shared/chart/echarts')
     const first = document.createElement('div')
     const second = document.createElement('div')
-    await createChart(first)
-    await createChart(second)
+    await fresh.createChart(first)
+    await fresh.createChart(second)
     expect(echarts.use).toHaveBeenCalledTimes(1)
     expect(echarts.use.mock.calls[0]?.[0]).toEqual([
       'LineChart',

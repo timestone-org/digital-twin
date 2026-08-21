@@ -98,9 +98,10 @@ describe('DtButton', () => {
     expect(wrapper.find('button').classes()).toContain('dt-btn--icon-only')
   })
 
-  it('ariaLabel 透到 aria-label，图标键才有可访问名称', () => {
+  it('aria-label 经 attrs 透传到根 button，图标键才有可访问名称', () => {
     const wrapper = mount(DtButton, {
-      props: { icon: 'user', ariaLabel: '当前用户' },
+      props: { icon: 'user' },
+      attrs: { 'aria-label': '当前用户' },
     })
     expect(wrapper.find('button').attributes('aria-label')).toBe('当前用户')
   })
@@ -110,5 +111,113 @@ describe('DtButton', () => {
       props: { icon: 'user', iconRight: 'arrow-right', loading: true },
     })
     expect(wrapper.findAll('svg')).toHaveLength(0)
+  })
+})
+
+describe('开关语义（pressed）', () => {
+  it('pressed=true 是按下态：soft 外观 + primary 强调 + aria-pressed=true', () => {
+    const wrapper = mount(DtButton, { props: { pressed: true } })
+    const button = wrapper.find('button')
+    expect(button.classes()).toContain('dt-btn--soft')
+    expect(button.attributes('style')).toContain('--accent-primary')
+    expect(button.attributes('aria-pressed')).toBe('true')
+  })
+
+  it('pressed=false 是弹起态：ghost 外观 + neutral 强调 + aria-pressed=false', () => {
+    const wrapper = mount(DtButton, { props: { pressed: false } })
+    const button = wrapper.find('button')
+    expect(button.classes()).toContain('dt-btn--ghost')
+    expect(button.attributes('style')).toContain('--text-secondary')
+    expect(button.attributes('aria-pressed')).toBe('false')
+  })
+
+  it('pressed 存在时显式传入的 variant 与 intent 被完全忽略', () => {
+    const on = mount(DtButton, {
+      props: { pressed: true, variant: 'outline', intent: 'danger' },
+    }).find('button')
+    expect(on.classes()).toContain('dt-btn--soft')
+    expect(on.classes()).not.toContain('dt-btn--outline')
+    expect(on.attributes('style')).toContain('--accent-primary')
+    expect(on.attributes('style')).not.toContain('--state-danger')
+
+    const off = mount(DtButton, {
+      props: { pressed: false, variant: 'solid', intent: 'danger' },
+    }).find('button')
+    expect(off.classes()).toContain('dt-btn--ghost')
+    expect(off.classes()).not.toContain('dt-btn--solid')
+    expect(off.attributes('style')).toContain('--text-secondary')
+    expect(off.attributes('style')).not.toContain('--state-danger')
+  })
+
+  // ⚠ Boolean prop 缺省会被 Vue 强转成 false，undefined 分支必须显式守住：
+  //   缺省一旦变 false，全仓普通按钮都会退化成 ghost 并被读屏当成开关
+  it('不传 pressed 时不落 aria-pressed，外观仍由 variant/intent 决定', () => {
+    const button = mount(DtButton, {
+      props: { variant: 'outline', intent: 'danger' },
+    }).find('button')
+    expect(button.attributes('aria-pressed')).toBeUndefined()
+    expect(button.classes()).toContain('dt-btn--outline')
+    expect(button.attributes('style')).toContain('--state-danger')
+  })
+
+  it('pressed 态点击照常 emit click，交给上层翻转状态', async () => {
+    const wrapper = mount(DtButton, { props: { pressed: true } })
+    await wrapper.find('button').trigger('click')
+    expect(wrapper.emitted('click')).toHaveLength(1)
+  })
+})
+
+describe('xs 档', () => {
+  it('size=xs 落 dt-btn--xs 且保留 dt-btn 基类（焦点环挂在基类上）', () => {
+    const button = mount(DtButton, {
+      props: { size: 'xs', icon: 'trash' },
+    }).find('button')
+    expect(button.classes()).toContain('dt-btn')
+    expect(button.classes()).toContain('dt-btn--xs')
+  })
+
+  it('xs 的内嵌图标压到 12px', () => {
+    const svg = mount(DtButton, { props: { size: 'xs', icon: 'trash' } }).find(
+      'svg',
+    )
+    expect(svg.attributes('width')).toBe('12')
+    expect(svg.attributes('height')).toBe('12')
+  })
+
+  it('xs 是 icon-only 场景：无文字时压成正方形图标键', () => {
+    const button = mount(DtButton, {
+      props: { size: 'xs', icon: 'trash' },
+    }).find('button')
+    expect(button.classes()).toContain('dt-btn--icon-only')
+  })
+
+  it('xs 也吃 disabled：禁用且不 emit click', async () => {
+    const wrapper = mount(DtButton, {
+      props: { size: 'xs', icon: 'trash', disabled: true },
+    })
+    await wrapper.find('button').trigger('click')
+    expect(wrapper.find('button').attributes('disabled')).toBe('')
+    expect(wrapper.emitted('click')).toBeUndefined()
+  })
+
+  it('xs 键键盘可达：原生 button 不带负 tabindex，focus 拿得到焦点', () => {
+    const wrapper = mount(DtButton, {
+      props: { size: 'xs', icon: 'trash' },
+      attachTo: document.body,
+    })
+    const element = wrapper.find('button').element
+    expect(element.getAttribute('tabindex')).toBeNull()
+    element.focus()
+    expect(document.activeElement).toBe(element)
+    wrapper.unmount()
+  })
+
+  it('xs 与 pressed 组合：微型键也能表达按压态', () => {
+    const button = mount(DtButton, {
+      props: { size: 'xs', icon: 'eye', pressed: true },
+    }).find('button')
+    expect(button.classes()).toContain('dt-btn--xs')
+    expect(button.classes()).toContain('dt-btn--soft')
+    expect(button.attributes('aria-pressed')).toBe('true')
   })
 })
