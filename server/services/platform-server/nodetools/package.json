@@ -1,0 +1,14 @@
+{
+  "name": "platform-nodetools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "platform-worker 的 glTF 压缩工具。Python 侧没有可用的 glTF Draco 编码器，这是装 Node 的唯一原因（ADR-0022）。",
+  "dependencies": {
+    "@gltf-transform/core": "4.1.1",
+    "@gltf-transform/extensions": "4.1.1",
+    "@gltf-transform/functions": "4.1.1",
+    "draco3dgltf": "1.5.7",
+    "meshoptimizer": "0.22.0"
+  }
+}

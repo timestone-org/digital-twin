@@ -14,6 +14,23 @@ from platform_server.apps.assets.schemas.common import (
 )
 
 
+class AssetVariantOut(OutputModel):
+    """一个模型素材的一档压缩产物。
+
+    ⚠ `size_bytes` 未压成时为 null，不是 0：给 0 的话界面会显示「0 B」，
+    那是一个看着像已经压完的假事实。
+    """
+
+    variant: str
+    label: str
+    hint: str
+    status: str
+    size_bytes: int | None
+    checksum: str | None
+    #: 失败原因；其余状态是空串
+    error: str
+
+
 class AssetOut(OutputModel):
     """一个素材。
 
@@ -30,6 +47,10 @@ class AssetOut(OutputModel):
     checksum: str
     created_at: Utc
     created_by: str
+    #: 压缩档。⚠ 只有模型类素材才有，其余一律空列表——图片与图标不分档
+    variants: list[AssetVariantOut] = Field(
+        default_factory=list[AssetVariantOut]
+    )
 
 
 class AssetKindOut(OutputModel):
@@ -78,6 +99,17 @@ class FinalizeUploadIn(InputModel):
 
     ⚠ 刻意只收显示名：类型从对象键里读回来，大小与校验和以存储端读到的为准。
     多收一样就多一个与真实字节对不上的机会，而对不上时没有任何一处会报错。
+    """
+
+    name: AssetName
+
+
+class AssetUpdateIn(InputModel):
+    """改一个素材的显示名。
+
+    ⚠ 只收显示名：类型、大小与校验和都是**字节的事实**，由存储端读回来落库。
+    放开它们等于允许库里的元信息与桶里的字节对不上，而对不上时没有任何一处
+    会报错——界面上显示的体积与那个文件本身再无关系。
     """
 
     name: AssetName

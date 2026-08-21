@@ -44,10 +44,243 @@ services:
     # 表现是整站打不开而每个服务单看都健康。
     restart: unless-stopped
 
+  # ---- 一次性任务：迁移与种子 ----
+  # ⚠ 每个代码单元一个作业，各用自己的镜像跑自己那份 alembic：五套迁移分属五个
+  # schema，合成一个作业就要求某一个镜像装得下全部五份代码。
+  # ⚠ 真服务用 `service_completed_successfully` 等它们：这正是「迁移先行」那条
+  # 规矩（engineering-workflow §4）——代码可回滚、数据库不回滚，故必须先让
+  # 新结构就位，再放新代码进来。
+  # ⚠ `restart: 'no'`：跑完就该退出。给它 unless-stopped 会让 compose 反复重跑，
+  # 而 alembic 每次都要抢一次 DDL 锁。
+
+  auth-migrate:
+    build:
+      context: ../server
+      dockerfile: services/auth-server/Dockerfile
+    environment:
+      DB_HOST: ${POSTGRES_HOST:?必填}
+      DB_PORT: ${POSTGRES_PORT:-5432}
+      AUTH_APP_LOG_FORMAT: json
+      AUTH_POSTGRES_HOST: ${POSTGRES_HOST:?必填}
+      AUTH_POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      AUTH_POSTGRES_USER: ${POSTGRES_USER:?必填}
+      AUTH_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必填}
+      AUTH_POSTGRES_DB: ${POSTGRES_DB:?必填}
+      AUTH_REDIS_HOST: ${REDIS_HOST:?必填}
+      AUTH_REDIS_PORT: ${REDIS_PORT:-6379}
+      AUTH_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?必填}
+      AUTH_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
+      AUTH_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
+      # ⚠ 只在**管理员账号还不存在**时才用得上：`ensure_admin` 对已存在的账号
+      # 一个字段都不动，故重开机不会把密码改回这里的值。
+      # ⚠ 仍然必填：密钥类绝不给默认值（config-and-secrets §2），而弱默认的
+      # 管理员口令等于没有口令
+      AUTH_SEED_ADMIN_PASSWORD: ${AUTH_SEED_ADMIN_PASSWORD:?必填：首次建管理员用，openssl rand -base64 24}
+      AUTH_SEED_ADMIN_USERNAME: ${AUTH_SEED_ADMIN_USERNAME:-admin}
+      AUTH_SEED_ADMIN_EMAIL: ${AUTH_SEED_ADMIN_EMAIL:-admin@example.com}
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        set -e
+        python - <<'PY'
+        import os, socket, sys, time
+        # ⚠ 库在本编排之外（与对象存储同档），compose 没法给它挂 healthcheck。
+        # 不等就迁移，主机重启时 Docker 常比 Postgres 先起来，于是整栈拒绝启动。
+        host, port = os.environ['DB_HOST'], int(os.environ['DB_PORT'])
+        for _ in range(60):
+            try:
+                socket.create_connection((host, port), timeout=2).close()
+                sys.exit(0)
+            except OSError:
+                time.sleep(2)
+        print(f'等不到数据库 {host}:{port}', file=sys.stderr)
+        sys.exit(1)
+        PY
+        alembic upgrade head
+        # ⚠ 种子必须跟着迁移一起自动跑：权限码目录与路由规则是**代码里的真源**，
+        # 加了新端点却没重跑种子，那个端点在边缘一律 403，而两边代码单看都对
+        python -m scripts.seed
+    restart: 'no'
+
+  platform-migrate:
+    build:
+      context: ../server
+      dockerfile: services/platform-server/Dockerfile
+    environment:
+      DB_HOST: ${POSTGRES_HOST:?必填}
+      DB_PORT: ${POSTGRES_PORT:-5432}
+      PLATFORM_APP_LOG_FORMAT: json
+      PLATFORM_POSTGRES_HOST: ${POSTGRES_HOST:?必填}
+      PLATFORM_POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      PLATFORM_POSTGRES_USER: ${POSTGRES_USER:?必填}
+      PLATFORM_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必填}
+      PLATFORM_POSTGRES_DB: ${POSTGRES_DB:?必填}
+      PLATFORM_SQLSERVER_HOST: ${ACSOURCE_HOST:?必填：现场 EMS 库地址}
+      PLATFORM_SQLSERVER_PORT: ${ACSOURCE_PORT:-1433}
+      PLATFORM_SQLSERVER_USER: ${ACSOURCE_USER:?必填}
+      PLATFORM_SQLSERVER_PASSWORD: ${ACSOURCE_PASSWORD:?必填}
+      PLATFORM_SQLSERVER_DATABASE: ${ACSOURCE_DB:?必填}
+      PLATFORM_REDIS_HOST: ${REDIS_HOST:?必填}
+      PLATFORM_REDIS_PORT: ${REDIS_PORT:-6379}
+      PLATFORM_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      PLATFORM_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
+      PLATFORM_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
+      PLATFORM_COLLECT_CREDENTIAL_SECRET: ${COLLECT_CREDENTIAL_SECRET:?必填}
+      PLATFORM_OBJECTSTORE_ENDPOINT: ${OSS_ENDPOINT:?必填}
+      PLATFORM_OBJECTSTORE_BUCKET: ${OSS_BUCKET:-digitaltwin}
+      PLATFORM_OBJECTSTORE_ACCESS_KEY: ${OSS_ACCESS_KEY:?必填}
+      PLATFORM_OBJECTSTORE_SECRET_KEY: ${OSS_SECRET_KEY:?必填}
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        set -e
+        python - <<'PY'
+        import os, socket, sys, time
+        # ⚠ 库在本编排之外（与对象存储同档），compose 没法给它挂 healthcheck。
+        # 不等就迁移，主机重启时 Docker 常比 Postgres 先起来，于是整栈拒绝启动。
+        host, port = os.environ['DB_HOST'], int(os.environ['DB_PORT'])
+        for _ in range(60):
+            try:
+                socket.create_connection((host, port), timeout=2).close()
+                sys.exit(0)
+            except OSError:
+                time.sleep(2)
+        print(f'等不到数据库 {host}:{port}', file=sys.stderr)
+        sys.exit(1)
+        PY
+        alembic upgrade head
+    restart: 'no'
+
+  opcua-migrate:
+    build:
+      context: ../server
+      dockerfile: services/opcua-server/Dockerfile
+    environment:
+      DB_HOST: ${POSTGRES_HOST:?必填}
+      DB_PORT: ${POSTGRES_PORT:-5432}
+      OPCUA_APP_LOG_FORMAT: json
+      OPCUA_POSTGRES_HOST: ${POSTGRES_HOST:?必填}
+      OPCUA_POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      OPCUA_POSTGRES_USER: ${POSTGRES_USER:?必填}
+      OPCUA_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必填}
+      OPCUA_POSTGRES_DB: ${POSTGRES_DB:?必填}
+      OPCUA_POSTGRES_SCHEMA: opcua
+      OPCUA_REDIS_HOST: ${REDIS_HOST:?必填}
+      OPCUA_REDIS_PORT: ${REDIS_PORT:-6379}
+      OPCUA_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      OPCUA_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
+      OPCUA_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        set -e
+        python - <<'PY'
+        import os, socket, sys, time
+        # ⚠ 库在本编排之外（与对象存储同档），compose 没法给它挂 healthcheck。
+        # 不等就迁移，主机重启时 Docker 常比 Postgres 先起来，于是整栈拒绝启动。
+        host, port = os.environ['DB_HOST'], int(os.environ['DB_PORT'])
+        for _ in range(60):
+            try:
+                socket.create_connection((host, port), timeout=2).close()
+                sys.exit(0)
+            except OSError:
+                time.sleep(2)
+        print(f'等不到数据库 {host}:{port}', file=sys.stderr)
+        sys.exit(1)
+        PY
+        alembic upgrade head
+    restart: 'no'
+
+  collect-migrate:
+    build:
+      context: ../server
+      dockerfile: services/collector-server/Dockerfile
+    environment:
+      DB_HOST: ${POSTGRES_HOST:?必填}
+      DB_PORT: ${POSTGRES_PORT:-5432}
+      COLLECT_APP_LOG_FORMAT: json
+      COLLECT_POSTGRES_HOST: ${POSTGRES_HOST:?必填}
+      COLLECT_POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      COLLECT_POSTGRES_USER: ${POSTGRES_USER:?必填}
+      COLLECT_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必填}
+      COLLECT_POSTGRES_DB: ${POSTGRES_DB:?必填}
+      COLLECT_POSTGRES_SCHEMA: collect
+      COLLECT_REDIS_HOST: ${REDIS_HOST:?必填}
+      COLLECT_REDIS_PORT: ${REDIS_PORT:-6379}
+      COLLECT_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      COLLECT_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
+      COLLECT_CREDENTIAL_SECRET: ${COLLECT_CREDENTIAL_SECRET:?必填}
+      COLLECT_PLATFORM_BASE_URL: http://platform-server:8005
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        set -e
+        python - <<'PY'
+        import os, socket, sys, time
+        # ⚠ 库在本编排之外（与对象存储同档），compose 没法给它挂 healthcheck。
+        # 不等就迁移，主机重启时 Docker 常比 Postgres 先起来，于是整栈拒绝启动。
+        host, port = os.environ['DB_HOST'], int(os.environ['DB_PORT'])
+        for _ in range(60):
+            try:
+                socket.create_connection((host, port), timeout=2).close()
+                sys.exit(0)
+            except OSError:
+                time.sleep(2)
+        print(f'等不到数据库 {host}:{port}', file=sys.stderr)
+        sys.exit(1)
+        PY
+        alembic upgrade head
+    restart: 'no'
+
+  realtime-migrate:
+    build:
+      context: ../server
+      dockerfile: services/realtime-hub/Dockerfile
+    environment:
+      DB_HOST: ${POSTGRES_HOST:?必填}
+      DB_PORT: ${POSTGRES_PORT:-5432}
+      REALTIME_APP_LOG_FORMAT: json
+      REALTIME_POSTGRES_HOST: ${POSTGRES_HOST:?必填}
+      REALTIME_POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      REALTIME_POSTGRES_USER: ${POSTGRES_USER:?必填}
+      REALTIME_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必填}
+      REALTIME_POSTGRES_DB: ${POSTGRES_DB:?必填}
+      REALTIME_POSTGRES_SCHEMA: realtime
+      REALTIME_REDIS_HOST: ${REDIS_HOST:?必填}
+      REALTIME_REDIS_PORT: ${REDIS_PORT:-6379}
+      REALTIME_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REALTIME_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
+      REALTIME_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        set -e
+        python - <<'PY'
+        import os, socket, sys, time
+        # ⚠ 库在本编排之外（与对象存储同档），compose 没法给它挂 healthcheck。
+        # 不等就迁移，主机重启时 Docker 常比 Postgres 先起来，于是整栈拒绝启动。
+        host, port = os.environ['DB_HOST'], int(os.environ['DB_PORT'])
+        for _ in range(60):
+            try:
+                socket.create_connection((host, port), timeout=2).close()
+                sys.exit(0)
+            except OSError:
+                time.sleep(2)
+        print(f'等不到数据库 {host}:{port}', file=sys.stderr)
+        sys.exit(1)
+        PY
+        alembic upgrade head
+    restart: 'no'
+
   auth-server:
     build:
       context: ../server
       dockerfile: services/auth-server/Dockerfile
+    # ⚠ 等迁移与种子跑完再起：权限码目录是代码里的真源，先起服务后灌种子的话，
+    # 中间那段窗口里新端点一律 403，而两边代码单看都对
+    depends_on:
+      auth-migrate: {condition: service_completed_successfully}
     environment:
       AUTH_APP_ROLE: api
       AUTH_APP_LOG_FORMAT: json
@@ -76,6 +309,8 @@ services:
     build:
       context: ../server
       dockerfile: services/platform-server/Dockerfile
+    depends_on:
+      platform-migrate: {condition: service_completed_successfully}
     environment:
       PLATFORM_APP_ROLE: api
       PLATFORM_APP_LOG_FORMAT: json
@@ -161,6 +396,8 @@ services:
     build:
       context: ../server
       dockerfile: services/opcua-server/Dockerfile
+    depends_on:
+      opcua-migrate: {condition: service_completed_successfully}
     environment:
       OPCUA_APP_ROLE: api
       OPCUA_APP_LOG_FORMAT: json
@@ -204,6 +441,8 @@ services:
     build:
       context: ../server
       dockerfile: services/platform-server/Dockerfile
+    depends_on:
+      platform-migrate: {condition: service_completed_successfully}
     environment:
       PLATFORM_APP_ROLE: worker
       PLATFORM_APP_LOG_FORMAT: json
@@ -249,7 +488,9 @@ services:
     build:
       context: ../server
       dockerfile: services/platform-server/Dockerfile
-    depends_on: [realtime-hub]
+    depends_on:
+      realtime-hub: {condition: service_started}
+      platform-migrate: {condition: service_completed_successfully}
     environment:
       PLATFORM_APP_ROLE: publisher
       PLATFORM_APP_LOG_FORMAT: json
@@ -300,7 +541,9 @@ services:
     build:
       context: ../server
       dockerfile: services/collector-server/Dockerfile
-    depends_on: [platform-server]
+    depends_on:
+      platform-server: {condition: service_started}
+      collect-migrate: {condition: service_completed_successfully}
     environment:
       COLLECT_APP_ROLE: collector
       COLLECT_APP_LOG_FORMAT: json
@@ -333,6 +576,8 @@ services:
     build:
       context: ../server
       dockerfile: services/realtime-hub/Dockerfile
+    depends_on:
+      realtime-migrate: {condition: service_completed_successfully}
     environment:
       REALTIME_APP_ROLE: hub
       REALTIME_APP_LOG_FORMAT: json

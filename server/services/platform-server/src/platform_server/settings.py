@@ -132,6 +132,15 @@ class Settings(
     acstartup_max_rows: int = 60000
 
     # 达标时长模型的训练队列，见 docs/AC_MODEL_DESIGN.md §4
+    # 模型压缩任务流。⚠ 与 worker 侧读的是同一对，改一处不改另一处的表现是
+    # 「传上去永远在压缩中」，而两边的配置单看都对
+    assetcompress_stream: str = "platform:asset:compress"
+    assetcompress_group: str = "asset-compress-workers"
+    # ⚠ 出厂值是镜像里的落点。本机跑 worker 时要指到仓里那份，否则表现是
+    # 每一档都失败、原因是「node: no such file」
+    assetcompress_node: str = "node"
+    assetcompress_script: str = "/app/nodetools/compress-model.mjs"
+
     acmodel_stream: str = "platform:ac-model:train"
     acmodel_group: str = "ac-model-trainers"
     acmodel_block_ms: int = 5000

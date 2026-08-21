@@ -10,6 +10,8 @@
 
 import uuid
 
+from platform_server.apps.assets import variants
+
 # 匿名可读的前缀白名单。⚠ `staging/` 刻意不在列
 PUBLIC_PREFIXES = ("models/", "images/", "icons/")
 
@@ -34,7 +36,19 @@ def model_prefix(asset_id: uuid.UUID) -> str:
 
 def model_key(asset_id: uuid.UUID) -> str:
     """模型原件。"""
-    return f"{model_prefix(asset_id)}original"
+    return f"{model_prefix(asset_id)}{variants.ORIGINAL}"
+
+
+def model_variant_key(asset_id: uuid.UUID, variant: str) -> str:
+    """某一档模型的键。`original` 就是原件那个键。
+
+    ⚠ 派生档与原件同住 `models/{id}/` 前缀：删素材删的是整前缀，派生件因此跟着
+    一起走，不会留下没有任何一行指向、也再没人清理的孤儿对象。
+    Args: asset_id, variant。
+    """
+    if variant == variants.ORIGINAL:
+        return model_key(asset_id)
+    return f"{model_prefix(asset_id)}{variant}"
 
 
 def image_key(asset_id: uuid.UUID) -> str:

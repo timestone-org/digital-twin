@@ -15,6 +15,8 @@ import { computed, ref } from 'vue'
 
 import AssetPickerDialog from '@/components/assets/AssetPickerDialog.vue'
 
+import ModelVariantPicker from './ModelVariantPicker.vue'
+
 import InspectorSection from '../fields/InspectorSection.vue'
 import NodePicker from '../fields/NodePicker.vue'
 import SceneEffectsFields from '../fields/SceneEffectsFields.vue'
@@ -113,6 +115,11 @@ function toggleBackground(opaque: boolean): void {
           清除
         </DtButton>
       </div>
+      <ModelVariantPicker
+        :asset-ref="modelValue.asset"
+        :model-value="modelValue.variant"
+        @update:model-value="write({ variant: $event })"
+      />
       <p class="text-xs text-text-disabled">
         存的是素材引用而不是下载地址；换一次部署地址也不会失效。
       </p>

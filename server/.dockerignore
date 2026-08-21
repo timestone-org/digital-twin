@@ -1,0 +1,14 @@
+# 构建上下文里不该出现的东西。
+# ⚠ 少了这份，`COPY services/platform-server/ ...` 会把本地的 .venv 与
+# nodetools/node_modules 一起塞进镜像层——镜像大出几百 MB，而且里面装的是
+# 宿主平台的原生二进制，在容器里跑不起来。
+.venv
+**/.venv
+**/__pycache__
+**/*.pyc
+**/node_modules
+.pytest_cache
+.ruff_cache
+.coverage
+**/.DS_Store
+**/.env*

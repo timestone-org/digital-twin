@@ -31,11 +31,13 @@ EXPECTED: tuple[tuple[str, str, frozenset[str]], ...] = (
     # 直传三步里只有这两步经过本服务，第二步是浏览器直连对象存储
     (f"{ASSETS}:presign-upload", "POST", MANAGE),
     (f"{ASSET}:finalize", "POST", MANAGE),
+    (f"{ASSET}:recompress", "POST", MANAGE),
+    (ASSET, "PATCH", MANAGE),
     (ASSET, "DELETE", MANAGE),
 )
 
 # 素材面对外端点的条数。写死是为了让「加了端点没加规则」在这里红
-ASSET_ROUTE_COUNT = 6
+ASSET_ROUTE_COUNT = 8
 
 
 def test_the_documented_face_covers_every_asset_route() -> None:

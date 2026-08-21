@@ -4,3 +4,8 @@ dist/
 coverage/
 storybook-static/
 pnpm-lock.yaml
+
+# ⚠ 自托管的 Draco 解码器是从 three 原样拷来的第三方产物，必须**逐字节一致**
+# （packages/three-core/tests/dracoDecoder.contract.spec.ts 钉着）。格式化一次
+# 那条契约就红，而红的原因看着像「解码器版本不对」
+app/public/draco/

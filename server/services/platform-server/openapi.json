@@ -3560,6 +3560,13 @@
           "size_bytes": {
             "title": "Size Bytes",
             "type": "integer"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/AssetVariantOut"
+            },
+            "title": "Variants",
+            "type": "array"
           }
         },
         "required": [
@@ -3574,6 +3581,81 @@
           "created_by"
         ],
         "title": "AssetOut",
+        "type": "object"
+      },
+      "AssetUpdateIn": {
+        "additionalProperties": false,
+        "description": "改一个素材的显示名。\n\n⚠ 只收显示名：类型、大小与校验和都是**字节的事实**，由存储端读回来落库。\n放开它们等于允许库里的元信息与桶里的字节对不上，而对不上时没有任何一处\n会报错——界面上显示的体积与那个文件本身再无关系。",
+        "properties": {
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "AssetUpdateIn",
+        "type": "object"
+      },
+      "AssetVariantOut": {
+        "description": "一个模型素材的一档压缩产物。\n\n⚠ `size_bytes` 未压成时为 null，不是 0：给 0 的话界面会显示「0 B」，\n那是一个看着像已经压完的假事实。",
+        "properties": {
+          "checksum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checksum"
+          },
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "hint": {
+            "title": "Hint",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "variant": {
+            "title": "Variant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "variant",
+          "label",
+          "hint",
+          "status",
+          "size_bytes",
+          "checksum",
+          "error"
+        ],
+        "title": "AssetVariantOut",
         "type": "object"
       },
       "BindingCreateIn": {
@@ -12007,7 +12089,7 @@
     },
     "/api/v1/platform/assets": {
       "get": {
-        "description": "按类型列素材，新的在前。\n\nArgs: session, _viewer, kind, limit, offset。",
+        "description": "按类型与名字关键词列素材，新的在前。\n\nArgs: session, _viewer, kind, q, limit, offset。",
         "operationId": "list_all_api_v1_platform_assets_get",
         "parameters": [
           {
@@ -12024,6 +12106,23 @@
                 }
               ],
               "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
             }
           },
           {
@@ -12177,11 +12276,63 @@
         "tags": [
           "asset"
         ]
+      },
+      "patch": {
+        "description": "改显示名。字节与对象键都不动，故引用它的大屏无感。\n\nArgs: session, actor, asset_id, body。",
+        "operationId": "rename_one_api_v1_platform_assets__asset_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AssetOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "改素材名",
+        "tags": [
+          "asset"
+        ]
       }
     },
     "/api/v1/platform/assets/{asset_id}:finalize": {
       "post": {
-        "description": "把字节搬进正式前缀并落行。重复调用返回同一个素材。\n\nArgs: session, store, actor, asset_id, body。",
+        "description": "把字节搬进正式前缀并落行。重复调用返回同一个素材。\n\n模型类素材落行的同时排一次压缩，任务在**事务提交之后**才投。\nArgs: session, store, actor, dispatcher, asset_id, body。",
         "operationId": "finalize_api_v1_platform_assets__asset_id__finalize_post",
         "parameters": [
           {
@@ -12228,6 +12379,50 @@
           }
         },
         "summary": "确认直传完成",
+        "tags": [
+          "asset"
+        ]
+      }
+    },
+    "/api/v1/platform/assets/{asset_id}:recompress": {
+      "post": {
+        "description": "把这个模型的各档打回待压缩并重新排队。\n\n⚠ 这是**唯一的重试入口**：worker 压不动时不自动重试（一个压不动的模型\n重试一万次也压不动，而自动重试会把 worker 占满），由人在界面上按这一下。\nArgs: session, actor, dispatcher, asset_id。",
+        "operationId": "recompress_api_v1_platform_assets__asset_id__recompress_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AssetOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "重压压缩档",
         "tags": [
           "asset"
         ]

@@ -3,7 +3,7 @@
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,16 +57,40 @@ async def get(session: AsyncSession, asset_id: uuid.UUID) -> Asset | None:
     return await session.get(Asset, asset_id)
 
 
-async def list_by_kind(
-    session: AsyncSession, *, kind: str | None, limit: int, offset: int
-) -> list[Asset]:
-    """按类型列素材，新的在前。
+# LIKE 的两个通配符与转义符自身。⚠ 不转义的话，搜「50%」会退化成「列全部」，
+# 而现象只是「搜索好像没生效」——没有任何一处会报错
+_LIKE_SPECIALS = str.maketrans({"\\": r"\\", "%": r"\%", "_": r"\_"})
 
-    Args: session, kind（None = 全部）, limit, offset。
+
+def name_contains(text: str) -> str:
+    """把用户输入的关键词裹成一个安全的 LIKE 模式。
+
+    Args: text。
+    """
+    return f"%{text.translate(_LIKE_SPECIALS)}%"
+
+
+async def list_by_kind(
+    session: AsyncSession,
+    *,
+    kind: str | None,
+    keyword: str | None,
+    limit: int,
+    offset: int,
+) -> list[Asset]:
+    """按类型与名字关键词列素材，新的在前。
+
+    Args: session, kind（None = 全部）, keyword（None = 不筛）, limit, offset。
     """
     statement = select(Asset)
     if kind is not None:
         statement = statement.where(Asset.kind == kind)
+    if keyword is not None:
+        # ⚠ `ilike` 而不是 `like`：素材名里中英混排，大小写敏感的搜索会让用户
+        # 搜「glb」搜不到自己刚传的「GLB」，而这在界面上与「没有这个素材」一样
+        statement = statement.where(
+            Asset.name.ilike(name_contains(keyword), escape="\\")
+        )
     # ⚠ 第二排序键是主键：只按 created_at 排时，同一毫秒落库的两行在翻页之间
     # 顺序可以变，表现为某一条在两页里各出现一次而另一条一次都没有
     rows = await session.execute(
@@ -83,3 +107,15 @@ async def remove(session: AsyncSession, asset_id: uuid.UUID) -> None:
     Args: session, asset_id。
     """
     await session.execute(delete(Asset).where(Asset.id == asset_id))
+
+
+async def rename(session: AsyncSession, asset_id: uuid.UUID, name: str) -> None:
+    """改显示名。行在不在由 service 先判，这里只写。
+
+    ⚠ 只动 name 一列：把整行 values 铺上去的话，某一次少传一个字段就会把它
+    写成默认值，而被覆盖掉的是「字节的事实」那几列。
+    Args: session, asset_id, name。
+    """
+    await session.execute(
+        update(Asset).where(Asset.id == asset_id).values(name=name)
+    )

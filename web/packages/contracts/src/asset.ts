@@ -13,6 +13,21 @@
 export const ASSET_KINDS = ['model', 'image', 'icon'] as const
 export type AssetKind = (typeof ASSET_KINDS)[number]
 
+/**
+ * 三维模型的压缩档。⚠ 与服务端 `apps/assets/variants.py` 逐字一致。
+ *
+ * ⚠ 排的是**画质**不是压缩率：`high` = 高画质（不减面，只做 Draco 无损几何压缩），
+ * 不是「高压缩」。反过来命名每次读都要在脑子里翻译一次，而翻译错的那次没有任何提示。
+ * ⚠ `original` 是用户传上来的那份字节，永远保留且永不改写——它是压缩失败时唯一的
+ * 退路，也是重压的输入。
+ */
+export const MODEL_VARIANTS = ['original', 'high', 'medium', 'low'] as const
+export type ModelVariant = (typeof MODEL_VARIANTS)[number]
+
+/** 由本平台压出来的那几档；`original` 不在其中，它不是派生件。 */
+export const DERIVED_MODEL_VARIANTS = ['high', 'medium', 'low'] as const
+export type DerivedModelVariant = (typeof DERIVED_MODEL_VARIANTS)[number]
+
 export const ASSET_REF_PREFIX = 'asset:'
 
 /** 素材 id → 引用串。 */
@@ -54,6 +69,39 @@ export function assetObjectKey(kind: AssetKind, assetId: string): string {
 }
 
 /**
+ * 某一档模型的对象键。`original` 就是这一类的基准键。
+ *
+ * ⚠ 派生档与原件同住 `models/{id}/` 这个前缀：删素材删的是整前缀，派生件因此
+ * 跟着一起走，不会留下没有任何一行指向的孤儿对象。
+ * @param assetId 素材 id
+ * @param variant 压缩档
+ */
+export function modelVariantKey(
+  assetId: string,
+  variant: ModelVariant,
+): string {
+  return variant === 'original'
+    ? assetObjectKey('model', assetId)
+    : `models/${assetId}/${variant}`
+}
+
+/**
+ * 某一档模型的取回地址；引用不合法给空串。
+ * @param base 取回前缀，末尾带斜杠（例 `/oss/`）
+ * @param ref 落库的引用串
+ * @param variant 压缩档
+ */
+export function modelVariantUrl(
+  base: string,
+  ref: string,
+  variant: ModelVariant,
+): string {
+  const id = parseAssetRef(ref)
+  if (id === null) return ''
+  return `${withSlash(base)}${modelVariantKey(id, variant)}`
+}
+
+/**
  * 引用串 → 可 fetch 的地址；引用不合法给空串。
  * @param base 取回前缀，末尾带斜杠（例 `/oss/`）
  * @param kind 素材类型
@@ -62,8 +110,11 @@ export function assetObjectKey(kind: AssetKind, assetId: string): string {
 export function assetUrl(base: string, kind: AssetKind, ref: string): string {
   const id = parseAssetRef(ref)
   if (id === null) return ''
-  // ⚠ 前缀末尾补斜杠而不是假定调用方给对：少一个斜杠拼出来的是
-  // `/ossmodels/...`，那是一条谁都解释不了的 404
-  const prefix = base.endsWith('/') ? base : `${base}/`
-  return `${prefix}${assetObjectKey(kind, id)}`
+  return `${withSlash(base)}${assetObjectKey(kind, id)}`
+}
+
+// ⚠ 末尾补斜杠而不是假定调用方给对：少一个斜杠拼出来的是 `/ossmodels/...`，
+// 那是一条谁都解释不了的 404
+function withSlash(base: string): string {
+  return base.endsWith('/') ? base : `${base}/`
 }

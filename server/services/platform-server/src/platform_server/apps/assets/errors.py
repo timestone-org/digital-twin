@@ -46,6 +46,17 @@ class AssetUploadMissing(AppError):
     http_status = 409
 
 
+class AssetNotCompressible(AppError):
+    """这类素材没有压缩档。
+
+    ⚠ 与「素材不存在」分开：这一条的处置是「别按那个按钮」，而那一条是
+    「换一个 id」。合成一个码会让调用方无从判断。
+    """
+
+    code = 41506
+    http_status = 400
+
+
 class AssetStoreUnavailable(AppError):
     """对象存储不可达或拒绝了操作。"""
 

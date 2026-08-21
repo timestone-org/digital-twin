@@ -31,6 +31,21 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --package platform-server --frozen --no-dev
 
 
+# glTF 压缩工具链。⚠ Python 侧没有可用的 glTF Draco 编码器，这是这个镜像里
+# 出现 Node 的唯一原因（ADR-0022）。只有 worker 角色会用到它，但三个角色共用
+# 一个镜像，故 api 与 publisher 也白背着——拆成两个镜像的代价是构建与部署各多一套
+FROM node:22-bookworm-slim AS nodetools
+
+WORKDIR /nodetools
+# 先只拷清单：脚本改动不会让 npm 那层失效
+COPY services/platform-server/nodetools/package.json \
+     services/platform-server/nodetools/package-lock.json ./
+# ⚠ `npm ci` 而不是 `npm install`：前者严格照锁文件装，后者会在锁文件与清单
+# 不一致时**默默改锁文件**，于是镜像里装的和仓里锁的不是同一批
+RUN npm ci --omit=dev --no-audit --no-fund
+COPY services/platform-server/nodetools/compress-model.mjs ./
+
+
 FROM python:3.12-slim-bookworm AS runtime
 
 # 非 root 运行
@@ -40,6 +55,11 @@ RUN groupadd --gid 10001 app \
 ENV PATH="/src/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
+
+# Node 运行时与压缩工具。⚠ 只拷 node 二进制与它要的动态库，不装整个
+# nodejs 包：后者会把 npm、corepack 与一串文档一起拖进来
+COPY --from=nodetools /usr/local/bin/node /usr/local/bin/node
+COPY --from=nodetools --chown=app:app /nodetools /app/nodetools
 
 COPY --from=builder --chown=app:app /src /src
 # ⚠ 落在服务目录：alembic 与 `python -m scripts.<名>` 都按 CWD 找自己那份，

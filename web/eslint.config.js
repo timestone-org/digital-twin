@@ -10,6 +10,8 @@ export default tseslint.config(
       '**/coverage/**',
       '**/node_modules/**',
       '**/storybook-static/**',
+      // 从 three 原样拷来的第三方产物，改一个字节那条契约测试就红
+      'app/public/draco/**',
     ],
   },
   js.configs.recommended,

@@ -4,10 +4,27 @@
  * ⚠ 逐字段窄化，不写 `as`：后端与前端各改各的时，断言会让错形状一路流进界面，
  * 最后崩在某个深层组件里，而不是在这里说「形状不对」。
  */
-import type { AssetKind } from '@dt/contracts'
-import { ASSET_KINDS } from '@dt/contracts'
+import type { AssetKind, DerivedModelVariant } from '@dt/contracts'
+import { ASSET_KINDS, DERIVED_MODEL_VARIANTS } from '@dt/contracts'
 
 import { TransportError } from './client'
+
+/** 一档压缩产物的状态。⚠ 与服务端 `VARIANT_STATUSES` 逐字一致。 */
+export const VARIANT_STATUSES = ['pending', 'ready', 'failed'] as const
+export type VariantStatus = (typeof VARIANT_STATUSES)[number]
+
+/** 一个模型素材的一档压缩产物。 */
+export interface AssetVariant {
+  variant: DerivedModelVariant
+  label: string
+  hint: string
+  status: VariantStatus
+  /** 未压成时为 null，不是 0——0 会在界面上显示成「0 B」，那是个假事实。 */
+  sizeBytes: number | null
+  checksum: string | null
+  /** 失败原因；其余状态是空串。 */
+  error: string
+}
 
 /** 一个素材。 */
 export interface Asset {
@@ -21,6 +38,8 @@ export interface Asset {
   checksum: string
   createdAt: string
   createdBy: string
+  /** 压缩档。⚠ 只有模型才有，图片与图标一律空数组。 */
+  variants: AssetVariant[]
 }
 
 /** 一类素材的登记信息，给文件选择器做 accept 与预检。 */
@@ -51,6 +70,18 @@ export interface AssetWire {
   checksum: string
   created_at: string
   created_by: string
+  variants?: unknown
+}
+
+/** 一档压缩产物的线形。⚠ 键名以 openapi 的 `AssetVariantOut` 为准。 */
+export interface AssetVariantWire {
+  variant: string
+  label: string
+  hint: string
+  status: string
+  size_bytes: number | null
+  checksum: string | null
+  error: string
 }
 
 /** 一类素材登记的线形。 */
@@ -92,6 +123,34 @@ function assetKind(value: unknown): AssetKind {
   return found
 }
 
+/** 后端给的档名收窄成闭合联合；不认识的一律拒。 */
+function variantName(value: unknown): DerivedModelVariant {
+  const found = DERIVED_MODEL_VARIANTS.find((name) => name === value)
+  if (found === undefined) {
+    throw new TransportError(0, `未知的压缩档：${text(value)}`)
+  }
+  return found
+}
+
+/** 状态同理收窄；不认识的当成待压缩，界面上至少不会显示成「已就绪」。 */
+function variantStatus(value: unknown): VariantStatus {
+  return VARIANT_STATUSES.find((name) => name === value) ?? 'pending'
+}
+
+/** 线形 → 一档。⚠ 大小与校验和保留 null，不折成 0/空串。 */
+function toAssetVariant(raw: unknown): AssetVariant {
+  if (!isRecord(raw)) throw new TransportError(0, '压缩档数据格式不对')
+  return {
+    variant: variantName(raw.variant),
+    label: text(raw.label),
+    hint: text(raw.hint),
+    status: variantStatus(raw.status),
+    sizeBytes: typeof raw.size_bytes === 'number' ? raw.size_bytes : null,
+    checksum: typeof raw.checksum === 'string' ? raw.checksum : null,
+    error: text(raw.error),
+  }
+}
+
 /** 线形 → 载荷。 */
 export function toAsset(raw: unknown): Asset {
   const wire = isRecord(raw) ? (raw as unknown as AssetWire) : null
@@ -106,6 +165,9 @@ export function toAsset(raw: unknown): Asset {
     checksum: text(wire.checksum),
     createdAt: text(wire.created_at),
     createdBy: text(wire.created_by),
+    variants: Array.isArray(wire.variants)
+      ? wire.variants.map(toAssetVariant)
+      : [],
   }
 }
 

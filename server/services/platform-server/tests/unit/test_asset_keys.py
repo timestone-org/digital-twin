@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 
-from platform_server.apps.assets import keys
+from platform_server.apps.assets import keys, variants
 from platform_server.apps.assets.kinds import ASSET_KINDS, kinds, spec_of
 from platform_server.apps.assets.refs import asset_ref, parse_asset_ref
 
@@ -103,3 +103,49 @@ def test_the_icon_budget_is_far_below_the_model_budget() -> None:
 
 def test_an_unregistered_kind_has_no_spec() -> None:
     assert spec_of("video") is None
+
+
+@pytest.mark.parametrize(
+    ("variant", "expected"),
+    [
+        ("original", f"models/{ASSET_ID}/original"),
+        ("high", f"models/{ASSET_ID}/high"),
+        ("medium", f"models/{ASSET_ID}/medium"),
+        ("low", f"models/{ASSET_ID}/low"),
+    ],
+)
+def test_every_variant_lands_under_the_model_prefix(
+    variant: str, expected: str
+) -> None:
+    # ⚠ 派生档必须与原件同前缀：删素材删的是整前缀，掉在外面的那一档会变成
+    # 没有任何一行指向、也再没人清理的孤儿
+    assert keys.model_variant_key(ASSET_ID, variant) == expected
+
+
+def test_the_original_variant_is_the_plain_model_key() -> None:
+    # 「原件」不是第四个派生件，它就是这一类的基准键
+    assert keys.model_variant_key(ASSET_ID, "original") == keys.model_key(
+        ASSET_ID
+    )
+
+
+def test_deleting_an_asset_sweeps_every_variant() -> None:
+    prefix = keys.owned_prefix("model", ASSET_ID)
+
+    for variant in ("original", "high", "medium", "low"):
+        assert keys.model_variant_key(ASSET_ID, variant).startswith(prefix)
+
+
+def test_the_variant_catalog_matches_the_derived_list() -> None:
+    # 目录与「要压哪几档」是同一份真源：漂了就会有一档永远排不上队
+    assert set(variants.derived()) == {"high", "medium", "low"}
+    assert all(
+        variants.spec_of(name) is not None for name in variants.derived()
+    )
+    assert variants.spec_of("original") is None
+    assert variants.spec_of("nope") is None
+
+
+def test_every_known_variant_includes_the_original() -> None:
+    assert variants.is_known("original")
+    assert not variants.is_known("ultra")

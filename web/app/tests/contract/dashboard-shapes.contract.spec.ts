@@ -35,6 +35,7 @@ import type { HistoryPointWire } from '@/api/pointHistories'
 import type { LayoutIssue, ValidationReportWire } from '@/api/dashboard'
 import type {
   AssetKindWire,
+  AssetVariantWire,
   AssetWire,
   UploadTicketWire,
 } from '@/api/assetsWire'
@@ -251,7 +252,17 @@ const SHAPES = {
     name: true,
     ref: true,
     size_bytes: true,
+    variants: true,
   } satisfies Keys<AssetWire>,
+  AssetVariantOut: {
+    checksum: true,
+    error: true,
+    hint: true,
+    label: true,
+    size_bytes: true,
+    status: true,
+    variant: true,
+  } satisfies Keys<AssetVariantWire>,
   AssetKindOut: {
     content_types: true,
     kind: true,

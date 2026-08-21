@@ -95,6 +95,7 @@ const sceneCamera = useSceneCamera({
 const model = useTwinModelLoad({
   core: () => core,
   asset: () => props.config.model.asset,
+  variant: () => props.config.model.variant,
   parts: () => props.config.parts,
   onReady: (asset, index) => {
     nodeIndex = index

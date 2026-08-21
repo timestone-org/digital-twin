@@ -12,6 +12,7 @@ import {
   DtModal,
   DtNotice,
   DtSpinner,
+  useConfirm,
 } from '@dt/ui'
 import { computed, ref, watch } from 'vue'
 
@@ -31,6 +32,7 @@ const emit = defineEmits<{
   pick: [ref: string, asset: Asset]
 }>()
 
+const confirm = useConfirm()
 const library = useAssetLibrary()
 const selectedId = ref('')
 const dialogTitle = computed(() => props.title ?? '选择素材')
@@ -52,7 +54,7 @@ function close(): void {
   emit('update:modelValue', false)
 }
 
-function confirm(): void {
+function pickSelected(): void {
   const asset = selected.value
   if (asset === null) return
   emit('pick', asset.ref, asset)
@@ -62,14 +64,28 @@ function confirm(): void {
 async function onFiles(files: File[]): Promise<void> {
   const file = files[0]
   if (file === undefined) return
-  const saved = await library.upload(props.kind, file)
+  const [saved] = await library.upload(props.kind, [file])
   // 传完即选中：用户刚挑的文件就是他要用的那个，再让他去列表里找一遍是白费
-  if (saved !== null) selectedId.value = saved.id
+  if (saved !== undefined) selectedId.value = saved.id
 }
 
-async function onRemove(assetId: string): Promise<void> {
-  await library.remove(assetId)
-  if (selectedId.value === assetId) selectedId.value = ''
+/**
+ * ⚠ 删除必须二次确认，且要说清它是**跨大屏共享**的：这个弹窗是挑素材用的，
+ * 手一滑点到旁边那个垃圾桶，被删掉的是所有引用它的大屏共用的那份字节。
+ * @param asset 要删的素材
+ */
+async function onRemove(asset: Asset): Promise<void> {
+  const ok = await confirm.ask({
+    title: '删除素材',
+    message:
+      `「${asset.name}」的字节会一并删掉，不可恢复。⚠ 删除不检查有没有人在用：` +
+      '正在引用它的大屏会显示「取不到」，而不会有任何一处报错。',
+    confirmText: '删除',
+    danger: true,
+  })
+  if (!ok) return
+  await library.remove(asset.id)
+  if (selectedId.value === asset.id) selectedId.value = ''
 }
 
 watch(
@@ -139,7 +155,7 @@ watch(
             intent="danger"
             icon="trash"
             :aria-label="`删除 ${asset.name}`"
-            @click="onRemove(asset.id)"
+            @click="onRemove(asset)"
           />
         </li>
       </ul>
@@ -147,7 +163,9 @@ watch(
 
     <template #footer>
       <DtButton variant="ghost" @click="close">取消</DtButton>
-      <DtButton :disabled="selected === null" @click="confirm">选用</DtButton>
+      <DtButton :disabled="selected === null" @click="pickSelected"
+        >选用</DtButton
+      >
     </template>
   </DtModal>
 </template>

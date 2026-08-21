@@ -7,10 +7,16 @@
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 from lib.lifespan import wait_for_termination
 from lib.logging import configure_logging, get_logger
+from platform_server.apps.assets.services.compress_worker import (
+    CompressConsumer,
+    CompressOptions,
+    ModelCompressor,
+)
 from platform_server.apps.hvac.services.ac_daily_worker import (
     DailyConsumer,
     DailyConsumerOptions,
@@ -93,6 +99,34 @@ def build_consumer(container: Container) -> ShardConsumer:
             claim_idle_ms=settings.acstartup_claim_idle_ms,
             shard_timeout_s=settings.acstartup_shard_timeout_s,
         ),
+    )
+
+
+def build_model_compressor(container: Container) -> CompressConsumer:
+    """按配置装出模型压缩消费者。
+
+    ⚠ 压缩真正跑在 Node 子进程里（Python 没有可用的 glTF Draco 编码器，
+    ADR-0022），故这条循环本身不吃 CPU，与其它消费循环共用事件循环无碍。
+    Args: container。
+    """
+    settings = container.settings
+    options = CompressOptions(
+        target=StreamGroup(
+            stream=settings.assetcompress_stream,
+            group=settings.assetcompress_group,
+            consumer=settings.app_instance,
+        ),
+        script=Path(settings.assetcompress_script),
+        node=settings.assetcompress_node,
+    )
+    return CompressConsumer(
+        stream=container.stream,
+        compressor=ModelCompressor(
+            database=container.database,
+            store=container.object_store,
+            options=options,
+        ),
+        options=options,
     )
 
 
@@ -300,6 +334,7 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
                     publisher,
                     scheduler,
                     build_daily_consumer(container),
+                    build_model_compressor(container),
                 ),
                 leaseholders=(publisher, scheduler),
                 container=container,

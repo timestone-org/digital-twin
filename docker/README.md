@@ -98,3 +98,36 @@ WS 的 token 走 `Sec-WebSocket-Protocol` 子协议，而 `auth_request` 的子�
 **`opcua-pki` 卷装着全部实例的服务器私钥。** 它不进镜像层、不进数据库，也因此
 **不随数据库备份一起走**。卷丢了等于全部实例的证书作废，每台上位机都要重新信任新证书。
 备份策略要单独覆盖它。
+
+## 迁移与种子（自动）
+
+`docker compose up` 会先把五个一次性作业跑完，再放真服务进来：
+
+| 作业 | 做什么 |
+|---|---|
+| `auth-migrate` | `alembic upgrade head` + `python -m scripts.seed` |
+| `platform-migrate` / `opcua-migrate` / `collect-migrate` / `realtime-migrate` | 各自 `alembic upgrade head` |
+
+真服务用 `depends_on: {condition: service_completed_successfully}` 等它们，
+这正是「迁移先行」那条规矩——代码可回滚、数据库不回滚，故必须先让新结构就位。
+**改了表结构直接 `docker compose up -d --build` 即可**，不用再手动跑 alembic。
+
+⚠ **种子必须跟着自动跑**：权限码目录与路由规则是**代码里的真源**，加了新端点却
+没重跑种子，那个端点在边缘一律 403，而两边代码单看都对。
+
+⚠ 种子对**已存在的管理员一个字段都不动**（`ensure_admin` 只在缺失时创建），
+故重开机不会把密码改回 `AUTH_SEED_ADMIN_PASSWORD`。那个变量仍然必填——弱默认的
+管理员口令等于没有口令。
+
+⚠ 作业自己先等库：Postgres 与对象存储都在本编排之外，compose 没法给它们挂
+healthcheck。主机重启时 Docker 常比 Postgres 先起来，不等就迁移会让**整栈拒绝启动**。
+等待上限 120s（60 次 × 2s），超时即失败退出而不是无限重试。
+
+只想单独跑某一个（不动正在跑的服务）：
+
+```bash
+docker compose run --rm --no-deps auth-migrate
+```
+
+⚠ 迁移**自动应用**意味着人工闸门只剩评审那一道。破坏性变更必须按扩展—收缩两次
+发布（engineering-workflow §4），否则一次 `up` 就把它推上去了。
