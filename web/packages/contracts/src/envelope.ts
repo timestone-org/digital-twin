@@ -70,8 +70,15 @@ export const ERROR_CODES = {
   signupDisabled: 40112,
   /** 台账编码已被占用。表单据此把错误落到「编码」那一格上，而不是弹一句通用失败。 */
   datasetTableCodeTaken: 41203,
+  /** 同一张台账下已有同名列标识。同上：落到「列标识」那一格，不弹通用失败。 */
+  datasetColumnKeyTaken: 41204,
   /** 台账下还有数据行。⚠ 这不是失败，是**升一级再问**：确认后带 force 重发。 */
   datasetTableNotEmpty: 41205,
+  /**
+   * 还有别的列的公式引用着这一列。⚠ 与上一条分开：那一条问「连历史一起删吗」，
+   * 这一条问「那几条公式就此算不出数，仍然删吗」，两句话的后果完全不同。
+   */
+  datasetColumnInUse: 41206,
   workshopNotFound: 41601,
   roomNotFound: 41602,
   acUnitNotFound: 41603,

@@ -22,11 +22,8 @@ import { formatDateTime } from '@/utils/datetime'
 import { listEmptyState } from '@/utils/listEmpty'
 import TableFormDialog from './components/TableFormDialog.vue'
 import TableRowActions from './components/TableRowActions.vue'
-import {
-  collectSummary,
-  matchesKeyword,
-  retentionLabel,
-} from './scripts/tableView'
+import { collectSummary } from '../scripts/collectSummary'
+import { matchesKeyword, retentionLabel } from './scripts/tableView'
 import { useTableOps } from './scripts/useTableOps'
 
 const COLUMNS: readonly DtDataColumn[] = [

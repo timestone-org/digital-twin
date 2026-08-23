@@ -1,6 +1,6 @@
 /**
- * @fileoverview 数据台账（`dataset`）配置面的接口封装：台账本身的增删改查。
- * 列、记录、公式与回填随后续各期落地，届时加在这个文件里。
+ * @fileoverview 数据台账（`dataset`）配置面的接口封装：台账与列的增删改查。
+ * 记录、公式与回填随后续各期落地，届时加在这个文件里。
  *
  * ⚠ 这一组打的是 platform-server，不是 auth-server：每个函数都要给 `baseUrl`。
  * 漏给就会打到 `/api/v1/auth/...`，边缘按前缀反代，拿回来的是一个 404 信封。
@@ -9,7 +9,11 @@
  */
 
 import type {
+  DatasetAggFunc,
   DatasetCollectMode,
+  DatasetColumn,
+  DatasetColumnSource,
+  DatasetColumnType,
   DatasetTable,
   DatasetTableSummary,
   Page,
@@ -135,6 +139,159 @@ export async function deleteDatasetTable(
     onPlatform({
       method: 'DELETE',
       query: { force: isForced },
+      headers: idempotent(key),
+    }),
+  )
+}
+
+/**
+ * 一张台账的详情。回参连列定义一起给，故进详情页只要这一次调用。
+ * @param tableId 台账 id
+ */
+export async function getDatasetTable(tableId: string): Promise<DatasetTable> {
+  return await requestData<DatasetTable>(
+    `/dataset-tables/${tableId}`,
+    onPlatform(),
+  )
+}
+
+/**
+ * 新增一列的入参。
+ * ⚠ `key` 是数据行 JSONB 里的字段名，也是公式里的 `{key}`，**建后不可改**，
+ * 故它只在这里出现、不在补丁里（docs/DATASET_DESIGN.md §4.2）。
+ */
+export interface DatasetColumnCreateInput {
+  key: string
+  name: string
+  unit?: string | null | undefined
+  /** 展示小数位，null = 不限。库里始终存全精度。 */
+  decimals?: number | null | undefined
+  data_type?: DatasetColumnType | undefined
+  source?: DatasetColumnSource | undefined
+  /** 仅 `source === 'point'` 有意义；后端 NOT NULL，其余来源给缺省值。 */
+  agg?: DatasetAggFunc | undefined
+  /** 点位身份 `{source_id}:{point_code}`。 */
+  node_key?: string | null | undefined
+  formula?: string | null | undefined
+  is_required?: boolean | undefined
+  default_value?: unknown
+  /** 缺省即排到最后。 */
+  order_index?: number | null | undefined
+}
+
+/**
+ * 改一列。缺省的字段不动。
+ * ⚠ 没有 `key`：见 `DatasetColumnCreateInput` 上的那一条。
+ */
+export interface DatasetColumnPatchInput {
+  name?: string | undefined
+  unit?: string | null | undefined
+  decimals?: number | null | undefined
+  data_type?: DatasetColumnType | undefined
+  source?: DatasetColumnSource | undefined
+  agg?: DatasetAggFunc | undefined
+  node_key?: string | null | undefined
+  formula?: string | null | undefined
+  is_required?: boolean | undefined
+  default_value?: unknown
+  order_index?: number | undefined
+}
+
+/**
+ * 一张台账的全部列。集合有界（后端不分页），故一次取完。
+ * @param tableId 台账 id
+ */
+export async function listDatasetColumns(
+  tableId: string,
+): Promise<DatasetColumn[]> {
+  return await requestData<DatasetColumn[]>(
+    `/dataset-tables/${tableId}/columns`,
+    onPlatform(),
+  )
+}
+
+/**
+ * 新增一列。
+ * @param tableId 台账 id
+ * @param input 列标识、名称与来源那几项
+ * @param key 幂等键，缺省现生成一个
+ */
+export async function createDatasetColumn(
+  tableId: string,
+  input: DatasetColumnCreateInput,
+  key: string = newIdempotencyKey(),
+): Promise<DatasetColumn> {
+  return await requestData<DatasetColumn>(
+    `/dataset-tables/${tableId}/columns`,
+    onPlatform({ method: 'POST', body: input, headers: idempotent(key) }),
+  )
+}
+
+/**
+ * 改一列。
+ * @param tableId 台账 id
+ * @param columnId 列 id
+ * @param patch 只带要改的字段
+ * @param key 幂等键，缺省现生成一个
+ */
+export async function updateDatasetColumn(
+  tableId: string,
+  columnId: string,
+  patch: DatasetColumnPatchInput,
+  key: string = newIdempotencyKey(),
+): Promise<DatasetColumn> {
+  return await requestData<DatasetColumn>(
+    `/dataset-tables/${tableId}/columns/${columnId}`,
+    onPlatform({ method: 'PATCH', body: patch, headers: idempotent(key) }),
+  )
+}
+
+/**
+ * 删一列。
+ * ⚠ 还被别的列的公式引用着时后端回 409（`datasetColumnInUse`），并把引用它的
+ * 那几列摊在信封的 `details` 里。前端据此把二次确认的文案换成具体的那一句，
+ * 而不是自己先查一遍「谁引用了它」——查完到用户点确认之间，公式可能已经改了。
+ * @param tableId 台账 id
+ * @param columnId 列 id
+ * @param isForced 跳过「被公式引用」的守卫
+ * @param key 幂等键，缺省现生成一个——两段式删除的两次调用各用各的，
+ *   共用一个会让第二次拿回第一次那份 409
+ */
+export async function deleteDatasetColumn(
+  tableId: string,
+  columnId: string,
+  isForced = false,
+  key: string = newIdempotencyKey(),
+): Promise<void> {
+  // ⚠ 走 request 而不是 requestData：这条返回 204，没有 data
+  await request<null>(
+    `/dataset-tables/${tableId}/columns/${columnId}`,
+    onPlatform({
+      method: 'DELETE',
+      query: { force: isForced },
+      headers: idempotent(key),
+    }),
+  )
+}
+
+/**
+ * 按给定顺序整体重排。
+ * ⚠ 名单外的列后端静默保持原样：并发编辑时另一个人刚加的列不该因为这次
+ * 重排而跳到列表顶端。
+ * @param tableId 台账 id
+ * @param columnIds 目标顺序的全套列 id
+ * @param key 幂等键，缺省现生成一个
+ */
+export async function reorderDatasetColumns(
+  tableId: string,
+  columnIds: readonly string[],
+  key: string = newIdempotencyKey(),
+): Promise<DatasetColumn[]> {
+  return await requestData<DatasetColumn[]>(
+    `/dataset-tables/${tableId}/columns:reorder`,
+    onPlatform({
+      method: 'POST',
+      body: { column_ids: columnIds },
       headers: idempotent(key),
     }),
   )

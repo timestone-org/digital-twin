@@ -5,7 +5,7 @@
  * `response.ok`），`code` 给业务分支。前端一律按 `code` 分支，绝不按 message。
  */
 
-import type { ApiEnvelope } from '@dt/contracts'
+import type { ApiEnvelope, FieldError } from '@dt/contracts'
 import { SUCCESS_CODE } from '@dt/contracts'
 
 import { AUTH_BASE_URL, REQUEST_TIMEOUT_MS } from '@/config/app'
@@ -15,13 +15,27 @@ export class BizError extends Error {
   readonly code: number
   readonly status: number
   readonly traceId: string
+  /**
+   * 信封里的字段级说明。
+   * ⚠ 有几条拒绝的**具体内容只在这里**：删列被公式引用时，后端把引用它的
+   * 那几列逐条摊在 `details` 里，`message` 只说得出一个条数。丢掉它，二次
+   * 确认就只能问「仍然删吗」，答不出「会坏掉哪几条公式」。
+   */
+  readonly details: readonly FieldError[]
 
-  constructor(code: number, message: string, status: number, traceId: string) {
+  constructor(
+    code: number,
+    message: string,
+    status: number,
+    traceId: string,
+    details: readonly FieldError[] = [],
+  ) {
     super(message || `业务错误 code=${code}`)
     this.name = 'BizError'
     this.code = code
     this.status = status
     this.traceId = traceId
+    this.details = details
   }
 }
 
@@ -148,6 +162,26 @@ async function send(path: string, options: RequestOptions): Promise<Response> {
   }
 }
 
+/**
+ * 取信封里的字段级说明。
+ * ⚠ 逐条筛形状而不是整块透传：`isEnvelope` 只认得 code / message / trace_id
+ * 三个键，`details` 是什么样它一概不知。原样交出去，某个缺字段的条目会崩在
+ * 二次确认的文案拼接里，而那里离真正的原因已经很远。
+ * @param body 已确认是信封的响应体
+ */
+function readDetails(body: ApiEnvelope<unknown>): FieldError[] {
+  const given: unknown = body.details
+  if (!Array.isArray(given)) return []
+  return given.filter(
+    (item): item is FieldError =>
+      typeof item === 'object' &&
+      item !== null &&
+      typeof Reflect.get(item, 'field') === 'string' &&
+      typeof Reflect.get(item, 'code') === 'string' &&
+      typeof Reflect.get(item, 'message') === 'string',
+  )
+}
+
 async function unwrap<T>(response: Response): Promise<T | null> {
   const envelope = await readEnvelope<T>(response)
   if (envelope === null) return null
@@ -157,6 +191,7 @@ async function unwrap<T>(response: Response): Promise<T | null> {
       envelope.message,
       response.status,
       envelope.trace_id,
+      readDetails(envelope),
     )
   }
   return envelope.data

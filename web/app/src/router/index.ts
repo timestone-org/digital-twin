@@ -113,6 +113,36 @@ export const routes: RouteRecordRaw[] = [
     },
   },
   {
+    // 详情的三个分区是**子路由**而不是页内状态：地址会变，于是「把列配置发给
+    // 同事」「刷新还停在这一页」「后退回上一个分区」都成立。
+    // ⚠ 子路由不重复写 permissions——`to.meta` 是全部匹配记录的合并，父级这一条
+    // 就管住了整棵子树，两处各写一份反而会漂（docs/DATASET_DESIGN.md §7.1）。
+    // ⚠ 带 `:tableId` 故不进 NAV_ITEMS；回列表靠 AppShell 的 backTo。
+    path: '/datasets/:tableId',
+    component: () => import('@/pages/Dataset/TableDetail/index.vue'),
+    meta: {
+      title: '台账详情',
+      permissions: [PERMISSION_CODES.datasetView],
+    },
+    children: [
+      {
+        path: '',
+        name: 'dataset-table-detail',
+        redirect: (to) => ({
+          name: 'dataset-table-columns',
+          params: { tableId: to.params.tableId },
+        }),
+      },
+      {
+        path: 'columns',
+        name: 'dataset-table-columns',
+        component: () =>
+          import('@/pages/Dataset/TableDetail/components/ColumnsPanel.vue'),
+        meta: { title: '列配置' },
+      },
+    ],
+  },
+  {
     path: '/hvac/units',
     name: 'hvac-units',
     component: () => import('@/pages/Hvac/Units/index.vue'),
