@@ -13,12 +13,24 @@ import { describe, expect, it } from 'vitest'
 
 import type {
   DatasetAggFunc,
+  DatasetCatalogChoice,
+  DatasetCatalogFunction,
   DatasetCollectMode,
   DatasetColumn,
   DatasetColumnSource,
   DatasetColumnType,
+  DatasetExternalDep,
+  DatasetFormulaCatalog,
+  DatasetFormulaColumn,
+  DatasetFormulaDeps,
+  DatasetFormulaPreview,
+  DatasetFormulaTable,
+  DatasetFormulaValidation,
+  DatasetPrevDep,
   DatasetTable,
   DatasetTableSummary,
+  DatasetWholeDep,
+  DatasetWindowDep,
 } from '@dt/contracts'
 import {
   DATASET_AGG_FUNCS,
@@ -90,10 +102,109 @@ const COLUMN_KEYS = {
   updated_at: true,
 } satisfies Keys<DatasetColumn>
 
+const PREV_DEP_KEYS = {
+  key: true,
+  steps: true,
+} satisfies Keys<DatasetPrevDep>
+
+const WINDOW_DEP_KEYS = {
+  func: true,
+  key: true,
+  window: true,
+} satisfies Keys<DatasetWindowDep>
+
+const WHOLE_DEP_KEYS = {
+  func: true,
+  key: true,
+} satisfies Keys<DatasetWholeDep>
+
+const EXTERNAL_DEP_KEYS = {
+  table: true,
+  key: true,
+} satisfies Keys<DatasetExternalDep>
+
+const DEPS_KEYS = {
+  same_row: true,
+  prev: true,
+  window: true,
+  whole: true,
+  external: true,
+  referenced_keys: true,
+} satisfies Keys<DatasetFormulaDeps>
+
+const CHOICE_KEYS = {
+  value: true,
+  label: true,
+} satisfies Keys<DatasetCatalogChoice>
+
+const CATALOG_FUNCTION_KEYS = {
+  name: true,
+  category: true,
+  signature: true,
+  description: true,
+  example: true,
+  args: true,
+  min_args: true,
+  max_args: true,
+} satisfies Keys<DatasetCatalogFunction>
+
+const FORMULA_COLUMN_KEYS = {
+  key: true,
+  name: true,
+  unit: true,
+  data_type: true,
+  source: true,
+} satisfies Keys<DatasetFormulaColumn>
+
+const FORMULA_TABLE_KEYS = {
+  code: true,
+  name: true,
+} satisfies Keys<DatasetFormulaTable>
+
+const CATALOG_KEYS = {
+  categories: true,
+  functions: true,
+  operators: true,
+  window_units: true,
+  rules: true,
+  columns: true,
+  tables: true,
+  library: true,
+} satisfies Keys<DatasetFormulaCatalog>
+
+const VALIDATION_KEYS = {
+  is_ok: true,
+  error: true,
+  deps: true,
+  notation: true,
+  notation_text: true,
+} satisfies Keys<DatasetFormulaValidation>
+
+const PREVIEW_KEYS = {
+  is_ok: true,
+  value: true,
+  error: true,
+  missing: true,
+  should_suggest_sum: true,
+  history_refs: true,
+} satisfies Keys<DatasetFormulaPreview>
+
 const SHAPES: Record<string, Record<string, true>> = {
   TableSummaryOut: { ...SUMMARY_KEYS },
   TableOut: { ...TABLE_KEYS },
   ColumnOut: { ...COLUMN_KEYS },
+  FormulaPrevDepOut: { ...PREV_DEP_KEYS },
+  FormulaWindowDepOut: { ...WINDOW_DEP_KEYS },
+  FormulaWholeDepOut: { ...WHOLE_DEP_KEYS },
+  FormulaExternalDepOut: { ...EXTERNAL_DEP_KEYS },
+  FormulaDepsOut: { ...DEPS_KEYS },
+  CatalogChoiceOut: { ...CHOICE_KEYS },
+  CatalogFunctionOut: { ...CATALOG_FUNCTION_KEYS },
+  FormulaColumnOut: { ...FORMULA_COLUMN_KEYS },
+  FormulaTableOut: { ...FORMULA_TABLE_KEYS },
+  FormulaFunctionsOut: { ...CATALOG_KEYS },
+  FormulaValidateOut: { ...VALIDATION_KEYS },
+  FormulaPreviewOut: { ...PREVIEW_KEYS },
 }
 
 describe('台账线形与 openapi 一致', () => {

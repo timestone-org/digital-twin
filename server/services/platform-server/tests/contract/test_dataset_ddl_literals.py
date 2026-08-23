@@ -9,12 +9,15 @@ import importlib.util
 from pathlib import Path
 from types import ModuleType
 
+from sqlalchemy import CheckConstraint
+
 from platform_server.apps.dataset.models import (
     KEY_PATTERN,
     MAX_DECIMALS,
     MAX_FORMULA_LENGTH,
     MAX_INTERVAL_MS,
     MIN_INTERVAL_MS,
+    DatasetColumn,
 )
 from platform_server.apps.dataset.protocols import (
     AGG_FUNCS,
@@ -83,6 +86,27 @@ def test_the_key_check_is_the_pydantic_pattern_with_doubled_quotes() -> None:
     module = _load_migration()
     assert (
         f"key ~ '{KEY_PATTERN.replace(chr(39), 2 * chr(39))}'"
+        == module.KEY_CHECK
+    )
+
+
+def test_the_table_definition_carries_the_same_key_check_as_the_migration() -> (
+    None
+):
+    """表定义上的 CHECK 与迁移建出来的那条必须逐字一样。
+
+    ⚠ 两者漂开是**静默**的：库里的约束由迁移建出，表定义只是元数据，于是运行期
+    照常拒绝而读模型的人以为放行，唯一的症状是 autogenerate 想把它改回去。
+    """
+    module = _load_migration()
+    constraints = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in DatasetColumn.__table__.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+    # 名字是命名约定展开之后的全名，与迁移里手写的那个一致
+    assert (
+        constraints["ck_dataset_columns_key_has_no_formula_token"]
         == module.KEY_CHECK
     )
 

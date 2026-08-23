@@ -2,11 +2,16 @@
 
 from fastapi import APIRouter
 
-from platform_server.apps.dataset.api import dataset_columns, dataset_tables
+from platform_server.apps.dataset.api import (
+    dataset_columns,
+    dataset_formula,
+    dataset_tables,
+)
 
 ROUTERS: tuple[APIRouter, ...] = (
     dataset_tables.router,
     dataset_columns.router,
+    dataset_formula.router,
 )
 
 __all__ = ["ROUTERS"]

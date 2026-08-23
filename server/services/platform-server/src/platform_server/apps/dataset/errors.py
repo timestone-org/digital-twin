@@ -65,3 +65,16 @@ class DatasetColumnInvalid(AppError):
 
     code = 41211
     http_status = 400
+
+
+class DatasetFormulaInvalid(AppError):
+    """公式写不通：语法、未知列、未知台账，或整表成环。
+
+    ⚠ 与 `DatasetColumnInvalid` 分开：这一条的处置是「回编辑器改公式」，而
+    那一条是「把来源那几项配齐」。合成一个码，界面就不知道该把光标放回哪里。
+    ⚠ 校验端点**不用**它——那里 200 + `is_ok=false`（docs/DATASET_DESIGN.md
+    §6.1）。它只在保存列时抛。
+    """
+
+    code = 41212
+    http_status = 400

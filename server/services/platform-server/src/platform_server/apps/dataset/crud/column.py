@@ -70,10 +70,13 @@ class ColumnCrud(CrudBase[DatasetColumn]):
     async def dependents_of(
         self, session: AsyncSession, *, table_id: uuid.UUID, key: str
     ) -> list[DatasetColumn]:
-        """同表内公式依赖这一列的其它列。
+        """同表内公式引用了这一列的其它列。
 
         ⚠ 读的是保存公式时解析出的 `formula_deps`，不在这里重解析公式原文：
-        解析器归公式引擎（第 2 期），两份实现必然漂移。
+        两份实现必然漂移。
+        ⚠ 比的是 `referenced_keys` 而不是 `same_row`：`PREV({x})` 与
+        `SUM_OVER({x}, '1d')` 一样是在引用这一列，只看同行引用会放行一次让那
+        几列从此算不出数的删除。
         Args: session, table_id, key。
         """
         rows = await session.execute(
@@ -81,7 +84,7 @@ class ColumnCrud(CrudBase[DatasetColumn]):
             .where(
                 DatasetColumn.table_id == table_id,
                 DatasetColumn.key != key,
-                DatasetColumn.formula_deps.contains([key]),
+                DatasetColumn.formula_deps.contains({"referenced_keys": [key]}),
             )
             .order_by(*DEFAULT_ORDER)
         )

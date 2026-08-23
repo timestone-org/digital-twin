@@ -350,12 +350,24 @@ export {
 } from './realtime'
 export type {
   DatasetAggFunc,
+  DatasetCatalogChoice,
+  DatasetCatalogFunction,
   DatasetColumn,
   DatasetColumnSource,
   DatasetColumnType,
   DatasetCollectMode,
+  DatasetExternalDep,
+  DatasetFormulaCatalog,
+  DatasetFormulaColumn,
+  DatasetFormulaDeps,
+  DatasetFormulaPreview,
+  DatasetFormulaTable,
+  DatasetFormulaValidation,
+  DatasetPrevDep,
   DatasetTable,
   DatasetTableSummary,
+  DatasetWholeDep,
+  DatasetWindowDep,
 } from './dataset'
 export {
   DATASET_AGG_FUNCS,

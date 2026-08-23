@@ -6,6 +6,18 @@ from platform_server.apps.dataset.schemas.column import (
     ColumnReorderIn,
     ColumnUpdateIn,
 )
+from platform_server.apps.dataset.schemas.formula import (
+    CatalogChoiceOut,
+    CatalogFunctionOut,
+    FormulaColumnOut,
+    FormulaDepsOut,
+    FormulaFunctionsOut,
+    FormulaPreviewIn,
+    FormulaPreviewOut,
+    FormulaTableOut,
+    FormulaValidateIn,
+    FormulaValidateOut,
+)
 from platform_server.apps.dataset.schemas.table import (
     TableCreateIn,
     TableOut,
@@ -14,10 +26,20 @@ from platform_server.apps.dataset.schemas.table import (
 )
 
 __all__ = [
+    "CatalogChoiceOut",
+    "CatalogFunctionOut",
     "ColumnCreateIn",
     "ColumnOut",
     "ColumnReorderIn",
     "ColumnUpdateIn",
+    "FormulaColumnOut",
+    "FormulaDepsOut",
+    "FormulaFunctionsOut",
+    "FormulaPreviewIn",
+    "FormulaPreviewOut",
+    "FormulaTableOut",
+    "FormulaValidateIn",
+    "FormulaValidateOut",
     "TableCreateIn",
     "TableOut",
     "TableSummaryOut",

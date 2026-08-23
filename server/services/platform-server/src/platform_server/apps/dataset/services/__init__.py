@@ -5,7 +5,8 @@
 
 from platform_server.apps.dataset.services import (
     column_service,
+    formula_service,
     table_service,
 )
 
-__all__ = ["column_service", "table_service"]
+__all__ = ["column_service", "formula_service", "table_service"]

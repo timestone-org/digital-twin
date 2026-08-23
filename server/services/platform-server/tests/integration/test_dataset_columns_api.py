@@ -5,13 +5,11 @@
 （并发编辑时另一个人刚加的列会消失在列表顶端）。
 """
 
-import uuid
 from typing import Any
 
 import httpx
 import pytest
 from conftest import AppContext
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from integration.dataset_helpers import (
     HTTP_BAD_REQUEST,
@@ -28,7 +26,6 @@ from integration.dataset_helpers import (
     data_of,
 )
 from lib.utils.ids import uuid7
-from platform_server.apps.dataset.crud import column_crud
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -354,31 +351,17 @@ async def test_force_deletes_a_referenced_column(
 async def _table_with_a_dependent(
     context: AppContext,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """建一张台账：一列被另一列的公式引用着。
-
-    公式引擎随第 2 期落地，`formula_deps` 眼下只能由用例直接种下。
-    """
+    """建一张台账：一列被另一列的公式引用着。依赖由保存时的试编译解析出来。"""
     table = await create_table(context.client)
     referenced = await create_column(context.client, table["id"])
-    dependent = await create_column(
+    await create_column(
         context.client,
         table["id"],
         key="合计",
         source="formula",
         formula="{产量} * 2",
     )
-    await _set_deps(context.session, dependent["id"], ["产量"])
     return table, referenced
-
-
-async def _set_deps(
-    session: AsyncSession, column_id: str, deps: list[str]
-) -> None:
-    """直接写一列的公式依赖。"""
-    column = await column_crud.get(session, uuid.UUID(column_id))
-    assert column is not None
-    column.formula_deps = deps
-    await session.commit()
 
 
 def _detail_fields(response: httpx.Response) -> list[str]:

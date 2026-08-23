@@ -1525,6 +1525,141 @@
         "title": "ApiResponse[DatasetsOut]",
         "type": "object"
       },
+      "ApiResponse_FormulaFunctionsOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FormulaFunctionsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[FormulaFunctionsOut]",
+        "type": "object"
+      },
+      "ApiResponse_FormulaPreviewOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FormulaPreviewOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[FormulaPreviewOut]",
+        "type": "object"
+      },
+      "ApiResponse_FormulaValidateOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FormulaValidateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[FormulaValidateOut]",
+        "type": "object"
+      },
       "ApiResponse_LiveReadingsOut_": {
         "properties": {
           "code": {
@@ -4277,6 +4412,84 @@
         "title": "BrowseOut",
         "type": "object"
       },
+      "CatalogChoiceOut": {
+        "description": "目录里的一个可选项：分类、运算符、时间窗写法共用这一个形状。",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "CatalogChoiceOut",
+        "type": "object"
+      },
+      "CatalogFunctionOut": {
+        "description": "函数面板里的一个函数。\n\n⚠ `min_args` / `max_args` 由后端从元数表注入，不是手写的：前端按\n`min_args` 生成模板空位数（docs/DATASET_DESIGN.md §5.3）。",
+        "properties": {
+          "args": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Args",
+            "type": "array"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "example": {
+            "title": "Example",
+            "type": "string"
+          },
+          "max_args": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Args"
+          },
+          "min_args": {
+            "title": "Min Args",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "signature": {
+            "title": "Signature",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "category",
+          "signature",
+          "description",
+          "example",
+          "args",
+          "min_args",
+          "max_args"
+        ],
+        "title": "CatalogFunctionOut",
+        "type": "object"
+      },
       "ColumnCreateIn": {
         "additionalProperties": false,
         "description": "新增一列。`order_index` 缺省表示排到最后。",
@@ -4467,16 +4680,12 @@
           "formula_deps": {
             "anyOf": [
               {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
+                "$ref": "#/components/schemas/FormulaDepsOut"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Formula Deps"
+            ]
           },
           "id": {
             "format": "uuid",
@@ -6137,6 +6346,460 @@
           "name"
         ],
         "title": "FinalizeUploadIn",
+        "type": "object"
+      },
+      "FormulaColumnOut": {
+        "description": "公式里可引用的一列。",
+        "properties": {
+          "data_type": {
+            "enum": [
+              "bool",
+              "number",
+              "string"
+            ],
+            "title": "Data Type",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "formula",
+              "manual",
+              "point"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "unit",
+          "data_type",
+          "source"
+        ],
+        "title": "FormulaColumnOut",
+        "type": "object"
+      },
+      "FormulaDepsOut": {
+        "description": "保存公式时解析出的依赖，也是 `dataset_columns.formula_deps` 的形态。\n\n⚠ 键集与 `formula.FormulaDeps.to_json()` 必须逐字一致：Pydantic 默认忽略\n多余键，那边加一个键而这里忘了加，落库形态与契约形态就此分叉，没有任何\n东西会报。由契约测试锁死。",
+        "properties": {
+          "external": {
+            "items": {
+              "$ref": "#/components/schemas/FormulaExternalDepOut"
+            },
+            "title": "External",
+            "type": "array"
+          },
+          "prev": {
+            "items": {
+              "$ref": "#/components/schemas/FormulaPrevDepOut"
+            },
+            "title": "Prev",
+            "type": "array"
+          },
+          "referenced_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Referenced Keys",
+            "type": "array"
+          },
+          "same_row": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Same Row",
+            "type": "array"
+          },
+          "whole": {
+            "items": {
+              "$ref": "#/components/schemas/FormulaWholeDepOut"
+            },
+            "title": "Whole",
+            "type": "array"
+          },
+          "window": {
+            "items": {
+              "$ref": "#/components/schemas/FormulaWindowDepOut"
+            },
+            "title": "Window",
+            "type": "array"
+          }
+        },
+        "required": [
+          "same_row",
+          "prev",
+          "window",
+          "whole",
+          "external",
+          "referenced_keys"
+        ],
+        "title": "FormulaDepsOut",
+        "type": "object"
+      },
+      "FormulaExternalDepOut": {
+        "description": "一处跨表直接引用。",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "table": {
+            "title": "Table",
+            "type": "string"
+          }
+        },
+        "required": [
+          "table",
+          "key"
+        ],
+        "title": "FormulaExternalDepOut",
+        "type": "object"
+      },
+      "FormulaFunctionsOut": {
+        "description": "函数目录 + 可引用的列与表 + 库公式。",
+        "properties": {
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogChoiceOut"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/FormulaColumnOut"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "functions": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogFunctionOut"
+            },
+            "title": "Functions",
+            "type": "array"
+          },
+          "library": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Library",
+            "type": "array"
+          },
+          "operators": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogChoiceOut"
+            },
+            "title": "Operators",
+            "type": "array"
+          },
+          "rules": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Rules",
+            "type": "array"
+          },
+          "tables": {
+            "items": {
+              "$ref": "#/components/schemas/FormulaTableOut"
+            },
+            "title": "Tables",
+            "type": "array"
+          },
+          "window_units": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogChoiceOut"
+            },
+            "title": "Window Units",
+            "type": "array"
+          }
+        },
+        "required": [
+          "categories",
+          "functions",
+          "operators",
+          "window_units",
+          "rules",
+          "columns",
+          "tables",
+          "library"
+        ],
+        "title": "FormulaFunctionsOut",
+        "type": "object"
+      },
+      "FormulaPrevDepOut": {
+        "description": "一处跨行引用。",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "steps": {
+            "title": "Steps",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "steps"
+        ],
+        "title": "FormulaPrevDepOut",
+        "type": "object"
+      },
+      "FormulaPreviewIn": {
+        "additionalProperties": false,
+        "description": "用一组样例值试算一条公式。",
+        "properties": {
+          "column_key": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[^\\s@'\"(),.:{}\\[\\]]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column Key"
+          },
+          "formula": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Formula",
+            "type": "string"
+          },
+          "values": {
+            "additionalProperties": true,
+            "maxProperties": 200,
+            "title": "Values",
+            "type": "object"
+          }
+        },
+        "required": [
+          "formula"
+        ],
+        "title": "FormulaPreviewIn",
+        "type": "object"
+      },
+      "FormulaPreviewOut": {
+        "description": "试算结果。",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "history_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "History Refs",
+            "type": "array"
+          },
+          "is_ok": {
+            "title": "Is Ok",
+            "type": "boolean"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "should_suggest_sum": {
+            "default": false,
+            "title": "Should Suggest Sum",
+            "type": "boolean"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "required": [
+          "is_ok"
+        ],
+        "title": "FormulaPreviewOut",
+        "type": "object"
+      },
+      "FormulaTableOut": {
+        "description": "公式里可跨表引用的一张台账。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "FormulaTableOut",
+        "type": "object"
+      },
+      "FormulaValidateIn": {
+        "additionalProperties": false,
+        "description": "校验一条公式。\n\n`column_key` 是正在编辑的那一列；给了才做环检测——新建时它还不存在，\n但它的 key 已经定下来了。",
+        "properties": {
+          "column_key": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[^\\s@'\"(),.:{}\\[\\]]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column Key"
+          },
+          "formula": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Formula",
+            "type": "string"
+          }
+        },
+        "required": [
+          "formula"
+        ],
+        "title": "FormulaValidateIn",
+        "type": "object"
+      },
+      "FormulaValidateOut": {
+        "description": "校验结果。\n\n⚠ 语法错误走 **200 + `is_ok=false`**，不是 HTTP 错误：编辑器里「公式还没\n写完」是正常状态（docs/DATASET_DESIGN.md §6.1）。",
+        "properties": {
+          "deps": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FormulaDepsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "is_ok": {
+            "title": "Is Ok",
+            "type": "boolean"
+          },
+          "notation": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notation"
+          },
+          "notation_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notation Text"
+          }
+        },
+        "required": [
+          "is_ok"
+        ],
+        "title": "FormulaValidateOut",
+        "type": "object"
+      },
+      "FormulaWholeDepOut": {
+        "description": "一处整列聚合引用。",
+        "properties": {
+          "func": {
+            "title": "Func",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "func",
+          "key"
+        ],
+        "title": "FormulaWholeDepOut",
+        "type": "object"
+      },
+      "FormulaWindowDepOut": {
+        "description": "一处时间窗引用。`key` 跨表时形如 `表code.列key`。",
+        "properties": {
+          "func": {
+            "title": "Func",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "window": {
+            "title": "Window",
+            "type": "string"
+          }
+        },
+        "required": [
+          "func",
+          "key",
+          "window"
+        ],
+        "title": "FormulaWindowDepOut",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -17462,6 +18125,158 @@
         "summary": "整体重排列",
         "tags": [
           "dataset-column"
+        ]
+      }
+    },
+    "/api/v1/platform/dataset-tables/{table_id}/formula-functions": {
+      "get": {
+        "description": "函数目录 + 这张台账可引用的列与表 + 库公式。\n\nArgs: table_id, session, _viewer。",
+        "operationId": "list_formula_functions_api_v1_platform_dataset_tables__table_id__formula_functions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_FormulaFunctionsOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "公式函数目录",
+        "tags": [
+          "dataset-formula"
+        ]
+      }
+    },
+    "/api/v1/platform/dataset-tables/{table_id}/formula:preview": {
+      "post": {
+        "description": "用一组样例值试算一条公式。\n\nArgs: table_id, payload, session, _manager。",
+        "operationId": "preview_formula_api_v1_platform_dataset_tables__table_id__formula_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FormulaPreviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_FormulaPreviewOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "试算公式",
+        "tags": [
+          "dataset-formula"
+        ]
+      }
+    },
+    "/api/v1/platform/dataset-tables/{table_id}/formula:validate": {
+      "post": {
+        "description": "校验一条公式。⚠ 公式写错回 200 + `is_ok=false`，不是 HTTP 错误。\n\nArgs: table_id, payload, session, _manager。",
+        "operationId": "validate_formula_api_v1_platform_dataset_tables__table_id__formula_validate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FormulaValidateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_FormulaValidateOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "校验公式",
+        "tags": [
+          "dataset-formula"
         ]
       }
     },

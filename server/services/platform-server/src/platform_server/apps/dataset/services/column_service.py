@@ -26,7 +26,12 @@ from platform_server.apps.dataset.schemas import (
 )
 from platform_server.apps.dataset.services.changes import given_changes
 from platform_server.apps.dataset.services.column_rules import (
+    check_formula_present,
     check_point_binding,
+)
+from platform_server.apps.dataset.services.formula_compile import (
+    ColumnDraft,
+    compile_for_save,
 )
 from platform_server.apps.dataset.services.presenters import to_column_out
 from platform_server.apps.dataset.services.table_service import require_table
@@ -57,8 +62,19 @@ async def create_column(
     if await column_crud.get_by_key(session, table.id, payload.key) is not None:
         raise DatasetColumnKeyTaken(f"这张台账下已有同名列：{payload.key}")
     check_point_binding(source=payload.source, node_key=payload.node_key)
+    check_formula_present(source=payload.source, formula=payload.formula)
+    deps = await compile_for_save(
+        session,
+        columns=await column_crud.list_by_table(session, table.id),
+        draft=ColumnDraft(
+            key=payload.key,
+            name=payload.name,
+            source=payload.source,
+            formula=payload.formula,
+        ),
+    )
     column = _new_column(
-        table.id, payload, await _order_of(session, payload, table.id)
+        table.id, payload, await _order_of(session, payload, table.id), deps
     )
     column_crud.add(session, column)
     await session.flush()
@@ -85,6 +101,13 @@ async def update_column(
     changes = given_changes(payload)
     source, node_key = _merged_binding(column, changes)
     check_point_binding(source=source, node_key=node_key)
+    draft = _merged_draft(column, changes, source)
+    check_formula_present(source=source, formula=draft.formula)
+    column.formula_deps = await compile_for_save(
+        session,
+        columns=await column_crud.list_by_table(session, column.table_id),
+        draft=draft,
+    )
     column_crud.apply_changes(column, changes)
     await session.flush()
     _logger.info(
@@ -180,11 +203,14 @@ async def _order_of(
 
 
 def _new_column(
-    table_id: uuid.UUID, payload: ColumnCreateIn, order_index: int
+    table_id: uuid.UUID,
+    payload: ColumnCreateIn,
+    order_index: int,
+    deps: dict[str, Any] | None,
 ) -> DatasetColumn:
     """按入参装出一行列定义。
 
-    Args: table_id, payload, order_index。
+    Args: table_id, payload, order_index, deps。
     """
     return DatasetColumn(
         table_id=table_id,
@@ -197,6 +223,7 @@ def _new_column(
         agg=payload.agg,
         node_key=payload.node_key,
         formula=payload.formula,
+        formula_deps=deps,
         order_index=order_index,
         is_required=payload.is_required,
         default_value=payload.default_value,
@@ -217,6 +244,25 @@ def _merged_binding(
     return (
         as_column_source(source if isinstance(source, str) else column.source),
         node_key if isinstance(node_key, str) else None,
+    )
+
+
+def _merged_draft(
+    column: DatasetColumn, changes: dict[str, Any], source: ColumnSource
+) -> ColumnDraft:
+    """把本次变更叠到现值上，得到要试编译的那一列。
+
+    ⚠ 只看入参会漏掉「改 source 不改 formula」这一路：一列从人工录入改成公式
+    列却没给公式，入参层看不出任何问题。
+    Args: column, changes, source。
+    """
+    formula = changes.get("formula", column.formula)
+    name = changes.get("name", column.name)
+    return ColumnDraft(
+        key=column.key,
+        name=name if isinstance(name, str) else column.name,
+        source=source,
+        formula=formula if isinstance(formula, str) else None,
     )
 
 

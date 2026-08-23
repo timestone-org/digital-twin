@@ -1,4 +1,4 @@
-"""闸 1 对数据台账那 10 条 `/api/v1/platform` 路由的判定钉死。
+"""闸 1 对数据台账那 13 条 `/api/v1/platform` 路由的判定钉死。
 
 ⚠ 这一层守的是**顺序**。闸 1 首条命中即终局，而 `fnmatch` 的 `*` 跨斜杠，
 所以 `dataset-tables*` 的两条不压过 900 那五条按方法兜底的规则，就会变成
@@ -36,10 +36,13 @@ EXPECTED: tuple[tuple[str, str, frozenset[str]], ...] = (
     (f"{COLUMNS}:reorder", "POST", MANAGE),
     (f"{COLUMNS}/{SAMPLE_ID}", "PATCH", MANAGE),
     (f"{COLUMNS}/{SAMPLE_ID}", "DELETE", MANAGE),
+    (f"{TABLE}/formula-functions", "GET", VIEW),
+    (f"{TABLE}/formula:validate", "POST", MANAGE),
+    (f"{TABLE}/formula:preview", "POST", MANAGE),
 )
 
 # 台账面对外端点的条数。写死是为了让「加了端点没加规则」在这里红
-DATASET_ROUTE_COUNT = 10
+DATASET_ROUTE_COUNT = 13
 
 
 def test_the_documented_face_covers_every_dataset_route() -> None:
@@ -66,6 +69,15 @@ def test_no_dataset_route_falls_through_to_the_hvac_catch_all() -> None:
         rule = find_rule(catalog_rule_views(), path=path, method=method)
         assert rule is not None
         assert rule.permission_codes <= DATASET_CODES
+
+
+def test_the_formula_catalog_is_readable_with_the_view_code_alone() -> None:
+    """函数目录只是一份说明书，读它不该要改结构的权限。"""
+    rule = find_rule(
+        catalog_rule_views(), path=f"{TABLE}/formula-functions", method="GET"
+    )
+    assert rule is not None
+    assert rule.permission_codes == VIEW
 
 
 def test_reordering_columns_is_not_satisfied_by_the_read_code() -> None:

@@ -40,6 +40,25 @@ class TableCrud(CrudBase[DatasetTable]):
         )
         return rows.scalars().first()
 
+    async def list_all(self, session: AsyncSession) -> list[DatasetTable]:
+        """全部台账，按编码升序。跨表引用的候选清单要它。
+
+        Args: session。
+        """
+        rows = await session.execute(
+            select(DatasetTable).order_by(*DEFAULT_ORDER)
+        )
+        return list(rows.scalars().all())
+
+    async def all_codes(self, session: AsyncSession) -> frozenset[str]:
+        """全部台账编码。跨表引用的存在性校验要拿它当已知集合。
+
+        ⚠ 集合有界（业务台账是几十张级别），故整份取回而不逐个查。
+        Args: session。
+        """
+        rows = await session.execute(select(DatasetTable.code))
+        return frozenset(rows.scalars().all())
+
     async def column_counts(
         self, session: AsyncSession, table_ids: frozenset[uuid.UUID]
     ) -> dict[uuid.UUID, int]:

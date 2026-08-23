@@ -40,9 +40,12 @@ MAX_DECIMALS = 10
 # `{a@b} + 1` 在宏替换之后剩一个裸 `@`，报的是「调用库公式要带括号」——
 # 指向一个用户根本没写的东西
 KEY_PATTERN = "^[^\\s@'\"(),.:{}\\[\\]]+$"
-# ⚠ 同一条规则写两遍：SQL 字面量里的单引号要写成两个，两边分叉的表现是入参
-# 放行而数据库拒绝，或者反过来
-_KEY_CHECK = "key ~ '^[^\\s''\"(),.:{}\\[\\]]+$'"
+# ⚠ 由 `KEY_PATTERN` **推导**，不许再抄一遍：多一份副本就多一处会漏改的地方，
+# 而漏改的表现是入参拒绝、表定义放行，两边都不报错。
+# 迁移里那份是手写的冻结字面量（冻结件不许 import 活常量），两侧不许漂由
+# tests/contract/test_dataset_ddl_literals.py 盯着。
+# SQL 字面量里的单引号要写成两个，故转义在这里做一次。
+_KEY_CHECK = f"""key ~ '{KEY_PATTERN.replace("'", "''")}'"""
 
 
 class DatasetColumn(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -65,8 +68,11 @@ class DatasetColumn(UuidPrimaryKeyMixin, TimestampMixin, Base):
     # ⚠ 不建外键指向点位表：删掉一个点位不该连坐已经写出去的台账历史
     node_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     formula: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # 保存公式时解析出的依赖，避免每次求值重解析
-    formula_deps: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    # 保存公式时解析出的依赖，避免每次求值重解析。形态见
+    # `formula.FormulaDeps.to_json()`
+    formula_deps: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
     order_index: Mapped[int] = mapped_column(Integer, nullable=False)
     # 仅对 manual 列有意义
     is_required: Mapped[bool] = mapped_column(Boolean, nullable=False)

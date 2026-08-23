@@ -7,6 +7,7 @@ from timeseries import InvalidNodeKey, split_node_key
 
 _MISSING_MESSAGE = "点位汇总列必须绑定一个点位"
 _SHAPE_MESSAGE = "点位身份的形状应为「数据源 id : 点位编码」"
+_NO_FORMULA_MESSAGE = "公式列必须写一条公式"
 
 
 def check_point_binding(*, source: ColumnSource, node_key: str | None) -> None:
@@ -28,6 +29,27 @@ def check_point_binding(*, source: ColumnSource, node_key: str | None) -> None:
         raise DatasetColumnInvalid(
             _SHAPE_MESSAGE, details=(_detail("invalid_format", _SHAPE_MESSAGE),)
         ) from error
+
+
+def check_formula_present(*, source: ColumnSource, formula: str | None) -> None:
+    """公式列必须带一条公式。
+
+    ⚠ 不拦的话这一列永远算不出数，而它在配置界面上与一列真的空数据长得一模
+    一样——没有任何一处会报错。
+    Args: source, formula。
+    """
+    if source != "formula" or (formula and formula.strip()):
+        return
+    raise DatasetColumnInvalid(
+        _NO_FORMULA_MESSAGE,
+        details=(
+            FieldError(
+                field="formula",
+                code="required",
+                message=_NO_FORMULA_MESSAGE,
+            ),
+        ),
+    )
 
 
 def _detail(code: str, message: str) -> FieldError:

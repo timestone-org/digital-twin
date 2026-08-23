@@ -58,8 +58,8 @@ export interface DatasetColumn {
   /** `source === 'point'` 时绑的点位身份 `{source_id}:{point_code}`。 */
   node_key: string | null
   formula: string | null
-  /** 保存公式时解析出的依赖。公式引擎随第 2 期落地，在那之前恒为 null。 */
-  formula_deps: string[] | null
+  /** 保存公式时解析出的依赖。非公式列恒为 null。 */
+  formula_deps: DatasetFormulaDeps | null
   order_index: number
   /** 仅对人工录入列有意义。 */
   is_required: boolean
@@ -92,4 +92,125 @@ export interface DatasetTableSummary {
 /** 台账详情：连列定义一起给。对应后端 `TableOut`。 */
 export interface DatasetTable extends DatasetTableSummary {
   columns: DatasetColumn[]
+}
+
+/** 一处跨行引用。对应后端 `FormulaPrevDepOut`。 */
+export interface DatasetPrevDep {
+  key: string
+  steps: number
+}
+
+/** 一处时间窗引用。`key` 跨表时形如 `表code.列key`。对应 `FormulaWindowDepOut`。 */
+export interface DatasetWindowDep {
+  func: string
+  key: string
+  /** 规范写法，如 `3mo`。⚠ `'3月'` 与 `'3mo'` 归一到同一个串。 */
+  window: string
+}
+
+/** 一处整列聚合引用。对应后端 `FormulaWholeDepOut`。 */
+export interface DatasetWholeDep {
+  func: string
+  key: string
+}
+
+/** 一处跨表直接引用。对应后端 `FormulaExternalDepOut`。 */
+export interface DatasetExternalDep {
+  table: string
+  key: string
+}
+
+/**
+ * 保存公式时解析出的依赖，也是库里 `formula_deps` 的形态。
+ * 对应后端 `FormulaDepsOut`。
+ */
+export interface DatasetFormulaDeps {
+  same_row: string[]
+  prev: DatasetPrevDep[]
+  window: DatasetWindowDep[]
+  whole: DatasetWholeDep[]
+  external: DatasetExternalDep[]
+  /** 上面几项里本表列 key 的并集，反查「谁引用了这一列」用。 */
+  referenced_keys: string[]
+}
+
+/** 目录里的一个可选项：分类、运算符、时间窗写法共用。对应 `CatalogChoiceOut`。 */
+export interface DatasetCatalogChoice {
+  value: string
+  label: string
+}
+
+/**
+ * 函数面板里的一个函数。对应后端 `CatalogFunctionOut`。
+ * ⚠ 元数由后端从元数表注入：前端**不许**硬编码任何函数名或参数个数，
+ * 否则后端加一族函数、界面上整族不可见（docs/DATASET_DESIGN.md §5.3）。
+ */
+export interface DatasetCatalogFunction {
+  name: string
+  category: string
+  signature: string
+  description: string
+  example: string
+  args: string[]
+  min_args: number
+  /** 不限参数个数时为 null。 */
+  max_args: number | null
+}
+
+/** 公式里可引用的一列。对应后端 `FormulaColumnOut`。 */
+export interface DatasetFormulaColumn {
+  key: string
+  name: string
+  unit: string | null
+  data_type: DatasetColumnType
+  source: DatasetColumnSource
+}
+
+/** 公式里可跨表引用的一张台账。对应后端 `FormulaTableOut`。 */
+export interface DatasetFormulaTable {
+  code: string
+  name: string
+}
+
+/** 函数目录 + 可引用的列与表 + 库公式。对应后端 `FormulaFunctionsOut`。 */
+export interface DatasetFormulaCatalog {
+  categories: DatasetCatalogChoice[]
+  functions: DatasetCatalogFunction[]
+  operators: DatasetCatalogChoice[]
+  window_units: DatasetCatalogChoice[]
+  rules: string[]
+  columns: DatasetFormulaColumn[]
+  tables: DatasetFormulaTable[]
+  /** 库公式标识。⚠ 公式库随第 4 期落地，在那之前恒为空。 */
+  library: string[]
+}
+
+/**
+ * 校验结果。对应后端 `FormulaValidateOut`。
+ * ⚠ 公式写错回 **200 + `is_ok: false`**，不是 HTTP 错误：编辑器里「还没写完」
+ * 是正常状态（docs/DATASET_DESIGN.md §6.1）。
+ */
+export interface DatasetFormulaValidation {
+  is_ok: boolean
+  error: string | null
+  deps: DatasetFormulaDeps | null
+  /**
+   * 记号树。递归结构，故是一团后端给的自由 JSON。
+   * ⚠ 认不出的节点渲染成 `?`，**绝不白屏**；渲染失败时后端给 null。
+   */
+  notation: Record<string, unknown> | null
+  notation_text: string | null
+}
+
+/** 试算结果。对应后端 `FormulaPreviewOut`。 */
+export interface DatasetFormulaPreview {
+  is_ok: boolean
+  value: unknown
+  error: string | null
+  /** 公式引用了、但这次没给值的列。 */
+  missing: string[]
+  /** 仅纯加法且结果正是被缺失值弄空时为真——界面据此提议改用 `SUM(...)`。 */
+  should_suggest_sum: boolean
+  /** ⚠ 试算**不取历史**，这些引用一律按空处理，界面要照实说。 */
+  history_refs: string[]
 }

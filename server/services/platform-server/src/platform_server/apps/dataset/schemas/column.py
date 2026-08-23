@@ -24,6 +24,7 @@ from platform_server.apps.dataset.schemas.common import (
     UpdateModel,
     Utc,
 )
+from platform_server.apps.dataset.schemas.formula import FormulaDepsOut
 
 # 一次重排最多收多少个列 id。⚠ 有上限不是省流量：这是个无界数组入参
 MAX_REORDER_IDS = 500
@@ -43,8 +44,8 @@ class ColumnOut(OutputModel):
     agg: AggFunc
     node_key: str | None
     formula: str | None
-    # 保存公式时解析出的依赖。⚠ 公式引擎随第 2 期落地，在那之前恒为 null
-    formula_deps: list[str] | None
+    # 保存公式时解析出的依赖，非公式列恒为 null
+    formula_deps: FormulaDepsOut | None
     order_index: int
     is_required: bool
     default_value: Any
