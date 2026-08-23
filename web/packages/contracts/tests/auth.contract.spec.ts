@@ -63,6 +63,16 @@ describe('权限码', () => {
     expect(PERMISSION_CODES.assetManage).toBe('asset:manage')
   })
 
+  // 台账的写码按**爆炸半径**切成四个，不是一个 manage 包干：改表结构影响往后
+  // 每一行，改一行只影响那一行，改修正等同于篡改台账，回填与全表重算则吃满库
+  it('台账面是一个读码加四个按爆炸半径切开的写码', () => {
+    expect(PERMISSION_CODES.datasetView).toBe('dataset:view')
+    expect(PERMISSION_CODES.datasetManage).toBe('dataset:manage')
+    expect(PERMISSION_CODES.datasetRecordWrite).toBe('dataset:record:write')
+    expect(PERMISSION_CODES.datasetOverride).toBe('dataset:override')
+    expect(PERMISSION_CODES.datasetBackfill).toBe('dataset:backfill')
+  })
+
   it('先前已发布的码一字未改', () => {
     expect(PERMISSION_CODES).toMatchObject(PUBLISHED)
   })

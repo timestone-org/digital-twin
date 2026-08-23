@@ -140,6 +140,13 @@ export const routes: RouteRecordRaw[] = [
           import('@/pages/Dataset/TableDetail/components/ColumnsPanel.vue'),
         meta: { title: '列配置' },
       },
+      {
+        path: 'records',
+        name: 'dataset-table-records',
+        component: () =>
+          import('@/pages/Dataset/TableDetail/components/RecordsPanel.vue'),
+        meta: { title: '数据' },
+      },
     ],
   },
   {

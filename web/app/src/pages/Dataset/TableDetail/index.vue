@@ -4,8 +4,10 @@
  *
  * ⚠ 三个分区是**子路由**而不是页内状态：地址会跟着变，于是「把列配置发给
  * 同事」「刷新还停在这一页」「后退回上一个分区」都成立
- * （docs/DATASET_DESIGN.md §7.1）。本期只有「列配置」一个分区。
- * ⚠ 台账与列的状态只在这一层持有，分区组件全部受控、只 emit 不自取数（§7.2）。
+ * （docs/DATASET_DESIGN.md §7.1）。
+ * ⚠ 台账与列的状态只在这一层持有，两个分区都受控地拿到同一份列定义（§7.2），
+ * 于是「改了列 → 数据表格的列跟着变」只有一条数据流。数据行是例外：它只喂给
+ * 「数据」分区一处，且带着游标栈与写后重取，摊到这里会让这一层同时管四份状态。
  */
 import { computed, onMounted } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
@@ -39,10 +41,28 @@ const tabs = computed<AppTabItem[]>(() => [
     icon: 'list-checks',
     to: `/datasets/${tableId.value}/columns`,
   },
+  {
+    key: 'records',
+    label: '数据',
+    icon: 'table',
+    to: `/datasets/${tableId.value}/records`,
+  },
 ])
 
-// 每个分区的主动作各不相同（列配置是「新增列」，数据分区将是「录入数据」），
-// 故按当前分区决定顶栏上摆哪一个
+/**
+ * 「只读」的判据是**一个写入口都没有**（设计 §7.3）。
+ * ⚠ 拿单个码判是错的：只有录入权限的人看到「只读 · 仅可查看」，会以为自己
+ * 进错了账号。这四个码互不蕴含，故要一个都不占才算只读。
+ */
+const WRITE_CODES: readonly string[] = [
+  PERMISSION_CODES.datasetManage,
+  PERMISSION_CODES.datasetRecordWrite,
+  PERMISSION_CODES.datasetOverride,
+  PERMISSION_CODES.datasetBackfill,
+]
+
+// 顶栏只摆列配置那一个主动作。数据分区的三颗（录入 / 重算 / 批量撤销）挂在
+// 分区自己的工具条上——它们各挂各的码，摊到顶栏就得把三份权限判断也搬上来
 const isColumnsTab = computed(() => route.name === 'dataset-table-columns')
 
 const collect = computed(() => {
@@ -99,11 +119,10 @@ onMounted(() => {
             >
               {{ detail.table.value.is_enabled ? '启用' : '停用' }}
             </DtTag>
-            <!-- ⚠ 「只读」的判据是**一个写入口都没有**：本页的写码只有
-                 dataset:manage 一个，故它就是判据。整页只摆这一处，行内不再
-                 重复——每行挂一句是纯噪音（设计 §7.3）。
-                 默认插槽刻意留空：有权限时这里什么都不该多出来 -->
-            <PermGuard :codes="[PERMISSION_CODES.datasetManage]" explain />
+            <!-- ⚠ 整页只摆这一处，行内不再重复——每行挂一句是纯噪音。
+                 判据见 WRITE_CODES；`mode="any"` 即「四个占一个就不是只读」。
+                 默认插槽刻意留空：有权限时这里什么都不该多出来（设计 §7.3） -->
+            <PermGuard :codes="WRITE_CODES" mode="any" explain />
             <span class="text-text-secondary">
               {{ detail.columns.value.length }} 列
             </span>

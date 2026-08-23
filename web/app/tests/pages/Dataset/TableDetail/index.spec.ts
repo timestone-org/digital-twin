@@ -159,6 +159,22 @@ describe('闸 3：写入口', () => {
     expect(wrapper.text()).toContain('新增列')
     expect(wrapper.findAll('[data-test="perm-readonly"]')).toHaveLength(0)
   })
+
+  // ⚠ 「只读」的判据是**一个写入口都没有**，不是某一个码：只有录入权限的人
+  // 看到「只读 · 仅可查看」，会以为自己进错了账号（设计 §7.3）
+  it.each([
+    ['dataset:record:write'],
+    ['dataset:override'],
+    ['dataset:backfill'],
+  ])('持 %s 的人不算只读，哪怕他改不了列', async (code) => {
+    const wrapper = await render(['dataset:view', code])
+    expect(wrapper.findAll('[data-test="perm-readonly"]')).toHaveLength(0)
+  })
+
+  it('新增列仍然只认 dataset:manage：录数据的人改不了表结构', async () => {
+    const wrapper = await render(['dataset:view', 'dataset:record:write'])
+    expect(wrapper.text()).not.toContain('新增列')
+  })
 })
 
 describe('分区页签', () => {
@@ -167,6 +183,14 @@ describe('分区页签', () => {
     const tab = wrapper.find('[aria-label="台账详情分区"] a')
     expect(tab.attributes('href')).toBe('/datasets/t1/columns')
     expect(tab.text()).toContain('列配置')
+  })
+
+  it('列配置与数据两个分区各有自己的地址', async () => {
+    const wrapper = await render(['dataset:view'])
+    const hrefs = wrapper
+      .findAll('[aria-label="台账详情分区"] a')
+      .map((one) => one.attributes('href'))
+    expect(hrefs).toEqual(['/datasets/t1/columns', '/datasets/t1/records'])
   })
 
   it('分区出口只有一个，内容由子路由决定', async () => {

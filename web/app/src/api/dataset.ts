@@ -1,6 +1,6 @@
 /**
- * @fileoverview 数据台账（`dataset`）配置面的接口封装：台账与列的增删改查。
- * 记录与回填随后续各期落地，届时加在这个文件里。
+ * @fileoverview 数据台账（`dataset`）的接口封装：台账、列、数据行与人工修正。
+ * 回填随后续各期落地，届时加在这个文件里。
  *
  * ⚠ 这一组打的是 platform-server，不是 auth-server：每个函数都要给 `baseUrl`。
  * 漏给就会打到 `/api/v1/auth/...`，边缘按前缀反代，拿回来的是一个 404 信封。
@@ -9,6 +9,7 @@
  */
 
 import type {
+  CursorPage,
   DatasetAggFunc,
   DatasetCollectMode,
   DatasetColumn,
@@ -17,6 +18,12 @@ import type {
   DatasetFormulaCatalog,
   DatasetFormulaPreview,
   DatasetFormulaValidation,
+  DatasetOverrideBulkClear,
+  DatasetOverrideWrite,
+  DatasetRecompute,
+  DatasetRecord,
+  DatasetRecordDelete,
+  DatasetRecordWrite,
   DatasetTable,
   DatasetTableSummary,
   Page,
@@ -362,5 +369,197 @@ export async function previewDatasetFormula(
   return await requestData<DatasetFormulaPreview>(
     `/dataset-tables/${tableId}/formula:preview`,
     onPlatform({ method: 'POST', body: draft, signal }),
+  )
+}
+
+/**
+ * 数据行分页的取数参数。`after` 是不透明游标，只原样带回。
+ * ⚠ 写成 `type` 而不是 `interface`：只有前者才隐式带索引签名，接口交给
+ * `RequestOptions.query`（一个 `Record`）会当场类型不兼容。
+ */
+export type DatasetRecordQuery = {
+  /** 每页条数，后端上限 200。 */
+  limit?: number | undefined
+  /** 上一页回执里的 `next`。⚠ 不许解析它。 */
+  after?: string | undefined
+  /** 数据时间下界，UTC RFC3339。 */
+  since?: string | undefined
+  until?: string | undefined
+}
+
+/**
+ * 一页数据行，按数据时间倒序。
+ * ⚠ 走的是**游标分页**而不是页码：`dataset_records` 是持续写入的时序集合，
+ * 页码分页会静默重复与漏行（docs/DATASET_DESIGN.md §6.1）。故出参没有
+ * `total`，界面只说得出「第几页」，说不出「共几页」。
+ * @param tableId 台账 id
+ * @param query 每页条数与游标
+ */
+export async function listDatasetRecords(
+  tableId: string,
+  query: DatasetRecordQuery = {},
+): Promise<CursorPage<DatasetRecord>> {
+  return await requestData<CursorPage<DatasetRecord>>(
+    `/dataset-tables/${tableId}/records`,
+    onPlatform({ query }),
+  )
+}
+
+/**
+ * 录入或改写一行的入参。
+ * ⚠ `values` 里的点位汇总列会被后端记成**人工修正**而不是覆盖采集原值
+ * （docs/DATASET_DESIGN.md §8.4）。故表单只提交用户真的动过的那几格：
+ * 原样回传一遍会把没人动过的格子静默打上修正角标。
+ */
+export interface DatasetRecordInput {
+  /** 数据时间；建行时缺省取此刻。 */
+  ts?: string | undefined
+  values: Record<string, unknown>
+}
+
+/**
+ * 录入一行。公式列在保存时随之算出。
+ * @param tableId 台账 id
+ * @param input 数据时间与各列取值
+ * @param key 幂等键，缺省现生成一个
+ */
+export async function createDatasetRecord(
+  tableId: string,
+  input: DatasetRecordInput,
+  key: string = newIdempotencyKey(),
+): Promise<DatasetRecordWrite> {
+  return await requestData<DatasetRecordWrite>(
+    `/dataset-tables/${tableId}/records`,
+    onPlatform({ method: 'POST', body: input, headers: idempotent(key) }),
+  )
+}
+
+/**
+ * 一行的定位。
+ * ⚠ `ts` 不能省：它是超表的分区键，带上直接命中 chunk，不带就是跨 chunk 扫描
+ * （docs/DATASET_DESIGN.md §6.1）。
+ */
+export interface DatasetRowRef {
+  tableId: string
+  rowId: string
+  ts: string
+}
+
+/**
+ * 改一行的原始值，可连带改数据时间。
+ * @param row 行定位（含分区键 `ts`）
+ * @param input 新的数据时间与取值
+ * @param key 幂等键，缺省现生成一个
+ */
+export async function updateDatasetRecord(
+  row: DatasetRowRef,
+  input: DatasetRecordInput,
+  key: string = newIdempotencyKey(),
+): Promise<DatasetRecordWrite> {
+  return await requestData<DatasetRecordWrite>(
+    `/dataset-tables/${row.tableId}/records/${row.rowId}`,
+    onPlatform({
+      method: 'PATCH',
+      query: { ts: row.ts },
+      body: input,
+      headers: idempotent(key),
+    }),
+  )
+}
+
+/**
+ * 删一行。
+ * ⚠ 回执不是 204 而是带 `has_stale_downstream`：删掉一行同样会让它之后那些行的
+ * `PREV` / 时间窗 / 整表公式结果失真，而那件事只能由回执说出来。
+ * @param row 行定位（含分区键 `ts`）
+ * @param key 幂等键，缺省现生成一个
+ */
+export async function deleteDatasetRecord(
+  row: DatasetRowRef,
+  key: string = newIdempotencyKey(),
+): Promise<DatasetRecordDelete> {
+  return await requestData<DatasetRecordDelete>(
+    `/dataset-tables/${row.tableId}/records/${row.rowId}`,
+    onPlatform({
+      method: 'DELETE',
+      query: { ts: row.ts },
+      headers: idempotent(key),
+    }),
+  )
+}
+
+/**
+ * 撤销一行里若干格的人工修正，这些格回落到自动采集值。
+ * ⚠ 回执的 `cleared` 点名真正撤掉的那几列：空数组意味着这几格早就没有修正了
+ * （别人先撤过、或手上这一页已经旧了），那不是失败。
+ * @param row 行定位（含分区键 `ts`）
+ * @param keys 要撤的列标识；缺省整行全撤
+ * @param key 幂等键，缺省现生成一个
+ */
+export async function clearDatasetRecordOverrides(
+  row: DatasetRowRef,
+  keys: readonly string[] | null = null,
+  key: string = newIdempotencyKey(),
+): Promise<DatasetOverrideWrite> {
+  return await requestData<DatasetOverrideWrite>(
+    `/dataset-tables/${row.tableId}/records/${row.rowId}/overrides`,
+    onPlatform({
+      method: 'DELETE',
+      query: { ts: row.ts },
+      body: { keys },
+      headers: idempotent(key),
+    }),
+  )
+}
+
+/** 批量撤销的入参。两端留空即不限。 */
+export interface DatasetOverrideBulkInput {
+  column_keys: readonly string[]
+  since?: string | undefined
+  until?: string | undefined
+}
+
+/**
+ * 按列 + 时间范围批量撤销人工修正（仪表修好之后整段退回自动值）。
+ * ⚠ `since` / `until` 留空是**不限**。界面不许把「不限」做成默认值：一次误点
+ * 就抹掉三年的修正，而回执只有一个数字，看不出抹掉了什么
+ * （docs/DATASET_DESIGN.md §7.8）。
+ * @param tableId 台账 id
+ * @param input 列名单与时间范围
+ * @param key 幂等键，缺省现生成一个
+ */
+export async function clearDatasetOverridesInRange(
+  tableId: string,
+  input: DatasetOverrideBulkInput,
+  key: string = newIdempotencyKey(),
+): Promise<DatasetOverrideBulkClear> {
+  return await requestData<DatasetOverrideBulkClear>(
+    `/dataset-tables/${tableId}/overrides:clear`,
+    onPlatform({ method: 'POST', body: input, headers: idempotent(key) }),
+  )
+}
+
+/** 一段时间范围。两端留空即整表。 */
+export interface DatasetRangeInput {
+  since?: string | undefined
+  until?: string | undefined
+}
+
+/**
+ * 重算公式列。只写计算值，不碰任何原始录入值。
+ * ⚠ 回执的 `is_truncated` 必须照实说出来：触顶的一次与算完的一次长得一模一样，
+ * 不说的话用户以为已经算完了（docs/DATASET_DESIGN.md §6.2）。
+ * @param tableId 台账 id
+ * @param range 时间范围，缺省整表
+ * @param key 幂等键，缺省现生成一个
+ */
+export async function recomputeDatasetTable(
+  tableId: string,
+  range: DatasetRangeInput = {},
+  key: string = newIdempotencyKey(),
+): Promise<DatasetRecompute> {
+  return await requestData<DatasetRecompute>(
+    `/dataset-tables/${tableId}:recompute`,
+    onPlatform({ method: 'POST', body: range, headers: idempotent(key) }),
   )
 }

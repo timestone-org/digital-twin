@@ -13,6 +13,9 @@ import ColumnsPanel from '@/pages/Dataset/TableDetail/components/ColumnsPanel.vu
 import ColumnSourceFormula from '@/pages/Dataset/TableDetail/components/ColumnSourceFormula.vue'
 import ColumnSourceManual from '@/pages/Dataset/TableDetail/components/ColumnSourceManual.vue'
 import ColumnSourcePoint from '@/pages/Dataset/TableDetail/components/ColumnSourcePoint.vue'
+import RecordCell from '@/pages/Dataset/TableDetail/components/RecordCell.vue'
+import RecordTable from '@/pages/Dataset/TableDetail/components/RecordTable.vue'
+import RecordsPanel from '@/pages/Dataset/TableDetail/components/RecordsPanel.vue'
 import { router } from '@/router'
 
 /**
@@ -61,6 +64,36 @@ describe('列配置分区的对外面', () => {
   })
 })
 
+describe('数据分区的对外面', () => {
+  it('与列配置分区收同样的三个 prop —— 详情页的出口只喂这三个', () => {
+    expect(propNames(RecordsPanel).sort()).toEqual(['busy', 'columns', 'table'])
+  })
+
+  // ⚠ 分区把列定义原样往下传：详情页那一份是唯一真源，数据表自己再取一次的话，
+  // 同一页上会出现两份列定义，而它们不一致时界面不会报任何错（设计 §7.2）
+  it('数据表收的是分区传下来的列定义，不自己取列', () => {
+    expect(propNames(RecordTable)).toContain('columns')
+    expect(emitNames(RecordTable).sort()).toEqual([
+      'edit',
+      'next',
+      'prev',
+      'remove',
+      'retry',
+      'revoke',
+    ])
+  })
+
+  it('一格收列定义、行与本页样本中位数，撤销只上报不自己发请求', () => {
+    expect(propNames(RecordCell).sort()).toEqual([
+      'busy',
+      'column',
+      'median',
+      'row',
+    ])
+    expect(emitNames(RecordCell)).toEqual(['revoke'])
+  })
+})
+
 describe('三个来源子块的对外面', () => {
   it('人工录入收数据类型，双向绑默认值与必填', () => {
     expect(propNames(ColumnSourceManual).sort()).toEqual([
@@ -98,6 +131,17 @@ describe('分区确实挂在路由上', () => {
     expect(router.getRoutes().map((route) => route.path)).toContain(
       `${BASE}/columns`,
     )
+  })
+
+  it('数据分区也有自己的地址：刷新还停在这一页，链接发得出去', () => {
+    expect(router.getRoutes().map((route) => route.path)).toContain(
+      `${BASE}/records`,
+    )
+  })
+
+  it('⚠ 数据分区同样只挂读码：写码挂路由会把只读账号整个挡在门外', () => {
+    const resolved = router.resolve('/datasets/t1/records')
+    expect(resolved.meta.permissions).toEqual(['dataset:view'])
   })
 
   // ⚠ 用 resolve 而不是 getRoutes()：守卫读的是 `to.meta`，那是全部匹配记录

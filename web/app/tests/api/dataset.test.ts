@@ -27,6 +27,12 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+const ROW = {
+  tableId: 't1',
+  rowId: 'r9',
+  ts: '2026-02-02T03:04:00.000Z',
+}
+
 function call(): [string, Record<string, unknown>] {
   const args = requestMock.mock.calls.at(-1)
   return [args?.[0] as string, (args?.[1] ?? {}) as Record<string, unknown>]
@@ -44,6 +50,22 @@ describe('每一条都打 platform 前缀', () => {
       () => dataset.updateDatasetTable('t1', { name: '改' }),
     ],
     ['deleteDatasetTable', () => dataset.deleteDatasetTable('t1')],
+    ['listDatasetRecords', () => dataset.listDatasetRecords('t1')],
+    [
+      'createDatasetRecord',
+      () => dataset.createDatasetRecord('t1', { values: {} }),
+    ],
+    ['deleteDatasetRecord', () => dataset.deleteDatasetRecord(ROW)],
+    [
+      'clearDatasetRecordOverrides',
+      () => dataset.clearDatasetRecordOverrides(ROW, ['kwh']),
+    ],
+    [
+      'clearDatasetOverridesInRange',
+      () =>
+        dataset.clearDatasetOverridesInRange('t1', { column_keys: ['kwh'] }),
+    ],
+    ['recomputeDatasetTable', () => dataset.recomputeDatasetTable('t1')],
   ])('%s', async (_name, run) => {
     await run()
     const [, options] = call()
@@ -108,5 +130,86 @@ describe('台账的读写', () => {
   it('删除走 request 而不是 requestData：这条是 204，没有 data', async () => {
     await dataset.deleteDatasetTable('t1')
     expect(client.request).toHaveBeenCalled()
+  })
+})
+
+describe('数据行的读写', () => {
+  it('⚠ 列表走游标而不是页码：时序集合按页码翻会静默重复与漏行', async () => {
+    await dataset.listDatasetRecords('t1', { limit: 50, after: 'cursor-1' })
+    const [path, options] = call()
+    expect(path).toBe('/dataset-tables/t1/records')
+    expect(options.query).toEqual({ limit: 50, after: 'cursor-1' })
+    expect(options.query).not.toHaveProperty('page')
+  })
+
+  it('录入走 POST，带幂等键——网络抖动引发的重试不该多出一行', async () => {
+    await dataset.createDatasetRecord(
+      't1',
+      { ts: '2026-02-02T03:04:00.000Z', values: { inflow: 12 } },
+      'key-1',
+    )
+    const [path, options] = call()
+    expect(path).toBe('/dataset-tables/t1/records')
+    expect(options.method).toBe('POST')
+    expect(options.headers).toEqual({ 'Idempotency-Key': 'key-1' })
+  })
+
+  it('⚠ 编辑带 `?ts=` 分区键，且它是**改之前**那一刻', async () => {
+    await dataset.updateDatasetRecord(ROW, {
+      ts: '2026-03-03T03:04:00.000Z',
+      values: {},
+    })
+    const [path, options] = call()
+    expect(path).toBe('/dataset-tables/t1/records/r9')
+    expect(options.method).toBe('PATCH')
+    expect(options.query).toEqual({ ts: '2026-02-02T03:04:00.000Z' })
+  })
+
+  it('⚠ 删行走 requestData：这条不是 204，回执里带着下游过期这件事', async () => {
+    await dataset.deleteDatasetRecord(ROW)
+    const [path, options] = call()
+    expect(path).toBe('/dataset-tables/t1/records/r9')
+    expect(options.method).toBe('DELETE')
+    expect(options.query).toEqual({ ts: '2026-02-02T03:04:00.000Z' })
+    expect(client.requestData).toHaveBeenCalled()
+  })
+})
+
+describe('人工修正', () => {
+  it('撤销单格点名列标识，并带上分区键', async () => {
+    await dataset.clearDatasetRecordOverrides(ROW, ['kwh'])
+    const [path, options] = call()
+    expect(path).toBe('/dataset-tables/t1/records/r9/overrides')
+    expect(options.method).toBe('DELETE')
+    expect(options.body).toEqual({ keys: ['kwh'] })
+    expect(options.query).toEqual({ ts: '2026-02-02T03:04:00.000Z' })
+  })
+
+  it('不点名就是整行全撤', async () => {
+    await dataset.clearDatasetRecordOverrides(ROW)
+    expect(call()[1].body).toEqual({ keys: null })
+  })
+
+  it('批量撤销是动作端点，故只能是 POST', async () => {
+    await dataset.clearDatasetOverridesInRange('t1', {
+      column_keys: ['kwh'],
+      since: '2026-03-01T00:00:00.000Z',
+    })
+    const [path, options] = call()
+    expect(path).toBe('/dataset-tables/t1/overrides:clear')
+    expect(options.method).toBe('POST')
+    expect(options.body).toEqual({
+      column_keys: ['kwh'],
+      since: '2026-03-01T00:00:00.000Z',
+      until: undefined,
+    })
+  })
+
+  it('重算同样是动作端点，缺省即整表', async () => {
+    await dataset.recomputeDatasetTable('t1')
+    const [path, options] = call()
+    expect(path).toBe('/dataset-tables/t1:recompute')
+    expect(options.method).toBe('POST')
+    expect(options.body).toEqual({})
   })
 })

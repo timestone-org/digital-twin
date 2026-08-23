@@ -32,6 +32,9 @@ export const PERMISSION_CODES = {
   assetManage: 'asset:manage',
   datasetView: 'dataset:view',
   datasetManage: 'dataset:manage',
+  datasetRecordWrite: 'dataset:record:write',
+  datasetOverride: 'dataset:override',
+  datasetBackfill: 'dataset:backfill',
 } as const
 
 export type PermissionCode =
