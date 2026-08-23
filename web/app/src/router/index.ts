@@ -101,6 +101,18 @@ export const routes: RouteRecordRaw[] = [
     },
   },
   {
+    // 数据台账：从点位历史汇总出来的业务派生层。这一条只挂**读码**——
+    // 写码（dataset:manage）在页内逐个入口门控，挂到路由上会把只读账号
+    // 整个挡在门外（docs/DATASET_DESIGN.md §7.1）。
+    path: '/datasets',
+    name: 'dataset-tables',
+    component: () => import('@/pages/Dataset/Tables/index.vue'),
+    meta: {
+      title: '数据台账',
+      permissions: [PERMISSION_CODES.datasetView],
+    },
+  },
+  {
     path: '/hvac/units',
     name: 'hvac-units',
     component: () => import('@/pages/Hvac/Units/index.vue'),

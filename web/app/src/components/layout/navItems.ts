@@ -48,6 +48,16 @@ export const NAV_ITEMS: readonly NavItem[] = [
     ],
   },
   {
+    // 台账挨着采集：它唯一的上游就是采集落下来的点位历史（DATASET_DESIGN §2.1）。
+    // ⚠ 只挂读码，与路由的 meta.permissions 逐字一致——两边漂移会造出
+    // 「看得见点不进」或「看不见但输地址能进」，由 navItems 的契约测试钉死。
+    key: 'datasets',
+    label: '数据台账',
+    icon: 'table',
+    to: '/datasets',
+    permission: [PERMISSION_CODES.datasetView],
+  },
+  {
     key: 'hvac',
     label: '空调管理',
     icon: 'snowflake',

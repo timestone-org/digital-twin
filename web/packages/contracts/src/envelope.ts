@@ -45,7 +45,10 @@ export const SUCCESS_CODE = 0
 /**
  * 已发布的错误码。**按码分支，不要按 message 分支**——文案会改、会翻译。
  * 分段十进制 `<4|5><领域两位><序号两位>`，领域 00 通用、01 认证与授权、
- * 16 空调与空间。
+ * 12 数据台账、16 空调与空间。
+ *
+ * ⚠ 只登记**前端真的按它分支**的码：登记一个没人消费的码，等于摆出一条
+ * 看起来处理过、实际走的是通用兜底的分支。
  */
 export const ERROR_CODES = {
   validationFailed: 40001,
@@ -65,6 +68,10 @@ export const ERROR_CODES = {
   builtinImmutable: 40110,
   tooManyLoginAttempts: 40111,
   signupDisabled: 40112,
+  /** 台账编码已被占用。表单据此把错误落到「编码」那一格上，而不是弹一句通用失败。 */
+  datasetTableCodeTaken: 41203,
+  /** 台账下还有数据行。⚠ 这不是失败，是**升一级再问**：确认后带 force 重发。 */
+  datasetTableNotEmpty: 41205,
   workshopNotFound: 41601,
   roomNotFound: 41602,
   acUnitNotFound: 41603,
