@@ -26,6 +26,12 @@ from platform_server.apps.dataset.formula.deps import (
     build_plan,
     topo_order,
 )
+from platform_server.apps.dataset.formula.entry import (
+    check_params,
+    merged_library,
+    sample_call,
+    validate_entry,
+)
 from platform_server.apps.dataset.formula.errors import (
     ExternalsNotPrefetched,
     FormulaError,
@@ -37,6 +43,9 @@ from platform_server.apps.dataset.formula.evaluator import (
 )
 from platform_server.apps.dataset.formula.library import (
     EMPTY_LIBRARY,
+    FX_PARAM_KINDS,
+    PARAM_COLUMN,
+    PARAM_VALUE,
     FormulaLibrary,
     FxEntry,
     FxParam,
@@ -75,9 +84,12 @@ __all__ = [
     "ALL_FUNCS",
     "CATEGORIES",
     "EMPTY_LIBRARY",
+    "FX_PARAM_KINDS",
     "MAX_PREV_N",
     "MAX_WINDOW_YEARS",
     "OPERATORS",
+    "PARAM_COLUMN",
+    "PARAM_VALUE",
     "PREV_FUNC",
     "RULES",
     "SCALAR_FUNCS",
@@ -110,12 +122,16 @@ __all__ = [
     "build_catalog",
     "build_externals",
     "build_plan",
+    "check_params",
     "empty_cache",
     "evaluate",
+    "merged_library",
     "parse_formula",
     "parse_window",
+    "sample_call",
     "to_notation",
     "to_plain_text",
     "topo_order",
+    "validate_entry",
     "window_lower_bound",
 ]

@@ -6,6 +6,7 @@
 """
 
 import re
+from typing import get_args
 
 import pytest
 
@@ -29,6 +30,10 @@ from platform_server.apps.dataset.formula.functions import (
     LAZY_IMPL,
     SCALAR_IMPL,
 )
+from platform_server.apps.dataset.formula.library import (
+    FX_CODE_RE,
+    FX_PARAM_KINDS,
+)
 from platform_server.apps.dataset.formula.notation import (
     _AGG_SYMBOLS,
     _FN_LABELS,
@@ -39,7 +44,10 @@ from platform_server.apps.dataset.formula.signatures import (
 )
 from platform_server.apps.dataset.formula.tokens import COLUMN_KEY_RE
 from platform_server.apps.dataset.models import KEY_PATTERN
-from platform_server.apps.dataset.schemas import FormulaDepsOut
+from platform_server.apps.dataset.schemas import (
+    FormulaDepsOut,
+    FormulaParamSpec,
+)
 
 CATALOG = build_catalog(EMPTY_LIBRARY)
 CATALOG_NAMES = {item.doc.name for item in CATALOG.functions}
@@ -167,3 +175,17 @@ def test_the_dependency_blob_round_trips_through_the_contract_model() -> None:
         "PREV({a}) + SUM_OVER({b}, '1h') + SUM_ALL({c}) + {src.d}"
     ).deps.to_json()
     assert FormulaDepsOut.model_validate(blob).model_dump() == blob
+
+
+def test_the_parameter_kinds_the_api_offers_match_the_engine() -> None:
+    # ⚠ 分叉的表现是「界面上能选、保存时被拒」：入参那一档 Literal 与引擎的
+    # 名单是同一条契约的两份写法
+    offered = get_args(FormulaParamSpec.model_fields["kind"].annotation)
+    assert set(offered) == set(FX_PARAM_KINDS)
+
+
+def test_the_library_call_prefix_is_banned_from_both_identifier_rules() -> None:
+    # ⚠ `@` 必须两边都禁：`{a@b} + 1` 在宏替换之后剩一个裸 `@`，报的是
+    # 「调用库公式要带括号」——指向一个用户根本没写过的东西
+    assert FX_CODE_RE.match("a@b") is None
+    assert COLUMN_KEY_RE.match("a@b") is None

@@ -37,6 +37,8 @@ PUBLISHED_CODES = frozenset(
         "dataset:record:write",
         "dataset:override",
         "dataset:backfill",
+        "formula:view",
+        "formula:manage",
     }
 )
 
@@ -150,6 +152,7 @@ def test_permission_groups_keep_catalog_order_and_sorting() -> None:
         "collect",
         "asset",
         "dataset",
+        "formula",
     ]
     for group in groups:
         orders = [item.sort_order for item in group.items]

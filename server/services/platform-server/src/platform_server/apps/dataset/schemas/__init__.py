@@ -18,6 +18,14 @@ from platform_server.apps.dataset.schemas.formula import (
     FormulaValidateIn,
     FormulaValidateOut,
 )
+from platform_server.apps.dataset.schemas.library import (
+    FormulaCreateIn,
+    FormulaDefOut,
+    FormulaDefWithUsagesOut,
+    FormulaParamSpec,
+    FormulaUpdateIn,
+    FormulaUsageOut,
+)
 from platform_server.apps.dataset.schemas.record import (
     DatasetSeriesPointOut,
     LatestOut,
@@ -52,11 +60,17 @@ __all__ = [
     "ColumnUpdateIn",
     "DatasetSeriesPointOut",
     "FormulaColumnOut",
+    "FormulaCreateIn",
+    "FormulaDefOut",
+    "FormulaDefWithUsagesOut",
     "FormulaDepsOut",
     "FormulaFunctionsOut",
+    "FormulaParamSpec",
     "FormulaPreviewIn",
     "FormulaPreviewOut",
     "FormulaTableOut",
+    "FormulaUpdateIn",
+    "FormulaUsageOut",
     "FormulaValidateIn",
     "FormulaValidateOut",
     "LatestOut",

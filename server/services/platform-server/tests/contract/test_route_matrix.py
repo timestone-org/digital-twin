@@ -36,6 +36,8 @@ from platform_server.apps.dataset.catalog import (
     DATASET_OVERRIDE,
     DATASET_RECORD_WRITE,
     DATASET_VIEW,
+    FORMULA_MANAGE,
+    FORMULA_VIEW,
 )
 from platform_server.apps.hvac.api import ROUTERS as HVAC_ROUTERS
 from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
@@ -160,8 +162,11 @@ def collect_expectation(path: str, method: str) -> frozenset[str] | None:
 
 # 数据台账（`dataset-tables` 与它下面的列、记录、人工修正）。闸 1 里对应的同样
 # 是按前缀的窄规则，阶梯五级：写兜底 → 读 → 记录写 → 记录读 → 修正 → 重算。
-# 导出与公式库各有自己的码，随它们的端点一起登记（docs/DATASET_DESIGN.md §9）。
+# CSV 导出另有自己的码，随它的端点一起登记（docs/DATASET_DESIGN.md §9）。
 DATASET_PREFIXES = (f"{API_PREFIX}/dataset-tables",)
+# ⚠ 公式库与 `dataset-tables` **平级**，且自带两个码：改一条库公式会同时改掉
+# 所有引用它的台账列，爆炸半径大一个量级，故不跟着 `dataset:manage` 走（§9）
+FORMULA_PREFIX = f"{API_PREFIX}/formulas"
 DATASET_TABLE = f"{API_PREFIX}/dataset-tables/{{table_id}}"
 # 人工修正自成一个码：修正值优先于点位聚合值，等同于篡改台账
 DATASET_OVERRIDDEN = (
@@ -180,10 +185,12 @@ DATASET_RECORD_READS = (
 
 
 def dataset_expectation(path: str, method: str) -> frozenset[str] | None:
-    """台账面某条路由该要哪个码；不是台账面的路由给 None。
+    """台账与公式库两面某条路由该要哪个码；别处的路由给 None。
 
     Args: path, method。
     """
+    if path.startswith(FORMULA_PREFIX):
+        return frozenset({FORMULA_VIEW if method == "GET" else FORMULA_MANAGE})
     if not any(path.startswith(prefix) for prefix in DATASET_PREFIXES):
         return None
     if (path, method) in DATASET_OVERRIDDEN:
@@ -192,9 +199,8 @@ def dataset_expectation(path: str, method: str) -> frozenset[str] | None:
         return frozenset({DATASET_BACKFILL})
     if method == "GET":
         return frozenset({DATASET_VIEW})
-    if path.startswith(f"{DATASET_TABLE}/records"):
-        return frozenset({DATASET_RECORD_WRITE})
-    return frozenset({DATASET_MANAGE})
+    is_record = path.startswith(f"{DATASET_TABLE}/records")
+    return frozenset({DATASET_RECORD_WRITE if is_record else DATASET_MANAGE})
 
 
 # 运行参数自成一段。⚠ 它既不匹配 `dashboard*` 也不匹配 `collect-*`，闸 1 里
@@ -569,8 +575,8 @@ def test_the_dataset_face_was_actually_covered() -> None:
         if dataset_expectation(path, method) is not None
     ]
     # 5 条台账面 + 5 条列面 + 3 条公式面 + 4 条记录面 + 3 条修正面
-    # + 3 条取数面（最新值 / 序列 / 重算）+ 3 条采集运行参数面
-    assert len(covered) == 26
+    # + 3 条取数面（最新值 / 序列 / 重算）+ 3 条采集运行参数面 + 7 条公式库面
+    assert len(covered) == 33
 
 
 def test_every_route_takes_its_session_from_the_one_place() -> None:

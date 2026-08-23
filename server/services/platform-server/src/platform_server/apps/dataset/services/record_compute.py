@@ -21,7 +21,6 @@ from platform_server.apps.dataset.crud import (
     table_crud,
 )
 from platform_server.apps.dataset.formula import (
-    EMPTY_LIBRARY,
     ColumnFormula,
     EvalContext,
     FormulaError,
@@ -38,6 +37,7 @@ from platform_server.apps.dataset.services.effective import (
     effective_values,
     to_snapshot,
 )
+from platform_server.apps.dataset.services.formula_library import library_for
 from platform_server.apps.dataset.services.record_history import (
     ComputeScope,
     RowSpan,
@@ -91,7 +91,7 @@ async def build_scope(
         sorted(entries, key=lambda item: item.key),
         known_keys,
         known_tables=await table_crud.all_codes(session),
-        library=EMPTY_LIBRARY,
+        library=await library_for(session, columns),
     )
     return ComputeScope(
         plan=plan,

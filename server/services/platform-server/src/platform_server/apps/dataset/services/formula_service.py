@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from platform_server.apps.dataset.crud import column_crud, table_crud
 from platform_server.apps.dataset.formula import (
     CATEGORIES,
-    EMPTY_LIBRARY,
     OPERATORS,
     RULES,
     WINDOW_UNITS,
@@ -51,6 +50,10 @@ from platform_server.apps.dataset.schemas import (
 from platform_server.apps.dataset.services.formula_cycles import (
     check_no_cycle,
 )
+from platform_server.apps.dataset.services.formula_library import (
+    library_for,
+    load_library,
+)
 from platform_server.apps.dataset.services.table_service import require_table
 
 
@@ -63,7 +66,9 @@ async def get_functions(
     """
     table = await require_table(session, table_id)
     columns = await column_crud.list_by_table(session, table.id)
-    catalog = build_catalog(EMPTY_LIBRARY)
+    # ⚠ 这里读整份库而不是走 `library_for` 那道 `@` 闸：面板要列出**可插入**
+    # 的库公式，而「这张表现在还没用过任何库公式」正是最需要列出来的那一刻
+    catalog = build_catalog(await load_library(session))
     tables = await table_crud.list_all(session)
     return FormulaFunctionsOut(
         categories=[_choice(item) for item in CATEGORIES],
@@ -164,7 +169,11 @@ async def _parse_against(
     if payload.column_key is not None:
         # 新建那一列时它还不在库里，但它的 key 已经定下来了
         known_keys.add(payload.column_key)
-    parsed = parse_formula(payload.formula, known_keys, library=EMPTY_LIBRARY)
+    parsed = parse_formula(
+        payload.formula,
+        known_keys,
+        library=await library_for(session, columns, extra=payload.formula),
+    )
     known_tables = await table_crud.all_codes(session)
     missing = sorted(parsed.deps.external_table_codes - known_tables)
     if missing:

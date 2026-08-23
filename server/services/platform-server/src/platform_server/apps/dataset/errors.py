@@ -96,3 +96,40 @@ class DatasetRecordInvalid(AppError):
 
     code = 41213
     http_status = 400
+
+
+class DatasetFormulaNotFound(AppError):
+    """公式库里没有这条公式。"""
+
+    code = 41220
+    http_status = 404
+
+
+class DatasetFormulaCodeTaken(AppError):
+    """公式标识已被占用。标识是全局唯一的调用点字面量。"""
+
+    code = 41221
+    http_status = 409
+
+
+class DatasetFormulaInUse(AppError):
+    """还有台账列或别的库公式在用这条公式。
+
+    ⚠ 停用与删除都会撞上它，理由相同：引用方在**解析期**就失败，而保存任一列
+    都会试编译整张表，于是那张表的录入、导入、修正与重算一起 400。故这一条
+    没有 `force` 出口——绕过去的代价是引用方在运行期静默崩掉
+    （docs/DATASET_DESIGN.md §5.11）。
+    """
+
+    code = 41222
+    http_status = 409
+
+
+class DatasetFormulaPresetRule(AppError):
+    """预设与自建的操作面不同。
+
+    预设删不得（只能停用——删掉之后没有恢复入口），自建则没有出厂口径可恢复。
+    """
+
+    code = 41223
+    http_status = 400

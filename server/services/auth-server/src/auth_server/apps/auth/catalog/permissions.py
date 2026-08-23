@@ -41,6 +41,10 @@ DATASET_MANAGE = "dataset:manage"
 DATASET_RECORD_WRITE = "dataset:record:write"
 DATASET_OVERRIDE = "dataset:override"
 DATASET_BACKFILL = "dataset:backfill"
+# 公式库是**跨台账的全局资源**，故与台账那五个码分家：改一条库公式会同时改掉
+# 所有引用它的台账列，爆炸半径大一个量级（docs/DATASET_DESIGN.md §9）
+FORMULA_VIEW = "formula:view"
+FORMULA_MANAGE = "formula:manage"
 
 PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(
@@ -308,6 +312,28 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
         description=(
             "按时间范围重算公式列、回填历史。⚠ 一次会改写大批历史行并吃满"
             "数据库，与「改一行」不是同一类风险"
+        ),
+    ),
+    PermissionSpec(
+        code=FORMULA_VIEW,
+        name="查看公式库",
+        kind="view",
+        group_code="formula",
+        group_label="公式库",
+        sort_order=10,
+        description="公式库列表、详情与引用反查",
+    ),
+    PermissionSpec(
+        code=FORMULA_MANAGE,
+        name="管理公式库",
+        kind="admin",
+        group_code="formula",
+        group_label="公式库",
+        sort_order=20,
+        description=(
+            "建改删库公式、停用与恢复出厂口径。⚠ 与「管理数据台账」分家是"
+            "刻意的：改一条库公式会同时改掉**所有**引用它的台账列，"
+            "停用一条还在被引用的公式会让那些表的录入与重算一起报错"
         ),
     ),
 )

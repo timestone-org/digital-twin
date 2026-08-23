@@ -1570,6 +1570,96 @@
         "title": "ApiResponse[DatasetsOut]",
         "type": "object"
       },
+      "ApiResponse_FormulaDefOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FormulaDefOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[FormulaDefOut]",
+        "type": "object"
+      },
+      "ApiResponse_FormulaDefWithUsagesOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FormulaDefWithUsagesOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[FormulaDefWithUsagesOut]",
+        "type": "object"
+      },
       "ApiResponse_FormulaFunctionsOut_": {
         "properties": {
           "code": {
@@ -4018,6 +4108,104 @@
           }
         },
         "title": "ApiResponse[list[ColumnOut]]",
+        "type": "object"
+      },
+      "ApiResponse_list_FormulaDefOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FormulaDefOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[list[FormulaDefOut]]",
+        "type": "object"
+      },
+      "ApiResponse_list_FormulaUsageOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FormulaUsageOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[list[FormulaUsageOut]]",
         "type": "object"
       },
       "ApiResponse_list_NodeOut__": {
@@ -6811,6 +6999,243 @@
         "title": "FormulaColumnOut",
         "type": "object"
       },
+      "FormulaCreateIn": {
+        "additionalProperties": false,
+        "description": "新建一条库公式。",
+        "properties": {
+          "category": {
+            "default": "custom",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Category",
+            "type": "string"
+          },
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[^\\s@'\"(),.:{}\\[\\]]+$",
+            "title": "Code",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "expression": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Expression",
+            "type": "string"
+          },
+          "is_enabled": {
+            "default": true,
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "params": {
+            "items": {
+              "$ref": "#/components/schemas/FormulaParamSpec"
+            },
+            "maxItems": 8,
+            "title": "Params",
+            "type": "array"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "expression"
+        ],
+        "title": "FormulaCreateIn",
+        "type": "object"
+      },
+      "FormulaDefOut": {
+        "description": "一条库公式。",
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "expression": {
+            "title": "Expression",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_builtin": {
+            "title": "Is Builtin",
+            "type": "boolean"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "params": {
+            "items": {
+              "$ref": "#/components/schemas/FormulaParamSpec"
+            },
+            "title": "Params",
+            "type": "array"
+          },
+          "signature": {
+            "title": "Signature",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "category",
+          "expression",
+          "params",
+          "description",
+          "is_builtin",
+          "is_enabled",
+          "signature",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "FormulaDefOut",
+        "type": "object"
+      },
+      "FormulaDefWithUsagesOut": {
+        "description": "改完一条公式的回执：连引用面一起给。\n\n⚠ 改动**即刻**对全部引用方生效，但历史行要等重算才跟上——界面据此提示去\n重算，不提示的话用户会以为改完就完了。",
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "expression": {
+            "title": "Expression",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_builtin": {
+            "title": "Is Builtin",
+            "type": "boolean"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "params": {
+            "items": {
+              "$ref": "#/components/schemas/FormulaParamSpec"
+            },
+            "title": "Params",
+            "type": "array"
+          },
+          "signature": {
+            "title": "Signature",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "usages": {
+            "items": {
+              "$ref": "#/components/schemas/FormulaUsageOut"
+            },
+            "title": "Usages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "category",
+          "expression",
+          "params",
+          "description",
+          "is_builtin",
+          "is_enabled",
+          "signature",
+          "created_at",
+          "updated_at",
+          "usages"
+        ],
+        "title": "FormulaDefWithUsagesOut",
+        "type": "object"
+      },
       "FormulaDepsOut": {
         "description": "保存公式时解析出的依赖，也是 `dataset_columns.formula_deps` 的形态。\n\n⚠ 键集与 `formula.FormulaDeps.to_json()` 必须逐字一致：Pydantic 默认忽略\n多余键，那边加一个键而这里忘了加，落库形态与契约形态就此分叉，没有任何\n东西会报。由契约测试锁死。",
         "properties": {
@@ -6960,6 +7385,47 @@
         "title": "FormulaFunctionsOut",
         "type": "object"
       },
+      "FormulaParamSpec": {
+        "description": "一个形参。出参与入参共用这一个形状——两边字段完全相同。",
+        "properties": {
+          "default": {
+            "title": "Default"
+          },
+          "hint": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Hint",
+            "type": "string"
+          },
+          "kind": {
+            "default": "column",
+            "enum": [
+              "column",
+              "value"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "default": "",
+            "maxLength": 64,
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[^\\s@'\"(),.:{}\\[\\]]+$",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "FormulaParamSpec",
+        "type": "object"
+      },
       "FormulaPrevDepOut": {
         "description": "一处跨行引用。",
         "properties": {
@@ -7080,6 +7546,143 @@
           "name"
         ],
         "title": "FormulaTableOut",
+        "type": "object"
+      },
+      "FormulaUpdateIn": {
+        "additionalProperties": false,
+        "description": "改一条库公式。缺省的字段不动。`code` 不在这里。",
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "expression": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expression"
+          },
+          "is_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Enabled"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FormulaParamSpec"
+                },
+                "maxItems": 8,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Params"
+          }
+        },
+        "title": "FormulaUpdateIn",
+        "type": "object"
+      },
+      "FormulaUsageOut": {
+        "description": "一处引用：哪张台账的哪一列在用这条公式。",
+        "properties": {
+          "column_id": {
+            "format": "uuid",
+            "title": "Column Id",
+            "type": "string"
+          },
+          "column_key": {
+            "title": "Column Key",
+            "type": "string"
+          },
+          "column_name": {
+            "title": "Column Name",
+            "type": "string"
+          },
+          "formula": {
+            "title": "Formula",
+            "type": "string"
+          },
+          "is_direct": {
+            "title": "Is Direct",
+            "type": "boolean"
+          },
+          "table_code": {
+            "title": "Table Code",
+            "type": "string"
+          },
+          "table_id": {
+            "format": "uuid",
+            "title": "Table Id",
+            "type": "string"
+          },
+          "table_name": {
+            "title": "Table Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "table_id",
+          "table_code",
+          "table_name",
+          "column_id",
+          "column_key",
+          "column_name",
+          "formula",
+          "is_direct"
+        ],
+        "title": "FormulaUsageOut",
         "type": "object"
       },
       "FormulaValidateIn": {
@@ -20100,6 +20703,397 @@
         "summary": "重算公式列",
         "tags": [
           "dataset-series"
+        ]
+      }
+    },
+    "/api/v1/platform/formulas": {
+      "get": {
+        "description": "公式库列表。`q` 按标识与名称模糊搜。\n\nArgs: session, _viewer, q, category。",
+        "operationId": "list_formulas_api_v1_platform_formulas_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_FormulaDefOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "公式库列表",
+        "tags": [
+          "dataset-library"
+        ]
+      },
+      "post": {
+        "description": "新建一条库公式。支持 `Idempotency-Key`。\n\nArgs: payload, session, response, write。",
+        "operationId": "create_formula_api_v1_platform_formulas_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FormulaCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_FormulaDefOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "新建库公式",
+        "tags": [
+          "dataset-library"
+        ]
+      }
+    },
+    "/api/v1/platform/formulas/{formula_id}": {
+      "delete": {
+        "description": "删一条库公式。预设删不得，还有人引用就 409。\n\nArgs: formula_id, session, _write。",
+        "operationId": "delete_formula_api_v1_platform_formulas__formula_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "formula_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Formula Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除库公式",
+        "tags": [
+          "dataset-library"
+        ]
+      },
+      "get": {
+        "description": "一条库公式的详情。\n\nArgs: formula_id, session, _viewer。",
+        "operationId": "read_formula_api_v1_platform_formulas__formula_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "formula_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Formula Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_FormulaDefOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "库公式详情",
+        "tags": [
+          "dataset-library"
+        ]
+      },
+      "patch": {
+        "description": "改一条库公式。`code` 不可改，故不在入参里。\n\nArgs: formula_id, payload, session, _write。",
+        "operationId": "update_formula_api_v1_platform_formulas__formula_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "formula_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Formula Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FormulaUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_FormulaDefWithUsagesOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "更新库公式",
+        "tags": [
+          "dataset-library"
+        ]
+      }
+    },
+    "/api/v1/platform/formulas/{formula_id}/usages": {
+      "get": {
+        "description": "哪些台账列在用这一条，含被别的库公式间接带进来的。\n\nArgs: formula_id, session, _viewer。",
+        "operationId": "list_formula_usages_api_v1_platform_formulas__formula_id__usages_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "formula_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Formula Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_FormulaUsageOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "库公式引用反查",
+        "tags": [
+          "dataset-library"
+        ]
+      }
+    },
+    "/api/v1/platform/formulas/{formula_id}:restore": {
+      "post": {
+        "description": "把改过的预设公式还原成出厂口径。⚠ 不动启用开关。\n\nArgs: formula_id, session, _write。",
+        "operationId": "restore_formula_api_v1_platform_formulas__formula_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "formula_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Formula Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_FormulaDefOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "恢复预设口径",
+        "tags": [
+          "dataset-library"
         ]
       }
     },

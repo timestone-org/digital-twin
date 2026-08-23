@@ -5,7 +5,10 @@
 
 from platform_server.apps.dataset.services import (
     column_service,
+    formula_library,
     formula_service,
+    formula_usage,
+    library_service,
     record_overrides,
     record_read,
     record_write,
@@ -30,7 +33,10 @@ __all__ = [
     "RecordLocator",
     "RecordWriter",
     "column_service",
+    "formula_library",
     "formula_service",
+    "formula_usage",
+    "library_service",
     "record_overrides",
     "record_read",
     "record_write",

@@ -71,13 +71,7 @@ from platform_server.apps.dashboard.services import (
     StaticPointCatalog,
     ValidationContext,
 )
-from platform_server.apps.dataset.catalog import (
-    DATASET_BACKFILL,
-    DATASET_MANAGE,
-    DATASET_OVERRIDE,
-    DATASET_RECORD_WRITE,
-    DATASET_VIEW,
-)
+from platform_server.apps.dataset import catalog as dataset_catalog
 from platform_server.apps.dataset.services import DatasetDirtyLog
 from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
 from platform_server.apps.hvac.deps import (
@@ -113,11 +107,13 @@ FULL_CODES = (
     COLLECT_MANAGE,
     ASSET_VIEW,
     ASSET_MANAGE,
-    DATASET_VIEW,
-    DATASET_MANAGE,
-    DATASET_RECORD_WRITE,
-    DATASET_OVERRIDE,
-    DATASET_BACKFILL,
+    dataset_catalog.DATASET_VIEW,
+    dataset_catalog.DATASET_MANAGE,
+    dataset_catalog.DATASET_RECORD_WRITE,
+    dataset_catalog.DATASET_OVERRIDE,
+    dataset_catalog.DATASET_BACKFILL,
+    dataset_catalog.FORMULA_VIEW,
+    dataset_catalog.FORMULA_MANAGE,
 )
 # 命令总线的两档预算，用例里固定住，断言里的信封才是可手写的常量
 BROWSE_TIMEOUT_S = 10.0

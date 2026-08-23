@@ -22,9 +22,14 @@ import type {
   DatasetExternalDep,
   DatasetFormulaCatalog,
   DatasetFormulaColumn,
+  DatasetFormulaDef,
+  DatasetFormulaDefWithUsages,
   DatasetFormulaDeps,
+  DatasetFormulaParam,
+  DatasetFormulaParamKind,
   DatasetFormulaPreview,
   DatasetFormulaTable,
+  DatasetFormulaUsage,
   DatasetFormulaValidation,
   DatasetLatest,
   DatasetOverride,
@@ -48,6 +53,7 @@ import {
   DATASET_COLLECT_MODES,
   DATASET_COLUMN_SOURCES,
   DATASET_COLUMN_TYPES,
+  DATASET_FORMULA_PARAM_KINDS,
   DATASET_RECORD_SOURCES,
 } from '@dt/contracts'
 
@@ -264,6 +270,45 @@ const SERIES_KEYS = {
   limit: true,
 } satisfies Keys<DatasetSeries>
 
+const FORMULA_PARAM_KEYS = {
+  name: true,
+  kind: true,
+  label: true,
+  hint: true,
+  default: true,
+} satisfies Keys<DatasetFormulaParam>
+
+const FORMULA_DEF_KEYS = {
+  id: true,
+  code: true,
+  name: true,
+  category: true,
+  expression: true,
+  params: true,
+  description: true,
+  is_builtin: true,
+  is_enabled: true,
+  signature: true,
+  created_at: true,
+  updated_at: true,
+} satisfies Keys<DatasetFormulaDef>
+
+const FORMULA_USAGE_KEYS = {
+  table_id: true,
+  table_code: true,
+  table_name: true,
+  column_id: true,
+  column_key: true,
+  column_name: true,
+  formula: true,
+  is_direct: true,
+} satisfies Keys<DatasetFormulaUsage>
+
+const FORMULA_DEF_WITH_USAGES_KEYS = {
+  ...FORMULA_DEF_KEYS,
+  usages: true,
+} satisfies Keys<DatasetFormulaDefWithUsages>
+
 const RECOMPUTE_KEYS = {
   recomputed: true,
   failed: true,
@@ -298,6 +343,10 @@ const SHAPES: Record<string, Record<string, true>> = {
   // 同名会让 FastAPI 把**两边**的形状名都改成带模块路径的长名
   DatasetSeriesPointOut: { ...SERIES_POINT_KEYS },
   SeriesOut: { ...SERIES_KEYS },
+  FormulaParamSpec: { ...FORMULA_PARAM_KEYS },
+  FormulaDefOut: { ...FORMULA_DEF_KEYS },
+  FormulaUsageOut: { ...FORMULA_USAGE_KEYS },
+  FormulaDefWithUsagesOut: { ...FORMULA_DEF_WITH_USAGES_KEYS },
   RecomputeOut: { ...RECOMPUTE_KEYS },
 }
 
@@ -325,6 +374,54 @@ describe('台账线形与 openapi 一致', () => {
       ['avg', 'count', 'delta', 'first', 'last', 'max', 'min', 'sum'],
       ['collect', 'import', 'manual'],
     ])
+  })
+
+  it('库公式的形参种类是两档闭合取值', () => {
+    // ⚠ 两档差在**实参能是什么**：`column` 只收裸列引用，`value` 收任意
+    // 表达式。前端多一档就是一个永远存不进库的选项
+    const kind: DatasetFormulaParamKind = 'value'
+    expect([...DATASET_FORMULA_PARAM_KINDS].sort()).toEqual(['column', 'value'])
+    expect(DATASET_FORMULA_PARAM_KINDS).toContain(kind)
+  })
+
+  it('停用与删除在类型上是两件事，但破坏力相同', () => {
+    // ⚠ 停用不是「藏起来」：引用它的台账列会在解析期报错，那张表的录入、
+    // 导入、修正与重算一起失败——界面必须把这句话说出来，故 `is_enabled`
+    // 与 `is_builtin` 都要在类型里（docs/DATASET_DESIGN.md §5.11）
+    const def: DatasetFormulaDef = {
+      id: 'f-1',
+      code: '占比',
+      name: '占比(%)',
+      category: 'basic',
+      expression: '{部分} / {整体} * 100',
+      params: [
+        { name: '部分', kind: 'column', label: '', hint: '', default: null },
+        { name: '整体', kind: 'value', label: '', hint: '', default: 1 },
+      ],
+      description: null,
+      is_builtin: true,
+      is_enabled: false,
+      signature: '@占比(部分, 整体)',
+      created_at: '2026-08-24T10:00:00.000Z',
+      updated_at: '2026-08-24T10:00:00.000Z',
+    }
+    expect([def.is_builtin, def.is_enabled]).toEqual([true, false])
+  })
+
+  it('间接引用在类型上分得出来', () => {
+    // ⚠ `is_direct: false` 表示这一列是被**别的库公式**带进来的：改这一列
+    // 救不了，要去改那条库公式
+    const usage: DatasetFormulaUsage = {
+      table_id: 't-1',
+      table_code: 'shift',
+      table_name: '班次台账',
+      column_id: 'c-1',
+      column_key: '净水',
+      column_name: '净水量',
+      formula: '@翻倍净值({进水}, {出水})',
+      is_direct: false,
+    }
+    expect(usage.is_direct).toBe(false)
   })
 
   it('一行的来源是三档闭合取值', () => {

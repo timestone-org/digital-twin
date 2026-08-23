@@ -81,8 +81,9 @@ async def test_the_catalog_lists_functions_columns_and_tables(
     assert {item["name"] for item in catalog["functions"]} >= {"SUM_ALL", "LN"}
     assert [item["key"] for item in catalog["columns"]] == ["进水", "出水"]
     assert [item["code"] for item in catalog["tables"]] == [other["code"]]
-    # 公式库随第 4 期落地；空表是正常状态，不是错误
-    assert catalog["library"] == []
+    # 库公式的插入面板由 `P/formulas` 那一族喂，这里只列出启用中的标识；
+    # 空库是正常状态，不是错误（docs/DATASET_DESIGN.md §5.11）
+    assert isinstance(catalog["library"], list)
 
 
 async def test_the_catalog_never_hand_writes_a_function_arity(

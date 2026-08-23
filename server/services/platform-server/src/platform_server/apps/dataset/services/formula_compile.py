@@ -15,7 +15,6 @@ from lib.errors.base import FieldError
 from platform_server.apps.dataset.crud import table_crud
 from platform_server.apps.dataset.errors import DatasetFormulaInvalid
 from platform_server.apps.dataset.formula import (
-    EMPTY_LIBRARY,
     ColumnFormula,
     ComputePlan,
     FormulaError,
@@ -23,6 +22,7 @@ from platform_server.apps.dataset.formula import (
     build_plan,
 )
 from platform_server.apps.dataset.models import DatasetColumn
+from platform_server.apps.dataset.services.formula_library import library_for
 
 
 @dataclass(frozen=True)
@@ -57,7 +57,7 @@ async def compile_for_save(
         _entries(columns, draft),
         known_keys=known_keys,
         known_tables=await table_crud.all_codes(session),
-        library=EMPTY_LIBRARY,
+        library=await library_for(session, columns, extra=draft.formula),
     )
     reason = plan.failures.get(draft.key)
     if reason is not None:

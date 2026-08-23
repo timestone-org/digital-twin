@@ -12,12 +12,16 @@ from types import ModuleType
 from sqlalchemy import CheckConstraint
 
 from platform_server.apps.dataset.models import (
+    CODE_PATTERN,
+    DEFAULT_CATEGORY,
     KEY_PATTERN,
+    MAX_CATEGORY_LENGTH,
     MAX_DECIMALS,
     MAX_FORMULA_LENGTH,
     MAX_INTERVAL_MS,
     MIN_INTERVAL_MS,
     DatasetColumn,
+    DatasetFormula,
 )
 from platform_server.apps.dataset.protocols import (
     AGG_FUNCS,
@@ -30,25 +34,45 @@ from platform_server.apps.dataset.protocols import (
 
 VERSIONS = Path(__file__).resolve().parents[2] / "migrations" / "versions"
 PATTERN = "*add_dataset_tables.py"
+LIBRARY_PATTERN = "*add_dataset_formulas.py"
 
 
-def _migration_path() -> Path:
-    """按文件名找到建表那一支。"""
-    matches = sorted(VERSIONS.glob(PATTERN))
+def _path_of(pattern: str) -> Path:
+    """按文件名找到某一支迁移。
+
+    Args: pattern。
+    """
+    matches = sorted(VERSIONS.glob(pattern))
     assert len(matches) == 1
     return matches[0]
 
 
-def _load_migration() -> ModuleType:
-    """把建表那一支当普通模块加载，好读它的字面量。"""
-    spec = importlib.util.spec_from_file_location(
-        "dataset_ddl", _migration_path()
-    )
+def _migration_path() -> Path:
+    """建表那一支。"""
+    return _path_of(PATTERN)
+
+
+def _load(pattern: str, name: str) -> ModuleType:
+    """把某一支迁移当普通模块加载，好读它的字面量。
+
+    Args: pattern, name。
+    """
+    spec = importlib.util.spec_from_file_location(name, _path_of(pattern))
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _load_migration() -> ModuleType:
+    """建表那一支。"""
+    return _load(PATTERN, "dataset_ddl")
+
+
+def _load_library_migration() -> ModuleType:
+    """公式库那一支。"""
+    return _load(LIBRARY_PATTERN, "dataset_library_ddl")
 
 
 def test_the_migration_does_not_import_live_constants() -> None:
@@ -124,3 +148,47 @@ def test_the_hypertable_carries_no_retention_policy() -> None:
     """⚠ 台账默认永久保留（D7）：加了保留策略就是静默删历史，不可逆。"""
     source = _migration_path().read_text(encoding="utf-8")
     assert "add_retention_policy" not in source
+
+
+def test_the_library_migration_does_not_import_live_constants() -> None:
+    """⚠ 冻结件不许 import 活常量——这条比下面几条都重要。"""
+    source = _path_of(LIBRARY_PATTERN).read_text(encoding="utf-8")
+    assert "from platform_server" not in source
+    assert "import platform_server" not in source
+
+
+def test_the_library_bounds_match_the_live_constants() -> None:
+    """公式体长度、分类长度与出厂分类三处两侧一致。"""
+    module = _load_library_migration()
+    assert module.MAX_FORMULA_LENGTH == MAX_FORMULA_LENGTH
+    assert module.MAX_CATEGORY_LENGTH == MAX_CATEGORY_LENGTH
+    assert module.DEFAULT_CATEGORY == DEFAULT_CATEGORY
+
+
+def test_the_code_check_is_the_column_key_rule_with_doubled_quotes() -> None:
+    """⚠ 公式标识与列 key 同一条禁令：任一侧放宽，`@标识(` 就切不回这条公式。"""
+    module = _load_library_migration()
+    assert CODE_PATTERN == KEY_PATTERN
+    assert (
+        f"code ~ '{CODE_PATTERN.replace(chr(39), 2 * chr(39))}'"
+        == module.CODE_CHECK
+    )
+
+
+def test_the_library_table_carries_the_same_checks_as_the_migration() -> None:
+    """表定义上的 CHECK 与迁移建出来的那条必须逐字一样。"""
+    module = _load_library_migration()
+    constraints = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in DatasetFormula.__table__.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+    assert (
+        constraints["ck_dataset_formulas_code_has_no_formula_token"]
+        == module.CODE_CHECK
+    )
+
+
+def test_the_library_migration_chains_onto_the_dataset_tables() -> None:
+    """⚠ 断链的表现是新库建不出这张表，而旧库看起来一切正常。"""
+    assert _load_library_migration().down_revision == _load_migration().revision

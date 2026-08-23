@@ -21,6 +21,8 @@ from auth_server.apps.auth.catalog.permissions import (
     DATASET_OVERRIDE,
     DATASET_RECORD_WRITE,
     DATASET_VIEW,
+    FORMULA_MANAGE,
+    FORMULA_VIEW,
 )
 from auth_server.apps.auth.catalog.specs import RouteRuleSpec
 
@@ -524,6 +526,36 @@ _DATASET_RULES: tuple[RouteRuleSpec, ...] = (
     ),
 )
 
+# 公式库。⚠ 它与 `dataset-tables` **平级**——路径里没有 `dataset-tables` 段，
+# 落不进上面那摞台账规则的任何一条，必须自成一档；不写就掉进 900 的方法兜底，
+# 表现是「改一条影响全部台账的公式只要 `ac:manage`」。
+# ⚠ 阶梯与台账同理：955 写兜底在下，957 读在上。反过来的话，`*` 方法的写兜底
+# 会把 GET 一并收进 manage，只有读权限的人连公式库列表都打不开。
+_FORMULA_RULES: tuple[RouteRuleSpec, ...] = (
+    RouteRuleSpec(
+        f"{_PLATFORM}/formulas*",
+        "*",
+        codes=(FORMULA_MANAGE,),
+        priority=955,
+        description=(
+            "公式库写操作的兜底：建改删库公式、停用与恢复出厂口径。"
+            "⚠ 用 `*` 方法而不是逐个方法列，是为了让将来新增的方法也落在"
+            "公式库自己的码上"
+        ),
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/formulas*",
+        "GET",
+        codes=(FORMULA_VIEW,),
+        priority=957,
+        description=(
+            "公式库列表、详情与引用反查。必须压过上面那条写兜底——那条用的是 "
+            "`*` 方法，会把 GET 一并收进 manage，只读用户于是连库里有哪些"
+            "公式都看不到"
+        ),
+    ),
+)
+
 PLATFORM_RULES: tuple[RouteRuleSpec, ...] = (
     *_PROBE_RULES,
     *_HVAC_RULES,
@@ -532,5 +564,6 @@ PLATFORM_RULES: tuple[RouteRuleSpec, ...] = (
     *_COLLECT_RULES,
     *_ASSET_RULES,
     *_DATASET_RULES,
+    *_FORMULA_RULES,
     *_PUBLIC_RULES,
 )

@@ -4,6 +4,10 @@ from platform_server.apps.dataset.crud.column import (
     ColumnCrud,
     column_crud,
 )
+from platform_server.apps.dataset.crud.formula import (
+    FormulaCrud,
+    formula_crud,
+)
 from platform_server.apps.dataset.crud.record import (
     CollectedRow,
     RecordCrud,
@@ -19,11 +23,13 @@ from platform_server.apps.dataset.crud.table import (
 __all__ = [
     "CollectedRow",
     "ColumnCrud",
+    "FormulaCrud",
     "RecordCrud",
     "RecordWindow",
     "TableCrud",
     "WholeStatsRow",
     "column_crud",
+    "formula_crud",
     "record_crud",
     "table_crud",
 ]

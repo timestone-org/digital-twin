@@ -181,7 +181,10 @@ export interface DatasetFormulaCatalog {
   rules: string[]
   columns: DatasetFormulaColumn[]
   tables: DatasetFormulaTable[]
-  /** 库公式标识。⚠ 公式库随第 4 期落地，在那之前恒为空。 */
+  /**
+   * 启用中的库公式标识。详情走 `P/formulas` 那一族取，本字段只喂插入面板。
+   * ⚠ 停用的不在内：停用不是「藏起来」，引用它的列会在解析期报错。
+   */
   library: string[]
 }
 
@@ -330,4 +333,81 @@ export interface DatasetRecompute {
   /** 待重算的行数触顶，本次只算了最早的 `limit` 行。 */
   is_truncated: boolean
   limit: number
+}
+
+/**
+ * 库公式的形参种类。
+ * ⚠ 两档差在**实参能是什么**：`column` 只收裸列引用 `{列key}`，因为
+ * `PREV` / `*_OVER` / `*_ALL` 要知道是哪一列；`value` 收任意表达式。
+ */
+export const DATASET_FORMULA_PARAM_KINDS = ['column', 'value'] as const
+export type DatasetFormulaParamKind =
+  (typeof DATASET_FORMULA_PARAM_KINDS)[number]
+
+/** 库公式的一个形参。对应后端 `FormulaParamSpec`。 */
+export interface DatasetFormulaParam {
+  name: string
+  kind: DatasetFormulaParamKind
+  /** 报错与模板里显示的名字，空则退回 `name`。 */
+  label: string
+  hint: string
+  /**
+   * ⚠ `value` 形参的默认值**不是界面预填**，它是「这个位置该放什么」的唯一
+   * 声明：落在只收字面量的位置（时间窗、`PREV` 的期数）而没有默认值，后端
+   * 保存时必然 400（docs/DATASET_DESIGN.md §5.11）。
+   */
+  default: unknown
+}
+
+/**
+ * 一条库公式。对应后端 `FormulaDefOut`。
+ * ⚠ 库公式是**跨台账的全局资源**：改一条会同时改掉所有引用它的台账列，
+ * 且历史行要等重算之后才跟上。
+ */
+export interface DatasetFormulaDef {
+  id: string
+  /** 调用点上的那个字面量 `@code(…)`。⚠ 建后不可改。 */
+  code: string
+  name: string
+  category: string
+  /** 公式体，形参写作 `{形参名}`。 */
+  expression: string
+  params: DatasetFormulaParam[]
+  description: string | null
+  /** 出厂预设：删不得（只能停用），改坏了能恢复出厂口径。 */
+  is_builtin: boolean
+  /**
+   * ⚠ 停用不是「藏起来」：引用它的台账列会在解析期报错，那张表的录入、导入、
+   * 人工修正与重算一起失败。停用一条还在被引用的公式，后端一律 409。
+   */
+  is_enabled: boolean
+  /** `@标识(形参1, 形参2)`，界面直接展示。 */
+  signature: string
+  created_at: string
+  updated_at: string
+}
+
+/** 一处引用：哪张台账的哪一列在用这条库公式。对应后端 `FormulaUsageOut`。 */
+export interface DatasetFormulaUsage {
+  table_id: string
+  table_code: string
+  table_name: string
+  column_id: string
+  column_key: string
+  column_name: string
+  formula: string
+  /**
+   * 列公式里亲手写了这个调用。
+   * ⚠ 为 false 表示它是被**别的库公式**带进来的——改这一列救不了，
+   * 要去改那条库公式。
+   */
+  is_direct: boolean
+}
+
+/**
+ * 改完一条库公式的回执。对应后端 `FormulaDefWithUsagesOut`。
+ * ⚠ `usages` 不能省：改动即刻生效，但历史行要等重算才跟上，界面据此提示。
+ */
+export interface DatasetFormulaDefWithUsages extends DatasetFormulaDef {
+  usages: DatasetFormulaUsage[]
 }

@@ -103,9 +103,9 @@
 
 ⚠ `/api/v1/auth/*` **故意不设 catch-all**：未枚举路径落到「受管前缀无规则 = 拒绝」。
 
-### 5.1 `/api/v1/platform` 的五面共存
+### 5.1 `/api/v1/platform` 的六面共存
 
-这个前缀下住着五套码，靠 priority 分层。**读上一行要先读下一行**：
+这个前缀下住着六套码，靠 priority 分层。**读上一行要先读下一行**：
 
 | priority | 模式 | 码 |
 |---|---|---|
@@ -116,6 +116,8 @@
 | 964 | `dataset-tables*:recompute` | `dataset:backfill` |
 | 962 | `dataset-tables*`（GET） | `dataset:view` |
 | 960 | `dataset-tables*`（`*` 方法） | `dataset:manage` |
+| 957 | `formulas*`（GET） | `formula:view` |
+| 955 | `formulas*`（`*` 方法） | `formula:manage` |
 | 940 | `collect-sources/*:test` · `…:browse` · `collect-points/*:write` | `collect:operate` |
 | 940 | `point-histories:aggregate` | `collect:view` |
 | 932 | `collect-*` · `point-histories*`（GET） | `collect:view` |
@@ -146,6 +148,10 @@
 `GET …/records`（靠 968 压回来）与 `…/records/{id}/overrides`（靠 970 压回来）。
 少压一级的表现都是 403：只读用户翻不出一行数据，或者能录一行数据的人顺手就能
 改掉现场采回来的自动值。
+
+⚠ `formulas*` 两级**与台账那七级是并列的两摞**，不是它的延伸：公式库的路径里
+没有 `dataset-tables` 段，落不进那摞里的任何一条。少了这两条它会掉进 900 的
+方法兜底，表现是「改一条影响全部台账的公式只要 `ac:manage`」。
 
 ## 6. 数据
 
