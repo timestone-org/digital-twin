@@ -1255,6 +1255,51 @@
         "title": "ApiResponse[CursorPage[RawSampleOut]]",
         "type": "object"
       },
+      "ApiResponse_CursorPage_RecordOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CursorPage_RecordOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[CursorPage[RecordOut]]",
+        "type": "object"
+      },
       "ApiResponse_CursorPage_StartupEpisodeOut__": {
         "properties": {
           "code": {
@@ -1660,6 +1705,51 @@
         "title": "ApiResponse[FormulaValidateOut]",
         "type": "object"
       },
+      "ApiResponse_LatestOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LatestOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[LatestOut]",
+        "type": "object"
+      },
       "ApiResponse_LiveReadingsOut_": {
         "properties": {
           "code": {
@@ -1883,6 +1973,96 @@
           }
         },
         "title": "ApiResponse[NodeOut]",
+        "type": "object"
+      },
+      "ApiResponse_OverrideBulkClearOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OverrideBulkClearOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[OverrideBulkClearOut]",
+        "type": "object"
+      },
+      "ApiResponse_OverrideWriteOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OverrideWriteOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[OverrideWriteOut]",
         "type": "object"
       },
       "ApiResponse_Page_AcUnitOut__": {
@@ -2740,6 +2920,141 @@
         "title": "ApiResponse[RecommendOut]",
         "type": "object"
       },
+      "ApiResponse_RecomputeOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecomputeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[RecomputeOut]",
+        "type": "object"
+      },
+      "ApiResponse_RecordDeleteOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordDeleteOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[RecordDeleteOut]",
+        "type": "object"
+      },
+      "ApiResponse_RecordWriteOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordWriteOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[RecordWriteOut]",
+        "type": "object"
+      },
       "ApiResponse_RoomOut_": {
         "properties": {
           "code": {
@@ -2783,6 +3098,51 @@
           }
         },
         "title": "ApiResponse[RoomOut]",
+        "type": "object"
+      },
+      "ApiResponse_SeriesOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SeriesOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[SeriesOut]",
         "type": "object"
       },
       "ApiResponse_SourceObjectsOut_": {
@@ -5309,6 +5669,39 @@
         "title": "CursorPage[RawSampleOut]",
         "type": "object"
       },
+      "CursorPage_RecordOut_": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RecordOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          }
+        },
+        "required": [
+          "items",
+          "next",
+          "has_more"
+        ],
+        "title": "CursorPage[RecordOut]",
+        "type": "object"
+      },
       "CursorPage_StartupEpisodeOut_": {
         "properties": {
           "has_more": {
@@ -6028,6 +6421,25 @@
           "metrics"
         ],
         "title": "DatasetOut",
+        "type": "object"
+      },
+      "DatasetSeriesPointOut": {
+        "description": "序列上的一个点。\n\n⚠ 字段名与点位历史读侧的 `HistoryPointOut` 对齐（`ts` / `value`），\n趋势页的渲染代码因此可以两边共用一份。\n⚠ 类名带 `Dataset` 前缀是被迫的：空调面已有一个 `SeriesPointOut`，\n同名会让 FastAPI 把**两边**的形状名都改成带模块路径的长名，而那会当场\n打断前端已经钉住空调那份的契约用例。",
+        "properties": {
+          "ts": {
+            "format": "date-time",
+            "title": "Ts",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "required": [
+          "ts",
+          "value"
+        ],
+        "title": "DatasetSeriesPointOut",
         "type": "object"
       },
       "DatasetsOut": {
@@ -6847,6 +7259,40 @@
           "quality"
         ],
         "title": "HistoryPointOut",
+        "type": "object"
+      },
+      "LatestOut": {
+        "description": "最后一行的值。大屏实时取数就读它。",
+        "properties": {
+          "computed": {
+            "additionalProperties": true,
+            "title": "Computed",
+            "type": "object"
+          },
+          "ts": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ts"
+          },
+          "values": {
+            "additionalProperties": true,
+            "title": "Values",
+            "type": "object"
+          }
+        },
+        "required": [
+          "ts",
+          "values",
+          "computed"
+        ],
+        "title": "LatestOut",
         "type": "object"
       },
       "LayoutIssueOut": {
@@ -7931,6 +8377,230 @@
           }
         },
         "title": "NodeUpdateIn",
+        "type": "object"
+      },
+      "OverrideBulkClearIn": {
+        "additionalProperties": false,
+        "description": "按列 + 时间范围批量撤销人工修正（仪表修好之后整段退回自动值）。\n\n⚠ 时间范围留空是**不限**。界面不许把「不限」做成默认值：一次误点就抹掉\n三年的修正，而回执只有一个数字，看不出抹掉了什么（§7.8）。",
+        "properties": {
+          "column_keys": {
+            "items": {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[^\\s@'\"(),.:{}\\[\\]]+$",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Column Keys",
+            "type": "array"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          }
+        },
+        "required": [
+          "column_keys"
+        ],
+        "title": "OverrideBulkClearIn",
+        "type": "object"
+      },
+      "OverrideBulkClearOut": {
+        "description": "批量撤销的回执。",
+        "properties": {
+          "cleared_cells": {
+            "title": "Cleared Cells",
+            "type": "integer"
+          },
+          "cleared_rows": {
+            "title": "Cleared Rows",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "is_truncated": {
+            "title": "Is Truncated",
+            "type": "boolean"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "recomputed": {
+            "title": "Recomputed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cleared_rows",
+          "cleared_cells",
+          "recomputed",
+          "failed",
+          "is_truncated",
+          "limit"
+        ],
+        "title": "OverrideBulkClearOut",
+        "type": "object"
+      },
+      "OverrideClearIn": {
+        "additionalProperties": false,
+        "description": "撤销一行的人工修正。`keys` 缺省表示整行全撤。",
+        "properties": {
+          "keys": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[^\\s@'\"(),.:{}\\[\\]]+$",
+                  "type": "string"
+                },
+                "maxItems": 200,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keys"
+          }
+        },
+        "title": "OverrideClearIn",
+        "type": "object"
+      },
+      "OverrideOut": {
+        "description": "一格人工修正的痕迹。\n\n⚠ 它只是**标记**，不参与取值——取值已经在 `values` 里生效了。\n⚠ `by_name` 冗余存一份是刻意的：账号可能被删，而这一格要一直答得出\n「谁改的」。",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By"
+          },
+          "by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By Name"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "required": [
+          "value",
+          "by",
+          "by_name",
+          "at",
+          "reason"
+        ],
+        "title": "OverrideOut",
+        "type": "object"
+      },
+      "OverrideWriteIn": {
+        "additionalProperties": false,
+        "description": "把一行里若干格改成人工判断的值。\n\n⚠ 只认 `source='point'` 的列：人工录入列请直接编辑原始值、公式列请改公式，\n两者都当场报错而不是静默忽略。\n⚠ 某一格提交为空 = 撤销那一格的修正。",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "values": {
+            "additionalProperties": true,
+            "maxProperties": 500,
+            "minProperties": 1,
+            "title": "Values",
+            "type": "object"
+          }
+        },
+        "required": [
+          "values"
+        ],
+        "title": "OverrideWriteIn",
+        "type": "object"
+      },
+      "OverrideWriteOut": {
+        "description": "写 / 撤销人工修正的回执。\n\n⚠ `cleared` 不能省：提交为空的那几格是**撤销修正**而不是「修正成空」，\n不分开说的话，用户撤了一格却看到「已修正 1 格」。",
+        "properties": {
+          "cleared": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Cleared",
+            "type": "array"
+          },
+          "has_stale_downstream": {
+            "title": "Has Stale Downstream",
+            "type": "boolean"
+          },
+          "record": {
+            "$ref": "#/components/schemas/RecordOut"
+          }
+        },
+        "required": [
+          "record",
+          "has_stale_downstream",
+          "cleared"
+        ],
+        "title": "OverrideWriteOut",
         "type": "object"
       },
       "Page_AcUnitOut_": {
@@ -9898,6 +10568,269 @@
         "title": "RecommendOut",
         "type": "object"
       },
+      "RecomputeIn": {
+        "additionalProperties": false,
+        "description": "重算公式列。时间范围留空表示整表。",
+        "properties": {
+          "since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          }
+        },
+        "title": "RecomputeIn",
+        "type": "object"
+      },
+      "RecomputeOut": {
+        "description": "一次重算的回执。",
+        "properties": {
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "is_truncated": {
+            "title": "Is Truncated",
+            "type": "boolean"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "recomputed": {
+            "title": "Recomputed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "recomputed",
+          "failed",
+          "is_truncated",
+          "limit"
+        ],
+        "title": "RecomputeOut",
+        "type": "object"
+      },
+      "RecordCreateIn": {
+        "additionalProperties": false,
+        "description": "录入一行。",
+        "properties": {
+          "ts": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ts"
+          },
+          "values": {
+            "additionalProperties": true,
+            "maxProperties": 500,
+            "title": "Values",
+            "type": "object"
+          }
+        },
+        "title": "RecordCreateIn",
+        "type": "object"
+      },
+      "RecordDeleteOut": {
+        "description": "删一行的回执。删除同样会让它之后那些行的公式结果失真。",
+        "properties": {
+          "deleted_row_id": {
+            "format": "uuid",
+            "title": "Deleted Row Id",
+            "type": "string"
+          },
+          "has_stale_downstream": {
+            "title": "Has Stale Downstream",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deleted_row_id",
+          "has_stale_downstream"
+        ],
+        "title": "RecordDeleteOut",
+        "type": "object"
+      },
+      "RecordOut": {
+        "description": "一行台账。",
+        "properties": {
+          "compute_error": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compute Error"
+          },
+          "computed": {
+            "additionalProperties": true,
+            "title": "Computed",
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "overrides": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/OverrideOut"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overrides"
+          },
+          "row_id": {
+            "format": "uuid",
+            "title": "Row Id",
+            "type": "string"
+          },
+          "samples": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Samples"
+          },
+          "source": {
+            "enum": [
+              "collect",
+              "import",
+              "manual"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "ts": {
+            "format": "date-time",
+            "title": "Ts",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "values": {
+            "additionalProperties": true,
+            "title": "Values",
+            "type": "object"
+          }
+        },
+        "required": [
+          "row_id",
+          "ts",
+          "values",
+          "overrides",
+          "samples",
+          "computed",
+          "compute_error",
+          "source",
+          "created_by_name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "RecordOut",
+        "type": "object"
+      },
+      "RecordUpdateIn": {
+        "additionalProperties": false,
+        "description": "改一行的原始值，可连带改数据时间。\n\n⚠ 改 `ts` 会走「先删后插」：`ts` 是分区键，就地 UPDATE 不合法（§4.3b）。\n行标识与录入署名原样带过去，前端持有的引用不会失效。",
+        "properties": {
+          "ts": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ts"
+          },
+          "values": {
+            "additionalProperties": true,
+            "maxProperties": 500,
+            "title": "Values",
+            "type": "object"
+          }
+        },
+        "title": "RecordUpdateIn",
+        "type": "object"
+      },
+      "RecordWriteOut": {
+        "description": "一次写入的回执。\n\n⚠ `has_stale_downstream`：往回补录或改历史行之后，它**之后**那些行里的\n`PREV` / 时间窗 / 整表公式结果就不准了。本期只如实上报、不做级联重算——\n级联的边界在最坏情况下是整表，而它由一次单行编辑触发（§5.10）。",
+        "properties": {
+          "has_stale_downstream": {
+            "title": "Has Stale Downstream",
+            "type": "boolean"
+          },
+          "record": {
+            "$ref": "#/components/schemas/RecordOut"
+          }
+        },
+        "required": [
+          "record",
+          "has_stale_downstream"
+        ],
+        "title": "RecordWriteOut",
+        "type": "object"
+      },
       "ReplaceLayoutIn": {
         "additionalProperties": false,
         "description": "整树替换。\n\n⚠ `expected_version` 必填：不带版本断言的整树替换就是「最后写入者获胜」，\n人与 Agent 同时在场时一方的改动会被静默抹掉（ADR-0012 二）。",
@@ -10264,6 +11197,36 @@
           "values"
         ],
         "title": "RuntimeParamWriteIn",
+        "type": "object"
+      },
+      "SeriesOut": {
+        "description": "若干列的时间序列，按 ts 升序。\n\n⚠ `is_truncated` 与 `limit` 必须如实给：只给 `series` 的话，前端分不清\n「这段时间就这么多数据」与「数据太多被砍了」，用户看到的是一段看不出\n不完整的曲线（§6.2）。",
+        "properties": {
+          "is_truncated": {
+            "title": "Is Truncated",
+            "type": "boolean"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "series": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/DatasetSeriesPointOut"
+              },
+              "type": "array"
+            },
+            "title": "Series",
+            "type": "object"
+          }
+        },
+        "required": [
+          "series",
+          "is_truncated",
+          "limit"
+        ],
+        "title": "SeriesOut",
         "type": "object"
       },
       "SeriesPointOut": {
@@ -18277,6 +19240,720 @@
         "summary": "校验公式",
         "tags": [
           "dataset-formula"
+        ]
+      }
+    },
+    "/api/v1/platform/dataset-tables/{table_id}/latest": {
+      "get": {
+        "description": "最后一行的值。⚠ 给的是 effective：大屏显示的必须是修正之后那个数。\n\nArgs: table_id, session, _viewer。",
+        "operationId": "read_latest_api_v1_platform_dataset_tables__table_id__latest_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_LatestOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "最后一行",
+        "tags": [
+          "dataset-series"
+        ]
+      }
+    },
+    "/api/v1/platform/dataset-tables/{table_id}/overrides:clear": {
+      "post": {
+        "description": "把某几列在一段时间里的修正整体撤掉，并重算受影响的行。\n\nArgs: table_id, payload, session, writer。",
+        "operationId": "clear_overrides_api_v1_platform_dataset_tables__table_id__overrides_clear_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OverrideBulkClearIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_OverrideBulkClearOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "按列批量撤销人工修正",
+        "tags": [
+          "dataset-override"
+        ]
+      }
+    },
+    "/api/v1/platform/dataset-tables/{table_id}/records": {
+      "get": {
+        "description": "按数据时间倒序翻页。**游标分页**，`after` 从上一页原样带回。\n\nArgs: table_id, session, page, filters, _viewer。",
+        "operationId": "list_records_api_v1_platform_dataset_tables__table_id__records_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_CursorPage_RecordOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "数据行列表",
+        "tags": [
+          "dataset-record"
+        ]
+      },
+      "post": {
+        "description": "录入一行，公式列随之算出。\n\nArgs: table_id, payload, session, response, writer。",
+        "operationId": "create_record_api_v1_platform_dataset_tables__table_id__records_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RecordWriteOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "录入一行",
+        "tags": [
+          "dataset-record"
+        ]
+      }
+    },
+    "/api/v1/platform/dataset-tables/{table_id}/records/{row_id}": {
+      "delete": {
+        "description": "删一行。回执带上「有没有让别的行的公式结果过期」。\n\n⚠ 不是 204：删除同样会让下游过期，而那件事只能由回执说出来。\nArgs: session, locator, writer。",
+        "operationId": "delete_record_api_v1_platform_dataset_tables__table_id__records__row_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "row_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Row Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ts",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ts"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RecordDeleteOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除一行",
+        "tags": [
+          "dataset-record"
+        ]
+      },
+      "patch": {
+        "description": "改一行的原始值，可连带改数据时间。公式列随之重算。\n\nArgs: payload, session, locator, writer。",
+        "operationId": "update_record_api_v1_platform_dataset_tables__table_id__records__row_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "row_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Row Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ts",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ts"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RecordWriteOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "编辑一行",
+        "tags": [
+          "dataset-record"
+        ]
+      }
+    },
+    "/api/v1/platform/dataset-tables/{table_id}/records/{row_id}/overrides": {
+      "delete": {
+        "description": "撤销修正，这些格回落到原值。请求体可以整个不传，等价于整行全撤。\n\nArgs: session, locator, writer, payload。",
+        "operationId": "delete_overrides_api_v1_platform_dataset_tables__table_id__records__row_id__overrides_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "row_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Row Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ts",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ts"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/OverrideClearIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_OverrideWriteOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "撤销一行的人工修正",
+        "tags": [
+          "dataset-override"
+        ]
+      },
+      "put": {
+        "description": "把一行里若干格改成人工判断的值；采集原值一个字都不动。\n\n⚠ 某一格提交为空 = 撤销那一格的修正，回执的 `cleared` 会点名。\nArgs: payload, session, locator, writer。",
+        "operationId": "put_overrides_api_v1_platform_dataset_tables__table_id__records__row_id__overrides_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "row_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Row Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ts",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ts"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OverrideWriteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_OverrideWriteOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "写人工修正",
+        "tags": [
+          "dataset-override"
+        ]
+      }
+    },
+    "/api/v1/platform/dataset-tables/{table_id}/series": {
+      "get": {
+        "description": "按列取序列，时刻升序。触顶时留下的是**最新**那批，回执会说出来。\n\nArgs: table_id, session, keys, _viewer, since / until。",
+        "operationId": "read_series_api_v1_platform_dataset_tables__table_id__series_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "keys",
+            "required": true,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 50,
+              "title": "Keys",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_SeriesOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "若干列的时间序列",
+        "tags": [
+          "dataset-series"
+        ]
+      }
+    },
+    "/api/v1/platform/dataset-tables/{table_id}:recompute": {
+      "post": {
+        "description": "改完公式之后重算。只写计算值，不碰任何原始录入值。\n\nArgs: table_id, payload, session, writer。",
+        "operationId": "recompute_api_v1_platform_dataset_tables__table_id__recompute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecomputeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RecomputeOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "重算公式列",
+        "tags": [
+          "dataset-series"
         ]
       }
     },

@@ -1,6 +1,8 @@
 """组合根：把配置拧成各个协作对象。装配只在这里发生，模块顶层不做副作用。"""
 
 from dataclasses import dataclass
+from datetime import tzinfo
+from zoneinfo import ZoneInfo
 
 from lib.cache import Cache, PubSub
 from lib.db import Database, PoolProfile, ReadOnlySqlSource, SourceProfile
@@ -26,6 +28,7 @@ from platform_server.apps.dashboard.services import (
     SubscriptionViewers,
     load_module_catalog,
 )
+from platform_server.apps.dataset.services import DatasetDirtyLog
 from platform_server.lease import Lease, RedisLease
 from platform_server.opcua import OpcuaClient
 from platform_server.realtime import RealtimeClient
@@ -83,6 +86,11 @@ class Container:
     object_store: ObjectStore
     # 数据源口令的加解密器。密钥派生只在装配时做一次
     credential_cipher: CredentialCipher
+    # 台账写入后的报脏口，见 docs/DATASET_DESIGN.md §16
+    dataset_dirty: DatasetDirtyLog
+    # 台账按日历回推月/年窗口时用的业务时区。⚠ 在装配时解析而不是用到再解析：
+    # 时区名写错了要在进程启动时就拒绝，而不是等某一条公式算到月窗口才 500
+    dataset_timezone: tzinfo
 
 
 def build_container(settings: Settings) -> Container:
@@ -115,14 +123,10 @@ def build_container(settings: Settings) -> Container:
             publisher=pubsub, channel=settings.collect_plan_channel
         ),
         pubsub=pubsub,
-        snapshots=RedisSnapshotSource(
-            url=settings.url(), timeout_s=settings.redis_timeout_s
-        ),
-        viewers=SubscriptionViewers(
-            source=ReadOnlyViewerSource(database=viewer_database)
-        ),
+        snapshots=_build_snapshots(settings),
+        viewers=SubscriptionViewers(source=_viewer_source(viewer_database)),
         collect_watchers=SubscriptionWatchers(
-            source=ReadOnlyViewerSource(database=viewer_database)
+            source=_viewer_source(viewer_database)
         ),
         viewer_database=viewer_database,
         realtime=_build_realtime(settings),
@@ -133,6 +137,30 @@ def build_container(settings: Settings) -> Container:
         # ⚠ 构造不连网：桶不存在要到第一次真正读写时才报，不在启动期误判
         object_store=create_object_store(settings),
         credential_cipher=_build_cipher(settings),
+        dataset_dirty=DatasetDirtyLog(sink=cache),
+        # ⚠ 时区在装配时就解析：名字写错了要在进程启动时拒绝，而不是等某一条
+        # 公式算到月窗口才 500
+        dataset_timezone=ZoneInfo(settings.dataset_bucket_timezone),
+    )
+
+
+def _viewer_source(database: Database) -> ReadOnlyViewerSource:
+    """订阅表的只读面。
+
+    ⚠ 两条链路各建一个：它们读的是同一张表、同一个只读连接池，只是把主题
+    解释成了另一种实体。
+    Args: database。
+    """
+    return ReadOnlyViewerSource(database=database)
+
+
+def _build_snapshots(settings: Settings) -> SnapshotSource:
+    """实时快照的只读面。发布器角色才用，但每个角色装的是同一份容器。
+
+    Args: settings。
+    """
+    return RedisSnapshotSource(
+        url=settings.url(), timeout_s=settings.redis_timeout_s
     )
 
 

@@ -26,7 +26,18 @@ import type {
   DatasetFormulaPreview,
   DatasetFormulaTable,
   DatasetFormulaValidation,
+  DatasetLatest,
+  DatasetOverride,
+  DatasetOverrideBulkClear,
+  DatasetOverrideWrite,
   DatasetPrevDep,
+  DatasetRecompute,
+  DatasetRecord,
+  DatasetRecordDelete,
+  DatasetRecordSource,
+  DatasetRecordWrite,
+  DatasetSeries,
+  DatasetSeriesPoint,
   DatasetTable,
   DatasetTableSummary,
   DatasetWholeDep,
@@ -37,6 +48,7 @@ import {
   DATASET_COLLECT_MODES,
   DATASET_COLUMN_SOURCES,
   DATASET_COLUMN_TYPES,
+  DATASET_RECORD_SOURCES,
 } from '@dt/contracts'
 
 interface OpenApiSchema {
@@ -189,6 +201,76 @@ const PREVIEW_KEYS = {
   history_refs: true,
 } satisfies Keys<DatasetFormulaPreview>
 
+const OVERRIDE_KEYS = {
+  value: true,
+  by: true,
+  by_name: true,
+  at: true,
+  reason: true,
+} satisfies Keys<DatasetOverride>
+
+const RECORD_KEYS = {
+  row_id: true,
+  ts: true,
+  values: true,
+  overrides: true,
+  samples: true,
+  computed: true,
+  compute_error: true,
+  source: true,
+  created_by_name: true,
+  created_at: true,
+  updated_at: true,
+} satisfies Keys<DatasetRecord>
+
+const RECORD_WRITE_KEYS = {
+  record: true,
+  has_stale_downstream: true,
+} satisfies Keys<DatasetRecordWrite>
+
+const RECORD_DELETE_KEYS = {
+  deleted_row_id: true,
+  has_stale_downstream: true,
+} satisfies Keys<DatasetRecordDelete>
+
+const OVERRIDE_WRITE_KEYS = {
+  ...RECORD_WRITE_KEYS,
+  cleared: true,
+} satisfies Keys<DatasetOverrideWrite>
+
+const BULK_CLEAR_KEYS = {
+  cleared_rows: true,
+  cleared_cells: true,
+  recomputed: true,
+  failed: true,
+  is_truncated: true,
+  limit: true,
+} satisfies Keys<DatasetOverrideBulkClear>
+
+const LATEST_KEYS = {
+  ts: true,
+  values: true,
+  computed: true,
+} satisfies Keys<DatasetLatest>
+
+const SERIES_POINT_KEYS = {
+  ts: true,
+  value: true,
+} satisfies Keys<DatasetSeriesPoint>
+
+const SERIES_KEYS = {
+  series: true,
+  is_truncated: true,
+  limit: true,
+} satisfies Keys<DatasetSeries>
+
+const RECOMPUTE_KEYS = {
+  recomputed: true,
+  failed: true,
+  is_truncated: true,
+  limit: true,
+} satisfies Keys<DatasetRecompute>
+
 const SHAPES: Record<string, Record<string, true>> = {
   TableSummaryOut: { ...SUMMARY_KEYS },
   TableOut: { ...TABLE_KEYS },
@@ -205,6 +287,18 @@ const SHAPES: Record<string, Record<string, true>> = {
   FormulaFunctionsOut: { ...CATALOG_KEYS },
   FormulaValidateOut: { ...VALIDATION_KEYS },
   FormulaPreviewOut: { ...PREVIEW_KEYS },
+  OverrideOut: { ...OVERRIDE_KEYS },
+  RecordOut: { ...RECORD_KEYS },
+  RecordWriteOut: { ...RECORD_WRITE_KEYS },
+  RecordDeleteOut: { ...RECORD_DELETE_KEYS },
+  OverrideWriteOut: { ...OVERRIDE_WRITE_KEYS },
+  OverrideBulkClearOut: { ...BULK_CLEAR_KEYS },
+  LatestOut: { ...LATEST_KEYS },
+  // ⚠ 类名带 `Dataset` 前缀是被迫的：空调面已有一个 `SeriesPointOut`，
+  // 同名会让 FastAPI 把**两边**的形状名都改成带模块路径的长名
+  DatasetSeriesPointOut: { ...SERIES_POINT_KEYS },
+  SeriesOut: { ...SERIES_KEYS },
+  RecomputeOut: { ...RECOMPUTE_KEYS },
 }
 
 describe('台账线形与 openapi 一致', () => {
@@ -222,13 +316,61 @@ describe('台账线形与 openapi 一致', () => {
       DatasetColumnSource: DATASET_COLUMN_SOURCES,
       DatasetColumnType: DATASET_COLUMN_TYPES,
       DatasetAggFunc: DATASET_AGG_FUNCS,
+      DatasetRecordSource: DATASET_RECORD_SOURCES,
     }
     expect(Object.values(enums).map((values) => [...values].sort())).toEqual([
       ['aggregate', 'manual'],
       ['formula', 'manual', 'point'],
       ['bool', 'number', 'string'],
       ['avg', 'count', 'delta', 'first', 'last', 'max', 'min', 'sum'],
+      ['collect', 'import', 'manual'],
     ])
+  })
+
+  it('一行的来源是三档闭合取值', () => {
+    // ⚠ 采集写出来的行与人填的行在界面上的处置不同（能不能改、撤销的措辞），
+    // 前端多一档就是一个永远不会出现的分支，少一档就是一行显示不出来源
+    const source: DatasetRecordSource = 'collect'
+    expect(DATASET_RECORD_SOURCES).toContain(source)
+  })
+
+  it('一行的取值口径已经生效，前端不再叠一次修正', () => {
+    // ⚠ `values` 出参已经是 effective（docs/DATASET_DESIGN.md D4）：类型上
+    // `overrides[].value` 与 `values[key]` 是两个不相干的字段，谁也不是谁的
+    // 补丁。写成「原值 + 补丁」的形状，前端迟早会去叠第二遍
+    const record: DatasetRecord = {
+      row_id: 'r-1',
+      ts: '2026-08-23T10:00:00.000Z',
+      values: { 温度: 25 },
+      overrides: {
+        温度: {
+          value: 25,
+          by: 'u-1',
+          by_name: '张三',
+          at: '2026-08-23T10:05:00.000Z',
+          reason: null,
+        },
+      },
+      samples: null,
+      computed: {},
+      compute_error: null,
+      source: 'manual',
+      created_by_name: '张三',
+      created_at: '2026-08-23T10:00:00.000Z',
+      updated_at: '2026-08-23T10:05:00.000Z',
+    }
+    expect(record.values['温度']).toBe(record.overrides?.['温度']?.value)
+  })
+
+  it('序列的截断标记与行数上限都在类型里', () => {
+    // ⚠ 只有 series 的话，界面分不清「这段时间就这么多数据」与「数据太多被
+    // 砍了」，用户看到的是一段看不出不完整的曲线（§6.2）
+    const series: DatasetSeries = {
+      series: { 产量: [{ ts: '2026-08-23T10:00:00.000Z', value: 1 }] },
+      is_truncated: true,
+      limit: 20000,
+    }
+    expect([series.is_truncated, series.limit]).toEqual([true, 20000])
   })
 
   it('中间那档列来源是 point 而不是协议名', () => {

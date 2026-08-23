@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from lib.db.hooks import run_after_commit_hooks
 from lib.logging.logger import get_logger
 
 _logger = get_logger("lib.db")
@@ -67,7 +68,11 @@ class Database:
 
     @asynccontextmanager
     async def session(self) -> AsyncGenerator[AsyncSession]:
-        """一次逻辑操作一个事务：正常出块提交，异常回滚。"""
+        """一次逻辑操作一个事务：正常出块提交，异常回滚。
+
+        提交成功之后才跑登记的副作用（`lib.db.hooks`）——回滚掉的事务不该在
+        外面留下「它成功了」的痕迹。
+        """
         async with self._sessions() as session:
             try:
                 yield session
@@ -76,6 +81,7 @@ class Database:
                 raise
             else:
                 await session.commit()
+                await run_after_commit_hooks(session)
 
     async def ping(self) -> bool:
         """连通性自检，供启动自检与就绪探针复用。"""

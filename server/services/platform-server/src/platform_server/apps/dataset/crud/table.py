@@ -59,6 +59,15 @@ class TableCrud(CrudBase[DatasetTable]):
         rows = await session.execute(select(DatasetTable.code))
         return frozenset(rows.scalars().all())
 
+    async def code_to_id(self, session: AsyncSession) -> dict[str, uuid.UUID]:
+        """全部台账的 `{编码: id}`。公式里的跨表引用写的是编码，取数要的是 id。
+
+        ⚠ 集合有界（业务台账是几十张级别），故整份取回而不逐个查。
+        Args: session。
+        """
+        rows = await session.execute(select(DatasetTable.code, DatasetTable.id))
+        return {row.code: row.id for row in rows.all()}
+
     async def column_counts(
         self, session: AsyncSession, table_ids: frozenset[uuid.UUID]
     ) -> dict[uuid.UUID, int]:

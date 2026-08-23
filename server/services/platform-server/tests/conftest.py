@@ -18,12 +18,17 @@ import pytest
 from fastapi import FastAPI
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
+    AsyncSession,
+    async_sessionmaker,
+)
 from unit.collect_fakes import (
     FakeChannelPublisher,
     FakeCommandTransport,
     FakeHistorySource,
 )
+from unit.dataset_fakes import FakeSetSink
 from unit.opcua_fakes import FakeNodeWriter
 from unit.source_fakes import FakeAcSource, InMemoryStream, full_shape
 
@@ -34,7 +39,7 @@ from lib.auth import (
     sign_context,
 )
 from lib.config import load_settings
-from lib.db import Database
+from lib.db import Database, run_after_commit_hooks
 from lib.idempotency import IdempotencyStore
 from lib.logging import configure_logging
 from lib.testing import FakeObjectStore, InMemoryCache
@@ -67,9 +72,13 @@ from platform_server.apps.dashboard.services import (
     ValidationContext,
 )
 from platform_server.apps.dataset.catalog import (
+    DATASET_BACKFILL,
     DATASET_MANAGE,
+    DATASET_OVERRIDE,
+    DATASET_RECORD_WRITE,
     DATASET_VIEW,
 )
+from platform_server.apps.dataset.services import DatasetDirtyLog
 from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
 from platform_server.apps.hvac.deps import (
     get_ac_source_reader,
@@ -102,6 +111,9 @@ FULL_CODES = (
     ASSET_MANAGE,
     DATASET_VIEW,
     DATASET_MANAGE,
+    DATASET_RECORD_WRITE,
+    DATASET_OVERRIDE,
+    DATASET_BACKFILL,
 )
 # 命令总线的两档预算，用例里固定住，断言里的信封才是可手写的常量
 BROWSE_TIMEOUT_S = 10.0
@@ -249,6 +261,9 @@ def _session_override(
                 raise
             else:
                 await session.commit()
+                # ⚠ 与 `lib.db.Database.session` 同构：不跑钩子的话，报脏这类
+                # 提交后副作用在用例里根本不发生，而它们在生产里是主路径
+                await run_after_commit_hooks(session)
 
     return override
 
@@ -276,6 +291,7 @@ class MakerSessions:
                 raise
             else:
                 await opened.commit()
+                await run_after_commit_hooks(opened)
 
 
 @dataclass
@@ -290,6 +306,8 @@ class AppContext:
     session: AsyncSession
     """素材字节的进程内替身；用例据它断言「搬没搬」「删没删」。"""
     object_store: FakeObjectStore
+    """台账报脏的进程内替身；用例据它断言「报没报脏」。"""
+    dirty: FakeSetSink
 
 
 @dataclass(frozen=True)
@@ -378,6 +396,13 @@ class ExternalFakes:
     points: StaticPointCatalog
     collect: CollectFakes
     nodes: FakeNodeWriter
+    dirty: FakeSetSink
+
+
+@pytest.fixture
+def dirty_sink() -> FakeSetSink:
+    """台账报脏用的进程内集合。"""
+    return FakeSetSink()
 
 
 @pytest.fixture
@@ -386,16 +411,18 @@ def external_fakes(
     point_catalog: StaticPointCatalog,
     collect_fakes: CollectFakes,
     node_writer: FakeNodeWriter,
+    dirty_sink: FakeSetSink,
 ) -> ExternalFakes:
-    """把四组假件收成一包给 `app_context`。
+    """把五组假件收成一包给 `app_context`。
 
-    Args: ac_source, point_catalog, collect_fakes, node_writer。
+    Args: ac_source, point_catalog, collect_fakes, node_writer, dirty_sink。
     """
     return ExternalFakes(
         ac_source=ac_source,
         points=point_catalog,
         collect=collect_fakes,
         nodes=node_writer,
+        dirty=dirty_sink,
     )
 
 
@@ -458,6 +485,23 @@ def _faked_container(built: Container, fakes: ExternalFakes) -> Container:
             publisher=fakes.collect.plans, channel=PLAN_CHANNEL
         ),
         history=fakes.collect.history,
+        dataset_dirty=DatasetDirtyLog(sink=fakes.dirty),
+    )
+
+
+def _rollback_sessions(
+    connection: AsyncConnection,
+) -> async_sessionmaker[AsyncSession]:
+    """一条回滚事务上的会话工厂。
+
+    ⚠ `join_transaction_mode="create_savepoint"`：请求内的 commit 只落到保存点，
+    外层事务最后整体回滚，跨请求可见但不留痕。
+    Args: connection。
+    """
+    return async_sessionmaker(
+        bind=connection,
+        expire_on_commit=False,
+        join_transaction_mode="create_savepoint",
     )
 
 
@@ -479,13 +523,7 @@ async def app_context(
     application.state.container = container
     connection = await container.database.engine.connect()
     transaction = await connection.begin()
-    # join_transaction_mode="create_savepoint"：请求内的 commit 只落到保存点，
-    # 外层事务最后整体回滚，跨请求可见但不留痕
-    maker = async_sessionmaker(
-        bind=connection,
-        expire_on_commit=False,
-        join_transaction_mode="create_savepoint",
-    )
+    maker = _rollback_sessions(connection)
     object_store = FakeObjectStore()
     _wire_fakes(
         application,
@@ -505,7 +543,10 @@ async def app_context(
     ):
         client.headers.update(sign())
         yield AppContext(
-            client=client, session=session, object_store=object_store
+            client=client,
+            session=session,
+            object_store=object_store,
+            dirty=external_fakes.dirty,
         )
 
     await transaction.rollback()
@@ -526,6 +567,16 @@ async def db_session(app_context: AppContext) -> AsyncSession:
 async def app_client(app_context: AppContext) -> httpx.AsyncClient:
     """整装应用的客户端，默认带全权身份头。"""
     return app_context.client
+
+
+@pytest.fixture
+async def dirty_marks(app_context: AppContext) -> FakeSetSink:
+    """与应用同一个报脏替身。
+
+    ⚠ 与 `app_client` 必须是同一个实例：各造一个的话，用例断言的是一个从来
+    没被应用碰过的空集合，而断言「没报脏」会恒真。
+    """
+    return app_context.dirty
 
 
 @pytest.fixture

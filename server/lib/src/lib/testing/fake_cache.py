@@ -17,6 +17,8 @@ class InMemoryCache:
 
     store: dict[str, str] = field(default_factory=dict[str, str])
     ttl_s: dict[str, int] = field(default_factory=dict[str, int])
+    #: 集合类型的键单独一份：真 Redis 里 SADD 与 SET 用的也不是同一种值
+    sets: dict[str, set[str]] = field(default_factory=dict[str, set[str]])
 
     async def ping(self) -> bool:
         return True
@@ -48,6 +50,9 @@ class InMemoryCache:
         self.store.pop(key, None)
         self.ttl_s.pop(key, None)
 
+    async def add_to_set(self, key: str, *members: str) -> None:
+        self.sets.setdefault(key, set()).update(members)
+
     async def exists(self, key: str) -> bool:
         return key in self.store
 
@@ -60,6 +65,7 @@ class InMemoryCache:
     async def close(self) -> None:
         self.store.clear()
         self.ttl_s.clear()
+        self.sets.clear()
 
 
 @dataclass
@@ -82,6 +88,9 @@ class UnavailableCache:
         raise self._error()
 
     async def delete(self, key: str) -> None:
+        raise self._error()
+
+    async def add_to_set(self, key: str, *members: str) -> None:
         raise self._error()
 
     async def exists(self, key: str) -> bool:

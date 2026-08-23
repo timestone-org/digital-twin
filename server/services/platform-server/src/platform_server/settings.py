@@ -86,6 +86,11 @@ class Settings(
     # 按天/月聚合的业务时区。⚠ 不带 timezone 的 time_bucket 按 UNIX 纪元对齐，
     # 东八区的日桶会从当地 08:00 开始（docs/COLLECT_DESIGN.md §6）
     collect_bucket_timezone: str = "Asia/Shanghai"
+    # 数据台账按日历回推月/年窗口时用的业务时区。⚠ 与采集那份分开：两个
+    # 消费者的口径不该互相牵连（docs/DATASET_DESIGN.md §4.4）。缺了它，
+    # `SUM_OVER({x}, '1月')` 会按 UTC 的日历回推，东八区凌晨那几个小时的行
+    # 静默落到上一个月，而两边看起来都对
+    dataset_bucket_timezone: str = "Asia/Shanghai"
     # 采集配置页的实时值：一个数据源最多推多少个点位（按 code 升序取前 N）。
     # ⚠ 有上限不是省流量：一台设备挂上万个点位时，配置页一屏只看得见几十行，
     # 而全量推会把整条 WS 通道占满。超出的部分由 `SourceOut.live_point_limit`

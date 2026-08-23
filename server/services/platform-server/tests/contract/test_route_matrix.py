@@ -31,7 +31,10 @@ from platform_server.apps.dashboard.catalog import (
 )
 from platform_server.apps.dataset.api import ROUTERS as DATASET_ROUTERS
 from platform_server.apps.dataset.catalog import (
+    DATASET_BACKFILL,
     DATASET_MANAGE,
+    DATASET_OVERRIDE,
+    DATASET_RECORD_WRITE,
     DATASET_VIEW,
 )
 from platform_server.apps.hvac.api import ROUTERS as HVAC_ROUTERS
@@ -155,10 +158,25 @@ def collect_expectation(path: str, method: str) -> frozenset[str] | None:
     return frozenset({COLLECT_MANAGE})
 
 
-# 数据台账（`dataset-tables` 与它下面的列）。闸 1 里对应的同样是按前缀的窄规则，
-# 阶梯只有两级：写兜底 + 读。记录、修正、导出、回填各有自己的码，随它们的端点
-# 一起登记（docs/DATASET_DESIGN.md §9）。
+# 数据台账（`dataset-tables` 与它下面的列、记录、人工修正）。闸 1 里对应的同样
+# 是按前缀的窄规则，阶梯五级：写兜底 → 读 → 记录写 → 记录读 → 修正 → 重算。
+# 导出与公式库各有自己的码，随它们的端点一起登记（docs/DATASET_DESIGN.md §9）。
 DATASET_PREFIXES = (f"{API_PREFIX}/dataset-tables",)
+DATASET_TABLE = f"{API_PREFIX}/dataset-tables/{{table_id}}"
+# 人工修正自成一个码：修正值优先于点位聚合值，等同于篡改台账
+DATASET_OVERRIDDEN = (
+    (f"{DATASET_TABLE}/records/{{row_id}}/overrides", "PUT"),
+    (f"{DATASET_TABLE}/records/{{row_id}}/overrides", "DELETE"),
+    (f"{DATASET_TABLE}/overrides:clear", "POST"),
+)
+# 全表重算大批量改写历史行且吃满数据库，与「改一行」不是同一类风险
+DATASET_BACKFILLED = ((f"{DATASET_TABLE}:recompute", "POST"),)
+# 记录面的读：翻页、最新值、序列
+DATASET_RECORD_READS = (
+    f"{DATASET_TABLE}/records",
+    f"{DATASET_TABLE}/latest",
+    f"{DATASET_TABLE}/series",
+)
 
 
 def dataset_expectation(path: str, method: str) -> frozenset[str] | None:
@@ -168,8 +186,14 @@ def dataset_expectation(path: str, method: str) -> frozenset[str] | None:
     """
     if not any(path.startswith(prefix) for prefix in DATASET_PREFIXES):
         return None
+    if (path, method) in DATASET_OVERRIDDEN:
+        return frozenset({DATASET_OVERRIDE})
+    if (path, method) in DATASET_BACKFILLED:
+        return frozenset({DATASET_BACKFILL})
     if method == "GET":
         return frozenset({DATASET_VIEW})
+    if path.startswith(f"{DATASET_TABLE}/records"):
+        return frozenset({DATASET_RECORD_WRITE})
     return frozenset({DATASET_MANAGE})
 
 
@@ -387,6 +411,22 @@ def test_every_manage_entry_still_points_at_a_live_route() -> None:
     assert set(DASHBOARD_READ_ACTIONS) <= set(ROUTE_CASES)
 
 
+def test_every_dataset_narrowing_still_points_at_a_live_route() -> None:
+    # 端点改名后这两张表会静默失效，那几条路由于是悄悄退回按方法的宽口径
+    assert set(DATASET_OVERRIDDEN) <= set(ROUTE_CASES)
+    assert set(DATASET_BACKFILLED) <= set(ROUTE_CASES)
+
+
+def test_the_dataset_record_reads_stay_on_the_view_code() -> None:
+    # ⚠ 记录写的窄规则用的是 `records*` 前缀，`*` 跨斜杠：读面不单独压过它的话，
+    # 只读用户连一行数据都翻不出来
+    assert [
+        path
+        for path in DATASET_RECORD_READS
+        if dataset_expectation(path, "GET") != frozenset({DATASET_VIEW})
+    ] == []
+
+
 def test_every_override_still_points_at_a_live_route() -> None:
     # 端点改名后这张表会静默失效，那条路由于是悄悄退回闸 1 的宽口径
     assert set(STRICTER_THAN_GATE_ONE) <= set(ROUTE_CASES)
@@ -528,8 +568,9 @@ def test_the_dataset_face_was_actually_covered() -> None:
         for path, method in ROUTE_CASES
         if dataset_expectation(path, method) is not None
     ]
-    # 5 条台账面 + 5 条列面 + 3 条公式面
-    assert len(covered) == 13
+    # 5 条台账面 + 5 条列面 + 3 条公式面 + 4 条记录面 + 3 条修正面
+    # + 3 条取数面（最新值 / 序列 / 重算）
+    assert len(covered) == 23
 
 
 def test_every_route_takes_its_session_from_the_one_place() -> None:

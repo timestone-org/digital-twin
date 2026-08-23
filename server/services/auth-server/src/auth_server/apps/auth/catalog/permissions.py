@@ -35,9 +35,12 @@ ASSET_VIEW = "asset:view"
 ASSET_MANAGE = "asset:manage"
 # platform-server 的 apps/dataset 复述一份，同上。⚠ 台账的划分依据是**爆炸半径**
 # 而不是「读 / 写」，完整的八个码见 docs/DATASET_DESIGN.md §9；这里只登记已经有
-# 端点的两个，记录读写、导出、人工修正、回填与公式库各自随端点落地时再加
+# 端点的五个，导出与公式库那三个各自随端点落地时再加
 DATASET_VIEW = "dataset:view"
 DATASET_MANAGE = "dataset:manage"
+DATASET_RECORD_WRITE = "dataset:record:write"
+DATASET_OVERRIDE = "dataset:override"
+DATASET_BACKFILL = "dataset:backfill"
 
 PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(
@@ -269,6 +272,42 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
         description=(
             "建改删台账、列的增删改与排序。⚠ 删列会让引用它的公式列算不出数，"
             "删台账（force）会连历史数据行一起删掉，两者都不可逆"
+        ),
+    ),
+    PermissionSpec(
+        code=DATASET_RECORD_WRITE,
+        name="录入与修改台账数据",
+        kind="manage",
+        group_code="dataset",
+        group_label="数据台账",
+        sort_order=30,
+        description=(
+            "新增、修改、删除单行数据。⚠ 与「管理数据台账」分家是按爆炸"
+            "半径切的：改表结构影响的是往后每一行，改一行只影响那一行"
+        ),
+    ),
+    PermissionSpec(
+        code=DATASET_OVERRIDE,
+        name="人工修正点位汇总值",
+        kind="admin",
+        group_code="dataset",
+        group_label="数据台账",
+        sort_order=40,
+        description=(
+            "写入、撤销与按列批量清除人工修正。⚠ 修正值优先于自动采集值，"
+            "且采集与重算都绕开它——等同于篡改台账，故与录入分成两个码"
+        ),
+    ),
+    PermissionSpec(
+        code=DATASET_BACKFILL,
+        name="重算与回填台账",
+        kind="admin",
+        group_code="dataset",
+        group_label="数据台账",
+        sort_order=50,
+        description=(
+            "按时间范围重算公式列、回填历史。⚠ 一次会改写大批历史行并吃满"
+            "数据库，与「改一行」不是同一类风险"
         ),
     ),
 )

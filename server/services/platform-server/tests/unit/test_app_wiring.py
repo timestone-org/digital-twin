@@ -5,6 +5,7 @@
 """
 
 from dataclasses import dataclass, field
+from datetime import UTC
 from typing import cast
 
 from pydantic import SecretStr
@@ -29,6 +30,7 @@ from platform_server.apps.dashboard.services import (
     SubscriptionViewers,
     load_module_catalog,
 )
+from platform_server.apps.dataset.services import DatasetDirtyLog
 from platform_server.apps.hvac.deps import get_ac_source_reader
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.container import IDEMPOTENCY_NAMESPACE, Container
@@ -42,6 +44,7 @@ from unit.collect_fakes import (
     FakeCommandTransport,
     FakeHistorySource,
 )
+from unit.dataset_fakes import FakeSetSink
 from unit.opcua_fakes import FakeNodeWriter
 from unit.publish_fakes import FakeSnapshotSource, FakeViewerSource
 
@@ -87,6 +90,25 @@ def build_settings() -> Settings:
     )
 
 
+def _command_bus() -> CommandBus:
+    """一条打假件的命令总线。三档预算在用例里固定住。"""
+    return CommandBus(
+        transport=FakeCommandTransport(),
+        browse_timeout_s=10.0,
+        command_timeout_s=5.0,
+        subtree_timeout_s=15.0,
+    )
+
+
+def _realtime() -> RealtimeClient:
+    """一个指向假地址的实时客户端。用例不许真发请求。"""
+    return RealtimeClient(
+        base_url="http://realtime-test",
+        service_key=PLACEHOLDER,
+        timeout_s=1.0,
+    )
+
+
 def _idempotency(cache: CacheLike) -> IdempotencyStore:
     """幂等结果的缓存面，命名空间与生产装配一致。
 
@@ -117,12 +139,7 @@ def build_container(
         points=StaticPointCatalog(),
         history=FakeHistorySource(),
         history_database=cast(Database, FakeDependency()),
-        command_bus=CommandBus(
-            transport=FakeCommandTransport(),
-            browse_timeout_s=10.0,
-            command_timeout_s=5.0,
-            subtree_timeout_s=15.0,
-        ),
+        command_bus=_command_bus(),
         command_transport=cast(RedisCommandTransport, FakeDependency()),
         plan_notifier=PlanNotifier(
             publisher=FakeChannelPublisher(), channel="collect:plan:changed"
@@ -132,17 +149,15 @@ def build_container(
         viewers=SubscriptionViewers(source=FakeViewerSource()),
         collect_watchers=SubscriptionWatchers(source=FakeViewerSource()),
         viewer_database=cast(Database, FakeDependency()),
-        realtime=RealtimeClient(
-            base_url="http://realtime-test",
-            service_key=PLACEHOLDER,
-            timeout_s=1.0,
-        ),
+        realtime=_realtime(),
         lease=cast(Lease, FakeDependency()),
         ac_publish_lease=cast(Lease, FakeDependency()),
         ac_daily_lease=cast(Lease, FakeDependency()),
         nodes=cast(OpcuaClient, FakeNodeWriter()),
         object_store=FakeObjectStore(),
         credential_cipher=CredentialCipher("c" * 32),
+        dataset_dirty=DatasetDirtyLog(sink=FakeSetSink()),
+        dataset_timezone=UTC,
     )
     return container, database, source
 

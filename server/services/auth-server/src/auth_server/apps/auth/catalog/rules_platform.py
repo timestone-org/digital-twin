@@ -16,7 +16,10 @@ from auth_server.apps.auth.catalog.permissions import (
     DASHBOARD_EDIT,
     DASHBOARD_MANAGE,
     DASHBOARD_VIEW,
+    DATASET_BACKFILL,
     DATASET_MANAGE,
+    DATASET_OVERRIDE,
+    DATASET_RECORD_WRITE,
     DATASET_VIEW,
 )
 from auth_server.apps.auth.catalog.specs import RouteRuleSpec
@@ -438,8 +441,13 @@ _ASSET_RULES: tuple[RouteRuleSpec, ...] = (
     ),
 )
 
-# 数据台账。阶梯：960 写兜底 → 962 读。两条都必须压过 900 那五条按方法兜底的
-# 规则——`{_PLATFORM}/*` 的 `*` **跨斜杠**，不压过去就成了拿 `ac:manage` 删台账。
+# 数据台账。阶梯自下而上：960 写兜底 → 962 读 → 964 重算 → 966 记录写 →
+# 968 记录读 → 970 单行修正 → 972 批量撤销修正。每一级都必须压过它下面那一级，
+# 而整摞又都要压过 900 那五条按方法兜底的规则——`{_PLATFORM}/*` 的 `*`
+# **跨斜杠**，不压过去就成了拿 `ac:manage` 删台账。
+# ⚠ 顺序在这里是承重的：`records*` 的 `*` 同样跨斜杠，966 的写兜底会把
+# `GET …/records` 一并收进 `record:write`，故 968 必须压在它上面；同理
+# `…/records/{rid}/overrides` 落在 966 的范围里，970 必须再压过 968。
 # ⚠ `columns:reorder` 是 POST 且真的改数据，落在 960 的写兜底里正是它要的
 # manage：单列一条动作规则反而会在将来新增动作端点时漏掉那一个。
 _DATASET_RULES: tuple[RouteRuleSpec, ...] = (
@@ -462,6 +470,56 @@ _DATASET_RULES: tuple[RouteRuleSpec, ...] = (
         description=(
             "台账列表、详情与列定义。必须压过上面那条写兜底——那条用的是 `*` "
             "方法，会把 GET 一并收进 manage，只读用户于是连表头都看不到"
+        ),
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/dataset-tables*:recompute",
+        "POST",
+        codes=(DATASET_BACKFILL,),
+        priority=964,
+        description=(
+            "按时间范围重算公式列。⚠ 一次会改写大批历史行并吃满数据库，"
+            "不跟着 960 的 manage 走"
+        ),
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/dataset-tables*/records*",
+        "*",
+        codes=(DATASET_RECORD_WRITE,),
+        priority=966,
+        description=(
+            "记录面写操作的兜底：录入、编辑、删除单行。⚠ 用 `*` 方法而不是"
+            "逐个方法列，是为了让将来新增的方法也落在记录自己的码上"
+        ),
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/dataset-tables*/records*",
+        "GET",
+        codes=(DATASET_VIEW,),
+        priority=968,
+        description=(
+            "数据行翻页。必须压过上面那条写兜底——那条用的是 `*` 方法，"
+            "会把 GET 一并收进 record:write，只读用户于是连一行数据都翻不出来"
+        ),
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/dataset-tables*/records*/overrides",
+        "*",
+        codes=(DATASET_OVERRIDE,),
+        priority=970,
+        description=(
+            "写与撤销单行的人工修正。⚠ 修正值优先于自动采集值，等同于篡改"
+            "台账，故不跟着 966 的记录写走"
+        ),
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/dataset-tables*/overrides:clear",
+        "POST",
+        codes=(DATASET_OVERRIDE,),
+        priority=972,
+        description=(
+            "按列 + 时间范围批量撤销人工修正。⚠ 它的路径里没有 `records` 段，"
+            "落不进 970 那条，必须单列"
         ),
     ),
 )

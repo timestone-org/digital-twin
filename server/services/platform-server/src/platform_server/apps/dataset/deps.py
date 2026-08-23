@@ -1,15 +1,28 @@
 """台账面自己的依赖注入件。
 
 组合根、事务、闸 2 与幂等键是服务级公共件，在 `platform_server.deps` 里；
-本模块只补一个带写权限判定的写上下文。
+本模块只补几个带写权限判定的写上下文。
 """
 
+import uuid
+from datetime import datetime
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Query
 
 from lib.auth import CallerContext
-from platform_server.apps.dataset.catalog import DATASET_MANAGE
+from lib.utils.timeutils import to_utc
+from platform_server.apps.dataset.catalog import (
+    DATASET_BACKFILL,
+    DATASET_MANAGE,
+    DATASET_OVERRIDE,
+    DATASET_RECORD_WRITE,
+)
+from platform_server.apps.dataset.services import (
+    Actor,
+    RecordLocator,
+    RecordWriter,
+)
 from platform_server.container import Container
 from platform_server.deps import (
     WriteGate,
@@ -21,9 +34,13 @@ from platform_server.deps import (
 
 __all__ = [
     "WriteGate",
+    "get_backfill_writer",
     "get_container",
     "get_idempotency_key",
     "get_manage_context",
+    "get_override_writer",
+    "get_record_locator",
+    "get_record_writer",
     "get_session",
     "require",
 ]
@@ -44,4 +61,67 @@ def get_manage_context(
         idempotency=container.idempotency,
         idempotency_key=idempotency_key,
         caller=caller,
+    )
+
+
+def get_record_writer(
+    container: Annotated[Container, Depends(get_container)],
+    caller: Annotated[CallerContext, Depends(require(DATASET_RECORD_WRITE))],
+) -> RecordWriter:
+    """录入 / 编辑 / 删除单行用的写上下文。
+
+    Args: container, caller。
+    """
+    return _writer(container, caller)
+
+
+def get_override_writer(
+    container: Annotated[Container, Depends(get_container)],
+    caller: Annotated[CallerContext, Depends(require(DATASET_OVERRIDE))],
+) -> RecordWriter:
+    """人工修正用的写上下文。
+
+    ⚠ 与录入分成两个码：修正值优先于点位聚合值，等同于篡改台账（§9）。
+    Args: container, caller。
+    """
+    return _writer(container, caller)
+
+
+def get_backfill_writer(
+    container: Annotated[Container, Depends(get_container)],
+    caller: Annotated[CallerContext, Depends(require(DATASET_BACKFILL))],
+) -> RecordWriter:
+    """全表重算用的写上下文。大批量改写历史行且吃满数据库，故自成一个码。
+
+    Args: container, caller。
+    """
+    return _writer(container, caller)
+
+
+def get_record_locator(
+    table_id: uuid.UUID,
+    row_id: uuid.UUID,
+    ts: Annotated[datetime | None, Query()] = None,
+) -> RecordLocator:
+    """从路径与查询参数拼出一行的定位。
+
+    ⚠ `ts` 是分区键：带上直接命中 chunk，不带就是跨 chunk 扫描（§6.1）。
+    Args: table_id, row_id, ts。
+    """
+    return RecordLocator(
+        table_id=table_id,
+        row_id=row_id,
+        ts=None if ts is None else to_utc(ts),
+    )
+
+
+def _writer(container: Container, caller: CallerContext) -> RecordWriter:
+    """把组合根里的报脏口与时区、加上调用者，拧成一个写上下文。
+
+    Args: container, caller。
+    """
+    return RecordWriter(
+        dirty=container.dataset_dirty,
+        timezone=container.dataset_timezone,
+        actor=Actor(user_id=str(caller.user_id), name=caller.username),
     )

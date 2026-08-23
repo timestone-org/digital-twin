@@ -38,7 +38,7 @@
 ⚠ **一个服务前缀的规则必须待在同一个文件里**：`fnmatch` 的 `*` 跨斜杠，窄规则
 与兜底的优先级阶梯只有并排看才检查得出来。
 
-当前 22 码 / 8 组 / 2 个内置角色 / 96 条内置路由规则。
+当前 25 码 / 8 组 / 2 个内置角色 / 101 条内置路由规则。
 
 ## 3. 三道闸
 
@@ -103,12 +103,19 @@
 
 ⚠ `/api/v1/auth/*` **故意不设 catch-all**：未枚举路径落到「受管前缀无规则 = 拒绝」。
 
-### 5.1 `/api/v1/platform` 的三面共存
+### 5.1 `/api/v1/platform` 的五面共存
 
-这个前缀下住着四套码，靠 priority 分层。**读上一行要先读下一行**：
+这个前缀下住着五套码，靠 priority 分层。**读上一行要先读下一行**：
 
 | priority | 模式 | 码 |
 |---|---|---|
+| 972 | `dataset-tables*/overrides:clear` | `dataset:override` |
+| 970 | `dataset-tables*/records*/overrides`（`*` 方法） | `dataset:override` |
+| 968 | `dataset-tables*/records*`（GET） | `dataset:view` |
+| 966 | `dataset-tables*/records*`（`*` 方法） | `dataset:record:write` |
+| 964 | `dataset-tables*:recompute` | `dataset:backfill` |
+| 962 | `dataset-tables*`（GET） | `dataset:view` |
+| 960 | `dataset-tables*`（`*` 方法） | `dataset:manage` |
 | 940 | `collect-sources/*:test` · `…:browse` · `collect-points/*:write` | `collect:operate` |
 | 940 | `point-histories:aggregate` | `collect:view` |
 | 932 | `collect-*` · `point-histories*`（GET） | `collect:view` |
@@ -133,6 +140,12 @@
 
 ⚠ `:replace-layout` 要的正是 910 那个码，故**不另立规则**——一条判定相同的
 窄规则会被冗余自检判成噪音。「没写」不等于「漏了」，由契约测试证明。
+
+⚠ 台账那七级里，**同一个 `*` 跨斜杠的坑要连着躲两次**：960 的写兜底会吞掉
+`GET dataset-tables/…`（靠 962 压回来），而 966 的记录写兜底又会吞掉
+`GET …/records`（靠 968 压回来）与 `…/records/{id}/overrides`（靠 970 压回来）。
+少压一级的表现都是 403：只读用户翻不出一行数据，或者能录一行数据的人顺手就能
+改掉现场采回来的自动值。
 
 ## 6. 数据
 

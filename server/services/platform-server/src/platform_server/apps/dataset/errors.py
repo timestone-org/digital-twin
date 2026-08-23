@@ -21,6 +21,13 @@ class DatasetColumnNotFound(AppError):
     http_status = 404
 
 
+class DatasetRecordNotFound(AppError):
+    """这张台账下没有这一行。"""
+
+    code = 41207
+    http_status = 404
+
+
 class DatasetTableCodeTaken(AppError):
     """台账编码已被占用。"""
 
@@ -77,4 +84,15 @@ class DatasetFormulaInvalid(AppError):
     """
 
     code = 41212
+    http_status = 400
+
+
+class DatasetRecordInvalid(AppError):
+    """录入的值与列定义对不上：类型不符、必填缺失，或写到了写不得的列上。
+
+    ⚠ 与 `DatasetColumnInvalid` 分开：那一条说的是**列的配置**写错了，
+    要去改列；这一条说的是**这一次提交的值**不合法，要去改输入。
+    """
+
+    code = 41213
     http_status = 400

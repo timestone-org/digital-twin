@@ -85,6 +85,15 @@ class Cache:
         """
         await self._run(self._client.delete(key))
 
+    async def add_to_set(self, key: str, *members: str) -> None:
+        """把成员加进一个集合。同一个成员加两次只留一份。
+
+        Args: key, members。
+        """
+        if not members:
+            return
+        await self._run(self._client.sadd(key, *members))
+
     async def exists(self, key: str) -> bool:
         """键是否存在。
 

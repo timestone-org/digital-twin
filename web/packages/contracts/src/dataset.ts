@@ -1,5 +1,5 @@
 /**
- * @fileoverview 数据台账配置面的出入参类型，逐字对应
+ * @fileoverview 数据台账配置面与数据面的出入参类型，逐字对应
  * `server/services/platform-server/openapi.json` 的 `dataset-tables` 一族。
  *
  * ⚠ 台账不直连设备：它唯一的上游是点位历史，列绑的是**点位身份**而不是协议
@@ -213,4 +213,121 @@ export interface DatasetFormulaPreview {
   should_suggest_sum: boolean
   /** ⚠ 试算**不取历史**，这些引用一律按空处理，界面要照实说。 */
   history_refs: string[]
+}
+
+/** 一行台账是谁写出来的。 */
+export const DATASET_RECORD_SOURCES = ['manual', 'collect', 'import'] as const
+export type DatasetRecordSource = (typeof DATASET_RECORD_SOURCES)[number]
+
+/**
+ * 一格人工修正的痕迹。对应后端 `OverrideOut`。
+ * ⚠ 它只是**标记**，不参与取值——取值已经在 `DatasetRecord.values` 里生效了。
+ * ⚠ `by_name` 冗余带一份是刻意的：账号可能被删，而这一格要一直答得出「谁改的」。
+ */
+export interface DatasetOverride {
+  value: unknown
+  /** 修正人的用户 id。数据迁移带进来的修正没有它。 */
+  by: string | null
+  by_name: string | null
+  at: string
+  reason: string | null
+}
+
+/**
+ * 一行台账。对应后端 `RecordOut`。
+ * ⚠ `values` **已经是 effective**（人工修正优先，docs/DATASET_DESIGN.md D4）：
+ * 前端绝不再叠一次 `overrides[].value`。修正前的原值是刻意不给的。
+ */
+export interface DatasetRecord {
+  row_id: string
+  ts: string
+  /** 生效值：人工修正优先于采集与录入值。 */
+  values: Record<string, unknown>
+  /** 整行没有修正时是 null，不是空对象。 */
+  overrides: Record<string, DatasetOverride> | null
+  /** 各点位汇总列的桶内样本数。⚠ `n = 0` 与「值为空」是两件事，文案必须分开。 */
+  samples: Record<string, number> | null
+  computed: Record<string, unknown>
+  /** 求值失败的列 `{列key: 原因}`，null = 全部成功。 */
+  compute_error: Record<string, string> | null
+  source: DatasetRecordSource
+  created_by_name: string | null
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * 一次写入的回执。对应后端 `RecordWriteOut`。
+ * ⚠ `has_stale_downstream`：改历史行会让它**之后**那些行的 `PREV` / 时间窗 /
+ * 整表公式结果不准。后端只上报、不级联重算，界面据此出横幅提示去重算
+ * （docs/DATASET_DESIGN.md §5.10）。
+ */
+export interface DatasetRecordWrite {
+  record: DatasetRecord
+  has_stale_downstream: boolean
+}
+
+/** 删一行的回执。对应后端 `RecordDeleteOut`。 */
+export interface DatasetRecordDelete {
+  deleted_row_id: string
+  has_stale_downstream: boolean
+}
+
+/**
+ * 写 / 撤销人工修正的回执。对应后端 `OverrideWriteOut`。
+ * ⚠ `cleared` 不能省：提交为空的那几格是**撤销修正**而不是「修正成空」，
+ * 不分开说的话，用户撤了一格却会看到「已修正 1 格」。
+ */
+export interface DatasetOverrideWrite extends DatasetRecordWrite {
+  cleared: string[]
+}
+
+/** 批量撤销修正的回执。对应后端 `OverrideBulkClearOut`。 */
+export interface DatasetOverrideBulkClear {
+  cleared_rows: number
+  /** 被清掉的格数。一行可能清掉多列。 */
+  cleared_cells: number
+  recomputed: number
+  /** 重算中出现求值错误的行数。 */
+  failed: number
+  /** 待处理的行数触顶，本次只处理了最早的 `limit` 行。 */
+  is_truncated: boolean
+  limit: number
+}
+
+/** 最后一行的值。对应后端 `LatestOut`。大屏实时取数读它。 */
+export interface DatasetLatest {
+  /** 一行都没有时为 null。 */
+  ts: string | null
+  values: Record<string, unknown>
+  computed: Record<string, unknown>
+}
+
+/**
+ * 序列上的一个点。对应后端 `DatasetSeriesPointOut`。
+ * ⚠ 字段名与点位历史读侧的 `HistoryPoint` 对齐，趋势页的渲染代码两边共用一份。
+ */
+export interface DatasetSeriesPoint {
+  ts: string
+  value: unknown
+}
+
+/**
+ * 若干列的时间序列，按 ts 升序。对应后端 `SeriesOut`。
+ * ⚠ `is_truncated` 必须用上：只看 `series` 的话，界面分不清「这段时间就这么多
+ * 数据」与「数据太多被砍了」，用户看到的是一段看不出不完整的曲线（§6.2）。
+ */
+export interface DatasetSeries {
+  series: Record<string, DatasetSeriesPoint[]>
+  is_truncated: boolean
+  limit: number
+}
+
+/** 一次重算的回执。对应后端 `RecomputeOut`。 */
+export interface DatasetRecompute {
+  recomputed: number
+  failed: number
+  /** 待重算的行数触顶，本次只算了最早的 `limit` 行。 */
+  is_truncated: boolean
+  limit: number
 }

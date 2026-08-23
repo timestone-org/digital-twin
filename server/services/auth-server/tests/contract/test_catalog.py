@@ -34,6 +34,9 @@ PUBLISHED_CODES = frozenset(
         "asset:manage",
         "dataset:view",
         "dataset:manage",
+        "dataset:record:write",
+        "dataset:override",
+        "dataset:backfill",
     }
 )
 

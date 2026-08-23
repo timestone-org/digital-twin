@@ -97,6 +97,26 @@ async def test_incr_in_window_sets_the_ttl_only_on_the_first_hit(
     assert await cache._client.ttl(key) <= first
 
 
+async def test_adding_the_same_member_twice_leaves_one_copy(
+    cache: Cache, key: str
+) -> None:
+    # ⚠ 集合的去重是「报脏」这类写入路径的全部指望：一次提交里改十行，
+    # 报十次脏也只该让下游取一次数
+    await cache.add_to_set(key, "shift_output")
+    await cache.add_to_set(key, "shift_output", "boiler_hourly")
+    assert await cache._client.smembers(key) == {
+        "shift_output",
+        "boiler_hourly",
+    }
+
+
+async def test_adding_no_member_touches_nothing(cache: Cache, key: str) -> None:
+    # ⚠ 空成员表直接返回而不是发一条 SADD：redis 的 SADD 至少要一个成员，
+    # 发出去是当场报错，而调用方那边只是「这一批没有要报的表」
+    await cache.add_to_set(key)
+    assert await cache.exists(key) is False
+
+
 async def test_unreachable_server_raises_a_domain_exception() -> None:
     # ⚠ 基础设施异常不许裸露给上层：业务层不该认识 redis.RedisError
     broken = Cache(url="redis://127.0.0.1:1/0", timeout_s=0.2)
