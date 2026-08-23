@@ -9,7 +9,7 @@
  * 于是一条指向不存在点位的历史绑定照常入库、永不产数据。
  */
 import type {
-  ArchiveBindingDetail,
+  BindingDetail,
   BindingPayload,
   BindingSourceKind,
   BindingTransform,
@@ -237,23 +237,36 @@ export function fromHistoryRange(
 }
 
 /**
- * 历史绑定的取数说明。缺点位身份时给 null：那样的绑定取不到数，
- * 由求值层报「历史绑定没有取数说明」，而不是在这里凭空补一个点位。
+ * 序列类绑定的取数说明。缺身份串时给 null：那样的绑定取不到数，
+ * 由求值层报「绑定没有取数说明」，而不是在这里凭空补一个点位。
+ *
+ * ⚠ 按**自身形状**判别是哪一支，不看 `source_kind`：`detail_json` 是自由
+ * JSONB，两者不一致时（换过来源却没清干净取数说明）以真正躺在里面的那个
+ * 字段为准，比信一个可能对不上的枚举稳。
  * @param raw 线上的 `detail_json`
  */
-export function toArchiveDetail(raw: unknown): ArchiveBindingDetail | null {
-  if (!isRecord(raw) || typeof raw.node_key !== 'string') return null
-  return { nodeKey: raw.node_key, range: toHistoryRange(raw.range) }
+export function toBindingDetail(raw: unknown): BindingDetail | null {
+  if (!isRecord(raw)) return null
+  if (typeof raw.dataset_key === 'string') {
+    return { datasetKey: raw.dataset_key, range: toHistoryRange(raw.range) }
+  }
+  if (typeof raw.node_key === 'string') {
+    return { nodeKey: raw.node_key, range: toHistoryRange(raw.range) }
+  }
+  return null
 }
 
 /**
  * 取数说明写回线上形状。
  * @param detail 载荷侧的取数说明
  */
-export function fromArchiveDetail(
-  detail: ArchiveBindingDetail,
+export function fromBindingDetail(
+  detail: BindingDetail,
 ): Record<string, unknown> {
-  return { node_key: detail.nodeKey, range: fromHistoryRange(detail.range) }
+  const range = fromHistoryRange(detail.range)
+  return 'datasetKey' in detail
+    ? { dataset_key: detail.datasetKey, range }
+    : { node_key: detail.nodeKey, range }
 }
 
 /**
@@ -269,7 +282,7 @@ export function toBinding(wire: BindingWire): BindingPayload {
     nodeKey: wire.node_key,
     staticValueJson: wire.static_value_json,
     computeJson: toComputeSpec(wire.compute_json),
-    detailJson: toArchiveDetail(wire.detail_json),
+    detailJson: toBindingDetail(wire.detail_json),
     transformJson: toTransform(wire.transform_json),
     createdAt: wire.created_at,
     updatedAt: wire.updated_at,

@@ -12,6 +12,7 @@
 import type { HistoryQuery, HistoryResult } from '@dt/contracts'
 import {
   createComputedProvider,
+  createDatasetProvider,
   createHistoryProvider,
   createRealtimeProvider,
   createStaticProvider,
@@ -41,6 +42,14 @@ export interface DashboardRuntimePorts {
    * 冒充历史，会画出一条从打开页面才开始的假曲线。
    */
   fetchHistory?: (query: HistoryQuery) => Promise<HistoryResult>
+  /**
+   * 读一段台账序列。
+   * ⚠ 与 `fetchHistory` 分开注入而不是共用一个：两者打的是不同的端点，
+   * 身份串的形状也不同（点位是 `{sourceId}:{pointCode}`，台账是
+   * `ds:{code}:{列key}`）。合成一个就得在里面按前缀分派，那是把路由塞进
+   * 取数函数里。
+   */
+  fetchDatasetSeries?: (query: HistoryQuery) => Promise<HistoryResult>
 }
 
 let modulesInstalled = false
@@ -67,7 +76,7 @@ function installTwinModelHost(): void {
 }
 
 /**
- * 装配四种取数来源。
+ * 装配五种取数来源。
  * ⚠ 每次打开一张大屏都要重装：`subscribe` 闭包里绑着当前那张屏的主题，
  * 沿用上一张的会让新屏订到旧主题上——连接是通的、数据永远不来。
  * @param ports 应用壳注入的订阅与历史取数
@@ -84,6 +93,11 @@ export function installDashboardDataSources(
   if (ports.fetchHistory !== undefined) {
     registerProvider(
       createHistoryProvider({ fetchHistory: ports.fetchHistory }),
+    )
+  }
+  if (ports.fetchDatasetSeries !== undefined) {
+    registerProvider(
+      createDatasetProvider({ fetchSeries: ports.fetchDatasetSeries }),
     )
   }
 }

@@ -9,7 +9,7 @@ import type {
 } from '@dt/contracts'
 
 import {
-  toArchiveDetail,
+  toBindingDetail,
   toComputeSpec,
   toSourceKind,
   toTransform,
@@ -101,7 +101,7 @@ export function toPublicBinding(wire: PublicBindingWire): BindingView {
     nodeKey: wire.node_key,
     staticValueJson: wire.static_value_json,
     computeJson: toComputeSpec(wire.compute_json),
-    detailJson: toArchiveDetail(wire.detail_json),
+    detailJson: toBindingDetail(wire.detail_json),
     transformJson: toTransform(wire.transform_json),
   }
 }

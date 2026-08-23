@@ -6,12 +6,12 @@
 
 from typing import Literal, get_args
 
-SourceKind = Literal["archive", "computed", "opcua", "static"]
+SourceKind = Literal["archive", "computed", "dataset", "opcua", "static"]
 
 SOURCE_KINDS: tuple[str, ...] = tuple(sorted(get_args(SourceKind)))
 
-# 走实时推送的那一种。⚠ `archive` 也指向点位，但它要的是历史序列，不该被
-# publisher 当成现值推出去
+# 走实时推送的那一种。⚠ `archive` 与 `dataset` 都不在其列：前者指向点位但要的
+# 是历史序列，后者压根没有现值可推——台账的行是采集器按周期写出来的
 REALTIME_SOURCE_KIND: SourceKind = "opcua"
 
 # `computed` 的运算符，与前端 `COMPUTE_OPS` 同口径

@@ -29,12 +29,13 @@ const emit = defineEmits<{
   pick: [fieldKey: string]
 }>()
 
-/** 四种来源的中文名。⚠ 逐档铺满：漏一档这份 Record 编译不过。 */
+/** 五种来源的中文名。⚠ 逐档铺满：漏一档这份 Record 编译不过。 */
 const SOURCE_LABELS: Record<BindingSourceKind, string> = {
   opcua: '实时点位',
   static: '常量',
   computed: '派生',
-  archive: '历史序列',
+  archive: '点位历史',
+  dataset: '数据台账',
 }
 
 const SOURCE_OPTIONS: readonly DtSelectOption[] = BINDING_SOURCE_KINDS.map(

@@ -4819,6 +4819,7 @@
             "enum": [
               "archive",
               "computed",
+              "dataset",
               "opcua",
               "static"
             ],
@@ -4909,6 +4910,7 @@
             "enum": [
               "archive",
               "computed",
+              "dataset",
               "opcua",
               "static"
             ],
@@ -5076,6 +5078,7 @@
                 "enum": [
                   "archive",
                   "computed",
+                  "dataset",
                   "opcua",
                   "static"
                 ],
@@ -7018,6 +7021,7 @@
             "enum": [
               "archive",
               "computed",
+              "dataset",
               "opcua",
               "static"
             ],
@@ -10549,6 +10553,7 @@
             "enum": [
               "archive",
               "computed",
+              "dataset",
               "opcua",
               "static"
             ],
@@ -13857,6 +13862,7 @@
             "enum": [
               "archive",
               "computed",
+              "dataset",
               "opcua",
               "static"
             ],

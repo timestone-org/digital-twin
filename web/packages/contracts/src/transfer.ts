@@ -5,7 +5,7 @@
  * 带 id 的包导回同一个库，会让「导入」变成「悄悄改掉源屏」。
  */
 import type {
-  ArchiveBindingDetail,
+  BindingDetail,
   BindingSourceKind,
   BindingTransform,
   ComputeSpec,
@@ -20,7 +20,7 @@ export interface ExportBindingPayload {
   nodeKey: string | null
   staticValueJson: unknown
   computeJson: ComputeSpec | null
-  detailJson: ArchiveBindingDetail | null
+  detailJson: BindingDetail | null
   transformJson: BindingTransform | null
 }
 

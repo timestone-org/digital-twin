@@ -3,8 +3,8 @@
  * @fileoverview 一条绑定按来源种类要填的那几项。
  * ⚠ 常量的 `0` / `false` / `''` 都是合法取值：清空输入写的是 `null`（= 没配过），
  * 不许把 falsy 当成「没配」，否则一整屏的零值会消失。
- * ⚠ 四种来源**逐档显式列出**，末尾那一档是「没有认出的来源」而不是某一种来源：
- * 用 `v-else` 兜底的话，将来加第五种来源会安静地画成上一种的表单，
+ * ⚠ 五种来源**逐档显式列出**，末尾那一档是「没有认出的来源」而不是某一种来源：
+ * 用 `v-else` 兜底的话，再加一种来源会安静地画成上一种的表单，
  * 用户填得完、也存得下，只是存的是另一种来源的字段。契约测试逐档钉死。
  */
 import type {
@@ -25,6 +25,7 @@ import {
 } from '@dt/ui'
 import { computed } from 'vue'
 
+import DatasetRefField from './DatasetRefField.vue'
 import PointRefField from './PointRefField.vue'
 
 const props = defineProps<{
@@ -84,12 +85,43 @@ function toggleInput(key: string, on: boolean): void {
   emit('write', { ...props.binding, computeJson: { op, inputs: next } })
 }
 
+/** 点位历史那一支的点位身份；这条绑定不是那一支时给空串。 */
+const archiveNodeKey = computed(() => {
+  const detail = props.binding.detailJson
+  return detail !== null && 'nodeKey' in detail ? detail.nodeKey : ''
+})
+
+/** 台账那一支的列身份；这条绑定不是那一支时给空串。 */
+const datasetKey = computed(() => {
+  const detail = props.binding.detailJson
+  return detail !== null && 'datasetKey' in detail ? detail.datasetKey : ''
+})
+
 function writeWindow(text: string): void {
-  const nodeKey =
-    props.binding.detailJson?.nodeKey ?? props.binding.nodeKey ?? ''
+  const range = { lastWindow: text }
+  // ⚠ 按当前来源写回对应的那一支，绝不「保留原样只换 range」：换过来源之后
+  // 原来那一支的身份串还躺在 detailJson 里，原样带过去就是拿点位身份当台账
+  // 列身份用，取数永远落空而界面上什么都看不出来
+  const detailJson =
+    props.binding.sourceKind === 'dataset'
+      ? { datasetKey: datasetKey.value, range }
+      : {
+          nodeKey: archiveNodeKey.value || (props.binding.nodeKey ?? ''),
+          range,
+        }
+  emit('write', { ...props.binding, detailJson })
+}
+
+/** 挑好台账列之后写回身份串，时间窗保持不变。 */
+function writeDatasetKey(key: string): void {
   emit('write', {
     ...props.binding,
-    detailJson: { nodeKey, range: { lastWindow: text } },
+    // 时间窗留空时不写这个字段，而不是写一个 undefined 进去：
+    // 后端收到的是一个「配过但没值」的 range，与「没配过」不是一回事
+    detailJson: {
+      datasetKey: key,
+      range: window.value === '' ? {} : { lastWindow: window.value },
+    },
   })
 }
 </script>
@@ -144,10 +176,19 @@ function writeWindow(text: string): void {
     </template>
 
     <template v-else-if="binding.sourceKind === 'archive'">
-      <PointRefField
-        :node-key="binding.detailJson?.nodeKey ?? ''"
-        @pick="emit('pick')"
-      />
+      <PointRefField :node-key="archiveNodeKey" @pick="emit('pick')" />
+      <DtField label="相对窗（如 1h / 7d）" size="sm">
+        <DtInput
+          :model-value="window"
+          size="sm"
+          placeholder="1h"
+          @update:model-value="writeWindow"
+        />
+      </DtField>
+    </template>
+
+    <template v-else-if="binding.sourceKind === 'dataset'">
+      <DatasetRefField :dataset-key="datasetKey" @pick="writeDatasetKey" />
       <DtField label="相对窗（如 1h / 7d）" size="sm">
         <DtInput
           :model-value="window"

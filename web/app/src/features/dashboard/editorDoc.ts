@@ -15,7 +15,7 @@ import type {
   ModuleManifest,
 } from '@dt/contracts'
 
-import { fromArchiveDetail } from '@/api/dashboardWire'
+import { fromBindingDetail } from '@/api/dashboardWire'
 import type { LayoutBindingInput, LayoutNodeInput } from '@/api/dashboard'
 import { newClientUuid } from '@/api/idempotency'
 import { readConfigAt, writeConfigAt, type ConfigPath } from './configPath'
@@ -581,7 +581,7 @@ function toBindingInput(binding: BindingPayload): LayoutBindingInput {
     detail_json:
       binding.detailJson === null
         ? null
-        : fromArchiveDetail(binding.detailJson),
+        : fromBindingDetail(binding.detailJson),
     transform_json: binding.transformJson,
   }
 }

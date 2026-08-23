@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { computeValue, createComputedProvider } from '../src/computed/provider'
 import type { DataSourceErrorCode } from '../src/errors'
 import { DATA_SOURCE_ERROR_CODES } from '../src/errors'
+import { createDatasetProvider } from '../src/dataset/provider'
 import { createHistoryProvider } from '../src/history/provider'
 import { createRealtimeProvider } from '../src/realtime/provider'
 import {
@@ -38,6 +39,10 @@ function builtinProviders(): DataSourceProvider[] {
       fetchHistory: () =>
         Promise.resolve({ points: [], isTruncated: false, isStale: false }),
     }),
+    createDatasetProvider({
+      fetchSeries: () =>
+        Promise.resolve({ points: [], isTruncated: false, isStale: false }),
+    }),
   ]
 }
 
@@ -46,7 +51,7 @@ beforeEach(() => {
 })
 
 describe('内置 provider 与来源种类', () => {
-  it('四种来源各有且只有一个内置实现', () => {
+  it('五种来源各有且只有一个内置实现', () => {
     const kinds = builtinProviders().map((provider) => provider.kind)
 
     expect([...kinds].sort()).toEqual([...BINDING_SOURCE_KINDS].sort())

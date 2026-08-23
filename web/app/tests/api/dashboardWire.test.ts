@@ -10,7 +10,8 @@ import { describe, expect, it } from 'vitest'
 
 import { TransportError } from '@/api/client'
 import {
-  fromArchiveDetail,
+  fromBindingDetail,
+  toBindingDetail,
   fromComputeSpec,
   fromHistoryRange,
   fromTransform,
@@ -211,10 +212,36 @@ describe('时间范围', () => {
     })
   })
 
-  it('取数说明写回去时键是 snake_case', () => {
+  it('点位历史的取数说明写回去时键是 snake_case', () => {
     expect(
-      fromArchiveDetail({ nodeKey: 's1:t1', range: { lastWindow: '1h' } }),
+      fromBindingDetail({ nodeKey: 's1:t1', range: { lastWindow: '1h' } }),
     ).toEqual({ node_key: 's1:t1', range: { last_window: '1h' } })
+  })
+
+  it('台账的取数说明写出的是 dataset_key，不是 node_key', () => {
+    expect(
+      fromBindingDetail({
+        datasetKey: 'ds:energy_log:进水量',
+        range: { lastWindow: '1h' },
+      }),
+    ).toEqual({
+      dataset_key: 'ds:energy_log:进水量',
+      range: { last_window: '1h' },
+    })
+  })
+
+  it('按自身形状判别是哪一支，不看 source_kind', () => {
+    // ⚠ 换过来源却没清干净取数说明时，以真正躺在里面的那个字段为准——
+    // 信一个可能对不上的枚举，会拿点位身份去当台账列身份用
+    expect(toBindingDetail({ dataset_key: 'ds:a:b' })).toEqual({
+      datasetKey: 'ds:a:b',
+      range: {},
+    })
+    expect(toBindingDetail({ node_key: 's1:t1' })).toEqual({
+      nodeKey: 's1:t1',
+      range: {},
+    })
+    expect(toBindingDetail({ what: 1 })).toBeNull()
   })
 })
 

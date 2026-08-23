@@ -4,7 +4,7 @@
  * 四张表（docs/DASHBOARD_DESIGN.md §2.1），列名到前端一律转成 camelCase。
  */
 import type {
-  ArchiveBindingDetail,
+  BindingDetail,
   BindingSourceKind,
   BindingTransform,
   ComputeSpec,
@@ -130,8 +130,13 @@ export interface BindingView {
   staticValueJson: unknown
   /** `sourceKind: 'computed'` 的派生规格。 */
   computeJson: ComputeSpec | null
-  /** `sourceKind: 'archive'` 的取数说明；其余来源为 null。 */
-  detailJson: ArchiveBindingDetail | null
+  /**
+   * 序列类来源的取数说明；其余来源为 null。
+   * ⚠ 按 `sourceKind` 判别该读哪一支：`archive` 是 `ArchiveBindingDetail`、
+   * `dataset` 是 `DatasetBindingDetail`。不判别就直接摸字段的话，另一支上
+   * 那个字段是 `undefined`，而 `undefined` 会一路流成一次「没配点位」。
+   */
+  detailJson: BindingDetail | null
   /** 取到值之后的定值变换。 */
   transformJson: BindingTransform | null
 }

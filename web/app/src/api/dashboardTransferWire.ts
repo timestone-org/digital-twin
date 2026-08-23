@@ -17,11 +17,11 @@ import type {
 import { TransportError } from './client'
 import type { DashboardWire } from './dashboardWire'
 import {
-  fromArchiveDetail,
+  fromBindingDetail,
   fromComputeSpec,
   fromTransform,
   isRecord,
-  toArchiveDetail,
+  toBindingDetail,
   toComputeSpec,
   toDashboard,
   toSourceKind,
@@ -90,7 +90,7 @@ function toExportBinding(raw: unknown, at: string): ExportBindingPayload {
     nodeKey: optionalString(source.node_key, `${at}.node_key`),
     staticValueJson: source.static_value_json,
     computeJson: toComputeSpec(source.compute_json),
-    detailJson: toArchiveDetail(source.detail_json),
+    detailJson: toBindingDetail(source.detail_json),
     transformJson: toTransform(source.transform_json),
   }
 }
@@ -154,7 +154,7 @@ function fromExportBinding(
     detail_json:
       binding.detailJson === null
         ? null
-        : fromArchiveDetail(binding.detailJson),
+        : fromBindingDetail(binding.detailJson),
     transform_json: fromTransform(binding.transformJson),
   }
 }

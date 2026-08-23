@@ -137,8 +137,8 @@ describe('常量与派生', () => {
   })
 })
 
-describe('历史序列', () => {
-  it('同步读取器给不出历史，说清楚而不是留白', () => {
+describe('序列类来源', () => {
+  it('点位历史：同步读取器给不出，说清楚而不是留白', () => {
     const slot = readerOf({})(
       binding({
         sourceKind: 'archive',
@@ -149,7 +149,27 @@ describe('历史序列', () => {
 
     expect(slot).toEqual({
       state: 'error',
-      message: '历史序列要异步取数，画布上不展开',
+      message: '序列要异步取数，画布上不展开',
+    })
+  })
+
+  it('数据台账：同样给不出，且与点位历史同一句话', () => {
+    // ⚠ 两者在这一层是同一件事（都要异步取数），措辞分家只会让人以为
+    // 台账那条是另一种毛病
+    const slot = readerOf({})(
+      binding({
+        sourceKind: 'dataset',
+        detailJson: {
+          datasetKey: 'ds:energy_log:进水量',
+          range: { lastWindow: '1h' },
+        },
+      }),
+      {},
+    )
+
+    expect(slot).toEqual({
+      state: 'error',
+      message: '序列要异步取数，画布上不展开',
     })
   })
 })

@@ -266,14 +266,22 @@ export {
 } from './runtimeParam'
 export type {
   ArchiveBindingDetail,
+  BindingDetail,
   BindingSourceKind,
   BindingTransform,
   ComputeOp,
   ComputeSpec,
+  DatasetBindingDetail,
+  DatasetKeyParts,
   HistoryPoint,
   HistoryTimeRange,
 } from './binding'
-export { BINDING_SOURCE_KINDS, COMPUTE_OPS } from './binding'
+export {
+  BINDING_SOURCE_KINDS,
+  COMPUTE_OPS,
+  datasetBindingKey,
+  parseDatasetBindingKey,
+} from './binding'
 export type {
   DataSourceProvider,
   HistoryQuery,
