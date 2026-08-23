@@ -16,6 +16,7 @@ import ColumnSourcePoint from '@/pages/Dataset/TableDetail/components/ColumnSour
 import RecordCell from '@/pages/Dataset/TableDetail/components/RecordCell.vue'
 import RecordTable from '@/pages/Dataset/TableDetail/components/RecordTable.vue'
 import RecordsPanel from '@/pages/Dataset/TableDetail/components/RecordsPanel.vue'
+import TrendPanel from '@/pages/Dataset/TableDetail/components/TrendPanel.vue'
 import { router } from '@/router'
 
 /**
@@ -94,6 +95,18 @@ describe('数据分区的对外面', () => {
   })
 })
 
+describe('趋势分区的对外面', () => {
+  it('也收同样的三个 prop —— 详情页的出口对三个分区一视同仁', () => {
+    expect(propNames(TrendPanel).sort()).toEqual(['busy', 'columns', 'table'])
+  })
+
+  // ⚠ 趋势是只读的一面：它没有任何写动作要往上报，故一个 emit 都不该有。
+  // 多出一个就说明有状态漏回了详情页那一层
+  it('一个 emit 都没有：这一面只看不改', () => {
+    expect(emitNames(TrendPanel)).toEqual([])
+  })
+})
+
 describe('三个来源子块的对外面', () => {
   it('人工录入收数据类型，双向绑默认值与必填', () => {
     expect(propNames(ColumnSourceManual).sort()).toEqual([
@@ -139,6 +152,17 @@ describe('分区确实挂在路由上', () => {
     )
   })
 
+  it('趋势分区同样是一条子路由，而不是页内状态', () => {
+    expect(router.getRoutes().map((route) => route.path)).toContain(
+      `${BASE}/trend`,
+    )
+  })
+
+  it('⚠ 趋势分区也只挂读码：写码挂路由会把只读账号整个挡在门外', () => {
+    const resolved = router.resolve('/datasets/t1/trend')
+    expect(resolved.meta.permissions).toEqual(['dataset:view'])
+  })
+
   it('⚠ 数据分区同样只挂读码：写码挂路由会把只读账号整个挡在门外', () => {
     const resolved = router.resolve('/datasets/t1/records')
     expect(resolved.meta.permissions).toEqual(['dataset:view'])
@@ -164,5 +188,23 @@ describe('分区确实挂在路由上', () => {
   it('带 :tableId 的详情路由不进左栏导航——那张表每一项都要有静态路径', () => {
     const resolved = router.resolve('/datasets/t1/columns')
     expect(resolved.name).toBe('dataset-table-columns')
+  })
+})
+
+describe('趋势分析页', () => {
+  it('有一条静态路径，故它进得了左栏导航', () => {
+    expect(router.getRoutes().map((route) => route.path)).toContain('/trend')
+  })
+
+  // ⚠ 两个源的读码互不蕴含：点位历史读的是采集面、台账读的是台账面。
+  // 按「全都要」放行会把只有其中一个码的账号整个挡在门外，而他本该看得到
+  // 自己那一半（docs/DATASET_DESIGN.md §7.1）
+  it('⚠ 按两个读码的下界放行：任一即可，不是全都要', () => {
+    const resolved = router.resolve('/trend')
+    expect([...(resolved.meta.permissions ?? [])].sort()).toEqual([
+      'collect:view',
+      'dataset:view',
+    ])
+    expect(resolved.meta.permissionMode).toBe('any')
   })
 })

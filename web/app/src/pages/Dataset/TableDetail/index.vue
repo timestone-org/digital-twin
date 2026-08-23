@@ -47,6 +47,12 @@ const tabs = computed<AppTabItem[]>(() => [
     icon: 'table',
     to: `/datasets/${tableId.value}/records`,
   },
+  {
+    key: 'trend',
+    label: '趋势',
+    icon: 'chart-line',
+    to: `/datasets/${tableId.value}/trend`,
+  },
 ])
 
 /**

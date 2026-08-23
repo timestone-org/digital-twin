@@ -58,6 +58,17 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permission: [PERMISSION_CODES.datasetView],
   },
   {
+    // 趋势分析横跨两层数据：上游的点位历史与派生出来的台账。挂在台账旁边而
+    // 不是塞进采集组里——它的入口是「我想看一条曲线」，不是「我要配采集」。
+    // ⚠ 两个码是**任一即可**，与路由的 permissionMode: 'any' 对应；导航项的码
+    // 与路由 meta 逐字一致，由 navItems 的契约测试钉死。
+    key: 'trend',
+    label: '趋势分析',
+    icon: 'chart-line',
+    to: '/trend',
+    permission: [PERMISSION_CODES.collectView, PERMISSION_CODES.datasetView],
+  },
+  {
     key: 'hvac',
     label: '空调管理',
     icon: 'snowflake',

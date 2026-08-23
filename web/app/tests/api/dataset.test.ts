@@ -66,6 +66,7 @@ describe('每一条都打 platform 前缀', () => {
         dataset.clearDatasetOverridesInRange('t1', { column_keys: ['kwh'] }),
     ],
     ['recomputeDatasetTable', () => dataset.recomputeDatasetTable('t1')],
+    ['getDatasetSeries', () => dataset.getDatasetSeries('t1', ['kwh'])],
   ])('%s', async (_name, run) => {
     await run()
     const [, options] = call()
@@ -211,5 +212,36 @@ describe('人工修正', () => {
     expect(path).toBe('/dataset-tables/t1:recompute')
     expect(options.method).toBe('POST')
     expect(options.body).toEqual({})
+  })
+})
+
+describe('取序列', () => {
+  it('⚠ 多个列是**重复**查询参数，不是逗号拼成一个', async () => {
+    await dataset.getDatasetSeries('t1', ['kwh', 'water'])
+    const [path] = call()
+    expect(path).toBe('/dataset-tables/t1/series?keys=kwh&keys=water')
+    // 拼成 `keys=kwh,water` 时后端会把它当成一个名字里带逗号的列：
+    // 回参里那一列恒为空数组，而且不报任何错
+    expect(path).not.toContain(',')
+  })
+
+  it('时间范围两端都进查询串', async () => {
+    await dataset.getDatasetSeries('t1', ['kwh'], {
+      since: '2026-08-01T00:00:00.000Z',
+      until: '2026-08-02T00:00:00.000Z',
+    })
+    const [path] = call()
+    expect(path).toContain('since=2026-08-01T00%3A00%3A00.000Z')
+    expect(path).toContain('until=2026-08-02T00%3A00%3A00.000Z')
+  })
+
+  it('不给范围时不塞空的 since / until', async () => {
+    await dataset.getDatasetSeries('t1', ['kwh'])
+    expect(call()[0]).not.toContain('since')
+  })
+
+  it('取序列是**子资源**不是动作端点，故是 GET', async () => {
+    await dataset.getDatasetSeries('t1', ['kwh'])
+    expect(call()[1].method).toBeUndefined()
   })
 })

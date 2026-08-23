@@ -24,6 +24,7 @@ import type {
   DatasetRecord,
   DatasetRecordDelete,
   DatasetRecordWrite,
+  DatasetSeries,
   DatasetTable,
   DatasetTableSummary,
   Page,
@@ -561,5 +562,34 @@ export async function recomputeDatasetTable(
   return await requestData<DatasetRecompute>(
     `/dataset-tables/${tableId}:recompute`,
     onPlatform({ method: 'POST', body: range, headers: idempotent(key) }),
+  )
+}
+
+/**
+ * 若干列的时间序列，按时刻升序。趋势图的取数就这一条。
+ * ⚠ 触顶时后端留下的是**最新**那一批（内层按 ts 倒序反扫），被砍掉的是更早
+ * 那一段。`is_truncated` 必须照实说出来，且要说清砍的是哪一头——曲线开头凭空
+ * 少一截会被读成「采集坏了」（docs/DATASET_DESIGN.md §6.2）。
+ * ⚠ `keys` 是**重复**查询参数（`keys=a&keys=b`）：`RequestOptions.query` 一个键
+ * 只放得下一个标量，逗号拼起来会被后端当成一个名字里带逗号的列，回参里那一列
+ * 恒为空数组、且不报任何错。故这一条自己拼查询串。
+ * @param tableId 台账 id
+ * @param keys 要取的列标识，后端上限 50
+ * @param range 时间范围，缺省整表
+ * @param signal 中止信号
+ */
+export async function getDatasetSeries(
+  tableId: string,
+  keys: readonly string[],
+  range: DatasetRangeInput = {},
+  signal?: AbortSignal,
+): Promise<DatasetSeries> {
+  const params = new URLSearchParams()
+  for (const key of keys) params.append('keys', key)
+  if (range.since !== undefined) params.set('since', range.since)
+  if (range.until !== undefined) params.set('until', range.until)
+  return await requestData<DatasetSeries>(
+    `/dataset-tables/${tableId}/series?${params.toString()}`,
+    onPlatform({ signal }),
   )
 }

@@ -185,12 +185,16 @@ describe('分区页签', () => {
     expect(tab.text()).toContain('列配置')
   })
 
-  it('列配置与数据两个分区各有自己的地址', async () => {
+  it('三个分区各有自己的地址', async () => {
     const wrapper = await render(['dataset:view'])
     const hrefs = wrapper
       .findAll('[aria-label="台账详情分区"] a')
       .map((one) => one.attributes('href'))
-    expect(hrefs).toEqual(['/datasets/t1/columns', '/datasets/t1/records'])
+    expect(hrefs).toEqual([
+      '/datasets/t1/columns',
+      '/datasets/t1/records',
+      '/datasets/t1/trend',
+    ])
   })
 
   it('分区出口只有一个，内容由子路由决定', async () => {

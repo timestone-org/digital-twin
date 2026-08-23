@@ -147,7 +147,28 @@ export const routes: RouteRecordRaw[] = [
           import('@/pages/Dataset/TableDetail/components/RecordsPanel.vue'),
         meta: { title: '数据' },
       },
+      {
+        path: 'trend',
+        name: 'dataset-table-trend',
+        component: () =>
+          import('@/pages/Dataset/TableDetail/components/TrendPanel.vue'),
+        meta: { title: '趋势' },
+      },
     ],
+  },
+  {
+    // 趋势分析：点位历史与台账曲线合在一页。
+    // ⚠ 两个源的读码互不蕴含，故按**下界**放行（`permissionMode: 'any'`）：
+    // 只有其中一个码的账号该看得到自己那一半，而不是被整页挡在门外。页内按
+    // 各自的码决定哪一面渲染得出来（docs/DATASET_DESIGN.md §7.1）。
+    path: '/trend',
+    name: 'trend',
+    component: () => import('@/pages/Trend/index.vue'),
+    meta: {
+      title: '趋势分析',
+      permissions: [PERMISSION_CODES.collectView, PERMISSION_CODES.datasetView],
+      permissionMode: 'any',
+    },
   },
   {
     path: '/hvac/units',

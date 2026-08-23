@@ -150,6 +150,9 @@ services:
         sys.exit(1)
         PY
         alembic upgrade head
+        # ⚠ 种子跟着迁移一起自动跑：内置预设公式是**代码里的真源**，
+        # 只补缺不覆盖，改过的那条不会被改回去（DATASET_DESIGN §5.11）
+        python -m scripts.seed
     restart: 'no'
 
   opcua-migrate:
