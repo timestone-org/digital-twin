@@ -7,12 +7,13 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
-import type { DatasetColumn } from '@dt/contracts'
+import type { DatasetColumn, DatasetFormulaValidation } from '@dt/contracts'
 import { ERROR_CODES } from '@dt/contracts'
 
 import { BizError } from '@/api/client'
 import * as dataset from '@/api/dataset'
 import ColumnFormDialog from '@/pages/Dataset/TableDetail/components/ColumnFormDialog.vue'
+import { VALIDATE_DEBOUNCE_MS } from '@/pages/Dataset/TableDetail/scripts/useFormulaValidation'
 
 const STAMP = '2026-01-01T00:00:00.000Z'
 
@@ -39,9 +40,40 @@ function column(over: Partial<DatasetColumn> = {}): DatasetColumn {
   }
 }
 
+const CATALOG = {
+  categories: [],
+  functions: [],
+  operators: [],
+  window_units: [],
+  rules: [],
+  columns: [],
+  tables: [],
+  library: [],
+}
+
+function validation(over: Partial<DatasetFormulaValidation> = {}) {
+  return {
+    is_ok: true,
+    error: null,
+    deps: {
+      same_row: [],
+      prev: [],
+      window: [],
+      whole: [],
+      external: [],
+      referenced_keys: [],
+    },
+    notation: null,
+    notation_text: '甲 + 乙',
+    ...over,
+  } satisfies DatasetFormulaValidation
+}
+
 beforeEach(() => {
   vi.spyOn(dataset, 'createDatasetColumn').mockResolvedValue(column())
   vi.spyOn(dataset, 'updateDatasetColumn').mockResolvedValue(column())
+  vi.spyOn(dataset, 'getDatasetFormulaCatalog').mockResolvedValue(CATALOG)
+  vi.spyOn(dataset, 'validateDatasetFormula').mockResolvedValue(validation())
 })
 
 enableAutoUnmount(afterEach)
@@ -122,10 +154,58 @@ describe('三选一的来源子块', () => {
     expect(document.body.textContent).toContain('上一周期末值')
   })
 
-  it('⚠ 公式这一档眼下只是一行文本，必须把「保存时才报错」说出来', async () => {
+  it('公式这一档挂的是编辑器：工具箱与两种编辑面都在', async () => {
     await open(column({ source: 'formula', formula: '{a}+{b}' }))
-    expect(document.body.textContent).toContain('公式编辑器')
-    expect(document.body.textContent).toContain('保存时')
+    expect(document.body.textContent).toContain('本表的列')
+    expect(document.body.textContent).toContain('分段')
+  })
+})
+
+describe('公式没校验通过就不放行保存', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  /** 走完校验的防抖与在飞的那一次。 */
+  async function settleCheck(): Promise<void> {
+    await vi.advanceTimersByTimeAsync(VALIDATE_DEBOUNCE_MS)
+    await flushPromises()
+  }
+
+  function saveButton(): HTMLButtonElement | undefined {
+    return [...document.querySelectorAll('button')].find(
+      (one) => one.textContent?.trim() === '保存',
+    )
+  }
+
+  it('⚠ 结论还没回来时保存是禁用的：不然点完保存才在后端撞上「公式写不通」', async () => {
+    await open(column({ source: 'formula', formula: '{a}+{b}' }))
+    expect(saveButton()?.disabled).toBe(true)
+  })
+
+  it('校验通过就放行', async () => {
+    await open(column({ source: 'formula', formula: '{a}+{b}' }))
+    await settleCheck()
+    expect(saveButton()?.disabled).toBe(false)
+  })
+
+  it('后端说公式写不通就一直拦着', async () => {
+    vi.mocked(dataset.validateDatasetFormula).mockResolvedValue(
+      validation({ is_ok: false, error: '少了一个右括号', deps: null }),
+    )
+    await open(column({ source: 'formula', formula: '{a}+' }))
+    await settleCheck()
+    expect(saveButton()?.disabled).toBe(true)
+    expect(document.body.textContent).toContain('少了一个右括号')
+  })
+
+  it('⚠ 别的来源不受这条拦：那一档根本没有公式可校验', async () => {
+    await open(column({ source: 'manual' }))
+    expect(saveButton()?.disabled).toBe(false)
   })
 })
 

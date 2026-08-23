@@ -66,6 +66,12 @@ const emit = defineEmits<{
 }>()
 
 const form = ref(emptyColumnForm())
+/**
+ * 公式校验的结论。
+ * ⚠ 缺省是 `true`：公式编辑器挂上之前不该拦住别的来源；它一挂上就会立刻
+ * 抛一次真实取值过来。
+ */
+const isFormulaValid = ref(true)
 const errors = ref<ColumnFormErrors>({ ...NO_ERRORS })
 const isKeyTyped = ref(false)
 const busy = ref(false)
@@ -78,6 +84,10 @@ const { isDirty } = useFormDirty(
 )
 
 const isEdit = computed(() => props.column !== null)
+// 公式没校验通过就不放行保存：不拦的话，用户点完保存才在后端撞上「公式写不通」
+const isBlocked = computed(
+  () => form.value.source === 'formula' && !isFormulaValid.value,
+)
 const sourceHint = computed(() => sourceMeta(form.value.source).hint)
 
 watch(
@@ -105,6 +115,7 @@ function resetTo(column: DatasetColumn | null): void {
   form.value = formStateOf(column)
   errors.value = { ...NO_ERRORS }
   error.value = null
+  isFormulaValid.value = true
   // 编辑态的标识是既成事实，不该再被名称推着走
   isKeyTyped.value = column !== null
 }
@@ -251,6 +262,10 @@ async function onSubmit(): Promise<void> {
           v-else
           v-model:formula="form.formula"
           :formula-error="errors.formula"
+          :table-id="props.tableId"
+          :column-key="form.key"
+          :unit="form.unit"
+          @validity="isFormulaValid = $event"
         />
       </div>
 
@@ -265,7 +280,9 @@ async function onSubmit(): Promise<void> {
       >
         取消
       </DtButton>
-      <DtButton :loading="busy" @click="onSubmit">保存</DtButton>
+      <DtButton :loading="busy" :disabled="isBlocked" @click="onSubmit">
+        保存
+      </DtButton>
     </template>
   </DtModal>
 </template>

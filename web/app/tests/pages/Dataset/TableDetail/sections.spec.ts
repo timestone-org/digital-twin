@@ -78,10 +78,15 @@ describe('三个来源子块的对外面', () => {
     ])
   })
 
-  it('公式双向绑一行文本，另收一格错误文案', () => {
+  it('公式双向绑一行文本，另收错误文案与编辑器要用的那三项', () => {
+    // ⚠ 落库的仍然只有 `formula` 这一行文本：另外三项是编辑器要打后端所需的
+    // 上下文（打哪张表、编辑的是哪一列、试算结果配哪个单位）
     expect(propNames(ColumnSourceFormula).sort()).toEqual([
+      'columnKey',
       'formula',
       'formulaError',
+      'tableId',
+      'unit',
     ])
   })
 })

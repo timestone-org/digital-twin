@@ -1,6 +1,6 @@
 /**
  * @fileoverview 数据台账（`dataset`）配置面的接口封装：台账与列的增删改查。
- * 记录、公式与回填随后续各期落地，届时加在这个文件里。
+ * 记录与回填随后续各期落地，届时加在这个文件里。
  *
  * ⚠ 这一组打的是 platform-server，不是 auth-server：每个函数都要给 `baseUrl`。
  * 漏给就会打到 `/api/v1/auth/...`，边缘按前缀反代，拿回来的是一个 404 信封。
@@ -14,6 +14,9 @@ import type {
   DatasetColumn,
   DatasetColumnSource,
   DatasetColumnType,
+  DatasetFormulaCatalog,
+  DatasetFormulaPreview,
+  DatasetFormulaValidation,
   DatasetTable,
   DatasetTableSummary,
   Page,
@@ -294,5 +297,70 @@ export async function reorderDatasetColumns(
       body: { column_ids: columnIds },
       headers: idempotent(key),
     }),
+  )
+}
+
+/**
+ * 一张台账的公式函数目录：函数、分类、运算符、时间窗写法、规则，
+ * 外加这张台账可引用的列与可跨表引用的台账。
+ * ⚠ 函数名单**只能**从这里来：前端硬编码一份的话，后端加一族函数（比如对数与
+ * 三角）之后整族在界面上不可见，而用户只会报「算不了 ln」
+ * （docs/DATASET_DESIGN.md §5.3）。
+ * @param tableId 台账 id
+ * @param signal 中止信号
+ */
+export async function getDatasetFormulaCatalog(
+  tableId: string,
+  signal?: AbortSignal,
+): Promise<DatasetFormulaCatalog> {
+  return await requestData<DatasetFormulaCatalog>(
+    `/dataset-tables/${tableId}/formula-functions`,
+    onPlatform({ signal }),
+  )
+}
+
+/** 校验或试算一条公式草稿时都要说清「正在编辑的是哪一列」。 */
+export interface DatasetFormulaDraft {
+  formula: string
+  /** 新建那一列时它还不在库里，但 key 已经定下来了；给了才做环检测。 */
+  column_key?: string | undefined
+}
+
+/**
+ * 校验一条公式。
+ * ⚠ 公式写错回的是 **200 + `is_ok: false`**，不是 HTTP 错误——编辑器里
+ * 「还没写完」是正常状态。把它当成请求失败会让编辑器每敲一个字就弹一次
+ * 吐司（docs/DATASET_DESIGN.md §6.1）。
+ * @param tableId 台账 id
+ * @param draft 公式原文与正在编辑的列 key
+ * @param signal 中止信号
+ */
+export async function validateDatasetFormula(
+  tableId: string,
+  draft: DatasetFormulaDraft,
+  signal?: AbortSignal,
+): Promise<DatasetFormulaValidation> {
+  return await requestData<DatasetFormulaValidation>(
+    `/dataset-tables/${tableId}/formula:validate`,
+    onPlatform({ method: 'POST', body: draft, signal }),
+  )
+}
+
+/**
+ * 用一组样例值试算一条公式。
+ * ⚠ 试算**不取历史**：`PREV` / 时间窗 / 整列 / 跨表一律按空处理，回执的
+ * `history_refs` 会如实列出来，界面必须照实说。
+ * @param tableId 台账 id
+ * @param draft 公式原文、列 key 与样例值
+ * @param signal 中止信号
+ */
+export async function previewDatasetFormula(
+  tableId: string,
+  draft: DatasetFormulaDraft & { values: Record<string, unknown> },
+  signal?: AbortSignal,
+): Promise<DatasetFormulaPreview> {
+  return await requestData<DatasetFormulaPreview>(
+    `/dataset-tables/${tableId}/formula:preview`,
+    onPlatform({ method: 'POST', body: draft, signal }),
   )
 }
