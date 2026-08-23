@@ -107,6 +107,24 @@ class Settings(
     dataset_table_timeout_s: float = Field(default=60.0, gt=0)
     # 单活租约的存活期，续期在每一拍（远快于它）
     dataset_lease_ttl_s: int = Field(default=180, ge=LEASE_TTL_FLOOR_S)
+    # 数据台账的保留期清理（worker 角色的另一条常驻循环），见
+    # docs/DATASET_DESIGN.md §15。⚠ 前四项同样每一趟现读运行参数
+    # ⚠ 默认关，且危险方向是**开**：打开它会按每张台账的 `retention_days`
+    # **真实删除**过期行，删掉的行找不回来。`retention_days` 为空是永久保留
+    dataset_retention_enabled: bool = False
+    # 两次清理之间至少隔多久。⚠ 「夜间」说的是意图不是调度——这里没有 cron，
+    # 只有一条带间隔的循环，它保证的是间隔而不是墙钟时刻
+    dataset_retention_interval_s: float = Field(default=86_400.0, gt=0)
+    # 单趟实删行数的预算，只在批边界判定：PG 的 DELETE 不能中途叫停，能保证的
+    # 是「超了就不再发下一条」。触顶会响亮记一条，绝不静默截断
+    dataset_retention_max_rows_per_run: int = Field(default=200_000, ge=1)
+    # 单表一趟的预算。⚠ 它与另外六条循环共用一个事件循环
+    dataset_retention_table_timeout_s: float = Field(default=300.0, gt=0)
+    # 单活租约的存活期。⚠ 必须**大于**清理周期的上限（运行参数目录钉的
+    # 24 小时）：续期只发生在每一趟醒来时，TTL 比周期还短就是每趟都先丢租约
+    dataset_retention_lease_ttl_s: int = Field(
+        default=90_000, ge=LEASE_TTL_FLOOR_S
+    )
     # 采集配置页的实时值：一个数据源最多推多少个点位（按 code 升序取前 N）。
     # ⚠ 有上限不是省流量：一台设备挂上万个点位时，配置页一屏只看得见几十行，
     # 而全量推会把整条 WS 通道占满。超出的部分由 `SourceOut.live_point_limit`

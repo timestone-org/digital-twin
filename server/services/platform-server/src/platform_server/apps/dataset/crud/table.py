@@ -60,6 +60,31 @@ class TableCrud(CrudBase[DatasetTable]):
         )
         return list(rows.scalars().all())
 
+    async def with_retention(
+        self, session: AsyncSession
+    ) -> list[tuple[uuid.UUID, str, int | None]]:
+        """配了保留期的台账 `(id, 编码, 保留天数)`，按编码升序。
+
+        ⚠ **第一道空值闸**：`retention_days IS NULL` 的语义是「永久保留」，在
+        这条 WHERE 上就滤掉。删掉的行找不回来，故第二道闸紧贴 DELETE 再判一次
+        （`services/retention_run.py`）——一道闸不够（§15.1）。
+        ⚠ 只回三个字段而不是整行：清理逐表各开一个短事务，整行会跨事务过期。
+        Args: session。
+        """
+        rows = await session.execute(
+            select(
+                DatasetTable.id,
+                DatasetTable.code,
+                DatasetTable.retention_days,
+            )
+            .where(
+                DatasetTable.retention_days.is_not(None),
+                DatasetTable.retention_days > 0,
+            )
+            .order_by(DatasetTable.code.asc(), DatasetTable.id.asc())
+        )
+        return [(row.id, row.code, row.retention_days) for row in rows.all()]
+
     async def list_all(self, session: AsyncSession) -> list[DatasetTable]:
         """全部台账，按编码升序。跨表引用的候选清单要它。
 

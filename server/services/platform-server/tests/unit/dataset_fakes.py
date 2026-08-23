@@ -173,17 +173,22 @@ class HalfBrokenStore:
 
 
 def dataset_parts(
-    sessions: Sessions, settings: Settings, lease: Lease
+    sessions: Sessions,
+    settings: Settings,
+    lease: Lease,
+    retention_lease: Lease | None = None,
 ) -> DatasetParts:
-    """台账那一面的四件，全是进程内假件。
+    """台账那一面的五件，全是进程内假件。
 
-    ⚠ 收成一个工厂而不是在每处装配点各拼一遍：那四件每加一期就多一件，
+    ⚠ 收成一个工厂而不是在每处装配点各拼一遍：那几件每加一期就多一件，
     而拼错一件的表现是那一面的用例整片红在一句「缺少参数」上。
-    Args: sessions, settings, lease。
+    Args: sessions, settings, lease, retention_lease（不给就与采集共用一把，
+        只有关停顺序的用例才在乎它们是两把）。
     """
     return DatasetParts(
         dirty=DatasetDirtyLog(sink=FakeSetSink()),
         backfill=recording_runner(sessions, settings),
         lease=lease,
+        retention_lease=lease if retention_lease is None else retention_lease,
         timezone=UTC,
     )

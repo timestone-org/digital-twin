@@ -50,6 +50,9 @@ PUBLISHER_LEASE_KEY = "platform:publisher:leader"
 AC_PUBLISH_LEASE_KEY = "platform:ac-publish:leader"
 AC_DAILY_LEASE_KEY = "platform:ac-startup-daily:leader"
 DATASET_LEASE_KEY = "platform:dataset-collect:leader"
+# 台账保留期清理的租约。⚠ 与采集那把分开：共用一把会让「今晚采不采」顺带
+# 决定「今晚清不清」，而两条循环的节奏差着三个量级（一分钟 vs 一天）
+DATASET_RETENTION_LEASE_KEY = "platform:dataset-retention:leader"
 
 # timescaledb 扩展所在的 schema。⚠ 它必须跟在归档只读池的 search_path 里：
 # `time_bucket` / `last` / `first` 都是扩展装出来的函数，只把 search_path 指向
@@ -66,9 +69,9 @@ IDEMPOTENCY_NAMESPACE = "platform:dashboard"
 
 @dataclass(frozen=True)
 class DatasetParts:
-    """台账那一面的长生命周期件，四件收成一包。
+    """台账那一面的长生命周期件，五件收成一包。
 
-    ⚠ 收成一件而不是在 `Container` 上平铺四个字段：它们的装配依赖完全一致
+    ⚠ 收成一件而不是在 `Container` 上平铺五个字段：它们的装配依赖完全一致
     （都只要 settings / 连接池 / cache），而每加一期就往装配那一段再多两行
     ——那一段贴着 50 行的上限，第 7 期（保留期清理）会当场把它顶破。
     ⚠ 收拢**不许**换成 `**dict[str, Any]` 那种展开：那样 pyright 对这一整段
@@ -81,6 +84,8 @@ class DatasetParts:
     backfill: BackfillRunner
     #: 聚合采集器的单活租约（§13.4）
     lease: Lease
+    #: 保留期清理的单活租约（§15.4）。⚠ 与上面那把分开，理由见键名旁的告诫
+    retention_lease: Lease
     #: 按日历回推月/年窗口时用的业务时区。⚠ 在装配时解析而不是用到再解析：
     #: 时区名写错了要在进程启动时就拒绝，而不是等某一条公式算到月窗口才 500
     timezone: tzinfo
@@ -112,9 +117,9 @@ class Container:
     viewer_database: Database
     realtime: RealtimeClient
     lease: Lease
-    # ⚠ 四把租约互不相干：大屏发布、预测下发、每日增量、台账采集各自单活
-    # （台账那把在 `dataset.lease` 上）。共用一把会让「大屏发布器在跑」顺带
-    # 决定「今晚抽不抽增量」，而四条循环的节奏差着好几个量级
+    # ⚠ 五把租约互不相干：大屏发布、预测下发、每日增量、台账采集、台账清理
+    # 各自单活（台账那两把在 `dataset` 上）。共用一把会让「大屏发布器在跑」
+    # 顺带决定「今晚抽不抽增量」，而五条循环的节奏差着好几个量级
     ac_publish_lease: Lease
     ac_daily_lease: Lease
     nodes: OpcuaClient
@@ -178,7 +183,7 @@ def _dataset(
     history_database: Database,
     cache: Cache,
 ) -> DatasetParts:
-    """台账那一面的四件。⚠ 构造不起任务、不连网：回填只在有人 POST 时才跑。
+    """台账那一面的五件。⚠ 构造不起任务、不连网：回填只在有人 POST 时才跑。
 
     ⚠ 回填取数走归档那**一个**只读连接池（与采集读侧同一个）：一次跨月的时序
     扫描不该把业务写连接连同它持有的锁一起占住，而另建一个池等于多出一个没有
@@ -195,6 +200,7 @@ def _dataset(
             settings=settings,
         ),
         lease=_build_lease(settings, DATASET_LEASE_KEY),
+        retention_lease=_build_lease(settings, DATASET_RETENTION_LEASE_KEY),
         timezone=ZoneInfo(settings.dataset_bucket_timezone),
     )
 
@@ -401,8 +407,10 @@ def _build_stream(settings: Settings) -> RedisStream:
 def _ttl_of(settings: Settings, key: str) -> int:
     """这把租约的存活期。
 
-    ⚠ 四条循环的节奏差着好几个量级（大屏一秒一拍、下发与台账采集一分钟一拍、
-    增量一天一次），共用一个 TTL 会让慢的那条在两拍之间就把租约丢了。
+    ⚠ 五条循环的节奏差着好几个量级（大屏一秒一拍、下发与台账采集一分钟一拍、
+    增量与台账清理一天一次），共用一个 TTL 会让慢的那条在两拍之间就把租约丢了。
+    ⚠ 清理那把必须**大于清理周期的上限**（运行参数目录钉的 24 小时）：续期只
+    发生在每一趟醒来时，TTL 比周期还短就是每一趟都先把租约丢了。
 
     Args: settings, key。
     """
@@ -412,4 +420,6 @@ def _ttl_of(settings: Settings, key: str) -> int:
         return settings.acdaily_lease_ttl_s
     if key == DATASET_LEASE_KEY:
         return settings.dataset_lease_ttl_s
+    if key == DATASET_RETENTION_LEASE_KEY:
+        return settings.dataset_retention_lease_ttl_s
     return settings.publish_lease_ttl_s

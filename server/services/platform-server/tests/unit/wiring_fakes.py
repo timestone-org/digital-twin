@@ -200,5 +200,6 @@ def build_container(ledger: list[str], *, settings: Settings) -> Container:
             cast(Database, FakeDependency("backfill", ledger)),
             settings,
             cast(Lease, LedgerLease(ledger=ledger)),
+            cast(Lease, LedgerLease(ledger=ledger)),
         ),
     )

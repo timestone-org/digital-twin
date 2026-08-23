@@ -284,22 +284,22 @@ def knobs_of(
         is_enabled=bool(
             values.get("dataset_enabled", settings.dataset_enabled)
         ),
-        interval_s=_number(
+        interval_s=number_or(
             values.get("dataset_interval_s"), settings.dataset_interval_s
         ),
-        table_timeout_s=_number(
+        table_timeout_s=number_or(
             values.get("dataset_table_timeout_s"),
             settings.dataset_table_timeout_s,
         ),
         limits=RunLimits(
             recompute_tail_buckets=int(
-                _number(
+                number_or(
                     values.get("dataset_recompute_tail_buckets"),
                     settings.dataset_recompute_tail_buckets,
                 )
             ),
             max_buckets_per_tick=int(
-                _number(
+                number_or(
                     values.get("dataset_max_buckets_per_tick"),
                     settings.dataset_max_buckets_per_tick,
                 )
@@ -308,8 +308,8 @@ def knobs_of(
     )
 
 
-def _number(raw: object, fallback: float) -> float:
-    """把一个运行参数收窄成数；不是数就回落。
+def number_or(raw: object, fallback: float) -> float:
+    """把一个运行参数收窄成数；不是数就回落。保留期清理那条循环共用它。
 
     ⚠ 布尔要单独挡掉：它在 Python 里是 int 的子类，不挡就会有一个 True 悄悄
     变成 1 秒的间隔。

@@ -1,5 +1,6 @@
 """数据访问层。只做查询与挂载实体，**不提交**——事务边界归 service 层。"""
 
+from platform_server.apps.dataset.crud import retention as retention_crud
 from platform_server.apps.dataset.crud.column import (
     ColumnCrud,
     column_crud,
@@ -31,5 +32,6 @@ __all__ = [
     "column_crud",
     "formula_crud",
     "record_crud",
+    "retention_crud",
     "table_crud",
 ]

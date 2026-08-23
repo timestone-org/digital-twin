@@ -994,7 +994,7 @@ Dataset/TableDetail/
 | 4 | 公式库 | ⬜ |
 | 5 | 聚合采集器（worker） | ✅ |
 | 6 | 历史回填 | ✅ |
-| 7 | 保留期夜间清理 | ⬜ |
+| 7 | 保留期夜间清理 | ✅ |
 | 8 | 前端契约 + 线形 + 台账列表页 | ⬜ |
 | 9 | 详情页：列配置 / 数据两个分区 | ⬜ |
 | 10 | 公式编辑器（工具箱 / 记号树 / 分支编辑） | ⬜ |
@@ -1188,6 +1188,8 @@ contextvars 不跨任务传播，不绑就取到一串全零。
 另有 `PLATFORM_DATASET_BUCKET_TIMEZONE`（§4.5.1），它同时喂 SQL 的 `time_bucket`
 与 Python 的 `bucket_start`，改它会改变**所有**新桶的边界，故也不做成运行参数。
 
+保留期清理另有五个变量（同一个 `dataset` 分组、同一条路由），列在 §15.5。
+
 ### 13.2 运行参数：`dataset` 分组
 
 界面路径 `GET/PUT/POST /api/v1/platform/dataset-tables/runtime-params[/{section}][:reset]`，
@@ -1199,14 +1201,18 @@ contextvars 不跨任务传播，不绑就取到一串全零。
 而没补上的表现是它掉进 900 那条按方法兜底的规则——「改台账采集节拍要 `ac:manage`」，
 管空调的人能改、管台账的人反而不能。
 
-**五项全是即时档**：采集器在**每一拍**里现读一次这一组的有效值（覆盖行优先，没覆盖的回落到
-环境变量），界面上一改下一拍就生效，不必重启进程。启动时抄一份的话，运维关掉开关之后
-还要重启一次才停得下来。
+**九项全是即时档**（采集五项 + 清理四项，后者见 §15.5）：两条循环各自在**每一拍 / 每一趟**里
+现读一次这一组的有效值（覆盖行优先，没覆盖的回落到环境变量），界面上一改下一拍就生效，
+不必重启进程。启动时抄一份的话，运维关掉开关之后还要重启一次才停得下来。
 
-⚠ **危险方向是「关」**（`danger: off`）：关掉之后水位停在原地、完全没有报错，界面上那张表
-看起来只是「今天还没有数据」；而关闭期间的桶**不会自己补回来**——重新打开只从当前这一拍
-往下算，中间那段要人显式触发回填（§14）。`recompute_tail_buckets` 的危险方向是「调小」：
-调到 0 就只算新桶，迟到的样本从此永远进不了台账，而那一格看起来只是「当时就这么多」。
+⚠ **采集开关的危险方向是「关」**（`danger: off`）：关掉之后水位停在原地、完全没有报错，
+界面上那张表看起来只是「今天还没有数据」；而关闭期间的桶**不会自己补回来**——重新打开只
+从当前这一拍往下算，中间那段要人显式触发回填（§14）。`recompute_tail_buckets` 的危险方向
+是「调小」：调到 0 就只算新桶，迟到的样本从此永远进不了台账，而那一格看起来只是「当时就
+这么多」。
+
+⚠ **同一组里的清理开关方向恰好相反**（`danger: on`，§15.5）：它**打开**才危险。同为开关
+不等于同一个方向，照抄另一个的取值会把二次确认弹在安全的那一侧。
 
 ### 13.3 界面上的「未生效」由真实有效值说了算
 
@@ -1391,8 +1397,177 @@ DELETE P/dataset-tables/{tid}/backfill   取消           dataset:backfill  没�
 
 ## 15. 保留期夜间清理
 
-> 本节随第 7 期补齐。三条硬约束（禁子查询 / DELETE 必带 `ts` 上下界 / 周期性 REINDEX）
-> 照 [COLLECT_DESIGN.md](./COLLECT_DESIGN.md) 的归档清理写。
+跑在 **worker 角色**里的另一条常驻循环（与聚合采集器并列），一趟扫完全部配了保留期的
+台账，把过期行**真的删掉**。
+
+⚠ **「夜间」说的是意图，不是调度器。** 这里没有 cron，只有一条带间隔的循环：它保证的是
+「两次清理之间至少隔一个周期」，**不保证在哪个墙钟时刻醒来**——进程什么时候起来，节奏
+就从什么时候算起。文档里不写「每天凌晨 X 点」，因为那句话是假的。
+
+⚠ **只删台账行**（`platform.dataset_records`）。点位历史的保留期归 collector-server
+管（§2 的两层分工），本模块一个字都不碰。
+
+### 15.1 保留天数：空 = 永久，且要有两道闸
+
+`dataset_tables.retention_days` 为 `NULL` 即**永久保留**（D7）。它绝不许被当成 0 天——
+那是一次不可逆的清库。故这条判断落在**两个互相独立**的地方，任何一道单独成立都拦得住：
+
+| 闸 | 位置 | 形态 |
+|---|---|---|
+| 1 | `crud/table.py::with_retention` 的 `WHERE` | `retention_days IS NOT NULL AND retention_days > 0` |
+| 2 | `services/retention_run.py::keep_before`，**紧贴 DELETE** | `retention_days is None or <= 0` → 返回 `None`，这张表一条语句都不发 |
+
+一道闸不够：删掉的行找不回来，而「少了一道闸」这件事在任何一次成功的清理里都看不出来。
+第 2 道刻意收在 `keep_before` 而不是在装载清单时就把空值滤掉——提前收窄的话，两道闸会
+退化成同一道。
+
+一张表的删除边界 = `now - retention_days`；下界取**这张表最老的一行**
+（`ORDER BY ts LIMIT 1`，走超表的有序追加计划，不是 `min(ts)` 的全扫）。
+
+### 15.2 三条硬约束——都是在真库上量出来的，不是推想的
+
+**(a) DELETE 的谓词里绝不许出现子查询。** 压缩超表上 `… IN (SELECT …)` 实测跑了 5.5 秒，
+然后仍以 `tuple decompression limit exceeded` 收场。要删哪几张表必须**先 SELECT 进应用层**，
+再以绑定参数下发。
+
+> 推论：**批的单位是「哪张表、多宽的 `ts` 窗口」，不是「多少行」**——PostgreSQL 的
+> `DELETE` 没有 `LIMIT`。故「这一趟不超过 N 行」做不到，能保证的只有「超了就不再发下一条」
+> （§15.3 的行数预算）。
+
+**(b) 谓词必须同时带 `ts` 的上界与下界。** 只给一侧，计划器会扫遍每一个 chunk。
+两条语句逐字如下（`crud/retention.py`，形状由
+`tests/contract/test_dataset_retention_sql.py` 逐条钉着）：
+
+```sql
+DELETE FROM platform.dataset_records
+ WHERE table_id = :table_id
+   AND ts >= :from_ts
+   AND ts < :to_ts
+```
+
+```sql
+SELECT public.show_chunks(
+         'platform.dataset_records',
+         older_than => :older_than,
+         newer_than => :newer_than
+       )::text AS chunk_name
+```
+
+⚠ `show_chunks` 要写**全限定**：业务写连接的 `search_path` 只有 `platform`，不限定就报
+「function show_chunks(…) does not exist」——一句看着像版本不对、其实是路径不对的错。
+
+⚠ 一批的窗口宽度取 **7 天 = `dataset_records` 的 `chunk_time_interval`**，于是一条 DELETE
+基本只碰一个 chunk。**每一批各自提交**：压缩块的解压额度是**按事务**算的，攒成一个大事务
+就会在某一批上撞出 `tuple decompression limit exceeded`，而前面删掉的那些跟着一起回滚。
+
+**(c) 必须周期性 `REINDEX`。** 压缩 chunk 上的 DML 让 `index_bytes` 涨了 **29 倍**，而
+`VACUUM (ANALYZE)` 一个字节都收不回来（387MB → 393MB）；只有 REINDEX 收得回（单个 chunk
+23ms，回收 112MB）。
+
+本仓的 REINDEX 口径：
+
+- **每一趟真删过行就跑一次**，对象是本趟 DELETE 实际覆盖到的那段 chunk；不按「运行次数」
+  节流——节流计数只活在进程内存里，重启比节流周期还勤的进程会**永远轮不到 REINDEX**，
+  而那是一件不报错、只让索引一路涨到 29 倍的事；
+- 真正的闸是**单趟 chunk 数上限（32）**与 `SET LOCAL lock_timeout = '5s'`：
+  `REINDEX TABLE` 拿的是 ACCESS EXCLUSIVE 锁，**拿不到就跳过这个 chunk**，异常就地吞掉
+  绝不上抛——为了回收索引把写入堵死，是拿要紧的事换不要紧的事；
+- 单个 chunk 失败要 `rollback`：语句报错之后这条事务已作废，不回滚的话后面每个 chunk
+  都跟着报「事务已中止」，看起来像整片 chunk 都锁着；
+- chunk 名来自 PG 自己的 `show_chunks()::text`，拼进 DDL 之前先过形状白名单
+  （标识符位置无法参数化，只能拼串）。
+
+### 15.3 执行锚点：拨开开关之后必须等满一个完整周期
+
+Redis 上一个写死不可配的键记着「上一次**真的删过**是什么时候」：
+
+```
+键：platform:dataset:retention:anchor    值：RFC3339 UTC 时刻
+```
+
+四条规则，一条一条都是为了同一件事——**「打开开关」绝不等于「立刻开删」**：
+
+1. 开关**关着**的那一趟：把锚点**抹掉**，一行都不删；
+2. 开关**开着**、锚点不存在（刚被拨开、或 Redis 丢过键）：把锚点写成此刻，**本趟不删**；
+3. 开关开着、`now - 锚点 < 周期`：什么都不做，**锚点原地不动**；
+4. 否则：删一趟，然后把锚点推到此刻。
+
+⚠ 第 1 条是这一节最要紧的一行。若锚点只在「真跑过」之后推进、而关着开关的那些趟原样留着，
+那么一个关了一年的库在重新拨开开关的**下一次醒来时就会立刻开删**——因为「上次执行」已经
+是一年以前，而这件事没有任何一句警告。抹掉它换来的是：拨开之后总有整整一个周期的反悔余地。
+这条由 `tests/unit/test_dataset_retention_loop.py` 里那条「关一年再打开」的用例钉着。
+
+⚠ 锚点带 30 天 TTL，那只是个兜底上限而不是节奏：周期的上限是 24 小时（§15.5 的运行参数
+目录钉着），故它怎么都不会先过期。真过期了就按「尚未锚定」处理——重新锚定、再等一个周期，
+方向是安全的。读写一律不抛：控制面抖一下不该让清理循环崩掉。
+
+**行数预算**：`dataset_retention_max_rows_per_run` 是一趟的实删行数上限，**只在批边界判定**
+（约束 a 的推论）。触顶时提前收工、剩下的下一趟继续，并**响亮记一条 `dataset_retention_capped`**
+——静默截断会让人以为保留期已经完全生效了，而其实每晚都只删掉一部分。
+
+### 15.4 单活、隔离与关停
+
+租约键 `platform:dataset-retention:leader`（写死不可配）。**与聚合采集那把分开**：共用一把
+会让「今晚采不采」顺带决定「今晚清不清」，而两条循环的节奏差着三个量级（一分钟 vs 一天）。
+⚠ Redis 不可达一律判非 leader；续不上立刻停手（renew-or-die）。
+
+⚠ 租约 TTL（出厂 90 000 秒 = 25 小时）**必须大于清理周期的上限**（24 小时）：续期只发生在
+每一趟醒来时，TTL 比周期还短就是每一趟都先把租约丢了。这条由用例钉着。
+
+| 情况 | 行为 |
+|---|---|
+| Redis 不可达 / 续租失败 | 一律判非 leader，立刻停手 |
+| 一张表抛异常或超时 | 记一条 `dataset_retention_table_failed`，**下一张表照常删** |
+| 一个 chunk 拿不到排他锁 | 记一条 `dataset_retention_reindex_skipped`，**跳过它** |
+| 回收索引整段出错 | 记一条 `dataset_retention_reindex_failed`，**清理结果不受影响** |
+| 一整趟出错 | 记一条 `dataset_retention_tick_failed`，下一趟继续（绝不带走循环） |
+
+关停顺序照 `worker.py::run_until_stopped`：**停收新活 → drain → 让租约 → 关资源**。
+逐表循环每一轮开头看一眼 `stopped`，手上那张删完就不再开始下一张。硬停最多让一批过期数据
+多留一个周期，**绝不会留下半张删了一半的表**——每一批各自提交，批与批之间没有任何需要
+收尾的状态。
+
+⚠ **删过行的台账要报脏**（§16）：删行同样会改这张表读出来的东西（长窗口的序列少了一截），
+不报脏的表现是大屏静默停在旧数上。只报**真的掉了行**的那几张。
+
+### 15.5 环境变量与运行参数
+
+| 变量 | 出厂值 | 含义 |
+|---|---|---|
+| `PLATFORM_DATASET_RETENTION_ENABLED` | `false` | 清理总开关 |
+| `PLATFORM_DATASET_RETENTION_INTERVAL_S` | `86400.0` | 清理周期（也是循环的醒来间隔） |
+| `PLATFORM_DATASET_RETENTION_MAX_ROWS_PER_RUN` | `200000` | 单趟实删行数上限 |
+| `PLATFORM_DATASET_RETENTION_TABLE_TIMEOUT_S` | `300.0` | 单表一趟的预算 |
+| `PLATFORM_DATASET_RETENTION_LEASE_TTL_S` | `90000` | 单活租约存活期（**不是**运行参数） |
+
+前四项都在 `dataset` 那一组运行参数里，**全是即时档**，每一趟现读（与采集那五项同一组、
+同一条路由、同两个权限码，见 §13.2）。
+
+⚠ **危险方向是「开」（`danger: on`），与采集开关恰好相反**：那一项关掉只是不再出新行，
+这一项**打开**就开始按保留天数真实删除，而删掉的行找不回来。照抄另一个开关的 `danger`
+等于把二次确认弹在安全的那一侧，用户会因此训练出无脑点确认的肌肉记忆。前端的
+`RUNTIME_PARAM_DANGERS` 因此要多一档 `'on'`（第 8 期补前端时一并加）。
+
+⚠ 周期的上限 24 小时是**硬的**：租约 TTL 按它算出来（§15.4）。
+
+### 15.6 可观测
+
+| event | 何时 | 级别 |
+|---|---|---|
+| `dataset_retention_run` | 这一趟删掉了行、或者有表失败 | INFO |
+| `dataset_retention_table_swept` | 一张表掉了行 | INFO |
+| `dataset_retention_anchored` | 拨开开关之后第一次锚定（附首次执行时刻） | INFO |
+| `dataset_retention_capped` | 触到单趟行数上限，提前收工 | WARNING |
+| `dataset_retention_table_failed` | 一张表这一趟没删完 | ERROR |
+| `dataset_retention_reindex_skipped` | 一个 chunk 没拿到排他锁 | WARNING |
+| `dataset_retention_reindex_failed` | 回收索引整段出错（清理本身已成功） | WARNING |
+| `dataset_retention_chunk_rejected` | chunk 名形状不对，没拼进 DDL | WARNING |
+| `dataset_retention_anchor_unreadable` / `_unwritable` | 锚点读/写不了 | WARNING |
+| `dataset_retention_lease_acquired` / `_released` / `_lost` | 主的交接 | INFO / INFO / ERROR |
+| `dataset_retention_tick_failed` | 一整趟出错 | ERROR |
+
+稳态下每晚删 0 行才是正常的，故**什么都没发生的那一趟不记**——一天一条的流水会把真正
+有内容的那几条埋掉。
 
 ## 16. 台账脏信号
 

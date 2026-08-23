@@ -51,8 +51,11 @@ TIER_RECONNECT = "reconnect"
 TIER_RESTART = "restart"
 
 # 危险方向：危险性挂在**变更方向**上而不是字段上。`off` = 由开改关危险，
-# `decrease` = 调小危险；None = 任何方向都不需要二次确认
+# `on` = 由关改开危险，`decrease` = 调小危险；None = 任何方向都不需要二次确认。
+# ⚠ 同为开关，危险方向可以相反：采集开关关掉只是不再出新行，而清理开关**打开**
+# 就开始真实删数据。照抄另一个开关的取值等于把二次确认弹在安全的那一侧
 DANGER_OFF = "off"
+DANGER_ON = "on"
 DANGER_DECREASE = "decrease"
 
 
@@ -402,6 +405,74 @@ _DATASET_SPECS: tuple[ParamSpec, ...] = (
             "worker 一起拖住。"
         ),
         read=lambda settings: settings.dataset_table_timeout_s,
+    ),
+    ParamSpec(
+        section=SECTION_DATASET,
+        key="dataset_retention_enabled",
+        kind=SWITCH_KIND,
+        unit="",
+        step=1,
+        minimum=0,
+        maximum=1,
+        label="保留期清理总开关",
+        hint=(
+            "打开之后，按每张台账的「保留天数」**真实删除**过期数据行，"
+            "删掉的行找不回来。⚠ 保留天数为空的台账是**永久保留**，一律跳过。"
+            "拨开之后还要等满一个完整周期才第一次执行，好留出反悔的余地。"
+        ),
+        read=lambda settings: settings.dataset_retention_enabled,
+        tier=TIER_INSTANT,
+        # ⚠ 危险方向与采集开关**相反**：这一项打开才是危险的那一侧
+        danger=DANGER_ON,
+    ),
+    ParamSpec(
+        section=SECTION_DATASET,
+        key="dataset_retention_interval_s",
+        kind=FLOAT_KIND,
+        unit="s",
+        step=3_600,
+        minimum=3_600,
+        maximum=86_400,
+        label="清理周期",
+        hint=(
+            "两次清理之间至少隔多久。⚠ 这里没有 cron：它保证的是间隔，不保证"
+            "在哪个墙钟时刻醒来。它同时是「拨开开关之后多久第一次删」的下界。"
+            "上限 24 小时是硬的——租约的存活期按它算出来，调过头就是每一趟都"
+            "先把租约丢了。"
+        ),
+        read=lambda settings: settings.dataset_retention_interval_s,
+    ),
+    ParamSpec(
+        section=SECTION_DATASET,
+        key="dataset_retention_max_rows_per_run",
+        kind=INT_KIND,
+        unit="行",
+        step=10_000,
+        minimum=1,
+        maximum=5_000_000,
+        label="单趟实删行数上限",
+        hint=(
+            "一趟清理最多删多少行，超了就收工、剩下的下一趟继续。⚠ 只在批边界"
+            "判定：PostgreSQL 的 DELETE 不能中途叫停，能保证的是「超了不再发下"
+            "一条」。触顶会响亮记一条日志，不会静默截断。"
+        ),
+        read=lambda settings: settings.dataset_retention_max_rows_per_run,
+    ),
+    ParamSpec(
+        section=SECTION_DATASET,
+        key="dataset_retention_table_timeout_s",
+        kind=FLOAT_KIND,
+        unit="s",
+        step=30,
+        minimum=1,
+        maximum=3_600,
+        label="单表每趟的预算",
+        hint=(
+            "一张台账一趟最多删多久，超了当这张表没删完、下一趟继续。⚠ 它与"
+            "另外六条循环共用一个事件循环，没有预算的一次慢删除会把整个 worker"
+            "一起拖住。"
+        ),
+        read=lambda settings: settings.dataset_retention_table_timeout_s,
     ),
 )
 

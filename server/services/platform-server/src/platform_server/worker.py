@@ -21,6 +21,11 @@ from platform_server.apps.dataset.services.collector import (
     CollectorContext,
     DatasetCollector,
 )
+from platform_server.apps.dataset.services.retention import (
+    DatasetRetention,
+    RetentionAnchor,
+    RetentionContext,
+)
 from platform_server.apps.hvac.services.ac_daily_worker import (
     DailyConsumer,
     DailyConsumerOptions,
@@ -207,6 +212,27 @@ def build_dataset_collector(container: Container) -> DatasetCollector:
     )
 
 
+def build_dataset_retention(container: Container) -> DatasetRetention:
+    """按配置装出台账保留期清理循环。
+
+    ⚠ 它与聚合采集器**各持一把租约**：共用一把会让「今晚采不采」顺带决定
+    「今晚清不清」，而两条循环的节奏差着三个量级（一分钟 vs 一天）。
+    ⚠ 同样没有「节奏」形参：总开关、周期与两个上限全部在**每一趟**里从运行
+    参数表现读（docs/DATASET_DESIGN.md §15）。
+    Args: container。
+    """
+    return DatasetRetention(
+        context=RetentionContext(
+            database=container.database,
+            # 执行锚点落在 Redis 上：它要挡的正是「进程重启把节奏清零」
+            anchor=RetentionAnchor(store=container.cache),
+            dirty=container.dataset.dirty,
+            settings=container.settings,
+        ),
+        lease=container.dataset.retention_lease,
+    )
+
+
 def build_daily_scheduler(container: Container) -> DailyScheduler:
     """按配置装出日增量的调度器。**它只入队，抽取在消费者那边。**
 
@@ -336,6 +362,7 @@ async def _release(container: Container) -> None:
     await container.ac_publish_lease.close()
     await container.ac_daily_lease.close()
     await container.dataset.lease.close()
+    await container.dataset.retention_lease.close()
     await container.ac_source.dispose()
     await container.database.dispose()
 
@@ -352,6 +379,7 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
     publisher = build_publish_loop(container)
     scheduler = build_daily_scheduler(container)
     collector = build_dataset_collector(container)
+    retention = build_dataset_retention(container)
     try:
         await run_until_stopped(
             WorkerRuntime(
@@ -363,8 +391,9 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
                     build_daily_consumer(container),
                     build_model_compressor(container),
                     collector,
+                    retention,
                 ),
-                leaseholders=(publisher, scheduler, collector),
+                leaseholders=(publisher, scheduler, collector, retention),
                 container=container,
                 wait=wait,
             ),

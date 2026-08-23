@@ -124,6 +124,28 @@ def test_the_dataset_switch_is_dangerous_in_the_off_direction() -> None:
     assert spec.kind == catalog.SWITCH_KIND
 
 
+def test_the_retention_switch_is_dangerous_in_the_on_direction() -> None:
+    # ⚠ 与采集开关**方向相反**：那一项关掉才危险，这一项**打开**才危险——打开
+    # 之后开始按保留天数真实删除，删掉的行找不回来。照抄另一个开关的取值等于
+    # 把二次确认弹在安全的那一侧
+    spec = catalog.spec_of(catalog.SECTION_DATASET, "dataset_retention_enabled")
+    assert spec is not None
+    assert spec.danger == catalog.DANGER_ON
+    assert spec.kind == catalog.SWITCH_KIND
+    other = catalog.spec_of(catalog.SECTION_DATASET, "dataset_enabled")
+    assert other is not None
+    assert other.danger != spec.danger
+
+
+def test_the_retention_period_stays_inside_what_its_lease_can_outlive() -> None:
+    # ⚠ 租约只在每一趟醒来时续期：周期上限超过 TTL 就是每一趟都先丢租约
+    spec = catalog.spec_of(
+        catalog.SECTION_DATASET, "dataset_retention_interval_s"
+    )
+    assert spec is not None
+    assert spec.maximum < build_settings().dataset_retention_lease_ttl_s
+
+
 def test_the_dataset_env_names_are_the_ones_the_design_doc_lists() -> None:
     # 界面上给运维看的变量名要与 .env 里那几行逐字相同
     names = {
@@ -136,6 +158,10 @@ def test_the_dataset_env_names_are_the_ones_the_design_doc_lists() -> None:
         "PLATFORM_DATASET_RECOMPUTE_TAIL_BUCKETS",
         "PLATFORM_DATASET_MAX_BUCKETS_PER_TICK",
         "PLATFORM_DATASET_TABLE_TIMEOUT_S",
+        "PLATFORM_DATASET_RETENTION_ENABLED",
+        "PLATFORM_DATASET_RETENTION_INTERVAL_S",
+        "PLATFORM_DATASET_RETENTION_MAX_ROWS_PER_RUN",
+        "PLATFORM_DATASET_RETENTION_TABLE_TIMEOUT_S",
     }
 
 

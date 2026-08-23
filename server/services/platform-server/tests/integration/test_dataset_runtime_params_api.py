@@ -24,12 +24,17 @@ HTTP_BAD_REQUEST = 400
 HTTP_FORBIDDEN = 403
 RUNTIME_PARAM_UNKNOWN = 41020
 SWITCH_KEY = "dataset_enabled"
+RETENTION_SWITCH_KEY = "dataset_retention_enabled"
 EXPECTED_KEYS = {
     "dataset_enabled",
     "dataset_interval_s",
     "dataset_recompute_tail_buckets",
     "dataset_max_buckets_per_tick",
     "dataset_table_timeout_s",
+    "dataset_retention_enabled",
+    "dataset_retention_interval_s",
+    "dataset_retention_max_rows_per_run",
+    "dataset_retention_table_timeout_s",
 }
 
 
@@ -50,6 +55,36 @@ async def test_the_group_lists_exactly_the_collector_knobs(
 
     assert response.status_code == HTTP_OK, response.text
     assert set(items_of(response)) == EXPECTED_KEYS
+
+
+async def test_the_two_switches_are_dangerous_in_opposite_directions(
+    app_client: httpx.AsyncClient,
+) -> None:
+    """⚠ 采集开关**关掉**才危险，清理开关**打开**才危险。
+
+    照抄另一个开关的取值等于把二次确认弹在安全的那一侧，而用户会因此训练出
+    无脑点确认的肌肉记忆。
+    Args: app_client。
+    """
+    response = await app_client.get(RUNTIME_PARAMS_URL)
+
+    items = items_of(response)
+    assert items[SWITCH_KEY]["danger"] == "off"
+    assert items[RETENTION_SWITCH_KEY]["danger"] == "on"
+
+
+async def test_the_retention_switch_ships_off_and_says_what_it_deletes(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # ⚠ 默认关：打开它才开始真实删除，而删掉的行找不回来
+    response = await app_client.get(RUNTIME_PARAMS_URL)
+
+    switch = items_of(response)[RETENTION_SWITCH_KEY]
+    assert switch["kind"] == "switch"
+    assert switch["value"] is False
+    assert switch["default_value"] is False
+    assert switch["env_name"] == "PLATFORM_DATASET_RETENTION_ENABLED"
+    assert switch["write_code"] == DATASET_MANAGE
 
 
 async def test_the_switch_says_which_direction_is_dangerous(
