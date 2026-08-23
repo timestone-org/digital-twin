@@ -1,6 +1,7 @@
-"""闸 1 对 `/api/v1/platform` 的规则 —— 空调、组态大屏、数据采集三面。
+"""闸 1 对 `/api/v1/platform` 的规则 —— 空调、组态大屏、运行参数、数据采集、
+素材库与数据台账。
 
-三面共用一个 URL 前缀，故它们的优先级阶梯必须在同一处看得见：`fnmatch` 的
+各面共用一个 URL 前缀，故它们的优先级阶梯必须在同一处看得见：`fnmatch` 的
 `*` 跨斜杠、首条命中即终局，窄规则的 priority 压不过兜底就等于没写。
 """
 
@@ -15,6 +16,8 @@ from auth_server.apps.auth.catalog.permissions import (
     DASHBOARD_EDIT,
     DASHBOARD_MANAGE,
     DASHBOARD_VIEW,
+    DATASET_MANAGE,
+    DATASET_VIEW,
 )
 from auth_server.apps.auth.catalog.specs import RouteRuleSpec
 
@@ -435,6 +438,34 @@ _ASSET_RULES: tuple[RouteRuleSpec, ...] = (
     ),
 )
 
+# 数据台账。阶梯：960 写兜底 → 962 读。两条都必须压过 900 那五条按方法兜底的
+# 规则——`{_PLATFORM}/*` 的 `*` **跨斜杠**，不压过去就成了拿 `ac:manage` 删台账。
+# ⚠ `columns:reorder` 是 POST 且真的改数据，落在 960 的写兜底里正是它要的
+# manage：单列一条动作规则反而会在将来新增动作端点时漏掉那一个。
+_DATASET_RULES: tuple[RouteRuleSpec, ...] = (
+    RouteRuleSpec(
+        f"{_PLATFORM}/dataset-tables*",
+        "*",
+        codes=(DATASET_MANAGE,),
+        priority=960,
+        description=(
+            "台账面写操作的兜底：建改删台账、列的增删改与整体重排。"
+            "⚠ 用 `*` 方法而不是逐个方法列，是为了让将来新增的方法也落在台账"
+            "自己的码上"
+        ),
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/dataset-tables*",
+        "GET",
+        codes=(DATASET_VIEW,),
+        priority=962,
+        description=(
+            "台账列表、详情与列定义。必须压过上面那条写兜底——那条用的是 `*` "
+            "方法，会把 GET 一并收进 manage，只读用户于是连表头都看不到"
+        ),
+    ),
+)
+
 PLATFORM_RULES: tuple[RouteRuleSpec, ...] = (
     *_PROBE_RULES,
     *_HVAC_RULES,
@@ -442,5 +473,6 @@ PLATFORM_RULES: tuple[RouteRuleSpec, ...] = (
     *_RUNTIME_PARAM_RULES,
     *_COLLECT_RULES,
     *_ASSET_RULES,
+    *_DATASET_RULES,
     *_PUBLIC_RULES,
 )

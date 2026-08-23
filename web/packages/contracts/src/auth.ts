@@ -30,6 +30,8 @@ export const PERMISSION_CODES = {
   collectManage: 'collect:manage',
   assetView: 'asset:view',
   assetManage: 'asset:manage',
+  datasetView: 'dataset:view',
+  datasetManage: 'dataset:manage',
 } as const
 
 export type PermissionCode =

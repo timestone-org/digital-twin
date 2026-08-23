@@ -66,6 +66,10 @@ from platform_server.apps.dashboard.services import (
     StaticPointCatalog,
     ValidationContext,
 )
+from platform_server.apps.dataset.catalog import (
+    DATASET_MANAGE,
+    DATASET_VIEW,
+)
 from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
 from platform_server.apps.hvac.deps import (
     get_ac_source_reader,
@@ -96,6 +100,8 @@ FULL_CODES = (
     COLLECT_MANAGE,
     ASSET_VIEW,
     ASSET_MANAGE,
+    DATASET_VIEW,
+    DATASET_MANAGE,
 )
 # 命令总线的两档预算，用例里固定住，断言里的信封才是可手写的常量
 BROWSE_TIMEOUT_S = 10.0

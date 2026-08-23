@@ -33,6 +33,11 @@ COLLECT_MANAGE = "collect:manage"
 # 一次误删会同时打穿引用它的每一张屏
 ASSET_VIEW = "asset:view"
 ASSET_MANAGE = "asset:manage"
+# platform-server 的 apps/dataset 复述一份，同上。⚠ 台账的划分依据是**爆炸半径**
+# 而不是「读 / 写」，完整的八个码见 docs/DATASET_DESIGN.md §9；这里只登记已经有
+# 端点的两个，记录读写、导出、人工修正、回填与公式库各自随端点落地时再加
+DATASET_VIEW = "dataset:view"
+DATASET_MANAGE = "dataset:manage"
 
 PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(
@@ -243,6 +248,27 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
         description=(
             "上传与删除素材。⚠ 删除不做引用检查：一个模型可能被多张大屏引用，"
             "删掉之后那些屏上会显示「取不到」"
+        ),
+    ),
+    PermissionSpec(
+        code=DATASET_VIEW,
+        name="查看数据台账",
+        kind="view",
+        group_code="dataset",
+        group_label="数据台账",
+        sort_order=10,
+        description="台账列表与详情、列定义的全部读面",
+    ),
+    PermissionSpec(
+        code=DATASET_MANAGE,
+        name="管理数据台账",
+        kind="manage",
+        group_code="dataset",
+        group_label="数据台账",
+        sort_order=20,
+        description=(
+            "建改删台账、列的增删改与排序。⚠ 删列会让引用它的公式列算不出数，"
+            "删台账（force）会连历史数据行一起删掉，两者都不可逆"
         ),
     ),
 )

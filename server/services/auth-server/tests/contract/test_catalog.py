@@ -32,6 +32,8 @@ PUBLISHED_CODES = frozenset(
         "collect:manage",
         "asset:view",
         "asset:manage",
+        "dataset:view",
+        "dataset:manage",
     }
 )
 
@@ -144,6 +146,7 @@ def test_permission_groups_keep_catalog_order_and_sorting() -> None:
         "dashboard",
         "collect",
         "asset",
+        "dataset",
     ]
     for group in groups:
         orders = [item.sort_order for item in group.items]

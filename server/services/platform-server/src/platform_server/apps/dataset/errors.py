@@ -1,0 +1,67 @@
+"""台账与公式域的异常（错误码领域号 12，见 docs/agents/api-contract.md §4.1）。
+
+每个异常自带错误码与 HTTP 状态，处理器不做 `isinstance` 长链分派。
+message 面向最终用户，不含表名、SQL、内网地址等内部信息。
+"""
+
+from lib.errors import AppError
+
+
+class DatasetTableNotFound(AppError):
+    """台账不存在，或存在但调用者无权看见。"""
+
+    code = 41201
+    http_status = 404
+
+
+class DatasetColumnNotFound(AppError):
+    """这张台账下没有这一列。"""
+
+    code = 41202
+    http_status = 404
+
+
+class DatasetTableCodeTaken(AppError):
+    """台账编码已被占用。"""
+
+    code = 41203
+    http_status = 409
+
+
+class DatasetColumnKeyTaken(AppError):
+    """同一张台账下已有同名列 key。"""
+
+    code = 41204
+    http_status = 409
+
+
+class DatasetTableNotEmpty(AppError):
+    """台账下还有数据行。
+
+    ⚠ 与「列还被引用」分开：这一条的处置是「确认要连历史一起删」，而那一条
+    是「先改公式」。合成一个码会让调用方无从判断该给用户看哪句话。
+    """
+
+    code = 41205
+    http_status = 409
+
+
+class DatasetColumnInUse(AppError):
+    """还有别的列的公式引用着这一列。"""
+
+    code = 41206
+    http_status = 409
+
+
+class DatasetTableInvalid(AppError):
+    """台账配置不合法：编码、周期或保留期写错了。"""
+
+    code = 41210
+    http_status = 400
+
+
+class DatasetColumnInvalid(AppError):
+    """列配置不合法：来源与它必需的那几项对不上。"""
+
+    code = 41211
+    http_status = 400

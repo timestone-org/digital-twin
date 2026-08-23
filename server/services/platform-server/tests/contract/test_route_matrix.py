@@ -29,6 +29,11 @@ from platform_server.apps.dashboard.catalog import (
     DASHBOARD_MANAGE,
     DASHBOARD_VIEW,
 )
+from platform_server.apps.dataset.api import ROUTERS as DATASET_ROUTERS
+from platform_server.apps.dataset.catalog import (
+    DATASET_MANAGE,
+    DATASET_VIEW,
+)
 from platform_server.apps.hvac.api import ROUTERS as HVAC_ROUTERS
 from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
 from platform_server.apps.runtime_params.api import (
@@ -45,6 +50,7 @@ ROUTERS = (
     *HVAC_ROUTERS,
     *DASHBOARD_ROUTERS,
     *COLLECT_ROUTERS,
+    *DATASET_ROUTERS,
     *RUNTIME_PARAM_ROUTERS,
 )
 
@@ -147,6 +153,24 @@ def collect_expectation(path: str, method: str) -> frozenset[str] | None:
     if (path, method) in COLLECT_OPERATED:
         return frozenset({COLLECT_OPERATE})
     return frozenset({COLLECT_MANAGE})
+
+
+# 数据台账（`dataset-tables` 与它下面的列）。闸 1 里对应的同样是按前缀的窄规则，
+# 阶梯只有两级：写兜底 + 读。记录、修正、导出、回填各有自己的码，随它们的端点
+# 一起登记（docs/DATASET_DESIGN.md §9）。
+DATASET_PREFIXES = (f"{API_PREFIX}/dataset-tables",)
+
+
+def dataset_expectation(path: str, method: str) -> frozenset[str] | None:
+    """台账面某条路由该要哪个码；不是台账面的路由给 None。
+
+    Args: path, method。
+    """
+    if not any(path.startswith(prefix) for prefix in DATASET_PREFIXES):
+        return None
+    if method == "GET":
+        return frozenset({DATASET_VIEW})
+    return frozenset({DATASET_MANAGE})
 
 
 # 运行参数自成一段。⚠ 它既不匹配 `dashboard*` 也不匹配 `collect-*`，闸 1 里
@@ -315,6 +339,7 @@ def test_gate_two_requires_the_code_gate_one_requires(
         dashboard_expectation(path, method)
         or collect_expectation(path, method)
         or runtime_param_expectation(path, method)
+        or dataset_expectation(path, method)
         or STRICTER_THAN_GATE_ONE.get(
             (path, method),
             NARROWED_IN_GATE_ONE.get((path, method), EXPECTED[method]),
@@ -483,6 +508,28 @@ def test_every_field_action_still_points_at_a_live_route() -> None:
     # 端点改名后这张表会静默失效，那条路由于是悄悄退回 manage 的口径
     assert set(COLLECT_OPERATED) <= set(ROUTE_CASES)
     assert set(COLLECT_READ_ACTIONS) <= set(ROUTE_CASES)
+
+
+def test_every_dataset_route_carries_exactly_one_dataset_code() -> None:
+    # 台账面的两个码互斥：同时要两个等于把「能看」与「能改结构」搅在一起
+    spread = [
+        f"{method} {path}"
+        for path, method in ROUTE_CASES
+        if (expected := dataset_expectation(path, method)) is not None
+        and len(expected) != 1
+    ]
+    assert spread == []
+
+
+def test_the_dataset_face_was_actually_covered() -> None:
+    # 前缀写错时上面那条会退回按方法的口径而全绿，这里钉住覆盖面
+    covered = [
+        (path, method)
+        for path, method in ROUTE_CASES
+        if dataset_expectation(path, method) is not None
+    ]
+    # 5 条台账面 + 5 条列面
+    assert len(covered) == 10
 
 
 def test_every_route_takes_its_session_from_the_one_place() -> None:

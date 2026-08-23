@@ -1075,6 +1075,51 @@
         "title": "ApiResponse[BrowseOut]",
         "type": "object"
       },
+      "ApiResponse_ColumnOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ColumnOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ColumnOut]",
+        "type": "object"
+      },
       "ApiResponse_ConnectivityOut_": {
         "properties": {
           "code": {
@@ -2020,6 +2065,51 @@
         "title": "ApiResponse[Page[SourceOut]]",
         "type": "object"
       },
+      "ApiResponse_Page_TableSummaryOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page_TableSummaryOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Page[TableSummaryOut]]",
+        "type": "object"
+      },
       "ApiResponse_Page_TemplateSummaryOut__": {
         "properties": {
           "code": {
@@ -2830,6 +2920,51 @@
         "title": "ApiResponse[SubtreeOut]",
         "type": "object"
       },
+      "ApiResponse_TableOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TableOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[TableOut]",
+        "type": "object"
+      },
       "ApiResponse_TemplateOut_": {
         "properties": {
           "code": {
@@ -3339,6 +3474,55 @@
           }
         },
         "title": "ApiResponse[list[BindingOut]]",
+        "type": "object"
+      },
+      "ApiResponse_list_ColumnOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ColumnOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[list[ColumnOut]]",
         "type": "object"
       },
       "ApiResponse_list_NodeOut__": {
@@ -4091,6 +4275,463 @@
           "items"
         ],
         "title": "BrowseOut",
+        "type": "object"
+      },
+      "ColumnCreateIn": {
+        "additionalProperties": false,
+        "description": "新增一列。`order_index` 缺省表示排到最后。",
+        "properties": {
+          "agg": {
+            "default": "avg",
+            "enum": [
+              "avg",
+              "count",
+              "delta",
+              "first",
+              "last",
+              "max",
+              "min",
+              "sum"
+            ],
+            "title": "Agg",
+            "type": "string"
+          },
+          "data_type": {
+            "default": "number",
+            "enum": [
+              "bool",
+              "number",
+              "string"
+            ],
+            "title": "Data Type",
+            "type": "string"
+          },
+          "decimals": {
+            "anyOf": [
+              {
+                "maximum": 10.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decimals"
+          },
+          "default_value": {
+            "title": "Default Value"
+          },
+          "formula": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Formula"
+          },
+          "is_required": {
+            "default": false,
+            "title": "Is Required",
+            "type": "boolean"
+          },
+          "key": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[^\\s@'\"(),.:{}\\[\\]]+$",
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "node_key": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 3,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Key"
+          },
+          "order_index": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Index"
+          },
+          "source": {
+            "default": "manual",
+            "enum": [
+              "formula",
+              "manual",
+              "point"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "key",
+          "name"
+        ],
+        "title": "ColumnCreateIn",
+        "type": "object"
+      },
+      "ColumnOut": {
+        "description": "一列的对外形态。",
+        "properties": {
+          "agg": {
+            "enum": [
+              "avg",
+              "count",
+              "delta",
+              "first",
+              "last",
+              "max",
+              "min",
+              "sum"
+            ],
+            "title": "Agg",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data_type": {
+            "enum": [
+              "bool",
+              "number",
+              "string"
+            ],
+            "title": "Data Type",
+            "type": "string"
+          },
+          "decimals": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decimals"
+          },
+          "default_value": {
+            "title": "Default Value"
+          },
+          "formula": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Formula"
+          },
+          "formula_deps": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Formula Deps"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_required": {
+            "title": "Is Required",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Key"
+          },
+          "order_index": {
+            "title": "Order Index",
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "formula",
+              "manual",
+              "point"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "table_id": {
+            "format": "uuid",
+            "title": "Table Id",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "table_id",
+          "key",
+          "name",
+          "unit",
+          "decimals",
+          "data_type",
+          "source",
+          "agg",
+          "node_key",
+          "formula",
+          "formula_deps",
+          "order_index",
+          "is_required",
+          "default_value",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ColumnOut",
+        "type": "object"
+      },
+      "ColumnReorderIn": {
+        "additionalProperties": false,
+        "description": "整体重排：给全套列 id 的目标顺序。\n\n⚠ 不在名单里的列**静默保持原样**，不报错也不排到最前：并发编辑时另一个人\n刚加的列不该因为这次重排而消失在列表顶端。",
+        "properties": {
+          "column_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Column Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "column_ids"
+        ],
+        "title": "ColumnReorderIn",
+        "type": "object"
+      },
+      "ColumnUpdateIn": {
+        "additionalProperties": false,
+        "description": "改一列。缺省的字段不动。\n\n⚠ `key` 不在这里：它是 JSONB 里的字段名，改一次等于让这一列的历史值集体\n失联，而每一行看起来都还在（docs/DATASET_DESIGN.md §4.2）。",
+        "properties": {
+          "agg": {
+            "anyOf": [
+              {
+                "enum": [
+                  "avg",
+                  "count",
+                  "delta",
+                  "first",
+                  "last",
+                  "max",
+                  "min",
+                  "sum"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agg"
+          },
+          "data_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "bool",
+                  "number",
+                  "string"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Type"
+          },
+          "decimals": {
+            "anyOf": [
+              {
+                "maximum": 10.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decimals"
+          },
+          "default_value": {
+            "title": "Default Value"
+          },
+          "formula": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Formula"
+          },
+          "is_required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Required"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "node_key": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 3,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Key"
+          },
+          "order_index": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Index"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "formula",
+                  "manual",
+                  "point"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "title": "ColumnUpdateIn",
         "type": "object"
       },
       "CombinationCoverageOut": {
@@ -6844,6 +7485,37 @@
           "total"
         ],
         "title": "Page[SourceOut]",
+        "type": "object"
+      },
+      "Page_TableSummaryOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TableSummaryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total"
+        ],
+        "title": "Page[TableSummaryOut]",
         "type": "object"
       },
       "Page_TemplateSummaryOut_": {
@@ -9945,6 +10617,366 @@
           "is_truncated"
         ],
         "title": "SubtreeOut",
+        "type": "object"
+      },
+      "TableCreateIn": {
+        "additionalProperties": false,
+        "description": "新建一张台账。",
+        "properties": {
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "title": "Code",
+            "type": "string"
+          },
+          "collect_interval_ms": {
+            "default": 60000,
+            "maximum": 86400000.0,
+            "minimum": 1000.0,
+            "title": "Collect Interval Ms",
+            "type": "integer"
+          },
+          "collect_mode": {
+            "default": "manual",
+            "enum": [
+              "aggregate",
+              "manual"
+            ],
+            "title": "Collect Mode",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_enabled": {
+            "default": true,
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "retention_days": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Days"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "TableCreateIn",
+        "type": "object"
+      },
+      "TableOut": {
+        "description": "台账详情：连列定义一起给，详情页一次请求就能画出表头。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "collect_interval_ms": {
+            "title": "Collect Interval Ms",
+            "type": "integer"
+          },
+          "collect_mode": {
+            "enum": [
+              "aggregate",
+              "manual"
+            ],
+            "title": "Collect Mode",
+            "type": "string"
+          },
+          "column_count": {
+            "title": "Column Count",
+            "type": "integer"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/ColumnOut"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "last_collected_ts": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Collected Ts"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "retention_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Days"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "description",
+          "collect_mode",
+          "collect_interval_ms",
+          "retention_days",
+          "last_collected_ts",
+          "is_enabled",
+          "column_count",
+          "created_at",
+          "updated_at",
+          "columns"
+        ],
+        "title": "TableOut",
+        "type": "object"
+      },
+      "TableSummaryOut": {
+        "description": "列表页的台账条目：带列数，不带整份列定义。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "collect_interval_ms": {
+            "title": "Collect Interval Ms",
+            "type": "integer"
+          },
+          "collect_mode": {
+            "enum": [
+              "aggregate",
+              "manual"
+            ],
+            "title": "Collect Mode",
+            "type": "string"
+          },
+          "column_count": {
+            "title": "Column Count",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "last_collected_ts": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Collected Ts"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "retention_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Days"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "description",
+          "collect_mode",
+          "collect_interval_ms",
+          "retention_days",
+          "last_collected_ts",
+          "is_enabled",
+          "column_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TableSummaryOut",
+        "type": "object"
+      },
+      "TableUpdateIn": {
+        "additionalProperties": false,
+        "description": "改台账。缺省的字段不动。\n\n⚠ `code` 不在这里：它是大屏绑定键 `ds:{code}:{列key}` 的前半段，改一次\n等于让每一处引用它的绑定悄悄失效。要换编码就新建一张。",
+        "properties": {
+          "collect_interval_ms": {
+            "anyOf": [
+              {
+                "maximum": 86400000.0,
+                "minimum": 1000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collect Interval Ms"
+          },
+          "collect_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "aggregate",
+                  "manual"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collect Mode"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Enabled"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "retention_days": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Days"
+          }
+        },
+        "title": "TableUpdateIn",
         "type": "object"
       },
       "TemplateCreateIn": {
@@ -15793,6 +16825,643 @@
         "summary": "导入大屏",
         "tags": [
           "dashboard"
+        ]
+      }
+    },
+    "/api/v1/platform/dataset-tables": {
+      "get": {
+        "description": "分页列出台账。`q` 按名称与编码模糊搜。\n\nArgs: session, page, _viewer, q。",
+        "operationId": "list_tables_api_v1_platform_dataset_tables_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Page_TableSummaryOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "台账列表",
+        "tags": [
+          "dataset-table"
+        ]
+      },
+      "post": {
+        "description": "建台账。支持 `Idempotency-Key`。\n\nArgs: payload, session, response, write。",
+        "operationId": "create_table_api_v1_platform_dataset_tables_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TableCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_TableOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "创建台账",
+        "tags": [
+          "dataset-table"
+        ]
+      }
+    },
+    "/api/v1/platform/dataset-tables/{table_id}": {
+      "delete": {
+        "description": "删台账。下面还有数据行时先确认；`force` 连历史一起删。\n\nArgs: table_id, session, _write, is_forced。",
+        "operationId": "delete_table_api_v1_platform_dataset_tables__table_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "force",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Force",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除台账",
+        "tags": [
+          "dataset-table"
+        ]
+      },
+      "get": {
+        "description": "台账详情，连列定义一起给。\n\nArgs: table_id, session, _viewer。",
+        "operationId": "read_table_api_v1_platform_dataset_tables__table_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_TableOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "台账详情",
+        "tags": [
+          "dataset-table"
+        ]
+      },
+      "patch": {
+        "description": "改台账。`code` 不可改，故不在入参里。\n\nArgs: table_id, payload, session, _write。",
+        "operationId": "update_table_api_v1_platform_dataset_tables__table_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TableUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_TableOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "更新台账",
+        "tags": [
+          "dataset-table"
+        ]
+      }
+    },
+    "/api/v1/platform/dataset-tables/{table_id}/columns": {
+      "get": {
+        "description": "一张台账的全部列。集合有界，故不分页。\n\nArgs: table_id, session, _viewer。",
+        "operationId": "list_columns_api_v1_platform_dataset_tables__table_id__columns_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_ColumnOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "列列表",
+        "tags": [
+          "dataset-column"
+        ]
+      },
+      "post": {
+        "description": "新增一列。支持 `Idempotency-Key`。\n\nArgs: table_id, payload, session, response, write。",
+        "operationId": "create_column_api_v1_platform_dataset_tables__table_id__columns_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ColumnCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ColumnOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "新增列",
+        "tags": [
+          "dataset-column"
+        ]
+      }
+    },
+    "/api/v1/platform/dataset-tables/{table_id}/columns/{column_id}": {
+      "delete": {
+        "description": "删一列。被别的列的公式引用着就 409；`force` 跳过守卫。\n\nArgs: table_id, column_id, session, _write, is_forced。",
+        "operationId": "delete_column_api_v1_platform_dataset_tables__table_id__columns__column_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "column_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Column Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "force",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Force",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除列",
+        "tags": [
+          "dataset-column"
+        ]
+      },
+      "patch": {
+        "description": "改一列。`key` 不可改，故不在入参里。\n\nArgs: table_id, column_id, payload, session, _write。",
+        "operationId": "update_column_api_v1_platform_dataset_tables__table_id__columns__column_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "column_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Column Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ColumnUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ColumnOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "更新列",
+        "tags": [
+          "dataset-column"
+        ]
+      }
+    },
+    "/api/v1/platform/dataset-tables/{table_id}/columns:reorder": {
+      "post": {
+        "description": "按给定顺序整体重排。名单外的列保持原样。\n\nArgs: table_id, payload, session, _write。",
+        "operationId": "reorder_columns_api_v1_platform_dataset_tables__table_id__columns_reorder_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ColumnReorderIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_ColumnOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "整体重排列",
+        "tags": [
+          "dataset-column"
         ]
       }
     },

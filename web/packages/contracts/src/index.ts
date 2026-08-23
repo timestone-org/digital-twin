@@ -348,3 +348,18 @@ export {
   SERVER_FRAME_TYPES,
   SERVER_SYSTEM_EVENTS,
 } from './realtime'
+export type {
+  DatasetAggFunc,
+  DatasetColumn,
+  DatasetColumnSource,
+  DatasetColumnType,
+  DatasetCollectMode,
+  DatasetTable,
+  DatasetTableSummary,
+} from './dataset'
+export {
+  DATASET_AGG_FUNCS,
+  DATASET_COLLECT_MODES,
+  DATASET_COLUMN_SOURCES,
+  DATASET_COLUMN_TYPES,
+} from './dataset'
