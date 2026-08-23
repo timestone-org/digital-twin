@@ -79,6 +79,21 @@ export const ERROR_CODES = {
    * 这一条问「那几条公式就此算不出数，仍然删吗」，两句话的后果完全不同。
    */
   datasetColumnInUse: 41206,
+  /**
+   * 库公式写不通：语法、未知列或成环。表单据此把后端那句话落到「公式体」那一格。
+   * ⚠ 校验端点不用它——那里是 200 + `is_ok=false`（docs/DATASET_DESIGN.md §6.1）。
+   */
+  datasetFormulaInvalid: 41212,
+  /** 公式标识已被占用。标识是调用点上的那个字面量，全局唯一。 */
+  datasetFormulaCodeTaken: 41221,
+  /**
+   * 还有台账列或别的库公式在用它。⚠ **停用与删除都会撞上它**，理由相同：
+   * 引用方在解析期就失败。后端刻意不给 `force`，故前端也不许摆一个强制入口
+   * （docs/DATASET_DESIGN.md §5.11）。
+   */
+  datasetFormulaInUse: 41222,
+  /** 预设删不得（只能停用），自建则没有出厂口径可恢复。 */
+  datasetFormulaPresetRule: 41223,
   workshopNotFound: 41601,
   roomNotFound: 41602,
   acUnitNotFound: 41603,

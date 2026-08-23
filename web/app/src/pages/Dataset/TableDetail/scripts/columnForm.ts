@@ -16,8 +16,8 @@ import type {
   DatasetColumnPatchInput,
 } from '@/api/dataset'
 
-/** 与后端 `ColumnCreateIn.key` 的 pattern 逐字一致。中文可用。 */
-export const KEY_PATTERN = /^[^\s@'"(),.:{}[\]]+$/
+import { KEY_PATTERN } from '../../scripts/datasetKey'
+
 export const KEY_MAX = 64
 export const NAME_MAX = 64
 export const UNIT_MAX = 32

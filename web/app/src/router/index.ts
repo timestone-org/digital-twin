@@ -157,6 +157,20 @@ export const routes: RouteRecordRaw[] = [
     ],
   },
   {
+    // 公式库：跨台账的全局资源，故与台账列表**平级**而不是挂在它下面——
+    // 挂成子路由就得先选一张台账，才能改一条影响全部台账的东西。
+    // ⚠ 只挂读码 `formula:view`：它与 `dataset:view` 分家，看得见某一张台账
+    // 不等于看得见全局口径；写码 `formula:manage` 在页内逐个入口门控
+    // （docs/DATASET_DESIGN.md §6、§9）。
+    path: '/formulas',
+    name: 'dataset-formulas',
+    component: () => import('@/pages/Dataset/Formulas/index.vue'),
+    meta: {
+      title: '公式库',
+      permissions: [PERMISSION_CODES.formulaView],
+    },
+  },
+  {
     // 趋势分析：点位历史与台账曲线合在一页。
     // ⚠ 两个源的读码互不蕴含，故按**下界**放行（`permissionMode: 'any'`）：
     // 只有其中一个码的账号该看得到自己那一半，而不是被整页挡在门外。页内按

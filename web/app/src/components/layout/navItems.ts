@@ -58,6 +58,16 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permission: [PERMISSION_CODES.datasetView],
   },
   {
+    // 公式库挨着台账：它是台账列的口径来源，但**不属于**任何一张台账。
+    // ⚠ 挂的是 formula:view 而不是 dataset:view——两个码互不蕴含，
+    // 与路由 meta 逐字一致，由 navItems 的契约测试钉死。
+    key: 'formulas',
+    label: '公式库',
+    icon: 'type',
+    to: '/formulas',
+    permission: [PERMISSION_CODES.formulaView],
+  },
+  {
     // 趋势分析横跨两层数据：上游的点位历史与派生出来的台账。挂在台账旁边而
     // 不是塞进采集组里——它的入口是「我想看一条曲线」，不是「我要配采集」。
     // ⚠ 两个码是**任一即可**，与路由的 permissionMode: 'any' 对应；导航项的码

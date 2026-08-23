@@ -35,6 +35,10 @@ export const PERMISSION_CODES = {
   datasetRecordWrite: 'dataset:record:write',
   datasetOverride: 'dataset:override',
   datasetBackfill: 'dataset:backfill',
+  formulaView: 'formula:view',
+  // ⚠ 与 dataset:manage 分家是刻意的：改一条库公式会同时改掉**所有**引用它的
+  // 台账列，爆炸半径比改单张表的一列大一个量级（docs/DATASET_DESIGN.md §9）
+  formulaManage: 'formula:manage',
 } as const
 
 export type PermissionCode =
