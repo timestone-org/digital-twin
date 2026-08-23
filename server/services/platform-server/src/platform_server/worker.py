@@ -200,10 +200,10 @@ def build_dataset_collector(container: Container) -> DatasetCollector:
             # ⚠ 走归档库自己的只读池：一次跨月的时序扫描不该把台账的写连接
             # 连同它持有的锁一起占住（ADR-0003 写独占读放行）
             history=container.history,
-            dirty=container.dataset_dirty,
+            dirty=container.dataset.dirty,
             settings=container.settings,
         ),
-        lease=container.dataset_lease,
+        lease=container.dataset.lease,
     )
 
 
@@ -335,7 +335,7 @@ async def _release(container: Container) -> None:
     await container.nodes.close()
     await container.ac_publish_lease.close()
     await container.ac_daily_lease.close()
-    await container.dataset_lease.close()
+    await container.dataset.lease.close()
     await container.ac_source.dispose()
     await container.database.dispose()
 

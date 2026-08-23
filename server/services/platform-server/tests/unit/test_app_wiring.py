@@ -5,7 +5,6 @@
 """
 
 from dataclasses import dataclass, field
-from datetime import UTC
 from typing import cast
 
 from pydantic import SecretStr
@@ -30,10 +29,12 @@ from platform_server.apps.dashboard.services import (
     SubscriptionViewers,
     load_module_catalog,
 )
-from platform_server.apps.dataset.services import DatasetDirtyLog
 from platform_server.apps.hvac.deps import get_ac_source_reader
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
-from platform_server.container import IDEMPOTENCY_NAMESPACE, Container
+from platform_server.container import (
+    IDEMPOTENCY_NAMESPACE,
+    Container,
+)
 from platform_server.lease import Lease
 from platform_server.opcua import OpcuaClient
 from platform_server.realtime import RealtimeClient
@@ -44,7 +45,7 @@ from unit.collect_fakes import (
     FakeCommandTransport,
     FakeHistorySource,
 )
-from unit.dataset_fakes import FakeSetSink
+from unit.dataset_fakes import dataset_parts
 from unit.opcua_fakes import FakeNodeWriter
 from unit.publish_fakes import FakeSnapshotSource, FakeViewerSource
 
@@ -153,12 +154,14 @@ def build_container(
         lease=cast(Lease, FakeDependency()),
         ac_publish_lease=cast(Lease, FakeDependency()),
         ac_daily_lease=cast(Lease, FakeDependency()),
-        dataset_lease=cast(Lease, FakeDependency()),
         nodes=cast(OpcuaClient, FakeNodeWriter()),
         object_store=FakeObjectStore(),
         credential_cipher=CredentialCipher("c" * 32),
-        dataset_dirty=DatasetDirtyLog(sink=FakeSetSink()),
-        dataset_timezone=UTC,
+        dataset=dataset_parts(
+            cast(Database, database),
+            build_settings(),
+            cast(Lease, FakeDependency()),
+        ),
     )
     return container, database, source
 
@@ -169,7 +172,9 @@ def test_readiness_never_waits_on_the_external_source() -> None:
 
 
 def test_the_external_source_is_closed_before_the_connection_pool() -> None:
-    # 连接池最后关：在途请求还要用它
+    # 连接池最后关：在途请求还要用它。
+    # ⚠ 在跑的历史回填排在**最前**：它收摊时还要写一次终态、放一次锁（要
+    # Redis），最后一批的提交还要连接池——排在它们后面就是关完了才想起来收摊
     container, _database, _source = build_container()
     closing = [
         hook.name
@@ -179,6 +184,7 @@ def test_the_external_source_is_closed_before_the_connection_pool() -> None:
         if hook.shutdown is not None
     ]
     assert closing == [
+        "dataset_backfill",
         "stream",
         "cache",
         "command_bus",

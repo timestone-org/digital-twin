@@ -28,7 +28,11 @@ from platform_server.apps.dashboard.services import (
     SubscriptionViewers,
     load_module_catalog,
 )
-from platform_server.apps.dataset.services import DatasetDirtyLog
+from platform_server.apps.dataset.services import (
+    BackfillJobs,
+    BackfillRunner,
+    DatasetDirtyLog,
+)
 from platform_server.lease import Lease, RedisLease
 from platform_server.opcua import OpcuaClient
 from platform_server.realtime import RealtimeClient
@@ -61,6 +65,28 @@ IDEMPOTENCY_NAMESPACE = "platform:dashboard"
 
 
 @dataclass(frozen=True)
+class DatasetParts:
+    """台账那一面的长生命周期件，四件收成一包。
+
+    ⚠ 收成一件而不是在 `Container` 上平铺四个字段：它们的装配依赖完全一致
+    （都只要 settings / 连接池 / cache），而每加一期就往装配那一段再多两行
+    ——那一段贴着 50 行的上限，第 7 期（保留期清理）会当场把它顶破。
+    ⚠ 收拢**不许**换成 `**dict[str, Any]` 那种展开：那样 pyright 对这一整段
+    的关键字参数一个都检查不到，拼错一个字段名要到运行期才炸。
+    """
+
+    #: 写入后的报脏口，见 docs/DATASET_DESIGN.md §16
+    dirty: DatasetDirtyLog
+    #: 历史回填的起跑口，兼在跑的那几个后台任务的强引用（§14）
+    backfill: BackfillRunner
+    #: 聚合采集器的单活租约（§13.4）
+    lease: Lease
+    #: 按日历回推月/年窗口时用的业务时区。⚠ 在装配时解析而不是用到再解析：
+    #: 时区名写错了要在进程启动时就拒绝，而不是等某一条公式算到月窗口才 500
+    timezone: tzinfo
+
+
+@dataclass(frozen=True)
 class Container:
     """一个进程内的全部长生命周期对象。"""
 
@@ -86,21 +112,16 @@ class Container:
     viewer_database: Database
     realtime: RealtimeClient
     lease: Lease
-    # ⚠ 四把租约互不相干：大屏发布、预测下发、每日增量、台账采集各自单活。
-    # 共用一把会让「大屏发布器在跑」顺带决定「今晚抽不抽增量」，而四条循环的
-    # 节奏差着好几个量级
+    # ⚠ 四把租约互不相干：大屏发布、预测下发、每日增量、台账采集各自单活
+    # （台账那把在 `dataset.lease` 上）。共用一把会让「大屏发布器在跑」顺带
+    # 决定「今晚抽不抽增量」，而四条循环的节奏差着好几个量级
     ac_publish_lease: Lease
     ac_daily_lease: Lease
-    dataset_lease: Lease
     nodes: OpcuaClient
     object_store: ObjectStore
     # 数据源口令的加解密器。密钥派生只在装配时做一次
     credential_cipher: CredentialCipher
-    # 台账写入后的报脏口，见 docs/DATASET_DESIGN.md §16
-    dataset_dirty: DatasetDirtyLog
-    # 台账按日历回推月/年窗口时用的业务时区。⚠ 在装配时解析而不是用到再解析：
-    # 时区名写错了要在进程启动时就拒绝，而不是等某一条公式算到月窗口才 500
-    dataset_timezone: tzinfo
+    dataset: DatasetParts
 
 
 def build_container(settings: Settings) -> Container:
@@ -143,15 +164,38 @@ def build_container(settings: Settings) -> Container:
         lease=_build_lease(settings, PUBLISHER_LEASE_KEY),
         ac_publish_lease=_build_lease(settings, AC_PUBLISH_LEASE_KEY),
         ac_daily_lease=_build_lease(settings, AC_DAILY_LEASE_KEY),
-        dataset_lease=_build_lease(settings, DATASET_LEASE_KEY),
         nodes=_build_nodes(settings),
         # ⚠ 构造不连网：桶不存在要到第一次真正读写时才报，不在启动期误判
         object_store=create_object_store(settings),
         credential_cipher=_build_cipher(settings),
-        dataset_dirty=DatasetDirtyLog(sink=cache),
-        # ⚠ 时区在装配时就解析：名字写错了要在进程启动时拒绝，而不是等某一条
-        # 公式算到月窗口才 500
-        dataset_timezone=ZoneInfo(settings.dataset_bucket_timezone),
+        dataset=_dataset(settings, database, history_database, cache),
+    )
+
+
+def _dataset(
+    settings: Settings,
+    database: Database,
+    history_database: Database,
+    cache: Cache,
+) -> DatasetParts:
+    """台账那一面的四件。⚠ 构造不起任务、不连网：回填只在有人 POST 时才跑。
+
+    ⚠ 回填取数走归档那**一个**只读连接池（与采集读侧同一个）：一次跨月的时序
+    扫描不该把业务写连接连同它持有的锁一起占住，而另建一个池等于多出一个没有
+    任何一处会去关的连接池。
+    Args: settings, database, history_database, cache。
+    """
+    return DatasetParts(
+        dirty=DatasetDirtyLog(sink=cache),
+        backfill=BackfillRunner(
+            sessions=database,
+            history=ReadOnlyHistorySource(database=history_database),
+            dirty=DatasetDirtyLog(sink=cache),
+            jobs=BackfillJobs(store=cache),
+            settings=settings,
+        ),
+        lease=_build_lease(settings, DATASET_LEASE_KEY),
+        timezone=ZoneInfo(settings.dataset_bucket_timezone),
     )
 
 

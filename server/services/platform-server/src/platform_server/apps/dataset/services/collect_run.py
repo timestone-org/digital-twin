@@ -5,6 +5,7 @@
 """
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -104,7 +105,7 @@ async def collect_table(
     if table is None:
         return None
     columns = await column_crud.list_by_table(session, table.id)
-    points = _point_columns(table, columns)
+    points = point_columns(table, columns)
     if not points:
         # ⚠ 水位一格都不推：等有人把点位列配上之后要能从原地接着算。推了就是把
         # 这段时间**永久跳过**——它此后只能靠回填补，而回填要人显式触发
@@ -143,16 +144,14 @@ async def _write_window(
     cells = await aggregate_cells(
         context.history, columns=points, window=window
     )
-    rows = _rows_of(table.id, cells, _manual_defaults(columns))
+    rows = collected_rows(table.id, cells, manual_defaults(columns))
     if not rows:
         return 0
     await record_crud.upsert_collected(
         session,
         table_id=table.id,
         rows=rows,
-        manual_keys=[
-            column.key for column in columns if column.source != POINT_SOURCE
-        ],
+        manual_keys=manual_keys(columns),
     )
     await _recompute(session, context, table, columns, window)
     mark_dirty(session, context.dirty, table.code)
@@ -193,8 +192,8 @@ async def _recompute(
     )
 
 
-def _point_columns(
-    table: DatasetTable, columns: list[DatasetColumn]
+def point_columns(
+    table: DatasetTable, columns: Sequence[DatasetColumn]
 ) -> list[PointColumn]:
     """能真正参与聚合的点位列。绑定串写坏的那几列跳过并记一条。
 
@@ -239,7 +238,18 @@ def _parse_node_key(
     )
 
 
-def _manual_defaults(columns: list[DatasetColumn]) -> dict[str, Any]:
+def manual_keys(columns: Sequence[DatasetColumn]) -> list[str]:
+    """更新时要从 EXCLUDED 里减掉的那些键 —— 一切非点位汇总列。
+
+    ⚠ 不减掉就是每一拍拿默认值盖掉人填的数（`record_crud.upsert_collected`）。
+    ⚠ 与回填共用这一份：两处各写一份「哪些键归人管」，漂了不会报错，只会在
+    某一条路径上把人工录入值悄悄抹平。
+    Args: columns。
+    """
+    return [column.key for column in columns if column.source != POINT_SOURCE]
+
+
+def manual_defaults(columns: Sequence[DatasetColumn]) -> dict[str, Any]:
     """人工录入列的表单默认值。
 
     ⚠ 只给**新建**的行用：更新时这些键会从 EXCLUDED 里被减掉，否则每一拍都拿
@@ -253,7 +263,7 @@ def _manual_defaults(columns: list[DatasetColumn]) -> dict[str, Any]:
     }
 
 
-def _rows_of(
+def collected_rows(
     table_id: uuid.UUID,
     cells: dict[datetime, dict[str, Cell]],
     defaults: dict[str, Any],

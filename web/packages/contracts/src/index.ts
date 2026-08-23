@@ -350,6 +350,8 @@ export {
 } from './realtime'
 export type {
   DatasetAggFunc,
+  DatasetBackfillJob,
+  DatasetBackfillStatus,
   DatasetCatalogChoice,
   DatasetCatalogFunction,
   DatasetColumn,
@@ -387,6 +389,7 @@ export type {
 } from './dataset'
 export {
   DATASET_AGG_FUNCS,
+  DATASET_BACKFILL_STATUSES,
   DATASET_COLLECT_MODES,
   DATASET_COLUMN_SOURCES,
   DATASET_COLUMN_TYPES,

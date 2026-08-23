@@ -15,6 +15,21 @@ from lib.logging.logger import get_logger
 
 _logger = get_logger("lib.cache")
 
+# 值等于自己才续期。否则会续到别人的键上，两个持有者同时以为自己独占
+_RENEW_SCRIPT = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('expire', KEYS[1], ARGV[2])
+end
+return 0
+"""
+# 值等于自己才删。否则会删掉接任者的那一份，而它正以为自己独占着
+_DELETE_SCRIPT = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('del', KEYS[1])
+end
+return 0
+"""
+
 
 class Cache:
     """一个 Redis 连接池的句柄。"""
@@ -70,6 +85,37 @@ class Cache:
             self._client.set(key, value, ex=ttl_s, nx=True)
         )
         return bool(result)
+
+    async def renew_if_owner(self, key: str, value: str, *, ttl_s: int) -> bool:
+        """值还等于 `value` 才续期，续上返回 True。
+
+        ⚠ 必须是 CAS 而不是「先读再写」：读到自己、写回去之间键可能已经过期
+        并被别人抢走，那一写就把别人的锁改成了自己的，两个持有者同时以为自己
+        独占——而两边都不会报错。
+        Args: key, value, ttl_s。
+        """
+        return bool(
+            await self._run(
+                self._client.eval(  # pyright: ignore[reportUnknownMemberType]
+                    _RENEW_SCRIPT, 1, key, value, ttl_s
+                )
+            )
+        )
+
+    async def delete_if_owner(self, key: str, value: str) -> bool:
+        """值还等于 `value` 才删，删掉返回 True。
+
+        ⚠ 放锁必须是 CAS：自己那把锁可能早已过期并被别人抢走，无条件删就是
+        把接任者的锁一起删掉——而它正以为自己独占着，两边同时在写。
+        Args: key, value。
+        """
+        return bool(
+            await self._run(
+                self._client.eval(  # pyright: ignore[reportUnknownMemberType]
+                    _DELETE_SCRIPT, 1, key, value
+                )
+            )
+        )
 
     async def get(self, key: str) -> str | None:
         """读一个字符串值。

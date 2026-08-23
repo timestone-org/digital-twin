@@ -444,7 +444,8 @@ _ASSET_RULES: tuple[RouteRuleSpec, ...] = (
 )
 
 # 数据台账。阶梯自下而上：960 写兜底 → 962 读 → 964 重算 → 966 记录写 →
-# 968 记录读 → 970 单行修正 → 972 批量撤销修正。每一级都必须压过它下面那一级，
+# 968 记录读 → 970 单行修正 → 972 批量撤销修正 → 974 回填 → 976 回填进度读。
+# 每一级都必须压过它下面那一级，
 # 而整摞又都要压过 900 那五条按方法兜底的规则——`{_PLATFORM}/*` 的 `*`
 # **跨斜杠**，不压过去就成了拿 `ac:manage` 删台账。
 # ⚠ 顺序在这里是承重的：`records*` 的 `*` 同样跨斜杠，966 的写兜底会把
@@ -512,6 +513,26 @@ _DATASET_RULES: tuple[RouteRuleSpec, ...] = (
         description=(
             "写与撤销单行的人工修正。⚠ 修正值优先于自动采集值，等同于篡改"
             "台账，故不跟着 966 的记录写走"
+        ),
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/dataset-tables*/backfill",
+        "*",
+        codes=(DATASET_BACKFILL,),
+        priority=974,
+        description=(
+            "起与取消历史回填。⚠ 一次会按点位历史重算一大段时间的台账行，"
+            "爆炸半径与 964 的重算同级，不跟着 960 的 manage 走"
+        ),
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/dataset-tables*/backfill",
+        "GET",
+        codes=(DATASET_VIEW,),
+        priority=976,
+        description=(
+            "查回填进度。必须压过上面那条——那条用的是 `*` 方法，会把 GET 一并"
+            "收进 backfill，于是只想看一眼进度的人反而要拿到改写历史的权限"
         ),
     ),
     RouteRuleSpec(

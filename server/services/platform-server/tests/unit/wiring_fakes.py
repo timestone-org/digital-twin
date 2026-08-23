@@ -5,7 +5,6 @@
 """
 
 from dataclasses import dataclass, field
-from datetime import UTC
 from typing import cast
 
 from pydantic import SecretStr
@@ -29,8 +28,10 @@ from platform_server.apps.dashboard.services import (
     SubscriptionViewers,
     load_module_catalog,
 )
-from platform_server.apps.dataset.services import DatasetDirtyLog
-from platform_server.container import IDEMPOTENCY_NAMESPACE, Container
+from platform_server.container import (
+    IDEMPOTENCY_NAMESPACE,
+    Container,
+)
 from platform_server.lease import Lease
 from platform_server.opcua import OpcuaClient
 from platform_server.realtime import RealtimeClient
@@ -41,7 +42,7 @@ from unit.collect_fakes import (
     FakeCommandTransport,
     FakeHistorySource,
 )
-from unit.dataset_fakes import FakeSetSink
+from unit.dataset_fakes import dataset_parts
 from unit.opcua_fakes import FakeNodeWriter
 from unit.publish_fakes import FakeSnapshotSource, FakeViewerSource
 
@@ -192,10 +193,12 @@ def build_container(ledger: list[str], *, settings: Settings) -> Container:
         lease=cast(Lease, LedgerLease(ledger=ledger)),
         ac_publish_lease=cast(Lease, LedgerLease(ledger=ledger)),
         ac_daily_lease=cast(Lease, LedgerLease(ledger=ledger)),
-        dataset_lease=cast(Lease, LedgerLease(ledger=ledger)),
         nodes=cast(OpcuaClient, FakeNodeWriter()),
         object_store=FakeObjectStore(),
         credential_cipher=CredentialCipher("c" * 32),
-        dataset_dirty=DatasetDirtyLog(sink=FakeSetSink()),
-        dataset_timezone=UTC,
+        dataset=dataset_parts(
+            cast(Database, FakeDependency("backfill", ledger)),
+            settings,
+            cast(Lease, LedgerLease(ledger=ledger)),
+        ),
     )

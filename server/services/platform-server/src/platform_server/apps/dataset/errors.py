@@ -133,3 +133,45 @@ class DatasetFormulaPresetRule(AppError):
 
     code = 41223
     http_status = 400
+
+
+class DatasetBackfillInvalid(AppError):
+    """回填区间不合法：区间为空，或整段没有可补的桶。
+
+    ⚠ 与 `DatasetRecordInvalid` 分开：那一条说的是提交上来的**值**不合法，
+    这一条说的是**时间范围**落在了取不到数的那一段——处置是改时间，不是改值。
+    """
+
+    code = 41230
+    http_status = 400
+
+
+class DatasetBackfillBusy(AppError):
+    """这张台账已经有一个回填在跑。
+
+    ⚠ 不是 400：请求本身合法，只是此刻排不上。调用方该做的是等它跑完或先取消，
+    而不是改参数重试。
+    """
+
+    code = 41231
+    http_status = 409
+
+
+class DatasetBackfillNotRunning(AppError):
+    """这张台账当前没有正在跑的回填，取消无从谈起。"""
+
+    code = 41232
+    http_status = 404
+
+
+class DatasetBackfillUnreadable(AppError):
+    """回填进度读不出来（存的内容已损坏）。
+
+    ⚠ 与「没有任务」分成两件事：**「我说不出来」与「什么都没有」是两个答案**。
+    合成一个的话，界面会在读不到的时候显示「没有回填任务」，而用户据此又发一次
+    ——那一次撞上的是仍然握着锁的上一次。
+    """
+
+    # ⚠ 首位跟 HTTP 状态走：这一条是 503，故是 5 开头而不是 4
+    code = 51230
+    http_status = 503

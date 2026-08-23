@@ -3,7 +3,7 @@
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import CrudBase
@@ -55,6 +55,28 @@ class PointCrud(CrudBase[CollectPoint]):
             )
         )
         return frozenset(rows.scalars().all())
+
+    async def retention_days_of(
+        self,
+        session: AsyncSession,
+        points: Sequence[tuple[uuid.UUID, str]],
+    ) -> list[int | None]:
+        """这几个点位各自的归档保留期天数，`None` 表示永久保留。
+
+        ⚠ 点位表里查不到的那几个一行都不回：绑了一个不存在的点位与「那个点位
+        永久保留」是两回事，硬凑一个 None 出来会让前者也被当成没有下界。
+        Args: session, points（`(source_id, code)` 对）。
+        """
+        if not points:
+            return []
+        rows = await session.execute(
+            select(CollectPoint.archive_retention_days).where(
+                tuple_(CollectPoint.source_id, CollectPoint.code).in_(
+                    list(points)
+                )
+            )
+        )
+        return list(rows.scalars().all())
 
     async def codes_of(
         self, session: AsyncSession, source_id: uuid.UUID, *, limit: int

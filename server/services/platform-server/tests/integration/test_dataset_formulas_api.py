@@ -505,7 +505,8 @@ async def test_seeding_never_overwrites_a_preset_someone_edited(
     row = await a_stored_preset(db_session)
     # ⚠ 缺几条要就地数，不能写死：写死就等于假设别的用例已经把种子跑过了，
     # 而用例顺序是随机的——那样这条会按跑法时绿时红
-    present = {stored.code for stored in await formula_crud.list_all(db_session)}
+    stored = await formula_crud.list_all(db_session)
+    present = {entry.code for entry in stored}
     missing = {entry.code for entry in BUILTIN_FORMULAS} - present
 
     added = await seed_builtin_formulas(db_session)

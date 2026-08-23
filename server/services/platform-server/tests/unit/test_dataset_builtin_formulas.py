@@ -76,7 +76,5 @@ def test_a_preset_call_lands_the_same_dependencies_as_typing_it_inline() -> (
     None
 ):
     expanded = parse_formula("@环比增长率({产量})", library=PRESETS)
-    inline = parse_formula(
-        "({产量} - PREV({产量}, 1)) / PREV({产量}, 1) * 100"
-    )
+    inline = parse_formula("({产量} - PREV({产量}, 1)) / PREV({产量}, 1) * 100")
     assert expanded.deps.to_json() == inline.deps.to_json()

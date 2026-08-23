@@ -63,9 +63,29 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
             startup=lambda: _selfcheck(container),
             startup_order=10,
         ),
+        _backfill_hook(container),
         *_client_hooks(container),
         *_http_hooks(container),
         *_pool_hooks(container),
+    )
+
+
+def _backfill_hook(container: Container) -> LifespanHook:
+    """在跑的历史回填先收摊，再关 Redis 与连接池。
+
+    ⚠ 顺序不是启动的逆序：这一步必须排在 Redis 与连接池**之前**——回填收摊
+    时还要写一次终态、放一次锁，两样都要 Redis，而最后一批的提交要连接池。
+    ⚠ 收摊是协作式的：置位之后在跑的任务补完手上那一批就停，绝不留半个批次。
+    Args: container。
+    """
+    runner = container.dataset.backfill
+
+    async def shutdown() -> None:
+        runner.stop()
+        await runner.drain(container.settings.app_drain_timeout_s)
+
+    return LifespanHook(
+        name="dataset_backfill", shutdown=shutdown, shutdown_order=96
     )
 
 

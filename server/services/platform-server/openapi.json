@@ -985,6 +985,51 @@
         "title": "ApiResponse[AssetOut]",
         "type": "object"
       },
+      "ApiResponse_BackfillJobOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BackfillJobOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[BackfillJobOut]",
+        "type": "object"
+      },
       "ApiResponse_BindingOut_": {
         "properties": {
           "code": {
@@ -4523,6 +4568,191 @@
           "error"
         ],
         "title": "AssetVariantOut",
+        "type": "object"
+      },
+      "BackfillJobOut": {
+        "description": "一次回填任务的全部对外状态，起任务与查进度共用这一个形状。",
+        "properties": {
+          "cursor": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor"
+          },
+          "done_buckets": {
+            "title": "Done Buckets",
+            "type": "integer"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "fast_path": {
+            "title": "Fast Path",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "interval_ms": {
+            "title": "Interval Ms",
+            "type": "integer"
+          },
+          "is_clamped": {
+            "title": "Is Clamped",
+            "type": "boolean"
+          },
+          "is_recompute_truncated": {
+            "title": "Is Recompute Truncated",
+            "type": "boolean"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "recompute_failed": {
+            "title": "Recompute Failed",
+            "type": "integer"
+          },
+          "recomputed": {
+            "title": "Recomputed",
+            "type": "integer"
+          },
+          "requested_since": {
+            "format": "date-time",
+            "title": "Requested Since",
+            "type": "string"
+          },
+          "requested_until": {
+            "format": "date-time",
+            "title": "Requested Until",
+            "type": "string"
+          },
+          "since": {
+            "format": "date-time",
+            "title": "Since",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "cancelled",
+              "done",
+              "failed",
+              "running"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "table_code": {
+            "title": "Table Code",
+            "type": "string"
+          },
+          "table_id": {
+            "format": "uuid",
+            "title": "Table Id",
+            "type": "string"
+          },
+          "total_buckets": {
+            "title": "Total Buckets",
+            "type": "integer"
+          },
+          "until": {
+            "format": "date-time",
+            "title": "Until",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "written_rows": {
+            "title": "Written Rows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "table_id",
+          "table_code",
+          "status",
+          "interval_ms",
+          "since",
+          "until",
+          "requested_since",
+          "requested_until",
+          "is_clamped",
+          "fast_path",
+          "total_buckets",
+          "done_buckets",
+          "written_rows",
+          "recomputed",
+          "recompute_failed",
+          "is_recompute_truncated",
+          "cursor",
+          "started_at",
+          "updated_at",
+          "finished_at",
+          "error",
+          "message",
+          "notes"
+        ],
+        "title": "BackfillJobOut",
+        "type": "object"
+      },
+      "BackfillStartIn": {
+        "additionalProperties": false,
+        "description": "要补哪一段历史。两端都按桶对齐，越界的部分会被 clamp 并逐条说明。",
+        "properties": {
+          "since": {
+            "format": "date-time",
+            "title": "Since",
+            "type": "string"
+          },
+          "until": {
+            "format": "date-time",
+            "title": "Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "since",
+          "until"
+        ],
+        "title": "BackfillStartIn",
         "type": "object"
       },
       "BindingCreateIn": {
@@ -19504,6 +19734,176 @@
         "summary": "更新台账",
         "tags": [
           "dataset-table"
+        ]
+      }
+    },
+    "/api/v1/platform/dataset-tables/{table_id}/backfill": {
+      "delete": {
+        "description": "取消是协作式的：当前这批跑完即停，绝不留写了一半的批。\n\n⚠ 不是 204：停下之后已写入的部分照样会重算一遍，而「补了多少、重算了多少」\n只能由回执说出来。\nArgs: table_id, session, runner, _gate。",
+        "operationId": "cancel_backfill_api_v1_platform_dataset_tables__table_id__backfill_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_BackfillJobOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "取消正在跑的回填",
+        "tags": [
+          "dataset-backfill"
+        ]
+      },
+      "get": {
+        "description": "`data = null` 表示这张表当前没有回填任务，与「任务失败」是两件事。\n\nArgs: table_id, session, runner, _viewer。",
+        "operationId": "read_backfill_api_v1_platform_dataset_tables__table_id__backfill_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_BackfillJobOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "查回填进度",
+        "tags": [
+          "dataset-backfill"
+        ]
+      },
+      "post": {
+        "description": "后台补这一段的桶，立刻返回；进度轮询 GET 同一路径。\n\nArgs: table_id, payload, session, runner, gate。",
+        "operationId": "start_backfill_api_v1_platform_dataset_tables__table_id__backfill_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackfillStartIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_BackfillJobOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "起一个历史回填任务",
+        "tags": [
+          "dataset-backfill"
         ]
       }
     },

@@ -43,6 +43,31 @@ def test_protocol_declares_the_same_names_as_the_real_client() -> None:
     assert declared == set(public_surface(Cache))
 
 
+async def test_only_the_owner_can_renew_a_key() -> None:
+    # ⚠ 续期必须是 CAS：读到自己、写回去之间键可能已经过期并被别人抢走，
+    # 那一写就把别人的锁改成了自己的，两个持有者同时以为自己独占
+    cache = InMemoryCache()
+    await cache.set_if_absent("lock", "mine", ttl_s=10)
+
+    assert await cache.renew_if_owner("lock", "mine", ttl_s=60) is True
+    assert await cache.renew_if_owner("lock", "theirs", ttl_s=60) is False
+    assert cache.ttl_s["lock"] == 60
+
+
+async def test_renewing_a_key_nobody_holds_changes_nothing() -> None:
+    cache = InMemoryCache()
+
+    assert await cache.renew_if_owner("lock", "mine", ttl_s=60) is False
+    assert "lock" not in cache.ttl_s
+
+
+async def test_an_unavailable_cache_refuses_to_renew_rather_than_lie() -> None:
+    # ⚠ 不可达时不许回 True：调用方据它判「锁还在我手上」，回错一次就是两个
+    # 进程同时在写同一段数据
+    with pytest.raises(DependencyUnavailable):
+        await UnavailableCache().renew_if_owner("lock", "mine", ttl_s=60)
+
+
 async def test_limiter_allows_up_to_the_limit_then_rejects() -> None:
     limiter = FixedWindowLimiter(
         cache=InMemoryCache(), namespace="login", limit=3, window_s=60

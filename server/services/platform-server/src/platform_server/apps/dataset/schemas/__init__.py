@@ -1,5 +1,9 @@
 """台账面的入参与出参。ORM 模型绝不直接返给 HTTP 层。"""
 
+from platform_server.apps.dataset.schemas.backfill import (
+    BackfillJobOut,
+    BackfillStartIn,
+)
 from platform_server.apps.dataset.schemas.column import (
     ColumnCreateIn,
     ColumnOut,
@@ -52,6 +56,8 @@ from platform_server.apps.dataset.schemas.table import (
 )
 
 __all__ = [
+    "BackfillJobOut",
+    "BackfillStartIn",
     "CatalogChoiceOut",
     "CatalogFunctionOut",
     "ColumnCreateIn",

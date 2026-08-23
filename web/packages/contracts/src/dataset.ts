@@ -336,6 +336,66 @@ export interface DatasetRecompute {
 }
 
 /**
+ * 一次历史回填的状态。
+ * ⚠ `cancelled` 与 `failed` 分成两档是刻意的：前者是人按的「不用跑了」，
+ * 后者要有人去看日志。合成一档的话，界面只能给出一句谁也不知道该不该管的话。
+ */
+export const DATASET_BACKFILL_STATUSES = [
+  'running',
+  'done',
+  'cancelled',
+  'failed',
+] as const
+export type DatasetBackfillStatus = (typeof DATASET_BACKFILL_STATUSES)[number]
+
+/**
+ * 一次历史回填任务。起任务与查进度**共用这一个形状**。对应后端
+ * `BackfillJobOut`（docs/DATASET_DESIGN.md §14.8）。
+ *
+ * ⚠ 请求区间（`requested_*`）与实际区间（`since` / `until`）两份都要渲染：
+ * 只给实际区间的话，被 clamp 掉的那一段在界面上无从对比，用户看到的只是
+ * 「它补的比我要的少」，而少在哪一头看不出来。
+ * ⚠ `notes` 必须原样显示：三道 clamp 与取数路径的说明都在里面，静默裁剪是
+ * 这条链路的失败模式。
+ */
+export interface DatasetBackfillJob {
+  table_id: string
+  table_code: string
+  status: DatasetBackfillStatus
+  /** 一行覆盖的桶宽，进度按桶数算。 */
+  interval_ms: number
+  /** 实际回填的区间，两端都是**桶起点**、闭区间。 */
+  since: string
+  until: string
+  /** 用户原样提交的区间。 */
+  requested_since: string
+  requested_until: string
+  is_clamped: boolean
+  /**
+   * 取数路径。⚠ 本仓的点位历史没有连续聚合视图，故恒为 `raw`——界面不要按
+   * 「有快路可选」来渲染（§14.4）。
+   */
+  fast_path: string
+  total_buckets: number
+  done_buckets: number
+  written_rows: number
+  recomputed: number
+  recompute_failed: number
+  /** 待重算的行数触顶，公式列**没算完**，界面要提示手动重算剩余区间。 */
+  is_recompute_truncated: boolean
+  /** 已经补到哪个桶；一批都还没跑完时是 null。 */
+  cursor: string | null
+  started_at: string
+  updated_at: string
+  finished_at: string | null
+  /** 只在 `status === 'failed'` 时有值。 */
+  error: string | null
+  message: string
+  /** clamp、取数路径、重算触顶这些「用户必须知道」的说明，逐条中文。 */
+  notes: string[]
+}
+
+/**
  * 库公式的形参种类。
  * ⚠ 两档差在**实参能是什么**：`column` 只收裸列引用 `{列key}`，因为
  * `PREV` / `*_OVER` / `*_ALL` 要知道是哪一列；`value` 收任意表达式。

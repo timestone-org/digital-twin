@@ -5,7 +5,6 @@ L2/L3 打真实 Postgres（SQLite 上全绿的迁移可以在生产直接失败�
 下发形状完全一致的签名头——用例因此走的是与生产同一条鉴权路径。
 """
 
-import contextlib
 import os
 import socket
 import uuid
@@ -19,7 +18,6 @@ from fastapi import FastAPI
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import (
-    AsyncConnection,
     AsyncSession,
     async_sessionmaker,
 )
@@ -28,7 +26,8 @@ from unit.collect_fakes import (
     FakeCommandTransport,
     FakeHistorySource,
 )
-from unit.dataset_fakes import FakeSetSink
+from unit.database_fakes import MakerSessions, rollback_sessions
+from unit.dataset_fakes import FakeSetSink, RecordingRunner
 from unit.opcua_fakes import FakeNodeWriter
 from unit.source_fakes import FakeAcSource, InMemoryStream, full_shape
 
@@ -72,7 +71,11 @@ from platform_server.apps.dashboard.services import (
     ValidationContext,
 )
 from platform_server.apps.dataset import catalog as dataset_catalog
-from platform_server.apps.dataset.services import DatasetDirtyLog
+from platform_server.apps.dataset.services import (
+    BackfillJobs,
+    BackfillRunner,
+    DatasetDirtyLog,
+)
 from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
 from platform_server.apps.hvac.deps import (
     get_ac_source_reader,
@@ -268,32 +271,6 @@ def _session_override(
     return override
 
 
-@dataclass(frozen=True)
-class MakerSessions:
-    """把用例那条回滚事务的会话工厂包成「开短事务」的最小面。
-
-    ⚠ 必须与 HTTP 那侧共用同一条连接：分开连就是两个事务，用例经接口种下的
-    绑定在下发那边根本看不见，而现象是「模型不存在」，看着像业务逻辑写错了。
-    工厂本身用的是 `join_transaction_mode="create_savepoint"`，故这里的提交
-    只落到保存点，外层事务最后整体回滚。
-    """
-
-    maker: async_sessionmaker[AsyncSession]
-
-    @contextlib.asynccontextmanager
-    async def session(self) -> AsyncIterator[AsyncSession]:
-        """开一个落在保存点上的短事务。"""
-        async with self.maker() as opened:
-            try:
-                yield opened
-            except Exception:
-                await opened.rollback()
-                raise
-            else:
-                await opened.commit()
-                await run_after_commit_hooks(opened)
-
-
 @dataclass
 class AppContext:
     """整装应用的客户端与一个**同连接**的会话。
@@ -308,6 +285,9 @@ class AppContext:
     object_store: FakeObjectStore
     """台账报脏的进程内替身；用例据它断言「报没报脏」。"""
     dirty: FakeSetSink
+    """回填的起跑口。⚠ 与应用同一个实例：端点用例据它看「起过没有」，
+    而 `sessions` 就是用例那条回滚事务的会话工厂。"""
+    backfill: BackfillRunner
 
 
 @dataclass(frozen=True)
@@ -469,14 +449,32 @@ def _wire_fakes(
     )
 
 
-def _faked_container(built: Container, fakes: ExternalFakes) -> Container:
+def _faked_container(
+    built: Container, fakes: ExternalFakes, sessions: MakerSessions
+) -> Container:
     """把会打网络的长生命周期对象换成进程内假件。
 
     ⚠ 用例不许打网络，而 Redis 与归档库在 CI 里也不存在。
-    Args: built, fakes。
+    ⚠ 回填的起跑口换成**只记不跑**的替身：用例那条会话是一条回滚事务上的
+    单连接，后台任务会在同一条连接上另开短事务，一交错就是
+    `PendingRollbackError`。真跑一遍回填由 `integration` 那一批用例自建起跑口
+    验（`backfill_helpers.Backfiller`）。
+    Args: built, fakes, sessions。
     """
+    dirty = DatasetDirtyLog(sink=fakes.dirty)
     return replace(
         built,
+        dataset=replace(
+            built.dataset,
+            dirty=dirty,
+            backfill=RecordingRunner(
+                sessions=sessions,
+                history=fakes.collect.history,
+                dirty=dirty,
+                jobs=BackfillJobs(store=InMemoryCache()),
+                settings=built.settings,
+            ),
+        ),
         nodes=fakes.nodes,
         idempotency=IdempotencyStore(
             cache=InMemoryCache(), namespace=IDEMPOTENCY_NAMESPACE
@@ -491,23 +489,6 @@ def _faked_container(built: Container, fakes: ExternalFakes) -> Container:
             publisher=fakes.collect.plans, channel=PLAN_CHANNEL
         ),
         history=fakes.collect.history,
-        dataset_dirty=DatasetDirtyLog(sink=fakes.dirty),
-    )
-
-
-def _rollback_sessions(
-    connection: AsyncConnection,
-) -> async_sessionmaker[AsyncSession]:
-    """一条回滚事务上的会话工厂。
-
-    ⚠ `join_transaction_mode="create_savepoint"`：请求内的 commit 只落到保存点，
-    外层事务最后整体回滚，跨请求可见但不留痕。
-    Args: connection。
-    """
-    return async_sessionmaker(
-        bind=connection,
-        expire_on_commit=False,
-        join_transaction_mode="create_savepoint",
     )
 
 
@@ -525,11 +506,13 @@ async def app_context(
     if not postgres_available:
         pytest.skip("本机连不到 Postgres")
     application = build_app(settings)
-    container = _faked_container(application.state.container, external_fakes)
-    application.state.container = container
-    connection = await container.database.engine.connect()
+    connection = await application.state.container.database.engine.connect()
     transaction = await connection.begin()
-    maker = _rollback_sessions(connection)
+    maker = rollback_sessions(connection)
+    container = _faked_container(
+        application.state.container, external_fakes, MakerSessions(maker)
+    )
+    application.state.container = container
     object_store = FakeObjectStore()
     _wire_fakes(
         application,
@@ -553,6 +536,7 @@ async def app_context(
             session=session,
             object_store=object_store,
             dirty=external_fakes.dirty,
+            backfill=container.dataset.backfill,
         )
 
     await transaction.rollback()

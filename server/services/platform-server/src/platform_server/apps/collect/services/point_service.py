@@ -6,6 +6,7 @@ IO（database-standard §6），而寻址串校验要往返一趟现场设备。
 """
 
 import uuid
+from collections.abc import Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -268,3 +269,22 @@ def _new_point(source_id: uuid.UUID, item: PointItemIn) -> CollectPoint:
         archive_max_interval_ms=item.archive_max_interval_ms,
         archive_retention_days=item.archive_retention_days,
     )
+
+
+async def strictest_retention_days(
+    session: AsyncSession, *, points: Sequence[tuple[uuid.UUID, str]]
+) -> int | None:
+    """这批点位里**最短**的那个保留期；一个有下界的都没有时给 None。
+
+    ⚠ 取最短而不是最长：保留期最短的那个点位一到边界就只剩半桶样本，而半桶
+    折算出来是个错的数，写出去之后与一个真实的低值长得一模一样。宁可让保留期
+    长的那几列少补一段（它们仍可以分开建表回填），也不要留下一格错的数。
+    ⚠ 永久保留（`None`）不参与比较：它对下界没有意见，不是「零天」。
+    Args: session, points（`(source_id, code)` 对）。
+    """
+    found = [
+        days
+        for days in await point_crud.retention_days_of(session, points)
+        if days is not None
+    ]
+    return min(found) if found else None

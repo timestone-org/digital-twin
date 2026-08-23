@@ -13,6 +13,8 @@ import { describe, expect, it } from 'vitest'
 
 import type {
   DatasetAggFunc,
+  DatasetBackfillJob,
+  DatasetBackfillStatus,
   DatasetCatalogChoice,
   DatasetCatalogFunction,
   DatasetCollectMode,
@@ -50,6 +52,7 @@ import type {
 } from '@dt/contracts'
 import {
   DATASET_AGG_FUNCS,
+  DATASET_BACKFILL_STATUSES,
   DATASET_COLLECT_MODES,
   DATASET_COLUMN_SOURCES,
   DATASET_COLUMN_TYPES,
@@ -316,6 +319,32 @@ const RECOMPUTE_KEYS = {
   limit: true,
 } satisfies Keys<DatasetRecompute>
 
+const BACKFILL_JOB_KEYS = {
+  table_id: true,
+  table_code: true,
+  status: true,
+  interval_ms: true,
+  since: true,
+  until: true,
+  requested_since: true,
+  requested_until: true,
+  is_clamped: true,
+  fast_path: true,
+  total_buckets: true,
+  done_buckets: true,
+  written_rows: true,
+  recomputed: true,
+  recompute_failed: true,
+  is_recompute_truncated: true,
+  cursor: true,
+  started_at: true,
+  updated_at: true,
+  finished_at: true,
+  error: true,
+  message: true,
+  notes: true,
+} satisfies Keys<DatasetBackfillJob>
+
 const SHAPES: Record<string, Record<string, true>> = {
   TableSummaryOut: { ...SUMMARY_KEYS },
   TableOut: { ...TABLE_KEYS },
@@ -348,6 +377,7 @@ const SHAPES: Record<string, Record<string, true>> = {
   FormulaUsageOut: { ...FORMULA_USAGE_KEYS },
   FormulaDefWithUsagesOut: { ...FORMULA_DEF_WITH_USAGES_KEYS },
   RecomputeOut: { ...RECOMPUTE_KEYS },
+  BackfillJobOut: { ...BACKFILL_JOB_KEYS },
 }
 
 describe('台账线形与 openapi 一致', () => {
@@ -468,6 +498,52 @@ describe('台账线形与 openapi 一致', () => {
       limit: 20000,
     }
     expect([series.is_truncated, series.limit]).toEqual([true, 20000])
+  })
+
+  it('回填的四档状态与后端字面量同集合', () => {
+    // ⚠ `cancelled` 与 `failed` 分成两档是刻意的：前者是人按的「不用跑了」，
+    // 后者要有人去看日志。合成一档，界面只能给出一句谁也不知道该不该管的话
+    const status: DatasetBackfillStatus = 'cancelled'
+    expect([...DATASET_BACKFILL_STATUSES].sort()).toEqual([
+      'cancelled',
+      'done',
+      'failed',
+      'running',
+    ])
+    expect(DATASET_BACKFILL_STATUSES).toContain(status)
+  })
+
+  it('回填回执同时带请求区间与实际区间', () => {
+    // ⚠ 只给实际区间的话，被 clamp 掉的那一段在界面上无从对比，用户看到的
+    // 只是「它补的比我要的少」，而少在哪一头看不出来（§14.3）
+    const job: DatasetBackfillJob = {
+      table_id: 't-1',
+      table_code: 'shift',
+      status: 'running',
+      interval_ms: 3600000,
+      since: '2026-08-20T00:00:00.000Z',
+      until: '2026-08-23T00:00:00.000Z',
+      requested_since: '2026-07-01T00:00:00.000Z',
+      requested_until: '2026-08-24T00:00:00.000Z',
+      is_clamped: true,
+      fast_path: 'raw',
+      total_buckets: 72,
+      done_buckets: 0,
+      written_rows: 0,
+      recomputed: 0,
+      recompute_failed: 0,
+      is_recompute_truncated: false,
+      cursor: null,
+      started_at: '2026-08-24T05:30:00.000Z',
+      updated_at: '2026-08-24T05:30:00.000Z',
+      finished_at: null,
+      error: null,
+      message: '已开始回填 72 个桶',
+      notes: ['起点早于点位历史的保留期（30 天）'],
+    }
+    expect(job.requested_since < job.since).toBe(true)
+    // ⚠ 本仓的点位历史没有连续聚合视图，界面不要按「有快路可选」渲染
+    expect([job.fast_path, job.notes.length]).toEqual(['raw', 1])
   })
 
   it('中间那档列来源是 point 而不是协议名', () => {

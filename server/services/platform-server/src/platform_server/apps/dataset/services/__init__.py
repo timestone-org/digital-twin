@@ -4,6 +4,7 @@
 """
 
 from platform_server.apps.dataset.services import (
+    backfill_service,
     column_service,
     formula_library,
     formula_service,
@@ -13,6 +14,13 @@ from platform_server.apps.dataset.services import (
     record_read,
     record_write,
     table_service,
+)
+from platform_server.apps.dataset.services.backfill_jobs import (
+    BackfillJobs,
+    BackfillJobState,
+)
+from platform_server.apps.dataset.services.backfill_service import (
+    BackfillRunner,
 )
 from platform_server.apps.dataset.services.dirty import (
     DIRTY_TABLES_KEY,
@@ -28,10 +36,14 @@ from platform_server.apps.dataset.services.record_write import (
 __all__ = [
     "DIRTY_TABLES_KEY",
     "Actor",
+    "BackfillJobState",
+    "BackfillJobs",
+    "BackfillRunner",
     "DatasetDirtyLog",
     "RecordFilters",
     "RecordLocator",
     "RecordWriter",
+    "backfill_service",
     "column_service",
     "formula_library",
     "formula_service",

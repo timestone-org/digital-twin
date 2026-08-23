@@ -1,4 +1,4 @@
-"""闸 1 对数据台账那 23 条 `/api/v1/platform` 路由的判定钉死。
+"""闸 1 对数据台账那 26 条 `/api/v1/platform` 路由的判定钉死。
 
 ⚠ 这一层守的是**顺序**。闸 1 首条命中即终局，而 `fnmatch` 的 `*` 跨斜杠，
 所以 `dataset-tables*` 那一摞不压过 900 那五条按方法兜底的规则，就会变成
@@ -58,10 +58,15 @@ EXPECTED: tuple[tuple[str, str, frozenset[str]], ...] = (
     (f"{TABLE}/latest", "GET", VIEW),
     (f"{TABLE}/series", "GET", VIEW),
     (f"{TABLE}:recompute", "POST", BACKFILL),
+    (f"{TABLE}/backfill", "POST", BACKFILL),
+    # ⚠ 查进度只要读面的码：看一眼进度的人不该顺带拿到改写历史的权限。
+    # 这一条必须压过同路径那条 `*` 方法的写规则，反过来的话它会被一并吞掉
+    (f"{TABLE}/backfill", "GET", VIEW),
+    (f"{TABLE}/backfill", "DELETE", BACKFILL),
 )
 
 # 台账面对外端点的条数。写死是为了让「加了端点没加规则」在这里红
-DATASET_ROUTE_COUNT = 23
+DATASET_ROUTE_COUNT = 26
 
 
 def test_the_documented_face_covers_every_dataset_route() -> None:
