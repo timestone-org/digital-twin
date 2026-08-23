@@ -340,6 +340,10 @@ services:
       # 采集计划变更的广播频道，collector 订阅同一个
       PLATFORM_COLLECT_PLAN_CHANNEL: ${COLLECT_PLAN_CHANNEL:-collect:plan:changed}
       PLATFORM_COLLECT_BUCKET_TIMEZONE: ${COLLECT_BUCKET_TIMEZONE:-Asia/Shanghai}
+      # 台账按日历回推月/年窗口时用的业务时区，同时也是聚合采集器的分桶时区。
+      # ⚠ **三个角色必须同值**：api 按一种边界算公式窗口、worker 按另一种分桶，
+      # 行会成批落进隔壁那一格，而数值本身合法、全程不报错
+      PLATFORM_DATASET_BUCKET_TIMEZONE: ${DATASET_BUCKET_TIMEZONE:-Asia/Shanghai}
       # 抽取分片队列。api 角色只投递，worker 角色消费
       PLATFORM_REDIS_HOST: ${REDIS_HOST:?必填}
       PLATFORM_REDIS_PORT: ${REDIS_PORT:-6379}
@@ -458,6 +462,17 @@ services:
       PLATFORM_SQLSERVER_DATABASE: ${ACSOURCE_DB:?必填}
       PLATFORM_ACSOURCE_TIMEZONE: ${ACSOURCE_TIMEZONE:-Asia/Shanghai}
       PLATFORM_SQLSERVER_CHARSET: ${ACSOURCE_CHARSET:-UTF-8}
+      # 台账聚合采集器（docs/DATASET_DESIGN.md §12、§13）。分桶时区与 api 角色
+      # 同值，理由见那一侧的告诫
+      PLATFORM_DATASET_BUCKET_TIMEZONE: ${DATASET_BUCKET_TIMEZONE:-Asia/Shanghai}
+      # ⚠ 默认关。它同时是**运行参数**：界面上（dataset 分组）改一下立刻生效，
+      # 且覆盖值优先于这里——这一行只是没被覆盖时的取值
+      PLATFORM_DATASET_ENABLED: ${DATASET_ENABLED:-false}
+      PLATFORM_DATASET_INTERVAL_S: ${DATASET_INTERVAL_S:-60.0}
+      PLATFORM_DATASET_RECOMPUTE_TAIL_BUCKETS: ${DATASET_RECOMPUTE_TAIL_BUCKETS:-2}
+      PLATFORM_DATASET_MAX_BUCKETS_PER_TICK: ${DATASET_MAX_BUCKETS_PER_TICK:-240}
+      PLATFORM_DATASET_TABLE_TIMEOUT_S: ${DATASET_TABLE_TIMEOUT_S:-60.0}
+      PLATFORM_DATASET_LEASE_TTL_S: ${DATASET_LEASE_TTL_S:-180}
       # ⚠ 回退链必须与 platform-server 逐字一致：少写一处就是非对称失效
       PLATFORM_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
       PLATFORM_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
@@ -505,6 +520,9 @@ services:
       PLATFORM_SQLSERVER_PASSWORD: ${ACSOURCE_PASSWORD:?必填}
       PLATFORM_SQLSERVER_DATABASE: ${ACSOURCE_DB:?必填}
       PLATFORM_ACSOURCE_TIMEZONE: ${ACSOURCE_TIMEZONE:-Asia/Shanghai}
+      # 组合根装配时就要解析这个时区名，故三个角色都要带上；取值也必须
+      # 三处同值（§4.5.1）
+      PLATFORM_DATASET_BUCKET_TIMEZONE: ${DATASET_BUCKET_TIMEZONE:-Asia/Shanghai}
       PLATFORM_SQLSERVER_CHARSET: ${ACSOURCE_CHARSET:-UTF-8}
       # ⚠ 回退链必须与 platform-server 逐字一致：少写一处就是非对称失效
       PLATFORM_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}

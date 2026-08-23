@@ -8,15 +8,20 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
+    ARRAY,
     Select,
+    Text,
     delete,
     func,
+    literal,
     select,
     text,
     tuple_,
 )
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import CrudBase
@@ -65,6 +70,22 @@ _WHOLE_STATS_TAIL = """
 GROUP BY ckey
 """
 _EXCLUDE_ROW = "\n      AND r.row_id <> CAST(:exclude_row_id AS uuid)"
+
+# 采集写出的行的来源标记，与 `services/buckets.COLLECT_SOURCE` 同值
+COLLECT_SOURCE = "collect"
+# 合并 JSONB 时的空底。⚠ 两侧都要 COALESCE：`samples_json` 可空，而 SQL 的
+# NULL `||` 任何东西还是 NULL——少一边就是一次采集把整份样本数抹平
+_EMPTY_JSONB = text("'{}'::jsonb")
+
+
+@dataclass(frozen=True)
+class CollectedRow:
+    """采集折算出来的一行：桶身份 + 点位聚合值 + 桶内样本数。"""
+
+    ts: datetime
+    row_id: uuid.UUID
+    values: dict[str, Any]
+    samples: dict[str, int]
 
 
 @dataclass(frozen=True)
@@ -332,6 +353,53 @@ class RecordCrud(CrudBase[DatasetRecord]):
             for row in rows.all()
         }
 
+    async def upsert_collected(
+        self,
+        session: AsyncSession,
+        *,
+        table_id: uuid.UUID,
+        rows: Sequence[CollectedRow],
+        manual_keys: Sequence[str],
+    ) -> None:
+        """把一批采集行幂等写进去：撞上同一个桶就并进去，不新建第二行（D2）。
+
+        ⚠ SET 子句里**没有** `overrides_json`、也没有 `source` / `created_by` /
+        `created_at`：人工修正独占它自己那一列，采集与重算绝不覆盖（D4），而
+        「谁写的、什么时候第一次写的」是这一行的出身，不该每拍改一次。
+        ⚠ 更新时要把 `manual_keys` 从 EXCLUDED 里减掉：入参里带着人工录入列的
+        默认值，那是给**新建**的行用的；不减就是每一拍都拿默认值盖掉人填的数。
+        ⚠ `updated_at` 要显式推进：`onupdate` 是 ORM 层的钩子，核心层的 upsert
+        走不到它，不写就永远停在第一次写入的时刻。
+        Args: session, table_id, rows, manual_keys（非点位列的键）。
+        """
+        if not rows:
+            return
+        statement = insert(DatasetRecord).values(
+            [_collected_values(table_id, row) for row in rows]
+        )
+        excluded = statement.excluded
+        removed = literal(sorted(manual_keys), ARRAY(Text()))
+        await session.execute(
+            statement.on_conflict_do_update(
+                index_elements=[
+                    DatasetRecord.table_id,
+                    DatasetRecord.ts,
+                    DatasetRecord.row_id,
+                ],
+                set_={
+                    "values_json": DatasetRecord.values_json.op("||")(
+                        excluded.values_json.op("-")(removed)
+                    ),
+                    "samples_json": func.coalesce(
+                        DatasetRecord.samples_json, _EMPTY_JSONB
+                    ).op("||")(
+                        func.coalesce(excluded.samples_json, _EMPTY_JSONB)
+                    ),
+                    "updated_at": func.now(),
+                },
+            )
+        )
+
     async def delete_one(
         self, session: AsyncSession, record: DatasetRecord
     ) -> None:
@@ -348,6 +416,23 @@ class RecordCrud(CrudBase[DatasetRecord]):
                 DatasetRecord.row_id == record.row_id,
             )
         )
+
+
+def _collected_values(table_id: uuid.UUID, row: CollectedRow) -> dict[str, Any]:
+    """一行采集行的插入值。
+
+    ⚠ 不带 `computed_json`：公式列在写完之后统一重算，插入时给它一个空值等于
+    先把上一拍算出来的结果抹掉再算一遍。
+    Args: table_id, row。
+    """
+    return {
+        "table_id": table_id,
+        "ts": row.ts,
+        "row_id": row.row_id,
+        "values_json": row.values,
+        "samples_json": row.samples,
+        "source": COLLECT_SOURCE,
+    }
 
 
 record_crud = RecordCrud()

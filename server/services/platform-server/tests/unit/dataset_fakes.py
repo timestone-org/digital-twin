@@ -1,6 +1,11 @@
-"""台账面那一跳跨进程依赖的假件。"""
+"""台账面那两跳跨进程依赖的假件：报脏口与归档库只读面。"""
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+
+# 减数查询的判别标志。⚠ 认这一段而不是整条 SQL：改了措辞用例仍该照常分流，
+# 而两条查询答错对方那一份的表现是「delta 全空」或「所有桶都是同一个数」
+PREVIOUS_END_MARKER = "DISTINCT ON"
 
 
 @dataclass
@@ -26,3 +31,48 @@ class FakeSetSink:
         Args: key。
         """
         return set(self.sets.get(key, set()))
+
+
+@dataclass
+class FakeHistory:
+    """归档库的只读面替身：分桶查询与减数查询各答一份预置结果。
+
+    ⚠ 不解析 SQL：断言的是被测代码**生成**的文本与绑定参数，那才是会写错的
+    地方。真跑一遍要 TimescaleDB，那一层由集成用例对着真库验。
+    """
+
+    buckets: list[dict[str, object]] = field(
+        default_factory=list[dict[str, object]]
+    )
+    previous: list[dict[str, object]] = field(
+        default_factory=list[dict[str, object]]
+    )
+    queries: list[tuple[str, dict[str, object]]] = field(
+        default_factory=list[tuple[str, dict[str, object]]]
+    )
+
+    async def fetch_all(
+        self, sql: str, params: Mapping[str, object]
+    ) -> list[dict[str, object]]:
+        """按查询种类作答。
+
+        Args: sql, params。
+        """
+        self.queries.append((sql, dict(params)))
+        if PREVIOUS_END_MARKER in sql:
+            return list(self.previous)
+        return list(self.buckets)
+
+    def sql_of(self, marker: str) -> str:
+        """跑过的查询里第一条含这一段的 SQL。
+
+        Args: marker。
+        """
+        return next(sql for sql, _ in self.queries if marker in sql)
+
+    def params_of(self, marker: str) -> dict[str, object]:
+        """跑过的查询里第一条含这一段的绑定参数。
+
+        Args: marker。
+        """
+        return next(params for sql, params in self.queries if marker in sql)

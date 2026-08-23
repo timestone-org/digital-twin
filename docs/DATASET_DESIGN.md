@@ -340,14 +340,40 @@ time_bucket(CAST(:bucket_width AS interval), ts, timezone => :bucket_timezone)
 不带它 `time_bucket` 按 UNIX 纪元对齐，东八区的日桶会从当地 08:00 开始，07:00 的数据落进前一天。
 平台侧已有的 `build_aggregate_query`（`apps/collect/crud/history.py`）本来就是这么写的。
 
-Python 侧的 `bucket_start()` 必须与它**同口径**：
+Python 侧的 `bucket_start()` 必须与它**同口径**——PG 的算法是「换成该时区的**墙钟**时刻 →
+在墙钟上按原点取整 → 换回 UTC」，照抄即可：
 
-```
-origin = datetime(2000, 1, 1, tzinfo=ZoneInfo(tz))
-bucket = origin + ((ts - origin) // interval) * interval
+```python
+zone   = ZoneInfo(tz)
+local  = ts.astimezone(zone).replace(tzinfo=None)     # 墙钟，不带时区
+origin = datetime(2000, 1, 3)                         # ⚠ 见下
+bucket = origin + ((local - origin) // interval) * interval
+return bucket.replace(tzinfo=zone, fold=1).astimezone(UTC)
 ```
 
-错开一格是静默写歪，不会有任何提示。
+三处都不能省，每一处写错都**不报错**，只是把数记进隔壁那一格：
+
+1. **原点是 `2000-01-03`（周一），不是 `2000-01-01`，且对全部桶宽都如此。**
+   两者差 2 天 = 172 800 秒，故整除它的桶宽（1s / 1min / 1h / 12h / 1d）两种取法算出来一模一样
+   ——只有 7 分钟、7 小时、11 秒这类不整除的桶宽会整体错开一段固定的量。
+   实测见 `tests/integration/test_dataset_bucket_alignment.py`（4 个时区 × 10 种桶宽 × 4 个时刻逐格比对）。
+2. **减法用不带时区的墙钟时刻。** 拿带时区的时刻相减算的是绝对时长，跨夏令时会与 PG 差一小时。
+3. **`fold=1`。** 秋季回拨那一小时的本地时刻出现两次，PG 的 `AT TIME ZONE` 取的是**后一次**
+   （回拨之后的标准时），而 Python 默认 `fold=0` 取前一次。一年只错一小时，而那一小时的数看起来完全正常。
+
+> 实现在 `apps/dataset/services/buckets.py`。⚠ **`collect_interval_ms` 的 1 天上界仍然保留**：
+> 周宽及以上的桶还没在真库上逐格验过（`time_bucket` 对 `interval` 里带月/年的宽度另有一套规则），
+> 解除条件是把那一档也加进上面那条比对用例。
+
+#### 4.5.2 跑得起来的两个前提（都不在 SQL 文本里）
+
+⚠ 上面那条 SQL **拼得对不等于跑得起来**，两个前提都只有真跑一遍才暴露，而拿假件断言 SQL
+文本的单元用例对它们完全无感：
+
+| 前提 | 写错的表现 |
+|---|---|
+| 归档只读池的 `search_path` 要带上 timescaledb 所在的 schema（`container.TIMESCALE_SCHEMA`） | `function time_bucket(...) does not exist`——一句看起来像版本不对、其实是路径不对的错。`last` / `first` 同样解析不到 |
+| `:bucket_width` 要绑 **`timedelta`**，不能绑 `'1 hour'` 这样的字符串 | `CAST($1 AS interval)` 让驱动把这个参数认成 interval，喂字符串是当场 `DataError`，整条链路 503 |
 
 #### 4.5.1 时区取值只有一处：`PLATFORM_DATASET_BUCKET_TIMEZONE`
 
@@ -868,7 +894,7 @@ Dataset/TableDetail/
 | 2 | 公式引擎 + validate / preview / functions 端点 | ⬜ |
 | 3 | 记录读写（effective / 分页 / latest / series / recompute / 脏信号） | ⬜ |
 | 4 | 公式库 | ⬜ |
-| 5 | 聚合采集器（worker） | ⬜ |
+| 5 | 聚合采集器（worker） | ✅ |
 | 6 | 历史回填 | ⬜ |
 | 7 | 保留期夜间清理 | ⬜ |
 | 8 | 前端契约 + 线形 + 台账列表页 | ⬜ |
@@ -881,11 +907,248 @@ Dataset/TableDetail/
 
 ## 12. 聚合采集器
 
-> 本节随第 5 期补齐。要点已记在 §4.4、§4.5、D1–D3、D6。
+跑在 **worker 角色**里的一条常驻循环（ADR-0002：重任务用运行角色而非独立服务），
+`ROLE=worker` 的进程起来就装它，与另外五条消费循环共用同一个事件循环。
+
+### 12.1 模块与职责
+
+| 模块 | 管什么 |
+|---|---|
+| `services/buckets.py` | 桶对齐（§4.5）与行幂等标识（D2）。**零 IO 的纯函数** |
+| `services/aggregate.py` | 八档白名单 + 两条 SQL（分桶聚合 / `delta` 减数）+ 把结果折成一格一格 |
+| `services/collect_run.py` | **一张表、一个事务**里发生的全部事：定桶 → 折算 → 幂等写 → 重算 → 推水位 → 报脏 |
+| `services/collector.py` | 调度：租约 → 读开关 → 逐表算 → 收摊 |
+| `crud/record.py::upsert_collected` | `ON CONFLICT DO UPDATE` 那一条 |
+
+### 12.2 一拍做什么
+
+```
+续/抢租约 ──否──→ 这一拍什么都不做（连库都不开）
+   │是
+读 dataset 组运行参数的有效值（一次小查询）
+   │
+总开关关着 ──→ 返回（租约照持：关的是「采不采」，不是「谁是主」）
+   │开
+取全部 collect_mode='aggregate' 且启用的台账 id
+   │
+逐表：各开一个事务 + 各有一个超时 + 每张之间 await asyncio.sleep(0)
+```
+
+**一条循环管全部台账**，不是一张表一条循环——台账是几十张级别的低频派生层，
+每张一条循环等于几十个各自持租约、各自定时的独立单元。逐表的隔离由
+「一表一事务、一表一超时」拿到：一张表撞上约束或查询超时，同一拍里其余的表照常写完。
+
+### 12.3 单表这一拍算哪几个桶
+
+```
+current      = bucket_start(now)                       # 还开着，绝不算
+last_closed  = current − 1 桶                           # 这一拍的右界
+first        = 水位 + 1 − RECOMPUTE_TAIL_BUCKETS        # 水位为空时 = last_closed
+右界再压到   min(last_closed, first + MAX_BUCKETS_PER_TICK − 1)
+```
+
+四条边界，每条都有理由：
+
+1. **只算已关闭的桶**：当前这个桶还在收数，此刻折算出来是半截的数，而它会被下一拍原地改掉
+   ——图上表现为最后一格反复跳。
+2. **水位为空的表只算最近一个已关闭的桶**，不倒着补历史：补历史是回填（§14）那件**显式触发**
+   的事，让它在建表之后自己跑起来等于随手扫全表。
+3. **每拍额外重算最近 `RECOMPUTE_TAIL_BUCKETS` 个已关闭的桶**（D6），兜住迟到的归档数据。
+4. **先把右界压进上限再展开桶序列**：停机一个月的 1 秒周期表展开出来是几百万个桶，
+   而那一串在算出上限之前就已经把内存吃掉了。
+
+**水位推到这一拍算完的最后一个桶，不管有没有写出行**——「这个桶算过了、一格都没算出来」
+与「这个桶还没轮到」是两回事。**唯一的例外是一根点位列都没绑的表：它连水位都不推**，
+等有人把列配上之后要能从原地接着算；推了就是把这段时间永久跳过。
+
+### 12.4 向前采集只读原始表
+
+⚠ 刚关闭的桶在连续聚合视图里**还没有**——不是慢，是没有（D6）。回填那一侧才谈快路（§14）。
+
+### 12.5 八档 SQL
+
+一条语句渲染出这一批列需要的全部档位（每档一条 SQL 就是 N 遍时序扫描）：
+
+```sql
+SELECT source_id, point_code,
+       time_bucket(CAST(:bucket_width AS interval), ts, timezone => :bucket_timezone) AS bucket_start,
+       count(value_num) AS num_count,
+       count(value_text) AS text_count,
+       <按需渲染的档位…>
+  FROM collect.point_history
+ WHERE (source_id, point_code) IN (…) AND ts >= :range_start AND ts < :range_end
+ GROUP BY source_id, point_code, bucket_start
+ ORDER BY bucket_start ASC, source_id ASC, point_code ASC
+ LIMIT :row_limit
+```
+
+| agg | 渲染出来的表达式 |
+|---|---|
+| `avg` / `min` / `max` / `sum` | `avg(value_num)` / `min(value_num)` / `max(value_num)` / `sum(value_num)` |
+| `count` | `count(value_num)`，**结果为 0 时这一格是空**（D3） |
+| `first` / `last` | `first/last(value_num, ts) FILTER (WHERE value_num IS NOT NULL)`，取不到再还原 `value_text` 那一份 |
+| `delta` | `last(value_num, ts) FILTER (…)` —— **SQL 只出本桶末值**，跨桶相减在 Python 里做 |
+
+⚠ **`FILTER (WHERE value_num IS NOT NULL)` 不能省**：timescaledb 的 `last(v, t)` 取的是
+「时间最大那一行的 `v`」，那一行的 `v` 是 NULL 就回 NULL——一个末尾恰好写过一条空值的桶
+会被整格算空，而它上面的样本明明都在。
+
+⚠ **样本数跟着真正撑起这一格的那一列走**：数值档记 `num_count`，`last`/`first` 落到文本
+那一档时记 `text_count`。不分开的话，一个有值的文本格会显示成「0 个样本」而被界面标灰。
+
+### 12.6 `delta` 的减数与三条边界
+
+减数单独一条查询，**必须有回看窗口下界** `clamp(桶宽 × 24, 6h, 2d)`：
+
+```sql
+SELECT DISTINCT ON (source_id, point_code) source_id, point_code, value_num
+  FROM collect.point_history
+ WHERE (source_id, point_code) IN (…)
+   AND ts >= :lookback_start AND ts < :range_start AND value_num IS NOT NULL
+ ORDER BY source_id ASC, point_code ASC, ts DESC
+```
+
+拿到减数之后按桶升序接力，三条规则见 §4.4，实现只有四行：
+
+```python
+if previous is None: return None          # 取不到上一桶末值 → 空，绝不拿本桶 first 顶替
+step = end - previous
+return None if step < 0 else step         # 负 → 空，绝不写 0
+```
+
+中间的空桶**不打断接力**——它们压根不在结果集里，而 `previous` 一直留着，末值有效到下次变化为止。
+
+### 12.7 写入：`ON CONFLICT DO UPDATE` 的 SET 子句
+
+```sql
+INSERT INTO platform.dataset_records
+       (table_id, ts, row_id, values_json, samples_json, source)
+VALUES (…)                                       -- row_id = uuid5(桶身份)，source = 'collect'
+    ON CONFLICT (table_id, ts, row_id) DO UPDATE SET
+       values_json  = dataset_records.values_json || (EXCLUDED.values_json - CAST(:manual_keys AS text[])),
+       samples_json = COALESCE(dataset_records.samples_json, '{}'::jsonb)
+                      || COALESCE(EXCLUDED.samples_json, '{}'::jsonb),
+       updated_at   = now()
+```
+
+五条，每条都是「不这么写就静默出错」：
+
+1. **SET 里没有 `overrides_json`**——人工修正独占它自己那一列，采集与重算绝不覆盖（D4）。
+2. **SET 里没有 `source` / `created_by` / `created_by_name` / `created_at`**——那是这一行的出身，
+   不该每一拍改一次。
+3. **`- CAST(:manual_keys AS text[])`**：入参里带着人工录入列的 `default_value`，那是给**新建**
+   的行用的；更新时不把这些键减掉，就是每一拍都拿默认值盖掉人填的数。
+4. **`samples_json` 两侧都要 `COALESCE`**：这一列可空，而 SQL 的 `NULL || 任何东西` 还是 NULL
+   ——少一边就是一次采集把整份样本数抹平。
+5. **`updated_at` 要显式推进**：`onupdate` 是 ORM 层的钩子，核心层的 upsert 走不到它，
+   不写就永远停在第一次写入的时刻。
+
+⚠ **整行全空的桶不写行**（D3）：一格都算不出来的桶写出去就是一行永远解释不清的空记录，
+而它在图上与一个真实的零点长得一模一样。
+
+### 12.8 写完之后
+
+- **重算刚写过的那一段的公式列**（只覆盖 `computed_json` / `compute_error`）。不重算的话，
+  表格会同时显示「这一拍新采的原始值」与「按上一拍的值算出来的公式值」，而两者都不带标记。
+- **报脏**（§16）：走 `lib.db.after_commit` 登记的钩子，即「自己这个事务提交之后」。
+  就地报脏会让发布器抢先读到旧值。**只有真写出行的那一拍才报**。
+
+### 12.9 出错与关停
+
+| 情况 | 行为 |
+|---|---|
+| Redis 不可达 / 续租失败 | 一律判非 leader，立刻停手（renew-or-die） |
+| 一张表抛异常或超时 | 记一条 `dataset_collect_table_failed`，**下一张表照常算** |
+| 一列的 `node_key` 拆不开 | 记一条 `dataset_collect_node_key_unusable`，**跳过那一列** |
+| 一列配了未知的 `agg` | **抛**——那是配置写坏了，不是数据缺失（§4.4） |
+| 文本点位配数值口径 | 那一格空、不报错 |
+| 一拍整体出错 | 记一条 `dataset_collect_tick_failed`，下一拍继续（绝不带走循环） |
+
+关停顺序照 `worker.py::run_until_stopped`：**停收新活 → drain → 让租约 → 关资源**，
+不是启动顺序的逆序。逐表循环每一轮开头看一眼 `stopped`，手上那张算完就不再开始下一张。
+
+日志只在**有内容**的那一拍记一条 `dataset_collect_tick`（写出了行、或者有表在等点位列）
+——一分钟一条的流水会把真正有内容的那几条埋掉。每一拍开头绑一条新的 trace：
+contextvars 不跨任务传播，不绑就取到一串全零。
 
 ## 13. 运维与配置
 
-> 本节随第 5 期补齐。
+### 13.1 六个环境变量
+
+全部在 platform-server 的 `.env` 上，**前五项同时是运行参数**（界面可改，见 §13.2）。
+
+| 变量 | 出厂值 | 含义 |
+|---|---|---|
+| `PLATFORM_DATASET_ENABLED` | `false` | 聚合采集总开关 |
+| `PLATFORM_DATASET_INTERVAL_S` | `60.0` | 采集器多久醒一次，扫一遍全部按周期聚合的台账 |
+| `PLATFORM_DATASET_RECOMPUTE_TAIL_BUCKETS` | `2` | 每拍额外重算最近几个已关闭的桶（D6） |
+| `PLATFORM_DATASET_MAX_BUCKETS_PER_TICK` | `240` | 单表一拍最多算多少个桶 |
+| `PLATFORM_DATASET_TABLE_TIMEOUT_S` | `60.0` | 单表一拍的预算 |
+| `PLATFORM_DATASET_LEASE_TTL_S` | `180` | 单活租约的存活期（**不是**运行参数：改它要重新装配租约） |
+
+另有 `PLATFORM_DATASET_BUCKET_TIMEZONE`（§4.5.1），它同时喂 SQL 的 `time_bucket`
+与 Python 的 `bucket_start`，改它会改变**所有**新桶的边界，故也不做成运行参数。
+
+### 13.2 运行参数：`dataset` 分组
+
+界面路径 `GET/PUT/POST /api/v1/platform/dataset-tables/runtime-params[/{section}][:reset]`，
+读用 `dataset:view`，写用 `dataset:manage`。
+
+⚠ 挂在 `dataset-tables/` 之下而不是另起一个顶层资源段：闸 1 的规则表在 **auth-server**，
+`dataset-tables*` 那一摞已经把「GET → `dataset:view`、其余 → `dataset:manage`」的阶梯铺好了，
+正是这一面要的两个码。另起 `dataset-runtime-params` 就要在另一个服务里补一条规则，
+而没补上的表现是它掉进 900 那条按方法兜底的规则——「改台账采集节拍要 `ac:manage`」，
+管空调的人能改、管台账的人反而不能。
+
+**五项全是即时档**：采集器在**每一拍**里现读一次这一组的有效值（覆盖行优先，没覆盖的回落到
+环境变量），界面上一改下一拍就生效，不必重启进程。启动时抄一份的话，运维关掉开关之后
+还要重启一次才停得下来。
+
+⚠ **危险方向是「关」**（`danger: off`）：关掉之后水位停在原地、完全没有报错，界面上那张表
+看起来只是「今天还没有数据」；而关闭期间的桶**不会自己补回来**——重新打开只从当前这一拍
+往下算，中间那段要人显式触发回填（§14）。`recompute_tail_buckets` 的危险方向是「调小」：
+调到 0 就只算新桶，迟到的样本从此永远进不了台账，而那一格看起来只是「当时就这么多」。
+
+### 13.3 界面上的「未生效」由真实有效值说了算
+
+台账列表页的「(未生效)」徽标读的是 `dataset_enabled` 的**有效值**，不许写死
+（本文档开头那条告诫）：写死会在运维打开开关之后继续显示未生效，把「诚实」变成
+另一个方向的谎。
+
+### 13.4 单活与多副本
+
+租约键 `platform:dataset-collect:leader`（写死不可配，与另外三把互不相干）。
+worker 起几个副本都行，同一时刻只有一个在算。写入本身按桶身份幂等（D2），
+但两个副本会互相把对方刚算的结果原地覆盖一遍，白烧一份数据库负载。
+
+⚠ Redis 不可达一律判非 leader：宁可这一拍没人采，也不要两个进程同时算同一批桶。
+
+### 13.5 排查「这张表怎么不出行」
+
+按这个顺序问，每一步都有一处**看得见**的证据：
+
+1. `dataset_enabled` 的有效值是不是 `false`（界面 / `GET …/runtime-params`）；
+2. 台账的 `collect_mode` 是不是 `aggregate`、`is_enabled` 是不是真；
+3. 有没有绑了点位的列——一根都没有时**水位原地不动**，日志里那一拍的
+   `dataset_collect_tick` 会把它的编码列进 `awaiting_columns`；
+4. 绑的点位有没有开归档（D5 会自动开，但绕开界面建的列可能没拿到）；
+5. `last_collected_ts` 有没有在动——不动而第 3 步又通过，去看
+   `dataset_collect_table_failed`；
+6. 行写出来了但格子是空的：看 `samples_json`，`n = 0` 就是「这个桶里一条数值样本都没有」
+   （文本点位配了数值口径也是这样）。
+
+### 13.6 可观测
+
+| event | 何时 | 级别 |
+|---|---|---|
+| `dataset_collect_tick` | 这一拍写出了行、或者有表在等点位列 | INFO |
+| `dataset_collect_lease_acquired` / `_released` / `_lost` | 主的交接 | INFO / INFO / ERROR |
+| `dataset_collect_table_failed` | 一张表这一拍没算完 | ERROR |
+| `dataset_collect_node_key_unusable` | 一列的绑定串拆不开 | WARNING |
+| `dataset_collect_tick_failed` | 一整拍出错 | ERROR |
+| `dataset_dirty_mark_failed` | 报脏没发出去（数据已落库） | WARNING |
+
+无事发生的一拍**不记**：一分钟一条的流水会把真正有内容的那几条埋掉。
 
 ## 14. 历史回填
 

@@ -7,11 +7,16 @@ from platform_server.apps.dataset.api import (
     dataset_formula,
     dataset_overrides,
     dataset_records,
+    dataset_runtime_params,
     dataset_series,
     dataset_tables,
 )
 
 ROUTERS: tuple[APIRouter, ...] = (
+    # ⚠ 必须排在 `dataset_tables` **之前**：两者的 `GET /dataset-tables/…` 只差
+    # 一个字面量段与一个 UUID 路径参数，排在后面时 `runtime-params` 会先落到
+    # `{table_id}` 上并当场 422，而不是回落到这条路由
+    dataset_runtime_params.router,
     dataset_tables.router,
     dataset_columns.router,
     dataset_formula.router,

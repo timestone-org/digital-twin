@@ -86,7 +86,11 @@ from platform_server.apps.hvac.deps import (
     get_sessions,
 )
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
-from platform_server.container import IDEMPOTENCY_NAMESPACE, Container
+from platform_server.container import (
+    IDEMPOTENCY_NAMESPACE,
+    TIMESCALE_SCHEMA,
+    Container,
+)
 from platform_server.deps import get_session
 from platform_server.settings import Settings
 from timeseries import HISTORY_SCHEMA
@@ -331,7 +335,13 @@ async def history_source(
     """
     if not postgres_available:
         pytest.skip("本机连不到 Postgres")
-    database = Database(dsn=settings.dsn(), search_path=HISTORY_SCHEMA)
+    # ⚠ search_path 与生产装配逐字相同（`container._build_history_database`）：
+    # 少了扩展那一段，`time_bucket` / `last` / `first` 一个都解析不到，而用例
+    # 里换成别的路径就会把这条真实的失败挡在外面
+    database = Database(
+        dsn=settings.dsn(),
+        search_path=f"{HISTORY_SCHEMA},{TIMESCALE_SCHEMA}",
+    )
     yield ReadOnlyHistorySource(database=database)
     await database.dispose()
 

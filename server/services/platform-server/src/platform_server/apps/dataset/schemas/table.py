@@ -35,7 +35,8 @@ class TableSummaryOut(OutputModel):
     collect_interval_ms: int
     # 空表示永久保留
     retention_days: int | None
-    # 采集器水位。⚠ 聚合采集器随第 5 期落地，在那之前恒为 null
+    # 采集器水位 = 已算完的最后一个桶的起点。⚠ 一根点位列都没绑的 aggregate
+    # 台账水位恒为 null：那不是「没在采」，是「等着有人把列配上」（§12.3）
     last_collected_ts: Utc | None
     is_enabled: bool
     column_count: int

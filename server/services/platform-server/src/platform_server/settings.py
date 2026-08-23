@@ -91,6 +91,22 @@ class Settings(
     # `SUM_OVER({x}, '1月')` 会按 UTC 的日历回推，东八区凌晨那几个小时的行
     # 静默落到上一个月，而两边看起来都对
     dataset_bucket_timezone: str = "Asia/Shanghai"
+    # 数据台账的聚合采集器（worker 角色的一条常驻循环），见
+    # docs/DATASET_DESIGN.md §12。⚠ 这五项都在**每一拍**里从运行参数表现读，
+    # 这里给的是没被覆盖时的取值，不是启动时抄一份的快照
+    # ⚠ 默认关：打开它会开始往每一张 aggregate 台账里写行，那是一件要运维明确
+    # 决定的事。界面上的「未生效」一律由这个开关的**真实有效值**说了算
+    dataset_enabled: bool = False
+    dataset_interval_s: float = Field(default=60.0, gt=0)
+    # 每拍额外重算最近几个已关闭的桶，兜住迟到的归档数据（D6）
+    dataset_recompute_tail_buckets: int = Field(default=2, ge=0)
+    # 单表一拍最多算多少个桶。停机很久之后靠一拍一段往前追
+    dataset_max_buckets_per_tick: int = Field(default=240, ge=1)
+    # 单表一拍的预算。⚠ 它与另外五条消费循环共用一个事件循环，没有预算的一次
+    # 慢查询会把整个 worker 一起拖住
+    dataset_table_timeout_s: float = Field(default=60.0, gt=0)
+    # 单活租约的存活期，续期在每一拍（远快于它）
+    dataset_lease_ttl_s: int = Field(default=180, ge=LEASE_TTL_FLOOR_S)
     # 采集配置页的实时值：一个数据源最多推多少个点位（按 code 升序取前 N）。
     # ⚠ 有上限不是省流量：一台设备挂上万个点位时，配置页一屏只看得见几十行，
     # 而全量推会把整条 WS 通道占满。超出的部分由 `SourceOut.live_point_limit`

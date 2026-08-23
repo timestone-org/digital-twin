@@ -569,8 +569,8 @@ def test_the_dataset_face_was_actually_covered() -> None:
         if dataset_expectation(path, method) is not None
     ]
     # 5 条台账面 + 5 条列面 + 3 条公式面 + 4 条记录面 + 3 条修正面
-    # + 3 条取数面（最新值 / 序列 / 重算）
-    assert len(covered) == 23
+    # + 3 条取数面（最新值 / 序列 / 重算）+ 3 条采集运行参数面
+    assert len(covered) == 26
 
 
 def test_every_route_takes_its_session_from_the_one_place() -> None:

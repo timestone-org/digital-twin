@@ -8,6 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lib.db import CrudBase
 from platform_server.apps.dataset.models import DatasetColumn, DatasetTable
 
+# 「按周期从点位历史聚合」那一档，取值集合见 `protocols.CollectMode`
+AGGREGATE_MODE = "aggregate"
+
 SORTABLE = {
     "code": DatasetTable.code,
     "name": DatasetTable.name,
@@ -39,6 +42,23 @@ class TableCrud(CrudBase[DatasetTable]):
             select(DatasetTable).where(DatasetTable.code == code)
         )
         return rows.scalars().first()
+
+    async def aggregating_ids(self, session: AsyncSession) -> list[uuid.UUID]:
+        """按周期聚合、且没被停用的台账 id，顺序写死。
+
+        ⚠ 只回 id 不回整行：采集器逐表各开一个事务，行要在**那个**事务里重新
+        取，否则改水位时改的是另一个会话里的实例，提交不出去。
+        Args: session。
+        """
+        rows = await session.execute(
+            select(DatasetTable.id)
+            .where(
+                DatasetTable.collect_mode == AGGREGATE_MODE,
+                DatasetTable.is_enabled.is_(True),
+            )
+            .order_by(*DEFAULT_ORDER)
+        )
+        return list(rows.scalars().all())
 
     async def list_all(self, session: AsyncSession) -> list[DatasetTable]:
         """全部台账，按编码升序。跨表引用的候选清单要它。

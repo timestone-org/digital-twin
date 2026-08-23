@@ -192,6 +192,7 @@ def build_container(ledger: list[str], *, settings: Settings) -> Container:
         lease=cast(Lease, LedgerLease(ledger=ledger)),
         ac_publish_lease=cast(Lease, LedgerLease(ledger=ledger)),
         ac_daily_lease=cast(Lease, LedgerLease(ledger=ledger)),
+        dataset_lease=cast(Lease, LedgerLease(ledger=ledger)),
         nodes=cast(OpcuaClient, FakeNodeWriter()),
         object_store=FakeObjectStore(),
         credential_cipher=CredentialCipher("c" * 32),

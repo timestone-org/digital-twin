@@ -17,7 +17,12 @@ from platform_server.apps.dashboard.catalog import (
     DASHBOARD_EDIT,
     DASHBOARD_VIEW,
 )
+from platform_server.apps.dataset.catalog import (
+    DATASET_MANAGE,
+    DATASET_VIEW,
+)
 from platform_server.apps.runtime_params import catalog
+from platform_server.apps.runtime_params.catalog import env_name_of
 from platform_server.settings import PUBLISH_MAX_ITEMS_CEILING, Settings
 
 PLACEHOLDER = "catalog-test"
@@ -75,11 +80,63 @@ def test_the_collect_scope_is_written_with_the_collect_manage_code() -> None:
         assert catalog.SECTION_WRITE_CODES[name] == COLLECT_MANAGE
 
 
-def test_the_two_scopes_partition_the_catalog() -> None:
+def test_the_scopes_partition_the_catalog() -> None:
     # 一个分组恰好落在一条路由上：落两条是双份写码，落零条是永远改不了
-    scoped = [*catalog.DASHBOARD_SCOPE, *catalog.COLLECT_SCOPE]
+    scoped = [
+        *catalog.DASHBOARD_SCOPE,
+        *catalog.COLLECT_SCOPE,
+        *catalog.DATASET_SCOPE,
+    ]
     assert sorted(scoped) == sorted(catalog.sections())
     assert len(scoped) == len(set(scoped))
+
+
+def test_the_restated_dataset_codes_match_the_dataset_module() -> None:
+    assert catalog.DATASET_MANAGE == DATASET_MANAGE
+    assert catalog.DATASET_VIEW == DATASET_VIEW
+
+
+def test_the_dataset_scope_is_written_with_the_dataset_manage_code() -> None:
+    for name in catalog.DATASET_SCOPE:
+        assert catalog.SECTION_WRITE_CODES[name] == DATASET_MANAGE
+
+
+def test_every_dataset_spec_reads_the_field_that_its_key_names() -> None:
+    # ⚠ 台账组的消费者**在本进程**（worker 的采集循环），故 `read` 必须真指到
+    # 配置对象上的同名字段：指歪了界面照样显示一个数，只是那个数与它旁边的
+    # 说明毫无关系，而采集器跑的是另一个
+    settings = build_settings()
+    mismatched = [
+        spec.key
+        for name in catalog.DATASET_SCOPE
+        for spec in catalog.specs_of(name) or ()
+        if spec.read(settings) != getattr(settings, spec.key)
+    ]
+    assert mismatched == []
+
+
+def test_the_dataset_switch_is_dangerous_in_the_off_direction() -> None:
+    # ⚠ 危险方向是**关**：关掉之后水位停在原地、完全没有报错，而那段时间的桶
+    # 不会自己补回来
+    spec = catalog.spec_of(catalog.SECTION_DATASET, "dataset_enabled")
+    assert spec is not None
+    assert spec.danger == catalog.DANGER_OFF
+    assert spec.kind == catalog.SWITCH_KIND
+
+
+def test_the_dataset_env_names_are_the_ones_the_design_doc_lists() -> None:
+    # 界面上给运维看的变量名要与 .env 里那几行逐字相同
+    names = {
+        env_name_of(spec)
+        for spec in catalog.specs_of(catalog.SECTION_DATASET) or ()
+    }
+    assert names == {
+        "PLATFORM_DATASET_ENABLED",
+        "PLATFORM_DATASET_INTERVAL_S",
+        "PLATFORM_DATASET_RECOMPUTE_TAIL_BUCKETS",
+        "PLATFORM_DATASET_MAX_BUCKETS_PER_TICK",
+        "PLATFORM_DATASET_TABLE_TIMEOUT_S",
+    }
 
 
 def test_every_section_has_a_write_code() -> None:

@@ -5,6 +5,7 @@ from platform_server.apps.dataset.crud.column import (
     column_crud,
 )
 from platform_server.apps.dataset.crud.record import (
+    CollectedRow,
     RecordCrud,
     RecordWindow,
     WholeStatsRow,
@@ -16,6 +17,7 @@ from platform_server.apps.dataset.crud.table import (
 )
 
 __all__ = [
+    "CollectedRow",
     "ColumnCrud",
     "RecordCrud",
     "RecordWindow",

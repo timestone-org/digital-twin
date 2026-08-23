@@ -1,8 +1,16 @@
 """台账面用例共用的 URL、请求体与建资源的捷径。"""
 
+import uuid
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 import httpx
+from sqlalchemy import text
+
+from lib.db import Database
+from timeseries import HISTORY_SCHEMA, HISTORY_TABLE
 
 TABLES = "/api/v1/platform/dataset-tables"
 # 台账报脏的跨进程契约键，见 docs/DATASET_DESIGN.md §16
@@ -89,3 +97,68 @@ async def create_record(
     response = await client.post(records_url(table_id), json=body)
     assert response.status_code == HTTP_CREATED, response.text
     return data_of(response)
+
+
+@dataclass(frozen=True)
+class Sample:
+    """一条待种进归档宽表的读数。"""
+
+    ts: datetime
+    value_num: float | None = None
+    value_text: str | None = None
+
+
+@dataclass(frozen=True)
+class ArchiveWriter:
+    """往 `collect.point_history` 里种几条读数，用完按 `source_id` 清干净。
+
+    ⚠ **只有用例这么写**：生产侧对 `collect` schema 只读（ADR-0003），台账那一
+    条链路一行都不许往这里写。
+    ⚠ 走的是一条独立连接，不在用例那条回滚事务里，故必须自己清——不清就会留在
+    库里毒下一次运行，而现象是「上一轮的样本又出现在这一轮的桶里」。
+    """
+
+    database: Database
+    source_id: uuid.UUID
+
+    def node_key(self, point_code: str) -> str:
+        """这个点位在台账列上写作什么。
+
+        Args: point_code。
+        """
+        return f"{self.source_id}:{point_code}"
+
+    async def write(self, point_code: str, samples: Sequence[Sample]) -> None:
+        """种一批读数。
+
+        Args: point_code, samples。
+        """
+        statement = text(
+            f"INSERT INTO {HISTORY_SCHEMA}.{HISTORY_TABLE}"  # noqa: S608
+            " (source_id, point_code, ts, value_num, value_text, quality)"
+            " VALUES (:source_id, :point_code, :ts, :value_num,"
+            " :value_text, 'good')"
+        )
+        async with self.database.session() as session:
+            for sample in samples:
+                await session.execute(
+                    statement,
+                    {
+                        "source_id": self.source_id,
+                        "point_code": point_code,
+                        "ts": sample.ts,
+                        "value_num": sample.value_num,
+                        "value_text": sample.value_text,
+                    },
+                )
+
+    async def clear(self) -> None:
+        """把这一轮种下的读数全删掉。"""
+        async with self.database.session() as session:
+            await session.execute(
+                text(
+                    f"DELETE FROM {HISTORY_SCHEMA}.{HISTORY_TABLE}"  # noqa: S608
+                    " WHERE source_id = :source_id"
+                ),
+                {"source_id": self.source_id},
+            )

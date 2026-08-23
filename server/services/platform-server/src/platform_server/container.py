@@ -45,6 +45,14 @@ PUBLISHER_LEASE_KEY = "platform:publisher:leader"
 # 预测下发与每日增量各自的单活租约键。理由同上：写死不可配
 AC_PUBLISH_LEASE_KEY = "platform:ac-publish:leader"
 AC_DAILY_LEASE_KEY = "platform:ac-startup-daily:leader"
+DATASET_LEASE_KEY = "platform:dataset-collect:leader"
+
+# timescaledb 扩展所在的 schema。⚠ 它必须跟在归档只读池的 search_path 里：
+# `time_bucket` / `last` / `first` 都是扩展装出来的函数，只把 search_path 指向
+# 归档 schema 时它们**一个都解析不到**，报的是「function time_bucket(...) does
+# not exist」——一句看起来像版本不对、其实是路径不对的错。
+# ⚠ 表名仍然写完全限定：这一段只为函数解析，不为表。
+TIMESCALE_SCHEMA = "public"
 
 # 幂等记录的键前缀。⚠ **不许随手改**：它是已经在 Redis 里的键，改了等于把一批
 # 还在有效期内（24h）的幂等记录一次作废，而作废的后果是客户端的一次重试真的
@@ -78,10 +86,12 @@ class Container:
     viewer_database: Database
     realtime: RealtimeClient
     lease: Lease
-    # ⚠ 三把租约互不相干：大屏发布、预测下发、每日增量各自单活。共用一把
-    # 会让「大屏发布器在跑」顺带决定「今晚抽不抽增量」
+    # ⚠ 四把租约互不相干：大屏发布、预测下发、每日增量、台账采集各自单活。
+    # 共用一把会让「大屏发布器在跑」顺带决定「今晚抽不抽增量」，而四条循环的
+    # 节奏差着好几个量级
     ac_publish_lease: Lease
     ac_daily_lease: Lease
+    dataset_lease: Lease
     nodes: OpcuaClient
     object_store: ObjectStore
     # 数据源口令的加解密器。密钥派生只在装配时做一次
@@ -133,6 +143,7 @@ def build_container(settings: Settings) -> Container:
         lease=_build_lease(settings, PUBLISHER_LEASE_KEY),
         ac_publish_lease=_build_lease(settings, AC_PUBLISH_LEASE_KEY),
         ac_daily_lease=_build_lease(settings, AC_DAILY_LEASE_KEY),
+        dataset_lease=_build_lease(settings, DATASET_LEASE_KEY),
         nodes=_build_nodes(settings),
         # ⚠ 构造不连网：桶不存在要到第一次真正读写时才报，不在启动期误判
         object_store=create_object_store(settings),
@@ -249,6 +260,7 @@ def _build_history_database(settings: Settings) -> Database:
     ⚠ 独立一池：一次跨月的时序扫描不该把业务写连接连同它持有的锁一起占住。
     ⚠ search_path 指向归档 schema，但查询仍然写完全限定的表名——配错时要的是
     「表不存在」，不是静默命中本服务 schema 里某张同名表。
+    ⚠ 后面还要跟上 `TIMESCALE_SCHEMA`，理由见那个常量。
     Args: settings。
     """
     return Database(
@@ -260,7 +272,7 @@ def _build_history_database(settings: Settings) -> Database:
             statement_timeout_ms=settings.collect_history_statement_timeout_ms,
             lock_timeout_ms=settings.postgres_lock_timeout_ms,
         ),
-        search_path=HISTORY_SCHEMA,
+        search_path=f"{HISTORY_SCHEMA},{TIMESCALE_SCHEMA}",
     )
 
 
@@ -345,8 +357,8 @@ def _build_stream(settings: Settings) -> RedisStream:
 def _ttl_of(settings: Settings, key: str) -> int:
     """这把租约的存活期。
 
-    ⚠ 三条循环的节奏差着一个量级（大屏一秒一拍、下发一分钟一拍、增量一天
-    一次），共用一个 TTL 会让慢的那条在两拍之间就把租约丢了。
+    ⚠ 四条循环的节奏差着好几个量级（大屏一秒一拍、下发与台账采集一分钟一拍、
+    增量一天一次），共用一个 TTL 会让慢的那条在两拍之间就把租约丢了。
 
     Args: settings, key。
     """
@@ -354,4 +366,6 @@ def _ttl_of(settings: Settings, key: str) -> int:
         return settings.acpublish_lease_ttl_s
     if key == AC_DAILY_LEASE_KEY:
         return settings.acdaily_lease_ttl_s
+    if key == DATASET_LEASE_KEY:
+        return settings.dataset_lease_ttl_s
     return settings.publish_lease_ttl_s

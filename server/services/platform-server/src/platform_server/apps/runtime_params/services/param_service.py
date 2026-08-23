@@ -164,6 +164,26 @@ async def reset_section(
     return await section_items(session, settings=settings, section=section)
 
 
+async def effective_values(
+    session: AsyncSession, *, settings: Settings, section: str
+) -> dict[str, ParamValue]:
+    """一个分组此刻的**全部有效值** `{键: 值}`，给本进程内的消费者用。
+
+    ⚠ 与 `overrides_for_plan` 相反：那一份只回稀疏的覆盖值（消费者在别的进程，
+    自己有一套环境变量兜底），这一份把回落也做完——同进程的消费者拿到的必须是
+    「此刻真正生效的那个数」，让它自己再兜一遍就是两份口径。
+    Args: session, settings, section。
+    """
+    specs = require_specs(section)
+    stored = await stored_rows(session, section)
+    return {
+        spec.key: effective_of(
+            spec, settings=settings, row=stored.get(spec.key)
+        ).value
+        for spec in specs
+    }
+
+
 async def overrides_for_plan(
     session: AsyncSession,
 ) -> dict[str, dict[str, ParamValue]]:

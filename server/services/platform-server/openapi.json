@@ -18585,6 +18585,152 @@
         ]
       }
     },
+    "/api/v1/platform/dataset-tables/runtime-params": {
+      "get": {
+        "description": "列出台账采集那一组运行参数。给了 `section` 就只回那一组。\n\nArgs: session, settings, _viewer, section。",
+        "operationId": "list_dataset_runtime_params_api_v1_platform_dataset_tables_runtime_params_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "section",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Section"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_RuntimeParamOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "台账采集运行参数目录与当前取值",
+        "tags": [
+          "dataset-table"
+        ]
+      }
+    },
+    "/api/v1/platform/dataset-tables/runtime-params/{section}": {
+      "put": {
+        "description": "改一个分组里的若干项。没给的项不动，改回默认值即删掉覆盖行。\n\nArgs: section, payload, session, settings, writer。",
+        "operationId": "replace_dataset_runtime_params_api_v1_platform_dataset_tables_runtime_params__section__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "section",
+            "required": true,
+            "schema": {
+              "title": "Section",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimeParamWriteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_RuntimeParamOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "修改一组台账采集运行参数",
+        "tags": [
+          "dataset-table"
+        ]
+      }
+    },
+    "/api/v1/platform/dataset-tables/runtime-params/{section}:reset": {
+      "post": {
+        "description": "删掉该分组的覆盖行，此后重新跟随环境变量。\n\nArgs: section, session, settings, writer。",
+        "operationId": "reset_dataset_runtime_params_api_v1_platform_dataset_tables_runtime_params__section__reset_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "section",
+            "required": true,
+            "schema": {
+              "title": "Section",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_RuntimeParamOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "恢复一组台账采集运行参数的默认值",
+        "tags": [
+          "dataset-table"
+        ]
+      }
+    },
     "/api/v1/platform/dataset-tables/{table_id}": {
       "delete": {
         "description": "删台账。下面还有数据行时先确认；`force` 连历史一起删。\n\nArgs: table_id, session, _write, is_forced。",

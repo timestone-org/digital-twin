@@ -153,6 +153,7 @@ def build_container(
         lease=cast(Lease, FakeDependency()),
         ac_publish_lease=cast(Lease, FakeDependency()),
         ac_daily_lease=cast(Lease, FakeDependency()),
+        dataset_lease=cast(Lease, FakeDependency()),
         nodes=cast(OpcuaClient, FakeNodeWriter()),
         object_store=FakeObjectStore(),
         credential_cipher=CredentialCipher("c" * 32),

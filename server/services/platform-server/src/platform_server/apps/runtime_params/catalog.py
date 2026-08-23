@@ -23,12 +23,17 @@ DASHBOARD_EDIT = "dashboard:edit"
 DASHBOARD_VIEW = "dashboard:view"
 COLLECT_MANAGE = "collect:manage"
 COLLECT_VIEW = "collect:view"
+DATASET_MANAGE = "dataset:manage"
+DATASET_VIEW = "dataset:view"
 
 SECTION_DASHBOARD = "dashboard"
 # 采集与归档两组的**消费者在 collector-server**：覆盖值随采集计划下发（稀疏），
 # 没覆盖的键由 collector 自己的环境变量兜底，默认值列的是出厂值
 SECTION_COLLECT = "collect"
 SECTION_ARCHIVE = "archive"
+# 台账聚合采集器那一组。**消费者在本进程**（worker 角色的采集循环），故它每一拍
+# 现读一次这一组的有效值——界面上一改，下一拍就生效，不必重启
+SECTION_DATASET = "dataset"
 
 # 取值类型。⚠ 字面量不是数字：数字枚举在两个仓之间对不上号时没有任何提示
 ParamKind = Literal["int", "float", "switch"]
@@ -312,12 +317,101 @@ _ARCHIVE_SPECS: tuple[ParamSpec, ...] = (
     ),
 )
 
+# ── 台账组：消费者是本进程 worker 角色的聚合采集循环 ────────────────────
+# ⚠ 键名逐字等于 `Settings` 上的字段名，故环境变量名就是 `PLATFORM_<键大写>`，
+# 与 docs/DATASET_DESIGN.md §13 列的那几个一字不差。取值每一拍现读，都是即时档
+_DATASET_SPECS: tuple[ParamSpec, ...] = (
+    ParamSpec(
+        section=SECTION_DATASET,
+        key="dataset_enabled",
+        kind=SWITCH_KIND,
+        unit="",
+        step=1,
+        minimum=0,
+        maximum=1,
+        label="台账采集总开关",
+        hint=(
+            "关掉之后按周期聚合的台账**不再出新行**：水位停在原地，界面上那张"
+            "表看起来只是「今天还没有数据」。⚠ 关闭期间的桶不会自己补回来——"
+            "重新打开只从当前这一拍往下算，中间那段要人显式触发回填。"
+        ),
+        read=lambda settings: settings.dataset_enabled,
+        tier=TIER_INSTANT,
+        danger=DANGER_OFF,
+    ),
+    ParamSpec(
+        section=SECTION_DATASET,
+        key="dataset_interval_s",
+        kind=FLOAT_KIND,
+        unit="s",
+        step=5,
+        minimum=1,
+        maximum=3_600,
+        label="采集循环节拍",
+        hint=(
+            "采集器多久醒一次，扫一遍全部按周期聚合的台账。它是「一个桶关闭"
+            "之后多久出行」的上界：比台账周期还大的节拍会让行成批地晚到，"
+            "而不是均匀地晚一点。"
+        ),
+        read=lambda settings: settings.dataset_interval_s,
+    ),
+    ParamSpec(
+        section=SECTION_DATASET,
+        key="dataset_recompute_tail_buckets",
+        kind=INT_KIND,
+        unit="个",
+        step=1,
+        minimum=0,
+        maximum=48,
+        label="每拍重算的尾部桶数",
+        hint=(
+            "每一拍额外重算最近这么多个已关闭的桶，兜住迟到的归档数据。"
+            "调到 0 就只算新桶：迟到的样本从此永远进不了台账，而那一格看起来"
+            "只是「当时就这么多」。"
+        ),
+        read=lambda settings: settings.dataset_recompute_tail_buckets,
+        danger=DANGER_DECREASE,
+    ),
+    ParamSpec(
+        section=SECTION_DATASET,
+        key="dataset_max_buckets_per_tick",
+        kind=INT_KIND,
+        unit="个",
+        step=60,
+        minimum=1,
+        maximum=10_000,
+        label="单表每拍的桶数上限",
+        hint=(
+            "停机很久之后靠一拍一段往前追，这是每一段的长度。调大追得快但"
+            "单次查询更重；调小则追平所需的时间按倍数拉长。"
+        ),
+        read=lambda settings: settings.dataset_max_buckets_per_tick,
+    ),
+    ParamSpec(
+        section=SECTION_DATASET,
+        key="dataset_table_timeout_s",
+        kind=FLOAT_KIND,
+        unit="s",
+        step=5,
+        minimum=1,
+        maximum=600,
+        label="单表每拍的预算",
+        hint=(
+            "一张台账一拍最多算多久，超了当这一拍没算完、下一拍继续。⚠ 它与"
+            "另外五条消费循环共用一个事件循环，没有预算的一次慢查询会把整个"
+            "worker 一起拖住。"
+        ),
+        read=lambda settings: settings.dataset_table_timeout_s,
+    ),
+)
+
 # 全部分组的登记项。新增运行参数只改这里，描述符、白名单与前端清单随之同步
 CATALOG: Mapping[str, tuple[ParamSpec, ...]] = MappingProxyType(
     {
         SECTION_DASHBOARD: _DASHBOARD_SPECS,
         SECTION_COLLECT: _COLLECT_SPECS,
         SECTION_ARCHIVE: _ARCHIVE_SPECS,
+        SECTION_DATASET: _DATASET_SPECS,
     }
 )
 
@@ -330,12 +424,14 @@ SECTION_WRITE_CODES: Mapping[str, str] = MappingProxyType(
         SECTION_DASHBOARD: DASHBOARD_EDIT,
         SECTION_COLLECT: COLLECT_MANAGE,
         SECTION_ARCHIVE: COLLECT_MANAGE,
+        SECTION_DATASET: DATASET_MANAGE,
     }
 )
 
-# 两条路由各自服务的分组。⚠ 一个分组只许出现在一个 scope 里
+# 三条路由各自服务的分组。⚠ 一个分组只许出现在一个 scope 里
 DASHBOARD_SCOPE: tuple[str, ...] = (SECTION_DASHBOARD,)
 COLLECT_SCOPE: tuple[str, ...] = (SECTION_COLLECT, SECTION_ARCHIVE)
+DATASET_SCOPE: tuple[str, ...] = (SECTION_DATASET,)
 
 
 def sections() -> tuple[str, ...]:

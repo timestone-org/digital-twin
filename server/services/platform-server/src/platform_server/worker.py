@@ -17,6 +17,10 @@ from platform_server.apps.assets.services.compress_worker import (
     CompressOptions,
     ModelCompressor,
 )
+from platform_server.apps.dataset.services.collector import (
+    CollectorContext,
+    DatasetCollector,
+)
 from platform_server.apps.hvac.services.ac_daily_worker import (
     DailyConsumer,
     DailyConsumerOptions,
@@ -182,6 +186,27 @@ def build_publish_loop(container: Container) -> PublishLoop:
     )
 
 
+def build_dataset_collector(container: Container) -> DatasetCollector:
+    """按配置装出台账聚合采集循环。
+
+    ⚠ 它没有「节奏」形参：总开关、节拍与三个上限全部在**每一拍**里从运行参数
+    表现读，界面上一改下一拍就生效（docs/DATASET_DESIGN.md §13）。启动时抄一份
+    的话，运维关掉开关之后还要重启一次进程才停得下来。
+    Args: container。
+    """
+    return DatasetCollector(
+        context=CollectorContext(
+            database=container.database,
+            # ⚠ 走归档库自己的只读池：一次跨月的时序扫描不该把台账的写连接
+            # 连同它持有的锁一起占住（ADR-0003 写独占读放行）
+            history=container.history,
+            dirty=container.dataset_dirty,
+            settings=container.settings,
+        ),
+        lease=container.dataset_lease,
+    )
+
+
 def build_daily_scheduler(container: Container) -> DailyScheduler:
     """按配置装出日增量的调度器。**它只入队，抽取在消费者那边。**
 
@@ -310,6 +335,7 @@ async def _release(container: Container) -> None:
     await container.nodes.close()
     await container.ac_publish_lease.close()
     await container.ac_daily_lease.close()
+    await container.dataset_lease.close()
     await container.ac_source.dispose()
     await container.database.dispose()
 
@@ -325,6 +351,7 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
     pool = TrainerPool()
     publisher = build_publish_loop(container)
     scheduler = build_daily_scheduler(container)
+    collector = build_dataset_collector(container)
     try:
         await run_until_stopped(
             WorkerRuntime(
@@ -335,8 +362,9 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
                     scheduler,
                     build_daily_consumer(container),
                     build_model_compressor(container),
+                    collector,
                 ),
-                leaseholders=(publisher, scheduler),
+                leaseholders=(publisher, scheduler, collector),
                 container=container,
                 wait=wait,
             ),
