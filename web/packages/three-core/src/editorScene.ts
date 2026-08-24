@@ -463,8 +463,8 @@ export class EditorScene {
   private refresh(): void {
     if (this.core === null) return
     this.placeModel()
-    // ⚠ 只认作者直接置的 `visible`，不套任何距离派生的显隐：编辑时镜头到处飞，
-    // 套上规则会让人「刚配好的东西一转镜头就不见了」
+    // ⚠ 只认调用方传入的 `visible`，不套任何距离派生的显隐：页面会在这一层
+    // 叠加左栏眼睛的编辑态覆盖，不读持久化的运行时距离规则
     applyPartVisibility(this.nodeIndex, this.config.parts)
     // ⚠ 传空索引是有意的：编辑态不套距离规则，部件层不该在这里建条目——
     // 建了它会为配了淡出的部件克隆材质（并打开透明通道），而这些克隆在编辑器里

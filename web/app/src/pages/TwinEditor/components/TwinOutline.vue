@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @fileoverview 左栏大纲树：搜索框 + 置顶「场景」区 + 七个实体分组（夹视图与
- * 散行）。管搜索、折叠、选中、增删复制重排显隐与文件夹；它自己不改文档，只抛
+ * 散行）。管搜索、折叠、选中、增删复制重排与文件夹；它自己不改文档，只抛
  * 事件，改配置一律由页面交给 `entityOps` / `folderOps`。
  * ⚠ 行上标的序号就是文档序，而文档序决定数组绑定的对齐（`anchorValues[2]`
  * 喂第 3 个锚点）——上移下移会连带改变相邻两行的取值来源，进出文件夹则不会。
@@ -53,7 +53,8 @@ const emit = defineEmits<{
   remove: [{ kind: TwinEntityKind; id: string }]
   duplicate: [{ kind: TwinEntityKind; id: string }]
   move: [{ kind: TwinEntityKind; id: string; delta: number }]
-  toggleVisible: [{ kind: TwinEntityKind; id: string }]
+  /** 只切编辑视口显隐，不改右栏「初始可见」。 */
+  toggleEditorVisible: [{ kind: TwinEntityKind; id: string }]
   addFolder: [TwinEntityKind]
   renameFolder: [{ id: string; name: string }]
   removeFolder: [string]
@@ -135,7 +136,7 @@ function requestRemove(row: TwinOutlineRow): void {
 function onRowAct(row: TwinOutlineRow, action: OutlineRowAction): void {
   const target = { kind: row.kind, id: row.id }
   if (action.type === 'select') emit('select', target)
-  else if (action.type === 'toggle-visible') emit('toggleVisible', target)
+  else if (action.type === 'toggle-visible') emit('toggleEditorVisible', target)
   else if (action.type === 'duplicate') emit('duplicate', target)
   else if (action.type === 'move')
     emit('move', { ...target, delta: action.delta })

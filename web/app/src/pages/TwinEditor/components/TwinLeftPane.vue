@@ -34,7 +34,7 @@ const emit = defineEmits<{
   remove: [{ kind: TwinEntityKind; id: string }]
   duplicate: [{ kind: TwinEntityKind; id: string }]
   move: [{ kind: TwinEntityKind; id: string; delta: number }]
-  toggleVisible: [{ kind: TwinEntityKind; id: string }]
+  toggleEditorVisible: [{ kind: TwinEntityKind; id: string }]
   addFolder: [TwinEntityKind]
   renameFolder: [{ id: string; name: string }]
   removeFolder: [string]
@@ -87,7 +87,7 @@ function removeHier(id: string): void {
         @remove="emit('remove', $event)"
         @duplicate="emit('duplicate', $event)"
         @move="emit('move', $event)"
-        @toggle-visible="emit('toggleVisible', $event)"
+        @toggle-editor-visible="emit('toggleEditorVisible', $event)"
         @add-folder="emit('addFolder', $event)"
         @rename-folder="emit('renameFolder', $event)"
         @remove-folder="emit('removeFolder', $event)"

@@ -121,45 +121,39 @@ withDefaults(
     color: var(--text-disabled);
   }
 
-  // 四角发光括号。用四个真实元素而不是伪元素：一个元素只有两个伪元素，
-  // 凑四角就得让消费方额外塞一个空 span 进来，那是漏在外面的实现细节。
+  // 四角发光角标：盒子自己一笔不画，只投一圈贴着轮廓的方形柔光。
+  // 用四个真实元素而不是伪元素：一个元素只有两个伪元素，凑四角就得让消费方额外塞一个
+  // 空 span 进来，那是漏在外面的实现细节。
   &__corner {
     position: absolute;
     display: var(--card-corner-display);
     box-sizing: border-box;
     width: 10px;
     height: 10px;
-    border: 0 solid var(--card-corner-color);
+    // ⚠ 辉光必须是 box-shadow：投影的形状取自盒子轮廓，这一圈方形柔光正是这么来的；
+    // 换成 drop-shadow 就是取渲染后的 alpha，而盒子一笔不画时它无光可投，四角会整个消失
     box-shadow: 0 0 var(--card-corner-glow) var(--card-corner-color);
     opacity: 0.9;
     pointer-events: none;
 
     &--tl {
-      top: -1px;
-      left: -1px;
-      border-top-width: 1px;
-      border-left-width: 1px;
+      top: 0;
+      left: 0;
     }
 
     &--tr {
-      top: -1px;
-      right: -1px;
-      border-top-width: 1px;
-      border-right-width: 1px;
+      top: 0;
+      right: 0;
     }
 
     &--bl {
-      bottom: -1px;
-      left: -1px;
-      border-bottom-width: 1px;
-      border-left-width: 1px;
+      bottom: 0;
+      left: 0;
     }
 
     &--br {
-      bottom: -1px;
-      right: -1px;
-      border-bottom-width: 1px;
-      border-right-width: 1px;
+      right: 0;
+      bottom: 0;
     }
   }
 }

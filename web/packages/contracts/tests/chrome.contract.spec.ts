@@ -59,7 +59,7 @@ describe('外观键清单', () => {
     const valuesOf = (key: string) =>
       SPECS.find((spec) => spec.key === key)?.values ?? []
     expect(valuesOf('borderSide')).not.toContain('all')
-    expect(valuesOf('cornerStyle')).not.toContain('bracket')
+    expect(valuesOf('cornerStyle')).not.toContain('halo')
     expect(valuesOf('titleAlign')).not.toContain('center')
   })
 })

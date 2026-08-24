@@ -6,14 +6,13 @@
  * 看不出来（见 `remapTwinBindings`）。
  */
 import type { GizmoChange } from '@dt/three-core'
-import type { TwinConfig, TwinVisibilityRule } from '@dt/twin-config'
+import type { TwinConfig } from '@dt/twin-config'
 
 import {
   addEntity,
   duplicateEntity,
   moveEntity,
   removeEntity,
-  updateEntity,
 } from './entityOps'
 import { addPartsFromNodes } from './bulkParts'
 import {
@@ -36,7 +35,6 @@ export interface TwinEditorActions {
   move: (kind: TwinEntityKind, id: string, delta: number) => void
   /** 换掉配置里的某个单例段（模型、视点切换控件）。 */
   patchConfig: (patch: Partial<TwinConfig>) => void
-  toggleVisible: (kind: TwinEntityKind, id: string) => void
   /** 在某段下新建一个空夹；返回夹 id，供上层立刻进入就地重命名。 */
   addFolder: (kind: TwinEntityKind) => string
   renameFolder: (id: string, name: string) => void
@@ -60,24 +58,6 @@ export interface TwinEditorActions {
   transformEntity: (change: GizmoChange) => void
   /** 手柄松手了；下一次拖动重新开一帧撤销。 */
   endTransform: () => void
-}
-
-/** 带 `visibility` 的五类；视点与钻取节点没有这一段。 */
-type VisibleKind = Exclude<TwinEntityKind, 'cameras' | 'hierNodes'>
-
-function hasVisibility(kind: TwinEntityKind): kind is VisibleKind {
-  return kind !== 'cameras' && kind !== 'hierNodes'
-}
-
-/** 取某个实体当前的显隐规则；没有这一段给 null。 */
-function visibilityOf(
-  config: TwinConfig,
-  kind: VisibleKind,
-  id: string,
-): TwinVisibilityRule | null {
-  const list: readonly { id: string; visibility: TwinVisibilityRule }[] =
-    config[kind]
-  return list.find((item) => item.id === id)?.visibility ?? null
 }
 
 /** 文件夹的六个动作：纯展示分组的增删改与成员进出，单独收一处。 */
@@ -223,16 +203,5 @@ export function createTwinEditorActions(
 
     transformEntity: (change) => applyTransform(doc, change),
     endTransform: () => doc.endMerge(),
-
-    toggleVisible: (kind, id) => {
-      if (!hasVisibility(kind)) return
-      const visibility = visibilityOf(doc.config.value, kind, id)
-      if (visibility === null) return
-      doc.commit(
-        updateEntity(doc.config.value, kind, id, {
-          visibility: { ...visibility, visible: !visibility.visible },
-        }),
-      )
-    },
   }
 }

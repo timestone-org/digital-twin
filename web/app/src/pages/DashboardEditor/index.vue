@@ -10,9 +10,8 @@
  */
 import type { ModuleManifest } from '@dt/contracts'
 import { getModule, listModules } from '@dt/modules'
-import { designSize } from '@dt/runtime'
 import { useConfirm, useToast } from '@dt/ui'
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { installDashboardModules } from '@/bootstrap/dashboard'
@@ -20,17 +19,18 @@ import { AppShell } from '@/components/layout'
 import { useDashboardDoc } from '@/composables/useDashboardDoc'
 import { useDashboardEditor } from '@/composables/useDashboardEditor'
 import { snapStep } from '@/features/dashboard/canvasSnap'
-import type { CanvasZoom } from '@/features/dashboard/canvasZoom'
 import { createEditorActions } from './scripts/editorActions'
 import { useEditorDataSources } from './scripts/useEditorDataSources'
 import { createArrangeActions } from './scripts/editorArrange'
 import { useEditorChrome } from './scripts/useEditorChrome'
+import { useEditorCanvasState } from './scripts/useEditorCanvasState'
 import { useEditorExtras } from './scripts/useEditorExtras'
 import { useEditorMeta } from './scripts/useEditorMeta'
 import { createEditorPageOps } from './scripts/useEditorPageOps'
 import { createEditorInspector } from './scripts/useEditorInspector'
 import { useEditorPanes } from './scripts/useEditorPanes'
 import { createEditorSurface } from './scripts/useEditorSurface'
+import { useEditorVisibility } from './scripts/useEditorVisibility'
 import EditorCanvas from './components/EditorCanvas.vue'
 import EditorNotices from './components/EditorNotices.vue'
 import EditorOverlays from './components/EditorOverlays.vue'
@@ -56,12 +56,8 @@ const pickingFieldKey = ref<string | null>(null)
 useEditorDataSources(file.dashboard, () => editor.nodes.value)
 
 const dashboardId = computed(() => String(route.params.dashboardId ?? ''))
-
-const design = computed(() =>
-  designSize(
-    file.dashboard.value?.designWidth ?? 0,
-    file.dashboard.value?.designHeight ?? 0,
-  ),
+const { design, zoom, canvasRef, fitScale, centerOn } = useEditorCanvasState(
+  file.dashboard,
 )
 
 const actions = createEditorActions({
@@ -78,12 +74,6 @@ const { snap, grid } = chrome
 // 左右两栏可拖拽改宽；宽度记在本机，取值域见 paneWidths
 const panes = useEditorPanes()
 const gridRef = panes.hostRef
-
-const zoom = ref<CanvasZoom>(null)
-const canvasRef = ref<InstanceType<typeof EditorCanvas> | null>(null)
-const fitScale = computed(() => canvasRef.value?.fitScale ?? 1)
-const centerOn = (nodeId: string): void =>
-  void canvasRef.value?.centerOn(nodeId)
 
 const arrange = createArrangeActions({
   editor,
@@ -142,7 +132,12 @@ const extras = useEditorExtras({
   onExportFailed: (message) => toast.error(message),
 })
 
-watch(dashboardId, () => void ops.reload(), { immediate: true })
+const editing = useEditorVisibility(
+  editor,
+  getManifest,
+  dashboardId,
+  ops.reload,
+)
 
 onUnmounted(file.dispose)
 </script>
@@ -166,7 +161,7 @@ onUnmounted(file.dispose)
         :snap="snap"
         @undo="editor.undo"
         @redo="editor.redo"
-        @reload="ops.reload"
+        @reload="editing.reload"
         @save="extras.saveWithThumbnail"
         @update:zoom="zoom = $event"
         @set-snap="snap = { ...snap, ...$event }"
@@ -192,13 +187,13 @@ onUnmounted(file.dispose)
         <LeftRail
           class="dt-editor__pane"
           :manifests="manifests"
-          :frames="editor.layout.value.frames"
-          :nodes="editor.nodes.value"
+          :frames="editing.frames.value"
+          :nodes="editing.nodes.value"
           :selected-ids="editor.selectedIds.value"
           :get-manifest="getManifest"
           @add="ops.addModule"
           @select="surface.onSelect"
-          @toggle="actions.toggleVisible"
+          @toggle-editor-visible="editing.toggle"
           @remove="ops.removeNode"
           @rename="surface.onRename"
           @move="surface.onMove"
@@ -211,8 +206,8 @@ onUnmounted(file.dispose)
           ref="canvasRef"
           class="dt-editor__pane"
           :design="design"
-          :frames="editor.layout.value.frames"
-          :nodes="editor.nodes.value"
+          :frames="editing.frames.value"
+          :nodes="editing.nodes.value"
           :selected-ids="editor.selectedIds.value"
           :get-manifest="getManifest"
           :card-chrome="inspector.cardChrome.value"

@@ -15,7 +15,7 @@ export const MINIMAL_OUTLINE_STYLE: Readonly<CardChrome> = Object.freeze({
   border: 'color-mix(in srgb, var(--accent-primary) 8%, transparent)',
   borderHover: 'color-mix(in srgb, var(--accent-primary) 40%, transparent)',
   radius: 4,
-  corners: false, // 淡描边配 L 形角标会显得脏，四角一律关掉
+  corners: false, // 淡描边配发光角标会显得脏，四角一律关掉
   borderStyle: 'breathe',
   borderPulseDuration: 6,
 

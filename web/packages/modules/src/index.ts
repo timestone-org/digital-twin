@@ -18,6 +18,13 @@ export {
 export { bannerBackground, imageSourceKind } from './shared/background'
 export type { ImageSourceKind } from './shared/background'
 export {
+  __resetAssetImages,
+  configureAssetImages,
+  isAssetRef,
+  resolveImageValue,
+} from './shared/assetImage'
+export type { ResolveAssetImage } from './shared/assetImage'
+export {
   configDefaults,
   readBoolean,
   readNumber,

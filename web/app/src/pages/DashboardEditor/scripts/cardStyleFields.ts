@@ -128,7 +128,8 @@ const CORNER_FIELDS: readonly CardField[] = [
     label: '角标形状',
     kind: 'enum',
     options: [
-      { value: '', label: 'L 形角括号（默认）' },
+      { value: '', label: '方形辉光（默认）' },
+      { value: 'bracket', label: 'L 形角括号' },
       { value: 'dot', label: '小方点' },
     ],
   },

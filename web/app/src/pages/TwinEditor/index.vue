@@ -5,13 +5,13 @@
  *
  * ⚠ 这一页对「自己在编 twin-view」一无所知，也不该知道：是大屏编辑器按
  * 清单上的 `subEditor` 声明跳进来的，路由参数只有 `dashboardId` + `nodeId`。
- * ⚠ 视口里不套距离派生的显隐，只认 `visibility.visible`——编辑时镜头到处飞，
- * 套上规则会让人「刚配好的东西一转镜头就不见了」。
+ * ⚠ 视口里不套距离派生的显隐；左栏眼睛管本次编辑显隐，
+ * 右栏「初始可见」只进持久化配置，两者不共用状态。
  */
 import { collectTwinConfigIssues } from '@dt/twin-config'
 import type { Vec3 } from '@dt/twin-config'
 import { DtPageState, useConfirm, useToast } from '@dt/ui'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute } from 'vue-router'
 
 import { AppShell } from '@/components/layout'
@@ -25,6 +25,10 @@ import TwinLeftPane from './components/TwinLeftPane.vue'
 import TwinRightPane from './components/TwinRightPane.vue'
 import TwinViewport from './components/TwinViewport.vue'
 import { createTwinEditorActions } from './scripts/twinEditorActions'
+import {
+  toggleEditorVisibility,
+  withEditorVisibility,
+} from './scripts/editorVisibility'
 import { createTwinViewportOps } from './scripts/twinViewportOps'
 import { useTwinBindings } from './scripts/useTwinBindings'
 import {
@@ -63,8 +67,16 @@ const roamPreviewing = ref(false)
  * 配置里没有这个数——右栏的坐标框与视口里的参考轴必须同源，否则两处的 0 不在一处。
  */
 const frameOrigin = ref<Vec3>([0, 0, 0])
+/** 左栏眼睛关掉的实体；只属于本次编辑，不进文档与撤销栈。 */
+const editorHidden = ref<ReadonlySet<string>>(new Set())
 
 const config = computed(() => page.doc.value?.config.value ?? null)
+const editingConfig = computed(() => {
+  const current = config.value
+  return current === null
+    ? null
+    : withEditorVisibility(current, editorHidden.value)
+})
 const bulk = useBulkParts(
   () => config.value,
   () => modelNodes.value,
@@ -84,6 +96,18 @@ const actions = computed(() => {
     : createTwinEditorActions(doc, (next) => {
         selection.value = next
       })
+})
+
+function toggleEditorVisible(target: {
+  kind: TwinEntityKind
+  id: string
+}): void {
+  editorHidden.value = toggleEditorVisibility(editorHidden.value, target)
+}
+
+// 路由复用同一页组件时，上一段孪生的编辑隐藏态不许串到下一段。
+watch([dashboardId, nodeId], () => {
+  editorHidden.value = new Set()
 })
 
 // 编辑视口里的读数与大屏走同一条链路：同一个推送主题、同一份缝合
@@ -177,7 +201,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
       <div v-else class="flex min-h-0 flex-1">
         <TwinLeftPane
           class="w-64 shrink-0 border-r border-border-subtle"
-          :config="config"
+          :config="editingConfig ?? config"
           :selection="selection"
           :flagged-ids="flaggedIds"
           :renaming-folder-id="renamingFolderId"
@@ -187,7 +211,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
           @remove="actions?.remove($event.kind, $event.id)"
           @duplicate="actions?.duplicate($event.kind, $event.id)"
           @move="actions?.move($event.kind, $event.id, $event.delta)"
-          @toggle-visible="actions?.toggleVisible($event.kind, $event.id)"
+          @toggle-editor-visible="toggleEditorVisible"
           @add-folder="addFolderIn"
           @rename-folder="actions?.renameFolder($event.id, $event.name)"
           @remove-folder="actions?.removeFolder($event)"
@@ -205,7 +229,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
           <TwinViewport
             ref="viewportRef"
             class="min-h-0 flex-1"
-            :config="config"
+            :config="editingConfig ?? config"
             :selection="selection"
             :pick-mode="viewport.pickMode.value"
             :gizmo-mode="gizmoMode"

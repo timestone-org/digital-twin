@@ -48,6 +48,40 @@ function texturedMesh(): THREE.Mesh {
   return new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), material)
 }
 
+describe('三层画布的挂载位置', () => {
+  // ⚠ 这一条守的是「视点切换 / 漫游 / 工具条看得见却点不动」：画布 append 在
+  // 覆盖层之后时，同为 auto 层叠的定位兄弟按树序绘制，吃指针的 canvas 就盖在
+  // 控件上面，而画面上一点异样都没有
+  it('垫在宿主原有内容之前，控件仍在画布之上', () => {
+    const hud = document.createElement('div')
+    container.append(hud)
+    const { core } = mount()
+
+    const order = [...container.children]
+    expect(order.indexOf(core.renderer.domElement)).toBeLessThan(
+      order.indexOf(hud),
+    )
+    expect(order.indexOf(core.labelRenderer.domElement)).toBeLessThan(
+      order.indexOf(hud),
+    )
+    expect(order.indexOf(core.spatialRenderer.domElement)).toBeLessThan(
+      order.indexOf(hud),
+    )
+    expect(order.at(-1)).toBe(hud)
+  })
+
+  // 三层之间的先后不能颠倒：canvas 在最下，3D 的 DOM 层在最上
+  it('三层自己的先后是 canvas → 标签层 → 空间层', () => {
+    const { core } = mount()
+
+    expect([...container.children]).toEqual([
+      core.renderer.domElement,
+      core.labelRenderer.domElement,
+      core.spatialRenderer.domElement,
+    ])
+  })
+})
+
 describe('渲染器工厂', () => {
   it('环境没有 WebGL 时返回 null 而不是抛错', () => {
     expect(createWebGLRenderer()).toBeNull()

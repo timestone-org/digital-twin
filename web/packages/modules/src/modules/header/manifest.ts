@@ -206,7 +206,7 @@ export default defineModule({
       default: '',
       span: 'full',
       placeholder: '留空 = 用风格自带花纹',
-      help: '可填图片地址（自动铺成整宽贴底），也可直接填 CSS background 简写 / 渐变；填 var(--fx-decor-topbg) 用内置的倒角横带底图。',
+      help: '可从素材库挑一张，也可填图片地址（自动铺成整宽贴底）或 CSS background 简写 / 渐变；填 var(--fx-decor-topbg) 用内置的倒角横带底图。',
     },
     {
       key: 'bgFilter',

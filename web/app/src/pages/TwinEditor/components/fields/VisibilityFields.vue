@@ -4,7 +4,7 @@
  *
  * ⚠ 这里配的距离规则**在编辑视口里不生效**（`TwinVisibilityRule` 的注释）：
  * 编辑时镜头到处飞，套上规则会让人「刚配好的东西一转镜头就不见了」。
- * 所以面板上要写明这一点，否则用户会以为自己配错了。
+ * 「初始可见」也只管运行态；编辑视口由左栏眼睛独立控制。
  */
 import {
   TWIN_FADE_DIRECTIONS,
@@ -122,7 +122,7 @@ function writeFadeDirection(next: string): void {
     </div>
 
     <p class="text-xs text-text-disabled">
-      距离规则只在大屏运行时生效；编辑视口里始终按「初始可见」显示。
+      初始可见与距离规则只在大屏运行时生效；编辑视口的显隐请用左栏眼睛控制。
     </p>
   </div>
 </template>

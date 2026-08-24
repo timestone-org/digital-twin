@@ -203,6 +203,29 @@ describe('加模块与保存', () => {
   })
 })
 
+describe('图层编辑态显隐', () => {
+  it('图层眼睛只隐藏设计画布，不置脏也不改初始可见', async () => {
+    vi.spyOn(dashboardApi, 'getDashboard').mockResolvedValue(
+      payload({ nodes: [{ ...node('n1'), isVisible: false }] }),
+    )
+    const wrapper = await mountEditor()
+    // 运行时初始隐藏不妨碍设计态编辑它。
+    expect(wrapper.find('.dt-node').exists()).toBe(true)
+    await buttonWith(wrapper, '图层')?.trigger('click')
+
+    await buttonWith(wrapper, '在编辑画布隐藏这个节点')?.trigger('click')
+
+    expect(wrapper.find('.dt-node').exists()).toBe(false)
+    expect(buttonWith(wrapper, '保存')?.attributes('disabled')).toBeDefined()
+
+    await wrapper.get('[data-test="layer-row"]').trigger('click')
+    await flushPromises()
+    expect(
+      wrapper.find('button[role="switch"]').attributes('aria-checked'),
+    ).toBe('false')
+  })
+})
+
 describe('版本冲突', () => {
   it('409 时提示「重新加载」并把保存挡住，绝不静默覆盖', async () => {
     vi.spyOn(dashboardApi, 'replaceLayout').mockRejectedValue(

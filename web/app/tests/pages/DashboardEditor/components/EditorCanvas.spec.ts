@@ -107,10 +107,10 @@ describe('摆节点', () => {
     expect(box.attributes('style')).toContain('top: 20px')
   })
 
-  it('隐藏的节点在设计态仍然画出来，只是标成隐藏', () => {
+  it('图层隐藏的节点不在设计画布渲染', () => {
     const wrapper = mountCanvas([node('a', { isVisible: false })])
 
-    expect(wrapper.find('.dt-node').classes()).toContain('dt-node--hidden')
+    expect(wrapper.find('.dt-node').exists()).toBe(false)
   })
 
   it('选中的那一格挂上选中样式，没选中的不挂', () => {

@@ -205,8 +205,14 @@ describe('修饰类', () => {
       'dt-module--hover-glow',
     ])
     expect(cardChromeClasses({ cornerStyle: 'bracket', hoverGlow: 1 })).toEqual(
-      ['dt-corners'],
+      ['dt-corners', 'dt-corners--bracket'],
     )
+  })
+
+  // 缺省档（方形辉光）是基类自己的画法：给它造一个显式值就等于多挂一个空转的类
+  it('缺省档与白名单外的脏值都不挂角标修饰类', () => {
+    expect(cardChromeClasses({ cornerStyle: 'halo' })).toEqual(['dt-corners'])
+    expect(cardChromeClasses({ cornerStyle: 7 })).toEqual(['dt-corners'])
   })
 
   it('边框样式选项表与归一化白名单同源', () => {

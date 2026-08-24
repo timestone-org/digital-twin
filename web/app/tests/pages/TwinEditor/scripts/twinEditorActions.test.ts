@@ -91,27 +91,6 @@ describe('复制', () => {
   })
 })
 
-describe('显隐开关', () => {
-  it('翻转 visible 并可撤销', () => {
-    const { actions, doc } = setup({ anchors: [{ id: 'a1' }] })
-
-    actions.toggleVisible('anchors', 'a1')
-
-    expect(doc.config.value.anchors[0]?.visibility.visible).toBe(false)
-    doc.undo()
-    expect(doc.config.value.anchors[0]?.visibility.visible).toBe(true)
-  })
-
-  // 视点没有 visibility 这一段，误当它有会写出一个渲染层永远不读的字段
-  it('视点上没有这一档，调了什么也不做', () => {
-    const { actions, doc } = setup({ cameras: [{ id: 'c1' }] })
-
-    actions.toggleVisible('cameras', 'c1')
-
-    expect(doc.canUndo.value).toBe(false)
-  })
-})
-
 describe('单例段', () => {
   it('patchConfig 换掉模型那一段', () => {
     const { actions, doc } = setup({})
@@ -179,14 +158,6 @@ describe('钻取树', () => {
     })
 
     actions.reparentHier('a', 'b')
-
-    expect(doc.canUndo.value).toBe(false)
-  })
-
-  it('钻取节点没有显隐这一档，调了什么也不做', () => {
-    const { actions, doc } = setup({ hierNodes: [{ id: 'a' }] })
-
-    actions.toggleVisible('hierNodes', 'a')
 
     expect(doc.canUndo.value).toBe(false)
   })

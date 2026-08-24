@@ -171,7 +171,9 @@ function forwardPreset(preset: ConfigPreset): void {
     </section>
 
     <section>
-      <h3 class="m-0 mb-2 text-2xs tracking-wide text-text-disabled">显隐</h3>
+      <h3 class="m-0 mb-2 text-2xs tracking-wide text-text-disabled">
+        初始显隐
+      </h3>
       <div class="grid grid-cols-2 gap-1">
         <DtButton
           v-for="item in VISIBLE_ACTIONS"

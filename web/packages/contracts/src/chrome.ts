@@ -22,7 +22,7 @@ export interface ChromeKeySpec {
   type: ChromeKeyType
   /**
    * 合法值白名单（仅 `enum`）。**不含「未设置」**——那是删键，不是一个值，
-   * 故凡是「缺省档」的枚举值（`borderSide:'all'` / `cornerStyle:'bracket'` /
+   * 故凡是「缺省档」的枚举值（`borderSide:'all'` / `cornerStyle:'halo'` /
    * `titleAlign:'center'`）都不在表里。
    */
   values?: readonly string[]
@@ -78,7 +78,7 @@ export const CHROME_KEYS = [
     values: ['top', 'bottom', 'left', 'right'],
   }, // 描边边数
   /* 四角 */
-  { key: 'cornerStyle', type: 'enum', values: ['dot'] }, // 角标形状（缺省 L 形角括号）
+  { key: 'cornerStyle', type: 'enum', values: ['bracket', 'dot'] }, // 角标形状（缺省方形辉光）
   { key: 'cornerSize', type: 'number' }, // 角标尺寸
   { key: 'cornerGlow', type: 'number' }, // 角标辉光
   { key: 'cornerOpacity', type: 'number' }, // 角标透明度

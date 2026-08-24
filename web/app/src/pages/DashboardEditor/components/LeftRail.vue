@@ -22,7 +22,7 @@ defineProps<{
 const emit = defineEmits<{
   add: [manifest: ModuleManifest]
   select: [nodeId: string, additive: boolean]
-  toggle: [nodeId: string, isVisible: boolean]
+  toggleEditorVisible: [nodeId: string]
   remove: [nodeId: string]
   rename: [nodeId: string, name: string]
   move: [nodeId: string, parentId: string | null, at?: number]
@@ -60,7 +60,7 @@ const tab = ref('library')
       :selected-ids="selectedIds"
       :get-manifest="getManifest"
       @select="(nodeId, additive) => emit('select', nodeId, additive)"
-      @toggle="(nodeId, isVisible) => emit('toggle', nodeId, isVisible)"
+      @toggle-editor-visible="emit('toggleEditorVisible', $event)"
       @remove="emit('remove', $event)"
       @rename="(nodeId, name) => emit('rename', nodeId, name)"
       @move="(nodeId, parentId, at) => emit('move', nodeId, parentId, at)"

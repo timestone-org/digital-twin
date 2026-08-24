@@ -123,7 +123,6 @@ const config = computed<Record<string, unknown>>(() => ({
     class="dt-node absolute"
     :class="{
       'dt-node--selected': isSelected,
-      'dt-node--hidden': !frame.isVisible,
       'dt-node--pinned': pinnedEdge !== null,
     }"
     :style="boxStyle"
@@ -164,12 +163,6 @@ const config = computed<Record<string, unknown>>(() => ({
 
 .dt-node--selected {
   outline: 2px solid var(--accent-primary);
-}
-
-// 隐藏节点在设计态仍要看得见、点得中：不画出来就没法把它改回可见
-.dt-node--hidden {
-  opacity: 0.4;
-  outline-color: var(--border-strong);
 }
 
 // ⚠ 见文件头：模块自己的交互会吃掉 pointerdown，整块关掉指针事件

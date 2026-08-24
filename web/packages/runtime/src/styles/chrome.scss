@@ -1,4 +1,4 @@
-// 大屏一格的卡片外观（chrome）：卡片框、八种边框样式、四角括号、纯描边浮层。
+// 大屏一格的卡片外观（chrome）：卡片框、八种边框样式、四角角标、纯描边浮层。
 //
 // ⚠ 这份**不能是 scoped**。`--card-anim` 注入的是 `dt-card-breathe …` 这种动画名，
 // Vue 的 scoped 改写只认同一块里的**字面量** animation-name，名字从 CSS 变量来时
@@ -232,11 +232,15 @@
   }
 
   // 四角发光角标。形状 / 尺寸 / 辉光 / 透明度 / 偏移全部变量化，每个兜底就是平台现值。
-  // box-sizing 显式写出：dot 变体「尺寸含 1px 边框」的语义不该依赖 preflight。
+  // 缺省档是**方形辉光**：盒子自己一笔不画，只投一圈贴着 10×10 轮廓的柔光。
+  // box-sizing 显式写出：另外两档「尺寸含 1px 边框」的语义不该依赖 preflight。
   //
-  // ⚠ 偏移必须夹到 0 以上：一格是 overflow:hidden，负偏移会把 L 的两条笔画连同辉光整个
-  // 裁到框外，屏幕上一点痕迹都不剩，表现是「四角怎么调都没变化」。@dt/ui 的 DtCard 那套
-  // -1px 骑在边框上的写法只在不裁剪的容器里成立，照搬进这里就是全裁光。
+  // ⚠ 辉光必须是 box-shadow 而不是 drop-shadow：投影的形状取自**盒子的轮廓**，缺省档
+  // 那一圈方形柔光正是这么来的；drop-shadow 取的是渲染后的 alpha，盒子一笔不画时它
+  // 无光可投，缺省档会整个消失。
+  //
+  // ⚠ 偏移必须夹到 0 以上：一格是 overflow:hidden，负偏移会把角标连同辉光整个裁到框外，
+  // 屏幕上一点痕迹都不剩，表现是「四角怎么调都没变化」。
   .dt-corners {
     --dt-corner-off: max(0px, var(--card-corner-off, 0px));
   }
@@ -251,13 +255,9 @@
     box-sizing: border-box;
     width: var(--card-corner-size, 10px);
     height: var(--card-corner-size, 10px);
+    // 缺省档不描边，另外两档各自加回来
     border: 0 solid var(--card-corner-color);
-    // ⚠ 辉光走 drop-shadow 而不是 box-shadow：box-shadow 描的是整只 10×10 盒子的方形
-    // 轮廓，而角标只画了其中两条边，糊出来的是一团与形状对不上的方光晕；drop-shadow
-    // 取的是渲染后的 alpha，光晕才贴着 L 形（与小方点）走
-    filter: drop-shadow(
-      0 0 var(--card-corner-glow, 5px) var(--card-corner-color)
-    );
+    box-shadow: 0 0 var(--card-corner-glow, 5px) var(--card-corner-color);
     opacity: var(--card-corner-opacity, 0.9);
     pointer-events: none;
   }
@@ -265,15 +265,11 @@
   .dt-corners::before {
     top: var(--dt-corner-off);
     left: var(--dt-corner-off);
-    border-top-width: 1px;
-    border-left-width: 1px;
   }
 
   .dt-corners::after {
     top: var(--dt-corner-off);
     right: var(--dt-corner-off);
-    border-top-width: 1px;
-    border-right-width: 1px;
   }
 
   // 伪元素一个盒子只有两个，下面两角得再借一层空元素
@@ -286,21 +282,38 @@
   .dt-corners > .dt-corner-b::before {
     bottom: var(--dt-corner-off);
     left: var(--dt-corner-off);
-    border-bottom-width: 1px;
-    border-left-width: 1px;
   }
 
   .dt-corners > .dt-corner-b::after {
     right: var(--dt-corner-off);
     bottom: var(--dt-corner-off);
+  }
+
+  // L 形角括号档：在同一团辉光上补两条朝外的实笔画。
+  .dt-corners--bracket::before {
+    border-top-width: 1px;
+    border-left-width: 1px;
+  }
+
+  .dt-corners--bracket::after {
+    border-top-width: 1px;
+    border-right-width: 1px;
+  }
+
+  .dt-corners--bracket > .dt-corner-b::before {
+    border-bottom-width: 1px;
+    border-left-width: 1px;
+  }
+
+  .dt-corners--bracket > .dt-corner-b::after {
     border-bottom-width: 1px;
     border-right-width: 1px;
   }
 
-  // 小方点变体：结构一行不动，把 L 的两条笔画换成一整块实心底色。
+  // 小方点档：把盒子整块填实，辉光跟着这枚实心点走。
   // ⚠ 底色而不是「四边各描 1px」：描边法只在 4px 这一档看着像实心，尺寸一调大就露出
-  // 中间的空心，成了个小方框——而那正是「角标尺寸」这个旋钮最常被调的方向。
-  // ⚠ 跨文件约定：正因为同一个变量在 L 形与方点下要有两套兜底，tokens 里**刻意不声明**
+  // 中间的空心，成了个小方框——而尺寸正是这个旋钮最常被调的方向。
+  // ⚠ 跨文件约定：正因为同一个变量在缺省档与方点下要有两套兜底，tokens 里**刻意不声明**
   // --card-corner-size / --card-corner-opacity。声明了这两行兜底就全成死代码，
   // 方点会退化成 10px 的大角标。
   .dt-corners--dot::before,
@@ -309,7 +322,6 @@
   .dt-corners--dot > .dt-corner-b::after {
     width: var(--card-corner-size, 4px);
     height: var(--card-corner-size, 4px);
-    border-width: 0;
     background: var(--card-corner-color);
     opacity: var(--card-corner-opacity, 0.8);
   }

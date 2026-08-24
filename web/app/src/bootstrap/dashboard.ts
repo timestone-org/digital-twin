@@ -1,5 +1,6 @@
 /**
- * @fileoverview 大屏子系统的启动装配：注册内置模块、登记配置控件、装配取数 provider。
+ * @fileoverview 大屏子系统的启动装配：注册内置模块、登记配置控件、把素材引用接到取回
+ * 地址上、装配取数 provider。
  *
  * ⚠ WS 客户端留在应用壳（它要读登录态），provider 只收一个**注入的订阅函数**——
  * 这正是 `@dt/datasources` 不自己建连接、也因此能在测试里跑假件的那条缝
@@ -18,9 +19,9 @@ import {
   createStaticProvider,
   registerProvider,
 } from '@dt/datasources'
-import { registerBuiltinModules } from '@dt/modules'
+import { configureAssetImages, registerBuiltinModules } from '@dt/modules'
 import { configureTwinModelHost } from '@dt/three-core/host'
-import { modelVariantUrl } from '@dt/contracts'
+import { assetUrl, modelVariantUrl } from '@dt/contracts'
 
 import { ASSET_BASE_URL } from '@/config/app'
 
@@ -61,6 +62,16 @@ export function installDashboardModules(): void {
   registerBuiltinModules()
   installConfigControls()
   installTwinModelHost()
+  installAssetImages()
+}
+
+/**
+ * 告诉模块怎么把 `asset:<uuid>` 变成一张能取回的图。
+ * ⚠ 三张大屏页（编辑 / 查看 / 公开）都从这里进，漏装一处的表现是那一页上图片模块
+ * 全空、而配置与另外两页一字不差。
+ */
+function installAssetImages(): void {
+  configureAssetImages((ref) => assetUrl(ASSET_BASE_URL, 'image', ref))
 }
 
 /**

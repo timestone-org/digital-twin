@@ -14,6 +14,7 @@ import {
   readText,
   readTrimmedText,
 } from '../../shared/config'
+import { isAssetRef, resolveImageValue } from '../../shared/assetImage'
 import { imageSourceKind } from '../../shared/background'
 
 const props = defineProps<{
@@ -34,8 +35,14 @@ const BACKGROUND_SIZES = {
 
 const title = computed(() => readText(props.config.title))
 // 先 trim：一串空白算没填，否则会渲染出一个必然加载失败的 img
-const source = computed(() => readTrimmedText(props.config.src))
+const rawSrc = computed(() => readTrimmedText(props.config.src))
+// 素材引用摊成地址后再判来源：不摊的话 `asset:…` 会被当成 URL 塞进 img，得到一个碎图图标
+const source = computed(() => resolveImageValue(rawSrc.value))
 const kind = computed(() => imageSourceKind(source.value))
+// 挑了素材却摊不出地址（宿主没装解析、素材已被删）：这是取不回，不是没配
+const isBrokenRef = computed(
+  () => isAssetRef(rawSrc.value) && source.value === '',
+)
 const alt = computed(() => readText(props.config.alt))
 const fit = computed(() => readEnum(props.config.fit, FITS, 'contain'))
 const position = computed(() =>
@@ -121,7 +128,7 @@ watch(source, () => {
 
 // 两句兜底与清单里的 default 逐字同值；配成空串即「占位时一个字都不显示」
 const placeholder = computed(() =>
-  hasFailed.value
+  hasFailed.value || isBrokenRef.value
     ? readText(props.config.errorText, '图片加载失败')
     : readText(props.config.emptyText, '未设置图片'),
 )

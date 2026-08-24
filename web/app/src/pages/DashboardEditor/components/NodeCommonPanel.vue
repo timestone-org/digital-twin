@@ -235,7 +235,11 @@ function writeCardStyle(next: CardChrome): void {
     </section>
 
     <section class="flex flex-col gap-2">
-      <DtField label="初始可见" size="sm">
+      <DtField
+        label="初始可见"
+        hint="只影响大屏运行时；编辑画布的显隐请用图层眼睛控制。"
+        size="sm"
+      >
         <DtSwitch
           :model-value="node.isVisible"
           size="sm"

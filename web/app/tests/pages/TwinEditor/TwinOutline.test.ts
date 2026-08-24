@@ -292,14 +292,14 @@ describe('选中与动作出口', () => {
     expect(wrapper.emitted('add')?.[0]).toEqual(['panels'])
   })
 
-  it('切显隐抛 toggleVisible', async () => {
+  it('切编辑视口显隐抛 toggleEditorVisible', async () => {
     const wrapper = mountOutline()
 
     await rowOf(wrapper, 'a1')
       .find('[data-test="row-visible"]')
       .trigger('click')
 
-    expect(wrapper.emitted('toggleVisible')?.[0]).toEqual([
+    expect(wrapper.emitted('toggleEditorVisible')?.[0]).toEqual([
       { kind: 'anchors', id: 'a1' },
     ])
   })

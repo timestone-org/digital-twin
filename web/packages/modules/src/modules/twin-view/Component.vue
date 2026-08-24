@@ -186,6 +186,9 @@ const errorMessage = computed(() =>
 .dt-twin__title {
   position: absolute;
   margin: 0;
+  // ⚠ 标题压在 3D 画面上，必须让指针穿过去：不让的话标题那一小块吃掉 pointerdown，
+  // 表现是「在标题上按住转不动模型」，而这跟一行文字看起来毫无关系
+  pointer-events: none;
   color: var(--text-primary);
   font-family: var(--font-display);
   letter-spacing: 0.06em;

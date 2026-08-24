@@ -246,23 +246,25 @@ export function renderItems(
   selectedIds: readonly string[],
 ): CanvasItem[] {
   const selected = new Set(selectedIds)
-  return placements.map((placement) => {
-    const isSelected = selected.has(placement.node.id)
-    return {
-      placement,
-      isSelected,
-      // 按位置判定钉在哪边，不认具体的区域名——认了具体取值编辑器就又认识某个模块了
-      pinnedEdge: !placement.isPinned
-        ? null
-        : placement.frame.top <= 0
-          ? 'bottom'
-          : 'top',
-      zIndex:
-        placement.frame.depth * 100 +
-        placement.node.zIndex +
-        (isSelected ? SELECTED_Z_BOOST : 0),
-    }
-  })
+  return placements
+    .filter((placement) => placement.frame.isVisible)
+    .map((placement) => {
+      const isSelected = selected.has(placement.node.id)
+      return {
+        placement,
+        isSelected,
+        // 按位置判定钉在哪边，不认具体的区域名——认了具体取值编辑器就又认识某个模块了
+        pinnedEdge: !placement.isPinned
+          ? null
+          : placement.frame.top <= 0
+            ? 'bottom'
+            : 'top',
+        zIndex:
+          placement.frame.depth * 100 +
+          placement.node.zIndex +
+          (isSelected ? SELECTED_Z_BOOST : 0),
+      }
+    })
 }
 
 /** 画布当前的文档态：拖动要用到的那几项，画布组件的 props 直接满足它。 */

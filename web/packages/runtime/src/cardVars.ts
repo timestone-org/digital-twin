@@ -314,6 +314,21 @@ export function cardVars(chrome: CardChrome): Record<string, string> {
 }
 
 /**
+ * 角标形状 → 修饰类。**缺省档（方形辉光）不在表里**：那是基类自己的画法，
+ * 登记进来就等于把平台默认固化成一个必须显式写出的值。
+ */
+const CORNER_STYLE_CLASS: Record<string, string> = {
+  bracket: 'dt-corners--bracket',
+  dot: 'dt-corners--dot',
+}
+
+/** 这一格的角标形状要挂的修饰类；缺省档与白名单外的脏值都不挂。 */
+function cornerStyleClass(chrome: CardChrome): string | undefined {
+  const style = chrome.cornerStyle
+  return typeof style === 'string' ? CORNER_STYLE_CLASS[style] : undefined
+}
+
+/**
  * chrome 袋子 → 卡片框上的修饰类。
  *
  * 这三个键走类而不是变量：边框样式与角标形状要换的是整套画法（伪元素几何、多层阴影），
@@ -331,7 +346,8 @@ export function cardChromeClasses(chrome: CardChrome): string[] {
   if (border != null && border !== '' && !isChromeFrameless(chrome)) {
     classes.push(`dt-card-border--${normalizeCardBorderStyle(border)}`)
   }
-  if (chrome.cornerStyle === 'dot') classes.push('dt-corners--dot')
+  const corner = cornerStyleClass(chrome)
+  if (corner) classes.push(corner)
   if (chrome.hoverGlow === true) classes.push('dt-module--hover-glow')
   return classes
 }
@@ -353,7 +369,8 @@ export function bareBorderClasses(chrome: CardChrome): string[] {
     // 有描边就跟着有四角，与卡片版观感统一；关不关由 corners 开关的 --card-corner-display 管
     'dt-corners',
   ]
-  if (chrome.cornerStyle === 'dot') classes.push('dt-corners--dot')
+  const corner = cornerStyleClass(chrome)
+  if (corner) classes.push(corner)
   return classes
 }
 

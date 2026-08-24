@@ -131,7 +131,7 @@ describe('事件透传', () => {
     outline.vm.$emit('remove', { kind: 'anchors', id: 'a1' })
     outline.vm.$emit('duplicate', { kind: 'anchors', id: 'a1' })
     outline.vm.$emit('move', { kind: 'anchors', id: 'a1', delta: 1 })
-    outline.vm.$emit('toggleVisible', { kind: 'anchors', id: 'a1' })
+    outline.vm.$emit('toggleEditorVisible', { kind: 'anchors', id: 'a1' })
 
     expect(wrapper.emitted('add')).toEqual([['anchors']])
     expect(wrapper.emitted('bulkAdd')).toHaveLength(1)
@@ -142,7 +142,7 @@ describe('事件透传', () => {
     expect(wrapper.emitted('move')).toEqual([
       [{ kind: 'anchors', id: 'a1', delta: 1 }],
     ])
-    expect(wrapper.emitted('toggleVisible')).toEqual([
+    expect(wrapper.emitted('toggleEditorVisible')).toEqual([
       [{ kind: 'anchors', id: 'a1' }],
     ])
   })

@@ -1,8 +1,9 @@
 /**
  * @fileoverview 配置里填的那一格「图」怎么变成一条能用的 CSS `background` 值。
  * 用户可能填的是一整条 CSS 简写（渐变、`var(--fx-decor-topbg) …`），也可能只是一个
- * 图片地址；两者的画法完全不同，混着当一种处理必然有一种是坏的。
+ * 图片地址或一条素材引用；三者的画法完全不同，混着当一种处理必然有一种是坏的。
  */
+import { resolveImageValue } from './assetImage'
 
 // CSS background 简写的开头：url() / *-gradient() / var()
 const CSS_VALUE_HEAD = /^(?:url\(|[a-z-]*gradient\(|var\()/i
@@ -26,10 +27,12 @@ export function imageSourceKind(value: string): ImageSourceKind {
  * 铺满整宽、贴住底边的横幅铺法，页头底图用的就是它。
  * ⚠ 包 `url("…")` 前要剔掉引号 / 反斜杠 / 换行：留着的话用户填的地址会把这条声明
  * 从中间截断，结果是整层背景静默消失，而配置看上去完全正常。
- * @param value 配置里存的原始字符串；CSS 简写原样返回，地址包成整宽贴底
+ * @param value 配置里存的原始字符串；CSS 简写原样返回，地址与素材引用包成整宽贴底
  */
 export function bannerBackground(value: string): string {
-  const text = value.trim()
+  // 素材引用先摊成地址：漏进下面那条 url("…") 的话包出来的是 url("asset:…")，
+  // 整层背景静默消失，而配置看上去完全正常
+  const text = resolveImageValue(value).trim()
   const kind = imageSourceKind(text)
   if (kind === 'empty') return ''
   if (kind === 'css') return text

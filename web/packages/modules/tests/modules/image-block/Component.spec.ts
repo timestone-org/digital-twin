@@ -4,10 +4,14 @@
  * 声明作废，表现是其他几档一起失效），以及清单缺省摊出来的配置与空配置渲染逐字相同。
  */
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import Component from '../../../src/modules/image-block/Component.vue'
 import imageBlockManifest from '../../../src/modules/image-block/manifest'
+import {
+  __resetAssetImages,
+  configureAssetImages,
+} from '../../../src/shared/assetImage'
 import { configDefaults } from '../../../src/shared/config'
 
 const URL_SRC = 'https://example.com/plant.png'
@@ -71,6 +75,48 @@ describe('图片块的来源', () => {
     const wrapper = render({ src: URL_SRC, alt: '厂区俯视图' })
 
     expect(wrapper.get('img').attributes('alt')).toBe('厂区俯视图')
+  })
+})
+
+afterEach(() => {
+  __resetAssetImages()
+})
+
+describe('图片块的素材引用', () => {
+  const ASSET_REF = 'asset:018f3a2b-4c5d-7e8f-9a0b-1c2d3e4f5a6b'
+  const ASSET_URL = '/oss/images/018f3a2b-4c5d-7e8f-9a0b-1c2d3e4f5a6b'
+
+  it('引用摊成地址后才进 img', () => {
+    configureAssetImages(() => ASSET_URL)
+
+    expect(render({ src: ASSET_REF }).get('img').attributes('src')).toBe(
+      ASSET_URL,
+    )
+  })
+
+  // 漏摊的话 `asset:…` 会被当成 URL 塞进 img，得到的是一个碎图图标
+  it('引用绝不原样塞进 img', () => {
+    configureAssetImages(() => ASSET_URL)
+
+    expect(render({ src: ASSET_REF }).get('img').attributes('src')).not.toBe(
+      ASSET_REF,
+    )
+  })
+
+  // 挑过素材却摊不出地址（宿主没装解析、素材已被删）是取不回，不是没配
+  it('摊不出地址时画的是加载失败那句，不是未配图那句', () => {
+    const wrapper = render({ src: ASSET_REF })
+
+    expect(wrapper.find('img').exists()).toBe(false)
+    expect(wrapper.get('.dt-image-block__empty').text()).toBe('图片加载失败')
+  })
+
+  it('摊不出地址时那句文案照样可改写', () => {
+    expect(
+      render({ src: ASSET_REF, errorText: '素材已删除' })
+        .get('.dt-image-block__empty')
+        .text(),
+    ).toBe('素材已删除')
   })
 })
 

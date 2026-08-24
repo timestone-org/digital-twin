@@ -135,6 +135,26 @@ function fillContainer(element: HTMLElement, interactive: boolean): void {
   element.style.pointerEvents = interactive ? 'auto' : 'none'
 }
 
+/**
+ * 把三层画布垫在宿主**原有子节点之前**，从下到上按 `layers` 的顺序。
+ *
+ * ⚠ 不许改回 append：画布是运行时挂进来的，append 会让它在 DOM 里排到覆盖层
+ * 之后，而同为 `z-index: auto` 的定位兄弟是按树序绘制的——吃指针的那层（canvas）
+ * 就盖在视点切换、漫游控件、场景工具条上面，表现是「看得见、点不动」，
+ * 而画面上一点异样都没有。
+ *
+ * @param container 宿主元素
+ * @param layers 从下到上的各层
+ */
+function stackUnderContent(
+  container: HTMLElement,
+  layers: readonly HTMLElement[],
+): void {
+  // ⚠ 锚点只取一次：逐层插到同一个原有首节点之前，各层之间的先后才不会颠倒
+  const anchor = container.firstChild
+  for (const layer of layers) container.insertBefore(layer, anchor)
+}
+
 /** 半球 + 环境 + 主次平行光，收进一个 Group 便于整组释放。 */
 function createLighting(): THREE.Group {
   const group = new THREE.Group()
@@ -169,16 +189,16 @@ export function createSceneCore(options: SceneCoreOptions): SceneCore {
 
   renderer.setPixelRatio(clampPixelRatio())
   renderer.setClearColor(0x000000, 0)
-  fillContainer(renderer.domElement, true)
-  container.appendChild(renderer.domElement)
-
   const labelRenderer = new CSS2DRenderer()
-  fillContainer(labelRenderer.domElement, false)
-  container.appendChild(labelRenderer.domElement)
-
   const spatialRenderer = new CSS3DRenderer()
+  fillContainer(renderer.domElement, true)
+  fillContainer(labelRenderer.domElement, false)
   fillContainer(spatialRenderer.domElement, false)
-  container.appendChild(spatialRenderer.domElement)
+  stackUnderContent(container, [
+    renderer.domElement,
+    labelRenderer.domElement,
+    spatialRenderer.domElement,
+  ])
 
   const controls = new OrbitControls(camera, renderer.domElement)
   controls.enableDamping = true

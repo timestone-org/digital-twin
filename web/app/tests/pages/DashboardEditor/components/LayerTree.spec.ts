@@ -156,7 +156,7 @@ describe('渲染', () => {
 
   it('行内每个图标键都真的画出了图标', () => {
     const wrapper = mountTree([node('a')])
-    const labels = ['定位到此节点', '隐藏这个节点', '删除这个节点']
+    const labels = ['定位到此节点', '在编辑画布隐藏这个节点', '删除这个节点']
 
     for (const label of labels) {
       expect(buttonBy(wrapper, label)?.find('.dt-icon').exists()).toBe(true)
@@ -190,20 +190,20 @@ describe('选中与行内动作', () => {
     expect(wrapper.emitted('select')?.[0]).toEqual(['a', true])
   })
 
-  it('切显隐抛 toggle，带下一个状态', async () => {
+  it('切设计态显隐只抛节点 id', async () => {
     const wrapper = mountTree([node('a')])
 
-    await buttonBy(wrapper, '隐藏这个节点')?.trigger('click')
+    await buttonBy(wrapper, '在编辑画布隐藏这个节点')?.trigger('click')
 
-    expect(wrapper.emitted('toggle')?.[0]).toEqual(['a', false])
+    expect(wrapper.emitted('toggleEditorVisible')?.[0]).toEqual(['a'])
   })
 
   it('已隐藏的节点给的是「显示」这一档', async () => {
     const wrapper = mountTree([node('a', { isVisible: false })])
 
-    await buttonBy(wrapper, '显示这个节点')?.trigger('click')
+    await buttonBy(wrapper, '在编辑画布显示这个节点')?.trigger('click')
 
-    expect(wrapper.emitted('toggle')?.[0]).toEqual(['a', true])
+    expect(wrapper.emitted('toggleEditorVisible')?.[0]).toEqual(['a'])
   })
 
   it('删除抛 remove，且不顺带选中它', async () => {
@@ -228,14 +228,14 @@ describe('选中与行内动作', () => {
     const wrapper = mountTree([node('a')])
 
     await buttonBy(wrapper, '定位到此节点')?.trigger('click')
-    await buttonBy(wrapper, '隐藏这个节点')?.trigger('click')
+    await buttonBy(wrapper, '在编辑画布隐藏这个节点')?.trigger('click')
 
     expect(wrapper.emitted('select')).toBeUndefined()
   })
 
   it('行内动作键走 DtButton 的 xs 幽灵档，删除键是 danger 色', () => {
     const wrapper = mountTree([node('a')])
-    const labels = ['定位到此节点', '隐藏这个节点', '删除这个节点']
+    const labels = ['定位到此节点', '在编辑画布隐藏这个节点', '删除这个节点']
 
     for (const label of labels) {
       const button = buttonBy(wrapper, label)
@@ -253,11 +253,11 @@ describe('选中与行内动作', () => {
     const hidden = mountTree([node('a', { isVisible: false })])
     const shown = mountTree([node('a')])
 
-    const pinned = buttonBy(hidden, '显示这个节点')
+    const pinned = buttonBy(hidden, '在编辑画布显示这个节点')
     expect(pinned?.classes()).toContain('dt-layer__act--pinned')
     expect(pinned?.attributes('style')).toContain('--state-warning')
 
-    const resting = buttonBy(shown, '隐藏这个节点')
+    const resting = buttonBy(shown, '在编辑画布隐藏这个节点')
     expect(resting?.classes()).not.toContain('dt-layer__act--pinned')
     expect(resting?.attributes('style')).toContain('--text-secondary')
   })

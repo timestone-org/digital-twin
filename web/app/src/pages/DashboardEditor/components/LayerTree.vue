@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * @fileoverview 图层树：把排版摊平表按缩进列成一张扁平清单，管多选、显隐、
- * 重命名、层序与拖拽换父。它只抛事件，改文档一律由页面交给 `editorActions`。
+ * @fileoverview 图层树：把排版摊平表按缩进列成一张扁平清单，管多选、设计态显隐、
+ * 重命名、层序与拖拽换父。眼睛只抛本地覆盖，不改文档的初始显隐。
  * ⚠ 行的 key 用节点 id：用索引的话，删掉中间一层会让其余行的展开态与选中态
  * 整体错位，而错位一眼看不出是错的。
  */
@@ -24,7 +24,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   select: [nodeId: string, additive: boolean]
-  toggle: [nodeId: string, isVisible: boolean]
+  toggleEditorVisible: [nodeId: string]
   remove: [nodeId: string]
   rename: [nodeId: string, name: string]
   move: [nodeId: string, parentId: string | null, at?: number]
@@ -163,9 +163,9 @@ function onRenameKeydown(event: KeyboardEvent): void {
           :icon="row.node.isVisible ? 'eye' : 'eye-off'"
           class="dt-layer__act"
           :class="{ 'dt-layer__act--pinned': !row.node.isVisible }"
-          :aria-label="row.node.isVisible ? '隐藏这个节点' : '显示这个节点'"
-          :title="row.node.isVisible ? '隐藏这个节点' : '显示这个节点'"
-          @click.stop="emit('toggle', row.id, !row.node.isVisible)"
+          :aria-label="`在编辑画布${row.node.isVisible ? '隐藏' : '显示'}这个节点`"
+          title="仅控制编辑画布，初始可见请在右侧设置"
+          @click.stop="emit('toggleEditorVisible', row.id)"
         />
         <DtButton
           size="xs"

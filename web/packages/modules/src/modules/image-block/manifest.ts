@@ -1,6 +1,6 @@
 /**
- * @fileoverview image-block —— 装饰图片块：填一个图片 URL 或一段 CSS background 值，
- * 再给一组画面调节（填充、圆角、旋转、滤镜）。不取任何数。
+ * @fileoverview image-block —— 装饰图片块：从素材库挑一张，或填一个图片 URL / 一段
+ * CSS background 值，再给一组画面调节（填充、圆角、旋转、滤镜）。不取任何数。
  */
 import { defineModule } from '../../registry'
 
@@ -31,7 +31,7 @@ export default defineModule({
       default: '',
       span: 'full',
       placeholder: 'https://… 或 linear-gradient(…)',
-      help: '填图片地址按图片画；填 CSS 值（渐变 / url() / var()）按背景画。',
+      help: '右侧按钮从素材库挑一张（推荐，落库的是素材引用，换部署不会失效）；也可手填图片地址按图片画，或填 CSS 值（渐变 / url() / var()）按背景画。',
     },
     {
       key: 'alt',

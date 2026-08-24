@@ -127,7 +127,7 @@ describe('显隐键的常驻规则', () => {
     const button = render().get('[data-test="row-visible"]')
 
     expect(button.classes()).toContain('opacity-0')
-    expect(button.attributes('aria-label')).toBe('隐藏进水温度')
+    expect(button.attributes('aria-label')).toBe('在编辑视口隐藏进水温度')
   })
 
   // 已隐藏时这个键是当前状态的唯一提示，不能跟着藏
@@ -138,7 +138,7 @@ describe('显隐键的常驻规则', () => {
 
     expect(button.classes()).not.toContain('opacity-0')
     expect(button.classes()).toContain('dt-btn--ghost')
-    expect(button.attributes('aria-label')).toBe('显示进水温度')
+    expect(button.attributes('aria-label')).toBe('在编辑视口显示进水温度')
   })
 
   it('选中行的动作键常驻', () => {

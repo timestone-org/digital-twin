@@ -110,7 +110,7 @@ function onMenu(item: DtMenuItem): void {
         data-test="row-flag"
       />
     </button>
-    <!-- 已隐藏时 eye-off 用警示色常驻：这个键是当前状态的唯一提示，不能跟着藏 -->
+    <!-- 已隐藏时 eye-off 用警示色常驻：这个键是编辑视口状态的唯一提示 -->
     <DtButton
       v-if="row.visible !== null"
       size="xs"
@@ -118,7 +118,8 @@ function onMenu(item: DtMenuItem): void {
       :intent="row.visible ? 'neutral' : 'warning'"
       :class="row.visible ? hiddenClass : ''"
       :icon="row.visible ? 'eye' : 'eye-off'"
-      :aria-label="`${row.visible ? '隐藏' : '显示'}${row.label}`"
+      :aria-label="`在编辑视口${row.visible ? '隐藏' : '显示'}${row.label}`"
+      title="仅控制编辑视口，初始可见请在右侧设置"
       data-test="row-visible"
       @click="emit('act', { type: 'toggle-visible' })"
     />
