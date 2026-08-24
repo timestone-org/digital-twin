@@ -82,8 +82,8 @@ def test_step_columns_match_the_migration() -> None:
 def test_closed_sets_are_spelled_the_same_way_in_sql() -> None:
     # 闭合集合与 CHECK 约束里的字面量是同一份，改一处必须两处一起动
     assert sql_values(SURFACE_KINDS).count(",") == len(SURFACE_KINDS) - 1
-    assert "'user', 'assistant', 'tool'" == sql_values(MESSAGE_ROLES)
-    assert "'model', 'server_tool', 'client_tool'" == sql_values(STEP_KINDS)
+    assert sql_values(MESSAGE_ROLES) == "'user', 'assistant', 'tool'"
+    assert sql_values(STEP_KINDS) == "'model', 'server_tool', 'client_tool'"
     assert sql_values(STEP_STATES).startswith("'running'")
 
 

@@ -80,7 +80,9 @@ def test_every_skill_declares_only_known_tools() -> None:
 
 def test_every_skill_has_readable_instructions() -> None:
     empty = {
-        skill.name for skill in list_skills() if not skill.instructions().strip()
+        skill.name
+        for skill in list_skills()
+        if not skill.instructions().strip()
     }
     assert empty == set()
 

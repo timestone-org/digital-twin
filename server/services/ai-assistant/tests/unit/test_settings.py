@@ -6,8 +6,9 @@
 """
 
 import pytest
-from ai_assistant.settings import DB_SCHEMA, HTTP_PORT, Settings
 from pydantic import SecretStr, ValidationError
+
+from ai_assistant.settings import DB_SCHEMA, HTTP_PORT, Settings
 
 PLACEHOLDER = "ai-assistant-test"
 

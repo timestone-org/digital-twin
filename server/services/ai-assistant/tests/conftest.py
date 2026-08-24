@@ -12,11 +12,11 @@ from collections.abc import AsyncIterator, Callable, Iterable
 
 import httpx
 import pytest
+from pydantic import SecretStr
+
 from ai_assistant.app import build_app
 from ai_assistant.apps.chat.catalog import ASSISTANT_MANAGE, ASSISTANT_USE
 from ai_assistant.settings import Settings
-from pydantic import SecretStr
-
 from lib.auth import (
     SignedContext,
     encode_identity,
