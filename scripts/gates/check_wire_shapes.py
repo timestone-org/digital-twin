@@ -139,10 +139,16 @@ def _pinned() -> dict[str, set[str]]:
         return found
     key = re.compile(r"^\s*(?P<name>[A-Z]\w+)\s*:\s*\{", re.MULTILINE)
     quoted = re.compile(r"['\"`](?P<name>[A-Z]\w+)['\"`]")
-    service = re.compile(r"['\"`](?P<service>[a-z-]+-(?:server|hub))['\"`]")
+    # ⚠ 归属按**真实存在的服务目录名**认，不按命名模式猜：写成
+    # `[a-z-]+-(?:server|hub)` 的话，任何不叫 `-server`/`-hub` 的服务
+    # （`ai-assistant`）都会让整个用例文件被静默跳过——表现是「钉了也不算数」。
+    services = {path.parent.name for path in _spec_files()}
+    quoted_word = re.compile(r"['\"`](?P<word>[a-z][a-z0-9-]*)['\"`]")
     for path in sorted(CONTRACT_TESTS.glob("*.ts")):
         text = read(path)
-        owners = {match.group("service") for match in service.finditer(text)}
+        owners = {
+            match.group("word") for match in quoted_word.finditer(text)
+        } & services
         if not owners:
             continue
         names = {match.group("name") for match in key.finditer(text)}
