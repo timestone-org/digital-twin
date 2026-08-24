@@ -17,10 +17,12 @@ def _settings(
     *,
     model_enabled: bool = False,
     model_api_key: SecretStr | None = None,
+    model_chat: str = "chat-model",
+    model_vision: str = "vision-model",
 ) -> Settings:
-    """占位配置，模型那两项由调用方指定。
+    """占位配置，模型那几项由调用方指定。
 
-    Args: model_enabled, model_api_key。
+    Args: model_enabled, model_api_key, model_chat, model_vision。
     """
     return Settings(
         postgres_host=PLACEHOLDER,
@@ -32,6 +34,8 @@ def _settings(
         edge_service_key=SecretStr("k" * 32),
         model_enabled=model_enabled,
         model_api_key=model_api_key,
+        model_chat=model_chat,
+        model_vision=model_vision,
     )
 
 
@@ -46,13 +50,20 @@ def test_an_enabled_model_yields_a_source() -> None:
     assert source is not None
 
 
-def test_the_two_kinds_resolve_to_different_model_names() -> None:
+def test_each_kind_resolves_to_its_own_configured_name() -> None:
     source = build_model_source(
-        _settings(model_enabled=True, model_api_key=SecretStr("sk-x"))
+        _settings(
+            model_enabled=True,
+            model_api_key=SecretStr("sk-x"),
+            model_chat="talker",
+            model_vision="looker",
+        )
     )
     assert source is not None
-    # 视觉模型的单价与延迟都高得多，混成一档等于每次对话都按视觉计费
-    assert source("chat").model_name != source("vision").model_name
+    # 两项默认同值（当前旗舰原生吃图），但各自的取值必须真的被用上——
+    # 接错的话「换成更便宜的看图模型」这次配置改动会静默不生效
+    assert source("chat").model_name == "talker"
+    assert source("vision").model_name == "looker"
 
 
 def test_the_client_does_not_retry_on_its_own() -> None:

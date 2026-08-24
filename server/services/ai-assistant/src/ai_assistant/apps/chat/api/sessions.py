@@ -5,15 +5,13 @@
 """
 
 import uuid
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
-from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_assistant.apps.chat.catalog import ASSISTANT_USE
+from ai_assistant.apps.chat.deps import WriteContext, get_write_context
 from ai_assistant.apps.chat.schemas import (
     SessionCreateIn,
     SessionDetailOut,
@@ -23,67 +21,15 @@ from ai_assistant.apps.chat.schemas import (
 )
 from ai_assistant.apps.chat.services import session_service
 from ai_assistant.apps.chat.services.session_service import SessionFilters
-from ai_assistant.container import Container
 from ai_assistant.deps import (
-    get_container,
-    get_idempotency_key,
     get_session,
     require,
 )
 from ai_assistant.settings import API_PREFIX
 from lib.auth import CallerContext
-from lib.idempotency import IdempotencyStore
 from lib.web import ApiResponse, Page, PageParams, ok, page_params
 
 router = APIRouter(prefix=f"{API_PREFIX}/sessions", tags=["chat-session"])
-
-
-@dataclass(frozen=True)
-class WriteContext:
-    """一次写请求要的三件事：谁在写、带没带幂等键、首次结果存哪。
-
-    ⚠ 打成一包不是为了好看：路由函数的形参上限是 5，而写端点天然还要带上
-    自己那一两件依赖。
-    """
-
-    idempotency: IdempotencyStore
-    idempotency_key: str | None
-    caller: CallerContext
-
-    async def run_once[ResultT: BaseModel](
-        self,
-        *,
-        endpoint: str,
-        model: type[ResultT],
-        action: Callable[[], Awaitable[ResultT]],
-    ) -> ResultT:
-        """带幂等键就只执行一次，重放直接返回首次结果。
-
-        Args: endpoint, model, action。
-        """
-        return await self.idempotency.run_once(
-            endpoint=endpoint,
-            key=self.idempotency_key,
-            caller=self.caller.user_id,
-            model=model,
-            action=action,
-        )
-
-
-def get_write_context(
-    container: Annotated[Container, Depends(get_container)],
-    caller: Annotated[CallerContext, Depends(require(ASSISTANT_USE))],
-    idempotency_key: Annotated[str | None, Depends(get_idempotency_key)],
-) -> WriteContext:
-    """建会话用的写上下文。
-
-    Args: container, caller, idempotency_key。
-    """
-    return WriteContext(
-        idempotency=container.idempotency,
-        idempotency_key=idempotency_key,
-        caller=caller,
-    )
 
 
 def get_filters(

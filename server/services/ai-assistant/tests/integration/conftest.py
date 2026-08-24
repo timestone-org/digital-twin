@@ -21,10 +21,9 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from ai_assistant.app import build_app
-from ai_assistant.apps.chat.api import sessions
 from ai_assistant.container import IDEMPOTENCY_NAMESPACE, Container
 from ai_assistant.deps import get_session
-from ai_assistant.settings import API_PREFIX, Settings
+from ai_assistant.settings import Settings
 from lib.config import load_settings
 from lib.db import run_after_commit_hooks
 from lib.idempotency import IdempotencyStore
@@ -45,21 +44,6 @@ def _reachable(host: str, port: int) -> bool:
             return True
     except OSError:
         return False
-
-
-def _mount_sessions(application: FastAPI) -> None:
-    """会话路由还没进 `ROUTERS` 时由用例挂上。
-
-    ⚠ 判的是「挂没挂」而不是「谁挂的」：登记进 `api/__init__.py` 之后这一步
-    自动变成空操作，不会挂出第二份。
-    """
-    prefix = f"{API_PREFIX}/sessions"
-    mounted = any(
-        str(getattr(route, "path", "")).startswith(prefix)
-        for route in application.routes
-    )
-    if not mounted:
-        application.include_router(sessions.router)
 
 
 def _session_override(
@@ -136,7 +120,6 @@ async def db_client(
     if not _reachable(db_settings.postgres_host, db_settings.postgres_port):
         pytest.skip("本机连不到 Postgres")
     application = build_app(db_settings)
-    _mount_sessions(application)
     database = application.state.container.database
     connection = await database.engine.connect()
     transaction = await connection.begin()

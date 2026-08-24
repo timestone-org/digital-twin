@@ -67,13 +67,17 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     # 模型能力总开关。关着时服务照常起、照常提供会话读取，只是不接模型——
     # 这是「某些现场没有外网」的正解，见 CONTEXT.md §3
     model_enabled: bool = False
-    # OpenAI 兼容端点。换供应商只改这一项，代码里不认任何厂商名
+    # OpenAI 兼容端点。换供应商只改这一项，代码里不认任何厂商名。
+    # ⚠ 缺省给的是 legacy 域名。供应商现在推**业务空间专属域名**，形如
+    # `https://{业务空间id}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`——
+    # 它含一段只有部署方知道的标识，所以这一项必须是配置而不是常量。
     model_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     model_api_key: SecretStr | None = None
-    # 对话模型与视觉模型分两项：看截图提布局建议要视觉，其余不要，
-    # 而视觉模型的单价与延迟都高得多，混成一项等于每次对话都按视觉计费
-    model_chat: str = "qwen3-max"
-    model_vision: str = "qwen-vl-max"
+    # 对话模型与看图模型分两项**不是**因为它们必须不同：当前旗舰原生吃图，
+    # 两项给同一个值是常态。分开留着，是为了让「看图那一路换成更便宜的专用
+    # 模型」成为一次配置改动而不是一次发版。
+    model_chat: str = "qwen3.8-max"
+    model_vision: str = "qwen3.8-max"
     # 一次模型调用的上限。⚠ 它必须大于边缘的读超时才有意义——所以助手的流式
     # 端点不走边缘的通用超时，见 docker/nginx 里那条 location
     model_timeout_s: float = Field(default=120.0, gt=0)
