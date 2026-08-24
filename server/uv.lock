@@ -43,6 +43,7 @@ dependencies = [
     { name = "langchain-openai" },
     { name = "langgraph" },
     { name = "lib", extra = ["auth", "db", "redis", "web"] },
+    { name = "openai" },
 ]
 
 [package.metadata]
@@ -51,6 +52,7 @@ requires-dist = [
     { name = "langchain-openai", specifier = ">=1.6" },
     { name = "langgraph", specifier = ">=1.2" },
     { name = "lib", extras = ["auth", "db", "redis", "web"], editable = "lib" },
+    { name = "openai", specifier = ">=3.3" },
 ]
 
 [[package]]
