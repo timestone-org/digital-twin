@@ -26,6 +26,10 @@ dependencies = [
     #   2. 它把 psycopg（LGPL-3.0-only）拖进依赖树，而本仓的许可证闸拦 LGPL。
     # 续跑状态落在我们自己的 `chat_steps` 上，形状比通用 checkpoint 窄得多：
     # 中断点只有一个（等客户端工具），要存的就是那一批待执行的调用。
+    # ⚠ 直接声明 openai：我们按它的异常类型分档「是下游不行」还是「是我们发错了」，
+    # 而那个判断决定断路器开不开。靠 langchain-openai 顺带装进来的话，
+    # check_service_deps 迟早会逮到，而且它换传输层时我们会静默失去这份分档。
+    "openai>=3.3",
     "langgraph>=1.2",
     "langchain-openai>=1.6",
 ]

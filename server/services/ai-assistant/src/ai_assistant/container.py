@@ -2,10 +2,12 @@
 
 from dataclasses import dataclass
 
+from ai_assistant.llm import GuardedModel, build_model_source
 from ai_assistant.settings import SERVICE_NAME, Settings
 from lib.cache import Cache
 from lib.db import Database, PoolProfile
 from lib.idempotency import IdempotencyStore
+from lib.resilience import CircuitBreaker
 
 # 幂等键的命名空间。⚠ 必须带服务名：共用一个 Redis 的两个服务，同一个端点名
 # 撞上同一个幂等键时会互相返回对方的结果
@@ -20,6 +22,9 @@ class Container:
     database: Database
     cache: Cache
     idempotency: IdempotencyStore
+    # ⚠ 没开模型时是 `None`，而不是一个「调了会报错」的壳：这与前端那套 ports
+    # 范式同口径——能力缺席就如实缺席，由调用方决定怎么说这件事
+    model: GuardedModel | None
 
 
 def _build_database(settings: Settings) -> Database:
@@ -40,6 +45,27 @@ def _build_database(settings: Settings) -> Database:
     )
 
 
+def _build_model(settings: Settings) -> GuardedModel | None:
+    """按配置装模型；没开就不装。
+
+    ⚠ 断路器一个进程一份、跟着模型一起活：每次调用现造一个的话它永远停在
+    「closed」，等于没有断路器。
+
+    Args: settings。
+    """
+    source = build_model_source(settings)
+    if source is None:
+        return None
+    return GuardedModel(
+        source=source,
+        breaker=CircuitBreaker(
+            name="model",
+            failure_threshold=settings.model_breaker_failures,
+            reset_after_s=settings.model_breaker_reset_s,
+        ),
+    )
+
+
 def build_container(settings: Settings) -> Container:
     """按配置装配容器。
 
@@ -53,4 +79,5 @@ def build_container(settings: Settings) -> Container:
         idempotency=IdempotencyStore(
             cache=cache, namespace=IDEMPOTENCY_NAMESPACE
         ),
+        model=_build_model(settings),
     )
