@@ -404,3 +404,9 @@ export {
   DATASET_FORMULA_PARAM_KINDS,
   DATASET_RECORD_SOURCES,
 } from './dataset'
+export type {
+  AssistantCapability,
+  AssistantSkill,
+  AssistantSurfaceKind,
+} from './assistant'
+export { ASSISTANT_SURFACE_KINDS } from './assistant'
