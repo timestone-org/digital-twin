@@ -40,3 +40,82 @@ export interface AssistantCapability {
   is_vision_enabled: boolean
   skills: AssistantSkill[]
 }
+
+/** 消息的说话人。`tool` 是工具结果回填的那一条。 */
+export const ASSISTANT_MESSAGE_ROLES = ['user', 'assistant', 'tool'] as const
+
+export type AssistantMessageRole = (typeof ASSISTANT_MESSAGE_ROLES)[number]
+
+/** 步骤的种类。服务端与客户端工具分两档，因为失败含义完全不同。 */
+export const ASSISTANT_STEP_KINDS = [
+  'model',
+  'server_tool',
+  'client_tool',
+] as const
+
+export type AssistantStepKind = (typeof ASSISTANT_STEP_KINDS)[number]
+
+/**
+ * 步骤的状态。
+ *
+ * ⚠ `awaiting_client` 是待续状态：模型已经要了客户端工具，正等浏览器把结果
+ * 送回来。界面上它是「转着圈的那一行」，不是失败。
+ */
+export const ASSISTANT_STEP_STATES = [
+  'running',
+  'awaiting_client',
+  'succeeded',
+  'failed',
+  'aborted',
+] as const
+
+export type AssistantStepState = (typeof ASSISTANT_STEP_STATES)[number]
+
+/** 一个步骤 —— 界面上「AI 做了什么」逐条渲染的就是它。 */
+export interface AssistantStep {
+  id: string
+  message_id: string
+  seq: number
+  kind: string
+  name: string
+  state: string
+  input_json: Record<string, unknown> | null
+  output_json: Record<string, unknown> | null
+  error: string | null
+  started_at: string | null
+  ended_at: string | null
+  created_at: string
+}
+
+/** 一条消息。`content_json` 的形状随 role 变，前端按 role 分支读。 */
+export interface AssistantMessage {
+  id: string
+  session_id: string
+  seq: number
+  role: string
+  content_json: Record<string, unknown>
+  usage_json: Record<string, unknown> | null
+  steps: AssistantStep[]
+  created_at: string
+}
+
+/** 会话列表里的一行。 */
+export interface AssistantSession {
+  id: string
+  user_id: string
+  title: string
+  surface_kind: string
+  surface_ref: string | null
+  is_archived: boolean
+  /** 乐观锁行版本。改标题与归档都推进它。 */
+  row_version: number
+  /** 最近一次失败的原因，给人看。不带上游地址与密钥。 */
+  last_error: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** 会话详情：列表那一行加上全部消息与步骤。 */
+export interface AssistantSessionDetail extends AssistantSession {
+  messages: AssistantMessage[]
+}

@@ -406,7 +406,19 @@ export {
 } from './dataset'
 export type {
   AssistantCapability,
+  AssistantMessage,
+  AssistantMessageRole,
+  AssistantSession,
+  AssistantSessionDetail,
   AssistantSkill,
+  AssistantStep,
+  AssistantStepKind,
+  AssistantStepState,
   AssistantSurfaceKind,
 } from './assistant'
-export { ASSISTANT_SURFACE_KINDS } from './assistant'
+export {
+  ASSISTANT_MESSAGE_ROLES,
+  ASSISTANT_STEP_KINDS,
+  ASSISTANT_STEP_STATES,
+  ASSISTANT_SURFACE_KINDS,
+} from './assistant'
