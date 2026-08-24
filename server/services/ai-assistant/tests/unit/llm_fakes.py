@@ -69,19 +69,21 @@ class ScriptedChat(BaseChatModel):
         return ChatResult(generations=[ChatGeneration(message=message)])
 
 
-def tool_call(name: str, call_id: str, **arguments: Any) -> dict[str, Any]:
+def tool_call(tool: str, call_id: str, /, **arguments: Any) -> dict[str, Any]:
     """拼一个 langchain 认的工具调用字面量。
 
-    Args: name, call_id, arguments。
+    ⚠ `tool` 与 `call_id` 是位置限定的：工具入参里出现 `name` 是常事
+    （`skills.load` 就收一个 `name`），不限定的话它会与形参撞上。
+    Args: tool, call_id, arguments。
     """
-    return {"name": name, "args": dict(arguments), "id": call_id}
+    return {"name": tool, "args": dict(arguments), "id": call_id}
 
 
-def asks(name: str, call_id: str, **arguments: Any) -> AIMessage:
+def asks(tool: str, call_id: str, /, **arguments: Any) -> AIMessage:
     """造一条「要调某个工具」的助手消息。
 
-    Args: name, call_id, arguments。
+    Args: tool, call_id, arguments。
     """
     return AIMessage(
-        content="", tool_calls=[tool_call(name, call_id, **arguments)]
+        content="", tool_calls=[tool_call(tool, call_id, **arguments)]
     )

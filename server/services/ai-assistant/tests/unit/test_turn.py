@@ -69,9 +69,9 @@ def _ask() -> list[BaseMessage]:
     return [HumanMessage(content="帮我绑一下 1 号机组的温度")]
 
 
-def _asks(name: str, call_id: str, **arguments: Any) -> AIMessage:
+def _asks(tool: str, call_id: str, /, **arguments: Any) -> AIMessage:
     return AIMessage(
-        content="", tool_calls=[tool_call(name, call_id, **arguments)]
+        content="", tool_calls=[tool_call(tool, call_id, **arguments)]
     )
 
 
