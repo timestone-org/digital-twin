@@ -141,9 +141,12 @@ def check_boolean_names() -> list[Violation]:
         if tree is None:
             continue
         for line, name in _annotated_bools(tree):
+            # ⚠ 先剥前导下划线再判前缀：不剥的话私有布尔字段无论叫什么都过不了
+            # （`_is_probing` 也一样），本文件的缩写检查早已是这个口径
+            bare = name.lstrip("_")
             if (
-                name.startswith(BOOL_PREFIX)
-                or name.endswith(BOOL_SUFFIX)
+                bare.startswith(BOOL_PREFIX)
+                or bare.endswith(BOOL_SUFFIX)
                 or _upstream_allows(path, name)
             ):
                 continue
