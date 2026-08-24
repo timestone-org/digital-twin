@@ -1,0 +1,26 @@
+"""大屏组态技能的清单。"""
+
+from pathlib import Path
+
+from ai_assistant.apps.chat.skills.manifest import SkillManifest
+
+DASHBOARD_COMPOSE = SkillManifest(
+    name="dashboard-compose",
+    title="组态大屏",
+    summary=(
+        "在大屏上摆模块、改模块配置与外观、对齐排版。"
+        "用户说「加一个…」「把边框去掉」「这几个对齐」时用它。"
+    ),
+    surface_kinds=("dashboard-editor",),
+    required_codes=("dashboard:edit",),
+    server_tools=("modules.catalog",),
+    client_tools=(
+        "dashboard.read_canvas",
+        "dashboard.add_module",
+        "dashboard.remove_node",
+        "dashboard.set_config",
+        "dashboard.set_geometry",
+        "dashboard.arrange",
+    ),
+    directory=Path(__file__).resolve().parent,
+)

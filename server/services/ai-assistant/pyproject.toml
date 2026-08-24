@@ -1,0 +1,80 @@
+[project]
+name = "ai-assistant"
+version = "0.1.0"
+description = "对话式助手：按当前工作面装配技能，编排模型与工具，把每一步如实推给前端。"
+requires-python = ">=3.12"
+dependencies = [
+    # ⚠ 四档一个都不能省，且必须自己声明：开发用的是 workspace 共享 venv，
+    # 别的服务装进来的包在本地和全部用例里都能 import 成功，只有按自己声明的
+    # 依赖装的独立镜像会启动即崩（check_service_deps.py 守这条）。
+    #   auth  —— 边缘签名身份头要 lib.auth 解，服务级密钥要它的定长比较
+    #   db    —— 会话、消息、步骤三张表
+    #   redis —— 幂等键存储与断路器状态
+    #   web   —— FastAPI 与 uvicorn
+    "lib[auth,db,redis,web]",
+    # 打模型端点与 platform 内部面。⚠ 必须自己声明：httpx 在工作区根的 dev 组里，
+    # 本地与全部用例都 import 得到，只有按自己声明的依赖装的镜像会崩。
+    "httpx>=0.28",
+    # 回合编排。选它是因为「跑到一半停下来等外部把工具跑完、再接着跑」是它的
+    # 一等公民（interrupt / Command），而这正是本服务的循环形状：改画布的工具
+    # 在浏览器里执行，api 角色无状态，续跑可能落到另一个副本上。
+    #
+    # ⚠ **刻意不装 `langgraph-checkpoint-postgres`**，两条理由各自都足够：
+    #   1. 它自己建表，绕过 alembic——而本仓的口径是「一张表只有一个属主、
+    #      只有属主管迁移」（ADR-0003）。让一个库在我们背后建表，等于把
+    #      schema 的所有权交出去，扩展—收缩两次发布也就无从谈起。
+    #   2. 它把 psycopg（LGPL-3.0-only）拖进依赖树，而本仓的许可证闸拦 LGPL。
+    # 续跑状态落在我们自己的 `chat_steps` 上，形状比通用 checkpoint 窄得多：
+    # 中断点只有一个（等客户端工具），要存的就是那一批待执行的调用。
+    "langgraph>=1.2",
+    "langchain-openai>=1.6",
+]
+
+[project.scripts]
+ai-assistant = "ai_assistant.__main__:main"
+# ⚠ 这里**不**登记 openapi 导出的 console 入口：`scripts` 是顶层包名，别的
+# 服务已经把它打进 wheel，同一个 venv 里两份会互相覆盖——导出脚本可能改写
+# **另一个服务**的 openapi.json。导出一律按路径调：
+#   uv run python scripts/export_openapi.py
+
+[tool.uv.sources]
+lib = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ai_assistant"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-q"
+markers = [
+    "requires_postgres: 需要真实 Postgres（L2/L3/L4）",
+    "requires_redis: 需要真实 Redis",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["ai_assistant"]
+omit = [
+    "*/migrations/*",
+    "*/__main__.py",
+    "*/conftest.py",
+]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = false
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+    "\\.\\.\\.",
+]
+
+[tool.coverage.xml]
+output = "coverage.xml"

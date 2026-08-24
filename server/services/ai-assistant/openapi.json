@@ -1,0 +1,208 @@
+{
+  "components": {
+    "schemas": {
+      "ApiResponse_CapabilityOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CapabilityOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[CapabilityOut]",
+        "type": "object"
+      },
+      "CapabilityOut": {
+        "description": "助手能力。\n\n⚠ 前端把「取不到这份」当作「助手不存在」而不是「暂时故障」：某些现场\n根本不部署本服务，那时边缘直接 502，入口就该干净地不出现。",
+        "properties": {
+          "is_model_enabled": {
+            "title": "Is Model Enabled",
+            "type": "boolean"
+          },
+          "is_vision_enabled": {
+            "title": "Is Vision Enabled",
+            "type": "boolean"
+          },
+          "skills": {
+            "items": {
+              "$ref": "#/components/schemas/SkillOut"
+            },
+            "title": "Skills",
+            "type": "array"
+          }
+        },
+        "required": [
+          "is_model_enabled",
+          "is_vision_enabled",
+          "skills"
+        ],
+        "title": "CapabilityOut",
+        "type": "object"
+      },
+      "FieldErrorOut": {
+        "description": "字段级校验错误的对外形状。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "code",
+          "message"
+        ],
+        "title": "FieldErrorOut",
+        "type": "object"
+      },
+      "SkillOut": {
+        "description": "一个技能在清单上的样子。正文（指令）不出这道门。",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "required_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Codes",
+            "type": "array"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "surface_kinds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Surface Kinds",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "title",
+          "summary",
+          "surface_kinds"
+        ],
+        "title": "SkillOut",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "DigitalTwin AI Assistant",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/assistant/capabilities": {
+      "get": {
+        "description": "模型是否可用，以及本部署装了哪些技能。\n\nArgs: container, _caller。",
+        "operationId": "read_capabilities_api_v1_assistant_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_CapabilityOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "助手能力",
+        "tags": [
+          "capability"
+        ]
+      }
+    },
+    "/api/v1/assistant/health": {
+      "get": {
+        "operationId": "health_api_v1_assistant_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "存活探针",
+        "tags": [
+          "probe"
+        ]
+      }
+    },
+    "/api/v1/assistant/ready": {
+      "get": {
+        "operationId": "ready_api_v1_assistant_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "就绪探针",
+        "tags": [
+          "probe"
+        ]
+      }
+    }
+  }
+}

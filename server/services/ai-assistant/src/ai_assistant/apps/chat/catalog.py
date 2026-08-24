@@ -1,0 +1,10 @@
+"""本模块的权限码字面量 —— 闸 2 用。
+
+⚠ **权限码目录的唯一真源是 auth-server 的 `apps/auth/catalog.py`**：码的名称、
+分档、内置角色与闸 1 的路由规则都登记在那里。本文件只复述闸 2 要判定的字面量，
+两边必须逐字一致——写歪一个字符的表现是「边缘放行、端点拒绝」这类只在某几条
+路径上才出现的 403，而两侧代码单看都对。服务之间不许互相 import，故只能复述。
+"""
+
+ASSISTANT_USE = "assistant:use"
+ASSISTANT_MANAGE = "assistant:manage"
