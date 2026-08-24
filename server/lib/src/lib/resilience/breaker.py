@@ -46,7 +46,7 @@ class CircuitBreaker:
     _failures: int = field(default=0, init=False)
     _opened_at: datetime | None = field(default=None, init=False)
     # 半开期间是否已经有一个探测在路上
-    _probing: bool = field(default=False, init=False)
+    _is_probing: bool = field(default=False, init=False)
 
     @property
     def state(self) -> BreakerState:
@@ -59,8 +59,8 @@ class CircuitBreaker:
         self._settle()
         if self._state == "closed":
             return True
-        if self._state == "half_open" and not self._probing:
-            self._probing = True
+        if self._state == "half_open" and not self._is_probing:
+            self._is_probing = True
             return True
         return False
 
@@ -75,7 +75,7 @@ class CircuitBreaker:
         self._state = "closed"
         self._failures = 0
         self._opened_at = None
-        self._probing = False
+        self._is_probing = False
         if was_open:
             _logger.info(
                 "breaker_closed", "下游恢复，断路器合上", breaker=self.name
@@ -88,11 +88,11 @@ class CircuitBreaker:
 
         Args: reason。
         """
-        was_probing = self._state == "half_open"
-        self._probing = False
+        is_probe = self._state == "half_open"
+        self._is_probing = False
         self._failures += 1
         # 半开时的一次失败直接重新打开：探测就是拿来判断「好没好」的
-        if was_probing or self._failures >= self.failure_threshold:
+        if is_probe or self._failures >= self.failure_threshold:
             self._open(reason)
 
     def _open(self, reason: str) -> None:
@@ -115,7 +115,7 @@ class CircuitBreaker:
         if elapsed < self.reset_after_s:
             return
         self._state = "half_open"
-        self._probing = False
+        self._is_probing = False
         _logger.info(
             "breaker_half_open", "冷却结束，放一个探测", breaker=self.name
         )
