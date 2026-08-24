@@ -129,12 +129,30 @@ function onPick(event: Event): void {
 </template>
 
 <style scoped lang="scss">
+@use 'sass:map';
 @use '../../styles/control' as ctl;
+
+// 色块内衬。颜色是装在槽里的内容而不是控件本身，留出这一圈边框与焦点环才压不住；
+// sm 只留 2px，32px 的格子再吃一圈内圈圆角就只剩 1px，方角套在圆框里
+$chip-insets: (
+  sm: 2px,
+  md: 3px,
+  lg: 3px,
+);
+
+// 预设色块边长。不用 --ctl-box-*：那是勾选框与单选点的边长（14–18px），表达的是
+// 状态点；这里是要点中的靶子，再小一档连排起来就点不准
+$preset-sizes: (
+  sm: 20px,
+  md: 24px,
+  lg: 28px,
+);
 
 .dt-color {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  // 比 DtField 的 6px 宽：选中预设那圈外扩的环贴着上一行会糊在一起
+  gap: 8px;
 
   &--disabled {
     opacity: 0.5;
@@ -146,12 +164,28 @@ function onPick(event: Event): void {
     gap: 8px;
   }
 
+  // 与 DtInput 同壳：同一层沉底、同一道边框、同一组过渡与焦点环
   &__swatch {
     position: relative;
     flex: none;
     overflow: hidden;
+    background: var(--surface-sunken);
     border: 1px solid var(--border-default);
     cursor: pointer;
+    transition:
+      border-color 0.18s ease,
+      box-shadow 0.18s ease;
+
+    // 棋盘格垫底：空值与半透明取值都预览成透明，没有这层格子它们跟实色长得一样
+    &::before {
+      content: '';
+      position: absolute;
+      background: repeating-conic-gradient(
+          rgba(var(--neutral-fg-rgb), 0.1) 0% 25%,
+          transparent 0% 50%
+        )
+        0 0 / 10px 10px;
+    }
 
     &--invalid {
       border-color: var(--state-danger);
@@ -161,6 +195,10 @@ function onPick(event: Event): void {
       border-color: var(--border-focus);
       box-shadow: 0 0 0 3px rgba(var(--accent-primary-rgb), 0.18);
     }
+
+    &--invalid:focus-within {
+      box-shadow: 0 0 0 3px rgba(var(--state-danger-rgb), 0.2);
+    }
   }
 
   &--disabled &__swatch {
@@ -169,7 +207,6 @@ function onPick(event: Event): void {
 
   &__chip {
     position: absolute;
-    inset: 0;
   }
 
   // 原生取色器铺满色块但整块透明：看得见的是 __chip，点得动、聚得上焦的是它自己
@@ -192,27 +229,37 @@ function onPick(event: Event): void {
   &__presets {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    // 选中环外扩 4px：间距再小，相邻两块的环就连成一条
+    gap: 8px;
   }
 
   &__preset {
     padding: 0;
-    border: 1px solid var(--border-subtle);
+    // 描边不许被填色顶掉（padding-box）：深色预设压在深色面板上，靠的就是这道
+    // 压在面板底色上的线才看得出边
+    background-clip: padding-box;
+    border: 1px solid var(--border-default);
     border-radius: var(--radius-sm);
     cursor: pointer;
-    transition: transform 0.18s ease;
+    transition:
+      border-color 0.18s ease,
+      box-shadow 0.18s ease;
 
     &:hover:not(:disabled) {
-      transform: scale(1.1);
+      border-color: var(--border-hover);
+      box-shadow: 0 0 8px -3px rgba(var(--accent-primary-rgb), 0.8);
     }
 
     &:disabled {
       cursor: not-allowed;
     }
 
+    // ⚠ 选中环与色块之间必须留空档：预设自己就可能是强调色，描边贴着画就跟填色糊成
+    // 一块。用 outline 而不是 box-shadow——空档直接透出面板底色，不必猜背景填什么
     &--active {
-      border-color: var(--accent-primary);
-      box-shadow: 0 0 0 1px var(--accent-primary);
+      outline: 2px solid var(--accent-primary);
+      outline-offset: 2px;
+      box-shadow: 0 0 10px -2px rgba(var(--accent-primary-rgb), 0.7);
     }
 
     @include ctl.focus-ring;
@@ -226,19 +273,25 @@ function onPick(event: Event): void {
     border-radius: var(--ctl-r-#{$size});
   }
 
+  // 内圈圆角 = 外圈减内衬，两处同源；各写各的会让色块四角比槽多出一圈直角
+  .dt-color--#{$size} .dt-color__chip,
+  .dt-color--#{$size} .dt-color__swatch::before {
+    inset: map.get($chip-insets, $size);
+    border-radius: calc(
+      var(--ctl-r-#{$size}) - #{map.get($chip-insets, $size)}
+    );
+  }
+
   .dt-color--#{$size} .dt-color__preset {
-    width: var(--ctl-box-#{$size});
-    height: var(--ctl-box-#{$size});
+    width: map.get($preset-sizes, $size);
+    height: map.get($preset-sizes, $size);
   }
 }
 
 @include ctl.reduced-motion {
+  .dt-color__swatch,
   .dt-color__preset {
     transition: none;
-
-    &:hover:not(:disabled) {
-      transform: none;
-    }
   }
 }
 </style>

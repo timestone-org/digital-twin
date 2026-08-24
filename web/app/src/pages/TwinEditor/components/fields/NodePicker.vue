@@ -68,7 +68,11 @@ function remove(name: string): void {
 
 <template>
   <div class="flex flex-col gap-2">
-    <ul v-if="modelValue.length > 0" class="flex flex-col gap-1">
+    <ul
+      v-if="modelValue.length > 0"
+      aria-label="已选择的名字"
+      class="flex max-h-56 flex-col gap-1 overflow-y-auto overscroll-contain pr-1"
+    >
       <li
         v-for="name in modelValue"
         :key="name"

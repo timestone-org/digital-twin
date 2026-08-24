@@ -5,6 +5,7 @@
 import type { TwinRowSlot } from './constants'
 import type { FlatHierField } from './hierTree'
 import type { FlatPanelField } from './normalizeElements'
+import { tintedParts } from './partTint'
 import { finiteValue, isRecord, toArray, toFiniteNumber } from './sanitize'
 import type {
   TwinAnchor,
@@ -20,6 +21,9 @@ import type {
   TwinHierValues,
   TwinPanelValue,
   TwinPanelValues,
+  TwinPart,
+  TwinPartValue,
+  TwinPartValues,
 } from './types'
 
 /**
@@ -32,11 +36,32 @@ export const EMPTY_PANEL_VALUES: TwinPanelValues = Object.freeze({})
 export const EMPTY_ARROW_VALUES: TwinArrowValues = Object.freeze({})
 export const EMPTY_FLOW_VALUES: TwinFlowValues = Object.freeze({})
 export const EMPTY_HIER_VALUES: TwinHierValues = Object.freeze({})
+export const EMPTY_PART_VALUES: TwinPartValues = Object.freeze({})
 
 /** 第 index 行的 sub 子槽；行不是对象一律按无值处理。 */
 function readRowSlot(rows: unknown, index: number, sub: TwinRowSlot): unknown {
   const row = toArray(rows)[index]
   return isRecord(row) ? finiteValue(row[sub]) : undefined
+}
+
+/**
+ * 部件数组行 → 部件 id 映射，第 i 行对应**配了状态染色的**第 i 个部件。
+ * ⚠ 行号必须走 `tintedParts` 过滤后的序号，不是 `config.parts` 的下标：
+ * 派生绑定行那边正是这么数的，两边不同口径会让每一行都接错部件。
+ * @param parts 归一化后的全部部件
+ * @param rows 模块 values 里 `partValues` 槽的整个数组
+ */
+export function stitchPartValues(
+  parts: readonly TwinPart[] | undefined,
+  rows: unknown,
+): TwinPartValues {
+  const out: Record<string, TwinPartValue> = {}
+  tintedParts(parts ?? []).forEach((part, index) => {
+    const value = readRowSlot(rows, index, 'value')
+    if (value === undefined) return
+    out[part.id] = { value }
+  })
+  return Object.keys(out).length === 0 ? EMPTY_PART_VALUES : out
 }
 
 /**

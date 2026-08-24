@@ -3,12 +3,22 @@
  * 场景内搜索、两点测距。不碰 three、不碰 DOM、不读时钟——时间戳由调用方喂进来。
  */
 import { flowKindColor, flowKindToken } from './flowColors'
-import type { TwinFlowLink, TwinHierNode, TwinPart } from './types'
+import { tintStopText } from './partTint'
+import type {
+  TwinFlowLink,
+  TwinHierNode,
+  TwinPart,
+  TwinPartTint,
+} from './types'
+
+/** 图例分组。 */
+export const TWIN_LEGEND_GROUPS = ['能量流', '部件染色'] as const
+export type TwinLegendGroup = (typeof TWIN_LEGEND_GROUPS)[number]
 
 /** 图例一条：一个颜色加它代表什么。 */
 export interface TwinLegendEntry {
-  group: '能量流'
-  /** 颜色含义（能源种类）。 */
+  group: TwinLegendGroup
+  /** 颜色含义（能源种类 / 这一档代表什么）。 */
   label: string
   /** 主题 token 名；没有就是 null，调用方直接用 `color`。 */
   token: string | null
@@ -17,29 +27,68 @@ export interface TwinLegendEntry {
 }
 
 /**
- * 把能量流的颜色语义归集成一份图例。
+ * 把场景里的颜色语义归集成一份图例。
  *
- * ⚠ 同一个种类只列一次：十条能流共用一套种类是常态，逐条列出来的图例没法看。
- * ⚠ 没写种类的流不进图例——它用的是缺省色，而「缺省色代表什么」本身没有含义。
+ * ⚠ 同一个含义只列一次：十条能流共用一套种类、几十个部件共用一套染色档位都是
+ * 常态，逐条列出来的图例没法看。
+ * ⚠ 没写种类的流、没写说明的档位照样进图例——档位那一侧有 `tintStopText` 按
+ * 条件拼一句兜底，而「一个没有任何说明的色块」等于没有图例。
+ *
  * @param flows 归一化后的能量流
+ * @param parts 归一化后的部件，取它们的状态染色档位
  */
 export function collectSceneLegend(
   flows: readonly TwinFlowLink[],
+  parts: readonly TwinPart[],
 ): TwinLegendEntry[] {
   const out: TwinLegendEntry[] = []
   const seen = new Set<string>()
+  const push = (entry: TwinLegendEntry): void => {
+    const key = `${entry.group}\u0000${entry.label}\u0000${entry.color}${entry.token ?? ''}`
+    if (entry.label === '' || seen.has(key)) return
+    seen.add(key)
+    out.push(entry)
+  }
   for (const flow of flows) {
     const label = flow.kind.trim()
-    if (label === '' || seen.has(label)) continue
-    seen.add(label)
-    out.push({
+    push({
       group: '能量流',
       label,
       token: flowKindToken(label),
       color: flowKindColor(label),
     })
   }
+  for (const part of parts) {
+    for (const swatch of tintSwatches(part.tint)) push(swatch)
+  }
   return out
+}
+
+/**
+ * 颜色规格拆成图例要的两半。
+ * ⚠ token 取不出时留 `transparent`、不猜一个色：猜的那个色会让「token 名写错了」
+ * 看起来像「配对了」，而图例正是用来核对这件事的地方。
+ */
+function swatchOf(spec: string, label: string): TwinLegendEntry {
+  const isToken = spec.startsWith('--')
+  return {
+    group: '部件染色',
+    label,
+    token: isToken ? spec : null,
+    color: isToken ? 'transparent' : spec,
+  }
+}
+
+/** 一条染色规则摊成图例条目；没配规则或没配颜色的档位不出现。 */
+function tintSwatches(tint: TwinPartTint | null): TwinLegendEntry[] {
+  if (tint === null) return []
+  if (tint.mode === 'gradient') {
+    const { min, max, from, to } = tint.gradient
+    return [swatchOf(from, String(min)), swatchOf(to, String(max))]
+  }
+  return tint.stops
+    .filter((stop) => stop.color !== '')
+    .map((stop) => swatchOf(stop.color, tintStopText(stop)))
 }
 
 /**

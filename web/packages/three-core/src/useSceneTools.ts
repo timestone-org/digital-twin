@@ -2,7 +2,11 @@
  * @fileoverview 场景工具的运行态：搜索定位、截图、剖切、两点测量的状态与动作。
  * 纯算的那一半在 `@dt/twin-config/sceneTools`，这里只做与 three 和 DOM 的绑定。
  */
-import type { TwinConfig, TwinSearchHit } from '@dt/twin-config'
+import type {
+  TwinConfig,
+  TwinLegendEntry,
+  TwinSearchHit,
+} from '@dt/twin-config'
 import {
   collectSceneLegend,
   measureDistance,
@@ -73,6 +77,12 @@ export interface SceneTools {
 
 type Point = [number, number, number]
 
+/** 场景里的颜色语义：能流的种类色，加上部件染色的档位色。 */
+function legendOf(options: SceneToolsOptions): TwinLegendEntry[] {
+  const config = options.config()
+  return collectSceneLegend(config.flows, config.parts)
+}
+
 /**
  * 装上场景工具。
  * @param options 场景内核、配置、节点索引与标题
@@ -100,7 +110,7 @@ export function useSceneTools(options: SceneToolsOptions): SceneTools {
     legendOpen,
     hits: computed(() => result.value.hits),
     total: computed(() => result.value.total),
-    legend: computed(() => collectSceneLegend(options.config().flows)),
+    legend: computed(() => legendOf(options)),
     clipAxis,
     clipRatio,
     measuring,

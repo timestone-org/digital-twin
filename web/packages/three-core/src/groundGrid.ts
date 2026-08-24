@@ -3,8 +3,8 @@
  * 由 `model.showGroundGrid` 开关控制，关掉要连同 GPU 资源一起释放；
  * 中心线落在当前坐标基准的原点上（`model.coordFrame`）。
  *
- * ⚠ 与编辑视口那圈网格是两回事：编辑器的恒显（没有参考系就没法摆坐标），
- * 这一层才是用户配的那个开关。
+ * ⚠ 与编辑视口那圈网格是两个对象（那边还多三条坐标轴、且不随开关释放资源），
+ * 但认的是同一个开关：关掉之后两边都不画。
  */
 import type { Vec3 } from '@dt/twin-config'
 import * as THREE from 'three'

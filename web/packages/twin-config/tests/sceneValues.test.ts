@@ -47,7 +47,7 @@ function rowsOf(values: readonly number[]): { value: number }[] {
   return values.map((value) => ({ value }))
 }
 
-describe('缝合五路', () => {
+describe('缝合六路', () => {
   it('锚点、箭头按文档序对齐到实体 id', () => {
     const live = twinSceneValues(CONFIG, {
       [TWIN_ANCHOR_BINDING_KEY]: rowsOf([1, 2]),
@@ -90,10 +90,11 @@ describe('缝合五路', () => {
     expect(live.flows.f1?.intensity).toBe(0.5)
   })
 
-  it('一个槽都没喂时五路都是空表，不是一堆 undefined 条目', () => {
+  it('一个槽都没喂时六路都是空表，不是一堆 undefined 条目', () => {
     const live = twinSceneValues(CONFIG, {})
 
     expect(live).toEqual({
+      parts: {},
       anchors: {},
       arrows: {},
       panels: {},

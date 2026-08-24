@@ -18,6 +18,8 @@ export const TWIN_CONFIG_ISSUE_KINDS = [
   'dangling-hier-node',
   'hier-cycle',
   'roam-too-short',
+  'tint-no-stops',
+  'tint-empty-range',
 ] as const
 export type TwinConfigIssueKind = (typeof TWIN_CONFIG_ISSUE_KINDS)[number]
 
@@ -203,6 +205,45 @@ function danglingHierClicks(config: TwinConfig): TwinConfigIssue[] {
 }
 
 /**
+ * 开了分档染色，却一档都没配。
+ * ⚠ 渲染层对这种规则是「永远走回落色」——不报出来的话，用户看到的是
+ * 「绑了点位、值也在变，颜色却一动不动」，而那与点位没通表现完全一样。
+ */
+function tintWithoutStops(config: TwinConfig): TwinConfigIssue[] {
+  return config.parts
+    .map((part, index) => ({ part, index }))
+    .filter((ref) => ref.part.tint?.mode === 'stops')
+    .filter((ref) => ref.part.tint?.stops.length === 0)
+    .map((ref) => ({
+      kind: 'tint-no-stops' as const,
+      entityId: ref.part.id,
+      path: `parts[${ref.index}].tint.stops`,
+      detail: '一档都没配，这个部件的颜色永远只会是回落色',
+    }))
+}
+
+/**
+ * 区间档的上界不大于下界，这一档永远命中不了。
+ * ⚠ 上界**不含**，所以 `from === to` 也是空区间——它看起来像「正好等于这个值」，
+ * 实际一次都不会命中，而界面上两个数字并排摆着看不出问题。
+ */
+function emptyTintRanges(config: TwinConfig): TwinConfigIssue[] {
+  return config.parts.flatMap((part, index) =>
+    (part.tint?.stops ?? [])
+      .map((stop, slot) => ({ stop, slot }))
+      .filter((ref) => ref.stop.match === 'range')
+      .filter((ref) => ref.stop.from !== null && ref.stop.to !== null)
+      .filter((ref) => (ref.stop.from ?? 0) >= (ref.stop.to ?? 0))
+      .map((ref) => ({
+        kind: 'tint-empty-range' as const,
+        entityId: part.id,
+        path: `parts[${index}].tint.stops[${ref.slot}]`,
+        detail: `区间 [${ref.stop.from}, ${ref.stop.to}) 是空的，这一档永远不会命中`,
+      })),
+  )
+}
+
+/**
  * 漫游轨迹里列到的、但 `cameras` 里没有的 id。
  * ⚠ 运行态对这种项是「跳过这一站」——不报出来的话，用户看到的是轨迹莫名少飞
  * 两站，而配置里明明还写着。
@@ -269,5 +310,7 @@ export function collectTwinConfigIssues(config: TwinConfig): TwinConfigIssue[] {
     ...danglingHierParents(config),
     ...danglingHierClicks(config),
     ...hierCycles(config),
+    ...tintWithoutStops(config),
+    ...emptyTintRanges(config),
   ]
 }

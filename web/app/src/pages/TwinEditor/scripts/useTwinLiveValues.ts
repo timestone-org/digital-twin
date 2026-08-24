@@ -10,7 +10,7 @@
  */
 import type { BindingPayload } from '@dt/contracts'
 import type { SceneLayerValues } from '@dt/three-core'
-import { computeModuleValues } from '@dt/runtime'
+import { computeModuleValues, type BindingValueReader } from '@dt/runtime'
 import {
   TWIN_VIEW_BINDINGS,
   twinSceneValues,
@@ -26,6 +26,17 @@ import { createBindingReader } from '@/runtime/bindingReader'
 import { dashboardTopic } from '@/runtime/pointFrames'
 import { createPointSubscribe } from '@/runtime/pointStream'
 
+export interface TwinLiveValues {
+  /** 缝合好的五路场景值；配置还没读出来时是 undefined。 */
+  scene: ComputedRef<SceneLayerValues | undefined>
+  /**
+   * 取一个绑定读取器。
+   * ⚠ 每次求值都要重新调它：对快照缓存的响应式依赖由那一次调用建立，
+   * 拿一个存下来的读取器反复用，值再变也不会重算，且不报任何错。
+   */
+  readBinding: () => BindingValueReader
+}
+
 /**
  * 装上实时读数。须在 setup 内调用。
  * @param dashboardId 这段孪生所在的大屏 id；空串 = 还没读出来，不订任何主题
@@ -36,7 +47,7 @@ export function useTwinLiveValues(
   dashboardId: () => string,
   config: () => TwinConfig | null,
   bindings: () => readonly BindingPayload[],
-): ComputedRef<SceneLayerValues | undefined> {
+): TwinLiveValues {
   // ⚠ 历史序列不注入：编辑视口上没有任何时序图元，注了也没人读，
   //   而注一个取不到数的通道只会在诊断时多一条假线索
   installDashboardDataSources({
@@ -51,25 +62,31 @@ export function useTwinLiveValues(
     dashboardId,
   )
 
+  const readBinding = (): BindingValueReader =>
+    createBindingReader(samples.read)
+
   // ⚠ 在 computed 里调用读取器：对快照缓存的响应式依赖由这次调用建立
   const values = computed(
     () =>
       computeModuleValues({
         specs: TWIN_VIEW_BINDINGS,
         bindings: bindings(),
-        read: createBindingReader(samples.read),
+        read: readBinding(),
       }).values,
   )
 
-  return computed(() => {
-    const scene = config()
-    if (scene === null) return undefined
-    const stitched = twinSceneValues(scene, values.value)
+  const scene = computed(() => {
+    const current = config()
+    if (current === null) return undefined
+    const stitched = twinSceneValues(current, values.value)
     return {
+      parts: stitched.parts,
       anchors: stitched.anchors,
       arrows: stitched.arrows,
       panels: stitched.panels,
       flows: stitched.flows,
     }
   })
+
+  return { scene, readBinding }
 }

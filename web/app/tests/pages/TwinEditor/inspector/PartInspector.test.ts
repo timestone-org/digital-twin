@@ -8,7 +8,7 @@
  */
 import { normalizeTwinConfig } from '@dt/twin-config'
 import type { TwinHierNode, TwinPart } from '@dt/twin-config'
-import { DtSelect } from '@dt/ui'
+import { DtSelect, DtSlider } from '@dt/ui'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
@@ -29,7 +29,7 @@ function mountPart(
   hierNodes: readonly TwinHierNode[] = [],
 ) {
   return mount(PartInspector, {
-    props: { modelValue, nodeNames, picking, hierNodes },
+    props: { modelValue, nodeNames, picking, hierNodes, tintBound: false },
   })
 }
 
@@ -87,6 +87,17 @@ describe('关联节点', () => {
     expect(lastPart(wrapper).nodes).toEqual(['Pump_01'])
   })
 
+  it('节点很多时清单限制高度并在内部滚动', () => {
+    const nodes = Array.from({ length: 20 }, (_, index) => `Node_${index}`)
+    const wrapper = mountPart(makePart({ nodes }), nodes)
+    const list = wrapper.find('ul[aria-label="已选择的名字"]')
+
+    expect(list.classes()).toContain('max-h-56')
+    expect(list.classes()).toContain('overflow-y-auto')
+    expect(list.classes()).toContain('overscroll-contain')
+    expect(list.findAll('li')).toHaveLength(20)
+  })
+
   it('模型里没有的名字当场标出来', () => {
     const wrapper = mountPart(makePart({ nodes: ['Cube', 'Ghost'] }))
 
@@ -112,6 +123,12 @@ describe('关联节点', () => {
 })
 
 describe('从视口拾取', () => {
+  it('提示 Shift 可以连续点选或框选当前部件的节点', () => {
+    const wrapper = mountPart()
+
+    expect(wrapper.text()).toContain('按住 Shift 可在视口连续点选或框选节点')
+  })
+
   it('点一下请求进入拾取模式', async () => {
     const wrapper = mountPart()
 
@@ -185,5 +202,50 @@ describe('显隐', () => {
     expect(next.visibility.visible).toBe(false)
     expect(next.nodes).toEqual(['Cube'])
     expect(part.visibility.visible).toBe(true)
+  })
+})
+
+describe('外观与状态染色', () => {
+  it('两段都摆出来，且各用共用的字段件', () => {
+    const wrapper = mountPart()
+
+    expect(wrapper.text()).toContain('不透明度')
+    expect(wrapper.text()).toContain('按点位取色')
+  })
+
+  it('改不透明度回的是整份部件，节点与显隐原样带上', async () => {
+    const part = makePart({ nodes: ['Cube'], visible: false })
+    const wrapper = mountPart(part)
+
+    wrapper
+      .findAllComponents(DtSlider)
+      .find((item) => item.props('label') === '不透明度')
+      ?.vm.$emit('update:modelValue', 0.25)
+    await wrapper.vm.$nextTick()
+
+    const next = lastPart(wrapper)
+    expect(next.look.opacity).toBe(0.25)
+    expect(next.nodes).toEqual(['Cube'])
+    expect(next.visibility.visible).toBe(false)
+    expect(part.look.opacity).toBe(1)
+  })
+
+  it('打开状态染色回的是整份部件，外观原样带上', async () => {
+    const wrapper = mountPart(makePart({ look: { opacity: 0.5 } }))
+
+    await wrapper
+      .find('button[role="switch"][aria-label="按点位取色"]')
+      .trigger('click')
+
+    const next = lastPart(wrapper)
+    expect(next.tint).not.toBeNull()
+    expect(next.look.opacity).toBe(0.5)
+  })
+
+  // ⚠ 没绑点位时染色永远只会是回落色，而那与「点位没通」表现完全一样
+  it('把「有没有挑点位」透传给染色面板', () => {
+    const tinted = makePart({ tint: { mode: 'stops' } })
+
+    expect(mountPart(tinted).text()).toContain('还没挑点位')
   })
 })

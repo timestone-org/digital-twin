@@ -12,6 +12,7 @@ import {
   TWIN_FLOW_BINDING_KEY,
   TWIN_HIER_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
+  TWIN_PART_BINDING_KEY,
 } from './constants'
 import { flattenHierFields } from './hierTree'
 import { flattenPanelFields } from './normalizeElements'
@@ -21,6 +22,7 @@ import {
   stitchFlowValues,
   stitchHierValues,
   stitchPanelValues,
+  stitchPartValues,
 } from './twinMath'
 import type { TwinConfig } from './types'
 import type {
@@ -29,10 +31,13 @@ import type {
   TwinFlowValues,
   TwinHierValues,
   TwinPanelValues,
+  TwinPartValues,
 } from './types'
 
-/** 缝合好的五路实时值，键都是实体自己的 id。 */
+/** 缝合好的六路实时值，键都是实体自己的 id。 */
 export interface TwinSceneValues {
+  /** 部件状态染色用；键是部件 id，只含配了染色的那些。 */
+  parts: TwinPartValues
   anchors: TwinAnchorValues
   arrows: TwinArrowValues
   panels: TwinPanelValues
@@ -42,7 +47,7 @@ export interface TwinSceneValues {
 }
 
 /**
- * 把一袋模块 `values` 缝成场景五路实时值。
+ * 把一袋模块 `values` 缝成场景六路实时值。
  * @param config **归一化后**的孪生配置；喂原始配置会因为脏条目被丢弃而整体错位一格
  * @param values 模块 values 袋，键是绑定槽键
  */
@@ -51,6 +56,9 @@ export function twinSceneValues(
   values: Record<string, unknown>,
 ): TwinSceneValues {
   return {
+    // ⚠ 喂全部部件、由 `stitchPartValues` 自己过滤：先在这里过滤一遍会多出
+    //   一处口径，而两处口径不一致就是「每一行都接错部件」
+    parts: stitchPartValues(config.parts, values[TWIN_PART_BINDING_KEY]),
     anchors: stitchAnchorValues(
       config.anchors,
       values[TWIN_ANCHOR_BINDING_KEY],

@@ -232,6 +232,9 @@ function toggleBackground(opaque: boolean): void {
         size="sm"
         @update:model-value="write({ showGroundGrid: $event })"
       />
+      <p class="text-xs text-text-disabled">
+        大屏与编辑视口共用这一个开关；关掉之后编辑时也没有网格与坐标轴可参照。
+      </p>
     </InspectorSection>
 
     <InspectorSection title="内置动画">

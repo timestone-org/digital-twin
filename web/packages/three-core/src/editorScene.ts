@@ -2,8 +2,8 @@
  * @fileoverview 孪生编辑视口的命令式内核：装配场景、装载模型、维护拾取与选中高亮，
  * 并把「选中了什么 / 点中了哪个节点 / 相机停在哪」回调给宿主组件。纯 TS，不依赖 Vue。
  *
- * ⚠ 与运行态渲染器（`TwinScene`）刻意不同的四处，理由都写在各自落点上：
- * 只认 `visibility.visible`、地面网格恒显、自动旋转恒关、
+ * ⚠ 与运行态渲染器（`TwinScene`）刻意不同的三处，理由都写在各自落点上：
+ * 只认 `visibility.visible`、自动旋转恒关、
  * 漫游只在用户点「预览」时才飞（绝不自动开播）。
  * 实时值由宿主 `setValues` 喂进来，没喂就是一片占位符——绝不拿旧值冒充。
  */
@@ -14,6 +14,7 @@ import {
   EMPTY_ARROW_VALUES,
   EMPTY_FLOW_VALUES,
   EMPTY_PANEL_VALUES,
+  EMPTY_PART_VALUES,
   RoamTimeline,
   buildRoamSegments,
   defaultCameraOf,
@@ -102,7 +103,7 @@ export interface EditorSceneCallbacks {
   entityTransform: (change: GizmoChange) => void
   /** 手柄松手了；宿主据此把这一次拖动合成一条撤销。 */
   entityTransformEnd: () => void
-  /** 按住 Shift 框选拿到的模型节点名，已去重排序；一个都没框中时不来。 */
+  /** 选中部件后按住 Shift 点选或框选拿到的模型节点名；一个都没命中时不来。 */
   marqueeNodes: (names: readonly string[]) => void
 }
 
@@ -140,6 +141,7 @@ const GROUND_NORMAL = new THREE.Vector3(0, 1, 0)
 
 // 宿主没喂实时值时的那一份：读数位置显示占位符，而不是拿旧值冒充
 const EMPTY_LAYER_VALUES: SceneLayerValues = {
+  parts: EMPTY_PART_VALUES,
   anchors: EMPTY_ANCHOR_VALUES,
   arrows: EMPTY_ARROW_VALUES,
   panels: EMPTY_PANEL_VALUES,
@@ -147,9 +149,8 @@ const EMPTY_LAYER_VALUES: SceneLayerValues = {
 }
 
 /**
- * 地面网格与坐标轴。
- * ⚠ 恒显，不看 `model.showGroundGrid`：那个开关说的是大屏上要不要画，
- * 而编辑时没有参考系就没法摆坐标。
+ * 地面网格与坐标轴；显隐认 `model.showGroundGrid`，与大屏是同一个开关。
+ * ⚠ 关掉之后编辑时就没有参考系了，摆坐标只能照着模型自己找位置。
  */
 function createHelpers(): THREE.Group {
   const group = new THREE.Group()
@@ -244,6 +245,8 @@ export class EditorScene {
   private downX = 0
   private downY = 0
   private downValid = false
+  /** 这次按下是否由“当前部件追加节点”接管；用于区分小框与 Shift 单击。 */
+  private shiftSelectingPartNodes = false
   /** 漫游预览的时间线；没在预览时是 null，编辑态绝不自己造一条开播。 */
   private roam: RoamTimeline | null = null
 
@@ -278,6 +281,9 @@ export class EditorScene {
   setValues(values: SceneLayerValues): void {
     this.liveValues = values
     this.layers?.setValues(values)
+    // ⚠ 状态染色只有在这里重套一次才会跟着读数变：编辑视口不逐帧套距离规则，
+    //   没有别的地方会再调它，表现就是「点位的值在变、部件的颜色不动」
+    this.layers?.parts.applyAppearance()
   }
 
   /**
@@ -459,17 +465,22 @@ export class EditorScene {
     this.surface = null
   }
 
-  /** 配置变了要重走的四件事：摆放、部件显隐、覆盖层与拾取标记、选中高亮。 */
+  /** 配置变了要重走的五件事：摆放、参考网格、部件显隐、覆盖层与拾取标记、选中高亮。 */
   private refresh(): void {
     if (this.core === null) return
     this.placeModel()
+    // 网格与坐标轴跟着「地面网格」开关走：只在大屏上生效的话，用户关掉之后
+    // 编辑视口里它还在，两边画面对不上
+    if (this.helpers !== null) {
+      this.helpers.visible = this.config.model.showGroundGrid
+    }
     // ⚠ 只认调用方传入的 `visible`，不套任何距离派生的显隐：页面会在这一层
     // 叠加左栏眼睛的编辑态覆盖，不读持久化的运行时距离规则
     applyPartVisibility(this.nodeIndex, this.config.parts)
-    // ⚠ 传空索引是有意的：编辑态不套距离规则，部件层不该在这里建条目——
-    // 建了它会为配了淡出的部件克隆材质（并打开透明通道），而这些克隆在编辑器里
-    // 永远不会被 apply 到，白改一遍模型的材质
-    this.layers?.build(this.config, this.liveValues, EMPTY_NODE_INDEX)
+    this.layers?.build(this.config, this.liveValues, this.nodeIndex)
+    // ⚠ 只套外观、不套距离：编辑时镜头到处飞，套上距离规则会让刚配好的东西
+    // 一转镜头就不见。但透明度与染色必须当场看得见，否则等于没法配
+    this.layers?.parts.applyAppearance()
     this.picks?.build(this.config)
     this.applySelectionHighlight()
   }
@@ -748,10 +759,16 @@ export class EditorScene {
   private readonly onPointerDown = (event: PointerEvent): void => {
     // ⚠ 用户一碰视口就停预览：镜头还自己往前飞会变成两个人抢方向盘
     this.stopRoamPreview()
-    // Shift 拖是框选：这期间要把轨道控制器让开，否则一边画框一边转镜头
-    if (this.marquee?.down(event) === true) {
+    this.shiftSelectingPartNodes = false
+    // 只有左侧已经选中部件时 Shift 才接管。否则 Shift 仍留给普通视口操作，
+    // 不能平白画出一个最终也不知道该写回哪个部件的框。
+    if (this.canShiftSelectPartNodes() && this.marquee?.down(event) === true) {
+      this.shiftSelectingPartNodes = true
       this.setOrbitEnabled(false)
-      this.downValid = false
+      // 小于框选阈值时要回落成 Shift 单击，所以仍需保留这一组按下坐标。
+      this.downValid = true
+      this.downX = event.clientX
+      this.downY = event.clientY
       return
     }
     this.downValid = event.button === 0
@@ -783,7 +800,10 @@ export class EditorScene {
   // ⚠ 拖过视口不算点击：轨道相机的拖拽同样以 pointerup 收尾，不设位移阈值的话
   // 每次转镜头松手都会顺手把选中改掉
   private readonly onPointerUp = (event: PointerEvent): void => {
+    const shiftSelectingPartNodes = this.shiftSelectingPartNodes
+    this.shiftSelectingPartNodes = false
     if (this.marquee?.up(event) === true) {
+      this.downValid = false
       this.setOrbitEnabled(true)
       return
     }
@@ -795,16 +815,25 @@ export class EditorScene {
       event.clientY - this.downY,
     )
     if (moved > CLICK_DRAG_THRESHOLD_PX) return
-    this.handleClick(event.clientX, event.clientY)
+    this.handleClick(event.clientX, event.clientY, shiftSelectingPartNodes)
   }
 
   private readonly onPointerCancel = (): void => {
     this.downValid = false
+    this.shiftSelectingPartNodes = false
     this.marquee?.cancel()
     this.setOrbitEnabled(true)
   }
 
-  private handleClick(clientX: number, clientY: number): void {
+  private canShiftSelectPartNodes(): boolean {
+    return this.pickMode === null && this.selection?.kind === 'parts'
+  }
+
+  private handleClick(
+    clientX: number,
+    clientY: number,
+    shiftSelectingPartNodes = false,
+  ): void {
     const core = this.core
     if (core === null) return
     const rect = core.renderer.domElement.getBoundingClientRect()
@@ -815,6 +844,7 @@ export class EditorScene {
     core.camera.updateMatrixWorld()
     this.modelObject?.updateMatrixWorld(true)
     this.raycaster.setFromCamera(new THREE.Vector2(ndc.x, ndc.y), core.camera)
+    if (shiftSelectingPartNodes) return this.pickPartNode()
     if (this.pickMode === 'node') return this.pickNode()
     if (this.pickMode === 'position') return this.pickPosition()
     this.pickEntity()
@@ -826,6 +856,14 @@ export class EditorScene {
     if (hit === null) return
     const name = nearestNamedName(hit.object)
     if (name !== '') this.on.pickNode(name)
+  }
+
+  /** 左侧已选中部件时，Shift 单击把命中的节点追加到那一个部件。 */
+  private pickPartNode(): void {
+    const hit = this.firstModelHit()
+    if (hit === null) return
+    const name = nearestNamedName(hit.object)
+    if (name !== '') this.on.marqueeNodes([name])
   }
 
   /**

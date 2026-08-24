@@ -11,9 +11,10 @@
 import { collectTwinConfigIssues } from '@dt/twin-config'
 import type { Vec3 } from '@dt/twin-config'
 import { DtPageState, useConfirm, useToast } from '@dt/ui'
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { onBeforeRouteLeave, useRoute } from 'vue-router'
 
+import { installDashboardModules } from '@/bootstrap/dashboard'
 import { AppShell } from '@/components/layout'
 
 import PointPickerDialog from '@/components/binding/PointPickerDialog.vue'
@@ -23,12 +24,10 @@ import TwinDiagnosticsPanel from './components/TwinDiagnosticsPanel.vue'
 import TwinEditorToolbar from './components/TwinEditorToolbar.vue'
 import TwinLeftPane from './components/TwinLeftPane.vue'
 import TwinRightPane from './components/TwinRightPane.vue'
+import TwinRuntimePreview from './components/TwinRuntimePreview.vue'
 import TwinViewport from './components/TwinViewport.vue'
 import { createTwinEditorActions } from './scripts/twinEditorActions'
-import {
-  toggleEditorVisibility,
-  withEditorVisibility,
-} from './scripts/editorVisibility'
+import { useEditorHidden } from './scripts/useEditorHidden'
 import { createTwinViewportOps } from './scripts/twinViewportOps'
 import { useTwinBindings } from './scripts/useTwinBindings'
 import {
@@ -40,6 +39,10 @@ import { useBulkParts } from './scripts/useBulkParts'
 import { useGizmoMode } from './scripts/useGizmoMode'
 import { useTwinEditorPage } from './scripts/useTwinEditorPage'
 import { useUnsavedGuard } from './scripts/useUnsavedGuard'
+
+// ⚠ 子编辑器也要装：直接刷新到这条路由时大屏那三页一个都没跑过，
+// 不装的话模型地址解析恒回空串，画面上是一句「模型地址解析失败」
+installDashboardModules()
 
 const route = useRoute()
 const toast = useToast()
@@ -67,16 +70,11 @@ const roamPreviewing = ref(false)
  * 配置里没有这个数——右栏的坐标框与视口里的参考轴必须同源，否则两处的 0 不在一处。
  */
 const frameOrigin = ref<Vec3>([0, 0, 0])
-/** 左栏眼睛关掉的实体；只属于本次编辑，不进文档与撤销栈。 */
-const editorHidden = ref<ReadonlySet<string>>(new Set())
-
 const config = computed(() => page.doc.value?.config.value ?? null)
-const editingConfig = computed(() => {
-  const current = config.value
-  return current === null
-    ? null
-    : withEditorVisibility(current, editorHidden.value)
-})
+const hidden = useEditorHidden(
+  () => config.value,
+  () => `${dashboardId.value}/${nodeId.value}`,
+)
 const bulk = useBulkParts(
   () => config.value,
   () => modelNodes.value,
@@ -96,18 +94,6 @@ const actions = computed(() => {
     : createTwinEditorActions(doc, (next) => {
         selection.value = next
       })
-})
-
-function toggleEditorVisible(target: {
-  kind: TwinEntityKind
-  id: string
-}): void {
-  editorHidden.value = toggleEditorVisibility(editorHidden.value, target)
-}
-
-// 路由复用同一页组件时，上一段孪生的编辑隐藏态不许串到下一段。
-watch([dashboardId, nodeId], () => {
-  editorHidden.value = new Set()
 })
 
 // 编辑视口里的读数与大屏走同一条链路：同一个推送主题、同一份缝合
@@ -201,7 +187,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
       <div v-else class="flex min-h-0 flex-1">
         <TwinLeftPane
           class="w-64 shrink-0 border-r border-border-subtle"
-          :config="editingConfig ?? config"
+          :config="hidden.config.value ?? config"
           :selection="selection"
           :flagged-ids="flaggedIds"
           :renaming-folder-id="renamingFolderId"
@@ -211,7 +197,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
           @remove="actions?.remove($event.kind, $event.id)"
           @duplicate="actions?.duplicate($event.kind, $event.id)"
           @move="actions?.move($event.kind, $event.id, $event.delta)"
-          @toggle-editor-visible="toggleEditorVisible"
+          @toggle-editor-visible="hidden.toggle"
           @add-folder="addFolderIn"
           @rename-folder="actions?.renameFolder($event.id, $event.name)"
           @remove-folder="actions?.removeFolder($event)"
@@ -226,25 +212,34 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
         />
 
         <div class="flex min-w-0 flex-1 flex-col">
-          <TwinViewport
-            ref="viewportRef"
-            class="min-h-0 flex-1"
-            :config="editingConfig ?? config"
-            :selection="selection"
-            :pick-mode="viewport.pickMode.value"
-            :gizmo-mode="gizmoMode"
-            :target-size="page.targetSize.value"
-            :values="binding.liveValues.value"
-            @select="selection = $event ?? TWIN_SELECT_MODEL"
-            @pick-node="viewport.onPickNode"
-            @pick-position="viewport.onPickPosition"
-            @model-nodes="modelNodes = $event"
-            @frame-origin="frameOrigin = $event"
-            @roam-preview="roamPreviewing = $event"
-            @entity-transform="actions?.transformEntity($event)"
-            @entity-transform-end="actions?.endTransform()"
-            @marquee-nodes="bulk.openWith($event)"
-          />
+          <!-- 画中画钉在视口这一块上，诊断面板展开时不会被它压住 -->
+          <div class="relative flex min-h-0 flex-1">
+            <TwinViewport
+              ref="viewportRef"
+              class="min-h-0 flex-1"
+              :config="hidden.config.value ?? config"
+              :selection="selection"
+              :pick-mode="viewport.pickMode.value"
+              :gizmo-mode="gizmoMode"
+              :target-size="page.targetSize.value"
+              :values="binding.liveValues.value"
+              @select="selection = $event ?? TWIN_SELECT_MODEL"
+              @pick-node="viewport.onPickNode"
+              @pick-position="viewport.onPickPosition"
+              @model-nodes="modelNodes = $event"
+              @frame-origin="frameOrigin = $event"
+              @roam-preview="roamPreviewing = $event"
+              @entity-transform="actions?.transformEntity($event)"
+              @entity-transform-end="actions?.endTransform()"
+              @marquee-nodes="viewport.onSelectNodes"
+            />
+            <TwinRuntimePreview
+              :node="page.node.value"
+              :config="config"
+              :bindings="binding.bindings.value"
+              :read-binding="binding.readBinding"
+            />
+          </div>
           <TwinDiagnosticsPanel
             v-if="showIssues"
             class="max-h-48 shrink-0 overflow-y-auto border-t border-border-subtle"
@@ -283,7 +278,6 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
     <BulkPartsDialog
       :open="bulk.open.value"
       :candidates="bulk.candidates.value"
-      :preselect="bulk.preselect.value"
       @update:open="bulk.open.value = $event"
       @confirm="actions?.addParts($event)"
     />

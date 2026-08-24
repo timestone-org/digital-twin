@@ -1,5 +1,5 @@
 /**
- * @fileoverview 五个覆盖层的合集：锚点、箭头、信息牌、能量流、场景特效。
+ * @fileoverview 覆盖层的合集：部件、锚点、箭头、信息牌、能量流、场景特效。
  *
  * 把它们收成一个对象，是为了让「建 / 喂值 / 换体量 / 推进一帧 / 释放」这五件事
  * 各只有一处写法。散在宿主组件里时，加一层就要在五个地方各补一行，
@@ -11,6 +11,7 @@ import type {
   TwinConfig,
   TwinFlowValues,
   TwinPanelValues,
+  TwinPartValues,
   Vec3,
 } from '@dt/twin-config'
 import type * as THREE from 'three'
@@ -21,11 +22,13 @@ import type { DistanceContext } from './distanceContext'
 import { FlowLayer } from './flowLayer'
 import type { NodeIndex } from './nodeIndex'
 import { PanelLayer } from './panelLayer'
-import { PartDistanceLayer } from './partDistance'
+import { PartsLayer } from './partsLayer'
 import { SceneEffectsLayer } from './sceneEffects'
 
-/** 五路实时值，缺席的那一路由调用方填空引用。 */
+/** 六路实时值，缺席的那一路由调用方填空引用。 */
 export interface SceneLayerValues {
+  /** 部件状态染色用；只有配了染色的部件在里面。 */
+  parts: TwinPartValues
   anchors: TwinAnchorValues
   arrows: TwinArrowValues
   panels: TwinPanelValues
@@ -39,14 +42,15 @@ export class SceneLayers {
   readonly panels: PanelLayer
   readonly flows: FlowLayer
   readonly effects: SceneEffectsLayer
-  /** 部件的距离显隐与淡出；它不往场景里加对象，改的是模型自己的节点。 */
-  readonly parts = new PartDistanceLayer()
+  /** 部件的显隐、透明度与染色；它不往场景里加对象，改的是模型自己的节点。 */
+  readonly parts: PartsLayer
 
   /** 宿主元素，CSS2D 标签与主题色解析都要用它。 */
   private readonly host: HTMLElement | null
 
   constructor(host: HTMLElement | null) {
     this.host = host
+    this.parts = new PartsLayer(host)
     this.anchors = new AnchorLayer(host)
     this.arrows = new ArrowLayer(host)
     this.panels = new PanelLayer()
@@ -68,7 +72,7 @@ export class SceneLayers {
   /**
    * 按配置重建全部覆盖层，并立刻喂一次值。
    * @param config 归一化后的孪生配置
-   * @param values 五路实时值
+   * @param values 六路实时值
    */
   build(
     config: TwinConfig,
@@ -86,9 +90,10 @@ export class SceneLayers {
 
   /**
    * 只换值不重建。
-   * @param values 五路实时值
+   * @param values 六路实时值
    */
   setValues(values: SceneLayerValues): void {
+    this.parts.setValues(values.parts)
     this.anchors.setValues(values.anchors)
     this.arrows.setValues(values.arrows)
     this.panels.setValues(values.panels)
@@ -96,7 +101,7 @@ export class SceneLayers {
   }
 
   /**
-   * 按这一帧的取景状态更新五处的距离显隐与淡出。
+   * 按这一帧的取景状态更新各处的距离显隐与淡出。
    *
    * ⚠ 每帧都调，故这里只算距离、不重建任何对象。配置变了走 `build`。
    * ⚠ 少调一处，那一类元素上配的距离规则就完全不生效——而它既不报错，
@@ -153,7 +158,7 @@ export class SceneLayers {
     this.panels.faceCamera(camera)
   }
 
-  /** 五层全部释放。⚠ 少一行就是一处只在「用久了变卡」时才看得见的泄漏。 */
+  /** 六层全部释放。⚠ 少一行就是一处只在「用久了变卡」时才看得见的泄漏。 */
   dispose(): void {
     this.parts.dispose()
     this.anchors.dispose()

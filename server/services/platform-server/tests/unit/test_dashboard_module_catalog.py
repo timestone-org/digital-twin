@@ -47,6 +47,7 @@ def test_slots_split_scalar_and_array_entries() -> None:
     slots = load_module_catalog().slots("twin-view")
     assert slots.scalar_keys == frozenset()
     assert slots.array_fields == {
+        "partValues": frozenset({"value"}),
         "anchorValues": frozenset({"value"}),
         "panelValues": frozenset({"value"}),
         "arrowValues": frozenset({"value"}),

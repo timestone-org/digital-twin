@@ -130,6 +130,39 @@ describe('两段式拾取', () => {
   })
 })
 
+describe('Shift 连续选择部件节点', () => {
+  it('把点选和框选结果追加到左侧当前部件并去重', () => {
+    const { ops, patchConfig } = setup()
+
+    ops.onSelectNodes(['pump', 'tank', 'valve', 'tank'])
+
+    expect(patchConfig).toHaveBeenCalledWith({
+      parts: [
+        expect.objectContaining({
+          id: 'part-1',
+          nodes: ['pump', 'tank', 'valve'],
+        }),
+      ],
+    })
+  })
+
+  it('左侧没有选中部件时不写回任何节点', () => {
+    const { ops, patchConfig } = setup(TWIN_SELECT_MODEL)
+
+    ops.onSelectNodes(['tank'])
+
+    expect(patchConfig).not.toHaveBeenCalled()
+  })
+
+  it('只命中已经关联的节点时不制造空改动', () => {
+    const { ops, patchConfig } = setup()
+
+    ops.onSelectNodes(['pump', 'pump'])
+
+    expect(patchConfig).not.toHaveBeenCalled()
+  })
+})
+
 describe('取当前机位', () => {
   it('存进视点', () => {
     const { ops, patchConfig } = setup()

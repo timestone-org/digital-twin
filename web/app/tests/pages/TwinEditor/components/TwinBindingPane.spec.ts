@@ -163,12 +163,27 @@ describe('只看选中的那一个', () => {
   })
 
   it('⚠ 选中不取数的东西时退回全部，不是空白一片', () => {
-    // 部件与视点没有绑定行；收窄成空会让人以为绑定丢了
-    const wrapper = mountPane([], false, { kind: 'parts', id: 'whatever' })
+    // 视点没有绑定行；收窄成空会让人以为绑定丢了
+    const wrapper = mountPane([], false, { kind: 'cameras', id: 'whatever' })
 
     expect(wrapper.text()).toContain('进口')
     expect(wrapper.text()).toContain('泵组 · 温度')
     expect(wrapper.text()).not.toContain('只看选中的')
+  })
+
+  // 部件取不取数由「配没配状态染色」定：没配的老实说它没有可绑的数据，
+  // 而不是退回全部——退回全部会让人以为染色已经能绑点位了
+  it('选中没配染色的部件时说它没有可绑的数据', () => {
+    const wrapper = mount(TwinBindingPane, {
+      props: {
+        config: normalizeTwinConfig({ parts: [{ id: 'plain', name: '外壳' }] }),
+        bindings: [],
+        isDirty: false,
+        selection: { kind: 'parts', id: 'plain' },
+      },
+    })
+
+    expect(wrapper.text()).toContain('没有可绑的数据')
   })
 
   it('选中的信息牌一个字段都没有时，老实说它没有可绑的数据', () => {

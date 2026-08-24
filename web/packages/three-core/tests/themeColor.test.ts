@@ -4,7 +4,11 @@
  */
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { ACCENT_COLOR_TOKEN, resolveColorSpec } from '../src/themeColor'
+import {
+  ACCENT_COLOR_TOKEN,
+  ColorSpecCache,
+  resolveColorSpec,
+} from '../src/themeColor'
 
 let hosts: HTMLElement[] = []
 
@@ -67,5 +71,41 @@ describe('颜色规格解析', () => {
   it('既不是 hex 也不是 token 的字符串返回 null', () => {
     expect(resolveColorSpec('red', null)).toBeNull()
     expect(resolveColorSpec('', null)).toBeNull()
+  })
+})
+
+describe('颜色规格的记忆表', () => {
+  // ⚠ token 要走 getComputedStyle 读级联，每帧给每个部件解析一次会直接吃掉帧预算
+  it('同一个规格只解析一次', () => {
+    const host = hostWith('--probe', '#00cefc')
+    const cache = new ColorSpecCache(host)
+
+    const first = cache.get('--probe')
+
+    expect(cache.get('--probe')).toBe(first)
+  })
+
+  it('解析不出来的规格也记住，不每帧重试一遍', () => {
+    const cache = new ColorSpecCache(null)
+
+    expect(cache.get('--missing')).toBeNull()
+    expect(cache.get('--missing')).toBeNull()
+  })
+
+  it('空串一律 null，不进表', () => {
+    expect(new ColorSpecCache(null).get('')).toBeNull()
+  })
+
+  // 不清的话，换肤之后只有染过色的部件还是上一套配色
+  it('清空之后重新解析，换肤能跟上', () => {
+    const host = hostWith('--probe', '#00cefc')
+    const cache = new ColorSpecCache(host)
+    const before = cache.get('--probe')
+
+    host.style.setProperty('--probe', '#ff0000')
+    cache.clear()
+
+    expect(cache.get('--probe')).not.toBe(before)
+    expect(cache.get('--probe')?.getHexString()).toBe('ff0000')
   })
 })

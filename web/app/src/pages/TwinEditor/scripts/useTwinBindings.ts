@@ -6,6 +6,7 @@
  * 表现是标签上有点位名、推送方却永远匹配不到这个键，读数一直是占位符。
  */
 import type { BindingPayload, CollectPoint } from '@dt/contracts'
+import type { BindingValueReader } from '@dt/runtime'
 import type { SceneLayerValues } from '@dt/three-core'
 import type { TwinConfig } from '@dt/twin-config'
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
@@ -29,6 +30,8 @@ export interface TwinBindings {
   closePicker: (isOpen: boolean) => void
   /** 缝合好的实时读数，喂给编辑视口；配置还没读出来时是 undefined。 */
   liveValues: ComputedRef<SceneLayerValues | undefined>
+  /** 取一个绑定读取器，运行态预览按它自己求值；每次求值都要重新调。 */
+  readBinding: () => BindingValueReader
 }
 
 /**
@@ -55,11 +58,7 @@ export function useTwinBindings(
 
   const pickingFieldKey = ref<string | null>(null)
 
-  const liveValues = useTwinLiveValues(
-    dashboardId,
-    config,
-    () => bindings.value,
-  )
+  const live = useTwinLiveValues(dashboardId, config, () => bindings.value)
 
   return {
     bindings,
@@ -78,6 +77,7 @@ export function useTwinBindings(
     closePicker: (isOpen) => {
       if (!isOpen) pickingFieldKey.value = null
     },
-    liveValues,
+    liveValues: live.scene,
+    readBinding: live.readBinding,
   }
 }

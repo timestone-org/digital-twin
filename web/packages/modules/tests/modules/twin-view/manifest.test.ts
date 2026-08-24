@@ -129,8 +129,9 @@ describe('绑点面板的行数', () => {
     expect(counts?.panelValues).toBe(2)
   })
 
-  it('配置为空时五个槽全是 0，而不是漏掉键', () => {
+  it('配置为空时六个槽全是 0，而不是漏掉键', () => {
     expect(manifest.bindingRowCounts?.({})).toEqual({
+      partValues: 0,
       anchorValues: 0,
       panelValues: 0,
       arrowValues: 0,

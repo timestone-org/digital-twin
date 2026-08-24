@@ -122,7 +122,7 @@ function onAxis(next: string): void {
     <dl v-if="legendOpen" class="twin-tools__legend">
       <div
         v-for="entry in tools.legend.value"
-        :key="entry.label"
+        :key="`${entry.group}:${entry.label}:${entry.color}`"
         class="twin-tools__legend-row"
       >
         <dt
@@ -134,7 +134,9 @@ function onAxis(next: string): void {
                 : `var(${entry.token}, ${entry.color})`,
           }"
         />
-        <dd class="twin-tools__legend-label text-xs">{{ entry.label }}</dd>
+        <dd class="twin-tools__legend-label text-xs">
+          {{ entry.group }} · {{ entry.label }}
+        </dd>
       </div>
     </dl>
 

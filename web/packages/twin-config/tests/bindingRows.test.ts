@@ -17,7 +17,11 @@ import {
 } from '../src/bindingRows'
 import { normalizeTwinConfig } from '../src/normalize'
 import { flattenPanelFields } from '../src/normalizeElements'
-import { stitchAnchorValues, stitchPanelValues } from '../src/twinMath'
+import {
+  stitchAnchorValues,
+  stitchPanelValues,
+  stitchPartValues,
+} from '../src/twinMath'
 
 const CONFIG = normalizeTwinConfig({
   anchors: [
@@ -118,6 +122,7 @@ describe('每个槽应有几行', () => {
   //   加了也喂不到任何东西的「新增一行」
   it('一个实体都没有的槽也出现在表里、值为 0', () => {
     expect(twinRowCounts(normalizeTwinConfig({}))).toEqual({
+      partValues: 0,
       anchorValues: 0,
       panelValues: 0,
       arrowValues: 0,
@@ -156,6 +161,48 @@ describe('推导出的顺序与缝合读值的顺序逐行相同', () => {
       { value: 1 },
     ])
     expect(rows.map((row) => row.entityId)).toEqual(Object.keys(stitched))
+  })
+
+  // ⚠ 部件的行号跳过没配染色的那些：两边只要有一边按 config.parts 的下标数，
+  //   给中间某个部件关掉染色就会让它之后的每一行改喂前一个部件
+  it('部件：第 i 行喂给配了染色的第 i 个部件', () => {
+    const mixed = normalizeTwinConfig({
+      parts: [
+        { id: 'skip1' },
+        { id: 'tint1', tint: { mode: 'stops' } },
+        { id: 'skip2' },
+        { id: 'tint2', tint: { mode: 'stops' } },
+      ],
+    })
+    const rows = twinBindingRows(mixed).filter(
+      (row) => row.slotKey === 'partValues',
+    )
+    const stitched = stitchPartValues(mixed.parts, [{ value: 1 }, { value: 2 }])
+
+    expect(rows.map((row) => row.entityId)).toEqual(Object.keys(stitched))
+    expect(rows.map((row) => row.fieldKey)).toEqual([
+      'partValues[0].value',
+      'partValues[1].value',
+    ])
+  })
+
+  // 关掉中间那个部件的染色，后面那个的绑定要跟着搬上来
+  it('给中间的部件关掉染色，它之后的绑定整体前移', () => {
+    const before = normalizeTwinConfig({
+      parts: [
+        { id: 'one', tint: { mode: 'stops' } },
+        { id: 'two', tint: { mode: 'stops' } },
+      ],
+    })
+    const after = normalizeTwinConfig({
+      parts: [{ id: 'one' }, { id: 'two', tint: { mode: 'stops' } }],
+    })
+    const moved = remapTwinBindings(before, after, [
+      binding('partValues[0].value'),
+      binding('partValues[1].value'),
+    ])
+
+    expect(moved.map((item) => item.fieldKey)).toEqual(['partValues[0].value'])
   })
 })
 
@@ -377,8 +424,21 @@ describe('某个实体占了哪几行', () => {
 
   it('⚠ 不取数的实体回 null，与「取数但一行都没有」分开', () => {
     // 前者该退回整段孪生的全部绑定，后者该说这个实体没有可绑的字段
-    expect(twinRowsOfEntity(MANY, 'parts', 'whatever')).toBeNull()
     expect(twinRowsOfEntity(MANY, 'cameras', 'whatever')).toBeNull()
+  })
+
+  // 部件只有配了状态染色才取数；没配的给空表，说的是「这个部件没有可绑的字段」
+  it('没配染色的部件给一张空表，配了的才有行', () => {
+    const mixed = normalizeTwinConfig({
+      parts: [{ id: 'plain' }, { id: 'tinted', tint: { mode: 'stops' } }],
+    })
+
+    expect(twinRowsOfEntity(mixed, 'parts', 'plain')).toEqual({
+      partValues: [],
+    })
+    expect(twinRowsOfEntity(mixed, 'parts', 'tinted')).toEqual({
+      partValues: [0],
+    })
   })
 
   it('没有字段的信息牌给一张空表，不是 null', () => {

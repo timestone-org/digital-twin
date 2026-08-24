@@ -2,7 +2,7 @@
  * @fileoverview 守部件索引的契约：同名节点一个不落、部件显隐按名字生效、
  * 配置引用了模型里没有的节点名要报得出来（不静默留空）。
  */
-import type { TwinPart } from '@dt/twin-config'
+import { DEFAULT_PART_LOOK, type TwinPart } from '@dt/twin-config'
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 
@@ -21,6 +21,8 @@ function part(id: string, nodes: string[], visible = true): TwinPart {
     name: id,
     nodes,
     visibility: { visible, hideBelow: null, hideAbove: null, fade: null },
+    look: DEFAULT_PART_LOOK,
+    tint: null,
     clickDistance: { min: null, max: null, farThreshold: null },
     clickHierNode: '',
   }

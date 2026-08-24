@@ -17,6 +17,7 @@ import { DEFAULT_CAMERA_FOV } from '@dt/twin-config'
 import { DtNotice, DtSpinner } from '@dt/ui'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
+import { targetFrameVars } from '../scripts/targetFrame'
 import type { TwinSelection } from '../scripts/types'
 
 const props = defineProps<{
@@ -59,7 +60,7 @@ const emit = defineEmits<{
   entityTransform: [GizmoChange]
   /** 手柄松手了；宿主据此把这一次拖动合成一条撤销。 */
   entityTransformEnd: []
-  /** 按住 Shift 框选拿到的模型节点名。 */
+  /** 选中部件后按住 Shift 点选或框选拿到的模型节点名。 */
   marqueeNodes: [readonly string[]]
 }>()
 
@@ -79,23 +80,8 @@ const pickHint = computed(() => {
   if (props.pickMode === 'position') return '点模型表面或地面，取那个点的坐标'
   return ''
 })
-/**
- * 按目标格子的宽高比留边；没给尺寸就铺满。
- * 编辑区左右都有面板、通常比大屏格子更宽，所以按高度撑满推宽度；
- * 真遇上更窄的编辑区时多出的部分由舞台裁掉，不会把画面挤没。
- */
-const frameStyle = computed(() => {
-  const size = props.targetSize
-  if (size === undefined || size.width <= 0 || size.height <= 0)
-    return undefined
-  // ⚠ 高度撑满、宽度由比例推：两个方向都写 auto 的话，视口里只有绝对定位的
-  // canvas、没有流内容，auto 会双双塌成 0——画面整个消失，且不报任何错
-  return {
-    width: 'auto',
-    height: '100%',
-    aspectRatio: `${size.width} / ${size.height}`,
-  }
-})
+/** 按目标格子的宽高比留边；没给尺寸就铺满。 */
+const frameVars = computed(() => targetFrameVars(props.targetSize))
 
 const backgroundStyle = computed(() => {
   const spec = props.config.model.background
@@ -204,7 +190,8 @@ defineExpose({ focus, snapshot, playRoamPreview, stopRoamPreview })
     <div
       ref="containerRef"
       class="twin-viewport"
-      :style="[backgroundStyle, frameStyle]"
+      :class="{ 'twin-viewport--framed': frameVars !== undefined }"
+      :style="[backgroundStyle, frameVars]"
     >
       <div v-if="status === 'loading'" class="twin-viewport__overlay">
         <DtSpinner />
@@ -221,9 +208,11 @@ defineExpose({ focus, snapshot, playRoamPreview, stopRoamPreview })
 </template>
 
 <style scoped lang="scss">
-// 舞台把视口居中；视口自己按目标格子的宽高比留边
-// 舞台把视口居中；比例超出可用宽度时由它裁掉，不让画面挤没
+// 舞台把视口居中；视口自己按目标格子的宽高比留边。
+// ⚠ `container-type` 不是装饰：比例框用 cqw/cqh 量的就是这块舞台，
+// 去掉它以后框会按整个视口算大小，比例照样是错的
 .twin-viewport__stage {
+  container-type: size;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -236,9 +225,25 @@ defineExpose({ focus, snapshot, playRoamPreview, stopRoamPreview })
 
 .twin-viewport {
   position: relative;
+  // ⚠ 不许收缩：比例框已经把两条边都夹在可用范围内，再让 flex 压一次会把
+  // 宽度压回去而高度纹丝不动，比例于是被悄悄改掉
+  flex: none;
   width: 100%;
   height: 100%;
   overflow: hidden;
+
+  // ⚠ 两条边同时夹住，不是「高度撑满、宽度按比例推」：推出来的宽度超过可用
+  // 宽度时 flex 会把宽压回去而高纹丝不动，比例就被悄悄改掉了
+  &--framed {
+    width: min(
+      100cqw,
+      calc(100cqh * var(--twin-frame-w) / var(--twin-frame-h))
+    );
+    height: min(
+      100cqh,
+      calc(100cqw * var(--twin-frame-h) / var(--twin-frame-w))
+    );
+  }
 
   &__overlay {
     position: absolute;

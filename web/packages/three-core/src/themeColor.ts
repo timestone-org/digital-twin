@@ -30,3 +30,35 @@ export function resolveColorSpec(
   const value = text.startsWith('--') ? readCssVariable(text, host) : text
   return CSS_COLOR_RE.test(value) ? new THREE.Color().setStyle(value) : null
 }
+
+/**
+ * 颜色规格的记忆表：同一个规格只解析一次。
+ *
+ * ⚠ token 的取值要走 `getComputedStyle` 读 CSS 级联，那是布局相关的同步调用——
+ * 每帧给每个部件解析一次会直接吃掉帧预算，而画面上只表现为「模型一多就卡」。
+ * ⚠ 表里的 `THREE.Color` 是**共享只读**的：调用方要改色必须先 `clone()`，
+ * 就地改会让下一个用同一个规格的元素跟着变色。
+ */
+export class ColorSpecCache {
+  private readonly memo = new Map<string, THREE.Color | null>()
+
+  constructor(private readonly host: HTMLElement | null) {}
+
+  /**
+   * 取一个规格解析出来的颜色；解析不出来给 null。
+   * @param spec `#rrggbb` 或 `--token`；空串一律 null
+   */
+  get(spec: string): THREE.Color | null {
+    if (spec === '') return null
+    const hit = this.memo.get(spec)
+    if (hit !== undefined) return hit
+    const color = resolveColorSpec(spec, this.host)
+    this.memo.set(spec, color)
+    return color
+  }
+
+  /** 主题换了或重建了图层时清空；不清的话换肤后仍是上一套配色。 */
+  clear(): void {
+    this.memo.clear()
+  }
+}
