@@ -167,7 +167,9 @@ async def test_a_forbidden_call_is_rejected_without_opening_the_breaker() -> (
 async def test_a_reply_that_is_not_an_assistant_message_is_refused() -> None:
     # 造一个空的往下走，会让编排层以为模型「什么都没说」，于是回合正常结束、
     # 界面上是一条空气泡——那比响亮失败难查得多
-    guarded, _ = _guarded(ScriptedChat(reply=HumanMessage(content="我不是助手")))
+    guarded, _ = _guarded(
+        ScriptedChat(reply=HumanMessage(content="我不是助手"))
+    )
     with pytest.raises(ModelUnavailable):
         await _respond(guarded)
 

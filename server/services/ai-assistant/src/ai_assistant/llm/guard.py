@@ -6,7 +6,9 @@
 真正的原因就被盖成「暂时不可用」，而那会让人去查网络。
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.tools import BaseTool
@@ -42,15 +44,18 @@ class GuardedModel:
         *,
         kind: ModelKind,
         messages: list[BaseMessage],
-        tools: list[BaseTool],
+        tools: Sequence[dict[str, Any] | BaseTool],
     ) -> AIMessage:
         """要一次补全。工具为空时就是纯对话。
+
+        ⚠ 工具收的是**声明**而不是可执行件：客户端工具压根没有服务端实现，
+        模型只需要一份能让它正确调用的形状描述。
 
         Args: kind, messages, tools。
         """
         self._guard()
         model = self.source(kind)
-        bound = model.bind_tools(tools) if tools else model
+        bound = model.bind_tools(list(tools)) if tools else model
         try:
             reply = await bound.ainvoke(messages)
         except _OUR_FAULT as error:
