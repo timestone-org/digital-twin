@@ -11,6 +11,7 @@ import type {
   TwinConfig,
   TwinFlowValues,
   TwinPanelValues,
+  Vec3,
 } from '@dt/twin-config'
 import type * as THREE from 'three'
 
@@ -109,6 +110,16 @@ export class SceneLayers {
     this.arrows.applyDistance(context)
     this.panels.applyDistance(context)
     this.flows.applyDistance(context)
+  }
+
+  /**
+   * 坐标基准的原点变了。
+   * ⚠ 只有场景特效吃它：锚点、箭头、信息牌、能量流存的都是世界坐标，
+   * 再减一次原点就等于把它们整片挪走。
+   * @param origin 基准原点，世界坐标
+   */
+  setFrameOrigin(origin: Vec3): void {
+    this.effects.setOrigin(origin)
   }
 
   /**

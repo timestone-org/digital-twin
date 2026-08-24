@@ -12,6 +12,7 @@ import type {
   TwinPedestal,
   TwinSceneEffects,
   TwinStarfield,
+  Vec3,
 } from '@dt/twin-config'
 import * as THREE from 'three'
 
@@ -527,6 +528,21 @@ export class SceneEffectsLayer {
       // 那些帧里，底座与光柱都是单位大小的一小撮
       effect.setWorldScale(this.diagonal)
     }
+  }
+
+  /**
+   * 整层挪到坐标基准的原点上：底座那一圈、光柱/能量罩的轴、星壳的球心
+   * 都以它为中心。
+   *
+   * ⚠ 三类特效在各自组里都是绕自己的原点建的，所以位置只摆这一处；各自再摆
+   * 一次的话，换基准时三者会各走各的，画面上是「底座挪了、光柱没跟上」。
+   * ⚠ 不摆的话它们钉在世界原点：模型的原点离世界原点越远，底座就越是套在
+   * 一片空地上，而这既不报错也不像是配错了什么。
+   *
+   * @param origin 基准原点，世界坐标
+   */
+  setOrigin(origin: Vec3): void {
+    this.group.position.set(origin[0], origin[1], origin[2])
   }
 
   /**

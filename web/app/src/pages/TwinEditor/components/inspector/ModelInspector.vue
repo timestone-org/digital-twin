@@ -200,9 +200,9 @@ function toggleBackground(opaque: boolean): void {
       </DtField>
       <p class="text-xs text-text-disabled">
         锚点 / 信息牌 / 箭头 /
-        视点填的坐标都按它显示，视口里的网格与坐标轴也立在
-        这个原点上。「模型中心」只把前后左右挪到全部模块的正中心，高度轴仍与模型
-        坐标系一致。
+        视点填的坐标都按它显示；视口里的网格与坐标轴、场景特效的底座与光柱也都以
+        这个原点为中心。「模型中心」只把前后左右挪到全部模块的正中心，高度轴仍与
+        模型坐标系一致。
       </p>
       <p class="text-xs text-text-disabled">
         当前原点（世界坐标）：{{ originText }}

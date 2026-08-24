@@ -454,6 +454,28 @@ describe('光柱', () => {
   })
 })
 
+describe('基准原点', () => {
+  // 三类特效各自绕自己的原点建，位置只摆整层这一处
+  it('整层挪到基准原点上，三类特效同一个中心', () => {
+    const layer = new SceneEffectsLayer()
+    layer.build(allOn())
+
+    layer.setOrigin([12, 3, -8])
+
+    expect(layer.group.position.toArray()).toEqual([12, 3, -8])
+  })
+
+  // ⚠ build 把子件全重建了一遍；位置挂在整层上，不该跟着回到世界原点
+  it('重建特效不会把基准原点丢回世界原点', () => {
+    const layer = new SceneEffectsLayer()
+    layer.setOrigin([12, 3, -8])
+
+    layer.build(allOn())
+
+    expect(layer.group.position.toArray()).toEqual([12, 3, -8])
+  })
+})
+
 describe('释放', () => {
   it('每一份几何与材质都 dispose 掉', () => {
     const layer = new SceneEffectsLayer()

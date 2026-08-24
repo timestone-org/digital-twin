@@ -495,6 +495,7 @@ export class EditorScene {
   private syncFrame(): void {
     const origin = modelFrameOrigin(this.config.model, this.modelObject)
     this.helpers?.position.set(...origin)
+    this.layers?.setFrameOrigin(origin)
     if (sameVec3(origin, this.coordOrigin)) return
     this.coordOrigin = origin
     this.on.frameOrigin(origin)

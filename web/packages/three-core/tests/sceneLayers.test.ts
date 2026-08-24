@@ -149,6 +149,25 @@ describe('距离规则一处都不许漏', () => {
   })
 })
 
+describe('坐标基准的原点', () => {
+  // ⚠ 只有特效吃它：另外四层存的都是世界坐标，再减一次原点等于把它们整片挪走
+  it('只挪场景特效，另外四层原地不动', () => {
+    const { layers } = layersOf(everything())
+
+    layers.setFrameOrigin([12, 3, -8])
+
+    expect(layers.effects.group.position.toArray()).toEqual([12, 3, -8])
+    for (const group of [
+      layers.anchors.group,
+      layers.arrows.group,
+      layers.panels.group,
+      layers.flows.group,
+    ]) {
+      expect(group.position.toArray()).toEqual([0, 0, 0])
+    }
+  })
+})
+
 describe('喂值与释放仍各只有一处', () => {
   it('setValues 不会把距离规则算出来的显隐冲掉', () => {
     const { layers } = layersOf(everything())

@@ -206,6 +206,7 @@ function placeModel(): void {
     layers?.setWorldScale(modelSpan())
   }
   const origin = modelFrameOrigin(props.config.model, root)
+  layers?.setFrameOrigin(origin)
   groundGrid?.sync(props.config.model.showGroundGrid, modelSpan(), origin)
 }
 

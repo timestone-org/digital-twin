@@ -386,6 +386,24 @@ describe('坐标基准', () => {
     expect(harness.events.frameOrigin).toHaveBeenLastCalledWith([14, 1, -8])
   })
 
+  // 底座套在一片空地上、光柱不在模型上——这两样都不报错，只能靠这条守
+  it('场景特效的中心跟着基准走，不钉在世界原点', async () => {
+    const harness = await ready(
+      twinConfig({
+        model: {
+          asset: ASSET,
+          coordFrame: 'center',
+          sceneEffects: { pedestal: { enabled: true } },
+        },
+      }),
+      fakeModel('pump', new THREE.Vector3(10, 5, -6)),
+    )
+    const scene = await renderedScene(harness)
+    const effects = scene.getObjectByName('twin-scene-effects')
+
+    expect(effects?.position.toArray()).toEqual([10, 0, -6])
+  })
+
   it('换基准就地重算，不用重新装载模型', async () => {
     const harness = await ready(
       twinConfig({ model: { asset: ASSET } }),
