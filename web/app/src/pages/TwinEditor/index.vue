@@ -9,6 +9,7 @@
  * 套上规则会让人「刚配好的东西一转镜头就不见了」。
  */
 import { collectTwinConfigIssues } from '@dt/twin-config'
+import type { Vec3 } from '@dt/twin-config'
 import { DtPageState, useConfirm, useToast } from '@dt/ui'
 import { computed, ref } from 'vue'
 import { onBeforeRouteLeave, useRoute } from 'vue-router'
@@ -56,6 +57,12 @@ const renamingFolderId = ref<string | null>(null)
 const modelNodes = ref<readonly string[]>([])
 /** 视口里正在飞漫游预览；它会被用户一碰镜头就停，所以由视口回传而不是这里说了算。 */
 const roamPreviewing = ref(false)
+/**
+ * 当前坐标基准的原点（世界坐标）。
+ * ⚠ 由视口回传而不是这里算：「模型中心」那一档取的是模型世界包围盒的中心，
+ * 配置里没有这个数——右栏的坐标框与视口里的参考轴必须同源，否则两处的 0 不在一处。
+ */
+const frameOrigin = ref<Vec3>([0, 0, 0])
 
 const config = computed(() => page.doc.value?.config.value ?? null)
 const bulk = useBulkParts(
@@ -208,6 +215,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
             @pick-node="viewport.onPickNode"
             @pick-position="viewport.onPickPosition"
             @model-nodes="modelNodes = $event"
+            @frame-origin="frameOrigin = $event"
             @roam-preview="roamPreviewing = $event"
             @entity-transform="actions?.transformEntity($event)"
             @entity-transform-end="actions?.endTransform()"
@@ -229,6 +237,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
           :model-nodes="modelNodes"
           :picking="viewport.isPicking.value"
           :roam-previewing="roamPreviewing"
+          :frame-origin="frameOrigin"
           :bindings="binding.bindings.value"
           :is-dirty="page.doc.value?.isDirty.value ?? false"
           @patch="actions?.patchConfig($event)"

@@ -15,9 +15,14 @@ import {
 import { DtButton, DtInput, DtSlider, DtSwitch } from '@dt/ui'
 
 import InspectorSection from '../fields/InspectorSection.vue'
-import Vec3Field from '../fields/Vec3Field.vue'
+import type { TwinFrameView } from '../../scripts/coordFrame'
+import PositionField from '../fields/PositionField.vue'
 
-const props = defineProps<{ modelValue: TwinCamera }>()
+const props = defineProps<{
+  modelValue: TwinCamera
+  /** 坐标基准：这几个坐标框显示的是它下面的读数。 */
+  frame: TwinFrameView
+}>()
 
 const emit = defineEmits<{
   'update:modelValue': [TwinCamera]
@@ -48,21 +53,23 @@ function write(patch: Partial<TwinCamera>): void {
 
     <InspectorSection title="机位">
       <div class="flex flex-col gap-1.5">
-        <span class="text-xs text-text-secondary">相机位置（世界坐标）</span>
-        <Vec3Field
+        <span class="text-xs text-text-secondary">相机位置</span>
+        <PositionField
           :model-value="modelValue.position"
+          :frame="frame"
           @update:model-value="write({ position: $event })"
         />
       </div>
       <div class="flex flex-col gap-1.5">
-        <span class="text-xs text-text-secondary">注视点（世界坐标）</span>
-        <Vec3Field
+        <span class="text-xs text-text-secondary">注视点</span>
+        <PositionField
           :model-value="modelValue.target"
+          :frame="frame"
           @update:model-value="write({ target: $event })"
         />
       </div>
       <p class="text-xs text-text-disabled">
-        两组都是世界坐标，不是方位角 /
+        两组都是坐标点，不是方位角 /
         俯仰角。填错不会报错，只会让镜头飞到一个谁也没想到的地方。
       </p>
       <DtButton

@@ -8,6 +8,10 @@ import { mount } from '@vue/test-utils'
 
 import TwinRightPane from '@/pages/TwinEditor/components/TwinRightPane.vue'
 import { TWIN_SELECT_MODEL } from '@/pages/TwinEditor/scripts/types'
+import type { Vec3 } from '@dt/twin-config'
+
+/** 基准原点落在世界原点上：这一份用例守的是分页，不是坐标基准。 */
+const ORIGIN: Vec3 = [0, 0, 0]
 
 const CONFIG = normalizeTwinConfig({
   anchors: [
@@ -25,6 +29,7 @@ function mountPane() {
       picking: false,
       roamPreviewing: false,
       gizmoMode: 'translate' as const,
+      frameOrigin: ORIGIN,
       bindings: [],
       isDirty: false,
     },

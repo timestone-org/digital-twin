@@ -33,6 +33,7 @@ function callbacks(
     pickPosition: vi.fn(),
     modelNodes: vi.fn(),
     cameraChange: vi.fn(),
+    frameOrigin: vi.fn(),
     status: vi.fn(),
     roamPreview,
     entityTransform: vi.fn(),

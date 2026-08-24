@@ -21,12 +21,16 @@ import { computed } from 'vue'
 import InspectorSection from '../fields/InspectorSection.vue'
 import PanelStyleFields from './PanelStyleFields.vue'
 import PanelFieldList from '../fields/PanelFieldList.vue'
+import type { TwinFrameView } from '../../scripts/coordFrame'
+import PositionField from '../fields/PositionField.vue'
 import Vec3Field from '../fields/Vec3Field.vue'
 import VisibilityFields from '../fields/VisibilityFields.vue'
 
 const props = defineProps<{
   modelValue: TwinPanel
   anchors: readonly TwinAnchor[]
+  /** 坐标基准：这几个坐标框显示的是它下面的读数。 */
+  frame: TwinFrameView
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [TwinPanel] }>()
@@ -118,23 +122,21 @@ function writeBillboard(next: string): void {
       </DtField>
 
       <DtNotice v-if="anchored" intent="warning" icon="alert-triangle">
-        已锚定：牌的位置以锚点为准，下面的世界坐标不生效。要用世界坐标，先把锚定改回「不锚定」。
+        已锚定：牌的位置以锚点为准，下面的坐标不生效。要用坐标定位，先把锚定改回「不锚定」。
       </DtNotice>
       <DtNotice v-if="danglingAnchor" intent="danger" icon="alert-circle">
         锚点 {{ modelValue.anchorId }} 不存在，这张牌会落在原点。
       </DtNotice>
 
-      <DtField
-        :label="anchored ? '世界坐标（当前不生效）' : '世界坐标'"
-        size="sm"
-      >
-        <Vec3Field
+      <DtField :label="anchored ? '坐标（当前不生效）' : '坐标'" size="sm">
+        <PositionField
           :model-value="modelValue.position"
+          :frame="frame"
           @update:model-value="write({ position: $event })"
         />
       </DtField>
 
-      <DtField label="偏移" hint="相对锚点或世界坐标" size="sm">
+      <DtField label="偏移" hint="相对锚点或上面那个坐标" size="sm">
         <Vec3Field
           :model-value="modelValue.offset"
           @update:model-value="write({ offset: $event })"

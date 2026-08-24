@@ -3,7 +3,13 @@
  * ⚠ three 的 GPU 资源 GC 收不走，释放全部收口在 `disposeScene`——它是本包
  * 「卸载必须清理」这条的落点（code-style-typescript §5.2）。
  */
-import type { TwinModelRef, TwinPose } from '@dt/twin-config'
+import type {
+  TwinHorizontalSpan,
+  TwinModelRef,
+  TwinPose,
+  Vec3,
+} from '@dt/twin-config'
+import { twinFrameOrigin } from '@dt/twin-config'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
@@ -257,6 +263,41 @@ export function applyModelPlacement(
 export function boundingDiagonal(object: THREE.Object3D): number {
   const box = new THREE.Box3().setFromObject(object)
   return box.isEmpty() ? 0 : box.getSize(new THREE.Vector3()).length()
+}
+
+/** 算基准原点要的两样：档位与模型原点。 */
+export type ModelFrame = Pick<TwinModelRef, 'coordFrame' | 'position'>
+
+/**
+ * 模型根在世界里的基准原点。
+ * ⚠ 必须在摆放落到根上之后再算：`center` 那一档取的是**世界**包围盒的中心，
+ * 拿上一帧的矩阵算出来的中心差一个位移，而画面上只表现为网格偏了一点。
+ * @param model 档位与模型原点
+ * @param root 模型根；null = 还没装载，那时没有中心可言
+ */
+export function modelFrameOrigin(
+  model: ModelFrame,
+  root: THREE.Object3D | null,
+): Vec3 {
+  return twinFrameOrigin(
+    model.coordFrame,
+    model.position,
+    root === null ? null : horizontalSpanOf(root),
+  )
+}
+
+/**
+ * 对象的世界水平跨度；空包围盒（没有几何）给 null。
+ * ⚠ 给 null 而不是给一个零跨度的盒：零跨度会被当成「中心就在原点」，
+ * 而调用方需要区分「量出来在原点」与「压根没量到」。
+ * @param object 要量的对象
+ */
+export function horizontalSpanOf(
+  object: THREE.Object3D,
+): TwinHorizontalSpan | null {
+  const box = new THREE.Box3().setFromObject(object)
+  if (box.isEmpty()) return null
+  return { minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z }
 }
 
 /**

@@ -47,6 +47,12 @@ const emit = defineEmits<{
   modelNodes: [readonly string[]]
   cameraChange: [TwinCameraPose]
   status: [EditorSceneStatus]
+  /**
+   * 当前坐标基准的原点（世界坐标）。
+   * ⚠ 右栏的坐标框必须拿它换算：视口里的参考轴已经挪到基准原点上，
+   * 右栏不跟着换的话两处对不上，且两处都不报错。
+   */
+  frameOrigin: [Vec3]
   /** 漫游预览开停；用户一碰镜头它会自己停，面板上的按钮要跟着回落。 */
   roamPreview: [boolean]
   /** 用户拖坐标轴手柄改了某个实体的位置 / 朝向。 */
@@ -70,7 +76,7 @@ const overlayMessage = computed(() =>
 )
 const pickHint = computed(() => {
   if (props.pickMode === 'node') return '点模型上的部件，取它的节点名'
-  if (props.pickMode === 'position') return '点模型表面或地面，取世界坐标'
+  if (props.pickMode === 'position') return '点模型表面或地面，取那个点的坐标'
   return ''
 })
 /**
@@ -136,6 +142,7 @@ onMounted(() => {
       modelNodes: (value) => emit('modelNodes', value),
       cameraChange: (value) => emit('cameraChange', value),
       status: applyStatus,
+      frameOrigin: (value) => emit('frameOrigin', value),
       roamPreview: (value) => emit('roamPreview', value),
       entityTransform: (change) => emit('entityTransform', change),
       entityTransformEnd: () => emit('entityTransformEnd'),

@@ -1,5 +1,6 @@
 /**
- * @fileoverview 契约：视点检查器把「position / target 是世界坐标」写在明面上。
+ * @fileoverview 契约：视点检查器把「position / target 是坐标点而不是方位角」写在明面上，
+ * 且两组坐标都按当前坐标基准显示。
  *
  * ⚠ 与「方位角 / 俯仰角」那套混着填不会报错，只会让镜头飞到一个谁也没想到的
  * 地方；⚠ 视野的区间取自 `MIN_CAMERA_FOV` / `MAX_CAMERA_FOV`，取到 0 或 180
@@ -15,6 +16,10 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import CameraInspector from '@/pages/TwinEditor/components/inspector/CameraInspector.vue'
+import type { TwinFrameView } from '@/pages/TwinEditor/scripts/coordFrame'
+
+/** 基准原点落在世界原点上：这一份用例守的不是坐标基准，读数即世界坐标。 */
+const FRAME: TwinFrameView = { mode: 'model', origin: [0, 0, 0] }
 
 function makeCamera(over: Record<string, unknown> = {}): TwinCamera {
   const camera = normalizeTwinConfig({
@@ -25,7 +30,7 @@ function makeCamera(over: Record<string, unknown> = {}): TwinCamera {
 }
 
 function mountCamera(modelValue: TwinCamera = makeCamera()) {
-  return mount(CameraInspector, { props: { modelValue } })
+  return mount(CameraInspector, { props: { modelValue, frame: FRAME } })
 }
 
 type Wrapper = ReturnType<typeof mountCamera>
@@ -42,12 +47,38 @@ function buttonByText(wrapper: Wrapper, text: string) {
   return found
 }
 
+/** 第 `group` 组坐标框（0 = 机位，1 = 注视点）里三个轴的显示值。 */
+function axisValues(wrapper: Wrapper, group: number): string[] {
+  return ['X', 'Y', 'Z'].map((axis) => {
+    const found = wrapper.findAll(`input[aria-label="${axis}"]`)[group]
+    if (!found) throw new Error(`没有第 ${group} 组的 ${axis} 输入框`)
+    return (found.element as HTMLInputElement).value
+  })
+}
+
 describe('机位', () => {
-  it('两组坐标都标明是世界坐标', () => {
+  it('两组坐标各有名字', () => {
     const wrapper = mountCamera()
 
-    expect(wrapper.text()).toContain('相机位置（世界坐标）')
-    expect(wrapper.text()).toContain('注视点（世界坐标）')
+    expect(wrapper.text()).toContain('相机位置')
+    expect(wrapper.text()).toContain('注视点')
+  })
+
+  // ⚠ 基准没接上时这两组仍是世界坐标，而画面上一点异常都看不出——只能靠这条守
+  it('机位与注视点都按当前基准显示读数', () => {
+    const wrapper = mount(CameraInspector, {
+      props: {
+        modelValue: makeCamera({
+          position: [12, 4, -25],
+          target: [10, 0, -30],
+        }),
+        frame: { mode: 'center', origin: [10, 0, -30] },
+      },
+    })
+
+    // 机位相对中心是 (2, 4, 5)；注视点正落在中心上，三个 0
+    expect(axisValues(wrapper, 0)).toEqual(['2', '4', '5'])
+    expect(axisValues(wrapper, 1)).toEqual(['0', '0', '0'])
   })
 
   it('明说它与方位角 / 俯仰角那套不通用', () => {

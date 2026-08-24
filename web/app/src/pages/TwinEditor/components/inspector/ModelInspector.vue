@@ -10,19 +10,37 @@
  * 那个开关关掉也没有另一档行为。字段本身留着，存量数据照常读得出来。
  */
 import type { TwinModelRef, Vec3 } from '@dt/twin-config'
-import { DtButton, DtColorInput, DtIcon, DtNumberInput, DtSwitch } from '@dt/ui'
+import { TWIN_COORD_FRAMES } from '@dt/twin-config'
+import {
+  DtButton,
+  DtColorInput,
+  DtField,
+  DtIcon,
+  DtNumberInput,
+  DtSegmented,
+  DtSwitch,
+} from '@dt/ui'
 import { computed, ref } from 'vue'
 
 import AssetPickerDialog from '@/components/assets/AssetPickerDialog.vue'
 
 import ModelVariantPicker from './ModelVariantPicker.vue'
 
+import { COORD_FRAME_OPTIONS, coordText } from '../../scripts/coordFrame'
+
 import InspectorSection from '../fields/InspectorSection.vue'
 import NodePicker from '../fields/NodePicker.vue'
 import SceneEffectsFields from '../fields/SceneEffectsFields.vue'
 import Vec3Field from '../fields/Vec3Field.vue'
 
-const props = defineProps<{ modelValue: TwinModelRef }>()
+const props = defineProps<{
+  modelValue: TwinModelRef
+  /**
+   * 当前基准的原点（世界坐标），视口算出来的。
+   * ⚠ 不在这里自己算：`center` 那一档要模型的世界包围盒，只有视口手上有。
+   */
+  frameOrigin: Vec3
+}>()
 
 const emit = defineEmits<{ 'update:modelValue': [TwinModelRef] }>()
 
@@ -75,6 +93,14 @@ function writeAnimationsEnabled(enabled: boolean): void {
 function writeRotation(rotation: Vec3): void {
   write({ rotation })
 }
+
+/** 分段控件给回来的是裸字符串；对不上闭合联合就当没切。 */
+function writeCoordFrame(value: string): void {
+  const found = TWIN_COORD_FRAMES.find((item) => item === value)
+  if (found !== undefined) write({ coordFrame: found })
+}
+
+const originText = computed(() => coordText(props.frameOrigin))
 
 /** 背景空串 = 透明；关掉开关就是把它清成空串，不是配一个黑。 */
 function toggleBackground(opaque: boolean): void {
@@ -134,7 +160,8 @@ function toggleBackground(opaque: boolean): void {
         @update:model-value="writeScale"
       />
       <div class="flex flex-col gap-1.5">
-        <span class="text-xs text-text-secondary">位置</span>
+        <!-- 模型自己的位置恒是世界坐标：基准是由它定出来的，跟着基准换算会绕回自身 -->
+        <span class="text-xs text-text-secondary">位置（世界坐标）</span>
         <Vec3Field
           :model-value="modelValue.position"
           @update:model-value="write({ position: $event })"
@@ -154,6 +181,32 @@ function toggleBackground(opaque: boolean): void {
         size="sm"
         @update:model-value="write({ autoRotate: $event })"
       />
+    </InspectorSection>
+
+    <InspectorSection title="坐标基准">
+      <DtField
+        label="摆放坐标以谁为 0"
+        hint="只换读数，不挪动任何已摆好的东西"
+        size="sm"
+      >
+        <DtSegmented
+          :model-value="modelValue.coordFrame"
+          :options="COORD_FRAME_OPTIONS"
+          size="sm"
+          block
+          aria-label="坐标基准"
+          @update:model-value="writeCoordFrame"
+        />
+      </DtField>
+      <p class="text-xs text-text-disabled">
+        锚点 / 信息牌 / 箭头 /
+        视点填的坐标都按它显示，视口里的网格与坐标轴也立在
+        这个原点上。「模型中心」只把前后左右挪到全部模块的正中心，高度轴仍与模型
+        坐标系一致。
+      </p>
+      <p class="text-xs text-text-disabled">
+        当前原点（世界坐标）：{{ originText }}
+      </p>
     </InspectorSection>
 
     <InspectorSection title="外观">

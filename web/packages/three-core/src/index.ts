@@ -40,10 +40,13 @@ export {
   disposeScene,
   disposeSceneGraph,
   frameObject,
+  horizontalSpanOf,
+  modelFrameOrigin,
   renderScene,
   resizeScene,
 } from './sceneCore'
 export type {
+  ModelFrame,
   ModelPlacement,
   SceneCore,
   SceneCoreOptions,

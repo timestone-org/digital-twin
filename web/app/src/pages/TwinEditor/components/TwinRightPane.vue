@@ -7,7 +7,7 @@
  */
 import type { BindingPayload } from '@dt/contracts'
 import type { GizmoMode } from '@dt/three-core'
-import type { TwinConfig } from '@dt/twin-config'
+import type { TwinConfig, Vec3 } from '@dt/twin-config'
 import { DtSegmented } from '@dt/ui'
 import { ref } from 'vue'
 
@@ -22,6 +22,8 @@ defineProps<{
   picking: boolean
   roamPreviewing: boolean
   gizmoMode: GizmoMode
+  /** 当前坐标基准的原点（世界坐标），视口算出来的。 */
+  frameOrigin: Vec3
   bindings: readonly BindingPayload[]
   isDirty: boolean
 }>()
@@ -81,6 +83,7 @@ function onTab(value: string): void {
       :picking="picking"
       :roam-previewing="roamPreviewing"
       :gizmo-mode="gizmoMode"
+      :frame-origin="frameOrigin"
       @patch="emit('patch', $event)"
       @request-pick="emit('requestPick', $event)"
       @cancel-pick="emit('cancelPick')"

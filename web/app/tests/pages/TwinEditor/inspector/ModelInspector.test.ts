@@ -12,6 +12,10 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ModelInspector from '@/pages/TwinEditor/components/inspector/ModelInspector.vue'
+import type { Vec3 } from '@dt/twin-config'
+
+/** 基准原点，「当前原点」那行读数用。 */
+const ORIGIN: Vec3 = [0, 0, 0]
 
 const api = vi.hoisted(() => ({
   listAssets: vi.fn(),
@@ -44,9 +48,12 @@ function makeModel(over: Record<string, unknown> = {}): TwinModelRef {
   return normalizeTwinConfig({ model: over }).model
 }
 
-function mountModel(modelValue: TwinModelRef = makeModel()) {
+function mountModel(
+  modelValue: TwinModelRef = makeModel(),
+  frameOrigin: Vec3 = ORIGIN,
+) {
   return mount(ModelInspector, {
-    props: { modelValue },
+    props: { modelValue, frameOrigin },
     attachTo: document.body,
   })
 }
@@ -92,6 +99,36 @@ beforeEach(() => {
     },
   ])
   api.listAssets.mockResolvedValue([ASSET])
+})
+
+describe('坐标基准', () => {
+  it('两档都摆在明面上，切一下整份写回', async () => {
+    const wrapper = mountModel()
+
+    await buttonByText(wrapper, '模型中心').trigger('click')
+
+    expect(lastModel(wrapper).coordFrame).toBe('center')
+  })
+
+  it('缺省是模型原点', () => {
+    expect(makeModel().coordFrame).toBe('model')
+  })
+
+  // 视口里的参考轴就立在这个点上，写出来用户才对得上
+  it('把当前原点的世界坐标写出来', () => {
+    const wrapper = mountModel(makeModel(), [10, 0, -30])
+
+    expect(wrapper.text()).toContain('10 / 0 / -30')
+  })
+
+  // ⚠ 换基准只换读数：真去挪坐标的话，切一下整场的锚点集体偏移
+  it('切基准不碰摆放里的位置', async () => {
+    const wrapper = mountModel(makeModel({ position: [4, 1, -2] }))
+
+    await buttonByText(wrapper, '模型中心').trigger('click')
+
+    expect(lastModel(wrapper).position).toEqual([4, 1, -2])
+  })
 })
 
 describe('模型素材', () => {

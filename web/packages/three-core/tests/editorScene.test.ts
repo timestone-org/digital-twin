@@ -39,6 +39,7 @@ interface Events {
   pickPosition: ReturnType<typeof vi.fn>
   modelNodes: ReturnType<typeof vi.fn>
   cameraChange: ReturnType<typeof vi.fn>
+  frameOrigin: ReturnType<typeof vi.fn>
   status: ReturnType<typeof vi.fn>
   roamPreview: ReturnType<typeof vi.fn>
   entityTransform: ReturnType<typeof vi.fn>
@@ -68,6 +69,7 @@ function createEvents(): Events {
     pickPosition: vi.fn(),
     modelNodes: vi.fn(),
     cameraChange: vi.fn(),
+    frameOrigin: vi.fn(),
     status: vi.fn(),
     roamPreview: vi.fn(),
     entityTransform: vi.fn(),
@@ -352,6 +354,64 @@ describe('模型装载', () => {
   })
 })
 
+describe('坐标基准', () => {
+  /** 视口里那圈网格与坐标轴所在的位置。 */
+  async function helperOrigin(harness: Harness): Promise<number[]> {
+    const scene = await renderedScene(harness)
+    const helpers = scene.getObjectByName('twin-editor-helpers')
+    if (helpers === undefined) throw new Error('参考轴没建出来')
+    return helpers.position.toArray()
+  }
+
+  it('模型原点那一档：参考轴立在模型原点上，原点也回传给宿主', async () => {
+    const harness = await ready(
+      twinConfig({ model: { asset: ASSET, position: [4, 1, -2] } }),
+    )
+
+    expect(await helperOrigin(harness)).toEqual([4, 1, -2])
+    expect(harness.events.frameOrigin).toHaveBeenLastCalledWith([4, 1, -2])
+  })
+
+  // ⚠ 高度轴不居中：这正是「前后左右居中、高度跟模型坐标系」的那条口径
+  it('模型中心那一档：前后左右挪到包围盒中心，高度仍落在模型原点上', async () => {
+    const harness = await ready(
+      twinConfig({
+        model: { asset: ASSET, coordFrame: 'center', position: [4, 1, -2] },
+      }),
+      // 边长 2 的盒，本地中心 (10, 5, -6) → 世界中心 (14, 6, -8)
+      fakeModel('pump', new THREE.Vector3(10, 5, -6)),
+    )
+
+    expect(await helperOrigin(harness)).toEqual([14, 1, -8])
+    expect(harness.events.frameOrigin).toHaveBeenLastCalledWith([14, 1, -8])
+  })
+
+  it('换基准就地重算，不用重新装载模型', async () => {
+    const harness = await ready(
+      twinConfig({ model: { asset: ASSET } }),
+      fakeModel('pump', new THREE.Vector3(10, 0, -6)),
+    )
+
+    harness.scene.setConfig(
+      twinConfig({ model: { asset: ASSET, coordFrame: 'center' } }),
+    )
+
+    expect(await helperOrigin(harness)).toEqual([10, 0, -6])
+  })
+
+  // 模型没了，中心也就没了：不留在上一个模型的中心上
+  it('模型装载失败时原点退回模型原点', async () => {
+    const harness = createScene(
+      twinConfig({ model: { asset: ASSET, coordFrame: 'center' } }),
+      { loadAsync: () => Promise.reject(new Error('取不到')) },
+    )
+    await flushPromises()
+
+    expect(harness.events.frameOrigin).not.toHaveBeenCalled()
+    expect(await helperOrigin(harness)).toEqual([0, 0, 0])
+  })
+})
+
 describe('编辑态刻意与运行态不同的地方', () => {
   it('配了自动旋转也不转，镜头停在原地', async () => {
     const harness = await ready(
@@ -512,6 +572,19 @@ describe('视口拾取', () => {
     const point = harness.events.pickPosition.mock.calls[0]?.[0] as number[]
     expect(point?.[1]).toBeCloseTo(0, 6)
     expect(harness.events.select).not.toHaveBeenCalled()
+  })
+
+  // ⚠ 拾取的那张地面必须与画出来的网格同高，否则「点网格拿到别处的点」
+  it('位置拾取的地面跟着基准原点的高度走，不钉在 y=0', async () => {
+    const harness = await ready(
+      twinConfig({ model: { asset: '', position: [0, 5, 0] } }),
+    )
+    harness.scene.setPickMode('position')
+
+    click(harness, CENTER_X, CENTER_Y)
+
+    const point = harness.events.pickPosition.mock.calls[0]?.[0] as number[]
+    expect(point?.[1]).toBeCloseTo(5, 6)
   })
 
   it('位置拾取模式下点模型表面取表面点', async () => {

@@ -33,6 +33,13 @@ export {
 } from './bindingRows'
 export type { TwinBindingRow } from './bindingRows'
 export { defaultCameraOf, isUsablePose } from './cameraSelect'
+export {
+  sameVec3,
+  toFrameCoords,
+  toWorldCoords,
+  twinFrameOrigin,
+} from './coordFrame'
+export type { TwinHorizontalSpan } from './coordFrame'
 export { GIZMO_KINDS, gizmoTargetOf } from './gizmoTarget'
 export type { TwinGizmoKind, TwinGizmoTarget } from './gizmoTarget'
 export {
@@ -106,6 +113,7 @@ export type { TwinRoamPhase, TwinRoamSegment } from './roamTimeline'
 export { ALWAYS_VISIBLE, NO_CLICK_LIMIT } from './normalizeRules'
 export {
   TWIN_BILLBOARD_MODES,
+  TWIN_COORD_FRAMES,
   TWIN_DISTANCE_REFS,
   TWIN_FADE_DIRECTIONS,
   TWIN_FOLDER_KINDS,
@@ -127,6 +135,7 @@ export type {
   TwinCamera,
   TwinClickDistanceRule,
   TwinConfig,
+  TwinCoordFrame,
   TwinDistanceRef,
   TwinDistanceRule,
   TwinFadeDirection,

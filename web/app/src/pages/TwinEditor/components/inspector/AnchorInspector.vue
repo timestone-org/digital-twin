@@ -9,11 +9,14 @@ import type { TwinAnchor, TwinVisibilityRule } from '@dt/twin-config'
 import { DtButton, DtInput, DtNumberInput, DtSwitch } from '@dt/ui'
 
 import InspectorSection from '../fields/InspectorSection.vue'
-import Vec3Field from '../fields/Vec3Field.vue'
+import type { TwinFrameView } from '../../scripts/coordFrame'
+import PositionField from '../fields/PositionField.vue'
 import VisibilityFields from '../fields/VisibilityFields.vue'
 
 const props = defineProps<{
   modelValue: TwinAnchor
+  /** 坐标基准：这几个坐标框显示的是它下面的读数。 */
+  frame: TwinFrameView
   /** 视口正处在「点模型拾取位置」模式。 */
   picking: boolean
 }>()
@@ -63,9 +66,10 @@ function togglePick(): void {
 
     <InspectorSection title="位置">
       <div class="flex flex-col gap-1.5">
-        <span class="text-xs text-text-secondary">世界坐标</span>
-        <Vec3Field
+        <span class="text-xs text-text-secondary">坐标</span>
+        <PositionField
           :model-value="modelValue.position"
+          :frame="frame"
           @update:model-value="write({ position: $event })"
         />
       </div>

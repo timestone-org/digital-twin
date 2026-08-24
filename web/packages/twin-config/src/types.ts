@@ -79,6 +79,16 @@ export interface TwinSceneEffects {
 }
 
 /**
+ * 摆放坐标的基准。`model` = 模型自己的坐标系原点；`center` = 模型全部模块的
+ * 正中心——只把前后左右挪到中心，高度轴仍与模型坐标系一致。
+ *
+ * ⚠ 基准只换读数，不动落库：坐标一律以世界坐标存，切基准不会挪动任何已摆好的
+ * 东西。反过来做的话，切一下基准整场的锚点集体偏移，而配置里一个字段都没改。
+ */
+export const TWIN_COORD_FRAMES = ['model', 'center'] as const
+export type TwinCoordFrame = (typeof TWIN_COORD_FRAMES)[number]
+
+/**
  * 模型引用与它在场景里的摆放。
  * `asset` 是素材引用 `asset:<uuid>`（ADR-0015 的唯一合法落库形态），空串 = 还没挑模型。
  */
@@ -96,6 +106,8 @@ export interface TwinModelRef {
   position: Vec3
   /** 欧拉角，度。 */
   rotation: Vec3
+  /** 摆放坐标读数的基准，见 `TWIN_COORD_FRAMES`。 */
+  coordFrame: TwinCoordFrame
   autoRotate: boolean
   /** 背景色规格；空串 = 透明。 */
   background: string

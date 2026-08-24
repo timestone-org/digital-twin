@@ -11,6 +11,10 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import AnchorInspector from '@/pages/TwinEditor/components/inspector/AnchorInspector.vue'
+import type { TwinFrameView } from '@/pages/TwinEditor/scripts/coordFrame'
+
+/** 基准原点落在世界原点上：这一份用例守的不是坐标基准，读数即世界坐标。 */
+const FRAME: TwinFrameView = { mode: 'model', origin: [0, 0, 0] }
 
 function makeAnchor(over: Record<string, unknown> = {}): TwinAnchor {
   const anchor = normalizeTwinConfig({
@@ -20,8 +24,12 @@ function makeAnchor(over: Record<string, unknown> = {}): TwinAnchor {
   return anchor
 }
 
-function mountAnchor(modelValue: TwinAnchor = makeAnchor(), picking = false) {
-  return mount(AnchorInspector, { props: { modelValue, picking } })
+function mountAnchor(
+  modelValue: TwinAnchor = makeAnchor(),
+  picking = false,
+  frame: TwinFrameView = FRAME,
+) {
+  return mount(AnchorInspector, { props: { modelValue, frame, picking } })
 }
 
 type Wrapper = ReturnType<typeof mountAnchor>
@@ -95,10 +103,27 @@ describe('小数位', () => {
 })
 
 describe('位置', () => {
-  it('标明是世界坐标', () => {
+  // ⚠ 基准没接上时这三个数仍是世界坐标，而画面上一点异常都看不出——只能靠这条守
+  it('坐标按当前基准显示，并把基准原点写在下面', () => {
+    const wrapper = mountAnchor(makeAnchor({ position: [12, 4, -25] }), false, {
+      mode: 'center',
+      origin: [10, 0, -30],
+    })
+
+    const shown = ['X', 'Y', 'Z'].map((axis) => {
+      const found = wrapper.find(`input[aria-label="${axis}"]`)
+      return (found.element as HTMLInputElement).value
+    })
+
+    expect(shown).toEqual(['2', '4', '5'])
+    expect(wrapper.text()).toContain('0 在模型中心')
+    expect(wrapper.text()).toContain('10 / 0 / -30')
+  })
+
+  it('基准原点就在世界原点上时不多那行提示', () => {
     const wrapper = mountAnchor()
 
-    expect(wrapper.text()).toContain('世界坐标')
+    expect(wrapper.text()).not.toContain('0 在模型')
   })
 
   it('点一下请求从视口拾取', async () => {

@@ -26,6 +26,10 @@ import RoamTourInspector from '@/pages/TwinEditor/components/inspector/RoamTourI
 import ViewpointsInspector from '@/pages/TwinEditor/components/inspector/ViewpointsInspector.vue'
 import TwinInspector from '@/pages/TwinEditor/components/TwinInspector.vue'
 import type { TwinSelection } from '@/pages/TwinEditor/scripts/types'
+import type { Vec3 } from '@dt/twin-config'
+
+/** 基准原点落在世界原点上：这一份用例守的是分派，不是坐标基准。 */
+const ORIGIN: Vec3 = [0, 0, 0]
 
 // 七类实体各两个：只有两个才验得出「换掉一项」有没有把另一项一起带走
 const CONFIG: TwinConfig = normalizeTwinConfig({
@@ -68,6 +72,7 @@ function mountInspector(selection: TwinSelection) {
       picking: false,
       roamPreviewing: false,
       gizmoMode: 'translate',
+      frameOrigin: ORIGIN,
     },
   })
 }

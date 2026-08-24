@@ -36,6 +36,13 @@ describe('模型摆放', () => {
     expect(normalizeModel({ scale: 1e9 }).scale).toBe(1000)
   })
 
+  // ⚠ 缺省必须是 model：缺省摆放下它的原点就是世界原点，存量配置的读数一个字都不变
+  it('坐标基准缺省是模型原点，认不出来的取值也落回它', () => {
+    expect(normalizeModel({}).coordFrame).toBe('model')
+    expect(normalizeModel({ coordFrame: 'centre' }).coordFrame).toBe('model')
+    expect(normalizeModel({ coordFrame: 'center' }).coordFrame).toBe('center')
+  })
+
   it('两个开关缺省关：地面网格与原始材质都是显式选项', () => {
     const model = normalizeModel({})
     expect(model.showGroundGrid).toBe(false)

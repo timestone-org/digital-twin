@@ -10,6 +10,10 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import ArrowInspector from '@/pages/TwinEditor/components/inspector/ArrowInspector.vue'
+import type { TwinFrameView } from '@/pages/TwinEditor/scripts/coordFrame'
+
+/** 基准原点落在世界原点上：这一份用例守的不是坐标基准，读数即世界坐标。 */
+const FRAME: TwinFrameView = { mode: 'model', origin: [0, 0, 0] }
 
 function arrowOf(over: Partial<TwinArrow> = {}): TwinArrow {
   return {
@@ -31,7 +35,12 @@ function arrowOf(over: Partial<TwinArrow> = {}): TwinArrow {
 
 function mountInspector(arrow: TwinArrow, picking = false) {
   return mount(ArrowInspector, {
-    props: { modelValue: arrow, picking, gizmoMode: 'translate' as const },
+    props: {
+      modelValue: arrow,
+      frame: FRAME,
+      picking,
+      gizmoMode: 'translate' as const,
+    },
   })
 }
 

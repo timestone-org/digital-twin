@@ -44,6 +44,7 @@ import {
   WEBGL_UNAVAILABLE_MESSAGE,
   applyModelPlacement,
   boundingDiagonal,
+  modelFrameOrigin,
   createSceneCore,
   createWebGLRenderer,
   disposeScene,
@@ -204,7 +205,8 @@ function placeModel(): void {
     applyModelPlacement(root, props.config.model)
     layers?.setWorldScale(modelSpan())
   }
-  groundGrid?.sync(props.config.model.showGroundGrid, modelSpan())
+  const origin = modelFrameOrigin(props.config.model, root)
+  groundGrid?.sync(props.config.model.showGroundGrid, modelSpan(), origin)
 }
 
 onMounted(() => {

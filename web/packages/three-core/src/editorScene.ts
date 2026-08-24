@@ -19,6 +19,7 @@ import {
   defaultCameraOf,
   gizmoTargetOf,
   hierEffectiveNodes,
+  sameVec3,
 } from '@dt/twin-config'
 import * as THREE from 'three'
 
@@ -52,6 +53,7 @@ import {
   disposeScene,
   disposeSceneGraph,
   frameObject,
+  modelFrameOrigin,
   renderScene,
   resizeScene,
   type SceneCore,
@@ -84,6 +86,12 @@ export interface EditorSceneCallbacks {
   modelNodes: (names: readonly string[]) => void
   cameraChange: (pose: TwinCameraPose) => void
   status: (status: EditorSceneStatus, message: string) => void
+  /**
+   * 当前坐标基准的原点（世界坐标）变了。
+   * ⚠ 宿主必须拿它换算右栏那几个坐标框：不换算的话，选了「模型中心」之后
+   * 视口里的参考轴已经挪到中心、输入框里却还是世界坐标，两处对不上且都不报错。
+   */
+  frameOrigin: (origin: Vec3) => void
   /** 漫游预览的开停；用户一碰镜头它会自己停，面板上的按钮要跟着回落。 */
   roamPreview: (playing: boolean) => void
   /**
@@ -127,8 +135,8 @@ const MIN_PROXY_SIZE = 1e-4
 /** 单个实体取景时取景框的边长，相对模型体量 */
 const ENTITY_FOCUS_RATIO = 0.12
 const MIN_ENTITY_SPAN = 1
-/** 没命中模型时位置拾取落在这张地面上 */
-const GROUND_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+/** 地面的法向；位置拾取用它按基准原点的高度现搭一张平面 */
+const GROUND_NORMAL = new THREE.Vector3(0, 1, 0)
 
 // 宿主没喂实时值时的那一份：读数位置显示占位符，而不是拿旧值冒充
 const EMPTY_LAYER_VALUES: SceneLayerValues = {
@@ -231,6 +239,8 @@ export class EditorScene {
   private loadSeq = 0
   private loadAbort: AbortController | null = null
   private modelSpan = 0
+  /** 当前基准原点（世界坐标）；变了才回调，免得每帧白发一次。 */
+  private coordOrigin: Vec3 = [0, 0, 0]
   private downX = 0
   private downY = 0
   private downValid = false
@@ -466,11 +476,28 @@ export class EditorScene {
 
   /** 把配置里的摆放落到模型上，并按新体量重算覆盖层与网格的尺寸。 */
   private placeModel(): void {
-    if (this.modelObject === null) return
-    applyModelPlacement(this.modelObject, this.config.model)
-    this.modelSpan = boundingDiagonal(this.modelObject)
-    this.layers?.setWorldScale(this.modelSpan)
-    this.helpers?.scale.setScalar(helperScaleFor(this.modelSpan))
+    if (this.modelObject !== null) {
+      applyModelPlacement(this.modelObject, this.config.model)
+      this.modelSpan = boundingDiagonal(this.modelObject)
+      this.layers?.setWorldScale(this.modelSpan)
+      this.helpers?.scale.setScalar(helperScaleFor(this.modelSpan))
+    }
+    // ⚠ 基准那一支不跟着「有没有模型」早退：没挑模型时参考轴也要立在基准原点上，
+    // 且右栏在那一刻就得拿到原点，否则第一个锚点是照着世界坐标摆的
+    this.syncFrame()
+  }
+
+  /**
+   * 把网格与坐标轴挪到当前基准的原点上，并把原点告诉宿主。
+   * ⚠ 全场只有这一处在算基准原点：右栏输入框的读数与视口里这三条轴必须同源，
+   * 各算一份的话「输入框里的 0」与「轴的交点」会是两个地方。
+   */
+  private syncFrame(): void {
+    const origin = modelFrameOrigin(this.config.model, this.modelObject)
+    this.helpers?.position.set(...origin)
+    if (sameVec3(origin, this.coordOrigin)) return
+    this.coordOrigin = origin
+    this.on.frameOrigin(origin)
   }
 
   /** 选中反馈：部件画描边框，其余四类把自己的拾取标记放大加亮。 */
@@ -676,6 +703,7 @@ export class EditorScene {
     this.nodeIndex = EMPTY_NODE_INDEX
     this.modelSpan = 0
     this.helpers?.scale.setScalar(1)
+    this.syncFrame()
     this.applySelectionHighlight()
   }
 
@@ -801,7 +829,9 @@ export class EditorScene {
 
   /**
    * 位置拾取：优先取模型表面的命中点。
-   * ⚠ 没命中模型时落到 y=0 的地面上而不是什么都不给——模型还没挑好时也要能摆锚点。
+   * ⚠ 没命中模型时落到地面上而不是什么都不给——模型还没挑好时也要能摆锚点。
+   * ⚠ 那张地面是**看得见的那圈网格**（跟着基准原点的高度走），不是恒定的 y=0：
+   * 两者不在一处时，用户点的是网格、拿回来的却是另一个高度上的点。
    */
   private pickPosition(): void {
     const hit = this.firstModelHit()
@@ -810,7 +840,9 @@ export class EditorScene {
       return
     }
     const point = new THREE.Vector3()
-    if (this.raycaster.ray.intersectPlane(GROUND_PLANE, point) === null) return
+    // three 的约定：normal·p + constant = 0，故过 y=h 的平面 constant 取 -h
+    const ground = new THREE.Plane(GROUND_NORMAL, -this.coordOrigin[1])
+    if (this.raycaster.ray.intersectPlane(ground, point) === null) return
     this.on.pickPosition([point.x, point.y, point.z])
   }
 

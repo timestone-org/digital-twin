@@ -227,10 +227,10 @@ describe('覆盖层', () => {
   it('拾取模式下给出提示条，回到浏览态就收起', async () => {
     const wrapper = mountViewport({ pickMode: 'position' })
 
-    expect(wrapper.text()).toContain('世界坐标')
+    expect(wrapper.text()).toContain('取那个点的坐标')
 
     await wrapper.setProps({ pickMode: null })
-    expect(wrapper.text()).not.toContain('世界坐标')
+    expect(wrapper.text()).not.toContain('取那个点的坐标')
     wrapper.unmount()
   })
 

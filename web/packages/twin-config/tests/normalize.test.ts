@@ -29,6 +29,8 @@ const EMPTY_MODEL: TwinModelRef = {
   scale: 1,
   position: [0, 0, 0],
   rotation: [0, 0, 0],
+  // 缺省是模型原点：那时基准原点就是世界原点，读数与这个字段出现之前一模一样
+  coordFrame: 'model',
   autoRotate: false,
   background: '',
   showGroundGrid: false,

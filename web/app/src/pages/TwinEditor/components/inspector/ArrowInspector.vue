@@ -20,11 +20,15 @@ import {
 import { computed } from 'vue'
 
 import InspectorSection from '../fields/InspectorSection.vue'
+import type { TwinFrameView } from '../../scripts/coordFrame'
+import PositionField from '../fields/PositionField.vue'
 import Vec3Field from '../fields/Vec3Field.vue'
 import VisibilityFields from '../fields/VisibilityFields.vue'
 
 const props = defineProps<{
   modelValue: TwinArrow
+  /** 坐标基准：这几个坐标框显示的是它下面的读数。 */
+  frame: TwinFrameView
   /** 视口正在等用户点一个位置。 */
   picking: boolean
   /** 视口里坐标轴手柄当前的模式。 */
@@ -85,8 +89,9 @@ function togglePick(): void {
       </DtField>
 
       <DtField label="位置" size="sm">
-        <Vec3Field
+        <PositionField
           :model-value="modelValue.position"
+          :frame="frame"
           @update:model-value="write({ position: $event })"
         />
       </DtField>

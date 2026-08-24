@@ -21,6 +21,7 @@ import {
   trimmedString,
 } from './sanitize'
 import {
+  TWIN_COORD_FRAMES,
   TWIN_LIGHT_COLUMN_MODES,
   TWIN_LIGHT_COLUMN_RISES,
   TWIN_PEDESTAL_REFLECTIONS,
@@ -142,6 +143,9 @@ export function normalizeModel(raw: unknown): TwinModelRef {
     scale: clampedOr(source.scale, DEFAULT_SCALE, MIN_SCALE, MAX_SCALE),
     position: vec3(source.position, ORIGIN),
     rotation: vec3(source.rotation, ORIGIN),
+    // ⚠ 存量配置里没有这个字段，缺省必须是 `model`：`model` + 缺省摆放下基准原点
+    // 就是世界原点，读数与这次发布之前逐字节一致
+    coordFrame: oneOf(source.coordFrame, TWIN_COORD_FRAMES, 'model'),
     autoRotate: source.autoRotate === true,
     background: normalizeColorSpec(source.background) ?? '',
     showGroundGrid: source.showGroundGrid === true,

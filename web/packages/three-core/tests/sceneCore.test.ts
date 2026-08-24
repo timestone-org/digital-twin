@@ -15,6 +15,7 @@ import {
   disposeScene,
   disposeSceneGraph,
   frameObject,
+  horizontalSpanOf,
   renderScene,
   resizeScene,
   type SceneCore,
@@ -149,6 +150,22 @@ describe('模型摆放与取景', () => {
 
   it('边长 2 的立方体对角线是 2√3', () => {
     expect(boundingDiagonal(texturedMesh())).toBeCloseTo(3.4641, 3)
+  })
+
+  it('水平跨度只量两条水平轴，且跟着世界变换走', () => {
+    const mesh = texturedMesh()
+    mesh.position.set(10, 5, -6)
+    expect(horizontalSpanOf(mesh)).toEqual({
+      minX: 9,
+      maxX: 11,
+      minZ: -7,
+      maxZ: -5,
+    })
+  })
+
+  // ⚠ 给 null 而不是零跨度：调用方要能区分「量出来在原点」与「压根没量到」
+  it('没有几何时水平跨度给 null，不给一个零跨度的盒', () => {
+    expect(horizontalSpanOf(new THREE.Group())).toBeNull()
   })
 
   it('取景把相机拉到包围球之外并收紧剪裁面', () => {

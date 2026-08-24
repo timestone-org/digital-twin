@@ -18,12 +18,14 @@ import type {
   TwinPart,
   TwinRoamTour,
   TwinViewpointSwitcher,
+  Vec3,
 } from '@dt/twin-config'
 import { DtEmpty } from '@dt/ui'
 import { computed } from 'vue'
 
 import type { GizmoMode } from '@dt/three-core'
 
+import type { TwinFrameView } from '../scripts/coordFrame'
 import type { TwinSelection } from '../scripts/types'
 import AnchorInspector from './inspector/AnchorInspector.vue'
 import ArrowInspector from './inspector/ArrowInspector.vue'
@@ -46,6 +48,8 @@ const props = defineProps<{
   roamPreviewing: boolean
   /** 视口里坐标轴手柄当前的模式。 */
   gizmoMode: GizmoMode
+  /** 当前坐标基准的原点（世界坐标），视口算出来的。 */
+  frameOrigin: Vec3
 }>()
 
 const emit = defineEmits<{
@@ -58,6 +62,16 @@ const emit = defineEmits<{
   stopRoamPreview: []
   'update:gizmoMode': [GizmoMode]
 }>()
+
+/**
+ * 摆放坐标框要用的基准。
+ * ⚠ 档位从配置读、原点从视口来：`center` 那一档的原点是模型的世界包围盒中心，
+ * 配置里没有这个数，也算不出来。
+ */
+const frame = computed<TwinFrameView>(() => ({
+  mode: props.config.model.coordFrame,
+  origin: props.frameOrigin,
+}))
 
 /** 选中的实体 id；单例段没有 id。 */
 const selectedId = computed(() =>
@@ -136,6 +150,7 @@ function writeHierNode(next: TwinHierNode): void {
     <ModelInspector
       v-if="selection.kind === 'model'"
       :model-value="config.model"
+      :frame-origin="frameOrigin"
       @update:model-value="writeModel"
     />
     <ViewpointsInspector
@@ -166,6 +181,7 @@ function writeHierNode(next: TwinHierNode): void {
     <AnchorInspector
       v-else-if="anchor !== null"
       :model-value="anchor"
+      :frame="frame"
       :picking="picking"
       @update:model-value="writeAnchor"
       @request-pick-position="emit('requestPick', 'position')"
@@ -174,18 +190,21 @@ function writeHierNode(next: TwinHierNode): void {
     <CameraInspector
       v-else-if="camera !== null"
       :model-value="camera"
+      :frame="frame"
       @update:model-value="writeCamera"
       @capture-current="emit('captureCamera', camera.id)"
     />
     <PanelInspector
       v-else-if="panel !== null"
       :model-value="panel"
+      :frame="frame"
       :anchors="config.anchors"
       @update:model-value="writePanel"
     />
     <ArrowInspector
       v-else-if="arrow !== null"
       :model-value="arrow"
+      :frame="frame"
       :picking="picking"
       :gizmo-mode="gizmoMode"
       @update:model-value="writeArrow"

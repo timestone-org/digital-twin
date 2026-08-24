@@ -1,5 +1,5 @@
 /**
- * @fileoverview 契约：信息牌检查器把「锚点优先、世界坐标静默不生效」摆在明面上。
+ * @fileoverview 契约：信息牌检查器把「锚点优先、自填坐标静默不生效」摆在明面上。
  *
  * 两者都给时按锚点走，`position` 那一份不生效——不写出来的话，用户改了坐标没反应
  * 会一路去查渲染层。另锁住：宽度 0 是「按内容自适应」这一档，改动一律整份写回。
@@ -15,6 +15,10 @@ import { describe, expect, it } from 'vitest'
 
 import PanelInspector from '@/pages/TwinEditor/components/inspector/PanelInspector.vue'
 import PanelFieldList from '@/pages/TwinEditor/components/fields/PanelFieldList.vue'
+import type { TwinFrameView } from '@/pages/TwinEditor/scripts/coordFrame'
+
+/** 基准原点落在世界原点上：这一份用例守的不是坐标基准，读数即世界坐标。 */
+const FRAME: TwinFrameView = { mode: 'model', origin: [0, 0, 0] }
 
 const ANCHORS: TwinAnchor[] = [
   {
@@ -64,7 +68,7 @@ function panelOf(over: Partial<TwinPanel> = {}): TwinPanel {
 
 function mountInspector(panel: TwinPanel) {
   return mount(PanelInspector, {
-    props: { modelValue: panel, anchors: ANCHORS },
+    props: { modelValue: panel, frame: FRAME, anchors: ANCHORS },
   })
 }
 
@@ -92,12 +96,12 @@ function selectByLabel(wrapper: Wrapper, label: string) {
   return found
 }
 
-describe('锚点与世界坐标二选一', () => {
-  it('锚定之后写明世界坐标不生效', () => {
+describe('锚点与坐标二选一', () => {
+  it('锚定之后写明坐标不生效', () => {
     const wrapper = mountInspector(panelOf({ anchorId: 'a1' }))
 
-    expect(wrapper.text()).toContain('世界坐标不生效')
-    expect(wrapper.text()).toContain('世界坐标（当前不生效）')
+    expect(wrapper.text()).toContain('下面的坐标不生效')
+    expect(wrapper.text()).toContain('坐标（当前不生效）')
   })
 
   it('没锚定时不说这句，也不给坐标加不生效标记', () => {
@@ -112,7 +116,7 @@ describe('锚点与世界坐标二选一', () => {
     expect(wrapper.text()).toContain('ghost 不存在')
   })
 
-  it('下拉里有「不锚定」这一档，改回去就用世界坐标', async () => {
+  it('下拉里有「不锚定」这一档，改回去就用自己的坐标', async () => {
     const wrapper = mountInspector(panelOf({ anchorId: 'a1' }))
     await selectByLabel(wrapper, '锚定').setValue('')
 
