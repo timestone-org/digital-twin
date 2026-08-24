@@ -15,6 +15,7 @@ import type {
   Vec3,
 } from '@dt/twin-config'
 import * as THREE from 'three'
+import { Reflector } from 'three/addons/objects/Reflector.js'
 
 import { disposeSceneGraph } from './sceneCore'
 import { resolveColorSpec } from './themeColor'
@@ -53,7 +54,8 @@ const FOOTPRINT_RATIO = 0.5
 /** 模型高度相对对角线的估值，同上，是有意的近似 */
 const MODEL_HEIGHT_RATIO = 0.5
 const MIN_STAGE_RADIUS = 0.2
-const MAX_STAGE_RADIUS = 400
+/** 先封顶模型的基础占地，用户半径倍率在它之后应用。 */
+const MAX_STAGE_FOOTPRINT_RADIUS = 400
 /** 底座各片之间的抬升步长，相对底座半径 */
 const COPLANAR_STEP = 0.002
 /** 光圈内半径相对外半径 */
@@ -67,6 +69,14 @@ const GRID_OPACITY = 0.25
 const SHADOW_OPACITY = 0.45
 /** 接触阴影只铺在模型脚下，比整个底座小一圈 */
 const SHADOW_RADIUS_RATIO = 0.55
+/** 柔和档用较小的离屏纹理，模糊采样同时压住实时反射的显存开销。 */
+const SOFT_REFLECTION_SIZE = 256
+const MIRROR_REFLECTION_SIZE = 512
+const SOFT_REFLECTION_OPACITY = 0.3
+const MIRROR_REFLECTION_OPACITY = 0.68
+const SOFT_REFLECTION_BLUR = 2.4
+const MIRROR_REFLECTION_BLUR = 0
+const REFLECTION_CLIP_BIAS = 0.003
 
 const MIN_COLUMN_HEIGHT = 0.2
 const MAX_COLUMN_HEIGHT = 800
@@ -143,6 +153,60 @@ void main() {
 }
 `
 
+const REFLECTION_VERTEX = `
+uniform mat4 textureMatrix;
+varying vec4 vReflectionUv;
+#include <common>
+#include <logdepthbuf_pars_vertex>
+void main() {
+  vReflectionUv = textureMatrix * vec4(position, 1.0);
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  #include <logdepthbuf_vertex>
+}
+`
+
+/**
+ * 五点采样让柔和档拥有真实的低成本模糊；镜面档的 uBlur 为 0，五次采样会落在
+ * 同一像素上，保留清晰轮廓。透明度留给底座地面、网格和反射自然叠加。
+ */
+const REFLECTION_FRAGMENT = `
+uniform vec3 color;
+uniform sampler2D tDiffuse;
+uniform float uOpacity;
+uniform float uBlur;
+uniform vec2 uTexelSize;
+varying vec4 vReflectionUv;
+#include <logdepthbuf_pars_fragment>
+
+float blendOverlay(float base, float blend) {
+  return base < 0.5
+    ? 2.0 * base * blend
+    : 1.0 - 2.0 * (1.0 - base) * (1.0 - blend);
+}
+
+vec3 blendOverlay(vec3 base, vec3 blend) {
+  return vec3(
+    blendOverlay(base.r, blend.r),
+    blendOverlay(base.g, blend.g),
+    blendOverlay(base.b, blend.b)
+  );
+}
+
+void main() {
+  #include <logdepthbuf_fragment>
+  vec2 projectedUv = vReflectionUv.xy / max(vReflectionUv.w, 0.00001);
+  vec2 offset = uTexelSize * uBlur;
+  vec4 reflected = texture2D(tDiffuse, projectedUv) * 0.4;
+  reflected += texture2D(tDiffuse, projectedUv + vec2(offset.x, 0.0)) * 0.15;
+  reflected += texture2D(tDiffuse, projectedUv - vec2(offset.x, 0.0)) * 0.15;
+  reflected += texture2D(tDiffuse, projectedUv + vec2(0.0, offset.y)) * 0.15;
+  reflected += texture2D(tDiffuse, projectedUv - vec2(0.0, offset.y)) * 0.15;
+  gl_FragColor = vec4(blendOverlay(reflected.rgb, color), uOpacity);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}
+`
+
 interface EffectMaterialOptions {
   fragment: string
   uniforms: GlowUniforms | ScanUniforms
@@ -175,6 +239,8 @@ interface Effect {
   readonly group: THREE.Group
   setWorldScale(diagonal: number): void
   update(step: number): void
+  /** 只释放不在普通对象图属性中的 GPU 资源，例如反射的离屏渲染目标。 */
+  dispose?(): void
 }
 
 /**
@@ -292,9 +358,56 @@ interface StagePart {
 }
 
 /** 平躺的圆面：圆/环几何本身立在 XY 面上，不转过来就是一堵墙。 */
-function layFlat(mesh: THREE.Mesh): THREE.Mesh {
+function layFlat<T extends THREE.Mesh>(mesh: T): T {
   mesh.rotation.x = -Math.PI / 2
   return mesh
+}
+
+function createReflection(
+  mode: TwinPedestal['reflection'],
+  color: THREE.Color,
+): Reflector | null {
+  if (mode === 'none') return null
+
+  const soft = mode === 'soft'
+  const textureSize = soft ? SOFT_REFLECTION_SIZE : MIRROR_REFLECTION_SIZE
+  const reflector = layFlat(
+    new Reflector(new THREE.CircleGeometry(1, GROUND_SEGMENTS), {
+      color,
+      textureWidth: textureSize,
+      textureHeight: textureSize,
+      clipBias: REFLECTION_CLIP_BIAS,
+      // 柔和档由着色器做模糊，不再为它支付多重采样；镜面档保留清晰边缘。
+      multisample: soft ? 0 : 4,
+      shader: {
+        name: 'TwinPedestalReflection',
+        uniforms: {
+          color: { value: null },
+          tDiffuse: { value: null },
+          textureMatrix: { value: null },
+          uOpacity: {
+            value: soft ? SOFT_REFLECTION_OPACITY : MIRROR_REFLECTION_OPACITY,
+          },
+          uBlur: {
+            value: soft ? SOFT_REFLECTION_BLUR : MIRROR_REFLECTION_BLUR,
+          },
+          uTexelSize: {
+            value: new THREE.Vector2(1 / textureSize, 1 / textureSize),
+          },
+        },
+        vertexShader: REFLECTION_VERTEX,
+        fragmentShader: REFLECTION_FRAGMENT,
+      },
+    }),
+  )
+  reflector.name = 'twin-pedestal-reflection'
+  const material = reflector.material
+  if (material instanceof THREE.ShaderMaterial) {
+    material.transparent = true
+    material.depthWrite = false
+    material.side = THREE.DoubleSide
+  }
+  return reflector
 }
 
 function createRing(color: THREE.Color): THREE.Mesh {
@@ -360,33 +473,39 @@ function createGrid(color: THREE.Color): THREE.GridHelper {
 }
 
 /**
- * 底座舞台：模型脚下那一圈。四个开关各自决定一片子件建不建。
- * ⚠ `reflection` 的三档目前一律按 `none` 处理：`soft`/`mirror` 要么加一次离屏
- * 反射渲染、要么上一张实时环境贴图，两者都是「每帧多一遍场景」的量级开销，
- * 而底座本身是给暗场展示加气氛的装饰件。契约里先把档位占住，等真有反射需求时
- * 只补这一处、不动配置与存量数据。
+ * 底座舞台：模型脚下那一圈。各开关决定对应子件建不建；反射关闭时也不创建
+ * 离屏渲染目标，柔和与镜面档分别在性能和清晰度之间取不同平衡。
  */
 class PedestalEffect implements Effect {
   readonly group = new THREE.Group()
   private readonly parts: StagePart[] = []
   private readonly radiusFactor: number
+  private readonly reflection: Reflector | null
 
   constructor(config: TwinPedestal, host: HTMLElement | null) {
     this.group.name = 'twin-pedestal'
     this.radiusFactor = config.radius
     const color =
       resolveColorSpec(config.color, host) ?? new THREE.Color(COLOR_FALLBACK)
-    if (config.gradientGround) this.addPart(createGround(color), 0)
-    if (config.grid) this.addPart(createGrid(color), 1)
-    if (config.ring) this.addPart(createRing(color), 2)
-    if (config.contactShadow) this.addPart(createContactShadow(), 3)
+    this.reflection = createReflection(config.reflection, color)
+    if (this.reflection !== null) this.addPart(this.reflection, 0)
+    if (config.gradientGround) this.addPart(createGround(color), 1)
+    if (config.grid) this.addPart(createGrid(color), 2)
+    if (config.ring) this.addPart(createRing(color), 3)
+    if (config.contactShadow) this.addPart(createContactShadow(), 4)
   }
 
   setWorldScale(diagonal: number): void {
-    const radius = clamp(
-      diagonal * FOOTPRINT_RATIO * this.radiusFactor,
+    // ⚠ 倍率不能放进统一封顶里：毫米级模型的基础占地早已超过上限，
+    // 那样滑块从 0.5 拉到 8 都会被压成同一个值。
+    const footprintRadius = clamp(
+      diagonal * FOOTPRINT_RATIO,
       MIN_STAGE_RADIUS,
-      MAX_STAGE_RADIUS,
+      MAX_STAGE_FOOTPRINT_RADIUS,
+    )
+    const radius = Math.max(
+      MIN_STAGE_RADIUS,
+      footprintRadius * this.radiusFactor,
     )
     for (const part of this.parts) {
       part.object.scale.setScalar(radius)
@@ -397,6 +516,11 @@ class PedestalEffect implements Effect {
   /** 底座是静态的：这一层没有随帧变化的量。 */
   update(): void {
     return
+  }
+
+  dispose(): void {
+    // ShaderMaterial 的纹理藏在 uniforms 中，通用对象图释放器扫描不到这张渲染目标。
+    this.reflection?.getRenderTarget().dispose()
   }
 
   private addPart(object: THREE.Object3D, layer: number): void {
@@ -576,6 +700,7 @@ export class SceneEffectsLayer {
   private clear(): void {
     for (const effect of this.effects) {
       this.group.remove(effect.group)
+      effect.dispose?.()
       // 几何、材质、贴图的释放收口在 disposeSceneGraph，本层不另起一套
       disposeSceneGraph(effect.group)
     }

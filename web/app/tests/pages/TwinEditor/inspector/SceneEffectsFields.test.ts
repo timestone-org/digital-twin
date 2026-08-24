@@ -118,6 +118,7 @@ describe('三档取值来自常量联合', () => {
     ).map((item) => item.value)
 
     expect(values).toEqual([...TWIN_PEDESTAL_REFLECTIONS])
+    expect(select?.props('hint')).toBeUndefined()
   })
 
   it('光柱的模式与上升方式各自与常量对上', () => {

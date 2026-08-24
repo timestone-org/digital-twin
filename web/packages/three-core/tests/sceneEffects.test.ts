@@ -13,6 +13,7 @@ import type {
   TwinStarfield,
 } from '@dt/twin-config'
 import * as THREE from 'three'
+import { Reflector } from 'three/addons/objects/Reflector.js'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { SceneEffectsLayer } from '../src/sceneEffects'
@@ -100,6 +101,14 @@ function partOf(layer: SceneEffectsLayer, name: string): Renderable {
   const found = renderablesOf(layer).find((object) => object.name === name)
   if (found === undefined) throw new Error(`这份输入本该建出 ${name}`)
   return found
+}
+
+function reflectionOf(layer: SceneEffectsLayer): Reflector {
+  const reflection = partOf(layer, 'twin-pedestal-reflection')
+  if (!(reflection instanceof Reflector)) {
+    throw new Error('底座反射本该由 Reflector 渲染')
+  }
+  return reflection
 }
 
 function materialsOf(object: Renderable): THREE.Material[] {
@@ -343,6 +352,62 @@ describe('底座的四个开关各自单独关', () => {
   })
 })
 
+describe('底座反射', () => {
+  it('不反射时不建额外渲染对象', () => {
+    const layer = new SceneEffectsLayer()
+
+    layer.build(
+      effects({
+        pedestal: pedestal({ enabled: true, reflection: 'none' }),
+      }),
+    )
+
+    expect(namesOf(layer)).not.toContain('twin-pedestal-reflection')
+  })
+
+  it('柔和与镜面都建真实反射，镜面更清晰也更强', () => {
+    const soft = new SceneEffectsLayer()
+    soft.build(
+      effects({
+        pedestal: pedestal({ enabled: true, reflection: 'soft' }),
+      }),
+    )
+    const mirror = new SceneEffectsLayer()
+    mirror.build(
+      effects({
+        pedestal: pedestal({ enabled: true, reflection: 'mirror' }),
+      }),
+    )
+    const softReflection = reflectionOf(soft)
+    const mirrorReflection = reflectionOf(mirror)
+
+    expect(mirrorReflection.getRenderTarget().width).toBeGreaterThan(
+      softReflection.getRenderTarget().width,
+    )
+    expect(uniformNumber(mirrorReflection, 'uOpacity')).toBeGreaterThan(
+      uniformNumber(softReflection, 'uOpacity'),
+    )
+    expect(uniformNumber(softReflection, 'uBlur')).toBeGreaterThan(
+      uniformNumber(mirrorReflection, 'uBlur'),
+    )
+  })
+
+  it('重建时销毁反射的离屏渲染目标', () => {
+    const layer = new SceneEffectsLayer()
+    layer.build(
+      effects({
+        pedestal: pedestal({ enabled: true, reflection: 'mirror' }),
+      }),
+    )
+    const reflection = reflectionOf(layer)
+    const dispose = vi.spyOn(reflection.getRenderTarget(), 'dispose')
+
+    layer.build(effects())
+
+    expect(dispose).toHaveBeenCalledOnce()
+  })
+})
+
 describe('光柱', () => {
   it('beam 画细光柱', () => {
     const layer = new SceneEffectsLayer()
@@ -557,6 +622,18 @@ describe('随模型体量缩放', () => {
     expect(partOf(wide, 'twin-pedestal-ring').scale.x).toBeGreaterThan(
       partOf(narrow, 'twin-pedestal-ring').scale.x,
     )
+  })
+
+  it('毫米级大模型重建底座时 radius 仍然能改变尺寸', () => {
+    const layer = new SceneEffectsLayer()
+    layer.setWorldScale(10_000)
+    layer.build(effects({ pedestal: pedestal({ enabled: true, radius: 0.5 }) }))
+    const narrow = partOf(layer, 'twin-pedestal-ring').scale.x
+
+    layer.build(effects({ pedestal: pedestal({ enabled: true, radius: 8 }) }))
+    const wide = partOf(layer, 'twin-pedestal-ring').scale.x
+
+    expect(wide).toBeGreaterThan(narrow)
   })
 
   it('height 倍数越大光柱越高', () => {

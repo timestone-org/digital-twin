@@ -167,7 +167,6 @@ function writeRise(next: string): void {
         :model-value="modelValue.pedestal.reflection"
         :options="reflectionOptions"
         label="反射"
-        hint="暂未生效：三档一律按「无」渲染"
         size="sm"
         @update:model-value="writeReflection"
       />
