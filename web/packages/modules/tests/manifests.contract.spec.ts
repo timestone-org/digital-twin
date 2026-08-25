@@ -13,6 +13,7 @@ import {
   TWIN_FLOW_BINDING_KEY,
   TWIN_HIER_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
+  TWIN_PART_BINDING_KEY,
 } from '@dt/twin-config'
 import { isIconName } from '@dt/ui'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
@@ -47,6 +48,7 @@ const KEY_CONSTANTS: Record<string, string> = {
   TWIN_FLOW_BINDING_KEY,
   TWIN_HIER_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
+  TWIN_PART_BINDING_KEY,
 }
 
 // 一跳前缀（`props.config.x` / `opts.config.x`）也算读：模块的 option 里配置常常

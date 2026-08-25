@@ -38,6 +38,8 @@ export interface TwinViewportOps {
   cancelPick: () => void
   onPickNode: (name: string) => void
   onPickPosition: (position: Vec3) => void
+  /** 把 Shift 点选或框选的节点追加到当前选中的部件。 */
+  onSelectNodes: (names: readonly string[]) => void
   captureCamera: (id: string) => void
   captureHierView: (id: string) => void
   previewRoam: () => void
@@ -160,6 +162,18 @@ export function createTwinViewportOps(deps: TwinViewportDeps): TwinViewportOps {
     pickMode: computed(() => pending.value?.what ?? null),
     isPicking: computed(() => pending.value !== null),
     focus: (selection) => viewportRef.value?.focus(selection),
+    onSelectNodes: (names) => {
+      const current = deps.selection()
+      if (current.kind !== 'parts') return
+      const nodes = nodesOf(deps, current.kind, current.id)
+      if (nodes === null) return
+      const next = [
+        ...new Set([...nodes, ...names.filter((name) => name !== '')]),
+      ]
+      // 没有新增节点就不制造一条空撤销记录。
+      if (next.length === nodes.length) return
+      patchEntity(deps, current.kind, current.id, { nodes: next })
+    },
     // 飞不起来（站点不够）就直说，不留一个没反应的按钮
     previewRoam: () => {
       if (viewportRef.value?.playRoamPreview() === false) {

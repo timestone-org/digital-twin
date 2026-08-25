@@ -1,6 +1,6 @@
 /**
  * @fileoverview 守编辑视口内核的契约：降级路径不白屏、快速换模型时慢的那次被丢弃且资源释放、
- * 编辑态三条与运行态刻意不同的行为（只认 visible / 网格恒显 / 自动旋转恒关）、
+ * 编辑态两条与运行态刻意不同的行为（只认 visible / 自动旋转恒关）、地面网格开关两边同步、
  * 实时值由宿主喂进来且重建覆盖层时会重放、拖动过视口不算点击，
  * 以及卸载后 rAF、Observer、监听与渲染上下文都停掉。
  */
@@ -15,6 +15,7 @@ import {
   EMPTY_ANCHOR_VALUES,
   EMPTY_ARROW_VALUES,
   EMPTY_FLOW_VALUES,
+  EMPTY_PART_VALUES,
   normalizeTwinConfig,
   type TwinConfig,
 } from '@dt/twin-config'
@@ -109,6 +110,19 @@ function fakeModel(
   return root
 }
 
+/** 某个节点这一刻的材质；外观改的就是它。 */
+function materialOf(
+  model: THREE.Object3D,
+  name: string,
+): THREE.MeshStandardMaterial {
+  const found = model.getObjectByName(name)
+  const material = found instanceof THREE.Mesh ? found.material : null
+  if (!(material instanceof THREE.MeshStandardMaterial)) {
+    throw new Error(`${name} 上没有可改的材质`)
+  }
+  return material
+}
+
 function fixedSource(root: THREE.Object3D): GltfSource {
   return { loadAsync: () => Promise.resolve({ scene: root }) }
 }
@@ -179,9 +193,10 @@ async function cardText(harness: Harness): Promise<string> {
   return texts.join(' ')
 }
 
-/** 只喂信息牌那一路，其余四路给空引用。 */
+/** 只喂信息牌那一路，其余各路给空引用。 */
 function panelValues(value: number): SceneLayerValues {
   return {
+    parts: EMPTY_PART_VALUES,
     anchors: EMPTY_ANCHOR_VALUES,
     arrows: EMPTY_ARROW_VALUES,
     panels: { 'p1::temp': { value } },
@@ -202,6 +217,27 @@ function press(
 function click(harness: Harness, x: number, y: number): void {
   press(harness.canvas, 'pointerdown', x, y)
   press(harness.canvas, 'pointerup', x, y)
+}
+
+function shiftPress(
+  canvas: HTMLCanvasElement,
+  type: 'pointerdown' | 'pointermove' | 'pointerup',
+  x: number,
+  y: number,
+): void {
+  canvas.dispatchEvent(
+    new MouseEvent(type, {
+      clientX: x,
+      clientY: y,
+      button: 0,
+      shiftKey: true,
+    }),
+  )
+}
+
+function shiftClick(harness: Harness, x: number, y: number): void {
+  shiftPress(harness.canvas, 'pointerdown', x, y)
+  shiftPress(harness.canvas, 'pointerup', x, y)
 }
 
 beforeEach(() => {
@@ -430,6 +466,48 @@ describe('坐标基准', () => {
   })
 })
 
+describe('地面网格开关', () => {
+  /** 视口里那圈网格与坐标轴。 */
+  async function helperGroup(harness: Harness): Promise<THREE.Object3D> {
+    const scene = await renderedScene(harness)
+    const found = scene.getObjectByName('twin-editor-helpers')
+    if (found === undefined) throw new Error('参考轴没建出来')
+    return found
+  }
+
+  it('开着的时候网格与坐标轴都在场上', async () => {
+    const harness = await ready(
+      twinConfig({ model: { asset: ASSET, showGroundGrid: true } }),
+    )
+
+    const group = await helperGroup(harness)
+
+    expect(group.children).toHaveLength(2)
+    expect(group.visible).toBe(true)
+  })
+
+  // ⚠ 只让大屏那一层认这个开关的话，编辑视口里网格照画，两边画面对不上
+  it('关掉之后编辑视口里也不画', async () => {
+    const harness = await ready(
+      twinConfig({ model: { asset: ASSET, showGroundGrid: false } }),
+    )
+
+    expect((await helperGroup(harness)).visible).toBe(false)
+  })
+
+  it('右栏改一下当场跟着变', async () => {
+    const harness = await ready(
+      twinConfig({ model: { asset: ASSET, showGroundGrid: true } }),
+    )
+
+    harness.scene.setConfig(
+      twinConfig({ model: { asset: ASSET, showGroundGrid: false } }),
+    )
+
+    expect((await helperGroup(harness)).visible).toBe(false)
+  })
+})
+
 describe('编辑态刻意与运行态不同的地方', () => {
   it('配了自动旋转也不转，镜头停在原地', async () => {
     const harness = await ready(
@@ -441,17 +519,6 @@ describe('编辑态刻意与运行态不同的地方', () => {
     await nextFrame()
 
     expect(harness.scene.snapshot().position).toEqual(before.position)
-  })
-
-  it('关掉地面网格的配置也照样画网格与坐标轴', async () => {
-    const harness = await ready(
-      twinConfig({ model: { asset: ASSET, showGroundGrid: false } }),
-    )
-    const scene = await renderedScene(harness)
-
-    expect(scene.getObjectByName('twin-editor-helpers')?.children).toHaveLength(
-      2,
-    )
   })
 
   it('部件只认 visible：置假的隐藏，配了距离规则的仍然可见', async () => {
@@ -485,6 +552,68 @@ describe('编辑态刻意与运行态不同的地方', () => {
     )
 
     expect(model.getObjectByName('pump')?.visible).toBe(false)
+  })
+
+  // ⚠ 距离规则不套，但外观必须当场看得见：看不见就等于「调了没反应」，
+  //   用户只能存一次、开一次大屏才知道自己配的是什么
+  it('透明度当场生效，不必等到运行态', async () => {
+    const model = fakeModel()
+    await ready(
+      twinConfig({
+        parts: [{ id: 'part-pump', nodes: ['pump'], look: { opacity: 0.3 } }],
+      }),
+      model,
+    )
+
+    expect(materialOf(model, 'pump').opacity).toBeCloseTo(0.3)
+  })
+
+  it('常态色当场染上，且不动共用材质的别处', async () => {
+    const model = fakeModel()
+    await ready(
+      twinConfig({
+        parts: [
+          {
+            id: 'part-pump',
+            nodes: ['pump'],
+            look: { color: '#00ff00', blend: 1 },
+          },
+        ],
+      }),
+      model,
+    )
+
+    expect(materialOf(model, 'pump').color.getHexString()).toBe('00ff00')
+  })
+
+  // ⚠ 编辑视口不逐帧套距离规则，喂值那一下不重套外观的话，
+  //   表现就是「点位的值在变、部件的颜色不动」
+  it('喂进来的读数当场改染色', async () => {
+    const model = fakeModel()
+    const harness = await ready(
+      twinConfig({
+        parts: [
+          {
+            id: 'part-pump',
+            nodes: ['pump'],
+            look: { blend: 1 },
+            tint: {
+              stops: [
+                { id: 'hot', match: 'range', from: 60, color: '#ff0000' },
+              ],
+            },
+          },
+        ],
+      }),
+      model,
+    )
+
+    harness.scene.setValues({
+      ...panelValues(0),
+      parts: { 'part-pump': { value: 80 } },
+    })
+
+    expect(materialOf(model, 'pump').color.getHexString()).toBe('ff0000')
   })
 })
 
@@ -547,6 +676,48 @@ describe('视口拾取', () => {
       kind: 'parts',
       id: 'part-pump',
     })
+  })
+
+  it('左侧选中部件后 Shift 单击把节点交给连续选择，不改当前选中', async () => {
+    const harness = await ready()
+    harness.scene.setSelection({ kind: 'parts', id: 'part-pump' })
+
+    shiftClick(harness, CENTER_X, CENTER_Y)
+
+    expect(harness.events.marqueeNodes).toHaveBeenCalledWith(['pump'])
+    expect(harness.events.select).not.toHaveBeenCalled()
+  })
+
+  it('左侧没有选中部件时 Shift 不画框，单击仍按普通点选处理', async () => {
+    const harness = await ready()
+
+    shiftPress(harness.canvas, 'pointerdown', CENTER_X, CENTER_Y)
+    shiftPress(harness.canvas, 'pointermove', CENTER_X + 60, CENTER_Y + 60)
+
+    expect(
+      harness.container.querySelector('[data-test="twin-marquee"]'),
+    ).toBeNull()
+
+    shiftPress(harness.canvas, 'pointerup', CENTER_X, CENTER_Y)
+    shiftClick(harness, CENTER_X, CENTER_Y)
+
+    expect(harness.events.marqueeNodes).not.toHaveBeenCalled()
+    expect(harness.events.select).toHaveBeenCalledWith({
+      kind: 'parts',
+      id: 'part-pump',
+    })
+  })
+
+  it('左侧选中部件后 Shift 拖动才画框', async () => {
+    const harness = await ready()
+    harness.scene.setSelection({ kind: 'parts', id: 'part-pump' })
+
+    shiftPress(harness.canvas, 'pointerdown', 40, 40)
+    shiftPress(harness.canvas, 'pointermove', 160, 120)
+
+    expect(
+      harness.container.querySelector('[data-test="twin-marquee"]'),
+    ).not.toBeNull()
   })
 
   it('点中锚点标记时选中那个锚点，模型挡不住它', async () => {

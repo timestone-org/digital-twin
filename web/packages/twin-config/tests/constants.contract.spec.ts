@@ -14,12 +14,14 @@ import {
   TWIN_FLOW_ROW_SLOTS,
   TWIN_HIER_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
+  TWIN_PART_BINDING_KEY,
   TWIN_VIEW_BINDINGS,
   anchorRowFieldKey,
   arrayRowFieldKey,
   arrowRowFieldKey,
   flowRowFieldKey,
   panelRowFieldKey,
+  partRowFieldKey,
 } from '../src/constants'
 import { stitchAnchorValues } from '../src/twinMath'
 import { normalizeTwinConfig } from '../src/normalize'
@@ -41,6 +43,7 @@ const CONFIG = normalizeTwinConfig({ anchors: [{ id: 'a1' }] })
 describe('绑定槽清单', () => {
   it('清单里的槽与槽键常量逐一对上', () => {
     expect(TWIN_VIEW_BINDINGS.map((spec) => spec.key)).toEqual([
+      TWIN_PART_BINDING_KEY,
       TWIN_ANCHOR_BINDING_KEY,
       TWIN_PANEL_BINDING_KEY,
       TWIN_ARROW_BINDING_KEY,
@@ -50,16 +53,18 @@ describe('绑定槽清单', () => {
   })
 
   it('三个槽都是数组槽', () => {
+    expect(specOf(TWIN_PART_BINDING_KEY).isArray).toBe(true)
     expect(specOf(TWIN_ANCHOR_BINDING_KEY).isArray).toBe(true)
     expect(specOf(TWIN_PANEL_BINDING_KEY).isArray).toBe(true)
     expect(specOf(TWIN_ARROW_BINDING_KEY).isArray).toBe(true)
   })
 
   // ⚠ 只许登记渲染层真正消费的槽：没有图元就摆槽位，用户绑完点位看到的是
-  //   「绑了没反应」。五个槽此刻各有一处在消费（钻取字段在钻取面板上），
-  //   加第六个必须与渲染层同轮落地
+  //   「绑了没反应」。六个槽此刻各有一处在消费（钻取字段在钻取面板上，
+  //   部件读数在 `PartsLayer` 的状态染色上），
+  //   加第七个必须与渲染层同轮落地
   it('清单里的每个槽都有渲染层在消费', () => {
-    expect(TWIN_VIEW_BINDINGS).toHaveLength(5)
+    expect(TWIN_VIEW_BINDINGS).toHaveLength(6)
   })
 
   it('能量流那一行有强度与激活两个子槽', () => {
@@ -85,6 +90,7 @@ describe('数组行 fieldKey', () => {
   })
 
   it('四类的构造函数走同一套形状', () => {
+    expect(partRowFieldKey(4)).toBe('partValues[4].value')
     expect(anchorRowFieldKey(3)).toBe('anchorValues[3].value')
     expect(panelRowFieldKey(1)).toBe('panelValues[1].value')
     expect(arrowRowFieldKey(2)).toBe('arrowValues[2].value')

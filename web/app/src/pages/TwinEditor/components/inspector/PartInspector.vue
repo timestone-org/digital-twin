@@ -11,6 +11,8 @@ import type {
   TwinDistanceRule,
   TwinHierNode,
   TwinPart,
+  TwinPartLook,
+  TwinPartTint,
   TwinVisibilityRule,
 } from '@dt/twin-config'
 import { hierPathOf } from '@dt/twin-config'
@@ -20,6 +22,8 @@ import { computed } from 'vue'
 import DistanceField from '../fields/DistanceField.vue'
 import InspectorSection from '../fields/InspectorSection.vue'
 import NodePicker from '../fields/NodePicker.vue'
+import PartLookFields from '../fields/PartLookFields.vue'
+import PartTintFields from '../fields/PartTintFields.vue'
 import VisibilityFields from '../fields/VisibilityFields.vue'
 
 const props = defineProps<{
@@ -30,6 +34,8 @@ const props = defineProps<{
   hierNodes: readonly TwinHierNode[]
   /** 视口正处在「点模型拾取节点」模式。 */
   picking: boolean
+  /** 这个部件在绑定页上已经挑好点位了吗；染色面板据它提醒。 */
+  tintBound: boolean
 }>()
 
 const emit = defineEmits<{
@@ -48,6 +54,14 @@ function writeClick(patch: Partial<TwinClickDistanceRule>): void {
 
 function writeVisibility(visibility: TwinVisibilityRule): void {
   write({ visibility })
+}
+
+function writeLook(look: TwinPartLook): void {
+  write({ look })
+}
+
+function writeTint(tint: TwinPartTint | null): void {
+  write({ tint })
 }
 
 function writeMin(min: TwinDistanceRule | null): void {
@@ -125,8 +139,26 @@ function togglePick(): void {
           >
             {{ picking ? '点视口里的模型…（取消）' : '从视口拾取' }}
           </DtButton>
+          <p class="text-xs text-text-disabled">
+            选中当前部件后，按住 Shift 可在视口连续点选或框选节点。
+          </p>
         </template>
       </NodePicker>
+    </InspectorSection>
+
+    <InspectorSection title="外观">
+      <PartLookFields
+        :model-value="modelValue.look"
+        @update:model-value="writeLook"
+      />
+    </InspectorSection>
+
+    <InspectorSection title="状态染色">
+      <PartTintFields
+        :model-value="modelValue.tint"
+        :bound="tintBound"
+        @update:model-value="writeTint"
+      />
     </InspectorSection>
 
     <InspectorSection title="显隐">

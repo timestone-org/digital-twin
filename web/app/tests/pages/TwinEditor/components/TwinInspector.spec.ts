@@ -73,6 +73,7 @@ function mountInspector(selection: TwinSelection) {
       roamPreviewing: false,
       gizmoMode: 'translate',
       frameOrigin: ORIGIN,
+      bindings: [],
     },
   })
 }
@@ -243,5 +244,68 @@ describe('往上转发的动作', () => {
     wrapper.findComponent(ArrowInspector).vm.$emit('update:gizmoMode', 'rotate')
 
     expect(wrapper.emitted('update:gizmoMode')?.[0]).toEqual(['rotate'])
+  })
+})
+
+describe('部件染色的「有没有挑点位」', () => {
+  const TINTED = normalizeTwinConfig({
+    parts: [
+      { id: 'plain', name: '外壳' },
+      { id: 'first', name: '泵体', tint: { mode: 'stops' } },
+      { id: 'second', name: '风机', tint: { mode: 'stops' } },
+    ],
+  })
+
+  function mountWith(id: string, fieldKeys: readonly string[]) {
+    return mount(TwinInspector, {
+      props: {
+        config: TINTED,
+        selection: { kind: 'parts', id },
+        modelNodes: [],
+        picking: false,
+        roamPreviewing: false,
+        gizmoMode: 'translate' as const,
+        frameOrigin: ORIGIN,
+        bindings: fieldKeys.map((fieldKey) => ({
+          id: fieldKey,
+          nodeId: 'n1',
+          fieldKey,
+          sourceKind: 'opcua' as const,
+          nodeKey: null,
+          staticValueJson: null,
+          computeJson: null,
+          transformJson: null,
+          detailJson: null,
+          createdAt: '',
+          updatedAt: '',
+        })),
+      },
+    })
+  }
+
+  it('绑了它那一行就算挑过了', () => {
+    const wrapper = mountWith('first', ['partValues[0].value'])
+
+    expect(wrapper.findComponent(PartInspector).props('tintBound')).toBe(true)
+  })
+
+  // ⚠ 行号跳过没配染色的部件：按 config.parts 的下标数的话，
+  //   这里会把「外壳」那一格当成「泵体」的行
+  it('行号按配了染色的部件数，不按它在 parts 里的下标', () => {
+    const wrapper = mountWith('second', ['partValues[1].value'])
+
+    expect(wrapper.findComponent(PartInspector).props('tintBound')).toBe(true)
+  })
+
+  it('绑的是别的部件那一行时不算', () => {
+    const wrapper = mountWith('second', ['partValues[0].value'])
+
+    expect(wrapper.findComponent(PartInspector).props('tintBound')).toBe(false)
+  })
+
+  it('没配染色的部件恒不算，免得摆一条永远消不掉的提醒', () => {
+    const wrapper = mountWith('plain', ['partValues[0].value'])
+
+    expect(wrapper.findComponent(PartInspector).props('tintBound')).toBe(false)
   })
 })

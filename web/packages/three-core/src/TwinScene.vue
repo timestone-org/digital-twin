@@ -12,12 +12,7 @@ import type {
   TwinFlowValues,
   TwinModalView,
   TwinPanelValues,
-} from '@dt/twin-config'
-import {
-  EMPTY_ANCHOR_VALUES,
-  EMPTY_ARROW_VALUES,
-  EMPTY_FLOW_VALUES,
-  EMPTY_PANEL_VALUES,
+  TwinPartValues,
 } from '@dt/twin-config'
 import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 
@@ -26,6 +21,7 @@ import { ModelAnimations } from './modelAnimations'
 import TwinRoamControls from './TwinRoamControls.vue'
 import { useRoamTour } from './useRoamTour'
 import { SceneLayers, type SceneLayerValues } from './sceneLayers'
+import { sceneValuesOf } from './sceneValueProps'
 import { distanceContextOf } from './distanceContext'
 import type { TwinPartClick } from './partPicking'
 import TwinSceneOverlay from './TwinSceneOverlay.vue'
@@ -54,6 +50,8 @@ import {
 const props = defineProps<{
   /** ⚠ 必须是 `normalizeTwinConfig` 的输出：这里按引用比对，就地改字段不会重绘。 */
   config: TwinConfig
+  /** 部件状态染色的读数；键是部件 id。 */
+  partValues?: TwinPartValues
   anchorValues?: TwinAnchorValues
   arrowValues?: TwinArrowValues
   panelValues?: TwinPanelValues
@@ -147,10 +145,6 @@ const structure = useStructureTree({
   enabled: () => props.showStructureTree === true,
 })
 
-const anchors = computed(() => props.anchorValues ?? EMPTY_ANCHOR_VALUES)
-const arrows = computed(() => props.arrowValues ?? EMPTY_ARROW_VALUES)
-const panels = computed(() => props.panelValues ?? EMPTY_PANEL_VALUES)
-const flows = computed(() => props.flowValues ?? EMPTY_FLOW_VALUES)
 const backgroundStyle = computed(() => {
   const spec = props.config.model.background
   if (spec === '') return undefined
@@ -172,14 +166,9 @@ const loop = useRenderLoop({
   },
 })
 
-/** 当前这一拍的五路实时值。 */
+/** 当前这一拍的六路实时值；缺席的那几路补成空引用。 */
 function liveValues(): SceneLayerValues {
-  return {
-    anchors: anchors.value,
-    arrows: arrows.value,
-    panels: panels.value,
-    flows: flows.value,
-  }
+  return sceneValuesOf(props)
 }
 
 function refreshLayers(): void {

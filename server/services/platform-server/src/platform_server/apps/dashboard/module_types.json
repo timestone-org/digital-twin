@@ -2354,6 +2354,20 @@
       ],
       "bindings": [
         {
+          "key": "partValues",
+          "label": "部件状态染色",
+          "data_type": "number",
+          "is_array": true,
+          "is_entity_pinned": true,
+          "array_fields": [
+            {
+              "key": "value",
+              "label": "数值 / 状态",
+              "data_type": "number"
+            }
+          ]
+        },
+        {
           "key": "anchorValues",
           "label": "锚点读数",
           "data_type": "number",

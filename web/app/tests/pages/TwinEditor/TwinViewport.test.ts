@@ -165,11 +165,13 @@ describe('回调转成事件', () => {
     scene().options.on.pickNode('pump')
     scene().options.on.pickPosition([1, 2, 3])
     scene().options.on.modelNodes(['pump', 'valve'])
+    scene().options.on.marqueeNodes(['pump'])
     scene().options.on.cameraChange(seam.pose)
 
     expect(wrapper.emitted('pickNode')).toEqual([['pump']])
     expect(wrapper.emitted('pickPosition')).toEqual([[[1, 2, 3]]])
     expect(wrapper.emitted('modelNodes')).toEqual([[['pump', 'valve']]])
+    expect(wrapper.emitted('marqueeNodes')).toEqual([[['pump']]])
     expect(wrapper.emitted('cameraChange')).toEqual([[seam.pose]])
     wrapper.unmount()
   })
@@ -282,42 +284,45 @@ describe('暴露给页面的两个方法', () => {
 describe('按大屏格子留边', () => {
   // ⚠ 不留边的话编辑区与大屏格子的宽高比不同，相机 aspect 跟着不同，
   // 同一份配置在两边取景不一样——看起来就是「牌与模型的大小对不上」
-  it('给了目标尺寸就按它的宽高比锁住视口', () => {
+  it('把大屏格子的宽高交给比例框', () => {
     const wrapper = mountViewport({
       targetSize: { width: 1280, height: 720 },
     })
 
     const style = wrapper.find('.twin-viewport').attributes('style') ?? ''
-    expect(style).toContain('aspect-ratio: 1280 / 720')
+    expect(style).toContain('--twin-frame-w: 1280')
+    expect(style).toContain('--twin-frame-h: 720')
     wrapper.unmount()
   })
 
-  // ⚠ 这条守的是一次真实的回归：宽高都写 auto 时，视口里只有绝对定位的
-  // canvas、没有流内容，两个方向双双塌成 0——模型整个不显示且不报任何错
-  it('高度撑满而不是 auto，宽度才有的推', () => {
+  // ⚠ 两个变量与这个类名缺一不可：只给变量的话样式表那两条 min() 根本没生效，
+  // 视口照样铺满，而界面上看不出比例是错的
+  it('挂上比例框的类名', () => {
     const wrapper = mountViewport({
       targetSize: { width: 1280, height: 720 },
     })
 
-    const style = wrapper.find('.twin-viewport').attributes('style') ?? ''
-    expect(style).toContain('height: 100%')
-    expect(style).not.toContain('height: auto')
+    expect(wrapper.find('.twin-viewport').classes()).toContain(
+      'twin-viewport--framed',
+    )
     wrapper.unmount()
   })
 
   it('没给尺寸时铺满，不凭空锁一个比例', () => {
     const wrapper = mountViewport()
 
-    const style = wrapper.find('.twin-viewport').attributes('style') ?? ''
-    expect(style).not.toContain('aspect-ratio')
+    const viewport = wrapper.find('.twin-viewport')
+    expect(viewport.attributes('style') ?? '').not.toContain('--twin-frame')
+    expect(viewport.classes()).not.toContain('twin-viewport--framed')
     wrapper.unmount()
   })
 
   it('尺寸不合法时当没给', () => {
     const wrapper = mountViewport({ targetSize: { width: 0, height: 720 } })
 
-    const style = wrapper.find('.twin-viewport').attributes('style') ?? ''
-    expect(style).not.toContain('aspect-ratio')
+    expect(wrapper.find('.twin-viewport').classes()).not.toContain(
+      'twin-viewport--framed',
+    )
     wrapper.unmount()
   })
 })

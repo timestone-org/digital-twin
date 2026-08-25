@@ -15,6 +15,7 @@ import {
 } from './normalizeElements'
 import { normalizeFolders } from './normalizeFolders'
 import { normalizeHierNode } from './normalizeHier'
+import { normalizePartLook, normalizePartTint } from './normalizeParts'
 import { normalizeClickDistance, normalizeVisibility } from './normalizeRules'
 import {
   clampedOr,
@@ -35,6 +36,8 @@ function normalizePart(raw: unknown, index: number): TwinPart | null {
     name: trimmedString(raw.name),
     nodes: stringList(raw.nodes),
     visibility: normalizeVisibility(raw.visibility, raw.visible),
+    look: normalizePartLook(raw.look),
+    tint: normalizePartTint(raw.tint),
     clickDistance: normalizeClickDistance(raw.clickDistance),
     clickHierNode: trimmedString(raw.clickHierNode),
   }

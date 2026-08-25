@@ -31,7 +31,6 @@ const emit = defineEmits<{
   <BulkPartsDialog
     :open="bulk.open.value"
     :candidates="bulk.candidates.value"
-    :preselect="bulk.preselect.value"
     @update:open="emit('update:bulk-open', $event)"
     @confirm="emit('add-parts', $event)"
   />

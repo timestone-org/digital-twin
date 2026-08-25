@@ -120,3 +120,76 @@ describe('collectTwinConfigIssues', () => {
     ])
   })
 })
+
+describe('状态染色的两条', () => {
+  // ⚠ 不报的话，用户看到的是「绑了点位、值也在变，颜色却一动不动」，
+  //   而那与点位根本没通表现完全一样
+  it('开了分档取色却一档都没配，单独报一条', () => {
+    const config = normalizeTwinConfig({
+      parts: [{ id: 'p1', tint: { mode: 'stops', stops: [] } }],
+    })
+
+    expect(collectTwinConfigIssues(config)).toEqual([
+      {
+        kind: 'tint-no-stops',
+        entityId: 'p1',
+        path: 'parts[0].tint.stops',
+        detail: '一档都没配，这个部件的颜色永远只会是回落色',
+      },
+    ])
+  })
+
+  it('渐变模式不要求档位，不误报', () => {
+    const config = normalizeTwinConfig({
+      parts: [{ id: 'p1', tint: { mode: 'gradient' } }],
+    })
+
+    expect(collectTwinConfigIssues(config)).toEqual([])
+  })
+
+  it('没配染色的部件当然也不报', () => {
+    expect(
+      collectTwinConfigIssues(normalizeTwinConfig({ parts: [{}] })),
+    ).toEqual([])
+  })
+
+  // ⚠ 上界不含，所以 from === to 也是空区间——两个数字并排摆着看不出问题
+  it('上界不大于下界的那一档报出来，指到具体是第几档', () => {
+    const config = normalizeTwinConfig({
+      parts: [
+        {
+          id: 'p1',
+          tint: {
+            stops: [
+              { id: 'ok', match: 'range', from: 0, to: 60 },
+              { id: 'bad', match: 'range', from: 80, to: 80 },
+            ],
+          },
+        },
+      ],
+    })
+
+    expect(collectTwinConfigIssues(config).map((issue) => issue.path)).toEqual([
+      'parts[0].tint.stops[1]',
+    ])
+  })
+
+  it('只设一端的区间不算空，等值档也不进这条判定', () => {
+    const config = normalizeTwinConfig({
+      parts: [
+        {
+          id: 'p1',
+          tint: {
+            stops: [
+              { id: 'a', match: 'range', from: 80 },
+              { id: 'b', match: 'range', to: 10 },
+              { id: 'c', match: 'equals', equals: '1' },
+            ],
+          },
+        },
+      ],
+    })
+
+    expect(collectTwinConfigIssues(config)).toEqual([])
+  })
+})

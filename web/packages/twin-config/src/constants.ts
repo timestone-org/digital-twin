@@ -14,6 +14,8 @@ export const TWIN_CONFIG_KEY = 'twin'
  */
 export const TWIN_CONFIG_VERSION = 1
 
+/** 部件状态染色读数的数组绑定槽键。 */
+export const TWIN_PART_BINDING_KEY = 'partValues'
 /** 锚点读数的数组绑定槽键。 */
 export const TWIN_ANCHOR_BINDING_KEY = 'anchorValues'
 /** 信息牌字段读数的数组绑定槽键。 */
@@ -56,6 +58,15 @@ export function arrayRowFieldKey(
   return `${slotKey}[${index}].${sub}`
 }
 
+/**
+ * 配了状态染色的部件里第 index 个的 fieldKey。
+ * ⚠ 行号是**配了染色的部件**之间的序号，不是 `config.parts` 的下标：
+ * 两者混用会让「给中间某个部件关掉染色」把它之后每一行都改喂前一个部件。
+ */
+export function partRowFieldKey(index: number): string {
+  return arrayRowFieldKey(TWIN_PART_BINDING_KEY, index, 'value')
+}
+
 /** 第 index 个锚点读数的 fieldKey。 */
 export function anchorRowFieldKey(index: number): string {
   return arrayRowFieldKey(TWIN_ANCHOR_BINDING_KEY, index, 'value')
@@ -90,6 +101,14 @@ export function hierRowFieldKey(index: number): string {
  * 是「绑了没反应」，那比缺一个功能更难查。加槽必须与渲染层同一轮落地。
  */
 export const TWIN_VIEW_BINDINGS: readonly BindingSpec[] = [
+  {
+    key: TWIN_PART_BINDING_KEY,
+    label: '部件状态染色',
+    dataType: 'number',
+    isArray: true,
+    isEntityPinned: true,
+    arrayFields: [{ key: 'value', label: '数值 / 状态', dataType: 'number' }],
+  },
   {
     key: TWIN_ANCHOR_BINDING_KEY,
     label: '锚点读数',

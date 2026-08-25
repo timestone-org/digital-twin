@@ -84,6 +84,7 @@ function onTab(value: string): void {
       :roam-previewing="roamPreviewing"
       :gizmo-mode="gizmoMode"
       :frame-origin="frameOrigin"
+      :bindings="bindings"
       @patch="emit('patch', $event)"
       @request-pick="emit('requestPick', $event)"
       @cancel-pick="emit('cancelPick')"

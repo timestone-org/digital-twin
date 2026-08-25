@@ -88,7 +88,7 @@ function mountLive(dashboardId = 'd1') {
     },
   })
   const wrapper = mount(host)
-  return { wrapper, values: () => latest?.value }
+  return { wrapper, live: () => latest, values: () => latest?.scene.value }
 }
 
 beforeEach(() => {

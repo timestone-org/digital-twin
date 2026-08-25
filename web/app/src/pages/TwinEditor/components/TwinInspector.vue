@@ -6,6 +6,7 @@
  * 每种实体在这里各自把整份数组重建一遍，类型才对得上；发通用的
  * 「kind + id + 新值」会让类型在泛型索引处塌成联合，只能靠断言糊过去。
  */
+import type { BindingPayload } from '@dt/contracts'
 import type {
   TwinAnchor,
   TwinArrow,
@@ -19,6 +20,11 @@ import type {
   TwinRoamTour,
   TwinViewpointSwitcher,
   Vec3,
+} from '@dt/twin-config'
+import {
+  TWIN_PART_BINDING_KEY,
+  partRowFieldKey,
+  twinRowsOfEntity,
 } from '@dt/twin-config'
 import { DtEmpty } from '@dt/ui'
 import { computed } from 'vue'
@@ -50,6 +56,8 @@ const props = defineProps<{
   gizmoMode: GizmoMode
   /** 当前坐标基准的原点（世界坐标），视口算出来的。 */
   frameOrigin: Vec3
+  /** 这段孪生当前的全部绑定，含还没保存的草稿。 */
+  bindings: readonly BindingPayload[]
 }>()
 
 const emit = defineEmits<{
@@ -81,6 +89,21 @@ const selectedId = computed(() =>
 const part = computed(
   () => props.config.parts.find((item) => item.id === selectedId.value) ?? null,
 )
+/**
+ * 选中的部件已经挑好点位了吗。
+ * ⚠ 按 `twinRowsOfEntity` 算行号，不按部件在 `config.parts` 里的下标：只有配了
+ * 染色的部件占行，两者对不上，直接拿下标会指到别的部件那一行去。
+ */
+const partTintBound = computed(() => {
+  const current = part.value
+  if (current === null || current.tint === null) return false
+  const rows = twinRowsOfEntity(props.config, 'parts', current.id)
+  const keys = new Set(props.bindings.map((item) => item.fieldKey))
+  return (rows?.[TWIN_PART_BINDING_KEY] ?? []).some((row) =>
+    keys.has(partRowFieldKey(row)),
+  )
+})
+
 const anchor = computed(
   () =>
     props.config.anchors.find((item) => item.id === selectedId.value) ?? null,
@@ -174,6 +197,7 @@ function writeHierNode(next: TwinHierNode): void {
       :node-names="modelNodes"
       :hier-nodes="config.hierNodes"
       :picking="picking"
+      :tint-bound="partTintBound"
       @update:model-value="writePart"
       @request-pick-node="emit('requestPick', 'node')"
       @cancel-pick="emit('cancelPick')"

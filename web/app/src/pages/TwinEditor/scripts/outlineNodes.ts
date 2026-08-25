@@ -132,6 +132,8 @@ export const TWIN_ISSUE_LABELS: Readonly<
   'dangling-hier-node': '钻取节点丢失',
   'hier-cycle': '钻取成环',
   'roam-too-short': '漫游飞不起来',
+  'tint-no-stops': '染色没档位',
+  'tint-empty-range': '档位区间为空',
 }
 
 /** 一行渲染所需的、与实体种类无关的那几个值。 */

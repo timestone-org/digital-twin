@@ -26,33 +26,127 @@ function flowsOf(...kinds: string[]): TwinFlowLink[] {
 
 describe('颜色图例', () => {
   it('每个种类只列一次——十条能流共用一套种类是常态', () => {
-    const legend = collectSceneLegend(flowsOf('water', 'water', 'steam'))
+    const legend = collectSceneLegend(flowsOf('water', 'water', 'steam'), [])
 
     expect(legend.map((item) => item.label)).toEqual(['water', 'steam'])
   })
 
   // 缺省色代表什么本身没有含义，列出来只会让人去猜
   it('没写种类的流不进图例', () => {
-    expect(collectSceneLegend(flowsOf('', '  '))).toEqual([])
+    expect(collectSceneLegend(flowsOf('', '  '), [])).toEqual([])
   })
 
   // ⚠ 图例的色块与画面上的管线必须同源，否则用户照着图例认的颜色是错的
   it('颜色取自与渲染层共用的那份色表', () => {
-    const legend = collectSceneLegend(flowsOf('water'))
+    const legend = collectSceneLegend(flowsOf('water'), [])
 
     expect(legend[0]?.color).toBe(flowKindColor('water'))
   })
 
   it('认得的种类给出主题 token，供渲染侧优先取用', () => {
-    const legend = collectSceneLegend(flowsOf('steam'))
+    const legend = collectSceneLegend(flowsOf('steam'), [])
 
     expect(legend[0]?.token).toBe('--flow-steam')
   })
 
   it('种类名带空格时拼不出合法变量名，token 给 null', () => {
-    const legend = collectSceneLegend(flowsOf('冷 却 水'))
+    const legend = collectSceneLegend(flowsOf('冷 却 水'), [])
 
     expect(legend[0]?.token).toBeNull()
+  })
+})
+
+describe('部件染色的图例', () => {
+  function partsOf(...tints: unknown[]): TwinPart[] {
+    return normalizeTwinConfig({
+      parts: tints.map((tint, index) => ({ id: `p${index}`, tint })),
+    }).parts
+  }
+
+  // 没写说明的档位也要有一句话：一个没有任何说明的色块等于没有图例
+  it('没写说明的档位按命中条件拼一句', () => {
+    const legend = collectSceneLegend(
+      [],
+      partsOf({
+        stops: [
+          { id: 'a', match: 'range', from: 80, color: '#ff0000' },
+          {
+            id: 'b',
+            match: 'equals',
+            equals: '0',
+            color: '#888888',
+            label: '停机',
+          },
+        ],
+      }),
+    )
+
+    expect(legend.map((item) => item.label)).toEqual(['≥ 80', '停机'])
+    expect(legend.every((item) => item.group === '部件染色')).toBe(true)
+  })
+
+  // 几十个部件共用一套档位是常态，逐条列出来的图例没法看
+  it('同含义同色只列一次', () => {
+    const rule = {
+      stops: [{ id: 'a', match: 'equals', equals: '1', color: '#00ff00' }],
+    }
+    const legend = collectSceneLegend([], partsOf(rule, rule))
+
+    expect(legend).toHaveLength(1)
+  })
+
+  it('没配颜色的档位不进图例——它本来就不染色', () => {
+    const legend = collectSceneLegend(
+      [],
+      partsOf({ stops: [{ id: 'a', match: 'range', label: '任意' }] }),
+    )
+
+    expect(legend).toEqual([])
+  })
+
+  it('没配染色的部件不出现', () => {
+    expect(collectSceneLegend([], partsOf(undefined))).toEqual([])
+  })
+
+  it('渐变列出两端，标签就是区间的上下端', () => {
+    const legend = collectSceneLegend(
+      [],
+      partsOf({
+        mode: 'gradient',
+        gradient: { min: 20, max: 90, from: '#00ff00', to: '#ff0000' },
+      }),
+    )
+
+    expect(legend.map((item) => item.label)).toEqual(['20', '90'])
+    expect(legend.map((item) => item.color)).toEqual(['#00ff00', '#ff0000'])
+  })
+
+  // ⚠ token 取不出时不猜一个色：猜的那个会让「token 名写错了」看起来像「配对了」
+  it('token 档给出 token，色块本身留空不猜色', () => {
+    const legend = collectSceneLegend(
+      [],
+      partsOf({
+        stops: [
+          { id: 'a', match: 'equals', equals: '1', color: '--state-danger' },
+        ],
+      }),
+    )
+
+    expect(legend[0]).toMatchObject({
+      token: '--state-danger',
+      color: 'transparent',
+    })
+  })
+
+  it('能流在前、部件染色在后，两组不混排', () => {
+    const legend = collectSceneLegend(
+      flowsOf('water'),
+      partsOf({
+        stops: [{ id: 'a', match: 'equals', equals: '1', color: '#00ff00' }],
+      }),
+    )
+
+    expect(legend.map((item) => item.group)).toEqual(['能量流', '部件染色'])
   })
 })
 

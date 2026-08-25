@@ -15,6 +15,7 @@ import { buildNodeIndex } from '../src/nodeIndex'
 import { SceneLayers, type SceneLayerValues } from '../src/sceneLayers'
 
 const EMPTY_VALUES: SceneLayerValues = {
+  parts: {},
   anchors: {},
   arrows: {},
   panels: {},

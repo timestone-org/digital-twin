@@ -3,7 +3,7 @@
  * @fileoverview `type: 'image'` 的控件：从素材库挑一张，或手填图片 URL / CSS background 值。
  *
  * ⚠ 挑素材落库的是 `asset:<uuid>` 引用不是 URL：URL 换一次部署 / 换一个桶就 404，
- * 而存量配置里那条链接没有任何一处会报错，表现只是那张屏上的图不见了（ADR-0020）。
+ * 而存量配置里那条链接没有任何一处会报错，表现只是那张屏上的图不见了（ADR-0015 四）。
  * ⚠ 预览按来源分三条路画（素材引用先摊成地址，判别在 `@dt/modules`），塞错了看着就像素材坏了。
  */
 import { parseAssetRef } from '@dt/contracts'
@@ -109,7 +109,7 @@ function clearAsset(): void {
     </div>
     <DtInput
       v-else
-      class="w-full"
+      class="min-w-0 flex-1"
       :model-value="current"
       size="sm"
       :disabled="disabled"

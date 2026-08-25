@@ -8,6 +8,7 @@ export {
   TWIN_FLOW_ROW_SLOTS,
   TWIN_HIER_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
+  TWIN_PART_BINDING_KEY,
   TWIN_VALUE_ROW_SLOTS,
   TWIN_VIEW_BINDINGS,
   anchorRowFieldKey,
@@ -16,6 +17,7 @@ export {
   flowRowFieldKey,
   hierRowFieldKey,
   panelRowFieldKey,
+  partRowFieldKey,
 } from './constants'
 export type {
   TwinAnchorRowSlot,
@@ -50,6 +52,7 @@ export {
 } from './flowColors'
 export {
   TWIN_CLIP_AXES,
+  TWIN_LEGEND_GROUPS,
   clipPlaneFor,
   collectSceneLegend,
   formatMeasureDistance,
@@ -62,6 +65,7 @@ export type {
   TwinClipAxis,
   TwinClipPlane,
   TwinLegendEntry,
+  TwinLegendGroup,
   TwinSearchHit,
   TwinSearchSource,
 } from './sceneTools'
@@ -112,6 +116,18 @@ export {
 export type { TwinRoamPhase, TwinRoamSegment } from './roamTimeline'
 export { ALWAYS_VISIBLE, NO_CLICK_LIMIT } from './normalizeRules'
 export {
+  DEFAULT_PART_LOOK,
+  DEFAULT_TINT_GRADIENT,
+  normalizePartLook,
+  normalizePartTint,
+} from './normalizeParts'
+export {
+  partAppearance,
+  partTintColor,
+  tintStopText,
+  tintedParts,
+} from './partTint'
+export {
   TWIN_BILLBOARD_MODES,
   TWIN_COORD_FRAMES,
   TWIN_DISTANCE_REFS,
@@ -122,6 +138,8 @@ export {
   TWIN_PANEL_ORIENTS,
   TWIN_PANEL_VARIANTS,
   TWIN_PEDESTAL_REFLECTIONS,
+  TWIN_TINT_MATCHES,
+  TWIN_TINT_MODES,
   TWIN_VIEWPOINT_MODES,
 } from './types'
 export type {
@@ -161,12 +179,22 @@ export type {
   TwinPanelValues,
   TwinPanelVariant,
   TwinPart,
+  TwinPartAppearance,
+  TwinPartColor,
+  TwinPartLook,
+  TwinPartTint,
+  TwinPartValue,
+  TwinPartValues,
   TwinPedestal,
   TwinPedestalReflection,
   TwinRoamTour,
   TwinRoamTourSegment,
   TwinSceneEffects,
   TwinStarfield,
+  TwinTintGradient,
+  TwinTintMatch,
+  TwinTintMode,
+  TwinTintStop,
   TwinViewpointMode,
   TwinVisibilityFade,
   TwinVisibilityRule,
@@ -179,6 +207,7 @@ export {
   EMPTY_FLOW_VALUES,
   EMPTY_HIER_VALUES,
   EMPTY_PANEL_VALUES,
+  EMPTY_PART_VALUES,
   formatAnchorText,
   formatArrowText,
   formatValueText,
@@ -187,6 +216,7 @@ export {
   stitchFlowValues,
   stitchHierValues,
   stitchPanelValues,
+  stitchPartValues,
 } from './twinMath'
 export type { ValueFormat } from './twinMath'
 export { twinSceneValues } from './sceneValues'

@@ -178,7 +178,91 @@ export interface TwinClickDistanceRule {
 }
 
 /**
- * 部件：模型内一组节点的唯一可寻址单元，显隐指向它。
+ * 部件常态外观：不随实时值变的那一份。
+ *
+ * ⚠ `color` 空串 = 不染色，而不是「染成黑色」：一份没配过的部件必须保持模型
+ * 自带的材质外观。空串与 `#000000` 分不开的话，新建部件会整片变黑。
+ * ⚠ `blend` 与 `glow` 只在**有色**时才起作用（常态色或状态染色命中）：
+ * 它们回答的是「染得多浓」，不是「染不染」。
+ */
+export interface TwinPartLook {
+  /** 不透明度倍率 [0,1]，乘在模型自带的不透明度上；1 = 不动它。 */
+  opacity: number
+  /** 常态色规格 `#rrggbb` 或 `--token`；空串 = 保留模型原色。 */
+  color: string
+  /** 染色浓度 [0,1]：0 完全是原色，1 完全换成染色。 */
+  blend: number
+  /** 自发光强度 [0,3]，0 = 不发光；发光色就是当前的染色。 */
+  glow: number
+}
+
+/**
+ * 一档取色的命中方式。
+ * `range` 落在 [from, to) 里（两端都可空 = 那一侧不设限），
+ * `equals` 与 `equals` 相等（数值可比时按数值比，否则按不分大小写的字符串比）。
+ */
+export const TWIN_TINT_MATCHES = ['range', 'equals'] as const
+export type TwinTintMatch = (typeof TWIN_TINT_MATCHES)[number]
+
+/**
+ * 一档取色：命中条件 + 颜色。
+ * ⚠ 上界 `to` **不含**：温度档配 `[60,80)` 与 `[80,∞)` 时，80 归后一档。
+ * 两档都含 80 的话，边界值归谁取决于档位顺序，而那是用户看不见的。
+ */
+export interface TwinTintStop {
+  id: string
+  match: TwinTintMatch
+  /** `range` 的下界，含；null = 不设下界。 */
+  from: number | null
+  /** `range` 的上界，不含；null = 不设上界。 */
+  to: number | null
+  /** `equals` 的比较值；原样存字符串，数值与状态码共用一个输入框。 */
+  equals: string
+  /** 命中时的颜色规格 `#rrggbb` 或 `--token`。 */
+  color: string
+  /** 这一档的说明，图例与诊断上显示；空串 = 只显示颜色。 */
+  label: string
+}
+
+/** 渐变取色的两端与区间。 */
+export interface TwinTintGradient {
+  /** 区间下端，对应 `from` 色。 */
+  min: number
+  /** 区间上端，对应 `to` 色。 */
+  max: number
+  from: string
+  to: string
+}
+
+/**
+ * 取色方式：`stops` 逐档比对（状态码与数值分档都走它），
+ * `gradient` 在区间内连续插值。
+ */
+export const TWIN_TINT_MODES = ['stops', 'gradient'] as const
+export type TwinTintMode = (typeof TWIN_TINT_MODES)[number]
+
+/**
+ * 部件按实时值取色的规则。`null`（在 `TwinPart.tint` 上）= 这个部件不取数。
+ *
+ * ⚠ 配了它的部件才占一行 `partValues` 绑定：没有规则却摆一个绑定槽，
+ * 用户绑完点位看到的是「绑了没反应」，比缺一个功能更难查。
+ * ⚠ 档位**自上而下取第一个命中的**：区间重叠时靠顺序定胜负，所以档位顺序
+ * 是配置的一部分，不许在渲染层重排。
+ */
+export interface TwinPartTint {
+  mode: TwinTintMode
+  stops: TwinTintStop[]
+  gradient: TwinTintGradient
+  /**
+   * 一档都没命中、或取不到数时的颜色；空串 = 退回常态色。
+   * ⚠ 这一条不是摆设：点位掉线时若不显式回落，部件会停在最后一次命中的颜色上，
+   * 而屏幕上没有任何迹象说明那个颜色已经是陈旧的。
+   */
+  fallback: string
+}
+
+/**
+ * 部件：模型内一组节点的唯一可寻址单元，显隐、外观与染色都指向它。
  * ⚠ `nodes` 是模型文件里的对象名，本包看不见模型——模型里改了名字，
  * 这个部件就静默地什么都不再命中。
  */
@@ -187,6 +271,9 @@ export interface TwinPart {
   name: string
   nodes: string[]
   visibility: TwinVisibilityRule
+  look: TwinPartLook
+  /** 按实时值取色；null = 不取数，也不占绑定行。 */
+  tint: TwinPartTint | null
   clickDistance: TwinClickDistanceRule
   /**
    * 点它时打开层级钻取并落在这个钻取节点上；空串 = 只上抛联动事件、不开钻取。
@@ -194,6 +281,25 @@ export interface TwinPart {
    * 这种悬空由 `collectTwinConfigIssues` 报出来，渲染层不猜。
    */
   clickHierNode: string
+}
+
+/**
+ * 一个部件这一刻该染什么色。
+ * ⚠ 渐变给的是**两端加插值位置**而不是算好的颜色：两端可以是 `--token`，
+ * 而 token 的取值只有在有 CSS 级联的宿主里才解析得出来（本包无 DOM）。
+ * 在这里退回「只认 hex」的话，配了 token 的渐变会静默地一直用同一个色。
+ */
+export type TwinPartColor =
+  | { kind: 'none' }
+  | { kind: 'solid'; spec: string }
+  | { kind: 'mix'; from: string; to: string; t: number }
+
+/** 一个部件这一刻的完整外观，渲染层照着套。 */
+export interface TwinPartAppearance {
+  opacity: number
+  color: TwinPartColor
+  blend: number
+  glow: number
 }
 
 /** 锚点：世界坐标上的一个读数标签。 */
@@ -505,6 +611,14 @@ export interface TwinConfig {
   hierNodes: TwinHierNode[]
   folders: TwinOutlineFolder[]
 }
+
+/** 一个部件的实时值，状态染色按它取色。 */
+export interface TwinPartValue {
+  value: unknown
+}
+
+/** 部件实时值，按部件 id 索引。 */
+export type TwinPartValues = Readonly<Record<string, TwinPartValue>>
 
 /** 一个锚点的实时值。 */
 export interface TwinAnchorValue {

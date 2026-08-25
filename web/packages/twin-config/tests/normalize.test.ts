@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest'
 import { TWIN_CONFIG_VERSION } from '../src/constants'
 import { normalizeTwinConfig } from '../src/normalize'
 import { NO_CLICK_LIMIT } from '../src/normalizeRules'
+import { DEFAULT_PART_LOOK } from '../src/normalizeParts'
 import {
   DEFAULT_ROAM_TOUR_IDLE_DELAY_MS,
   DEFAULT_ROAM_TOUR_PAUSE_MS,
@@ -194,6 +195,8 @@ describe('normalizeTwinConfig 的实体', () => {
         name: '主机',
         nodes: ['pump'],
         visibility: shown(true),
+        look: DEFAULT_PART_LOOK,
+        tint: null,
         clickDistance: NO_CLICK_LIMIT,
         clickHierNode: '',
       },
@@ -203,6 +206,8 @@ describe('normalizeTwinConfig 的实体', () => {
         nodes: [],
         // 老写法 `visible: false` 仍然读得进来：存量手写配置不该一升级就全亮
         visibility: shown(false),
+        look: DEFAULT_PART_LOOK,
+        tint: null,
         clickDistance: NO_CLICK_LIMIT,
         clickHierNode: '',
       },

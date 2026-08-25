@@ -34,6 +34,10 @@ const OWNERS: Readonly<Record<string, readonly string[]>> = {
   TwinSceneEffects: ['fields/SceneEffectsFields.vue'],
   TwinPart: ['inspector/PartInspector.vue'],
   TwinClickDistanceRule: ['inspector/PartInspector.vue'],
+  TwinPartLook: ['fields/PartLookFields.vue'],
+  TwinPartTint: ['fields/PartTintFields.vue'],
+  TwinTintGradient: ['fields/PartTintFields.vue'],
+  TwinTintStop: ['fields/TintStopRow.vue'],
   TwinAnchor: ['inspector/AnchorInspector.vue'],
   TwinCamera: ['inspector/CameraInspector.vue'],
   TwinViewpointSwitcher: ['inspector/ViewpointsInspector.vue'],
@@ -93,8 +97,17 @@ const FIELDS = interfaceFields(readFileSync(TYPES, 'utf8'))
 /** 这些接口是取值用的，不是配置；不进覆盖检查。 */
 const VALUE_SHAPES = /Values?$/
 
+/**
+ * 由配置 + 实时值现算出来的形状，不是配置本身，因而没有「在哪改」可言。
+ * ⚠ 与上面的取值形状分开列：它们不叫 `*Value(s)`，靠命名认不出来。
+ */
+const DERIVED_SHAPES = new Set(['TwinPartAppearance'])
+
 const checked = [...FIELDS.keys()].filter(
-  (name) => !VALUE_SHAPES.test(name) && name !== 'TwinConfig',
+  (name) =>
+    !VALUE_SHAPES.test(name) &&
+    !DERIVED_SHAPES.has(name) &&
+    name !== 'TwinConfig',
 )
 
 describe('检查器覆盖了整份孪生契约', () => {
