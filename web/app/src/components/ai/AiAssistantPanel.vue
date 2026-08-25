@@ -95,7 +95,7 @@ watch(
 <template>
   <aside class="ai-panel" aria-label="AI 助手">
     <div class="ai-panel__bar">
-      <DtIcon name="sparkles" :size="16" class="ai-panel__badge" />
+      <DtIcon name="bot" :size="16" class="ai-panel__badge" />
       <span class="ai-panel__name">助手</span>
       <span class="ai-panel__where">{{ surfaceLabel }}</span>
       <DtButton
@@ -115,7 +115,7 @@ watch(
     <div ref="scroller" class="ai-panel__stream">
       <DtEmpty
         v-if="chat.entries.value.length === 0"
-        icon="sparkles"
+        icon="bot"
         title="说说你想做什么"
         hint="比如「把 1 号机组的温度绑到这个数值卡上」"
       />
@@ -169,8 +169,10 @@ watch(
   flex-direction: column;
   min-height: 0;
   height: 100%;
-  background: var(--surface-panel);
-  border-left: 1px solid var(--border-default);
+  /* ⚠ 这里**不再自己画背景**：面板既可能嵌在页面里，也可能浮在画布上，
+     而浮着的那一路由外面那层（AiDock）垫不透明底。自己再涂一层半透明的，
+     两层叠起来反而更浑。 */
+  background: transparent;
 }
 
 .ai-panel__bar {
@@ -178,7 +180,9 @@ watch(
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-default);
+  /* 标题栏压一层更实的底，滚动内容从它下面过时不会糊在一起 */
+  background: var(--surface-raised);
 }
 
 .ai-panel__badge {
@@ -217,7 +221,9 @@ watch(
 }
 
 .ai-said {
+  max-width: 92%;
   padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: var(--surface-sunken);
   color: var(--text-primary);
@@ -227,15 +233,21 @@ watch(
   word-break: break-word;
 }
 
+/* 自己说的那条：右对齐 + 一道左侧强调边。⚠ 不靠背景色区分——
+   `--surface-raised` 只有 15% 不透明度，在深色底上与助手那条几乎一个样，
+   而「谁说的」是这个面板最要紧的一件事。 */
 .ai-said--mine {
   align-self: flex-end;
-  max-width: 85%;
+  border-color: var(--border-strong);
+  border-left: 2px solid var(--accent-primary);
   background: var(--surface-raised);
   color: var(--text-title);
 }
 
 .ai-said--bad {
+  max-width: 100%;
   padding: 0;
+  border: 0;
   background: transparent;
 }
 
@@ -253,7 +265,8 @@ watch(
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem;
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--border-default);
+  background: var(--surface-raised);
 }
 
 .ai-panel__hint {
