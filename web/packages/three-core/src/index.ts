@@ -53,6 +53,13 @@ export type {
   SceneRenderer,
   SceneRendererFactory,
 } from './sceneCore'
+export {
+  glSnapshotsWithin,
+  registerCoreSnapshot,
+  registerGlSnapshot,
+  snapshotSceneCore,
+} from './glCapture'
+export type { GlSnapshotSource } from './glCapture'
 export { ACCENT_COLOR_TOKEN, resolveColorSpec } from './themeColor'
 export {
   configureTwinModelHost,

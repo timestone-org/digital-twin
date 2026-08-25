@@ -37,6 +37,7 @@ function fakeHandle(overrides: Partial<TwinViewportHandle> = {}) {
     snapshot: vi.fn(pose),
     playRoamPreview: vi.fn(() => true),
     stopRoamPreview: vi.fn(),
+    stageEl: vi.fn(() => null),
     ...overrides,
   }
 }

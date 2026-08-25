@@ -1,9 +1,10 @@
 """会话表：一次对话，属于一个用户，钉在一个工作面上。"""
 
 import uuid
+from typing import Any
 
 from sqlalchemy import Boolean, CheckConstraint, Integer, String, Text, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_assistant.apps.chat.enums import SURFACE_KINDS, sql_values
@@ -47,6 +48,11 @@ class ChatSession(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     # 最近一次失败的原因，给人看。⚠ 不带上游 URL 与密钥，只带能对外说的那一句
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 当前执行计划（ADR-0024）。落库不落内存——api 角色无状态，续跑可能落到
+    # 另一个副本上。没有计划就是 NULL，不填空对象
+    plan_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
 
     __table_args__ = (
         CheckConstraint(

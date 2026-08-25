@@ -5,6 +5,7 @@
  * 以及卸载后 rAF、Observer、监听与渲染上下文都停掉。
  */
 import type { GltfSource } from '../src/modelLoader'
+import { __resetGlSnapshots, glSnapshotsWithin } from '../src/glCapture'
 import { configureTwinModelHost, resetTwinModelHost } from '../src/host'
 import { WEBGL_UNAVAILABLE_MESSAGE } from '../src/sceneCore'
 import {
@@ -251,6 +252,7 @@ afterEach(() => {
   }
   resetTwinModelHost()
   vi.restoreAllMocks()
+  __resetGlSnapshots()
 })
 
 describe('降级与空态', () => {
@@ -959,5 +961,32 @@ describe('卸载收口', () => {
     click(harness, CENTER_X, CENTER_Y)
 
     expect(harness.events.select).not.toHaveBeenCalled()
+  })
+})
+
+describe('快照登记', () => {
+  it('挂载即以渲染器画布为 host 登记，卸载即注销', async () => {
+    const harness = await ready()
+
+    expect(glSnapshotsWithin(harness.container).map((one) => one.host)).toEqual(
+      [harness.canvas],
+    )
+
+    harness.scene.dispose()
+    expect(glSnapshotsWithin(harness.container)).toHaveLength(0)
+  })
+
+  it('WebGL 不可用时不登记：快照源必须真能出图', () => {
+    const container = document.createElement('div')
+    const scene = new EditorScene({
+      container,
+      config: twinConfig(),
+      on: createEvents(),
+      createRenderer: () => null,
+      gltfSource: { loadAsync: vi.fn() },
+    })
+
+    expect(glSnapshotsWithin(container)).toHaveLength(0)
+    scene.dispose()
   })
 })

@@ -97,6 +97,11 @@ export interface AdvanceBody {
    * 两下之后读到的是一屏过期的画布。
    */
   surface_context?: Record<string, unknown>
+  /**
+   * 这一页实现了哪些客户端工具，每轮自报；没实现的模型看不见。
+   * ⚠ 空数组与不带是两回事：空数组 = 这一页明说一个客户端工具都没有。
+   */
+  client_tools?: string[]
   user_text?: string
   tool_results?: {
     call_id: string

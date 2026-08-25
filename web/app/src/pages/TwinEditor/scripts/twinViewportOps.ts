@@ -15,7 +15,7 @@ import type { TwinEntityKind, TwinSelection } from './types'
 type CameraPose = { position: Vec3; target: Vec3; fov: number }
 
 /**
- * 视口对外的四个命令。
+ * 视口对外的那几个命令。
  * ⚠ 手工与 `TwinViewport` 的 `defineExpose` 对齐：`InstanceType<typeof 组件>`
  * 取不到 `defineExpose` 的类型（会塌成 any），写错了 typecheck 与 lint 都不拦。
  */
@@ -24,6 +24,8 @@ export interface TwinViewportHandle {
   snapshot: () => CameraPose
   playRoamPreview: () => boolean
   stopRoamPreview: () => void
+  /** 视口的宿主元素；助手截图拿它当截图根。 */
+  stageEl: () => HTMLElement | null
 }
 
 export interface TwinViewportOps {

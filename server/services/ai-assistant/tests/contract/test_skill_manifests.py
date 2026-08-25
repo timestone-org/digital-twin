@@ -7,42 +7,18 @@
 
 from ai_assistant.apps.chat.enums import SURFACE_KINDS
 from ai_assistant.apps.chat.services import skill_catalog
+from ai_assistant.apps.chat.services.tool_specs import TOOL_SPECS
 from ai_assistant.apps.chat.skills import list_skills
 
-# 服务端工具的登记名。⚠ 新增工具要同时进这里与技能清单，两边不符即红
+# 登记名直接取自工具规格真源。⚠ 不许手抄一份：手抄的名单会让「技能声明了、
+# 规格里没有」的幽灵工具在这道闸下安然过关
 KNOWN_SERVER_TOOLS = frozenset(
-    {
-        "points.list_sources",
-        "points.search",
-        "attachment.read_table",
-        "dashboard.validate",
-        "modules.catalog",
-        "formula.catalog",
-        "formula.validate",
-        "formula.preview",
-    }
+    spec.name for spec in TOOL_SPECS if spec.runs_on == "server"
 )
 
-# 客户端工具的登记名。它们由浏览器执行，前端的工作面必须实现同名的那一份
+# 客户端工具由浏览器执行，前端的工作面必须实现同名的那一份
 KNOWN_CLIENT_TOOLS = frozenset(
-    {
-        "dashboard.read_canvas",
-        "dashboard.read_bindings",
-        "dashboard.read_config",
-        "dashboard.chrome_keys",
-        "dashboard.write_binding",
-        "dashboard.remove_binding",
-        "dashboard.add_config_item",
-        "dashboard.remove_config_item",
-        "dashboard.add_module",
-        "dashboard.remove_node",
-        "dashboard.set_config",
-        "dashboard.set_geometry",
-        "dashboard.arrange",
-        "dashboard.capture",
-        "dataset.read_columns",
-        "dataset.propose_formula",
-    }
+    spec.name for spec in TOOL_SPECS if spec.runs_on == "client"
 )
 
 

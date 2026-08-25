@@ -116,6 +116,7 @@ const SHAPES: Record<string, Record<string, true>> = {
     created_at: true,
     updated_at: true,
     messages: true,
+    plan_json: true,
   } satisfies Keys<AssistantSessionDetail>,
   MessageOut: {
     id: true,

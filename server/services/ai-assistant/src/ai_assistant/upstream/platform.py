@@ -26,6 +26,7 @@ _SOURCES = "/api/v1/platform/collect-sources"
 _DASHBOARDS = "/api/v1/platform/dashboards"
 _MODULES = "/api/v1/platform/module-types"
 _TABLES = "/api/v1/platform/dataset-tables"
+_ASSETS = "/api/v1/platform/assets"
 
 
 class PlatformUnavailable(DependencyUnavailable):
@@ -156,6 +157,84 @@ class PlatformClient:
             f"{_TABLES}/{table_id}/formula:preview", headers, body
         )
 
+    async def list_dashboards(
+        self,
+        headers: dict[str, str],
+        *,
+        keyword: str | None = None,
+        project_id: str | None = None,
+    ) -> object:
+        """翻第一页大屏清单。回整个分页体，`total` 留给调用方做截断说明。
+
+        Args: headers, keyword（按名字模糊筛）, project_id（限定项目）。
+        """
+        query: dict[str, Any] = {"page": 1, "size": self._page_size}
+        if keyword:
+            query["q"] = keyword
+        if project_id:
+            query["project_id"] = project_id
+        return await self._get(_DASHBOARDS, query, headers)
+
+    async def list_dataset_tables(
+        self, headers: dict[str, str], *, keyword: str | None = None
+    ) -> object:
+        """翻第一页台账清单。回整个分页体，`total` 留给调用方做截断说明。
+
+        Args: headers, keyword（按名称与编码模糊筛）。
+        """
+        query: dict[str, Any] = {"page": 1, "size": self._page_size}
+        if keyword:
+            query["q"] = keyword
+        return await self._get(_TABLES, query, headers)
+
+    async def list_dataset_columns(
+        self, headers: dict[str, str], table_id: str
+    ) -> list[object]:
+        """一张台账已保存的全部列。集合有界，上游不分页。
+
+        Args: headers, table_id。
+        """
+        body = await self._get(f"{_TABLES}/{table_id}/columns", {}, headers)
+        return _rows_of(body)
+
+    async def list_assets(
+        self,
+        headers: dict[str, str],
+        *,
+        keyword: str | None = None,
+        kind: str | None = None,
+        limit: int = 50,
+    ) -> list[object]:
+        """按关键词与类型列素材，新的在前。上游不给总数，只给这一窗。
+
+        Args: headers, keyword（按名字模糊筛）, kind（素材类型）, limit。
+        """
+        query: dict[str, Any] = {"limit": limit, "offset": 0}
+        if keyword:
+            query["q"] = keyword
+        if kind:
+            query["kind"] = kind
+        return _rows_of(await self._get(_ASSETS, query, headers))
+
+    async def find_point(
+        self, headers: dict[str, str], *, source_id: str, code: str
+    ) -> object | None:
+        """按 `(source_id, code)` 找那一个点位；没有就给 None。
+
+        ⚠ 上游没有按编码精确取一条的端点，`q` 是名字/编码的模糊匹配；
+        这里先按 `q=code` 缩一页，再本地按编码逐字比对。
+
+        Args: headers, source_id, code。
+        """
+        query: dict[str, Any] = {
+            "page": 1,
+            "size": self._page_size,
+            "source_id": source_id,
+            "q": code,
+        }
+        rows = _items_of(await self._get(_POINTS, query, headers))
+        return next((row for row in rows if _code_of(row) == code), None)
+
     async def validate_dashboard(
         self, headers: dict[str, str], dashboard_id: str
     ) -> object:
@@ -249,6 +328,27 @@ def _items_of(body: object) -> list[object]:
     if not isinstance(items, list):
         return []
     return cast("list[object]", items)
+
+
+def _rows_of(body: object) -> list[object]:
+    """收下「data 直接就是数组」的响应体；不是数组就当空。
+
+    Args: body。
+    """
+    if not isinstance(body, list):
+        return []
+    return cast("list[object]", body)
+
+
+def _code_of(row: object) -> str | None:
+    """取一行点位的编码，取不出就给 None。
+
+    Args: row。
+    """
+    if not isinstance(row, dict):
+        return None
+    code = cast("dict[str, object]", row).get("code")
+    return code if isinstance(code, str) else None
 
 
 def _reason(error: Exception) -> str:

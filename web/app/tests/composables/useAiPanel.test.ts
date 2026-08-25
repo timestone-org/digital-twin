@@ -1,13 +1,15 @@
 /**
  * @fileoverview 契约：助手面板的装配那一层。
  *
- * 三条：工作面**挂载时登记、卸载时撤掉**（不撤的话助手仍握着一份指向已经没了
+ * 四条：工作面**挂载时登记、卸载时撤掉**（不撤的话助手仍握着一份指向已经没了
  * 的页面的句柄）；探测失败一律读成「这套部署没有助手」而不是「暂时故障」；
- * 连点两下不许建出两个会话（第二个拿着一段空历史，用户看不出自己在跟哪一个说话）。
+ * 连点两下不许建出两个会话（第二个拿着一段空历史，用户看不出自己在跟哪一个说话）；
+ * 打开面板要把库里的历史回放出来，且回放失败不挡打开、已有内容不重复灌。
  */
 import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
+import type { AssistantMessage, AssistantSessionDetail } from '@dt/contracts'
 
 import * as api from '@/api/assistant'
 import { useAiPanel, type AiPanel } from '@/composables/useAiPanel'
@@ -45,13 +47,51 @@ function setup(): Harness {
   return { panel, wrapper }
 }
 
+/** 库里的一条消息。 */
+function said(role: string, text: string, seq: number): AssistantMessage {
+  return {
+    id: `m${seq}`,
+    session_id: 's1',
+    seq,
+    role,
+    content_json: { text },
+    usage_json: null,
+    steps: [],
+    created_at: '',
+  }
+}
+
+/** 库里的一份会话详情。 */
+function detailOf(
+  messages: AssistantMessage[],
+  plan: AssistantSessionDetail['plan_json'] = null,
+): AssistantSessionDetail {
+  return {
+    id: 's1',
+    user_id: 'u1',
+    title: '',
+    surface_kind: 'dashboard-editor',
+    surface_ref: 'db1',
+    is_archived: false,
+    row_version: 1,
+    last_error: null,
+    created_at: '',
+    updated_at: '',
+    messages,
+    plan_json: plan,
+  }
+}
+
 let created: ReturnType<typeof vi.fn>
+let readBack: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   __resetAiPorts()
   __resetSurfaces()
   created = vi.fn().mockResolvedValue({ id: 's1' })
+  readBack = vi.fn().mockResolvedValue(null)
   vi.spyOn(api, 'createSession').mockImplementation(created)
+  vi.spyOn(api, 'readSession').mockImplementation(readBack)
 })
 
 afterEach(() => {
@@ -144,6 +184,74 @@ describe('打开面板', () => {
     await expect(ctx.panel.open()).rejects.toThrow()
     expect(ctx.panel.isOpen.value).toBe(false)
     expect(ctx.panel.sessionId.value).toBeNull()
+    ctx.wrapper.unmount()
+  })
+})
+
+describe('回放历史', () => {
+  it('打开面板时把库里的历史与计划灌回时间线', async () => {
+    const plan = {
+      title: '绑三个点',
+      state: 'active' as const,
+      items: [{ title: '查点位', status: 'done' as const, note: '' }],
+    }
+    readBack.mockResolvedValue(
+      detailOf(
+        [said('user', '帮我绑点', 1), said('assistant', '好的', 2)],
+        plan,
+      ),
+    )
+    const ctx = setup()
+    await ctx.panel.open()
+    expect(ctx.panel.chat.entries.value.map((one) => one.text)).toEqual([
+      '帮我绑点',
+      '好的',
+    ])
+    expect(ctx.panel.chat.plan.value).toEqual(plan)
+    ctx.wrapper.unmount()
+  })
+
+  it('读不回历史不挡打开面板，只在时间线上说一句', async () => {
+    readBack.mockRejectedValue(new Error('网断了'))
+    const ctx = setup()
+    await ctx.panel.open()
+    expect(ctx.panel.isOpen.value).toBe(true)
+    const roles = ctx.panel.chat.entries.value.map((one) => one.role)
+    expect(roles).toEqual(['note'])
+    ctx.wrapper.unmount()
+  })
+
+  it('时间线已经有内容时不重复灌（来回开合面板）', async () => {
+    readBack.mockResolvedValue(detailOf([said('user', '帮我绑点', 1)]))
+    const ctx = setup()
+    await ctx.panel.open()
+    ctx.panel.close()
+    await ctx.panel.open()
+    // 再读一次库的话，屏上同一段历史会出现两遍
+    expect(readBack).toHaveBeenCalledTimes(1)
+    expect(ctx.panel.chat.entries.value).toHaveLength(1)
+    ctx.wrapper.unmount()
+  })
+
+  it('上一次读取还没回来又开了一次：后一次为准', async () => {
+    let settleFirst!: (given: AssistantSessionDetail) => void
+    const first = new Promise<AssistantSessionDetail>((resolve) => {
+      settleFirst = resolve
+    })
+    readBack
+      .mockImplementationOnce(() => first)
+      .mockResolvedValueOnce(detailOf([said('user', '新历史', 1)]))
+    const ctx = setup()
+    const opened = ctx.panel.open()
+    // 等第一次读取真的发出去（open 会一直等在它上面）
+    await vi.waitFor(() => expect(readBack).toHaveBeenCalledTimes(1))
+    await ctx.panel.open()
+    settleFirst(detailOf([said('user', '旧历史', 1)]))
+    await opened
+    // 旧响应不许盖掉新的，也不许再叠一份
+    expect(ctx.panel.chat.entries.value.map((one) => one.text)).toEqual([
+      '新历史',
+    ])
     ctx.wrapper.unmount()
   })
 })

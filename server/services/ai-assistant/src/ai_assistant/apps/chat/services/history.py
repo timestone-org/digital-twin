@@ -72,6 +72,23 @@ def replay(rows: list[ChatMessage]) -> list[BaseMessage]:
     return [to_message(row) for row in sorted(rows, key=lambda one: one.seq)]
 
 
+def window(rows: list[ChatMessage], limit: int) -> list[ChatMessage]:
+    """取最近的一截历史，且**不许把工具调用与它的回应切开**。
+
+    ⚠ 裸切片的切点可能落在「带工具调用的助手消息」与它的工具回应之间——
+    窗口于是以几条孤儿工具消息开头，端点直接判请求不合法，报出来的 400 与
+    真实原因毫无关系，且回合越长越容易触发。掐掉头部的孤儿工具消息即可：
+    窗口保住的是尾部，助手消息在窗口里时它的回应一定也在。
+
+    Args: rows, limit。
+    """
+    recent = sorted(rows, key=lambda one: one.seq)[-limit:]
+    start = 0
+    while start < len(recent) and recent[start].role == _TOOL:
+        start += 1
+    return recent[start:]
+
+
 def _text_of(message: BaseMessage) -> str:
     """一条消息落库时留下的那段文字。
 

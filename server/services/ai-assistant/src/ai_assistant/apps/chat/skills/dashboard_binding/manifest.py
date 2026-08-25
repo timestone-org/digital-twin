@@ -16,7 +16,6 @@ DASHBOARD_BINDING = SkillManifest(
     server_tools=(
         "points.list_sources",
         "points.search",
-        "attachment.read_table",
         "dashboard.validate",
     ),
     client_tools=(

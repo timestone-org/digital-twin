@@ -9,19 +9,22 @@
  * 把它们与一次对话接起来。
  */
 import { computed, ref } from 'vue'
-import type { AssistantSurfaceKind } from '@dt/contracts'
 import { DtButton, DtFilePicker, DtNotice, DtSpinner, DtTextarea } from '@dt/ui'
 
 import { parseAttachment } from '@/api/assistant'
 import AiCoreIcon from '@/components/ai/AiCoreIcon.vue'
+import AiPlanCard from '@/components/ai/AiPlanCard.vue'
 import AiTimeline from '@/components/ai/AiTimeline.vue'
 import { toBase64 } from '@/features/ai/attachment'
-import { useAiConversation } from '@/composables/useAiConversation'
+import type { AiConversation } from '@/composables/useAiConversation'
 
 const props = defineProps<{
-  surfaceKind: AssistantSurfaceKind
+  /**
+   * 这一页的那段对话。⚠ 由 useAiPanel 持有而不是这里造：面板收起就卸载，
+   * 对话（时间线与计划）不能跟着没。
+   */
+  chat: AiConversation
   surfaceLabel: string
-  sessionId: string | null
   /** 摆在输入框上方的一句提醒，各页面自己给。 */
   hint?: string
   /** 面板此刻是不是放大着。宽窄由外面的 dock 管，这里只画那个按钮。 */
@@ -32,20 +35,15 @@ const emit = defineEmits<{ close: []; 'toggle-wide': [] }>()
 
 const draft = ref('')
 
-const chat = useAiConversation(
-  () => props.sessionId,
-  () => ({ kind: props.surfaceKind, label: props.surfaceLabel }),
-)
-
 const canSend = computed(
-  () => draft.value.trim() !== '' && !chat.isRunning.value,
+  () => draft.value.trim() !== '' && !props.chat.isRunning.value,
 )
 
 async function send(): Promise<void> {
   if (!canSend.value) return
   const text = draft.value.trim()
   draft.value = ''
-  await chat.send(text)
+  await props.chat.send(text)
 }
 
 const attaching = ref(false)
@@ -102,6 +100,8 @@ async function attach(files: File[]): Promise<void> {
         收起
       </DtButton>
     </div>
+
+    <AiPlanCard v-if="chat.plan.value !== null" :plan="chat.plan.value" />
 
     <AiTimeline :entries="chat.entries.value" />
 

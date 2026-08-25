@@ -189,7 +189,6 @@ onMounted(() => {
     />
     <AiDock
       :ai="ai.panel"
-      surface-kind="dataset-table"
       surface-label="台账详情"
       hint="助手只提议公式，落库要你自己点确认。"
     />

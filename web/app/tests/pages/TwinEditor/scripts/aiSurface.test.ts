@@ -3,8 +3,8 @@
  *
  * 守的是这一页最容易静默出错的那件事：数组绑定的行号是文档序，实体本身不在
  * fieldKey 里露面。按行号猜的结果是每一条绑定都有值、却全接错了对象，
- * 而界面上看不出来。另守一条：这一页**没有截图工具**——视口是 WebGL，
- * 给一个永远出白图的工具比不给更糟。
+ * 而界面上看不出来。另守一条：截图走与大屏同一份口径，交出去的是裸的
+ * dataUrl 串，且截的根是视口宿主。
  */
 import { describe, expect, it, vi } from 'vitest'
 import type { AssistantToolCall, BindingPayload } from '@dt/contracts'
@@ -12,6 +12,10 @@ import { normalizeTwinConfig, type TwinConfig } from '@dt/twin-config'
 
 import { createBinding } from '@/features/dashboard/editorDoc'
 import { createTwinSurface } from '@/pages/TwinEditor/scripts/aiSurface'
+
+const captureCanvas = vi.hoisted(() => vi.fn())
+
+vi.mock('@/features/ai/captureWithGl', () => ({ captureCanvas }))
 
 function config(): TwinConfig {
   return normalizeTwinConfig({
@@ -28,13 +32,15 @@ function call(name: string, args: Record<string, unknown>): AssistantToolCall {
 
 function setup(bindings: BindingPayload[] = []) {
   const write = vi.fn<(binding: BindingPayload) => void>()
+  const stageEl = document.createElement('div')
   const surface = createTwinSurface({
     config: () => config(),
     bindings: () => bindings,
     write,
     nodeId: () => 'n1',
+    stage: () => stageEl,
   })
-  return { surface, write }
+  return { surface, write, stageEl }
 }
 
 describe('读场景', () => {
@@ -52,6 +58,7 @@ describe('读场景', () => {
       bindings: () => [],
       write: vi.fn(),
       nodeId: () => 'n1',
+      stage: () => null,
     })
     const shot = (await surface.run(
       call('dashboard.read_canvas', {}),
@@ -135,12 +142,23 @@ describe('写绑定', () => {
   })
 })
 
-describe('这一页没有截图', () => {
-  it('叫它一律抛', async () => {
+describe('截视口', () => {
+  it('以视口宿主为根截图，交出去的是裸的 dataUrl 串', async () => {
+    captureCanvas.mockResolvedValue('data:image/png;base64,iVBORw0KGgo=')
+    const { surface, stageEl } = setup()
+
+    const got = await surface.run(call('dashboard.capture', {}))
+
+    expect(got).toBe('data:image/png;base64,iVBORw0KGgo=')
+    expect(captureCanvas).toHaveBeenCalledWith(stageEl)
+  })
+
+  it('截不到时如实抛，不给一张空图', async () => {
+    captureCanvas.mockRejectedValue(new Error('画布还没准备好，截不到图'))
     const { surface } = setup()
-    // 视口是 WebGL，截图库取到的一定是空的；给一个永远出白图的工具更糟
+
     await expect(surface.run(call('dashboard.capture', {}))).rejects.toThrow(
-      /dashboard\.capture/,
+      /截不到/,
     )
   })
 })

@@ -5,13 +5,27 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ref } from 'vue'
-import { PERMISSION_CODES } from '@dt/contracts'
+import { computed, ref } from 'vue'
+import { PERMISSION_CODES, type AssistantPlan } from '@dt/contracts'
 
 import AiCoreIcon from '@/components/ai/AiCoreIcon.vue'
 import AiDock from '@/components/ai/AiDock.vue'
+import type { AiConversation, ChatEntry } from '@/composables/useAiConversation'
 import type { AiPanel } from '@/composables/useAiPanel'
 import { useAuthStore } from '@/stores/auth'
+
+function fakeChat(): AiConversation {
+  return {
+    entries: computed<readonly ChatEntry[]>(() => []),
+    isRunning: ref(false),
+    plan: ref<AssistantPlan | null>(null),
+    send: vi.fn(() => Promise.resolve()),
+    stop: vi.fn(),
+    clear: vi.fn(),
+    restore: vi.fn(),
+    note: vi.fn(),
+  }
+}
 
 function fakeAi(open = false, available = true): AiPanel {
   const isOpen = ref<boolean>(open)
@@ -19,6 +33,7 @@ function fakeAi(open = false, available = true): AiPanel {
     isAvailable: ref<boolean>(available),
     isOpen,
     sessionId: ref<string | null>(null),
+    chat: fakeChat(),
     open: vi.fn(() => {
       isOpen.value = true
       return Promise.resolve()

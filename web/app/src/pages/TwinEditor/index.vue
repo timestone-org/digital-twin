@@ -103,9 +103,6 @@ const binding = useTwinBindings(
   () => config.value,
 )
 
-// 助手：这一页只有绑点，没有截图（视口是 WebGL，截图库取到的一定是空的）
-const ai = useTwinAi(page, binding, () => config.value)
-
 const viewport = createTwinViewportOps({
   config: () => config.value,
   actions: () => actions.value,
@@ -116,6 +113,14 @@ const viewport = createTwinViewportOps({
 // ⚠ 模板里的 `ref="viewportRef"` 只认得顶层绑定，写成 `viewport.viewportRef`
 // 会被当成一个字符串 ref 名，视口句柄永远是 null
 const viewportRef = viewport.viewportRef
+
+// 助手：绑点 + 截视口（WebGL 走场景登记的快照替身，见 captureWithGl）
+const ai = useTwinAi(
+  page,
+  binding,
+  () => config.value,
+  () => viewportRef.value?.stageEl() ?? null,
+)
 
 function select(next: TwinSelection): void {
   selection.value = next

@@ -23,11 +23,17 @@ from langchain_core.messages import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_assistant.apps.chat.crud import session_crud
-from ai_assistant.apps.chat.models import ChatMessage, ChatStep
-from ai_assistant.apps.chat.services import history, vision
+from ai_assistant.apps.chat.models import ChatMessage, ChatSession, ChatStep
+from ai_assistant.apps.chat.services import (
+    history,
+    tool_select,
+    vision,
+)
+from ai_assistant.apps.chat.services import (
+    plan as plan_service,
+)
 from ai_assistant.apps.chat.services.prompt import build_system_prompt
 from ai_assistant.apps.chat.services.server_tools import ServerTools
-from ai_assistant.apps.chat.services.tool_specs import TOOL_SPECS
 from ai_assistant.apps.chat.services.turn import (
     ServerToolRunner,
     TurnDeps,
@@ -114,6 +120,8 @@ class AdvanceInput:
     # 提示词每一轮现拼，只在第一轮带的话，助手动了两下之后看到的就是一屏
     # 它自己都不知道改成什么样了的画布
     surface_context: dict[str, Any] | None = None
+    # 这一页实现了哪些客户端工具（前端自报）。None = 老前端，退回技能声明推导
+    client_tools: list[str] | None = None
 
 
 def incoming_messages(payload: AdvanceInput) -> list[BaseMessage]:
@@ -144,21 +152,28 @@ async def load_context(
 ) -> list[BaseMessage]:
     """系统提示词 + 一段历史 + 这一次的输入。
 
-    ⚠ 历史只带最近的一截。全带的话，一个跑了几十轮的会话会把上下文占满，
+    ⚠ 历史只带最近的一截，且截断点不许把工具调用与它的回应切开
+    （`history.window`）。全带的话，一个跑了几十轮的会话会把上下文占满，
     而被挤掉的是**这一轮的工作面快照**——模型于是对着一屏它看不见的画布动手。
 
     Args: session, chat_session_id, payload。
     """
     rows = await session_crud.messages_of(session, chat_session_id)
-    recent = rows[-MAX_HISTORY_MESSAGES:]
+    recent = history.window(rows, MAX_HISTORY_MESSAGES)
+    row = await session.get(ChatSession, chat_session_id)
     system = SystemMessage(
         content=build_system_prompt(
             payload.surface_kind,
             surface_label=payload.surface_label,
             context=payload.surface_context,
+            plan=row.plan_json if row is not None else None,
         )
     )
     return [system, *history.replay(recent), *incoming_messages(payload)]
+
+
+# 一次推进往外吐的东西：回合事件，外加计划快照
+AdvanceEvent = TurnEvent | plan_service.PlanUpdate
 
 
 async def advance(
@@ -166,7 +181,7 @@ async def advance(
     *,
     chat_session_id: uuid.UUID,
     payload: AdvanceInput,
-) -> AsyncIterator[TurnEvent]:
+) -> AsyncIterator[AdvanceEvent]:
     """推进一个回合，边跑边吐，最后落库。
 
     ⚠ 增量**不进落库那一摞**：回合结束时落的是攒齐的那条助手消息，增量只是
@@ -179,10 +194,13 @@ async def advance(
         messages = await load_context(
             session, chat_session_id=chat_session_id, payload=payload
         )
+    plans = plan_service.PlanTools(
+        sessions=deps.sessions, chat_session_id=chat_session_id
+    )
     turn = TurnDeps(
         model=deps.model,
-        specs=TOOL_SPECS,
-        run_tool=deps.server_tools,
+        specs=tool_select.specs_for(payload.surface_kind, payload.client_tools),
+        run_tool=_with_plan_tools(plans, deps.server_tools),
         # 带图的这一轮走视觉档。⚠ 不能整个会话都走：视觉模型的单价与延迟都
         # 高得多，一次截图之后每一句闲聊都按视觉计费
         kind="vision" if has_image(payload) else "chat",
@@ -196,6 +214,9 @@ async def advance(
         if isinstance(item, TurnStep):
             produced.append(item)
         yield item
+        # 计划刚写完的那一步后面紧跟一帧快照：前端的清单与步骤同步长
+        if _wrote_plan(item) and plans.latest is not None:
+            yield plan_service.PlanUpdate(plan=plans.latest)
     if outcome is not None:
         await _persist(
             deps,
@@ -205,6 +226,37 @@ async def advance(
             steps=produced,
         )
         yield outcome
+
+
+def _wrote_plan(item: AdvanceEvent) -> bool:
+    """这一件产出是不是一次成功的计划写入。
+
+    Args: item。
+    """
+    return (
+        isinstance(item, TurnStep)
+        and plan_service.is_plan_tool(item.name)
+        and item.state == "succeeded"
+    )
+
+
+def _with_plan_tools(
+    plans: plan_service.PlanTools, base: ServerToolRunner
+) -> ServerToolRunner:
+    """计划工具就地拦下，其余交给原来的执行面。
+
+    ⚠ 不并进 `ServerTools`：计划写的是本服务自己的库，那一包按「转发身份头
+    打 platform」组织，混在一起两种失败就分不开档了。
+
+    Args: plans, base。
+    """
+
+    async def run(name: str, arguments: dict[str, Any]) -> Any:
+        if plan_service.is_plan_tool(name):
+            return await plans.run(name, arguments)
+        return await base(name, arguments)
+
+    return run
 
 
 def has_image(payload: AdvanceInput) -> bool:

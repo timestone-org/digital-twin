@@ -23,6 +23,8 @@ EVENT_STEP = "step"
 EVENT_CLIENT_TOOL = "client_tool.request"
 EVENT_DONE = "turn.done"
 EVENT_ERROR = "error"
+# 计划变了：整份快照下发，前端不做增量合并（ADR-0024）
+EVENT_PLAN = "plan"
 
 EVENT_NAMES = (
     EVENT_DELTA,
@@ -30,6 +32,7 @@ EVENT_NAMES = (
     EVENT_CLIENT_TOOL,
     EVENT_DONE,
     EVENT_ERROR,
+    EVENT_PLAN,
 )
 
 
@@ -93,6 +96,14 @@ def outcome_frame(outcome: TurnOutcome) -> str:
             },
         )
     return frame(EVENT_DONE, {"reply": outcome.reply})
+
+
+def plan_frame(plan: dict[str, Any]) -> str:
+    """计划变了，把整份快照推出去。
+
+    Args: plan。
+    """
+    return frame(EVENT_PLAN, {"plan": plan})
 
 
 def error_frame(code: int, message: str, trace_id: str) -> str:

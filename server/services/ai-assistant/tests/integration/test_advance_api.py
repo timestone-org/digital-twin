@@ -353,3 +353,74 @@ async def test_a_screenshot_goes_to_the_vision_model_and_stays_out_of_the_db(
     # 几兆字节的 base64 存一次、每次重放再喂一遍，上下文与账单一起翻倍
     assert PNG not in stored
     assert "[截图]" in stored
+
+
+async def test_writing_a_plan_streams_a_snapshot_and_persists_it(
+    db_stack: DbStack,
+) -> None:
+    """计划全链路：`plan.write` 落库、`plan` 事件紧跟那一步、详情接口带得出来。
+
+    ⚠ 快照事件必须紧跟在写计划那一步后面：前端的清单与步骤是同一条时间线，
+    错开的话界面上是「步骤说写了计划，清单却还是旧的」。
+    """
+    model = ScriptedChat(
+        script=[
+            _asks(
+                "plan.write",
+                "c-plan",
+                title="绑完整屏",
+                items=[
+                    {"title": "读画布", "status": "in_progress"},
+                    {"title": "绑温度槽"},
+                ],
+            )
+        ],
+        reply=AIMessage(content="计划立好了"),
+    )
+    _install(db_stack, model)
+    session_id = await _new_session(db_stack.client)
+
+    events = await _advance(db_stack.client, session_id, user_text="把整屏绑好")
+
+    names = [name for name, _ in events]
+    step_at = names.index("step", names.index("step") + 1)  # 第二步是工具步
+    assert names[step_at + 1] == "plan"
+    plan = next(data for name, data in events if name == "plan")["plan"]
+    assert plan["state"] == "active"
+    assert [one["status"] for one in plan["items"]] == [
+        "in_progress",
+        "pending",
+    ]
+
+    detail = await db_stack.client.get(f"{SESSIONS_URL}/{session_id}")
+    assert detail.status_code == 200
+    stored = detail.json()["data"]["plan_json"]
+    assert stored is not None
+    assert stored["title"] == "绑完整屏"
+
+
+async def test_the_plan_reaches_the_next_rounds_prompt(
+    db_stack: DbStack,
+) -> None:
+    """上一轮立的计划要出现在下一轮的系统提示词里，且当前项被点名。"""
+    first = ScriptedChat(
+        script=[
+            _asks(
+                "plan.write",
+                "c-plan",
+                items=[{"title": "绑温度槽", "status": "in_progress"}],
+            )
+        ],
+        reply=AIMessage(content="开工"),
+    )
+    _install(db_stack, first)
+    session_id = await _new_session(db_stack.client)
+    await _advance(db_stack.client, session_id, user_text="绑一下")
+
+    second = ScriptedChat(reply=AIMessage(content="继续"))
+    _install(db_stack, second)
+    await _advance(db_stack.client, session_id, user_text="继续吧")
+
+    system = str(second.seen[0][0].content)
+    assert "## 当前计划" in system
+    assert "你正在做第 1 项：**绑温度槽**" in system

@@ -68,7 +68,6 @@ const emit = defineEmits<{
 
   <AiDock
     :ai="ai"
-    surface-kind="dashboard-editor"
     surface-label="大屏编辑器"
     hint="助手改的是草稿，保存要你自己按。"
   />

@@ -15,6 +15,9 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
 import { CSS3DRenderer } from 'three/examples/jsm/renderers/CSS3DRenderer.js'
 
+// ⚠ glCapture 对本模块只有类型依赖，这条运行时依赖不构成环
+import { registerCoreSnapshot, unregisterCoreSnapshot } from './glCapture'
+
 /** WebGL 不可用时的统一文案，降级提示由宿主渲染。 */
 export const WEBGL_UNAVAILABLE_MESSAGE =
   '当前环境不支持 WebGL，无法渲染 3D 模型'
@@ -207,7 +210,7 @@ export function createSceneCore(options: SceneCoreOptions): SceneCore {
   modelRoot.name = 'twin-model-root'
   scene.add(createLighting(), modelRoot)
 
-  return {
+  const core: SceneCore = {
     scene,
     camera,
     renderer,
@@ -216,6 +219,10 @@ export function createSceneCore(options: SceneCoreOptions): SceneCore {
     spatialRenderer,
     modelRoot,
   }
+  // 建好即进快照登记处：DOM 截图方靠它拿「先画一帧再拷」的 2D 替身，
+  // 注销收在 disposeScene 里，宿主组件不用各自记着这件事
+  registerCoreSnapshot(core)
+  return core
 }
 
 /**
@@ -480,6 +487,7 @@ function disposeIfTexture(value: THREE.Texture | THREE.Color | null): void {
  * @param core 场景内核
  */
 export function disposeScene(core: SceneCore): void {
+  unregisterCoreSnapshot(core)
   core.controls.dispose()
   core.labelRenderer.domElement.remove()
   core.spatialRenderer.domElement.remove()

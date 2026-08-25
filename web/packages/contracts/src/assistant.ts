@@ -118,6 +118,8 @@ export interface AssistantSession {
 /** 会话详情：列表那一行加上全部消息与步骤。 */
 export interface AssistantSessionDetail extends AssistantSession {
   messages: AssistantMessage[]
+  /** 当前执行计划（ADR-0024）；没有就是 null。重开面板时靠它恢复清单。 */
+  plan_json: AssistantPlan | null
 }
 
 /**
@@ -133,9 +135,42 @@ export const ASSISTANT_EVENT_NAMES = [
   'client_tool.request',
   'turn.done',
   'error',
+  'plan',
 ] as const
 
 export type AssistantEventName = (typeof ASSISTANT_EVENT_NAMES)[number]
+
+/**
+ * 计划项的状态。⚠ 闭合集合，与后端 `services/plan.py` 逐字一致：
+ * 认不出的状态前端按 `pending` 画，不静默丢整项。
+ */
+export const ASSISTANT_PLAN_STATUSES = [
+  'pending',
+  'in_progress',
+  'done',
+  'skipped',
+  'failed',
+] as const
+
+export type AssistantPlanStatus = (typeof ASSISTANT_PLAN_STATUSES)[number]
+
+/** 计划里的一项。 */
+export interface AssistantPlanItem {
+  title: string
+  status: AssistantPlanStatus
+  /** 补充说明或失败原因；空串表示没有。 */
+  note: string
+}
+
+/**
+ * 一份执行计划（ADR-0024）。`plan` 事件整份下发，前端不做增量合并；
+ * 全部项走完后 `state` 变成 `done`。
+ */
+export interface AssistantPlan {
+  title: string
+  state: 'active' | 'done'
+  items: AssistantPlanItem[]
+}
 
 /**
  * 模型逐字吐出来的一小块走哪一路。
