@@ -22,6 +22,8 @@ import type {
   AssistantStep,
 } from '@dt/contracts'
 import {
+  ASSISTANT_DELTA_CHANNELS,
+  ASSISTANT_EVENT_NAMES,
   ASSISTANT_MESSAGE_ROLES,
   ASSISTANT_STEP_KINDS,
   ASSISTANT_STEP_STATES,
@@ -58,6 +60,21 @@ const ENUMS_PATH = join(
   'apps',
   'chat',
   'enums.py',
+)
+
+// 事件集合的真源。⚠ openapi 描述不了 SSE 的载荷，所以只能对着这份源码比
+const EVENTS_PATH = join(
+  process.cwd(),
+  '..',
+  'server',
+  'services',
+  'ai-assistant',
+  'src',
+  'ai_assistant',
+  'apps',
+  'chat',
+  'services',
+  'events.py',
 )
 
 type Keys<T> = Record<keyof T, true>
@@ -191,5 +208,55 @@ describe('三个闭合集合与后端 enums.py 里的那一份逐字相同', () 
     expect([...ASSISTANT_STEP_STATES].sort()).toEqual(
       backendTuple('STEP_STATES').sort(),
     )
+  })
+})
+
+describe('事件流的事件名两侧逐字相同', () => {
+  // ⚠ SSE 的载荷 openapi 描述不了，所以这是一份「没有生成物兜底」的契约。
+  // 漂开的表现是「助手做了一步但界面上没有」——前端遇到没见过的事件名只能
+  // 静默丢弃，而两边代码单看都对。
+  function backendEventNames(): string[] {
+    const source = readFileSync(EVENTS_PATH, 'utf8')
+    const block = /EVENT_NAMES = \(([\s\S]*?)\)/.exec(source)?.[1] ?? ''
+    const constants = [...block.matchAll(/EVENT_[A-Z_]+/g)].map(
+      (match) => match[0],
+    )
+    return constants.map((name) => {
+      const assigned = new RegExp(`^${name} = "([^"]+)"`, 'm').exec(source)
+      return assigned?.[1] ?? name
+    })
+  }
+
+  it('确实读到了后端那份清单（读不到就等于这条闸没跑）', () => {
+    expect(backendEventNames().length).toBeGreaterThan(0)
+  })
+
+  it('两侧逐字相同', () => {
+    expect([...ASSISTANT_EVENT_NAMES].sort()).toEqual(
+      backendEventNames().sort(),
+    )
+  })
+
+  it('增量的两路与后端的字面量一致', () => {
+    // 混成一路或多出一路，界面会把模型的自言自语当成结论铺出来
+    const source = readFileSync(
+      join(
+        process.cwd(),
+        '..',
+        'server',
+        'services',
+        'ai-assistant',
+        'src',
+        'ai_assistant',
+        'llm',
+        'deltas.py',
+      ),
+      'utf8',
+    )
+    const block = /DeltaChannel = Literal\[([^\]]*)\]/.exec(source)?.[1] ?? ''
+    const channels = [...block.matchAll(/"([^"]+)"/g)].map(
+      (match) => match[1] ?? '',
+    )
+    expect([...ASSISTANT_DELTA_CHANNELS].sort()).toEqual(channels.sort())
   })
 })

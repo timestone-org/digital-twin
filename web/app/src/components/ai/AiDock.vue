@@ -6,6 +6,7 @@
  * 这套部署没有 ai-assistant 服务、这个账号没有 `assistant:use`——任一条成立
  * 都是干净地不出现，而不是出现一个点了报错的按钮。
  */
+import { ref } from 'vue'
 import type { AssistantSurfaceKind } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import { DtIcon } from '@dt/ui'
@@ -22,6 +23,10 @@ defineProps<{
   /** 摆在输入框上方的一句提醒，各页面自己给。 */
   hint: string
 }>()
+
+// ⚠ 放大不是装饰：助手的回答里常有表格与代码块，26rem 宽的话它们只能在自己的
+// 框里横向滚，读一行要来回拖两次
+const isWide = ref(false)
 </script>
 
 <template>
@@ -36,12 +41,14 @@ defineProps<{
       >
         <DtIcon name="bot" :size="22" />
       </button>
-      <div v-else class="ai-dock__panel">
+      <div v-else class="ai-dock__panel" :class="{ 'is-wide': isWide }">
         <AiAssistantPanel
           :surface-kind="surfaceKind"
           :surface-label="surfaceLabel"
           :session-id="ai.sessionId.value"
           :hint="hint"
+          :is-wide="isWide"
+          @toggle-wide="isWide = !isWide"
           @close="ai.close"
         />
       </div>
@@ -99,6 +106,11 @@ defineProps<{
      （40% 透明）——那是给「页面里的面板」定的，底下永远压着应用自己的深色背景。
      助手是浮在画布上的，不垫一层不透明底，画布会直接透上来把字压没。 */
   background: var(--surface-base);
+}
+
+.ai-dock__panel.is-wide {
+  width: min(46rem, calc(100vw - 2rem));
+  height: min(46rem, calc(100vh - 6rem));
 }
 
 @media (prefers-reduced-motion: reduce) {

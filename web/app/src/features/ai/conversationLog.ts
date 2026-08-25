@@ -1,0 +1,170 @@
+/**
+ * @fileoverview 对话面板上那一条时间线的状态：用户说的、助手说的、助手想的、
+ * 助手做的每一步。纯函数，进出都是新的一份。
+ *
+ * ⚠ 抽出来不只是为了组合式函数的行数：**流式与分段的规矩全在这里**。
+ * 「新来的一小块该接在上一条后面，还是另起一条」错一次的表现是助手的话被
+ * 切成几十个气泡，或者两轮的话粘成一大坨——而这两种都只在真模型逐字吐字时
+ * 才复现，本地用假件一次都碰不到。
+ *
+ * ⚠ 一路只有一条在长。步骤一插进来就把两路都**收口**：那一步之后模型说的话
+ * 属于新的一段，接在旧气泡后面读起来像它在自言自语中途插了个动作。
+ */
+import type { AssistantDeltaChannel } from '@dt/contracts'
+
+import type { RunnerStep } from './turnRunner'
+
+/**
+ * 界面上的一条。
+ * `reasoning` 是模型想的过程——⚠ 它**不落库**，重开会话就没有了。
+ */
+export type ChatRole =
+  | 'user'
+  | 'assistant'
+  | 'reasoning'
+  | 'step'
+  /** 界面自己说的一句话（「已停下」这类），不是模型说的，也不是失败。 */
+  | 'note'
+  | 'error'
+
+export interface ChatEntry {
+  id: string
+  role: ChatRole
+  text: string
+  step?: RunnerStep
+  /** 还在逐字长。界面据它画光标、并且**不许折起来**。 */
+  isStreaming?: boolean
+}
+
+/** 一条时间线，加上两路各自正在长的那一条。 */
+export interface ConversationLog {
+  entries: readonly ChatEntry[]
+  /** 正在长的那一条的 id；没有就是 null。 */
+  openText: string | null
+  openReasoning: string | null
+}
+
+let seed = 0
+
+function nextId(): string {
+  seed += 1
+  return `e${seed}`
+}
+
+/** 空的时间线。 */
+export function emptyLog(): ConversationLog {
+  return { entries: [], openText: null, openReasoning: null }
+}
+
+/**
+ * 添一条完整的话。
+ * ⚠ 先收口再添：正在长的那一条与新添的这一条不是同一段。
+ * @param log 当前时间线
+ * @param role 谁说的
+ * @param text 说了什么
+ */
+export function withSaid(
+  log: ConversationLog,
+  role: ChatRole,
+  text: string,
+): ConversationLog {
+  const sealedLog = sealed(log)
+  return {
+    ...sealedLog,
+    entries: [...sealedLog.entries, { id: nextId(), role, text }],
+  }
+}
+
+/**
+ * 接住模型吐出来的一小块。
+ * @param log 当前时间线
+ * @param channel 走哪一路
+ * @param text 这一小块
+ */
+export function withDelta(
+  log: ConversationLog,
+  channel: AssistantDeltaChannel,
+  text: string,
+): ConversationLog {
+  if (text === '') return log
+  const openId = channel === 'reasoning' ? log.openReasoning : log.openText
+  if (openId === null) return started(log, channel, text)
+  return { ...log, entries: appended(log.entries, openId, text) }
+}
+
+/**
+ * 添一步。
+ * ⚠ 步骤会把两路都收口：这一步之后模型说的话是新的一段。
+ * @param log 当前时间线
+ * @param step 这一步
+ */
+export function withStep(
+  log: ConversationLog,
+  step: RunnerStep,
+): ConversationLog {
+  const sealedLog = sealed(log)
+  return {
+    ...sealedLog,
+    entries: [
+      ...sealedLog.entries,
+      { id: nextId(), role: 'step', text: step.title, step },
+    ],
+  }
+}
+
+/**
+ * 回合结束：把没长完的收口，并在**一个字都没流出来**时补上整段答复。
+ * ⚠ 流出来过就不补：补了会让同一段话在界面上出现两遍，而这只在真模型上
+ * 才看得见——假件是一次性回全的，两条路在本地长得一模一样。
+ * @param log 当前时间线
+ * @param reply 服务端给的整段答复
+ */
+export function withReply(
+  log: ConversationLog,
+  reply: string,
+): ConversationLog {
+  if (log.openText !== null) return sealed(log)
+  if (reply === '') return sealed(log)
+  return withSaid(log, 'assistant', reply)
+}
+
+/** 把正在长的那两条都收口。 */
+export function sealed(log: ConversationLog): ConversationLog {
+  if (log.openText === null && log.openReasoning === null) return log
+  const open = new Set([log.openText, log.openReasoning])
+  return {
+    entries: log.entries.map((entry) =>
+      open.has(entry.id) ? { ...entry, isStreaming: false } : entry,
+    ),
+    openText: null,
+    openReasoning: null,
+  }
+}
+
+function started(
+  log: ConversationLog,
+  channel: AssistantDeltaChannel,
+  text: string,
+): ConversationLog {
+  const id = nextId()
+  const role: ChatRole = channel === 'reasoning' ? 'reasoning' : 'assistant'
+  const entries = [...log.entries, { id, role, text, isStreaming: true }]
+  return channel === 'reasoning'
+    ? { ...log, entries, openReasoning: id }
+    : { ...log, entries, openText: id }
+}
+
+function appended(
+  entries: readonly ChatEntry[],
+  id: string,
+  text: string,
+): ChatEntry[] {
+  return entries.map((entry) =>
+    entry.id === id ? { ...entry, text: entry.text + text } : entry,
+  )
+}
+
+/** 只给测试用：让条目 id 回到起点。 */
+export function __resetEntryIds(): void {
+  seed = 0
+}

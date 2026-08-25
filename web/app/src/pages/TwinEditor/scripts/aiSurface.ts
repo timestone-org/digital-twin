@@ -13,6 +13,7 @@ import type { AssistantToolCall, BindingPayload } from '@dt/contracts'
 import { twinBindingRows, type TwinConfig } from '@dt/twin-config'
 
 import { createBinding } from '@/features/dashboard/editorDoc'
+import { withSource } from '@/features/ai/bindingSource'
 import type { AiSurface, SurfaceSnapshot } from '@/features/ai/surfaces'
 
 /** 这一页实现了哪些客户端工具。⚠ 与技能清单里声明的名字逐字相同。 */
@@ -119,12 +120,18 @@ function writeBinding(
     throw new Error(`这段孪生里没有 ${fieldKey} 这一行，先读一次绑定行`)
   }
   const current = deps.bindings().find((one) => one.fieldKey === fieldKey)
-  deps.write({
-    ...(current ?? createBinding(deps.nodeId(), fieldKey)),
-    sourceKind: 'opcua',
-    nodeKey: textArg(call, 'node_key'),
-  })
-  return { ok: true, field_key: fieldKey, entity: row.label }
+  // 常量与点位是同一条绑定的两种取数方式，口径两页共用一份
+  const written = withSource(
+    current ?? createBinding(deps.nodeId(), fieldKey),
+    call,
+  )
+  deps.write(written)
+  return {
+    ok: true,
+    field_key: fieldKey,
+    entity: row.label,
+    source_kind: written.sourceKind,
+  }
 }
 
 function textArg(call: AssistantToolCall, name: string): string {

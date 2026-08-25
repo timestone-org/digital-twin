@@ -16,9 +16,11 @@ import type { AssistantToolCall, ModuleManifest } from '@dt/contracts'
 import type { ConfigPath } from '@/features/dashboard/configPath'
 import { createBinding } from '@/features/dashboard/editorDoc'
 import { nodeLabelOf } from '@/features/dashboard/nodeLabel'
+import { withSource } from '@/features/ai/bindingSource'
 import type { AiSurface, SurfaceSnapshot } from '@/features/ai/surfaces'
 import { captureCanvas } from './aiSurfaceCapture'
 import { COMPOSE_TOOLS, runCompose } from './aiSurfaceCompose'
+import { CONFIG_TOOLS, runConfig } from './aiSurfaceConfig'
 import type { ComposeDeps, EditorSurfaceDeps } from './aiSurfaceTypes'
 
 export type { ComposeDeps, EditorSurfaceDeps }
@@ -34,9 +36,11 @@ export const EDITOR_TOOLS = [
   'dashboard.read_canvas',
   'dashboard.read_bindings',
   'dashboard.write_binding',
+  'dashboard.remove_binding',
   'dashboard.set_config',
   'dashboard.capture',
   ...COMPOSE_TOOLS,
+  ...CONFIG_TOOLS,
 ] as const
 
 /** 造出大屏编辑器这个工作面。 */
@@ -52,20 +56,32 @@ export function createEditorSurface(deps: ComposeDeps): AiSurface {
 
 function snapshotOf(deps: EditorSurfaceDeps): SurfaceSnapshot {
   const nodes = deps.editor.nodes.value
+  const chosen = deps.editor.selected.value
   return {
     node_count: nodes.length,
     selected_id: deps.editor.selectedId.value,
-    nodes: nodes.slice(0, MAX_LISTED).map((node) => ({
-      id: node.id,
-      module_type: node.moduleType,
-      label: nodeLabelOf(node, deps.getManifest),
-      x: node.x,
-      y: node.y,
-      w: node.w,
-      h: node.h,
-      binding_count: node.bindings.length,
-    })),
+    // ⚠ 选中项**单拎出来给一份**：埋在几十个画布节点中间的一格 id，模型
+    // 十次里有三次读不出「用户说的『这个』指的是它」，而那三次它会去改另一个
+    selected: chosen === null ? null : briefOf(deps, chosen),
+    nodes: nodes.slice(0, MAX_LISTED).map((node) => briefOf(deps, node)),
     is_truncated: nodes.length > MAX_LISTED,
+  }
+}
+
+/** 一个画布节点的名片。⚠ 不带 configJson：整屏的配置能有几十万字。 */
+function briefOf(
+  deps: EditorSurfaceDeps,
+  node: EditorSurfaceDeps['editor']['nodes']['value'][number],
+): SurfaceSnapshot {
+  return {
+    id: node.id,
+    module_type: node.moduleType,
+    label: nodeLabelOf(node, deps.getManifest),
+    x: node.x,
+    y: node.y,
+    w: node.w,
+    h: node.h,
+    binding_count: node.bindings.length,
   }
 }
 
@@ -89,9 +105,10 @@ function dispatch(deps: ComposeDeps, call: AssistantToolCall): unknown {
   if (call.name === 'dashboard.read_canvas') return snapshotOf(deps)
   if (call.name === 'dashboard.read_bindings') return readBindings(deps, call)
   if (call.name === 'dashboard.write_binding') return writeBinding(deps, call)
+  if (call.name === 'dashboard.remove_binding') return dropBinding(deps, call)
   if (call.name === 'dashboard.set_config') return setConfig(deps, call)
   if (call.name === 'dashboard.capture') return captureCanvas(deps.stageEl())
-  const composed = runCompose(deps, call)
+  const composed = runCompose(deps, call) ?? runConfig(deps, call)
   if (composed !== null) return composed
   throw new Error(`当前页面没有实现 ${call.name}`)
 }
@@ -116,6 +133,7 @@ function readBindings(
       field_key: one.fieldKey,
       source_kind: one.sourceKind,
       node_key: one.nodeKey,
+      static_value: one.staticValueJson,
     })),
   }
 }
@@ -126,7 +144,6 @@ function writeBinding(
 ): SurfaceSnapshot {
   const node = nodeOf(deps, call)
   const fieldKey = textArg(call, 'field_key')
-  const pointKey = textArg(call, 'node_key')
   // 先选中：动作层按选中项写，而用户也要看见助手在动哪一个
   deps.editor.select(node.id)
   deps.editor.flush()
@@ -136,11 +153,29 @@ function writeBinding(
   // ⚠ 也不能直接调 `applyPickedPoint`：它是为「用户先点绑点、再挑点位」那条路
   // 写的，对不存在的绑定**静默返回**——助手每次都「成功」而一条都没写出来。
   const current = node.bindings.find((one) => one.fieldKey === fieldKey)
-  deps.actions.writeBinding({
-    ...(current ?? createBinding(node.id, fieldKey)),
-    sourceKind: 'opcua',
-    nodeKey: pointKey,
-  })
+  const written = withSource(current ?? createBinding(node.id, fieldKey), call)
+  deps.actions.writeBinding(written)
+  return {
+    ok: true,
+    node_id: node.id,
+    field_key: fieldKey,
+    source_kind: written.sourceKind,
+  }
+}
+
+/** 解掉一条绑定。⚠ 换点位不要用它——直接重写那一条，绑定 id 要沿用。 */
+function dropBinding(
+  deps: EditorSurfaceDeps,
+  call: AssistantToolCall,
+): SurfaceSnapshot {
+  const node = nodeOf(deps, call)
+  const fieldKey = textArg(call, 'field_key')
+  if (!node.bindings.some((one) => one.fieldKey === fieldKey)) {
+    throw new Error(`${node.id} 上没有 ${fieldKey} 这条绑定`)
+  }
+  deps.editor.select(node.id)
+  deps.editor.flush()
+  deps.actions.dropSlot(fieldKey)
   return { ok: true, node_id: node.id, field_key: fieldKey }
 }
 
