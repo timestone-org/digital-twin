@@ -10,16 +10,10 @@
  */
 import { computed, ref } from 'vue'
 import type { AssistantSurfaceKind } from '@dt/contracts'
-import {
-  DtButton,
-  DtFilePicker,
-  DtIcon,
-  DtNotice,
-  DtSpinner,
-  DtTextarea,
-} from '@dt/ui'
+import { DtButton, DtFilePicker, DtNotice, DtSpinner, DtTextarea } from '@dt/ui'
 
 import { parseAttachment } from '@/api/assistant'
+import AiCoreIcon from '@/components/ai/AiCoreIcon.vue'
 import AiTimeline from '@/components/ai/AiTimeline.vue'
 import { toBase64 } from '@/features/ai/attachment'
 import { useAiConversation } from '@/composables/useAiConversation'
@@ -85,7 +79,7 @@ async function attach(files: File[]): Promise<void> {
 <template>
   <aside class="ai-panel" aria-label="AI 助手">
     <div class="ai-panel__bar">
-      <DtIcon name="bot" :size="16" class="ai-panel__badge" />
+      <AiCoreIcon :size="20" />
       <span class="ai-panel__name">助手</span>
       <span class="ai-panel__where">{{ surfaceLabel }}</span>
       <DtButton
@@ -160,10 +154,6 @@ async function attach(files: File[]): Promise<void> {
   border-bottom: 1px solid var(--border-default);
   /* 标题栏压一层更实的底，滚动内容从它下面过时不会糊在一起 */
   background: var(--surface-raised);
-}
-
-.ai-panel__badge {
-  color: var(--accent-primary);
 }
 
 .ai-panel__name {

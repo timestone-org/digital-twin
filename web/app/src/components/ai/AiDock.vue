@@ -9,9 +9,9 @@
 import { ref } from 'vue'
 import type { AssistantSurfaceKind } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtIcon } from '@dt/ui'
 
 import AiAssistantPanel from '@/components/ai/AiAssistantPanel.vue'
+import AiCoreIcon from '@/components/ai/AiCoreIcon.vue'
 import PermGuard from '@/components/PermGuard.vue'
 import type { AiPanel } from '@/composables/useAiPanel'
 
@@ -39,7 +39,7 @@ const isWide = ref(false)
         aria-label="打开 AI 助手"
         @click="() => void ai.open()"
       >
-        <DtIcon name="bot" :size="22" />
+        <AiCoreIcon :size="52" />
       </button>
       <div v-else class="ai-dock__panel" :class="{ 'is-wide': isWide }">
         <AiAssistantPanel
@@ -64,30 +64,21 @@ const isWide = ref(false)
   z-index: var(--z-assistant);
 }
 
-/* 收起时的那颗球。做成圆形是因为它悬在画布上而不是页面里——
-   方形按钮在任何底色上都像是「掉了一块界面」。 */
+/* 收起时的入口：机器人本体就是按钮。它自带不透明软壳与投影，
+   在任意底色的画布上都立得住，不再另垫圆底——垫了反而像贴纸。 */
 .ai-dock__call {
   display: grid;
   place-items: center;
-  width: 3rem;
-  height: 3rem;
-  border: 1px solid var(--border-strong);
-  border-radius: 50%;
-  /* ⚠ 必须不透明：它浮在画布上，而画布什么颜色都可能 */
-  background: var(--surface-base);
-  color: var(--accent-primary);
-  box-shadow: var(--fx-shadow-menu);
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: transparent;
   cursor: pointer;
-  transition:
-    transform 0.15s ease,
-    color 0.15s ease,
-    border-color 0.15s ease;
+  transition: transform 0.15s ease;
 }
 
 .ai-dock__call:hover {
   transform: translateY(-2px);
-  border-color: var(--accent-primary);
-  color: var(--text-title);
 }
 
 .ai-dock__call:focus-visible {

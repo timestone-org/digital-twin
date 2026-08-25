@@ -8,8 +8,9 @@
  * 上一步时会被一直拽回底部。
  */
 import { nextTick, ref, watch } from 'vue'
-import { DtEmpty, DtMarkdown } from '@dt/ui'
+import { DtMarkdown } from '@dt/ui'
 
+import AiCoreIcon from '@/components/ai/AiCoreIcon.vue'
 import AiReasoning from '@/components/ai/AiReasoning.vue'
 import AiStepRow from '@/components/ai/AiStepRow.vue'
 import type { ChatEntry } from '@/features/ai/conversationLog'
@@ -40,12 +41,14 @@ watch(
 
 <template>
   <div ref="scroller" class="ai-stream">
-    <DtEmpty
-      v-if="entries.length === 0"
-      icon="bot"
-      title="说说你想做什么"
-      hint="比如「把 1 号机组的温度绑到这个数值卡上」"
-    />
+    <!-- 空态不走 DtEmpty：它的 icon 只收注册名，塞不进这个会动的图标 -->
+    <div v-if="entries.length === 0" class="ai-stream__empty">
+      <AiCoreIcon :size="72" />
+      <p class="ai-stream__empty-title">说说你想做什么</p>
+      <p class="ai-stream__empty-hint">
+        比如「把 1 号机组的温度绑到这个数值卡上」
+      </p>
+    </div>
     <ul v-else class="ai-stream__list">
       <template v-for="entry in entries" :key="entry.id">
         <li v-if="entry.role === 'user'" class="ai-said ai-said--mine">
@@ -81,6 +84,27 @@ watch(
   min-height: 0;
   overflow-y: auto;
   padding: 0.75rem;
+}
+
+.ai-stream__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 2.5rem 1rem;
+  text-align: center;
+}
+
+.ai-stream__empty-title {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.ai-stream__empty-hint {
+  margin: 0;
+  color: var(--text-disabled);
+  font-size: 0.75rem;
 }
 
 .ai-stream__list {
