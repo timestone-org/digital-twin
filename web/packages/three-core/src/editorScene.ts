@@ -53,6 +53,7 @@ import {
   createWebGLRenderer,
   disposeScene,
   disposeSceneGraph,
+  frameBoxPose,
   frameObject,
   modelFrameOrigin,
   renderScene,
@@ -60,6 +61,7 @@ import {
   type SceneCore,
   type SceneRendererFactory,
 } from './sceneCore'
+import { createCameraFlight } from './cameraFlight'
 import { MarqueeGesture } from './marqueeGesture'
 import { nodeNamesInRect, type ScreenRect } from './marqueeSelect'
 import { SceneLayers, type SceneLayerValues } from './sceneLayers'
@@ -131,8 +133,6 @@ const MAX_HELPER_SCALE = 200
 const SELECTION_RENDER_ORDER = 970
 /** token 取不出时的选中框兜底色 */
 const SELECT_BOX_FALLBACK = '#7ef9ff'
-/** 取景量具的最小边长，缩放为 0 会让包围盒退化成一个点 */
-const MIN_PROXY_SIZE = 1e-4
 /** 单个实体取景时取景框的边长，相对模型体量 */
 const ENTITY_FOCUS_RATIO = 0.12
 const MIN_ENTITY_SPAN = 1
@@ -196,18 +196,6 @@ function createSelectionBox(
   return helper
 }
 
-/**
- * 取景量具：一个不可见的单位立方体。
- * ⚠ `frameObject` 只收对象，而部件与实体的取景目标是一个包围盒；借它把两者接上，
- * 取景的算法就仍然只有 `sceneCore` 那一份。
- */
-function createFocusProxy(): THREE.Mesh {
-  const proxy = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1))
-  proxy.name = 'twin-focus-proxy'
-  proxy.visible = false
-  return proxy
-}
-
 /** 一个编辑态视口。宿主挂载时建一份，卸载时 `dispose`。 */
 export class EditorScene {
   private readonly container: HTMLElement
@@ -229,7 +217,6 @@ export class EditorScene {
   private gizmo: TransformGizmo | null = null
   private gizmoMode: GizmoMode = 'translate'
   private marquee: MarqueeGesture | null = null
-  private focusProxy: THREE.Mesh | null = null
   private modelObject: THREE.Object3D | null = null
   private nodeIndex: NodeIndex = EMPTY_NODE_INDEX
   private observer: ResizeObserver | null = null
@@ -249,6 +236,8 @@ export class EditorScene {
   private shiftSelectingPartNodes = false
   /** 漫游预览的时间线；没在预览时是 null，编辑态绝不自己造一条开播。 */
   private roam: RoamTimeline | null = null
+  /** 聚焦与切视点共用的一段相机飞行；用户一碰视口就取消。 */
+  private readonly flight = createCameraFlight()
 
   constructor(options: EditorSceneOptions) {
     this.container = options.container
@@ -356,6 +345,8 @@ export class EditorScene {
       this.config.roamTour,
     )
     if (segments.length === 0) return false
+    // 预览接管镜头：半路的飞行就地取消，免得两边同帧抢方向盘
+    this.flight.cancel()
     this.roam = new RoamTimeline(segments, this.config.roamTour.loop)
     this.roam.play()
     this.on.roamPreview(true)
@@ -374,6 +365,7 @@ export class EditorScene {
     // ⚠ 先让在途装载作废再释放：晚一步回来的那次会往已 dispose 的场景里挂模型
     this.loadSeq += 1
     this.roam = null
+    this.flight.cancel()
     this.loadAbort?.abort()
     this.loadAbort = null
     cancelAnimationFrame(this.frameHandle)
@@ -394,7 +386,6 @@ export class EditorScene {
     this.modelObject = null
     this.helpers = null
     this.selectionBox = null
-    this.focusProxy = null
     this.nodeIndex = EMPTY_NODE_INDEX
   }
 
@@ -417,7 +408,6 @@ export class EditorScene {
       this.selectionBoxTarget,
       this.container,
     )
-    this.focusProxy = createFocusProxy()
     this.marquee = new MarqueeGesture({
       host: () => this.container,
       onFinish: (rect) => this.finishMarquee(rect),
@@ -427,12 +417,7 @@ export class EditorScene {
       onChange: (change) => this.on.entityTransform(change),
       onDragEnd: () => this.on.entityTransformEnd(),
     })
-    core.scene.add(
-      this.picks.group,
-      this.helpers,
-      this.selectionBox,
-      this.focusProxy,
-    )
+    core.scene.add(this.picks.group, this.helpers, this.selectionBox)
     this.attach(core)
     this.measure()
     this.refresh()
@@ -599,27 +584,27 @@ export class EditorScene {
 
   private frameBox(box: THREE.Box3): void {
     const core = this.core
-    const proxy = this.focusProxy
-    if (core === null || proxy === null || box.isEmpty()) return
-    box.getCenter(proxy.position)
-    box.getSize(proxy.scale)
-    proxy.scale.set(
-      Math.max(proxy.scale.x, MIN_PROXY_SIZE),
-      Math.max(proxy.scale.y, MIN_PROXY_SIZE),
-      Math.max(proxy.scale.z, MIN_PROXY_SIZE),
-    )
-    proxy.updateMatrixWorld(true)
-    frameObject(core, proxy)
-    this.emitCamera()
+    if (core === null) return
+    const framed = frameBoxPose(core.camera, box)
+    if (framed === null) return
+    this.stopRoamPreview()
+    this.flight.flyTo(core, framed.pose, framed.span)
+    // 飞行是异步落位，这里直接把终点位姿报给宿主，不等镜头到站
+    this.on.cameraChange(framed.pose)
   }
 
   private applyCamera(id: string): void {
     const core = this.core
     const camera = this.config.cameras.find((item) => item.id === id)
     if (core === null || camera === undefined) return
-    applyCameraPose(core, camera, this.modelSpan)
-    core.controls.update()
-    this.emitCamera()
+    this.stopRoamPreview()
+    this.flight.flyTo(core, camera, this.modelSpan)
+    // 飞行是异步落位，这里直接把终点位姿报给宿主，不等镜头到站
+    this.on.cameraChange({
+      position: camera.position,
+      target: camera.target,
+      fov: camera.fov,
+    })
   }
 
   /** 预览这一帧：把时间线算出的位姿落到相机上；走完了就自己收尾。 */
@@ -735,6 +720,7 @@ export class EditorScene {
     this.layers?.update(delta, core.camera)
     // ⚠ 喂帧钟夹过的时长：标签页切走再回来那一帧有几十秒，直接算下去预览会一帧飞完
     this.advanceRoam(delta * MS_PER_S, core)
+    this.flight.advance(delta * MS_PER_S)
     // ⚠ 宿主被折叠（clientHeight 为 0）时不换算标记尺寸：拿 0 当视口高度算出来的
     // 世界尺寸会把相机整个包进标记球里，之后连点都点不中，而画面上什么异常都看不出
     const height = this.container.clientHeight
@@ -757,8 +743,9 @@ export class EditorScene {
   }
 
   private readonly onPointerDown = (event: PointerEvent): void => {
-    // ⚠ 用户一碰视口就停预览：镜头还自己往前飞会变成两个人抢方向盘
+    // ⚠ 用户一碰视口就停预览、停飞行：镜头还自己往前飞会变成两个人抢方向盘
     this.stopRoamPreview()
+    this.flight.cancel()
     this.shiftSelectingPartNodes = false
     // 只有左侧已经选中部件时 Shift 才接管。否则 Shift 仍留给普通视口操作，
     // 不能平白画出一个最终也不知道该写回哪个部件的框。

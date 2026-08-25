@@ -22,10 +22,11 @@ import {
   type Ref,
 } from 'vue'
 
+import type { CameraFlight } from './cameraFlight'
 import type { NodeIndex } from './nodeIndex'
 import { pickIntersection } from './partPicking'
 import { applyClipping, boxOfNames, saveScreenshot } from './sceneToolOps'
-import { frameBox, type SceneCore } from './sceneCore'
+import type { SceneCore } from './sceneCore'
 
 /**
  * 工具条从宿主取这套状态。
@@ -46,6 +47,8 @@ export interface SceneToolsOptions {
   nodeIndex: () => NodeIndex
   /** 截图文件名用的标题。 */
   title: () => string
+  /** 相机飞行；定位与切视点共用宿主的这一段。 */
+  flight: CameraFlight
 }
 
 export interface SceneTools {
@@ -121,7 +124,7 @@ export function useSceneTools(options: SceneToolsOptions): SceneTools {
       // 命中的实体在模型里找不到对应几何：不动镜头，也不报错——那是配置与
       // 模型对不上，由诊断面板去说，这里乱飞一下只会让人更糊涂
       if (core === null || box === null) return
-      frameBox(core, box)
+      options.flight.flyToBox(core, box)
     },
 
     screenshot: () => saveScreenshot(options.core(), options.title()),

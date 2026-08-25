@@ -6,14 +6,17 @@
  */
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
 
+import type { CameraFlight } from './cameraFlight'
 import { buildSceneTree, objectAtUid, type SceneTreeNode } from './sceneTree'
-import { frameBox, type SceneCore } from './sceneCore'
+import type { SceneCore } from './sceneCore'
 import * as THREE from 'three'
 
 export interface StructureTreeOptions {
   core: () => SceneCore | null
   /** 模型换了要重建树；宿主在装载完成后调 `rebuild`。 */
   enabled: () => boolean
+  /** 相机飞行；定位与切视点共用宿主的这一段。 */
+  flight: CameraFlight
 }
 
 export interface StructureTree {
@@ -88,7 +91,7 @@ export function useStructureTree(options: StructureTreeOptions): StructureTree {
       const core = options.core()
       const object = core === null ? null : objectAtUid(core.modelRoot, uid)
       if (core === null || object === null) return
-      frameBox(core, new THREE.Box3().setFromObject(object))
+      options.flight.flyToBox(core, new THREE.Box3().setFromObject(object))
     },
     rebuild: () => {
       // ⚠ 先把手动隐藏的恢复再清记录：换模型时不恢复的话，那些对象带着

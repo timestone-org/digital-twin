@@ -1,7 +1,7 @@
 /**
  * @fileoverview 守节点树的渲染：节点按设计像素恒等定位、**不可见节点根本不挂载**、
  * 容器的子层渲染进容器组件的默认插槽且坐标系正好是内容区（内缩绝不加第二次）、
- * 非容器节点不接子节点，以及递归到深度上限就停。
+ * 非容器节点不接子节点、入场延迟按视觉序错峰且子层拿父格接力，以及递归到深度上限就停。
  */
 import type { DashboardNodePayload } from '@dt/contracts'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -80,6 +80,44 @@ describe('一层的定位', () => {
     expect(style).toContain('top: 20px')
     expect(style).toContain('width: 100px')
     expect(style).toContain('z-index: 3')
+  })
+
+  it('入场延迟按视觉序错峰：版面靠上的格子先出现，与渲染序无关', () => {
+    const wrapper = mountTree(
+      toRoots([
+        // zIndex 让 lower 先渲染，但版面上 upper 在上——观众按版面看
+        fakeNode({ id: 'lower', moduleType: 'leaf', y: 400, zIndex: 1 }),
+        fakeNode({ id: 'upper', moduleType: 'leaf', y: 0, zIndex: 9 }),
+      ]),
+    )
+    const styles = wrapper
+      .findAll('.dt-node')
+      .map((node) => node.attributes('style') ?? '')
+
+    expect(styles[0]).toContain('--dt-node-enter-delay: 45ms')
+    expect(styles[1]).toContain('--dt-node-enter-delay: 0ms')
+  })
+
+  it('容器子层的入场延迟拿父格接力，不与顶层从零齐跑', async () => {
+    const wrapper = mountTree(
+      toRoots([
+        fakeNode({ id: 'top', moduleType: 'leaf', y: 0 }),
+        fakeNode({
+          id: 'box',
+          moduleType: 'shell',
+          y: 100,
+          w: 400,
+          h: 300,
+          configJson: { showTitle: true },
+        }),
+        fakeNode({ id: 'kid', moduleType: 'leaf', parentId: 'box' }),
+      ]),
+    )
+    await flushPromises()
+    const kidStyle = wrapper.get('.shell .dt-node').attributes('style') ?? ''
+
+    // 父格 box 排第二拍（45ms），子层起拍 = 父格延迟 + 一拍
+    expect(kidStyle).toContain('--dt-node-enter-delay: 90ms')
   })
 
   it('不可见的节点根本不挂载，它的模块一次都没跑起来', async () => {

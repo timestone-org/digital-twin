@@ -329,29 +329,54 @@ export function frameObject(core: SceneCore, object: THREE.Object3D): void {
   frameBox(core, new THREE.Box3().setFromObject(object))
 }
 
+/** 框住一个包围盒的机位，以及取景内容的体量（剪裁面按它罩住内容）。 */
+export interface FramedPose {
+  pose: TwinPose
+  span: number
+}
+
+/**
+ * 算出能框住包围盒的机位，不动相机——瞬移与飞行两条路共用这一份几何。
+ * @param camera 当前相机；取景距离按它的视野算
+ * @param box 世界坐标下的包围盒；空盒给 null，不把镜头甩到原点
+ */
+export function frameBoxPose(
+  camera: THREE.PerspectiveCamera,
+  box: THREE.Box3,
+): FramedPose | null {
+  if (box.isEmpty()) return null
+  const center = box.getCenter(new THREE.Vector3())
+  const radius = Math.max(
+    box.getSize(new THREE.Vector3()).length() / 2,
+    MIN_FRAME_RADIUS,
+  )
+  const halfFov = THREE.MathUtils.degToRad(camera.fov) / 2
+  const distance = (radius / Math.sin(halfFov)) * FRAME_MARGIN
+  const eye = new THREE.Vector3(...FRAME_DIRECTION)
+    .normalize()
+    .multiplyScalar(distance)
+    .add(center)
+  return {
+    pose: {
+      position: [eye.x, eye.y, eye.z],
+      target: [center.x, center.y, center.z],
+      fov: camera.fov,
+    },
+    // ⚠ 剪裁面必须跟着包围盒走：固定的 0.01/5000 在大模型上深度精度不够，
+    // 表面会互相穿插闪烁，而这既不报错也不好归因
+    span: radius * 2,
+  }
+}
+
 /**
  * 把镜头对到一个包围盒上。部件由多个对象组成，框它们要先并出一个盒。
  * @param core 场景核心
  * @param box 世界坐标下的包围盒；空盒直接返回，不把镜头甩到原点
  */
 export function frameBox(core: SceneCore, box: THREE.Box3): void {
-  if (box.isEmpty()) return
-  const center = box.getCenter(new THREE.Vector3())
-  const radius = Math.max(
-    box.getSize(new THREE.Vector3()).length() / 2,
-    MIN_FRAME_RADIUS,
-  )
-  const halfFov = THREE.MathUtils.degToRad(core.camera.fov) / 2
-  const distance = (radius / Math.sin(halfFov)) * FRAME_MARGIN
-  const offset = new THREE.Vector3(...FRAME_DIRECTION)
-    .normalize()
-    .multiplyScalar(distance)
-  core.camera.position.copy(center).add(offset)
-  // ⚠ 剪裁面必须跟着包围盒走：固定的 0.01/5000 在大模型上深度精度不够，
-  // 表面会互相穿插闪烁，而这既不报错也不好归因
-  applyClipPlanes(core, distance, radius * 2)
-  core.camera.updateProjectionMatrix()
-  core.controls.target.copy(center)
+  const framed = frameBoxPose(core.camera, box)
+  if (framed === null) return
+  applyCameraPose(core, framed.pose, framed.span)
   core.controls.update()
 }
 

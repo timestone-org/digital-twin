@@ -25,7 +25,7 @@ import { flushPromises } from '@vue/test-utils'
 import * as THREE from 'three'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { EditorScene } from '../src/editorScene'
+import { EditorScene, type TwinCameraPose } from '../src/editorScene'
 
 const ASSET = 'asset:0192f0aa-0000-7000-8000-000000000001'
 const OTHER_ASSET = 'asset:0192f0aa-0000-7000-8000-000000000002'
@@ -854,7 +854,8 @@ describe('选中高亮', () => {
 })
 
 describe('取景与机位', () => {
-  it('对焦到部件时镜头看向那个部件，并回传机位', async () => {
+  // 聚焦走飞行异步落位，回传的是终点位姿——落地的插值数学由 cameraFlight 的用例守
+  it('对焦到部件时回传看向那个部件的终点机位', async () => {
     const harness = await ready(
       twinConfig(),
       fakeModel('pump', new THREE.Vector3(10, 0, 0)),
@@ -863,18 +864,23 @@ describe('取景与机位', () => {
 
     harness.scene.focus({ kind: 'parts', id: 'part-pump' })
 
-    expect(harness.scene.snapshot().target[0]).toBeCloseTo(10, 6)
     expect(harness.events.cameraChange).toHaveBeenCalledTimes(1)
+    const pose: TwinCameraPose | undefined =
+      harness.events.cameraChange.mock.calls[0]?.[0]
+    expect(pose?.target[0]).toBeCloseTo(10, 6)
   })
 
-  it('对焦到实体时镜头看向它的落点', async () => {
+  it('对焦到实体时回传看向它落点的终点机位', async () => {
     const harness = await ready(
       twinConfig({ anchors: [{ id: 'a1', position: [0, 4, 0] }] }),
     )
+    harness.events.cameraChange.mockClear()
 
     harness.scene.focus({ kind: 'anchors', id: 'a1' })
 
-    expect(harness.scene.snapshot().target[1]).toBeCloseTo(4, 6)
+    const pose: TwinCameraPose | undefined =
+      harness.events.cameraChange.mock.calls[0]?.[0]
+    expect(pose?.target[1]).toBeCloseTo(4, 6)
   })
 
   it('对焦到视点时套用它存下的机位', async () => {

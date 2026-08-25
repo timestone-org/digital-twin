@@ -16,6 +16,7 @@ import {
   moduleRect,
   type DesignSize,
 } from './dashboardGeometry'
+import { ENTER_STAGGER_MS, entranceDelays } from './entranceStagger'
 import type { GetModuleManifest, RuntimeNode } from './nodeTree'
 
 defineOptions({ name: 'NodeTree' })
@@ -31,6 +32,8 @@ const props = defineProps<{
   cardChrome?: CardChrome | undefined
   /** 递归深度，顶层不传。 */
   depth?: number
+  /** 入场延迟的起拍（毫秒）：容器子层拿父格的延迟接力，顶层不传。 */
+  enterBaseMs?: number
   /**
    * 本层节点无条件渲染（节点弹窗的根用）：弹窗目标通常配成初始不可见，
    * 不掀开的话弹窗里就是一片空白。只作用于本层，子层照常按可见性走。
@@ -62,7 +65,16 @@ const layerStyle = computed<CSSProperties>(() => ({
   height: `${props.design.height}px`,
 }))
 
-/** 节点在本层里的绝对像素位置。 */
+// 本层的入场延迟表；节点被联动重新掀开时也按同一张表走
+const enterDelays = computed(() =>
+  entranceDelays(visibleNodes.value, props.enterBaseMs ?? 0),
+)
+
+function enterDelayOf(node: RuntimeNode): number {
+  return enterDelays.value.get(node.id) ?? 0
+}
+
+/** 节点在本层里的绝对像素位置与入场拍点。 */
 function styleOf(node: RuntimeNode): CSSProperties {
   const rect = moduleRect(node.box)
   return {
@@ -71,6 +83,7 @@ function styleOf(node: RuntimeNode): CSSProperties {
     width: `${rect.width}px`,
     height: `${rect.height}px`,
     zIndex: node.zIndex,
+    '--dt-node-enter-delay': `${enterDelayOf(node)}ms`,
   }
 }
 
@@ -110,6 +123,7 @@ function childDesignOf(node: RuntimeNode): DesignSize {
           :get-manifest="getManifest"
           :card-chrome="cardChrome"
           :depth="currentDepth + 1"
+          :enter-base-ms="enterDelayOf(node) + ENTER_STAGGER_MS"
         />
       </ModuleRenderer>
     </div>
@@ -123,7 +137,29 @@ function childDesignOf(node: RuntimeNode): DesignSize {
   overflow: hidden;
 }
 
+// 入场动画挂在格子上而不是 .dt-module：那边的 animation/transform 已被
+// 呼吸描边与悬停抬升占用，叠上去会互相覆盖
 .dt-node {
   position: absolute;
+  animation: dt-node-enter 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  animation-delay: var(--dt-node-enter-delay, 0ms);
+}
+
+@keyframes dt-node-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dt-node {
+    animation: none;
+  }
 }
 </style>

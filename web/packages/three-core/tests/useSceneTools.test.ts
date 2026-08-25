@@ -7,6 +7,7 @@ import * as THREE from 'three'
 import { describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 
+import { CAMERA_FLIGHT_MS, createCameraFlight } from '../src/cameraFlight'
 import { buildNodeIndex, EMPTY_NODE_INDEX } from '../src/nodeIndex'
 import { createSceneCore, type SceneCore } from '../src/sceneCore'
 import { createHeadlessRenderer } from '../src/testing/createHeadlessRenderer'
@@ -42,14 +43,16 @@ function setup(model: THREE.Object3D | null = modelOf('pump', 'hall')) {
   })
   if (model !== null) core.modelRoot.add(model)
   const index = model === null ? EMPTY_NODE_INDEX : buildNodeIndex(model)
+  const flight = createCameraFlight()
   const tools = useSceneTools({
     core: () => core,
     element: () => container,
     config: () => config(),
     nodeIndex: () => index,
     title: () => '一号车间',
+    flight,
   })
-  return { tools, core, container }
+  return { tools, core, container, flight }
 }
 
 describe('搜索', () => {
@@ -77,7 +80,7 @@ describe('搜索', () => {
 
 describe('定位', () => {
   it('把镜头飞到命中的几何上', () => {
-    const { tools, core } = setup()
+    const { tools, core, flight } = setup()
     const before = core.camera.position.clone()
 
     tools.locate({
@@ -87,6 +90,7 @@ describe('定位', () => {
       nodes: ['pump'],
       rank: 0,
     })
+    flight.advance(CAMERA_FLIGHT_MS)
 
     expect(core.camera.position.equals(before)).toBe(false)
   })

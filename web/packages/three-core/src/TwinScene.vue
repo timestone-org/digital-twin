@@ -90,6 +90,8 @@ const sceneCamera = useSceneCamera({
   config: () => props.config,
   span: modelSpan,
 })
+// 切视点/钻取/定位共用的那段飞行；用户一碰轨道控制器就取消（onMounted 里挂）
+const flight = sceneCamera.flight
 
 const model = useTwinModelLoad({
   core: () => core,
@@ -129,6 +131,7 @@ const tools = useSceneTools({
   config: () => props.config,
   nodeIndex: () => nodeIndex,
   title: () => props.sceneTitle ?? '',
+  flight,
 })
 // 工具条是这套状态的视图，走注入而不是 prop——里面几个 ref 本就是给人改的
 provide(SCENE_TOOLS_KEY, tools)
@@ -139,10 +142,12 @@ usePartClick({
   parts: () => layers?.parts ?? null,
   onPartClick: (part) => emit('partClick', part),
   intercept: tools.interceptClick,
+  flight,
 })
 const structure = useStructureTree({
   core: () => core,
   enabled: () => props.showStructureTree === true,
+  flight,
 })
 
 const backgroundStyle = computed(() => {
@@ -161,6 +166,9 @@ const loop = useRenderLoop({
     if (core !== null) layers?.update(deltaS, core.camera)
     if (deltaS > 0) animations?.update(deltaS)
     roam.advance(deltaS * MS_PER_S)
+    // 漫游开播即接管镜头：半路的飞行就地取消，免得两边同帧抢方向盘
+    if (roam.playing.value) flight.cancel()
+    flight.advance(deltaS * MS_PER_S)
     // ⚠ 每帧都要算：镜头一直在动，距离规则的成立与否随时在变
     if (core !== null) layers?.applyDistanceRules(distanceContextOf(core))
   },
@@ -213,6 +221,8 @@ onMounted(() => {
   // ⚠ 必须等 core 建好再装：漫游要往轨道控制器上挂监听，早一步挂不上去
   roam.attach()
   viewpoints.attach()
+  // 用户一碰轨道控制器就取消飞行，镜头当场交还给手
+  core.controls.addEventListener('start', flight.cancel)
   void model.load()
 })
 
@@ -230,6 +240,8 @@ onBeforeUnmount(() => {
   // ⚠ 先让在途装载作废再释放：晚一步回来的那次会往已 dispose 的场景里挂模型
   model.abort()
   viewpoints.detach()
+  flight.cancel()
+  core?.controls.removeEventListener('start', flight.cancel)
   disposeLayers()
   if (core !== null) disposeScene(core)
   core = null

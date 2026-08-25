@@ -5,6 +5,7 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 
+import { CAMERA_FLIGHT_MS, createCameraFlight } from '../src/cameraFlight'
 import { buildSceneTree, objectAtUid } from '../src/sceneTree'
 import { createSceneCore, type SceneCore } from '../src/sceneCore'
 import { createHeadlessRenderer } from '../src/testing/createHeadlessRenderer'
@@ -37,8 +38,13 @@ function setup(enabled = true) {
     renderer: createHeadlessRenderer(),
   })
   core.modelRoot.add(model())
-  const tree = useStructureTree({ core: () => core, enabled: () => enabled })
-  return { tree, core }
+  const flight = createCameraFlight()
+  const tree = useStructureTree({
+    core: () => core,
+    enabled: () => enabled,
+    flight,
+  })
+  return { tree, core, flight }
 }
 
 describe('建树', () => {
@@ -156,10 +162,11 @@ describe('展开与定位', () => {
   })
 
   it('点一支把镜头飞过去', () => {
-    const { tree, core } = setup()
+    const { tree, core, flight } = setup()
     const before = core.camera.position.clone()
 
     tree.locate(tree.nodes.value[0]?.children[0]?.uid ?? '')
+    flight.advance(CAMERA_FLIGHT_MS)
 
     expect(core.camera.position.equals(before)).toBe(false)
   })

@@ -6,6 +6,7 @@
  */
 import { onBeforeUnmount, onMounted } from 'vue'
 
+import type { CameraFlight } from './cameraFlight'
 import { distanceContextOf } from './distanceContext'
 import {
   ClickGesture,
@@ -13,7 +14,7 @@ import {
   type PartClickParts,
   type TwinPartClick,
 } from './partPicking'
-import { frameBox, type SceneCore } from './sceneCore'
+import type { SceneCore } from './sceneCore'
 
 export interface PartClickDeps {
   /** 视口元素；挂载时才有。 */
@@ -29,6 +30,8 @@ export interface PartClickDeps {
    * ⚠ 测量开着时还去触发部件联动的话，用户量个尺寸会顺手打开一个弹窗。
    */
   intercept?: (event: PointerEvent) => boolean
+  /** 相机飞行；「太远只拉近」那一下与切视点共用宿主的这一段。 */
+  flight: CameraFlight
 }
 
 /**
@@ -63,7 +66,7 @@ export function usePartClick(deps: PartClickDeps): void {
       context: distanceContextOf(core),
     })
     // 太远：这一下只把镜头拉过去，不算真点击
-    if (outcome.kind === 'approach') frameBox(core, outcome.box)
+    if (outcome.kind === 'approach') deps.flight.flyToBox(core, outcome.box)
     if (outcome.kind === 'click') {
       deps.onPartClick({
         partId: outcome.partId,
