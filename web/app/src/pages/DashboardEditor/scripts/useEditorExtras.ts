@@ -81,6 +81,7 @@ function aiPanelOf(deps: EditorExtrasDeps): AiPanel {
   return useAiPanel({
     editor: deps.editor,
     actions: deps.actions,
+    arrange: deps.arrange,
     getManifest: deps.getManifest,
     dashboardId: deps.dashboardId,
   })

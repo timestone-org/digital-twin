@@ -73,6 +73,23 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         runs_on="server",
     ),
     ToolSpec(
+        name="modules.catalog",
+        description=(
+            "模块清单，**唯一的模块真源**。不给参数时列出全部模块的名片；"
+            "给 module_type 时把那一个的配置字段与绑定槽全部展开。"
+            "摆模块或改配置之前必须先把那一个展开——"
+            "清单里没有的配置键写进去不报错也不生效。"
+        ),
+        parameters=_object(
+            {
+                "module_type": _string("要展开的模块类型，如 metric-card"),
+                "keyword": _string("按中文名或别名筛名片表；展开时不用给"),
+            },
+            [],
+        ),
+        runs_on="server",
+    ),
+    ToolSpec(
         name="points.list_sources",
         description="列出全部采集数据源。绑点之前先看有哪些源。",
         parameters=_object({}, []),
@@ -133,6 +150,83 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
                 "node_key": _string("点位身份，形如 `{数据源id}:{点位编码}`"),
             },
             ["node_id", "field_key", "node_key"],
+        ),
+        runs_on="client",
+    ),
+    ToolSpec(
+        name="dashboard.add_module",
+        description=(
+            "往画布上加一个模块。`module_type` 取自模块清单。"
+            "不给坐标就落到默认位置。返回新节点的 id。"
+        ),
+        parameters=_object(
+            {
+                "module_type": _string("模块类型，取自 modules.catalog"),
+                "x": _integer("左上角横坐标（设计像素，整数）"),
+                "y": _integer("左上角纵坐标（设计像素，整数）"),
+                "parent_id": _string("落进哪个容器节点；不给则落到顶层"),
+            },
+            ["module_type"],
+        ),
+        runs_on="client",
+    ),
+    ToolSpec(
+        name="dashboard.remove_node",
+        description=(
+            "删掉一个画布节点。⚠ **连它的子树一起删**。"
+            "删之前先告诉用户要删什么、有几个子节点。"
+        ),
+        parameters=_object({"node_id": _string("画布节点 id")}, ["node_id"]),
+        runs_on="client",
+    ),
+    ToolSpec(
+        name="dashboard.set_geometry",
+        description=(
+            "改一个画布节点的位置与大小。只给要改的那几维，"
+            "不给的维保持原值。全部必须是整数。"
+        ),
+        parameters=_object(
+            {
+                "node_id": _string("画布节点 id"),
+                "x": _integer("左上角横坐标"),
+                "y": _integer("左上角纵坐标"),
+                "w": _integer("宽"),
+                "h": _integer("高"),
+            },
+            ["node_id"],
+        ),
+        runs_on="client",
+    ),
+    ToolSpec(
+        name="dashboard.arrange",
+        description=(
+            "对齐、分布或整理。对齐要 ≥2 个节点、分布要 ≥3 个，"
+            "且它们必须在同一个父层里。tidy 不看 node_ids，整理整个顶层。"
+        ),
+        parameters=_object(
+            {
+                "action": {
+                    "type": "string",
+                    "enum": [
+                        "left",
+                        "hcenter",
+                        "right",
+                        "top",
+                        "vcenter",
+                        "bottom",
+                        "distribute-x",
+                        "distribute-y",
+                        "tidy",
+                    ],
+                    "description": "做哪一个动作",
+                },
+                "node_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "参与的画布节点 id",
+                },
+            },
+            ["action"],
         ),
         runs_on="client",
     ),

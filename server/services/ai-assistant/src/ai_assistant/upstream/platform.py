@@ -24,6 +24,8 @@ _logger = get_logger("assistant.upstream.platform")
 _POINTS = "/api/v1/platform/collect-points"
 _SOURCES = "/api/v1/platform/collect-sources"
 _DASHBOARDS = "/api/v1/platform/dashboards"
+_MODULES = "/api/v1/platform/module-types"
+_TABLES = "/api/v1/platform/dataset-tables"
 
 
 class PlatformUnavailable(DependencyUnavailable):
@@ -98,6 +100,62 @@ class PlatformClient:
             query["source_id"] = source_id
         return _items_of(await self._get(_POINTS, query, headers))
 
+    async def list_module_types(self, headers: dict[str, str]) -> object:
+        """取整份模块清单。
+
+        ⚠ 它是**唯一的模块真源**：模块有什么配置字段、字段什么类型、有哪些
+        可选值全在里面。没有它，助手要摆一个模块就只能凭印象填键名，而写错的
+        键存得下去、也不报错，画面上表现为「配了没反应」。
+
+        Args: headers。
+        """
+        return await self._get(_MODULES, {}, headers)
+
+    async def read_module_type(
+        self, headers: dict[str, str], module_type: str
+    ) -> object:
+        """取一个模块类型的完整清单。
+
+        Args: headers, module_type。
+        """
+        return await self._get(f"{_MODULES}/{module_type}", {}, headers)
+
+    async def formula_functions(
+        self, headers: dict[str, str], table_id: str
+    ) -> object:
+        """取一张台账能用的函数目录、可引用的列与表、公式库。
+
+        Args: headers, table_id。
+        """
+        return await self._get(
+            f"{_TABLES}/{table_id}/formula-functions", {}, headers
+        )
+
+    async def check_formula(
+        self, headers: dict[str, str], table_id: str, body: dict[str, Any]
+    ) -> object:
+        """校验一条公式。
+
+        ⚠ 公式写错回的是 **200 + `is_ok=false`**，不是 HTTP 错误。把它当成
+        调用失败的话，助手会以为是自己这一侧坏了，而真正该看的那句错在体里。
+
+        Args: headers, table_id, body。
+        """
+        return await self._post(
+            f"{_TABLES}/{table_id}/formula:validate", headers, body
+        )
+
+    async def try_formula(
+        self, headers: dict[str, str], table_id: str, body: dict[str, Any]
+    ) -> object:
+        """用一组样例值试算一条公式。
+
+        Args: headers, table_id, body。
+        """
+        return await self._post(
+            f"{_TABLES}/{table_id}/formula:preview", headers, body
+        )
+
     async def validate_dashboard(
         self, headers: dict[str, str], dashboard_id: str
     ) -> object:
@@ -128,8 +186,13 @@ class PlatformClient:
     ) -> object:
         return await self._call("GET", path, headers, params=query)
 
-    async def _post(self, path: str, headers: dict[str, str]) -> object:
-        return await self._call("POST", path, headers, json={})
+    async def _post(
+        self,
+        path: str,
+        headers: dict[str, str],
+        body: dict[str, Any] | None = None,
+    ) -> object:
+        return await self._call("POST", path, headers, json=body or {})
 
     async def _call(
         self,

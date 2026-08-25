@@ -8,7 +8,8 @@
  * 另守两条：动手之前先选中那个画布节点（用户得看见助手在动哪一个），
  * 以及认不出的节点/工具一律抛（把「做不到」如实告诉模型）。
  */
-import { describe, expect, it } from 'vitest'
+import { computed } from 'vue'
+import { describe, expect, it, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
 import { mount } from '@vue/test-utils'
 import type {
@@ -22,6 +23,7 @@ import {
   type DashboardEditor,
 } from '@/composables/useDashboardEditor'
 import { createEditorActions } from '@/pages/DashboardEditor/scripts/editorActions'
+import { createArrangeActions } from '@/pages/DashboardEditor/scripts/editorArrange'
 import { createEditorSurface } from '@/pages/DashboardEditor/scripts/aiSurface'
 import type { AiSurface } from '@/features/ai/surfaces'
 
@@ -80,6 +82,20 @@ function setup(): Harness {
           dashboardId: () => 'd1',
           getManifest: () => MANIFEST,
           design: () => ({ width: 1920, height: 1080 }),
+        }),
+        arrange: createArrangeActions({
+          editor,
+          getManifest: () => MANIFEST,
+          design: () => ({ width: 1920, height: 1080 }),
+          steps: () => ({ x: 8, y: 8 }),
+          dashboardId: () => 'd1',
+          chrome: {
+            rules: computed(() => []),
+            setInteractions: vi.fn(),
+            setSnap: vi.fn(),
+            setGrid: vi.fn(),
+          },
+          notify: vi.fn(),
         }),
         getManifest: () => MANIFEST,
       })

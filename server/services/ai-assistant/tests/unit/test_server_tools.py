@@ -166,3 +166,96 @@ async def test_without_an_upstream_the_tools_say_they_cannot() -> None:
     # 「本部署没接上业务面」与「没有点位」是两件事，不能混
     with pytest.raises(UnknownServerTool):
         await ServerTools()("points.list_sources", {})
+
+
+def _catalog(modules: list[dict[str, object]]) -> Handler:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "code": 0,
+                "message": "ok",
+                "trace_id": "t",
+                "data": {"catalog_version": 1, "modules": modules},
+            },
+        )
+
+    return handler
+
+
+def _module(module_type: str, name: str) -> dict[str, object]:
+    return {
+        "type": module_type,
+        "display_name": name,
+        "category": "数据",
+        "keywords": [module_type, "shuzhi"],
+        "chrome": "card",
+        "default_size": {"width": 320, "height": 160, "min_width": 80},
+        "config_schema": [{"key": "title"}, {"key": "unit"}],
+        "bindings": [
+            {
+                "key": "itemValues",
+                "label": "读数",
+                "data_type": "number",
+                "is_array": True,
+                "array_fields": [{"key": "value", "label": "值"}],
+            }
+        ],
+    }
+
+
+async def test_the_module_list_gives_cards_not_config_fields() -> None:
+    tools = _tools(_catalog([_module("metric-card", "实时数值")]))
+    got = await tools("modules.catalog", {})
+    assert isinstance(got, dict)
+    modules = got["modules"]
+    assert isinstance(modules, list)
+    card = modules[0]
+    # 整份清单六万多字符，塞进去会把技能正文与工具结果一起挤出上下文
+    assert "config_schema" not in card
+    assert card["config_field_count"] == 2
+    assert card["slots"][0]["array_fields"] == ["value"]
+
+
+async def test_naming_a_module_type_pulls_its_full_schema() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/metric-card")
+        return httpx.Response(
+            200,
+            json={
+                "code": 0,
+                "message": "ok",
+                "trace_id": "t",
+                "data": _module("metric-card", "实时数值"),
+            },
+        )
+
+    got = await _tools(handler)(
+        "modules.catalog", {"module_type": "metric-card"}
+    )
+    assert isinstance(got, dict)
+    assert got["config_schema"] == [{"key": "title"}, {"key": "unit"}]
+
+
+async def test_the_keyword_filters_by_chinese_name_and_alias() -> None:
+    tools = _tools(
+        _catalog(
+            [
+                _module("metric-card", "实时数值"),
+                _module("text-block", "文本块"),
+            ]
+        )
+    )
+    got = await tools("modules.catalog", {"keyword": "文本"})
+    assert isinstance(got, dict)
+    modules = got["modules"]
+    assert isinstance(modules, list)
+    assert [one["type"] for one in modules] == ["text-block"]
+
+
+async def test_a_keyword_that_matches_nothing_still_lists_everything() -> None:
+    # 给空表模型就以为没有这个模块；而用户说的叫法与清单对不上是常事
+    tools = _tools(_catalog([_module("metric-card", "实时数值")]))
+    got = await tools("modules.catalog", {"keyword": "毫不相干"})
+    assert isinstance(got, dict)
+    assert len(got["modules"]) == 1

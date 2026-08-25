@@ -11,18 +11,22 @@
  * ⚠ 快照是**摘要**不是整棵树。一屏最多 2000 个画布节点，整份塞进去会把上下文
  * 占满，而被挤掉的是技能正文与工具结果。
  */
-import type { AssistantToolCall } from '@dt/contracts'
-import type { GetModuleManifest } from '@dt/runtime'
+import type { AssistantToolCall, ModuleManifest } from '@dt/contracts'
 
-import type { DashboardEditor } from '@/composables/useDashboardEditor'
 import type { ConfigPath } from '@/features/dashboard/configPath'
 import { createBinding } from '@/features/dashboard/editorDoc'
 import { nodeLabelOf } from '@/features/dashboard/nodeLabel'
 import type { AiSurface, SurfaceSnapshot } from '@/features/ai/surfaces'
-import type { EditorActions } from './editorActions'
+import { COMPOSE_TOOLS, runCompose } from './aiSurfaceCompose'
+import type { ComposeDeps, EditorSurfaceDeps } from './aiSurfaceTypes'
+
+export type { ComposeDeps, EditorSurfaceDeps }
 
 /** 快照里最多列几个画布节点。再多就只给计数——列到第 200 个也没人读得完。 */
 const MAX_LISTED = 120
+
+/** 模块级卡片外观住在配置袋子的这一段。 */
+const CARD_STYLE = '__cardStyle'
 
 /** 这一页实现了哪些客户端工具。⚠ 与技能清单里声明的名字逐字相同。 */
 export const EDITOR_TOOLS = [
@@ -30,16 +34,11 @@ export const EDITOR_TOOLS = [
   'dashboard.read_bindings',
   'dashboard.write_binding',
   'dashboard.set_config',
+  ...COMPOSE_TOOLS,
 ] as const
 
-export interface EditorSurfaceDeps {
-  editor: DashboardEditor
-  actions: EditorActions
-  getManifest: GetModuleManifest
-}
-
 /** 造出大屏编辑器这个工作面。 */
-export function createEditorSurface(deps: EditorSurfaceDeps): AiSurface {
+export function createEditorSurface(deps: ComposeDeps): AiSurface {
   return {
     kind: 'dashboard-editor',
     label: '大屏编辑器',
@@ -75,7 +74,7 @@ function snapshotOf(deps: EditorSurfaceDeps): SurfaceSnapshot {
  * 「工具失败要如实回给模型」这条最容易断的地方。
  */
 function settle(
-  deps: EditorSurfaceDeps,
+  deps: ComposeDeps,
   call: AssistantToolCall,
 ): Promise<unknown> {
   try {
@@ -85,14 +84,13 @@ function settle(
   }
 }
 
-function dispatch(
-  deps: EditorSurfaceDeps,
-  call: AssistantToolCall,
-): unknown {
+function dispatch(deps: ComposeDeps, call: AssistantToolCall): unknown {
   if (call.name === 'dashboard.read_canvas') return snapshotOf(deps)
   if (call.name === 'dashboard.read_bindings') return readBindings(deps, call)
   if (call.name === 'dashboard.write_binding') return writeBinding(deps, call)
   if (call.name === 'dashboard.set_config') return setConfig(deps, call)
+  const composed = runCompose(deps, call)
+  if (composed !== null) return composed
   throw new Error(`当前页面没有实现 ${call.name}`)
 }
 
@@ -150,10 +148,44 @@ function setConfig(
 ): SurfaceSnapshot {
   const node = nodeOf(deps, call)
   const path = pathArg(call)
+  refuseSilentNoop(deps.getManifest(node.moduleType), path)
   deps.editor.select(node.id)
   deps.editor.flush()
   deps.actions.changeConfig(path, call.arguments.value, false)
   return { ok: true, node_id: node.id, path }
+}
+
+/**
+ * 拦下那些「写得进去、但一定不生效」的键。
+ *
+ * ⚠ 这是本页最该做的一件事：配置是一只自由袋子，写一个清单里没有的键既不报错
+ * 也不渲染，画面上表现为「配了没反应」，而配置确实存下去了。服务端的模块目录
+ * 又不带 `chromeConfigurable` / `unsupportedChromeKeys` 两格——只有浏览器手里的
+ * 这份清单知道哪几个外观键这个模块画不出来。
+ */
+function refuseSilentNoop(
+  manifest: ModuleManifest | undefined,
+  path: ConfigPath,
+): void {
+  const head = path[0]
+  if (manifest === undefined || typeof head !== 'string') return
+  if (head !== CARD_STYLE) {
+    const declared = manifest.configSchema.some((field) => field.key === head)
+    if (!declared && !head.startsWith('__')) {
+      throw new Error(`${manifest.type} 没有 ${head} 这个配置字段`)
+    }
+    return
+  }
+  if (manifest.chromeConfigurable === false) {
+    throw new Error(`${manifest.type} 自绘外壳，统一外观键对它没有效果`)
+  }
+  const key = path[1]
+  const unsupported = manifest.unsupportedChromeKeys ?? []
+  // ⚠ `some` 而不是 `includes`：清单那格是 `ChromeKey[]`，而模型给的是裸串，
+  // `includes` 会因为两边类型对不上而编译失败
+  if (typeof key === 'string' && unsupported.some((one) => one === key)) {
+    throw new Error(`${manifest.type} 画不出 ${key}，写了也看不见`)
+  }
 }
 
 function nodeOf(deps: EditorSurfaceDeps, call: AssistantToolCall) {

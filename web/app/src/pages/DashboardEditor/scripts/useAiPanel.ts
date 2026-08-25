@@ -8,21 +8,16 @@
  * 部署 ai-assistant，那时入口就该干净地不出现，而不是弹一条红色告警。
  */
 import { onMounted, onUnmounted, ref, type Ref } from 'vue'
-import type { GetModuleManifest } from '@dt/runtime'
 
 import { createSession } from '@/api/assistant'
-import type { DashboardEditor } from '@/composables/useDashboardEditor'
 import { aiPorts } from '@/features/ai/ports'
 import { clearSurface, setSurface } from '@/features/ai/surfaces'
 import { createEditorSurface } from './aiSurface'
-import type { EditorActions } from './editorActions'
+import type { ComposeDeps } from './aiSurfaceTypes'
 
 const SURFACE = 'dashboard-editor'
 
-export interface AiPanelDeps {
-  editor: DashboardEditor
-  actions: EditorActions
-  getManifest: GetModuleManifest
+export interface AiPanelDeps extends ComposeDeps {
   dashboardId: () => string | null
 }
 

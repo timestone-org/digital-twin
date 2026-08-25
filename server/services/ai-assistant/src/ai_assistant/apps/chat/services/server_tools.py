@@ -11,9 +11,11 @@
 某一个用户。做成进程级单例的话，两个用户的请求会互相借用对方的身份。
 """
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
 
+from ai_assistant.apps.chat.services.module_catalog import catalog_of
 from ai_assistant.apps.chat.services.point_recall import (
     PointCandidate,
     ScoredPoint,
@@ -27,6 +29,10 @@ MAX_RESULTS = 20
 # 为了凑够候选最多翻几页。⚠ 有上限：一个源可能挂着上万个点位，
 # 无上限地翻会把一次工具调用变成几十次往返
 MAX_PAGES = 5
+
+
+# 一个工具的实现：收一袋参数，给一份结果
+ToolHandler = Callable[[dict[str, Any]], Awaitable[Any]]
 
 
 class UnknownServerTool(RuntimeError):
@@ -43,24 +49,49 @@ class ServerTools:
     async def __call__(self, name: str, arguments: dict[str, Any]) -> Any:
         """按名字跑一个工具。
 
+        ⚠ 查表而不是一串 `if`：工具是会一直加的，而一串 `if` 加到第十个就过不了
+        复杂度闸，那时最省事的改法是把工具塞进别的分支里——名字与实现于是开始
+        对不上。
+
         Args: name, arguments。
         """
-        if name == "skills.load":
-            return _load_skill(str(arguments.get("name") or ""))
-        if name == "points.list_sources":
-            return await self._list_sources()
-        if name == "points.search":
-            return await self._search_points(arguments)
-        if name == "dashboard.validate":
-            return await self._validate(arguments)
-        raise UnknownServerTool(f"没有这个工具：{name}")
+        run = self._handlers().get(name)
+        if run is None:
+            raise UnknownServerTool(f"没有这个工具：{name}")
+        return await run(arguments)
+
+    def _handlers(self) -> dict[str, ToolHandler]:
+        """工具名 → 实现。
+
+        ⚠ 键必须与 `tool_specs.TOOL_SPECS` 里的名字逐字相同：对不上时模型
+        看得见那个工具、调用它却每次都失败。
+        """
+        return {
+            "skills.load": _skill_answer,
+            "modules.catalog": self._modules,
+            "points.list_sources": self._list_sources,
+            "points.search": self._search_points,
+            "dashboard.validate": self._validate,
+        }
 
     def _upstream(self) -> PlatformClient:
         if self.platform is None:
             raise UnknownServerTool("本部署没有接上业务面，取不到点位")
         return self.platform
 
-    async def _list_sources(self) -> Any:
+    async def _modules(self, arguments: dict[str, Any]) -> Any:
+        """给模块清单：不点名就给名片表，点名就把那一个展开。
+
+        Args: arguments。
+        """
+        wanted = _text_or_none(arguments.get("module_type"))
+        client = self._upstream()
+        if wanted is not None:
+            return await client.read_module_type(self.headers, wanted)
+        body = await client.list_module_types(self.headers)
+        return catalog_of(body, _text_or_none(arguments.get("keyword")))
+
+    async def _list_sources(self, _arguments: dict[str, Any]) -> Any:
         rows = await self._upstream().list_sources(self.headers)
         return {"sources": [_source_of(row) for row in rows]}
 
@@ -120,6 +151,14 @@ class ServerTools:
         return await self._upstream().validate_dashboard(
             self.headers, dashboard_id
         )
+
+
+async def _skill_answer(arguments: dict[str, Any]) -> Any:
+    """技能是本地的，没有 IO；包成协程只为与别的工具同形。
+
+    Args: arguments。
+    """
+    return _load_skill(str(arguments.get("name") or ""))
 
 
 def _load_skill(name: str) -> dict[str, Any]:
