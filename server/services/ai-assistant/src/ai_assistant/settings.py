@@ -21,6 +21,9 @@ HTTP_PORT = 8006
 MAX_STEPS_PER_TURN = 24
 # 一次对话最多带多少条历史消息进模型。再多就该由编排层摘要——摘要是编排层的事
 MAX_HISTORY_MESSAGES = 40
+# 一张截图 base64 之后的字符数上限，约合 3 MB 原图。⚠ 有上限：一张没缩过的整屏
+# PNG 能有十几兆，而那时倒下的不只是这一个请求
+MAX_IMAGE_CHARS = 4_000_000
 
 
 class MigrationSettings(PostgresSettings):

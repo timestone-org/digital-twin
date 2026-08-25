@@ -15,7 +15,9 @@ export interface EditorSurfaceDeps {
   getManifest: GetModuleManifest
 }
 
-/** 组态还要排布动作。 */
+/** 组态还要排布动作；看图还要画布舞台那个元素。 */
 export interface ComposeDeps extends EditorSurfaceDeps {
   arrange: ArrangeActions
+  /** 画布舞台元素；还没挂载时给 null。 */
+  stageEl: () => HTMLElement | null
 }

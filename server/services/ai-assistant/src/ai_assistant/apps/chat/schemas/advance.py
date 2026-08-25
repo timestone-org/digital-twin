@@ -6,10 +6,11 @@
 
 from typing import Any, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from ai_assistant.apps.chat.schemas.common import InputModel
 from ai_assistant.apps.chat.schemas.session import SurfaceKind
+from ai_assistant.settings import MAX_IMAGE_CHARS
 
 # 一次回填最多带几条。与一次能下发的客户端工具数同量级
 MAX_TOOL_RESULTS = 32
@@ -25,6 +26,20 @@ class ToolResultIn(InputModel):
     call_id: str = Field(min_length=1, max_length=128)
     output: Any = None
     error: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("output")
+    @classmethod
+    def check_size(cls, given: Any) -> Any:
+        """产出不许大到把进程压垮。
+
+        ⚠ 只量字符串：能大到成问题的只有内嵌的图，而对一袋结构化结果做序列化
+        测长，等于每个请求都白跑一遍 JSON 编码。
+
+        Args: given。
+        """
+        if isinstance(given, str) and len(given) > MAX_IMAGE_CHARS:
+            raise ValueError("工具产出太大，截图请先缩小再传")
+        return given
 
 
 class AdvanceIn(InputModel):

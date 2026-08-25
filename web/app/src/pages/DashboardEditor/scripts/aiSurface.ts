@@ -17,6 +17,7 @@ import type { ConfigPath } from '@/features/dashboard/configPath'
 import { createBinding } from '@/features/dashboard/editorDoc'
 import { nodeLabelOf } from '@/features/dashboard/nodeLabel'
 import type { AiSurface, SurfaceSnapshot } from '@/features/ai/surfaces'
+import { captureCanvas } from './aiSurfaceCapture'
 import { COMPOSE_TOOLS, runCompose } from './aiSurfaceCompose'
 import type { ComposeDeps, EditorSurfaceDeps } from './aiSurfaceTypes'
 
@@ -34,6 +35,7 @@ export const EDITOR_TOOLS = [
   'dashboard.read_bindings',
   'dashboard.write_binding',
   'dashboard.set_config',
+  'dashboard.capture',
   ...COMPOSE_TOOLS,
 ] as const
 
@@ -89,6 +91,7 @@ function dispatch(deps: ComposeDeps, call: AssistantToolCall): unknown {
   if (call.name === 'dashboard.read_bindings') return readBindings(deps, call)
   if (call.name === 'dashboard.write_binding') return writeBinding(deps, call)
   if (call.name === 'dashboard.set_config') return setConfig(deps, call)
+  if (call.name === 'dashboard.capture') return captureCanvas(deps.stageEl())
   const composed = runCompose(deps, call)
   if (composed !== null) return composed
   throw new Error(`当前页面没有实现 ${call.name}`)

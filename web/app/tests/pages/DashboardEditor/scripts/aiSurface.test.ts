@@ -97,6 +97,7 @@ function setup(): Harness {
           },
           notify: vi.fn(),
         }),
+        stageEl: () => null,
         getManifest: () => MANIFEST,
       })
       return () => h('div')

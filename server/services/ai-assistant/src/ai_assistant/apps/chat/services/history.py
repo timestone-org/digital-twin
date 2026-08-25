@@ -6,6 +6,10 @@
 
 ⚠ 工具消息必须带回 `tool_call_id`。丢了它，模型看到的是「有人回了句话，
 但不知道回的是哪次调用」——端点那一侧多半直接判请求不合法。
+
+⚠ **图不落库**，落的是一句占位。一张截图是几兆字节的 base64，存进去之后这个
+会话每重放一次就把它再喂给模型一遍，上下文与账单一起翻倍。图只活在截它的那
+一轮（`services/vision.py`）。
 """
 
 from typing import Any, cast
@@ -19,6 +23,7 @@ from langchain_core.messages import (
 from langchain_core.messages.tool import ToolCall
 
 from ai_assistant.apps.chat.models import ChatMessage
+from ai_assistant.apps.chat.services.vision import PLACEHOLDER
 
 _USER = "user"
 _ASSISTANT = "assistant"
@@ -68,8 +73,33 @@ def replay(rows: list[ChatMessage]) -> list[BaseMessage]:
 
 
 def _text_of(message: BaseMessage) -> str:
+    """一条消息落库时留下的那段文字。
+
+    ⚠ 多模态消息的 content 是一串块。这里把文字块留下、图片块换成占位——
+    原样存的话，一次截图会在库里留下几兆字节，且每次重放都再喂一遍。
+
+    Args: message。
+    """
     content = message.content
-    return content if isinstance(content, str) else ""
+    if isinstance(content, str):
+        return content
+    parts = [_part_text(one) for one in cast("list[object]", content)]
+    return " ".join(one for one in parts if one)
+
+
+def _part_text(part: object) -> str:
+    """一个内容块摊成文字。
+
+    Args: part。
+    """
+    if isinstance(part, str):
+        return part
+    if not isinstance(part, dict):
+        return ""
+    body = cast("dict[str, object]", part)
+    if body.get("type") == "text":
+        return str(body.get("text") or "")
+    return PLACEHOLDER
 
 
 def _calls_of(body: dict[str, Any]) -> list[ToolCall]:

@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_assistant.apps.chat.crud import session_crud
 from ai_assistant.apps.chat.models import ChatMessage, ChatStep
-from ai_assistant.apps.chat.services import history
+from ai_assistant.apps.chat.services import history, vision
 from ai_assistant.apps.chat.services.prompt import build_system_prompt
 from ai_assistant.apps.chat.services.server_tools import ServerTools
 from ai_assistant.apps.chat.services.tool_specs import TOOL_SPECS
@@ -86,6 +86,16 @@ class ClientToolResult:
         """摊成模型认的一段工具输出。"""
         if self.error is not None:
             return f"失败：{self.error}"
+        # ⚠ 图不放在工具消息里：那一层只认文字，塞进去多半被整条丢掉，
+        # 表现是模型说「我没看到图」而调用明明成功了
+        if vision.is_image(self.output):
+            return vision.HANDOFF
+        return str(self.output)
+
+    def image(self) -> str | None:
+        """这一条带回来的图；没有就是 None。"""
+        if not vision.is_image(self.output):
+            return None
         return str(self.output)
 
 
@@ -111,10 +121,14 @@ def incoming_messages(payload: AdvanceInput) -> list[BaseMessage]:
     """
     if payload.user_text is not None:
         return [HumanMessage(content=payload.user_text)]
-    return [
+    replies: list[BaseMessage] = [
         ToolMessage(content=result.as_text(), tool_call_id=result.call_id)
         for result in payload.tool_results
     ]
+    # ⚠ 图统一排在这一批工具消息**之后**：夹在中间的话，工具消息与它对应的
+    # 调用就不再相邻，而有的端点按相邻性校验这一段
+    pictures = [one.image() for one in payload.tool_results]
+    return replies + [vision.image_message(one) for one in pictures if one]
 
 
 async def load_context(
@@ -155,7 +169,12 @@ async def advance(
             session, chat_session_id=chat_session_id, payload=payload
         )
     turn = TurnDeps(
-        model=deps.model, specs=TOOL_SPECS, run_tool=deps.server_tools
+        model=deps.model,
+        specs=TOOL_SPECS,
+        run_tool=deps.server_tools,
+        # 带图的这一轮走视觉档。⚠ 不能整个会话都走：视觉模型的单价与延迟都
+        # 高得多，一次截图之后每一句闲聊都按视觉计费
+        kind="vision" if has_image(payload) else "chat",
     )
     produced: list[TurnStep] = []
     outcome: TurnOutcome | None = None
@@ -174,6 +193,14 @@ async def advance(
             steps=produced,
         )
         yield outcome
+
+
+def has_image(payload: AdvanceInput) -> bool:
+    """这一次回填里有没有图，也就是这一轮要不要走视觉档。
+
+    Args: payload。
+    """
+    return any(one.image() is not None for one in payload.tool_results)
 
 
 async def _persist(

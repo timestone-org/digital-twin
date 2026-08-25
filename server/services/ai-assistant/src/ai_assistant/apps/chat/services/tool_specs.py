@@ -231,6 +231,16 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         runs_on="client",
     ),
     ToolSpec(
+        name="dashboard.capture",
+        description=(
+            "截当前画布的图并直接看它。**只在这一轮看得见**——"
+            "看完必须当场把结论写成文字，下一轮只剩一句「这里曾经有一张图」。"
+            "⚠ 三维模块在截图里是一块空白，那是截不到不是没配。"
+        ),
+        parameters=_object({}, []),
+        runs_on="client",
+    ),
+    ToolSpec(
         name="dashboard.set_config",
         description=(
             "改一个画布节点的配置。`path` 是配置路径，"

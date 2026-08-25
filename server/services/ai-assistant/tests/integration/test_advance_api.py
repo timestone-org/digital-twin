@@ -30,6 +30,7 @@ from lib.resilience import CircuitBreaker
 pytestmark = pytest.mark.requires_postgres
 
 SESSIONS_URL = "/api/v1/assistant/sessions"
+PNG = "data:image/png;base64,iVBORw0KGgo="
 
 
 def _asks(tool: str, call_id: str, /, **arguments: Any) -> AIMessage:
@@ -38,13 +39,17 @@ def _asks(tool: str, call_id: str, /, **arguments: Any) -> AIMessage:
     )
 
 
-def _install(stack: DbStack, model: BaseChatModel) -> None:
+def _install(
+    stack: DbStack, model: BaseChatModel, asked: list[ModelKind] | None = None
+) -> None:
     """把假模型与用例那条连接装进推进依赖。
 
-    Args: stack, model。
+    Args: stack, model, asked（记下每次要的是哪一档模型）。
     """
 
-    def source(_kind: ModelKind) -> BaseChatModel:
+    def source(kind: ModelKind) -> BaseChatModel:
+        if asked is not None:
+            asked.append(kind)
         return model
 
     @asynccontextmanager
@@ -229,3 +234,37 @@ async def test_an_unknown_session_is_missing(db_stack: DbStack) -> None:
         json={"surface_kind": "dashboard-editor", "user_text": "在吗"},
     )
     assert response.status_code == 404
+
+
+async def test_a_screenshot_goes_to_the_vision_model_and_stays_out_of_the_db(
+    db_stack: DbStack,
+) -> None:
+    asked: list[ModelKind] = []
+    _install(
+        db_stack,
+        ScriptedChat(
+            script=[
+                _asks("dashboard.capture", "p1"),
+                AIMessage(content="左上角那个卡片比右边三个矮 12 像素"),
+            ]
+        ),
+        asked,
+    )
+    session_id = await _new_session(db_stack.client)
+    await _advance(db_stack.client, session_id, user_text="看看我这屏怎么样")
+
+    events = await _advance(
+        db_stack.client,
+        session_id,
+        tool_results=[{"call_id": "p1", "output": PNG}],
+    )
+
+    assert events[-1][0] == "turn.done"
+    # 带图那一轮才走视觉档：整个会话都走的话，之后每句闲聊都按视觉计费
+    assert asked[-1] == "vision"
+
+    detail = await db_stack.client.get(f"{SESSIONS_URL}/{session_id}")
+    stored = json.dumps(detail.json()["data"], ensure_ascii=False)
+    # 几兆字节的 base64 存一次、每次重放再喂一遍，上下文与账单一起翻倍
+    assert PNG not in stored
+    assert "[截图]" in stored
