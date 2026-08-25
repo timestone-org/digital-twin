@@ -19,6 +19,54 @@
 ⚠ 用户说的模块名是中文（「数值卡」「按钮」），清单里每个模块带 `keywords`
 （含拼音），按它对上模块类型，**不要自己音译**。
 
+## 改配置的四步
+
+配置是一只**自由袋子**：写一个清单里没有的键既不报错也不渲染，画面上表现为
+「配了没反应」，而配置确实存下去了。所以每次改配置都走这四步：
+
+1. `modules.catalog` 带 `module_type` —— 这个模块**能配什么**（键、类型、
+   默认值、可选值、条件显示、数组字段的 itemSchema）。
+2. `dashboard.read_config` —— 这个画布节点**此刻配成什么样**。
+   ⚠ 不读就写，等于把用户已经调好的那几格一起冲掉。
+3. `dashboard.set_config` 改单个键，或 `dashboard.add_config_item` /
+   `dashboard.remove_config_item` 增删数组字段里的一项。
+4. 把改了什么用一句话说给用户听。
+
+`dashboard.set_config` 的 `path` 是**路径数组**：
+
+| 要改的东西 | path |
+| --- | --- |
+| 顶层字段 | `["title"]` |
+| 数组里第 2 项的某一格 | `["items", 1, "unit"]` |
+| 卡片外观 | `["__cardStyle", "borderStyle"]` |
+
+⚠ 往数组字段里**加一项**不要用 `set_config` 整份重写——用
+`dashboard.add_config_item`，它按 itemSchema 填好默认值再盖上你给的那几格。
+整份重写会把没提到的字段全变成 `undefined`。
+
+## 数据模块：一项配置 = 一行数据
+
+多数数据模块（实时数值卡、表格、图表）是「一块 N 个指标」：
+**配置里的第 i 项与数据槽的第 i 行一一对应**。
+
+给「实时数值」再加一个指标并让它显示一个固定值，完整的一趟是：
+
+1. `dashboard.read_config` 看现在有几项（比如 2 项）。
+2. `dashboard.add_config_item`，`field` 给 `items`，
+   `values` 给 `{"label":"额定功率","unit":"MW","kind":"number"}`
+   → 回一个 `index: 2`。
+3. `dashboard.write_binding`，`field_key` 给 `itemValues[2].value`，
+   `source_kind` 给 `static`，`value` 给 `12.5`。
+
+要接现场实时数据就把第 3 步换成 `source_kind: "opcua"` 加 `node_key`
+（点位怎么找见 `dashboard-binding` 技能）。
+
+⚠ **加了配置项不绑数据槽，那一格显示的是「没配来源」**，而不是空白——
+用户会以为模块坏了。加完就问清楚这一项的值从哪来。
+
+⚠ **删中间一项**会让它之后每一行的绑定都改喂前一项。删完必须重读绑定核对，
+并把这件事说给用户听。
+
 ## 坐标与几何
 
 - 设计坐标系，单位像素，原点在左上角。默认画布 1920×1080。
@@ -29,13 +77,14 @@
 
 ## 外观（用户说「边框」「圆角」「背景」时）
 
-模块外观不在配置字段里，在节点的**卡片外观**那一段，用 `dashboard.set_config`
+模块外观**不在配置字段里**，在节点的卡片外观那一段，用 `dashboard.set_config`
 写 `__cardStyle` 下面的键。
 
+- 拿不准键名就调 `dashboard.chrome_keys`，它给全部可用键与各自的合法取值。
+  ⚠ 凭印象写的外观键存得下去、也不报错，就是看不见。
 - 「去掉边框」= `borderStyle` 设成 `none`
-- 边框风格是闭合集合：`solid` `glow` `double` `dashed` `bracket` `cut` `breathe` `none`
 - ⚠ 外观键的语义是「**键不存在 = 没设置**」，与配置字段的默认值相反。
-  要恢复成缺省就**删掉那个键**，不要写一个「默认值」进去。
+  要恢复成缺省就把值设成 `null`**删掉那个键**，不要写一个「默认值」进去。
 
 清单里的 `chrome` 说的是这一格套不套平台的卡片框：
 

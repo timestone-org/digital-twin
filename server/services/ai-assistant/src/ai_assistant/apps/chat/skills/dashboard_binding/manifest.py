@@ -23,6 +23,7 @@ DASHBOARD_BINDING = SkillManifest(
         "dashboard.read_canvas",
         "dashboard.read_bindings",
         "dashboard.write_binding",
+        "dashboard.remove_binding",
     ),
     directory=Path(__file__).resolve().parent,
 )

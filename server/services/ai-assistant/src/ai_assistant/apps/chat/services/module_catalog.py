@@ -29,6 +29,10 @@ def brief_of(module: dict[str, object]) -> dict[str, Any]:
         "default_size": _size_of(module.get("default_size")),
         "slots": [_slot_of(one) for one in _list_of(module.get("bindings"))],
         "config_field_count": len(_list_of(module.get("config_schema"))),
+        # ⚠ 这两格必须在名片上：装不装得下子节点、是不是钉在页头页脚，决定的是
+        # 「这个模块能不能这么摆」。缺了它们模型只能试一次、被拒、再换一个
+        "is_container": bool(module.get("is_container")),
+        "region": module.get("region"),
     }
 
 

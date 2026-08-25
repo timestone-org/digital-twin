@@ -76,6 +76,25 @@
 
 漏了这句，用户看到的是「绑完了但一个数都没有」，会当成没绑上。
 
+## 不接点位的那几种槽
+
+不是每一格都来自现场。用户说「这一格就写 380」「额定值填死」时，
+用 `dashboard.write_binding` 的 `source_kind: "static"` 加 `value`：
+
+```
+dashboard.write_binding(node_id=…, field_key="itemValues[2].value",
+                        source_kind="static", value=380)
+```
+
+- `value` 可以是数字、文本、真假。
+- ⚠ **不能给 `null`**：那一层把 null 读成「没配过」，画面上是「取不到」
+  而不是空值，而你会以为自己配好了。
+- 常量槽没有历史、也不推送，所以趋势图那类时序槽绑常量是没有意义的。
+
+⚠ 常量与点位**是同一条绑定的两种取数方式**。要把一个已经绑了常量的槽改接
+点位，直接再写一次 `write_binding`（换成 `opcua` 加 `node_key`）——
+不要先 `remove_binding` 再绑：绑定 id 是实时推送的关联键，解了再绑会断一次。
+
 ## 数组槽位
 
 多数数据模块的槽位是**数组槽**（一个槽对应 N 行），槽键形如 `itemValues[0].value`。

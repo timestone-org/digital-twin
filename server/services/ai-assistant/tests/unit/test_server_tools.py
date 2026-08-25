@@ -218,6 +218,37 @@ async def test_the_module_list_gives_cards_not_config_fields() -> None:
     assert card["slots"][0]["array_fields"] == ["value"]
 
 
+async def test_the_card_says_whether_it_holds_children() -> None:
+    """装不装得下子节点要在名片上。
+
+    ⚠ 缺了它模型只能挑一个试、被编辑器拒、再换一个——三次往返换一个
+    本可以不发生的错误。
+    """
+    holder = _module("container", "容器")
+    holder["is_container"] = True
+    holder["region"] = None
+    tools = _tools(_catalog([holder]))
+
+    got = await tools("modules.catalog", {})
+    assert isinstance(got, dict)
+    modules = got["modules"]
+    assert isinstance(modules, list)
+    assert modules[0]["is_container"] is True
+
+
+async def test_a_pinned_module_says_which_region_it_lives_in() -> None:
+    header = _module("header", "页头")
+    header["region"] = "header"
+    tools = _tools(_catalog([header]))
+
+    got = await tools("modules.catalog", {})
+    assert isinstance(got, dict)
+    modules = got["modules"]
+    assert isinstance(modules, list)
+    # 页头页脚每屏只有一个、且横向铺满——摆之前就该知道
+    assert modules[0]["region"] == "header"
+
+
 async def test_naming_a_module_type_pulls_its_full_schema() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path.endswith("/metric-card")

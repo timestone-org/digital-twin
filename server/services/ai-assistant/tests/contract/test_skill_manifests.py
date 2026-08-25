@@ -28,7 +28,12 @@ KNOWN_CLIENT_TOOLS = frozenset(
     {
         "dashboard.read_canvas",
         "dashboard.read_bindings",
+        "dashboard.read_config",
+        "dashboard.chrome_keys",
         "dashboard.write_binding",
+        "dashboard.remove_binding",
+        "dashboard.add_config_item",
+        "dashboard.remove_config_item",
         "dashboard.add_module",
         "dashboard.remove_node",
         "dashboard.set_config",
