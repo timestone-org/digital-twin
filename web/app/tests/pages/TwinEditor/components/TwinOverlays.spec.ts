@@ -7,10 +7,11 @@
  */
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PERMISSION_CODES } from '@dt/contracts'
 
+import BulkPartsDialog from '@/pages/TwinEditor/components/BulkPartsDialog.vue'
 import TwinOverlays from '@/pages/TwinEditor/components/TwinOverlays.vue'
 import type { AiPanel } from '@/composables/useAiPanel'
 import type { BulkParts } from '@/pages/TwinEditor/scripts/useBulkParts'
@@ -80,16 +81,18 @@ function setup(isAvailable = false) {
 describe('批量加部件', () => {
   it('关弹窗是上抛，不是就地改 prop', async () => {
     const wrapper = setup()
-    const dialog = wrapper.findComponent({ name: 'BulkPartsDialog' })
-    await dialog.vm.$emit('update:open', false)
+    const dialog = wrapper.getComponent(BulkPartsDialog)
+    dialog.vm.$emit('update:open', false)
+    await nextTick()
     expect(wrapper.emitted('update:bulk-open')).toEqual([[false]])
     wrapper.unmount()
   })
 
   it('确认选中的部件名一路上抛给页面', async () => {
     const wrapper = setup()
-    const dialog = wrapper.findComponent({ name: 'BulkPartsDialog' })
-    await dialog.vm.$emit('confirm', ['泵体', '阀门'])
+    const dialog = wrapper.getComponent(BulkPartsDialog)
+    dialog.vm.$emit('confirm', ['泵体', '阀门'])
+    await nextTick()
     expect(wrapper.emitted('add-parts')).toEqual([[['泵体', '阀门']]])
     wrapper.unmount()
   })
