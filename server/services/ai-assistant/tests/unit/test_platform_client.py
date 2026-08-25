@@ -161,3 +161,39 @@ async def test_the_pool_is_rebuilt_after_it_is_closed() -> None:
     await client.close()
     await client.list_sources(HEADERS)
     assert len(calls) == 2
+
+
+async def test_a_timeout_says_so_plainly() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("timed out", request=request)
+
+    with pytest.raises(PlatformUnavailable) as error:
+        await _client(handler).list_sources(HEADERS)
+    # 「超时」与「回了 500」要分得开：前者查网络，后者查上游
+    assert "超时" in str(error.value)
+
+
+async def test_a_body_that_is_not_a_page_reads_as_empty_not_a_crash() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"code": 0, "message": "ok", "trace_id": "t", "data": []},
+        )
+
+    # 上游换了形状时宁可空，也不要在几个文件之外炸出一个看不懂的类型错
+    assert await _client(handler).list_sources(HEADERS) == []
+
+
+async def test_a_page_without_items_reads_as_empty() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "code": 0,
+                "message": "ok",
+                "trace_id": "t",
+                "data": {"page": 1, "size": 200, "total": 0},
+            },
+        )
+
+    assert await _client(handler).list_sources(HEADERS) == []

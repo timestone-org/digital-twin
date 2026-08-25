@@ -14,12 +14,15 @@ import { RouterView, useRoute } from 'vue-router'
 import { PERMISSION_CODES } from '@dt/contracts'
 import { DtButton, DtPageState, DtTag } from '@dt/ui'
 
+import AiDock from '@/components/ai/AiDock.vue'
 import PermGuard from '@/components/PermGuard.vue'
 import type { AppTabItem } from '@/components/layout'
 import { AppShell, AppTabNav } from '@/components/layout'
 import ColumnFormDialog from './components/ColumnFormDialog.vue'
+import FormulaProposalCard from './components/FormulaProposalCard.vue'
 import { collectSummary } from '../scripts/collectSummary'
 import { useColumnOps } from './scripts/useColumnOps'
+import { useTableAi } from './scripts/useTableAi'
 import { useTableDetail } from './scripts/useTableDetail'
 
 const route = useRoute()
@@ -31,6 +34,15 @@ const ops = useColumnOps({
   columns: detail.columns,
   setColumns: detail.setColumns,
   reloadColumns: detail.reloadColumns,
+})
+
+const ai = useTableAi({
+  tableId: () => tableId.value,
+  tableName: () => detail.table.value?.name ?? '',
+  columns: () => detail.columns.value,
+  isFormOpen: ops.isFormOpen,
+  openCreate: ops.openCreate,
+  openEdit: ops.openEdit,
 })
 
 /** 分区是子路由，页签因此是真链接：可收藏、可中键新开、后退可用。 */
@@ -165,7 +177,21 @@ onMounted(() => {
       v-model="ops.isFormOpen.value"
       :table-id="tableId"
       :column="ops.editing.value"
+      :seed="ai.seed.value"
       @saved="ops.afterSaved($event)"
+    />
+
+    <FormulaProposalCard
+      v-if="ai.proposal.value"
+      :proposal="ai.proposal.value"
+      @adopt="ai.adopt"
+      @dismiss="ai.dismiss"
+    />
+    <AiDock
+      :ai="ai.panel"
+      surface-kind="dataset-table"
+      surface-label="台账详情"
+      hint="助手只提议公式，落库要你自己点确认。"
     />
   </AppShell>
 </template>

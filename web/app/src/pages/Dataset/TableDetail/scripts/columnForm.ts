@@ -90,8 +90,36 @@ function defaultValueText(value: unknown): string {
  * 「哪个字段缺省成什么」有且只有一处答案。
  * @param column 要编辑的列，`null` 表示新增
  */
-export function formStateOf(column: DatasetColumn | null): ColumnFormState {
-  if (column === null) return emptyColumnForm()
+/** 打开弹窗时的预填（助手的提议走这条）。两格都可缺席。 */
+export interface ColumnFormSeed {
+  formula?: string
+  /** 只在新增时有意义：列标识建后不可改。 */
+  key?: string
+}
+
+/**
+ * 列 → 表单初值。
+ * ⚠ 有预填公式时**连来源一起切成「公式」**：只填表达式的话，这一列仍是人工
+ * 录入，保存下去那条公式一次都不算，而界面上看着一切正常。
+ * @param column 正在编辑的那一列；`null` 即新增
+ * @param seed 预填
+ */
+export function formStateOf(
+  column: DatasetColumn | null,
+  seed: ColumnFormSeed = {},
+): ColumnFormState {
+  const base = column === null ? emptyColumnForm() : fromColumn(column)
+  const formula = seed.formula ?? ''
+  if (formula === '') return base
+  return {
+    ...base,
+    key: column === null ? (seed.key ?? base.key) : base.key,
+    source: 'formula',
+    formula,
+  }
+}
+
+function fromColumn(column: DatasetColumn): ColumnFormState {
   return {
     key: column.key,
     name: column.name,

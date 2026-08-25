@@ -1,24 +1,25 @@
 /**
- * @fileoverview 编辑器里的助手面板：登记工作面、探一次能力、管开合与会话。
+ * @fileoverview 把一个页面接进助手：登记工作面、探一次能力、管开合与会话。
  *
  * ⚠ 工作面**挂载时登记、卸载时撤掉**。不撤的话，用户离开这一页之后助手仍握着
- * 一份指向已经没了的编辑器的句柄，下一次动手会改到一个不存在的画布上。
+ * 一份指向已经没了的页面的句柄，下一次动手会改到一个不存在的东西上。
  *
  * ⚠ 探测失败一律当作「这套部署没有助手」，不是「暂时故障」：某些现场根本不
- * 部署 ai-assistant，那时入口就该干净地不出现，而不是弹一条红色告警。
+ * 部署 ai-assistant，那时入口就该干净地不出现，而不是弹一条红色告警
+ * （features/ai/ports.ts）。
  */
 import { onMounted, onUnmounted, ref, type Ref } from 'vue'
 
 import { createSession } from '@/api/assistant'
 import { aiPorts } from '@/features/ai/ports'
 import { clearSurface, setSurface } from '@/features/ai/surfaces'
-import { createEditorSurface } from './aiSurface'
-import type { ComposeDeps } from './aiSurfaceTypes'
+import type { AiSurface } from '@/features/ai/surfaces'
 
-const SURFACE = 'dashboard-editor'
-
-export interface AiPanelDeps extends ComposeDeps {
-  dashboardId: () => string | null
+export interface AiPanelOptions {
+  /** 这一页的工作面。⚠ 只在装配时调一次，句柄要一直有效。 */
+  surface: () => AiSurface
+  /** 工作面指向的那个东西的 id（大屏 id / 台账 id）；还没加载出来时给 null。 */
+  refId: () => string | null
 }
 
 export interface AiPanel {
@@ -31,19 +32,17 @@ export interface AiPanel {
   close: () => void
 }
 
-/**
- * 把编辑器接进助手。
- * @param deps 编辑器的草稿、动作层、清单解析器与当前大屏 id
- */
-export function useAiPanel(deps: AiPanelDeps): AiPanel {
+/** 把一个页面接进助手。 */
+export function useAiPanel(options: AiPanelOptions): AiPanel {
   const isAvailable = ref(false)
   const isOpen = ref(false)
   const sessionId = ref<string | null>(null)
   let opening = false
 
-  setSurface(createEditorSurface(deps))
+  const surface = options.surface()
+  setSurface(surface)
   onUnmounted(() => {
-    clearSurface(SURFACE)
+    clearSurface(surface.kind)
   })
 
   onMounted(() => {
@@ -67,7 +66,7 @@ export function useAiPanel(deps: AiPanelDeps): AiPanel {
     }
     opening = true
     try {
-      const created = await createSession(SURFACE, deps.dashboardId())
+      const created = await createSession(surface.kind, options.refId())
       sessionId.value = created.id
       isOpen.value = true
     } finally {

@@ -7,6 +7,7 @@ import type { DashboardPayload } from '@dt/contracts'
 import type { DesignSize, GetModuleManifest } from '@dt/runtime'
 
 import { exportDashboard } from '@/api/dashboardTransfer'
+import { useAiPanel, type AiPanel } from '@/composables/useAiPanel'
 import type { DashboardEditor } from '@/composables/useDashboardEditor'
 import type {
   EditorGridConfig,
@@ -14,6 +15,7 @@ import type {
 } from '@/features/dashboard/canvasSnap'
 import type { CanvasZoom } from '@/features/dashboard/canvasZoom'
 import { downloadJson } from '@/utils/downloadJson'
+import { createEditorSurface } from './aiSurface'
 import type { EditorActions } from './editorActions'
 import type { ArrangeActions } from './editorArrange'
 import { useEditorHotkeys } from './useEditorHotkeys'
@@ -23,7 +25,6 @@ import {
 } from './useEditorContextMenu'
 import { clearDraft } from './editorDraft'
 import { captureThumbnail } from './editorThumbnail'
-import { useAiPanel, type AiPanel } from './useAiPanel'
 
 export interface EditorExtrasDeps {
   editor: DashboardEditor
@@ -79,12 +80,15 @@ export interface EditorExtras {
 /** 助手的工作面要认得画布节点是什么模块，所以清单解析器也要给它。 */
 function aiPanelOf(deps: EditorExtrasDeps): AiPanel {
   return useAiPanel({
-    editor: deps.editor,
-    actions: deps.actions,
-    arrange: deps.arrange,
-    stageEl: deps.stageEl,
-    getManifest: deps.getManifest,
-    dashboardId: deps.dashboardId,
+    surface: () =>
+      createEditorSurface({
+        editor: deps.editor,
+        actions: deps.actions,
+        arrange: deps.arrange,
+        stageEl: deps.stageEl,
+        getManifest: deps.getManifest,
+      }),
+    refId: deps.dashboardId,
   })
 }
 

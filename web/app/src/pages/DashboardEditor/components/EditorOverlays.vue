@@ -13,11 +13,8 @@ import type { CollectPoint } from '@dt/contracts'
 import type { ContextMenuAction } from '../scripts/contextMenuItems'
 import type { ContextMenuState } from '../scripts/useEditorContextMenu'
 import PointPickerDialog from '@/components/binding/PointPickerDialog.vue'
-import AiAssistantPanel from '@/components/ai/AiAssistantPanel.vue'
-import PermGuard from '@/components/PermGuard.vue'
-import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton } from '@dt/ui'
-import type { AiPanel } from '../scripts/useAiPanel'
+import AiDock from '@/components/ai/AiDock.vue'
+import type { AiPanel } from '@/composables/useAiPanel'
 import CanvasContextMenu from './CanvasContextMenu.vue'
 import EditorPreview from './EditorPreview.vue'
 import ShortcutsDialog from './ShortcutsDialog.vue'
@@ -69,42 +66,10 @@ const emit = defineEmits<{
     @close="emit('close-menu')"
   />
 
-  <PermGuard :codes="[PERMISSION_CODES.assistantUse]">
-    <div v-if="ai.isAvailable.value" class="ai-dock">
-      <DtButton
-        v-if="!ai.isOpen.value"
-        variant="solid"
-        size="sm"
-        icon="sparkles"
-        @click="() => void ai.open()"
-      >
-        助手
-      </DtButton>
-      <div v-else class="ai-dock__panel">
-        <AiAssistantPanel
-          surface-kind="dashboard-editor"
-          surface-label="大屏编辑器"
-          :session-id="ai.sessionId.value"
-          hint="助手改的是草稿，保存要你自己按。"
-          @close="ai.close"
-        />
-      </div>
-    </div>
-  </PermGuard>
+  <AiDock
+    :ai="ai"
+    surface-kind="dashboard-editor"
+    surface-label="大屏编辑器"
+    hint="助手改的是草稿，保存要你自己按。"
+  />
 </template>
-<style scoped lang="scss">
-.ai-dock {
-  position: fixed;
-  right: 1rem;
-  bottom: 1rem;
-  z-index: var(--z-assistant);
-}
-
-.ai-dock__panel {
-  width: min(26rem, calc(100vw - 2rem));
-  height: min(34rem, calc(100vh - 6rem));
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow: var(--fx-shadow-menu);
-}
-</style>

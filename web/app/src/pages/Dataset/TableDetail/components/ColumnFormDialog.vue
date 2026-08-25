@@ -44,6 +44,7 @@ import {
   UNIT_MAX,
   validateColumnForm,
   type ColumnFormErrors,
+  type ColumnFormSeed,
 } from '../scripts/columnForm'
 import { SOURCE_OPTIONS, sourceMeta, TYPE_OPTIONS } from '../scripts/columnView'
 
@@ -58,6 +59,12 @@ const props = defineProps<{
   modelValue: boolean
   tableId: string
   column: DatasetColumn | null
+  /**
+   * 打开时的预填（助手的提议走这条）。
+   * ⚠ 只预填、不落库：这一页每次写入都是真实落库且没有撤销栈，
+   * 所以最后那一下必须由用户自己按。
+   */
+  seed?: ColumnFormSeed
 }>()
 
 const emit = defineEmits<{
@@ -112,12 +119,12 @@ watch(
 )
 
 function resetTo(column: DatasetColumn | null): void {
-  form.value = formStateOf(column)
+  form.value = formStateOf(column, props.seed)
   errors.value = { ...NO_ERRORS }
   error.value = null
   isFormulaValid.value = true
-  // 编辑态的标识是既成事实，不该再被名称推着走
-  isKeyTyped.value = column !== null
+  // 编辑态的标识是既成事实，不该再被名称推着走；预填来的标识同理
+  isKeyTyped.value = column !== null || (props.seed?.key ?? '') !== ''
 }
 
 function onKeyInput(value: string): void {

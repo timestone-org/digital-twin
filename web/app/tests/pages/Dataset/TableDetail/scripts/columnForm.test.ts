@@ -187,3 +187,29 @@ describe('出参组装', () => {
     expect(toCreateInput(form({ key: ' 进水量 ' })).key).toBe('进水量')
   })
 })
+
+describe('助手提议的预填', () => {
+  it('连来源一起切成公式', () => {
+    // 只填表达式的话，这一列仍是人工录入，保存下去那条公式一次都不算，
+    // 而界面上看着一切正常
+    const state = formStateOf(null, { formula: '{本期} * 2' })
+    expect(state.source).toBe('formula')
+    expect(state.formula).toBe('{本期} * 2')
+  })
+
+  it('新增时连列标识一起预填', () => {
+    const state = formStateOf(null, { formula: '1 + 1', key: '增量' })
+    expect(state.key).toBe('增量')
+  })
+
+  it('编辑时不动列标识：它建后不可改', () => {
+    // 改一次等于让这一列的历史值集体失联，而每一行看起来都还在
+    const state = formStateOf(column(), { formula: '1 + 1', key: '别的' })
+    expect(state.key).toBe(column().key)
+  })
+
+  it('没有预填时原样返回', () => {
+    expect(formStateOf(null).formula).toBe('')
+    expect(formStateOf(null, {}).source).toBe('manual')
+  })
+})

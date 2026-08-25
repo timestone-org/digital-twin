@@ -15,6 +15,9 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
 
+from ai_assistant.apps.chat.services.formula_catalog import (
+    catalog_of as formula_catalog_of,
+)
 from ai_assistant.apps.chat.services.module_catalog import catalog_of
 from ai_assistant.apps.chat.services.point_recall import (
     PointCandidate,
@@ -72,6 +75,9 @@ class ServerTools:
             "points.list_sources": self._list_sources,
             "points.search": self._search_points,
             "dashboard.validate": self._validate,
+            "formula.catalog": self._formula_catalog,
+            "formula.validate": self._check_formula,
+            "formula.preview": self._try_formula,
         }
 
     def _upstream(self) -> PlatformClient:
@@ -144,13 +150,74 @@ class ServerTools:
             found.extend(_candidate_of(row) for row in batch)
         return found
 
-    async def _validate(self, arguments: dict[str, Any]) -> Any:
-        dashboard_id = _text_or_none(arguments.get("dashboard_id"))
-        if dashboard_id is None:
-            raise UnknownServerTool("dashboard.validate 少了 dashboard_id")
-        return await self._upstream().validate_dashboard(
-            self.headers, dashboard_id
+    async def _formula_catalog(self, arguments: dict[str, Any]) -> Any:
+        """给函数目录。不给关键词是名字与签名，给了才带样例。
+
+        Args: arguments。
+        """
+        body = await self._upstream().formula_functions(
+            self.headers, _required(arguments, "table_id")
         )
+        return formula_catalog_of(body, _text_or_none(arguments.get("keyword")))
+
+    async def _check_formula(self, arguments: dict[str, Any]) -> Any:
+        """验一条公式的语法、依赖与环。
+
+        ⚠ 写错回的是 200 + `is_ok=false`，不是调用失败。把它当成失败会让
+        助手以为是自己这一侧坏了，而真正该念给用户听的那句错就在体里。
+
+        Args: arguments。
+        """
+        return await self._upstream().check_formula(
+            self.headers,
+            _required(arguments, "table_id"),
+            _formula_body(arguments),
+        )
+
+    async def _try_formula(self, arguments: dict[str, Any]) -> Any:
+        """用一组样例值试算。不读台账里的真数据，故空表也能验。
+
+        Args: arguments。
+        """
+        body = _formula_body(arguments)
+        given = arguments.get("values")
+        body["values"] = given if isinstance(given, dict) else {}
+        return await self._upstream().try_formula(
+            self.headers, _required(arguments, "table_id"), body
+        )
+
+    async def _validate(self, arguments: dict[str, Any]) -> Any:
+        return await self._upstream().validate_dashboard(
+            self.headers, _required(arguments, "dashboard_id")
+        )
+
+
+def _formula_body(arguments: dict[str, Any]) -> dict[str, Any]:
+    """校验与试算共用的那两格。
+
+    Args: arguments。
+    """
+    body: dict[str, Any] = {"formula": _required(arguments, "formula")}
+    column_key = _text_or_none(arguments.get("column_key"))
+    # ⚠ 缺席与 null 在这里是同一件事，但给了 null 也算「有这一格」；
+    # 只有真给了列 key 才做环检测
+    if column_key is not None:
+        body["column_key"] = column_key
+    return body
+
+
+def _required(arguments: dict[str, Any], name: str) -> str:
+    """取一个非空的字符串参数；没有就抛。
+
+    ⚠ 抛而不是拿空串去打上游：空串会变成一个形如 `/dataset-tables//...`
+    的路径，回来的是 404，而那与「这张台账不存在」看着一模一样。
+
+    Args: arguments, name。
+    """
+    given = _text_or_none(arguments.get(name))
+    if given is None:
+        raise UnknownServerTool(f"少了参数 {name}")
+    return given
 
 
 async def _skill_answer(arguments: dict[str, Any]) -> Any:

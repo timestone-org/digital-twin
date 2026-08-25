@@ -120,6 +120,86 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         runs_on="server",
     ),
     ToolSpec(
+        name="formula.catalog",
+        description=(
+            "公式的**唯一函数真源**：函数、运算符、时间窗写法、九条求值口径、"
+            "这张台账可引用的列与跨表、公式库条目。不给 keyword 时函数只给"
+            "名字与签名；给了才回匹配的那几个并带上样例。"
+            "目录里没有的函数写出来是「未知函数」，不要凭记忆写。"
+        ),
+        parameters=_object(
+            {
+                "table_id": _string("台账 id，取自当前工作面"),
+                "keyword": _string("按函数名或说明筛，如「同比」「PREV」"),
+            },
+            ["table_id"],
+        ),
+        runs_on="server",
+    ),
+    ToolSpec(
+        name="formula.validate",
+        description=(
+            "验一条公式的语法、依赖与环。⚠ 写错回的是 `is_ok=false` 加一句"
+            "错误说明，不是调用失败——把那句话念给用户听。"
+        ),
+        parameters=_object(
+            {
+                "table_id": _string("台账 id"),
+                "formula": _string("要验的表达式"),
+                "column_key": _string("正在编辑的那一列的 key；给了才做环检测"),
+            },
+            ["table_id", "formula"],
+        ),
+        runs_on="server",
+    ),
+    ToolSpec(
+        name="formula.preview",
+        description=(
+            "用一组**你自己编的**样例值试算。它不读台账里的真数据，空表也能验。"
+            "看返回的 value 是不是你预期的那个数；`history_refs` 列出的那些引用"
+            "试算时一律按空算，有这一项时要跟用户明说。"
+        ),
+        parameters=_object(
+            {
+                "table_id": _string("台账 id"),
+                "formula": _string("要试算的表达式"),
+                "column_key": _string("正在编辑的那一列的 key"),
+                "values": {
+                    "type": "object",
+                    "additionalProperties": True,
+                    "description": '样例值，键是列 key，如 {"本期": 120}',
+                },
+            },
+            ["table_id", "formula"],
+        ),
+        runs_on="server",
+    ),
+    ToolSpec(
+        name="dataset.read_columns",
+        description=(
+            "读当前这张台账有哪些列：key、名字、类型、单位、取值来源，"
+            "公式列还带着它现在的表达式。动手之前先读一次。"
+        ),
+        parameters=_object({}, []),
+        runs_on="client",
+    ),
+    ToolSpec(
+        name="dataset.propose_formula",
+        description=(
+            "把写好并验过的表达式**交给用户过目**，由他点确认才落库。"
+            "⚠ 台账页没有撤销栈，所以你只提议、不写入。"
+        ),
+        parameters=_object(
+            {
+                "column_key": _string("要写给哪一列；新列就给你建议的 key"),
+                "formula": _string("表达式"),
+                "reading": _string("一句话说明这条公式在算什么"),
+            },
+            ["column_key", "formula", "reading"],
+        ),
+        runs_on="client",
+    ),
+    ToolSpec(
         name="dashboard.read_canvas",
         description=(
             "读当前画布：有哪些画布节点、各是什么模块、摆在哪、叫什么。"
