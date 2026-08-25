@@ -62,8 +62,30 @@ def test_a_row_with_nothing_in_it_still_replays() -> None:
 
 def test_window_takes_the_most_recent_slice() -> None:
     rows = [_row("user", {"text": f"m{i}"}, seq=i) for i in range(1, 11)]
-    kept = history.window(rows, 3)
+    kept = history.window(rows, 3, step=1)
     assert [one.seq for one in kept] == [8, 9, 10]
+
+
+def test_window_drops_a_whole_step_at_a_time() -> None:
+    """脱落点在两次脱落之间原地不动。
+
+    每条消息都挪一格的话，会话一过高水位，发出去的历史区前缀每一轮都对不上，
+    端点的前缀缓存从此再也命中不了——而这件事没有任何运行期迹象。
+    """
+    rows = [_row("user", {"text": f"m{i}"}, seq=i) for i in range(1, 21)]
+    starts = {
+        history.window(rows[:count], 10, step=5)[0].seq
+        for count in range(11, 16)
+    }
+    assert starts == {6}
+    assert history.window(rows[:16], 10, step=5)[0].seq == 11
+
+
+def test_window_never_empties_when_the_step_overshoots_the_limit() -> None:
+    # 台阶比高水位还大时，一个台阶就能把整段历史削光——表现是模型突然
+    # 什么都不记得了
+    rows = [_row("user", {"text": f"m{i}"}, seq=i) for i in range(1, 6)]
+    assert history.window(rows, 3, step=10) != []
 
 
 def test_window_never_starts_with_an_orphan_tool_message() -> None:
@@ -79,7 +101,7 @@ def test_window_never_starts_with_an_orphan_tool_message() -> None:
         _row("tool", {"tool_call_id": "c2", "text": "结果二"}, seq=4),
         _row("assistant", {"text": "好了"}, seq=5),
     ]
-    kept = history.window(rows, 3)
+    kept = history.window(rows, 3, step=1)
     assert [one.seq for one in kept] == [5]
 
 
@@ -89,5 +111,5 @@ def test_window_keeps_a_complete_pair_intact() -> None:
         _row("tool", {"tool_call_id": "c1", "text": "结果"}, seq=2),
         _row("user", {"text": "继续"}, seq=3),
     ]
-    kept = history.window(rows, 3)
+    kept = history.window(rows, 3, step=1)
     assert [one.seq for one in kept] == [1, 2, 3]

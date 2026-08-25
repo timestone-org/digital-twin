@@ -49,6 +49,12 @@ def build_model_source(settings: Settings) -> ChatModelSource | None:
             # （runtime-resilience §4.2）。留着 SDK 自带的重试会让一次超时
             # 变成三次，把上游的预算悄悄用光
             max_retries=0,
+            # 流式回包里要用量那一格。⚠ **必须显式给。** 库只在用默认 OpenAI
+            # 端点时才自己开它，而这里的端点一律来自配置——不给的话流式回包里
+            # 连 usage 都没有，缓存命中与 token 消耗就一个都量不到，而「量不到」
+            # 表现为一切正常。端点万一不认这一格，退路是关
+            # `ASSISTANT_MODEL_STREAM_ENABLED`：非流式那一路本来就带用量
+            stream_usage=True,
         )
 
     return source

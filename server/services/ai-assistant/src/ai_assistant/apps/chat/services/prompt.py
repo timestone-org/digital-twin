@@ -1,8 +1,14 @@
-"""提示词装配：常驻的那几百字，加上按需长出来的部分。
+"""常驻提示词：这一页上永远不变的那几百字。
 
-**这是整套助手的上下文工程主轴。** 常驻的只有：一段基本约定、当前工作面、
-以及每个可用技能的名字与一句话简介。技能的完整指令**不常驻**——模型判断要用
-哪个之后，自己调 `skills.load` 把它拉全。
+**这是整套助手的上下文工程主轴。** 它按「多久变一次」分层，这一份是最稳的两层：
+一段基本约定（跨会话跨页面完全相同）＋当前位置与技能名录（同一页上所有会话逐字
+相同）。每轮都会变的那些——工作面快照、当前计划——在对话**最末尾**的状态块里
+（`services/state_block.py`）。
+
+⚠ **这里一个字都不许跟着会话变。** 常驻提示词与工具声明排在整个请求的最前面，
+是端点前缀缓存唯一能命中的那一段（dashboard-editor 上有 11.7k 字符）。往里塞一格
+每轮会变的东西——快照、计划、当前时间、用户名——等于把它后面的工具声明与整段
+历史一起作废，而从外面完全看不出来：只有账单和延迟会慢慢变难看。
 
 ⚠ 为什么不把四个技能的正文全铺进去：一份正文两三千字，四份就把上下文的前
 三分之一占掉了，而其中至少三份与这一轮毫无关系。被挤掉的是工作面快照与工具
@@ -13,10 +19,6 @@
 本可以不发生的错误。
 """
 
-from typing import Any
-
-from ai_assistant.apps.chat.services import plan as plan_service
-from ai_assistant.apps.chat.services.surface_context import render
 from ai_assistant.apps.chat.skills import SkillManifest, skills_for
 
 # 常驻约定。⚠ 「节点」在本仓指三样东西，这一段必须留着——不说清的话模型会把
@@ -32,8 +34,8 @@ _BASE = """你是这套工业数字孪生平台的助手。
   **点位**（采集来的一个测点）、**地址空间节点**（OPC UA 服务器里的）。
 - 不确定就问，不要猜着做。做错一步的代价远大于多问一句。
 - 每次只做用户要的那件事，不要顺手改别的。
-- 用户说「这个」「当前这个模块」时，指的是**下面快照里选中的那一个**；
-  快照说没有选中，就问一句是哪一个，不要挑一个看着像的。
+- 用户说「这个」「当前这个模块」时，指的是**状态块里选中的那一个**；
+  状态块说没有选中，就问一句是哪一个，不要挑一个看着像的。
 
 ## 动手的规矩
 
@@ -53,37 +55,28 @@ _BASE = """你是这套工业数字孪生平台的助手。
 - 计划没走完就不要说「做完了」；做不下去就把那一项标成 failed 并说明原因。
 """
 
+# 指路：易变的那些在哪。⚠ 必须说清「以最后一份为准」——模型自己用读取工具
+# 拿到的快照留在历史里，越往后越旧，而它分不出哪一份是此刻的
+_WHERE_STATE_LIVES = """## 实时状态在哪
+
+这一屏当前的摘要与当前计划，在对话**最后**那个 `<当前状态>` 块里，每一轮都会
+刷新一份。一律以**最后那一份**为准——更早的快照、以及你自己用读取工具拿到的
+那些，都可能已经被你自己改过了。"""
+
 _NO_SKILLS = "这一页上没有可用的技能，你只能解读与回答问题。"
 
 
-def build_system_prompt(
-    surface_kind: str,
-    *,
-    surface_label: str = "",
-    context: dict[str, Any] | None = None,
-    plan: dict[str, Any] | None = None,
-) -> str:
-    """装配常驻提示词。
+def build_system_prompt(surface_kind: str, *, surface_label: str = "") -> str:
+    """装配常驻提示词。**产出只取决于在哪一页，与是哪个会话无关。**
 
-    ⚠ 工作面快照排在**技能名录之前**：模型读到「用户选中的是这一个」之后再
-    读技能，选技能这一步才有依据。反过来的话它常常先挑好技能才发现自己没弄清
-    对象，于是多一次往返。
-
-    ⚠ 计划排在快照之后：模型先看清这一屏此刻的样子，再对照计划决定下一步——
-    它自己上一轮动过的东西就在快照里。
-
-    Args: surface_kind, surface_label（给人看的页面名，缺省用工作面标识）,
-        context（工作面此刻的摘要，前端每次推进都带最新的一份）,
-        plan（会话上的当前计划；没有或已完结时不占一个字）。
+    Args: surface_kind, surface_label（给人看的页面名，缺省用工作面标识）。
     """
-    skills = skills_for(surface_kind)
     where = surface_label or surface_kind
     parts = [
         _BASE.strip(),
         f"## 当前位置\n\n用户正在**{where}**。",
-        render(context),
-        plan_service.render(plan),
-        _roster(skills),
+        _roster(skills_for(surface_kind)),
+        _WHERE_STATE_LIVES,
     ]
     return "\n\n".join(one for one in parts if one)
 

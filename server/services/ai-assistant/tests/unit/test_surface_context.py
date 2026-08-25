@@ -7,6 +7,7 @@
 
 from typing import Any
 
+from ai_assistant.apps.chat.services import state_block
 from ai_assistant.apps.chat.services.prompt import build_system_prompt
 from ai_assistant.apps.chat.services.surface_context import (
     MAX_CONTEXT_CHARS,
@@ -68,23 +69,16 @@ def test_an_oversized_snapshot_says_it_was_cut() -> None:
     assert len(text) < MAX_CONTEXT_CHARS * 2
 
 
-def test_the_snapshot_rides_along_in_the_system_prompt() -> None:
-    prompt = build_system_prompt(
-        "dashboard-editor",
-        surface_label="大屏编辑器",
-        context=_shot(selected_id="n7"),
-    )
-
-    assert "n7" in prompt
+def test_the_snapshot_rides_along_in_the_state_block() -> None:
+    assert "n7" in state_block.render(_shot(selected_id="n7"), None)
 
 
-def test_the_snapshot_sits_before_the_skill_roster() -> None:
-    """快照排在技能名录之前：先弄清对象，再挑技能。
+def test_the_snapshot_never_rides_along_in_the_system_prompt() -> None:
+    """快照不许进常驻提示词。
 
-    ⚠ 反过来的话模型常常先挑好技能才发现自己没弄清对象，于是多一次往返。
+    ⚠ 常驻提示词与工具声明是端点前缀缓存唯一能命中的那一段。快照每一轮都变，
+    塞进去等于把它后面十几 k 字符连同整段历史一起作废。
     """
-    prompt = build_system_prompt(
-        "dashboard-editor", context=_shot(selected_id="n7")
-    )
+    prompt = build_system_prompt("dashboard-editor", surface_label="大屏编辑器")
 
-    assert prompt.index("n7") < prompt.index("## 可用技能")
+    assert "这一页此刻的样子" not in prompt

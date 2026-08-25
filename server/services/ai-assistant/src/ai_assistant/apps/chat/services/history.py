@@ -12,6 +12,7 @@
 一轮（`services/vision.py`）。
 """
 
+from math import ceil
 from typing import Any, cast
 
 from langchain_core.messages import (
@@ -24,6 +25,7 @@ from langchain_core.messages.tool import ToolCall
 
 from ai_assistant.apps.chat.models import ChatMessage
 from ai_assistant.apps.chat.services.vision import PLACEHOLDER
+from ai_assistant.settings import HISTORY_DROP_STEP
 
 _USER = "user"
 _ASSISTANT = "assistant"
@@ -72,17 +74,32 @@ def replay(rows: list[ChatMessage]) -> list[BaseMessage]:
     return [to_message(row) for row in sorted(rows, key=lambda one: one.seq)]
 
 
-def window(rows: list[ChatMessage], limit: int) -> list[ChatMessage]:
-    """取最近的一截历史，且**不许把工具调用与它的回应切开**。
+def window(
+    rows: list[ChatMessage],
+    limit: int,
+    step: int = HISTORY_DROP_STEP,
+) -> list[ChatMessage]:
+    """取最近的一截历史，**脱落按台阶走**，且不许把工具调用与它的回应切开。
 
-    ⚠ 裸切片的切点可能落在「带工具调用的助手消息」与它的工具回应之间——
-    窗口于是以几条孤儿工具消息开头，端点直接判请求不合法，报出来的 400 与
-    真实原因毫无关系，且回合越长越容易触发。掐掉头部的孤儿工具消息即可：
-    窗口保住的是尾部，助手消息在窗口里时它的回应一定也在。
+    ⚠ 裸的 `[-limit:]` 会让窗口每多一条消息就整体前移一格。端点的前缀缓存认的是
+    逐字相同的前缀，于是会话一过 `limit`，历史区**每一轮**都对不上——一个跑了
+    几十轮的会话从此再也吃不到缓存，而这件事没有任何运行期迹象。按台阶脱落之后
+    起点每 `step` 条才动一次，窗口在 `limit - step` 与 `limit` 之间浮动。
 
-    Args: rows, limit。
+    ⚠ 掐掉头部的孤儿工具消息：切点落在「带工具调用的助手消息」与它的工具回应
+    之间时，窗口会以几条没有调用的工具回应开头，端点直接判请求不合法，报出来的
+    400 与真实原因毫无关系。掐头是安全的——窗口保住的是尾部，助手消息在窗口里
+    时它的回应一定也在。
+
+    Args: rows, limit（高水位）, step（一次脱落几条）。
     """
-    recent = sorted(rows, key=lambda one: one.seq)[-limit:]
+    ordered = sorted(rows, key=lambda one: one.seq)
+    overflow = max(0, len(ordered) - limit)
+    # ⚠ 脱落量要兜底。台阶比高水位还大时（`limit` 小于 `step` 的那些调用），
+    # 一个台阶就能把整段历史削光，而表现是模型突然什么都不记得了
+    floor = max(limit - step, 1)
+    drop = min(ceil(overflow / step) * step, max(0, len(ordered) - floor))
+    recent = ordered[drop:]
     start = 0
     while start < len(recent) and recent[start].role == _TOOL:
         start += 1
