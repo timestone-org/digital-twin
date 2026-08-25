@@ -42,9 +42,10 @@ E2E、a11y、变异测试不进 PR 闸门是 `testing-standard-*.md` §9 的明�
 
 于是规矩是两条，且没有例外：
 
-1. **改完先在本地过闸**：秒级的用 `scripts/ci-local.sh --fast`，
-   推送或合并之前用 `scripts/ci-local.sh --all`（act 跑的就是 `ci.yml` 本身，
-   同一份 YAML、同一批闸门脚本，与合并后在 GitHub 上跑的是同一件事）。
+1. **改完先在本地过闸**：`scripts/ci-local.sh --fast`（约 5 分钟，不起容器，
+   覆盖流水线第 1–2 段的全部内容）；推送或合并之前用 `scripts/ci-local.sh --all`
+   （act 跑的就是 `ci.yml` 本身，同一份 YAML、同一批闸门脚本，与合并后在
+   GitHub 上跑的是同一件事）。
 2. **合并进 main 之后盯一眼那轮流水线**：它是最后一道真运行器上的验证，
    红了按「main 永远可发布」当场修或回滚，不许拖到下一个 PR。
 
@@ -181,11 +182,20 @@ docstring 不去，它可能被程序读走。
 分支上没有 CI 可等。
 
 ```bash
-scripts/ci-local.sh --fast          # 只跑闸门脚本，秒级，不起容器
+scripts/ci-local.sh --fast          # 第 1–2 段的全部静态检查，约 5 分钟，不起容器
 scripts/ci-local.sh                 # act 跑第 1–2 段
 scripts/ci-local.sh -j server-test  # act 跑指定作业（含服务容器）
 scripts/ci-local.sh --all           # act 跑整条流水线 —— 推送/合并前必须绿
 ```
+
+`--fast` 跑 20 道闸门脚本，外加与「2·前端/后端格式、lint、类型」逐字同源的六步：
+`prettier` / `black` / `ruff` / `eslint` / `typecheck` / `pyright`（含类型检查
+范围自检）。⚠ **格式与类型不许留到 `--all` 才暴露**：它们是全流水线里最早红、
+也最没有信息量的一档，为一个空格白等二三十分钟的容器启动与真库测试是纯浪费。
+代价是 `--fast` 从秒级变成分钟级，大头在 eslint 全量遍历。
+
+⚠ **跑 act 期间不要改工作树**：act 绑的是本地目录，跑到一半新写的文件会被当成
+被测内容，报出来的红与已提交的状态无关。
 
 ⚠ 脚本给 act 喂一份写死 `ref: refs/heads/main` 的 push 负载：流水线的触发条件是
 `push: branches: [main]`，不喂负载就得指望当前分支正好叫 main。负载里的 `before`

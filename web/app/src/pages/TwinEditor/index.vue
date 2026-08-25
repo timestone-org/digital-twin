@@ -287,6 +287,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
       :binding="binding"
       :ai="ai"
       @add-parts="actions?.addParts($event)"
+      @update:bulk-open="bulk.open.value = $event"
     />
   </AppShell>
 </template>

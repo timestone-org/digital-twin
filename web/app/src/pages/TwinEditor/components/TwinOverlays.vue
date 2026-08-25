@@ -19,7 +19,12 @@ defineProps<{
   ai: AiPanel
 }>()
 
-const emit = defineEmits<{ 'add-parts': [names: readonly string[]] }>()
+// ⚠ 开关状态归页面持有，这里只上抛。就地写 `bulk.open.value = $event` 是改
+// prop 上挂着的那只 ref——能跑，但状态的归属从此有两处，而 vue 的 lint 拦它
+const emit = defineEmits<{
+  'add-parts': [names: readonly string[]]
+  'update:bulk-open': [open: boolean]
+}>()
 </script>
 
 <template>
@@ -27,7 +32,7 @@ const emit = defineEmits<{ 'add-parts': [names: readonly string[]] }>()
     :open="bulk.open.value"
     :candidates="bulk.candidates.value"
     :preselect="bulk.preselect.value"
-    @update:open="bulk.open.value = $event"
+    @update:open="emit('update:bulk-open', $event)"
     @confirm="emit('add-parts', $event)"
   />
 

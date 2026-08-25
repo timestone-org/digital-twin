@@ -12,7 +12,7 @@
 # 等待；二是 act 没有真的缓存后端，`enable-cache` / `cache: pnpm` 那几层在本地
 # 既不命中也不保存，只有推上去才验得到。
 #
-#   scripts/ci-local.sh --fast          闸门脚本 + 两个格式化器（不起容器）
+#   scripts/ci-local.sh --fast          不起容器就能跑的全部静态检查（约 4 分钟）
 #   scripts/ci-local.sh                 act 逐个跑第 1–2 段的作业
 #   scripts/ci-local.sh -j server-test  act 跑指定作业
 #   scripts/ci-local.sh --all           act 跑整条流水线（推送前跑这个）
@@ -66,13 +66,19 @@ gates=(
   check_service_deps
 )
 
-# 格式化器。⚠ 它们不是闸门脚本，但**必须留在 --fast 里**：格式是全流水线里
-# 最早红、也最没有信息量的一档，让它留到 `--all` 才暴露，等于为一个空格白等
-# 十几分钟的容器启动与真库测试。
-# 名字 → 命令，与 ci.yml 里那两步逐字同源。
-formatters=(
+# 第 2 段那几步的本地版。⚠ 它们不是闸门脚本，但**必须留在 --fast 里**：
+# 格式与类型是全流水线里最早红、也最没有信息量的一档，让它们留到 `--all` 才
+# 暴露，等于为一个空格白等二三十分钟的容器启动与真库测试。
+# 代价是 `--fast` 从秒级变成分钟级，主要花在 eslint 全量遍历上——仍然比
+# 跑一轮 act 便宜一个数量级。
+# 名字 → 命令，与 ci.yml 的「2·前端/后端格式、lint、类型」逐字同源。
+statics=(
   'prettier|pnpm --dir web format:check'
   "black|${PYTHON[*]} -m black --check --config server/pyproject.toml server scripts"
+  "ruff|${PYTHON[*]} -m ruff check --config server/pyproject.toml server scripts"
+  'eslint|pnpm --dir web lint'
+  'typecheck|pnpm --dir web typecheck'
+  'pyright|scripts/run_pyright.sh'
 )
 
 run_one() {
@@ -92,7 +98,7 @@ run_fast() {
   for gate in "${gates[@]}"; do
     run_one "$gate" "${PYTHON[@]}" "scripts/gates/${gate}.py" || failed=1
   done
-  for entry in "${formatters[@]}"; do
+  for entry in "${statics[@]}"; do
     # shellcheck disable=SC2086 # 命令串按空白切成词，正是这里要的
     run_one "${entry%%|*}" ${entry#*|} || failed=1
   done

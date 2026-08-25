@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { AssistantToolCall, BindingPayload } from '@dt/contracts'
 import { normalizeTwinConfig, type TwinConfig } from '@dt/twin-config'
 
+import { createBinding } from '@/features/dashboard/editorDoc'
 import { createTwinSurface } from '@/pages/TwinEditor/scripts/aiSurface'
 
 function config(): TwinConfig {
@@ -78,12 +79,9 @@ describe('读绑定行', () => {
   it('已经绑上的那一行带出点位身份', async () => {
     const { surface } = setup([
       {
-        id: 'b1',
-        nodeId: 'n1',
-        fieldKey: 'anchorValues[1].value',
+        ...createBinding('n1', 'anchorValues[1].value'),
         sourceKind: 'opcua',
         nodeKey: 'src:K1_TT02',
-        detailJson: null,
       },
     ])
     const shot = (await surface.run(
