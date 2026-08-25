@@ -9,7 +9,6 @@
  * 没有答复，下一轮请求会被端点判成不合法。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { AssistantToolCall } from '@dt/contracts'
 import type { AdvanceBody } from '@/api/assistant'
 import {
   MAX_ROUNDS,
@@ -35,16 +34,27 @@ interface Recorded {
   steps: RunnerStep[]
   replies: string[]
   errors: string[]
-  ran: AssistantToolCall[]
+  ran: RunnerStep[]
+  said: string[]
+  thought: string[]
 }
 
 function sinkOf(): { sink: RunnerSink; seen: Recorded } {
-  const seen: Recorded = { steps: [], replies: [], errors: [], ran: [] }
+  const seen: Recorded = {
+    steps: [],
+    replies: [],
+    errors: [],
+    ran: [],
+    said: [],
+    thought: [],
+  }
   return {
     seen,
     sink: {
+      onDelta: (channel, text) =>
+        (channel === 'reasoning' ? seen.thought : seen.said).push(text),
       onStep: (step) => seen.steps.push(step),
-      onToolsRun: (calls) => seen.ran.push(...calls),
+      onToolsRun: (steps) => seen.ran.push(...steps),
       onDone: (reply) => seen.replies.push(reply),
       onError: (message) => seen.errors.push(message),
     },
@@ -276,5 +286,79 @@ describe('回合循环', () => {
 
     expect(seen.ran).toEqual([])
     expect(seen.replies).toEqual(['没事了'])
+  })
+
+  it('模型的话与它想的过程分两路交出去', async () => {
+    const { advance } = advanceOf([
+      [
+        frame('message.delta', { channel: 'reasoning', text: '先查点位' }),
+        frame('message.delta', { channel: 'text', text: '好的' }),
+        frame('message.delta', { channel: 'text', text: '，我来绑' }),
+        frame('turn.done', { reply: '好的，我来绑' }),
+      ],
+    ])
+    const { sink, seen } = sinkOf()
+    await runTurn(inputOf(advance), sink)
+
+    // 混成一路的话，界面只能把自言自语和结论一起铺出来
+    expect(seen.thought).toEqual(['先查点位'])
+    expect(seen.said.join('')).toBe('好的，我来绑')
+  })
+
+  it('每一轮都带上这一屏此刻的样子', async () => {
+    let selected = 'n1'
+    setSurface({
+      kind: 'dashboard-editor',
+      label: '大屏编辑器',
+      snapshot: () => ({ selected_id: selected }),
+      tools: ['dashboard.read_canvas'],
+      run: vi.fn().mockImplementation(() => {
+        selected = 'n2'
+        return Promise.resolve(null)
+      }),
+    })
+    const { advance, bodies } = advanceOf([
+      [
+        frame('client_tool.request', {
+          calls: [
+            { call_id: 'r1', name: 'dashboard.read_canvas', arguments: {} },
+          ],
+        }),
+      ],
+      [frame('turn.done', { reply: '看完了' })],
+    ])
+    const { sink } = sinkOf()
+    await runTurn(inputOf(advance), sink)
+
+    // 只在第一轮带的话，助手动过两下之后读到的是一屏过期的画布
+    expect(bodies[0]?.surface_context).toEqual({ selected_id: 'n1' })
+    expect(bodies[1]?.surface_context).toEqual({ selected_id: 'n2' })
+  })
+
+  it('客户端工具跑完记成步骤，成败分得开', async () => {
+    setSurface({
+      kind: 'dashboard-editor',
+      label: '大屏编辑器',
+      snapshot: () => ({}),
+      tools: ['dashboard.write_binding'],
+      run: vi.fn().mockRejectedValue(new Error('这个槽不存在')),
+    })
+    const { advance } = advanceOf([
+      [
+        frame('client_tool.request', {
+          calls: [
+            { call_id: 'w1', name: 'dashboard.write_binding', arguments: {} },
+          ],
+        }),
+      ],
+      [frame('turn.done', { reply: '换一个' })],
+    ])
+    const { sink, seen } = sinkOf()
+    await runTurn(inputOf(advance), sink)
+
+    // 服务端看不见客户端工具——不记的话，一次绑二十个点在界面上是一片空白
+    expect(seen.ran).toHaveLength(1)
+    expect(seen.ran[0]?.state).toBe('failed')
+    expect(seen.ran[0]?.error).toBe('这个槽不存在')
   })
 })

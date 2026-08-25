@@ -16,11 +16,17 @@ DASHBOARD_COMPOSE = SkillManifest(
     server_tools=("modules.catalog",),
     client_tools=(
         "dashboard.read_canvas",
+        "dashboard.read_bindings",
+        "dashboard.read_config",
+        "dashboard.chrome_keys",
         "dashboard.add_module",
         "dashboard.remove_node",
         "dashboard.set_config",
+        "dashboard.add_config_item",
+        "dashboard.remove_config_item",
         "dashboard.set_geometry",
         "dashboard.arrange",
+        "dashboard.write_binding",
     ),
     directory=Path(__file__).resolve().parent,
 )

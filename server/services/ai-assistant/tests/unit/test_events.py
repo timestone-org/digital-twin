@@ -9,6 +9,7 @@ import json
 from ai_assistant.apps.chat.services import events
 from ai_assistant.apps.chat.services.turn_types import (
     ClientToolCall,
+    TurnDelta,
     TurnOutcome,
     TurnStep,
 )
@@ -85,8 +86,23 @@ def test_an_error_frame_carries_the_trace_id() -> None:
 
 def test_the_event_names_are_a_closed_set() -> None:
     assert set(events.EVENT_NAMES) == {
+        events.EVENT_DELTA,
         events.EVENT_STEP,
         events.EVENT_CLIENT_TOOL,
         events.EVENT_DONE,
         events.EVENT_ERROR,
     }
+
+
+def test_a_delta_frame_says_which_channel_it_came_from() -> None:
+    """思考与正文必须分得开。
+
+    ⚠ 混成一路的话，界面只能把模型的自言自语和结论一起铺在对话里，
+    而用户要读的只有结论。
+    """
+    body = _payload(
+        events.delta_frame(TurnDelta(channel="reasoning", text="先查点位"))
+    )
+
+    assert body["channel"] == "reasoning"
+    assert body["text"] == "先查点位"

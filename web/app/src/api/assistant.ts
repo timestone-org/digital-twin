@@ -91,6 +91,12 @@ export async function archiveSession(
 export interface AdvanceBody {
   surface_kind: AssistantSurfaceKind
   surface_label?: string
+  /**
+   * 这一屏此刻的摘要，进提示词。
+   * ⚠ **每次推进都带**：提示词一轮一拼，只在用户发话那次带的话，助手动了
+   * 两下之后读到的是一屏过期的画布。
+   */
+  surface_context?: Record<string, unknown>
   user_text?: string
   tool_results?: {
     call_id: string

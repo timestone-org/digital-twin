@@ -1,16 +1,21 @@
-"""模型调用的外壳：断路、超时归因、失败分档。
+"""模型调用的外壳：断路、超时归因、失败分档、逐字吐出去。
 
 ⚠ **哪一档失败该让断路器打开，是这个文件里最要紧的判断。**
 超时、连不上、限流、5xx 是「下游此刻不行」——该打开，短路能省下白等的时间。
 401 与 400 是「我们自己配错了或发错了」——**绝不能打开**：断路器一开，
 真正的原因就被盖成「暂时不可用」，而那会让人去查网络。
+
+⚠ 流式与否**不改变这一层的产出**：两条路都回一条攒齐的 `AIMessage`，
+增量只是顺路交给了口子。不这样的话，编排层要为两条路各写一遍「怎么读工具
+调用」，而那两份一旦漂开，表现是「流式时工具调不出来」这种只在生产才复现
+的故障。
 """
 
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, BaseMessageChunk
 from langchain_core.tools import BaseTool
 from openai import (
     APIConnectionError,
@@ -21,6 +26,8 @@ from openai import (
     PermissionDeniedError,
 )
 
+from ai_assistant.llm import deltas
+from ai_assistant.llm.deltas import DeltaSink
 from ai_assistant.llm.errors import ModelRejected, ModelUnavailable
 from ai_assistant.llm.provider import ChatModelSource, ModelKind
 from lib.logging import get_logger
@@ -38,6 +45,9 @@ class GuardedModel:
 
     source: ChatModelSource
     breaker: CircuitBreaker
+    # 逐字流式的总开关。⚠ 关着时 `on_delta` 被忽略而不是报错：调用方不必
+    # 为了「这套部署关了流式」再写一条分支
+    is_streaming: bool = True
 
     async def respond(
         self,
@@ -45,19 +55,28 @@ class GuardedModel:
         kind: ModelKind,
         messages: list[BaseMessage],
         tools: Sequence[dict[str, Any] | BaseTool],
+        on_delta: DeltaSink | None = None,
     ) -> AIMessage:
         """要一次补全。工具为空时就是纯对话。
 
         ⚠ 工具收的是**声明**而不是可执行件：客户端工具压根没有服务端实现，
         模型只需要一份能让它正确调用的形状描述。
 
-        Args: kind, messages, tools。
+        ⚠ 给了 `on_delta` 才走流式。回的仍是攒齐的那一条——增量是顺路交出去
+        的，不是替代品。
+
+        Args: kind, messages, tools, on_delta。
         """
         self._guard()
         model = self.source(kind)
         bound = model.bind_tools(list(tools)) if tools else model
+        sink = on_delta if self.is_streaming else None
         try:
-            reply = await bound.ainvoke(messages)
+            reply = (
+                await bound.ainvoke(messages)
+                if sink is None
+                else await _drain(bound.astream(messages), sink)
+            )
         except _OUR_FAULT as error:
             raise ModelRejected(_reason(error)) from error
         except OpenAIError as error:
@@ -74,6 +93,51 @@ class GuardedModel:
                 "model_short_circuited", "断路器打开着，本次没有发出去"
             )
             raise ModelUnavailable("模型暂时不可用") from error
+
+
+async def _drain(
+    stream: AsyncIterator[BaseMessage], sink: DeltaSink
+) -> BaseMessage:
+    """收完一条流：每块顺手交给口子，最后把它们攒成一条。
+
+    ⚠ 攒的是**块的加法**而不是自己拼字符串：工具调用在流里是逐段来的
+    （函数名一块、参数的前半截一块、后半截又一块），自己拼只能拼出正文，
+    而工具调用会整批丢掉——表现是「模型只会说话不会动手」。
+
+    ⚠ 一块都没来时上游抛的是 `ValueError` 而不是 `OpenAIError`。不接住的话
+    它会穿过整个编排层，最后表现为**流突然断掉、界面上没有任何错**——
+    而 `:advance` 只把 `AppError` 落成 error 事件。
+
+    Args: stream, sink。
+    """
+    merged: BaseMessage | None = None
+    try:
+        async for part in stream:
+            deltas.emit(part, sink)
+            merged = _join(merged, part)
+    except ValueError as error:
+        raise ModelUnavailable("模型没有回任何内容") from error
+    if merged is None:
+        raise ModelUnavailable("模型没有回任何内容")
+    return merged
+
+
+def _join(merged: BaseMessage | None, part: BaseMessage) -> BaseMessage:
+    """把新的一块并进已有的。
+
+    ⚠ 只有块与块之间有加法。不带流式实现的模型（用例里的假件就是）在
+    `astream` 上退化成「整条回一次」，那一条是普通消息而不是块——那时直接
+    用它，而不是让整条流栽在一个 `TypeError` 上。
+
+    Args: merged, part。
+    """
+    if merged is None:
+        return part
+    if isinstance(merged, BaseMessageChunk) and isinstance(
+        part, BaseMessageChunk
+    ):
+        return merged + part
+    return part
 
 
 def _as_ai_message(reply: BaseMessage) -> AIMessage:

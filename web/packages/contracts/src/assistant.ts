@@ -128,6 +128,7 @@ export interface AssistantSessionDetail extends AssistantSession {
  * 漂开的表现是「助手做了一步但界面上没有」，而两边代码单看都对。
  */
 export const ASSISTANT_EVENT_NAMES = [
+  'message.delta',
   'step',
   'client_tool.request',
   'turn.done',
@@ -135,6 +136,17 @@ export const ASSISTANT_EVENT_NAMES = [
 ] as const
 
 export type AssistantEventName = (typeof ASSISTANT_EVENT_NAMES)[number]
+
+/**
+ * 模型逐字吐出来的一小块走哪一路。
+ *
+ * ⚠ 两路分开而不是拼成一路：`reasoning` 动辄比 `text` 长几倍，混进正文的话，
+ * 用户看到的是一大段自言自语后面跟着结论，而他要读的只有结论。
+ * ⚠ `reasoning` **只活在这一轮**：它不落库，重开会话时看不到。
+ */
+export const ASSISTANT_DELTA_CHANNELS = ['text', 'reasoning'] as const
+
+export type AssistantDeltaChannel = (typeof ASSISTANT_DELTA_CHANNELS)[number]
 
 /** 要交给浏览器执行的一次调用。 */
 export interface AssistantToolCall {

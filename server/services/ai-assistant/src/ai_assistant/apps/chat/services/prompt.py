@@ -13,6 +13,9 @@
 本可以不发生的错误。
 """
 
+from typing import Any
+
+from ai_assistant.apps.chat.services.surface_context import render
 from ai_assistant.apps.chat.skills import SkillManifest, skills_for
 
 # 常驻约定。⚠ 「节点」在本仓指三样东西，这一段必须留着——不说清的话模型会把
@@ -21,11 +24,15 @@ _BASE = """你是这套工业数字孪生平台的助手。
 
 ## 说话的规矩
 
-- 说中文。
+- 说中文，**简短**。面板只有一栏宽，长篇大论要滚很久才看得到结论。
+- 正文按 markdown 写：小标题、列表、表格、`行内代码` 都会被渲染出来。
+  ⚠ 别用一级标题，也别为一句话的答复套一个标题。
 - 「节点」在本系统里指三样东西，一律用全称：**画布节点**（大屏上的一个模块）、
   **点位**（采集来的一个测点）、**地址空间节点**（OPC UA 服务器里的）。
 - 不确定就问，不要猜着做。做错一步的代价远大于多问一句。
 - 每次只做用户要的那件事，不要顺手改别的。
+- 用户说「这个」「当前这个模块」时，指的是**下面快照里选中的那一个**；
+  快照说没有选中，就问一句是哪一个，不要挑一个看着像的。
 
 ## 动手的规矩
 
@@ -39,20 +46,30 @@ _BASE = """你是这套工业数字孪生平台的助手。
 _NO_SKILLS = "这一页上没有可用的技能，你只能解读与回答问题。"
 
 
-def build_system_prompt(surface_kind: str, *, surface_label: str = "") -> str:
+def build_system_prompt(
+    surface_kind: str,
+    *,
+    surface_label: str = "",
+    context: dict[str, Any] | None = None,
+) -> str:
     """装配常驻提示词。
 
-    Args: surface_kind, surface_label（给人看的页面名，缺省用工作面标识）。
+    ⚠ 工作面快照排在**技能名录之前**：模型读到「用户选中的是这一个」之后再
+    读技能，选技能这一步才有依据。反过来的话它常常先挑好技能才发现自己没弄清
+    对象，于是多一次往返。
+
+    Args: surface_kind, surface_label（给人看的页面名，缺省用工作面标识）,
+        context（工作面此刻的摘要，前端每次推进都带最新的一份）。
     """
     skills = skills_for(surface_kind)
     where = surface_label or surface_kind
-    return "\n\n".join(
-        [
-            _BASE.strip(),
-            f"## 当前位置\n\n用户正在**{where}**。",
-            _roster(skills),
-        ]
-    )
+    parts = [
+        _BASE.strip(),
+        f"## 当前位置\n\n用户正在**{where}**。",
+        render(context),
+        _roster(skills),
+    ]
+    return "\n\n".join(one for one in parts if one)
 
 
 def _roster(skills: tuple[SkillManifest, ...]) -> str:

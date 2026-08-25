@@ -5,16 +5,25 @@
 接口」这件事。
 """
 
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from typing import Any, cast
 
-from langchain_core.callbacks import CallbackManagerForLLMRun
+from langchain_core.callbacks import (
+    AsyncCallbackManagerForLLMRun,
+    CallbackManagerForLLMRun,
+)
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage
-from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
+from langchain_core.outputs import (
+    ChatGeneration,
+    ChatGenerationChunk,
+    ChatResult,
+)
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from pydantic import ConfigDict, Field
+
+from ai_assistant.llm.deltas import REASONING_KEY
 
 
 class ScriptedChat(BaseChatModel):
@@ -87,3 +96,74 @@ def asks(tool: str, call_id: str, /, **arguments: Any) -> AIMessage:
     return AIMessage(
         content="", tool_calls=[tool_call(tool, call_id, **arguments)]
     )
+
+
+class StreamingChat(BaseChatModel):
+    """按块吐字的假件。
+
+    ⚠ 真的实现 `_astream` 而不是让基类退化成「整条回一次」：被测的正是
+    「一块一块来的东西怎么攒回一条」，而退化那条路上根本没有块。
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    # 每一块：(正文, 思考)。工具调用另给
+    parts: list[tuple[str, str]] = Field(default_factory=list[tuple[str, str]])
+    tool_chunks: list[dict[str, Any]] = Field(
+        default_factory=list[dict[str, Any]]
+    )
+    error: Exception | None = None
+
+    @property
+    def _llm_type(self) -> str:
+        return "streaming"
+
+    def bind_tools(
+        self,
+        tools: Sequence[dict[str, Any] | type | BaseTool],
+        **kwargs: Any,
+    ) -> Runnable[Any, AIMessage]:
+        """假件不真绑工具，原样返回自己。
+
+        Args: tools, kwargs。
+        """
+        return cast("Runnable[Any, AIMessage]", self)
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        """非流式那条路：把全部块拼起来一次给完。
+
+        Args: messages, stop, run_manager, kwargs。
+        """
+        said = "".join(text for text, _ in self.parts)
+        return ChatResult(
+            generations=[ChatGeneration(message=AIMessage(content=said))]
+        )
+
+    async def _astream(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: AsyncCallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[ChatGenerationChunk]:
+        """逐块吐。
+
+        Args: messages, stop, run_manager, kwargs。
+        """
+        if self.error is not None:
+            raise self.error
+        for text, thought in self.parts:
+            extra = {REASONING_KEY: thought} if thought else {}
+            yield ChatGenerationChunk(
+                message=AIMessageChunk(content=text, additional_kwargs=extra)
+            )
+        for call in self.tool_chunks:
+            yield ChatGenerationChunk(
+                message=AIMessageChunk(content="", tool_call_chunks=[call])
+            )

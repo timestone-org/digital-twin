@@ -3,9 +3,10 @@
 变量名 = `ASSISTANT_<组>_<键>`。密钥类一律无默认值——缺失即拒绝启动。
 """
 
-from typing import Self
+import json
+from typing import Any, Self, cast
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from lib.config import AppSettings, PostgresSettings, RedisSettings
@@ -24,6 +25,25 @@ MAX_HISTORY_MESSAGES = 40
 # 一张截图 base64 之后的字符数上限，约合 3 MB 原图。⚠ 有上限：一张没缩过的整屏
 # PNG 能有十几兆，而那时倒下的不只是这一个请求
 MAX_IMAGE_CHARS = 4_000_000
+
+
+def _parsed_object(given: str) -> dict[str, Any] | None:
+    """把一段 JSON 解成对象；空的、或者不是对象，都给 `None`。
+
+    Args: given。
+    """
+    text = given.strip()
+    if not text:
+        return None
+    try:
+        body: object = json.loads(text)
+    except ValueError:
+        return None
+    if not isinstance(body, dict):
+        return None
+    # ⚠ 收窄一次而不是原样返回：`isinstance` 从 `object` narrow 出来的是
+    # `dict[Unknown, Unknown]`，直接返回会把未知类型一路带进装配层
+    return cast("dict[str, Any]", body)
 
 
 def _has_secret(given: SecretStr | None) -> bool:
@@ -89,6 +109,17 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     # 模型」成为一次配置改动而不是一次发版。
     model_chat: str = "qwen3.8-max"
     model_vision: str = "qwen3.8-max"
+    # 逐字流式。⚠ 关掉它 = 用户在整个回合里只看得见「做了哪一步」，模型说的
+    # 那段话要等回合结束才整段出现，而模型想的十几秒是纯黑箱。留成配置只为
+    # 一种场合：个别 OpenAI 兼容端点在带工具时不支持流式，那时表现是一条 400
+    model_stream_enabled: bool = True
+    # 透传给端点的额外请求体，一段 JSON 对象。⚠ 存在的理由：思考过程一类的
+    # 开关在 OpenAI 兼容口径里没有标准字段，各家用自己的键，而代码里不认厂商
+    # 名——于是它只能是取值而不是分支。留空即什么都不加。
+    # ⚠ 收成 `str` 再自己解，而不是声明成 `dict`：声明成 dict 时
+    # `ASSISTANT_MODEL_EXTRA_BODY=`（留空是最常见的「还没填」形态）会在配置源
+    # 那一层就炸，报出来的是一句「解析字段失败」，与「这一格可以不填」完全对不上
+    model_extra_body: str = ""
     # 一次模型调用的上限。⚠ 它必须大于边缘的读超时才有意义——所以助手的流式
     # 端点不走边缘的通用超时，见 docker/nginx 里那条 location
     model_timeout_s: float = Field(default=120.0, gt=0)
@@ -99,6 +130,24 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     # platform 的内部面地址。助手是纯消费方，业务数据一律经它拿
     platform_base_url: str = "http://platform-server:8005"
     platform_timeout_s: float = Field(default=5.0, gt=0)
+
+    def extra_body(self) -> dict[str, Any] | None:
+        """透传给端点的额外请求体；没配就是 `None`。"""
+        return _parsed_object(self.model_extra_body)
+
+    @field_validator("model_extra_body")
+    @classmethod
+    def _extra_body_must_be_an_object(cls, given: str) -> str:
+        """配错了就不许起。
+
+        ⚠ 留到第一次对话才发现的话，报出来的是一条模型端点的 400，
+        而那与「本地这一格写歪了」看着毫无关系。
+
+        Args: given。
+        """
+        if given.strip() and _parsed_object(given) is None:
+            raise ValueError("ASSISTANT_MODEL_EXTRA_BODY 必须是一段 JSON 对象")
+        return given
 
     @model_validator(mode="after")
     def _model_key_required_when_enabled(self) -> Self:

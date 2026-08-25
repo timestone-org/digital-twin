@@ -220,16 +220,47 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
     ToolSpec(
         name="dashboard.write_binding",
         description=(
-            "把一个采集点位写进某个槽位。`field_key` 必须是该模块声明过的槽键，"
-            "数组槽形如 `itemValues[0].value`。"
+            "把一个数据来源写进某个槽位。`field_key` 必须是该模块声明过的槽键，"
+            "数组槽形如 `itemValues[0].value`；槽位还不存在时会顺手建出来。"
+            "接实时点位用 `source_kind='opcua'` 并给 `node_key`；"
+            "写一个不随现场变的固定值用 `source_kind='static'` 并给 `value`"
+            "（数字、文本、真假都行）。"
         ),
         parameters=_object(
             {
                 "node_id": _string("画布节点 id"),
                 "field_key": _string("槽键"),
-                "node_key": _string("点位身份，形如 `{数据源id}:{点位编码}`"),
+                "source_kind": {
+                    "type": "string",
+                    "enum": ["opcua", "static"],
+                    "description": (
+                        "取数来源：opcua = 采集点位，static = 常量。缺省 opcua"
+                    ),
+                },
+                "node_key": _string(
+                    "点位身份，形如 `{数据源id}:{点位编码}`；opcua 才要"
+                ),
+                "value": {
+                    "description": "常量值，static 才要。给 null 表示空值",
+                },
             },
-            ["node_id", "field_key", "node_key"],
+            ["node_id", "field_key"],
+        ),
+        runs_on="client",
+    ),
+    ToolSpec(
+        name="dashboard.remove_binding",
+        description=(
+            "解掉某个槽位上的绑定。⚠ 换点位不要用它——直接再写一次 "
+            "`dashboard.write_binding` 即可；解了再绑会让实时推送的"
+            "关联键断一次。"
+        ),
+        parameters=_object(
+            {
+                "node_id": _string("画布节点 id"),
+                "field_key": _string("槽键"),
+            },
+            ["node_id", "field_key"],
         ),
         runs_on="client",
     ),
@@ -316,6 +347,69 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
             "截当前画布的图并直接看它。**只在这一轮看得见**——"
             "看完必须当场把结论写成文字，下一轮只剩一句「这里曾经有一张图」。"
             "⚠ 三维模块在截图里是一块空白，那是截不到不是没配。"
+        ),
+        parameters=_object({}, []),
+        runs_on="client",
+    ),
+    ToolSpec(
+        name="dashboard.read_config",
+        description=(
+            "读一个画布节点**此刻的配置**：配置袋子里现有的键值、卡片外观那一段"
+            "（`__cardStyle`）、以及这个模块吃不吃统一外观。"
+            "⚠ 改配置之前必须先读一次——尤其是往数组字段里加项时，"
+            "不读就写等于把用户已经配好的那几项整批冲掉。"
+        ),
+        parameters=_object({"node_id": _string("画布节点 id")}, ["node_id"]),
+        runs_on="client",
+    ),
+    ToolSpec(
+        name="dashboard.add_config_item",
+        description=(
+            "往一个**数组配置字段**末尾加一项，新项按模块清单里的 itemSchema "
+            "填默认值，再用 `values` 覆盖你要改的那几格。"
+            "「给实时数值卡再加一个指标」就是它（field 为 items）。"
+            "返回新项的下标，**数据槽的行号与它一致**——加完通常还要为这一行"
+            "写绑定，槽键形如 `itemValues[下标].value`。"
+        ),
+        parameters=_object(
+            {
+                "node_id": _string("画布节点 id"),
+                "field": _string("数组配置字段的键，如 items"),
+                "values": {
+                    "type": "object",
+                    "additionalProperties": True,
+                    "description": (
+                        '这一项要设的字段，如 {"label":"出口温度","unit":"°C"}'
+                    ),
+                },
+            },
+            ["node_id", "field"],
+        ),
+        runs_on="client",
+    ),
+    ToolSpec(
+        name="dashboard.remove_config_item",
+        description=(
+            "删掉一个数组配置字段里的第 index 项。"
+            "⚠ 删中间一项会让它之后每一行的数据绑定都改喂前一项——"
+            "删完必须重读绑定并跟用户说清。"
+        ),
+        parameters=_object(
+            {
+                "node_id": _string("画布节点 id"),
+                "field": _string("数组配置字段的键，如 items"),
+                "index": _integer("要删第几项，从 0 起"),
+            },
+            ["node_id", "field", "index"],
+        ),
+        runs_on="client",
+    ),
+    ToolSpec(
+        name="dashboard.chrome_keys",
+        description=(
+            "卡片外观（边框、圆角、背景、标题条、四角、悬停）的**全部可用键**"
+            "与各自的合法取值。用户说到外观而你拿不准键名时调它——"
+            "外观键不在模块的配置字段里，凭印象写的键存得下去但看不见。"
         ),
         parameters=_object({}, []),
         runs_on="client",

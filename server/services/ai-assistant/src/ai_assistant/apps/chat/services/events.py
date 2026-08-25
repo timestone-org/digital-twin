@@ -10,15 +10,27 @@
 import json
 from typing import Any
 
-from ai_assistant.apps.chat.services.turn_types import TurnOutcome, TurnStep
+from ai_assistant.apps.chat.services.turn_types import (
+    TurnDelta,
+    TurnOutcome,
+    TurnStep,
+)
 
 # 闭合集合。加一档要同时改前端的解帧表
+# 模型逐字吐出来的一小块：`channel` 分「说的话」与「想的过程」两路
+EVENT_DELTA = "message.delta"
 EVENT_STEP = "step"
 EVENT_CLIENT_TOOL = "client_tool.request"
 EVENT_DONE = "turn.done"
 EVENT_ERROR = "error"
 
-EVENT_NAMES = (EVENT_STEP, EVENT_CLIENT_TOOL, EVENT_DONE, EVENT_ERROR)
+EVENT_NAMES = (
+    EVENT_DELTA,
+    EVENT_STEP,
+    EVENT_CLIENT_TOOL,
+    EVENT_DONE,
+    EVENT_ERROR,
+)
 
 
 def frame(name: str, body: dict[str, Any]) -> str:
@@ -31,6 +43,17 @@ def frame(name: str, body: dict[str, Any]) -> str:
     """
     payload = json.dumps(body, ensure_ascii=False, default=str)
     return f"event: {name}\ndata: {payload}\n\n"
+
+
+def delta_frame(delta: TurnDelta) -> str:
+    """模型又吐了一小块。
+
+    ⚠ 一块一帧，不攒：攒起来批量发省不下几个字节，却把「逐字出现」变回
+    「一段一段地蹦」，而那正是这条链路存在的理由。
+
+    Args: delta。
+    """
+    return frame(EVENT_DELTA, {"channel": delta.channel, "text": delta.text})
 
 
 def step_frame(step: TurnStep) -> str:
