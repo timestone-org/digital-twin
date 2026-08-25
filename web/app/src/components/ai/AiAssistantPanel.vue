@@ -10,9 +10,19 @@
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import type { AssistantSurfaceKind } from '@dt/contracts'
-import { DtButton, DtEmpty, DtIcon, DtNotice, DtSpinner, DtTextarea } from '@dt/ui'
+import {
+  DtButton,
+  DtEmpty,
+  DtFilePicker,
+  DtIcon,
+  DtNotice,
+  DtSpinner,
+  DtTextarea,
+} from '@dt/ui'
 
+import { parseAttachment } from '@/api/assistant'
 import AiStepRow from '@/components/ai/AiStepRow.vue'
+import { toBase64 } from '@/features/ai/attachment'
 import { useAiConversation } from '@/composables/useAiConversation'
 
 const props = defineProps<{
@@ -42,6 +52,32 @@ async function send(): Promise<void> {
   const text = draft.value.trim()
   draft.value = ''
   await chat.send(text)
+}
+
+const attaching = ref(false)
+const attachError = ref('')
+
+/**
+ * 读一张点表，把它摊平之后附在草稿后面。
+ * ⚠ 附进**草稿**而不是直接发出去：用户得先看见助手将要看到什么，
+ * 这一点比省几下点击重要。
+ */
+async function attach(files: File[]): Promise<void> {
+  const file = files[0]
+  if (file === undefined) return
+  attaching.value = true
+  attachError.value = ''
+  try {
+    const table = await parseAttachment(file.name, await toBase64(file))
+    const note = table.is_truncated
+      ? `（只读了前 ${table.rows.length} 行，共 ${table.total_rows} 行）`
+      : ''
+    draft.value = `${draft.value}\n\n参考点表 ${file.name}${note}：\n${table.text}`
+  } catch (error) {
+    attachError.value = error instanceof Error ? error.message : '读不了这个文件'
+  } finally {
+    attaching.value = false
+  }
 }
 
 // 新内容一律滚到底：不滚的话，助手在做第三步时用户还盯着第一步
@@ -112,7 +148,14 @@ watch(
         placeholder="说说你想做什么…"
         aria-label="对助手说"
       />
+      <DtNotice v-if="attachError" intent="danger">{{ attachError }}</DtNotice>
       <div class="ai-panel__actions">
+        <DtFilePicker
+          label="附点表"
+          accept=".csv,.xlsx,.xlsm"
+          :disabled="attaching"
+          @select="(files) => void attach(files)"
+        />
         <DtButton type="submit" size="sm" :disabled="!canSend">发送</DtButton>
       </div>
     </form>
@@ -221,6 +264,8 @@ watch(
 
 .ai-panel__actions {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 </style>

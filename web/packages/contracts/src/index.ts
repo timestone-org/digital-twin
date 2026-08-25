@@ -410,6 +410,7 @@ export type {
   AssistantToolCall,
   AssistantMessage,
   AssistantMessageRole,
+  AssistantParsedTable,
   AssistantSession,
   AssistantSessionDetail,
   AssistantSkill,

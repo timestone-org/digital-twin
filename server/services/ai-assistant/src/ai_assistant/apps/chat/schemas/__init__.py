@@ -1,5 +1,9 @@
 """出入参模型。ORM 模型绝不直接返给 HTTP 层。"""
 
+from ai_assistant.apps.chat.schemas.attachment import (
+    AttachmentParseIn,
+    AttachmentParseOut,
+)
 from ai_assistant.apps.chat.schemas.capability import CapabilityOut, SkillOut
 from ai_assistant.apps.chat.schemas.common import (
     InputModel,
@@ -20,6 +24,8 @@ from ai_assistant.apps.chat.schemas.session import (
 )
 
 __all__ = [
+    "AttachmentParseIn",
+    "AttachmentParseOut",
     "CapabilityOut",
     "InputModel",
     "MessageOut",

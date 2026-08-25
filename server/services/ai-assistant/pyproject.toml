@@ -30,6 +30,10 @@ dependencies = [
     # 而那个判断决定断路器开不开。靠 langchain-openai 顺带装进来的话，
     # check_service_deps 迟早会逮到，而且它换传输层时我们会静默失去这份分档。
     "openai>=3.3",
+    # 读用户上传的点表。⚠ 放后端而不是前端是刻意的：前端当初拒绝引 xlsx 解析库
+    # 的理由是「几百 KB 的包体」（见 pointCsv.ts 的文件头），而那条理由在服务端
+    # 不成立；现场拿到的点表又十有八九是 xlsx 或 csv。
+    "openpyxl>=3.1",
     "langgraph>=1.2",
     "langchain-openai>=1.6",
 ]

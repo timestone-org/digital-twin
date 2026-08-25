@@ -4,10 +4,31 @@
  * 漏了那句提醒，用户会以为助手绑完就落库了，然后关掉标签页——而草稿只在内存里。
  */
 import { mount } from '@vue/test-utils'
+import { DtFilePicker } from '@dt/ui'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import AiAssistantPanel from '@/components/ai/AiAssistantPanel.vue'
 import { __resetAiPorts, setAiPorts } from '@/features/ai/ports'
+
+// 附点表这一路打的是真接口，用例里换成假件——它验的是「读出来的表去了哪」，
+// 不是解析本身（那一半由后端的用例守）
+vi.mock('@/api/assistant', () => ({
+  parseAttachment: vi.fn((filename: string) => {
+    if (!filename.endsWith('.csv')) return Promise.reject(new Error('只认得 .csv'))
+    return Promise.resolve({
+      columns: ['code', 'name'],
+      rows: [['a', '温度']],
+      is_truncated: false,
+      total_rows: 1,
+      text: 'code | name\na | 温度',
+    })
+  }),
+}))
+
+/** 走 DtFilePicker 的 `select` 事件，与用户真的挑一个文件同一条路。 */
+function pick(wrapper: ReturnType<typeof mountPanel>, file: File): void {
+  wrapper.findComponent(DtFilePicker).vm.$emit('select', [file])
+}
 
 function mountPanel(sessionId: string | null = 's1') {
   return mount(AiAssistantPanel, {
@@ -71,6 +92,26 @@ describe('助手面板', () => {
     await wrapper.find('form').trigger('submit')
     await vi.waitFor(() => {
       expect(wrapper.text()).toContain('帮我绑点')
+    })
+  })
+})
+
+describe('附点表', () => {
+  it('读出来的表附进草稿，而不是直接发出去', async () => {
+    // 用户得先看见助手将要看到什么
+    const wrapper = mountPanel()
+    pick(wrapper, new File(['code,name\na,温度\n'], '点表.csv'))
+    await vi.waitFor(() => {
+      expect(wrapper.find('textarea').element.value).toContain('点表.csv')
+    })
+    expect(wrapper.find('textarea').element.value).toContain('code | name')
+  })
+
+  it('读不了的文件如实报错，不静默吞掉', async () => {
+    const wrapper = mountPanel()
+    pick(wrapper, new File(['%PDF'], '手册.pdf'))
+    await vi.waitFor(() => {
+      expect(wrapper.text()).toMatch(/csv|读不了/)
     })
   })
 })

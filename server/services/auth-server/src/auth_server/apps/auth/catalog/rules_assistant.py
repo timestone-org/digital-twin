@@ -45,6 +45,16 @@ ASSISTANT_RULES: tuple[RouteRuleSpec, ...] = (
         description="会话列表与新建",
     ),
     RouteRuleSpec(
+        f"{_A}/attachments*",
+        "*",
+        codes=(ASSISTANT_USE,),
+        priority=890,
+        description=(
+            "解析上传的点表。⚠ 它不存文件——读完就把内容交给调用方，"
+            "所以这里没有「谁能读回来」那一档判定"
+        ),
+    ),
+    RouteRuleSpec(
         f"{_A}/skills",
         "GET",
         codes=(ASSISTANT_USE,),

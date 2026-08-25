@@ -15,6 +15,7 @@ import { describe, expect, it } from 'vitest'
 import type {
   AssistantCapability,
   AssistantMessage,
+  AssistantParsedTable,
   AssistantSession,
   AssistantSessionDetail,
   AssistantSkill,
@@ -109,6 +110,13 @@ const SHAPES: Record<string, Record<string, true>> = {
     steps: true,
     created_at: true,
   } satisfies Keys<AssistantMessage>,
+  AttachmentParseOut: {
+    columns: true,
+    rows: true,
+    is_truncated: true,
+    total_rows: true,
+    text: true,
+  } satisfies Keys<AssistantParsedTable>,
   StepOut: {
     id: true,
     message_id: true,

@@ -143,3 +143,20 @@ export interface AssistantToolCall {
   name: string
   arguments: Record<string, unknown>
 }
+
+/**
+ * 读出来的一张点表。
+ *
+ * ⚠ 服务端**不存文件**：读完就把内容交出来，由前端附在用户那句话后面——
+ * 用户看得见助手将要看到什么，这一点比省几行界面重要。
+ */
+export interface AssistantParsedTable {
+  columns: string[]
+  rows: string[][]
+  /** 行数超上限时截断了。⚠ 截断了要在界面上说出来。 */
+  is_truncated: boolean
+  /** 截断前的总行数。 */
+  total_rows: number
+  /** 摊平给模型看的那一段，竖线分隔。 */
+  text: string
+}

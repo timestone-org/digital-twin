@@ -49,6 +49,51 @@
         "title": "AdvanceIn",
         "type": "object"
       },
+      "ApiResponse_AttachmentParseOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttachmentParseOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[AttachmentParseOut]",
+        "type": "object"
+      },
       "ApiResponse_CapabilityOut_": {
         "properties": {
           "code": {
@@ -227,6 +272,73 @@
           }
         },
         "title": "ApiResponse[SessionOut]",
+        "type": "object"
+      },
+      "AttachmentParseIn": {
+        "additionalProperties": false,
+        "description": "要解析的那个文件。",
+        "properties": {
+          "content_base64": {
+            "maxLength": 2800000,
+            "minLength": 1,
+            "title": "Content Base64",
+            "type": "string"
+          },
+          "filename": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Filename",
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename",
+          "content_base64"
+        ],
+        "title": "AttachmentParseIn",
+        "type": "object"
+      },
+      "AttachmentParseOut": {
+        "description": "读出来的一张表。",
+        "properties": {
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "is_truncated": {
+            "title": "Is Truncated",
+            "type": "boolean"
+          },
+          "rows": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "total_rows": {
+            "title": "Total Rows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "columns",
+          "rows",
+          "is_truncated",
+          "total_rows",
+          "text"
+        ],
+        "title": "AttachmentParseOut",
         "type": "object"
       },
       "CapabilityOut": {
@@ -850,6 +962,48 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/assistant/attachments:parse": {
+      "post": {
+        "description": "读一张 xlsx / csv，摊成表头加数据行。\n\nArgs: payload, _caller。",
+        "operationId": "parse_attachment_api_v1_assistant_attachments_parse_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachmentParseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AttachmentParseOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "把上传的点表读成一张表",
+        "tags": [
+          "attachment"
+        ]
+      }
+    },
     "/api/v1/assistant/capabilities": {
       "get": {
         "description": "模型是否可用，以及本部署装了哪些技能。\n\nArgs: container, _caller。",
