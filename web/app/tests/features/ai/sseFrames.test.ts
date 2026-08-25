@@ -38,7 +38,8 @@ describe('增量解帧', () => {
 
   it('逐字符喂进去也要一帧不少', () => {
     const reader = createFrameReader()
-    const whole = frame('step', { title: '一' }) + frame('step', { title: '二' })
+    const whole =
+      frame('step', { title: '一' }) + frame('step', { title: '二' })
     const found = [...whole].flatMap((one) => reader.push(one))
     expect(found).toHaveLength(2)
   })

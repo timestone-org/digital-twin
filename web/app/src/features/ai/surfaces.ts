@@ -62,9 +62,7 @@ export function activeSurface(): AiSurface | null {
  * 它下一轮就会换一条路；静默成功则会让它一路自信地错下去。
  * @param call 模型下发的调用
  */
-export async function runClientTool(
-  call: AssistantToolCall,
-): Promise<unknown> {
+export async function runClientTool(call: AssistantToolCall): Promise<unknown> {
   const surface = current
   if (surface === null) throw new UnsupportedTool(call.name)
   if (!surface.tools.includes(call.name)) throw new UnsupportedTool(call.name)

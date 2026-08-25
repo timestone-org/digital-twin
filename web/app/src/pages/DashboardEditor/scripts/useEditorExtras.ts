@@ -92,7 +92,6 @@ function aiPanelOf(deps: EditorExtrasDeps): AiPanel {
   })
 }
 
-
 /** 右键菜单与快捷键共用同一批动作出口，删除同样先过确认弹窗。 */
 function contextMenuOf(deps: EditorExtrasDeps): EditorContextMenu {
   return useEditorContextMenu({

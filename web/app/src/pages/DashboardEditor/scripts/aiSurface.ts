@@ -75,14 +75,13 @@ function snapshotOf(deps: EditorSurfaceDeps): SurfaceSnapshot {
  * 就把异常扔出去，于是只挂了 `.catch()` 的调用方一个都收不到——而那正是
  * 「工具失败要如实回给模型」这条最容易断的地方。
  */
-function settle(
-  deps: ComposeDeps,
-  call: AssistantToolCall,
-): Promise<unknown> {
+function settle(deps: ComposeDeps, call: AssistantToolCall): Promise<unknown> {
   try {
     return Promise.resolve(dispatch(deps, call))
   } catch (error) {
-    return Promise.reject(error instanceof Error ? error : new Error('执行失败'))
+    return Promise.reject(
+      error instanceof Error ? error : new Error('执行失败'),
+    )
   }
 }
 

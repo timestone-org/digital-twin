@@ -14,7 +14,8 @@ import { __resetAiPorts, setAiPorts } from '@/features/ai/ports'
 // 不是解析本身（那一半由后端的用例守）
 vi.mock('@/api/assistant', () => ({
   parseAttachment: vi.fn((filename: string) => {
-    if (!filename.endsWith('.csv')) return Promise.reject(new Error('只认得 .csv'))
+    if (!filename.endsWith('.csv'))
+      return Promise.reject(new Error('只认得 .csv'))
     return Promise.resolve({
       columns: ['code', 'name'],
       rows: [['a', '温度']],

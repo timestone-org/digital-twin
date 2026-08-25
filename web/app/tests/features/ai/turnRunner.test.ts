@@ -53,10 +53,7 @@ function sinkOf(): { sink: RunnerSink; seen: Recorded } {
 
 /** 一个按脚本作答的推进面，并记下每一次收到的请求体。 */
 function advanceOf(script: string[][]): {
-  advance: (
-    sessionId: string,
-    body: AdvanceBody,
-  ) => AsyncGenerator<string>
+  advance: (sessionId: string, body: AdvanceBody) => AsyncGenerator<string>
   bodies: AdvanceBody[]
 } {
   const bodies: AdvanceBody[] = []
@@ -93,7 +90,9 @@ afterEach(() => {
 
 describe('回合循环', () => {
   it('一问一答就结束', async () => {
-    const { advance } = advanceOf([[STEP, frame('turn.done', { reply: '好了' })]])
+    const { advance } = advanceOf([
+      [STEP, frame('turn.done', { reply: '好了' })],
+    ])
     const { sink, seen } = sinkOf()
     await runTurn(inputOf(advance), sink)
 

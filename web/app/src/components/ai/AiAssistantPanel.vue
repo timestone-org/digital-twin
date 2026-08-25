@@ -74,7 +74,8 @@ async function attach(files: File[]): Promise<void> {
       : ''
     draft.value = `${draft.value}\n\n参考点表 ${file.name}${note}：\n${table.text}`
   } catch (error) {
-    attachError.value = error instanceof Error ? error.message : '读不了这个文件'
+    attachError.value =
+      error instanceof Error ? error.message : '读不了这个文件'
   } finally {
     attaching.value = false
   }

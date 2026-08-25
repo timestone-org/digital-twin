@@ -218,6 +218,7 @@ async def test_permission_catalog_is_readable_and_grouped(
         "opcua",
         "dashboard",
         "collect",
+        "assistant",
         "asset",
         "dataset",
         "formula",

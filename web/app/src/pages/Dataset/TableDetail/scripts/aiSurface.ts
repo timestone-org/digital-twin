@@ -94,7 +94,9 @@ function settle(
   try {
     return Promise.resolve(dispatch(deps, proposal, call))
   } catch (error) {
-    return Promise.reject(error instanceof Error ? error : new Error('执行失败'))
+    return Promise.reject(
+      error instanceof Error ? error : new Error('执行失败'),
+    )
   }
 }
 

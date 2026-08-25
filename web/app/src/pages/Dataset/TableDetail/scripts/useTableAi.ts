@@ -55,9 +55,7 @@ export function useTableAi(deps: TableAiDeps): TableAi {
   function adopt(): void {
     const staged = table.proposal.value
     if (staged === null) return
-    const target = deps
-      .columns()
-      .find((one) => one.key === staged.columnKey)
+    const target = deps.columns().find((one) => one.key === staged.columnKey)
     seed.value = { formula: staged.formula, key: staged.columnKey }
     table.clearProposal()
     if (target === undefined) deps.openCreate()

@@ -19,9 +19,7 @@ export async function toBase64(file: File): Promise<string> {
   const bytes = new Uint8Array(await file.arrayBuffer())
   const parts: string[] = []
   for (let start = 0; start < bytes.length; start += CHUNK) {
-    parts.push(
-      String.fromCharCode(...bytes.subarray(start, start + CHUNK)),
-    )
+    parts.push(String.fromCharCode(...bytes.subarray(start, start + CHUNK)))
   }
   return btoa(parts.join(''))
 }

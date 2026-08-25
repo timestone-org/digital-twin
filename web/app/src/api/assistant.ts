@@ -16,12 +16,7 @@ import type {
 } from '@dt/contracts'
 
 import { ASSISTANT_BASE_URL } from '@/config/app'
-import {
-  openStream,
-  request,
-  requestData,
-  type RequestOptions,
-} from './client'
+import { openStream, request, requestData, type RequestOptions } from './client'
 import { newIdempotencyKey } from './idempotency'
 
 function onAssistant(options: RequestOptions = {}): RequestOptions {

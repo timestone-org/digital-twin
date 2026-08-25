@@ -84,9 +84,9 @@ describe('客户端工具的执行', () => {
   it('这一页没实现的工具抛，而不是静默成功', async () => {
     const run = vi.fn()
     setSurface(surface({ run }))
-    await expect(runClientTool(call('dashboard.write_binding'))).rejects.toThrow(
-      UnsupportedTool,
-    )
+    await expect(
+      runClientTool(call('dashboard.write_binding')),
+    ).rejects.toThrow(UnsupportedTool)
     expect(run).not.toHaveBeenCalled()
   })
 

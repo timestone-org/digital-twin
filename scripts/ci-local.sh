@@ -12,7 +12,7 @@
 # 等待；二是 act 没有真的缓存后端，`enable-cache` / `cache: pnpm` 那几层在本地
 # 既不命中也不保存，只有推上去才验得到。
 #
-#   scripts/ci-local.sh --fast          只跑闸门脚本（秒级，不起容器）
+#   scripts/ci-local.sh --fast          闸门脚本 + 两个格式化器（不起容器）
 #   scripts/ci-local.sh                 act 逐个跑第 1–2 段的作业
 #   scripts/ci-local.sh -j server-test  act 跑指定作业
 #   scripts/ci-local.sh --all           act 跑整条流水线（推送前跑这个）
@@ -66,17 +66,35 @@ gates=(
   check_service_deps
 )
 
+# 格式化器。⚠ 它们不是闸门脚本，但**必须留在 --fast 里**：格式是全流水线里
+# 最早红、也最没有信息量的一档，让它留到 `--all` 才暴露，等于为一个空格白等
+# 十几分钟的容器启动与真库测试。
+# 名字 → 命令，与 ci.yml 里那两步逐字同源。
+formatters=(
+  'prettier|pnpm --dir web format:check'
+  "black|${PYTHON[*]} -m black --check --config server/pyproject.toml server scripts"
+)
+
+run_one() {
+  printf '%-28s' "$1"
+  shift
+  if output=$("$@" 2>&1); then
+    echo '✅'
+    return 0
+  fi
+  echo '❌'
+  printf '%s\n' "$output" | sed 's/^/    /'
+  return 1
+}
+
 run_fast() {
   local failed=0
   for gate in "${gates[@]}"; do
-    printf '%-28s' "$gate"
-    if output=$("${PYTHON[@]}" "scripts/gates/${gate}.py" 2>&1); then
-      echo '✅'
-    else
-      echo '❌'
-      printf '%s\n' "$output" | sed 's/^/    /'
-      failed=1
-    fi
+    run_one "$gate" "${PYTHON[@]}" "scripts/gates/${gate}.py" || failed=1
+  done
+  for entry in "${formatters[@]}"; do
+    # shellcheck disable=SC2086 # 命令串按空白切成词，正是这里要的
+    run_one "${entry%%|*}" ${entry#*|} || failed=1
   done
   return "$failed"
 }

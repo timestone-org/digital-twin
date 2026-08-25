@@ -211,9 +211,7 @@ describe('改几何', () => {
 describe('对齐排布', () => {
   it('顶对齐把选中的几个拉到同一条线上', async () => {
     const { editor, surface } = setup()
-    await surface.run(
-      call('dashboard.set_geometry', { node_id: 'b', y: 400 }),
-    )
+    await surface.run(call('dashboard.set_geometry', { node_id: 'b', y: 400 }))
     await surface.run(
       call('dashboard.arrange', { action: 'top', node_ids: ['a', 'b'] }),
     )

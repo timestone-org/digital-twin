@@ -62,7 +62,14 @@ export function useAiConversation(
     isRunning.value = false
   }
 
-  const send = createSender({ sessionId, surface, state, isRunning, push, stop })
+  const send = createSender({
+    sessionId,
+    surface,
+    state,
+    isRunning,
+    push,
+    stop,
+  })
 
   onScopeDispose(stop)
 
@@ -112,7 +119,10 @@ function createSender(parts: SenderParts): (text: string) => Promise<void> {
     parts.isRunning.value = true
     parts.push({ role: 'user', text })
     try {
-      await runTurn(inputOf(parts, id, advance, text, controller), sinkOf(parts))
+      await runTurn(
+        inputOf(parts, id, advance, text, controller),
+        sinkOf(parts),
+      )
     } catch (error) {
       if (!controller.signal.aborted) {
         parts.push({ role: 'error', text: reason(error) })

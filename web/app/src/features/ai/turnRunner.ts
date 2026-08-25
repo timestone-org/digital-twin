@@ -12,10 +12,7 @@
  * 调用永远没有答复，模型下一轮会被端点判成请求不合法——报出来的是一条与
  * 真实原因毫无关系的错。
  */
-import type {
-  AssistantSurfaceKind,
-  AssistantToolCall,
-} from '@dt/contracts'
+import type { AssistantSurfaceKind, AssistantToolCall } from '@dt/contracts'
 
 import type { AdvanceBody } from '@/api/assistant'
 import type { AdvanceStream } from './ports'

@@ -20,9 +20,7 @@ const KIND_ICONS: Record<string, IconName> = {
   client_tool: 'square-mouse-pointer',
 }
 
-const icon = computed<IconName>(
-  () => KIND_ICONS[props.step.kind] ?? 'activity',
-)
+const icon = computed<IconName>(() => KIND_ICONS[props.step.kind] ?? 'activity')
 
 const isFailed = computed(() => props.step.state === 'failed')
 const isWaiting = computed(() => props.step.state === 'awaiting_client')

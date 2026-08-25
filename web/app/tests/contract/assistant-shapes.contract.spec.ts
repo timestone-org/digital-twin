@@ -169,9 +169,7 @@ describe('三个闭合集合与后端 enums.py 里的那一份逐字相同', () 
   // 与工作面同源：漂开时前端会把一个合法状态渲染成「未知」，而两边代码单看都对
   function backendTuple(name: string): string[] {
     const source = readFileSync(ENUMS_PATH, 'utf8')
-    const block = new RegExp(`${name} = \\(([\\s\\S]*?)\\)`).exec(
-      source,
-    )?.[1]
+    const block = new RegExp(`${name} = \\(([\\s\\S]*?)\\)`).exec(source)?.[1]
     return [...(block ?? '').matchAll(/"([^"]+)"/g)].map(
       (match) => match[1] ?? '',
     )
