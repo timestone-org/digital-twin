@@ -250,8 +250,19 @@ def check_production_code_avoids_testing_package() -> list[Violation]:
 
 
 def _own_schema(service: Path) -> str:
+    """服务目录名 → 它自己那个 schema 的名字。
+
+    ⚠ 对不上的服务要逐个登记。漏一个的表现是**冤枉它**：它动自己的 schema
+    也算越界，而报出来的那句话说的是「不许动别的 schema」。
+
+    Args: service。
+    """
     name = service.name.removesuffix("-server").replace("-", "_")
-    return {"collector": "collect", "realtime_hub": "realtime"}.get(name, name)
+    return {
+        "collector": "collect",
+        "realtime_hub": "realtime",
+        "ai_assistant": "assistant",
+    }.get(name, name)
 
 
 def check_migrations_touch_one_schema_only() -> list[Violation]:
