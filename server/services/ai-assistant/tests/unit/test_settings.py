@@ -47,6 +47,16 @@ def test_model_on_without_key_is_rejected_at_startup() -> None:
     assert "ASSISTANT_MODEL_API_KEY" in str(error.value)
 
 
+def test_model_on_with_a_blank_key_is_rejected_too() -> None:
+    # ⚠ `.env` 里写着 `ASSISTANT_MODEL_API_KEY=` 就是空串，而那是最常见的
+    # 「还没填」形态。只判 None 的话它会一路过关，服务照常起、能力面照常说
+    # 「接了模型」，而每一次对话都撞 401
+    for blank in ("", "   "):
+        with pytest.raises(ValidationError) as error:
+            _settings(model_enabled=True, model_api_key=SecretStr(blank))
+        assert "ASSISTANT_MODEL_API_KEY" in str(error.value)
+
+
 def test_model_on_with_key_is_accepted() -> None:
     settings = _settings(model_enabled=True, model_api_key=SecretStr("sk-x"))
     assert settings.model_enabled is True

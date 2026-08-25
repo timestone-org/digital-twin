@@ -26,6 +26,14 @@ MAX_HISTORY_MESSAGES = 40
 MAX_IMAGE_CHARS = 4_000_000
 
 
+def _has_secret(given: SecretStr | None) -> bool:
+    """密钥是不是真配了。⚠ 空白与缺席同档。
+
+    Args: given。
+    """
+    return given is not None and given.get_secret_value().strip() != ""
+
+
 class MigrationSettings(PostgresSettings):
     """迁移只需要连库这一组。
 
@@ -99,8 +107,14 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
         ⚠ 「缺失时打一条 WARN 继续」与「第一次用到时才发现没配」都是明令禁止的
         （config-and-secrets §3）：后者意味着服务已经接了流量，此时失败影响的是
         真实用户。
+
+        ⚠ **空串也算没配。** 环境变量留空是最常见的「还没填」形态——
+        `.env` 里写着 `ASSISTANT_MODEL_API_KEY=` 就是它。只判 `is None` 的话，
+        空串会一路过关，服务照常起、能力面照常说「接了模型」，而每一次对话都
+        撞 401；那一档还刻意不打开断路器（是我们配错了，不是下游不行），
+        于是每次都要等一个完整的往返才失败。
         """
-        if self.model_enabled and self.model_api_key is None:
+        if self.model_enabled and not _has_secret(self.model_api_key):
             raise ValueError(
                 "ASSISTANT_MODEL_ENABLED 为真时必须配 ASSISTANT_MODEL_API_KEY"
             )
