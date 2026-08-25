@@ -4,7 +4,7 @@
  */
 import { ref, type Ref } from 'vue'
 import type { DashboardPayload } from '@dt/contracts'
-import type { DesignSize } from '@dt/runtime'
+import type { DesignSize, GetModuleManifest } from '@dt/runtime'
 
 import { exportDashboard } from '@/api/dashboardTransfer'
 import type { DashboardEditor } from '@/composables/useDashboardEditor'
@@ -23,6 +23,7 @@ import {
 } from './useEditorContextMenu'
 import { clearDraft } from './editorDraft'
 import { captureThumbnail } from './editorThumbnail'
+import { useAiPanel, type AiPanel } from './useAiPanel'
 
 export interface EditorExtrasDeps {
   editor: DashboardEditor
@@ -54,6 +55,10 @@ export interface EditorExtrasDeps {
   /** 把节点滚进视口中央，由画布提供。 */
   centerOn: (nodeId: string) => void
   onExportFailed: (message: string) => void
+  /** 清单解析器；助手的工作面要靠它读出每个画布节点是什么模块。 */
+  getManifest: GetModuleManifest
+  /** 当前大屏 id；助手的会话钉在它上面。 */
+  dashboardId: () => string | null
 }
 
 export interface EditorExtras {
@@ -63,7 +68,24 @@ export interface EditorExtras {
   /** 工具栏保存入口：保存成功后顺手截缩略图并清草稿。 */
   saveWithThumbnail: () => Promise<void>
   exportJson: () => Promise<void>
+  /**
+   * 助手面板。
+   * ⚠ 这套部署没装助手时 `isAvailable` 恒假，入口不出现——而不是出现一个
+   * 点了报错的按钮（features/ai/ports.ts）。
+   */
+  ai: AiPanel
 }
+
+/** 助手的工作面要认得画布节点是什么模块，所以清单解析器也要给它。 */
+function aiPanelOf(deps: EditorExtrasDeps): AiPanel {
+  return useAiPanel({
+    editor: deps.editor,
+    actions: deps.actions,
+    getManifest: deps.getManifest,
+    dashboardId: deps.dashboardId,
+  })
+}
+
 
 /** 右键菜单与快捷键共用同一批动作出口，删除同样先过确认弹窗。 */
 function contextMenuOf(deps: EditorExtrasDeps): EditorContextMenu {
@@ -80,6 +102,7 @@ function contextMenuOf(deps: EditorExtrasDeps): EditorContextMenu {
 export function useEditorExtras(deps: EditorExtrasDeps): EditorExtras {
   const { editor, dashboard } = deps
   const previewOpen = ref(false)
+  const ai = aiPanelOf(deps)
 
   async function saveWithThumbnail(): Promise<void> {
     await deps.save()
@@ -129,5 +152,6 @@ export function useEditorExtras(deps: EditorExtrasDeps): EditorExtras {
     contextMenu: contextMenuOf(deps),
     saveWithThumbnail,
     exportJson,
+    ai,
   }
 }

@@ -33,8 +33,8 @@ class SessionCrud(CrudBase[ChatSession]):
     ) -> Select[tuple[ChatSession]]:
         """按归属与两个过滤条件构造列表查询。
 
-        `owner_id` 为 None 表示不限归属——只有持 `assistant:manage` 的调用者
-        走得到这里，判定在 service 层。
+        `owner_id` 为 None 表示不限归属。眼下没有调用方会给 None——
+        「谁看得见谁的」这条判定在 service 层的 `visible_owner` 一处。
         Args: owner_id, surface_kind, is_archived。
         """
         statement = select(ChatSession)

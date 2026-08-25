@@ -10,6 +10,7 @@ from auth_server.apps.auth.catalog.permissions import (
     ALL_CODES,
     ASSET_MANAGE,
     ASSET_VIEW,
+    ASSISTANT_USE,
     COLLECT_MANAGE,
     COLLECT_OPERATE,
     COLLECT_VIEW,
@@ -36,6 +37,7 @@ from auth_server.apps.auth.catalog.permissions import (
     grouped_permissions,
 )
 from auth_server.apps.auth.catalog.roles import ROLE_ADMIN, ROLE_VIEWER, ROLES
+from auth_server.apps.auth.catalog.rules_assistant import ASSISTANT_RULES
 from auth_server.apps.auth.catalog.rules_auth import AUTH_RULES
 from auth_server.apps.auth.catalog.rules_opcua import OPCUA_RULES
 from auth_server.apps.auth.catalog.rules_platform import PLATFORM_RULES
@@ -52,6 +54,7 @@ ROUTE_RULES: tuple[RouteRuleSpec, ...] = (
     *PLATFORM_RULES,
     *OPCUA_RULES,
     *REALTIME_RULES,
+    *ASSISTANT_RULES,
 )
 
 __all__ = [
@@ -60,6 +63,7 @@ __all__ = [
     "ALL_CODES",
     "ASSET_MANAGE",
     "ASSET_VIEW",
+    "ASSISTANT_USE",
     "AUTH_RULES",
     "COLLECT_MANAGE",
     "COLLECT_OPERATE",

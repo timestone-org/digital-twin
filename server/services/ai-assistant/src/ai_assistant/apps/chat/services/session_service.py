@@ -10,7 +10,6 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ai_assistant.apps.chat.catalog import ASSISTANT_MANAGE
 from ai_assistant.apps.chat.crud import session_crud
 from ai_assistant.apps.chat.errors import SessionNotFound
 from ai_assistant.apps.chat.models import ChatMessage, ChatSession, ChatStep
@@ -28,9 +27,6 @@ from lib.web import Page, PageParams
 
 _logger = get_logger("assistant.chat.session")
 
-# 持它的人看得见所有人的会话：出了事要能按一个会话 id 查到那次对话
-_MANAGE_CODES = frozenset({ASSISTANT_MANAGE})
-
 
 @dataclass(frozen=True)
 class SessionFilters:
@@ -40,15 +36,15 @@ class SessionFilters:
     is_archived: bool | None
 
 
-def visible_owner(caller: CallerContext) -> uuid.UUID | None:
-    """这个调用者看得见谁的会话。None = 不限归属。
+def visible_owner(caller: CallerContext) -> uuid.UUID:
+    """这个人看得见谁的会话 —— 眼下只有他自己的。
 
-    ⚠ 只有持 `assistant:manage` 的人拿得到 None：会话里存着用户与助手的完整
-    对话，按 `assistant:use` 放开等于全员互相可读。
+    ⚠ 保留这个函数而不是到处写 `caller.user_id`：管理面落地时，「谁看得见谁的」
+    这条判定要能在**一处**改完。散在四个查询里的话，总会漏掉一个，
+    而漏掉的那个是一条越权读。
+
     Args: caller。
     """
-    if caller.has_any(_MANAGE_CODES):
-        return None
     return caller.user_id
 
 
@@ -189,10 +185,7 @@ async def require_session(
     Args: session, chat_session_id, caller。
     """
     chat_session = await session_crud.get(session, chat_session_id)
-    owner_id = visible_owner(caller)
-    if chat_session is None or (
-        owner_id is not None and chat_session.user_id != owner_id
-    ):
+    if chat_session is None or chat_session.user_id != visible_owner(caller):
         raise SessionNotFound("会话不存在")
     return chat_session
 

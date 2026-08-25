@@ -123,6 +123,10 @@
   --z-sticky: 100;
   --z-nav: 200;
   --z-dropdown: 300;
+  /* ⚠ 助手面板压在 dropdown 之上、modal 之下：它是常驻的工作面而不是弹窗，
+   * 业务弹窗仍要能盖住它；面板内部的下拉由 `resolveOverlayZIndex` 沿祖先链
+   * 取最大值 +1，自动落在它上面 */
+  --z-assistant: 350;
   --z-tooltip: 400;
   --z-modal: 500;
   /* ⚠ 二次确认必须**高于** modal：它是从别的弹窗里问出来的，而同层之间由

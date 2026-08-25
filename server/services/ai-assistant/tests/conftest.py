@@ -15,7 +15,7 @@ import pytest
 from pydantic import SecretStr
 
 from ai_assistant.app import build_app
-from ai_assistant.apps.chat.catalog import ASSISTANT_MANAGE, ASSISTANT_USE
+from ai_assistant.apps.chat.catalog import ASSISTANT_USE
 from ai_assistant.settings import Settings
 from lib.auth import (
     SignedContext,
@@ -28,7 +28,7 @@ from lib.utils.timeutils import utcnow
 
 # 身份头的存活时长，取值本身不参与断言
 HEADER_TTL_S = 900
-FULL_CODES = (ASSISTANT_USE, ASSISTANT_MANAGE)
+FULL_CODES = (ASSISTANT_USE,)
 # 占位取值：本层用例一个都不连
 PLACEHOLDER = "ai-assistant-test"
 

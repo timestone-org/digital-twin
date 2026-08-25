@@ -18,7 +18,6 @@ HeaderFactory = Callable[..., dict[str, str]]
 
 SESSIONS_URL = "/api/v1/assistant/sessions"
 ASSISTANT_USE = "assistant:use"
-ASSISTANT_MANAGE = "assistant:manage"
 DEFAULT_SURFACE = "dashboard-editor"
 
 
@@ -101,28 +100,6 @@ async def test_another_callers_session_cannot_be_deleted(
         f"{SESSIONS_URL}/{created['id']}", headers=sign([ASSISTANT_USE])
     )
     assert response.status_code == 404
-
-
-async def test_a_manager_reads_any_owners_session(
-    db_client: httpx.AsyncClient, sign: HeaderFactory
-) -> None:
-    created = await _create(db_client, sign([ASSISTANT_USE]))
-    response = await db_client.get(
-        f"{SESSIONS_URL}/{created['id']}",
-        headers=sign([ASSISTANT_USE, ASSISTANT_MANAGE]),
-    )
-    assert response.status_code == 200
-    assert _data(response)["id"] == created["id"]
-
-
-async def test_a_manager_lists_every_owners_session(
-    db_client: httpx.AsyncClient, sign: HeaderFactory
-) -> None:
-    created = await _create(db_client, sign([ASSISTANT_USE]))
-    response = await db_client.get(
-        SESSIONS_URL, headers=sign([ASSISTANT_USE, ASSISTANT_MANAGE])
-    )
-    assert created["id"] in [row["id"] for row in _items(response)]
 
 
 async def test_a_session_detail_starts_with_no_messages(

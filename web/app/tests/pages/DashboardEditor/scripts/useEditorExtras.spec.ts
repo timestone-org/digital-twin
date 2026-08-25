@@ -108,6 +108,8 @@ function setup(pickerConsumes: () => boolean): Harness {
         stageEl: () => null,
         centerOn: vi.fn(),
         onExportFailed: vi.fn(),
+        getManifest: () => MANIFEST,
+        dashboardId: () => 'd1',
       })
       return () => h('div')
     },

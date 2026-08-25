@@ -36,6 +36,14 @@ ASSET_MANAGE = "asset:manage"
 # platform-server 的 apps/dataset 复述一份，同上。⚠ 台账的划分依据是**爆炸半径**
 # 而不是「读 / 写」，完整的八个码见 docs/DATASET_DESIGN.md §9；这里只登记已经有
 # 端点的五个，导出与公式库那三个各自随端点落地时再加
+# ai-assistant 复述一份，同上。⚠ **助手不是绕过权限的通道**：它改的是浏览器里
+# 的草稿，最终保存仍走 `dashboard:edit`；服务端工具代表用户调 platform 时也带着
+# 用户自己的身份头。所以这两个码管的只是「能不能用助手」，不是「能改什么」
+# ⚠ 这里**只有 use 一个码**。「看得见别人的会话」那件事眼下是在端点内部判的
+# （同一个 URL 上按调用者分支），而闸 1 的规则按 路径 + 方法 匹配——一个没有
+# 任何规则要它的码，在角色配置界面上就是一个点了没效果的开关。等管理面真的
+# 有了自己的端点，再连着那条规则一起登记。
+ASSISTANT_USE = "assistant:use"
 DATASET_VIEW = "dataset:view"
 DATASET_MANAGE = "dataset:manage"
 DATASET_RECORD_WRITE = "dataset:record:write"
@@ -231,6 +239,18 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
         description=(
             "增删改数据源与点位，含接入凭据、采集周期、死区与归档保留期。"
             "改完即广播新采集计划，采集进程随之改变它在现场读什么"
+        ),
+    ),
+    PermissionSpec(
+        code=ASSISTANT_USE,
+        name="使用 AI 助手",
+        kind="operate",
+        group_code="assistant",
+        group_label="AI 助手",
+        sort_order=10,
+        description=(
+            "开对话、让助手动手。⚠ 它动的是浏览器里的草稿，"
+            "最终保存仍按各自的码判——只有这个码存不下任何东西"
         ),
     ),
     PermissionSpec(

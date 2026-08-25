@@ -26,7 +26,6 @@ from lib.auth import CallerContext
 from lib.utils.timeutils import utcnow
 
 ASSISTANT_USE = "assistant:use"
-ASSISTANT_MANAGE = "assistant:manage"
 
 
 def _caller(*codes: str) -> CallerContext:
@@ -108,10 +107,6 @@ def test_the_list_order_ends_on_a_unique_column() -> None:
 def test_a_plain_caller_only_sees_their_own_sessions() -> None:
     caller = _caller(ASSISTANT_USE)
     assert visible_owner(caller) == caller.user_id
-
-
-def test_a_manager_sees_every_owner() -> None:
-    assert visible_owner(_caller(ASSISTANT_USE, ASSISTANT_MANAGE)) is None
 
 
 def test_the_owner_lands_in_the_list_query() -> None:

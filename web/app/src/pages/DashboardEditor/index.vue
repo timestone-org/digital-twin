@@ -130,6 +130,8 @@ const extras = useEditorExtras({
   stageEl: () => canvasRef.value?.stageRef ?? null,
   centerOn,
   onExportFailed: (message) => toast.error(message),
+  getManifest,
+  dashboardId: () => dashboardId.value,
 })
 
 const editing = useEditorVisibility(
@@ -272,6 +274,7 @@ onUnmounted(file.dispose)
       :design="design"
       :get-manifest="getManifest"
       :chrome-json="meta.draft.value?.chromeJson ?? {}"
+      :ai="extras.ai"
       :context-menu="extras.contextMenu.state.value"
       @close-picker="ops.closePicker"
       @pick="ops.pickPoint"
