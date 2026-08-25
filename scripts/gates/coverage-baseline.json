@@ -1,4 +1,8 @@
 {
+  "ai-assistant": {
+    "lines": 96.31,
+    "branches": 84.9
+  },
   "auth-server": {
     "lines": 95.7,
     "branches": 77.0

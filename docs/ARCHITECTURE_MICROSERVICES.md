@@ -45,7 +45,7 @@
 | `collector-server` | 连接 PLC、订阅、采样、写快照与历史 | 无业务面（仅探针） | 8007 |
 | `opcua-server` | 对上位系统暴露 opc.tcp 端点，托管多个 OPC UA 服务器实例 | `/api/v1/opcua` | 8008 |
 | `realtime-hub` | WebSocket 连接与订阅、服务→客户端扇出、通知 | `/api/v1/realtime` | 8000 |
-| `ai-assistant` | 对话式助手、知识检索、意图路由 | `/api/v1/assistant` | 8006 |
+| `ai-assistant` | 技能驱动的对话式助手：按页面装技能、点位召回、改画布的工具下发到浏览器 | `/api/v1/assistant` | 8006 |
 
 ### 2.2 部署单元（9 个）
 
@@ -165,7 +165,7 @@ server/
 | `auth` | 用户、角色、权限码、路由规则、API 密钥 | auth-server |
 | `opcua` | 服务器实例、地址空间节点与类型、方法定义、实例凭据与信任证书 | opcua-server |
 | `realtime` | 主题登记、用户订阅 | realtime-hub |
-| `assistant` | 会话、消息、知识块 | ai-assistant |
+| `assistant` | 会话、消息、回合步骤 | ai-assistant |
 | `platform` | 大屏、绑定、项目、模板、素材、点位配置、台账、报告、建模 | platform-server |
 | `collect` | 点位历史、采集运行态 | collector-server |
 

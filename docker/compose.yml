@@ -19,6 +19,7 @@ services:
       platform-server: {condition: service_healthy}
       opcua-server: {condition: service_started}
       realtime-hub: {condition: service_started}
+      ai-assistant: {condition: service_started}
     ports: ['${EDGE_HTTP_PORT:-8080}:80']
     environment:
       AUTH_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填：/internal/ 的服务级密钥}
@@ -276,6 +277,46 @@ services:
         alembic upgrade head
     restart: 'no'
 
+  assistant-migrate:
+    build:
+      context: ../server
+      dockerfile: services/ai-assistant/Dockerfile
+    environment:
+      DB_HOST: ${POSTGRES_HOST:?必填}
+      DB_PORT: ${POSTGRES_PORT:-5432}
+      ASSISTANT_APP_LOG_FORMAT: json
+      ASSISTANT_POSTGRES_HOST: ${POSTGRES_HOST:?必填}
+      ASSISTANT_POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      ASSISTANT_POSTGRES_USER: ${POSTGRES_USER:?必填}
+      ASSISTANT_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必填}
+      ASSISTANT_POSTGRES_DB: ${POSTGRES_DB:?必填}
+      ASSISTANT_POSTGRES_SCHEMA: assistant
+      ASSISTANT_REDIS_HOST: ${REDIS_HOST:?必填}
+      ASSISTANT_REDIS_PORT: ${REDIS_PORT:-6379}
+      ASSISTANT_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      ASSISTANT_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
+      ASSISTANT_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        set -e
+        python - <<'PY'
+        import os, socket, sys, time
+        # ⚠ 库在本编排之外（与对象存储同档），compose 没法给它挂 healthcheck。
+        # 不等就迁移，主机重启时 Docker 常比 Postgres 先起来，于是整栈拒绝启动。
+        host, port = os.environ['DB_HOST'], int(os.environ['DB_PORT'])
+        for _ in range(60):
+            try:
+                socket.create_connection((host, port), timeout=2).close()
+                sys.exit(0)
+            except OSError:
+                time.sleep(2)
+        print(f'等不到数据库 {host}:{port}', file=sys.stderr)
+        sys.exit(1)
+        PY
+        alembic upgrade head
+    restart: 'no'
+
   auth-server:
     build:
       context: ../server
@@ -364,6 +405,49 @@ services:
     expose: ['8005']
     healthcheck:
       test: ['CMD', 'python', '-c', "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8005/api/v1/platform/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+  # AI 助手。⚠ 它是**可缺席**的：没有它，前端探测失败之后入口干净地不出现，
+  # 别的功能一件不少（features/ai/ports.ts）。所以边缘不给它挂 service_healthy，
+  # 它起不来也不该拖着整个站不启动。
+  # ⚠ 没配 ASSISTANT_MODEL_API_KEY 时服务照常起，只是能力面回「没接模型」——
+  # 密钥类绝不给默认值，而弱默认的密钥等于没有密钥（config-and-secrets §2）。
+  ai-assistant:
+    build:
+      context: ../server
+      dockerfile: services/ai-assistant/Dockerfile
+    depends_on:
+      assistant-migrate: {condition: service_completed_successfully}
+    environment:
+      ASSISTANT_APP_ROLE: api
+      ASSISTANT_APP_LOG_FORMAT: json
+      ASSISTANT_POSTGRES_HOST: ${POSTGRES_HOST:?必填}
+      ASSISTANT_POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      ASSISTANT_POSTGRES_USER: ${POSTGRES_USER:?必填}
+      ASSISTANT_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必填}
+      ASSISTANT_POSTGRES_DB: ${POSTGRES_DB:?必填}
+      ASSISTANT_POSTGRES_SCHEMA: assistant
+      ASSISTANT_REDIS_HOST: ${REDIS_HOST:?必填}
+      ASSISTANT_REDIS_PORT: ${REDIS_PORT:-6379}
+      ASSISTANT_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      # ⚠ 与 auth-server 取同一个值：分叉就是助手一律 401
+      ASSISTANT_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
+      ASSISTANT_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
+      # 助手代表用户去读点位与模块清单，故上游是业务面自己
+      ASSISTANT_PLATFORM_BASE_URL: http://platform-server:8005
+      # 模型。⚠ 开关开着却没配密钥 = 启动即失败，而不是起来之后每次对话报错
+      ASSISTANT_MODEL_ENABLED: ${ASSISTANT_MODEL_ENABLED:-false}
+      ASSISTANT_MODEL_BASE_URL: ${ASSISTANT_MODEL_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      ASSISTANT_MODEL_API_KEY: ${ASSISTANT_MODEL_API_KEY:-}
+      ASSISTANT_MODEL_CHAT: ${ASSISTANT_MODEL_CHAT:-qwen3.8-max}
+      ASSISTANT_MODEL_VISION: ${ASSISTANT_MODEL_VISION:-qwen3.8-max}
+      ASSISTANT_MODEL_TIMEOUT_S: ${ASSISTANT_MODEL_TIMEOUT_S:-120}
+    expose: ['8006']
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8006/api/v1/assistant/health')"]
       interval: 10s
       timeout: 3s
       retries: 3

@@ -272,6 +272,19 @@ jobs:
       REALTIME_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
       REALTIME_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
 
+      # ⚠ 助手的模型开关**在 CI 里保持关**：打开就要一把真密钥，而用例验的是
+      # 编排与工具分派，模型本身由假件顶。开关关着时它照常构造得出 Settings
+      ASSISTANT_POSTGRES_HOST: localhost
+      ASSISTANT_POSTGRES_PORT: '55432'
+      ASSISTANT_POSTGRES_USER: dt
+      ASSISTANT_POSTGRES_PASSWORD: dt
+      ASSISTANT_POSTGRES_DB: dt
+      ASSISTANT_POSTGRES_SCHEMA: assistant
+      ASSISTANT_REDIS_HOST: localhost
+      ASSISTANT_REDIS_PORT: '56379'
+      ASSISTANT_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
+      ASSISTANT_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
+
       COLLECT_POSTGRES_HOST: localhost
       COLLECT_POSTGRES_PORT: '55432'
       COLLECT_POSTGRES_USER: dt
@@ -322,6 +335,10 @@ jobs:
 
       - name: 建 realtime schema
         working-directory: server/services/realtime-hub
+        run: uv run alembic upgrade head
+
+      - name: 建 assistant schema
+        working-directory: server/services/ai-assistant
         run: uv run alembic upgrade head
 
       # ⚠ --cov 必须用点号模块名：写成路径形式时 coverage 静默跳过、数字虚高
@@ -401,6 +418,16 @@ jobs:
             --junitxml=../../../realtime-junit.xml 2>&1 \
             | tee ../../../realtime-pytest.log
 
+      # ⚠ 停在等浏览器那一步只有真库能验：待续状态必须落库，api 角色是无状态的
+      - name: ai-assistant 全层
+        working-directory: server/services/ai-assistant
+        run: |
+          set -o pipefail
+          uv run pytest -q --cov=ai_assistant --cov-branch \
+            --cov-report=xml:../../../assistant-coverage.xml \
+            --junitxml=../../../assistant-junit.xml 2>&1 \
+            | tee ../../../assistant-pytest.log
+
       # CI 里 skip 掉的用例等于没跑：环境能力由服务容器保证，缺了就该红
       - name: 运行结果自检（无 skip、无外网、覆盖率口径）
         run: |
@@ -420,6 +447,8 @@ jobs:
             collector-junit.xml collector-pytest.log
           uv run --project server python scripts/gates/check_pytest_run.py \
             realtime-junit.xml realtime-pytest.log
+          uv run --project server python scripts/gates/check_pytest_run.py \
+            assistant-junit.xml assistant-pytest.log
 
       # 整体覆盖率不许低于基线——哪怕仍在阈值之上
       - name: 覆盖率棘轮
@@ -440,6 +469,8 @@ jobs:
             collector-server collector-coverage.xml
           uv run --project server python scripts/gates/check_coverage.py \
             realtime-hub realtime-coverage.xml
+          uv run --project server python scripts/gates/check_coverage.py \
+            ai-assistant assistant-coverage.xml
 
       # 基线是**本次推送前的 main**（`github.event.before`）：刚合进来的那一坨
       # 改动正好落在这段区间里。⚠ 没有 before（分支首推、手动补跑）时无基线
@@ -460,6 +491,7 @@ jobs:
             collectwire-coverage.xml auth-coverage.xml \
             platform-coverage.xml opcua-coverage.xml \
             collector-coverage.xml realtime-coverage.xml \
+            assistant-coverage.xml \
             --compare-branch "${BASELINE}" --fail-under=85
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -593,6 +625,20 @@ jobs:
           OPCUA_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
         run: uv run python scripts/export_openapi.py --check
 
+      - name: ai-assistant 的 openapi.json 与代码一致
+        working-directory: server/services/ai-assistant
+        env:
+          ASSISTANT_POSTGRES_HOST: localhost
+          ASSISTANT_POSTGRES_PORT: '55432'
+          ASSISTANT_POSTGRES_USER: dt
+          ASSISTANT_POSTGRES_PASSWORD: dt
+          ASSISTANT_POSTGRES_DB: dt
+          ASSISTANT_POSTGRES_SCHEMA: assistant
+          ASSISTANT_REDIS_HOST: redis-not-used-in-this-job
+          ASSISTANT_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
+          ASSISTANT_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
+        run: uv run python scripts/export_openapi.py --check
+
       # ⚠ 代码可以回滚、数据库不回滚，所以每个迁移都必须真的能上能下
       - name: auth 迁移 upgrade → downgrade → upgrade
         working-directory: server/services/auth-server
@@ -631,6 +677,20 @@ jobs:
           REALTIME_POSTGRES_PASSWORD: dt
           REALTIME_POSTGRES_DB: dt
           REALTIME_POSTGRES_SCHEMA: realtime
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+
+      - name: ai-assistant 的迁移 upgrade → downgrade → upgrade
+        working-directory: server/services/ai-assistant
+        env:
+          ASSISTANT_POSTGRES_HOST: localhost
+          ASSISTANT_POSTGRES_PORT: '55432'
+          ASSISTANT_POSTGRES_USER: dt
+          ASSISTANT_POSTGRES_PASSWORD: dt
+          ASSISTANT_POSTGRES_DB: dt
+          ASSISTANT_POSTGRES_SCHEMA: assistant
         run: |
           uv run alembic upgrade head
           uv run alembic downgrade base
