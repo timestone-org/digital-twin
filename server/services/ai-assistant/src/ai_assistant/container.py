@@ -62,6 +62,7 @@ def _build_model(settings: Settings) -> GuardedModel | None:
         return None
     return GuardedModel(
         source=source,
+        is_streaming=settings.model_stream_enabled,
         breaker=CircuitBreaker(
             name="model",
             failure_threshold=settings.model_breaker_failures,

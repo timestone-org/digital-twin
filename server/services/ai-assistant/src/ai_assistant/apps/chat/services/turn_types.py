@@ -8,6 +8,8 @@
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from ai_assistant.llm import DeltaChannel
+
 StepKind = Literal["model", "server_tool", "client_tool"]
 StepState = Literal["succeeded", "failed", "awaiting_client"]
 
@@ -21,6 +23,19 @@ class ClientToolCall:
     call_id: str
     name: str
     arguments: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class TurnDelta:
+    """模型逐字吐出来的一小块。
+
+    ⚠ 它**不落库**：这一回合结束时落的是攒齐的那条助手消息，而思考过程一路
+    连那也不落——下一轮重放要是把它再喂回去，上下文与账单一起翻倍，而模型
+    早就把结论写进正文了。
+    """
+
+    channel: DeltaChannel
+    text: str
 
 
 @dataclass(frozen=True)

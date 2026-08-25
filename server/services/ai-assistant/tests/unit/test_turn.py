@@ -20,7 +20,11 @@ from ai_assistant.apps.chat.services.turn import (
     run_turn,
     stream_turn,
 )
-from ai_assistant.apps.chat.services.turn_types import TurnOutcome
+from ai_assistant.apps.chat.services.turn_types import (
+    TurnDelta,
+    TurnOutcome,
+    TurnStep,
+)
 from ai_assistant.llm import GuardedModel
 from ai_assistant.llm.provider import ModelKind
 from lib.resilience import CircuitBreaker
@@ -251,7 +255,7 @@ async def test_the_streaming_variant_yields_each_step_as_it_happens() -> None:
     async for item in stream_turn(_deps(model, runner), _ask()):
         if isinstance(item, TurnOutcome):
             outcome = item
-        else:
+        elif isinstance(item, TurnStep):
             seen.append(item.kind)
 
     # 等回合整个跑完再一次性推的话，一次绑点要转十几秒的圈
@@ -281,3 +285,43 @@ async def test_the_streaming_variant_agrees_with_the_blocking_one() -> None:
         call.name for call in blocking.pending
     ]
     assert streamed.is_waiting == blocking.is_waiting
+
+
+async def test_the_model_text_arrives_as_deltas_before_the_turn_ends() -> None:
+    """模型说的话必须在回合结束**之前**就一块块出来。
+
+    ⚠ 只在 `turn.done` 里给的话，用户在模型作答的十几秒里看到的是一片空白，
+    而助手其实一直在说。
+    """
+    model = ScriptedChat(reply=AIMessage(content="已经绑好了"))
+    said: list[str] = []
+    ended = False
+    async for item in stream_turn(_deps(model, RecordingRunner()), _ask()):
+        if isinstance(item, TurnDelta):
+            assert not ended, "增量不许晚于回合结束"
+            said.append(item.text)
+        if isinstance(item, TurnOutcome):
+            ended = True
+
+    assert "".join(said) == "已经绑好了"
+
+
+async def test_a_tool_only_reply_produces_no_text_delta() -> None:
+    """只要工具、不说话的那一轮不许吐增量。
+
+    ⚠ 吐一条空的出去，界面上就是一个空气泡——而它出现在「正在查点位」
+    这一步之前，读起来像助手答非所问。
+    """
+    model = ScriptedChat(
+        script=[
+            _asks("points.search", "c1", keyword="温度"),
+            AIMessage(content="查到了"),
+        ]
+    )
+    said = [
+        item.text
+        async for item in stream_turn(_deps(model, RecordingRunner()), _ask())
+        if isinstance(item, TurnDelta)
+    ]
+
+    assert said == ["查到了"]

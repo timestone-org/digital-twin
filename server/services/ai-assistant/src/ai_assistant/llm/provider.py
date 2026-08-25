@@ -11,8 +11,8 @@
 from typing import Literal, Protocol
 
 from langchain_core.language_models import BaseChatModel
-from langchain_openai import ChatOpenAI
 
+from ai_assistant.llm.reasoning import ReasoningChatOpenAI
 from ai_assistant.settings import Settings
 
 # 对话用与看图用分两档：视觉模型的单价与延迟都高得多，混成一档等于每次
@@ -36,11 +36,15 @@ def build_model_source(settings: Settings) -> ChatModelSource | None:
         return None
 
     def source(kind: ModelKind) -> BaseChatModel:
-        return ChatOpenAI(
+        return ReasoningChatOpenAI(
             base_url=settings.model_base_url,
             api_key=key,
             model=_name_of(settings, kind),
             timeout=settings.model_timeout_s,
+            # 端点方言里的额外请求体。⚠ 思考过程一类的开关在 OpenAI 兼容口径里
+            # 没有标准字段，各家用自己的键——而代码里不认厂商名，于是它只能是
+            # 一格配置（config-and-secrets §6）。留空即什么都不加
+            extra_body=settings.extra_body(),
             # ⚠ 这一层不重试：一条链路只有一层负责重试，而那一层是编排层
             # （runtime-resilience §4.2）。留着 SDK 自带的重试会让一次超时
             # 变成三次，把上游的预算悄悄用光

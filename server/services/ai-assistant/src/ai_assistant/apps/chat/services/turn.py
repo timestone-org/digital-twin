@@ -23,10 +23,11 @@
 库的类型缝隙打交道了。
 """
 
+import asyncio
 import json
 import operator
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Annotated, Any, Protocol, TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
@@ -36,10 +37,11 @@ from langgraph.graph.message import add_messages
 from ai_assistant.apps.chat.services.tool_specs import ToolSpec, openai_schema
 from ai_assistant.apps.chat.services.turn_types import (
     ClientToolCall,
+    TurnDelta,
     TurnOutcome,
     TurnStep,
 )
-from ai_assistant.llm import GuardedModel, ModelKind
+from ai_assistant.llm import DeltaChannel, DeltaSink, GuardedModel, ModelKind
 from ai_assistant.settings import MAX_STEPS_PER_TURN
 from lib.logging import get_logger
 
@@ -47,6 +49,12 @@ _logger = get_logger("assistant.turn")
 
 _THINK = "think"
 _USE_TOOLS = "use_tools"
+
+# 队列里表示「图跑完了」的哨兵。⚠ 不能用 `None`：图的产出里本来就可能有假值
+_STOP = object()
+
+# 一个回合往外吐的三种东西
+TurnEvent = TurnDelta | TurnStep | TurnOutcome
 
 
 class TurnState(TypedDict):
@@ -85,6 +93,9 @@ class TurnDeps:
     specs: tuple[ToolSpec, ...]
     run_tool: ServerToolRunner
     kind: ModelKind = "chat"
+    # 模型逐字吐出来的东西交给谁。⚠ 不给 = 不走流式：`run_turn` 那条路不需要
+    # 增量，而流式会让每次作答多几百次回调
+    on_delta: DeltaSink | None = None
 
 
 async def run_turn(deps: TurnDeps, messages: list[BaseMessage]) -> TurnOutcome:
@@ -100,12 +111,74 @@ async def run_turn(deps: TurnDeps, messages: list[BaseMessage]) -> TurnOutcome:
 
 async def stream_turn(
     deps: TurnDeps, messages: list[BaseMessage]
-) -> AsyncIterator[TurnStep | TurnOutcome]:
-    """跑一个回合，**每走完一步就吐一步**，最后吐一个结果。
+) -> AsyncIterator[TurnEvent]:
+    """跑一个回合，**边跑边吐**：模型说的每一小块、走完的每一步，最后一个结果。
 
-    ⚠ 存在的理由只有一个：界面要在回合进行中就看见「AI 做了哪一步」。
-    等回合整个跑完再一次性推，一次绑点要转十几秒的圈——而那期间助手其实
-    一直在动，只是外面看不见（ADR-0023 的第二条决策）。
+    ⚠ 存在的理由只有一个：界面要在回合进行中就看见助手在动。等回合整个跑完
+    再一次性推，一次绑点要转十几秒的圈——而那期间助手一直在动，只是外面
+    看不见（ADR-0023 的第二条决策）。
+
+    ⚠ 增量与步骤走**同一条队列**。各走各的话，两侧的先后就由调度器决定，
+    而界面上会出现「先看见结论、再看见推导」这种读起来像是乱序的东西。
+
+    Args: deps, messages。
+    """
+    queue: asyncio.Queue[TurnEvent | object] = asyncio.Queue()
+    worker = asyncio.create_task(
+        _pump(replace(deps, on_delta=_pusher(queue)), messages, queue)
+    )
+    try:
+        while True:
+            item = await queue.get()
+            if item is _STOP:
+                break
+            if isinstance(item, BaseException):
+                raise item
+            yield _as_event(item)
+    finally:
+        # ⚠ 消费方半途撒手（用户按了停）时必须掐掉：不掐的话图会一直跑到自己
+        # 结束，而它每一步都在花模型的钱
+        worker.cancel()
+
+
+def _pusher(queue: asyncio.Queue[TurnEvent | object]) -> DeltaSink:
+    """把模型增量塞进队列的那个口子。
+
+    Args: queue。
+    """
+
+    def push(channel: DeltaChannel, text: str) -> None:
+        queue.put_nowait(TurnDelta(channel=channel, text=text))
+
+    return push
+
+
+async def _pump(
+    deps: TurnDeps,
+    messages: list[BaseMessage],
+    queue: asyncio.Queue[TurnEvent | object],
+) -> None:
+    """把图的产出灌进队列，失败也灌进去，最后放一个哨兵。
+
+    ⚠ 失败走队列而不是让任务默默死掉：任务里抛出去的异常没人接，表现是
+    「流突然停了、没有任何错」。
+
+    Args: deps, messages, queue。
+    """
+    try:
+        async for item in _walk(deps, messages):
+            queue.put_nowait(item)
+    # ⚠ 接住所有异常是刻意的：这一层只负责把它送到消费方手里，分档在那边做
+    except Exception as error:
+        queue.put_nowait(error)
+    finally:
+        queue.put_nowait(_STOP)
+
+
+async def _walk(
+    deps: TurnDeps, messages: list[BaseMessage]
+) -> AsyncIterator[TurnStep | TurnOutcome]:
+    """把图走一遍，每走完一步吐一步，最后吐一个结果。
 
     ⚠ 取的是**整份状态**而不是增量：增量要在这里把两个规约（消息追加、
     步骤追加）再实现一遍，而那份实现与图里那份一旦漂开，界面上会少一步或
@@ -126,6 +199,19 @@ async def stream_turn(
             yield step
         seen = len(steps)
     yield _outcome(latest, len(messages))
+
+
+def _as_event(item: TurnEvent | object) -> TurnEvent:
+    """队列里取出来的那一格收成事件。
+
+    ⚠ 收不成就抛：能进这条队列的只有三种东西加一个哨兵，多出第四种说明
+    上面某处漏了分支，而静默丢弃会让界面少一整段。
+
+    Args: item。
+    """
+    if isinstance(item, TurnDelta | TurnStep | TurnOutcome):
+        return item
+    raise TypeError(f"回合里冒出了一个不认识的东西：{type(item).__name__}")
 
 
 def _build_graph(deps: TurnDeps) -> Any:
@@ -158,7 +244,10 @@ def _thinker(deps: TurnDeps) -> Callable[[TurnState], Awaitable[TurnUpdate]]:
 
     async def think(state: TurnState) -> TurnUpdate:
         reply = await deps.model.respond(
-            kind=deps.kind, messages=list(state["messages"]), tools=schemas
+            kind=deps.kind,
+            messages=list(state["messages"]),
+            tools=schemas,
+            on_delta=deps.on_delta,
         )
         pending = _client_calls(reply, client_names)
         return {

@@ -1,5 +1,6 @@
 """模型接入与调用外壳。"""
 
+from ai_assistant.llm.deltas import DeltaChannel, DeltaSink
 from ai_assistant.llm.errors import (
     ModelDisabled,
     ModelRejected,
@@ -14,6 +15,8 @@ from ai_assistant.llm.provider import (
 
 __all__ = [
     "ChatModelSource",
+    "DeltaChannel",
+    "DeltaSink",
     "GuardedModel",
     "ModelDisabled",
     "ModelKind",
