@@ -406,6 +406,7 @@ export {
 } from './dataset'
 export type {
   AssistantCapability,
+  AssistantDeltaChannel,
   AssistantEventName,
   AssistantToolCall,
   AssistantMessage,
@@ -420,6 +421,7 @@ export type {
   AssistantSurfaceKind,
 } from './assistant'
 export {
+  ASSISTANT_DELTA_CHANNELS,
   ASSISTANT_EVENT_NAMES,
   ASSISTANT_MESSAGE_ROLES,
   ASSISTANT_STEP_KINDS,
