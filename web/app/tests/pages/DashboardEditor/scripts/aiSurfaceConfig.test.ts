@@ -342,6 +342,38 @@ describe('绑常量', () => {
   })
 })
 
+describe('解绑', () => {
+  it('解掉之后那个槽上没有绑定了', async () => {
+    const { editor, surface } = setup()
+    await run(surface, 'dashboard.write_binding', {
+      node_id: 'a',
+      field_key: 'itemValues[0].value',
+      source_kind: 'static',
+      value: 380,
+    })
+    await run(surface, 'dashboard.remove_binding', {
+      node_id: 'a',
+      field_key: 'itemValues[0].value',
+    })
+    const target = editor.nodes.value.find((one) => one.id === 'a')
+
+    expect(target?.bindings).toEqual([])
+  })
+
+  it('本来就没有那条绑定时当场抛', async () => {
+    const { surface } = setup()
+    // 静默成功会让模型以为解掉了，接着往下走
+    await expect(
+      surface.run(
+        call('dashboard.remove_binding', {
+          node_id: 'a',
+          field_key: 'itemValues[9].value',
+        }),
+      ),
+    ).rejects.toThrow(/没有/)
+  })
+})
+
 describe('选中项', () => {
   it('快照把用户选中的那一个单拎出来', async () => {
     const { editor, surface } = setup()

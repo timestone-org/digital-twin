@@ -47,6 +47,19 @@ describe('正文渲染', () => {
     expect(wrapper.find('code').text()).toBe('items')
   })
 
+  it('斜体与删除线各自成元素', () => {
+    const wrapper = render('*斜的* 与 ~~划掉的~~')
+
+    expect(wrapper.find('em').text()).toBe('斜的')
+    expect(wrapper.find('del').text()).toBe('划掉的')
+  })
+
+  it('引用块单独成块', () => {
+    const wrapper = render('> 保存之后才会有实时数值')
+
+    expect(wrapper.find('blockquote').text()).toContain('保存之后')
+  })
+
   it('标题降级渲染，不抢页面标题的层级', () => {
     const wrapper = render('## 做法')
 
