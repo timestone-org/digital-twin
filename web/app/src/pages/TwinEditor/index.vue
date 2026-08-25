@@ -16,10 +16,8 @@ import { onBeforeRouteLeave, useRoute } from 'vue-router'
 
 import { AppShell } from '@/components/layout'
 
-import PointPickerDialog from '@/components/binding/PointPickerDialog.vue'
-
-import BulkPartsDialog from './components/BulkPartsDialog.vue'
 import TwinDiagnosticsPanel from './components/TwinDiagnosticsPanel.vue'
+import TwinOverlays from './components/TwinOverlays.vue'
 import TwinEditorToolbar from './components/TwinEditorToolbar.vue'
 import TwinLeftPane from './components/TwinLeftPane.vue'
 import TwinRightPane from './components/TwinRightPane.vue'
@@ -38,6 +36,7 @@ import {
 } from './scripts/types'
 import { useBulkParts } from './scripts/useBulkParts'
 import { useGizmoMode } from './scripts/useGizmoMode'
+import { useTwinAi } from './scripts/useTwinAi'
 import { useTwinEditorPage } from './scripts/useTwinEditorPage'
 import { useUnsavedGuard } from './scripts/useUnsavedGuard'
 
@@ -117,6 +116,9 @@ const binding = useTwinBindings(
   () => page.node.value?.id ?? '',
   () => config.value,
 )
+
+// 助手：这一页只有绑点，没有截图（视口是 WebGL，截图库取到的一定是空的）
+const ai = useTwinAi(page, binding, () => config.value)
 
 const viewport = createTwinViewportOps({
   config: () => config.value,
@@ -280,19 +282,11 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
       </div>
     </div>
 
-    <BulkPartsDialog
-      :open="bulk.open.value"
-      :candidates="bulk.candidates.value"
-      :preselect="bulk.preselect.value"
-      @update:open="bulk.open.value = $event"
-      @confirm="actions?.addParts($event)"
-    />
-
-    <PointPickerDialog
-      :model-value="binding.pickingFieldKey.value !== null"
-      :field-key="binding.pickingFieldKey.value"
-      @update:model-value="binding.closePicker"
-      @pick="binding.pickPoint"
+    <TwinOverlays
+      :bulk="bulk"
+      :binding="binding"
+      :ai="ai"
+      @add-parts="actions?.addParts($event)"
     />
   </AppShell>
 </template>
