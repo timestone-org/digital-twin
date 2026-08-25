@@ -406,6 +406,8 @@ export {
 } from './dataset'
 export type {
   AssistantCapability,
+  AssistantEventName,
+  AssistantToolCall,
   AssistantMessage,
   AssistantMessageRole,
   AssistantSession,
@@ -417,6 +419,7 @@ export type {
   AssistantSurfaceKind,
 } from './assistant'
 export {
+  ASSISTANT_EVENT_NAMES,
   ASSISTANT_MESSAGE_ROLES,
   ASSISTANT_STEP_KINDS,
   ASSISTANT_STEP_STATES,

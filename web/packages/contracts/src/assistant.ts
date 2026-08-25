@@ -119,3 +119,27 @@ export interface AssistantSession {
 export interface AssistantSessionDetail extends AssistantSession {
   messages: AssistantMessage[]
 }
+
+/**
+ * 事件流的事件名。
+ *
+ * ⚠ **这一组不在 openapi 里**：SSE 的载荷 openapi 描述不了，所以它是一份
+ * 「没有生成物兜底」的契约。两侧靠一条契约用例对着后端的 `events.py` 比对——
+ * 漂开的表现是「助手做了一步但界面上没有」，而两边代码单看都对。
+ */
+export const ASSISTANT_EVENT_NAMES = [
+  'step',
+  'client_tool.request',
+  'turn.done',
+  'error',
+] as const
+
+export type AssistantEventName = (typeof ASSISTANT_EVENT_NAMES)[number]
+
+/** 要交给浏览器执行的一次调用。 */
+export interface AssistantToolCall {
+  /** 模型给的调用 id。⚠ 回填结果时必须逐字用它。 */
+  call_id: string
+  name: string
+  arguments: Record<string, unknown>
+}

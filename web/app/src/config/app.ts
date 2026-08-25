@@ -12,6 +12,13 @@ export const PLATFORM_BASE_URL = '/api/v1/platform'
 export const OPCUA_BASE_URL = '/api/v1/opcua'
 
 /**
+ * ai-assistant 的对外前缀，与 server/services/ai-assistant 的 API_PREFIX 同值。
+ * ⚠ 这套服务在某些现场根本不部署——那时边缘直接 502，助手入口就该干净地
+ * 不出现，而不是弹一条红色告警（见 features/ai/ports.ts）。
+ */
+export const ASSISTANT_BASE_URL = '/api/v1/assistant'
+
+/**
  * 素材字节的取回与直传前缀，由边缘反代到对象存储的桶根。
  * ⚠ 与 platform-server 的 `PLATFORM_OBJECTSTORE_PUBLIC_BASE` 以及 nginx 那条
  * `location ^~ /oss/` 是同一个值：三处分叉的表现是上传 404、模型加载不出来，

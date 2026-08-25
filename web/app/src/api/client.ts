@@ -237,3 +237,83 @@ export async function requestData<T>(
   }
   return data
 }
+
+/**
+ * 发一个**流式**请求，把响应体逐块交出去。
+ *
+ * ⚠ 它**不走统一信封**：流一旦开始就没法再改状态码，所以这里只在开流之前判
+ * 一次「受不受理」，之后的失败由载荷自己表达（见 ai-assistant 的 `error` 事件）。
+ * ⚠ 它**不套 `REQUEST_TIMEOUT_MS`**：那个 20 秒是给一问一答用的，而一次模型
+ * 回合可能跑几分钟。这条流的寿命由调用方的 `signal` 决定——**调用方必须在
+ * 卸载时 abort**，否则组件没了而读取还在，一路写进已经销毁的状态。
+ * @param path 相对前缀的路径
+ * @param options 前缀、请求体、中止信号
+ */
+export async function* openStream(
+  path: string,
+  options: StreamOptions = {},
+): AsyncGenerator<string> {
+  const response = await sendStream(path, options)
+  if (!response.ok || response.body === null) {
+    throw new TransportError(response.status, '事件流打不开')
+  }
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) return
+      if (value !== undefined) yield value
+    }
+  } finally {
+    // ⚠ 必须取消：不取消的话，调用方 abort 之后底层连接仍挂着，
+    // 而服务端那边的回合会一直跑到自己结束
+    await reader.cancel().catch(() => undefined)
+  }
+}
+
+export interface StreamOptions {
+  baseUrl?: string | undefined
+  body?: unknown
+  signal?: AbortSignal | undefined
+}
+
+async function sendStream(
+  path: string,
+  options: StreamOptions,
+): Promise<Response> {
+  const first = await fetchStream(path, options)
+  if (first.status !== 401) return first
+  const refreshed = await hooks.onRefresh()
+  if (!refreshed) {
+    hooks.onUnauthorized()
+    return first
+  }
+  return fetchStream(path, options)
+}
+
+async function fetchStream(
+  path: string,
+  options: StreamOptions,
+): Promise<Response> {
+  const headers: Record<string, string> = {
+    Accept: 'text/event-stream',
+    'Content-Type': 'application/json',
+  }
+  const token = hooks.getToken()
+  if (token !== null) headers.Authorization = `Bearer ${token}`
+  try {
+    return await fetch(`${options.baseUrl ?? AUTH_BASE_URL}${path}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(options.body ?? {}),
+      signal: options.signal ?? null,
+    })
+  } catch (error) {
+    // ⚠ 中止不是故障：调用方卸载时 abort 是常态，把它当网络错会在界面上
+    // 弹一条「无法连接服务器」，而其实只是用户关掉了面板
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw error
+    }
+    throw new TransportError(0, '无法连接服务器，请检查网络')
+  }
+}
