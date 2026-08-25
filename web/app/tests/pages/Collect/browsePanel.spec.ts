@@ -627,3 +627,51 @@ describe('几万点位的文件夹', () => {
     expect(element(wrapper, 'Temp').checked).toBe(true)
   })
 })
+
+/**
+ * ⚠ 这一组守的是「看得出层级」：缩进被挤掉一格，同一层的兄弟就各缩各的，
+ * 一棵树看着是平的。
+ * ⚠ 断言的是**渲染出来的格子数**而不是 `padding-left`：CSS 计算值在 happy-dom
+ * 里量不到，格子数才是这一层能验的东西。
+ */
+describe('层级', () => {
+  /** 一个节点那一行。行里只有它自己，子层在兄弟 `<ul>` 里。 */
+  function row(wrapper: VueWrapper, name: string): DOMWrapper<Element> {
+    const found = wrapper
+      .findAll('.tree-row')
+      .find((one) => one.text().includes(`ns=2;s=${name}`))
+    if (found === undefined) throw new Error(`找不到「${name}」那一行`)
+    return found
+  }
+
+  async function deepTree(): Promise<VueWrapper> {
+    const wrapper = await render({
+      [ROOT]: [branch('Line1')],
+      'ns=2;s=Line1': [branch('Sub'), leaf('Temp')],
+      'ns=2;s=Sub': [leaf('Deep')],
+    })
+    await click(chevron(wrapper))
+    await click(chevron(wrapper, 1))
+    return wrapper
+  }
+
+  it('缩进格子数等于深度', async () => {
+    const wrapper = await deepTree()
+
+    const depthOf = (name: string): number =>
+      row(wrapper, name).findAll('.tree-guide').length
+
+    expect(depthOf('Line1')).toBe(0)
+    expect(depthOf('Sub')).toBe(1)
+    expect(depthOf('Temp')).toBe(1)
+    expect(depthOf('Deep')).toBe(2)
+  })
+
+  it('⚠ 没有箭头的叶子也占一格折叠钮位：少一格，同一层的兄弟就对不齐', async () => {
+    const wrapper = await deepTree()
+
+    // Sub 有箭头、Temp 没有，两者是同一层的兄弟
+    expect(row(wrapper, 'Sub').findAll('.tree-caret')).toHaveLength(1)
+    expect(row(wrapper, 'Temp').findAll('.tree-caret')).toHaveLength(1)
+  })
+})
