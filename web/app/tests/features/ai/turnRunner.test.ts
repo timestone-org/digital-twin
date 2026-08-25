@@ -9,9 +9,12 @@
  * 没有答复，下一轮请求会被端点判成不合法。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { AssistantPlan } from '@dt/contracts'
 import type { AdvanceBody } from '@/api/assistant'
 import {
+  MAX_PLAN_NUDGES,
   MAX_ROUNDS,
+  PLAN_CONTINUE_TEXT,
   runTurn,
   type RunnerSink,
   type RunnerStep,
@@ -37,6 +40,8 @@ interface Recorded {
   ran: RunnerStep[]
   said: string[]
   thought: string[]
+  plans: AssistantPlan[]
+  notes: string[]
 }
 
 function sinkOf(): { sink: RunnerSink; seen: Recorded } {
@@ -47,6 +52,8 @@ function sinkOf(): { sink: RunnerSink; seen: Recorded } {
     ran: [],
     said: [],
     thought: [],
+    plans: [],
+    notes: [],
   }
   return {
     seen,
@@ -57,6 +64,8 @@ function sinkOf(): { sink: RunnerSink; seen: Recorded } {
       onToolsRun: (steps) => seen.ran.push(...steps),
       onDone: (reply) => seen.replies.push(reply),
       onError: (message) => seen.errors.push(message),
+      onPlan: (plan) => seen.plans.push(plan),
+      onNote: (text) => seen.notes.push(text),
     },
   }
 }
@@ -67,11 +76,13 @@ function advanceOf(script: string[][]): {
   bodies: AdvanceBody[]
 } {
   const bodies: AdvanceBody[] = []
-  let round = 0
   async function* advance(
     _sessionId: string,
     body: AdvanceBody,
   ): AsyncGenerator<string> {
+    // ⚠ 回合序号按「第几次请求」数，不在生成器尾部自增：收流方读到
+    // `turn.done` 会提前撂下生成器，尾部那一行永远跑不到，脚本于是被重放
+    const round = bodies.length
     bodies.push(body)
     for (const chunk of script[round] ?? []) {
       // 让出一次事件循环：真实的流是一块一块到的，同步吐完会让「边收边处理」
@@ -79,7 +90,6 @@ function advanceOf(script: string[][]): {
       await Promise.resolve()
       yield chunk
     }
-    round += 1
   }
   return { advance, bodies }
 }
@@ -360,5 +370,127 @@ describe('回合循环', () => {
     expect(seen.ran).toHaveLength(1)
     expect(seen.ran[0]?.state).toBe('failed')
     expect(seen.ran[0]?.error).toBe('这个槽不存在')
+  })
+})
+
+describe('计划', () => {
+  const activePlan = {
+    title: '绑完整屏',
+    state: 'active',
+    items: [
+      { title: '读画布', status: 'done', note: '' },
+      { title: '绑温度槽', status: 'in_progress', note: '' },
+    ],
+  }
+  const donePlan = {
+    ...activePlan,
+    state: 'done',
+    items: [{ title: '读画布', status: 'done', note: '' }],
+  }
+
+  it('plan 帧整份交给 sink', async () => {
+    const { advance } = advanceOf([
+      [
+        frame('plan', { plan: activePlan }),
+        frame('turn.done', { reply: '立好了' }),
+      ],
+      [frame('turn.done', { reply: '继续中' })],
+    ])
+    const { sink, seen } = sinkOf()
+    await runTurn(inputOf(advance), sink)
+
+    expect(seen.plans).toHaveLength(1)
+    expect(seen.plans[0]?.items.map((one) => one.status)).toEqual([
+      'done',
+      'in_progress',
+    ])
+  })
+
+  it('回合结束而计划未完时代用户催一句', async () => {
+    const { advance, bodies } = advanceOf([
+      [
+        frame('plan', { plan: activePlan }),
+        frame('turn.done', { reply: '先到这' }),
+      ],
+      [
+        frame('plan', { plan: donePlan }),
+        frame('turn.done', { reply: '做完了' }),
+      ],
+    ])
+    const { sink, seen } = sinkOf()
+    await runTurn(inputOf(advance), sink)
+
+    expect(bodies).toHaveLength(2)
+    expect(bodies[1]?.user_text).toBe(PLAN_CONTINUE_TEXT)
+    expect(seen.notes).toEqual(['计划还没走完，自动继续。'])
+  })
+
+  it('催有上限，到顶就停', async () => {
+    const stall = [
+      frame('plan', { plan: activePlan }),
+      frame('turn.done', { reply: '再想想' }),
+    ]
+    const { advance, bodies } = advanceOf(
+      Array.from({ length: MAX_PLAN_NUDGES + 2 }, () => stall),
+    )
+    const { sink } = sinkOf()
+    await runTurn(inputOf(advance), sink)
+
+    // 首轮 + 最多 MAX_PLAN_NUDGES 次催，之后交还给人
+    expect(bodies).toHaveLength(1 + MAX_PLAN_NUDGES)
+  })
+
+  it('计划完结时不催', async () => {
+    const { advance, bodies } = advanceOf([
+      [
+        frame('plan', { plan: donePlan }),
+        frame('turn.done', { reply: '做完了' }),
+      ],
+    ])
+    const { sink, seen } = sinkOf()
+    await runTurn(inputOf(advance), sink)
+
+    expect(bodies).toHaveLength(1)
+    expect(seen.notes).toEqual([])
+  })
+
+  it('坏形状的 plan 帧被跳过而不是渲染成空清单', async () => {
+    const { advance } = advanceOf([
+      [
+        frame('plan', { plan: { items: '不是列表' } }),
+        frame('turn.done', { reply: '好' }),
+      ],
+    ])
+    const { sink, seen } = sinkOf()
+    await runTurn(inputOf(advance), sink)
+
+    expect(seen.plans).toEqual([])
+  })
+
+  it('每一轮都自报这一页实现了哪些工具', async () => {
+    setSurface({
+      kind: 'dashboard-editor',
+      label: '大屏编辑器',
+      snapshot: () => ({}),
+      tools: ['dashboard.read_canvas'],
+      run: () => Promise.resolve(null),
+    })
+    const { advance, bodies } = advanceOf([
+      [frame('turn.done', { reply: '好' })],
+    ])
+    const { sink } = sinkOf()
+    await runTurn(inputOf(advance), sink)
+
+    expect(bodies[0]?.client_tools).toEqual(['dashboard.read_canvas'])
+  })
+
+  it('没有工作面时如实报空名单', async () => {
+    const { advance, bodies } = advanceOf([
+      [frame('turn.done', { reply: '好' })],
+    ])
+    const { sink } = sinkOf()
+    await runTurn(inputOf(advance), sink)
+
+    expect(bodies[0]?.client_tools).toEqual([])
   })
 })

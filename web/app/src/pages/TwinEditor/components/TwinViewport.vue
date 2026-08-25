@@ -182,7 +182,12 @@ function stopRoamPreview(): void {
   scene?.stopRoamPreview()
 }
 
-defineExpose({ focus, snapshot, playRoamPreview, stopRoamPreview })
+/** 视口的宿主元素；助手截图拿它当截图根。 */
+function stageEl(): HTMLElement | null {
+  return containerRef.value
+}
+
+defineExpose({ focus, snapshot, playRoamPreview, stopRoamPreview, stageEl })
 </script>
 
 <template>

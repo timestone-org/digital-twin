@@ -260,7 +260,7 @@ describe('选中形状的两份声明', () => {
   })
 })
 
-describe('暴露给页面的两个方法', () => {
+describe('暴露给页面的几个方法', () => {
   it('对焦请求转给场景', () => {
     const wrapper = mountViewport()
 
@@ -277,6 +277,13 @@ describe('暴露给页面的两个方法', () => {
     const wrapper = mountViewport()
 
     expect(wrapper.vm.snapshot()).toEqual(seam.pose)
+    wrapper.unmount()
+  })
+
+  it('交出视口宿主元素，助手截图拿它当根', () => {
+    const wrapper = mountViewport()
+
+    expect(wrapper.vm.stageEl()).toBe(wrapper.find('.twin-viewport').element)
     wrapper.unmount()
   })
 })

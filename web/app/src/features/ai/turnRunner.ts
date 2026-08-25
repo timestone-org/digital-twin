@@ -14,12 +14,19 @@
  *
  * ⚠ 每一轮都重新读一次工作面快照。攒一份在第一轮用的话，助手自己动过两下
  * 之后，它读到的还是动手之前那一屏。
+ *
+ * ⚠ 计划没走完而模型停了嘴时，这里代用户催一句「按计划继续」（ADR-0024）。
+ * 有上限：模型反复停下说明它自己也拿不准，那时该交还给人，不是继续催。
  */
 import type {
   AssistantDeltaChannel,
+  AssistantPlan,
+  AssistantPlanItem,
+  AssistantPlanStatus,
   AssistantSurfaceKind,
   AssistantToolCall,
 } from '@dt/contracts'
+import { ASSISTANT_PLAN_STATUSES } from '@dt/contracts'
 
 import type { AdvanceBody } from '@/api/assistant'
 import type { AdvanceStream } from './ports'
@@ -27,7 +34,14 @@ import { createFrameReader } from './sseFrames'
 import { activeSurface, runClientTool } from './surfaces'
 
 /** 一次往返的上限。到顶就停下并如实告诉用户，而不是继续烧钱。 */
-export const MAX_ROUNDS = 12
+export const MAX_ROUNDS = 24
+
+/** 计划未完时最多代用户催几次。 */
+export const MAX_PLAN_NUDGES = 3
+
+/** 催那一句。⚠ 会作为用户消息落库，措辞要经得起在历史里被读到。 */
+export const PLAN_CONTINUE_TEXT =
+  '（自动继续）按计划把剩下的项做完；做不下去就把那一项标成 failed 并说明原因。'
 
 /** 界面要渲染的一步。 */
 export interface RunnerStep {
@@ -47,6 +61,10 @@ export interface RunnerSink {
   onToolsRun: (steps: readonly RunnerStep[]) => void
   onDone: (reply: string) => void
   onError: (message: string) => void
+  /** 计划变了：整份快照，直接盖掉手上那份。 */
+  onPlan: (plan: AssistantPlan) => void
+  /** 循环自己说的一句话（「计划未完，自动继续」这类），不是模型说的。 */
+  onNote: (text: string) => void
 }
 
 export interface RunnerInput {
@@ -75,53 +93,87 @@ export async function runTurn(
   input: RunnerInput,
   sink: RunnerSink,
 ): Promise<void> {
+  const watch: PlanWatch = { plan: null }
+  let nudges = 0
   let body: AdvanceBody = { ...envelope(input), user_text: input.userText }
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
-    const pending = await pump(input, body, sink)
-    if (pending === null) return
-    const results = await runAll(pending, sink)
-    body = { ...envelope(input), tool_results: results }
+    const outcome = await pump(input, body, sink, watch)
+    if (outcome.kind === 'error') return
+    if (outcome.kind === 'pending') {
+      const results = await runAll(outcome.calls, sink)
+      body = { ...envelope(input), tool_results: results }
+      continue
+    }
+    // 模型收了嘴而计划没走完：代用户催一句，让它接着干（ADR-0024）
+    if (!planUnfinished(watch.plan) || nudges >= MAX_PLAN_NUDGES) return
+    nudges += 1
+    sink.onNote('计划还没走完，自动继续。')
+    body = { ...envelope(input), user_text: PLAN_CONTINUE_TEXT }
   }
   sink.onError(`助手来回了 ${MAX_ROUNDS} 轮还没结束，已经停下`)
 }
 
-/** 每一轮都要带的那几格：在哪一页、这一页此刻长什么样。 */
+/** 循环手上那份最新计划。 */
+interface PlanWatch {
+  plan: AssistantPlan | null
+}
+
+/** 计划还挂着没走完。 */
+function planUnfinished(plan: AssistantPlan | null): boolean {
+  return plan !== null && plan.state === 'active'
+}
+
+/** 每一轮都要带的那几格：在哪一页、这一页此刻长什么样、实现了哪些工具。 */
 function envelope(input: RunnerInput): AdvanceBody {
-  const snapshot = activeSurface()?.snapshot()
+  const surface = activeSurface()
+  const snapshot = surface?.snapshot()
   return {
     surface_kind: input.surfaceKind,
     surface_label: input.surfaceLabel,
     ...(snapshot === undefined ? {} : { surface_context: snapshot }),
+    // 页面自报实现了哪些客户端工具；没有工作面时如实报空，模型就不会调
+    client_tools: surface === null ? [] : [...surface.tools],
   }
 }
 
+/** 一次收流的结果。 */
+type PumpOutcome =
+  | { kind: 'pending'; calls: readonly AssistantToolCall[] }
+  | { kind: 'done' }
+  | { kind: 'error' }
+
 /**
- * 收一次流。回合结束时给 `null`，停在客户端工具上时给那批待办。
+ * 收一次流：跑完 / 出错 / 停在一批客户端工具上。
  */
 async function pump(
   input: RunnerInput,
   body: AdvanceBody,
   sink: RunnerSink,
-): Promise<readonly AssistantToolCall[] | null> {
+  watch: PlanWatch,
+): Promise<PumpOutcome> {
   const reader = createFrameReader()
   let pending: readonly AssistantToolCall[] | null = null
   const stream = input.advance(input.sessionId, body, input.signal)
   for await (const chunk of stream) {
     for (const frame of reader.push(chunk)) {
-      pending = handle(frame.name, frame.data, sink) ?? pending
-      if (frame.name === 'turn.done' || frame.name === 'error') return null
+      pending = handle(frame.name, frame.data, sink, watch) ?? pending
+      if (frame.name === 'turn.done') return { kind: 'done' }
+      if (frame.name === 'error') return { kind: 'error' }
     }
   }
   for (const frame of reader.flush()) {
-    pending = handle(frame.name, frame.data, sink) ?? pending
+    pending = handle(frame.name, frame.data, sink, watch) ?? pending
   }
-  return pending
+  return pending === null
+    ? { kind: 'done' }
+    : { kind: 'pending', calls: pending }
 }
 
 function handle(
   name: string,
   data: Record<string, unknown>,
   sink: RunnerSink,
+  watch: PlanWatch,
 ): readonly AssistantToolCall[] | null {
   if (name === 'message.delta') {
     sink.onDelta(readChannel(data.channel), readText(data.text))
@@ -132,6 +184,14 @@ function handle(
     return null
   }
   if (name === 'client_tool.request') return readCalls(data)
+  if (name === 'plan') {
+    const plan = readPlan(data.plan)
+    if (plan !== null) {
+      watch.plan = plan
+      sink.onPlan(plan)
+    }
+    return null
+  }
   if (name === 'turn.done') {
     sink.onDone(readText(data.reply))
     return null
@@ -214,6 +274,43 @@ function readObject(given: unknown): Record<string, unknown> {
     return {}
   }
   return { ...given }
+}
+
+/**
+ * 把一帧计划快照读成结构；读不出给 null。
+ * ⚠ 认不出的项状态按 `pending` 画，不静默丢整项——丢一项的表现是
+ * 「清单少了一行」，而那与「模型改了计划」看着一模一样。
+ */
+export function readPlan(given: unknown): AssistantPlan | null {
+  const body = readObject(given)
+  const rawItems: unknown = body.items
+  if (!Array.isArray(rawItems)) return null
+  const list: unknown[] = rawItems
+  const items = list.flatMap((one): AssistantPlanItem[] => {
+    const item = readObject(one)
+    const title = readText(item.title)
+    if (title === '') return []
+    return [
+      {
+        title,
+        status: readStatus(item.status),
+        note: readText(item.note),
+      },
+    ]
+  })
+  if (items.length === 0) return null
+  return {
+    title: readText(body.title),
+    state: body.state === 'done' ? 'done' : 'active',
+    items,
+  }
+}
+
+function readStatus(given: unknown): AssistantPlanStatus {
+  for (const status of ASSISTANT_PLAN_STATUSES) {
+    if (given === status) return status
+  }
+  return 'pending'
 }
 
 function readText(given: unknown): string {

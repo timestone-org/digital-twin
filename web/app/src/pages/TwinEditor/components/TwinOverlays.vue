@@ -44,7 +44,6 @@ const emit = defineEmits<{
 
   <AiDock
     :ai="ai"
-    surface-kind="twin-editor"
     surface-label="孪生编辑器"
     hint="助手改的是草稿，保存要你自己按。"
   />

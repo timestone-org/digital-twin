@@ -5,7 +5,7 @@
 """
 
 import json
-from typing import Any, Self
+from typing import Annotated, Any, Self
 
 from pydantic import Field, field_validator, model_validator
 
@@ -17,6 +17,9 @@ from ai_assistant.settings import MAX_IMAGE_CHARS
 MAX_TOOL_RESULTS = 32
 MAX_USER_TEXT = 4000
 MAX_SURFACE_LABEL = 64
+# 页面自报的客户端工具名单上限。真实页面十几个，64 已是数倍余量
+MAX_CLIENT_TOOLS = 64
+MAX_TOOL_NAME = 64
 # 工作面快照序列化之后的字符上限。⚠ 有上限：一屏两千个画布节点的摘要能有
 # 十几万字，而这一段每一轮都要重发一次
 MAX_SURFACE_CONTEXT_CHARS = 40_000
@@ -59,6 +62,13 @@ class AdvanceIn(InputModel):
     tool_results: list[ToolResultIn] = Field(
         default_factory=list[ToolResultIn], max_length=MAX_TOOL_RESULTS
     )
+    # 这一页实现了哪些客户端工具，前端每轮自报；没实现的模型看不见。
+    # ⚠ None 与空表是两回事：None 是老前端没带这一格（退回技能声明推导），
+    # 空表是这一页明说自己一个客户端工具都没有
+    client_tools: (
+        list[Annotated[str, Field(min_length=1, max_length=MAX_TOOL_NAME)]]
+        | None
+    ) = Field(default=None, max_length=MAX_CLIENT_TOOLS)
 
     @field_validator("surface_context")
     @classmethod

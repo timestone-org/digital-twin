@@ -41,6 +41,7 @@ def test_session_columns_match_the_migration() -> None:
         "is_archived",
         "row_version",
         "last_error",
+        "plan_json",
         "created_at",
         "updated_at",
     }

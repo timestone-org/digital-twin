@@ -9,10 +9,11 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { computed, nextTick, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { PERMISSION_CODES } from '@dt/contracts'
+import { PERMISSION_CODES, type AssistantPlan } from '@dt/contracts'
 
 import BulkPartsDialog from '@/pages/TwinEditor/components/BulkPartsDialog.vue'
 import TwinOverlays from '@/pages/TwinEditor/components/TwinOverlays.vue'
+import type { AiConversation, ChatEntry } from '@/composables/useAiConversation'
 import type { AiPanel } from '@/composables/useAiPanel'
 import type { BulkParts } from '@/pages/TwinEditor/scripts/useBulkParts'
 import type { TwinBindings } from '@/pages/TwinEditor/scripts/useTwinBindings'
@@ -41,11 +42,25 @@ function binding(): TwinBindings {
   }
 }
 
+function chat(): AiConversation {
+  return {
+    entries: computed<readonly ChatEntry[]>(() => []),
+    isRunning: ref(false),
+    plan: ref<AssistantPlan | null>(null),
+    send: vi.fn(() => Promise.resolve()),
+    stop: vi.fn(),
+    clear: vi.fn(),
+    restore: vi.fn(),
+    note: vi.fn(),
+  }
+}
+
 function panel(isAvailable: boolean): AiPanel {
   return {
     isAvailable: ref(isAvailable),
     isOpen: ref(false),
     sessionId: ref<string | null>(null),
+    chat: chat(),
     open: vi.fn(() => Promise.resolve()),
     close: vi.fn(),
   }

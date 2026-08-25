@@ -47,6 +47,12 @@ def test_dashboard_editor_offers_the_three_dashboard_skills() -> None:
     }
 
 
+def test_twin_editor_offers_binding_and_review() -> None:
+    # 看图技能也在列：孪生视口的截图走「先画一帧再拷」的替身，3D 画面截得到
+    names = {skill.name for skill in skills_for("twin-editor")}
+    assert names == {"dashboard-binding", "dashboard-review"}
+
+
 def test_an_unknown_surface_offers_nothing() -> None:
     assert skills_for("no-such-surface") == ()
 

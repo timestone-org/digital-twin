@@ -102,6 +102,8 @@ class SessionDetailOut(SessionOut):
     """会话详情：连着全部消息与步骤，两级都按 `seq` 升序。"""
 
     messages: list[MessageOut] = Field(default_factory=list[MessageOut])
+    # 当前执行计划（ADR-0024）。前端重开面板时靠它恢复计划清单
+    plan_json: dict[str, Any] | None = None
 
 
 class SessionCreateIn(InputModel):

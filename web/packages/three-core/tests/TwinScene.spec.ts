@@ -8,6 +8,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import * as THREE from 'three'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { __resetGlSnapshots, glSnapshotsWithin } from '../src/glCapture'
 import { configureTwinModelHost, resetTwinModelHost } from '../src/host'
 import type * as SceneCoreModule from '../src/sceneCore'
 import { WEBGL_UNAVAILABLE_MESSAGE } from '../src/sceneCore'
@@ -97,6 +98,7 @@ afterEach(() => {
   resetTwinModelHost()
   seam.createWebGLRenderer.mockReset()
   seam.loadTwinModel.mockReset()
+  __resetGlSnapshots()
 })
 
 describe('降级路径', () => {
@@ -429,6 +431,29 @@ describe('快速切模型的竞态', () => {
 
     expect(wrapper.text()).not.toContain('模型地址解析失败')
     expect(wrapper.text()).not.toContain('模型加载中')
+    wrapper.unmount()
+  })
+})
+
+describe('快照登记', () => {
+  it('挂载即以渲染器画布为 host 登记，卸载即注销', async () => {
+    const wrapper = mountScene()
+    await flushPromises()
+
+    expect(glSnapshotsWithin(document.body).map((one) => one.host)).toEqual([
+      renderer.domElement,
+    ])
+
+    wrapper.unmount()
+    expect(glSnapshotsWithin(document.body)).toHaveLength(0)
+  })
+
+  it('WebGL 不可用时不登记：快照源必须真能出图', async () => {
+    seam.createWebGLRenderer.mockReturnValue(null)
+    const wrapper = mountScene()
+    await flushPromises()
+
+    expect(glSnapshotsWithin(document.body)).toHaveLength(0)
     wrapper.unmount()
   })
 })

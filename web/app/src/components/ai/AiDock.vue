@@ -7,7 +7,6 @@
  * 都是干净地不出现，而不是出现一个点了报错的按钮。
  */
 import { ref } from 'vue'
-import type { AssistantSurfaceKind } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 
 import AiAssistantPanel from '@/components/ai/AiAssistantPanel.vue'
@@ -17,7 +16,6 @@ import type { AiPanel } from '@/composables/useAiPanel'
 
 defineProps<{
   ai: AiPanel
-  surfaceKind: AssistantSurfaceKind
   /** 给人看的页面名，进提示词。 */
   surfaceLabel: string
   /** 摆在输入框上方的一句提醒，各页面自己给。 */
@@ -43,9 +41,8 @@ const isWide = ref(false)
       </button>
       <div v-else class="ai-dock__panel" :class="{ 'is-wide': isWide }">
         <AiAssistantPanel
-          :surface-kind="surfaceKind"
+          :chat="ai.chat"
           :surface-label="surfaceLabel"
-          :session-id="ai.sessionId.value"
           :hint="hint"
           :is-wide="isWide"
           @toggle-wide="isWide = !isWide"

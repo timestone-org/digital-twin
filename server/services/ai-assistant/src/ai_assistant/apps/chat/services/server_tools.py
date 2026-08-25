@@ -11,6 +11,7 @@
 某一个用户。做成进程级单例的话，两个用户的请求会互相借用对方的身份。
 """
 
+import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
@@ -74,10 +75,15 @@ class ServerTools:
             "modules.catalog": self._modules,
             "points.list_sources": self._list_sources,
             "points.search": self._search_points,
+            "points.detail": self._point_detail,
+            "dashboards.list": self._list_dashboards,
             "dashboard.validate": self._validate,
             "formula.catalog": self._formula_catalog,
             "formula.validate": self._check_formula,
             "formula.preview": self._try_formula,
+            "datasets.list_tables": self._list_tables,
+            "datasets.read_columns": self._read_saved_columns,
+            "assets.search": self._search_assets,
         }
 
     def _upstream(self) -> PlatformClient:
@@ -191,6 +197,83 @@ class ServerTools:
             self.headers, _required(arguments, "dashboard_id")
         )
 
+    async def _list_dashboards(self, arguments: dict[str, Any]) -> Any:
+        """列用户可见的大屏，逐字段窄化并按上限截断。
+
+        Args: arguments。
+        """
+        body = await self._upstream().list_dashboards(
+            self.headers,
+            keyword=_text_or_none(arguments.get("keyword")),
+            project_id=_text_or_none(arguments.get("project_id")),
+        )
+        rows, total = _page_of(body)
+        shown = rows[: _limit_of(arguments.get("limit"))]
+        return {
+            "dashboards": [_dashboard_of(row) for row in shown],
+            "note": _list_note(len(shown), total > len(shown), total),
+        }
+
+    async def _list_tables(self, arguments: dict[str, Any]) -> Any:
+        """列台账表，逐字段窄化并按上限截断。
+
+        Args: arguments。
+        """
+        body = await self._upstream().list_dataset_tables(
+            self.headers, keyword=_text_or_none(arguments.get("keyword"))
+        )
+        rows, total = _page_of(body)
+        shown = rows[: _limit_of(arguments.get("limit"))]
+        return {
+            "tables": [_table_of(row) for row in shown],
+            "note": _list_note(len(shown), total > len(shown), total),
+        }
+
+    async def _read_saved_columns(self, arguments: dict[str, Any]) -> Any:
+        """读一张台账**已保存**的列。列集合有界，不截断。
+
+        Args: arguments。
+        """
+        rows = await self._upstream().list_dataset_columns(
+            self.headers, _required(arguments, "table_id")
+        )
+        return {"columns": [_column_of(row) for row in rows]}
+
+    async def _search_assets(self, arguments: dict[str, Any]) -> Any:
+        """搜素材。⚠ 上游不报总数，多要一条来判断有没有截断。
+
+        Args: arguments。
+        """
+        limit = _limit_of(arguments.get("limit"))
+        rows = await self._upstream().list_assets(
+            self.headers,
+            keyword=_text_or_none(arguments.get("keyword")),
+            kind=_text_or_none(arguments.get("kind")),
+            limit=limit + 1,
+        )
+        shown = rows[:limit]
+        return {
+            "assets": [_asset_of(row) for row in shown],
+            "note": _list_note(len(shown), len(rows) > limit),
+        }
+
+    async def _point_detail(self, arguments: dict[str, Any]) -> Any:
+        """按 node_key 取一个点位的完整配置。
+
+        Args: arguments。
+        """
+        source_id, code = _split_node_key(_required(arguments, "node_key"))
+        row = await self._upstream().find_point(
+            self.headers, source_id=source_id, code=code
+        )
+        if row is None:
+            return {
+                "point": None,
+                "note": "没有这个点位；node_key 多半记岔了，"
+                "用 points.search 重找，不要猜一个",
+            }
+        return {"point": _point_of(row)}
+
 
 def _formula_body(arguments: dict[str, Any]) -> dict[str, Any]:
     """校验与试算共用的那两格。
@@ -273,6 +356,128 @@ def _source_of(row: object) -> dict[str, Any]:
         "name": body.get("name"),
         "description": body.get("description"),
     }
+
+
+def _dashboard_of(row: object) -> dict[str, Any]:
+    # 逐字段窄化的理由同 `_candidate_of`；名片只留认它与指路要用的四格
+    body = _as_body(row)
+    return {
+        "id": body.get("id"),
+        "name": body.get("name"),
+        "project_id": body.get("project_id"),
+        "updated_at": body.get("updated_at"),
+    }
+
+
+def _table_of(row: object) -> dict[str, Any]:
+    body = _as_body(row)
+    return {
+        "id": body.get("id"),
+        "code": body.get("code"),
+        "name": body.get("name"),
+        "collect_mode": body.get("collect_mode"),
+        "collect_interval_ms": body.get("collect_interval_ms"),
+    }
+
+
+def _column_of(row: object) -> dict[str, Any]:
+    body = _as_body(row)
+    return {
+        "key": body.get("key"),
+        "name": body.get("name"),
+        "data_type": body.get("data_type"),
+        "unit": body.get("unit"),
+        "source": body.get("source"),
+        "node_key": body.get("node_key"),
+        "formula": body.get("formula"),
+    }
+
+
+def _asset_of(row: object) -> dict[str, Any]:
+    body = _as_body(row)
+    variants = body.get("variants")
+    rows = cast("list[object]", variants) if isinstance(variants, list) else []
+    return {
+        "id": body.get("id"),
+        "name": body.get("name"),
+        "kind": body.get("kind"),
+        "variants": [_variant_of(one) for one in rows],
+    }
+
+
+def _variant_of(row: object) -> dict[str, Any]:
+    body = _as_body(row)
+    return {"variant": body.get("variant"), "status": body.get("status")}
+
+
+def _point_of(row: object) -> dict[str, Any]:
+    body = _as_body(row)
+    return {
+        "node_key": body.get("node_key"),
+        "source_id": body.get("source_id"),
+        "code": body.get("code"),
+        "name": body.get("name"),
+        "unit": body.get("unit"),
+        "data_type": body.get("data_type"),
+        "address": body.get("address"),
+        "sampling_interval_ms": body.get("sampling_interval_ms"),
+        "deadband": body.get("deadband"),
+        "archive_enabled": body.get("archive_enabled"),
+        "archive_max_interval_ms": body.get("archive_max_interval_ms"),
+        "archive_retention_days": body.get("archive_retention_days"),
+    }
+
+
+def _page_of(body: object) -> tuple[list[object], int]:
+    """从分页体里取 items 与 total；不是分页体就当空。
+
+    Args: body。
+    """
+    page = _as_body(body)
+    items = page.get("items")
+    rows = cast("list[object]", items) if isinstance(items, list) else []
+    total = page.get("total")
+    return rows, total if isinstance(total, int) else len(rows)
+
+
+def _list_note(shown: int, is_clipped: bool, total: int | None = None) -> str:
+    """清单末尾那句话：截断要挑明，空表要按「真的没有」念。
+
+    ⚠ 不说明截断，模型会把「前 20 条里没有」读成「全库没有」；
+    不说明空表，它会从别处硬凑一个。
+
+    Args: shown, is_clipped, total（上游不报总数时不给）。
+    """
+    if is_clipped:
+        head = f"共 {total} 条" if total is not None else "还有更多"
+        return f"{head}，只列出前 {shown} 条；给关键词能缩小范围"
+    if shown == 0:
+        return "空表就是真的没有，不要猜"
+    return f"共 {shown} 条，已全部列出"
+
+
+def _split_node_key(node_key: str) -> tuple[str, str]:
+    """拆 `{source_id}:{code}`；拆不动就抛。
+
+    ⚠ 前半段必须是 UUID：直接拿去打上游的话，回来的是一个含糊的 422，
+    而真正的问题只是 node_key 写错了。
+
+    Args: node_key。
+    """
+    source_id, _, code = node_key.partition(":")
+    if not code or not _is_uuid(source_id):
+        raise UnknownServerTool(
+            f"node_key 形如 {{数据源id}}:{{点位编码}}，读不懂：{node_key}"
+        )
+    return source_id, code
+
+
+def _is_uuid(given: str) -> bool:
+    try:
+        uuid.UUID(given)
+    except ValueError:
+        return False
+    return True
 
 
 def _as_body(row: object) -> dict[str, object]:

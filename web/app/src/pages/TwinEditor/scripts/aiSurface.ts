@@ -1,9 +1,8 @@
 /**
- * @fileoverview 孪生编辑器作为助手的工作面：读场景、读绑定行、写绑定。
+ * @fileoverview 孪生编辑器作为助手的工作面：读场景、读绑定行、写绑定、截视口。
  *
- * ⚠ 这一页只有绑点。**没有截图工具**：整块视口是 WebGL，而渲染器没开
- * `preserveDrawingBuffer`，截图库取到的一定是空的——给它一个永远出白图的工具，
- * 比不给更糟。
+ * ⚠ 截图与大屏同一份口径（`captureWithGl`）：视口是 WebGL，截图库直接读不到
+ * 它的缓冲，靠场景登记的「先画一帧再拷」快照插替身截进去。
  *
  * ⚠ 数组绑定的行号是**文档序**，实体本身不在 fieldKey 里露面。所以读绑定时
  * 必须把每一行对应的实体名字一起给出去，让模型**按名字对**。按行号猜的结果是
@@ -14,6 +13,7 @@ import { twinBindingRows, type TwinConfig } from '@dt/twin-config'
 
 import { createBinding } from '@/features/dashboard/editorDoc'
 import { withSource } from '@/features/ai/bindingSource'
+import { captureCanvas } from '@/features/ai/captureWithGl'
 import type { AiSurface, SurfaceSnapshot } from '@/features/ai/surfaces'
 
 /** 这一页实现了哪些客户端工具。⚠ 与技能清单里声明的名字逐字相同。 */
@@ -21,6 +21,7 @@ export const TWIN_TOOLS = [
   'dashboard.read_canvas',
   'dashboard.read_bindings',
   'dashboard.write_binding',
+  'dashboard.capture',
 ] as const
 
 /** 快照里最多列几行。一份大场景能有几百行，整份塞进去会占满上下文。 */
@@ -33,6 +34,8 @@ export interface TwinSurfaceDeps {
   write: (binding: BindingPayload) => void
   /** 这段孪生所在的大屏节点 id；新建的绑定挂在它上面。 */
   nodeId: () => string
+  /** 3D 视口的宿主元素，截图的根；还没挂载时给 null。 */
+  stage: () => HTMLElement | null
 }
 
 /** 造出孪生编辑器这个工作面。 */
@@ -83,6 +86,7 @@ function dispatch(deps: TwinSurfaceDeps, call: AssistantToolCall): unknown {
   if (call.name === 'dashboard.read_canvas') return snapshotOf(deps)
   if (call.name === 'dashboard.read_bindings') return readRows(deps)
   if (call.name === 'dashboard.write_binding') return writeBinding(deps, call)
+  if (call.name === 'dashboard.capture') return captureCanvas(deps.stage())
   throw new Error(`当前页面没有实现 ${call.name}`)
 }
 

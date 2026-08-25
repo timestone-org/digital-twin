@@ -58,3 +58,36 @@ def test_a_row_with_nothing_in_it_still_replays() -> None:
     # 库里存着的东西不一定是本版本写的，读不出来也不能炸掉整段历史
     back = history.to_message(_row("assistant", {}))
     assert back.content == ""
+
+
+def test_window_takes_the_most_recent_slice() -> None:
+    rows = [_row("user", {"text": f"m{i}"}, seq=i) for i in range(1, 11)]
+    kept = history.window(rows, 3)
+    assert [one.seq for one in kept] == [8, 9, 10]
+
+
+def test_window_never_starts_with_an_orphan_tool_message() -> None:
+    """切点落在工具调用与它的回应之间时，孤儿工具消息必须掐掉。
+
+    不掐的话，发给端点的历史以几条没有调用的工具回应开头，回来的是一条
+    与真实原因毫无关系的 400，且回合越长越容易触发。
+    """
+    rows = [
+        _row("user", {"text": "绑点"}, seq=1),
+        _row("assistant", {"text": "", "tool_calls": []}, seq=2),
+        _row("tool", {"tool_call_id": "c1", "text": "结果一"}, seq=3),
+        _row("tool", {"tool_call_id": "c2", "text": "结果二"}, seq=4),
+        _row("assistant", {"text": "好了"}, seq=5),
+    ]
+    kept = history.window(rows, 3)
+    assert [one.seq for one in kept] == [5]
+
+
+def test_window_keeps_a_complete_pair_intact() -> None:
+    rows = [
+        _row("assistant", {"text": "", "tool_calls": []}, seq=1),
+        _row("tool", {"tool_call_id": "c1", "text": "结果"}, seq=2),
+        _row("user", {"text": "继续"}, seq=3),
+    ]
+    kept = history.window(rows, 3)
+    assert [one.seq for one in kept] == [1, 2, 3]

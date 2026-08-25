@@ -21,8 +21,8 @@ from ai_assistant.apps.chat.catalog import ASSISTANT_USE
 from ai_assistant.apps.chat.deps import get_advance_deps
 from ai_assistant.apps.chat.schemas.advance import AdvanceIn
 from ai_assistant.apps.chat.services import advance_service, events
+from ai_assistant.apps.chat.services.plan import PlanUpdate
 from ai_assistant.apps.chat.services.session_service import require_session
-from ai_assistant.apps.chat.services.turn import TurnEvent
 from ai_assistant.apps.chat.services.turn_types import (
     TurnDelta,
     TurnStep,
@@ -89,7 +89,7 @@ async def _frames(
         yield events.error_frame(error.code, str(error), trace_id)
 
 
-def _frame_of(item: TurnEvent) -> str:
+def _frame_of(item: advance_service.AdvanceEvent) -> str:
     """一件产出摊成一帧。
 
     ⚠ 分档必须穷尽。漏一档的表现是「助手做了一步但界面上没有」，而两侧代码
@@ -101,6 +101,8 @@ def _frame_of(item: TurnEvent) -> str:
         return events.delta_frame(item)
     if isinstance(item, TurnStep):
         return events.step_frame(item)
+    if isinstance(item, PlanUpdate):
+        return events.plan_frame(item.plan)
     return events.outcome_frame(item)
 
 
@@ -109,6 +111,7 @@ def _to_input(payload: AdvanceIn) -> advance_service.AdvanceInput:
         surface_kind=payload.surface_kind,
         surface_label=payload.surface_label,
         surface_context=payload.surface_context,
+        client_tools=payload.client_tools,
         user_text=payload.user_text,
         tool_results=[
             advance_service.ClientToolResult(

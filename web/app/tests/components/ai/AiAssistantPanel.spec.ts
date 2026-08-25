@@ -6,8 +6,10 @@
 import { mount } from '@vue/test-utils'
 import { DtFilePicker } from '@dt/ui'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { effectScope, type EffectScope } from 'vue'
 
 import AiAssistantPanel from '@/components/ai/AiAssistantPanel.vue'
+import { useAiConversation } from '@/composables/useAiConversation'
 import { __resetAiPorts, setAiPorts } from '@/features/ai/ports'
 
 // 附点表这一路打的是真接口，用例里换成假件——它验的是「读出来的表去了哪」，
@@ -31,18 +33,30 @@ function pick(wrapper: ReturnType<typeof mountPanel>, file: File): void {
   wrapper.findComponent(DtFilePicker).vm.$emit('select', [file])
 }
 
+// 对话归 useAiPanel 持有、按 prop 传进来；用例里在独立作用域造一段真的
+let scope: EffectScope | null = null
+
 function mountPanel(sessionId: string | null = 's1') {
+  scope = effectScope()
+  const chat = scope.run(() =>
+    useAiConversation(
+      () => sessionId,
+      () => ({ kind: 'dashboard-editor', label: '大屏编辑器' }),
+    ),
+  )
+  if (chat === undefined) throw new Error('对话没造出来')
   return mount(AiAssistantPanel, {
     props: {
-      surfaceKind: 'dashboard-editor' as const,
+      chat,
       surfaceLabel: '大屏编辑器',
-      sessionId,
       hint: '助手改的是草稿，保存要你自己按。',
     },
   })
 }
 
 afterEach(() => {
+  scope?.stop()
+  scope = null
   __resetAiPorts()
 })
 

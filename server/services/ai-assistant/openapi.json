@@ -5,6 +5,23 @@
         "additionalProperties": false,
         "description": "推进一个回合。",
         "properties": {
+          "client_tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 64,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Tools"
+          },
           "surface_context": {
             "anyOf": [
               {
@@ -586,6 +603,18 @@
             },
             "title": "Messages",
             "type": "array"
+          },
+          "plan_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Json"
           },
           "row_version": {
             "title": "Row Version",

@@ -73,6 +73,47 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         runs_on="server",
     ),
     ToolSpec(
+        name="plan.write",
+        description=(
+            "写下（或整份重写）这次任务的执行计划。需要 3 步以上或跨多个"
+            "对象的任务，**先立计划再动手**；每完成一项立刻把它的 status "
+            "改掉再整份重写一次。status 取 pending/in_progress/done/"
+            "skipped/failed，同一时刻至多一项 in_progress。全部项走完，"
+            "计划自动完结。单步小事不要立计划。"
+        ),
+        parameters=_object(
+            {
+                "title": _string("计划标题：一句话说明这次要做成什么"),
+                "items": {
+                    "type": "array",
+                    "description": "计划项，按执行顺序，整份给全",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "title": _string("这一项要做什么，具体到能验收"),
+                            "status": {
+                                "type": "string",
+                                "enum": [
+                                    "pending",
+                                    "in_progress",
+                                    "done",
+                                    "skipped",
+                                    "failed",
+                                ],
+                                "description": "状态，缺省 pending",
+                            },
+                            "note": _string("补充说明或失败原因，可省"),
+                        },
+                        "required": ["title"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            ["items"],
+        ),
+        runs_on="server",
+    ),
+    ToolSpec(
         name="modules.catalog",
         description=(
             "模块清单，**唯一的模块真源**。不给参数时列出全部模块的名片；"
@@ -108,6 +149,59 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
                 "limit": _integer("最多返回几条，缺省 20，上限 50"),
             },
             ["keyword"],
+        ),
+        runs_on="server",
+    ),
+    ToolSpec(
+        name="points.detail",
+        description=(
+            "按 node_key 取一个点位的完整配置：名字、单位、数据类型、寻址串、"
+            "采样周期与归档设置。node_key 形如 `{数据源id}:{点位编码}`，"
+            "与绑定里存的是同一个串。回 `point: null` 就是真的没有这个点位"
+            "——多半是 node_key 记岔了，用 points.search 重找，不要猜一个。"
+        ),
+        parameters=_object(
+            {
+                "node_key": _string("点位身份，形如 `{数据源id}:{点位编码}`"),
+            },
+            ["node_key"],
+        ),
+        runs_on="server",
+    ),
+    ToolSpec(
+        name="assets.search",
+        description=(
+            "按关键词与类型搜素材库（三维模型、图片、图标），"
+            "回 id、名字、类型与压缩档，新的在前。都不给就列最新的一批。"
+            "空表就是真的没有这个素材，不要编一个 id 或 ref。"
+        ),
+        parameters=_object(
+            {
+                "keyword": _string("按素材名模糊搜"),
+                "kind": _string(
+                    "素材类型：model（三维模型）/ image（图片）/ icon（图标）；"
+                    "不给则全类型找"
+                ),
+                "limit": _integer("最多返回几条，缺省与上限都是 20"),
+            },
+            [],
+        ),
+        runs_on="server",
+    ),
+    ToolSpec(
+        name="dashboards.list",
+        description=(
+            "列出当前用户可见的大屏：id、名字、所属项目与更新时间。"
+            "要检查或说起某张大屏而手上没有 id 时先调它。"
+            "空表就是真的一张都没有，不要编一个 id。"
+        ),
+        parameters=_object(
+            {
+                "keyword": _string("按大屏名字模糊筛"),
+                "project_id": _string("限定在某个项目内；不给则全部"),
+                "limit": _integer("最多返回几条，缺省与上限都是 20"),
+            },
+            [],
         ),
         runs_on="server",
     ),
@@ -172,6 +266,34 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
             },
             ["table_id", "formula"],
         ),
+        runs_on="server",
+    ),
+    ToolSpec(
+        name="datasets.list_tables",
+        description=(
+            "列出数据台账表：id、编码、名字、采集方式与周期。"
+            "任何工作面都能查，说起某张台账而手上没有 id 时先调它。"
+            "空表就是真的没有台账，不要编一个 id。"
+        ),
+        parameters=_object(
+            {
+                "keyword": _string("按台账名称或编码模糊筛"),
+                "limit": _integer("最多返回几条，缺省与上限都是 20"),
+            },
+            [],
+        ),
+        runs_on="server",
+    ),
+    ToolSpec(
+        name="datasets.read_columns",
+        description=(
+            "读某张台账**已保存**的列清单：key、名字、类型、单位、来源，"
+            "公式列带表达式。⚠ 与 `dataset.read_columns`（单数前缀）不是"
+            "同一个：那个读的是台账页上正在编辑的草稿、只在台账工作面可用；"
+            "这一个读的是库里已保存的列，任何页面都能查。"
+            "table_id 取自 datasets.list_tables。"
+        ),
+        parameters=_object({"table_id": _string("台账 id")}, ["table_id"]),
         runs_on="server",
     ),
     ToolSpec(
@@ -346,7 +468,8 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         description=(
             "截当前画布的图并直接看它。**只在这一轮看得见**——"
             "看完必须当场把结论写成文字，下一轮只剩一句「这里曾经有一张图」。"
-            "⚠ 三维模块在截图里是一块空白，那是截不到不是没配。"
+            "三维（孪生）模块也截得到；若某块 3D 区域仍是空白，"
+            "那是那一个场景截取失败，不是没配。"
         ),
         parameters=_object({}, []),
         runs_on="client",

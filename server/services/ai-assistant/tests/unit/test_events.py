@@ -91,6 +91,7 @@ def test_the_event_names_are_a_closed_set() -> None:
         events.EVENT_CLIENT_TOOL,
         events.EVENT_DONE,
         events.EVENT_ERROR,
+        events.EVENT_PLAN,
     }
 
 

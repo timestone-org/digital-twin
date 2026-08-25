@@ -42,7 +42,7 @@ from ai_assistant.apps.chat.services.turn_types import (
     TurnStep,
 )
 from ai_assistant.llm import DeltaChannel, DeltaSink, GuardedModel, ModelKind
-from ai_assistant.settings import MAX_STEPS_PER_TURN
+from ai_assistant.settings import MAX_STEPS_PER_TURN, MAX_TOOL_RESULT_CHARS
 from lib.logging import get_logger
 
 _logger = get_logger("assistant.turn")
@@ -311,7 +311,7 @@ async def _run_one(
                 error=reason,
             ),
         )
-    body = json.dumps(result, ensure_ascii=False, default=str)
+    body = _clamped(json.dumps(result, ensure_ascii=False, default=str))
     return (
         ToolMessage(content=body, tool_call_id=call.call_id),
         TurnStep(
@@ -320,8 +320,26 @@ async def _run_one(
             state="succeeded",
             title=f"{call.name} 跑完了",
             input_json=call.arguments,
+            # 落库供排障：工具当时到底回了什么。⚠ 存的是钳过的那份——
+            # 原样存的话，一次超大结果每次重放这个会话都要再读一遍
+            output_json={"body": body},
         ),
     )
+
+
+def _clamped(body: str) -> str:
+    """把工具产出钳在上限内，截断要**说出来**。
+
+    ⚠ 不设上限的话，一次超大结果能把整个上下文挤掉，被挤走的正是工作面
+    快照与技能正文；静默截断则会让模型把半份结果当成全部。
+
+    Args: body。
+    """
+    if len(body) <= MAX_TOOL_RESULT_CHARS:
+        return body
+    kept = body[:MAX_TOOL_RESULT_CHARS]
+    tail = f"……（产出太大已截断，共 {len(body)} 字。要看后面请缩小范围再调）"
+    return f"{kept}\n{tail}"
 
 
 def _after_think(state: TurnState) -> str:

@@ -15,6 +15,7 @@
 
 from typing import Any
 
+from ai_assistant.apps.chat.services import plan as plan_service
 from ai_assistant.apps.chat.services.surface_context import render
 from ai_assistant.apps.chat.skills import SkillManifest, skills_for
 
@@ -41,6 +42,15 @@ _BASE = """你是这套工业数字孪生平台的助手。
 - 其余页面（台账、采集）**没有撤销**，每一次写入都是真实落库。
   在那里你只提议，由用户确认。
 - 工具失败时如实说失败了，不要装作做成了。
+
+## 计划纪律
+
+- 需要 3 步以上、或要动多个对象的任务，先用 `plan.write` 列出计划再动手；
+  单步小事不立计划。
+- 一次只做一项：开工前把它标成 in_progress，做完**立刻**整份更新再开下一项。
+- 布局、外观这类**看效果**的任务，收尾项固定是「截图自检」：用
+  `dashboard.capture` 看过，不满意就把修正项补进计划接着改，看过图才许收尾。
+- 计划没走完就不要说「做完了」；做不下去就把那一项标成 failed 并说明原因。
 """
 
 _NO_SKILLS = "这一页上没有可用的技能，你只能解读与回答问题。"
@@ -51,6 +61,7 @@ def build_system_prompt(
     *,
     surface_label: str = "",
     context: dict[str, Any] | None = None,
+    plan: dict[str, Any] | None = None,
 ) -> str:
     """装配常驻提示词。
 
@@ -58,8 +69,12 @@ def build_system_prompt(
     读技能，选技能这一步才有依据。反过来的话它常常先挑好技能才发现自己没弄清
     对象，于是多一次往返。
 
+    ⚠ 计划排在快照之后：模型先看清这一屏此刻的样子，再对照计划决定下一步——
+    它自己上一轮动过的东西就在快照里。
+
     Args: surface_kind, surface_label（给人看的页面名，缺省用工作面标识）,
-        context（工作面此刻的摘要，前端每次推进都带最新的一份）。
+        context（工作面此刻的摘要，前端每次推进都带最新的一份）,
+        plan（会话上的当前计划；没有或已完结时不占一个字）。
     """
     skills = skills_for(surface_kind)
     where = surface_label or surface_kind
@@ -67,6 +82,7 @@ def build_system_prompt(
         _BASE.strip(),
         f"## 当前位置\n\n用户正在**{where}**。",
         render(context),
+        plan_service.render(plan),
         _roster(skills),
     ]
     return "\n\n".join(one for one in parts if one)
