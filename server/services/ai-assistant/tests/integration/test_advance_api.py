@@ -16,7 +16,7 @@ import pytest
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from sqlalchemy.ext.asyncio import AsyncSession
-from unit.llm_fakes import ScriptedChat, tool_call
+from unit.llm_fakes import ScriptedChat, StreamingChat, tool_call
 
 from ai_assistant.apps.chat.catalog import ASSISTANT_USE
 from ai_assistant.apps.chat.deps import get_advance_deps
@@ -112,8 +112,93 @@ async def test_a_plain_answer_streams_a_step_then_done(
 
     events = await _advance(db_stack.client, session_id, user_text="在吗")
 
-    assert [name for name, _ in events] == ["step", "turn.done"]
+    # ⚠ 增量排在步骤之前：模型是先说出来、这一步才算走完的
+    assert [name for name, _ in events] == [
+        "message.delta",
+        "step",
+        "turn.done",
+    ]
+    assert events[0][1] == {"channel": "text", "text": "你好"}
     assert events[-1][1]["reply"] == "你好"
+
+
+async def test_the_snapshot_of_the_page_reaches_the_model(
+    db_stack: DbStack,
+) -> None:
+    """工作面快照要真的进到模型看得见的那一段。
+
+    ⚠ 断的话，用户说「把**这个**模块的标题改掉」时，「这个」在模型手里
+    没有指代——它只能反问，或者挑一个看着像的画布节点动手。
+    """
+    model = ScriptedChat(reply=AIMessage(content="好"))
+    _install(db_stack, model)
+    session_id = await _new_session(db_stack.client)
+
+    await _advance(
+        db_stack.client,
+        session_id,
+        user_text="把这个模块的标题改成机组温度",
+        surface_context={
+            "selected_id": "n7",
+            "selected": {"id": "n7", "module_type": "metric-card"},
+        },
+    )
+
+    system = str(model.seen[0][0].content)
+    assert "n7" in system
+    assert "metric-card" in system
+
+
+async def test_an_oversized_snapshot_is_refused_up_front(
+    db_stack: DbStack,
+) -> None:
+    """快照大到能挤掉提示词时当场拒。
+
+    ⚠ 就地截断出来的是一段不合法的 JSON，而模型读到一半会当成
+    「这一屏就这么多」，然后对着半屏画布下结论。
+    """
+    _install(db_stack, ScriptedChat(reply=AIMessage(content="好")))
+    session_id = await _new_session(db_stack.client)
+
+    response = await db_stack.client.post(
+        f"{SESSIONS_URL}/{session_id}:advance",
+        json={
+            "surface_kind": "dashboard-editor",
+            "user_text": "看看",
+            "surface_context": {"nodes": ["n" * 200 for _ in range(400)]},
+        },
+    )
+
+    assert response.status_code == 400
+
+
+async def test_the_thinking_is_streamed_but_never_stored(
+    db_stack: DbStack,
+) -> None:
+    """想的过程推得出去，但一个字都不许落库。
+
+    ⚠ 落了的话，这个会话每重放一次就把它再喂给模型一遍，
+    上下文与账单一起翻倍——而模型早就把结论写进正文了。
+    """
+    _install(
+        db_stack,
+        StreamingChat(parts=[("绑好了", "先查点位，再逐个写进去")]),
+    )
+    session_id = await _new_session(db_stack.client)
+
+    events = await _advance(db_stack.client, session_id, user_text="帮我绑点")
+
+    thoughts = [
+        body["text"]
+        for name, body in events
+        if name == "message.delta" and body["channel"] == "reasoning"
+    ]
+    assert thoughts == ["先查点位，再逐个写进去"]
+
+    detail = await db_stack.client.get(f"{SESSIONS_URL}/{session_id}")
+    stored = json.dumps(detail.json()["data"]["messages"], ensure_ascii=False)
+    assert "先查点位" not in stored
+    assert "绑好了" in stored
 
 
 async def test_the_turn_is_persisted_with_its_steps(

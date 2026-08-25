@@ -22,7 +22,11 @@ from ai_assistant.apps.chat.deps import get_advance_deps
 from ai_assistant.apps.chat.schemas.advance import AdvanceIn
 from ai_assistant.apps.chat.services import advance_service, events
 from ai_assistant.apps.chat.services.session_service import require_session
-from ai_assistant.apps.chat.services.turn_types import TurnOutcome
+from ai_assistant.apps.chat.services.turn import TurnEvent
+from ai_assistant.apps.chat.services.turn_types import (
+    TurnDelta,
+    TurnStep,
+)
 from ai_assistant.deps import get_session, require
 from ai_assistant.settings import API_PREFIX
 from lib.auth import CallerContext
@@ -79,20 +83,32 @@ async def _frames(
             chat_session_id=session_id,
             payload=_to_input(payload),
         ):
-            yield (
-                events.outcome_frame(item)
-                if isinstance(item, TurnOutcome)
-                else events.step_frame(item)
-            )
+            yield _frame_of(item)
     except AppError as error:
         _logger.warning("turn_failed", "回合失败", code=error.code)
         yield events.error_frame(error.code, str(error), trace_id)
+
+
+def _frame_of(item: TurnEvent) -> str:
+    """一件产出摊成一帧。
+
+    ⚠ 分档必须穷尽。漏一档的表现是「助手做了一步但界面上没有」，而两侧代码
+    单看都对（events.py 的文件头写了同一条）。
+
+    Args: item。
+    """
+    if isinstance(item, TurnDelta):
+        return events.delta_frame(item)
+    if isinstance(item, TurnStep):
+        return events.step_frame(item)
+    return events.outcome_frame(item)
 
 
 def _to_input(payload: AdvanceIn) -> advance_service.AdvanceInput:
     return advance_service.AdvanceInput(
         surface_kind=payload.surface_kind,
         surface_label=payload.surface_label,
+        surface_context=payload.surface_context,
         user_text=payload.user_text,
         tool_results=[
             advance_service.ClientToolResult(

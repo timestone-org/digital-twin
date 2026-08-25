@@ -31,6 +31,7 @@ from ai_assistant.apps.chat.services.tool_specs import TOOL_SPECS
 from ai_assistant.apps.chat.services.turn import (
     ServerToolRunner,
     TurnDeps,
+    TurnEvent,
     stream_turn,
 )
 from ai_assistant.apps.chat.services.turn_types import TurnOutcome, TurnStep
@@ -109,6 +110,10 @@ class AdvanceInput:
     tool_results: list[ClientToolResult] = field(
         default_factory=list[ClientToolResult]
     )
+    # 这一屏此刻的摘要。⚠ **每一次推进都带最新的一份**，不只在用户发话那次：
+    # 提示词每一轮现拼，只在第一轮带的话，助手动了两下之后看到的就是一屏
+    # 它自己都不知道改成什么样了的画布
+    surface_context: dict[str, Any] | None = None
 
 
 def incoming_messages(payload: AdvanceInput) -> list[BaseMessage]:
@@ -148,7 +153,9 @@ async def load_context(
     recent = rows[-MAX_HISTORY_MESSAGES:]
     system = SystemMessage(
         content=build_system_prompt(
-            payload.surface_kind, surface_label=payload.surface_label
+            payload.surface_kind,
+            surface_label=payload.surface_label,
+            context=payload.surface_context,
         )
     )
     return [system, *history.replay(recent), *incoming_messages(payload)]
@@ -159,8 +166,12 @@ async def advance(
     *,
     chat_session_id: uuid.UUID,
     payload: AdvanceInput,
-) -> AsyncIterator[TurnStep | TurnOutcome]:
-    """推进一个回合，逐步吐出去，最后落库。
+) -> AsyncIterator[TurnEvent]:
+    """推进一个回合，边跑边吐，最后落库。
+
+    ⚠ 增量**不进落库那一摞**：回合结束时落的是攒齐的那条助手消息，增量只是
+    它的碎片。都留下的话，同一段话在库里会有两份，而重放时模型看到自己把
+    同一件事说了两遍。
 
     Args: deps, chat_session_id, payload。
     """
@@ -182,7 +193,8 @@ async def advance(
         if isinstance(item, TurnOutcome):
             outcome = item
             continue
-        produced.append(item)
+        if isinstance(item, TurnStep):
+            produced.append(item)
         yield item
     if outcome is not None:
         await _persist(

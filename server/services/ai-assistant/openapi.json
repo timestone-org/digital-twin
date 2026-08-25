@@ -5,6 +5,18 @@
         "additionalProperties": false,
         "description": "推进一个回合。",
         "properties": {
+          "surface_context": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Surface Context"
+          },
           "surface_kind": {
             "enum": [
               "dashboard-editor",
