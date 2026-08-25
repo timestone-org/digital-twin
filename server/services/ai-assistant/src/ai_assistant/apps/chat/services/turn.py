@@ -25,7 +25,7 @@
 
 import json
 import operator
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Annotated, Any, Protocol, TypedDict
 
@@ -96,6 +96,36 @@ async def run_turn(deps: TurnDeps, messages: list[BaseMessage]) -> TurnOutcome:
     seed: TurnState = {"messages": messages, "steps": [], "pending": ()}
     final = await graph.ainvoke(seed, {"recursion_limit": MAX_STEPS_PER_TURN})
     return _outcome(final, len(messages))
+
+
+async def stream_turn(
+    deps: TurnDeps, messages: list[BaseMessage]
+) -> AsyncIterator[TurnStep | TurnOutcome]:
+    """跑一个回合，**每走完一步就吐一步**，最后吐一个结果。
+
+    ⚠ 存在的理由只有一个：界面要在回合进行中就看见「AI 做了哪一步」。
+    等回合整个跑完再一次性推，一次绑点要转十几秒的圈——而那期间助手其实
+    一直在动，只是外面看不见（ADR-0023 的第二条决策）。
+
+    ⚠ 取的是**整份状态**而不是增量：增量要在这里把两个规约（消息追加、
+    步骤追加）再实现一遍，而那份实现与图里那份一旦漂开，界面上会少一步或
+    多一步，且只在特定的工具组合下才复现。
+
+    Args: deps, messages。
+    """
+    graph = _build_graph(deps)
+    seed: TurnState = {"messages": messages, "steps": [], "pending": ()}
+    seen = 0
+    latest: dict[str, Any] = {}
+    async for state in graph.astream(  # type: ignore[reportUnknownMemberType]  # 理由：见文件头
+        seed, {"recursion_limit": MAX_STEPS_PER_TURN}, stream_mode="values"
+    ):
+        latest = dict(state)
+        steps = list(latest.get("steps") or [])
+        for step in steps[seen:]:
+            yield step
+        seen = len(steps)
+    yield _outcome(latest, len(messages))
 
 
 def _build_graph(deps: TurnDeps) -> Any:

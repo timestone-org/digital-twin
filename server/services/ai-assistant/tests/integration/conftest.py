@@ -9,7 +9,7 @@ L2 打真实 Postgres——SQLite 上全绿的迁移可以在生产直接失败�
 
 import socket
 from collections.abc import AsyncIterator, Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 import httpx
 import pytest
@@ -68,7 +68,9 @@ def _session_override(
     return override
 
 
-def _wire(application: FastAPI, connection: AsyncConnection) -> None:
+def _wire(
+    application: FastAPI, connection: AsyncConnection
+) -> async_sessionmaker[AsyncSession]:
     """把事务件换成用例那条连接，幂等键换成进程内替身。
 
     ⚠ `join_transaction_mode="create_savepoint"`：请求内的 commit 只落到保存
@@ -89,6 +91,7 @@ def _wire(application: FastAPI, connection: AsyncConnection) -> None:
             cache=InMemoryCache(), namespace=IDEMPOTENCY_NAMESPACE
         ),
     )
+    return maker
 
 
 @pytest.fixture
@@ -109,11 +112,24 @@ def db_settings(settings: Settings) -> Settings:
     )
 
 
+@dataclass(frozen=True)
+class DbStack:
+    """一条用例手上的整装应用与它的客户端。
+
+    ⚠ 把应用也交出去，是因为有些用例还要往容器里换件（比如把模型换成假的）。
+    只给客户端的话，那种用例只能去掏 transport 的私有字段。
+    """
+
+    client: httpx.AsyncClient
+    app: FastAPI
+    sessions: async_sessionmaker[AsyncSession]
+
+
 @pytest.fixture
-async def db_client(
+async def db_stack(
     db_settings: Settings, sign: HeaderFactory
-) -> AsyncIterator[httpx.AsyncClient]:
-    """整装应用的客户端，每条用例一个回滚事务，用完不留痕。
+) -> AsyncIterator[DbStack]:
+    """整装应用 + 客户端，每条用例一个回滚事务，用完不留痕。
 
     Args: db_settings, sign。
     """
@@ -123,7 +139,7 @@ async def db_client(
     database = application.state.container.database
     connection = await database.engine.connect()
     transaction = await connection.begin()
-    _wire(application, connection)
+    maker = _wire(application, connection)
     transport = httpx.ASGITransport(app=application)
     async with httpx.AsyncClient(
         transport=transport,
@@ -131,7 +147,16 @@ async def db_client(
         timeout=REQUEST_TIMEOUT_S,
     ) as client:
         client.headers.update(sign())
-        yield client
+        yield DbStack(client=client, app=application, sessions=maker)
     await transaction.rollback()
     await connection.close()
     await database.dispose()
+
+
+@pytest.fixture
+async def db_client(db_stack: DbStack) -> httpx.AsyncClient:
+    """整装应用的客户端。
+
+    Args: db_stack。
+    """
+    return db_stack.client

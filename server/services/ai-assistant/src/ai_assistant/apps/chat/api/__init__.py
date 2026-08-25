@@ -4,8 +4,8 @@
 它是前端进这套助手的第一道门，取不到它就什么都不摆。
 """
 
-from ai_assistant.apps.chat.api import capabilities, sessions
+from ai_assistant.apps.chat.api import advance, capabilities, sessions
 
-ROUTERS = (capabilities.router, sessions.router)
+ROUTERS = (capabilities.router, sessions.router, advance.router)
 
 __all__ = ["ROUTERS"]

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from ai_assistant.apps.chat.services.server_tools import ServerTools
 from ai_assistant.llm import GuardedModel, build_model_source
 from ai_assistant.settings import SERVICE_NAME, Settings
 from lib.cache import Cache
@@ -25,6 +26,9 @@ class Container:
     # ⚠ 没开模型时是 `None`，而不是一个「调了会报错」的壳：这与前端那套 ports
     # 范式同口径——能力缺席就如实缺席，由调用方决定怎么说这件事
     model: GuardedModel | None
+    # 服务端工具的执行面。⚠ 与模型不同，它**总是装**：技能正文的拉取走它，
+    # 而那件事在没有模型的部署里也要能答（前端要摆出「这套装了哪些技能」）
+    server_tools: ServerTools
 
 
 def _build_database(settings: Settings) -> Database:
@@ -80,4 +84,5 @@ def build_container(settings: Settings) -> Container:
             cache=cache, namespace=IDEMPOTENCY_NAMESPACE
         ),
         model=_build_model(settings),
+        server_tools=ServerTools(),
     )

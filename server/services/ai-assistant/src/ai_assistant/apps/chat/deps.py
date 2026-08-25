@@ -13,6 +13,10 @@ from fastapi import Depends
 from pydantic import BaseModel
 
 from ai_assistant.apps.chat.catalog import ASSISTANT_USE
+from ai_assistant.apps.chat.services.advance_service import (
+    AdvanceDeps,
+    deps_of,
+)
 from ai_assistant.container import Container
 from ai_assistant.deps import (
     get_container,
@@ -69,3 +73,16 @@ def get_write_context(
         idempotency_key=idempotency_key,
         caller=caller,
     )
+
+
+def get_advance_deps(
+    container: Annotated[Container, Depends(get_container)],
+) -> AdvanceDeps:
+    """推进一个回合要的那几样。
+
+    ⚠ 做成依赖而不是在路由里现取：用例要把会话工厂换成自己那条回滚连接，
+    不然跑一遍回合就在库里留下真数据；模型也要换成假件，不然用例会打网络。
+
+    Args: container。
+    """
+    return deps_of(container)

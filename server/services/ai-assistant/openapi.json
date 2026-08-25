@@ -1,6 +1,54 @@
 {
   "components": {
     "schemas": {
+      "AdvanceIn": {
+        "additionalProperties": false,
+        "description": "推进一个回合。",
+        "properties": {
+          "surface_kind": {
+            "enum": [
+              "dashboard-editor",
+              "twin-editor",
+              "dataset-table",
+              "collect-source",
+              "dashboard-view"
+            ],
+            "title": "Surface Kind",
+            "type": "string"
+          },
+          "surface_label": {
+            "default": "",
+            "maxLength": 64,
+            "title": "Surface Label",
+            "type": "string"
+          },
+          "tool_results": {
+            "items": {
+              "$ref": "#/components/schemas/ToolResultIn"
+            },
+            "maxItems": 32,
+            "title": "Tool Results",
+            "type": "array"
+          },
+          "user_text": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Text"
+          }
+        },
+        "required": [
+          "surface_kind"
+        ],
+        "title": "AdvanceIn",
+        "type": "object"
+      },
       "ApiResponse_CapabilityOut_": {
         "properties": {
           "code": {
@@ -722,6 +770,38 @@
         "title": "StepOut",
         "type": "object"
       },
+      "ToolResultIn": {
+        "additionalProperties": false,
+        "description": "浏览器跑完一个客户端工具之后带回来的东西。",
+        "properties": {
+          "call_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Call Id",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "output": {
+            "title": "Output"
+          }
+        },
+        "required": [
+          "call_id"
+        ],
+        "title": "ToolResultIn",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -1112,6 +1192,58 @@
         "summary": "更新会话",
         "tags": [
           "chat-session"
+        ]
+      }
+    },
+    "/api/v1/assistant/sessions/{session_id}:advance": {
+      "post": {
+        "description": "跑一个回合，每走完一步就推一帧。\n\nArgs: session_id, payload, session, deps, caller。",
+        "operationId": "advance_turn_api_v1_assistant_sessions__session_id__advance_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdvanceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "推进一个回合（事件流）",
+        "tags": [
+          "turn"
         ]
       }
     }

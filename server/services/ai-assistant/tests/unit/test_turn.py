@@ -15,7 +15,12 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 from ai_assistant.apps.chat.services.tool_specs import ToolSpec
-from ai_assistant.apps.chat.services.turn import TurnDeps, run_turn
+from ai_assistant.apps.chat.services.turn import (
+    TurnDeps,
+    run_turn,
+    stream_turn,
+)
+from ai_assistant.apps.chat.services.turn_types import TurnOutcome
 from ai_assistant.llm import GuardedModel
 from ai_assistant.llm.provider import ModelKind
 from lib.resilience import CircuitBreaker
@@ -231,3 +236,48 @@ async def test_both_model_kinds_run_the_same_loop(kind: str) -> None:
         _ask(),
     )
     assert outcome.reply == "好"
+
+
+async def test_the_streaming_variant_yields_each_step_as_it_happens() -> None:
+    runner = RecordingRunner()
+    model = ScriptedChat(
+        script=[
+            _asks("points.search", "c1", keyword="温度"),
+            AIMessage(content="好了"),
+        ]
+    )
+    seen: list[str] = []
+    outcome: TurnOutcome | None = None
+    async for item in stream_turn(_deps(model, runner), _ask()):
+        if isinstance(item, TurnOutcome):
+            outcome = item
+        else:
+            seen.append(item.kind)
+
+    # 等回合整个跑完再一次性推的话，一次绑点要转十几秒的圈
+    assert seen == ["model", "server_tool", "model"]
+    assert outcome is not None
+    assert outcome.reply == "好了"
+
+
+async def test_the_streaming_variant_agrees_with_the_blocking_one() -> None:
+    runner = RecordingRunner()
+    model = ScriptedChat(
+        script=[_asks("dashboard.write_binding", "c9", node_id="n1")]
+    )
+    streamed: TurnOutcome | None = None
+    async for item in stream_turn(_deps(model, runner), _ask()):
+        if isinstance(item, TurnOutcome):
+            streamed = item
+
+    other = ScriptedChat(
+        script=[_asks("dashboard.write_binding", "c9", node_id="n1")]
+    )
+    blocking = await run_turn(_deps(other, RecordingRunner()), _ask())
+
+    # 两条路给出的待办必须一样，否则「界面看到的」与「落库的」会分叉
+    assert streamed is not None
+    assert [call.name for call in streamed.pending] == [
+        call.name for call in blocking.pending
+    ]
+    assert streamed.is_waiting == blocking.is_waiting
