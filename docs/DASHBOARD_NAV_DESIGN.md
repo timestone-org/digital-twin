@@ -134,7 +134,7 @@ export function createInteractionRuntime(ports: InteractionPorts = {}): Interact
   它和显隐类动作的后果完全不同。
 - **`components/InteractionActionFields.vue`**：加两个分支。`navigate` 就地摆一个
   大屏选择器；`navigateByValue` 的行列表交给新的 `InteractionValueRoutes.vue`
-  （.vue ≤300 行的闸门顶着，而它本来就是一段自成一体的列表编辑）。
+  （.vue ≤500 行的闸门顶着，而它本来就是一段自成一体的列表编辑）。
 - **`scripts/rowKeys.ts`**（新）：「落库里没有 id 的行」的本地 key，互斥组与跳转路由共用。
   ⚠ 原本这段只在互斥组那里有一份，路由再抄一遍就是第二份——而里头那个坑是真的：
   拿行内容当 key 会在改字的那一刻整行重挂、输入框丢焦点；删中间一行不连着删 uid

@@ -40,7 +40,7 @@ web/packages/modules/src/modules/action-button/
 └── _variants.scss    五档风格、切角、悬停与按下、辉光与呼吸
 ```
 
-`look.ts` 与 `_variants.scss` 不是洁癖：单文件组件 ≤300 行是闸门
+`look.ts` 与 `_variants.scss` 不是洁癖：单文件组件 ≤500 行是闸门
 （[code-style-typescript](agents/code-style-typescript.md) §3），三十个旋钮摊在
 组件里必然超。收成纯函数还有一个实际好处——夹取与哨兵语义能被独立单测，
 挂载组件去断言 `--btn-font-size` 既慢又看不清断的是哪一条。

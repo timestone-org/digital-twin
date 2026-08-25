@@ -1,6 +1,6 @@
 /**
  * @fileoverview 把孪生编辑器接进助手。
- * 单独一层是为了让页面只写一行——它已经顶着 300 行的上限。
+ * 单独一层是为了让页面只写一行——接线细节不摊进那份单文件组件。
  */
 import { useAiPanel, type AiPanel } from '@/composables/useAiPanel'
 import type { TwinConfig } from '@dt/twin-config'

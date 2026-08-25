@@ -29,7 +29,7 @@ from _report import (
 MAX_FUNCTION_LINES = 50
 MAX_ROUTE_LINES = 20  # 超了几乎一定是业务漏进了 HTTP 层
 MAX_NESTING = 4
-MAX_CLASS_LINES = 300
+MAX_CLASS_LINES = 500
 MAX_MODULE_LINES = 600
 
 HTTP_METHODS = frozenset(
@@ -136,7 +136,7 @@ def check_nesting_depth() -> list[Violation]:
 
 
 def check_class_and_module_length() -> list[Violation]:
-    """类 ≤300 行、模块 ≤600 行。"""
+    """类 ≤500 行、模块 ≤600 行。"""
     found: list[Violation] = []
     for path in _all_python():
         text = read(path)

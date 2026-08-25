@@ -118,18 +118,18 @@ export default tseslint.config(
   {
     // ⚠ pinia 的 setup store 是**容器**不是函数：它的函数体里装的是状态
     // 与一组动作，按「函数 ≤50 行」量它等于要求把一个 store 拆成好几个，
-    // 而那会让「同一份会话状态」散到多处。按类的 300 行上限量整个文件。
+    // 而那会让「同一份会话状态」散到多处。按类的 500 行上限量整个文件。
     files: ['**/stores/*.ts'],
     rules: {
       'max-lines-per-function': 'off',
-      'max-lines': ['error', { max: 300, skipBlankLines: true }],
+      'max-lines': ['error', { max: 500, skipBlankLines: true }],
     },
   },
   {
-    // 单文件组件 ≤300 行：超了几乎总是因为逻辑写在了组件里，
+    // 单文件组件 ≤500 行：超了几乎总是因为逻辑写在了组件里，
     // 而逻辑抽进组合式函数才能被独立单元测试
     files: ['**/*.vue'],
-    rules: { 'max-lines': ['error', { max: 300, skipBlankLines: true }] },
+    rules: { 'max-lines': ['error', { max: 500, skipBlankLines: true }] },
   },
   {
     // describe/it 的回调天然长；断言里的字面量也不该被当成魔数

@@ -1,7 +1,7 @@
 /**
  * @fileoverview 素材库页的交互编排：切类型、搜索防抖、开详情。
  *
- * 从 `index.vue` 抽出来是为了把那一份单文件组件压回 300 行的闸；库状态本身在
+ * 从 `index.vue` 抽出来是为了让那份单文件组件只剩呈现；库状态本身在
  * `features/assets/useAssetLibrary.ts`，纯呈现派生在 `assetsView.ts`，
  * 按一下就发生一件事的那几个动作在 `assetsActions.ts`。
  */

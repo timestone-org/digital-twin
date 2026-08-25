@@ -823,7 +823,7 @@ URL 形状受 `scripts/gates/check_api_contract.py` 管，三条会真的把人�
   也不能反过来承诺后台在采而实际没采。
 - 开关的措辞一律由三个总开关的**真实有效值**决定，**不许写死**。
 
-### 7.10 组件切分（本仓 SFC ≤300 行）
+### 7.10 组件切分（本仓 SFC ≤500 行）
 
 参考实现的 `detail.vue` 是 1076 行、`ColumnFormDialog.vue` 627 行、`RecordTable.vue` 560 行，
 在本仓一律超限。切法：

@@ -40,7 +40,7 @@ web/packages/modules/src/modules/metric-card/
 └── MetricCell.vue   一格：名称、读数、单位、状态点、更新时刻
 ```
 
-拆成四个文件不是洁癖，是闸门：单文件组件 ≤300 行
+拆成四个文件不是洁癖，是闸门：单文件组件 ≤500 行
 （[code-style-typescript](agents/code-style-typescript.md) §3）。
 更重要的是 `metrics.ts` 里全是纯函数，能被独立单测——
 四档状态与阈值边界这类逻辑，挂载组件去测既慢又看不清断的是哪一条。

@@ -318,7 +318,7 @@ ORDER BY bucket_ts ASC
   `meta.permissions = [acView]`。它是详情页、**不进 `NAV_ITEMS`**，靠 `AppShell`
   的 `backTo` 回台账。
 - 台账页 `pages/Hvac/Units/`：行操作加「查看数据」，另加一个「数据与达标」弹窗
-  （绑定 + 上下限）。⚠ `index.vue` 已 208 行，SFC 上限 300 行，新逻辑一律放
+  （绑定 + 上下限）。⚠ `index.vue` 已 208 行，SFC 上限 500 行，新逻辑一律放
   page-private 组件与 composable。
 - 取数竞态：时间段切换是
   [code-style-typescript §7.1](agents/code-style-typescript.md) 点名的快速切换场景，
