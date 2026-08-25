@@ -26,6 +26,7 @@ from ai_assistant.apps.chat.crud import session_crud
 from ai_assistant.apps.chat.models import ChatMessage, ChatStep
 from ai_assistant.apps.chat.services import history
 from ai_assistant.apps.chat.services.prompt import build_system_prompt
+from ai_assistant.apps.chat.services.server_tools import ServerTools
 from ai_assistant.apps.chat.services.tool_specs import TOOL_SPECS
 from ai_assistant.apps.chat.services.turn import (
     ServerToolRunner,
@@ -55,17 +56,20 @@ class AdvanceDeps:
     server_tools: ServerToolRunner
 
 
-def deps_of(container: Container) -> AdvanceDeps:
+def deps_of(container: Container, headers: dict[str, str]) -> AdvanceDeps:
     """从容器取出这几样；没接模型就抛。
 
-    Args: container。
+    ⚠ `headers` 是这一次调用要转发给 platform 的身份头，**每请求一份**。
+    做成进程级的话，两个用户的请求会互相借用对方的身份。
+
+    Args: container, headers。
     """
     if container.model is None:
         raise ModelDisabled("本部署没有接模型")
     return AdvanceDeps(
         sessions=container.database.session,
         model=container.model,
-        server_tools=container.server_tools,
+        server_tools=ServerTools(platform=container.platform, headers=headers),
     )
 
 

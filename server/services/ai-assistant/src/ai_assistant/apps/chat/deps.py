@@ -9,7 +9,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from pydantic import BaseModel
 
 from ai_assistant.apps.chat.catalog import ASSISTANT_USE
@@ -23,6 +23,7 @@ from ai_assistant.deps import (
     get_idempotency_key,
     require,
 )
+from ai_assistant.upstream import caller_headers
 from lib.auth import CallerContext
 from lib.idempotency import IdempotencyStore
 
@@ -76,6 +77,7 @@ def get_write_context(
 
 
 def get_advance_deps(
+    request: Request,
     container: Annotated[Container, Depends(get_container)],
 ) -> AdvanceDeps:
     """推进一个回合要的那几样。
@@ -83,6 +85,9 @@ def get_advance_deps(
     ⚠ 做成依赖而不是在路由里现取：用例要把会话工厂换成自己那条回滚连接，
     不然跑一遍回合就在库里留下真数据；模型也要换成假件，不然用例会打网络。
 
-    Args: container。
+    ⚠ 身份头从**入站请求**上原样取走：助手代表用户去调 platform，而那一侧按
+    用户自己的权限码判定——助手因此不是绕过权限的通道。
+
+    Args: request, container。
     """
-    return deps_of(container)
+    return deps_of(container, caller_headers(request.headers))
