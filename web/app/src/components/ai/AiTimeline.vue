@@ -107,37 +107,65 @@ watch(
   font-size: 0.75rem;
 }
 
+/* 一条竖直轨道，助手做的每一件事都挂在它上面。⚠ 轨道靠伪元素画在列表背后，
+   不是给每一项加左边框：加边框的话，两项之间的 gap 会把这条线切成一段一段。 */
 .ai-stream__list {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
   margin: 0;
-  padding: 0;
+  padding: 0 0 0 0.875rem;
   list-style: none;
 }
 
+.ai-stream__list::before {
+  content: '';
+  position: absolute;
+  top: 0.375rem;
+  bottom: 0.375rem;
+  left: 0.1875rem;
+  width: 1px;
+  background: var(--ai-rail);
+}
+
 .ai-said {
+  position: relative;
   max-width: 92%;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--border-subtle);
+  padding: 0.375rem 0.5rem;
   border-radius: var(--radius-md);
-  background: var(--surface-sunken);
   color: var(--text-primary);
   font-size: 0.875rem;
   line-height: 1.6;
   word-break: break-word;
 }
 
-/* 自己说的那条：右对齐 + 一道左侧强调边。⚠ 不靠背景色区分——
-   `--surface-raised` 只有 15% 不透明度，在深色底上与助手那条几乎一个样，
-   而「谁说的」是这个面板最要紧的一件事。 */
+/* 助手说的话不装在框里：一段回答常有好几屏，套上框之后读起来像一张张卡片，
+   而它本来就是连续的一段话。轨道上一个小圆点标出它从哪开始。 */
+.ai-said::before {
+  content: '';
+  position: absolute;
+  top: 0.75rem;
+  left: -0.8125rem;
+  width: 0.3125rem;
+  height: 0.3125rem;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  box-shadow: 0 0 8px var(--fx-glow-title);
+}
+
+/* 自己说的那条：右对齐 + 紫色渐变实心。⚠ 「谁说的」是这个面板最要紧的一件事，
+   所以两侧不共享任何一种底色——助手那边是透明的，这边是实的。 */
 .ai-said--mine {
   align-self: flex-end;
-  border-color: var(--border-strong);
-  border-left: 2px solid var(--accent-primary);
-  background: var(--surface-raised);
-  color: var(--text-title);
+  padding: 0.5rem 0.75rem;
+  background: var(--ai-grad-user);
+  box-shadow: 0 6px 18px -8px rgba(var(--accent-primary-rgb), 0.7);
   white-space: pre-wrap;
+}
+
+.ai-said--mine::before {
+  display: none;
 }
 
 /* 还在逐字长的那一条：末尾一个呼吸的小方块，让「它还在说」看得见 */
@@ -161,10 +189,15 @@ watch(
 
 .ai-said--bad {
   max-width: 100%;
-  background: transparent;
-  border-color: var(--state-danger);
+  border: 1px solid var(--state-danger);
+  background: rgba(var(--state-danger-rgb), 0.08);
   color: var(--state-danger);
   white-space: pre-wrap;
+}
+
+.ai-said--bad::before {
+  background: var(--state-danger);
+  box-shadow: none;
 }
 
 @keyframes ai-caret {

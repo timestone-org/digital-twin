@@ -147,18 +147,32 @@ async function attach(files: File[]): Promise<void> {
 }
 
 .ai-panel__bar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--border-default);
   /* 标题栏压一层更实的底，滚动内容从它下面过时不会糊在一起 */
   background: var(--surface-raised);
+}
+
+/* 底边那条发光细线。⚠ 用伪元素而不是 border-bottom：border 只能是实色，
+   而这条要中间亮两头淡，才不至于把面板横切成两段。 */
+.ai-panel__bar::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: var(--ai-grad-edge);
 }
 
 .ai-panel__name {
   color: var(--text-title);
   font-weight: 600;
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 12px var(--fx-glow-title);
 }
 
 .ai-panel__where {
@@ -181,12 +195,23 @@ async function attach(files: File[]): Promise<void> {
 }
 
 .ai-panel__compose {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem;
-  border-top: 1px solid var(--border-default);
   background: var(--surface-raised);
+}
+
+/* 与标题栏同款的发光细线，摆在上沿 */
+.ai-panel__compose::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--ai-grad-edge);
 }
 
 .ai-panel__hint {

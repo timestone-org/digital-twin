@@ -29,7 +29,7 @@ const isWide = ref(false)
 
 <template>
   <PermGuard :codes="[PERMISSION_CODES.assistantUse]">
-    <div v-if="ai.isAvailable.value" class="ai-dock">
+    <div v-if="ai.isAvailable.value" class="ai-dock ai-surface">
       <button
         v-if="!ai.isOpen.value"
         type="button"
@@ -64,6 +64,7 @@ const isWide = ref(false)
 /* 收起时的入口：机器人本体就是按钮。它自带不透明软壳与投影，
    在任意底色的画布上都立得住，不再另垫圆底——垫了反而像贴纸。 */
 .ai-dock__call {
+  position: relative;
   display: grid;
   place-items: center;
   padding: 0;
@@ -74,8 +75,33 @@ const isWide = ref(false)
   transition: transform 0.15s ease;
 }
 
+/* 一圈呼吸的紫色光晕。⚠ 铺在机器人**背后**（负 z）而不是描边：描边会跟着
+   按钮的方角走，而机器人本体是圆的，两个形状对不上。 */
+.ai-dock__call::before {
+  content: '';
+  position: absolute;
+  inset: -35%;
+  z-index: -1;
+  border-radius: 50%;
+  background: var(--ai-halo);
+  animation: ai-dock-halo 3.2s ease-in-out infinite;
+}
+
 .ai-dock__call:hover {
   transform: translateY(-2px);
+}
+
+@keyframes ai-dock-halo {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.94);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
 }
 
 .ai-dock__call:focus-visible {
@@ -86,14 +112,15 @@ const isWide = ref(false)
 .ai-dock__panel {
   width: min(26rem, calc(100vw - 2rem));
   height: min(34rem, calc(100vh - 6rem));
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: var(--fx-shadow-menu);
+  box-shadow: var(--ai-glow);
   /* ⚠ 这一层是整块面板的**不透明底**。面板自己用的是 `--surface-panel`
-     （40% 透明）——那是给「页面里的面板」定的，底下永远压着应用自己的深色背景。
-     助手是浮在画布上的，不垫一层不透明底，画布会直接透上来把字压没。 */
-  background: var(--surface-base);
+     （半透明）——那是给「页面里的面板」定的，底下永远压着应用自己的深色背景。
+     助手是浮在画布上的，不垫一层不透明底，画布会直接透上来把字压没。
+     渐变的最后一层就是那块不透明底，两束紫光叠在它上面。 */
+  background: var(--ai-grad-panel);
 }
 
 .ai-dock__panel.is-wide {
@@ -108,6 +135,10 @@ const isWide = ref(false)
 
   .ai-dock__call:hover {
     transform: none;
+  }
+
+  .ai-dock__call::before {
+    animation: none;
   }
 }
 </style>
