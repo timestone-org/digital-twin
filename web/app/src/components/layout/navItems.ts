@@ -167,6 +167,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
         to: '/system/api-keys',
         permission: [PERMISSION_CODES.userView],
       },
+      {
+        key: 'assistant',
+        label: '助手模型',
+        icon: 'sparkles',
+        to: '/system/assistant',
+        permission: [PERMISSION_CODES.assistantManage],
+      },
     ],
   },
 ]

@@ -9,14 +9,17 @@
  * 把它们与一次对话接起来。
  */
 import { computed, ref } from 'vue'
+import type { AssistantModelProfile } from '@dt/contracts'
 import { DtButton, DtFilePicker, DtNotice, DtSpinner, DtTextarea } from '@dt/ui'
 
 import { parseAttachment } from '@/api/assistant'
 import AiCoreIcon from '@/components/ai/AiCoreIcon.vue'
+import AiModelPicker from '@/components/ai/AiModelPicker.vue'
 import AiPlanCard from '@/components/ai/AiPlanCard.vue'
 import AiTimeline from '@/components/ai/AiTimeline.vue'
 import { toBase64 } from '@/features/ai/attachment'
 import type { AiConversation } from '@/composables/useAiConversation'
+import type { ModelChoice } from '@/composables/useAiPanel'
 
 const props = defineProps<{
   /**
@@ -29,9 +32,17 @@ const props = defineProps<{
   hint?: string
   /** 面板此刻是不是放大着。宽窄由外面的 dock 管，这里只画那个按钮。 */
   isWide?: boolean
+  /** 这套部署接了哪几路模型。只有一路时下拉整个不渲染。 */
+  models?: readonly AssistantModelProfile[]
+  /** 这个会话选了哪一路。 */
+  choice?: ModelChoice
 }>()
 
-const emit = defineEmits<{ close: []; 'toggle-wide': [] }>()
+const emit = defineEmits<{
+  close: []
+  'toggle-wide': []
+  pick: [value: ModelChoice]
+}>()
 
 const draft = ref('')
 
@@ -80,6 +91,12 @@ async function attach(files: File[]): Promise<void> {
       <AiCoreIcon :size="20" />
       <span class="ai-panel__name">助手</span>
       <span class="ai-panel__where">{{ surfaceLabel }}</span>
+      <AiModelPicker
+        v-if="models !== undefined && choice !== undefined"
+        :models="models"
+        :choice="choice"
+        @pick="(value) => emit('pick', value)"
+      />
       <DtButton
         variant="ghost"
         size="xs"

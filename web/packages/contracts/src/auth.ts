@@ -40,6 +40,9 @@ export const PERMISSION_CODES = {
   // 台账列，爆炸半径比改单张表的一列大一个量级（docs/DATASET_DESIGN.md §9）
   formulaManage: 'formula:manage',
   assistantUse: 'assistant:use',
+  // ⚠ 比 use 严一档：模型账号是**整套部署共用的一份**，换掉它等于替所有人
+  // 换了说话的账号
+  assistantManage: 'assistant:manage',
 } as const
 
 export type PermissionCode =

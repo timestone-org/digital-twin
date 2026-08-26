@@ -45,6 +45,9 @@ const isWide = ref(false)
           :surface-label="surfaceLabel"
           :hint="hint"
           :is-wide="isWide"
+          :models="ai.models.value"
+          :choice="ai.choice.value"
+          @pick="(value) => void ai.pickModel(value)"
           @toggle-wide="isWide = !isWide"
           @close="ai.close"
         />

@@ -342,6 +342,16 @@ export const routes: RouteRecordRaw[] = [
     },
   },
   {
+    // 管的是整套部署共用的那一份模型凭据，故比 assistant:use 严一档
+    path: '/system/assistant',
+    name: 'system-assistant',
+    component: () => import('@/pages/System/Assistant/index.vue'),
+    meta: {
+      title: '助手模型',
+      permissions: [PERMISSION_CODES.assistantManage],
+    },
+  },
+  {
     path: '/forbidden',
     name: 'forbidden',
     component: () => import('@/pages/Forbidden/index.vue'),

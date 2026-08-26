@@ -12,8 +12,9 @@
  * ⚠ 对话放在这里而不是面板组件里：面板收起就卸载，对话不能跟着没。
  */
 import { onMounted, onUnmounted, ref, type Ref } from 'vue'
+import type { AssistantModelProfile } from '@dt/contracts'
 
-import { createSession, readSession } from '@/api/assistant'
+import { createSession, patchSession, readSession } from '@/api/assistant'
 import {
   useAiConversation,
   type AiConversation,
@@ -29,9 +30,21 @@ export interface AiPanelOptions {
   refId: () => string | null
 }
 
+/** 面板上那个下拉此刻选中的东西。 */
+export interface ModelChoice {
+  profile: string
+  effort: string
+}
+
 export interface AiPanel {
   /** 这套部署到底有没有助手。为假时入口不出现。 */
   isAvailable: Ref<boolean>
+  /** 这套部署接了哪几路模型。空 = 不摆那个下拉。 */
+  models: Ref<AssistantModelProfile[]>
+  /** 这个会话选了哪一路。 */
+  choice: Ref<ModelChoice>
+  /** 换一路模型。⚠ 落到会话上，不是只改这一屏。 */
+  pickModel: (next: ModelChoice) => Promise<void>
   isOpen: Ref<boolean>
   sessionId: Ref<string | null>
   /** 这一页的那段对话。开合面板不动它，历史与计划都留在这。 */
@@ -44,6 +57,8 @@ export interface AiPanel {
 /** 把一个页面接进助手。 */
 export function useAiPanel(options: AiPanelOptions): AiPanel {
   const isAvailable = ref(false)
+  const models = ref<AssistantModelProfile[]>([])
+  const choice = ref<ModelChoice>({ profile: '', effort: '' })
   const isOpen = ref(false)
   const sessionId = ref<string | null>(null)
   let opening = false
@@ -63,7 +78,7 @@ export function useAiPanel(options: AiPanelOptions): AiPanel {
   })
 
   onMounted(() => {
-    void probeInto(isAvailable)
+    void probeInto({ isAvailable, models, choice })
   })
 
   async function open(): Promise<void> {
@@ -86,6 +101,9 @@ export function useAiPanel(options: AiPanelOptions): AiPanel {
 
   return {
     isAvailable,
+    models,
+    choice,
+    pickModel: (next) => picked(next, choice, sessionId),
     isOpen,
     sessionId,
     chat,
@@ -96,12 +114,43 @@ export function useAiPanel(options: AiPanelOptions): AiPanel {
   }
 }
 
-/** 探一次能力，把「有没有助手」写进给定的开关。 */
-async function probeInto(isAvailable: Ref<boolean>): Promise<void> {
+/** 探一次能力：有没有助手、接了哪几路模型。 */
+async function probeInto(into: {
+  isAvailable: Ref<boolean>
+  models: Ref<AssistantModelProfile[]>
+  choice: Ref<ModelChoice>
+}): Promise<void> {
   const ask = aiPorts()?.probe
   if (ask === undefined) return
   const capability = await ask()
-  isAvailable.value = capability?.is_model_enabled === true
+  into.isAvailable.value = capability?.is_model_enabled === true
+  into.models.value = capability?.models ?? []
+  // ⚠ 只在还没选过时填默认：填过头会把用户在别的标签页里换的那一路盖回去
+  if (into.choice.value.profile === '') {
+    into.choice.value = {
+      profile: capability?.default_model_id ?? '',
+      effort: '',
+    }
+  }
+}
+
+/**
+ * 换一路模型。
+ * ⚠ 写回**会话**而不是只改这一屏：工具回填那几次推进是循环自己发的，
+ * 那时界面手上没有用户的选择。
+ */
+async function picked(
+  next: ModelChoice,
+  choice: Ref<ModelChoice>,
+  sessionId: Ref<string | null>,
+): Promise<void> {
+  choice.value = next
+  const id = sessionId.value
+  if (id === null) return
+  await patchSession(id, {
+    model_profile: next.profile,
+    ...(next.effort === '' ? {} : { reasoning_effort: next.effort }),
+  })
 }
 
 /**

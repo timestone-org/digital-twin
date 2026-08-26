@@ -25,6 +25,8 @@ function detailOf(text: string): AssistantSessionDetail {
     is_archived: false,
     row_version: 1,
     last_error: null,
+    model_profile: null,
+    reasoning_effort: null,
     created_at: '',
     updated_at: '',
     messages: [

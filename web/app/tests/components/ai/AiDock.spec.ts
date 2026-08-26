@@ -31,6 +31,9 @@ function fakeAi(open = false, available = true): AiPanel {
   const isOpen = ref<boolean>(open)
   return {
     isAvailable: ref<boolean>(available),
+    models: ref([]),
+    choice: ref({ profile: '', effort: '' }),
+    pickModel: vi.fn(() => Promise.resolve()),
     isOpen,
     sessionId: ref<string | null>(null),
     chat: fakeChat(),

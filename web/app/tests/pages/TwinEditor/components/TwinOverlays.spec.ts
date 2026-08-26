@@ -58,6 +58,9 @@ function chat(): AiConversation {
 function panel(isAvailable: boolean): AiPanel {
   return {
     isAvailable: ref(isAvailable),
+    models: ref([]),
+    choice: ref({ profile: '', effort: '' }),
+    pickModel: vi.fn(() => Promise.resolve()),
     isOpen: ref(false),
     sessionId: ref<string | null>(null),
     chat: chat(),

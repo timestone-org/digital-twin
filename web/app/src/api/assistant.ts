@@ -8,6 +8,9 @@
  */
 import type {
   AssistantCapability,
+  AssistantCredentialStatus,
+  AssistantDeviceLoginPoll,
+  AssistantDeviceLoginStart,
   AssistantParsedTable,
   AssistantSession,
   AssistantSessionDetail,
@@ -74,6 +77,77 @@ export async function readSession(
   return request<AssistantSessionDetail>(
     `/sessions/${sessionId}`,
     onAssistant({ signal }),
+  )
+}
+
+/**
+ * 改会话：标题、归档，或换一路模型。
+ * ⚠ 换模型落在**会话**上而不是每次推进带：工具回填那几次是循环自己发的，
+ * 那时界面手上没有用户的选择。
+ * @param sessionId 会话 id
+ * @param patch 只带要改的那几格
+ */
+export async function patchSession(
+  sessionId: string,
+  patch: {
+    title?: string
+    is_archived?: boolean
+    model_profile?: string
+    reasoning_effort?: string
+  },
+): Promise<AssistantSession | null> {
+  return request<AssistantSession>(
+    `/sessions/${sessionId}`,
+    onAssistant({ method: 'PATCH', body: patch }),
+  )
+}
+
+/** 读一路模型账号的登录态。⚠ 回来的东西里没有令牌，也永远不该有。 */
+export async function readCredential(
+  provider: string,
+  signal?: AbortSignal,
+): Promise<AssistantCredentialStatus | null> {
+  return request<AssistantCredentialStatus>(
+    `/credentials/${provider}`,
+    onAssistant({ signal }),
+  )
+}
+
+/** 开一次设备码登录：拿用户码与验证地址。 */
+export async function startDeviceLogin(
+  provider: string,
+  key: string = newIdempotencyKey(),
+): Promise<AssistantDeviceLoginStart> {
+  return requestData<AssistantDeviceLoginStart>(
+    `/credentials/${provider}:start-login`,
+    onAssistant({ method: 'POST', headers: { 'Idempotency-Key': key } }),
+  )
+}
+
+/**
+ * 问一次「用户点完了没」。
+ * ⚠ 下一次要隔多久由**返回值**说了算：上游让慢下来时它会变大，照原间隔接着
+ * 打的话，被限流的是整台机器而不只是这一次登录。
+ * @param provider 哪一路
+ * @param ref 这次登录的句柄
+ * @param signal 中止信号
+ */
+export async function pollDeviceLogin(
+  provider: string,
+  ref: string,
+  signal?: AbortSignal,
+): Promise<AssistantDeviceLoginPoll> {
+  return requestData<AssistantDeviceLoginPoll>(
+    `/credentials/${provider}:poll-login`,
+    onAssistant({ method: 'POST', body: { ref }, signal }),
+  )
+}
+
+/** 退出模型账号。⚠ 整套部署共用一份，退的是所有人的。 */
+export async function forgetCredential(provider: string): Promise<void> {
+  await request<null>(
+    `/credentials/${provider}`,
+    onAssistant({ method: 'DELETE' }),
   )
 }
 

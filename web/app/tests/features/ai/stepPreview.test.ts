@@ -37,6 +37,14 @@ describe('入参摊平', () => {
     expect(value).toContain('已截断')
   })
 
+  it('展不开的值说一句话，不让整张卡片空着', () => {
+    // 客户端工具的产出是页面自己造的对象，循环引用不是不可能
+    const looped: Record<string, unknown> = {}
+    looped.self = looped
+    const flat = inputPreview({ node: looped })
+    expect(flat?.node).toContain('展不开')
+  })
+
   it('键太多时多出来的被数出来，不是悄悄没了', () => {
     const given: Record<string, number> = {}
     for (let at = 0; at < MAX_KEYS + 3; at += 1) given[`k${at}`] = at
