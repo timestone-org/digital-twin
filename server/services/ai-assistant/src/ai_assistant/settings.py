@@ -32,6 +32,8 @@ MAX_TOOL_RESULT_CHARS = 20_000
 # 一张截图 base64 之后的字符数上限，约合 3 MB 原图。⚠ 有上限：一张没缩过的整屏
 # PNG 能有十几兆，而那时倒下的不只是这一个请求
 MAX_IMAGE_CHARS = 4_000_000
+# 推理档位的闭合集合
+REASONING_EFFORTS = ("low", "medium", "high", "xhigh")
 
 
 def _parsed_object(given: str) -> dict[str, Any] | None:
@@ -134,9 +136,34 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     model_breaker_failures: int = Field(default=5, ge=1)
     model_breaker_reset_s: float = Field(default=30.0, gt=0)
 
+    # 第二条模型来路：用 ChatGPT 订阅直连 Codex 后端，而不是按 token 付费的
+    # API Key。⚠ 默认关着，且与上面那条**并存**——两边都配好时由会话自己选。
+    # ⚠ 这条路走的是未公开接口，供应商随时可能改；它同时要求部署方自己确认
+    # 账号与订阅条款允许这么用（上游库自己也把这套标成 experimental）
+    codex_enabled: bool = False
+    # 走这条路时用哪个模型。⚠ 无默认值：模型代号随供应商发版变，写死一个
+    # 我们没验证过的名字，表现是每次对话都撞一条 404，而那与「这一格没填」
+    # 看起来毫无关系
+    codex_model: str = ""
+    # 面板上还能选哪几个，逗号分隔；留空就只有上面那一个
+    codex_models: str = ""
+    # 推理档位。⚠ 闭合集合，配错了不许起——端点对不认识的档位回 400，
+    # 而那条 400 里不会提到是哪一格配错了
+    codex_reasoning_effort: str = "medium"
+    # 模型账号令牌的加密密钥（Fernet 密钥由它派生）。⚠ 密钥类无默认值；
+    # 开了 codex 却没配它 = 启动即失败，见 `_codex_needs_a_credential_secret`
+    credential_secret: SecretStr | None = None
+
     # platform 的内部面地址。助手是纯消费方，业务数据一律经它拿
     platform_base_url: str = "http://platform-server:8005"
     platform_timeout_s: float = Field(default=5.0, gt=0)
+
+    def codex_model_choices(self) -> tuple[str, ...]:
+        """面板上可选的模型代号，第一个是默认。"""
+        listed = [one.strip() for one in self.codex_models.split(",")]
+        names = [self.codex_model, *listed]
+        # 去重且保序：写重了只是配置手滑，不该让下拉里出现两个一样的
+        return tuple(dict.fromkeys(one for one in names if one))
 
     def extra_body(self) -> dict[str, Any] | None:
         """透传给端点的额外请求体；没配就是 `None`。"""
@@ -173,5 +200,42 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
         if self.model_enabled and not _has_secret(self.model_api_key):
             raise ValueError(
                 "ASSISTANT_MODEL_ENABLED 为真时必须配 ASSISTANT_MODEL_API_KEY"
+            )
+        return self
+
+    @field_validator("codex_reasoning_effort")
+    @classmethod
+    def _effort_must_be_known(cls, given: str) -> str:
+        """推理档位是闭合集合，配错了不许起。
+
+        ⚠ 留到第一次对话才发现的话，报出来的是端点的一条 400，
+        而那条 400 里不会提到是哪一格配错了。
+
+        Args: given。
+        """
+        if given not in REASONING_EFFORTS:
+            allowed = "/".join(REASONING_EFFORTS)
+            raise ValueError(
+                f"ASSISTANT_CODEX_REASONING_EFFORT 只能是 {allowed}"
+            )
+        return given
+
+    @model_validator(mode="after")
+    def _codex_needs_a_model_and_a_secret(self) -> Self:
+        """开着 codex 却没配模型代号或加密密钥——启动即失败。
+
+        ⚠ 两样都留到第一次用才发现的话：没配模型代号是一条 404，
+        没配密钥是「登录成功了但令牌存不进去」——两种现象都指不回这里。
+        """
+        if not self.codex_enabled:
+            return self
+        if not self.codex_model.strip():
+            raise ValueError(
+                "ASSISTANT_CODEX_ENABLED 为真时必须配 ASSISTANT_CODEX_MODEL"
+            )
+        if not _has_secret(self.credential_secret):
+            raise ValueError(
+                "ASSISTANT_CODEX_ENABLED 为真时必须配 "
+                "ASSISTANT_CREDENTIAL_SECRET"
             )
         return self

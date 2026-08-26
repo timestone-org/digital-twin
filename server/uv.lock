@@ -42,7 +42,7 @@ dependencies = [
     { name = "httpx" },
     { name = "langchain-openai" },
     { name = "langgraph" },
-    { name = "lib", extra = ["auth", "db", "redis", "web"] },
+    { name = "lib", extra = ["auth", "crypto", "db", "redis", "web"] },
     { name = "openai" },
     { name = "openpyxl" },
 ]
@@ -52,7 +52,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28" },
     { name = "langchain-openai", specifier = ">=1.6" },
     { name = "langgraph", specifier = ">=1.2" },
-    { name = "lib", extras = ["auth", "db", "redis", "web"], editable = "lib" },
+    { name = "lib", extras = ["auth", "crypto", "db", "redis", "web"], editable = "lib" },
     { name = "openai", specifier = ">=3.3" },
     { name = "openpyxl", specifier = ">=3.1" },
 ]
@@ -1315,6 +1315,9 @@ auth = [
     { name = "argon2-cffi" },
     { name = "pyjwt" },
 ]
+crypto = [
+    { name = "cryptography" },
+]
 db = [
     { name = "alembic" },
     { name = "asyncpg" },
@@ -1341,6 +1344,7 @@ requires-dist = [
     { name = "argon2-cffi", marker = "extra == 'auth'", specifier = ">=23.1" },
     { name = "asyncpg", marker = "extra == 'db'", specifier = ">=0.30" },
     { name = "boto3", marker = "extra == 's3'", specifier = ">=1.35" },
+    { name = "cryptography", marker = "extra == 'crypto'", specifier = ">=43" },
     { name = "fastapi", marker = "extra == 'web'", specifier = ">=0.115" },
     { name = "greenlet", marker = "extra == 'db'", specifier = ">=3.1" },
     { name = "pydantic", specifier = ">=2.9" },
@@ -1351,7 +1355,7 @@ requires-dist = [
     { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'db'", specifier = ">=2.0" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'web'", specifier = ">=0.32" },
 ]
-provides-extras = ["db", "mssql", "redis", "s3", "web", "auth"]
+provides-extras = ["db", "crypto", "mssql", "redis", "s3", "web", "auth"]
 
 [[package]]
 name = "mako"

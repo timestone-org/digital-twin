@@ -10,12 +10,15 @@ from alembic import context
 from sqlalchemy import Connection, pool, text
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from ai_assistant.apps.chat.models import Base
+from ai_assistant.apps.chat.models import Base as ChatBase
+from ai_assistant.apps.credential.models import Base as CredentialBase
 from ai_assistant.settings import DB_SCHEMA, MigrationSettings
 from lib.config import load_settings_or_exit
 
 config = context.config
-target_metadata = Base.metadata
+# ⚠ 每个 apps/<feature> 各有一个声明基类，故元数据是一组而不是一份：
+# 漏登记一个，那个模块的表在 autogenerate 眼里就是「该删掉的多余表」
+target_metadata = [ChatBase.metadata, CredentialBase.metadata]
 
 _settings = load_settings_or_exit(MigrationSettings)
 
