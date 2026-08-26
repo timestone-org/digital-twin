@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent, h, nextTick, ref } from 'vue'
 
-import { useUnsavedGuard } from '@/pages/TwinEditor/scripts/useUnsavedGuard'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 
 // ⚠ 监听挂在全局 window 上，用例之间会互相串门：挂了不拆的话，第一条用例
 // 留下的那个拦截器会让后面每一条都「拦住了」

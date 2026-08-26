@@ -38,7 +38,7 @@ import { useBulkParts } from './scripts/useBulkParts'
 import { useGizmoMode } from './scripts/useGizmoMode'
 import { useTwinAi } from './scripts/useTwinAi'
 import { useTwinEditorPage } from './scripts/useTwinEditorPage'
-import { useUnsavedGuard } from './scripts/useUnsavedGuard'
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 
 // ⚠ 子编辑器也要装：直接刷新到这条路由时大屏那三页一个都没跑过，
 // 不装的话模型地址解析恒回空串，画面上是一句「模型地址解析失败」
