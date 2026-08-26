@@ -1,29 +1,20 @@
 {
-  "name": "@dt/modules",
+  "name": "@dt/twin2d",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
-  "scripts": {
-    "typecheck": "vue-tsc --noEmit -p tsconfig.json"
-  },
   "dependencies": {
     "@dt/contracts": "workspace:*",
-    "@dt/three-core": "workspace:*",
-    "@dt/tokens": "workspace:*",
-    "@dt/twin-config": "workspace:*",
-    "@dt/twin2d": "workspace:*",
-    "@dt/ui": "workspace:*",
-    "echarts": "^6.1.0"
+    "@dt/ui": "workspace:*"
   },
   "peerDependencies": {
     "vue": "^3.5.0"
   },
   "devDependencies": {
     "typescript": "~5.7.2",
-    "vite": "^6.0.7",
     "vue": "^3.5.13",
     "vue-tsc": "^2.2.0"
   }
