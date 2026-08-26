@@ -3,7 +3,7 @@
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import Select, func, select, tuple_
+from sqlalchemy import Select, delete, func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import CrudBase
@@ -38,6 +38,37 @@ class PointCrud(CrudBase[CollectPoint]):
             select(CollectPoint).order_by(*DEFAULT_ORDER)
         )
         return list(rows.scalars().all())
+
+    async def list_by_ids(
+        self, session: AsyncSession, point_ids: Sequence[uuid.UUID]
+    ) -> list[CollectPoint]:
+        """按主键取这一批点位，顺序同列表面。
+
+        Args: session, point_ids。
+        """
+        if not point_ids:
+            return []
+        rows = await session.execute(
+            select(CollectPoint)
+            .where(CollectPoint.id.in_(list(point_ids)))
+            .order_by(*DEFAULT_ORDER)
+        )
+        return list(rows.scalars().all())
+
+    async def delete_many(
+        self, session: AsyncSession, point_ids: Sequence[uuid.UUID]
+    ) -> None:
+        """一条语句删掉这一批。
+
+        ⚠ 不逐条 `session.delete`：那是 N 次往返，而这张表没有 ORM 关系要跟着
+        级联，一条 `IN` 删完即可。
+        Args: session, point_ids。
+        """
+        if not point_ids:
+            return
+        await session.execute(
+            delete(CollectPoint).where(CollectPoint.id.in_(list(point_ids)))
+        )
 
     async def taken_codes(
         self, session: AsyncSession, source_id: uuid.UUID, codes: Sequence[str]

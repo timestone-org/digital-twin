@@ -503,8 +503,8 @@ def test_the_collect_face_was_actually_covered() -> None:
         for path, method in ROUTE_CASES
         if collect_expectation(path, method) is not None
     ]
-    # 15 条配置/动作面 + 3 条采集运行参数面
-    assert len(covered) == 18
+    # 16 条配置/动作面 + 3 条采集运行参数面
+    assert len(covered) == 19
 
 
 def test_every_field_action_still_points_at_a_live_route() -> None:

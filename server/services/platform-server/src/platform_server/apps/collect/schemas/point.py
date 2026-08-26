@@ -19,6 +19,8 @@ from platform_server.apps.collect.schemas.common import (
 # 一次批量建点的上限。⚠ 有上限不是为了省内存，是因为整批要在一次寻址串校验
 # 的往返里带过去，太长会把那次往返拖过预算
 MAX_BATCH = 200
+# 一次批量删点的上限。⚠ 与列表单页上限同值：界面上一次最多勾中一整页
+MAX_DELETE_BATCH = 200
 # 心跳归档的默认值：稳态段每分钟至少落一条，曲线才不会断
 DEFAULT_ARCHIVE_MAX_INTERVAL_MS = 60_000
 
@@ -106,6 +108,20 @@ class PointUpdateIn(UpdateModel):
     archive_enabled: bool | None = None
     archive_max_interval_ms: int | None = Field(default=None, gt=0)
     archive_retention_days: int | None = Field(default=None, gt=0)
+
+
+class PointDeleteIn(InputModel):
+    """批量删点。
+
+    ⚠ 整批要么全删要么全不删：部分成功之后，界面上剩下的那几条看着像「没勾
+    中」，而它们其实是被绑定守卫拦下来的——于是用户再勾一次、再删一次，
+    永远删不掉也永远看不出原因。
+    """
+
+    point_ids: list[uuid.UUID] = Field(
+        min_length=1, max_length=MAX_DELETE_BATCH
+    )
+    is_forced: bool = False
 
 
 class AddressCheckOut(OutputModel):
