@@ -18,6 +18,7 @@
     "@dt/three-core": "workspace:*",
     "@dt/tokens": "workspace:*",
     "@dt/twin-config": "workspace:*",
+    "@dt/twin2d": "workspace:*",
     "@dt/ui": "workspace:*",
     "html-to-image": "^1.11.13",
     "pinia": "^2.3.0",

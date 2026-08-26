@@ -83,6 +83,9 @@ importers:
       '@dt/twin-config':
         specifier: workspace:*
         version: link:../packages/twin-config
+      '@dt/twin2d':
+        specifier: workspace:*
+        version: link:../packages/twin2d
       '@dt/ui':
         specifier: workspace:*
         version: link:../packages/ui
