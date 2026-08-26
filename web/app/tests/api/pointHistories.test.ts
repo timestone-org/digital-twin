@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as client from '@/api/client'
 import {
+  fetchPointAggregate,
   fetchPointHistory,
   resolveWindow,
   windowToMs,
@@ -148,5 +149,55 @@ describe('取数', () => {
         NOW,
       ),
     ).rejects.toThrow('boom')
+  })
+})
+
+describe('分桶聚合', () => {
+  it('⚠ 一次请求带全部点位：拆成一个点位一次就是 N 条各自会失败的链路', async () => {
+    requestMock.mockResolvedValue({
+      items: [],
+      interval: '5m',
+      aggregate: 'avg',
+      timezone: 'Asia/Shanghai',
+      is_truncated: false,
+    })
+
+    await fetchPointAggregate({
+      nodeKeys: ['s1:temp', 's1:flow'],
+      fromMs: Date.parse('2026-08-14T11:00:00Z'),
+      toMs: NOW,
+      interval: '5m',
+      aggregate: 'max',
+    })
+
+    const [path, options] = lastCall()
+    expect(path).toBe('/point-histories:aggregate')
+    expect(options.method).toBe('POST')
+    // ⚠ 键名逐字锁住：写歪一个后端就是 422，而前端这边看不出哪里错了
+    expect(options.body).toEqual({
+      node_keys: ['s1:temp', 's1:flow'],
+      range_start: '2026-08-14T11:00:00.000Z',
+      range_end: '2026-08-14T12:00:00.000Z',
+      interval: '5m',
+      aggregate: 'max',
+    })
+  })
+
+  it('触顶如实带上来，不悄悄当成「就这么多」', async () => {
+    requestMock.mockResolvedValue({
+      items: [],
+      interval: '1s',
+      aggregate: 'avg',
+      timezone: 'UTC',
+      is_truncated: true,
+    })
+    const result = await fetchPointAggregate({
+      nodeKeys: ['s1:temp'],
+      fromMs: Date.parse('2026-08-14T11:00:00Z'),
+      toMs: NOW,
+      interval: '1s',
+      aggregate: 'avg',
+    })
+    expect(result.is_truncated).toBe(true)
   })
 })

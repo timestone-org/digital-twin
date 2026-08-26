@@ -14,11 +14,11 @@ import {
   type VueWrapper,
 } from '@vue/test-utils'
 import type {
+  CollectHistoryAggregate,
   CollectPoint,
   DatasetSeries,
   DatasetTable,
   DatasetTableSummary,
-  HistoryResult,
   Page,
 } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
@@ -122,17 +122,24 @@ function pointPage(items: CollectPoint[]): Page<CollectPoint> {
   return { items, total: items.length, page: 1, size: 50 }
 }
 
-function history(over: Partial<HistoryResult> = {}): HistoryResult {
+function aggregate(
+  over: Partial<CollectHistoryAggregate> = {},
+): CollectHistoryAggregate {
   return {
-    points: [{ t: Date.parse('2026-08-24T00:00:00.000Z'), v: 21 }],
-    isTruncated: false,
-    isStale: false,
+    items: [
+      {
+        node_key: 's1:p1',
+        bucket_start: '2026-08-24T00:00:00.000Z',
+        value: 21,
+        sample_count: 300,
+      },
+    ],
+    interval: '10m',
+    aggregate: 'avg',
+    timezone: 'Asia/Shanghai',
+    is_truncated: false,
     ...over,
   }
-}
-
-function series(over: Partial<DatasetSeries> = {}): DatasetSeries {
-  return { series: { power: [] }, is_truncated: false, limit: 5000, ...over }
 }
 
 /** 按 label 找到那一格控件的下拉触发器：一屏上不止一个下拉。 */
@@ -141,6 +148,10 @@ function triggerOf(wrapper: VueWrapper, label: string) {
     .findAll('.dt-field')
     .find((one) => one.text().includes(label))
   return field?.find('.dt-select__trigger')
+}
+
+function series(over: Partial<DatasetSeries> = {}): DatasetSeries {
+  return { series: { power: [] }, is_truncated: false, limit: 5000, ...over }
 }
 
 function signIn(codes: string[]): void {
@@ -157,7 +168,7 @@ beforeEach(() => {
   vi.spyOn(dataset, 'getDatasetTable').mockResolvedValue(detail('t1'))
   vi.spyOn(dataset, 'getDatasetSeries').mockResolvedValue(series())
   vi.spyOn(collect, 'listPoints').mockResolvedValue(pointPage([point()]))
-  vi.spyOn(histories, 'fetchPointHistory').mockResolvedValue(history())
+  vi.spyOn(histories, 'fetchPointAggregate').mockResolvedValue(aggregate())
 })
 
 enableAutoUnmount(afterEach)
@@ -281,21 +292,10 @@ describe('点位历史那一面', () => {
     expect(wrapper.text()).toContain('只列了前 50 个')
   })
 
-  it('清空一下取消全部勾选，图跟着回到空态', async () => {
-    signIn([PERMISSION_CODES.collectView])
-    const wrapper = await open()
-    await wrapper.get('input[type="checkbox"]').setValue(true)
-    await wrapper
-      .findAll('button')
-      .find((one) => one.text().includes('清空'))
-      ?.trigger('click')
-    expect(wrapper.text()).toContain('已选 0 / 8 条')
-  })
-
   it('一条都没勾时不发请求，也不画一张会被读成「没数据」的空图', async () => {
     signIn([PERMISSION_CODES.collectView])
     const wrapper = await open()
-    expect(vi.mocked(histories.fetchPointHistory)).not.toHaveBeenCalled()
+    expect(vi.mocked(histories.fetchPointAggregate)).not.toHaveBeenCalled()
     expect(wrapper.find('[data-test="chart"]').exists()).toBe(false)
   })
 
@@ -313,7 +313,7 @@ describe('点位历史那一面', () => {
 
   it('⚠ 取数失败时不画图：空图与「这段时间没采到数」长得一模一样', async () => {
     signIn([PERMISSION_CODES.collectView])
-    vi.mocked(histories.fetchPointHistory).mockRejectedValue(
+    vi.mocked(histories.fetchPointAggregate).mockRejectedValue(
       new BizError(40000, '归档库连不上', 503, 'trace'),
     )
     const wrapper = await open()
@@ -329,8 +329,8 @@ describe('点位历史那一面', () => {
 
   it('⚠ 触顶时说的是**更晚**那一段没画——与台账那一面正好相反', async () => {
     signIn([PERMISSION_CODES.collectView])
-    vi.mocked(histories.fetchPointHistory).mockResolvedValue(
-      history({ isTruncated: true }),
+    vi.mocked(histories.fetchPointAggregate).mockResolvedValue(
+      aggregate({ is_truncated: true }),
     )
     const wrapper = await open()
     await wrapper.get('input[type="checkbox"]').setValue(true)

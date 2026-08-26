@@ -79,9 +79,15 @@ class AggregateIn(InputModel):
 
 
 class AggregateOut(OutputModel):
-    """一次聚合的结果，回显它用的口径。"""
+    """一次聚合的结果，回显它用的口径。
+
+    ⚠ `is_truncated` 不是装饰：桶数上限拦的是「窗口除以桶宽算出几十万格」，
+    而被拦掉的那一截在图上就是曲线**到某处戛然而止**——不说破的话，那与
+    「那之后设备停了」长得一模一样（DATASET_DESIGN §6.2 的同一条口径）。
+    """
 
     items: list[AggregateBucketOut]
     interval: str
     aggregate: str
     timezone: str
+    is_truncated: bool = False

@@ -1,18 +1,16 @@
 /**
- * @fileoverview 点位历史这一面的两件纯活：把采集点位摊成勾选项，以及逐个点位
- * 取一段读数。与 Vue 无关，故单独一份。
+ * @fileoverview 点位历史这一面的三件纯活：把采集点位摊成勾选项、筛出「画得
+ * 出曲线」的那些、以及一次问一批点位的分桶读数。与 Vue 无关，故单独一份。
  */
 import type { CollectPoint, HistoryPoint } from '@dt/contracts'
 
-import { fetchPointHistory } from '@/api/pointHistories'
+import { fetchPointAggregate } from '@/api/pointHistories'
+import {
+  chooseTrendBucket,
+  withBucketGaps,
+  type TrendBucket,
+} from '@/features/trend/trendBucket'
 import type { TrendItem } from '@/features/trend/trendSeries'
-
-/**
- * 一个点位一次最多取多少个读数。
- * ⚠ 这个数要与截断提示里说的一致：`fetchPointHistory` 从窗口**起点**往后翻页，
- * 触顶时留下的是**最早**那一批，被砍掉的是更晚那一段。
- */
-export const POINT_TREND_LIMIT = 2000
 
 /**
  * 把一个采集点位摊成勾选项。
@@ -35,32 +33,61 @@ export function toTrendItem(point: CollectPoint): TrendItem {
 export interface OnePointReading {
   key: string
   points: HistoryPoint[]
+}
+
+/** 一次取数的全部结果：每个点位一条序列，加上这次真正用的桶宽。 */
+export interface PointReadings {
+  readings: OnePointReading[]
+  bucket: TrendBucket
+  /** 桶数触顶，更晚的那一段没取回来。 */
   isTruncated: boolean
 }
 
 /**
- * 逐个点位取一段读数。
- * ⚠ 任何一个失败整次就失败：半张图比没有图更难判读，而缺的那半在图上看不出来。
+ * 取一批点位在一段窗口上的分桶读数。
+ * ⚠ 一次请求问全部点位：逐个点位各发一次的话，8 个点位就是 8 条各自会失败的
+ * 链路，而半张图在界面上与「那几个点位没数据」长得一模一样。
+ * ⚠ 桶宽按窗口自己选，不让用户填：填得太细就是一条被截断的半截曲线，而截断
+ * 这件事只能事后解释。
  * @param wanted 已勾的点位
  * @param fromMs 窗口左端
  * @param toMs 窗口右端
+ * @param aggregate 折算档位
+ * @param signal 取消信号
  */
 export async function readPointReadings(
   wanted: readonly TrendItem[],
   fromMs: number,
   toMs: number,
-): Promise<OnePointReading[]> {
-  return await Promise.all(
-    wanted.map(async (item) => {
-      const result = await fetchPointHistory({
-        nodeKey: item.key,
-        range: { fromMs, toMs, limit: POINT_TREND_LIMIT },
-      })
-      return {
-        key: item.key,
-        points: result.points,
-        isTruncated: result.isTruncated,
-      }
-    }),
+  aggregate: string,
+  signal?: AbortSignal,
+): Promise<PointReadings> {
+  const bucket = chooseTrendBucket(toMs - fromMs)
+  const result = await fetchPointAggregate(
+    {
+      nodeKeys: wanted.map((item) => item.key),
+      fromMs,
+      toMs,
+      interval: bucket.value,
+      aggregate,
+    },
+    signal,
   )
+  const grouped = new Map<string, HistoryPoint[]>(
+    wanted.map((item) => [item.key, []]),
+  )
+  for (const one of result.items) {
+    grouped.get(one.node_key)?.push({
+      t: Date.parse(one.bucket_start),
+      v: one.value,
+    })
+  }
+  return {
+    readings: [...grouped].map(([key, points]) => ({
+      key,
+      points: withBucketGaps(points, bucket.ms),
+    })),
+    bucket,
+    isTruncated: result.is_truncated,
+  }
 }

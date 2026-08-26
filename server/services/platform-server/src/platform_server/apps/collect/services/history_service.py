@@ -89,7 +89,10 @@ async def aggregate_history(
         range_start=payload.range_start,
         range_end=payload.range_end,
     )
-    window = _window(query, row_limit=_bucket_limit(payload))
+    cap = _bucket_limit(payload)
+    # ⚠ 多问一行是为了**认出**触顶：恰好取回上限那么多行时，「刚好这么多」与
+    # 「被砍了」在结果里长得一模一样
+    window = _window(query, row_limit=cap + 1)
     sql, params = build_aggregate_query(
         window,
         aggregate_sql=AGGREGATE_SQL[payload.aggregate],
@@ -98,10 +101,11 @@ async def aggregate_history(
     )
     rows = await source.fetch_all(sql, params)
     return AggregateOut(
-        items=[_to_bucket(row) for row in rows],
+        items=[_to_bucket(row) for row in rows[:cap]],
         interval=payload.interval,
         aggregate=payload.aggregate,
         timezone=timezone,
+        is_truncated=len(rows) > cap,
     )
 
 

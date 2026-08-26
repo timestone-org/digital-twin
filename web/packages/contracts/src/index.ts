@@ -298,12 +298,15 @@ export type {
 export { POINT_QUALITIES, POINT_STATES } from './datasource'
 export type {
   CollectAddressCheck,
+  CollectAggregate,
   CollectBrowseItem,
   CollectBrowseResult,
   CollectCheckStatus,
   CollectConnectivity,
   CollectDataType,
   CollectErrorCategory,
+  CollectHistoryAggregate,
+  CollectHistoryBucket,
   CollectPoint,
   CollectPointBatch,
   CollectPointCreateInput,
@@ -323,6 +326,7 @@ export type {
   CollectWriteResult,
 } from './collect'
 export {
+  COLLECT_AGGREGATES,
   COLLECT_CHECK_STATUSES,
   COLLECT_DATA_TYPES,
   COLLECT_ERROR_CATEGORIES,

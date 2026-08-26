@@ -1,11 +1,16 @@
 /**
  * @fileoverview 点位历史读侧的接口封装：把 `HistoryQuery` 翻成
- * `GET /point-histories` 的游标翻页，并给取数层一个能直接注入的 `fetchHistory`。
+ * `GET /point-histories` 的游标翻页，并给取数层一个能直接注入的 `fetchHistory`；
+ * 另有一条走 `POST …:aggregate` 的分桶读法。
  *
  * ⚠ 取不到就 reject：绝不返回空 `points` 冒充「这段时间没数据」——那会画出一条
  * 「从打开页面才开始」的假曲线（DASHBOARD_DESIGN §4.3）。
+ * ⚠ 两条读法各有各的用处，不是新旧关系：逐条是**原值**，绑定与导出要它；分桶是
+ * **降采样**，一屏画几个小时的曲线要它。1 秒采样的点位一天有八万多条读数，逐条
+ * 读只够读到窗口开头那一小截。
  */
 import type {
+  CollectHistoryAggregate,
   CursorPage,
   HistoryPoint,
   HistoryQuery,
@@ -109,4 +114,42 @@ export async function fetchPointHistory(
     isTruncated: hasMore && points.length >= maxPoints,
     isStale: false,
   }
+}
+
+/** 一次分桶聚合要问的东西。 */
+export interface PointAggregateQuery {
+  /** 一次最多 50 个，与后端 `MAX_NODE_KEYS` 同值。 */
+  nodeKeys: readonly string[]
+  fromMs: number
+  toMs: number
+  /** `15m` 这样的桶宽，形状由后端正则钉死。 */
+  interval: string
+  aggregate: string
+}
+
+/**
+ * 一次问一批点位的分桶聚合。
+ * ⚠ 一次请求问全部点位，而不是一个点位一次：谓词是 `(source_id, point_code) IN
+ * (…)`，一次扫过去比 N 次各扫一遍便宜得多，也免掉 N 条链路各自失败的分叉。
+ * @param query 点位、窗口、桶宽与档位
+ * @param signal 取消信号
+ */
+export async function fetchPointAggregate(
+  query: PointAggregateQuery,
+  signal?: AbortSignal,
+): Promise<CollectHistoryAggregate> {
+  return await requestData<CollectHistoryAggregate>(
+    '/point-histories:aggregate',
+    onPlatform({
+      method: 'POST',
+      body: {
+        node_keys: [...query.nodeKeys],
+        range_start: new Date(query.fromMs).toISOString(),
+        range_end: new Date(query.toMs).toISOString(),
+        interval: query.interval,
+        aggregate: query.aggregate,
+      },
+      ...(signal === undefined ? {} : { signal }),
+    }),
+  )
 }

@@ -6,18 +6,31 @@
  * 还在，用户会以为自己已经取消了勾选。
  * ⚠ 清单只列一页，列不下的必须**说出来**：现场一个数据源上百个点位，不说的话
  * 用户会以为看到的就是全部，然后在清单里找一个明明存在的点位怎么也找不到。
- * ⚠ 点位历史触顶时留下的是**最早**那一批（取数从窗口起点往后翻页），与台账
- * 序列正好相反，故这一面的截断提示说的是「更晚的那一段没画」。
  */
 import { computed, onMounted, onUnmounted } from 'vue'
 
-import { DtButton, DtIcon, DtInput, DtNotice, DtSwitch } from '@dt/ui'
+import { COLLECT_AGGREGATES } from '@dt/contracts'
+import type { DtSelectOption } from '@dt/contracts'
+import { DtButton, DtIcon, DtInput, DtNotice, DtSelect, DtSwitch } from '@dt/ui'
 
 import TrendSurface from '@/components/trend/TrendSurface.vue'
 import { POINT_PICKER_PAGE_SIZE } from '@/composables/usePointPicker'
 import { usePointTrend } from '../scripts/usePointTrend'
 
+/** 各档折算的说法。⚠ 与 `COLLECT_AGGREGATES` 一一对应，少一条就是下拉里少一项。 */
+const AGGREGATE_LABELS: Record<string, string> = {
+  avg: '平均值',
+  max: '最大值',
+  min: '最小值',
+  sum: '求和',
+  count: '样本数',
+}
+
 const trend = usePointTrend()
+
+const aggregateOptions: readonly DtSelectOption[] = COLLECT_AGGREGATES.map(
+  (value) => ({ value, label: AGGREGATE_LABELS[value] ?? value }),
+)
 
 /** 清单底下那一句：一共几个、这一页列了几个。 */
 const listNote = computed(() => {
@@ -28,9 +41,12 @@ const listNote = computed(() => {
   return `共 ${total} 个点位，这里只列了前 ${POINT_PICKER_PAGE_SIZE} 个，用关键字缩小范围。`
 })
 
-const footnote = computed(() =>
-  trend.pointCount.value > 0 ? `共 ${trend.pointCount.value} 个数据点。` : '',
-)
+/** 图底下那一句：这次是按多粗的桶画的。 */
+const footnote = computed(() => {
+  const bucket = trend.bucket.value
+  if (bucket === null) return ''
+  return `曲线按 ${bucket.label} 一格折算过，画的不是逐条原始读数；把时间范围缩小，格子会跟着变细。`
+})
 
 onMounted(() => {
   void trend.picker.search()
@@ -56,6 +72,18 @@ onUnmounted(trend.dispose)
     @query="trend.query()"
     @update:range="trend.range.value = $event"
   >
+    <template #options>
+      <div class="w-32">
+        <DtSelect
+          :model-value="trend.aggregate.value"
+          :options="aggregateOptions"
+          label="折算"
+          size="sm"
+          @update:model-value="trend.aggregate.value = $event"
+        />
+      </div>
+    </template>
+
     <template #filters>
       <DtInput
         v-model="trend.picker.keyword.value"

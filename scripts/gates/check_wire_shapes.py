@@ -41,10 +41,7 @@ _PARSED_FIELD_BY_FIELD = (
     "导出包来自用户随手挑的文件，由 dashboardTransferWire 逐字段窄化、"
     "认不出就抛——键名不对是当场失败，不是静默读到 undefined"
 )
-_NO_CONSUMER = "前端不调 `:aggregate`，分桶聚合眼下只有后端自己用"
 EXEMPT: dict[str, str] = {
-    "platform-server:AggregateOut": _NO_CONSUMER,
-    "platform-server:AggregateBucketOut": _NO_CONSUMER,
     "platform-server:ModuleCatalogOut": _CATALOG_IS_FRONTEND_OWNED,
     "platform-server:ModuleTypeOut": _CATALOG_IS_FRONTEND_OWNED,
     "platform-server:BindingSpecOut": _CATALOG_IS_FRONTEND_OWNED,

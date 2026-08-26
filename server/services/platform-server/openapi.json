@@ -639,7 +639,7 @@
         "type": "object"
       },
       "AggregateOut": {
-        "description": "一次聚合的结果，回显它用的口径。",
+        "description": "一次聚合的结果，回显它用的口径。\n\n⚠ `is_truncated` 不是装饰：桶数上限拦的是「窗口除以桶宽算出几十万格」，\n而被拦掉的那一截在图上就是曲线**到某处戛然而止**——不说破的话，那与\n「那之后设备停了」长得一模一样（DATASET_DESIGN §6.2 的同一条口径）。",
         "properties": {
           "aggregate": {
             "title": "Aggregate",
@@ -648,6 +648,11 @@
           "interval": {
             "title": "Interval",
             "type": "string"
+          },
+          "is_truncated": {
+            "default": false,
+            "title": "Is Truncated",
+            "type": "boolean"
           },
           "items": {
             "items": {

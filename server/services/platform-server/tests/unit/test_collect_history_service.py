@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from lib.web import CursorParams, decode_cursor, encode_cursor
+from lib.web.pagination import MAX_PAGE_SIZE
 from platform_server.apps.collect.errors import HistoryQueryInvalid
 from platform_server.apps.collect.schemas import AggregateIn
 from platform_server.apps.collect.services import history_service
@@ -33,6 +34,30 @@ def build_row(minute: int, value: float | None) -> dict[str, object]:
         "value_text": None,
         "quality": "good",
     }
+
+
+def bucket_row(index: int) -> dict[str, object]:
+    """一行聚合结果。
+
+    Args: index。
+    """
+    return {
+        "source_id": SOURCE_ID,
+        "point_code": "outlet_temp",
+        "bucket_start": RANGE_START + timedelta(minutes=index),
+        "bucket_value": float(index),
+        "sample_count": 1,
+    }
+
+
+def build_aggregate() -> AggregateIn:
+    """一次单点位、一分钟桶的聚合入参。"""
+    return AggregateIn(
+        node_keys=[NODE_KEY],
+        range_start=RANGE_START,
+        range_end=RANGE_END,
+        interval="1m",
+    )
 
 
 def build_query() -> history_service.HistoryQuery:
@@ -257,6 +282,27 @@ async def test_a_bucket_row_maps_into_the_public_shape() -> None:
     assert result.items[0].node_key == NODE_KEY
     assert result.items[0].value == 21.5
     assert result.items[0].sample_count == 60
+
+
+async def test_a_full_bucket_result_says_it_was_truncated() -> None:
+    # ⚠ 上限恰好取满时，「刚好这么多」与「被砍了」在结果里长得一模一样；
+    # 曲线于是在中途戛然而止，看着像那之后设备停了
+    source = FakeHistorySource(
+        rows=[bucket_row(index) for index in range(MAX_PAGE_SIZE + 1)]
+    )
+    result = await history_service.aggregate_history(
+        source, payload=build_aggregate(), default_timezone="UTC"
+    )
+    assert result.is_truncated is True
+    assert len(result.items) == MAX_PAGE_SIZE
+
+
+async def test_a_result_under_the_cap_is_not_called_truncated() -> None:
+    source = FakeHistorySource(rows=[bucket_row(0)])
+    result = await history_service.aggregate_history(
+        source, payload=build_aggregate(), default_timezone="UTC"
+    )
+    assert result.is_truncated is False
 
 
 async def test_a_bucket_with_no_samples_reads_back_as_null() -> None:

@@ -1,15 +1,17 @@
 /**
  * @fileoverview 锁住点位那一面的两件纯活：没开归档的点位必须在名字上标出来，
- * 以及**任何一个点位取数失败整次就失败**——绝不返回半张图。
+ * 以及一批点位**一次请求问完**、按点位归位、桶与桶之间的空洞画成断档。
  *
- * ⚠ 半张图在界面上看不出缺了什么：少的那条线与「这个点位没数据」长得一样。
+ * ⚠ 一个点位一次请求的老写法在这里是不许回去的：8 个点位就是 8 条各自会失败
+ * 的链路，而半张图在界面上与「那几个点位没数据」长得一模一样。
+ * ⚠ 断档那条是真会静默出错的：不插 null 的话 echarts 把空洞两端连成一条直线，
+ * 那条直线看着像「值一直在平稳变化」，而那段时间一条读数都没有。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CollectPoint } from '@dt/contracts'
+import type { CollectHistoryAggregate, CollectPoint } from '@dt/contracts'
 
 import * as histories from '@/api/pointHistories'
 import {
-  POINT_TREND_LIMIT,
   readPointReadings,
   toTrendItem,
 } from '@/pages/Trend/scripts/pointTrendData'
@@ -38,12 +40,30 @@ function point(over: Partial<CollectPoint> = {}): CollectPoint {
 const FROM = Date.parse('2026-08-24T00:00:00.000Z')
 const TO = Date.parse('2026-08-24T06:00:00.000Z')
 
+function aggregate(
+  over: Partial<CollectHistoryAggregate> = {},
+): CollectHistoryAggregate {
+  return {
+    items: [],
+    interval: '2m',
+    aggregate: 'avg',
+    timezone: 'Asia/Shanghai',
+    is_truncated: false,
+    ...over,
+  }
+}
+
+function bucket(nodeKey: string, minute: number, value: number | null) {
+  return {
+    node_key: nodeKey,
+    bucket_start: new Date(FROM + minute * 60_000).toISOString(),
+    value,
+    sample_count: 1,
+  }
+}
+
 beforeEach(() => {
-  vi.spyOn(histories, 'fetchPointHistory').mockResolvedValue({
-    points: [{ t: FROM, v: 21 }],
-    isTruncated: false,
-    isStale: false,
-  })
+  vi.spyOn(histories, 'fetchPointAggregate').mockResolvedValue(aggregate())
 })
 
 afterEach(() => {
@@ -59,7 +79,7 @@ describe('摊成勾选项', () => {
     expect(item.isDrawable).toBe(true)
   })
 
-  it('⚠ 没开归档的点位当场标出来，也标成画不出来：它永远取不到一条读数', () => {
+  it('⚠ 没开归档的点位当场标出来：它永远取不到一条读数', () => {
     const item = toTrendItem(point({ archive_enabled: false }))
     expect(item.label).toContain('未记录历史')
     expect(item.isDrawable).toBe(false)
@@ -70,35 +90,90 @@ describe('摊成勾选项', () => {
   })
 })
 
-describe('逐个点位取读数', () => {
-  it('窗口两端与点数上限一起下去，上限与截断提示里说的那个数是同一个', async () => {
-    await readPointReadings([toTrendItem(point())], FROM, TO)
-    expect(vi.mocked(histories.fetchPointHistory)).toHaveBeenCalledWith({
-      nodeKey: 's1:p1',
-      range: { fromMs: FROM, toMs: TO, limit: POINT_TREND_LIMIT },
-    })
+describe('取一批点位的分桶读数', () => {
+  it('⚠ 一次请求问完全部点位，不是一个点位一次', async () => {
+    await readPointReadings(
+      [toTrendItem(point()), toTrendItem(point({ node_key: 's1:p2' }))],
+      FROM,
+      TO,
+      'avg',
+    )
+    const spy = vi.mocked(histories.fetchPointAggregate)
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(spy.mock.calls[0]?.[0].nodeKeys).toEqual(['s1:p1', 's1:p2'])
   })
 
-  it('⚠ 一个点位失败整次就 reject，绝不返回半张图', async () => {
-    vi.mocked(histories.fetchPointHistory)
-      .mockResolvedValueOnce({ points: [], isTruncated: false, isStale: false })
-      .mockRejectedValueOnce(new Error('归档库连不上'))
+  it('桶宽按窗口自己选，档位与折算一起下去', async () => {
+    const result = await readPointReadings(
+      [toTrendItem(point())],
+      FROM,
+      TO,
+      'max',
+    )
+    const sent = vi.mocked(histories.fetchPointAggregate).mock.calls[0]?.[0]
+    // 6 小时 / 190 格上限 → 落在 2 分钟这一档
+    expect(sent?.interval).toBe('2m')
+    expect(sent?.aggregate).toBe('max')
+    expect(result.bucket.ms).toBe(120_000)
+  })
+
+  it('按点位归位；一格都没有的点位回一条空序列而不是不出现', async () => {
+    vi.mocked(histories.fetchPointAggregate).mockResolvedValue(
+      aggregate({ items: [bucket('s1:p1', 0, 21)] }),
+    )
+    const result = await readPointReadings(
+      [toTrendItem(point()), toTrendItem(point({ node_key: 's1:p2' }))],
+      FROM,
+      TO,
+      'avg',
+    )
+    expect(result.readings.map((one) => one.key)).toEqual(['s1:p1', 's1:p2'])
+    expect(result.readings[1]?.points).toEqual([])
+  })
+
+  it('⚠ 桶之间空过一大截时插一个断档点，别让两端被连成一条直线', async () => {
+    vi.mocked(histories.fetchPointAggregate).mockResolvedValue(
+      aggregate({
+        items: [
+          bucket('s1:p1', 0, 21),
+          bucket('s1:p1', 2, 22),
+          bucket('s1:p1', 30, 23),
+        ],
+      }),
+    )
+    const result = await readPointReadings(
+      [toTrendItem(point())],
+      FROM,
+      TO,
+      'avg',
+    )
+    expect(result.readings[0]?.points.map((one) => one.v)).toEqual([
+      21,
+      22,
+      null,
+      23,
+    ])
+  })
+
+  it('触顶如实带上来', async () => {
+    vi.mocked(histories.fetchPointAggregate).mockResolvedValue(
+      aggregate({ is_truncated: true }),
+    )
+    const result = await readPointReadings(
+      [toTrendItem(point())],
+      FROM,
+      TO,
+      'avg',
+    )
+    expect(result.isTruncated).toBe(true)
+  })
+
+  it('⚠ 取数失败整次就 reject，绝不返回半张图', async () => {
+    vi.mocked(histories.fetchPointAggregate).mockRejectedValue(
+      new Error('归档库连不上'),
+    )
     await expect(
-      readPointReadings(
-        [toTrendItem(point()), toTrendItem(point({ node_key: 's1:p2' }))],
-        FROM,
-        TO,
-      ),
+      readPointReadings([toTrendItem(point())], FROM, TO, 'avg'),
     ).rejects.toThrow('归档库连不上')
-  })
-
-  it('任一点位触顶就把触顶如实带上来', async () => {
-    vi.mocked(histories.fetchPointHistory).mockResolvedValue({
-      points: [],
-      isTruncated: true,
-      isStale: false,
-    })
-    const found = await readPointReadings([toTrendItem(point())], FROM, TO)
-    expect(found[0]?.isTruncated).toBe(true)
   })
 })

@@ -264,6 +264,39 @@ export interface CollectWriteResult {
   is_written: boolean
 }
 
+/**
+ * 点位历史分桶聚合的档位，与后端 `AGGREGATES` 白名单同值。
+ * ⚠ 分档的不是装饰：温度看 `avg`、电量看 `max`（累积量），拿平均去读一条累积
+ * 曲线会画出一条压扁了的假线，而数值本身完全合法。
+ */
+export const COLLECT_AGGREGATES = ['avg', 'max', 'min', 'sum', 'count'] as const
+export type CollectAggregate = (typeof COLLECT_AGGREGATES)[number]
+
+/**
+ * 一个聚合桶。
+ * ⚠ `sample_count` 不是装饰：2 个样本的均值与 3600 个样本的均值在图上长得
+ * 一模一样，而前者多半意味着那一段几乎没采到数。
+ */
+export interface CollectHistoryBucket {
+  node_key: string
+  bucket_start: string
+  value: number | null
+  sample_count: number
+}
+
+/**
+ * 一次分桶聚合的结果，回显它真正用的口径。
+ * ⚠ `is_truncated` 必须看：桶数触顶时曲线会在中途戛然而止，那与「那之后设备
+ * 停了」在图上长得一模一样。
+ */
+export interface CollectHistoryAggregate {
+  items: CollectHistoryBucket[]
+  interval: string
+  aggregate: string
+  timezone: string
+  is_truncated: boolean
+}
+
 /** 批量建点的单批上限，与后端 `MAX_BATCH` 同值。超了后端 422。 */
 export const COLLECT_POINT_BATCH_MAX = 200
 /** 批量删点的单批上限，与后端 `MAX_DELETE_BATCH` 同值。 */

@@ -18,6 +18,8 @@ import type {
   CollectBrowseItem,
   CollectBrowseResult,
   CollectConnectivity,
+  CollectHistoryAggregate,
+  CollectHistoryBucket,
   CollectPoint,
   CollectPointBatch,
   CollectPointSaved,
@@ -158,6 +160,21 @@ const SHAPES: Record<string, Record<string, true>> = {
     node_key: true,
     is_written: true,
   } satisfies Keys<CollectWriteResult>,
+
+  AggregateBucketOut: {
+    node_key: true,
+    bucket_start: true,
+    value: true,
+    sample_count: true,
+  } satisfies Keys<CollectHistoryBucket>,
+
+  AggregateOut: {
+    items: true,
+    interval: true,
+    aggregate: true,
+    timezone: true,
+    is_truncated: true,
+  } satisfies Keys<CollectHistoryAggregate>,
 
   Page_SourceOut_: {
     items: true,
