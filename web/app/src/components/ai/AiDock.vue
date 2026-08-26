@@ -71,13 +71,6 @@ onUnmounted(() => {
         <AiCoreIcon :size="52" />
       </button>
       <div v-else class="ai-dock__panel" :class="{ 'is-wide': isWide }">
-        <span
-          v-for="corner in ['tl', 'tr', 'bl', 'br']"
-          :key="corner"
-          class="ai-dock__corner"
-          :class="`ai-dock__corner--${corner}`"
-          aria-hidden="true"
-        />
         <AiAssistantPanel
           :chat="ai.chat"
           :compose="ai.compose"
@@ -192,39 +185,6 @@ onUnmounted(() => {
     opacity: 0;
     transform: translateY(8px) scale(0.98);
   }
-}
-
-/* 四角发光角标，与 DtCard 的 corners 同一副面孔（--card-corner-* 同源），
-   主题关掉角标时这里跟着消失 */
-.ai-dock__corner {
-  position: absolute;
-  z-index: 1;
-  display: var(--card-corner-display);
-  width: 10px;
-  height: 10px;
-  box-shadow: 0 0 var(--card-corner-glow) var(--card-corner-color);
-  opacity: 0.9;
-  pointer-events: none;
-}
-
-.ai-dock__corner--tl {
-  top: 0;
-  left: 0;
-}
-
-.ai-dock__corner--tr {
-  top: 0;
-  right: 0;
-}
-
-.ai-dock__corner--bl {
-  bottom: 0;
-  left: 0;
-}
-
-.ai-dock__corner--br {
-  right: 0;
-  bottom: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
