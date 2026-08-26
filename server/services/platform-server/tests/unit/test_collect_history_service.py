@@ -4,11 +4,11 @@
 """
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from lib.web import CursorParams, decode_cursor
+from lib.web import CursorParams, decode_cursor, encode_cursor
 from platform_server.apps.collect.errors import HistoryQueryInvalid
 from platform_server.apps.collect.schemas import AggregateIn
 from platform_server.apps.collect.services import history_service
@@ -96,7 +96,7 @@ async def test_a_full_page_reports_more_and_hands_back_a_cursor() -> None:
     anchor = decode_cursor(page.next)
     assert anchor["point_code"] == "outlet_temp"
     assert anchor["source_id"] == str(SOURCE_ID)
-    assert anchor["ts"] == "2026-08-01T00:01:00.000Z"
+    assert anchor["ts"] == "2026-08-01T00:01:00+00:00"
 
 
 async def test_a_short_page_has_no_cursor() -> None:
@@ -130,6 +130,21 @@ async def test_a_cursor_is_carried_into_the_next_query() -> None:
         page=CursorParams(limit=2, after=first.next),
     )
     assert source.last_params["after_point_code"] == "outlet_temp"
+
+
+async def test_a_cursor_with_an_unreadable_moment_is_refused() -> None:
+    # ⚠ 游标是客户端随手就能改的入参：解不动的时刻漏成异常就是一个 500，
+    # 而它本该是一次 400
+    forged = encode_cursor(
+        {"ts": "昨天", "source_id": str(SOURCE_ID), "point_code": "outlet_temp"}
+    )
+    with pytest.raises(HistoryQueryInvalid) as raised:
+        await history_service.read_history(
+            FakeHistorySource(),
+            query=build_query(),
+            page=CursorParams(limit=2, after=forged),
+        )
+    assert raised.value.http_status == 400
 
 
 async def test_a_text_value_round_trips_through_the_archive_columns() -> None:
@@ -201,10 +216,10 @@ async def test_an_explicit_timezone_wins_over_the_default() -> None:
 async def test_the_window_suffix_becomes_a_postgres_interval() -> None:
     source = FakeHistorySource()
     for interval, expected in (
-        ("30s", "30 seconds"),
-        ("15m", "15 minutes"),
-        ("2h", "2 hours"),
-        ("1d", "1 days"),
+        ("30s", timedelta(seconds=30)),
+        ("15m", timedelta(minutes=15)),
+        ("2h", timedelta(hours=2)),
+        ("1d", timedelta(days=1)),
     ):
         payload = AggregateIn(
             node_keys=[NODE_KEY],

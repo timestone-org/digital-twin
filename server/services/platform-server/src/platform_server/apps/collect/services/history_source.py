@@ -42,6 +42,7 @@ class ReadOnlyHistorySource:
                 "history_query_failed",
                 "归档库查询失败",
                 error_type=type(error).__name__,
+                **_driver_cause(error),
             )
             raise HistoryUnavailable(
                 "历史数据暂时读不了，请稍后重试"
@@ -54,3 +55,23 @@ class ReadOnlyHistorySource:
             await session.execute(_READ_ONLY)
             rows = await session.execute(text(sql), params)
             return [dict(row) for row in rows.mappings().all()]
+
+
+def _driver_cause(error: SQLAlchemyError) -> dict[str, str]:
+    """驱动那一层的错误类名与 SQLSTATE，两样都是低基数的稳定字面量。
+
+    ⚠ 只取名字与状态码，**不取消息本体**：驱动的消息里带着这一次的绑定值，
+    那是请求体全文，不许进日志（observability §1）。
+    ⚠ 但也不能只留 `DBAPIError` 这一个外层名：`DataError/22000`（绑错了参数
+    类型，重试一万次也不会好）与 `ConnectionDoesNotExistError`（库真的断了）
+    在外层名下长得一模一样，而这一面对外一律是 503「请稍后重试」——分不出这
+    两者时，一个必然失败的查询会被当成抖动看上好几个月。
+    Args: error。
+    """
+    cause = getattr(getattr(error, "orig", None), "__cause__", None)
+    if cause is None:
+        return {}
+    return {
+        "driver_error": type(cause).__name__,
+        "sqlstate": str(getattr(cause, "sqlstate", "")),
+    }

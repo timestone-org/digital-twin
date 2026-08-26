@@ -7,13 +7,13 @@
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from lib.errors.base import FieldError
-from lib.utils.timeutils import format_rfc3339
+from lib.utils.timeutils import to_utc
 from lib.web import CursorPage, CursorParams, decode_cursor, encode_cursor
-from lib.web.pagination import MAX_PAGE_SIZE
+from lib.web.pagination import CURSOR_FIELD, MAX_PAGE_SIZE
 from platform_server.apps.collect.crud import (
     HistoryCursor,
     HistorySource,
@@ -93,7 +93,7 @@ async def aggregate_history(
     sql, params = build_aggregate_query(
         window,
         aggregate_sql=AGGREGATE_SQL[payload.aggregate],
-        interval=_interval_sql(payload.interval),
+        interval=_interval_of(payload.interval),
         timezone=timezone,
     )
     rows = await source.fetch_all(sql, params)
@@ -250,8 +250,8 @@ def _reject_bad_node_key(position: int, node_key: str) -> None:
 def _window(query: HistoryQuery, *, row_limit: int) -> HistoryWindow:
     return HistoryWindow(
         points=tuple(_point_ref(key) for key in query.node_keys),
-        range_start=format_rfc3339(query.range_start),
-        range_end=format_rfc3339(query.range_end),
+        range_start=to_utc(query.range_start),
+        range_end=to_utc(query.range_end),
         row_limit=row_limit,
     )
 
@@ -271,42 +271,71 @@ def _bucket_limit(payload: AggregateIn) -> int:
     return MAX_PAGE_SIZE * len(payload.node_keys)
 
 
-def _interval_sql(interval: str) -> str:
-    """把 `15m` 这样的窗口翻成 Postgres 的 interval 字面量。
+def _interval_of(interval: str) -> timedelta:
+    """把 `15m` 这样的窗口翻成一段 `timedelta`。
 
+    ⚠ 回 `timedelta` 而不是 `'15 minutes'`：它绑到 `CAST(:bucket_width AS
+    interval)` 上，驱动按 interval 认这个占位符，字符串是当场 DataError。
     Args: interval。
     """
     units = {"s": "seconds", "m": "minutes", "h": "hours", "d": "days"}
-    amount, unit = interval[:-1], interval[-1]
-    return f"{amount} {units[unit]}"
+    amount, unit = int(interval[:-1]), interval[-1]
+    return timedelta(**{units[unit]: amount})
 
 
 def _cursor_of(after: str | None) -> HistoryCursor | None:
     """把不透明游标解回锚点。
 
+    ⚠ 里面的时刻要解成 `datetime`：它绑到 `(ts, …) > (:after_ts, …)` 上，驱动
+    按 timestamptz 认这个占位符，字符串进不去。解不动的按「游标不可解析」拒绝，
+    别漏成 500——游标是客户端随手就能改的入参。
     Args: after。
     """
     if after is None:
         return None
     payload = decode_cursor(after)
     return HistoryCursor(
-        ts=payload.get(_CURSOR_TS, ""),
+        ts=_cursor_moment(payload.get(_CURSOR_TS, "")),
         source_id=payload.get(_CURSOR_SOURCE, ""),
         point_code=payload.get(_CURSOR_CODE, ""),
     )
+
+
+def _cursor_moment(raw: str) -> datetime:
+    """把游标里的时刻解回 UTC datetime。
+
+    Args: raw。
+    """
+    try:
+        moment = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise HistoryQueryInvalid(
+            "游标不可解析",
+            details=(
+                FieldError(
+                    field=CURSOR_FIELD,
+                    code="invalid_cursor",
+                    message="游标不可解析，请从上一页响应里原样带回",
+                ),
+            ),
+        ) from error
+    return to_utc(moment)
 
 
 def _next_cursor(rows: Sequence[HistoryPointOut]) -> str:
     """把这一页最后一行编成下一页的锚点。
 
     ⚠ 只在「还有下一页」时调用，那时这一页必非空（limit ≥ 1）。
+    ⚠ 时刻写 `isoformat()` 而不是对外那份 `format_rfc3339`：后者截到毫秒，
+    带亚毫秒时刻的那一行会因为「锚点比自己小」在下一页里**再来一次**。游标
+    是不透明的，精度只对自己负责。
     Args: rows。
     """
     last = rows[-1]
     source_id, point_code = split_node_key(last.node_key)
     return encode_cursor(
         {
-            _CURSOR_TS: format_rfc3339(last.ts),
+            _CURSOR_TS: to_utc(last.ts).isoformat(),
             _CURSOR_SOURCE: str(source_id),
             _CURSOR_CODE: point_code,
         }

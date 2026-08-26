@@ -251,8 +251,8 @@ GET    /api/v1/platform/collect-runtime-params            采集/归档两组运
 PUT    /api/v1/platform/collect-runtime-params/{section}  写覆盖值（写完通知计划变更）
 POST   /api/v1/platform/collect-runtime-params/{section}:reset  整组恢复默认
 
-GET    /api/v1/platform/point-history?node_keys=&from=&to=&limit=      游标分页
-GET    /api/v1/platform/point-history:aggregate?node_keys=&interval=&agg=
+GET    /api/v1/platform/point-histories?node_keys=&range_start=&range_end=&limit=&after=   游标分页
+POST   /api/v1/platform/point-histories:aggregate         分桶聚合，回 is_truncated
 
 GET    /internal/v1/platform/collect-plan                collector 拉计划，服务级密钥
 ```
@@ -347,6 +347,12 @@ ALTER TABLE collect.point_history SET (
 
 聚合查询的 `time_bucket` **必须带 `timezone =>` 参数**。不带的话按 UNIX 纪元对齐，
 东八区的日桶会从当地 08:00 开始，07:00 的数据落进前一天。这条要有测试锁死。
+
+读侧的时刻与桶宽**必须绑 `datetime` / `timedelta`，不许绑它们的字符串形态**。
+驱动按 `ts >= $n` 与 `CAST($n AS interval)` 的上下文把这两个占位符认成
+timestamptz 与 interval，喂字符串是当场 `DataError`，对外表现为整条读侧恒 503。
+这一条**假件测不出来**——只断言 SQL 文本的用例会全绿放行，故读侧必须有一条
+对着真库跑的用例（`test_collect_history_archive.py`）。
 
 保留期：全局 Timescale 策略是上限；按点位的 `archive_retention_days` 由
 `platform-worker` 的夜间批处理执行——**迁移里禁止回填数据**。

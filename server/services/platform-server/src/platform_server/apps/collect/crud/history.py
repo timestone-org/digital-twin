@@ -5,11 +5,16 @@ collector-server 写独占，平台侧只许读。**不许跨 schema JOIN、不�
 不许把两个 schema 放进同一个事务**——那三样都会让「写独占」形同虚设。
 ⚠ 列名不写字面量，一律取自 `timeseries.schema`：列名改了而另一侧没改，
 表现是 import 错误，不是运行期空结果。
+⚠ 时刻绑 `datetime`、桶宽绑 `timedelta`，**绝不绑它们的字符串形态**：驱动按
+`ts >= $n` / `CAST($n AS interval)` 的上下文把这几个占位符认成 timestamptz 与
+interval，喂字符串是当场 DataError，而对着假件断言 SQL 文本的单元测试一条都
+看不出来——真库上的表现是整条读侧恒 503。
 """
 
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Protocol
 
 from timeseries import HISTORY_SCHEMA, HISTORY_TABLE
@@ -53,8 +58,8 @@ class HistoryWindow:
     """
 
     points: tuple[PointRef, ...]
-    range_start: str
-    range_end: str
+    range_start: datetime
+    range_end: datetime
     row_limit: int
 
 
@@ -62,7 +67,7 @@ class HistoryWindow:
 class HistoryCursor:
     """键集翻页的锚点，来自上一页最后一行。"""
 
-    ts: str
+    ts: datetime
     source_id: str
     point_code: str
 
@@ -121,7 +126,11 @@ def build_range_query(
 
 
 def build_aggregate_query(
-    window: HistoryWindow, *, aggregate_sql: str, interval: str, timezone: str
+    window: HistoryWindow,
+    *,
+    aggregate_sql: str,
+    interval: timedelta,
+    timezone: str,
 ) -> tuple[str, dict[str, object]]:
     """构造一次分桶聚合的查询。
 
