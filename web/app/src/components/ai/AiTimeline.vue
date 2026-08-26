@@ -12,7 +12,7 @@ import { DtMarkdown } from '@dt/ui'
 
 import AiCoreIcon from '@/components/ai/AiCoreIcon.vue'
 import AiReasoning from '@/components/ai/AiReasoning.vue'
-import AiStepRow from '@/components/ai/AiStepRow.vue'
+import AiToolCard from '@/components/ai/AiToolCard.vue'
 import type { ChatEntry } from '@/features/ai/conversationLog'
 
 const props = defineProps<{ entries: readonly ChatEntry[] }>()
@@ -72,7 +72,7 @@ watch(
         <li v-else-if="entry.role === 'error'" class="ai-said ai-said--bad">
           {{ entry.text }}
         </li>
-        <AiStepRow v-else-if="entry.step" :step="entry.step" />
+        <AiToolCard v-else-if="entry.step" :step="entry.step" />
       </template>
     </ul>
   </div>

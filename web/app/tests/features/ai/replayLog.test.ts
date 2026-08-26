@@ -194,3 +194,40 @@ describe('坏形状防御', () => {
     expect(log.entries).toEqual([])
   })
 })
+
+describe('回放里的入参与产出', () => {
+  it('库里存的那两格照样展得开', () => {
+    // 不带回来的话，历史里的每一步都只剩一句标题，出错当场最该看的东西没了
+    const log = replayedLog(
+      detailOf([
+        messageOf({
+          role: 'assistant',
+          content_json: { text: '好了' },
+          steps: [
+            stepOf({
+              input_json: { q: '温度' },
+              output_json: { body: '命中 3 条' },
+            }),
+          ],
+        }),
+      ]),
+    )
+    const step = log.entries.find((one) => one.role === 'step')?.step
+    expect(step?.input).toEqual({ q: '温度' })
+    expect(step?.output).toBe('命中 3 条')
+  })
+
+  it('回放里没有截图——它本来就不落库', () => {
+    const log = replayedLog(
+      detailOf([
+        messageOf({
+          role: 'assistant',
+          content_json: { text: '看完了' },
+          steps: [stepOf({ kind: 'client_tool', name: 'dashboard.capture' })],
+        }),
+      ]),
+    )
+    const step = log.entries.find((one) => one.role === 'step')?.step
+    expect(step?.image).toBeUndefined()
+  })
+})

@@ -31,6 +31,7 @@ import { ASSISTANT_PLAN_STATUSES } from '@dt/contracts'
 import type { AdvanceBody } from '@/api/assistant'
 import type { AdvanceStream } from './ports'
 import { createFrameReader } from './sseFrames'
+import { inputPreview, isImageOutput, outputPreview } from './stepPreview'
 import { activeSurface, runClientTool } from './surfaces'
 
 /** 一次往返的上限。到顶就停下并如实告诉用户，而不是继续烧钱。 */
@@ -50,6 +51,18 @@ export interface RunnerStep {
   state: string
   title: string
   error: string | null
+  /** 入参，已摊成键值表。 */
+  input?: Record<string, string>
+  /** 产出摘要。 */
+  output?: string
+  /**
+   * 这一步截到的图（`data:image/…`）。
+   * ⚠ 只有最近几步留着原图，更早的会被丢掉换成 `isImageDropped` —— 一张截图
+   * 几百 KB，一个截了几十次的会话会把这个标签页拖垮。
+   */
+  image?: string
+  /** 这一步有过图，但为省内存没留下。 */
+  isImageDropped?: true
 }
 
 /** 循环把发生的事交给谁。 */
@@ -215,36 +228,54 @@ async function runAll(
     try {
       const output = await runClientTool(call)
       results.push({ call_id: call.call_id, output })
-      steps.push(stepOf(call, null))
+      steps.push(stepOf(call, output, null))
     } catch (error) {
       // 失败也要送回去，而且要说清——不送的话那次调用永远没有答复
       const reason = describe(error)
       results.push({ call_id: call.call_id, error: reason })
-      steps.push(stepOf(call, reason))
+      steps.push(stepOf(call, undefined, reason))
     }
   }
   sink.onToolsRun(steps)
   return results
 }
 
-/** 一次客户端工具执行记成一步。标题是给人看的一句话，不是工具名。 */
-function stepOf(call: AssistantToolCall, error: string | null): RunnerStep {
+/**
+ * 一次客户端工具执行记成一步。标题是给人看的一句话，不是工具名。
+ * ⚠ 入参与产出就地留下：这几步**服务端看不见**（它们跑在浏览器里），
+ * 不在这里留，界面上就永远只有一句「做完了」。
+ * ⚠ 截图单拎一格：混进产出的话，展开看到的是几十万字符的 base64。
+ */
+function stepOf(
+  call: AssistantToolCall,
+  output: unknown,
+  error: string | null,
+): RunnerStep {
+  const input = inputPreview(call.arguments)
+  const text = outputPreview(output)
   return {
     kind: 'client_tool',
     name: call.name,
     state: error === null ? 'succeeded' : 'failed',
     title: error === null ? `${call.name} 做完了` : `${call.name} 没做成`,
     error,
+    ...(input === null ? {} : { input }),
+    ...(text === null ? {} : { output: text }),
+    ...(isImageOutput(output) ? { image: output } : {}),
   }
 }
 
 function readStep(data: Record<string, unknown>): RunnerStep {
+  const input = inputPreview(data.input)
+  const output = readText(data.output)
   return {
     kind: readText(data.kind),
     name: readText(data.name),
     state: readText(data.state),
     title: readText(data.title),
     error: typeof data.error === 'string' ? data.error : null,
+    ...(input === null ? {} : { input }),
+    ...(output === '' ? {} : { output }),
   }
 }
 

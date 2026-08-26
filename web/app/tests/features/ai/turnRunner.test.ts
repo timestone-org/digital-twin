@@ -164,6 +164,83 @@ describe('回合循环', () => {
     expect(seen.replies).toEqual(['绑好了'])
   })
 
+  it('客户端工具那一步带上它的入参与产出', async () => {
+    // 这几步服务端看不见（它们跑在浏览器里），不在这里留就永远只有一句「做完了」
+    setSurface({
+      kind: 'dashboard-editor',
+      label: '大屏编辑器',
+      snapshot: () => ({}),
+      tools: ['dashboard.write_binding'],
+      run: vi.fn().mockResolvedValue({ ok: true }),
+    })
+    const { advance } = advanceOf([
+      [
+        frame('client_tool.request', {
+          calls: [
+            {
+              call_id: 'w1',
+              name: 'dashboard.write_binding',
+              arguments: { node_id: 'n1' },
+            },
+          ],
+        }),
+      ],
+      [frame('turn.done', { reply: '绑好了' })],
+    ])
+    const { sink, seen } = sinkOf()
+    await runTurn(inputOf(advance), sink)
+
+    expect(seen.ran[0]?.input).toEqual({ node_id: 'n1' })
+    expect(seen.ran[0]?.output).toBe('{"ok":true}')
+  })
+
+  it('截图进 image 那一格，不混进文本产出', async () => {
+    // 混进去的话，展开看到的是几十万字符的 base64 而不是一张图
+    const shot = 'data:image/png;base64,iVBORw0KGgo='
+    setSurface({
+      kind: 'dashboard-editor',
+      label: '大屏编辑器',
+      snapshot: () => ({}),
+      tools: ['dashboard.capture'],
+      run: vi.fn().mockResolvedValue(shot),
+    })
+    const { advance } = advanceOf([
+      [
+        frame('client_tool.request', {
+          calls: [{ call_id: 'c1', name: 'dashboard.capture', arguments: {} }],
+        }),
+      ],
+      [frame('turn.done', { reply: '看完了' })],
+    ])
+    const { sink, seen } = sinkOf()
+    await runTurn(inputOf(advance), sink)
+
+    expect(seen.ran[0]?.image).toBe(shot)
+    expect(seen.ran[0]?.output).toBeUndefined()
+  })
+
+  it('服务端那一步的入参与产出照单读出来', async () => {
+    const { advance } = advanceOf([
+      [
+        frame('step', {
+          kind: 'server_tool',
+          name: 'points.search',
+          state: 'succeeded',
+          title: '查了点位',
+          error: null,
+          input: { q: '温度' },
+          output: '命中 3 条',
+        }),
+        frame('turn.done', { reply: '好了' }),
+      ],
+    ])
+    const { sink, seen } = sinkOf()
+    await runTurn(inputOf(advance), sink)
+
+    expect(seen.steps[0]?.input).toEqual({ q: '温度' })
+    expect(seen.steps[0]?.output).toBe('命中 3 条')
+  })
+
   it('第一次带发话，回填那次不带', async () => {
     setSurface({
       kind: 'dashboard-editor',
