@@ -26,7 +26,7 @@ from ai_assistant.apps.chat.services.turn_types import (
     TurnStep,
 )
 from ai_assistant.llm import GuardedModel
-from ai_assistant.llm.provider import ModelKind
+from ai_assistant.llm.provider import ModelChoice
 from lib.resilience import CircuitBreaker
 from unit.llm_fakes import ScriptedChat, tool_call
 
@@ -64,7 +64,7 @@ def _deps(
     runner: RecordingRunner,
     specs: tuple[ToolSpec, ...] = (SERVER_TOOL, CLIENT_TOOL),
 ) -> TurnDeps:
-    def source(_kind: ModelKind) -> BaseChatModel:
+    async def source(_choice: ModelChoice) -> BaseChatModel:
         return model
 
     return TurnDeps(
@@ -235,7 +235,7 @@ async def test_both_model_kinds_run_the_same_loop(kind: str) -> None:
             model=deps.model,
             specs=deps.specs,
             run_tool=deps.run_tool,
-            kind="vision" if kind == "vision" else "chat",
+            choice=ModelChoice(kind="vision" if kind == "vision" else "chat"),
         ),
         _ask(),
     )

@@ -11,8 +11,8 @@
 的故障。
 """
 
-from collections.abc import AsyncIterator, Sequence
-from dataclasses import dataclass
+from collections.abc import AsyncIterator, Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Any
 
 from langchain_core.messages import AIMessage, BaseMessage, BaseMessageChunk
@@ -29,7 +29,11 @@ from openai import (
 from ai_assistant.llm import deltas
 from ai_assistant.llm.deltas import DeltaSink
 from ai_assistant.llm.errors import ModelRejected, ModelUnavailable
-from ai_assistant.llm.provider import ChatModelSource, ModelKind
+from ai_assistant.llm.provider import (
+    DEFAULT_PROFILE,
+    ModelChoice,
+    ModelSource,
+)
 from lib.logging import get_logger
 from lib.resilience import BreakerOpen, CircuitBreaker
 
@@ -43,16 +47,21 @@ _OUR_FAULT = (AuthenticationError, PermissionDeniedError, BadRequestError)
 class GuardedModel:
     """带断路器的模型调用面。"""
 
-    source: ChatModelSource
+    source: ModelSource
     breaker: CircuitBreaker
     # 逐字流式的总开关。⚠ 关着时 `on_delta` 被忽略而不是报错：调用方不必
     # 为了「这套部署关了流式」再写一条分支
     is_streaming: bool = True
+    # 除默认那一路之外，每一路各有一份断路器。⚠ 共用一份的话，订阅账号那一路
+    # 挂掉会把按量那一路一起短路，而后者本来好好的
+    breakers: Mapping[str, CircuitBreaker] = field(
+        default_factory=dict[str, CircuitBreaker]
+    )
 
     async def respond(
         self,
         *,
-        kind: ModelKind,
+        choice: ModelChoice,
         messages: list[BaseMessage],
         tools: Sequence[dict[str, Any] | BaseTool],
         on_delta: DeltaSink | None = None,
@@ -65,10 +74,11 @@ class GuardedModel:
         ⚠ 给了 `on_delta` 才走流式。回的仍是攒齐的那一条——增量是顺路交出去
         的，不是替代品。
 
-        Args: kind, messages, tools, on_delta。
+        Args: choice, messages, tools, on_delta。
         """
-        self._guard()
-        model = self.source(kind)
+        breaker = self._breaker_of(choice.profile)
+        self._guard(breaker)
+        model = await self.source(choice)
         bound = model.bind_tools(list(tools)) if tools else model
         sink = on_delta if self.is_streaming else None
         try:
@@ -80,16 +90,25 @@ class GuardedModel:
         except _OUR_FAULT as error:
             raise ModelRejected(_reason(error)) from error
         except OpenAIError as error:
-            self.breaker.record_failure(type(error).__name__)
+            breaker.record_failure(type(error).__name__)
             raise ModelUnavailable(_reason(error)) from error
-        self.breaker.record_success()
+        breaker.record_success()
         answer = _as_ai_message(reply)
-        _log_usage(kind, answer)
+        _log_usage(choice, answer)
         return answer
 
-    def _guard(self) -> None:
+    def _breaker_of(self, profile: str) -> CircuitBreaker:
+        """这一路自己那份断路器；没单独配就用默认那一路的。
+
+        Args: profile。
+        """
+        if profile == DEFAULT_PROFILE:
+            return self.breaker
+        return self.breakers.get(profile, self.breaker)
+
+    def _guard(self, breaker: CircuitBreaker) -> None:
         try:
-            self.breaker.guard()
+            breaker.guard()
         except BreakerOpen as error:
             _logger.warning(
                 "model_short_circuited", "断路器打开着，本次没有发出去"
@@ -117,7 +136,7 @@ def usage_of(reply: AIMessage) -> dict[str, int] | None:
     }
 
 
-def _log_usage(kind: ModelKind, reply: AIMessage) -> None:
+def _log_usage(choice: ModelChoice, reply: AIMessage) -> None:
     """把这一次调用的用量记一条。
 
     ⚠ 没有这条日志，上下文工程就是盲的：前缀被打断这件事没有任何运行期迹象，
@@ -126,13 +145,14 @@ def _log_usage(kind: ModelKind, reply: AIMessage) -> None:
 
     ⚠ 字段只有档位与几个数字：低基数，且不带任何请求内容（observability §3）。
 
-    Args: kind, reply。
+    Args: choice, reply。
     """
     fields = usage_of(reply)
+    tags = {"kind": choice.kind, "profile": choice.profile}
     if fields is None:
-        _logger.debug("model_usage_absent", "端点没回用量", kind=kind)
+        _logger.debug("model_usage_absent", "端点没回用量", **tags)
         return
-    _logger.info("model_call_usage", "一次模型调用的用量", kind=kind, **fields)
+    _logger.info("model_call_usage", "一次模型调用的用量", **tags, **fields)
 
 
 async def _drain(

@@ -9,6 +9,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
+  MAX_KEPT_IMAGES,
   __resetEntryIds,
   emptyLog,
   withDelta,
@@ -127,5 +128,38 @@ describe('整条', () => {
 
     expect(log.openText).toBeNull()
     expect(roles(log)).toEqual(['assistant', 'user'])
+  })
+})
+
+describe('截图封顶', () => {
+  const SHOT = 'data:image/png;base64,iVBORw0KGgo='
+
+  function withShots(count: number): ConversationLog {
+    let log = emptyLog()
+    for (let at = 0; at < count; at += 1) {
+      log = withStep(log, { ...STEP, name: `capture-${at}`, image: SHOT })
+    }
+    return log
+  }
+
+  it('没到上限时一张都不丢', () => {
+    const log = withShots(MAX_KEPT_IMAGES)
+    const kept = log.entries.filter((one) => one.step?.image !== undefined)
+    expect(kept).toHaveLength(MAX_KEPT_IMAGES)
+  })
+
+  it('超出上限时丢的是最早的那几张', () => {
+    // ⚠ 一张截图几百 KB。不封顶的话，聊半小时的标签页会吃掉几百兆
+    const log = withShots(MAX_KEPT_IMAGES + 2)
+    const withImage = log.entries.filter((one) => one.step?.image !== undefined)
+    expect(withImage).toHaveLength(MAX_KEPT_IMAGES)
+    expect(withImage[0]?.step?.name).toBe('capture-2')
+  })
+
+  it('丢掉的那几张留一个记号，不是当作从来没有过', () => {
+    const log = withShots(MAX_KEPT_IMAGES + 1)
+    const first = log.entries[0]
+    expect(first?.step?.image).toBeUndefined()
+    expect(first?.step?.isImageDropped).toBe(true)
   })
 })

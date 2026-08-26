@@ -24,6 +24,16 @@ const SCAN_ROOTS = [
   join(WEB_ROOT, 'packages', 'ui', 'src'),
 ]
 const TOKENS_SCSS = join(WEB_ROOT, 'packages', 'tokens', 'src', 'tokens.scss')
+// 助手在自己的根节点上改写同一批语义 token，并加了几格自己的 `--ai-*`。
+// ⚠ 它不在扫描根里（那两处只收 app/src 与 ui/src），漏了这一句的话，助手用到的
+// `--ai-*` 会被整批判成拼错——而它们其实是有定义的。
+const AI_SURFACE_SCSS = join(
+  WEB_ROOT,
+  'packages',
+  'tokens',
+  'src',
+  'ai-surface.scss',
+)
 const STYLE_SUFFIXES = ['.vue', '.scss', '.css', '.ts']
 
 /**
@@ -59,6 +69,7 @@ function walk(root: string): string[] {
 function declaredNames(): Set<string> {
   const declared = new Set<string>(Object.values(TOKEN_CSS_VAR))
   collectDeclarations(readFileSync(TOKENS_SCSS, 'utf8'), declared)
+  collectDeclarations(readFileSync(AI_SURFACE_SCSS, 'utf8'), declared)
   // 组件自己在 `:root` 之外声明的局部变量同样算数：扫到哪个文件就把它
   // 自己的声明一并收进来，避免把「局部变量」误判成拼错。
   for (const root of SCAN_ROOTS) {

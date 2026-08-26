@@ -248,3 +248,40 @@ async def test_a_created_session_answers_with_its_location(
     )
     created = _data(response)
     assert response.headers["Location"] == f"{SESSIONS_URL}/{created['id']}"
+
+
+async def test_a_session_remembers_which_model_it_was_switched_to(
+    db_client: httpx.AsyncClient,
+) -> None:
+    """换模型是会话级的选择。
+
+    ⚠ 存在会话上而不是每次请求带：工具回填那几次推进是循环自己发的，
+    那时前端手上没有用户的选择，只有落在会话上才带得过去。
+    """
+    created = await db_client.post(
+        SESSIONS_URL, json={"surface_kind": "dashboard-editor"}
+    )
+    session_id = created.json()["data"]["id"]
+    patched = await db_client.patch(
+        f"{SESSIONS_URL}/{session_id}",
+        json={"model_profile": "codex", "reasoning_effort": "high"},
+    )
+    assert patched.status_code == 200
+    body = patched.json()["data"]
+    assert body["model_profile"] == "codex"
+    assert body["reasoning_effort"] == "high"
+
+
+async def test_an_unknown_model_profile_is_rejected(
+    db_client: httpx.AsyncClient,
+) -> None:
+    # 放行的话它会落进会话行，而取模型那一层认不出就退回默认——
+    # 界面上显示「用的是订阅账号」而实际走的是按量端点，账单上才看得出来
+    created = await db_client.post(
+        SESSIONS_URL, json={"surface_kind": "dashboard-editor"}
+    )
+    session_id = created.json()["data"]["id"]
+    rejected = await db_client.patch(
+        f"{SESSIONS_URL}/{session_id}", json={"model_profile": "没这一路"}
+    )
+    assert rejected.status_code == 400

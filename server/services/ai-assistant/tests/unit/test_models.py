@@ -38,6 +38,8 @@ def test_session_columns_match_the_migration() -> None:
         "title",
         "surface_kind",
         "surface_ref",
+        "model_profile",
+        "reasoning_effort",
         "is_archived",
         "row_version",
         "last_error",

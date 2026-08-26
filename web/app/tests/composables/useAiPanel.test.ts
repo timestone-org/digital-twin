@@ -75,6 +75,8 @@ function detailOf(
     is_archived: false,
     row_version: 1,
     last_error: null,
+    model_profile: null,
+    reasoning_effort: null,
     created_at: '',
     updated_at: '',
     messages,
@@ -130,6 +132,8 @@ describe('能力探测', () => {
           is_model_enabled: true,
           is_vision_enabled: true,
           skills: [],
+          models: [],
+          default_model_id: '',
         }),
     })
     const ctx = setup()

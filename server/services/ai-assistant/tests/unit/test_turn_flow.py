@@ -22,7 +22,7 @@ from ai_assistant.apps.chat.services.tool_specs import specs_named
 from ai_assistant.apps.chat.services.turn import TurnDeps, run_turn
 from ai_assistant.apps.chat.skills import find_skill
 from ai_assistant.llm import GuardedModel
-from ai_assistant.llm.provider import ModelKind
+from ai_assistant.llm.provider import ModelChoice
 from lib.resilience import CircuitBreaker
 from unit.llm_fakes import ScriptedChat, tool_call
 
@@ -37,7 +37,7 @@ def _asks(tool: str, call_id: str, /, **arguments: Any) -> AIMessage:
 
 
 def _deps(model: BaseChatModel) -> TurnDeps:
-    def source(_kind: ModelKind) -> BaseChatModel:
+    async def source(_choice: ModelChoice) -> BaseChatModel:
         return model
 
     return TurnDeps(

@@ -229,4 +229,6 @@ def _to_detail_out(
         updated_at=chat_session.updated_at,
         messages=list(messages),
         plan_json=chat_session.plan_json,
+        model_profile=chat_session.model_profile,
+        reasoning_effort=chat_session.reasoning_effort,
     )

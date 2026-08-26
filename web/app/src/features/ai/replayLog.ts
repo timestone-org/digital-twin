@@ -15,6 +15,7 @@ import {
   withStep,
   type ConversationLog,
 } from './conversationLog'
+import { inputPreview, outputPreview } from './stepPreview'
 import type { RunnerStep } from './turnRunner'
 
 /** 循环代发的催促消息的开头（turnRunner 的 PLAN_CONTINUE_TEXT 以它起头）。 */
@@ -62,13 +63,22 @@ function withAssistantSaid(
   return text === '' ? stepped : withSaid(stepped, 'assistant', text)
 }
 
+/**
+ * 库里的一步摊成界面上的一步。
+ * ⚠ 图不在里面：截图**从来不落库**（存的是一句「[截图]」），所以回放出来的
+ * 那几步永远没有缩略图。卡片上就此说一句人话，不留一个点不开的空框。
+ */
 function runnerStepOf(step: AssistantStep): RunnerStep {
+  const input = inputPreview(step.input_json)
+  const output = outputPreview(step.output_json)
   return {
     kind: step.kind,
     name: step.name,
     state: step.state,
     title: titleOf(step),
     error: step.error,
+    ...(input === null ? {} : { input }),
+    ...(output === null ? {} : { output }),
   }
 }
 

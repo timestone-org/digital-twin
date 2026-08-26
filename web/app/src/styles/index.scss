@@ -18,3 +18,6 @@
 @use 'base';
 @use 'animations';
 @use 'components';
+// 助手那块紫玻璃。⚠ 必须是全局的：它改写的是语义 token，而消费它们的是
+// @dt/ui 里各组件自己的 scoped 样式——scoped 改写够不着那些选择器。
+@use '@dt/tokens/ai-surface.scss';

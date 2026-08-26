@@ -27,6 +27,22 @@ export interface AssistantSkill {
   required_codes: string[]
 }
 
+/** 能选的一路模型。 */
+export interface AssistantModelProfile {
+  id: string
+  label: string
+  /**
+   * 这一路此刻能不能用。
+   * ⚠ 「配了」不等于「能用」：订阅账号那一路还得先登录过。为假时要把它灰着
+   * 并指向系统页——摆成可选的话，用户点下去收到的是一条「模型暂时不可用」。
+   */
+  is_ready: boolean
+  has_vision: boolean
+  models: string[]
+  /** 可调的推理档位；空表示这一路没有这一档。 */
+  efforts: string[]
+}
+
 /**
  * 助手能力。
  *
@@ -39,6 +55,42 @@ export interface AssistantCapability {
   /** 视觉输入是否可用。看截图提建议那类技能据它决定摆不摆。 */
   is_vision_enabled: boolean
   skills: AssistantSkill[]
+  /** 这套部署接了哪几路模型。空 = 一路都没接。 */
+  models: AssistantModelProfile[]
+  /** 没选过时用哪一路。 */
+  default_model_id: string
+}
+
+/** 一路模型账号的登录态。⚠ 令牌本身**永远不在里面**。 */
+export interface AssistantCredentialStatus {
+  provider: string
+  is_connected: boolean
+  /** 账号标识的掩码，形如 `…a1b2c3`。只回答「是不是我那个号」。 */
+  account_label: string | null
+  plan_label: string | null
+  expires_at: string | null
+  last_refresh_at: string | null
+  /** 最近一次续期失败的原因，给人看。为空表示一切正常。 */
+  last_error: string | null
+}
+
+/** 设备码登录开了个头。 */
+export interface AssistantDeviceLoginStart {
+  /** 这次登录的句柄。⚠ 不是 device_code——那一格是密钥态，不下发。 */
+  ref: string
+  user_code: string
+  verification_uri: string
+  /** 建议的轮询间隔。⚠ 必须照它来：打快了上游会限流整台机器。 */
+  interval_s: number
+  expires_in_s: number
+}
+
+/** 问了一次的结果。 */
+export interface AssistantDeviceLoginPoll {
+  is_done: boolean
+  /** 下一次隔多久再问。上游让慢下来时这个数会变大，界面要用回它。 */
+  interval_s: number
+  status: AssistantCredentialStatus | null
 }
 
 /** 消息的说话人。`tool` 是工具结果回填的那一条。 */
@@ -111,6 +163,9 @@ export interface AssistantSession {
   row_version: number
   /** 最近一次失败的原因，给人看。不带上游地址与密钥。 */
   last_error: string | null
+  /** 这个会话选了哪一路模型、哪一档；`null` = 按部署配置的默认。 */
+  model_profile: string | null
+  reasoning_effort: string | null
   created_at: string
   updated_at: string
 }

@@ -10,10 +10,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from ai_assistant.apps.chat.catalog import ASSISTANT_USE
-from ai_assistant.apps.chat.schemas.capability import CapabilityOut
+from ai_assistant.apps.chat.schemas.capability import (
+    CapabilityOut,
+    ModelProfileOut,
+)
 from ai_assistant.apps.chat.services import skill_catalog
 from ai_assistant.container import Container
 from ai_assistant.deps import get_container, require
+from ai_assistant.llm import CODEX_PROFILE
 from ai_assistant.settings import API_PREFIX
 from lib.auth import CallerContext
 from lib.web import ApiResponse, ok
@@ -32,12 +36,44 @@ async def read_capabilities(
 
     Args: container, _caller。
     """
-    settings = container.settings
+    profiles = await _profiles_of(container)
     return ok(
         CapabilityOut(
-            is_model_enabled=settings.model_enabled,
-            is_vision_enabled=settings.model_enabled
-            and bool(settings.model_vision),
+            is_model_enabled=any(one.is_ready for one in profiles),
+            is_vision_enabled=any(
+                one.is_ready and one.has_vision for one in profiles
+            ),
             skills=skill_catalog(),
+            models=profiles,
+            default_model_id=container.models.default_id(),
         )
     )
+
+
+async def _profiles_of(container: Container) -> list[ModelProfileOut]:
+    """这套部署接了哪几路，各自此刻能不能用。
+
+    ⚠ 订阅账号那一路的「能不能用」要**去库里看有没有登录过**：只按配置回答的话，
+    界面上会摆出一个点了就报错的选项，而报出来的错是「模型暂时不可用」。
+
+    Args: container。
+    """
+    connected = await _codex_connected(container)
+    return [
+        ModelProfileOut(
+            id=one.id,
+            label=one.label,
+            is_ready=connected if one.id == CODEX_PROFILE else one.is_ready,
+            has_vision=one.has_vision,
+            models=list(one.models),
+            efforts=list(one.efforts),
+        )
+        for one in container.models.profiles()
+    ]
+
+
+async def _codex_connected(container: Container) -> bool:
+    store = container.credentials
+    if store is None:
+        return False
+    return (await store.status(CODEX_PROFILE)).is_connected

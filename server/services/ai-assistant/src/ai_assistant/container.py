@@ -2,10 +2,24 @@
 
 from dataclasses import dataclass
 
-from ai_assistant.llm import GuardedModel, build_model_source
+import httpx
+
+from ai_assistant.apps.credential.services import (
+    HTTP_TIMEOUT_S,
+    CredentialStore,
+    DeviceLogin,
+    OAuthClient,
+)
+from ai_assistant.llm import (
+    CODEX_PROFILE,
+    DEFAULT_PROFILE,
+    GuardedModel,
+    ModelRegistry,
+)
 from ai_assistant.settings import SERVICE_NAME, Settings
 from ai_assistant.upstream import PlatformClient
 from lib.cache import Cache
+from lib.crypto import SecretCipher
 from lib.db import Database, PoolProfile
 from lib.idempotency import IdempotencyStore
 from lib.resilience import CircuitBreaker
@@ -29,6 +43,15 @@ class Container:
     # 打业务面的客户端。⚠ 连接池一个进程一份、长活——每次调用现造一个再关掉，
     # 等于每次都重新握一次 TCP 手
     platform: PlatformClient
+    # 这套部署接了哪几路模型。⚠ 与 `model` 分开：能力面要在模型关着时
+    # 也能如实回答「这里本来能接哪几路」
+    models: ModelRegistry
+    # 订阅账号那一路的凭据读写与登录。没开 codex 时同样是 `None`
+    credentials: CredentialStore | None
+    device_login: DeviceLogin | None
+    # 打 OAuth 端点的 http 客户端。⚠ 与凭据一起活：没开 codex 时不建，
+    # 建了就要在关停时收掉（见 app.py 的 lifespan 钩子）
+    oauth_http: httpx.AsyncClient | None
 
 
 def _build_database(settings: Settings) -> Database:
@@ -49,26 +72,66 @@ def _build_database(settings: Settings) -> Database:
     )
 
 
-def _build_model(settings: Settings) -> GuardedModel | None:
-    """按配置装模型；没开就不装。
+def _build_model(
+    settings: Settings, registry: ModelRegistry
+) -> GuardedModel | None:
+    """按配置装模型；一路都没接就不装。
 
     ⚠ 断路器一个进程一份、跟着模型一起活：每次调用现造一个的话它永远停在
     「closed」，等于没有断路器。
 
-    Args: settings。
+    ⚠ **每一路各有一份断路器**：共用一份的话，订阅账号那一路挂掉会把按量
+    那一路一起短路，而后者本来好好的。
+
+    Args: settings, registry。
     """
-    source = build_model_source(settings)
-    if source is None:
+    if not registry.profiles():
         return None
     return GuardedModel(
-        source=source,
+        source=registry.resolve,
         is_streaming=settings.model_stream_enabled,
-        breaker=CircuitBreaker(
-            name="model",
-            failure_threshold=settings.model_breaker_failures,
-            reset_after_s=settings.model_breaker_reset_s,
-        ),
+        breaker=_breaker_of(settings, DEFAULT_PROFILE),
+        breakers={CODEX_PROFILE: _breaker_of(settings, CODEX_PROFILE)},
     )
+
+
+def _breaker_of(settings: Settings, profile: str) -> CircuitBreaker:
+    return CircuitBreaker(
+        name=f"model:{profile}",
+        failure_threshold=settings.model_breaker_failures,
+        reset_after_s=settings.model_breaker_reset_s,
+    )
+
+
+def _build_codex(
+    settings: Settings, database: Database, cache: Cache
+) -> tuple[
+    CredentialStore | None, DeviceLogin | None, httpx.AsyncClient | None
+]:
+    """按配置装订阅账号那一路；没开就三个都不建。
+
+    ⚠ 密钥在这里已经保证有了：`Settings` 的校验器兜着「开了 codex 却没配
+    密钥 → 启动即退出」，所以这里不需要再写一条「没配就降级」的分支——
+    写了反而会让配置漏填悄悄变成「登录不了但服务起着」。
+
+    Args: settings, database, cache。
+    """
+    secret = settings.credential_secret
+    if not settings.codex_enabled or secret is None:
+        return (None, None, None)
+    # ⚠ 客户端自己也带超时：逐个请求写的那份只兜住走 `_post` 的路径，
+    # 而「每个跨进程调用必须有超时」守的是整条连接
+    http = httpx.AsyncClient(timeout=HTTP_TIMEOUT_S)
+    store = CredentialStore(
+        sessions=database.session,
+        cipher=SecretCipher(
+            secret.get_secret_value(), label="model-credential"
+        ),
+        oauth=OAuthClient(http),
+        cache=cache,
+    )
+    login = DeviceLogin(oauth=OAuthClient(http), cache=cache, store=store)
+    return (store, login, http)
 
 
 def build_container(settings: Settings) -> Container:
@@ -77,16 +140,26 @@ def build_container(settings: Settings) -> Container:
     Args: settings。
     """
     cache = Cache(url=settings.url(), timeout_s=settings.redis_timeout_s)
+    database = _build_database(settings)
+    credentials, device_login, oauth_http = _build_codex(
+        settings, database, cache
+    )
+    # ⚠ 一个进程一份：造两份的话，两份各自的档位清单可以在将来漂开
+    registry = ModelRegistry(settings, tokens=credentials)
     return Container(
         settings=settings,
-        database=_build_database(settings),
+        database=database,
         cache=cache,
         idempotency=IdempotencyStore(
             cache=cache, namespace=IDEMPOTENCY_NAMESPACE
         ),
-        model=_build_model(settings),
+        model=_build_model(settings, registry),
         platform=PlatformClient(
             base_url=settings.platform_base_url,
             timeout_s=settings.platform_timeout_s,
         ),
+        models=registry,
+        credentials=credentials,
+        device_login=device_login,
+        oauth_http=oauth_http,
     )

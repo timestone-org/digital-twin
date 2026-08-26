@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./tokens.scss": "./src/tokens.scss",
-    "./decor.scss": "./src/decor.scss"
+    "./decor.scss": "./src/decor.scss",
+    "./ai-surface.scss": "./src/ai-surface.scss"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"

@@ -54,6 +54,30 @@ def test_a_step_frame_carries_what_the_list_renders() -> None:
     assert body["title"] == "跑完了"
 
 
+def test_a_step_frame_carries_the_input_and_output_it_can_show() -> None:
+    step = TurnStep(
+        kind="server_tool",
+        name="points.search",
+        state="succeeded",
+        title="跑完了",
+        input_json={"q": "温度"},
+        output_json={"body": "命中 3 条"},
+    )
+    body = _payload(events.step_frame(step))
+    # 不带这两格的话，「它到底把什么写进去了」要等会话重开才看得见
+    assert body["input"] == {"q": "温度"}
+    assert body["output"] == "命中 3 条"
+
+
+def test_a_step_without_input_frames_them_as_null() -> None:
+    step = TurnStep(
+        kind="model", name="model", state="succeeded", title="给出答复"
+    )
+    body = _payload(events.step_frame(step))
+    assert body["input"] is None
+    assert body["output"] is None
+
+
 def test_a_finished_turn_frames_as_done() -> None:
     frame = events.outcome_frame(TurnOutcome(reply="好了"))
     assert events.EVENT_DONE in frame

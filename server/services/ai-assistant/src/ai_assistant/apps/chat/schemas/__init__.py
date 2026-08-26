@@ -4,7 +4,11 @@ from ai_assistant.apps.chat.schemas.attachment import (
     AttachmentParseIn,
     AttachmentParseOut,
 )
-from ai_assistant.apps.chat.schemas.capability import CapabilityOut, SkillOut
+from ai_assistant.apps.chat.schemas.capability import (
+    CapabilityOut,
+    ModelProfileOut,
+    SkillOut,
+)
 from ai_assistant.apps.chat.schemas.common import (
     InputModel,
     OutputModel,
@@ -29,6 +33,7 @@ __all__ = [
     "CapabilityOut",
     "InputModel",
     "MessageOut",
+    "ModelProfileOut",
     "OutputModel",
     "SessionCreateIn",
     "SessionDetailOut",

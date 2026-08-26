@@ -22,7 +22,7 @@ from openai import (
 
 from ai_assistant.llm import GuardedModel, ModelRejected, ModelUnavailable
 from ai_assistant.llm.guard import usage_of
-from ai_assistant.llm.provider import ModelKind
+from ai_assistant.llm.provider import ModelChoice
 from lib.resilience import CircuitBreaker
 from lib.testing.clock import FrozenClock
 from unit.llm_fakes import ScriptedChat, StreamingChat
@@ -43,7 +43,7 @@ def _guarded(
         clock=clock or FrozenClock(),
     )
 
-    def source(_kind: ModelKind) -> BaseChatModel:
+    async def source(_choice: ModelChoice) -> BaseChatModel:
         return model
 
     return GuardedModel(source=source, breaker=breaker), breaker
@@ -51,7 +51,9 @@ def _guarded(
 
 async def _respond(guarded: GuardedModel) -> AIMessage:
     return await guarded.respond(
-        kind="chat", messages=[HumanMessage(content="你好")], tools=[]
+        choice=ModelChoice(),
+        messages=[HumanMessage(content="你好")],
+        tools=[],
     )
 
 
@@ -188,7 +190,7 @@ async def _stream(
     guarded: GuardedModel, sink: list[tuple[str, str]]
 ) -> AIMessage:
     return await guarded.respond(
-        kind="chat",
+        choice=ModelChoice(),
         messages=[HumanMessage(content="你好")],
         tools=[],
         on_delta=lambda channel, text: sink.append((channel, text)),
@@ -252,7 +254,7 @@ async def test_turning_streaming_off_ignores_the_sink() -> None:
         clock=FrozenClock(),
     )
 
-    def source(_kind: ModelKind) -> BaseChatModel:
+    async def source(_choice: ModelChoice) -> BaseChatModel:
         return model
 
     guarded = GuardedModel(source=source, breaker=breaker, is_streaming=False)

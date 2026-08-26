@@ -105,11 +105,40 @@ export function withStep(
   const sealedLog = sealed(log)
   return {
     ...sealedLog,
-    entries: [
+    entries: withImagesCapped([
       ...sealedLog.entries,
       { id: nextId(), role: 'step', text: step.title, step },
-    ],
+    ]),
   }
+}
+
+/**
+ * 时间线上最多留几张截图的原图。
+ * ⚠ 有上限：一张 1280 宽的截图 base64 之后是几百 KB，而一次「看图提建议」
+ * 常常连截好几张。不封顶的话，开着聊半小时的标签页会吃掉几百兆。
+ */
+export const MAX_KEPT_IMAGES = 6
+
+/** 从最新往回数，超出上限的那些图丢掉，只留一句「已释放」。 */
+function withImagesCapped(entries: ChatEntry[]): ChatEntry[] {
+  let seen = 0
+  for (let at = entries.length - 1; at >= 0; at -= 1) {
+    const entry = entries[at]
+    if (entry?.step?.image === undefined) continue
+    seen += 1
+    if (seen <= MAX_KEPT_IMAGES) continue
+    entries[at] = { ...entry, step: withoutImage(entry.step) }
+  }
+  return entries
+}
+
+function withoutImage(step: RunnerStep): RunnerStep {
+  // ⚠ 真的把这一格摘掉，而不是赋 undefined：`exactOptionalPropertyTypes` 下
+  // 「有这一格但值是 undefined」与「没有这一格」不是一回事，而那几百 KB
+  // 只有真摘掉才会被回收
+  const next: RunnerStep = { ...step, isImageDropped: true }
+  delete next.image
+  return next
 }
 
 /**

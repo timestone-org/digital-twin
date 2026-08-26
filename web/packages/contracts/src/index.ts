@@ -408,11 +408,15 @@ export {
 } from './dataset'
 export type {
   AssistantCapability,
+  AssistantCredentialStatus,
   AssistantDeltaChannel,
+  AssistantDeviceLoginPoll,
+  AssistantDeviceLoginStart,
   AssistantEventName,
   AssistantToolCall,
   AssistantMessage,
   AssistantMessageRole,
+  AssistantModelProfile,
   AssistantParsedTable,
   AssistantPlan,
   AssistantPlanItem,

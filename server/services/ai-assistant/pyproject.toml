@@ -7,11 +7,12 @@ dependencies = [
     # ⚠ 四档一个都不能省，且必须自己声明：开发用的是 workspace 共享 venv，
     # 别的服务装进来的包在本地和全部用例里都能 import 成功，只有按自己声明的
     # 依赖装的独立镜像会启动即崩（check_service_deps.py 守这条）。
-    #   auth  —— 边缘签名身份头要 lib.auth 解，服务级密钥要它的定长比较
-    #   db    —— 会话、消息、步骤三张表
-    #   redis —— 幂等键存储与断路器状态
-    #   web   —— FastAPI 与 uvicorn
-    "lib[auth,db,redis,web]",
+    #   auth   —— 边缘签名身份头要 lib.auth 解，服务级密钥要它的定长比较
+    #   crypto —— 模型账号的令牌加密落库
+    #   db     —— 会话、消息、步骤、模型凭据四张表
+    #   redis  —— 幂等键存储、断路器状态、设备码登录的在途会话
+    #   web    —— FastAPI 与 uvicorn
+    "lib[auth,crypto,db,redis,web]",
     # 打模型端点与 platform 内部面。⚠ 必须自己声明：httpx 在工作区根的 dev 组里，
     # 本地与全部用例都 import 得到，只有按自己声明的依赖装的镜像会崩。
     "httpx>=0.28",

@@ -9,14 +9,17 @@
  * 把它们与一次对话接起来。
  */
 import { computed, ref } from 'vue'
+import type { AssistantModelProfile } from '@dt/contracts'
 import { DtButton, DtFilePicker, DtNotice, DtSpinner, DtTextarea } from '@dt/ui'
 
 import { parseAttachment } from '@/api/assistant'
 import AiCoreIcon from '@/components/ai/AiCoreIcon.vue'
+import AiModelPicker from '@/components/ai/AiModelPicker.vue'
 import AiPlanCard from '@/components/ai/AiPlanCard.vue'
 import AiTimeline from '@/components/ai/AiTimeline.vue'
 import { toBase64 } from '@/features/ai/attachment'
 import type { AiConversation } from '@/composables/useAiConversation'
+import type { ModelChoice } from '@/composables/useAiPanel'
 
 const props = defineProps<{
   /**
@@ -29,9 +32,17 @@ const props = defineProps<{
   hint?: string
   /** 面板此刻是不是放大着。宽窄由外面的 dock 管，这里只画那个按钮。 */
   isWide?: boolean
+  /** 这套部署接了哪几路模型。只有一路时下拉整个不渲染。 */
+  models?: readonly AssistantModelProfile[]
+  /** 这个会话选了哪一路。 */
+  choice?: ModelChoice
 }>()
 
-const emit = defineEmits<{ close: []; 'toggle-wide': [] }>()
+const emit = defineEmits<{
+  close: []
+  'toggle-wide': []
+  pick: [value: ModelChoice]
+}>()
 
 const draft = ref('')
 
@@ -80,6 +91,12 @@ async function attach(files: File[]): Promise<void> {
       <AiCoreIcon :size="20" />
       <span class="ai-panel__name">助手</span>
       <span class="ai-panel__where">{{ surfaceLabel }}</span>
+      <AiModelPicker
+        v-if="models !== undefined && choice !== undefined"
+        :models="models"
+        :choice="choice"
+        @pick="(value) => emit('pick', value)"
+      />
       <DtButton
         variant="ghost"
         size="xs"
@@ -147,18 +164,32 @@ async function attach(files: File[]): Promise<void> {
 }
 
 .ai-panel__bar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--border-default);
   /* 标题栏压一层更实的底，滚动内容从它下面过时不会糊在一起 */
   background: var(--surface-raised);
+}
+
+/* 底边那条发光细线。⚠ 用伪元素而不是 border-bottom：border 只能是实色，
+   而这条要中间亮两头淡，才不至于把面板横切成两段。 */
+.ai-panel__bar::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: var(--ai-grad-edge);
 }
 
 .ai-panel__name {
   color: var(--text-title);
   font-weight: 600;
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 12px var(--fx-glow-title);
 }
 
 .ai-panel__where {
@@ -181,12 +212,23 @@ async function attach(files: File[]): Promise<void> {
 }
 
 .ai-panel__compose {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem;
-  border-top: 1px solid var(--border-default);
   background: var(--surface-raised);
+}
+
+/* 与标题栏同款的发光细线，摆在上沿 */
+.ai-panel__compose::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--ai-grad-edge);
 }
 
 .ai-panel__hint {

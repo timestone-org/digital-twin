@@ -168,6 +168,141 @@
         "title": "ApiResponse[CapabilityOut]",
         "type": "object"
       },
+      "ApiResponse_CredentialStatusOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CredentialStatusOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[CredentialStatusOut]",
+        "type": "object"
+      },
+      "ApiResponse_DeviceLoginPollOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeviceLoginPollOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[DeviceLoginPollOut]",
+        "type": "object"
+      },
+      "ApiResponse_DeviceLoginStartOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeviceLoginStartOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[DeviceLoginStartOut]",
+        "type": "object"
+      },
       "ApiResponse_Page_SessionOut__": {
         "properties": {
           "code": {
@@ -373,6 +508,11 @@
       "CapabilityOut": {
         "description": "助手能力。\n\n⚠ 前端把「取不到这份」当作「助手不存在」而不是「暂时故障」：某些现场\n根本不部署本服务，那时边缘直接 502，入口就该干净地不出现。",
         "properties": {
+          "default_model_id": {
+            "default": "",
+            "title": "Default Model Id",
+            "type": "string"
+          },
           "is_model_enabled": {
             "title": "Is Model Enabled",
             "type": "boolean"
@@ -380,6 +520,13 @@
           "is_vision_enabled": {
             "title": "Is Vision Enabled",
             "type": "boolean"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelProfileOut"
+            },
+            "title": "Models",
+            "type": "array"
           },
           "skills": {
             "items": {
@@ -395,6 +542,164 @@
           "skills"
         ],
         "title": "CapabilityOut",
+        "type": "object"
+      },
+      "CredentialStatusOut": {
+        "description": "一路模型的登录态。",
+        "properties": {
+          "account_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Label"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "is_connected": {
+            "title": "Is Connected",
+            "type": "boolean"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_refresh_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Refresh At"
+          },
+          "plan_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Label"
+          },
+          "provider": {
+            "enum": [
+              "codex"
+            ],
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "is_connected"
+        ],
+        "title": "CredentialStatusOut",
+        "type": "object"
+      },
+      "DeviceLoginPollIn": {
+        "description": "问一次「用户点完了没」。",
+        "properties": {
+          "ref": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref"
+        ],
+        "title": "DeviceLoginPollIn",
+        "type": "object"
+      },
+      "DeviceLoginPollOut": {
+        "description": "问了一次的结果。",
+        "properties": {
+          "interval_s": {
+            "title": "Interval S",
+            "type": "integer"
+          },
+          "is_done": {
+            "title": "Is Done",
+            "type": "boolean"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CredentialStatusOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "is_done",
+          "interval_s"
+        ],
+        "title": "DeviceLoginPollOut",
+        "type": "object"
+      },
+      "DeviceLoginStartOut": {
+        "description": "设备码登录开了个头。",
+        "properties": {
+          "expires_in_s": {
+            "title": "Expires In S",
+            "type": "integer"
+          },
+          "interval_s": {
+            "title": "Interval S",
+            "type": "integer"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "user_code": {
+            "title": "User Code",
+            "type": "string"
+          },
+          "verification_uri": {
+            "title": "Verification Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "user_code",
+          "verification_uri",
+          "interval_s",
+          "expires_in_s"
+        ],
+        "title": "DeviceLoginStartOut",
         "type": "object"
       },
       "FieldErrorOut": {
@@ -495,6 +800,49 @@
           "created_at"
         ],
         "title": "MessageOut",
+        "type": "object"
+      },
+      "ModelProfileOut": {
+        "description": "能选的一路模型。",
+        "properties": {
+          "efforts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Efforts",
+            "type": "array"
+          },
+          "has_vision": {
+            "title": "Has Vision",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_ready": {
+            "title": "Is Ready",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Models",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "is_ready",
+          "has_vision"
+        ],
+        "title": "ModelProfileOut",
         "type": "object"
       },
       "Page_SessionOut_": {
@@ -604,6 +952,17 @@
             "title": "Messages",
             "type": "array"
           },
+          "model_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Profile"
+          },
           "plan_json": {
             "anyOf": [
               {
@@ -615,6 +974,17 @@
               }
             ],
             "title": "Plan Json"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
           },
           "row_version": {
             "title": "Row Version",
@@ -693,6 +1063,28 @@
             ],
             "title": "Last Error"
           },
+          "model_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Profile"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          },
           "row_version": {
             "title": "Row Version",
             "type": "integer"
@@ -756,6 +1148,38 @@
               }
             ],
             "title": "Is Archived"
+          },
+          "model_profile": {
+            "anyOf": [
+              {
+                "enum": [
+                  "default",
+                  "codex"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Profile"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
           },
           "title": {
             "anyOf": [
@@ -1064,6 +1488,207 @@
         "summary": "助手能力",
         "tags": [
           "capability"
+        ]
+      }
+    },
+    "/api/v1/assistant/credentials/{provider}": {
+      "delete": {
+        "description": "把这一路的凭据整行删掉。\n\nArgs: provider, store, _caller。",
+        "operationId": "forget_api_v1_assistant_credentials__provider__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "enum": [
+                "codex"
+              ],
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "退出模型账号",
+        "tags": [
+          "model-credential"
+        ]
+      },
+      "get": {
+        "description": "挂着的是哪个账号、什么时候过期。\n\nArgs: provider, store, _caller。",
+        "operationId": "read_status_api_v1_assistant_credentials__provider__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "enum": [
+                "codex"
+              ],
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_CredentialStatusOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "模型账号登录态",
+        "tags": [
+          "model-credential"
+        ]
+      }
+    },
+    "/api/v1/assistant/credentials/{provider}:poll-login": {
+      "post": {
+        "description": "问一次；点完了就把令牌存下来并把最新状态一并带回。\n\nArgs: provider, store, login, caller, body。",
+        "operationId": "poll_login_api_v1_assistant_credentials__provider__poll_login_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "enum": [
+                "codex"
+              ],
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceLoginPollIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_DeviceLoginPollOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "问一次登录好了没",
+        "tags": [
+          "model-credential"
+        ]
+      }
+    },
+    "/api/v1/assistant/credentials/{provider}:start-login": {
+      "post": {
+        "description": "要一个用户码与验证地址，交给人去别的设备上确认。\n\nArgs: provider, login, _caller, _key。",
+        "operationId": "start_login_api_v1_assistant_credentials__provider__start_login_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "enum": [
+                "codex"
+              ],
+              "title": "Provider",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_DeviceLoginStartOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "开始设备码登录",
+        "tags": [
+          "model-credential"
         ]
       }
     },

@@ -23,7 +23,7 @@ from ai_assistant.apps.chat.deps import get_advance_deps
 from ai_assistant.apps.chat.services.advance_service import AdvanceDeps
 from ai_assistant.apps.chat.services.server_tools import ServerTools
 from ai_assistant.llm import GuardedModel
-from ai_assistant.llm.provider import ModelKind
+from ai_assistant.llm.provider import ModelChoice, ModelKind
 from integration.conftest import DbStack
 from lib.resilience import CircuitBreaker
 
@@ -47,9 +47,9 @@ def _install(
     Args: stack, model, asked（记下每次要的是哪一档模型）。
     """
 
-    def source(kind: ModelKind) -> BaseChatModel:
+    async def source(choice: ModelChoice) -> BaseChatModel:
         if asked is not None:
-            asked.append(kind)
+            asked.append(choice.kind)
         return model
 
     @asynccontextmanager
