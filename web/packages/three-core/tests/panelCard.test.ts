@@ -335,6 +335,50 @@ describe('升降角标', () => {
   })
 })
 
+describe('还没有读数时', () => {
+  // ⚠ 图形只画填充不画骨架时，没读数的仪表只剩一个数字、进度条与趋势线整个不见，
+  //   用户看到的是「这几档画法没生效」，而配置里明明选着
+  it('没有读数的行落一个 data-empty，样式表拿它显骨架', () => {
+    const built = render({ fields: [field({ kind: 'gauge' })] })
+    const row = built.card.querySelector<HTMLElement>('.twin-panel__row')
+
+    expect(row?.dataset.empty).toBe('on')
+  })
+
+  it('读数一到就把这个标记摘掉', () => {
+    const built = buildPanelCard(panel({ fields: [field({ kind: 'gauge' })] }))
+    const view = built.fields[0]
+    if (view === undefined) throw new Error('本该建出一行')
+
+    paintPanelField(view, {})
+    expect(view.row.dataset.empty).toBe('on')
+
+    paintPanelField(view, { 'p1::f1': { value: 40 } })
+    expect(view.row.dataset.empty).toBeUndefined()
+  })
+
+  it('趋势线在没有读数时也留着盒子，不是一片空白', () => {
+    const built = render({ fields: [field({ kind: 'sparkline' })] })
+    const box = built.card.querySelector<HTMLElement>('.twin-panel__spark-box')
+
+    expect(box).not.toBeNull()
+    expect(box?.dataset.empty).toBe('on')
+  })
+
+  it('柱群在没有读数时标成空槽，与「读数为零」区分开', () => {
+    const built = buildPanelCard(panel({ fields: [field({ kind: 'bars' })] }))
+    const view = built.fields[0]
+    if (view === undefined) throw new Error('本该建出一行')
+    const bars = built.card.querySelector<HTMLElement>('.twin-panel__bars')
+
+    paintPanelField(view, {})
+    expect(bars?.dataset.empty).toBe('on')
+
+    paintPanelField(view, { 'p1::f1': { value: 0 } })
+    expect(bars?.dataset.empty).toBe('off')
+  })
+})
+
 describe('版式与装饰', () => {
   it('密度与列数落成卡片属性', () => {
     const { card } = render({
@@ -343,6 +387,15 @@ describe('版式与装饰', () => {
 
     expect(card.dataset.density).toBe('loose')
     expect(card.dataset.columns).toBe('3')
+  })
+
+  // ⚠ `clip-path` 连后代一起裁：切角画在卡片上会把四角括号与横扫光带一起切掉，
+  //   而配置里明明开着。切角只许画在外壳层上。
+  it('每张卡片都有一层外壳，底与切角画在它身上', () => {
+    const { card } = render({ style: { ...STYLE, variant: 'precision' } })
+
+    expect(card.querySelector('.twin-panel__shell')).not.toBeNull()
+    expect(card.style.clipPath).toBe('')
   })
 
   it('三层装饰各出一个节点，开哪个出哪个', () => {

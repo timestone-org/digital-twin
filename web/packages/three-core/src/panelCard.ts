@@ -102,6 +102,18 @@ function flagCard(card: HTMLElement, style: TwinPanelStyle): void {
 }
 
 /**
+ * 外壳层：背景、描边、切角与投影都画在它身上，卡片本体不带这些。
+ * ⚠ 这是「四角括号在切角变体上不见了」的修法：`clip-path` 连**后代一起裁**，
+ * 画在卡片上时把装饰层与内容一并切掉，而配置里明明开着。切角只裁这一层，
+ * 装饰与内容就都逃得出来。
+ */
+function buildShell(): HTMLElement {
+  const shell = span('twin-panel__shell')
+  shell.setAttribute('aria-hidden', 'true')
+  return shell
+}
+
+/**
  * 三层装饰各出一个自己的节点，不共用伪元素。
  * ⚠ 挤在 `::before` / `::after` 上时，「战术 HUD + 四角括号」这类组合会互相覆盖：
  * 后写的那条选择器赢，另一件装饰安静地不见了，而配置里明明两个都开着。
@@ -277,6 +289,7 @@ export function buildPanelCard(panel: TwinPanel): PanelCard {
   card.classList.add(`twin-panel--${panel.style.variant}`)
   flagCard(card, panel.style)
 
+  card.append(buildShell())
   const head = buildHead(panel)
   if (head !== null) card.append(head)
   const body = div('twin-panel__body')
@@ -386,6 +399,10 @@ export function paintPanelField(
     view.unitEl.textContent = reading.unit
   }
   paintTone(view, reading)
+  // ⚠ 「还没有读数」要落成一个属性：样式表按它把骨架显出来、把大字占位符缩回
+  //   正常字号（缘由见 `styles/panel.scss` 的骨架那一节）。
+  if (reading.live) delete view.row.dataset.empty
+  else view.row.dataset.empty = 'on'
   const ratio = reading.live ? panelFieldRatio(view.field, reading.raw) : null
   if (ratio === null) view.row.style.removeProperty('--tp-fill')
   else view.row.style.setProperty('--tp-fill', ratio.toFixed(3))

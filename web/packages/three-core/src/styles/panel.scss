@@ -225,8 +225,9 @@
       --tp-tone: var(--state-danger);
     }
 
-    // 满幅的那几档：大字、趋势线与柱群在一格宽里根本读不出来
-    &[data-kind='hero'],
+    // ⚠ 只有这两档满幅：走势横向压到半格宽就只剩一团墨。大字**不**满幅——
+    //   它在两列里放得下，一起满幅会让分了列的牌大半行仍是一行一个，
+    //   看起来就像「列数没生效」。
     &[data-kind='sparkline'],
     &[data-kind='bars'] {
       grid-column: 1 / -1;
@@ -282,11 +283,24 @@
     letter-spacing: -0.03em;
   }
 
-  // 量程进度条
+  // ⚠ 没读数时占位符是一个破折号，用 2.6em 画出来就是一根横杠，
+  //   看着像版式坏了而不是「还没有数」——缩回正常字号并压暗
+  &__row[data-kind='hero'][data-empty='on'] &__num {
+    color: var(--text-disabled);
+    font-size: 1.2em;
+    font-weight: 400;
+  }
+
+  // ⚠ 图形的**骨架**（槽、环、基线、柱底）与填充分开，且始终画得出来：只画填充的话，
+  //   没读数时仪表只剩一个数字、进度条与趋势线整个不见，用户看到的是「这几档画法
+  //   没生效」。对比度按「暗底上一眼看得见」定，不是按「淡到不打扰」定。
   &__track {
     position: relative;
-    height: 3px;
-    background: color-mix(in srgb, var(--tp-accent) 12%, transparent);
+    height: 5px;
+    background: color-mix(in srgb, var(--tp-accent) 22%, transparent);
+    border-radius: var(--radius-pill);
+    box-shadow: inset 0 0 0 1px
+      color-mix(in srgb, var(--tp-accent) 26%, transparent);
 
     > i {
       display: block;
@@ -294,53 +308,82 @@
       height: 100%;
       background: linear-gradient(
         90deg,
-        color-mix(in srgb, var(--tp-tone) 34%, transparent),
+        color-mix(in srgb, var(--tp-tone) 44%, transparent),
         var(--tp-tone)
       );
-      box-shadow: 0 0 8px color-mix(in srgb, var(--tp-tone) 40%, transparent);
+      border-radius: inherit;
+      box-shadow: 0 0 8px color-mix(in srgb, var(--tp-tone) 45%, transparent);
       transition: width var(--fx-transition, 0.5s ease);
     }
   }
 
-  // 迷你趋势线
+  // 迷你趋势线：无数据时靠底纹与基线撑出「这里是一张图」
+  &__spark-box {
+    position: relative;
+    height: 38px;
+    padding: 3px 0;
+    background:
+      linear-gradient(
+          color-mix(in srgb, var(--tp-accent) 16%, transparent) 1px,
+          transparent 1px
+        )
+        0 0 / 100% 25%,
+      linear-gradient(
+          90deg,
+          color-mix(in srgb, var(--tp-accent) 16%, transparent) 1px,
+          transparent 1px
+        )
+        0 0 / 12.5% 100%;
+    border-bottom: 1px solid
+      color-mix(in srgb, var(--tp-accent) 40%, transparent);
+  }
+
   &__spark {
     display: block;
     width: 100%;
-    height: 34px;
+    height: 100%;
     overflow: visible;
   }
 
   &__spark-line {
     fill: none;
     stroke: var(--tp-tone);
-    stroke-width: 1.4;
+    stroke-width: 1.6;
     stroke-linecap: round;
     stroke-linejoin: round;
     vector-effect: non-scaling-stroke;
   }
 
   &__spark-area {
-    fill: color-mix(in srgb, var(--tp-tone) 16%, transparent);
+    fill: color-mix(in srgb, var(--tp-tone) 20%, transparent);
     stroke: none;
   }
 
-  // 迷你柱群
+  // 迷你柱群：柱底始终看得见，空槽也留一格底座
   &__bars {
     display: flex;
     gap: 2px;
     align-items: flex-end;
-    height: 30px;
+    height: 34px;
+    padding-top: 2px;
+    border-bottom: 1px solid
+      color-mix(in srgb, var(--tp-accent) 40%, transparent);
 
     > i {
       flex: 1;
       min-width: 1px;
       height: calc(var(--tp-bar, 0) * 100%);
-      // 一根柱子矮到零高时整排会看着像没数据，留一线底
-      min-height: 1px;
+      // ⚠ 空槽留一个看得见的底座：全为零时整排消失，看着像图没画出来
+      min-height: 3px;
       background: linear-gradient(
         var(--tp-tone),
-        color-mix(in srgb, var(--tp-tone) 14%, transparent)
+        color-mix(in srgb, var(--tp-tone) 18%, transparent)
       );
+    }
+
+    // 一个读数都还没到时整排都是底座，让它明确读作「空槽」而不是「零值」
+    &[data-empty='on'] > i {
+      background: color-mix(in srgb, var(--tp-accent) 26%, transparent);
     }
   }
 
@@ -352,29 +395,40 @@
   }
 
   // ⚠ 圆环画在伪元素上、不画在这个盒子上：`mask` 连子节点一起遮，
-  //   写在盒子上会把圆心里的读数一起抠掉——环还在，数字没了
+  //   写在盒子上会把圆心里的读数一起抠掉——环还在，数字没了。
+  // ⚠ 环槽的对比度按「没读数时也一眼看得见这是个仪表」定：槽太淡的话，
+  //   没数据的仪表看起来就只剩中间一个数字。
   &__ring {
     position: relative;
     display: grid;
     place-items: center;
     flex: none;
-    width: 54px;
-    height: 54px;
+    width: 56px;
+    height: 56px;
 
     &::before {
       position: absolute;
       inset: 0;
       background: conic-gradient(
         var(--tp-tone) calc(var(--tp-fill, 0) * 360deg),
-        color-mix(in srgb, var(--tp-accent) 14%, transparent) 0
+        color-mix(in srgb, var(--tp-accent) 26%, transparent) 0
       );
       border-radius: var(--radius-pill);
-      // 挖空圆心，圆环才是圆环
+      // 挖空圆心，圆环才是圆环；内径小一点，环就粗一点
       mask: radial-gradient(
         circle,
-        transparent 58%,
-        var(--fx-const-opaque) 59%
+        transparent 62%,
+        var(--fx-const-opaque) 63%
       );
+      content: '';
+    }
+
+    // 环内一圈细描边，暗底上把仪表的轮廓咬住
+    &::after {
+      position: absolute;
+      inset: 22%;
+      border: 1px solid color-mix(in srgb, var(--tp-accent) 22%, transparent);
+      border-radius: var(--radius-pill);
       content: '';
     }
   }
@@ -455,7 +509,14 @@
   }
 }
 
-// 三层装饰各占一个节点，互不覆盖
+// 外壳层：底、描边、切角与投影都在它身上（缘由见 `panelCard` 的 buildShell）。
+.twin-panel__shell {
+  z-index: -2;
+  border-radius: inherit;
+}
+
+// 四层贴片各占一个节点，互不覆盖
+.twin-panel__shell,
 .twin-panel__grid,
 .twin-panel__scan,
 .twin-panel__corners {
@@ -464,17 +525,17 @@
   pointer-events: none;
 }
 
-// 底纹网格压在内容之下
+// 底纹网格压在内容之下、外壳之上
 .twin-panel__grid {
   z-index: -1;
   background-image:
     linear-gradient(
-      color-mix(in srgb, var(--tp-accent) 8%, transparent) 1px,
+      color-mix(in srgb, var(--tp-accent) 15%, transparent) 1px,
       transparent 1px
     ),
     linear-gradient(
       90deg,
-      color-mix(in srgb, var(--tp-accent) 8%, transparent) 1px,
+      color-mix(in srgb, var(--tp-accent) 15%, transparent) 1px,
       transparent 1px
     );
   background-size: 14px 14px;
@@ -496,7 +557,7 @@
     height: 34%;
     background: linear-gradient(
       color-mix(in srgb, var(--tp-accent) 0%, transparent),
-      color-mix(in srgb, var(--tp-accent) 16%, transparent),
+      color-mix(in srgb, var(--tp-accent) 28%, transparent),
       color-mix(in srgb, var(--tp-accent) 0%, transparent)
     );
     animation: twin-panel-scan 3.4s linear infinite;
@@ -540,8 +601,11 @@
   );
 }
 
+// 八种变体。底、描边与切角一律画在 `__shell` 上；变体自己那一笔点缀（光条 /
+// 导轨 / 虚线）留在卡片的 `::before` 上——它们本就摆在轮廓以内，不需要跟着裁。
+
 // 卡片：圆角 + accent 描边 + 一层柔光，最中性的一档
-.twin-panel--card {
+.twin-panel--card .twin-panel__shell {
   background: var(--tp-bg);
   border: 1px solid color-mix(in srgb, var(--tp-accent) 50%, transparent);
   box-shadow: 0 0 14px color-mix(in srgb, var(--tp-accent) 18%, transparent);
@@ -549,17 +613,7 @@
 
 // 战术：切角 + 顶部一道光条
 .twin-panel--hud {
-  background: var(--tp-bg);
-  border: 1px solid color-mix(in srgb, var(--tp-accent) 55%, transparent);
   border-radius: 0;
-  clip-path: polygon(
-    0 7px,
-    7px 0,
-    100% 0,
-    100% calc(100% - 7px),
-    calc(100% - 7px) 100%,
-    0 100%
-  );
 
   &::before {
     position: absolute;
@@ -573,8 +627,26 @@
   }
 }
 
+.twin-panel--hud .twin-panel__shell {
+  background: var(--tp-bg);
+  border: 1px solid color-mix(in srgb, var(--tp-accent) 55%, transparent);
+  border-radius: 0;
+  clip-path: polygon(
+    0 7px,
+    7px 0,
+    100% 0,
+    100% calc(100% - 7px),
+    calc(100% - 7px) 100%,
+    0 100%
+  );
+}
+
 // 玻璃：重磨砂 + 柔角 + 低对比描边
 .twin-panel--glass {
+  border-radius: 11px;
+}
+
+.twin-panel--glass .twin-panel__shell {
   background: color-mix(in srgb, var(--tp-bg) 58%, transparent);
   border: 1px solid color-mix(in srgb, var(--tp-accent) 22%, transparent);
   border-radius: 11px;
@@ -587,50 +659,46 @@
 // 角标：底完全透明，只在四角画发光括号
 .twin-panel--bracket {
   padding: var(--tp-pad-y) calc(var(--tp-pad-x) + 2px);
-  background: transparent;
-  border: none;
 
   .twin-panel__title {
     text-shadow: 0 0 8px color-mix(in srgb, var(--tp-accent) 45%, transparent);
   }
+}
 
-  &::before {
-    position: absolute;
-    inset: 0;
-    background-image:
-      linear-gradient(var(--tp-accent), var(--tp-accent)),
-      linear-gradient(var(--tp-accent), var(--tp-accent)),
-      linear-gradient(var(--tp-accent), var(--tp-accent)),
-      linear-gradient(var(--tp-accent), var(--tp-accent)),
-      linear-gradient(var(--tp-accent), var(--tp-accent)),
-      linear-gradient(var(--tp-accent), var(--tp-accent)),
-      linear-gradient(var(--tp-accent), var(--tp-accent)),
-      linear-gradient(var(--tp-accent), var(--tp-accent));
-    background-repeat: no-repeat;
-    background-position:
-      0 0,
-      0 0,
-      100% 0,
-      100% 0,
-      0 100%,
-      0 100%,
-      100% 100%,
-      100% 100%;
-    background-size:
-      11px 1.5px,
-      1.5px 11px,
-      11px 1.5px,
-      1.5px 11px,
-      11px 1.5px,
-      1.5px 11px,
-      11px 1.5px,
-      1.5px 11px;
-    filter: drop-shadow(
-      0 0 4px color-mix(in srgb, var(--tp-accent) 55%, transparent)
-    );
-    pointer-events: none;
-    content: '';
-  }
+.twin-panel--bracket .twin-panel__shell {
+  background: transparent;
+  border: none;
+  background-image:
+    linear-gradient(var(--tp-accent), var(--tp-accent)),
+    linear-gradient(var(--tp-accent), var(--tp-accent)),
+    linear-gradient(var(--tp-accent), var(--tp-accent)),
+    linear-gradient(var(--tp-accent), var(--tp-accent)),
+    linear-gradient(var(--tp-accent), var(--tp-accent)),
+    linear-gradient(var(--tp-accent), var(--tp-accent)),
+    linear-gradient(var(--tp-accent), var(--tp-accent)),
+    linear-gradient(var(--tp-accent), var(--tp-accent));
+  background-repeat: no-repeat;
+  background-position:
+    0 0,
+    0 0,
+    100% 0,
+    100% 0,
+    0 100%,
+    0 100%,
+    100% 100%,
+    100% 100%;
+  background-size:
+    11px 1.5px,
+    1.5px 11px,
+    11px 1.5px,
+    1.5px 11px,
+    11px 1.5px,
+    1.5px 11px,
+    11px 1.5px,
+    1.5px 11px;
+  filter: drop-shadow(
+    0 0 4px color-mix(in srgb, var(--tp-accent) 55%, transparent)
+  );
 }
 
 // 标牌：实心标题条压在内容条上
@@ -638,10 +706,7 @@
   gap: 0;
   padding: 0;
   overflow: hidden;
-  background: var(--tp-bg);
-  border: 1px solid color-mix(in srgb, var(--tp-accent) 38%, transparent);
   border-radius: 5px;
-  box-shadow: 0 0 12px color-mix(in srgb, var(--tp-accent) 16%, transparent);
 
   .twin-panel__head {
     padding: 4px 11px;
@@ -672,8 +737,30 @@
   }
 }
 
+.twin-panel--tag .twin-panel__shell {
+  background: var(--tp-bg);
+  border: 1px solid color-mix(in srgb, var(--tp-accent) 38%, transparent);
+  border-radius: 5px;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--tp-accent) 16%, transparent);
+}
+
 // 精密切角：冷线细描 + 不对称切角 + 一层渐变外框，综合态势那一档
 .twin-panel--precision {
+  border-radius: 0;
+
+  &::before {
+    position: absolute;
+    top: 8px;
+    left: 40px;
+    width: 62px;
+    height: 2px;
+    background: linear-gradient(90deg, var(--tp-accent), transparent);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--tp-accent) 65%, transparent);
+    content: '';
+  }
+}
+
+.twin-panel--precision .twin-panel__shell {
   background: linear-gradient(
     145deg,
     color-mix(in srgb, var(--tp-bg) 92%, var(--tp-accent)),
@@ -696,37 +783,12 @@
     18px calc(100% - 7px),
     0 calc(100% - 7px)
   );
-
-  &::before {
-    position: absolute;
-    top: 8px;
-    left: 40px;
-    width: 62px;
-    height: 2px;
-    background: linear-gradient(90deg, var(--tp-accent), transparent);
-    box-shadow: 0 0 10px color-mix(in srgb, var(--tp-accent) 65%, transparent);
-    content: '';
-  }
 }
 
 // 熔铸导轨：左侧一条竖导轨，能源与产线主题
 .twin-panel--forge {
   padding-left: calc(var(--tp-pad-x) + 8px);
-  background: linear-gradient(
-    105deg,
-    color-mix(in srgb, var(--tp-bg) 88%, var(--tp-accent)),
-    var(--tp-bg) 62%
-  );
-  border: 1px solid color-mix(in srgb, var(--tp-accent) 26%, transparent);
   border-radius: 0;
-  clip-path: polygon(
-    0 0,
-    calc(100% - 12px) 0,
-    100% 12px,
-    100% calc(100% - 22px),
-    calc(100% - 18px) 100%,
-    0 100%
-  );
 
   &::before {
     position: absolute;
@@ -743,8 +805,44 @@
   }
 }
 
+.twin-panel--forge .twin-panel__shell {
+  background: linear-gradient(
+    105deg,
+    color-mix(in srgb, var(--tp-bg) 88%, var(--tp-accent)),
+    var(--tp-bg) 62%
+  );
+  border: 1px solid color-mix(in srgb, var(--tp-accent) 26%, transparent);
+  border-radius: 0;
+  clip-path: polygon(
+    0 0,
+    calc(100% - 12px) 0,
+    100% 12px,
+    100% calc(100% - 22px),
+    calc(100% - 18px) 100%,
+    0 100%
+  );
+}
+
 // 信号矩阵：点阵底 + 开放式角标，设备监控那一档
 .twin-panel--matrix {
+  border-radius: 0;
+
+  &::before {
+    position: absolute;
+    top: 6px;
+    right: 30px;
+    width: 46px;
+    height: 3px;
+    background: repeating-linear-gradient(
+      90deg,
+      var(--tp-accent) 0 5px,
+      transparent 5px 9px
+    );
+    content: '';
+  }
+}
+
+.twin-panel--matrix .twin-panel__shell {
   background-color: var(--tp-bg);
   background-image: radial-gradient(
     color-mix(in srgb, var(--tp-accent) 14%, transparent) 0.8px,
@@ -763,20 +861,6 @@
     12px calc(100% - 9px),
     0 calc(100% - 9px)
   );
-
-  &::before {
-    position: absolute;
-    top: 6px;
-    right: 30px;
-    width: 46px;
-    height: 3px;
-    background: repeating-linear-gradient(
-      90deg,
-      var(--tp-accent) 0 5px,
-      transparent 5px 9px
-    );
-    content: '';
-  }
 }
 
 // 行为：入场动画、锚点脉冲、居中时退回卡片自身的呼吸光

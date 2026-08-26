@@ -53,8 +53,14 @@ function areaPoints(line: string, count: number): string {
   return `${left.toFixed(2)},${CHART_HEIGHT} ${line} ${CHART_WIDTH},${CHART_HEIGHT}`
 }
 
-/** 迷你趋势线。 */
+/**
+ * 迷你趋势线。
+ * ⚠ 外面套一个盒子：折线本身在没数据时什么都不画，只有盒子上的底纹与基线
+ * 能说明「这里是一张图，还没有读数」——不套的话用户看到的是一片空白。
+ */
 export function createSparkline(): PanelChart {
+  const box = document.createElement('div')
+  box.className = 'twin-panel__spark-box'
   const svg = document.createElementNS(SVG_NS, 'svg')
   svg.setAttribute('class', 'twin-panel__spark')
   svg.setAttribute('viewBox', `0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`)
@@ -67,15 +73,18 @@ export function createSparkline(): PanelChart {
   line.setAttribute('class', 'twin-panel__spark-line')
   svg.append(area, line)
 
+  box.append(svg)
+
   const points: number[] = []
   return {
-    el: svg,
+    el: box,
     push(ratio) {
       rollingPush(points, ratio)
       const drawn = polylinePoints(points)
       // 只有一个点时 polyline 画不出任何东西，索性留空，别留一段假线头
       line.setAttribute('points', points.length > 1 ? drawn : '')
       area.setAttribute('points', areaPoints(drawn, points.length))
+      box.dataset.empty = points.length === 0 ? 'on' : 'off'
     },
   }
 }
@@ -106,6 +115,8 @@ export function createMiniBars(): PanelChart {
       bars.forEach((bar, index) => {
         setBar(bar, index < offset ? 0 : points[index - offset])
       })
+      // 一个读数都没到时整排都是底座，样式表拿它区分「空槽」与「读数为零」
+      wrap.dataset.empty = points.length === 0 ? 'on' : 'off'
     },
   }
 }
