@@ -14,14 +14,18 @@
 import { onMounted, onUnmounted, ref, type Ref } from 'vue'
 import type { AssistantModelProfile } from '@dt/contracts'
 
-import { createSession, patchSession, readSession } from '@/api/assistant'
+import { createSession, patchSession } from '@/api/assistant'
+import { newComposeState, type ComposeState } from '@/composables/useAiCompose'
 import {
   useAiConversation,
   type AiConversation,
 } from '@/composables/useAiConversation'
+import { createReplayer } from '@/composables/useAiReplayer'
 import { aiPorts } from '@/features/ai/ports'
 import { clearSurface, setSurface } from '@/features/ai/surfaces'
 import type { AiSurface } from '@/features/ai/surfaces'
+
+export { newComposeState, type ComposeState } from '@/composables/useAiCompose'
 
 export interface AiPanelOptions {
   /** 这一页的工作面。⚠ 只在装配时调一次，句柄要一直有效。 */
@@ -49,6 +53,8 @@ export interface AiPanel {
   sessionId: Ref<string | null>
   /** 这一页的那段对话。开合面板不动它，历史与计划都留在这。 */
   chat: AiConversation
+  /** 输入区的草稿与附件。开合面板同样不动它。 */
+  compose: ComposeState
   /** 打开面板；第一次打开时建会话，随后把库里的历史回放进时间线。 */
   open: () => Promise<void>
   close: () => void
@@ -61,7 +67,6 @@ export function useAiPanel(options: AiPanelOptions): AiPanel {
   const choice = ref<ModelChoice>({ profile: '', effort: '' })
   const isOpen = ref(false)
   const sessionId = ref<string | null>(null)
-  let opening = false
 
   const surface = options.surface()
   setSurface(surface)
@@ -70,6 +75,7 @@ export function useAiPanel(options: AiPanelOptions): AiPanel {
     () => sessionId.value,
     () => ({ kind: surface.kind, label: surface.label }),
   )
+  const compose = newComposeState()
   const replayer = createReplayer(chat)
 
   onUnmounted(() => {
@@ -81,23 +87,13 @@ export function useAiPanel(options: AiPanelOptions): AiPanel {
     void probeInto({ isAvailable, models, choice })
   })
 
-  async function open(): Promise<void> {
-    // ⚠ 连点两下不能建两个会话：第二个会拿着一段空历史，而用户看不出
-    // 自己在跟哪一个说话
-    if (opening) return
-    if (sessionId.value === null) {
-      opening = true
-      try {
-        const created = await createSession(surface.kind, options.refId())
-        sessionId.value = created.id
-      } finally {
-        opening = false
-      }
-    }
-    isOpen.value = true
-    const id = sessionId.value
-    if (id !== null) await replayer.replay(id)
-  }
+  const open = openerOf({
+    surfaceKind: surface.kind,
+    refId: options.refId,
+    sessionId,
+    isOpen,
+    replay: replayer.replay,
+  })
 
   return {
     isAvailable,
@@ -107,10 +103,41 @@ export function useAiPanel(options: AiPanelOptions): AiPanel {
     isOpen,
     sessionId,
     chat,
+    compose,
     open,
     close: () => {
       isOpen.value = false
     },
+  }
+}
+
+/**
+ * 造「打开面板」这个动作：第一次打开建会话，随后把库里的历史回放进时间线。
+ * ⚠ 连点两下不能建两个会话：第二个会拿着一段空历史，而用户看不出
+ * 自己在跟哪一个说话。
+ */
+function openerOf(parts: {
+  surfaceKind: AiSurface['kind']
+  refId: () => string | null
+  sessionId: Ref<string | null>
+  isOpen: Ref<boolean>
+  replay: (sessionId: string) => Promise<void>
+}): () => Promise<void> {
+  let opening = false
+  return async () => {
+    if (opening) return
+    if (parts.sessionId.value === null) {
+      opening = true
+      try {
+        const created = await createSession(parts.surfaceKind, parts.refId())
+        parts.sessionId.value = created.id
+      } finally {
+        opening = false
+      }
+    }
+    parts.isOpen.value = true
+    const id = parts.sessionId.value
+    if (id !== null) await parts.replay(id)
   }
 }
 
@@ -151,43 +178,4 @@ async function picked(
     model_profile: next.profile,
     ...(next.effort === '' ? {} : { reasoning_effort: next.effort }),
   })
-}
-
-/**
- * 回放器：把库里的历史读回来灌进时间线。
- * ⚠ 竞态按后一次为准：上一次 readSession 还没回来又开了一次面板时，
- * 前一次在途的读取直接作废，不许旧响应盖掉新的。
- */
-function createReplayer(chat: AiConversation): {
-  replay: (sessionId: string) => Promise<void>
-  abort: () => void
-} {
-  let inFlight: AbortController | null = null
-
-  async function replay(sessionId: string): Promise<void> {
-    // 本页生命周期里这段对话已经有内容（来回开合），或回合正跑着：都不灌
-    if (chat.entries.value.length > 0 || chat.isRunning.value) return
-    inFlight?.abort()
-    const controller = new AbortController()
-    inFlight = controller
-    // 这一次仍是最新的一次，且没被掐掉
-    const isCurrent = (): boolean =>
-      inFlight === controller && !controller.signal.aborted
-    try {
-      const detail = await readSession(sessionId, controller.signal)
-      if (isCurrent() && detail !== null) chat.restore(detail)
-    } catch {
-      // 回放失败不挡打开面板：空时间线照样能用，只是提醒一句
-      if (isCurrent()) chat.note('没能读回这个会话的历史，先从空白继续')
-    } finally {
-      if (inFlight === controller) inFlight = null
-    }
-  }
-
-  return {
-    replay,
-    abort: () => {
-      inFlight?.abort()
-    },
-  }
 }

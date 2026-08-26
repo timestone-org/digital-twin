@@ -169,6 +169,11 @@ def assemble(
     ⚠ 历史只带最近的一截，且截断点不许把工具调用与它的回应切开
     （`history.window`）。全带的话，一个跑了几十轮的会话会把上下文占满。
 
+    ⚠ 尾部**没等到回执的调用要就地补一条失败回执**：上一轮被掐掉、页面被关掉、
+    回执整批被判不合法，都会留下这样一批孤儿，而端点对「有调用没回应」的一段
+    历史一律判 400——不补的话这个会话从此一句都发不出去（`history` 文件头）。
+    补在历史与这一次的输入**之间**：这一次带回来的回执要先认，剩下的才算孤儿。
+
     Args: payload, rows（这个会话的全部消息）, plan（会话上的当前计划）。
     """
     recent = history.window(rows, MAX_HISTORY_MESSAGES)
@@ -177,10 +182,14 @@ def assemble(
             payload.surface_kind, surface_label=payload.surface_label
         )
     )
+    past = history.replay(recent)
+    incoming = incoming_messages(payload)
+    orphans = history.unanswered([*past, *incoming])
     return [
         system,
-        *history.replay(recent),
-        *incoming_messages(payload),
+        *past,
+        *history.fillers(orphans),
+        *incoming,
         *state_block.messages_of(payload.surface_context, plan),
     ]
 

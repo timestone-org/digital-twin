@@ -8,6 +8,7 @@ from ai_assistant.llm.errors import (
 )
 from ai_assistant.llm.guard import GuardedModel
 from ai_assistant.llm.provider import (
+    CODEX_PROFILE,
     DEFAULT_PROFILE,
     ChatModelSource,
     ModelChoice,
@@ -15,7 +16,7 @@ from ai_assistant.llm.provider import (
     ModelSource,
     build_model_source,
 )
-from ai_assistant.llm.registry import CODEX_PROFILE, ModelProfile, ModelRegistry
+from ai_assistant.llm.registry import ModelProfile, ModelRegistry
 
 __all__ = [
     "CODEX_PROFILE",

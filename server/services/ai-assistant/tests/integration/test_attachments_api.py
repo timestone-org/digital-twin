@@ -1,4 +1,4 @@
-"""解析上传的点表。
+"""解析上传的参考文件。
 
 ⚠ 走 base64 而不是 multipart：本仓一个 multipart 端点都没有（素材的字节是直传
 对象存储的），引 `python-multipart` 就是为一个端点多一个依赖。
@@ -43,6 +43,19 @@ async def test_the_flattened_text_is_pipe_separated(
         PARSE_URL, json=_body("点表.csv", b"code,name\na,b\n")
     )
     assert "code | name" in response.json()["data"]["text"]
+
+
+async def test_a_plain_text_file_comes_back_verbatim(
+    db_client: httpx.AsyncClient,
+) -> None:
+    # 不一定是点表：纯文本资料也收，正文只走 text 一格
+    response = await db_client.post(
+        PARSE_URL, json=_body("巡检记录.txt", "1 号机组一切正常".encode())
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["columns"] == []
+    assert data["text"] == "1 号机组一切正常"
 
 
 async def test_content_that_is_not_base64_is_refused(

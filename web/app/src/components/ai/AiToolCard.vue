@@ -120,9 +120,7 @@ function toggle(): void {
       title="助手看到的这一屏"
       width="min(72rem, 92vw)"
     >
-      <!-- ⚠ 弹窗 Teleport 到 body，跑到 .ai-surface 外面去了：不自己挂一层，
-           它会按全局主题画，与面板里那块紫玻璃对不上 -->
-      <div class="ai-surface ai-step__zoom">
+      <div class="ai-step__zoom">
         <img :src="step.image" alt="助手看到的这一屏" />
       </div>
     </DtModal>

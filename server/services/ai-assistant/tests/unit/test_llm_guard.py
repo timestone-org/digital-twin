@@ -20,12 +20,17 @@ from openai import (
     RateLimitError,
 )
 
-from ai_assistant.llm import GuardedModel, ModelRejected, ModelUnavailable
+from ai_assistant.llm import (
+    CODEX_PROFILE,
+    GuardedModel,
+    ModelRejected,
+    ModelUnavailable,
+)
 from ai_assistant.llm.guard import usage_of
 from ai_assistant.llm.provider import ModelChoice
 from lib.resilience import CircuitBreaker
 from lib.testing.clock import FrozenClock
-from unit.llm_fakes import ScriptedChat, StreamingChat
+from unit.llm_fakes import ScriptedChat, StreamingChat, asks
 
 THRESHOLD = 2
 
@@ -311,3 +316,46 @@ def test_usage_reads_the_cache_hit_off_a_reply() -> None:
 def test_a_reply_without_usage_is_not_a_failure() -> None:
     # 端点不回用量是常有的事，那时该少一条日志，而不是掉一次作答
     assert usage_of(AIMessage(content="好的")) is None
+
+
+async def test_the_subscription_route_swaps_the_dots_out_and_back() -> None:
+    """点号出去换成 `__`，回来换回去。
+
+    ⚠ 那个端点只认 `^[a-zA-Z0-9_-]+$`：不换是每一次带工具的对话都撞一条 400，
+    而那条 400 里既没有工具名也没提到点号。只换出去不换回来则是另一半——
+    编排层按名字派发时一个都对不上，现象是「模型说它调了工具，然后什么都
+    没发生」。
+    """
+    model = ScriptedChat(reply=asks("points__search", "c1"))
+    guarded, _ = _guarded(model)
+
+    answer = await guarded.respond(
+        choice=ModelChoice(profile=CODEX_PROFILE),
+        messages=[HumanMessage(content="找点位"), asks("skills.load", "c0")],
+        tools=[{"type": "function", "function": {"name": "points.search"}}],
+    )
+
+    sent = model.bound[0]
+    assert isinstance(sent, dict)
+    assert sent["function"]["name"] == "points__search"
+    said = model.seen[0][1]
+    assert isinstance(said, AIMessage)
+    assert said.tool_calls[0]["name"] == "skills__load"
+    assert answer.tool_calls[0]["name"] == "points.search"
+
+
+async def test_the_pay_per_token_route_keeps_the_names_as_they_are() -> None:
+    # 那一路收点号，换了反而对不上
+    model = ScriptedChat(reply=asks("points.search", "c1"))
+    guarded, _ = _guarded(model)
+
+    answer = await guarded.respond(
+        choice=ModelChoice(),
+        messages=[HumanMessage(content="找点位")],
+        tools=[{"type": "function", "function": {"name": "points.search"}}],
+    )
+
+    sent = model.bound[0]
+    assert isinstance(sent, dict)
+    assert sent["function"]["name"] == "points.search"
+    assert answer.tool_calls[0]["name"] == "points.search"

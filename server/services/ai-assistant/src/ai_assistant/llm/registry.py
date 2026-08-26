@@ -14,12 +14,13 @@ from langchain_core.language_models import BaseChatModel
 from ai_assistant.llm.codex import StoredTokenProvider, build_codex_model
 from ai_assistant.llm.codex.token_provider import TokenSource
 from ai_assistant.llm.errors import ModelDisabled
-from ai_assistant.llm.provider import ModelChoice, build_model_source
+from ai_assistant.llm.provider import (
+    CODEX_PROFILE,
+    DEFAULT_PROFILE,
+    ModelChoice,
+    build_model_source,
+)
 from ai_assistant.settings import Settings
-
-# 按 API Key 计费那一路的档位名。⚠ 是线上契约的一部分：前端按它记住用户的选择
-DEFAULT_PROFILE = "default"
-CODEX_PROFILE = "codex"
 
 
 @dataclass(frozen=True)
@@ -109,12 +110,14 @@ class ModelRegistry:
         # pragma 理由：调用方在进这条分支前已经判过 `_tokens is not None`
         if source is None:  # pragma: no cover
             raise ModelDisabled("本部署没有接订阅账号那一路模型")
-        await source.usable(CODEX_PROFILE)
+        seed = await source.usable(CODEX_PROFILE)
         settings = self._settings
         chosen = settings.codex_model_choices()
         return build_codex_model(
             model=chosen[0] if chosen else settings.codex_model,
-            token_provider=StoredTokenProvider(source),
+            # ⚠ 刚摸到的那一份直接当快照：上游把 api_key 焊成同步可调用件，
+            # 第一次请求会从执行器线程回来要它
+            token_provider=StoredTokenProvider(source, seed=seed),
             effort=effort or settings.codex_reasoning_effort,
             timeout_s=settings.model_timeout_s,
         )

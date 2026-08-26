@@ -24,6 +24,17 @@ DeltaSink = Callable[[DeltaChannel, str], None]
 # 端点不吐这一格时它恒为空，与「代码里不认任何厂商」并不冲突
 REASONING_KEY = "reasoning_content"
 
+# 思考过程在 Responses 方言里的另一种形状：一个 `reasoning` 内容块，摘要逐段
+# 放在 `summary[].text` 里。⚠ 两种形状都要认——只认上面那一格的话，走
+# Responses 那一路的端点思考几十秒，界面上一个字都没有，看着就是卡住了
+# （实测：订阅账号那一路只走这一种）
+_REASONING_BLOCK = "reasoning"
+_SUMMARY = "summary"
+_SUMMARY_TEXT = "summary_text"
+_TEXT_BLOCK = "text"
+_TEXT = "text"
+_TYPE = "type"
+
 
 def text_of(message: BaseMessage) -> str:
     """一块增量里的正文。
@@ -43,10 +54,54 @@ def text_of(message: BaseMessage) -> str:
 def reasoning_of(message: BaseMessage) -> str:
     """一块增量里的思考过程；端点没吐就是空串。
 
+    ⚠ 两种方言都认，见上面两组常量。
+
     Args: message。
     """
     given = message.additional_kwargs.get(REASONING_KEY)
-    return given if isinstance(given, str) else ""
+    if isinstance(given, str) and given:
+        return given
+    return _summarized(message.content)
+
+
+def _summarized(content: str | list[str | dict[str, object]]) -> str:
+    """内容块里那几段思考摘要，按到达顺序接起来。
+
+    Args: content。
+    """
+    if isinstance(content, str):
+        return ""
+    parts = [_block_summary(one) for one in cast("list[object]", content)]
+    return "".join(parts)
+
+
+def _block_summary(block: object) -> str:
+    """一个内容块里的思考摘要；不是思考块就当没有。
+
+    Args: block。
+    """
+    if not isinstance(block, dict):
+        return ""
+    body = cast("dict[str, object]", block)
+    if body.get(_TYPE) != _REASONING_BLOCK:
+        return ""
+    listed = body.get(_SUMMARY)
+    if not isinstance(listed, list):
+        return ""
+    return "".join(_summary_text(one) for one in cast("list[object]", listed))
+
+
+def _summary_text(part: object) -> str:
+    """思考摘要里的一段。⚠ 它的 `type` 是 `summary_text` 而不是 `text`。
+
+    Args: part。
+    """
+    if not isinstance(part, dict):
+        return ""
+    body = cast("dict[str, object]", part)
+    if body.get(_TYPE) != _SUMMARY_TEXT:
+        return ""
+    return str(body.get(_TEXT) or "")
 
 
 def emit(message: BaseMessage, sink: DeltaSink) -> None:
@@ -76,5 +131,7 @@ def _part_text(part: object) -> str:
         return part
     if isinstance(part, dict):
         body = cast("dict[str, object]", part)
-        return str(body.get("text") or "") if body.get("type") == "text" else ""
+        if body.get(_TYPE) != _TEXT_BLOCK:
+            return ""
+        return str(body.get(_TEXT) or "")
     return ""

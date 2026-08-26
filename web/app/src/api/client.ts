@@ -255,7 +255,13 @@ export async function* openStream(
 ): AsyncGenerator<string> {
   const response = await sendStream(path, options)
   if (!response.ok || response.body === null) {
-    throw new TransportError(response.status, '事件流打不开')
+    // ⚠ 状态码要进这句话：它是用户唯一看得见的线索，而这几种失败的处置完全
+    // 不同——400 是这次请求本身不合法（重发多少次都一样），502 是服务暂时
+    // 不在（过一会儿就好）。只说「打不开」的话，两种都长成「助手坏了」
+    throw new TransportError(
+      response.status,
+      `事件流打不开（HTTP ${response.status}）`,
+    )
   }
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
   try {

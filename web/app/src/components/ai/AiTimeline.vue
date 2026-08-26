@@ -15,7 +15,13 @@ import AiReasoning from '@/components/ai/AiReasoning.vue'
 import AiToolCard from '@/components/ai/AiToolCard.vue'
 import type { ChatEntry } from '@/features/ai/conversationLog'
 
-const props = defineProps<{ entries: readonly ChatEntry[] }>()
+const props = defineProps<{
+  entries: readonly ChatEntry[]
+  /** 空态里可点的几句开场；点了填进草稿，不直接发。 */
+  starters?: readonly string[] | undefined
+}>()
+
+const emit = defineEmits<{ starter: [text: string] }>()
 
 const scroller = ref<HTMLElement | null>(null)
 /** 离底多少像素以内算「还盯着最新的」。 */
@@ -45,9 +51,23 @@ watch(
     <div v-if="entries.length === 0" class="ai-stream__empty">
       <AiCoreIcon :size="72" />
       <p class="ai-stream__empty-title">说说你想做什么</p>
-      <p class="ai-stream__empty-hint">
+      <p
+        v-if="starters === undefined || starters.length === 0"
+        class="ai-stream__empty-hint"
+      >
         比如「把 1 号机组的温度绑到这个数值卡上」
       </p>
+      <ul v-else class="ai-stream__starters">
+        <li v-for="one in starters" :key="one">
+          <button
+            type="button"
+            class="ai-stream__starter"
+            @click="emit('starter', one)"
+          >
+            {{ one }}
+          </button>
+        </li>
+      </ul>
     </div>
     <ul v-else class="ai-stream__list">
       <template v-for="entry in entries" :key="entry.id">
@@ -91,7 +111,7 @@ watch(
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
-  padding: 2.5rem 1rem;
+  padding: 2rem 1rem;
   text-align: center;
 }
 
@@ -105,6 +125,41 @@ watch(
   margin: 0;
   color: var(--text-disabled);
   font-size: 0.75rem;
+}
+
+.ai-stream__starters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 可点的开场：低调的胶囊，点了只是填进草稿——所以不能长得像「执行」按钮 */
+.ai-stream__starter {
+  padding: 0.3125rem 0.75rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.ai-stream__starter:hover {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.ai-stream__starter:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
 }
 
 /* 一条竖直轨道，助手做的每一件事都挂在它上面。⚠ 轨道靠伪元素画在列表背后，
@@ -126,7 +181,11 @@ watch(
   bottom: 0.375rem;
   left: 0.1875rem;
   width: 1px;
-  background: var(--ai-rail);
+  background: linear-gradient(
+    180deg,
+    rgba(var(--accent-primary-rgb), 0.45),
+    rgba(var(--accent-primary-rgb), 0.06)
+  );
 }
 
 .ai-said {
@@ -154,12 +213,16 @@ watch(
   box-shadow: 0 0 8px var(--fx-glow-title);
 }
 
-/* 自己说的那条：右对齐 + 紫色渐变实心。⚠ 「谁说的」是这个面板最要紧的一件事，
-   所以两侧不共享任何一种底色——助手那边是透明的，这边是实的。 */
+/* 自己说的那条：右对齐 + 强调色实心，字用强调底专用前景（各主题都校过对比）。
+   ⚠ 「谁说的」是这个面板最要紧的一件事，所以两侧不共享任何一种底色——
+   助手那边是透明的，这边是实的。 */
 .ai-said--mine {
   align-self: flex-end;
   padding: 0.5rem 0.75rem;
-  background: var(--ai-grad-user);
+  border-radius: var(--radius-md);
+  border-bottom-right-radius: var(--radius-sm);
+  background: var(--accent-primary);
+  color: var(--text-on-emphasis);
   box-shadow: 0 6px 18px -8px rgba(var(--accent-primary-rgb), 0.7);
   white-space: pre-wrap;
 }
@@ -209,6 +272,10 @@ watch(
 @media (prefers-reduced-motion: reduce) {
   .ai-said--live::after {
     animation: none;
+  }
+
+  .ai-stream__starter {
+    transition: none;
   }
 }
 </style>

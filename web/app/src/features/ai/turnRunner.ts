@@ -34,8 +34,15 @@ import { createFrameReader } from './sseFrames'
 import { inputPreview, isImageOutput, outputPreview } from './stepPreview'
 import { activeSurface, runClientTool } from './surfaces'
 
-/** 一次往返的上限。到顶就停下并如实告诉用户，而不是继续烧钱。 */
-export const MAX_ROUNDS = 24
+/**
+ * 一次往返的上限。到顶就停下并如实告诉用户，而不是继续烧钱。
+ * ⚠ 量的是**往返次数**（一批客户端工具跑完再推进一次算一轮），不是服务端那边
+ * 一个回合里的步数（`MAX_STEPS_PER_TURN`）。一句「设计一个光伏看板」实测要
+ * 三十多轮：加模块、逐个改配置、绑点、截图自查各占几轮，24 轮会在半路上把人
+ * 撂下。到顶不是死路——历史里那批没等到回执的调用由服务端补上失败回执
+ * （`history.fillers`），所以用户说一句「继续」就能接着做。
+ */
+export const MAX_ROUNDS = 60
 
 /** 计划未完时最多代用户催几次。 */
 export const MAX_PLAN_NUDGES = 3
@@ -123,7 +130,9 @@ export async function runTurn(
     sink.onNote('计划还没走完，自动继续。')
     body = { ...envelope(input), user_text: PLAN_CONTINUE_TEXT }
   }
-  sink.onError(`助手来回了 ${MAX_ROUNDS} 轮还没结束，已经停下`)
+  sink.onError(
+    `助手来回了 ${MAX_ROUNDS} 轮还没做完，先停下了。说一句「继续」就接着做。`,
+  )
 }
 
 /** 循环手上那份最新计划。 */

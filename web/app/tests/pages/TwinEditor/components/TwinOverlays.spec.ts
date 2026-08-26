@@ -14,7 +14,7 @@ import { PERMISSION_CODES, type AssistantPlan } from '@dt/contracts'
 import BulkPartsDialog from '@/pages/TwinEditor/components/BulkPartsDialog.vue'
 import TwinOverlays from '@/pages/TwinEditor/components/TwinOverlays.vue'
 import type { AiConversation, ChatEntry } from '@/composables/useAiConversation'
-import type { AiPanel } from '@/composables/useAiPanel'
+import { newComposeState, type AiPanel } from '@/composables/useAiPanel'
 import type { BulkParts } from '@/pages/TwinEditor/scripts/useBulkParts'
 import type { TwinBindings } from '@/pages/TwinEditor/scripts/useTwinBindings'
 import { useAuthStore } from '@/stores/auth'
@@ -64,6 +64,7 @@ function panel(isAvailable: boolean): AiPanel {
     isOpen: ref(false),
     sessionId: ref<string | null>(null),
     chat: chat(),
+    compose: newComposeState(),
     open: vi.fn(() => Promise.resolve()),
     close: vi.fn(),
   }

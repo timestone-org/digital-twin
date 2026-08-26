@@ -29,6 +29,8 @@ class ChatModelSource(Protocol):
 
 # 没选过时走哪一路。⚠ 是线上契约的一部分：会话里存的就是这个字面量
 DEFAULT_PROFILE = "default"
+# 订阅账号那一路。⚠ 同上，也是线上契约的一部分
+CODEX_PROFILE = "codex"
 
 
 @dataclass(frozen=True)

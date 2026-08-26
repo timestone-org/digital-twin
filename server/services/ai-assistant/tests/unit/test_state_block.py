@@ -9,10 +9,14 @@
 import uuid
 from typing import Any
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import (
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
 
 from ai_assistant.apps.chat.models import ChatMessage
-from ai_assistant.apps.chat.services import state_block
+from ai_assistant.apps.chat.services import history, state_block
 from ai_assistant.apps.chat.services.advance_service import (
     AdvanceInput,
     ClientToolResult,
@@ -109,3 +113,74 @@ def test_the_block_never_lands_in_the_database() -> None:
 
     assert "<当前状态" not in written
     assert "n7" not in written
+
+
+def _orphan_rows() -> list[ChatMessage]:
+    """一段以「三个调用只回来一个」结尾的历史。
+
+    上一轮被掐掉、页面被关掉、回执整批被判 400，留下的都是这个形状。
+    """
+    session = uuid.uuid4()
+    bodies: list[tuple[str, dict[str, Any]]] = [
+        ("user", {"text": "把这几个框对齐"}),
+        (
+            "assistant",
+            {
+                "text": "",
+                "tool_calls": [
+                    {"name": "dashboard.set_geometry", "args": {}, "id": one}
+                    for one in ("c1", "c2", "c3")
+                ],
+            },
+        ),
+        ("tool", {"tool_call_id": "c2", "text": "好了"}),
+    ]
+    return [
+        ChatMessage(session_id=session, seq=index, role=role, content_json=body)
+        for index, (role, body) in enumerate(bodies, start=1)
+    ]
+
+
+def test_calls_left_without_an_answer_get_one_before_the_next_turn() -> None:
+    """尾部的孤儿调用补上失败回执，否则这个会话再也发不出一句。
+
+    ⚠ 端点对「有调用没回应」的一段历史一律判 400，而那条 400 与真实原因隔得
+    极远：新开的会话好好的，只有这一个会话怎么发都不行。
+    """
+    said = assemble(payload=_speaks("继续"), rows=_orphan_rows(), plan=None)
+
+    filled = [
+        one
+        for one in said
+        if isinstance(one, ToolMessage)
+        and str(one.content) == history.NO_REPLY_TEXT
+    ]
+    assert [one.tool_call_id for one in filled] == ["c1", "c3"]
+    # 补的那两条要排在这一次的发话**前面**：夹在后面等于调用与回应被隔开
+    positions = [said.index(one) for one in filled]
+    saying = next(
+        index
+        for index, one in enumerate(said)
+        if isinstance(one, HumanMessage) and one.content == "继续"
+    )
+    assert max(positions) < saying
+
+
+def test_the_answers_carried_by_this_very_request_are_not_orphans() -> None:
+    # 这一轮带回来的回执要先认，不然同一个调用会收到两条回应
+    payload = AdvanceInput(
+        surface_kind=SURFACE,
+        tool_results=[
+            ClientToolResult(call_id="c1", output="好"),
+            ClientToolResult(call_id="c3", output="好"),
+        ],
+        surface_context=SHOT,
+    )
+
+    said = assemble(payload=payload, rows=_orphan_rows(), plan=None)
+
+    assert all(
+        str(one.content) != history.NO_REPLY_TEXT
+        for one in said
+        if isinstance(one, ToolMessage)
+    )

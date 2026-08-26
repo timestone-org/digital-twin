@@ -46,5 +46,10 @@ const emit = defineEmits<{
     :ai="ai"
     surface-label="孪生编辑器"
     hint="助手改的是草稿，保存要你自己按。"
+    :starters="[
+      '把选中的部件绑到对应的点位',
+      '按温度点位给这个部件配色',
+      '截一张当前场景，讲讲你看到了什么',
+    ]"
   />
 </template>

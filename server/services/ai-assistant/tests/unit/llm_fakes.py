@@ -41,6 +41,10 @@ class ScriptedChat(BaseChatModel):
     seen: list[list[BaseMessage]] = Field(
         default_factory=list[list[BaseMessage]]
     )
+    # 绑过的工具声明。⚠ 记下来才守得住「发出去的名字长什么样」
+    bound: list[dict[str, Any] | type | BaseTool] = Field(
+        default_factory=list[dict[str, Any] | type | BaseTool]
+    )
 
     @property
     def _llm_type(self) -> str:
@@ -51,10 +55,11 @@ class ScriptedChat(BaseChatModel):
         tools: Sequence[dict[str, Any] | type | BaseTool],
         **kwargs: Any,
     ) -> Runnable[Any, AIMessage]:
-        """假件不真绑工具，原样返回自己。
+        """假件不真绑工具，只记下声明，原样返回自己。
 
         Args: tools, kwargs。
         """
+        self.bound = list(tools)
         # ⚠ 收窄一次而不是压制类型：假件的产出永远是 `AIMessage`（`_generate`
         # 只造这一种），但基类的输出类型是 `BaseMessage`，直接返回过不去
         return cast("Runnable[Any, AIMessage]", self)

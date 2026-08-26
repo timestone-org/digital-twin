@@ -1,25 +1,24 @@
 <script setup lang="ts">
 /**
- * @fileoverview 助手面板：外框、时间线、输入框。
+ * @fileoverview 助手面板：外框、时间线、输入区。
  *
  * ⚠ 助手改的是**草稿**，保存永远由用户自己按。面板上一直摆着这句话——
  * 漏了它，用户会以为绑完就落库了，然后关掉标签页。
  *
- * ⚠ 时间线怎么摆在 `AiTimeline`，正文怎么渲染在 `AiMarkdown`：这里只负责
- * 把它们与一次对话接起来。
+ * ⚠ 面板消费的是全局语义 token，跟着当前主题走——它是这个产品里的一块工作面，
+ * 不是一件异色的挂件。时间线怎么摆在 `AiTimeline`，输入区在 `AiComposer`：
+ * 这里只负责把它们与一次对话接起来。
  */
 import { computed, ref } from 'vue'
 import type { AssistantModelProfile } from '@dt/contracts'
-import { DtButton, DtFilePicker, DtNotice, DtSpinner, DtTextarea } from '@dt/ui'
+import { DtButton } from '@dt/ui'
 
-import { parseAttachment } from '@/api/assistant'
+import AiComposer from '@/components/ai/AiComposer.vue'
 import AiCoreIcon from '@/components/ai/AiCoreIcon.vue'
-import AiModelPicker from '@/components/ai/AiModelPicker.vue'
 import AiPlanCard from '@/components/ai/AiPlanCard.vue'
 import AiTimeline from '@/components/ai/AiTimeline.vue'
-import { toBase64 } from '@/features/ai/attachment'
 import type { AiConversation } from '@/composables/useAiConversation'
-import type { ModelChoice } from '@/composables/useAiPanel'
+import type { ComposeState, ModelChoice } from '@/composables/useAiPanel'
 
 const props = defineProps<{
   /**
@@ -27,15 +26,19 @@ const props = defineProps<{
    * 对话（时间线与计划）不能跟着没。
    */
   chat: AiConversation
+  /** 输入区的草稿与附件。同样由 useAiPanel 持有。 */
+  compose: ComposeState
   surfaceLabel: string
   /** 摆在输入框上方的一句提醒，各页面自己给。 */
-  hint?: string
+  hint?: string | undefined
+  /** 空态里可点的几句开场，各页面按自己的能力给。 */
+  starters?: readonly string[] | undefined
   /** 面板此刻是不是放大着。宽窄由外面的 dock 管，这里只画那个按钮。 */
-  isWide?: boolean
+  isWide?: boolean | undefined
   /** 这套部署接了哪几路模型。只有一路时下拉整个不渲染。 */
-  models?: readonly AssistantModelProfile[]
+  models?: readonly AssistantModelProfile[] | undefined
   /** 这个会话选了哪一路。 */
-  choice?: ModelChoice
+  choice?: ModelChoice | undefined
 }>()
 
 const emit = defineEmits<{
@@ -44,122 +47,111 @@ const emit = defineEmits<{
   pick: [value: ModelChoice]
 }>()
 
-const draft = ref('')
+/** 草稿为空时 ↑ 召回的那句：时间线上最后一条自己说的话。 */
+const lastSaid = computed<string | null>(() => {
+  const entries = props.chat.entries.value
+  for (let at = entries.length - 1; at >= 0; at -= 1) {
+    const one = entries[at]
+    if (one !== undefined && one.role === 'user') return one.text
+  }
+  return null
+})
 
-const canSend = computed(
-  () => draft.value.trim() !== '' && !props.chat.isRunning.value,
-)
+const composer = ref<InstanceType<typeof AiComposer> | null>(null)
 
-async function send(): Promise<void> {
-  if (!canSend.value) return
-  const text = draft.value.trim()
-  draft.value = ''
-  await props.chat.send(text)
+/** 空态开场点进草稿而不是直接发出去：用户得先看见将要发送什么。 */
+function onStarter(text: string): void {
+  props.compose.setDraft(text)
+  composer.value?.focusInput()
 }
 
-const attaching = ref(false)
-const attachError = ref('')
-
 /**
- * 读一张点表，把它摊平之后附在草稿后面。
- * ⚠ 附进**草稿**而不是直接发出去：用户得先看见助手将要看到什么，
- * 这一点比省几下点击重要。
+ * Esc：正跑着先停下，闲着就收起。
+ * ⚠ stopPropagation：编辑器在 window 上也听 Esc（清画布选中），
+ * 焦点在面板里时那一下不该漏出去。
  */
-async function attach(files: File[]): Promise<void> {
-  const file = files[0]
-  if (file === undefined) return
-  attaching.value = true
-  attachError.value = ''
-  try {
-    const table = await parseAttachment(file.name, await toBase64(file))
-    const note = table.is_truncated
-      ? `（只读了前 ${table.rows.length} 行，共 ${table.total_rows} 行）`
-      : ''
-    draft.value = `${draft.value}\n\n参考点表 ${file.name}${note}：\n${table.text}`
-  } catch (error) {
-    attachError.value =
-      error instanceof Error ? error.message : '读不了这个文件'
-  } finally {
-    attaching.value = false
-  }
+function onEscape(event: KeyboardEvent): void {
+  if (event.defaultPrevented) return
+  event.stopPropagation()
+  if (props.chat.isRunning.value) props.chat.stop()
+  else emit('close')
 }
 </script>
 
 <template>
-  <aside class="ai-panel" aria-label="AI 助手">
+  <aside class="ai-panel" aria-label="AI 助手" @keydown.esc="onEscape">
     <div class="ai-panel__bar">
-      <AiCoreIcon :size="20" />
-      <span class="ai-panel__name">助手</span>
+      <AiCoreIcon :size="22" />
+      <span class="ai-panel__name">AI 助手</span>
       <span class="ai-panel__where">{{ surfaceLabel }}</span>
-      <AiModelPicker
-        v-if="models !== undefined && choice !== undefined"
-        :models="models"
-        :choice="choice"
-        @pick="(value) => emit('pick', value)"
-      />
       <DtButton
         variant="ghost"
         size="xs"
         icon="trash"
+        aria-label="清空这一屏的对话"
+        title="清空对话"
         :disabled="chat.entries.value.length === 0"
         @click="chat.clear"
-      >
-        清空
-      </DtButton>
+      />
       <DtButton
         variant="ghost"
         size="xs"
         :icon="isWide ? 'chevron-right' : 'chevron-left'"
         :aria-label="isWide ? '缩小助手面板' : '放大助手面板'"
+        :title="isWide ? '缩小面板' : '放大面板'"
         @click="emit('toggle-wide')"
       />
-      <DtButton variant="ghost" size="xs" icon="close" @click="emit('close')">
-        收起
-      </DtButton>
+      <DtButton
+        variant="ghost"
+        size="xs"
+        icon="close"
+        aria-label="收起助手面板"
+        title="收起（Esc）"
+        @click="emit('close')"
+      />
     </div>
 
     <AiPlanCard v-if="chat.plan.value !== null" :plan="chat.plan.value" />
 
-    <AiTimeline :entries="chat.entries.value" />
+    <AiTimeline
+      :entries="chat.entries.value"
+      :starters="starters"
+      @starter="onStarter"
+    />
 
-    <div v-if="chat.isRunning.value" class="ai-panel__busy">
-      <DtSpinner :size="14" label="助手正在处理" />
-      <span>正在处理…</span>
-      <DtButton variant="ghost" size="xs" @click="chat.stop">停下</DtButton>
-    </div>
-
-    <form class="ai-panel__compose" @submit.prevent="send">
-      <p v-if="hint" class="ai-panel__hint">{{ hint }}</p>
-      <DtTextarea
-        v-model="draft"
-        :rows="2"
-        autosize
-        placeholder="说说你想做什么…"
-        aria-label="对助手说"
-      />
-      <DtNotice v-if="attachError" intent="danger">{{ attachError }}</DtNotice>
-      <div class="ai-panel__actions">
-        <DtFilePicker
-          label="附点表"
-          accept=".csv,.xlsx,.xlsm"
-          :disabled="attaching"
-          @select="(files) => void attach(files)"
-        />
-        <DtButton type="submit" size="sm" :disabled="!canSend">发送</DtButton>
-      </div>
-    </form>
+    <AiComposer
+      ref="composer"
+      :compose="compose"
+      :running="chat.isRunning.value"
+      :hint="hint"
+      :last-said="lastSaid"
+      :models="models"
+      :choice="choice"
+      @send="(text) => void chat.send(text)"
+      @stop="chat.stop"
+      @pick="(value) => emit('pick', value)"
+    />
   </aside>
 </template>
 
 <style scoped lang="scss">
 .ai-panel {
+  /* 面板里两条发光分隔线共用的一笔。⚠ 用强调色的 rgb 伴生变量拼出来，
+     换主题时跟着全局强调色走，不携带任何一种固定色相 */
+  --ai-edge: linear-gradient(
+    90deg,
+    transparent,
+    rgba(var(--accent-primary-rgb), 0.55),
+    rgba(var(--accent-secondary-rgb), 0.35),
+    transparent
+  );
+
   display: flex;
   flex-direction: column;
   min-height: 0;
   height: 100%;
-  /* ⚠ 这里**不再自己画背景**：面板既可能嵌在页面里，也可能浮在画布上，
-     而浮着的那一路由外面那层（AiDock）垫不透明底。自己再涂一层半透明的，
-     两层叠起来反而更浑。 */
+  /* ⚠ 这里**不自己画背景**：面板浮在画布上的那一层底（不透明 + 毛玻璃）
+     由外面的 AiDock 垫。自己再涂一层半透明的，两层叠起来反而更浑。 */
   background: transparent;
 }
 
@@ -182,13 +174,15 @@ async function attach(files: File[]): Promise<void> {
   bottom: 0;
   left: 0;
   height: 1px;
-  background: var(--ai-grad-edge);
+  background: var(--ai-edge);
 }
 
 .ai-panel__name {
   color: var(--text-title);
+  font-family: var(--font-display);
   font-weight: 600;
   letter-spacing: 0.02em;
+  white-space: nowrap;
   text-shadow: 0 0 12px var(--fx-glow-title);
 }
 
@@ -200,48 +194,5 @@ async function attach(files: File[]): Promise<void> {
   white-space: nowrap;
   color: var(--text-secondary);
   font-size: 0.75rem;
-}
-
-.ai-panel__busy {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.25rem 0.75rem;
-  color: var(--text-secondary);
-  font-size: 0.8125rem;
-}
-
-.ai-panel__compose {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.75rem;
-  background: var(--surface-raised);
-}
-
-/* 与标题栏同款的发光细线，摆在上沿 */
-.ai-panel__compose::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 1px;
-  background: var(--ai-grad-edge);
-}
-
-.ai-panel__hint {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-  line-height: 1.5;
-}
-
-.ai-panel__actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
 }
 </style>

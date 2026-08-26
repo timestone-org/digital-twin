@@ -205,7 +205,7 @@ export function advanceTurn(
 }
 
 /**
- * 把一张点表交给服务端解析。
+ * 把一份参考文件（点表或纯文本）交给服务端解析。
  * ⚠ 内容走 base64 放在 JSON 里，不用 multipart——本仓一个 multipart 端点都没有
  * （素材的字节是直传对象存储的），引一个解析库就是为一个端点多一个依赖。
  * @param filename 原文件名，服务端按后缀选解析方式

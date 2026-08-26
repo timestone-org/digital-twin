@@ -73,6 +73,15 @@ describe('开流', () => {
 })
 
 describe('开不起来的时候', () => {
+  it('话里带上状态码：400 与 502 的处置完全不同', async () => {
+    // ⚠ 这句话是用户唯一看得见的线索。只说「打不开」的话，「这次请求本身不
+    // 合法、重发多少次都一样」与「服务暂时不在、过一会儿就好」长得一模一样
+    fetchMock.mockResolvedValue(streaming([], 400))
+    await expect(collect(openStream('/x:advance'))).rejects.toThrow(
+      '事件流打不开（HTTP 400）',
+    )
+  })
+
   it('非 2xx 一律抛传输错，而不是交出一段空流', async () => {
     fetchMock.mockResolvedValue(streaming([], 500))
     await expect(collect(openStream('/x:advance'))).rejects.toBeInstanceOf(

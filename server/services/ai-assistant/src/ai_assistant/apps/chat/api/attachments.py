@@ -1,7 +1,7 @@
-"""解析上传的点表。
+"""解析上传的参考文件（点表或纯文本资料）。
 
 ⚠ 它**不存文件**：读完就把内容交出去，由前端附在用户那句话后面。存文件要连带
-一整套生命周期，而这张表的用处只有一次。
+一整套生命周期，而这份文件的用处只有一次。
 """
 
 import base64
@@ -35,12 +35,12 @@ UseDep = Annotated[CallerContext, Depends(require(ASSISTANT_USE))]
 @router.post(
     ":parse",
     response_model=ApiResponse[AttachmentParseOut],
-    summary="把上传的点表读成一张表",
+    summary="把上传的文件读成给模型看的文本",
 )
 async def parse_attachment(
     payload: AttachmentParseIn, _caller: UseDep
 ) -> ApiResponse[AttachmentParseOut]:
-    """读一张 xlsx / csv，摊成表头加数据行。
+    """读一份 xlsx / csv / 纯文本：表格摊成表头加数据行，文本原样截取。
 
     Args: payload, _caller。
     """

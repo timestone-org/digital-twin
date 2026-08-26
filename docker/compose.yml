@@ -445,6 +445,29 @@ services:
       ASSISTANT_MODEL_CHAT: ${ASSISTANT_MODEL_CHAT:-qwen3.8-max}
       ASSISTANT_MODEL_VISION: ${ASSISTANT_MODEL_VISION:-qwen3.8-max}
       ASSISTANT_MODEL_TIMEOUT_S: ${ASSISTANT_MODEL_TIMEOUT_S:-120}
+      # 逐字流式。⚠ 关掉它 = 整个回合只看得见「做了哪一步」，模型说的那段话要等
+      # 回合结束才整段出现。留成配置只为一种场合：个别 OpenAI 兼容端点带工具时
+      # 不支持流式，那时表现是一条 400
+      ASSISTANT_MODEL_STREAM_ENABLED: ${ASSISTANT_MODEL_STREAM_ENABLED:-true}
+      # 透传给端点的额外请求体，一段 JSON 对象。思考开关一类的键各家不同，
+      # 而代码里不认厂商名——于是它只能是取值。留空即什么都不加
+      ASSISTANT_MODEL_EXTRA_BODY: ${ASSISTANT_MODEL_EXTRA_BODY:-}
+      # 第二条模型来路：ChatGPT 订阅直连 Codex（ADR-0026）。与上面那条**并存**，
+      # 由每个会话自己选走哪一路。默认关。
+      # ⚠ 这几格必须逐个写在这里：compose 不给服务挂 env_file，宿主 .env 里配了
+      # 而这里没列的变量**根本进不了容器**——表现是页面上这一路始终「未启用」，
+      # 而 .env 单看是配好的，两边都不报错
+      ASSISTANT_CODEX_ENABLED: ${ASSISTANT_CODEX_ENABLED:-false}
+      # ⚠ 开关为真时这两格必填，否则**启动即失败**（刻意的）：没配模型代号是每次
+      # 对话撞一条 404，没配加密密钥是「登录成功了但令牌存不进去」——
+      # 两种现象都指不回这里
+      ASSISTANT_CODEX_MODEL: ${ASSISTANT_CODEX_MODEL:-}
+      ASSISTANT_CREDENTIAL_SECRET: ${ASSISTANT_CREDENTIAL_SECRET:-}
+      # 面板上还能选哪几个，逗号分隔；留空就只有上面那一个
+      ASSISTANT_CODEX_MODELS: ${ASSISTANT_CODEX_MODELS:-}
+      # 缺省推理档位，闭合集合 low/medium/high/xhigh。⚠ 配错了不许起——
+      # 端点对不认识的档位回 400，而那条 400 里不会提到是哪一格配错了
+      ASSISTANT_CODEX_REASONING_EFFORT: ${ASSISTANT_CODEX_REASONING_EFFORT:-medium}
     expose: ['8006']
     healthcheck:
       test: ['CMD', 'python', '-c', "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8006/api/v1/assistant/health')"]

@@ -247,7 +247,7 @@ export interface AssistantToolCall {
 }
 
 /**
- * 读出来的一张点表。
+ * 读出来的一份参考文件：表格有 columns/rows，纯文本两者为空、正文只在 text。
  *
  * ⚠ 服务端**不存文件**：读完就把内容交出来，由前端附在用户那句话后面——
  * 用户看得见助手将要看到什么，这一点比省几行界面重要。
@@ -255,10 +255,10 @@ export interface AssistantToolCall {
 export interface AssistantParsedTable {
   columns: string[]
   rows: string[][]
-  /** 行数超上限时截断了。⚠ 截断了要在界面上说出来。 */
+  /** 内容超上限时截断了。⚠ 截断了要在界面上说出来。 */
   is_truncated: boolean
   /** 截断前的总行数。 */
   total_rows: number
-  /** 摊平给模型看的那一段，竖线分隔。 */
+  /** 摊平给模型看的那一段：表格是竖线分隔，纯文本是原文（含截断说明）。 */
   text: string
 }

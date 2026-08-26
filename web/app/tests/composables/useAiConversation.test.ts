@@ -106,6 +106,56 @@ describe('restore', () => {
   })
 })
 
+describe('流开不起来', () => {
+  it('如实说一句并且从「正在跑」上下来', async () => {
+    // ⚠ 服务不在、边缘 502、令牌换不动，都从这一条口子出来。不收住的话
+    // 界面停在「正在思考」上，而且再也发不出下一句——看着就是卡死
+    setAiPorts({
+      // eslint-disable-next-line require-yield
+      advance: async function* () {
+        await Promise.resolve()
+        throw new Error('事件流打不开')
+      },
+    })
+    const chat = conversation()
+
+    await chat.send('绑一下')
+
+    expect(chat.entries.value.map((one) => [one.role, one.text])).toEqual([
+      ['user', '绑一下'],
+      ['error', '事件流打不开'],
+    ])
+    expect(chat.isRunning.value).toBe(false)
+  })
+})
+
+describe('流开不起来之后', () => {
+  it('下一句照样发得出去', async () => {
+    // ⚠ 用户报的就是这一条：看到红字之后再也发不出下一句
+    let attempt = 0
+    setAiPorts({
+      advance: async function* () {
+        attempt += 1
+        await Promise.resolve()
+        if (attempt === 1) throw new Error('事件流打不开')
+        yield 'event: turn.done\ndata: {"reply": "好"}\n\n'
+      },
+    })
+    const chat = conversation()
+
+    await chat.send('第一句')
+    await chat.send('第二句')
+
+    expect(chat.isRunning.value).toBe(false)
+    expect(chat.entries.value.map((one) => [one.role, one.text])).toEqual([
+      ['user', '第一句'],
+      ['error', '事件流打不开'],
+      ['user', '第二句'],
+      ['assistant', '好'],
+    ])
+  })
+})
+
 describe('note', () => {
   it('添在时间线末尾，角色是 note', () => {
     const chat = conversation()

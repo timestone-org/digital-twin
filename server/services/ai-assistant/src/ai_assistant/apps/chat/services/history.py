@@ -7,6 +7,12 @@
 ⚠ 工具消息必须带回 `tool_call_id`。丢了它，模型看到的是「有人回了句话，
 但不知道回的是哪次调用」——端点那一侧多半直接判请求不合法。
 
+⚠ **没等到回执的调用要补一条失败回执**（`unanswered` / `fillers`）。上一轮被
+掐掉、页面被关掉、回执整批被判不合法——这几种情况都会在历史尾部留下一批没人
+应答的 `tool_calls`，而端点对「有调用没回应」的一段历史一律判 400。不补的话，
+**这个会话从此发不出任何一句**，而新开的会话好好的：现象与原因隔得极远
+（实测：一步 37 个调用超过回填上限那次就是这么来的）。
+
 ⚠ **图不落库**，落的是一句占位。一张截图是几兆字节的 base64，存进去之后这个
 会话每重放一次就把它再喂给模型一遍，上下文与账单一起翻倍。图只活在截它的那
 一轮（`services/vision.py`）。
@@ -30,6 +36,10 @@ from ai_assistant.settings import HISTORY_DROP_STEP
 _USER = "user"
 _ASSISTANT = "assistant"
 _TOOL = "tool"
+
+# 补出来的那条回执说的话。⚠ 说清是「没回执」而不是编一个成功：模型据此决定
+# 要不要重做那一步，而假装成功会让它接着往下走
+NO_REPLY_TEXT = "失败：这一步没有回执（上一轮被中断了）"
 
 
 def to_content(message: BaseMessage) -> tuple[str, dict[str, Any]]:
@@ -148,3 +158,34 @@ def _calls_of(body: dict[str, Any]) -> list[ToolCall]:
     if not isinstance(calls, list):
         return []
     return [cast("ToolCall", item) for item in cast("list[object]", calls)]
+
+
+def unanswered(messages: list[BaseMessage]) -> tuple[str, ...]:
+    """这一段里没等到回执的工具调用 id，按发起顺序。
+
+    ⚠ 端点对「有调用没回应」的一段历史一律判请求不合法，且报出来的 400 与
+    真实原因毫无关系。
+
+    Args: messages。
+    """
+    asked: list[str] = []
+    for message in messages:
+        if isinstance(message, AIMessage):
+            asked.extend(
+                str(call.get("id") or "") for call in message.tool_calls
+            )
+        elif isinstance(message, ToolMessage):
+            given = message.tool_call_id
+            if given in asked:
+                asked.remove(given)
+    return tuple(one for one in asked if one)
+
+
+def fillers(call_ids: tuple[str, ...]) -> list[BaseMessage]:
+    """给没回执的调用各补一条失败回执。
+
+    Args: call_ids。
+    """
+    return [
+        ToolMessage(content=NO_REPLY_TEXT, tool_call_id=one) for one in call_ids
+    ]

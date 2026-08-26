@@ -11,7 +11,7 @@ import { PERMISSION_CODES, type AssistantPlan } from '@dt/contracts'
 import AiCoreIcon from '@/components/ai/AiCoreIcon.vue'
 import AiDock from '@/components/ai/AiDock.vue'
 import type { AiConversation, ChatEntry } from '@/composables/useAiConversation'
-import type { AiPanel } from '@/composables/useAiPanel'
+import { newComposeState, type AiPanel } from '@/composables/useAiPanel'
 import { useAuthStore } from '@/stores/auth'
 
 function fakeChat(): AiConversation {
@@ -37,6 +37,7 @@ function fakeAi(open = false, available = true): AiPanel {
     isOpen,
     sessionId: ref<string | null>(null),
     chat: fakeChat(),
+    compose: newComposeState(),
     open: vi.fn(() => {
       isOpen.value = true
       return Promise.resolve()
@@ -49,7 +50,6 @@ function mountDock(ai: AiPanel) {
   return mount(AiDock, {
     props: {
       ai,
-      surfaceKind: 'dashboard-editor' as const,
       surfaceLabel: '大屏编辑器',
       hint: '助手改的是草稿，保存要你自己按。',
     },
@@ -95,5 +95,43 @@ describe('AiDock', () => {
     grant([])
     const wrapper = mountDock(fakeAi())
     expect(wrapper.find('button').exists()).toBe(false)
+  })
+})
+
+describe('⌘I 开合', () => {
+  function press(init: KeyboardEventInit): void {
+    window.dispatchEvent(new KeyboardEvent('keydown', init))
+  }
+
+  it('关着时 ⌘I 打开', () => {
+    const ai = fakeAi()
+    const wrapper = mountDock(ai)
+    press({ key: 'i', metaKey: true })
+    expect(ai.open).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('开着时 Ctrl+I 收起', () => {
+    const ai = fakeAi(true)
+    const wrapper = mountDock(ai)
+    press({ key: 'i', ctrlKey: true })
+    expect(ai.close).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('这套部署没有助手时 ⌘I 什么都不做', () => {
+    const ai = fakeAi(false, false)
+    const wrapper = mountDock(ai)
+    press({ key: 'i', metaKey: true })
+    expect(ai.open).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('卸载后不再吞别的页面的 ⌘I', () => {
+    const ai = fakeAi()
+    const wrapper = mountDock(ai)
+    wrapper.unmount()
+    press({ key: 'i', metaKey: true })
+    expect(ai.open).not.toHaveBeenCalled()
   })
 })

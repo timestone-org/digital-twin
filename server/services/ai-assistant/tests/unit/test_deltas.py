@@ -1,8 +1,9 @@
 """模型逐字吐出来的两路增量怎么读。
 
-**守的是两件在真模型上才会碰到的事**：多模态消息的 content 是一串块而不是
+**守的是三件在真模型上才会碰到的事**：多模态消息的 content 是一串块而不是
 一个字符串（整块 `str()` 出来是一段 Python 字面量，会原样出现在用户的对话框
-里），以及思考那一路端点不吐时必须安静地什么都不给。
+里）；思考那一路有**两种方言**，只认一种的话另一路的端点想几十秒而界面上一个
+字都没有，看着就是卡住了；以及端点不吐思考时必须安静地什么都不给。
 """
 
 from typing import Any
@@ -75,5 +76,38 @@ def test_an_empty_block_hands_nothing_over() -> None:
     """
     seen, push = _sink()
     emit(AIMessageChunk(content=""), push)
+
+    assert seen == []
+
+
+def _reasoning_block(text: str) -> dict[str, Any]:
+    """Responses 方言里的一块思考摘要。
+
+    Args: text。
+    """
+    return {
+        "type": "reasoning",
+        "index": 0,
+        "summary": [{"index": 0, "type": "summary_text", "text": text}],
+    }
+
+
+def test_the_responses_dialect_puts_the_thinking_in_a_content_block() -> None:
+    """订阅账号那一路的思考摘要走内容块，不走 `reasoning_content`。
+
+    ⚠ 只认那一格的话，这一路的端点想几十秒而界面上一个字都没有——用户看到的
+    是「点了没反应」，而日志里一切正常。
+    """
+    chunk = AIMessageChunk(content=[_reasoning_block("**在想过河顺序**")])
+
+    assert reasoning_of(chunk) == "**在想过河顺序**"
+    # 思考不许漏进正文：漏了就是一大段自言自语顶在结论前面
+    assert text_of(chunk) == ""
+
+
+def test_a_reasoning_block_without_a_summary_hands_nothing_over() -> None:
+    # 摘要开头与结尾各有一块空的（一块带 id、一块带密文），它们不该吐空事件
+    seen, push = _sink()
+    emit(AIMessageChunk(content=[{"type": "reasoning", "summary": []}]), push)
 
     assert seen == []

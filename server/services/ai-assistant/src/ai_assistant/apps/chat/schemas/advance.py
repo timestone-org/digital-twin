@@ -13,8 +13,13 @@ from ai_assistant.apps.chat.schemas.common import InputModel
 from ai_assistant.apps.chat.schemas.session import SurfaceKind
 from ai_assistant.settings import MAX_IMAGE_CHARS
 
-# 一次回填最多带几条。与一次能下发的客户端工具数同量级
-MAX_TOOL_RESULTS = 32
+# 一次回填最多带几条。⚠ 量的是**一步里的调用条数**，不是工具的种类数——
+# 模型一步要三十几个 `dashboard.set_geometry` 是常态（实测见过 37 个），
+# 而这一格卡在 32 的表现是：那一步的回执整批被判 400，浏览器收到「事件流
+# 打不开」，且那些调用从此没有回执——历史里留下一批没人应答的 tool_calls，
+# 于是**这个会话再也发不出下一句**（端点判整段历史不合法）。
+# 尾部那批孤儿调用现在由 `history.unanswered` 兜底，但上限本身也得够用。
+MAX_TOOL_RESULTS = 128
 MAX_USER_TEXT = 4000
 MAX_SURFACE_LABEL = 64
 # 页面自报的客户端工具名单上限。真实页面十几个，64 已是数倍余量

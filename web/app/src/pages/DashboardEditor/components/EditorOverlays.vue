@@ -70,5 +70,10 @@ const emit = defineEmits<{
     :ai="ai"
     surface-label="大屏编辑器"
     hint="助手改的是草稿，保存要你自己按。"
+    :starters="[
+      '把 1 号机组的温度绑到选中的数值卡上',
+      '截一张当前画布，说说布局哪里能改',
+      '加一个趋势图，绑上合适的点位',
+    ]"
   />
 </template>

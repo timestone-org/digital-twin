@@ -463,7 +463,7 @@
         "type": "object"
       },
       "AttachmentParseOut": {
-        "description": "读出来的一张表。",
+        "description": "读出来的内容。表格有 columns/rows；纯文本两者为空，正文只在 text 里。",
         "properties": {
           "columns": {
             "items": {
@@ -1429,7 +1429,7 @@
   "paths": {
     "/api/v1/assistant/attachments:parse": {
       "post": {
-        "description": "读一张 xlsx / csv，摊成表头加数据行。\n\nArgs: payload, _caller。",
+        "description": "读一份 xlsx / csv / 纯文本：表格摊成表头加数据行，文本原样截取。\n\nArgs: payload, _caller。",
         "operationId": "parse_attachment_api_v1_assistant_attachments_parse_post",
         "requestBody": {
           "content": {
@@ -1463,7 +1463,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "把上传的点表读成一张表",
+        "summary": "把上传的文件读成给模型看的文本",
         "tags": [
           "attachment"
         ]

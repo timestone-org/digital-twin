@@ -3,6 +3,10 @@
 守的是「存结构不存提示词文本」：把整段提示词拼好再存，将来改了写法，历史会话
 会用两套口径重放。另守工具消息必须带回 `tool_call_id`——丢了它，模型看到的是
 「有人回了句话，但不知道回的是哪次调用」。
+
+还守一条只有真会话才碰得到的：**没等到回执的调用要认得出来**。上一轮被掐掉、
+页面被关掉、回执整批被判不合法，都会在尾部留下这样一批孤儿，而端点对「有调用
+没回应」的一段历史一律判 400——认不出来就是这个会话从此一句都发不出去。
 """
 
 import uuid
@@ -113,3 +117,60 @@ def test_window_keeps_a_complete_pair_intact() -> None:
     ]
     kept = history.window(rows, 3, step=1)
     assert [one.seq for one in kept] == [1, 2, 3]
+
+
+def _asks(call_ids: list[str]) -> AIMessage:
+    """一条要调若干工具的助手消息。
+
+    Args: call_ids。
+    """
+    return AIMessage(
+        content="",
+        tool_calls=[
+            {"name": "dashboard.set_geometry", "args": {}, "id": one}
+            for one in call_ids
+        ],
+    )
+
+
+def test_a_call_that_never_got_an_answer_is_spotted() -> None:
+    # 一步 37 个调用、回填上限 32 的那次，尾部就留下了这样一批
+    said = [
+        HumanMessage(content="排一下版"),
+        _asks(["c1", "c2", "c3"]),
+        ToolMessage(content="好", tool_call_id="c2"),
+    ]
+
+    assert history.unanswered(said) == ("c1", "c3")
+
+
+def test_a_fully_answered_stretch_has_no_orphans() -> None:
+    said = [
+        _asks(["c1"]),
+        ToolMessage(content="好", tool_call_id="c1"),
+        HumanMessage(content="继续"),
+    ]
+
+    assert history.unanswered(said) == ()
+
+
+def test_an_answer_to_a_call_nobody_made_is_ignored() -> None:
+    # 窗口掐头之后可能只剩下回执那一半，那不是孤儿调用
+    said = [ToolMessage(content="好", tool_call_id="c9")]
+
+    assert history.unanswered(said) == ()
+
+
+def test_the_filler_says_there_was_no_answer() -> None:
+    """补的是**失败**回执，不是编一个成功。
+
+    ⚠ 编一个成功的话，模型会以为那一步做完了，接着往下走——而画布上其实
+    什么都没发生。
+    """
+    made = history.fillers(("c1",))
+
+    assert len(made) == 1
+    one = made[0]
+    assert isinstance(one, ToolMessage)
+    assert one.tool_call_id == "c1"
+    assert "没有回执" in str(one.content)

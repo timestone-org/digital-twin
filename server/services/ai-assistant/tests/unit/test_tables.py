@@ -1,8 +1,8 @@
-"""读用户上传的点表。
+"""读用户上传的参考文件：表格摊平、纯文本截取。
 
 守三条现场教训：CSV 带 BOM 是常态（不剥的话首列表头多一个看不见的字符）、
 xlsx 里要取公式**算出来的值**（取到 `=A1*2` 的话匹配永远对不上，而表格在 Excel
-里看着一切正常）、以及截断了必须说出来（少了多少行，从外面得看得见）。
+里看着一切正常）、以及截断了必须说出来（少了多少，从外面得看得见）。
 """
 
 import io
@@ -12,6 +12,7 @@ from openpyxl import Workbook
 
 from ai_assistant.apps.chat.services.tables import (
     MAX_ROWS,
+    MAX_TEXT_CHARS,
     UnsupportedTable,
     parse_table,
     to_text,
@@ -97,6 +98,35 @@ def test_the_text_is_pipe_separated_not_json() -> None:
     assert to_text(got).splitlines()[0] == "code | name"
 
 
+def test_a_text_file_comes_through_verbatim() -> None:
+    # 不一定是点表：巡检记录、工艺说明这类纯文本原样交给模型
+    got = parse_table(
+        "巡检记录.txt", "上午 9 点，1 号机组正常。\n下午停机。".encode()
+    )
+    assert got.columns == []
+    assert got.body == "上午 9 点，1 号机组正常。\n下午停机。"
+    assert to_text(got) == got.body
+
+
+def test_a_markdown_file_is_treated_as_text_not_a_table() -> None:
+    got = parse_table("工艺.md", "# 流程\n先开阀，再升温".encode())
+    assert got.rows == []
+    assert "先开阀" in to_text(got)
+
+
+def test_a_long_text_is_truncated_and_says_so() -> None:
+    body = "行\n" * MAX_TEXT_CHARS
+    got = parse_table("手册.txt", body.encode())
+    assert got.is_truncated is True
+    assert len(got.body) == MAX_TEXT_CHARS
+    assert str(got.total_rows) in to_text(got)
+
+
+def test_an_empty_text_file_reads_as_empty() -> None:
+    got = parse_table("空.txt", b"  \n\n")
+    assert to_text(got) == "（这个文件里没有读到任何内容）"
+
+
 def test_an_unknown_suffix_is_refused_plainly() -> None:
     with pytest.raises(UnsupportedTable):
         parse_table("点表.pdf", b"%PDF")
@@ -105,3 +135,9 @@ def test_an_unknown_suffix_is_refused_plainly() -> None:
 def test_an_unreadable_encoding_is_refused_plainly() -> None:
     with pytest.raises(UnsupportedTable):
         parse_table("点表.csv", b"\xff\xfe\x00\x00\xff")
+
+
+def test_a_binary_blob_with_a_text_suffix_is_refused_plainly() -> None:
+    # 改个后缀不能把二进制骗进来：解不出编码就照实拒绝
+    with pytest.raises(UnsupportedTable):
+        parse_table("伪装.txt", b"\xff\xfe\x00\x00\xff")

@@ -1,11 +1,11 @@
-"""把用户上传的点表读成一张紧凑的表。
+"""把用户上传的参考文件读成给模型看的文本：表格摊平，纯文本原样截取。
 
 ⚠ **不落库、不存对象存储**。读完就把内容交给模型，会话里存的是那段文本。
-存文件要连带一整套生命周期（谁能读、什么时候删、删了引用怎么办），而这张表
-的用处只有一次——它是这一轮对话的参考资料，不是资产。
+存文件要连带一整套生命周期（谁能读、什么时候删、删了引用怎么办），而这份
+文件的用处只有一次——它是这一轮对话的参考资料，不是资产。
 
-⚠ 行列都有上限，且**截断了要说出来**。一张几千行的点表整份塞进上下文，会把
-技能正文与工作面快照一起挤掉，而挤掉了哪一段从外面完全看不出来。
+⚠ 内容都有上限，且**截断了要说出来**。一张几千行的表或一整本手册塞进上下文，
+会把技能正文与工作面快照一起挤掉，而挤掉了哪一段从外面完全看不出来。
 
 ⚠ CSV 用 `utf-8-sig` 读：现场的点表十有八九是从组态软件导出、再用 Excel 存过
 一道的，带 BOM 是常态。不剥的话首列表头会多一个看不见的字符，而「为什么第一列
@@ -23,8 +23,24 @@ MAX_ROWS = 200
 MAX_COLUMNS = 30
 # 单元格文本上限：整段说明塞进一格是常事，而它对匹配没有帮助
 MAX_CELL = 120
+# 纯文本的字符上限，量级与截断后的表持平：附件是参考资料，不是全文检索库
+MAX_TEXT_CHARS = 24_000
 
 _XLSX_SUFFIXES = (".xlsx", ".xlsm")
+# 逐字读的纯文本类。⚠ 名单是显式的：兜底「读得动就收」会把 pdf / 图片这类
+# 二进制也放进来，解出一堆乱码还占满上下文
+_TEXT_SUFFIXES = (
+    ".txt",
+    ".md",
+    ".markdown",
+    ".json",
+    ".log",
+    ".yaml",
+    ".yml",
+    ".xml",
+    ".ini",
+    ".toml",
+)
 
 
 class UnsupportedTable(ValueError):
@@ -33,13 +49,15 @@ class UnsupportedTable(ValueError):
 
 @dataclass(frozen=True)
 class ParsedTable:
-    """读出来的一张表。第一行当表头。"""
+    """读出来的一份内容：表格走 columns/rows，纯文本走 body，二选一。"""
 
     columns: list[str] = field(default_factory=list[str])
     rows: list[list[str]] = field(default_factory=list[list[str]])
     is_truncated: bool = False
     # 原始行数（截断前）。⚠ 截断了必须让人看得见到底少了多少
     total_rows: int = 0
+    # 纯文本文件的正文；表格文件恒为空串
+    body: str = ""
 
 
 def parse_table(filename: str, content: bytes) -> ParsedTable:
@@ -50,9 +68,13 @@ def parse_table(filename: str, content: bytes) -> ParsedTable:
     lowered = filename.lower()
     if lowered.endswith(_XLSX_SUFFIXES):
         return _shape(_read_xlsx(content))
-    if lowered.endswith((".csv", ".txt")):
+    if lowered.endswith(".csv"):
         return _shape(_read_csv(content))
-    raise UnsupportedTable("只认得 .xlsx / .xlsm / .csv")
+    if lowered.endswith(_TEXT_SUFFIXES):
+        return _shape_text(_decode(content))
+    raise UnsupportedTable(
+        "只认得表格（.xlsx / .xlsm / .csv）或纯文本（.txt / .md / .json 等）"
+    )
 
 
 def _read_csv(content: bytes) -> list[list[str]]:
@@ -120,14 +142,34 @@ def _shape(grid: list[list[str]]) -> ParsedTable:
     )
 
 
+def _shape_text(text: str) -> ParsedTable:
+    """纯文本按字符截断。行数口径是全文行数，截断了从数字上看得出来。
+
+    Args: text。
+    """
+    stripped = text.strip()
+    if stripped == "":
+        return ParsedTable()
+    return ParsedTable(
+        body=stripped[:MAX_TEXT_CHARS],
+        is_truncated=len(stripped) > MAX_TEXT_CHARS,
+        total_rows=len(stripped.splitlines()),
+    )
+
+
 def to_text(table: ParsedTable) -> str:
     """摊成一段给模型看的文本。
 
-    ⚠ 用竖线分隔而不是 JSON：同样的内容，表格形态的 token 数少得多，
-    而模型对「一行是一条」这件事看得更准。
+    ⚠ 表格用竖线分隔而不是 JSON：同样的内容，表格形态的 token 数少得多，
+    而模型对「一行是一条」这件事看得更准。纯文本原样给。
 
     Args: table。
     """
+    if table.body != "":
+        if table.is_truncated:
+            note = f"（只截了开头一段，全文共 {table.total_rows} 行）"
+            return f"{table.body}\n{note}"
+        return table.body
     if not table.columns:
         return "（这个文件里没有读到任何内容）"
     lines = [" | ".join(table.columns)]

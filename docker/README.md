@@ -99,6 +99,35 @@ WS 的 token 走 `Sec-WebSocket-Protocol` 子协议，而 `auth_request` 的子�
 **不随数据库备份一起走**。卷丢了等于全部实例的证书作废，每台上位机都要重新信任新证书。
 备份策略要单独覆盖它。
 
+### ai-assistant 的两条模型来路
+
+助手整套是**可缺席**的：不起这个服务，前端探测不到就干净地不出现入口，别的功能
+一件不少。起了它，两条模型来路各配各的，且**并存**——两边都配好时由每个会话
+自己选走哪一路（[ADR-0026](../docs/adr/0026-助手接订阅账号模型走上游私有面.md)）。
+
+| 变量 | 说明 |
+|---|---|
+| `ASSISTANT_MODEL_ENABLED` / `ASSISTANT_MODEL_API_KEY` | 按量计费那一路。开关为真却没配密钥（**空串同档**）= 启动即失败 |
+| `ASSISTANT_MODEL_BASE_URL` / `_CHAT` / `_VISION` / `_TIMEOUT_S` | 端点与模型代号。换供应商是改这几行，不是改代码 |
+| `ASSISTANT_MODEL_STREAM_ENABLED` / `_EXTRA_BODY` | 逐字流式开关、透传的额外请求体（一段 JSON 对象） |
+| `ASSISTANT_CODEX_ENABLED` | 订阅账号那一路，默认关 |
+| `ASSISTANT_CODEX_MODEL` / `ASSISTANT_CREDENTIAL_SECRET` | 开关为真时**两个都必填**，否则启动即失败 |
+| `ASSISTANT_CODEX_MODELS` / `ASSISTANT_CODEX_REASONING_EFFORT` | 可选模型清单、缺省推理档位（`low`/`medium`/`high`/`xhigh` 闭合集合） |
+
+⚠ **宿主 `.env` 里配了不等于容器里有。** compose 不给服务挂 `env_file`，每个变量
+都要在 `ai-assistant` 的 `environment` 里逐条列出来；漏列的表现是页面上那一路
+始终「未启用」，而 `.env` 单看是配好的、两边都不报错。加新配置项时记得同时改
+`compose.yml`、根目录的 `.env.example`，还有这张表。
+
+⚠ **订阅那一路配好之后还要登录一次。** 去 系统管理 → 助手模型 页面走设备码登录
+（需要 `assistant:manage`）；不登录的话面板上这一路是灰的，标「未登录」。
+令牌整包加密存在 `assistant.model_credentials`，整套部署共用一行——换掉
+`ASSISTANT_CREDENTIAL_SECRET` 等于那一行解不开，界面上会变回「从来没登录过」。
+
+⚠ **`ASSISTANT_MODEL_TIMEOUT_S` 要小于边缘那条事件流 location 的
+`proxy_read_timeout`（300s）**，否则边缘先掐断，服务端这条超时与它的失败分档一次
+都轮不到，而现象是「助手转了半分钟然后什么都没发生」。
+
 ## 迁移与种子（自动）
 
 `docker compose up` 会先把五个一次性作业跑完，再放真服务进来：

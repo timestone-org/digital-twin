@@ -134,12 +134,11 @@ const uid = useId()
 </template>
 
 <style scoped lang="scss">
-/* 整体偏色。⚠ 图里那几十个渐变端点是硬编码的青蓝，一个个换成变量既繁琐又
-   容易漏掉一两个（漏掉的那个只有人眼看得出来）。整张图统一转色调是本仓已有的
-   做法——装饰位图那一路就是靠 `--fx-decor-filter` 做的，理由见 tokens.scss。
-   缺省 `none`：不在助手那块紫玻璃里时，它仍是原色。 */
+/* 机器人本体是硬编码的青蓝，正是本仓默认主题的色相。换主题的整体偏色走
+   `--fx-decor-filter`——装饰位图那一路的既有做法（理由见 tokens.scss）：
+   一个个把渐变端点换成变量既繁琐又容易漏掉一两个，漏掉的只有人眼看得出来。 */
 .ai-core {
-  filter: var(--ai-figure-filter, none);
+  filter: var(--fx-decor-filter, none);
 }
 
 /* 动画的目标都在子件 AiCoreFigure 里，一律 :deep 打进去 */

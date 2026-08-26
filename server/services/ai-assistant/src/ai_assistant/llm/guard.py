@@ -27,9 +27,11 @@ from openai import (
 )
 
 from ai_assistant.llm import deltas
+from ai_assistant.llm.codex import wire_names
 from ai_assistant.llm.deltas import DeltaSink
 from ai_assistant.llm.errors import ModelRejected, ModelUnavailable
 from ai_assistant.llm.provider import (
+    CODEX_PROFILE,
     DEFAULT_PROFILE,
     ModelChoice,
     ModelSource,
@@ -79,6 +81,11 @@ class GuardedModel:
         breaker = self._breaker_of(choice.profile)
         self._guard(breaker)
         model = await self.source(choice)
+        # ⚠ 订阅账号那一路的端点不认工具名里的点号：出去的路上换掉，
+        # 回来的路上换回来，两头都换才对得上（wire_names 文件头）
+        if choice.profile == CODEX_PROFILE:
+            tools = wire_names.wired_tools(tools)
+            messages = wire_names.wired_messages(messages)
         bound = model.bind_tools(list(tools)) if tools else model
         sink = on_delta if self.is_streaming else None
         try:
@@ -94,6 +101,8 @@ class GuardedModel:
             raise ModelUnavailable(_reason(error)) from error
         breaker.record_success()
         answer = _as_ai_message(reply)
+        if choice.profile == CODEX_PROFILE:
+            answer = wire_names.restored(answer)
         _log_usage(choice, answer)
         return answer
 

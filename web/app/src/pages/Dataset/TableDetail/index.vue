@@ -191,6 +191,10 @@ onMounted(() => {
       :ai="ai.panel"
       surface-label="台账详情"
       hint="助手只提议公式，落库要你自己点确认。"
+      :starters="[
+        '帮「综合能耗」这类计算列提一条公式',
+        '检查这张表现有公式的口径对不对',
+      ]"
     />
   </AppShell>
 </template>
