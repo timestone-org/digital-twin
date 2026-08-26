@@ -6,6 +6,9 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json"
+  },
   "dependencies": {
     "@dt/contracts": "workspace:*",
     "@dt/ui": "workspace:*"
