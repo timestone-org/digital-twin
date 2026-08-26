@@ -60,6 +60,15 @@ describe('信息牌', () => {
     expect(panel({ style: { fontScale: 0 } }).style.fontScale).toBe(0.5)
   })
 
+  // ⚠ 自动定出来的大小按模型对角线的一成算，大厂区上一成仍很占地方；
+  //   下限停在 0.2 时用户「调到最小还是大」
+  it('整体大小能压到 0.1，越界的夹回区间', () => {
+    expect(panel({ style: { scale: 0.1 } }).style.scale).toBe(0.1)
+    expect(panel({ style: { scale: 0.01 } }).style.scale).toBe(0.1)
+    expect(panel({ style: { scale: 99 } }).style.scale).toBe(5)
+    expect(panel({}).style.scale).toBe(1)
+  })
+
   it('不认识的变体与朝向都回落到缺省', () => {
     const style = panel({
       style: { variant: 'neon', orient: 'diagonal' },
