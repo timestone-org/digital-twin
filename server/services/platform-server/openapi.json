@@ -9801,6 +9801,32 @@
         "title": "PointCreateIn",
         "type": "object"
       },
+      "PointDeleteIn": {
+        "additionalProperties": false,
+        "description": "批量删点。\n\n⚠ 整批要么全删要么全不删：部分成功之后，界面上剩下的那几条看着像「没勾\n中」，而它们其实是被绑定守卫拦下来的——于是用户再勾一次、再删一次，\n永远删不掉也永远看不出原因。",
+        "properties": {
+          "is_forced": {
+            "default": false,
+            "title": "Is Forced",
+            "type": "boolean"
+          },
+          "point_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Point Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "point_ids"
+        ],
+        "title": "PointDeleteIn",
+        "type": "object"
+      },
       "PointItemIn": {
         "additionalProperties": false,
         "description": "批量里的一个点位。数据源在批的层面上给，一批只对一个源。",
@@ -16312,6 +16338,59 @@
           }
         },
         "summary": "下发写值",
+        "tags": [
+          "collect-point"
+        ]
+      }
+    },
+    "/api/v1/platform/collect-points:batch-delete": {
+      "post": {
+        "description": "批量删点。整批全删或全不删；被绑着就 409 并点名，`is_forced` 跳守卫。\n\nArgs: payload, session, write。",
+        "operationId": "batch_delete_points_api_v1_platform_collect_points_batch_delete_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PointDeleteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "批量删除点位",
         "tags": [
           "collect-point"
         ]

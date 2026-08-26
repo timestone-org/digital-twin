@@ -31,6 +31,7 @@ from platform_server.apps.dashboard.services import dashboards_binding
 pytestmark = pytest.mark.requires_postgres
 
 BINDING_SLOT = "anchorValues[0].value"
+BATCH_DELETE = f"{POINTS}:batch-delete"
 
 
 @dataclass(frozen=True)
@@ -176,3 +177,72 @@ async def test_force_delete_removes_a_bound_point(
     listed = await app_client.get(POINTS, params={"source_id": source["id"]})
     ids = [item["id"] for item in payload(listed)["items"]]
     assert point["id"] not in ids
+
+
+async def test_one_bound_point_blocks_the_whole_batch(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # ⚠ 整批不删，而不是「删掉能删的那几个」：部分成功之后表上剩下的那一条
+    # 看着像没勾中，用户会再勾一次再删一次
+    source = await create_source(app_client)
+    batch = await create_points(
+        app_client,
+        source["id"],
+        point_item("outlet_temp"),
+        point_item("inlet_temp"),
+    )
+    free, bound = batch["items"][0], batch["items"][1]
+    await bind_point(app_client, node_key=bound["node_key"], name="一号大屏")
+    response = await app_client.post(
+        BATCH_DELETE, json={"point_ids": [free["id"], bound["id"]]}
+    )
+    assert response.status_code == 409
+    body = envelope(response)
+    assert body["code"] == 41105
+    assert body["details"][0]["field"] == f"points[{bound['id']}]"
+    listed = await app_client.get(POINTS, params={"source_id": source["id"]})
+    assert len(payload(listed)["items"]) == 2
+
+
+async def test_the_batch_conflict_names_the_points_not_the_dashboards(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # ⚠ 批量删的时候用户要知道「是哪几个点位删不掉」；哪几张屏绑着它，
+    # 单删那一条才列得下
+    source = await create_source(app_client)
+    batch = await create_points(
+        app_client, source["id"], point_item("outlet_temp", name="出口温度")
+    )
+    point = batch["items"][0]
+    await bind_point(app_client, node_key=point["node_key"], name="一号大屏")
+    await bind_point(app_client, node_key=point["node_key"], name="二号大屏")
+    response = await app_client.post(
+        BATCH_DELETE, json={"point_ids": [point["id"]]}
+    )
+    body = envelope(response)
+    assert "出口温度" in body["message"]
+    assert body["details"][0]["message"] == "出口温度 被 2 张大屏绑着"
+
+
+async def test_a_forced_batch_removes_bound_points_too(
+    app_client: httpx.AsyncClient,
+) -> None:
+    source = await create_source(app_client)
+    batch = await create_points(
+        app_client,
+        source["id"],
+        point_item("outlet_temp"),
+        point_item("inlet_temp"),
+    )
+    bound = batch["items"][1]
+    await bind_point(app_client, node_key=bound["node_key"], name="一号大屏")
+    response = await app_client.post(
+        BATCH_DELETE,
+        json={
+            "point_ids": [item["id"] for item in batch["items"]],
+            "is_forced": True,
+        },
+    )
+    assert response.status_code == 204
+    listed = await app_client.get(POINTS, params={"source_id": source["id"]})
+    assert payload(listed)["items"] == []

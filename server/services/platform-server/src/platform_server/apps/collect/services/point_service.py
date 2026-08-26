@@ -148,6 +148,40 @@ async def delete_point(
     return node_key
 
 
+async def delete_points(
+    session: AsyncSession,
+    *,
+    point_ids: Sequence[uuid.UUID],
+    is_forced: bool = False,
+) -> int:
+    """批量删点，返回删掉几个。
+
+    ⚠ 整批全删或全不删：只要有一个还被大屏绑着，就整批 409 并点名那几个。
+    部分成功会让界面上剩下的那几条看着像「没勾中」，用户于是再勾一次再删一次。
+    ⚠ 撞见已经不在的点位一律 404，不静默跳过：别人刚删掉其中一条时，静默成功
+    会让人以为自己删的是另一条，而那一条还好好地在表里。
+    ⚠ `is_forced` 是显式跳过这道守卫：仍绑着它们的大屏引用就此失效——界面要
+    在二次确认里把这句话说出来。
+    Args: session, point_ids, is_forced。
+    """
+    wanted = list(dict.fromkeys(point_ids))
+    points = await point_crud.list_by_ids(session, wanted)
+    _raise_if_missing(wanted, points)
+    if not is_forced:
+        await binding_guard.raise_if_any_bound(
+            session, points=[_point_ref(point) for point in points]
+        )
+    _logger.info(
+        "collect_points_deleted",
+        "点位已批量删除",
+        point_total=len(points),
+        is_forced=is_forced,
+    )
+    await point_crud.delete_many(session, wanted)
+    await _commit(session)
+    return len(points)
+
+
 async def require_point(
     session: AsyncSession, point_id: uuid.UUID
 ) -> CollectPoint:
@@ -159,6 +193,30 @@ async def require_point(
     if point is None:
         raise PointNotFound("点位不存在")
     return point
+
+
+def _raise_if_missing(
+    wanted: Sequence[uuid.UUID], found: Sequence[CollectPoint]
+) -> None:
+    """这一批里有点位不存在就整批 404 并报个数。
+
+    Args: wanted, found。
+    """
+    known = {point.id for point in found}
+    missing = [one for one in wanted if one not in known]
+    if not missing:
+        return
+    raise PointNotFound(
+        f"这批里有 {len(missing)} 个点位不存在，可能刚被删掉，请刷新后重试"
+    )
+
+
+def _point_ref(point: CollectPoint) -> binding_guard.PointRef:
+    return binding_guard.PointRef(
+        point_id=point.id,
+        node_key=compose_node_key(point.source_id, point.code),
+        name=point.name,
+    )
 
 
 async def _commit(session: AsyncSession) -> None:

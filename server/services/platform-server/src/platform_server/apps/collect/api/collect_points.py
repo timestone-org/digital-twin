@@ -20,6 +20,7 @@ from platform_server.apps.collect.deps import (
 from platform_server.apps.collect.schemas import (
     PointBatchOut,
     PointCreateIn,
+    PointDeleteIn,
     PointOut,
     PointSavedOut,
     PointUpdateIn,
@@ -131,6 +132,27 @@ async def delete_point(
     """
     await point_service.delete_point(
         session, point_id=point_id, is_forced=is_forced
+    )
+    await write.plans.notify(reason=REASON_POINT_CHANGED)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    ":batch-delete",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="批量删除点位",
+)
+async def batch_delete_points(
+    payload: PointDeleteIn,
+    session: SessionDep,
+    write: ManageDep,
+) -> Response:
+    """批量删点。整批全删或全不删；被绑着就 409 并点名，`is_forced` 跳守卫。
+
+    Args: payload, session, write。
+    """
+    await point_service.delete_points(
+        session, point_ids=payload.point_ids, is_forced=payload.is_forced
     )
     await write.plans.notify(reason=REASON_POINT_CHANGED)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

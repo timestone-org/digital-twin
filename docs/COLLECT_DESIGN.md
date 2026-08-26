@@ -244,6 +244,7 @@ GET    /api/v1/platform/collect-points?source_id=&q=      分页 + 搜索（Agen
 POST   /api/v1/platform/collect-points                   支持批量
 PATCH  /api/v1/platform/collect-points/{id}
 DELETE /api/v1/platform/collect-points/{id}?force=      force 跳过绑定守卫（引用失效）
+POST   /api/v1/platform/collect-points:batch-delete      批量删点，整批全删或全不删
 POST   /api/v1/platform/collect-points/{id}:write        下发写值，必须带 Idempotency-Key
 
 GET    /api/v1/platform/collect-runtime-params            采集/归档两组运行参数目录与取值
