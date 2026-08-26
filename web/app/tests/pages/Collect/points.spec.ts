@@ -5,6 +5,7 @@
  * 1. 「没收到过 / 取不到 / 陈旧 / 现值」四种情形在界面上分得开。
  * 2. 写值走 `:write` 且带幂等键，失败**不自动重试**。
  * 3. 卸载时退订——不退的话，切走的页面还在收消息并更新已经不在的状态。
+ * 4. 批量删除整批一次发出去，且被绑着时先给二次确认再强删。
  */
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -14,6 +15,7 @@ import { ref } from 'vue'
 import type { CollectPoint, CollectSource } from '@dt/contracts'
 
 import * as collectApi from '@/api/collect'
+import { BizError } from '@/api/client'
 import NodeTable from '@/pages/Collect/Opcua/components/NodeTable.vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -180,6 +182,12 @@ async function typeAndSubmit(value: string): Promise<void> {
 
 async function push(item: Record<string, unknown>): Promise<void> {
   pushFrame({ items: [item] })
+  await flushPromises()
+}
+
+/** 勾中一行——多选是批量删除唯一的入口。 */
+async function selectRow(wrapper: VueWrapper, name: string): Promise<void> {
+  await wrapper.find(`input[aria-label="选择 ${name}"]`).setValue(true)
   await flushPromises()
 }
 
@@ -443,5 +451,141 @@ describe('两种空态', () => {
     expect(wrapper.text()).toContain('没有匹配的点位')
     expect(wrapper.text()).not.toContain('尚未导入点位')
     expect(wrapper.text()).not.toContain('CSV 批量导入')
+  })
+})
+
+describe('批量开关记录历史', () => {
+  const SAVED = { point: point(), address_check: null }
+
+  async function selectBoth(): Promise<VueWrapper> {
+    const wrapper = await render([
+      point(),
+      point({ id: 'p2', name: '进口温度' }),
+    ])
+    await selectRow(wrapper, '出口温度')
+    await selectRow(wrapper, '进口温度')
+    return wrapper
+  }
+
+  it('勾中的每一行都改过去，并把改了几个说出来', async () => {
+    const update = vi.spyOn(collectApi, 'updatePoint').mockResolvedValue(SAVED)
+    await clickByText(await selectBoth(), '批量开启记录历史')
+    await flushPromises()
+
+    expect(update).toHaveBeenCalledWith('p1', { archive_enabled: true })
+    expect(update).toHaveBeenCalledWith('p2', { archive_enabled: true })
+    expect(toastSuccess).toHaveBeenCalledWith('已开启记录历史：2 个点位')
+  })
+
+  it('⚠ 部分失败要报出失败个数，静默吞掉会让人以为整批都改成了', async () => {
+    vi.spyOn(collectApi, 'updatePoint')
+      .mockResolvedValueOnce(SAVED)
+      .mockRejectedValueOnce(new Error('冲突'))
+    await clickByText(await selectBoth(), '批量关闭记录历史')
+    await flushPromises()
+
+    expect(toastSuccess).not.toHaveBeenCalled()
+    expect(toastError).toHaveBeenCalledWith('1 个成功，1 个失败')
+  })
+})
+
+describe('批量删除', () => {
+  const BOUND = new BizError(41105, '这批里有 1 个点位还被大屏绑着', 409, 't')
+
+  async function askToDelete(rows: CollectPoint[]): Promise<VueWrapper> {
+    const wrapper = await render(rows)
+    for (const row of rows) await selectRow(wrapper, row.name)
+    await clickByText(wrapper, '批量删除')
+    await flushPromises()
+    return wrapper
+  }
+
+  it('勾中之后才出现批量条，没勾时不占位', async () => {
+    const wrapper = await render()
+    expect(wrapper.text()).not.toContain('批量删除')
+
+    await selectRow(wrapper, '出口温度')
+    expect(wrapper.text()).toContain('已选 1 项')
+    expect(wrapper.text()).toContain('批量删除')
+  })
+
+  it('⚠ 整批一次发出去，不是勾几个就打几次接口', async () => {
+    const remove = vi
+      .spyOn(collectApi, 'deletePoints')
+      .mockResolvedValue(undefined)
+    await askToDelete([point(), point({ id: 'p2', name: '进口温度' })])
+    bodyButton('删除').click()
+    await flushPromises()
+
+    expect(remove).toHaveBeenCalledTimes(1)
+    expect(remove).toHaveBeenCalledWith(['p1', 'p2'], false)
+  })
+
+  it('确认框里说清删的是几个点位，以及历史仍然留着', async () => {
+    vi.spyOn(collectApi, 'deletePoints').mockResolvedValue(undefined)
+    await askToDelete([point(), point({ id: 'p2', name: '进口温度' })])
+
+    expect(document.body.textContent).toContain('2 个点位')
+    expect(document.body.textContent).toContain('已归档的历史会保留')
+  })
+
+  it('删完把删掉几个说出来，并重拉当前页', async () => {
+    vi.spyOn(collectApi, 'deletePoints').mockResolvedValue(undefined)
+    await askToDelete([point()])
+    // ⚠ 读 render 装上去的那个桩，不再 spyOn 一次：重复 spyOn 会换出一个
+    // 调用记录空着的新桩，断言于是永远看不到这次重拉
+    const listed = vi.mocked(collectApi.listPoints)
+    const before = listed.mock.calls.length
+    bodyButton('删除').click()
+    await flushPromises()
+
+    expect(toastSuccess).toHaveBeenCalledWith('已删除 1 个点位')
+    expect(listed.mock.calls.length).toBeGreaterThan(before)
+  })
+
+  it('⚠ 被大屏绑着时先摆二次确认，绝不直接强删', async () => {
+    const remove = vi
+      .spyOn(collectApi, 'deletePoints')
+      .mockRejectedValueOnce(BOUND)
+    await askToDelete([point()])
+    bodyButton('删除').click()
+    await flushPromises()
+
+    expect(remove).toHaveBeenCalledTimes(1)
+    expect(document.body.textContent).toContain('还被大屏绑着')
+    expect(document.body.textContent).toContain('绑定就此失效')
+  })
+
+  it('二次确认按下去才带 force，后果已经在文案里说过了', async () => {
+    const remove = vi
+      .spyOn(collectApi, 'deletePoints')
+      .mockRejectedValueOnce(BOUND)
+      .mockResolvedValueOnce(undefined)
+    await askToDelete([point()])
+    bodyButton('删除').click()
+    await flushPromises()
+    bodyButton('强制删除').click()
+    await flushPromises()
+
+    expect(remove).toHaveBeenLastCalledWith(['p1'], true)
+  })
+
+  it('⚠ 网络错误不许升级成强删——那会诱导人删掉还被绑着的点位', async () => {
+    vi.spyOn(collectApi, 'deletePoints').mockRejectedValue(new Error('超时'))
+    await askToDelete([point()])
+    bodyButton('删除').click()
+    await flushPromises()
+
+    expect(toastError).toHaveBeenCalled()
+    expect(document.body.textContent).not.toContain('强制删除')
+  })
+
+  it('只读账号连勾选框都没有，也就点不到批量删除', async () => {
+    signIn(['collect:view'])
+    const wrapper = await render()
+
+    expect(wrapper.find('input[aria-label="选择 出口温度"]').exists()).toBe(
+      false,
+    )
   })
 })

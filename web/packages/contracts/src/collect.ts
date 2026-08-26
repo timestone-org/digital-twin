@@ -224,6 +224,17 @@ export interface CollectPointUpdateInput {
 }
 
 /**
+ * 批量删点。
+ * ⚠ 整批全删或全不删：一个点位还被大屏绑着，整批就 409 并点名那几个。
+ * `is_forced` 显式跳过绑定守卫，仍绑着它们的大屏引用就此失效——调用方要在
+ * 二次确认里把这句话说出来。
+ */
+export interface CollectPointDeleteInput {
+  point_ids: string[]
+  is_forced?: boolean | undefined
+}
+
+/**
  * 一条寻址串在现场的校验结论。
  * ⚠ `unverified` 不是「通过」：超时、采集侧离线、动作不被支持都落这一档。
  * 显示成通过，用户就再也不知道这条寻址串还没被现场确认过。
@@ -255,5 +266,7 @@ export interface CollectWriteResult {
 
 /** 批量建点的单批上限，与后端 `MAX_BATCH` 同值。超了后端 422。 */
 export const COLLECT_POINT_BATCH_MAX = 200
+/** 批量删点的单批上限，与后端 `MAX_DELETE_BATCH` 同值。 */
+export const COLLECT_POINT_DELETE_BATCH_MAX = 200
 /** 采样与轮询周期的下限，与后端 `MIN_INTERVAL_MS` 同值。 */
 export const COLLECT_MIN_INTERVAL_MS = 50

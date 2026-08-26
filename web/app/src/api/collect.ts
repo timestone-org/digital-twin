@@ -14,6 +14,7 @@ import type {
   CollectPoint,
   CollectPointBatch,
   CollectPointCreateInput,
+  CollectPointDeleteInput,
   CollectPointSaved,
   CollectPointUpdateInput,
   CollectSource,
@@ -239,6 +240,29 @@ export async function deletePoint(
     onPlatform({
       method: 'DELETE',
       query: { force: force ? 'true' : undefined },
+    }),
+  )
+}
+
+/**
+ * 批量删点。⚠ 整批全删或全不删：这批里有一个被大屏绑着，后端就 409 并点名
+ * 那几个，一个都不删。
+ * `force` 显式跳过绑定守卫：仍绑着它们的大屏槽会静默失去数据源——
+ * 调用方要在二次确认里把这句话说出来。
+ * ⚠ 单批上限 `COLLECT_POINT_DELETE_BATCH_MAX`，超了后端 400。
+ */
+export async function deletePoints(
+  pointIds: readonly string[],
+  force = false,
+): Promise<void> {
+  await request(
+    '/collect-points:batch-delete',
+    onPlatform({
+      method: 'POST',
+      body: {
+        point_ids: [...pointIds],
+        is_forced: force,
+      } satisfies CollectPointDeleteInput,
     }),
   )
 }
