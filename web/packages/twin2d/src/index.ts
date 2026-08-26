@@ -370,6 +370,7 @@ export type { Twin2dSvgLayer, Twin2dSvgTag } from './paintVec'
 export {
   isFixedColorSprite,
   paintIco,
+  paintSlotState,
   paintText,
   resolveIcoSrc,
   resolveTxtContent,
@@ -379,6 +380,7 @@ export type {
   Twin2dIcoResolved,
   Twin2dIconResolver,
   Twin2dSlotRead,
+  Twin2dSlotState,
   Twin2dTextCtx,
 } from './paintText'
 export {

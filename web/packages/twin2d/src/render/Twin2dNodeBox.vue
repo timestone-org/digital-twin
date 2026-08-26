@@ -62,7 +62,7 @@ const props = withDefaults(
     states?: readonly Twin2dState[]
     /** 槽键 → 读数，变体的 `slot` / `has` 两档与派生槽都读它。 */
     slotValues?: Twin2dSlotValues
-    /** 按槽键取口径与读数；不注入时 `slot` 档文本一律占位符。 */
+    /** 按槽键取口径、读数与取数档位；不注入时 `slot` 档文本一律占位符、不出档位色。 */
     readSlot?: Twin2dSlotReader
     /** `asset:<uuid>` → 可直接用的地址；不注入时 ico 的 `asset` 一档整枝不渲染。 */
     resolveIcon?: Twin2dIconResolver

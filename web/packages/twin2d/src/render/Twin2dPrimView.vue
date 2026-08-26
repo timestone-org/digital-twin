@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
  * @fileoverview 图元树的递归渲染件：按 kind 四分支——box 出一个 `<div>` 并递归子树，
- * vec 与 ico 交给两个叶子件，txt 出一段文字。样式一律取自 paint 一族，`hidden` 与
- * `when` 不成立的那一枝整枝不渲染。口径见 docs/MODULE_TWIN_2D_DESIGN.md §4.2、§9.2、§13.1。
+ * vec 与 ico 交给两个叶子件，txt 出一段文字并按自己那一格的取数档位出色。样式一律取自
+ * paint 一族，`hidden` 与 `when` 不成立的那一枝整枝不渲染。
+ * 口径见 docs/MODULE_TWIN_2D_DESIGN.md §4.2、§9.2、§9.6、§13.1。
  */
 import { computed } from 'vue'
 
@@ -13,7 +14,11 @@ import { evalCondition } from '../variants'
 import Twin2dGlyph from './Twin2dGlyph.vue'
 import Twin2dVec from './Twin2dVec.vue'
 import type { Twin2dPaintCtx, Twin2dPaintOut } from '../paintCommon'
-import type { Twin2dIconResolver, Twin2dTextCtx } from '../paintText'
+import type {
+  Twin2dIconResolver,
+  Twin2dSlotRead,
+  Twin2dTextCtx,
+} from '../paintText'
 import type {
   Twin2dBoxPrim,
   Twin2dIcoPrim,
@@ -21,6 +26,7 @@ import type {
   Twin2dLen,
   Twin2dPrim,
   Twin2dTxtPrim,
+  Twin2dTxtSrc,
   Twin2dVecPrim,
 } from '../typesPrim'
 import type { Twin2dVariantCtx } from '../variants'
@@ -62,7 +68,7 @@ const props = defineProps<{
   ctx: Twin2dPaintCtx
   /** `when` 的求值上下文，与 `applyVariants` 用的是同一份。 */
   variant: Twin2dVariantCtx
-  /** 按槽键取口径与读数；不注入时 `slot` 档文本一律「—」。 */
+  /** 按槽键取口径、读数与取数档位；不注入时 `slot` 档文本一律「—」、不出档位色。 */
   readSlot?: Twin2dSlotReader
   /** 素材地址解析槽；不注入时 ico 的 `asset` 一档整枝不渲染。 */
   resolveIcon?: Twin2dIconResolver
@@ -126,12 +132,27 @@ function boxViewOf(prim: Twin2dBoxPrim, ctx: Twin2dPaintCtx): Twin2dBoxView {
 }
 
 /**
- * txt 画出来是什么。
+ * `slot` 一档的那一格读数；其余四档的字是配置里写死的，没有取数这回事，给 null。
+ * @param src 文本五档来源
+ * @param read 按槽键取口径、读数与取数档位
+ */
+function slotReadOf(
+  src: Twin2dTxtSrc,
+  read: Twin2dSlotReader,
+): Twin2dSlotRead | null {
+  return src.kind === 'slot' ? read(src.slot) : null
+}
+
+/**
+ * txt 画出来是什么：显示串、样式与 `title`。
  * ⚠ 显示串一律经 `resolveTxtContent`：精度、单位、映射表与占位符是槽位的口径，
  * 在模板里再拼一遍就是第二个真源，而两份漂了只表现为「这一格的数看着不一样」（§11.3）。
+ * ⚠ 同一格取两次读数是有意的：两次都是同一个纯查表，换成把结果塞回去省一次的写法，
+ * 就得假定 `resolveTxtContent` 只会查 `src.slot` 那一个键——那是个改一行就静默出错的前提。
+ * ⚠ 档位的 `title` 排在后面：它与「文字被省略了」抢同一个属性，坏掉的原因要压过省略提示。
  * @param prim 文本图元
  * @param ctx 本图元的上下文
- * @param read 按槽键取口径与读数
+ * @param read 按槽键取口径、读数与取数档位
  */
 function txtViewOf(
   prim: Twin2dTxtPrim,
@@ -142,9 +163,10 @@ function txtViewOf(
     node: ctx.node,
     readSlot: read,
   })
+  const paint = paintText(prim, ctx, slotReadOf(prim.src, read))
   return {
-    paint: paintText(prim, ctx),
-    attrs: txtTitleAttrs(prim, content),
+    paint,
+    attrs: { ...txtTitleAttrs(prim, content), ...paint.attrs },
     content,
   }
 }

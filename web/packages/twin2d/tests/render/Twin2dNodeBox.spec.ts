@@ -626,6 +626,8 @@ describe('两个注入槽', () => {
         placeholder: '',
       },
       value: 63.4,
+      state: 'ok',
+      reason: '',
     })
     const nodeStyle = styleOf({
       prims: [txtOf({ src: { kind: 'slot', slot: 'p' } })],

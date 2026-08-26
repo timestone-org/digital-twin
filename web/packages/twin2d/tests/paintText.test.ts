@@ -2,6 +2,7 @@
  * @fileoverview 锁住 txt / ico 的绘制契约：字体缺席键不产声明、`--font-digit` 挂
  * `.t2-digit`、阴影落 text-shadow 而不是 box-shadow、描边字带 paint-order；
  * 文本四档来源（slot 一档只走 formatSlotValue）与图标四来源；
+ * 取数四档出的那一层样式，以及它排在字体之后这一条；
  * 以及 `ico.color` 对 4 枚插画式 sprite 不生效、对另 7 枚生效这两档。
  */
 import { describe, expect, it } from 'vitest'
@@ -9,13 +10,18 @@ import { describe, expect, it } from 'vitest'
 import {
   isFixedColorSprite,
   paintIco,
+  paintSlotState,
   paintText,
   resolveIcoSrc,
   resolveTxtContent,
   txtTitleAttrs,
 } from '../src/paintText'
 import type { Twin2dPaintCtx } from '../src/paintCommon'
-import type { Twin2dSlotRead, Twin2dTextCtx } from '../src/paintText'
+import type {
+  Twin2dSlotRead,
+  Twin2dSlotState,
+  Twin2dTextCtx,
+} from '../src/paintText'
 import type { Twin2dNode } from '../src/types'
 import type {
   Twin2dIcoPrim,
@@ -136,6 +142,22 @@ function fontStyle(font: FontValue): Record<string, string> {
 
 function textCtx(read: Twin2dSlotRead | null): Twin2dTextCtx {
   return { node: NODE, readSlot: () => read }
+}
+
+/** 一个槽位的口径，四档共用；占位符与单位不同字样，显什么一眼分得开。 */
+const SLOT_FORMAT = {
+  precision: 1,
+  format: 'auto' as const,
+  unit: 'kW',
+  enumMap: {},
+  placeholder: '--',
+}
+
+function readOf(
+  state: Twin2dSlotState,
+  patch: Partial<Twin2dSlotRead> = {},
+): Twin2dSlotRead {
+  return { slot: SLOT_FORMAT, value: null, state, reason: '', ...patch }
 }
 
 describe('paintText 的字体：缺席键跟随主题', () => {
@@ -286,8 +308,103 @@ describe('paintText 的描边字', () => {
   })
 })
 
+describe('paintSlotState 的取数四档', () => {
+  it('有值那一档一条样式都不产，档位不碰样式数据', () => {
+    const out = paintSlotState(readOf('ok', { value: 63.4 }))
+
+    expect(out).toEqual({ style: {}, classes: [], attrs: {} })
+  })
+
+  it('没有档位可言时也一条都不产', () => {
+    expect(paintSlotState(null)).toEqual({ style: {}, classes: [], attrs: {} })
+  })
+
+  it('未配来源那一档只压字色', () => {
+    const out = paintSlotState(readOf('unbound'))
+
+    expect(out.style).toEqual({ color: 'var(--text-disabled)' })
+    expect(out.classes).toEqual([])
+  })
+
+  /**
+   * ⚠ 这一档与未配来源显示的是**同一个占位符**：透明度与呼吸是它们唯一的区分手段，
+   * 少一样就等于把「等首帧」与「从没配过」画成同一个样子。
+   */
+  it('等首帧那一档在同一个字色上再加透明度与呼吸', () => {
+    const out = paintSlotState(readOf('pending'))
+
+    expect(out.style['color']).toBe('var(--text-disabled)')
+    expect(out.style['opacity']).toBe('0.45')
+    expect(out.classes).toEqual(['t2-anim-breathe'])
+  })
+
+  // ⚠ 挂了动画类却没给时长，`animation` 简写解析不到 var() 会整条报废，一动不动
+  it('呼吸那一档连时长一起给', () => {
+    expect(paintSlotState(readOf('pending')).style['--t2-anim-dur']).toBe(
+      '1600ms',
+    )
+  })
+
+  it('取不到那一档变色并把原因挂到 title 上', () => {
+    const out = paintSlotState(readOf('error', { reason: '通道断了' }))
+
+    expect(out.style).toEqual({ color: 'var(--state-danger)' })
+    expect(out.attrs).toEqual({ title: '通道断了' })
+  })
+
+  // 空 title 会 hover 出一个空气泡，还不如什么都不挂
+  it('说不出原因时不挂 title', () => {
+    expect(paintSlotState(readOf('error')).attrs).toEqual({})
+  })
+})
+
+describe('paintText 叠取数档位', () => {
+  /**
+   * ⚠ 档位那一层排在**最后**：排在字体前面会被样式数据里的 `font.color` 顶掉，
+   * 于是配了字色的那些读数坏了也照旧是原色，而墙上一个提示都没有。
+   */
+  it('档位色压过样式数据里配的字色', () => {
+    const prim = txt({ font: { color: 'var(--t2-accent)' } })
+
+    expect(paintText(prim, CTX, readOf('error')).style['color']).toBe(
+      'var(--state-danger)',
+    )
+  })
+
+  it('有值那一档照旧用样式数据里配的字色', () => {
+    const prim = txt({ font: { color: 'var(--t2-accent)' } })
+
+    expect(
+      paintText(prim, CTX, readOf('ok', { value: 1 })).style['color'],
+    ).toBe('var(--t2-accent)')
+  })
+
+  it('等首帧那一档的透明度压过基类给的那一份', () => {
+    const out = paintText(txt({ opacity: 1 }), CTX, readOf('pending'))
+
+    expect(out.style['opacity']).toBe('0.45')
+    expect(out.classes).toContain('t2-anim-breathe')
+  })
+
+  it('等宽数字类与档位类叠得起来，不互相顶掉', () => {
+    const prim = txt({ font: { family: 'var(--font-digit)' } })
+
+    expect(paintText(prim, CTX, readOf('pending')).classes).toEqual([
+      't2-digit',
+      't2-anim-breathe',
+    ])
+  })
+
+  it('hidden 的一枝连档位色都不产', () => {
+    const out = paintText(txt({ hidden: true }), CTX, readOf('error'))
+
+    expect(out.style).toEqual({})
+    expect(out.attrs).toEqual({})
+  })
+})
+
 describe('paintText 与基类', () => {
-  it('基类那几项照出，attrs 恒空（title 不走 attrs）', () => {
+  it('基类那几项照出，没喂档位时 attrs 空（title 不走 attrs）', () => {
     const out = paintText(txt({ z: 4, opacity: 0.5 }), CTX)
     expect(out.style['z-index']).toBe('4')
     expect(out.style['opacity']).toBe('0.5')
@@ -338,6 +455,8 @@ describe('resolveTxtContent 的四档来源', () => {
         enumMap: {},
         placeholder: '',
       },
+      state: 'ok',
+      reason: '',
     }
     expect(
       resolveTxtContent({ kind: 'slot', slot: 'power' }, textCtx(read)),
@@ -354,6 +473,8 @@ describe('resolveTxtContent 的四档来源', () => {
         enumMap: { '1': '运行' },
         placeholder: '',
       },
+      state: 'ok',
+      reason: '',
     }
     expect(
       resolveTxtContent({ kind: 'slot', slot: 'run' }, textCtx(read)),
@@ -364,6 +485,22 @@ describe('resolveTxtContent 的四档来源', () => {
     expect(
       resolveTxtContent({ kind: 'slot', slot: 'ghost' }, textCtx(null)),
     ).toBe('—')
+  })
+
+  /**
+   * ⚠ 把上一帧的读数留在墙上比显示占位符危险得多：谁也看不出那个数停在什么时候。
+   * 文字与颜色读的是同一个 `state`，所以不可能出现「灰着的字里写着一个数」。
+   */
+  it('非有值三档按无值格式化，显示槽位自己的占位符', () => {
+    const stale = { value: 63.44 }
+    const texts = (['unbound', 'pending', 'error'] as const).map((state) =>
+      resolveTxtContent(
+        { kind: 'slot', slot: 'power' },
+        textCtx(readOf(state, stale)),
+      ),
+    )
+
+    expect(texts).toEqual(['--', '--', '--'])
   })
 
   it('label 一档出节点显示名；显示名为空就是空，不回落成 id', () => {

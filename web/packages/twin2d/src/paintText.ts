@@ -1,12 +1,16 @@
 /**
  * @fileoverview txt / ico 两种图元的绘制：字体五键（缺席即跟随主题）、行高、对齐与省略、
- * text-shadow 与描边字，以及图标四来源的解析与 `ico.color` 的分档生效。
- * 口径见 docs/MODULE_TWIN_2D_DESIGN.md §4.2、§5、§11.2。
+ * text-shadow 与描边字，图标四来源的解析与 `ico.color` 的分档生效，以及一格读数按取数
+ * 四档出色。口径见 docs/MODULE_TWIN_2D_DESIGN.md §4.2、§5、§9.6、§11.2。
  */
 import { sanitizeCssValue } from './cssValue'
 import { NO_DATA, formatSlotValue } from './format'
 import { TWIN_2D_FIXED_COLOR_SPRITES } from './kinds'
-import { paintBase } from './paintCommon'
+import {
+  TWIN_2D_ANIM_CLASSES,
+  TWIN_2D_ANIM_DURATION_VAR,
+  paintBase,
+} from './paintCommon'
 import type { Twin2dSlotFormat } from './format'
 import type { Twin2dFixedColorSprite, Twin2dSpriteId } from './kinds'
 import type { Twin2dPaintCtx, Twin2dPaintOut } from './paintCommon'
@@ -42,13 +46,40 @@ const BASELINE_AUTO = 'auto'
 const NO_ASSET_URL = ''
 /** 空档 */
 const NO_ICO: Twin2dIcoResolved = Object.freeze({ kind: 'none' })
+/** 未配来源与等首帧两档的字色：占位符不是读数，按三级正文压下去 */
+const SLOT_MUTED_COLOR = 'var(--text-disabled)'
+/** 取不到那一档的字色 */
+const SLOT_ERROR_COLOR = 'var(--state-danger)'
+/** 等首帧那一档的透明度 */
+const SLOT_PENDING_OPACITY = '0.45'
+/** 等首帧那一下呼吸的周期 */
+const SLOT_PENDING_BREATHE = '1600ms'
 
-/** 一个槽位的口径与它当下的读数。 */
+/**
+ * 一格读数落在取数四档的哪一档（§9.6 那张表）。
+ * ⚠ `unbound` 与 `pending` 在墙上是**同一个占位符**，只差颜色与透明度——所以这两档
+ * 不是装饰，是它们唯一的区分手段。
+ */
+export type Twin2dSlotState = 'ok' | 'unbound' | 'pending' | 'error'
+
+/**
+ * 一个槽位的口径、它当下的读数，以及这一格的取数档位。
+ * ⚠ 档位与读数走**同一条**取数路径（`readSlot` 的返回值），不另开第二条：两条各查各的
+ * 时，某一格的文字与它的颜色会来自不同的一帧，而那种错在图上完全看不出来。
+ */
 export interface Twin2dSlotRead {
   /** 精度、单位、映射表与占位符。 */
   slot: Twin2dSlotFormat
   /** 原始读数，取不到时由调用方喂 null。 */
   value: unknown
+  /**
+   * 这一格的取数档位。
+   * ⚠ 没有逐槽数据线时（设计态、独立挂载、缝合层自己产的那一份）一律 `'ok'`：
+   * 那一档一条样式都不改，于是预览与运行态有值时长得一模一样。
+   */
+  state: Twin2dSlotState
+  /** `error` 档挂到 `title` 上的原因；说不出原因给空串（空 `title` 会弹一个空气泡）。 */
+  reason: string
 }
 
 /**
@@ -161,39 +192,87 @@ function outlineCss(outline: Twin2dTextOutline | null): Record<string, string> {
 }
 
 /**
- * 一个 `txt` 图元画出来是什么：基类那几项 + 字体 + 排版 + 阴影 + 描边。
+ * 一格读数按取数四档出的那一层样式：`ok` 与没有档位时一条都不产，其余三档接管占位符
+ * 的观感（§9.6）。
+ *
+ * ⚠ 三档一律**盖掉**样式数据里的字色与透明度：这三档画出来的是占位符而不是读数，
+ * 让「这一格坏了」按读数本身的配色去画，等于把坏掉的点位藏进正常的版面里。
+ * ⚠ `pending` 与 `unbound` 显示的是**同一个占位符**，只差这一层颜色与透明度。
+ * ⚠ 呼吸那一档必须连 `--t2-anim-dur` 一起给：`animation` 简写解析不到它会整条报废，
+ * 表现是「类挂上了却一动不动」。
+ *
+ * @param read 这一格的口径、读数与档位；不是槽位来源的文字喂 null
+ */
+export function paintSlotState(read: Twin2dSlotRead | null): Twin2dPaintOut {
+  if (read === null || read.state === 'ok') {
+    return { style: {}, classes: [], attrs: {} }
+  }
+  switch (read.state) {
+    case 'unbound':
+      return { style: { color: SLOT_MUTED_COLOR }, classes: [], attrs: {} }
+    case 'pending':
+      return {
+        style: {
+          color: SLOT_MUTED_COLOR,
+          opacity: SLOT_PENDING_OPACITY,
+          [TWIN_2D_ANIM_DURATION_VAR]: SLOT_PENDING_BREATHE,
+        },
+        classes: [TWIN_2D_ANIM_CLASSES.breathe],
+        attrs: {},
+      }
+    case 'error':
+      return {
+        style: { color: SLOT_ERROR_COLOR },
+        classes: [],
+        attrs: read.reason === '' ? {} : { title: read.reason },
+      }
+  }
+}
+
+/**
+ * 一个 `txt` 图元画出来是什么：基类那几项 + 字体 + 排版 + 阴影 + 描边，最后叠一层取数档位。
  * ⚠ `font.family` 里含 `--font-digit` 时挂 `.t2-digit`：token 只给字体族，
  * `font-variant-numeric: tabular-nums` 要消费处自己配，它不是字体族的一部分，
  * 塞进 font 简写会被丢掉（§11.2）。
+ * ⚠ 档位那一层排在**最后**：排在字体前面会被样式数据里的 `font.color` 顶掉，
+ * 于是配了字色的那些读数坏了也照旧是原色（§9.6）。
  * @param prim 已归一化的文本图元
  * @param ctx 节点实例、父级盒尺寸与实例前缀
+ * @param read 这一格的口径、读数与档位；`slot` 之外的四档来源喂 null
  */
 export function paintText(
   prim: Twin2dTxtPrim,
   ctx: Twin2dPaintCtx,
+  read: Twin2dSlotRead | null = null,
 ): Twin2dPaintOut {
   const base = paintBase(prim, ctx)
   if (prim.hidden) return base
   const family = fontFamilyOf(prim.font)
+  const state = paintSlotState(read)
   const style: Record<string, string> = {
     ...base.style,
     ...fontCss(prim.font, family),
     ...lineHeightCss(prim.lineHeight),
     ...layoutCss(prim),
     ...outlineCss(prim.outline),
+    ...state.style,
   }
   const shadow = textShadowCss(prim.shadows)
   if (shadow !== null) style['text-shadow'] = shadow
-  const classes = family.includes(DIGIT_FAMILY_TOKEN)
-    ? [...base.classes, DIGIT_CLASS]
-    : base.classes
-  return { style, classes, attrs: {} }
+  const digit = family.includes(DIGIT_FAMILY_TOKEN) ? [DIGIT_CLASS] : []
+  return {
+    style,
+    classes: [...base.classes, ...digit, ...state.classes],
+    attrs: state.attrs,
+  }
 }
 
 /**
  * 溢出时挂在元素上的 `title`。
  * ⚠ 不并进 `paintText` 的 `attrs`：完整文本要先由 `resolveTxtContent` 取出来，
  * 而那要槽位读数，`Twin2dPaintCtx` 里没有。空文本不挂，否则 hover 出一个空气泡。
+ * ⚠ 与 `paintSlotState` 的 `error` 档抢同一个 `title`，由渲染层让**档位那一份赢**：
+ * 这一格坏了的原因比「这里的字被省略了」要紧得多（§9.6）。
  * @param prim 已归一化的文本图元
  * @param content `resolveTxtContent` 取出的完整文本
  */
@@ -209,6 +288,9 @@ export function txtTitleAttrs(
  * 文本五档来源 → 显示串。
  * ⚠ `slot` 一档一律走 `formatSlotValue`：精度、单位与映射表是槽位的口径，
  * 在这里另格式化一遍就是第二个真源（§11.3）。
+ * ⚠ 非 `ok` 三档按**无值**格式化，于是显示这个槽位自己的占位符：把上一帧的读数留在
+ * 墙上比显示占位符危险得多——谁也看不出那个数停在什么时候。这一步与 `paintSlotState`
+ * 的出色读的是**同一个** `state`，文字与颜色因此不可能各说各的（§9.6）。
  * ⚠ 槽键悬空时回「—」而不是空串：空串看起来是「这一格没配」，而实际是「槽键拼错了」，
  * 说清楚这件事归诊断（issues.ts）。
  * ⚠ `label` 空就是空，不回落 `id`：回落会让「清掉显示名」变成「冒出一串 uuid」，
@@ -227,7 +309,8 @@ export function resolveTxtContent(
       return src.text
     case 'slot': {
       const read = ctx.readSlot(src.slot)
-      return read === null ? NO_DATA : formatSlotValue(read.value, read.slot)
+      if (read === null) return NO_DATA
+      return formatSlotValue(read.state === 'ok' ? read.value : null, read.slot)
     }
     case 'label':
       return ctx.node.label

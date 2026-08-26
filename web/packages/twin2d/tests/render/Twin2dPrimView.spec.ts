@@ -403,6 +403,8 @@ describe('txt 的显示串', () => {
         placeholder: '',
       },
       value: 63.4,
+      state: 'ok',
+      reason: '',
     })
 
     const wrapper = render(
@@ -429,6 +431,8 @@ describe('txt 的显示串', () => {
         placeholder: '',
       },
       value: 12,
+      state: 'ok',
+      reason: '',
     })
     const leaf = txtOf({ id: 'leaf', src: { kind: 'slot', slot: 'q' } })
     const mid = boxOf({ id: 'mid', children: [leaf] })

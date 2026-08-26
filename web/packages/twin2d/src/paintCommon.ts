@@ -62,14 +62,26 @@ const STATUS_COLORS: Readonly<Record<Twin2dDefaultStatus, string | null>> =
     hidden: null,
   })
 
-/** keyframes 五档对应的固定类名，`none` 不挂类 */
-const ANIM_CLASSES: Readonly<Record<Twin2dAnimKind, string>> = Object.freeze({
-  none: '',
-  pulse: 't2-anim-pulse',
-  blink: 't2-anim-blink',
-  breathe: 't2-anim-breathe',
-  dash: 't2-anim-dash',
-})
+/**
+ * keyframes 五档对应的固定类名，`none` 不挂类。
+ * ⚠ 导出是给 `paintText` 的等首帧一档复用 `breathe` 那一条用的：类名在两处各写一遍时，
+ * 改了 scss 的那一处会让另一处静默不动画（`twin2d-css-vars` 契约只扫本文件）。
+ */
+export const TWIN_2D_ANIM_CLASSES: Readonly<Record<Twin2dAnimKind, string>> =
+  Object.freeze({
+    none: '',
+    pulse: 't2-anim-pulse',
+    blink: 't2-anim-blink',
+    breathe: 't2-anim-breathe',
+    dash: 't2-anim-dash',
+  })
+
+/**
+ * keyframes 时长那个自定义属性名。
+ * ⚠ 挂了 `.t2-anim-*` 却没注入它，`animation` 简写解析不到 `var()` 会**整条报废**——
+ * 表现是「动画一档都不动」而不是「按缺省时长动」，一处报错都没有。
+ */
+export const TWIN_2D_ANIM_DURATION_VAR = '--t2-anim-dur'
 
 /** 节点渐变低端 */
 const FILL_A = 'var(--surface-panel)'
@@ -176,8 +188,8 @@ export function paintBase(
   const classes: string[] = []
   const anim = prim.anim
   if (anim !== null && anim.kind !== 'none') {
-    classes.push(ANIM_CLASSES[anim.kind])
-    style['--t2-anim-dur'] = `${anim.durationMs}ms`
+    classes.push(TWIN_2D_ANIM_CLASSES[anim.kind])
+    style[TWIN_2D_ANIM_DURATION_VAR] = `${anim.durationMs}ms`
   }
   return { style, classes, attrs: {} }
 }
@@ -209,7 +221,7 @@ export function injectVars(
     '--t2-badge': cssVarChain(sanitizeCssValue(node.badgeColor, ''), accent),
     '--t2-fill-a': FILL_A,
     '--t2-fill-b': FILL_B,
-    '--t2-anim-dur': `${ROOT_ANIM_DURATION_MS}ms`,
+    [TWIN_2D_ANIM_DURATION_VAR]: `${ROOT_ANIM_DURATION_MS}ms`,
   }
   const dot = statusColor(status)
   if (dot !== null) vars['--t2-status'] = dot

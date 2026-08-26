@@ -1,6 +1,7 @@
 /**
  * @fileoverview 守 2D 孪生模块壳的渲染契约：七个配置键真的读到了、逐槽取数四档在墙上
- * 各自可辨、实时状态覆盖静态状态而「无数据」不覆盖、连线取值归一，以及配了联动才吞冒泡。
+ * 各自可辨（那一格自己变色 + 角上一枚整块汇总角标）、实时状态覆盖静态状态而「无数据」
+ * 不覆盖、连线取值归一，以及配了联动才吞冒泡。
  * ⚠ 这几类错法既不报错也不空白：图照样画得出来，只是那一路数据永远不到。
  */
 import { TWIN_2D_CONFIG_KEY, Twin2dStage } from '@dt/twin2d'
@@ -123,6 +124,16 @@ function stageView(wrapper: ReturnType<typeof render>): unknown {
 /** 一格读数的显示串；节点上只有这一个图元。 */
 function readingText(wrapper: ReturnType<typeof render>): string {
   return wrapper.get('.t2-node').text()
+}
+
+/** 那一格读数自己的内联样式串。 */
+function readingStyle(wrapper: ReturnType<typeof render>): string {
+  return wrapper.get('.t2-node .t2-prim').attributes('style') ?? ''
+}
+
+/** 那一格读数自己挂的类名。 */
+function readingClasses(wrapper: ReturnType<typeof render>): readonly string[] {
+  return wrapper.get('.t2-node .t2-prim').classes()
 }
 
 afterEach(() => {
@@ -280,6 +291,78 @@ describe('逐槽取数四档在墙上各自可辨', () => {
     const wrapper = render({ config: { [TWIN_2D_CONFIG_KEY]: DANGLING_SCENE } })
 
     expect(readingText(wrapper)).toBe('—')
+  })
+})
+
+/**
+ * ⚠ 角标交代的是「整块有几格非 ok」，逐格上色交代的是「哪一格」。只剩角标那一半时，
+ * 画布上「这一格的点位坏了」与「这一格从没配过」长得一模一样——本模块自报
+ * `ownsStatusDisplay`，运行时不会再盖一层整格浮层来补这句话（§9.6）。
+ */
+describe('四档不只写在角标上，那一格自己也变', () => {
+  it('取不到时变色的是那一格本身，角标同时还在', () => {
+    const wrapper = render({
+      meta: {
+        slots: { [READING_FIELD]: { state: 'error', message: '通道断了' } },
+      },
+    })
+
+    expect(readingStyle(wrapper)).toContain('color: var(--state-danger)')
+    expect(wrapper.find('.dt-twin2d__readout--error').exists()).toBe(true)
+  })
+
+  it('取不到的原因也挂在那一格自己的 title 上', () => {
+    const wrapper = render({
+      meta: {
+        slots: { [READING_FIELD]: { state: 'error', message: '通道断了' } },
+      },
+    })
+
+    expect(wrapper.get('.t2-node .t2-prim').attributes('title')).toBe(
+      '通道断了',
+    )
+  })
+
+  // ⚠ 这两档在墙上是同一个占位符，透明度与呼吸是它们唯一的区分手段
+  it('未配来源与等首帧在那一格上仍然分得开', () => {
+    const unbound = render({ meta: { slots: {} } })
+    const pending = render({
+      meta: { slots: { [READING_FIELD]: { state: 'pending' } } },
+    })
+
+    expect(readingText(unbound)).toBe(readingText(pending))
+    expect(readingStyle(unbound)).toContain('color: var(--text-disabled)')
+    expect(readingStyle(unbound)).not.toContain('opacity: 0.45')
+    expect(readingStyle(pending)).toContain('opacity: 0.45')
+    expect(readingClasses(pending)).toContain('t2-anim-breathe')
+  })
+
+  it('有值那一档那一格不带任何档位色', () => {
+    const wrapper = render({
+      values: { nodeValues: [{ value: 36.5 }] },
+      meta: { slots: { [READING_FIELD]: { state: 'ok' } } },
+    })
+
+    expect(readingStyle(wrapper)).not.toContain('var(--text-disabled)')
+    expect(readingStyle(wrapper)).not.toContain('var(--state-danger)')
+  })
+
+  // 设计态与独立挂载没有数据线：一片灰的预览比什么都不说更容易被当成真的坏了
+  it('没有下发逐槽结论时一格都不上色', () => {
+    const wrapper = render({ values: { nodeValues: [{ value: 36.5 }] } })
+
+    expect(readingStyle(wrapper)).not.toContain('var(--text-disabled)')
+  })
+
+  // ⚠ 派生槽不进绑定行、查不到 fieldKey；判成「未配来源」的话整条派生链永远是灰的
+  it('派生槽算出来的值不被当成未配来源灰掉', () => {
+    const wrapper = render({
+      config: { [TWIN_2D_CONFIG_KEY]: DERIVED_SCENE },
+      values: { nodeValues: [{ value: 36.5 }] },
+      meta: { slots: { [READING_FIELD]: { state: 'ok' } } },
+    })
+
+    expect(readingStyle(wrapper)).not.toContain('var(--text-disabled)')
   })
 })
 

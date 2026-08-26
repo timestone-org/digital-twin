@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
  * @fileoverview twin-2d-view 的渲染壳：读全部七个顶层配置键、把三个数组绑定槽缝回
- * 节点与连线、把状态那条数据线归一成节点渲染状态、逐槽交代取数四档，再上抛联动。
+ * 节点与连线、把状态那条数据线归一成节点渲染状态、逐槽交代取数四档（逐格上色 + 一枚
+ * 整块汇总角标），再上抛联动。
  *
  * ⚠ 七个配置键**全在本文件里读**，三个槽键也在本文件里显式列一遍：`manifests.contract`
  * 判「死字段 / 暗键」的可达集只沿相对 import 走且必须落在 `packages/modules/src` 下，
@@ -43,6 +44,7 @@ import type {
   Twin2dEdgeState,
   Twin2dSlotFormat,
   Twin2dSlotRead,
+  Twin2dSlotState,
   Twin2dStatus,
 } from '@dt/twin2d'
 import { computed } from 'vue'
@@ -99,6 +101,18 @@ const REASON_SEP = '；'
 const NODE_SELECTOR = '.t2-node'
 /** 节点盒把自己的 id 挂在这个属性上。 */
 const NODE_ID_ATTR = 'data-id'
+
+/** 一格读数的取数档位与它的原因；`ok` 与「没有数据线」都落 `OK_GEAR`。 */
+interface Twin2dSlotGear {
+  state: Twin2dSlotState
+  /** `error` 档的原因，画布上原样挂到那一格的 `title` 上；说不出原因给空串。 */
+  reason: string
+}
+
+/** 有值那一档：一条样式都不改，读数照样式数据画。 */
+const OK_GEAR: Twin2dSlotGear = { state: 'ok', reason: '' }
+/** 未配来源那一档：这一行有 fieldKey，但运行时压根没下发它的结论。 */
+const UNBOUND_GEAR: Twin2dSlotGear = { state: 'unbound', reason: '' }
 
 /** 非 ok 的那两档在画布角上怎么交代。 */
 interface Twin2dReadout {
@@ -211,18 +225,36 @@ const slotFieldKeys = computed(() => {
 })
 
 /**
- * 一个槽位的口径与读数；没配来源、等首帧、取不到三档都把值抹成 null，于是画布上显示
- * 这个槽位自己的占位符，而不是一个不知道停在什么时候的旧数（§9.6）。
+ * 一格读数落在取数四档的哪一档。
+ * ⚠ 整袋逐槽结论缺席时按**有值**算，不是按未配来源：设计态与独立挂载都没有数据线，
+ * 判成未配来源的话编辑器预览里整张图会灰着，而运行态一切正常。
+ * ⚠ 派生槽不进绑定行、因此没有 fieldKey，同样按有值算：它的值是就地算出来的，
+ * 判成未配来源的话整条派生链在墙上永远是灰的占位符。
+ * @param nodeId 节点 id
+ * @param key 槽键
+ */
+function gearOf(nodeId: string, key: string): Twin2dSlotGear {
+  const table = props.meta?.slots
+  const field = slotFieldKeys.value.get(`${nodeId}${KEY_SEP}${key}`)
+  if (table === undefined || field === undefined) return OK_GEAR
+  const slot = table[field]
+  if (slot === undefined) return UNBOUND_GEAR
+  if (slot.state === 'ok') return OK_GEAR
+  return { state: slot.state, reason: slot.message ?? '' }
+}
+
+/**
+ * 一个槽位的口径、读数与档位。
+ * ⚠ 档位跟着读数从**同一个函数**回去，包里据此逐格出色；分成两条 props 递下去的话，
+ * 某一格的文字与它的颜色会来自不同的一帧。
+ * ⚠ 非 ok 三档**不在这里**把值抹成 null：那一步归包里的 `resolveTxtContent`，
+ * 它与出色读同一个 `state`。两处都抹就是两份口径，漂了只表现为「这一格的字与颜色对不上」。
  * @param nodeId 节点 id
  * @param key 槽键
  */
 function readSlot(nodeId: string, key: string): Twin2dSlotRead | null {
   const read = stitched.value.readSlot(nodeId, key)
-  if (read === null) return null
-  const field = slotFieldKeys.value.get(`${nodeId}${KEY_SEP}${key}`)
-  const state = field === undefined ? undefined : props.meta?.slots?.[field]
-  if (state === undefined || state.state === 'ok') return read
-  return { slot: read.slot, value: null }
+  return read === null ? null : { ...read, ...gearOf(nodeId, key) }
 }
 
 const live = computed(() => ({
@@ -245,10 +277,12 @@ function reasonsOf(failed: readonly ModuleSlotMeta[]): string {
 }
 
 /**
- * 逐槽四档里非 ok 的那两档的角标。
- * ⚠ 本模块自报 `ownsStatusDisplay`，运行时因此**不给它盖整格状态浮层**——不自己把
- * 「等首帧」与「取不到」说出来，坏掉的点位在图上就只剩一个占位符，与「这一格本来就
- * 没配来源」长得一模一样（§9.6）。
+ * 逐槽四档里非 ok 的那两档的**整块汇总**角标。
+ * ⚠ 与逐格上色分工明确、不重复：画布上每一格自己的档位由 `readSlot` 递下去、
+ * 由 `paintText` 逐格出色（哪一格坏了看得见）；这枚角标交代的是**整块有几格**非 ok
+ * （一眼知道这块图值不值得信），它俩少了任何一个都留下一个说不清的洞（§9.6）。
+ * ⚠ 本模块自报 `ownsStatusDisplay`，运行时因此**不给它盖整格状态浮层**——这两处不说，
+ * 就没有第三处会说。
  * ⚠ 取不到压过等首帧：两档并存时先说要人管的那一档。
  */
 const readout = computed<Twin2dReadout | null>(() => {

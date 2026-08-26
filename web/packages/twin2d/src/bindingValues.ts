@@ -220,6 +220,9 @@ function protoFreeTable<T>(
  * 一个槽位的口径与它当下的读数；这个节点没声明这个槽时给 null。
  * ⚠ 声明了但没绑上的槽给的是 `value: null` 而不是整个 null：两者在墙上不一样——
  * 前者显示这个槽位自己的占位符，后者退到全局那个「—」（`paintText` 的 slot 一档）。
+ * ⚠ 档位恒 `'ok'`：缝合层只认得配置与那袋 `values`，「没配来源 / 等首帧 / 取不到」
+ * 三档要 `meta.slots` 才判得出来，那是模块壳的事（§9.6）。在这里瞎猜一档的表现是
+ * 编辑器预览里整张图灰着，而运行态一切正常。
  * @param defs 节点 id → 槽位表
  * @param values 节点 id → 已缝好的读数
  * @param nodeId 节点 id
@@ -233,7 +236,12 @@ function readOf(
 ): Twin2dSlotRead | null {
   const slot = defs.get(nodeId)?.get(key)
   if (slot === undefined) return null
-  return { slot, value: values.get(nodeId)?.get(key) ?? null }
+  return {
+    slot,
+    value: values.get(nodeId)?.get(key) ?? null,
+    state: 'ok',
+    reason: '',
+  }
 }
 
 /**

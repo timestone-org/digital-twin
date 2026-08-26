@@ -85,7 +85,11 @@ interface Twin2dStageLive {
   status?: Readonly<Record<string, Twin2dStatus | null>>
   /** 按节点 id 的槽读数。 */
   slots?: Readonly<Record<string, Twin2dSlotValues>>
-  /** 按节点 id 与槽键取口径与读数。 */
+  /**
+   * 按节点 id 与槽键取口径、读数与这一格的取数档位。
+   * ⚠ 逐槽状态就走这一条，**不另开一条**：档位与读数分两条路各查各的时，某一格的文字
+   * 与它的颜色会来自不同的一帧，而那种错在图上完全看不出来（§9.6）。
+   */
   readSlot?: (nodeId: string, key: string) => Twin2dSlotRead | null
   /** 按连线 id 的运行态。 */
   edges?: Readonly<Record<string, Twin2dEdgeState>>
@@ -107,7 +111,7 @@ interface Twin2dStageFit {
   dy: number
 }
 
-/** 一个节点渲染要的那一份：实例、样式与它自己那份运行态。 */
+/** 一个节点渲染要的那一份：实例、样式与它自己那份运行态（含逐槽档位）。 */
 interface Twin2dNodeView {
   node: Twin2dNode
   style: Twin2dNodeStyle

@@ -1183,27 +1183,46 @@ export type Twin2dExpr =
 
 | 档 | 判据 | 画什么 |
 |---|---|---|
-| 未配来源 | `fieldKey` 不在 `meta.slots` 里 | 槽位的 `placeholder`（`'—'` / `'--'`），`--text-disabled` 色 |
+| 未配来源 | 这一行有 `fieldKey`，但它不在 `meta.slots` 里 | 槽位的 `placeholder`（`'—'` / `'--'`），`--text-disabled` 色 |
 | 等首帧 | `meta.slots[k].state === 'pending'` | 同占位符 + `opacity .45` + 一次 `breathe` 呼吸 |
 | 取不到 | `state === 'error'` | 占位符 + `--state-danger` 色 + `title` 属性挂原因 |
 | 有值 | `state === 'ok'` | 值 + 单位；`meta.valueTimeMs` 由标题条右侧的时刻显示交代 |
 
 ⚠ 前两档都显示同一个占位符，**只靠颜色与透明度区分**——所以这两条不是装饰，
-是唯一的区分手段，`Component.spec.ts` 里各一条用例。
+是唯一的区分手段；`packages/twin2d/tests/render/Twin2dSlotState.spec.ts` 与模块侧的
+`Component.spec.ts` 里各有一条专门钉「两档的字一样、样式不一样」。
 ⚠ `unbound` 那一档仍归运行时浮层，但本模块**没有 `isRequired` 的槽**（一张纯静态
 工艺图是合法用法），所以浮层实际永不出现在这个模块上。
 
-> ⚠ **R7 落下来的不是这张表的全部，差在「逐格上色」这一半，排 R7b 补。**
-> `@dt/twin2d` 的公开面上没有逐槽**状态**通道：`Twin2dStage` 收的是
-> `slots: Twin2dSlotValues`（值表）与 `readSlot → { slot, value }`，
-> 而图元的颜色、透明度与 `title` 全由样式数据决定，模块壳够不到某一格文字的样式。
-> 于是 R7 的落法是：**文字**照这张表走（`ok` 出值，其余三档一律显示槽位自己的
-> 占位符），**颜色 / 透明度 / 呼吸 / title** 由模块在画布角上画一枚汇总角标承载。
->
-> 代价说清楚：画布上「这一格的点位坏了」与「这一格从没配过」**长得一样**，
-> 只有角标那一处能分辨——这正是本节开头要避开的那种静默留白，所以它是缺口不是设计。
-> 补法是给 `Twin2dStage` 开一条逐槽状态 props、由 `paintText` 按档出色，
-> 那要改 `@dt/twin2d`，而 R7 的规模豁免允许集里没有那个包（§19 R7），故拆到 R7b。
+**这四档最终落在哪儿（R7b 定稿）。** `@dt/twin2d` 的公开面上开了一条**逐槽状态通道**，
+但它不是第二条 props：`Twin2dSlotRead` 在口径（`slot`）与读数（`value`）之外多带
+`state`（四档）与 `reason`（`error` 档的原因），仍由**同一个**
+`readSlot(nodeId, key)` 回，`Twin2dStage` → `Twin2dNodeBox` → `Twin2dPrimView`
+一路照旧往下递，一个 prop 名都没新增。落点两处：
+
+- **文字**：`resolveTxtContent` 的 `slot` 一档在非 `ok` 三档按**无值**格式化，
+  于是出这个槽位自己的占位符（`formatSlotValue` 那一份口径，不另写第二份）。
+- **观感**：`paintSlotState` 按档出 `color` / `opacity` / `t2-anim-breathe` /
+  `title`，由 `paintText` 叠在**最后一层**——排在字体之后才盖得住样式数据里配的
+  `font.color`，排前面的话「配了字色的读数坏了也照旧是原色」，一处报错都没有。
+  呼吸那一档必须连 `--t2-anim-dur` 一起注入：`animation` 简写解析不到 `var()`
+  会**整条报废**，表现是「类挂上了却一动不动」。
+
+> ⚠ **不许再开第二条取数路径。** 档位与读数分两条 props 递下去时，同一格的文字与它的
+> 颜色会来自不同的一帧——图上完全看不出来，而那正是这四档要解决的那类静默错。
+> 同理，「非 `ok` 三档把值抹成 null」**只在包里做一次**（`resolveTxtContent`），
+> 模块壳只报档位、不再自己抹一遍：两处都抹就是两份口径，漂了只表现为
+> 「这一格的字与它的颜色对不上」。
+
+⚠ 两处判据在模块壳（`Component.vue` 的 `gearOf`）里，写反了都不报错：
+**整袋 `meta.slots` 缺席**时（设计态、独立挂载）按**有值**算，不按未配来源——否则
+编辑器预览里整张图是灰的而运行态一切正常；**派生槽**不进绑定行、因而查不到 `fieldKey`，
+同样按有值算——它的值是就地算出来的，判成未配来源的话整条派生链在墙上永远是占位符。
+
+**角上那枚汇总角标留着，与逐格上色分工不重复。** 逐格上色回答「**哪一格**」，
+角标（`.dt-twin2d__readout`）回答「**整块有几格**非 ok」——一眼知道这块图值不值得信，
+不必逐格去找。本模块自报 `ownsStatusDisplay`，运行时不会再盖一层整格浮层，
+这两处不说就没有第三处会说。
 
 ### 9.7 联动
 
@@ -1956,6 +1975,7 @@ gitleaks 只有这条路径才跑得到）。⚠ **跑 act 期间不要动工作
 | **R5** 预置库 | `palette` / `nodes`（11 种）/ `subtypes`（7 组 25 条）/ `edges`（5 种）/ `sensors`（4 种）/ `circuit`（8 枚 GB/T） | `src/presets/*.ts`、`tests/presets/*.test.ts`、`tests/twin2d-preset-fidelity.spec.ts`、`tests/twin2d-slot-refs.contract.spec.ts` | ≈ 3 200（源 1 900 / 测试 1 300） | 同上 | **§7 那张 100 行表 98 行有断言**（用例名带行号 `§7-1` … `§7-100`；当时缺的 #73 / #97 与只覆盖一半的 #8 / #22 / #71 逐条列在 §7 开头的水位表里，两条缺的分别依赖 R9 的标注渲染件与 R7 的连线取值归一）——这张表是「内置库只是预置数据、不会退化成渲染分支」的唯一机械保证；`slot-refs` 保证预置里零悬空槽/零悬空 sprite id；`palette.ts` 的字面 hex 不触发硬编码色值闸 | 8 |
 | **R6** 绑定行与缝合 | `bindingRows.ts`：有效槽位筛选、行 → 实体映射、`twin2dRowLabels`/`RowCounts`、`remapTwin2dBindings`、`twin2dValues` 缝合 | `src/bindingRows.ts`、`tests/bindingRows.test.ts` | ≈ 900（源 350 / 测试 550） | 同上 | 三个槽的行数与顺序；派生槽与未被引用的槽都不成行；`rowCounts` 三键都在且可为 0；删中间节点后其后行号整体前移 | 3 |
 | **R7** 模块落地（**走机械化豁免，必须只有这一个新模块目录**） | `manifest.ts`（7 个配置字段 + 3 个槽，⚠ **此时先不声明 `subEditor`**，见 R13）+ `Component.vue`（读全部键、缝三槽、状态归一、四档、`@click.stop`）+ 测试 + 六处花名册 + 本文件 | `packages/modules/src/modules/twin-2d-view/{manifest.ts,Component.vue}`、`packages/modules/tests/modules/twin-2d-view/{manifest.test.ts,Component.spec.ts}`、`packages/modules/tests/manifests.contract.spec.ts`（`KEY_CONSTANTS` 加四项）、`packages/modules/tests/registerBuiltins.test.ts`、`server/services/platform-server/src/platform_server/apps/dashboard/module_types.json`、`server/services/platform-server/tests/{contract,unit,integration}/…`、`docs/MODULE_TWIN_2D_DESIGN.md` | ≈ 1 200（含快照 json） | ⚠ 先 `pnpm --dir web vitest run packages/modules/tests/catalog.contract.spec.ts -u` 重生成 `module_types.json` 并提交，否则服务端按过期目录校验、新绑定被拒；然后 `scripts/ci-local.sh --all` | `_is_module_landing()` 豁免成立——⚠ 本 PR **绝不能**顺手改 `packages/modules/src/shared/`、`packages/modules/package.json`、`packages/ui/**`、`app/src/**`，任一处都会让豁免整体失效；⚠ 也**绝不能**与另一个新模块合并（`len(fresh)==2` 时豁免直接消失）；`nodeStatus` 的 `enumMap === undefined` 有断言 | 1 |
+| **R7b** 逐槽状态通道（**必须与 R7 分开**） | 给 `Twin2dSlotRead` 加 `state` / `reason` 两项——仍由**同一个** `readSlot` 回，不新增 props；`paintSlotState` 按四档出 `color`/`opacity`/`breathe`/`title` 并叠在 `paintText` 最后一层；`resolveTxtContent` 的 slot 档在非 `ok` 三档按无值格式化；模块壳只报档位（`gearOf`）、不再自己抹值，角上那枚汇总角标留着（分工见 §9.6） | `packages/twin2d/src/{paintText,paintCommon,bindingValues,index}.ts`、`packages/twin2d/src/render/{Twin2dStage,Twin2dNodeBox,Twin2dPrimView}.vue`、`packages/twin2d/tests/render/Twin2dSlotState.spec.ts`、`packages/twin2d/tests/paintText.test.ts`、`packages/modules/src/modules/twin-2d-view/Component.vue`、`packages/modules/tests/modules/twin-2d-view/Component.spec.ts`、`docs/MODULE_TWIN_2D_DESIGN.md` | ≈ 550（源 150 / 测试 400） | `pnpm --dir web vitest run packages/twin2d packages/modules/tests/modules/twin-2d-view`；`scripts/ci-local.sh --fast` | 四档各一条渲染用例；**「等首帧与未配来源只靠颜色与透明度分得开」单独一条**（本轮要害，两档的字必须相等、样式必须不等）；档位按 (节点 id, 槽键) 各查各的有一条（按下标取会串到隔壁节点上）；模块侧一条端到端钉「`error` 时**那一格**真的变色，不是只有角标变色」；`packages/twin2d` 覆盖率维持语句/函数/行 100%、分支 99.9%（`edgeView.ts` 与 `Twin2dStage.vue` 那两条构造上走不到的空值守卫除外） | 1 |
 | **R8** 编辑器骨架 | 路由一条；`index.vue`（AppShell + `h-full`/`min-h-0` + 三栏 + `DtPageState` + `installDashboardModules()`）；`twin2dDoc.ts`（帧 = 配置 + 绑定，`commit` 无条件重派）；`useTwin2dEditorPage.ts`（整树替换、其余节点原样带回、`expectedVersion` 冲突、**`useRacedFetch`**）；工具栏；两道未保存守卫 | `app/src/router/index.ts`、`app/src/pages/Twin2dEditor/index.vue`、`components/Twin2dToolbar.vue`、`scripts/{types,twin2dDoc,useTwin2dEditorPage}.ts`、`app/tests/pages/Twin2dEditor/*.spec.ts` | ≈ 1 800 | `scripts/ci-local.sh --fast`；`pnpm --dir web vitest run app/tests` | `check_structure_web` 的页面形态三条；`check_web_styles` 的 AppShell 必带 `h-full`+`min-h-0`；`use*` ≤200 行；`check_race_guards_come_from_one_place` 绿；**「快速切 nodeId 旧响应不覆盖新文档」有用例**；每个内联 handler 都有用例 | 5 |
 | **R9** 画布与手势 | `EditorCanvas` / `CanvasGrid` / `CanvasNodeLayer` / `CanvasEdgeLayer` / `CanvasEdgeHandles` / `CanvasMarkLayer`（⚠ 按 `zOrder` 分两层与运行态一致）/ `CanvasMarquee` / `CanvasConnectPreview`；`viewportOps` / `snapping` / `useCanvasPointer` / `editorSelection` / `waypointOps` / `portOps` | 见 §3.3 | ≈ 3 400 | 同上 | 卸载必清理（window 上的 `pointermove`/`pointerup`、ResizeObserver）；手势期间只做纯变更、`pointerup` 才 `commit` 一次（一手势一步撤销）；拖拽中卸载要补一次 commit；sprite 宿主在画布里挂了一次 | 9 |
 | **R10** 检查器四件 | `Twin2dInspector` 分发 + Node/Edge/Mark/Canvas 四个 + `PlacementField`/`ColorField`/`TransitionField`/`ShadowList`/`StrokePassList`/`FillList`；`nodeOps`/`edgeOps`/`markOps`；两条覆盖契约 | 见 §3.3 + `app/tests/contract/{twin2d-inspector-coverage,twin2d-consumed}.contract.spec.ts` | ≈ 3 200 | 同上 | 传感器锚点**九档全给**（参考项目编辑器只给 4 档，手写 `'c'` 能渲染但选不到、一改就丢）；文本类输入走合并撤销；两条覆盖契约全绿 | 8 |
@@ -1979,3 +1999,6 @@ R0d 必须在 R7 之前（`Component.vue` 落地时词表就该在真源里，�
 豁免整体失效）；
 R7 必须是**独占一个 PR** 且 `subEditor` 留到 R13（在编辑器路由存在之前声明它，
 `sub-editor-routes` 契约当场红）。
+
+⚠ R7b 只能排在 R7 之后，且**不能与 R7 合成一个 PR**：R7 走的机械化豁免不允许碰
+`packages/twin2d/**`（见 R7 那一行的三条禁改），而 R7b 改的正是那个包。
