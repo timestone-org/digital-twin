@@ -6,6 +6,7 @@
 import { TWIN_2D_MAX_EXPR_DEPTH } from './constants'
 import { isPresent } from './format'
 import { trimmedString } from './sanitize'
+import { twin2dExprSlotRefs } from './slotRefs'
 import type { Twin2dExpr } from './typesPrim'
 
 /** 算式的取值：一个有限数，或一段文本（`join` 与字符串字面量产出）。 */
@@ -136,29 +137,6 @@ function evalAt(
   }
 }
 
-function collectRefs(expr: Twin2dExpr, depth: number, into: Set<string>): void {
-  if (depth >= TWIN_2D_MAX_EXPR_DEPTH) return
-  switch (expr.kind) {
-    case 'slot':
-      into.add(expr.slot)
-      return
-    case 'ratio':
-      collectRefs(expr.num, depth + 1, into)
-      collectRefs(expr.den, depth + 1, into)
-      return
-    case 'scale':
-      collectRefs(expr.of, depth + 1, into)
-      return
-    case 'first':
-    case 'sum':
-    case 'join':
-      for (const item of expr.of) collectRefs(item, depth + 1, into)
-      return
-    default:
-      return
-  }
-}
-
 /**
  * 求一条派生槽算式的值；取不到一律给 null，占位符由渲染层出。
  * @param expr 派生槽算式，取归一化之后的那一份
@@ -174,12 +152,11 @@ export function evalExpr(
 
 /**
  * 一条算式引用到的槽键，按首次出现去重。
- * ⚠ 与求值共用同一道深度上限：超深的枝永远求不出值，把它的槽键报成「被引用」
- * 会让绑点面板多出一行永远喂不到东西的槽（§14.2 的有效槽位筛选按它做）。
+ * ⚠ 遍历本身归 `slotRefs.ts`——「哪些地方能写槽键」全仓只许有一份口径（§14.2）。
+ * 那一份与这里的求值共用同一道深度上限：超深的枝永远求不出值，把它的槽键报成
+ * 「被引用」会让绑点面板多出一行永远喂不到东西的槽。
  * @param expr 派生槽算式
  */
 export function exprSlotRefs(expr: Twin2dExpr): string[] {
-  const keys = new Set<string>()
-  collectRefs(expr, 0, keys)
-  return [...keys]
+  return [...new Set(twin2dExprSlotRefs(expr, '').map((ref) => ref.key))]
 }

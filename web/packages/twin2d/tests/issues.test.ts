@@ -449,6 +449,41 @@ describe('collectTwin2dIssues', () => {
     ])
   })
 
+  // ⚠ 这四处与 `bindingRows` 的「有效槽位」共用同一份遍历器（`slotRefs.ts`）：
+  //   这里扫不到的槽，那边也永远绑不上，而两处都零报错
+  it('图元的显示条件、变体补丁与节点补丁里的槽引用一处不漏', () => {
+    const when: Twin2dCondition = {
+      kind: 'slot',
+      slot: 'a',
+      op: 'gt',
+      value: 1,
+      value2: null,
+    }
+    const config = configOf({
+      styles: [
+        styleWith({
+          prims: [{ ...txtPrim('t', { kind: 'label' }), when }],
+          variants: [
+            {
+              id: 'v0',
+              when: { kind: 'state', state: 'hover' },
+              patch: { t: { when, src: { kind: 'slot', slot: 'b' } } },
+              rootPatch: {},
+            },
+          ],
+        }),
+      ],
+      nodes: [nodeWith({ patch: { t: { src: { kind: 'slot', slot: 'c' } } } })],
+    })
+
+    expect(collectTwin2dIssues(config).map((issue) => issue.at)).toEqual([
+      'styles[0].prims[0].when.slot',
+      'styles[0].variants[0].patch.t.when.slot',
+      'styles[0].variants[0].patch.t.src.slot',
+      'nodes[0].patch.t.src.slot',
+    ])
+  })
+
   it('不引槽的三档变体条件不报任何问题', () => {
     const config = configOf({
       styles: [

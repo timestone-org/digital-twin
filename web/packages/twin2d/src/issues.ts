@@ -11,8 +11,14 @@
  */
 import { collectTwin2dDroppedIssues } from './issuesDropped'
 import { normalizeTwin2dConfig } from './normalize'
+import {
+  twin2dNodeScope,
+  twin2dSlotRefs,
+  twin2dStyleScope,
+  twin2dWalkPrims,
+} from './slotRefs'
 import type { Twin2dIssue } from './issueTypes'
-import type { Twin2dCondition, Twin2dExpr, Twin2dPrim } from './typesPrim'
+import type { Twin2dPrimSite, Twin2dSlotRef, Twin2dSlotScope } from './slotRefs'
 import type {
   Twin2dConfig,
   Twin2dNode,
@@ -23,34 +29,13 @@ import type {
 /** 按 id 取一个节点样式；取不到返回 null。 */
 type Twin2dStyleLookup = (id: string) => Twin2dNodeStyle | null
 
-/** 图元树上的一个位置：图元本身与它的字段路径。 */
-interface Twin2dPrimSite {
-  prim: Twin2dPrim
-  at: string
-}
-
-/** 一处槽引用：引到的键与写着它的字段路径。 */
-interface Twin2dSlotRef {
-  key: string
-  at: string
-}
-
-function walkPrims(prims: readonly Twin2dPrim[], at: string): Twin2dPrimSite[] {
-  return prims.flatMap((prim, index) => {
-    const here = `${at}[${index}]`
-    const site: Twin2dPrimSite = { prim, at: here }
-    if (prim.kind !== 'box') return [site]
-    return [site, ...walkPrims(prim.children, `${here}.children`)]
-  })
-}
-
 /** 样式里的图元树与节点追加的图元树，摊平成带路径的位置表。 */
 function primSites(config: Twin2dConfig): Twin2dPrimSite[] {
   const inStyles = config.styles.flatMap((style, index) =>
-    walkPrims(style.prims, `styles[${index}].prims`),
+    twin2dWalkPrims(style.prims, `styles[${index}].prims`),
   )
   const inNodes = config.nodes.flatMap((node, index) =>
-    walkPrims(node.layers, `nodes[${index}].layers`),
+    twin2dWalkPrims(node.layers, `nodes[${index}].layers`),
   )
   return [...inStyles, ...inNodes]
 }
@@ -140,53 +125,18 @@ function danglingPorts(
   })
 }
 
-function exprSlotRefs(expr: Twin2dExpr, at: string): Twin2dSlotRef[] {
-  switch (expr.kind) {
-    case 'slot':
-      return [{ key: expr.slot, at: `${at}.slot` }]
-    case 'ratio':
-      return [
-        ...exprSlotRefs(expr.num, `${at}.num`),
-        ...exprSlotRefs(expr.den, `${at}.den`),
-      ]
-    case 'scale':
-      return exprSlotRefs(expr.of, `${at}.of`)
-    case 'first':
-    case 'sum':
-    case 'join':
-      return expr.of.flatMap((item, index) =>
-        exprSlotRefs(item, `${at}.of[${index}]`),
-      )
-    default:
-      return []
-  }
-}
-
-function conditionSlotRefs(
-  condition: Twin2dCondition,
-  at: string,
-): Twin2dSlotRef[] {
-  switch (condition.kind) {
-    case 'slot':
-      return [{ key: condition.slot, at: `${at}.slot` }]
-    case 'has':
-      return condition.slots.map((key, index) => ({
-        key,
-        at: `${at}.slots[${index}]`,
-      }))
-    case 'not':
-      return conditionSlotRefs(condition.of, `${at}.of`)
-    default:
-      return []
-  }
-}
-
-function primSlotRefs(sites: readonly Twin2dPrimSite[]): Twin2dSlotRef[] {
-  return sites.flatMap((site) =>
-    site.prim.kind === 'txt' && site.prim.src.kind === 'slot'
-      ? [{ key: site.prim.src.slot, at: `${site.at}.src.slot` }]
-      : [],
-  )
+/**
+ * 一个作用域上的槽引用，路径接到它在文档里的位置上。
+ * ⚠ 遍历本身归 `slotRefs.ts`：诊断面与绑点面板的「有效槽位」按同一套扫描面走，
+ * 两边分叉的表现是「这里不报、那边也绑不上」，两处都零报错。
+ * @param scope 样式或节点这一层的作用域
+ * @param at 这个作用域在文档里的字段路径
+ */
+function scopedSlotRefs(scope: Twin2dSlotScope, at: string): Twin2dSlotRef[] {
+  return twin2dSlotRefs(scope).map((ref) => ({
+    key: ref.key,
+    at: `${at}.${ref.at}`,
+  }))
 }
 
 /**
@@ -208,33 +158,16 @@ function slotIssues(
     }))
 }
 
-function styleSlotRefs(
-  style: Twin2dNodeStyle,
-  at: string,
-  sites: readonly Twin2dPrimSite[],
-): Twin2dSlotRef[] {
-  const fromExprs = style.slots.flatMap((slot, index) =>
-    slot.expr === null
-      ? []
-      : exprSlotRefs(slot.expr, `${at}.slots[${index}].expr`),
-  )
-  const fromVariants = style.variants.flatMap((variant, index) =>
-    conditionSlotRefs(variant.when, `${at}.variants[${index}].when`),
-  )
-  return [...primSlotRefs(sites), ...fromExprs, ...fromVariants]
-}
-
-/** 样式内三处槽引用：`txt` 图元、变体条件、派生槽算式。 */
+/** 样式内的槽引用：图元树、变体条件与变体补丁、派生槽算式。 */
 function styleSlotIssues(config: Twin2dConfig): Twin2dIssue[] {
   return config.styles.flatMap((style, index) => {
-    const at = `styles[${index}]`
-    const sites = walkPrims(style.prims, `${at}.prims`)
     const keys = new Set(style.slots.map((slot) => slot.key))
-    return slotIssues(styleSlotRefs(style, at, sites), keys)
+    const refs = scopedSlotRefs(twin2dStyleScope(style), `styles[${index}]`)
+    return slotIssues(refs, keys)
   })
 }
 
-/** 节点追加的图元与追加的派生槽；可用槽 = 样式槽 ∪ 节点追加槽。 */
+/** 节点追加的图元、追加的派生槽与节点级补丁；可用槽 = 样式槽 ∪ 节点追加槽。 */
 function nodeSlotIssues(
   config: Twin2dConfig,
   styleFor: Twin2dStyleLookup,
@@ -242,15 +175,9 @@ function nodeSlotIssues(
   return config.nodes.flatMap((node, index) => {
     const style = styleFor(node.styleId)
     if (style === null) return []
-    const at = `nodes[${index}]`
-    const sites = walkPrims(node.layers, `${at}.layers`)
     const keys = new Set([...style.slots, ...node.slots].map((s) => s.key))
-    const fromExprs = node.slots.flatMap((slot, slotIndex) =>
-      slot.expr === null
-        ? []
-        : exprSlotRefs(slot.expr, `${at}.slots[${slotIndex}].expr`),
-    )
-    return slotIssues([...primSlotRefs(sites), ...fromExprs], keys)
+    const refs = scopedSlotRefs(twin2dNodeScope(node), `nodes[${index}]`)
+    return slotIssues(refs, keys)
   })
 }
 
@@ -265,7 +192,10 @@ function danglingPatchKeys(
   return config.nodes.flatMap((node, index) => {
     const style = styleFor(node.styleId)
     if (style === null) return []
-    const sites = [...walkPrims(style.prims, ''), ...walkPrims(node.layers, '')]
+    const sites = [
+      ...twin2dWalkPrims(style.prims, ''),
+      ...twin2dWalkPrims(node.layers, ''),
+    ]
     const ids = new Set(sites.map((site) => site.prim.id))
     return Object.keys(node.patch)
       .filter((key) => !ids.has(key))
@@ -283,7 +213,7 @@ function layerIdsOf(config: Twin2dConfig, styleId: string): Set<string> {
   const ids = new Set<string>()
   for (const node of config.nodes) {
     if (node.styleId !== styleId) continue
-    for (const site of walkPrims(node.layers, '')) ids.add(site.prim.id)
+    for (const site of twin2dWalkPrims(node.layers, '')) ids.add(site.prim.id)
   }
   return ids
 }
@@ -297,7 +227,7 @@ function layerIdsOf(config: Twin2dConfig, styleId: string): Set<string> {
  */
 function danglingVariantKeys(config: Twin2dConfig): Twin2dIssue[] {
   return config.styles.flatMap((style, index) => {
-    const own = walkPrims(style.prims, '').map((site) => site.prim.id)
+    const own = twin2dWalkPrims(style.prims, '').map((site) => site.prim.id)
     const ids = new Set([...own, ...layerIdsOf(config, style.id)])
     return style.variants.flatMap((variant, slot) =>
       Object.keys(variant.patch)

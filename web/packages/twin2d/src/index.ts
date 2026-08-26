@@ -464,3 +464,15 @@ export type {
   Twin2dSubtypeDef,
   Twin2dTerminalSubtypeId,
 } from './presets'
+export {
+  effectiveSlotsOf,
+  twin2dBindingRows,
+  twin2dRowCounts,
+  twin2dRowLabels,
+  twin2dRowsOfEntity,
+  twin2dStyleResolver,
+} from './bindingRows'
+export type { Twin2dBindingRow } from './bindingRows'
+export { remapTwin2dBindings } from './bindingRemap'
+export { twin2dValues } from './bindingValues'
+export type { Twin2dEdgeReading, Twin2dLiveValues } from './bindingValues'

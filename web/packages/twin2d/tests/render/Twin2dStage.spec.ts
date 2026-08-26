@@ -11,6 +11,7 @@ import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { h, nextTick } from 'vue'
 
+import { twin2dValues } from '../../src/bindingValues'
 import { normalizeTwin2dConfig } from '../../src/normalize'
 import Twin2dNodeBox from '../../src/render/Twin2dNodeBox.vue'
 import Twin2dStage from '../../src/render/Twin2dStage.vue'
@@ -603,5 +604,63 @@ describe('连线层', () => {
     const wrapper = render({ edges: [EDGE] })
 
     expect(wrapper.get('.t2-edges').attributes('viewBox')).toBe('0 0 400 200')
+  })
+})
+
+// ⚠ 一张普通对象上 `slots['constructor']` 取到的是 `Object` 构造函数而不是 undefined，
+// `?? EMPTY_SLOTS` 兜不住它（函数不是 nullish），下游 `.get()` 当场 TypeError 整块白掉
+describe('实体 id 撞上原型链上的名字', () => {
+  const SLOT_STYLE = {
+    id: 'ns-slot',
+    name: '带读数的方块',
+    size: { w: 100, h: 60 },
+    defaultStatus: 'online',
+    slots: [{ key: 'temp', label: '温度' }],
+    prims: [
+      {
+        id: 'frame',
+        kind: 'box',
+        size: { w: 100, h: 60 },
+        // ⚠ 这条 `when` 是这两条用例的要害：条件求值会对读数表调 `.get()`，
+        // 表里落进一个 `Object` 构造函数时正是在这儿 TypeError，整块大屏白掉
+        children: [
+          {
+            id: 'val',
+            kind: 'txt',
+            src: { kind: 'slot', slot: 'temp' },
+            when: { kind: 'has', slots: ['temp'], mode: 'any' },
+          },
+        ],
+      },
+    ],
+  }
+  const PROTO_NODE = [
+    { id: 'constructor', styleId: 'ns-slot', x: 0, y: 0, w: 100, h: 60 },
+  ]
+
+  it('叫 constructor 的节点一个读数都没绑时照常画，不从原型链上拿到函数', () => {
+    const over: Overrides = { styles: [SLOT_STYLE], nodes: PROTO_NODE }
+    const values = twin2dValues(docOf(over), {})
+
+    const wrapper = render(over, {
+      containerSize: BOX,
+      live: { slots: values.slots, readSlot: values.readSlot },
+    })
+
+    expect(wrapper.findAllComponents(Twin2dNodeBox)).toHaveLength(1)
+    expect(wrapper.text()).not.toContain('60')
+  })
+
+  it('绑上读数之后照常画出它自己那一份', () => {
+    const over: Overrides = { styles: [SLOT_STYLE], nodes: PROTO_NODE }
+    const values = twin2dValues(docOf(over), { nodeValues: [{ value: 60 }] })
+
+    const wrapper = render(over, {
+      containerSize: BOX,
+      live: { slots: values.slots, readSlot: values.readSlot },
+    })
+
+    expect(wrapper.findAllComponents(Twin2dNodeBox)).toHaveLength(1)
+    expect(wrapper.text()).toContain('60')
   })
 })
