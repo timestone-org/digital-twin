@@ -8,6 +8,7 @@
 在没有模型时仍然要能读。
 """
 
+from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from langchain_core.language_models import BaseChatModel
@@ -24,6 +25,35 @@ class ChatModelSource(Protocol):
     """按用途取一个模型。测试注一个假的进来，不打真端点。"""
 
     def __call__(self, kind: ModelKind) -> BaseChatModel: ...
+
+
+# 没选过时走哪一路。⚠ 是线上契约的一部分：会话里存的就是这个字面量
+DEFAULT_PROFILE = "default"
+
+
+@dataclass(frozen=True)
+class ModelChoice:
+    """这一次调用要用哪一路模型。
+
+    ⚠ 打成一包而不是三个形参：调用面的形参上限是 5，而 `respond` 还要收
+    消息、工具与增量口子。
+    """
+
+    # 看图那一档单价与延迟都高得多，混成一档等于每次对话都按视觉计费
+    kind: ModelKind = "chat"
+    profile: str = DEFAULT_PROFILE
+    # 推理档位；`None` 表示按这一路的配置默认
+    effort: str | None = None
+
+
+class ModelSource(Protocol):
+    """按选择取一个模型。
+
+    ⚠ 是**异步**的：订阅账号那一路要先拿一个此刻能用的令牌，而那可能触发一次
+    续期——同步的话，续期只能在事件循环里阻塞地等一次网络往返。
+    """
+
+    async def __call__(self, choice: ModelChoice) -> BaseChatModel: ...
 
 
 def build_model_source(settings: Settings) -> ChatModelSource | None:

@@ -5,13 +5,14 @@ from typing import Annotated, Any, ClassVar
 
 from pydantic import AfterValidator, Field, StringConstraints, WithJsonSchema
 
-from ai_assistant.apps.chat.enums import SURFACE_KINDS
+from ai_assistant.apps.chat.enums import MODEL_PROFILES, SURFACE_KINDS
 from ai_assistant.apps.chat.schemas.common import (
     InputModel,
     OutputModel,
     UpdateModel,
     Utc,
 )
+from ai_assistant.settings import REASONING_EFFORTS
 
 # 与 `chat_sessions` 的列宽逐字对齐；两边漂开的表现是入参放行、写库时才炸，
 # 而报出来的是一句 22001，看不出是哪个字段。由单元用例钉住不许漂
@@ -26,6 +27,29 @@ def _known_surface_kind(value: str) -> str:
     """
     if value not in SURFACE_KINDS:
         raise ValueError(f"未登记的工作面：{value}")
+    return value
+
+
+def _known_profile(value: str) -> str:
+    """未登记的模型档位一律拒。
+
+    ⚠ 放行的话它会落进会话行，而取模型那一层认不出就退回默认——
+    界面上显示「用的是订阅账号」而实际走的是按量端点，账单上才看得出来。
+
+    Args: value。
+    """
+    if value not in MODEL_PROFILES:
+        raise ValueError(f"未登记的模型档位：{value}")
+    return value
+
+
+def _known_effort(value: str) -> str:
+    """未登记的推理档位一律拒。
+
+    Args: value。
+    """
+    if value not in REASONING_EFFORTS:
+        raise ValueError(f"未登记的推理档位：{value}")
     return value
 
 
@@ -64,6 +88,9 @@ class SessionOut(OutputModel):
     is_archived: bool
     row_version: int
     last_error: str | None
+    # 这个会话选了哪一路模型、哪一档；`None` = 按部署配置的默认
+    model_profile: str | None = None
+    reasoning_effort: str | None = None
     created_at: Utc
     updated_at: Utc
 
@@ -106,6 +133,18 @@ class SessionDetailOut(SessionOut):
     plan_json: dict[str, Any] | None = None
 
 
+ModelProfileName = Annotated[
+    str,
+    AfterValidator(_known_profile),
+    WithJsonSchema({"type": "string", "enum": list(MODEL_PROFILES)}),
+]
+ReasoningEffort = Annotated[
+    str,
+    AfterValidator(_known_effort),
+    WithJsonSchema({"type": "string", "enum": list(REASONING_EFFORTS)}),
+]
+
+
 class SessionCreateIn(InputModel):
     """建会话。
 
@@ -126,3 +165,7 @@ class SessionUpdateIn(UpdateModel):
     title: Title | None = None
     # 归档只是不再默认列出，历史一条都不删
     is_archived: bool | None = None
+    # 换模型是**会话级**的选择：工具回填那几次推进是循环自己发的，
+    # 那时前端手上没有用户的选择，只有落在会话上才带得过去
+    model_profile: ModelProfileName | None = None
+    reasoning_effort: ReasoningEffort | None = None

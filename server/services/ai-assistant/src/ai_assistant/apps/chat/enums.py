@@ -29,6 +29,12 @@ STEP_KINDS = ("model", "server_tool", "client_tool")
 STEP_STATES = ("running", "awaiting_client", "succeeded", "failed", "aborted")
 
 
+# 模型档位：这套部署可能接的几路。⚠ 是闭合集合——落进会话行的名字取模型那一层
+# 认不出就退回默认，界面上显示「用的是订阅账号」而实际走的是按量端点，
+# 而那要到账单上才看得出来
+MODEL_PROFILES = ("default", "codex")
+
+
 def sql_values(values: tuple[str, ...]) -> str:
     """把闭合集合摊成 CHECK 约束里的值列表。
 

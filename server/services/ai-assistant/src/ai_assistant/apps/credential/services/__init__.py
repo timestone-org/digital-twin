@@ -12,6 +12,7 @@ from ai_assistant.apps.credential.services.oauth_client import (
 from ai_assistant.apps.credential.services.store import (
     CredentialStatus,
     CredentialStore,
+    UsableToken,
 )
 from ai_assistant.apps.credential.services.tokens import TokenBundle
 
@@ -24,4 +25,5 @@ __all__ = [
     "LoginStarted",
     "OAuthClient",
     "TokenBundle",
+    "UsableToken",
 ]

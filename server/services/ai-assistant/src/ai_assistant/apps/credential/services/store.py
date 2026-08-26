@@ -49,6 +49,18 @@ ACCOUNT_TAIL_CHARS = 6
 
 
 @dataclass(frozen=True)
+class UsableToken:
+    """此刻能用的那一份。
+
+    ⚠ 只有这两格出得了这一层：refresh_token 一个字都不该离开，
+    而模型那一路要的恰好也只有访问令牌与账号标识（后者进请求头）。
+    """
+
+    access_token: str
+    account_id: str | None
+
+
+@dataclass(frozen=True)
 class CredentialStatus:
     """界面上要显示的那几格。⚠ 令牌本身一个字都不在里面。"""
 
@@ -138,17 +150,26 @@ class CredentialStore:
             await session.delete(row)
             return True
 
-    async def access_token(self, provider: str) -> str:
-        """取一个此刻能用的访问令牌，必要时先换一份新的。
+    async def usable(self, provider: str) -> UsableToken:
+        """取一份此刻能用的令牌，必要时先换一份新的。
 
         Args: provider。
         """
         bundle = await self._bundle(provider)
         if bundle is None:
             raise CredentialNotFound("这一路模型还没登录，去系统页登录一次")
-        if not bundle.is_stale(skew_s=REFRESH_SKEW_S):
-            return bundle.access_token
-        return (await self._refreshed(provider, bundle)).access_token
+        if bundle.is_stale(skew_s=REFRESH_SKEW_S):
+            bundle = await self._refreshed(provider, bundle)
+        return UsableToken(
+            access_token=bundle.access_token, account_id=bundle.account_id
+        )
+
+    async def access_token(self, provider: str) -> str:
+        """只要访问令牌那一格。
+
+        Args: provider。
+        """
+        return (await self.usable(provider)).access_token
 
     async def _bundle(self, provider: str) -> TokenBundle | None:
         async with self._sessions() as session:

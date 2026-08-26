@@ -65,3 +65,12 @@ async def test_capabilities_rejects_a_caller_without_the_code(
         CAPABILITIES_URL, headers=sign(["dashboard:view"])
     )
     assert response.status_code == 403
+
+
+async def test_capabilities_lists_no_model_route_when_none_is_configured(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # 摆出一个点了报错的选项，比干净地不摆更难查
+    body = _data(await app_client.get(CAPABILITIES_URL))
+    assert body["models"] == []
+    assert body["is_model_enabled"] is False

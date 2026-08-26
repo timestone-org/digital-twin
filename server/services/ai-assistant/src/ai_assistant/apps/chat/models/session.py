@@ -17,6 +17,8 @@ SURFACE_KIND_MAX_LENGTH = 32
 # ⚠ 存字符串不存 UUID：不同工作面指向的标识形态不同，收成 UUID 就把
 # 「将来会有非 UUID 标识的工作面」这件事挡死在类型上
 SURFACE_REF_MAX_LENGTH = 128
+PROFILE_MAX_LENGTH = 32
+EFFORT_MAX_LENGTH = 16
 
 
 class ChatSession(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -52,6 +54,14 @@ class ChatSession(UuidPrimaryKeyMixin, TimestampMixin, Base):
     # 另一个副本上。没有计划就是 NULL，不填空对象
     plan_json: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB, nullable=True
+    )
+    # 这个会话用哪一路模型、哪一档推理。⚠ 落在会话上而不是每次请求带：
+    # 工具回填那几次推进是循环自己发的，那时前端手上没有用户的选择
+    model_profile: Mapped[str | None] = mapped_column(
+        String(PROFILE_MAX_LENGTH), nullable=True
+    )
+    reasoning_effort: Mapped[str | None] = mapped_column(
+        String(EFFORT_MAX_LENGTH), nullable=True
     )
 
     __table_args__ = (

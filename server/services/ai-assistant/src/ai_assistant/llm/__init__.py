@@ -8,19 +8,29 @@ from ai_assistant.llm.errors import (
 )
 from ai_assistant.llm.guard import GuardedModel
 from ai_assistant.llm.provider import (
+    DEFAULT_PROFILE,
     ChatModelSource,
+    ModelChoice,
     ModelKind,
+    ModelSource,
     build_model_source,
 )
+from ai_assistant.llm.registry import CODEX_PROFILE, ModelProfile, ModelRegistry
 
 __all__ = [
+    "CODEX_PROFILE",
+    "DEFAULT_PROFILE",
     "ChatModelSource",
     "DeltaChannel",
     "DeltaSink",
     "GuardedModel",
+    "ModelChoice",
     "ModelDisabled",
     "ModelKind",
+    "ModelProfile",
+    "ModelRegistry",
     "ModelRejected",
+    "ModelSource",
     "ModelUnavailable",
     "build_model_source",
 ]

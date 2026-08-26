@@ -508,6 +508,11 @@
       "CapabilityOut": {
         "description": "助手能力。\n\n⚠ 前端把「取不到这份」当作「助手不存在」而不是「暂时故障」：某些现场\n根本不部署本服务，那时边缘直接 502，入口就该干净地不出现。",
         "properties": {
+          "default_model_id": {
+            "default": "",
+            "title": "Default Model Id",
+            "type": "string"
+          },
           "is_model_enabled": {
             "title": "Is Model Enabled",
             "type": "boolean"
@@ -515,6 +520,13 @@
           "is_vision_enabled": {
             "title": "Is Vision Enabled",
             "type": "boolean"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelProfileOut"
+            },
+            "title": "Models",
+            "type": "array"
           },
           "skills": {
             "items": {
@@ -790,6 +802,49 @@
         "title": "MessageOut",
         "type": "object"
       },
+      "ModelProfileOut": {
+        "description": "能选的一路模型。",
+        "properties": {
+          "efforts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Efforts",
+            "type": "array"
+          },
+          "has_vision": {
+            "title": "Has Vision",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_ready": {
+            "title": "Is Ready",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Models",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "is_ready",
+          "has_vision"
+        ],
+        "title": "ModelProfileOut",
+        "type": "object"
+      },
       "Page_SessionOut_": {
         "properties": {
           "items": {
@@ -897,6 +952,17 @@
             "title": "Messages",
             "type": "array"
           },
+          "model_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Profile"
+          },
           "plan_json": {
             "anyOf": [
               {
@@ -908,6 +974,17 @@
               }
             ],
             "title": "Plan Json"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
           },
           "row_version": {
             "title": "Row Version",
@@ -986,6 +1063,28 @@
             ],
             "title": "Last Error"
           },
+          "model_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Profile"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          },
           "row_version": {
             "title": "Row Version",
             "type": "integer"
@@ -1049,6 +1148,38 @@
               }
             ],
             "title": "Is Archived"
+          },
+          "model_profile": {
+            "anyOf": [
+              {
+                "enum": [
+                  "default",
+                  "codex"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Profile"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
           },
           "title": {
             "anyOf": [

@@ -43,7 +43,13 @@ from ai_assistant.apps.chat.services.turn import (
 )
 from ai_assistant.apps.chat.services.turn_types import TurnOutcome, TurnStep
 from ai_assistant.container import Container
-from ai_assistant.llm import GuardedModel, ModelDisabled
+from ai_assistant.llm import (
+    DEFAULT_PROFILE,
+    GuardedModel,
+    ModelChoice,
+    ModelDisabled,
+    ModelKind,
+)
 from ai_assistant.settings import MAX_HISTORY_MESSAGES
 from lib.logging import get_logger
 
@@ -216,10 +222,7 @@ async def advance(
 
     Args: deps, chat_session_id, payload。
     """
-    async with deps.sessions() as session:
-        messages = await load_context(
-            session, chat_session_id=chat_session_id, payload=payload
-        )
+    messages, choice = await _opened(deps, chat_session_id, payload)
     plans = plan_service.PlanTools(
         sessions=deps.sessions, chat_session_id=chat_session_id
     )
@@ -227,9 +230,7 @@ async def advance(
         model=deps.model,
         specs=tool_select.specs_for(payload.surface_kind, payload.client_tools),
         run_tool=_with_plan_tools(plans, deps.server_tools),
-        # 带图的这一轮走视觉档。⚠ 不能整个会话都走：视觉模型的单价与延迟都
-        # 高得多，一次截图之后每一句闲聊都按视觉计费
-        kind="vision" if has_image(payload) else "chat",
+        choice=choice,
     )
     produced: list[TurnStep] = []
     outcome: TurnOutcome | None = None
@@ -252,6 +253,45 @@ async def advance(
             steps=produced,
         )
         yield outcome
+
+
+async def _opened(
+    deps: AdvanceDeps, chat_session_id: uuid.UUID, payload: AdvanceInput
+) -> tuple[list[BaseMessage], ModelChoice]:
+    """开一次库：把这一轮的上下文与模型选择一起读出来。
+
+    ⚠ 一次会话里读完：分两次开的话，中途改过模型的那一轮会读到两份不一致的
+    状态（提示词按旧的拼、模型按新的取）。
+
+    Args: deps, chat_session_id, payload。
+    """
+    async with deps.sessions() as session:
+        messages = await load_context(
+            session, chat_session_id=chat_session_id, payload=payload
+        )
+        row = await session.get(ChatSession, chat_session_id)
+        return messages, _choice_of(row, payload)
+
+
+def _choice_of(row: ChatSession | None, payload: AdvanceInput) -> ModelChoice:
+    """这一轮用哪一路模型、哪一档。
+
+    ⚠ 带图的这一轮走视觉档。不能整个会话都走：视觉模型的单价与延迟都高得多，
+    一次截图之后每一句闲聊都按视觉计费。
+
+    ⚠ 档位从**会话行**上取而不是从请求上取：换模型是会话级的选择，
+    每次推进都由前端重报的话，工具回填那几次会漏带（那时前端手上没有它）。
+
+    Args: row, payload。
+    """
+    kind: ModelKind = "vision" if has_image(payload) else "chat"
+    if row is None:
+        return ModelChoice(kind=kind)
+    return ModelChoice(
+        kind=kind,
+        profile=row.model_profile or DEFAULT_PROFILE,
+        effort=row.reasoning_effort,
+    )
 
 
 def _wrote_plan(item: AdvanceEvent) -> bool:

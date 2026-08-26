@@ -13,6 +13,7 @@ from typing import Any
 
 import httpx
 import pytest
+from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -28,7 +29,8 @@ from ai_assistant.apps.credential.services import (
     OAuthClient,
     TokenBundle,
 )
-from ai_assistant.settings import API_PREFIX
+from ai_assistant.llm import ModelRegistry
+from ai_assistant.settings import API_PREFIX, Settings
 from integration.conftest import DbStack, HeaderFactory
 from lib.crypto import SecretCipher
 from lib.testing import InMemoryCache
@@ -96,12 +98,27 @@ def _wire_codex(
         oauth=oauth,
         cache=cache,
     )
+    settings = replace_settings(stack.app.state.container.settings)
     stack.app.state.container = replace(
         stack.app.state.container,
+        settings=settings,
         credentials=store,
         device_login=DeviceLogin(oauth=oauth, cache=cache, store=store),
+        # 能力面按注册表铺清单，不换的话这套部署里根本没有订阅账号那一路
+        models=ModelRegistry(settings, tokens=store),
     )
     return cache
+
+
+def replace_settings(settings: Settings) -> Settings:
+    """把配置改成「接了订阅账号那一路」。"""
+    return settings.model_copy(
+        update={
+            "codex_enabled": True,
+            "codex_model": "some-codex",
+            "credential_secret": SecretStr(SECRET),
+        }
+    )
 
 
 @pytest.fixture
@@ -383,3 +400,27 @@ async def test_a_deployment_without_codex_says_so(
         f"{CREDENTIALS}:start-login", headers=manage_headers
     )
     assert started.status_code == 503
+
+
+async def test_a_configured_but_unlogged_route_is_listed_as_not_ready(
+    db_stack: DbStack,
+) -> None:
+    # 配了却没登录时摆成可选的话，用户点下去收到的是一条「模型暂时不可用」
+    _wire_codex(db_stack)
+    body = (await db_stack.client.get(f"{API_PREFIX}/capabilities")).json()[
+        "data"
+    ]
+    codex = next(one for one in body["models"] if one["id"] == "codex")
+    assert codex["is_ready"] is False
+    assert "xhigh" in codex["efforts"]
+
+
+async def test_a_logged_in_route_is_listed_as_ready(
+    db_stack: DbStack, manage_headers: dict[str, str]
+) -> None:
+    await _login_once(db_stack, manage_headers)
+    body = (await db_stack.client.get(f"{API_PREFIX}/capabilities")).json()[
+        "data"
+    ]
+    codex = next(one for one in body["models"] if one["id"] == "codex")
+    assert codex["is_ready"] is True

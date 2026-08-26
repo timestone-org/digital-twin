@@ -9,6 +9,7 @@
 """
 
 import langchain_openai.chatgpt_oauth as upstream
+from langchain_openai.chat_models import codex as codex_upstream
 
 from ai_assistant.apps.credential.services.tokens import CLAIMS_NAMESPACE
 
@@ -45,3 +46,33 @@ def test_the_scope_still_asks_for_offline_access() -> None:
 
 def test_the_claims_namespace_matches_the_one_we_read() -> None:
     assert upstream.CHATGPT_AUTH_CLAIMS_NAMESPACE == CLAIMS_NAMESPACE
+
+
+def test_the_codex_chat_model_is_still_where_we_look_for_it() -> None:
+    # 换了名字的话，红的该是这条用例而不是第一次真实对话
+    assert hasattr(codex_upstream, "_ChatOpenAICodex")
+
+
+def test_the_codex_chat_model_still_forces_the_wire_level_fields() -> None:
+    """后端那三条硬约束仍由上游焊死。
+
+    ⚠ 它们松开的话我们不会立刻发现：`store=true` 与非流式都要等到真发一次请求
+    才撞 400，而那条 400 的措辞与「上游改了默认值」毫无关系。
+    """
+    forced = (
+        codex_upstream._FORCED_VALUES
+    )  # pyright: ignore[reportPrivateUsage]  # 理由：见文件头
+    assert forced["use_responses_api"] is True
+    assert forced["store"] is False
+    assert forced["streaming"] is True
+
+
+def test_the_codex_base_url_still_points_at_the_backend() -> None:
+    assert codex_upstream.CHATGPT_CODEX_BASE_URL.startswith(
+        "https://chatgpt.com/backend-api"
+    )
+
+
+def test_the_account_id_header_is_still_the_one_we_fill() -> None:
+    # 少了它后端认不出是哪个订阅，而我们是靠 token 的 account_id 喂进去的
+    assert codex_upstream.ACCOUNT_ID_HEADER.lower() == "chatgpt-account-id"

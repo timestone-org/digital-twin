@@ -17,6 +17,22 @@ class SkillOut(BaseModel):
     required_codes: list[str] = Field(default_factory=list)
 
 
+class ModelProfileOut(BaseModel):
+    """能选的一路模型。"""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    label: str
+    # 这一路此刻能不能用。⚠ 「装配得起来」不等于「能用」：订阅账号那一路
+    # 还得先登录过，为假时前端把它灰着并指向系统页
+    is_ready: bool
+    has_vision: bool
+    models: list[str] = Field(default_factory=list[str])
+    # 可调的推理档位；空表示这一路没有这一档
+    efforts: list[str] = Field(default_factory=list[str])
+
+
 class CapabilityOut(BaseModel):
     """助手能力。
 
@@ -31,3 +47,7 @@ class CapabilityOut(BaseModel):
     # 视觉输入是否可用。看截图提布局建议这类技能据它决定摆不摆
     is_vision_enabled: bool
     skills: list[SkillOut]
+    # 这套部署接了哪几路模型。空 = 一路都没接
+    models: list[ModelProfileOut] = Field(default_factory=list[ModelProfileOut])
+    # 没选过时用哪一路
+    default_model_id: str = ""

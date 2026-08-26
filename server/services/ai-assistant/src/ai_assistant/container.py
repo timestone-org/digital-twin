@@ -10,7 +10,12 @@ from ai_assistant.apps.credential.services import (
     DeviceLogin,
     OAuthClient,
 )
-from ai_assistant.llm import GuardedModel, build_model_source
+from ai_assistant.llm import (
+    CODEX_PROFILE,
+    DEFAULT_PROFILE,
+    GuardedModel,
+    ModelRegistry,
+)
 from ai_assistant.settings import SERVICE_NAME, Settings
 from ai_assistant.upstream import PlatformClient
 from lib.cache import Cache
@@ -38,6 +43,9 @@ class Container:
     # 打业务面的客户端。⚠ 连接池一个进程一份、长活——每次调用现造一个再关掉，
     # 等于每次都重新握一次 TCP 手
     platform: PlatformClient
+    # 这套部署接了哪几路模型。⚠ 与 `model` 分开：能力面要在模型关着时
+    # 也能如实回答「这里本来能接哪几路」
+    models: ModelRegistry
     # 订阅账号那一路的凭据读写与登录。没开 codex 时同样是 `None`
     credentials: CredentialStore | None
     device_login: DeviceLogin | None
@@ -64,25 +72,34 @@ def _build_database(settings: Settings) -> Database:
     )
 
 
-def _build_model(settings: Settings) -> GuardedModel | None:
-    """按配置装模型；没开就不装。
+def _build_model(
+    settings: Settings, registry: ModelRegistry
+) -> GuardedModel | None:
+    """按配置装模型；一路都没接就不装。
 
     ⚠ 断路器一个进程一份、跟着模型一起活：每次调用现造一个的话它永远停在
     「closed」，等于没有断路器。
 
-    Args: settings。
+    ⚠ **每一路各有一份断路器**：共用一份的话，订阅账号那一路挂掉会把按量
+    那一路一起短路，而后者本来好好的。
+
+    Args: settings, registry。
     """
-    source = build_model_source(settings)
-    if source is None:
+    if not registry.profiles():
         return None
     return GuardedModel(
-        source=source,
+        source=registry.resolve,
         is_streaming=settings.model_stream_enabled,
-        breaker=CircuitBreaker(
-            name="model",
-            failure_threshold=settings.model_breaker_failures,
-            reset_after_s=settings.model_breaker_reset_s,
-        ),
+        breaker=_breaker_of(settings, DEFAULT_PROFILE),
+        breakers={CODEX_PROFILE: _breaker_of(settings, CODEX_PROFILE)},
+    )
+
+
+def _breaker_of(settings: Settings, profile: str) -> CircuitBreaker:
+    return CircuitBreaker(
+        name=f"model:{profile}",
+        failure_threshold=settings.model_breaker_failures,
+        reset_after_s=settings.model_breaker_reset_s,
     )
 
 
@@ -127,6 +144,8 @@ def build_container(settings: Settings) -> Container:
     credentials, device_login, oauth_http = _build_codex(
         settings, database, cache
     )
+    # ⚠ 一个进程一份：造两份的话，两份各自的档位清单可以在将来漂开
+    registry = ModelRegistry(settings, tokens=credentials)
     return Container(
         settings=settings,
         database=database,
@@ -134,11 +153,12 @@ def build_container(settings: Settings) -> Container:
         idempotency=IdempotencyStore(
             cache=cache, namespace=IDEMPOTENCY_NAMESPACE
         ),
-        model=_build_model(settings),
+        model=_build_model(settings, registry),
         platform=PlatformClient(
             base_url=settings.platform_base_url,
             timeout_s=settings.platform_timeout_s,
         ),
+        models=registry,
         credentials=credentials,
         device_login=device_login,
         oauth_http=oauth_http,

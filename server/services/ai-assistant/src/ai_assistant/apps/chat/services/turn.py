@@ -27,7 +27,7 @@ import asyncio
 import json
 import operator
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Annotated, Any, Protocol, TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
@@ -41,7 +41,12 @@ from ai_assistant.apps.chat.services.turn_types import (
     TurnOutcome,
     TurnStep,
 )
-from ai_assistant.llm import DeltaChannel, DeltaSink, GuardedModel, ModelKind
+from ai_assistant.llm import (
+    DeltaChannel,
+    DeltaSink,
+    GuardedModel,
+    ModelChoice,
+)
 from ai_assistant.settings import MAX_STEPS_PER_TURN, MAX_TOOL_RESULT_CHARS
 from lib.logging import get_logger
 
@@ -92,7 +97,9 @@ class TurnDeps:
     model: GuardedModel
     specs: tuple[ToolSpec, ...]
     run_tool: ServerToolRunner
-    kind: ModelKind = "chat"
+    # 这一轮用哪一路模型、哪一档。⚠ 每一轮现取而不是造图时定死：同一个会话
+    # 里带图的那一轮要临时切到视觉档
+    choice: ModelChoice = field(default_factory=ModelChoice)
     # 模型逐字吐出来的东西交给谁。⚠ 不给 = 不走流式：`run_turn` 那条路不需要
     # 增量，而流式会让每次作答多几百次回调
     on_delta: DeltaSink | None = None
@@ -244,7 +251,7 @@ def _thinker(deps: TurnDeps) -> Callable[[TurnState], Awaitable[TurnUpdate]]:
 
     async def think(state: TurnState) -> TurnUpdate:
         reply = await deps.model.respond(
-            kind=deps.kind,
+            choice=deps.choice,
             messages=list(state["messages"]),
             tools=schemas,
             on_delta=deps.on_delta,
