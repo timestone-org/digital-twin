@@ -48,8 +48,12 @@ const MAX_PANEL_COLUMNS = 4
 const MAX_LEVELS = 6
 /** 量程缺省 0–100：多数现场量是百分比，配了图形却没配量程时至少画得出来 */
 const DEFAULT_RANGE_MAX = 100
-/** 牌整体大小的倍率区间；1 = 按模型体量自动定的那个大小。 */
-const MIN_PANEL_SCALE = 0.2
+/**
+ * 牌整体大小的倍率区间；1 = 按模型体量自动定的那个大小。
+ * ⚠ 下限压到 0.1：自动定出来的大小按模型对角线的一成算，大厂区上一成仍然很占地方，
+ * 停在 0.2 时用户「调到最小还是大」。
+ */
+const MIN_PANEL_SCALE = 0.1
 const MAX_PANEL_SCALE = 5
 const MIN_FONT_SCALE = 0.5
 const MAX_FONT_SCALE = 3

@@ -45,8 +45,10 @@ const WIDTH_RANGE = { min: 1, max: 1200, step: 10 }
 const HEIGHT_RANGE = { min: 1, max: 1200, step: 10 }
 const COLUMN_RANGE = { min: 1, max: 4, step: 1 }
 const FONT_RANGE = { min: 0.5, max: 3, step: 0.05 }
-// 牌在 3D 里的整体大小；1 = 按模型体量自动定的那个大小
-const SCALE_RANGE = { min: 0.2, max: 5, step: 0.1 }
+// 牌在 3D 里的整体大小；1 = 按模型体量自动定的那个大小。
+// ⚠ 上下限必须与 `normalizeElements` 的夹取区间一致：滑块给得出、归一化收得回，
+// 用户会看到自己刚拖的值被弹回去，而没有任何提示说明为什么
+const SCALE_RANGE = { min: 0.1, max: 5, step: 0.1 }
 
 /** 关掉自适应时给的最小高度，够放下页眉加两行读数。 */
 const FIXED_HEIGHT = 150
@@ -145,6 +147,17 @@ function toggleAutoHeight(auto: boolean): void {
       />
     </DtField>
 
+    <!-- ⚠ 摆在外观组靠前：默认单列，而这一档藏深了用户会以为「指标只能一行一个」 -->
+    <DtSlider
+      :model-value="modelValue.columns"
+      :range="COLUMN_RANGE"
+      label="字段列数"
+      hint="趋势线与柱群两档始终占满一整行，其余按列排"
+      size="sm"
+      show-value
+      @update:model-value="writeStyle({ columns: $event })"
+    />
+
     <DtColorInput
       :model-value="modelValue.accent"
       label="主题色"
@@ -216,16 +229,6 @@ function toggleAutoHeight(auto: boolean): void {
         @update:model-value="writeDensity"
       />
     </DtField>
-
-    <DtSlider
-      :model-value="modelValue.columns"
-      :range="COLUMN_RANGE"
-      label="字段列数"
-      hint="大字、趋势线与柱群三档始终占满一整行"
-      size="sm"
-      show-value
-      @update:model-value="writeStyle({ columns: $event })"
-    />
 
     <DtSlider
       :model-value="modelValue.fontScale"
