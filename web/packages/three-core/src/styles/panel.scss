@@ -1,46 +1,543 @@
-// 信息牌的观感：基础版式 + 五种变体。
+// 信息牌的观感：挂点与引线、卡片版式、八种字段画法、三层装饰、八种变体。
 //
-// ⚠ 必须是全局样式，不能 scoped：牌是 CSS2DObject 的 DOM，挂在标签层容器里，
+// ⚠ 必须是全局样式，不能 scoped：牌是 CSS3DObject 的 DOM，挂在标签层容器里，
 // 不在任何组件的 scoped 作用域内——写成 scoped 会一条都不生效。
-// ⚠ 逐牌不同的取色、宽度与字号由 `panelLayer` 写成 CSS 变量传进来；
-// 这里绝不反过来去内联它们，否则变体又会被内联优先级压死。
+// ⚠ 逐牌不同的取色、尺寸与占比由 `panelCard` 写成 CSS 变量挂在**挂点**上；
+// 所以那几个变量的缺省值必须写在 `.twin-panel-mount` 上。写到 `.twin-panel` 上
+// 会就地重新声明一遍，把挂点上传下来的值挡掉——牌会全部退回缺省色。
+// ⚠ 色值一律走 token 或 color-mix：硬编码色在换肤时第一个露馅（闸门 check_ts_style）。
 
-.twin-panel {
+// 挂点是一个 0×0 的容器，它的中心就是牌的锚点；卡片相对它偏出去，引线连回来。
+.twin-panel-mount {
   --tp-accent: var(--accent-primary);
   --tp-bg: var(--surface-overlay);
   --tp-font-size: 11px;
+  // 卡片与锚点之间的距离，`orient` 非居中时才用得上
+  --tp-lead: 26px;
 
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: var(--tp-width, auto);
-  padding: 8px 10px;
+  width: 0;
+  height: 0;
   color: var(--text-primary);
   font-size: var(--tp-font-size);
   line-height: 1.5;
   white-space: nowrap;
-  border-radius: var(--radius-md);
   user-select: none;
 
+  > .twin-panel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform: translate(-50%, -50%);
+  }
+
+  &[data-orient='top'] > .twin-panel {
+    transform: translate(-50%, calc(-100% - var(--tp-lead)));
+  }
+
+  &[data-orient='bottom'] > .twin-panel {
+    transform: translate(-50%, var(--tp-lead));
+  }
+
+  &[data-orient='left'] > .twin-panel {
+    transform: translate(calc(-100% - var(--tp-lead)), -50%);
+  }
+
+  &[data-orient='right'] > .twin-panel {
+    transform: translate(var(--tp-lead), -50%);
+  }
+}
+
+// 锚点上的小菱标：牌偏出去之后，它是「这块读数说的是这里」的唯一凭据
+.twin-panel-anchor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 9px;
+  height: 9px;
+  background: color-mix(in srgb, var(--tp-accent) 26%, transparent);
+  border: 1px solid var(--tp-accent);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--tp-accent) 60%, transparent);
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+// 引线：从锚点指向卡片的一笔，近锚点端最亮
+.twin-panel-lead {
+  position: absolute;
+  background: linear-gradient(
+    var(--tp-accent),
+    color-mix(in srgb, var(--tp-accent) 18%, transparent)
+  );
+
+  [data-orient='top'] > & {
+    bottom: 0;
+    left: 0;
+    width: 1px;
+    height: var(--tp-lead);
+    transform: translateX(-50%);
+  }
+
+  [data-orient='bottom'] > & {
+    top: 0;
+    left: 0;
+    width: 1px;
+    height: var(--tp-lead);
+    background: linear-gradient(
+      color-mix(in srgb, var(--tp-accent) 18%, transparent),
+      var(--tp-accent)
+    );
+    transform: translateX(-50%);
+  }
+
+  [data-orient='left'] > & {
+    top: 0;
+    right: 0;
+    width: var(--tp-lead);
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--tp-accent) 18%, transparent),
+      var(--tp-accent)
+    );
+    transform: translateY(-50%);
+  }
+
+  [data-orient='right'] > & {
+    top: 0;
+    left: 0;
+    width: var(--tp-lead);
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      var(--tp-accent),
+      color-mix(in srgb, var(--tp-accent) 18%, transparent)
+    );
+    transform: translateY(-50%);
+  }
+}
+
+.twin-panel {
+  // 版式尺度按密度换，字号不跟着换：字号是用户单独调的一档
+  --tp-pad-y: 9px;
+  --tp-pad-x: 11px;
+  --tp-gap: 6px;
+  --tp-cols: 1;
+
+  position: relative;
+  // ⚠ 装饰层靠 z-index: -1 压在内容之下：卡片自己不成栈上下文的话，
+  // 那一层会掉到整块画布背后去，牌上就什么底纹都看不见
+  isolation: isolate;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--tp-gap);
+  width: var(--tp-width, max-content);
+  min-width: 120px;
+  // 一张牌宽过这个数就该拆成两张：CSS3D 的牌没有滚动条，横着长下去只会越出画面
+  max-width: 560px;
+  min-height: var(--tp-height, auto);
+  padding: var(--tp-pad-y) var(--tp-pad-x);
+  border-radius: var(--radius-md);
+
+  &[data-density='compact'] {
+    --tp-pad-y: 6px;
+    --tp-pad-x: 8px;
+    --tp-gap: 4px;
+  }
+
+  &[data-density='loose'] {
+    --tp-pad-y: 14px;
+    --tp-pad-x: 16px;
+    --tp-gap: 10px;
+  }
+
+  &[data-columns='2'] {
+    --tp-cols: 2;
+  }
+
+  &[data-columns='3'] {
+    --tp-cols: 3;
+  }
+
+  &[data-columns='4'] {
+    --tp-cols: 4;
+  }
+
+  &__head {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-bottom: calc(var(--tp-gap) - 2px);
+    border-bottom: 1px solid
+      color-mix(in srgb, var(--tp-accent) 20%, transparent);
+  }
+
+  // 标题上那行小字：工业大屏上惯用的等宽大写标识
+  &__eyebrow {
+    color: color-mix(in srgb, var(--tp-accent) 72%, var(--text-secondary));
+    font-size: 0.76em;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
   &__title {
-    color: var(--tp-accent);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--text-title);
     font-weight: 700;
+    letter-spacing: 0.04em;
+
+    &::before {
+      width: 3px;
+      height: 1em;
+      background: var(--tp-accent);
+      box-shadow: 0 0 8px var(--tp-accent);
+      content: '';
+    }
+  }
+
+  &__body {
+    display: grid;
+    grid-template-columns: repeat(var(--tp-cols), minmax(0, 1fr));
+    gap: var(--tp-gap) calc(var(--tp-gap) * 2);
+    align-content: start;
+    flex: 1;
   }
 
   &__row {
+    --tp-tone: var(--tp-accent);
+
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+
+    &[data-tone='success'] {
+      --tp-tone: var(--state-success);
+    }
+
+    &[data-tone='warning'] {
+      --tp-tone: var(--state-warning);
+    }
+
+    &[data-tone='danger'] {
+      --tp-tone: var(--state-danger);
+    }
+
+    // 满幅的那几档：大字、趋势线与柱群在一格宽里根本读不出来
+    &[data-kind='hero'],
+    &[data-kind='sparkline'],
+    &[data-kind='bars'] {
+      grid-column: 1 / -1;
+    }
+  }
+
+  &__line {
     display: flex;
     gap: 12px;
+    align-items: baseline;
     justify-content: space-between;
   }
 
+  // ⚠ 标签吃掉中间的空档，读数才贴着右边：靠 `space-between` 分的话，
+  //   状态灯与升降角标这两档一多出一个节点，标签就被挤到行中间去了
   &__label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
     color: var(--text-secondary);
+    text-overflow: ellipsis;
   }
 
   &__value {
+    color: var(--text-primary);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
   }
+
+  // 大字主指标
+  &__hero {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+  }
+
+  &__num {
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__unit {
+    color: var(--tp-tone);
+    font-size: 0.8em;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+
+  &__row[data-kind='hero'] &__num {
+    font-size: 2.6em;
+    font-weight: 300;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+  }
+
+  // 量程进度条
+  &__track {
+    position: relative;
+    height: 3px;
+    background: color-mix(in srgb, var(--tp-accent) 12%, transparent);
+
+    > i {
+      display: block;
+      width: calc(var(--tp-fill, 0) * 100%);
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--tp-tone) 34%, transparent),
+        var(--tp-tone)
+      );
+      box-shadow: 0 0 8px color-mix(in srgb, var(--tp-tone) 40%, transparent);
+      transition: width var(--fx-transition, 0.5s ease);
+    }
+  }
+
+  // 迷你趋势线
+  &__spark {
+    display: block;
+    width: 100%;
+    height: 34px;
+    overflow: visible;
+  }
+
+  &__spark-line {
+    fill: none;
+    stroke: var(--tp-tone);
+    stroke-width: 1.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+  }
+
+  &__spark-area {
+    fill: color-mix(in srgb, var(--tp-tone) 16%, transparent);
+    stroke: none;
+  }
+
+  // 迷你柱群
+  &__bars {
+    display: flex;
+    gap: 2px;
+    align-items: flex-end;
+    height: 30px;
+
+    > i {
+      flex: 1;
+      min-width: 1px;
+      height: calc(var(--tp-bar, 0) * 100%);
+      // 一根柱子矮到零高时整排会看着像没数据，留一线底
+      min-height: 1px;
+      background: linear-gradient(
+        var(--tp-tone),
+        color-mix(in srgb, var(--tp-tone) 14%, transparent)
+      );
+    }
+  }
+
+  // 环形仪表：圆环按占比填，数值压在圆心
+  &__row[data-kind='gauge'] {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+
+  // ⚠ 圆环画在伪元素上、不画在这个盒子上：`mask` 连子节点一起遮，
+  //   写在盒子上会把圆心里的读数一起抠掉——环还在，数字没了
+  &__ring {
+    position: relative;
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 54px;
+    height: 54px;
+
+    &::before {
+      position: absolute;
+      inset: 0;
+      background: conic-gradient(
+        var(--tp-tone) calc(var(--tp-fill, 0) * 360deg),
+        color-mix(in srgb, var(--tp-accent) 14%, transparent) 0
+      );
+      border-radius: var(--radius-pill);
+      // 挖空圆心，圆环才是圆环
+      mask: radial-gradient(
+        circle,
+        transparent 58%,
+        var(--fx-const-opaque) 59%
+      );
+      content: '';
+    }
+  }
+
+  &__row[data-kind='gauge'] &__num {
+    font-size: 0.98em;
+    font-weight: 700;
+  }
+
+  &__ring-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  // 状态灯
+  &__dot {
+    flex: none;
+    width: 7px;
+    height: 7px;
+    margin-right: 6px;
+    border-radius: var(--radius-pill);
+    background: var(--tp-tone);
+    box-shadow: 0 0 9px var(--tp-tone);
+  }
+
+  // 升降角标
+  &__delta {
+    margin-left: 6px;
+    color: var(--text-disabled);
+    font-size: 0.8em;
+    font-style: normal;
+
+    &[data-dir='up'] {
+      color: var(--state-danger);
+    }
+
+    &[data-dir='down'] {
+      color: var(--state-success);
+    }
+  }
+
+  &__foot {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: calc(var(--tp-gap) - 2px);
+    border-top: 1px solid color-mix(in srgb, var(--tp-accent) 14%, transparent);
+  }
+
+  &__note {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-disabled);
+    font-size: 0.76em;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    letter-spacing: 0.12em;
+    text-overflow: ellipsis;
+  }
+
+  &__ticks {
+    display: flex;
+    flex: none;
+    gap: 3px;
+
+    > i {
+      width: 3px;
+      height: 3px;
+      background: color-mix(in srgb, var(--tp-accent) 30%, transparent);
+    }
+
+    > i:last-child {
+      background: var(--tp-accent);
+      box-shadow: 0 0 6px var(--tp-accent);
+    }
+  }
+}
+
+// 三层装饰各占一个节点，互不覆盖
+.twin-panel__grid,
+.twin-panel__scan,
+.twin-panel__corners {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+// 底纹网格压在内容之下
+.twin-panel__grid {
+  z-index: -1;
+  background-image:
+    linear-gradient(
+      color-mix(in srgb, var(--tp-accent) 8%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--tp-accent) 8%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 14px 14px;
+  mask-image: radial-gradient(
+    circle at center,
+    var(--fx-const-opaque),
+    transparent 78%
+  );
+}
+
+// 横扫光带
+.twin-panel__scan {
+  z-index: 1;
+  overflow: hidden;
+
+  &::after {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 34%;
+    background: linear-gradient(
+      color-mix(in srgb, var(--tp-accent) 0%, transparent),
+      color-mix(in srgb, var(--tp-accent) 16%, transparent),
+      color-mix(in srgb, var(--tp-accent) 0%, transparent)
+    );
+    animation: twin-panel-scan 3.4s linear infinite;
+    content: '';
+  }
+}
+
+// 四角括号：八条渐变各画一段，四个角、每角两笔
+.twin-panel__corners {
+  z-index: 1;
+  background-image:
+    linear-gradient(var(--tp-accent), var(--tp-accent)),
+    linear-gradient(var(--tp-accent), var(--tp-accent)),
+    linear-gradient(var(--tp-accent), var(--tp-accent)),
+    linear-gradient(var(--tp-accent), var(--tp-accent)),
+    linear-gradient(var(--tp-accent), var(--tp-accent)),
+    linear-gradient(var(--tp-accent), var(--tp-accent)),
+    linear-gradient(var(--tp-accent), var(--tp-accent)),
+    linear-gradient(var(--tp-accent), var(--tp-accent));
+  background-repeat: no-repeat;
+  background-position:
+    0 0,
+    0 0,
+    100% 0,
+    100% 0,
+    0 100%,
+    0 100%,
+    100% 100%,
+    100% 100%;
+  background-size:
+    11px 1.5px,
+    1.5px 11px,
+    11px 1.5px,
+    1.5px 11px,
+    11px 1.5px,
+    1.5px 11px,
+    11px 1.5px,
+    1.5px 11px;
+  filter: drop-shadow(
+    0 0 4px color-mix(in srgb, var(--tp-accent) 55%, transparent)
+  );
 }
 
 // 卡片：圆角 + accent 描边 + 一层柔光，最中性的一档
@@ -52,7 +549,6 @@
 
 // 战术：切角 + 顶部一道光条
 .twin-panel--hud {
-  position: relative;
   background: var(--tp-bg);
   border: 1px solid color-mix(in srgb, var(--tp-accent) 55%, transparent);
   border-radius: 0;
@@ -90,8 +586,7 @@
 
 // 角标：底完全透明，只在四角画发光括号
 .twin-panel--bracket {
-  position: relative;
-  padding: 9px 13px;
+  padding: var(--tp-pad-y) calc(var(--tp-pad-x) + 2px);
   background: transparent;
   border: none;
 
@@ -99,27 +594,37 @@
     text-shadow: 0 0 8px color-mix(in srgb, var(--tp-accent) 45%, transparent);
   }
 
-  // 八条渐变各画一段：四个角、每角两笔
   &::before {
     position: absolute;
     inset: 0;
-    background:
-      linear-gradient(var(--tp-accent), var(--tp-accent)) 0 0 / 11px 1.5px
-        no-repeat,
-      linear-gradient(var(--tp-accent), var(--tp-accent)) 0 0 / 1.5px 11px
-        no-repeat,
-      linear-gradient(var(--tp-accent), var(--tp-accent)) 100% 0 / 11px 1.5px
-        no-repeat,
-      linear-gradient(var(--tp-accent), var(--tp-accent)) 100% 0 / 1.5px 11px
-        no-repeat,
-      linear-gradient(var(--tp-accent), var(--tp-accent)) 0 100% / 11px 1.5px
-        no-repeat,
-      linear-gradient(var(--tp-accent), var(--tp-accent)) 0 100% / 1.5px 11px
-        no-repeat,
-      linear-gradient(var(--tp-accent), var(--tp-accent)) 100% 100% / 11px 1.5px
-        no-repeat,
-      linear-gradient(var(--tp-accent), var(--tp-accent)) 100% 100% / 1.5px 11px
-        no-repeat;
+    background-image:
+      linear-gradient(var(--tp-accent), var(--tp-accent)),
+      linear-gradient(var(--tp-accent), var(--tp-accent)),
+      linear-gradient(var(--tp-accent), var(--tp-accent)),
+      linear-gradient(var(--tp-accent), var(--tp-accent)),
+      linear-gradient(var(--tp-accent), var(--tp-accent)),
+      linear-gradient(var(--tp-accent), var(--tp-accent)),
+      linear-gradient(var(--tp-accent), var(--tp-accent)),
+      linear-gradient(var(--tp-accent), var(--tp-accent));
+    background-repeat: no-repeat;
+    background-position:
+      0 0,
+      0 0,
+      100% 0,
+      100% 0,
+      0 100%,
+      0 100%,
+      100% 100%,
+      100% 100%;
+    background-size:
+      11px 1.5px,
+      1.5px 11px,
+      11px 1.5px,
+      1.5px 11px,
+      11px 1.5px,
+      1.5px 11px,
+      11px 1.5px,
+      1.5px 11px;
     filter: drop-shadow(
       0 0 4px color-mix(in srgb, var(--tp-accent) 55%, transparent)
     );
@@ -138,38 +643,165 @@
   border-radius: 5px;
   box-shadow: 0 0 12px color-mix(in srgb, var(--tp-accent) 16%, transparent);
 
-  .twin-panel__title {
+  .twin-panel__head {
     padding: 4px 11px;
-    // ⚠ 标题条是实心 accent 底，字色必须换成反色轴那一档：
-    // 沿用 --tp-accent 会是同色叠同色，整行看不见
-    color: var(--text-inverse);
-    letter-spacing: 0.05em;
     background: var(--tp-accent);
+    border-bottom: none;
   }
 
-  .twin-panel__row {
-    padding: 4px 11px;
+  // ⚠ 标题条是实心 accent 底，字色必须换成反色轴那一档：
+  // 沿用 --tp-accent 会是同色叠同色，整行看不见
+  .twin-panel__title,
+  .twin-panel__eyebrow {
+    color: var(--text-inverse);
+    letter-spacing: 0.05em;
+  }
+
+  .twin-panel__title::before {
+    background: var(--text-inverse);
+    box-shadow: none;
+  }
+
+  .twin-panel__body {
+    padding: 5px 11px;
+  }
+
+  .twin-panel__foot {
+    padding: 0 11px 5px;
+    border-top: none;
   }
 }
 
-// 行为：入场动画与锚点脉冲
-.twin-panel[data-animate='on'] {
+// 精密切角：冷线细描 + 不对称切角 + 一层渐变外框，综合态势那一档
+.twin-panel--precision {
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--tp-bg) 92%, var(--tp-accent)),
+    var(--tp-bg)
+  );
+  border: 1px solid color-mix(in srgb, var(--tp-accent) 34%, transparent);
+  border-radius: 0;
+  box-shadow:
+    0 12px 28px var(--fx-scrim),
+    inset 0 0 22px color-mix(in srgb, var(--tp-accent) 7%, transparent);
+  clip-path: polygon(
+    0 12px,
+    12px 0,
+    calc(100% - 34px) 0,
+    calc(100% - 26px) 8px,
+    100% 8px,
+    100% calc(100% - 12px),
+    calc(100% - 12px) 100%,
+    26px 100%,
+    18px calc(100% - 7px),
+    0 calc(100% - 7px)
+  );
+
+  &::before {
+    position: absolute;
+    top: 8px;
+    left: 40px;
+    width: 62px;
+    height: 2px;
+    background: linear-gradient(90deg, var(--tp-accent), transparent);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--tp-accent) 65%, transparent);
+    content: '';
+  }
+}
+
+// 熔铸导轨：左侧一条竖导轨，能源与产线主题
+.twin-panel--forge {
+  padding-left: calc(var(--tp-pad-x) + 8px);
+  background: linear-gradient(
+    105deg,
+    color-mix(in srgb, var(--tp-bg) 88%, var(--tp-accent)),
+    var(--tp-bg) 62%
+  );
+  border: 1px solid color-mix(in srgb, var(--tp-accent) 26%, transparent);
+  border-radius: 0;
+  clip-path: polygon(
+    0 0,
+    calc(100% - 12px) 0,
+    100% 12px,
+    100% calc(100% - 22px),
+    calc(100% - 18px) 100%,
+    0 100%
+  );
+
+  &::before {
+    position: absolute;
+    top: 14%;
+    bottom: 14%;
+    left: 0;
+    width: 3px;
+    background: linear-gradient(
+      var(--tp-accent),
+      color-mix(in srgb, var(--tp-accent) 10%, transparent)
+    );
+    box-shadow: 0 0 12px color-mix(in srgb, var(--tp-accent) 70%, transparent);
+    content: '';
+  }
+}
+
+// 信号矩阵：点阵底 + 开放式角标，设备监控那一档
+.twin-panel--matrix {
+  background-color: var(--tp-bg);
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--tp-accent) 14%, transparent) 0.8px,
+    transparent 0.8px
+  );
+  background-size: 8px 8px;
+  border: 1px solid color-mix(in srgb, var(--tp-accent) 30%, transparent);
+  border-radius: 0;
+  clip-path: polygon(
+    0 0,
+    calc(100% - 28px) 0,
+    calc(100% - 20px) 9px,
+    100% 9px,
+    100% 100%,
+    20px 100%,
+    12px calc(100% - 9px),
+    0 calc(100% - 9px)
+  );
+
+  &::before {
+    position: absolute;
+    top: 6px;
+    right: 30px;
+    width: 46px;
+    height: 3px;
+    background: repeating-linear-gradient(
+      90deg,
+      var(--tp-accent) 0 5px,
+      transparent 5px 9px
+    );
+    content: '';
+  }
+}
+
+// 行为：入场动画、锚点脉冲、居中时退回卡片自身的呼吸光
+.twin-panel-mount[data-animate='on'] > .twin-panel {
   animation: twin-panel-in 0.34s cubic-bezier(0.2, 0.7, 0.3, 1) both;
 }
 
-.twin-panel[data-pulse='on'] {
+.twin-panel-mount[data-pulse='on'] > .twin-panel-anchor {
+  animation: twin-panel-halo 1.7s ease-in-out infinite;
+}
+
+// 居中档没有锚点小环可脉冲，改让卡片自己呼吸
+.twin-panel-mount[data-pulse='on'][data-orient='center'] > .twin-panel {
   animation: twin-panel-pulse 1.7s ease-in-out infinite;
 }
 
 @keyframes twin-panel-in {
   from {
-    transform: translateY(6px);
     opacity: 0;
+    scale: 0.94;
   }
 
   to {
-    transform: none;
     opacity: 1;
+    scale: 1;
   }
 }
 
@@ -181,5 +813,26 @@
 
   50% {
     box-shadow: 0 0 20px color-mix(in srgb, var(--tp-accent) 45%, transparent);
+  }
+}
+
+@keyframes twin-panel-halo {
+  0%,
+  100% {
+    box-shadow: 0 0 6px color-mix(in srgb, var(--tp-accent) 40%, transparent);
+  }
+
+  50% {
+    box-shadow: 0 0 18px color-mix(in srgb, var(--tp-accent) 95%, transparent);
+  }
+}
+
+@keyframes twin-panel-scan {
+  from {
+    transform: translateY(-120%);
+  }
+
+  to {
+    transform: translateY(420%);
   }
 }

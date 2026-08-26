@@ -72,6 +72,14 @@ export type {
 export { flattenPanelFields } from './normalizeElements'
 export type { FlatPanelField } from './normalizeElements'
 export {
+  PANEL_FIELD_KINDS,
+  panelFieldRatio,
+  panelFieldSpan,
+  panelFieldTone,
+  panelKindUsesRange,
+  panelKindUsesSeries,
+} from './panelGraph'
+export {
   HIER_SUMMARY_FALLBACK_COUNT,
   buildHierTree,
   childrenOf,
@@ -135,7 +143,10 @@ export {
   TWIN_FOLDER_KINDS,
   TWIN_LIGHT_COLUMN_MODES,
   TWIN_LIGHT_COLUMN_RISES,
+  TWIN_PANEL_DENSITIES,
+  TWIN_PANEL_FIELD_KINDS,
   TWIN_PANEL_ORIENTS,
+  TWIN_PANEL_TONES,
   TWIN_PANEL_VARIANTS,
   TWIN_PEDESTAL_REFLECTIONS,
   TWIN_TINT_MATCHES,
@@ -172,9 +183,13 @@ export type {
   TwinModelRef,
   TwinOutlineFolder,
   TwinPanel,
+  TwinPanelDensity,
   TwinPanelField,
+  TwinPanelFieldKind,
+  TwinPanelLevel,
   TwinPanelOrient,
   TwinPanelStyle,
+  TwinPanelTone,
   TwinPanelValue,
   TwinPanelValues,
   TwinPanelVariant,

@@ -5,7 +5,8 @@
  * ⚠ 取值键不带牌 id 时，两张牌上同名的字段会互相覆盖——两个读数都在，
  * 只是其中一个显示的是另一张牌的值，界面上完全看不出来。
  */
-import type { TwinAnchor, TwinPanel } from '@dt/twin-config'
+import { TWIN_PANEL_VARIANTS } from '@dt/twin-config'
+import type { TwinAnchor, TwinPanel, TwinPanelField } from '@dt/twin-config'
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 
@@ -24,13 +25,19 @@ const STYLE = {
   accent: '--accent-primary',
   background: '',
   width: 0,
+  height: 0,
+  columns: 1,
+  density: 'normal',
+  scan: false,
+  corners: false,
+  grid: false,
   fontScale: 1,
   scale: 1,
   animate: false,
   pulse: false,
 } as const
 
-function field(key: string, overrides: Record<string, unknown> = {}) {
+function field(key: string, overrides: Partial<TwinPanelField> = {}) {
   return {
     key,
     label: key,
@@ -38,14 +45,20 @@ function field(key: string, overrides: Record<string, unknown> = {}) {
     prefix: '',
     decimals: null,
     staticText: '',
+    kind: 'text',
+    min: 0,
+    max: 100,
+    levels: [],
     ...overrides,
-  }
+  } satisfies TwinPanelField
 }
 
 function panel(overrides: Partial<TwinPanel> = {}): TwinPanel {
   return {
     id: 'p1',
     name: '泵组',
+    subtitle: '',
+    footnote: '',
     anchorId: '',
     position: [0, 0, 0],
     offset: [0, 0, 0],
@@ -69,7 +82,8 @@ function anchor(id: string, position: [number, number, number]): TwinAnchor {
   }
 }
 
-function cards(layer: PanelLayer): HTMLElement[] {
+/** CSS3D 挂的是 0×0 的挂点，卡片在它里面；逐牌的 CSS 变量写在挂点上。 */
+function mounts(layer: PanelLayer): HTMLElement[] {
   return layer.group.children
     .filter(
       (child): child is typeof child & { element: HTMLElement } =>
@@ -78,11 +92,18 @@ function cards(layer: PanelLayer): HTMLElement[] {
     .map((child) => child.element)
 }
 
+function cards(layer: PanelLayer): HTMLElement[] {
+  return mounts(layer).flatMap((mount) => {
+    const card = mount.querySelector('.twin-panel')
+    return card instanceof HTMLElement ? [card] : []
+  })
+}
+
 function valuesOf(layer: PanelLayer): string[] {
   return cards(layer).flatMap((card) =>
-    [...card.querySelectorAll('span')]
-      .filter((_, index) => index % 2 === 1)
-      .map((span) => span.textContent ?? ''),
+    [...card.querySelectorAll('.twin-panel__value, .twin-panel__num')].map(
+      (node) => node.textContent ?? '',
+    ),
   )
 }
 
@@ -115,13 +136,13 @@ describe('建与清', () => {
     document.body.append(host)
     const layer = new PanelLayer()
     layer.build([panel()], [])
-    const card = cards(layer)[0]
-    if (card === undefined) throw new Error('本该建出卡片')
-    host.append(card)
+    const mount = mounts(layer)[0]
+    if (mount === undefined) throw new Error('本该建出卡片')
+    host.append(mount)
 
     layer.dispose()
 
-    expect(card.isConnected).toBe(false)
+    expect(mount.isConnected).toBe(false)
     host.remove()
   })
 })
@@ -243,8 +264,8 @@ describe('变体', () => {
     layer.dispose()
   })
 
-  it('五种变体各得各的 class', () => {
-    for (const variant of ['card', 'hud', 'glass', 'bracket', 'tag'] as const) {
+  it('八种变体各得各的 class', () => {
+    for (const variant of TWIN_PANEL_VARIANTS) {
       const layer = new PanelLayer()
       layer.build([panel({ style: { ...STYLE, variant } })], [])
 
@@ -269,21 +290,30 @@ describe('变体', () => {
     layer.dispose()
   })
 
-  it('逐牌不同的取色、宽度与字号走 CSS 变量传下去', () => {
+  // ⚠ 变量挂在挂点上、不挂在卡片上：引线与锚点小环是卡片的兄弟，
+  //   写到卡片上它们取不到主题色，会退回缺省的 accent
+  it('逐牌不同的取色、尺寸与字号走 CSS 变量挂在挂点上', () => {
     const layer = new PanelLayer()
 
     layer.build(
       [
         panel({
-          style: { ...STYLE, accent: '#ff0000', width: 240, fontScale: 2 },
+          style: {
+            ...STYLE,
+            accent: '#ff0000',
+            width: 240,
+            height: 160,
+            fontScale: 2,
+          },
         }),
       ],
       [],
     )
 
-    const inline = cards(layer)[0]?.style
+    const inline = mounts(layer)[0]?.style
     expect(inline?.getPropertyValue('--tp-accent')).toBe('#ff0000')
     expect(inline?.getPropertyValue('--tp-width')).toBe('240px')
+    expect(inline?.getPropertyValue('--tp-height')).toBe('160px')
     expect(inline?.getPropertyValue('--tp-font-size')).toBe('22.0px')
     layer.dispose()
   })
@@ -296,7 +326,7 @@ describe('变体', () => {
       [],
     )
 
-    expect(cards(layer)[0]?.style.getPropertyValue('--tp-accent')).toBe(
+    expect(mounts(layer)[0]?.style.getPropertyValue('--tp-accent')).toBe(
       'var(--accent-primary)',
     )
     layer.dispose()

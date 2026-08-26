@@ -79,6 +79,75 @@ describe('信息牌', () => {
     }).fields
     expect(fields.map((item) => item.decimals)).toEqual([3, 10, null])
   })
+
+  // ⚠ 旧配置里没有这几个键：缺省不对的话，一次保存就把存量牌的观感全改了
+  it('版式与装饰缺省是单列、标准密度、不带装饰', () => {
+    const style = panel({}).style
+    expect(style.height).toBe(0)
+    expect(style.columns).toBe(1)
+    expect(style.density).toBe('normal')
+    expect(style.scan).toBe(false)
+    expect(style.corners).toBe(false)
+    expect(style.grid).toBe(false)
+  })
+
+  it('列数与高度夹进上下限，不认识的密度回落', () => {
+    expect(panel({ style: { columns: 99 } }).style.columns).toBe(4)
+    expect(panel({ style: { columns: 0 } }).style.columns).toBe(1)
+    expect(panel({ style: { height: -20 } }).style.height).toBe(0)
+    expect(panel({ style: { height: 9999 } }).style.height).toBe(1200)
+    expect(panel({ style: { density: 'airy' } }).style.density).toBe('normal')
+  })
+
+  it('副标题与页脚缺省为空串，两端空白去掉', () => {
+    expect(panel({}).subtitle).toBe('')
+    expect(panel({}).footnote).toBe('')
+    expect(panel({ subtitle: '  SECTOR 04  ' }).subtitle).toBe('SECTOR 04')
+  })
+
+  // ⚠ 换画法不改行数：八种画法都只吃一个值，既有绑定不会跟着错位
+  it('字段画法缺省是文本，不认识的回落到文本', () => {
+    const fields = panel({
+      fields: [{}, { kind: 'radar' }, { kind: 'gauge' }],
+    }).fields
+    expect(fields.map((item) => item.kind)).toEqual(['text', 'text', 'gauge'])
+  })
+
+  it('量程缺省 0–100，给了就照给的来', () => {
+    expect(panel({ fields: [{}] }).fields[0]?.min).toBe(0)
+    expect(panel({ fields: [{}] }).fields[0]?.max).toBe(100)
+    const ranged = panel({ fields: [{ min: 20, max: 40 }] }).fields[0]
+    expect([ranged?.min, ranged?.max]).toEqual([20, 40])
+  })
+
+  // ⚠ 颠倒的量程不纠正：改成合法值等于替用户猜他要哪一头，而图形会照着猜的画
+  it('颠倒的量程原样留着，交给配置体检去报', () => {
+    const built = panel({ fields: [{ min: 80, max: 20 }] }).fields[0]
+    expect([built?.min, built?.max]).toEqual([80, 20])
+  })
+
+  it('阈值档缺 at 的丢掉，缺 id 的按下标铸一个，超上限截断', () => {
+    const levels = panel({
+      fields: [
+        {
+          levels: [{ tone: 'danger' }, { at: 60 }, { at: 80, tone: 'danger' }],
+        },
+      ],
+    }).fields[0]?.levels
+    expect(levels?.map((item) => item.at)).toEqual([60, 80])
+    // ⚠ 铸出来的 id 按**原始下标**走，丢掉的那一档不让后面的整体前移：
+    //   同一份输入永远得到同一批 id，重跑一次归一化不会换一套列表键
+    expect(levels?.map((item) => item.id)).toEqual(['level-1', 'level-2'])
+    expect(levels?.[0]?.tone).toBe('warning')
+  })
+
+  // ⚠ 归一化偷偷重排会让用户改一个数字、整列跟着跳位；取档本就与先后无关
+  it('阈值档不重排，原样保留文档序', () => {
+    const levels = panel({
+      fields: [{ levels: [{ at: 80 }, { at: 20 }, { at: 50 }] }],
+    }).fields[0]?.levels
+    expect(levels?.map((item) => item.at)).toEqual([80, 20, 50])
+  })
 })
 
 describe('扁平化后的文档序', () => {

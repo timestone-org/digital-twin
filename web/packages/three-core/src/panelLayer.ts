@@ -5,39 +5,34 @@
  * 正对屏幕，于是「随模型缩放」与「钉死朝向」两件事都做不到。换成 CSS3D 之后
  * DOM 真进 3D 空间，代价是它与 WebGL 几何之间没有深度遮挡——牌永远画在模型
  * 之上，被挡住的牌也看得见。
- * ⚠ 全部文本走 `textContent`——牌名、字段标签、单位与静态文案都是用户可控文本，
- * 拼进 `innerHTML` 就是一个注入点（code-style-typescript §10）。
  * ⚠ 本层不建任何 GPU 几何：卡片是 DOM。要清的只有 DOM，但它一定要清——
  * 从场景图上摘下对象带不走它的元素。
+ * ⚠ 卡片长什么样全在 `panelCard` 与 `styles/panel.scss`：这里只管落点、朝向、
+ * 尺寸与显隐这四样与三维有关的事。
  */
 import type {
   TwinAnchor,
   TwinBillboardMode,
   TwinPanel,
-  TwinPanelField,
-  TwinPanelValues,
   Vec3,
 } from '@dt/twin-config'
-import { EMPTY_PANEL_VALUES, formatValueText } from '@dt/twin-config'
+import { EMPTY_PANEL_VALUES } from '@dt/twin-config'
+import type { TwinPanelValues } from '@dt/twin-config'
 import * as THREE from 'three'
 import { CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js'
 
 import { distanceResolver, type DistanceContext } from './distanceContext'
 import { resolveVisibility } from './distanceRules'
-
-/** 没有读数、也没有静态文案时的占位符 */
-const NO_VALUE_TEXT = '—'
-
-interface FieldEntry {
-  field: TwinPanelField
-  valueKey: string
-  valueEl: HTMLElement
-}
+import {
+  buildPanelCard,
+  paintPanelField,
+  type PanelFieldView,
+} from './panelCard'
 
 interface PanelEntry {
   panel: TwinPanel
   label: CSS3DObject
-  fields: FieldEntry[]
+  fields: PanelFieldView[]
 }
 
 /** 牌的落点已经在 `label.position` 上，距离规则直接读它，不再算第二遍。 */
@@ -58,58 +53,6 @@ function positionOf(panel: TwinPanel, anchors: readonly TwinAnchor[]): Vec3 {
     base[1] + panel.offset[1],
     base[2] + panel.offset[2],
   ]
-}
-
-/**
- * 一个字段当前该显示什么：有实时值用实时值，没有就退回静态文案或占位符。
- *
- * ⚠ 没有读数时也要把前缀与单位拼上：编辑器里五路实时值恒空，只显示一个占位符
- * 的话，用户配了前缀和单位完全看不到反馈，只能保存后到大屏上去猜配对没配对。
- * 运行态同理——绑定还没上数的那一段，牌上至少要看得出这一格是什么量。
- */
-function fieldText(entry: FieldEntry, values: TwinPanelValues): string {
-  const live = values[entry.valueKey]
-  if (live !== undefined) {
-    const text = formatValueText(entry.field, live.value)
-    if (text !== '') return text
-  }
-  const reading =
-    entry.field.staticText === '' ? NO_VALUE_TEXT : entry.field.staticText
-  return [entry.field.prefix, reading, entry.field.unit]
-    .filter((part) => part !== '')
-    .join(' ')
-}
-
-/** 卡片基准字号，px；`fontScale` 乘在它上面。 */
-const BASE_FONT_PX = 11
-
-/**
- * 把这张牌的个性写成 CSS 变量，观感交给样式表按变体分。
- *
- * ⚠ 绝不在这里内联 border / background / border-radius / padding：内联样式的
- * 优先级压过样式表里的任何选择器，五种变体会全部长成一个样——这正是它们
- * 之前「配了不生效」的原因。逐牌不同的只有取色、宽度与字号，一律走变量。
- */
-function styleCard(element: HTMLElement, panel: TwinPanel): void {
-  const { style } = panel
-  element.classList.add('twin-panel', `twin-panel--${style.variant}`)
-  element.style.setProperty('--tp-accent', cssColor(style.accent))
-  element.style.setProperty(
-    '--tp-bg',
-    style.background === ''
-      ? 'var(--surface-overlay)'
-      : cssColor(style.background),
-  )
-  element.style.setProperty(
-    '--tp-font-size',
-    `${(BASE_FONT_PX * style.fontScale).toFixed(1)}px`,
-  )
-  if (style.width > 0) {
-    element.style.setProperty('--tp-width', `${style.width}px`)
-  }
-  element.dataset.orient = style.orient
-  if (style.pulse) element.dataset.pulse = 'on'
-  if (style.animate) element.dataset.animate = 'on'
 }
 
 /** 竖轴，`horizontal` 档绕它转。 */
@@ -143,27 +86,6 @@ function applyBillboard(
     toCamera.normalize(),
   )
   label.up.copy(UP)
-}
-
-/** 色规格 → 能写进 style 的字符串；token 要包一层 `var()`。 */
-function cssColor(spec: string): string {
-  return spec.startsWith('--') ? `var(${spec})` : spec
-}
-
-function buildRow(field: TwinPanelField): {
-  row: HTMLElement
-  valueEl: HTMLElement
-} {
-  const row = document.createElement('div')
-  row.className = 'twin-panel__row'
-  const labelEl = document.createElement('span')
-  labelEl.className = 'twin-panel__label'
-  labelEl.textContent = field.label
-  const valueEl = document.createElement('span')
-  valueEl.className = 'twin-panel__value'
-  valueEl.textContent = NO_VALUE_TEXT
-  row.append(labelEl, valueEl)
-  return { row, valueEl }
 }
 
 /**
@@ -246,8 +168,8 @@ export class PanelLayer {
    */
   setValues(values: TwinPanelValues): void {
     for (const entry of this.entries) {
-      for (const field of entry.fields) {
-        field.valueEl.textContent = fieldText(field, values)
+      for (const view of entry.fields) {
+        paintPanelField(view, values)
       }
     }
   }
@@ -277,28 +199,15 @@ export class PanelLayer {
     panel: TwinPanel,
     anchors: readonly TwinAnchor[],
   ): PanelEntry {
-    const element = document.createElement('div')
-    styleCard(element, panel)
-    if (panel.name !== '') {
-      const title = document.createElement('div')
-      title.className = 'twin-panel__title'
-      title.textContent = panel.name
-      element.append(title)
-    }
-    const fields: FieldEntry[] = []
-    for (const field of panel.fields) {
-      const { row, valueEl } = buildRow(field)
-      element.append(row)
-      fields.push({ field, valueKey: `${panel.id}::${field.key}`, valueEl })
-    }
-    const label = new CSS3DObject(element)
+    const card = buildPanelCard(panel)
+    const label = new CSS3DObject(card.mount)
     label.position.set(...positionOf(panel, anchors))
     label.scale.setScalar(this.baseScale * panel.style.scale)
     this.group.add(label)
-    return { panel, label, fields }
+    return { panel, label, fields: card.fields }
   }
 
-  // ⚠ CSS2D 的 DOM 元素挂在标签层容器里，从场景图上摘下对象带不走它——
+  // ⚠ CSS3D 的 DOM 元素挂在标签层容器里，从场景图上摘下对象带不走它——
   // 漏了这一步，卸载后卡片还留在页面上飘着
   private clear(): void {
     for (const entry of this.entries) {

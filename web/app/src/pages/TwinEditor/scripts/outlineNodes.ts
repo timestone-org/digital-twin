@@ -134,6 +134,7 @@ export const TWIN_ISSUE_LABELS: Readonly<
   'roam-too-short': '漫游飞不起来',
   'tint-no-stops': '染色没档位',
   'tint-empty-range': '档位区间为空',
+  'panel-empty-range': '图形量程为空',
 }
 
 /** 一行渲染所需的、与实体种类无关的那几个值。 */

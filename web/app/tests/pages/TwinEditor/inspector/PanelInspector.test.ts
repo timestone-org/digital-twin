@@ -36,6 +36,8 @@ function panelOf(over: Partial<TwinPanel> = {}): TwinPanel {
   return {
     id: 'p1',
     name: '一号牌',
+    subtitle: '',
+    footnote: '',
     anchorId: '',
     position: [0, 0, 0],
     offset: [0, 1, 0],
@@ -47,6 +49,10 @@ function panelOf(over: Partial<TwinPanel> = {}): TwinPanel {
         prefix: '',
         decimals: null,
         staticText: '',
+        kind: 'text',
+        min: 0,
+        max: 100,
+        levels: [],
       },
     ],
     billboard: 'face',
@@ -56,6 +62,12 @@ function panelOf(over: Partial<TwinPanel> = {}): TwinPanel {
       accent: '--accent-primary',
       background: '',
       width: 0,
+      height: 0,
+      columns: 1,
+      density: 'normal',
+      scan: false,
+      corners: false,
+      grid: false,
       fontScale: 1,
       scale: 1,
       animate: false,
@@ -80,10 +92,17 @@ function written(wrapper: Wrapper): TwinPanel {
   return events[0][0] as TwinPanel
 }
 
+/**
+ * ⚠ 认 `label` 也认 `ariaLabel`：DtSwitch 有可见标签时用前者，没有时才用后者，
+ * 只认一边会让「把裸开关换成带标签的开关」这种纯观感改动把用例整片打红。
+ */
 function switchByLabel(wrapper: Wrapper, label: string) {
   const found = wrapper
     .findAllComponents(DtSwitch)
-    .find((item) => item.props('ariaLabel') === label)
+    .find(
+      (item) =>
+        item.props('label') === label || item.props('ariaLabel') === label,
+    )
   if (!found) throw new Error(`未找到开关：${label}`)
   return found
 }
