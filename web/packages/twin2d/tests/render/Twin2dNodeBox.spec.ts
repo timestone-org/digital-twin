@@ -14,7 +14,7 @@ import Twin2dNodeBox from '../../src/render/Twin2dNodeBox.vue'
 import Twin2dPrimView from '../../src/render/Twin2dPrimView.vue'
 import type { Twin2dSlotValues } from '../../src/expr'
 import type { Twin2dStatus } from '../../src/kinds'
-import type { Twin2dSlotRead } from '../../src/paintText'
+import type { Twin2dIconResolver, Twin2dSlotRead } from '../../src/paintText'
 import type {
   Twin2dNode,
   Twin2dNodeStyle,
@@ -23,6 +23,7 @@ import type {
 import type {
   Twin2dBorder,
   Twin2dBoxPrim,
+  Twin2dIcoPrim,
   Twin2dLayout,
   Twin2dPrim as Twin2dPrimNode,
   Twin2dPrimBase,
@@ -99,6 +100,17 @@ function txtOf(patch: Partial<Twin2dTxtPrim> = {}): Twin2dTxtPrim {
     titleAttr: false,
     shadows: [],
     outline: null,
+    ...patch,
+  }
+}
+
+function icoOf(patch: Partial<Twin2dIcoPrim> = {}): Twin2dIcoPrim {
+  return {
+    ...BASE,
+    id: 'glyph',
+    kind: 'ico',
+    src: { kind: 'sprite', id: 'ico-hx' },
+    color: 'currentColor',
     ...patch,
   }
 }
@@ -203,6 +215,7 @@ interface RenderOptions {
   status?: Twin2dStatus | null
   slotValues?: Twin2dSlotValues
   readSlot?: SlotReader
+  resolveIcon?: Twin2dIconResolver
   idPrefix?: string
 }
 
@@ -211,7 +224,7 @@ interface RenderOptions {
  * 那正是这份用例要分开的两种情形。
  */
 function render(options: RenderOptions = {}) {
-  const { readSlot, ...rest } = options
+  const { readSlot, resolveIcon, ...rest } = options
   return mount(Twin2dNodeBox, {
     props: {
       node: rest.node ?? nodeOf(),
@@ -220,6 +233,7 @@ function render(options: RenderOptions = {}) {
       ...(rest.slotValues === undefined ? {} : { slotValues: rest.slotValues }),
       ...(rest.idPrefix === undefined ? {} : { idPrefix: rest.idPrefix }),
       ...(readSlot === undefined ? {} : { readSlot }),
+      ...(resolveIcon === undefined ? {} : { resolveIcon }),
     },
   })
 }
@@ -624,5 +638,24 @@ describe('两个注入槽', () => {
 
   it('label 档读的是节点显示名', () => {
     expect(render().text()).toBe('一号换热站')
+  })
+
+  it('素材解析槽一路传到 ico 图元', () => {
+    const nodeStyle = styleOf({
+      prims: [icoOf({ src: { kind: 'asset', ref: 'asset:7f3a' } })],
+    })
+
+    const wrapper = render({ nodeStyle, resolveIcon: (ref) => `/oss/${ref}` })
+
+    expect(wrapper.get('img').attributes('src')).toBe('/oss/asset:7f3a')
+  })
+
+  // 未注入时那一档整枝不渲染：留一个空 src 会让浏览器把当前页地址再请求一遍
+  it('未注入素材解析槽时 asset 档不渲染', () => {
+    const nodeStyle = styleOf({
+      prims: [icoOf({ src: { kind: 'asset', ref: 'asset:7f3a' } })],
+    })
+
+    expect(render({ nodeStyle }).find('img').exists()).toBe(false)
   })
 })
