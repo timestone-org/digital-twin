@@ -4,9 +4,12 @@
 可能落到另一个副本上；起后台任务的话，那个副本上的任务在关停时被 drain 掉，
 而用户看到的是「一直转圈」。
 
-⚠ `device_code` 与 PKCE 的 verifier 是密钥态，**一个字都不下发**：交给浏览器的
-只是一个不可猜的句柄。它们连同轮询间隔一起放 Redis，TTL 就是上游给的有效期——
-过期即消失，不用自己清。
+⚠ `device_auth_id` 是密钥态，**一个字都不下发**：交给浏览器的只是一个不可猜的
+句柄。它连同用户码与轮询间隔一起放 Redis，TTL 就是上游给的有效期——过期即消失，
+不用自己清。
+
+⚠ PKCE 的 verifier **不在我们手上**：这一路是服务端生成、轮询成功时连着授权码
+一起给回来的，所以这里没有可存的东西（见 `oauth_client` 文件头第 3 条）。
 """
 
 import secrets
@@ -15,10 +18,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
 from ai_assistant.apps.credential.errors import LoginSessionExpired
-from ai_assistant.apps.credential.services.oauth_client import (
-    OAuthClient,
-    make_pkce_pair,
-)
+from ai_assistant.apps.credential.services.oauth_client import OAuthClient
 from ai_assistant.apps.credential.services.tokens import TokenBundle
 from lib.cache import CacheLike
 from lib.logging import get_logger
@@ -88,18 +88,18 @@ class DeviceLogin:
 
         Args: provider。
         """
-        verifier, challenge = make_pkce_pair()
-        started = await self._oauth.start_device_code(challenge)
+        started = await self._oauth.start_device_code()
         ref = secrets.token_urlsafe(_REF_BYTES)
         await self._cache.set_json(
             _key(ref),
             {
                 "provider": provider,
-                "device_code": started.device_code,
-                "verifier": verifier,
+                "device_auth_id": started.device_auth_id,
+                "user_code": started.user_code,
                 "interval_s": started.interval_s,
             },
-            ttl_s=started.expires_in_s,
+            # ⚠ TTL 至少一秒：上游给的是绝对时刻，算出来可能已经是 0
+            ttl_s=max(started.expires_in_s, 1),
         )
         _logger.info(
             "device_login_started", "设备码登录已开始", provider=provider
@@ -121,14 +121,14 @@ class DeviceLogin:
         if pending is None:
             raise LoginSessionExpired("这次登录已经过期，请重新开始")
         polled = await self._oauth.poll_device_code(
-            pending.device_code, pending.interval_s
+            device_auth_id=pending.device_auth_id,
+            user_code=pending.user_code,
+            interval_s=pending.interval_s,
         )
-        if polled.authorization_code is None:
+        if polled.grant is None:
             await self._keep(ref, pending, polled.interval_s)
             return LoginProgress(is_done=False, interval_s=polled.interval_s)
-        bundle = await self._oauth.exchange_code(
-            polled.authorization_code, pending.verifier
-        )
+        bundle = await self._oauth.exchange_code(polled.grant)
         await self._store.save(
             pending.provider,
             bundle,
@@ -157,8 +157,8 @@ class DeviceLogin:
             _key(ref),
             {
                 "provider": pending.provider,
-                "device_code": pending.device_code,
-                "verifier": pending.verifier,
+                "device_auth_id": pending.device_auth_id,
+                "user_code": pending.user_code,
                 "interval_s": interval_s,
             },
             # 剩余有效期这里拿不到，续一个够长的窗口；上游那边到点自己会拒
@@ -173,8 +173,8 @@ _KEEP_TTL_S = 900
 @dataclass(frozen=True)
 class _Pending:
     provider: str
-    device_code: str
-    verifier: str
+    device_auth_id: str
+    user_code: str
     interval_s: int
 
 
@@ -189,18 +189,18 @@ def _read_pending(given: Any) -> _Pending | None:
     # `dict[Unknown, Unknown]`，直接读会把未知类型一路带进业务层
     body = cast("dict[str, Any]", given)
     provider = body.get("provider")
-    device_code = body.get("device_code")
-    verifier = body.get("verifier")
+    device_auth_id = body.get("device_auth_id")
+    user_code = body.get("user_code")
     if not (
         isinstance(provider, str)
-        and isinstance(device_code, str)
-        and isinstance(verifier, str)
+        and isinstance(device_auth_id, str)
+        and isinstance(user_code, str)
     ):
         return None
     interval = body.get("interval_s")
     return _Pending(
         provider=provider,
-        device_code=device_code,
-        verifier=verifier,
+        device_auth_id=device_auth_id,
+        user_code=user_code,
         interval_s=interval if isinstance(interval, int) else 5,
     )

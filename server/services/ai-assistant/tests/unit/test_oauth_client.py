@@ -1,8 +1,8 @@
-"""设备码那三步与刷新。
+"""设备码那两跳与刷新。
 
-守的全是「照着协议走，不然会被限流或静默失败」：`slow_down` 必须把间隔抬上去
-（RFC 8628 §3.5），4xx 的体必须读出来（OAuth 把「用户还没点完」也放在错误响应
-里），刷新回来没带新的 refresh_token 时要沿用手上那一份。
+⚠ 这一族用例钉的是**实测出来的线形**，不是 RFC 8628：那两跳是供应商自己的一套，
+四处与标准不同（JSON 体、`device_auth_id`、verifier 由服务端给、地址是常量）。
+照标准写的实现在这里全红——这正是它们存在的理由。
 """
 
 import base64
@@ -17,10 +17,31 @@ from ai_assistant.apps.credential.errors import (
     UpstreamUnavailable,
 )
 from ai_assistant.apps.credential.services.oauth_client import (
-    SLOW_DOWN_STEP_S,
+    VERIFICATION_URI,
+    DeviceCodeGrant,
     OAuthClient,
-    make_pkce_pair,
 )
+
+
+def _grant() -> DeviceCodeGrant:
+    return DeviceCodeGrant(
+        authorization_code="code-1", code_verifier="ver-from-server"
+    )
+
+
+START_BODY = {
+    "device_auth_id": "deviceauth_abc123",
+    "user_code": "D1DS-ER4CN",
+    # ⚠ 上游给的是字符串，不是数字
+    "interval": "5",
+    # ⚠ 给的是绝对时刻，不是 expires_in
+    "expires_at": "2099-01-01T00:00:00+00:00",
+}
+GRANT_BODY = {
+    "authorization_code": "code-1",
+    "code_challenge": "chal",
+    "code_verifier": "ver-from-server",
+}
 
 
 def _client(handler: httpx.MockTransport) -> OAuthClient:
@@ -37,6 +58,25 @@ def _replies(*bodies: tuple[int, dict[str, Any]]) -> httpx.MockTransport:
     return httpx.MockTransport(handle)
 
 
+def _recorded(
+    seen: list[httpx.Request], *bodies: tuple[int, dict[str, Any]]
+) -> httpx.MockTransport:
+    calls = iter(bodies)
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        status, body = next(calls)
+        return httpx.Response(status, json=body)
+
+    return httpx.MockTransport(handle)
+
+
+def _pending(code: str = "deviceauth_authorization_pending") -> dict[str, Any]:
+    return {
+        "error": {"message": "Device authorization is pending.", "code": code}
+    }
+
+
 def _id_token(claims: dict[str, Any]) -> str:
     def part(body: dict[str, Any]) -> str:
         raw = json.dumps(body).encode()
@@ -45,58 +85,125 @@ def _id_token(claims: dict[str, Any]) -> str:
     return f"{part({'alg': 'none'})}.{part(claims)}.sig"
 
 
-async def test_a_start_carries_the_user_code_and_interval() -> None:
+async def test_the_device_code_hop_posts_json_not_a_form() -> None:
+    # 发表单收到的是「Input should be a valid dictionary or object」，
+    # 与「设备码流程不可用」毫无关系
+    seen: list[httpx.Request] = []
+    client = _client(_recorded(seen, (200, START_BODY)))
+    await client.start_device_code()
+    assert seen[0].headers["content-type"].startswith("application/json")
+    assert json.loads(seen[0].content) == {
+        "client_id": "app_EMoamEEZ73f0CkXaXp7hrann"
+    }
+
+
+async def test_a_start_reads_the_handle_the_interval_and_the_deadline() -> None:
+    client = _client(_replies((200, START_BODY)))
+    started = await client.start_device_code()
+    assert started.device_auth_id == "deviceauth_abc123"
+    assert started.user_code == "D1DS-ER4CN"
+    # 字符串的 interval 要收成数字
+    assert started.interval_s == 5
+    # 绝对时刻要换成还剩多少秒；当成秒数用的话界面上是二十亿秒的倒计时
+    assert started.expires_in_s > 0
+    # 响应里没有这一格，地址是常量
+    assert started.verification_uri == VERIFICATION_URI
+
+
+async def test_a_start_without_a_handle_carries_the_upstream_reason() -> None:
+    # 不带上游那句话的话，任何一种上游变更都收敛成同一句「请稍后重试」
     client = _client(
-        _replies(
+        _replies((200, {"error": {"message": "client_id 不对", "code": "x"}}))
+    )
+    with pytest.raises(LoginRejected, match="client_id 不对"):
+        await client.start_device_code()
+
+
+async def test_the_poll_hop_sends_the_handle_and_the_user_code() -> None:
+    seen: list[httpx.Request] = []
+    client = _client(_recorded(seen, (200, GRANT_BODY)))
+    await client.poll_device_code(
+        device_auth_id="deviceauth_abc123", user_code="D1DS-ER4CN", interval_s=5
+    )
+    body = json.loads(seen[0].content)
+    # ⚠ 少一格就是 422，而那条 422 里不会提到少的是哪一格
+    assert body["device_auth_id"] == "deviceauth_abc123"
+    assert body["user_code"] == "D1DS-ER4CN"
+
+
+async def test_a_403_means_still_waiting_not_a_failure() -> None:
+    # 上游用 403/404 表示等待。当成失败的话，人还没点完登录页就红了
+    client = _client(_replies((403, _pending())))
+    polled = await client.poll_device_code(
+        device_auth_id="d", user_code="u", interval_s=5
+    )
+    assert polled.grant is None
+
+
+async def test_a_404_means_still_waiting_too() -> None:
+    client = _client(_replies((404, {})))
+    polled = await client.poll_device_code(
+        device_auth_id="d", user_code="u", interval_s=5
+    )
+    assert polled.grant is None
+
+
+async def test_the_pending_code_in_the_body_also_counts() -> None:
+    client = _client(_replies((400, _pending())))
+    polled = await client.poll_device_code(
+        device_auth_id="d", user_code="u", interval_s=5
+    )
+    assert polled.grant is None
+
+
+async def test_a_real_failure_is_rejected_with_the_upstream_words() -> None:
+    client = _client(
+        _replies((400, {"error": {"message": "已过期", "code": "expired"}}))
+    )
+    with pytest.raises(LoginRejected, match="已过期"):
+        await client.poll_device_code(
+            device_auth_id="d", user_code="u", interval_s=5
+        )
+
+
+async def test_a_finished_poll_hands_back_the_servers_verifier() -> None:
+    # 本地另造一份 verifier 拿去换，换到的是一条 invalid_grant
+    client = _client(_replies((200, GRANT_BODY)))
+    polled = await client.poll_device_code(
+        device_auth_id="d", user_code="u", interval_s=5
+    )
+    assert polled.grant is not None
+    assert polled.grant.code_verifier == "ver-from-server"
+
+
+async def test_the_exchange_hop_posts_a_form_not_json() -> None:
+    # 这一跳是标准 OAuth，与上面两跳不同口径；顺手统一会让它 415
+    seen: list[httpx.Request] = []
+    client = _client(
+        _recorded(
+            seen,
+            (200, GRANT_BODY),
             (
                 200,
                 {
-                    "device_code": "dc-1",
-                    "user_code": "ABCD-1234",
-                    "verification_uri": "https://example.test/activate",
-                    "interval": 7,
-                    "expires_in": 900,
+                    "access_token": "at-1",
+                    "refresh_token": "rt-1",
+                    "expires_in": 3600,
                 },
-            )
+            ),
         )
     )
-    started = await client.start_device_code("challenge")
-    assert started.user_code == "ABCD-1234"
-    assert started.interval_s == 7
-    assert started.expires_in_s == 900
-
-
-async def test_a_start_without_a_user_code_is_rejected() -> None:
-    client = _client(_replies((200, {"device_code": "dc-1"})))
-    with pytest.raises(LoginRejected):
-        await client.start_device_code("challenge")
-
-
-async def test_a_pending_poll_is_not_a_failure() -> None:
-    # OAuth 把「用户还没点完」放在 4xx 里；当成失败的话登录永远开不了头
-    client = _client(_replies((400, {"error": "authorization_pending"})))
-    polled = await client.poll_device_code("dc-1", 5)
-    assert polled.authorization_code is None
-    assert polled.interval_s == 5
-
-
-async def test_slow_down_raises_the_interval() -> None:
-    # 照原间隔接着打的话，上游会把这台机器限流
-    client = _client(_replies((400, {"error": "slow_down"})))
-    polled = await client.poll_device_code("dc-1", 5)
-    assert polled.interval_s == 5 + SLOW_DOWN_STEP_S
-
-
-async def test_a_terminal_error_is_rejected() -> None:
-    client = _client(_replies((400, {"error": "access_denied"})))
-    with pytest.raises(LoginRejected):
-        await client.poll_device_code("dc-1", 5)
-
-
-async def test_a_finished_poll_hands_back_the_code() -> None:
-    client = _client(_replies((200, {"authorization_code": "code-1"})))
-    polled = await client.poll_device_code("dc-1", 5)
-    assert polled.authorization_code == "code-1"
+    polled = await client.poll_device_code(
+        device_auth_id="d", user_code="u", interval_s=5
+    )
+    assert polled.grant is not None
+    await client.exchange_code(polled.grant)
+    assert (
+        seen[1]
+        .headers["content-type"]
+        .startswith("application/x-www-form-urlencoded")
+    )
+    assert b"code_verifier=ver-from-server" in seen[1].content
 
 
 async def test_an_exchange_reads_the_account_out_of_the_id_token() -> None:
@@ -121,7 +228,9 @@ async def test_an_exchange_reads_the_account_out_of_the_id_token() -> None:
             )
         )
     )
-    bundle = await client.exchange_code("code-1", "verifier")
+    bundle = await client.exchange_code(
+        _grant(),
+    )
     assert bundle.account_id == "acc-9"
     assert bundle.plan_type == "pro"
 
@@ -132,7 +241,7 @@ async def test_a_token_without_a_lifetime_is_rejected() -> None:
         _replies((200, {"access_token": "at-1", "refresh_token": "rt-1"}))
     )
     with pytest.raises(LoginRejected):
-        await client.exchange_code("code-1", "verifier")
+        await client.exchange_code(_grant())
 
 
 async def test_a_refresh_keeps_the_old_refresh_token() -> None:
@@ -143,40 +252,6 @@ async def test_a_refresh_keeps_the_old_refresh_token() -> None:
     bundle = await client.refresh("rt-1")
     assert bundle.access_token == "at-2"
     assert bundle.refresh_token == "rt-1"
-
-
-async def test_a_dead_endpoint_is_unavailable_not_rejected() -> None:
-    def blow_up(_request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("connection refused")
-
-    client = _client(httpx.MockTransport(blow_up))
-    with pytest.raises(UpstreamUnavailable):
-        await client.poll_device_code("dc-1", 5)
-
-
-def test_a_pkce_pair_is_url_safe_and_unpadded() -> None:
-    verifier, challenge = make_pkce_pair()
-    assert "=" not in verifier
-    assert "=" not in challenge
-    assert verifier != challenge
-
-
-async def test_a_success_body_that_is_not_json_is_rejected() -> None:
-    def html(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, text="<html>反代插了一段</html>")
-
-    client = _client(httpx.MockTransport(html))
-    with pytest.raises(LoginRejected):
-        await client.poll_device_code("dc-1", 5)
-
-
-async def test_an_error_body_that_is_not_json_is_unavailable() -> None:
-    def gateway(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(502, text="bad gateway")
-
-    client = _client(httpx.MockTransport(gateway))
-    with pytest.raises(UpstreamUnavailable):
-        await client.poll_device_code("dc-1", 5)
 
 
 async def test_an_unreadable_id_token_does_not_fail_the_login() -> None:
@@ -194,7 +269,7 @@ async def test_an_unreadable_id_token_does_not_fail_the_login() -> None:
             )
         )
     )
-    bundle = await client.exchange_code("code-1", "verifier")
+    bundle = await client.exchange_code(_grant())
     assert bundle.account_id is None
 
 
@@ -212,17 +287,51 @@ async def test_an_id_token_without_our_namespace_yields_no_account() -> None:
             )
         )
     )
-    bundle = await client.exchange_code("code-1", "verifier")
+    bundle = await client.exchange_code(_grant())
     assert bundle.plan_type is None
 
 
-async def test_an_expired_device_code_says_so() -> None:
-    client = _client(_replies((400, {"error": "expired_token"})))
-    with pytest.raises(LoginRejected, match="过期"):
-        await client.poll_device_code("dc-1", 5)
+async def test_a_body_that_is_not_json_still_lands_a_sane_error() -> None:
+    def html(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="<html>反代插了一段</html>")
 
-
-async def test_an_unknown_error_still_reads_as_rejected() -> None:
-    client = _client(_replies((400, {"error": "什么新花样"})))
+    client = _client(httpx.MockTransport(html))
     with pytest.raises(LoginRejected):
-        await client.poll_device_code("dc-1", 5)
+        await client.start_device_code()
+
+
+async def test_a_dead_endpoint_is_unavailable_not_rejected() -> None:
+    def blow_up(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    client = _client(httpx.MockTransport(blow_up))
+    with pytest.raises(UpstreamUnavailable):
+        await client.start_device_code()
+
+
+async def test_a_dead_endpoint_on_the_poll_hop_is_unavailable_too() -> None:
+    def blow_up(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    client = _client(httpx.MockTransport(blow_up))
+    with pytest.raises(UpstreamUnavailable):
+        await client.poll_device_code(
+            device_auth_id="d", user_code="u", interval_s=5
+        )
+
+
+async def test_a_missing_deadline_falls_back_to_a_usable_window() -> None:
+    client = _client(_replies((200, {"device_auth_id": "d", "user_code": "u"})))
+    started = await client.start_device_code()
+    assert started.expires_in_s > 0
+
+
+async def test_a_garbled_deadline_falls_back_too() -> None:
+    client = _client(
+        _replies(
+            (200, {**START_BODY, "expires_at": "不是时间", "interval": "x"})
+        )
+    )
+    started = await client.start_device_code()
+    assert started.expires_in_s > 0
+    assert started.interval_s == 5

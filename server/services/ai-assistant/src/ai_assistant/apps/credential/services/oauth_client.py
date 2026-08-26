@@ -1,20 +1,24 @@
 """跟上游 OAuth 端点说话的那一层：设备码三步与刷新。
 
-⚠ 端点地址、client_id、scope 全部**从 `langchain_openai.chatgpt_oauth` 取**，
-不在这里抄一份字面量：抄下来的那份会在上游改地址时静默失效，而现象是
-「登录页转圈转到超时」。契约用例钉住这几个名字还在不在。
+⚠ 设备码那两跳**不是 RFC 8628**，是供应商自己的一套，与标准差四处（每一处都是
+实测出来的；照 RFC 或照 `langchain_openai.chatgpt_oauth` 里那份写，一定不通）：
 
-⚠ 上游那个 `login_chatgpt_device` 用不了：它是同步的、`time.sleep` 轮询、
-最后写文件——三条都塞不进一个异步 Web 服务。协议照它的，实现是我们自己的。
+1. 体是 **JSON** 不是表单编码。发表单收到的是一句「Input should be a valid
+   dictionary or object」，与「设备码流程不可用」毫无关系。
+2. 句柄叫 **`device_auth_id`**，不叫 `device_code`。
+3. **PKCE 的 verifier 由服务端生成**，在轮询成功那一下连着授权码一起给回来——
+   本地先造一份再拿去换，换到的是一条 `invalid_grant`。
+4. 响应里**没有 `verification_uri`**，让人打开的地址是个常量
+   （`{issuer}/codex/device`）。
 
-⚠ `slow_down` 必须把间隔抬上去（RFC 8628 §3.5）。照原间隔接着打的话，
-上游会把这台机器限流，而那之后所有人的登录都开不了头。
+⚠ client_id 与端点地址仍从 `langchain_openai.chatgpt_oauth` 取，不抄字面量：
+那几个它是对的，抄下来的那份会在上游改地址时静默失效。
+
+⚠ 刷新与授权码交换走的是标准 OAuth 的 `/oauth/token`，那一条**是表单编码**。
+两半各按各的口径，别顺手统一。
 """
 
-import base64
 import datetime as dt
-import hashlib
-import secrets
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -43,17 +47,22 @@ from ai_assistant.apps.credential.services.tokens import (
 HTTP_TIMEOUT_S = 10.0
 # 上游没给间隔时按这个数轮询
 DEFAULT_POLL_INTERVAL_S = 5
-# 收到 slow_down 时往上抬多少秒（RFC 8628 §3.5）
-SLOW_DOWN_STEP_S = 5
-# 这几档表示「用户还没点完」，不是失败
-_PENDING_ERRORS = frozenset({"authorization_pending", "slow_down"})
+# 上游没给有效期时按这个数倒计时
+DEFAULT_EXPIRES_IN_S = 900
+# 让人在浏览器里打开的那个地址。⚠ 是常量：设备码那一跳的响应里没有它
+VERIFICATION_URI = "https://auth.openai.com/codex/device"
+# 「用户还没点完」的两种表达：上游用 403/404 表示等待，同时在体里给这个码
+_PENDING_STATUSES = frozenset({403, 404})
+_PENDING_CODE = "deviceauth_authorization_pending"
+_HEADERS = {"Accept": "application/json"}
 
 
 @dataclass(frozen=True)
 class DeviceCodeStart:
     """设备码登录开了个头。"""
 
-    device_code: str
+    # ⚠ 是 `device_auth_id` 不是 `device_code`：名字对不上就一路 422
+    device_auth_id: str
     user_code: str
     verification_uri: str
     interval_s: int
@@ -61,10 +70,22 @@ class DeviceCodeStart:
 
 
 @dataclass(frozen=True)
-class DeviceCodePoll:
-    """轮询一次的结果。`authorization_code` 为空表示还没好。"""
+class DeviceCodeGrant:
+    """轮询到的授权。
 
-    authorization_code: str | None
+    ⚠ `code_verifier` 是**服务端给的**：本地另造一份拿去换，换到的是一条
+    `invalid_grant`，而那条错与「登录没完成」看着一模一样。
+    """
+
+    authorization_code: str
+    code_verifier: str
+
+
+@dataclass(frozen=True)
+class DeviceCodePoll:
+    """轮询一次的结果。`grant` 为空表示还没好。"""
+
+    grant: DeviceCodeGrant | None
     interval_s: int
 
 
@@ -75,65 +96,64 @@ class OAuthClient:
         """Args: client（外部注入，测试注假件）。"""
         self._client = client
 
-    async def start_device_code(self, challenge: str) -> DeviceCodeStart:
-        """要一个用户码与验证地址。
+    async def start_device_code(self) -> DeviceCodeStart:
+        """要一个用户码。
 
-        Args: challenge（PKCE 的 code_challenge）。
+        ⚠ 只带 client_id：PKCE 由服务端管，这里给了也没人看。
         """
-        body = await self._post(
+        body = await self._posted(
             CHATGPT_DEVICE_CODE_URL,
-            {
-                "client_id": CHATGPT_CLIENT_ID,
-                "scope": DEFAULT_SCOPE,
-                "code_challenge": challenge,
-                "code_challenge_method": "S256",
-            },
+            {"client_id": CHATGPT_CLIENT_ID},
+            is_form=False,
         )
         start = _read_start(body)
         if start is None:
-            raise LoginRejected("上游没给出可用的用户码，请稍后重试")
+            raise LoginRejected(_why(body, "上游没给出可用的用户码"))
         return start
 
     async def poll_device_code(
-        self, device_code: str, interval_s: int
+        self, *, device_auth_id: str, user_code: str, interval_s: int
     ) -> DeviceCodePoll:
         """问一次「用户点完了没」。
 
-        Args: device_code, interval_s（当前轮询间隔）。
+        Args: device_auth_id, user_code, interval_s（当前轮询间隔）。
         """
-        body = await self._post(
+        response = await self._send(
             CHATGPT_DEVICE_TOKEN_URL,
-            {"client_id": CHATGPT_CLIENT_ID, "device_code": device_code},
+            {
+                "client_id": CHATGPT_CLIENT_ID,
+                "device_auth_id": device_auth_id,
+                "user_code": user_code,
+            },
+            is_form=False,
         )
-        code = body.get("authorization_code")
-        if isinstance(code, str) and code:
-            return DeviceCodePoll(
-                authorization_code=code, interval_s=interval_s
-            )
-        error = body.get("error")
-        if isinstance(error, str) and error not in _PENDING_ERRORS:
-            raise LoginRejected(_rejection_of(error))
-        next_interval = (
-            interval_s + SLOW_DOWN_STEP_S
-            if error == "slow_down"
-            else interval_s
-        )
-        return DeviceCodePoll(authorization_code=None, interval_s=next_interval)
+        body = _read_body(response)
+        if response.is_success:
+            grant = _read_grant(body)
+            if grant is None:
+                raise LoginRejected(_why(body, "上游没给出可用的授权"))
+            return DeviceCodePoll(grant=grant, interval_s=interval_s)
+        if _is_pending(response.status_code, body):
+            return DeviceCodePoll(grant=None, interval_s=interval_s)
+        raise LoginRejected(_why(body, "登录没有完成，请重新开始"))
 
-    async def exchange_code(self, code: str, verifier: str) -> TokenBundle:
+    async def exchange_code(self, grant: DeviceCodeGrant) -> TokenBundle:
         """拿授权码换一份令牌包。
 
-        Args: code, verifier（PKCE 的 code_verifier）。
+        ⚠ 这一跳是标准 OAuth，**表单编码**，与上面两跳不同口径。
+
+        Args: grant。
         """
-        body = await self._post(
+        body = await self._posted(
             CHATGPT_TOKEN_URL,
             {
                 "grant_type": "authorization_code",
-                "code": code,
+                "code": grant.authorization_code,
                 "redirect_uri": CHATGPT_DEVICE_REDIRECT_URI,
                 "client_id": CHATGPT_CLIENT_ID,
-                "code_verifier": verifier,
+                "code_verifier": grant.code_verifier,
             },
+            is_form=True,
         )
         return _bundle_of(body, fallback_refresh=None)
 
@@ -145,7 +165,7 @@ class OAuthClient:
 
         Args: refresh_token。
         """
-        body = await self._post(
+        body = await self._posted(
             CHATGPT_TOKEN_URL,
             {
                 "grant_type": "refresh_token",
@@ -153,65 +173,128 @@ class OAuthClient:
                 "refresh_token": refresh_token,
                 "scope": DEFAULT_SCOPE,
             },
+            is_form=True,
         )
         return _bundle_of(body, fallback_refresh=refresh_token)
 
-    async def _post(self, url: str, form: dict[str, str]) -> dict[str, Any]:
+    async def _send(
+        self, url: str, body: dict[str, str], *, is_form: bool
+    ) -> httpx.Response:
+        """发一跳；连不上就抬成「服务不可达」。
+
+        Args: url, body, is_form。
+        """
         try:
-            response = await self._client.post(
-                url, data=form, timeout=HTTP_TIMEOUT_S
+            if is_form:
+                return await self._client.post(
+                    url, data=body, headers=_HEADERS, timeout=HTTP_TIMEOUT_S
+                )
+            return await self._client.post(
+                url, json=body, headers=_HEADERS, timeout=HTTP_TIMEOUT_S
             )
         except httpx.HTTPError as error:
             raise UpstreamUnavailable("登录服务此刻连不上") from error
-        return _read_body(response)
 
-
-def make_pkce_pair() -> tuple[str, str]:
-    """造一对 PKCE 的 (verifier, challenge)。
-
-    ⚠ verifier 与 device_code 一样是**密钥态**：它只在服务端待着，
-    一个字都不许下发给浏览器。
-    """
-    verifier = base64.urlsafe_b64encode(secrets.token_bytes(64)).rstrip(b"=")
-    digest = hashlib.sha256(verifier).digest()
-    challenge = base64.urlsafe_b64encode(digest).rstrip(b"=")
-    return verifier.decode("ascii"), challenge.decode("ascii")
+    async def _posted(
+        self, url: str, body: dict[str, str], *, is_form: bool
+    ) -> dict[str, Any]:
+        response = await self._send(url, body, is_form=is_form)
+        read = _read_body(response)
+        if response.is_success:
+            return read
+        raise LoginRejected(_why(read, "登录没有完成，请重新开始"))
 
 
 def _read_body(response: httpx.Response) -> dict[str, Any]:
-    """读响应体。
+    """读响应体；读不出给空表。
 
-    ⚠ 4xx 也要把体读出来：OAuth 把 `authorization_pending` 这类**正常**状态
-    也放在错误响应里，`raise_for_status` 会把「用户还没点完」变成一条异常。
+    ⚠ 4xx 的体也要读出来：上游把「用户还没点完」放在错误响应里，
+    而分档要看体里那个码。
+
+    Args: response。
     """
     try:
         body: Any = response.json()
     except ValueError:
-        body = None
-    if isinstance(body, dict):
-        return cast("dict[str, Any]", body)
-    if response.is_success:
-        raise LoginRejected("上游回了一段读不懂的内容")
-    raise UpstreamUnavailable("登录服务此刻不可用")
+        return {}
+    return cast("dict[str, Any]", body) if isinstance(body, dict) else {}
+
+
+def _error_of(body: dict[str, Any]) -> dict[str, Any]:
+    """上游的错误对象。⚠ 它**嵌在 `error` 里**，不是顶层几个平铺字段。
+
+    Args: body。
+    """
+    nested = body.get("error")
+    if isinstance(nested, dict):
+        return cast("dict[str, Any]", nested)
+    return {}
+
+
+def _is_pending(status: int, body: dict[str, Any]) -> bool:
+    """这一次是「还在等人点」而不是失败。
+
+    ⚠ 两条都要认：上游用 **403/404** 表示等待（不是 400），体里另给一个码。
+    只认其中一条的话，等待会被读成失败，登录页在人还没点完时就红了。
+
+    Args: status, body。
+    """
+    if status in _PENDING_STATUSES:
+        return True
+    return _error_of(body).get("code") == _PENDING_CODE
+
+
+def _why(body: dict[str, Any], fallback: str) -> str:
+    """把上游那句话带出来。
+
+    ⚠ 带上它是刻意的：不带的话，任何一种上游变更都收敛成同一句「请稍后重试」，
+    而那句话指不回任何地方——这条路本来就走在一个没有公开契约的端点上。
+    上游这几条消息里只有校验信息，不含地址与密钥。
+
+    Args: body, fallback。
+    """
+    said = _error_of(body).get("message")
+    return f"{fallback}：{said}" if isinstance(said, str) and said else fallback
 
 
 def _read_start(body: dict[str, Any]) -> DeviceCodeStart | None:
-    device_code = body.get("device_code")
+    device_auth_id = body.get("device_auth_id")
     user_code = body.get("user_code")
-    uri = body.get("verification_uri_complete") or body.get("verification_uri")
-    if not (
-        isinstance(device_code, str)
-        and isinstance(user_code, str)
-        and isinstance(uri, str)
-    ):
+    if not (isinstance(device_auth_id, str) and isinstance(user_code, str)):
         return None
     return DeviceCodeStart(
-        device_code=device_code,
+        device_auth_id=device_auth_id,
         user_code=user_code,
-        verification_uri=uri,
+        verification_uri=VERIFICATION_URI,
+        # ⚠ `interval` 上游给的是**字符串**
         interval_s=_int_or(body.get("interval"), DEFAULT_POLL_INTERVAL_S),
-        expires_in_s=_int_or(body.get("expires_in"), 600),
+        expires_in_s=_expires_in(body.get("expires_at")),
     )
+
+
+def _read_grant(body: dict[str, Any]) -> DeviceCodeGrant | None:
+    code = body.get("authorization_code")
+    verifier = body.get("code_verifier")
+    if not (isinstance(code, str) and isinstance(verifier, str)):
+        return None
+    return DeviceCodeGrant(authorization_code=code, code_verifier=verifier)
+
+
+def _expires_in(given: object) -> int:
+    """把上游给的**绝对时刻**换成还剩多少秒。
+
+    ⚠ 它给的是 `expires_at` 不是 `expires_in`：当成秒数用的话，界面上会显示
+    一个二十亿秒的倒计时。
+
+    Args: given。
+    """
+    if not isinstance(given, str):
+        return DEFAULT_EXPIRES_IN_S
+    try:
+        deadline = dt.datetime.fromisoformat(given)
+    except ValueError:
+        return DEFAULT_EXPIRES_IN_S
+    return max(int((deadline - dt.datetime.now(dt.UTC)).total_seconds()), 0)
 
 
 def _bundle_of(
@@ -220,7 +303,7 @@ def _bundle_of(
     access = body.get("access_token")
     refresh = body.get("refresh_token") or fallback_refresh
     if not (isinstance(access, str) and isinstance(refresh, str)):
-        raise LoginRejected("上游没给出可用的令牌，请重新登录")
+        raise LoginRejected(_why(body, "上游没给出可用的令牌，请重新登录"))
     expires_in = _int_or(body.get("expires_in"), 0)
     if expires_in <= 0:
         # 存一份立刻就过期的令牌，等于每次对话都先失败一次再去刷新
@@ -242,6 +325,8 @@ def _claims_of(id_token: str | None) -> dict[str, str]:
 
     ⚠ 读不出不是错：账号信息只用来在界面上显示「挂着的是哪个号」，
     为它让整次登录失败不值当。
+
+    Args: id_token。
     """
     if id_token is None:
         return {}
@@ -256,14 +341,6 @@ def _claims_of(id_token: str | None) -> dict[str, str]:
     return {
         key: value for key, value in fields.items() if isinstance(value, str)
     }
-
-
-def _rejection_of(error: str) -> str:
-    if error == "expired_token":
-        return "这次登录已经过期，请重新开始"
-    if error == "access_denied":
-        return "授权被拒绝"
-    return "登录没有完成，请重新开始"
 
 
 def _int_or(given: object, fallback: int) -> int:
