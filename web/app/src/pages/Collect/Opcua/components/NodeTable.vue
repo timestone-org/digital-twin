@@ -9,7 +9,8 @@
  * ⚠ 「配了多少个点位」与「实时值覆盖多少个」不是一回事：推送按编码升序取前
  * `live_point_limit` 个，超出的那些只有配置没有实时值。
  *
- * 多选与记录历史开关的口径在 `useArchiveOps`，两级删除在 `useForceDelete`。
+ * 多选的口径在 `useArchiveOps`，单条删与批量删都走 `useForceDelete` 的两级
+ * 确认——批量那一路整批全删或全不删，一个点位被绑着就一个都不删。
  */
 import { computed, watch } from 'vue'
 import type { CollectPoint, CollectSource } from '@dt/contracts'
@@ -34,7 +35,7 @@ import { useLiveValues } from '../scripts/useLiveValues'
 import { usePointEditing } from '../scripts/usePointEditing'
 import { usePointList } from '../scripts/usePointList'
 import { usePointOps } from '../scripts/usePointOps'
-import BatchArchiveBar from './BatchArchiveBar.vue'
+import BatchActionBar from './BatchActionBar.vue'
 import ForceDeleteDialog from './ForceDeleteDialog.vue'
 import ImportPointsDialog from './ImportPointsDialog.vue'
 import NodeTableNotices from './NodeTableNotices.vue'
@@ -66,10 +67,20 @@ const removal = useForceDelete<CollectPoint>(
   (_point, message) => `${message}。强制删除会让那些大屏上的绑定就此失效。`,
   () => list.reload(),
 )
+const batchRemoval = useForceDelete<readonly string[]>(
+  (pointIds, force) => collect.deletePoints(pointIds, force),
+  (_pointIds, message) => `${message}。强制删除会让那些大屏上的绑定就此失效。`,
+  () => list.reload(),
+  (pointIds) => `已删除 ${pointIds.length} 个点位`,
+)
 
 const hasPoints = computed(() => list.total.value > 0)
 const hasRows = computed(() => list.items.value.length > 0)
 const hasSelection = computed(() => archive.selectedCount.value > 0)
+
+const batchDeleteName = computed(
+  () => `${batchRemoval.target.value?.length ?? 0} 个点位`,
+)
 
 const writeSample = computed(() =>
   editing.writing.value === null
@@ -112,11 +123,12 @@ watch(list.items, () => archive.clearSelection())
         :is-connected="live.isConnected.value"
       />
 
-      <BatchArchiveBar
+      <BatchActionBar
         v-if="hasSelection"
         :count="archive.selectedCount.value"
         :busy="archive.batchBusy.value"
         @batch="archive.batchArchive"
+        @remove="batchRemoval.ask([...archive.selected.value])"
         @clear="archive.clearSelection"
       />
 
@@ -276,6 +288,16 @@ watch(list.items, () => archive.clearSelection())
       :conflict="removal.conflict.value"
       :loading="removal.busy.value"
       @confirm="removal.confirm"
+    />
+
+    <ForceDeleteDialog
+      v-model="batchRemoval.open.value"
+      title="批量删除点位"
+      :name="batchDeleteName"
+      message="它们已归档的历史会保留，按编码存放。此操作不可撤销。"
+      :conflict="batchRemoval.conflict.value"
+      :loading="batchRemoval.busy.value"
+      @confirm="batchRemoval.confirm"
     />
   </DtCard>
 </template>

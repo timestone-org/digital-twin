@@ -111,6 +111,24 @@ describe('点位', () => {
     ])
   })
 
+  it('批量删点打动作端点，选中的 id 原样成组发出去', async () => {
+    await collect.deletePoints(['p1', 'p2'])
+    const [path, options] = rawCall()
+
+    expect([path, options.method, options.baseUrl]).toEqual([
+      '/collect-points:batch-delete',
+      'POST',
+      PLATFORM_PREFIX,
+    ])
+    expect(options.body).toEqual({ point_ids: ['p1', 'p2'], is_forced: false })
+  })
+
+  it('⚠ 强删要显式写进请求体——漏了它后端会照常拦下被绑着的点位', async () => {
+    await collect.deletePoints(['p1'], true)
+
+    expect(rawCall()[1].body).toEqual({ point_ids: ['p1'], is_forced: true })
+  })
+
   it('下发写值打动作端点并带幂等键', async () => {
     await collect.writePoint('p1', 42, 'key-w')
     const [path, options] = call()

@@ -1,6 +1,9 @@
 <script setup lang="ts">
 /**
- * @fileoverview 点位表的批量操作条：勾选后出现，唯一的用途是批量开关记录历史。
+ * @fileoverview 点位表的批量操作条：勾选后出现，批量开关记录历史与批量删除。
+ *
+ * ⚠ 删除排在最右并与前两个动作隔开：它和「开关记录历史」不是一类后果，
+ * 挨着摆会被顺手点到，而删掉的点位找不回来。
  */
 import { DtButton } from '@dt/ui'
 
@@ -11,6 +14,7 @@ defineProps<{
 
 defineEmits<{
   batch: [next: boolean]
+  remove: []
   clear: []
 }>()
 </script>
@@ -39,7 +43,19 @@ defineEmits<{
     >
       批量关闭记录历史
     </DtButton>
-    <DtButton variant="ghost" size="sm" class="ml-auto" @click="$emit('clear')">
+    <DtButton
+      variant="ghost"
+      size="sm"
+      icon="trash"
+      intent="danger"
+      class="ml-auto"
+      data-test="batch-delete-points"
+      @click="$emit('remove')"
+    >
+      批量删除
+    </DtButton>
+    <span class="h-3.5 w-px bg-border-subtle" />
+    <DtButton variant="ghost" size="sm" @click="$emit('clear')">
       取消选择
     </DtButton>
   </div>

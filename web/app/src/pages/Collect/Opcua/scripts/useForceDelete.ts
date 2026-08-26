@@ -11,12 +11,9 @@ import { useToast } from '@dt/ui'
 import { BizError } from '@/api/client'
 import { describeError } from '@/composables/useAsyncList'
 
-interface Deletable {
-  id: string
-  name: string
-}
-
-export interface ForceDelete<TargetT extends Deletable> {
+// ⚠ 目标不约束成 `{ id, name }`：本文件一个字段都不读它，只是原样转交给
+// `remove` / `conflictText`。约束住就等于「批量删除的目标必须假装成一条记录」
+export interface ForceDelete<TargetT> {
   open: Ref<boolean>
   target: Ref<TargetT | null>
   busy: Ref<boolean>
@@ -32,11 +29,13 @@ export interface ForceDelete<TargetT extends Deletable> {
  * @param remove 真正的删除调用
  * @param conflictText 409 时的二级文案（要把强删后果说出来）
  * @param done 删除成功后的收尾（刷新列表等）
+ * @param successText 成功提示；批量删要把删掉几个说出来
  */
-export function useForceDelete<TargetT extends Deletable>(
+export function useForceDelete<TargetT>(
   remove: (target: TargetT, force: boolean) => Promise<void>,
   conflictText: (target: TargetT, message: string) => string,
   done: () => Promise<void> | void,
+  successText: (target: TargetT) => string = () => '已删除',
 ): ForceDelete<TargetT> {
   const toast = useToast()
   const open = ref(false)
@@ -57,7 +56,7 @@ export function useForceDelete<TargetT extends Deletable>(
     try {
       await remove(current, force)
       open.value = false
-      toast.success('已删除')
+      toast.success(successText(current))
       await done()
     } catch (caught) {
       if (!force && caught instanceof BizError && caught.status === 409) {
