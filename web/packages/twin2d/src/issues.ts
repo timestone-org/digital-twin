@@ -1,7 +1,7 @@
 /**
  * @fileoverview 诊断面的入口，吃**原始** JSON。两族问题都不让渲染报错，只让配好的
  * 东西安静地不出现——静默降级对人尚可忍受，对 Agent 是致命的：这里是引用完整性那一
- * 族（悬空的样式 / 端口 / 槽 / 图元 id / 渐变、画布外拐点），跑在归一化输出上；
+ * 族（悬空的样式 / 端口 / 槽 / 图元 id / 变体补丁 id / 渐变、画布外拐点），跑在归一化输出上；
  * 「归一化整条丢掉了什么」那一族在 `issuesDropped.ts`，跑在原始文档上。
  * ⚠ 诊断只在编辑器的诊断面板里跑、不在渲染路径上，所以入口自己再归一化一趟无所谓；
  * 换来的是两族判据都能拿到自己需要的那份文档。
@@ -278,6 +278,40 @@ function danglingPatchKeys(
   })
 }
 
+/** 用这个样式的节点各自追加的图元 id：变体补丁按 id 寻址，追加层也在寻址范围内。 */
+function layerIdsOf(config: Twin2dConfig, styleId: string): Set<string> {
+  const ids = new Set<string>()
+  for (const node of config.nodes) {
+    if (node.styleId !== styleId) continue
+    for (const site of walkPrims(node.layers, '')) ids.add(site.prim.id)
+  }
+  return ids
+}
+
+/**
+ * 变体补丁的键在图元树里找不到。
+ * ⚠ 与 `dangling-prim` 是两条不同的问题：那一条是节点级覆盖补丁，这一条是变体补丁，
+ * 同一个错字在两处的字段路径完全不同，合成一条就没法照着找过去。
+ * ⚠ 用这个样式的节点追加的图元也算数：变体是并过 `layers` 之后才应用的，所以只在
+ * 某个节点上存在的图元 id 是一条真能生效的补丁（§9.2）。
+ */
+function danglingVariantKeys(config: Twin2dConfig): Twin2dIssue[] {
+  return config.styles.flatMap((style, index) => {
+    const own = walkPrims(style.prims, '').map((site) => site.prim.id)
+    const ids = new Set([...own, ...layerIdsOf(config, style.id)])
+    return style.variants.flatMap((variant, slot) =>
+      Object.keys(variant.patch)
+        .filter((key) => !ids.has(key))
+        .map((key) => ({
+          level: 'warn' as const,
+          code: 'dangling-variant-prim' as const,
+          message: `图元树里没有 ${key}，变体 ${variant.id} 的这条补丁一句也不会生效`,
+          at: `styles[${index}].variants[${slot}].patch.${key}`,
+        })),
+    )
+  })
+}
+
 /**
  * `vec` 的填充引了一个本图元里没有的渐变 id。
  * ⚠ SVG 对这种 `fill="url(#缺)"` 是整个不上色——只剩描边，看着像「填充色配错了」。
@@ -355,6 +389,7 @@ export function collectTwin2dIssues(
     ...styleSlotIssues(config),
     ...nodeSlotIssues(config, styleFor),
     ...danglingPatchKeys(config, styleFor),
+    ...danglingVariantKeys(config),
     ...danglingGradients(sites),
     ...outOfCanvasWaypoints(config),
     ...collectTwin2dDroppedIssues(raw, config),

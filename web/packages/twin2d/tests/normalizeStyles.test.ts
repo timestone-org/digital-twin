@@ -234,6 +234,20 @@ describe('normalizeRootPatch', () => {
     ).toEqual({ lift: -2, z: 0, borderColor: 'var(--danger)' })
   })
 
+  it('hover 那一档的抬升与等比缩放同在一条补丁上，两样都收', () => {
+    expect(normalizeRootPatch({ lift: 3, scale: 1.025 })).toEqual({
+      lift: 3,
+      scale: 1.025,
+    })
+  })
+
+  it('⚠ scale 是 0、负数或缺席时都不写这个键——缩到 0 会让整个节点塌成一个点', () => {
+    expect('scale' in normalizeRootPatch({ scale: 0 })).toBe(false)
+    expect('scale' in normalizeRootPatch({ scale: -1 })).toBe(false)
+    expect('scale' in normalizeRootPatch({ scale: 'big' })).toBe(false)
+    expect('scale' in normalizeRootPatch({ lift: 1 })).toBe(false)
+  })
+
   it('阴影为空数组时不写这个键，给了才写', () => {
     expect(normalizeRootPatch({ shadows: [] }).shadows).toBeUndefined()
     expect(normalizeRootPatch({ shadows: [{ id: 'g', blur: 8 }] })).toEqual({

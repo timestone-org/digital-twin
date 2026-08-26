@@ -163,7 +163,7 @@ web/packages/twin2d/
     ├── expr.ts                       派生槽表达式求值（闭合小语言，深度上限 3）
     ├── format.ts                     读数格式化（第二份副本，见 §11.3）
     ├── bindingRows.ts                行 → 实体的映射、行标签/行数、绑定重派、缝合
-    ├── issues.ts                     诊断（悬空 styleId / 悬空槽引用 / 悬空端口 / 越界拐点 / 超深树）
+    ├── issues.ts                     诊断（悬空 styleId / 槽引用 / 端口 / 补丁图元 id / 越界拐点 / 超深树）
     ├── presets/
     │   ├── index.ts                  桶
     │   ├── palette.ts                预置调色板（字面 hex，§6.1）
@@ -359,6 +359,9 @@ interface Twin2dPrimBase {
   /** 属性过渡。缺席 = 瞬变。预置库里逐处填 { durationMs: 180, easing: 'ease' }。 */
   transition: Twin2dTransition | null   // { props: readonly Twin2dTransitionProp[], durationMs, easing }
   rotate: number              // deg，绕 transformOrigin
+  /** 等比缩放，缺省 1；与 rotate 共用 transformOrigin。参考项目的 .tnv-box__icon 那处
+   *  hover scale(1.08) 落在这里。⚠ 归一化按尺寸类正数收：0 与负数一律回 1。 */
+  scale: number
   transformOrigin: string     // 缺省 '50% 50%'；悬浮卡的两档是 '50% 100%' / '50% 0'
   /** 'none' 时整枝不吃指针事件。⚠ 悬浮卡不设它会 hover 自我抖动（§9.3）。 */
   pointerEvents: 'auto' | 'none'
@@ -366,6 +369,12 @@ interface Twin2dPrimBase {
   keepUpright: boolean
 }
 ```
+
+> ⚠ **图元自己的 `rotate` 与 `scale` 合成一条 `transform`，顺序与节点级同族**
+> （`平移 → 旋转 → 缩放`，§4.6 的 `nodeTransformCss` 是同一族）：CSS 的变换列表从右往左
+> 作用到点上，等比缩放排在最右即最先作用，于是摆位的位移量不被它放大，而等比缩放与
+> 旋转可交换，`keepUpright` 的反向角也不受它影响。`paintCommon.ts` 的 `transformCss`
+> 是唯一实现。
 
 > ⚠ **`transition` 是一个独立字段，不能靠 `anim` 顶。** 参考项目有七处
 > `transition: 0.18s ease`（`.tnv-box` / `.tnv-tank` / `.tnv-square__tile` /
@@ -539,7 +548,9 @@ export interface Twin2dVariant {
   when: Twin2dCondition
   /** primitiveId → 浅覆盖。只覆盖显式给出的键。 */
   patch: Record<string, Twin2dPrimPatch>
-  /** 作用在节点根上的覆盖（抬升、外发光、边框色、z）。 */
+  /** 作用在节点根上的覆盖（抬升、等比缩放、外发光、边框色、z、强调色）。
+   *  ⚠ 缺席的键 = 不覆盖；`lift` 与 `scale` 是同一条根 transform 上的两段，
+   *  `translateY(-3px) scale(1.025)` 那一档两样都要给。 */
   rootPatch: Twin2dRootPatch
 }
 
@@ -558,6 +569,12 @@ export type Twin2dCondition =
 在 `kinds.ts` 里另立一份同名闭合常量，并由 `twin2d-op-parity.contract.spec.ts`
 断言两份逐项相同：两处各写一份、悄悄漂移的表现是「同一条 `between` 在阈值卡片上
 成立、在 2D 图上不成立」。
+
+⚠ **取数口径也是同一套**：变体阈值判定、派生槽求值与槽位显示三处都用 `format.ts` 的
+`isPresent`——只认真正的有限数。实时点位值那条链路上的 `'60'` 是**脏数据不是笔误**
+（`@dt/modules` 的 `shared/config` 写明了这条分工），认它的表现是 `>40` 的变体命中了、
+派生槽也拿它算了，而墙上那一格显示的仍是未经格式化的原样文本。手写配置里的数字串
+（阈值的 `value`/`value2`、几何数值那些）照旧走宽口径的 `toFiniteNumber`。
 
 变体求值顺序 = 文档序，后者覆盖前者。
 
@@ -833,10 +850,10 @@ export const TWIN_2D_PALETTE = {
 | # | 视觉件 | 参考项目的实现 | 新模型如何表达 | |
 |---|---|---|---|---|
 | 8 | 七处 `transition: 0.18s ease` | `.tnv-box` / `.tnv-tank` / `.tnv-square__tile` / `.tnv-box__icon` / `.tnv-cyl__outline`（4 属性）+ `.tnv-energy-pct`（4 属性）+ `.tnv-energy-tip`（opacity + transform） | 图元基类的 `transition:{props,durationMs:180,easing:'ease'}`（§4.2），预置数据里逐处填。⚠ 少了它 hover 是硬切——「哪儿都能配、就是手感不一样」 | ✅ |
-| 9 | `.tnv:hover .tnv-box` | `translateY(-3px) scale(1.025)`；border→`color-mix(accent 86%, text-primary)`；**追加**一层 `radial-gradient(circle at 25% 0, accent18%, transparent 54%)` 叠在原渐变上；三重阴影 `inset 18px 18%` / `0 8px 18px rgba(0,0,0,.24)` / `0 0 18px 42%` | 变体 `{when:{kind:'state',state:'hover'}}`：`rootPatch.transform`、`patch['frame'].border.color`、`patch['frame'].fills` **追加**一层 radial、`patch['frame'].shadows` 整组替换。`fills` 是数组，所以「叠一层」是天然可表达的 | ✅ |
-| 10 | `.tnv:hover .tnv-box__icon` | `scale(1.08)` / border 62% / `background: color-mix(accent 16%)` / `0 0 12px 34%` | 同一条 hover 变体里对 `patch['icon']` 的四项覆盖 | ✅ |
-| 11 | `.tnv:hover .tnv-tank` | `translateY(-3px) scale(1.02)`（⚠ 与 box 的 1.025 **不同**）/ `inset 20px 18%` / `0 8px 18px rgba(0,0,0,.22)`（⚠ 与 box 的 .24 不同）/ `0 0 18px 40%`（⚠ 与 box 的 42% 不同） | 罐形预置样式自己的 hover 变体，**含那三处逐值差异** | ✅ |
-| 12 | `.tnv:hover .tnv-square__tile` | `scale(1.04)` / `inset 18px 18%` / `.22` / `18px 42%` | 方块预置样式自己的 hover 变体 | ✅ |
+| 9 | `.tnv:hover .tnv-box` | `translateY(-3px) scale(1.025)`；border→`color-mix(accent 86%, text-primary)`；**追加**一层 `radial-gradient(circle at 25% 0, accent18%, transparent 54%)` 叠在原渐变上；三重阴影 `inset 18px 18%` / `0 8px 18px rgba(0,0,0,.24)` / `0 0 18px 42%` | 变体 `{when:{kind:'state',state:'hover'}}`：`rootPatch.lift:3` + `rootPatch.scale:1.025`（两段合成同一条根 transform）、`patch['frame'].border.color`、`patch['frame'].fills` **追加**一层 radial、`patch['frame'].shadows` 整组替换。`fills` 是数组，所以「叠一层」是天然可表达的 | ✅ |
+| 10 | `.tnv:hover .tnv-box__icon` | `scale(1.08)` / border 62% / `background: color-mix(accent 16%)` / `0 0 12px 34%` | 同一条 hover 变体里对 `patch['icon']` 的四项覆盖：`scale:1.08`（图元自己的等比缩放，§4.2）、`border.color`、`fills`、`shadows` | ✅ |
+| 11 | `.tnv:hover .tnv-tank` | `translateY(-3px) scale(1.02)`（⚠ 与 box 的 1.025 **不同**）/ `inset 20px 18%` / `0 8px 18px rgba(0,0,0,.22)`（⚠ 与 box 的 .24 不同）/ `0 0 18px 40%`（⚠ 与 box 的 42% 不同） | 罐形预置样式自己的 hover 变体：`rootPatch.lift:3` + `rootPatch.scale:1.02`，**含那三处逐值差异** | ✅ |
+| 12 | `.tnv:hover .tnv-square__tile` | `scale(1.04)` / `inset 18px 18%` / `.22` / `18px 42%` | 方块预置样式自己的 hover 变体：`rootPatch.scale:1.04`（这一件没有抬升）加三条阴影 | ✅ |
 | 13 | `.tnv:hover .tnv-cyl__outline` | stroke→accent / width 1.8 / `drop-shadow(0 0 8px accent64%)` | 圆柱预置样式的 hover 变体，`patch` 到那个 `vec` 的 `strokes[0]` 与 `filter` | ✅ |
 | 14 | `.topo-node-box:hover { z-index: 30 }` | 节点常态 `z-index:2`，hover 抬到 30 | `rootPatch.z` 在 hover 变体里给 30。⚠ **不抬升的话能量悬浮卡会被右邻节点整块盖住**——而它只在两个节点靠得近时才看得出来 | ✅ |
 | 15 | 五处 `pointer-events: none` | `.tnv-energy-tip` / `.tnv-cyl__body` / `.tnv-tank__stubs` / `.tnv-name` / `.tnv-sensor-slot` | 图元基类的 `pointerEvents:'none'`（§4.2）。⚠ 悬浮卡不设它会**hover 自我抖动**：卡片弹出来盖住指针 → 节点失去 hover → 卡片收起 → 指针回到节点 → 再弹出 | ✅ |
@@ -1057,7 +1074,8 @@ sprite 宿主（`Twin2dIconSprite.vue`）挂在舞台根上，`position:absolute
   ↓ 合并节点级：patch（按图元 id 覆盖）+ layers（追加）+ ports/slots（追加）
   ↓ 求值变体：state（hover/selected/alarm/active/flipped）、status、tag、slot 阈值、has
   ↓ paint*：图元 → 内联样式对象 / SVG 属性对象；--t2-* 注入根
-  ↓ 变换：根 translate → rotate → scale(flip)；keepUpright 的图元反向旋转
+  ↓ 变换：根 translate → rotate → scale(flip)；图元同序 平移 → rotate → scale；
+    keepUpright 的图元反向旋转
 ```
 
 ⚠ 变体产出的是**补丁**而不是新的图元树：整树重建会让每一帧都换掉所有子组件的
@@ -1790,7 +1808,7 @@ export default defineModule({
 | 单元 | `.../format.test.ts` | 两套占位符；整数/小数/enum/单位；kWh 短与全；`reverseFromValue` 的「boolean 一律 false」；locale 钉 `'en-US'` |
 | 单元 | `.../normalize*.test.ts` | 数字 id 要 `String()` 化（否则节点换自动 id、引用它的连线被静默丢掉）；`posDim` 挡 0 与负数；白名单外的枚举值忽略而非报错；图元树超深截断进诊断；悬空连线过滤；`tags` 的 trim 与长度上限 |
 | 单元 | `.../bindingRows.test.ts` | 三个槽的行数与行顺序；派生槽不成行；未被引用的槽不成行；`rowCounts` **三键都在且可为 0**；`remapTwin2dBindings` 按三个稳定键搬家；删中间节点后其后行号整体前移 |
-| 单元 | `.../issues.test.ts` | 悬空 styleId / 槽引用 / 端口 / 渐变 id / sprite id、越界拐点、超深图元树、被消毒拒掉的 CSS 值，各出一条诊断 |
+| 单元 | `.../issues.test.ts` | 悬空 styleId / 槽引用 / 端口 / 渐变 id / sprite id、**节点级覆盖补丁与变体补丁各自的悬空图元 id**（两条 code 分开）、越界拐点、超深图元树、被消毒拒掉的 CSS 值，各出一条诊断 |
 | 组件 | `.../render/Twin2dNodeBox.spec.ts` | 11 种预置样式各挂载一次，断言根类、`--t2-*` 值、关键内联样式；**hover 变体命中时 5 个子图元各自的补丁值**；旋转 90° 后 `keepUpright` 的 `txt` 反向旋转；六档 `labelPos` 各自哪个 `txt` 在渲染 |
 | 组件 | `.../render/Twin2dPrim.spec.ts` | 四种 kind 各渲对元素；`hidden` / `when` 不成立时整枝不渲染；递归深度；`transition` 输出成一条声明 |
 | 组件 | `.../render/Twin2dVec.spec.ts` | 五种几何各出对的 SVG 元素；渐变 id 加了实例前缀（同页两份不撞、且永不撞 sprite 的四个 id）；`stretch` → `preserveAspectRatio="none"`；`nonScaling` → `vector-effect` |

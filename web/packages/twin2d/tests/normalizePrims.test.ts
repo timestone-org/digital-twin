@@ -58,7 +58,7 @@ describe('normalizePrim', () => {
     expect(normalizePrim({ id: 7, kind: 'box' }, 0)?.id).toBe('7')
   })
 
-  it('公共十五项在没配任何东西时也各有一个值', () => {
+  it('公共十六项在没配任何东西时也各有一个值', () => {
     const prim = normalizePrim(BOX, 0)
     expect(prim).not.toBeNull()
     expect(prim).toMatchObject({
@@ -73,13 +73,14 @@ describe('normalizePrim', () => {
       anim: null,
       transition: null,
       rotate: 0,
+      scale: 1,
       transformOrigin: '50% 50%',
       pointerEvents: 'auto',
       keepUpright: false,
     })
   })
 
-  it('十五项逐个可配，一个都不许在归一化里丢掉', () => {
+  it('十六项逐个可配，一个都不许在归一化里丢掉', () => {
     const prim = normalizePrim(
       {
         ...BOX,
@@ -90,6 +91,7 @@ describe('normalizePrim', () => {
         hidden: true,
         when: { kind: 'state', state: 'hover' },
         rotate: 30,
+        scale: 1.08,
         transformOrigin: '50% 100%',
         pointerEvents: 'none',
         keepUpright: true,
@@ -104,6 +106,7 @@ describe('normalizePrim', () => {
       hidden: true,
       when: { kind: 'state', state: 'hover' },
       rotate: 30,
+      scale: 1.08,
       transformOrigin: '50% 100%',
       pointerEvents: 'none',
       keepUpright: true,
@@ -114,6 +117,13 @@ describe('normalizePrim', () => {
     expect(normalizePrim({ ...BOX, opacity: 4 }, 0)?.opacity).toBe(1)
     expect(normalizePrim({ ...BOX, opacity: -2 }, 0)?.opacity).toBe(0)
     expect(normalizePrim({ ...BOX, opacity: Number.NaN }, 0)?.opacity).toBe(1)
+  })
+
+  it('⚠ scale 走尺寸类正数：0 与负数回 1，0 会让整枝塌成一个点且一处不报错', () => {
+    expect(normalizePrim({ ...BOX, scale: 0 }, 0)?.scale).toBe(1)
+    expect(normalizePrim({ ...BOX, scale: -1.5 }, 0)?.scale).toBe(1)
+    expect(normalizePrim({ ...BOX, scale: Number.NaN }, 0)?.scale).toBe(1)
+    expect(normalizePrim({ ...BOX, scale: 0.5 }, 0)?.scale).toBe(0.5)
   })
 })
 
@@ -892,6 +902,7 @@ describe('normalizePrimPatch', () => {
         z: 3,
         opacity: 2,
         rotate: -90,
+        scale: 1.04,
         hidden: false,
       }),
     ).toEqual({
@@ -902,8 +913,15 @@ describe('normalizePrimPatch', () => {
       z: 3,
       opacity: 1,
       rotate: -90,
+      scale: 1.04,
       hidden: false,
     })
+  })
+
+  it('⚠ 补丁里的 scale 同样挡 0 与负数，落回缺省 1 而不是把这一键丢掉', () => {
+    expect(normalizePrimPatch({ scale: 0 })).toEqual({ scale: 1 })
+    expect(normalizePrimPatch({ scale: -2 })).toEqual({ scale: 1 })
+    expect('scale' in normalizePrimPatch({ rotate: 3 })).toBe(false)
   })
 
   it('条件与动效一组逐键收', () => {

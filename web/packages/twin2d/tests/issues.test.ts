@@ -1,8 +1,9 @@
 /**
- * @fileoverview 锁住诊断入口与「引用完整性」那一族：悬空的样式 / 端口 / 槽 / 图元 id /
- * 渐变，加上画布外的拐点。入口吃的是原始 JSON、自己归一化一趟，所以这一族判的始终是
- * 归一化之后仍在的东西。五样都不会让渲染报错——一个让节点落到兜底样式，一个让线接到
- * 别处，其余几个让配好的东西安静地不出现。丢弃那一族在 issuesDropped.test.ts。
+ * @fileoverview 锁住诊断入口与「引用完整性」那一族：悬空的样式 / 端口 / 槽 / 覆盖补丁与
+ * 变体补丁各自的图元 id / 渐变，加上画布外的拐点。入口吃的是原始 JSON、自己归一化一趟，
+ * 所以这一族判的始终是归一化之后仍在的东西。这几样都不会让渲染报错——一个让节点落到
+ * 兜底样式，一个让线接到别处，其余几个让配好的东西安静地不出现。
+ * 丢弃那一族在 issuesDropped.test.ts。
  */
 import { describe, expect, it } from 'vitest'
 
@@ -75,6 +76,7 @@ function primBase(id: string): Twin2dPrimBase {
     anim: null,
     transition: null,
     rotate: 0,
+    scale: 1,
     transformOrigin: 'center',
     pointerEvents: 'auto',
     keepUpright: false,
@@ -578,6 +580,75 @@ describe('collectTwin2dIssues', () => {
       nodes: [nodeWith({ styleId: 'st-gone', patch: { __gone: { z: 1 } } })],
     })
     expect(onlyCode(collectTwin2dIssues(noStyle), 'dangling-prim')).toEqual([])
+  })
+
+  it('变体补丁的键在图元树里找不到时报出来，与节点级覆盖那条分得开', () => {
+    const config = configOf({
+      styles: [
+        styleWith({
+          prims: [boxPrim('frame', [])],
+          variants: [
+            {
+              id: 'hover',
+              when: { kind: 'state', state: 'hover' },
+              patch: { frame: { z: 30 }, __gone: { z: 30 } },
+              rootPatch: {},
+            },
+          ],
+        }),
+      ],
+    })
+    expect(collectTwin2dIssues(config)).toEqual([
+      {
+        level: 'warn',
+        code: 'dangling-variant-prim',
+        message: '图元树里没有 __gone，变体 hover 的这条补丁一句也不会生效',
+        at: 'styles[0].variants[0].patch.__gone',
+      },
+    ])
+  })
+
+  it('⚠ 补丁指到用这个样式的节点自己追加的图元也算数——变体是并过 layers 之后才应用的', () => {
+    const config = configOf({
+      styles: [
+        styleWith({
+          variants: [
+            {
+              id: 'hover',
+              when: { kind: 'state', state: 'hover' },
+              patch: { __extra: { z: 30 } },
+              rootPatch: {},
+            },
+          ],
+        }),
+      ],
+      nodes: [nodeWith({ layers: [boxPrim('__extra', [])] })],
+    })
+    expect(
+      onlyCode(collectTwin2dIssues(config), 'dangling-variant-prim'),
+    ).toEqual([])
+    const otherStyle = configOf({
+      styles: [
+        styleWith({
+          variants: [
+            {
+              id: 'hover',
+              when: { kind: 'state', state: 'hover' },
+              patch: { __extra: { z: 30 } },
+              rootPatch: {},
+            },
+          ],
+        }),
+      ],
+      nodes: [
+        nodeWith({ styleId: 'st-other', layers: [boxPrim('__extra', [])] }),
+      ],
+    })
+    expect(
+      onlyCode(collectTwin2dIssues(otherStyle), 'dangling-variant-prim').map(
+        (issue) => issue.at,
+      ),
+    ).toEqual(['styles[0].variants[0].patch.__extra'])
   })
 
   it('矢量图元引到本图元里没有的渐变 id 时报出来', () => {

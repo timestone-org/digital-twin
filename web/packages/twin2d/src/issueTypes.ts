@@ -1,5 +1,5 @@
 /**
- * @fileoverview 诊断的词汇表：两档严重度、十五个 code 与一条诊断的形状。
+ * @fileoverview 诊断的词汇表：两档严重度、十六个 code 与一条诊断的形状。
  * 单独成文件是因为两族判据都要用它——引用完整性那族在 `issues.ts`，丢弃那族在
  * `issuesDropped.ts`，而两者之间不许成环。
  */
@@ -8,12 +8,13 @@
 export const TWIN_2D_ISSUE_LEVELS = ['error', 'warn'] as const
 export type Twin2dIssueLevel = (typeof TWIN_2D_ISSUE_LEVELS)[number]
 
-/** 十五种问题，一种一个 code：先引用完整性那一族，再丢弃那一族。 */
+/** 十六种问题，一种一个 code：先引用完整性那一族，再丢弃那一族。 */
 export const TWIN_2D_ISSUE_CODES = [
   'dangling-style',
   'dangling-port',
   'dangling-slot',
   'dangling-prim',
+  'dangling-variant-prim',
   'dangling-gradient',
   'dangling-sprite',
   'waypoint-out-of-canvas',

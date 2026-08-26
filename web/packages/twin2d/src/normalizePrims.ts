@@ -1,5 +1,5 @@
 /**
- * @fileoverview 图元树的归一化：四种图元的公共十五项、四个子类各自的字段、深度上限
+ * @fileoverview 图元树的归一化：四种图元的公共十六项、四个子类各自的字段、深度上限
  * 截断，以及变体与节点级覆盖用的浅补丁。叶子结构在 normalizePieces / normalizePaint /
  * normalizeShape 三处。口径见 docs/MODULE_TWIN_2D_DESIGN.md §4.2、§9.2。
  */
@@ -45,6 +45,7 @@ import {
   idOf,
   isRecord,
   oneOf,
+  posDim,
   toArray,
   trimmedString,
   uniqueBy,
@@ -110,7 +111,7 @@ function originOr(value: unknown): string {
   return text === '' ? CENTER_ORIGIN : text
 }
 
-/** 四种图元共有的十五项。 */
+/** 四种图元共有的十六项。 */
 function normalizeBase(
   raw: Record<string, unknown>,
   id: string,
@@ -128,6 +129,7 @@ function normalizeBase(
     anim: normalizeAnim(raw['anim']),
     transition: normalizeTransition(raw['transition']),
     rotate: finiteOr(raw['rotate'], 0),
+    scale: posDim(raw['scale'], 1),
     transformOrigin: originOr(raw['transformOrigin']),
     pointerEvents: oneOf(raw['pointerEvents'], TWIN_2D_POINTER_EVENTS, 'auto'),
     keepUpright: boolOr(raw['keepUpright'], false),
@@ -266,6 +268,8 @@ function applyGeometryPatch(
   if ('z' in raw) patch.z = finiteOr(raw['z'], 0)
   if ('opacity' in raw) patch.opacity = unitOr(raw['opacity'], 1)
   if ('rotate' in raw) patch.rotate = finiteOr(raw['rotate'], 0)
+  // ⚠ 等比缩放走 posDim：0 会让整枝塌成一个点且一处都不报错，负数则连带镜像
+  if ('scale' in raw) patch.scale = posDim(raw['scale'], 1)
   if ('hidden' in raw) patch.hidden = boolOr(raw['hidden'], false)
 }
 

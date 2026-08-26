@@ -259,7 +259,7 @@ export type Twin2dCondition =
   | { kind: 'has'; slots: readonly string[]; mode: Twin2dHasMode }
   | { kind: 'not'; of: Twin2dCondition }
 
-/** 图元共有的十四项。 */
+/** 图元共有的十五项。 */
 export interface Twin2dPrimBase {
   /** 样式内唯一：节点级覆盖、变体补丁都按它寻址，也是 `v-for` 的 key。 */
   id: string
@@ -276,6 +276,12 @@ export interface Twin2dPrimBase {
   transition: Twin2dTransition | null
   /** 绕 `transformOrigin` 转多少度。 */
   rotate: number
+  /**
+   * 绕 `transformOrigin` 等比缩放，缺省 1（与 `rotate` 共用同一个基点）。
+   * ⚠ 只有等比一档，没有分轴的 sx/sy：分轴缩放会把描边宽度也拉成椭圆的，
+   * 而参考项目那四处 hover 放大要的正是「整枝一起大一点」（§7 #10）。
+   */
+  scale: number
   transformOrigin: string
   /** ⚠ 悬浮卡不设成 `none` 会 hover 自我抖动，每秒十几次而每一帧都是「对」的（§9.3）。 */
   pointerEvents: Twin2dPointerEvents
@@ -391,6 +397,7 @@ export interface Twin2dPrimPatch {
   anim?: Twin2dAnim | null
   transition?: Twin2dTransition | null
   rotate?: number
+  scale?: number
   transformOrigin?: string
   pointerEvents?: Twin2dPointerEvents
   keepUpright?: boolean
@@ -420,10 +427,16 @@ export interface Twin2dPrimPatch {
   outline?: Twin2dTextOutline | null
 }
 
-/** 作用在节点根上的覆盖：抬升、外发光、边框色、层级与强调色。 */
+/** 作用在节点根上的覆盖：抬升、等比缩放、外发光、边框色、层级与强调色。 */
 export interface Twin2dRootPatch {
   /** 沿 y 轴负方向的位移（设计像素）。 */
   lift?: number
+  /**
+   * 整个节点的等比缩放；缺席 = 不覆盖。
+   * ⚠ 与 `lift` 是**同一条** transform 上的两段：hover 那一档
+   * `translateY(-3px) scale(1.025)` 两样都要给，只给 `lift` 就是「抬起来了但没变大」（§7 #9）。
+   */
+  scale?: number
   shadows?: readonly Twin2dShadow[]
   borderColor?: string
   /** ⚠ hover 变体必须同时抬它，否则悬浮卡被右邻节点整块盖住（§9.3）。 */

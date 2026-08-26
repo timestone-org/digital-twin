@@ -288,3 +288,84 @@ export type {
 export { collectTwin2dIssues } from './issues'
 export type { Twin2dIssueOptions } from './issues'
 export { collectTwin2dDroppedIssues } from './issuesDropped'
+export {
+  anchorPoint,
+  perimTToSide,
+  perimeterPoint,
+  pointAlong,
+  polylineLength,
+  projectToPerimT,
+  resolveSide,
+  sideNormal,
+  wrap01,
+} from './geometry'
+export type { Box, PerimeterPoint, Pt } from './geometry'
+export { edgePath, orthogonalRoute, roundCorners } from './edgePath'
+export type { EdgePathInput, EdgePathResult } from './edgePath'
+export {
+  applyNodeTransform,
+  centerBoxOf,
+  invertNodeTransform,
+  keepUprightCss,
+  nodeTransformCss,
+  portWorldPos,
+  portWorldSide,
+} from './transform'
+export {
+  CSS_VALUE_MAX_LEN,
+  cssVarChain,
+  isSafeCssValue,
+  resolveAccent,
+  sanitizeCssValue,
+} from './cssValue'
+export { evalExpr, exprSlotRefs } from './expr'
+export type { Twin2dExprValue, Twin2dSlotValues } from './expr'
+export {
+  NO_DATA,
+  fmtClock,
+  fmtDecimal,
+  fmtFixed,
+  fmtKwh,
+  fmtNumber,
+  fmtTrim,
+  formatSlotValue,
+  isPresent,
+} from './format'
+export type { Twin2dSlotFormat } from './format'
+export { anchor9Css, lenToCss, perimCss, placementCss } from './placement'
+export type { Twin2dPerimAt } from './placement'
+export { activeVariants, applyVariants, evalCondition } from './variants'
+export type { Twin2dVariantCtx, Twin2dVariantResult } from './variants'
+export {
+  TWIN_2D_BOX_CONSTANTS,
+  injectVars,
+  paintBase,
+  statusColor,
+} from './paintCommon'
+export type { Twin2dPaintCtx, Twin2dPaintOut } from './paintCommon'
+export { paintBox } from './paintBox'
+export {
+  paintVec,
+  svgGradientAttrs,
+  svgGradientDomId,
+  svgPaintLayers,
+  svgShapeAttrs,
+  svgShapeTag,
+  svgStopAttrs,
+  svgStrokeAttrs,
+} from './paintVec'
+export type { Twin2dSvgLayer, Twin2dSvgTag } from './paintVec'
+export {
+  isFixedColorSprite,
+  paintIco,
+  paintText,
+  resolveIcoSrc,
+  resolveTxtContent,
+  txtTitleAttrs,
+} from './paintText'
+export type {
+  Twin2dIcoResolved,
+  Twin2dIconResolver,
+  Twin2dSlotRead,
+  Twin2dTextCtx,
+} from './paintText'

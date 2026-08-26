@@ -293,6 +293,9 @@ export function normalizeRootPatch(raw: unknown): Twin2dRootPatch {
   const patch: Twin2dRootPatch = {}
   const lift = toFiniteNumber(raw.lift)
   if (lift !== null) patch.lift = lift
+  // ⚠ 0 与负数一律不写这个键：等比缩放到 0 会让整个节点塌成一个点，而没有一处会报错
+  const scale = toFiniteNumber(raw.scale)
+  if (scale !== null && scale > 0) patch.scale = scale
   const shadows = normalizeShadows(raw.shadows)
   if (shadows.length > 0) patch.shadows = shadows
   const borderColor = trimmedString(raw.borderColor)
