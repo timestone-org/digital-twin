@@ -80,6 +80,18 @@ export const routes: RouteRecordRaw[] = [
     },
   },
   {
+    // 2D 孪生子编辑器：与三维那条平级，改的同样是某个节点的一段 config。
+    // ⚠ 路径必须同时接 `:dashboardId` 与 `:nodeId`：属性面板的入口按这两个
+    // 参数跳，少一个就跳到一个空页，而 `sub-editor-routes` 契约按字面查这两段
+    path: '/dashboards/:dashboardId/edit/twin-2d/:nodeId',
+    name: 'twin-2d-editor',
+    component: () => import('@/pages/Twin2dEditor/index.vue'),
+    meta: {
+      title: '2D 孪生编辑器',
+      permissions: [PERMISSION_CODES.dashboardEdit],
+    },
+  },
+  {
     // 素材是跨大屏的公共资源，故不挂在某张大屏或某个项目下面
     path: '/assets',
     name: 'assets',
