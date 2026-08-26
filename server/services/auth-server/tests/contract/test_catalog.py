@@ -31,6 +31,7 @@ PUBLISHED_CODES = frozenset(
         "collect:operate",
         "collect:manage",
         "assistant:use",
+        "assistant:manage",
         "asset:view",
         "asset:manage",
         "dataset:view",

@@ -39,11 +39,12 @@ ASSET_MANAGE = "asset:manage"
 # ai-assistant 复述一份，同上。⚠ **助手不是绕过权限的通道**：它改的是浏览器里
 # 的草稿，最终保存仍走 `dashboard:edit`；服务端工具代表用户调 platform 时也带着
 # 用户自己的身份头。所以这两个码管的只是「能不能用助手」，不是「能改什么」
-# ⚠ 这里**只有 use 一个码**。「看得见别人的会话」那件事眼下是在端点内部判的
-# （同一个 URL 上按调用者分支），而闸 1 的规则按 路径 + 方法 匹配——一个没有
-# 任何规则要它的码，在角色配置界面上就是一个点了没效果的开关。等管理面真的
-# 有了自己的端点，再连着那条规则一起登记。
+# ⚠ manage 管的是**模型凭据**（`/credentials*` 那一族），不是「看得见别人的
+# 会话」——后者是在同一个 URL 上按调用者分支判的，而闸 1 的规则按 路径 + 方法
+# 匹配，表达不了它；一个没有任何规则要它的码，在角色配置界面上就是一个点了
+# 没效果的开关。凭据面有自己的路径，所以它登记得起来。
 ASSISTANT_USE = "assistant:use"
+ASSISTANT_MANAGE = "assistant:manage"
 DATASET_VIEW = "dataset:view"
 DATASET_MANAGE = "dataset:manage"
 DATASET_RECORD_WRITE = "dataset:record:write"
@@ -251,6 +252,19 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
         description=(
             "开对话、让助手动手。⚠ 它动的是浏览器里的草稿，"
             "最终保存仍按各自的码判——只有这个码存不下任何东西"
+        ),
+    ),
+    PermissionSpec(
+        code=ASSISTANT_MANAGE,
+        name="管理助手模型凭据",
+        kind="manage",
+        group_code="assistant",
+        group_label="AI 助手",
+        sort_order=20,
+        description=(
+            "登录/退出模型账号，看得见凭据的过期时刻与所属账号。"
+            "⚠ 它是**整套部署共用的一份凭据**：换掉之后，"
+            "所有人的助手立刻改用新账号说话"
         ),
     ),
     PermissionSpec(

@@ -4,7 +4,10 @@
 不同，那一条因为凭据在子协议里而必须免认证放行。这里没有那个问题。
 """
 
-from auth_server.apps.auth.catalog.permissions import ASSISTANT_USE
+from auth_server.apps.auth.catalog.permissions import (
+    ASSISTANT_MANAGE,
+    ASSISTANT_USE,
+)
 from auth_server.apps.auth.catalog.specs import RouteRuleSpec
 
 _A = "/api/v1/assistant"
@@ -60,6 +63,17 @@ ASSISTANT_RULES: tuple[RouteRuleSpec, ...] = (
         codes=(ASSISTANT_USE,),
         priority=890,
         description="这套部署装了哪些技能",
+    ),
+    RouteRuleSpec(
+        f"{_A}/credentials*",
+        "*",
+        codes=(ASSISTANT_MANAGE,),
+        priority=880,
+        description=(
+            "模型账号的登录与退出。⚠ 比会话那几条**更严**：这一份凭据是"
+            "整套部署共用的，换掉它等于替所有人换了说话的账号。"
+            "端点只回账号掩码与过期时刻，令牌本身一个字都不出库"
+        ),
     ),
 )
 
