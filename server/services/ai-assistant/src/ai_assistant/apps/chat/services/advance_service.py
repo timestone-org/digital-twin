@@ -26,6 +26,7 @@ from ai_assistant.apps.chat.crud import session_crud
 from ai_assistant.apps.chat.models import ChatMessage, ChatSession, ChatStep
 from ai_assistant.apps.chat.services import (
     history,
+    state_block,
     tool_select,
     vision,
 )
@@ -144,32 +145,57 @@ def incoming_messages(payload: AdvanceInput) -> list[BaseMessage]:
     return replies + [vision.image_message(one) for one in pictures if one]
 
 
+def assemble(
+    *,
+    payload: AdvanceInput,
+    rows: list[ChatMessage],
+    plan: dict[str, Any] | None,
+) -> list[BaseMessage]:
+    """把这一轮喂给模型的消息列表拼出来。
+
+    ⚠ 顺序就是上下文的分层，从最稳到每轮都变：常驻提示词 → 历史 → 这一次的
+    输入 → **末尾的状态块**。易变的东西一旦挪到前面去，它后面的工具声明与整段
+    历史会跟着一起丢掉端点的前缀缓存（`prompt.py` 与 `state_block.py` 文件头）。
+
+    ⚠ 状态块**不落库**：`_persist` 落的是 `incoming_messages` 与本回合新增的
+    那几条，而它两者都不是。
+
+    ⚠ 历史只带最近的一截，且截断点不许把工具调用与它的回应切开
+    （`history.window`）。全带的话，一个跑了几十轮的会话会把上下文占满。
+
+    Args: payload, rows（这个会话的全部消息）, plan（会话上的当前计划）。
+    """
+    recent = history.window(rows, MAX_HISTORY_MESSAGES)
+    system = SystemMessage(
+        content=build_system_prompt(
+            payload.surface_kind, surface_label=payload.surface_label
+        )
+    )
+    return [
+        system,
+        *history.replay(recent),
+        *incoming_messages(payload),
+        *state_block.messages_of(payload.surface_context, plan),
+    ]
+
+
 async def load_context(
     session: AsyncSession,
     *,
     chat_session_id: uuid.UUID,
     payload: AdvanceInput,
 ) -> list[BaseMessage]:
-    """系统提示词 + 一段历史 + 这一次的输入。
-
-    ⚠ 历史只带最近的一截，且截断点不许把工具调用与它的回应切开
-    （`history.window`）。全带的话，一个跑了几十轮的会话会把上下文占满，
-    而被挤掉的是**这一轮的工作面快照**——模型于是对着一屏它看不见的画布动手。
+    """读出这个会话的历史与计划，拼成这一轮的上下文。
 
     Args: session, chat_session_id, payload。
     """
     rows = await session_crud.messages_of(session, chat_session_id)
-    recent = history.window(rows, MAX_HISTORY_MESSAGES)
     row = await session.get(ChatSession, chat_session_id)
-    system = SystemMessage(
-        content=build_system_prompt(
-            payload.surface_kind,
-            surface_label=payload.surface_label,
-            context=payload.surface_context,
-            plan=row.plan_json if row is not None else None,
-        )
+    return assemble(
+        payload=payload,
+        rows=rows,
+        plan=row.plan_json if row is not None else None,
     )
-    return [system, *history.replay(recent), *incoming_messages(payload)]
 
 
 # 一次推进往外吐的东西：回合事件，外加计划快照

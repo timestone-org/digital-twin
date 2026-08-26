@@ -1,4 +1,4 @@
-"""模型调用的外壳：断路、超时归因、失败分档、逐字吐出去。
+"""模型调用的外壳：断路、超时归因、失败分档、逐字吐出去、记下用量。
 
 ⚠ **哪一档失败该让断路器打开，是这个文件里最要紧的判断。**
 超时、连不上、限流、5xx 是「下游此刻不行」——该打开，短路能省下白等的时间。
@@ -83,7 +83,9 @@ class GuardedModel:
             self.breaker.record_failure(type(error).__name__)
             raise ModelUnavailable(_reason(error)) from error
         self.breaker.record_success()
-        return _as_ai_message(reply)
+        answer = _as_ai_message(reply)
+        _log_usage(kind, answer)
+        return answer
 
     def _guard(self) -> None:
         try:
@@ -93,6 +95,44 @@ class GuardedModel:
                 "model_short_circuited", "断路器打开着，本次没有发出去"
             )
             raise ModelUnavailable("模型暂时不可用") from error
+
+
+def usage_of(reply: AIMessage) -> dict[str, int] | None:
+    """这一次调用花了多少 token、其中多少是命中前缀缓存的；端点没回就是 None。
+
+    ⚠ `cache_read` 这个键名是 langchain 从 OpenAI 兼容口径的
+    `prompt_tokens_details.cached_tokens` 映过来的。映法一变，这里静默变成 0，
+    而 0 与「真的一次都没命中」长得一模一样——所以有一条用例钉着它。
+
+    Args: reply。
+    """
+    usage = reply.usage_metadata
+    if usage is None:
+        return None
+    details = usage.get("input_token_details") or {}
+    return {
+        "prompt": usage.get("input_tokens", 0),
+        "cached": details.get("cache_read", 0),
+        "output": usage.get("output_tokens", 0),
+    }
+
+
+def _log_usage(kind: ModelKind, reply: AIMessage) -> None:
+    """把这一次调用的用量记一条。
+
+    ⚠ 没有这条日志，上下文工程就是盲的：前缀被打断这件事没有任何运行期迹象，
+    只有账单和延迟会慢慢变难看。`cached` 逼近 `prompt` 才说明常驻提示词与工具
+    声明真的被复用了。
+
+    ⚠ 字段只有档位与几个数字：低基数，且不带任何请求内容（observability §3）。
+
+    Args: kind, reply。
+    """
+    fields = usage_of(reply)
+    if fields is None:
+        _logger.debug("model_usage_absent", "端点没回用量", kind=kind)
+        return
+    _logger.info("model_call_usage", "一次模型调用的用量", kind=kind, **fields)
 
 
 async def _drain(

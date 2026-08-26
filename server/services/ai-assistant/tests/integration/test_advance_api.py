@@ -125,10 +125,13 @@ async def test_a_plain_answer_streams_a_step_then_done(
 async def test_the_snapshot_of_the_page_reaches_the_model(
     db_stack: DbStack,
 ) -> None:
-    """工作面快照要真的进到模型看得见的那一段。
+    """工作面快照要真的进到模型看得见的那一段，而且在**最后一条**上。
 
-    ⚠ 断的话，用户说「把**这个**模块的标题改掉」时，「这个」在模型手里
+    ⚠ 进不去的话，用户说「把**这个**模块的标题改掉」时，「这个」在模型手里
     没有指代——它只能反问，或者挑一个看着像的画布节点动手。
+
+    ⚠ 不许回到系统提示词里：那一段是端点前缀缓存唯一能命中的地方，而快照每轮
+    都变，塞进去等于把它后面的工具声明与整段历史一起作废（ADR-0025）。
     """
     model = ScriptedChat(reply=AIMessage(content="好"))
     _install(db_stack, model)
@@ -144,9 +147,11 @@ async def test_the_snapshot_of_the_page_reaches_the_model(
         },
     )
 
-    system = str(model.seen[0][0].content)
-    assert "n7" in system
-    assert "metric-card" in system
+    seen = model.seen[0]
+    state = str(seen[-1].content)
+    assert "n7" in state
+    assert "metric-card" in state
+    assert "n7" not in str(seen[0].content)
 
 
 async def test_an_oversized_snapshot_is_refused_up_front(
@@ -402,7 +407,10 @@ async def test_writing_a_plan_streams_a_snapshot_and_persists_it(
 async def test_the_plan_reaches_the_next_rounds_prompt(
     db_stack: DbStack,
 ) -> None:
-    """上一轮立的计划要出现在下一轮的系统提示词里，且当前项被点名。"""
+    """上一轮立的计划要出现在下一轮的状态块里，且当前项被点名。
+
+    ⚠ 状态块在**最后一条**，不在系统提示词里——理由同快照那一条（ADR-0025）。
+    """
     first = ScriptedChat(
         script=[
             _asks(
@@ -421,6 +429,8 @@ async def test_the_plan_reaches_the_next_rounds_prompt(
     _install(db_stack, second)
     await _advance(db_stack.client, session_id, user_text="继续吧")
 
-    system = str(second.seen[0][0].content)
-    assert "## 当前计划" in system
-    assert "你正在做第 1 项：**绑温度槽**" in system
+    seen = second.seen[0]
+    state = str(seen[-1].content)
+    assert "## 当前计划" in state
+    assert "你正在做第 1 项：**绑温度槽**" in state
+    assert "## 当前计划" not in str(seen[0].content)

@@ -21,6 +21,7 @@ from openai import (
 )
 
 from ai_assistant.llm import GuardedModel, ModelRejected, ModelUnavailable
+from ai_assistant.llm.guard import usage_of
 from ai_assistant.llm.provider import ModelKind
 from lib.resilience import CircuitBreaker
 from lib.testing.clock import FrozenClock
@@ -284,3 +285,27 @@ async def test_a_stream_that_says_nothing_is_not_an_empty_bubble() -> None:
 
     with pytest.raises(ModelUnavailable):
         await _stream(guarded, [])
+
+
+def test_usage_reads_the_cache_hit_off_a_reply() -> None:
+    """缓存命中数要能从回包里读出来。
+
+    ⚠ 读不出来时它是 0，而 0 与「真的一次都没命中」长得一模一样——上下文工程
+    的全部效果都靠这一格来验，所以键名在这里钉死。
+    """
+    reply = AIMessage(
+        content="好的",
+        usage_metadata={
+            "input_tokens": 5000,
+            "output_tokens": 40,
+            "total_tokens": 5040,
+            "input_token_details": {"cache_read": 4608},
+        },
+    )
+
+    assert usage_of(reply) == {"prompt": 5000, "cached": 4608, "output": 40}
+
+
+def test_a_reply_without_usage_is_not_a_failure() -> None:
+    # 端点不回用量是常有的事，那时该少一条日志，而不是掉一次作答
+    assert usage_of(AIMessage(content="好的")) is None
