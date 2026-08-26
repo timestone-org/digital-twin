@@ -322,8 +322,15 @@ export const TWIN_PANEL_VARIANTS = [
   'glass',
   'bracket',
   'tag',
+  'precision',
+  'forge',
+  'matrix',
 ] as const
 export type TwinPanelVariant = (typeof TWIN_PANEL_VARIANTS)[number]
+
+/** 版式密度：只改内边距与行距，不改字号。 */
+export const TWIN_PANEL_DENSITIES = ['compact', 'normal', 'loose'] as const
+export type TwinPanelDensity = (typeof TWIN_PANEL_DENSITIES)[number]
 
 /** 卡片相对锚点的偏移方向；非 `center` 时画引线与锚点光环。 */
 export const TWIN_PANEL_ORIENTS = [
@@ -354,6 +361,22 @@ export interface TwinPanelStyle {
   background: string
   /** 卡片宽度 px；0 = 按内容自适应。 */
   width: number
+  /**
+   * 卡片最小高度 px；0 = 按内容自适应。
+   * ⚠ 是**最小**高度不是固定高度：定死高度会让加一个字段就溢出裁切，
+   * 而 CSS3D 的牌没有滚动条，被裁掉的那几行在画面上不留任何痕迹。
+   */
+  height: number
+  /** 字段分几列排。 */
+  columns: number
+  /** 版式密度。 */
+  density: TwinPanelDensity
+  /** 横扫光带。 */
+  scan: boolean
+  /** 四角括号叠加，与变体自带的边框叠着画。 */
+  corners: boolean
+  /** 底纹网格。 */
+  grid: boolean
   /** 字号缩放。 */
   fontScale: number
   /**
@@ -369,10 +392,57 @@ export interface TwinPanelStyle {
 }
 
 /**
+ * 字段的画法。
+ * - `text` 一行标签配一个读数，最省地方
+ * - `hero` 大号主指标，一张牌上挑一两个量用
+ * - `bar` 读数下面压一条量程进度条
+ * - `gauge` 环形仪表，一眼看出占量程几成
+ * - `sparkline` 迷你趋势线，攒的是**本次会话内**收到的读数
+ * - `bars` 迷你柱群，与趋势线同一份序列，看节拍比看走势清楚
+ * - `dot` 状态灯，配阈值档时最有用
+ * - `delta` 读数带一个与上一次相比的升降角标
+ */
+export const TWIN_PANEL_FIELD_KINDS = [
+  'text',
+  'hero',
+  'bar',
+  'gauge',
+  'sparkline',
+  'bars',
+  'dot',
+  'delta',
+] as const
+export type TwinPanelFieldKind = (typeof TWIN_PANEL_FIELD_KINDS)[number]
+
+/** 阈值档的色轴；`accent` 就是牌自己的主题色。 */
+export const TWIN_PANEL_TONES = [
+  'accent',
+  'success',
+  'warning',
+  'danger',
+] as const
+export type TwinPanelTone = (typeof TWIN_PANEL_TONES)[number]
+
+/**
+ * 一个阈值档：读数 ≥ `at` 就进这一档。
+ * ⚠ 命中的是**满足条件里 `at` 最大的那一档**，与档在数组里的先后无关：
+ * 按数组序取第一个满足的，会让用户把「危险」写在「预警」前面时，
+ * 超了危险线的读数只显示预警色。
+ */
+export interface TwinPanelLevel {
+  /** 稳定 id，编辑器拿它当列表键；不参与取档。 */
+  id: string
+  at: number
+  tone: TwinPanelTone
+}
+
+/**
  * 信息牌上的一个字段：一个标签配一个值。
  * ⚠ 值来自数组绑定，按**扁平化后的文档序**对齐：第 i 行喂给「把所有信息牌的
  * 字段按顺序摊平之后」的第 i 个字段。插一个字段会让它之后的每一行整体后移一格，
  * 这正是编辑器改完必须重派绑定行的原因。
+ * ⚠ 换画法**不改行数**：八种画法都只吃一个值，所以既有绑定不会因为把某一行
+ * 改成仪表盘而整体错位。
  */
 export interface TwinPanelField {
   /** 牌内唯一键，供编辑器定位；不参与取值对齐。 */
@@ -385,6 +455,13 @@ export interface TwinPanelField {
   decimals: number | null
   /** 没有实时值时显示的静态文本。⚠ 与「常量绑定」不同：它纯展示，不进求值。 */
   staticText: string
+  kind: TwinPanelFieldKind
+  /** 图形量程下限；进度条、仪表、趋势线按 `[min, max]` 归一。 */
+  min: number
+  /** 图形量程上限。 */
+  max: number
+  /** 阈值档；空数组 = 不按读数换色，一律用牌的主题色。 */
+  levels: TwinPanelLevel[]
 }
 
 /**
@@ -396,6 +473,10 @@ export interface TwinPanel {
   id: string
   /** 卡片标题；空串 = 不画标题行。 */
   name: string
+  /** 标题上方那行小字标识；空串 = 不画。 */
+  subtitle: string
+  /** 卡片底栏文案；空串 = 不画底栏。 */
+  footnote: string
   /** 锚定的锚点 id；空串 = 用 `position`。 */
   anchorId: string
   position: Vec3

@@ -3,6 +3,7 @@
  * 归一化只管形状，这两样必须响亮报出去——静默降级对人尚可忍受，对 Agent 是致命的（ADR-0012 四）。
  */
 import { MIN_ROAM_TOUR_STOPS } from './normalizeScene'
+import { panelFieldSpan, panelKindUsesRange } from './panelGraph'
 import type { TwinConfig } from './types'
 
 /** 漫游是单例段，没有实体 id；诊断面板按它跳到漫游那一节。 */
@@ -20,6 +21,7 @@ export const TWIN_CONFIG_ISSUE_KINDS = [
   'roam-too-short',
   'tint-no-stops',
   'tint-empty-range',
+  'panel-empty-range',
 ] as const
 export type TwinConfigIssueKind = (typeof TWIN_CONFIG_ISSUE_KINDS)[number]
 
@@ -286,6 +288,26 @@ function shortRoamTour(
 }
 
 /**
+ * 图形字段的量程上限不大于下限：进度条、仪表与趋势线都算不出「占几成」。
+ * ⚠ 渲染层遇到这一档退回纯文本——图形安静地不见了，配置里却明明配着，
+ * 不报出来用户只会以为是画法没生效。
+ */
+function emptyPanelRanges(config: TwinConfig): TwinConfigIssue[] {
+  return config.panels.flatMap((panel, index) =>
+    panel.fields
+      .map((field, slot) => ({ field, slot }))
+      .filter((ref) => panelKindUsesRange(ref.field.kind))
+      .filter((ref) => panelFieldSpan(ref.field) === null)
+      .map((ref) => ({
+        kind: 'panel-empty-range' as const,
+        entityId: panel.id,
+        path: `panels[${index}].fields[${ref.slot}].max`,
+        detail: `量程上限 ${ref.field.max} 不大于下限 ${ref.field.min}，这个字段会退回纯文本`,
+      })),
+  )
+}
+
+/**
  * 收齐一份归一化配置里的全部问题，按重复 id → 悬空引用 → 画不出来的顺序；
  * 没有问题返回空数组。
  * @param config 归一化后的配置
@@ -312,5 +334,6 @@ export function collectTwinConfigIssues(config: TwinConfig): TwinConfigIssue[] {
     ...hierCycles(config),
     ...tintWithoutStops(config),
     ...emptyTintRanges(config),
+    ...emptyPanelRanges(config),
   ]
 }

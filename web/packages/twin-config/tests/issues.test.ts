@@ -192,4 +192,43 @@ describe('状态染色的两条', () => {
 
     expect(collectTwinConfigIssues(config)).toEqual([])
   })
+
+  // ⚠ 渲染层遇到颠倒的量程退回纯文本：图形安静地不见了，而配置里明明配着，
+  //   不报出来用户只会以为是画法没生效
+  it('图形字段的量程上限不大于下限时报出来，指到具体是第几个字段', () => {
+    const config = normalizeTwinConfig({
+      panels: [
+        {
+          id: 'panel-1',
+          fields: [
+            { key: 'ok', kind: 'bar', min: 0, max: 100 },
+            { key: 'bad', kind: 'gauge', min: 80, max: 20 },
+          ],
+        },
+      ],
+    })
+
+    expect(collectTwinConfigIssues(config)).toEqual([
+      {
+        kind: 'panel-empty-range',
+        entityId: 'panel-1',
+        path: 'panels[0].fields[1].max',
+        detail: '量程上限 20 不大于下限 80，这个字段会退回纯文本',
+      },
+    ])
+  })
+
+  // ⚠ 不吃量程的画法配着颠倒的量程也无所谓：报出来只会变成一堆噪音
+  it('不吃量程的画法不进这条判定', () => {
+    const config = normalizeTwinConfig({
+      panels: [
+        {
+          id: 'panel-1',
+          fields: [{ key: 'a', kind: 'text', min: 80, max: 20 }],
+        },
+      ],
+    })
+
+    expect(collectTwinConfigIssues(config)).toEqual([])
+  })
 })

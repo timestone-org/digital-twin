@@ -14,6 +14,7 @@ import {
 } from './normalizeShared'
 import { normalizeVisibility } from './normalizeRules'
 import {
+  finiteOr,
   isRecord,
   normalizeColorSpec,
   stringList,
@@ -22,12 +23,16 @@ import {
 } from './sanitize'
 import {
   TWIN_BILLBOARD_MODES,
+  TWIN_PANEL_DENSITIES,
+  TWIN_PANEL_FIELD_KINDS,
   TWIN_PANEL_ORIENTS,
+  TWIN_PANEL_TONES,
   TWIN_PANEL_VARIANTS,
   type TwinArrow,
   type TwinFlowLink,
   type TwinPanel,
   type TwinPanelField,
+  type TwinPanelLevel,
   type TwinPanelStyle,
   type Vec3,
 } from './types'
@@ -35,6 +40,14 @@ import {
 const MAX_DECIMALS = 10
 /** 卡片宽度 0 = 自适应；上限防手滑输成一屏宽 */
 const MAX_PANEL_WIDTH = 1200
+/** 卡片最小高度 0 = 自适应；上限同宽度 */
+const MAX_PANEL_HEIGHT = 1200
+/** 字段分列上限：三列以上每格窄到放不下一个带单位的读数 */
+const MAX_PANEL_COLUMNS = 4
+/** 阈值档上限：再多用户自己也读不出牌上现在是哪一档 */
+const MAX_LEVELS = 6
+/** 量程缺省 0–100：多数现场量是百分比，配了图形却没配量程时至少画得出来 */
+const DEFAULT_RANGE_MAX = 100
 /** 牌整体大小的倍率区间；1 = 按模型体量自动定的那个大小。 */
 const MIN_PANEL_SCALE = 0.2
 const MAX_PANEL_SCALE = 5
@@ -61,6 +74,12 @@ function normalizePanelStyle(raw: unknown): TwinPanelStyle {
     accent: normalizeColorSpec(source.accent) ?? DEFAULT_ACCENT,
     background: normalizeColorSpec(source.background) ?? '',
     width: clampedOr(source.width, 0, 0, MAX_PANEL_WIDTH),
+    height: clampedOr(source.height, 0, 0, MAX_PANEL_HEIGHT),
+    columns: clampedOr(source.columns, 1, 1, MAX_PANEL_COLUMNS),
+    density: oneOf(source.density, TWIN_PANEL_DENSITIES, 'normal'),
+    scan: source.scan === true,
+    corners: source.corners === true,
+    grid: source.grid === true,
     fontScale: clampedOr(source.fontScale, 1, MIN_FONT_SCALE, MAX_FONT_SCALE),
     scale: clampedOr(source.scale, 1, MIN_PANEL_SCALE, MAX_PANEL_SCALE),
     animate: source.animate === true,
@@ -68,7 +87,31 @@ function normalizePanelStyle(raw: unknown): TwinPanelStyle {
   }
 }
 
-/** 信息牌与钻取节点共用的一个读数字段。 */
+/**
+ * 阈值档。
+ * ⚠ 不排序：编辑器按文档序摆这几行，归一化偷偷重排会让用户改一个数字、
+ * 整列跟着跳位。取档的一方本就与先后无关（见 `panelFieldTone`）。
+ */
+function normalizeLevels(raw: unknown): TwinPanelLevel[] {
+  const built = normalizeList(raw, (item, index): TwinPanelLevel | null => {
+    if (!isRecord(item)) return null
+    const at = toFiniteNumber(item.at)
+    if (at === null) return null
+    return {
+      id: entityId(item.id, 'level', index),
+      at,
+      tone: oneOf(item.tone, TWIN_PANEL_TONES, 'warning'),
+    }
+  })
+  return built.slice(0, MAX_LEVELS)
+}
+
+/**
+ * 信息牌与钻取节点共用的一个读数字段。
+ * ⚠ 量程颠倒（上限 ≤ 下限）在这里**不纠正**：改成合法值等于替用户瞎猜他要的
+ * 是哪一头，而图形会照着猜出来的量程画。这一档由 `collectTwinConfigIssues`
+ * 报出去，渲染层遇到它退回纯文本。
+ */
 export function normalizePanelField(
   raw: unknown,
   index: number,
@@ -81,6 +124,10 @@ export function normalizePanelField(
     prefix: trimmedString(raw.prefix),
     decimals: decimalsOf(raw.decimals),
     staticText: trimmedString(raw.staticText),
+    kind: oneOf(raw.kind, TWIN_PANEL_FIELD_KINDS, 'text'),
+    min: finiteOr(raw.min, 0),
+    max: finiteOr(raw.max, DEFAULT_RANGE_MAX),
+    levels: normalizeLevels(raw.levels),
   }
 }
 
@@ -90,6 +137,8 @@ export function normalizePanel(raw: unknown, index: number): TwinPanel | null {
   return {
     id: entityId(raw.id, 'panel', index),
     name: trimmedString(raw.name),
+    subtitle: trimmedString(raw.subtitle),
+    footnote: trimmedString(raw.footnote),
     anchorId: trimmedString(raw.anchorId),
     position: vec3(raw.position, ORIGIN),
     offset: vec3(raw.offset, ORIGIN),

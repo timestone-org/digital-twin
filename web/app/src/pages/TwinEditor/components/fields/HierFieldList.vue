@@ -93,6 +93,12 @@ function add(): void {
       prefix: '',
       decimals: null,
       staticText: '',
+      // ⚠ 钻取卡片只画文本：字段类型与信息牌共用一份，但那边的八种画法
+      //   在钻取面板上没有渲染，配了也不会有任何变化
+      kind: 'text',
+      min: 0,
+      max: 100,
+      levels: [],
     },
   ])
 }

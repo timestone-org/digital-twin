@@ -26,6 +26,10 @@ function fieldOf(
     prefix: '',
     decimals: null,
     staticText: '',
+    kind: 'text',
+    min: 0,
+    max: 100,
+    levels: [],
     ...over,
   }
 }
@@ -34,6 +38,8 @@ function panelOf(fields: TwinPanelField[]): TwinPanel {
   return {
     id: 'p1',
     name: '一号牌',
+    subtitle: '',
+    footnote: '',
     anchorId: '',
     position: [0, 0, 0],
     offset: [0, 0, 0],
@@ -45,6 +51,12 @@ function panelOf(fields: TwinPanelField[]): TwinPanel {
       accent: '--accent-primary',
       background: '',
       width: 0,
+      height: 0,
+      columns: 1,
+      density: 'normal',
+      scan: false,
+      corners: false,
+      grid: false,
       fontScale: 1,
       scale: 1,
       animate: false,

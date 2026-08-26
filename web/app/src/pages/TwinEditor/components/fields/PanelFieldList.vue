@@ -25,6 +25,7 @@ import type { DtMenuItem } from '@dt/contracts'
 import { computed } from 'vue'
 
 import { PANEL_FIELD_PRESETS } from '../../scripts/panelFieldPresets'
+import PanelFieldGraph from './PanelFieldGraph.vue'
 
 const props = defineProps<{
   panel: TwinPanel
@@ -107,6 +108,10 @@ function addPreset(item: DtMenuItem): void {
       prefix: '',
       decimals: preset.decimals,
       staticText: '',
+      kind: preset.kind,
+      min: preset.min,
+      max: preset.max,
+      levels: [],
     },
   ])
 }
@@ -121,6 +126,10 @@ function add(): void {
       prefix: '',
       decimals: null,
       staticText: '',
+      kind: 'text',
+      min: 0,
+      max: 100,
+      levels: [],
     },
   ])
 }
@@ -265,6 +274,8 @@ function toggleDecimals(index: number, on: boolean): void {
         size="sm"
         @update:model-value="patch(row.index, { staticText: $event })"
       />
+
+      <PanelFieldGraph :field="row.field" @update="patch(row.index, $event)" />
     </div>
 
     <DtEmpty

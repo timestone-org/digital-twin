@@ -1,5 +1,5 @@
 /**
- * @fileoverview 信息牌的整套外观预设：外观那一组有八个开关，逐个试出一副协调的
+ * @fileoverview 信息牌的整套外观预设：外观那三组有十几个开关，逐个试出一副协调的
  * 样子很费劲，预设把「一整套」变成一次点击。
  * ⚠ 预设只覆盖它列出的键，没列的原样留着——用户调过的宽度不该被换个风格抹掉。
  */
@@ -17,7 +17,7 @@ export interface TwinPanelPreset {
 }
 
 /**
- * 四套常用外观。刻意都不动 `accent` 与 `background`：主题色是用户按项目定的，
+ * 八套常用外观。刻意都不动 `accent` 与 `background`：主题色是用户按项目定的，
  * 换个版式就把它改掉，等于每次试样式都要重挑一次颜色。
  */
 export const TWIN_PANEL_PRESETS: readonly TwinPanelPreset[] = [
@@ -25,19 +25,46 @@ export const TWIN_PANEL_PRESETS: readonly TwinPanelPreset[] = [
     id: 'plain-card',
     label: '简洁卡片',
     hint: '常规卡片，无动效，适合密集摆放',
-    patch: { variant: 'card', orient: 'center', animate: false, pulse: false },
+    patch: {
+      variant: 'card',
+      orient: 'center',
+      density: 'normal',
+      scan: false,
+      corners: false,
+      grid: false,
+      animate: false,
+      pulse: false,
+    },
   },
   {
     id: 'tech-hud',
     label: '科技 HUD',
     hint: '带入场动画与锚点光环，适合少量重点位',
-    patch: { variant: 'hud', orient: 'top', animate: true, pulse: true },
+    patch: {
+      variant: 'hud',
+      orient: 'top',
+      density: 'normal',
+      scan: true,
+      corners: false,
+      grid: false,
+      animate: true,
+      pulse: true,
+    },
   },
   {
     id: 'glass',
     label: '玻璃',
     hint: '半透底，压在模型上不挡视线',
-    patch: { variant: 'glass', orient: 'center', animate: true, pulse: false },
+    patch: {
+      variant: 'glass',
+      orient: 'center',
+      density: 'normal',
+      scan: false,
+      corners: false,
+      grid: false,
+      animate: true,
+      pulse: false,
+    },
   },
   {
     id: 'mini-tag',
@@ -47,8 +74,82 @@ export const TWIN_PANEL_PRESETS: readonly TwinPanelPreset[] = [
       variant: 'tag',
       orient: 'top',
       width: 0,
+      density: 'compact',
       fontScale: 0.85,
+      scan: false,
+      corners: false,
+      grid: false,
       animate: false,
+      pulse: false,
+    },
+  },
+  {
+    id: 'precision',
+    label: '精密切角',
+    hint: '冷线细描配不对称切角，综合态势那一档',
+    patch: {
+      variant: 'precision',
+      orient: 'top',
+      width: 260,
+      density: 'normal',
+      columns: 2,
+      scan: true,
+      corners: true,
+      grid: true,
+      animate: true,
+      pulse: true,
+    },
+  },
+  {
+    id: 'forge',
+    label: '熔铸导轨',
+    hint: '左侧一条竖导轨，能源与产线主题',
+    patch: {
+      variant: 'forge',
+      orient: 'right',
+      width: 240,
+      density: 'normal',
+      columns: 1,
+      scan: false,
+      corners: false,
+      grid: true,
+      animate: true,
+      pulse: true,
+    },
+  },
+  {
+    id: 'matrix',
+    label: '信号矩阵',
+    hint: '点阵底配开放式角标，设备监控那一档',
+    patch: {
+      variant: 'matrix',
+      orient: 'top',
+      width: 250,
+      density: 'compact',
+      columns: 2,
+      scan: true,
+      corners: true,
+      grid: false,
+      animate: true,
+      pulse: false,
+    },
+  },
+  {
+    id: 'command-wall',
+    label: '指挥大屏',
+    hint: '宽体两列 + 满装饰，一张牌顶一块副屏',
+    patch: {
+      variant: 'precision',
+      orient: 'center',
+      width: 420,
+      height: 220,
+      density: 'loose',
+      columns: 2,
+      fontScale: 1.1,
+      scan: true,
+      corners: true,
+      grid: true,
+      animate: true,
       pulse: false,
     },
   },

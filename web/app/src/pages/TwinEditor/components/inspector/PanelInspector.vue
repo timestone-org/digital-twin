@@ -41,6 +41,9 @@ const VARIANT_LABELS: Readonly<Record<TwinPanelVariant, string>> = {
   glass: '玻璃',
   bracket: '角标',
   tag: '标牌',
+  precision: '精密切角',
+  forge: '熔铸导轨',
+  matrix: '信号矩阵',
 }
 const ORIENT_LABELS: Readonly<Record<TwinPanelOrient, string>> = {
   center: '居中（不画引线）',
@@ -108,6 +111,26 @@ function writeBillboard(next: string): void {
           aria-label="标题文本"
           size="sm"
           @update:model-value="write({ name: $event })"
+        />
+      </DtField>
+
+      <DtField label="副标题" hint="标题上那行小字，会转成大写等宽" size="sm">
+        <DtInput
+          :model-value="modelValue.subtitle"
+          aria-label="副标题"
+          placeholder="如 COOLING LOOP / SECTOR 04"
+          size="sm"
+          @update:model-value="write({ subtitle: $event })"
+        />
+      </DtField>
+
+      <DtField label="页脚文案" hint="留空 = 不画底栏" size="sm">
+        <DtInput
+          :model-value="modelValue.footnote"
+          aria-label="页脚文案"
+          placeholder="如 OPC-UA / NODE-042"
+          size="sm"
+          @update:model-value="write({ footnote: $event })"
         />
       </DtField>
 
