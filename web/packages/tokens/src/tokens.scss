@@ -153,4 +153,9 @@
     'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Chakra Petch',
     system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, 'Cascadia Code', 'JetBrains Mono', monospace;
+  /* 读数专用族：与 --font-display 同源，单列一个名字是为了让「墙上所有数字」
+   * 能一处改完。⚠ 只给字体族，等宽数字要消费处自己配 font-variant-numeric。 */
+  --font-digit:
+    'Chakra Petch', ui-monospace, 'HarmonyOS Sans SC', 'PingFang SC',
+    'Microsoft YaHei', system-ui, sans-serif;
 }

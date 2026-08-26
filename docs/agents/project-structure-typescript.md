@@ -27,6 +27,7 @@ web/
 │   ├── datasources/        ← 数据源与 provider 注册
 │   ├── ui/                 ← 基础组件库
 │   ├── three-core/         ← 3D 渲染内核
+│   ├── twin2d/             ← 2D 孪生文档契约与渲染件
 │   ├── modules/            ← 大屏组件模块
 │   └── runtime/            ← 运行态装配
 │
@@ -44,7 +45,8 @@ web/
  L1  基础             twin-config   datasources       ui ─┐
                         │                              │  │
                         └──────────┬───────────────────┘  │
- L2  领域能力              three-core ──▶ modules ────────┘
+ L2  领域能力       three-core ─┬──▶ modules ─────────────┘
+                        twin2d ─┘
                                               │
  L3  运行态                                runtime
                                               │
@@ -62,7 +64,8 @@ web/
 | `@dt/datasources` | contracts |
 | `@dt/ui` | contracts, tokens |
 | `@dt/three-core` | contracts, tokens, twin-config, ui |
-| `@dt/modules` | contracts, three-core, tokens, twin-config, ui |
+| `@dt/twin2d` | contracts, ui |
+| `@dt/modules` | contracts, three-core, tokens, twin-config, twin2d, ui |
 | `@dt/runtime` | contracts, modules, security, ui |
 | `@dt/app` | 全部 |
 

@@ -30,8 +30,9 @@ ALLOWED: dict[str, frozenset[str]] = {
     "datasources": frozenset({"contracts"}),
     "ui": frozenset({"contracts", "tokens"}),
     "three-core": frozenset({"contracts", "tokens", "twin-config", "ui"}),
+    "twin2d": frozenset({"contracts", "ui"}),
     "modules": frozenset(
-        {"contracts", "three-core", "tokens", "twin-config", "ui"}
+        {"contracts", "three-core", "tokens", "twin-config", "twin2d", "ui"}
     ),
     "runtime": frozenset({"contracts", "modules", "security", "ui"}),
 }
