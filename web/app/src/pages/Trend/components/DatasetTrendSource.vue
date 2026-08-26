@@ -6,6 +6,8 @@
  * 换表时留下任何一份，新表的图上就会挂着旧表那条看不出是旧的曲线。
  * ⚠ 深链指向的台账没了时只说一句、页面照常可用，**不当成加载失败**
  * （docs/DATASET_DESIGN.md §7.13）。
+ * ⚠ 选表的下拉塞进图表左栏的 `filters` 插槽，而不是另起一行摆在图上方：
+ * 「挑什么」的控件全在一处，图才留得住高度。
  */
 import { onMounted, onUnmounted } from 'vue'
 
@@ -30,17 +32,6 @@ onUnmounted(picker.dispose)
 
 <template>
   <div class="flex min-h-0 flex-1 flex-col gap-3">
-    <div class="w-64">
-      <DtSelect
-        :model-value="picker.tableId.value"
-        :options="picker.options.value"
-        label="数据台账"
-        size="sm"
-        :disabled="picker.options.value.length === 0"
-        @update:model-value="picker.select($event)"
-      />
-    </div>
-
     <DtNotice
       v-if="picker.missingLink.value"
       intent="warning"
@@ -63,12 +54,32 @@ onUnmounted(picker.dispose)
       :key="picker.tableId.value"
       :table-id="picker.tableId.value"
       :columns="picker.columns.value"
-    />
-    <DtEmpty
-      v-else
-      icon="chart-line"
-      title="还没有选台账"
-      hint="在上面挑一张台账就能看它的曲线。"
-    />
+    >
+      <template #filters>
+        <DtSelect
+          :model-value="picker.tableId.value"
+          :options="picker.options.value"
+          label="数据台账"
+          size="sm"
+          @update:model-value="picker.select($event)"
+        />
+      </template>
+    </DatasetTrendChart>
+    <template v-else>
+      <div class="w-64">
+        <DtSelect
+          :model-value="picker.tableId.value"
+          :options="picker.options.value"
+          label="数据台账"
+          size="sm"
+          @update:model-value="picker.select($event)"
+        />
+      </div>
+      <DtEmpty
+        icon="chart-line"
+        title="还没有选台账"
+        hint="在上面挑一张台账就能看它的曲线。"
+      />
+    </template>
   </div>
 </template>

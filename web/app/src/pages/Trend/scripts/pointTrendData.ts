@@ -27,6 +27,7 @@ export function toTrendItem(point: CollectPoint): TrendItem {
     key: point.node_key,
     label: `${point.name}${unit}${mark}`,
     unit: point.unit ?? '',
+    isDrawable: point.archive_enabled,
   }
 }
 

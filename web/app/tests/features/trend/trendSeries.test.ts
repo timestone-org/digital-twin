@@ -47,7 +47,7 @@ function column(over: Partial<DatasetColumn> = {}): DatasetColumn {
 }
 
 function item(key: string, unit = 'kW'): TrendItem {
-  return { key, label: key, unit }
+  return { key, label: key, unit, isDrawable: true }
 }
 
 describe('哪些列画得出', () => {

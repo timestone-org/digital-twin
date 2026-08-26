@@ -28,6 +28,12 @@ export interface TrendItem {
   label: string
   /** 量纲，同量纲共用一条 Y 轴。 */
   unit: string
+  /**
+   * 这一项到底画不画得出线。
+   * ⚠ 画不出的照样列在清单里、也勾得上——藏起来的话，用户会在采集面看见这个
+   * 点位、在这里找不到它，然后去查是不是权限出了问题。它只是默认被筛掉。
+   */
+  isDrawable: boolean
 }
 
 /**
@@ -52,6 +58,7 @@ export function columnTrendItems(
     label:
       column.unit === null ? column.name : `${column.name}（${column.unit}）`,
     unit: column.unit ?? '',
+    isDrawable: true,
   }))
 }
 

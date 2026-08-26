@@ -1,10 +1,13 @@
 /**
- * @fileoverview 趋势分析页「点位历史」这一面的取数：搜点位、勾点位、取一段读数。
+ * @fileoverview 趋势分析页「点位历史」这一面的取数：搜点位、筛点位、勾点位、
+ * 取一段读数。
  *
  * ⚠ 勾选与搜索结果是两份东西：搜完下一个关键字，已经勾上的点位仍要留在清单里，
  * 否则用户会以为自己取消了勾选，而图上那条线还在。
  * ⚠ 取数失败一律走 `failure`，绝不留一份空读数了事：一张空图与「这段时间确实
  * 没采到数」在界面上长得一模一样（`fetchPointHistory` 因此也是失败即 reject）。
+ * ⚠ 「只看记录历史的」默认开着：没开归档的点位勾得上、查得动、永远画不出线，
+ * 而现场往往几十个点位里只有几个开了归档——不筛的话满屏都是画不出的东西。
  */
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
 
@@ -15,6 +18,7 @@ import { describeError } from '@/composables/useAsyncList'
 import { usePointPicker, type PointPicker } from '@/composables/usePointPicker'
 import { useRacedFetch, type RacedFetch } from '@/composables/useRacedFetch'
 import {
+  countTrendPoints,
   isSelectionDirty,
   pointChartSeries,
   toggleTrendKey,
@@ -34,15 +38,20 @@ import {
 
 export interface PointTrend {
   picker: PointPicker
+  /** 只看开了归档的点位。 */
+  drawableOnly: Ref<boolean>
   items: ComputedRef<TrendItem[]>
   selected: ComputedRef<string[]>
   range: Ref<TrendRangeValue>
   series: ComputedRef<DtChartSeries[]>
+  pointCount: ComputedRef<number>
   loading: Ref<boolean>
   failure: Ref<string | null>
   dirty: ComputedRef<boolean>
   truncation: ComputedRef<string | null>
   toggle: (key: string) => void
+  /** 一次取消全部勾选。 */
+  clear: () => void
   query: () => Promise<void>
   dispose: () => void
 }
@@ -104,10 +113,32 @@ async function runQuery(
   })
 }
 
+/**
+ * 勾一下之后该留下哪几项。
+ * ⚠ 存的是**整项**而不是 key：勾上的点位随时会掉出搜索结果（换关键字、或者
+ * 被「只看记录历史的」筛掉），那时只剩 key 就拼不出名字与量纲，图例会变成
+ * 一串 `{uuid}:{code}`。
+ * @param items 当前清单
+ * @param selected 当前勾选
+ * @param key 被点的那一项
+ */
+function nextChosen(
+  items: readonly TrendItem[],
+  selected: readonly string[],
+  key: string,
+): TrendItem[] {
+  const catalog = new Map(items.map((item) => [item.key, item]))
+  return toggleTrendKey(selected, key).flatMap((wanted) => {
+    const found = catalog.get(wanted)
+    return found === undefined ? [] : [found]
+  })
+}
+
 export function usePointTrend(): PointTrend {
   const picker = usePointPicker()
   const state = createState()
   const range = ref<TrendRangeValue>(defaultTrendRange())
+  const drawableOnly = ref(true)
   const raced = useRacedFetch()
 
   const selected = computed(() => state.chosen.value.map((item) => item.key))
@@ -116,17 +147,21 @@ export function usePointTrend(): PointTrend {
     ...state.chosen.value,
     ...picker.items.value
       .map(toTrendItem)
-      .filter((item) => !selected.value.includes(item.key)),
+      .filter((item) => !selected.value.includes(item.key))
+      .filter((item) => !drawableOnly.value || item.isDrawable),
   ])
+  const series = computed(() =>
+    pointChartSeries(state.fetched.value, items.value, selected.value),
+  )
 
   return {
     picker,
+    drawableOnly,
     items,
     selected,
     range,
-    series: computed(() =>
-      pointChartSeries(state.fetched.value, items.value, selected.value),
-    ),
+    series,
+    pointCount: computed(() => countTrendPoints(series.value)),
     loading: state.loading,
     failure: state.failure,
     dirty: computed(() =>
@@ -142,14 +177,9 @@ export function usePointTrend(): PointTrend {
         : null,
     ),
     toggle: (key) => {
-      const catalog = new Map(items.value.map((item) => [item.key, item]))
-      state.chosen.value = toggleTrendKey(selected.value, key).flatMap(
-        (wanted) => {
-          const found = catalog.get(wanted)
-          return found === undefined ? [] : [found]
-        },
-      )
+      state.chosen.value = nextChosen(items.value, selected.value, key)
     },
+    clear: () => (state.chosen.value = []),
     query: () => runQuery(state, raced, range.value),
     dispose: () => {
       picker.dispose()

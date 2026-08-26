@@ -56,12 +56,13 @@ describe('摊成勾选项', () => {
     expect(item.label).toBe('车间温度（℃）')
     expect(item.unit).toBe('℃')
     expect(item.key).toBe('s1:p1')
+    expect(item.isDrawable).toBe(true)
   })
 
-  it('⚠ 没开归档的点位当场标出来：它永远取不到一条读数', () => {
-    expect(toTrendItem(point({ archive_enabled: false })).label).toContain(
-      '未记录历史',
-    )
+  it('⚠ 没开归档的点位当场标出来，也标成画不出来：它永远取不到一条读数', () => {
+    const item = toTrendItem(point({ archive_enabled: false }))
+    expect(item.label).toContain('未记录历史')
+    expect(item.isDrawable).toBe(false)
   })
 
   it('没有量纲时不硬编一个空括号', () => {

@@ -7,7 +7,12 @@
  */
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
+import {
+  enableAutoUnmount,
+  flushPromises,
+  mount,
+  type VueWrapper,
+} from '@vue/test-utils'
 import type {
   CollectPoint,
   DatasetSeries,
@@ -130,6 +135,14 @@ function series(over: Partial<DatasetSeries> = {}): DatasetSeries {
   return { series: { power: [] }, is_truncated: false, limit: 5000, ...over }
 }
 
+/** 按 label 找到那一格控件的下拉触发器：一屏上不止一个下拉。 */
+function triggerOf(wrapper: VueWrapper, label: string) {
+  const field = wrapper
+    .findAll('.dt-field')
+    .find((one) => one.text().includes(label))
+  return field?.find('.dt-select__trigger')
+}
+
 function signIn(codes: string[]): void {
   const auth = useAuthStore()
   auth.user = { permissions: codes } as never
@@ -236,13 +249,47 @@ describe('深链', () => {
 })
 
 describe('点位历史那一面', () => {
-  it('搜出来的点位进勾选清单，没开归档的当场标出来', async () => {
+  it('⚠ 没开归档的点位默认筛掉：它勾得上、查得动，却永远画不出一条线', async () => {
     signIn([PERMISSION_CODES.collectView])
     vi.mocked(collect.listPoints).mockResolvedValue(
       pointPage([point({ archive_enabled: false })]),
     )
     const wrapper = await open()
+    expect(wrapper.text()).not.toContain('未记录历史')
+  })
+
+  it('关掉「只看记录历史的」就能看见它们，而且当场标出来', async () => {
+    signIn([PERMISSION_CODES.collectView])
+    vi.mocked(collect.listPoints).mockResolvedValue(
+      pointPage([point({ archive_enabled: false })]),
+    )
+    const wrapper = await open()
+    await wrapper.get('[role="switch"]').trigger('click')
     expect(wrapper.text()).toContain('未记录历史')
+  })
+
+  it('⚠ 一页列不下时把总数说出来，别让人以为看到的就是全部', async () => {
+    signIn([PERMISSION_CODES.collectView])
+    vi.mocked(collect.listPoints).mockResolvedValue({
+      items: [point()],
+      total: 137,
+      page: 1,
+      size: 50,
+    })
+    const wrapper = await open()
+    expect(wrapper.text()).toContain('共 137 个点位')
+    expect(wrapper.text()).toContain('只列了前 50 个')
+  })
+
+  it('清空一下取消全部勾选，图跟着回到空态', async () => {
+    signIn([PERMISSION_CODES.collectView])
+    const wrapper = await open()
+    await wrapper.get('input[type="checkbox"]').setValue(true)
+    await wrapper
+      .findAll('button')
+      .find((one) => one.text().includes('清空'))
+      ?.trigger('click')
+    expect(wrapper.text()).toContain('已选 0 / 8 条')
   })
 
   it('一条都没勾时不发请求，也不画一张会被读成「没数据」的空图', async () => {
@@ -301,7 +348,7 @@ describe('台账那一面的选表', () => {
   it('换一张表就取它的列，图跟着整块重建', async () => {
     signIn([PERMISSION_CODES.datasetView])
     const wrapper = await open()
-    await wrapper.get('.dt-select__trigger').trigger('click')
+    await triggerOf(wrapper, '数据台账')?.trigger('click')
     await flushPromises()
     const items = document.querySelectorAll('.dt-select-menu__item')
     items[items.length - 1]?.dispatchEvent(

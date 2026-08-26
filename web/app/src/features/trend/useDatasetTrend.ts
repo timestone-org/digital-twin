@@ -47,6 +47,8 @@ export interface DatasetTrend {
   /** 截断的那一句；没截断就是 null。 */
   truncation: ComputedRef<string | null>
   toggle: (key: string) => void
+  /** 一次取消全部勾选。 */
+  clear: () => void
   query: () => Promise<void>
   /** 卸载时掐掉在途请求。 */
   dispose: () => void
@@ -155,6 +157,7 @@ export function useDatasetTrend(
     toggle: (key) => {
       selected.value = toggleTrendKey(selected.value, key)
     },
+    clear: () => (selected.value = []),
     query: () => runQuery(state, raced, tableId(), selected.value, range.value),
     dispose: raced.cancel,
   }
