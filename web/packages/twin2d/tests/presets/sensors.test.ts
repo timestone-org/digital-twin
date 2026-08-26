@@ -276,6 +276,7 @@ describe('药丸的读数槽位', () => {
       dataType: 'number',
       unit: '℃',
       precision: null,
+      format: 'auto',
       enumMap: {},
       placeholder: '--',
       primary: false,

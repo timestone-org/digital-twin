@@ -5,6 +5,7 @@
  * `builtinLibrary`；口径见 docs/MODULE_TWIN_2D_DESIGN.md §7.6、§7.7。
  */
 import { TWIN_2D_DEFAULT_PLACEHOLDER } from '../constants'
+import { TWIN_2D_LABEL_NATURAL_WHEN, twin2dWithChrome } from './chrome'
 import { TWIN_2D_PALETTE } from './palette'
 import {
   ACCENT,
@@ -71,14 +72,18 @@ function dotPulsePatch(): Twin2dVariant['patch'] {
   return { 'status-dot': { anim: { kind: 'pulse', durationMs: ALARM_MS } } }
 }
 
-/** 方块本体：1.5px 描边、150° 渐变底、内发光加外发光，套一枚半宽半高的图标（§7.6 #41）。 */
-function tileBox(): Twin2dBoxPrim {
+/**
+ * 方块本体：1.5px 描边、150° 渐变底、内发光加外发光，套一枚半宽半高的图标（§7.6 #41）。
+ * ⚠ id 叫 `frame` 而不是按形状叫 `tile`：图元 id 是跨样式的公共词表，承载
+ * 边框 / 圆角 / 选中态的那一枚一律叫 `frame`——这一形的那三样全在这里。
+ */
+function tileFrame(): Twin2dBoxPrim {
   const glyph = spriteOf(
     primBase('glyph', IN_FLOW, { w: '50%', h: '50%' }),
     'ico-hx',
   )
   return {
-    ...boxOf(primBase('tile', FILL_PARENT, AUTO_SIZE), layoutOf(FLOW_NONE), [
+    ...boxOf(primBase('frame', FILL_PARENT, AUTO_SIZE), layoutOf(FLOW_NONE), [
       glyph,
     ]),
     transition: TILE_TRANSITION,
@@ -109,6 +114,7 @@ function tileLabel(): Twin2dTxtPrim {
   }
   return {
     ...txtOf(primBase('label-natural', at, AUTO_SIZE), { kind: 'label' }),
+    when: TWIN_2D_LABEL_NATURAL_WHEN,
     font: {
       size: TILE_LABEL_SIZE,
       weight: 600,
@@ -131,7 +137,7 @@ function tileHoverVariant(): Twin2dVariant {
     id: 'hover',
     when: { kind: 'state', state: 'hover' },
     patch: {
-      tile: {
+      frame: {
         border: borderOf(1.5, HOVER_BORDER),
         shadows: [
           accentShadow({ id: 'inner', inset: true, blur: 18, percent: 18 }),
@@ -144,26 +150,36 @@ function tileHoverVariant(): Twin2dVariant {
   }
 }
 
-/** 方块的选中：一圈 2px 实色 + 一层外发光（§7.7 #48）。 */
+/**
+ * 方块的选中：一圈 2px 实色 + 一层外发光（§7.7 #48）。
+ * ⚠ 补丁落在 `frame` 而不是 `rootPatch.shadows`：参考项目那条 `box-shadow` 挂在有圆角的
+ * 那一层（`.tnv-box` / `.tnv-tank` / `.tnv-square__tile`）上，而本模型的节点根
+ * `.t2-node` **没有 border-radius**——`spread: 2` 的实边落在根上会在圆角盒**外**画出
+ * 一个直角框，取值全对、只是形状不对，没有一处会报错。
+ * ⚠ 整组替换而不是追加：参考项目那条 `box-shadow` 是一个属性，选中时它把常态的内外
+ * 发光整条顶掉。
+ */
 function tileSelectedVariant(): Twin2dVariant {
   return {
     id: 'selected',
     when: { kind: 'state', state: 'selected' },
-    patch: {},
-    rootPatch: {
-      shadows: [
-        {
-          id: 'ring',
-          inset: false,
-          x: 0,
-          y: 0,
-          blur: 0,
-          spread: 2,
-          color: ACCENT,
-        },
-        accentShadow({ id: 'halo', inset: false, blur: 16, percent: 45 }),
-      ],
+    patch: {
+      frame: {
+        shadows: [
+          {
+            id: 'ring',
+            inset: false,
+            x: 0,
+            y: 0,
+            blur: 0,
+            spread: 2,
+            color: ACCENT,
+          },
+          accentShadow({ id: 'halo', inset: false, blur: 16, percent: 45 }),
+        ],
+      },
     },
+    rootPatch: {},
   }
 }
 
@@ -178,7 +194,7 @@ function tileAlarmVariant(): Twin2dVariant {
     when: { kind: 'status', in: ['alarm'] },
     patch: {
       ...dotPulsePatch(),
-      tile: {
+      frame: {
         border: borderOf(1.5, 'var(--state-danger)'),
         anim: { kind: 'breathe', durationMs: ALARM_MS },
       },
@@ -201,6 +217,7 @@ function hxSlot(spec: {
     dataType: 'number',
     unit: spec.unit,
     precision: null,
+    format: 'auto',
     enumMap: {},
     placeholder: TWIN_2D_DEFAULT_PLACEHOLDER,
     primary: spec.primary,
@@ -230,6 +247,7 @@ function hxSlots(): readonly Twin2dSlot[] {
       dataType: 'enum',
       unit: '',
       precision: null,
+      format: 'auto',
       enumMap: {},
       placeholder: TWIN_2D_DEFAULT_PLACEHOLDER,
       primary: false,
@@ -238,25 +256,29 @@ function hxSlots(): readonly Twin2dSlot[] {
   ]
 }
 
-/** 板式换热器：外壳只做居中，观感全在里面那块方砖上。 */
+/**
+ * 板式换热器：`shell` 只做居中，观感全在里面那块方砖上。
+ * ⚠ `shell` 不填色、不描边、不圆角，一格观感都不承载，所以它**不叫** `frame`：
+ * 边框 / 圆角 / 选中态在里面那一枚 `frame` 上，跨样式抄来的补丁认的是后者。
+ */
 function heatExchangerStyle(): Twin2dNodeStyle {
-  const frame = boxOf(
-    primBase('frame', FILL_PARENT, AUTO_SIZE),
+  const shell = boxOf(
+    primBase('shell', FILL_PARENT, AUTO_SIZE),
     layoutOf(FLOW_NONE),
-    [tileBox()],
+    [tileFrame()],
   )
-  return {
+  return twin2dWithChrome({
     id: 'heat-exchanger',
     name: '板式换热器',
     category: 'exchanger',
     accent: TWIN_2D_PALETTE.water,
     defaultStatus: 'online',
     size: { w: 154, h: 154 },
-    prims: [frame, tileLabel(), statusDot()],
+    prims: [shell, tileLabel(), statusDot()],
     ports: [],
     slots: hxSlots(),
     variants: [tileHoverVariant(), tileSelectedVariant(), tileAlarmVariant()],
-  }
+  })
 }
 
 /** 竖色条：3px 宽、一个字高，实心强调色加一圈同色发光（§7.6 #43）。 */
@@ -286,6 +308,7 @@ function labelBar(): Twin2dBoxPrim {
 function labelText(): Twin2dTxtPrim {
   return {
     ...txtOf(primBase('label-natural', IN_FLOW, AUTO_SIZE), { kind: 'label' }),
+    when: TWIN_2D_LABEL_NATURAL_WHEN,
     font: { size: NAME_SIZE, weight: 600, color: 'var(--text-primary)' },
     nowrap: true,
     shadows: [
@@ -322,7 +345,7 @@ function labelStyle(): Twin2dNodeStyle {
     }),
     [labelBar(), labelText()],
   )
-  return {
+  return twin2dWithChrome({
     id: 'label',
     name: '文字标注',
     category: 'label',
@@ -333,7 +356,7 @@ function labelStyle(): Twin2dNodeStyle {
     ports: [],
     slots: [],
     variants: [labelAlarmVariant()],
-  }
+  })
 }
 
 /**

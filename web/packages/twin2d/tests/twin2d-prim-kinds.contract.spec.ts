@@ -73,6 +73,7 @@ const VARIANT: Twin2dVariantCtx = {
   status: null,
   tags: new Map(),
   slots: new Map(),
+  fields: new Map(),
 }
 
 const BASE: Omit<Twin2dPrimBase, 'id'> = {
@@ -149,6 +150,7 @@ const SAMPLES: Record<Twin2dPrimKind, Twin2dPrimType> = {
     kind: 'txt',
     src: { kind: 'lit', text: '读数' },
     font: {},
+    lineHeight: null,
     align: 'start',
     baseline: 'auto',
     nowrap: false,

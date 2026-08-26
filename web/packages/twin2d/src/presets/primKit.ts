@@ -216,6 +216,7 @@ export function txtOf(
     kind: 'txt',
     src,
     font: {},
+    lineHeight: null,
     align: 'start',
     baseline: 'auto',
     nowrap: false,

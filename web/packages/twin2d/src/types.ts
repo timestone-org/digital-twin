@@ -20,6 +20,7 @@ import type {
   Twin2dPortSide,
   Twin2dSlotKind,
   Twin2dStatus,
+  Twin2dValueFormat,
 } from './kinds'
 import type {
   Twin2dBorder,
@@ -64,6 +65,12 @@ export interface Twin2dSlot {
   unit: string
   /** null = 整数直出、小数走一位；给了数就定点。 */
   precision: number | null
+  /**
+   * 读数走哪一台格式化器；缺省 `'auto'` 就是 `precision` 那一套。
+   * ⚠ 与 `precision` 是两件事而不是一件：格式档挑函数，`precision` 是喂给它的位数。
+   * 少了这一档，同一屏上出不了「主读数 12k、悬浮卡 1,234 kWh」这种并存写法（§7.12 #93–#95）。
+   */
+  format: Twin2dValueFormat
   /**
    * 数值 → 文案的映射。
    * ⚠ 键是**字符串**：JSON 的键永远是字符串，标成 number 时 `Object.entries`

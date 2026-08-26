@@ -35,11 +35,24 @@ describe('normalizeSlot', () => {
       dataType: 'number',
       unit: '',
       precision: null,
+      format: 'auto',
       enumMap: {},
       placeholder: '—',
       primary: false,
       expr: null,
     })
+  })
+
+  it('格式档认不出一律回 auto——缺省档必须与「没有格式档」时逐字相同', () => {
+    expect(normalizeSlot({ key: 'a' })?.format).toBe('auto')
+    expect(normalizeSlot({ key: 'a', format: 'kwh' })?.format).toBe('auto')
+    expect(normalizeSlot({ key: 'a', format: 'kwhShort' })?.format).toBe(
+      'kwhShort',
+    )
+    expect(normalizeSlot({ key: 'a', format: 'grouped' })?.format).toBe(
+      'grouped',
+    )
+    expect(normalizeSlot({ key: 'a', format: 'trim2' })?.format).toBe('trim2')
   })
 
   it('派生槽算式合法时留在 derived 档', () => {

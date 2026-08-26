@@ -30,6 +30,7 @@ import {
   normalizeFont,
   normalizeIcoSrc,
   normalizeLayout,
+  normalizeLineHeight,
   normalizeOutline,
   normalizePlacement,
   normalizeRadius,
@@ -81,6 +82,7 @@ export {
   normalizeFont,
   normalizeIcoSrc,
   normalizeLayout,
+  normalizeLineHeight,
   normalizeOutline,
   normalizePad,
   normalizePlacement,
@@ -191,7 +193,7 @@ function icoPrim(
   }
 }
 
-/** 文本：四来源、字体、对齐、省略与描边字。 */
+/** 文本：五来源、字体、行高、对齐、省略与描边字。 */
 function txtPrim(
   base: Twin2dPrimBase,
   raw: Record<string, unknown>,
@@ -201,6 +203,7 @@ function txtPrim(
     kind: 'txt',
     src: normalizeTxtSrc(raw['src']),
     font: normalizeFont(raw['font']),
+    lineHeight: normalizeLineHeight(raw['lineHeight']),
     align: oneOf(raw['align'], TWIN_2D_TEXT_ALIGNS, 'start'),
     baseline: oneOf(raw['baseline'], TWIN_2D_TEXT_BASELINES, 'auto'),
     nowrap: boolOr(raw['nowrap'], false),
@@ -363,6 +366,9 @@ function applyTextPatch(
   }
   if ('color' in raw) patch.color = colorOr(raw['color'])
   if ('font' in raw) patch.font = normalizeFont(raw['font'])
+  if ('lineHeight' in raw) {
+    patch.lineHeight = normalizeLineHeight(raw['lineHeight'])
+  }
   if ('align' in raw) {
     patch.align = oneOf(raw['align'], TWIN_2D_TEXT_ALIGNS, 'start')
   }

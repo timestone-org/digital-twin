@@ -846,7 +846,7 @@ describe('图标四来源', () => {
   })
 })
 
-describe('文本四来源', () => {
+describe('文本五来源', () => {
   it('不是对象与认不出的 kind 都退成空字面量', () => {
     expect(normalizeTxtSrc(null)).toEqual({ kind: 'lit', text: '' })
     expect(normalizeTxtSrc({ kind: 'html' })).toEqual({ kind: 'lit', text: '' })
@@ -874,9 +874,10 @@ describe('文本四来源', () => {
     })
   })
 
-  it('label 与 id 两档没有别的字段', () => {
+  it('label / id / badge 三档没有别的字段', () => {
     expect(normalizeTxtSrc({ kind: 'label' })).toEqual({ kind: 'label' })
     expect(normalizeTxtSrc({ kind: 'id' })).toEqual({ kind: 'id' })
+    expect(normalizeTxtSrc({ kind: 'badge' })).toEqual({ kind: 'badge' })
   })
 })
 
@@ -1028,5 +1029,33 @@ describe('normalizePrimPatch', () => {
   it('两张名单都认不出的 src 当这一键没给过', () => {
     expect('src' in normalizePrimPatch({ src: { kind: 'video' } })).toBe(false)
     expect('src' in normalizePrimPatch({ src: 'label' })).toBe(false)
+  })
+})
+
+describe('txt 的行高', () => {
+  /** 只取行高那一格，缺席时就是生产缺省 */
+  function lineHeightOf(raw: unknown): number | null {
+    const prim = normalizePrim({ id: 't', kind: 'txt', lineHeight: raw }, 0)
+    if (prim === null || prim.kind !== 'txt') throw new Error('夹具建不出图元')
+    return prim.lineHeight
+  }
+
+  it('缺席、非数、非正数一律回 null（= 跟随主题）', () => {
+    expect(lineHeightOf(undefined)).toBeNull()
+    expect(lineHeightOf('tall')).toBeNull()
+    // ⚠ 0 不当有效值：`line-height: 0` 会把整行压成一条缝而且不报错
+    expect(lineHeightOf(0)).toBeNull()
+    expect(lineHeightOf(-1)).toBeNull()
+  })
+
+  it('正数原样留下，小数不取整', () => {
+    expect(lineHeightOf(1)).toBe(1)
+    expect(lineHeightOf(1.55)).toBe(1.55)
+  })
+
+  it('补丁面上同样是一个键：给了才收，收下的非法值成 null', () => {
+    expect(normalizePrimPatch({ lineHeight: 1.1 })).toEqual({ lineHeight: 1.1 })
+    expect(normalizePrimPatch({ lineHeight: 0 })).toEqual({ lineHeight: null })
+    expect('lineHeight' in normalizePrimPatch({})).toBe(false)
   })
 })

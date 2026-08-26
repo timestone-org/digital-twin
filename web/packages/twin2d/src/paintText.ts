@@ -1,5 +1,5 @@
 /**
- * @fileoverview txt / ico 两种图元的绘制：字体五键（缺席即跟随主题）、对齐与省略、
+ * @fileoverview txt / ico 两种图元的绘制：字体五键（缺席即跟随主题）、行高、对齐与省略、
  * text-shadow 与描边字，以及图标四来源的解析与 `ico.color` 的分档生效。
  * 口径见 docs/MODULE_TWIN_2D_DESIGN.md §4.2、§5、§11.2。
  */
@@ -104,6 +104,15 @@ function fontCss(font: FontValue, family: string): Record<string, string> {
 }
 
 /**
+ * 行高：只在显式给了正数时产声明。
+ * ⚠ 不产 `line-height: normal` 兜底：写了它就把外层继承下来的行高一起顶掉，
+ * 而这一档的语义是「不说」而不是「按浏览器缺省」（§7.7 #51）。
+ */
+function lineHeightCss(lineHeight: number | null): Record<string, string> {
+  return lineHeight === null ? {} : { 'line-height': String(lineHeight) }
+}
+
+/**
  * 排版四项。
  * ⚠ `baseline` 三档落到 `align-self` 而不是 `vertical-align`：图元都是 flex 子项，
  * `vertical-align` 在 flex 子项上不生效，写了看起来像「基线这一档配了没反应」。
@@ -169,6 +178,7 @@ export function paintText(
   const style: Record<string, string> = {
     ...base.style,
     ...fontCss(prim.font, family),
+    ...lineHeightCss(prim.lineHeight),
     ...layoutCss(prim),
     ...outlineCss(prim.outline),
   }
@@ -196,14 +206,16 @@ export function txtTitleAttrs(
 }
 
 /**
- * 文本四档来源 → 显示串。
+ * 文本五档来源 → 显示串。
  * ⚠ `slot` 一档一律走 `formatSlotValue`：精度、单位与映射表是槽位的口径，
  * 在这里另格式化一遍就是第二个真源（§11.3）。
  * ⚠ 槽键悬空时回「—」而不是空串：空串看起来是「这一格没配」，而实际是「槽键拼错了」，
  * 说清楚这件事归诊断（issues.ts）。
  * ⚠ `label` 空就是空，不回落 `id`：回落会让「清掉显示名」变成「冒出一串 uuid」，
  * 既不像配置生效也不像出错。要显示 id 是 `id` 那一档的事。
- * @param src 文本四档来源
+ * ⚠ `badge` 空也是空：角标画不画由图元的 `when` 判（`field` 一档的 `present`），
+ * 在这里回落成别的字会让「没配角标」的节点身上凭空长出一个圆点。
+ * @param src 文本五档来源
  * @param ctx 节点实例与槽位读数
  */
 export function resolveTxtContent(
@@ -221,6 +233,8 @@ export function resolveTxtContent(
       return ctx.node.label
     case 'id':
       return ctx.node.id
+    case 'badge':
+      return ctx.node.badge
   }
 }
 

@@ -76,6 +76,7 @@ const TXT: Twin2dTxtPrim = {
   keepUpright: false,
   src: { kind: 'label' },
   font: {},
+  lineHeight: null,
   align: 'start',
   baseline: 'auto',
   nowrap: false,
@@ -330,7 +331,13 @@ describe('resolveTxtContent 的四档来源', () => {
   it('slot 一档走 formatSlotValue：精度与单位都由槽位口径决定', () => {
     const read: Twin2dSlotRead = {
       value: 63.44,
-      slot: { precision: 1, unit: 'kW', enumMap: {}, placeholder: '' },
+      slot: {
+        precision: 1,
+        format: 'auto',
+        unit: 'kW',
+        enumMap: {},
+        placeholder: '',
+      },
     }
     expect(
       resolveTxtContent({ kind: 'slot', slot: 'power' }, textCtx(read)),
@@ -342,6 +349,7 @@ describe('resolveTxtContent 的四档来源', () => {
       value: 1,
       slot: {
         precision: 0,
+        format: 'auto',
         unit: 'kW',
         enumMap: { '1': '运行' },
         placeholder: '',
@@ -496,5 +504,41 @@ describe('paintIco 的 color 分档', () => {
     const out = paintIco({ ...ico({ kind: 'name', name: 'gauge' }), z: 2 }, CTX)
     expect(out.style['z-index']).toBe('2')
     expect(out.attrs).toEqual({})
+  })
+})
+
+describe('paintText 的行高', () => {
+  it('不给行高时一个声明都不产——写 normal 会把外层继承来的行高一起顶掉', () => {
+    expect(paintText(TXT, CTX).style['line-height']).toBeUndefined()
+  })
+
+  it('给了行高就出无单位倍数，小数原样', () => {
+    expect(paintText({ ...TXT, lineHeight: 1 }, CTX).style['line-height']).toBe(
+      '1',
+    )
+    expect(
+      paintText({ ...TXT, lineHeight: 1.55 }, CTX).style['line-height'],
+    ).toBe('1.55')
+  })
+
+  it('hidden 的一枝连行高都不产', () => {
+    expect(
+      paintText({ ...TXT, hidden: true, lineHeight: 1 }, CTX).style[
+        'line-height'
+      ],
+    ).toBeUndefined()
+  })
+})
+
+describe('resolveTxtContent 的 badge 一档', () => {
+  it('读节点上的角标文本', () => {
+    const ctx = { node: { ...NODE, badge: 'A1' }, readSlot: () => null }
+
+    expect(resolveTxtContent({ kind: 'badge' }, ctx)).toBe('A1')
+  })
+
+  // ⚠ 空就是空：在这里回落成别的字会让「没配角标」的节点身上凭空长出一个圆点
+  it('没配角标时给空串，不回落到显示名', () => {
+    expect(resolveTxtContent({ kind: 'badge' }, textCtx(null))).toBe('')
   })
 })

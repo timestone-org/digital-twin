@@ -144,6 +144,7 @@ function txtOf(patch: Partial<Twin2dTxtPrim> = {}): Twin2dTxtPrim {
     kind: 'txt',
     src: { kind: 'lit', text: '读数' },
     font: {},
+    lineHeight: null,
     align: 'start',
     baseline: 'auto',
     nowrap: false,
@@ -161,6 +162,7 @@ function variantCtx(states: readonly Twin2dState[] = []): Twin2dVariantCtx {
     status: null,
     tags: new Map(),
     slots: new Map(),
+    fields: new Map(),
   }
 }
 
@@ -393,7 +395,13 @@ describe('txt 的显示串', () => {
   // ⚠ 精度、单位与映射表是槽位的口径，在模板里再拼一遍就是第二个真源（§11.3）
   it('slot 档走槽位口径出精度与单位', () => {
     const read: SlotReader = () => ({
-      slot: { precision: 1, unit: 'kW', enumMap: {}, placeholder: '' },
+      slot: {
+        precision: 1,
+        format: 'auto',
+        unit: 'kW',
+        enumMap: {},
+        placeholder: '',
+      },
       value: 63.4,
     })
 
@@ -413,7 +421,13 @@ describe('txt 的显示串', () => {
 
   it('取数槽一路传到最深那层', () => {
     const read: SlotReader = () => ({
-      slot: { precision: 0, unit: 't/h', enumMap: {}, placeholder: '' },
+      slot: {
+        precision: 0,
+        format: 'auto',
+        unit: 't/h',
+        enumMap: {},
+        placeholder: '',
+      },
       value: 12,
     })
     const leaf = txtOf({ id: 'leaf', src: { kind: 'slot', slot: 'q' } })

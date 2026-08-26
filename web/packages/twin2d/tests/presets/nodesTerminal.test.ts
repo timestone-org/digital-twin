@@ -101,18 +101,13 @@ function shadowsOf(patch: Twin2dPrimPatch): readonly Twin2dShadow[] {
   return shadows
 }
 
-function rootShadowsOf(variant: Twin2dVariant): readonly Twin2dShadow[] {
-  const shadows = variant.rootPatch.shadows
-  if (shadows === undefined) throw new Error('这条变体没有换节点根的阴影')
-  return shadows
-}
-
 function ctxWith(status: Twin2dVariantCtx['status']): Twin2dVariantCtx {
   return {
     states: new Set(),
     status,
     tags: new Map<string, string>(),
     slots: new Map<string, unknown>(),
+    fields: new Map(),
   }
 }
 
@@ -146,7 +141,12 @@ describe('三个末端预置样式', () => {
 
   it('图元树的结构：外壳套图标底板与主体，主体里是标题加一行读数', () => {
     const style = styleOf('bath-terminal')
-    expect(style.prims.map((prim) => prim.id)).toEqual(['frame', 'status-dot'])
+    expect(style.prims.map((prim) => prim.id)).toEqual([
+      'frame',
+      'status-dot',
+      'badge',
+      'label-outer',
+    ])
     const frame = boxOf(style, 'frame')
     expect(frame.at).toEqual({ kind: 'fill', inset: [0, 0, 0, 0] })
     expect(frame.children.map((prim) => prim.id)).toEqual(['icon', 'body'])
@@ -302,17 +302,18 @@ describe('三个末端预置样式', () => {
     expect(shadowsOf(icon).map((shadow) => shadow.blur)).toEqual([12])
   })
 
-  it('选中出一圈 2px 实色加一层外发光', () => {
+  it('选中出一圈 2px 实色加一层外发光，落在有圆角的外壳上而不是节点根', () => {
     const selected = variantOf(styleOf('heating-terminal'), 'selected')
+    const frame = patchOf(selected, 'frame')
     expect(selected.when).toEqual({ kind: 'state', state: 'selected' })
-    expect(rootShadowsOf(selected).map((shadow) => shadow.spread)).toEqual([
-      2, 0,
-    ])
-    expect(rootShadowsOf(selected).map((shadow) => shadow.color)).toEqual([
+    expect(shadowsOf(frame).map((shadow) => shadow.spread)).toEqual([2, 0])
+    expect(shadowsOf(frame).map((shadow) => shadow.color)).toEqual([
       ACCENT,
       mixTransparent(ACCENT, 45),
     ])
-    expect(selected.patch).toEqual({})
+    // ⚠ 节点根 `.t2-node` 没有 border-radius：这两条落到根上就是在圆角盒外画直角框，
+    //   取值一条都不差，只有形状不对，没有一处会报错
+    expect(selected.rootPatch).toEqual({})
   })
 
   it('报警转危险色、外壳呼吸、状态点脉冲', () => {

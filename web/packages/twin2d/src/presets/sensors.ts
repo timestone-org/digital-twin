@@ -175,6 +175,7 @@ function tagTxt(
     ...baseOf(`${idPrefix}-kind`, FLOW_AT),
     kind: 'txt',
     src: { kind: 'lit', text: def.id },
+    lineHeight: null,
     font: {
       family: TAG_FAMILY,
       size: PILL_FONT_SIZE,
@@ -202,6 +203,7 @@ function valueTxt(
     ...baseOf(`${idPrefix}-value`, FLOW_AT),
     kind: 'txt',
     src: { kind: 'slot', slot: def.slotKey },
+    lineHeight: null,
     font: {
       family: DIGIT_FAMILY,
       size: PILL_FONT_SIZE,
@@ -241,6 +243,7 @@ function unitTxt(
     hidden: def.unit === '',
     opacity: UNIT_OPACITY,
     src: { kind: 'lit', text: def.unit },
+    lineHeight: null,
     font: { size: UNIT_FONT_SIZE, color },
     align: 'start',
     baseline: 'auto',
@@ -320,6 +323,7 @@ export function twin2dSensorSlot(def: Twin2dSensorDef): Twin2dSlot {
     dataType: 'number',
     unit: def.unit,
     precision: null,
+    format: 'auto',
     enumMap: {},
     placeholder: TWIN_2D_SENSOR_PLACEHOLDER,
     primary: false,

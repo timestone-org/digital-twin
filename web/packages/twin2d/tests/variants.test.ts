@@ -1,10 +1,11 @@
 /**
- * @fileoverview 锁住变体求值的三件事：六档条件的真假判定（`slot` 与阈值卡片同义、
+ * @fileoverview 锁住变体求值的三件事：七档条件的真假判定（`slot` 与阈值卡片同义、
  * `not` 可嵌套）、命中变体保持文档序且后者覆盖前者、以及「产出的是补丁不是新树」——
  * 没被补丁碰到的图元必须返回**原引用**，否则 hover 一个节点就重绘整张图。
  */
 import { describe, expect, it } from 'vitest'
 
+import { normalizeNode } from '../src/normalizeNodes'
 import { normalizePrim } from '../src/normalizePrims'
 import type {
   Twin2dIcoPrim,
@@ -13,7 +14,12 @@ import type {
   Twin2dTxtPrim,
 } from '../src/typesPrim'
 import type { Twin2dVariant } from '../src/types'
-import { activeVariants, applyVariants, evalCondition } from '../src/variants'
+import {
+  activeVariants,
+  applyVariants,
+  evalCondition,
+  nodeFields,
+} from '../src/variants'
 import type { Twin2dVariantCtx } from '../src/variants'
 
 /** 夹具走真归一化，缺席字段拿的就是生产缺省 */
@@ -29,6 +35,7 @@ function ctxOf(over: Partial<Twin2dVariantCtx> = {}): Twin2dVariantCtx {
     status: null,
     tags: new Map(),
     slots: new Map(),
+    fields: new Map(),
     ...over,
   }
 }
@@ -616,5 +623,72 @@ describe('tag 档端到端：一个源类样式的四条子类变体', () => {
     expect(iconOf(result.prims).src).toEqual({ kind: 'name', name: 'a' })
     expect(result.prims).toBe(tree)
     expect(result.root).toEqual({})
+  })
+})
+
+describe('field 一档读节点上的三个闭合字段', () => {
+  it('in 判据比的是字段当下的取值', () => {
+    const cond = prim({
+      id: 'p',
+      kind: 'txt',
+      when: { kind: 'field', field: 'labelPos', in: ['left', 'right'] },
+    }).when
+    if (cond === null) throw new Error('条件建不出来')
+
+    expect(
+      evalCondition(cond, ctxOf({ fields: new Map([['labelPos', 'left']]) })),
+    ).toBe(true)
+    expect(
+      evalCondition(cond, ctxOf({ fields: new Map([['labelPos', 'bottom']]) })),
+    ).toBe(false)
+  })
+
+  // ⚠ 取不到的字段按空串算：没有这一条，present 一档在「字段还没进上下文」时会当成有值
+  it('present 判据只问有没有值，字段缺席按空串算', () => {
+    const cond = prim({
+      id: 'p',
+      kind: 'txt',
+      when: { kind: 'field', field: 'badge', test: 'present' },
+    }).when
+    if (cond === null) throw new Error('条件建不出来')
+
+    expect(
+      evalCondition(cond, ctxOf({ fields: new Map([['badge', 'A']]) })),
+    ).toBe(true)
+    expect(
+      evalCondition(cond, ctxOf({ fields: new Map([['badge', '']]) })),
+    ).toBe(false)
+    expect(evalCondition(cond, ctxOf({}))).toBe(false)
+  })
+
+  it('nodeFields 只摊三个字段，且摊的是已归一化的取值', () => {
+    const node = normalizeNode({
+      id: 'n1',
+      labelPos: 'inside',
+      badge: ' A1 ',
+      badgeShape: 'circle-number',
+      tags: { labelPos: 'left' },
+    })
+    if (node === null) throw new Error('节点建不出来')
+
+    expect([...nodeFields(node)]).toEqual([
+      ['labelPos', 'inside'],
+      ['badge', 'A1'],
+      ['badgeShape', 'round'],
+    ])
+  })
+
+  // ⚠ 两张表分开：合成一张的话用户自己写的同名 tag 就能改掉显示名位置
+  it('同名 tag 进不了 field 一档', () => {
+    const cond = prim({
+      id: 'p',
+      kind: 'txt',
+      when: { kind: 'field', field: 'labelPos', in: ['left'] },
+    }).when
+    if (cond === null) throw new Error('条件建不出来')
+
+    expect(
+      evalCondition(cond, ctxOf({ tags: new Map([['labelPos', 'left']]) })),
+    ).toBe(false)
   })
 })

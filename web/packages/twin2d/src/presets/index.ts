@@ -2,6 +2,16 @@
 // 与 `TWIN_2D_TERMINAL_STYLES` 是**不带子类变体**的原始那份，拿它渲染只会让 25 种
 // 子类组合一条都不生效，而这一步零报错。
 export {
+  TWIN_2D_BADGE_PRIM_ID,
+  TWIN_2D_LABEL_NATURAL_WHEN,
+  TWIN_2D_LABEL_OUTER_PRIM_ID,
+  TWIN_2D_LABEL_VARIANTS,
+  badgePrim,
+  labelOuterPrim,
+  twin2dChromePrims,
+  twin2dWithChrome,
+} from './chrome'
+export {
   TWIN_2D_CIRCUIT_CAPACITOR,
   TWIN_2D_CIRCUIT_DIODE,
   TWIN_2D_CIRCUIT_GROUND,

@@ -9,7 +9,7 @@ import { computed, ref, useId } from 'vue'
 import { sanitizeCssValue } from '../cssValue'
 import { injectVars } from '../paintCommon'
 import { centerBoxOf, nodeTransformCss } from '../transform'
-import { applyVariants } from '../variants'
+import { applyVariants, nodeFields } from '../variants'
 import Twin2dPrimView from './Twin2dPrimView.vue'
 import type { Twin2dSlotValues } from '../expr'
 import type { Twin2dDefaultStatus, Twin2dState, Twin2dStatus } from '../kinds'
@@ -153,6 +153,8 @@ const variant = computed<Twin2dVariantCtx>(() => {
     // ⚠ 用 Map 不用普通对象：`constructor` 这类键在对象上会取到原型链上的东西
     tags: new Map(Object.entries(props.node.tags)),
     slots: props.slotValues,
+    // ⚠ 与 tags 分成两张表：合成一张会让用户自己写的同名 tag 悄悄改掉显示名位置
+    fields: nodeFields(props.node),
   }
 })
 

@@ -150,6 +150,7 @@ function ctxWith(status: Twin2dVariantCtx['status']): Twin2dVariantCtx {
     status,
     tags: new Map<string, string>(),
     slots: new Map<string, unknown>(),
+    fields: new Map(),
   }
 }
 
@@ -294,6 +295,9 @@ describe('两个储能容器预置样式', () => {
         'hover',
         'selected',
         'alarm',
+        'label-left',
+        'label-right',
+        'label-inside',
       ])
     }
   })
@@ -327,6 +331,8 @@ describe('水箱（tank）', () => {
       'frame',
       'stubs',
       'status-dot',
+      'badge',
+      'label-outer',
     ])
     expect(boxOf(style, 'frame').children.map((prim) => prim.id)).toEqual([
       'icon',
@@ -468,17 +474,18 @@ describe('水箱（tank）', () => {
     ])
   })
 
-  it('选中出一圈 2px 实色加一层外发光', () => {
+  it('选中出一圈 2px 实色加一层外发光，落在有圆角的胶囊外壳上而不是节点根', () => {
     const selected = variantOf(styleOf('water-tank'), 'selected')
+    const frame = patchOf(selected, 'frame')
     expect(selected.when).toEqual({ kind: 'state', state: 'selected' })
-    expect(selected.patch).toEqual({})
-    expect(rootShadowsOf(selected).map((shadow) => shadow.spread)).toEqual([
-      2, 0,
-    ])
-    expect(rootShadowsOf(selected).map((shadow) => shadow.color)).toEqual([
+    expect(shadowsOf(frame).map((shadow) => shadow.spread)).toEqual([2, 0])
+    expect(shadowsOf(frame).map((shadow) => shadow.color)).toEqual([
       ACCENT,
       mixTransparent(ACCENT, 45),
     ])
+    // ⚠ 节点根 `.t2-node` 没有 border-radius：这两条落到根上就是在药丸外壳外画直角框，
+    //   取值一条都不差，只有形状不对，没有一处会报错
+    expect(selected.rootPatch).toEqual({})
   })
 
   it('报警转危险色、外壳呼吸、状态点脉冲', () => {
@@ -500,7 +507,7 @@ describe('分集水器（cylinder）', () => {
   it('图元树与叠序：体身在下、端盖压两头、双管在上，图标与文字层最后', () => {
     const style = styleOf('manifold')
     expect(style.prims.map((prim) => prim.id)).toEqual([
-      'outline',
+      'frame',
       'cap-left',
       'cap-right',
       'line-warm',
@@ -508,6 +515,8 @@ describe('分集水器（cylinder）', () => {
       'icon',
       'body',
       'status-dot',
+      'badge',
+      'label-outer',
     ])
     expect(boxOf(style, 'body').children.map((prim) => prim.id)).toEqual([
       'label-natural',
@@ -517,7 +526,7 @@ describe('分集水器（cylinder）', () => {
 
   it('五枚 vec 一律铺满节点盒、按设计像素直写、两轴各自拉伸且照旧可点', () => {
     const style = styleOf('manifold')
-    const ids = ['outline', 'cap-left', 'cap-right', 'line-warm', 'line-cool']
+    const ids = ['frame', 'cap-left', 'cap-right', 'line-warm', 'line-cool']
     for (const id of ids) {
       const prim = vecOf(style, id)
       expect(prim.at).toEqual({ kind: 'fill', inset: [0, 0, 0, 0] })
@@ -535,7 +544,7 @@ describe('分集水器（cylinder）', () => {
   // ⚠ 五处「抄成同色 / 抄成对称就白做了」的第一处
   it('端盖与体身**不同色**——圆柱的立体感全在这一处', () => {
     const style = styleOf('manifold')
-    const bodyFill = vecOf(style, 'outline').fill
+    const bodyFill = vecOf(style, 'frame').fill
     const capFill = vecOf(style, 'cap-left').fill
     expect(bodyFill).toEqual({ kind: 'color', color: 'var(--surface-panel)' })
     expect(capFill).toEqual({ kind: 'color', color: 'var(--surface-overlay)' })
@@ -545,7 +554,7 @@ describe('分集水器（cylinder）', () => {
 
   // ⚠ 第二处
   it('体身矩形**没有圆角**：rx 恒 0，圆全靠两端的端盖压出来', () => {
-    const rect = rectOf(vecOf(styleOf('manifold'), 'outline'))
+    const rect = rectOf(vecOf(styleOf('manifold'), 'frame'))
     expect(rect.rx).toBe(0)
     expect(rect).toEqual({
       kind: 'rect',
@@ -611,7 +620,7 @@ describe('分集水器（cylinder）', () => {
 
   it('四处描边色逐值取自调色板：体身 62% / 端盖 70% / 暖 60% / 冷 60%', () => {
     const style = styleOf('manifold')
-    expect(onlyStroke(vecOf(style, 'outline')).color).toBe(
+    expect(onlyStroke(vecOf(style, 'frame')).color).toBe(
       `rgba(${TWIN_2D_PALETTE_RGB.water}, 0.62)`,
     )
     expect(onlyStroke(vecOf(style, 'cap-left')).color).toBe(
@@ -632,7 +641,7 @@ describe('分集水器（cylinder）', () => {
     const style = styleOf('manifold')
     expect(onlyStroke(vecOf(style, 'line-warm')).cap).toBe('round')
     expect(onlyStroke(vecOf(style, 'line-cool')).cap).toBe('round')
-    expect(onlyStroke(vecOf(style, 'outline')).cap).toBe('butt')
+    expect(onlyStroke(vecOf(style, 'frame')).cap).toBe('butt')
     expect(onlyStroke(vecOf(style, 'cap-left')).cap).toBe('butt')
   })
 
@@ -677,7 +686,7 @@ describe('分集水器（cylinder）', () => {
 
   it('hover 把体身描边转强调色并加粗到 1.8，且不抬也不放大', () => {
     const hover = variantOf(styleOf('manifold'), 'hover')
-    const stroke = strokesOf(patchOf(hover, 'outline'))[0]
+    const stroke = strokesOf(patchOf(hover, 'frame'))[0]
     expect(stroke?.width).toBe(1.8)
     expect(stroke?.color).toBe(ACCENT)
     // ⚠ 参考项目的 hover 只落在圆柱体身描边上，罐形那一档才有位移与放大
@@ -690,7 +699,7 @@ describe('分集水器（cylinder）', () => {
 
   it('选中把体身线宽提到 2.5 并只加一层发光，没有罐形那圈 2px 实边', () => {
     const selected = variantOf(styleOf('manifold'), 'selected')
-    const stroke = strokesOf(patchOf(selected, 'outline'))[0]
+    const stroke = strokesOf(patchOf(selected, 'frame'))[0]
     expect(stroke?.width).toBe(2.5)
     expect(stroke?.color).toBe(`rgba(${TWIN_2D_PALETTE_RGB.water}, 0.62)`)
     expect(rootShadowsOf(selected)).toEqual([
@@ -711,11 +720,11 @@ describe('分集水器（cylinder）', () => {
 
   it('报警只换色不加粗、不呼吸，状态点照旧脉冲', () => {
     const alarm = variantOf(styleOf('manifold'), 'alarm')
-    const stroke = strokesOf(patchOf(alarm, 'outline'))[0]
+    const stroke = strokesOf(patchOf(alarm, 'frame'))[0]
     expect(stroke?.color).toBe(DANGER)
     // ⚠ 只有选中那一档加粗到 2.5，报警仍是 1.2
     expect(stroke?.width).toBe(1.2)
-    expect(patchOf(alarm, 'outline').anim).toBeUndefined()
+    expect(patchOf(alarm, 'frame').anim).toBeUndefined()
     expect(patchOf(alarm, 'status-dot').anim).toEqual({
       kind: 'pulse',
       durationMs: 1000,

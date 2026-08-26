@@ -1,5 +1,5 @@
 /**
- * @fileoverview 变体求值：六档条件的判定、按文档序挑出命中的变体，以及把它们的补丁
+ * @fileoverview 变体求值：七档条件的判定、按文档序挑出命中的变体，以及把它们的补丁
  * 浅合并进图元树。产出的是**补丁**不是新树——没被补丁碰到的图元返回原引用（§9.2）。
  * 口径见 docs/MODULE_TWIN_2D_DESIGN.md §4.5、§6.3、§9.2、§9.3。
  */
@@ -9,11 +9,12 @@ import { trimmedString } from './sanitize'
 import type { Twin2dSlotValues } from './expr'
 import type {
   Twin2dHasMode,
+  Twin2dNodeField,
   Twin2dState,
   Twin2dStatus,
   Twin2dThresholdOp,
 } from './kinds'
-import type { Twin2dVariant } from './types'
+import type { Twin2dNode, Twin2dVariant } from './types'
 import type {
   Twin2dBoxPrim,
   Twin2dCondition,
@@ -27,7 +28,7 @@ import type {
   Twin2dVecPrim,
 } from './typesPrim'
 
-/** 六档条件各自要读的那一份。 */
+/** 七档条件各自要读的那一份。 */
 export interface Twin2dVariantCtx {
   /**
    * 当前打开的交互态。
@@ -45,6 +46,28 @@ export interface Twin2dVariantCtx {
   tags: ReadonlyMap<string, string>
   /** 槽键到读数，与派生槽求值共用同一份。 */
   slots: Twin2dSlotValues
+  /**
+   * 节点上那三个闭合字段的当下取值，`field` 一档读它。
+   * ⚠ 与 `tags` 分开两张表：合成一张的话用户自己写一条 `labelPos` tag 就能把
+   * 外置显示名挪到另一边，而那既不像配置生效也不像出错（§7.7 #56）。
+   */
+  fields: ReadonlyMap<Twin2dNodeField, string>
+}
+
+/**
+ * 节点上能进 `field` 条件的那三个字段。
+ * ⚠ 三项都是**已归一化**的取值：`labelPos` 必是六档之一、`badgeShape` 必是三档之一，
+ * 于是条件里的名单只要照抄档名就行，不必再想「用户填了别的怎么办」。
+ * @param node 节点实例
+ */
+export function nodeFields(
+  node: Twin2dNode,
+): ReadonlyMap<Twin2dNodeField, string> {
+  return new Map<Twin2dNodeField, string>([
+    ['labelPos', node.labelPos],
+    ['badge', node.badge],
+    ['badgeShape', node.badgeShape],
+  ])
 }
 
 /** 变体应用之后的图元树与节点根覆盖。 */
@@ -105,6 +128,18 @@ function matchHas(
   return mode === 'all' ? slots.every(present) : slots.some(present)
 }
 
+// ⚠ 取不到的字段按空串算：`present` 一档于是判「非空」，`in` 一档判「落在名单里」，
+//   两档都不必为「这个字段还没归一化」另开一个分支
+function matchField(
+  field: Twin2dNodeField,
+  test: 'in' | 'present',
+  wanted: readonly string[],
+  fields: ReadonlyMap<Twin2dNodeField, string>,
+): boolean {
+  const value = fields.get(field) ?? ''
+  return test === 'present' ? value !== '' : wanted.includes(value)
+}
+
 function matchTag(
   key: string,
   wanted: readonly string[],
@@ -134,6 +169,8 @@ export function evalCondition(
       return matchSlot(cond, ctx.slots)
     case 'has':
       return matchHas(cond.slots, cond.mode, ctx.slots)
+    case 'field':
+      return matchField(cond.field, cond.test, cond.in, ctx.fields)
     case 'not':
       return !evalCondition(cond.of, ctx)
   }
@@ -199,6 +236,7 @@ const ICO_KEYS = ['color'] as const
 /** txt 独有的可补丁键（`src` 另判） */
 const TXT_KEYS = [
   'font',
+  'lineHeight',
   'align',
   'baseline',
   'nowrap',

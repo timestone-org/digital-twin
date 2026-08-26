@@ -5,6 +5,7 @@
  * `TERMINAL_FIELDS`；口径见 docs/MODULE_TWIN_2D_DESIGN.md §7.1、§7.2、§7.7。
  */
 import { TWIN_2D_DEFAULT_PLACEHOLDER } from '../constants'
+import { TWIN_2D_LABEL_NATURAL_WHEN, twin2dWithChrome } from './chrome'
 import { TWIN_2D_PALETTE, mixTransparent } from './palette'
 import {
   ACCENT,
@@ -111,6 +112,7 @@ function iconPlate(sprite: Twin2dSpriteId): Twin2dBoxPrim {
 function bodyBox(primarySlot: string): Twin2dBoxPrim {
   const title: Twin2dTxtPrim = {
     ...txtOf(primBase('label-natural', IN_FLOW, AUTO_SIZE), { kind: 'label' }),
+    when: TWIN_2D_LABEL_NATURAL_WHEN,
     font: { size: NAME_SIZE, weight: 600, color: 'var(--text-primary)' },
     nowrap: true,
     ellipsis: true,
@@ -216,26 +218,36 @@ function hoverVariant(): Twin2dVariant {
   }
 }
 
-/** 选中：一圈 2px 实色 + 一层外发光（§7.7 #48）。 */
+/**
+ * 选中：一圈 2px 实色 + 一层外发光（§7.7 #48）。
+ * ⚠ 补丁落在 `frame` 而不是 `rootPatch.shadows`：参考项目那条 `box-shadow` 挂在有圆角的
+ * 那一层（`.tnv-box` / `.tnv-tank` / `.tnv-square__tile`）上，而本模型的节点根
+ * `.t2-node` **没有 border-radius**——`spread: 2` 的实边落在根上会在圆角盒**外**画出
+ * 一个直角框，取值全对、只是形状不对，没有一处会报错。
+ * ⚠ 整组替换而不是追加：参考项目那条 `box-shadow` 是一个属性，选中时它把常态的内外
+ * 发光整条顶掉。
+ */
 function selectedVariant(): Twin2dVariant {
   return {
     id: 'selected',
     when: { kind: 'state', state: 'selected' },
-    patch: {},
-    rootPatch: {
-      shadows: [
-        {
-          id: 'ring',
-          inset: false,
-          x: 0,
-          y: 0,
-          blur: 0,
-          spread: 2,
-          color: ACCENT,
-        },
-        accentShadow({ id: 'halo', inset: false, blur: 16, percent: 45 }),
-      ],
+    patch: {
+      frame: {
+        shadows: [
+          {
+            id: 'ring',
+            inset: false,
+            x: 0,
+            y: 0,
+            blur: 0,
+            spread: 2,
+            color: ACCENT,
+          },
+          accentShadow({ id: 'halo', inset: false, blur: 16, percent: 45 }),
+        ],
+      },
     },
+    rootPatch: {},
   }
 }
 
@@ -273,6 +285,7 @@ function slotOf(spec: {
     dataType: 'number',
     unit: spec.unit,
     precision: null,
+    format: 'auto',
     enumMap: {},
     placeholder: TWIN_2D_DEFAULT_PLACEHOLDER,
     primary: spec.primary,
@@ -302,6 +315,7 @@ function terminalSlots(): readonly Twin2dSlot[] {
       dataType: 'enum',
       unit: '',
       precision: null,
+      format: 'auto',
       enumMap: {},
       placeholder: TWIN_2D_DEFAULT_PLACEHOLDER,
       primary: false,
@@ -320,7 +334,7 @@ function terminalStyle(spec: {
   accent: string
   sprite: Twin2dSpriteId
 }): Twin2dNodeStyle {
-  return {
+  return twin2dWithChrome({
     id: spec.id,
     name: spec.name,
     category: 'terminal',
@@ -331,7 +345,7 @@ function terminalStyle(spec: {
     ports: [],
     slots: terminalSlots(),
     variants: [hoverVariant(), selectedVariant(), alarmVariant()],
-  }
+  })
 }
 
 /**

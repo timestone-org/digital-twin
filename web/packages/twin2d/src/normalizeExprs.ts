@@ -1,13 +1,15 @@
 /**
  * @fileoverview 两门闭合小语言的归一化：派生槽算式（七档算子、最多三层）与变体条件
- * （六档判据、`not` 可嵌套）。样式与节点两侧都用它们。
+ * （七档判据、`not` 可嵌套）。样式与节点两侧都用它们。
  * 口径见 docs/MODULE_TWIN_2D_DESIGN.md §4.5、§6.3 与 §9.5。
  */
 import { TWIN_2D_MAX_EXPR_DEPTH, TWIN_2D_MAX_TAG_LENGTH } from './constants'
 import {
   TWIN_2D_CONDITION_KINDS,
   TWIN_2D_EXPR_KINDS,
+  TWIN_2D_FIELD_TESTS,
   TWIN_2D_HAS_MODES,
+  TWIN_2D_NODE_FIELDS,
   TWIN_2D_STATES,
   TWIN_2D_STATUSES,
   TWIN_2D_THRESHOLD_OPS,
@@ -23,6 +25,7 @@ import {
 import type {
   Twin2dConditionKind,
   Twin2dExprKind,
+  Twin2dNodeField,
   Twin2dState,
   Twin2dThresholdOp,
 } from './kinds'
@@ -123,6 +126,20 @@ function matchCondition(
   return inList.length === 0 ? null : { kind: 'tag', key, in: inList }
 }
 
+/**
+ * 节点字段条件：字段名不在白名单里整条丢弃；`in` 一档的空名单同样整条丢弃。
+ * ⚠ `present` 一档不看 `in`：它判的是「这个字段有没有值」，硬要一份名单就等于
+ * 让用户把角标可能的取值全枚举一遍（§7.7 #50）。
+ */
+function fieldCondition(raw: Record<string, unknown>): Twin2dCondition | null {
+  const field = oneOf<Twin2dNodeField | ''>(raw.field, TWIN_2D_NODE_FIELDS, '')
+  if (field === '') return null
+  const test = oneOf(raw.test, TWIN_2D_FIELD_TESTS, 'in')
+  if (test === 'present') return { kind: 'field', field, test, in: [] }
+  const inList = stringList(raw.in)
+  return inList.length === 0 ? null : { kind: 'field', field, test, in: inList }
+}
+
 function valueCondition(
   kind: 'slot' | 'has',
   raw: Record<string, unknown>,
@@ -163,11 +180,13 @@ function conditionAt(raw: unknown, depth: number): Twin2dCondition | null {
   if (kind === 'state' || kind === 'status' || kind === 'tag') {
     return matchCondition(kind, raw)
   }
+  if (kind === 'field') return fieldCondition(raw)
   return valueCondition(kind, raw)
 }
 
 /**
  * 一条变体条件；认不出的 kind、空取值集合与嵌套过深的 `not` 一律返回 null。
+ * ⚠ 例外是 `field` 的 `present` 一档：它本来就不带取值集合（见 `fieldCondition`）。
  * ⚠ 返回 null 的条件会让整条变体被丢弃（见 `normalizeVariant`），不是「恒真」——
  * 一条恒真的变体会把外观钉死在那一档上，而它看起来像「样式本来就长这样」。
  * @param raw 原始条件

@@ -15,6 +15,7 @@ import {
   TWIN_2D_PORT_DIRS,
   TWIN_2D_PORT_SIDES,
   TWIN_2D_SLOT_KINDS,
+  TWIN_2D_VALUE_FORMATS,
 } from './kinds'
 import { normalizeCondition, normalizeExpr } from './normalizeExprs'
 import {
@@ -195,6 +196,7 @@ export function normalizeSlot(raw: unknown): Twin2dSlot | null {
       precision === null
         ? null
         : clamp(Math.round(precision), 0, MAX_SLOT_PRECISION),
+    format: oneOf(raw.format, TWIN_2D_VALUE_FORMATS, 'auto'),
     enumMap: normalizeEnumMap(raw.enumMap),
     placeholder: placeholder === '' ? TWIN_2D_DEFAULT_PLACEHOLDER : placeholder,
     primary: boolOr(raw.primary, false),

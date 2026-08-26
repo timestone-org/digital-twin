@@ -379,7 +379,7 @@ function literalText(value: unknown): string {
 }
 
 /**
- * 文本四来源；认不出与取不到槽键的都退成空字面量。
+ * 文本五来源；认不出与取不到槽键的都退成空字面量。
  * ⚠ 退成 `label` 会让一处配错的文本图元冒出节点名，看着像「显示名重复了」。
  * @param raw 原始值
  */
@@ -394,7 +394,20 @@ export function normalizeTxtSrc(raw: unknown): Twin2dTxtSrc {
       return { kind: 'label' }
     case 'id':
       return { kind: 'id' }
+    case 'badge':
+      return { kind: 'badge' }
     default:
       return { kind: 'lit', text: literalText(raw['text']) }
   }
+}
+
+/**
+ * 行高倍数；非正数与非有限数一律回 null（= 跟随主题）。
+ * ⚠ 0 不当有效值：`line-height: 0` 会把整行压成一条缝而不报错，而用户想表达的
+ * 「不设行高」在这里的写法是不给这一键（§7.7 #51）。
+ * @param value 原始值
+ */
+export function normalizeLineHeight(value: unknown): number | null {
+  const parsed = toFiniteNumber(value)
+  return parsed === null || parsed <= 0 ? null : parsed
 }

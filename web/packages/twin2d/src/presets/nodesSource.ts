@@ -7,6 +7,7 @@
  */
 import { TWIN_2D_DEFAULT_PLACEHOLDER } from '../constants'
 import { TWIN_2D_STATUSES } from '../kinds'
+import { TWIN_2D_LABEL_NATURAL_WHEN, twin2dWithChrome } from './chrome'
 import { TWIN_2D_PALETTE, mixTransparent } from './palette'
 import type { Twin2dSpriteId } from '../kinds'
 import type { Twin2dNodeStyle, Twin2dPort, Twin2dSlot } from '../types'
@@ -224,10 +225,11 @@ const BOX_REST: Omit<Twin2dBoxPrim, keyof Twin2dPrimBase | 'kind'> = {
   children: [],
 }
 
-/** txt 独有那九项的缺省：空字面量、跟随主题的字体、左对齐、不省略。 */
+/** txt 独有那十项的缺省：空字面量、跟随主题的字体与行高、左对齐、不省略。 */
 const TXT_REST: Omit<Twin2dTxtPrim, keyof Twin2dPrimBase | 'kind'> = {
   src: { kind: 'lit', text: '' },
   font: {},
+  lineHeight: null,
   align: 'start',
   baseline: 'auto',
   nowrap: false,
@@ -289,6 +291,7 @@ function liveSlot(spec: LiveSlotSpec): Twin2dSlot {
     dataType: 'number',
     unit: spec.unit,
     precision: spec.precision,
+    format: 'auto',
     enumMap: {},
     placeholder: TWIN_2D_DEFAULT_PLACEHOLDER,
     primary: false,
@@ -314,6 +317,7 @@ function derivedSlot(spec: DerivedSlotSpec): Twin2dSlot {
     dataType: 'number',
     unit: spec.unit,
     precision: spec.precision,
+    format: 'auto',
     enumMap: {},
     placeholder: TWIN_2D_DEFAULT_PLACEHOLDER,
     primary: false,
@@ -361,7 +365,16 @@ const EFFICIENCY_EXPR: Twin2dExpr = {
  * 而单位与精度是**槽位**上的口径，一个槽出不了两种写法（§7.12 #91）。
  */
 const SOURCE_SLOTS: readonly Twin2dSlot[] = [
-  liveSlot({ key: 'input_kwh', label: '输入能量', unit: 'kWh', precision: 0 }),
+  // ⚠ 悬浮卡那一行要千分位：`grouped` 档走 fmtNumber，与主读数的压缩档并存（§7.12 #94）
+  {
+    ...liveSlot({
+      key: 'input_kwh',
+      label: '输入能量',
+      unit: 'kWh',
+      precision: 0,
+    }),
+    format: 'grouped',
+  },
   {
     ...liveSlot({
       key: 'output_kwh',
@@ -393,6 +406,7 @@ const SOURCE_SLOTS: readonly Twin2dSlot[] = [
     dataType: 'enum',
     unit: '',
     precision: null,
+    format: 'auto',
     // ⚠ 键是字符串：JSON 的键永远是字符串，标成数字时拿数值读数去索引会静默查不到
     enumMap: { '0': '离线', '1': '运行', '2': '待机', '3': '报警' },
     placeholder: TWIN_2D_DEFAULT_PLACEHOLDER,
@@ -400,27 +414,39 @@ const SOURCE_SLOTS: readonly Twin2dSlot[] = [
     expr: null,
   },
   liveSlot({ key: 'cop', label: '性能系数', unit: '', precision: null }),
-  derivedSlot({
-    key: 'output',
-    label: '输出（读数行）',
-    unit: '',
-    precision: 0,
-    expr: OUTPUT_EXPR,
-  }),
-  derivedSlot({
-    key: 'output_total',
-    label: '输出（悬浮卡）',
-    unit: 'kWh',
-    precision: 0,
-    expr: OUTPUT_EXPR,
-  }),
-  derivedSlot({
-    key: 'efficiency',
-    label: '能效（合成）',
-    unit: '%',
-    precision: null,
-    expr: EFFICIENCY_EXPR,
-  }),
+  // ⚠ 主读数走压缩档：`precision: 0` 在这一档是「压缩后不留小数」，于是 12345 显 12k
+  //   而不是 12.35k——与参考项目 `abs >= 10000` 那一支同值（§7.12 #93）
+  {
+    ...derivedSlot({
+      key: 'output',
+      label: '输出（读数行）',
+      unit: '',
+      precision: 0,
+      expr: OUTPUT_EXPR,
+    }),
+    format: 'kwhShort',
+  },
+  {
+    ...derivedSlot({
+      key: 'output_total',
+      label: '输出（悬浮卡）',
+      unit: 'kWh',
+      precision: 0,
+      expr: OUTPUT_EXPR,
+    }),
+    format: 'grouped',
+  },
+  // ⚠ 能效两位小数且去尾随零：参考项目这一处不是 `toFixed(1)`，抄错不报错、只差一位（§7.12 #95）
+  {
+    ...derivedSlot({
+      key: 'efficiency',
+      label: '能效（合成）',
+      unit: '%',
+      precision: null,
+      expr: EFFICIENCY_EXPR,
+    }),
+    format: 'trim2',
+  },
 ]
 
 /** 一个端口要填的三项。 */
@@ -473,6 +499,7 @@ function caption(
   id: string,
   text: string,
   font: Twin2dTxtPrim['font'],
+  lineHeight: number | null = null,
 ): Twin2dTxtPrim {
   return {
     ...PRIM_BASE,
@@ -481,8 +508,16 @@ function caption(
     id,
     src: { kind: 'lit', text },
     font,
+    lineHeight,
   }
 }
+
+/**
+ * 悬浮卡一行的行高：参考项目 `.tnv-energy-tip__row` 的 1.55。
+ * ⚠ 行距由行高撑而不是 `gap`：`tip-rows` 的 gap 是 0，改用 gap 会让三行之间等距、
+ * 而每一行自己的上下留白消失，整张卡看着挤在一起（§7.3）。
+ */
+const TIP_ROW_LINE_HEIGHT = 1.55
 
 /** 悬浮卡里一行右侧的读数：digit 字体 15px，带一层字发光。 */
 function tipValue(id: string, slot: string): Twin2dTxtPrim {
@@ -498,6 +533,7 @@ function tipValue(id: string, slot: string): Twin2dTxtPrim {
       weight: 400,
       color: ACCENT,
     },
+    lineHeight: TIP_ROW_LINE_HEIGHT,
     nowrap: true,
     shadows: [glow(`${id}-glow`, 6, alpha(38))],
   }
@@ -519,7 +555,7 @@ function tipRow(id: string, label: string, slot: string): Twin2dBoxPrim {
       pad: [0, 0, 0, 0],
     },
     children: [
-      caption(`tip-${id}-label`, label, TIP_LABEL_FONT),
+      caption(`tip-${id}-label`, label, TIP_LABEL_FONT, TIP_ROW_LINE_HEIGHT),
       tipValue(`tip-${id}-value`, slot),
     ],
   }
@@ -701,6 +737,9 @@ function efficiencyPill(): Twin2dBoxPrim {
           letterSpacing: 0.4,
           color: ACCENT,
         },
+        // ⚠ 参考项目 `.tnv-energy-pct` 的 1.1：缺省行高会把这枚药丸撑高一截，
+        //   于是它压不住同一行里 28px 的大字（§7.3 #19）
+        lineHeight: 1.1,
       },
     ],
   }
@@ -791,6 +830,7 @@ function bodyColumn(): Twin2dBoxPrim {
         ...TXT_REST,
         kind: 'txt',
         id: 'label-natural',
+        when: TWIN_2D_LABEL_NATURAL_WHEN,
         src: { kind: 'label' },
         font: { size: 18, weight: 600, color: 'var(--text-primary)' },
         nowrap: true,
@@ -802,12 +842,17 @@ function bodyColumn(): Twin2dBoxPrim {
   }
 }
 
-/** 图标底板：34×34 居中摆一枚 26×26 的 sprite。 */
+/**
+ * 图标底板：34×34 居中摆一枚 26×26 的 sprite。
+ * ⚠ 那枚 sprite 的 id 是 `glyph`，与末端 / 方块两族**逐字同名**：图元 id 是节点级
+ * patch 与变体补丁的寻址键，一族自己另起一个名字，用户把一条变体补丁从末端抄到这里
+ * 就寻不到址——表现是「变体命中了、外观纹丝不动」，零报错。
+ */
 function iconPlate(sprite: Twin2dSpriteId): Twin2dBoxPrim {
   const glyph: Twin2dIcoPrim = {
     ...PRIM_BASE,
     kind: 'ico',
-    id: 'icon-glyph',
+    id: 'glyph',
     size: { w: 26, h: 26 },
     src: { kind: 'sprite', id: sprite },
     // ⚠ 这四枚 sprite 的颜色是插画的一部分、写死在 symbol 里，`color` 对它们无效；
@@ -866,13 +911,13 @@ function frameBox(sprite: Twin2dSpriteId): Twin2dBoxPrim {
   }
 }
 
-/** 右下角的状态点：7×7 的圆，取节点根注入的状态色（§7.7 #53）。 */
+/** 右下角的状态点：7×7 的圆，取节点根注入的状态色（§7.7 #53）。id 同上，四族共用 `status-dot`。 */
 function statusDot(): Twin2dBoxPrim {
   return {
     ...PRIM_BASE,
     ...BOX_REST,
     kind: 'box',
-    id: 'dot',
+    id: 'status-dot',
     at: {
       kind: 'abs',
       left: null,
@@ -974,7 +1019,7 @@ const ALARM_VARIANT: Twin2dNodeStyle['variants'][number] = {
       border: edge(1.5, ALARM_BORDER),
       anim: { kind: 'breathe', durationMs: ALARM_MS },
     },
-    dot: { anim: { kind: 'pulse', durationMs: ALARM_MS } },
+    'status-dot': { anim: { kind: 'pulse', durationMs: ALARM_MS } },
   },
 }
 
@@ -999,7 +1044,7 @@ interface SourceStyleSpec {
  * `category === 'source'` 决定能量三件套画不画，本模型把那件事交给了图元的 `when`（§7 #55）。
  */
 function sourceStyle(spec: SourceStyleSpec): Twin2dNodeStyle {
-  return {
+  return twin2dWithChrome({
     id: spec.id,
     name: spec.name,
     category: 'source',
@@ -1010,7 +1055,7 @@ function sourceStyle(spec: SourceStyleSpec): Twin2dNodeStyle {
     ports: SOURCE_PORTS,
     slots: SOURCE_SLOTS,
     variants: SOURCE_VARIANTS,
-  }
+  })
 }
 
 /** 四个能源源样式的 id，与参考项目的节点类型 id 逐字相同。 */

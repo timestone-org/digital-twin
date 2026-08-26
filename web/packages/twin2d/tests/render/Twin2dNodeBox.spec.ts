@@ -93,6 +93,7 @@ function txtOf(patch: Partial<Twin2dTxtPrim> = {}): Twin2dTxtPrim {
     kind: 'txt',
     src: { kind: 'label' },
     font: {},
+    lineHeight: null,
     align: 'start',
     baseline: 'auto',
     nowrap: false,
@@ -617,7 +618,13 @@ describe('图元树的上下文', () => {
 describe('两个注入槽', () => {
   it('取数槽一路传到 txt 图元', () => {
     const read: SlotReader = () => ({
-      slot: { precision: 1, unit: 'kW', enumMap: {}, placeholder: '' },
+      slot: {
+        precision: 1,
+        format: 'auto',
+        unit: 'kW',
+        enumMap: {},
+        placeholder: '',
+      },
       value: 63.4,
     })
     const nodeStyle = styleOf({
@@ -657,5 +664,69 @@ describe('两个注入槽', () => {
     })
 
     expect(render({ nodeStyle }).find('img').exists()).toBe(false)
+  })
+})
+
+describe('field 一档的条件读到的是节点字段，不是 tags', () => {
+  /** 一枚只有 `when` 不同的文本图元，配上一份只挂它的样式 */
+  function labelStyle(when: Twin2dTxtPrim['when']): Twin2dNodeStyle {
+    return styleOf({ prims: [txtOf({ id: 'outer', when })] })
+  }
+
+  it('labelPos 落在名单里才渲染，落在别档整枝不渲染', () => {
+    const when: Twin2dTxtPrim['when'] = {
+      kind: 'field',
+      field: 'labelPos',
+      test: 'in',
+      in: ['left', 'right'],
+    }
+
+    expect(
+      render({
+        node: nodeOf({ labelPos: 'left' }),
+        nodeStyle: labelStyle(when),
+      }).text(),
+    ).toBe('一号换热站')
+    expect(
+      render({
+        node: nodeOf({ labelPos: 'bottom' }),
+        nodeStyle: labelStyle(when),
+      }).text(),
+    ).toBe('')
+  })
+
+  // ⚠ 少了这一条，角标就得在渲染层写一句 `v-if="node.badge"`，而那正是「预置数据
+  //   长回渲染分支」的第一步
+  it('badge 有值才渲染，且文本取的就是 node.badge', () => {
+    const when: Twin2dTxtPrim['when'] = {
+      kind: 'field',
+      field: 'badge',
+      test: 'present',
+      in: [],
+    }
+    const nodeStyle = styleOf({
+      prims: [txtOf({ id: 'badge-text', when, src: { kind: 'badge' } })],
+    })
+
+    expect(render({ node: nodeOf({ badge: 'A1' }), nodeStyle }).text()).toBe(
+      'A1',
+    )
+    expect(render({ node: nodeOf({ badge: '' }), nodeStyle }).text()).toBe('')
+  })
+
+  it('同名 tag 顶不掉节点字段', () => {
+    const when: Twin2dTxtPrim['when'] = {
+      kind: 'field',
+      field: 'labelPos',
+      test: 'in',
+      in: ['left'],
+    }
+
+    expect(
+      render({
+        node: nodeOf({ labelPos: 'bottom', tags: { labelPos: 'left' } }),
+        nodeStyle: labelStyle(when),
+      }).text(),
+    ).toBe('')
   })
 })

@@ -17,6 +17,8 @@ import type {
   Twin2dBoxPrim,
   Twin2dIcoPrim,
   Twin2dPrim,
+  Twin2dPrimPatch,
+  Twin2dShadow,
   Twin2dTxtPrim,
 } from '../../src/typesPrim'
 import type { Twin2dVariantCtx } from '../../src/variants'
@@ -70,12 +72,29 @@ function variantOf(style: Twin2dNodeStyle, id: string): Twin2dVariant {
   return hit
 }
 
+// ⚠ 两个取值器把「补丁里没有这一项」变成抛错而不是可选链：一串 `?.` 会让断言在补丁
+// 整块缺席时静默通过，而那正是「变体命中了、外观纹丝不动」的样子
+function patchOf(variant: Twin2dVariant, primId: string): Twin2dPrimPatch {
+  const patch = variant.patch[primId]
+  if (patch === undefined) {
+    throw new Error(`变体 ${variant.id} 没有补丁 ${primId}`)
+  }
+  return patch
+}
+
+function shadowsOf(patch: Twin2dPrimPatch): readonly Twin2dShadow[] {
+  const shadows = patch.shadows
+  if (shadows === undefined) throw new Error('这条补丁没有换阴影')
+  return shadows
+}
+
 function ctxWith(status: Twin2dVariantCtx['status']): Twin2dVariantCtx {
   return {
     states: new Set(),
     status,
     tags: new Map<string, string>(),
     slots: new Map<string, unknown>(),
+    fields: new Map(),
   }
 }
 
@@ -90,18 +109,23 @@ describe('板式换热器（square）', () => {
     expect(style.ports).toEqual([])
   })
 
-  it('结构：外壳只做居中，里面一块铺满的方砖套一枚半宽半高的图标', () => {
+  it('结构：shell 只做居中，里面那枚 frame 铺满并套一枚半宽半高的图标', () => {
     const style = styleOf('heat-exchanger')
     expect(style.prims.map((prim) => prim.id)).toEqual([
-      'frame',
+      'shell',
       'label-natural',
       'status-dot',
+      'badge',
+      'label-outer',
     ])
-    const frame = boxOf(style, 'frame')
-    expect(frame.layout.flow).toBe('none')
-    expect(frame.fills).toEqual([])
-    expect(frame.children.map((prim) => prim.id)).toEqual(['tile'])
-    const tile = boxOf(style, 'tile')
+    const shell = boxOf(style, 'shell')
+    expect(shell.layout.flow).toBe('none')
+    // ⚠ shell 一格观感都不承载，所以它不叫 frame：边框 / 圆角 / 选中态在里面那一枚上
+    expect(shell.fills).toEqual([])
+    expect(shell.border.width).toBe(0)
+    expect(shell.radius).toBe(0)
+    expect(shell.children.map((prim) => prim.id)).toEqual(['frame'])
+    const tile = boxOf(style, 'frame')
     expect(tile.at).toEqual({ kind: 'fill', inset: [0, 0, 0, 0] })
     expect(tile.layout.flow).toBe('none')
     expect(tile.children.map((prim) => prim.id)).toEqual(['glyph'])
@@ -112,7 +136,7 @@ describe('板式换热器（square）', () => {
   })
 
   it('方砖逐值：1.5px 描边、8 圆角、150° 渐变，内发光 14% 与外发光 24%', () => {
-    const tile = boxOf(styleOf('heat-exchanger'), 'tile')
+    const tile = boxOf(styleOf('heat-exchanger'), 'frame')
     expect(tile.border.width).toBe(1.5)
     expect(tile.border.color).toBe(ACCENT)
     expect(tile.radius).toBe(8)
@@ -164,8 +188,8 @@ describe('板式换热器（square）', () => {
 
   it('hover 只换方砖的描边与三重阴影：这一形不追加径向高光，落影是 .22 不是 .24', () => {
     const hover = variantOf(styleOf('heat-exchanger'), 'hover')
-    expect(Object.keys(hover.patch)).toEqual(['tile'])
-    const tile = hover.patch['tile']
+    expect(Object.keys(hover.patch)).toEqual(['frame'])
+    const tile = hover.patch['frame']
     expect(tile?.fills).toBeUndefined()
     expect(tile?.border?.color).toBe(
       `color-mix(in srgb, ${ACCENT} 86%, var(--text-primary))`,
@@ -177,15 +201,21 @@ describe('板式换热器（square）', () => {
     ])
   })
 
-  it('选中出一圈 2px；报警让方砖转危险色、状态点脉冲', () => {
+  it('选中那一圈 2px 落在有圆角的方砖上而不是节点根；报警让方砖转危险色、状态点脉冲', () => {
     const style = styleOf('heat-exchanger')
     const selected = variantOf(style, 'selected')
-    expect(selected.rootPatch.shadows?.map((shadow) => shadow.spread)).toEqual([
-      2, 0,
+    const tile = shadowsOf(patchOf(selected, 'frame'))
+    expect(tile.map((shadow) => shadow.spread)).toEqual([2, 0])
+    expect(tile.map((shadow) => shadow.color)).toEqual([
+      ACCENT,
+      mixTransparent(ACCENT, 45),
     ])
+    // ⚠ 节点根 `.t2-node` 没有 border-radius：这两条落到根上就是在圆角方砖外画直角框，
+    //   取值一条都不差，只有形状不对，没有一处会报错
+    expect(selected.rootPatch).toEqual({})
     const alarm = variantOf(style, 'alarm')
-    expect(alarm.patch['tile']?.border?.color).toBe('var(--state-danger)')
-    expect(alarm.patch['tile']?.anim).toEqual({
+    expect(alarm.patch['frame']?.border?.color).toBe('var(--state-danger)')
+    expect(alarm.patch['frame']?.anim).toEqual({
       kind: 'breathe',
       durationMs: 1000,
     })
@@ -278,7 +308,12 @@ describe('文字标注（text）', () => {
 
   it('没有 hover 与选中变体：参考项目那三条规则一条都不落在这一形上', () => {
     const style = styleOf('label')
-    expect(style.variants.map((variant) => variant.id)).toEqual(['alarm'])
+    expect(style.variants.map((variant) => variant.id)).toEqual([
+      'alarm',
+      'label-left',
+      'label-right',
+      'label-inside',
+    ])
     expect(style.variants[0]?.patch['status-dot']?.anim).toEqual({
       kind: 'pulse',
       durationMs: 1000,

@@ -293,6 +293,8 @@ function twin2dHit(row: ParityRow): boolean {
     status: null,
     tags: new Map(),
     slots: new Map([['v', row.reading]]),
+    // 这一侧只判 slot 一档，节点字段表给空的即可
+    fields: new Map(),
   }
   return evalCondition(cond, ctx)
 }

@@ -10,6 +10,9 @@ import {
   TWIN_2D_ANCHORS,
   TWIN_2D_ANIM_KINDS,
   TWIN_2D_CONDITION_KINDS,
+  TWIN_2D_FIELD_TESTS,
+  TWIN_2D_NODE_FIELDS,
+  TWIN_2D_VALUE_FORMATS,
   TWIN_2D_DEFAULT_STATUSES,
   TWIN_2D_EDGE_ROUTES,
   TWIN_2D_EXPR_KINDS,
@@ -46,6 +49,9 @@ const CLOSED_SETS: readonly (readonly [string, readonly string[]])[] = [
   ['填充', TWIN_2D_FILL_KINDS],
   ['几何', TWIN_2D_SHAPE_KINDS],
   ['条件', TWIN_2D_CONDITION_KINDS],
+  ['节点字段', TWIN_2D_NODE_FIELDS],
+  ['字段判据', TWIN_2D_FIELD_TESTS],
+  ['格式档', TWIN_2D_VALUE_FORMATS],
   ['算式算子', TWIN_2D_EXPR_KINDS],
   ['阈值算子', TWIN_2D_THRESHOLD_OPS],
   ['内置图标', TWIN_2D_SPRITE_IDS],
@@ -68,7 +74,16 @@ describe('闭合取值域', () => {
     expect(TWIN_2D_TRANSITION_PROPS).toHaveLength(6)
     expect(TWIN_2D_ANIM_KINDS).toHaveLength(5)
     expect(TWIN_2D_EXPR_KINDS).toHaveLength(7)
-    expect(TWIN_2D_CONDITION_KINDS).toHaveLength(6)
+    expect(TWIN_2D_CONDITION_KINDS).toHaveLength(7)
+    expect(TWIN_2D_NODE_FIELDS).toEqual(['labelPos', 'badge', 'badgeShape'])
+    expect(TWIN_2D_FIELD_TESTS).toEqual(['in', 'present'])
+    // ⚠ auto 必须排头且是缺省：漂一格就是全库读数一起换写法，而这一步零报错
+    expect(TWIN_2D_VALUE_FORMATS).toEqual([
+      'auto',
+      'kwhShort',
+      'grouped',
+      'trim2',
+    ])
   })
 
   // ⚠ 阈值算子与 @dt/modules/shared/thresholds 的 THRESHOLD_OPS 是两份副本，

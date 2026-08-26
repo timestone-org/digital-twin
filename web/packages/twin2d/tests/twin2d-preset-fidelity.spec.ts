@@ -50,6 +50,7 @@ import { normalizeEdge } from '../src/normalizeEdges'
 import { normalizeMark } from '../src/normalizeMarks'
 import { normalizeNode } from '../src/normalizeNodes'
 import { normalizePrim } from '../src/normalizePrims'
+import { evalCondition } from '../src/variants'
 import {
   TWIN_2D_BOX_CONSTANTS,
   injectVars,
@@ -78,7 +79,9 @@ import {
 } from '../src/presets/subtypes'
 import Twin2dStage from '../src/render/Twin2dStage.vue'
 import type { Twin2dEdgeState, Twin2dEdgeView } from '../src/edgeView'
-import type { Twin2dAnchor9 } from '../src/kinds'
+import type { Twin2dSlotFormat } from '../src/format'
+import type { Twin2dAnchor9, Twin2dValueFormat } from '../src/kinds'
+import type { Twin2dVariantCtx } from '../src/variants'
 import type {
   Twin2dEdge,
   Twin2dEdgeStyle,
@@ -95,6 +98,7 @@ import type {
   Twin2dIcoPrim,
   Twin2dPrim,
   Twin2dPrimPatch,
+  Twin2dRadius,
   Twin2dShadow,
   Twin2dStrokePass,
   Twin2dTxtPrim,
@@ -314,6 +318,63 @@ function exprOf(styleId: string, key: string): Twin2dExpr {
   const expr = slotOf(styleId, key).expr
   if (expr === null) throw new Error(`槽位 ${key} 不是派生槽`)
   return expr
+}
+
+/** 角标底色的注入变量名，`node.badgeColor || accent` 都落到它上面。 */
+const BADGE_VAR = 'var(--t2-badge)'
+
+/** 外置显示名自带的那一档定位（`top`），另外三档由变体补。 */
+const NAME_AT_TOP = {
+  kind: 'abs',
+  left: '50%',
+  right: null,
+  top: 0,
+  bottom: null,
+  tx: '-50%',
+  ty: 'calc(-100% - 4px)',
+}
+
+/** 只给一个 `labelPos` 的求值上下文，其余全空。 */
+function labelPosCtx(pos: string): Twin2dVariantCtx {
+  return {
+    states: new Set(),
+    status: null,
+    tags: new Map(),
+    slots: new Map(),
+    fields: new Map([['labelPos', pos]]),
+  }
+}
+
+/** 某一档 `labelPos` 下，这枚显示名图元画不画。 */
+function labelShownAt(primId: string, pos: string): boolean {
+  const prim = searchPrims(styleOf(SOURCE).prims, primId)
+  if (prim === null || prim.when === null) throw new Error(`${primId} 没有条件`)
+  return evalCondition(prim.when, labelPosCtx(pos))
+}
+
+/** `label-<档>` 那条变体打在外置显示名上的补丁。 */
+function labelPatchAt(pos: string): Twin2dPrimPatch {
+  return patchOf(SOURCE, `label-${pos}`, 'label-outer')
+}
+
+/**
+ * 一份只填了格式化用得上那五项的槽位口径。
+ * @param format 格式档
+ * @param precision 小数位
+ * @param unit 单位
+ */
+function fmtSlot(
+  format: Twin2dValueFormat,
+  precision: number | null,
+  unit: string,
+): Twin2dSlotFormat {
+  return {
+    format,
+    precision,
+    unit,
+    enumMap: {},
+    placeholder: TWIN_2D_DEFAULT_PLACEHOLDER,
+  }
 }
 
 function sensorSlotOf(key: string): Twin2dSlot {
@@ -568,7 +629,7 @@ describe('§7.1 shape=box（7 件）', () => {
 
   it('§7-2 .tnv-box__icon 图标底板：34×34、radius-sm、底色照抄写死的 rgba(--accent-primary-rgb, .06)、border 1px accent40%、内 svg 26×26', () => {
     const plate = boxOf(SOURCE, 'icon')
-    const glyph = asIco(primOf(SOURCE, 'icon-glyph'))
+    const glyph = asIco(primOf(SOURCE, 'glyph'))
 
     expect(plate.size).toEqual({ w: 34, h: 34 })
     expect(plate.layout.flow).toBe('none')
@@ -658,7 +719,7 @@ describe('§7.2 悬停、过渡与合成层（10 件）', () => {
       boxOf(SOURCE, 'energy-pct').transition,
       boxOf(SOURCE, 'energy-tip').transition,
       boxOf('water-tank', 'frame').transition,
-      boxOf('heat-exchanger', 'tile').transition,
+      boxOf('heat-exchanger', 'frame').transition,
     ]
 
     for (const transition of carriers) {
@@ -735,9 +796,9 @@ describe('§7.2 悬停、过渡与合成层（10 件）', () => {
     ])
   })
 
-  it('§7-12 hover square tile：scale 1.04 + 抬 3px（参考项目这一件同样 translateY(-3px)）/ 内 18px 18% / .22 / 18px 42%', () => {
+  it('§7-12 hover square 的可见面：scale 1.04 + 抬 3px（参考项目这一件同样 translateY(-3px)）/ 内 18px 18% / .22 / 18px 42%', () => {
     const variant = variantOf('heat-exchanger', 'hover')
-    const tile = patchOf('heat-exchanger', 'hover', 'tile')
+    const tile = patchOf('heat-exchanger', 'hover', 'frame')
 
     expect(variant.rootPatch.scale).toBe(1.04)
     // ⚠ 参考项目 `.tnv:hover .tnv-square__tile` 是 `translateY(-3px) scale(1.04)`，
@@ -751,7 +812,7 @@ describe('§7.2 悬停、过渡与合成层（10 件）', () => {
   })
 
   it('§7-13 hover cyl 体身：描边转 accent、线宽 1.8、外加 8px 64% 的光', () => {
-    const outline = patchOf('manifold', 'hover', 'outline')
+    const outline = patchOf('manifold', 'hover', 'frame')
     const pass = strokeAt(outline.strokes ?? [], 0)
 
     expect(pass.width).toBe(1.8)
@@ -777,10 +838,15 @@ describe('§7.2 悬停、过渡与合成层（10 件）', () => {
     }
   })
 
-  it('§7-15 五处 pointer-events:none：悬浮卡 / 圆柱文字层 / 管接头 / 传感器药丸', () => {
+  it('§7-15 五处 pointer-events:none：悬浮卡 / 圆柱文字层 / 管接头 / 外置显示名 / 传感器药丸', () => {
     expect(boxOf(SOURCE, 'energy-tip').pointerEvents).toBe('none')
     expect(boxOf('manifold', 'body').pointerEvents).toBe('none')
     expect(boxOf('water-tank', 'stubs').pointerEvents).toBe('none')
+    // ⚠ 第五处：外置显示名盖在节点外沿，吃了指针就会在名字底下丢 hover
+    for (const style of ALL_NODE_STYLES) {
+      const outer = searchPrims(style.prims, 'label-outer')
+      expect([style.id, outer?.pointerEvents]).toEqual([style.id, 'none'])
+    }
     const pill = TWIN_2D_SENSOR_PILLS[0]
     expect(pill?.pointerEvents).toBe('none')
     expect(
@@ -1058,7 +1124,7 @@ const CYL_COOL_INK = 'rgba(47, 233, 255, 0.6)'
 describe('§7.5 shape=cylinder（10 件，全 SVG）', () => {
   it('§7-31 .tnv-cyl__svg：五枚 vec 铺满节点盒并两轴各自拉伸（= preserveAspectRatio="none"）', () => {
     for (const id of [
-      'outline',
+      'frame',
       'cap-left',
       'cap-right',
       'line-warm',
@@ -1071,8 +1137,8 @@ describe('§7.5 shape=cylinder（10 件，全 SVG）', () => {
     }
   })
 
-  it('§7-32 __outline：rect x10 y0 w=W−20 h=H **rx 0**、底 --surface-panel、描边水色 62% / 1.2 / non-scaling', () => {
-    const outline = vecOf('manifold', 'outline')
+  it('§7-32 体身那一枚：rect x10 y0 w=W−20 h=H **rx 0**、底 --surface-panel、描边水色 62% / 1.2 / non-scaling', () => {
+    const outline = vecOf('manifold', 'frame')
     const pass = strokeAt(outline.strokes, 0)
 
     expect(outline.shape).toEqual({
@@ -1097,7 +1163,7 @@ describe('§7.5 shape=cylinder（10 件，全 SVG）', () => {
 
   it('§7-33 端盖与体身不同色：cap 取 --surface-overlay，body 取 --surface-panel', () => {
     const cap = vecOf('manifold', 'cap-left')
-    const outline = vecOf('manifold', 'outline')
+    const outline = vecOf('manifold', 'frame')
 
     // ⚠ 圆柱的立体感全在这一处：抄成同色就变成一个平的矩形加两个椭圆边，而每一项数值都「对」
     expect(cap.fill).toEqual({ kind: 'color', color: 'var(--surface-overlay)' })
@@ -1164,11 +1230,11 @@ describe('§7.5 shape=cylinder（10 件，全 SVG）', () => {
 
   it('§7-37 cyl 的 selected / alarm：选中线宽 2.5 + 一层 8px 光；报警只换危险色、线宽仍 1.2', () => {
     const selected = strokeAt(
-      patchOf('manifold', 'selected', 'outline').strokes ?? [],
+      patchOf('manifold', 'selected', 'frame').strokes ?? [],
       0,
     )
     const alarm = strokeAt(
-      patchOf('manifold', 'alarm', 'outline').strokes ?? [],
+      patchOf('manifold', 'alarm', 'frame').strokes ?? [],
       0,
     )
 
@@ -1236,12 +1302,12 @@ describe('§7.5 shape=cylinder（10 件，全 SVG）', () => {
 })
 
 describe('§7.6 shape=square / text（5 件）', () => {
-  it('§7-41 .tnv-square 外壳 + __tile：外层只居中，tile 铺满 + 1.5 描边 + radius-md + 150° 渐变 + 内 14px 14% / 外 8px 24%，图标 50%/50%', () => {
-    const frame = boxOf('heat-exchanger', 'frame')
-    const tile = boxOf('heat-exchanger', 'tile')
+  it('§7-41 .tnv-square 外壳 + __tile：shell 只居中，frame 铺满 + 1.5 描边 + radius-md + 150° 渐变 + 内 14px 14% / 外 8px 24%，图标 50%/50%', () => {
+    const shell = boxOf('heat-exchanger', 'shell')
+    const tile = boxOf('heat-exchanger', 'frame')
     const glyph = asIco(primOf('heat-exchanger', 'glyph'))
 
-    expect(frame.layout.flow).toBe('none')
+    expect(shell.layout.flow).toBe('none')
     expect(tile.at).toEqual({ kind: 'fill', inset: [0, 0, 0, 0] })
     expect([tile.border.width, tile.radius]).toEqual([1.5, 8])
     const base = fillAt(tile.fills, 0)
@@ -1363,15 +1429,28 @@ describe('§7.7 根容器、角标、状态点、显示名（11 件）', () => {
     expect(resolveAccent('#62ff8a', 'var(--style-c)')).toBe('#62ff8a')
   })
 
-  it('§7-48 is-selected：一圈 2px 实边 + 16px 45% 外发光，作用在有圆角的那块可见面上', () => {
-    const onFrame = patchOf(SOURCE, 'selected', 'frame').shadows ?? []
-    const onRoot = variantOf('water-tank', 'selected').rootPatch.shadows ?? []
-
-    expect(onFrame.map(shadowTuple)).toEqual([
+  it('§7-48 is-selected：一圈 2px 实边 + 16px 45% 外发光，四形一律落在有圆角的那块可见面上', () => {
+    // ⚠ 参考项目那条规则挂的是 `.tnv-box` / `.tnv-tank` / `.tnv-square__tile`，三者
+    //   各有自己的圆角；节点根 `.tnv` 与本模型的 `.t2-node` 都**没有 border-radius**。
+    //   把 spread 2 的实边挪到根上，取值一条都不差，画出来却是圆角盒**外**的一个直角
+    //   框，且没有一处会报错——所以这里连「根上没有阴影」一起守
+    const want = [
       [false, 0, 0, 0, 2, ACCENT],
       [false, 0, 0, 16, 0, mix(45)],
-    ])
-    expect(onRoot.map(shadowTuple)).toEqual(onFrame.map(shadowTuple))
+    ]
+    const faces: readonly (readonly [string, string, Twin2dRadius])[] = [
+      [SOURCE, 'frame', 8],
+      ['water-tank', 'frame', 'pill'],
+      ['heating-terminal', 'frame', 8],
+      ['heat-exchanger', 'frame', 8],
+    ]
+
+    for (const [styleId, primId, radius] of faces) {
+      const face = patchOf(styleId, 'selected', primId)
+      expect((face.shadows ?? []).map(shadowTuple)).toEqual(want)
+      expect(variantOf(styleId, 'selected').rootPatch.shadows).toBeUndefined()
+      expect(boxOf(styleId, primId).radius).toEqual(radius)
+    }
   })
 
   it('§7-49 is-alarm：描边转 --state-danger + 1s 呼吸；新模型里没有 !important', () => {
@@ -1388,10 +1467,7 @@ describe('§7.7 根容器、角标、状态点、显示名（11 件）', () => {
     expect(JSON.stringify(ALL_NODE_STYLES).includes('!important')).toBe(false)
   })
 
-  it('§7-50 .tnv-badge 取色：--t2-badge = node.badgeColor || accent', () => {
-    // ⚠ 只守住取色那一半：角标盒本体（min-w 18 / h 18 / pad 0 3 / pill / 1.5px 边）
-    //   还没落成预置图元，落成时这条要一起补
-
+  it('§7-50 .tnv-badge 盒：abs tl / translate(-40%,-40%) / min-w 18 h 18 / pad 0 3 / pill / 1.5px 边 / 7px 75% 发光，取色 = node.badgeColor || accent', () => {
     const style = styleOf(SOURCE)
     const plain = injectVars(
       nodeOf({ id: 'n1', styleId: SOURCE }),
@@ -1410,6 +1486,78 @@ describe('§7.7 根容器、角标、状态点、显示名（11 件）', () => {
     expect(painted['--t2-badge']).toBe(
       `var(--state-warning, ${plain['--t2-accent'] ?? ''})`,
     )
+
+    const badge = boxOf(SOURCE, 'badge')
+    const fill = fillAt(badge.fills, 0)
+
+    expect(badge.at).toEqual({
+      kind: 'abs',
+      left: 0,
+      right: null,
+      top: 0,
+      bottom: null,
+      tx: '-40%',
+      ty: '-40%',
+    })
+    expect([badge.minWidth, badge.size]).toEqual([18, { w: 'auto', h: 18 }])
+    expect(badge.layout.pad).toEqual([0, 3, 0, 3])
+    expect([badge.radius, badge.z]).toEqual(['pill', 5])
+    expect(fill.kind === 'solid' ? fill.color : '').toBe(BADGE_VAR)
+    expect([badge.border.width, badge.border.color]).toEqual([
+      1.5,
+      `color-mix(in srgb, var(--text-primary) 35%, ${BADGE_VAR})`,
+    ])
+    expect(shadowTuple(shadowAt(badge.shadows, 0))).toEqual([
+      false,
+      0,
+      0,
+      7,
+      0,
+      `color-mix(in srgb, ${BADGE_VAR} 75%, transparent)`,
+    ])
+    // ⚠ 显示条件读的是节点字段而不是 tag：合进自由 tag 表就等于让用户的同名 tag
+    //   能把别人的角标点亮，而那既不像配置生效也不像出错
+    expect(badge.when).toEqual({
+      kind: 'field',
+      field: 'badge',
+      test: 'present',
+      in: [],
+    })
+    for (const style of ALL_NODE_STYLES) {
+      expect([style.id, searchPrims(style.prims, 'badge') !== null]).toEqual([
+        style.id,
+        true,
+      ])
+    }
+  })
+
+  it('§7-51 .tnv-badge 字：15 / 700 / --text-primary / line-height 1 / 字体族走 --font-display，父盒 none + 居中', () => {
+    const text = txtOf(SOURCE, 'badge-text')
+    const parent = boxOf(SOURCE, 'badge')
+
+    expect(text.src).toEqual({ kind: 'badge' })
+    expect(text.font).toEqual({
+      family: 'var(--font-display)',
+      size: 15,
+      weight: 700,
+      color: 'var(--text-primary)',
+    })
+    // ⚠ 少了这一格角标会被行高撑成椭圆：18px 高的药丸里放 15px 的字，
+    //   缺省行高（约 1.2）算出来就顶到 18px 再加上下留白
+    expect(text.lineHeight).toBe(1)
+    expect(
+      paintText(text, {
+        node: nodeOf({ id: 'n1', styleId: SOURCE }),
+        boxW: 18,
+        boxH: 18,
+        idPrefix: 'p',
+      }).style['line-height'],
+    ).toBe('1')
+    expect([
+      parent.layout.flow,
+      parent.layout.align,
+      parent.layout.justify,
+    ]).toEqual(['none', 'center', 'center'])
   })
 
   it('§7-52 badgeShape 三档：参考项目那两档（circle-number / circle-letter）都映射到 round，square / diamond 是新增', () => {
@@ -1422,7 +1570,7 @@ describe('§7.7 根容器、角标、状态点、显示名（11 件）', () => {
   })
 
   it('§7-53 .tnv-dot 状态点：abs r5 b5、7×7、圆、取 --t2-status、6px 同色发光、z 5，报警时脉冲', () => {
-    const dot = boxOf(SOURCE, 'dot')
+    const dot = boxOf(SOURCE, 'status-dot')
     const fill = fillAt(dot.fills, 0)
 
     expect(dot.at).toEqual({
@@ -1445,7 +1593,7 @@ describe('§7.7 根容器、角标、状态点、显示名（11 件）', () => {
       0,
       'var(--t2-status)',
     ])
-    expect(patchOf(SOURCE, 'alarm', 'dot').anim).toEqual({
+    expect(patchOf(SOURCE, 'alarm', 'status-dot').anim).toEqual({
       kind: 'pulse',
       durationMs: 1000,
     })
@@ -1471,7 +1619,7 @@ describe('§7.7 根容器、角标、状态点、显示名（11 件）', () => {
     }
   })
 
-  it('§7-56 labelPos 六档：缺省 bottom = 各形状内部的自然名位，每个预置样式都带着那枚 label-natural', () => {
+  it('§7-56 labelPos 六档：bottom 走各形状内部的自然名位，另四档走外置那一枚，hidden 两枚都不画', () => {
     expect([...TWIN_2D_LABEL_POSITIONS]).toEqual([
       'bottom',
       'top',
@@ -1481,13 +1629,92 @@ describe('§7.7 根容器、角标、状态点、显示名（11 件）', () => {
       'hidden',
     ])
     expect(nodeOf({ id: 'n1', styleId: SOURCE }).labelPos).toBe('bottom')
-    // ⚠ 外置那枚 `label-outer`（maxWidth 160、四档 abs、不吃指针）还没落成预置图元
     for (const style of ALL_NODE_STYLES) {
-      expect([
+      const natural = searchPrims(style.prims, 'label-natural')
+      const outer = searchPrims(style.prims, 'label-outer')
+
+      expect([style.id, natural?.when, outer?.when]).toEqual([
         style.id,
-        searchPrims(style.prims, 'label-natural') !== null,
-      ]).toEqual([style.id, true])
+        { kind: 'field', field: 'labelPos', test: 'in', in: ['bottom'] },
+        {
+          kind: 'field',
+          field: 'labelPos',
+          test: 'in',
+          in: ['top', 'left', 'right', 'inside'],
+        },
+      ])
     }
+    // hidden 那一档两个条件都不成立 = 两枚都不画
+    for (const pos of ['bottom', 'top', 'left', 'right', 'inside', 'hidden']) {
+      const shown = ['label-natural', 'label-outer'].filter((id) =>
+        labelShownAt(id, pos),
+      )
+      expect([pos, shown]).toEqual([
+        pos,
+        pos === 'hidden'
+          ? []
+          : [pos === 'bottom' ? 'label-natural' : 'label-outer'],
+      ])
+    }
+  })
+
+  it('§7-56b 外置显示名逐值：abs 四档 / 上限 160 而 inside 一档 92% / 18-600 / 单行省略 / 4px 50% 字晕 / z 4', () => {
+    const outer = txtOf(SOURCE, 'label-outer')
+
+    expect(outer.at).toEqual(NAME_AT_TOP)
+    expect([outer.maxWidth, outer.z]).toEqual([160, 4])
+    expect(outer.font).toEqual({
+      size: 18,
+      weight: 600,
+      color: 'var(--text-primary)',
+    })
+    expect([outer.nowrap, outer.ellipsis]).toEqual([true, true])
+    expect(shadowTuple(shadowAt(outer.shadows, 0))).toEqual([
+      false,
+      0,
+      0,
+      4,
+      0,
+      mix(50),
+    ])
+    expect(labelPatchAt('left')).toEqual({
+      at: {
+        kind: 'abs',
+        left: null,
+        right: '100%',
+        top: '50%',
+        bottom: null,
+        tx: '-6px',
+        ty: '-50%',
+      },
+      align: 'end',
+    })
+    expect(labelPatchAt('right')).toEqual({
+      at: {
+        kind: 'abs',
+        left: '100%',
+        right: null,
+        top: '50%',
+        bottom: null,
+        tx: '6px',
+        ty: '-50%',
+      },
+      align: 'start',
+    })
+    // ⚠ inside 那一档的上限是 92% 不是 160px：贴在节点正中的名字要跟着盒宽收
+    expect(labelPatchAt('inside')).toEqual({
+      at: {
+        kind: 'abs',
+        left: '50%',
+        right: null,
+        top: '50%',
+        bottom: null,
+        tx: '-50%',
+        ty: '-50%',
+      },
+      align: 'center',
+      maxWidth: '92%',
+    })
   })
 })
 
@@ -2090,8 +2317,8 @@ describe('§7.12 取值、格式化、状态归一与派生（11 件）', () => 
   })
 
   it('§7-91 数值格式：precision 为 null 时整数直出、小数一位；给了数就定点补零；单位空格分隔', () => {
-    const loose = { precision: null, unit: '', enumMap: {}, placeholder: '—' }
-    const fixed = { precision: 2, unit: 'kWh', enumMap: {}, placeholder: '—' }
+    const loose = fmtSlot('auto', null, '')
+    const fixed = fmtSlot('auto', 2, 'kWh')
 
     expect(formatSlotValue(63, loose)).toBe('63')
     expect(formatSlotValue(63.44, loose)).toBe('63.4')
@@ -2115,22 +2342,57 @@ describe('§7.12 取值、格式化、状态归一与派生（11 件）', () => 
     expect(formatSlotValue(3, status)).toBe('报警')
   })
 
-  it('§7-93 kWh 短档：判档用**取整后**的绝对值，999.6 与 1000 同显 1k（本仓刻意的差异）', () => {
-    expect(fmtKwh(999.6, 2)).toBe('1k')
-    expect(fmtKwh(999.4, 2)).toBe('999')
+  it('§7-93 kWh 短档真的落在主读数那一槽上：judge 用**取整后**的绝对值，999.6 与 1000 同显 1k', () => {
+    const output = slotOf(SOURCE, 'output')
+
+    expect([output.format, output.precision, output.unit]).toEqual([
+      'kwhShort',
+      0,
+      '',
+    ])
+    // ⚠ 这一档的 precision 是「压缩后留几位」而不是「定点几位」：0 让 12345 显 12k，
+    //   与参考项目 `abs >= 10000 → toFixed(0)` 那一支同值
+    expect(formatSlotValue(12345, output)).toBe('12k')
+    expect(formatSlotValue(999.6, output)).toBe('1k')
+    expect(formatSlotValue(999.4, output)).toBe('999')
+    expect(formatSlotValue(-2000, output)).toBe('-2k')
+    // 档位本身仍是那台函数，precision 换成 2 就回到两位
     expect(fmtKwh(12345, 2)).toBe('12.35k')
-    expect(fmtKwh(-2000, 2)).toBe('-2k')
   })
 
-  it('§7-94 kWh 全档：fmtNumber(Math.round(v), 0) 出千分位，locale 钉死 en-US', () => {
+  it('§7-94 kWh 全档真的落在悬浮卡那两槽上：千分位 + kWh，locale 钉死 en-US', () => {
+    for (const key of ['input_kwh', 'output_total']) {
+      const slot = slotOf(SOURCE, key)
+
+      expect([key, slot.format, slot.precision, slot.unit]).toEqual([
+        key,
+        'grouped',
+        0,
+        'kWh',
+      ])
+      expect([key, formatSlotValue(1234.6, slot)]).toEqual([key, '1,235 kWh'])
+      expect([key, formatSlotValue(999999.5, slot)]).toEqual([
+        key,
+        '1,000,000 kWh',
+      ])
+    }
     expect(fmtNumber(Math.round(1234.6), 0)).toBe('1,235')
-    expect(fmtNumber(Math.round(999999.5), 0)).toBe('1,000,000')
   })
 
-  it('§7-95 能效百分比走 fmtTrim(v, 2)（不是 toFixed(1)），去尾随零', () => {
+  it('§7-95 能效那一槽走 trim2：两位、去尾随零，不是主读数那档的一位', () => {
+    const efficiency = slotOf(SOURCE, 'efficiency')
+
+    expect([efficiency.format, efficiency.precision, efficiency.unit]).toEqual([
+      'trim2',
+      null,
+      '%',
+    ])
+    // ⚠ 单位与值之间那个空格是本仓全局口径（#91），参考项目那一处是拼死的 `%`——
+    //   逐字符对不上的只有这一格，它由槽位数据驱动，用户想去掉自己改 unit 即可
+    expect(formatSlotValue(63.456, efficiency)).toBe('63.46 %')
+    expect(formatSlotValue(63.4, efficiency)).toBe('63.4 %')
+    expect(formatSlotValue(63, efficiency)).toBe('63 %')
     expect(`${fmtTrim(63.456, 2)}%`).toBe('63.46%')
-    expect(`${fmtTrim(63.4, 2)}%`).toBe('63.4%')
-    expect(`${fmtTrim(63, 2)}%`).toBe('63%')
   })
 
   it('§7-96 状态归一：本包只认四档状态，一处都不再开第二份同义词表', () => {
@@ -2234,6 +2496,8 @@ describe('§7 收尾那三条「参考项目里根本不存在」的警告', () 
       'frame',
       'stubs',
       'status-dot',
+      'badge',
+      'label-outer',
     ])
     // 那条 fill-opacity .25 的波形是静态图标的一部分（#83），不是液位
     expect(searchPrims(tank.prims, 'level')).toBe(null)
@@ -2280,6 +2544,19 @@ describe('这份验收清单自己', () => {
     const numbered = SPEC_SELF.match(/\bit\(\s*'§7-/g)?.length ?? 0
 
     expect(all).toBeGreaterThanOrEqual(100)
-    expect(numbered).toBeGreaterThanOrEqual(95)
+    expect(numbered).toBeGreaterThanOrEqual(98)
+  })
+
+  // ⚠ 这条是棘轮：100 行里眼下 98 行有断言，缺的两行（#73 标注标签定位、
+  //   #97 活跃与方向词表）在本包里根本没有对应实现——一个归标注视图（未建），
+  //   一个住在 @dt/modules 的 shared/format。掉下去说明有人把已有的断言删了
+  it('§7 那张 100 行表里有断言的行数不许倒退', () => {
+    const rows = new Set(
+      [...SPEC_SELF.matchAll(/\bit\(\s*'§7-(\d+)/g)].map((hit) => hit[1]),
+    )
+
+    expect(rows.size).toBeGreaterThanOrEqual(98)
+    expect(rows.has('51')).toBe(true)
+    expect(rows.has('56')).toBe(true)
   })
 })

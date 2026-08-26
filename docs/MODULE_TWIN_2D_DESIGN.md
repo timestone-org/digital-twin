@@ -831,7 +831,20 @@ export const TWIN_2D_PALETTE = {
 > 真正的兜底是那条 fidelity 测试与 §17 的六条契约。任何一处「我们已经列全了」的
 > 断言都要先能指着一个把它数出来的命令，否则不许写进文档。
 
-图例：✅ 逐值复刻｜🔁 复刻但换了实现基底或口径｜➕ 参考项目没有、本期新增｜⛔ 参考项目本身不存在，不做
+**当前兑现水位：100 行里 98 行有断言。** 用例名带行号（`§7-1` … `§7-100`），
+红了能直接对回这张表。数法：`grep -ohE '§7-[0-9]+' tests/twin2d-preset-fidelity.spec.ts |
+sort -nu | wc -l`——用例条数比这个数大，因为有两行各带两条用例，别拿用例数当行数。
+缺的两行都是**依赖尚未落地的东西**，各自排在对应的轮次里。
+
+| 行 | 眼下锁住了什么 | 缺口与原因 |
+|---|---|---|
+| **缺** #73 标注标签定位 | 无 | 标注的两层 svg 渲染件还没落地（排 R9），落点算不出来就无从断言 |
+| **缺** #97 活跃与方向词表 | 无 | ⚠ `boolFromValue` / `reverseFromValue` **本仓一处都没有**（`grep` 全树零命中），它们是参考项目 `edgeState.ts` 里的两个函数。`Twin2dEdgeState` 的 `active` / `reversed` 目前由调用方直接喂，归一化那一步排在 R7（模块的 `Component.vue` 落地时补） |
+| **半** #8 七处 0.18s | 六处载体逐处 180ms + ease、属性表闭合六档 | `.tnv-cyl__outline` 补间的 stroke / stroke-width 在六档属性表里表达不了，本模型那一处只补间 filter |
+| **半** #22 悬浮卡翻转档 | `flipped` 这个档位名在状态表里 | 预置库里还没有那条 flipped 变体（`top: calc(100% + 10px)` / `translate(-50%, 4px)` / 基点 `50% 0` / 箭头描边 48%→62%） |
+| **半** #71 标注缺省 | strokeWidth 2 / opacity 1 / stroke 与 fill 留空 / zOrder below / nonScalingStroke false | 两层 svg 的 `aria-hidden="true"` 与 `pointer-events: none` 没有断言 |
+
+图例：✅ 逐值复刻｜🔁 复刻但换了实现基底或口径｜➕ 参考项目没有、本期新增｜⛔ 参考项目本身不存在，不做｜⏳ 要复刻但依赖的东西还没落地，排在后面的轮次
 
 ### 7.1 `shape=box`（7 件）
 
@@ -849,11 +862,11 @@ export const TWIN_2D_PALETTE = {
 
 | # | 视觉件 | 参考项目的实现 | 新模型如何表达 | |
 |---|---|---|---|---|
-| 8 | 七处 `transition: 0.18s ease` | `.tnv-box` / `.tnv-tank` / `.tnv-square__tile` / `.tnv-box__icon` / `.tnv-cyl__outline`（4 属性）+ `.tnv-energy-pct`（4 属性）+ `.tnv-energy-tip`（opacity + transform） | 图元基类的 `transition:{props,durationMs:180,easing:'ease'}`（§4.2），预置数据里逐处填。⚠ 少了它 hover 是硬切——「哪儿都能配、就是手感不一样」 | ✅ |
+| 8 | 七处 `transition: 0.18s ease` | **4 属性**（border-color / background / box-shadow / transform）：`.tnv-box` / `.tnv-box__icon` / `.tnv-energy-pct`；**3 属性**：`.tnv-tank` 与 `.tnv-square__tile`（border-color / box-shadow / transform）、`.tnv-cyl__outline`（filter / stroke / stroke-width）；**2 属性**：`.tnv-energy-tip`（opacity + transform） | 图元基类的 `transition:{props,durationMs:180,easing:'ease'}`（§4.2），预置数据里逐处填。⚠ 少了它 hover 是硬切——「哪儿都能配、就是手感不一样」。⚠ 六档属性表里没有 stroke / stroke-width，圆柱那一处只补间 filter（差异见 §7 开头的水位表） | ✅ |
 | 9 | `.tnv:hover .tnv-box` | `translateY(-3px) scale(1.025)`；border→`color-mix(accent 86%, text-primary)`；**追加**一层 `radial-gradient(circle at 25% 0, accent18%, transparent 54%)` 叠在原渐变上；三重阴影 `inset 18px 18%` / `0 8px 18px rgba(0,0,0,.24)` / `0 0 18px 42%` | 变体 `{when:{kind:'state',state:'hover'}}`：`rootPatch.lift:3` + `rootPatch.scale:1.025`（两段合成同一条根 transform）、`patch['frame'].border.color`、`patch['frame'].fills` **追加**一层 radial、`patch['frame'].shadows` 整组替换。`fills` 是数组，所以「叠一层」是天然可表达的 | ✅ |
 | 10 | `.tnv:hover .tnv-box__icon` | `scale(1.08)` / border 62% / `background: color-mix(accent 16%)` / `0 0 12px 34%` | 同一条 hover 变体里对 `patch['icon']` 的四项覆盖：`scale:1.08`（图元自己的等比缩放，§4.2）、`border.color`、`fills`、`shadows` | ✅ |
 | 11 | `.tnv:hover .tnv-tank` | `translateY(-3px) scale(1.02)`（⚠ 与 box 的 1.025 **不同**）/ `inset 20px 18%` / `0 8px 18px rgba(0,0,0,.22)`（⚠ 与 box 的 .24 不同）/ `0 0 18px 40%`（⚠ 与 box 的 42% 不同） | 罐形预置样式自己的 hover 变体：`rootPatch.lift:3` + `rootPatch.scale:1.02`，**含那三处逐值差异** | ✅ |
-| 12 | `.tnv:hover .tnv-square__tile` | `scale(1.04)` / `inset 18px 18%` / `.22` / `18px 42%` | 方块预置样式自己的 hover 变体：`rootPatch.scale:1.04`（这一件没有抬升）加三条阴影 | ✅ |
+| 12 | `.tnv:hover .tnv-square__tile` | `translateY(-3px) scale(1.04)` / `inset 18px 18%` / `.22` / `18px 42%` | 方块预置样式自己的 hover 变体：`rootPatch.lift:3` + `rootPatch.scale:1.04`（抬升与 box / tank 一样是 3px，只有放大倍数三家各不同）加三条阴影 | ✅ |
 | 13 | `.tnv:hover .tnv-cyl__outline` | stroke→accent / width 1.8 / `drop-shadow(0 0 8px accent64%)` | 圆柱预置样式的 hover 变体，`patch` 到那个 `vec` 的 `strokes[0]` 与 `filter` | ✅ |
 | 14 | `.topo-node-box:hover { z-index: 30 }` | 节点常态 `z-index:2`，hover 抬到 30 | `rootPatch.z` 在 hover 变体里给 30。⚠ **不抬升的话能量悬浮卡会被右邻节点整块盖住**——而它只在两个节点靠得近时才看得出来 | ✅ |
 | 15 | 五处 `pointer-events: none` | `.tnv-energy-tip` / `.tnv-cyl__body` / `.tnv-tank__stubs` / `.tnv-name` / `.tnv-sensor-slot` | 图元基类的 `pointerEvents:'none'`（§4.2）。⚠ 悬浮卡不设它会**hover 自我抖动**：卡片弹出来盖住指针 → 节点失去 hover → 卡片收起 → 指针回到节点 → 再弹出 | ✅ |
@@ -926,7 +939,7 @@ export const TWIN_2D_PALETTE = {
 | 53 | `.tnv-dot` 状态点 | abs r5 b5 / 7×7 / 50% / bg `--dot-color` / shadow 6px / z 5；alarm 加 `tnv-dot-pulse`（scale 1↔1.35, opacity .75↔1） | 预置的 `box`（radius 50%）+ `anim:{kind:'pulse'}` | ✅ |
 | 54 | status 五档配色 | online→`--state-success` / offline→**`--state-idle`**（⚠ 不是 `--state-offline`）/ warning→`--state-warning` / alarm→`--state-danger` + 脉冲 + 根 `is-alarm` / hidden→整点不渲染 | `paintCommon.ts` 的 `statusColor()` 逐档照抄，**含 offline 用 `--state-idle` 这一条** | ✅ |
 | 55 | status 缺省两种行为 | 未声明 + `category==='label'` → 不渲染；未声明 + 其他 → `--state-success` | 样式上一个 `defaultStatus: Twin2dStatus \| 'hidden'` 字段。装饰类预置给 `'hidden'`，设备类给 `'online'`。**分类不再参与渲染判断**——`category` 在新模型里只是调色板分栏用的字符串 | 🔁 |
-| 56 | `labelPos` 六档 | `bottom` = 各形状内部的「自然名位」；`top/left/right/inside` 走外置 `.tnv-name`（abs 四档定位，max-width **160px** 硬上限，shadow 4px 50%，pointer-events none）；`hidden` 两边都不渲染 | 样式里两个 `txt` 图元：`id:'label-natural'` 与 `id:'label-outer'`（后者 `maxWidth:160`、`pointerEvents:'none'`）。`paintCommon.ts` 的 `labelVisibility(labelPos)` 决定哪个显示、外置那个用哪套 abs 值。四档 abs 值与 160px 上限逐值照抄 | ✅ |
+| 56 | `labelPos` 六档 | `bottom` = 各形状内部的「自然名位」；`top/left/right/inside` 走外置 `.tnv-name`（abs 四档定位，shadow 4px 50%，pointer-events none；max-width **按档不同**：`.tnv-name` 基线 160px，`inside` 那一档被 `.tnv-name--inside` 覆盖成 **92%**）；`hidden` 两边都不渲染 | 样式里两个 `txt` 图元：`id:'label-natural'` 与 `id:'label-outer'`（后者 `maxWidth:160`、`pointerEvents:'none'`）。`paintCommon.ts` 的 `labelVisibility(labelPos)` 决定哪个显示、外置那个用哪套 abs 值。四档 abs 值逐值照抄，上限跟着分档：`top/left/right` 三档 160px、`inside` 一档 92% | ✅ |
 
 ### 7.8 传感器药丸（4 件）
 
@@ -948,7 +961,7 @@ export const TWIN_2D_PALETTE = {
 | 65 | 箭头 | 末两点求角 / size 10 / 展开 ±0.42 rad / polygon fill = 边色 / **属性 `opacity="0.82"`** / `v-show="e.arrow !== false"` | `marker:{kind:'arrow',size:10,spread:0.42,filled:true,opacity:0.82}`；`{kind:'none'}` 即无箭头 | ✅ |
 | 66 | **方向反转的几何后果** | `reversed === true` 时：start/end 互换、sSide/tSide 互换、**并把 `waypoints` 整体 `reverse()`**，之后才进 `edgePath` | `geometry.ts` 的 `edgeGeom()` 里同一顺序。⚠ **只换端点不 reverse 拐点，带拐点的路径会自己交叉**——而它看起来像「拐点算错了」。`geometry.test.ts` 与 `Twin2dEdgeLayer.spec.ts` 各锁一条**带 waypoints** 的用例 | ✅ |
 | 67 | 流动动画 | 只在 `config.animateFlow === true` 时给舞台加类；`--topo-flow-duration = (0.8/flowSpeed)s`；keyframes 终点 `stroke-dashoffset: -20`（= 一个完整 dash 周期 10+10） | 合成规则**只有一条**：`config.animateFlow` 是总闸（关掉时全部不动）→ `edgeStyle.flow{enabled, dash, durationMs}` 决定这条线动不动与基准时长 → 最终时长 = `durationMs / flowSpeed`。**dashoffset 终点由 `dash` 求和算出**，不写死 -20。⚠ 改了 dasharray 忘改 -20 会出现肉眼可见的抽动 | 🔁 |
-| 68 | 非活跃边 | 运行时：`dasharray 0`（变实线）+ `animation none` + `opacity .5`，**照常渲染**；编辑器版：`v-if` 直接不渲染 + 动画恒开 | `edgeStyle.inactive{opacity,dashOff,color}`；**编辑器与运行态共用同一份**（参考项目那两边不一致是既成事实，本仓没有存量，第一天就统一） | 🔁 |
+| 68 | 非活跃边 | 运行时 `.topo-edge.is-inactive`：`dasharray 0`（变实线）+ `animation none` + `opacity .5`，线体与箭头都**照常渲染**；编辑器版 `.topo-flow-edge.is-inactive` **同样**是 `dasharray 0` + `animation none`，两处真正的差别是：① 它不压 opacity，而把描边整根换成 `var(--border-strong, #3a4a60)`；② `visibleEdge = active \|\| selected` + `v-if="visibleEdge"`——非活跃边**只在没被选中时才不渲染**，选中时照常画出来（连同箭头与把手） | `edgeStyle.inactive{opacity,dashOff,color}`；**编辑器与运行态共用同一份**（参考项目那两边差在「压透明度还是换灰描边」以及那条 `active \|\| selected` 的隐身规则，本仓没有存量，第一天就统一） | 🔁 |
 | 69 | 双线 / 母线加粗 / 铁路线 | **不存在** | `strokes: StrokePass[]` 多遍描边：双线 = 宽底色 + 窄芯色；母线 = 单遍大 width；铁路线 = 宽实线 + 窄虚线。⚠ 不做「沿法线偏移整条路径」（那要做 path offsetting，对折线+圆角是一整块几何工作） | ➕ |
 | 70 | 连线标签 | **不存在**：`edgePath` 返回的 label 锚点无人消费，落库形状里也没有 label 字段 | `edge.label` + `labelAt`（0..1 沿折线弧长，§8）+ `edgeStyle.label{font,box}`。可以是字面量，也可以绑 `edgeValues[i].value`。电路图的网络标号、工艺图的流量标注都靠它 | ➕ |
 
@@ -997,13 +1010,16 @@ export const TWIN_2D_PALETTE = {
 | 94 | kWh 全档 | `Math.round(v).toLocaleString('zh-CN') + ' kWh'` | `fmtNumber(Math.round(v), 0) + ' kWh'`。⚠ `toLocaleString` **必须钉 `'en-US'`**（本仓全仓口径）：自托管 runner 是中文 locale、开发机是 en-US，不钉的话本地绿 CI 红。⚠ `.vue` 里禁 `toLocaleString(`（`check_formatting_is_centralised`），所以它只能待在 `.ts` 里 | 🔁 |
 | 95 | 能效百分比 | `${fmtTrim(v, 2)}%`（**不是** `toFixed(1)`） | 同样 `fmtTrim(v, 2)`。⚠ 这是参考项目内部两种数值格式并存的一处：主读数走 `toFixed(1)`、能效走 `fmtTrim(,2)`，抄错了不会报错，只是小数位不同 | ✅ |
 | 96 | 设备状态词表归一 | `toStatus` 先 `String(raw).trim().toLowerCase()`，再查**四组词表**：`running/run/on/ok/normal/good/1/true`、`warning/warn/uncertain/degraded/standby/idle/2`、`alarm/alert/fault/error/bad/critical/3`、`offline/off/down/disconnected/0/false`；都不中 → `unknown`，且 `unknown` **不覆盖**配置里的 status | 归一走本仓既有的 `@dt/modules/shared/status.ts` 的 `toDeviceStatus`（§10）。⚠ 两边差的**不只是 2 号档的名字**（本仓叫 `standby`、参考项目叫 `warning`），而是**整套词表**：本仓的 `toDeviceStatus` 只有 `NUMERIC_STATUSES = {0:offline,1:running,2:standby,3:alarm}` 加一个对五个字面档名的 `readEnum`（精确匹配、不 trim、不降大小写），现场返回 `"on"` / `"ok"` / `"normal"` / `"1"`（字符串）的点位在本仓一律落进 `unknown`，图上表现为「状态永远不亮」且零报错。**处置：给 `toDeviceStatus` 加一张同义词表**，排成独立小 PR R0d（§19） | 🔁 |
-| 97 | 连线的活跃/方向词表 | `boolFromValue` 11 真词 / 12 假词，未知非空 → fallback；`reverseFromValue`：**boolean 一律 false**（设备 on/off 不表方向）、number `<0`、字符串先 `Number()` 再查词表 | 照抄，含「boolean 不表方向」这条反直觉的规矩（`format.test.ts` 里一条用例专门守它） | ✅ |
+| 97 | 连线的活跃/方向词表 | `boolFromValue` 11 真词 / 12 假词，未知非空 → fallback；`reverseFromValue`：**boolean 一律 false**（设备 on/off 不表方向）、number `<0`、字符串先 `Number()` 再查词表 | ⚠ **本仓还没有这两个函数**（`grep` 全树零命中）。`Twin2dEdgeState` 的 `active` / `reversed` 目前由调用方直接喂，归一化那一步排在 R7 —— 届时照抄，含「boolean 不表方向」这条反直觉的规矩（设备的 on/off 不表示流向），并配一条专门守它的用例 | ⏳ |
 | 98 | 容器读数拼接 | `温度 · 液位` 两个字段拼串 | 派生槽 `join(['temperature_c','level_pct'], ' · ')`（§9.5） | 🔁 |
-| 99 | 能量三级兜底链 | `output = firstNumber(['output_kwh','outputKwh','today_kwh'])`；`efficiency = efficiency_pct → cop*100 → (output/input)*100`；`input = firstNumber(['input_kwh','inputKwh'])` | 派生槽的**可递归表达式**（§9.5）：`first([slot(a), slot(b), slot(c)])` 与 `first([slot(e), scale(slot('cop'),100), ratio(<output>, slot('input_kwh'), 100)])` | 🔁 |
+| 99 | 能量三级兜底链 | `output = firstNumber(['output_kwh','outputKwh','today_kwh'])`；`efficiency = efficiency_pct → cop*100 → (output/input)*100`，⚠ 第三级带 **`input > 0`** 这个前置条件（`TopologyNodeView.vue:145`）——分母非正就整档不算，`efficiency` 留 `null`；`input = firstNumber(['input_kwh','inputKwh'])` | 派生槽的**可递归表达式**（§9.5）：`first([slot(a), slot(b), slot(c)])` 与 `first([slot(e), scale(slot('cop'),100), ratio(<output>, slot('input_kwh'), 100)])`。⚠ `input > 0` 不在派生槽里另写条件——`expr.ts` 的 `ratioValue` 自带等价守卫 `den === null \|\| den <= 0 → null`，分母 0 与负数都直接出 `null` | 🔁 |
 | 100 | `legacyPrimaryFieldKey` | 主显键 `today_kwh` 在 `category==='source'` 时改读 `power_kw` 的绑定、`terminal` 时改读 `demand_kw` | **不做**。它是参考项目为自己的存量绑定留的兼容垫片，本仓没有存量文档；照搬等于第一天就带一条谁也解释不清的隐式改绑规则（§18） | ⛔ |
 
-**逐条数完：100 件。** 其中 89 件带结论标记：✅ 逐值复刻 59、🔁 换基底或换口径 26、
-➕ 参考项目没有 3、⛔ 不做 1；余下 11 件是 §7.11 的内置图标，整份 sprite 原样搬（§5），不逐枚标。
+**逐条数完：100 件。** 其中 89 件带结论标记：✅ 逐值复刻 58、🔁 换基底或换口径 26、
+➕ 参考项目没有 3、⛔ 不做 1、⏳ 依赖未落地 1（#97，排 R7）；余下 11 件是 §7.11 的内置图标，
+整份 sprite 原样搬（§5），不逐枚标。
+数法：`awk '/^## 7\./,/^## 8\./' docs/MODULE_TWIN_2D_DESIGN.md | grep -cE '\| ✅ \|$'`
+（其余标记同理）——⚠ 别用「grep 这个字符出现几次」来数，正文里也会出现它。
 
 > ⚠ 三处「参考项目里根本不存在」的东西，照着它的类型定义做会做出多余功能：
 > **罐形没有液位填充**（那条波形是静态图标的一部分，见 #83）、
@@ -1922,7 +1938,7 @@ gitleaks 只有这条路径才跑得到）。⚠ **跑 act 期间不要动工作
 | **R2** 几何与变换 | `geometry.ts`（周长参数化含 bottom/left 反向、四角精确法线、`projectToPerimT`、四种路由、`side:'auto'` 解析、圆角折线两条退化保护、箭头、反向渲染、`labelAt` 弧长）+ `transform.ts` | `src/{geometry,transform}.ts`、`tests/{geometry,transform}.test.ts` | ≈ 1 600（源 700 / 测试 900） | 同上 | 四段周长各三点、四角法线、四种路由、两条退化保护、**带 waypoints 的反向渲染**、**二极管 16 组端口坐标**逐条有断言 | 4 |
 | **R3** 绘制层（纯函数） | `placement` / `paintBox` / `paintVec` / `paintText` / `paintCommon` / `variants` / `expr` / `cssValue` / `format` | `src/{placement,paintBox,paintVec,paintText,paintCommon,variants,expr,cssValue,format}.ts`、对应 `tests/*.test.ts`、`app/tests/contract/{twin2d-op-parity,twin2d-format-parity}.contract.spec.ts` | ≈ 2 600（源 1 300 / 测试 1 300） | 同上 + `pnpm --dir web vitest run app/tests/contract/twin2d-format-parity.contract.spec.ts` | 九档锚点与 `perim` 法线两套数学各锁一遍；`transition` 六档、`pointerEvents`/`transformOrigin`/`minWidth`/`maxWidth` 各一条；`expr` 七档 + 深度 3；`cssValue` 拒放两侧；format 与 `shared/format` 行为逐项相同且 locale 钉 `'en-US'` | 7 |
 | **R4** 渲染件 + sprite | `render/` 八件 + `twin2d.scss` + `icons.svg` 原样搬 | `src/render/{icons.svg,Twin2dIconSprite.vue,Twin2dStage.vue,Twin2dNodeBox.vue,Twin2dPrim.vue,Twin2dVec.vue,Twin2dGlyph.vue,Twin2dEdgeLayer.vue,twin2d.scss}`、`tests/render/*.spec.ts`、`tests/{twin2d-prim-kinds,twin2d-css-vars,twin2d-sprite-ids}.contract.spec.ts`、`app/tests/contract/twin2d-render-props.contract.spec.ts` | ≈ 2 400（源 1 300 / 测试 1 100） | 同上 | SFC ≤500 行逐个核；`twin2d.scss` 里**零硬编码色值**；`.vue` 里禁 `new Date(` / `toLocaleString(`；`:key` 不许索引（StrokePass/Fill/Shadow/Gradient 都要有 id）；`Twin2dStage` 的 ResizeObserver 卸载必清理；四条契约全绿；hover 与 `prefers-reduced-motion` 各有用例 | 6 |
-| **R5** 预置库 | `palette` / `nodes`（11 种）/ `subtypes`（7 组 25 条）/ `edges`（5 种）/ `sensors`（4 种）/ `circuit`（8 枚 GB/T） | `src/presets/*.ts`、`tests/presets/*.test.ts`、`tests/twin2d-preset-fidelity.spec.ts`、`tests/twin2d-slot-refs.contract.spec.ts` | ≈ 3 200（源 1 900 / 测试 1 300） | 同上 | **§7 那张 100 行表逐条有断言**（这是「内置库只是预置数据、不会退化成渲染分支」的唯一机械保证）；`slot-refs` 保证预置里零悬空槽/零悬空 sprite id；`palette.ts` 的字面 hex 不触发硬编码色值闸 | 8 |
+| **R5** 预置库 | `palette` / `nodes`（11 种）/ `subtypes`（7 组 25 条）/ `edges`（5 种）/ `sensors`（4 种）/ `circuit`（8 枚 GB/T） | `src/presets/*.ts`、`tests/presets/*.test.ts`、`tests/twin2d-preset-fidelity.spec.ts`、`tests/twin2d-slot-refs.contract.spec.ts` | ≈ 3 200（源 1 900 / 测试 1 300） | 同上 | **§7 那张 100 行表 98 行有断言**（用例名带行号 `§7-1` … `§7-100`；缺的 #73 / #97 与只覆盖一半的 #8 / #22 / #71 逐条列在 §7 开头的水位表里，两条缺的分别依赖 R9 的标注渲染件与 R7 的连线取值归一）——这张表是「内置库只是预置数据、不会退化成渲染分支」的唯一机械保证；`slot-refs` 保证预置里零悬空槽/零悬空 sprite id；`palette.ts` 的字面 hex 不触发硬编码色值闸 | 8 |
 | **R6** 绑定行与缝合 | `bindingRows.ts`：有效槽位筛选、行 → 实体映射、`twin2dRowLabels`/`RowCounts`、`remapTwin2dBindings`、`twin2dValues` 缝合 | `src/bindingRows.ts`、`tests/bindingRows.test.ts` | ≈ 900（源 350 / 测试 550） | 同上 | 三个槽的行数与顺序；派生槽与未被引用的槽都不成行；`rowCounts` 三键都在且可为 0；删中间节点后其后行号整体前移 | 3 |
 | **R7** 模块落地（**走机械化豁免，必须只有这一个新模块目录**） | `manifest.ts`（7 个配置字段 + 3 个槽，⚠ **此时先不声明 `subEditor`**，见 R13）+ `Component.vue`（读全部键、缝三槽、状态归一、四档、`@click.stop`）+ 测试 + 六处花名册 + 本文件 | `packages/modules/src/modules/twin-2d-view/{manifest.ts,Component.vue}`、`packages/modules/tests/modules/twin-2d-view/{manifest.test.ts,Component.spec.ts}`、`packages/modules/tests/manifests.contract.spec.ts`（`KEY_CONSTANTS` 加四项）、`packages/modules/tests/registerBuiltins.test.ts`、`server/services/platform-server/src/platform_server/apps/dashboard/module_types.json`、`server/services/platform-server/tests/{contract,unit,integration}/…`、`docs/MODULE_TWIN_2D_DESIGN.md` | ≈ 1 200（含快照 json） | ⚠ 先 `pnpm --dir web vitest run packages/modules/tests/catalog.contract.spec.ts -u` 重生成 `module_types.json` 并提交，否则服务端按过期目录校验、新绑定被拒；然后 `scripts/ci-local.sh --all` | `_is_module_landing()` 豁免成立——⚠ 本 PR **绝不能**顺手改 `packages/modules/src/shared/`、`packages/modules/package.json`、`packages/ui/**`、`app/src/**`，任一处都会让豁免整体失效；⚠ 也**绝不能**与另一个新模块合并（`len(fresh)==2` 时豁免直接消失）；`nodeStatus` 的 `enumMap === undefined` 有断言 | 1 |
 | **R8** 编辑器骨架 | 路由一条；`index.vue`（AppShell + `h-full`/`min-h-0` + 三栏 + `DtPageState` + `installDashboardModules()`）；`twin2dDoc.ts`（帧 = 配置 + 绑定，`commit` 无条件重派）；`useTwin2dEditorPage.ts`（整树替换、其余节点原样带回、`expectedVersion` 冲突、**`useRacedFetch`**）；工具栏；两道未保存守卫 | `app/src/router/index.ts`、`app/src/pages/Twin2dEditor/index.vue`、`components/Twin2dToolbar.vue`、`scripts/{types,twin2dDoc,useTwin2dEditorPage}.ts`、`app/tests/pages/Twin2dEditor/*.spec.ts` | ≈ 1 800 | `scripts/ci-local.sh --fast`；`pnpm --dir web vitest run app/tests` | `check_structure_web` 的页面形态三条；`check_web_styles` 的 AppShell 必带 `h-full`+`min-h-0`；`use*` ≤200 行；`check_race_guards_come_from_one_place` 绿；**「快速切 nodeId 旧响应不覆盖新文档」有用例**；每个内联 handler 都有用例 | 5 |

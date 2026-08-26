@@ -11,6 +11,7 @@ export {
   TWIN_2D_EDGE_MARKER_KINDS,
   TWIN_2D_EDGE_ROUTES,
   TWIN_2D_EXPR_KINDS,
+  TWIN_2D_FIELD_TESTS,
   TWIN_2D_FILL_KINDS,
   TWIN_2D_FIT_MODES,
   TWIN_2D_FIXED_COLOR_SPRITES,
@@ -25,6 +26,7 @@ export {
   TWIN_2D_MARK_KINDS,
   TWIN_2D_MARK_LABEL_POSITIONS,
   TWIN_2D_MARK_Z_ORDERS,
+  TWIN_2D_NODE_FIELDS,
   TWIN_2D_NODE_ROTATIONS,
   TWIN_2D_PAINT_KINDS,
   TWIN_2D_PATTERNS,
@@ -50,6 +52,7 @@ export {
   TWIN_2D_THRESHOLD_OPS,
   TWIN_2D_TRANSITION_PROPS,
   TWIN_2D_TXT_SRC_KINDS,
+  TWIN_2D_VALUE_FORMATS,
   TWIN_2D_VEC_COORDS,
 } from './kinds'
 export type {
@@ -65,6 +68,7 @@ export type {
   Twin2dEdgeMarkerKind,
   Twin2dEdgeRoute,
   Twin2dExprKind,
+  Twin2dFieldTest,
   Twin2dFillKind,
   Twin2dFitMode,
   Twin2dFixedColorSprite,
@@ -79,6 +83,7 @@ export type {
   Twin2dMarkKind,
   Twin2dMarkLabelPos,
   Twin2dMarkZOrder,
+  Twin2dNodeField,
   Twin2dNodeRotation,
   Twin2dPaintKind,
   Twin2dPattern,
@@ -103,6 +108,7 @@ export type {
   Twin2dThresholdOp,
   Twin2dTransitionProp,
   Twin2dTxtSrcKind,
+  Twin2dValueFormat,
   Twin2dVecCoord,
 } from './kinds'
 export type {
@@ -238,6 +244,7 @@ export {
   normalizeFont,
   normalizeIcoSrc,
   normalizeLayout,
+  normalizeLineHeight,
   normalizeOutline,
   normalizePad,
   normalizePlacement,
@@ -334,7 +341,12 @@ export {
 export type { Twin2dSlotFormat } from './format'
 export { anchor9Css, lenToCss, perimCss, placementCss } from './placement'
 export type { Twin2dPerimAt } from './placement'
-export { activeVariants, applyVariants, evalCondition } from './variants'
+export {
+  activeVariants,
+  applyVariants,
+  evalCondition,
+  nodeFields,
+} from './variants'
 export type { Twin2dVariantCtx, Twin2dVariantResult } from './variants'
 export {
   TWIN_2D_BOX_CONSTANTS,
@@ -394,6 +406,7 @@ export { default as Twin2dPrimView } from './render/Twin2dPrimView.vue'
 export { default as Twin2dStage } from './render/Twin2dStage.vue'
 export { default as Twin2dVec } from './render/Twin2dVec.vue'
 export {
+  TWIN_2D_BADGE_PRIM_ID,
   TWIN_2D_BUILTIN_NODE_STYLES,
   TWIN_2D_BUILTIN_NODE_STYLE_MAP,
   TWIN_2D_CIRCUIT_CAPACITOR,
@@ -407,6 +420,9 @@ export {
   TWIN_2D_CIRCUIT_SWITCH,
   TWIN_2D_EDGE_PRESETS,
   TWIN_2D_EDGE_PRESET_DEFS,
+  TWIN_2D_LABEL_NATURAL_WHEN,
+  TWIN_2D_LABEL_OUTER_PRIM_ID,
+  TWIN_2D_LABEL_VARIANTS,
   TWIN_2D_MISC_STYLES,
   TWIN_2D_PALETTE,
   TWIN_2D_PALETTE_RGB,
@@ -426,12 +442,16 @@ export {
   TWIN_2D_TERMINAL_STYLES,
   TWIN_2D_TERMINAL_SUBTYPE_DEFS,
   TWIN_2D_VESSEL_STYLES,
+  badgePrim,
+  labelOuterPrim,
   mixTransparent,
+  twin2dChromePrims,
   twin2dEdgePreset,
   twin2dSensorIdPrefix,
   twin2dSensorPill,
   twin2dSensorSlot,
   twin2dSubtypeVariant,
+  twin2dWithChrome,
   twin2dWithSubtypes,
 } from './presets'
 export type {

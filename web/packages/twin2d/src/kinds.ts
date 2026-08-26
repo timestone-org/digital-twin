@@ -161,9 +161,32 @@ export const TWIN_2D_ICO_SRC_KINDS = [
 ] as const
 export type Twin2dIcoSrcKind = (typeof TWIN_2D_ICO_SRC_KINDS)[number]
 
-/** 文本来源四档。 */
-export const TWIN_2D_TXT_SRC_KINDS = ['lit', 'slot', 'label', 'id'] as const
+/**
+ * 文本来源五档。
+ * ⚠ `badge` 是独立的一档而不是拿 `lit` 顶：角标的字来自 `node.badge`，
+ * 落成字面量就等于把每个节点的角标写死在样式里（§7.7 #51）。
+ */
+export const TWIN_2D_TXT_SRC_KINDS = [
+  'lit',
+  'slot',
+  'label',
+  'id',
+  'badge',
+] as const
 export type Twin2dTxtSrcKind = (typeof TWIN_2D_TXT_SRC_KINDS)[number]
+
+/**
+ * 槽位读数的格式档四档。
+ * ⚠ `auto` 必须排头且是缺省：另外三档各自换掉一台格式化器，缺省漂一格就是
+ * 全库读数一起换写法，而这一步零报错（§7.12 #91、#93–#95）。
+ */
+export const TWIN_2D_VALUE_FORMATS = [
+  'auto',
+  'kwhShort',
+  'grouped',
+  'trim2',
+] as const
+export type Twin2dValueFormat = (typeof TWIN_2D_VALUE_FORMATS)[number]
 
 /** 槽位两档：`live` 成一行绑定，`derived` 由算式得出、不成行。 */
 export const TWIN_2D_SLOT_KINDS = ['live', 'derived'] as const
@@ -302,16 +325,33 @@ export type Twin2dVecCoord = (typeof TWIN_2D_VEC_COORDS)[number]
 export const TWIN_2D_EDGE_MARKER_KINDS = ['none', 'arrow'] as const
 export type Twin2dEdgeMarkerKind = (typeof TWIN_2D_EDGE_MARKER_KINDS)[number]
 
-/** 变体条件六档。 */
+/** 变体条件七档。 */
 export const TWIN_2D_CONDITION_KINDS = [
   'state',
   'status',
   'tag',
   'slot',
   'has',
+  'field',
   'not',
 ] as const
 export type Twin2dConditionKind = (typeof TWIN_2D_CONDITION_KINDS)[number]
+
+/**
+ * `field` 条件能读的节点字段三档。
+ * ⚠ 是白名单不是任意字段名：放开成任意键就等于让条件去读节点上的位姿与图元树，
+ * 那两样一变整张图重算，而条件的全部意义是「便宜地判一下」（§6.3）。
+ */
+export const TWIN_2D_NODE_FIELDS = ['labelPos', 'badge', 'badgeShape'] as const
+export type Twin2dNodeField = (typeof TWIN_2D_NODE_FIELDS)[number]
+
+/**
+ * `field` 条件的判据两档：取值落在名单里 / 只要有值。
+ * ⚠ 「只要有值」单开一档而不是拿空名单表示：空名单在 `tag` / `status` 两档的口径里
+ * 是「整条丢弃」，同一个形状在两处两种意思，读的人必错一次（§4.5）。
+ */
+export const TWIN_2D_FIELD_TESTS = ['in', 'present'] as const
+export type Twin2dFieldTest = (typeof TWIN_2D_FIELD_TESTS)[number]
 
 /** `has` 条件的判定两档。 */
 export const TWIN_2D_HAS_MODES = ['any', 'all'] as const

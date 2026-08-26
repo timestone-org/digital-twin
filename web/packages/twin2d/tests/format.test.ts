@@ -21,6 +21,7 @@ import type { Twin2dSlotFormat } from '../src/format'
 function slotOf(over: Partial<Twin2dSlotFormat>): Twin2dSlotFormat {
   return {
     precision: null,
+    format: 'auto',
     unit: '',
     enumMap: {},
     placeholder: NO_DATA,
@@ -285,5 +286,54 @@ describe('formatSlotValue', () => {
 
   it('占位符是空串时兜底成 NO_DATA', () => {
     expect(formatSlotValue(null, slotOf({ placeholder: '' }))).toBe(NO_DATA)
+  })
+})
+
+describe('formatSlotValue 的四档格式', () => {
+  it('缺省档 auto 与格式档没落地之前逐字相同：整数直出、小数一位、给了数就定点', () => {
+    expect(formatSlotValue(63, slotOf({}))).toBe('63')
+    expect(formatSlotValue(63.44, slotOf({}))).toBe('63.4')
+    expect(formatSlotValue(1234.5, slotOf({ precision: 2 }))).toBe('1234.50')
+  })
+
+  it('kwhShort 档压缩到 k，precision 决定压缩后留几位', () => {
+    expect(formatSlotValue(12345, slotOf({ format: 'kwhShort' }))).toBe(
+      '12.35k',
+    )
+    expect(
+      formatSlotValue(12345, slotOf({ format: 'kwhShort', precision: 0 })),
+    ).toBe('12k')
+    expect(
+      formatSlotValue(880, slotOf({ format: 'kwhShort', precision: 0 })),
+    ).toBe('880')
+  })
+
+  it('grouped 档出千分位，precision 缺席时按整数走', () => {
+    expect(
+      formatSlotValue(1234.6, slotOf({ format: 'grouped', unit: 'kWh' })),
+    ).toBe('1,235 kWh')
+    expect(
+      formatSlotValue(1234.56, slotOf({ format: 'grouped', precision: 1 })),
+    ).toBe('1,234.6')
+  })
+
+  it('trim2 档最多两位且去尾随零，precision 能压到别的位数', () => {
+    expect(formatSlotValue(63.456, slotOf({ format: 'trim2' }))).toBe('63.46')
+    expect(formatSlotValue(63.4, slotOf({ format: 'trim2' }))).toBe('63.4')
+    expect(
+      formatSlotValue(63.456, slotOf({ format: 'trim2', precision: 1 })),
+    ).toBe('63.5')
+  })
+
+  // ⚠ 映射表与占位符在四档之上：格式档只管「有限数怎么写」，换档不许把这两件带偏
+  it('格式档管不到映射表与占位符', () => {
+    const slot = slotOf({
+      format: 'grouped',
+      enumMap: { '1': '运行' },
+      placeholder: '--',
+    })
+
+    expect(formatSlotValue(1, slot)).toBe('运行')
+    expect(formatSlotValue(null, slot)).toBe('--')
   })
 })

@@ -7,6 +7,7 @@
  * docs/MODULE_TWIN_2D_DESIGN.md §7.4、§7.5、§7.7。
  */
 import { TWIN_2D_DEFAULT_PLACEHOLDER } from '../constants'
+import { TWIN_2D_LABEL_NATURAL_WHEN, twin2dWithChrome } from './chrome'
 import { TWIN_2D_PALETTE_RGB, mixTransparent } from './palette'
 import {
   ACCENT,
@@ -80,6 +81,7 @@ function liveSlot(spec: {
     dataType: 'number',
     unit: spec.unit,
     precision: null,
+    format: 'auto',
     enumMap: {},
     placeholder: TWIN_2D_DEFAULT_PLACEHOLDER,
     primary: spec.primary,
@@ -125,6 +127,7 @@ function vesselSlots(): readonly Twin2dSlot[] {
       dataType: 'enum',
       unit: '',
       precision: null,
+      format: 'auto',
       enumMap: {},
       placeholder: TWIN_2D_DEFAULT_PLACEHOLDER,
       primary: false,
@@ -137,6 +140,7 @@ function vesselSlots(): readonly Twin2dSlot[] {
       dataType: 'string',
       unit: '',
       precision: null,
+      format: 'auto',
       enumMap: {},
       placeholder: TWIN_2D_DEFAULT_PLACEHOLDER,
       primary: false,
@@ -201,6 +205,7 @@ function readingText(letterSpacing: number | null): Twin2dTxtPrim {
 function titleText(shadows: readonly Twin2dShadow[]): Twin2dTxtPrim {
   return {
     ...txtOf(primBase('label-natural', IN_FLOW, AUTO_SIZE), { kind: 'label' }),
+    when: TWIN_2D_LABEL_NATURAL_WHEN,
     maxWidth: '100%',
     font: { size: NAME_SIZE, weight: 600, color: 'var(--text-primary)' },
     align: 'center',
@@ -365,26 +370,36 @@ function tankHoverVariant(): Twin2dVariant {
   }
 }
 
-/** 罐形选中：一圈 2px 实色 + 一层外发光（§7.7 #48）。 */
+/**
+ * 罐形选中：一圈 2px 实色 + 一层外发光（§7.7 #48）。
+ * ⚠ 补丁落在 `frame` 而不是 `rootPatch.shadows`：参考项目那条 `box-shadow` 挂在有圆角的
+ * 那一层（`.tnv-box` / `.tnv-tank` / `.tnv-square__tile`）上，而本模型的节点根
+ * `.t2-node` **没有 border-radius**——`spread: 2` 的实边落在根上会在圆角盒**外**画出
+ * 一个直角框，取值全对、只是形状不对，没有一处会报错。
+ * ⚠ 整组替换而不是追加：参考项目那条 `box-shadow` 是一个属性，选中时它把常态的内外
+ * 发光整条顶掉。
+ */
 function tankSelectedVariant(): Twin2dVariant {
   return {
     id: 'selected',
     when: { kind: 'state', state: 'selected' },
-    patch: {},
-    rootPatch: {
-      shadows: [
-        {
-          id: 'ring',
-          inset: false,
-          x: 0,
-          y: 0,
-          blur: 0,
-          spread: 2,
-          color: ACCENT,
-        },
-        accentShadow({ id: 'halo', inset: false, blur: 16, percent: 45 }),
-      ],
+    patch: {
+      frame: {
+        shadows: [
+          {
+            id: 'ring',
+            inset: false,
+            x: 0,
+            y: 0,
+            blur: 0,
+            spread: 2,
+            color: ACCENT,
+          },
+          accentShadow({ id: 'halo', inset: false, blur: 16, percent: 45 }),
+        ],
+      },
     },
+    rootPatch: {},
   }
 }
 
@@ -523,13 +538,15 @@ function cylVec(
 }
 
 /**
- * 体身矩形。
+ * 体身矩形：圆柱这一形的边框与选中态都落在它身上，故它就是本样式的 `frame`。
+ * ⚠ id 叫 `frame` 而不是按形状叫 `outline`：图元 id 是跨样式的公共词表，承载
+ * 边框 / 圆角 / 选中态的那一枚一律叫 `frame`，与它是 `box` 还是 `vec` 无关。
  * ⚠ `rx` 是 **0**：参考项目这一枚是直角矩形，圆角全靠两端的椭圆端盖压出来。
  * 给了圆角会让端盖与体身之间露出一条月牙缝。
  */
-function cylOutline(): Twin2dVecPrim {
+function cylFrame(): Twin2dVecPrim {
   return cylVec(
-    'outline',
+    'frame',
     {
       kind: 'rect',
       x: CYL_BODY_INSET,
@@ -651,7 +668,7 @@ function cylHoverVariant(): Twin2dVariant {
     id: 'hover',
     when: { kind: 'state', state: 'hover' },
     patch: {
-      outline: {
+      frame: {
         strokes: [
           cylStroke({
             id: 'ink',
@@ -681,7 +698,7 @@ function cylSelectedVariant(): Twin2dVariant {
     id: 'selected',
     when: { kind: 'state', state: 'selected' },
     patch: {
-      outline: {
+      frame: {
         strokes: [
           cylStroke({
             id: 'ink',
@@ -706,7 +723,7 @@ function cylAlarmVariant(): Twin2dVariant {
     id: 'alarm',
     when: { kind: 'status', in: ['alarm'] },
     patch: {
-      outline: {
+      frame: {
         strokes: [
           cylStroke({
             id: 'ink',
@@ -726,7 +743,7 @@ function cylAlarmVariant(): Twin2dVariant {
 
 /** 水箱：横向胶囊，强调色跟随主题的一级强调色（参考项目的 `--accent-primary`）。 */
 function waterTankStyle(): Twin2dNodeStyle {
-  return {
+  return twin2dWithChrome({
     id: 'water-tank',
     name: '水箱',
     category: 'vessel',
@@ -737,7 +754,7 @@ function waterTankStyle(): Twin2dNodeStyle {
     ports: VESSEL_PORTS,
     slots: vesselSlots(),
     variants: [tankHoverVariant(), tankSelectedVariant(), tankAlarmVariant()],
-  }
+  })
 }
 
 /**
@@ -746,7 +763,7 @@ function waterTankStyle(): Twin2dNodeStyle {
  * 重排就是改渲染结果——端盖跑到体身下面时只表现为「圆柱两头变平了」。
  */
 function manifoldStyle(): Twin2dNodeStyle {
-  return {
+  return twin2dWithChrome({
     id: 'manifold',
     name: '分集水器',
     category: 'vessel',
@@ -754,7 +771,7 @@ function manifoldStyle(): Twin2dNodeStyle {
     defaultStatus: 'online',
     size: { w: CYL_W, h: CYL_H },
     prims: [
-      cylOutline(),
+      cylFrame(),
       cylCap('cap-left', CYL_BODY_INSET),
       cylCap('cap-right', CYL_W - CYL_BODY_INSET),
       cylLine('line-warm', CYL_WARM_DY, CYL_WARM_STROKE),
@@ -766,7 +783,7 @@ function manifoldStyle(): Twin2dNodeStyle {
     ports: VESSEL_PORTS,
     slots: vesselSlots(),
     variants: [cylHoverVariant(), cylSelectedVariant(), cylAlarmVariant()],
-  }
+  })
 }
 
 /**

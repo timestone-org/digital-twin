@@ -90,9 +90,9 @@ export type Twin2dTerminalSubtypeId =
  * ⚠ 不是 `'icon'`——那是 34×34 的**底板盒**，往盒上打 `src` 补丁是一次静默空转：
  * `patchedBox` 根本不搬 `src` 这个键，于是图标照旧、零报错。
  */
-export const TWIN_2D_SOURCE_GLYPH_PRIM_ID = 'icon-glyph'
+export const TWIN_2D_SOURCE_GLYPH_PRIM_ID = 'glyph'
 
-/** 三个末端样式里那枚图标图元的 id。⚠ 与源类那边**不同名**，两族各写各的。 */
+/** 三个末端样式里那枚图标图元的 id。⚠ 与源类那边**同名**，四族共用一套图元 id 词表。 */
 export const TWIN_2D_TERMINAL_GLYPH_PRIM_ID = 'glyph'
 
 /**

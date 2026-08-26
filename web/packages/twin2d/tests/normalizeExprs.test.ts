@@ -255,3 +255,44 @@ describe('normalizeCondition 的 not 嵌套', () => {
     expect(normalizeCondition(wrap(5))).toBeNull()
   })
 })
+
+describe('normalizeCondition 的 field 一档', () => {
+  it('字段名不在三档白名单里整条丢弃', () => {
+    expect(
+      normalizeCondition({ kind: 'field', field: 'x', in: ['a'] }),
+    ).toBeNull()
+    expect(
+      normalizeCondition({ kind: 'field', field: 'labelPos', in: ['top'] }),
+    ).toEqual({ kind: 'field', field: 'labelPos', test: 'in', in: ['top'] })
+  })
+
+  it('判据缺席按 in 走，空名单整条丢弃', () => {
+    expect(
+      normalizeCondition({ kind: 'field', field: 'badgeShape', in: [] }),
+    ).toBeNull()
+    expect(
+      normalizeCondition({ kind: 'field', field: 'badgeShape', in: ['  '] }),
+    ).toBeNull()
+  })
+
+  // ⚠ present 一档本就不带名单：要一份名单等于让用户把角标可能的取值全枚举一遍
+  it('present 一档不看名单，空名单照样成立', () => {
+    expect(
+      normalizeCondition({ kind: 'field', field: 'badge', test: 'present' }),
+    ).toEqual({ kind: 'field', field: 'badge', test: 'present', in: [] })
+  })
+
+  it('判据认不出时退回 in，于是空名单照旧整条丢弃', () => {
+    expect(
+      normalizeCondition({ kind: 'field', field: 'badge', test: 'maybe' }),
+    ).toBeNull()
+    expect(
+      normalizeCondition({
+        kind: 'field',
+        field: 'badge',
+        test: 'maybe',
+        in: ['A', 'A', 'B'],
+      }),
+    ).toEqual({ kind: 'field', field: 'badge', test: 'in', in: ['A', 'B'] })
+  })
+})

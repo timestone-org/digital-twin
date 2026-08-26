@@ -124,6 +124,7 @@ function ctxOf(over: Partial<Twin2dVariantCtx>): Twin2dVariantCtx {
     status: 'online',
     tags: new Map<string, string>(),
     slots: new Map<string, unknown>(),
+    fields: new Map(),
     ...over,
   }
 }
@@ -147,11 +148,11 @@ const SOURCE_IDS = [
   'solar-source',
 ]
 
-/** 全树 26 枚图元的文档序（深度优先），四个样式逐字相同 */
+/** 全树 29 枚图元的文档序（深度优先），四个样式逐字相同；末两枚是每份样式都挂的外挂件 */
 const PRIM_IDS = [
   'frame',
   'icon',
-  'icon-glyph',
+  'glyph',
   'body',
   'label-natural',
   'readings',
@@ -174,7 +175,10 @@ const PRIM_IDS = [
   'tip-row-efficiency',
   'tip-efficiency-label',
   'tip-efficiency-value',
-  'dot',
+  'status-dot',
+  'badge',
+  'badge-text',
+  'label-outer',
 ]
 
 describe('四个能源源预置样式', () => {
@@ -209,7 +213,7 @@ describe('四个能源源预置样式', () => {
 
   it('四枚 sprite 逐值，与参考项目的 SOURCE_CLASS_ICON 同名', () => {
     expect(
-      TWIN_2D_SOURCE_STYLES.map((style) => icoOf(style, 'icon-glyph').src),
+      TWIN_2D_SOURCE_STYLES.map((style) => icoOf(style, 'glyph').src),
     ).toEqual([
       { kind: 'sprite', id: 'ico-src-waste-heat' },
       { kind: 'sprite', id: 'ico-src-steam' },
@@ -219,15 +223,17 @@ describe('四个能源源预置样式', () => {
   })
 
   for (const id of SOURCE_IDS) {
-    it(`${id} 结构完整：26 枚图元、id 全树唯一、槽引用与补丁寻址都不悬空`, () => {
+    it(`${id} 结构完整：29 枚图元、id 全树唯一、槽引用与补丁寻址都不悬空`, () => {
       const style = styleOf(id)
       const prims = flatten(style.prims)
       expect(prims.map((prim) => prim.id)).toEqual(PRIM_IDS)
-      expect(new Set(prims.map((prim) => prim.id)).size).toBe(26)
+      expect(new Set(prims.map((prim) => prim.id)).size).toBe(29)
       expect(style.prims.map((prim) => prim.id)).toEqual([
         'frame',
         'energy-tip',
-        'dot',
+        'status-dot',
+        'badge',
+        'label-outer',
       ])
 
       const slotKeys = new Set(style.slots.map((slot) => slot.key))
@@ -306,8 +312,8 @@ describe('四个能源源预置样式', () => {
         opacity: 1,
       },
     ])
-    expect(icoOf(style, 'icon-glyph').size).toEqual({ w: 26, h: 26 })
-    expect(icoOf(style, 'icon-glyph').color).toBe(ACCENT)
+    expect(icoOf(style, 'glyph').size).toEqual({ w: 26, h: 26 })
+    expect(icoOf(style, 'glyph').color).toBe(ACCENT)
   })
 
   it('主体两行一列：显示名 18px/600，读数行两端分布、间距 10', () => {
@@ -545,7 +551,7 @@ describe('四个能源源预置样式', () => {
 
   it('状态点：右下 5/5、7×7 药丸、6px 同色发光、z 5，hidden 档整枝摘掉', () => {
     const style = styleOf('waste-heat-source')
-    const dot = boxOf(style, 'dot')
+    const dot = boxOf(style, 'status-dot')
     expect(dot.at).toEqual({
       kind: 'abs',
       left: null,
@@ -784,7 +790,7 @@ describe('四个能源源预置样式', () => {
       kind: 'breathe',
       durationMs: 1000,
     })
-    expect(patchOf(alarm, 'dot').anim).toEqual({
+    expect(patchOf(alarm, 'status-dot').anim).toEqual({
       kind: 'pulse',
       durationMs: 1000,
     })
@@ -794,12 +800,15 @@ describe('四个能源源预置样式', () => {
     expect(evalCondition(alarm.when, ctxOf({ status: 'online' }))).toBe(false)
   })
 
-  it('三档变体的文档序即覆盖序，且常态一档都不命中', () => {
+  it('三档交互变体加三档名位变体，文档序即覆盖序，且常态一档都不命中', () => {
     for (const style of TWIN_2D_SOURCE_STYLES) {
       expect(style.variants.map((variant) => variant.id)).toEqual([
         'hover',
         'selected',
         'alarm',
+        'label-left',
+        'label-right',
+        'label-inside',
       ])
     }
     const style = styleOf('waste-heat-source')

@@ -10,9 +10,11 @@ import type {
   Twin2dBackgroundFit,
   Twin2dBorderStyle,
   Twin2dCursor,
+  Twin2dFieldTest,
   Twin2dFlow,
   Twin2dHasMode,
   Twin2dJustify,
+  Twin2dNodeField,
   Twin2dPointerEvents,
   Twin2dSpriteId,
   Twin2dState,
@@ -241,9 +243,12 @@ export type Twin2dExpr =
   | { kind: 'join'; of: readonly Twin2dExpr[]; sep: string }
 
 /**
- * 变体条件六档。
+ * 变体条件七档。
  * ⚠ `tag` 的键与值都是自由字符串，不做白名单：做了就等于把子类重新钉死成枚举，
  * 这一档就白加了（§6.3）。
+ * ⚠ `field` 读的是节点上的**闭合字段**（`labelPos` / `badge` / `badgeShape`），
+ * 与 `tag` 不重叠：把 `labelPos` 塞进自由 tag 表会与用户自己的同名 tag 撞上，
+ * 撞上之后是「显示名跑到了另一边」，零报错（§7.7 #50/#56）。
  */
 export type Twin2dCondition =
   | { kind: 'state'; state: Twin2dState }
@@ -257,6 +262,12 @@ export type Twin2dCondition =
       value2: number | null
     }
   | { kind: 'has'; slots: readonly string[]; mode: Twin2dHasMode }
+  | {
+      kind: 'field'
+      field: Twin2dNodeField
+      test: Twin2dFieldTest
+      in: readonly string[]
+    }
   | { kind: 'not'; of: Twin2dCondition }
 
 /** 图元共有的十五项。 */
@@ -346,12 +357,13 @@ export interface Twin2dIcoPrim extends Twin2dPrimBase {
   color: string
 }
 
-/** 文本四来源。 */
+/** 文本五来源。 */
 export type Twin2dTxtSrc =
   | { kind: 'lit'; text: string }
   | { kind: 'slot'; slot: string }
   | { kind: 'label' }
   | { kind: 'id' }
+  | { kind: 'badge' }
 
 /** 描边字（标注标签用）：SVG 的 `paint-order: stroke` 那一套。 */
 export interface Twin2dTextOutline {
@@ -365,6 +377,13 @@ export interface Twin2dTxtPrim extends Twin2dPrimBase {
   src: Twin2dTxtSrc
   /** 缺席键 = 跟随主题。 */
   font: FontValue
+  /**
+   * 行高倍数，null = 跟随主题。
+   * ⚠ 与 `font` 并列而不进 `FontValue`：那是 L0 契约包的共享形状，属性面板的字体
+   * 控件也不认这一档（§7.7 #51）。
+   * ⚠ 角标那一处必须显式给 1：少了它 18px 高的药丸被行高撑成椭圆，而每一处取值都对。
+   */
+  lineHeight: number | null
   align: Twin2dTextAlign
   baseline: Twin2dTextBaseline
   nowrap: boolean
@@ -419,6 +438,7 @@ export interface Twin2dPrimPatch {
   src?: Twin2dIcoSrc | Twin2dTxtSrc
   color?: string
   font?: FontValue
+  lineHeight?: number | null
   align?: Twin2dTextAlign
   baseline?: Twin2dTextBaseline
   nowrap?: boolean

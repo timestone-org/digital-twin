@@ -175,6 +175,7 @@ function designator(anchor: Twin2dAnchor9): Twin2dTxtPrim {
     keepUpright: true,
     src: { kind: 'label' },
     font: { size: LABEL_SIZE, weight: LABEL_WEIGHT, color: PIN_INK },
+    lineHeight: null,
     align: 'center',
     baseline: 'auto',
     nowrap: true,

@@ -61,12 +61,19 @@ function tagCtx(value: string): Twin2dVariantCtx {
     status: null,
     tags: new Map([[TWIN_2D_SUBTYPE_TAG_KEY, value]]),
     slots: new Map(),
+    fields: new Map(),
   }
 }
 
 /** 什么都没打的求值上下文，用来取「不加子类时长什么样」。 */
 function bareCtx(): Twin2dVariantCtx {
-  return { states: new Set(), status: null, tags: new Map(), slots: new Map() }
+  return {
+    states: new Set(),
+    status: null,
+    tags: new Map(),
+    slots: new Map(),
+    fields: new Map(),
+  }
 }
 
 function styleOf(
@@ -262,7 +269,7 @@ describe('25 种组合逐条', () => {
 })
 
 describe('子类变体排在交互态之前', () => {
-  it('源类样式的变体序是「4 条子类 → hover → selected → alarm」', () => {
+  it('源类样式的变体序是「4 条子类 → hover → selected → alarm → 3 条名位」', () => {
     const style = styleOf(TWIN_2D_SUBTYPED_SOURCE_STYLES, 'waste-heat-source')
 
     expect(style.variants.map((variant) => variant.id)).toEqual([
@@ -273,10 +280,13 @@ describe('子类变体排在交互态之前', () => {
       'hover',
       'selected',
       'alarm',
+      'label-left',
+      'label-right',
+      'label-inside',
     ])
   })
 
-  it('末端样式的变体序是「3 条子类 → hover → selected → alarm」', () => {
+  it('末端样式的变体序是「3 条子类 → hover → selected → alarm → 3 条名位」', () => {
     const style = styleOf(TWIN_2D_SUBTYPED_TERMINAL_STYLES, 'ac-terminal')
 
     expect(style.variants.map((variant) => variant.id)).toEqual([
@@ -286,6 +296,9 @@ describe('子类变体排在交互态之前', () => {
       'hover',
       'selected',
       'alarm',
+      'label-left',
+      'label-right',
+      'label-inside',
     ])
   })
 
