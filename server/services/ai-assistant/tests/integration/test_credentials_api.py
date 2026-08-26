@@ -41,11 +41,14 @@ CREDENTIALS = f"{API_PREFIX}/credentials/codex"
 SECRET = "credential-secret-0123456789abcdef"
 
 START_BODY = {
-    "device_code": "dc-secret",
+    "device_auth_id": "deviceauth_secret",
     "user_code": "ABCD-1234",
-    "verification_uri": "https://example.test/activate",
-    "interval": 5,
-    "expires_in": 900,
+    "interval": "5",
+    "expires_at": "2099-01-01T00:00:00+00:00",
+}
+GRANT_BODY = {
+    "authorization_code": "code-1",
+    "code_verifier": "ver-from-server",
 }
 TOKEN_BODY = {
     "access_token": "at-super-secret",
@@ -155,7 +158,7 @@ async def test_a_device_login_lands_a_ciphered_row(
     _wire_codex(
         db_stack,
         (200, START_BODY),
-        (200, {"authorization_code": "code-1"}),
+        (200, GRANT_BODY),
         (200, TOKEN_BODY),
     )
     started = (
@@ -164,7 +167,7 @@ async def test_a_device_login_lands_a_ciphered_row(
         )
     ).json()["data"]
     # 交给浏览器的是句柄，不是 device_code
-    assert started["ref"] != START_BODY["device_code"]
+    assert started["ref"] != START_BODY["device_auth_id"]
     assert started["user_code"] == "ABCD-1234"
 
     polled = (
@@ -194,7 +197,7 @@ async def test_the_status_face_never_returns_a_token(
     _wire_codex(
         db_stack,
         (200, START_BODY),
-        (200, {"authorization_code": "code-1"}),
+        (200, GRANT_BODY),
         (200, TOKEN_BODY),
     )
     started = (
@@ -250,7 +253,7 @@ async def _login_once(
     _wire_codex(
         stack,
         (200, START_BODY),
-        (200, {"authorization_code": "code-1"}),
+        (200, GRANT_BODY),
         (200, TOKEN_BODY),
         *extra,
     )
@@ -366,7 +369,7 @@ async def test_a_held_refresh_lock_makes_the_loser_wait_and_reread(
     cache = _wire_codex(
         db_stack,
         (200, START_BODY),
-        (200, {"authorization_code": "code-1"}),
+        (200, GRANT_BODY),
         (200, TOKEN_BODY),
     )
     started = (
