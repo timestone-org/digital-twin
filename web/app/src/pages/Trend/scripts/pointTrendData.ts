@@ -1,13 +1,13 @@
 /**
- * @fileoverview 点位历史这一面的三件纯活：把采集点位摊成勾选项、筛出「画得
- * 出曲线」的那些、以及一次问一批点位的分桶读数。与 Vue 无关，故单独一份。
+ * @fileoverview 点位历史这一面的两件纯活：把采集点位摊成勾选项，以及一次问
+ * 一批点位的分桶读数。与 Vue 无关，故单独一份。
  */
 import type { CollectPoint, HistoryPoint } from '@dt/contracts'
 
 import { fetchPointAggregate } from '@/api/pointHistories'
 import {
-  chooseTrendBucket,
-  withBucketGaps,
+  holdBucketValues,
+  resolveTrendBucket,
   type TrendBucket,
 } from '@/features/trend/trendBucket'
 import type { TrendItem } from '@/features/trend/trendSeries'
@@ -26,6 +26,7 @@ export function toTrendItem(point: CollectPoint): TrendItem {
     label: `${point.name}${unit}${mark}`,
     unit: point.unit ?? '',
     isDrawable: point.archive_enabled,
+    holdMs: point.archive_max_interval_ms,
   }
 }
 
@@ -43,26 +44,31 @@ export interface PointReadings {
   isTruncated: boolean
 }
 
+/** 取一次分桶读数要的那几样。 */
+export interface PointQuery {
+  wanted: readonly TrendItem[]
+  fromMs: number
+  toMs: number
+  aggregate: string
+  /** 界面上选的取点间隔，`auto` 即跟着窗口走。 */
+  interval: string
+}
+
 /**
  * 取一批点位在一段窗口上的分桶读数。
  * ⚠ 一次请求问全部点位：逐个点位各发一次的话，8 个点位就是 8 条各自会失败的
  * 链路，而半张图在界面上与「那几个点位没数据」长得一模一样。
- * ⚠ 桶宽按窗口自己选，不让用户填：填得太细就是一条被截断的半截曲线，而截断
- * 这件事只能事后解释。
- * @param wanted 已勾的点位
- * @param fromMs 窗口左端
- * @param toMs 窗口右端
- * @param aggregate 折算档位
+ * ⚠ 空掉的格按各自的归档心跳结转上一个读数，不是画成断档——理由见
+ * `holdBucketValues`。心跳是**逐点位**的，故补格也逐点位算。
+ * @param query 点位、窗口、折算档位与取点间隔
  * @param signal 取消信号
  */
 export async function readPointReadings(
-  wanted: readonly TrendItem[],
-  fromMs: number,
-  toMs: number,
-  aggregate: string,
+  query: PointQuery,
   signal?: AbortSignal,
 ): Promise<PointReadings> {
-  const bucket = chooseTrendBucket(toMs - fromMs)
+  const { wanted, fromMs, toMs, aggregate, interval } = query
+  const bucket = resolveTrendBucket(toMs - fromMs, interval)
   const result = await fetchPointAggregate(
     {
       nodeKeys: wanted.map((item) => item.key),
@@ -83,9 +89,13 @@ export async function readPointReadings(
     })
   }
   return {
-    readings: [...grouped].map(([key, points]) => ({
-      key,
-      points: withBucketGaps(points, bucket.ms),
+    readings: wanted.map((item) => ({
+      key: item.key,
+      points: holdBucketValues(grouped.get(item.key) ?? [], {
+        bucketMs: bucket.ms,
+        holdMs: item.holdMs,
+        toMs,
+      }),
     })),
     bucket,
     isTruncated: result.is_truncated,

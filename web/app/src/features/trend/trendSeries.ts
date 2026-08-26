@@ -34,6 +34,13 @@ export interface TrendItem {
    * 点位、在这里找不到它，然后去查是不是权限出了问题。它只是默认被筛掉。
    */
   isDrawable: boolean
+  /**
+   * 空档最多结转多久（毫秒），取这个点位的归档心跳。
+   * ⚠ 台账列一律 0（不结转）：那一路的空桶是「这一格算不出来」，抄上一格的值
+   * 会让断采期间的曲线看起来一切正常（DATASET_DESIGN D3）。点位历史那一路
+   * 相反——订阅模式下「没有新读数」的正常含义就是「值没变」。
+   */
+  holdMs: number
 }
 
 /**
@@ -59,6 +66,7 @@ export function columnTrendItems(
       column.unit === null ? column.name : `${column.name}（${column.unit}）`,
     unit: column.unit ?? '',
     isDrawable: true,
+    holdMs: 0,
   }))
 }
 

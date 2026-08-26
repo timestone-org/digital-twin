@@ -13,12 +13,11 @@ import type { DtChartSeries } from '@dt/ui'
 
 import { usePointPicker, type PointPicker } from '@/composables/usePointPicker'
 import { useRacedFetch } from '@/composables/useRacedFetch'
-import type { TrendBucket } from '@/features/trend/trendBucket'
 import {
-  isSelectionDirty,
-  pointChartSeries,
-  type TrendItem,
-} from '@/features/trend/trendSeries'
+  TREND_BUCKET_AUTO,
+  type TrendBucket,
+} from '@/features/trend/trendBucket'
+import type { TrendItem } from '@/features/trend/trendSeries'
 import {
   defaultTrendRange,
   type TrendRangeValue,
@@ -26,7 +25,10 @@ import {
 import { toTrendItem } from './pointTrendData'
 import {
   createPointState,
+  listedItems,
   nextChosen,
+  pointDirty,
+  pointSeries,
   pointTruncation,
   runPointQuery,
 } from './pointTrendState'
@@ -42,6 +44,8 @@ export interface PointTrend {
   selected: ComputedRef<string[]>
   range: Ref<TrendRangeValue>
   aggregate: Ref<string>
+  /** 取点间隔，`auto` 即跟着时间范围走。 */
+  interval: Ref<string>
   series: ComputedRef<DtChartSeries[]>
   /** 这次取数真正用的桶宽；还没查过是 null。 */
   bucket: Ref<TrendBucket | null>
@@ -61,18 +65,18 @@ export function usePointTrend(): PointTrend {
   const state = createPointState()
   const range = ref<TrendRangeValue>(defaultTrendRange())
   const aggregate = ref(DEFAULT_AGGREGATE)
+  const interval = ref(TREND_BUCKET_AUTO)
   const drawableOnly = ref(true)
   const raced = useRacedFetch()
 
   const selected = computed(() => state.chosen.value.map((item) => item.key))
-  // 已勾的排在前面，再接上这一次搜出来、还没勾的那些
-  const items = computed<TrendItem[]>(() => [
-    ...state.chosen.value,
-    ...picker.items.value
-      .map(toTrendItem)
-      .filter((item) => !selected.value.includes(item.key))
-      .filter((item) => !drawableOnly.value || item.isDrawable),
-  ])
+  const items = computed<TrendItem[]>(() =>
+    listedItems(
+      state.chosen.value,
+      picker.items.value.map(toTrendItem),
+      drawableOnly.value,
+    ),
+  )
 
   return {
     picker,
@@ -81,25 +85,23 @@ export function usePointTrend(): PointTrend {
     selected,
     range,
     aggregate,
+    interval,
     bucket: state.bucket,
-    series: computed(() =>
-      pointChartSeries(state.fetched.value, items.value, selected.value),
-    ),
+    series: computed(() => pointSeries(state, items.value, selected.value)),
     loading: state.loading,
     failure: state.failure,
-    dirty: computed(() =>
-      isSelectionDirty(
-        state.hasQueried.value,
-        selected.value,
-        state.fetched.value,
-      ),
-    ),
+    dirty: computed(() => pointDirty(state, selected.value)),
     truncation: computed(() => pointTruncation(state)),
     toggle: (key) => {
       state.chosen.value = nextChosen(items.value, selected.value, key)
     },
     clear: () => (state.chosen.value = []),
-    query: () => runPointQuery(state, raced, range.value, aggregate.value),
+    query: () =>
+      runPointQuery(state, raced, {
+        range: range.value,
+        aggregate: aggregate.value,
+        interval: interval.value,
+      }),
     dispose: () => {
       picker.dispose()
       raced.cancel()

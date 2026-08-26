@@ -12,6 +12,10 @@
  * ⚠ 截断必须说清砍掉的是哪一头：曲线**开头**凭空少一截最容易被读成
  * 「那阵子采集坏了」（docs/DATASET_DESIGN.md §6.2）。
  * ⚠ 取数失败时**不画图**：一张空图与「这段时间确实没有数据」长得一模一样。
+ * ⚠ 范围不合法的那句话摆在工具条**下面**，不走 `DtSelect` 的 `error`：
+ * `DtField` 把错误渲染在控件底下，而这一行是 `items-end` 对齐的——一格长高
+ * 就把它自己的控件顶上去，整条工具条当场错位。同理，这一行里任何控件都不许
+ * 带 `error` / `hint`。
  */
 import { computed } from 'vue'
 
@@ -80,41 +84,46 @@ function patchRange(patch: Partial<TrendRangeValue>): void {
 
 <template>
   <div class="flex min-h-0 flex-1 flex-col gap-3">
-    <div class="flex flex-wrap items-end gap-3">
-      <div class="w-40">
-        <DtSelect
-          :model-value="range.preset"
-          :options="rangeOptions"
-          label="时间范围"
+    <div class="flex flex-col gap-1.5">
+      <div class="flex flex-wrap items-end gap-3">
+        <div class="w-40">
+          <DtSelect
+            :model-value="range.preset"
+            :options="rangeOptions"
+            label="时间范围"
+            size="sm"
+            @update:model-value="patchRange({ preset: $event })"
+          />
+        </div>
+        <DtDateTimeInput
+          v-if="isCustom"
+          :model-value="range.from"
+          label="开始"
           size="sm"
-          :error="rangeProblem ?? undefined"
-          @update:model-value="patchRange({ preset: $event })"
+          @update:model-value="patchRange({ from: $event })"
         />
+        <DtDateTimeInput
+          v-if="isCustom"
+          :model-value="range.to"
+          label="结束"
+          size="sm"
+          @update:model-value="patchRange({ to: $event })"
+        />
+        <slot name="options" />
+        <DtButton
+          size="sm"
+          icon="chart-line"
+          :loading="loading"
+          :disabled="!canQuery"
+          @click="emit('query')"
+        >
+          查询
+        </DtButton>
       </div>
-      <DtDateTimeInput
-        v-if="isCustom"
-        :model-value="range.from"
-        label="开始"
-        size="sm"
-        @update:model-value="patchRange({ from: $event })"
-      />
-      <DtDateTimeInput
-        v-if="isCustom"
-        :model-value="range.to"
-        label="结束"
-        size="sm"
-        @update:model-value="patchRange({ to: $event })"
-      />
-      <slot name="options" />
-      <DtButton
-        size="sm"
-        icon="chart-line"
-        :loading="loading"
-        :disabled="!canQuery"
-        @click="emit('query')"
-      >
-        查询
-      </DtButton>
+
+      <p v-if="rangeProblem" class="text-xs text-state-danger" role="alert">
+        {{ rangeProblem }}
+      </p>
     </div>
 
     <div class="flex min-h-0 flex-1 flex-col gap-3 xl:flex-row">
@@ -164,7 +173,7 @@ function patchRange(patch: Partial<TrendRangeValue>): void {
           {{
             isFull
               ? `最多同时画 ${MAX_TREND_SERIES} 条，要换别的先取消一条。`
-              : `最多同时画 ${MAX_TREND_SERIES} 条；曲线上的缺口表示那一段没有取值。`
+              : `最多同时画 ${MAX_TREND_SERIES} 条；曲线上的缺口表示那一段没有取到值。`
           }}
         </p>
       </aside>

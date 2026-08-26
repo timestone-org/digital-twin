@@ -8,6 +8,7 @@
 import { ref, type Ref } from 'vue'
 
 import type { HistoryPoint } from '@dt/contracts'
+import type { DtChartSeries } from '@dt/ui'
 
 import { describeError } from '@/composables/useAsyncList'
 import type { RacedFetch } from '@/composables/useRacedFetch'
@@ -15,7 +16,12 @@ import {
   bucketTruncationHint,
   type TrendBucket,
 } from '@/features/trend/trendBucket'
-import { toggleTrendKey, type TrendItem } from '@/features/trend/trendSeries'
+import {
+  isSelectionDirty,
+  pointChartSeries,
+  toggleTrendKey,
+  type TrendItem,
+} from '@/features/trend/trendSeries'
 import {
   resolveTrendRange,
   type TrendRangeValue,
@@ -45,27 +51,42 @@ export function createPointState(): PointState {
   }
 }
 
+/** 界面上那几个「怎么取」的选择。 */
+export interface PointQueryChoice {
+  range: TrendRangeValue
+  aggregate: string
+  /** 取点间隔，`auto` 即跟着窗口走。 */
+  interval: string
+}
+
 /**
  * 取一次读数。
  * @param state 要写的那几格
  * @param raced 竞态守卫
- * @param range 界面上的时间范围
- * @param aggregate 折算档位
+ * @param choice 界面上的时间范围、折算档位与取点间隔
  */
 export async function runPointQuery(
   state: PointState,
   raced: RacedFetch,
-  range: TrendRangeValue,
-  aggregate: string,
+  choice: PointQueryChoice,
 ): Promise<void> {
   const wanted = [...state.chosen.value]
-  const window = resolveTrendRange(range).window
+  const window = resolveTrendRange(choice.range).window
   if (wanted.length === 0 || window === null) return
   state.loading.value = true
   state.failure.value = null
   await raced.run(
     (signal) =>
-      readPointReadings(wanted, window.fromMs, window.toMs, aggregate, signal),
+      readPointReadings(
+        {
+          wanted,
+          fromMs: window.fromMs,
+          toMs: window.toMs,
+          aggregate: choice.aggregate,
+          interval: choice.interval,
+        },
+        signal,
+      ),
     {
       ok: (result) => {
         const next: Record<string, HistoryPoint[]> = {}
@@ -94,6 +115,56 @@ export function pointTruncation(state: PointState): string | null {
   const bucket = state.bucket.value
   if (!state.isTruncated.value || bucket === null) return null
   return bucketTruncationHint(bucket)
+}
+
+/**
+ * 这一次要画的那几条曲线。
+ * ⚠ 只摊上一次查询真取回来的那几个 key：勾了但还没查的不进图，否则会得到一条
+ * 有图例、没有线的空曲线，看的人会判成「这一列没数据」。
+ * @param state 一次查询留下的那几格
+ * @param items 清单
+ * @param selected 当前勾选
+ */
+export function pointSeries(
+  state: PointState,
+  items: readonly TrendItem[],
+  selected: readonly string[],
+): DtChartSeries[] {
+  return pointChartSeries(state.fetched.value, items, selected)
+}
+
+/**
+ * 勾选是否已经超出上一次查询的结果。
+ * @param state 一次查询留下的那几格
+ * @param selected 当前勾选
+ */
+export function pointDirty(
+  state: PointState,
+  selected: readonly string[],
+): boolean {
+  return isSelectionDirty(state.hasQueried.value, selected, state.fetched.value)
+}
+
+/**
+ * 清单上列哪几项：已勾的排在前面，再接上这一次搜出来、还没勾的那些。
+ * ⚠ 已勾的必须一直留着，不随搜索结果与筛选消失：它掉出清单时图上那条线还在，
+ * 用户会以为自己已经取消了勾选。
+ * @param chosen 已勾的那几项
+ * @param found 这一次搜出来的点位摊成的项
+ * @param drawableOnly 只留画得出线的
+ */
+export function listedItems(
+  chosen: readonly TrendItem[],
+  found: readonly TrendItem[],
+  drawableOnly: boolean,
+): TrendItem[] {
+  const picked = new Set(chosen.map((item) => item.key))
+  return [
+    ...chosen,
+    ...found.filter(
+      (item) => !picked.has(item.key) && (!drawableOnly || item.isDrawable),
+    ),
+  ]
 }
 
 /**

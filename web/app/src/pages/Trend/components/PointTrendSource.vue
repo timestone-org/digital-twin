@@ -15,6 +15,8 @@ import { DtButton, DtIcon, DtInput, DtNotice, DtSelect, DtSwitch } from '@dt/ui'
 
 import TrendSurface from '@/components/trend/TrendSurface.vue'
 import { POINT_PICKER_PAGE_SIZE } from '@/composables/usePointPicker'
+import { trendBucketChoices } from '@/features/trend/trendBucket'
+import { resolveTrendRange } from '@/features/trend/trendRange'
 import { usePointTrend } from '../scripts/usePointTrend'
 
 /** 各档折算的说法。⚠ 与 `COLLECT_AGGREGATES` 一一对应，少一条就是下拉里少一项。 */
@@ -32,6 +34,21 @@ const aggregateOptions: readonly DtSelectOption[] = COLLECT_AGGREGATES.map(
   (value) => ({ value, label: AGGREGATE_LABELS[value] ?? value }),
 )
 
+/**
+ * 当前时间范围下选得动的取点间隔。
+ * 太细的那几档禁掉而不是藏掉：藏掉会让人以为这个软件就只看得到这么细，而
+ * 实际上把时间范围缩小一点就选得上了。
+ */
+const intervalOptions = computed<DtSelectOption[]>(() => {
+  const window = resolveTrendRange(trend.range.value).window
+  const span = window === null ? 0 : window.toMs - window.fromMs
+  return trendBucketChoices(span).map((one) => ({
+    value: one.value,
+    label: one.label,
+    disabled: one.isTooFine,
+  }))
+})
+
 /** 清单底下那一句：一共几个、这一页列了几个。 */
 const listNote = computed(() => {
   if (trend.picker.error.value !== null) return ''
@@ -41,11 +58,15 @@ const listNote = computed(() => {
   return `共 ${total} 个点位，这里只列了前 ${POINT_PICKER_PAGE_SIZE} 个，用关键字缩小范围。`
 })
 
-/** 图底下那一句：这次是按多粗的桶画的。 */
+/** 图底下那一句：这次按多粗的格子画的，以及空格是怎么补的。 */
 const footnote = computed(() => {
   const bucket = trend.bucket.value
   if (bucket === null) return ''
-  return `曲线按 ${bucket.label} 一格折算过，画的不是逐条原始读数；把时间范围缩小，格子会跟着变细。`
+  return (
+    `曲线按 ${bucket.label} 一格折算过，画的不是逐条原始读数。` +
+    '没有新读数的格子保持上一个值（订阅模式下那就是「值没变」）；' +
+    '超过该点位的归档心跳还没有读数，才画成断档。'
+  )
 })
 
 onMounted(() => {
@@ -73,7 +94,16 @@ onUnmounted(trend.dispose)
     @update:range="trend.range.value = $event"
   >
     <template #options>
-      <div class="w-32">
+      <div class="w-36">
+        <DtSelect
+          :model-value="trend.interval.value"
+          :options="intervalOptions"
+          label="取点间隔"
+          size="sm"
+          @update:model-value="trend.interval.value = $event"
+        />
+      </div>
+      <div class="w-28">
         <DtSelect
           :model-value="trend.aggregate.value"
           :options="aggregateOptions"

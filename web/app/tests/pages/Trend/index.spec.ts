@@ -359,6 +359,53 @@ describe('台账那一面的选表', () => {
   })
 })
 
+describe('取点间隔', () => {
+  it('默认走自动档，标签里写明它这次落在哪一格', async () => {
+    signIn([PERMISSION_CODES.collectView])
+    const wrapper = await open()
+    // 默认「最近 24 小时」→ 自动档落在 10 分钟
+    expect(triggerOf(wrapper, '取点间隔')?.text()).toContain('10 分钟')
+  })
+
+  it('手选一档就按它去问，不再跟着窗口走', async () => {
+    signIn([PERMISSION_CODES.collectView])
+    const wrapper = await open()
+    await triggerOf(wrapper, '取点间隔')?.trigger('click')
+    await flushPromises()
+    const wanted = [...document.querySelectorAll('.dt-select-menu__item')].find(
+      (one) => one.textContent?.includes('1 小时'),
+    )
+    wanted?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    await wrapper.get('input[type="checkbox"]').setValue(true)
+    await wrapper
+      .findAll('button')
+      .find((one) => one.text().includes('查询'))
+      ?.trigger('click')
+    await flushPromises()
+    expect(
+      vi.mocked(histories.fetchPointAggregate).mock.calls.at(-1)?.[0].interval,
+    ).toBe('1h')
+  })
+})
+
+describe('工具条对齐', () => {
+  it('⚠ 范围不合法时那句话不许挤进工具条：一格长高整条就错位', async () => {
+    signIn([PERMISSION_CODES.collectView])
+    const wrapper = await open()
+    await triggerOf(wrapper, '时间范围')?.trigger('click')
+    await flushPromises()
+    const custom = [...document.querySelectorAll('.dt-select-menu__item')].find(
+      (one) => one.textContent?.includes('自定义'),
+    )
+    custom?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(wrapper.text()).toContain('请把开始与结束时间都选上')
+    // `DtField` 把 error 渲染在控件底下，工具条是 items-end 对齐的
+    expect(wrapper.find('.dt-field__error').exists()).toBe(false)
+  })
+})
+
 describe('点位那一面的搜索', () => {
   it('点搜索按当前关键字重搜一遍', async () => {
     signIn([PERMISSION_CODES.collectView])
