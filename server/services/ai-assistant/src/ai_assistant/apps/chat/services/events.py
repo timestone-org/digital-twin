@@ -10,6 +10,7 @@
 import json
 from typing import Any
 
+from ai_assistant.apps.chat.services import step_preview
 from ai_assistant.apps.chat.services.turn_types import (
     TurnDelta,
     TurnOutcome,
@@ -62,6 +63,10 @@ def delta_frame(delta: TurnDelta) -> str:
 def step_frame(step: TurnStep) -> str:
     """一步跑完了。
 
+    ⚠ 入参与产出**带一份钳过的预览**。不带的话，界面上一步只有一句标题，
+    「它到底把什么写进去了」只能等这个会话重开之后从库里读回来——而那正是
+    出错当场最该看见的东西。钳制口径见 `step_preview`。
+
     Args: step。
     """
     return frame(
@@ -72,6 +77,8 @@ def step_frame(step: TurnStep) -> str:
             "state": step.state,
             "title": step.title,
             "error": step.error,
+            "input": step_preview.input_preview(step.input_json),
+            "output": step_preview.output_preview(step.output_json),
         },
     )
 
