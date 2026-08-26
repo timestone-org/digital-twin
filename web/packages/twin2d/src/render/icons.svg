@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  能源拓扑节点图标 sprite。
+  用法：在节点渲染宿主 inline 一次（见 TopologyIconSprite.vue），节点内
+        <svg><use href="#ico-..."/></svg>，颜色走 currentColor。
+  契约：所有 ico-* 映射目标必须 ∈ TOPOLOGY_SYMBOL_IDS（icons.ts 白名单）。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="ico-src-waste-heat" viewBox="0 0 240 150">
+    <defs>
+      <linearGradient id="recoveryFill" x1="120" y1="24" x2="120" y2="118" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#17495D"/>
+        <stop offset="1" stop-color="#0C2A38"/>
+      </linearGradient>
+    </defs>
+    <rect x="36" y="26" width="168" height="92" rx="14" fill="url(#recoveryFill)" stroke="#62FF8A" stroke-opacity="0.92"/>
+    <path d="M60 46H180M60 66H180M60 86H180" stroke="#62FF8A" stroke-opacity="0.6"/>
+    <path d="M76 112C68 98 68 84 76 70C84 56 84 42 76 28" stroke="#FF5C7A" stroke-width="3.4" stroke-linecap="round" stroke-opacity="0.98"/>
+    <path d="M116 112C108 98 108 84 116 70C124 56 124 42 116 28" stroke="#FF9B54" stroke-width="3.4" stroke-linecap="round" stroke-opacity="0.98"/>
+    <path d="M156 112C148 98 148 84 156 70C164 56 164 42 156 28" stroke="#2FE9FF" stroke-width="3.4" stroke-linecap="round" stroke-opacity="0.98"/>
+    </symbol>
+  <symbol id="ico-src-steam" viewBox="0 0 220 180">
+    <defs>
+      <linearGradient id="hxFill" x1="110" y1="24" x2="110" y2="156" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#15425F"/>
+        <stop offset="1" stop-color="#0B2738"/>
+      </linearGradient>
+    </defs>
+    <rect x="46" y="24" width="128" height="132" rx="10" fill="url(#hxFill)" stroke="#7BD5FF" stroke-opacity="0.92"/>
+    <path d="M68 44H152M68 136H152" stroke="#62DCFF" stroke-opacity="0.6"/>
+    <path d="M78 46C124 46 96 76 142 76C96 76 124 106 78 106C124 106 96 136 142 136" stroke="#FF9B54" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M142 46C96 46 124 76 78 76C124 76 96 106 142 106C96 106 124 136 78 136" stroke="#2FE9FF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M20 66H46M174 66H200M20 114H46M174 114H200" stroke="#7BD5FF" stroke-width="3.4" stroke-linecap="round"/>
+    </symbol>
+  <symbol id="ico-src-air-source" viewBox="0 0 148 148">
+    <defs>
+      <linearGradient id="pumpFill" x1="74" y1="18" x2="74" y2="130" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#16445F"/>
+        <stop offset="1" stop-color="#0B2738"/>
+      </linearGradient>
+    </defs>
+    <circle cx="74" cy="74" r="44" fill="url(#pumpFill)" stroke="#7BD5FF" stroke-opacity="0.92"/>
+    <path d="M42 74H18M130 74H106" stroke="#7BD5FF" stroke-width="5" stroke-linecap="round"/>
+    <path d="M62 49L100 74L62 99V49Z" fill="#62DCFF" fill-opacity="0.95"/>
+    <circle cx="74" cy="74" r="8" fill="#D9F7FF"/>
+    </symbol>
+  <symbol id="ico-src-solar" viewBox="0 0 240 150">
+    <defs>
+      <linearGradient id="solarFill" x1="42" y1="20" x2="198" y2="118" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#1B4A62"/>
+        <stop offset="1" stop-color="#0B2738"/>
+      </linearGradient>
+    </defs>
+    <path d="M60 22H196L174 116H38L60 22Z" fill="url(#solarFill)" stroke="#2FE9FF" stroke-opacity="0.92"/>
+    <path d="M84 22L62 116M112 22L90 116M140 22L118 116M168 22L146 116" stroke="#62DCFF" stroke-opacity="0.6"/>
+    <path d="M51 58H187M44 88H180" stroke="#62DCFF" stroke-opacity="0.6"/>
+    <path d="M104 116L96 138M134 116L142 138M78 138H160" stroke="#7BD5FF" stroke-opacity="0.72"/>
+    <circle cx="195" cy="28" r="11" fill="#FFE65C" fill-opacity="0.98"/>
+    </symbol>
+  <symbol id="ico-vsl-tank" viewBox="0 0 48 48">
+    <path d="M8 18 a4 4 0 0 1 4 -4 h24 a4 4 0 0 1 4 4 v22 a4 4 0 0 1 -4 4 h-24 a4 4 0 0 1 -4 -4 z" stroke="currentColor" fill="rgba(7,22,36,.85)" stroke-width="1.6">
+    </path>
+    <path d="M22 14 v-6 h4 v6" stroke="currentColor" stroke-width="1.4" fill="none">
+    </path>
+    <path d="M22 44 v4 h4 v-4" stroke="currentColor" stroke-width="1.4" fill="none">
+    </path>
+    <path d="M10 28 q4 -2 8 0 t8 0 t8 0 t8 0 V42 q-4 2 -8 0 t-8 0 t-8 0 t-8 0 Z" fill="currentColor" fill-opacity="0.25" stroke="none">
+    </path>
+    <path d="M10 28 q4 -2 8 0 t8 0 t8 0 t8 0" stroke="currentColor" stroke-width="1.2" fill="none" opacity="0.7">
+    </path>
+    </symbol>
+  <symbol id="ico-vsl-manifold" viewBox="0 0 48 48">
+    <rect x="4" y="20" width="40" height="14" rx="7" stroke="currentColor" fill="rgba(7,22,36,.85)" stroke-width="1.6">
+    </rect>
+    <line x1="12" y1="20" x2="12" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    </line>
+    <line x1="22" y1="20" x2="22" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    </line>
+    <line x1="32" y1="20" x2="32" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    </line>
+    <line x1="42" y1="20" x2="42" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    </line>
+    <line x1="12" y1="34" x2="12" y2="42" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    </line>
+    <line x1="22" y1="34" x2="22" y2="42" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    </line>
+    <line x1="32" y1="34" x2="32" y2="42" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    </line>
+    <line x1="42" y1="34" x2="42" y2="42" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    </line>
+    <line x1="6" y1="27" x2="42" y2="27" stroke="currentColor" stroke-width="1" opacity="0.5">
+    </line>
+    </symbol>
+  <symbol id="ico-hx" viewBox="0 0 48 48">
+    <rect x="10" y="10" width="28" height="28" rx="2" stroke="currentColor" fill="rgba(7,22,36,.85)" stroke-width="1.6">
+    </rect>
+    <path d="M14 16 q5 4 10 0 t10 0" stroke="currentColor" fill="none" stroke-width="1.2">
+    </path>
+    <path d="M14 24 q5 -4 10 0 t10 0" stroke="currentColor" fill="none" stroke-width="1.2">
+    </path>
+    <path d="M14 32 q5 4 10 0 t10 0" stroke="currentColor" fill="none" stroke-width="1.2">
+    </path>
+    <line x1="6" y1="14" x2="10" y2="14" stroke="currentColor" stroke-width="1.6">
+    </line>
+    <line x1="6" y1="34" x2="10" y2="34" stroke="currentColor" stroke-width="1.6">
+    </line>
+    <line x1="38" y1="14" x2="42" y2="14" stroke="currentColor" stroke-width="1.6">
+    </line>
+    <line x1="38" y1="34" x2="42" y2="34" stroke="currentColor" stroke-width="1.6">
+    </line>
+    </symbol>
+  <symbol id="ico-term-shower" viewBox="0 0 48 48">
+    <path d="M24 6 a10 10 0 0 1 10 10 H14 a10 10 0 0 1 10 -10z" stroke="currentColor" fill="rgba(7,22,36,.85)" stroke-width="1.6">
+    </path>
+    <line x1="24" y1="6" x2="24" y2="2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+    </line>
+    <circle cx="18" cy="13" r="1" fill="currentColor">
+    </circle>
+    <circle cx="24" cy="13" r="1" fill="currentColor">
+    </circle>
+    <circle cx="30" cy="13" r="1" fill="currentColor">
+    </circle>
+    <path d="M16 22 q-1 4 0 6 q1 -2 0 -6 z M22 22 q-1 4 0 6 q1 -2 0 -6 z M28 22 q-1 4 0 6 q1 -2 0 -6 z M34 22 q-1 4 0 6 q1 -2 0 -6 z" stroke="currentColor" fill="rgba(7,22,36,.55)" stroke-width="1.2">
+    </path>
+    <path d="M19 34 q-1 4 0 6 q1 -2 0 -6 z M25 34 q-1 4 0 6 q1 -2 0 -6 z M31 34 q-1 4 0 6 q1 -2 0 -6 z" stroke="currentColor" fill="rgba(7,22,36,.55)" stroke-width="1.2">
+    </path>
+    </symbol>
+  <symbol id="ico-term-radiator" viewBox="0 0 48 48">
+    <line x1="6" y1="20" x2="42" y2="20" stroke="currentColor" stroke-width="1.6">
+    </line>
+    <line x1="6" y1="40" x2="42" y2="40" stroke="currentColor" stroke-width="1.6">
+    </line>
+    <rect x="10" y="20" width="4" height="20" stroke="currentColor" fill="rgba(7,22,36,.85)" stroke-width="1.4">
+    </rect>
+    <rect x="17" y="20" width="4" height="20" stroke="currentColor" fill="rgba(7,22,36,.85)" stroke-width="1.4">
+    </rect>
+    <rect x="24" y="20" width="4" height="20" stroke="currentColor" fill="rgba(7,22,36,.85)" stroke-width="1.4">
+    </rect>
+    <rect x="31" y="20" width="4" height="20" stroke="currentColor" fill="rgba(7,22,36,.85)" stroke-width="1.4">
+    </rect>
+    <rect x="38" y="20" width="4" height="20" stroke="currentColor" fill="rgba(7,22,36,.85)" stroke-width="1.4">
+    </rect>
+    <path d="M14 16 c0 -3 3 -3 3 -6 s-3 -3 -3 -6" stroke="currentColor" fill="none" stroke-width="1.3" stroke-linecap="round">
+    </path>
+    <path d="M24 16 c0 -3 3 -3 3 -6 s-3 -3 -3 -6" stroke="currentColor" fill="none" stroke-width="1.3" stroke-linecap="round">
+    </path>
+    <path d="M34 16 c0 -3 3 -3 3 -6 s-3 -3 -3 -6" stroke="currentColor" fill="none" stroke-width="1.3" stroke-linecap="round">
+    </path>
+    </symbol>
+  <symbol id="ico-term-ac" viewBox="0 0 48 48">
+    <rect x="4" y="12" width="40" height="20" rx="3" stroke="currentColor" fill="rgba(7,22,36,.85)" stroke-width="1.6">
+    </rect>
+    <line x1="6" y1="28" x2="42" y2="28" stroke="currentColor" stroke-width="1.2" opacity="0.7">
+    </line>
+    <line x1="14" y1="36" x2="10" y2="42" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+    </line>
+    <line x1="22" y1="36" x2="18" y2="42" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+    </line>
+    <line x1="30" y1="36" x2="26" y2="42" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+    </line>
+    <line x1="38" y1="36" x2="34" y2="42" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+    </line>
+    <circle cx="38" cy="20" r="1.5" fill="currentColor">
+    </circle>
+    </symbol>
+  <symbol id="ico-tap" viewBox="0 0 48 48">
+    <path d="M10 12 v14 a4 4 0 0 0 4 4 h12" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round">
+    </path>
+    <rect x="6" y="6" width="8" height="8" rx="1" stroke="currentColor" fill="rgba(7,22,36,.85)" stroke-width="1.4">
+    </rect>
+    <rect x="26" y="28" width="6" height="6" rx="1" stroke="currentColor" fill="rgba(7,22,36,.85)" stroke-width="1.4">
+    </rect>
+    <path d="M29 36 q-2 4 0 6 q2 -2 0 -6 z" stroke="currentColor" fill="currentColor" stroke-width="1">
+    </path>
+    </symbol>
+</svg>

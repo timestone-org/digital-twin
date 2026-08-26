@@ -369,3 +369,27 @@ export type {
   Twin2dSlotRead,
   Twin2dTextCtx,
 } from './paintText'
+export {
+  TWIN_2D_END_MARKER,
+  TWIN_2D_START_MARKER,
+  buildEdgeViews,
+  buildPinViews,
+} from './edgeView'
+export type {
+  Twin2dEdgeFlowTiming,
+  Twin2dEdgeLabelView,
+  Twin2dEdgeLayerInput,
+  Twin2dEdgePart,
+  Twin2dEdgeState,
+  Twin2dEdgeStrokeView,
+  Twin2dEdgeView,
+  Twin2dFlowInput,
+  Twin2dPinView,
+} from './edgeView'
+export { default as Twin2dEdgeLayer } from './render/Twin2dEdgeLayer.vue'
+export { default as Twin2dGlyph } from './render/Twin2dGlyph.vue'
+export { default as Twin2dIconSprite } from './render/Twin2dIconSprite.vue'
+export { default as Twin2dNodeBox } from './render/Twin2dNodeBox.vue'
+export { default as Twin2dPrimView } from './render/Twin2dPrimView.vue'
+export { default as Twin2dStage } from './render/Twin2dStage.vue'
+export { default as Twin2dVec } from './render/Twin2dVec.vue'

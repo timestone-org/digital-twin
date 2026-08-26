@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./twin2d.scss": "./src/render/twin2d.scss"
   },
   "scripts": {
     "typecheck": "vue-tsc --noEmit -p tsconfig.json"

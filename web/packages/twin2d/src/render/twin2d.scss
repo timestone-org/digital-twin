@@ -1,0 +1,167 @@
+// 2D 孪生的固定 keyframes 与结构性样式：只放「所有节点都长一样」的那部分，
+// 一切可配的观感（颜色、圆角、间距、字号）由 paint* 一族算成内联样式。
+//
+// ⚠ 这里一个字面色值都不写，全部 var(--…)：本文件在包的 src/ 下，硬编码色值闸扫得到它。
+// ⚠ 必须全局引入（`@use '@dt/twin2d/twin2d.scss'`），不能 scoped：keyframes 与
+//   `.t2-anim-*` 由 paintCommon.ts 按数据挂类名，scoped 改写认不出这些类名，
+//   写成 scoped 的表现是「动画配了一档都不动」，零报错。
+
+// ── 舞台 ──────────────────────────────────────────────────────────────
+// ⚠ `contain: layout style` 是性能而非观感，不做成可配置项（§7 #16）。
+//   不含 `paint`：那一档会把贴着边画的描边与外发光裁掉。
+.t2-stage {
+  position: relative;
+  overflow: hidden;
+  contain: layout style;
+}
+
+// 等比缩放层：缩放矩阵由 Twin2dStage.vue 按容器尺寸算成内联 transform。
+// ⚠ `transform-origin: 0 0` 不能省——缺省的 50% 50% 会让缩放同时把整张图推走，
+//   而那看起来像「fitPadding 算错了」。
+.t2-stage__viewport {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+// 层序容器：底图 / 图案 / below 标注 / 连线 / 节点 / above 标注各一层，
+// 先后由 DOM 顺序定，不靠 z-index。
+.t2-stage__layer {
+  position: absolute;
+  inset: 0;
+}
+
+.t2-stage__empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+// sprite 宿主：每个 DOM 文档挂一次，本身不占位也不可见。
+// ⚠ 不能用 `display:none` 或 `visibility:hidden` 藏它——那样 `<use href="#ico-…">`
+//   解析不到符号，图标全部静默消失而 `<use>` 元素在 devtools 里还好端端地在。
+.t2-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+// ── 节点与图元 ────────────────────────────────────────────────────────
+// 六个 --t2-* 由 paintCommon.ts 的 injectVars 注入在这个根上。
+// ⚠ `will-change: transform` 是给 hover 变体那一下缩放用的（§7 #16）：参考项目挂在
+//   每个节点的盒上，逐节点一层，这里的数量与它一致，不是「给每个图元都挂一层」。
+.t2-node {
+  position: absolute;
+  box-sizing: border-box;
+  font-family: var(--font-sans);
+  will-change: transform;
+}
+
+// 图元的定位与尺寸全部来自内联样式；这里只补一条所有图元都一样的盒模型。
+.t2-prim {
+  box-sizing: border-box;
+}
+
+// 连线层：命中带由编辑器另行铺设，运行态的线本身不吃指针事件。
+// ⚠ `overflow: visible` 不能省：`<svg>` 的 UA 缺省是裁掉溢出，端点标记与
+//   多遍描边的外圈会被切掉半边。
+.t2-edges {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+// 等宽数字。由 paintText.ts 在 font.family 含 --font-digit 时挂上。
+// ⚠ token 只给字体族，`font-variant-numeric` 不是字体族的一部分，
+//   塞进 font 简写会被丢掉，所以必须在消费处单配（§11.2）。
+.t2-digit {
+  font-variant-numeric: tabular-nums;
+}
+
+// ── 四档 keyframes ───────────────────────────────────────────────────
+// 时长一律由 --t2-anim-dur 驱动：图元级由 paintBase 按 anim.durationMs 注入，
+// 节点根由 injectVars 给一个缺省。
+.t2-anim-pulse {
+  animation: t2-pulse var(--t2-anim-dur) ease-in-out infinite;
+}
+
+// steps(1, end) 让两个关键帧之间不做补间，闪成硬边的通断而不是渐隐渐现。
+.t2-anim-blink {
+  animation: t2-blink var(--t2-anim-dur) steps(1, end) infinite;
+}
+
+.t2-anim-breathe {
+  animation: t2-breathe var(--t2-anim-dur) ease-in-out infinite;
+}
+
+.t2-anim-dash {
+  animation: t2-dash var(--t2-anim-dur) linear infinite;
+}
+
+// ⚠ 缩放走独立的 `scale` 属性，不写 `transform: scale()`：paintBase 把摆位的平移、
+//   keepUpright 的反向、图元自己的 rotate 与 scale 合成了**一条**内联 transform，
+//   而 keyframes 里的 transform 是整条替换——图元会当场跳回节点左上角。
+//   `scale` 是独立属性，排在 translate/rotate 之后叠加，不碰那一条。
+// ⚠ 透明度走 `filter: opacity()`，不写 `opacity`：动画所在的层叠来源压过内联样式，
+//   直接动 opacity 会把图元配的 opacity 顶掉（配 0.4 的图元会在动画里亮成 1）。
+//   filter 是相乘，两者叠得起来。
+@keyframes t2-pulse {
+  from,
+  to {
+    scale: 1;
+    filter: opacity(0.75);
+  }
+
+  50% {
+    scale: 1.35;
+    filter: opacity(1);
+  }
+}
+
+@keyframes t2-blink {
+  from,
+  to {
+    filter: opacity(1);
+  }
+
+  50% {
+    filter: opacity(0.2);
+  }
+}
+
+@keyframes t2-breathe {
+  from,
+  to {
+    filter: opacity(0.5);
+  }
+
+  50% {
+    filter: opacity(1);
+  }
+}
+
+// 只写终点：起点取元素当前的 stroke-dashoffset，于是内联给的相位不被动画抹掉。
+// ⚠ --t2-dash-end 由 Twin2dEdgeLayer.vue 内联注入，取值是 dash 数组求和取负——
+//   写死 -20 时改了 dasharray 就会出现肉眼可见的抽动（§7 #67）。
+@keyframes t2-dash {
+  to {
+    stroke-dashoffset: var(--t2-dash-end);
+  }
+}
+
+// ⚠ 只关 keyframes，**不关 transition**（§7 #17）：过渡是对用户操作的直接反馈，
+//   一并关掉反而让人以为界面卡住了。
+@media (prefers-reduced-motion: reduce) {
+  .t2-anim-pulse,
+  .t2-anim-blink,
+  .t2-anim-breathe,
+  .t2-anim-dash {
+    animation: none;
+  }
+}
