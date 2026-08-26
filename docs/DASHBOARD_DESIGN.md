@@ -373,6 +373,20 @@ ModuleSlotMeta = { state: 'ok' | 'pending' | 'error', message?, timestampMs? }
 （退出平台卡片外观）的第一个使用者，设计见
 [MODULE_ACTION_BUTTON_DESIGN](MODULE_ACTION_BUTTON_DESIGN.md)。
 
+`twin-2d-view`（2D 孪生）是第二个**文档型**模块，也是 §5.1 那条判据在
+「一整张图」上的兑现：一块画布上摆 N 个节点、N 条连线，而**节点与连线长什么样
+本身也是文档**——一组可配置的图元描述（几何 / 槽位 / 变体 / 端口）。内置的那批
+节点样式因此只是预置数据，渲染组件里没有一处按样式 id 分支；用户能从零画出一个
+新形状、新配色、新字段布局，画电路符号走的是同一条路。它是
+[ADR-0016](adr/0016-复杂config段由清单声明的整页子编辑器接管.md) 的第二个使用者，
+设计见 [MODULE_TWIN_2D_DESIGN](MODULE_TWIN_2D_DESIGN.md)。
+
+`info-card` / `info-list` / `gauge-card` / `info-feed` 是信息卡片模块族：
+把「一格读数」「一行列表」「一只仪表」「一条推送流」四种排布各归一个模块，
+观感由一组正交档位拼出来，成套的观感做成一键预设。切成四个而不是一个，是因为
+属性面板不折叠——一个模块吃下四种排布会有一半字段在任一档下都配了不生效。
+设计见 [MODULE_INFO_CARD_DESIGN](MODULE_INFO_CARD_DESIGN.md)。
+
 ---
 
 ## 6. 实时链路
