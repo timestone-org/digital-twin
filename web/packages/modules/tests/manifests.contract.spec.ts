@@ -15,6 +15,12 @@ import {
   TWIN_PANEL_BINDING_KEY,
   TWIN_PART_BINDING_KEY,
 } from '@dt/twin-config'
+import {
+  TWIN_2D_CONFIG_KEY,
+  TWIN_2D_EDGE_BINDING_KEY,
+  TWIN_2D_NODE_BINDING_KEY,
+  TWIN_2D_STATUS_BINDING_KEY,
+} from '@dt/twin2d'
 import { isIconName } from '@dt/ui'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -42,6 +48,10 @@ const KEY_CONSTANTS: Record<string, string> = {
   METRIC_ITEMS_KEY,
   METRIC_SLOT_KEY,
   SHOW_TITLE_CONFIG_KEY,
+  TWIN_2D_CONFIG_KEY,
+  TWIN_2D_EDGE_BINDING_KEY,
+  TWIN_2D_NODE_BINDING_KEY,
+  TWIN_2D_STATUS_BINDING_KEY,
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_ARROW_BINDING_KEY,
   TWIN_CONFIG_KEY,
@@ -193,6 +203,7 @@ describe('一个模块 = 一个目录', () => {
       'image-block',
       'metric-card',
       'text-block',
+      'twin-2d-view',
       'twin-view',
     ])
   })

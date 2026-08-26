@@ -34,6 +34,7 @@ const BUILTIN_TYPES = [
   'image-block',
   'metric-card',
   'text-block',
+  'twin-2d-view',
   'twin-view',
 ]
 

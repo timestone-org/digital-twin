@@ -2161,6 +2161,182 @@
       "bindings": []
     },
     {
+      "type": "twin-2d-view",
+      "display_name": "2D 孪生",
+      "category": "孪生",
+      "icon": "network",
+      "keywords": [
+        "2d",
+        "twin",
+        "luansheng",
+        "孪生",
+        "流程",
+        "系统图",
+        "接线",
+        "电路"
+      ],
+      "default_size": {
+        "width": 1280,
+        "height": 480,
+        "min_width": 240,
+        "min_height": 120
+      },
+      "chrome": "card",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "group": "标题",
+          "help": "留空则不显示标题条。",
+          "span": "full"
+        },
+        {
+          "key": "twin2d",
+          "label": "2D 孪生画面",
+          "type": "object",
+          "group": "画面",
+          "help": "节点、连线、标注与节点样式都由 2D 孪生编辑器写入。",
+          "span": "full"
+        },
+        {
+          "key": "fitMode",
+          "label": "缩放方式",
+          "type": "enum",
+          "default": "contain",
+          "options": [
+            {
+              "value": "contain",
+              "label": "完整显示"
+            },
+            {
+              "value": "width",
+              "label": "按宽铺满"
+            },
+            {
+              "value": "height",
+              "label": "按高铺满"
+            },
+            {
+              "value": "stretch",
+              "label": "拉满（会变形）"
+            }
+          ],
+          "group": "画面",
+          "help": "完整显示会留出安全边距；拉满两轴各自缩放，电路图别用。",
+          "span": "half"
+        },
+        {
+          "key": "fitPadding",
+          "label": "四周留白 (%)",
+          "type": "range",
+          "default": 4,
+          "group": "画面",
+          "help": "只在「完整显示」下有意义。",
+          "span": "half",
+          "when": {
+            "key": "fitMode",
+            "in": [
+              "contain"
+            ]
+          },
+          "min": 0,
+          "max": 20,
+          "step": 1
+        },
+        {
+          "key": "showSprite",
+          "label": "使用内置图标集",
+          "type": "boolean",
+          "default": true,
+          "group": "画面",
+          "help": "关掉后内置图标集那一档的图标不显示，自带图标集的项目可以省下这一份。",
+          "span": "half"
+        },
+        {
+          "key": "animateFlow",
+          "label": "连线流动动画",
+          "type": "boolean",
+          "group": "运行态",
+          "help": "总闸：关掉时所有连线都不动，不论样式里怎么配。",
+          "span": "full"
+        },
+        {
+          "key": "flowSpeed",
+          "label": "流动速度",
+          "type": "range",
+          "default": 1,
+          "group": "运行态",
+          "help": "全局倍率：最终时长 = 样式里的基准时长 ÷ 这个值。",
+          "span": "half",
+          "when": {
+            "key": "animateFlow",
+            "in": [
+              true
+            ]
+          },
+          "min": 0.5,
+          "max": 5,
+          "step": 0.1
+        }
+      ],
+      "bindings": [
+        {
+          "key": "nodeValues",
+          "label": "节点读数",
+          "data_type": "number",
+          "is_array": true,
+          "is_entity_pinned": true,
+          "array_fields": [
+            {
+              "key": "value",
+              "label": "数值",
+              "data_type": "number"
+            }
+          ]
+        },
+        {
+          "key": "nodeStatus",
+          "label": "节点状态",
+          "data_type": "enum",
+          "is_array": true,
+          "is_entity_pinned": true,
+          "array_fields": [
+            {
+              "key": "status",
+              "label": "状态",
+              "data_type": "enum"
+            }
+          ]
+        },
+        {
+          "key": "edgeValues",
+          "label": "连线读数",
+          "data_type": "number",
+          "is_array": true,
+          "is_entity_pinned": true,
+          "array_fields": [
+            {
+              "key": "active",
+              "label": "有流 / 通电",
+              "data_type": "boolean"
+            },
+            {
+              "key": "direction",
+              "label": "流向（负数 = 反向）",
+              "data_type": "number"
+            },
+            {
+              "key": "value",
+              "label": "标签读数",
+              "data_type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "type": "twin-view",
       "display_name": "数字孪生",
       "category": "孪生",

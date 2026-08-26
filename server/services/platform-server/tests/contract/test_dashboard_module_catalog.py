@@ -31,7 +31,8 @@ _UNION = re.compile(
 _MEMBER = re.compile(r"'([^']+)'")
 
 # 已登记的模块：两个钉位/通用容器、两个装饰块、一个纯配置页头、
-# 一个带 3D 资源与数组绑定，以及一个多点位读数模块
+# 一个带 3D 资源与数组绑定、一张按文档序钉行的 2D 孪生画面，
+# 以及一个多点位读数模块
 EXPECTED_TYPES = frozenset(
     {
         "action-button",
@@ -41,6 +42,7 @@ EXPECTED_TYPES = frozenset(
         "metric-card",
         "image-block",
         "text-block",
+        "twin-2d-view",
         "twin-view",
     }
 )

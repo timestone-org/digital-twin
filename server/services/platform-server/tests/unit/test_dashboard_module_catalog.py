@@ -23,6 +23,7 @@ def test_the_committed_catalog_registers_the_known_modules() -> None:
             "image-block",
             "metric-card",
             "text-block",
+            "twin-2d-view",
             "twin-view",
         }
     )
@@ -54,6 +55,24 @@ def test_slots_split_scalar_and_array_entries() -> None:
         "flowValues": frozenset({"intensity", "active"}),
         "partFieldValues": frozenset({"value"}),
     }
+
+
+def test_the_two_d_twin_slots_are_arrays_pinned_to_the_drawing() -> None:
+    """三个槽的行钉在图文档里的节点与连线上，故免掉「索引连续」那条校验。
+
+    ⚠ 漏了这个标记的话，图上只给第 2 个节点绑点就会被服务端拒掉，而现象是
+    「绑点面板上填好了，保存报 422」。
+    """
+    slots = load_module_catalog().slots("twin-2d-view")
+    assert slots.scalar_keys == frozenset()
+    assert slots.array_fields == {
+        "nodeValues": frozenset({"value"}),
+        "nodeStatus": frozenset({"status"}),
+        "edgeValues": frozenset({"active", "direction", "value"}),
+    }
+    assert slots.entity_pinned == frozenset(
+        {"nodeValues", "nodeStatus", "edgeValues"}
+    )
 
 
 def test_an_unknown_type_has_no_slots() -> None:
