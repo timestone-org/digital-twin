@@ -1,6 +1,7 @@
 /**
  * @fileoverview 契约：加载防竞态（乱序返回时只有最后一次能写状态）、
- * 保存必带版本断言、409 落成「你的版本旧了」而不是静默覆盖（ADR-0012）。
+ * 保存必带版本断言、版本冲突（41007）落成「你的版本旧了」而不是静默覆盖
+ * （ADR-0012）；其余 409 走普通错误。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DashboardPayload } from '@dt/contracts'
@@ -170,16 +171,17 @@ describe('保存', () => {
     expect(doc.error.value).toBeNull()
   })
 
-  it('HTTP 409 但换了个错误码时仍按版本冲突处理', async () => {
+  it('HTTP 409 但错误码不是版本冲突时走普通错误，不劝人重新加载', async () => {
     vi.spyOn(dashboardApi, 'getDashboard').mockResolvedValue(payload('d1'))
     vi.spyOn(dashboardApi, 'replaceLayout').mockRejectedValue(
-      new BizError(41099, '冲突', 409, 't'),
+      new BizError(41005, '这张大屏里已经有同名的键', 409, 't'),
     )
     const doc = useDashboardDoc()
     await doc.load('d1')
     await doc.save({ expectedVersion: 1, nodes: [] })
 
-    expect(doc.conflict.value).toBe(VERSION_CONFLICT_MESSAGE)
+    expect(doc.error.value).toBe('这张大屏里已经有同名的键')
+    expect(doc.conflict.value).toBeNull()
   })
 
   it('其余失败落成普通错误，冲突标记保持干净', async () => {

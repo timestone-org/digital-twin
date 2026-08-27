@@ -1,7 +1,9 @@
 /**
  * @fileoverview 大屏文档的 IO 工厂：防竞态加载器与两条保存轴（整树替换/元数据）。
  * 状态引用由 `useDashboardDoc` 持有并注入，这里只装配行为。
- * ⚠ 409 一律落 `conflict` 交界面走「重新加载」，绝不静默重试或覆盖（ADR-0012）。
+ * ⚠ 版本冲突（41007）落 `conflict` 交界面走「重新加载」，绝不静默重试或覆盖
+ * （ADR-0012）。其余 409（如绑定槽撞键）走普通错误：它们不是「别人改过」，
+ * 重新加载既丢掉手上的改动、也修不好这次保存。
  */
 import type { Ref } from 'vue'
 import type { DashboardPayload } from '@dt/contracts'
@@ -22,8 +24,6 @@ import { useRacedFetch } from '@/composables/useRacedFetch'
 export const VERSION_CONFLICT_MESSAGE =
   '这张大屏在别处被改过，你手上的版本旧了。请重新加载后再改，避免覆盖别人的改动。'
 
-const CONFLICT_HTTP_STATUS = 409
-
 export interface DocState {
   dashboard: Ref<DashboardPayload | null>
   loading: Ref<boolean>
@@ -32,12 +32,15 @@ export interface DocState {
   conflict: Ref<string | null>
 }
 
-/** 这个错误是不是「你的版本旧了」。⚠ 按码分支，不按 message。 */
+/**
+ * 这个错误是不是「你的版本旧了」。⚠ 只按码分支，不按 message、也不按状态码：
+ * `BizError` 必出自统一信封，code 一定真实；HTTP 409 还住着 41005/41006 这类
+ * 撞键冲突，按状态码认会把它们也说成「被别人改过」。
+ */
 function isVersionConflict(caught: unknown): boolean {
   return (
     caught instanceof BizError &&
-    (caught.code === DASHBOARD_VERSION_CONFLICT_CODE ||
-      caught.status === CONFLICT_HTTP_STATUS)
+    caught.code === DASHBOARD_VERSION_CONFLICT_CODE
   )
 }
 
