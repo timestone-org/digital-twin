@@ -236,6 +236,49 @@ describe('覆盖层', () => {
     wrapper.unmount()
   })
 
+  // 落牌等场景的提示与缺省两句不同，宿主给的文案要顶掉缺省
+  it('给了提示文案时顶掉缺省那句', () => {
+    const wrapper = mountViewport({
+      pickMode: 'position',
+      pickHint: '在模型表面点一下，新信息牌会吸附到那个点',
+    })
+
+    expect(wrapper.text()).toContain('新信息牌会吸附到那个点')
+    expect(wrapper.text()).not.toContain('取那个点的坐标')
+    wrapper.unmount()
+  })
+
+  it('提示条上的取消按钮发 cancelPick', async () => {
+    const wrapper = mountViewport({ pickMode: 'position' })
+
+    await wrapper.find('.twin-viewport__pick button').trigger('click')
+
+    expect(wrapper.emitted('cancelPick')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('拾取中按 Esc 发 cancelPick，浏览态按了不发', async () => {
+    const wrapper = mountViewport({ pickMode: 'position' })
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(wrapper.emitted('cancelPick')).toHaveLength(1)
+
+    await wrapper.setProps({ pickMode: null })
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(wrapper.emitted('cancelPick')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  // ⚠ 卸载不摘监听的话，下一个视口挂上后按 Esc 会发到已卸载的组件上
+  it('卸载后按 Esc 不再发事件', () => {
+    const wrapper = mountViewport({ pickMode: 'position' })
+    wrapper.unmount()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+
+    expect(wrapper.emitted('cancelPick')).toBeUndefined()
+  })
+
   it('背景配的是 token 时套上 var()', () => {
     const wrapper = mountViewport({
       config: twinConfig({

@@ -1,10 +1,13 @@
 <script setup lang="ts">
 /**
- * @fileoverview 信息牌检查器：锚定 / 偏移 / 朝向 / 外观 / 字段 / 显隐。
+ * @fileoverview 信息牌检查器：锚定 / 偏移 / 朝向 / 旋转 / 外观 / 字段 / 显隐。
  *
  * ⚠ `anchorId` 与 `position` 二选一，**前者优先**：两个都给时按锚点走，
  * `position` 那份静默不生效。用户配了没反应会找不到原因，所以面板上必须摆明。
+ * ⚠ 旋转只在「钉死朝向」档有意义：另两档朝向每帧被相机接管，所以那两档下
+ * 不摆旋转控件——摆一个改了没反应的输入框比没有更糟。
  */
+import type { GizmoMode } from '@dt/three-core'
 import {
   TWIN_BILLBOARD_MODES,
   TWIN_PANEL_ORIENTS,
@@ -15,7 +18,14 @@ import {
   type TwinPanelOrient,
   type TwinPanelVariant,
 } from '@dt/twin-config'
-import { DtField, DtInput, DtNotice, DtSegmented, DtSelect } from '@dt/ui'
+import {
+  DtButton,
+  DtField,
+  DtInput,
+  DtNotice,
+  DtSegmented,
+  DtSelect,
+} from '@dt/ui'
 import { computed } from 'vue'
 
 import InspectorSection from '../fields/InspectorSection.vue'
@@ -31,9 +41,29 @@ const props = defineProps<{
   anchors: readonly TwinAnchor[]
   /** 坐标基准：这几个坐标框显示的是它下面的读数。 */
   frame: TwinFrameView
+  /** 视口正在等用户点一个位置。 */
+  picking: boolean
+  /** 视口里坐标轴手柄当前的模式。 */
+  gizmoMode: GizmoMode
 }>()
 
-const emit = defineEmits<{ 'update:modelValue': [TwinPanel] }>()
+const emit = defineEmits<{
+  'update:modelValue': [TwinPanel]
+  requestPickPosition: []
+  cancelPick: []
+  'update:gizmoMode': [GizmoMode]
+}>()
+
+const GIZMO_OPTIONS = [
+  { value: 'translate', label: '拖位置' },
+  { value: 'rotate', label: '拖旋转' },
+] as const
+
+/** 分段控件给回来的是裸字符串，对不上就当没改。 */
+function writeGizmoMode(next: string): void {
+  const found = GIZMO_OPTIONS.find((item) => item.value === next)
+  if (found !== undefined) emit('update:gizmoMode', found.value)
+}
 
 const VARIANT_LABELS: Readonly<Record<TwinPanelVariant, string>> = {
   card: '卡片',
@@ -100,6 +130,11 @@ function writeBillboard(next: string): void {
   const found = TWIN_BILLBOARD_MODES.find((item) => item === next)
   if (found !== undefined) write({ billboard: found })
 }
+
+function togglePick(): void {
+  if (props.picking) emit('cancelPick')
+  else emit('requestPickPosition')
+}
 </script>
 
 <template>
@@ -158,6 +193,20 @@ function writeBillboard(next: string): void {
           @update:model-value="write({ position: $event })"
         />
       </DtField>
+      <template v-if="!anchored">
+        <DtButton
+          variant="soft"
+          size="sm"
+          :icon="picking ? 'close' : 'magnet'"
+          block
+          @click="togglePick"
+        >
+          {{ picking ? '取消拾取' : '从视口拾取位置' }}
+        </DtButton>
+        <p v-if="picking" class="text-xs text-text-secondary">
+          在模型表面点一下，牌的中心会吸附到那个点。
+        </p>
+      </template>
 
       <DtField label="偏移" hint="相对锚点或上面那个坐标" size="sm">
         <Vec3Field
@@ -180,6 +229,33 @@ function writeBillboard(next: string): void {
           @update:model-value="writeBillboard"
         />
       </DtField>
+
+      <template v-if="modelValue.billboard === 'fixed'">
+        <!-- 轴标带度数记号：与上面坐标 / 偏移的 X/Y/Z 区分开，读屏与测试都不撞名 -->
+        <DtField label="旋转" hint="绕 X / Y / Z 轴的欧拉角，度" size="sm">
+          <Vec3Field
+            :model-value="modelValue.rotation"
+            :step="1"
+            :axes="['X°', 'Y°', 'Z°']"
+            @update:model-value="write({ rotation: $event })"
+          />
+        </DtField>
+        <DtField
+          v-if="!anchored"
+          label="视口里怎么拖"
+          hint="在 3D 里直接拖坐标轴手柄"
+          size="sm"
+        >
+          <DtSegmented
+            :model-value="gizmoMode"
+            :options="GIZMO_OPTIONS"
+            aria-label="视口里怎么拖"
+            size="sm"
+            block
+            @update:model-value="writeGizmoMode"
+          />
+        </DtField>
+      </template>
     </InspectorSection>
 
     <PanelStyleFields

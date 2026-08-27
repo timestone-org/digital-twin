@@ -6,13 +6,14 @@
  * 看不出来（见 `remapTwinBindings`）。
  */
 import type { GizmoChange } from '@dt/three-core'
-import type { TwinConfig } from '@dt/twin-config'
+import type { TwinConfig, Vec3 } from '@dt/twin-config'
 
 import {
   addEntity,
   duplicateEntity,
   moveEntity,
   removeEntity,
+  updateEntity,
 } from './entityOps'
 import { addPartsFromNodes } from './bulkParts'
 import {
@@ -28,6 +29,8 @@ import type { TwinEntityKind, TwinSelection } from './types'
 
 export interface TwinEditorActions {
   add: (kind: TwinEntityKind) => void
+  /** 新建一张信息牌，中心落在给定的世界坐标上（视口拾取的表面点）。 */
+  addPanelAt: (position: Vec3) => void
   /** 按模型节点名批量建部件；选中最后建出来的那个。 */
   addParts: (nodeNames: readonly string[]) => void
   remove: (kind: TwinEntityKind, id: string) => void
@@ -140,10 +143,11 @@ function createHierActions(
 function applyTransform(doc: TwinDoc, change: GizmoChange): void {
   const config = doc.config.value
   const list = config[change.kind]
-  const patch =
-    change.direction === null
-      ? { position: change.position }
-      : { position: change.position, direction: change.direction }
+  const patch = {
+    position: change.position,
+    ...(change.direction === null ? {} : { direction: change.direction }),
+    ...(change.rotation === null ? {} : { rotation: change.rotation }),
+  }
   doc.commitMerged(
     {
       ...config,
@@ -172,6 +176,15 @@ export function createTwinEditorActions(
       const { config, id } = addEntity(doc.config.value, kind)
       doc.commit(config)
       select({ kind, id })
+    },
+
+    // 建牌 + 落点只 commit 一次：撤销一步就该回到「没这张牌」的状态
+    addPanelAt: (position) => {
+      const created = addEntity(doc.config.value, 'panels')
+      doc.commit(
+        updateEntity(created.config, 'panels', created.id, { position }),
+      )
+      select({ kind: 'panels', id: created.id })
     },
 
     addParts: (nodeNames) => {

@@ -54,6 +54,13 @@ describe('信息牌', () => {
     expect(style.accent).toBe('--accent-primary')
   })
 
+  // 存量配置没有这个字段：缺省必须是零旋转，否则老大屏的牌集体歪掉
+  it('旋转缺省是零，给了就照给的来', () => {
+    expect(panel({}).rotation).toEqual([0, 0, 0])
+    expect(panel({ rotation: [10, -45, 90] }).rotation).toEqual([10, -45, 90])
+    expect(panel({ rotation: 'nope' }).rotation).toEqual([0, 0, 0])
+  })
+
   it('宽度 0 表示自适应，字号缩放有上下限', () => {
     expect(panel({ style: { width: -5 } }).style.width).toBe(0)
     expect(panel({ style: { fontScale: 99 } }).style.fontScale).toBe(3)

@@ -78,7 +78,10 @@ const bulk = useBulkParts(
   () => config.value,
   () => modelNodes.value,
 )
-const gizmoMode = useGizmoMode(() => selection.value)
+const gizmoMode = useGizmoMode(
+  () => selection.value,
+  () => config.value,
+)
 const issues = computed(() =>
   config.value === null ? [] : collectTwinConfigIssues(config.value),
 )
@@ -126,6 +129,15 @@ function select(next: TwinSelection): void {
   selection.value = next
   // 选中即取景：在大纲里点一个锚点，视口该把镜头带过去
   viewport.focus(next)
+}
+
+/** 信息牌走「先点位置再落牌」：进入拾取，等视口回传表面点；其余实体直接建。 */
+function addEntityOf(kind: TwinEntityKind): void {
+  if (kind === 'panels') {
+    viewport.requestPlacePanel()
+    return
+  }
+  actions.value?.add(kind)
 }
 
 function addFolderIn(kind: TwinEntityKind): void {
@@ -199,7 +211,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
           :flagged-ids="flaggedIds"
           :renaming-folder-id="renamingFolderId"
           @select="select"
-          @add="actions?.add($event)"
+          @add="addEntityOf"
           @bulk-add="bulk.openBlank()"
           @remove="actions?.remove($event.kind, $event.id)"
           @duplicate="actions?.duplicate($event.kind, $event.id)"
@@ -227,12 +239,18 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
               :config="hidden.config.value ?? config"
               :selection="selection"
               :pick-mode="viewport.pickMode.value"
+              :pick-hint="
+                viewport.isPlacingPanel.value
+                  ? '在模型表面点一下，新信息牌会吸附到那个点'
+                  : undefined
+              "
               :gizmo-mode="gizmoMode"
               :target-size="page.targetSize.value"
               :values="binding.liveValues.value"
               @select="selection = $event ?? TWIN_SELECT_MODEL"
               @pick-node="viewport.onPickNode"
               @pick-position="viewport.onPickPosition"
+              @cancel-pick="viewport.cancelPick"
               @model-nodes="modelNodes = $event"
               @frame-origin="frameOrigin = $event"
               @roam-preview="roamPreviewing = $event"

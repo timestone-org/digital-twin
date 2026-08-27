@@ -53,6 +53,7 @@ const ANCHOR: GizmoTarget = {
   id: 'a1',
   position: [1, 2, 3],
   direction: null,
+  rotation: null,
 }
 
 const ARROW: GizmoTarget = {
@@ -60,6 +61,15 @@ const ARROW: GizmoTarget = {
   id: 'r1',
   position: [0, 0, 0],
   direction: [1, 0, 0],
+  rotation: null,
+}
+
+const PANEL: GizmoTarget = {
+  kind: 'panels',
+  id: 'n1',
+  position: [0, 0, 0],
+  direction: null,
+  rotation: [0, 90, 0],
 }
 
 afterEach(() => {
@@ -150,7 +160,13 @@ describe('回写', () => {
     emitObjectChange(gizmo)
 
     expect(changes).toEqual([
-      { kind: 'anchors', id: 'a1', position: [4, 5, 6], direction: null },
+      {
+        kind: 'anchors',
+        id: 'a1',
+        position: [4, 5, 6],
+        direction: null,
+        rotation: null,
+      },
     ])
   })
 
@@ -211,6 +227,43 @@ describe('箭头朝向', () => {
     gizmo.attach({ ...ARROW, direction: [0, 0, 0] }, 'rotate')
 
     expect(proxyOf(gizmo).quaternion.equals(new THREE.Quaternion())).toBe(true)
+  })
+})
+
+describe('信息牌旋转', () => {
+  it('挂上时把欧拉角换成替身的姿态，再读回来不失真', () => {
+    const { gizmo, changes } = setup()
+
+    gizmo.attach(PANEL, 'rotate')
+    emitObjectChange(gizmo)
+
+    const rotation = changes[0]?.rotation
+    expect(rotation?.[0]).toBeCloseTo(0)
+    expect(rotation?.[1]).toBeCloseTo(90)
+    expect(rotation?.[2]).toBeCloseTo(0)
+  })
+
+  it('用户转出来的姿态按度写回', () => {
+    const { gizmo, changes } = setup()
+    gizmo.attach({ ...PANEL, rotation: [0, 0, 0] }, 'rotate')
+
+    proxyOf(gizmo).quaternion.setFromEuler(
+      new THREE.Euler(0, 0, Math.PI / 2, 'XYZ'),
+    )
+    emitObjectChange(gizmo)
+
+    expect(changes[0]?.rotation?.[2]).toBeCloseTo(90)
+    // 位置那一半照常带上，宿主永远收到一份完整的改动
+    expect(changes[0]?.position).toEqual([0, 0, 0])
+  })
+
+  it('锚点与箭头的改动里旋转恒为 null', () => {
+    const { gizmo, changes } = setup()
+    gizmo.attach(ARROW, 'rotate')
+
+    emitObjectChange(gizmo)
+
+    expect(changes[0]?.rotation).toBeNull()
   })
 })
 

@@ -482,6 +482,8 @@ export interface TwinPanel {
   position: Vec3
   /** 相对锚点或位置的偏移。 */
   offset: Vec3
+  /** 欧拉角，度。只在 `billboard: 'fixed'` 档生效——另两档朝向每帧被相机接管。 */
+  rotation: Vec3
   fields: TwinPanelField[]
   billboard: TwinBillboardMode
   style: TwinPanelStyle

@@ -59,6 +59,20 @@ function positionOf(panel: TwinPanel, anchors: readonly TwinAnchor[]): Vec3 {
 const UP = new THREE.Vector3(0, 1, 0)
 
 /**
+ * 配置里的欧拉角（度）→ three 的欧拉对象。
+ * ⚠ 序固定 XYZ，与 `transformGizmo` 那份必须一致：两边不同序时，
+ * 手柄转出来的角度写回配置后，牌会摆到另一个姿态上。
+ */
+function eulerOf(rotation: Vec3): THREE.Euler {
+  return new THREE.Euler(
+    THREE.MathUtils.degToRad(rotation[0]),
+    THREE.MathUtils.degToRad(rotation[1]),
+    THREE.MathUtils.degToRad(rotation[2]),
+    'XYZ',
+  )
+}
+
+/**
  * 把一张牌摆成它该有的朝向。
  * @param label 牌对象
  * @param mode 朝向档
@@ -202,6 +216,10 @@ export class PanelLayer {
     const card = buildPanelCard(panel)
     const label = new CSS3DObject(card.mount)
     label.position.set(...positionOf(panel, anchors))
+    // 只有 fixed 档吃配置的旋转：另两档的朝向每帧被相机接管，套了也会被盖掉
+    if (panel.billboard === 'fixed') {
+      label.quaternion.setFromEuler(eulerOf(panel.rotation))
+    }
     label.scale.setScalar(this.baseScale * panel.style.scale)
     this.group.add(label)
     return { panel, label, fields: card.fields }

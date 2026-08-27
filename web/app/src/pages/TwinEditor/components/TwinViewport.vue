@@ -14,7 +14,7 @@ import {
 } from '@dt/three-core'
 import type { TwinConfig, Vec3 } from '@dt/twin-config'
 import { DEFAULT_CAMERA_FOV } from '@dt/twin-config'
-import { DtNotice, DtSpinner } from '@dt/ui'
+import { DtButton, DtNotice, DtSpinner } from '@dt/ui'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { targetFrameVars } from '../scripts/targetFrame'
@@ -25,7 +25,9 @@ const props = defineProps<{
   config: TwinConfig
   selection: TwinSelection | null
   pickMode: TwinPickMode
-  /** 坐标轴手柄的模式；只有箭头用得上 `rotate`。 */
+  /** 覆盖拾取提示条的文案；不给就按 `pickMode` 用缺省的两句。 */
+  pickHint?: string | undefined
+  /** 坐标轴手柄的模式；箭头与钉死朝向的信息牌用得上 `rotate`。 */
   gizmoMode?: GizmoMode
   /**
    * 这块孪生在大屏上占多大（设计像素）；给了就按它的宽高比留边。
@@ -62,6 +64,8 @@ const emit = defineEmits<{
   entityTransformEnd: []
   /** 选中部件后按住 Shift 点选或框选拿到的模型节点名。 */
   marqueeNodes: [readonly string[]]
+  /** 用户按 Esc 或点提示条上的取消，退出这一次拾取。 */
+  cancelPick: []
 }>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
@@ -76,10 +80,16 @@ const overlayMessage = computed(() =>
   status.value === 'error' ? errorMessage.value : '未选择模型',
 )
 const pickHint = computed(() => {
+  if (props.pickMode === null) return ''
+  if (props.pickHint !== undefined) return props.pickHint
   if (props.pickMode === 'node') return '点模型上的部件，取它的节点名'
-  if (props.pickMode === 'position') return '点模型表面或地面，取那个点的坐标'
-  return ''
+  return '点模型表面或地面，取那个点的坐标'
 })
+
+/** 拾取途中按 Esc 也能退出来，不用非得找到那个取消按钮。 */
+function onKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && props.pickMode !== null) emit('cancelPick')
+}
 /** 按目标格子的宽高比留边；没给尺寸就铺满。 */
 const frameVars = computed(() => targetFrameVars(props.targetSize))
 
@@ -139,9 +149,11 @@ onMounted(() => {
   scene.setPickMode(props.pickMode)
   // 挂载时视口已经错过了此前的每一次 watch，首帧值要在这里补一次
   if (props.values !== undefined) scene.setValues(props.values)
+  window.addEventListener('keydown', onKeydown)
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
   scene?.dispose()
   scene = null
 })
@@ -207,7 +219,17 @@ defineExpose({ focus, snapshot, playRoamPreview, stopRoamPreview, stageEl })
           {{ overlayMessage }}
         </DtNotice>
       </div>
-      <p v-if="pickHint !== ''" class="twin-viewport__pick">{{ pickHint }}</p>
+      <div v-if="pickHint !== ''" class="twin-viewport__pick">
+        <span>{{ pickHint }}</span>
+        <DtButton
+          class="twin-viewport__pick-cancel"
+          variant="ghost"
+          size="sm"
+          @click="emit('cancelPick')"
+        >
+          取消
+        </DtButton>
+      </div>
     </div>
   </div>
 </template>
@@ -266,11 +288,16 @@ defineExpose({ focus, snapshot, playRoamPreview, stopRoamPreview, stageEl })
     color: var(--text-secondary);
   }
 
+  // ⚠ 容器不吃指针、取消按钮单独放行：提示条横在视口顶上，整条能点的话
+  // 会挡住它底下那一小条模型
   &__pick {
     position: absolute;
     top: 8px;
     left: 50%;
-    padding: 4px 12px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 4px 6px 4px 12px;
     font-size: 12px;
     color: var(--text-secondary);
     background: var(--surface-sunken);
@@ -278,6 +305,11 @@ defineExpose({ focus, snapshot, playRoamPreview, stopRoamPreview, stageEl })
     border-radius: var(--radius-pill);
     transform: translateX(-50%);
     pointer-events: none;
+    white-space: nowrap;
+  }
+
+  &__pick-cancel {
+    pointer-events: auto;
   }
 }
 </style>

@@ -62,6 +62,7 @@ function panel(overrides: Partial<TwinPanel> = {}): TwinPanel {
     anchorId: '',
     position: [0, 0, 0],
     offset: [0, 0, 0],
+    rotation: [0, 0, 0],
     fields: [field('temp')],
     billboard: 'face',
     style: { ...STYLE },
@@ -543,6 +544,31 @@ describe('三种朝向', () => {
     layer.faceCamera(cameraAt(0, 100, 0))
 
     expect(quatOf(layer).equals(before)).toBe(true)
+    layer.dispose()
+  })
+
+  // ⚠ 旋转只在钉死档生效：另两档每帧被相机接管，配了也看不出效果
+  it('钉死朝向：配置的欧拉角落到牌上，转镜头也不动', () => {
+    const layer = new PanelLayer()
+    layer.build([panel({ billboard: 'fixed', rotation: [0, 90, 0] })], [])
+
+    layer.faceCamera(cameraAt(10, 8, 6))
+
+    const expected = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(0, Math.PI / 2, 0, 'XYZ'),
+    )
+    expect(quatOf(layer).angleTo(expected)).toBeCloseTo(0)
+    layer.dispose()
+  })
+
+  it('跟随相机那两档不吃配置的旋转，朝向仍归相机', () => {
+    const layer = new PanelLayer()
+    layer.build([panel({ billboard: 'face', rotation: [0, 90, 0] })], [])
+    const camera = cameraAt(10, 8, 6)
+
+    layer.faceCamera(camera)
+
+    expect(quatOf(layer).angleTo(camera.quaternion)).toBeCloseTo(0)
     layer.dispose()
   })
 })

@@ -22,7 +22,7 @@ function config(overrides: Record<string, unknown> = {}): TwinConfig {
 }
 
 describe('给手柄的三类', () => {
-  it('锚点：给出位置，没有朝向', () => {
+  it('锚点：给出位置，没有姿态', () => {
     const target = gizmoTargetOf(config(), { kind: 'anchors', id: 'a1' })
 
     expect(target).toEqual({
@@ -30,6 +30,7 @@ describe('给手柄的三类', () => {
       id: 'a1',
       position: [1, 2, 3],
       direction: null,
+      rotation: null,
     })
   })
 
@@ -38,13 +39,18 @@ describe('给手柄的三类', () => {
 
     expect(target?.position).toEqual([4, 5, 6])
     expect(target?.direction).toEqual([0, 0, 1])
+    expect(target?.rotation).toBeNull()
   })
 
-  it('没锚定的信息牌：给位置', () => {
-    const target = gizmoTargetOf(config(), { kind: 'panels', id: 'n1' })
+  it('没锚定的信息牌：位置与旋转都给', () => {
+    const settings = config({
+      panels: [{ id: 'n1', position: [7, 8, 9], rotation: [0, 45, 0] }],
+    })
+    const target = gizmoTargetOf(settings, { kind: 'panels', id: 'n1' })
 
     expect(target?.position).toEqual([7, 8, 9])
     expect(target?.direction).toBeNull()
+    expect(target?.rotation).toEqual([0, 45, 0])
   })
 })
 

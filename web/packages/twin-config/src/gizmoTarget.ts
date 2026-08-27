@@ -17,6 +17,8 @@ export interface TwinGizmoTarget {
   position: Vec3
   /** 箭头的朝向；另外两类没有朝向，给 null。 */
   direction: Vec3 | null
+  /** 信息牌的欧拉角（度）；另外两类给 null。 */
+  rotation: Vec3 | null
 }
 
 function isGizmoKind(kind: string): kind is TwinGizmoKind {
@@ -51,7 +53,13 @@ function anchorTarget(config: TwinConfig, id: string): TwinGizmoTarget | null {
   const anchor = config.anchors.find((item) => item.id === id)
   return anchor === undefined
     ? null
-    : { kind: 'anchors', id, position: anchor.position, direction: null }
+    : {
+        kind: 'anchors',
+        id,
+        position: anchor.position,
+        direction: null,
+        rotation: null,
+      }
 }
 
 function arrowTarget(config: TwinConfig, id: string): TwinGizmoTarget | null {
@@ -63,6 +71,7 @@ function arrowTarget(config: TwinConfig, id: string): TwinGizmoTarget | null {
         id,
         position: arrow.position,
         direction: arrow.direction,
+        rotation: null,
       }
 }
 
@@ -75,5 +84,11 @@ function panelTarget(config: TwinConfig, id: string): TwinGizmoTarget | null {
     config.anchors.some((item) => item.id === panel.anchorId)
   return anchored
     ? null
-    : { kind: 'panels', id, position: panel.position, direction: null }
+    : {
+        kind: 'panels',
+        id,
+        position: panel.position,
+        direction: null,
+        rotation: panel.rotation,
+      }
 }

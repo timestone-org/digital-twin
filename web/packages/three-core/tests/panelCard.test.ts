@@ -68,6 +68,7 @@ function panel(overrides: Partial<TwinPanel> = {}): TwinPanel {
     anchorId: '',
     position: [0, 0, 0],
     offset: [0, 0, 0],
+    rotation: [0, 0, 0],
     fields: [field()],
     billboard: 'face',
     style: { ...STYLE },

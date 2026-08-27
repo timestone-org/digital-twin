@@ -44,9 +44,10 @@ function fakeHandle(overrides: Partial<TwinViewportHandle> = {}) {
 
 function setup(selection: TwinSelection = { kind: 'parts', id: 'part-1' }) {
   const patchConfig = vi.fn()
+  const addPanelAt = vi.fn()
   const onRoamUnavailable = vi.fn()
   const config: { value: TwinConfig | null } = { value: CONFIG }
-  const actions = { patchConfig } as unknown as TwinEditorActions
+  const actions = { patchConfig, addPanelAt } as unknown as TwinEditorActions
   const ops = createTwinViewportOps({
     config: () => config.value,
     actions: () => actions,
@@ -55,7 +56,7 @@ function setup(selection: TwinSelection = { kind: 'parts', id: 'part-1' }) {
   })
   const handle = fakeHandle()
   ops.viewportRef.value = handle
-  return { ops, patchConfig, onRoamUnavailable, handle, config }
+  return { ops, patchConfig, addPanelAt, onRoamUnavailable, handle, config }
 }
 
 describe('两段式拾取', () => {
@@ -128,6 +129,61 @@ describe('两段式拾取', () => {
     ops.onPickNode('tank')
 
     expect(patchConfig).not.toHaveBeenCalled()
+  })
+})
+
+describe('先点位置再落牌', () => {
+  it('请求落牌后进入位置拾取，点到哪牌建在哪', () => {
+    const { ops, addPanelAt, patchConfig } = setup()
+
+    ops.requestPlacePanel()
+    expect(ops.pickMode.value).toBe('position')
+    expect(ops.isPlacingPanel.value).toBe(true)
+
+    ops.onPickPosition([3, 2, 1])
+
+    expect(addPanelAt).toHaveBeenCalledWith([3, 2, 1])
+    // 落的是新牌，不许顺手改到当前选中的实体上
+    expect(patchConfig).not.toHaveBeenCalled()
+  })
+
+  it('落完一次就结束，第二下不再建牌', () => {
+    const { ops, addPanelAt } = setup()
+
+    ops.requestPlacePanel()
+    ops.onPickPosition([1, 1, 1])
+    ops.onPickPosition([2, 2, 2])
+
+    expect(addPanelAt).toHaveBeenCalledTimes(1)
+    expect(ops.isPlacingPanel.value).toBe(false)
+  })
+
+  it('取消之后视口回来的那一下不建牌', () => {
+    const { ops, addPanelAt } = setup()
+
+    ops.requestPlacePanel()
+    ops.cancelPick()
+    ops.onPickPosition([1, 1, 1])
+
+    expect(addPanelAt).not.toHaveBeenCalled()
+  })
+
+  // 落牌不依赖选中：大纲里选着模型段也照样能加牌
+  it('单例段选中时也能请求落牌', () => {
+    const { ops, addPanelAt } = setup(TWIN_SELECT_MODEL)
+
+    ops.requestPlacePanel()
+    ops.onPickPosition([1, 2, 3])
+
+    expect(addPanelAt).toHaveBeenCalledWith([1, 2, 3])
+  })
+
+  it('普通位置拾取不算落牌，提示语不该换', () => {
+    const { ops } = setup()
+
+    ops.requestPick('position')
+
+    expect(ops.isPlacingPanel.value).toBe(false)
   })
 })
 

@@ -223,7 +223,12 @@ function writeHierNode(next: TwinHierNode): void {
       :model-value="panel"
       :frame="frame"
       :anchors="config.anchors"
+      :picking="picking"
+      :gizmo-mode="gizmoMode"
       @update:model-value="writePanel"
+      @request-pick-position="emit('requestPick', 'position')"
+      @cancel-pick="emit('cancelPick')"
+      @update:gizmo-mode="emit('update:gizmoMode', $event)"
     />
     <ArrowInspector
       v-else-if="arrow !== null"

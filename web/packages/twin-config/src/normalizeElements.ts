@@ -146,6 +146,7 @@ export function normalizePanel(raw: unknown, index: number): TwinPanel | null {
     anchorId: trimmedString(raw.anchorId),
     position: vec3(raw.position, ORIGIN),
     offset: vec3(raw.offset, ORIGIN),
+    rotation: vec3(raw.rotation, ORIGIN),
     fields: normalizeList(raw.fields, normalizePanelField),
     billboard: oneOf(raw.billboard, TWIN_BILLBOARD_MODES, 'face'),
     style: normalizePanelStyle(raw.style),

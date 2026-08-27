@@ -41,6 +41,7 @@ function panelOf(over: Partial<TwinPanel> = {}): TwinPanel {
     anchorId: '',
     position: [0, 0, 0],
     offset: [0, 1, 0],
+    rotation: [0, 0, 0],
     fields: [
       {
         key: 'f1',
@@ -78,9 +79,15 @@ function panelOf(over: Partial<TwinPanel> = {}): TwinPanel {
   }
 }
 
-function mountInspector(panel: TwinPanel) {
+function mountInspector(panel: TwinPanel, picking = false) {
   return mount(PanelInspector, {
-    props: { modelValue: panel, frame: FRAME, anchors: ANCHORS },
+    props: {
+      modelValue: panel,
+      frame: FRAME,
+      anchors: ANCHORS,
+      picking,
+      gizmoMode: 'translate' as const,
+    },
   })
 }
 
@@ -140,6 +147,82 @@ describe('锚点与坐标二选一', () => {
     await selectByLabel(wrapper, '锚定').setValue('')
 
     expect(written(wrapper).anchorId).toBe('')
+  })
+})
+
+describe('从视口拾取位置', () => {
+  it('没锚定时给拾取按钮，点一下请求拾取', async () => {
+    const wrapper = mountInspector(panelOf())
+
+    const button = wrapper
+      .findAll('button')
+      .find((item) => item.text().includes('从视口拾取位置'))
+    expect(button).toBeDefined()
+    await button?.trigger('click')
+
+    expect(wrapper.emitted('requestPickPosition')).toHaveLength(1)
+  })
+
+  it('拾取中按钮变成取消，点一下取消拾取', async () => {
+    const wrapper = mountInspector(panelOf(), true)
+
+    const button = wrapper
+      .findAll('button')
+      .find((item) => item.text().includes('取消拾取'))
+    expect(button).toBeDefined()
+    await button?.trigger('click')
+
+    expect(wrapper.emitted('cancelPick')).toHaveLength(1)
+  })
+
+  // 锚定生效时位置由锚点定，拾取回来的坐标写了也没反应
+  it('锚定之后不给拾取按钮', () => {
+    const wrapper = mountInspector(panelOf({ anchorId: 'a1' }))
+
+    expect(wrapper.text()).not.toContain('从视口拾取位置')
+  })
+})
+
+describe('旋转', () => {
+  it('钉死朝向档给旋转输入，改一轴整份写回', async () => {
+    const wrapper = mountInspector(panelOf({ billboard: 'fixed' }))
+
+    expect(wrapper.text()).toContain('旋转')
+    // ⚠ DtNumberInput 要 change 才落定，input 只改显示
+    await wrapper.find('input[aria-label="Y°"]').setValue('45')
+    await wrapper.find('input[aria-label="Y°"]').trigger('change')
+
+    expect(written(wrapper).rotation).toEqual([0, 45, 0])
+  })
+
+  // 另两档朝向每帧被相机接管，摆一个改了没反应的输入框比没有更糟
+  it('跟随相机的两档不摆旋转控件', () => {
+    const wrapper = mountInspector(panelOf({ billboard: 'face' }))
+
+    expect(wrapper.text()).not.toContain('旋转')
+    expect(wrapper.text()).not.toContain('视口里怎么拖')
+  })
+
+  it('钉死朝向且没锚定时给手柄模式切换，切到拖旋转', async () => {
+    const wrapper = mountInspector(panelOf({ billboard: 'fixed' }))
+
+    const rotate = wrapper
+      .findAll('button')
+      .find((item) => item.text().includes('拖旋转'))
+    expect(rotate).toBeDefined()
+    await rotate?.trigger('click')
+
+    expect(wrapper.emitted('update:gizmoMode')).toEqual([['rotate']])
+  })
+
+  // 锚定的牌没有手柄可拖，切换摆出来也是空的
+  it('锚定之后旋转输入还在，手柄切换收起', () => {
+    const wrapper = mountInspector(
+      panelOf({ billboard: 'fixed', anchorId: 'a1' }),
+    )
+
+    expect(wrapper.text()).toContain('旋转')
+    expect(wrapper.text()).not.toContain('视口里怎么拖')
   })
 })
 

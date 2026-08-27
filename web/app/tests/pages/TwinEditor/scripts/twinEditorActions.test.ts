@@ -47,6 +47,66 @@ describe('新增', () => {
   })
 })
 
+describe('按拾取点落牌', () => {
+  it('新牌的中心落在给定坐标上，选中挪过去', () => {
+    const { actions, select, doc } = setup({})
+
+    actions.addPanelAt([3, 2, 1])
+
+    const created = doc.config.value.panels[0]
+    expect(created?.position).toEqual([3, 2, 1])
+    expect(select).toHaveBeenCalledWith({ kind: 'panels', id: created?.id })
+  })
+
+  // 建牌 + 落点必须是一笔：分两笔的话撤销一步只退回落点，留下一张原点上的牌
+  it('撤销一步就回到「没这张牌」', () => {
+    const { actions, doc } = setup({})
+
+    actions.addPanelAt([3, 2, 1])
+    doc.undo()
+
+    expect(doc.config.value.panels).toHaveLength(0)
+  })
+})
+
+describe('手柄改动落盘', () => {
+  it('信息牌的旋转跟着位置一起落', () => {
+    const { actions, doc } = setup({
+      panels: [{ id: 'n1', position: [0, 0, 0] }],
+    })
+
+    actions.transformEntity({
+      kind: 'panels',
+      id: 'n1',
+      position: [1, 2, 3],
+      direction: null,
+      rotation: [0, 45, 0],
+    })
+    actions.endTransform()
+
+    const panel = doc.config.value.panels[0]
+    expect(panel?.position).toEqual([1, 2, 3])
+    expect(panel?.rotation).toEqual([0, 45, 0])
+  })
+
+  it('平移改动不带旋转时，原有旋转不动', () => {
+    const { actions, doc } = setup({
+      panels: [{ id: 'n1', position: [0, 0, 0], rotation: [0, 30, 0] }],
+    })
+
+    actions.transformEntity({
+      kind: 'panels',
+      id: 'n1',
+      position: [5, 0, 0],
+      direction: null,
+      rotation: null,
+    })
+    actions.endTransform()
+
+    expect(doc.config.value.panels[0]?.rotation).toEqual([0, 30, 0])
+  })
+})
+
 describe('删除与重排会连带搬绑定', () => {
   it('删中间那个锚点，后面的绑定整体前移', () => {
     const { actions, doc } = setup(

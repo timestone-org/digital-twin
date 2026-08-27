@@ -43,6 +43,7 @@ function panelOf(fields: TwinPanelField[]): TwinPanel {
     anchorId: '',
     position: [0, 0, 0],
     offset: [0, 0, 0],
+    rotation: [0, 0, 0],
     fields,
     billboard: 'face',
     style: {
