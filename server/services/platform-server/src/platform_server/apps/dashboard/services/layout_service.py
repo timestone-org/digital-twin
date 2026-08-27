@@ -70,6 +70,7 @@ async def replace_layout(
         )
     )
     await _drop_removed(session, state=state, plan=plan)
+    await _park_moved_bindings(session, state=state, plan=plan)
     await _write(session, dashboard=dashboard, state=state, plan=plan)
     if payload.schema_version is not None:
         dashboard.schema_version = payload.schema_version
@@ -107,6 +108,34 @@ async def _drop_removed(
         ),
     )
     await node_crud.delete_by_ids(session, sorted(doomed))
+
+
+async def _park_moved_bindings(
+    session: AsyncSession, *, state: DashboardState, plan: LayoutPlan
+) -> None:
+    """要换槽的绑定先挪到临时键上，让最终写入各就各位。
+
+    ⚠ `(node_id, field_key)` 唯一且非延迟，而 flush 里 UPDATE 的先后由主键序
+    决定：删一个数组行会让后面每一行的 fieldKey 前移一格，先更新的行会撞上
+    还没让位的旧行；两行互换槽位更是怎么排序都撞。临时键带 `~` 前缀，合法
+    槽键出不来这个形状，不会与任何最终键相撞。
+    Args: session, state, plan。
+    """
+    known = {item.id: item for item in state.bindings}
+    parked = False
+    for planned in plan.nodes:
+        for binding in planned.bindings:
+            current = known.get(binding.binding_id)
+            if current is None:
+                continue
+            if (
+                current.field_key != binding.entry.field_key
+                or current.node_id != binding.node_id
+            ):
+                current.field_key = f"~{current.id.hex}"
+                parked = True
+    if parked:
+        await _flush(session)
 
 
 async def _write(

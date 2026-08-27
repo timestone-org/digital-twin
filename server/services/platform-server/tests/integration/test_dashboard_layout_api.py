@@ -133,6 +133,108 @@ async def test_a_binding_keeps_its_id_across_a_replace(
     assert [item["id"] for item in stored] == [binding_id]
 
 
+def static_binding(binding_id: str, index: int) -> dict[str, Any]:
+    """一条钉了 id 的静态绑定，槽位是 `anchorValues[index].value`。
+
+    Args: binding_id, index。
+    """
+    return {
+        "id": binding_id,
+        "field_key": f"anchorValues[{index}].value",
+        "source_kind": "static",
+        "static_value_json": 1,
+    }
+
+
+async def test_two_bindings_can_swap_their_slots_in_one_replace(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # 编辑器里「字段上移/下移」发的就是这种互换：最终形态合法，但
+    # (node_id, field_key) 唯一约束非延迟，逐条 UPDATE 的中间态会撞自己人
+    dashboard = await make_screen(app_client)
+    node_id = str(uuid.uuid4())
+    first = str(uuid.uuid4())
+    second = str(uuid.uuid4())
+    await replace(
+        app_client,
+        dashboard["id"],
+        version=1,
+        nodes=[
+            layout_node(
+                node_id=node_id,
+                module_type="twin-view",
+                bindings=[static_binding(first, 0), static_binding(second, 1)],
+            )
+        ],
+    )
+    swapped = await replace(
+        app_client,
+        dashboard["id"],
+        version=2,
+        nodes=[
+            layout_node(
+                node_id=node_id,
+                module_type="twin-view",
+                bindings=[static_binding(first, 1), static_binding(second, 0)],
+            )
+        ],
+    )
+    stored = data_of(swapped)["nodes"][0]["bindings"]
+    assert {item["id"]: item["field_key"] for item in stored} == {
+        first: "anchorValues[1].value",
+        second: "anchorValues[0].value",
+    }
+
+
+async def test_bindings_shift_down_when_an_earlier_row_is_removed(
+    app_client: httpx.AsyncClient,
+) -> None:
+    # 删一个信息牌字段就是这条路：它的绑定没了，后面每一行的行号前移一格。
+    # id 故意与行号反序：UPDATE 按主键序发出时，后一行会抢还没让位的槽
+    dashboard = await make_screen(app_client)
+    node_id = str(uuid.uuid4())
+    ids = [
+        "ffffffff-0000-4000-8000-000000000000",
+        "bbbbbbbb-0000-4000-8000-000000000000",
+        "22222222-0000-4000-8000-000000000000",
+    ]
+    await replace(
+        app_client,
+        dashboard["id"],
+        version=1,
+        nodes=[
+            layout_node(
+                node_id=node_id,
+                module_type="twin-view",
+                bindings=[
+                    static_binding(binding_id, index)
+                    for index, binding_id in enumerate(ids)
+                ],
+            )
+        ],
+    )
+    shifted = await replace(
+        app_client,
+        dashboard["id"],
+        version=2,
+        nodes=[
+            layout_node(
+                node_id=node_id,
+                module_type="twin-view",
+                bindings=[
+                    static_binding(ids[1], 0),
+                    static_binding(ids[2], 1),
+                ],
+            )
+        ],
+    )
+    stored = data_of(shifted)["nodes"][0]["bindings"]
+    assert {item["id"]: item["field_key"] for item in stored} == {
+        ids[1]: "anchorValues[0].value",
+        ids[2]: "anchorValues[1].value",
+    }
+
+
 async def test_a_node_left_out_of_the_payload_is_deleted(
     app_client: httpx.AsyncClient,
 ) -> None:
