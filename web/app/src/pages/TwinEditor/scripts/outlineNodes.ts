@@ -1,5 +1,5 @@
 /**
- * @fileoverview 大纲树的数据推导：置顶的「场景」区（三个单例）、七个实体分组的
+ * @fileoverview 大纲树的数据推导：置顶的「场景」区（三个单例）、六个实体分组的
  * 夹视图与散行清单，外加「删了会连带影响什么」与「一条诊断落在哪个实体上」两处
  * 映射。判断全在这里、组件只管画，这些规则才测得动。
  */
@@ -29,7 +29,7 @@ export interface TwinOutlineRow {
   label: string
   /** 名字后面的补充信息，可为空串。 */
   meta: string
-  /** 显隐；null = 这一类没有显隐字段（视点、钻取节点）。 */
+  /** 显隐；null = 这一类没有显隐字段（视点）。 */
   visible: boolean | null
   /** 有诊断问题，行上打红点。 */
   flagged: boolean
@@ -95,9 +95,7 @@ export interface TwinRemoveImpact {
   panels: number
   flows: number
   viewpoints: number
-  /** 上一层没了的下级钻取节点：它们会各自变成一个根。 */
-  hierChildren: number
-  /** 点击动作指向它的部件：点了不会再打开钻取。 */
+  /** 远距取景指向它的部件：远距点击会退回自动框住。 */
   parts: number
 }
 
@@ -105,11 +103,10 @@ const NO_IMPACT: TwinRemoveImpact = {
   panels: 0,
   flows: 0,
   viewpoints: 0,
-  hierChildren: 0,
   parts: 0,
 }
 
-/** 七个实体分组的顺序。 */
+/** 六个实体分组的顺序。 */
 const ENTITY_KINDS: readonly TwinEntityKind[] = [
   'parts',
   'anchors',
@@ -117,7 +114,6 @@ const ENTITY_KINDS: readonly TwinEntityKind[] = [
   'panels',
   'arrows',
   'flows',
-  'hierNodes',
 ]
 
 /** 每种问题的短标签。 */
@@ -128,9 +124,11 @@ export const TWIN_ISSUE_LABELS: Readonly<
   'dangling-camera': '视点丢失',
   'dangling-anchor': '锚点丢失',
   'flow-too-short': '流画不出',
-  'dangling-hier-parent': '上一层丢失',
-  'dangling-hier-node': '钻取节点丢失',
-  'hier-cycle': '钻取成环',
+  'dangling-part-camera': '视点丢失',
+  'part-focus-no-target': '取景没配全',
+  'part-far-unreachable': '远档没分界',
+  'part-detail-unreachable': '详情弹不出来',
+  'part-detail-empty': '详情没有字段',
   'roam-too-short': '漫游飞不起来',
   'tint-no-stops': '染色没档位',
   'tint-empty-range': '档位区间为空',
@@ -146,7 +144,7 @@ interface RowInput {
   visible: boolean | null
 }
 
-/** 七类实体各自怎么摊成行。⚠ 视点与钻取节点没有 visibility，`visible` 恒为 null。 */
+/** 六类实体各自怎么摊成行。⚠ 视点没有 visibility，`visible` 恒为 null。 */
 const ROW_INPUTS: Readonly<
   Record<TwinEntityKind, (config: TwinConfig) => RowInput[]>
 > = {
@@ -197,14 +195,6 @@ const ROW_INPUTS: Readonly<
       name: flow.name,
       meta: `${flow.pathAnchors.length} 锚点`,
       visible: flow.visibility.visible,
-    })),
-  hierNodes: (config) =>
-    config.hierNodes.map((node) => ({
-      kind: 'hierNodes',
-      id: node.id,
-      name: node.name,
-      meta: `${node.fields.length} 字段`,
-      visible: null,
     })),
 }
 
@@ -264,7 +254,7 @@ function buildSection(
 }
 
 /**
- * 摊出七个实体分组（夹视图 + 散行）。「场景」区是静态的 `TWIN_SCENE_ENTRIES`。
+ * 摊出六个实体分组（夹视图 + 散行）。「场景」区是静态的 `TWIN_SCENE_ENTRIES`。
  * @param config 当前配置
  * @param flaggedIds 有诊断问题的实体 id
  */
@@ -300,14 +290,7 @@ export function twinRemoveImpact(
     return {
       ...NO_IMPACT,
       viewpoints: config.viewpoints.items.filter((item) => item === id).length,
-    }
-  }
-  if (kind === 'hierNodes') {
-    return {
-      ...NO_IMPACT,
-      hierChildren: config.hierNodes.filter((node) => node.parentId === id)
-        .length,
-      parts: config.parts.filter((part) => part.clickHierNode === id).length,
+      parts: config.parts.filter((part) => part.click.cameraId === id).length,
     }
   }
   return NO_IMPACT
@@ -331,9 +314,7 @@ export function twinRemoveImpactText(
   if (impact.flows > 0) clauses.push(`${impact.flows} 条能量流`)
   if (impact.viewpoints > 0)
     clauses.push(`视点切换里的 ${impact.viewpoints} 项`)
-  if (impact.hierChildren > 0)
-    clauses.push(`${impact.hierChildren} 个下级钻取节点`)
-  if (impact.parts > 0) clauses.push(`${impact.parts} 个部件的点击动作`)
+  if (impact.parts > 0) clauses.push(`${impact.parts} 个部件的远距取景`)
   if (clauses.length === 0) return ''
   return `${clauses.join('、')}会悬空，需要自己改绑`
 }

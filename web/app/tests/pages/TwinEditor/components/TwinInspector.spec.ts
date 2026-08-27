@@ -18,7 +18,6 @@ import AnchorInspector from '@/pages/TwinEditor/components/inspector/AnchorInspe
 import ArrowInspector from '@/pages/TwinEditor/components/inspector/ArrowInspector.vue'
 import CameraInspector from '@/pages/TwinEditor/components/inspector/CameraInspector.vue'
 import FlowInspector from '@/pages/TwinEditor/components/inspector/FlowInspector.vue'
-import HierNodeInspector from '@/pages/TwinEditor/components/inspector/HierNodeInspector.vue'
 import ModelInspector from '@/pages/TwinEditor/components/inspector/ModelInspector.vue'
 import PanelInspector from '@/pages/TwinEditor/components/inspector/PanelInspector.vue'
 import PartInspector from '@/pages/TwinEditor/components/inspector/PartInspector.vue'
@@ -56,10 +55,6 @@ const CONFIG: TwinConfig = normalizeTwinConfig({
   flows: [
     { id: 'f1', name: '冷却水' },
     { id: 'f2', name: '回水' },
-  ],
-  hierNodes: [
-    { id: 'h1', name: '一层' },
-    { id: 'h2', name: '二层' },
   ],
 })
 
@@ -99,7 +94,6 @@ const DISPATCH: readonly DispatchCase[] = [
   ['panels', { kind: 'panels', id: 'p1' }, PanelInspector],
   ['arrows', { kind: 'arrows', id: 'ar1' }, ArrowInspector],
   ['flows', { kind: 'flows', id: 'f1' }, FlowInspector],
-  ['hierNodes', { kind: 'hierNodes', id: 'h1' }, HierNodeInspector],
 ]
 
 describe('选中什么就画什么', () => {
@@ -139,7 +133,6 @@ const LISTS: readonly ListCase[] = [
   ['arrows', { kind: 'arrows', id: 'ar1' }, ArrowInspector, 'ar2'],
   ['flows', { kind: 'flows', id: 'f1' }, FlowInspector, 'f2'],
   ['parts', { kind: 'parts', id: 'pt1' }, PartInspector, 'pt2'],
-  ['hierNodes', { kind: 'hierNodes', id: 'h1' }, HierNodeInspector, 'h2'],
 ]
 
 type SingletonCase = readonly [string, TwinSelection, Component]
@@ -219,12 +212,13 @@ describe('往上转发的动作', () => {
     expect(wrapper.emitted('captureCamera')?.[0]).toEqual(['c2'])
   })
 
-  it('钻取节点存视角带上事件里的那个 id', () => {
-    const wrapper = mountInspector({ kind: 'hierNodes', id: 'h1' })
+  // ⚠ 带上是哪个部件：不带的话「取当前机位」会存到列表里的第一个部件上
+  it('部件取当前机位带上它自己的 id', () => {
+    const wrapper = mountInspector({ kind: 'parts', id: 'pt2' })
 
-    wrapper.findComponent(HierNodeInspector).vm.$emit('captureView', 'h1')
+    wrapper.findComponent(PartInspector).vm.$emit('captureView')
 
-    expect(wrapper.emitted('captureHierView')?.[0]).toEqual(['h1'])
+    expect(wrapper.emitted('capturePartView')?.[0]).toEqual(['pt2'])
   })
 
   it('漫游的预览与停止各自上抛', () => {

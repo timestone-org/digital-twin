@@ -24,7 +24,6 @@ const ID_PREFIX: Readonly<Record<TwinEntityKind, string>> = {
   panels: 'panel',
   arrows: 'arrow',
   flows: 'flow',
-  hierNodes: 'hier',
 }
 
 /**

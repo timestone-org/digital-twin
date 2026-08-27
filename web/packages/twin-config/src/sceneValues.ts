@@ -10,18 +10,18 @@ import {
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_ARROW_BINDING_KEY,
   TWIN_FLOW_BINDING_KEY,
-  TWIN_HIER_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
   TWIN_PART_BINDING_KEY,
+  TWIN_PART_FIELD_BINDING_KEY,
 } from './constants'
-import { flattenHierFields } from './hierTree'
 import { flattenPanelFields } from './normalizeElements'
+import { flattenPartFields } from './partFields'
 import {
   stitchAnchorValues,
   stitchArrowValues,
   stitchFlowValues,
-  stitchHierValues,
   stitchPanelValues,
+  stitchPartFieldValues,
   stitchPartValues,
 } from './twinMath'
 import type { TwinConfig } from './types'
@@ -29,8 +29,8 @@ import type {
   TwinAnchorValues,
   TwinArrowValues,
   TwinFlowValues,
-  TwinHierValues,
   TwinPanelValues,
+  TwinPartFieldValues,
   TwinPartValues,
 } from './types'
 
@@ -42,8 +42,8 @@ export interface TwinSceneValues {
   arrows: TwinArrowValues
   panels: TwinPanelValues
   flows: TwinFlowValues
-  /** 钻取面板用；3D 覆盖层不消费它。 */
-  hier: TwinHierValues
+  /** 部件详情卡片用；3D 覆盖层不消费它。 */
+  partFields: TwinPartFieldValues
 }
 
 /**
@@ -70,10 +70,10 @@ export function twinSceneValues(
       values[TWIN_PANEL_BINDING_KEY],
     ),
     flows: stitchFlowValues(config.flows, values[TWIN_FLOW_BINDING_KEY]),
-    // ⚠ 同理：按「第 i 个节点」对齐会让多字段的节点之后整体错位
-    hier: stitchHierValues(
-      flattenHierFields(config.hierNodes),
-      values[TWIN_HIER_BINDING_KEY],
+    // ⚠ 同理：按「第 i 个部件」对齐会让多字段的部件之后整体错位
+    partFields: stitchPartFieldValues(
+      flattenPartFields(config.parts),
+      values[TWIN_PART_FIELD_BINDING_KEY],
     ),
   }
 }

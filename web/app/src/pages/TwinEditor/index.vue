@@ -225,9 +225,6 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
           "
           @remove-from-folder="actions?.removeFromFolder($event)"
           @create-folder-with-item="createFolderWith"
-          @add-hier="actions?.addHier($event)"
-          @move-hier="actions?.moveHier($event.id, $event.delta)"
-          @reparent-hier="actions?.reparentHier($event.id, $event.parentId)"
         />
 
         <div class="flex min-w-0 flex-1 flex-col">
@@ -288,7 +285,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
           @request-pick="viewport.requestPick"
           @cancel-pick="viewport.cancelPick"
           @capture-camera="viewport.captureCamera"
-          @capture-hier-view="viewport.captureHierView"
+          @capture-part-view="viewport.capturePartView"
           @preview-roam="viewport.previewRoam"
           @stop-roam-preview="viewport.stopRoamPreview"
           @write-binding="binding.write"

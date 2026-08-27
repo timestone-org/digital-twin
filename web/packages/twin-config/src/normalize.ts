@@ -14,8 +14,12 @@ import {
   normalizePanel,
 } from './normalizeElements'
 import { normalizeFolders } from './normalizeFolders'
-import { normalizeHierNode } from './normalizeHier'
-import { normalizePartLook, normalizePartTint } from './normalizeParts'
+import {
+  normalizePartClick,
+  normalizePartDetail,
+  normalizePartLook,
+  normalizePartTint,
+} from './normalizeParts'
 import { normalizeClickDistance, normalizeVisibility } from './normalizeRules'
 import {
   clampedOr,
@@ -39,7 +43,8 @@ function normalizePart(raw: unknown, index: number): TwinPart | null {
     look: normalizePartLook(raw.look),
     tint: normalizePartTint(raw.tint),
     clickDistance: normalizeClickDistance(raw.clickDistance),
-    clickHierNode: trimmedString(raw.clickHierNode),
+    click: normalizePartClick(raw.click),
+    detail: normalizePartDetail(raw.detail),
   }
 }
 
@@ -76,7 +81,6 @@ export function normalizeTwinConfig(raw: unknown): TwinConfig {
   const panels = normalizeList(source.panels, normalizePanel)
   const arrows = normalizeList(source.arrows, normalizeArrow)
   const flows = normalizeList(source.flows, normalizeFlow)
-  const hierNodes = normalizeList(source.hierNodes, normalizeHierNode)
   return {
     version: TWIN_CONFIG_VERSION,
     model: normalizeModel(source.model),
@@ -88,7 +92,6 @@ export function normalizeTwinConfig(raw: unknown): TwinConfig {
     panels,
     arrows,
     flows,
-    hierNodes,
     folders: normalizeFolders(source.folders, {
       parts,
       anchors,
@@ -96,7 +99,6 @@ export function normalizeTwinConfig(raw: unknown): TwinConfig {
       panels,
       arrows,
       flows,
-      hierNodes,
     }),
   }
 }

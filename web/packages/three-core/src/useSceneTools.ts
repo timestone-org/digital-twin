@@ -160,7 +160,6 @@ function search(
     query,
     {
       parts: options.config().parts,
-      hierNodes: options.config().hierNodes,
       namedNodes: options.nodeIndex().namedNodes,
     },
     SEARCH_LIMIT,

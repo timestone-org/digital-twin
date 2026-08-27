@@ -43,7 +43,7 @@ const MAX_PANEL_WIDTH = 1200
 /** 卡片最小高度 0 = 自适应；上限同宽度 */
 const MAX_PANEL_HEIGHT = 1200
 /** 字段分列上限：三列以上每格窄到放不下一个带单位的读数 */
-const MAX_PANEL_COLUMNS = 4
+export const MAX_PANEL_COLUMNS = 4
 /** 阈值档上限：再多用户自己也读不出牌上现在是哪一档 */
 const MAX_LEVELS = 6
 /** 量程缺省 0–100：多数现场量是百分比，配了图形却没配量程时至少画得出来 */
@@ -111,7 +111,7 @@ function normalizeLevels(raw: unknown): TwinPanelLevel[] {
 }
 
 /**
- * 信息牌与钻取节点共用的一个读数字段。
+ * 信息牌与部件详情卡片共用的一个读数字段。
  * ⚠ 量程颠倒（上限 ≤ 下限）在这里**不纠正**：改成合法值等于替用户瞎猜他要的
  * 是哪一头，而图形会照着猜出来的量程画。这一档由 `collectTwinConfigIssues`
  * 报出去，渲染层遇到它退回纯文本。

@@ -153,6 +153,16 @@ export class PartsLayer {
   }
 
   /**
+   * 某个部件在模型里命中的对象，详情弹窗要拿它们克隆一份摆进自己的场景。
+   * ⚠ 给的是**原件**不是副本：调用方要克隆自己克隆，在这里先复制一遍会让
+   * 「弹窗里看到的是不是场上这一份」多出一处口径。
+   * @param partId 部件 id
+   */
+  objectsOf(partId: string): readonly THREE.Object3D[] {
+    return this.entries.find((entry) => entry.part.id === partId)?.objects ?? []
+  }
+
+  /**
    * 某个部件的世界包围盒；`approach` 那一下要用它把镜头拉过去。
    * @param partId 部件 id
    */

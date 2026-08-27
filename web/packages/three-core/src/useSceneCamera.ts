@@ -1,9 +1,9 @@
 /**
- * @fileoverview 把位姿落到相机上的三条路：开屏初始取景（瞬时落位）、钻取取景
- * 快照与切视点（都走飞行）。瞬时那条改完要叫一次 `controls.update()`，漏掉那
+ * @fileoverview 把位姿落到相机上的三条路：开屏初始取景（瞬时落位）、取景快照
+ * 与切视点（都走飞行）。瞬时那条改完要叫一次 `controls.update()`，漏掉那
  * 一句的表现是「镜头没动，一拖才跳过去」。
  */
-import type { TwinCamera, TwinConfig, TwinModalView } from '@dt/twin-config'
+import type { TwinCamera, TwinConfig, TwinFocusView } from '@dt/twin-config'
 import { defaultCameraOf } from '@dt/twin-config'
 import type { Object3D } from 'three'
 
@@ -24,7 +24,7 @@ export interface SceneCamera {
    */
   applyInitial: (root: Object3D) => void
   /** 飞到一个取景快照上；null / undefined = 不动镜头。 */
-  applyView: (view: TwinModalView | null | undefined) => void
+  applyView: (view: TwinFocusView | null | undefined) => void
   /** 飞到某个视点。 */
   applyCamera: (camera: TwinCamera) => void
   /**

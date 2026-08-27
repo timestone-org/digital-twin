@@ -4,12 +4,7 @@
  */
 import { flowKindColor, flowKindToken } from './flowColors'
 import { tintStopText } from './partTint'
-import type {
-  TwinFlowLink,
-  TwinHierNode,
-  TwinPart,
-  TwinPartTint,
-} from './types'
+import type { TwinFlowLink, TwinPart, TwinPartTint } from './types'
 
 /** 图例分组。 */
 export const TWIN_LEGEND_GROUPS = ['能量流', '部件染色'] as const
@@ -164,7 +159,7 @@ export function clipPlaneFor(
 
 /** 一条搜索命中。 */
 export interface TwinSearchHit {
-  kind: 'part' | 'hier' | 'node'
+  kind: 'part' | 'node'
   /** 实体 id；`node` 档即节点名。 */
   id: string
   label: string
@@ -177,10 +172,9 @@ export interface TwinSearchHit {
 /** 搜索结果默认条数上限。 */
 const DEFAULT_SEARCH_LIMIT = 50
 
-/** 搜索的取材：部件、钻取层级与模型里的节点名。 */
+/** 搜索的取材：部件与模型里的节点名。 */
 export interface TwinSearchSource {
   parts: readonly TwinPart[]
-  hierNodes: readonly TwinHierNode[]
   namedNodes: readonly string[]
 }
 
@@ -192,7 +186,7 @@ function rankOf(text: string, query: string): number {
 }
 
 /**
- * 搜部件名 / 钻取节点名 / 模型节点名。
+ * 搜部件名 / 模型节点名。
  *
  * 排序：前缀命中优先于子串命中，同档按「名字更短的更相关」（搜 `pump` 时 `Pump`
  * 该排在 `Pump_Assembly_Housing_01` 前面），最后按字典序保证结果稳定。
@@ -217,18 +211,6 @@ export function searchSceneEntities(
     const rank = rankOf(label, needle)
     if (rank >= 0)
       hits.push({ kind: 'part', id: part.id, label, nodes: part.nodes, rank })
-  }
-  for (const node of source.hierNodes) {
-    const rank = rankOf(node.name, needle)
-    if (rank >= 0) {
-      hits.push({
-        kind: 'hier',
-        id: node.id,
-        label: node.name,
-        nodes: node.nodes,
-        rank,
-      })
-    }
   }
   for (const name of source.namedNodes) {
     const rank = rankOf(name, needle)

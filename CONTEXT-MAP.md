@@ -22,6 +22,7 @@
 - 数据采集与归档：[`docs/COLLECT_DESIGN.md`](docs/COLLECT_DESIGN.md)
 - 大屏组态与实时：[`docs/DASHBOARD_DESIGN.md`](docs/DASHBOARD_DESIGN.md)
 - 跨大屏跳转：[`docs/DASHBOARD_NAV_DESIGN.md`](docs/DASHBOARD_NAV_DESIGN.md)
+- 孪生部件交互：[`docs/TWIN_PART_INTERACTION_DESIGN.md`](docs/TWIN_PART_INTERACTION_DESIGN.md)
 - AI 助手：[`docs/AI_ASSISTANT_DESIGN.md`](docs/AI_ASSISTANT_DESIGN.md)
 - 预测下发与每日增量：[`docs/AC_PUBLISH_DESIGN.md`](docs/AC_PUBLISH_DESIGN.md)
 - 对外接口口径：[`docs/agents/api-contract.md`](docs/agents/api-contract.md)

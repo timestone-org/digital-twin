@@ -14,7 +14,7 @@ const scene = vi.hoisted(() => ({
     name: 'TwinSceneStub',
     props: {
       config: { type: Object, required: true },
-      anchorValues: { type: Object, default: undefined },
+      values: { type: Object, default: undefined },
     },
     template: '<div class="scene-stub" />',
   },
@@ -70,16 +70,16 @@ describe('数组绑定按文档序缝合', () => {
       { anchorValues: [{ value: 36.5 }, { value: 21 }] },
     )
 
-    expect(wrapper.getComponent(scene.TwinScene).props('anchorValues')).toEqual(
-      { inlet: { value: 36.5 }, outlet: { value: 21 } },
+    expect(wrapper.getComponent(scene.TwinScene).props('values')).toMatchObject(
+      { anchors: { inlet: { value: 36.5 }, outlet: { value: 21 } } },
     )
   })
 
   it('没有绑定值时交出空映射而不是编造的行', async () => {
     const wrapper = await render({ [TWIN_CONFIG_KEY]: TWIN })
 
-    expect(wrapper.getComponent(scene.TwinScene).props('anchorValues')).toEqual(
-      {},
+    expect(wrapper.getComponent(scene.TwinScene).props('values')).toMatchObject(
+      { anchors: {} },
     )
   })
 })

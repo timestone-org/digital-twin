@@ -12,9 +12,9 @@ import {
   TWIN_ARROW_BINDING_KEY,
   TWIN_FLOW_BINDING_KEY,
   TWIN_FLOW_ROW_SLOTS,
-  TWIN_HIER_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
   TWIN_PART_BINDING_KEY,
+  TWIN_PART_FIELD_BINDING_KEY,
   TWIN_VIEW_BINDINGS,
   anchorRowFieldKey,
   arrayRowFieldKey,
@@ -48,7 +48,7 @@ describe('绑定槽清单', () => {
       TWIN_PANEL_BINDING_KEY,
       TWIN_ARROW_BINDING_KEY,
       TWIN_FLOW_BINDING_KEY,
-      TWIN_HIER_BINDING_KEY,
+      TWIN_PART_FIELD_BINDING_KEY,
     ])
   })
 
@@ -60,7 +60,7 @@ describe('绑定槽清单', () => {
   })
 
   // ⚠ 只许登记渲染层真正消费的槽：没有图元就摆槽位，用户绑完点位看到的是
-  //   「绑了没反应」。六个槽此刻各有一处在消费（钻取字段在钻取面板上，
+  //   「绑了没反应」。六个槽此刻各有一处在消费（详情字段在部件详情卡片上，
   //   部件读数在 `PartsLayer` 的状态染色上），
   //   加第七个必须与渲染层同轮落地
   it('清单里的每个槽都有渲染层在消费', () => {

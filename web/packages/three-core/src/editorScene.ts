@@ -19,7 +19,6 @@ import {
   buildRoamSegments,
   defaultCameraOf,
   gizmoTargetOf,
-  hierEffectiveNodes,
   sameVec3,
 } from '@dt/twin-config'
 import * as THREE from 'three'
@@ -527,16 +526,14 @@ export class EditorScene {
     gizmo.attach(target, this.gizmoMode)
   }
 
-  /** 选中框只画在有几何的两类上：部件与钻取节点。 */
+  /** 选中框只画在有几何的那一类上：部件。 */
   private boxOfHighlight(selection: TwinSceneSelection): THREE.Box3 | null {
     if (selection.kind === 'parts') return this.boxOfPart(selection.id)
-    if (selection.kind === 'hierNodes') return this.boxOfHier(selection.id)
     return null
   }
 
   private boxOfSelection(selection: TwinSceneSelection): THREE.Box3 | null {
     if (selection.kind === 'parts') return this.boxOfPart(selection.id)
-    if (selection.kind === 'hierNodes') return this.boxOfHier(selection.id)
     // 三个单例段没有自己的几何，取景一律退回整个模型
     if (
       selection.kind === 'model' ||
@@ -556,15 +553,6 @@ export class EditorScene {
       new THREE.Vector3(...point.position),
       new THREE.Vector3(span, span, span),
     )
-  }
-
-  /**
-   * 一个钻取节点的包围盒。
-   * ⚠ 走的是**有效节点**：上层自己往往一个节点都没配，取景要落在子孙的并集上，
-   * 否则在厂区、车间这种层上选中即取景等于什么都不发生。
-   */
-  private boxOfHier(id: string): THREE.Box3 | null {
-    return this.boxOfNames(hierEffectiveNodes(this.config.hierNodes, id))
   }
 
   private boxOfPart(id: string): THREE.Box3 | null {

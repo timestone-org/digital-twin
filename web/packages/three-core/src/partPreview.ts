@@ -1,0 +1,192 @@
+/**
+ * @fileoverview 弹窗里那一小块 3D：只装一个部件，自己一套场景、相机与渲染器。
+ *
+ * ⚠ 部件的对象是**克隆**进来的，几何与材质仍与画布上那棵模型树**共用**——所以
+ * 释放时只许收自己造的那几样（灯光、控制器、渲染器），绝不能走
+ * `disposeSceneGraph`：那会把主场景正在用的几何与材质一并释放，表现是大屏上
+ * 那个部件整块消失，而这里已经关掉了、没有任何线索指回来。
+ * ⚠ 克隆要把祖先的变换**烘进去**：`clone()` 只带自己那一层的 position/rotation，
+ * 挂在别处的部件会以模型原点为准摆放，看着像「模型跑到画面外去了」。
+ * ⚠ 上下文有硬上限：开一次弹窗多一个 WebGL 上下文，关掉必须 `forceContextLoss`，
+ * 否则来回点几次部件之后最早的那个会被浏览器静默回收，主画布毫无征兆地黑掉。
+ */
+import * as THREE from 'three'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+
+import {
+  clampPixelRatio,
+  createWebGLRenderer,
+  frameBoxPose,
+  type SceneRenderer,
+  type SceneRendererFactory,
+} from './sceneCore'
+
+/** 视野，与主画布同一档，换个视野会让同一个部件看着胖瘦不同。 */
+const PREVIEW_FOV_DEG = 45
+/** 自转速度，度/秒。慢到能看清结构，又不至于像没在动。 */
+const SPIN_DEG_PER_S = 12
+/** 剪裁面按部件体量给，固定值在小件上会把它整个裁掉。 */
+const NEAR_RATIO = 0.01
+const FAR_RATIO = 40
+/** 近剪裁面的下限；再小会让深度精度不够，表面互相穿插闪烁。 */
+const MIN_NEAR = 1e-3
+
+export interface PartPreviewOptions {
+  /** 画布挂到这里。 */
+  container: HTMLElement
+  /** 要展示的对象，画布上那棵模型树里的原件。 */
+  objects: readonly THREE.Object3D[]
+  autoRotate: boolean
+  /** 渲染器工厂；测试里换成 headless 替身。 */
+  renderer?: SceneRendererFactory
+}
+
+export interface PartPreview {
+  /** 按宿主尺寸重算相机与画布。 */
+  measure: (width: number, height: number) => void
+  /** 推进并画一帧。 */
+  frame: (deltaS: number) => void
+  dispose: () => void
+}
+
+/** 半球 + 环境 + 一盏主光：够看清形体，不追求与主画布逐灯一致。 */
+function createLighting(): THREE.Group {
+  const group = new THREE.Group()
+  group.add(new THREE.HemisphereLight(0xdfefff, 0x202634, 1.1))
+  group.add(new THREE.AmbientLight(0xffffff, 0.6))
+  const key = new THREE.DirectionalLight(0xffffff, 1.1)
+  key.position.set(5, 8, 6)
+  group.add(key)
+  return group
+}
+
+/**
+ * 把一个对象连同祖先的变换克隆出来。
+ * ⚠ 先清掉自己那一层的变换再叠世界矩阵：不清的话它自己那一份会被算两遍。
+ */
+function bakedClone(source: THREE.Object3D): THREE.Object3D {
+  const clone = source.clone()
+  clone.position.set(0, 0, 0)
+  clone.quaternion.identity()
+  clone.scale.set(1, 1, 1)
+  source.updateWorldMatrix(true, false)
+  clone.applyMatrix4(source.matrixWorld)
+  return clone
+}
+
+/** 把这一组对象搬到原点附近，免得相机得先飞很远才看得见。 */
+function centerAt(group: THREE.Group): THREE.Box3 {
+  const box = new THREE.Box3().setFromObject(group)
+  if (box.isEmpty()) return box
+  const center = box.getCenter(new THREE.Vector3())
+  group.position.sub(center)
+  return box.translate(center.clone().negate())
+}
+
+/**
+ * 造一块只装这个部件的预览。渲染器造不出来（无 WebGL）时给 null。
+ * @param options 宿主元素、要展示的对象与自转开关
+ */
+export function createPartPreview(
+  options: PartPreviewOptions,
+): PartPreview | null {
+  const renderer: SceneRenderer | null = (
+    options.renderer ?? createWebGLRenderer
+  )()
+  if (renderer === null) return null
+
+  const scene = new THREE.Scene()
+  const lighting = createLighting()
+  const stage = new THREE.Group()
+  for (const object of options.objects) stage.add(bakedClone(object))
+  const box = centerAt(stage)
+  scene.add(lighting, stage)
+
+  const camera = new THREE.PerspectiveCamera(PREVIEW_FOV_DEG, 1, MIN_NEAR, 1)
+  renderer.setPixelRatio(clampPixelRatio())
+  renderer.setClearColor(0x000000, 0)
+  const canvas = renderer.domElement
+  canvas.style.position = 'absolute'
+  canvas.style.inset = '0'
+  canvas.style.width = '100%'
+  canvas.style.height = '100%'
+  options.container.append(canvas)
+
+  const controls = new OrbitControls(camera, canvas)
+  controls.enableDamping = true
+  // 平移会把部件推出画面，而这块预览没有「回到中心」的入口
+  controls.enablePan = false
+
+  // ⚠ 不走 `applyCameraPose`：那一支要一整份 `SceneCore`，而这里只有相机与
+  //   控制器两样，为了对上形状去造一份假的内核比就地摆两行更容易出错
+  const framed = frameBoxPose(camera, box)
+  if (framed !== null) {
+    camera.position.set(...framed.pose.position)
+    controls.target.set(...framed.pose.target)
+    controls.update()
+  }
+
+  return makeHandle({
+    renderer,
+    scene,
+    camera,
+    controls,
+    canvas,
+    stage,
+    lighting,
+    span: framed?.span ?? 1,
+    autoRotate: options.autoRotate,
+  })
+}
+
+/** 造好之后能对外做的三件事：量尺寸、推一帧、释放。 */
+interface HandleParts {
+  renderer: SceneRenderer
+  scene: THREE.Scene
+  camera: THREE.PerspectiveCamera
+  controls: OrbitControls
+  canvas: HTMLCanvasElement
+  stage: THREE.Group
+  lighting: THREE.Group
+  /** 取景内容的体量，剪裁面按它给。 */
+  span: number
+  autoRotate: boolean
+}
+
+function makeHandle(parts: HandleParts): PartPreview {
+  const { renderer, scene, camera, controls, canvas, stage, lighting } = parts
+  return {
+    measure: (width, height) => {
+      // ⚠ 下限取 1：宿主被折叠时 height 是 0，aspect 变 Infinity 会让投影矩阵
+      //   整片 NaN，模型直接消失且控制台一声不吭
+      const w = Math.max(1, Math.floor(width))
+      const h = Math.max(1, Math.floor(height))
+      camera.aspect = w / h
+      camera.near = Math.max(parts.span * NEAR_RATIO, MIN_NEAR)
+      camera.far = parts.span * FAR_RATIO
+      camera.updateProjectionMatrix()
+      renderer.setSize(w, h)
+    },
+
+    frame: (deltaS) => {
+      if (parts.autoRotate) {
+        stage.rotation.y += THREE.MathUtils.degToRad(SPIN_DEG_PER_S) * deltaS
+      }
+      controls.update()
+      renderer.render(scene, camera)
+    },
+
+    dispose: () => {
+      controls.dispose()
+      // ⚠ 只收自己造的灯：几何与材质是与主场景共用的，在这里 dispose 会让
+      //   大屏上那个部件整块消失
+      lighting.traverse((node) => {
+        if (node instanceof THREE.Light) node.dispose()
+      })
+      scene.clear()
+      canvas.remove()
+      renderer.dispose()
+      renderer.forceContextLoss()
+    },
+  }
+}

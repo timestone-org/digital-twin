@@ -16,7 +16,7 @@ import {
   screenshotStamp,
   searchSceneEntities,
 } from '../src/sceneTools'
-import type { TwinFlowLink, TwinHierNode, TwinPart } from '../src/types'
+import type { TwinFlowLink, TwinPart } from '../src/types'
 
 function flowsOf(...kinds: string[]): TwinFlowLink[] {
   return normalizeTwinConfig({
@@ -220,10 +220,7 @@ describe('场景内搜索', () => {
       { id: 'p3', name: '风机', nodes: ['fan'] },
     ],
   }).parts
-  const hierNodes: TwinHierNode[] = normalizeTwinConfig({
-    hierNodes: [{ id: 'h1', name: '一号车间', nodes: ['ws1'] }],
-  }).hierNodes
-  const source = { parts, hierNodes, namedNodes: ['pump-01', 'valve'] }
+  const source = { parts, namedNodes: ['pump-01', 'valve'] }
 
   it('空搜索词给空结果，不把整份清单倒出来', () => {
     expect(searchSceneEntities('   ', source)).toEqual({ hits: [], total: 0 })
@@ -249,14 +246,14 @@ describe('场景内搜索', () => {
     expect(searchSceneEntities('PUMP', source).total).toBeGreaterThan(0)
   })
 
-  it('三类实体都搜得到，且各自带上定位用的节点名', () => {
+  it('两类实体都搜得到，且各自带上定位用的节点名', () => {
     const kinds = new Set(
       searchSceneEntities('p', source).hits.map((hit) => hit.kind),
     )
 
     expect(kinds.has('part')).toBe(true)
     expect(kinds.has('node')).toBe(true)
-    expect(searchSceneEntities('车间', source).hits[0]?.nodes).toEqual(['ws1'])
+    expect(searchSceneEntities('风机', source).hits[0]?.nodes).toEqual(['fan'])
   })
 
   // ⚠ 截断了要如实报数，否则用户以为搜到的就这些

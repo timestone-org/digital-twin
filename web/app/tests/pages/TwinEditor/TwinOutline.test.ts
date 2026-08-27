@@ -1,5 +1,5 @@
 /**
- * @fileoverview 大纲树的整树契约：场景区 + 七个实体分组（夹视图与散行）、搜索
+ * @fileoverview 大纲树的整树契约：场景区 + 六个实体分组（夹视图与散行）、搜索
  * （高亮/计数/不污染折叠态）、菜单动作分发、拖行入夹，以及删除的口径——有连带
  * 影响才就地二次确认，没有就直接删靠撤销兜底。
  * ⚠ 视点没有 visibility 所以那一行不许出显隐键，行序号恒为文档序（数组绑定按它对齐）。
@@ -114,15 +114,7 @@ describe('渲染', () => {
       wrapper
         .findAll('[data-test="outline-section"]')
         .map((item) => item.attributes('data-key')),
-    ).toEqual([
-      'parts',
-      'anchors',
-      'cameras',
-      'panels',
-      'arrows',
-      'flows',
-      'hierNodes',
-    ])
+    ).toEqual(['parts', 'anchors', 'cameras', 'panels', 'arrows', 'flows'])
     expect(
       wrapper
         .findAll('[data-test="outline-single"]')

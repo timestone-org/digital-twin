@@ -8,7 +8,11 @@ import { describe, expect, it } from 'vitest'
 import { TWIN_CONFIG_VERSION } from '../src/constants'
 import { normalizeTwinConfig } from '../src/normalize'
 import { NO_CLICK_LIMIT } from '../src/normalizeRules'
-import { DEFAULT_PART_LOOK } from '../src/normalizeParts'
+import {
+  DEFAULT_PART_CLICK,
+  DEFAULT_PART_DETAIL,
+  DEFAULT_PART_LOOK,
+} from '../src/normalizeParts'
 import {
   DEFAULT_ROAM_TOUR_IDLE_DELAY_MS,
   DEFAULT_ROAM_TOUR_PAUSE_MS,
@@ -129,7 +133,6 @@ describe('normalizeTwinConfig 的缺省', () => {
       panels: [],
       arrows: [],
       flows: [],
-      hierNodes: [],
       folders: [],
     })
   })
@@ -198,7 +201,8 @@ describe('normalizeTwinConfig 的实体', () => {
         look: DEFAULT_PART_LOOK,
         tint: null,
         clickDistance: NO_CLICK_LIMIT,
-        clickHierNode: '',
+        click: DEFAULT_PART_CLICK,
+        detail: DEFAULT_PART_DETAIL,
       },
       {
         id: 'p-fan',
@@ -209,7 +213,8 @@ describe('normalizeTwinConfig 的实体', () => {
         look: DEFAULT_PART_LOOK,
         tint: null,
         clickDistance: NO_CLICK_LIMIT,
-        clickHierNode: '',
+        click: DEFAULT_PART_CLICK,
+        detail: DEFAULT_PART_DETAIL,
       },
     ])
   })

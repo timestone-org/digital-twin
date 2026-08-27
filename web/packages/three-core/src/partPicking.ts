@@ -122,20 +122,25 @@ export interface TwinPartClick {
   partName: string
 }
 
-/** 一次视口点击落到了什么结果上。 */
+/**
+ * 一次视口点击落到了什么结果上。
+ * ⚠ 这里只判**落在远档还是近档**，两档各做什么由宿主按部件配置定：判定与动作
+ * 混在一处的话，「远距切视角、近距弹详情」这两条会各自长出一份距离口径。
+ */
 export type PartClickOutcome =
   | { kind: 'none' }
-  /** 太远，先把镜头拉到这个盒子上；这一下不算真点击。 */
-  | { kind: 'approach'; box: THREE.Box3 }
-  | ({ kind: 'click' } & TwinPartClick)
+  /** 落在远档：离得太远，这一下不算真点击。`box` 是这个部件的包围盒。 */
+  | { kind: 'far'; part: TwinPart; box: THREE.Box3 | null }
+  /** 落在近档：这是一次真点击。 */
+  | { kind: 'near'; part: TwinPart }
 
 const NOTHING: PartClickOutcome = { kind: 'none' }
 
 /**
  * 把一次松手判到底：算不算点击、命中哪个部件、这个距离允不允许点。
  *
- * ⚠ 判定收在这里而不是散在宿主组件里：宿主只负责把结果落成 emit 或移镜头，
- * 三条分支（挡掉 / 拉近 / 上抛）才不会在某次改动里少掉一条。
+ * ⚠ 判定收在这里而不是散在宿主组件里：宿主只负责把结果落成动作，
+ * 三条分支（挡掉 / 落远档 / 落近档）才不会在某次改动里少掉一条。
  *
  * @param event 松手事件
  * @param deps 视口元素、相机、模型根、部件层与取距离所需的取景状态
@@ -165,10 +170,9 @@ export function resolvePartClick(deps: {
   )
   if (gate === 'block') return NOTHING
   if (gate === 'approach') {
-    const box = deps.parts.boxOf(part.id)
-    return box === null ? NOTHING : { kind: 'approach', box }
+    return { kind: 'far', part, box: deps.parts.boxOf(part.id) }
   }
-  return { kind: 'click', partId: part.id, partName: part.name }
+  return { kind: 'near', part }
 }
 
 /** 判定要用到的部件层能力；收窄成接口，测试里给个假件就够。 */

@@ -17,7 +17,6 @@ function hosts(over: Partial<TwinFolderHosts> = {}): TwinFolderHosts {
     panels: [],
     arrows: [],
     flows: [],
-    hierNodes: [],
     ...over,
   }
 }

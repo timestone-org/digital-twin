@@ -4,15 +4,15 @@
  * ⚠ 三个监听必须成对装卸，且回调要具名——内联箭头的那个 `removeEventListener`
  * 摘不掉，每次挂载都会往元素上多留一个，表现是切几次大屏之后一次点击触发多回。
  */
+import type { TwinPart } from '@dt/twin-config'
+import type * as THREE from 'three'
 import { onBeforeUnmount, onMounted } from 'vue'
 
-import type { CameraFlight } from './cameraFlight'
 import { distanceContextOf } from './distanceContext'
 import {
   ClickGesture,
   resolvePartClick,
   type PartClickParts,
-  type TwinPartClick,
 } from './partPicking'
 import type { SceneCore } from './sceneCore'
 
@@ -23,20 +23,20 @@ export interface PartClickDeps {
   core: () => SceneCore | null
   /** 部件层；模型没加载时给 null。 */
   parts: () => PartClickParts | null
-  /** 通过了距离门禁的那一次点击。 */
-  onPartClick: (part: TwinPartClick) => void
+  /** 落在近档的那一次点击——这是一次真点击。 */
+  onNearClick: (part: TwinPart) => void
+  /** 落在远档：离得太远，还不算真点击。`box` 是这个部件的包围盒。 */
+  onFarClick: (part: TwinPart, box: THREE.Box3 | null) => void
   /**
    * 这一下被别的工具截走了吗（如两点测量）——返回 true 就不再判部件点击。
    * ⚠ 测量开着时还去触发部件联动的话，用户量个尺寸会顺手打开一个弹窗。
    */
   intercept?: (event: PointerEvent) => boolean
-  /** 相机飞行；「太远只拉近」那一下与切视点共用宿主的这一段。 */
-  flight: CameraFlight
 }
 
 /**
  * 装上部件点击。
- * @param deps 取视口、场景与部件层的四个口子
+ * @param deps 取视口、场景与部件层的口子，以及远近两档的回调
  */
 export function usePartClick(deps: PartClickDeps): void {
   const gesture = new ClickGesture()
@@ -65,14 +65,8 @@ export function usePartClick(deps: PartClickDeps): void {
       parts,
       context: distanceContextOf(core),
     })
-    // 太远：这一下只把镜头拉过去，不算真点击
-    if (outcome.kind === 'approach') deps.flight.flyToBox(core, outcome.box)
-    if (outcome.kind === 'click') {
-      deps.onPartClick({
-        partId: outcome.partId,
-        partName: outcome.partName,
-      })
-    }
+    if (outcome.kind === 'far') deps.onFarClick(outcome.part, outcome.box)
+    if (outcome.kind === 'near') deps.onNearClick(outcome.part)
   }
 
   onMounted(() => {

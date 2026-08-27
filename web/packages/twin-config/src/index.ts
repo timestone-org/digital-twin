@@ -6,17 +6,17 @@ export {
   TWIN_CONFIG_VERSION,
   TWIN_FLOW_BINDING_KEY,
   TWIN_FLOW_ROW_SLOTS,
-  TWIN_HIER_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
   TWIN_PART_BINDING_KEY,
+  TWIN_PART_FIELD_BINDING_KEY,
   TWIN_VALUE_ROW_SLOTS,
   TWIN_VIEW_BINDINGS,
   anchorRowFieldKey,
   arrayRowFieldKey,
   arrowRowFieldKey,
   flowRowFieldKey,
-  hierRowFieldKey,
   panelRowFieldKey,
+  partFieldRowFieldKey,
   partRowFieldKey,
 } from './constants'
 export type {
@@ -34,7 +34,7 @@ export {
   twinRowsOfEntity,
 } from './bindingRows'
 export type { TwinBindingRow } from './bindingRows'
-export { defaultCameraOf, isUsablePose } from './cameraSelect'
+export { defaultCameraOf, isUsablePose, partFocusView } from './cameraSelect'
 export {
   sameVec3,
   toFrameCoords,
@@ -79,18 +79,8 @@ export {
   panelKindUsesRange,
   panelKindUsesSeries,
 } from './panelGraph'
-export {
-  HIER_SUMMARY_FALLBACK_COUNT,
-  buildHierTree,
-  childrenOf,
-  flattenHierFields,
-  hierAncestors,
-  hierEffectiveNodes,
-  hierPathOf,
-  hierSummaryFields,
-} from './hierTree'
-export type { FlatHierField, TwinHierTreeNode } from './hierTree'
-export { normalizeHierNode } from './normalizeHier'
+export { detailPanelOf, flattenPartFields } from './partFields'
+export type { FlatPartField } from './partFields'
 export {
   finiteValue,
   normalizeColorSpec,
@@ -111,6 +101,7 @@ export {
   MAX_ROAM_TOUR_SEGMENT_MS,
   MIN_CAMERA_FOV,
   MIN_ROAM_TOUR_STOPS,
+  normalizeFocusView,
   normalizeRoamTour,
 } from './normalizeScene'
 export { applyRoamEasing, interpTwinPose } from './roamPose'
@@ -124,8 +115,12 @@ export {
 export type { TwinRoamPhase, TwinRoamSegment } from './roamTimeline'
 export { ALWAYS_VISIBLE, NO_CLICK_LIMIT } from './normalizeRules'
 export {
+  DEFAULT_PART_CLICK,
+  DEFAULT_PART_DETAIL,
   DEFAULT_PART_LOOK,
   DEFAULT_TINT_GRADIENT,
+  normalizePartClick,
+  normalizePartDetail,
   normalizePartLook,
   normalizePartTint,
 } from './normalizeParts'
@@ -148,6 +143,8 @@ export {
   TWIN_PANEL_ORIENTS,
   TWIN_PANEL_TONES,
   TWIN_PANEL_VARIANTS,
+  TWIN_PART_FAR_ACTIONS,
+  TWIN_PART_NEAR_ACTIONS,
   TWIN_PEDESTAL_REFLECTIONS,
   TWIN_TINT_MATCHES,
   TWIN_TINT_MODES,
@@ -171,14 +168,11 @@ export type {
   TwinFlowLink,
   TwinFlowValue,
   TwinFlowValues,
+  TwinFocusView,
   TwinFolderKind,
-  TwinHierNode,
-  TwinHierValue,
-  TwinHierValues,
   TwinLightColumn,
   TwinLightColumnMode,
   TwinLightColumnRise,
-  TwinModalView,
   TwinModelAnimations,
   TwinModelRef,
   TwinOutlineFolder,
@@ -195,8 +189,14 @@ export type {
   TwinPanelVariant,
   TwinPart,
   TwinPartAppearance,
+  TwinPartClick,
   TwinPartColor,
+  TwinPartDetail,
+  TwinPartFarAction,
+  TwinPartFieldValue,
+  TwinPartFieldValues,
   TwinPartLook,
+  TwinPartNearAction,
   TwinPartTint,
   TwinPartValue,
   TwinPartValues,
@@ -220,8 +220,8 @@ export {
   EMPTY_ANCHOR_VALUES,
   EMPTY_ARROW_VALUES,
   EMPTY_FLOW_VALUES,
-  EMPTY_HIER_VALUES,
   EMPTY_PANEL_VALUES,
+  EMPTY_PART_FIELD_VALUES,
   EMPTY_PART_VALUES,
   formatAnchorText,
   formatArrowText,
@@ -229,8 +229,8 @@ export {
   stitchAnchorValues,
   stitchArrowValues,
   stitchFlowValues,
-  stitchHierValues,
   stitchPanelValues,
+  stitchPartFieldValues,
   stitchPartValues,
 } from './twinMath'
 export type { ValueFormat } from './twinMath'

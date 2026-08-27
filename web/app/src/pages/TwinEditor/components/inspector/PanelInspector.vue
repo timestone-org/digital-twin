@@ -11,12 +11,10 @@ import type { GizmoMode } from '@dt/three-core'
 import {
   TWIN_BILLBOARD_MODES,
   TWIN_PANEL_ORIENTS,
-  TWIN_PANEL_VARIANTS,
   type TwinAnchor,
   type TwinBillboardMode,
   type TwinPanel,
   type TwinPanelOrient,
-  type TwinPanelVariant,
 } from '@dt/twin-config'
 import {
   DtButton,
@@ -28,6 +26,7 @@ import {
 } from '@dt/ui'
 import { computed } from 'vue'
 
+import { PANEL_VARIANT_OPTIONS } from '../../scripts/panelVariants'
 import InspectorSection from '../fields/InspectorSection.vue'
 import PanelStyleFields from './PanelStyleFields.vue'
 import PanelFieldList from '../fields/PanelFieldList.vue'
@@ -65,16 +64,6 @@ function writeGizmoMode(next: string): void {
   if (found !== undefined) emit('update:gizmoMode', found.value)
 }
 
-const VARIANT_LABELS: Readonly<Record<TwinPanelVariant, string>> = {
-  card: '卡片',
-  hud: '战术 HUD',
-  glass: '玻璃',
-  bracket: '角标',
-  tag: '标牌',
-  precision: '精密切角',
-  forge: '熔铸导轨',
-  matrix: '信号矩阵',
-}
 const ORIENT_LABELS: Readonly<Record<TwinPanelOrient, string>> = {
   center: '居中（不画引线）',
   top: '上方',
@@ -86,10 +75,6 @@ const ORIENT_LABELS: Readonly<Record<TwinPanelOrient, string>> = {
 /** 关掉自适应时给的初始宽度。 */
 const FIXED_WIDTH = 240
 
-const variantOptions = TWIN_PANEL_VARIANTS.map((value) => ({
-  value,
-  label: VARIANT_LABELS[value],
-}))
 const BILLBOARD_LABELS: Readonly<Record<TwinBillboardMode, string>> = {
   face: '始终朝相机',
   horizontal: '只水平跟随',
@@ -260,7 +245,7 @@ function togglePick(): void {
 
     <PanelStyleFields
       :model-value="modelValue.style"
-      :variant-options="variantOptions"
+      :variant-options="PANEL_VARIANT_OPTIONS"
       :orient-options="orientOptions"
       :fixed-width="FIXED_WIDTH"
       @update:model-value="write({ style: $event })"

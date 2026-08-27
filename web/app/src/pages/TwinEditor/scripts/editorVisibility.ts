@@ -7,7 +7,7 @@ import type { TwinConfig, TwinVisibilityRule } from '@dt/twin-config'
 import type { TwinEntityKind } from './types'
 
 /** 有显隐规则、也能在编辑视口临时隐藏的五类实体。 */
-type EditorVisibleKind = Exclude<TwinEntityKind, 'cameras' | 'hierNodes'>
+type EditorVisibleKind = Exclude<TwinEntityKind, 'cameras'>
 
 export interface EditorVisibilityTarget {
   kind: TwinEntityKind

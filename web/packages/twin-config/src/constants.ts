@@ -24,8 +24,8 @@ export const TWIN_PANEL_BINDING_KEY = 'panelValues'
 export const TWIN_ARROW_BINDING_KEY = 'arrowValues'
 /** 能量流读数的数组绑定槽键。 */
 export const TWIN_FLOW_BINDING_KEY = 'flowValues'
-/** 层级钻取字段读数的数组绑定槽键。 */
-export const TWIN_HIER_BINDING_KEY = 'hierValues'
+/** 部件详情字段读数的数组绑定槽键。 */
+export const TWIN_PART_FIELD_BINDING_KEY = 'partFieldValues'
 
 /** 只有一个数值的那三类元素共用这一份子槽。 */
 export const TWIN_VALUE_ROW_SLOTS = ['value'] as const
@@ -87,9 +87,9 @@ export function flowRowFieldKey(index: number, sub: TwinFlowRowSlot): string {
   return arrayRowFieldKey(TWIN_FLOW_BINDING_KEY, index, sub)
 }
 
-/** 扁平化后第 index 个钻取节点字段的 fieldKey。 */
-export function hierRowFieldKey(index: number): string {
-  return arrayRowFieldKey(TWIN_HIER_BINDING_KEY, index, 'value')
+/** 扁平化后第 index 个部件详情字段的 fieldKey。 */
+export function partFieldRowFieldKey(index: number): string {
+  return arrayRowFieldKey(TWIN_PART_FIELD_BINDING_KEY, index, 'value')
 }
 
 /**
@@ -145,8 +145,8 @@ export const TWIN_VIEW_BINDINGS: readonly BindingSpec[] = [
     ],
   },
   {
-    key: TWIN_HIER_BINDING_KEY,
-    label: '钻取节点字段',
+    key: TWIN_PART_FIELD_BINDING_KEY,
+    label: '部件详情字段',
     dataType: 'number',
     isArray: true,
     isEntityPinned: true,

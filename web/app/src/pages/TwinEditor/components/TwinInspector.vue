@@ -13,7 +13,6 @@ import type {
   TwinCamera,
   TwinConfig,
   TwinFlowLink,
-  TwinHierNode,
   TwinModelRef,
   TwinPanel,
   TwinPart,
@@ -23,6 +22,7 @@ import type {
 } from '@dt/twin-config'
 import {
   TWIN_PART_BINDING_KEY,
+  flattenPartFields,
   partRowFieldKey,
   twinRowsOfEntity,
 } from '@dt/twin-config'
@@ -37,7 +37,6 @@ import AnchorInspector from './inspector/AnchorInspector.vue'
 import ArrowInspector from './inspector/ArrowInspector.vue'
 import CameraInspector from './inspector/CameraInspector.vue'
 import FlowInspector from './inspector/FlowInspector.vue'
-import HierNodeInspector from './inspector/HierNodeInspector.vue'
 import ModelInspector from './inspector/ModelInspector.vue'
 import PanelInspector from './inspector/PanelInspector.vue'
 import PartInspector from './inspector/PartInspector.vue'
@@ -65,7 +64,7 @@ const emit = defineEmits<{
   requestPick: ['node' | 'position']
   cancelPick: []
   captureCamera: [string]
-  captureHierView: [string]
+  capturePartView: [string]
   previewRoam: []
   stopRoamPreview: []
   'update:gizmoMode': [GizmoMode]
@@ -104,6 +103,18 @@ const partTintBound = computed(() => {
   )
 })
 
+/**
+ * 这个部件之前已有多少行摊平的详情字段，字段列表按它标行号。
+ * ⚠ 数的是**摊平后**的行：按部件下标数会让多字段的部件之后整体错位。
+ */
+const partFieldRowOffset = computed(() => {
+  const current = part.value
+  if (current === null) return 0
+  return flattenPartFields(props.config.parts).findIndex(
+    (entry) => entry.partId === current.id,
+  )
+})
+
 const anchor = computed(
   () =>
     props.config.anchors.find((item) => item.id === selectedId.value) ?? null,
@@ -123,11 +134,6 @@ const arrow = computed(
 const flow = computed(
   () => props.config.flows.find((item) => item.id === selectedId.value) ?? null,
 )
-const hierNode = computed(
-  () =>
-    props.config.hierNodes.find((item) => item.id === selectedId.value) ?? null,
-)
-
 /** 按 id 换掉数组里的一项，整份数组重建。 */
 function replaced<T extends { id: string }>(
   list: readonly T[],
@@ -163,9 +169,6 @@ function writeArrow(next: TwinArrow): void {
 function writeFlow(next: TwinFlowLink): void {
   emit('patch', { flows: [...replaced(props.config.flows, next)] })
 }
-function writeHierNode(next: TwinHierNode): void {
-  emit('patch', { hierNodes: [...replaced(props.config.hierNodes, next)] })
-}
 </script>
 
 <template>
@@ -195,12 +198,14 @@ function writeHierNode(next: TwinHierNode): void {
       v-else-if="part !== null"
       :model-value="part"
       :node-names="modelNodes"
-      :hier-nodes="config.hierNodes"
+      :cameras="config.cameras"
+      :field-row-offset="partFieldRowOffset"
       :picking="picking"
       :tint-bound="partTintBound"
       @update:model-value="writePart"
       @request-pick-node="emit('requestPick', 'node')"
       @cancel-pick="emit('cancelPick')"
+      @capture-view="emit('capturePartView', part.id)"
     />
     <AnchorInspector
       v-else-if="anchor !== null"
@@ -246,18 +251,6 @@ function writeHierNode(next: TwinHierNode): void {
       :model-value="flow"
       :anchors="config.anchors"
       @update:model-value="writeFlow"
-    />
-    <HierNodeInspector
-      v-else-if="hierNode !== null"
-      :model-value="hierNode"
-      :nodes="config.hierNodes"
-      :cameras="config.cameras"
-      :node-names="modelNodes"
-      :picking="picking"
-      @update:model-value="writeHierNode"
-      @request-pick-node="emit('requestPick', 'node')"
-      @cancel-pick="emit('cancelPick')"
-      @capture-view="emit('captureHierView', $event)"
     />
     <DtEmpty v-else title="选中的东西已经不在了" />
   </div>

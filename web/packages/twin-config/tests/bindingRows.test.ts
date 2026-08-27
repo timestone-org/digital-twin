@@ -103,7 +103,7 @@ describe('绑定行的推导', () => {
 })
 
 describe('每个槽应有几行', () => {
-  it('按实体数给，信息牌与钻取节点按扁平化后的字段数', () => {
+  it('按实体数给，信息牌与部件详情按扁平化后的字段数', () => {
     const counts = twinRowCounts(
       normalizeTwinConfig({
         anchors: [{ id: 'a1' }, { id: 'a2' }],
@@ -127,7 +127,7 @@ describe('每个槽应有几行', () => {
       panelValues: 0,
       arrowValues: 0,
       flowValues: 0,
-      hierValues: 0,
+      partFieldValues: 0,
     })
   })
 
@@ -427,7 +427,8 @@ describe('某个实体占了哪几行', () => {
     expect(twinRowsOfEntity(MANY, 'cameras', 'whatever')).toBeNull()
   })
 
-  // 部件只有配了状态染色才取数；没配的给空表，说的是「这个部件没有可绑的字段」
+  // 部件占两个槽：染色一行，详情字段每个字段一行。没配的给空表，说的是
+  // 「这个部件没有可绑的字段」
   it('没配染色的部件给一张空表，配了的才有行', () => {
     const mixed = normalizeTwinConfig({
       parts: [{ id: 'plain' }, { id: 'tinted', tint: { mode: 'stops' } }],
@@ -435,9 +436,11 @@ describe('某个实体占了哪几行', () => {
 
     expect(twinRowsOfEntity(mixed, 'parts', 'plain')).toEqual({
       partValues: [],
+      partFieldValues: [],
     })
     expect(twinRowsOfEntity(mixed, 'parts', 'tinted')).toEqual({
       partValues: [0],
+      partFieldValues: [],
     })
   })
 

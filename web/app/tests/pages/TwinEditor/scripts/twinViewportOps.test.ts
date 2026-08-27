@@ -22,8 +22,7 @@ import {
 } from '@/pages/TwinEditor/scripts/types'
 
 const CONFIG = normalizeTwinConfig({
-  parts: [{ id: 'part-1', nodes: ['pump'] }],
-  hierNodes: [{ id: 'h1' }],
+  parts: [{ id: 'part-1', nodes: ['pump'], click: { near: 'detail' } }],
   cameras: [{ id: 'c1' }],
 })
 
@@ -231,16 +230,33 @@ describe('取当前机位', () => {
     })
   })
 
-  it('存进钻取节点的取景快照', () => {
+  it('存进部件的取景快照', () => {
     const { ops, patchConfig } = setup()
 
-    ops.captureHierView('h1')
+    ops.capturePartView('part-1')
 
     expect(patchConfig).toHaveBeenCalledWith({
-      hierNodes: [
+      parts: [
         expect.objectContaining({
-          id: 'h1',
-          view: expect.objectContaining({ fov: 50 }),
+          id: 'part-1',
+          click: expect.objectContaining({
+            view: expect.objectContaining({ fov: 50 }),
+          }),
+        }),
+      ],
+    })
+  })
+
+  // ⚠ 只发一个 view 会把远近两档的动作抹成缺省
+  it('存取景不动这个部件已经配好的两档动作', () => {
+    const { ops, patchConfig } = setup()
+
+    ops.capturePartView('part-1')
+
+    expect(patchConfig).toHaveBeenCalledWith({
+      parts: [
+        expect.objectContaining({
+          click: expect.objectContaining({ near: 'detail' }),
         }),
       ],
     })
