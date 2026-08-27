@@ -2,6 +2,8 @@
  * @fileoverview 守快照登记处的契约：按根筛快照源、注销即消失、
  * 内核快照「先画一帧再拷」、任何一步失败给 null 而不是抛——
  * 截图方靠最后这条保证整张截图不因一块 3D 跟着失败。
+ * 替身那条守的是「截图不留痕」——替身留在 DOM 里的话，
+ * 画面上会多出一张不再更新的假画布。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -11,6 +13,7 @@ import {
   registerCoreSnapshot,
   registerGlSnapshot,
   snapshotSceneCore,
+  withGlSubstitutes,
 } from '../src/glCapture'
 import { createSceneCore, disposeScene, type SceneCore } from '../src/sceneCore'
 import { createHeadlessRenderer } from '../src/testing/createHeadlessRenderer'
@@ -115,6 +118,77 @@ describe('内核快照', () => {
 
     expect(snapshotSceneCore(core)).toBeNull()
     disposeScene(core)
+  })
+})
+
+describe('WebGL 替身', () => {
+  /** 往根下挂一张带内联样式的 WebGL 画布，登记成快照源。 */
+  function glHostIn(
+    root: HTMLElement,
+    snapshot: () => HTMLCanvasElement | null,
+  ): HTMLCanvasElement {
+    const host = document.createElement('canvas')
+    host.style.cssText = 'position: absolute; inset: 0px; width: 100%;'
+    root.append(host)
+    registerGlSnapshot({ host, snapshot })
+    return host
+  }
+
+  it('替身照抄本体的内联样式，跑完恢复原状', async () => {
+    const root = document.createElement('div')
+    const copy = document.createElement('canvas')
+    const host = glHostIn(root, () => copy)
+
+    await withGlSubstitutes(root, () => {
+      // 此刻替身顶着 WebGL 画布：本体隐身、替身是它的下一个兄弟
+      expect(host.style.visibility).toBe('hidden')
+      expect(host.nextSibling).toBe(copy)
+      expect(copy.style.position).toBe('absolute')
+      expect(copy.style.width).toBe('100%')
+      return Promise.resolve('ok')
+    })
+
+    expect(root.contains(copy)).toBe(false)
+    expect(host.style.visibility).toBe('')
+  })
+
+  it('run 抛出时也把替身摘掉、本体放回来', async () => {
+    const root = document.createElement('div')
+    const copy = document.createElement('canvas')
+    const host = glHostIn(root, () => copy)
+
+    await expect(
+      withGlSubstitutes(root, () => Promise.reject(new Error('boom'))),
+    ).rejects.toThrow(/boom/)
+
+    expect(root.contains(copy)).toBe(false)
+    expect(host.style.visibility).toBe('')
+  })
+
+  it('快照给 null 的那一处保持原状，不隐藏本体', async () => {
+    const root = document.createElement('div')
+    const host = glHostIn(root, () => null)
+
+    await withGlSubstitutes(root, () => {
+      // 宁可这一块空白，也不能让整张截图失败
+      expect(host.style.visibility).toBe('')
+      expect(root.children).toHaveLength(1)
+      return Promise.resolve('ok')
+    })
+
+    expect(root.children).toHaveLength(1)
+  })
+
+  it('根之外的快照源一概不碰', async () => {
+    const elsewhere = document.createElement('div')
+    const copy = document.createElement('canvas')
+    const host = glHostIn(elsewhere, () => copy)
+
+    await withGlSubstitutes(document.createElement('div'), () => {
+      expect(host.style.visibility).toBe('')
+      expect(elsewhere.contains(copy)).toBe(false)
+      return Promise.resolve('ok')
+    })
   })
 })
 

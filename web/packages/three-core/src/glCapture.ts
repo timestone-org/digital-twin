@@ -1,6 +1,8 @@
 /**
  * @fileoverview WebGL 画布的快照登记处：DOM 截图方按根元素找到活着的场景，
  * 让每个场景当场出一张能被 `toDataURL` 读走的 2D 替身。
+ * `withGlSubstitutes` 是截图方的统一入口——截图期间用替身顶掉 WebGL canvas，
+ * 截完恢复；助手截图与保存缩略图共用这一份。
  */
 import type { Camera, Object3D } from 'three'
 
@@ -48,6 +50,51 @@ export function glSnapshotsWithin(
   root: HTMLElement,
 ): readonly GlSnapshotSource[] {
   return [...sources].filter((one) => root.contains(one.host))
+}
+
+/** 一处已插进 DOM 的替身，恢复时要还的三样。 */
+interface PlacedSubstitute {
+  host: HTMLElement
+  substitute: HTMLCanvasElement
+  /** host 原来的内联 visibility；恢复时原样放回。 */
+  visibility: string
+}
+
+/**
+ * 对 root 下每处登记过的 WebGL 画布取快照并插替身，跑完 run 再恢复原状。
+ * 替身照抄 WebGL canvas 的内联样式（它们是 absolute + inset:0 铺满宿主），
+ * 插成相邻兄弟；原 canvas 只临时隐藏，不动它的位置与内容。
+ * 某一处快照失败（上下文丢了 / 被污染）就让那一块保持原状，不让整张截图失败。
+ * @param root 截图的根元素
+ * @param run 在替身就位期间要跑的截图动作
+ */
+export async function withGlSubstitutes<T>(
+  root: HTMLElement,
+  run: () => Promise<T>,
+): Promise<T> {
+  const placed: PlacedSubstitute[] = []
+  for (const source of glSnapshotsWithin(root)) {
+    const parent = source.host.parentElement
+    if (parent === null) continue
+    const substitute = source.snapshot()
+    if (substitute === null) continue
+    substitute.style.cssText = source.host.style.cssText
+    parent.insertBefore(substitute, source.host.nextSibling)
+    placed.push({
+      host: source.host,
+      substitute,
+      visibility: source.host.style.visibility,
+    })
+    source.host.style.visibility = 'hidden'
+  }
+  try {
+    return await run()
+  } finally {
+    for (const one of placed) {
+      one.substitute.remove()
+      one.host.style.visibility = one.visibility
+    }
+  }
 }
 
 /**

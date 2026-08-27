@@ -4,7 +4,11 @@
  * 样式原样复制过去——不把它打成 none，画出来的就是「内容缩在左上角、四周一大片空」。
  * ⚠ 截图是锦上添花：任何失败都只能返回 false，不许把保存流程带挂。
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  __resetGlSnapshots,
+  registerGlSnapshot,
+} from '@dt/three-core/glCapture'
 
 const toPng =
   vi.fn<
@@ -40,6 +44,10 @@ beforeEach(() => {
   saveDashboardThumbnail.mockResolvedValue()
 })
 
+afterEach(() => {
+  __resetGlSnapshots()
+})
+
 describe('captureThumbnail', () => {
   it('⚠ 把舞台的缩放打成 none：留着它内容只占画面左上角一小块', async () => {
     await captureThumbnail('d1', stageEl())
@@ -70,6 +78,26 @@ describe('captureThumbnail', () => {
   it('量不到宽度时跳过：pixelRatio 会算成除零', async () => {
     expect(await captureThumbnail('d1', stageEl(0))).toBe(false)
     expect(toPng).not.toHaveBeenCalled()
+  })
+
+  it('⚠ 开拍那一刻 WebGL 替身已就位：直接截 3D 画布出来是空白', async () => {
+    const stage = stageEl()
+    const host = document.createElement('canvas')
+    stage.append(host)
+    const copy = document.createElement('canvas')
+    registerGlSnapshot({ host, snapshot: () => copy })
+    toPng.mockImplementation(() => {
+      // 此刻替身顶着 WebGL 画布：本体隐身、替身是它的下一个兄弟
+      expect(host.style.visibility).toBe('hidden')
+      expect(host.nextSibling).toBe(copy)
+      return Promise.resolve('data:image/png;base64,AA')
+    })
+
+    expect(await captureThumbnail('d1', stage)).toBe(true)
+
+    expect(toPng).toHaveBeenCalledTimes(1)
+    expect(stage.contains(copy)).toBe(false)
+    expect(host.style.visibility).toBe('')
   })
 
   it('⚠ 截图失败只返回 false：让一个装饰把保存流程弄挂才是灾难', async () => {

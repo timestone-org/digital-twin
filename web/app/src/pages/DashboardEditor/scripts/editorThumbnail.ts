@@ -2,7 +2,10 @@
  * @fileoverview 保存后的缩略图截取：把画布舞台渲染成 dataUrl 交给缩略图接口。
  * ⚠ best-effort：截图失败或超时**不算保存失败**——缩略图是锦上添花，
  * 让它挡保存等于让一个装饰把主流程弄挂。
+ * ⚠ 三维区域（WebGL canvas）截图库直接读不到，孪生模块会截成空白——
+ * 走 `withGlSubstitutes` 的快照替身（见 `@dt/three-core/glCapture`）。
  */
+import { withGlSubstitutes } from '@dt/three-core/glCapture'
 import { toPng } from 'html-to-image'
 
 import { saveDashboardThumbnail } from '@/api/dashboardThumbnail'
@@ -45,14 +48,16 @@ export async function captureThumbnail(
   if (width === 0) return false
   try {
     const dataUrl = await withTimeout(
-      toPng(stage, {
-        pixelRatio: CAPTURE_WIDTH_PX / width,
-        cacheBust: true,
-        // ⚠ 舞台身上带着编辑器此刻的缩放，而截图库克隆节点时把计算样式原样复制
-        // 过去——留着它，画布仍是设计尺寸而内容只画在左上角那一小块，四周全是空。
-        // 缩到 640 宽这件事由 pixelRatio 一个人负责。
-        style: { transform: 'none' },
-      }),
+      withGlSubstitutes(stage, () =>
+        toPng(stage, {
+          pixelRatio: CAPTURE_WIDTH_PX / width,
+          cacheBust: true,
+          // ⚠ 舞台身上带着编辑器此刻的缩放，而截图库克隆节点时把计算样式原样复制
+          // 过去——留着它，画布仍是设计尺寸而内容只画在左上角那一小块，四周全是空。
+          // 缩到 640 宽这件事由 pixelRatio 一个人负责。
+          style: { transform: 'none' },
+        }),
+      ),
       CAPTURE_TIMEOUT_MS,
     )
     await saveDashboardThumbnail(dashboardId, dataUrl)
