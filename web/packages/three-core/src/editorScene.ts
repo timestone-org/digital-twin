@@ -266,17 +266,19 @@ export class EditorScene {
   }
 
   /**
-   * 换一份配置；只有模型引用变了才重新装载。
+   * 换一份配置；只有模型引用或压缩档变了才重新装载。
    * @param config 归一化后的孪生配置
    */
   setConfig(config: TwinConfig): void {
     if (config === this.config) return
-    const changedAsset = config.model.asset !== this.config.model.asset
+    const changedModel =
+      config.model.asset !== this.config.model.asset ||
+      config.model.variant !== this.config.model.variant
     this.config = config
     // ⚠ 无论换不换模型都先刷一遍：换模型那条路上装载可能失败，只等 `mountModel`
     // 去刷的话，覆盖层与拾取标记会一直停在上一份配置上
     this.refresh()
-    if (changedAsset) void this.load()
+    if (changedModel) void this.load()
   }
 
   /**
@@ -704,7 +706,7 @@ export class EditorScene {
       this.on.status('empty', '')
       return
     }
-    const url = resolveTwinModelUrl(asset)
+    const url = resolveTwinModelUrl(asset, this.config.model.variant)
     if (url === '') {
       this.fail('模型地址解析失败：素材引用无效或宿主未注入')
       return

@@ -322,6 +322,50 @@ describe('模型装载', () => {
     expect(harness.events.cameraChange).toHaveBeenCalled()
   })
 
+  it('装载用配置里选的压缩档解析地址，不恒取原件', async () => {
+    configureTwinModelHost({
+      resolveModelUrl: (ref, variant) => `/assets/${ref}/${variant}.glb`,
+    })
+    const source = {
+      loadAsync: vi.fn(() => Promise.resolve({ scene: fakeModel() })),
+    }
+    createScene(
+      twinConfig({ model: { asset: ASSET, variant: 'medium' } }),
+      source,
+    )
+    await flushPromises()
+
+    expect(source.loadAsync).toHaveBeenCalledWith(
+      `/assets/${ASSET}/medium.glb`,
+      expect.any(Function),
+    )
+  })
+
+  it('只换压缩档也会重新装载，用的是新档位的地址', async () => {
+    configureTwinModelHost({
+      resolveModelUrl: (ref, variant) => `/assets/${ref}/${variant}.glb`,
+    })
+    const source = {
+      loadAsync: vi.fn(() => Promise.resolve({ scene: fakeModel() })),
+    }
+    const harness = createScene(
+      twinConfig({ model: { asset: ASSET, variant: 'original' } }),
+      source,
+    )
+    await flushPromises()
+
+    harness.scene.setConfig(
+      twinConfig({ model: { asset: ASSET, variant: 'low' } }),
+    )
+    await flushPromises()
+
+    expect(source.loadAsync).toHaveBeenCalledTimes(2)
+    expect(source.loadAsync).toHaveBeenLastCalledWith(
+      `/assets/${ASSET}/low.glb`,
+      expect.any(Function),
+    )
+  })
+
   it('慢的那次装载后返回时结果被丢弃，它的 GPU 资源一并释放', async () => {
     const slow = deferred()
     const fast = deferred()
