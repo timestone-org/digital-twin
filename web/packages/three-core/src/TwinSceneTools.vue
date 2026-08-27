@@ -20,7 +20,6 @@ const { query, clipAxis, clipRatio, legendOpen } = tools
 
 const KIND_LABELS: Readonly<Record<TwinSearchHit['kind'], string>> = {
   part: '部件',
-  hier: '层级',
   node: '节点',
 }
 

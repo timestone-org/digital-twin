@@ -4,10 +4,10 @@
  * ⚠ 本包看不见模型：模型换了或节点改了名，部件就静默地什么都不再命中，
  * 界面上不标出来的话，用户看到的只是「配了但没反应」。
  * 另锁住：候选拿不到时不许把手填的名字判成缺失（那是「还不知道」不是「不存在」），
- * 以及两段式点击的语义必须写在旁边。
+ * 以及远近两档点击的语义必须写在旁边。
  */
 import { normalizeTwinConfig } from '@dt/twin-config'
-import type { TwinHierNode, TwinPart } from '@dt/twin-config'
+import type { TwinCamera, TwinPart } from '@dt/twin-config'
 import { DtSelect, DtSlider } from '@dt/ui'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
@@ -26,10 +26,17 @@ function mountPart(
   modelValue: TwinPart = makePart(),
   nodeNames: readonly string[] = ['Cube', 'Pump_01'],
   picking = false,
-  hierNodes: readonly TwinHierNode[] = [],
+  cameras: readonly TwinCamera[] = [],
 ) {
   return mount(PartInspector, {
-    props: { modelValue, nodeNames, picking, hierNodes, tintBound: false },
+    props: {
+      modelValue,
+      nodeNames,
+      picking,
+      cameras,
+      fieldRowOffset: 0,
+      tintBound: false,
+    },
   })
 }
 
@@ -110,16 +117,6 @@ describe('关联节点', () => {
     expect(wrapper.text()).not.toContain('在当前模型里没找到')
     expect(wrapper.text()).toContain('模型还没加载')
   })
-
-  it('一个钻取节点都没有时给行内空态：单行、不带图标', () => {
-    const wrapper = mountPart()
-
-    const empty = wrapper
-      .findAll('.dt-empty--inline')
-      .find((item) => item.text().includes('还没有钻取节点'))
-    if (!empty) throw new Error('没有钻取节点的行内空态')
-    expect(empty.find('svg').exists()).toBe(false)
-  })
 })
 
 describe('从视口拾取', () => {
@@ -148,19 +145,13 @@ describe('从视口拾取', () => {
 })
 
 describe('点击距离', () => {
-  it('把两段式点击的语义写在旁边', () => {
-    const wrapper = mountPart()
-
-    expect(wrapper.text()).toContain('第一次点击只是把镜头拉近')
-  })
-
   it('三条阈值各自可以整条不配', () => {
     const wrapper = mountPart()
 
     for (const label of [
       '近于此距离不响应',
       '远于此距离不响应',
-      '两段式点击分界',
+      '远近两档的分界',
     ]) {
       expect(
         wrapper.find(`button[role="switch"][aria-label="${label}"]`).exists(),
@@ -172,13 +163,24 @@ describe('点击距离', () => {
     const wrapper = mountPart()
 
     await wrapper
-      .find('button[role="switch"][aria-label="两段式点击分界"]')
+      .find('button[role="switch"][aria-label="远近两档的分界"]')
       .trigger('click')
 
     const next = lastPart(wrapper)
     expect(next.clickDistance.farThreshold).not.toBeNull()
     expect(next.clickDistance.min).toBeNull()
     expect(next.clickDistance.max).toBeNull()
+  })
+
+  // ⚠ 阈值与动作分开写回时，改一个会把另一个抹成缺省
+  it('改阈值不动两档动作', async () => {
+    const wrapper = mountPart(makePart({ click: { near: 'detail' } }))
+
+    await wrapper
+      .find('button[role="switch"][aria-label="远近两档的分界"]')
+      .trigger('click')
+
+    expect(lastPart(wrapper).click.near).toBe('detail')
   })
 })
 

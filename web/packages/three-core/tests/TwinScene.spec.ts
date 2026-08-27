@@ -277,7 +277,7 @@ describe('实时值', () => {
     })
     await flushPromises()
 
-    await wrapper.setProps({ anchorValues: { a1: { value: 36.456 } } })
+    await wrapper.setProps({ values: { anchors: { a1: { value: 36.456 } } } })
     await flushPromises()
 
     await vi.waitFor(() => {
@@ -321,7 +321,7 @@ describe('箭头与信息牌', () => {
     })
     await flushPromises()
 
-    await wrapper.setProps({ arrowValues: { ar1: { value: 12 } } })
+    await wrapper.setProps({ values: { arrows: { ar1: { value: 12 } } } })
     await flushPromises()
 
     expect(document.body.textContent).toContain('进气 12 m/s')
@@ -340,7 +340,9 @@ describe('箭头与信息牌', () => {
     })
     await flushPromises()
 
-    await wrapper.setProps({ panelValues: { 'p1::temp': { value: 36 } } })
+    await wrapper.setProps({
+      values: { panels: { 'p1::temp': { value: 36 } } },
+    })
     await flushPromises()
 
     expect(document.body.textContent).toContain('36')
@@ -606,7 +608,7 @@ describe('部件点击', () => {
   })
 })
 
-describe('钻取取景', () => {
+describe('外部取景', () => {
   /** 相机是渲染器记账里的那一台；场景核心本身不外露。 */
   function cameraOf(): THREE.PerspectiveCamera {
     const last = renderer.renders[renderer.renders.length - 1]?.camera
@@ -921,6 +923,181 @@ describe('模型内置动画', () => {
     await flushPromises()
 
     expect(wrapper.text()).not.toContain('模型加载失败')
+    wrapper.unmount()
+  })
+})
+
+describe('远近两档的点击动作', () => {
+  /** 相机是渲染器记账里的那一台；场景核心本身不外露。 */
+  function cameraOf(): THREE.PerspectiveCamera {
+    const last = renderer.renders[renderer.renders.length - 1]?.camera
+    if (!(last instanceof THREE.PerspectiveCamera)) {
+      throw new Error('还没有渲染过一帧')
+    }
+    return last
+  }
+
+  /**
+   * ⚠ 取的是这一次挂载自己的根元素，不是文档里第一个 `.twin-scene`：
+   * 前面的用例留在文档上的旧视口会把点击喂给一个早就卸载的场景。
+   */
+  async function scene(
+    part: Record<string, unknown>,
+    rest: Record<string, unknown> = {},
+  ) {
+    const wrapper = mountScene({
+      config: config({
+        parts: [{ id: 'part-pump', name: '泵', nodes: ['pump'], ...part }],
+        ...rest,
+      }),
+    })
+    await flushPromises()
+    const element = wrapper.element as HTMLElement
+    element.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 100, height: 100 }) as DOMRect
+    return { wrapper, element }
+  }
+
+  function clickPart(element: HTMLElement): void {
+    press(element, 50, 50)
+    release(element, 50, 50)
+  }
+
+  /** ⚠ 弹窗 Teleport 到 body，`wrapper.find` 看不见它。 */
+  function modal(): HTMLElement | null {
+    return document.querySelector<HTMLElement>('[data-test="part-modal-data"]')
+  }
+
+  function closeModal(): void {
+    document
+      .querySelector<HTMLElement>('.dt-modal button[aria-label="关闭"]')
+      ?.click()
+  }
+
+  it('近距点击配了弹详情时弹出弹窗', async () => {
+    const { wrapper, element } = await scene({
+      click: { near: 'detail' },
+      detail: { fields: [{ key: 'temp', label: '出水温度' }] },
+    })
+
+    clickPart(element)
+    await flushPromises()
+
+    expect(modal()?.textContent).toContain('出水温度')
+    wrapper.unmount()
+  })
+
+  it('弹窗标题空着退回部件名', async () => {
+    const { wrapper, element } = await scene({ click: { near: 'detail' } })
+
+    clickPart(element)
+    await flushPromises()
+
+    expect(document.querySelector('.dt-modal__title')?.textContent).toBe('泵')
+    wrapper.unmount()
+  })
+
+  // ⚠ 缺省就弹窗的话，一份还没配过详情字段的配置每点一下部件都会弹出空弹窗
+  it('近距动作缺省不弹窗', async () => {
+    const { wrapper, element } = await scene({})
+
+    clickPart(element)
+    await flushPromises()
+
+    expect(modal()).toBeNull()
+    wrapper.unmount()
+  })
+
+  // ⚠ 弹详情是附加动作：替代掉联动会把同屏别的模块静默掐掉
+  it('弹详情的同时联动事件照发', async () => {
+    const { wrapper, element } = await scene({ click: { near: 'detail' } })
+
+    clickPart(element)
+    await flushPromises()
+
+    expect(wrapper.emitted('partClick')?.[0]).toEqual([
+      { partId: 'part-pump', partName: '泵' },
+    ])
+    wrapper.unmount()
+  })
+
+  it('关闭键把弹窗收掉', async () => {
+    const { wrapper, element } = await scene({ click: { near: 'detail' } })
+    clickPart(element)
+    await flushPromises()
+
+    closeModal()
+    await flushPromises()
+
+    expect(modal()).toBeNull()
+    wrapper.unmount()
+  })
+
+  // ⚠ 删掉一个正弹着详情的部件，弹窗里克隆的那份对象已经不在场上了
+  it('配置里这个部件没了就把弹窗收掉', async () => {
+    const { wrapper, element } = await scene({ click: { near: 'detail' } })
+    clickPart(element)
+    await flushPromises()
+
+    await wrapper.setProps({ config: config({ parts: [] }) })
+    await flushPromises()
+
+    expect(modal()).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('远距动作选了「飞到取景」时飞到配好的机位', async () => {
+    const { wrapper, element } = await scene({
+      clickDistance: { farThreshold: { ref: 'orbit', value: 0.001 } },
+      click: {
+        far: 'view',
+        view: { position: [3, 4, 5], target: [1, 1, 1], fov: 30 },
+      },
+    })
+
+    clickPart(element)
+    await vi.waitFor(() => {
+      expect(cameraOf().fov).toBe(30)
+    })
+
+    expect(wrapper.emitted('partClick')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('远距取景挑的是预设视点时也飞得过去', async () => {
+    const { wrapper, element } = await scene(
+      {
+        clickDistance: { farThreshold: { ref: 'orbit', value: 0.001 } },
+        click: { far: 'view', cameraId: 'c9' },
+      },
+      {
+        cameras: [
+          { id: 'c9', position: [6, 7, 8], target: [0, 0, 0], fov: 25 },
+        ],
+      },
+    )
+
+    clickPart(element)
+    await vi.waitFor(() => {
+      expect(cameraOf().fov).toBe(25)
+    })
+    wrapper.unmount()
+  })
+
+  it('远距动作选「不响应」时镜头一动不动', async () => {
+    const { wrapper, element } = await scene({
+      clickDistance: { farThreshold: { ref: 'orbit', value: 0.001 } },
+      click: { far: 'none' },
+    })
+    await vi.waitFor(() => {
+      expect(renderer.renders.length).toBeGreaterThan(0)
+    })
+    const before = cameraOf().position.clone()
+
+    clickPart(element)
+    await flushPromises()
+
+    expect(cameraOf().position.equals(before)).toBe(true)
     wrapper.unmount()
   })
 })

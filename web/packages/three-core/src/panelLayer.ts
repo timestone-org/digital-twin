@@ -22,6 +22,7 @@ import * as THREE from 'three'
 import { CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js'
 
 import { distanceResolver, type DistanceContext } from './distanceContext'
+import { panelPositionOf } from './distanceBasis'
 import { resolveVisibility } from './distanceRules'
 import {
   buildPanelCard,
@@ -36,24 +37,6 @@ interface PanelEntry {
 }
 
 /** 牌的落点已经在 `label.position` 上，距离规则直接读它，不再算第二遍。 */
-
-/**
- * 牌的落点：锚点优先，锚点找不到时退回自己的坐标。
- * ⚠ 退回而不是不画：一张配好了字段的牌因为锚点被删就整个消失，用户只会觉得
- * 「我的牌哪去了」。悬空引用由 `collectTwinConfigIssues` 单独报出来。
- */
-function positionOf(panel: TwinPanel, anchors: readonly TwinAnchor[]): Vec3 {
-  const anchor =
-    panel.anchorId === ''
-      ? undefined
-      : anchors.find((item) => item.id === panel.anchorId)
-  const base = anchor?.position ?? panel.position
-  return [
-    base[0] + panel.offset[0],
-    base[1] + panel.offset[1],
-    base[2] + panel.offset[2],
-  ]
-}
 
 /** 竖轴，`horizontal` 档绕它转。 */
 const UP = new THREE.Vector3(0, 1, 0)
@@ -215,7 +198,7 @@ export class PanelLayer {
   ): PanelEntry {
     const card = buildPanelCard(panel)
     const label = new CSS3DObject(card.mount)
-    label.position.set(...positionOf(panel, anchors))
+    label.position.set(...panelPositionOf(panel, anchors))
     // 只有 fixed 档吃配置的旋转：另两档的朝向每帧被相机接管，套了也会被盖掉
     if (panel.billboard === 'fixed') {
       label.quaternion.setFromEuler(eulerOf(panel.rotation))

@@ -27,6 +27,7 @@ import {
   TWIN_PEDESTAL_REFLECTIONS,
   TWIN_VIEWPOINT_MODES,
   type TwinCamera,
+  type TwinFocusView,
   type TwinLightColumn,
   type TwinModelAnimations,
   type TwinModelRef,
@@ -168,6 +169,20 @@ export function normalizeCamera(
     target: vec3(raw.target, ORIGIN),
     fov: clampedOr(raw.fov, DEFAULT_CAMERA_FOV, MIN_CAMERA_FOV, MAX_CAMERA_FOV),
     isDefault: raw.isDefault === true,
+  }
+}
+
+/**
+ * 取景快照；不是对象就当没配。
+ * ⚠ 视野落到 0 或 180 时取景距离的公式会除零或塌缩，表现是「飞过去画面整个
+ * 消失」而不报错，所以这里按视点同一套区间夹住。
+ */
+export function normalizeFocusView(raw: unknown): TwinFocusView | null {
+  if (!isRecord(raw)) return null
+  return {
+    position: vec3(raw.position, ORIGIN),
+    target: vec3(raw.target, ORIGIN),
+    fov: clampedOr(raw.fov, DEFAULT_CAMERA_FOV, MIN_CAMERA_FOV, MAX_CAMERA_FOV),
   }
 }
 

@@ -29,7 +29,6 @@ function modelOf(...names: string[]): THREE.Object3D {
 function config(): TwinConfig {
   return normalizeTwinConfig({
     parts: [{ id: 'p1', name: '泵', nodes: ['pump'] }],
-    hierNodes: [{ id: 'h1', name: '车间', nodes: ['hall'] }],
     flows: [{ id: 'f1', kind: 'water' }],
   })
 }
@@ -56,14 +55,11 @@ function setup(model: THREE.Object3D | null = modelOf('pump', 'hall')) {
 }
 
 describe('搜索', () => {
-  it('三类取材都在：部件、钻取层级、模型节点名', () => {
+  it('两类取材都在：部件、模型节点名', () => {
     const { tools } = setup()
 
     tools.query.value = '泵'
     expect(tools.hits.value.map((hit) => hit.kind)).toContain('part')
-
-    tools.query.value = '车间'
-    expect(tools.hits.value.map((hit) => hit.kind)).toContain('hier')
 
     // 节点名来自模型索引，不是配置——这一路断了的话搜不到任何未登记成部件的几何
     tools.query.value = 'pump'

@@ -262,6 +262,67 @@ export interface TwinPartTint {
 }
 
 /**
+ * 远距点击（远于 `clickDistance.farThreshold`）做什么。
+ * - `approach` 把这个部件框进画面，不算真点击
+ * - `view` 飞到这个部件自己配的取景快照或预设视点
+ * - `none` 远距点击什么都不做
+ * ⚠ 配了 `view` 却既没有快照也没有视点时**退回 `approach`**：不退的话远距点击
+ * 彻底没反应，而用户看不出是少配了一样东西。这一条由 `collectTwinConfigIssues` 报。
+ */
+export const TWIN_PART_FAR_ACTIONS = ['approach', 'view', 'none'] as const
+export type TwinPartFarAction = (typeof TWIN_PART_FAR_ACTIONS)[number]
+
+/**
+ * 近距点击（近于分界，或没配分界）做什么。
+ * ⚠ 联动事件两档都照发：动作是附加的，不是替代——否则给部件配上详情会把同屏
+ * 别的模块的联动静默掐掉。
+ */
+export const TWIN_PART_NEAR_ACTIONS = ['detail', 'none'] as const
+export type TwinPartNearAction = (typeof TWIN_PART_NEAR_ACTIONS)[number]
+
+/** 一个部件远近两档的点击动作。 */
+export interface TwinPartClick {
+  far: TwinPartFarAction
+  near: TwinPartNearAction
+  /** `far: 'view'` 的取景快照；null = 退回 `cameraId`。 */
+  view: TwinFocusView | null
+  /** `far: 'view'` 且没有快照时切到这个预设视点；空串 = 不切。 */
+  cameraId: string
+}
+
+/**
+ * 部件详情弹窗：近距点击弹出来的那一个，只讲这一个部件。
+ *
+ * ⚠ 弹窗里那块 3D **只装这一个部件**：它自己起一套场景与相机，把部件的对象克隆
+ * 一份摆进去，与画布上那棵模型树互不干扰。所以「只看这一个」不需要去动主场景。
+ * ⚠ 字段用的是信息牌那一套 `TwinPanelField`，八种画法与阈值档全通用；但它走的是
+ * **另一个绑定槽**（`partFieldValues`），与信息牌的行互不干扰。
+ * ⚠ 字段一律占绑定行，与 `near` 配成什么无关：按动作过滤会让用户在下拉里翻一下
+ * 就把这个部件已经绑好的点位整片丢掉。配了字段却不弹窗由诊断报出来。
+ */
+export interface TwinPartDetail {
+  /** 弹窗标题；空串 = 用部件名。 */
+  title: string
+  /** 标题下那行小字；空串 = 不画。 */
+  subtitle: string
+  fields: TwinPanelField[]
+  /** 弹窗里画不画这个部件的三维模型。 */
+  showModel: boolean
+  /** 模型在弹窗里自转。 */
+  autoRotate: boolean
+  /** 模型那一块的高度 px。 */
+  modelHeight: number
+  /** 弹窗宽度 px。 */
+  width: number
+  /** 数据卡片的风格，与信息牌同一套八种变体。 */
+  variant: TwinPanelVariant
+  /** 主题色规格；空串 = 跟随大屏主题色。 */
+  accent: string
+  /** 字段分几列排。 */
+  columns: number
+}
+
+/**
  * 部件：模型内一组节点的唯一可寻址单元，显隐、外观与染色都指向它。
  * ⚠ `nodes` 是模型文件里的对象名，本包看不见模型——模型里改了名字，
  * 这个部件就静默地什么都不再命中。
@@ -275,12 +336,10 @@ export interface TwinPart {
   /** 按实时值取色；null = 不取数，也不占绑定行。 */
   tint: TwinPartTint | null
   clickDistance: TwinClickDistanceRule
-  /**
-   * 点它时打开层级钻取并落在这个钻取节点上；空串 = 只上抛联动事件、不开钻取。
-   * ⚠ 指到一个已删掉的钻取节点时，钻取弹窗打不开，表现是「点了没反应」——
-   * 这种悬空由 `collectTwinConfigIssues` 报出来，渲染层不猜。
-   */
-  clickHierNode: string
+  /** 远近两档点击各做什么。 */
+  click: TwinPartClick
+  /** 近距点击弹出的详情卡片。 */
+  detail: TwinPartDetail
 }
 
 /**
@@ -565,50 +624,17 @@ export interface TwinViewpointSwitcher {
 }
 
 /**
- * 钻取弹窗的取景快照：一个机位加一个注视点。
+ * 取景快照：一个机位加一个注视点。部件远距点击飞过去用它。
  * ⚠ 与 `TwinCamera` 同形却不是同一个东西：视点是场上共享的预设、能在切换条上
- * 露面，这一份只属于某个钻取节点、不进切换条。共用一个类型会让「删掉一个视点」
- * 顺手把某个钻取节点的取景也删了。
+ * 露面，这一份只属于某个部件、不进切换条。共用一个类型会让「删掉一个视点」
+ * 顺手把某个部件的取景也删了。
  */
-export interface TwinModalView {
+export interface TwinFocusView {
   position: Vec3
   /** 注视点。 */
   target: Vec3
   /** 透视视野，度。 */
   fov: number
-}
-
-/**
- * 层级钻取树上的一个节点：厂区 → 车间 → 设备这类逐层下钻的一层。
- *
- * ⚠ `parentId` 成环时整棵树建不出来，那几个节点会从钻取里整体消失——成环由
- * `collectTwinConfigIssues` 报出来，`buildHierTree` 只保证自己不会无限递归。
- * ⚠ `order` 决定同级次序，与**文档序**是两回事：文档序定的是 `hierValues`
- * 第几行喂哪个字段，拖着改父子或调同级次序都不动它。
- */
-export interface TwinHierNode {
-  id: string
-  /** 上一层的节点 id；null = 这是一个根。 */
-  parentId: string | null
-  name: string
-  /** 同级次序，小的在前；相同时按文档序。 */
-  order: number
-  /** 卡片上的图标名；空串 = 不画图标。 */
-  icon: string
-  /** 这一层对应的 3D 节点名；空数组 = 取全部子孙的并集。 */
-  nodes: string[]
-  /** 钻进来时的取景；null = 不改机位。优先级高于 `cameraId`。 */
-  view: TwinModalView | null
-  /** 钻进来时切到这个预设视点；空串 = 不切。⚠ `view` 有值时它不生效。 */
-  cameraId: string
-  /** 这一层要显示的读数字段。 */
-  fields: TwinPanelField[]
-  /** 父层卡片上摘要显示哪几个字段的 key；空数组 = 取 `fields` 前两个。 */
-  summaryFieldKeys: string[]
-  /** 钻取页标题；空串 = 用根到本节点的钻取路径。 */
-  title: string
-  /** 藏起子项卡片列表，只能在 3D 上点部件钻进下一层。 */
-  hideChildList: boolean
 }
 
 /**
@@ -654,7 +680,7 @@ export interface TwinRoamTour {
   segmentSettings: Record<string, TwinRoamTourSegment>
 }
 
-/** 可分夹的实体集合名，与 `TwinConfig` 上七个实体数组字段逐字对应。 */
+/** 可分夹的实体集合名，与 `TwinConfig` 上六个实体数组字段逐字对应。 */
 export const TWIN_FOLDER_KINDS = [
   'parts',
   'anchors',
@@ -662,7 +688,6 @@ export const TWIN_FOLDER_KINDS = [
   'panels',
   'arrows',
   'flows',
-  'hierNodes',
 ] as const
 export type TwinFolderKind = (typeof TWIN_FOLDER_KINDS)[number]
 
@@ -691,7 +716,6 @@ export interface TwinConfig {
   panels: TwinPanel[]
   arrows: TwinArrow[]
   flows: TwinFlowLink[]
-  hierNodes: TwinHierNode[]
   folders: TwinOutlineFolder[]
 }
 
@@ -742,14 +766,14 @@ export interface TwinFlowValue {
 /** 能量流实时值，按流 id 索引。 */
 export type TwinFlowValues = Readonly<Record<string, TwinFlowValue>>
 
-/** 一个钻取节点字段的实时值。 */
-export interface TwinHierValue {
+/** 一个部件详情字段的实时值。 */
+export interface TwinPartFieldValue {
   value: unknown
 }
 
 /**
- * 钻取节点字段的实时值，按 `<节点 id>::<字段 key>` 索引。
- * ⚠ 键里必须带节点 id：两层上都有一个叫 `power` 的字段是常事，
- * 只用字段 key 会让后一层的值盖掉前一层的。
+ * 部件详情字段的实时值，按 `<部件 id>::<字段 key>` 索引。
+ * ⚠ 键里必须带部件 id：两个部件上都有一个叫 `power` 的字段是常事，
+ * 只用字段 key 会让后一个部件的值盖掉前一个的。
  */
-export type TwinHierValues = Readonly<Record<string, TwinHierValue>>
+export type TwinPartFieldValues = Readonly<Record<string, TwinPartFieldValue>>

@@ -16,7 +16,6 @@ function config(overrides: Record<string, unknown> = {}): TwinConfig {
     parts: [{ id: 'p1', name: '泵', nodes: ['pump'] }],
     cameras: [{ id: 'c1', position: [1, 1, 1], target: [0, 0, 0] }],
     flows: [{ id: 'f1' }],
-    hierNodes: [{ id: 'h1', name: '车间' }],
     ...overrides,
   })
 }
@@ -85,10 +84,6 @@ describe('不给手柄的情况', () => {
 
   it('能流走途经锚点，没有自己的位置', () => {
     expect(gizmoTargetOf(config(), { kind: 'flows', id: 'f1' })).toBeNull()
-  })
-
-  it('钻取节点没有位置', () => {
-    expect(gizmoTargetOf(config(), { kind: 'hierNodes', id: 'h1' })).toBeNull()
   })
 
   it('三个单例段没有 id，一律不给', () => {

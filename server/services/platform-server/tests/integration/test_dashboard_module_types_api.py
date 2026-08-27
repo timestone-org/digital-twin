@@ -57,7 +57,7 @@ async def test_a_single_module_carries_its_config_and_slots(
         "panelValues",
         "arrowValues",
         "flowValues",
-        "hierValues",
+        "partFieldValues",
     ]
 
 

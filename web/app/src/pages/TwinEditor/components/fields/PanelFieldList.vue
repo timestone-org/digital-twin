@@ -27,11 +27,19 @@ import { computed } from 'vue'
 import { PANEL_FIELD_PRESETS } from '../../scripts/panelFieldPresets'
 import PanelFieldGraph from './PanelFieldGraph.vue'
 
-const props = defineProps<{
-  panel: TwinPanel
-  /** 本牌之前已有多少行摊平字段；不给就按本牌内序号显示，不假装知道全局位置。 */
-  rowOffset?: number | undefined
-}>()
+const props = withDefaults(
+  defineProps<{
+    panel: TwinPanel
+    /** 本牌之前已有多少行摊平字段；不给就按本牌内序号显示，不假装知道全局位置。 */
+    rowOffset?: number | undefined
+    /**
+     * 这批字段长在什么上面，用于行号与提示文案。
+     * ⚠ 部件详情复用同一份列表：文案写死「牌」会让部件那边说的是另一件东西。
+     */
+    owner?: string
+  }>(),
+  { rowOffset: undefined, owner: '牌' },
+)
 
 const emit = defineEmits<{ 'update:fields': [TwinPanelField[]] }>()
 
@@ -49,7 +57,7 @@ const rows = computed(() =>
 )
 
 const rowLabel = computed(() =>
-  props.rowOffset === undefined ? '本牌第' : '第',
+  props.rowOffset === undefined ? `本${props.owner}第` : '第',
 )
 
 /**
@@ -162,7 +170,11 @@ function toggleDecimals(index: number, on: boolean): void {
 <template>
   <div class="flex flex-col gap-2">
     <p class="text-xs text-text-disabled">
-      实时值按所有信息牌字段摊平后的文档序对齐：在前面插一行，它之后的每一行（含后面每一张牌）整体后移一格。
+      实时值按所有{{
+        owner
+      }}字段摊平后的文档序对齐：在前面插一行，它之后的每一行（含后面每一个{{
+        owner
+      }}）整体后移一格。
     </p>
 
     <DtNotice
@@ -281,7 +293,7 @@ function toggleDecimals(index: number, on: boolean): void {
     <DtEmpty
       v-if="rows.length === 0"
       size="inline"
-      title="这张牌上还没有字段，画出来是一张空卡片。"
+      :title="`这个${owner}上还没有字段，画出来是一张空卡片。`"
     />
     <p v-else class="text-xs text-text-disabled">
       静态文本纯展示、不进求值，与「常量绑定」不是一回事。

@@ -82,7 +82,7 @@ describe('空词直通', () => {
 
     expect(view.active).toBe(false)
     expect(view.scene).toHaveLength(3)
-    expect(view.sections).toHaveLength(7)
+    expect(view.sections).toHaveLength(6)
     expect(sectionOf(view, 'anchors').folders).toHaveLength(2)
     expect(sectionOf(view, 'anchors').rows).toHaveLength(1)
   })

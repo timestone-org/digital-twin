@@ -1,15 +1,12 @@
 /**
- * @fileoverview 契约：左栏两个页签各画各的，事件（含六个文件夹事件）一路透传
- * 上去，钻取节点的删除并到通用的 remove 上（带 kind），renamingFolderId 递进
- * 大纲让新夹立刻进入就地重命名。
+ * @fileoverview 契约：左栏画大纲，事件（含六个文件夹事件）一路透传上去，
+ * renamingFolderId 递进大纲让新夹立刻进入就地重命名。
  * ⚠ 模板里的事件名写错时 typecheck 与 lint 双双放行，父组件只是收不到——
  * 每条透传都要有「子组件抛了、父组件收到了什么」的断言。
  */
 import { normalizeTwinConfig, type TwinConfig } from '@dt/twin-config'
-import { DtSegmented } from '@dt/ui'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
-import { nextTick } from 'vue'
 
 import TwinLeftPane from '@/pages/TwinEditor/components/TwinLeftPane.vue'
 import TwinOutline from '@/pages/TwinEditor/components/TwinOutline.vue'
@@ -17,7 +14,6 @@ import TwinOutline from '@/pages/TwinEditor/components/TwinOutline.vue'
 function configOf(): TwinConfig {
   return normalizeTwinConfig({
     anchors: [{ id: 'a1', name: '进口' }],
-    hierNodes: [{ id: 'plant', name: '厂区' }],
     folders: [{ id: 'f1', kind: 'anchors', name: '温度组', itemIds: [] }],
   })
 }
@@ -33,45 +29,9 @@ function render(renamingFolderId: string | null = null) {
   })
 }
 
-type Wrapper = ReturnType<typeof render>
-
-async function switchTab(wrapper: Wrapper, value: string): Promise<void> {
-  wrapper.getComponent(DtSegmented).vm.$emit('update:modelValue', value)
-  await nextTick()
-}
-
-async function toHierTab(wrapper: Wrapper): Promise<void> {
-  await switchTab(wrapper, 'hier')
-}
-
-describe('左栏页签', () => {
-  it('缺省停在大纲', () => {
-    const wrapper = render()
-
-    expect(wrapper.find('[data-test="twin-outline"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="twin-hierarchy"]').exists()).toBe(false)
-  })
-
-  it('切到层级页签只画钻取树', async () => {
-    const wrapper = render()
-
-    await toHierTab(wrapper)
-
-    expect(wrapper.find('[data-test="twin-hierarchy"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="twin-outline"]').exists()).toBe(false)
-  })
-
-  it('页签值不认识时回落大纲，不留一栏空白', async () => {
-    const wrapper = render()
-
-    await switchTab(wrapper, '?')
-
-    expect(wrapper.find('[data-test="twin-outline"]').exists()).toBe(true)
-  })
-
-  // variant 写错时 typecheck 放行、只是长相回落 control，这里锁 tabs 档真的生效
-  it('页签用 tabs 档的分段控件', () => {
-    expect(render().find('.dt-segmented--tabs').exists()).toBe(true)
+describe('左栏', () => {
+  it('画的就是大纲', () => {
+    expect(render().find('[data-test="twin-outline"]').exists()).toBe(true)
   })
 })
 
@@ -83,27 +43,6 @@ describe('事件透传', () => {
 
     expect(wrapper.emitted('select')?.[0]).toEqual([
       { kind: 'anchors', id: 'a1' },
-    ])
-  })
-
-  it('层级页签的新建根节点传成 addHier(null)', async () => {
-    const wrapper = render()
-    await toHierTab(wrapper)
-
-    await wrapper.get('[data-test="hier-add-root"]').trigger('click')
-
-    expect(wrapper.emitted('addHier')?.[0]).toEqual([null])
-  })
-
-  it('钻取节点的删除并到通用 remove 上，带上 kind', async () => {
-    const wrapper = render()
-    await toHierTab(wrapper)
-
-    // plant 是叶子：直接删，不经确认框
-    await wrapper.get('[data-test="hier-remove"]').trigger('click')
-
-    expect(wrapper.emitted('remove')?.[0]).toEqual([
-      { kind: 'hierNodes', id: 'plant' },
     ])
   })
 

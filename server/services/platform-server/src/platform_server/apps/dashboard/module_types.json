@@ -2328,8 +2328,8 @@
           ]
         },
         {
-          "key": "hierValues",
-          "label": "钻取节点字段",
+          "key": "partFieldValues",
+          "label": "部件详情字段",
           "data_type": "number",
           "is_array": true,
           "is_entity_pinned": true,

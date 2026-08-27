@@ -1,6 +1,6 @@
 /**
  * @fileoverview 页面与 3D 视口之间的那几个来回：视口里拾取节点 / 位置、
- * 取当前机位存进视点或钻取快照、试飞漫游。
+ * 取当前机位存进视点或部件的取景快照、试飞漫游。
  *
  * ⚠ 拾取是**两段式**的：先记下「点完写回哪个实体的哪个字段」（或「点完落一张
  * 新信息牌」），等视口回调再落。不记的话，视口只知道用户点了模型上的哪个东西，
@@ -48,7 +48,7 @@ export interface TwinViewportOps {
   /** 把 Shift 点选或框选的节点追加到当前选中的部件。 */
   onSelectNodes: (names: readonly string[]) => void
   captureCamera: (id: string) => void
-  captureHierView: (id: string) => void
+  capturePartView: (id: string) => void
   previewRoam: () => void
   stopRoamPreview: () => void
 }
@@ -93,7 +93,7 @@ function patchEntity(
   })
 }
 
-/** 带 `nodes` 的两类：部件与钻取节点。其余种类拾取节点名没有意义。 */
+/** 只有部件带 `nodes`；其余种类拾取节点名没有意义。 */
 function nodesOf(
   deps: TwinViewportDeps,
   kind: TwinEntityKind,
@@ -103,9 +103,6 @@ function nodesOf(
   if (config === null) return null
   if (kind === 'parts') {
     return config.parts.find((item) => item.id === id)?.nodes ?? null
-  }
-  if (kind === 'hierNodes') {
-    return config.hierNodes.find((item) => item.id === id)?.nodes ?? null
   }
   return null
 }
@@ -158,19 +155,23 @@ function createPicking(
   }
 }
 
-/** 取当前机位那一路：存进视点，或存进钻取节点的取景快照。 */
+/** 取当前机位那一路：存进视点，或存进部件的取景快照。 */
 function createCapture(
   deps: TwinViewportDeps,
   viewportRef: Ref<TwinViewportHandle | null>,
-): Pick<TwinViewportOps, 'captureCamera' | 'captureHierView'> {
+): Pick<TwinViewportOps, 'captureCamera' | 'capturePartView'> {
   return {
     captureCamera: (id) => {
       const pose = viewportRef.value?.snapshot()
       if (pose !== undefined) patchEntity(deps, 'cameras', id, { ...pose })
     },
-    captureHierView: (id) => {
+    capturePartView: (id) => {
       const pose = viewportRef.value?.snapshot()
-      if (pose !== undefined) patchEntity(deps, 'hierNodes', id, { view: pose })
+      if (pose === undefined) return
+      const part = deps.config()?.parts.find((item) => item.id === id)
+      if (part === undefined) return
+      // ⚠ 整段 `click` 一起写回：只发一个 `view` 会把远近两档的动作抹成缺省
+      patchEntity(deps, 'parts', id, { click: { ...part.click, view: pose } })
     },
   }
 }

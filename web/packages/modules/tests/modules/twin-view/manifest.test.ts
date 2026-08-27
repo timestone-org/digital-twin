@@ -136,7 +136,7 @@ describe('绑点面板的行数', () => {
       panelValues: 0,
       arrowValues: 0,
       flowValues: 0,
-      hierValues: 0,
+      partFieldValues: 0,
     })
   })
 })

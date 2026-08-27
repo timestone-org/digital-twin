@@ -59,7 +59,6 @@ function snapshotOf(deps: TwinSurfaceDeps): SurfaceSnapshot {
     panel_count: config.panels.length,
     arrow_count: config.arrows.length,
     flow_count: config.flows.length,
-    hier_node_count: config.hierNodes.length,
     bound_count: deps.bindings().length,
   }
 }

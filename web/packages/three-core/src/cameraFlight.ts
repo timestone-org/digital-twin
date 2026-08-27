@@ -39,7 +39,11 @@ function prefersInstant(): boolean {
   )
 }
 
-function currentPoseOf(core: SceneCore): TwinPose {
+/**
+ * 相机此刻的机位、注视点与视野。
+ * @param core 场景内核
+ */
+export function cameraPoseOf(core: SceneCore): TwinPose {
   const eye = core.camera.position
   const target = core.controls.target
   return {
@@ -68,7 +72,7 @@ export function createCameraFlight(): CameraFlight {
       return
     }
     // 半路换目标就从当前位置重新起飞，衔接处不跳变
-    state = { core, from: currentPoseOf(core), to, span, elapsedMs: 0 }
+    state = { core, from: cameraPoseOf(core), to, span, elapsedMs: 0 }
   }
 
   return {

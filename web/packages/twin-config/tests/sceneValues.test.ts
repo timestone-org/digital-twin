@@ -1,7 +1,7 @@
 /**
  * @fileoverview 契约：一袋模块 values 缝成场景五路实时值。
  * ⚠ 运行态渲染器与编辑视口共用这一支，所以这里钉死的对齐顺序就是两边看到的
- * 同一个结果——信息牌与钻取节点都按**扁平化后的字段序**对齐，按「第 i 张牌」
+ * 同一个结果——信息牌与部件详情都按**扁平化后的字段序**对齐，按「第 i 张牌」
  * 对齐会让多字段的牌之后整条错位，而两边都不报错。
  */
 import { describe, expect, it } from 'vitest'
@@ -10,8 +10,8 @@ import {
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_ARROW_BINDING_KEY,
   TWIN_FLOW_BINDING_KEY,
-  TWIN_HIER_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
+  TWIN_PART_FIELD_BINDING_KEY,
 } from '../src/constants'
 import { normalizeTwinConfig } from '../src/normalize'
 import { twinSceneValues } from '../src/sceneValues'
@@ -31,15 +31,17 @@ const CONFIG = normalizeTwinConfig({
   ],
   arrows: [{ id: 'ar1' }],
   flows: [{ id: 'f1' }],
-  hierNodes: [
+  parts: [
     {
       id: 'h1',
-      fields: [
-        { key: 'x', label: 'X' },
-        { key: 'y', label: 'Y' },
-      ],
+      detail: {
+        fields: [
+          { key: 'x', label: 'X' },
+          { key: 'y', label: 'Y' },
+        ],
+      },
     },
-    { id: 'h2', fields: [{ key: 'z', label: 'Z' }] },
+    { id: 'h2', detail: { fields: [{ key: 'z', label: 'Z' }] } },
   ],
 })
 
@@ -70,12 +72,12 @@ describe('缝合六路', () => {
     })
   })
 
-  it('钻取节点同理，也按扁平化后的字段序对齐', () => {
+  it('部件详情字段同理，也按扁平化后的字段序对齐', () => {
     const live = twinSceneValues(CONFIG, {
-      [TWIN_HIER_BINDING_KEY]: rowsOf([1, 2, 3]),
+      [TWIN_PART_FIELD_BINDING_KEY]: rowsOf([1, 2, 3]),
     })
 
-    expect(live.hier).toEqual({
+    expect(live.partFields).toEqual({
       'h1::x': { value: 1 },
       'h1::y': { value: 2 },
       'h2::z': { value: 3 },
@@ -99,7 +101,7 @@ describe('缝合六路', () => {
       arrows: {},
       panels: {},
       flows: {},
-      hier: {},
+      partFields: {},
     })
   })
 

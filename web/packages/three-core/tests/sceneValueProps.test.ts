@@ -13,7 +13,7 @@ import {
 } from '@dt/twin-config'
 import { describe, expect, it } from 'vitest'
 
-import { sceneValuesOf } from '../src/sceneValueProps'
+import { partFieldValuesOf, sceneValuesOf } from '../src/sceneValueProps'
 
 describe('实时值 prop 的补齐', () => {
   it('一路都没给时六路各自是那一份稳定空引用', () => {
@@ -33,12 +33,24 @@ describe('实时值 prop 的补齐', () => {
   it('给了的那一路原样带过去', () => {
     const parts = { p1: { value: 3 } }
 
-    expect(sceneValuesOf({ partValues: parts }).parts).toBe(parts)
+    expect(sceneValuesOf({ values: { parts } }).parts).toBe(parts)
   })
 
   it('空表也算给过：不拿空引用顶掉它', () => {
     const empty = {}
 
-    expect(sceneValuesOf({ anchorValues: empty }).anchors).toBe(empty)
+    expect(sceneValuesOf({ values: { anchors: empty } }).anchors).toBe(empty)
+  })
+})
+
+describe('详情字段那一路', () => {
+  it('缺席时给同一个空引用', () => {
+    expect(partFieldValuesOf({})).toBe(partFieldValuesOf({ values: {} }))
+  })
+
+  it('给了的原样带过去', () => {
+    const fields = { 'p1::temp': { value: 7 } }
+
+    expect(partFieldValuesOf({ values: { partFields: fields } })).toBe(fields)
   })
 })

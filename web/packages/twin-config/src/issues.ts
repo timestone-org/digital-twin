@@ -15,9 +15,11 @@ export const TWIN_CONFIG_ISSUE_KINDS = [
   'dangling-camera',
   'dangling-anchor',
   'flow-too-short',
-  'dangling-hier-parent',
-  'dangling-hier-node',
-  'hier-cycle',
+  'dangling-part-camera',
+  'part-focus-no-target',
+  'part-far-unreachable',
+  'part-detail-unreachable',
+  'part-detail-empty',
   'roam-too-short',
   'tint-no-stops',
   'tint-empty-range',
@@ -133,76 +135,92 @@ function shortFlows(
 }
 
 /**
- * 钻取节点的父指针指到一个不存在的节点。
- * ⚠ 建树时这种节点按根处理——不报出来的话，用户看到的是「明明挂在 A 下面的
- * 一层，钻取里却自己成了一个根」。
+ * 部件的远距取景指到一个不存在的预设视点。
+ * ⚠ 渲染层对这种部件是「退回把它框进画面」——不报出来的话，用户看到的是
+ * 「远距点它飞到的位置跟配的视点对不上」，而那与飞行没生效看起来一模一样。
  */
-function danglingHierParents(config: TwinConfig): TwinConfigIssue[] {
-  const known = new Set(config.hierNodes.map((item) => item.id))
-  return config.hierNodes
-    .map((node, index) => ({ node, index }))
-    .filter((ref) => ref.node.parentId !== null)
-    .filter((ref) => !known.has(ref.node.parentId ?? ''))
-    .map((ref) => ({
-      kind: 'dangling-hier-parent' as const,
-      entityId: ref.node.id,
-      path: `hierNodes[${ref.index}].parentId`,
-      detail: `找不到上一层 ${ref.node.parentId ?? ''}，这一层会变成一个根`,
-    }))
-}
-
-/** 从这个节点一路往上，能不能走回它自己。`seen` 同时挡住无限循环。 */
-function loopsBackTo(
-  byId: ReadonlyMap<string, string | null>,
-  start: string,
-): boolean {
-  const seen = new Set<string>([start])
-  let cursor = byId.get(start) ?? null
-  while (cursor !== null) {
-    if (cursor === start) return true
-    if (seen.has(cursor)) return false
-    seen.add(cursor)
-    cursor = byId.get(cursor) ?? null
-  }
-  return false
-}
-
-/**
- * 父子成环。
- * ⚠ 这一条必须挡住：环上的节点从任何根都走不到，`buildHierTree` 于是把它们
- * 整片丢掉，表现是「配了一层，钻取里根本没有它」。
- */
-function hierCycles(config: TwinConfig): TwinConfigIssue[] {
-  const parents = new Map(
-    config.hierNodes.map((item) => [item.id, item.parentId]),
-  )
-  return config.hierNodes
-    .map((node, index) => ({ node, index }))
-    .filter((ref) => loopsBackTo(parents, ref.node.id))
-    .map((ref) => ({
-      kind: 'hier-cycle' as const,
-      entityId: ref.node.id,
-      path: `hierNodes[${ref.index}].parentId`,
-      detail: '父子指到自己头上成了环，这几层在钻取里整片不出现',
-    }))
-}
-
-/**
- * 部件的点击动作指到一个不存在的钻取节点。
- * ⚠ 渲染层对这种部件是「不开钻取」——不报出来的话，用户看到的只是
- * 「点了这个部件没反应」，而配置里明明选了一层。
- */
-function danglingHierClicks(config: TwinConfig): TwinConfigIssue[] {
-  const known = new Set(config.hierNodes.map((item) => item.id))
+function danglingPartCameras(
+  config: TwinConfig,
+  known: ReadonlySet<string>,
+): TwinConfigIssue[] {
   return config.parts
     .map((part, index) => ({ part, index }))
-    .filter((ref) => ref.part.clickHierNode !== '')
-    .filter((ref) => !known.has(ref.part.clickHierNode))
+    .filter((ref) => ref.part.click.cameraId !== '')
+    .filter((ref) => !known.has(ref.part.click.cameraId))
     .map((ref) => ({
-      kind: 'dangling-hier-node' as const,
+      kind: 'dangling-part-camera' as const,
       entityId: ref.part.id,
-      path: `parts[${ref.index}].clickHierNode`,
-      detail: `找不到钻取节点 ${ref.part.clickHierNode}，点这个部件不会打开钻取`,
+      path: `parts[${ref.index}].click.cameraId`,
+      detail: `找不到视点 ${ref.part.click.cameraId}，远距点击会退回把这个部件框进画面`,
+    }))
+}
+
+/**
+ * 远距动作选了「飞到取景」，却既没有取景快照也没有预设视点。
+ * ⚠ 渲染层这时退回 `approach`——不报出来的话，用户以为配好了一个机位，
+ * 而现场飞到的是自动算出来的另一个位置。
+ */
+function partFocusWithoutTarget(config: TwinConfig): TwinConfigIssue[] {
+  return config.parts
+    .map((part, index) => ({ part, index }))
+    .filter((ref) => ref.part.click.far === 'view')
+    .filter((ref) => ref.part.click.view === null)
+    .filter((ref) => ref.part.click.cameraId === '')
+    .map((ref) => ({
+      kind: 'part-focus-no-target' as const,
+      entityId: ref.part.id,
+      path: `parts[${ref.index}].click.far`,
+      detail: '远距动作是「飞到取景」，却没存机位也没挑视点，会退回自动框住',
+    }))
+}
+
+/**
+ * 配了远距取景，却没配远近分界：远档整个不存在，那个取景永远飞不到。
+ * ⚠ 不报的话，用户看到的是「配好了机位，点了却还是原地」——而配置里两处
+ * 分别看都挑不出毛病。
+ */
+function unreachablePartFarAction(config: TwinConfig): TwinConfigIssue[] {
+  return config.parts
+    .map((part, index) => ({ part, index }))
+    .filter((ref) => ref.part.click.far === 'view')
+    .filter((ref) => ref.part.clickDistance.farThreshold === null)
+    .map((ref) => ({
+      kind: 'part-far-unreachable' as const,
+      entityId: ref.part.id,
+      path: `parts[${ref.index}].clickDistance.farThreshold`,
+      detail: '没配远近分界，每一下都算近距点击，远距取景永远飞不到',
+    }))
+}
+
+/**
+ * 配了详情字段，近距点击却不弹窗。
+ * ⚠ 这些字段照样占绑定行——不报出来的话，用户绑完点位怎么点都看不到它们，
+ * 而绑点面板上那几行看起来一切正常。
+ */
+function unreachablePartDetails(config: TwinConfig): TwinConfigIssue[] {
+  return config.parts
+    .map((part, index) => ({ part, index }))
+    .filter((ref) => ref.part.detail.fields.length > 0)
+    .filter((ref) => ref.part.click.near !== 'detail')
+    .map((ref) => ({
+      kind: 'part-detail-unreachable' as const,
+      entityId: ref.part.id,
+      path: `parts[${ref.index}].click.near`,
+      detail: `配了 ${ref.part.detail.fields.length} 个详情字段，但近距点击不弹窗，它们永远显示不出来`,
+    }))
+}
+
+/** 近距点击要弹窗，详情却一个字段都没有：弹出来是一张空卡片。 */
+function emptyPartDetails(config: TwinConfig): TwinConfigIssue[] {
+  return config.parts
+    .map((part, index) => ({ part, index }))
+    .filter((ref) => ref.part.click.near === 'detail')
+    .filter((ref) => ref.part.detail.fields.length === 0)
+    .map((ref) => ({
+      kind: 'part-detail-empty' as const,
+      entityId: ref.part.id,
+      path: `parts[${ref.index}].detail.fields`,
+      detail: '近距点击要弹详情，但一个字段都没配，弹出来是一张空卡片',
     }))
 }
 
@@ -322,16 +340,17 @@ export function collectTwinConfigIssues(config: TwinConfig): TwinConfigIssue[] {
     ...duplicateIds('panels', config.panels),
     ...duplicateIds('arrows', config.arrows),
     ...duplicateIds('flows', config.flows),
-    ...duplicateIds('hierNodes', config.hierNodes),
     ...danglingCameras(config),
     ...danglingRoamCameras(config, cameraIds),
     ...danglingPanelAnchors(config, anchorIds),
     ...danglingFlowAnchors(config, anchorIds),
     ...shortFlows(config, anchorIds),
     ...shortRoamTour(config, cameraIds),
-    ...danglingHierParents(config),
-    ...danglingHierClicks(config),
-    ...hierCycles(config),
+    ...danglingPartCameras(config, cameraIds),
+    ...partFocusWithoutTarget(config),
+    ...unreachablePartFarAction(config),
+    ...unreachablePartDetails(config),
+    ...emptyPartDetails(config),
     ...tintWithoutStops(config),
     ...emptyTintRanges(config),
     ...emptyPanelRanges(config),

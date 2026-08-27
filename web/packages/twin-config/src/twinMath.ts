@@ -3,8 +3,8 @@
  * 锚点读数格式化。无 Vue、无 three、无 DOM。
  */
 import type { TwinRowSlot } from './constants'
-import type { FlatHierField } from './hierTree'
 import type { FlatPanelField } from './normalizeElements'
+import type { FlatPartField } from './partFields'
 import { tintedParts } from './partTint'
 import { finiteValue, isRecord, toArray, toFiniteNumber } from './sanitize'
 import type {
@@ -17,11 +17,11 @@ import type {
   TwinFlowLink,
   TwinFlowValue,
   TwinFlowValues,
-  TwinHierValue,
-  TwinHierValues,
   TwinPanelValue,
   TwinPanelValues,
   TwinPart,
+  TwinPartFieldValue,
+  TwinPartFieldValues,
   TwinPartValue,
   TwinPartValues,
 } from './types'
@@ -35,7 +35,7 @@ export const EMPTY_ANCHOR_VALUES: TwinAnchorValues = Object.freeze({})
 export const EMPTY_PANEL_VALUES: TwinPanelValues = Object.freeze({})
 export const EMPTY_ARROW_VALUES: TwinArrowValues = Object.freeze({})
 export const EMPTY_FLOW_VALUES: TwinFlowValues = Object.freeze({})
-export const EMPTY_HIER_VALUES: TwinHierValues = Object.freeze({})
+export const EMPTY_PART_FIELD_VALUES: TwinPartFieldValues = Object.freeze({})
 export const EMPTY_PART_VALUES: TwinPartValues = Object.freeze({})
 
 /** 第 index 行的 sub 子槽；行不是对象一律按无值处理。 */
@@ -144,23 +144,23 @@ export function stitchFlowValues(
 }
 
 /**
- * 钻取字段数组行 → `<节点 id>::<字段 key>` 映射。
- * ⚠ 行号是**扁平化后**的文档序，必须喂 `flattenHierFields` 的输出：
- * 按「第 i 个节点」对齐会让多字段的节点之后的每一行整体错位。
- * @param fields `flattenHierFields` 的输出
- * @param rows 模块 values 里 `hierValues` 槽的整个数组
+ * 部件详情字段数组行 → `<部件 id>::<字段 key>` 映射。
+ * ⚠ 行号是**扁平化后**的文档序，必须喂 `flattenPartFields` 的输出：
+ * 按「第 i 个部件」对齐会让多字段的部件之后的每一行整体错位。
+ * @param fields `flattenPartFields` 的输出
+ * @param rows 模块 values 里 `partFieldValues` 槽的整个数组
  */
-export function stitchHierValues(
-  fields: readonly FlatHierField[] | undefined,
+export function stitchPartFieldValues(
+  fields: readonly FlatPartField[] | undefined,
   rows: unknown,
-): TwinHierValues {
-  const out: Record<string, TwinHierValue> = {}
+): TwinPartFieldValues {
+  const out: Record<string, TwinPartFieldValue> = {}
   ;(fields ?? []).forEach((entry, index) => {
     const value = readRowSlot(rows, index, 'value')
     if (value === undefined) return
     out[entry.valueKey] = { value }
   })
-  return Object.keys(out).length === 0 ? EMPTY_HIER_VALUES : out
+  return Object.keys(out).length === 0 ? EMPTY_PART_FIELD_VALUES : out
 }
 
 function formatReading(value: unknown, decimals: number | null): string {

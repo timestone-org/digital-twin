@@ -60,7 +60,6 @@ describe('分组', () => {
       'panels',
       'arrows',
       'flows',
-      'hierNodes',
     ])
   })
 
@@ -97,17 +96,6 @@ describe('行', () => {
 
   it('视点没有显隐字段，它的行不给显隐值', () => {
     expect(sectionOf(makeConfig(), 'cameras').rows[0]?.visible).toBeNull()
-  })
-
-  it('钻取节点的行也不给显隐值，meta 报字段数', () => {
-    const config = makeConfig({
-      hierNodes: [{ id: 'plant', name: '厂区', fields: [{ key: 'f1' }] }],
-    })
-    const rows = sectionOf(config, 'hierNodes').rows
-
-    expect(rows[0]?.visible).toBeNull()
-    expect(rows[0]?.meta).toBe('1 字段')
-    expect(rows[0]?.label).toBe('厂区')
   })
 
   it('其余五类都带显隐值', () => {
@@ -284,32 +272,29 @@ describe('删除的连带影响', () => {
       panels: 0,
       flows: 0,
       viewpoints: 0,
-      hierChildren: 0,
       parts: 0,
     })
   })
 
-  it('删钻取节点数出会变成根的下级，与点它就打开钻取的部件', () => {
+  it('删视点数出远距取景指着它的部件', () => {
     const config = makeConfig({
-      parts: [{ id: 'p1', clickHierNode: 'plant' }],
-      hierNodes: [{ id: 'plant' }, { id: 'shop', parentId: 'plant' }],
+      parts: [{ id: 'p1', click: { far: 'view', cameraId: 'c9' } }],
+      cameras: [{ id: 'c9' }],
     })
 
-    expect(twinRemoveImpact(config, 'hierNodes', 'plant')).toMatchObject({
-      hierChildren: 1,
+    expect(twinRemoveImpact(config, 'cameras', 'c9')).toMatchObject({
       parts: 1,
     })
   })
 
-  it('删钻取节点的确认文案点名下级与部件', () => {
+  it('删视点的确认文案点名那几个部件', () => {
     const config = makeConfig({
-      parts: [{ id: 'p1', clickHierNode: 'plant' }],
-      hierNodes: [{ id: 'plant' }, { id: 'shop', parentId: 'plant' }],
+      parts: [{ id: 'p1', click: { far: 'view', cameraId: 'c9' } }],
+      cameras: [{ id: 'c9' }],
     })
-    const text = twinRemoveImpactText(config, 'hierNodes', 'plant')
+    const text = twinRemoveImpactText(config, 'cameras', 'c9')
 
-    expect(text).toContain('1 个下级钻取节点')
-    expect(text).toContain('1 个部件的点击动作')
+    expect(text).toContain('1 个部件的远距取景')
   })
 
   it('没人引用的锚点删了也不牵连别人', () => {

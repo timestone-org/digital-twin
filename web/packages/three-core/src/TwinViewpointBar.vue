@@ -95,7 +95,7 @@ function shortcutOf(index: number): string | undefined {
   right: 12px;
   max-width: 13rem;
 
-  // 悬浮面板：与钻取面板同一套底 / 描边 / 投影，3D 上面不另起一种观感
+  // 悬浮面板：与详情卡片同一套底 / 描边 / 投影，3D 上面不另起一种观感
   &__panel {
     display: flex;
     flex-direction: column;

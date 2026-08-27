@@ -24,7 +24,6 @@ const ENTITY_KINDS: readonly TwinEntityKind[] = [
   'panels',
   'arrows',
   'flows',
-  'hierNodes',
 ]
 
 function makeConfig(over: Record<string, unknown> = {}): TwinConfig {
@@ -35,7 +34,6 @@ function makeConfig(over: Record<string, unknown> = {}): TwinConfig {
     panels: [{ id: 'pl1', anchorId: 'a1' }],
     arrows: [{ id: 'ar1' }],
     flows: [{ id: 'fl1', pathAnchors: ['a1', 'a2'] }],
-    hierNodes: [{ id: 'h1' }],
     folders: [
       { id: 'f1', kind: 'anchors', name: '前段', itemIds: ['a1'] },
       { id: 'f2', kind: 'anchors', name: '后段', itemIds: [] },

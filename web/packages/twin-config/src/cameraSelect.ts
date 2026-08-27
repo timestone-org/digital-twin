@@ -2,7 +2,7 @@
  * @fileoverview 从视点清单里挑机位。纯选择逻辑，与归一化分开放——
  * 归一化只负责把外来 JSON 修成合法形状，挑哪个机位是运行态的决策。
  */
-import type { TwinCamera } from './types'
+import type { TwinCamera, TwinFocusView, TwinPart } from './types'
 
 /**
  * 打开大屏时用的机位；一个都没标默认就用文档序第一个，一个视点都没有给 null。
@@ -32,3 +32,22 @@ export function isUsablePose(camera: TwinCamera): boolean {
 
 /** 机位与注视点至少要差这么远才算两个点。 */
 const MIN_POSE_SPAN = 1e-6
+
+/**
+ * 部件远距点击要飞去的取景：自己的快照优先，没有就退回它引用的预设视点。
+ *
+ * ⚠ 两个都配了时预设视点静默不生效——编辑器上要把这一条摆明。
+ * ⚠ 一个都取不到时给 null，调用方退回「把这个部件框进画面」：远距点击彻底没
+ * 反应的话，用户看不出是少配了一样东西。悬空与漏配由 `collectTwinConfigIssues` 报。
+ * @param part 归一化后的部件
+ * @param cameras 归一化后的视点
+ */
+export function partFocusView(
+  part: TwinPart,
+  cameras: readonly TwinCamera[],
+): TwinFocusView | null {
+  if (part.click.view !== null) return part.click.view
+  const camera = cameras.find((item) => item.id === part.click.cameraId)
+  if (camera === undefined || !isUsablePose(camera)) return null
+  return { position: camera.position, target: camera.target, fov: camera.fov }
+}

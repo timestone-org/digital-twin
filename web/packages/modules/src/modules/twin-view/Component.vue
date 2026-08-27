@@ -6,20 +6,19 @@
  * 不开孪生的大屏也要为它付首屏包体（DASHBOARD_DESIGN §5.4）。
  */
 import type { InteractionEvent, ModuleMeta } from '@dt/contracts'
-import type { TwinModalView } from '@dt/twin-config'
 import {
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_ARROW_BINDING_KEY,
   TWIN_CONFIG_KEY,
   TWIN_FLOW_BINDING_KEY,
-  TWIN_HIER_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
   TWIN_PART_BINDING_KEY,
+  TWIN_PART_FIELD_BINDING_KEY,
   normalizeTwinConfig,
   twinSceneValues,
 } from '@dt/twin-config'
 import { DtNotice } from '@dt/ui'
-import { computed, defineAsyncComponent, ref, type CSSProperties } from 'vue'
+import { computed, defineAsyncComponent, type CSSProperties } from 'vue'
 
 import {
   readBoolean,
@@ -36,25 +35,14 @@ const props = defineProps<{
 
 const emit = defineEmits<{ interaction: [InteractionEvent] }>()
 
-/** 当前钻进到哪一层；空串 = 钻取面板没开。 */
-const drillNodeId = ref('')
-
 /**
- * 点中部件时上抛联动事件，`value` 是**部件 id**；这个部件挂了钻取节点就顺便钻过去。
+ * 点中部件时上抛联动事件，`value` 是**部件 id**。
  * ⚠ 不上抛部件名：名字随时可改，而联动规则里存的那份不会跟着改，
  * 改完名字规则就静默失配——只表现为「点了没反应」。
- * ⚠ 联动事件照发不误：钻取是附加动作，不是替代——否则给部件配上钻取会把
- * 同屏别的模块的联动静默掐掉。
+ * ⚠ 远近两档各自的动作（切视角 / 弹详情）在 3D 宿主里就地做完了，这里只管联动。
  */
 function onPartClick(part: { partId: string }): void {
   emit('interaction', { event: 'click', value: part.partId })
-  const target = scene.value.parts.find((item) => item.id === part.partId)
-  const wanted = target?.clickHierNode ?? ''
-  if (wanted === '') return
-  // 指到一个已删掉的层就什么都不做；这种悬空由 collectTwinConfigIssues 报出来
-  if (scene.value.hierNodes.some((item) => item.id === wanted)) {
-    drillNodeId.value = wanted
-  }
 }
 
 const CORNERS = [
@@ -81,13 +69,6 @@ const TwinScene = defineAsyncComponent(async () => {
   return core.TwinScene
 })
 
-// ⚠ 与 3D 宿主走同一次异步 import：钻取面板自己不碰 three，但静态引进来会把
-// 整个 three-core 桶焊进首屏静态图（DASHBOARD_DESIGN §5.4）
-const TwinHierDrill = defineAsyncComponent(async () => {
-  const core = await import('@dt/three-core')
-  return core.TwinHierDrill
-})
-
 // ⚠ TwinScene 按引用比对这份配置，所以只能是 normalizeTwinConfig 的输出本身：
 // 就地改字段不会重绘，而 computed 只在 config 换了对象时才产出新引用
 const scene = computed(() => normalizeTwinConfig(props.config[TWIN_CONFIG_KEY]))
@@ -109,27 +90,12 @@ const rows = computed(() => ({
   [TWIN_PANEL_BINDING_KEY]: props.values[TWIN_PANEL_BINDING_KEY],
   [TWIN_ARROW_BINDING_KEY]: props.values[TWIN_ARROW_BINDING_KEY],
   [TWIN_FLOW_BINDING_KEY]: props.values[TWIN_FLOW_BINDING_KEY],
-  [TWIN_HIER_BINDING_KEY]: props.values[TWIN_HIER_BINDING_KEY],
+  [TWIN_PART_FIELD_BINDING_KEY]: props.values[TWIN_PART_FIELD_BINDING_KEY],
 }))
 
 // ⚠ 缝合只走 `twinSceneValues` 这一处：对齐顺序在编辑视口那边也要用同一份，
 // 各写各的就会「编辑器里核对过的对应关系，到大屏上全接错对象」
 const live = computed(() => twinSceneValues(scene.value, rows.value))
-
-/**
- * 钻进这一层时的取景：自己的快照优先，没有就退回它引用的预设视点。
- * ⚠ 两个都配了时预设视点静默不生效——编辑器上已把这一条摆明。
- */
-const drillView = computed<TwinModalView | null>(() => {
-  const node = scene.value.hierNodes.find(
-    (item) => item.id === drillNodeId.value,
-  )
-  if (node === undefined) return null
-  if (node.view !== null) return node.view
-  const camera = scene.value.cameras.find((item) => item.id === node.cameraId)
-  if (camera === undefined) return null
-  return { position: camera.position, target: camera.target, fov: camera.fov }
-})
 
 const titleStyle = computed<CSSProperties>(() => ({
   ...CORNER_OFFSETS[readEnum(props.config.titlePosition, CORNERS, 'top-left')],
@@ -148,25 +114,11 @@ const errorMessage = computed(() =>
   <div class="dt-twin">
     <TwinScene
       :config="scene"
-      :part-values="live.parts"
-      :anchor-values="live.anchors"
-      :arrow-values="live.arrows"
-      :panel-values="live.panels"
-      :flow-values="live.flows"
-      :focus-view="drillView"
+      :values="live"
       :show-scene-tools="showSceneTools"
       :show-structure-tree="showStructureTree"
       :scene-title="title"
       @part-click="onPartClick"
-    />
-    <TwinHierDrill
-      v-if="drillNodeId !== ''"
-      class="dt-twin__drill"
-      :nodes="scene.hierNodes"
-      :node-id="drillNodeId"
-      :values="live.hier"
-      @update:node-id="drillNodeId = $event"
-      @close="drillNodeId = ''"
     />
     <p v-if="title !== ''" class="dt-twin__title" :style="titleStyle">
       {{ title }}
@@ -196,15 +148,6 @@ const errorMessage = computed(() =>
   font-family: var(--font-display);
   letter-spacing: 0.06em;
   text-shadow: var(--fx-glow-title);
-}
-
-.dt-twin__drill {
-  position: absolute;
-  top: 12px;
-  right: 16px;
-  bottom: 12px;
-  width: 280px;
-  max-width: 45%;
 }
 
 .dt-twin__error {

@@ -23,7 +23,6 @@ import {
   removeFromFolder,
   renameFolder,
 } from './folderOps'
-import { addHierNode, moveHierSibling, reparentHierNode } from './hierOps'
 import type { TwinDoc } from './twinDoc'
 import type { TwinEntityKind, TwinSelection } from './types'
 
@@ -47,12 +46,6 @@ export interface TwinEditorActions {
   removeFromFolder: (itemId: string) => void
   /** 新建夹并把一个实体移进去，一笔撤销；返回夹 id。 */
   addFolderWithItem: (kind: TwinEntityKind, itemId: string) => string
-  /** 新建一个钻取节点；`parentId` 为 null 时建的是根。 */
-  addHier: (parentId: string | null) => void
-  /** 同一层里前挪一位或后挪一位。 */
-  moveHier: (id: string, delta: number) => void
-  /** 换一个钻取节点的上一层；拖进自己的子树时什么都不做。 */
-  reparentHier: (id: string, parentId: string | null) => void
   /**
    * 坐标轴手柄拖出来的位置 / 朝向。
    * ⚠ 走合并写入：一次拖动逐帧来几十条，各记一条撤销的话，
@@ -107,33 +100,6 @@ function createFolderActions(doc: TwinDoc): TwinFolderActions {
   }
 }
 
-/** 钻取树的三个动作：它们不按 `kind` 分派，与其余动作形状不同，单独收一处。 */
-type TwinHierActions = Pick<
-  TwinEditorActions,
-  'addHier' | 'moveHier' | 'reparentHier'
->
-
-function createHierActions(
-  doc: TwinDoc,
-  select: (selection: TwinSelection) => void,
-): TwinHierActions {
-  return {
-    addHier: (parentId) => {
-      const { config, id } = addHierNode(doc.config.value, parentId)
-      doc.commit(config)
-      select({ kind: 'hierNodes', id })
-    },
-
-    moveHier: (id, delta) => {
-      doc.commit(moveHierSibling(doc.config.value, id, delta))
-    },
-
-    reparentHier: (id, parentId) => {
-      doc.commit(reparentHierNode(doc.config.value, id, parentId))
-    },
-  }
-}
-
 /**
  * 把手柄拖出来的位置 / 朝向落进配置。
  * ⚠ 走合并写入：一次拖动逐帧来几十条，各记一条撤销的话撤销一次只退回一帧。
@@ -169,7 +135,6 @@ export function createTwinEditorActions(
   select: (selection: TwinSelection) => void,
 ): TwinEditorActions {
   return {
-    ...createHierActions(doc, select),
     ...createFolderActions(doc),
 
     add: (kind) => {

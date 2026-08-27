@@ -163,66 +163,6 @@ describe('单例段', () => {
   })
 })
 
-describe('钻取树', () => {
-  it('建根之后选中挪到新节点上', () => {
-    const { actions, select, doc } = setup({})
-
-    actions.addHier(null)
-
-    const created = doc.config.value.hierNodes[0]
-    expect(created?.name).toBe('区域 1')
-    expect(select).toHaveBeenCalledWith({
-      kind: 'hierNodes',
-      id: created?.id,
-    })
-  })
-
-  it('建子层挂在指定的上一层下', () => {
-    const { actions, doc } = setup({ hierNodes: [{ id: 'plant' }] })
-
-    actions.addHier('plant')
-
-    expect(doc.config.value.hierNodes[1]?.parentId).toBe('plant')
-  })
-
-  it('同级挪位走 commit，撤销栈上留得下一步', () => {
-    const { actions, doc } = setup({
-      hierNodes: [
-        { id: 'a', order: 0 },
-        { id: 'b', order: 1 },
-      ],
-    })
-
-    actions.moveHier('b', -1)
-
-    expect(doc.canUndo.value).toBe(true)
-    expect(doc.config.value.hierNodes.find((it) => it.id === 'b')?.order).toBe(
-      0,
-    )
-  })
-
-  it('改父子走 commit', () => {
-    const { actions, doc } = setup({
-      hierNodes: [{ id: 'a' }, { id: 'b' }],
-    })
-
-    actions.reparentHier('b', 'a')
-
-    expect(doc.config.value.hierNodes[1]?.parentId).toBe('a')
-  })
-
-  // ⚠ 拖进自己的子树会成环，而成环的那几层在钻取里整片消失
-  it('拖进自己的子树被挡下，撤销栈上不留空帧', () => {
-    const { actions, doc } = setup({
-      hierNodes: [{ id: 'a' }, { id: 'b', parentId: 'a' }],
-    })
-
-    actions.reparentHier('a', 'b')
-
-    expect(doc.canUndo.value).toBe(false)
-  })
-})
-
 describe('文件夹', () => {
   const FOLDERED = {
     anchors: [{ id: 'a1' }, { id: 'a2' }],

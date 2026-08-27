@@ -12,13 +12,13 @@ import {
   TWIN_ANCHOR_BINDING_KEY,
   TWIN_ARROW_BINDING_KEY,
   TWIN_FLOW_BINDING_KEY,
-  TWIN_HIER_BINDING_KEY,
   TWIN_PANEL_BINDING_KEY,
   TWIN_PART_BINDING_KEY,
+  TWIN_PART_FIELD_BINDING_KEY,
   arrayRowFieldKey,
 } from './constants'
-import { flattenHierFields } from './hierTree'
 import { flattenPanelFields } from './normalizeElements'
+import { flattenPartFields } from './partFields'
 import { tintedParts } from './partTint'
 import type { TwinConfig } from './types'
 
@@ -89,7 +89,7 @@ export function twinBindingRows(config: TwinConfig): TwinBindingRow[] {
     ...rowsOf(TWIN_PANEL_BINDING_KEY, panels, 'value'),
     ...rowsOf(TWIN_ARROW_BINDING_KEY, arrows, 'value'),
     ...rowsOf(TWIN_FLOW_BINDING_KEY, flows, 'intensity'),
-    ...rowsOf(TWIN_HIER_BINDING_KEY, hierEntities(config), 'value'),
+    ...rowsOf(TWIN_PART_FIELD_BINDING_KEY, partFieldEntities(config), 'value'),
   ]
 }
 
@@ -98,19 +98,21 @@ function panelNameOf(config: TwinConfig, panelId: string): string {
 }
 
 /**
- * 钻取节点的行：按**扁平化后**的字段序，一行名字是「节点名 · 字段标签」。
- * ⚠ 顺序是文档序不是树序：拖着改父子会把树序整片重排，而那会静默地让每一条
- * 绑定改喂另一个字段。
+ * 部件详情字段的行：按**扁平化后**的字段序，一行名字是「部件名 · 字段标签」。
+ * ⚠ 与部件状态染色是两个槽：染色一个部件只占一行，详情字段一个部件占几行看
+ * 它配了几个字段，两者的行号各数各的。
  */
-function hierEntities(config: TwinConfig): { id: string; label: string }[] {
-  return flattenHierFields(config.hierNodes).map((entry) => ({
+function partFieldEntities(
+  config: TwinConfig,
+): { id: string; label: string }[] {
+  return flattenPartFields(config.parts).map((entry) => ({
     id: entry.valueKey,
-    label: `${nameOr(hierNameOf(config, entry.nodeId), entry.nodeId)} · ${nameOr(entry.field.label, entry.field.key)}`,
+    label: `${nameOr(partNameOf(config, entry.partId), entry.partId)} · ${nameOr(entry.field.label, entry.field.key)}`,
   }))
 }
 
-function hierNameOf(config: TwinConfig, nodeId: string): string {
-  return config.hierNodes.find((item) => item.id === nodeId)?.name ?? ''
+function partNameOf(config: TwinConfig, partId: string): string {
+  return config.parts.find((item) => item.id === partId)?.name ?? ''
 }
 
 /**
@@ -131,24 +133,22 @@ export function twinRowLabels(
 }
 
 /**
- * 有绑定的六类实体各自落在哪个数组槽。键是 `TwinConfig` 上的数组字段名。
+ * 有绑定的五类实体各自落在哪个数组槽。键是 `TwinConfig` 上的数组字段名。
  * ⚠ 视点**不在表里**：它不取数，选中它时没有「只看这一个」可言。
- * ⚠ 部件在表里，但只有配了状态染色的那些才真有行——没配的部件会得到一张空表，
- * 那正是要说的「这个部件没有可绑的字段」，与「不取数」是两回事。
+ * ⚠ 部件占**两个槽**：状态染色一行，详情字段每个字段一行，所以它的值是一对。
  */
-const SLOT_OF_KIND: Readonly<Record<string, string>> = {
-  parts: TWIN_PART_BINDING_KEY,
-  anchors: TWIN_ANCHOR_BINDING_KEY,
-  panels: TWIN_PANEL_BINDING_KEY,
-  arrows: TWIN_ARROW_BINDING_KEY,
-  flows: TWIN_FLOW_BINDING_KEY,
-  hierNodes: TWIN_HIER_BINDING_KEY,
+const SLOTS_OF_KIND: Readonly<Record<string, readonly string[]>> = {
+  parts: [TWIN_PART_BINDING_KEY, TWIN_PART_FIELD_BINDING_KEY],
+  anchors: [TWIN_ANCHOR_BINDING_KEY],
+  panels: [TWIN_PANEL_BINDING_KEY],
+  arrows: [TWIN_ARROW_BINDING_KEY],
+  flows: [TWIN_FLOW_BINDING_KEY],
 }
 
 /**
  * 一行是不是属于某个实体。
  *
- * ⚠ 信息牌与钻取节点一个实体摊成多行，行的 id 是 `<实体 id>::<字段 key>`；
+ * ⚠ 信息牌与部件详情一个实体摊成多行，行的 id 是 `<实体 id>::<字段 key>`；
  * 锚点/箭头/能量流一个实体一行，行的 id 就是实体 id。两种都要认。
  * @param rowEntityId 行上记的实体标识
  * @param entityId 实体 id
@@ -162,7 +162,7 @@ function isRowOf(rowEntityId: string, entityId: string): boolean {
  *
  * ⚠ 给的是**行号**不是过滤后的行：数组绑定的 fieldKey 是 `槽[行号].子键`，
  * 按过滤后的位置重新编号会让每一条绑定都改喂另一个实体。
- * ⚠ 这类实体不取数时回 `null`（部件、视点，以及模型/视点控件/漫游这些单例段），
+ * ⚠ 这类实体不取数时回 `null`（视点，以及模型/视点控件/漫游这些单例段），
  * 与「取数但一行都没有」的空表分开：前者该退回整段孪生的全部绑定，后者该老实
  * 说这个实体没有可绑的字段。
  *
@@ -175,12 +175,16 @@ export function twinRowsOfEntity(
   kind: string,
   entityId: string,
 ): Record<string, number[]> | null {
-  const slotKey = SLOT_OF_KIND[kind]
-  if (slotKey === undefined) return null
-  const rows = twinBindingRows(config)
-    .filter((row) => row.slotKey === slotKey && isRowOf(row.entityId, entityId))
-    .map((row) => row.index)
-  return { [slotKey]: rows }
+  const slotKeys = SLOTS_OF_KIND[kind]
+  if (slotKeys === undefined) return null
+  const out: Record<string, number[]> = {}
+  for (const slotKey of slotKeys) out[slotKey] = []
+  for (const row of twinBindingRows(config)) {
+    if (!slotKeys.includes(row.slotKey)) continue
+    if (!isRowOf(row.entityId, entityId)) continue
+    out[row.slotKey]?.push(row.index)
+  }
+  return out
 }
 
 /** 六个数组槽，重映射与行数统计逐个走一遍。 */
@@ -190,7 +194,7 @@ const ARRAY_SLOTS = [
   TWIN_PANEL_BINDING_KEY,
   TWIN_ARROW_BINDING_KEY,
   TWIN_FLOW_BINDING_KEY,
-  TWIN_HIER_BINDING_KEY,
+  TWIN_PART_FIELD_BINDING_KEY,
 ] as const
 
 /**
