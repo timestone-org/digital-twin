@@ -102,12 +102,15 @@ function toExportBinding(raw: unknown, at: string): ExportBindingPayload {
  */
 function toExportNode(raw: unknown, at: string): ExportNodePayload {
   const source = requireRecord(raw, at)
+  // ⚠ 线形名是后端的 `parent_key`（openapi 为准）。`parent_client_key` 是旧版
+  // 前端落盘用过的名字——那批文件当时导不进去，读回来仍认它一次
+  const parentRaw =
+    source.parent_key !== undefined
+      ? source.parent_key
+      : source.parent_client_key
   return {
     clientKey: requireString(source.client_key, `${at}.client_key`),
-    parentClientKey: optionalString(
-      source.parent_client_key,
-      `${at}.parent_client_key`,
-    ),
+    parentClientKey: optionalString(parentRaw, `${at}.parent_key`),
     moduleType: requireString(source.module_type, `${at}.module_type`),
     x: requireNumber(source.x, `${at}.x`),
     y: requireNumber(source.y, `${at}.y`),
@@ -162,7 +165,7 @@ function fromExportBinding(
 function fromExportNode(node: ExportNodePayload): Record<string, unknown> {
   return {
     client_key: node.clientKey,
-    parent_client_key: node.parentClientKey,
+    parent_key: node.parentClientKey,
     module_type: node.moduleType,
     x: node.x,
     y: node.y,

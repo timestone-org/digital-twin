@@ -3,8 +3,10 @@
  *
  * ⚠ 包可能来自用户随手挑的一个文件，缺字段、错类型必须在这一层就说「形状不对」，
  * 而不是放行到渲染层再崩。
- * ⚠ 包里不许出现任何 id：父子关系只由 `client_key` / `parent_client_key` 表达，
+ * ⚠ 包里不许出现任何 id：父子关系只由 `client_key` / `parent_key` 表达，
  * 带 id 的包导回同一个库会让「导入」变成「悄悄改掉源屏」。
+ * ⚠ 线形字段名以后端 openapi 为准：这里的夹具要是跟着前端实现写，
+ * 两边同错也全绿，真后端却按 extra_forbidden 打回。
  */
 import { describe, expect, it } from 'vitest'
 
@@ -32,7 +34,7 @@ function bindingWire(over: Record<string, unknown> = {}): unknown {
 function nodeWire(over: Record<string, unknown> = {}): unknown {
   return {
     client_key: 'k1',
-    parent_client_key: null,
+    parent_key: null,
     module_type: 'demo',
     x: 1,
     y: 2,
@@ -206,11 +208,35 @@ describe('整包写回线形', () => {
     ])
   })
 
+  it('父子关系读写的都是后端的 parent_key——写别的名字后端按 extra_forbidden 打回', () => {
+    const payload = parseExportPackage(
+      packageWire({ nodes: [nodeWire({ parent_key: 'k0' })] }),
+    )
+    expect(payload.nodes[0]?.parentClientKey).toBe('k0')
+
+    const node = (fromExportPackage(payload).nodes as unknown[])[0]
+    expect(node).toMatchObject({ parent_key: 'k0' })
+    expect(Object.keys(node as Record<string, unknown>)).not.toContain(
+      'parent_client_key',
+    )
+  })
+
+  it('旧版前端落盘的 parent_client_key 仍读得回——那批文件当时导不进去，别再废一次', () => {
+    const legacy = nodeWire({ parent_key: undefined }) as Record<
+      string,
+      unknown
+    >
+    legacy.parent_client_key = 'k0'
+    const payload = parseExportPackage(packageWire({ nodes: [legacy] }))
+
+    expect(payload.nodes[0]?.parentClientKey).toBe('k0')
+  })
+
   it('原样往返：窄化再写回，与进来时逐字段相同', () => {
     const original = packageWire({
       nodes: [
         nodeWire({
-          parent_client_key: 'k0',
+          parent_key: 'k0',
           bindings: [
             bindingWire({
               source_kind: 'computed',
