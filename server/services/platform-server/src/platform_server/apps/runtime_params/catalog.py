@@ -46,17 +46,19 @@ Number = int | float
 ParamValue = bool | int | float
 
 # 生效档位。非即时档要在界面上如实说「还没生效」
-TIER_INSTANT = "instant"
-TIER_RECONNECT = "reconnect"
-TIER_RESTART = "restart"
+ParamTier = Literal["instant", "reconnect", "restart"]
+TIER_INSTANT: ParamTier = "instant"
+TIER_RECONNECT: ParamTier = "reconnect"
+TIER_RESTART: ParamTier = "restart"
 
 # 危险方向：危险性挂在**变更方向**上而不是字段上。`off` = 由开改关危险，
 # `on` = 由关改开危险，`decrease` = 调小危险；None = 任何方向都不需要二次确认。
 # ⚠ 同为开关，危险方向可以相反：采集开关关掉只是不再出新行，而清理开关**打开**
 # 就开始真实删数据。照抄另一个开关的取值等于把二次确认弹在安全的那一侧
-DANGER_OFF = "off"
-DANGER_ON = "on"
-DANGER_DECREASE = "decrease"
+ParamDanger = Literal["off", "on", "decrease"]
+DANGER_OFF: ParamDanger = "off"
+DANGER_ON: ParamDanger = "on"
+DANGER_DECREASE: ParamDanger = "decrease"
 
 
 @dataclass(frozen=True)
@@ -79,8 +81,8 @@ class ParamSpec:
     label: str
     hint: str
     read: Callable[[Settings], ParamValue]
-    tier: str = TIER_INSTANT
-    danger: str | None = None
+    tier: ParamTier = TIER_INSTANT
+    danger: ParamDanger | None = None
     # 键对应的环境变量全名在**别的服务**上时由它给出（如 COLLECT_*）
     env_override: str | None = None
 
