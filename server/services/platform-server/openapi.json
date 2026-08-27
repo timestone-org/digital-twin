@@ -11855,11 +11855,16 @@
         "type": "object"
       },
       "RuntimeParamOut": {
-        "description": "一项运行参数的登记信息与当前状态。\n\n`value` 是**有效值**：有覆盖行就是覆盖值，没有就是环境变量给的默认值。\n`env_name` 给运维对着 .env 看——界面上改的和文件里写的是同一件事。\n\n⚠ `minimum` / `maximum` 随取值一起下发，不让界面自己写一份：两边各写一份\n时前端放行的值会被服务端 422 挡回来，而用户看不出自己错在哪。\n`tier` 是生效档位（instant / reconnect / restart），非即时档界面要如实说\n「保存了但还没生效」；`danger` 是危险方向（off / decrease），命中方向的\n改动界面要求二次确认。",
+        "description": "一项运行参数的登记信息与当前状态。\n\n`value` 是**有效值**：有覆盖行就是覆盖值，没有就是环境变量给的默认值。\n`env_name` 给运维对着 .env 看——界面上改的和文件里写的是同一件事。\n\n⚠ `minimum` / `maximum` 随取值一起下发，不让界面自己写一份：两边各写一份\n时前端放行的值会被服务端 422 挡回来，而用户看不出自己错在哪。\n`tier` 是生效档位（instant / reconnect / restart），非即时档界面要如实说\n「保存了但还没生效」；`danger` 是危险方向（off / on / decrease），命中方向的\n改动界面要求二次确认。\n\n⚠ 三个闭合集合都按 `Literal` 声明，好让 `openapi.json` 带上 enum：写成裸\n`str` 时前端只能照着这段散文自己抄一份，而抄漏一个取值的表现是**运行期\n整包抛「未知的 X」**——`danger` 的 `on` 就这么漏过一次。",
         "properties": {
           "danger": {
             "anyOf": [
               {
+                "enum": [
+                  "off",
+                  "on",
+                  "decrease"
+                ],
                 "type": "string"
               },
               {
@@ -11966,6 +11971,11 @@
             "title": "Step"
           },
           "tier": {
+            "enum": [
+              "instant",
+              "reconnect",
+              "restart"
+            ],
             "title": "Tier",
             "type": "string"
           },

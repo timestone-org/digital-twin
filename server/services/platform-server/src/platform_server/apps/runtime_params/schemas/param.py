@@ -4,7 +4,9 @@ from pydantic import Field
 
 from platform_server.apps.runtime_params.catalog import (
     Number,
+    ParamDanger,
     ParamKind,
+    ParamTier,
     ParamValue,
 )
 from platform_server.apps.runtime_params.schemas.common import (
@@ -23,8 +25,12 @@ class RuntimeParamOut(OutputModel):
     ⚠ `minimum` / `maximum` 随取值一起下发，不让界面自己写一份：两边各写一份
     时前端放行的值会被服务端 422 挡回来，而用户看不出自己错在哪。
     `tier` 是生效档位（instant / reconnect / restart），非即时档界面要如实说
-    「保存了但还没生效」；`danger` 是危险方向（off / decrease），命中方向的
+    「保存了但还没生效」；`danger` 是危险方向（off / on / decrease），命中方向的
     改动界面要求二次确认。
+
+    ⚠ 三个闭合集合都按 `Literal` 声明，好让 `openapi.json` 带上 enum：写成裸
+    `str` 时前端只能照着这段散文自己抄一份，而抄漏一个取值的表现是**运行期
+    整包抛「未知的 X」**——`danger` 的 `on` 就这么漏过一次。
     """
 
     section: str
@@ -38,8 +44,8 @@ class RuntimeParamOut(OutputModel):
     step: Number
     minimum: Number
     maximum: Number
-    tier: str
-    danger: str | None
+    tier: ParamTier
+    danger: ParamDanger | None
     value: ParamValue
     default_value: ParamValue
     previous_value: ParamValue | None
