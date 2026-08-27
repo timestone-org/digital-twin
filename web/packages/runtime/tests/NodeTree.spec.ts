@@ -22,8 +22,21 @@ import {
 const shell = fakeManifest({
   type: 'shell',
   isContainer: true,
+  // ⚠ 标题条那 28px 只在**清单声明了这个开关**时才留：页头页脚一类壳里没有条的
+  //   容器，配置里遗留的 showTitle 不该把子节点整体顶下去
+  configSchema: [
+    { key: 'showTitle', label: '显示标题条', type: 'boolean', default: false },
+  ],
   component: () =>
     asAsyncModule(fakeModuleComponent({ mark: 'shell', hasSlot: true })),
+})
+
+/** 没有标题条开关的容器壳：页头页脚就是这一类。 */
+const barless = fakeManifest({
+  type: 'barless',
+  isContainer: true,
+  component: () =>
+    asAsyncModule(fakeModuleComponent({ mark: 'barless', hasSlot: true })),
 })
 
 /** 组件会渲染插槽，但清单没声明自己是容器——运行时因此不该给它子节点。 */
@@ -35,7 +48,7 @@ const slotLeaf = fakeManifest({
 
 const leaf = fakeManifest({ type: 'leaf' })
 
-const catalog = fakeCatalog([shell, slotLeaf, leaf])
+const catalog = fakeCatalog([shell, barless, slotLeaf, leaf])
 
 const STAGE: DesignSize = { width: 1920, height: 1080 }
 
@@ -163,6 +176,35 @@ describe('容器的子层', () => {
 
     expect(childLayer.attributes('style')).toContain('width: 380px')
     expect(childLayer.attributes('style')).toContain('height: 252px')
+  })
+
+  // 页头页脚删掉标题条之后，存量大屏的 config_json 里还留着这个 true
+  it('壳里没有标题条开关时，遗留的 showTitle 不给子层留那 28px', async () => {
+    const wrapper = mountTree(
+      toRoots([
+        fakeNode({
+          id: 'root',
+          moduleType: 'barless',
+          w: 400,
+          h: 300,
+          configJson: { showTitle: true, __container: { pad: 10 } },
+        }),
+        fakeNode({
+          id: 'kid',
+          moduleType: 'leaf',
+          parentId: 'root',
+          x: 0,
+          y: 0,
+          w: 380,
+          h: 280,
+        }),
+      ]),
+    )
+    await flushPromises()
+
+    expect(
+      wrapper.get('.barless .dt-node-layer').attributes('style'),
+    ).toContain('height: 280px')
   })
 
   it('子节点坐标相对内容区原点，内缩不许再加一次', async () => {

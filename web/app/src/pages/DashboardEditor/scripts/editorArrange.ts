@@ -105,9 +105,12 @@ export interface ArrangeActions {
 
 /** 选中集里同父才能对齐；返回同父的选中节点，父不一致给 null。 */
 function sameParentSelection(
-  editor: DashboardEditor,
+  deps: ArrangeDeps,
 ): readonly { id: string; geometry: NodeGeometry }[] | null {
-  const nodes = editor.selectedNodes.value
+  // 钉位节点整个排除在外：对齐一次就能把页头从顶部挪走，而钉位的意思正是挪不走
+  const nodes = deps.editor.selectedNodes.value.filter(
+    (node) => !isRegionType(deps, node.moduleType),
+  )
   if (nodes.length === 0) return null
   const parent = nodes[0]?.parentId ?? null
   if (nodes.some((node) => (node.parentId ?? null) !== parent)) return null
@@ -207,7 +210,7 @@ function pasteInto(
   return pastedIds.length > 0
 }
 
-/** 钉位单例：整理与复制都要把它排除在外。 */
+/** 钉位单例：整理、对齐、方向键与复制都要把它排除在外。 */
 function isRegionType(deps: ArrangeDeps, moduleType: string): boolean {
   return isPinnedRegion(deps.getManifest(moduleType))
 }
@@ -251,15 +254,15 @@ function alignActions(
 
   return {
     alignReady: () => {
-      const selection = sameParentSelection(editor)
+      const selection = sameParentSelection(deps)
       return selection !== null && selection.length >= 2
     },
     distributeReady: () => {
-      const selection = sameParentSelection(editor)
+      const selection = sameParentSelection(deps)
       return selection !== null && selection.length >= 3
     },
     alignSelected: (kind) => {
-      const selection = sameParentSelection(editor)
+      const selection = sameParentSelection(deps)
       if (selection === null || selection.length < 2) return
       applyRects(
         editor,
@@ -271,7 +274,7 @@ function alignActions(
       )
     },
     distributeSelected: (axis) => {
-      const selection = sameParentSelection(editor)
+      const selection = sameParentSelection(deps)
       if (selection === null || selection.length < 3) return
       applyRects(
         editor,
@@ -288,9 +291,17 @@ function alignActions(
   }
 }
 
-/** 方向键微调：只动选中集里的最上层节点，子树跟着根走，连按并成一笔。 */
-function nudgeBy(editor: DashboardEditor, dx: number, dy: number): void {
-  const ids = doc.topMostIds(editor.nodes.value, editor.selectedIds.value)
+/**
+ * 方向键微调：只动选中集里的最上层节点，子树跟着根走，连按并成一笔。
+ * ⚠ 钉位节点不跟着动——方向键是另一条能把页头从顶部挪走的路。
+ */
+function nudgeBy(deps: ArrangeDeps, dx: number, dy: number): void {
+  const { editor } = deps
+  const ids = doc
+    .topMostIds(editor.nodes.value, editor.selectedIds.value)
+    .filter(
+      (id) => !isRegionType(deps, doc.moduleTypeOf(editor.nodes.value, id)),
+    )
   if (ids.length === 0) return
   const wanted = new Set(ids)
   editor.apply(
@@ -409,7 +420,7 @@ function batchActions(
 
   return {
     nudgeSelected: (dx, dy) => {
-      nudgeBy(editor, dx, dy)
+      nudgeBy(deps, dx, dy)
     },
     changeGeometryBatch: (changes, isContinuous) => {
       editor.apply(

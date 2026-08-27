@@ -391,6 +391,9 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         description=(
             "往画布上加一个模块。`module_type` 取自模块清单。"
             "不给坐标就落到默认位置。返回新节点的 id。"
+            "⚠ 清单里带 `region` 的（页头 / 页脚）是**钉位单例**："
+            "每屏最多一个、只能落顶层、坐标由钉边算，"
+            "给的 x/y/parent_id 一律不作数。"
         ),
         parameters=_object(
             {
@@ -417,6 +420,9 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         description=(
             "改一个画布节点的位置与大小。只给要改的那几维，"
             "不给的维保持原值。全部必须是整数。"
+            "⚠ 钉位模块（清单里带 `region` 的页头 / 页脚）横向恒铺满、"
+            "钉住的那条边不动，**只有高度改得动**：页头钉上沿、页脚钉下沿，"
+            "y 由钉边与高算出来。回执报的是落库后的几何，以它为准。"
         ),
         parameters=_object(
             {
@@ -435,6 +441,8 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         description=(
             "对齐、分布或整理。对齐要 ≥2 个节点、分布要 ≥3 个，"
             "且它们必须在同一个父层里。tidy 不看 node_ids，整理整个顶层。"
+            "⚠ 钉位模块（页头 / 页脚）一律不参与——它们挪不动，"
+            "选中集里有它也只按其余节点算个数。"
         ),
         parameters=_object(
             {

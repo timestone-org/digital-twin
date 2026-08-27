@@ -43,7 +43,7 @@ export function grabHandlersOf(
       }
       if (!ctx.selected.value.has(nodeId)) emit('select', nodeId, false)
       // 钉位节点不许移动，点选照做
-      if (placement.isPinned) return
+      if (placement.pinnedEdge !== null) return
       startDrag(placement, event, 'move', { x: 0, y: 0 })
     },
     onNodeResize: (placement, dir, event) => {

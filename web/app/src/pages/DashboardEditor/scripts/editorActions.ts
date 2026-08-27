@@ -20,6 +20,8 @@ import * as doc from '@/features/dashboard/editorDoc'
 import {
   acceptsChildren,
   isPinnedRegion,
+  pinnedEdgeOf,
+  type PinnedEdge,
 } from '@/features/dashboard/moduleLibrary'
 
 export interface EditorActionDeps {
@@ -100,19 +102,38 @@ function hostOf(deps: EditorActionDeps): string | null {
 }
 
 /**
- * 钉位模块的落位几何：横向铺满、页头钉顶、页脚钉底，只留高度可调。
+ * 钉位模块的几何：横向铺满、页头钉顶、页脚钉底，只留高度可调。
+ * ⚠ 每一条改几何的路都要过它——面板输入、拖手柄、助手的 set_geometry。
+ * 漏一条的表现是页脚被拉高之后下沿掉出画布，而画布上只看得见「页脚变矮了」。
+ * @param edge 被钉住的那条边；null 原样返回
  */
+function pinGeometry(
+  edge: PinnedEdge,
+  design: DesignSize,
+  geometry: doc.NodeGeometry,
+): doc.NodeGeometry {
+  if (edge === null) return geometry
+  const h = Math.min(geometry.h, design.height)
+  return {
+    x: 0,
+    y: edge === 'bottom' ? Math.max(0, design.height - h) : 0,
+    w: design.width,
+    h,
+  }
+}
+
+/** 新钉位节点的落位几何：高度取清单缺省，其余由钉边算出来。 */
 function pinnedGeometry(
   manifest: ModuleManifest,
   design: DesignSize,
 ): doc.NodeGeometry {
   const h = manifest.defaultSize.height
-  return {
+  return pinGeometry(pinnedEdgeOf(manifest), design, {
     x: 0,
-    y: manifest.region === 'footer' ? Math.max(0, design.height - h) : 0,
+    y: 0,
     w: design.width,
     h,
-  }
+  })
 }
 
 /** 插入一个新节点；钉位撞单例时不插并返回 false。 */
@@ -176,8 +197,15 @@ function createNodeActions(deps: EditorActionDeps): NodeActions {
     changeGeometry: (nodeId, geometry, isContinuous, dimension) => {
       const field =
         dimension === undefined ? 'geometry' : `geometry.${dimension}`
+      const placed = pinGeometry(
+        pinnedEdgeOf(
+          deps.getManifest(doc.moduleTypeOf(editor.nodes.value, nodeId)),
+        ),
+        deps.design(),
+        geometry,
+      )
       editor.apply(
-        (nodes) => doc.setGeometry(nodes, nodeId, geometry),
+        (nodes) => doc.setGeometry(nodes, nodeId, placed),
         mergeKeyOf(nodeId, field),
       )
       if (!isContinuous) editor.flush()

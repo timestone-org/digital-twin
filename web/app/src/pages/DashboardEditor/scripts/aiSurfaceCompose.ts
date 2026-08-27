@@ -97,7 +97,18 @@ function setGeometry(
   deps.editor.flush()
   // 不连续：这一步就是完整的一笔，用户一次 Ctrl+Z 应当整个退回
   deps.actions.changeGeometry(node.id, geometry, false)
-  return { ok: true, node_id: node.id, ...geometry }
+  // ⚠ 回执报**落库后**的几何而不是入参：钉位模块（页头 / 页脚）的 x/y/宽会被
+  // 动作层按钉边重算，照抄入参的话模型手里那份坐标与画布上的不是一回事，
+  // 接着它会对着一个并不存在的位置继续算下一步
+  const placed = nodeOf(deps, call)
+  return {
+    ok: true,
+    node_id: node.id,
+    x: placed.x,
+    y: placed.y,
+    w: placed.w,
+    h: placed.h,
+  }
 }
 
 function arrange(deps: ComposeDeps, call: AssistantToolCall): SurfaceSnapshot {

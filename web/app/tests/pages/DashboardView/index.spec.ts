@@ -6,11 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { ref, shallowRef } from 'vue'
-import {
-  __resetConfigControls,
-  __resetModules,
-  SHOW_TITLE_CONFIG_KEY,
-} from '@dt/modules'
+import { __resetConfigControls, __resetModules } from '@dt/modules'
 import { __resetProviders, listProviders } from '@dt/datasources'
 import type { DashboardPayload } from '@dt/contracts'
 
@@ -63,7 +59,7 @@ const PAYLOAD: DashboardPayload = {
       h: 96,
       zIndex: 0,
       isVisible: true,
-      configJson: { title: '运行大屏', [SHOW_TITLE_CONFIG_KEY]: true },
+      configJson: {},
       createdAt: '2026-08-14T00:00:00Z',
       updatedAt: '2026-08-14T00:00:00Z',
       bindings: [],
@@ -101,7 +97,9 @@ describe('自装配', () => {
     const wrapper = mount(DashboardView)
     await flushPromises()
 
-    await vi.waitFor(() => expect(wrapper.text()).toContain('运行大屏'))
+    await vi.waitFor(() =>
+      expect(wrapper.find('.dt-header').exists()).toBe(true),
+    )
     expect(wrapper.text()).not.toContain('未知')
     wrapper.unmount()
   })

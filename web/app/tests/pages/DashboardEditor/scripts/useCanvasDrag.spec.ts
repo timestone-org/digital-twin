@@ -43,7 +43,7 @@ function item(
     layer: LAYER,
     minW: 24,
     minH: 24,
-    isPinned: false,
+    pinnedEdge: null,
     ...over,
   }
 }
@@ -175,9 +175,9 @@ describe('缩放', () => {
     expect(result.rects.get('a')).toMatchObject({ w: 24, h: 24 })
   })
 
-  it('钉位节点横向被钉死，只有高能改', () => {
+  it('钉顶的横向被钉死、上沿不动，拖下沿只改高', () => {
     const current = session({
-      anchor: item('h', { x: 0, y: 0, w: 1000, h: 80 }, { isPinned: true }),
+      anchor: item('h', { x: 0, y: 0, w: 1000, h: 80 }, { pinnedEdge: 'top' }),
       kind: 'resize',
       dir: { x: 0, y: 1 },
     })
@@ -185,6 +185,40 @@ describe('缩放', () => {
     const result = computeDrag(current, { dx: 50, dy: 23, ...FRAME })
 
     expect(result.rects.get('h')).toEqual({ x: 0, y: 0, w: 1000, h: 100 })
+  })
+
+  // 只写 h 不算 y 的话，页脚是向下长的，下沿掉出画布而画面上只是「变矮了」
+  it('钉底的拖上沿：高变大、下沿仍贴着本层底边', () => {
+    const current = session({
+      anchor: item(
+        'f',
+        { x: 0, y: 720, w: 1000, h: 80 },
+        { pinnedEdge: 'bottom' },
+      ),
+      kind: 'resize',
+      dir: { x: 0, y: -1 },
+    })
+
+    const result = computeDrag(current, { dx: 50, dy: -23, ...FRAME })
+
+    expect(result.rects.get('f')).toEqual({ x: 0, y: 700, w: 1000, h: 100 })
+  })
+
+  // 存量几何没贴住底边时也要被拉回去：钉位的意思是「算得出来」，不是「当初摆对了」
+  it('钉底的节点没贴底时，一动就被重新贴回底边', () => {
+    const current = session({
+      anchor: item(
+        'f',
+        { x: 0, y: 300, w: 1000, h: 80 },
+        { pinnedEdge: 'bottom' },
+      ),
+      kind: 'resize',
+      dir: { x: 0, y: -1 },
+    })
+
+    const result = computeDrag(current, { dx: 0, dy: -20, ...FRAME })
+
+    expect(result.rects.get('f')).toEqual({ x: 0, y: 700, w: 1000, h: 100 })
   })
 })
 

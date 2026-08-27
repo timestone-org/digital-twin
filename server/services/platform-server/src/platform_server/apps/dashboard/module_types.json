@@ -875,63 +875,12 @@
       "version": 1,
       "config_schema": [
         {
-          "key": "title",
-          "label": "标题",
-          "type": "string",
-          "default": "",
-          "placeholder": "留空则标题条上没有文字",
-          "group": "标题",
-          "span": "full",
-          "when": {
-            "key": "showTitle",
-            "in": [
-              true
-            ]
-          }
-        },
-        {
-          "key": "showTitle",
-          "label": "显示标题条",
-          "type": "boolean",
-          "default": false,
-          "group": "标题",
-          "span": "half"
-        },
-        {
-          "key": "titleAlign",
-          "label": "标题对齐",
-          "type": "enum",
-          "default": "center",
-          "options": [
-            {
-              "value": "left",
-              "label": "靠左"
-            },
-            {
-              "value": "center",
-              "label": "居中"
-            },
-            {
-              "value": "right",
-              "label": "靠右"
-            }
-          ],
-          "group": "标题",
-          "span": "half",
-          "when": {
-            "key": "showTitle",
-            "in": [
-              true
-            ]
-          }
-        },
-        {
           "key": "accent",
           "label": "强调色",
           "type": "color",
           "default": "var(--accent-primary)",
           "group": "外观",
-          "help": "顶部分隔线与扫光取这个色。",
+          "help": "顶部分隔线、顶边扫光与点阵底纹都取这个色。",
           "span": "half"
         },
         {
@@ -945,61 +894,34 @@
         },
         {
           "key": "backgroundImage",
-          "label": "背景图 / 渐变",
-          "type": "string",
+          "label": "背景底图",
+          "type": "image",
           "default": "",
-          "placeholder": "留空 = 无；填 CSS：linear-gradient(…) 或 url(…)",
+          "placeholder": "留空 = 无，只有背景色",
           "group": "外观",
-          "help": "叠在背景色之上的 CSS background-image 值；留空不注入，纯色背景不受影响。",
+          "help": "可从素材库挑一张，也可填图片地址（自动铺满整条）或 CSS background 简写 / 渐变。",
           "span": "full"
         },
         {
-          "key": "showDivider",
-          "label": "顶部分隔线",
-          "type": "boolean",
-          "default": true,
-          "group": "外观",
-          "span": "half"
-        },
-        {
           "key": "dividerWidth",
-          "label": "分隔线粗细 (px)",
+          "label": "顶部分隔线 (px)",
           "type": "number",
           "default": 1,
           "group": "外观",
+          "help": "0 = 不画这条线。",
           "span": "half",
-          "when": {
-            "key": "showDivider",
-            "in": [
-              true
-            ]
-          },
           "min": 0,
           "max": 8,
           "step": 1
         },
         {
-          "key": "showSweep",
-          "label": "顶边扫光",
-          "type": "boolean",
-          "default": true,
-          "group": "外观",
-          "help": "顶边一条由强调色渐隐的高光带，纯装饰。",
-          "span": "half"
-        },
-        {
           "key": "sweepOpacity",
-          "label": "扫光浓度",
+          "label": "顶边扫光浓度",
           "type": "number",
           "default": 0.6,
           "group": "外观",
+          "help": "顶边一条由强调色渐隐的高光带，纯装饰；0 = 不要它。",
           "span": "half",
-          "when": {
-            "key": "showSweep",
-            "in": [
-              true
-            ]
-          },
           "min": 0,
           "max": 1,
           "step": 0.05
@@ -1061,29 +983,6 @@
       "version": 1,
       "config_schema": [
         {
-          "key": "title",
-          "label": "标题",
-          "type": "string",
-          "default": "",
-          "placeholder": "留空则标题条上没有文字",
-          "group": "标题",
-          "span": "full",
-          "when": {
-            "key": "showTitle",
-            "in": [
-              true
-            ]
-          }
-        },
-        {
-          "key": "showTitle",
-          "label": "显示标题条",
-          "type": "boolean",
-          "default": false,
-          "group": "标题",
-          "span": "half"
-        },
-        {
           "key": "variant",
           "label": "风格",
           "type": "enum",
@@ -1122,7 +1021,7 @@
         },
         {
           "key": "deco",
-          "label": "标题装饰",
+          "label": "两侧装饰",
           "type": "enum",
           "default": "bars",
           "options": [
@@ -1152,7 +1051,7 @@
             }
           ],
           "group": "外观",
-          "help": "标题两侧的对称装饰；选「无」即不添加。"
+          "help": "沿中线左右对称的一对装饰；选「无」即不添加。"
         },
         {
           "key": "decoGap",
@@ -1160,7 +1059,7 @@
           "type": "number",
           "default": 0,
           "group": "外观",
-          "help": "两侧装饰之间给标题留的空 (px)；0 = 随宽度自适应。子节点较宽或屏幕较窄时调大它避免重叠。",
+          "help": "两条装饰之间留出的空 (px)；0 = 随宽度自适应。中间的子节点（标题文字块之类）较宽或屏幕较窄时调大它避免重叠。",
           "when": {
             "key": "deco",
             "in": [
@@ -1181,7 +1080,7 @@
           "type": "color",
           "default": "var(--accent-primary)",
           "group": "外观",
-          "help": "花纹、装饰条、底部分隔线与标题辉光都取这个色。",
+          "help": "花纹、装饰条与底部分隔线都取这个色。",
           "span": "half"
         },
         {
@@ -1344,7 +1243,7 @@
           "type": "boolean",
           "default": true,
           "group": "动效",
-          "help": "开着时光带盖在花纹与扫描线之上，是「光扫过标题」的手感；关掉则沉到花纹层附近。子节点始终在光带之上。",
+          "help": "开着时光带盖在花纹与扫描线之上，是「光扫过页头」的手感；关掉则沉到花纹层附近。子节点始终在光带之上。",
           "when": {
             "key": "scan",
             "in": [

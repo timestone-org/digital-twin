@@ -11,6 +11,7 @@ import { computed, type CSSProperties } from 'vue'
 
 import type { ResizeDir } from '@/features/dashboard/canvasSnap'
 import type { EditorFrame } from '@/features/dashboard/editorLayout'
+import type { PinnedEdge } from '@/features/dashboard/moduleLibrary'
 
 const props = defineProps<{
   frame: EditorFrame
@@ -25,8 +26,11 @@ const props = defineProps<{
   isSelected: boolean
   /** 单选时才给手柄：多选状态下拖手柄改谁的尺寸没有定义。 */
   hasHandles: boolean
-  /** 钉位节点只许动一条边：贴顶的给下边、贴底的给上边；不钉位为 null。 */
-  pinnedEdge: 'top' | 'bottom' | null
+  /**
+   * 被**钉住**的那条边；不钉位为 null。手柄给的是它的对边——
+   * 页头钉顶只出下沿手柄、页脚钉底只出上沿手柄。
+   */
+  pinnedEdge: PinnedEdge
   zIndex: number
 }>()
 
@@ -94,6 +98,7 @@ const HANDLES: readonly Handle[] = [
   },
 ]
 
+/** 钉位时只留一个手柄：钉住上沿 → 只能拖下沿（y=1），钉住下沿 → 只能拖上沿。 */
 const handles = computed<readonly Handle[]>(() => {
   if (!props.isSelected || !props.hasHandles) return []
   if (props.pinnedEdge === null) return HANDLES
@@ -146,6 +151,7 @@ const config = computed<Record<string, unknown>>(() => ({
       :key="handle.id"
       class="dt-node__handle absolute"
       :class="handle.place"
+      :data-test="`handle-${handle.id}`"
       :style="{ cursor: handle.cursor }"
       @pointerdown.stop="emit('resize', handle.dir, $event)"
     ></span>

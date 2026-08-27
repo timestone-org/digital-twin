@@ -95,7 +95,7 @@ function styleOf(node: RuntimeNode): CSSProperties {
 function childDesignOf(node: RuntimeNode): DesignSize {
   return containerGeometry(
     moduleRect(node.box),
-    resolveContentInset(node.config),
+    resolveContentInset(node.config, props.getManifest(node.moduleType)),
   )
 }
 </script>

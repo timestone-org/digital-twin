@@ -52,7 +52,9 @@ describe('容器清单与容器几何的对齐', () => {
     const defaults = configDefaults(manifest.configSchema)
 
     expect(defaults[SHOW_TITLE_CONFIG_KEY]).toBe(true)
-    expect(resolveContentInset(defaults).top).toBe(8 + TITLE_BAR_HEIGHT_PX)
+    expect(resolveContentInset(defaults, manifest).top).toBe(
+      8 + TITLE_BAR_HEIGHT_PX,
+    )
   })
 
   it('内部布局的缺省是整块写死的，不从子字段拼', () => {
