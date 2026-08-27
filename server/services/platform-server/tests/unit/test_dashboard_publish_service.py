@@ -39,8 +39,10 @@ from unit.publish_fakes import (
 
 DASHBOARD = uuid.UUID("0198f0c0-0000-7000-8000-0000000000a1")
 OTHER_DASHBOARD = uuid.UUID("0198f0c0-0000-7000-8000-0000000000a2")
+# 观看者的身份是**订阅行 id**：退订重订会换新，连接 id 不会（viewers.py）
 VIEWER = uuid.UUID("0198f0c0-0000-7000-8000-0000000000b1")
 SECOND_VIEWER = uuid.UUID("0198f0c0-0000-7000-8000-0000000000b2")
+CONNECTION = uuid.UUID("0198f0c0-0000-7000-8000-0000000000c1")
 SOURCE = "0198f0c0-0000-7000-8000-00000000abcd"
 OUTLET = f"{SOURCE}:outlet_temp"
 INLET = f"{SOURCE}:inlet_temp"
@@ -116,11 +118,11 @@ class Harness:
     def watch(self, *pairs: tuple[uuid.UUID, uuid.UUID]) -> None:
         """摆出「谁在看哪张大屏」。
 
-        Args: pairs（大屏, 连接）。
+        Args: pairs（大屏, 订阅行 id）。
         """
         self.source.rows = [
-            subscription_row(topic_of(dashboard_id), connection_id)
-            for dashboard_id, connection_id in pairs
+            subscription_row(topic_of(dashboard_id), subscription_id)
+            for dashboard_id, subscription_id in pairs
         ]
 
     def frames(self) -> list[list[dict[str, object]]]:
@@ -213,6 +215,33 @@ async def test_swapping_one_viewer_for_another_still_counts_as_new() -> None:
     harness.watch((DASHBOARD, SECOND_VIEWER))
     await harness.publisher.publish_once()
     assert len(harness.frames()) == 2
+
+
+async def test_a_remount_on_the_same_connection_gets_a_full_frame() -> None:
+    """SPA 里从编辑器回到大屏页：同一条连接退订又重订。
+
+    ⚠ 订阅行是删了再插的，主键换新而连接 id 一个字都没变；页面那侧的快照
+    缓存已随组件卸载清空。认不出这位观看者的话，值不变的点位永远等不到
+    首帧，那一格就一直停在「加载中」——而刷新（换新连接）反而正常。
+    """
+    harness = build_harness(readings={OUTLET: reading(21.5)})
+    harness.source.rows = [
+        {
+            "topic": topic_of(DASHBOARD),
+            "id": VIEWER,
+            "connection_id": CONNECTION,
+        }
+    ]
+    await harness.publisher.publish_once()
+    harness.source.rows = [
+        {
+            "topic": topic_of(DASHBOARD),
+            "id": SECOND_VIEWER,
+            "connection_id": CONNECTION,
+        }
+    ]
+    await harness.publisher.publish_once()
+    assert harness.node_keys() == [[OUTLET, INLET], [OUTLET, INLET]]
 
 
 async def test_a_changed_binding_plan_forces_a_full_frame() -> None:

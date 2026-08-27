@@ -87,12 +87,12 @@ class DashboardPublisher:
         # 个只读会话与多少次 BEGIN/COMMIT
         lookups = await self.plans.load_many(tuple(watchers), self._plans)
         total = 0
-        for dashboard_id, connections in watchers.items():
-            is_full = self._is_new_audience(dashboard_id, connections)
+        for dashboard_id, subscriptions in watchers.items():
+            is_full = self._is_new_audience(dashboard_id, subscriptions)
             total += await self._publish_one(
                 dashboard_id, lookups.get(dashboard_id), is_full=is_full
             )
-            self._watchers[dashboard_id] = connections
+            self._watchers[dashboard_id] = subscriptions
         return PublishReport(dashboards=len(watchers), items=total)
 
     def forget_all(self) -> None:
@@ -190,15 +190,19 @@ class DashboardPublisher:
         return lookup.plan, lookup.is_reloaded
 
     def _is_new_audience(
-        self, dashboard_id: uuid.UUID, connections: frozenset[uuid.UUID]
+        self, dashboard_id: uuid.UUID, subscriptions: frozenset[uuid.UUID]
     ) -> bool:
         """这一拍有没有新观看者。有就推全量。
 
-        ⚠ 比的是连接集合而不是人数：人数不变的换人同样是一位新观看者，而他
-        的画面在下一次值变化之前会一直空着。
-        Args: dashboard_id, connections。
+        ⚠ 比的是**订阅行 id** 的集合，不是人数也不是连接 id：人数不变的换人、
+        以及同一条连接退订又重订（SPA 切页面，本地快照已清空），都是一位
+        新观看者，而后者在连接 id 上看不出来——他的画面在下一次值变化之前
+        会一直空着。
+        Args: dashboard_id, subscriptions。
         """
-        return bool(connections - self._watchers.get(dashboard_id, frozenset()))
+        return bool(
+            subscriptions - self._watchers.get(dashboard_id, frozenset())
+        )
 
     def _forget_gone(
         self, watchers: Mapping[uuid.UUID, frozenset[uuid.UUID]]

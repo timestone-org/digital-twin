@@ -11,7 +11,7 @@ import 错误而不是空结果，不需要比对（ADR-0017）。
 from pathlib import Path
 
 from platform_server.apps.dashboard.services.viewers import (
-    CONNECTION_COLUMN,
+    ID_COLUMN,
     SUBSCRIPTION_SCHEMA,
     SUBSCRIPTION_TABLE,
     TOPIC_COLUMN,
@@ -21,6 +21,8 @@ ROOT = Path(__file__).resolve().parents[5]
 HUB = ROOT / "server" / "services" / "realtime-hub" / "src" / "realtime_hub"
 SUBSCRIPTION_MODEL = HUB / "apps" / "channel" / "models" / "subscription.py"
 HUB_SETTINGS = HUB / "settings.py"
+# id 列不在模型文件里，来自 lib 的主键 mixin——比对要跟到它的出处
+LIB_DB_MIXINS = ROOT / "server" / "lib" / "src" / "lib" / "db" / "mixins.py"
 
 
 def test_the_subscription_table_is_the_one_the_hub_writes() -> None:
@@ -32,7 +34,11 @@ def test_the_subscription_table_is_the_one_the_hub_writes() -> None:
 def test_the_columns_we_read_are_the_ones_the_hub_declares() -> None:
     declared = SUBSCRIPTION_MODEL.read_text(encoding="utf-8")
     assert f"{TOPIC_COLUMN}: Mapped" in declared
-    assert f"{CONNECTION_COLUMN}: Mapped" in declared
+    # ⚠ 发布循环按订阅行主键认「新观看者」（退订重订会换新 id）：模型必须
+    # 还挂着声明它的 mixin，mixin 里那一列也必须还叫这个名
+    assert "UuidPrimaryKeyMixin" in declared
+    mixins = LIB_DB_MIXINS.read_text(encoding="utf-8")
+    assert f"{ID_COLUMN}: Mapped" in mixins
 
 
 def test_the_subscription_schema_is_the_one_the_hub_migrates() -> None:

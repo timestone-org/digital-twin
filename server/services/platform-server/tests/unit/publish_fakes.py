@@ -11,7 +11,7 @@ from typing import Any
 
 from platform_server.apps.collect.services import PointReading
 from platform_server.apps.dashboard.services.viewers import (
-    CONNECTION_COLUMN,
+    ID_COLUMN,
     TOPIC_COLUMN,
 )
 
@@ -65,12 +65,14 @@ class FakeViewerSource:
         return list(self.rows)
 
 
-def subscription_row(topic: str, connection_id: uuid.UUID) -> dict[str, object]:
+def subscription_row(
+    topic: str, subscription_id: uuid.UUID
+) -> dict[str, object]:
     """造一条订阅行，键名与只读查询选出的列一致。
 
-    Args: topic, connection_id。
+    Args: topic, subscription_id（订阅行主键，退订重订会换新）。
     """
-    return {TOPIC_COLUMN: topic, CONNECTION_COLUMN: connection_id}
+    return {TOPIC_COLUMN: topic, ID_COLUMN: subscription_id}
 
 
 @dataclass

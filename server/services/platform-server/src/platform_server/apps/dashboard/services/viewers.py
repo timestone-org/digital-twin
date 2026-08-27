@@ -37,7 +37,10 @@ _logger = get_logger("platform.dashboard.viewers")
 SUBSCRIPTION_SCHEMA = "realtime"
 SUBSCRIPTION_TABLE = f"{SUBSCRIPTION_SCHEMA}.subscription"
 TOPIC_COLUMN = "topic"
-CONNECTION_COLUMN = "connection_id"
+# ⚠ 读的是订阅行的**主键**而不是 connection_id：hub 的退订是删行、重订是插新行，
+# 主键必然换新。SPA 里切页面正是同一条连接退订又重订——按连接 id 比对认不出
+# 这位刚清空了本地快照的观看者，全量帧就永远欠着，页面停在「加载中」
+ID_COLUMN = "id"
 
 # ⚠ 必须是这个事务里的第一条语句：Postgres 只允许在事务尚未做过任何读写时
 # 声明它只读。放到第二条就静默失效，而这个连接从此可以写别人的 schema
@@ -47,7 +50,7 @@ _READ_ONLY = text("SET TRANSACTION READ ONLY")
 # 抑制 S608 的理由 —— 拼进 SQL 的只有本模块的表名与列名常量，唯一的外部输入
 # 是 `:topic_prefix` 绑定参数
 _SELECT = (
-    f"SELECT {TOPIC_COLUMN}, {CONNECTION_COLUMN}"  # noqa: S608
+    f"SELECT {TOPIC_COLUMN}, {ID_COLUMN}"  # noqa: S608
     f" FROM {SUBSCRIPTION_TABLE}"
     f" WHERE {TOPIC_COLUMN} LIKE :topic_prefix"
 )
@@ -91,16 +94,18 @@ class ReadOnlyViewerSource:
 
 @dataclass(frozen=True)
 class SubscriptionViewers:
-    """把订阅关系读成「哪张大屏上有哪些连接在看」。"""
+    """把订阅关系读成「哪张大屏上有哪些订阅在看」。"""
 
     source: ViewerSource
 
     async def active(self) -> dict[uuid.UUID, frozenset[uuid.UUID]]:
-        """当前有人在看的大屏，以及看它的那些连接。
+        """当前有人在看的大屏，以及看它的那些**订阅行**。
 
-        ⚠ 返回的是**连接集合**而不是计数：新观看者要收一帧全量，而「多了一
-        条连接」与「换了一条连接」在计数上分不开——人数不变的换人会让新来的
-        那位一直空着，直到某个值恰好变化。
+        ⚠ 返回的是订阅行 id 的集合而不是连接集合或计数：新观看者要收一帧
+        全量，而「多了一条连接」「换了一条连接」「同一条连接退订又重订」
+        （SPA 切页面）在计数与连接 id 上都分不开——后者退订即删行、重订即
+        插新行，只有行 id 认得出来。认不出的表现是新来的那位一直空着，
+        直到某个值恰好变化。
         """
         rows = await self.source.fetch_all(
             _SELECT, {"topic_prefix": _TOPIC_PREFIX}
@@ -111,20 +116,20 @@ class SubscriptionViewers:
 def group_by_dashboard(
     rows: Sequence[Mapping[str, object]],
 ) -> dict[uuid.UUID, frozenset[uuid.UUID]]:
-    """把订阅行按大屏归并，认不出的主题与连接一律丢掉。
+    """把订阅行按大屏归并，认不出的主题与行标识一律丢掉。
 
     Args: rows。
     """
     grouped: dict[uuid.UUID, set[uuid.UUID]] = {}
     for row in rows:
         dashboard_id = _dashboard_of(row)
-        connection_id = _connection_of(row)
-        if dashboard_id is None or connection_id is None:
+        subscription_id = _subscription_of(row)
+        if dashboard_id is None or subscription_id is None:
             continue
-        grouped.setdefault(dashboard_id, set()).add(connection_id)
+        grouped.setdefault(dashboard_id, set()).add(subscription_id)
     return {
-        dashboard_id: frozenset(connections)
-        for dashboard_id, connections in grouped.items()
+        dashboard_id: frozenset(subscriptions)
+        for dashboard_id, subscriptions in grouped.items()
     }
 
 
@@ -135,16 +140,16 @@ def _dashboard_of(row: Mapping[str, object]) -> uuid.UUID | None:
     return dashboard_id_of(topic)
 
 
-def _connection_of(row: Mapping[str, object]) -> uuid.UUID | None:
-    connection = row.get(CONNECTION_COLUMN)
-    if isinstance(connection, uuid.UUID):
-        return connection
-    if not isinstance(connection, str):
+def _subscription_of(row: Mapping[str, object]) -> uuid.UUID | None:
+    subscription = row.get(ID_COLUMN)
+    if isinstance(subscription, uuid.UUID):
+        return subscription
+    if not isinstance(subscription, str):
         return None
     try:
-        return uuid.UUID(connection)
+        return uuid.UUID(subscription)
     except ValueError:
         _logger.warning(
-            "subscription_row_malformed", "订阅行的连接标识不是 UUID，已跳过"
+            "subscription_row_malformed", "订阅行的标识不是 UUID，已跳过"
         )
         return None

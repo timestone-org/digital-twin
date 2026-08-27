@@ -24,8 +24,9 @@ from unit.publish_fakes import (
 )
 
 SOURCE_ID = uuid.UUID("0199a000-0000-7000-8000-00000000000a")
-CONNECTION_1 = uuid.UUID("0199b000-0000-7000-8000-000000000001")
-CONNECTION_2 = uuid.UUID("0199b000-0000-7000-8000-000000000002")
+# 观看者的身份是**订阅行 id**：退订重订会换新，连接 id 不会（watchers.py）
+SUBSCRIPTION_1 = uuid.UUID("0199b000-0000-7000-8000-000000000001")
+SUBSCRIPTION_2 = uuid.UUID("0199b000-0000-7000-8000-000000000002")
 KEY_A = f"{SOURCE_ID}:temp"
 KEY_B = f"{SOURCE_ID}:flow"
 NOW_MS = 1_700_000_000_000
@@ -79,13 +80,13 @@ def reading(value: object, *, at_ms: int = NOW_MS) -> PointReading:
 def build_harness(
     *,
     node_keys: tuple[str, ...] = (KEY_A, KEY_B),
-    connections: tuple[uuid.UUID, ...] = (CONNECTION_1,),
+    subscriptions: tuple[uuid.UUID, ...] = (SUBSCRIPTION_1,),
     max_items: int = 200,
     plan_ttl_s: float = 10.0,
 ) -> Harness:
     """装一套发布器。
 
-    Args: node_keys, connections, max_items, plan_ttl_s。
+    Args: node_keys, subscriptions, max_items, plan_ttl_s。
     """
     snapshots = FakeSnapshotSource(
         readings={key: reading(1.0) for key in node_keys}
@@ -95,8 +96,8 @@ def build_harness(
     )
     viewers = FakeViewerSource(
         rows=[
-            subscription_row(topic_of(SOURCE_ID), connection)
-            for connection in connections
+            subscription_row(topic_of(SOURCE_ID), subscription_id)
+            for subscription_id in subscriptions
         ]
     )
     realtime = FakeRealtime()
@@ -122,7 +123,7 @@ def build_harness(
 
 
 async def test_nobody_watching_means_nothing_is_pushed() -> None:
-    harness = build_harness(connections=())
+    harness = build_harness(subscriptions=())
     report = await harness.publisher.publish_once()
     assert (report.sources, report.items) == (0, 0)
     assert harness.realtime.published == []
@@ -157,8 +158,21 @@ async def test_a_second_watcher_gets_a_full_frame_too() -> None:
     harness = build_harness()
     await harness.publisher.publish_once()
     harness.viewers.rows.append(
-        subscription_row(topic_of(SOURCE_ID), CONNECTION_2)
+        subscription_row(topic_of(SOURCE_ID), SUBSCRIPTION_2)
     )
+    await harness.publisher.publish_once()
+    _, items, _ = harness.realtime.published[1]
+    assert len(items) == 2
+
+
+async def test_a_remount_on_the_same_connection_gets_a_full_frame() -> None:
+    # 同一条连接退订又重订（SPA 切页面）：行删了再插、id 换新。
+    # 认不出他的话，值不变的点位永远等不到首帧，页面停在等待态
+    harness = build_harness()
+    await harness.publisher.publish_once()
+    harness.viewers.rows = [
+        subscription_row(topic_of(SOURCE_ID), SUBSCRIPTION_2)
+    ]
     await harness.publisher.publish_once()
     _, items, _ = harness.realtime.published[1]
     assert len(items) == 2

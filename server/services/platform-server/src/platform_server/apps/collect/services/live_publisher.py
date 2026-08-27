@@ -97,12 +97,14 @@ class SourceLivePublisher:
         watched = await self.watchers.active()
         self._forget_gone(watched)
         total = 0
-        for source_id, connections in watched.items():
+        for source_id, subscriptions in watched.items():
+            # ⚠ 差集按订阅行 id 算：同一条连接退订又重订（SPA 切页面）也是
+            # 一位新观看者，连接 id 认不出他（见 watchers.py）
             is_new = bool(
-                connections - self._watched.get(source_id, frozenset())
+                subscriptions - self._watched.get(source_id, frozenset())
             )
             total += await self._publish_one(source_id, is_new=is_new)
-            self._watched[source_id] = connections
+            self._watched[source_id] = subscriptions
         return LiveReport(sources=len(watched), items=total)
 
     def forget_all(self) -> None:
