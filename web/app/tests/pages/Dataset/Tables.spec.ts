@@ -1,7 +1,7 @@
 /**
- * @fileoverview 数据台账列表页的行为契约：一行说清这张表是什么、闸 3 门禁、
- * 客户端搜索、两种空态，以及**两段式删除**——先不带 force 试一次，后端回
- * 409 才升级成「仍然删除」。
+ * @fileoverview 数据台账列表页的行为契约：一行说清这张表是什么、**进得去详情**、
+ * 闸 3 门禁、客户端搜索、两种空态，以及**两段式删除**——先不带 force 试一次，
+ * 后端回 409 才升级成「仍然删除」。
  */
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -13,13 +13,23 @@ import { DtConfirmHost, DtToastHost, useConfirm, useToast } from '@dt/ui'
 
 import { BizError } from '@/api/client'
 import * as dataset from '@/api/dataset'
+import TableFormDialog from '@/pages/Dataset/Tables/components/TableFormDialog.vue'
 import TablesPage from '@/pages/Dataset/Tables/index.vue'
 import { useAuthStore } from '@/stores/auth'
 
+// ⚠ push 得是**同一个** spy：工厂里每次现 new 一个的话，断言看的和页面用的
+// 不是一份，调用记录永远是空的
+const routerMock = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }))
+
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useRouter: () => routerMock,
   useRoute: () => ({ path: '/datasets', query: {} }),
-  RouterLink: { template: '<a><slot /></a>' },
+  // ⚠ 存根必须把 `to` 渲染成 href：丢掉它，「这个入口指向哪张台账」就无从断言，
+  // 而这一页缺的正是这些入口
+  RouterLink: {
+    props: { to: { type: String, required: true } },
+    template: '<a :href="to"><slot /></a>',
+  },
 }))
 
 function table(over: Partial<DatasetTableSummary> = {}): DatasetTableSummary {
@@ -70,6 +80,7 @@ beforeEach(() => {
   // ⚠ 视图偏好落在 localStorage 里：不清的话上一条用例切过的视图会带进下一条，
   // 而用例顺序是随机的
   localStorage.clear()
+  routerMock.push.mockClear()
   vi.spyOn(dataset, 'listDatasetTables').mockResolvedValue(pageOf([table()]))
 })
 
@@ -124,6 +135,35 @@ describe('台账列表页', () => {
     expect(wrapper.text()).toContain('自动采集 · 每 1 小时')
     expect(wrapper.text()).toContain('6')
     expect(wrapper.text()).toContain('永久')
+  })
+
+  it('台账名就是进详情的链接——不进详情配不了列，也配不了公式', async () => {
+    const wrapper = await render(['dataset:view'])
+    const link = wrapper
+      .findAll('a')
+      .find((node) => node.text() === '一号机组能耗台账')
+    expect(link?.attributes('href')).toBe('/datasets/t1')
+  })
+
+  it('行尾另留一枚入口，且只读账号照样点得进去', async () => {
+    const wrapper = await render(['dataset:view'])
+    const entry = wrapper.find('[aria-label="配置列与查看数据"]')
+    expect(entry.exists()).toBe(true)
+    expect(entry.attributes('href')).toBe('/datasets/t1')
+  })
+
+  it('⚠ 一列都没有的台账标成「未配列」，那三个字直接去列配置', async () => {
+    vi.mocked(dataset.listDatasetTables).mockResolvedValue(
+      pageOf([table({ column_count: 0 })]),
+    )
+    const wrapper = await render(['dataset:view'])
+    const link = wrapper.findAll('a').find((node) => node.text() === '未配列')
+    expect(link?.attributes('href')).toBe('/datasets/t1/columns')
+  })
+
+  it('配好了列就只报数目，不再多摆一句提示', async () => {
+    const wrapper = await render(['dataset:view'])
+    expect(wrapper.text()).not.toContain('未配列')
   })
 
   it('人工录入的台账不显示采集周期——它根本不按周期采', async () => {
@@ -317,6 +357,23 @@ describe('建表与改表', () => {
     await flushPromises()
     expect(document.body.textContent).toContain('新建台账')
     expect(document.body.textContent).toContain('先建表，再给它配列')
+  })
+
+  it('⚠ 建完直接进列配置：新表一列都没有，停在列表上等于让人再找一次入口', async () => {
+    const wrapper = await render(['dataset:view', 'dataset:manage'])
+    wrapper
+      .findComponent(TableFormDialog)
+      .vm.$emit('saved', '台账「新表」已创建', 'new-id')
+    await flushPromises()
+    expect(routerMock.push).toHaveBeenCalledWith('/datasets/new-id/columns')
+  })
+
+  it('改完不跳，就地重取——改个名字被扔进详情页是没道理的', async () => {
+    const wrapper = await render(['dataset:view', 'dataset:manage'])
+    wrapper.findComponent(TableFormDialog).vm.$emit('saved', '台账已更新', null)
+    await flushPromises()
+    expect(routerMock.push).not.toHaveBeenCalled()
+    expect(dataset.listDatasetTables).toHaveBeenCalledTimes(2)
   })
 
   it('点编辑打开的是这一张，名称已经铺好', async () => {
