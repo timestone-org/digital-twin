@@ -1,16 +1,20 @@
 /**
  * @fileoverview 契约：Esc 优先链的页面段——帮助 → 预览 → 挑点面板 → 清选中，
- * 每一下只消费链上最前面的那一层。
+ * 每一下只消费链上最前面的那一层；以及导出 JSON 落盘的必须是线形整包。
  */
 import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { computed, defineComponent, h, ref, shallowRef } from 'vue'
 import type {
+  DashboardExportPayload,
   DashboardNodePayload,
   DashboardPayload,
   ModuleManifest,
 } from '@dt/contracts'
 
+import { exportDashboard } from '@/api/dashboardTransfer'
+import { parseExportPackage } from '@/api/dashboardTransferWire'
+import { downloadJson } from '@/utils/downloadJson'
 import {
   useDashboardEditor,
   type DashboardEditor,
@@ -26,6 +30,9 @@ import {
   useEditorExtras,
   type EditorExtras,
 } from '@/pages/DashboardEditor/scripts/useEditorExtras'
+
+vi.mock('@/api/dashboardTransfer', () => ({ exportDashboard: vi.fn() }))
+vi.mock('@/utils/downloadJson', () => ({ downloadJson: vi.fn() }))
 
 const MANIFEST: ModuleManifest = {
   type: 'demo',
@@ -64,7 +71,10 @@ interface Harness {
   wrapper: ReturnType<typeof mount>
 }
 
-function setup(pickerConsumes: () => boolean): Harness {
+function setup(
+  pickerConsumes: () => boolean,
+  dashboard: DashboardPayload | null = null,
+): Harness {
   let editor!: DashboardEditor
   let extras!: EditorExtras
   const consumePicker = vi.fn(pickerConsumes)
@@ -95,7 +105,7 @@ function setup(pickerConsumes: () => boolean): Harness {
           design: () => ({ width: 1920, height: 1080 }),
         }),
         arrange,
-        dashboard: shallowRef<DashboardPayload | null>(null),
+        dashboard: shallowRef<DashboardPayload | null>(dashboard),
         design: () => ({ width: 1920, height: 1080 }),
         snap: () => normalizeSnapConfig(),
         grid: () => normalizeEditorGrid(),
@@ -170,6 +180,63 @@ describe('Esc 优先链的页面段', () => {
 
     expect(ctx.extras.helpOpen.value).toBe(false)
     expect(ctx.extras.previewOpen.value).toBe(true)
+    ctx.wrapper.unmount()
+  })
+})
+
+const DASHBOARD: DashboardPayload = {
+  id: 'd1',
+  projectId: 'p1',
+  name: '演示屏',
+  description: null,
+  designWidth: 1920,
+  designHeight: 1080,
+  themeJson: {},
+  chromeJson: {},
+  rowVersion: 1,
+  schemaVersion: 2,
+  isPublic: false,
+  createdAt: '',
+  updatedAt: '',
+  nodes: [],
+}
+
+const EXPORT_PAYLOAD: DashboardExportPayload = {
+  schemaVersion: 2,
+  name: '演示屏',
+  description: null,
+  designWidth: 1920,
+  designHeight: 1080,
+  themeJson: {},
+  chromeJson: {},
+  nodes: [
+    {
+      clientKey: 'k1',
+      parentClientKey: null,
+      moduleType: 'demo',
+      x: 0,
+      y: 0,
+      w: 100,
+      h: 50,
+      zIndex: 0,
+      isVisible: true,
+      configJson: {},
+      bindings: [],
+    },
+  ],
+}
+
+describe('导出 JSON', () => {
+  it('落盘的是线形整包：导入端的 parseExportPackage 能原样读回', async () => {
+    const ctx = setup(() => true, DASHBOARD)
+    vi.mocked(exportDashboard).mockResolvedValue(EXPORT_PAYLOAD)
+
+    await ctx.extras.exportJson()
+
+    expect(downloadJson).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(downloadJson).mock.calls[0]?.[1]).toBe('演示屏')
+    const saved = vi.mocked(downloadJson).mock.calls[0]?.[0]
+    expect(parseExportPackage(saved)).toEqual(EXPORT_PAYLOAD)
     ctx.wrapper.unmount()
   })
 })

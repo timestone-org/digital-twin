@@ -7,6 +7,7 @@ import type { DashboardPayload } from '@dt/contracts'
 import type { DesignSize, GetModuleManifest } from '@dt/runtime'
 
 import { exportDashboard } from '@/api/dashboardTransfer'
+import { fromExportPackage } from '@/api/dashboardTransferWire'
 import { useAiPanel, type AiPanel } from '@/composables/useAiPanel'
 import type { DashboardEditor } from '@/composables/useDashboardEditor'
 import type {
@@ -120,12 +121,15 @@ export function useEditorExtras(deps: EditorExtrasDeps): EditorExtras {
     }
   }
 
+  // ⚠ 存的是 `fromExportPackage` 的产出（线形 snake_case），不是内存里的
+  // camelCase 载荷：导入端的 `parseExportPackage` 只认线形，写载荷进文件
+  // 会让这份包导不回来。
   async function exportJson(): Promise<void> {
     const current = dashboard.value
     if (current === null) return
     try {
-      const payload = await exportDashboard(current.id)
-      downloadJson(payload, current.name)
+      const packed = fromExportPackage(await exportDashboard(current.id))
+      downloadJson(packed, current.name)
     } catch {
       deps.onExportFailed('导出失败，请稍后再试')
     }
