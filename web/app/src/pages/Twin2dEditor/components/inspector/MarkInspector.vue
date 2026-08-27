@@ -38,6 +38,8 @@ import {
   TWIN_2D_UNIT_RANGE,
   enumOptions,
   fieldsChanged,
+  twin2dFontWith,
+  twin2dSameFont,
 } from '../../scripts/inspectorFields'
 import { updateMark } from '../../scripts/markOps'
 import ColorField from '../fields/ColorField.vue'
@@ -213,39 +215,6 @@ function writeGeom(key: GeomKey, next: number | undefined): void {
 }
 
 /**
- * 换掉字体里的一个键；空值一律**删键**而不是写 undefined——缺席才是「跟随排版」，
- * 而 `exactOptionalPropertyTypes` 下显式的 undefined 与缺席是两回事。
- * @param font 现在的字体
- * @param key 哪一个键
- * @param value 新值，`undefined` 与空串都当作清掉
- */
-function fontWith<K extends keyof FontValue>(
-  font: FontValue,
-  key: K,
-  value: FontValue[K],
-): FontValue {
-  const next: FontValue = { ...font }
-  if (value === undefined || value === '') delete next[key]
-  else next[key] = value
-  return next
-}
-
-/**
- * 五个键逐一比过；字体每次都是新对象，只比引用等于每次都算改过。
- * @param a 一份字体
- * @param b 另一份字体
- */
-function sameFont(a: FontValue, b: FontValue): boolean {
-  return (
-    a.family === b.family &&
-    a.size === b.size &&
-    a.weight === b.weight &&
-    a.letterSpacing === b.letterSpacing &&
-    a.color === b.color
-  )
-}
-
-/**
  * 写字体里的一个键。
  * @param key 哪一个键
  * @param value 新值
@@ -254,8 +223,8 @@ function writeFont<K extends keyof FontValue>(
   key: K,
   value: FontValue[K],
 ): void {
-  const font = fontWith(props.mark.font, key, value)
-  if (sameFont(font, props.mark.font)) return
+  const font = twin2dFontWith(props.mark.font, key, value)
+  if (twin2dSameFont(font, props.mark.font)) return
   writeMerged({ font }, `font.${key}`)
 }
 

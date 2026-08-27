@@ -197,6 +197,25 @@ export function orderMarks(
 }
 
 /**
+ * 把一批标注整体平移（方向键微调走这一支）；辅助线的两端一起挪。
+ * ⚠ 不点名任何一条、或位移为零时原样返回入参那份配置。
+ * @param config 当前配置
+ * @param ids 要挪的那一批
+ * @param at 位移（设计坐标）
+ */
+export function moveMarks(
+  config: Twin2dConfig,
+  ids: readonly string[],
+  at: Pt,
+): Twin2dConfig {
+  return withMarkDeltas(
+    config,
+    ids,
+    ids.map(() => at),
+  )
+}
+
+/**
  * 把一批标注对到同一条边上。
  * @param config 当前配置
  * @param ids 要对齐的那一批

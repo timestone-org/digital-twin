@@ -6,7 +6,7 @@
  * 有一份改了口径（比如「与现值相同就不记一帧」漏了某一类值）就只有那一个面板出错，
  * 而两个面板看起来一模一样。
  */
-import type { DtNumberRange, DtSegmentedOption } from '@dt/contracts'
+import type { DtNumberRange, DtSegmentedOption, FontValue } from '@dt/contracts'
 
 /** 0..1 的量纲：周长参数、不透明度与沿线位置共用，一格 0.05。 */
 export const TWIN_2D_UNIT_RANGE: Readonly<DtNumberRange> = Object.freeze({
@@ -43,4 +43,38 @@ export function fieldsChanged(
   patch: Readonly<Record<string, unknown>>,
 ): boolean {
   return Object.entries(patch).some(([key, value]) => current[key] !== value)
+}
+
+/**
+ * 换掉字体里的一个键；空值一律**删键**而不是写 undefined——缺席才是「跟随排版」，
+ * 而 `exactOptionalPropertyTypes` 下显式的 undefined 与缺席是两回事。
+ * @param font 现在的字体
+ * @param key 哪一个键
+ * @param value 新值，`undefined` 与空串都当作清掉
+ */
+export function twin2dFontWith<K extends keyof FontValue>(
+  font: FontValue,
+  key: K,
+  value: FontValue[K],
+): FontValue {
+  const next: FontValue = { ...font }
+  if (value === undefined || value === '') delete next[key]
+  else next[key] = value
+  return next
+}
+
+/**
+ * 五个键逐一比过。
+ * ⚠ 字体每次都是新对象，只比引用等于每次都算改过，于是「点进去又点出来」就白记一帧。
+ * @param a 一份字体
+ * @param b 另一份字体
+ */
+export function twin2dSameFont(a: FontValue, b: FontValue): boolean {
+  return (
+    a.family === b.family &&
+    a.size === b.size &&
+    a.weight === b.weight &&
+    a.letterSpacing === b.letterSpacing &&
+    a.color === b.color
+  )
 }

@@ -7,6 +7,11 @@
  * `subEditor` 声明跳进来的，路由参数只有 `dashboardId` + `nodeId`。
  * ⚠ 未保存的改动只在内存里，没有本地草稿可恢复，所以两道守卫缺一不可：站内跳转
  * 拦在 `onBeforeRouteLeave`，关标签页 / 刷新拦在 `useUnsavedGuard`。
+ * ⚠ 键盘手势装在这一层而不是画布层：撤销、粘贴、保存都要落到文档态上，装在画布里
+ * 的话焦点一离开画布这几个键就整片失灵，而这一步零报错。让位表单的判定归
+ * `isTwin2dFormFocused`（按最近可交互祖先判，见 `shortcuts.ts`）。
+ * ⚠ 样式库抽屉开着时整套手势 `suspended`：不让位的话，在库里用方向键翻行会同时把
+ * 画布上选中的节点 nudge 一格并压进撤销栈——不报错，只是图悄悄动了。
  */
 import {
   TWIN_2D_BUILTIN_NODE_STYLE_MAP,
@@ -23,9 +28,16 @@ import { AppShell } from '@/components/layout'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 
 import EditorStage from './components/EditorStage.vue'
+import NodePalette from './components/NodePalette.vue'
+import StyleLibraryDrawer from './components/StyleLibraryDrawer.vue'
 import Twin2dInspector from './components/Twin2dInspector.vue'
+import Twin2dOutline from './components/Twin2dOutline.vue'
 import Twin2dToolbar from './components/Twin2dToolbar.vue'
+import { createTwin2dCommands } from './scripts/editorCommands'
 import { createTwin2dSelection } from './scripts/editorSelection'
+import type { Twin2dStyleKind } from './scripts/editorSelection'
+import { addNode } from './scripts/nodeOps'
+import { useTwin2dShortcuts } from './scripts/shortcuts'
 import { useTwin2dEditorPage } from './scripts/useTwin2dEditorPage'
 import type { Twin2dEntityKind } from './scripts/types'
 
@@ -51,6 +63,13 @@ const selection = createTwin2dSelection()
 const showIssues = ref(false)
 /** 画布层按这个信号取一次景；「适应」每按一次加一。 */
 const fitRequest = ref(0)
+/** 样式库抽屉开着没有。 */
+const libraryOpen = ref(false)
+/**
+ * 图元树上选中的那一枚；空串 = 一枚都没选。
+ * ⚠ 住在这一层而不是样式面里：右栏的图元字段面与将来画布上的高亮都要读它。
+ */
+const selectedPrim = ref('')
 
 const config = computed(() => page.doc.value?.config.value ?? null)
 
@@ -118,6 +137,49 @@ function endMerge(): void {
   page.doc.value?.endMerge()
 }
 
+const commands = createTwin2dCommands({
+  config: () => config.value,
+  selection,
+  commit,
+  undo: () => page.doc.value?.undo(),
+  redo: () => page.doc.value?.redo(),
+  save: () => void save(),
+})
+
+useTwin2dShortcuts({
+  handlers: commands.handlers,
+  grid: () => config.value?.canvas.grid ?? 0,
+  suspended: () => libraryOpen.value,
+})
+
+/**
+ * 从调色板加一个节点，落在画布正中。
+ * ⚠ 走 `addNode` 而不是就地拼一个：缺省值抄一份出来，抄的那份一旦与归一化不一致，
+ * 新节点会在「存一次再读回来」之后悄悄变样。
+ * @param styleId 拖下来的那份样式
+ */
+function addFromPalette(styleId: string): void {
+  const current = config.value
+  if (current === null) return
+  const added = addNode(current, {
+    styleId,
+    x: current.canvas.width / 2,
+    y: current.canvas.height / 2,
+  })
+  commit(added.config)
+  if (added.id !== null) selection.select('nodes', added.id)
+}
+
+/**
+ * 样式库里点了一份样式：右栏切过去，抽屉让开。
+ * @param kind 哪条样式轴
+ * @param id 样式 id
+ */
+function focusStyle(kind: Twin2dStyleKind, id: string): void {
+  selection.focusStyle(kind, id)
+  libraryOpen.value = false
+}
+
 // ⚠ 撤销、重做与删除之后选中里会留下已经不存在的 id：不摘的表现是右栏画着一个
 // 已经不存在的东西，改哪一项都写不回去且不报错
 watch(config, (next) => {
@@ -127,6 +189,15 @@ watch(config, (next) => {
     return rows.some((row) => row.id === id)
   })
 })
+
+// ⚠ 换一份样式必须把图元选中清掉：图元 id 只在**它自己那份样式**里唯一，留着上一份
+// 的 id 会让右栏画出另一份样式里同名的那一枚，而改哪一项都落在别人身上
+watch(
+  () => selection.styleFocus.value?.id ?? '',
+  () => {
+    selectedPrim.value = ''
+  },
+)
 
 /** 返回大屏编辑器；外壳的返回入口按站内路径走。 */
 const backTo = computed(() => `/dashboards/${dashboardId.value}/edit`)
@@ -210,11 +281,29 @@ onBeforeUnmount(page.dispose)
 
         <div class="flex min-h-0 flex-1">
           <aside
-            class="w-64 shrink-0 overflow-y-auto border-r border-border-subtle p-2 text-2xs text-text-secondary"
+            class="flex w-64 shrink-0 flex-col gap-2 overflow-y-auto border-r border-border-subtle p-2 text-2xs text-text-secondary"
             aria-label="大纲"
             data-test="outline"
           >
-            {{ outlineSummary }}
+            <div class="flex items-center gap-1">
+              <span class="min-w-0 flex-1 truncate">{{ outlineSummary }}</span>
+              <DtButton
+                size="xs"
+                variant="ghost"
+                intent="primary"
+                icon="palette"
+                aria-label="样式库"
+                title="样式库：新建、复制、恢复内置与整包导入导出"
+                data-test="open-style-library"
+                @click="libraryOpen = true"
+              />
+            </div>
+            <Twin2dOutline
+              :config="config"
+              :selection="selection"
+              @change="commit"
+            />
+            <NodePalette :styles="config.styles" @add="addFromPalette" />
           </aside>
 
           <div class="flex min-w-0 flex-1 flex-col">
@@ -253,19 +342,46 @@ onBeforeUnmount(page.dispose)
             aria-label="检查器"
             data-test="inspector"
           >
-            <p class="text-text-disabled" data-test="inspector-target">
-              {{ targetSummary }}
-            </p>
+            <div class="flex items-center gap-1">
+              <span
+                class="min-w-0 flex-1 truncate text-text-disabled"
+                data-test="inspector-target"
+              >
+                {{ targetSummary }}
+              </span>
+              <DtButton
+                v-if="selection.styleFocus.value !== null"
+                size="xs"
+                variant="ghost"
+                intent="neutral"
+                icon="close"
+                aria-label="退出样式编辑"
+                title="退出样式编辑，回到画布上选中的那一个"
+                data-test="close-style-focus"
+                @click="selection.clearStyleFocus()"
+              />
+            </div>
             <Twin2dInspector
               v-if="config !== null"
               :config="config"
               :selection="selection.inspect.value"
+              :style-focus="selection.styleFocus.value"
+              :selected-prim="selectedPrim"
               @change="commit"
               @merge="commitMerged"
               @end-merge="endMerge"
+              @pick-prim="selectedPrim = $event"
             />
           </aside>
         </div>
+
+        <StyleLibraryDrawer
+          v-model:open="libraryOpen"
+          :config="config"
+          :file-name="`${page.dashboard.value?.name ?? '2d'}-样式包`"
+          @change="commit"
+          @focus="focusStyle"
+        />
       </template>
     </div>
   </AppShell>

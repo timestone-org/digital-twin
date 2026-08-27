@@ -8,6 +8,9 @@
  * 为的是把「脏着」「冲突」「出错」这几种界面分支逐个摆出来。
  * ⚠ 画布层自己那些行为归 `EditorStage.test.ts`；这里只看两处接线：改动落不落进撤销栈、
  * 实体没了之后选中里还留不留着它。
+ * ⚠ 键盘手势必须**让位表单**，判据是最近可交互祖先（含 `role=combobox` 这类）：只看
+ * `tagName` 的话，用户用键盘翻下拉时画布上选中的节点会同时被 nudge 一格并压进撤销栈
+ * ——不报错，只是图悄悄动了。下面「翻下拉时节点不动」那一条正是钉这件事的。
  */
 import type { DashboardNodePayload, DashboardPayload } from '@dt/contracts'
 import { normalizeTwin2dConfig } from '@dt/twin2d'
@@ -57,6 +60,7 @@ vi.mock('@/pages/Twin2dEditor/scripts/useTwin2dEditorPage', () => ({
 }))
 
 import EditorStage from '@/pages/Twin2dEditor/components/EditorStage.vue'
+import Twin2dInspector from '@/pages/Twin2dEditor/components/Twin2dInspector.vue'
 import Twin2dEditor from '@/pages/Twin2dEditor/index.vue'
 import type { Twin2dEditorSelection } from '@/pages/Twin2dEditor/scripts/editorSelection'
 import { createTwin2dDoc } from '@/pages/Twin2dEditor/scripts/twin2dDoc'
@@ -553,6 +557,204 @@ describe('未保存守卫', () => {
     mountPage()
 
     expect(isBlocked()).toBe(false)
+  })
+})
+
+/**
+ * 造一个真的可交互祖先并把焦点放上去。
+ * ⚠ 用真节点而不是桩：判据是 `activeElement.closest(...)`，桩掉它等于把这条契约
+ * 换成「我以为它是怎么判的」。
+ * @param attrs 这个元素上的属性
+ */
+function focusOn(attrs: Readonly<Record<string, string>>): HTMLElement {
+  const host = document.createElement('button')
+  for (const [key, value] of Object.entries(attrs))
+    host.setAttribute(key, value)
+  document.body.appendChild(host)
+  host.focus()
+  return host
+}
+
+/** 真发一次方向键。 */
+function pressArrow(): void {
+  window.dispatchEvent(
+    new KeyboardEvent('keydown', {
+      key: 'ArrowRight',
+      bubbles: true,
+      cancelable: true,
+    }),
+  )
+}
+
+/** 文档里那个节点当前的横坐标。 */
+function xNow(): number {
+  return controls.doc.value?.config.value.nodes[0]?.x ?? -1
+}
+
+/**
+ * 选中那个节点，等选中态生效。
+ * @param wrapper 挂好的这一页
+ */
+async function pickNodeA(wrapper: ReturnType<typeof mountPage>): Promise<void> {
+  selectionOf(wrapper).select('nodes', 'a')
+  await nextTick()
+}
+
+describe('键盘手势让位表单', () => {
+  it('焦点在下拉触发器上按方向键，节点一步不动', async () => {
+    const wrapper = mountPage()
+    await pickNodeA(wrapper)
+    const before = xNow()
+    const box = focusOn({ role: 'combobox' })
+
+    pressArrow()
+    await nextTick()
+
+    expect(xNow()).toBe(before)
+    expect(controls.doc.value?.canUndo.value).toBe(false)
+    box.remove()
+  })
+
+  it('焦点在输入框里按方向键也一步不动', async () => {
+    const wrapper = mountPage()
+    await pickNodeA(wrapper)
+    const before = xNow()
+    const field = document.createElement('input')
+    document.body.appendChild(field)
+    field.focus()
+
+    pressArrow()
+    await nextTick()
+
+    expect(xNow()).toBe(before)
+    field.remove()
+  })
+
+  it('焦点在弹窗里的普通按钮上也让位', async () => {
+    const wrapper = mountPage()
+    await pickNodeA(wrapper)
+    const before = xNow()
+    const dialog = document.createElement('div')
+    dialog.setAttribute('role', 'dialog')
+    const inside = document.createElement('button')
+    dialog.appendChild(inside)
+    document.body.appendChild(dialog)
+    inside.focus()
+
+    pressArrow()
+    await nextTick()
+
+    expect(xNow()).toBe(before)
+    dialog.remove()
+  })
+
+  it('焦点在画布上按方向键，节点真的动了', async () => {
+    const wrapper = mountPage()
+    await pickNodeA(wrapper)
+    const before = xNow()
+    const stage = focusOn({ 'data-test': 'plain-canvas-host' })
+
+    pressArrow()
+    await nextTick()
+
+    expect(xNow()).toBe(before + CONFIG.canvas.grid)
+    expect(controls.doc.value?.canUndo.value).toBe(true)
+    stage.remove()
+  })
+
+  it('走的时候把 window 上那道监听摘干净', async () => {
+    const wrapper = mountPage()
+    await pickNodeA(wrapper)
+    const before = xNow()
+
+    wrapper.unmount()
+    pressArrow()
+
+    expect(xNow()).toBe(before)
+  })
+})
+
+describe('左栏装配', () => {
+  it('大纲与调色板都在左栏里', () => {
+    const wrapper = mountPage()
+
+    const left = wrapper.find('[data-test="outline"]')
+    expect(left.find('[data-test="twin2d-outline"]').exists()).toBe(true)
+    expect(left.find('[data-test="node-palette"]').exists()).toBe(true)
+  })
+
+  it('点调色板上的一项就往画布中央加一个节点', async () => {
+    const wrapper = mountPage()
+    const item = wrapper.findAll('[data-test^="palette-item-"]')[0]
+
+    await item?.trigger('click')
+
+    const nodes = controls.doc.value?.config.value.nodes ?? []
+    expect(nodes).toHaveLength(2)
+    expect(nodes[1]?.x).toBe(CONFIG.canvas.width / 2)
+  })
+
+  it('大纲改出来的整份配置落一步撤销', async () => {
+    const wrapper = mountPage()
+    await pickNodeA(wrapper)
+
+    await wrapper.find('[data-test="outline-remove-nodes"]').trigger('click')
+
+    expect(controls.doc.value?.config.value.nodes).toHaveLength(0)
+    expect(controls.doc.value?.canUndo.value).toBe(true)
+  })
+})
+
+describe('样式库抽屉', () => {
+  it('默认收着，点一下才开', async () => {
+    const wrapper = mountPage()
+    expect(wrapper.find('[data-test="style-lib-rows"]').exists()).toBe(false)
+
+    await wrapper.find('[data-test="open-style-library"]').trigger('click')
+
+    expect(wrapper.find('[data-test="style-lib-rows"]').exists()).toBe(true)
+  })
+
+  it('在库里点一份样式，右栏换成样式面、抽屉让开', async () => {
+    const wrapper = mountPage()
+    await wrapper.find('[data-test="open-style-library"]').trigger('click')
+
+    const row = wrapper.findAll('[data-test^="style-lib-open-styles:"]')[0]
+    await row?.trigger('click')
+
+    expect(inspectorKind(wrapper)).toBe('style')
+    expect(wrapper.find('[data-test="style-lib-rows"]').exists()).toBe(false)
+  })
+
+  it('退出样式编辑之后右栏回到画布那一段', async () => {
+    const wrapper = mountPage()
+    selectionOf(wrapper).focusStyle('styles', 'nope')
+    await nextTick()
+
+    await wrapper.find('[data-test="close-style-focus"]').trigger('click')
+
+    expect(inspectorKind(wrapper)).toBe('canvas')
+  })
+
+  // ⚠ 图元 id 只在它自己那份样式里唯一：留着上一份的 id 会让右栏画出另一份样式里
+  // 同名的那一枚，而改哪一项都落在别人身上
+  it('换一份样式就把图元选中清掉', async () => {
+    const wrapper = mountPage()
+    const selection = selectionOf(wrapper)
+    selection.focusStyle('styles', 'one')
+    await nextTick()
+    wrapper.findComponent(Twin2dInspector).vm.$emit('pickPrim', 'p1')
+    await nextTick()
+    expect(wrapper.findComponent(Twin2dInspector).props('selectedPrim')).toBe(
+      'p1',
+    )
+
+    selection.focusStyle('styles', 'two')
+    await nextTick()
+
+    expect(wrapper.findComponent(Twin2dInspector).props('selectedPrim')).toBe(
+      '',
+    )
   })
 })
 

@@ -31,6 +31,21 @@ export function downloadJson(data: unknown, name: string): void {
 }
 
 /**
+ * 触发浏览器下载一段已经排好版的 JSON 文本。
+ * ⚠ 与 `downloadJson` 的分工是「谁排的版」：调用方自己有一套排版口径（样式包的
+ * `twin2dStylePackageText`）时走这一支，让「导出的字节」与「导入认得的字节」逐字
+ * 同源——在这里再 `JSON.stringify` 一遍就是第二套排版，而往返不一致看不出来。
+ * @param text 要写进文件的 JSON 正文
+ * @param name 文件名（不含扩展名），会先做字符规整
+ */
+export function downloadText(text: string, name: string): void {
+  downloadBlob(
+    new Blob([text], { type: 'application/json' }),
+    `${toFileName(name)}.json`,
+  )
+}
+
+/**
  * 触发浏览器下载一份 CSV。
  * ⚠ MIME 带 `charset=utf-8`，且正文自带 BOM（见 `pointCsv.ts`）：两者缺一，
  * Excel 会按本地代码页解，中文列全是乱码。

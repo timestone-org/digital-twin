@@ -12,16 +12,15 @@
  *   只管把样式给的东西挪一挪、藏一藏。
  */
 import { TWIN_2D_SENSOR_DEFS, twin2dSensorIdPrefix } from '@dt/twin2d'
-import type {
-  Twin2dPlacement,
-  Twin2dPrim,
-  Twin2dPrimKind,
-  Twin2dPrimPatch,
-} from '@dt/twin2d'
+import type { Twin2dPlacement, Twin2dPrim, Twin2dPrimPatch } from '@dt/twin2d'
 import { DtButton, DtEmpty, DtNumberInput, DtSelect } from '@dt/ui'
 import { computed } from 'vue'
 
 import { TWIN_2D_UNIT_RANGE } from '../../scripts/inspectorFields'
+import {
+  TWIN_2D_PRIM_KIND_LABELS,
+  twin2dPatchOptions,
+} from '../../scripts/primTreeRows'
 import PlacementField from '../fields/PlacementField.vue'
 
 const props = defineProps<{
@@ -49,13 +48,6 @@ const SENSOR_PILL_IDS: ReadonlySet<string> = new Set(
   TWIN_2D_SENSOR_DEFS.map((def) => `${twin2dSensorIdPrefix(def)}-pill`),
 )
 
-const KIND_LABELS: Readonly<Record<Twin2dPrimKind, string>> = {
-  box: '盒',
-  vec: '矢量',
-  ico: '图标',
-  txt: '文本',
-}
-
 /** 「显示」这一格的三档：不覆盖 / 强制显示 / 强制隐藏。 */
 const SHOW_OPTIONS = [
   { value: '', label: '不覆盖' },
@@ -79,24 +71,9 @@ const patchRows = computed(() =>
   })),
 )
 
-/**
- * 深度优先摊平图元树，`box` 连它的子树一起带上。
- * @param prims 一棵图元树
- */
-function flattenPrims(prims: readonly Twin2dPrim[]): readonly Twin2dPrim[] {
-  return prims.flatMap((prim) =>
-    prim.kind === 'box' ? [prim, ...flattenPrims(prim.children)] : [prim],
-  )
-}
-
 /** 样式里还没被覆盖的那些图元。 */
 const patchable = computed(() =>
-  flattenPrims(props.stylePrims)
-    .filter((prim) => props.patch[prim.id] === undefined)
-    .map((prim) => ({
-      value: prim.id,
-      label: `${prim.id} · ${KIND_LABELS[prim.kind]}`,
-    })),
+  twin2dPatchOptions(props.stylePrims, props.patch),
 )
 
 /**
@@ -263,7 +240,7 @@ function setPatchOpacity(
     >
       <div class="flex items-center gap-1">
         <span class="min-w-0 flex-1 truncate text-xs text-text-secondary">
-          {{ prim.id }} · {{ KIND_LABELS[prim.kind] }}
+          {{ prim.id }} · {{ TWIN_2D_PRIM_KIND_LABELS[prim.kind] }}
         </span>
         <DtButton
           size="xs"

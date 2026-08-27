@@ -518,6 +518,26 @@ export function orderNodes(
 }
 
 /**
+ * 把一批节点整体平移（方向键微调走这一支）。
+ * ⚠ 不点名任何一条、或位移为零时原样返回入参那份配置：换了新引用却什么都没改，
+ * 撤销键上就多出一格按了没反应的空步。
+ * @param config 当前配置
+ * @param ids 要挪的那一批
+ * @param at 位移（设计坐标）
+ */
+export function moveNodes(
+  config: Twin2dConfig,
+  ids: readonly string[],
+  at: Pt,
+): Twin2dConfig {
+  return withNodeDeltas(
+    config,
+    ids,
+    ids.map(() => at),
+  )
+}
+
+/**
  * 把一批节点对到同一条边上。
  * @param config 当前配置
  * @param ids 要对齐的那一批
