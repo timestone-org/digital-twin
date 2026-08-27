@@ -23,6 +23,7 @@ async def test_the_listing_names_every_registered_module(
         "action-button",
         "container",
         "footer",
+        "gauge-card",
         "header",
         "image-block",
         "info-card",

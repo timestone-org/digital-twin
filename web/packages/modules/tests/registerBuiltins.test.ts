@@ -30,6 +30,7 @@ const BUILTIN_TYPES = [
   'action-button',
   'container',
   'footer',
+  'gauge-card',
   'header',
   'image-block',
   'info-card',

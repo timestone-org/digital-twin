@@ -960,6 +960,779 @@
       "bindings": []
     },
     {
+      "type": "gauge-card",
+      "display_name": "仪表卡片",
+      "category": "数据",
+      "icon": "gauge",
+      "keywords": [
+        "gauge",
+        "yibiao",
+        "jindu",
+        "mubiao",
+        "仪表",
+        "仪表盘",
+        "进度",
+        "目标",
+        "储罐",
+        "温度计",
+        "液位"
+      ],
+      "default_size": {
+        "width": 320,
+        "height": 220,
+        "min_width": 120,
+        "min_height": 96
+      },
+      "chrome": "card",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "default": "",
+          "placeholder": "留空则不画标题栏",
+          "group": "内容",
+          "span": "full"
+        },
+        {
+          "key": "items",
+          "label": "仪表",
+          "type": "array",
+          "default": [
+            {
+              "label": "点位 1",
+              "unit": "",
+              "precision": 0
+            }
+          ],
+          "group": "内容",
+          "help": "每一项在绑点面板上是一行。⚠ 删掉中间一项，它之后每一个仪表的绑定都会改喂前一个——删完请核对绑点面板。",
+          "span": "full",
+          "item_schema": [
+            {
+              "key": "label",
+              "label": "名称",
+              "type": "string",
+              "default": "",
+              "placeholder": "留空则这一个不画标签",
+              "help": "这一个仪表的名称；留空则不画标签。绑点面板上仍按「第 N 个仪表」称呼它。"
+            },
+            {
+              "key": "unit",
+              "label": "单位",
+              "type": "string",
+              "default": "",
+              "placeholder": "如 ℃ / kWh / m³/h",
+              "help": "首尾空格照原样保留，「° C」这种写法是有意的排版。"
+            },
+            {
+              "key": "precision",
+              "label": "小数位",
+              "type": "range",
+              "default": 0,
+              "min": 0,
+              "max": 6,
+              "step": 1
+            },
+            {
+              "key": "min",
+              "label": "量程下限",
+              "type": "number",
+              "default": 0,
+              "help": "百分比 =（值 − 下限）÷（上限 − 下限），填充与刻度都按它算。"
+            },
+            {
+              "key": "max",
+              "label": "量程上限",
+              "type": "number",
+              "default": 100,
+              "help": "⚠ 上限不大于下限时这一个仪表不画填充，也不伪造 0%——量程错了比空着更难发现。"
+            },
+            {
+              "key": "target",
+              "label": "目标值",
+              "type": "number",
+              "help": "留空则不画目标标记，完成率也退回按量程算。完成率 = 值 ÷ 目标，可以超过 100%。"
+            },
+            {
+              "key": "color",
+              "label": "固定颜色",
+              "type": "color",
+              "default": "",
+              "help": "填了就固定这一个仪表的填充色并压过规则命中色。只填 var(--…) 引用，填死色值换肤时不跟着走。"
+            },
+            {
+              "key": "emitValue",
+              "label": "联动值",
+              "type": "string",
+              "default": "",
+              "help": "点这一个仪表时上抛的值，留空则这一个点了不上抛。"
+            }
+          ],
+          "item_label_key": "label",
+          "min_items": 1
+        },
+        {
+          "key": "emptyText",
+          "label": "缺值占位",
+          "type": "string",
+          "default": "—",
+          "group": "内容",
+          "help": "取不到值时画在读数位的那个符号。⚠ 缺值绝不伪造 0，填充也一并不画。",
+          "span": "half"
+        },
+        {
+          "key": "layout",
+          "label": "排布",
+          "type": "enum",
+          "default": "auto",
+          "options": [
+            {
+              "value": "auto",
+              "label": "自动"
+            },
+            {
+              "value": "single",
+              "label": "单个仪表"
+            },
+            {
+              "value": "grid",
+              "label": "网格"
+            }
+          ],
+          "group": "排布",
+          "help": "自动 = 只有一个时铺满整块，多个时按网格。",
+          "span": "half"
+        },
+        {
+          "key": "columns",
+          "label": "列数",
+          "type": "enum",
+          "default": "auto",
+          "options": [
+            {
+              "value": "auto",
+              "label": "自动"
+            },
+            {
+              "value": "1",
+              "label": "1 列"
+            },
+            {
+              "value": "2",
+              "label": "2 列"
+            },
+            {
+              "value": "3",
+              "label": "3 列"
+            },
+            {
+              "value": "4",
+              "label": "4 列"
+            },
+            {
+              "value": "5",
+              "label": "5 列"
+            },
+            {
+              "value": "6",
+              "label": "6 列"
+            }
+          ],
+          "group": "排布",
+          "help": "自动 = 按最小列宽自适应铺满；行数一律随仪表个数自适应。",
+          "span": "half"
+        },
+        {
+          "key": "gap",
+          "label": "仪表间距 (px)",
+          "type": "range",
+          "default": 10,
+          "group": "排布",
+          "help": "行列同值：仪表是方的，横竖分两个旋钮只会让网格歪。",
+          "span": "half",
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "padX",
+          "label": "整块左右内边距 (px)",
+          "type": "range",
+          "default": 10,
+          "group": "排布",
+          "span": "half",
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "padY",
+          "label": "整块上下内边距 (px)",
+          "type": "range",
+          "default": 6,
+          "group": "排布",
+          "span": "half",
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "shape",
+          "label": "几何",
+          "type": "enum",
+          "default": "arc",
+          "options": [
+            {
+              "value": "arc",
+              "label": "弧度盘"
+            },
+            {
+              "value": "linear",
+              "label": "横向条"
+            },
+            {
+              "value": "track",
+              "label": "目标轨道"
+            },
+            {
+              "value": "tank",
+              "label": "储罐"
+            },
+            {
+              "value": "thermometer",
+              "label": "温度计"
+            }
+          ],
+          "group": "几何",
+          "help": "五档共用同一条「量程 → 百分比 → 填充」的链，只在最后一步分叉。",
+          "span": "half"
+        },
+        {
+          "key": "geometry",
+          "label": "尺寸",
+          "type": "object",
+          "default": {
+            "thickness": 0,
+            "arcSpan": 270,
+            "tankWidth": 56,
+            "tubeWidth": 14,
+            "bulbSize": 26
+          },
+          "group": "几何",
+          "help": "五个子键按几何档各管一段：弧度盘吃厚度与张角、横向条与目标轨道吃厚度、储罐吃罐宽、温度计吃管宽与球径。",
+          "span": "full",
+          "fields": [
+            {
+              "key": "thickness",
+              "label": "进度厚度 (px)",
+              "type": "range",
+              "default": 0,
+              "help": "0 = 随几何档：弧 9 / 条 12 / 轨道 18；非零按 2–24 夹取。储罐与温度计不吃这一项。",
+              "min": 0,
+              "max": 24,
+              "step": 1
+            },
+            {
+              "key": "arcSpan",
+              "label": "弧张角 (°)",
+              "type": "range",
+              "default": 270,
+              "help": "缺口永远在正下方居中。只有弧度盘吃这一项。",
+              "min": 180,
+              "max": 300,
+              "step": 5
+            },
+            {
+              "key": "tankWidth",
+              "label": "罐宽 (px)",
+              "type": "range",
+              "default": 56,
+              "help": "同时受「不超过半块宽」约束，窄块里罐会自己收窄。只有储罐吃这一项。",
+              "min": 16,
+              "max": 200,
+              "step": 1
+            },
+            {
+              "key": "tubeWidth",
+              "label": "管宽 (px)",
+              "type": "range",
+              "default": 14,
+              "help": "管顶是半圆帽，宽度改了帽子跟着走。只有温度计吃这一项。",
+              "min": 6,
+              "max": 60,
+              "step": 1
+            },
+            {
+              "key": "bulbSize",
+              "label": "球径 (px)",
+              "type": "range",
+              "default": 26,
+              "help": "温度计底下那个球的直径。只有温度计吃这一项。",
+              "min": 10,
+              "max": 96,
+              "step": 1
+            }
+          ]
+        },
+        {
+          "key": "fillStyle",
+          "label": "填充上色",
+          "type": "enum",
+          "default": "solid",
+          "options": [
+            {
+              "value": "solid",
+              "label": "纯色"
+            },
+            {
+              "value": "gradient",
+              "label": "渐变"
+            }
+          ],
+          "group": "几何",
+          "help": "渐变档由填充色自己调深浅，不另开色标：弧与条向前加深，储罐自下而上淡出。",
+          "span": "half"
+        },
+        {
+          "key": "scale",
+          "label": "刻度",
+          "type": "object",
+          "default": {
+            "showRange": false,
+            "ticks": false,
+            "tickCount": 4,
+            "wanFormat": false,
+            "wanDigits": 2
+          },
+          "group": "刻度",
+          "span": "full",
+          "fields": [
+            {
+              "key": "showRange",
+              "label": "显示量程端点",
+              "type": "boolean",
+              "default": false,
+              "help": "在仪表两端标出下限与上限（弧度盘 / 横向条）。"
+            },
+            {
+              "key": "ticks",
+              "label": "显示刻度",
+              "type": "boolean",
+              "default": false,
+              "help": "在轨道下方摆一排等距刻度（横向条 / 目标轨道）。"
+            },
+            {
+              "key": "tickCount",
+              "label": "刻度个数",
+              "type": "range",
+              "default": 4,
+              "help": "首尾各占一个，四个即 0 / 33.3 / 66.7 / 100。",
+              "min": 2,
+              "max": 8,
+              "step": 1
+            },
+            {
+              "key": "wanFormat",
+              "label": "按「万」显示",
+              "type": "boolean",
+              "default": false,
+              "help": "⚠ 量程上限不足 1 万时整卡回落原始格式：小量程走「万」会让刻度全塌成「0.0万」，信息全失。"
+            },
+            {
+              "key": "wanDigits",
+              "label": "「万」小数位",
+              "type": "range",
+              "default": 2,
+              "help": "刻度、读数与目标标签共用这一个小数位。",
+              "min": 0,
+              "max": 4,
+              "step": 1
+            }
+          ]
+        },
+        {
+          "key": "tickSize",
+          "label": "刻度字号 (px)",
+          "type": "range",
+          "default": 10,
+          "group": "刻度",
+          "help": "刻度与量程端点共用这一个字号。",
+          "span": "half",
+          "min": 8,
+          "max": 20,
+          "step": 1
+        },
+        {
+          "key": "targetMark",
+          "label": "画目标标记",
+          "type": "boolean",
+          "default": true,
+          "group": "目标",
+          "help": "⚠ 只在这一个仪表填了目标值时才画：没有目标就连标记位都不占。",
+          "span": "half"
+        },
+        {
+          "key": "targetLabel",
+          "label": "目标标签",
+          "type": "string",
+          "default": "计划",
+          "placeholder": "如 计划 / 目标",
+          "group": "目标",
+          "help": "画在目标标记上方，后面紧接目标值。",
+          "span": "half"
+        },
+        {
+          "key": "showPercent",
+          "label": "显示完成率",
+          "type": "boolean",
+          "default": true,
+          "group": "目标",
+          "help": "⚠ 完成率 = 值 ÷ 目标，不夹取、可以超过 100%；与「量程百分比」不是一个数。",
+          "span": "half"
+        },
+        {
+          "key": "readout",
+          "label": "读数显示",
+          "type": "enum",
+          "default": "value",
+          "options": [
+            {
+              "value": "value",
+              "label": "原始值"
+            },
+            {
+              "value": "percent",
+              "label": "量程百分比"
+            },
+            {
+              "value": "both",
+              "label": "值 + 百分比"
+            },
+            {
+              "value": "none",
+              "label": "不显示"
+            }
+          ],
+          "group": "读数",
+          "help": "⚠ 这里的百分比是**量程**百分比（夹在 0–100），不是完成率。",
+          "span": "half"
+        },
+        {
+          "key": "readoutPlace",
+          "label": "读数位置",
+          "type": "enum",
+          "default": "center",
+          "options": [
+            {
+              "value": "center",
+              "label": "图形中央"
+            },
+            {
+              "value": "beside",
+              "label": "图形旁边"
+            },
+            {
+              "value": "below",
+              "label": "图形下方"
+            }
+          ],
+          "group": "读数",
+          "help": "⚠ 横向条与目标轨道要吃满整行，「旁边」在这两档上落在轨道上方那一行。",
+          "span": "half"
+        },
+        {
+          "key": "valueSize",
+          "label": "读数字号 (px)",
+          "type": "range",
+          "default": 0,
+          "group": "读数",
+          "help": "0 = 跟着块宽自适应。填正数即钉死一个字号，多个并排时字号才对得齐。",
+          "span": "half",
+          "min": 0,
+          "max": 200,
+          "step": 1
+        },
+        {
+          "key": "valueColor",
+          "label": "读数颜色",
+          "type": "color",
+          "default": "var(--accent-primary)",
+          "group": "读数",
+          "help": "命中取值规则的那一个改用规则的颜色，这里配的是没有命中时的颜色。",
+          "span": "half"
+        },
+        {
+          "key": "valueGlow",
+          "label": "读数辉光 (px)",
+          "type": "range",
+          "default": 0,
+          "group": "读数",
+          "span": "half",
+          "min": 0,
+          "max": 24,
+          "step": 1
+        },
+        {
+          "key": "unitSize",
+          "label": "单位字号 (px)",
+          "type": "range",
+          "default": 12,
+          "group": "单位",
+          "span": "half",
+          "min": 8,
+          "max": 32,
+          "step": 1
+        },
+        {
+          "key": "unitPlace",
+          "label": "单位位置",
+          "type": "enum",
+          "default": "baseline",
+          "options": [
+            {
+              "value": "baseline",
+              "label": "读数右侧"
+            },
+            {
+              "value": "attached",
+              "label": "紧跟读数"
+            }
+          ],
+          "group": "单位",
+          "help": "两档都与读数同基线，差的只是那一道小间隙。",
+          "span": "half"
+        },
+        {
+          "key": "labelPlace",
+          "label": "标签位置",
+          "type": "enum",
+          "default": "below",
+          "options": [
+            {
+              "value": "above",
+              "label": "读数上方"
+            },
+            {
+              "value": "below",
+              "label": "读数下方"
+            },
+            {
+              "value": "left",
+              "label": "读数左侧"
+            },
+            {
+              "value": "right",
+              "label": "读数右侧"
+            }
+          ],
+          "group": "标签",
+          "help": "⚠ 它只管摆在哪儿，不管显不显示：这一个没有名称时整行不渲染。要藏标签就把那一项的「名称」留空。",
+          "span": "half"
+        },
+        {
+          "key": "labelSize",
+          "label": "标签字号 (px)",
+          "type": "range",
+          "default": 12,
+          "group": "标签",
+          "span": "half",
+          "min": 8,
+          "max": 48,
+          "step": 1
+        },
+        {
+          "key": "labelTone",
+          "label": "标签文字色",
+          "type": "enum",
+          "default": "secondary",
+          "options": [
+            {
+              "value": "secondary",
+              "label": "次要"
+            },
+            {
+              "value": "primary",
+              "label": "正文"
+            },
+            {
+              "value": "title",
+              "label": "标题"
+            },
+            {
+              "value": "muted",
+              "label": "弱化"
+            }
+          ],
+          "group": "标签",
+          "span": "half"
+        },
+        {
+          "key": "fillColor",
+          "label": "填充色",
+          "type": "color",
+          "default": "",
+          "placeholder": "留空 = 跟随读数颜色",
+          "group": "配色",
+          "help": "这一项配的是整块的填充色；逐个仪表的固定颜色与规则命中色都压过它。",
+          "span": "half"
+        },
+        {
+          "key": "trackColor",
+          "label": "轨道底色",
+          "type": "color",
+          "default": "",
+          "placeholder": "留空 = 跟随主题的沉底色",
+          "group": "配色",
+          "help": "空轨道那一层的颜色；填满的那一段走填充色。",
+          "span": "half"
+        },
+        {
+          "key": "thousands",
+          "label": "千分位分隔",
+          "type": "boolean",
+          "default": true,
+          "group": "格式",
+          "help": "读数、刻度与目标标签一起走这一档。",
+          "span": "half"
+        },
+        {
+          "key": "rules",
+          "label": "取值规则",
+          "type": "array",
+          "default": [],
+          "group": "告警",
+          "help": "按声明顺序取首个命中，高危规则放前面；颜色留空跟随严重度语义色，填则只填 var(--…)。",
+          "item_schema": [
+            {
+              "key": "op",
+              "label": "判断",
+              "type": "enum",
+              "default": "gt",
+              "options": [
+                {
+                  "value": "lt",
+                  "label": "< 小于"
+                },
+                {
+                  "value": "lte",
+                  "label": "≤ 小于等于"
+                },
+                {
+                  "value": "gt",
+                  "label": "> 大于"
+                },
+                {
+                  "value": "gte",
+                  "label": "≥ 大于等于"
+                },
+                {
+                  "value": "between",
+                  "label": "区间内 [a,b]"
+                },
+                {
+                  "value": "outside",
+                  "label": "区间外"
+                },
+                {
+                  "value": "eq",
+                  "label": "= 等于"
+                },
+                {
+                  "value": "neq",
+                  "label": "≠ 不等于"
+                }
+              ]
+            },
+            {
+              "key": "value",
+              "label": "阈值",
+              "type": "number",
+              "default": 0
+            },
+            {
+              "key": "value2",
+              "label": "阈值上界",
+              "type": "number",
+              "when": {
+                "key": "op",
+                "in": [
+                  "between",
+                  "outside"
+                ]
+              }
+            },
+            {
+              "key": "level",
+              "label": "严重度",
+              "type": "enum",
+              "default": "warning",
+              "options": [
+                {
+                  "value": "normal",
+                  "label": "正常（绿）"
+                },
+                {
+                  "value": "info",
+                  "label": "提示（蓝）"
+                },
+                {
+                  "value": "warning",
+                  "label": "警告（黄）"
+                },
+                {
+                  "value": "danger",
+                  "label": "危险（红）"
+                }
+              ]
+            },
+            {
+              "key": "color",
+              "label": "颜色",
+              "type": "color",
+              "default": "",
+              "help": "留空跟随严重度语义色；量程分区、介质类别这类非严重度的配色填这里。"
+            },
+            {
+              "key": "label",
+              "label": "文案",
+              "type": "string",
+              "default": ""
+            },
+            {
+              "key": "blink",
+              "label": "闪烁",
+              "type": "boolean",
+              "default": false
+            }
+          ],
+          "item_label_key": "label"
+        }
+      ],
+      "bindings": [
+        {
+          "key": "gaugeValues",
+          "label": "仪表读数",
+          "data_type": "number",
+          "is_array": true,
+          "is_entity_pinned": true,
+          "array_fields": [
+            {
+              "key": "value",
+              "label": "主读数",
+              "data_type": "number"
+            },
+            {
+              "key": "aux",
+              "label": "目标实际值",
+              "data_type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "type": "header",
       "display_name": "页头",
       "category": "布局",

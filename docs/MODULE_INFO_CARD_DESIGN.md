@@ -954,6 +954,35 @@ config + values + meta.slots ──► rows.ts / cells.ts ──► RowView[] / 
 
 ## 10. 明确的偏离
 
+> ⚠ **`gauge-card` 落地时逐条对回 `entity-gauge` / `target-progress` 源码，逮到 7 处。**
+> （已确认这两个参考模块**零 echarts 依赖**、纯 SVG + CSS，所以在迁移范围内。）
+>
+> 1. **两个「百分比」根本不是一个数。** `readout:'percent'` 是**量程百分比**
+>    （夹在 0–100，来自 `entity-gauge`）；轨道 pill 的 `showPercent` 是**完成率**
+>    （值 ÷ 目标 × 100，**不夹、可 > 100%**，来自 `target-progress`）。
+>    同一张卡上并存，混用不报错、只是数不对。已分成两个函数各配用例。
+> 2. **量程非法的口径两套，取诚实那一套。** `entity-gauge` 是 `min >= max → null`；
+>    `target-progress` 是 `max = m > min ? m : min + 100`——**伪造一段量程**，
+>    整卡百分比全错而屏上看不出来。后者不迁。
+> 3. **`linear` 的读数在轨道上方整行**，不在旁边。§1.3 写的 `readoutPlace:'beside'`
+>    要理解成「不叠在图形上」，逐档落点在档表注释里。
+> 4. **`labelPlace` 少一档 `right`**：`entity-gauge` 的 linear 副标题与读数同基线、在右侧。
+>    §1.3 写 `below` 画不出源码那个样子。
+> 5. **`labelPlace` 没有 `hidden`**（与 `info-card` §10.3 同一处收敛）：label 留空即整行不渲染。
+> 6. **`tank` / `thermometer` 不吃厚度字段**。源码那句 `style === 'linear' ? 12 : 9`
+>    会给它们也算出 9，但字段的 `when` 根本不放行——照抄会得到一个谁也用不上的数。
+>    这两档的粗细走各自的几何。
+> 7. **首末刻度的对齐基准，源码是两套判据**（刻度按下标、目标标记按分数阈值），
+>    收成阈值一套，四刻度下逐个结果与源码相同。
+>
+> ⚠ **§1.3 又一次没列全**：量程端点 11px、刻度 10px 是两个不同的字号，
+> 而新模型只有一个 `tickSize`——要还原参考观感，`arc` / `linear` 那几套预设得显式给 `tickSize:11`。
+>
+> ⚠ 三处**新模型有、参考仓没有**的旋钮（源码是写死的常量）：`arcSpan`（源码只有
+> 225°/495° 两个常量）· `scale.tickCount`（源码写死 4）· 四档几何的独立单位字号与颜色
+> （`entity-gauge` 把单位**拼进读数字符串**，只有 `target-progress` 有独立的单位节点）。
+
+
 > ⚠ **`info-card` 落地时逐条对回参考源码，逮到 §5.2 / §1.3 六处与源码不符，一律以源码为准。**
 > 源码在 `DigitalTwinBK/web/packages/modules/src/modules/{kpi-card,kpi-group,icon-kpi-group}/`。
 >
@@ -1000,6 +1029,32 @@ config + values + meta.slots ──► rows.ts / cells.ts ──► RowView[] / 
 > 6. **`metric-status-table` 的徽章词是「正常 / 预警 / 超标」**，与 `LEVEL_TEXT` 的
 >    「正常 / 提示 / 警告 / 危急」不是一套。所以 `target-badge-list` 必须走
 >    `badge.kind:'rule'` + 规则自带 `label`；换成 `severity` 档，「超标」会变成「危急」。
+
+
+> ⚠ **以下 6 条是 `gauge-card` 落地时逐行对回参考源码才发现的，文档此前没有记。**
+> 一律以 `DigitalTwinBK/web/packages/modules/src/modules/{target-progress,entity-gauge}/`
+> 的源码为准。⚠ §1.3 里 `entity-gauge` 那四行写的是四档的**取值并集**，不是各档的取值。
+>
+> 1. **横向条那一档的标签在读数右侧、11 号**（`.eg-label--inline`：与读数同基线、
+>    左边距 6px、`font-size: 11px`）。§1.3 的 `14a` 写的是 `labelPlace:'below'`，
+>    照抄会让标签掉到读数下方并大一号。`linear-bar` 预设按源码给 `right` + `labelSize:11`。
+> 2. **储罐那一档的读数字号钉死 16**：`.eg-tank-center .eg-value { font-size: 16px }`
+>    覆盖了 `.eg-value` 的 `clamp(16px, 1.6vw, 34px)`。罐身只有 56px 宽，自适应字号会顶出罐外，
+>    所以 `tank` 是六套里唯一不用哨兵 `valueSize: 0` 的一套。
+> 3. **储罐那一档的填充是渐变**（`.eg-tank-fill` 是 `linear-gradient(0deg, 色, color-mix(色 40%))`），
+>    弧、条、温度计三档才是纯色。§1.3 那四行一个都没写 `fillStyle`。
+> 4. **`entity-gauge` 四档的单位恒 `attached`、千分位恒开。** 单位是拼进读数字符串的
+>    （`${num}${unit}`），没有独立单位节点；`formatGaugeText` / `formatRangeLabel` 走
+>    `toLocaleString('en-US', {…})` 且**没关 `useGrouping`**，读数与量程端点都带千分位。
+>    `target-progress` 的 `thousands` 缺省也是 `true`。故 `gauge-card` 的 `thousands`
+>    字段缺省是 `true`——与 `info-card` 的 `false` 相反，两个模块的参考源本就不同。
+> 5. **量程端点与刻度不是一个字号**：`.eg-range` 是 11px、`.tp-tick` 是 10px。新模型把两者
+>    收成一个 `tickSize`，于是 `arc-gauge` / `linear-bar` 给 11、`target-track` 给 10。
+> 6. **行内 `min` / `max` 有缺省 0 / 100，只有 `target` 刻意没有。** 两个参考模块的
+>    `configSchema` 里 `min` / `max` 的 `default` 就是 0 / 100，而 `target` 那一项连
+>    `default` 都不写（`help` 自陈「留空则不画目标标记」）。§5.3 的 ⚠ 把三个键并列写成
+>    「刻意无 default」，那是 `info-list` 的 `range` 簇口径：仪表没有量程就整个画不出来，
+>    而「不画目标标记」只跟 `target` 一个键有关。
 
 
 以下是**表达不出来或有意收窄**的，逐条记在案。除此之外的 15 个模块观感都在 §1.3 的取值里。

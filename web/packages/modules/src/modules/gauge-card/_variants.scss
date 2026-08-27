@@ -1,0 +1,525 @@
+// 仪表卡的全部档位样式：五档几何（弧度盘 / 横向条 / 目标轨道 / 储罐 / 温度计）、
+// 读数三处、标签四处、单位两档与读数四档。摊在某个 .vue 的 scoped 块里会把它撑过行数闸门，
+// 所以单独成文，由模块里**每一个** SFC 各 `@use './variants'` 一次。
+// ⚠ scoped 样式只作用于声明它的那个组件自己渲染的节点：读数那一组由卡片组件渲染、
+//   几何由 GaugeShape.vue 渲染，两边都要 @use，少一边那半套样式会静默不生效。
+// ⚠ 容器那一层（网格列模板、仪表间距、整块内边距）不在这里：它由 look.gridStyle 直接
+//   摊成内联样式，样式表这一侧一个键都不认。
+//
+// DOM 契约（look.classes 挂在 .gc-cell 上，GaugeShape 自己再挂一份形状类）：
+//   .gc-cell
+//     .gc-readout > .gc-label + .gc-read > .gc-value + .gc-unit + .gc-percent
+//     .gc-shape …几何… + .gc-center（读数摆图形中央时那一组挪进这里）+ .gc-range
+
+.gc-cell,
+.gc-shape {
+  // 图形的填充色：命中色 / 逐个静态色 → 模块填充色 → 主题强调色，三级只写一次。
+  // ⚠ 弧、条、液面、液面高光与球全都读它——各写一遍链子必然漂
+  --gc-tone: var(--gc-item-color, var(--gc-fill-color, var(--accent-primary)));
+
+  // 读数与命中文案的颜色：逐个仪表的覆盖色仍排在最前。
+  // ⚠ 顺序反过来（读数色在前）会让命中规则的那一个仪表读数照旧是强调色——告警色只上了
+  //   图形、没上数字，而两处本该是同一个颜色，屏上看着像半个告警
+  --gc-read-color: var(--gc-item-color, var(--gc-value-color, var(--gc-tone)));
+}
+
+.gc-cell {
+  display: flex;
+  min-width: 0;
+  box-sizing: border-box;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  gap: 5px;
+  // 读数字号跟着**仪表**宽自适应，不跟着视口：并排的窄格里长读数不会被裁掉
+  container-type: inline-size;
+}
+
+.gc-cell--pick {
+  cursor: pointer;
+}
+
+/* 读数三处 */
+
+// 图形旁边：图形在前、读数在后。⚠ 横向条与粗轨道的轨道要吃满整行，读数只能落在
+// 轨道**上方**那一行（参考仓 .eg-linear-main 与 .tp-head 都是这样）
+.gc-cell.gc--read-beside {
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 12px;
+}
+
+.gc-cell.gc--read-beside.gc--shape-linear {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+// 粗轨道那一档的头行与轨道之间是 12px，与横向条的 6px 不是一个值
+.gc-cell.gc--read-beside.gc--shape-track {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+
+// 图形下方：读数在 DOM 里恒在前（读屏先念数），摆到下面只翻一次主轴
+.gc-cell.gc--read-below {
+  flex-direction: column-reverse;
+}
+
+/* 标签四处 */
+
+.gc-readout {
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.gc-cell--label-below .gc-readout {
+  flex-direction: column-reverse;
+}
+
+// ⚠ 撑满并两端对齐：标题贴左缘、读数贴右缘。挤在中间居中是另一种观感，
+//    而两者在窄卡上看起来很像——宽到一定程度才分得出来
+.gc-cell--label-left .gc-readout {
+  width: 100%;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.gc-cell--label-right .gc-readout {
+  flex-direction: row-reverse;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.gc-read {
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: baseline;
+  overflow: hidden;
+  gap: 5px;
+}
+
+// 紧跟读数那一档不留空隙；读数右侧那一档留 5px（参考仓 .tp-unit 的 gap）
+.gc-cell.gc--unit-attached .gc-read {
+  gap: 0;
+}
+
+.gc-value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--gc-read-color);
+  // 0 = 跟着仪表宽自适应，与参考仓 .eg-value 的 clamp 同量级，只是基准换成容器宽
+  font-family: var(--font-digit);
+  font-size: var(--gc-value-size, clamp(16px, 14cqi, 34px));
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  // ⚠ 辉光色要压到半透明：直接用 currentcolor 会得到一倍强的光晕，读数看着糊了一圈。
+  //   第二层是储罐那一档的描边（--gc-outline），其余档回落成一层不可见的空阴影
+  text-shadow:
+    0 0 var(--gc-value-glow, 0)
+      color-mix(in srgb, currentcolor 50%, transparent),
+    var(--gc-outline, 0 0 0 transparent);
+  transition: color 0.3s ease;
+  white-space: nowrap;
+}
+
+.gc-unit {
+  flex: none;
+  color: var(--text-secondary);
+  font-size: var(--gc-unit-size, 12px);
+  font-style: normal;
+  text-shadow: var(--gc-outline, none);
+}
+
+.gc-percent {
+  flex: none;
+  color: var(--text-secondary);
+  font-size: var(--gc-unit-size, 12px);
+  font-style: normal;
+  margin-left: 4px;
+  text-shadow: var(--gc-outline, none);
+}
+
+.gc-label {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--gc-label-color, var(--text-secondary));
+  font-size: var(--gc-label-size, 12px);
+  letter-spacing: 0.05em;
+  text-overflow: ellipsis;
+  text-shadow: var(--gc-outline, none);
+  white-space: nowrap;
+}
+
+// 命中文案顶掉标签时跟着填充色走，字距收回正常——它是一句话，不是一个名字
+.gc-label--hit {
+  color: var(--gc-read-color);
+  letter-spacing: normal;
+}
+
+/* 读数四档与闪烁 */
+
+// 没有读数的三档：占位符是同一个字，全靠这里的颜色与透明度分开
+.gc-value--pending {
+  color: var(--text-secondary);
+  opacity: 0.7;
+  text-shadow: var(--gc-outline, none);
+}
+
+.gc-value--unbound {
+  color: var(--text-disabled);
+  opacity: 1;
+  text-shadow: var(--gc-outline, none);
+}
+
+// 取不到要显眼：它是「去查现场」的信号，与「还没配」不是一回事
+.gc-value--error {
+  color: var(--state-danger);
+  text-shadow: var(--gc-outline, none);
+}
+
+.gc-value--blink {
+  animation: gc-value-blink 1s steps(1, end) infinite;
+}
+
+@keyframes gc-value-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* 五档几何共用的外壳：.gc-shape 摆图形与量程端点，.gc-figure 只框图形本身 */
+
+.gc-shape {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+}
+
+// ⚠ 居中读数覆盖的是 .gc-figure 而不是 .gc-shape：量程端点也在 .gc-shape 里，
+//   贴着整块去居中会让读数被端点那一行顶偏几像素
+.gc-figure {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+}
+
+// 图形中央那一层：不吃鼠标事件，整格点击照旧
+.gc-center {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inset: 0;
+  pointer-events: none;
+}
+
+.gc-range {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  color: var(--text-disabled);
+  font-size: var(--gc-tick-size, 10px);
+  white-space: nowrap;
+}
+
+/* 弧度盘 */
+
+.gc-shape--arc {
+  flex-direction: column;
+}
+
+.gc-shape--arc .gc-figure {
+  aspect-ratio: 1 / 1;
+}
+
+.gc-arc {
+  max-height: 100%;
+  height: 100%;
+  aspect-ratio: 1 / 1;
+}
+
+.gc-arc__track {
+  stroke: var(--gc-track-color, var(--border-subtle));
+  opacity: 0.6;
+}
+
+.gc-arc__fill {
+  stroke: var(--gc-tone);
+  filter: drop-shadow(0 0 5px var(--gc-tone));
+  transition:
+    stroke-dashoffset 0.6s ease,
+    stroke 0.4s ease;
+}
+
+// 渐变描边只能走 SVG 的 <linearGradient>：CSS 的 linear-gradient() 上不了 stroke
+.gc-arc__stop-a {
+  stop-color: var(--gc-tone);
+  stop-opacity: 0.45;
+}
+
+.gc-arc__stop-b {
+  stop-color: var(--gc-tone);
+  stop-opacity: 1;
+}
+
+.gc-shape--arc .gc-range {
+  max-width: 70%;
+  margin-top: -8px;
+}
+
+/* 横向条与目标轨道 */
+
+.gc-shape--linear,
+.gc-shape--track {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.gc-shape--linear .gc-figure,
+.gc-shape--track .gc-figure {
+  width: 100%;
+  flex: none;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.gc-bar {
+  position: relative;
+  display: block;
+  width: 100%;
+  border-radius: var(--radius-pill);
+}
+
+// 轨道/填充要的是「半圆端头」而不是某个具体圆角：厚度可配（2~24px），写死半高只在
+// 缺省那一档对；交给 pill 让浏览器自动钳到半高，任意厚度都是正圆端头
+.gc-shape--linear .gc-bar {
+  height: var(--gc-thickness, 12px);
+  border: 1px solid var(--border-subtle);
+  background: var(--gc-track-color, var(--surface-sunken));
+  overflow: hidden;
+}
+
+// 粗轨道要露出目标标记与它上方的标签，所以这一档不裁
+.gc-shape--track .gc-bar {
+  height: var(--gc-thickness, 18px);
+  background: var(
+    --gc-track-color,
+    color-mix(in srgb, var(--border-strong) 55%, transparent)
+  );
+  overflow: visible;
+}
+
+.gc-bar__fill {
+  position: absolute;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--gc-tone);
+  box-shadow: 0 0 6px var(--gc-tone);
+  inset: 0 auto 0 0;
+  transition: width 0.4s ease;
+}
+
+.gc-shape--grad .gc-bar__fill {
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--gc-tone) 60%, transparent),
+    var(--gc-tone)
+  );
+}
+
+.gc-pill {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  color: var(--text-title);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  text-shadow: 0 1px 2px
+    color-mix(in srgb, var(--text-inverse) 70%, transparent);
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+
+.gc-target {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 0;
+  border-left: 1px dashed var(--state-warning);
+}
+
+.gc-target__label {
+  position: absolute;
+  bottom: calc(100% + 2px);
+  color: var(--state-warning);
+  font-size: var(--gc-tick-size, 10px);
+  white-space: nowrap;
+}
+
+.gc-ticks {
+  position: relative;
+  display: block;
+  height: 14px;
+  margin-top: 5px;
+}
+
+.gc-tick {
+  position: absolute;
+  top: 0;
+  color: var(--text-secondary);
+  font-size: var(--gc-tick-size, 10px);
+  font-style: normal;
+  white-space: nowrap;
+}
+
+/* 储罐 */
+
+.gc-shape--tank {
+  align-items: stretch;
+  padding: 4px 0;
+  gap: 6px;
+}
+
+.gc-shape--tank .gc-figure {
+  align-items: stretch;
+}
+
+.gc-tank {
+  position: relative;
+  display: block;
+  width: var(--gc-tank-w, 56px);
+  max-width: 50%;
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-md);
+  background: var(--gc-track-color, var(--surface-sunken));
+  overflow: hidden;
+}
+
+.gc-tank__fill {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--gc-tone);
+  transition: height 0.6s ease;
+}
+
+.gc-shape--grad .gc-tank__fill,
+.gc-shape--grad .gc-thermo__fill {
+  background-image: linear-gradient(
+    0deg,
+    var(--gc-tone),
+    color-mix(in srgb, var(--gc-tone) 40%, transparent)
+  );
+}
+
+.gc-tank__surface {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 3px;
+  background: var(--gc-tone);
+  box-shadow: 0 0 6px var(--gc-tone);
+}
+
+/* 温度计 */
+
+.gc-shape--thermometer {
+  padding: 4px 0;
+  gap: 6px;
+}
+
+.gc-thermo {
+  position: relative;
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+}
+
+.gc-thermo__tube {
+  position: relative;
+  display: block;
+  width: var(--gc-tube-w, 14px);
+  min-height: 0;
+  flex: 1;
+  border: 1px solid var(--border-hover);
+  border-bottom: none;
+  // 同上：管顶要半圆帽，pill 自动钳到半宽，不必跟着管宽手算
+  border-radius: var(--radius-pill) var(--radius-pill) 0 0;
+  background: var(--gc-track-color, var(--surface-sunken));
+  overflow: hidden;
+}
+
+.gc-thermo__fill {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--gc-tone);
+  box-shadow: 0 0 5px var(--gc-tone);
+  transition: height 0.6s ease;
+}
+
+.gc-thermo__bulb {
+  width: var(--gc-bulb, 26px);
+  height: var(--gc-bulb, 26px);
+  flex: none;
+  border: 1px solid var(--border-hover);
+  border-radius: 50%;
+  margin-top: -2px;
+  background: var(--gc-tone);
+  box-shadow: 0 0 8px var(--gc-tone);
+}
+
+// 竖着长的两档：量程端点跟着立起来，上端是 max、下端是 min
+.gc-shape--tank .gc-range,
+.gc-shape--thermometer .gc-range {
+  width: auto;
+  height: 100%;
+  flex-direction: column-reverse;
+}
+
+// 「减少动态」：闪烁与所有过渡一起关掉，别让墙上一直在动
+@media (prefers-reduced-motion: reduce) {
+  .gc-value--blink {
+    animation: none;
+  }
+
+  .gc-arc__fill,
+  .gc-bar__fill,
+  .gc-tank__fill,
+  .gc-thermo__fill {
+    transition: none;
+  }
+}
