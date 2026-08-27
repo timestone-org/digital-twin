@@ -1,18 +1,20 @@
 <script setup lang="ts">
 /**
- * @fileoverview 一条标注的渲染件：rect / line / text 三档几何加它的标签。
- * 编辑器与运行态画的是同一份形状，所以这里只认 `Twin2dMark`，一处都不碰选中态与手势。
- * 口径见 docs/MODULE_TWIN_2D_DESIGN.md §7.10（#71–#73）。
+ * @fileoverview 一条标注的渲染件：rect / line / text 三档几何加它的标签。运行态的
+ * `Twin2dMarkLayer` 与编辑器的标注层挂的是同一份，所以这里只认 `Twin2dMark`，一处都不碰
+ * 选中态与手势。口径见 docs/MODULE_TWIN_2D_DESIGN.md §7.10（#71–#73）。
  *
  * ⚠ 标签落点逐值照参考项目：框内九宫格贴边 10、框外上下各 8、辅助线上方 10 下方 14。
  * 上下不对称是有意的——下方那一档要多让出一个字的升部，改成对称会贴到线上。
  * ⚠ 描边与虚线挂在外层 `<g>` 上由子元素继承，唯独标签的描边归 `.t2m-label`
  * （`paint-order: stroke` 的描边字）：少了这一条，虚线标注的字会连字带描边一起虚掉。
  */
-import { sanitizeCssValue } from '@dt/twin2d'
-import type { Twin2dMark, Twin2dMarkAlignH, Twin2dMarkAlignV } from '@dt/twin2d'
-import type { FontValue } from '@dt/contracts'
 import { computed } from 'vue'
+
+import { sanitizeCssValue } from '../cssValue'
+import type { Twin2dMarkAlignH, Twin2dMarkAlignV } from '../kinds'
+import type { Twin2dMark } from '../types'
+import type { FontValue } from '@dt/contracts'
 
 /** 标签在框内时的贴边留白（设计像素）。 */
 const LABEL_PAD = 10

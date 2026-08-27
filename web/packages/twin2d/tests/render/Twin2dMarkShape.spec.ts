@@ -7,12 +7,12 @@
  * ⚠ 描边与填充留空是合法配置（= 由渲染层回退），补一个具体颜色等于把主题色写死进
  * 文档，所以两处回退也要有断言。
  */
-import { normalizeMark } from '@dt/twin2d'
-import type { Twin2dMark } from '@dt/twin2d'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
-import Twin2dMarkShape from '@/pages/Twin2dEditor/components/Twin2dMarkShape.vue'
+import { normalizeMark } from '../../src/normalizeMarks'
+import Twin2dMarkShape from '../../src/render/Twin2dMarkShape.vue'
+import type { Twin2dMark } from '../../src/types'
 
 /** 造一条归一化过的标注；造不出来直接抛，省得后面对着 null 断言。 */
 function markOf(raw: Record<string, unknown>): Twin2dMark {

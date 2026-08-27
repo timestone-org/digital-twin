@@ -97,6 +97,36 @@ const LINKED_SCENE = {
   edges: [{ id: 'e1', from: { nodeId: 'a' }, to: { nodeId: 'b' } }],
 }
 
+/** 一张带两条标注的图：一条压在连线之下、一条盖在节点之上。 */
+const MARKED_SCENE = {
+  version: 1,
+  canvas: { width: 400, height: 300 },
+  styles: [PROBE_STYLE],
+  nodes: [{ id: 'n1', styleId: 'probe' }],
+  marks: [
+    {
+      id: 'frame',
+      kind: 'rect',
+      x: 8,
+      y: 8,
+      w: 380,
+      h: 280,
+      text: '一号站房',
+      zOrder: 'below',
+    },
+    {
+      id: 'title',
+      kind: 'text',
+      x: 120,
+      y: 4,
+      w: 160,
+      h: 32,
+      text: '系统图',
+      zOrder: 'above',
+    },
+  ],
+}
+
 interface RenderOptions {
   config?: Record<string, unknown>
   values?: Record<string, unknown>
@@ -119,6 +149,20 @@ function render(options: RenderOptions = {}) {
 /** 舞台真正收到的那四个顶层配置键。 */
 function stageView(wrapper: ReturnType<typeof render>): unknown {
   return wrapper.getComponent(Twin2dStage).props('view')
+}
+
+/** 一层标注里各条的 id，文档序。 */
+function idsOf(wrapper: ReturnType<typeof render>, layer: string): string[] {
+  return wrapper
+    .findAll(`[data-layer="${layer}"] [data-test="mark"]`)
+    .map((node) => node.attributes('data-id') ?? '')
+}
+
+/** 舞台自下而上那六层。 */
+function layerOrder(wrapper: ReturnType<typeof render>): (string | null)[] {
+  return [...wrapper.get('.t2-stage__viewport').element.children].map((el) =>
+    el.getAttribute('data-layer'),
+  )
 }
 
 /** 一格读数的显示串；节点上只有这一个图元。 */
@@ -209,6 +253,39 @@ describe('七个顶层配置键都在模块壳里读', () => {
 
     expect(stageView(fast)).toMatchObject({ flowSpeed: 3 })
     expect(stageView(absurd)).toMatchObject({ flowSpeed: 5 })
+  })
+})
+
+describe('标注在运行态真画得出来', () => {
+  // ⚠ 端到端一条：图框、标题栏、图例这些全是标注，画不出来时大屏上只少了它们，
+  // 而编辑器里明明看得见——最坏的一类「配了不生效」
+  it('两档 zOrder 各进各的层，DOM 顺序就是层序', () => {
+    const wrapper = render({
+      config: { [TWIN_2D_CONFIG_KEY]: MARKED_SCENE },
+    })
+
+    expect(idsOf(wrapper, 'marks-below')).toEqual(['frame'])
+    expect(idsOf(wrapper, 'marks-above')).toEqual(['title'])
+    expect(layerOrder(wrapper)).toEqual([
+      'background',
+      'pattern',
+      'marks-below',
+      'edges',
+      'nodes',
+      'marks-above',
+    ])
+  })
+
+  it('标注的文字与几何照文档画', () => {
+    const wrapper = render({
+      config: { [TWIN_2D_CONFIG_KEY]: MARKED_SCENE },
+    })
+    const frame = wrapper.get('[data-id="frame"]')
+
+    expect(frame.get('[data-test="mark-label"]').text()).toBe('一号站房')
+    expect(frame.get('[data-test="mark-shape"]').attributes('width')).toBe(
+      '380',
+    )
   })
 })
 

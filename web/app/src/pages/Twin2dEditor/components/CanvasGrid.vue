@@ -1,14 +1,20 @@
 <script setup lang="ts">
 /**
- * @fileoverview 画布底：一层按当前倍率对齐的网格线，加一圈把设计框之外压暗的遮罩
- * ——让 `canvas.width/height` 的边界在任何倍率下都一眼可见。
+ * @fileoverview 画布底：画布自己的底图与图案底，压一层按当前倍率对齐的网格线，再加
+ * 一圈把设计框之外压暗的遮罩——让 `canvas.width/height` 的边界在任何倍率下都一眼可见。
  *
+ * ⚠ 底两层的取值走包里的 `canvasBackdropStyles`，运行态舞台调的是同一份：在这里另算
+ * 一份的表现是底图偏一点、图案疏一格，而两边单看都对（§3.3）。
+ * ⚠ 底两层住在**设计**坐标系里（整块按倍率缩），不是照屏幕像素铺：照屏幕铺的话缩放
+ * 时图案的疏密不跟着变，而那与「大屏上看到的」对不上。
+ * ⚠ 网格线压在底图之上：反过来的话配了底图的画布在编辑器里就没有网格可对齐了。
  * ⚠ 纯装饰，整层一点指针都不吃：吃了的话它盖在画布上，点选、框选与拖放全被它接走，
  * 而界面上看不出任何异常。
  * ⚠ 线色只走 `--fx-grid-line`：写死颜色的那一层在换肤时第一个露馅。
  * ⚠ 格距不足几个像素时整层不画：再密线就糊成一片实色，那是比没有网格更糟的底。
  */
-import { finiteOr } from '@dt/twin2d'
+import { resolveImageValue } from '@dt/modules'
+import { canvasBackdropStyles, finiteOr } from '@dt/twin2d'
 import type { Twin2dCanvas } from '@dt/twin2d'
 import { computed } from 'vue'
 import type { CSSProperties } from 'vue'
@@ -66,10 +72,28 @@ const frameStyle = computed<CSSProperties>(() => {
 })
 
 /**
+ * 底两层那块方框：位置同设计框，尺寸用**设计**像素、整块再按倍率缩。
+ * ⚠ 每一项都过一手 `finiteOr`，理由同上一条。
+ */
+const backdropStyle = computed<CSSProperties>(() => ({
+  left: `${finiteOr(origin.value.x, 0)}px`,
+  top: `${finiteOr(origin.value.y, 0)}px`,
+  width: `${Math.max(0, finiteOr(props.canvas.width, 0))}px`,
+  height: `${Math.max(0, finiteOr(props.canvas.height, 0))}px`,
+  transform: `scale(${finiteOr(props.view.scale, 1)})`,
+  transformOrigin: '0 0',
+}))
+
+/** 底图与图案两层的取值；素材引用走应用壳注入的那条解析。 */
+const backdrop = computed(() =>
+  canvasBackdropStyles(props.canvas, resolveImageValue),
+)
+
+/**
  * 网格线的三个数：格距与两轴起点。
  * ⚠ 出的是自定义属性而不是 `background-*` 本身：值里带 `var()` 的标准属性会被
- * happy-dom 的 CSSOM 整条丢掉，浏览器上没事、用例里却断言不到（同 `Twin2dStage`
- * 的底图层）。
+ * happy-dom 的 CSSOM 整条丢掉，浏览器上没事、用例里却断言不到（同
+ * `canvasBackdropStyles` 出的那两层）。
  */
 const linesStyle = computed<Record<string, string>>(() => ({
   '--t2-grid-step': `${step.value}px`,
@@ -85,6 +109,22 @@ const linesStyle = computed<Record<string, string>>(() => ({
     aria-hidden="true"
     data-test="grid"
   >
+    <div
+      class="dt-twin2d-grid__backdrop"
+      :style="backdropStyle"
+      data-test="grid-backdrop"
+    >
+      <div
+        class="dt-twin2d-grid__fill t2-backdrop"
+        :style="backdrop.background"
+        data-test="grid-background"
+      />
+      <div
+        class="dt-twin2d-grid__fill t2-backdrop-pattern"
+        :style="backdrop.pattern"
+        data-test="grid-pattern"
+      />
+    </div>
     <div
       v-if="showLines"
       class="dt-twin2d-grid__lines"
@@ -105,6 +145,16 @@ const linesStyle = computed<Record<string, string>>(() => ({
   position: absolute;
   inset: 0;
   overflow: hidden;
+}
+
+// 底两层的方框：`--t2-bg` / `--t2-pattern` 的规则在 twin2d.scss 里，两个宿主共用
+.dt-twin2d-grid__backdrop {
+  position: absolute;
+}
+
+.dt-twin2d-grid__fill {
+  position: absolute;
+  inset: 0;
 }
 
 // 格距与起点由内联的自定义属性喂进来，线色恒走 token

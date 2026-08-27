@@ -325,6 +325,8 @@ export {
   resolveAccent,
   sanitizeCssValue,
 } from './cssValue'
+export { canvasBackdropStyles } from './canvasBackdrop'
+export type { Twin2dBackdropStyles } from './canvasBackdrop'
 export { evalExpr, exprSlotRefs } from './expr'
 export type { Twin2dExprValue, Twin2dSlotValues } from './expr'
 export {
@@ -403,6 +405,8 @@ export type {
 export { default as Twin2dEdgeLayer } from './render/Twin2dEdgeLayer.vue'
 export { default as Twin2dGlyph } from './render/Twin2dGlyph.vue'
 export { default as Twin2dIconSprite } from './render/Twin2dIconSprite.vue'
+export { default as Twin2dMarkLayer } from './render/Twin2dMarkLayer.vue'
+export { default as Twin2dMarkShape } from './render/Twin2dMarkShape.vue'
 export { default as Twin2dNodeBox } from './render/Twin2dNodeBox.vue'
 export { default as Twin2dPrimView } from './render/Twin2dPrimView.vue'
 export { default as Twin2dStage } from './render/Twin2dStage.vue'

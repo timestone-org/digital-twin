@@ -32,6 +32,18 @@
   inset: 0;
 }
 
+// 画布底两层：取值由 canvasBackdropStyles 出成 --t2-bg / --t2-pattern 两个自定义属性，
+// 接过去的规则只有这两条。
+// ⚠ 运行态舞台与编辑画布共用它们：谁再写一份的表现是底图偏一点、图案疏一格，
+//   而两边单看都对。
+.t2-backdrop {
+  background: var(--t2-bg, none);
+}
+
+.t2-backdrop-pattern {
+  background-image: var(--t2-pattern, none);
+}
+
 .t2-stage__empty {
   position: absolute;
   inset: 0;
@@ -71,6 +83,15 @@
 // ⚠ `overflow: visible` 不能省：`<svg>` 的 UA 缺省是裁掉溢出，端点标记与
 //   多遍描边的外圈会被切掉半边。
 .t2-edges {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+// 标注层：编辑器在自己那层上铺命中带，运行态的标注本身不吃指针事件。
+// ⚠ `overflow: visible` 同连线层：贴着画布边缘画的图框会被 UA 缺省裁掉半条边。
+.t2-marks {
   position: absolute;
   inset: 0;
   overflow: visible;

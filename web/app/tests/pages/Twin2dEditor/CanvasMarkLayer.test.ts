@@ -10,6 +10,7 @@
  * ⚠ 卸载不补那一次也不报错：拖到一半切走的改动既没进撤销栈也没落库。
  */
 import {
+  Twin2dMarkShape,
   Twin2dStage,
   normalizeCanvas,
   normalizeMark,
@@ -177,21 +178,14 @@ describe('按 zOrder 分两层', () => {
     above.unmount()
   })
 
-  it('两层与运行态舞台的层序逐层对上', () => {
+  // ⚠ 两边各按自己那套分的话，配 below 的标注在编辑器里看着在上面、上了大屏跑到
+  // 下面，而两边单看都对——所以两边分出来的必须逐条相等
+  it('两层分出来的与运行态舞台那两层逐条相同', () => {
     const config = normalizeTwin2dConfig({
       canvas: { width: 800, height: 600 },
       marks: fixtureMarks(),
     })
-    const common = {
-      canvas: config.canvas,
-      marks: config.marks,
-      selectedIds: [],
-      snap: { ...TWIN_2D_DEFAULT_SNAP },
-      scale: 1,
-      startGesture: () => false,
-      editable: false,
-    }
-    const wrapper = mount(Twin2dStage, {
+    const stage = mount(Twin2dStage, {
       props: {
         canvas: config.canvas,
         nodes: config.nodes,
@@ -201,29 +195,32 @@ describe('按 zOrder 分两层', () => {
         edgeStyles: [],
         containerSize: { w: 800, h: 600 },
       },
-      slots: {
-        'marks-below': () => h(CanvasMarkLayer, { ...common, layer: 'below' }),
-        'marks-above': () => h(CanvasMarkLayer, { ...common, layer: 'above' }),
-      },
     })
-
     // ⚠ 先落到一个有类型的根上：`.vue` 的模块在 typescript-eslint 眼里是 any，
     // 直接在 `wrapper.element` 上查 DOM 会整串判成不安全调用
-    const root: Element = wrapper.element
-    const layers = [...root.querySelectorAll('[data-layer]')].map((el) =>
-      el.getAttribute('data-layer'),
-    )
+    const root: Element = stage.element
+    const stageIds = (layer: string) =>
+      [
+        ...root.querySelectorAll(`[data-layer="${layer}"] [data-test="mark"]`),
+      ].map((el) => el.getAttribute('data-id'))
+    const editorIds = (wrapper: ReturnType<typeof mountLayer>) =>
+      wrapper.findAll('[data-test="mark"]').map((m) => m.attributes('data-id'))
+    const below = mountLayer()
+    const above = mountLayer({ layer: 'above' })
 
-    expect(layers).toEqual([
-      'background',
-      'pattern',
-      'marks-below',
-      'below',
-      'edges',
-      'nodes',
-      'marks-above',
-      'above',
-    ])
+    expect(editorIds(below)).toEqual(stageIds('marks-below'))
+    expect(editorIds(above)).toEqual(stageIds('marks-above'))
+    below.unmount()
+    above.unmount()
+    stage.unmount()
+  })
+
+  // ⚠ 形状件两边各一份的话，同一条标注在编辑器与大屏上会长得不一样，而两边单看都对
+  it('形状件与运行态是同一个组件，编辑器不另留一份', () => {
+    const wrapper = mountLayer()
+    const shape = wrapper.getComponent(Twin2dMarkShape)
+
+    expect(shape.props('mark')).toMatchObject({ id: 'a' })
     wrapper.unmount()
   })
 

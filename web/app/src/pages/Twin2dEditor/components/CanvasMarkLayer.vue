@@ -2,7 +2,8 @@
 /**
  * @fileoverview 编辑器的标注层：一个实例画一档 `zOrder`，画布把它挂两次——`below`
  * 那份在连线之下、`above` 那份在节点之上，与运行态 `Twin2dStage` 的层序逐层对上。
- * 层内负责命中、拖动、八向缩放与端点拖拽，形状交给 `Twin2dMarkShape`。
+ * 层内负责命中、拖动、八向缩放与端点拖拽，形状交给包里的 `Twin2dMarkShape`——运行态
+ * 挂的是同一份，两边画出来的标注逐像素相同。
  *
  * ⚠ 分两层是这一模块的硬口径：参考项目的编辑器把标注全塞进一个浮层，于是配了
  * `below` 的标注在编辑器里看着在上面、上了大屏跑到下面——所见即所得在这一项上是假的
@@ -13,6 +14,7 @@
  * 就能往撤销栈里塞进几百格，撤销键从此按不回上一步。收场被卸载打断
  * （`'interrupted'`）照样上抛，否则拖到一半切走的改动既没进撤销栈也没落库。
  */
+import { Twin2dMarkShape } from '@dt/twin2d'
 import type { Pt, Twin2dCanvas, Twin2dMark, Twin2dMarkZOrder } from '@dt/twin2d'
 import { computed, shallowRef } from 'vue'
 
@@ -35,7 +37,6 @@ import type {
 } from '../scripts/useCanvasPointer'
 import { canvasViewBox, screenToDesignPx } from '../scripts/viewportOps'
 import CanvasMarkHandles from './CanvasMarkHandles.vue'
-import Twin2dMarkShape from './Twin2dMarkShape.vue'
 
 /** 缩放的最小边长（设计像素）：再小就只剩一条线，八个手柄挤在一起谁也点不中。 */
 const MIN_MARK_SIZE = 8

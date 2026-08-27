@@ -159,6 +159,7 @@ web/packages/twin2d/
     ├── paintText.ts                  txt / ico：字体、省略、阴影、图标四来源
     ├── paintCommon.ts                基类六项（摆位、z、opacity、rotate、transition、pointerEvents）+ --t2-* 注入
     ├── cssValue.ts                   CSS 值消毒（拒 url( 与控制字符）+ 颜色回退链
+    ├── canvasBackdrop.ts             画布底两层求值（舞台与编辑画布共用，§7 #76）
     ├── variants.ts                   条件求值 + 变体补丁浅合并
     ├── expr.ts                       派生槽表达式求值（闭合小语言，深度上限 3）
     ├── format.ts                     读数格式化（第二份副本，见 §11.3）
@@ -181,6 +182,8 @@ web/packages/twin2d/
         ├── Twin2dVec.vue             SVG 图元层（含渐变 id 加前缀）
         ├── Twin2dGlyph.vue           图标四来源
         ├── Twin2dEdgeLayer.vue       连线层：多遍描边 + 端点标记 + 引脚 marker + 标签
+        ├── Twin2dMarkLayer.vue       标注层：一层一档 zOrder，舞台挂两次
+        ├── Twin2dMarkShape.vue       一条标注：三档几何 + 标签（编辑器挂的是同一份）
         └── twin2d.scss               固定 keyframes + 结构性样式，全部 var() 驱动
 ```
 
@@ -238,7 +241,7 @@ web/app/src/pages/Twin2dEditor/
 ├── components/
 │   ├── Twin2dToolbar.vue           保存/撤销/重做/工具切换/吸附/适应/诊断
 │   ├── EditorCanvas.vue            视口壳：平移缩放、坐标换算、指针总线
-│   ├── CanvasGrid.vue              网格与设计框遮罩
+│   ├── CanvasGrid.vue              底图与图案底（调 canvasBackdropStyles）、网格与设计框遮罩
 │   ├── CanvasNodeLayer.vue         节点层：拖动、选中、旋转手柄、端口点
 │   ├── CanvasEdgeLayer.vue         连线层（复用 Twin2dEdgeLayer）+ 命中带
 │   ├── CanvasEdgeHandles.vue       拐点/端点把手（一手势一步撤销）
@@ -273,15 +276,9 @@ web/app/src/pages/Twin2dEditor/
 页面根只有 `index.vue`、私有组件只在 `components/` 且只有 `.vue`、脚本只在 `scripts/` 且只有 `.ts`。
 `useUnsavedGuard` **不在这里**——它提到 `app/src/composables/` 与 `TwinEditor` 共用（§19 R0b）。
 
-> ⚠ **R9 落下来的画布有两处缺口，都记在这里以免被当成 bug 去查。**
->
-> 1. **编辑画布画不出底图与图案。** 那两层的求值只活在
->    `packages/twin2d/src/render/Twin2dStage.vue` 里、没出包，而 R9 的范围不含
->    `packages/**`。在编辑器里另写一份就是第二处口径——底图偏一点、图案疏一格，
->    而两边单看都对。补法是把那两层的求值提成包的公开函数，排 R12。
-> 2. **拖节点时连线不跟着走**，松手才归位。节点草稿是节点层私有的，层间没有逐帧通道。
->    要跟着走得把草稿位置提到装配层按帧下发给连线层，代价是每帧多一次全量连线重算；
->    是否值得等真机拖起来再定。
+> ⚠ **画布上还有一处缺口，记在这里以免被当成 bug 去查：拖节点时连线不跟着走**，
+> 松手才归位。节点草稿是节点层私有的，层间没有逐帧通道。要跟着走得把草稿位置提到装配层
+> 按帧下发给连线层，代价是每帧多一次全量连线重算；是否值得等真机拖起来再定。
 
 ### 3.4 行数量级（诚实版）
 
@@ -846,16 +843,14 @@ export const TWIN_2D_PALETTE = {
 对回这张表；#97 的实现按「共享包的入场券是 ≥2 个真实消费方」留在模块目录，断言就跟着
 实现走（`packages/modules/tests/modules/twin-2d-view/edgeState.test.ts`）。数法（在 `web/` 下）：
 `grep -ohE '§7-[0-9]+' packages/twin2d/tests/twin2d-preset-fidelity.spec.ts | sort -u | wc -l`
-得 98，加上模块目录那一行即 99。⚠ 别写 `sort -nu`：这些串不以数字开头，`-n` 会把它们
-全判成相等而只剩一条。用例条数比行数大，因为有两行各带两条用例，别拿用例数当行数。
-缺的那一行是**依赖尚未落地的东西**，排在对应的轮次里。
+得 99，加上模块目录那一行即 100，整张表逐行都有断言。⚠ 别写 `sort -nu`：这些串不以数字
+开头，`-n` 会把它们全判成相等而只剩一条。用例条数比行数大，因为有几行各带两条用例
+（`§7-71` 与 `§7-71b` 这样），别拿用例数当行数。
 
 | 行 | 眼下锁住了什么 | 缺口与原因 |
 |---|---|---|
-| **缺** #73 标注标签定位 | 无 | 标注的两层 svg 渲染件还没落地（排 R9），落点算不出来就无从断言 |
 | **半** #8 七处 0.18s | 六处载体逐处 180ms + ease、属性表闭合六档 | `.tnv-cyl__outline` 补间的 stroke / stroke-width 在六档属性表里表达不了，本模型那一处只补间 filter |
 | **半** #22 悬浮卡翻转档 | `flipped` 这个档位名在状态表里 | 预置库里还没有那条 flipped 变体（`top: calc(100% + 10px)` / `translate(-50%, 4px)` / 基点 `50% 0` / 箭头描边 48%→62%） |
-| **半** #71 标注缺省 | strokeWidth 2 / opacity 1 / stroke 与 fill 留空 / zOrder below / nonScalingStroke false | 两层 svg 的 `aria-hidden="true"` 与 `pointer-events: none` 没有断言 |
 
 图例：✅ 逐值复刻｜🔁 复刻但换了实现基底或口径｜➕ 参考项目没有、本期新增｜⛔ 参考项目本身不存在，不做｜⏳ 要复刻但依赖的东西还没落地，排在后面的轮次
 

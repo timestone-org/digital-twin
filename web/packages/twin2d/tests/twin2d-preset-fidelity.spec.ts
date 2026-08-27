@@ -13,7 +13,6 @@ import { join } from 'node:path'
 
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
-import { h } from 'vue'
 
 import {
   TWIN_2D_DEFAULT_CORNER_RADIUS,
@@ -77,6 +76,8 @@ import {
   TWIN_2D_SOURCE_SUBTYPE_DEFS,
   TWIN_2D_TERMINAL_SUBTYPE_DEFS,
 } from '../src/presets/subtypes'
+import Twin2dMarkLayer from '../src/render/Twin2dMarkLayer.vue'
+import Twin2dMarkShape from '../src/render/Twin2dMarkShape.vue'
 import Twin2dStage from '../src/render/Twin2dStage.vue'
 import type { Twin2dEdgeState, Twin2dEdgeView } from '../src/edgeView'
 import type { Twin2dSlotFormat } from '../src/format'
@@ -85,7 +86,6 @@ import type { Twin2dVariantCtx } from '../src/variants'
 import type {
   Twin2dEdge,
   Twin2dEdgeStyle,
-  Twin2dMark,
   Twin2dNode,
   Twin2dNodeStyle,
   Twin2dSlot,
@@ -452,24 +452,26 @@ interface StageOverrides {
   marks?: readonly unknown[]
 }
 
-/** 两个标注插槽：各自把收到的标注 id 列出来，好断言「哪一条进了哪一层」。 */
-function markSlots() {
-  const line = (test: string) => (props: { marks: readonly Twin2dMark[] }) =>
-    h('i', { 'data-test': test }, props.marks.map((mark) => mark.id).join(','))
-  return { 'marks-below': line('below'), 'marks-above': line('above') }
+/**
+ * 一条标注的标签落点：`[x, y]`。
+ * @param raw 标注的原始配置
+ */
+function labelOf(raw: Record<string, unknown>): (string | undefined)[] {
+  const mark = normalizeMark(raw)
+  if (mark === null) throw new Error('标注造不出来')
+  const wrapper = mount(Twin2dMarkShape, { props: { mark } })
+  const label = wrapper.get('[data-test="mark-label"]')
+  const at = [label.attributes('x'), label.attributes('y')]
+  wrapper.unmount()
+  return at
 }
 
 /**
  * 挂一个舞台。
  * @param over 画布 / 节点 / 标注的覆盖
  * @param box 容器尺寸（happy-dom 量不出真实布局，必须显式喂）
- * @param withSlots 要不要挂那两个标注插槽
  */
-function mountStage(
-  over: StageOverrides,
-  box: { w: number; h: number },
-  withSlots = false,
-) {
+function mountStage(over: StageOverrides, box: { w: number; h: number }) {
   const doc = normalizeTwin2dConfig({
     canvas: { width: 400, height: 200, ...over.canvas },
     styles: [STAGE_STYLE],
@@ -490,7 +492,6 @@ function mountStage(
       edgeStyles: doc.edgeStyles,
       containerSize: box,
     },
-    ...(withSlots ? { slots: markSlots() } : {}),
   })
 }
 
@@ -2051,6 +2052,44 @@ describe('§7.10 标注、舞台、底板（8 件）', () => {
     expect(mark?.nonScalingStroke).toBe(false)
   })
 
+  it('§7-73 标注标签落点：框内九宫格贴边 10、框外上下各 8、辅助线上方 10 下方 14（上下不对称是有意的，下方那一档要多让出一个字的升部）', () => {
+    const boxAt = (labelPos: string, alignH = 'center', alignV = 'middle') =>
+      labelOf({
+        id: 'm1',
+        kind: 'rect',
+        x: 100,
+        y: 50,
+        w: 200,
+        h: 80,
+        text: '一号机组',
+        labelPos,
+        labelAlignH: alignH,
+        labelAlignV: alignV,
+      })
+    const lineAt = (labelPos: string) =>
+      labelOf({
+        id: 'l1',
+        kind: 'line',
+        x: 10,
+        y: 20,
+        x2: 110,
+        y2: 80,
+        text: '母线',
+        labelPos,
+      })
+
+    expect(boxAt('inside', 'left', 'top')).toEqual(['110', '60'])
+    expect(boxAt('inside', 'right', 'bottom')).toEqual(['290', '120'])
+    expect([boxAt('top'), boxAt('bottom')]).toEqual([
+      ['200', '42'],
+      ['200', '138'],
+    ])
+    expect([lineAt('top'), lineAt('bottom')]).toEqual([
+      ['60', '40'],
+      ['60', '64'],
+    ])
+  })
+
   it('§7-72 标注标签排版：描边字走 paint-order: stroke（少了它描边盖在字上，字变虚）', () => {
     const outline = 'color-mix(in srgb, var(--surface-base) 80%, transparent)'
     const prim = normalizePrim(
@@ -2070,15 +2109,30 @@ describe('§7.10 标注、舞台、底板（8 件）', () => {
     expect(out.style['-webkit-text-stroke-color']).toBe(outline)
   })
 
+  it('§7-71b 两层标注都不吃指针、也不进无障碍树（吃了的话铺满画布的图框会把节点全挡掉）', () => {
+    const wrapper = mount(Twin2dMarkLayer, {
+      props: { marks: [], width: 400, height: 200 },
+    })
+
+    expect(wrapper.classes()).toContain('t2-marks')
+    expect(wrapper.attributes('aria-hidden')).toBe('true')
+    expect(SCSS).toContain('.t2-marks {')
+    wrapper.unmount()
+  })
+
   it('§7-74 标注 zOrder 在编辑器里也生效：舞台按 below / above 分两层，运行态与编辑器同一个组件', () => {
     const marks = [
       { id: 'm-below', kind: 'rect', x: 0, y: 0 },
       { id: 'm-above', kind: 'rect', x: 0, y: 0, zOrder: 'above' },
     ]
-    const wrapper = mountStage({ marks }, { w: 800, h: 400 }, true)
+    const wrapper = mountStage({ marks }, { w: 800, h: 400 })
+    const idsOf = (layer: string) =>
+      wrapper
+        .findAll(`[data-layer="${layer}"] [data-test="mark"]`)
+        .map((node) => node.attributes('data-id'))
 
-    expect(wrapper.get('[data-test="below"]').text()).toBe('m-below')
-    expect(wrapper.get('[data-test="above"]').text()).toBe('m-above')
+    expect(idsOf('marks-below')).toEqual(['m-below'])
+    expect(idsOf('marks-above')).toEqual(['m-above'])
   })
 
   it('§7-75 舞台等比缩放：fitPadding 缺省 4（= 参考项目那 4% 安全留白），量不出容器时只藏起来、**不产 transform**', () => {
@@ -2544,18 +2598,18 @@ describe('这份验收清单自己', () => {
     const numbered = SPEC_SELF.match(/\bit\(\s*'§7-/g)?.length ?? 0
 
     expect(all).toBeGreaterThanOrEqual(100)
-    expect(numbered).toBeGreaterThanOrEqual(98)
+    expect(numbered).toBeGreaterThanOrEqual(99)
   })
 
-  // ⚠ 这条是棘轮：100 行里眼下 98 行有断言，缺的两行（#73 标注标签定位、
-  //   #97 活跃与方向词表）在本包里根本没有对应实现——一个归标注视图（未建），
-  //   一个住在 @dt/modules 的 shared/format。掉下去说明有人把已有的断言删了
+  // ⚠ 这条是棘轮：100 行里眼下 99 行有断言，缺的那一行（#97 活跃与方向词表）在本包里
+  //   根本没有对应实现——它住在 @dt/modules 的 shared/format。掉下去说明有人把已有的
+  //   断言删了
   it('§7 那张 100 行表里有断言的行数不许倒退', () => {
     const rows = new Set(
       [...SPEC_SELF.matchAll(/\bit\(\s*'§7-(\d+)/g)].map((hit) => hit[1]),
     )
 
-    expect(rows.size).toBeGreaterThanOrEqual(98)
+    expect(rows.size).toBeGreaterThanOrEqual(99)
     expect(rows.has('51')).toBe(true)
     expect(rows.has('56')).toBe(true)
   })

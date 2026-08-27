@@ -25,6 +25,9 @@ const PAINT_TEXT = join(PKG, 'paintText.ts')
 const RENDER_INJECTED: Readonly<Record<string, string>> = Object.freeze({
   // dashoffset 终点 = dash 数组求和取负，只有连线层算得出（§7 #67）
   '--t2-dash-end': join(PKG, 'render', 'Twin2dEdgeLayer.vue'),
+  // 画布底两层：舞台与编辑画布共用同一份求值，规则在 scss 里只有一处
+  '--t2-bg': join(PKG, 'canvasBackdrop.ts'),
+  '--t2-pattern': join(PKG, 'canvasBackdrop.ts'),
 })
 
 /**

@@ -15,6 +15,10 @@
 // 孪生信息牌的观感（五种变体）。⚠ 同样必须是全局的：牌是 CSS2DObject 的 DOM，
 // 挂在标签层容器里，不在任何组件的 scoped 作用域内——少了这一句五种变体长得一样。
 @use '@dt/three-core/panel.scss';
+// 2D 孪生的舞台层序、节点结构与四档动画。⚠ 必须是全局的：keyframes 与 `.t2-anim-*`
+// 由 paintCommon.ts 按数据挂类名，scoped 改写认不出这些类名；少了这一句，图的层序、
+// 底图与流动动画全部静默不生效（理由见该文件头）。
+@use '@dt/twin2d/twin2d.scss';
 @use 'base';
 @use 'animations';
 @use 'components';

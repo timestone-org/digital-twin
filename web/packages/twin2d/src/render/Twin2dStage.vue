@@ -1,22 +1,26 @@
 <script setup lang="ts">
 /**
  * @fileoverview 舞台：按容器尺寸把画布等比缩放贴进模块矩形（`fitMode` 四档）、钉死六层
- * 的层序、画底图与图案底、一个节点都没有时出空态，并把 sprite 宿主在每个 DOM 文档里
+ * 的层序、铺底图与图案底、一个节点都没有时出空态，并把 sprite 宿主在每个 DOM 文档里
  * 挂一次。口径见 docs/MODULE_TWIN_2D_DESIGN.md §9.1、§7.10。
+ *
+ * ⚠ 底两层的取值走 `canvasBackdropStyles`、标注的形状走 `Twin2dMarkShape`：编辑画布调的
+ * 是同一份，各写各的表现是「编辑器里画一个样、大屏上画另一个样」，而两边单看都对。
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
+import { canvasBackdropStyles } from '../canvasBackdrop'
 import {
   TWIN_2D_DEFAULT_FIT_PADDING,
   TWIN_2D_DEFAULT_FLOW_SPEED,
 } from '../constants'
-import { sanitizeCssValue } from '../cssValue'
 import Twin2dEdgeLayer from './Twin2dEdgeLayer.vue'
 import Twin2dIconSprite from './Twin2dIconSprite.vue'
+import Twin2dMarkLayer from './Twin2dMarkLayer.vue'
 import Twin2dNodeBox from './Twin2dNodeBox.vue'
 import type { Twin2dEdgeState } from '../edgeView'
 import type { Twin2dSlotValues } from '../expr'
-import type { Twin2dBackgroundFit, Twin2dFitMode, Twin2dStatus } from '../kinds'
+import type { Twin2dFitMode, Twin2dStatus } from '../kinds'
 import type { Twin2dIconResolver, Twin2dSlotRead } from '../paintText'
 import type {
   Twin2dCanvas,
@@ -31,39 +35,15 @@ import type {
 const EMPTY_TEXT = '这张 2D 孪生还没有画任何节点'
 /** 归一百分比的分母 */
 const PERCENT = 100
-/** 素材引用前缀 */
-const ASSET_PREFIX = 'asset:'
 /** 素材解析槽未注入时的空地址 */
 const NO_ASSET_URL = ''
-/** 会把 `url()` 提前闭合的字符 */
-const URL_UNSAFE_RE = /["'()\\\s]/
-/** 底图地址允许的前缀 */
-const IMAGE_PREFIXES = ['https://', 'http://', 'data:', '/'] as const
-/** 图案色缺省：参考项目那三个变量全仓无定义、只活在 `var()` 的兜底位上（§7 #76） */
-const PATTERN_FALLBACK =
-  'color-mix(in srgb, var(--accent-primary) 5%, transparent)'
-/** 斜织两层的角度 */
-const WEAVE_ANGLES = [45, -45] as const
-/** 平行线那一档的角度 */
-const LINES_ANGLE = 0
+
 /**
  * 同一个 DOM 文档里 sprite 宿主已经有主了的标记。
  * ⚠ 记在文档上而不是模块变量里：宿主挂进的是文档，判据就该在文档上。同一份包被打进
  * 两份产物（运行态与编辑器各一份）时模块变量各算各的，两边都会判成没挂过。
  */
 const SPRITE_CLAIM_ATTR = 'data-twin2d-sprite'
-
-/**
- * 底图四档铺法。
- * ⚠ 与 `paintBox` 里图元底图那一份是同一张表的两处落点（那边服务图元的 `fills`、
- * 这边服务画布底图），改了要两处一起改。
- */
-const IMAGE_FIT: Readonly<Record<Twin2dBackgroundFit, string>> = Object.freeze({
-  cover: 'center center / cover no-repeat',
-  contain: 'center center / contain no-repeat',
-  stretch: 'center center / 100% 100% no-repeat',
-  tile: 'left top / auto repeat',
-})
 
 /** 空读数表共用一份：每次求值都换一个新 Map 等于告诉子组件「数据变了」。 */
 const EMPTY_SLOTS: Twin2dSlotValues = new Map<string, unknown>()
@@ -128,7 +108,7 @@ const props = withDefaults(
     nodes: readonly Twin2dNode[]
     /** 连线实例。 */
     edges: readonly Twin2dEdge[]
-    /** 标注：舞台只按 `zOrder` 分成上下两层，画法交给两个同名插槽。 */
+    /** 标注：舞台按 `zOrder` 分成上下两层，各交给一层 `Twin2dMarkLayer`。 */
     marks: readonly Twin2dMark[]
     /** 节点样式（文档 ∪ 预置库，调用方合并好）。 */
     nodeStyles: readonly Twin2dNodeStyle[]
@@ -277,77 +257,10 @@ const iconResolver = computed<Twin2dIconResolver>(
   () => props.live.resolveIcon ?? NO_ICON_RESOLVER,
 )
 
-/**
- * 底图那一层的取值：未解析的素材引用 → 不画；图片地址 → `url()` 加铺法；其余 → 当
- * CSS `background` 简写用。
- * ⚠ 素材引用解析不出来（或没注入解析槽）时整层不画，**不能**顺着落到简写那一档：
- * `asset:7f3a` 本身是一个「安全」的 CSS 值，注进去只会得到一条谁也解释不了的声明。
- * ⚠ 引号、括号与空白一律拒，它们能把 `url()` 提前闭合。
- * @param canvas 画布的底图两项
- * @param resolve 素材解析槽
- */
-function backgroundValue(
-  canvas: Twin2dCanvas,
-  resolve: Twin2dIconResolver,
-): string | null {
-  const raw = canvas.background
-  if (raw === '') return null
-  const asset = raw.startsWith(ASSET_PREFIX)
-  const ref = asset ? resolve(raw) : raw
-  if (asset || IMAGE_PREFIXES.some((prefix) => ref.startsWith(prefix))) {
-    if (ref === NO_ASSET_URL || URL_UNSAFE_RE.test(ref)) return null
-    return `url("${ref}") ${IMAGE_FIT[canvas.backgroundFit]}`
-  }
-  const value = sanitizeCssValue(raw, '')
-  return value === '' ? null : value
-}
-
-/**
- * 底图层。
- * ⚠ 出的是自定义属性而不是 `background` 本身，由本文件的 scoped 规则接过去：值里带
- * `var()` 的标准属性会被 happy-dom 的 CSSOM 整条丢掉，浏览器上没事、用例里却断言不到
- * （连线层的边色同一个原因）。
- */
-const backgroundStyle = computed<Record<string, string>>(() => {
-  const value = backgroundValue(props.canvas, iconResolver.value)
-  return value === null ? {} : { '--t2-bg': value }
-})
-
-/**
- * 一层等距斜线。
- * @param angle 线的法向角度
- * @param color 线色
- * @param gap 线间距
- * @param width 线宽
- */
-function stripes(
-  angle: number,
-  color: string,
-  gap: number,
-  width: number,
-): string {
-  const line = `${color} ${gap}px ${gap + width}px`
-  return `repeating-linear-gradient(${angle}deg, transparent 0 ${gap}px, ${line})`
-}
-
-/** 图案层：斜织是两层角度对称的等距斜线，点阵靠一层径向渐变按格铺（§7 #76）。 */
-const patternStyle = computed<Record<string, string>>(() => {
-  const canvas = props.canvas
-  if (canvas.pattern === 'none') return {}
-  const color = sanitizeCssValue(canvas.patternColor, PATTERN_FALLBACK)
-  const { patternGap: gap, patternWidth: width } = canvas
-  if (canvas.pattern === 'dots') {
-    const dot = `${color} 0 ${width}px, transparent ${width}px`
-    return {
-      '--t2-pattern': `radial-gradient(circle at 50% 50%, ${dot})`,
-      'background-size': `${gap}px ${gap}px`,
-    }
-  }
-  const angles: readonly number[] =
-    canvas.pattern === 'weave' ? WEAVE_ANGLES : [LINES_ANGLE]
-  const layers = angles.map((angle) => stripes(angle, color, gap, width))
-  return { '--t2-pattern': layers.join(', ') }
-})
+/** 画布底两层：取值与消毒全在 `canvasBackdropStyles` 里，本文件只把它贴上去。 */
+const backdrop = computed(() =>
+  canvasBackdropStyles(props.canvas, iconResolver.value),
+)
 
 const marksBelow = computed(() =>
   props.marks.filter((mark) => mark.zOrder === 'below'),
@@ -398,14 +311,21 @@ const empty = computed(
     <Twin2dIconSprite v-if="ownsSprite" />
     <div class="t2-stage__viewport" :style="viewportStyle">
       <div
-        class="t2-stage__layer"
+        class="t2-stage__layer t2-backdrop"
         data-layer="background"
-        :style="backgroundStyle"
+        :style="backdrop.background"
       />
-      <div class="t2-stage__layer" data-layer="pattern" :style="patternStyle" />
-      <div class="t2-stage__layer" data-layer="marks-below">
-        <slot name="marks-below" :marks="marksBelow" />
-      </div>
+      <div
+        class="t2-stage__layer t2-backdrop-pattern"
+        data-layer="pattern"
+        :style="backdrop.pattern"
+      />
+      <Twin2dMarkLayer
+        data-layer="marks-below"
+        :marks="marksBelow"
+        :width="canvas.width"
+        :height="canvas.height"
+      />
       <Twin2dEdgeLayer
         data-layer="edges"
         :edges="edges"
@@ -431,21 +351,13 @@ const empty = computed(
           :id-prefix="item.node.id"
         />
       </div>
-      <div class="t2-stage__layer" data-layer="marks-above">
-        <slot name="marks-above" :marks="marksAbove" />
-      </div>
+      <Twin2dMarkLayer
+        data-layer="marks-above"
+        :marks="marksAbove"
+        :width="canvas.width"
+        :height="canvas.height"
+      />
     </div>
     <p v-if="empty" class="t2-stage__empty">{{ EMPTY_TEXT }}</p>
   </div>
 </template>
-
-<style scoped>
-/* 两层底的取值是数据，由内联的自定义属性喂进来；结构性样式在 twin2d.scss 里 */
-.t2-stage__layer[data-layer='background'] {
-  background: var(--t2-bg, none);
-}
-
-.t2-stage__layer[data-layer='pattern'] {
-  background-image: var(--t2-pattern, none);
-}
-</style>

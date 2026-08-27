@@ -9,7 +9,7 @@
  */
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { h, nextTick } from 'vue'
+import { nextTick } from 'vue'
 
 import { twin2dValues } from '../../src/bindingValues'
 import { normalizeTwin2dConfig } from '../../src/normalize'
@@ -19,7 +19,7 @@ import type { Twin2dEdgeState } from '../../src/edgeView'
 import type { Twin2dSlotValues } from '../../src/expr'
 import type { Twin2dFitMode, Twin2dStatus } from '../../src/kinds'
 import type { Twin2dSlotRead } from '../../src/paintText'
-import type { Twin2dConfig, Twin2dMark, Twin2dNode } from '../../src/types'
+import type { Twin2dConfig, Twin2dNode } from '../../src/types'
 
 // ⚠ 拥有 sprite 的舞台在卸载时才把文档级标记还回去，不逐条卸载会让后面的用例全都
 // 领不到宿主——而那看起来像「层序错了」
@@ -90,34 +90,10 @@ interface Live {
   resolveIcon?: (assetRef: string) => string
 }
 
-/** 一个标注插槽收到的那一份。 */
-interface MarksSlotProps {
-  marks: readonly Twin2dMark[]
-}
-
 interface Extra {
   view?: Partial<typeof VIEW>
   live?: Live
   containerSize?: { w: number; h: number } | null
-  withMarkSlots?: boolean
-}
-
-/** 两个标注插槽：各自把收到的标注 id 列出来，好断言「哪一条进了哪一层」。 */
-function markSlots() {
-  return {
-    'marks-below': (slotProps: MarksSlotProps) =>
-      h(
-        'i',
-        { 'data-test': 'below' },
-        slotProps.marks.map((mark) => mark.id).join(','),
-      ),
-    'marks-above': (slotProps: MarksSlotProps) =>
-      h(
-        'i',
-        { 'data-test': 'above' },
-        slotProps.marks.map((mark) => mark.id).join(','),
-      ),
-  }
 }
 
 function docOf(over: Overrides): Twin2dConfig {
@@ -145,7 +121,6 @@ function render(over: Overrides = {}, extra: Extra = {}) {
       live: extra.live ?? {},
       containerSize: extra.containerSize ?? null,
     },
-    ...(extra.withMarkSlots === true ? { slots: markSlots() } : {}),
   })
 }
 
@@ -184,6 +159,13 @@ function layerStyle(wrapper: Wrapper, layer: string): string {
 
 function spriteCount(wrapper: Wrapper): number {
   return wrapper.findAll('.twin2d-icon-sprite').length
+}
+
+/** 一层标注里各条的 id，文档序。 */
+function markIds(wrapper: Wrapper, layer: string): string[] {
+  return wrapper
+    .findAll(`[data-layer="${layer}"] [data-test="mark"]`)
+    .map((node) => node.attributes('data-id') ?? '')
 }
 
 describe('等比缩放四档', () => {
@@ -331,7 +313,7 @@ describe('自己量容器', () => {
 
 describe('层序', () => {
   it('自下而上是 底图 → 图案 → 下层标注 → 连线 → 节点 → 上层标注', () => {
-    const wrapper = render({}, { containerSize: BOX, withMarkSlots: true })
+    const wrapper = render({}, { containerSize: BOX })
 
     const layers = [...wrapper.get('.t2-stage__viewport').element.children]
 
@@ -347,23 +329,34 @@ describe('层序', () => {
 
   // ⚠ 编辑器与运行态共用这一份分层：两边分法不同的表现是「配 below 的标注在编辑器里
   // 看着在上面、上了大屏跑到下面」
-  it('标注按 zOrder 分进上下两层', () => {
+  it('标注按 zOrder 分进上下两层，各自真画出形状来', () => {
     const marks = [
       { id: 'm1', kind: 'rect', zOrder: 'below' },
       { id: 'm2', kind: 'text', text: '标题', zOrder: 'above' },
     ]
 
-    const wrapper = render({ marks }, { withMarkSlots: true })
+    const wrapper = render({ marks })
 
-    expect(wrapper.get('[data-test="below"]').text()).toBe('m1')
-    expect(wrapper.get('[data-test="above"]').text()).toBe('m2')
+    expect(markIds(wrapper, 'marks-below')).toEqual(['m1'])
+    expect(markIds(wrapper, 'marks-above')).toEqual(['m2'])
   })
 
-  it('两层标注都空时插槽收到空表', () => {
-    const wrapper = render({}, { withMarkSlots: true })
+  it('两层标注都空时一条形状都不画', () => {
+    const wrapper = render()
 
-    expect(wrapper.get('[data-test="below"]').text()).toBe('')
-    expect(wrapper.get('[data-test="above"]').text()).toBe('')
+    expect(markIds(wrapper, 'marks-below')).toEqual([])
+    expect(markIds(wrapper, 'marks-above')).toEqual([])
+  })
+
+  // ⚠ 两层的 viewBox 跟着画布走：写死成节点层那一份的话，非方形画布上标注会整体错位
+  it('两层标注按画布尺寸取 viewBox', () => {
+    const marks = [{ id: 'm1', kind: 'rect', zOrder: 'below' }]
+
+    const wrapper = render({ marks })
+
+    expect(
+      wrapper.get('[data-layer="marks-below"]').attributes('viewBox'),
+    ).toBe('0 0 400 200')
   })
 })
 

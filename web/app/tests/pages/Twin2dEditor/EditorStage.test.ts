@@ -6,7 +6,11 @@
  * ⚠ 逐帧落库同样不报错，只是撤销键从此按不回上一步——拖一个节点就塞进几百帧。
  * ⚠ 漏挂 sprite 时图标**静默消失**：`<use>` 元素照样在，只是解析不到任何目标。
  */
-import { Twin2dIconSprite, normalizeTwin2dConfig } from '@dt/twin2d'
+import {
+  Twin2dIconSprite,
+  Twin2dStage,
+  normalizeTwin2dConfig,
+} from '@dt/twin2d'
 import type { Twin2dConfig } from '@dt/twin2d'
 import { mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
@@ -97,6 +101,56 @@ function mountStage(config: Twin2dConfig = CONFIG): Harness {
   })
   const wrapper: VueWrapper = mount(host)
   return { wrapper, doc, selection, changes: () => seen }
+}
+
+/**
+ * 两边的层名折成同一套词，好逐项比对。
+ * ⚠ 比的是「编辑器这一串」与「运行态那一串」，不是各自与一份手抄的字面量：手抄的话
+ * 两边一起改也照样绿，而那正是所见即所得漂掉的样子。
+ */
+const LAYER_ROLES: Readonly<Record<string, string>> = {
+  'mark-layer:below': '下层标注',
+  'edge-layer': '连线',
+  'node-layer': '节点',
+  'mark-layer:above': '上层标注',
+  'marks-below': '下层标注',
+  edges: '连线',
+  nodes: '节点',
+  'marks-above': '上层标注',
+}
+
+/** 编辑画布这一串。 */
+function editorRoles(wrapper: VueWrapper): string[] {
+  return wrapper
+    .findAll('[data-test="canvas-stage"] > *')
+    .map((item) => {
+      const layer = item.attributes('data-layer')
+      const test = item.attributes('data-test') ?? ''
+      return layer === undefined ? test : `${test}:${layer}`
+    })
+    .flatMap((key) => (key in LAYER_ROLES ? [LAYER_ROLES[key] ?? ''] : []))
+}
+
+/** 运行态舞台那一串。 */
+function runtimeRoles(): string[] {
+  const stage = mount(Twin2dStage, {
+    props: {
+      canvas: CONFIG.canvas,
+      nodes: CONFIG.nodes,
+      edges: CONFIG.edges,
+      marks: CONFIG.marks,
+      nodeStyles: CONFIG.styles,
+      edgeStyles: CONFIG.edgeStyles,
+      containerSize: { w: 800, h: 600 },
+    },
+  })
+  const root: Element = stage.element
+  const roles = [...root.querySelectorAll('[data-layer]')].flatMap((el) => {
+    const key = el.getAttribute('data-layer') ?? ''
+    return key in LAYER_ROLES ? [LAYER_ROLES[key] ?? ''] : []
+  })
+  stage.unmount()
+  return roles
 }
 
 /** 舞台里各层的绘制序：DOM 序即层序。 */
@@ -230,6 +284,14 @@ describe('层序', () => {
       .map((item) => item.attributes('data-layer'))
 
     expect(layers).toEqual(['below', 'above'])
+  })
+
+  // ⚠ 编辑器另排一套的话，配 below 的标注在这里看着在上面、上了大屏跑到下面，
+  // 而两边单看都对
+  it('四层的先后与运行态舞台逐项相同', () => {
+    const { wrapper } = mountStage()
+
+    expect(editorRoles(wrapper)).toEqual(runtimeRoles())
   })
 
   it('选中一条连线时把手压在两层标注之上', async () => {

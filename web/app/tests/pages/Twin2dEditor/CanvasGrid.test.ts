@@ -1,15 +1,21 @@
 /**
- * @fileoverview 契约：网格跟着视口走（格距按倍率、起点按平移）、设计框那一圈遮罩按
- * 视口摆位，以及**整层一点指针都不吃**。
+ * @fileoverview 契约：画布的底图与图案底与运行态舞台逐字相同、网格跟着视口走（格距按
+ * 倍率、起点按平移）、设计框那一圈遮罩按视口摆位，以及**整层一点指针都不吃**。
  *
+ * ⚠ 底两层在这里另算一份不报错：底图偏一点、图案疏一格，而编辑器与大屏单看都对。
  * ⚠ 网格吃了指针不报错：它盖在整块画布上，点选、框选与拖放会全被这层装饰接走。
  * ⚠ 格距不足几个像素时线糊成一片实色，比没有网格更糟，所以那一档整层不画。
  * ⚠ 视口带 NaN 时 `left: NaNpx` 会让整块遮罩静默消失，而 devtools 里看什么都正常。
  */
-import { normalizeCanvas } from '@dt/twin2d'
+import {
+  __resetAssetImages,
+  configureAssetImages,
+  resolveImageValue,
+} from '@dt/modules'
+import { Twin2dStage, normalizeCanvas } from '@dt/twin2d'
 import type { Twin2dCanvas } from '@dt/twin2d'
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import CanvasGrid from '@/pages/Twin2dEditor/components/CanvasGrid.vue'
 import type { Twin2dViewport } from '@/pages/Twin2dEditor/scripts/viewportOps'
@@ -34,6 +40,119 @@ type Wrapper = ReturnType<typeof mountGrid>
 function styleOf(wrapper: Wrapper, test: string): string {
   return wrapper.get(`[data-test="${test}"]`).attributes('style') ?? ''
 }
+
+/** 运行态舞台上同一块画布的那一层取值。 */
+function stageLayerStyle(canvas: Twin2dCanvas, layer: string): string {
+  const wrapper = mount(Twin2dStage, {
+    props: {
+      canvas,
+      nodes: [],
+      edges: [],
+      marks: [],
+      nodeStyles: [],
+      edgeStyles: [],
+      containerSize: { w: 800, h: 400 },
+      live: { resolveIcon: resolveImageValue },
+    },
+  })
+  const style = wrapper.get(`[data-layer="${layer}"]`).attributes('style') ?? ''
+  wrapper.unmount()
+  return style
+}
+
+afterEach(() => {
+  __resetAssetImages()
+})
+
+describe('底图与图案底', () => {
+  it('底图落进底层的内联样式里，铺法跟着配置走', () => {
+    const canvas = normalizeCanvas({
+      background: '/oss/plant.png',
+      backgroundFit: 'contain',
+    })
+
+    expect(styleOf(mountGrid(VIEW, canvas), 'grid-background')).toContain(
+      '--t2-bg: url("/oss/plant.png") center center / contain no-repeat',
+    )
+  })
+
+  it('素材引用走应用壳注入的那条解析', () => {
+    configureAssetImages((ref) => `/oss/${ref.slice('asset:'.length)}`)
+    const canvas = normalizeCanvas({ background: 'asset:7f3a' })
+
+    expect(styleOf(mountGrid(VIEW, canvas), 'grid-background')).toContain(
+      'url("/oss/7f3a")',
+    )
+  })
+
+  // ⚠ 没注入解析时整层不画，不发一个必 404 的请求
+  it('没注入解析时素材引用一层都不画', () => {
+    const canvas = normalizeCanvas({ background: 'asset:7f3a' })
+
+    expect(styleOf(mountGrid(VIEW, canvas), 'grid-background')).toBe('')
+  })
+
+  it('图案底按配置出那一层的取值', () => {
+    const canvas = normalizeCanvas({ pattern: 'dots', patternGap: 18 })
+
+    const style = styleOf(mountGrid(VIEW, canvas), 'grid-pattern')
+    expect(style).toContain('--t2-pattern: radial-gradient(')
+    expect(style).toContain('background-size: 18px 18px')
+  })
+
+  it('底图留空、图案 none 时两层各自一条声明都不产', () => {
+    const wrapper = mountGrid(VIEW)
+
+    expect(styleOf(wrapper, 'grid-background')).toBe('')
+    expect(styleOf(wrapper, 'grid-pattern')).toBe('')
+  })
+
+  it('两层的取值与运行态舞台上那两层逐字相同', () => {
+    const canvas = normalizeCanvas({
+      background: 'linear-gradient(180deg, #04121f, #071a2c)',
+      pattern: 'weave',
+      patternGap: 26,
+    })
+    const wrapper = mountGrid(VIEW, canvas)
+
+    expect(styleOf(wrapper, 'grid-background')).toBe(
+      stageLayerStyle(canvas, 'background'),
+    )
+    expect(styleOf(wrapper, 'grid-pattern')).toBe(
+      stageLayerStyle(canvas, 'pattern'),
+    )
+  })
+
+  // ⚠ 底两层住在设计坐标系里：照屏幕像素铺的话，缩放时图案的疏密不跟着变，
+  // 而那与大屏上看到的对不上
+  it('底两层是设计像素加一个缩放，不是屏幕像素', () => {
+    const style = styleOf(mountGrid(VIEW), 'grid-backdrop')
+
+    expect(style).toContain('width: 400px')
+    expect(style).toContain('height: 200px')
+    expect(style).toContain('transform: scale(2)')
+    expect(style).toContain('left: -100px')
+  })
+
+  // ⚠ 反过来的话，配了底图的画布在编辑器里就没有网格可对齐了
+  it('网格线压在底两层之上', () => {
+    const wrapper = mountGrid(VIEW)
+    const order = [...wrapper.get('[data-test="grid"]').element.children].map(
+      (el) => el.getAttribute('data-test'),
+    )
+
+    expect(order).toEqual(['grid-backdrop', 'grid-lines', 'grid-frame'])
+  })
+
+  it('画布宽高不是数时底两层收成零宽零高，而不是 NaN', () => {
+    const broken: Twin2dCanvas = { ...CANVAS, width: Number.NaN }
+
+    const style = styleOf(mountGrid(VIEW, broken), 'grid-backdrop')
+
+    expect(style).toContain('width: 0px')
+    expect(style).not.toContain('NaN')
+  })
+})
 
 describe('网格线', () => {
   it('格距按当前倍率换算，起点跟着平移走', () => {
