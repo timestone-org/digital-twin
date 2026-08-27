@@ -325,6 +325,14 @@ export {
   resolveAccent,
   sanitizeCssValue,
 } from './cssValue'
+export {
+  __resetTwin2dAssets,
+  configureTwin2dAssets,
+  twin2dAssetsConfigured,
+  twin2dIconUrl,
+  twin2dImageUrl,
+} from './assets'
+export type { Twin2dAssetPorts } from './assets'
 export { canvasBackdropStyles } from './canvasBackdrop'
 export type { Twin2dBackdropStyles } from './canvasBackdrop'
 export { evalExpr, exprSlotRefs } from './expr'

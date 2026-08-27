@@ -372,3 +372,42 @@ describe('拖着搬家', () => {
     expect(over.defaultPrevented).toBe(false)
   })
 })
+
+describe('剪贴板那一对', () => {
+  // ⚠ 行尾那枚「复制」是就地再制，底下这一对才是剪贴板：本层只上抛不干活，
+  // 在这里另起一份剪贴板的话，键盘粘出来的与按键粘出来的会是两份内容
+  it('复制只上抛，一份配置都不自己改', async () => {
+    const wrapper = mountTree(PRIMS, 'a')
+
+    await wrapper.get('[data-test="prim-clip-copy"]').trigger('click')
+
+    expect(wrapper.emitted('copy')).toHaveLength(1)
+    expect(wrapper.emitted('change')).toBeUndefined()
+  })
+
+  it('粘贴也只上抛', async () => {
+    const wrapper = mountTree()
+
+    await wrapper.get('[data-test="prim-clip-paste"]').trigger('click')
+
+    expect(wrapper.emitted('paste')).toHaveLength(1)
+    expect(wrapper.emitted('change')).toBeUndefined()
+  })
+
+  // ⚠ 一枚都没选时按下去只会是「按了没反应」，那比按不下去难查得多
+  it('一枚都没选时复制那一枚按不下去', () => {
+    const wrapper = mountTree()
+
+    expect(
+      wrapper.get('[data-test="prim-clip-copy"]').attributes('disabled'),
+    ).toBeDefined()
+  })
+
+  it('粘贴那一枚一直按得下去：剪贴板里有没有东西本层不知道', () => {
+    const wrapper = mountTree()
+
+    expect(
+      wrapper.get('[data-test="prim-clip-paste"]').attributes('disabled'),
+    ).toBeUndefined()
+  })
+})

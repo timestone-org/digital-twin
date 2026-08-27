@@ -60,6 +60,10 @@ const emit = defineEmits<{
   endMerge: []
   /** 图元树上选中了一枚；空串 = 取消选中。画布怎么高亮由装配层接。 */
   pickPrim: [primId: string]
+  /** 图元树上按了复制；剪贴板归页面持有（与 ⌘C 同一支），本层只转发。 */
+  copyPrim: []
+  /** 图元树上按了粘贴；同上。 */
+  pastePrim: []
 }>()
 
 /** 没选中、选中了样式、或选中的那条实体已经不在了，都落到这一段。 */
@@ -158,6 +162,8 @@ function onPickPrim(primId: string): void {
       @merge="onMerge"
       @end-merge="onEndMerge"
       @pick-prim="onPickPrim"
+      @copy-prim="emit('copyPrim')"
+      @paste-prim="emit('pastePrim')"
     />
     <NodeInspector
       v-else-if="node !== null"

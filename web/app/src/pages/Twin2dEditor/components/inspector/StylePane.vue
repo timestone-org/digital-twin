@@ -60,6 +60,10 @@ const emit = defineEmits<{
   endMerge: []
   /** 图元树上选中了一枚；空串 = 取消选中。 */
   pickPrim: [primId: string]
+  /** 图元树上按了复制；剪贴板归页面持有，本层只转发。 */
+  copyPrim: []
+  /** 图元树上按了粘贴；同上。 */
+  pastePrim: []
 }>()
 
 /** 新变体的种子：一条判得出的条件，否则归一化会把整条丢掉。 */
@@ -176,6 +180,8 @@ function onMerge(next: Twin2dConfig, key: string): void {
       @merge="onMerge"
       @end-merge="onEndMerge"
       @pick-prim="emit('pickPrim', $event)"
+      @copy-prim="emit('copyPrim')"
+      @paste-prim="emit('pastePrim')"
     >
       <template #prim>
         <PrimFields

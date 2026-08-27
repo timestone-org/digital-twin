@@ -50,7 +50,6 @@ import type {
 import { computed } from 'vue'
 
 import ModulePanel from '../../shared/ModulePanel.vue'
-import { resolveImageValue } from '../../shared/assetImage'
 import {
   readBoolean,
   readEnum,
@@ -257,12 +256,17 @@ function readSlot(nodeId: string, key: string): Twin2dSlotRead | null {
   return read === null ? null : { ...read, ...gearOf(nodeId, key) }
 }
 
+/**
+ * 递给舞台的运行态。
+ * ⚠ 两条素材解析**不在这里递**：图标要 `icons/` 前缀、画布底图要 `images/` 前缀，
+ * 由应用壳启动期一次注入 `configureTwin2dAssets`，包里按 kind 各取各的。在这里
+ * 递一条本地的，等于让其中一档拼错前缀，而拼错的表现只是那一档 404（§11.4）。
+ */
 const live = computed(() => ({
   status: statusOverride.value,
   slots: stitched.value.slots,
   readSlot,
   edges: edgeStates.value,
-  resolveIcon: resolveImageValue,
 }))
 
 /**

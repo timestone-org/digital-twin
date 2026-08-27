@@ -88,6 +88,7 @@ interface Live {
   readSlot?: (nodeId: string, key: string) => Twin2dSlotRead | null
   edges?: Readonly<Record<string, Twin2dEdgeState>>
   resolveIcon?: (assetRef: string) => string
+  resolveImage?: (assetRef: string) => string
 }
 
 interface Extra {
@@ -363,10 +364,12 @@ describe('层序', () => {
 describe('底图', () => {
   // ⚠ 两层底的取值出成自定义属性、由组件自己的 scoped 规则接过去：值里带 var() 的标准
   // 属性会被 happy-dom 的 CSSOM 整条丢掉，浏览器上没事、用例里却断言不到
-  it('素材引用经解析槽落进 url() 并带上铺法', () => {
+  // ⚠ 底图吃的是**图片**那一条解析槽，不是图标那一条：共用一条时其中一档必然拼错
+  // 对象键前缀，而拼错的表现只是那一档 404（§11.4）
+  it('素材引用经图片那条解析槽落进 url() 并带上铺法', () => {
     const wrapper = render(
       { canvas: { background: 'asset:7f3a', backgroundFit: 'contain' } },
-      { live: { resolveIcon: (ref) => `/oss/${ref}` } },
+      { live: { resolveImage: (ref) => `/oss/${ref}` } },
     )
 
     expect(layerStyle(wrapper, 'background')).toContain(

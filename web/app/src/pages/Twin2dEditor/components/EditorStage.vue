@@ -12,7 +12,6 @@
  * 而两份对不上的表现是「画出来的位置与点得中的位置差一截」。
  * ⚠ 本层一个字都不写文档：改动整份上抛，撤销栈归页面的文档态。
  */
-import { resolveImageValue } from '@dt/modules'
 import {
   TWIN_2D_BUILTIN_NODE_STYLES,
   TWIN_2D_EDGE_PRESETS,
@@ -361,7 +360,6 @@ function pickMany(
         :snap="snap"
         :scale="api.view.scale"
         :start-gesture="api.startGesture"
-        :resolve-icon="resolveImageValue"
         :extra-guides="markGuides"
         @pick="pickNode"
         @change="commitNodes"

@@ -7,6 +7,7 @@
  */
 import { computed } from 'vue'
 
+import { twin2dIconUrl } from '../assets'
 import { paintBox } from '../paintBox'
 import { paintText, resolveTxtContent, txtTitleAttrs } from '../paintText'
 import { posDim } from '../sanitize'
@@ -41,8 +42,6 @@ defineOptions({ name: 'Twin2dPrimView' })
 const MIN_BOX = 1
 /** 归一百分比的分母 */
 const PERCENT = 100
-/** 素材解析槽未注入时的空地址 */
-const NO_ASSET_URL = ''
 
 /** 按槽键取口径与读数，与 `Twin2dTextCtx` 上的那一项同型。 */
 type Twin2dSlotReader = Twin2dTextCtx['readSlot']
@@ -176,9 +175,9 @@ const slotReader = computed<Twin2dSlotReader>(
   () => props.readSlot ?? (() => null),
 )
 
-/** 未注入时一律回空地址：ico 的 `asset` 一档随即整枝不渲染，不留一个空 `src`。 */
+/** 没显式递解析槽就走应用壳注入的那一条；两处都没有时 ico 的 `asset` 一档整枝不渲染。 */
 const iconResolver = computed<Twin2dIconResolver>(
-  () => props.resolveIcon ?? (() => NO_ASSET_URL),
+  () => props.resolveIcon ?? twin2dIconUrl,
 )
 
 /**

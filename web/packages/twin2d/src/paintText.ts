@@ -3,6 +3,7 @@
  * text-shadow 与描边字，图标四来源的解析与 `ico.color` 的分档生效，以及一格读数按取数
  * 四档出色。口径见 docs/MODULE_TWIN_2D_DESIGN.md §4.2、§5、§9.6、§11.2。
  */
+import { twin2dIconUrl } from './assets'
 import { sanitizeCssValue } from './cssValue'
 import { NO_DATA, formatSlotValue } from './format'
 import { TWIN_2D_FIXED_COLOR_SPRITES } from './kinds'
@@ -42,8 +43,6 @@ const NOWRAP = 'nowrap'
 const OVERFLOW_HIDDEN = 'hidden'
 /** 基线跟随父级的那一档 */
 const BASELINE_AUTO = 'auto'
-/** 素材解析槽未注入时的空地址 */
-const NO_ASSET_URL = ''
 /** 空档 */
 const NO_ICO: Twin2dIcoResolved = Object.freeze({ kind: 'none' })
 /** 未配来源与等首帧两档的字色：占位符不是读数，按三级正文压下去 */
@@ -108,12 +107,6 @@ export type Twin2dIcoResolved =
 
 /** `asset:<uuid>` / URL / `data:` → 可直接进 `src` 的地址；取不到给空串。 */
 export type Twin2dIconResolver = (assetRef: string) => string
-
-// ⚠ 未注入素材解析槽时一律回空串：图元落回空档、图标静默消失，说明这件事归诊断
-// （issues.ts），不在这里凭空造地址（§11.4）
-function noIconResolver(): string {
-  return NO_ASSET_URL
-}
 
 // 字体族先过消毒；被拒的值回落空串 = 这一项跟随主题
 function fontFamilyOf(font: FontValue): string {
@@ -338,11 +331,11 @@ export function isFixedColorSprite(
  * ⚠ 地址的取法归注入的 `resolveIcon`：`assetUrl` 的 `kind` 对图标是 `'icon'`、
  * 对画布底图是 `'image'`，一个函数服务两种 kind 时装错的表现是**图标 404**（§11.4）。
  * @param src 图标四来源（外加一个空档）
- * @param resolveIcon 素材地址解析槽，缺省是「未注入」——一律回空档
+ * @param resolveIcon 素材地址解析槽，缺省走应用壳注入的那一条；未注入即回空档
  */
 export function resolveIcoSrc(
   src: Twin2dIcoSrc,
-  resolveIcon: Twin2dIconResolver = noIconResolver,
+  resolveIcon: Twin2dIconResolver = twin2dIconUrl,
 ): Twin2dIcoResolved {
   switch (src.kind) {
     case 'none':

@@ -8,11 +8,12 @@
  * ⚠ 视口带 NaN 时 `left: NaNpx` 会让整块遮罩静默消失，而 devtools 里看什么都正常。
  */
 import {
-  __resetAssetImages,
-  configureAssetImages,
-  resolveImageValue,
-} from '@dt/modules'
-import { Twin2dStage, normalizeCanvas } from '@dt/twin2d'
+  Twin2dStage,
+  __resetTwin2dAssets,
+  configureTwin2dAssets,
+  normalizeCanvas,
+  twin2dImageUrl,
+} from '@dt/twin2d'
 import type { Twin2dCanvas } from '@dt/twin2d'
 import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -52,7 +53,7 @@ function stageLayerStyle(canvas: Twin2dCanvas, layer: string): string {
       nodeStyles: [],
       edgeStyles: [],
       containerSize: { w: 800, h: 400 },
-      live: { resolveIcon: resolveImageValue },
+      live: { resolveImage: twin2dImageUrl },
     },
   })
   const style = wrapper.get(`[data-layer="${layer}"]`).attributes('style') ?? ''
@@ -61,7 +62,7 @@ function stageLayerStyle(canvas: Twin2dCanvas, layer: string): string {
 }
 
 afterEach(() => {
-  __resetAssetImages()
+  __resetTwin2dAssets()
 })
 
 describe('底图与图案底', () => {
@@ -77,7 +78,10 @@ describe('底图与图案底', () => {
   })
 
   it('素材引用走应用壳注入的那条解析', () => {
-    configureAssetImages((ref) => `/oss/${ref.slice('asset:'.length)}`)
+    configureTwin2dAssets({
+      resolveIcon: (ref) => `/oss/icons/${ref.slice('asset:'.length)}`,
+      resolveImage: (ref) => `/oss/${ref.slice('asset:'.length)}`,
+    })
     const canvas = normalizeCanvas({ background: 'asset:7f3a' })
 
     expect(styleOf(mountGrid(VIEW, canvas), 'grid-background')).toContain(

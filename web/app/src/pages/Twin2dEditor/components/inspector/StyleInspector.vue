@@ -71,6 +71,10 @@ const emit = defineEmits<{
   endMerge: []
   /** 选中了图元树上的一枚；空串 = 取消选中。画布怎么高亮由装配层接。 */
   pickPrim: [primId: string]
+  /** 图元树上按了复制；剪贴板归页面持有，本层只转发。 */
+  copyPrim: []
+  /** 图元树上按了粘贴；同上，与 ⌘V 是同一支。 */
+  pastePrim: []
 }>()
 
 /** 缺省尺寸是画布上的整数像素，0 与负数画不出东西来。 */
@@ -384,6 +388,8 @@ function onPickPrim(primId: string): void {
         :selected="selectedPrim"
         @change="onPrims"
         @pick="onPickPrim"
+        @copy="emit('copyPrim')"
+        @paste="emit('pastePrim')"
       />
       <slot name="prim" />
     </section>

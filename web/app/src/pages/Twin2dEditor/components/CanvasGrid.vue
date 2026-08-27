@@ -13,8 +13,7 @@
  * ⚠ 线色只走 `--fx-grid-line`：写死颜色的那一层在换肤时第一个露馅。
  * ⚠ 格距不足几个像素时整层不画：再密线就糊成一片实色，那是比没有网格更糟的底。
  */
-import { resolveImageValue } from '@dt/modules'
-import { canvasBackdropStyles, finiteOr } from '@dt/twin2d'
+import { canvasBackdropStyles, finiteOr, twin2dImageUrl } from '@dt/twin2d'
 import type { Twin2dCanvas } from '@dt/twin2d'
 import { computed } from 'vue'
 import type { CSSProperties } from 'vue'
@@ -84,9 +83,13 @@ const backdropStyle = computed<CSSProperties>(() => ({
   transformOrigin: '0 0',
 }))
 
-/** 底图与图案两层的取值；素材引用走应用壳注入的那条解析。 */
+/**
+ * 底图与图案两层的取值；素材引用走应用壳注入的**图片**那一条。
+ * ⚠ 与运行态舞台读的是同一个注入槽：各读各的槽时，只装上其中一个的那次部署里
+ * 编辑器有底图、大屏没有（或反过来），而两边单看都对（§11.4）。
+ */
 const backdrop = computed(() =>
-  canvasBackdropStyles(props.canvas, resolveImageValue),
+  canvasBackdropStyles(props.canvas, twin2dImageUrl),
 )
 
 /**

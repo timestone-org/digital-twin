@@ -14,6 +14,9 @@
  *   「上移一格没反应」通常是有人给这一枝配了 `z`。
  * ⚠ 一切改动都由 `primOps` 算出整份新配置再上抛，本层一个数组都不自己改：样式是
  *   引用式可覆盖的（§13.4），就地改就是把「什么时候落一份覆盖」复制出第二份判断。
+ * ⚠ 行尾那枚「复制」是**就地再制**，底下那一对才是剪贴板（跨样式、跨大屏都粘得出来）。
+ *   剪贴板归页面持有、与 ⌘C / ⌘V 同一支，所以这一对只上抛不干活：在这里另起一份
+ *   剪贴板的话，键盘粘出来的与按键粘出来的会是两份内容，而两边都不报错。
  */
 import { TWIN_2D_PRIM_KINDS } from '@dt/twin2d'
 import type { Twin2dConfig, Twin2dNodeStyle, Twin2dPrimKind } from '@dt/twin2d'
@@ -55,6 +58,10 @@ const emit = defineEmits<{
   change: [config: Twin2dConfig]
   /** 选中了一枚图元；空串 = 取消选中。画布怎么高亮由装配层接。 */
   pick: [primId: string]
+  /** 把选中那一枚（连子树）打进剪贴板；剪贴板归页面持有，与 ⌘C 同一支。 */
+  copy: []
+  /** 把剪贴板里那份图元粘进这棵树；与 ⌘V 同一支。 */
+  paste: []
 }>()
 
 /**
@@ -370,6 +377,27 @@ const ROW_ACTIONS: readonly Twin2dRowAction[] = [
       <span class="mr-auto text-3xs text-text-disabled" data-test="prim-add-at">
         {{ addBlocked === '' ? addAt.hint : addBlocked }}
       </span>
+      <DtButton
+        size="xs"
+        variant="ghost"
+        intent="neutral"
+        :disabled="selected === ''"
+        title="把选中那一枚（连子树）打进剪贴板，⌘C 同效"
+        data-test="prim-clip-copy"
+        @click="emit('copy')"
+      >
+        复制
+      </DtButton>
+      <DtButton
+        size="xs"
+        variant="ghost"
+        intent="neutral"
+        title="把剪贴板里那份图元粘到这棵树最上层，⌘V 同效"
+        data-test="prim-clip-paste"
+        @click="emit('paste')"
+      >
+        粘贴
+      </DtButton>
       <DtButton
         v-for="kind in TWIN_2D_PRIM_KINDS"
         :key="kind"

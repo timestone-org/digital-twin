@@ -1,6 +1,6 @@
 /**
- * @fileoverview 大屏子系统的启动装配：注册内置模块、登记配置控件、把素材引用接到取回
- * 地址上、装配取数 provider。
+ * @fileoverview 大屏子系统的启动装配：注册内置模块、登记配置控件、把三类素材引用（图片 /
+ * 模型 / 图标）各自接到取回地址上、装配取数 provider。
  *
  * ⚠ WS 客户端留在应用壳（它要读登录态），provider 只收一个**注入的订阅函数**——
  * 这正是 `@dt/datasources` 不自己建连接、也因此能在测试里跑假件的那条缝
@@ -21,6 +21,7 @@ import {
 } from '@dt/datasources'
 import { configureAssetImages, registerBuiltinModules } from '@dt/modules'
 import { configureTwinModelHost } from '@dt/three-core/host'
+import { configureTwin2dAssets } from '@dt/twin2d'
 import { assetUrl, modelVariantUrl } from '@dt/contracts'
 
 import { ASSET_BASE_URL } from '@/config/app'
@@ -63,6 +64,7 @@ export function installDashboardModules(): void {
   installConfigControls()
   installTwinModelHost()
   installAssetImages()
+  installTwin2dAssets()
 }
 
 /**
@@ -72,6 +74,21 @@ export function installDashboardModules(): void {
  */
 function installAssetImages(): void {
   configureAssetImages((ref) => assetUrl(ASSET_BASE_URL, 'image', ref))
+}
+
+/**
+ * 告诉 2D 孪生怎么把两处素材引用变成能取回的地址。
+ * ⚠ 两条分开而不是共用一条：`assetUrl` 的 `kind` 决定对象键前缀（图标是
+ * `icons/<id>`、画布底图是 `images/<id>`），一条服务两种时装错的表现是**图标 404**
+ * ——碎图或空白，零报错，而图上其余部分一切照常（ADR-0015 四、§11.4）。
+ * ⚠ 编辑器页也从这里进（子编辑器自己调 `installDashboardModules`）：漏装的表现是
+ * 那一页上图标与底图全空，而配置与另外几页一字不差。
+ */
+function installTwin2dAssets(): void {
+  configureTwin2dAssets({
+    resolveIcon: (ref) => assetUrl(ASSET_BASE_URL, 'icon', ref),
+    resolveImage: (ref) => assetUrl(ASSET_BASE_URL, 'image', ref),
+  })
 }
 
 /**

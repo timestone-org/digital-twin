@@ -11,9 +11,16 @@
  * ⚠ 键盘手势必须**让位表单**，判据是最近可交互祖先（含 `role=combobox` 这类）：只看
  * `tagName` 的话，用户用键盘翻下拉时画布上选中的节点会同时被 nudge 一格并压进撤销栈
  * ——不报错，只是图悄悄动了。下面「翻下拉时节点不动」那一条正是钉这件事的。
+ * ⚠ 素材解析「没装配」是**装配**状态，诊断跑在配置上一辈子看不见它：不在这一页问一次
+ * 的表现是整张图的图标与底图一起消失，而配置一字没错、控制台一声不吭。
  */
-import type { DashboardNodePayload, DashboardPayload } from '@dt/contracts'
-import { normalizeTwin2dConfig } from '@dt/twin2d'
+import type {
+  CollectPoint,
+  DashboardNodePayload,
+  DashboardPayload,
+  Page,
+} from '@dt/contracts'
+import { __resetTwin2dAssets, normalizeTwin2dConfig } from '@dt/twin2d'
 import type { Twin2dConfig } from '@dt/twin2d'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
@@ -59,8 +66,22 @@ vi.mock('@/pages/Twin2dEditor/scripts/useTwin2dEditorPage', () => ({
   useTwin2dEditorPage: () => stub.page,
 }))
 
+// ⚠ 画中画那条取数会去建一条真的 WebSocket（模块级单例），不桩掉的话这一份用例每跑
+// 一次都往网上打一次，而失败与否取决于机器上有没有人在听那个端口
+vi.mock('@/composables/useRealtimeChannel', () => ({
+  useRealtimeChannel: () => ({ subscribe: () => () => undefined }),
+}))
+
+import * as collectApi from '@/api/collect'
+import {
+  __resetDashboardBootstrap,
+  installDashboardModules,
+} from '@/bootstrap/dashboard'
+import PointPickerDialog from '@/components/binding/PointPickerDialog.vue'
 import EditorStage from '@/pages/Twin2dEditor/components/EditorStage.vue'
+import Twin2dBindingPane from '@/pages/Twin2dEditor/components/Twin2dBindingPane.vue'
 import Twin2dInspector from '@/pages/Twin2dEditor/components/Twin2dInspector.vue'
+import Twin2dRuntimePreview from '@/pages/Twin2dEditor/components/Twin2dRuntimePreview.vue'
 import Twin2dEditor from '@/pages/Twin2dEditor/index.vue'
 import type { Twin2dEditorSelection } from '@/pages/Twin2dEditor/scripts/editorSelection'
 import { createTwin2dDoc } from '@/pages/Twin2dEditor/scripts/twin2dDoc'
@@ -194,8 +215,12 @@ function isBlocked(): boolean {
   return event.defaultPrevented
 }
 
+/** 挑点弹窗一开就搜一次；不桩掉的话这一份用例会往网上打一次真请求。 */
+const NO_POINTS: Page<CollectPoint> = { items: [], total: 0, page: 1, size: 50 }
+
 beforeEach(() => {
   setActivePinia(createPinia())
+  vi.spyOn(collectApi, 'listPoints').mockResolvedValue(NO_POINTS)
   guard.leave = null
   controls = makeControls()
   stub.page = controls.page
@@ -498,7 +523,63 @@ describe('诊断', () => {
 
     await wrapper.find('[data-test="issues"]').trigger('click')
 
-    expect(wrapper.findAll('[data-test="diagnostics"] li')).toHaveLength(1)
+    expect(
+      wrapper.findAll(
+        '[data-test="diagnostics"] [data-test="diagnostics-row"]',
+      ),
+    ).toHaveLength(1)
+  })
+
+  // ⚠ 跳过去才是这张清单的用处：只列不跳的话，「nodes[0].styleId」这种路径要人自己
+  // 回大纲上一个个数下标
+  it('点一条就跳到出问题的那个实体', async () => {
+    const wrapper = mountPage()
+    await wrapper.find('[data-test="issues"]').trigger('click')
+
+    await wrapper.find('[data-test="diagnostics-row"]').trigger('click')
+
+    expect(selectionOf(wrapper).pick.value).toEqual({
+      kind: 'nodes',
+      ids: ['a'],
+    })
+  })
+})
+
+describe('素材解析没装配', () => {
+  beforeEach(() => {
+    __resetTwin2dAssets()
+  })
+
+  // ⚠ 装回去必须走真正那一支：在这里手搓两条解析等于把「装配到底装了什么」抄第二遍
+  afterEach(() => {
+    __resetDashboardBootstrap()
+    installDashboardModules()
+  })
+
+  it('诊断里点名，而不是让图标与底图悄悄消失', async () => {
+    const wrapper = mountPage()
+
+    await wrapper.find('[data-test="issues"]').trigger('click')
+
+    expect(wrapper.find('[data-test="setup-issue"]').text()).toContain(
+      '素材解析还没装配',
+    )
+  })
+
+  it('顶栏那个计数也算上它，否则没人会想到去展开诊断', () => {
+    const wrapper = mountPage()
+
+    expect(wrapper.find('[data-test="issues"]').text()).toContain('2')
+  })
+
+  it('装配齐了就一条都不摆', async () => {
+    __resetDashboardBootstrap()
+    installDashboardModules()
+    const wrapper = mountPage()
+
+    await wrapper.find('[data-test="issues"]').trigger('click')
+
+    expect(wrapper.find('[data-test="setup-issue"]').exists()).toBe(false)
   })
 })
 
@@ -765,5 +846,243 @@ describe('卸载', () => {
     wrapper.unmount()
 
     expect(controls.dispose).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * 切到右栏的某一页。
+ * @param wrapper 挂好的这一页
+ * @param label 页签上的文案
+ */
+async function switchPane(
+  wrapper: ReturnType<typeof mountPage>,
+  label: string,
+): Promise<void> {
+  const tab = wrapper
+    .get('[data-test="right-pane-tabs"]')
+    .findAll('button')
+    .find((item) => item.text() === label)
+  await tab?.trigger('click')
+}
+
+/**
+ * 右栏那一页正画着没有。
+ * ⚠ 按 `v-show` 落下的行内 `display` 判，不用 `isVisible()`：happy-dom 下后者对组件
+ * 根节点恒回 true，于是「两页同时摆着」这种错法照样报绿。
+ * @param wrapper 挂好的这一页
+ * @param testId 那一页根节点上的测试钩子
+ */
+function isPaneShown(
+  wrapper: ReturnType<typeof mountPage>,
+  testId: string,
+): boolean {
+  const pane = wrapper.find(`[data-test="${testId}"]`)
+  const style = pane.exists()
+    ? (pane.attributes('style') ?? '')
+    : 'display: none'
+  return !style.includes('display: none')
+}
+
+describe('右栏两页', () => {
+  it('缺省停在属性页，绑定页收着', () => {
+    const wrapper = mountPage()
+
+    expect(isPaneShown(wrapper, 'twin2d-inspector')).toBe(true)
+    expect(isPaneShown(wrapper, 'twin2d-binding-pane')).toBe(false)
+  })
+
+  it('切到绑定页，属性页让开', async () => {
+    const wrapper = mountPage()
+
+    await switchPane(wrapper, '绑定')
+
+    expect(isPaneShown(wrapper, 'twin2d-binding-pane')).toBe(true)
+    expect(isPaneShown(wrapper, 'twin2d-inspector')).toBe(false)
+  })
+
+  // ⚠ 绑一串实体时每选一个都被踢回属性页，等于每绑一个点位都要多点一次
+  it('换选中不会把人从绑定页踢回属性页', async () => {
+    const wrapper = mountPage()
+    await switchPane(wrapper, '绑定')
+
+    await pickTheNode(wrapper)
+
+    expect(isPaneShown(wrapper, 'twin2d-binding-pane')).toBe(true)
+  })
+
+  // ⚠ `v-if` 会在每次切回属性页时把「显示全部」悄悄按回默认，而用户以为自己还在看全部
+  it('切回属性页再回来，绑定页上的取舍还在', async () => {
+    const wrapper = mountPage()
+    await pickTheNode(wrapper)
+    await switchPane(wrapper, '绑定')
+    await wrapper.find('[data-test="binding-show-all"]').trigger('click')
+
+    await switchPane(wrapper, '属性')
+    await switchPane(wrapper, '绑定')
+
+    expect(wrapper.find('[data-test="binding-show-all"]').exists()).toBe(false)
+  })
+
+  it('两页拿的是同一条选中', async () => {
+    const wrapper = mountPage()
+    await pickTheNode(wrapper)
+
+    await switchPane(wrapper, '绑定')
+
+    expect(wrapper.findComponent(Twin2dBindingPane).props('selection')).toEqual(
+      { kind: 'nodes', id: 'a' },
+    )
+  })
+})
+
+describe('绑定装配', () => {
+  it('绑定页要求挑点位时把弹窗开起来', async () => {
+    const wrapper = mountPage()
+    await switchPane(wrapper, '绑定')
+
+    wrapper
+      .findComponent(Twin2dBindingPane)
+      .vm.$emit('pick', 'nodeValues[0].value')
+    await nextTick()
+
+    expect(wrapper.findComponent(PointPickerDialog).props('fieldKey')).toBe(
+      'nodeValues[0].value',
+    )
+  })
+
+  // ⚠ 绑定与配置压在同一帧撤销里：只把配置进退的话，撤销一次会让行号回到旧配置、
+  // 绑定却停在新行号上
+  it('绑定页写出去的那一条落进文档态', async () => {
+    const wrapper = mountPage()
+    await switchPane(wrapper, '绑定')
+
+    wrapper.findComponent(Twin2dBindingPane).vm.$emit('bind', 'nodeStatus[0]')
+    await nextTick()
+
+    expect(controls.doc.value?.bindings.value).toHaveLength(1)
+    expect(controls.doc.value?.bindings.value[0]?.fieldKey).toBe(
+      'nodeStatus[0]',
+    )
+  })
+
+  it('绑定页拿到的是含草稿的那一份，不是节点上存量的', async () => {
+    const wrapper = mountPage()
+    await switchPane(wrapper, '绑定')
+    wrapper.findComponent(Twin2dBindingPane).vm.$emit('bind', 'nodeStatus[0]')
+    await nextTick()
+
+    const given: unknown = wrapper
+      .findComponent(Twin2dBindingPane)
+      .props('bindings')
+
+    expect(Array.isArray(given) ? given : []).toHaveLength(1)
+  })
+})
+
+describe('画中画预览', () => {
+  it('钉在画布那一栏上，诊断展开时不会被它压住', () => {
+    const wrapper = mountPage()
+
+    expect(
+      wrapper.find('[data-test="canvas"] [data-test="open-preview"]').exists(),
+    ).toBe(true)
+  })
+
+  // ⚠ 预览画的必须是内存里的草稿：画存量配置的话，「上了大屏长什么样」问的是上一次
+  // 保存的那一份，而两边都不报错
+  it('喂给预览的是内存里的草稿与这个节点', async () => {
+    const wrapper = mountPage()
+    const preview = wrapper.findComponent(Twin2dRuntimePreview)
+    const before: unknown = preview.props('config')
+    expect(before).toBe(controls.doc.value?.config.value)
+
+    await dirty(wrapper)
+
+    expect(preview.props('config')).toBe(controls.doc.value?.config.value)
+  })
+
+  it('预览拿的是含草稿的那一份绑定', async () => {
+    const wrapper = mountPage()
+    await switchPane(wrapper, '绑定')
+    wrapper.findComponent(Twin2dBindingPane).vm.$emit('bind', 'nodeStatus[0]')
+    await nextTick()
+
+    const given: unknown = wrapper
+      .findComponent(Twin2dRuntimePreview)
+      .props('bindings')
+
+    expect(Array.isArray(given) ? given : []).toHaveLength(1)
+  })
+})
+
+/** 图元树上每一行的 id，按树上从上到下。 */
+function primIdsOn(wrapper: ReturnType<typeof mountPage>): string[] {
+  return wrapper
+    .findAll('[data-test^="prim-pick-"]')
+    .map((item) =>
+      (item.attributes('data-test') ?? '').slice('prim-pick-'.length),
+    )
+}
+
+/**
+ * 进到某一份内置样式的图元树上。
+ * @param wrapper 挂好的这一页
+ */
+async function openFirstStyle(
+  wrapper: ReturnType<typeof mountPage>,
+): Promise<void> {
+  await wrapper.find('[data-test="open-style-library"]').trigger('click')
+  await wrapper
+    .findAll('[data-test^="style-lib-open-styles:"]')[0]
+    ?.trigger('click')
+}
+
+describe('图元剪贴板', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  // ⚠ 树上那两枚键与 ⌘C / ⌘V 是同一支：各写一份的话，键盘与鼠标会在同一份样式上粘出
+  // 两种结果，而两边都不报错
+  it('复制一枚再粘一份，树上多一枚且 id 不撞', async () => {
+    const wrapper = mountPage()
+    await openFirstStyle(wrapper)
+    const before = primIdsOn(wrapper)
+    await wrapper
+      .find(`[data-test="prim-pick-${before[0] ?? ''}"]`)
+      .trigger('click')
+
+    await wrapper.find('[data-test="prim-clip-copy"]').trigger('click')
+    await wrapper.find('[data-test="prim-clip-paste"]').trigger('click')
+
+    const after = primIdsOn(wrapper)
+    expect(after.length).toBeGreaterThan(before.length)
+    expect(new Set(after).size).toBe(after.length)
+  })
+
+  it('粘完选中转到副本上，接着就能改它', async () => {
+    const wrapper = mountPage()
+    await openFirstStyle(wrapper)
+    const before = primIdsOn(wrapper)
+    await wrapper
+      .find(`[data-test="prim-pick-${before[0] ?? ''}"]`)
+      .trigger('click')
+    await wrapper.find('[data-test="prim-clip-copy"]').trigger('click')
+
+    await wrapper.find('[data-test="prim-clip-paste"]').trigger('click')
+
+    const picked = wrapper.findComponent(Twin2dInspector).props('selectedPrim')
+    expect(before).not.toContain(picked)
+    expect(primIdsOn(wrapper)).toContain(picked)
+  })
+
+  it('一枚都没选时复制那一枚键按不下去', async () => {
+    const wrapper = mountPage()
+
+    await openFirstStyle(wrapper)
+
+    expect(
+      wrapper.find('[data-test="prim-clip-copy"]').attributes('disabled'),
+    ).toBeDefined()
   })
 })

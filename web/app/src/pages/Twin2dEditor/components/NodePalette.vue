@@ -12,7 +12,6 @@
  * ⚠ 本层不挂 sprite 宿主（`Twin2dIconSprite`）：那是画布壳的活，两处都挂会让同一份
  * symbol 在文档里重号。
  */
-import { resolveImageValue } from '@dt/modules'
 import {
   TWIN_2D_BUILTIN_NODE_STYLE_MAP,
   Twin2dNodeBox,
@@ -236,7 +235,6 @@ function onDragStart(event: DragEvent, styleId: string): void {
                 :node="item.node"
                 :node-style="item.style"
                 :id-prefix="`palette-${item.id}`"
-                :resolve-icon="resolveImageValue"
               />
             </span>
           </span>

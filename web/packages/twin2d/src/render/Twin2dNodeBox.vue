@@ -6,6 +6,7 @@
  */
 import { computed, ref, useId } from 'vue'
 
+import { twin2dIconUrl } from '../assets'
 import { sanitizeCssValue } from '../cssValue'
 import { injectVars } from '../paintCommon'
 import { centerBoxOf, nodeTransformCss } from '../transform'
@@ -26,8 +27,6 @@ import type { Twin2dVariantCtx } from '../variants'
 
 /** 节点级 `patch` 借变体那条路做浅合并时用的身份 */
 const NODE_PATCH_ID = '__node'
-/** 素材解析槽未注入时的空地址 */
-const NO_ASSET_URL = ''
 /** 变体求值里「这个节点不画状态」的那一档 */
 const STATUS_HIDDEN = 'hidden'
 /** 节点自己没给状态的哨兵 */
@@ -126,9 +125,9 @@ const slotReader = computed<Twin2dSlotReader>(
   () => props.readSlot ?? (() => null),
 )
 
-/** 未注入时一律回空地址：ico 的 `asset` 一档随即整枝不渲染，不留一个空 `src`。 */
+/** 没显式递解析槽就走应用壳注入的那一条；两处都没有时 ico 的 `asset` 一档整枝不渲染。 */
 const iconResolver = computed<Twin2dIconResolver>(
-  () => props.resolveIcon ?? (() => NO_ASSET_URL),
+  () => props.resolveIcon ?? twin2dIconUrl,
 )
 
 /**

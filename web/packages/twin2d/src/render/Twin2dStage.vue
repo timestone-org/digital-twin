@@ -9,6 +9,7 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
+import { twin2dIconUrl, twin2dImageUrl } from '../assets'
 import { canvasBackdropStyles } from '../canvasBackdrop'
 import {
   TWIN_2D_DEFAULT_FIT_PADDING,
@@ -35,8 +36,6 @@ import type {
 const EMPTY_TEXT = '这张 2D 孪生还没有画任何节点'
 /** 归一百分比的分母 */
 const PERCENT = 100
-/** 素材解析槽未注入时的空地址 */
-const NO_ASSET_URL = ''
 
 /**
  * 同一个 DOM 文档里 sprite 宿主已经有主了的标记。
@@ -47,9 +46,6 @@ const SPRITE_CLAIM_ATTR = 'data-twin2d-sprite'
 
 /** 空读数表共用一份：每次求值都换一个新 Map 等于告诉子组件「数据变了」。 */
 const EMPTY_SLOTS: Twin2dSlotValues = new Map<string, unknown>()
-
-/** 素材解析槽未注入时的空解析 */
-const NO_ICON_RESOLVER: Twin2dIconResolver = () => NO_ASSET_URL
 
 /** 舞台与流动动画那四个顶层配置键；模块壳读了递进来，包里一处都不读配置（§3.2）。 */
 interface Twin2dStageView {
@@ -73,8 +69,14 @@ interface Twin2dStageLive {
   readSlot?: (nodeId: string, key: string) => Twin2dSlotRead | null
   /** 按连线 id 的运行态。 */
   edges?: Readonly<Record<string, Twin2dEdgeState>>
-  /** `asset:<uuid>` → 可直接用的地址。 */
+  /**
+   * 图元 `ico.src` 的 `asset:<uuid>` → 可直接用的地址。
+   * ⚠ 与底图那一条**分开**：`assetUrl` 的 `kind` 对图标是 `'icon'`、对底图是
+   * `'image'`，一条服务两种的表现是图标 404（碎图或空白），零报错（§11.4）。
+   */
   resolveIcon?: Twin2dIconResolver
+  /** `canvas.background` 的 `asset:<uuid>` → 可直接用的地址。 */
+  resolveImage?: Twin2dIconResolver
 }
 
 /** 容器尺寸（CSS 像素）。 */
@@ -252,14 +254,18 @@ const viewportStyle = computed<Record<string, string>>(() => {
   return style
 })
 
-/** 未注入时一律回空地址：ico 与底图的 `asset` 一档随即整枝不画，不留一个空 `src`。 */
+/** 没显式递解析槽就走应用壳注入的那一条；两处都没有时 ico 的 `asset` 一档整枝不画。 */
 const iconResolver = computed<Twin2dIconResolver>(
-  () => props.live.resolveIcon ?? NO_ICON_RESOLVER,
+  () => props.live.resolveIcon ?? twin2dIconUrl,
 )
 
-/** 画布底两层：取值与消毒全在 `canvasBackdropStyles` 里，本文件只把它贴上去。 */
+/**
+ * 画布底两层：取值与消毒全在 `canvasBackdropStyles` 里，本文件只把它贴上去。
+ * ⚠ 底图吃的是**图片**那一条解析，不是图标那一条：两者共用一条时其中一档必然
+ * 拼错前缀，而拼错的表现只是那一档 404，零报错（§11.4）。
+ */
 const backdrop = computed(() =>
-  canvasBackdropStyles(props.canvas, iconResolver.value),
+  canvasBackdropStyles(props.canvas, props.live.resolveImage ?? twin2dImageUrl),
 )
 
 const marksBelow = computed(() =>

@@ -12,34 +12,38 @@
  * `isTwin2dFormFocused`（按最近可交互祖先判，见 `shortcuts.ts`）。
  * ⚠ 样式库抽屉开着时整套手势 `suspended`：不让位的话，在库里用方向键翻行会同时把
  * 画布上选中的节点 nudge 一格并压进撤销栈——不报错，只是图悄悄动了。
+ * ⚠ 右栏是属性 / 绑定两页并存，不是「绑定另开一页」：绑点时要一边看着图上是谁、
+ * 一边填槽，分成两条路由的话每绑一个点位都要来回跳一趟。
+ * ⚠ 画中画预览走的是运行态那条渲染链（模块自己画），这一页对「自己在编哪个模块」
+ * 一无所知——模块类型来自节点行、草稿注回的键来自清单，一个都不写死。
  */
-import {
-  TWIN_2D_BUILTIN_NODE_STYLE_MAP,
-  collectTwin2dIssues,
-  twin2dStyleResolver,
-} from '@dt/twin2d'
 import type { Twin2dConfig } from '@dt/twin2d'
 import { DtButton, DtNotice, DtPageState, useConfirm, useToast } from '@dt/ui'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute } from 'vue-router'
 
 import { installDashboardModules } from '@/bootstrap/dashboard'
+import PointPickerDialog from '@/components/binding/PointPickerDialog.vue'
 import { AppShell } from '@/components/layout'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 
 import EditorStage from './components/EditorStage.vue'
 import NodePalette from './components/NodePalette.vue'
 import StyleLibraryDrawer from './components/StyleLibraryDrawer.vue'
-import Twin2dInspector from './components/Twin2dInspector.vue'
+import Twin2dDiagnostics from './components/Twin2dDiagnostics.vue'
 import Twin2dOutline from './components/Twin2dOutline.vue'
+import Twin2dRightPane from './components/Twin2dRightPane.vue'
+import Twin2dRuntimePreview from './components/Twin2dRuntimePreview.vue'
 import Twin2dToolbar from './components/Twin2dToolbar.vue'
 import { createTwin2dCommands } from './scripts/editorCommands'
 import { createTwin2dSelection } from './scripts/editorSelection'
 import type { Twin2dStyleKind } from './scripts/editorSelection'
 import { addNode } from './scripts/nodeOps'
 import { useTwin2dShortcuts } from './scripts/shortcuts'
-import { useTwin2dEditorPage } from './scripts/useTwin2dEditorPage'
+import { twin2dScan, twin2dSetupIssues } from './scripts/twin2dIssues'
 import type { Twin2dEntityKind } from './scripts/types'
+import { useTwin2dBindings } from './scripts/useTwin2dBindings'
+import { useTwin2dEditorPage } from './scripts/useTwin2dEditorPage'
 
 // ⚠ 子编辑器也要装：直接刷新到这条路由时大屏那三页一个都没跑过，
 // 不装的话素材地址与内置图标解析恒回空串，画面上是一张只剩底色的图
@@ -73,24 +77,26 @@ const selectedPrim = ref('')
 
 const config = computed(() => page.doc.value?.config.value ?? null)
 
-// 预置库里的样式也算「认识」，否则整张图的节点会被逐个报成悬空样式
-const issues = computed(() => {
-  const current = config.value
-  return current === null
-    ? []
-    : collectTwin2dIssues(current, {
-        knownStyleIds: new Set(TWIN_2D_BUILTIN_NODE_STYLE_MAP.keys()),
-        styleOf: twin2dStyleResolver(current),
-      })
-})
-
-// ⚠ 同一处路径上可能同时报出两条不同的问题，所以键里带上文档序
-const issueRows = computed(() =>
-  issues.value.map((issue, order) => ({
-    key: `${order}:${issue.code}:${issue.at}`,
-    text: `${issue.at}：${issue.message}`,
-  })),
+/** 绑定这一路：绑定表、绑定页四个动作与挑点弹窗的开关。 */
+const binding = useTwin2dBindings(
+  () => page.doc.value,
+  () => nodeId.value,
 )
+
+// ⚠ 诊断走 `twin2dIssues` 那一支，与右下角那张清单同源：各调各的话，顶栏这个数与
+// 清单上的行数迟早对不上，而先信哪一个全靠猜
+const issues = computed(() =>
+  config.value === null ? [] : twin2dScan(config.value).issues,
+)
+
+/**
+ * 装配这一层的缺口（当下只有素材解析一条）。
+ * ⚠ 只在装载这一刻问一次：装配是启动期一次性的事（上面那句
+ * `installDashboardModules` 就是它），做成 computed 会让人以为它还会变。
+ * ⚠ 必须与配置问题合并计数：素材没接上时整张图的图标与底图一起消失，而配置一字
+ * 没错——不合进顶栏那个数的话，用户根本不会想到去展开诊断。
+ */
+const setupIssues = twin2dSetupIssues()
 
 const outlineSummary = computed(() => {
   const current = config.value
@@ -144,6 +150,10 @@ const commands = createTwin2dCommands({
   undo: () => page.doc.value?.undo(),
   redo: () => page.doc.value?.redo(),
   save: () => void save(),
+  selectedPrim: () => selectedPrim.value,
+  pickPrim: (primId) => {
+    selectedPrim.value = primId
+  },
 })
 
 useTwin2dShortcuts({
@@ -178,6 +188,20 @@ function addFromPalette(styleId: string): void {
 function focusStyle(kind: Twin2dStyleKind, id: string): void {
   selection.focusStyle(kind, id)
   libraryOpen.value = false
+}
+
+/**
+ * 诊断里点了一条：跳到出问题的那一个。
+ * ⚠ 两条样式轴走 `styleFocus` 而不是画布选中：塞进画布那条轴的话，右栏画不出样式面，
+ * 而画布上还会多出一个选不中的幽灵。
+ * @param target 出问题的那个实体
+ */
+function focusIssue(target: { kind: Twin2dEntityKind; id: string }): void {
+  if (target.kind === 'styles' || target.kind === 'edgeStyles') {
+    selection.focusStyle(target.kind, target.id)
+    return
+  }
+  selection.select(target.kind, target.id)
 }
 
 // ⚠ 撤销、重做与删除之后选中里会留下已经不存在的 id：不摘的表现是右栏画着一个
@@ -241,7 +265,7 @@ onBeforeUnmount(page.dispose)
         :is-saving="page.saving.value"
         :can-undo="page.doc.value?.canUndo.value ?? false"
         :can-redo="page.doc.value?.canRedo.value ?? false"
-        :issue-count="issues.length"
+        :issue-count="issues.length + setupIssues.length"
         @save="save"
         @undo="page.doc.value?.undo()"
         @redo="page.doc.value?.redo()"
@@ -320,6 +344,11 @@ onBeforeUnmount(page.dispose)
                 :fit-request="fitRequest"
                 @change="commit"
               />
+              <Twin2dRuntimePreview
+                :node="page.node.value"
+                :config="config"
+                :bindings="binding.bindings.value"
+              />
               <p
                 class="pointer-events-none absolute bottom-1 right-2 text-2xs text-text-disabled"
                 data-test="canvas-readout"
@@ -327,22 +356,32 @@ onBeforeUnmount(page.dispose)
                 {{ canvasSummary }}
               </p>
             </section>
-            <ul
+            <div
               v-if="showIssues"
               class="max-h-48 shrink-0 overflow-y-auto border-t border-border-subtle p-2 text-2xs text-text-secondary"
               aria-label="配置问题"
               data-test="diagnostics"
             >
-              <li v-for="row in issueRows" :key="row.key">{{ row.text }}</li>
-            </ul>
+              <DtNotice
+                v-for="text in setupIssues"
+                :key="text"
+                class="mb-1.5"
+                intent="warning"
+                icon="alert-triangle"
+                data-test="setup-issue"
+              >
+                {{ text }}
+              </DtNotice>
+              <Twin2dDiagnostics :config="config" @select="focusIssue" />
+            </div>
           </div>
 
           <aside
-            class="flex w-80 shrink-0 flex-col gap-2 overflow-y-auto border-l border-border-subtle p-2 text-2xs text-text-secondary"
+            class="flex w-80 shrink-0 flex-col border-l border-border-subtle text-2xs text-text-secondary"
             aria-label="检查器"
             data-test="inspector"
           >
-            <div class="flex items-center gap-1">
+            <div class="flex shrink-0 items-center gap-1 p-2 pb-0">
               <span
                 class="min-w-0 flex-1 truncate text-text-disabled"
                 data-test="inspector-target"
@@ -361,16 +400,26 @@ onBeforeUnmount(page.dispose)
                 @click="selection.clearStyleFocus()"
               />
             </div>
-            <Twin2dInspector
+            <Twin2dRightPane
               v-if="config !== null"
+              class="min-h-0 flex-1"
               :config="config"
               :selection="selection.inspect.value"
               :style-focus="selection.styleFocus.value"
               :selected-prim="selectedPrim"
+              :bindings="binding.bindings.value"
+              :is-dirty="page.doc.value?.isDirty.value ?? false"
               @change="commit"
               @merge="commitMerged"
               @end-merge="endMerge"
               @pick-prim="selectedPrim = $event"
+              @copy-prim="commands.handlers.copy()"
+              @paste-prim="commands.handlers.paste()"
+              @write-binding="binding.write"
+              @drop-binding="binding.drop"
+              @add-binding="binding.bind"
+              @pick-point="binding.pickingFieldKey.value = $event"
+              @remove-binding-row="binding.removeRow"
             />
           </aside>
         </div>
@@ -381,6 +430,13 @@ onBeforeUnmount(page.dispose)
           :file-name="`${page.dashboard.value?.name ?? '2d'}-样式包`"
           @change="commit"
           @focus="focusStyle"
+        />
+
+        <PointPickerDialog
+          :model-value="binding.pickingFieldKey.value !== null"
+          :field-key="binding.pickingFieldKey.value"
+          @update:model-value="binding.closePicker"
+          @pick="binding.pickPoint"
         />
       </template>
     </div>

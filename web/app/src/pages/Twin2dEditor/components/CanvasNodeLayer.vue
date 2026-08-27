@@ -11,7 +11,12 @@
  * ⚠ sprite 宿主归画布壳挂，本层一份都不挂：两处都挂会让同一份 symbol 在文档里重号，
  * 而一处都不挂时图标**静默消失**——`<use>` 元素照样在，只是解析不到任何目标。
  */
-import { Twin2dNodeBox, applyNodeTransform, centerBoxOf } from '@dt/twin2d'
+import {
+  Twin2dNodeBox,
+  applyNodeTransform,
+  centerBoxOf,
+  twin2dIconUrl,
+} from '@dt/twin2d'
 import type {
   Pt,
   Twin2dIconResolver,
@@ -49,9 +54,6 @@ const DOT_PX = 9
 
 /** 旋转手柄离节点上沿多远（屏幕像素）。 */
 const HANDLE_GAP_PX = 22
-
-/** 素材解析槽未注入时的空地址；ico 的 `asset` 一档随即整枝不渲染。 */
-const NO_ASSET_URL = ''
 
 /** 一条参考线都没有；不每次现造一个空表，免得下游白重画。 */
 const NO_GUIDES: readonly Twin2dGuideLine[] = Object.freeze([])
@@ -163,9 +165,9 @@ const spin = computed<SpinHandle | null>(() => {
   return { view, at }
 })
 
-/** 未注入时一律回空地址，不留一个空 `src`。 */
+/** 没显式递解析槽就走应用壳注入的那一条；两处都没有时 ico 的 `asset` 一档整枝不渲染。 */
 const iconResolver = computed<Twin2dIconResolver>(
-  () => props.resolveIcon ?? (() => NO_ASSET_URL),
+  () => props.resolveIcon ?? twin2dIconUrl,
 )
 
 /** 选中框与两种手柄的尺寸：屏幕上固定几个像素，所以要按倍率反着缩。 */
