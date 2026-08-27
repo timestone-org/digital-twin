@@ -5,6 +5,8 @@
  * ⚠ 编码只在新建时可填：它是大屏绑定键 `ds:{code}:{列key}` 的前半段，建后再改
  * 会让已配好的大屏绑定全部悬空，后端的 `TableUpdateIn` 里因此根本没有这一项。
  * ⚠ 周期以**秒**呈现、以毫秒落库：让人对着 60000 数零没有必要。
+ * ⚠ `saved` 第二个参数只有**新建**那次给得出 id：调用方靠它把人送去配列，
+ * 编辑那次给 `null`——改完一个名字被扔进详情页是没道理的。
  */
 import { computed, ref, watch } from 'vue'
 import type {
@@ -54,7 +56,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
-  saved: [message: string]
+  saved: [message: string, createdId: string | null]
 }>()
 
 const code = ref('')
@@ -157,11 +159,11 @@ async function save(): Promise<void> {
   const target = props.table
   if (target === null) {
     const created = await dataset.createDatasetTable(toCreateInput(state.value))
-    emit('saved', `台账「${created.name}」已创建`)
+    emit('saved', `台账「${created.name}」已创建`, created.id)
     return
   }
   await dataset.updateDatasetTable(target.id, toPatchInput(state.value))
-  emit('saved', '台账已更新')
+  emit('saved', '台账已更新', null)
 }
 
 async function onSubmit(): Promise<void> {

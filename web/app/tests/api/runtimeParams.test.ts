@@ -146,6 +146,24 @@ describe('采集分组走自己的路由', () => {
   })
 })
 
+describe('台账分组走自己的路由', () => {
+  it('⚠ dataset 挂在 `dataset-tables/` 之下：另起顶层段会掉进按方法兜底的规则里', async () => {
+    await runtimeParams.listRuntimeParams('dataset')
+    const [listPath] = call()
+    expect(listPath).toBe('/dataset-tables/runtime-params')
+
+    await runtimeParams.saveRuntimeParams('dataset', {
+      dataset_enabled: true,
+    })
+    const [savePath] = call()
+    expect(savePath).toBe('/dataset-tables/runtime-params/dataset')
+
+    await runtimeParams.resetRuntimeParams('dataset')
+    const [resetPath] = call()
+    expect(resetPath).toBe('/dataset-tables/runtime-params/dataset:reset')
+  })
+})
+
 describe('错误码', () => {
   it('提交了目录里没有的键有自己的码，按码分支不按文案', () => {
     expect(runtimeParams.RUNTIME_PARAM_UNKNOWN_CODE).toBe(41020)

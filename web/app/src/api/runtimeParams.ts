@@ -19,12 +19,15 @@ export const RUNTIME_PARAM_UNKNOWN_CODE = 41020
 
 /**
  * 分组落在哪条路由上。
- * ⚠ 两条路由不是冗余：写权限码不同（dashboard:edit vs collect:manage），
- * 后端按码把分组拆开了，发错前缀就是 400。
+ * ⚠ 三条路由不是冗余：写权限码各不相同（`dashboard:edit` / `collect:manage` /
+ * `dataset:manage`），后端按码把分组拆开了，发错前缀就是 400。台账那条**挂在
+ * `dataset-tables/` 之下**，好落进闸 1 已经铺好的那摞规则里。
  * @param section 参数分组
  */
 function baseOf(section: RuntimeParamSection): string {
-  return section === 'dashboard' ? '/runtime-params' : '/collect-runtime-params'
+  if (section === 'dashboard') return '/runtime-params'
+  if (section === 'dataset') return '/dataset-tables/runtime-params'
+  return '/collect-runtime-params'
 }
 
 /** 读一组运行参数的当前有效值。 */

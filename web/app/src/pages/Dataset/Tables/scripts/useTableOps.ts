@@ -7,9 +7,13 @@
  * 刻意不在点删除之前先查一次行数：查完到用户点确认之间，行数可能已经变了。
  * ⚠ 删除的两步是模块级函数、只收一份 `deps`：塞回 composable 里会让它涨成一个
  * 谁也不敢动的大函数。
+ * ⚠ 新建成功后**直接进详情的列配置**：刚建出来的台账一列都没有，落不下任何一行
+ * 数据；停在列表上等于让人自己再找一次入口，而弹窗刚说完「先建表，再给它配列」。
+ * 编辑那次不跳——改完一个名字被扔进详情页是没道理的。
  */
 
 import { ref, type Ref } from 'vue'
+import { useRouter, type Router } from 'vue-router'
 import type { DatasetTableSummary } from '@dt/contracts'
 import { ERROR_CODES } from '@dt/contracts'
 import { useConfirm, useToast } from '@dt/ui'
@@ -22,6 +26,7 @@ interface Deps {
   toast: ReturnType<typeof useToast>
   confirm: ReturnType<typeof useConfirm>
   reload: () => Promise<void>
+  router: Router
 }
 
 export interface TableOps {
@@ -31,8 +36,12 @@ export interface TableOps {
   openCreate: () => void
   openEdit: (table: DatasetTableSummary) => void
   removeTable: (table: DatasetTableSummary) => Promise<void>
-  /** 弹窗保存成功后：报一句、重新取数。 */
-  afterSaved: (message: string) => Promise<void>
+  /**
+   * 弹窗保存成功后：报一句、重新取数；新建的那次再把人送进列配置。
+   * @param message 吐司文案
+   * @param createdId 新建出来的台账 id，编辑时为 `null`
+   */
+  afterSaved: (message: string, createdId: string | null) => Promise<void>
 }
 
 /**
@@ -114,7 +123,12 @@ async function removeTable(
  * @param reload 写完之后重新取数
  */
 export function useTableOps(reload: () => Promise<void>): TableOps {
-  const deps: Deps = { toast: useToast(), confirm: useConfirm(), reload }
+  const deps: Deps = {
+    toast: useToast(),
+    confirm: useConfirm(),
+    reload,
+    router: useRouter(),
+  }
   const editing = ref<DatasetTableSummary | null>(null)
   const isFormOpen = ref(false)
 
@@ -130,8 +144,12 @@ export function useTableOps(reload: () => Promise<void>): TableOps {
       isFormOpen.value = true
     },
     removeTable: (table) => removeTable(deps, table),
-    afterSaved: async (message) => {
+    afterSaved: async (message, createdId) => {
       deps.toast.success(message)
+      if (createdId !== null) {
+        await deps.router.push(`/datasets/${createdId}/columns`)
+        return
+      }
       await reload()
     },
   }

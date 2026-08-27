@@ -7,7 +7,7 @@ import { computed } from 'vue'
 import type { RuntimeParamItem } from '@dt/contracts'
 import { DtNumberInput, DtSwitch, DtTag } from '@dt/ui'
 
-import { TIER_TEXT } from '../scripts/runtimeParamsMeta'
+import { TIER_TEXT } from './runtimeParamsMeta'
 
 const props = defineProps<{
   item: RuntimeParamItem

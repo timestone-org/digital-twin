@@ -13,7 +13,7 @@ import type { VueWrapper } from '@vue/test-utils'
 import type { RuntimeParamItem } from '@dt/contracts'
 
 import * as runtimeApi from '@/api/runtimeParams'
-import RuntimeParamsDialog from '@/pages/Collect/Opcua/components/RuntimeParamsDialog.vue'
+import RuntimeParamsDialog from '@/components/runtime/RuntimeParamsDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const toastError = vi.fn()

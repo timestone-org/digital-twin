@@ -1,6 +1,7 @@
 /**
  * @fileoverview 建表 / 改表弹窗的契约：打开即铺好现值、编码建后锁死、周期以秒
- * 呈现却以毫秒落库、校验挡在提交前、编码被占用要落到那一格上。
+ * 呈现却以毫秒落库、校验挡在提交前、编码被占用要落到那一格上，以及 `saved`
+ * 只在新建那次交出 id。
  *
  * ⚠ 「打开即铺好现值」这条最容易破：watch 不写 immediate 时，组件在已经是
  * 打开态时被挂载，表单会是空的，而看上去只是「用户自己没填」。
@@ -141,15 +142,19 @@ describe('建表 / 改表弹窗', () => {
       't1',
       expect.not.objectContaining({ code: expect.anything() }),
     )
-    expect(wrapper.emitted('saved')?.[0]).toEqual(['台账已更新'])
+    // ⚠ 编辑那次 id 必须是 null：给了 id 调用方就会把人扔进详情页
+    expect(wrapper.emitted('saved')?.[0]).toEqual(['台账已更新', null])
   })
 
-  it('建表成功后报的是这张表的名字', async () => {
+  it('建表成功后报的是这张表的名字，并交出新表的 id 供调用方送人去配列', async () => {
     const wrapper = await open(null)
     await type(0, '能耗')
     await type(1, 'energy')
     await save()
-    expect(wrapper.emitted('saved')?.[0]).toEqual(['台账「能耗台账」已创建'])
+    expect(wrapper.emitted('saved')?.[0]).toEqual([
+      '台账「能耗台账」已创建',
+      'new',
+    ])
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([false])
   })
 
