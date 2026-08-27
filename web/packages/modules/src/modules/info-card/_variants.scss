@@ -1,0 +1,382 @@
+// 一格的外壳三档、悬停三档、标签三处、图标两种画法与读数四档的样式。
+// 由 InfoCell.vue 的 scoped 块 @use 进来——摊在同一个文件里会把它撑过行数闸门。
+// 档位类由 look.classes 下发（同一份也挂在卡片根上），这里一律用 .ic-cell 复合，
+// 免得把卡片根自己那一层也一并染上。
+// ⚠ 容器那一层（网格列模板、格间距、整块内边距）不在这里：它由 look.gridStyle 直接
+//   摊成内联样式，样式表这一侧一个键都不认。
+
+.ic-cell {
+  // 这一格的数值色：命中色 → 逐格静态色 → 模块纯色 → 主题强调色，四级只在这里写一次。
+  // ⚠ 单位「跟随数值色」那一档、左色条与命中文案全都读它——各写一遍链子必然漂
+  --ic-tone: var(--ic-cell-color, var(--ic-value-color, var(--accent-primary)));
+
+  // 横向对齐的落点：行向排布时是主轴，图标在上时是交叉轴，两处读同一个值
+  --ic-main: flex-start;
+
+  position: relative;
+  display: flex;
+  box-sizing: border-box;
+  min-width: 0;
+  align-items: center;
+  justify-content: var(--ic-main);
+  padding: var(--ic-cell-py, 8px) var(--ic-cell-px, 12px);
+  overflow: hidden;
+  // 读数字号跟着**格**宽自适应，不跟着视口：并排的窄格里长读数不会被裁掉
+  container-type: inline-size;
+  gap: var(--ic-icon-gap, 10px);
+  transition:
+    background 0.3s ease,
+    border-color 0.3s ease,
+    box-shadow 0.3s ease,
+    transform 0.3s ease;
+}
+
+.ic-cell--pick {
+  cursor: pointer;
+}
+
+.ic-cell.ic--align-center {
+  --ic-main: center;
+}
+
+.ic-cell.ic--align-right {
+  --ic-main: flex-end;
+}
+
+// 单格大字档：整格居中，与参考仓 kpi-card 的 .kpi-body 同款
+.ic-cell.ic--layout-single {
+  height: 100%;
+  justify-content: center;
+}
+
+// 图标在上：主轴转成纵向，于是横向对齐改由交叉轴接手
+.ic-cell.ic--icon-badge.ic--icon-at-top {
+  flex-direction: column;
+  align-items: var(--ic-main);
+  justify-content: center;
+}
+
+/* ---------------- 外壳三档 ---------------- */
+
+// 裸排档不画外壳，故没有规则；卡片与左色条共用同一套描边与渐变底
+.ic-cell.ic--shell-card,
+.ic-cell.ic--shell-accent {
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 18%, transparent);
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    135deg,
+    var(--surface-raised) 0%,
+    var(--surface-panel) 100%
+  );
+}
+
+// 左色条：3px 发光竖条压在卡片自己的描边上，圆角靠格上的 overflow 裁
+.ic-cell.ic--shell-accent::after {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--ic-tone);
+  box-shadow: 0 0 8px var(--ic-tone);
+  content: '';
+}
+
+/* ---------------- 悬停三档 ---------------- */
+
+.ic-cell.ic--hover-tint:hover {
+  background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
+}
+
+.ic-cell.ic--hover-lift:hover {
+  border-color: var(--ic-tone);
+  box-shadow: 0 6px 18px -10px
+    color-mix(in srgb, var(--accent-primary) 40%, transparent);
+  transform: translateY(-2px);
+}
+
+/* ---------------- 图标两种画法 ---------------- */
+
+// 右上角标：钉在格的角上，不占排版位；不吃鼠标事件，整格点击照旧
+.ic-corner {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: var(--ic-icon-size, 20px);
+  height: var(--ic-icon-size, 20px);
+  object-fit: contain;
+  opacity: var(--ic-icon-opacity, 1);
+  pointer-events: none;
+}
+
+.ic-corner--emoji {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--ic-icon-font, 18px);
+  line-height: 1;
+}
+
+.ic-badge {
+  display: flex;
+  flex: none;
+  width: var(--ic-icon-size, 40px);
+  height: var(--ic-icon-size, 40px);
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--ic-icon-border, var(--border-default));
+  border-radius: var(--ic-icon-radius, 50%);
+  background: var(--ic-icon-bg);
+  box-shadow: var(--ic-icon-glow);
+  font-size: var(--ic-icon-font, 18px);
+  line-height: 1;
+  opacity: var(--ic-icon-opacity, 1);
+  // 换主题时底色与描边平滑过渡，不闪一下
+  transition:
+    background var(--fx-transition, 0.5s ease),
+    border-color var(--fx-transition, 0.5s ease);
+}
+
+// 素材图按容器直径 60% 等比内缩，与 emoji 的视觉重量一致
+.ic-badge__img {
+  width: 60%;
+  height: 60%;
+  object-fit: contain;
+}
+
+/* ---------------- 四段：标签 ｜ 读数 ｜ 涨跌 ｜ 状态点 ---------------- */
+
+// 段间距逐个对回参考仓：网格小卡 4px（.kpi-cell__value-row 的 margin-top）、
+// 单格大字 6px（.kpi-body 的 gap）、图标容器档 2px（.ikg-cell__label 的 margin-bottom）。
+// ⚠ 三个参考模块在这一处就是三个值，收成一个数会让其中两套预设的疏密当场变样
+.ic-text {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ic-cell.ic--layout-single .ic-text {
+  gap: 6px;
+}
+
+.ic-cell.ic--icon-badge .ic-text {
+  gap: 2px;
+}
+
+.ic-cell.ic--align-left .ic-text {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.ic-cell.ic--align-center .ic-text {
+  align-items: center;
+  text-align: center;
+}
+
+.ic-cell.ic--align-right .ic-text {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.ic-label {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--ic-label-color, var(--text-secondary));
+  font-size: var(--ic-label-size, 12px);
+  letter-spacing: 0.05em;
+  opacity: var(--ic-label-opacity, 1);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// 命中文案顶掉标签时跟着数值色走，字距收回正常——它是一句话，不是一个名字
+.ic-label--hit {
+  color: var(--ic-tone);
+  letter-spacing: normal;
+  opacity: 1;
+}
+
+// DOM 序恒是「标签 → 读数 → 涨跌」，读屏先念名字；摆在下方只换 order
+.ic-cell--label-below .ic-label {
+  order: 1;
+}
+
+// 标签在读数左侧：两列网格显式布点。⚠ 不把 .ic-text 翻成 row——那样对齐档注入的
+// align-items 会从「横向对齐」当场变成「纵向对齐」，语义反转
+.ic-cell--label-left .ic-text {
+  display: grid;
+  align-content: center;
+  column-gap: 8px;
+  grid-template-columns: auto minmax(0, auto);
+}
+
+.ic-cell--label-left .ic-label {
+  align-self: center;
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.ic-cell--label-left .ic-read {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+// 涨跌块跟到读数那一列的第二行，不去挤标签列
+.ic-cell--label-left .ic-compare {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.ic-read {
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: baseline;
+  overflow: hidden;
+  gap: 5px;
+}
+
+// 单位紧跟读数那一档不留空隙；读数右侧那一档留 5px（参考仓 .kpi-value 的 gap）
+.ic-cell.ic--unit-attached .ic-read {
+  gap: 0;
+}
+
+.ic-value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ic-tone);
+  // 0 = 跟着格宽自适应：网格里的小卡与单格大字两档各有一条 clamp
+  font-size: var(--ic-value-size, clamp(16px, 13cqi, 36px));
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  // ⚠ 辉光色要压到半透明：参考仓 kpi-card 是数值色 50%、kpi-group 是 55%，
+  //   直接用 currentcolor 会得到一倍强的光晕，读数看着糊了一圈
+  text-shadow: 0 0 var(--ic-value-glow, 0)
+    color-mix(in srgb, currentcolor 50%, transparent);
+  transition: color 0.3s ease;
+  white-space: nowrap;
+}
+
+.ic-cell.ic--layout-single .ic-value {
+  font-size: var(--ic-value-size, clamp(18px, 13cqi, 52px));
+}
+
+// 数字字体档：读数逐帧跳动时列宽不抖
+.ic-cell.ic--font-digit .ic-value {
+  font-family: var(--font-digit);
+  font-variant-numeric: tabular-nums;
+}
+
+// 文本值回退正文字体并缩到数值字号的 70%——数字字体排中文很怪，参考仓也是这个比例
+.ic-cell.ic--font-digit .ic-value--plain {
+  font-family: inherit;
+  font-size: calc(var(--ic-value-size, clamp(16px, 13cqi, 36px)) * 0.7);
+  font-variant-numeric: normal;
+}
+
+.ic-cell.ic--font-digit.ic--layout-single .ic-value--plain {
+  font-size: calc(var(--ic-value-size, clamp(18px, 13cqi, 52px)) * 0.7);
+}
+
+// 渐变文字。⚠ text-shadow 必须置空：background-clip: text 下阴影会糊在字面上
+.ic-value--gradient {
+  background-image: var(--ic-value-gradient);
+  background-size: cover;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
+}
+
+.ic-unit {
+  flex: none;
+  color: var(--ic-unit-color, var(--text-secondary));
+  font-size: var(--ic-unit-size, 12px);
+  font-style: normal;
+  opacity: var(--ic-unit-opacity, 1);
+}
+
+// 跟随数值色那一档：整条颜色链在 --ic-tone 里，含命中规则后的告警色
+.ic-cell.ic--unit-tone-accent .ic-unit {
+  color: var(--ic-tone);
+}
+
+.ic-compare {
+  display: flex;
+  max-width: 100%;
+  align-items: baseline;
+  overflow: hidden;
+  color: var(--ic-trend, var(--text-secondary));
+  font-size: 12px;
+  gap: 4px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ic-compare__arrow {
+  font-size: 11px;
+}
+
+.ic-compare__label {
+  color: var(--text-secondary);
+  font-style: normal;
+}
+
+// 状态点钉在格的左上角：摆进文字流里的话，没有标签的格与有标签的格会各站一处
+.ic-dot {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ic-dot-color, var(--state-warning));
+  box-shadow: 0 0 6px var(--ic-dot-color, var(--state-warning));
+  pointer-events: none;
+}
+
+/* ---------------- 读数四档与闪烁 ---------------- */
+
+// 没有读数的三档：占位符是同一个字，全靠这里的颜色与透明度分开
+.ic-value--pending {
+  color: var(--text-secondary);
+  opacity: 0.7;
+  text-shadow: none;
+}
+
+.ic-value--unbound {
+  color: var(--text-disabled);
+  text-shadow: none;
+}
+
+// 取不到要显眼：它是「去查现场」的信号，与「还没配」不是一回事
+.ic-value--error {
+  color: var(--state-danger);
+  text-shadow: none;
+}
+
+.ic-value--blink {
+  animation: ic-value-blink 1s steps(1, end) infinite;
+}
+
+@keyframes ic-value-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.4;
+  }
+}
+
+// 「减少动态」：闪烁与上浮一起关掉，别让墙上一直在动
+@media (prefers-reduced-motion: reduce) {
+  .ic-value--blink {
+    animation: none;
+  }
+
+  .ic-cell.ic--hover-lift:hover {
+    transform: none;
+  }
+}

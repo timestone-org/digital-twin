@@ -25,6 +25,7 @@ async def test_the_listing_names_every_registered_module(
         "footer",
         "header",
         "image-block",
+        "info-card",
         "info-list",
         "metric-card",
         "text-block",

@@ -21,6 +21,7 @@ def test_the_committed_catalog_registers_the_known_modules() -> None:
             "footer",
             "header",
             "image-block",
+            "info-card",
             "info-list",
             "metric-card",
             "text-block",

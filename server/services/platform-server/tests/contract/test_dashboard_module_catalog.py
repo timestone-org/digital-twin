@@ -32,13 +32,14 @@ _MEMBER = re.compile(r"'([^']+)'")
 
 # 已登记的模块：两个钉位/通用容器、两个装饰块、一个纯配置页头、
 # 一个带 3D 资源与数组绑定、一张按文档序钉行的 2D 孪生画面，
-# 以及两个多点位模块（一块摆几个读数的、一块摆一列行的）
+# 以及三个多点位模块（一块摆几个读数的、一块摆一网格卡片的、一块摆一列行的）
 EXPECTED_TYPES = frozenset(
     {
         "action-button",
         "container",
         "footer",
         "header",
+        "info-card",
         "info-list",
         "metric-card",
         "image-block",

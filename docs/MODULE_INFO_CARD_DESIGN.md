@@ -104,7 +104,7 @@
 |---|---|---|---|---|
 | 1 | `kpi-card` | `info-card` | `kpi-single` | `layout:'single'` `cellShell:'plain'` `padX:12` `padY:4` `align:'center'` `labelPlace:'below'` `labelSize:12` `valueSize:0` `valueGlow:12` `unit:{place:'baseline',size:13}` `icon:{mode:'corner',size:20,opacity:0.85}` `compare:{show:true,mode:'percent'}` `statusDot:'none'` |
 | 2 | `kpi-group` | `info-card` | `kpi-grid` | `layout:'grid'` `columns:'auto'` `gapX:10` `gapY:10` `padX:10` `padY:6` `cellShell:'accent'` `cellPadX:12` `cellPadY:8` `labelPlace:'above'` `valueSize:0` `valueGlow:10` `hover:'lift'` |
-| 3 | `icon-kpi-group` | `info-card` | `icon-grid` / `icon-column` | `layout:'grid'` `columns:2` `gapX:0` `gapY:0` `padX:0` `padY:0` `cellShell:'plain'` `cellPadX:10` `cellPadY:5` `icon:{mode:'badge',position:'left',size:40,shape:'circle',bgAngle:135,glow:8,gap:10,fontSize:18}` `labelPlace:'above'` `labelSize:13` `labelTone:'title'` `labelOpacity:0.6` `valueSize:26` `unit:{size:12,opacity:0.5}` `textPlainFallback:true`；`icon-column` 档 = `icon.position:'top'` + `align:'center'` |
+| 3 | `icon-kpi-group` | `info-card` | `icon-grid` / `icon-column` | `layout:'grid'` `columns:'2'` `gapX:0` `gapY:0` `padX:0` `padY:0` `cellShell:'plain'` `cellPadX:10` `cellPadY:5` `icon:{mode:'badge',position:'left',size:40,shape:'circle',bgAngle:135,glow:8,gap:10,fontSize:18}` `labelPlace:'above'` `labelSize:13` `labelTone:'title'` `labelOpacity:0.6` `valueSize:26` `unit:{size:12,opacity:0.5}` `textPlainFallback:true`；`icon-column` 档 = `icon.position:'top'` + `align:'center'` |
 | 4 | `list` | `info-list` | `row-list` | `rowLayout:'stack'` `rowLines:[{left:'label',right:'value'}]` `rowShape:{lead:'icon'}` `rowShell:'divider'` `dividerStyle:'dotted'` `spacing:{padX:6,padY:4,rowPadX:4,rowPadY:6}` `labelSize:13` `valueSize:16` `valueColor:'var(--accent-secondary)'` `unitPlace:'attached'` `unitSize:11` `thousands:true` `autoScroll:true` `scrollSpeed:3` |
 | 5 | `tag-table` | `info-list` | `three-col` | `rowLayout:'columns'` `columnHeader:{show:true,name:'名称',value:'数值',unit:'单位'}` `rowShell:'divider'` `spacing:{padX:8,padY:4,rowPadX:4,rowPadY:6}` `valueSize:13` `valueColor:'var(--accent-secondary)'` `unitPlace:'column'` `hover:'tint'` `thousands:true` |
 | 6 | `metric-status-table` | `info-list` | `target-badge-list` | `rowLines:[{left:'label',right:'value'},{left:'sub',right:'badge'}]` `rowShell:'divider'` `spacing:{rowPadY:8}` `labelSize:14` `labelTone:'primary'` `valueSize:22` `valueGlow:10` `unitPlace:'attached'` `unitSize:11` `subSource:'target'` `subLabel:'目标'` `badge:{kind:'rule',style:'outline'}` `alarmOn:'value'` |
@@ -844,6 +844,18 @@ bindings: [{
 
 ## 9. 目录树与行数
 
+> ⚠ **这张表是落地前的估算，不是实况。已落地的 `info-list` 与它对不上**——
+> 树上画的 `hold.ts` / `bindingRows.ts` / `RowMeter.vue` / `RowBadge.vue` / `_list.scss`
+> 一个都不存在（实际 14 个文件，树上 19 个）。
+>
+> **定死一条口径，后续三个模块照它走，不要照这张表走**：
+> 槽键与项键常量、`fieldKey`、`rowLabels` / `rowCounts` 一律与派生同住一个文件
+> （`info-list` 是 `rows.ts`、`info-card` 是 `cells.ts`），**不另建 `bindingRows.ts`**。
+> 先例是 `metric-card/metrics.ts`——常量与派生同处一地，改一处不会漏另一处。
+>
+> ⚠ 这张表连续误导过两轮 agent 去建不该建的文件。**估算表与实况冲突时，以已落地的模块为准。**
+
+
 ```
 web/packages/modules/src/modules/info-card/          ≈ 2950 行
   manifest.ts     ~180  身份 · 拼 schema · bindings · presets · 派生行数行名 · preview
@@ -941,6 +953,34 @@ config + values + meta.slots ──► rows.ts / cells.ts ──► RowView[] / 
 ---
 
 ## 10. 明确的偏离
+
+> ⚠ **`info-card` 落地时逐条对回参考源码，逮到 §5.2 / §1.3 六处与源码不符，一律以源码为准。**
+> 源码在 `DigitalTwinBK/web/packages/modules/src/modules/{kpi-card,kpi-group,icon-kpi-group}/`。
+>
+> 1. **`columns` 的档值是字符串不是数字。** 源码 `icon-kpi-group/format.ts` 的
+>    `COLUMN_VALUES` 与 `Component.vue` 的 `cfgStr(columns,'2')` 都按字符串比。
+>    写成数字 `2` 会**判不中白名单、静默回落「自动」**——用户配了两列却得到自适应，零报错。
+>    预设里一律 `'2'`，并有一条断言钉住五套的 `columns` 全是字符串。
+> 2. **`align` 是三档不是两档**：源码 `cfgEnum(align, ['left','center','right'], 'center')`。
+> 3. **`labelPlace` 没有 `hidden` 档**：源码只有 above/below/left；「藏标签」是由该格
+>    `label` 留空时整行不渲染实现的，不是一个档。⚠ 代价：藏了标签，绑点面板的行名也跟着没了。
+> 4. **`unit.place` 没有 `joined` 档**：三个参考模块的单位一律 `align-items: baseline`
+>    加一道小间隙，没有第三种贴法。收成 baseline / attached 两档。
+> 5. **`icon.mode` 没有 `inline` 档**：源码只有两种画法——右上角标与图标容器，
+>    收成 none / corner / badge 三档。
+> 6. **`valueKind` 的开关量那一档不出自这三个参考模块**（它们只有 number/text），
+>    出自本仓 `metric-card` 的 `kind`，档序 number/boolean/text。
+>
+> ⚠ **`LEVEL_TEXT` 与 `shared/thresholds.ts` 的 `LEVEL_OPTIONS` 不是一套**：
+> 后者是属性面板的下拉，label 写成「危险（红）」；前者是画在状态点上的词，`danger` 叫「危急」。
+> 改任何一份都不要顺手同步另一份。
+>
+> ⚠ **§1.3 只列了会变的键，没列全**。这些只能从源码读：`kpi-single` 的
+> `cellPadX/Y = 0`（源码 `.kpi-body` 只有一处 `padding: 4px 12px`，留字段缺省 12/8
+> 会让左右留白翻倍）· `kpi-grid` 的 `labelSize 12` / `unit.size 12` ·
+> `icon-grid` 的 `valueGlow 0`（源码那一处根本没有 text-shadow）· 三套的 `thousands` 全 false。
+> **后续模块落地时同样不能只照 §1.3 抄。**
+
 
 > ⚠ **以下 6 条是 `info-list` 落地时逐行对回参考源码才发现的，文档此前没有记。**
 > 一律以 `DigitalTwinBK/web/packages/modules/src/modules/<模块>/` 的源码为准。

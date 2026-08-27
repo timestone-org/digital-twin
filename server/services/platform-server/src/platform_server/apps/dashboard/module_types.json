@@ -1568,6 +1568,1015 @@
       "bindings": []
     },
     {
+      "type": "info-card",
+      "display_name": "信息卡片",
+      "category": "数据",
+      "icon": "layout-grid",
+      "keywords": [
+        "infocard",
+        "kapian",
+        "zhibiao",
+        "kpi",
+        "信息卡片",
+        "卡片",
+        "指标",
+        "读数",
+        "气象"
+      ],
+      "default_size": {
+        "width": 420,
+        "height": 220,
+        "min_width": 120,
+        "min_height": 64
+      },
+      "chrome": "card",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "default": "",
+          "placeholder": "留空则不画标题栏",
+          "group": "内容",
+          "span": "full"
+        },
+        {
+          "key": "items",
+          "label": "格",
+          "type": "array",
+          "default": [
+            {
+              "label": "点位 1",
+              "unit": "",
+              "precision": 1
+            }
+          ],
+          "group": "内容",
+          "help": "每一项在绑点面板上是一行。⚠ 删掉中间一项，它之后每一格的绑定都会改喂前一格——删完请核对绑点面板。",
+          "span": "full",
+          "item_schema": [
+            {
+              "key": "label",
+              "label": "名称",
+              "type": "string",
+              "default": "",
+              "placeholder": "留空则这一格不画标签行",
+              "help": "这一格的名称；留空则不画标签行。绑点面板上仍按「第 N 格」称呼它。"
+            },
+            {
+              "key": "unit",
+              "label": "单位",
+              "type": "string",
+              "default": "",
+              "placeholder": "如 ℃ / kWh / m³/h",
+              "help": "首尾空格照原样保留，「° C」这种写法是有意的排版。"
+            },
+            {
+              "key": "precision",
+              "label": "小数位",
+              "type": "range",
+              "default": 1,
+              "min": 0,
+              "max": 6,
+              "step": 1
+            },
+            {
+              "key": "valueKind",
+              "label": "值类型",
+              "type": "enum",
+              "default": "number",
+              "options": [
+                {
+                  "value": "number",
+                  "label": "数值"
+                },
+                {
+                  "value": "boolean",
+                  "label": "开关量"
+                },
+                {
+                  "value": "text",
+                  "label": "文本"
+                }
+              ],
+              "help": "⚠ 只有数值档会去评估取值规则：开关量与文本命中不了阈值，也就没有告警色。"
+            },
+            {
+              "key": "trueText",
+              "label": "真值文案",
+              "type": "string",
+              "default": "运行",
+              "when": {
+                "key": "valueKind",
+                "in": [
+                  "boolean"
+                ]
+              }
+            },
+            {
+              "key": "falseText",
+              "label": "假值文案",
+              "type": "string",
+              "default": "停止",
+              "when": {
+                "key": "valueKind",
+                "in": [
+                  "boolean"
+                ]
+              }
+            },
+            {
+              "key": "emoji",
+              "label": "emoji 图标",
+              "type": "string",
+              "default": "",
+              "placeholder": "如 🌡️ 💧 🌧️"
+            },
+            {
+              "key": "icon",
+              "label": "素材图标",
+              "type": "image",
+              "default": "",
+              "help": "素材库里的图标；留空则用 emoji，两者都留空时这一格不画图标。"
+            },
+            {
+              "key": "color",
+              "label": "固定颜色",
+              "type": "color",
+              "default": "",
+              "help": "填了就固定这一格的读数颜色并压过渐变与规则命中色。只填 var(--…) 引用，填死色值换肤时不跟着走。"
+            },
+            {
+              "key": "emitValue",
+              "label": "联动值",
+              "type": "string",
+              "default": "",
+              "help": "点这一格时上抛的值，留空则这一格点了不上抛。"
+            }
+          ],
+          "item_label_key": "label",
+          "min_items": 1
+        },
+        {
+          "key": "emptyText",
+          "label": "缺值占位",
+          "type": "string",
+          "default": "—",
+          "group": "内容",
+          "help": "取不到值时画在读数位的那个符号。⚠ 缺值绝不伪造 0。",
+          "span": "half"
+        },
+        {
+          "key": "layout",
+          "label": "排布",
+          "type": "enum",
+          "default": "auto",
+          "options": [
+            {
+              "value": "auto",
+              "label": "自动"
+            },
+            {
+              "value": "single",
+              "label": "单格大字"
+            },
+            {
+              "value": "grid",
+              "label": "网格"
+            }
+          ],
+          "group": "排布",
+          "help": "自动 = 只有一格时大字铺满，多格时按网格。",
+          "span": "half"
+        },
+        {
+          "key": "columns",
+          "label": "列数",
+          "type": "enum",
+          "default": "auto",
+          "options": [
+            {
+              "value": "auto",
+              "label": "自动"
+            },
+            {
+              "value": "1",
+              "label": "1 列"
+            },
+            {
+              "value": "2",
+              "label": "2 列"
+            },
+            {
+              "value": "3",
+              "label": "3 列"
+            },
+            {
+              "value": "4",
+              "label": "4 列"
+            },
+            {
+              "value": "5",
+              "label": "5 列"
+            },
+            {
+              "value": "6",
+              "label": "6 列"
+            }
+          ],
+          "group": "排布",
+          "help": "自动 = 按最小列宽自适应铺满；行数一律随格数自适应，没有单独的行数档。",
+          "span": "half"
+        },
+        {
+          "key": "gapX",
+          "label": "列间距 (px)",
+          "type": "range",
+          "default": 10,
+          "group": "排布",
+          "span": "half",
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "gapY",
+          "label": "行间距 (px)",
+          "type": "range",
+          "default": 10,
+          "group": "排布",
+          "span": "half",
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "padX",
+          "label": "整块左右内边距 (px)",
+          "type": "range",
+          "default": 10,
+          "group": "排布",
+          "span": "half",
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "padY",
+          "label": "整块上下内边距 (px)",
+          "type": "range",
+          "default": 6,
+          "group": "排布",
+          "span": "half",
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "cellShell",
+          "label": "格外壳",
+          "type": "enum",
+          "default": "plain",
+          "options": [
+            {
+              "value": "plain",
+              "label": "裸排（无框）"
+            },
+            {
+              "value": "card",
+              "label": "卡片"
+            },
+            {
+              "value": "accent",
+              "label": "卡片 + 左色条"
+            }
+          ],
+          "group": "外壳",
+          "span": "half"
+        },
+        {
+          "key": "cellPadX",
+          "label": "格左右内边距 (px)",
+          "type": "range",
+          "default": 12,
+          "group": "外壳",
+          "span": "half",
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "cellPadY",
+          "label": "格上下内边距 (px)",
+          "type": "range",
+          "default": 8,
+          "group": "外壳",
+          "span": "half",
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "hover",
+          "label": "悬停反馈",
+          "type": "enum",
+          "default": "none",
+          "options": [
+            {
+              "value": "none",
+              "label": "无"
+            },
+            {
+              "value": "tint",
+              "label": "提亮"
+            },
+            {
+              "value": "lift",
+              "label": "上浮"
+            }
+          ],
+          "group": "外壳",
+          "help": "⚠ 触摸屏没有悬停：只靠这一档的大屏，手指按上去是没有反馈的。",
+          "span": "half"
+        },
+        {
+          "key": "align",
+          "label": "格内对齐",
+          "type": "enum",
+          "default": "center",
+          "options": [
+            {
+              "value": "left",
+              "label": "左对齐"
+            },
+            {
+              "value": "center",
+              "label": "居中"
+            },
+            {
+              "value": "right",
+              "label": "右对齐"
+            }
+          ],
+          "group": "标签",
+          "span": "half"
+        },
+        {
+          "key": "labelPlace",
+          "label": "标签位置",
+          "type": "enum",
+          "default": "above",
+          "options": [
+            {
+              "value": "above",
+              "label": "读数上方"
+            },
+            {
+              "value": "below",
+              "label": "读数下方"
+            },
+            {
+              "value": "left",
+              "label": "读数左侧"
+            }
+          ],
+          "group": "标签",
+          "help": "⚠ 它只管摆在哪儿，不管显不显示：这一格没有名称时整行不渲染，也不占位。要藏某一格的标签，把那一项的「名称」留空。",
+          "span": "half"
+        },
+        {
+          "key": "labelSize",
+          "label": "标签字号 (px)",
+          "type": "range",
+          "default": 12,
+          "group": "标签",
+          "span": "half",
+          "min": 8,
+          "max": 48,
+          "step": 1
+        },
+        {
+          "key": "labelTone",
+          "label": "标签文字色",
+          "type": "enum",
+          "default": "secondary",
+          "options": [
+            {
+              "value": "secondary",
+              "label": "次要"
+            },
+            {
+              "value": "primary",
+              "label": "正文"
+            },
+            {
+              "value": "title",
+              "label": "标题"
+            },
+            {
+              "value": "muted",
+              "label": "弱化"
+            }
+          ],
+          "group": "标签",
+          "span": "half"
+        },
+        {
+          "key": "labelOpacity",
+          "label": "标签透明度",
+          "type": "range",
+          "default": 1,
+          "group": "标签",
+          "span": "half",
+          "min": 0.2,
+          "max": 1,
+          "step": 0.05
+        },
+        {
+          "key": "valueSize",
+          "label": "读数字号 (px)",
+          "type": "range",
+          "default": 0,
+          "group": "数值",
+          "help": "0 = 跟着格宽自适应。填正数即钉死一个字号，多格并排时字号才对得齐。",
+          "span": "half",
+          "min": 0,
+          "max": 200,
+          "step": 1
+        },
+        {
+          "key": "valueColor",
+          "label": "读数颜色",
+          "type": "color",
+          "default": "var(--accent-primary)",
+          "group": "数值",
+          "help": "命中取值规则的那一格改用规则的颜色，这里配的是没有命中时的颜色。",
+          "span": "half"
+        },
+        {
+          "key": "valueFill",
+          "label": "读数填充",
+          "type": "enum",
+          "default": "solid",
+          "options": [
+            {
+              "value": "solid",
+              "label": "纯色"
+            },
+            {
+              "value": "gradient",
+              "label": "渐变文字"
+            }
+          ],
+          "group": "数值",
+          "help": "⚠ 渐变文字有三个前提：模块开了渐变、这一格没有固定颜色也没命中规则、这个值有资格用数字字体。缺一即静默回落纯色。",
+          "span": "half"
+        },
+        {
+          "key": "valueGradient",
+          "label": "渐变色标",
+          "type": "array",
+          "default": [],
+          "group": "数值",
+          "help": "≥2 个色标才画渐变，只填一个整组回落纯色。",
+          "span": "full",
+          "when": {
+            "key": "valueFill",
+            "in": [
+              "gradient"
+            ]
+          },
+          "item_schema": [
+            {
+              "key": "color",
+              "label": "色标",
+              "type": "color",
+              "default": "var(--accent-secondary)"
+            }
+          ],
+          "item_label_key": "color",
+          "max_items": 6
+        },
+        {
+          "key": "gradientAngle",
+          "label": "渐变角度",
+          "type": "range",
+          "default": 0,
+          "group": "数值",
+          "help": "0 = 自下而上。",
+          "span": "half",
+          "when": {
+            "key": "valueFill",
+            "in": [
+              "gradient"
+            ]
+          },
+          "min": 0,
+          "max": 360,
+          "step": 5
+        },
+        {
+          "key": "valueGlow",
+          "label": "读数辉光 (px)",
+          "type": "range",
+          "default": 0,
+          "group": "数值",
+          "help": "⚠ 渐变文字档下辉光一律不画：阴影会糊在字面上。",
+          "span": "half",
+          "min": 0,
+          "max": 24,
+          "step": 1
+        },
+        {
+          "key": "valueFont",
+          "label": "读数字体",
+          "type": "enum",
+          "default": "digit",
+          "options": [
+            {
+              "value": "digit",
+              "label": "数字字体"
+            },
+            {
+              "value": "body",
+              "label": "正文字体"
+            }
+          ],
+          "group": "数值",
+          "help": "数字字体是等宽的，读数逐帧跳动时列宽不抖。",
+          "span": "half"
+        },
+        {
+          "key": "textPlainFallback",
+          "label": "文本值不走渐变",
+          "type": "boolean",
+          "default": true,
+          "group": "数值",
+          "help": "开着时文本值与缺值回落正文字体 + 纯色；关掉则一视同仁。",
+          "span": "half"
+        },
+        {
+          "key": "unit",
+          "label": "单位",
+          "type": "object",
+          "default": {
+            "place": "baseline",
+            "size": 12,
+            "tone": "secondary",
+            "opacity": 1
+          },
+          "group": "单位",
+          "span": "full",
+          "fields": [
+            {
+              "key": "place",
+              "label": "位置",
+              "type": "enum",
+              "default": "baseline",
+              "options": [
+                {
+                  "value": "baseline",
+                  "label": "读数右侧"
+                },
+                {
+                  "value": "attached",
+                  "label": "紧跟读数"
+                }
+              ],
+              "help": "两档都与读数同基线，差的只是那一道小间隙。"
+            },
+            {
+              "key": "size",
+              "label": "字号 (px)",
+              "type": "range",
+              "default": 12,
+              "min": 8,
+              "max": 32,
+              "step": 1
+            },
+            {
+              "key": "tone",
+              "label": "文字色",
+              "type": "enum",
+              "default": "secondary",
+              "options": [
+                {
+                  "value": "secondary",
+                  "label": "次要"
+                },
+                {
+                  "value": "muted",
+                  "label": "弱化"
+                },
+                {
+                  "value": "primary",
+                  "label": "正文"
+                },
+                {
+                  "value": "accent",
+                  "label": "跟随数值色"
+                }
+              ],
+              "help": "「跟随数值色」会一并跟着命中规则后的告警色走。"
+            },
+            {
+              "key": "opacity",
+              "label": "透明度",
+              "type": "range",
+              "default": 1,
+              "min": 0.2,
+              "max": 1,
+              "step": 0.05
+            }
+          ]
+        },
+        {
+          "key": "thousands",
+          "label": "千分位分隔",
+          "type": "boolean",
+          "default": false,
+          "group": "格式",
+          "span": "half"
+        },
+        {
+          "key": "fixedDecimals",
+          "label": "固定小数位",
+          "type": "boolean",
+          "default": false,
+          "group": "格式",
+          "help": "开着时按「小数位」补零对齐（42.00 / 3.50），读数跳动时位数不变。",
+          "span": "half"
+        },
+        {
+          "key": "icon",
+          "label": "图标",
+          "type": "object",
+          "default": {
+            "mode": "none",
+            "position": "left",
+            "size": 20,
+            "shape": "circle",
+            "bgFrom": "",
+            "bgTo": "",
+            "bgAngle": 135,
+            "borderColor": "",
+            "glow": 8,
+            "gap": 10,
+            "fontSize": 18,
+            "opacity": 1
+          },
+          "group": "图标",
+          "help": "角标钉在格的右上角，图标容器跟着文字走；两者都取这一项配的素材图标或 emoji。",
+          "span": "full",
+          "fields": [
+            {
+              "key": "mode",
+              "label": "画法",
+              "type": "enum",
+              "default": "none",
+              "options": [
+                {
+                  "value": "none",
+                  "label": "不画"
+                },
+                {
+                  "value": "corner",
+                  "label": "右上角标"
+                },
+                {
+                  "value": "badge",
+                  "label": "图标容器"
+                }
+              ]
+            },
+            {
+              "key": "position",
+              "label": "方位",
+              "type": "enum",
+              "default": "left",
+              "options": [
+                {
+                  "value": "left",
+                  "label": "文字左侧"
+                },
+                {
+                  "value": "top",
+                  "label": "文字上方"
+                }
+              ],
+              "help": "⚠ 只对图标容器生效：右上角标钉死在角上，不看这一项。"
+            },
+            {
+              "key": "size",
+              "label": "直径 (px)",
+              "type": "range",
+              "default": 20,
+              "min": 16,
+              "max": 96,
+              "step": 1
+            },
+            {
+              "key": "shape",
+              "label": "形状",
+              "type": "enum",
+              "default": "circle",
+              "options": [
+                {
+                  "value": "circle",
+                  "label": "正圆"
+                },
+                {
+                  "value": "rounded",
+                  "label": "圆角方"
+                },
+                {
+                  "value": "square",
+                  "label": "直角方"
+                }
+              ]
+            },
+            {
+              "key": "bgFrom",
+              "label": "底色起",
+              "type": "color",
+              "default": "",
+              "placeholder": "留空 = 跟随强调色"
+            },
+            {
+              "key": "bgTo",
+              "label": "底色止",
+              "type": "color",
+              "default": "",
+              "placeholder": "留空 = 跟随强调色"
+            },
+            {
+              "key": "bgAngle",
+              "label": "底渐变角",
+              "type": "range",
+              "default": 135,
+              "min": 0,
+              "max": 360,
+              "step": 5
+            },
+            {
+              "key": "borderColor",
+              "label": "描边色",
+              "type": "color",
+              "default": "",
+              "placeholder": "留空 = 跟随强调色"
+            },
+            {
+              "key": "glow",
+              "label": "外发光 (px)",
+              "type": "range",
+              "default": 8,
+              "min": 0,
+              "max": 24,
+              "step": 1
+            },
+            {
+              "key": "gap",
+              "label": "与文字间距 (px)",
+              "type": "range",
+              "default": 10,
+              "min": 0,
+              "max": 40,
+              "step": 1
+            },
+            {
+              "key": "fontSize",
+              "label": "emoji 字号 (px)",
+              "type": "range",
+              "default": 18,
+              "help": "只影响 emoji；素材图标按容器直径等比内缩。",
+              "min": 8,
+              "max": 48,
+              "step": 1
+            },
+            {
+              "key": "opacity",
+              "label": "透明度",
+              "type": "range",
+              "default": 1,
+              "min": 0.2,
+              "max": 1,
+              "step": 0.05
+            }
+          ]
+        },
+        {
+          "key": "compare",
+          "label": "涨跌对比",
+          "type": "object",
+          "default": {
+            "show": false,
+            "mode": "percent",
+            "label": "",
+            "invertTrend": false
+          },
+          "group": "对比",
+          "help": "要接「对比值」子槽才画：当前值与对比值任一缺席时整块不出。",
+          "span": "full",
+          "fields": [
+            {
+              "key": "show",
+              "label": "显示涨跌块",
+              "type": "boolean",
+              "default": false
+            },
+            {
+              "key": "mode",
+              "label": "显示什么",
+              "type": "enum",
+              "default": "percent",
+              "options": [
+                {
+                  "value": "percent",
+                  "label": "百分比"
+                },
+                {
+                  "value": "delta",
+                  "label": "绝对差值"
+                },
+                {
+                  "value": "both",
+                  "label": "差值 + 百分比"
+                }
+              ],
+              "help": "⚠ 百分比档在对比基数为 0 时回退显绝对差值，不留空。"
+            },
+            {
+              "key": "label",
+              "label": "标注",
+              "type": "string",
+              "default": "",
+              "placeholder": "如 较上期 / 目标"
+            },
+            {
+              "key": "invertTrend",
+              "label": "下降为好",
+              "type": "boolean",
+              "default": false,
+              "help": "开着时数值下降显绿（能耗 / 成本类指标）。"
+            }
+          ]
+        },
+        {
+          "key": "rules",
+          "label": "取值规则",
+          "type": "array",
+          "default": [],
+          "group": "告警",
+          "help": "按声明顺序取首个命中，高危规则放前面；颜色留空跟随严重度语义色，填则只填 var(--…)。",
+          "item_schema": [
+            {
+              "key": "op",
+              "label": "判断",
+              "type": "enum",
+              "default": "gt",
+              "options": [
+                {
+                  "value": "lt",
+                  "label": "< 小于"
+                },
+                {
+                  "value": "lte",
+                  "label": "≤ 小于等于"
+                },
+                {
+                  "value": "gt",
+                  "label": "> 大于"
+                },
+                {
+                  "value": "gte",
+                  "label": "≥ 大于等于"
+                },
+                {
+                  "value": "between",
+                  "label": "区间内 [a,b]"
+                },
+                {
+                  "value": "outside",
+                  "label": "区间外"
+                },
+                {
+                  "value": "eq",
+                  "label": "= 等于"
+                },
+                {
+                  "value": "neq",
+                  "label": "≠ 不等于"
+                }
+              ]
+            },
+            {
+              "key": "value",
+              "label": "阈值",
+              "type": "number",
+              "default": 0
+            },
+            {
+              "key": "value2",
+              "label": "阈值上界",
+              "type": "number",
+              "when": {
+                "key": "op",
+                "in": [
+                  "between",
+                  "outside"
+                ]
+              }
+            },
+            {
+              "key": "level",
+              "label": "严重度",
+              "type": "enum",
+              "default": "warning",
+              "options": [
+                {
+                  "value": "normal",
+                  "label": "正常（绿）"
+                },
+                {
+                  "value": "info",
+                  "label": "提示（蓝）"
+                },
+                {
+                  "value": "warning",
+                  "label": "警告（黄）"
+                },
+                {
+                  "value": "danger",
+                  "label": "危险（红）"
+                }
+              ]
+            },
+            {
+              "key": "color",
+              "label": "颜色",
+              "type": "color",
+              "default": "",
+              "help": "留空跟随严重度语义色；水温梯度、能源类型这类非严重度的配色填这里。"
+            },
+            {
+              "key": "label",
+              "label": "文案",
+              "type": "string",
+              "default": ""
+            },
+            {
+              "key": "blink",
+              "label": "闪烁",
+              "type": "boolean",
+              "default": false
+            }
+          ],
+          "item_label_key": "label"
+        },
+        {
+          "key": "statusDot",
+          "label": "状态点",
+          "type": "enum",
+          "default": "none",
+          "options": [
+            {
+              "value": "none",
+              "label": "不画"
+            },
+            {
+              "value": "auto",
+              "label": "命中规则时"
+            }
+          ],
+          "group": "告警",
+          "help": "⚠ 只在命中规则时画点：没有判据就连「正常」都不该说。",
+          "span": "half"
+        }
+      ],
+      "bindings": [
+        {
+          "key": "cardValues",
+          "label": "卡片读数",
+          "data_type": "number",
+          "is_array": true,
+          "is_entity_pinned": true,
+          "array_fields": [
+            {
+              "key": "value",
+              "label": "主读数",
+              "data_type": "number"
+            },
+            {
+              "key": "aux",
+              "label": "对比值（上期 / 目标）",
+              "data_type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "type": "info-list",
       "display_name": "信息列表",
       "category": "数据",
