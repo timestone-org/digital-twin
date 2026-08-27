@@ -1,8 +1,7 @@
-# 机密扫描配置。默认规则集全开，这里只加一条**窄**豁免。
+# 机密扫描配置。默认规则集全开，这里只加**窄**豁免。
 #
-# ⚠ 豁免只针对 `generic-api-key` 这一条**启发式**规则，且只在测试目录下：
-# 它是按「像密钥的字符串」猜的，测试夹具里的假口令（`Admin123456`、
-# `EXPIRED_TOKEN`）必然命中。所有**具体**规则——私钥、AWS/GitHub/Slack 令牌、
+# ⚠ 两条豁免都只针对 `generic-api-key` 这一条**启发式**规则——它是按
+# 「像密钥的字符串」猜的。所有**具体**规则——私钥、AWS/GitHub/Slack 令牌、
 # 连接串——在全仓包括测试目录里一律照常拦截，所以「真凭据被写进测试」
 # 这件 testing-standard-python.md §7.4 真正要防的事仍然拦得住。
 
@@ -14,9 +13,25 @@ useDefault = true
 [[rules]]
 id = "generic-api-key"
 
-[rules.allowlist]
+# 一、测试夹具里的假口令（`Admin123456`、`EXPIRED_TOKEN`）必然命中启发式。
+[[rules.allowlists]]
 description = "测试夹具里的假凭据不是密钥"
 paths = [
   '''(^|/)tests/''',
   '''\.(test|spec|contract\.spec)\.[cm]?tsx?$''',
 ]
+
+# 二、TypeScript 的**类型标注**不是取值。启发式看的是「名字里带
+# key/token/secret 且冒号后跟一串长字符」，而 TS 里 `paletteKey: Twin2dPaletteKey`
+# 这种成员声明天生就长这样。判据卡到三条同时成立（`condition = "AND"`）：
+# 文件是 .ts/.tsx/.vue、整行**只有**「字段名: 类型名」、右侧是不带引号的大驼峰标识符。
+# 真凭据在 TS 源码里只能写成带引号的字面量（`apiKey: 'sk-…'`），引号一出现
+# 就落不进这条；而 .env/.yaml 里那种裸值形状被 paths 挡在外面。剩下的唯一缝是
+# 「.ts 里写不带引号的裸值」，那不是合法 TS，vue-tsc 那道闸先红。
+# 两条判据各自都是必要的（去掉任一条，`presets/{edges,sensors}.ts` 的误报立刻回来）。
+[[rules.allowlists]]
+description = "TS 类型标注：冒号右侧是裸类型名，不是字符串字面量"
+condition = "AND"
+regexTarget = "line"
+paths = ['''\.(ts|tsx|vue)$''']
+regexes = ['''^\s*[A-Za-z_$][\w$]*\??:\s*[A-Z][A-Za-z0-9]*(?:\[\])?,?\s*$''']
