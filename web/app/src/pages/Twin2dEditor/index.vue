@@ -23,6 +23,7 @@ import { AppShell } from '@/components/layout'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 
 import EditorStage from './components/EditorStage.vue'
+import Twin2dInspector from './components/Twin2dInspector.vue'
 import Twin2dToolbar from './components/Twin2dToolbar.vue'
 import { createTwin2dSelection } from './scripts/editorSelection'
 import { useTwin2dEditorPage } from './scripts/useTwin2dEditorPage'
@@ -92,12 +93,29 @@ const targetSummary = computed(() => {
 })
 
 /**
- * 画布上一手势改出来的整份配置落一步撤销。
- * ⚠ 只有这一个入口写文档：绕开它写的那一笔不会重派绑定，而界面上一切照旧。
+ * 一手势、一次点选改出来的整份配置落一步撤销。
+ * ⚠ 写配置只有这一支与 `commitMerged`：绕开文档态写的那一笔不会重派绑定，
+ * 而界面上一切照旧。
  * @param next 整份新配置
  */
 function commit(next: Twin2dConfig): void {
   page.doc.value?.commit(next)
+}
+
+/**
+ * 连续输入的一帧：同 `key` 的连着并成一帧撤销。
+ * ⚠ 文本框逐键各落一帧的话，敲一个显示名就往撤销栈里塞进十几格，撤销键从此
+ * 按不回上一步。
+ * @param next 整份新配置
+ * @param key 这一段连续输入的标识
+ */
+function commitMerged(next: Twin2dConfig, key: string): void {
+  page.doc.value?.commitMerged(next, key)
+}
+
+/** 一段连续输入到此为止；下一次输入重新开一帧。 */
+function endMerge(): void {
+  page.doc.value?.endMerge()
 }
 
 // ⚠ 撤销、重做与删除之后选中里会留下已经不存在的 id：不摘的表现是右栏画着一个
@@ -231,11 +249,21 @@ onBeforeUnmount(page.dispose)
           </div>
 
           <aside
-            class="w-80 shrink-0 overflow-y-auto border-l border-border-subtle p-2 text-2xs text-text-secondary"
+            class="flex w-80 shrink-0 flex-col gap-2 overflow-y-auto border-l border-border-subtle p-2 text-2xs text-text-secondary"
             aria-label="检查器"
             data-test="inspector"
           >
-            {{ targetSummary }}
+            <p class="text-text-disabled" data-test="inspector-target">
+              {{ targetSummary }}
+            </p>
+            <Twin2dInspector
+              v-if="config !== null"
+              :config="config"
+              :selection="selection.inspect.value"
+              @change="commit"
+              @merge="commitMerged"
+              @end-merge="endMerge"
+            />
           </aside>
         </div>
       </template>

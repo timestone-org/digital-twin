@@ -384,6 +384,86 @@ describe('画布装配', () => {
   })
 })
 
+/** 右栏当前画的是哪一段。 */
+function inspectorKind(wrapper: ReturnType<typeof mountPage>): string {
+  const host = wrapper.find(
+    '[data-test="inspector"] [data-test="twin2d-inspector"]',
+  )
+  return host.attributes('data-kind') ?? ''
+}
+
+/**
+ * 选中那个节点，等右栏换过去。
+ * @param wrapper 挂好的这一页
+ */
+async function pickTheNode(
+  wrapper: ReturnType<typeof mountPage>,
+): Promise<void> {
+  selectionOf(wrapper).select('nodes', 'a')
+  await nextTick()
+  await wrapper.vm.$nextTick()
+}
+
+/** 文档里那个节点当前的显示名。 */
+function labelNow(): string {
+  return controls.doc.value?.config.value.nodes[0]?.label ?? ''
+}
+
+describe('检查器装配', () => {
+  it('没选中时右栏是画布检查器', () => {
+    const wrapper = mountPage()
+
+    expect(inspectorKind(wrapper)).toBe('canvas')
+  })
+
+  it('选中一个节点，右栏换成节点检查器', async () => {
+    const wrapper = mountPage()
+
+    await pickTheNode(wrapper)
+
+    expect(inspectorKind(wrapper)).toBe('node')
+    expect(wrapper.find('input[data-test="node-label"]').exists()).toBe(true)
+  })
+
+  it('检查器上抛的一次性改动落一步撤销', async () => {
+    const wrapper = mountPage()
+
+    await wrapper.find('[data-test="canvas-show-grid"]').trigger('click')
+
+    expect(controls.doc.value?.config.value.canvas.showGrid).toBe(true)
+    expect(controls.doc.value?.canUndo.value).toBe(true)
+  })
+
+  // ⚠ 每敲一个字母塞一帧进撤销栈，撤销键就等于废了：按二十下才退得回一个词
+  it('显示名连敲五个字母，撤销栈只多一格', async () => {
+    const wrapper = mountPage()
+    await pickTheNode(wrapper)
+    const box = wrapper.find('input[data-test="node-label"]')
+
+    for (const text of ['电', '电阻', '电阻 ', '电阻 R', '电阻 R1']) {
+      await box.setValue(text)
+    }
+
+    expect(labelNow()).toBe('电阻 R1')
+    controls.doc.value?.undo()
+    expect(labelNow()).toBe('')
+    expect(controls.doc.value?.canUndo.value).toBe(false)
+  })
+
+  it('焦点离开输入框就断段，再敲另起一帧', async () => {
+    const wrapper = mountPage()
+    await pickTheNode(wrapper)
+    const box = wrapper.find('input[data-test="node-label"]')
+
+    await box.setValue('电')
+    await box.trigger('focusout')
+    await box.setValue('电阻')
+
+    controls.doc.value?.undo()
+    expect(labelNow()).toBe('电')
+  })
+})
+
 describe('诊断', () => {
   it('顶栏上写着问题条数', () => {
     const wrapper = mountPage()
