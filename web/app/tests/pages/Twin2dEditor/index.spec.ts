@@ -6,6 +6,8 @@
  * `useUnsavedGuard`。这一页的改动只在内存里，漏一道就是「改了半天，一走全没」。
  * ⚠ 取数与落库的行为归 `useTwin2dEditorPage.test.ts`；这里换成一份手搓的页面状态，
  * 为的是把「脏着」「冲突」「出错」这几种界面分支逐个摆出来。
+ * ⚠ 画布层自己那些行为归 `EditorStage.test.ts`；这里只看两处接线：改动落不落进撤销栈、
+ * 实体没了之后选中里还留不留着它。
  */
 import type { DashboardNodePayload, DashboardPayload } from '@dt/contracts'
 import { normalizeTwin2dConfig } from '@dt/twin2d'
@@ -54,7 +56,9 @@ vi.mock('@/pages/Twin2dEditor/scripts/useTwin2dEditorPage', () => ({
   useTwin2dEditorPage: () => stub.page,
 }))
 
+import EditorStage from '@/pages/Twin2dEditor/components/EditorStage.vue'
 import Twin2dEditor from '@/pages/Twin2dEditor/index.vue'
+import type { Twin2dEditorSelection } from '@/pages/Twin2dEditor/scripts/editorSelection'
 import { createTwin2dDoc } from '@/pages/Twin2dEditor/scripts/twin2dDoc'
 import type { Twin2dDoc } from '@/pages/Twin2dEditor/scripts/twin2dDoc'
 import type { Twin2dEditorPage } from '@/pages/Twin2dEditor/scripts/useTwin2dEditorPage'
@@ -153,6 +157,22 @@ function mountPage() {
   })
   mounted.push(wrapper)
   return wrapper
+}
+
+/**
+ * 取画布层拿到的那一份选中态。
+ * ⚠ 过一手 `unknown` 再收：typescript-eslint 解析不出 `.vue` 的模块，props 在它眼里
+ * 是「解析不出的类型」，真正的类型检查由 `vue-tsc` 做（同 EditorCanvas.test.ts 那条）。
+ * @param wrapper 挂好的这一页
+ */
+function selectionOf(
+  wrapper: ReturnType<typeof mountPage>,
+): Twin2dEditorSelection {
+  const given: unknown = wrapper.findComponent(EditorStage).props('selection')
+  if (given === null || typeof given !== 'object') {
+    throw new Error('画布层没拿到选中态')
+  }
+  return given as Twin2dEditorSelection
 }
 
 /** 改一笔配置，让文档脏起来。 */
@@ -325,6 +345,42 @@ describe('顶栏动作', () => {
     expect(
       wrapper.find('[data-test="canvas"]').attributes('data-fit-request'),
     ).toBe('1')
+  })
+})
+
+describe('画布装配', () => {
+  it('画布那一栏里装着画布层', () => {
+    const wrapper = mountPage()
+
+    expect(
+      wrapper.find('[data-test="canvas"] [data-test="canvas-host"]').exists(),
+    ).toBe(true)
+  })
+
+  it('画布上抛的整份配置落一步撤销', async () => {
+    const wrapper = mountPage()
+
+    wrapper
+      .findComponent(EditorStage)
+      .vm.$emit('change', normalizeTwin2dConfig({ canvas: { width: 640 } }))
+    await nextTick()
+
+    expect(controls.doc.value?.config.value.canvas.width).toBe(640)
+    expect(controls.doc.value?.canUndo.value).toBe(true)
+  })
+
+  // ⚠ 不摘的表现是右栏画着一个已经不存在的东西，改哪一项都写不回去且不报错
+  it('实体没了之后选中里不再留着它', async () => {
+    const wrapper = mountPage()
+    const selection = selectionOf(wrapper)
+    selection.select('nodes', 'a')
+
+    wrapper
+      .findComponent(EditorStage)
+      .vm.$emit('change', normalizeTwin2dConfig({ canvas: { width: 640 } }))
+    await nextTick()
+
+    expect(selection.pick.value).toBeNull()
   })
 })
 

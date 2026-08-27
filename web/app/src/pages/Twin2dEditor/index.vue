@@ -13,16 +13,20 @@ import {
   collectTwin2dIssues,
   twin2dStyleResolver,
 } from '@dt/twin2d'
+import type { Twin2dConfig } from '@dt/twin2d'
 import { DtButton, DtNotice, DtPageState, useConfirm, useToast } from '@dt/ui'
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute } from 'vue-router'
 
 import { installDashboardModules } from '@/bootstrap/dashboard'
 import { AppShell } from '@/components/layout'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 
+import EditorStage from './components/EditorStage.vue'
 import Twin2dToolbar from './components/Twin2dToolbar.vue'
+import { createTwin2dSelection } from './scripts/editorSelection'
 import { useTwin2dEditorPage } from './scripts/useTwin2dEditorPage'
+import type { Twin2dEntityKind } from './scripts/types'
 
 // ⚠ 子编辑器也要装：直接刷新到这条路由时大屏那三页一个都没跑过，
 // 不装的话素材地址与内置图标解析恒回空串，画面上是一张只剩底色的图
@@ -39,6 +43,9 @@ const page = useTwin2dEditorPage(
   () => dashboardId.value,
   () => nodeId.value,
 )
+
+/** 画布这一条选中轴；大纲与检查器随后接同一份。 */
+const selection = createTwin2dSelection()
 
 const showIssues = ref(false)
 /** 画布层按这个信号取一次景；「适应」每按一次加一。 */
@@ -82,6 +89,25 @@ const canvasSummary = computed(() => {
 const targetSummary = computed(() => {
   const size = page.targetSize.value
   return size === undefined ? '' : `大屏上占位 ${size.width} × ${size.height}`
+})
+
+/**
+ * 画布上一手势改出来的整份配置落一步撤销。
+ * ⚠ 只有这一个入口写文档：绕开它写的那一笔不会重派绑定，而界面上一切照旧。
+ * @param next 整份新配置
+ */
+function commit(next: Twin2dConfig): void {
+  page.doc.value?.commit(next)
+}
+
+// ⚠ 撤销、重做与删除之后选中里会留下已经不存在的 id：不摘的表现是右栏画着一个
+// 已经不存在的东西，改哪一项都写不回去且不报错
+watch(config, (next) => {
+  if (next === null) return
+  selection.prune((kind: Twin2dEntityKind, id: string) => {
+    const rows: readonly { id: string }[] = next[kind]
+    return rows.some((row) => row.id === id)
+  })
 })
 
 /** 返回大屏编辑器；外壳的返回入口按站内路径走。 */
@@ -175,12 +201,24 @@ onBeforeUnmount(page.dispose)
 
           <div class="flex min-w-0 flex-1 flex-col">
             <section
-              class="relative flex min-h-0 flex-1 items-center justify-center text-2xs text-text-disabled"
+              class="relative min-h-0 flex-1"
               aria-label="画布"
               data-test="canvas"
               :data-fit-request="fitRequest"
             >
-              {{ canvasSummary }}
+              <EditorStage
+                v-if="config !== null"
+                :config="config"
+                :selection="selection"
+                :fit-request="fitRequest"
+                @change="commit"
+              />
+              <p
+                class="pointer-events-none absolute bottom-1 right-2 text-2xs text-text-disabled"
+                data-test="canvas-readout"
+              >
+                {{ canvasSummary }}
+              </p>
             </section>
             <ul
               v-if="showIssues"
