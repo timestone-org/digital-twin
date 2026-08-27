@@ -1,6 +1,6 @@
 /**
- * @fileoverview 守页脚清单的声明：钉在页脚区域、是容器、不取数，以及缺省的标题条
- * 开关与 `resolveContentInset` 留出的内缩同源——两边不一致时子节点会整体错位。
+ * @fileoverview 守页脚清单的声明：钉在页脚区域、是容器、不取数、壳里没有标题条，
+ * 以及每个观感旋钮只描述一件事——同一条边配两个旋钮时两边一定会漂。
  */
 import { describe, expect, it, vi } from 'vitest'
 
@@ -9,6 +9,7 @@ import { configDefaults } from '../../../src/shared/config'
 import {
   CONTAINER_CONFIG_KEY,
   SHOW_TITLE_CONFIG_KEY,
+  hasTitleBar,
   resolveContentInset,
 } from '../../../src/shared/container'
 
@@ -47,11 +48,13 @@ describe('页脚清单的声明', () => {
 })
 
 describe('页脚清单与容器几何的对齐', () => {
-  it('缺省不开标题条，内容区因此只内缩一个内边距', () => {
+  // 标题是拖进来的文字块子节点；壳里再给一份就有两个答案，也会与它抢位置
+  it('没有标题条这一档，内容区因此只内缩一个内边距', () => {
     const defaults = configDefaults(manifest.configSchema)
 
-    expect(defaults[SHOW_TITLE_CONFIG_KEY]).toBe(false)
-    expect(resolveContentInset(defaults).top).toBe(8)
+    expect(defaults[SHOW_TITLE_CONFIG_KEY]).toBeUndefined()
+    expect(hasTitleBar(manifest)).toBe(false)
+    expect(resolveContentInset(defaults, manifest).top).toBe(8)
   })
 
   it('内部布局的缺省是整块写死的，不从子字段拼', () => {
@@ -62,13 +65,6 @@ describe('页脚清单与容器几何的对齐', () => {
     const pad = field(CONTAINER_CONFIG_KEY)?.fields?.[0]
 
     expect(pad).toMatchObject({ key: 'pad', min: 0, max: 64, default: 8 })
-  })
-
-  it('标题文本只在标题条开着时才出现在属性面板里', () => {
-    expect(field('title')?.when).toEqual({
-      key: SHOW_TITLE_CONFIG_KEY,
-      in: [true],
-    })
   })
 })
 
@@ -88,20 +84,21 @@ describe('页脚清单的设计态预览', () => {
       ...(manifest.preview?.config ?? {}),
     }
 
-    expect(resolveContentInset(dragged).top).toBe(8)
+    expect(resolveContentInset(dragged, manifest).top).toBe(8)
   })
 })
 
 describe('页脚可配观感的声明', () => {
-  it('分隔线与扫光缺省开着，兜底就是页脚现值', () => {
-    expect(field('showDivider')?.default).toBe(true)
+  // ⚠ 显隐开关 + 取值旋钮描述同一条边时两边必然会漂：取值的 0 就是「没有」
+  it('分隔线与扫光各只有一个旋钮，没有另一半的显隐开关', () => {
+    expect(field('showDivider')).toBeUndefined()
+    expect(field('showSweep')).toBeUndefined()
     expect(field('dividerWidth')).toMatchObject({
       default: 1,
       min: 0,
       max: 8,
       step: 1,
     })
-    expect(field('showSweep')?.default).toBe(true)
     expect(field('sweepOpacity')).toMatchObject({
       default: 0.6,
       min: 0,
@@ -110,34 +107,31 @@ describe('页脚可配观感的声明', () => {
     })
   })
 
-  it('标题缺省居中，三档都摆进了面板', () => {
-    expect(field('titleAlign')?.default).toBe('center')
-    expect(field('titleAlign')?.options?.map((item) => item.value)).toEqual([
-      'left',
-      'center',
-      'right',
-    ])
-  })
-
   it('点阵缺省是关的——页脚一直没有底纹，存量不能凭空多一层', () => {
     expect(field('showDotGrid')?.default).toBe(false)
   })
 
-  it('背景图缺省留空，不注入就不影响纯色背景', () => {
-    expect(field('backgroundImage')?.default).toBe('')
+  it('背景底图走素材库那一档，缺省留空', () => {
+    expect(field('backgroundImage')).toMatchObject({
+      type: 'image',
+      default: '',
+    })
   })
 })
 
 describe('页脚壳不消费的 chrome 键', () => {
-  // ⚠ 标题条自绘且开关走自己的「显示标题条」配置：chrome 的标题键在壳里没有
-  //   消费点，声明漏一个 = 面板上多一个「配了没反应」的控件
-  it('逐键声明：整套标题条 + showTitle，字体与字色照常消费', () => {
+  // ⚠ 壳里没有标题条：整套标题键都没有消费点，漏登记一个 = 面板上多一个
+  //   「配了没反应」的控件
+  it('逐键声明：整套标题键，字体与正文排版照常消费', () => {
     expect(manifest.unsupportedChromeKeys).toEqual([
       'showTitle',
+      'titleColor',
       'titleAlign',
       'titlePadding',
       'titleGap',
+      'titleFontSize',
       'titleFontWeight',
+      'titleLetterSpacing',
       'titleBarWidth',
       'titleBarFull',
       'titleBarRadius',

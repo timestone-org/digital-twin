@@ -5,6 +5,9 @@
  */
 import type { ModuleManifest } from '@dt/contracts'
 
+/** 钉位模块被钉住的那条边；不钉位为 null。可拖的永远是它的对边。 */
+export type PinnedEdge = 'top' | 'bottom' | null
+
 /** 库里的一组。 */
 export interface ModuleGroup {
   category: string
@@ -69,13 +72,24 @@ export function acceptsChildren(manifest: ModuleManifest | undefined): boolean {
 }
 
 /**
+ * 钉位模块钉住的是哪条边：页头钉顶、页脚钉底，不钉位为 null。
+ * ⚠ 取值只从**契约里的区域枚举**推，编辑器仍然不认识任何模块类型；
+ * 而「钉住哪条边」必须有唯一一处答案——分散在各处按坐标猜的话，
+ * 手柄给的那条边与真正被钉住的那条边迟早对不上（本仓出过一次，页头拖的是上沿）。
+ * @param manifest 模块清单
+ */
+export function pinnedEdgeOf(manifest: ModuleManifest | undefined): PinnedEdge {
+  const region = manifest?.region
+  if (region === undefined) return null
+  return region === 'footer' ? 'bottom' : 'top'
+}
+
+/**
  * 这个模块是不是钉位模块（页头 / 页脚这类）：同样只读声明。
- * ⚠ 只判断「有没有声明」，不判断声明的是哪一个区域——一比具体取值，
- * 编辑器就又认识某个具体模块了。
  * @param manifest 模块清单
  */
 export function isPinnedRegion(manifest: ModuleManifest | undefined): boolean {
-  return manifest?.region !== undefined
+  return pinnedEdgeOf(manifest) !== null
 }
 
 /**

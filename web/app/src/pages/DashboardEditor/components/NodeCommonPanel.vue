@@ -69,7 +69,7 @@ const ORDER_ACTIONS: readonly OrderAction[] = [
   { key: 'center', label: '定位', hint: '定位到此节点' },
 ]
 
-/** 钉位节点（页头 / 页脚）横向锁死，只许改高。 */
+/** 钉位节点（页头 / 页脚）横向锁死，只许改高；钉住的那条边由动作层重新算回去。 */
 const region = computed(() => props.manifest?.region)
 
 /** 层序位置：`index` 是 0 起的底层序，面板上按「第几层 / 共几层」读。 */
@@ -118,7 +118,7 @@ const geometry = computed<NodeGeometry>(() => ({
   h: props.node.h,
 }))
 
-/** 钉位节点的 x / y / 宽由排版算，改了也会被夹回去，索性锁上。 */
+/** 钉位节点的 x / 宽由排版算、y 由钉边与高度算出来，改了都会被夹回去，索性锁上。 */
 function isGeometryLocked(key: keyof NodeGeometry): boolean {
   return region.value !== undefined && key !== 'h'
 }
@@ -204,7 +204,9 @@ function writeCardStyle(next: CardChrome): void {
       <p v-if="region" class="dt-common__meta">
         {{ region === 'header' ? '页头' : '页脚' }}钉在{{
           region === 'header' ? '顶部' : '底部'
-        }}、始终整宽，只有高度可改。
+        }}、始终整宽，只有高度可改——改高就是拖{{
+          region === 'header' ? '下' : '上'
+        }}沿。
       </p>
       <div class="flex items-center gap-1">
         <span class="dt-common__meta">层序</span>

@@ -257,7 +257,8 @@ describe('组级禁用判定', () => {
     ).toContain('显示标题')
   })
 
-  // 容器 / 页头的标题条走各自配置，chrome 的 showTitle 对它们落不到任何地方
+  // 容器的标题条走它自己的配置，页头页脚壳里干脆没有条——chrome 的 showTitle
+  // 对这几个都落不到任何地方
   it('showTitle 自己在不消费清单里时标题条组不受它锁', () => {
     expect(
       cardGroupDisabledReason(

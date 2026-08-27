@@ -69,6 +69,7 @@ function childOrigin(
   }
   const inset = resolveContentInset(
     resolveModuleConfig(manifest, node.configJson),
+    manifest,
   )
   return { left: frame.left + inset.left, top: frame.top + inset.top }
 }
@@ -84,7 +85,10 @@ function childBounds(
   }
   return containerGeometry(
     rect,
-    resolveContentInset(resolveModuleConfig(manifest, node.configJson)),
+    resolveContentInset(
+      resolveModuleConfig(manifest, node.configJson),
+      manifest,
+    ),
   )
 }
 

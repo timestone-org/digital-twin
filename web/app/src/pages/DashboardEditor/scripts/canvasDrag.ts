@@ -10,6 +10,7 @@ import type { DesignSize, ModuleRect, NodeBox } from '@dt/runtime'
 
 import { clampRect } from '@/features/dashboard/canvasAlign'
 import type { NodeGeometry } from '@/features/dashboard/editorDoc'
+import type { PinnedEdge } from '@/features/dashboard/moduleLibrary'
 import {
   applyResize,
   collectGuides,
@@ -41,8 +42,11 @@ export interface DragItem {
   layer: DesignSize
   minW: number
   minH: number
-  /** 钉位节点：不许移动、不许换父，宽与 x 被钉住。 */
-  isPinned: boolean
+  /**
+   * 被钉住的那条边：不许移动、不许换父，横向铺满，只有对边跟着指针走。
+   * 不钉位为 null。
+   */
+  pinnedEdge: PinnedEdge
 }
 
 /** 换父的落点：目标层的原点（绝对）与边界；`parentId` 为 null 即顶层。 */
@@ -309,9 +313,20 @@ function resizeDrag(session: DragSession, input: DragInput): DragResult {
   }
 }
 
-/** 钉位节点横向被钉死：x 恒 0、宽恒本层宽，只有高能改。 */
+/**
+ * 钉位节点横向铺满、纵向只留一条边能动：钉顶的 y 恒 0，钉底的下沿恒贴本层底边。
+ * ⚠ 高度改了 y 必须跟着算：只写 h 的话页脚被拉高时是向下长的，下沿掉出画布，
+ * 而画布上只看得见「页脚变矮了一截」。
+ */
 function pinnedBox(anchor: DragItem, rect: NodeBox): NodeBox {
-  return anchor.isPinned ? { ...rect, x: 0, w: anchor.layer.width } : rect
+  if (anchor.pinnedEdge === null) return rect
+  const h = Math.min(rect.h, anchor.layer.height)
+  return {
+    x: 0,
+    y: anchor.pinnedEdge === 'top' ? 0 : Math.max(0, anchor.layer.height - h),
+    w: anchor.layer.width,
+    h,
+  }
 }
 
 /**
@@ -519,7 +534,7 @@ function dropOf(
   event: PointerEvent,
 ): DropTarget | null {
   if (current.kind !== 'move' || current.items.length !== 1) return null
-  if (current.anchor.isPinned) return null
+  if (current.anchor.pinnedEdge !== null) return null
   const target = runtime.options.dropTargetAt(event, current.excluded)
   if (target === null || target.parentId === current.anchor.parentId) {
     return null

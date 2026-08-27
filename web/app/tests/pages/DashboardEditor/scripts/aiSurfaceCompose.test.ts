@@ -48,7 +48,17 @@ const BARE: ModuleManifest = {
   chromeConfigurable: false,
 }
 
-const MANIFESTS = [DEMO, BOX, BARE]
+/** 钉位模块：x / y / 宽由钉边算出来，模型只能改高。 */
+const FOOT: ModuleManifest = {
+  ...DEMO,
+  type: 'foot',
+  displayName: '页脚',
+  isContainer: true,
+  region: 'footer',
+  defaultSize: { width: 1920, height: 72 },
+}
+
+const MANIFESTS = [DEMO, BOX, BARE, FOOT]
 
 function node(id: string, x: number): DashboardNodePayload {
   return {
@@ -197,6 +207,34 @@ describe('改几何', () => {
     )
     const target = editor.nodes.value.find((one) => one.id === 'a')
     expect(target).toMatchObject({ x: 300, y: 20, w: 240, h: 50 })
+  })
+
+  // ⚠ 回执照抄入参的话，模型手里那份坐标与画布上的不是一回事，接着它会对着一个
+  //   并不存在的位置继续算下一步
+  it('钉位模块的回执报的是落库后的几何，不是入参', async () => {
+    const { editor, surface } = setup()
+    const added = (await surface.run(
+      call('dashboard.add_module', { module_type: 'foot' }),
+    )) as Record<string, unknown>
+    const nodeId = String(added.node_id)
+
+    const got = (await surface.run(
+      call('dashboard.set_geometry', {
+        node_id: nodeId,
+        x: 300,
+        y: 90,
+        h: 120,
+      }),
+    )) as Record<string, unknown>
+
+    // 下沿贴着 1080：y 由钉边与高算出来，x 与宽被铺满
+    expect(got).toMatchObject({ x: 0, y: 960, w: 1920, h: 120 })
+    expect(editor.nodes.value.find((one) => one.id === nodeId)).toMatchObject({
+      x: 0,
+      y: 960,
+      w: 1920,
+      h: 120,
+    })
   })
 
   it('带小数的几何当场抛', async () => {

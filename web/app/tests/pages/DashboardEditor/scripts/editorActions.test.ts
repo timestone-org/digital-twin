@@ -473,8 +473,17 @@ describe('钉位与落点', () => {
     region: 'header',
     bindings: [],
   }
-  const resolve = (moduleType: string): ModuleManifest | undefined =>
-    moduleType === PINNED.type ? PINNED : getManifest(moduleType)
+  const FOOT: ModuleManifest = {
+    ...LEAF,
+    type: 'demo-footer',
+    region: 'footer',
+    bindings: [],
+  }
+  const resolve = (moduleType: string): ModuleManifest | undefined => {
+    if (moduleType === PINNED.type) return PINNED
+    if (moduleType === FOOT.type) return FOOT
+    return getManifest(moduleType)
+  }
 
   function setupPinned(nodes: DashboardNodePayload[] = []) {
     const editor = useDashboardEditor(resolve)
@@ -507,6 +516,51 @@ describe('钉位与落点', () => {
 
     expect(actions.addModule(PINNED)).toBe(false)
     expect(editor.nodes.value).toHaveLength(1)
+  })
+
+  it('页脚落在底边上', () => {
+    const { editor, actions } = setupPinned()
+
+    expect(actions.addModule(FOOT)).toBe(true)
+
+    expect(editor.nodes.value[0]).toMatchObject({
+      x: 0,
+      y: 1020,
+      w: 1920,
+      h: 60,
+    })
+  })
+
+  // 面板里只有「高」能改，y 得跟着算——只写 h 的话页脚是向下长的，下沿掉出画布
+  it('改高时钉住的那条边不动：页头压着顶、页脚贴着底', () => {
+    const { editor, actions } = setupPinned([
+      node('h', { moduleType: 'demo-header', x: 0, y: 0, w: 1920, h: 100 }),
+      node('f', { moduleType: 'demo-footer', x: 0, y: 1020, w: 1920, h: 60 }),
+    ])
+
+    actions.changeGeometry('h', { x: 0, y: 0, w: 1920, h: 160 }, false, 'h')
+    actions.changeGeometry('f', { x: 0, y: 1020, w: 1920, h: 200 }, false, 'h')
+
+    const byId = (id: string) =>
+      editor.nodes.value.find((item) => item.id === id)
+    expect(byId('h')).toMatchObject({ y: 0, h: 160 })
+    expect(byId('f')).toMatchObject({ y: 880, h: 200 })
+  })
+
+  // 面板锁着这几格，助手的 set_geometry 却给得进来
+  it('钉位节点的 x / y / 宽给了也不作数', () => {
+    const { editor, actions } = setupPinned([
+      node('h', { moduleType: 'demo-header', x: 0, y: 0, w: 1920, h: 100 }),
+    ])
+
+    actions.changeGeometry('h', { x: 300, y: 400, w: 600, h: 100 }, false)
+
+    expect(editor.nodes.value[0]).toMatchObject({
+      x: 0,
+      y: 0,
+      w: 1920,
+      h: 100,
+    })
   })
 
   it('落点添加落在指定位置与指定父层', () => {

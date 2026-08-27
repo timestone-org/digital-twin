@@ -6,11 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { ref } from 'vue'
-import {
-  __resetConfigControls,
-  __resetModules,
-  SHOW_TITLE_CONFIG_KEY,
-} from '@dt/modules'
+import { __resetConfigControls, __resetModules } from '@dt/modules'
 import { __resetProviders, listProviders } from '@dt/datasources'
 import type { DashboardNodeView, PublicDashboardPayload } from '@dt/contracts'
 
@@ -68,7 +64,7 @@ const HEADER: DashboardNodeView = {
   h: 96,
   zIndex: 0,
   isVisible: true,
-  configJson: { title: '总览大屏', [SHOW_TITLE_CONFIG_KEY]: true },
+  configJson: {},
   bindings: [],
 }
 
@@ -132,7 +128,9 @@ describe('自装配', () => {
     await flushPromises()
 
     // 模块渲染组件是真实的动态 import，微任务冲不平，等它落地
-    await vi.waitFor(() => expect(wrapper.text()).toContain('总览大屏'))
+    await vi.waitFor(() =>
+      expect(wrapper.find('.dt-header').exists()).toBe(true),
+    )
     expect(wrapper.text()).not.toContain('未知')
     wrapper.unmount()
   })
@@ -237,7 +235,7 @@ describe('联动', () => {
       ...HEADER,
       id: 'n-4',
       moduleType: 'header',
-      configJson: { title: '明细面板', [SHOW_TITLE_CONFIG_KEY]: true },
+      configJson: {},
     }
     getPublicDashboard.mockResolvedValue({
       ...payload([clickable, panel]),

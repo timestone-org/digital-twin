@@ -27,7 +27,8 @@ import {
 } from '@/features/dashboard/editorLayout'
 import {
   acceptsChildren,
-  isPinnedRegion,
+  pinnedEdgeOf,
+  type PinnedEdge,
 } from '@/features/dashboard/moduleLibrary'
 import type { DragItem, DragKind, DragSession, DropTarget } from './canvasDrag'
 
@@ -45,7 +46,8 @@ export interface CanvasPlacement {
   layer: DesignSize
   /** 容器的内容区矩形（绝对）；不接子节点的为 null。 */
   content: ModuleRect | null
-  isPinned: boolean
+  /** 被钉住的那条边；不钉位为 null。 */
+  pinnedEdge: PinnedEdge
   minW: number
   minH: number
 }
@@ -97,7 +99,7 @@ function placementOf(
     content: acceptsChildren(manifest)
       ? containerContentRect(frame, node, size, input.getManifest)
       : null,
-    isPinned: isPinnedRegion(manifest),
+    pinnedEdge: pinnedEdgeOf(manifest),
     minW: manifest?.defaultSize.minWidth ?? MIN_SIDE_PX,
     minH: manifest?.defaultSize.minHeight ?? MIN_SIDE_PX,
   }
@@ -113,6 +115,7 @@ function containerContentRect(
   const manifest = getManifest(node.moduleType)
   const inset = resolveContentInset(
     resolveModuleConfig(manifest, node.configJson),
+    manifest,
   )
   return {
     left: frame.left + inset.left,
@@ -134,7 +137,7 @@ export function dragItemOf(placement: CanvasPlacement): DragItem {
     layer: placement.layer,
     minW: placement.minW,
     minH: placement.minH,
-    isPinned: placement.isPinned,
+    pinnedEdge: placement.pinnedEdge,
   }
 }
 
@@ -229,12 +232,12 @@ export function contentRectOf(
   return placements.find((item) => item.node.id === nodeId)?.content ?? null
 }
 
-/** 画布上一格的渲染入参：选中态、钉位方向与层叠顺序。 */
+/** 画布上一格的渲染入参：选中态、钉住的那条边与层叠顺序。 */
 export interface CanvasItem {
   placement: CanvasPlacement
   isSelected: boolean
-  /** 钉位节点只许动一条边：贴顶的给下边、贴底的给上边。 */
-  pinnedEdge: 'top' | 'bottom' | null
+  /** 被钉住的那条边；可拖的是它的对边。不钉位为 null。 */
+  pinnedEdge: PinnedEdge
   zIndex: number
 }
 
@@ -253,12 +256,7 @@ export function renderItems(
       return {
         placement,
         isSelected,
-        // 按位置判定钉在哪边，不认具体的区域名——认了具体取值编辑器就又认识某个模块了
-        pinnedEdge: !placement.isPinned
-          ? null
-          : placement.frame.top <= 0
-            ? 'bottom'
-            : 'top',
+        pinnedEdge: placement.pinnedEdge,
         zIndex:
           placement.frame.depth * 100 +
           placement.node.zIndex +
@@ -324,7 +322,8 @@ function batchItems(
   const items = topMostIds(doc.nodes, doc.selectedIds)
     .map((id) => byId.get(id))
     .filter(
-      (item): item is CanvasPlacement => item !== undefined && !item.isPinned,
+      (item): item is CanvasPlacement =>
+        item !== undefined && item.pinnedEdge === null,
     )
     .map(dragItemOf)
   return items.some((item) => item.nodeId === anchor.nodeId) ? items : [anchor]

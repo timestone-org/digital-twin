@@ -1,8 +1,10 @@
 /**
- * @fileoverview 守容器内容区的几何：缺 `showTitle` 一律按**没有**标题条算。
+ * @fileoverview 守容器内容区的几何：缺 `showTitle` 一律按**没有**标题条算，
+ * 清单里没声明这个开关的模块（页头 / 页脚）连存量配置里遗留的 true 都不认。
  * ⚠ 回落成「有标题条」会凭空留出 28px，把容器里所有子节点整体往下顶，
  * 而配置里根本没有这一项——错位只在子节点位置上看得出来，没有任何报错。
  */
+import type { ConfigField, ModuleManifest } from '@dt/contracts'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -10,9 +12,34 @@ import {
   CONTAINER_PAD_DEFAULT_PX,
   SHOW_TITLE_CONFIG_KEY,
   TITLE_BAR_HEIGHT_PX,
+  hasTitleBar,
   readContainerLayout,
   resolveContentInset,
 } from '../../src/shared/container'
+
+const TITLE_FIELD: ConfigField = {
+  key: SHOW_TITLE_CONFIG_KEY,
+  label: '显示标题条',
+  type: 'boolean',
+  default: false,
+}
+
+function manifest(configSchema: ConfigField[]): ModuleManifest {
+  return {
+    type: 'demo',
+    displayName: '演示',
+    category: '演示',
+    defaultSize: { width: 100, height: 100 },
+    configSchema,
+    bindings: [],
+    component: () => Promise.resolve({ default: {} }),
+  }
+}
+
+/** 有标题条开关的容器。 */
+const BARRED = manifest([TITLE_FIELD])
+/** 页头页脚那一类：壳里没有标题条，清单里也没有那个开关。 */
+const BARLESS = manifest([])
 
 describe('容器内部布局', () => {
   it('内边距原样取回', () => {
@@ -30,9 +57,17 @@ describe('容器内部布局', () => {
   })
 })
 
+describe('标题条的有无由清单说了算', () => {
+  it('清单声明了开关才算有条', () => {
+    expect(hasTitleBar(BARRED)).toBe(true)
+    expect(hasTitleBar(BARLESS)).toBe(false)
+    expect(hasTitleBar(undefined)).toBe(false)
+  })
+})
+
 describe('内容区内缩', () => {
   it('空配置不留标题条的高度', () => {
-    expect(resolveContentInset({})).toEqual({
+    expect(resolveContentInset({}, BARRED)).toEqual({
       top: 8,
       right: 8,
       bottom: 8,
@@ -41,11 +76,15 @@ describe('内容区内缩', () => {
   })
 
   it('显式关掉标题条同样不留高度', () => {
-    expect(resolveContentInset({ [SHOW_TITLE_CONFIG_KEY]: false }).top).toBe(8)
+    expect(
+      resolveContentInset({ [SHOW_TITLE_CONFIG_KEY]: false }, BARRED).top,
+    ).toBe(8)
   })
 
   it('开了标题条才在顶部加出条的高度', () => {
-    expect(resolveContentInset({ [SHOW_TITLE_CONFIG_KEY]: true })).toEqual({
+    expect(
+      resolveContentInset({ [SHOW_TITLE_CONFIG_KEY]: true }, BARRED),
+    ).toEqual({
       top: 8 + TITLE_BAR_HEIGHT_PX,
       right: 8,
       bottom: 8,
@@ -53,13 +92,22 @@ describe('内容区内缩', () => {
     })
   })
 
+  // 页头页脚删掉标题条那一版之后，存量大屏里遗留的 true 会一直留在 config_json 里
+  it('壳里没有标题条的模块，存量配置里遗留的 true 也不占位', () => {
+    expect(
+      resolveContentInset({ [SHOW_TITLE_CONFIG_KEY]: true }, BARLESS).top,
+    ).toBe(8)
+  })
+
   it('四边内缩跟着内边距走', () => {
     expect(
-      resolveContentInset({ [CONTAINER_CONFIG_KEY]: { pad: 20 } }),
+      resolveContentInset({ [CONTAINER_CONFIG_KEY]: { pad: 20 } }, BARRED),
     ).toEqual({ top: 20, right: 20, bottom: 20, left: 20 })
   })
 
   it('标题条开关是字符串时按没开算', () => {
-    expect(resolveContentInset({ [SHOW_TITLE_CONFIG_KEY]: 'true' }).top).toBe(8)
+    expect(
+      resolveContentInset({ [SHOW_TITLE_CONFIG_KEY]: 'true' }, BARRED).top,
+    ).toBe(8)
   })
 })

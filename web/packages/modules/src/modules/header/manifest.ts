@@ -1,7 +1,9 @@
 /**
- * @fileoverview header —— 钉在顶部的整宽容器。它自己只画科技风外壳（背景层、花纹风格、
- * CRT 扫描线、横向扫光、底部辉光分隔线、标题两侧装饰），标题、时钟、logo 都是独立子节点，
- * 由运行时按节点树注入（DASHBOARD_DESIGN §5.4）。
+ * @fileoverview header —— 钉在顶部的整宽容器：上沿钉死，拖下沿改高。
+ * 它自己只画科技风外壳（背景层、花纹风格、CRT 扫描线、横向扫光、底部辉光分隔线、
+ * 中央两侧装饰），**标题、时钟、logo 一律是独立子节点**，由运行时按节点树注入。
+ * ⚠ 壳里没有标题条：大屏标题就是拖一个文字块进来，位置、字号、颜色都归那个节点，
+ * 壳再给一份必然与它抢位置，也让「标题在哪配」有两个答案。
  */
 import type { ConfigField } from '@dt/contracts'
 
@@ -9,7 +11,6 @@ import { defineModule } from '../../registry'
 import {
   CONTAINER_CONFIG_KEY,
   CONTAINER_PAD_DEFAULT_PX,
-  SHOW_TITLE_CONFIG_KEY,
 } from '../../shared/container'
 import { HEADER_DECOS, HEADER_VARIANTS } from './options'
 
@@ -70,7 +71,7 @@ const SCAN_FIELDS: ConfigField[] = [
     type: 'boolean',
     group: '动效',
     default: true,
-    help: '开着时光带盖在花纹与扫描线之上，是「光扫过标题」的手感；关掉则沉到花纹层附近。子节点始终在光带之上。',
+    help: '开着时光带盖在花纹与扫描线之上，是「光扫过页头」的手感；关掉则沉到花纹层附近。子节点始终在光带之上。',
     when: { key: 'scan', in: [true] },
   },
 ]
@@ -84,14 +85,22 @@ export default defineModule({
   chrome: 'bare',
   isContainer: true,
   region: 'header',
-  // 标题条自绘（_shell.scss）：竖条宽/圆角/辉光/颜色与标题排版四件套是通的，
-  // 其余标题键壳里没有对应消费点
+  // 壳里没有标题条，整套标题键都没有消费点。少登记一个 = 面板上多一个
+  // 「配了没反应」的控件
   unsupportedChromeKeys: [
     'showTitle',
+    'titleColor',
     'titleAlign',
     'titlePadding',
     'titleGap',
+    'titleFontSize',
+    'titleFontWeight',
+    'titleLetterSpacing',
+    'titleBarWidth',
     'titleBarFull',
+    'titleBarRadius',
+    'titleBarGlow',
+    'titleBarColor',
     'titleBarColorAlt',
     'titlePulse',
     'titlePulseDuration',
@@ -101,19 +110,16 @@ export default defineModule({
   ],
   defaultSize: { width: 1920, height: 108, minWidth: 240, minHeight: 48 },
   // 出厂就落库的键。⚠ 四角辉光在整宽横条上观感突兀，出厂关掉；属性面板里能再开回来
-  defaultConfig: {
-    __cardStyle: { corners: false },
-    [SHOW_TITLE_CONFIG_KEY]: false,
-  },
+  defaultConfig: { __cardStyle: { corners: false } },
   configPresets: [
     {
       id: 'podium',
       label: '翼台横幅',
-      hint: '翼台轮廓 + 倒角横带底图 + 4 秒横向扫光。下沿由轮廓自己收口，不画分隔线。节点高度与子节点（标题、时钟）仍需自己摆。',
+      hint: '翼台轮廓 + 倒角横带底图 + 4 秒横向扫光。下沿由轮廓自己收口，不画分隔线。节点高度与子节点（文字块、时钟）仍需自己摆。',
       config: {
         variant: 'podium',
         bgImage: 'var(--fx-decor-topbg) center bottom / 100% 100% no-repeat',
-        // 两侧不放装饰条：地点与时钟都是子节点，装饰条会与它们抢位置
+        // 两侧不放装饰条：标题、地点与时钟都是子节点，装饰条会与它们抢位置
         deco: 'none',
         // CRT 扫描线走大屏级的全屏一层，页头这层再来一遍会明显更脏
         scanlines: false,
@@ -122,34 +128,12 @@ export default defineModule({
         scanDuration: 4,
         scanColor: 'var(--card-border)',
         scanAbove: true,
-        [SHOW_TITLE_CONFIG_KEY]: false,
         // 卡片四边框会把翼台轮廓框回一个矩形
         __cardStyle: { borderStyle: 'none' },
       },
     },
   ],
   configSchema: [
-    {
-      key: 'title',
-      label: '标题',
-      type: 'string',
-      group: '标题',
-      default: '',
-      span: 'full',
-      placeholder: '留空则标题条上没有文字',
-      // 标题文本只在标题条里渲染，条关着时填了不会上屏 → 面板同步隐藏，免得「填了没反应」
-      when: { key: SHOW_TITLE_CONFIG_KEY, in: [true] },
-    },
-    {
-      key: SHOW_TITLE_CONFIG_KEY,
-      label: '显示标题条',
-      type: 'boolean',
-      group: '标题',
-      // ⚠ 这个 false 必须显式写着：缺省回落成「有标题条」会给页头留 28px 的条，
-      //   把全部子节点整体往下顶，而配置里根本没有这一项
-      default: false,
-      span: 'half',
-    },
     {
       key: 'variant',
       label: '风格',
@@ -160,11 +144,11 @@ export default defineModule({
     },
     {
       key: 'deco',
-      label: '标题装饰',
+      label: '两侧装饰',
       type: 'enum',
       group: '外观',
       default: 'bars',
-      help: '标题两侧的对称装饰；选「无」即不添加。',
+      help: '沿中线左右对称的一对装饰；选「无」即不添加。',
       options: [...HEADER_DECOS],
     },
     {
@@ -176,7 +160,7 @@ export default defineModule({
       min: 0,
       max: 800,
       step: 10,
-      help: '两侧装饰之间给标题留的空 (px)；0 = 随宽度自适应。子节点较宽或屏幕较窄时调大它避免重叠。',
+      help: '两条装饰之间留出的空 (px)；0 = 随宽度自适应。中间的子节点（标题文字块之类）较宽或屏幕较窄时调大它避免重叠。',
       when: { key: 'deco', in: DECORATED_STYLES },
     },
     {
@@ -186,7 +170,7 @@ export default defineModule({
       group: '外观',
       default: 'var(--accent-primary)',
       span: 'half',
-      help: '花纹、装饰条、底部分隔线与标题辉光都取这个色。',
+      help: '花纹、装饰条与底部分隔线都取这个色。',
     },
     {
       key: 'background',
@@ -198,7 +182,7 @@ export default defineModule({
       placeholder: '留空 = 透明，继承大屏背景',
     },
     {
-      // 底图单独一层：滤镜只染底图，不把标题与子节点文字一起偏色
+      // 底图单独一层：滤镜只染底图，不把子节点的文字一起偏色
       key: 'bgImage',
       label: '背景底图',
       type: 'image',
@@ -284,7 +268,6 @@ export default defineModule({
   // 页头自己不取数：标题、时钟、读数都是子节点，各自绑各自的
   bindings: [],
   // 刻意不给 preview：页头自带花纹与底线，空着也看得见，编一份演示配置只会让画布与
-  // 运行态长得不一样。⚠ 尤其不能铺 showTitle——标题条一开就占掉 28px，而算子节点原点的
-  // 那条路读的是不含演示配置的原始 config，子节点会在画布上被顶下去、保存后又弹回来
+  // 运行态长得不一样
   component: () => import('./Component.vue'),
 })

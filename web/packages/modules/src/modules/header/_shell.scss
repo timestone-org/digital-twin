@@ -1,4 +1,4 @@
-/* 页头外壳自身的样式：容器、底部辉光线、背景层、扫光带、标题条与子节点层。
+/* 页头外壳自身的样式：容器、底部辉光线、背景层、扫光带与子节点层。
  *
  * ⚠ 必须最后一个 @use：风格档（_variants）与花纹（_deco）里有同特异度的规则，
  * 排在它们之前的话这里的取值会被后来者盖掉，而两边看起来都「写了」。
@@ -84,45 +84,10 @@
   pointer-events: none;
 }
 
-// 升到花纹与扫描线之上，得到「光扫过标题」的手感。
+// 升到花纹与扫描线之上，得到「光扫过页头」的手感。
 // ⚠ 仍在子节点之下：子节点是内容，光带是氛围，压住读数就本末倒置了
 .dt-header__scan--above {
   z-index: 3;
-}
-
-.dt-header__bar {
-  display: flex;
-  height: var(--dt-header-bar-height);
-  flex: none;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  border-bottom: 1px solid
-    color-mix(in srgb, var(--dt-header-accent) 28%, transparent);
-}
-
-.dt-header__bar-accent {
-  width: var(--card-title-bar-w, 3px);
-  height: 13px;
-  flex: none;
-  border-radius: var(--card-title-bar-radius, var(--radius-pill));
-  background: var(--card-title-bar, var(--dt-header-accent));
-  box-shadow: 0 0 var(--card-title-bar-glow, 6px)
-    var(--card-title-bar, var(--dt-header-accent));
-}
-
-.dt-header__title {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  color: var(--card-title-color, var(--text-primary));
-  // 画布配了统一字体就跟着走，没配才用标题体
-  font-family: var(--card-font, var(--font-display));
-  font-size: var(--card-title-size, 18px);
-  font-weight: var(--card-title-weight, 600);
-  letter-spacing: var(--card-title-ls, 0.08em);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 // 子节点在这一层里绝对定位；内缩已经由 padding 让出来，运行时不要再算一次。

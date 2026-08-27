@@ -450,8 +450,9 @@ export function cardGroupDisabledReason(
       return '已被「四角辉光」开关关闭'
     }
   }
-  // ⚠ 开关自己被壳声明为不消费时不做联动禁用：容器/页头的标题条走各自的
-  // 「显示标题条」配置，chrome 的 showTitle 对它们本来就落不到任何地方
+  // ⚠ 开关自己被壳声明为不消费时不做联动禁用：容器的标题条走它自己的
+  // 「显示标题条」配置，页头页脚壳里干脆没有条，chrome 的 showTitle 对这几个
+  // 本来就落不到任何地方
   if (
     groupId === 'title' &&
     effective.showTitle === false &&

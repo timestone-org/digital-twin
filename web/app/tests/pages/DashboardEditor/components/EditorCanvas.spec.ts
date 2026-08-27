@@ -34,6 +34,7 @@ const MANIFEST: ModuleManifest = {
 }
 
 const PINNED: ModuleManifest = { ...MANIFEST, type: 'pinned', region: 'header' }
+const FOOTER: ModuleManifest = { ...MANIFEST, type: 'footed', region: 'footer' }
 const CONTAINER: ModuleManifest = {
   ...MANIFEST,
   type: 'box',
@@ -42,6 +43,7 @@ const CONTAINER: ModuleManifest = {
 
 function getManifest(moduleType: string): ModuleManifest {
   if (moduleType === 'pinned') return PINNED
+  if (moduleType === 'footed') return FOOTER
   return moduleType === 'box' ? CONTAINER : MANIFEST
 }
 
@@ -136,13 +138,27 @@ describe('摆节点', () => {
     expect(wrapper.findAll('.dt-node__handle')).toHaveLength(0)
   })
 
-  it('钉位节点只给一个手柄，且只许动高', () => {
+  // 钉住的边与可拖的边是对偶的，两处各写一遍必然对不上——这两条用例就是那道闸
+  it('页头钉顶：只给下沿一个手柄', () => {
     const wrapper = mountCanvas(
       [node('h', { moduleType: 'pinned', x: 0, y: 0, w: 1920, h: 80 })],
       ['h'],
     )
 
-    expect(wrapper.findAll('.dt-node__handle')).toHaveLength(1)
+    const handles = wrapper.findAll('.dt-node__handle')
+    expect(handles).toHaveLength(1)
+    expect(handles[0]?.attributes('data-test')).toBe('handle-s')
+  })
+
+  it('页脚钉底：只给上沿一个手柄', () => {
+    const wrapper = mountCanvas(
+      [node('f', { moduleType: 'footed', x: 0, y: 1000, w: 1920, h: 80 })],
+      ['f'],
+    )
+
+    const handles = wrapper.findAll('.dt-node__handle')
+    expect(handles).toHaveLength(1)
+    expect(handles[0]?.attributes('data-test')).toBe('handle-n')
   })
 
   it('一个节点都没有时出中央引导层，且挂在缩放变换的舞台之外', () => {

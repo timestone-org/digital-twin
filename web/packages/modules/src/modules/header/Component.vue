@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @fileoverview header 的渲染壳：背景底图层、花纹风格、CRT 扫描线、横向扫光带、
- * 底部辉光分隔线、标题两侧装饰，以及可选标题条。
+ * 底部辉光分隔线、中央两侧装饰。壳里**没有标题条**——标题是拖进来的文字块子节点。
  * ⚠ 子节点走**默认插槽**由运行时注入，插槽名写错既不报错也不渲染——
  * 由 tests/modules/header/Component.spec.ts 的插槽用例守。
  */
@@ -12,8 +12,6 @@ import { bannerBackground } from '../../shared/background'
 import { readBoolean, readNumber, readText } from '../../shared/config'
 import {
   CONTAINER_CONFIG_KEY,
-  SHOW_TITLE_CONFIG_KEY,
-  TITLE_BAR_HEIGHT_PX,
   readContainerLayout,
 } from '../../shared/container'
 import { normalizeDeco, normalizeVariant } from './options'
@@ -30,10 +28,6 @@ const PLAIN_VARIANT = 'plain'
 /** 底线内缩的上限。到 50% 左右边界就交叉了，线会整条消失。 */
 const INSET_MAX = 49
 
-const title = computed(() => readText(props.config.title))
-const isTitleShown = computed(() =>
-  readBoolean(props.config[SHOW_TITLE_CONFIG_KEY]),
-)
 const layout = computed(() =>
   readContainerLayout(props.config[CONTAINER_CONFIG_KEY]),
 )
@@ -108,10 +102,7 @@ const shellVars = computed<CSSProperties>(() => {
 })
 
 const shellStyle = computed<CSSProperties>(() => {
-  const style: CSSProperties = {
-    ...shellVars.value,
-    '--dt-header-bar-height': `${TITLE_BAR_HEIGHT_PX}px`,
-  }
+  const style: CSSProperties = { ...shellVars.value }
   if (background.value !== '') style.backgroundColor = background.value
   return style
 })
@@ -127,7 +118,7 @@ const contentStyle = computed<CSSProperties>(() => ({
     :class="[`dt-header--${variant}`, { 'dt-scanlines': isScanlineShown }]"
     :style="shellStyle"
   >
-    <!-- 底图单独一层真实元素而不是伪元素：滤镜打在这一层上，标题与子节点的文字不跟着偏色。
+    <!-- 底图单独一层真实元素而不是伪元素：滤镜打在这一层上，子节点的文字不跟着偏色。
          排在最前 → 与同为 z-index:0 的装饰层比 DOM 序，恒在它之下 -->
     <i
       v-if="isBgLayerShown"
@@ -136,12 +127,7 @@ const contentStyle = computed<CSSProperties>(() => ({
       aria-hidden="true"
     />
 
-    <div v-if="isTitleShown" class="dt-header__bar">
-      <span class="dt-header__bar-accent" />
-      <span class="dt-header__title dt-glow-text">{{ title }}</span>
-    </div>
-
-    <!-- 标题两侧的对称装饰：环境层，不吃指针，压在子节点之下 -->
+    <!-- 沿中线左右对称的装饰：环境层，不吃指针，压在子节点之下 -->
     <div
       v-if="deco !== 'none' && isDecorated"
       class="dt-header__deco"

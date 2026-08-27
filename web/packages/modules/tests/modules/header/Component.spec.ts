@@ -1,7 +1,8 @@
 /**
  * @fileoverview 守页头的渲染契约：子节点走默认插槽（插槽名写错既不报错也不渲染）、
- * 缺 `showTitle` 时不画标题条，以及「空配置」与「清单缺省摊出来的配置」渲染逐字相同——
- * 两份缺省一旦漂，表现是同一张大屏在新建与重载之后长得不一样。
+ * 壳里没有标题条（存量配置里遗留的 showTitle 也不该长回来），以及「空配置」与
+ * 「清单缺省摊出来的配置」渲染逐字相同——两份缺省一旦漂，表现是同一张大屏在
+ * 新建与重载之后长得不一样。
  */
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
@@ -26,22 +27,12 @@ describe('页头外壳', () => {
     expect(wrapper.get('.dt-header__content .child').text()).toBe('时钟子节点')
   })
 
-  it('空配置不画标题条', () => {
-    const wrapper = render({})
-
-    expect(wrapper.find('.dt-header__bar').exists()).toBe(false)
-  })
-
-  it('开了标题条才画，并显示标题文字', () => {
+  // 大屏标题就是拖一个文字块进页头；壳再给一条标题条必然与它抢位置
+  it('壳里没有标题条，存量配置里遗留的开关也长不回来', () => {
     const wrapper = render({ showTitle: true, title: '光伏大屏' })
 
-    expect(wrapper.get('.dt-header__title').text()).toBe('光伏大屏')
-  })
-
-  it('开了标题条但没填标题时条还在，只是没有文字', () => {
-    const wrapper = render({ showTitle: true })
-
-    expect(wrapper.get('.dt-header__title').text()).toBe('')
+    expect(wrapper.find('.dt-header__bar').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('光伏大屏')
   })
 
   it('空配置与清单缺省摊出来的配置渲染逐字相同', () => {

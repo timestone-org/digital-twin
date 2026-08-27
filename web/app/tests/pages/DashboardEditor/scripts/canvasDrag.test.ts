@@ -26,7 +26,7 @@ function item(over: Partial<DragItem> = {}): DragItem {
     layer: { width: 1000, height: 800 },
     minW: 10,
     minH: 10,
-    isPinned: false,
+    pinnedEdge: null,
     ...over,
   }
 }

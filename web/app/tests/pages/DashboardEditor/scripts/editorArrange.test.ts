@@ -1,5 +1,5 @@
 /**
- * @fileoverview 排布动作契约：同父守卫、整理跳过钉位与子层、
+ * @fileoverview 排布动作契约：同父守卫、对齐 / 分布 / 整理 / 方向键一律跳过钉位、
  * 粘贴选中新节点且根钳回边界、再制不动剪贴板、联动规则跟着复制粘贴走。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -242,6 +242,37 @@ describe('整理', () => {
         a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
       expect(overlap).toBe(false)
     }
+  })
+})
+
+// 钉位的意思是挪不走：对齐与方向键都是能把页头从顶部挪开的路
+describe('钉位节点不参与排布', () => {
+  it('对齐时被排除在外，也不给它凑够人数', () => {
+    const { editor, actions } = setup([
+      node('h', { moduleType: 'header', x: 0, y: 0, w: 1920, h: 100 }),
+      node('a', { x: 50, y: 300 }),
+    ])
+    editor.setSelection(['h', 'a'])
+
+    // 只剩一个普通节点：对齐本来就要 ≥2 个，这一步该是做不了
+    expect(actions.alignReady()).toBe(false)
+    const before = byId(editor, 'h')
+    actions.alignSelected('top')
+
+    expect(byId(editor, 'h')).toBe(before)
+  })
+
+  it('方向键微调不动它', () => {
+    const { editor, actions } = setup([
+      node('h', { moduleType: 'header', x: 0, y: 0, w: 1920, h: 100 }),
+      node('a', { x: 50, y: 300 }),
+    ])
+    editor.setSelection(['h', 'a'])
+
+    actions.nudgeSelected(8, 8)
+
+    expect(byId(editor, 'h')).toMatchObject({ x: 0, y: 0 })
+    expect(byId(editor, 'a')).toMatchObject({ x: 58, y: 308 })
   })
 })
 

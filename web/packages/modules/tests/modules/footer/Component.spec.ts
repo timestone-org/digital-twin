@@ -1,10 +1,9 @@
 /**
  * @fileoverview 守页脚的渲染契约：子节点走默认插槽（插槽名写错既不报错也不渲染）、
- * 缺 `showTitle` 时不画标题条，以及「空配置」与「清单缺省摊出来的配置」渲染逐字相同。
+ * 壳里没有标题条（存量配置里遗留的 showTitle 也不该长回来）、背景底图与顶边观感，
+ * 以及「空配置」与「清单缺省摊出来的配置」渲染逐字相同。
  */
 import { mount } from '@vue/test-utils'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import Component from '../../../src/modules/footer/Component.vue'
@@ -28,29 +27,18 @@ describe('页脚外壳', () => {
     expect(wrapper.get('.dt-footer__content .child').text()).toBe('版权子节点')
   })
 
-  it('空配置不画标题条', () => {
-    const wrapper = render({})
-
-    expect(wrapper.find('.dt-footer__bar').exists()).toBe(false)
-  })
-
-  it('开了标题条才画，并显示标题文字', () => {
+  // 标题是拖进来的文字块子节点；壳再给一份就会与它抢位置
+  it('壳里没有标题条，存量配置里遗留的开关也长不回来', () => {
     const wrapper = render({ showTitle: true, title: '运行状态' })
 
-    expect(wrapper.get('.dt-footer__title').text()).toBe('运行状态')
+    expect(wrapper.find('.dt-footer__bar').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('运行状态')
   })
 
-  it('开了标题条但没填标题时条还在，只是没有文字', () => {
-    const wrapper = render({ showTitle: true })
-
-    expect(wrapper.get('.dt-footer__title').text()).toBe('')
-  })
-
-  it('标题条的显隐与内容区内缩算的是同一件事', () => {
+  it('遗留的标题条开关也不占内容区的位', () => {
     const config = { showTitle: true }
 
-    expect(render(config).find('.dt-footer__bar').exists()).toBe(true)
-    expect(resolveContentInset(config).top).toBe(36)
+    expect(resolveContentInset(config, footerManifest).top).toBe(8)
   })
 
   it('空配置与清单缺省摊出来的配置渲染逐字相同', () => {
@@ -94,13 +82,16 @@ describe('页脚外观', () => {
     )
   })
 
-  it('背景色与背景图都留空时一个都不注入', () => {
-    const style = render({}).get('.dt-footer').attributes('style') ?? ''
+  it('背景色与背景底图都留空时，底色不注入、底图那一层也不出', () => {
+    const wrapper = render({})
 
-    expect(style).not.toContain('background')
+    expect(wrapper.get('.dt-footer').attributes('style')).not.toContain(
+      'background-color',
+    )
+    expect(wrapper.find('.dt-footer__bg').exists()).toBe(false)
   })
 
-  it('填了背景才写背景样式', () => {
+  it('填了背景才写背景色', () => {
     const wrapper = render({ background: 'var(--surface-panel)' })
 
     expect(wrapper.get('.dt-footer').attributes('style')).toContain(
@@ -108,14 +99,30 @@ describe('页脚外观', () => {
     )
   })
 
-  it('只填了背景图时不连带写死背景色', () => {
-    const wrapper = render({
-      backgroundImage: 'linear-gradient(var(--accent-primary), transparent)',
-    })
-    const style = wrapper.get('.dt-footer').attributes('style') ?? ''
+  // 底图独立一层：整条 background 简写落在它身上，抹不掉外壳的底色
+  it('只填了背景底图时不连带写死背景色', () => {
+    const style =
+      render({
+        backgroundImage: 'linear-gradient(var(--accent-primary), transparent)',
+      })
+        .get('.dt-footer')
+        .attributes('style') ?? ''
 
-    expect(style).toContain('background-image: linear-gradient')
+    expect(style).toContain('--dt-footer-bg: linear-gradient')
     expect(style).not.toContain('background-color')
+  })
+
+  it('图片地址包成铺满整条的横幅，CSS 简写则原样透传', () => {
+    const url = render({ backgroundImage: '/a.png' })
+      .get('.dt-footer')
+      .attributes('style')
+    const css = render({ backgroundImage: 'var(--fx-decor-topbg) center' })
+      .get('.dt-footer')
+      .attributes('style')
+
+    expect(url).toContain('center bottom / 100% 100% no-repeat')
+    expect(css).toContain('--dt-footer-bg: var(--fx-decor-topbg)')
+    expect(css).not.toContain('url(')
   })
 
   it('缺省不铺点阵，开了才铺', () => {
@@ -138,18 +145,14 @@ describe('页脚可配的观感', () => {
 
     expect(style).toContain('--dt-footer-divider-w: 1px')
     expect(style).toContain('--dt-footer-sweep-opacity: 60%')
-    expect(style).toContain('--dt-footer-title-justify: center')
   })
 
-  it('分隔线关掉后线宽落到 0，粗细旋钮跟着不生效', () => {
-    expect(shellStyle({ showDivider: false, dividerWidth: 4 })).toContain(
-      '--dt-footer-divider-w: 0px',
-    )
-  })
-
-  it('分隔线开着时粗细可配', () => {
+  it('分隔线粗细可配，0 就是不画线', () => {
     expect(shellStyle({ dividerWidth: 3 })).toContain(
       '--dt-footer-divider-w: 3px',
+    )
+    expect(shellStyle({ dividerWidth: 0 })).toContain(
+      '--dt-footer-divider-w: 0px',
     )
   })
 
@@ -159,61 +162,19 @@ describe('页脚可配的观感', () => {
     )
   })
 
-  it('扫光缺省开着，关掉后整条伪元素退场', () => {
-    expect(render({}).get('.dt-footer').classes()).not.toContain(
-      'dt-footer--sweepless',
-    )
-    expect(render({ showSweep: false }).get('.dt-footer').classes()).toContain(
-      'dt-footer--sweepless',
-    )
-  })
-
   it('扫光浓度按百分比注入，浮点尾数不外泄', () => {
     expect(shellStyle({ sweepOpacity: 0.35 })).toContain(
       '--dt-footer-sweep-opacity: 35%',
     )
-    expect(shellStyle({ sweepOpacity: 0 })).toContain(
-      '--dt-footer-sweep-opacity: 0%',
-    )
   })
 
-  it('标题对齐三档各自落到 flex 主轴对齐值上', () => {
-    expect(shellStyle({ titleAlign: 'left' })).toContain(
-      '--dt-footer-title-justify: flex-start',
+  // 留 0 浓度的话伪元素仍在顶边压着一层，会吃掉贴顶那一排子节点的点击
+  it('浓度归零时整条扫光伪元素退场', () => {
+    expect(render({}).get('.dt-footer').classes()).not.toContain(
+      'dt-footer--sweepless',
     )
-    expect(shellStyle({ titleAlign: 'right' })).toContain(
-      '--dt-footer-title-justify: flex-end',
+    expect(render({ sweepOpacity: 0 }).get('.dt-footer').classes()).toContain(
+      'dt-footer--sweepless',
     )
-  })
-
-  it('标题对齐是名单外的值时回落居中', () => {
-    expect(shellStyle({ titleAlign: 'justify' })).toContain(
-      '--dt-footer-title-justify: center',
-    )
-  })
-})
-
-// ⚠ vitest 不编译 scoped 样式块，字体变量接错只能对着源码钉：
-//   读了没人发射的变量名，配了 fontFamily 也永远走兜底字体，全程无报错
-describe('标题字体变量（源码契约）', () => {
-  const SOURCE = readFileSync(
-    join(
-      process.cwd(),
-      'packages',
-      'modules',
-      'src',
-      'modules',
-      'footer',
-      'Component.vue',
-    ),
-    'utf8',
-  )
-
-  it('标题读 cardVars 发射的 --card-font，留空兜底 --font-display', () => {
-    expect(SOURCE).toContain('var(--card-font, var(--font-display))')
-  })
-
-  it('没人发射的 --card-title-font 不许出现', () => {
-    expect(SOURCE).not.toContain('--card-title-font')
   })
 })

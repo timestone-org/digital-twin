@@ -143,6 +143,17 @@ export function siblingCount(
   return nodes.filter((node) => node.parentId === parentId).length
 }
 
+/**
+ * 某个节点的模块类型；找不到给空串——清单解析器对空串一律解析不出来，
+ * 于是「节点不在了」与「这个类型没注册」自然收敛成同一条路。
+ */
+export function moduleTypeOf(
+  nodes: readonly DashboardNodePayload[],
+  nodeId: string,
+): string {
+  return nodes.find((node) => node.id === nodeId)?.moduleType ?? ''
+}
+
 /** 一个节点连同它的整棵子树的 id。 */
 export function subtreeIds(
   nodes: readonly DashboardNodePayload[],

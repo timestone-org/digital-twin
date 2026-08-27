@@ -36,6 +36,7 @@ export {
   CONTAINER_PAD_DEFAULT_PX,
   SHOW_TITLE_CONFIG_KEY,
   TITLE_BAR_HEIGHT_PX,
+  hasTitleBar,
   readContainerLayout,
   resolveContentInset,
 } from './shared/container'

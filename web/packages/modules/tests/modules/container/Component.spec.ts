@@ -38,21 +38,21 @@ describe('容器外壳', () => {
     const wrapper = render({})
 
     expect(wrapper.find('.dt-container__bar').exists()).toBe(false)
-    expect(resolveContentInset({}).top).toBe(8)
+    expect(resolveContentInset({}, manifest).top).toBe(8)
   })
 
   it('开了标题条时两边一起多让出 28px', () => {
     const config = { showTitle: true, __container: { pad: 12 } }
 
     expect(render(config).find('.dt-container__bar').exists()).toBe(true)
-    expect(resolveContentInset(config).top).toBe(40)
+    expect(resolveContentInset(config, manifest).top).toBe(40)
   })
 
   it('showTitle 存成字符串这类脏值按关着算，不让几何两边分裂', () => {
     const config = { showTitle: 'true' }
 
     expect(render(config).find('.dt-container__bar').exists()).toBe(false)
-    expect(resolveContentInset(config).top).toBe(8)
+    expect(resolveContentInset(config, manifest).top).toBe(8)
   })
 })
 
