@@ -108,7 +108,7 @@
 | 4 | `list` | `info-list` | `row-list` | `rowLayout:'stack'` `rowLines:[{left:'label',right:'value'}]` `rowShape:{lead:'icon'}` `rowShell:'divider'` `dividerStyle:'dotted'` `spacing:{padX:6,padY:4,rowPadX:4,rowPadY:6}` `labelSize:13` `valueSize:16` `valueColor:'var(--accent-secondary)'` `unitPlace:'attached'` `unitSize:11` `thousands:true` `autoScroll:true` `scrollSpeed:3` |
 | 5 | `tag-table` | `info-list` | `three-col` | `rowLayout:'columns'` `columnHeader:{show:true,name:'名称',value:'数值',unit:'单位'}` `rowShell:'divider'` `spacing:{padX:8,padY:4,rowPadX:4,rowPadY:6}` `valueSize:13` `valueColor:'var(--accent-secondary)'` `unitPlace:'column'` `hover:'tint'` `thousands:true` |
 | 6 | `metric-status-table` | `info-list` | `target-badge-list` | `rowLines:[{left:'label',right:'value'},{left:'sub',right:'badge'}]` `rowShell:'divider'` `spacing:{rowPadY:8}` `labelSize:14` `labelTone:'primary'` `valueSize:22` `valueGlow:10` `unitPlace:'attached'` `unitSize:11` `subSource:'target'` `subLabel:'目标'` `badge:{kind:'rule',style:'outline'}` `alarmOn:'value'` |
-| 7 | `source-list` | `info-list` | `source-card` | `rowShape:{lead:'icon',extras:true}` `rowLines:[{left:'label'},{left:'badge',left2:'tag',right:'value'},{left:'sub',right:'meter'}]` `rowShell:'accent'` `spacing:{rowPadX:9,rowPadY:5}` `valueSize:18` `valueGlow:8` `badge:{kind:'device'}` `subSource:'aux'` `subLabel:'能效'` `meter:{kind:'bar',source:'share',label:'占比',height:4,width:128,dot:false,showPercent:true}` `extras:[{label:'功率',unit:'kW'},{label:'温度',unit:'℃'},{label:'流量',unit:'m³/h'}]` `hover:'lift'` `scrollSpeed:5` |
+| 7 | `source-list` | `info-list` | `source-card` | `rowShape:{lead:'icon',extras:true}` `rowLines:[{left:'label'},{left:'badge',left2:'tag',right:'value'},{left:'sub',right:'meter'}]` `rowShell:'accent'` `spacing:{rowPadX:9,rowPadY:5}` `valueSize:18` `valueGlow:8` `badge:{kind:'device'}` `subSource:'aux'` `subLabel:'能效'` `meter:{kind:'bar',source:'share',label:'',height:4,width:128,dot:false,showPercent:true}` `extras:[{label:'功率',unit:'kW'},{label:'温度',unit:'℃'},{label:'流量',unit:'m³/h'}]` `hover:'tint'` `scrollSpeed:5`。⚠ 两处按源码：`.src-share` 的 DOM 只有百分比、**没有「占比」二字**（写那两个字的是 `terminal-list-v2` 与 `vessel-list`）；`.src-item:hover` 是底色 12% + 描边转 kind 色 + 两层辉光、**没有任何位移**，所以是 `tint` 不是 `lift` |
 | 8 | `terminal-list-v2` | `info-list` | `terminal-card` | `rowLines:[{left:'label',left2:'tag',right:'badge'},{left:'value',right:'meter'}]` `rowShell:'card'` `grouping:'tabs'` `defaultGroup:''` `spacing:{rowPadX:8,rowPadY:4}` `valueSize:17` `valueGlow:8` `badge:{kind:'device'}` `meter:{kind:'bar',source:'share',label:'占比',height:3,width:50,showPercent:true}` `scrollSpeed:4` |
 | 9 | `vessel-list` | `info-list` | `vessel-card` | `rowLines:[{left:'label',right:'value'},{left:'meter',right:'sub'},{left:'meter2'}]` `rowShell:'card'` `grouping:'section'` `spacing:{rowPadX:7,rowPadY:6}` `valueSize:17` `valueGlow:8` `unitPlace:'attached'` `subSource:'aux'` `subLabel:'水温'` `alarmOn:'sub'` `meter:{kind:'bar',source:'range',label:'占比',dot:true,showPercent:true,source2:'aux2',label2:'液位'}` `scrollSpeed:4`（参考仓 4.5，见 §10.4）。三个各自独立的绑定槽：`value`=储能 · `aux`=水温 · `aux2`=液位 |
 | 10 | `work-order-list` | `info-list` | `work-order` | `rowLines:[{left:'label',right:'badge'},{left:'desc'},{left:'time'}]` `rowShell:'edge'` `dividerStyle:'dotted'` `spacing:{rowPadX:8,rowPadY:9}` `labelSize:14` `labelTone:'primary'` `badge:{kind:'rule',style:'solid'}` `subSource:'aux'` `alarmOn:'sub'` `timeSource:'bound'` `rowFilter:'all'`；三档状态 = 三条 `eq` 规则（§3.3） |
@@ -361,7 +361,7 @@ N 次调用的代价可以忽略。
 | 参考仓的机制 | 新模型 |
 |---|---|
 | `source-list` 的 `KIND_VAR` 五色（按能源类型） | 逐行 `item.color`：能源类型是**静态元数据**，不是值驱动的 |
-| `vessel-list` 的 `tempColor` 四档（按水温） | `alarmOn:'sub'` + 4 条带 `color` 的规则（`lt 35` 蓝 / `between 35 45` 青 / `between 45 55` 橙 / `gte 55` 红），高危在前 |
+| `vessel-list` 的 `tempColor` 四档（按水温） | `alarmOn:'sub'` + 4 条带 `color` 的规则，高危在前：`gt 55` 热 / `gt 45` 橙 / `lt 30` 冷 / `between 30 45` 常温。⚠ 阈值取自 `vessel-list/index.ts` 的 schema 缺省（`coolTemp` **30**、`warmTemp` **45**、热阈 `warmTemp+10` = **55**），且 `calc.ts::tempColor` 的两个上界是**严格大于**（`t` 恰为 55 时落第三档，不是最高档）。常温那一档的颜色是 `--accent-secondary`，不是某个 chart 冷色 |
 | `work-order-list` 的三档状态色 | `subSource:'aux'` + `alarmOn:'sub'` + 3 条 `eq` 规则（`eq 0` 待执行 · `--state-warning` / `eq 1` 执行中 · `--state-info` / `eq 2` 已完成 · `--state-success`），三条 `level` 都填 `normal`，配 `rowFilter:'all'` |
 
 ⚠ 规则里的 `color` 只许填 `var(--…)` 引用，不填十六进制：算出来的色值会原地钉死在一套
@@ -941,6 +941,26 @@ config + values + meta.slots ──► rows.ts / cells.ts ──► RowView[] / 
 ---
 
 ## 10. 明确的偏离
+
+> ⚠ **以下 6 条是 `info-list` 落地时逐行对回参考源码才发现的，文档此前没有记。**
+> 一律以 `DigitalTwinBK/web/packages/modules/src/modules/<模块>/` 的源码为准。
+>
+> 1. **hover 底色三处不同**：`tag-table` 6% · `terminal-list-v2` 8% · `source-list` 12%。
+>    收成一档取 8%（中位数），另外两个模块的 hover 深浅与参考仓差一点。
+> 2. **左色边底纹两处不同**：`alarm-list` 8% · `work-order-list` **7%**。取 8%，
+>    工单行比参考仓浓一个百分点。
+> 3. **闪烁落点两套**：`list` / `tag-table` 闪的是**读数的 opacity**（1 ↔ 0.4），
+>    `alarm-list` 闪的是**整行底色**（22% ↔ 4%）。收成一套取多数派（读数 opacity），
+>    `alarm-rows` 预设的整行呼吸不再现。
+> 4. **`.wo-dept` 的 `font-weight: 600` 表达不出来**——新模型没有字重旋钮，
+>    工单的部门名会比参考仓细一号。
+> 5. **`.tl-name` 是 12px**（不是字段缺省的 13）。`terminal-card` 预设必须显式给
+>    `labelSize:12`，否则比参考仓大一号。同理 `three-col` 的 `unitSize` 要显式给 13。
+>    ⚠ 这一类值**只能从源码读**，§1.3 那张表没有列全——后面三个模块落地时同样不能只照它抄。
+> 6. **`metric-status-table` 的徽章词是「正常 / 预警 / 超标」**，与 `LEVEL_TEXT` 的
+>    「正常 / 提示 / 警告 / 危急」不是一套。所以 `target-badge-list` 必须走
+>    `badge.kind:'rule'` + 规则自带 `label`；换成 `severity` 档，「超标」会变成「危急」。
+
 
 以下是**表达不出来或有意收窄**的，逐条记在案。除此之外的 15 个模块观感都在 §1.3 的取值里。
 

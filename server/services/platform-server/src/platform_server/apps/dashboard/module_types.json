@@ -1568,6 +1568,1421 @@
       "bindings": []
     },
     {
+      "type": "info-list",
+      "display_name": "信息列表",
+      "category": "数据",
+      "icon": "table",
+      "keywords": [
+        "infolist",
+        "liebiao",
+        "xinxi",
+        "信息列表",
+        "列表",
+        "表格",
+        "告警",
+        "工单",
+        "排行"
+      ],
+      "default_size": {
+        "width": 360,
+        "height": 420,
+        "min_width": 160,
+        "min_height": 96
+      },
+      "chrome": "card",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "default": "",
+          "placeholder": "留空则不画标题栏",
+          "group": "内容",
+          "span": "full"
+        },
+        {
+          "key": "items",
+          "label": "行",
+          "type": "array",
+          "default": [
+            {
+              "label": "点位 1",
+              "unit": "",
+              "precision": 1
+            }
+          ],
+          "group": "内容",
+          "help": "每一项在绑点面板上是一行。⚠ 删掉中间一项，它之后每一行的绑定都会改喂前一行——删完请核对绑点面板。",
+          "span": "full",
+          "item_schema": [
+            {
+              "key": "label",
+              "label": "行名",
+              "type": "string",
+              "default": "",
+              "placeholder": "留空显示「点位 N」"
+            },
+            {
+              "key": "unit",
+              "label": "单位",
+              "type": "string",
+              "default": "",
+              "placeholder": "如 ℃ / kWh / m³/h",
+              "help": "首尾空格照原样保留，「° C」这种写法是有意的排版。"
+            },
+            {
+              "key": "precision",
+              "label": "小数位",
+              "type": "range",
+              "default": 1,
+              "min": 0,
+              "max": 6,
+              "step": 1
+            },
+            {
+              "key": "tag",
+              "label": "分类标签",
+              "type": "string",
+              "default": "",
+              "help": "画在行内的分类 chip，文字颜色跟随这一行当前的颜色。它与状态徽章正交，两个可以同时挂。"
+            },
+            {
+              "key": "group",
+              "label": "分组",
+              "type": "string",
+              "default": "",
+              "help": "分组档下这一行归到哪一段 / 哪个页签；留空的行落进「其它」段，不计入任何页签计数。"
+            },
+            {
+              "key": "color",
+              "label": "固定颜色",
+              "type": "color",
+              "default": "",
+              "help": "填了就固定这一行的颜色并压过规则命中色，用来表达「能源类型」这种静态元数据。只填 var(--…) 引用，填死色值换肤时不跟着走。"
+            },
+            {
+              "key": "icon",
+              "label": "行首图标",
+              "type": "image",
+              "default": "",
+              "help": "素材库里的图标；前导列选「图标」时画在行首，取不到时回退一个圆点。"
+            },
+            {
+              "key": "range",
+              "label": "量程",
+              "type": "object",
+              "help": "进度条选「量程占比」时的上下界与目标值。留空 = 这一项不判。",
+              "fields": [
+                {
+                  "key": "min",
+                  "label": "下限",
+                  "type": "number"
+                },
+                {
+                  "key": "max",
+                  "label": "上限",
+                  "type": "number"
+                },
+                {
+                  "key": "target",
+                  "label": "目标值",
+                  "type": "number"
+                }
+              ]
+            },
+            {
+              "key": "desc",
+              "label": "描述",
+              "type": "string",
+              "default": "",
+              "help": "行内的长描述；绑定了描述槽时以绑定值为准，这里是它的回落。"
+            },
+            {
+              "key": "emitValue",
+              "label": "联动值",
+              "type": "string",
+              "default": "",
+              "help": "点这一行时上抛的值，留空则这一行点了不上抛。"
+            }
+          ],
+          "item_label_key": "label",
+          "min_items": 1
+        },
+        {
+          "key": "noRowsText",
+          "label": "无行占位",
+          "type": "string",
+          "default": "暂无数据",
+          "group": "内容",
+          "help": "一项都没配时画的一句话。",
+          "span": "half"
+        },
+        {
+          "key": "rowLayout",
+          "label": "排版",
+          "type": "enum",
+          "default": "stack",
+          "options": [
+            {
+              "value": "stack",
+              "label": "段位编排"
+            },
+            {
+              "value": "columns",
+              "label": "三列对齐"
+            }
+          ],
+          "group": "行结构",
+          "help": "三列表档下「行编排」与「前导 / 尾列」不生效，整行是名称 / 数值 / 单位三列。",
+          "span": "half"
+        },
+        {
+          "key": "rowLines",
+          "label": "行编排",
+          "type": "array",
+          "default": [
+            {
+              "left": "label",
+              "left2": "none",
+              "right": "value",
+              "right2": "none"
+            }
+          ],
+          "group": "行结构",
+          "help": "一行最多三段，每段左右分列：左组左对齐、右组右对齐。⚠ 四个段位全为「空」的那一段整段不画。",
+          "span": "full",
+          "item_schema": [
+            {
+              "key": "left",
+              "label": "左 1",
+              "type": "enum",
+              "default": "none",
+              "options": [
+                {
+                  "value": "none",
+                  "label": "空"
+                },
+                {
+                  "value": "label",
+                  "label": "行名"
+                },
+                {
+                  "value": "value",
+                  "label": "主读数"
+                },
+                {
+                  "value": "sub",
+                  "label": "副读数"
+                },
+                {
+                  "value": "badge",
+                  "label": "徽章"
+                },
+                {
+                  "value": "tag",
+                  "label": "分类标签"
+                },
+                {
+                  "value": "meter",
+                  "label": "进度件 1"
+                },
+                {
+                  "value": "meter2",
+                  "label": "进度件 2"
+                },
+                {
+                  "value": "alarmText",
+                  "label": "命中文案"
+                },
+                {
+                  "value": "desc",
+                  "label": "描述"
+                },
+                {
+                  "value": "time",
+                  "label": "时刻"
+                }
+              ]
+            },
+            {
+              "key": "left2",
+              "label": "左 2",
+              "type": "enum",
+              "default": "none",
+              "options": [
+                {
+                  "value": "none",
+                  "label": "空"
+                },
+                {
+                  "value": "label",
+                  "label": "行名"
+                },
+                {
+                  "value": "value",
+                  "label": "主读数"
+                },
+                {
+                  "value": "sub",
+                  "label": "副读数"
+                },
+                {
+                  "value": "badge",
+                  "label": "徽章"
+                },
+                {
+                  "value": "tag",
+                  "label": "分类标签"
+                },
+                {
+                  "value": "meter",
+                  "label": "进度件 1"
+                },
+                {
+                  "value": "meter2",
+                  "label": "进度件 2"
+                },
+                {
+                  "value": "alarmText",
+                  "label": "命中文案"
+                },
+                {
+                  "value": "desc",
+                  "label": "描述"
+                },
+                {
+                  "value": "time",
+                  "label": "时刻"
+                }
+              ]
+            },
+            {
+              "key": "right",
+              "label": "右 1",
+              "type": "enum",
+              "default": "none",
+              "options": [
+                {
+                  "value": "none",
+                  "label": "空"
+                },
+                {
+                  "value": "label",
+                  "label": "行名"
+                },
+                {
+                  "value": "value",
+                  "label": "主读数"
+                },
+                {
+                  "value": "sub",
+                  "label": "副读数"
+                },
+                {
+                  "value": "badge",
+                  "label": "徽章"
+                },
+                {
+                  "value": "tag",
+                  "label": "分类标签"
+                },
+                {
+                  "value": "meter",
+                  "label": "进度件 1"
+                },
+                {
+                  "value": "meter2",
+                  "label": "进度件 2"
+                },
+                {
+                  "value": "alarmText",
+                  "label": "命中文案"
+                },
+                {
+                  "value": "desc",
+                  "label": "描述"
+                },
+                {
+                  "value": "time",
+                  "label": "时刻"
+                }
+              ]
+            },
+            {
+              "key": "right2",
+              "label": "右 2",
+              "type": "enum",
+              "default": "none",
+              "options": [
+                {
+                  "value": "none",
+                  "label": "空"
+                },
+                {
+                  "value": "label",
+                  "label": "行名"
+                },
+                {
+                  "value": "value",
+                  "label": "主读数"
+                },
+                {
+                  "value": "sub",
+                  "label": "副读数"
+                },
+                {
+                  "value": "badge",
+                  "label": "徽章"
+                },
+                {
+                  "value": "tag",
+                  "label": "分类标签"
+                },
+                {
+                  "value": "meter",
+                  "label": "进度件 1"
+                },
+                {
+                  "value": "meter2",
+                  "label": "进度件 2"
+                },
+                {
+                  "value": "alarmText",
+                  "label": "命中文案"
+                },
+                {
+                  "value": "desc",
+                  "label": "描述"
+                },
+                {
+                  "value": "time",
+                  "label": "时刻"
+                }
+              ]
+            }
+          ],
+          "item_label_key": "left",
+          "max_items": 3
+        },
+        {
+          "key": "rowShape",
+          "label": "前导与尾列",
+          "type": "object",
+          "default": {
+            "lead": "none",
+            "tail": "none",
+            "tail2": "none",
+            "extras": false
+          },
+          "group": "行结构",
+          "help": "前导列与两个尾列都垂直居中、跨全部行段。",
+          "span": "full",
+          "fields": [
+            {
+              "key": "lead",
+              "label": "前导列",
+              "type": "enum",
+              "default": "none",
+              "options": [
+                {
+                  "value": "none",
+                  "label": "无"
+                },
+                {
+                  "value": "icon",
+                  "label": "图标"
+                },
+                {
+                  "value": "badge",
+                  "label": "徽章"
+                }
+              ]
+            },
+            {
+              "key": "tail",
+              "label": "尾列 1",
+              "type": "enum",
+              "default": "none",
+              "options": [
+                {
+                  "value": "none",
+                  "label": "无"
+                },
+                {
+                  "value": "value",
+                  "label": "主读数"
+                },
+                {
+                  "value": "sub",
+                  "label": "副读数"
+                },
+                {
+                  "value": "badge",
+                  "label": "徽章"
+                },
+                {
+                  "value": "time",
+                  "label": "时刻"
+                }
+              ]
+            },
+            {
+              "key": "tail2",
+              "label": "尾列 2",
+              "type": "enum",
+              "default": "none",
+              "options": [
+                {
+                  "value": "none",
+                  "label": "无"
+                },
+                {
+                  "value": "value",
+                  "label": "主读数"
+                },
+                {
+                  "value": "sub",
+                  "label": "副读数"
+                },
+                {
+                  "value": "badge",
+                  "label": "徽章"
+                },
+                {
+                  "value": "time",
+                  "label": "时刻"
+                }
+              ]
+            },
+            {
+              "key": "extras",
+              "label": "扩展指标行",
+              "type": "boolean",
+              "default": false,
+              "help": "在行段下方补一条扩展指标行，取「扩展指标」里配的那几项，有值才画。"
+            }
+          ]
+        },
+        {
+          "key": "columnHeader",
+          "label": "表头",
+          "type": "object",
+          "default": {
+            "show": true,
+            "name": "名称",
+            "value": "数值",
+            "unit": "单位"
+          },
+          "group": "表头",
+          "span": "full",
+          "when": {
+            "key": "rowLayout",
+            "in": [
+              "columns"
+            ]
+          },
+          "fields": [
+            {
+              "key": "show",
+              "label": "显示表头",
+              "type": "boolean",
+              "default": true
+            },
+            {
+              "key": "name",
+              "label": "名称列",
+              "type": "string",
+              "default": "名称"
+            },
+            {
+              "key": "value",
+              "label": "数值列",
+              "type": "string",
+              "default": "数值"
+            },
+            {
+              "key": "unit",
+              "label": "单位列",
+              "type": "string",
+              "default": "单位"
+            }
+          ]
+        },
+        {
+          "key": "spacing",
+          "label": "间距",
+          "type": "object",
+          "default": {
+            "padX": 6,
+            "padY": 4,
+            "rowPadX": 4,
+            "rowPadY": 6
+          },
+          "group": "间距",
+          "span": "full",
+          "fields": [
+            {
+              "key": "padX",
+              "label": "整块左右内边距 (px)",
+              "type": "range",
+              "default": 6,
+              "min": 0,
+              "max": 40,
+              "step": 1
+            },
+            {
+              "key": "padY",
+              "label": "整块上下内边距 (px)",
+              "type": "range",
+              "default": 4,
+              "min": 0,
+              "max": 40,
+              "step": 1
+            },
+            {
+              "key": "rowPadX",
+              "label": "行左右内边距 (px)",
+              "type": "range",
+              "default": 4,
+              "min": 0,
+              "max": 40,
+              "step": 1
+            },
+            {
+              "key": "rowPadY",
+              "label": "行上下内边距 (px)",
+              "type": "range",
+              "default": 6,
+              "min": 0,
+              "max": 40,
+              "step": 1
+            }
+          ]
+        },
+        {
+          "key": "rowShell",
+          "label": "行外壳",
+          "type": "enum",
+          "default": "divider",
+          "options": [
+            {
+              "value": "plain",
+              "label": "无"
+            },
+            {
+              "value": "divider",
+              "label": "分隔线"
+            },
+            {
+              "value": "card",
+              "label": "卡片"
+            },
+            {
+              "value": "accent",
+              "label": "卡片 + 左色条"
+            },
+            {
+              "value": "edge",
+              "label": "左色边 + 底纹"
+            }
+          ],
+          "group": "外壳",
+          "help": "⚠ 告警态不在这五档里：它是叠在外壳之上的一层描边与呼吸，不会顶掉这里选的外壳。",
+          "span": "half"
+        },
+        {
+          "key": "dividerStyle",
+          "label": "分隔线",
+          "type": "enum",
+          "default": "dotted",
+          "options": [
+            {
+              "value": "dotted",
+              "label": "点线"
+            },
+            {
+              "value": "dashed",
+              "label": "虚线"
+            },
+            {
+              "value": "solid",
+              "label": "实线"
+            },
+            {
+              "value": "none",
+              "label": "无"
+            }
+          ],
+          "group": "外壳",
+          "span": "half"
+        },
+        {
+          "key": "hover",
+          "label": "悬停反馈",
+          "type": "enum",
+          "default": "none",
+          "options": [
+            {
+              "value": "none",
+              "label": "无"
+            },
+            {
+              "value": "tint",
+              "label": "提亮"
+            },
+            {
+              "value": "lift",
+              "label": "上浮"
+            }
+          ],
+          "group": "外壳",
+          "help": "⚠ 触摸屏没有悬停：只靠这一档的大屏，手指按上去是没有反馈的。",
+          "span": "half"
+        },
+        {
+          "key": "autoScroll",
+          "label": "自动滚动",
+          "type": "boolean",
+          "default": true,
+          "group": "滚动",
+          "help": "内容超出时慢速垂直滚动；关掉改为原生滚动条手动滚。"
+        },
+        {
+          "key": "scrollSpeed",
+          "label": "滚动速度（每项秒数）",
+          "type": "range",
+          "default": 3,
+          "group": "滚动",
+          "help": "每个条目经过视区所需的秒数，越大越慢。",
+          "when": {
+            "key": "autoScroll",
+            "in": [
+              true
+            ]
+          },
+          "min": 1,
+          "max": 30,
+          "step": 1
+        },
+        {
+          "key": "grouping",
+          "label": "分组",
+          "type": "enum",
+          "default": "none",
+          "options": [
+            {
+              "value": "none",
+              "label": "不分组"
+            },
+            {
+              "value": "section",
+              "label": "分段组头"
+            },
+            {
+              "value": "tabs",
+              "label": "分类页签"
+            }
+          ],
+          "group": "分组",
+          "help": "按行内的「分组」字符串分段或分页签；页签的计数用全量行数，不是当前页签的子集。",
+          "span": "half"
+        },
+        {
+          "key": "defaultGroup",
+          "label": "初始分组",
+          "type": "string",
+          "default": "",
+          "placeholder": "留空 = 全部",
+          "group": "分组",
+          "help": "页签档下打开大屏时初始选中的那一个；用户点击切换不受它影响。",
+          "span": "half"
+        },
+        {
+          "key": "labelSize",
+          "label": "行名字号 (px)",
+          "type": "range",
+          "default": 13,
+          "group": "标签",
+          "span": "half",
+          "min": 8,
+          "max": 48,
+          "step": 1
+        },
+        {
+          "key": "labelTone",
+          "label": "行名文字色",
+          "type": "enum",
+          "default": "secondary",
+          "options": [
+            {
+              "value": "secondary",
+              "label": "次要"
+            },
+            {
+              "value": "primary",
+              "label": "正文"
+            },
+            {
+              "value": "title",
+              "label": "标题"
+            },
+            {
+              "value": "muted",
+              "label": "弱化"
+            }
+          ],
+          "group": "标签",
+          "span": "half"
+        },
+        {
+          "key": "valueSize",
+          "label": "读数字号 (px)",
+          "type": "range",
+          "default": 16,
+          "group": "数值",
+          "span": "half",
+          "min": 8,
+          "max": 96,
+          "step": 1
+        },
+        {
+          "key": "valueColor",
+          "label": "读数颜色",
+          "type": "color",
+          "default": "var(--accent-secondary)",
+          "group": "数值",
+          "help": "命中取值规则的那一行改用规则的颜色，这里配的是没有命中时的颜色。",
+          "span": "half"
+        },
+        {
+          "key": "valueGlow",
+          "label": "读数辉光 (px)",
+          "type": "range",
+          "default": 0,
+          "group": "数值",
+          "span": "half",
+          "min": 0,
+          "max": 24,
+          "step": 1
+        },
+        {
+          "key": "unitPlace",
+          "label": "单位位置",
+          "type": "enum",
+          "default": "attached",
+          "options": [
+            {
+              "value": "attached",
+              "label": "紧跟读数"
+            },
+            {
+              "value": "baseline",
+              "label": "读数右侧"
+            },
+            {
+              "value": "column",
+              "label": "独占一列"
+            }
+          ],
+          "group": "单位",
+          "help": "「独占一列」只在三列表档有意义，行内编排档下它等同于紧跟读数。",
+          "span": "half"
+        },
+        {
+          "key": "unitSize",
+          "label": "单位字号 (px)",
+          "type": "range",
+          "default": 11,
+          "group": "单位",
+          "span": "half",
+          "min": 8,
+          "max": 32,
+          "step": 1
+        },
+        {
+          "key": "subSource",
+          "label": "副读数取值",
+          "type": "enum",
+          "default": "aux",
+          "options": [
+            {
+              "value": "aux",
+              "label": "副读数 1"
+            },
+            {
+              "value": "aux2",
+              "label": "副读数 2"
+            },
+            {
+              "value": "aux3",
+              "label": "副读数 3"
+            },
+            {
+              "value": "target",
+              "label": "行内目标值"
+            },
+            {
+              "value": "text",
+              "label": "绑定文本"
+            }
+          ],
+          "group": "副读数",
+          "help": "它与两条进度条的选源各自独立，所以副读数槽有三个。",
+          "span": "half"
+        },
+        {
+          "key": "subLabel",
+          "label": "副读数前缀",
+          "type": "string",
+          "default": "",
+          "placeholder": "如 目标 / 水温 / 能效",
+          "group": "副读数",
+          "span": "half"
+        },
+        {
+          "key": "badge",
+          "label": "状态徽章",
+          "type": "object",
+          "default": {
+            "kind": "none",
+            "style": "outline"
+          },
+          "group": "徽章",
+          "span": "full",
+          "fields": [
+            {
+              "key": "kind",
+              "label": "取值来源",
+              "type": "enum",
+              "default": "none",
+              "options": [
+                {
+                  "value": "none",
+                  "label": "不画"
+                },
+                {
+                  "value": "device",
+                  "label": "设备状态"
+                },
+                {
+                  "value": "severity",
+                  "label": "严重度"
+                },
+                {
+                  "value": "rule",
+                  "label": "命中规则"
+                }
+              ],
+              "help": "「严重度」画正常 / 提示 / 警告 / 危急四个词，「命中规则」画规则自己的文案——两者不是同一句话。"
+            },
+            {
+              "key": "style",
+              "label": "画法",
+              "type": "enum",
+              "default": "outline",
+              "options": [
+                {
+                  "value": "outline",
+                  "label": "描边"
+                },
+                {
+                  "value": "solid",
+                  "label": "实心"
+                },
+                {
+                  "value": "dot",
+                  "label": "圆点"
+                }
+              ],
+              "help": "⚠ 设备状态那一档自带五档配色与呼吸，这一项对它不作用。"
+            }
+          ]
+        },
+        {
+          "key": "meter",
+          "label": "进度条",
+          "type": "object",
+          "default": {
+            "kind": "none",
+            "source": "range",
+            "label": "",
+            "height": 4,
+            "width": 0,
+            "color": "",
+            "glow": 6,
+            "dot": false,
+            "showPercent": true,
+            "source2": "none",
+            "label2": ""
+          },
+          "group": "进度",
+          "help": "两条同构的进度条，样式子键是共享的：只有选源与前缀各有一套。",
+          "span": "full",
+          "fields": [
+            {
+              "key": "kind",
+              "label": "画法",
+              "type": "enum",
+              "default": "none",
+              "options": [
+                {
+                  "value": "none",
+                  "label": "不画"
+                },
+                {
+                  "value": "bar",
+                  "label": "进度条"
+                }
+              ]
+            },
+            {
+              "key": "source",
+              "label": "第一条选源",
+              "type": "enum",
+              "default": "range",
+              "options": [
+                {
+                  "value": "range",
+                  "label": "量程占比"
+                },
+                {
+                  "value": "share",
+                  "label": "全表占比"
+                },
+                {
+                  "value": "aux",
+                  "label": "副读数 1"
+                },
+                {
+                  "value": "aux2",
+                  "label": "副读数 2"
+                },
+                {
+                  "value": "aux3",
+                  "label": "副读数 3"
+                }
+              ]
+            },
+            {
+              "key": "label",
+              "label": "第一条前缀",
+              "type": "string",
+              "default": ""
+            },
+            {
+              "key": "height",
+              "label": "条粗 (px)",
+              "type": "range",
+              "default": 4,
+              "min": 1,
+              "max": 24,
+              "step": 1
+            },
+            {
+              "key": "width",
+              "label": "条宽 (px)",
+              "type": "range",
+              "default": 0,
+              "help": "0 = 铺满剩余宽度。",
+              "min": 0,
+              "max": 400,
+              "step": 1
+            },
+            {
+              "key": "color",
+              "label": "条色",
+              "type": "color",
+              "default": "",
+              "placeholder": "留空 = 跟随行当前色"
+            },
+            {
+              "key": "glow",
+              "label": "辉光 (px)",
+              "type": "range",
+              "default": 6,
+              "min": 0,
+              "max": 24,
+              "step": 1
+            },
+            {
+              "key": "dot",
+              "label": "发光圆点",
+              "type": "boolean",
+              "default": false,
+              "help": "条前面加一个 4px 的发光圆点。⚠ 两条共享它，开了第二条也会跟着有。"
+            },
+            {
+              "key": "showPercent",
+              "label": "显示百分比",
+              "type": "boolean",
+              "default": true
+            },
+            {
+              "key": "source2",
+              "label": "第二条选源",
+              "type": "enum",
+              "default": "none",
+              "options": [
+                {
+                  "value": "none",
+                  "label": "不画第二条"
+                },
+                {
+                  "value": "range",
+                  "label": "量程占比"
+                },
+                {
+                  "value": "share",
+                  "label": "全表占比"
+                },
+                {
+                  "value": "aux",
+                  "label": "副读数 1"
+                },
+                {
+                  "value": "aux2",
+                  "label": "副读数 2"
+                },
+                {
+                  "value": "aux3",
+                  "label": "副读数 3"
+                }
+              ]
+            },
+            {
+              "key": "label2",
+              "label": "第二条前缀",
+              "type": "string",
+              "default": ""
+            }
+          ]
+        },
+        {
+          "key": "extras",
+          "label": "扩展指标",
+          "type": "array",
+          "default": [],
+          "group": "扩展",
+          "help": "取绑定的三个扩展槽，有值才画（真实 0 算有值）。要它出现还得把「扩展指标行」打开。",
+          "span": "full",
+          "item_schema": [
+            {
+              "key": "label",
+              "label": "名称",
+              "type": "string",
+              "default": ""
+            },
+            {
+              "key": "unit",
+              "label": "单位",
+              "type": "string",
+              "default": ""
+            },
+            {
+              "key": "precision",
+              "label": "小数位",
+              "type": "range",
+              "default": 1,
+              "min": 0,
+              "max": 6,
+              "step": 1
+            }
+          ],
+          "item_label_key": "label",
+          "max_items": 3
+        },
+        {
+          "key": "thousands",
+          "label": "千分位分隔",
+          "type": "boolean",
+          "default": true,
+          "group": "格式",
+          "span": "half"
+        },
+        {
+          "key": "rules",
+          "label": "取值规则",
+          "type": "array",
+          "default": [],
+          "group": "告警",
+          "help": "按声明顺序取首个命中，高危规则放前面；颜色留空跟随严重度语义色，填则只填 var(--…)。",
+          "item_schema": [
+            {
+              "key": "op",
+              "label": "判断",
+              "type": "enum",
+              "default": "gt",
+              "options": [
+                {
+                  "value": "lt",
+                  "label": "< 小于"
+                },
+                {
+                  "value": "lte",
+                  "label": "≤ 小于等于"
+                },
+                {
+                  "value": "gt",
+                  "label": "> 大于"
+                },
+                {
+                  "value": "gte",
+                  "label": "≥ 大于等于"
+                },
+                {
+                  "value": "between",
+                  "label": "区间内 [a,b]"
+                },
+                {
+                  "value": "outside",
+                  "label": "区间外"
+                },
+                {
+                  "value": "eq",
+                  "label": "= 等于"
+                },
+                {
+                  "value": "neq",
+                  "label": "≠ 不等于"
+                }
+              ]
+            },
+            {
+              "key": "value",
+              "label": "阈值",
+              "type": "number",
+              "default": 0
+            },
+            {
+              "key": "value2",
+              "label": "阈值上界",
+              "type": "number",
+              "when": {
+                "key": "op",
+                "in": [
+                  "between",
+                  "outside"
+                ]
+              }
+            },
+            {
+              "key": "level",
+              "label": "严重度",
+              "type": "enum",
+              "default": "warning",
+              "options": [
+                {
+                  "value": "normal",
+                  "label": "正常（绿）"
+                },
+                {
+                  "value": "info",
+                  "label": "提示（蓝）"
+                },
+                {
+                  "value": "warning",
+                  "label": "警告（黄）"
+                },
+                {
+                  "value": "danger",
+                  "label": "危险（红）"
+                }
+              ]
+            },
+            {
+              "key": "color",
+              "label": "颜色",
+              "type": "color",
+              "default": "",
+              "help": "留空跟随严重度语义色；能源类型、水温梯度这类非严重度的配色填这里。"
+            },
+            {
+              "key": "label",
+              "label": "文案",
+              "type": "string",
+              "default": ""
+            },
+            {
+              "key": "blink",
+              "label": "闪烁",
+              "type": "boolean",
+              "default": false
+            }
+          ],
+          "item_label_key": "label"
+        },
+        {
+          "key": "alarmOn",
+          "label": "规则判哪个读数",
+          "type": "enum",
+          "default": "value",
+          "options": [
+            {
+              "value": "value",
+              "label": "主读数"
+            },
+            {
+              "value": "sub",
+              "label": "副读数"
+            }
+          ],
+          "group": "告警",
+          "span": "half"
+        },
+        {
+          "key": "rowFilter",
+          "label": "行筛选",
+          "type": "enum",
+          "default": "all",
+          "options": [
+            {
+              "value": "all",
+              "label": "全部"
+            },
+            {
+              "value": "hit",
+              "label": "命中规则"
+            },
+            {
+              "value": "alarm",
+              "label": "只看告警"
+            }
+          ],
+          "group": "告警",
+          "span": "half"
+        },
+        {
+          "key": "rowSort",
+          "label": "行序",
+          "type": "enum",
+          "default": "docOrder",
+          "options": [
+            {
+              "value": "docOrder",
+              "label": "配置顺序"
+            },
+            {
+              "value": "severity",
+              "label": "严重度降序"
+            }
+          ],
+          "group": "告警",
+          "span": "half"
+        },
+        {
+          "key": "holdSeconds",
+          "label": "最短持续 (s)",
+          "type": "range",
+          "default": 0,
+          "group": "迟滞",
+          "help": "告警清除后至少保留的秒数，压住值在阈值附近抖动导致的反复进出列表；0 = 清除即移除。",
+          "span": "half",
+          "min": 0,
+          "max": 300,
+          "step": 1
+        },
+        {
+          "key": "calmText",
+          "label": "无告警占位",
+          "type": "string",
+          "default": "无活动告警",
+          "group": "迟滞",
+          "help": "⚠ 与「无行占位」是两件事：这一句说的是「配了 N 行但一条都没命中」，那一句说的是「一行都没配」。",
+          "span": "half"
+        },
+        {
+          "key": "timeSource",
+          "label": "时刻来源",
+          "type": "enum",
+          "default": "sample",
+          "options": [
+            {
+              "value": "sample",
+              "label": "采样时刻"
+            },
+            {
+              "value": "alarmSince",
+              "label": "告警起始时刻"
+            },
+            {
+              "value": "bound",
+              "label": "绑定文本"
+            }
+          ],
+          "group": "时刻",
+          "help": "⚠ 采样时刻是「最后一帧什么时候到的」，告警起始时刻是「什么时候开始报的」，两个数字长得一样但不是一回事。",
+          "span": "half"
+        }
+      ],
+      "bindings": [
+        {
+          "key": "listValues",
+          "label": "行读数",
+          "data_type": "number",
+          "is_array": true,
+          "is_entity_pinned": true,
+          "array_fields": [
+            {
+              "key": "value",
+              "label": "主读数",
+              "data_type": "number"
+            },
+            {
+              "key": "aux",
+              "label": "副读数 1 / 判据值",
+              "data_type": "number"
+            },
+            {
+              "key": "aux2",
+              "label": "副读数 2",
+              "data_type": "number"
+            },
+            {
+              "key": "aux3",
+              "label": "副读数 3",
+              "data_type": "number"
+            },
+            {
+              "key": "status",
+              "label": "设备状态",
+              "data_type": "number"
+            },
+            {
+              "key": "name",
+              "label": "行名",
+              "data_type": "string"
+            },
+            {
+              "key": "text",
+              "label": "描述",
+              "data_type": "string"
+            },
+            {
+              "key": "time",
+              "label": "时刻文本",
+              "data_type": "string"
+            },
+            {
+              "key": "extra1",
+              "label": "扩展 1",
+              "data_type": "number"
+            },
+            {
+              "key": "extra2",
+              "label": "扩展 2",
+              "data_type": "number"
+            },
+            {
+              "key": "extra3",
+              "label": "扩展 3",
+              "data_type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "type": "metric-card",
       "display_name": "实时数值",
       "category": "数据",

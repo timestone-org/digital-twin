@@ -1,0 +1,135 @@
+// info-list 列表壳这一层的样式：整块内边距、空态、三列档的表头、组头与分类页签。
+// 由 Component.vue 的 scoped 块 @use 进来——摊进组件里会把它撑过单文件 500 行的闸门。
+// ⚠ 行与行内件的样式在 `_row.scss`（由 InfoRow.vue @use）。两处不许互相抄：
+//   scoped 编译只把作用域属性打到本组件自己的元素与子组件根上，行内那些元素
+//   拿不到本组件的作用域属性，抄过来的规则一条都不会命中，改了也「不生效」。
+
+.il-list {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  padding: var(--il-pad-y) var(--il-pad-x);
+}
+
+// 滚动视口吃掉页签与表头之外的全部高度；min-height 不给 0 的话它撑着不缩
+.il-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.il-empty {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  color: var(--text-disabled);
+  font-size: 13px;
+}
+
+// 三列档：表头与数据行共用同一份列模板。⚠ 拆成两处字符串就会错列，
+// 而 typecheck、lint 与 css-variables 契约都扫不到这里
+.il--layout-columns .il-head,
+.il--layout-columns .il-row {
+  display: grid;
+  align-items: center;
+  column-gap: 8px;
+  grid-template-columns: var(--il-cols-tpl);
+}
+
+.il-head {
+  flex: none;
+  padding: 6px var(--il-row-px);
+  border-bottom: 1px solid var(--border-strong);
+  color: var(--il-label-color);
+  font-size: var(--il-label-size);
+  letter-spacing: 0.04em;
+}
+
+.il-head__cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// 数值列与单位列跟着数据行右对齐，否则表头与它统辖的那一列各看各的
+.il-head__cell:not(:first-child) {
+  text-align: right;
+}
+
+.il--group-section .il-section {
+  display: flex;
+  height: 26px;
+  align-items: center;
+  padding: 0 var(--il-row-px);
+  border-bottom: 1px dashed
+    color-mix(in srgb, var(--accent-primary) 22%, transparent);
+  color: var(--accent-secondary);
+  font-size: var(--il-label-size);
+  gap: 6px;
+  letter-spacing: 0.06em;
+}
+
+.il-section__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.il-section__count {
+  color: var(--text-disabled);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+// ⚠ 页签条摆在滚动视口**外面**：视口真滚起来时会渲染两份内容副本，
+//   槽里带 role / 状态的交互件会跟着复制出第二份
+.il--group-tabs .il-tabs {
+  display: flex;
+  flex: none;
+  margin: 0;
+  padding: 0 0 4px;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--accent-primary) 18%, transparent);
+  gap: 6px;
+  list-style: none;
+}
+
+.il--group-tabs .il-tab {
+  display: flex;
+  align-items: center;
+  padding: 3px 7px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--il-label-size);
+  cursor: pointer;
+  gap: 4px;
+  user-select: none;
+}
+
+.il--group-tabs .il-tab.is-active {
+  border-color: color-mix(in srgb, var(--accent-primary) 50%, transparent);
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  color: var(--accent-primary);
+}
+
+.il--group-tabs .il-tab:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.il-tab__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.il-tab__count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  opacity: 0.7;
+}
