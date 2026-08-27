@@ -8,6 +8,8 @@
  * ⚠ 搜索是**纯客户端过滤**：台账是业务级资源，几十张顶天（设计 §7.9）。
  * 于是一次取回、本地筛，既不用为每个字符发一次请求，也不会出现「服务端翻页
  * 与本地筛选各筛各的」——那时第 2 页会漏掉本该命中的行，且不报任何错。
+ * ⚠ 「未生效」读的是采集总开关的**真实有效值**，一个字都不写死（设计 §13.3）：
+ * 两个后台任务默认都是关的，而关着的表看起来只是「今天还没有数据」。
  */
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
@@ -18,6 +20,7 @@ import { DtButton, DtDataView, DtIcon, DtInput, DtNotice, DtTag } from '@dt/ui'
 import * as dataset from '@/api/dataset'
 import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
+import RuntimeParamsDialog from '@/components/runtime/RuntimeParamsDialog.vue'
 import { useAsyncList } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
 import { formatDateTime } from '@/utils/datetime'
@@ -25,6 +28,7 @@ import { listEmptyState } from '@/utils/listEmpty'
 import TableFormDialog from './components/TableFormDialog.vue'
 import TableRowActions from './components/TableRowActions.vue'
 import { collectSummary } from '../scripts/collectSummary'
+import { useDatasetSwitches } from './scripts/useDatasetSwitches'
 import { matchesKeyword, retentionLabel } from './scripts/tableView'
 import { useTableOps } from './scripts/useTableOps'
 
@@ -33,7 +37,7 @@ const COLUMNS: readonly DtDataColumn[] = [
   { key: 'code', label: '编码', width: '12rem', card: 'meta' },
   { key: 'collect', label: '取数方式', width: '14rem' },
   { key: 'column_count', label: '列数', width: '5rem', align: 'right' },
-  { key: 'retention', label: '保留期', width: '7rem' },
+  { key: 'retention', label: '保留期', width: '9rem' },
   { key: 'status', label: '状态', width: '6rem' },
   { key: 'created_at', label: '创建时间', width: '12rem' },
   {
@@ -56,6 +60,8 @@ const PAGE_SIZE = 200
 
 const view = useViewMode('dataset-tables')
 const keyword = ref('')
+const isParamsOpen = ref(false)
+const switches = useDatasetSwitches()
 
 const list = useAsyncList<DatasetTableSummary>(
   (query) => dataset.listDatasetTables(query),
@@ -84,14 +90,39 @@ const emptyState = computed(() =>
   }),
 )
 
+// 采集总开关关着，而这一屏里有按周期汇总的台账——那些表一行都不会新增
+const stalled = computed(
+  () =>
+    !switches.collectEnabled.value &&
+    visible.value.some((table) => table.collect_mode === 'aggregate'),
+)
+
+/** 弹窗一关就重读开关：刚被拨过的话，页面上那几句话得跟着改口。 */
+function onParamsToggle(open: boolean): void {
+  isParamsOpen.value = open
+  if (!open) void switches.load()
+}
+
 onMounted(() => {
   void list.reload()
+  void switches.load()
 })
 </script>
 
 <template>
   <AppShell title="数据台账" subtitle="自定义表结构 · 人工录入 / 点位汇总">
     <template #actions>
+      <!-- ⚠ 不挂 PermGuard：读这一组只要 `dataset:view`，与本页同码；改不改得动
+           由弹窗按后端下发的写码自己决定 -->
+      <DtButton
+        variant="ghost"
+        size="sm"
+        icon="settings"
+        data-test="open-dataset-params"
+        @click="isParamsOpen = true"
+      >
+        运行参数
+      </DtButton>
       <PermGuard :codes="[PERMISSION_CODES.datasetManage]" explain>
         <DtButton size="sm" icon="plus" @click="ops.openCreate">
           新建台账
@@ -104,6 +135,13 @@ onMounted(() => {
       <DtNotice v-if="missing > 0" intent="warning" icon="alert-triangle">
         还有 {{ missing }} 张台账没取回来，搜索只筛得到已经列出的这
         {{ list.items.value.length }} 张。
+      </DtNotice>
+
+      <!-- 配好了列却一行数据都不出，头号原因就是这个开关；不明说的话，那张表
+           看起来只是「今天还没有数据」 -->
+      <DtNotice v-if="stalled" intent="warning" icon="alert-triangle">
+        台账采集总开关当前是关的，按周期汇总的台账不会出新行。在「运行参数」里
+        打开它；关闭期间的桶不会自己补回来，那一段要在详情页显式触发回填。
       </DtNotice>
 
       <DtDataView
@@ -157,12 +195,25 @@ onMounted(() => {
         </template>
 
         <template #cell-collect="{ row }">
-          <span
-            class="truncate text-text-secondary"
-            :title="collectSummary(row).hint"
-          >
-            {{ collectSummary(row).label }}
-          </span>
+          <div class="flex min-w-0 items-center gap-1.5">
+            <span
+              class="truncate text-text-secondary"
+              :title="collectSummary(row).hint"
+            >
+              {{ collectSummary(row).label }}
+            </span>
+            <DtTag
+              v-if="
+                row.collect_mode === 'aggregate' &&
+                !switches.collectEnabled.value
+              "
+              size="sm"
+              intent="warning"
+              title="台账采集总开关是关的，这张表不会出新行"
+            >
+              未生效
+            </DtTag>
+          </div>
         </template>
 
         <!-- ⚠ 一列都没有的台账要标出来：它和配好的长得一模一样，却一行数据都
@@ -179,8 +230,19 @@ onMounted(() => {
           <template v-else>{{ row.column_count }}</template>
         </template>
 
+        <!-- ⚠ 清理关着不算异常（默认就是关的，且它开着才会真删行），故只补一句
+             灰字而不是警告色——把安全的那一侧标成红的，警告就不值钱了 -->
         <template #cell-retention="{ row }">
           {{ retentionLabel(row.retention_days) }}
+          <span
+            v-if="
+              row.retention_days !== null && !switches.retentionEnabled.value
+            "
+            class="text-xs text-text-disabled"
+            title="保留期清理总开关是关的，过期的行不会被删"
+          >
+            未清理
+          </span>
         </template>
 
         <template #cell-status="{ row }">
@@ -207,6 +269,14 @@ onMounted(() => {
       v-model="ops.isFormOpen.value"
       :table="ops.editing.value"
       @saved="(message, createdId) => ops.afterSaved(message, createdId)"
+    />
+
+    <RuntimeParamsDialog
+      :model-value="isParamsOpen"
+      section="dataset"
+      title="运行参数 · 数据台账"
+      intro="聚合采集与保留期清理两条循环的旋钮，九项全是即时档：改完下一拍就生效，不必重启进程。"
+      @update:model-value="onParamsToggle"
     />
   </AppShell>
 </template>

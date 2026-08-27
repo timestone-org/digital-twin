@@ -1,18 +1,21 @@
 /**
  * @fileoverview 数据台账列表页的行为契约：一行说清这张表是什么、**进得去详情**、
  * 闸 3 门禁、客户端搜索、两种空态，以及**两段式删除**——先不带 force 试一次，
- * 后端回 409 才升级成「仍然删除」。
+ * 后端回 409 才升级成「仍然删除」，以及**两个总开关的实话**——关着就说关着，
+ * 读不到就退回全关且不把整页判成加载失败。
  */
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
-import type { DatasetTableSummary } from '@dt/contracts'
+import type { DatasetTableSummary, RuntimeParamItem } from '@dt/contracts'
 import { ERROR_CODES } from '@dt/contracts'
 
 import { DtConfirmHost, DtToastHost, useConfirm, useToast } from '@dt/ui'
 
 import { BizError } from '@/api/client'
 import * as dataset from '@/api/dataset'
+import * as runtimeApi from '@/api/runtimeParams'
+import RuntimeParamsDialog from '@/components/runtime/RuntimeParamsDialog.vue'
 import TableFormDialog from '@/pages/Dataset/Tables/components/TableFormDialog.vue'
 import TablesPage from '@/pages/Dataset/Tables/index.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -75,6 +78,38 @@ function pageOf(items: DatasetTableSummary[], total = items.length) {
   return { items, page: 1, size: 200, total }
 }
 
+/** 两个总开关的有效值。只有 key 与 value 参与判断，其余照登记项填齐。 */
+function paramSwitch(key: string, value: boolean): RuntimeParamItem {
+  return {
+    section: 'dataset',
+    key,
+    envName: `PLATFORM_${key.toUpperCase()}`,
+    writeCode: 'dataset:manage',
+    label: key,
+    hint: '',
+    kind: 'switch',
+    unit: '',
+    step: 1,
+    minimum: 0,
+    maximum: 1,
+    tier: 'instant',
+    danger: key === 'dataset_enabled' ? 'off' : 'on',
+    value,
+    defaultValue: false,
+    overridden: value,
+    updatedBy: null,
+    updatedAt: null,
+    previousValue: null,
+  }
+}
+
+function switches(collect: boolean, retention = false): RuntimeParamItem[] {
+  return [
+    paramSwitch('dataset_enabled', collect),
+    paramSwitch('dataset_retention_enabled', retention),
+  ]
+}
+
 beforeEach(() => {
   setActivePinia(createPinia())
   // ⚠ 视图偏好落在 localStorage 里：不清的话上一条用例切过的视图会带进下一条，
@@ -82,6 +117,8 @@ beforeEach(() => {
   localStorage.clear()
   routerMock.push.mockClear()
   vi.spyOn(dataset, 'listDatasetTables').mockResolvedValue(pageOf([table()]))
+  // 两个开关默认都是关的，与后端的默认值一致
+  vi.spyOn(runtimeApi, 'listRuntimeParams').mockResolvedValue(switches(false))
 })
 
 // ⚠ 必须自动卸载：确认框与吐司宿主 teleport 到 body 上，上一条不卸载就清 body，
@@ -238,6 +275,86 @@ describe('台账列表页', () => {
   it('取全了就不摆那句提示', async () => {
     const wrapper = await render(['dataset:view'])
     expect(wrapper.text()).not.toContain('没取回来')
+  })
+})
+
+describe('两个总开关的实话', () => {
+  it('⚠ 采集总开关关着时，自动采集的台账标「未生效」并在页顶说清后果', async () => {
+    const wrapper = await render(['dataset:view'])
+    expect(wrapper.text()).toContain('未生效')
+    expect(wrapper.text()).toContain('台账采集总开关当前是关的')
+  })
+
+  it('开关打开之后不许再说未生效——措辞跟着有效值走，不是写死的', async () => {
+    vi.mocked(runtimeApi.listRuntimeParams).mockResolvedValue(switches(true))
+    const wrapper = await render(['dataset:view'])
+    expect(wrapper.text()).not.toContain('未生效')
+    expect(wrapper.text()).not.toContain('台账采集总开关当前是关的')
+  })
+
+  it('人工录入的台账不受这个开关管，一句都不标', async () => {
+    vi.mocked(dataset.listDatasetTables).mockResolvedValue(
+      pageOf([table({ collect_mode: 'manual' })]),
+    )
+    const wrapper = await render(['dataset:view'])
+    expect(wrapper.text()).not.toContain('未生效')
+    expect(wrapper.text()).not.toContain('台账采集总开关当前是关的')
+  })
+
+  it('⚠ 运行参数取不到时退回全关，且整页照常渲染——不判成加载失败', async () => {
+    vi.mocked(runtimeApi.listRuntimeParams).mockRejectedValue(
+      new Error('平台服务开小差'),
+    )
+    const wrapper = await render(['dataset:view'])
+    expect(wrapper.text()).toContain('一号机组能耗台账')
+    expect(wrapper.text()).toContain('未生效')
+    expect(wrapper.text()).not.toContain('平台服务开小差')
+  })
+
+  it('保留期那一格在清理开关关着时补一句，开着就不补', async () => {
+    vi.mocked(dataset.listDatasetTables).mockResolvedValue(
+      pageOf([table({ retention_days: 90 })]),
+    )
+    const wrapper = await render(['dataset:view'])
+    expect(wrapper.text()).toContain('未清理')
+
+    vi.mocked(runtimeApi.listRuntimeParams).mockResolvedValue(
+      switches(false, true),
+    )
+    const opened = await render(['dataset:view'])
+    expect(opened.text()).not.toContain('未清理')
+  })
+
+  it('永久保留的台账不提清理：它本来就没有过期的行', async () => {
+    const wrapper = await render(['dataset:view'])
+    expect(wrapper.text()).toContain('永久')
+    expect(wrapper.text()).not.toContain('未清理')
+  })
+
+  it('「运行参数」按只读码就开得出来，开的是 dataset 那一组', async () => {
+    const wrapper = await render(['dataset:view'])
+    const dialog = wrapper.findComponent(RuntimeParamsDialog)
+    expect(dialog.props('section')).toBe('dataset')
+    expect(dialog.props('modelValue')).toBe(false)
+
+    await wrapper.find('[data-test="open-dataset-params"]').trigger('click')
+    expect(dialog.props('modelValue')).toBe(true)
+  })
+
+  it('弹窗一关就重读开关：刚拨过的话，页面上那几句话得跟着改口', async () => {
+    const wrapper = await render(['dataset:view'])
+    const before = vi.mocked(runtimeApi.listRuntimeParams).mock.calls.length
+    vi.mocked(runtimeApi.listRuntimeParams).mockResolvedValue(switches(true))
+
+    wrapper
+      .findComponent(RuntimeParamsDialog)
+      .vm.$emit('update:modelValue', false)
+    await flushPromises()
+
+    expect(vi.mocked(runtimeApi.listRuntimeParams).mock.calls.length).toBe(
+      before + 1,
+    )
+    expect(wrapper.text()).not.toContain('未生效')
   })
 })
 
