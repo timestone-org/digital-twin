@@ -990,3 +990,119 @@ describe('快照登记', () => {
     scene.dispose()
   })
 })
+
+describe('量当前距离', () => {
+  /** 相机现在离这个世界坐标多远；断言拿它对，就不必把机位钉死。 */
+  function distanceTo(harness: Harness, point: readonly number[]): number {
+    const { position } = harness.scene.snapshot()
+    return Math.hypot(
+      (position[0] ?? 0) - (point[0] ?? 0),
+      (position[1] ?? 0) - (point[1] ?? 0),
+      (position[2] ?? 0) - (point[2] ?? 0),
+    )
+  }
+
+  it('轨道那一档量的是相机到轨道中心', async () => {
+    const harness = await ready()
+    const { target } = harness.scene.snapshot()
+
+    expect(harness.scene.measureDistance('orbit')).toBeCloseTo(
+      distanceTo(harness, target),
+      6,
+    )
+  })
+
+  // 部件的 `self` 与 `part-center` 是同一个点，运行态那边也是这么给的
+  it('选中部件时两档都量到它的包围盒中心', async () => {
+    const harness = await ready(
+      twinConfig(),
+      fakeModel('pump', new THREE.Vector3(10, 0, 0)),
+    )
+    harness.scene.setSelection({ kind: 'parts', id: 'part-pump' })
+
+    const expected = distanceTo(harness, [10, 0, 0])
+    expect(harness.scene.measureDistance('part-center')).toBeCloseTo(
+      expected,
+      4,
+    )
+    expect(harness.scene.measureDistance('self')).toBeCloseTo(expected, 4)
+  })
+
+  it('选中锚点时本元素那一档量到它的坐标', async () => {
+    const harness = await ready(
+      twinConfig({ anchors: [{ id: 'a1', position: [0, 4, 0] }] }),
+    )
+    harness.scene.setSelection({ kind: 'anchors', id: 'a1' })
+
+    expect(harness.scene.measureDistance('self')).toBeCloseTo(
+      distanceTo(harness, [0, 4, 0]),
+      6,
+    )
+    // 参考系真的分得开：与轨道那一档不是同一个数
+    expect(harness.scene.measureDistance('self')).not.toBeCloseTo(
+      harness.scene.measureDistance('orbit') ?? 0,
+      3,
+    )
+  })
+
+  // ⚠ 覆盖层元素不属于任何部件，这一档对它们恒不成立（= 不限制）。
+  // 给个数出来会让「配了等于没配」的阈值看起来像配对了
+  it('覆盖层元素上的部件中心那一档量不出，给 null', async () => {
+    const harness = await ready(
+      twinConfig({ anchors: [{ id: 'a1', position: [0, 4, 0] }] }),
+    )
+    harness.scene.setSelection({ kind: 'anchors', id: 'a1' })
+
+    expect(harness.scene.measureDistance('part-center')).toBeNull()
+  })
+
+  // 左栏眼睛关掉的实体在渲染层根本没有条目：问渲染层要基准点会把
+  // 「临时藏起来了」误报成「量不出」
+  it('实体被置成不可见时照样量得出来', async () => {
+    const harness = await ready(
+      twinConfig({
+        anchors: [
+          { id: 'a1', position: [0, 4, 0], visibility: { visible: false } },
+        ],
+      }),
+    )
+    harness.scene.setSelection({ kind: 'anchors', id: 'a1' })
+
+    expect(harness.scene.measureDistance('self')).toBeCloseTo(
+      distanceTo(harness, [0, 4, 0]),
+      6,
+    )
+  })
+
+  it('部件的节点在模型里一个都没命中时量不出，不拿 0 顶替', async () => {
+    const harness = await ready(
+      twinConfig({ parts: [{ id: 'part-x', nodes: ['模型里没有这个节点'] }] }),
+    )
+    harness.scene.setSelection({ kind: 'parts', id: 'part-x' })
+
+    expect(harness.scene.measureDistance('self')).toBeNull()
+    expect(harness.scene.measureDistance('part-center')).toBeNull()
+  })
+
+  it('选的是模型这类单例段时，本元素那一档没有意义，给 null', async () => {
+    const harness = await ready()
+    harness.scene.setSelection({ kind: 'model' })
+
+    expect(harness.scene.measureDistance('self')).toBeNull()
+    expect(harness.scene.measureDistance('orbit')).not.toBeNull()
+  })
+
+  it('WebGL 不可用时一律量不出：没有相机就没有距离', () => {
+    const container = document.createElement('div')
+    const scene = new EditorScene({
+      container,
+      config: twinConfig(),
+      on: createEvents(),
+      createRenderer: () => null,
+      gltfSource: { loadAsync: vi.fn() },
+    })
+
+    expect(scene.measureDistance('orbit')).toBeNull()
+    scene.dispose()
+  })
+})

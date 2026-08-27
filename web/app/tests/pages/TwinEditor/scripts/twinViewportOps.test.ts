@@ -26,6 +26,9 @@ const CONFIG = normalizeTwinConfig({
   cameras: [{ id: 'c1' }],
 })
 
+/** 假视口量出来的距离；断言按它比对，换个数不影响任何一条用例的含义。 */
+const MEASURED = 12.5
+
 function pose(): { position: Vec3; target: Vec3; fov: number } {
   return { position: [1, 2, 3], target: [0, 0, 0], fov: 50 }
 }
@@ -34,6 +37,7 @@ function fakeHandle(overrides: Partial<TwinViewportHandle> = {}) {
   return {
     focus: vi.fn(),
     snapshot: vi.fn(pose),
+    measureDistance: vi.fn(() => MEASURED),
     playRoamPreview: vi.fn(() => true),
     stopRoamPreview: vi.fn(),
     stageEl: vi.fn(() => null),
@@ -269,6 +273,23 @@ describe('取当前机位', () => {
     ops.captureCamera('c1')
 
     expect(patchConfig).not.toHaveBeenCalled()
+  })
+})
+
+describe('测距', () => {
+  it('把参考系原样交给视口，量出来的数原样带回', () => {
+    const { ops, handle } = setup()
+
+    expect(ops.measureDistance('part-center')).toBe(MEASURED)
+    expect(handle.measureDistance).toHaveBeenCalledWith('part-center')
+  })
+
+  // 视口还没挂上时按了尺子，得到的是「量不出」而不是一个 0
+  it('视口句柄还没有时给 null，不拿 0 顶替', () => {
+    const { ops } = setup()
+    ops.viewportRef.value = null
+
+    expect(ops.measureDistance('orbit')).toBeNull()
   })
 })
 

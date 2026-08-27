@@ -7,7 +7,12 @@
  * 漫游只在用户点「预览」时才飞（绝不自动开播）。
  * 实时值由宿主 `setValues` 喂进来，没喂就是一片占位符——绝不拿旧值冒充。
  */
-import type { TwinConfig, TwinPose, Vec3 } from '@dt/twin-config'
+import type {
+  TwinConfig,
+  TwinDistanceRef,
+  TwinPose,
+  Vec3,
+} from '@dt/twin-config'
 import {
   DEFAULT_CAMERA_FOV,
   EMPTY_ANCHOR_VALUES,
@@ -23,6 +28,8 @@ import {
 } from '@dt/twin-config'
 import * as THREE from 'three'
 
+import { flowMidpointOf, panelPositionOf } from './distanceBasis'
+import { distanceContextOf, distanceResolver } from './distanceContext'
 import { createFrameClock } from './frameClock'
 import { resolveTwinModelUrl } from './host'
 import { createGltfSource, loadTwinModel, type GltfSource } from './modelLoader'
@@ -70,6 +77,18 @@ import {
   type GizmoMode,
 } from './transformGizmo'
 import { ACCENT_COLOR_TOKEN, resolveColorSpec } from './themeColor'
+
+/**
+ * 一串带 id 与坐标的实体里，指定那一个的坐标；没有这一个给 null。
+ * @param list 锚点或箭头
+ * @param id 实体 id
+ */
+function positionById(
+  list: readonly { id: string; position: Vec3 }[],
+  id: string,
+): Vec3 | null {
+  return list.find((item) => item.id === id)?.position ?? null
+}
 
 /** 视口自己的状态机；宿主据此画空态 / 加载 / 出错的覆盖层。 */
 export type EditorSceneStatus = 'empty' | 'loading' | 'ready' | 'error'
@@ -330,6 +349,71 @@ export class EditorScene {
       target: [target.x, target.y, target.z],
       fov: core.camera.fov,
     }
+  }
+
+  /**
+   * 按参考系量一下当前相机离选中实体多远；量不出给 null。
+   *
+   * ⚠ 与运行态逐帧判显隐走的是同一个 `distanceResolver` 和同一组基准点：
+   * 这里另算一套的话，量出来的数填回阈值就是个不生效的门槛，而它不报错。
+   * ⚠ 基准点从配置算、不问渲染层要：左栏眼睛关掉的实体在渲染层根本没有条目，
+   * 问它会把「临时藏起来了」误报成「量不出」。
+   *
+   * @param ref 距离参考系
+   */
+  measureDistance(ref: TwinDistanceRef): number | null {
+    const core = this.core
+    if (core === null) return null
+    const basis = this.distanceBasisOf(this.selection)
+    const resolve = distanceResolver(
+      distanceContextOf(core),
+      basis.self,
+      basis.partCenter,
+    )
+    const distance = resolve(ref)
+    return distance !== null && Number.isFinite(distance) ? distance : null
+  }
+
+  /**
+   * 选中实体的两个基准点：它自己在哪、它所属部件的中心在哪。
+   * ⚠ 覆盖层元素不属于任何部件，`partCenter` 恒为 null——`part-center`
+   * 那一档对它们本来就不成立（配了等于不限制），这里如实给 null。
+   * @param selection 当前选中；null = 没选中
+   */
+  private distanceBasisOf(selection: TwinSceneSelection | null): {
+    self: Vec3 | THREE.Vector3 | null
+    partCenter: THREE.Vector3 | null
+  } {
+    const none = { self: null, partCenter: null }
+    if (selection === null || !('id' in selection)) return none
+    if (selection.kind === 'parts') {
+      // 部件的 `self` 与 `part-center` 是同一个点，运行态那边也是这么给的
+      const center = this.layers?.parts.centerOf(selection.id) ?? null
+      return { self: center, partCenter: center }
+    }
+    return { self: this.entityPositionOf(selection), partCenter: null }
+  }
+
+  /**
+   * 覆盖层元素套 `self` 参考系时用的那个点；定不出来给 null。
+   * @param selection 当前选中的覆盖层元素
+   */
+  private entityPositionOf(
+    selection: Extract<TwinSceneSelection, { id: string }>,
+  ): Vec3 | THREE.Vector3 | null {
+    const { anchors, panels, arrows, flows } = this.config
+    if (selection.kind === 'anchors') return positionById(anchors, selection.id)
+    if (selection.kind === 'arrows') return positionById(arrows, selection.id)
+    if (selection.kind === 'panels') {
+      const panel = panels.find((item) => item.id === selection.id)
+      return panel === undefined ? null : panelPositionOf(panel, anchors)
+    }
+    if (selection.kind === 'flows') {
+      const flow = flows.find((item) => item.id === selection.id)
+      return flow === undefined ? null : flowMidpointOf(flow, anchors)
+    }
+    // 视点没有几何，离它多远无从说起
+    return null
   }
 
   /**

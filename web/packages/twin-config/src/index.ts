@@ -57,6 +57,7 @@ export {
   collectSceneLegend,
   formatMeasureDistance,
   measureDistance,
+  measuredThreshold,
   screenshotFileName,
   screenshotStamp,
   searchSceneEntities,

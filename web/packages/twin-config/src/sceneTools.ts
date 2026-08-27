@@ -246,6 +246,18 @@ export function formatMeasureDistance(distance: number): string {
 }
 
 /**
+ * 量出来的距离取成阈值填得进去的数；量不出时给 null。
+ *
+ * ⚠ 小数位与 `formatMeasureDistance` 同一套口径：读出来 12.35 却填进去
+ * 12.345678 的话，同一个阈值在界面上和配置里不是一个数，而两处都不报错。
+ * @param distance 世界单位下的距离
+ */
+export function measuredThreshold(distance: number): number | null {
+  const value = Number(formatMeasureDistance(distance))
+  return Number.isFinite(value) ? value : null
+}
+
+/**
  * 三维两点直线距离；任一坐标非有限时给 NaN（调用方按「测不出」处理）。
  * @param a 起点
  * @param b 终点
