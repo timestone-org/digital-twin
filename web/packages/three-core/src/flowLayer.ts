@@ -9,6 +9,7 @@ import type { TwinAnchor, TwinFlowLink, TwinFlowValues } from '@dt/twin-config'
 import { flowKindColor, flowKindToken, toFiniteNumber } from '@dt/twin-config'
 import * as THREE from 'three'
 
+import { curveMidpoint, flowPathPointsOf } from './distanceBasis'
 import { distanceResolver, type DistanceContext } from './distanceContext'
 import { resolveVisibility } from './distanceRules'
 import { resolveColorSpec } from './themeColor'
@@ -38,8 +39,6 @@ const MIN_PARTICLES = 4
 const MAX_PARTICLES = 40
 /** 强度为 1 时每秒走过的世界单位相对模型对角线 */
 const SPEED_RATIO = 0.12
-/** 相邻两点近到这个距离以内就当成同一个点 */
-const MIN_SEGMENT = 1e-6
 /** 单帧最多推进的秒数 */
 const MAX_STEP_SECONDS = 0.1
 /** 能量流压在模型之上，与锚点同档 */
@@ -77,29 +76,6 @@ function clamp(value: number, low: number, high: number): number {
 /** 相位恒落回 [0,1)，负数也要绕回来。 */
 function wrap01(value: number): number {
   return ((value % 1) + 1) % 1
-}
-
-/**
- * 锚点串 → 世界坐标点串。
- * ⚠ 悬空的锚点引用只跳过那一个点，不废掉整条流——悬空引用由
- * `collectTwinConfigIssues` 单独报出来，渲染层不替它报警。
- * ⚠ 连着的重合点必须并成一个：CatmullRom 在重合点上切线是零向量，
- * TubeGeometry 归一化它会写出 NaN 顶点，那根管线会整根从画面上消失。
- */
-function pathPointsOf(
-  flow: TwinFlowLink,
-  anchorById: ReadonlyMap<string, TwinAnchor>,
-): THREE.Vector3[] {
-  const points: THREE.Vector3[] = []
-  for (const anchorId of flow.pathAnchors) {
-    const anchor = anchorById.get(anchorId)
-    if (anchor === undefined) continue
-    const point = new THREE.Vector3(...anchor.position)
-    const last = points[points.length - 1]
-    if (last !== undefined && last.distanceTo(point) <= MIN_SEGMENT) continue
-    points.push(point)
-  }
-  return points
 }
 
 /** 粒子数按路径长度给，长管道才不会稀疏成几个孤点。 */
@@ -206,7 +182,7 @@ export class FlowLayer {
     const routes = flows
       // 只认作者直接置的显隐；随距离派生的那部分归取景层，不在这里算
       .filter((flow) => flow.visibility.visible)
-      .map((flow) => ({ flow, points: pathPointsOf(flow, anchorById) }))
+      .map((flow) => ({ flow, points: flowPathPointsOf(flow, anchorById) }))
       // 一根管线至少要两个点，剩一个点连方向都定不出来
       .filter((route) => route.points.length >= 2)
     if (routes.length === 0) return
@@ -334,8 +310,7 @@ export class FlowLayer {
       speed: 0,
       active: true,
       distanceOpacity: 1,
-      // 一条流没有单一坐标，取路径中点当它的位置
-      midpoint: curve.getPointAt(0.5),
+      midpoint: curveMidpoint(curve),
     }
     this.applyEntryScale(entry)
     placeParticles(entry)

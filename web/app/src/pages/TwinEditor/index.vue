@@ -25,6 +25,7 @@ import TwinRightPane from './components/TwinRightPane.vue'
 import TwinRuntimePreview from './components/TwinRuntimePreview.vue'
 import TwinViewport from './components/TwinViewport.vue'
 import { createTwinEditorActions } from './scripts/twinEditorActions'
+import { provideTwinMeasure } from './scripts/twinMeasure'
 import { useEditorHidden } from './scripts/useEditorHidden'
 import { createTwinViewportOps } from './scripts/twinViewportOps'
 import { useTwinBindings } from './scripts/useTwinBindings'
@@ -116,6 +117,9 @@ const viewport = createTwinViewportOps({
 // ⚠ 模板里的 `ref="viewportRef"` 只认得顶层绑定，写成 `viewport.viewportRef`
 // 会被当成一个字符串 ref 名，视口句柄永远是 null
 const viewportRef = viewport.viewportRef
+
+// 右栏那几个距离阈值旁边的「量当前距离」按它取数
+provideTwinMeasure(viewport.measureDistance)
 
 // 助手：绑点 + 截视口（WebGL 走场景登记的快照替身，见 captureWithGl）
 const ai = useTwinAi(

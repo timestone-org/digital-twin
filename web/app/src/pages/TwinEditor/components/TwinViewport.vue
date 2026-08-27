@@ -12,7 +12,7 @@ import {
   type TwinCameraPose,
   type TwinPickMode,
 } from '@dt/three-core'
-import type { TwinConfig, Vec3 } from '@dt/twin-config'
+import type { TwinConfig, TwinDistanceRef, Vec3 } from '@dt/twin-config'
 import { DEFAULT_CAMERA_FOV } from '@dt/twin-config'
 import { DtButton, DtNotice, DtSpinner } from '@dt/ui'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -125,6 +125,14 @@ function snapshot(): TwinCameraPose {
   )
 }
 
+/**
+ * 按参考系量当前相机离选中实体多远；右栏的距离字段「量当前距离」用。
+ * @param ref 距离参考系
+ */
+function measureDistance(ref: TwinDistanceRef): number | null {
+  return scene?.measureDistance(ref) ?? null
+}
+
 onMounted(() => {
   const element = containerRef.value
   if (element === null) return
@@ -199,7 +207,14 @@ function stageEl(): HTMLElement | null {
   return containerRef.value
 }
 
-defineExpose({ focus, snapshot, playRoamPreview, stopRoamPreview, stageEl })
+defineExpose({
+  focus,
+  snapshot,
+  measureDistance,
+  playRoamPreview,
+  stopRoamPreview,
+  stageEl,
+})
 </script>
 
 <template>

@@ -9,12 +9,12 @@ import type {
   TwinAnchor,
   TwinConfig,
   TwinFlowLink,
-  TwinPanel,
   TwinPart,
   Vec3,
 } from '@dt/twin-config'
 import * as THREE from 'three'
 
+import { panelPositionOf } from './distanceBasis'
 import { ACCENT_COLOR_TOKEN, resolveColorSpec } from './themeColor'
 
 /**
@@ -98,26 +98,6 @@ function anchorPositions(
 }
 
 /**
- * 信息牌落点：锚点优先，锚点悬空时退回自带坐标，再叠偏移。
- * @param panel 归一化后的信息牌
- * @param byId 锚点 id → 世界坐标
- */
-function panelPosition(
-  panel: TwinPanel,
-  byId: ReadonlyMap<string, Vec3>,
-): Vec3 {
-  const base =
-    panel.anchorId === ''
-      ? panel.position
-      : (byId.get(panel.anchorId) ?? panel.position)
-  return [
-    base[0] + panel.offset[0],
-    base[1] + panel.offset[1],
-    base[2] + panel.offset[2],
-  ]
-}
-
-/**
  * 能量流落点：路径上解析得出的锚点的中点。
  * ⚠ 不足两点返回 null：那条流本来就画不出线，给个标记等于让人点中一条看不见的东西。
  * @param flow 归一化后的能量流
@@ -180,7 +160,7 @@ export function entityPickPoints(config: TwinConfig): TwinPickPoint[] {
       .map((panel): TwinPickPoint => ({
         kind: 'panels',
         id: panel.id,
-        position: panelPosition(panel, byId),
+        position: panelPositionOf(panel, config.anchors),
       })),
     ...config.arrows
       .filter((arrow) => arrow.visibility.visible)

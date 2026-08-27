@@ -12,6 +12,7 @@ import {
   collectSceneLegend,
   formatMeasureDistance,
   measureDistance,
+  measuredThreshold,
   screenshotFileName,
   screenshotStamp,
   searchSceneEntities,
@@ -305,5 +306,24 @@ describe('两点测距', () => {
   it('测不出时给一个破折号，而不是 NaN 上屏', () => {
     expect(formatMeasureDistance(Number.NaN)).toBe('—')
     expect(formatMeasureDistance(-1)).toBe('—')
+  })
+})
+
+describe('量出来的距离取成阈值', () => {
+  // 读出来 12.35 却填进去 12.345678 的话，界面与配置里不是一个数，两处都不报错
+  it('小数位与展示文本同一套口径', () => {
+    expect(measuredThreshold(12.345678)).toBe(12.35)
+    expect(measuredThreshold(0.503412)).toBe(0.503)
+    expect(measuredThreshold(123.456)).toBe(123)
+  })
+
+  it('给的是数不是串，直接填得进数字框', () => {
+    expect(typeof measuredThreshold(2.5)).toBe('number')
+  })
+
+  it('量不出时给 null，不给 NaN——NaN 填进阈值会让规则整条静默失效', () => {
+    expect(measuredThreshold(Number.NaN)).toBeNull()
+    expect(measuredThreshold(-1)).toBeNull()
+    expect(measuredThreshold(Number.POSITIVE_INFINITY)).toBeNull()
   })
 })

@@ -32,15 +32,19 @@ interface SceneStub {
   setPickMode: Mock
   focus: Mock
   snapshot: Mock
+  measureDistance: Mock
   dispose: Mock
 }
 
-const seam = vi.hoisted<{ instances: SceneStub[]; pose: TwinCameraPose }>(
-  () => ({
-    instances: [],
-    pose: { position: [1, 2, 3], target: [0, 0, 0], fov: 50 },
-  }),
-)
+const seam = vi.hoisted<{
+  instances: SceneStub[]
+  pose: TwinCameraPose
+  measured: number
+}>(() => ({
+  instances: [],
+  pose: { position: [1, 2, 3], target: [0, 0, 0], fov: 50 },
+  measured: 12.5,
+}))
 
 // ⚠ 只换掉桶文件里的 `EditorScene` 一项：组件还从同一个包里拿类型与常量，
 // 整包替身会把它们一起挖空
@@ -54,6 +58,7 @@ vi.mock('@dt/three-core', async (importOriginal) => {
     readonly setPickMode = vi.fn()
     readonly focus = vi.fn()
     readonly snapshot = vi.fn(() => seam.pose)
+    readonly measureDistance = vi.fn(() => seam.measured)
     readonly dispose = vi.fn()
 
     constructor(options: EditorSceneOptions) {
@@ -320,6 +325,14 @@ describe('暴露给页面的几个方法', () => {
     const wrapper = mountViewport()
 
     expect(wrapper.vm.snapshot()).toEqual(seam.pose)
+    wrapper.unmount()
+  })
+
+  it('测距请求带着参考系转给场景，量出来的数原样交回', () => {
+    const wrapper = mountViewport()
+
+    expect(wrapper.vm.measureDistance('part-center')).toBe(seam.measured)
+    expect(scene().measureDistance).toHaveBeenCalledWith('part-center')
     wrapper.unmount()
   })
 

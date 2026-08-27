@@ -6,7 +6,7 @@
  * 新信息牌」），等视口回调再落。不记的话，视口只知道用户点了模型上的哪个东西，
  * 不知道那一下是给谁点的。
  */
-import type { TwinConfig, Vec3 } from '@dt/twin-config'
+import type { TwinConfig, TwinDistanceRef, Vec3 } from '@dt/twin-config'
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
 
 import type { TwinEditorActions } from './twinEditorActions'
@@ -23,6 +23,7 @@ type CameraPose = { position: Vec3; target: Vec3; fov: number }
 export interface TwinViewportHandle {
   focus: (selection: TwinSelection) => void
   snapshot: () => CameraPose
+  measureDistance: (ref: TwinDistanceRef) => number | null
   playRoamPreview: () => boolean
   stopRoamPreview: () => void
   /** 视口的宿主元素；助手截图拿它当截图根。 */
@@ -49,6 +50,8 @@ export interface TwinViewportOps {
   onSelectNodes: (names: readonly string[]) => void
   captureCamera: (id: string) => void
   capturePartView: (id: string) => void
+  /** 按参考系量当前相机离选中实体多远；量不出给 null。 */
+  measureDistance: (ref: TwinDistanceRef) => number | null
   previewRoam: () => void
   stopRoamPreview: () => void
 }
@@ -194,6 +197,7 @@ export function createTwinViewportOps(deps: TwinViewportDeps): TwinViewportOps {
       () => pending.value !== null && 'place' in pending.value,
     ),
     focus: (selection) => viewportRef.value?.focus(selection),
+    measureDistance: (ref) => viewportRef.value?.measureDistance(ref) ?? null,
     onSelectNodes: (names) => {
       const current = deps.selection()
       if (current.kind !== 'parts') return
