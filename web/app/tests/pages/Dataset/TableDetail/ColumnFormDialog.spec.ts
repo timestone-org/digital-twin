@@ -116,7 +116,8 @@ describe('打开即铺好现值', () => {
     await open(column())
     expect(inputs()[0]?.value).toBe('用电量')
     expect(inputs()[1]?.value).toBe('kwh')
-    expect(inputs().map((one) => one.value)).toContain('src1:meter.kwh')
+    // ⚠ 点位身份是挑出来的，不是敲出来的：它摆在只读值框里，不在任何输入框里
+    expect(document.body.textContent).toContain('src1:meter.kwh')
   })
 
   it('⚠ 编辑态的列标识是禁用的：改一次历史值就集体失联', async () => {
@@ -147,9 +148,9 @@ describe('三选一的来源子块', () => {
     expect(document.body.textContent).toContain('必填')
   })
 
-  it('点位汇总摆点位标识与聚合口径，且口径带一句怎么算的说明', async () => {
+  it('点位汇总摆挑点位与聚合口径，且口径带一句怎么算的说明', async () => {
     await open(column())
-    expect(document.body.textContent).toContain('点位标识')
+    expect(document.body.textContent).toContain('挑点位')
     expect(document.body.textContent).toContain('聚合口径')
     expect(document.body.textContent).toContain('上一周期末值')
   })
@@ -217,11 +218,11 @@ describe('校验挡在提交前', () => {
     expect(document.body.textContent).toContain('请填列名称')
   })
 
-  it('点位列没填点位标识时同样挡住', async () => {
+  it('点位列没挑点位时同样挡住', async () => {
     await open(column({ node_key: '' }))
     await click('保存')
     expect(dataset.updateDatasetColumn).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain('请填点位标识')
+    expect(document.body.textContent).toContain('请挑一个点位')
   })
 })
 

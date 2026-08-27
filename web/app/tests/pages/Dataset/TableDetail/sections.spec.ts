@@ -116,9 +116,10 @@ describe('三个来源子块的对外面', () => {
     ])
   })
 
-  it('点位汇总双向绑点位标识与聚合口径，另收一格错误文案', () => {
+  it('点位汇总双向绑点位标识与聚合口径，另收错误文案与正在配的列标识', () => {
     expect(propNames(ColumnSourcePoint).sort()).toEqual([
       'agg',
+      'columnKey',
       'nodeKey',
       'nodeKeyError',
     ])

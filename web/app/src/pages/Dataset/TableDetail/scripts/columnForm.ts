@@ -191,8 +191,7 @@ function keyError(key: string): string {
 
 function nodeKeyError(nodeKey: string): string {
   const trimmed = nodeKey.trim()
-  if (trimmed.length < NODE_KEY_MIN)
-    return '请填点位标识，形如 数据源id:点位编码'
+  if (trimmed.length < NODE_KEY_MIN) return '请挑一个点位'
   if (trimmed.length > NODE_KEY_MAX) return `不超过 ${NODE_KEY_MAX} 个字符`
   return ''
 }
