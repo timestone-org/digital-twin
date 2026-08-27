@@ -894,6 +894,11 @@ web/packages/modules/src/modules/info-feed/           ≈ 1030 行
   Component.vue ~190 · FeedRow.vue ~120 · _feed.scss ~110
 ```
 
+⚠ **四个模块都落地了，四棵树逐个都与实况不同。** `info-feed` 实际是 8 个文件：
+`manifest.ts` · `options.ts`（级别档表，树上叫 `levels.ts`）· `feed.ts`（行组装，树上叫 `rows.ts`）·
+`look.ts` · `presets.ts`（树上漏画了，而每个模块都有）· `Component.vue` · `FeedRow.vue` ·
+`_variants.scss`（树上叫 `_feed.scss`；四个模块统一叫这个名字）。合计 1 118 行源码 + 2 219 行测试。
+
 四个模块合计约 **10 200 行源码 + 4 000 行测试**。这是一个大程序，不是一次小补丁——
 参照物：`metric-card` 用 1 074 行源码 + 655 行测试供了 13 个字段与一套四段带阈值，
 `action-button` 用 1 171 行供了 30 个字段与 3 套预设。
@@ -1055,6 +1060,44 @@ config + values + meta.slots ──► rows.ts / cells.ts ──► RowView[] / 
 >    `default` 都不写（`help` 自陈「留空则不画目标标记」）。§5.3 的 ⚠ 把三个键并列写成
 >    「刻意无 default」，那是 `info-list` 的 `range` 簇口径：仪表没有量程就整个画不出来，
 >    而「不画目标标记」只跟 `target` 一个键有关。
+
+
+> ⚠ **以下 9 条是 `info-feed` 落地时逐行对回参考源码才发现的，文档此前没有记。**
+> 一律以 `DigitalTwinBK/web/packages/modules/src/modules/feed-list/` 的源码为准。
+>
+> 1. **时刻不加粗。** 源码 `.fl-time` 只有 flex / 字号 / 色 / `nowrap`，加粗的只有
+>    `.fl-level`（`font-weight: 600`）。落地时先照 `info-list` 的读数写了 600，对回源码后收回——
+>    两件都加粗，「级别重、时刻轻」这层主次就没了。⚠ `info-list` 那处 600 管的是**读数**，
+>    不是时刻，两个模块不必同款。
+> 2. **源码只有一个「次要文字字号」。** `timeSize`（缺省 12）同时喂 `.fl-level` 与 `.fl-time`
+>    （源码注释自陈「级别文字与时间都属次要信息，共用这一档」）。§5.2 的 `levelSize` +
+>    `timeSize` 两个旋钮是新模型的加宽，两者的缺省都从这一个 12 来，参考观感靠两个都给 12 还原。
+> 3. **行内边距在源码里是写死的**：`.fl-row { padding: 7px 4px }`，没有对应字段。
+>    `rowPadX` / `rowPadY` 是新旋钮，缺省与两套预设都回到这一对数——写字段缺省的 0 会让行挤成一团。
+> 4. **`timePlace` 与 `showLevel` 源码里没有**：时刻恒在行尾、级别文字只要有就画。
+>    加 `showLevel` 的代价是关掉后级别只剩色相一路（色觉障碍 / 远看 / 读屏都读不出来），
+>    所以那一档的 `help` 里写明。
+> 5. **级别「提示」不需要源码那道回退。** 源码写的是 `var(--state-info, var(--accent-primary))`；
+>    本仓 `--state-info` 是真 token（`DtButton` / `DtTag` / `DtProgress` 一路都在用），故直引，
+>    并复用 `shared/thresholds.ts` 的 `levelColor`——同屏的告警列表与信息流同色、换肤一起走。
+>    ⚠ 权重也逐字对上：`SEVERITY_RANK + 1` 恰好是源码那套 4 / 3 / 2 / 1，0 号让给未识别级别。
+> 6. **上抛的值取原文，不是屏上那个占位符。** 源码 `@click.stop="onRowClick(row.text)"` 里的
+>    `row.text` 已经是 `text || NO_DATA`，于是没推正文的那一条会把「—」当值发出去，
+>    下游的筛选联动被设成「—」而两边都不报错。新模型拆成 `text`（画）与 `pickValue`（抛）两个字段。
+> 7. **时刻的等宽走 `--font-mono` 而不是七段数码管。** 源码 `.fl-time` 挂的是全局
+>    `dt-digit`（BK 的 `--font-digit` + `tabular-nums` + `letter-spacing: .02em`）；本仓模块包
+>    没有那一档字体，按 `info-list` 的口径落成 `--font-mono` + `tabular-nums`。字形不同是有意的。
+> 8. **默认尺寸取 §1.1 而不是源码。** 源码是 400×200 / min 160×80，§1.1 定的是 400×260 /
+>    min 160×96：新模型多了级别文字与两档行内边距，200 高摆不下三条还留出滚动余量。
+> 9. **§1.3 第 12 行把 `emptyText:'暂无信息'` 列进了预设取值，落地时不写。** §7 第三条定死
+>    「预设换的是观感」，`title` 与 `emptyText` 两个内容键一个都不写（写了会抹掉用户自己写的字）。
+>    观感一致是因为清单里那个字段的缺省本来就是「暂无信息」，不是因为预设写了它。
+>
+> ⚠ **预设 ↔ 源码逐条核过的关键取值**（对预设去对 §1.3 是循环验证，只有对回源码才算数）：
+> `dotSize 8` · `dotGlow 6` · `textSize 13` · `levelSize` / `timeSize` 同取源码的次要字号 12 ·
+> `rowPadY 7` / `rowPadX 4` · `rowBorderStyle 'dotted'` 与四档档序 · `scrollSpeed 3` /
+> `autoScroll true` · `sortByRank false` · `levels []`——十项与源码逐字相同，断言在
+> `tests/modules/info-feed/presets.spec.ts` 的「关键取值逐条对回参考源码」一段。
 
 
 以下是**表达不出来或有意收窄**的，逐条记在案。除此之外的 15 个模块观感都在 §1.3 的取值里。

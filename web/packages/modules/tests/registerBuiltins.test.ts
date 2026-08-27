@@ -34,6 +34,7 @@ const BUILTIN_TYPES = [
   'header',
   'image-block',
   'info-card',
+  'info-feed',
   'info-list',
   'metric-card',
   'text-block',

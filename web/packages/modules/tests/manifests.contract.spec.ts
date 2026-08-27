@@ -32,6 +32,7 @@ import {
   GAUGE_SLOT_KEY,
 } from '../src/modules/gauge-card/gauges'
 import { CARD_ITEMS_KEY, CARD_SLOT_KEY } from '../src/modules/info-card/cells'
+import { FEED_SLOT_KEY } from '../src/modules/info-feed/feed'
 import { LIST_ITEMS_KEY, LIST_SLOT_KEY } from '../src/modules/info-list/rows'
 import {
   METRIC_ITEMS_KEY,
@@ -53,6 +54,7 @@ const KEY_CONSTANTS: Record<string, string> = {
   CARD_ITEMS_KEY,
   CARD_SLOT_KEY,
   CONTAINER_CONFIG_KEY,
+  FEED_SLOT_KEY,
   GAUGE_ITEMS_KEY,
   GAUGE_SLOT_KEY,
   LIST_ITEMS_KEY,
@@ -215,6 +217,7 @@ describe('一个模块 = 一个目录', () => {
       'header',
       'image-block',
       'info-card',
+      'info-feed',
       'info-list',
       'metric-card',
       'text-block',

@@ -32,8 +32,8 @@ _MEMBER = re.compile(r"'([^']+)'")
 
 # 已登记的模块：两个钉位/通用容器、两个装饰块、一个纯配置页头、
 # 一个带 3D 资源与数组绑定、一张按文档序钉行的 2D 孪生画面，
-# 以及四个多点位模块（一块摆几个读数的、一块摆一网格卡片的、一块摆一列行的、
-# 一块摆一组带量程仪表的）
+# 以及五个多点位模块（一块摆几个读数的、一块摆一网格卡片的、一块摆一列行的、
+# 一块摆一组带量程仪表的，以及一块直通渲染后端推来的成品文本流的）
 EXPECTED_TYPES = frozenset(
     {
         "action-button",
@@ -42,6 +42,7 @@ EXPECTED_TYPES = frozenset(
         "gauge-card",
         "header",
         "info-card",
+        "info-feed",
         "info-list",
         "metric-card",
         "image-block",

@@ -1,0 +1,86 @@
+// 一条信息的行样式：四档分隔线、两档时刻落点，与圆点 / 级别文字 / 正文 / 时刻四件。
+// 由 FeedRow.vue 的 scoped 块 @use 进来——摊在同一个文件里会把它撑过行数闸门。
+// 档位类由 look.classes 下发，这里一律用 .if-row 复合——同一份类若也挂在列表根上，
+// 不复合就会把根自己那一层也一并染上。
+// ⚠ 尺寸只认 --if-* 变量，不认配置键；`var()` 里的兜底与清单里那七个字段的 default
+//   逐字相同——脱离 look.ts 单独挂载时才用得上，正常路径上七个键一个不缺。
+
+.if-row {
+  // 这一条的级别色：级别档给了才注入 --if-level-color，未识别级别落回中性次要文字色。
+  // ⚠ 落回中性是刻意的：认不出的级别不伪装成某一档状态
+  --if-tone: var(--if-level-color, var(--text-secondary));
+
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: var(--if-row-py, 7px) var(--if-row-px, 4px);
+  // 线型由 --if-line-style 换档；`none` 即整条边不画
+  border-bottom: 1px var(--if-line-style, dotted) var(--border-strong);
+  gap: 8px;
+}
+
+.if-row.if--border-dotted {
+  --if-line-style: dotted;
+}
+
+.if-row.if--border-dashed {
+  --if-line-style: dashed;
+}
+
+.if-row.if--border-solid {
+  --if-line-style: solid;
+}
+
+.if-row.if--border-none {
+  --if-line-style: none;
+}
+
+// 时刻挪到正文之前那一档：把正文往后排一位，圆点与级别仍钉在行首——几行的左边缘
+// 不因为这个开关而参差。⚠ 只换视觉次序，DOM 里时刻仍跟在正文之后，读屏与复制
+// 得到的顺序不跟着排版走
+.if-row.if--time-left .if-text {
+  order: 1;
+}
+
+.if-dot {
+  flex: none;
+  width: var(--if-dot-size, 8px);
+  height: var(--if-dot-size, 8px);
+  border-radius: 50%;
+  background: var(--if-tone);
+  // 同色外发光；blur 取 0 即等价于关辉光（纯色点）
+  box-shadow: 0 0 var(--if-dot-glow, 6px) var(--if-tone);
+}
+
+.if-level {
+  flex: none;
+  color: var(--if-tone);
+  font-size: var(--if-level-size, 12px);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.if-text {
+  // 超长文本单行截断，不换行挤压时刻列（min-width: 0 使 flex 项可收缩）
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--if-text-size, 13px);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.if-time {
+  flex: none;
+  color: var(--text-secondary);
+  // 时刻是等宽的：比例字体下每跳一次数字，整行都在左右抖
+  font-family: var(--font-mono);
+  font-size: var(--if-time-size, 12px);
+  font-variant-numeric: tabular-nums;
+  // ⚠ 不加粗：参考仓只给级别文字 600，时刻走常规字重。两件都加粗，
+  //   「级别重、时刻轻」这层主次就没了（info-list 的读数是 600，那是读数不是时刻）
+  white-space: nowrap;
+}

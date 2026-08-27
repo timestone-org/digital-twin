@@ -3350,6 +3350,334 @@
       ]
     },
     {
+      "type": "info-feed",
+      "display_name": "信息流",
+      "category": "数据",
+      "icon": "activity",
+      "keywords": [
+        "feed",
+        "xinxiliu",
+        "yujing",
+        "gonggao",
+        "信息流",
+        "预警",
+        "公告",
+        "日志",
+        "消息流"
+      ],
+      "default_size": {
+        "width": 400,
+        "height": 260,
+        "min_width": 160,
+        "min_height": 96
+      },
+      "chrome": "card",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "default": "",
+          "placeholder": "留空则不画标题栏",
+          "group": "内容",
+          "span": "full"
+        },
+        {
+          "key": "emptyText",
+          "label": "空态文案",
+          "type": "string",
+          "default": "暂无信息",
+          "placeholder": "暂无信息",
+          "group": "内容",
+          "help": "一条都摆不出来时画的一句话。⚠ 没推来文本的条目不占位，所以刚打开、后端还没推的那一刻看到的也是这一句。",
+          "span": "half"
+        },
+        {
+          "key": "showDot",
+          "label": "显示级别圆点",
+          "type": "boolean",
+          "default": true,
+          "group": "圆点",
+          "help": "行首那颗按级别着色的圆点。",
+          "span": "half"
+        },
+        {
+          "key": "dotSize",
+          "label": "圆点直径 (px)",
+          "type": "range",
+          "default": 8,
+          "group": "圆点",
+          "span": "half",
+          "when": {
+            "key": "showDot",
+            "in": [
+              true
+            ]
+          },
+          "min": 4,
+          "max": 24,
+          "step": 1
+        },
+        {
+          "key": "dotGlow",
+          "label": "圆点辉光 (px)",
+          "type": "range",
+          "default": 6,
+          "group": "圆点",
+          "help": "同色外发光的模糊半径；0 = 纯色点。",
+          "span": "half",
+          "when": {
+            "key": "showDot",
+            "in": [
+              true
+            ]
+          },
+          "min": 0,
+          "max": 24,
+          "step": 1
+        },
+        {
+          "key": "showLevel",
+          "label": "显示级别文字",
+          "type": "boolean",
+          "default": true,
+          "group": "级别",
+          "help": "圆点与文字是同一件事的两种编码。⚠ 关掉后级别只剩色相一路，色觉障碍、远看与读屏都读不出来。未知级别本来就不编造文字，与这个开关无关。",
+          "span": "half"
+        },
+        {
+          "key": "levelSize",
+          "label": "级别字号 (px)",
+          "type": "range",
+          "default": 12,
+          "group": "级别",
+          "span": "half",
+          "when": {
+            "key": "showLevel",
+            "in": [
+              true
+            ]
+          },
+          "min": 10,
+          "max": 32,
+          "step": 1
+        },
+        {
+          "key": "textSize",
+          "label": "正文字号 (px)",
+          "type": "range",
+          "default": 13,
+          "group": "正文",
+          "help": "正文超长时单行截断，全文挂在悬停提示上。",
+          "span": "half",
+          "min": 10,
+          "max": 32,
+          "step": 1
+        },
+        {
+          "key": "showTime",
+          "label": "显示时间",
+          "type": "boolean",
+          "default": true,
+          "group": "时间",
+          "help": "⚠ 时间是后端直通的文本，不是墙钟：那一条没推时间就整列留白，故可关。",
+          "span": "half"
+        },
+        {
+          "key": "timeSize",
+          "label": "时间字号 (px)",
+          "type": "range",
+          "default": 12,
+          "group": "时间",
+          "span": "half",
+          "when": {
+            "key": "showTime",
+            "in": [
+              true
+            ]
+          },
+          "min": 10,
+          "max": 32,
+          "step": 1
+        },
+        {
+          "key": "timePlace",
+          "label": "时间位置",
+          "type": "enum",
+          "default": "right",
+          "options": [
+            {
+              "value": "right",
+              "label": "行尾"
+            },
+            {
+              "value": "left",
+              "label": "行首"
+            }
+          ],
+          "group": "时间",
+          "help": "摆行首时时间排在圆点之前，几条的时刻竖着对齐；摆行尾时正文吃满中间的空档。",
+          "span": "half",
+          "when": {
+            "key": "showTime",
+            "in": [
+              true
+            ]
+          }
+        },
+        {
+          "key": "rowBorderStyle",
+          "label": "行分隔线",
+          "type": "enum",
+          "default": "dotted",
+          "options": [
+            {
+              "value": "dotted",
+              "label": "点线"
+            },
+            {
+              "value": "dashed",
+              "label": "虚线"
+            },
+            {
+              "value": "solid",
+              "label": "实线"
+            },
+            {
+              "value": "none",
+              "label": "无"
+            }
+          ],
+          "group": "行",
+          "span": "half"
+        },
+        {
+          "key": "rowPadX",
+          "label": "行左右内边距 (px)",
+          "type": "range",
+          "default": 4,
+          "group": "行",
+          "span": "half",
+          "min": 0,
+          "max": 24,
+          "step": 1
+        },
+        {
+          "key": "rowPadY",
+          "label": "行上下内边距 (px)",
+          "type": "range",
+          "default": 7,
+          "group": "行",
+          "span": "half",
+          "min": 0,
+          "max": 24,
+          "step": 1
+        },
+        {
+          "key": "levels",
+          "label": "级别色板",
+          "type": "array",
+          "default": [],
+          "group": "色板",
+          "help": "留空 = 走内置档（danger / warning / info / success 与 red / yellow / blue / green 等别名各自映到一个主题状态色）。这里按级别值覆盖：只填了文字或权重的条目，颜色仍回落内置档。⚠ 橙没有内置档——本仓没有橙这一档语义色，要它只能在这里配。",
+          "span": "full",
+          "item_schema": [
+            {
+              "key": "key",
+              "label": "级别值",
+              "type": "string",
+              "default": "",
+              "placeholder": "如 orange",
+              "help": "与推来的级别文本比对，两侧都去首尾空格再转小写。⚠ 同一个级别值配了两条时后一条生效。"
+            },
+            {
+              "key": "label",
+              "label": "级别文字",
+              "type": "string",
+              "default": "",
+              "placeholder": "留空取内置档"
+            },
+            {
+              "key": "color",
+              "label": "颜色",
+              "type": "color",
+              "default": "",
+              "placeholder": "留空取内置档",
+              "help": "只填 var(--…) 引用，填死色值换肤时不跟着走。"
+            },
+            {
+              "key": "rank",
+              "label": "排序权重",
+              "type": "number",
+              "default": 0,
+              "help": "越大越靠前，只在「按级别排序」开着时才参与。"
+            }
+          ],
+          "item_label_key": "key"
+        },
+        {
+          "key": "sortByRank",
+          "label": "按级别排序",
+          "type": "boolean",
+          "default": false,
+          "group": "色板",
+          "help": "按权重降序排，同权重的保持推送顺序。⚠ 缺省关着：本模块的语义是直通，重排会让「最新的一条在最上面」这条默认读法失效。",
+          "span": "half"
+        },
+        {
+          "key": "autoScroll",
+          "label": "自动滚动",
+          "type": "boolean",
+          "default": true,
+          "group": "滚动",
+          "help": "内容超出时慢速垂直滚动；关掉改为原生滚动条手动滚。"
+        },
+        {
+          "key": "scrollSpeed",
+          "label": "滚动速度（每项秒数）",
+          "type": "range",
+          "default": 3,
+          "group": "滚动",
+          "help": "每个条目经过视区所需的秒数，越大越慢。",
+          "when": {
+            "key": "autoScroll",
+            "in": [
+              true
+            ]
+          },
+          "min": 1,
+          "max": 30,
+          "step": 1
+        }
+      ],
+      "bindings": [
+        {
+          "key": "feedValues",
+          "label": "信息流条目",
+          "data_type": "string",
+          "is_array": true,
+          "array_fields": [
+            {
+              "key": "level",
+              "label": "级别",
+              "data_type": "string"
+            },
+            {
+              "key": "text",
+              "label": "内容",
+              "data_type": "string"
+            },
+            {
+              "key": "time",
+              "label": "时间",
+              "data_type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "type": "info-list",
       "display_name": "信息列表",
       "category": "数据",
