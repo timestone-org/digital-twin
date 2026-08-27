@@ -15,7 +15,7 @@ import ImportPointsDialog from '@/pages/Collect/Opcua/components/ImportPointsDia
 import NodeTable from '@/pages/Collect/Opcua/components/NodeTable.vue'
 import PointFormDialog from '@/pages/Collect/Opcua/components/PointFormDialog.vue'
 import PointValueCell from '@/pages/Collect/Opcua/components/PointValueCell.vue'
-import RuntimeParamsDialog from '@/pages/Collect/Opcua/components/RuntimeParamsDialog.vue'
+import RuntimeParamsDialog from '@/components/runtime/RuntimeParamsDialog.vue'
 import SourceFormDialog from '@/pages/Collect/Opcua/components/SourceFormDialog.vue'
 import SourceListItem from '@/pages/Collect/Opcua/components/SourceListItem.vue'
 import SourceStateTag from '@/pages/Collect/Opcua/components/SourceStateTag.vue'

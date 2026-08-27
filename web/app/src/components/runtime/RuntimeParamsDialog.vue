@@ -1,16 +1,17 @@
 <script setup lang="ts">
 /**
- * @fileoverview 采集/归档运行参数弹窗：读有效值 → 逐项渲染（生效档位徽标、
- * 默认值与是否已覆盖）→ 危险方向要求输入确认词 → 保存 → 整组恢复默认。
+ * @fileoverview 运行参数弹窗，按 `section` 服务全部分组：读有效值 → 逐项渲染
+ * （生效档位徽标、默认值与是否已覆盖）→ 危险方向要求输入确认词 → 保存 →
+ * 整组恢复默认。放在共用的 `components/` 而不是某一页下面——大屏、采集/归档、
+ * 台账三处用的是同一面，摆在任一页的私有目录里会让另外两处去深链它。
  *
- * ⚠ 字段清单、标签、说明、上下界全部来自后端目录（`/collect-runtime-params`），
- * 这里不手写一份——两处各写一份时前端放行的值会被服务端拒回，而用户看不出错在哪。
+ * ⚠ 字段清单、标签、说明、上下界与**写权限码**全部来自后端目录，这里不手写
+ * 一份——两处各写一份时前端放行的值会被服务端拒回，而用户看不出错在哪。
  * ⚠ 非即时档要如实说「保存了但还没生效」：保存成功却什么都没变，用户只会以为
  * 自己改错了地方。
  */
 import { computed, onUnmounted, ref, watch } from 'vue'
 import type { RuntimeParamItem, RuntimeParamSection } from '@dt/contracts'
-import { PERMISSION_CODES } from '@dt/contracts'
 import {
   DtButton,
   DtModal,
@@ -27,7 +28,7 @@ import {
 } from '@/api/runtimeParams'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import { useAuthStore } from '@/stores/auth'
-import { DANGER_TEXT, isDangerousChange } from '../scripts/runtimeParamsMeta'
+import { DANGER_TEXT, isDangerousChange } from './runtimeParamsMeta'
 import DangerConfirmPanel from './DangerConfirmPanel.vue'
 import RuntimeParamRow from './RuntimeParamRow.vue'
 
@@ -43,9 +44,15 @@ const toast = useToast()
 const confirm = useConfirm()
 const auth = useAuthStore()
 const raced = useRacedFetch()
-const canWrite = computed(() =>
-  auth.can([PERMISSION_CODES.collectManage], 'all'),
-)
+/**
+ * ⚠ 写码取自后端下发的 `writeCode`，不写死某一个：同一面服务三个分组，
+ * 而三组的写码各不相同（`dashboard:edit` / `collect:manage` / `dataset:manage`）。
+ * 写死一个的表现是「有权限的人看不到保存键」或「没权限的人点了才被拒」。
+ */
+const canWrite = computed(() => {
+  const codes = [...new Set(items.value.map((one) => one.writeCode))]
+  return codes.length > 0 && auth.can(codes, 'all')
+})
 
 const items = ref<RuntimeParamItem[]>([])
 const draft = ref<Record<string, number | boolean>>({})
@@ -169,7 +176,7 @@ async function reset(): Promise<void> {
   const agreed = await confirm.ask({
     title: '恢复默认',
     message:
-      '会删掉这一组的覆盖值，此后它们重新跟随采集器的环境变量。' +
+      '会删掉这一组的覆盖值，此后它们重新跟随服务端的环境变量。' +
       '若其中有危险方向的改动（如关掉总开关的覆盖被恢复成开），也会一并生效。',
     confirmText: '恢复默认',
     danger: true,
@@ -237,7 +244,7 @@ function onChange(key: string, value: number | boolean): void {
           icon="alert-triangle"
           data-test="restart-notice"
         >
-          已保存，但这一项要等采集进程下次启动才生效。
+          已保存，但这一项要等对应的服务进程下次启动才生效。
         </DtNotice>
 
         <!-- 危险方向：要求原样输入确认词。安全方向不弹——每次都弹，用户会

@@ -4,9 +4,12 @@
  * 环境变量是**永久默认值**，库里只存被改过的项作为覆盖值，两者叠加得有效值；
  * 「恢复默认」即删掉覆盖行，此后该项重新跟随环境变量。
  *
- * ⚠ 分组按写权限码拆在两条路由上：`dashboard` 走 `/runtime-params`，
- * `collect` / `archive` 走 `/collect-runtime-params`——采集/归档两组的消费者
- * 是采集器，覆盖值随采集计划下发，最迟一个计划刷新周期（默认 30 秒）生效。
+ * ⚠ 分组按**写权限码**拆在三条路由上：`dashboard` 走 `/runtime-params`（写
+ * `dashboard:edit`）、`collect` / `archive` 走 `/collect-runtime-params`（写
+ * `collect:manage`）、`dataset` 走 `/dataset-tables/runtime-params`（写
+ * `dataset:manage`）。闸 2 的声明是挂在路由上的静态属性，一条路由声明不出两个码。
+ * 采集/归档两组的消费者是采集器，覆盖值随采集计划下发，最迟一个计划刷新周期
+ * （默认 30 秒）生效；台账那一组由 worker 的两条循环每一拍现读。
  */
 
 /** 有可编辑项的 section，与后端 `apps/runtime_params/catalog.py` 的键逐字一致。 */
@@ -14,6 +17,7 @@ export const RUNTIME_PARAM_SECTIONS = [
   'dashboard',
   'collect',
   'archive',
+  'dataset',
 ] as const
 
 export type RuntimeParamSection = (typeof RUNTIME_PARAM_SECTIONS)[number]
@@ -33,11 +37,14 @@ export const RUNTIME_PARAM_TIERS = ['instant', 'reconnect', 'restart'] as const
 export type RuntimeParamTier = (typeof RUNTIME_PARAM_TIERS)[number]
 
 /**
- * 危险方向：`off` = 由开改关危险，`decrease` = 调小危险；null = 任何方向
- * 都不需要二次确认。危险性挂在**变更方向**上而不是字段上——安全方向也弹，
- * 用户会训练出无脑点确认的肌肉记忆。
+ * 危险方向：`off` = 由开改关危险，`on` = 由关改开危险，`decrease` = 调小危险；
+ * null = 任何方向都不需要二次确认。危险性挂在**变更方向**上而不是字段上——
+ * 安全方向也弹，用户会训练出无脑点确认的肌肉记忆。
+ *
+ * ⚠ `on` 与 `off` 同时存在且互为反面：采集类开关关掉才危险，清理类开关打开
+ * 才危险（它会真实删行）。少列一种时线形转换会整包抛「未知的危险方向」。
  */
-export const RUNTIME_PARAM_DANGERS = ['off', 'decrease'] as const
+export const RUNTIME_PARAM_DANGERS = ['off', 'on', 'decrease'] as const
 export type RuntimeParamDanger = (typeof RUNTIME_PARAM_DANGERS)[number]
 
 /** 一个可编辑项的登记信息与当前状态。 */
