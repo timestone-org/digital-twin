@@ -264,6 +264,7 @@ async function onSubmit(): Promise<void> {
           v-model:node-key="form.nodeKey"
           v-model:agg="form.agg"
           :node-key-error="errors.nodeKey"
+          :column-key="form.key"
         />
         <ColumnSourceFormula
           v-else
