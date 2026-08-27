@@ -1,6 +1,6 @@
 /**
  * @fileoverview 守 2D 孪生清单的声明：套框吃全套外观、绑定槽直接摊开公共常量、
- * 状态子槽刻意不给 `enumMap`、三个槽的行数都由清单自述，以及本轮刻意还没有子编辑器。
+ * 状态子槽刻意不给 `enumMap`、三个槽的行数都由清单自述，整段图文档交给子编辑器。
  * ⚠ 这一批错法 typecheck 与 lint 双双放行，表现只是「配了没反应」。
  */
 import type { BindingSpec } from '@dt/contracts'
@@ -73,9 +73,22 @@ describe('2D 孪生清单的状态与联动声明', () => {
     expect(manifest.hostClickable).toBeUndefined()
   })
 
-  // ⚠ 编辑器路由要到后面的轮次才存在：现在声明会让 sub-editor-routes 契约当场红
-  it('本轮刻意还没有子编辑器入口', () => {
-    expect(manifest.subEditor).toBeUndefined()
+  // ⚠ 四个字段任一写错都不报错：接管的键不对就照旧画 JSON 框，路由名不对就
+  //   「点了没反应」。路由是否真存在由 app 那侧的 sub-editor-routes 契约兜
+  it('图文档那一段交给 2D 孪生编辑器接管', () => {
+    expect(manifest.subEditor).toEqual({
+      configKey: TWIN_2D_CONFIG_KEY,
+      routeName: 'twin-2d-editor',
+      label: '打开 2D 孪生编辑器',
+      hint: '节点、连线、标注与节点样式都在那里画。',
+    })
+  })
+
+  // 接管的键必须真在自己的 schema 里，否则入口永远不出现——而字段照旧画成 JSON 框
+  it('被接管的键就是 schema 里那个没有 fields 的 object 字段', () => {
+    const taken = field(manifest.subEditor?.configKey ?? '')
+    expect(taken?.type).toBe('object')
+    expect(taken?.fields).toBeUndefined()
   })
 })
 

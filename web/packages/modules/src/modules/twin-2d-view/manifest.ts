@@ -181,9 +181,13 @@ export default defineModule({
   interactionEvents: ['select'],
   // ⚠ `hostClickable` 刻意不开：画布内部有拖拽手势（运行态的平移/触屏滑动），
   //   整块可点会让每次拖完松手都派发一次 click
-  //
-  // ⚠ `subEditor` 本轮**刻意不声明**：编辑器路由 `twin-2d-editor` 要到 R13 才存在，
-  //   现在声明会让 `sub-editor-routes` 契约当场红（它按路由名与两个路径参数逐字检查）
+  // 属性面板只读这份声明来决定出不出入口，故这里的路由名写错 = 入口点了没反应
+  subEditor: {
+    configKey: TWIN_2D_CONFIG_KEY,
+    routeName: 'twin-2d-editor',
+    label: '打开 2D 孪生编辑器',
+    hint: '节点、连线、标注与节点样式都在那里画。',
+  },
   bindingRowLabels: (config) =>
     twin2dRowLabels(normalizeTwin2dConfig(config[TWIN_2D_CONFIG_KEY])),
   // ⚠ 行不是用户随手加的：行号就是实体的文档序。不声明行数的话，绑点面板会摆出

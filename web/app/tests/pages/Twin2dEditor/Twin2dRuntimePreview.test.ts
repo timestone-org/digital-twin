@@ -7,8 +7,8 @@
  * ⚠ 草稿注回的键来自清单，模块类型来自节点行——两者写死的话，这一页就不再是
  * 「谁声明了子编辑器就编谁」，而换个模块进来只表现为预览画的是存量配置。
  * ⚠ 取不到读数要说出口：一块空白既可能是没绑点位，也可能是绑了还没保存，两者查法不同。
- * ⚠ 用真注册表而不是替身：`getModule` 换成假的之后，「清单没声明子编辑器」这条
- * 退路就只在替身上成立，而它正是真注册表当下的样子。
+ * ⚠ 用真注册表而不是替身：`getModule` 换成假的之后，这一页与清单之间的那条约定
+ * 就只在替身上成立。
  */
 import type {
   BindingView,
@@ -16,7 +16,7 @@ import type {
   ModuleManifest,
 } from '@dt/contracts'
 import { __resetProviders } from '@dt/datasources'
-import { registerModule } from '@dt/modules'
+import { getModule, registerModule } from '@dt/modules'
 import { useRuntimeData } from '@dt/runtime'
 import { TWIN_2D_CONFIG_KEY, normalizeTwin2dConfig } from '@dt/twin2d'
 import { mount } from '@vue/test-utils'
@@ -61,10 +61,10 @@ const DECLARED: ModuleManifest = {
   component: () => Promise.resolve({ default: {} }),
 }
 
-/** 清单还没声明子编辑器：退回本页读写用的那个键。 */
+/** 清单没声明子编辑器：退回本页读写用的那个键。 */
 const UNDECLARED: ModuleManifest = {
   type: 'x-undeclared',
-  displayName: '还没声明子编辑器的模块',
+  displayName: '没声明子编辑器的模块',
   category: '孪生',
   defaultSize: { width: 1280, height: 480 },
   configSchema: [],
@@ -389,5 +389,12 @@ describe('挂的确实是运行态那条链', () => {
     const wrapper = await mountReal()
 
     expect(wrapper.text()).toContain('换热站')
+  })
+
+  // 清单声明的键与本页读写的键一旦分家，预览画存量、保存写另一处，两边都不报错
+  it('真清单声明的键就是本页读写的那个键，退路因此走不到', () => {
+    expect(getModule('twin-2d-view')?.subEditor?.configKey).toBe(
+      TWIN_2D_CONFIG_KEY,
+    )
   })
 })

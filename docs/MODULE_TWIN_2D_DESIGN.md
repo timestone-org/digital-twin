@@ -276,9 +276,12 @@ web/app/src/pages/Twin2dEditor/
 页面根只有 `index.vue`、私有组件只在 `components/` 且只有 `.vue`、脚本只在 `scripts/` 且只有 `.ts`。
 `useUnsavedGuard` **不在这里**——它提到 `app/src/composables/` 与 `TwinEditor` 共用（§19 R0b）。
 
-> ⚠ **画布上还有一处缺口，记在这里以免被当成 bug 去查：拖节点时连线不跟着走**，
-> 松手才归位。节点草稿是节点层私有的，层间没有逐帧通道。要跟着走得把草稿位置提到装配层
-> 按帧下发给连线层，代价是每帧多一次全量连线重算；是否值得等真机拖起来再定。
+> ⚠ **画布上有一处缺口，记在这里以免被当成 bug 去查：拖节点时连线不跟着走**，
+> 松手才归位。拖动中的位置是节点层私有的草稿，而 `EditorStage` 喂给连线层的是文档里的
+> `nodes`，层间没有逐帧通道；拖把手改连线走的是另一条路，那一条有草稿边、线会跟着动。
+> 补它要把节点草稿提到 `EditorStage` 按帧下发给连线层，代价是每个 `pointermove` 多一次
+> 全量连线重算（每条线一次路由求解加一次弧长定位），而一次多选拖动是几百个
+> `pointermove`。是否值得等真机拖起来再定。
 
 ### 3.4 行数量级（诚实版）
 
@@ -293,6 +296,8 @@ web/app/src/pages/Twin2dEditor/
 | `app/src/pages/Twin2dEditor/` | ≈ 11 000 | ≈ 4 500 | ≈ 15 500 |
 | 跨包契约测试（`app/tests/contract/twin2d-*`，5 条；另 5 条落在 `packages/twin2d/tests/`，已计进第一行，§17.2） | — | ≈ 600 | ≈ 600 |
 | **合计** | **≈ 19 000** | **≈ 12 300** | **≈ 31 300** |
+
+这张表是排期用的量级估算；落地后的实测行数与用例数在 §19.1。
 
 > ⚠ `paint.ts` 一个文件装不下：四种 kind × 五档 `fills` × 四边 border × 三形 radius ×
 > inset/outset shadows × 六项 flex × 五档摆位 × rotate/keepUpright，加上五种 SVG 几何、
@@ -1717,7 +1722,7 @@ export default defineModule({
   keywords: ['2d', 'twin', 'luansheng', '孪生', '流程', '系统图', '接线', '电路'],
   defaultSize: { width: 1280, height: 480, minWidth: 240, minHeight: 120 },
   // 套框：一张图配上统一卡片外观与标题条，40 个 chrome 键全吃
-  chrome: 'card',
+  // chrome 缺省即 card，故不声明（§15.1）
   configSchema: [ /* 见 §15.1 */ ],
   bindings: [...TWIN_2D_VIEW_BINDINGS],
   // 一张图几十个读数，坏一个不能盖住整块
@@ -1957,53 +1962,72 @@ export default defineModule({
 
 ## 19. 实施轮次表
 
-**行数是诚实值**（§3.4），含测试。按 [engineering-workflow](agents/engineering-workflow.md)
-§3.1 的 400 行上限，全程约 **66–81 个 PR**；下表的「轮」是**工作单元**，一轮拆几个 PR
-写在最后一列。规模例外的处理照
-[AC_DATA_LANDING](AC_DATA_LANDING.md) §0 的三条出路，由用户拍板，本文不替他决定。
-
-本地过闸一律用 `scripts/ci-local.sh`：`--fast` 是秒级子集（含 black + prettier），
-`--all` 走 act 跑整条 `ci.yml`（覆盖率棘轮、`diff-cover --fail-under=85`、包体预算、
-gitleaks 只有这条路径才跑得到）。⚠ **跑 act 期间不要动工作树**。
+R0–R13 已全部落地。「新增行」是各轮提交的实测新增行数（含测试与文档），
+§19.1 的「落点实测」是当前的 `wc -l` 与用例数。本地过闸一律用 `scripts/ci-local.sh`：
+`--fast` 是秒级子集（含 black + prettier），`--all` 走 act 跑整条 `ci.yml`（覆盖率棘轮、
+`diff-cover --fail-under=85`、包体预算、gitleaks 只有这条路径才跑得到）。
+⚠ **跑 act 期间不要动工作树**。
 ⚠ 开发期不要推分支等 GitHub 的 CI——分支与 PR 上根本不触发流水线。
 
-| 轮 | 范围 | 产出文件 | 行数量级 | 过闸命令 | 验收标准 | PR 数 |
-|---|---|---|---|---|---|---|
-| **R0a** 前置·依赖表与 token | 把「新增包」的闸门前置条件先落平。此时 `packages/twin2d/` 还不存在，多一条表项无害 | `scripts/gates/check_web_deps.py`、`docs/agents/project-structure-typescript.md`、`web/packages/tokens/src/tokens.scss` | ≈ 40 | `scripts/ci-local.sh --fast` | `check_web_deps` 认得新表项且不因目录缺席而红；`--font-digit` 落在字体族段里；`css-variables` 契约照旧绿 | 1 |
-| **R0b** 前置·`useUnsavedGuard` 提取 | 从 `TwinEditor/scripts/` 提到 `app/src/composables/`（**目录已存在**），`TwinEditor` 改引用，测试跟着搬 | `web/app/src/composables/useUnsavedGuard.ts`、`web/app/src/pages/TwinEditor/index.vue`、`web/app/tests/composables/useUnsavedGuard.spec.ts`（原 `tests/pages/TwinEditor/scripts/` 那份删除） | ≈ 90 | `scripts/ci-local.sh --fast`；`pnpm --dir web vitest run app/tests` | `TwinEditor` 的既有守卫用例逐条照旧绿；`check_structure_web` 的「测试镜像源码」不红 | 1 |
-| **R0c** 前置·锁文件（**单独成 PR，硬约束**） | 建 `packages/twin2d/package.json`（名 `@dt/twin2d`、deps `contracts`+`ui`、peer vue，⚠ **先不写 `typecheck` 脚本**，否则 `pnpm -r --if-present typecheck` 会因缺 tsconfig 失败）+ `packages/modules/package.json` 加一条依赖 + 锁文件 | `web/packages/twin2d/package.json`、`web/packages/modules/package.json`、`web/pnpm-lock.yaml`、本文件（占位一节） | 手写 ≈ 30（锁文件不计） | `scripts/ci-local.sh --fast` | `check_lockfile_stands_alone` 绿——它只允许锁文件与 `*.md` 及 basename ∈ {package.json, pyproject.toml} 同批，本 PR 正好合法。⚠ **顺序必须在 R0a 之后**，否则目录存在而不在 ALLOWED 表里会让 `check_web_deps` 在 main 上红 | 1 |
-| **R0d** 前置·`toDeviceStatus` 补同义词表（**独立小 PR**） | 给 `@dt/modules/shared/status.ts` 的 `toDeviceStatus` 加一张字符串同义词表：`String(raw).trim().toLowerCase()` 后先查词表，查不到再走现有的 `readEnum`。**纯扩宽**——表里这些取值今天一律落 `unknown`（fallback），加了不改变任何一条现有行为。理由是「一份真源」：状态归一在本仓只该有一处，不在本模块里另起一份（§10.1）。⚠ `shared/status.ts` + `StatusBadge.vue` 今天**一个生产消费方都没有**（只有它们自己的用例），本模块是第一个——所以现在补是改一处，等信息卡片、设备列表这些同样要吃 `toDeviceStatus` 的模块进来之后再补，就是改一片，且期间各家很可能各自贴一张本地词表 | `web/packages/modules/src/shared/status.ts`、`web/packages/modules/tests/shared/status.test.ts`（已存在，追加用例）| ≈ 25 源 + ≈ 60 测试 | `scripts/ci-local.sh --fast`；`pnpm --dir web vitest run packages/modules/tests/shared` | 四组词表逐词各一条用例；大小写与前后空格各一条；**现有用例一条不改照旧绿**（这是「纯扩宽」的机械证明）；`packages/*/src/**/*.ts` 那一档 95/90 不掉 | 1 |
-| **R1** 契约与归一化 | tsconfig + typecheck 脚本；`constants` / `kinds` / `types`；`normalize` 六件；`issues.ts` | `packages/twin2d/{tsconfig.json,package.json}`、`src/{index,constants,kinds,types,normalize,normalizeStyles,normalizePrims,normalizeNodes,normalizeEdges,normalizeMarks,issues}.ts`、`tests/normalize*.test.ts`、`tests/issues.test.ts` | ≈ 3 400（源 1 600 / 测试 1 800） | `pnpm --dir web vitest run packages/twin2d --coverage`；`scripts/ci-local.sh --fast` | `packages/*/src/**/*.ts` 那一档 95/90 达标；`check_comments` 每个 `.ts` 有 `@fileoverview` 且**无变更史叙事**（迁移注释里最容易写「原实现是…」）；`posDim` 挡 0 与负数、数字 id `String()` 化、超深截断三条各有用例 | 9 |
-| **R2** 几何与变换 | `geometry.ts`（周长参数化含 bottom/left 反向、四角精确法线、`projectToPerimT`、四种路由、`side:'auto'` 解析、圆角折线两条退化保护、箭头、反向渲染、`labelAt` 弧长）+ `transform.ts` | `src/{geometry,transform}.ts`、`tests/{geometry,transform}.test.ts` | ≈ 1 600（源 700 / 测试 900） | 同上 | 四段周长各三点、四角法线、四种路由、两条退化保护、**带 waypoints 的反向渲染**、**二极管 16 组端口坐标**逐条有断言 | 4 |
-| **R3** 绘制层（纯函数） | `placement` / `paintBox` / `paintVec` / `paintText` / `paintCommon` / `variants` / `expr` / `cssValue` / `format` | `src/{placement,paintBox,paintVec,paintText,paintCommon,variants,expr,cssValue,format}.ts`、对应 `tests/*.test.ts`、`app/tests/contract/{twin2d-op-parity,twin2d-format-parity}.contract.spec.ts` | ≈ 2 600（源 1 300 / 测试 1 300） | 同上 + `pnpm --dir web vitest run app/tests/contract/twin2d-format-parity.contract.spec.ts` | 九档锚点与 `perim` 法线两套数学各锁一遍；`transition` 六档、`pointerEvents`/`transformOrigin`/`minWidth`/`maxWidth` 各一条；`expr` 七档 + 深度 3；`cssValue` 拒放两侧；format 与 `shared/format` 行为逐项相同且 locale 钉 `'en-US'` | 7 |
-| **R4** 渲染件 + sprite | `render/` 八件 + `twin2d.scss` + `icons.svg` 原样搬 | `src/render/{icons.svg,Twin2dIconSprite.vue,Twin2dStage.vue,Twin2dNodeBox.vue,Twin2dPrim.vue,Twin2dVec.vue,Twin2dGlyph.vue,Twin2dEdgeLayer.vue,twin2d.scss}`、`tests/render/*.spec.ts`、`tests/{twin2d-prim-kinds,twin2d-css-vars,twin2d-sprite-ids}.contract.spec.ts`、`app/tests/contract/twin2d-render-props.contract.spec.ts` | ≈ 2 400（源 1 300 / 测试 1 100） | 同上 | SFC ≤500 行逐个核；`twin2d.scss` 里**零硬编码色值**；`.vue` 里禁 `new Date(` / `toLocaleString(`；`:key` 不许索引（StrokePass/Fill/Shadow/Gradient 都要有 id）；`Twin2dStage` 的 ResizeObserver 卸载必清理；四条契约全绿；hover 与 `prefers-reduced-motion` 各有用例 | 6 |
-| **R5** 预置库 | `palette` / `nodes`（11 种）/ `subtypes`（7 组 25 条）/ `edges`（5 种）/ `sensors`（4 种）/ `circuit`（8 枚 GB/T） | `src/presets/*.ts`、`tests/presets/*.test.ts`、`tests/twin2d-preset-fidelity.spec.ts`、`tests/twin2d-slot-refs.contract.spec.ts` | ≈ 3 200（源 1 900 / 测试 1 300） | 同上 | **§7 那张 100 行表 98 行有断言**（用例名带行号 `§7-1` … `§7-100`；当时缺的 #73 / #97 与只覆盖一半的 #8 / #22 / #71 逐条列在 §7 开头的水位表里，两条缺的分别依赖 R9 的标注渲染件与 R7 的连线取值归一）——这张表是「内置库只是预置数据、不会退化成渲染分支」的唯一机械保证；`slot-refs` 保证预置里零悬空槽/零悬空 sprite id；`palette.ts` 的字面 hex 不触发硬编码色值闸 | 8 |
-| **R6** 绑定行与缝合 | `bindingRows.ts`：有效槽位筛选、行 → 实体映射、`twin2dRowLabels`/`RowCounts`、`remapTwin2dBindings`、`twin2dValues` 缝合 | `src/bindingRows.ts`、`tests/bindingRows.test.ts` | ≈ 900（源 350 / 测试 550） | 同上 | 三个槽的行数与顺序；派生槽与未被引用的槽都不成行；`rowCounts` 三键都在且可为 0；删中间节点后其后行号整体前移 | 3 |
-| **R7** 模块落地（**走机械化豁免，必须只有这一个新模块目录**） | `manifest.ts`（7 个配置字段 + 3 个槽，⚠ **此时先不声明 `subEditor`**，见 R13）+ `Component.vue`（读全部键、缝三槽、状态归一、四档、`@click.stop`）+ 测试 + 六处花名册 + 本文件 | `packages/modules/src/modules/twin-2d-view/{manifest.ts,Component.vue}`、`packages/modules/tests/modules/twin-2d-view/{manifest.test.ts,Component.spec.ts}`、`packages/modules/tests/manifests.contract.spec.ts`（`KEY_CONSTANTS` 加四项）、`packages/modules/tests/registerBuiltins.test.ts`、`server/services/platform-server/src/platform_server/apps/dashboard/module_types.json`、`server/services/platform-server/tests/{contract,unit,integration}/…`、`docs/MODULE_TWIN_2D_DESIGN.md` | ≈ 1 200（含快照 json） | ⚠ 先 `pnpm --dir web vitest run packages/modules/tests/catalog.contract.spec.ts -u` 重生成 `module_types.json` 并提交，否则服务端按过期目录校验、新绑定被拒；然后 `scripts/ci-local.sh --all` | `_is_module_landing()` 豁免成立——⚠ 本 PR **绝不能**顺手改 `packages/modules/src/shared/`、`packages/modules/package.json`、`packages/ui/**`、`app/src/**`，任一处都会让豁免整体失效；⚠ 也**绝不能**与另一个新模块合并（`len(fresh)==2` 时豁免直接消失）；`nodeStatus` 的 `enumMap === undefined` 有断言 | 1 |
-| **R7b** 逐槽状态通道（**必须与 R7 分开**） | 给 `Twin2dSlotRead` 加 `state` / `reason` 两项——仍由**同一个** `readSlot` 回，不新增 props；`paintSlotState` 按四档出 `color`/`opacity`/`breathe`/`title` 并叠在 `paintText` 最后一层；`resolveTxtContent` 的 slot 档在非 `ok` 三档按无值格式化；模块壳只报档位（`gearOf`）、不再自己抹值，角上那枚汇总角标留着（分工见 §9.6） | `packages/twin2d/src/{paintText,paintCommon,bindingValues,index}.ts`、`packages/twin2d/src/render/{Twin2dStage,Twin2dNodeBox,Twin2dPrimView}.vue`、`packages/twin2d/tests/render/Twin2dSlotState.spec.ts`、`packages/twin2d/tests/paintText.test.ts`、`packages/modules/src/modules/twin-2d-view/Component.vue`、`packages/modules/tests/modules/twin-2d-view/Component.spec.ts`、`docs/MODULE_TWIN_2D_DESIGN.md` | ≈ 550（源 150 / 测试 400） | `pnpm --dir web vitest run packages/twin2d packages/modules/tests/modules/twin-2d-view`；`scripts/ci-local.sh --fast` | 四档各一条渲染用例；**「等首帧与未配来源只靠颜色与透明度分得开」单独一条**（本轮要害，两档的字必须相等、样式必须不等）；档位按 (节点 id, 槽键) 各查各的有一条（按下标取会串到隔壁节点上）；模块侧一条端到端钉「`error` 时**那一格**真的变色，不是只有角标变色」；`packages/twin2d` 覆盖率维持语句/函数/行 100%、分支 99.9%（`edgeView.ts` 与 `Twin2dStage.vue` 那两条构造上走不到的空值守卫除外） | 1 |
-| **R8** 编辑器骨架 | 路由一条；`index.vue`（AppShell + `h-full`/`min-h-0` + 三栏 + `DtPageState` + `installDashboardModules()`）；`twin2dDoc.ts`（帧 = 配置 + 绑定，`commit` 无条件重派）；`useTwin2dEditorPage.ts`（整树替换、其余节点原样带回、`expectedVersion` 冲突、**`useRacedFetch`**）；工具栏；两道未保存守卫 | `app/src/router/index.ts`、`app/src/pages/Twin2dEditor/index.vue`、`components/Twin2dToolbar.vue`、`scripts/{types,twin2dDoc,useTwin2dEditorPage}.ts`、`app/tests/pages/Twin2dEditor/*.spec.ts` | ≈ 1 800 | `scripts/ci-local.sh --fast`；`pnpm --dir web vitest run app/tests` | `check_structure_web` 的页面形态三条；`check_web_styles` 的 AppShell 必带 `h-full`+`min-h-0`；`use*` ≤200 行；`check_race_guards_come_from_one_place` 绿；**「快速切 nodeId 旧响应不覆盖新文档」有用例**；每个内联 handler 都有用例 | 5 |
-| **R9** 画布与手势 | `EditorCanvas` / `CanvasGrid` / `CanvasNodeLayer` / `CanvasEdgeLayer` / `CanvasEdgeHandles` / `CanvasMarkLayer`（⚠ 按 `zOrder` 分两层与运行态一致）/ `CanvasMarquee` / `CanvasConnectPreview`；`viewportOps` / `snapping` / `useCanvasPointer` / `editorSelection` / `waypointOps` / `portOps` | 见 §3.3 | ≈ 3 400 | 同上 | 卸载必清理（window 上的 `pointermove`/`pointerup`、ResizeObserver）；手势期间只做纯变更、`pointerup` 才 `commit` 一次（一手势一步撤销）；拖拽中卸载要补一次 commit；sprite 宿主在画布里挂了一次 | 9 |
-| **R10** 检查器四件 | `Twin2dInspector` 分发 + Node/Edge/Mark/Canvas 四个 + `PlacementField`/`ColorField`/`TransitionField`/`ShadowList`/`StrokePassList`/`FillList`；`nodeOps`/`edgeOps`/`markOps`；两条覆盖契约 | 见 §3.3 + `app/tests/contract/{twin2d-inspector-coverage,twin2d-consumed}.contract.spec.ts` | ≈ 3 200 | 同上 | 传感器锚点**九档全给**（参考项目编辑器只给 4 档，手写 `'c'` 能渲染但选不到、一改就丢）；文本类输入走合并撤销；两条覆盖契约全绿 | 8 |
-| **R11** 样式编辑器与样式库 | `StyleInspector`（尺寸/端口/槽位/图元树/变体）+ `PrimTree` + `PrimFields` + `VariantFields` + `GeometryField`（画布上取点画路径）+ `PortList` + `SlotList` + `ExprEditor` + `StyleLibraryDrawer` + `NodePalette` + `Twin2dOutline`；`styleOps`/`primOps`/`stylePackage`/`clipboard`/`shortcuts` | 见 §3.3 | ≈ 3 800 | 同上 | 快捷键必须让位表单（`isFormFocused` 按最近可交互祖先判，含 `role=combobox/listbox/dialog`——只看 `tagName` 会让键盘翻下拉时把节点静默 nudge 进撤销栈）；「恢复内置」是**删覆盖**而不是写死内置数据；样式包导出/导入往返一致 | 10 |
-| **R12** 绑定页 + 运行态预览 + 诊断 | `Twin2dBindingPane`（复用 `BindingPanel`，喂 rowLabels/rowCounts）、`Twin2dRuntimePreview`（画中画，走模块注册表而非类型字面量）、`Twin2dDiagnostics`、`useTwin2dBindings`/`useTwin2dLiveValues`（自己装 `installDashboardDataSources`）、`bootstrap/dashboard.ts` 注入 `configureTwin2dAssets` | 见 §3.3 + `app/src/bootstrap/dashboard.ts` + `packages/twin2d/tests/twin2d-asset-injection.test.ts` | ≈ 1 500 | 同上 | ⚠ 运行态预览里**不许出现模块 type 字面量**（两份零字面量闸都扫 `app/src`）——照 `TwinEditor` 的做法用 `getModule(node.moduleType)?.subEditor?.configKey`；素材两种 kind 各一条用例；未注入时「空 + 进诊断」有用例 | 4 |
-| **R13** 接线 `subEditor` + ADR + 收尾 | `manifest` 补 `subEditor` 四个字段（此时 `sub-editor-routes` 契约才会绿）；ADR-0026 / 0027；本文件定稿；`DASHBOARD_DESIGN` §5 补一段；按实际水位补交互用例把 `functions` 顶回 85+ | `packages/modules/src/modules/twin-2d-view/manifest.ts`、`docs/adr/0026-*.md`、`docs/adr/0027-*.md`、`docs/MODULE_TWIN_2D_DESIGN.md`、`docs/DASHBOARD_DESIGN.md`、补覆盖的测试 | ≈ 800 | **`scripts/ci-local.sh --all`** | `sub-editor-routes.contract` 四条全绿（`routeName` 存在、path 含 `:dashboardId` 与 `:nodeId`、`configKey` 在自己的 schema 里、至少一个模块声明了子编辑器）；覆盖率棘轮（90/80 封顶）与 `diff-cover --fail-under=85` 全过 | 3 |
+| 轮 | 落下的东西 | 新增行 | 兑现的验收点 |
+|---|---|---|---|
+| **R0a** 依赖表与 token | `check_web_deps` 的表项、`project-structure-typescript` 的一行、`tokens.scss` 的 `--font-digit` | 12 | 新目录尚不存在也不红；`css-variables` 契约照旧绿 |
+| **R0b** `useUnsavedGuard` 提取 | 从 `TwinEditor/scripts/` 移到 `app/src/composables/`，`TwinEditor` 与它的用例跟着改引用 | 2（其余是文件移动） | `TwinEditor` 的守卫用例逐条照旧绿；`check_structure_web` 的「测试镜像源码」不红 |
+| **R0c** 锁文件（单独成 PR） | `@dt/twin2d` 的 `package.json`、`packages/modules` 加一条依赖、锁文件 | 45 | `check_lockfile_stands_alone` 绿——锁文件只与 `package.json` 同批 |
+| **R0d** `toDeviceStatus` 现场词表 | `@dt/modules/shared/status.ts` 加一张字符串同义词表，纯扩宽 | 105 | 四组词表逐词各一条用例；**现有用例一条不改照旧绿** |
+| **R1** 契约与归一化 | `constants` / `kinds` / `types`、`normalize` 六件、`issues`；33 个文件 | 9 472 | `posDim` 挡 0 与负数、数字 id `String()` 化、超深截断各有用例；每个 `.ts` 有 `@fileoverview` |
+| **R2** 几何与变换 | `geometry.ts`（周长参数化、四角法线、四种路由、圆角折线两条退化保护、箭头、`labelAt` 弧长）+ `transform.ts` | 1 884 | 四段周长各三点、四角法线、四种路由、带 waypoints 的反向渲染、二极管 16 组端口坐标逐条有断言 |
+| **R3** 绘制层 | `placement` / `paintBox` / `paintVec` / `paintText` / `paintCommon` / `variants` / `expr` / `cssValue` / `format` 九件纯函数 + 两条 parity 契约 | 6 916 | 九档锚点与 `perim` 法线两套数学各锁一遍；`expr` 七档 + 深度 3；format 与 `shared/format` 行为逐项相同且 locale 钉 `'en-US'` |
+| **R4** 渲染件与 sprite | `render/` 八件 + `twin2d.scss` + `icons.svg` | 6 222 | SFC ≤500 行逐个核；`twin2d.scss` 零硬编码色值；`:key` 不用索引；`Twin2dStage` 的 ResizeObserver 卸载必清理；四条契约全绿 |
+| **R5** 预置库 | `palette` / `nodes`（19 条 = 11 种类型 + 8 枚 GB/T 4728 电路符号）/ `subtypes`（7 组 25 条）/ `edges`（5 种）/ `sensors`（4 种）；随后一轮补齐表达缺口并统一图元词表 | 11 032 + 1 944 | §7 那张 100 行表**逐行有断言**（99 行在 `twin2d-preset-fidelity.spec.ts`，第 100 行的实现在模块目录、断言跟着实现走）；`slot-refs` 零悬空槽/零悬空 sprite id |
+| **R6** 绑定行与缝合 | `bindingRows.ts`：有效槽位筛选、行 → 实体映射、`twin2dRowLabels` / `RowCounts`、`remapTwin2dBindings`、`twin2dValues` | 2 783 | 三个槽的行数与顺序；派生槽与未被引用的槽都不成行；删中间节点后其后行号整体前移 |
+| **R7** 模块落地（独占一个 PR） | `manifest.ts` 七个配置字段 + 三个槽 + `Component.vue` + 六处花名册 + 重生成的 `module_types.json` | 1 732 | `_is_module_landing()` 机械化豁免成立（本 PR 只碰这一个新模块目录）；`nodeStatus` 的 `enumMap === undefined` 有断言 |
+| **R7 前置** app 的依赖锁 | `app/package.json` 加 `@dt/twin2d` + 锁文件 | 4 | 锁文件单独成 PR |
+| **R7b** 逐槽状态通道 | `Twin2dSlotRead` 加 `state` / `reason`，`paintSlotState` 四档叠在 `paintText` 最后一层；模块壳只报档位 | 780 | 四档各一条渲染用例；「等首帧与未配来源只靠颜色与透明度分得开」单独一条；档位按 (节点 id, 槽键) 各查各的 |
+| **R8** 编辑器骨架 | 路由一条、`index.vue` 三栏、`twin2dDoc.ts`（帧 = 配置 + 绑定，`commit` 无条件重派）、`useTwin2dEditorPage.ts`（整树替换 + `useRacedFetch`）、工具栏、两道未保存守卫 | 2 159 | `check_structure_web` 页面形态三条；AppShell 必带 `h-full` + `min-h-0`；`use*` ≤200 行；「快速切 nodeId 旧响应不覆盖新文档」有用例 |
+| **R9** 画布与手势 | `EditorCanvas` / `EditorStage` / `CanvasGrid` / 节点层 / 连线层 / 把手 / 标注层 / 框选 / 连线预览，`viewportOps` / `snapping` / `useCanvasPointer` / `editorSelection` / `waypointOps` / `portOps`；39 个文件 | 10 755 | 卸载必清理 `window` 上的 `pointermove` / `pointerup` 与 ResizeObserver；一手势一步撤销（`pointerup` 才 commit）；拖拽中卸载补一次 commit |
+| **R10** 检查器四件 | `Twin2dInspector` 分发 + Node/Edge/Mark/Canvas 四个 + 六个字段件，`nodeOps` / `edgeOps` / `markOps`，两条覆盖契约；43 个文件 | 11 181 | 传感器锚点九档全给；文本类输入走合并撤销；`twin2d-inspector-coverage` 与 `twin2d-consumed` 两条契约全绿 |
+| **R11** 样式编辑器与样式库 | `StyleInspector` + `PrimTree` + `PrimFields` + `VariantFields` + `GeometryField` + `PortList` + `SlotList` + `ExprEditor` + `StyleLibraryDrawer` + `NodePalette` + `Twin2dOutline`，`styleOps` / `primOps` / `stylePackage` / `clipboard` / `shortcuts`；93 个文件。前一轮先把标注与底图收进包并补上从未被引入的样式表 | 23 534 + 1 149 | 快捷键让位表单（`isFormFocused` 按最近可交互祖先判）；「恢复内置」是删覆盖而不是写死内置数据；样式包导出/导入往返一致 |
+| **R12** 绑定页、画中画与诊断 | `Twin2dBindingPane`（复用 `BindingPanel`）、`Twin2dRuntimePreview`（走模块注册表）、`Twin2dDiagnostics`、`useTwin2dBindings` / `useTwin2dLiveValues`、`bootstrap/dashboard.ts` 注入素材解析 | 3 685 | 运行态预览里零模块 type 字面量；素材两种 kind 各一条用例；未注入时「空 + 进诊断」有用例 |
+| **R13** 接线子编辑器与定稿 | `manifest` 的 `subEditor` 四个字段、[ADR-0027](adr/0027-2D孪生的节点与连线样式是可配置图元文档.md)、[ADR-0028](adr/0028-2D编辑画布自绘而不引入图编辑框架.md)、本文件与 `DASHBOARD_DESIGN` §5.7 定稿、`sub-editor-routes` 补上点击跳转两条 | 413 | `sub-editor-routes.contract` 六条检查全绿（两个声明了子编辑器的模块各查一遍，共 11 条用例）：至少一个模块声明了子编辑器、`routeName` 都在路由表里、路径都含 `:dashboardId` 与 `:nodeId`、`configKey` 都在自己的 schema 里，外加入口按钮点下去真落在声明的那一页、并带上两个参数 |
 
-两个 ADR 的题目（[engineering-workflow](agents/engineering-workflow.md) 的四条触发条件里
-命中「引入/否决一个跨模块的结构性做法」）：
+### 19.1 落点实测
 
-- **ADR-0026 · 2D 孪生的节点与连线样式是可配置图元文档** —— 记「形状从枚举下沉成数据」
-  这条判断、内置库只是预置数据、以及「改预置库会改存量渲染」这条与 `ConfigField.default`
-  同源的口径。
-- **ADR-0027 · 2D 编辑画布自绘而不引入图编辑框架** —— 记 §13.2 那笔账，特别是
-  `as unknown as` 撞 lint 这条硬约束。
+| 落点 | 源 | 测试 | 用例 |
+|---|---|---|---|
+| `@dt/twin2d` | 16 598 行 / 63 个文件 | 23 808 行 / 55 个文件 | 1 709 |
+| `packages/modules/src/modules/twin-2d-view/` | 712 行 | 998 行 / 3 个文件 | 72 |
+| `app/src/pages/Twin2dEditor/` | 24 593 行 / 93 个文件 | 25 414 行 / 87 个文件 | 1 814 |
+| `app/tests/contract/twin2d-*` | — | 1 557 行 / 6 个文件 | 179 |
+| **合计** | **41 903** | **51 777** | **3 774** |
 
-⚠ 顺序上有四处不能换：R0a 必须在 R0c 之前（否则新目录不在 ALLOWED 表里）；
-R0b 必须在 R8 之前（否则第一个用到守卫的 PR 要连带把提取带进来）；
-R0d 必须在 R7 之前（`Component.vue` 落地时词表就该在真源里，否则那个 PR 要么带着
-一份本地词表副本、要么顺手改 `packages/modules/src/shared/` —— 后者会让 R7 的机械化
-豁免整体失效）；
-R7 必须是**独占一个 PR** 且 `subEditor` 留到 R13（在编辑器路由存在之前声明它，
-`sub-editor-routes` 契约当场红）。
+`@dt/twin2d` 的覆盖率是语句 / 函数 / 行 100%、分支 99.9%——未覆盖的两条是
+`edgeView.ts` 与 `Twin2dStage.vue` 里构造上走不到的空值守卫。
 
-⚠ R7b 只能排在 R7 之后，且**不能与 R7 合成一个 PR**：R7 走的机械化豁免不允许碰
-`packages/twin2d/**`（见 R7 那一行的三条禁改），而 R7b 改的正是那个包。
+### 19.2 两个 ADR
+
+[engineering-workflow](agents/engineering-workflow.md) 的四条触发条件里，这两件命中
+「引入 / 否决一个跨模块的结构性做法」：
+
+- [**ADR-0027 · 2D 孪生的节点与连线样式是可配置图元文档**](adr/0027-2D孪生的节点与连线样式是可配置图元文档.md)
+  ——形状从枚举下沉成数据、内置库只是预置数据、以及「改预置库会改存量渲染」这条与
+  `ConfigField.default` 同源的口径。
+- [**ADR-0028 · 2D 编辑画布自绘而不引入图编辑框架**](adr/0028-2D编辑画布自绘而不引入图编辑框架.md)
+  ——§13.2 那笔账，特别是 `as unknown as` 撞 lint 这条硬约束。
+
+### 19.3 顺序上不能换的四处
+
+拆 PR 时这四条是硬的：
+
+- **R0a 在 R0c 之前**：新目录存在而不在 `check_web_deps` 的 ALLOWED 表里，会让闸门
+  在 main 上红。
+- **R0b 在 R8 之前**：第一个用到未保存守卫的分片 PR 若要连带把提取带进来，
+  那个 PR 的规模豁免整体失效。
+- **R0d 在 R7 之前**：`Component.vue` 落地时状态词表就该在真源里，否则那个 PR 要么
+  带一份本地副本、要么顺手改 `packages/modules/src/shared/`——后者会让 R7 的机械化
+  豁免整体失效。
+- **R7 独占一个 PR，`subEditor` 留到 R13**：机械化豁免只认「只有这一个新模块目录」；
+  而在编辑器路由存在之前声明 `subEditor`，`sub-editor-routes` 契约当场红。
+
+⚠ R7b 只能排在 R7 之后且不能与它合成一个 PR：R7 的豁免不允许碰 `packages/twin2d/**`，
+而 R7b 改的正是那个包。

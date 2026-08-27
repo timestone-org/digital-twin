@@ -379,7 +379,11 @@ ModuleSlotMeta = { state: 'ok' | 'pending' | 'error', message?, timestampMs? }
 节点样式因此只是预置数据，渲染组件里没有一处按样式 id 分支；用户能从零画出一个
 新形状、新配色、新字段布局，画电路符号走的是同一条路。它是
 [ADR-0016](adr/0016-复杂config段由清单声明的整页子编辑器接管.md) 的第二个使用者，
-设计见 [MODULE_TWIN_2D_DESIGN](MODULE_TWIN_2D_DESIGN.md)。
+设计见 [MODULE_TWIN_2D_DESIGN](MODULE_TWIN_2D_DESIGN.md)。两条结构性判断各有一份 ADR：
+样式从形状枚举下沉成图元文档见
+[ADR-0027](adr/0027-2D孪生的节点与连线样式是可配置图元文档.md)，
+编辑画布自绘、不引入图编辑框架见
+[ADR-0028](adr/0028-2D编辑画布自绘而不引入图编辑框架.md)。
 
 `info-card` / `info-list` / `gauge-card` / `info-feed` 是信息卡片模块族：
 把「一格读数」「一行列表」「一只仪表」「一条推送流」四种排布各归一个模块，
