@@ -13,6 +13,13 @@ import { computed } from 'vue'
 const props = defineProps<{
   /** 当前指向的点位身份；空串 = 还没挑。 */
   nodeKey: string
+  /**
+   * 外层 `DtField` 给的控件 id 与描述 id。
+   * ⚠ 不接的话，`DtField` 的 `<label for>` 指向一个不存在的元素：读屏念不出
+   * 这一行叫什么，点标签也不会聚焦到挑点按钮上。
+   */
+  controlId?: string | undefined
+  describedby?: string | undefined
 }>()
 
 const emit = defineEmits<{ pick: [] }>()
@@ -44,10 +51,12 @@ const parts = computed(() => {
       还没挑点位
     </span>
     <DtButton
+      :id="props.controlId"
       class="dt-point-ref__pick"
       size="sm"
       variant="outline"
       icon="search"
+      :aria-describedby="props.describedby"
       @click="emit('pick')"
     >
       挑点位
