@@ -11,6 +11,8 @@ import type { SceneLayerValues } from '@dt/three-core'
 import type { TwinConfig } from '@dt/twin-config'
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
 
+import type { ReadPointSample } from '@/runtime/bindingReader'
+
 import { createTwinBindingActions } from './twinBindingActions'
 import type { TwinDoc } from './twinDoc'
 import { useTwinLiveValues } from './useTwinLiveValues'
@@ -32,6 +34,11 @@ export interface TwinBindings {
   liveValues: ComputedRef<SceneLayerValues | undefined>
   /** 取一个绑定读取器，运行态预览按它自己求值；每次求值都要重新调。 */
   readBinding: () => BindingValueReader
+  /**
+   * 取一个点位此刻的快照；没收到过给 undefined。
+   * ⚠ 助手的 `dashboard.read_values` 走它，与视口读的是同一份缓存。
+   */
+  readSample: ReadPointSample
 }
 
 /**
@@ -79,5 +86,6 @@ export function useTwinBindings(
     },
     liveValues: live.scene,
     readBinding: live.readBinding,
+    readSample: live.read,
   }
 }

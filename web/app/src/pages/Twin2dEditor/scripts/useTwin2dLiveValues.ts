@@ -58,6 +58,14 @@ export interface Twin2dLiveValues {
    * 反复用的话，值再变也不会重算，而且不报任何错。
    */
   readBinding: () => BindingValueReader
+  /**
+   * 取一个点位此刻的快照；没收到过给 undefined。
+   * ⚠ 助手的 `dashboard.read_values` 走它，与画中画读的是同一份缓存：另开一份
+   * 的表现是「助手说有值、画面上是占位符」，而两处单看都对。
+   * ⚠ 它的四档与 `valueReport` 的四档是同一套说法：没收到过 = `waiting`
+   * （已订阅、还没来第一帧），取数失败才是 `unavailable`。
+   */
+  read: ReadPointSample
   /** 当下取不取得到数；界面照它明说，不留白。 */
   state: ComputedRef<Twin2dLiveState>
   tally: ComputedRef<Twin2dLiveTally>
@@ -115,6 +123,7 @@ export function useTwin2dLiveValues(
 
   return {
     readBinding: () => createBindingReader(samples.read),
+    read: samples.read,
     state,
     tally,
   }

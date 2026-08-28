@@ -21,10 +21,8 @@ import { DtButton, DtNotice } from '@dt/ui'
 import { computed, ref } from 'vue'
 import type { CSSProperties } from 'vue'
 
-import {
-  TWIN_2D_LIVE_STATE_TEXT,
-  useTwin2dLiveValues,
-} from '../scripts/useTwin2dLiveValues'
+import { TWIN_2D_LIVE_STATE_TEXT } from '../scripts/useTwin2dLiveValues'
+import type { Twin2dLiveValues } from '../scripts/useTwin2dLiveValues'
 
 const props = defineProps<{
   /** 被编辑的大屏节点；null = 还没读出来。 */
@@ -37,15 +35,16 @@ const props = defineProps<{
   config: Twin2dConfig | null
   /** 当前这一份绑定，含还没保存的草稿。 */
   bindings: readonly BindingView[]
+  /**
+   * 这一页那份实时读数。
+   * ⚠ 由页面传进来而不是在这里自己订一份：助手的 `dashboard.read_values` 读的
+   * 就是它，各订各的会出现「助手说有值、画面上是占位符」，而两处单看都对。
+   */
+  live: Twin2dLiveValues
 }>()
 
-const live = useTwin2dLiveValues(
-  () => props.node?.dashboardId ?? '',
-  () => props.bindings,
-)
-
 // 预览与运行态共用同一条取数：同一份绑定、同一个读取器、同一个订阅
-provideRuntimeData({ readBinding: () => live.readBinding() })
+provideRuntimeData({ readBinding: () => props.live.readBinding() })
 
 const open = ref(false)
 const wide = ref(false)
@@ -130,8 +129,8 @@ const sizeLabel = computed(() => {
 
 /** 取数取不取得到，照实写一句；绑了点位就把「收到几个」也报出来。 */
 const liveLabel = computed(() => {
-  const text = TWIN_2D_LIVE_STATE_TEXT[live.state.value]
-  const { bound, received } = live.tally.value
+  const text = TWIN_2D_LIVE_STATE_TEXT[props.live.state.value]
+  const { bound, received } = props.live.tally.value
   return bound === 0 ? text : `${text} · ${received}/${bound}`
 })
 </script>

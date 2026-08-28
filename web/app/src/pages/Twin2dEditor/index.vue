@@ -23,6 +23,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute } from 'vue-router'
 
 import { installDashboardModules } from '@/bootstrap/dashboard'
+import AiDock from '@/components/ai/AiDock.vue'
 import PointPickerDialog from '@/components/binding/PointPickerDialog.vue'
 import { AppShell } from '@/components/layout'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
@@ -42,6 +43,7 @@ import { addNode } from './scripts/nodeOps'
 import { useTwin2dShortcuts } from './scripts/shortcuts'
 import { twin2dScan, twin2dSetupIssues } from './scripts/twin2dIssues'
 import type { Twin2dEntityKind } from './scripts/types'
+import { TWIN_2D_AI_STARTERS, useTwin2dAi } from './scripts/useTwin2dAi'
 import { useTwin2dBindings } from './scripts/useTwin2dBindings'
 import { useTwin2dEditorPage } from './scripts/useTwin2dEditorPage'
 
@@ -77,11 +79,16 @@ const selectedPrim = ref('')
 
 const config = computed(() => page.doc.value?.config.value ?? null)
 
-/** 绑定这一路：绑定表、绑定页四个动作与挑点弹窗的开关。 */
+/** 绑定这一路：绑定表、绑定页四个动作、挑点弹窗的开关，与那一份实时读数。 */
 const binding = useTwin2dBindings(
   () => page.doc.value,
+  () => dashboardId.value,
   () => nodeId.value,
 )
+
+// 助手：绑点 + 照抄 + 读数 + 保存。⚠ 这一页不给截图，2D 舞台是 SVG/DOM，
+// 那条链路没在它上面验过（见 scripts/aiSurface.ts 的文件头）
+const ai = useTwin2dAi(page, binding, selection)
 
 // ⚠ 诊断走 `twin2dIssues` 那一支，与右下角那张清单同源：各调各的话，顶栏这个数与
 // 清单上的行数迟早对不上，而先信哪一个全靠猜
@@ -348,6 +355,7 @@ onBeforeUnmount(page.dispose)
                 :node="page.node.value"
                 :config="config"
                 :bindings="binding.bindings.value"
+                :live="binding.live"
               />
               <p
                 class="pointer-events-none absolute bottom-1 right-2 text-2xs text-text-disabled"
@@ -437,6 +445,13 @@ onBeforeUnmount(page.dispose)
           :field-key="binding.pickingFieldKey.value"
           @update:model-value="binding.closePicker"
           @pick="binding.pickPoint"
+        />
+
+        <AiDock
+          :ai="ai"
+          surface-label="2D 孪生编辑器"
+          hint="助手改的是草稿；它自己会问你要不要保存，保存之后实时读数才认得新绑的点位。"
+          :starters="TWIN_2D_AI_STARTERS"
         />
       </template>
     </div>

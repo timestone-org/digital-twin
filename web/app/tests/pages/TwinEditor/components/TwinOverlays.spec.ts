@@ -39,6 +39,7 @@ function binding(): TwinBindings {
     closePicker: vi.fn(),
     liveValues: computed(() => undefined),
     readBinding: () => () => ({ state: 'pending' }),
+    readSample: () => undefined,
   }
 }
 
