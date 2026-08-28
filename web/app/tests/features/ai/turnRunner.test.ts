@@ -9,9 +9,10 @@
  * 没有答复，下一轮请求会被端点判成不合法。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { AssistantPlan } from '@dt/contracts'
+import { ASSISTANT_ASK_TOOL, type AssistantPlan } from '@dt/contracts'
 import type { AdvanceBody } from '@/api/assistant'
 import {
+  ASK_MUST_BE_ALONE,
   MAX_PLAN_NUDGES,
   MAX_ROUNDS,
   PLAN_CONTINUE_TEXT,
@@ -19,6 +20,7 @@ import {
   type RunnerSink,
   type RunnerStep,
 } from '@/features/ai/turnRunner'
+import { __resetAskHandler, setAskHandler } from '@/features/ai/askBridge'
 import { __resetSurfaces, setSurface } from '@/features/ai/surfaces'
 
 function frame(name: string, body: unknown): string {
@@ -106,7 +108,33 @@ function inputOf(advance: ReturnType<typeof advanceOf>['advance']) {
 
 afterEach(() => {
   __resetSurfaces()
+  __resetAskHandler()
 })
+
+/** 一次提问的入参，两个选项。 */
+const ASK_ARGS = {
+  question: '要覆盖这 12 条绑定吗？',
+  options: [
+    { value: 'yes', label: '覆盖' },
+    { value: 'no', label: '留着' },
+  ],
+}
+
+function askCall(callId = 'q1'): Record<string, unknown> {
+  return { call_id: callId, name: ASSISTANT_ASK_TOOL, arguments: ASK_ARGS }
+}
+
+/** 一个会写东西的工作面，用来演「ask 与写动作混在同一批」。 */
+function writingSurface(run = vi.fn().mockResolvedValue({ ok: true })) {
+  setSurface({
+    kind: 'dashboard-editor',
+    label: '大屏编辑器',
+    snapshot: () => ({}),
+    tools: ['dashboard.write_binding'],
+    run,
+  })
+  return run
+}
 
 describe('回合循环', () => {
   it('一问一答就结束', async () => {
@@ -558,16 +586,167 @@ describe('计划', () => {
     const { sink } = sinkOf()
     await runTurn(inputOf(advance), sink)
 
-    expect(bodies[0]?.client_tools).toEqual(['dashboard.read_canvas'])
+    expect(bodies[0]?.client_tools).toEqual([
+      ASSISTANT_ASK_TOOL,
+      'dashboard.read_canvas',
+    ])
   })
 
-  it('没有工作面时如实报空名单', async () => {
+  it('没有工作面时也照样报提问：它不归任何一页', async () => {
+    // 报空的话，一个工作面都没登记的页面里助手只会闷头改，从不问
     const { advance, bodies } = advanceOf([
       [frame('turn.done', { reply: '好' })],
     ])
     const { sink } = sinkOf()
     await runTurn(inputOf(advance), sink)
 
-    expect(bodies[0]?.client_tools).toEqual([])
+    expect(bodies[0]?.client_tools).toEqual([ASSISTANT_ASK_TOOL])
+  })
+})
+
+describe('提问这个内建工具', () => {
+  it('没有工作面也派发得出去，答案回填给下一轮', async () => {
+    setAskHandler(() =>
+      Promise.resolve({
+        picked: ['yes'],
+        free_text: null,
+        is_cancelled: false,
+      }),
+    )
+    const { advance, bodies } = advanceOf([
+      [frame('client_tool.request', { calls: [askCall()] })],
+      [frame('turn.done', { reply: '那就覆盖' })],
+    ])
+    const { sink, seen } = sinkOf()
+    await runTurn(inputOf(advance), sink)
+
+    expect(bodies[1]?.tool_results).toEqual([
+      {
+        call_id: 'q1',
+        output: { picked: ['yes'], free_text: null, is_cancelled: false },
+      },
+    ])
+    // 问题与答案已经在时间线的卡片上，再记一行「做完了」是同一件事说两遍
+    expect(seen.ran).toEqual([])
+    expect(seen.replies).toEqual(['那就覆盖'])
+  })
+
+  it('取消是正常回执，不是失败', async () => {
+    // 送成 error 的话模型会去排查「工具坏了」，而实情只是用户想自己说
+    setAskHandler(() =>
+      Promise.resolve({ picked: [], free_text: null, is_cancelled: true }),
+    )
+    const { advance, bodies } = advanceOf([
+      [frame('client_tool.request', { calls: [askCall()] })],
+      [frame('turn.done', { reply: '好' })],
+    ])
+    const { sink } = sinkOf()
+    await runTurn(inputOf(advance), sink)
+
+    const result = bodies[1]?.tool_results?.[0]
+    expect(result?.error).toBeUndefined()
+    expect(result?.output).toMatchObject({ is_cancelled: true })
+  })
+})
+
+describe('提问必须单独成一批', () => {
+  it('混在同一批里时，别的调用一个都不跑', async () => {
+    // 按顺序跑的话，用户点了「取消」而覆盖照样发生了——而「哪个选项算取消」
+    // 是模型的语义、前端读不出来，只能从批次这一层拦
+    const run = writingSurface()
+    setAskHandler(() =>
+      Promise.resolve({ picked: ['no'], free_text: null, is_cancelled: false }),
+    )
+    const { advance, bodies } = advanceOf([
+      [
+        frame('client_tool.request', {
+          calls: [
+            askCall(),
+            {
+              call_id: 'w1',
+              name: 'dashboard.write_binding',
+              arguments: { node_id: 'n1' },
+            },
+            {
+              call_id: 'w2',
+              name: 'dashboard.write_binding',
+              arguments: { node_id: 'n2' },
+            },
+          ],
+        }),
+      ],
+      [frame('turn.done', { reply: '那就留着' })],
+    ])
+    const { sink } = sinkOf()
+    await runTurn(inputOf(advance), sink)
+
+    expect(run).not.toHaveBeenCalled()
+    expect(bodies[1]?.tool_results).toEqual([
+      {
+        call_id: 'q1',
+        output: { picked: ['no'], free_text: null, is_cancelled: false },
+      },
+      { call_id: 'w1', error: ASK_MUST_BE_ALONE },
+      { call_id: 'w2', error: ASK_MUST_BE_ALONE },
+    ])
+  })
+
+  it('ask 排在后面时同样拦得住', async () => {
+    const run = writingSurface()
+    setAskHandler(() =>
+      Promise.resolve({ picked: ['no'], free_text: null, is_cancelled: false }),
+    )
+    const { advance, bodies } = advanceOf([
+      [
+        frame('client_tool.request', {
+          calls: [
+            {
+              call_id: 'w1',
+              name: 'dashboard.write_binding',
+              arguments: { node_id: 'n1' },
+            },
+            askCall(),
+          ],
+        }),
+      ],
+      [frame('turn.done', { reply: '好' })],
+    ])
+    const { sink, seen } = sinkOf()
+    await runTurn(inputOf(advance), sink)
+
+    expect(run).not.toHaveBeenCalled()
+    expect(bodies[1]?.tool_results?.[0]).toEqual({
+      call_id: 'w1',
+      error: ASK_MUST_BE_ALONE,
+    })
+    // 被拦下的那几个照样记成步骤：静默跳过的话，用户看不出为什么什么都没变
+    expect(seen.ran.map((one) => one.state)).toEqual(['failed'])
+  })
+
+  it('没有 ask 的一批照旧全跑', async () => {
+    const run = writingSurface()
+    const { advance } = advanceOf([
+      [
+        frame('client_tool.request', {
+          calls: [
+            {
+              call_id: 'w1',
+              name: 'dashboard.write_binding',
+              arguments: {},
+            },
+            {
+              call_id: 'w2',
+              name: 'dashboard.write_binding',
+              arguments: {},
+            },
+          ],
+        }),
+      ],
+      [frame('turn.done', { reply: '好' })],
+    ])
+    const { sink } = sinkOf()
+    await runTurn(inputOf(advance), sink)
+
+    expect(run).toHaveBeenCalledTimes(2)
   })
 })

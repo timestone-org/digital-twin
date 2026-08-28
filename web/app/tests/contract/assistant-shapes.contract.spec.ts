@@ -13,6 +13,9 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type {
+  AssistantAskAnswer,
+  AssistantAskOption,
+  AssistantAskRequest,
   AssistantCapability,
   AssistantCredentialStatus,
   AssistantDeviceLoginPoll,
@@ -26,6 +29,7 @@ import type {
   AssistantStep,
 } from '@dt/contracts'
 import {
+  ASSISTANT_ASK_TOOL,
   ASSISTANT_DELTA_CHANNELS,
   ASSISTANT_EVENT_NAMES,
   ASSISTANT_MESSAGE_ROLES,
@@ -79,6 +83,23 @@ const EVENTS_PATH = join(
   'chat',
   'services',
   'events.py',
+)
+
+// 客户端工具规格的真源。⚠ 客户端工具的入参 openapi 里没有（它们在浏览器里
+// 执行，服务端只下发形状），所以只能对着那份源码比——漂开的表现是「模型看得见
+// 这个工具、调用却每次都失败」，而失败的样子与「这一页没实现它」一模一样
+const CLIENT_SPECS_PATH = join(
+  process.cwd(),
+  '..',
+  'server',
+  'services',
+  'ai-assistant',
+  'src',
+  'ai_assistant',
+  'apps',
+  'chat',
+  'services',
+  'client_tool_specs.py',
 )
 
 type Keys<T> = Record<keyof T, true>
@@ -299,5 +320,72 @@ describe('事件流的事件名两侧逐字相同', () => {
       (match) => match[1] ?? '',
     )
     expect([...ASSISTANT_DELTA_CHANNELS].sort()).toEqual(channels.sort())
+  })
+})
+
+describe('user.ask 的入参两侧逐字一致', () => {
+  // JSON Schema 自己的词，不是这个工具的参数名
+  const VOCABULARY = new Set([
+    'type',
+    'description',
+    'properties',
+    'required',
+    'items',
+    'additionalProperties',
+  ])
+
+  /** 后端那份规格里 `user.ask` 那一段。 */
+  function askBlock(): string {
+    const source = readFileSync(CLIENT_SPECS_PATH, 'utf8')
+    const from = source.indexOf(`name="${ASSISTANT_ASK_TOOL}"`)
+    const to = source.indexOf('runs_on="client"', from)
+    return from < 0 || to < 0 ? '' : source.slice(from, to)
+  }
+
+  /** 那一段里出现的参数名（连选项自己的那三格）。 */
+  function backendKeys(): string[] {
+    return [...askBlock().matchAll(/"(\w+)":/g)]
+      .map((match) => match[1] ?? '')
+      .filter((name) => !VOCABULARY.has(name))
+      .sort()
+  }
+
+  it('确实读到了后端那一段（读不到就等于这条闸没跑）', () => {
+    expect(askBlock().length).toBeGreaterThan(0)
+    expect(backendKeys().length).toBeGreaterThan(0)
+  })
+
+  it('参数名一个不多一个不少', () => {
+    const declared: Record<string, true> = {
+      question: true,
+      options: true,
+      allow_multiple: true,
+      allow_free_text: true,
+      free_text_label: true,
+    } satisfies Keys<AssistantAskRequest>
+    const perOption: Record<string, true> = {
+      value: true,
+      label: true,
+      hint: true,
+    } satisfies Keys<Required<AssistantAskOption>>
+    expect(backendKeys()).toEqual(
+      [...Object.keys(declared), ...Object.keys(perOption)].sort(),
+    )
+  })
+
+  it('问题与选项两格是必给的', () => {
+    // ⚠ options 做成可选的话，模型会一路退回「不给选项的自由提问」
+    const required = /\[\s*"question",\s*"options",?\s*\]/
+    expect(required.test(askBlock())).toBe(true)
+  })
+
+  it('回执那三格在规格里说清了', () => {
+    const answer: Record<string, true> = {
+      picked: true,
+      free_text: true,
+      is_cancelled: true,
+    } satisfies Keys<AssistantAskAnswer>
+    const block = askBlock()
+    for (const key of Object.keys(answer)) expect(block).toContain(key)
   })
 })

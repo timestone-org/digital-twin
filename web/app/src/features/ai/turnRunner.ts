@@ -17,6 +17,9 @@
  *
  * ⚠ 计划没走完而模型停了嘴时，这里代用户催一句「按计划继续」（ADR-0024）。
  * 有上限：模型反复停下说明它自己也拿不准，那时该交还给人，不是继续催。
+ *
+ * ⚠ 派发先看内建表再落到工作面：`user.ask` 不归任何一页（`builtinTools.ts`）。
+ * 它还必须**单独成一批**，理由见 `ASK_MUST_BE_ALONE`。
  */
 import type {
   AssistantDeltaChannel,
@@ -28,7 +31,14 @@ import type {
 } from '@dt/contracts'
 import { ASSISTANT_PLAN_STATUSES } from '@dt/contracts'
 
+import { ASSISTANT_ASK_TOOL } from '@dt/contracts'
+
 import type { AdvanceBody } from '@/api/assistant'
+import {
+  BUILTIN_CLIENT_TOOLS,
+  isBuiltinTool,
+  runBuiltinTool,
+} from './builtinTools'
 import type { AdvanceStream } from './ports'
 import { createFrameReader } from './sseFrames'
 import { inputPreview, isImageOutput, outputPreview } from './stepPreview'
@@ -43,6 +53,17 @@ import { activeSurface, runClientTool } from './surfaces'
  * （`history.fillers`），所以用户说一句「继续」就能接着做。
  */
 export const MAX_ROUNDS = 60
+
+/**
+ * 一批里混了 `user.ask` 与别的调用时，退给那几个的失败话术。
+ *
+ * ⚠ 这条守卫拦的是确认：模型很容易发出 `user.ask("要覆盖这 12 条绑定吗？")
+ * + write_binding × 12` 这样一批，按顺序跑的话用户点了「取消」而覆盖照样
+ * 发生了。而「哪个选项算取消」是模型的语义、前端读不出来，所以只能从批次
+ * 这一层拦（AI_ASSISTANT_ASK_DESIGN §1）。
+ */
+export const ASK_MUST_BE_ALONE =
+  'user.ask 必须单独发：要先拿到用户的回答才能动手'
 
 /** 计划未完时最多代用户催几次。 */
 export const MAX_PLAN_NUDGES = 3
@@ -153,8 +174,10 @@ function envelope(input: RunnerInput): AdvanceBody {
     surface_kind: input.surfaceKind,
     surface_label: input.surfaceLabel,
     ...(snapshot === undefined ? {} : { surface_context: snapshot }),
-    // 页面自报实现了哪些客户端工具；没有工作面时如实报空，模型就不会调
-    client_tools: surface === null ? [] : [...surface.tools],
+    // 页面自报实现了哪些客户端工具：内建那几个每一页都有，工作面的按登记来。
+    // ⚠ 没有工作面时也**不是空**——提问不归任何一页，一个工作面都没登记的
+    // 页面（纯看板、纯列表页）照样要能问
+    client_tools: [...BUILTIN_CLIENT_TOOLS, ...(surface?.tools ?? [])],
   }
 }
 
@@ -223,9 +246,11 @@ function handle(
 }
 
 /**
- * 把一批待办在当前工作面上跑完，成败都收成结果。
+ * 把一批待办跑完，成败都收成结果。
  * ⚠ 每一个都顺手记成一步交给界面：这几步是助手唯一真正改动画布的地方，
  * 而服务端看不见它们——不记的话，一次绑二十个点在界面上是二十秒的空白。
+ * ⚠ 提问不记步：问题与答案已经就在时间线的那张卡片上，再记一行
+ * 「user.ask 做完了」只是同一件事说两遍。
  */
 async function runAll(
   calls: readonly AssistantToolCall[],
@@ -233,11 +258,17 @@ async function runAll(
 ): Promise<ToolResult[]> {
   const results: ToolResult[] = []
   const steps: RunnerStep[] = []
+  const isMixedBatch = calls.some(isAsk) && calls.length > 1
   for (const call of calls) {
+    if (isMixedBatch && !isAsk(call)) {
+      results.push({ call_id: call.call_id, error: ASK_MUST_BE_ALONE })
+      steps.push(stepOf(call, undefined, ASK_MUST_BE_ALONE))
+      continue
+    }
     try {
-      const output = await runClientTool(call)
+      const output = await dispatch(call)
       results.push({ call_id: call.call_id, output })
-      steps.push(stepOf(call, output, null))
+      if (!isAsk(call)) steps.push(stepOf(call, output, null))
     } catch (error) {
       // 失败也要送回去，而且要说清——不送的话那次调用永远没有答复
       const reason = describe(error)
@@ -247,6 +278,16 @@ async function runAll(
   }
   sink.onToolsRun(steps)
   return results
+}
+
+function isAsk(call: AssistantToolCall): boolean {
+  return call.name === ASSISTANT_ASK_TOOL
+}
+
+/** 先看内建表，再落到工作面。 */
+async function dispatch(call: AssistantToolCall): Promise<unknown> {
+  if (isBuiltinTool(call.name)) return runBuiltinTool(call)
+  return runClientTool(call)
 }
 
 /**

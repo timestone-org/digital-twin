@@ -12,6 +12,7 @@ import { effectScope, type EffectScope } from 'vue'
 import AiAssistantPanel from '@/components/ai/AiAssistantPanel.vue'
 import { useAiConversation } from '@/composables/useAiConversation'
 import { newComposeState } from '@/composables/useAiPanel'
+import { __resetAskHandler, askUser } from '@/features/ai/askBridge'
 import { __resetAiPorts, setAiPorts } from '@/features/ai/ports'
 
 // 附文件这一路打的是真接口，用例里换成假件——它验的是「读出来的内容去了哪」，
@@ -65,14 +66,26 @@ function mountPanel(sessionId: string | null = 's1', starters?: string[]) {
       ...(starters === undefined ? {} : { starters }),
     },
   })
-  return Object.assign(wrapper, { compose })
+  return Object.assign(wrapper, { compose, chat })
 }
 
 afterEach(() => {
   scope?.stop()
   scope = null
   __resetAiPorts()
+  __resetAskHandler()
 })
+
+const ASK = {
+  question: '这一格的值从哪来？',
+  options: [
+    { value: 'opcua', label: '实时点位' },
+    { value: 'dataset', label: '台账列' },
+  ],
+  allow_multiple: false,
+  allow_free_text: false,
+  free_text_label: null,
+}
 
 describe('助手面板', () => {
   it('没说过话时给一句引导，而不是一片空白', () => {
@@ -256,5 +269,89 @@ describe('附文件', () => {
     await vi.waitFor(() => {
       expect(wrapper.text()).toContain('只认得')
     })
+  })
+})
+
+describe('助手问用户拿主意', () => {
+  it('提问摆成一张可点的卡片，问题与选项都在上面', async () => {
+    const wrapper = mountPanel()
+    void askUser(ASK)
+    await vi.waitFor(() => {
+      expect(wrapper.find('.ai-ask').exists()).toBe(true)
+    })
+    expect(wrapper.text()).toContain('这一格的值从哪来？')
+    expect(wrapper.findAll('.ai-ask__option')).toHaveLength(2)
+  })
+
+  it('待回答期间输入框锁着', async () => {
+    // 不锁的话用户的新消息会与正在跑的回合抢同一条时间线，谁后到谁覆盖
+    const wrapper = mountPanel()
+    void askUser(ASK)
+    await vi.waitFor(() => {
+      expect(wrapper.find('textarea').attributes('disabled')).toBeDefined()
+    })
+  })
+
+  it('点一个选项就把答案交回去，卡片就地收起，输入框解禁', async () => {
+    const wrapper = mountPanel()
+    const pending = askUser(ASK)
+    await vi.waitFor(() => {
+      expect(wrapper.find('.ai-ask__option').exists()).toBe(true)
+    })
+
+    await wrapper.findAll('.ai-ask__option')[1]?.trigger('click')
+
+    await expect(pending).resolves.toEqual({
+      picked: ['dataset'],
+      free_text: null,
+      is_cancelled: false,
+    })
+    await vi.waitFor(() => {
+      expect(wrapper.find('.ai-ask__option').exists()).toBe(false)
+    })
+    expect(wrapper.text()).toContain('你选了：台账列')
+    expect(wrapper.find('textarea').attributes('disabled')).toBeUndefined()
+  })
+
+  it('「我自己说」回一条取消，输入框随即解禁', async () => {
+    const wrapper = mountPanel()
+    const pending = askUser(ASK)
+    await vi.waitFor(() => {
+      expect(wrapper.find('.ai-ask__mine').exists()).toBe(true)
+    })
+
+    await wrapper.find('.ai-ask__mine').trigger('click')
+
+    // 取消是正常回执：回合据它继续往下走，不是一条失败
+    await expect(pending).resolves.toMatchObject({ is_cancelled: true })
+    await vi.waitFor(() => {
+      expect(wrapper.find('textarea').attributes('disabled')).toBeUndefined()
+    })
+  })
+
+  it('掐掉回合时挂着的提问被结成取消', async () => {
+    const wrapper = mountPanel()
+    const pending = askUser(ASK)
+    await vi.waitFor(() => {
+      expect(wrapper.find('.ai-ask').exists()).toBe(true)
+    })
+
+    wrapper.chat.stop()
+
+    await expect(pending).resolves.toMatchObject({ is_cancelled: true })
+    await vi.waitFor(() => {
+      expect(wrapper.find('textarea').attributes('disabled')).toBeUndefined()
+    })
+  })
+
+  it('卸载时挂着的提问也被结掉，回合不留在半路上', async () => {
+    const wrapper = mountPanel()
+    const pending = askUser(ASK)
+    await vi.waitFor(() => {
+      expect(wrapper.find('.ai-ask').exists()).toBe(true)
+    })
+
+    scope?.stop()
+    await expect(pending).resolves.toMatchObject({ is_cancelled: true })
   })
 })

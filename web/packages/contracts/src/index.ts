@@ -411,6 +411,9 @@ export {
   DATASET_RECORD_SOURCES,
 } from './dataset'
 export type {
+  AssistantAskAnswer,
+  AssistantAskOption,
+  AssistantAskRequest,
   AssistantCapability,
   AssistantCredentialStatus,
   AssistantDeltaChannel,
@@ -434,6 +437,7 @@ export type {
   AssistantSurfaceKind,
 } from './assistant'
 export {
+  ASSISTANT_ASK_TOOL,
   ASSISTANT_DELTA_CHANNELS,
   ASSISTANT_EVENT_NAMES,
   ASSISTANT_MESSAGE_ROLES,

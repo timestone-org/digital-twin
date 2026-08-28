@@ -10,7 +10,11 @@
  * ⚠ 一路只有一条在长。步骤一插进来就把两路都**收口**：那一步之后模型说的话
  * 属于新的一段，接在旧气泡后面读起来像它在自言自语中途插了个动作。
  */
-import type { AssistantDeltaChannel } from '@dt/contracts'
+import type {
+  AssistantAskAnswer,
+  AssistantAskRequest,
+  AssistantDeltaChannel,
+} from '@dt/contracts'
 
 import type { RunnerStep } from './turnRunner'
 
@@ -23,15 +27,28 @@ export type ChatRole =
   | 'assistant'
   | 'reasoning'
   | 'step'
+  /** 助手在问用户拿主意，等他点（`features/ai/askQueue.ts`）。 */
+  | 'ask'
   /** 界面自己说的一句话（「已停下」这类），不是模型说的，也不是失败。 */
   | 'note'
   | 'error'
+
+/**
+ * 时间线上的一次提问。
+ * ⚠ `answer` 为 null 才是「还等着」：卡片据它决定摆不摆那排按钮，而回合
+ * 也正停在这一条上。答过之后就地收起，只留一行「你选了：…」。
+ */
+export interface AskEntry {
+  request: AssistantAskRequest
+  answer: AssistantAskAnswer | null
+}
 
 export interface ChatEntry {
   id: string
   role: ChatRole
   text: string
   step?: RunnerStep
+  ask?: AskEntry
   /** 还在逐字长。界面据它画光标、并且**不许折起来**。 */
   isStreaming?: boolean
 }
@@ -109,6 +126,58 @@ export function withStep(
       ...sealedLog.entries,
       { id: nextId(), role: 'step', text: step.title, step },
     ]),
+  }
+}
+
+/**
+ * 摆一次提问，等用户点。
+ * ⚠ 与步骤同样先收口：问题之后模型说的话是新的一段。
+ * ⚠ id 由调用方给（`askQueue` 那边要拿它认回自己等的是哪一次），所以
+ * 它走的是 `a…` 而不是这里的 `e…`，两个序列撞不到一起。
+ * @param log 当前时间线
+ * @param id 这一次提问的 id
+ * @param request 问题与选项
+ */
+export function withAsk(
+  log: ConversationLog,
+  id: string,
+  request: AssistantAskRequest,
+): ConversationLog {
+  const sealedLog = sealed(log)
+  return {
+    ...sealedLog,
+    entries: [
+      ...sealedLog.entries,
+      {
+        id,
+        role: 'ask',
+        text: request.question,
+        ask: { request, answer: null },
+      },
+    ],
+  }
+}
+
+/**
+ * 把用户的回答落到那一条提问上；找不到就原样返回。
+ * ⚠ 只落一次：第二次落进来的会被挡掉——挂着的提问被掐掉的同时用户正好点了
+ * 一下时，两条答案会一起到，而回合只收得下第一条。
+ * @param log 当前时间线
+ * @param id 哪一次提问
+ * @param answer 用户给的回答
+ */
+export function withAnswered(
+  log: ConversationLog,
+  id: string,
+  answer: AssistantAskAnswer,
+): ConversationLog {
+  return {
+    ...log,
+    entries: log.entries.map((entry) =>
+      entry.id === id && entry.ask !== undefined && entry.ask.answer === null
+        ? { ...entry, ask: { ...entry.ask, answer } }
+        : entry,
+    ),
   }
 }
 

@@ -117,12 +117,14 @@ function onEscape(event: KeyboardEvent): void {
       :entries="chat.entries.value"
       :starters="starters"
       @starter="onStarter"
+      @answer="chat.answerAsk"
     />
 
     <AiComposer
       ref="composer"
       :compose="compose"
       :running="chat.isRunning.value"
+      :asking="chat.isAsking.value"
       :hint="hint"
       :last-said="lastSaid"
       :models="models"

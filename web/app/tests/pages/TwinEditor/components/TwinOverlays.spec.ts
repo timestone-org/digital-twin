@@ -47,11 +47,13 @@ function chat(): AiConversation {
   return {
     entries: computed<readonly ChatEntry[]>(() => []),
     isRunning: ref(false),
+    isAsking: ref(false),
     plan: ref<AssistantPlan | null>(null),
     send: vi.fn(() => Promise.resolve()),
     stop: vi.fn(),
     clear: vi.fn(),
     restore: vi.fn(),
+    answerAsk: vi.fn(),
     note: vi.fn(),
   }
 }

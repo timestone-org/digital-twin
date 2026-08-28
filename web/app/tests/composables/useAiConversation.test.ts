@@ -13,6 +13,7 @@ import {
   useAiConversation,
   type AiConversation,
 } from '@/composables/useAiConversation'
+import { __resetAskHandler, askUser } from '@/features/ai/askBridge'
 import { __resetAiPorts, setAiPorts } from '@/features/ai/ports'
 
 function detailOf(text: string): AssistantSessionDetail {
@@ -67,7 +68,16 @@ afterEach(() => {
   scope?.stop()
   scope = null
   __resetAiPorts()
+  __resetAskHandler()
 })
+
+const ASK = {
+  question: '这一格的值从哪来？',
+  options: [{ value: 'opcua', label: '实时点位' }],
+  allow_multiple: false,
+  allow_free_text: false,
+  free_text_label: null,
+}
 
 describe('restore', () => {
   it('整份替换时间线并恢复计划', () => {
@@ -163,5 +173,40 @@ describe('note', () => {
     expect(chat.entries.value.map((one) => [one.role, one.text])).toEqual([
       ['note', '没能读回历史'],
     ])
+  })
+})
+
+describe('挂着的提问一定收得了口', () => {
+  // 不收口的话回合永远停在那次 await 上：界面既不动也不报错，输入框一直禁着
+  it('清空这一屏时结成取消', async () => {
+    const chat = conversation()
+    const pending = askUser(ASK)
+    await vi.waitFor(() => {
+      expect(chat.isAsking.value).toBe(true)
+    })
+
+    chat.clear()
+
+    await expect(pending).resolves.toMatchObject({ is_cancelled: true })
+    expect(chat.isAsking.value).toBe(false)
+  })
+
+  it('用户改口另发一句时，上一条挂着的提问也结掉', async () => {
+    setAiPorts({
+      advance: async function* () {
+        await Promise.resolve()
+        yield ''
+      },
+    })
+    const chat = conversation()
+    const pending = askUser(ASK)
+    await vi.waitFor(() => {
+      expect(chat.isAsking.value).toBe(true)
+    })
+
+    await chat.send('算了，换个说法')
+
+    await expect(pending).resolves.toMatchObject({ is_cancelled: true })
+    expect(chat.isAsking.value).toBe(false)
   })
 })

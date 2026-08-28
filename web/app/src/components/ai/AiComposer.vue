@@ -30,6 +30,12 @@ const props = defineProps<{
   compose: ComposeState
   /** 正在跑回合：发送让位给停止。 */
   running: boolean
+  /**
+   * 助手正等着用户在卡片上回答。
+   * ⚠ 这期间输入框上锁：不锁的话用户的新消息会与正在跑的回合抢同一条时间线，
+   * 两个回合同时往里写，谁后到谁覆盖。要用打字，先点卡片上的「我自己说」。
+   */
+  asking?: boolean | undefined
   /** 摆在输入框上方的一句提醒，各页面自己给。 */
   hint?: string | undefined
   /** 草稿为空时按 ↑ 召回的上一句话；null = 没得召回。 */
@@ -49,6 +55,7 @@ const emit = defineEmits<{
 const canSend = computed(
   () =>
     !props.running &&
+    props.asking !== true &&
     (props.compose.draft.value.trim() !== '' ||
       props.compose.attachments.value.length > 0),
 )
@@ -149,7 +156,10 @@ defineExpose({ focusInput })
         class="ai-inputbox__text"
         :rows="2"
         autosize
-        placeholder="说说你想做什么…"
+        :disabled="asking === true"
+        :placeholder="
+          asking === true ? '先回答上面那个问题…' : '说说你想做什么…'
+        "
         aria-label="对助手说"
         @update:model-value="compose.setDraft"
         @keydown="onKeydown"

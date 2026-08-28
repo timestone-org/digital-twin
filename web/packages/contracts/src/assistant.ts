@@ -269,3 +269,49 @@ export interface AssistantParsedTable {
   /** 摊平给模型看的那一段：表格是竖线分隔，纯文本是原文（含截断说明）。 */
   text: string
 }
+
+/**
+ * 内建客户端工具：向用户提问。
+ *
+ * ⚠ 「内建」的意思是**不归任何工作面**——每一页都要能问，包括一个工作面都
+ * 没登记的页面。所以它不进任何一个工作面的 `tools` 数组，由前端恒定自报
+ * （`features/ai/builtinTools.ts`），后端按自报下发（`tool_select.py`）。
+ */
+export const ASSISTANT_ASK_TOOL = 'user.ask'
+
+/** 提问里的一个备选项。 */
+export interface AssistantAskOption {
+  /** 回执按它认。 */
+  value: string
+  /** 按钮上的字。 */
+  label: string
+  /** 补一句这一项意味着什么。 */
+  hint?: string
+}
+
+/**
+ * 一次提问。
+ *
+ * ⚠ `options` **必给**：做成可选的话模型会一路退回「不给选项的自由提问」，
+ * 那正是这套东西要换掉的行为（AI_ASSISTANT_ASK_DESIGN §1）。
+ */
+export interface AssistantAskRequest {
+  question: string
+  options: AssistantAskOption[]
+  allow_multiple: boolean
+  allow_free_text: boolean
+  /** 输入框的提示语；没给就是 null。 */
+  free_text_label: string | null
+}
+
+/**
+ * 用户给的回答。
+ *
+ * ⚠ 取消是**正常回执**不是失败：送成 error 的话模型会去排查「工具坏了」，
+ * 而没回执的 tool_call 在订阅那一路上会把整个会话锁死（`wire_names.py`）。
+ */
+export interface AssistantAskAnswer {
+  picked: string[]
+  free_text: string | null
+  is_cancelled: boolean
+}
