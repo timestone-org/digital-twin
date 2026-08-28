@@ -11,6 +11,10 @@
  * ⚠ 视口、手势与两向换算全从插槽里接，本层一份都不存：存一份就是第二份真源，
  * 而两份对不上的表现是「画出来的位置与点得中的位置差一截」。
  * ⚠ 本层一个字都不写文档：改动整份上抛，撤销栈归页面的文档态。
+ * ⚠ 手势期间的草稿在这里合成一次（`shownNodes` / `shownEdges`），连线与把手一律读
+ * 合成表而不是 `config`：读文档态的那些层在整个拖动过程中按旧位置画，松手才跳一次。
+ * 合成只换整份引用（草稿本来就是「只换被拖那几个、其余原样」的一份新表），一次拖动
+ * 几百帧，每帧再拷一遍全表就成了拖着卡。
  */
 import {
   TWIN_2D_BUILTIN_NODE_STYLES,
@@ -90,6 +94,9 @@ const marqueeSource = shallowRef<PointerEvent | null>(null)
 /** 拖把手期间的草稿边；连线层照它画，null = 照文档画。 */
 const edgeDraft = shallowRef<Twin2dEdge | null>(null)
 
+/** 拖节点期间那一帧的草稿表（节点层逐帧交上来）；null = 没在拖。 */
+const nodeDraft = shallowRef<readonly Twin2dNode[] | null>(null)
+
 /** 标注层这一帧吸出来的参考线；参考线只有节点层一副画法。 */
 const markGuides = shallowRef<readonly Twin2dGuideLine[]>([])
 
@@ -117,6 +124,15 @@ const snap = computed(() => ({
 const nodeIds = computed(() => props.selection.idsOf('nodes'))
 const edgeIds = computed(() => props.selection.idsOf('edges'))
 const markIds = computed(() => props.selection.idsOf('marks'))
+
+/**
+ * 连线看得见的那份节点表：拖节点期间是这一帧的草稿，平时就是文档态。
+ * ⚠ 只有画出来的东西读它。框选盒与标注能吸的层外盒仍读文档态：那两件事与拖节点
+ * 互斥（一次只跑一个手势），而 `entityBoxes` 每算一遍都要把全图的走线重排一次。
+ */
+const shownNodes = computed<readonly Twin2dNode[]>(
+  () => nodeDraft.value ?? props.config.nodes,
+)
 
 /** 拖把手期间连线层照草稿画：不换的话线停在原处，只有把手在动。 */
 const shownEdges = computed<readonly Twin2dEdge[]>(() => {
@@ -375,7 +391,7 @@ function pickMany(
         :canvas="config.canvas"
         :edges="shownEdges"
         :edge-styles="edgeStyles"
-        :nodes="config.nodes"
+        :nodes="shownNodes"
         :node-styles="nodeStyles"
         :selected-ids="edgeIds"
         :snap="snap"
@@ -394,6 +410,7 @@ function pickMany(
         :extra-guides="markGuides"
         @pick="pickNode"
         @change="commitNodes"
+        @preview="nodeDraft = $event"
         @port-grab="grabPort"
       />
       <CanvasMarkLayer
@@ -414,7 +431,7 @@ function pickMany(
         v-if="focusedEdge !== null"
         :canvas="config.canvas"
         :edge="focusedEdge"
-        :nodes="config.nodes"
+        :nodes="shownNodes"
         :node-styles="nodeStyles"
         :edge-styles="edgeStyles"
         :snap="snap"

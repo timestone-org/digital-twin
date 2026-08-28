@@ -101,9 +101,11 @@ interface LayerProps {
   resolveIcon?: Twin2dIconResolver
 }
 
-/** 层里抛出来的三类事件，加上冒到画布壳上的那几下按 */
+/** 层里抛出来的四类事件，加上冒到画布壳上的那几下按 */
 interface Seen {
   changes: (readonly Twin2dNode[])[]
+  /** 每一帧的草稿；null = 回到文档态。⚠ 它不进撤销栈，与 `changes` 数的不是一回事 */
+  previews: (readonly Twin2dNode[] | null)[]
   picks: [string, boolean][]
   ports: [string, string][]
   /** ⚠ 接下的那一按必须停在这一层，冒上去就会被画布壳当成「点了空白」 */
@@ -120,7 +122,13 @@ interface Harness {
  * ⚠ 手势状态机装在**外层**：画布壳持有、各层共用同一台，卸载补收场也是它做的。
  */
 function mountLayer(over: Partial<LayerProps> = {}): Harness {
-  const seen: Seen = { changes: [], picks: [], ports: [], bubbled: 0 }
+  const seen: Seen = {
+    changes: [],
+    previews: [],
+    picks: [],
+    ports: [],
+    bubbled: 0,
+  }
   const props: LayerProps = {
     nodes: [makeNode()],
     nodeStyles: [STYLE],
@@ -146,6 +154,9 @@ function mountLayer(over: Partial<LayerProps> = {}): Harness {
             },
             onChange: (nodes: readonly Twin2dNode[]) => {
               seen.changes.push(nodes)
+            },
+            onPreview: (nodes: readonly Twin2dNode[] | null) => {
+              seen.previews.push(nodes)
             },
             onPortGrab: (nodeId: string, portId: string) => {
               seen.ports.push([nodeId, portId])
@@ -355,6 +366,91 @@ describe('一手势一步撤销', () => {
 
     dragBy(nodeEl(wrapper, 'n1'), [100, 60], [102, 60])
 
+    expect(seen.changes).toHaveLength(0)
+  })
+})
+
+describe('草稿上抛', () => {
+  /**
+   * ⚠ 草稿只留在本层的话，连线层还照文档态画：整个拖动过程里线都停在旧位置，
+   * 松手才跳一次，而节点本身是跟手的——看着就是「线掉队了」。
+   */
+  it('每一帧把草稿交上去，落库还一次都没有', () => {
+    const { wrapper, seen } = mountLayer()
+
+    down(nodeEl(wrapper, 'n1'), 100, 60)
+    fire('pointermove', 130, 60)
+    fire('pointermove', 140, 60)
+
+    expect(seen.previews.map((nodes) => nodes?.[0]?.x)).toEqual([130, 140])
+    expect(seen.changes).toHaveLength(0)
+  })
+
+  // 收场不交这一次 null 的话，上层的草稿会赖着不走，撤销之后画面还停在拖过的位置
+  it('收场那一下交一次 null，上层跟着回到文档态', () => {
+    const { wrapper, seen } = mountLayer()
+
+    dragBy(nodeEl(wrapper, 'n1'), [100, 60], [140, 60])
+
+    expect(seen.previews.at(-1)).toBeNull()
+    expect(seen.changes).toHaveLength(1)
+  })
+
+  it('被取消的手势同样交一次 null，且一次 commit 都不落', () => {
+    const { wrapper, seen } = mountLayer()
+
+    down(nodeEl(wrapper, 'n1'), 100, 60)
+    fire('pointermove', 140, 60)
+    fire('pointercancel', 140, 60)
+
+    expect(seen.previews.at(-1)).toBeNull()
+    expect(seen.changes).toHaveLength(0)
+  })
+
+  // 没挪过的那些帧一份草稿都不换：换了就是让上层白重画一遍连线
+  it('点一下没挪动，一次草稿都不交', () => {
+    const { wrapper, seen } = mountLayer()
+
+    dragBy(nodeEl(wrapper, 'n1'), [100, 60], [102, 60])
+
+    expect(seen.previews).toHaveLength(0)
+  })
+
+  // 端口点与旋转手柄读的是同一份草稿：只有节点跟手的话，手柄会留在原地
+  it('端口点与旋转手柄在拖动过程中一起跟手', async () => {
+    const { wrapper } = mountLayer({ selectedIds: ['n1'] })
+
+    down(nodeEl(wrapper, 'n1'), 100, 60)
+    fire('pointermove', 140, 60)
+    await nextTick()
+
+    expect(
+      wrapper.get('[data-test="node-port"][data-id="a"]').attributes('style'),
+    ).toContain('left: 140px')
+    expect(
+      wrapper.get('[data-test="node-rotate"]').attributes('style'),
+    ).toContain('left: 160px')
+  })
+
+  // ⚠ 草稿只换被拖的那几个：一次拖动几百帧，每帧再拷一遍全表就成了拖着卡
+  it('没被拖的那些节点在草稿里还是文档里的同一份对象', () => {
+    const nodes = [makeNode(), NODE_B]
+    const { wrapper, seen } = mountLayer({ nodes })
+
+    down(nodeEl(wrapper, 'n1'), 100, 60)
+    fire('pointermove', 140, 60)
+
+    expect(seen.previews.at(-1)?.[1]).toBe(nodes[1])
+    expect(seen.previews.at(-1)?.[0]).not.toBe(nodes[0])
+  })
+
+  it('旋转的每一帧也交草稿，转过的那一档立刻见得着', () => {
+    const { wrapper, seen } = mountLayer({ selectedIds: ['n1'] })
+
+    down(wrapper.get('[data-test="node-rotate"]').element, 120, 28)
+    fire('pointermove', 152, 60)
+
+    expect(seen.previews.at(-1)?.[0]).toMatchObject({ rotate: 90 })
     expect(seen.changes).toHaveLength(0)
   })
 })

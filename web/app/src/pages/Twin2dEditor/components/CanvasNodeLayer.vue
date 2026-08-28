@@ -6,6 +6,8 @@
  *
  * ⚠ 手势期间只改本地草稿，`pointerup` 才抛一次 `change`（落 commit 归上层）：一次
  * 拖动走几百个 `pointermove`，逐帧落库之后撤销键就再也按不回上一步。
+ * ⚠ 同一份草稿逐帧原样抛一次 `preview`（纯变更，谁都不写文档）：连线层照
+ * 「文档态 ∪ 这一帧草稿」画，不给它的话线在整个拖动过程里停在旧位置，松手才跳一次。
  * ⚠ 手势走画布壳递下来的那条总线（`startGesture`），本层不另装一副 window 监听：
  * 每层各起一台状态机的话，「上一次没收场就先顶掉它」这条互斥就不成立了。
  * ⚠ sprite 宿主归画布壳挂，本层一份都不挂：两处都挂会让同一份 symbol 在文档里重号，
@@ -109,6 +111,8 @@ const emit = defineEmits<{
   pick: [id: string, additive: boolean]
   /** 一手势一次：把改完的整份节点表交给上层落一次 commit。 */
   change: [nodes: readonly Twin2dNode[]]
+  /** 这一帧的草稿表，不进撤销栈；null = 没有草稿了，照文档画。 */
+  preview: [nodes: readonly Twin2dNode[] | null]
   /** 从一个端口点起手，交给连线预览。 */
   portGrab: [nodeId: string, portId: string, event: PointerEvent]
 }>()
@@ -121,6 +125,18 @@ const draft = shallowRef<readonly Twin2dNode[] | null>(null)
 
 /** 这一帧吸出来的参考线；手势收场即清空。 */
 const guides = shallowRef<readonly Twin2dGuideLine[]>([])
+
+/**
+ * 换一份草稿，同一份原样交给上层。
+ * ⚠ 引用没变就一次都不抛：一步都没挪的那些帧照样走到这里，抛出去就是让连线层
+ * 白重算一遍全图的走线。
+ * @param next 这一帧的草稿；null = 回到文档态
+ */
+function setDraft(next: readonly Twin2dNode[] | null): void {
+  if (draft.value === next) return
+  draft.value = next
+  emit('preview', next)
+}
 
 const styleMap = computed<ReadonlyMap<string, Twin2dNodeStyle>>(
   () => new Map(props.nodeStyles.map((style) => [style.id, style])),
@@ -225,7 +241,7 @@ function axisLocked(frame: Twin2dGestureFrame): { dx: number; dy: number } {
  */
 function endGesture(end: Twin2dGestureEnd): void {
   const next = draft.value
-  draft.value = null
+  setDraft(null)
   guides.value = []
   if (next !== null && end !== 'cancelled') emit('change', next)
 }
@@ -250,7 +266,7 @@ function dragTo(
     snapOf(frame),
   )
   // 同一个引用 = 一步都没挪，这一手势不该在撤销栈上留一格空步
-  draft.value = move.nodes === props.nodes ? null : move.nodes
+  setDraft(move.nodes === props.nodes ? null : move.nodes)
   guides.value = move.guides
 }
 
@@ -296,7 +312,7 @@ function spinTo(
   if (!frame.moved) return
   const turn = rotationOf(base, center, frame.from, frame.to)
   const next = withNodeRotation(props.nodes, id, turn)
-  draft.value = next === props.nodes ? null : next
+  setDraft(next === props.nodes ? null : next)
 }
 
 /**
