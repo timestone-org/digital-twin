@@ -285,6 +285,13 @@ function drop(
   host.dispatchEvent(event)
 }
 
+/** 这条连线这一刻画成什么样；命中带与可见线同一份几何，取其一即可。 */
+function edgePath(wrapper: VueWrapper, id: string): string {
+  return (
+    wrapper.get(`[data-test="edge-hit"][data-id="${id}"]`).attributes('d') ?? ''
+  )
+}
+
 /** 这条标注现在在哪。 */
 function markX(doc: Twin2dDoc, id: string): number {
   return doc.config.value.marks.find((mark) => mark.id === id)?.x ?? Number.NaN
@@ -636,5 +643,91 @@ describe('调色板拖放', () => {
 
     expect(doc.config.value.nodes).toHaveLength(2)
     expect(changes()).toBe(0)
+  })
+})
+
+/**
+ * 转过 90° 的一份：连线端点要跟着节点的位姿走，跟手时也一样。
+ * ⚠ 转过的节点最容易在「跟手」这件事上出错：端口世界坐标要过一遍位姿变换，
+ * 而把草稿只喂给节点层的话，转过的那个节点连手都跟不上。
+ */
+const TURNED: Twin2dConfig = normalizeTwin2dConfig({
+  ...CONFIG,
+  nodes: [
+    { id: 'n1', styleId: 's1', x: 100, y: 100, w: 40, h: 20, rotate: 90 },
+    { id: 'n2', styleId: 's1', x: 300, y: 100, w: 40, h: 20 },
+  ],
+})
+
+describe('拖节点时连线跟手', () => {
+  // ⚠ 只把草稿留在节点层里的话，整个拖动过程中连线还按旧位置画，松手才跳一次
+  it('拖动途中连线就跟着走，这时还一次都没落库', async () => {
+    const { wrapper, changes } = mountStage()
+    const before = edgePath(wrapper, 'e1')
+
+    await press(nodeAt(wrapper, 'n1'), 110, 110)
+    fire('pointermove', 170, 110)
+    await nextTick()
+
+    expect(edgePath(wrapper, 'e1')).not.toBe(before)
+    expect(changes()).toBe(0)
+  })
+
+  // 跟手画的与落库画的是同一份几何：差一点点的话没人看得出来，但松手会「跳一下」
+  it('跟手画出来的与松手落库之后画出来的一模一样', async () => {
+    const { wrapper } = mountStage()
+
+    await press(nodeAt(wrapper, 'n1'), 110, 110)
+    fire('pointermove', 170, 110)
+    await nextTick()
+    const during = edgePath(wrapper, 'e1')
+    fire('pointerup', 170, 110)
+    await nextTick()
+
+    expect(edgePath(wrapper, 'e1')).toBe(during)
+  })
+
+  it('两头都在拖的那条线也跟手，两端一起挪', async () => {
+    const { wrapper, selection, changes } = mountStage()
+    selection.selectMany('nodes', ['n1', 'n2'], false)
+    await nextTick()
+    const before = { e1: edgePath(wrapper, 'e1'), e2: edgePath(wrapper, 'e2') }
+
+    await press(nodeAt(wrapper, 'n1'), 110, 110)
+    fire('pointermove', 110, 170)
+    await nextTick()
+
+    expect(edgePath(wrapper, 'e1')).not.toBe(before.e1)
+    expect(edgePath(wrapper, 'e2')).not.toBe(before.e2)
+    expect(changes()).toBe(0)
+  })
+
+  it('转过 90° 的节点跟手画出来的也与落库之后一致', async () => {
+    const { wrapper } = mountStage(TURNED)
+
+    await press(nodeAt(wrapper, 'n1'), 110, 110)
+    fire('pointermove', 170, 150)
+    await nextTick()
+    const during = edgePath(wrapper, 'e1')
+    fire('pointerup', 170, 150)
+    await nextTick()
+
+    expect(edgePath(wrapper, 'e1')).toBe(during)
+  })
+
+  it('松手之后回到文档态，草稿不会赖着不走', async () => {
+    const { wrapper, doc } = mountStage()
+    await dragBy(
+      nodeAt(wrapper, 'n1'),
+      { x: 110, y: 110 },
+      { x: 170, y: 110 },
+      4,
+    )
+    const after = edgePath(wrapper, 'e1')
+
+    doc.undo()
+    await nextTick()
+
+    expect(edgePath(wrapper, 'e1')).not.toBe(after)
   })
 })
