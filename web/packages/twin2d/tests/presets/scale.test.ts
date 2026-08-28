@@ -9,8 +9,16 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  TWIN_2D_SENSOR_DEFAULT_AT,
+  TWIN_2D_SENSOR_DEFS,
+  twin2dSensorIdPrefix,
+  twin2dSensorPill,
+} from '../../src/presets/sensors'
+import {
   TWIN_2D_PRESET_MIN_FONT_SIZE,
+  TWIN_2D_PRESET_SCALE,
   twin2dScaleNodeStyle,
+  twin2dShippedSensorPill,
 } from '../../src/presets/scale'
 import type {
   Twin2dNodeStyle,
@@ -795,5 +803,101 @@ describe('端口', () => {
     })
     expect(out.ports[0]?.marker?.length).toBe(4)
     expect(out.ports[0]?.marker?.strokes[0]?.width).toBe(1.4)
+  })
+})
+
+/**
+ * ⚠ 这一组量的是**发货**那一枚药丸，与 `tests/presets/sensors.test.ts` 量的参考尺度
+ * 是两张表。存量图迁移时药丸按同一档缩过，新加的走参考尺度就会比旁边那些大一号，
+ * 而两边单看都对、一处都不报错（§7.13）。
+ */
+describe('出厂尺度的传感器药丸', () => {
+  /** 四种传感器里拿温度那一枚当样本；四种只差颜色、单位与槽键。 */
+  const TT = TWIN_2D_SENSOR_DEFS[0]
+
+  function shipped(): Twin2dBoxPrim {
+    if (TT === undefined) throw new Error('预置传感器表是空的')
+    return twin2dShippedSensorPill(TT, TWIN_2D_SENSOR_DEFAULT_AT, 'sensor-tt')
+  }
+
+  function reference(): Twin2dBoxPrim {
+    if (TT === undefined) throw new Error('预置传感器表是空的')
+    return twin2dSensorPill(TT, TWIN_2D_SENSOR_DEFAULT_AT, 'sensor-tt')
+  }
+
+  it('图元 id 与结构一格不动：勾选框按 id 认药丸', () => {
+    if (TT === undefined) throw new Error('预置传感器表是空的')
+    const pill = shipped()
+
+    expect(pill.id).toBe(`${twin2dSensorIdPrefix(TT)}-pill`)
+    expect(pill.children.map((one) => one.id)).toEqual(
+      reference().children.map((one) => one.id),
+    )
+  })
+
+  // ⚠ 12.48 那一档撞的是 12px 地板（12.48×0.75=9.36），所以三档并成 12/12/12——
+  //   与存量迁移（开地板那一档）落在同一组数上
+  it('三片字号 16 / 16 / 12.48 → 12 / 12 / 12', () => {
+    const sizes = shipped().children.map((one) =>
+      one.kind === 'txt' ? one.font.size : null,
+    )
+
+    expect(
+      reference().children.map((one) =>
+        one.kind === 'txt' ? one.font.size : null,
+      ),
+    ).toEqual([16, 16, 12.48])
+    expect(sizes).toEqual([
+      TWIN_2D_PRESET_MIN_FONT_SIZE,
+      TWIN_2D_PRESET_MIN_FONT_SIZE,
+      TWIN_2D_PRESET_MIN_FONT_SIZE,
+    ])
+  })
+
+  it('排布与字晕按比例缩：gap 4.48→3.36、pad 8→6、外发光 6→4.5', () => {
+    const pill = shipped()
+    const glow = pill.shadows[0]
+
+    expect(pill.layout.gap).toBe(3.36)
+    expect(pill.layout.pad).toEqual([1.44, 6, 1.44, 6])
+    expect(glow?.blur).toBe(4.5)
+  })
+
+  // ⚠ 线宽不缩这条与存量迁移那一侧是同一条规矩：一边缩一边不缩，
+  //   表现是「旧药丸的边比新的细」，而两边取值单看都对
+  it('描边宽不缩，圆角仍是 pill', () => {
+    expect(shipped().border.width).toBe(reference().border.width)
+    expect(shipped().border.width).toBe(1)
+    expect(shipped().radius).toBe('pill')
+  })
+
+  // ⚠ at 是调用方在实例坐标里选的落点：跟着缩的话，把药丸挪出去之后再新建一枚
+  //   同落点的会差出 25%
+  it('落点原样带回，一格都不缩', () => {
+    if (TT === undefined) throw new Error('预置传感器表是空的')
+    const at: Twin2dPrimBase['at'] = {
+      kind: 'anchor',
+      anchor: 'r',
+      dx: 84,
+      dy: -15,
+    }
+
+    expect(twin2dShippedSensorPill(TT, at, 'sensor-tt').at).toEqual(at)
+  })
+
+  it('参考那一支一格不动——§7.8 那份逐像素谱锁的就是它', () => {
+    const before = structuredClone(reference())
+
+    shipped()
+
+    expect(reference()).toEqual(before)
+  })
+
+  it('就是参考那一枚过一道出厂缩放，没有第二套算术', () => {
+    if (TT === undefined) throw new Error('预置传感器表是空的')
+    const style = styleOf({ prims: [reference()] })
+    const [scaled] = twin2dScaleNodeStyle(style, TWIN_2D_PRESET_SCALE).prims
+
+    expect(shipped()).toEqual(scaled)
   })
 })

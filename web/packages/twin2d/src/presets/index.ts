@@ -42,6 +42,7 @@ export {
   TWIN_2D_PRESET_MIN_FONT_SIZE,
   TWIN_2D_PRESET_SCALE,
   twin2dScaleNodeStyle,
+  twin2dShippedSensorPill,
 } from './scale'
 export {
   TWIN_2D_SENSOR_DEFAULT_AT,

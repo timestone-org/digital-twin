@@ -16,8 +16,8 @@ import {
   TWIN_2D_SENSOR_DEFAULT_AT,
   TWIN_2D_SENSOR_DEFS,
   twin2dSensorIdPrefix,
-  twin2dSensorPill,
   twin2dSensorSlot,
+  twin2dShippedSensorPill,
 } from '@dt/twin2d'
 import type {
   Twin2dPlacement,
@@ -49,7 +49,7 @@ const emit = defineEmits<{
 
 /**
  * 一枚药丸在 `layers` 里的图元 id。
- * ⚠ 与 `twin2dSensorPill` 拼出来的那个逐字相同；对不上的表现是勾选框永远显示未启用、
+ * ⚠ 与药丸工厂拼出来的那个逐字相同；对不上的表现是勾选框永远显示未启用、
  * 而每按一次就往图上多摞一枚药丸。
  * @param def 这一种传感器的身份
  */
@@ -76,10 +76,12 @@ const rows = computed<readonly SensorRow[]>(() =>
  * 加一枚药丸：图元落进 `layers`，读数槽位落进 `slots`。
  * ⚠ 槽键已经在册就不再加一条：样式里自带同键槽位时，重复的那条归一化会丢，
  * 而丢掉的可能正是带着单位与精度的那一份。
+ * ⚠ 走**出厂尺度**那一支而不是 `twin2dSensorPill`：后者是参考尺度（§7.8 那份逐像素
+ * 谱锁着它），拿它落进图里会让新加的药丸比同一张图上已有的大一号，而两边单看都对。
  * @param def 这一种传感器的身份
  */
 function add(def: Twin2dSensorDef): void {
-  const pill = twin2dSensorPill(
+  const pill = twin2dShippedSensorPill(
     def,
     TWIN_2D_SENSOR_DEFAULT_AT,
     twin2dSensorIdPrefix(def),

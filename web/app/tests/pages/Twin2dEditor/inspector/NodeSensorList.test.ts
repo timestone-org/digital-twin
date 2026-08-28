@@ -14,6 +14,7 @@ import {
   TWIN_2D_SENSOR_DEFS,
   twin2dSensorPill,
   twin2dSensorSlot,
+  twin2dShippedSensorPill,
 } from '@dt/twin2d'
 import type {
   Twin2dAnchor9,
@@ -151,6 +152,20 @@ describe('两半同进同出', () => {
     expect(layers.map((prim) => prim.id)).toEqual(['sensor-tt-pill'])
     expect(slots.map((slot) => slot.key)).toEqual([TT.slotKey])
     expect(mergeKey).toBeNull()
+  })
+
+  // ⚠ 勾出来的必须是**出厂尺度**那一枚：走参考尺度那支的话，新加的药丸会比同一张图上
+  //   已有的（存量迁移时缩过的）大一号，而两边取值单看都对、一处都不报错（§7.13）
+  it('勾出来的是出厂尺度那一枚，不是参考尺度那一枚', async () => {
+    const wrapper = mountList()
+
+    await wrapper.find('[data-test="sensor-toggle-TT"] input').setValue(true)
+
+    const [layers] = lastUpdate(wrapper)
+    expect(layers[0]).toEqual(
+      twin2dShippedSensorPill(TT, TWIN_2D_SENSOR_DEFAULT_AT, 'sensor-tt'),
+    )
+    expect(layers[0]).not.toEqual(ttPill())
   })
 
   it('槽键已经在册就不再加一条', async () => {
