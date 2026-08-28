@@ -8833,6 +8833,17 @@
           "default_size": {
             "$ref": "#/components/schemas/ModuleDefaultSizeOut"
           },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
           "display_name": {
             "title": "Display Name",
             "type": "string"
