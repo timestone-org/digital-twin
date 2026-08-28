@@ -54,6 +54,13 @@ function zoomOf(wrapper: Wrapper, id: string): number {
   return Number(found[1])
 }
 
+/** 一份预置样式的缺省尺寸；⚠ 不写字面量——它随出厂尺度档走（`TWIN_2D_PRESET_SCALE`）。 */
+function sizeOf(id: string): { w: number; h: number } {
+  const style = TWIN_2D_BUILTIN_NODE_STYLES.find((one) => one.id === id)
+  if (style === undefined) throw new Error(`预置库里没有 ${id}`)
+  return style.size
+}
+
 describe('库里有什么', () => {
   it('预置库整份都摆得出来', () => {
     const wrapper = mountPalette()
@@ -130,7 +137,7 @@ describe('缩略图是真画出来的', () => {
   it('大样式按框等比缩小', () => {
     const wrapper = mountPalette()
 
-    expect(zoomOf(wrapper, 'water-tank')).toBeCloseTo(46 / 140)
+    expect(zoomOf(wrapper, 'water-tank')).toBeCloseTo(46 / sizeOf('water-tank').h)
   })
 
   it('小到极点的符号最多放大两倍，不铺满整格', () => {
@@ -145,8 +152,8 @@ describe('缩略图是真画出来的', () => {
       .get('.t2p-fit')
       .attributes('style')
 
-    expect(style).toContain('width: 196px')
-    expect(style).toContain('height: 140px')
+    expect(style).toContain(`width: ${sizeOf('water-tank').w}px`)
+    expect(style).toContain(`height: ${sizeOf('water-tank').h}px`)
   })
 
   it('不挂 sprite 宿主——那是画布壳的活，两处都挂会让 symbol 在文档里重号', () => {

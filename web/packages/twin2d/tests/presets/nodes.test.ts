@@ -8,9 +8,11 @@
  * 末尾两组守的是图元 id 词表：四族共用一套名字、每条变体补丁的键都指得到一枚图元，
  * 以及 `frame` 这个**角色名**——十一种节点样式里承载边框 / 圆角 / 选中态的那一枚一律
  * 叫它，与它是 `box` 还是 `vec` 无关。
+ * 末组量的是汇总面上那一道出厂缩放的结果（§7.13），与参考尺度那份谱是两张表。
  */
 import { describe, expect, it } from 'vitest'
 
+import { normalizeNodeStyle } from '../../src/normalizeStyles'
 import { TWIN_2D_CIRCUIT_STYLES } from '../../src/presets/circuit'
 import {
   TWIN_2D_BUILTIN_NODE_STYLES,
@@ -20,6 +22,11 @@ import { TWIN_2D_MISC_STYLES } from '../../src/presets/nodesMisc'
 import { TWIN_2D_SOURCE_STYLES } from '../../src/presets/nodesSource'
 import { TWIN_2D_TERMINAL_STYLES } from '../../src/presets/nodesTerminal'
 import { TWIN_2D_VESSEL_STYLES } from '../../src/presets/nodesVessel'
+import {
+  TWIN_2D_PRESET_MIN_FONT_SIZE,
+  TWIN_2D_PRESET_SCALE,
+  twin2dScaleNodeStyle,
+} from '../../src/presets/scale'
 import {
   TWIN_2D_SOURCE_SUBTYPE_DEFS,
   TWIN_2D_SUBTYPED_SOURCE_STYLES,
@@ -105,6 +112,18 @@ const NODE_TYPE_STYLES = TWIN_2D_BUILTIN_NODE_STYLES.slice(0, 11)
 
 /** 承载边框 / 圆角 / 选中态的那一枚图元的 id。 */
 const FRAME_PRIM_ID = 'frame'
+
+/** 汇总面上那一道出厂缩放，与 `nodes.ts` 绑的是同一个比例。 */
+function shippedOf(style: Twin2dNodeStyle): Twin2dNodeStyle {
+  return twin2dScaleNodeStyle(style, TWIN_2D_PRESET_SCALE)
+}
+
+// 一枚 txt 图元的字号；取不到给 null，与「这一枚跟随主题」区分不开时用例自己会红
+function fontSizeOf(style: Twin2dNodeStyle, primId: string): number | null {
+  const prim = flatPrims(style.prims).find((one) => one.id === primId)
+  if (prim === undefined || prim.kind !== 'txt') return null
+  return prim.font.size ?? null
+}
 
 /** 每份样式都挂着的两枚外挂件，自带药丸圆角，扫「谁承载观感」时先摘掉。 */
 const ATTACHED_PRIM_IDS = new Set(['status-dot', 'badge'])
@@ -203,15 +222,15 @@ describe('id → 样式的查表', () => {
 })
 
 describe('进汇总的是带子类变体的那一份', () => {
-  it('四个源类样式逐个取自 TWIN_2D_SUBTYPED_SOURCE_STYLES', () => {
+  it('四个源类样式逐个取自 TWIN_2D_SUBTYPED_SOURCE_STYLES，出厂前过一道缩放', () => {
     for (const [index, style] of TWIN_2D_SUBTYPED_SOURCE_STYLES.entries()) {
-      expect(TWIN_2D_BUILTIN_NODE_STYLES[index]).toBe(style)
+      expect(TWIN_2D_BUILTIN_NODE_STYLES[index]).toEqual(shippedOf(style))
     }
   })
 
-  it('三个末端样式逐个取自 TWIN_2D_SUBTYPED_TERMINAL_STYLES', () => {
+  it('三个末端样式逐个取自 TWIN_2D_SUBTYPED_TERMINAL_STYLES，出厂前过一道缩放', () => {
     for (const [index, style] of TWIN_2D_SUBTYPED_TERMINAL_STYLES.entries()) {
-      expect(TWIN_2D_BUILTIN_NODE_STYLES[6 + index]).toBe(style)
+      expect(TWIN_2D_BUILTIN_NODE_STYLES[6 + index]).toEqual(shippedOf(style))
     }
   })
 
@@ -265,14 +284,23 @@ describe('进汇总的是带子类变体的那一份', () => {
     }
   })
 
-  it('容器、换热与标注、电路四族原样进来，一条子类变体都不带', () => {
-    const untouched = [
-      ...TWIN_2D_VESSEL_STYLES,
-      ...TWIN_2D_MISC_STYLES,
-      ...TWIN_2D_CIRCUIT_STYLES,
-    ]
+  it('容器、换热与标注两族原样进来（只过缩放），一条子类变体都不带', () => {
+    const untouched = [...TWIN_2D_VESSEL_STYLES, ...TWIN_2D_MISC_STYLES]
 
     for (const style of untouched) {
+      expect(TWIN_2D_BUILTIN_NODE_STYLE_MAP.get(style.id)).toEqual(
+        shippedOf(style),
+      )
+      expect(
+        style.variants.filter((one) => one.id.startsWith('subtype-')),
+      ).toEqual([])
+    }
+  })
+
+  // ⚠ 电路符号是唯一不过缩放的一族，故这里断的是**同一个对象**而不是等值：
+  // 换成 toEqual 的话，哪天有人把它并进缩放那一批也照样绿（§7.13）
+  it('电路符号那一族不过缩放：查表取到的就是本族那一份对象', () => {
+    for (const style of TWIN_2D_CIRCUIT_STYLES) {
       expect(TWIN_2D_BUILTIN_NODE_STYLE_MAP.get(style.id)).toBe(style)
       expect(
         style.variants.filter((one) => one.id.startsWith('subtype-')),
@@ -382,5 +410,108 @@ describe('frame 是承载边框 / 圆角 / 选中态的那一枚', () => {
     expect(
       shell?.kind === 'box' ? shell.children.map((prim) => prim.id) : [],
     ).toEqual([FRAME_PRIM_ID])
+  })
+})
+
+/**
+ * ⚠ 这一组锁的是**产品侧的出厂尺度**，与 `twin2d-preset-fidelity.spec.ts` 锁的参考取值
+ * 是两张表：那份谱量的是各族模块产出的参考尺度，这里量的是汇总面缩完之后真正发货的
+ * 那一份。只锁一头的话，改缩放比与改各族取值都会有一头一声不吭（§7.13）。
+ */
+describe('出厂尺度：设备族整体缩一档、电路符号不缩', () => {
+  it('缩放档与字号地板是两个具名常量，迁移脚本读的就是它们', () => {
+    expect(TWIN_2D_PRESET_SCALE).toBe(0.75)
+    expect(TWIN_2D_PRESET_MIN_FONT_SIZE).toBe(12)
+  })
+
+  it('十一种节点类型的出厂尺寸', () => {
+    const sizes = NODE_TYPE_STYLES.map((style) => [
+      style.id,
+      style.size.w,
+      style.size.h,
+    ])
+
+    expect(sizes).toEqual([
+      ['waste-heat-source', 168, 93],
+      ['steam-source', 168, 93],
+      ['air-source', 168, 93],
+      ['solar-source', 168, 93],
+      ['water-tank', 147, 105],
+      ['manifold', 168, 95],
+      ['bath-terminal', 147, 84],
+      ['heating-terminal', 147, 84],
+      ['ac-terminal', 147, 84],
+      ['heat-exchanger', 116, 116],
+      ['label', 168, 38],
+    ])
+  })
+
+  it('八枚电路符号的尺寸一格不动', () => {
+    const sizes = TWIN_2D_BUILTIN_NODE_STYLES.slice(11).map((style) => [
+      style.id,
+      style.size.w,
+      style.size.h,
+    ])
+
+    expect(sizes).toEqual([
+      ['circuit-resistor', 40, 20],
+      ['circuit-capacitor', 40, 20],
+      ['circuit-inductor', 40, 20],
+      ['circuit-diode', 40, 20],
+      ['circuit-switch', 40, 20],
+      ['circuit-ground', 24, 20],
+      ['circuit-source', 32, 40],
+      ['circuit-junction', 6, 6],
+    ])
+  })
+
+  it('显示名与主读数的出厂字号', () => {
+    const rows = [
+      ['waste-heat-source', 'label-natural', 13.5],
+      ['waste-heat-source', 'output-value', 21],
+      ['water-tank', 'reading', 22.5],
+      ['manifold', 'reading', 22.5],
+      ['bath-terminal', 'value', 24],
+      ['heat-exchanger', 'label-natural', 12.75],
+      ['label', 'label-natural', 13.5],
+    ] as const
+
+    for (const [styleId, primId, want] of rows) {
+      const style = TWIN_2D_BUILTIN_NODE_STYLE_MAP.get(styleId)
+
+      expect([styleId, primId, style && fontSizeOf(style, primId)]).toEqual([
+        styleId,
+        primId,
+        want,
+      ])
+    }
+  })
+
+  // ⚠ 地板挡的是「越缩越读不清」那一个方向：本就 12px 的说明字与悬浮卡原样留着，
+  //   角标那一枚 15px 缩到 11.25 会被抬回 12
+  it('字号缩到地板为止，没有一枚跌破 12px', () => {
+    const sizes = TWIN_2D_BUILTIN_NODE_STYLES.flatMap((style) =>
+      flatPrims(style.prims)
+        .filter((prim) => prim.kind === 'txt')
+        .map((prim) => prim.font.size ?? TWIN_2D_PRESET_MIN_FONT_SIZE),
+    )
+
+    const source = TWIN_2D_BUILTIN_NODE_STYLE_MAP.get('waste-heat-source')
+
+    expect(sizes.length).toBeGreaterThan(0)
+    expect(sizes.filter((size) => size < TWIN_2D_PRESET_MIN_FONT_SIZE)).toEqual(
+      [],
+    )
+    expect(source && fontSizeOf(source, 'badge-text')).toBe(
+      TWIN_2D_PRESET_MIN_FONT_SIZE,
+    )
+  })
+
+  // ⚠ 尺寸留了小数这一条就红：`normalizeNodeStyle` 对 size 是 `Math.round`，
+  //   而「从调色板拖进画布」走的正是归一化那条路
+  it('十九条缩完仍过得了归一化的恒等', () => {
+    for (const style of TWIN_2D_BUILTIN_NODE_STYLES) {
+      expect(normalizeNodeStyle(structuredClone(style))).toEqual(style)
+    }
   })
 })
