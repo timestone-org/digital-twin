@@ -206,9 +206,10 @@ describe('2D 孪生清单的配置字段', () => {
     expect(field('flowSpeed')?.when?.in).toEqual([true])
   })
 
-  it('缩放档的下拉项就是舞台认得的那四档', () => {
+  // ⚠ 面板上多出一档舞台认不出的值时，用户选得到、画布上却按 contain 画，两侧都不报错
+  it('缩放档的下拉项就是舞台认得的那五档', () => {
     expect((field('fitMode')?.options ?? []).map((item) => item.value)).toEqual(
-      ['contain', 'width', 'height', 'stretch'],
+      ['contain', 'width', 'height', 'stretch', 'none'],
     )
   })
 })

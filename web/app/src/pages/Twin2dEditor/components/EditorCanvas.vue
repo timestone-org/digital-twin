@@ -14,6 +14,7 @@ import { Twin2dIconSprite } from '@dt/twin2d'
 import type { Pt, Twin2dCanvas } from '@dt/twin2d'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
+import { TWIN_2D_STYLE_DRAG_MIME } from '../scripts/paletteDrag'
 import { useCanvasPointer } from '../scripts/useCanvasPointer'
 import type {
   Twin2dGestureFrame,
@@ -87,6 +88,12 @@ const emit = defineEmits<{
    * ⚠ 各层接下这一按时必须 `stopPropagation`，否则「点节点」会连带被当成点空白。
    */
   backgroundDown: [event: PointerEvent]
+  /**
+   * 调色板上那一项落在画布上了；给的是**设计坐标**的落点。
+   * ⚠ 只有这一层接得住：落点要过宿主矩形与视口两道换算才成设计坐标，而这两样
+   * 都只在本层，各层从插槽里接到的也是本层这一份。
+   */
+  dropStyle: [styleId: string, at: Pt]
 }>()
 
 defineSlots<{
@@ -233,6 +240,47 @@ function onWheel(event: WheelEvent): void {
 }
 
 /**
+ * 这一手拖的是不是调色板上的样式。
+ * ⚠ 只认 `types`：`dragover` 阶段按规范读不到 dataTransfer 里的**数据**，那时
+ * `getData` 恒回空串——拿它当判据的话，整个画布对任何一手拖拽都判「这里不收」。
+ * @param event 那一下拖拽事件
+ */
+function isStyleDrag(event: DragEvent): boolean {
+  return event.dataTransfer?.types.includes(TWIN_2D_STYLE_DRAG_MIME) === true
+}
+
+/**
+ * 拖着东西悬在画布上（`dragenter` 与 `dragover` 同一支）。
+ * ⚠ 收得下时必须 `preventDefault`：不拦掉浏览器的缺省动作，`drop` 根本不会发——
+ * 表现是从左栏拖下来松手，画布上什么都没有且零报错。
+ * ⚠ 两个事件都要拦：只拦 `dragover` 时 Chrome 照常收，Firefox 那一路却是进不来的。
+ * ⚠ 不认识的那些一律不拦：拦了的话，从别处拖进来的文件与文字也会在这里被「接住」，
+ * 而画布对它们一个字都做不了，只剩一个骗人的「可以放」光标。
+ * @param event 那一下 dragenter / dragover
+ */
+function onDragHover(event: DragEvent): void {
+  if (!isStyleDrag(event)) return
+  event.preventDefault()
+  // 光标带个「+」：这一手是照着样式新建，不是把左栏那一项搬走
+  if (event.dataTransfer !== null) event.dataTransfer.dropEffect = 'copy'
+}
+
+/**
+ * 在画布上松手。
+ * ⚠ 落点换算不出来（宿主还没挂上）时什么都不做：硬落一个的话，节点会出现在
+ * 画布原点上，而用户以为自己拖歪了。
+ * @param event 那一下 drop
+ */
+function onDrop(event: DragEvent): void {
+  if (!isStyleDrag(event)) return
+  event.preventDefault()
+  const styleId = event.dataTransfer?.getData(TWIN_2D_STYLE_DRAG_MIME) ?? ''
+  const at = toDesign(event)
+  if (styleId === '' || at === null) return
+  emit('dropStyle', styleId, at)
+}
+
+/**
  * 量一次容器。
  * @param el 宿主元素
  */
@@ -285,6 +333,9 @@ defineExpose({ view, fit, zoomBy })
     @wheel.prevent="onWheel"
     @pointerdown.capture="onCaptureDown"
     @pointerdown="onHostDown"
+    @dragenter="onDragHover"
+    @dragover="onDragHover"
+    @drop="onDrop"
   >
     <Twin2dIconSprite />
     <CanvasGrid :canvas="canvas" :view="view" />

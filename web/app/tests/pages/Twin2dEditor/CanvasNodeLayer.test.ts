@@ -57,6 +57,7 @@ const STYLE: Twin2dNodeStyle = {
     makePort('k', { kind: 'xy', x: 1, y: 0.5 }, 'right'),
   ],
   slots: [],
+  outline: { kind: 'rect', r: 0 },
   variants: [],
 }
 

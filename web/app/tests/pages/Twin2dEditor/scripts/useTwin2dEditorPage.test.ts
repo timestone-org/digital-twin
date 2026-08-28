@@ -107,6 +107,20 @@ describe('取数', () => {
     )
   })
 
+  // ⚠ 起手尺寸算进的是**基线**，不是打开页面后改的一笔：算成改动的话，一进来就是
+  // 「未保存」，离开还要拦一道确认，而用户什么都没动
+  it('节点上没配过时画布起手就按 1:1 配好，且不算一笔改动', async () => {
+    getMock.mockResolvedValue(payload([node('n1')]))
+    const editor = page()
+
+    await flushPromises()
+
+    // 格子 640×360、留白缺省 4% ⇒ 编辑的一像素就是大屏上的一像素
+    expect(editor.doc.value?.config.value.canvas.width).toBe(614)
+    expect(editor.doc.value?.config.value.canvas.height).toBe(346)
+    expect(editor.doc.value?.isDirty.value).toBe(false)
+  })
+
   it('节点上没配过时给一份空配置，不报错', async () => {
     getMock.mockResolvedValue(payload([node('n1')]))
     const editor = page()

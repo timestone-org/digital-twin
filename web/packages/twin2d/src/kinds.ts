@@ -50,6 +50,18 @@ export const TWIN_2D_STATUSES = [
 export type Twin2dStatus = (typeof TWIN_2D_STATUSES)[number]
 
 /** 样式缺省状态：四档之外多一个「整个状态点不渲染」。 */
+/**
+ * 节点外缘的四档形状：端口与连线端点按它取点，与图元怎么画无关。
+ * ⚠ `capsule` 是「两头半圆」，横长的圆柱与竖长的胶囊共用这一档；`round` 才读半径。
+ */
+export const TWIN_2D_OUTLINE_KINDS = [
+  'rect',
+  'round',
+  'ellipse',
+  'capsule',
+] as const
+export type Twin2dOutlineKind = (typeof TWIN_2D_OUTLINE_KINDS)[number]
+
 export const TWIN_2D_DEFAULT_STATUSES = [...TWIN_2D_STATUSES, 'hidden'] as const
 export type Twin2dDefaultStatus = (typeof TWIN_2D_DEFAULT_STATUSES)[number]
 
@@ -219,6 +231,9 @@ export const TWIN_2D_FIT_MODES = [
   'width',
   'height',
   'stretch',
+  // ⚠ `none` 是唯一**不产生缩放**的一档：其余四档都落成 CSS transform，倍率不为 1 时
+  //   整块图是被重采样的，字与细线必然发虚。要清晰只有让倍率恒等于 1
+  'none',
 ] as const
 export type Twin2dFitMode = (typeof TWIN_2D_FIT_MODES)[number]
 

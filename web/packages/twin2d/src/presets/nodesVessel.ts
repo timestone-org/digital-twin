@@ -770,6 +770,9 @@ function manifoldStyle(): Twin2dNodeStyle {
     accent: 'var(--accent-secondary)',
     defaultStatus: 'online',
     size: { w: CYL_W, h: CYL_H },
+    // 外缘 = 矩形 + 两头 10px 的圆角：端盖是**横半径 10** 的椭圆而不是半个圆，取
+    // `capsule`（半径 = 短边之半 = 63）会把贴近四角的线头往里拽出一大截
+    outline: { kind: 'round', r: CYL_CAP_RX },
     prims: [
       cylFrame(),
       cylCap('cap-left', CYL_BODY_INSET),

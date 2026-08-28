@@ -9,6 +9,7 @@ import {
 } from './constants'
 import {
   TWIN_2D_DEFAULT_STATUSES,
+  TWIN_2D_OUTLINE_KINDS,
   TWIN_2D_EDGE_MARKER_KINDS,
   TWIN_2D_EDGE_ROUTES,
   TWIN_2D_PORT_AT_KINDS,
@@ -58,6 +59,7 @@ import type {
   Twin2dEdgeMarker,
   Twin2dEdgeStyle,
   Twin2dNodeStyle,
+  Twin2dOutline,
   Twin2dPinMarker,
   Twin2dPort,
   Twin2dPortAt,
@@ -348,6 +350,20 @@ function roundedDim(value: unknown, fallback: number): number {
  * 0.4 圆下去就是 0，一个宽 0 的节点在画布上什么都不画且哪儿都不报错。
  * @param raw 原始节点样式
  */
+/**
+ * 一条外缘轮廓；认不出的一律回外接矩形。
+ * ⚠ 缺省必须是 `rect`：那是老口径，存量样式没声明过这一项，回别的档等于把所有存量图
+ * 的线头挪一遍位置。
+ * @param raw 原始轮廓
+ */
+function normalizeOutline(raw: unknown): Twin2dOutline {
+  const source = isRecord(raw) ? raw : {}
+  return {
+    kind: oneOf(source.kind, TWIN_2D_OUTLINE_KINDS, 'rect'),
+    r: posDim(source.r, 0),
+  }
+}
+
 export function normalizeNodeStyle(raw: unknown): Twin2dNodeStyle | null {
   if (!isRecord(raw)) return null
   const id = idOf(raw.id)
@@ -363,6 +379,7 @@ export function normalizeNodeStyle(raw: unknown): Twin2dNodeStyle | null {
       w: roundedDim(size.w, DEFAULT_STYLE_WIDTH),
       h: roundedDim(size.h, DEFAULT_STYLE_HEIGHT),
     },
+    outline: normalizeOutline(raw.outline),
     prims: normalizePrims(raw.prims, 0),
     ports: normalizePorts(raw.ports),
     slots: normalizeSlots(raw.slots),

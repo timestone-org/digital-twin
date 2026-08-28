@@ -57,6 +57,7 @@ const BASE_STYLE: Twin2dNodeStyle = {
   prims: [],
   ports: [],
   slots: [],
+  outline: { kind: 'rect', r: 0 },
   variants: [],
 }
 

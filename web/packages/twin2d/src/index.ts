@@ -28,6 +28,7 @@ export {
   TWIN_2D_MARK_Z_ORDERS,
   TWIN_2D_NODE_FIELDS,
   TWIN_2D_NODE_ROTATIONS,
+  TWIN_2D_OUTLINE_KINDS,
   TWIN_2D_PAINT_KINDS,
   TWIN_2D_PATTERNS,
   TWIN_2D_PLACEMENT_KINDS,
@@ -85,6 +86,7 @@ export type {
   Twin2dMarkZOrder,
   Twin2dNodeField,
   Twin2dNodeRotation,
+  Twin2dOutlineKind,
   Twin2dPaintKind,
   Twin2dPattern,
   Twin2dPlacementKind,
@@ -160,6 +162,7 @@ export type {
   Twin2dNode,
   Twin2dNodeSize,
   Twin2dNodeStyle,
+  Twin2dOutline,
   Twin2dPinMarker,
   Twin2dPort,
   Twin2dPortAt,
@@ -225,6 +228,9 @@ export {
   trimmedString,
   uniqueBy,
 } from './sanitize'
+export { twin2dOutlinePoint } from './outline'
+export { twin2dDesignSize, twin2dFitScales } from './stageFit'
+export type { Twin2dBox, Twin2dFitView } from './stageFit'
 export { normalizeCondition, normalizeExpr } from './normalizeExprs'
 export { normalizeShape } from './normalizeShape'
 export {

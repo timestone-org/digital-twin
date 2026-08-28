@@ -1,6 +1,8 @@
 /**
- * @fileoverview 契约：顶栏的五个动作各抛各的事件，撤销 / 重做 / 保存按可用性禁用。
+ * @fileoverview 契约：顶栏的六个动作各抛各的事件，撤销 / 重做 / 保存按可用性禁用，
+ * 「按格子对齐」在已经 1:1 时禁用、在不知道格子多大时整枚不摆。
  * ⚠ 诊断计数必须写在按钮上：面板默认收着，不给数字就没人知道它有内容。
+ * ⚠ 倍率读数必须写在按钮上：不写的话「上屏会缩一截」这件事只有点开才知道。
  * ⚠ 图标名没登记时 DtIcon 静默不画，typecheck 与 lint 双双放行，只能在这里兜。
  */
 import { mount } from '@vue/test-utils'
@@ -14,6 +16,10 @@ interface ToolbarProps {
   canUndo: boolean
   canRedo: boolean
   issueCount: number
+  parityText: string
+  parityExact: boolean
+  cropExact: boolean
+  alignCrops: boolean
 }
 
 function mountToolbar(over: Partial<ToolbarProps> = {}) {
@@ -24,6 +30,10 @@ function mountToolbar(over: Partial<ToolbarProps> = {}) {
       canUndo: false,
       canRedo: false,
       issueCount: 0,
+      parityText: '上屏后 66%',
+      parityExact: false,
+      cropExact: false,
+      alignCrops: false,
       ...over,
     },
   })
@@ -164,5 +174,72 @@ describe('诊断计数', () => {
     await wrapper.find('[data-test="issues"]').trigger('click')
 
     expect(wrapper.emitted('toggleIssues')).toHaveLength(1)
+  })
+})
+
+describe('按格子对齐', () => {
+  it('没对上时把倍率写在键面上，点了抛 alignCell', async () => {
+    const wrapper = mountToolbar()
+    const button = wrapper.find('[data-test="align-cell"]')
+
+    expect(button.text()).toBe('上屏后 66%')
+    await button.trigger('click')
+
+    expect(wrapper.emitted('alignCell')).toHaveLength(1)
+  })
+
+  it('已经 1:1 时禁用，点不出事件', async () => {
+    const wrapper = mountToolbar({
+      parityExact: true,
+      parityText: '1:1 与大屏一致',
+    })
+    const button = wrapper.find('[data-test="align-cell"]')
+
+    expect(button.attributes('disabled')).toBeDefined()
+    await button.trigger('click')
+
+    expect(wrapper.emitted('alignCell')).toBeUndefined()
+  })
+
+  // ⚠ 不知道格子多大时摆一枚「对齐到什么」说不出来的键，点下去只能什么都不做
+  it('不知道这块在大屏上占多大时，这一枚整个不摆', () => {
+    const wrapper = mountToolbar({ parityText: '' })
+
+    expect(wrapper.find('[data-test="align-cell"]').exists()).toBe(false)
+  })
+})
+
+describe('画布裁到内容', () => {
+  it('还有多余空白时点了抛 cropToContent', async () => {
+    const wrapper = mountToolbar()
+
+    await wrapper.find('[data-test="crop-content"]').trigger('click')
+
+    expect(wrapper.emitted('cropToContent')).toHaveLength(1)
+  })
+
+  it('已经贴着内容时禁用，点不出事件', async () => {
+    const wrapper = mountToolbar({ cropExact: true })
+    const button = wrapper.find('[data-test="crop-content"]')
+
+    expect(button.attributes('disabled')).toBeDefined()
+    await button.trigger('click')
+
+    expect(wrapper.emitted('cropToContent')).toBeUndefined()
+  })
+})
+
+describe('对齐会裁到内容时', () => {
+  // ⚠ 一次真事故的补丁：按格子对齐会**缩小**画布，而画布就是运行态的裁切框——缩下去
+  // 之后落在外面的节点在大屏上一个都看不见，编辑器里却照画不误，两边都不报错
+  it('那一枚按不动，且提示说清为什么', async () => {
+    const wrapper = mountToolbar({ alignCrops: true })
+    const button = wrapper.find('[data-test="align-cell"]')
+
+    expect(button.attributes('disabled')).toBeDefined()
+    expect(button.attributes('title')).toContain('裁掉')
+    await button.trigger('click')
+
+    expect(wrapper.emitted('alignCell')).toBeUndefined()
   })
 })

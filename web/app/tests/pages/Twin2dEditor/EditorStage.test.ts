@@ -1,6 +1,7 @@
 /**
  * @fileoverview 契约：画布装配。层序与运行态 `Twin2dStage` 逐层对齐、sprite 宿主只挂
- * 一次、一次手势只落一步撤销（拖到一半卸载也补上那一次），命中与框选都落到同一条选中轴。
+ * 一次、一次手势只落一步撤销（拖到一半卸载也补上那一次），命中与框选都落到同一条选中轴，
+ * 从调色板拖下来的那一手落成一个吸在网格上、接着被选中的新节点。
  *
  * ⚠ 层序错了不会报错：配了 `below` 的标注在编辑器里看着在上面、上了大屏跑到下面。
  * ⚠ 逐帧落库同样不报错，只是撤销键从此按不回上一步——拖一个节点就塞进几百帧。
@@ -20,6 +21,7 @@ import { defineComponent, h, nextTick } from 'vue'
 import EditorStage from '@/pages/Twin2dEditor/components/EditorStage.vue'
 import { createTwin2dSelection } from '@/pages/Twin2dEditor/scripts/editorSelection'
 import type { Twin2dEditorSelection } from '@/pages/Twin2dEditor/scripts/editorSelection'
+import { TWIN_2D_STYLE_DRAG_MIME } from '@/pages/Twin2dEditor/scripts/paletteDrag'
 import { createTwin2dDoc } from '@/pages/Twin2dEditor/scripts/twin2dDoc'
 import type { Twin2dDoc } from '@/pages/Twin2dEditor/scripts/twin2dDoc'
 
@@ -251,6 +253,36 @@ async function dragBy(
   }
   fire('pointerup', to.x, to.y)
   await nextTick()
+}
+
+/**
+ * 从调色板拖一份样式到画布上松手。
+ * ⚠ 不走 `trigger`：VTU 造的是真的 `DragEvent`，而 `dataTransfer` 是它原型上的只读
+ * 取值器，赋值在严格模式下直接抛。
+ * ⚠ 视口是单位视口（装配层不给容器尺寸，happy-dom 量出来是 0×0），所以窗口坐标
+ * 就是设计坐标。
+ * @param wrapper 挂好的装配层
+ * @param styleId 拖的是哪份样式
+ * @param at 松手那一点
+ */
+function drop(
+  wrapper: VueWrapper,
+  styleId: string,
+  at: { x: number; y: number },
+): void {
+  const event = new Event('drop', { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'dataTransfer', {
+    value: {
+      types: [TWIN_2D_STYLE_DRAG_MIME],
+      dropEffect: 'none',
+      getData: (key: string) =>
+        key === TWIN_2D_STYLE_DRAG_MIME ? styleId : '',
+    },
+  })
+  Object.defineProperty(event, 'clientX', { value: at.x })
+  Object.defineProperty(event, 'clientY', { value: at.y })
+  const host: Element = wrapper.get('[data-test="canvas-host"]').element
+  host.dispatchEvent(event)
 }
 
 /** 这条标注现在在哪。 */
@@ -553,5 +585,56 @@ describe('连线', () => {
 
     expect(changes()).toBe(1)
     expect(doc.config.value.edges[0]?.to.portId).toBe('')
+  })
+})
+
+describe('调色板拖放', () => {
+  it('松手就在落点上加一个节点，落点吸到网格上', async () => {
+    const { wrapper, doc, changes } = mountStage()
+
+    drop(wrapper, 's1', { x: 247, y: 133 })
+    await nextTick()
+
+    const added = doc.config.value.nodes.at(-1)
+    expect(doc.config.value.nodes).toHaveLength(3)
+    expect(added?.styleId).toBe('s1')
+    // 40×20 的盒摆到指针正中是 (227, 123)，吸到 (220, 120)
+    expect({ x: added?.x, y: added?.y }).toEqual({ x: 220, y: 120 })
+    expect(changes()).toBe(1)
+  })
+
+  it('新加的那一个接着被选中，右栏不会还停在上一个上', async () => {
+    const { wrapper, doc, selection } = mountStage()
+    selection.select('nodes', 'n1')
+
+    drop(wrapper, 's1', { x: 247, y: 133 })
+    await nextTick()
+
+    expect(selection.idsOf('nodes')).toEqual([
+      doc.config.value.nodes.at(-1)?.id,
+    ])
+  })
+
+  it('落在画布外的那一手夹到整只盒都在画布里', async () => {
+    const { wrapper, doc } = mountStage()
+
+    drop(wrapper, 's1', { x: 9000, y: -400 })
+    await nextTick()
+
+    const added = doc.config.value.nodes.at(-1)
+    expect({ x: added?.x, y: added?.y }).toEqual({
+      x: CONFIG.canvas.width - STYLE.size.w,
+      y: 0,
+    })
+  })
+
+  it('样式落不到就整手作废，撤销栈上也不多一格', async () => {
+    const { wrapper, doc, changes } = mountStage()
+
+    drop(wrapper, '没这份样式', { x: 247, y: 133 })
+    await nextTick()
+
+    expect(doc.config.value.nodes).toHaveLength(2)
+    expect(changes()).toBe(0)
   })
 })

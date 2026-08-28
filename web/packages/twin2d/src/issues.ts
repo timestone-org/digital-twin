@@ -287,6 +287,40 @@ function outOfCanvasWaypoints(config: Twin2dConfig): Twin2dIssue[] {
   )
 }
 
+/**
+ * 节点整个落在画布外：运行态按画布尺寸裁切，这些节点在大屏上一个都看不见，而编辑器
+ * 上它们还好好地画着。
+ * ⚠ 判的是「整只盒都在外面」而不是「探出去一点」：贴着边画的符号常常探出去几像素，
+ * 那是常态；整只在外才是「上了大屏就消失」。
+ * ⚠ 盒按样式尺寸算：`w`/`h` 为 0 的节点跟样式的 `size` 走，拿节点上的 0 去判会把
+ * 所有跟样式走的节点都算成一个点。
+ * @param config 归一化后的配置
+ * @param styleFor 按 id 取样式
+ */
+function outOfCanvasNodes(
+  config: Twin2dConfig,
+  styleFor: (id: string) => Twin2dNodeStyle | null,
+): Twin2dIssue[] {
+  const { width, height } = config.canvas
+  return config.nodes.flatMap((node, index) => {
+    const size = styleFor(node.styleId)?.size
+    if (size === undefined) return []
+    const w = node.w > 0 ? node.w : size.w
+    const h = node.h > 0 ? node.h : size.h
+    const outside =
+      node.x >= width || node.y >= height || node.x + w <= 0 || node.y + h <= 0
+    if (!outside) return []
+    return [
+      {
+        level: 'warn' as const,
+        code: 'node-out-of-canvas' as const,
+        message: `节点在 ${width}×${height} 的画布外（左上角 ${node.x}, ${node.y}），上了大屏会被整个裁掉`,
+        at: `nodes[${index}]`,
+      },
+    ]
+  })
+}
+
 /** 诊断入口的可选注入。 */
 export interface Twin2dIssueOptions {
   /** 预置库里的样式 id，与文档里的样式合起来算「认识」。 */
@@ -321,6 +355,7 @@ export function collectTwin2dIssues(
     ...danglingPatchKeys(config, styleFor),
     ...danglingVariantKeys(config),
     ...danglingGradients(sites),
+    ...outOfCanvasNodes(config, styleFor),
     ...outOfCanvasWaypoints(config),
     ...collectTwin2dDroppedIssues(raw, config),
   ]

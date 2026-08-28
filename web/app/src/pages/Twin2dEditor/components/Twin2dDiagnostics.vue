@@ -85,6 +85,7 @@ const ISSUE_LABELS: Readonly<Record<Twin2dIssueCode, string>> = {
   'dangling-gradient': '渐变找不到',
   'dangling-sprite': '内置图标找不到',
   'waypoint-out-of-canvas': '拐点在画布外',
+  'node-out-of-canvas': '节点在画布外',
   'prim-too-deep': '图元树过深',
   'dropped-node': '节点被丢掉',
   'dropped-edge': '连线被丢掉',

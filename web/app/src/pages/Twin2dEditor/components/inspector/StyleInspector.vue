@@ -19,12 +19,13 @@
  *   与画布高亮都要用它，收在这一层的话另外两处就拿不到。图元字段面与变体面各留一个
  *   具名插槽，由装配层塞进来。
  */
-import { TWIN_2D_DEFAULT_STATUSES } from '@dt/twin2d'
+import { TWIN_2D_DEFAULT_STATUSES, TWIN_2D_OUTLINE_KINDS } from '@dt/twin2d'
 import type {
   Twin2dConfig,
   Twin2dDefaultStatus,
   Twin2dNodeSize,
   Twin2dNodeStyle,
+  Twin2dOutlineKind,
   Twin2dPort,
   Twin2dSlot,
 } from '@dt/twin2d'
@@ -38,7 +39,7 @@ import {
 } from '@dt/ui'
 import { computed } from 'vue'
 
-import { fieldsChanged } from '../../scripts/inspectorFields'
+import { enumOptions, fieldsChanged } from '../../scripts/inspectorFields'
 import {
   restoreBuiltinNodeStyle,
   twin2dNodeStyleOrigin,
@@ -188,6 +189,41 @@ function endMerge(): void {
  * @param axis 动的是哪一轴
  * @param value 新值
  */
+/** 外缘四档在面上叫什么。 */
+const OUTLINE_LABELS: Readonly<Record<Twin2dOutlineKind, string>> = {
+  rect: '矩形',
+  round: '圆角矩形',
+  ellipse: '椭圆',
+  capsule: '胶囊',
+}
+
+const OUTLINE_OPTIONS = enumOptions(TWIN_2D_OUTLINE_KINDS, OUTLINE_LABELS)
+
+/** 圆角取值域；上界由 `twin2dOutlinePoint` 按短边之半再夹一次，这里只挡负数。 */
+const OUTLINE_R_RANGE = { min: 0, step: 1, precision: 0 }
+
+/**
+ * 换一档外缘；半径原样留着，换回圆角矩形时还是上次那个数。
+ * @param next 下拉给回来的裸字符串
+ */
+function setOutlineKind(next: string): void {
+  const found = TWIN_2D_OUTLINE_KINDS.find((item) => item === next)
+  if (found === undefined || found === props.nodeStyle.outline.kind) return
+  writeMerged(
+    { outline: { ...props.nodeStyle.outline, kind: found } },
+    'outline',
+  )
+}
+
+/**
+ * 改圆角半径。
+ * @param next 新值
+ */
+function writeOutlineR(next: number): void {
+  if (next === props.nodeStyle.outline.r) return
+  writeMerged({ outline: { ...props.nodeStyle.outline, r: next } }, 'outline-r')
+}
+
 function writeSize(axis: 'w' | 'h', value: number): void {
   const current = props.nodeStyle.size
   const size: Twin2dNodeSize =
@@ -338,6 +374,30 @@ function onPickPrim(primId: string): void {
         :steppers="false"
         data-test="style-h"
         @update:model-value="writeSize('h', $event ?? nodeStyle.size.h)"
+      />
+    </div>
+
+    <div class="grid grid-cols-2 gap-1.5">
+      <DtSelect
+        :model-value="nodeStyle.outline.kind"
+        :options="OUTLINE_OPTIONS"
+        label="外缘"
+        hint="连线与端口接在这条线上，与图元怎么画无关"
+        size="sm"
+        data-test="style-outline"
+        @update:model-value="setOutlineKind"
+      />
+      <DtNumberInput
+        v-if="nodeStyle.outline.kind === 'round'"
+        :model-value="nodeStyle.outline.r"
+        :range="OUTLINE_R_RANGE"
+        label="圆角"
+        unit="px"
+        hint="超过短边之半按短边之半算"
+        size="sm"
+        :steppers="false"
+        data-test="style-outline-r"
+        @update:model-value="writeOutlineR($event ?? nodeStyle.outline.r)"
       />
     </div>
 

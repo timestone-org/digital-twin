@@ -272,6 +272,8 @@ const STYLE_BASE = {
   category: 'circuit',
   accent: PIN_INK,
   defaultStatus: 'hidden',
+  // 电路符号都是方框加两根引脚，外缘就是外接矩形，端点接在方框边上正是对的
+  outline: { kind: 'rect', r: 0 },
   slots: [],
   variants: [],
 } as const

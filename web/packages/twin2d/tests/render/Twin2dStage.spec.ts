@@ -127,20 +127,29 @@ function render(over: Overrides = {}, extra: Extra = {}) {
 
 type Wrapper = ReturnType<typeof render>
 
-/** ⚠ 容器尺寸必须显式喂：happy-dom 量不出真实布局，`getBoundingClientRect` 恒 0。 */
+/** ⚠ 容器尺寸必须显式喂：happy-dom 量不出真实布局，`offsetWidth/Height` 恒 0。 */
 const BOX = { w: 800, h: 800 }
 
-/** 替掉那一次读数用的矩形：自己量容器那条路只有这么一个办法测。 */
-const MEASURED: DOMRect = {
-  width: 800,
-  height: 800,
-  top: 0,
-  left: 0,
-  right: 800,
-  bottom: 800,
-  x: 0,
-  y: 0,
-  toJSON: () => ({}),
+/** 替掉那一次读数用的排版盒：自己量容器那条路只有这么一个办法测。 */
+const MEASURED = { w: 800, h: 800 }
+
+/**
+ * 给宿主按上一副排版盒读数。
+ * ⚠ 桩的必须是 `offsetWidth/Height` 而不是 `getBoundingClientRect`：舞台量的是排版盒，
+ * 桩错了这条用例会在「实现改回去用视觉盒」时照样绿——而那正是大屏编辑器里整块图缩成
+ * 一角的那个 bug。
+ * @param host 宿主元素
+ * @param box 要让它量出来的排版盒
+ */
+function stubLayoutBox(host: Element, box: { w: number; h: number }): void {
+  Object.defineProperty(host, 'offsetWidth', {
+    value: box.w,
+    configurable: true,
+  })
+  Object.defineProperty(host, 'offsetHeight', {
+    value: box.h,
+    configurable: true,
+  })
 }
 
 /** 谁都不做的观察者，只为填 `ResizeObserverCallback` 的第二个参数。 */
@@ -284,7 +293,7 @@ describe('自己量容器', () => {
     vi.stubGlobal('ResizeObserver', Fake)
     const wrapper = render()
     const host = wrapper.get('.t2-stage').element
-    vi.spyOn(host, 'getBoundingClientRect').mockReturnValue(MEASURED)
+    stubLayoutBox(host, MEASURED)
 
     callbacks[0]?.([], IDLE_OBSERVER)
     await nextTick()

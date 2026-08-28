@@ -90,6 +90,7 @@ function makeStyle(
     prims: [],
     ports,
     slots: [],
+    outline: { kind: 'rect', r: 0 },
     variants: [],
   }
 }

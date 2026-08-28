@@ -1125,3 +1125,52 @@ describe('图元剪贴板', () => {
     ).toBeDefined()
   })
 })
+
+describe('按大屏格子对齐', () => {
+  // 格子 640×360、留白缺省 4% ⇒ 1:1 的设计尺寸是 614×346
+  const DESIGN = { width: 614, height: 346 }
+
+  it('对不上时顶栏与画布读数都照实写出上屏倍率', () => {
+    const wrapper = mountPage()
+
+    expect(wrapper.find('[data-test="align-cell"]').text()).toContain('上屏后')
+    expect(wrapper.find('[data-test="canvas-readout"]').text()).toContain(
+      '上屏后',
+    )
+  })
+
+  it('点一下把画布设成 1:1 的设计尺寸，并落一步撤销', async () => {
+    const wrapper = mountPage()
+
+    await wrapper.find('[data-test="align-cell"]').trigger('click')
+
+    const canvas = controls.doc.value?.config.value.canvas
+    expect({ width: canvas?.width, height: canvas?.height }).toEqual(DESIGN)
+    expect(controls.doc.value?.canUndo.value).toBe(true)
+  })
+
+  // ⚠ 对齐改的是画布坐标系，节点坐标一个都不许动：跟着缩一遍的话，图与画布的相对
+  // 关系没变，用户按下去只看到「什么都没发生」，而撤销栈里多了一格
+  it('对齐只改画布尺寸，节点坐标一个都不动', async () => {
+    const wrapper = mountPage()
+    const before = controls.doc.value?.config.value.nodes[0]
+
+    await wrapper.find('[data-test="align-cell"]').trigger('click')
+
+    expect(controls.doc.value?.config.value.nodes[0]).toEqual(before)
+  })
+
+  it('对齐之后那一枚禁用，读数改口说 1:1', async () => {
+    const wrapper = mountPage()
+
+    await wrapper.find('[data-test="align-cell"]').trigger('click')
+    await nextTick()
+
+    const button = wrapper.find('[data-test="align-cell"]')
+    expect(button.attributes('disabled')).toBeDefined()
+    expect(button.text()).toBe('1:1')
+    expect(wrapper.find('[data-test="canvas-readout"]').text()).toContain(
+      '1:1 与大屏一致',
+    )
+  })
+})
