@@ -103,9 +103,11 @@ watch(
 )
 
 // 这一页的「哪张屏」就是地址里那个令牌——公开面没有大屏 id（ADR-0014）
+// 第三支是连接态：通道断了、屏上还挂着最后已知值时，每一格自己标出「数据可能过期」
 const values = useDashboardValues(
   () => nodes.value,
   () => publicToken(),
+  () => channel.connectionState.value,
 )
 // 这张屏到底有没有实时绑定。⚠ 没有的话不许说「实时」：通道连着与画面上的
 // 数字是活的，是两件事

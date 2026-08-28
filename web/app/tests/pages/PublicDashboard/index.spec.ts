@@ -1,14 +1,19 @@
 /**
  * @fileoverview 公开页必须**自己**装配模块与取数：直连它时没有别的页面替它注册
- * 过任何东西。这里还守两条只在公开面成立的口径——取数走公开票据换来的**别名**
- * 主题（真主题不出门，ADR-0014/0021），以及右下角那条状态必须说实话。
+ * 过任何东西。这里还守三条只在公开面成立的口径——取数走公开票据换来的**别名**
+ * 主题（真主题不出门，ADR-0014/0021）、右下角那条状态必须说实话，以及通道断了
+ * 之后屏上每一格都要把「数据可能过期」标出来。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { __resetConfigControls, __resetModules } from '@dt/modules'
 import { __resetProviders, listProviders } from '@dt/datasources'
-import type { DashboardNodeView, PublicDashboardPayload } from '@dt/contracts'
+import type {
+  DashboardNodeView,
+  ModuleConnectionState,
+  PublicDashboardPayload,
+} from '@dt/contracts'
 
 import { __resetDashboardBootstrap } from '@/bootstrap/dashboard'
 import PublicDashboard from '@/pages/PublicDashboard/index.vue'
@@ -23,7 +28,10 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
 }))
 
-const isConnected = ref(true)
+// ⚠ 桩照真通道那样只留一份判定：`isConnected` 从连接态派生，不许各写各的——
+// 两份能各说各话的桩，能造出真通道造不出的状态组合
+const connectionState = ref<ModuleConnectionState>('open')
+const isConnected = computed(() => connectionState.value === 'open')
 const isRejected = ref(false)
 // ⚠ 显式给出签名：不带类型的 `vi.fn()` 记不下入参，`calls[0][0]` 取不到主题
 const subscribe = vi.fn<
@@ -34,9 +42,14 @@ const subscribe = vi.fn<
 >(() => () => undefined)
 const closeChannel = vi.fn()
 
+/** 一条桩通道；两个入口给的是同一条，跟真实现一样。 */
+function channel() {
+  return { isConnected, connectionState, isRejected, subscribe }
+}
+
 vi.mock('@/composables/useRealtimeChannel', () => ({
-  usePublicRealtimeChannel: () => ({ isConnected, isRejected, subscribe }),
-  useRealtimeChannel: () => ({ isConnected, isRejected, subscribe }),
+  usePublicRealtimeChannel: () => channel(),
+  useRealtimeChannel: () => channel(),
   closeRealtimeChannel: () => {
     closeChannel()
   },
@@ -110,7 +123,7 @@ beforeEach(() => {
   __resetConfigControls()
   __resetProviders()
   __resetDashboardBootstrap()
-  isConnected.value = true
+  connectionState.value = 'open'
   isRejected.value = false
   subscribe.mockClear()
   closeChannel.mockClear()
@@ -210,7 +223,7 @@ describe('状态角标', () => {
 
   it('通道没连上时不许说实时——那是一张停住的屏', async () => {
     getPublicDashboard.mockResolvedValue(payload([HEADER, LIVE_TEXT]))
-    isConnected.value = false
+    connectionState.value = 'closed'
     const wrapper = mount(PublicDashboard)
     await flushPromises()
 
@@ -267,7 +280,7 @@ describe('通道断了的角标', () => {
   it('有实时绑定时，断够久就报出来', async () => {
     vi.useFakeTimers()
     getPublicDashboard.mockResolvedValue(payload([HEADER, LIVE_TEXT]))
-    isConnected.value = false
+    connectionState.value = 'closed'
     const wrapper = mount(PublicDashboard)
     await flushPromises()
 
@@ -280,7 +293,7 @@ describe('通道断了的角标', () => {
 
   it('⚠ 一张纯静态的屏不报——那是一件与画面无关的事', async () => {
     vi.useFakeTimers()
-    isConnected.value = false
+    connectionState.value = 'closed'
     const wrapper = mount(PublicDashboard)
     await flushPromises()
 
@@ -317,6 +330,53 @@ describe('撤回', () => {
 
     expect(wrapper.find('[data-test="public-stage"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('加载失败')
+    wrapper.unmount()
+  })
+})
+
+describe('通道断了：屏上的值标成可能过期', () => {
+  /** 推一帧真读数进来，让屏上确实挂着一个通道推来的值。 */
+  function pushSample(): void {
+    const handler = subscribe.mock.calls[0]?.[1]
+    handler?.({
+      items: [
+        {
+          nodeKey: 'ns=2;s=Temp',
+          state: 'ok',
+          value: 42,
+          timestampMs: 1_700_000_000_000,
+          quality: 'good',
+        },
+      ],
+    })
+  }
+
+  it('断了以后旧值照常显示，另挂一枚角标', async () => {
+    getPublicDashboard.mockResolvedValue(payload([HEADER, LIVE_TEXT]))
+    const wrapper = mount(PublicDashboard)
+    await flushPromises()
+    await vi.waitFor(() => expect(subscribe).toHaveBeenCalled())
+    pushSample()
+    await flushPromises()
+    expect(wrapper.find('.dt-module-status--badge').exists()).toBe(false)
+
+    connectionState.value = 'reconnecting'
+    await flushPromises()
+
+    expect(wrapper.get('.dt-module-status--badge').text()).toBe('数据可能过期')
+    // 整格没被盖住，模块照常在画自己的内容——「可能过期」不是「没有数据」
+    expect(wrapper.find('.dt-module-status--cover').exists()).toBe(false)
+    expect(wrapper.findAll('.dt-module')).toHaveLength(2)
+    wrapper.unmount()
+  })
+
+  it('⚠ 纯静态的一格不标：常量不会因为通道断了就过期', async () => {
+    getPublicDashboard.mockResolvedValue(payload([HEADER]))
+    connectionState.value = 'closed'
+    const wrapper = mount(PublicDashboard)
+    await flushPromises()
+
+    expect(wrapper.find('.dt-module-status--badge').exists()).toBe(false)
     wrapper.unmount()
   })
 })

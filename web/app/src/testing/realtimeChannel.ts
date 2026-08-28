@@ -7,10 +7,13 @@
  * ⚠ 谁挂了会订实时值的组件谁就得桩，而这件事很容易忘，所以桩只写这一份：
  * 各 spec 里 `vi.mock` 转一手，别再各写各的。
  */
-import { ref, type Ref } from 'vue'
+import type { ModuleConnectionState } from '@dt/contracts'
+import { computed, ref, type ComputedRef, type Ref } from 'vue'
 
 export interface FakeChannel {
-  isConnected: Ref<boolean>
+  isConnected: ComputedRef<boolean>
+  /** 连接态，真通道里 `isConnected` 就是从它派生的，这里同样只有一份。 */
+  connectionState: Ref<ModuleConnectionState>
   /** 服务端明确拒绝了这条连接（公开票据无效或已撤回）。 */
   isRejected: Ref<boolean>
   /** 订过的主题，按调用顺序。 */
@@ -22,12 +25,13 @@ export interface FakeChannel {
 
 /** 造一条不连网的通道。默认当作已连上。 */
 export function fakeRealtimeChannel(isConnected = true): FakeChannel {
-  const connected = ref(isConnected)
+  const state = ref<ModuleConnectionState>(isConnected ? 'open' : 'closed')
   const topics: string[] = []
   let last: ((payload: object) => void) | null = null
 
   return {
-    isConnected: connected,
+    connectionState: state,
+    isConnected: computed(() => state.value === 'open'),
     isRejected: ref(false),
     topics,
     subscribe: (topic, handler) => {

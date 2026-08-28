@@ -3,13 +3,19 @@
  * 入参全是 getter，所以它不认识 props、也不 inject 任何东西——装配点之外
  * （测试、别的宿主）能直接装上它。
  */
-import type { BindingView, ModuleManifest, ModuleMeta } from '@dt/contracts'
+import type {
+  BindingView,
+  ModuleConnectionState,
+  ModuleManifest,
+  ModuleMeta,
+} from '@dt/contracts'
 import { computed, type ComputedRef } from 'vue'
 
 import {
   computeModuleStatus,
   countUnboundRequired,
   showsStatusOverlay,
+  type ModuleStatusInput,
 } from './moduleStatus'
 import {
   computeModuleValues,
@@ -27,6 +33,8 @@ export interface ModuleEvaluationInput {
   hasRenderError: () => boolean
   /** 本节点真配了以它为源的联动规则；无联动运行时给 undefined。 */
   interactive: () => boolean | undefined
+  /** 实时通道连接态；设计态与独立渲染时给 undefined，那时永不降 `stale`。 */
+  connectionState: () => ModuleConnectionState | undefined
 }
 
 export interface ModuleEvaluation {
@@ -34,6 +42,28 @@ export interface ModuleEvaluation {
   meta: ComputedRef<ModuleMeta>
   /** 要不要盖整格状态浮层，理由见 `showsStatusOverlay`。 */
   showStatusOverlay: ComputedRef<boolean>
+}
+
+/**
+ * 折状态要的那几样：渲染失败、必绑缺口、各档槽计数与连接态。
+ * @param input 装配点注入的 getter 们
+ * @param values 这一轮的求值结果
+ * @param connection 连接态；缺席就是这里没有实时通道
+ */
+function statusInputOf(
+  input: ModuleEvaluationInput,
+  values: ModuleValues,
+  connection: ModuleConnectionState | undefined,
+): ModuleStatusInput {
+  return {
+    hasRenderError: input.hasRenderError(),
+    unboundRequiredCount: countUnboundRequired(
+      input.manifest()?.bindings ?? [],
+      input.bindings(),
+    ),
+    tally: values.tally,
+    ...(connection === undefined ? {} : { connectionState: connection }),
+  }
 }
 
 /** 状态条只放得下一句，取第一条槽的原因；逐槽原因在求值结果里。 */
@@ -57,15 +87,13 @@ export function useModuleEvaluation(
     }),
   )
 
+  // ⚠ 连接态在 computed 里取：取好再传进来的话，通道断了这一格也不会重算
+  const connectionState = computed(() => input.connectionState())
+
   const status = computed(() =>
-    computeModuleStatus({
-      hasRenderError: input.hasRenderError(),
-      unboundRequiredCount: countUnboundRequired(
-        input.manifest()?.bindings ?? [],
-        input.bindings(),
-      ),
-      tally: evaluated.value.tally,
-    }),
+    computeModuleStatus(
+      statusInputOf(input, evaluated.value, connectionState.value),
+    ),
   )
 
   // 模块自报「逐格状态我自己交代」
@@ -86,6 +114,9 @@ export function useModuleEvaluation(
     if (reason !== '') value.errorMessage = reason
     const interactive = input.interactive()
     if (interactive !== undefined) value.interactive = interactive
+    if (connectionState.value !== undefined) {
+      value.connectionState = connectionState.value
+    }
     return value
   })
 

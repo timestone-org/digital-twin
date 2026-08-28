@@ -5,10 +5,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import { ref, shallowRef } from 'vue'
+import { computed, ref, shallowRef } from 'vue'
 import { __resetConfigControls, __resetModules } from '@dt/modules'
 import { __resetProviders, listProviders } from '@dt/datasources'
-import type { DashboardPayload } from '@dt/contracts'
+import type { DashboardPayload, ModuleConnectionState } from '@dt/contracts'
 
 import { __resetDashboardBootstrap } from '@/bootstrap/dashboard'
 import { OFFLINE_GRACE_MS } from '@/composables/useRealtimeOffline'
@@ -22,11 +22,15 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
 }))
 
-// ⚠ 通道必须打桩：不桩的话挂载页面就真的开一条 WebSocket
-const isConnected = ref(true)
+// ⚠ 通道必须打桩：不桩的话挂载页面就真的开一条 WebSocket。
+// ⚠ 桩也照真通道那样只留一份判定：`isConnected` 从连接态派生，不许各写各的——
+// 两份能各说各话的桩，能造出真通道造不出的状态组合
+const connectionState = ref<ModuleConnectionState>('open')
+const isConnected = computed(() => connectionState.value === 'open')
 vi.mock('@/composables/useRealtimeChannel', () => ({
   useRealtimeChannel: () => ({
     isConnected,
+    connectionState,
     subscribe: vi.fn(() => () => undefined),
     onSystem: vi.fn(() => () => undefined),
   }),
@@ -81,7 +85,7 @@ vi.mock('@/composables/useDashboardDoc', () => ({
 }))
 
 beforeEach(() => {
-  isConnected.value = true
+  connectionState.value = 'open'
   __resetModules()
   __resetConfigControls()
   __resetProviders()
@@ -134,7 +138,7 @@ describe('通道断了要说出来', () => {
       const wrapper = mount(DashboardView)
       await flushPromises()
 
-      isConnected.value = false
+      connectionState.value = 'closed'
       await vi.advanceTimersByTimeAsync(OFFLINE_GRACE_MS)
       await flushPromises()
 

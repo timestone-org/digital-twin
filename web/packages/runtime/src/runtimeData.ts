@@ -4,6 +4,7 @@
  * ⚠ 注入的是**函数不是值**：`ModuleRenderer` 在 computed 里调用它，响应式依赖由那次
  * 调用建立；传一个取好的值进来，值再变也不会重算，而且不报任何错。
  */
+import type { ModuleConnectionState } from '@dt/contracts'
 import { inject, provide, type InjectionKey } from 'vue'
 
 import type { BindingSlot, BindingValueReader } from './moduleValues'
@@ -11,6 +12,12 @@ import type { BindingSlot, BindingValueReader } from './moduleValues'
 export interface RuntimeDataSource {
   /** 取当前的绑定读取器；每次求值都重新调用它。 */
   readBinding: () => BindingValueReader
+  /**
+   * 取实时通道此刻的连接态；每次求值都重新调用它。
+   * ⚠ 不装这一支就是「这里没有实时通道」（设计态画布、独立渲染、用例），
+   * 于是模块永远不会被标成陈旧——而不是被当成断开。
+   */
+  connectionState?: () => ModuleConnectionState
 }
 
 export const RUNTIME_DATA_KEY: InjectionKey<RuntimeDataSource> =

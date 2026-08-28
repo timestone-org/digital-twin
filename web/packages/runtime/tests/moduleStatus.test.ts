@@ -1,18 +1,24 @@
 /**
- * @fileoverview 守模块状态的优先级阶梯与它的**来源无感知**：输入只有各档槽的计数，
- * 没有任何来源种类——加一种来源不必碰这台状态机。另守必绑槽的缺口统计
- * （数组槽 `rows[0].value` 就是把 `rows` 配上了）。
+ * @fileoverview 守模块状态的优先级阶梯与它的**来源无感知**：输入只有各档槽的计数
+ * 与通道连接态，没有任何来源种类——加一种来源不必碰这台状态机。另守必绑槽的缺口
+ * 统计（数组槽 `rows[0].value` 就是把 `rows` 配上了）、以及 `stale` 那一档的口径：
+ * 按连接态判、只在有值可显示时成立、硬问题优先，且它不盖整格。
  */
 import type { BindingSpec } from '@dt/contracts'
 import { describe, expect, it } from 'vitest'
 
-import { computeModuleStatus, countUnboundRequired } from '../src/moduleStatus'
+import {
+  computeModuleStatus,
+  countUnboundRequired,
+  showsStatusOverlay,
+} from '../src/moduleStatus'
 import type { ModuleValuesTally } from '../src/moduleValues'
 import { fakeBinding } from '../src/testing/fixtures'
 
 const EMPTY_TALLY: ModuleValuesTally = {
   bound: 0,
   ok: 0,
+  sampled: 0,
   empty: 0,
   pending: 0,
   error: 0,
@@ -133,5 +139,127 @@ describe('状态阶梯', () => {
         tally: tally({ bound: 1, ok: 1 }),
       }),
     ).toBe('error')
+  })
+})
+
+describe('通道断了：数据可能过期', () => {
+  it('通道断了而屏上还挂着推来的值，就是陈旧', () => {
+    expect(
+      computeModuleStatus({
+        unboundRequiredCount: 0,
+        tally: tally({ bound: 1, ok: 1, sampled: 1 }),
+        connectionState: 'reconnecting',
+      }),
+    ).toBe('stale')
+  })
+
+  it.each(['connecting', 'reconnecting', 'closed', 'error'] as const)(
+    '只有 open 算通，%s 一律算断',
+    (state) => {
+      expect(
+        computeModuleStatus({
+          unboundRequiredCount: 0,
+          tally: tally({ bound: 1, ok: 1, sampled: 1 }),
+          connectionState: state,
+        }),
+      ).toBe('stale')
+    },
+  )
+
+  it('通道连着就是正常态', () => {
+    expect(
+      computeModuleStatus({
+        unboundRequiredCount: 0,
+        tally: tally({ bound: 1, ok: 1, sampled: 1 }),
+        connectionState: 'open',
+      }),
+    ).toBe('connected')
+  })
+
+  it('⚠ 缺席不等于断开：设计态与独立渲染永不降档', () => {
+    // 编辑器画布不装连接态，冒一枚角标只会让人去查一条不存在的故障
+    expect(
+      computeModuleStatus({
+        unboundRequiredCount: 0,
+        tally: tally({ bound: 1, ok: 1, sampled: 1 }),
+      }),
+    ).toBe('connected')
+  })
+
+  it('⚠ 一个推来的值都没有时不叫陈旧：常量槽不会因为通道断了就过期', () => {
+    expect(
+      computeModuleStatus({
+        unboundRequiredCount: 0,
+        tally: tally({ bound: 1, ok: 1 }),
+        connectionState: 'closed',
+      }),
+    ).toBe('connected')
+  })
+
+  it('⚠ 一个值都没有时该说空态，不该说「可能过期」', () => {
+    expect(
+      computeModuleStatus({
+        unboundRequiredCount: 0,
+        tally: tally({ bound: 1, empty: 1 }),
+        connectionState: 'closed',
+      }),
+    ).toBe('empty')
+  })
+
+  it('还在等首帧时说加载中，不说过期', () => {
+    expect(
+      computeModuleStatus({
+        unboundRequiredCount: 0,
+        tally: tally({ bound: 2, ok: 1, sampled: 1, pending: 1 }),
+        connectionState: 'closed',
+      }),
+    ).toBe('loading')
+  })
+
+  it('硬问题压过陈旧：必绑槽没配来源', () => {
+    expect(
+      computeModuleStatus({
+        unboundRequiredCount: 1,
+        tally: tally({ bound: 2, ok: 1, sampled: 1 }),
+        connectionState: 'closed',
+      }),
+    ).toBe('unbound')
+  })
+
+  it('硬问题压过陈旧：有槽取不到', () => {
+    expect(
+      computeModuleStatus({
+        unboundRequiredCount: 0,
+        tally: tally({ bound: 2, ok: 1, sampled: 1, error: 1 }),
+        connectionState: 'closed',
+      }),
+    ).toBe('error')
+  })
+
+  it('硬问题压过陈旧：渲染失败', () => {
+    expect(
+      computeModuleStatus({
+        hasRenderError: true,
+        unboundRequiredCount: 0,
+        tally: tally({ bound: 1, ok: 1, sampled: 1 }),
+        connectionState: 'closed',
+      }),
+    ).toBe('error')
+  })
+})
+
+describe('要不要盖整格', () => {
+  it('自报交代状态的模块，陈旧那一档也照样放行——角标不盖格', () => {
+    expect(showsStatusOverlay(true, 'stale')).toBe(true)
+  })
+
+  it('自报交代状态的模块，其余能自己画的档次不放行', () => {
+    expect(showsStatusOverlay(true, 'error')).toBe(false)
+    expect(showsStatusOverlay(true, 'loading')).toBe(false)
+  })
+
+  it('没自报的模块一律由浮层交代', () => {
+    expect(showsStatusOverlay(false, 'stale')).toBe(true)
+    expect(showsStatusOverlay(false, 'unbound')).toBe(true)
   })
 })

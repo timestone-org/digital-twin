@@ -59,8 +59,10 @@ const getManifest: GetModuleManifest = (moduleType: string) =>
 
 const file = useDashboardDoc()
 
+const channel = useRealtimeChannel()
+
 installDashboardDataSources({
-  subscribe: createPointSubscribe(useRealtimeChannel(), () => {
+  subscribe: createPointSubscribe(channel, () => {
     const current = file.dashboard.value
     return current === null ? null : dashboardTopic(current.id)
   }),
@@ -70,9 +72,11 @@ installDashboardDataSources({
 const nodes = computed(() => file.dashboard.value?.nodes ?? [])
 // ⚠ 取当前**已加载**的那张屏而不是地址栏里的 id：切屏期间地址已经换了、文档还没到，
 // 按地址走会让上一屏的画面配上新屏的订阅
+// 第三支是连接态：通道断了、屏上还挂着最后已知值时，每一格自己标出「数据可能过期」
 useDashboardValues(
   () => nodes.value,
   () => file.dashboard.value?.id ?? '',
+  () => channel.connectionState.value,
 )
 
 const tree = computed(() => buildNodeTree(nodes.value, getManifest))

@@ -2,10 +2,11 @@
  * @fileoverview 守三件套 props 真的装配到了模块手里（清单缺省铺底的 config、
  * 求值后的 values、带状态的 meta），以及三条失败边界各自**只影响一格**：
  * 清单缺失、渲染抛错（不许冒泡）、异步 chunk 加载失败（重试一次后占位）。
+ * 另守「数据可能过期」那一档的画法：不盖整格、只加角标，且设计态不冒角标。
  */
-import type { BindingPayload } from '@dt/contracts'
+import type { BindingPayload, ModuleConnectionState } from '@dt/contracts'
 import { flushPromises, mount } from '@vue/test-utils'
-import { defineComponent, h, type PropType } from 'vue'
+import { defineComponent, h, nextTick, ref, type PropType } from 'vue'
 import { describe, expect, it } from 'vitest'
 
 import ModuleRenderer from '../src/ModuleRenderer.vue'
@@ -110,6 +111,12 @@ interface Cell {
   bare?: boolean
 }
 
+/** 桩通道的连接态；只有 `mountWired` 起的宿主才把它装进取数源。 */
+const channelState = ref<ModuleConnectionState>('open')
+// ⚠ 用模块级开关而不是 prop：在 setup 的根作用域上读 prop 会丢响应性，
+// 而这条判断只需要在挂载那一刻定死
+let isWired = false
+
 const Host = defineComponent({
   name: 'RendererHost',
   props: {
@@ -120,7 +127,14 @@ const Host = defineComponent({
     },
   },
   setup(props) {
-    provideRuntimeData({ readBinding: () => props.reader })
+    provideRuntimeData(
+      isWired
+        ? {
+            readBinding: () => props.reader,
+            connectionState: () => channelState.value,
+          }
+        : { readBinding: () => props.reader },
+    )
     return () => h('div', props.cells.map(toCell))
   },
 })
@@ -142,6 +156,23 @@ function toCell(cell: Cell) {
 }
 
 function mountCells(cells: readonly Cell[], reader = PENDING_READER) {
+  isWired = false
+  return mount(Host, { props: { cells, reader } })
+}
+
+/**
+ * 装了实时通道的宿主：连接态由 `channelState` 说了算。
+ * @param cells 这一屏的格子
+ * @param state 挂载时的连接态
+ * @param reader 取数读取器
+ */
+function mountWired(
+  cells: readonly Cell[],
+  state: ModuleConnectionState,
+  reader = OK_READER,
+) {
+  isWired = true
+  channelState.value = state
   return mount(Host, { props: { cells, reader } })
 }
 
@@ -297,6 +328,103 @@ describe('自己交代状态的模块', () => {
       '"slots":{"power":{"state":"error","message":"快照读不到"}}',
     )
     expect(wrapper.get('.seen').attributes('data-meta')).not.toContain('slots')
+  })
+})
+
+describe('通道断了：数据可能过期', () => {
+  it('不盖整格——旧值照常显示，只在右上角挂一枚角标', async () => {
+    const wrapper = mountWired(
+      [{ moduleType: 'simple', bindings: [POWER_BINDING] }],
+      'reconnecting',
+    )
+    await flushPromises()
+
+    expect(wrapper.get('.dt-module-status--badge').text()).toBe('数据可能过期')
+    expect(wrapper.find('.dt-module-status--cover').exists()).toBe(false)
+    expect(wrapper.get('.seen').attributes('data-values')).toBe('{"power":42}')
+  })
+
+  it('角标不在模块自己的节点里，也就挡不住模块的内容', async () => {
+    const wrapper = mountWired(
+      [{ moduleType: 'simple', bindings: [POWER_BINDING] }],
+      'closed',
+    )
+    await flushPromises()
+
+    expect(wrapper.get('.seen').find('.dt-module-status--badge').exists()).toBe(
+      false,
+    )
+    expect(wrapper.find('.dt-module-status__veil').exists()).toBe(true)
+  })
+
+  it('通道连着时一枚角标都没有', async () => {
+    const wrapper = mountWired(
+      [{ moduleType: 'simple', bindings: [POWER_BINDING] }],
+      'open',
+    )
+    await flushPromises()
+
+    expect(wrapper.find('.dt-module-status').exists()).toBe(false)
+  })
+
+  it('连着的时候断掉，屏上的旧值当场被标成可能过期', async () => {
+    const wrapper = mountWired(
+      [{ moduleType: 'simple', bindings: [POWER_BINDING] }],
+      'open',
+    )
+    await flushPromises()
+    expect(wrapper.find('.dt-module-status--badge').exists()).toBe(false)
+
+    channelState.value = 'reconnecting'
+    await nextTick()
+
+    expect(wrapper.find('.dt-module-status--badge').exists()).toBe(true)
+  })
+
+  it('⚠ 设计态与独立渲染不装连接态，于是永远不冒这枚角标', async () => {
+    // 编辑器画布上冒一枚「数据可能过期」，等于让人去查一条不存在的故障
+    const wrapper = mountCells(
+      [{ moduleType: 'simple', bindings: [POWER_BINDING] }],
+      OK_READER,
+    )
+    await flushPromises()
+
+    expect(wrapper.find('.dt-module-status').exists()).toBe(false)
+  })
+
+  it('连接态照实透传进 meta，模块要自己画也拿得到', async () => {
+    const wrapper = mountWired(
+      [{ moduleType: 'simple', bindings: [POWER_BINDING] }],
+      'reconnecting',
+    )
+    await flushPromises()
+
+    expect(wrapper.get('.seen').attributes('data-meta')).toContain(
+      '"connectionState":"reconnecting"',
+    )
+  })
+
+  it('一个值都没有时说的还是加载中——空格不许被说成有数据', async () => {
+    const wrapper = mountWired(
+      [{ moduleType: 'simple', bindings: [POWER_BINDING] }],
+      'closed',
+      PENDING_READER,
+    )
+    await flushPromises()
+
+    expect(wrapper.get('.dt-module-status--cover').text()).toContain('加载中')
+    expect(wrapper.find('.dt-module-status--badge').exists()).toBe(false)
+  })
+
+  it('自报交代状态的模块也挂角标：通道断了是整条链路的事', async () => {
+    const wrapper = mountWired(
+      [{ moduleType: 'owns-status', bindings: [POWER_BINDING] }],
+      'closed',
+    )
+    await flushPromises()
+
+    expect(wrapper.get('.dt-module-status--badge').text()).toBe('数据可能过期')
+    expect(wrapper.find('.owns').exists()).toBe(true)
   })
 })
 

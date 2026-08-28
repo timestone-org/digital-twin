@@ -64,6 +64,7 @@ const MODULE_REGION_MEMBERS: Record<ModuleRegion, true> = {
 const MODULE_STATUS_MEMBERS: Record<ModuleStatus, true> = {
   loading: true,
   connected: true,
+  stale: true,
   empty: true,
   unbound: true,
   error: true,
@@ -149,14 +150,20 @@ describe('模块清单', () => {
 })
 
 describe('模块状态', () => {
-  it('五档各自对应一种「现在为什么长这样」', () => {
+  it('六档各自对应一种「现在为什么长这样」', () => {
     expect([...MODULE_STATUSES]).toEqual([
       'loading',
       'connected',
+      'stale',
       'empty',
       'unbound',
       'error',
     ])
+  })
+
+  it('⚠ 陈旧是一档状态：通道断了、屏上挂着最后已知值时必须标出来', () => {
+    // 不标的话，一张停住的屏与一张活着的屏在墙上长得一模一样
+    expect(MODULE_STATUSES).toContain('stale')
   })
 
   it('状态的类型成员与运行时常量对齐', () => {

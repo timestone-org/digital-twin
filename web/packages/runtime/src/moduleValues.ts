@@ -44,6 +44,12 @@ export interface ModuleValuesTally {
   bound: number
   /** 取到了非空值。 */
   ok: number
+  /**
+   * 取到了非空值、且带采样时刻的槽数。
+   * ⚠ 这不是「哪种来源」——本文件仍对来源无感知：带采样时刻就是「有人在往这条
+   * 槽里推值」，通道一断它们就全成了最后已知值，`stale` 一档据此推。
+   */
+  sampled: number
   /** 取到了，但值是空。 */
   empty: number
   /** 还在等首帧。 */
@@ -197,7 +203,7 @@ export function computeModuleValues(input: ModuleValuesInput): ModuleValues {
     errors: {},
     slots: {},
     siblings: {},
-    tally: { bound: 0, ok: 0, empty: 0, pending: 0, error: 0 },
+    tally: { bound: 0, ok: 0, empty: 0, pending: 0, error: 0, sampled: 0 },
     valueTimeMs: null,
   }
   const derived: BindingView[] = []
@@ -249,7 +255,10 @@ function resolveBinding(
     spec,
   )
   if (value === null || value === undefined) state.tally.empty += 1
-  else state.tally.ok += 1
+  else {
+    state.tally.ok += 1
+    if (slot.timestampMs !== undefined) state.tally.sampled += 1
+  }
   state.siblings[binding.fieldKey] = value
   injectFieldValue(state.values, binding.fieldKey, value)
 }

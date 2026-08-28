@@ -13,14 +13,23 @@
  */
 
 import {
-  REALTIME_AUTH_EXPIRED_CLOSE_CODE,
   REALTIME_HANDSHAKE_REJECTED_CLOSE_CODE,
   REALTIME_PUBLIC_GRANT_CLOSE_CODE,
   type ClientMessage,
+  type ModuleConnectionState,
 } from '@dt/contracts'
 import { ref, type Ref } from 'vue'
 
 import { newClientUuid } from '@/api/idempotency'
+import {
+  CLOSE_TOKEN_EXPIRED,
+  REALTIME_WS_PATH,
+  connectionState,
+  isConnected,
+  markConnecting,
+  nextBackoffMs,
+  resetBackoff,
+} from '@/runtime/realtimeConnection'
 import {
   currentCredential,
   setPublicTicket,
@@ -30,20 +39,10 @@ import { createTopicRegistry, type TopicHandler } from '@/runtime/topicRegistry'
 import type { DispatchPorts } from '@/runtime/realtimeDispatch'
 import { useAuthStore } from '@/stores/auth'
 
-/** hub 的对外前缀，与 server/services/realtime-hub 的 API_PREFIX 同值。 */
-export const REALTIME_WS_PATH = '/api/v1/realtime/ws'
-/**
- * 令牌过期时服务端用的关闭码。收到它要换票重连，而不是当成网络故障。
- * ⚠ 取自 `@dt/contracts` 而不是就地再写一个 4001：两份同值常量一定会漂，
- * 而漂开之后「换票重连」这条路径会安静地退化成普通重连。
- */
-export const CLOSE_TOKEN_EXPIRED = REALTIME_AUTH_EXPIRED_CLOSE_CODE
-/** 重连退避的起点与上限。⚠ 不退避的话，hub 一挂全站客户端会一起打它。 */
-const RECONNECT_MIN_MS = 1_000
-const RECONNECT_MAX_MS = 30_000
-
 interface Channel {
   isConnected: Ref<boolean>
+  /** 连接态；模块的「数据可能过期」由它推，判定只此一份。 */
+  connectionState: Ref<ModuleConnectionState>
   /**
    * 服务端明确拒绝了这条连接：票据无效、已被撤回，或标记形状不对。
    * ⚠ 与「断了」分开：断了要等它自己回来，被拒了要去问一句「这张屏还公开吗」。
@@ -52,7 +51,6 @@ interface Channel {
   subscribe: (topic: string, handler: TopicHandler) => () => void
 }
 
-const isConnected = ref(false)
 const isRejected = ref(false)
 const topics = createTopicRegistry()
 const ports: DispatchPorts = {
@@ -64,7 +62,6 @@ const ports: DispatchPorts = {
   newRequestId: newClientUuid,
 }
 let socket: WebSocket | null = null
-let reconnectMs = RECONNECT_MIN_MS
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let isClosing = false
 
@@ -88,12 +85,11 @@ function resubscribeAll(): void {
 
 function scheduleReconnect(): void {
   if (isClosing || reconnectTimer !== null) return
+  connectionState.value = 'reconnecting'
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null
     connect()
-  }, reconnectMs)
-  // 指数退避，夹在上限内
-  reconnectMs = Math.min(reconnectMs * 2, RECONNECT_MAX_MS)
+  }, nextBackoffMs())
 }
 
 function connect(): void {
@@ -104,11 +100,12 @@ function connect(): void {
   // ⚠ 两个子协议一起报：服务端只认「标记之后的那一个」这种固定形状
   const opened = new WebSocket(url, [offered.marker, offered.token])
   socket = opened
+  markConnecting()
 
   opened.addEventListener('open', () => {
-    isConnected.value = true
+    connectionState.value = 'open'
     isRejected.value = false
-    reconnectMs = RECONNECT_MIN_MS
+    resetBackoff()
     resubscribeAll()
   })
   opened.addEventListener('message', (event: MessageEvent<string>) => {
@@ -116,11 +113,12 @@ function connect(): void {
   })
   opened.addEventListener('close', (event: CloseEvent) => {
     socket = null
-    isConnected.value = false
     // ⚠ 1008 是「票压根验不过」，换票没用：再重连也是拿同一张票被拒，
-    // 那会退化成一个打满退避上限的空转循环。停下，等登录态那条路把票换掉
+    // 那会退化成一个打满退避上限的空转循环。停下，等登录态那条路把票换掉；
+    // 停下也要把态说出来，否则屏上一切照旧显示成活值
     if (event.code === REALTIME_HANDSHAKE_REJECTED_CLOSE_CODE) {
       isRejected.value = true
+      connectionState.value = 'error'
       return
     }
     // ⚠ 4003 是「这枚公开票据没有授权」：要么链接被撤回了，要么推送方还没把
@@ -129,7 +127,7 @@ function connect(): void {
     if (event.code === REALTIME_PUBLIC_GRANT_CLOSE_CODE) isRejected.value = true
     // ⚠ 4001 是「票过期了」：由 store 的刷新逻辑保证下次握手带的是新票，
     // 所以退避归零、立刻重连
-    if (event.code === CLOSE_TOKEN_EXPIRED) reconnectMs = RECONNECT_MIN_MS
+    if (event.code === CLOSE_TOKEN_EXPIRED) resetBackoff()
     scheduleReconnect()
   })
 }
@@ -161,10 +159,8 @@ export function closeRealtimeChannel(): void {
   // ⚠ 票据也要清：不清的话回到登录态之后，下一次握手仍会报公开那条子协议，
   // 而那条连接看什么都被拒
   setPublicTicket(null)
-  // ⚠ 退避也要归零：不归零的话，登出前攒到的退避值会被下一次登录继承——
-  // 表现是「重新登录后要等半分钟才有实时数据」，而那与网络无关
-  reconnectMs = RECONNECT_MIN_MS
-  isConnected.value = false
+  resetBackoff()
+  connectionState.value = 'closed'
   isRejected.value = false
 }
 
@@ -172,7 +168,7 @@ export function closeRealtimeChannel(): void {
 export function useRealtimeChannel(): Channel {
   isClosing = false
   connect()
-  return { isConnected, isRejected, subscribe }
+  return { isConnected, connectionState, isRejected, subscribe }
 }
 
 /**
@@ -189,8 +185,8 @@ export function usePublicRealtimeChannel(ticket: string): Channel {
   if (setPublicTicket(ticket)) {
     socket?.close()
     socket = null
-    reconnectMs = RECONNECT_MIN_MS
-    isConnected.value = false
+    resetBackoff()
+    connectionState.value = 'closed'
     isRejected.value = false
   }
   // ⚠ 刻意**不**清主题登记表：换屏时退订旧主题是取数那一侧的事（它按屏重订），

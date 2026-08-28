@@ -38,6 +38,7 @@ function fakeChannel(): {
   const state = { handler: null as Handler | null, offCount: 0 }
   vi.spyOn(channel, 'useRealtimeChannel').mockReturnValue({
     isConnected: ref(true),
+    connectionState: ref('open'),
     isRejected: ref(false),
     subscribe: (_topic: string, handler: Handler) => {
       state.handler = handler

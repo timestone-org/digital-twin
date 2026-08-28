@@ -13,6 +13,7 @@ import { defineComponent, h, ref } from 'vue'
 import type {
   BindingPayload,
   DashboardNodePayload,
+  ModuleConnectionState,
   PointValueListener,
 } from '@dt/contracts'
 import { __resetProviders, registerProvider } from '@dt/datasources'
@@ -76,8 +77,17 @@ function node(bindings: BindingPayload[]): DashboardNodePayload {
   }
 }
 
-/** 把 composable 挂进组件，并把它 provide 的取数源取出来。 */
-function mountValues(initial: DashboardNodePayload[], initialScope = 'd1') {
+/**
+ * 把 composable 挂进组件，并把它 provide 的取数源取出来。
+ * @param initial 初始节点
+ * @param initialScope 初始的「哪张屏」
+ * @param connectionState 连接态；不给就是设计态那条路
+ */
+function mountValues(
+  initial: DashboardNodePayload[],
+  initialScope = 'd1',
+  connectionState?: () => ModuleConnectionState,
+) {
   const nodes = ref<DashboardNodePayload[]>(initial)
   const scope = ref(initialScope)
   let source: RuntimeDataSource | null = null
@@ -94,6 +104,7 @@ function mountValues(initial: DashboardNodePayload[], initialScope = 'd1') {
       const found = useDashboardValues(
         () => nodes.value,
         () => scope.value,
+        connectionState,
       )
       values = found
       return () => h('div', [String(found.sampleCount.value), h(child)])
@@ -262,5 +273,24 @@ describe('透出去的那份快照缓存', () => {
     const { values } = mountValues([node([binding('s:a')])])
 
     expect(values()?.read('s:a')).toBeUndefined()
+  })
+})
+
+describe('连接态', () => {
+  it('给了就装进取数源，且每次都现取——通道断了模块才重算得出来', () => {
+    registerFakeRealtime()
+    const state = ref<ModuleConnectionState>('open')
+    const mounted = mountValues([node([])], 'd1', () => state.value)
+
+    expect(mounted.read()?.connectionState?.()).toBe('open')
+    state.value = 'reconnecting'
+    expect(mounted.read()?.connectionState?.()).toBe('reconnecting')
+  })
+
+  it('⚠ 不给就整支缺席：设计态的画布不该冒出「数据可能过期」', () => {
+    registerFakeRealtime()
+    const mounted = mountValues([node([])])
+
+    expect(mounted.read()?.connectionState).toBeUndefined()
   })
 })

@@ -24,6 +24,7 @@ vi.mock('vue-router', () => ({
 vi.mock('@/composables/useRealtimeChannel', () => ({
   useRealtimeChannel: () => ({
     isConnected: ref(true),
+    connectionState: ref('open'),
     subscribe: vi.fn(() => () => undefined),
     onSystem: vi.fn(() => () => undefined),
   }),

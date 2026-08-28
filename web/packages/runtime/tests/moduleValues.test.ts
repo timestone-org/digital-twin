@@ -197,6 +197,7 @@ describe('取不到的槽', () => {
     expect(result.tally).toEqual({
       bound: 1,
       ok: 0,
+      sampled: 0,
       empty: 0,
       pending: 0,
       error: 1,
@@ -229,7 +230,33 @@ describe('取不到的槽', () => {
 
     expect(result.values).toEqual({ power: 42 })
     expect(result.tally.ok).toBe(1)
+    expect(result.tally.sampled).toBe(1)
     expect(result.valueTimeMs).toBe(1_700_000_000_000)
+  })
+
+  it('⚠ 带采样时刻的才计进 sampled：常量槽通道断了也不会过期', () => {
+    const result = computeModuleValues({
+      specs: [],
+      bindings: [
+        fakeBinding({ id: 'b1', fieldKey: 'title', sourceKind: 'static' }),
+      ],
+      read: readerOf({ title: { state: 'ok', value: '一号线' } }),
+    })
+
+    expect(result.tally.ok).toBe(1)
+    expect(result.tally.sampled).toBe(0)
+  })
+
+  it('取到空值的槽不计进 sampled：屏上没有它可显示的东西', () => {
+    const result = computeModuleValues({
+      specs: [],
+      bindings: [
+        fakeBinding({ id: 'b1', fieldKey: 'power', sourceKind: 'opcua' }),
+      ],
+      read: readerOf({ power: { state: 'ok', value: null, timestampMs: 17 } }),
+    })
+
+    expect(result.tally.sampled).toBe(0)
   })
 
   it('取到的空值算「绑了但没有值」，不算取不到', () => {

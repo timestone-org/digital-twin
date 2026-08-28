@@ -347,15 +347,18 @@ export interface ModuleManifest {
 }
 
 /**
- * 模块的运行状态。五档各自对应一种「现在看到的东西为什么长这样」：
- * `loading` 尚无首帧、`connected` 正常、`empty` 已绑但还没收到值、
- * `unbound` 必绑槽没配来源、`error` 取数或渲染失败。
- * ⚠ 没有「值过期」这一档：值有多旧由 `valueTimeMs` 照实说，模块自己决定
- * 要不要显示——一个一天变一次的点位不该因为时刻旧就被整格降档。
+ * 模块的运行状态。六档各自对应一种「现在看到的东西为什么长这样」：
+ * `loading` 尚无首帧、`connected` 正常、`stale` 通道断了屏上挂的是最后已知值、
+ * `empty` 已绑但还没收到值、`unbound` 必绑槽没配来源、`error` 取数或渲染失败。
+ * ⚠ `stale` 判的是**连接态**，不是时间戳，两件事别混：通道一断，屏上一切都是
+ * 最后已知值，与点位变化快慢无关；值有多旧仍由 `valueTimeMs` 照实说、由模块自己
+ * 决定要不要显示——一个一天变一次的点位不该因为时刻旧就被降档
+ * （DASHBOARD_DESIGN §4.3、runtime-resilience §9「返回陈旧数据必须标注为陈旧」）。
  */
 export const MODULE_STATUSES = [
   'loading',
   'connected',
+  'stale',
   'empty',
   'unbound',
   'error',
@@ -407,7 +410,11 @@ export interface ModuleMeta {
   valueTimeMs?: number
   /** `status: 'error'` 时的原因。取不到就说取不到，不许静默留白。 */
   errorMessage?: string
-  /** 实时通道连接态；设计态与独立渲染时缺席。 */
+  /**
+   * 实时通道连接态；设计态与独立渲染时缺席。
+   * ⚠ `status: 'stale'` 就是由它推的：缺席即「这里没有实时通道」，于是模块
+   * 永远不会被标成陈旧。
+   */
   connectionState?: ModuleConnectionState
   /**
    * 本节点是否真配了以它为 source 的联动规则（由运行时按规则表推导）。

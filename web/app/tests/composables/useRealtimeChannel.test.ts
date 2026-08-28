@@ -7,16 +7,17 @@
  * 2. 重连后必须把已有订阅**重订一遍**：连上了却收不到数据是最难查的一种。
  * 3. 最后一个订阅者走了才退订：还有人在看时退订，另一半页面会静默停更。
  * 4. 重连要退避：不退避的话 hub 一挂，全站客户端会一起打它。
+ * 5. 连接态要照实说：模块的「数据可能过期」全靠它，说错了屏上就在拿旧值冒充实时。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 import {
-  CLOSE_TOKEN_EXPIRED,
   closeRealtimeChannel,
   usePublicRealtimeChannel,
   useRealtimeChannel,
 } from '@/composables/useRealtimeChannel'
+import { CLOSE_TOKEN_EXPIRED } from '@/runtime/realtimeConnection'
 import {
   REALTIME_AUTH_EXPIRED_CLOSE_CODE,
   REALTIME_AUTH_SUBPROTOCOL as AUTH_SUBPROTOCOL,
@@ -373,5 +374,76 @@ describe('公开链接', () => {
     useRealtimeChannel()
 
     expect(latest().protocols).toEqual([AUTH_SUBPROTOCOL, 'tok-1'])
+  })
+})
+
+describe('连接态', () => {
+  it('还没有凭据时是 closed，不是 connecting', () => {
+    // 没票据压根不去连，说 connecting 等于报一条不存在的握手
+    localStorage.removeItem(STORAGE_KEYS.accessToken)
+    const channel = useRealtimeChannel()
+    expect(channel.connectionState.value).toBe('closed')
+  })
+
+  it('握手中是 connecting，连上是 open', () => {
+    const channel = useRealtimeChannel()
+    expect(channel.connectionState.value).toBe('connecting')
+    latest().emit('open')
+    expect(channel.connectionState.value).toBe('open')
+  })
+
+  it('⚠ 断了立刻是 reconnecting，不等退避到点', () => {
+    // 等到点才说的话，退避涨到半分钟时屏上会有半分钟在拿旧值冒充实时
+    const channel = useRealtimeChannel()
+    latest().emit('open')
+    latest().emit('close', { code: 1006 })
+    expect(channel.connectionState.value).toBe('reconnecting')
+  })
+
+  it('⚠ 重连期间不退回 connecting：那是「还没连上过」的说法', () => {
+    const channel = useRealtimeChannel()
+    latest().emit('open')
+    latest().emit('close', { code: 1006 })
+    vi.advanceTimersByTime(1000)
+    expect(channel.connectionState.value).toBe('reconnecting')
+  })
+
+  it('重连上了回到 open', () => {
+    const channel = useRealtimeChannel()
+    latest().emit('close', { code: 1006 })
+    vi.advanceTimersByTime(1000)
+    latest().emit('open')
+    expect(channel.connectionState.value).toBe('open')
+  })
+
+  it('⚠ 握手被拒（1008）是 error：不再重连，也不许停在 open', () => {
+    const channel = useRealtimeChannel()
+    latest().emit('open')
+    latest().emit('close', { code: 1008 })
+    expect(channel.connectionState.value).toBe('error')
+  })
+
+  it('主动关掉是 closed', () => {
+    const channel = useRealtimeChannel()
+    latest().emit('open')
+    closeRealtimeChannel()
+    expect(channel.connectionState.value).toBe('closed')
+  })
+
+  it('⚠ isConnected 是从连接态派生的，只有 open 算连上', () => {
+    // 两份各判各的话，「屏上标没标数据可能过期」与「通道到底通不通」会各说各的
+    const channel = useRealtimeChannel()
+    expect(channel.isConnected.value).toBe(false)
+    latest().emit('open')
+    expect(channel.isConnected.value).toBe(true)
+    latest().emit('close', { code: 1006 })
+    expect(channel.isConnected.value).toBe(false)
+  })
+
+  it('换一枚公开票据重连时先回到 closed，再重新握手', () => {
+    usePublicRealtimeChannel('tok-a')
+    latest().emit('open')
+    const channel = usePublicRealtimeChannel('tok-b')
+    expect(channel.connectionState.value).toBe('connecting')
   })
 })
