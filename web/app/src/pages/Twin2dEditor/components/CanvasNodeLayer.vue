@@ -36,6 +36,7 @@ import {
   withNodeRotation,
 } from '../scripts/portOps'
 import type { Twin2dPortDot } from '../scripts/portOps'
+import { twin2dAxisLocked, twin2dClaimPointer } from '../scripts/gestureFrame'
 import { snapAtScale } from '../scripts/snapping'
 import type { Twin2dGuideLine, Twin2dSnapOptions } from '../scripts/snapping'
 import type {
@@ -44,9 +45,6 @@ import type {
   Twin2dGestureSpec,
 } from '../scripts/useCanvasPointer'
 import { screenToDesignPx } from '../scripts/viewportOps'
-
-/** 鼠标左键。 */
-const LEFT_BUTTON = 0
 
 /** 选中框的线宽（屏幕像素）。 */
 const HAIRLINE_PX = 1
@@ -123,6 +121,12 @@ const emit = defineEmits<{
  */
 const draft = shallowRef<readonly Twin2dNode[] | null>(null)
 
+/**
+ * 这份草稿是照哪一份文档节点表算出来的；null = 眼下没有草稿。
+ * ⚠ 不做成响应式：只在收场那一下比一次引用，进模板会白引一次重绘。
+ */
+let draftBase: readonly Twin2dNode[] | null = null
+
 /** 这一帧吸出来的参考线；手势收场即清空。 */
 const guides = shallowRef<readonly Twin2dGuideLine[]>([])
 
@@ -134,6 +138,7 @@ const guides = shallowRef<readonly Twin2dGuideLine[]>([])
  */
 function setDraft(next: readonly Twin2dNode[] | null): void {
   if (draft.value === next) return
+  draftBase = next === null ? null : props.nodes
   draft.value = next
   emit('preview', next)
 }
@@ -207,30 +212,9 @@ function atStyle(at: Pt): CSSProperties {
   return { left: `${at.x}px`, top: `${at.y}px` }
 }
 
-/**
- * 接下这一按：主键才归本层，接了就不再往上冒。
- * ⚠ 中键归画布壳平移、右键留给上下文菜单，这两下一律放过去；一并吞掉的表现是
- * 「按在节点上就平移不了」，而按在空白处一切正常。
- * ⚠ 接下的那一下必须 `stopPropagation`，否则「点节点」会连带被当成点空白。
- * @param event 起手的 `pointerdown`
- */
-function claim(event: PointerEvent): boolean {
-  if (event.button !== LEFT_BUTTON) return false
-  event.stopPropagation()
-  return true
-}
-
 /** Alt = 这一帧不吸附；阈值按当前倍率从屏幕像素换成设计像素。 */
 function snapOf(frame: Twin2dGestureFrame): Twin2dSnapOptions {
   return snapAtScale(props.snap, props.scale, frame.alt)
-}
-
-/** Shift = 只走位移大的那根轴。 */
-function axisLocked(frame: Twin2dGestureFrame): { dx: number; dy: number } {
-  if (!frame.shift) return { dx: frame.dx, dy: frame.dy }
-  return Math.abs(frame.dx) >= Math.abs(frame.dy)
-    ? { dx: frame.dx, dy: 0 }
-    : { dx: 0, dy: frame.dy }
 }
 
 /**
@@ -241,9 +225,13 @@ function axisLocked(frame: Twin2dGestureFrame): { dx: number; dy: number } {
  */
 function endGesture(end: Twin2dGestureEnd): void {
   const next = draft.value
+  // ⚠ 文档在手势中途被换掉（拖着不放按 ⌘Z）就丢掉这一拖：草稿是照旧那份算的，
+  //   铺到新文档上会把那一步撤销静默撤回，撤销的若是删节点还会留下悬空连线。
+  //   中途换掉之后又拖了一下的，下一帧已经照新文档重算，这里自然放行
+  const stale = draftBase !== props.nodes
   setDraft(null)
   guides.value = []
-  if (next !== null && end !== 'cancelled') emit('change', next)
+  if (next !== null && end !== 'cancelled' && !stale) emit('change', next)
 }
 
 /**
@@ -262,7 +250,7 @@ function dragTo(
   const move = moveNodes(
     props.nodes,
     styleMap.value,
-    { ids, leadId, ...axisLocked(frame) },
+    { ids, leadId, ...twin2dAxisLocked(frame) },
     snapOf(frame),
   )
   // 同一个引用 = 一步都没挪，这一手势不该在撤销栈上留一格空步
@@ -323,7 +311,7 @@ function spinTo(
  * @param event 起手的 `pointerdown`
  */
 function startSpin(handle: SpinHandle, event: PointerEvent): void {
-  if (!claim(event)) return
+  if (!twin2dClaimPointer(event)) return
   const box = centerBoxOf(handle.view.node, handle.view.style.size)
   const center: Pt = { x: box.x, y: box.y }
   const base = handle.view.node.rotate
@@ -346,7 +334,7 @@ function startSpin(handle: SpinHandle, event: PointerEvent): void {
  * @param event 起手的 `pointerdown`
  */
 function onPortDown(dot: Twin2dPortDot, event: PointerEvent): void {
-  if (!claim(event)) return
+  if (!twin2dClaimPointer(event)) return
   emit('portGrab', dot.nodeId, dot.portId, event)
 }
 
@@ -358,7 +346,7 @@ function onPortDown(dot: Twin2dPortDot, event: PointerEvent): void {
  * @param event 起手的 `pointerdown`
  */
 function onNodeDown(view: NodeView, event: PointerEvent): void {
-  if (!claim(event)) return
+  if (!twin2dClaimPointer(event)) return
   const id = view.node.id
   if (event.ctrlKey || event.metaKey) {
     emit('pick', id, true)

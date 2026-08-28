@@ -7,6 +7,8 @@
  * 「我改过的」会让同一个符号在库里出现两次，而两处点下去得到的是同一个 styleId。
  * ⚠ 缩略图走 `Twin2dNodeBox` 缩放渲染，不画占位方块：调色板上看到的就该是拖下去
  * 会得到的东西，而占位方块把「这个样式长什么样」推给了用户去试。
+ * ⚠ 缩放盒的算法与样式预览共用 `twin2dPreviewFit`：两处各写一份的话，同一个符号在
+ * 调色板上与在预览里会缩到不一样大，而两处单看都对。
  * ⚠ 预览节点的缺省值一律经 `normalizeNodes` 取，不在这里抄一份：抄的那份与归一化
  * 一旦不一致，缩略图与真拖下去的节点就长得不一样，且这一步零报错。
  * ⚠ 本层不挂 sprite 宿主（`Twin2dIconSprite`）：那是画布壳的活，两处都挂会让同一份
@@ -23,6 +25,7 @@ import { computed, ref } from 'vue'
 import type { CSSProperties } from 'vue'
 
 import { TWIN_2D_STYLE_DRAG_MIME } from '../scripts/paletteDrag'
+import { twin2dPreviewFit } from '../scripts/stylePreview'
 import { twin2dMergedNodeStyles } from '../scripts/styleOps'
 
 /** 调色板上的一项。 */
@@ -60,6 +63,9 @@ const emit = defineEmits<{
 const THUMB_W = 78
 const THUMB_H = 46
 const CARD_MIN = 88
+
+/** 缩略图的框，交给共用的那支缩放算料。 */
+const THUMB: Twin2dNodeSize = { w: THUMB_W, h: THUMB_H }
 
 /** 缩略图最多放大几倍：接线点只有 6×6，按框铺满会糊成一大块。 */
 const MAX_ZOOM = 2
@@ -110,21 +116,6 @@ function badgeOf(id: string): string {
 }
 
 /**
- * 缩略图里那层缩放盒：按框等比缩，居中摆。
- * ⚠ `translate` 必须排在 `scale` 左边——CSS 的变换列表从右往左作用，排右边时那
- * 半格位移会跟着一起缩，缩得越狠偏得越多。
- * @param size 样式的缺省尺寸
- */
-function fitStyle(size: Twin2dNodeSize): CSSProperties {
-  const zoom = Math.min(THUMB_W / size.w, THUMB_H / size.h, MAX_ZOOM)
-  return {
-    width: `${size.w}px`,
-    height: `${size.h}px`,
-    transform: `translate(-50%, -50%) scale(${zoom})`,
-  }
-}
-
-/**
  * 一项。
  * @param style 这份样式
  * @param node 它的预览节点
@@ -136,7 +127,7 @@ function itemOf(style: Twin2dNodeStyle, node: Twin2dNode): PaletteItem {
     node,
     style,
     badge: badgeOf(style.id),
-    fit: fitStyle(style.size),
+    fit: twin2dPreviewFit(THUMB, style.size, MAX_ZOOM),
   }
 }
 

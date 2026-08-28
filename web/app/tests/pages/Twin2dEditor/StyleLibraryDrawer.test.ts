@@ -13,6 +13,9 @@
  * 按 `styleFocus` 判要不要走图元那一支，不切的话编辑面上的复制粘贴会去动画布上选中
  * 的实体，且这一步零报错。
  * ⚠ 连线样式不进编辑面：那张预览画的是一个节点，连线在框里没有东西可画。
+ * ⚠ 编辑面开在哪一份上是**受控**的（真源在页面上）：留在抽屉里的话，开编辑面这一步
+ * 顺手关掉抽屉，于是画布键盘手势唯一那道硬闸自己失效（`index.spec.ts` 里有一条正面
+ * 钉住「编辑面开着时 Delete 不删画布上的节点」）。
  */
 import { TWIN_2D_BUILTIN_NODE_STYLES, normalizeTwin2dConfig } from '@dt/twin2d'
 import type { Twin2dConfig, Twin2dNodeStyle } from '@dt/twin2d'
@@ -98,11 +101,26 @@ const CONFIG: Twin2dConfig = normalizeTwin2dConfig({
 /** 一份没有任何自建样式的配置：导出那一支该拦下来。 */
 const BARE: Twin2dConfig = normalizeTwin2dConfig({})
 
+/**
+ * 挂一副抽屉。
+ * ⚠ `wizardId` 是**受控** prop（真源在页面上，画布键盘手势按它让位），所以这里得替
+ * 页面把写回接上：不接的话「开编辑面」在用例里永远开不起来，而实现是对的。
+ * @param config 整份配置
+ */
 function mountDrawer(config: Twin2dConfig = CONFIG) {
-  return mount(StyleLibraryDrawer, {
-    props: { open: true, config },
+  const wrapper = mount(StyleLibraryDrawer, {
+    props: {
+      open: true,
+      config,
+      wizardId: '',
+      'onUpdate:wizardId': (id: string) =>
+        void wrapper.setProps({
+          wizardId: id,
+        }),
+    },
     global: { stubs: { Teleport: true } },
   })
+  return wrapper
 }
 
 type Wrapper = ReturnType<typeof mountDrawer>

@@ -9,6 +9,11 @@
  *   会让预览里看不到自己刚落下的那份覆盖，而界面上只表现为「改了没反应」（§13.4）。
  * ⚠ 本层不挂 sprite 宿主（`Twin2dIconSprite`）：那是画布壳的活，两处都挂会让同一份
  *   symbol 在文档里重号，而重号之后浏览器只认头一个。
+ * ⚠ **不喂 `idPrefix`**，让 `Twin2dNodeBox` 回落它自己那份 `useId()`：局部渐变的 DOM id
+ *   是 `t2g-<前缀>-<渐变 id>`，按样式 id 拼前缀的话，同一份样式的两张预览（右栏一张、
+ *   编辑面一张，开编辑面时必然同时在场）会把同一个 id 写两遍，`url(#…)` 只认头一个，
+ *   于是第二张的渐变悄悄取到第一张那份。sprite 的 `<use href="#…">` 指的是**全局**
+ *   symbol id、本就不带实例前缀，那一路不受影响。
  * ⚠ 图标的 `asset` 一档在这里解析不出地址（不注入 `resolveIcon`），那一枝整个不渲染，
  *   与调色板缩略图同口径。
  * ⚠ 五档交互态里只有 `hover` 有运行期驱动（`Twin2dNodeBox` 自检），另外四档舞台目前
@@ -140,7 +145,11 @@ function setStatus(value: string): void {
  */
 function setSizeMode(value: string): void {
   const found = SIZE_OPTIONS.find((item) => item.value === value)
-  if (found !== undefined) sizeMode.value = found.value
+  if (found === undefined) return
+  // ⚠ 进自定义档时按**当下**的样式缺省重新种一次：只在换样式 id 时种的话，
+  //   同一份样式改完缺省尺寸再切过来，种进去的还是改之前那两个数
+  if (found.value === 'custom') custom.value = { ...props.nodeStyle.size }
+  sizeMode.value = found.value
 }
 
 /**
@@ -177,7 +186,6 @@ function setCustom(axis: 'w' | 'h', value: number | undefined): void {
           :states="states"
           :slot-values="shot.slots"
           :read-slot="shot.readSlot"
-          :id-prefix="`preview-${nodeStyle.id}`"
         />
       </span>
       <span class="t2sp-size" data-test="style-preview-size">

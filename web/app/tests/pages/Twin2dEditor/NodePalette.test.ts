@@ -137,7 +137,9 @@ describe('缩略图是真画出来的', () => {
   it('大样式按框等比缩小', () => {
     const wrapper = mountPalette()
 
-    expect(zoomOf(wrapper, 'water-tank')).toBeCloseTo(46 / sizeOf('water-tank').h)
+    expect(zoomOf(wrapper, 'water-tank')).toBeCloseTo(
+      46 / sizeOf('water-tank').h,
+    )
   })
 
   it('小到极点的符号最多放大两倍，不铺满整格', () => {
