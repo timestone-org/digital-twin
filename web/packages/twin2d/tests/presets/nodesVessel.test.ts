@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest'
 import { evalExpr, exprSlotRefs } from '../../src/expr'
 import { TWIN_2D_STATUSES } from '../../src/kinds'
 import { normalizeNodeStyle } from '../../src/normalizeStyles'
+import { svgShapeAttrs } from '../../src/paintVec'
 import { TWIN_2D_PALETTE_RGB, mixTransparent } from '../../src/presets/palette'
 import { TWIN_2D_VESSEL_STYLES } from '../../src/presets/nodesVessel'
 import { evalCondition } from '../../src/variants'
@@ -138,10 +139,19 @@ function ellipseOf(
   return shape
 }
 
-function lineOf(prim: Twin2dVecPrim): Extract<Twin2dShape, { kind: 'line' }> {
-  const shape = prim.shape
-  if (shape.kind !== 'line') throw new Error(`${prim.id} 不是直线`)
-  return shape
+/**
+ * 一枚 vec 落到某个实例盒上真正画出来的 SVG 几何属性。
+ * ⚠ 断言几何一律走这里而不是直读 `shape`：坐标档决定同一组数字画在哪，读 `shape`
+ * 的用例在「几何恒定不随盒走」这个缺陷面前是全绿的（§7.5）。
+ */
+function geometryOf(
+  style: Twin2dNodeStyle,
+  id: string,
+  boxW: number,
+  boxH: number,
+): Record<string, string> {
+  const prim = vecOf(style, id)
+  return svgShapeAttrs(prim.shape, prim.coord, boxW, boxH)
 }
 
 function ctxWith(status: Twin2dVariantCtx['status']): Twin2dVariantCtx {
@@ -524,13 +534,15 @@ describe('分集水器（cylinder）', () => {
     ])
   })
 
-  it('五枚 vec 一律铺满节点盒、按设计像素直写、两轴各自拉伸且照旧可点', () => {
+  it('五枚 vec 一律铺满节点盒、几何走归一坐标、两轴各自拉伸且照旧可点', () => {
     const style = styleOf('manifold')
     const ids = ['frame', 'cap-left', 'cap-right', 'line-warm', 'line-cool']
     for (const id of ids) {
       const prim = vecOf(style, id)
       expect(prim.at).toEqual({ kind: 'fill', inset: [0, 0, 0, 0] })
-      expect(prim.coord).toBe('px')
+      // ⚠ 必须是 unit：px 档的坐标不随实例盒走，而 viewBox 取的正是实例盒尺寸，
+      //   于是节点放宽之后圆柱恒定停在 224 宽上（§7.5）
+      expect(prim.coord).toBe('unit')
       // ⚠ stretch 即 preserveAspectRatio="none"，参考项目的圆柱就是拉伸的
       expect(prim.stretch).toBe(true)
       // ⚠ 圆柱本体是可点的，只有压在它上面的文字层显式让开；摘成 'none' 会让整个
@@ -539,6 +551,72 @@ describe('分集水器（cylinder）', () => {
       expect(onlyStroke(prim).nonScaling).toBe(true)
       expect(onlyStroke(prim).width).toBe(1.2)
     }
+  })
+
+  it('默认盒下五枚 vec 的几何逐像素等于参考取值', () => {
+    const style = styleOf('manifold')
+    const at = (id: string): Record<string, string> =>
+      geometryOf(style, id, CYL_W, CYL_H)
+
+    expect(at('frame')).toEqual({
+      x: '10',
+      y: '0',
+      width: '204',
+      height: '126',
+      rx: '0',
+      ry: '0',
+    })
+    expect(at('cap-left')).toEqual({ cx: '10', cy: '63', rx: '10', ry: '63' })
+    expect(at('cap-right')).toEqual({ cx: '214', cy: '63', rx: '10', ry: '63' })
+    expect(at('line-warm')).toEqual({
+      x1: '14',
+      y1: '60',
+      x2: '210',
+      y2: '60',
+    })
+    expect(at('line-cool')).toEqual({
+      x1: '14',
+      y1: '69',
+      x2: '210',
+      y2: '69',
+    })
+  })
+
+  // ⚠ 几何按设计像素直写时这一条必红：`paintVec` 的 viewBox 取的正是实例盒尺寸，
+  //   viewBox 与元素同尺时 `preserveAspectRatio="none"` 一点缩放都不产生——节点放宽，
+  //   圆柱纹丝不动地留在 224 宽上，右边空出一大块，而一处都不报错
+  it('节点放宽一倍时五枚 vec 的几何跟着变宽', () => {
+    const style = styleOf('manifold')
+    const wide = (id: string): Record<string, string> =>
+      geometryOf(style, id, CYL_W * 2, CYL_H)
+
+    expect(wide('frame')).toEqual({
+      x: '20',
+      y: '0',
+      width: '408',
+      height: '126',
+      rx: '0',
+      ry: '0',
+    })
+    expect(wide('cap-left')).toEqual({ cx: '20', cy: '63', rx: '20', ry: '63' })
+    expect(wide('cap-right')).toEqual({
+      cx: '428',
+      cy: '63',
+      rx: '20',
+      ry: '63',
+    })
+    expect(wide('line-warm')).toEqual({
+      x1: '28',
+      y1: '60',
+      x2: '420',
+      y2: '60',
+    })
+    expect(wide('line-cool')).toEqual({
+      x1: '28',
+      y1: '69',
+      x2: '420',
+      y2: '69',
+    })
   })
 
   // ⚠ 五处「抄成同色 / 抄成对称就白做了」的第一处
@@ -554,47 +632,58 @@ describe('分集水器（cylinder）', () => {
 
   // ⚠ 第二处
   it('体身矩形**没有圆角**：rx 恒 0，圆全靠两端的端盖压出来', () => {
-    const rect = rectOf(vecOf(styleOf('manifold'), 'frame'))
+    const style = styleOf('manifold')
+    const rect = rectOf(vecOf(style, 'frame'))
+    const drawn = geometryOf(style, 'frame', CYL_W, CYL_H)
+
     expect(rect.rx).toBe(0)
-    expect(rect).toEqual({
-      kind: 'rect',
-      x: 10,
-      y: 0,
-      w: CYL_W - 20,
-      h: CYL_H,
-      rx: 0,
-    })
+    // 归一坐标下两轴各按自己的比例放大，两个方向都得是 0 才是真的直角
+    expect([drawn['rx'], drawn['ry']]).toEqual(['0', '0'])
   })
 
   // ⚠ 第三处
-  it('端盖横半径**固定 10**、竖半径才是半高，两者不相等', () => {
-    const left = ellipseOf(vecOf(styleOf('manifold'), 'cap-left'))
-    const right = ellipseOf(vecOf(styleOf('manifold'), 'cap-right'))
-    expect(left.rx).toBe(10)
-    expect(right.rx).toBe(10)
-    expect(left.ry).toBe(CYL_CY)
-    expect(right.ry).toBe(CYL_CY)
-    // 抄成「rx 也随宽度走」时两者会相等或成比例，这一条把它钉死
-    expect(left.rx).not.toBe(left.ry)
-    expect(left.cx).toBe(10)
-    expect(right.cx).toBe(CYL_W - 10)
-    expect(left.cy).toBe(CYL_CY)
-    expect(right.cy).toBe(CYL_CY)
+  it('端盖横半径**不随高走**：拉高一倍时竖半径跟着变、横半径纹丝不动', () => {
+    const style = styleOf('manifold')
+    const normal = geometryOf(style, 'cap-left', CYL_W, CYL_H)
+    const tall = geometryOf(style, 'cap-left', CYL_W, CYL_H * 2)
+
+    expect([normal['rx'], normal['ry']]).toEqual(['10', String(CYL_CY)])
+    // 抄成「横半径也归高」时两者会一起变，而画出来只是「端盖胖了一点」
+    expect([tall['rx'], tall['ry']]).toEqual(['10', String(CYL_H)])
+    expect(normal['rx']).not.toBe(normal['ry'])
+  })
+
+  it('两枚端盖各压一头：圆心在 10 与 W−10、竖向都在中线上', () => {
+    const style = styleOf('manifold')
+    const left = geometryOf(style, 'cap-left', CYL_W, CYL_H)
+    const right = geometryOf(style, 'cap-right', CYL_W, CYL_H)
+
+    expect([left['cx'], left['cy']]).toEqual(['10', String(CYL_CY)])
+    expect([right['cx'], right['cy']]).toEqual([
+      String(CYL_W - 10),
+      String(CYL_CY),
+    ])
+    expect(ellipseOf(vecOf(style, 'cap-left')).cx).not.toBe(
+      ellipseOf(vecOf(style, 'cap-right')).cx,
+    )
   })
 
   // ⚠ 第四处
   it('双集管线**不对称**：暖管在 cy-3、冷管在 cy+6，不是 ±3', () => {
-    const warm = lineOf(vecOf(styleOf('manifold'), 'line-warm'))
-    const cool = lineOf(vecOf(styleOf('manifold'), 'line-cool'))
-    expect(warm.y1).toBe(CYL_CY - 3)
-    expect(cool.y1).toBe(CYL_CY + 6)
-    expect(warm.y1).toBe(warm.y2)
-    expect(cool.y1).toBe(cool.y2)
-    expect(CYL_CY - warm.y1).not.toBe(cool.y1 - CYL_CY)
-    expect(cool.y1 - CYL_CY).not.toBe(3)
+    const style = styleOf('manifold')
+    const warm = geometryOf(style, 'line-warm', CYL_W, CYL_H)
+    const cool = geometryOf(style, 'line-cool', CYL_W, CYL_H)
+    const warmY = Number(warm['y1'])
+    const coolY = Number(cool['y1'])
+
+    expect(warmY).toBe(CYL_CY - 3)
+    expect(coolY).toBe(CYL_CY + 6)
+    expect(warm['y1']).toBe(warm['y2'])
+    expect(cool['y1']).toBe(cool['y2'])
+    expect(CYL_CY - warmY).not.toBe(coolY - CYL_CY)
+    expect(coolY - CYL_CY).not.toBe(3)
     for (const line of [warm, cool]) {
-      expect(line.x1).toBe(14)
-      expect(line.x2).toBe(CYL_W - 14)
+      expect([line['x1'], line['x2']]).toEqual(['14', String(CYL_W - 14)])
     }
   })
 
