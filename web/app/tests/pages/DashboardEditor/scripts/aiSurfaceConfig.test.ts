@@ -106,6 +106,9 @@ function setup(): { editor: DashboardEditor; surface: AiSurface } {
           notify: vi.fn(),
         }),
         stageEl: () => null,
+        readSample: () => undefined,
+        save: () => Promise.resolve({ isSaved: true, message: null }),
+        savedVersion: () => 1,
         getManifest: () => MANIFEST,
       })
       return () => h('div')
@@ -375,20 +378,23 @@ describe('解绑', () => {
 })
 
 describe('选中项', () => {
-  it('快照把用户选中的那一个单拎出来', async () => {
+  it('快照把用户选中的那些单拎出来', async () => {
     const { editor, surface } = setup()
     editor.select('a')
     editor.flush()
     const shot = await run(surface, 'dashboard.read_canvas', {})
 
-    // 埋在几十个节点中间的一格 id，模型读不出「用户说的『这个』指的是它」
-    expect(shot.selected).toMatchObject({ id: 'a', module_type: 'metric-demo' })
+    // 埋在几十个节点中间的几格 id，模型读不出「用户说的『这个』指的是它」
+    expect(shot.selected).toMatchObject([
+      { id: 'a', module_type: 'metric-demo' },
+    ])
   })
 
-  it('没选中时如实给 null', async () => {
+  it('没选中时给空数组，不是一格 null', async () => {
     const { surface } = setup()
     const shot = await run(surface, 'dashboard.read_canvas', {})
 
-    expect(shot.selected).toBeNull()
+    expect(shot.selected).toEqual([])
+    expect(shot.selected_ids).toEqual([])
   })
 })

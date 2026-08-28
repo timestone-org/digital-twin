@@ -134,6 +134,7 @@ describe('能力探测', () => {
           skills: [],
           models: [],
           default_model_id: '',
+          default_effort: '',
         }),
     })
     const ctx = setup()

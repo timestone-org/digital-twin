@@ -7,7 +7,10 @@ import type { Ref } from 'vue'
 
 import { fetchPointHistory } from '@/api/pointHistories'
 import { installDashboardDataSources } from '@/bootstrap/dashboard'
-import { useDashboardValues } from '@/composables/useDashboardValues'
+import {
+  useDashboardValues,
+  type DashboardValues,
+} from '@/composables/useDashboardValues'
 import { useRealtimeChannel } from '@/composables/useRealtimeChannel'
 import { dashboardTopic } from '@/runtime/pointFrames'
 import { createPointSubscribe } from '@/runtime/pointStream'
@@ -19,7 +22,7 @@ import { createPointSubscribe } from '@/runtime/pointStream'
 export function useEditorDataSources(
   dashboard: Ref<DashboardPayload | null>,
   nodes: () => readonly DashboardNodeView[],
-): void {
+): DashboardValues {
   installDashboardDataSources({
     subscribe: createPointSubscribe(useRealtimeChannel(), () => {
       const current = dashboard.value
@@ -27,5 +30,5 @@ export function useEditorDataSources(
     }),
     fetchHistory: fetchPointHistory,
   })
-  useDashboardValues(nodes, () => dashboard.value?.id ?? '')
+  return useDashboardValues(nodes, () => dashboard.value?.id ?? '')
 }

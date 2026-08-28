@@ -98,6 +98,9 @@ function setup(): Harness {
           notify: vi.fn(),
         }),
         stageEl: () => null,
+        readSample: () => undefined,
+        save: () => Promise.resolve({ isSaved: true, message: null }),
+        savedVersion: () => 1,
         getManifest: () => MANIFEST,
       })
       return () => h('div')
@@ -111,7 +114,35 @@ describe('读画布', () => {
   it('给出节点数、选中项与每个节点的摘要', async () => {
     const { surface } = setup()
     const shot = await surface.run(call('dashboard.read_canvas', {}))
-    expect(shot).toMatchObject({ node_count: 2, selected_id: null })
+    expect(shot).toMatchObject({
+      node_count: 2,
+      selected_id: null,
+      selected_ids: [],
+      selected: [],
+    })
+  })
+
+  it('框选了几个就给几个，不是只给最后点的那一个', async () => {
+    const { editor, surface } = setup()
+    editor.setSelection(['a', 'b'])
+    editor.flush()
+    const shot = (await surface.run(
+      call('dashboard.read_canvas', {}),
+    )) as Record<string, unknown>
+    expect(shot.selected_ids).toEqual(['a', 'b'])
+    expect(
+      (shot.selected as Record<string, unknown>[]).map((one) => one.id),
+    ).toEqual(['a', 'b'])
+  })
+
+  it('单选那一格留着——老口径不许主动删', async () => {
+    const { editor, surface } = setup()
+    editor.setSelection(['a', 'b'])
+    editor.flush()
+    const shot = (await surface.run(
+      call('dashboard.read_canvas', {}),
+    )) as Record<string, unknown>
+    expect(shot.selected_id).toBe('b')
   })
 
   it('摘要里带着模块类型与人读名字', async () => {
@@ -126,32 +157,6 @@ describe('读画布', () => {
       module_type: 'demo',
       label: '演示模块',
     })
-  })
-})
-
-describe('读绑定', () => {
-  it('给出这个模块声明过的槽位', async () => {
-    const { surface } = setup()
-    const shot = (await surface.run(
-      call('dashboard.read_bindings', { node_id: 'a' }),
-    )) as Record<string, unknown>
-    expect(shot.slots).toEqual([
-      {
-        key: 'itemValues',
-        label: '读数',
-        data_type: 'number',
-        is_array: true,
-        is_required: false,
-      },
-    ])
-  })
-
-  it('画布上没有的节点一律抛', async () => {
-    const { surface } = setup()
-    // 把「这个画布节点不在这一屏上」如实告诉模型，它下一轮会重读画布
-    await expect(
-      surface.run(call('dashboard.read_bindings', { node_id: 'zzz' })),
-    ).rejects.toThrow(/zzz/)
   })
 })
 

@@ -26,6 +26,7 @@ import {
 import type { CanvasZoom } from '@/features/dashboard/canvasZoom'
 import { createEditorActions } from '@/pages/DashboardEditor/scripts/editorActions'
 import { createArrangeActions } from '@/pages/DashboardEditor/scripts/editorArrange'
+import { activeSurface } from '@/features/ai/surfaces'
 import {
   useEditorExtras,
   type EditorExtras,
@@ -68,6 +69,7 @@ interface Harness {
   editor: DashboardEditor
   extras: EditorExtras
   consumePicker: ReturnType<typeof vi.fn>
+  save: ReturnType<typeof vi.fn>
   wrapper: ReturnType<typeof mount>
 }
 
@@ -78,6 +80,7 @@ function setup(
   let editor!: DashboardEditor
   let extras!: EditorExtras
   const consumePicker = vi.fn(pickerConsumes)
+  const save = vi.fn(() => Promise.resolve({ isSaved: true, message: null }))
   const host = defineComponent({
     setup() {
       editor = useDashboardEditor(() => MANIFEST)
@@ -113,19 +116,20 @@ function setup(
         fitScale: () => 1,
         removeSelected: vi.fn(),
         consumePicker,
-        save: vi.fn(() => Promise.resolve()),
+        save,
         confirm: { ask: vi.fn(() => Promise.resolve(false)) },
         stageEl: () => null,
         centerOn: vi.fn(),
         onExportFailed: vi.fn(),
         getManifest: () => MANIFEST,
         dashboardId: () => 'd1',
+        readSample: () => undefined,
       })
       return () => h('div')
     },
   })
   const wrapper = mount(host)
-  return { editor, extras, consumePicker, wrapper }
+  return { editor, extras, consumePicker, save, wrapper }
 }
 
 function pressEscape(): void {
@@ -237,6 +241,28 @@ describe('导出 JSON', () => {
     expect(vi.mocked(downloadJson).mock.calls[0]?.[1]).toBe('演示屏')
     const saved = vi.mocked(downloadJson).mock.calls[0]?.[0]
     expect(parseExportPackage(saved)).toEqual(EXPORT_PAYLOAD)
+    ctx.wrapper.unmount()
+  })
+})
+
+describe('助手的保存工具', () => {
+  it('接的是页面那条保存路径，不是另写的一套', async () => {
+    const ctx = setup(() => true, DASHBOARD)
+
+    await activeSurface()?.run({
+      call_id: 'c1',
+      name: 'dashboard.save',
+      arguments: {},
+    })
+
+    // 另起一条的话，助手保存完的那张屏不清草稿也不换缩略图，两处都看不出
+    expect(ctx.save).toHaveBeenCalledTimes(1)
+    ctx.wrapper.unmount()
+  })
+
+  it('这一页确实把保存工具亮出来了——没亮的话模型压根不会去存', () => {
+    const ctx = setup(() => true, DASHBOARD)
+    expect(activeSurface()?.tools).toContain('dashboard.save')
     ctx.wrapper.unmount()
   })
 })

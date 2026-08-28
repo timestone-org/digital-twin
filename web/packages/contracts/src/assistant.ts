@@ -12,6 +12,7 @@ export const ASSISTANT_SURFACE_KINDS = [
   'dataset-table',
   'collect-source',
   'dashboard-view',
+  'twin2d-editor',
 ] as const
 
 export type AssistantSurfaceKind = (typeof ASSISTANT_SURFACE_KINDS)[number]
@@ -59,6 +60,12 @@ export interface AssistantCapability {
   models: AssistantModelProfile[]
   /** 没选过时用哪一路。 */
   default_model_id: string
+  /**
+   * 没选过时用哪一档推理。
+   * ⚠ 前端**不许再判一次**这一档配不配得上 `default_model_id` 那一路：
+   * 两份口径迟早分叉，而分叉的表现是界面上选着一档、发出去的是另一档。
+   */
+  default_effort: string
 }
 
 /** 一路模型账号的登录态。⚠ 令牌本身**永远不在里面**。 */

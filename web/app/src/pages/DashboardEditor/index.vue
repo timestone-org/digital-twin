@@ -53,7 +53,7 @@ const file = useDashboardDoc()
 const editor = useDashboardEditor(getManifest)
 const pickingFieldKey = ref<string | null>(null)
 
-useEditorDataSources(file.dashboard, () => editor.nodes.value)
+const values = useEditorDataSources(file.dashboard, () => editor.nodes.value)
 
 const dashboardId = computed(() => String(route.params.dashboardId ?? ''))
 const { design, zoom, canvasRef, fitScale, centerOn } = useEditorCanvasState(
@@ -132,6 +132,7 @@ const extras = useEditorExtras({
   onExportFailed: (message) => toast.error(message),
   getManifest,
   dashboardId: () => dashboardId.value,
+  readSample: values.read,
 })
 
 const editing = useEditorVisibility(

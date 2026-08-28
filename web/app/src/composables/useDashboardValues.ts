@@ -11,11 +11,21 @@ import type { Ref } from 'vue'
 
 import { usePointSamples } from '@/composables/usePointSamples'
 import { boundPointKeys } from '@/features/dashboard/editorDoc'
-import { createBindingReader } from '@/runtime/bindingReader'
+import {
+  createBindingReader,
+  type ReadPointSample,
+} from '@/runtime/bindingReader'
 
 export interface DashboardValues {
   /** 收到过读数的点位数，供状态条显示。 */
   sampleCount: Ref<number>
+  /**
+   * 取一个点位当前的快照；没收到过给 undefined。
+   * ⚠ 与画布渲染读的是**同一份**缓存：助手另发一次请求的话，会出现
+   * 「助手说有值、画面上是占位符」。
+   * ⚠ 每次调用都现取：取好再传下去的话，值再变也不会重算。
+   */
+  read: ReadPointSample
 }
 
 /**
@@ -34,5 +44,5 @@ export function useDashboardValues(
     readBinding: () => createBindingReader(samples.read),
   })
 
-  return { sampleCount: samples.sampleCount }
+  return { sampleCount: samples.sampleCount, read: samples.read }
 }

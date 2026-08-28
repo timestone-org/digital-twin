@@ -19,11 +19,16 @@ import { nodeLabelOf } from '@/features/dashboard/nodeLabel'
 import { withSource } from '@/features/ai/bindingSource'
 import { captureCanvas } from '@/features/ai/captureWithGl'
 import type { AiSurface, SurfaceSnapshot } from '@/features/ai/surfaces'
+import { BINDING_TOOLS, runBindingTool } from './aiSurfaceBindings'
 import { COMPOSE_TOOLS, runCompose } from './aiSurfaceCompose'
 import { CONFIG_TOOLS, runConfig } from './aiSurfaceConfig'
-import type { ComposeDeps, EditorSurfaceDeps } from './aiSurfaceTypes'
+import type {
+  ComposeDeps,
+  EditorSurfaceDeps,
+  EditorToolDeps,
+} from './aiSurfaceTypes'
 
-export type { ComposeDeps, EditorSurfaceDeps }
+export type { ComposeDeps, EditorSurfaceDeps, EditorToolDeps }
 
 /** 快照里最多列几个画布节点。再多就只给计数——列到第 200 个也没人读得完。 */
 const MAX_LISTED = 120
@@ -34,17 +39,17 @@ const CARD_STYLE = '__cardStyle'
 /** 这一页实现了哪些客户端工具。⚠ 与技能清单里声明的名字逐字相同。 */
 export const EDITOR_TOOLS = [
   'dashboard.read_canvas',
-  'dashboard.read_bindings',
   'dashboard.write_binding',
   'dashboard.remove_binding',
   'dashboard.set_config',
   'dashboard.capture',
+  ...BINDING_TOOLS,
   ...COMPOSE_TOOLS,
   ...CONFIG_TOOLS,
 ] as const
 
 /** 造出大屏编辑器这个工作面。 */
-export function createEditorSurface(deps: ComposeDeps): AiSurface {
+export function createEditorSurface(deps: EditorToolDeps): AiSurface {
   return {
     kind: 'dashboard-editor',
     label: '大屏编辑器',
@@ -56,13 +61,17 @@ export function createEditorSurface(deps: ComposeDeps): AiSurface {
 
 function snapshotOf(deps: EditorSurfaceDeps): SurfaceSnapshot {
   const nodes = deps.editor.nodes.value
-  const chosen = deps.editor.selected.value
   return {
     node_count: nodes.length,
+    // ⚠ 单选那一格**留着**：会话是跨版本的，删掉它会让老前端发来的快照
+    //   在后端连选中项都读不出来（规格书 §2.5）
     selected_id: deps.editor.selectedId.value,
-    // ⚠ 选中项**单拎出来给一份**：埋在几十个画布节点中间的一格 id，模型
-    // 十次里有三次读不出「用户说的『这个』指的是它」，而那三次它会去改另一个
-    selected: chosen === null ? null : briefOf(deps, chosen),
+    selected_ids: [...deps.editor.selectedIds.value],
+    // ⚠ 选中集**单拎出来给一份**：埋在几十个画布节点中间的几格 id，模型
+    // 十次里有三次读不出「用户说的『这几个』指的是它们」，而那三次它会去改别的
+    selected: deps.editor.selectedNodes.value.map((node) =>
+      briefOf(deps, node),
+    ),
     nodes: nodes.slice(0, MAX_LISTED).map((node) => briefOf(deps, node)),
     is_truncated: nodes.length > MAX_LISTED,
   }
@@ -91,7 +100,10 @@ function briefOf(
  * 就把异常扔出去，于是只挂了 `.catch()` 的调用方一个都收不到——而那正是
  * 「工具失败要如实回给模型」这条最容易断的地方。
  */
-function settle(deps: ComposeDeps, call: AssistantToolCall): Promise<unknown> {
+function settle(
+  deps: EditorToolDeps,
+  call: AssistantToolCall,
+): Promise<unknown> {
   try {
     return Promise.resolve(dispatch(deps, call))
   } catch (error) {
@@ -101,41 +113,17 @@ function settle(deps: ComposeDeps, call: AssistantToolCall): Promise<unknown> {
   }
 }
 
-function dispatch(deps: ComposeDeps, call: AssistantToolCall): unknown {
+function dispatch(deps: EditorToolDeps, call: AssistantToolCall): unknown {
   if (call.name === 'dashboard.read_canvas') return snapshotOf(deps)
-  if (call.name === 'dashboard.read_bindings') return readBindings(deps, call)
   if (call.name === 'dashboard.write_binding') return writeBinding(deps, call)
   if (call.name === 'dashboard.remove_binding') return dropBinding(deps, call)
   if (call.name === 'dashboard.set_config') return setConfig(deps, call)
   if (call.name === 'dashboard.capture') return captureCanvas(deps.stageEl())
+  const bound = runBindingTool(deps, call)
+  if (bound !== null) return bound
   const composed = runCompose(deps, call) ?? runConfig(deps, call)
   if (composed !== null) return composed
   throw new Error(`当前页面没有实现 ${call.name}`)
-}
-
-function readBindings(
-  deps: EditorSurfaceDeps,
-  call: AssistantToolCall,
-): SurfaceSnapshot {
-  const node = nodeOf(deps, call)
-  const manifest = deps.getManifest(node.moduleType)
-  return {
-    node_id: node.id,
-    module_type: node.moduleType,
-    slots: (manifest?.bindings ?? []).map((slot) => ({
-      key: slot.key,
-      label: slot.label,
-      data_type: slot.dataType,
-      is_array: slot.isArray === true,
-      is_required: slot.isRequired === true,
-    })),
-    bound: node.bindings.map((one) => ({
-      field_key: one.fieldKey,
-      source_kind: one.sourceKind,
-      node_key: one.nodeKey,
-      static_value: one.staticValueJson,
-    })),
-  }
 }
 
 function writeBinding(
