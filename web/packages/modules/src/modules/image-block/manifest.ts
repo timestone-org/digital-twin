@@ -6,6 +6,8 @@ import { defineModule } from '../../registry'
 
 export default defineModule({
   type: 'image-block',
+  description:
+    '装饰图片块：从素材库挑一张图，或手填图片地址，或填一段 CSS background 值（渐变 / url() / var()），再配填充方式、裁剪定位、圆角、旋转、翻转与六项滤镜。放 logo、底图、示意图、装饰花纹用它；要按读数换图请用状态类模块——它没有任何绑定槽、不取数。填素材库引用最稳：落库的是素材引用，换部署不会失效。⚠ 「平铺」只对 CSS 值那条路生效——填图片地址时走的是 `<img>` + object-fit，没有平铺这回事。⚠ 「不透明度 (%)」量纲是 0–100，与 text-block 同名字段的 0–1 不是一回事。',
   displayName: '图片块',
   category: '装饰',
   icon: 'image',

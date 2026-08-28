@@ -52,6 +52,9 @@ EXPECTED_TYPES = frozenset(
     }
 )
 
+# 一段合格描述的字数下限，与前端 tests/description.contract.spec.ts 同值
+MIN_DESCRIPTION_LENGTH = 60
+
 
 def frontend_unions(file_name: str) -> dict[str, frozenset[str]]:
     """把 `@dt/contracts` 里的闭合联合读成集合。
@@ -101,6 +104,21 @@ def walk_bindings(specs: list[Any]) -> list[dict[str, Any]]:
 def test_the_committed_catalog_holds_the_first_phase_modules() -> None:
     types = {module["type"] for module in catalog_json()["modules"]}
     assert types == EXPECTED_TYPES
+
+
+def test_every_committed_module_carries_a_description() -> None:
+    """产物里每个模块都得带那段给模型读的说明。
+
+    ⚠ 前端那道闸只管清单，本条管的是**落到服务端这份产物**里的结果：
+    忘了重跑生成、或序列化那一步漏了这一键时，Agent 读到的名片上就没有它，
+    而模块本身照常渲染、没有任何一处报错。
+    """
+    thin = [
+        module["type"]
+        for module in catalog_json()["modules"]
+        if len(module.get("description") or "") < MIN_DESCRIPTION_LENGTH
+    ]
+    assert thin == []
 
 
 def test_the_config_field_types_match_the_frontend_union() -> None:

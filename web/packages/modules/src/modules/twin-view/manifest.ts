@@ -15,6 +15,8 @@ import { defineModule } from '../../registry'
 
 export default defineModule({
   type: 'twin-view',
+  description:
+    '数字孪生查看器：一个 3D 场景，模型上摆部件、锚点、信息牌、箭头与能量流，各自接上点位后随读数染色、变数、流动，运行态还可开场景工具条与只读结构树。要在三维模型上做可视化时用它；平面的流程图 / 系统图 / 接线图请用 twin-2d-view。⚠ 场景本身（模型、部件、锚点、信息牌、能量流）不在属性面板里配——`twin` 那一段由子编辑器（路由 `twin-editor`）整块写入，属性面板只出一个入口按钮，这里能配的只有标题、标题位置与字号，以及场景工具条与结构树两个运行态开关。六个数组绑定槽，行全部钉在场景实体上（行号 = 归一化后的文档序，行数跟着场景走，空行只表示那个实体没接数据源，不会让后面的行移位）：`partValues` 部件状态染色、`anchorValues` 锚点读数、`panelValues` 信息牌字段（按信息牌摊平后的序）、`arrowValues` 箭头读数、`partFieldValues` 部件详情字段，这五个的唯一子槽 `value` 都收数值；`flowValues` 是能量流，两个子槽——`intensity` 收数值（驱动粒子）、`active` 收布尔（流不流）。⚠ `partValues` 的行号是「配了状态染色的部件」之间的序号，不是场景里全部部件的下标：给中间某个部件关掉染色，会让它之后每一行改喂前一个部件。',
   displayName: '数字孪生',
   category: '孪生',
   icon: 'building',

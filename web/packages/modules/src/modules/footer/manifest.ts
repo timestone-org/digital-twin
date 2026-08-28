@@ -11,6 +11,8 @@ import {
 
 export default defineModule({
   type: 'footer',
+  description:
+    "钉在大屏底部的整宽容器：下沿钉死、只能拖上沿改高，`region: 'footer'` 意味着每张大屏最多一个。版权、联系方式、状态灯都是独立子节点，由运行时注入默认插槽；与页头对称，壳里没有标题条，要一行字就往里放一个 text-block。自己不取数，没有绑定槽；外观只有强调色、背景、背景底图、顶部分隔线、顶边扫光与点阵底纹六项。⚠ 「顶部分隔线 (px)」与「顶边扫光浓度」填 0 就是不画，没有另外的显示开关。",
   displayName: '页脚',
   category: '布局',
   icon: 'panel-bottom',

@@ -78,6 +78,8 @@ const SCAN_FIELDS: ConfigField[] = [
 
 export default defineModule({
   type: 'header',
+  description:
+    "钉在大屏顶部的整宽容器，自己只画科技风外壳：背景底图层、七档花纹风格、CRT 扫描线、横向扫光带、底部辉光分隔线与中央两侧装饰。`region: 'header'` 意味着每张大屏最多一个页头节点，上沿钉死、只能拖下沿改高，横向位置与宽度由编辑器夹取。⚠ 壳里没有标题条、没有时钟：大屏标题、时间、logo 一律是拖进页头里的独立子节点（多半是 text-block），由运行时注入默认插槽——问「大屏标题在哪配」时答案是那个子节点，不是这里。自己不取数，没有绑定槽。⚠ 「CRT 扫描线」「横向扫光」这几项在「素净」风格下调了没有任何变化：那一档把花纹层整个关掉了。",
   displayName: '页头',
   category: '布局',
   icon: 'layout-grid',

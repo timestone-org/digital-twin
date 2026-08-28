@@ -103,6 +103,8 @@ function moduleType(manifest: ModuleManifest): CatalogJson {
     display_name: manifest.displayName,
     category: manifest.category,
   }
+  // 模型据它选模块、配字段；缺席只有第三方清单才允许（ModuleManifest.description）
+  put(out, 'description', manifest.description)
   put(out, 'icon', manifest.icon)
   put(out, 'keywords', manifest.keywords)
   out.default_size = size(manifest.defaultSize)
