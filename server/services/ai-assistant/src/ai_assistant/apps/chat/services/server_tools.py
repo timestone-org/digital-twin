@@ -11,7 +11,6 @@
 某一个用户。做成进程级单例的话，两个用户的请求会互相借用对方的身份。
 """
 
-import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
@@ -24,6 +23,10 @@ from ai_assistant.apps.chat.services.point_recall import (
     PointCandidate,
     ScoredPoint,
     rank,
+)
+from ai_assistant.apps.chat.services.point_resolve import (
+    resolve_points,
+    split_node_key,
 )
 from ai_assistant.apps.chat.skills import find_skill
 from ai_assistant.upstream import PlatformClient
@@ -76,6 +79,7 @@ class ServerTools:
             "points.list_sources": self._list_sources,
             "points.search": self._search_points,
             "points.detail": self._point_detail,
+            "points.resolve": self._resolve_points,
             "dashboards.list": self._list_dashboards,
             "dashboard.validate": self._validate,
             "formula.catalog": self._formula_catalog,
@@ -256,6 +260,15 @@ class ServerTools:
             "assets": [_asset_of(row) for row in shown],
             "note": _list_note(len(shown), len(rows) > limit),
         }
+
+    async def _resolve_points(self, arguments: dict[str, Any]) -> Any:
+        """把一批 node_key 换成人话，认不出的进 unknown。
+
+        Args: arguments。
+        """
+        return await resolve_points(
+            self._upstream(), self.headers, arguments.get("node_keys")
+        )
 
     async def _point_detail(self, arguments: dict[str, Any]) -> Any:
         """按 node_key 取一个点位的完整配置。
@@ -457,27 +470,19 @@ def _list_note(shown: int, is_clipped: bool, total: int | None = None) -> str:
 
 
 def _split_node_key(node_key: str) -> tuple[str, str]:
-    """拆 `{source_id}:{code}`；拆不动就抛。
+    """拆 `{数据源id}:{点位编码}`；拆不动就抛。
 
-    ⚠ 前半段必须是 UUID：直接拿去打上游的话，回来的是一个含糊的 422，
-    而真正的问题只是 node_key 写错了。
+    ⚠ 抛而不是含糊地放行：拆不动的串打到上游回来的是 422，而真正的问题
+    只是 node_key 写错了。
 
     Args: node_key。
     """
-    source_id, _, code = node_key.partition(":")
-    if not code or not _is_uuid(source_id):
+    parts = split_node_key(node_key)
+    if parts is None:
         raise UnknownServerTool(
             f"node_key 形如 {{数据源id}}:{{点位编码}}，读不懂：{node_key}"
         )
-    return source_id, code
-
-
-def _is_uuid(given: str) -> bool:
-    try:
-        uuid.UUID(given)
-    except ValueError:
-        return False
-    return True
+    return parts
 
 
 def _as_body(row: object) -> dict[str, object]:

@@ -74,3 +74,11 @@ async def test_capabilities_lists_no_model_route_when_none_is_configured(
     body = _data(await app_client.get(CAPABILITIES_URL))
     assert body["models"] == []
     assert body["is_model_enabled"] is False
+
+
+async def test_capabilities_hands_out_a_default_effort(
+    app_client: httpx.AsyncClient,
+) -> None:
+    """前端要把它填进 choice.effort；缺了这一格订阅那一路按端点缺省档跑。"""
+    body = _data(await app_client.get(CAPABILITIES_URL))
+    assert body["default_effort"] == "medium"

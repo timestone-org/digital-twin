@@ -38,6 +38,7 @@
             "enum": [
               "dashboard-editor",
               "twin-editor",
+              "twin2d-editor",
               "dataset-table",
               "collect-source",
               "dashboard-view"
@@ -508,6 +509,11 @@
       "CapabilityOut": {
         "description": "助手能力。\n\n⚠ 前端把「取不到这份」当作「助手不存在」而不是「暂时故障」：某些现场\n根本不部署本服务，那时边缘直接 502，入口就该干净地不出现。",
         "properties": {
+          "default_effort": {
+            "default": "medium",
+            "title": "Default Effort",
+            "type": "string"
+          },
           "default_model_id": {
             "default": "",
             "title": "Default Model Id",
@@ -884,6 +890,7 @@
             "enum": [
               "dashboard-editor",
               "twin-editor",
+              "twin2d-editor",
               "dataset-table",
               "collect-source",
               "dashboard-view"
@@ -1768,6 +1775,7 @@
                   "enum": [
                     "dashboard-editor",
                     "twin-editor",
+                    "twin2d-editor",
                     "dataset-table",
                     "collect-source",
                     "dashboard-view"

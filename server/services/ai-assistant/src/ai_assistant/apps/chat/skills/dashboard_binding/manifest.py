@@ -11,11 +11,13 @@ DASHBOARD_BINDING = SkillManifest(
         "把大屏上模块的数据槽位批量绑到采集点位上。"
         "用户描述要绑什么、或上传一张点表时用它。"
     ),
-    surface_kinds=("dashboard-editor", "twin-editor"),
+    # 2D 孪生也在列：它同样是「一堆槽位等着接点位」，绑定那套工具形状一致
+    surface_kinds=("dashboard-editor", "twin-editor", "twin2d-editor"),
     required_codes=("dashboard:edit", "collect:view"),
     server_tools=(
         "points.list_sources",
         "points.search",
+        "points.resolve",
         "dashboard.validate",
     ),
     client_tools=(
@@ -23,6 +25,9 @@ DASHBOARD_BINDING = SkillManifest(
         "dashboard.read_bindings",
         "dashboard.write_binding",
         "dashboard.remove_binding",
+        "dashboard.copy_bindings",
+        "dashboard.read_values",
+        "dashboard.save",
     ),
     directory=Path(__file__).resolve().parent,
 )

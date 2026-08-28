@@ -14,7 +14,7 @@ import pytest
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
-from ai_assistant.apps.chat.services.tool_specs import ToolSpec
+from ai_assistant.apps.chat.services.tool_shapes import ToolSpec
 from ai_assistant.apps.chat.services.turn import (
     TurnDeps,
     run_turn,

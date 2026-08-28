@@ -10,6 +10,7 @@
 SURFACE_KINDS = (
     "dashboard-editor",
     "twin-editor",
+    "twin2d-editor",
     "dataset-table",
     "collect-source",
     "dashboard-view",
