@@ -6,12 +6,16 @@
  * 只表现为「刚才改的几项一起没了」（§13.4）。
  * ⚠ 图元与变体逐键写回走**合并撤销**，合并键带上样式 id 与那一枚的身份：不带的话
  * 改完 A 接着改 B，两笔会并进同一帧。
+ * ⚠ 顶上那张预览是「刚新建、画布上还没有节点在用的样式」唯一看得见的地方，缺了它
+ * 用户只能先往画布上拖一个才知道自己配出了什么。连线样式那条轴上没有它——预览画的
+ * 是一个节点，那条轴上没有东西可画。
  */
 import { normalizeTwin2dConfig } from '@dt/twin2d'
 import type { Twin2dConfig, Twin2dPrim, Twin2dVariant } from '@dt/twin2d'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
+import Twin2dStylePreview from '@/pages/Twin2dEditor/components/Twin2dStylePreview.vue'
 import PrimFields from '@/pages/Twin2dEditor/components/inspector/PrimFields.vue'
 import StyleInspector from '@/pages/Twin2dEditor/components/inspector/StyleInspector.vue'
 import StylePane from '@/pages/Twin2dEditor/components/inspector/StylePane.vue'
@@ -216,5 +220,35 @@ describe('往上转交', () => {
     await wrapper.vm.$nextTick()
 
     expect(wrapper.emitted('pickPrim')?.[0]).toEqual(['b1'])
+  })
+})
+
+describe('顶上那张预览', () => {
+  it('节点样式那条轴上摆一张，画的就是当下这一份', () => {
+    const wrapper = mountPane()
+
+    expect(wrapper.getComponent(Twin2dStylePreview).props('nodeStyle')).toEqual(
+      CONFIG.styles[0],
+    )
+  })
+
+  it('连线样式那条轴上不摆——预览画的是一个节点', () => {
+    const wrapper = mountPane(EDGE_FOCUS)
+
+    expect(wrapper.findComponent(Twin2dStylePreview).exists()).toBe(false)
+  })
+
+  it('样式编辑面那边关掉它，两张一起摆会把配置挤出屏外', () => {
+    const wrapper = mount(StylePane, {
+      props: {
+        config: CONFIG,
+        focus: NODE_FOCUS,
+        selectedPrim: '',
+        showPreview: false,
+      },
+    })
+
+    expect(wrapper.findComponent(Twin2dStylePreview).exists()).toBe(false)
+    expect(wrapper.find('[data-test="style-inspector"]').exists()).toBe(true)
   })
 })

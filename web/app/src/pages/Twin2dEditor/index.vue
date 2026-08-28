@@ -452,9 +452,15 @@ onBeforeUnmount(page.dispose)
         <StyleLibraryDrawer
           v-model:open="libraryOpen"
           :config="config"
+          :selected-prim="selectedPrim"
           :file-name="`${page.dashboard.value?.name ?? '2d'}-样式包`"
           @change="commit"
           @focus="focusStyle"
+          @merge="commitMerged"
+          @end-merge="endMerge"
+          @pick-prim="selectedPrim = $event"
+          @copy-prim="commands.handlers.copy()"
+          @paste-prim="commands.handlers.paste()"
         />
 
         <PointPickerDialog

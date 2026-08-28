@@ -16,6 +16,10 @@
  * ⚠ 抽屉是 `role="dialog"`（DtModal），于是开着的时候整套键盘手势按
  *   `isTwin2dFormFocused` 的口径自动让位——不让位的话，在库里用方向键翻行会同时把
  *   画布上选中的节点 nudge 进撤销栈。
+ * ⚠ 新建 / 复制 / 「预览并编辑」三条入口都顺手把右栏的样式焦点切过去：图元剪贴板与
+ *   「选中的是哪一枚图元」都归页面持有，而页面按 `styleFocus` 判要不要走图元那一支。
+ *   不切的话，编辑面上的复制粘贴会去动画布上选中的实体，且这一步零报错。
+ * ⚠ 只有节点样式进编辑面：预览画的是一个节点，连线样式在那张框里没有东西可画。
  */
 import type { Twin2dConfig } from '@dt/twin2d'
 import {
@@ -62,6 +66,7 @@ import type {
   Twin2dImportMode,
   Twin2dImportReport,
 } from '../scripts/stylePackage'
+import Twin2dStyleWizard from './Twin2dStyleWizard.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -69,10 +74,12 @@ const props = withDefaults(
     open: boolean
     /** 整份配置；本层只读，改动一律整份上抛。 */
     config: Twin2dConfig
+    /** 图元树上选中的那一枚；空串 = 一枚都没选。归页面持有，与 ⌘C / ⌘V 同一份。 */
+    selectedPrim?: string
     /** 导出文件名（不含扩展名）。 */
     fileName?: string
   }>(),
-  { fileName: 'twin2d-styles' },
+  { selectedPrim: '', fileName: 'twin2d-styles' },
 )
 
 const emit = defineEmits<{
@@ -81,6 +88,16 @@ const emit = defineEmits<{
   change: [config: Twin2dConfig]
   /** 请求把右栏切到这份样式上。 */
   focus: [kind: Twin2dStyleKind, id: string]
+  /** 编辑面里的连续输入：同 `key` 的连着并成一帧。 */
+  merge: [config: Twin2dConfig, key: string]
+  /** 焦点离开输入框，这一段连续输入到此为止。 */
+  endMerge: []
+  /** 编辑面的图元树上选中了一枚；空串 = 取消选中。 */
+  pickPrim: [primId: string]
+  /** 编辑面的图元树上按了复制；剪贴板归页面持有，本层只转发。 */
+  copyPrim: []
+  /** 编辑面的图元树上按了粘贴；同上。 */
+  pastePrim: []
 }>()
 
 /** 三档撞名处理各自的说法；缺省那一档摆在第一位。 */
@@ -97,8 +114,15 @@ const MODE_OPTIONS = TWIN_2D_IMPORT_MODES.map((value) => ({
 
 const toast = useToast()
 
+// ⚠ 缺省值走 computed 不走 withDefaults 的读取端：exactOptionalPropertyTypes 下
+// withDefaults 出来的仍是 `string | undefined`，往下传会在调用点报错
+const selectedPrim = computed(() => props.selectedPrim ?? '')
+
 const keyword = ref('')
 const mode = ref<Twin2dImportMode>('rename')
+
+/** 正在编辑外观的那份节点样式；空串 = 编辑面没开着。 */
+const wizardId = ref('')
 
 const rows = computed<readonly Twin2dStyleLibRow[]>(() =>
   twin2dStyleLibFilter(twin2dStyleLibRows(props.config), keyword.value),
@@ -121,7 +145,38 @@ function push(next: Twin2dConfig): void {
 function landed(kind: Twin2dStyleKind, added: Twin2dAdded): void {
   push(added.config)
   // ⚠ 加不进去时不动焦点：交一个落不到实处的 id 出去，右栏会画一份不存在的样式
-  if (added.id !== null) emit('focus', kind, added.id)
+  if (added.id === null) return
+  // 新出炉的样式在库里只有一行字，直接进带预览的编辑面才看得见它长什么样
+  if (kind === 'styles') return openWizard(added.id)
+  emit('focus', kind, added.id)
+}
+
+/**
+ * 打开带预览的编辑面，并把右栏的样式焦点一起切过去。
+ * @param id 节点样式 id
+ */
+function openWizard(id: string): void {
+  wizardId.value = id
+  emit('focus', 'styles', id)
+}
+
+/**
+ * 编辑面开关；关掉就把那份 id 一起清了，免得下次开在上一份上。
+ * @param open 开着没有
+ */
+function setWizardOpen(open: boolean): void {
+  if (!open) wizardId.value = ''
+}
+
+/**
+ * 抽屉开关；关掉时把编辑面一起带走。
+ * ⚠ 不带走的话，库关了之后那张编辑面还浮在画布上，而它是从库里开出来的，用户找不到
+ * 是哪儿把它开着的，也没有第二个地方能再把它关掉。
+ * @param open 开着没有
+ */
+function setOpen(open: boolean): void {
+  setWizardOpen(open)
+  emit('update:open', open)
 }
 
 function onAddNodeStyle(): void {
@@ -241,7 +296,7 @@ function onPickFile(files: readonly File[]): void {
 }
 
 function close(): void {
-  emit('update:open', false)
+  setOpen(false)
 }
 </script>
 
@@ -252,7 +307,7 @@ function close(): void {
     description="预置库与这张图里的样式并成一列；改过的内置样式随时能恢复回去。"
     width="44rem"
     data-test="style-library"
-    @update:model-value="emit('update:open', $event)"
+    @update:model-value="setOpen"
   >
     <div class="flex flex-col gap-3">
       <div class="flex flex-wrap items-end gap-2">
@@ -348,6 +403,17 @@ function close(): void {
             {{ row.originLabel }} · {{ row.usedBy }} 个在用
           </span>
           <DtButton
+            v-if="row.kind === 'styles'"
+            size="xs"
+            variant="ghost"
+            intent="primary"
+            icon="pencil"
+            aria-label="预览并编辑"
+            title="打开带预览的编辑面，边改边看这个节点长什么样"
+            :data-test="`style-lib-edit-${row.key}`"
+            @click="openWizard(row.id)"
+          />
+          <DtButton
             size="xs"
             variant="ghost"
             intent="primary"
@@ -393,4 +459,18 @@ function close(): void {
       </DtButton>
     </template>
   </DtModal>
+
+  <Twin2dStyleWizard
+    :open="wizardId !== ''"
+    :config="config"
+    :style-id="wizardId"
+    :selected-prim="selectedPrim"
+    @update:open="setWizardOpen"
+    @change="emit('change', $event)"
+    @merge="(next, key) => emit('merge', next, key)"
+    @end-merge="emit('endMerge')"
+    @pick-prim="emit('pickPrim', $event)"
+    @copy-prim="emit('copyPrim')"
+    @paste-prim="emit('pastePrim')"
+  />
 </template>
