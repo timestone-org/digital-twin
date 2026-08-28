@@ -9,6 +9,7 @@ Revises: d4a1c7b2e903
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
 
 revision: str = "e5f2a3b41c78"
@@ -52,9 +53,40 @@ def _swap(kinds: str) -> None:
 
     Args: kinds（闭合集合摊成的值列表）。
     """
-    op.execute(f"ALTER TABLE {SCHEMA}.{TABLE} DROP CONSTRAINT {CONSTRAINT}")
+    _drop_existing()
     op.execute(
         f"ALTER TABLE {SCHEMA}.{TABLE} ADD CONSTRAINT {CONSTRAINT} "
         f"CHECK (surface_kind IN ({kinds})) NOT VALID"
     )
     op.execute(f"ALTER TABLE {SCHEMA}.{TABLE} VALIDATE CONSTRAINT {CONSTRAINT}")
+
+
+def _drop_existing() -> None:
+    """删掉现有那条管 `surface_kind` 的 CHECK，**不管它此刻叫什么名字**。
+
+    ⚠ 同一条约束在不同库里名字不一样，所以按名字硬删只在其中一种库上成立，
+    另一种上是 `constraint … does not exist`，整个迁移作业退 1。根因：命名约定是
+    `ck_%(table_name)s_%(constraint_name)s`，而建表时传进去的 `name=` 已经自带
+    `ck_chat_sessions_` 前缀——约定生效的库里于是成了**双前缀**，没生效的库里是
+    单前缀。alembic 的 `op.create_table` 在 `target_metadata` 是**列表**时取不到
+    约定（本服务正是两份 metadata），故新建的库是单前缀，而现网那份是双前缀。
+
+    ⚠ 连「试两个名字」都不够：超过 63 字符的名字会被 Postgres 截断并加哈希后缀，
+    现网 hvac 那几张表上就有。唯一可靠的做法是按**定义**查出真名再删。
+    """
+    found = (
+        op.get_bind()
+        .execute(
+            sa.text(
+                "SELECT conname FROM pg_constraint "
+                "WHERE conrelid = CAST(:table AS regclass) "
+                "AND contype = 'c' "
+                "AND pg_get_constraintdef(oid) ILIKE :pattern"
+            ),
+            {"table": f"{SCHEMA}.{TABLE}", "pattern": "%surface_kind%"},
+        )
+        .scalars()
+        .all()
+    )
+    for name in found:
+        op.drop_constraint(str(name), TABLE, type_="check", schema=SCHEMA)
