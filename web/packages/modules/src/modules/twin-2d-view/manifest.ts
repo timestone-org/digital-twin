@@ -77,6 +77,8 @@ const PREVIEW_SCENE = {
 
 export default defineModule({
   type: 'twin-2d-view',
+  description:
+    '2D 孪生画面：一张由节点、连线、标注与节点样式画成的流程图 / 系统图 / 一次接线图，节点按状态变色、连线按读数流动，整张图按四档缩放方式适配模块矩形。工艺流程、能流、管网、配电接线这类平面图上挂读数时用它；三维模型请用 twin-view。⚠ 图本身不在属性面板里配——`twin2d` 那一段由子编辑器（路由 `twin-2d-editor`）整块写入，这里能配的只有标题、缩放、留白、内置图标集开关与两项流动动画。三个数组绑定槽，行都钉在图文档里的实体上（行数由图里的节点 / 连线数决定，不由绑定条数决定，空行只表示那个实体没接数据源）：`nodeValues[i].value` 第 i 个节点的数值、`nodeStatus[i].status` 第 i 个节点的状态（数值原样进来，不要给它配枚举映射，配了全图状态会集体退回灰色的 unknown）、`edgeValues[i]` 第 i 条连线的三个子槽——`active` 收布尔（有流 / 通电）、`direction` 收数值（负数 = 反向）、`value` 收数值（标签读数）。⚠ 它上抛的联动事件是 `select` 而不是 `click`，联动规则的触发事件要选对，选错永远不触发；另外「连线流动动画」是总闸，关着时样式里怎么配都不动。',
   displayName: '2D 孪生',
   category: '孪生',
   icon: 'network',

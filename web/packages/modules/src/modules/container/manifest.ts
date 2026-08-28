@@ -11,6 +11,8 @@ import {
 
 export default defineModule({
   type: 'container',
+  description:
+    '通用容器：自己只画一条可关的标题条与一块内容区，里面的东西是独立子节点，由运行时按节点树注入——它不渲染任何内容，也没有绑定槽、不取数。要把几个模块框成一组、给它们共同的标题与背景时用它；钉在屏幕上下沿的整宽横条请用 header / footer，那两个各自钉死一条边且每屏只许一个。子节点的坐标以内容区左上角为原点，内容区 = 容器矩形减去 `__container.pad` 内边距，标题条开着时再减去顶部 28px。⚠ 关掉「显示标题条」会让这个容器里已有的全部子节点整体上移 28px：那一项不是纯外观开关，它改的是内容区原点。',
   displayName: '容器',
   category: '布局',
   icon: 'layout-template',

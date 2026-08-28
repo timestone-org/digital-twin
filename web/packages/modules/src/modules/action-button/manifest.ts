@@ -28,6 +28,8 @@ import { BUTTON_TEXT_DEFAULT } from './look'
 
 export default defineModule({
   type: 'action-button',
+  description:
+    '按钮控件：一个原生 `<button>`，点一下上抛一次联动事件；显隐、开弹窗、跨屏跳转、按值互斥切换全由大屏级联动规则决定，模块自己不认识任何一种动作。要一块明确「能点」的入口时用它；只想让一段文字或一张图可点，text-block 与 image-block 本身就整块可点，不必换成按钮。它没有绑定槽、不取数：「禁用」是常态置灰而不是随数据变，要按读数决定能不能点得靠联动规则控制显隐。配了「联动值」就随事件抛出它（「按值跳转大屏」「按值互斥切换」按它分流），留空则抛一个不带值的点击，显隐与弹窗类动作够用。⚠ 只配按钮不配联动规则的话，点了什么都不会发生，而两侧都不报错。',
   displayName: '按钮',
   category: '控件',
   icon: 'square-mouse-pointer',

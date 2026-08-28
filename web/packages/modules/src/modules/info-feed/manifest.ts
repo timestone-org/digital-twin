@@ -23,6 +23,8 @@ import { INFO_FEED_PRESETS } from './presets'
 
 export default defineModule({
   type: 'info-feed',
+  description:
+    '信息流：直通渲染后端推来的成品文本条目，一条是「级别圆点 ｜ 级别文字 ｜ 正文 ｜ 时间」四件，自带自动滚动；它不做阈值评估也不做数值格式化。预警、公告、日志、告警消息这类条数不固定、内容与级别由后端给的流用它；一行一个点位、由前端按规则表评估数值的固定清单用 info-list。一个数组绑定槽 `feedValues`，三个子槽 `level` / `text` / `time` 全收字符串：`level` 与内置档比对来上色（danger / red / error、warning / warn / yellow、info / blue、success / normal / green），`time` 是后端给的时间文本而不是墙钟。⚠ 本族四个模块里只有它的数组槽是列表式的：条目由用户在绑点面板上手工增删，服务端强制索引连续且从 0 起，中间空一格会被拒——不像另外三个那样把行钉在配置项上。⚠ 气象「橙色」没有内置档（主题只有四支状态色），要橙必须在「级别色板」里配一条。',
   displayName: '信息流',
   category: '数据',
   icon: 'activity',

@@ -103,6 +103,10 @@ class ModuleTypeOut(OutputModel):
     type: str
     display_name: str
     category: str
+    # 给模型读的一段说明：这是什么、什么时候改用哪个兄弟模块、槽怎么喂、
+    # 真有的那条坑。
+    # ⚠ 可选只为兼容第三方清单；内建模块缺了它，Agent 只能靠模块名猜它是干什么的
+    description: str | None = None
     icon: str | None = None
     keywords: list[str] = Field(default_factory=list[str])
     default_size: ModuleDefaultSizeOut

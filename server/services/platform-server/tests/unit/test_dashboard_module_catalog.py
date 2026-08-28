@@ -44,6 +44,19 @@ def test_the_metric_card_slot_is_an_entity_pinned_array() -> None:
     assert slots.entity_pinned == frozenset({"itemValues"})
 
 
+def test_a_module_carries_the_description_the_agent_reads() -> None:
+    """名片上那段说明要装得出来。
+
+    ⚠ 服务端漏收这一键的话，装载器会静默丢掉它——Agent 拿到的名片只剩类型名与
+    关键词，于是靠模块名猜这块是干什么的，而两侧都不报错。
+    """
+    module = load_module_catalog().find("gauge-card")
+    assert module is not None
+    assert module.description is not None
+    # 划界那半句是描述最要紧的部分：模型正是在这三个卡片族之间选错模块
+    assert "metric-card" in module.description
+
+
 def test_an_unknown_type_has_no_manifest() -> None:
     assert load_module_catalog().find("gauge-chart") is None
 

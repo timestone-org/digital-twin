@@ -60,6 +60,8 @@ function rowLabels(
 
 export default defineModule({
   type: 'info-card',
+  description:
+    '信息卡片：一块摆 1..N 个格，一格纵向四段「徽章·标签 ｜ 读数 + 单位 ｜ 涨跌块 ｜ 脚注」，排布、格外壳、标签、数值、单位、图标六组档位正交可配，读数可走渐变文字与素材图标 / emoji。要一屏好看的 KPI 网格、带图标或带「较上期」对比时用它；只要朴素的数字 + 单位 + 阈值灯用 metric-card，要量程 / 进度 / 液位那种图形用 gauge-card，要竖着一列多字段的行用 info-list。一个数组绑定槽 `cardValues`，行钉在 `items` 配置项上：第 i 行喂第 i 格，子槽 `value` 是主读数、`aux` 是涨跌块要的对比值（上期 / 目标），都收数值；单位、小数位、emoji 与固定颜色是逐格的配置项，不从点位来。⚠ 涨跌块要 `value` 与 `aux` 两个子槽都有值才画，缺一整块不出。⚠ 删掉 `items` 中间一格，它之后每一格的绑定都会改喂前一格。',
   displayName: '信息卡片',
   category: '数据',
   icon: 'layout-grid',

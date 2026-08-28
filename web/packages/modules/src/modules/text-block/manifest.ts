@@ -6,6 +6,8 @@ import { defineModule } from '../../registry'
 
 export default defineModule({
   type: 'text-block',
+  description:
+    '装饰文本块：几行固定文案加一整套排版旋钮（字号、行高、字重、字间距、四档字体、水平/垂直对齐、内边距、不透明度、溢出处理、辉光）。大屏上的说明、标注、副标题、单位注解，以及页头/页脚里的大屏标题，都由它出。⚠ 它没有任何绑定槽、不取任何数：要显示读数请用 metric-card 或 info-card，那边才有单位、小数位与阈值。整块可点，配了以它为源的联动规则时点它上抛一个不带值的 click。⚠ 「字间距」的 0 是哨兵不是零——表示沿用内置的约 0.02em；⚠ 「不透明度」量纲是 0–1，与 image-block 同名字段的 0–100 不是一回事。',
   displayName: '文本块',
   category: '装饰',
   icon: 'type',
