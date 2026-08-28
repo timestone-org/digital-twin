@@ -13,10 +13,12 @@ from fastapi import Depends, Request
 from pydantic import BaseModel
 
 from ai_assistant.apps.chat.catalog import ASSISTANT_USE
+from ai_assistant.apps.chat.services import model_profiles
 from ai_assistant.apps.chat.services.advance_service import (
     AdvanceDeps,
     deps_of,
 )
+from ai_assistant.apps.chat.services.model_profiles import ModelDefaults
 from ai_assistant.container import Container
 from ai_assistant.deps import (
     get_container,
@@ -91,3 +93,20 @@ def get_advance_deps(
     Args: request, container。
     """
     return deps_of(container, caller_headers(request.headers))
+
+
+async def get_model_defaults(
+    container: Annotated[Container, Depends(get_container)],
+) -> ModelDefaults:
+    """新会话该盖上的那一路模型、那一档推理。
+
+    ⚠ 与能力端点报的默认是**同一份判定**（`model_profiles`）：各算各的话，
+    界面显示订阅账号而回合走按量计费，运行期一点迹象都没有。
+
+    Args: container。
+    """
+    return await model_profiles.defaults_of(
+        container.models,
+        container.credentials,
+        effort=container.settings.codex_reasoning_effort,
+    )

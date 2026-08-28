@@ -1834,7 +1834,7 @@
         ]
       },
       "post": {
-        "description": "建会话。支持 `Idempotency-Key`。\n\nArgs: payload, session, response, write。",
+        "description": "建会话；支持 `Idempotency-Key`。建出来就带着此刻默认的那一路模型。\n\nArgs: payload, session, response, write, defaults。",
         "operationId": "create_session_api_v1_assistant_sessions_post",
         "parameters": [
           {

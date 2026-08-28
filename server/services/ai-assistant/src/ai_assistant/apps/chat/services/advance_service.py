@@ -291,6 +291,11 @@ def _choice_of(row: ChatSession | None, payload: AdvanceInput) -> ModelChoice:
     ⚠ 档位从**会话行**上取而不是从请求上取：换模型是会话级的选择，
     每次推进都由前端重报的话，工具回填那几次会漏带（那时前端手上没有它）。
 
+    ⚠ 行上是空的只可能是**建行时还没盖默认的旧行**（见
+    `session_service.create_session`）。那时退按量而不是退部署默认：这一层
+    看不见订阅那一路登没登录，按配置退的话，配了却没登录的部署会让每一条
+    旧会话都发不出回合。
+
     Args: row, payload。
     """
     kind: ModelKind = "vision" if has_image(payload) else "chat"

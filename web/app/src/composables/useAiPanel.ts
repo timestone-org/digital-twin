@@ -12,32 +12,34 @@
  * ⚠ 对话放在这里而不是面板组件里：面板收起就卸载，对话不能跟着没。
  */
 import { onMounted, onUnmounted, ref, type Ref } from 'vue'
-import type { AssistantCapability, AssistantModelProfile } from '@dt/contracts'
+import type { AssistantModelProfile } from '@dt/contracts'
 
-import { createSession, patchSession } from '@/api/assistant'
+import { createSession } from '@/api/assistant'
 import { newComposeState, type ComposeState } from '@/composables/useAiCompose'
 import {
   useAiConversation,
   type AiConversation,
 } from '@/composables/useAiConversation'
+import {
+  adoptRow,
+  fillDefaults,
+  newModelChoice,
+  pickModel,
+  type ModelChoice,
+} from '@/composables/useAiModelChoice'
 import { createReplayer } from '@/composables/useAiReplayer'
 import { aiPorts } from '@/features/ai/ports'
 import { clearSurface, setSurface } from '@/features/ai/surfaces'
 import type { AiSurface } from '@/features/ai/surfaces'
 
 export { newComposeState, type ComposeState } from '@/composables/useAiCompose'
+export type { ModelChoice } from '@/composables/useAiModelChoice'
 
 export interface AiPanelOptions {
   /** 这一页的工作面。⚠ 只在装配时调一次，句柄要一直有效。 */
   surface: () => AiSurface
   /** 工作面指向的那个东西的 id（大屏 id / 台账 id）；还没加载出来时给 null。 */
   refId: () => string | null
-}
-
-/** 面板上那个下拉此刻选中的东西。 */
-export interface ModelChoice {
-  profile: string
-  effort: string
 }
 
 export interface AiPanel {
@@ -64,7 +66,7 @@ export interface AiPanel {
 export function useAiPanel(options: AiPanelOptions): AiPanel {
   const isAvailable = ref(false)
   const models = ref<AssistantModelProfile[]>([])
-  const choice = ref<ModelChoice>({ profile: '', effort: '' })
+  const choice = newModelChoice()
   const isOpen = ref(false)
   const sessionId = ref<string | null>(null)
 
@@ -91,6 +93,7 @@ export function useAiPanel(options: AiPanelOptions): AiPanel {
     surfaceKind: surface.kind,
     refId: options.refId,
     sessionId,
+    choice,
     isOpen,
     replay: replayer.replay,
   })
@@ -99,7 +102,7 @@ export function useAiPanel(options: AiPanelOptions): AiPanel {
     isAvailable,
     models,
     choice,
-    pickModel: (next) => picked(next, choice, sessionId),
+    pickModel: (next) => pickModel(next, choice, sessionId),
     isOpen,
     sessionId,
     chat,
@@ -120,6 +123,7 @@ function openerOf(parts: {
   surfaceKind: AiSurface['kind']
   refId: () => string | null
   sessionId: Ref<string | null>
+  choice: Ref<ModelChoice>
   isOpen: Ref<boolean>
   replay: (sessionId: string) => Promise<void>
 }): () => Promise<void> {
@@ -131,6 +135,7 @@ function openerOf(parts: {
       try {
         const created = await createSession(parts.surfaceKind, parts.refId())
         parts.sessionId.value = created.id
+        adoptRow(parts.choice, created)
       } finally {
         opening = false
       }
@@ -153,42 +158,4 @@ async function probeInto(into: {
   into.isAvailable.value = capability?.is_model_enabled === true
   into.models.value = capability?.models ?? []
   fillDefaults(into.choice, capability)
-}
-
-/**
- * 还没选过时把部署的默认填上。
- * ⚠ 只在还没选过时填：填过头会把用户在别的标签页里换的那一路盖回去。
- * ⚠ 两格一起填：只填模型那一格的话，默认落在「按量计费 + 不指定思考档」上，
- * 而后端已经把「此刻真能用的那一路」算好了，前端不许再判一次。
- * @param choice 面板此刻选中的那一路
- * @param capability 探到的能力；探不到时是 null
- */
-function fillDefaults(
-  choice: Ref<ModelChoice>,
-  capability: AssistantCapability | null,
-): void {
-  if (choice.value.profile !== '') return
-  choice.value = {
-    profile: capability?.default_model_id ?? '',
-    effort: capability?.default_effort ?? '',
-  }
-}
-
-/**
- * 换一路模型。
- * ⚠ 写回**会话**而不是只改这一屏：工具回填那几次推进是循环自己发的，
- * 那时界面手上没有用户的选择。
- */
-async function picked(
-  next: ModelChoice,
-  choice: Ref<ModelChoice>,
-  sessionId: Ref<string | null>,
-): Promise<void> {
-  choice.value = next
-  const id = sessionId.value
-  if (id === null) return
-  await patchSession(id, {
-    model_profile: next.profile,
-    ...(next.effort === '' ? {} : { reasoning_effort: next.effort }),
-  })
 }

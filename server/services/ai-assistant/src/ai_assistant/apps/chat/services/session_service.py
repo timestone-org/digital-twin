@@ -21,6 +21,7 @@ from ai_assistant.apps.chat.schemas import (
     SessionUpdateIn,
     StepOut,
 )
+from ai_assistant.apps.chat.services.model_profiles import ModelDefaults
 from lib.auth import CallerContext
 from lib.logging import get_logger
 from lib.web import Page, PageParams
@@ -102,17 +103,27 @@ async def get_session(
 
 
 async def create_session(
-    session: AsyncSession, *, caller: CallerContext, payload: SessionCreateIn
+    session: AsyncSession,
+    *,
+    caller: CallerContext,
+    payload: SessionCreateIn,
+    defaults: ModelDefaults,
 ) -> SessionOut:
     """建会话。归属钉在调用者身上，入参里给不了别人的 id。
 
-    Args: session, caller, payload。
+    ⚠ 建行时就把默认那一路**盖上去**，不留 NULL：留 NULL 的话推进那一层会
+    退回按量计费那一路，而界面显示的是能力面报的默认（多半是订阅账号）——
+    两边不一致时运行期毫无迹象，只有账单看得出来。
+
+    Args: session, caller, payload, defaults（这套部署此刻的默认那一路）。
     """
     chat_session = ChatSession(
         user_id=caller.user_id,
         title=payload.title,
         surface_kind=payload.surface_kind,
         surface_ref=payload.surface_ref,
+        model_profile=defaults.profile,
+        reasoning_effort=defaults.effort,
     )
     session_crud.add(session, chat_session)
     await session.flush()

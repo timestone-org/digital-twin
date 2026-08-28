@@ -11,7 +11,11 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_assistant.apps.chat.catalog import ASSISTANT_USE
-from ai_assistant.apps.chat.deps import WriteContext, get_write_context
+from ai_assistant.apps.chat.deps import (
+    WriteContext,
+    get_model_defaults,
+    get_write_context,
+)
 from ai_assistant.apps.chat.schemas import (
     SessionCreateIn,
     SessionDetailOut,
@@ -20,6 +24,7 @@ from ai_assistant.apps.chat.schemas import (
     SurfaceKind,
 )
 from ai_assistant.apps.chat.services import session_service
+from ai_assistant.apps.chat.services.model_profiles import ModelDefaults
 from ai_assistant.apps.chat.services.session_service import SessionFilters
 from ai_assistant.deps import (
     get_session,
@@ -46,6 +51,8 @@ def get_filters(
 
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+# 新会话该盖上的那一路模型：与能力端点报的 `default_model_id` 同一份判定
+DefaultsDep = Annotated[ModelDefaults, Depends(get_model_defaults)]
 PageDep = Annotated[PageParams, Depends(page_params)]
 UseDep = Annotated[CallerContext, Depends(require(ASSISTANT_USE))]
 WriteDep = Annotated[WriteContext, Depends(get_write_context)]
@@ -80,16 +87,17 @@ async def create_session(
     session: SessionDep,
     response: Response,
     write: WriteDep,
+    defaults: DefaultsDep,
 ) -> ApiResponse[SessionOut]:
-    """建会话。支持 `Idempotency-Key`。
+    """建会话；支持 `Idempotency-Key`。建出来就带着此刻默认的那一路模型。
 
-    Args: payload, session, response, write。
+    Args: payload, session, response, write, defaults。
     """
     created = await write.run_once(
         endpoint="create_chat_session",
         model=SessionOut,
         action=lambda: session_service.create_session(
-            session, caller=write.caller, payload=payload
+            session, caller=write.caller, payload=payload, defaults=defaults
         ),
     )
     response.headers["Location"] = f"{API_PREFIX}/sessions/{created.id}"

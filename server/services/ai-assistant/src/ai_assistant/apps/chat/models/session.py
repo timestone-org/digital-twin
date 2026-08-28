@@ -56,7 +56,9 @@ class ChatSession(UuidPrimaryKeyMixin, TimestampMixin, Base):
         JSONB, nullable=True
     )
     # 这个会话用哪一路模型、哪一档推理。⚠ 落在会话上而不是每次请求带：
-    # 工具回填那几次推进是循环自己发的，那时前端手上没有用户的选择
+    # 工具回填那几次推进是循环自己发的，那时前端手上没有用户的选择。
+    # ⚠ 建行时就盖上此刻的默认，不留 NULL：留着的话推进那一层退按量，
+    # 而界面显示的是能力面报的默认，两边不一致时只有账单看得出来
     model_profile: Mapped[str | None] = mapped_column(
         String(PROFILE_MAX_LENGTH), nullable=True
     )

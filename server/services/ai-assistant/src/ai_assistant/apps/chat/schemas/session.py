@@ -88,7 +88,8 @@ class SessionOut(OutputModel):
     is_archived: bool
     row_version: int
     last_error: str | None
-    # 这个会话选了哪一路模型、哪一档；`None` = 按部署配置的默认
+    # 这个会话走哪一路模型、哪一档。建会话时就盖上了此刻的默认，
+    # `None` 只会出现在建行时还没盖默认的旧行上
     model_profile: str | None = None
     reasoning_effort: str | None = None
     created_at: Utc

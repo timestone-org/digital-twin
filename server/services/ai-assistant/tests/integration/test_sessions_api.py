@@ -17,6 +17,7 @@ pytestmark = pytest.mark.requires_postgres
 HeaderFactory = Callable[..., dict[str, str]]
 
 SESSIONS_URL = "/api/v1/assistant/sessions"
+CAPABILITIES_URL = "/api/v1/assistant/capabilities"
 ASSISTANT_USE = "assistant:use"
 DEFAULT_SURFACE = "dashboard-editor"
 
@@ -299,3 +300,44 @@ async def test_an_unknown_model_profile_is_rejected(
         f"{SESSIONS_URL}/{session_id}", json={"model_profile": "没这一路"}
     )
     assert rejected.status_code == 400
+
+
+def _default_route(capability: dict[str, object]) -> tuple[object, object]:
+    """能力端点报的默认那一路，以及它该配的推理档。
+
+    ⚠ 推理档只有「有这一档的路」才该带：按量那一路吃不到它。
+
+    Args: capability。
+    """
+    listed = capability["models"]
+    assert isinstance(listed, list)
+    chosen = capability["default_model_id"]
+    found = next(
+        (
+            one
+            for one in listed
+            if isinstance(one, dict) and one["id"] == chosen
+        ),
+        None,
+    )
+    has_effort = found is not None and bool(found["efforts"])
+    return chosen, capability["default_effort"] if has_effort else None
+
+
+async def test_a_new_session_is_stamped_with_the_route_the_panel_shows(
+    db_client: httpx.AsyncClient, sign: HeaderFactory
+) -> None:
+    """建行时就把默认那一路盖上，不留 NULL。
+
+    ⚠ 留 NULL 的话推进那一层退回按量计费，而面板显示的是能力端点报的默认
+    （订阅登录过时就是订阅账号）——两边不一致时运行期一点迹象都没有，
+    只有账单看得出来。所以这两处必须是同一份判定。
+    """
+    probed = await db_client.get(CAPABILITIES_URL)
+    assert probed.status_code == 200
+    profile, effort = _default_route(_data(probed))
+
+    created = await _create(db_client, sign([ASSISTANT_USE]))
+
+    assert created["model_profile"] == profile
+    assert created["reasoning_effort"] == effort

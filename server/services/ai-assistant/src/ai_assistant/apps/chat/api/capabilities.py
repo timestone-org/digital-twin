@@ -14,10 +14,9 @@ from ai_assistant.apps.chat.schemas.capability import (
     CapabilityOut,
     ModelProfileOut,
 )
-from ai_assistant.apps.chat.services import skill_catalog
+from ai_assistant.apps.chat.services import model_profiles, skill_catalog
 from ai_assistant.container import Container
 from ai_assistant.deps import get_container, require
-from ai_assistant.llm import CODEX_PROFILE
 from ai_assistant.llm.registry import ModelRegistry
 from ai_assistant.settings import API_PREFIX
 from lib.auth import CallerContext
@@ -40,7 +39,9 @@ async def read_capabilities(
     return ok(
         capability_of(
             container.models,
-            await _profiles_of(container),
+            await model_profiles.profiles_of(
+                container.models, container.credentials
+            ),
             container.settings.codex_reasoning_effort,
         )
     )
@@ -57,6 +58,10 @@ def capability_of(
     只按配置挑的话，助手开箱就是一个点了报错的下拉，而报出来的错是
     「模型暂时不可用」，与「去登录一下」完全对不上。
 
+    ⚠ 这里报的默认与建会话盖在行上的那一路**必须是同一份判定**（走
+    `model_profiles.default_id_of`）：各算各的话，界面显示订阅账号而回合走
+    按量计费，除了账单没有任何迹象。
+
     Args: models, profiles（各自此刻能不能用）, default_effort。
     """
     ready = [one.id for one in profiles if one.is_ready]
@@ -67,35 +72,6 @@ def capability_of(
         ),
         skills=skill_catalog(),
         models=profiles,
-        default_model_id=models.default_id(ready_ids=ready),
+        default_model_id=model_profiles.default_id_of(models, profiles),
         default_effort=default_effort,
     )
-
-
-async def _profiles_of(container: Container) -> list[ModelProfileOut]:
-    """这套部署接了哪几路，各自此刻能不能用。
-
-    ⚠ 订阅账号那一路的「能不能用」要**去库里看有没有登录过**：只按配置回答的话，
-    界面上会摆出一个点了就报错的选项，而报出来的错是「模型暂时不可用」。
-
-    Args: container。
-    """
-    connected = await _codex_connected(container)
-    return [
-        ModelProfileOut(
-            id=one.id,
-            label=one.label,
-            is_ready=connected if one.id == CODEX_PROFILE else one.is_ready,
-            has_vision=one.has_vision,
-            models=list(one.models),
-            efforts=list(one.efforts),
-        )
-        for one in container.models.profiles()
-    ]
-
-
-async def _codex_connected(container: Container) -> bool:
-    store = container.credentials
-    if store is None:
-        return False
-    return (await store.status(CODEX_PROFILE)).is_connected

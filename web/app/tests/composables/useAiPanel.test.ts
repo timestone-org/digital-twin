@@ -9,7 +9,11 @@
 import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
-import type { AssistantMessage, AssistantSessionDetail } from '@dt/contracts'
+import type {
+  AssistantMessage,
+  AssistantSession,
+  AssistantSessionDetail,
+} from '@dt/contracts'
 
 import * as api from '@/api/assistant'
 import { useAiPanel, type AiPanel } from '@/composables/useAiPanel'
@@ -61,6 +65,29 @@ function said(role: string, text: string, seq: number): AssistantMessage {
   }
 }
 
+/**
+ * 库里的一行会话。
+ * ⚠ 造件要**摊全**：少一格的假件会让「下拉显示的是行上那一路」这条契约
+ * 在用例里恒真，而线上少的正是那一格。
+ */
+function rowOf(overrides: Partial<AssistantSession> = {}): AssistantSession {
+  return {
+    id: 's1',
+    user_id: 'u1',
+    title: '',
+    surface_kind: 'dashboard-editor',
+    surface_ref: 'db1',
+    is_archived: false,
+    row_version: 1,
+    last_error: null,
+    model_profile: 'default',
+    reasoning_effort: null,
+    created_at: '',
+    updated_at: '',
+    ...overrides,
+  }
+}
+
 /** 库里的一份会话详情。 */
 function detailOf(
   messages: AssistantMessage[],
@@ -86,14 +113,17 @@ function detailOf(
 
 let created: ReturnType<typeof vi.fn>
 let readBack: ReturnType<typeof vi.fn>
+let patched: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   __resetAiPorts()
   __resetSurfaces()
-  created = vi.fn().mockResolvedValue({ id: 's1' })
+  created = vi.fn().mockResolvedValue(rowOf())
   readBack = vi.fn().mockResolvedValue(null)
+  patched = vi.fn().mockResolvedValue(rowOf())
   vi.spyOn(api, 'createSession').mockImplementation(created)
   vi.spyOn(api, 'readSession').mockImplementation(readBack)
+  vi.spyOn(api, 'patchSession').mockImplementation(patched)
 })
 
 afterEach(() => {
@@ -257,6 +287,67 @@ describe('回放历史', () => {
     expect(ctx.panel.chat.entries.value.map((one) => one.text)).toEqual([
       '新历史',
     ])
+    ctx.wrapper.unmount()
+  })
+})
+
+describe('下拉显示的那一路', () => {
+  /** 探测面：这套部署报的默认是订阅账号那一路。 */
+  function probesCodexAsDefault(): void {
+    setAiPorts({
+      probe: () =>
+        Promise.resolve({
+          is_model_enabled: true,
+          is_vision_enabled: false,
+          skills: [],
+          models: [],
+          default_model_id: 'codex',
+          default_effort: 'medium',
+        }),
+    })
+  }
+
+  it('建完会话就以行上那一路为准，不是能力端点报的默认', async () => {
+    // 两处各填各的话，界面显示订阅账号而回合走按量计费——运行期毫无迹象，
+    // 只有账单看得出来
+    probesCodexAsDefault()
+    created.mockResolvedValue(rowOf({ model_profile: 'default' }))
+    const ctx = setup()
+    await ctx.wrapper.vm.$nextTick()
+    await Promise.resolve()
+
+    await ctx.panel.open()
+
+    expect(ctx.panel.choice.value.profile).toBe('default')
+    ctx.wrapper.unmount()
+  })
+
+  it('会话还没建起来时先拿部署的默认占着', async () => {
+    probesCodexAsDefault()
+    const ctx = setup()
+    await ctx.wrapper.vm.$nextTick()
+    await Promise.resolve()
+
+    expect(ctx.panel.choice.value.profile).toBe('codex')
+    ctx.wrapper.unmount()
+  })
+
+  it('换一路之后同样以服务端回的那一行为准', async () => {
+    // 换路时思考档是清在本地的，而没带上这一格的 PATCH 不动行上的旧值——
+    // 不抄回来的话下拉是空的，回合却仍按行上那一档在跑
+    const ctx = setup()
+    await ctx.panel.open()
+    patched.mockResolvedValue(
+      rowOf({ model_profile: 'codex', reasoning_effort: 'high' }),
+    )
+
+    await ctx.panel.pickModel({ profile: 'codex', effort: '' })
+
+    expect(patched).toHaveBeenCalledWith('s1', { model_profile: 'codex' })
+    expect(ctx.panel.choice.value).toEqual({
+      profile: 'codex',
+      effort: 'high',
+    })
     ctx.wrapper.unmount()
   })
 })

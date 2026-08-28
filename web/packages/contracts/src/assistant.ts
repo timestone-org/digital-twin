@@ -170,7 +170,11 @@ export interface AssistantSession {
   row_version: number
   /** 最近一次失败的原因，给人看。不带上游地址与密钥。 */
   last_error: string | null
-  /** 这个会话选了哪一路模型、哪一档；`null` = 按部署配置的默认。 */
+  /**
+   * 这个会话走哪一路模型、哪一档。建会话时服务端就把此刻的默认盖上了，
+   * ⚠ `null` 只会出现在**建行时还没盖默认的旧行**上，别拿它当「按默认」——
+   * 推进那一层对空值退的是按量计费那一路。
+   */
   model_profile: string | null
   reasoning_effort: string | null
   created_at: string
