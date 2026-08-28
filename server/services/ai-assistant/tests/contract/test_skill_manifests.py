@@ -110,6 +110,20 @@ def test_the_dispatch_table_never_grows_a_tool_nobody_declared() -> None:
     assert set(ServerTools()._handlers()) - KNOWN_SERVER_TOOLS == set()
 
 
+def test_no_skill_claims_the_builtin_ask_tool() -> None:
+    """`user.ask` 只能靠前端自报下发。
+
+    被哪个技能认领之后，老前端那条「不带 client_tools 就按技能声明推导」的
+    退路会把它一起发出去——而老前端不认识它。
+    """
+    claimed = {
+        skill.name
+        for skill in list_skills()
+        if "user.ask" in skill.client_tools
+    }
+    assert claimed == set()
+
+
 def test_the_2d_twin_surface_is_offered_the_binding_loop() -> None:
     offered = {spec.name for spec in specs_for(TWIN_2D, None)}
     assert {

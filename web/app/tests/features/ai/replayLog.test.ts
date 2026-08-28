@@ -12,6 +12,8 @@ import type {
   AssistantStep,
 } from '@dt/contracts'
 
+import { ASSISTANT_ASK_TOOL } from '@dt/contracts'
+
 import { __resetEntryIds } from '@/features/ai/conversationLog'
 import { AUTO_CONTINUE_PREFIX, replayedLog } from '@/features/ai/replayLog'
 import { PLAN_CONTINUE_TEXT } from '@/features/ai/turnRunner'
@@ -231,5 +233,28 @@ describe('回放里的入参与产出', () => {
     )
     const step = log.entries.find((one) => one.role === 'step')?.step
     expect(step?.image).toBeUndefined()
+  })
+})
+
+describe('回放不还原可点的提问卡片', () => {
+  // ⚠ 那一轮早就结束了：点了也没有人在等这个答案。历史里它是一条普通工具步骤
+  it('user.ask 回放成 step 而不是 ask', () => {
+    const log = replayedLog(
+      detailOf([
+        messageOf({
+          role: 'assistant',
+          content_json: { text: '' },
+          steps: [
+            stepOf({
+              kind: 'client_tool',
+              name: ASSISTANT_ASK_TOOL,
+              state: 'succeeded',
+            }),
+          ],
+        }),
+      ]),
+    )
+    expect(log.entries.map((one) => one.role)).toEqual(['step'])
+    expect(log.entries.every((one) => one.ask === undefined)).toBe(true)
   })
 })

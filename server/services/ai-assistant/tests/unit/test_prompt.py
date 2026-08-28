@@ -61,6 +61,24 @@ def test_the_prompt_points_at_where_the_live_state_lives() -> None:
     assert "<当前状态>" in prompt
 
 
+def test_the_prompt_sends_every_question_through_the_ask_tool() -> None:
+    """在正文里问一句然后等用户打字，正是这一期要换掉的做法。"""
+    prompt = build_system_prompt("dashboard-editor")
+    assert "user.ask" in prompt
+    assert "不要在正文里问一句等他打字" in prompt
+
+
+def test_the_prompt_tells_the_model_to_look_before_it_asks() -> None:
+    # 问一句要用户读要用户想，比模型自己查一次贵得多
+    prompt = build_system_prompt("dashboard-editor")
+    assert "能自己查清的不要问" in prompt
+
+
+def test_the_prompt_gates_the_dangerous_moves_behind_a_question() -> None:
+    prompt = build_system_prompt("dashboard-editor")
+    assert "先问再做" in prompt
+
+
 def test_the_plan_discipline_is_resident() -> None:
     body = build_system_prompt("dashboard-editor")
     assert "plan.write" in body

@@ -8,8 +8,10 @@
  * 上一步时会被一直拽回底部。
  */
 import { nextTick, ref, watch } from 'vue'
+import type { AssistantAskAnswer } from '@dt/contracts'
 import { DtMarkdown } from '@dt/ui'
 
+import AiAskCard from '@/components/ai/AiAskCard.vue'
 import AiCoreIcon from '@/components/ai/AiCoreIcon.vue'
 import AiReasoning from '@/components/ai/AiReasoning.vue'
 import AiToolCard from '@/components/ai/AiToolCard.vue'
@@ -21,7 +23,11 @@ const props = defineProps<{
   starters?: readonly string[] | undefined
 }>()
 
-const emit = defineEmits<{ starter: [text: string] }>()
+const emit = defineEmits<{
+  starter: [text: string]
+  /** 用户在某一条提问上点了。 */
+  answer: [id: string, answer: AssistantAskAnswer]
+}>()
 
 const scroller = ref<HTMLElement | null>(null)
 /** 离底多少像素以内算「还盯着最新的」。 */
@@ -92,6 +98,11 @@ watch(
         <li v-else-if="entry.role === 'error'" class="ai-said ai-said--bad">
           {{ entry.text }}
         </li>
+        <AiAskCard
+          v-else-if="entry.ask"
+          :ask="entry.ask"
+          @answer="(value) => emit('answer', entry.id, value)"
+        />
         <AiToolCard v-else-if="entry.step" :step="entry.step" />
       </template>
     </ul>

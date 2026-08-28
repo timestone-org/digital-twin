@@ -12,6 +12,9 @@ from ai_assistant.apps.chat.services.tool_select import (
 )
 from ai_assistant.apps.chat.services.tool_specs import TOOL_SPECS
 
+# 内建客户端工具：任何工作面上都该有，前提是这一页报了它
+ASK = "user.ask"
+
 
 def _names(surface: str, client_tools: list[str] | None) -> set[str]:
     return {spec.name for spec in specs_for(surface, client_tools)}
@@ -59,6 +62,23 @@ def test_the_original_spec_order_is_kept() -> None:
     picked = [spec.name for spec in specs_for("dashboard-editor", None)]
     reference = [spec.name for spec in TOOL_SPECS if spec.name in set(picked)]
     assert picked == reference
+
+
+def test_the_ask_tool_is_offered_on_every_surface_that_reports_it() -> None:
+    """`user.ask` 不归任何技能：报了就有，与在哪一页、装了哪些技能无关。"""
+    for surface in SURFACE_KINDS:
+        assert ASK in _names(surface, [ASK])
+
+
+def test_the_ask_tool_is_not_offered_to_a_page_that_never_reported_it() -> None:
+    """老前端不认识它，下发了模型就会调一个每次都失败的工具。
+
+    两条路都要守：明说自己没有（空表），与压根不带这一格（None，退回技能
+    声明推导——而没有任何技能声明它）。
+    """
+    for surface in SURFACE_KINDS:
+        assert ASK not in _names(surface, [])
+        assert ASK not in _names(surface, None)
 
 
 def test_cross_module_read_tools_are_visible_on_every_surface() -> None:

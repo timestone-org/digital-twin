@@ -15,6 +15,60 @@ from ai_assistant.apps.chat.services.tool_shapes import (
 )
 
 CLIENT_SPECS: tuple[ToolSpec, ...] = (
+    # 内建：不归任何技能，只要这一页报了它就下发（见 `tool_select`）
+    ToolSpec(
+        name="user.ask",
+        description=(
+            "要用户拿主意时问他：问题与选项在页面上渲染成一排可点的按钮，"
+            "回执是 `{picked, free_text, is_cancelled}`。"
+            "⚠ `options` **必给**、2–6 个，且要互斥地穷尽这一步的分叉，"
+            "最可能的那个排第一。真正开放的问题（起个名字、填一个数）用 "
+            "`allow_free_text: true`，**但仍然要给几个常见候选**："
+            "给了候选，八成的情况用户点一下就过去了。"
+            "⚠ 用户不回答时回的是 `is_cancelled: true`，那是一条**正常回执**"
+            "而不是失败：换个方式往下走，别去排查「工具坏了」。"
+            "⚠ **必须单独成一批**：这一次调用里除了它不许有别的工具。"
+            "混着发出去时，后面那几个动作按顺序照跑，于是用户点了「取消」"
+            "而覆盖照样发生了——「哪个选项算取消」只有你知道，页面读不出来。"
+        ),
+        parameters=object_schema(
+            {
+                "question": string_schema("一句话问题，一次只问一件事"),
+                "options": {
+                    "type": "array",
+                    "description": "备选项，2–6 个，最可能的排第一个",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "value": string_schema("这一项的取值，回执按它认"),
+                            "label": string_schema("按钮上的字，一行以内"),
+                            "hint": string_schema(
+                                "补一句这一项意味着什么，可省"
+                            ),
+                        },
+                        "required": ["value", "label"],
+                        "additionalProperties": False,
+                    },
+                },
+                "allow_multiple": {
+                    "type": "boolean",
+                    "description": "允许多选，缺省 false",
+                },
+                "allow_free_text": {
+                    "type": "boolean",
+                    "description": (
+                        "除选项外再给一个输入框，缺省 false；"
+                        "给了也仍然要给选项"
+                    ),
+                },
+                "free_text_label": string_schema(
+                    "输入框的提示语；allow_free_text 为真时才有用"
+                ),
+            },
+            ["question", "options"],
+        ),
+        runs_on="client",
+    ),
     ToolSpec(
         name="dataset.read_columns",
         description=(

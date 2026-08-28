@@ -7,11 +7,14 @@
  * 复现，本地用假件一次都碰不到。
  */
 import { beforeEach, describe, expect, it } from 'vitest'
+import type { AssistantAskRequest } from '@dt/contracts'
 
 import {
   MAX_KEPT_IMAGES,
   __resetEntryIds,
   emptyLog,
+  withAnswered,
+  withAsk,
   withDelta,
   withReply,
   withSaid,
@@ -161,5 +164,64 @@ describe('截图封顶', () => {
     const first = log.entries[0]
     expect(first?.step?.image).toBeUndefined()
     expect(first?.step?.isImageDropped).toBe(true)
+  })
+})
+
+const ASK: AssistantAskRequest = {
+  question: '这一格的值从哪来？',
+  options: [{ value: 'opcua', label: '实时点位' }],
+  allow_multiple: false,
+  allow_free_text: false,
+  free_text_label: null,
+}
+
+describe('提问条目', () => {
+  it('摆出来时还没有答案，问题就是这一条的正文', () => {
+    const log = withAsk(emptyLog(), 'a1', ASK)
+    const entry = log.entries[0]
+    expect(entry?.role).toBe('ask')
+    expect(entry?.id).toBe('a1')
+    expect(entry?.text).toBe('这一格的值从哪来？')
+    expect(entry?.ask?.answer).toBeNull()
+  })
+
+  it('提问也断句：它之后模型说的话是新的一段', () => {
+    // 接在旧气泡后面读起来像它在自言自语中途插了个问题
+    const streaming = withDelta(emptyLog(), 'text', '我看了看')
+    const log = withAsk(streaming, 'a1', ASK)
+    expect(log.openText).toBeNull()
+    expect(log.entries[0]?.isStreaming).toBe(false)
+  })
+
+  it('答案落回那一条上', () => {
+    const log = withAnswered(withAsk(emptyLog(), 'a1', ASK), 'a1', {
+      picked: ['opcua'],
+      free_text: null,
+      is_cancelled: false,
+    })
+    expect(log.entries[0]?.ask?.answer?.picked).toEqual(['opcua'])
+  })
+
+  it('答过的不许再改：结掉与点击同时到时只收得下第一条', () => {
+    const once = withAnswered(withAsk(emptyLog(), 'a1', ASK), 'a1', {
+      picked: ['opcua'],
+      free_text: null,
+      is_cancelled: false,
+    })
+    const twice = withAnswered(once, 'a1', {
+      picked: [],
+      free_text: null,
+      is_cancelled: true,
+    })
+    expect(twice.entries[0]?.ask?.answer?.is_cancelled).toBe(false)
+  })
+
+  it('认不出的 id 原样返回，不误伤别的条目', () => {
+    const log = withAnswered(withAsk(emptyLog(), 'a1', ASK), 'a9', {
+      picked: [],
+      free_text: null,
+      is_cancelled: true,
+    })
+    expect(log.entries[0]?.ask?.answer).toBeNull()
   })
 })
