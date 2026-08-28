@@ -142,50 +142,87 @@ web/packages/twin2d/
 ├── tsconfig.json
 └── src/
     ├── index.ts                      桶：只做 re-export（check_barrels_only_reexport）
+    ├── env.d.ts                      非 TS 资源与跨包 .vue 的模块声明
+    │
     ├── constants.ts                  config key / 文档版本 / 三个槽键 / 行 fieldKey 构造 / TWIN_2D_VIEW_BINDINGS
-    ├── types.ts                      文档类型全集（§4 的字面量就是这份）
-    ├── kinds.ts                      闭合常量数组：图元 kind / 状态 / 标注 kind / 路由档 / 阈值算子 / 表达式算子 / TWIN_2D_SPRITE_IDS 与 TWIN_2D_FIXED_COLOR_SPRITES
-    ├── normalize.ts                  normalizeTwin2dConfig 入口 + canvas
-    ├── normalizeStyles.ts            节点样式 / 连线样式 / 端口 / 槽位
-    ├── normalizePrims.ts             图元树（递归，深度上限 6）
-    ├── normalizeNodes.ts             节点实例 + 覆盖补丁 + 追加图元 + tags
-    ├── normalizeEdges.ts             连线 + 端点 + 拐点 + 悬空过滤
-    ├── normalizeMarks.ts             标注
-    ├── geometry.ts                   周长参数化、反投影、四种路由、圆角折线、箭头（§8）
-    ├── transform.ts                  rotate × flip 的复合、portWorldPos、centerBoxOf
-    ├── placement.ts                  五种摆位 → CSS；九档锚点表；法线推移
-    ├── paintBox.ts                   box：布局 / 多层填充 / 边框 / 圆角 / 阴影 / 裁剪
-    ├── paintVec.ts                   vec：五种几何 → SVG 属性、多遍描边、局部渐变
-    ├── paintText.ts                  txt / ico：字体、省略、阴影、图标四来源
-    ├── paintCommon.ts                基类六项（摆位、z、opacity、rotate、transition、pointerEvents）+ --t2-* 注入
-    ├── cssValue.ts                   CSS 值消毒（拒 url( 与控制字符）+ 颜色回退链
-    ├── canvasBackdrop.ts             画布底两层求值（舞台与编辑画布共用，§7 #76）
-    ├── variants.ts                   条件求值 + 变体补丁浅合并
-    ├── expr.ts                       派生槽表达式求值（闭合小语言，深度上限 3）
-    ├── format.ts                     读数格式化（第二份副本，见 §11.3）
-    ├── bindingRows.ts                行 → 实体的映射、行标签/行数、绑定重派、缝合
-    ├── issues.ts                     诊断（悬空 styleId / 槽引用 / 端口 / 补丁图元 id / 越界拐点 / 超深树）
+    ├── kinds.ts                      全部闭合取值域：图元 kind / 摆位 / 状态 / 交互态 / 路由 / 条件 / 阈值算子 / 表达式算子 / sprite id
+    ├── types.ts                      文档契约：画布、槽位、变体、端口、两种样式与三类实例（§4 的字面量就是这份）
+    ├── typesPrim.ts                  图元那一族的类型：长度、填充、描边、几何、摆位、条件、算式
+    │
+    ├── normalize.ts                  normalizeTwin2dConfig 入口 + 画布
+    ├── normalizeStyles.ts            节点样式 / 连线样式，以及它们里面的端口、槽位、变体
+    ├── normalizePrims.ts             图元树：四种图元的公共十六项 + 各自字段，深度上限 6
+    ├── normalizePieces.ts            图元盒那一族：长度 / 尺寸 / 内边距 / 圆角 / 字体 / 布局 / 边框
+    ├── normalizePaint.ts             上色那一族：填充层 / 描边遍 / 局部渐变 / 色标 / 阴影 / SVG 上色
+    ├── normalizeShape.ts             五种 SVG 几何；画不出来的一律判非法
+    ├── normalizeExprs.ts             两门闭合小语言：派生槽算式（七档、最多三层）与变体条件
+    ├── normalizeNodes.ts             节点实例：位姿、子类 tags、按图元 id 的覆盖、追加图元
+    ├── normalizeEdges.ts             连线：端点、拐点、走线档，指向不存在节点的整条丢弃
+    ├── normalizeMarks.ts             标注三档（辅助框 / 辅助线 / 文字）
+    ├── sanitize.ts                   清洗原语：数 / 串 / 布尔 / 闭合取值域 / 长度 / 去重
+    │
+    ├── geometry.ts                   节点盒的周长参数化、反投影、出线方向解析、折线弧长取点（§8）
+    ├── outline.ts                    外接矩形上的周长点 → 符号**画出来的外缘**（圆角矩形 / 椭圆 / 胶囊）
+    ├── transform.ts                  节点位姿唯一实现：左上角 ↔ 中心盒、根 transform 串、端口世界坐标
+    ├── placement.ts                  摆位五档 → 内联定位；九档锚点贴边表；法线推移
+    ├── stageFit.ts                   舞台贴合的算术：四档缩放倍率与它的反函数
+    ├── edgePath.ts                   圆角折线 path 串、四档走线路由与统一入口 edgePath()
+    ├── edgeView.ts                   连线层的绘制输入：两端解析、多遍描边、标记与标签落位
+    │
+    ├── paintCommon.ts                图元基类六项（摆位 / z / opacity / rotate / transition / pointerEvents）+ --t2-* 注入
+    ├── paintBox.ts                   box：排布六项、多层填充合成一条 background、四边可分关的边框、圆角、阴影
+    ├── paintVec.ts                   vec：五种几何 → SVG 属性、多遍描边分层、局部渐变（id 带实例前缀）
+    ├── paintText.ts                  txt / ico：字体五键、行高、对齐与省略、阴影、图标四来源、逐槽状态四档
+    ├── cssValue.ts                   用户可填 CSS 值的消毒（拒 url( 与控制字符）+ 颜色兜底链
+    ├── canvasBackdrop.ts             画布底两层（底图与图案）的求值，舞台与编辑画布共用（§7 #76）
+    ├── assets.ts                     素材引用 asset:<uuid> → 可取回地址的注入槽（图标与底图各一支，§11.4）
+    │
+    ├── variants.ts                   变体求值：七档条件判定 + 按文档序的补丁浅合并（§9.2）
+    ├── expr.ts                       派生槽算式求值：七档闭合小语言，深度上限 3（§9.5）
+    ├── slotRefs.ts                   「一处配置引到了哪个槽键」这套遍历的**唯一一份**（§14.2）
+    ├── format.ts                     读数格式化（与 @dt/modules/shared/format 同签名的第二份副本，§11.3）
+    │
+    ├── bindingRows.ts                三个数组槽摊成行、行 → 实体的映射与 twin2dStyleResolver
+    ├── bindingValues.ts              模块 values 袋 → 三路运行态的缝合（派生槽就地求值，§10.1）
+    ├── bindingRemap.ts               配置改动前后对比，把绑定从旧行号搬到新行号（§14.3）
+    │
+    ├── issueTypes.ts                 诊断词汇表：两档严重度、十六个 code 与一条诊断的形状
+    ├── issues.ts                     诊断入口，吃**原始** JSON（悬空 styleId / 槽引用 / 端口 / 补丁 id / 越界拐点 / 超深树）
+    ├── issuesDropped.ts              「归一化整条丢掉了什么」那一族，同样跑在原始 JSON 上
+    │
     ├── presets/
     │   ├── index.ts                  桶
     │   ├── palette.ts                预置调色板（字面 hex，§6.1）
-    │   ├── nodes.ts                  11 种预置节点样式
-    │   ├── subtypes.ts               7 组子类变体（§6.3）
+    │   ├── primKit.ts                三个 box 系族共用的图元零件
+    │   ├── chrome.ts                 每份预置都挂的两枚外挂件：左上角标与外置显示名
+    │   ├── nodesSource.ts            4 个能源源（余热 / 蒸汽 / 空气能 / 太阳能）
+    │   ├── nodesVessel.ts            2 个储能容器（水箱 tank / 罐 cylinder）
+    │   ├── nodesTerminal.ts          3 个末端（洗浴 / 采暖 / 空调）
+    │   ├── nodesMisc.ts              2 个不成族的（板式换热器 square / 标注 text）
+    │   ├── subtypes.ts               子类那一层：4×4 源 + 3×3 末端 = 25 种视觉组合（§6.3）
+    │   ├── scale.ts                  出厂尺度：各族按参考尺度产样式，这一道把**长度类**取值等比缩到 1080p 观感档（§7.13）
+    │   ├── nodes.ts                  汇总面：五族接成一张有序清单 + 一张 id → 样式
+    │   ├── circuit.ts                8 枚电路符号（GB/T 4728，§6.2）
     │   ├── edges.ts                  5 种预置连线样式
-    │   ├── sensors.ts                4 种预置传感器药丸（可追加进任意节点）
-    │   └── circuit.ts                8 枚电路符号（GB/T 4728，§6.2）
+    │   └── sensors.ts                4 种预置传感器药丸（可追加进任意节点）
+    │
     └── render/
         ├── icons.svg                 内置图标 sprite，从参考项目原样搬（§5）
         ├── Twin2dIconSprite.vue      sprite 宿主：每个 DOM 文档挂一次
-        ├── Twin2dStage.vue           舞台：等比缩放、层序、图案底、空态
-        ├── Twin2dNodeBox.vue         一个节点：根容器、状态类、局部变量注入、旋转镜像、hover
-        ├── Twin2dPrim.vue            图元递归渲染（四分支）
-        ├── Twin2dVec.vue             SVG 图元层（含渐变 id 加前缀）
-        ├── Twin2dGlyph.vue           图标四来源
-        ├── Twin2dEdgeLayer.vue       连线层：多遍描边 + 端点标记 + 引脚 marker + 标签
+        ├── Twin2dStage.vue           舞台：等比缩放贴合（fitMode 四档）、六层层序、图案底、空态
+        ├── Twin2dNodeBox.vue         一个节点：根位姿、六个 --t2-* 注入、hover 自检、变体求值
+        ├── Twin2dPrimView.vue        图元树的递归渲染件（四分支）
+        ├── Twin2dVec.vue             SVG 图元层（渐变 id 带实例前缀）
+        ├── Twin2dGlyph.vue           ico 的四来源分支
+        ├── Twin2dEdgeLayer.vue       连线层：多遍描边 + 端点标记 + 引脚 marker + 沿路径标签
         ├── Twin2dMarkLayer.vue       标注层：一层一档 zOrder，舞台挂两次
         ├── Twin2dMarkShape.vue       一条标注：三档几何 + 标签（编辑器挂的是同一份）
         └── twin2d.scss               固定 keyframes + 结构性样式，全部 var() 驱动
 ```
+
+> ⚠ 这棵树与 `web/packages/twin2d/src/` 的实际文件是**逐个对上的**，加文件要同步改。
+> 只补一行会让它看着像在维护、实际仍然是错的——而读的人正是靠它决定「这件事该写在哪个
+> 文件里」，对不上时新代码就落进了随手挑的那一个。
 
 依赖表两处副本都要登记：
 
@@ -237,51 +274,82 @@ web/packages/modules/src/modules/twin-2d-view/
 
 ```
 web/app/src/pages/Twin2dEditor/
-├── index.vue                       AppShell + 三栏 + DtPageState
+├── index.vue                       AppShell + 三栏 + DtPageState；持有撤销栈、选中、样式焦点与编辑面开关
 ├── components/
-│   ├── Twin2dToolbar.vue           保存/撤销/重做/工具切换/吸附/适应/诊断
-│   ├── EditorCanvas.vue            视口壳：平移缩放、坐标换算、指针总线
-│   ├── CanvasGrid.vue              底图与图案底（调 canvasBackdropStyles）、网格与设计框遮罩
-│   ├── CanvasNodeLayer.vue         节点层：拖动、选中、旋转手柄、端口点
-│   ├── CanvasEdgeLayer.vue         连线层（复用 Twin2dEdgeLayer）+ 命中带
-│   ├── CanvasEdgeHandles.vue       拐点/端点把手（一手势一步撤销）
-│   ├── CanvasMarkLayer.vue         标注绘制与八手柄缩放（按 zOrder 分两层）
+│   ├── Twin2dToolbar.vue           顶栏：撤销重做、适应画布、诊断计数、保存
+│   ├── Twin2dOutline.vue           左栏大纲：节点 / 连线 / 标注 / 样式四段可折叠
+│   ├── OutlineRow.vue              大纲里的一行：类别图标 + 主副名 + 小徽标
+│   ├── NodePalette.vue             调色板：预置库 ∪ 自建按 category 分组，真实缩略图，拖入画布
+│   ├── StyleLibraryDrawer.vue      样式库抽屉：新建 / 复制 / 删除 / 恢复内置 / 导入导出 / 开编辑面
+│   ├── Twin2dStyleWizard.vue       带预览的样式编辑面：左整套配置、右实时预览（§13.7）
+│   ├── Twin2dStylePreview.vue      样式预览件：临时节点跑 Twin2dNodeBox，切变体 / 状态 / 尺寸 / 示例读数
+│   │
+│   ├── EditorCanvas.vue            视口壳：平移缩放、屏幕 ⇄ 设计坐标换算、指针总线
+│   ├── EditorStage.vue             画布装配层：各层按运行态层序摆进视口壳，持有各层草稿
+│   ├── CanvasGrid.vue              画布底图与图案底 + 按倍率对齐的网格 + 设计框遮罩
+│   ├── CanvasNodeLayer.vue         节点层：拖动、点选、选中框、旋转手柄、端口点
+│   ├── CanvasEdgeLayer.vue         连线层：可见的线交给包里的 Twin2dEdgeLayer，另铺命中带
+│   ├── CanvasEdgeHandles.vue       选中那条线的把手：每个拐点一枚、两端各一枚
+│   ├── CanvasMarkLayer.vue         标注层：一实例一档 zOrder，画布挂两次
+│   ├── CanvasMarkHandles.vue       标注把手：有框的两档给八向缩放，线给两端
 │   ├── CanvasMarquee.vue           框选
-│   ├── CanvasConnectPreview.vue    连线预览虚线
-│   ├── NodePalette.vue             样式库调色板（分组 + 拖拽）
-│   ├── StyleLibraryDrawer.vue      样式库管理（新建/复制/恢复内置/导入导出）
-│   ├── Twin2dOutline.vue           左栏大纲（节点/连线/标注/样式四段）
-│   ├── OutlineRow.vue
-│   ├── Twin2dInspector.vue         右栏分发
-│   ├── inspector/{Node,Edge,Mark,Canvas,Style}Inspector.vue
-│   ├── inspector/{PrimTree,PrimFields,VariantFields}.vue
-│   ├── fields/{Placement,Geometry,Color,Transition}Field.vue
-│   ├── fields/{StrokePassList,FillList,ShadowList,PortList,SlotList,ExprEditor}.vue
-│   ├── Twin2dBindingPane.vue       复用 BindingPanel
-│   ├── Twin2dRuntimePreview.vue    画中画运行态
-│   └── Twin2dDiagnostics.vue
-└── scripts/
-    ├── types.ts                    页面内选中态等
-    ├── twin2dDoc.ts                文档态 + 撤销栈（照 twinDoc.ts）
-    ├── useTwin2dEditorPage.ts      取数与落库（整树替换，走 useRacedFetch）
-    ├── editorSelection.ts          四条选中轴（节点/连线/标注/样式）
-    ├── {node,edge,mark,style,prim,port,waypoint}Ops.ts
-    ├── snapping.ts / viewportOps.ts / clipboard.ts / shortcuts.ts
-    ├── useCanvasPointer.ts         指针手势状态机
-    ├── useTwin2dBindings.ts / useTwin2dLiveValues.ts
-    └── stylePackage.ts             样式包导入导出（JSON）
+│   ├── CanvasConnectPreview.vue    从端口拉出来的连线预览虚线
+│   │
+│   ├── Twin2dRightPane.vue         右栏顶层分页：属性 / 绑定
+│   ├── Twin2dInspector.vue         属性页的分派：按选中交给四个检查器之一
+│   ├── Twin2dArrangePanel.vue      多选后的批量摆位：六档对齐 + 两档等间距
+│   ├── Twin2dBindingPane.vue       绑定页（复用 BindingPanel），默认只摆当前选中那个实体的行
+│   ├── Twin2dRuntimePreview.vue    画中画：按大屏上的宽高比跑运行态那一条
+│   ├── Twin2dDiagnostics.vue       诊断清单，点一条跳到出问题的实体
+│   ├── inspector/
+│   │   ├── {Canvas,Node,Edge,Mark}Inspector.vue      四类实体各一副面
+│   │   ├── {Style,EdgeStyle}Inspector.vue            两条样式轴各一副面
+│   │   ├── StylePane.vue                             样式栏装配：预览 + 检查器 + 两个具名插槽
+│   │   ├── {PrimTree,PrimFields,VariantFields}.vue   图元树 / 一枚图元的字段 / 一条变体
+│   │   ├── Node{PortList,LayerList,SensorList,TagList,BadgeFields}.vue  节点级的五张小表
+│   │   └── prim/                                     图元字段的分档面与格件
+│   │       ├── {Box,Vec,Ico,Txt}Fields.vue           四种 kind 各自的字段
+│   │       ├── PrimBaseFields.vue                    四种共有的十五项
+│   │       ├── {Len,Radius,Border,Paint}Field.vue    长度 / 圆角 / 边框 / SVG 上色
+│   │       ├── {DrawPart,Gradient}List.vue           手绘几笔 / 局部渐变表
+│   │       ├── ConditionField.vue                    七档变体条件
+│   │       ├── RootPatchFields.vue                   变体作用在节点根上的覆盖
+│   │       ├── VariantPatchRow.vue                   一条变体里针对一枚图元的覆盖
+│   │       └── StringListField.vue                   逗号分隔的名单
+│   └── fields/                                       跨检查器共用的格件（只有 .vue）
+│       ├── {Placement,Geometry,Color,Transition}Field.vue
+│       ├── {EdgeMarker,PinMarker}Field.vue
+│       ├── {StrokePass,Fill,Shadow,Port,Slot}List.vue
+│       └── ExprEditor.vue                            派生槽算式：七档算子，最多三层
+└── scripts/                                          只有 .ts；组合式函数与纯逻辑同一个文件夹
+    ├── types.ts                    「现在选中的是什么」与五类实体集合的名字
+    ├── twin2dDoc.ts                文档态 + 绑定 + 撤销栈；写配置只有 commit 一个入口
+    ├── twin2dNodeDoc.ts            大屏节点 ↔ 2D 孪生文档的两次搬运
+    ├── useTwin2dEditorPage.ts      取数与落库（整树替换，走 useRacedFetch，§13.5）
+    ├── editorSelection.ts          画布那条选中轴 + 与它并行的样式焦点轴
+    ├── editorCommands.ts           键盘手势的十二个落点
+    ├── shortcuts.ts                键盘手势的判定与装载；suspended 时整体让位
+    ├── clipboard.ts                实体与图元两族剪贴板
+    ├── {node,edge,mark,port,waypoint}Ops.ts   四类实例与端口的纯变更
+    ├── {style,prim}Ops.ts          样式面与图元树的纯变更（改内置 = 落一份同 id 覆盖）
+    ├── stylePackage.ts             样式包导入导出（JSON），三档撞名处理
+    ├── styleLibrary.ts             样式库抽屉的行推导
+    ├── stylePreview.ts             样式预览的纯算料：临时节点、示例读数、缩放盒（§13.7）
+    ├── {outlineRows,primTreeRows}.ts          大纲行 / 图元树摊平成一列
+    ├── inspectorFields.ts          检查器共用的三件小事（闭合取值摆成选项等）
+    ├── paletteDrag.ts              调色板 → 画布拖放那半张契约：dataTransfer 用哪个类型、载荷装什么
+    ├── useCanvasPointer.ts         指针手势状态机（pointerdown → move → up）
+    ├── gestureFrame.ts             手势帧的两条纯判定：这一按归不归本层接、Shift 锁轴
+    ├── {viewportOps,snapping,entityBoxes,fitContent,hostFit}.ts   视口 / 吸附 / 包围盒 / 裁到内容 / 1:1 判据
+    ├── useTwin2dSizing.ts          画布尺寸这一簇：与大屏格子对不对得上、四周还剩多少
+    ├── {shapeText,useKeyDrafts}.ts             几何的文本面 / 寻址键改名的草稿
+    ├── {useTwin2dBindings,useTwin2dLiveValues}.ts  绑定这一路 / 实时读数这一路
+    └── twin2dIssues.ts             诊断入口：一份配置进，归一化结果与逐条问题出
 ```
 
 结构闸的三条硬约束（`check_page_directories` / `check_page_scripts_in_one_dir`）都遵守：
 页面根只有 `index.vue`、私有组件只在 `components/` 且只有 `.vue`、脚本只在 `scripts/` 且只有 `.ts`。
 `useUnsavedGuard` **不在这里**——它提到 `app/src/composables/` 与 `TwinEditor` 共用（§19 R0b）。
-
-> ⚠ **画布上有一处缺口，记在这里以免被当成 bug 去查：拖节点时连线不跟着走**，
-> 松手才归位。拖动中的位置是节点层私有的草稿，而 `EditorStage` 喂给连线层的是文档里的
-> `nodes`，层间没有逐帧通道；拖把手改连线走的是另一条路，那一条有草稿边、线会跟着动。
-> 补它要把节点草稿提到 `EditorStage` 按帧下发给连线层，代价是每个 `pointermove` 多一次
-> 全量连线重算（每条线一次路由求解加一次弧长定位），而一次多选拖动是几百个
-> `pointermove`。是否值得等真机拖起来再定。
 
 ### 3.4 行数量级（诚实版）
 
@@ -1701,6 +1769,55 @@ onBeforeUnmount(() => raced.cancel())
 ⚠ 这次提取排在**最前面一轮**（§19 的 R0b），在本模块任何一行代码之前：
 排在后面的话，第一个用到它的分片 PR 就得连带把提取一起带进来，而那会让
 那个 PR 的规模豁免整体失效。验收里带一条「顺手跑 `TwinEditor` 的既有用例」。
+
+
+### 13.7 自定义样式边配边看
+
+样式是**数据**，不是代码：用户配完一棵图元树，在按下保存之前没有任何地方告诉他配出了
+什么。三处各自的理由不同，但都落在同一个预览件上（`Twin2dStylePreview.vue`）。
+
+| 摆在哪 | 为什么非要有 |
+|---|---|
+| 样式栏顶上（`StylePane`） | 一份**刚新建的样式画布上还没有节点在用**，改它的时候整张画布一动不动。调色板那张缩略图太小且不带状态 |
+| 样式编辑面右栏（`Twin2dStyleWizard`） | 样式库抽屉是 `DtModal`，开着时把右栏整个盖住——「在库里改样式」这条路上，右栏那张预览一眼都看不见 |
+| 画布上 | **不需要做**：`config` 整份换引用 → `EditorStage` 的 `nodeStyles` 是 computed → `Twin2dNodeBox` 重画，逐键 `commitMerged` 也走同一条。改一个字符当帧就变 |
+
+**预览件复用 `Twin2dNodeBox`，不画示意图。** 与 `NodePalette` 的缩略图同一条理由：编辑器
+与大屏所见即所得靠的就是两边同一个渲染件，示意图会把「这个样式长什么样」推回给用户去试。
+预览造的是一个**临时**节点与一份临时配置，一个字都不写回文档——内置样式的编辑是文档里落
+一份同 id 的覆盖（§13.4），预览这一层要是也 materialize 一份，就成了第二条落地路径。
+
+**示例读数经 `twin2dValues` 缝出来**（`scripts/stylePreview.ts`），不在预览侧另拼一张槽键
+表：派生槽求值与「同键以样式那一份为准」全仓只有那一份口径（§10.1、§14.2），另拼一张会让
+预览里的派生槽与墙上不是同一个数，而两处单看都对。
+
+**编辑面不拦本地草稿**，改动照常按三档（一次性 / 合并 / 断段）原样上抛页面，撤销栈仍归页面
+那一个 `commit` 持有。拦一份草稿再「保存」的话，撤销键退不回这一段里的任何一步，而且草稿与
+文档会漂出第二套「什么时候落一份覆盖」的判断。左栏也因此直接复用 `StylePane` 整套字段，不
+另摆一份。
+
+> ⚠ 预览面上**必须**能切变体与状态：变体产出的是内联补丁而不是一份静态样式（§9.2），
+> 不切到那一档上，配了十条变体的样式在预览里与没配一模一样，用户只能靠往画布上摆一个
+> 再造出那个状态来验。
+> ⚠ 预览件**不喂 `idPrefix`**，回落 `Twin2dNodeBox` 自己那份 `useId()`：局部渐变的 DOM id
+> 是 `t2g-<前缀>-<渐变 id>`，按样式 id 拼前缀的话，同一份样式的两张预览（样式栏一张、
+> 编辑面一张，开编辑面时必然同时在场）会把同一个 id 写进文档两遍，`url(#…)` 只认头一个，
+> 于是第二张的渐变悄悄取到第一张那份。sprite 的 `<use href="#…">` 指的是**全局** symbol
+> id、本就不带实例前缀，那一路不受影响。
+> ⚠ 编辑面开在哪一份样式上归**页面**持有，不是抽屉的内部状态：画布的键盘手势按「有没有
+> 覆盖层开着」整体让位，而那道闸在页面上。开编辑面这一步会顺手把抽屉关掉（右栏焦点要跟着
+> 切过去），闸门只认抽屉的话它自己就失效了——表现是在编辑面里按 `Delete`，删掉的是**画布上
+> 选中的那个节点**，并压进撤销栈。
+> ⚠ 编辑面是叠在抽屉之上的第二层弹窗，`layer` 必须调高：同一层的弹窗 z-index 相同、谁在
+> 上全看挂载次序，抽屉挂得早就会把它整个盖住。
+
+**已知缺口：五档交互态里只有 `hover` 有运行期驱动。** `Twin2dNodeBox` 的 `states` prop
+全仓无人喂——`Twin2dStage` 只递 `edgeStates`，编辑器的 `CanvasNodeLayer` 与模块壳
+`Component.vue` 都一档不递，只有 `hover` 由节点根上那对 `@mouseenter` / `@mouseleave`
+自检（§9.3）。于是 `selected` / `active` / `alarm` / `flipped` 四档条件的变体**配得出来、
+存得下去、运行态永远不触发**，且一处都不报错。预览面照样把五档都摆出来（否则配了那几条连
+在编辑器里都验不了），但这是**现状而不是设计意图**：真要用那四档，得先在舞台与画布两处把
+`states` 接上，接之前不该在别处依赖它们。
 
 ---
 
