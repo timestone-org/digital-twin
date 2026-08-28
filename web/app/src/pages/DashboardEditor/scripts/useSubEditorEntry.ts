@@ -19,7 +19,8 @@ export interface SubEditorEntryDeps {
   selectedId: ComputedRef<string | null>
   /** 布局或元数据任一脏着都算脏。 */
   isDirty: () => boolean
-  save: () => Promise<void>
+  /** 保存两条轴；回执由调用方各自解读，这里只等它跑完。 */
+  save: () => Promise<unknown>
   confirm: {
     ask: (input: {
       title: string

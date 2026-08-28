@@ -121,6 +121,9 @@ function setup(): Harness {
           notify: vi.fn(),
         }),
         stageEl: () => null,
+        readSample: () => undefined,
+        save: () => Promise.resolve({ isSaved: true, message: null }),
+        savedVersion: () => 1,
         getManifest,
       })
       return () => h('div')

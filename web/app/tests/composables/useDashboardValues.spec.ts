@@ -19,7 +19,10 @@ import { __resetProviders, registerProvider } from '@dt/datasources'
 import { useRuntimeData } from '@dt/runtime'
 import type { RuntimeDataSource } from '@dt/runtime'
 
-import { useDashboardValues } from '@/composables/useDashboardValues'
+import {
+  useDashboardValues,
+  type DashboardValues,
+} from '@/composables/useDashboardValues'
 
 const unsubscribe = vi.fn()
 let asked: string[][] = []
@@ -78,6 +81,7 @@ function mountValues(initial: DashboardNodePayload[], initialScope = 'd1') {
   const nodes = ref<DashboardNodePayload[]>(initial)
   const scope = ref(initialScope)
   let source: RuntimeDataSource | null = null
+  let values: DashboardValues | null = null
   // ⚠ 取数源要在**子组件**里取：provide 在同一个 setup 里 inject 不到自己
   const child = {
     setup() {
@@ -87,15 +91,16 @@ function mountValues(initial: DashboardNodePayload[], initialScope = 'd1') {
   }
   const host = defineComponent({
     setup() {
-      const values = useDashboardValues(
+      const found = useDashboardValues(
         () => nodes.value,
         () => scope.value,
       )
-      return () => h('div', [String(values.sampleCount.value), h(child)])
+      values = found
+      return () => h('div', [String(found.sampleCount.value), h(child)])
     },
   })
   const wrapper = mount(host)
-  return { wrapper, nodes, scope, read: () => source }
+  return { wrapper, nodes, scope, read: () => source, values: () => values }
 }
 
 beforeEach(() => {
@@ -229,5 +234,33 @@ describe('取数源', () => {
     await wrapper.vm.$nextTick()
 
     expect(wrapper.text()).toContain('1')
+  })
+})
+
+describe('透出去的那份快照缓存', () => {
+  // 助手的 read_values 读它。⚠ 必须与画布渲染是**同一份**：另发一次请求的话，
+  // 会出现「助手说有值、画面上是占位符」
+  it('与画布渲染读的是同一份缓存', () => {
+    registerFakeRealtime()
+    const { values, read } = mountValues([node([binding('s:a')])])
+
+    emit('s:a', { state: 'ok', value: 21, timestampMs: 99, quality: 'good' })
+
+    expect(values()?.read('s:a')).toEqual({
+      state: 'ok',
+      value: 21,
+      timestampMs: 99,
+      quality: 'good',
+    })
+    expect(read()?.readBinding()(binding('s:a'), {})).toMatchObject({
+      value: 21,
+    })
+  })
+
+  it('没收到过的点位给 undefined，不拿一个空值冒充首帧', () => {
+    registerFakeRealtime()
+    const { values } = mountValues([node([binding('s:a')])])
+
+    expect(values()?.read('s:a')).toBeUndefined()
   })
 })

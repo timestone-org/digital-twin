@@ -12,7 +12,7 @@
  * ⚠ 对话放在这里而不是面板组件里：面板收起就卸载，对话不能跟着没。
  */
 import { onMounted, onUnmounted, ref, type Ref } from 'vue'
-import type { AssistantModelProfile } from '@dt/contracts'
+import type { AssistantCapability, AssistantModelProfile } from '@dt/contracts'
 
 import { createSession, patchSession } from '@/api/assistant'
 import { newComposeState, type ComposeState } from '@/composables/useAiCompose'
@@ -152,12 +152,25 @@ async function probeInto(into: {
   const capability = await ask()
   into.isAvailable.value = capability?.is_model_enabled === true
   into.models.value = capability?.models ?? []
-  // ⚠ 只在还没选过时填默认：填过头会把用户在别的标签页里换的那一路盖回去
-  if (into.choice.value.profile === '') {
-    into.choice.value = {
-      profile: capability?.default_model_id ?? '',
-      effort: '',
-    }
+  fillDefaults(into.choice, capability)
+}
+
+/**
+ * 还没选过时把部署的默认填上。
+ * ⚠ 只在还没选过时填：填过头会把用户在别的标签页里换的那一路盖回去。
+ * ⚠ 两格一起填：只填模型那一格的话，默认落在「按量计费 + 不指定思考档」上，
+ * 而后端已经把「此刻真能用的那一路」算好了，前端不许再判一次。
+ * @param choice 面板此刻选中的那一路
+ * @param capability 探到的能力；探不到时是 null
+ */
+function fillDefaults(
+  choice: Ref<ModelChoice>,
+  capability: AssistantCapability | null,
+): void {
+  if (choice.value.profile !== '') return
+  choice.value = {
+    profile: capability?.default_model_id ?? '',
+    effort: capability?.default_effort ?? '',
   }
 }
 

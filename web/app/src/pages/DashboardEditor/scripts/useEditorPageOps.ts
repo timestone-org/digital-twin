@@ -14,6 +14,7 @@ import type {
 } from '@/features/dashboard/editorDoc'
 import type { EditorActions } from './editorActions'
 import type { ArrangeActions } from './editorArrange'
+import type { SaveOutcome } from '@/features/ai/saveTool'
 import { saveDashboard } from './editorSave'
 import { useEditorDraftFlow } from './useEditorDraftFlow'
 import type { EditorMeta } from './useEditorMeta'
@@ -51,7 +52,8 @@ export interface EditorPageOps {
   removeNode: (nodeId: string) => Promise<void>
   removeSelected: () => Promise<void>
   reload: () => Promise<void>
-  save: () => Promise<void>
+  /** 保存两条轴。⚠ 回执带失败原因：助手那条保存工具靠它把 409 如实抛出去。 */
+  save: () => Promise<SaveOutcome>
   changeSelectedGeometry: (
     geometry: NodeGeometry,
     isContinuous: boolean,
@@ -108,17 +110,22 @@ async function reload(deps: EditorPageOpsDeps): Promise<void> {
 }
 
 // 双轴保存的顺序不变量见 editorSave.ts
-async function save(deps: EditorPageOpsDeps): Promise<void> {
+async function save(deps: EditorPageOpsDeps): Promise<SaveOutcome> {
   const { file, toast } = deps
+  // ⚠ 用一只可变盒子而不是裸变量：赋值发生在回调里，TS 不跟踪那一次赋值，
+  //   裸变量在返回处会被窄化成 null，于是失败原因永远传不出去
+  const failure: { message: string | null } = { message: null }
   const done = await saveDashboard({
     editor: deps.editor,
     file,
     meta: deps.meta,
     onFail: () => {
-      toast.error(file.conflict.value ?? file.error.value ?? '保存失败')
+      failure.message = file.conflict.value ?? file.error.value ?? '保存失败'
+      toast.error(failure.message)
     },
   })
   if (done) toast.success('大屏已保存')
+  return { isSaved: done, message: failure.message }
 }
 
 /** 草稿流与离开守卫装在本工厂：要的（编辑器/载荷/元数据/确认框）恰与这里的依赖重合。 */

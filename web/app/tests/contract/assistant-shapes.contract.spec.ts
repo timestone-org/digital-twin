@@ -90,6 +90,7 @@ const SHAPES: Record<string, Record<string, true>> = {
     skills: true,
     models: true,
     default_model_id: true,
+    default_effort: true,
   } satisfies Keys<AssistantCapability>,
   ModelProfileOut: {
     id: true,
