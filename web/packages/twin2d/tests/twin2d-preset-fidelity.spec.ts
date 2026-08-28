@@ -321,6 +321,11 @@ function exprOf(styleId: string, key: string): Twin2dExpr {
   return expr
 }
 
+/** 一个样式的槽位口径表：`join` 拿它给每一段出单位与精度。 */
+function formatsOf(styleId: string): Map<string, Twin2dSlot> {
+  return new Map(styleOf(styleId).slots.map((slot) => [slot.key, slot]))
+}
+
 /** 角标底色的注入变量名，`node.badgeColor || accent` 都落到它上面。 */
 const BADGE_VAR = 'var(--t2-badge)'
 
@@ -2384,7 +2389,7 @@ describe('§7.12 取值、格式化、状态归一与派生（11 件）', () => 
     }
   })
 
-  it('§7-91 数值格式：precision 为 null 时整数直出、小数一位；给了数就定点补零；单位空格分隔', () => {
+  it('§7-91 数值格式：precision 为 null 时整数直出、小数一位；给了数就定点补零；字母单位空格分隔', () => {
     const loose = fmtSlot('auto', null, '')
     const fixed = fmtSlot('auto', 2, 'kWh')
 
@@ -2415,11 +2420,13 @@ describe('§7.12 取值、格式化、状态归一与派生（11 件）', () => 
 
     expect([output.format, output.precision, output.unit]).toEqual([
       'kwhShort',
-      0,
+      null,
       '',
     ])
-    // ⚠ 这一档的 precision 是「压缩后留几位」而不是「定点几位」：0 让 12345 显 12k，
-    //   与参考项目 `abs >= 10000 → toFixed(0)` 那一支同值
+    // ⚠ 不给 precision：这一档的缺省位数随值分两支，与参考项目
+    //   `toFixed(abs >= 10_000 ? 0 : 1)` 同源。钉死一个位数只对得上其中一支
+    expect(formatSlotValue(3300, output)).toBe('3.3k')
+    expect(formatSlotValue(1400, output)).toBe('1.4k')
     expect(formatSlotValue(12345, output)).toBe('12k')
     expect(formatSlotValue(999.6, output)).toBe('1k')
     expect(formatSlotValue(999.4, output)).toBe('999')
@@ -2455,11 +2462,11 @@ describe('§7.12 取值、格式化、状态归一与派生（11 件）', () => 
       null,
       '%',
     ])
-    // ⚠ 单位与值之间那个空格是本仓全局口径（#91），参考项目那一处是拼死的 `%`——
-    //   逐字符对不上的只有这一格，它由槽位数据驱动，用户想去掉自己改 unit 即可
-    expect(formatSlotValue(63.456, efficiency)).toBe('63.46 %')
-    expect(formatSlotValue(63.4, efficiency)).toBe('63.4 %')
-    expect(formatSlotValue(63, efficiency)).toBe('63 %')
+    // ⚠ 百分号紧贴数值：参考项目那一处是拼死的 `${fmtTrim(v, 2)}%`，
+    //   逐字符相同。字母单位（同一张卡上的 kWh）照旧留一个空格
+    expect(formatSlotValue(63.456, efficiency)).toBe('63.46%')
+    expect(formatSlotValue(63.4, efficiency)).toBe('63.4%')
+    expect(formatSlotValue(63, efficiency)).toBe('63%')
     expect(`${fmtTrim(63.456, 2)}%`).toBe('63.46%')
   })
 
@@ -2477,7 +2484,9 @@ describe('§7.12 取值、格式化、状态归一与派生（11 件）', () => 
     }
   })
 
-  it('§7-98 容器读数拼接落成派生槽 join(["temperature_c","level_pct"], " · ")', () => {
+  // 参考项目 `vesselReading`：`${t.toFixed(1)}℃` 与 `${Math.round(l)}%`，' · ' 只在两段之间；
+  // 单位与精度写在槽位上，`join` 逐段照它出串（§7.4 #29）
+  it('§7-98 容器读数拼接落成派生槽 join(["temperature_c","level_pct"], " · ")，逐段带单位与定点', () => {
     const reading = slotOf('water-tank', 'reading')
     const expr = reading.expr
     if (expr === null) throw new Error('reading 不是派生槽')
@@ -2491,22 +2500,29 @@ describe('§7.12 取值、格式化、状态归一与派生（11 件）', () => 
       ],
       sep: ' · ',
     })
+    expect([
+      slotOf('water-tank', 'temperature_c').precision,
+      slotOf('water-tank', 'level_pct').precision,
+    ]).toEqual([1, 0])
     expect(
       evalExpr(
         expr,
-        new Map([
+        new Map<string, unknown>([
           ['temperature_c', 55],
           ['level_pct', 60],
         ]),
+        formatsOf('water-tank'),
       ),
-    ).toBe('55 · 60')
+    ).toBe('55.0℃ · 60%')
   })
 
   it('§7-99 能量兜底链：输出 first(output_kwh → today_kwh)，能效 first(efficiency_pct → cop×100 → 输出÷投入×100)', () => {
     const output = exprOf(SOURCE, 'output')
     const efficiency = exprOf(SOURCE, 'efficiency')
 
-    expect(evalExpr(output, new Map([['today_kwh', 12]]))).toBe(12)
+    expect(
+      evalExpr(output, new Map([['today_kwh', 12]]), formatsOf(SOURCE)),
+    ).toBe(12)
     expect(
       evalExpr(
         output,
@@ -2514,9 +2530,12 @@ describe('§7.12 取值、格式化、状态归一与派生（11 件）', () => 
           ['output_kwh', 8],
           ['today_kwh', 12],
         ]),
+        formatsOf(SOURCE),
       ),
     ).toBe(8)
-    expect(evalExpr(efficiency, new Map([['cop', 3.2]]))).toBe(320)
+    expect(
+      evalExpr(efficiency, new Map([['cop', 3.2]]), formatsOf(SOURCE)),
+    ).toBe(320)
     expect(
       evalExpr(
         efficiency,
@@ -2524,6 +2543,7 @@ describe('§7.12 取值、格式化、状态归一与派生（11 件）', () => 
           ['output_kwh', 60],
           ['input_kwh', 80],
         ]),
+        formatsOf(SOURCE),
       ),
     ).toBe(75)
     expect(
@@ -2533,6 +2553,7 @@ describe('§7.12 取值、格式化、状态归一与派生（11 件）', () => 
           ['efficiency_pct', 91.5],
           ['cop', 3.2],
         ]),
+        formatsOf(SOURCE),
       ),
     ).toBe(91.5)
   })

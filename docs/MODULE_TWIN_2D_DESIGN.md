@@ -974,7 +974,7 @@ export const TWIN_2D_PALETTE = {
 | 26 | `.tnv-tank__icon` | 30×30，svg 100%/100% | `ico{size:{w:30,h:30}}` | ✅ |
 | 27 | `.tnv-tank__body` | flex col / center / text-align center / gap 2 | `box{layout:{flow:'col',align:'center',justify:'center',gap:2}}` | ✅ |
 | 28 | `.tnv-tank__title` | 18/600 ellipsis max-width 100% | `txt{maxWidth:'100%'}` | ✅ |
-| 29 | `.tnv-tank__reading` | digit 30px / ls .5 / accent / shadow 3px 70%；内容 = 温度 `·` 液位拼接 | `txt{src:{kind:'slot',slot:'reading'}}`，其中 `reading` 是一个**派生槽** `join(['temperature_c','level_pct'], ' · ')`（§9.5） | 🔁 |
+| 29 | `.tnv-tank__reading` | digit 30px / ls .5 / accent / shadow 3px 70%；内容 = `${t.toFixed(1)}℃` `·` `${Math.round(l)}%` | `txt{src:{kind:'slot',slot:'reading'}}`，其中 `reading` 是一个**派生槽** `join(['temperature_c','level_pct'], ' · ')`（§9.5）。单位与精度**只写在槽位上**（`temperature_c` 给 `precision:1`、`level_pct` 给 `precision:0`，单位照抄参考项目的 `℃` / `%`），`join` 逐段过 `formatSlotValue` 出串，拼出来是「100.0℃ · 0%」，与参考项目逐字相同 | 🔁 |
 | 30 | `.tnv-tank__stubs` 管接头 | abs left 24% right 24% bottom -5 h 5 / `repeating-linear-gradient(90deg, transparent 0 18px, accent 18px 20px)` / opacity .45 / pointer-events none | `box{at:{kind:'abs',left:'24%',right:'24%',bottom:-5},size:{h:5},pointerEvents:'none',fills:[{kind:'repeat',angle:90,stops:[…]}]}`——`fills` 多一档 `repeat` 就够 | ✅ |
 
 ### 7.5 `shape=cylinder`（10 件，全 SVG）
@@ -1098,14 +1098,14 @@ export const TWIN_2D_PALETTE = {
 | # | 视觉件 | 参考项目的实现 | 新模型如何表达 | |
 |---|---|---|---|---|
 | 90 | 两套占位符 | 节点侧 `'—'`（em dash），传感器侧 `'--'`（两个 ASCII 连字符）。看着像不一致，但两处都有测试锁定 | `Twin2dSlot.placeholder`，预置数据里节点槽给 `'—'`（= `NO_DATA`）、传感器槽给 `'--'`。**差异保留**，因为它是槽位上的数据而不是代码里的常量——用户想统一自己改就行 | ✅ |
-| 91 | 数值格式 | 整数 `String(v)`；小数 `toFixed(1)`；末尾拼 `unit`（空格分隔） | `format.ts`：`precision === null` 时整数直出、小数走 `fmtTrim(v, 1)`；给了数走 `fmtFixed(v, n)`。⚠ 与 `toFixed(1)` 的差别是**尾随零**：`63.40` → `63.4`。本仓 `fmtTrim` / `fmtDecimal` 的分工注释写明了这一取舍，本模块跟本仓口径 | 🔁 |
+| 91 | 数值格式 | 整数 `String(v)`；小数 `toFixed(1)`；末尾拼 `unit`——通用字段一律空格分隔，而百分数与容器读数那两处是拼死的 `%` / `℃`，不留空格 | `format.ts`：`precision === null` 时整数直出、小数走 `fmtTrim(v, 1)`；给了数走 `fmtFixed(v, n)`。单位分两族（`withUnit`）：首字符落在 `%‰°℃℉` 的紧贴，`kWh` / `m³/h` 这类字母单位前留一个空格。⚠ 与 `toFixed(1)` 的差别是**尾随零**：`63.40` → `63.4`。⚠ 参考项目的分法是**逐调用点**写死的（四个格式化函数各拼各的），本模型只有槽位这一层，故按**单位**分族：预置库里每一处都与参考项目逐字相同，差别只会出现在「用户把一个 `%` 槽配成通用读数」这种参考项目里不存在的组合上 | 🔁 |
 | 92 | `enum` 值 | 查数字表 `{0:'离线',1:'运行',2:'待机',3:'报警'}` | `Twin2dSlot.enumMap`（键是**字符串**）。⚠ 这与 API 契约「禁数字枚举」不冲突：那条约束的是**接口出参**，这里是一张展示映射表 | ✅ |
-| 93 | kWh 短档 | `abs>=1000` → `(v/1000).toFixed(abs>=10000?0:1)+'k'`，否则 `String(Math.round(v))` | `fmtKwh(v, 2)`（本仓口径）。⚠ 判档用的是**取整后**的绝对值，所以 `999.6` 参考项目显 `1000`、本仓显 `1k`——这是本仓刻意的（同一屏上不并排出现两种写法），差异写在这里 | 🔁 |
+| 93 | kWh 短档 | `abs>=1000` → `(v/1000).toFixed(abs>=10000?0:1)+'k'`，否则 `String(Math.round(v))` | `fmtKwh(v, n)`，`n` 由槽位的 `precision` 给；**槽位不给时按值分两支**：`abs >= 10000` 不留小数、否则留一位（`kwhShortDigits`），于是 3300 → `3.3k`、12345 → `12k`，与参考项目那个三元逐支相同。⚠ 位数**不能钉成常量**：钉 0 会把 3300 显成 `3k`、钉 1 会把 12345 显成 `12.3k`，两种都不报错。⚠ 判档用的是**取整后**的绝对值，所以 `999.6` 参考项目显 `1000`、本仓显 `1k`——这是本仓刻意的（同一屏上不并排出现两种写法）。⚠ 整千数的尾随零也不同：`3000` 参考项目显 `3.0k`、本仓 `fmtKwh` 走 `fmtTrim` 抹零显 `3k`（同 #91 那条取舍） | 🔁 |
 | 94 | kWh 全档 | `Math.round(v).toLocaleString('zh-CN') + ' kWh'` | `fmtNumber(Math.round(v), 0) + ' kWh'`。⚠ `toLocaleString` **必须钉 `'en-US'`**（本仓全仓口径）：自托管 runner 是中文 locale、开发机是 en-US，不钉的话本地绿 CI 红。⚠ `.vue` 里禁 `toLocaleString(`（`check_formatting_is_centralised`），所以它只能待在 `.ts` 里 | 🔁 |
-| 95 | 能效百分比 | `${fmtTrim(v, 2)}%`（**不是** `toFixed(1)`） | 同样 `fmtTrim(v, 2)`。⚠ 这是参考项目内部两种数值格式并存的一处：主读数走 `toFixed(1)`、能效走 `fmtTrim(,2)`，抄错了不会报错，只是小数位不同 | ✅ |
+| 95 | 能效百分比 | `${fmtTrim(v, 2)}%`（**不是** `toFixed(1)`），百分号紧贴 | 槽位 `format:'trim2'` + `unit:'%'`，`fmtTrim(v, 2)` 之后紧贴拼 `%`（#91 的紧贴族），药丸与悬浮卡两处逐字相同。⚠ 这是参考项目内部两种数值格式并存的一处：主读数走 `toFixed(1)`、能效走 `fmtTrim(,2)`，抄错了不会报错，只是小数位不同 | ✅ |
 | 96 | 设备状态词表归一 | `toStatus` 先 `String(raw).trim().toLowerCase()`，再查**四组词表**：`running/run/on/ok/normal/good/1/true`、`warning/warn/uncertain/degraded/standby/idle/2`、`alarm/alert/fault/error/bad/critical/3`、`offline/off/down/disconnected/0/false`；都不中 → `unknown`，且 `unknown` **不覆盖**配置里的 status | 归一走本仓既有的 `@dt/modules/shared/status.ts` 的 `toDeviceStatus`（§10）。⚠ 两边差的**不只是 2 号档的名字**（本仓叫 `standby`、参考项目叫 `warning`），而是**整套词表**：本仓的 `toDeviceStatus` 只有 `NUMERIC_STATUSES = {0:offline,1:running,2:standby,3:alarm}` 加一个对五个字面档名的 `readEnum`（精确匹配、不 trim、不降大小写），现场返回 `"on"` / `"ok"` / `"normal"` / `"1"`（字符串）的点位在本仓一律落进 `unknown`，图上表现为「状态永远不亮」且零报错。**处置：给 `toDeviceStatus` 加一张同义词表**，排成独立小 PR R0d（§19） | 🔁 |
 | 97 | 连线的活跃/方向词表 | `boolFromValue` 11 真词 / 12 假词，未知非空 → fallback；`reverseFromValue`：**boolean 一律 false**（设备 on/off 不表方向）、number `<0`、字符串先 `Number()` 再查词表 | 模块目录的 `edgeState.ts`：11 真词 / 12 假词逐词照搬（查表前 `trim().toLowerCase()`）、未知非空回落调用方给的缺省；`reverseFromValue` 三条判据照抄，含「boolean 不表方向」这条反直觉的规矩。⚠ **不进 `@dt/twin2d`**：包的类型面上只有已归一的 `Twin2dEdgeState`，而共享包的入场券是「已有 ≥2 个真实消费方」，眼下只有 2D 孪生有连线。断言在 `packages/modules/tests/modules/twin-2d-view/edgeState.test.ts` | ✅ |
-| 98 | 容器读数拼接 | `温度 · 液位` 两个字段拼串 | 派生槽 `join(['temperature_c','level_pct'], ' · ')`（§9.5） | 🔁 |
+| 98 | 容器读数拼接 | `温度 · 液位` 两个字段拼串，逐段自己带单位与定点 | 派生槽 `join(['temperature_c','level_pct'], ' · ')`（§9.5），每一段过写在**槽位**上的口径。⚠ 拼出来的每一段与那个槽**独立成一格时同一种写法**：`℃` 与 `%` 紧贴是 #91 的单位分族，不是读数行的特例——同一个数在读数行与悬浮卡里换一种写法，看着就像两处各自格式化的 | 🔁 |
 | 99 | 能量三级兜底链 | `output = firstNumber(['output_kwh','outputKwh','today_kwh'])`；`efficiency = efficiency_pct → cop*100 → (output/input)*100`，⚠ 第三级带 **`input > 0`** 这个前置条件（`TopologyNodeView.vue:145`）——分母非正就整档不算，`efficiency` 留 `null`；`input = firstNumber(['input_kwh','inputKwh'])` | 派生槽的**可递归表达式**（§9.5）：`first([slot(a), slot(b), slot(c)])` 与 `first([slot(e), scale(slot('cop'),100), ratio(<output>, slot('input_kwh'), 100)])`。⚠ `input > 0` 不在派生槽里另写条件——`expr.ts` 的 `ratioValue` 自带等价守卫 `den === null \|\| den <= 0 → null`，分母 0 与负数都直接出 `null` | 🔁 |
 | 100 | `legacyPrimaryFieldKey` | 主显键 `today_kwh` 在 `category==='source'` 时改读 `power_kw` 的绑定、`terminal` 时改读 `demand_kw` | **不做**。它是参考项目为自己的存量绑定留的兼容垫片，本仓没有存量文档；照搬等于第一天就带一条谁也解释不清的隐式改绑规则（§18） | ⛔ |
 
@@ -1391,10 +1391,32 @@ export type Twin2dExpr =
 | 递归**深度上限 3**，超深截断进诊断 | 上面那条 efficiency 链正好是 3 层。给到无限深就要考虑成环 |
 | `ratio` 的分母 `<= 0` 或非有限 → 整式为空 | 参考项目的 `input != null && input > 0` 那条判断，照抄 |
 | 派生槽**不出现在绑定行里** | 它没有数据来源。`bindingRows.ts` 的 `effectiveSlots()` 过滤掉 `kind:'derived'`。⚠ 漏了这一步的表现是绑点面板多出几行永远喂不到东西的槽 |
+| `join` 的每一段过**它自己那个槽位**的口径 | 拼出来的是给人看的串，不是中间值：一段读数没有单位与小数位就只是个裸数（水箱那行会显成「100 · 0」而不是「100.0℃ · 0%」）。口径全仓只有 `format.ts` 的 `formatSlotValue` 那一份，`expr.ts` 不自己拼单位——两份漂开的表现是同一个数在读数行与悬浮卡里不一样 |
 
 ⚠ `expr` 里的槽引用可能悬空（引了一个不存在的 key）。`issues.ts` 出一条诊断，
 `twin2d-slot-refs.contract.spec.ts` 保证**预置库里**一条悬空都没有——
 悬空的表现是那一格永远显示占位符，看起来像「点位没绑上」。
+
+求值签名是 `evalExpr(expr, values, formats)`，第三张表是**槽键 → 显示口径**，
+缝合层（`bindingValues.ts`）直接把这个节点的槽位表递进去。三条与口径有关的边界：
+
+| 边界 | 结果 |
+|---|---|
+| 口径只认**直接写在 `join` 里**的那一档 `slot` | `first` / `ratio` / `scale` / `sum` 算出来的是没有槽位身份的中间值，照旧直拼。要让它带单位，就把它自己立成一个带单位的派生槽——`nodesSource.ts` 的 `output`（大字、无单位、压缩档）与 `output_total`（悬浮卡、`kWh`、千分位）正是同一个数分成的两个槽 |
+| 口径表里查不到这个键 | 直拼裸值，不编一份缺省口径出来。那是一处悬空引用，归 `issues.ts` 报 |
+| 口径**不参与算术** | 同一个槽进 `sum` / `ratio` 时仍是数；只有拼进串的那一刻才过格式化 |
+
+⚠ 第三个参数是**必填**的：给成可省的话，忘了传的那一处会安安静静地拼出一串没有单位、
+没有小数位的裸数，而每一层都不报错。
+
+**对存量文档**：这门小语言的档位、字段与落库形状一处没动，归一化白名单照旧七档，
+旧文档读回来一字不丢，不需要迁移。变的只是同一份文档**拼出来的串**：
+
+- 引用内置样式的图（内置库是引用式、不 materialize，§13.4）直接拿到新口径，
+  水箱与分集水器的读数行从「100 · 0」变成「100.0℃ · 0%」——这正是要的。
+- 自定义样式里手写过 `join` 的：拼进去的槽只要配了 `unit` / `precision`，
+  那一段从此带单位与定点。不想带的话把那个槽的 `unit` 清空，或者把那一段换成
+  `lit` 写死的文本。
 
 ### 9.6 逐槽状态四档（`ownsStatusDisplay: true`）
 
@@ -1626,6 +1648,12 @@ function applyEnumMap(value: unknown, spec: BindingSpec | undefined): unknown {
 （`NO_DATA` / `isPresent` / `fmtFixed` / `fmtNumber` / `fmtTrim` / `fmtKwh` / `fmtDecimal` / `fmtClock`），
 但 `@dt/twin2d` **不许依赖 `@dt/modules`**（方向反了），而这些函数被调用的位置在
 图元渲染的最深处（一个 `txt` 读一个槽），提到 `Component.vue` 去做是不现实的。
+
+`formatSlotValue` 是本包独有的一层（本仓真源里没有对应的函数，格式化契约那张表因此
+把它排除在外）。它的单位分两族：首字符落在 `%‰°℃℉` 的紧贴数值，`kWh` / `m³/h`
+这类字母单位前留一个空格（§7 #91）。分族按**单位**走而不是按调用点走——同一个数在
+读数行与悬浮卡里换一种写法，看着就像两处各自格式化的；派生槽拼串那一段
+（`expr.ts` 的 `partText`）因此直接用这一份，不另开一档。
 
 所以 `@dt/twin2d/src/format.ts` 是**第二份副本**，配一条契约：
 `app/tests/contract/twin2d-format-parity.contract.spec.ts`——它住在 `app/tests/`，

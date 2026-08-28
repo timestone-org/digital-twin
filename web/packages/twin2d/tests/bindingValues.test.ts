@@ -21,6 +21,7 @@ interface SlotSpec {
   key: string
   label?: string
   unit?: string
+  precision?: number
   placeholder?: string
   kind?: string
   expr?: unknown
@@ -223,6 +224,37 @@ describe('派生槽', () => {
     })
 
     expect(values.slots['n1']?.has('double')).toBe(false)
+  })
+
+  // ⚠ 口径表就是这个节点的槽位表本身：缝合层不传它，读数行拼出来的就是几个没有单位、
+  //   没有小数位的裸数，而每一层都不报错（§7.4 #29）
+  it('join 一档按各自槽位的单位与精度拼串', () => {
+    const JOINED = normalizeTwin2dConfig({
+      styles: [
+        style('s1', [
+          { key: 'temp', unit: '℃', precision: 1 },
+          { key: 'level', unit: '%', precision: 0 },
+          {
+            key: 'reading',
+            kind: 'derived',
+            expr: {
+              kind: 'join',
+              of: [
+                { kind: 'slot', slot: 'temp' },
+                { kind: 'slot', slot: 'level' },
+              ],
+              sep: ' · ',
+            },
+          },
+        ]),
+      ],
+      nodes: [{ id: 'n1', styleId: 's1' }],
+    })
+    const values = twin2dValues(JOINED, {
+      nodeValues: [{ value: 100 }, { value: 0 }],
+    })
+
+    expect(values.slots['n1']?.get('reading')).toBe('100.0℃ · 0%')
   })
 })
 

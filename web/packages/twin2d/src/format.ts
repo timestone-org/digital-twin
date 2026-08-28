@@ -16,8 +16,12 @@ const MAX_DIGITS = 100
 const KILO = 1000
 // 值与单位之间的分隔
 const UNIT_GAP = ' '
-// kwhShort 档压缩后保留几位小数（§7 #93）
-const KWH_SHORT_DIGITS = 2
+// ⚠ 紧贴数值的那一族单位的首字符：百分号、千分号与度数一族。参考项目的百分数是
+//   `${fmtTrim(v, 2)}%`、容器读数是 `${t.toFixed(1)}℃`，都不留空格，而 kWh / m³/h
+//   这类字母单位一律 `${body} ${unit}`（§7 #95、#98）
+const TIGHT_UNIT_HEADS = '%‰°℃℉'
+// kwhShort 档压缩后留一位小数的上限，到这个量级就不留了（§7 #93）
+const KWH_SHORT_FLAT = 10000
 // grouped 档不留小数：先四舍五入到整数再加千分位（§7 #94）
 const GROUPED_DIGITS = 0
 // trim2 档最多两位、去尾随零（§7 #95）
@@ -178,8 +182,19 @@ function autoText(value: number, precision: number | null): string {
 }
 
 /**
+ * 压缩档没给精度时留几位小数：万位以上不留、千位留一位。
+ * ⚠ 位数**随值变**，不是一个常量：参考项目那一支是 `toFixed(abs >= 10_000 ? 0 : 1)`，
+ * 钉死成一个数只对得上其中一支——钉 0 会把 3300 显成「3k」，钉 1 会把 12345 显成
+ * 「12.3k」，两种都不报错。
+ * @param value 有限数
+ */
+function kwhShortDigits(value: number): number {
+  return Math.abs(value) >= KWH_SHORT_FLAT ? 0 : 1
+}
+
+/**
  * 按槽位的格式档挑格式化器，`precision` 是喂给它的位数。
- * ⚠ 三个非缺省档各有自己的缺省位数，与函数签名上的缺省**刻意不同**：压缩档 2
+ * ⚠ 三个非缺省档各有自己的缺省位数，与函数签名上的缺省**刻意不同**：压缩档随值分两支
  * （§7 #93）、千分位档 0（#94）、去尾随零档 2（#95）。凑成一个统一值不会报错，
  * 只是墙上的小数位换了一档。
  * @param value 有限数
@@ -188,7 +203,7 @@ function autoText(value: number, precision: number | null): string {
 function numberText(value: number, slot: Twin2dSlotFormat): string {
   switch (slot.format) {
     case 'kwhShort':
-      return fmtKwh(value, slot.precision ?? KWH_SHORT_DIGITS)
+      return fmtKwh(value, slot.precision ?? kwhShortDigits(value))
     case 'grouped':
       return fmtNumber(value, slot.precision ?? GROUPED_DIGITS)
     case 'trim2':
@@ -199,12 +214,16 @@ function numberText(value: number, slot: Twin2dSlotFormat): string {
 }
 
 /**
- * 值后面拼单位，空单位不留空格。
+ * 值后面拼单位：空单位不留空格，百分号与度数一族紧贴，字母单位前留一个空格。
+ * ⚠ 分档按**单位**走而不是按调用点走：同一个数在读数行与悬浮卡里换一种写法，
+ * 看着就像两处各自格式化的（参考项目正是各写各的，四个格式化函数各拼各的单位）。
  * @param text 已格式化的值
  * @param unit 单位
  */
 function withUnit(text: string, unit: string): string {
-  return unit === '' ? text : `${text}${UNIT_GAP}${unit}`
+  if (unit === '') return text
+  const gap = TIGHT_UNIT_HEADS.includes(unit.charAt(0)) ? '' : UNIT_GAP
+  return `${text}${gap}${unit}`
 }
 
 /**

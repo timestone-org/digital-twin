@@ -179,6 +179,8 @@ function edgeReadings(
  * （`nodesSource.ts` 的能效链第三级只能引实时槽）。
  * ⚠ 只判 `expr`：归一化就是拿 `expr === null` 定的 `kind`，两处都判会多出一条
  * 构造上走不到的分支。
+ * ⚠ 槽位表同时是 `join` 那一档的**显示口径**表：读数行拼出来的每一段按它自己那个槽
+ * 的单位与精度出串（§7.4 #29）。少传这一张，墙上那一行就是几个没有单位的裸数。
  * @param defs 这个节点可用的槽位表
  * @param live 这个节点已缝好的实时读数
  */
@@ -190,7 +192,7 @@ function withDerived(
   const out = new Map<string, unknown>(base)
   for (const slot of defs.values()) {
     if (slot.expr === null) continue
-    const value = evalExpr(slot.expr, base)
+    const value = evalExpr(slot.expr, base, defs)
     if (value !== null) out.set(slot.key, value)
   }
   return out

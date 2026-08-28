@@ -225,7 +225,10 @@ describe('formatSlotValue', () => {
 
   it('给了 precision 就定点补零', () => {
     expect(formatSlotValue(63.4, slotOf({ precision: 2, unit: '%' }))).toBe(
-      '63.40 %',
+      '63.40%',
+    )
+    expect(formatSlotValue(63.4, slotOf({ precision: 2, unit: 'kW' }))).toBe(
+      '63.40 kW',
     )
   })
 
@@ -287,6 +290,25 @@ describe('formatSlotValue', () => {
   it('占位符是空串时兜底成 NO_DATA', () => {
     expect(formatSlotValue(null, slotOf({ placeholder: '' }))).toBe(NO_DATA)
   })
+
+  // ⚠ 紧贴那一档给拼进一行里的读数用（`expr.ts` 的 `partText`）：段与段之间已经有
+  //   分隔符，单位前再留空格就分不清哪个单位归哪个数
+  // 参考项目的百分数与容器读数是拼死的 `%` / `℃`（不留空格），而 kWh / m³/h 一律
+  // `${body} ${unit}`——两族的分法照抄它（§7 #91、#95、#98）
+  it('百分号与度数一族紧贴数值，字母单位前留一个空格', () => {
+    expect(formatSlotValue(32, slotOf({ unit: '%' }))).toBe('32%')
+    expect(formatSlotValue(63.44, slotOf({ precision: 1, unit: '℃' }))).toBe(
+      '63.4℃',
+    )
+    expect(formatSlotValue(36.5, slotOf({ precision: 1, unit: '°C' }))).toBe(
+      '36.5°C',
+    )
+    expect(formatSlotValue(1.5, slotOf({ precision: 1, unit: 'kW' }))).toBe(
+      '1.5 kW',
+    )
+    expect(formatSlotValue(12, slotOf({ unit: 'm³/h' }))).toBe('12 m³/h')
+    expect(formatSlotValue('  高  ', slotOf({ unit: '档' }))).toBe('高 档')
+  })
 })
 
 describe('formatSlotValue 的四档格式', () => {
@@ -296,16 +318,18 @@ describe('formatSlotValue 的四档格式', () => {
     expect(formatSlotValue(1234.5, slotOf({ precision: 2 }))).toBe('1234.50')
   })
 
-  it('kwhShort 档压缩到 k，precision 决定压缩后留几位', () => {
-    expect(formatSlotValue(12345, slotOf({ format: 'kwhShort' }))).toBe(
-      '12.35k',
-    )
+  // ⚠ 缺省位数随值分两支（参考项目 `toFixed(abs >= 10_000 ? 0 : 1)`）：钉死一个数
+  //   只对得上其中一支，而两支都不报错
+  it('kwhShort 档压缩到 k：千位留一位、万位不留，precision 能盖掉这条缺省', () => {
+    expect(formatSlotValue(3300, slotOf({ format: 'kwhShort' }))).toBe('3.3k')
+    expect(formatSlotValue(12345, slotOf({ format: 'kwhShort' }))).toBe('12k')
+    expect(formatSlotValue(880, slotOf({ format: 'kwhShort' }))).toBe('880')
     expect(
-      formatSlotValue(12345, slotOf({ format: 'kwhShort', precision: 0 })),
-    ).toBe('12k')
+      formatSlotValue(3300, slotOf({ format: 'kwhShort', precision: 2 })),
+    ).toBe('3.3k')
     expect(
-      formatSlotValue(880, slotOf({ format: 'kwhShort', precision: 0 })),
-    ).toBe('880')
+      formatSlotValue(3300, slotOf({ format: 'kwhShort', precision: 0 })),
+    ).toBe('3k')
   })
 
   it('grouped 档出千分位，precision 缺席时按整数走', () => {

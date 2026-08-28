@@ -342,7 +342,11 @@ export type { Twin2dAssetPorts } from './assets'
 export { canvasBackdropStyles } from './canvasBackdrop'
 export type { Twin2dBackdropStyles } from './canvasBackdrop'
 export { evalExpr, exprSlotRefs } from './expr'
-export type { Twin2dExprValue, Twin2dSlotValues } from './expr'
+export type {
+  Twin2dExprValue,
+  Twin2dSlotFormats,
+  Twin2dSlotValues,
+} from './expr'
 export {
   NO_DATA,
   fmtClock,

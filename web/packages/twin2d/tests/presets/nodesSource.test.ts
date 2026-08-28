@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { evalExpr } from '../../src/expr'
+import { formatSlotValue } from '../../src/format'
 import { normalizeNodeStyle } from '../../src/normalizeStyles'
 import {
   TWIN_2D_SOURCE_STYLES,
@@ -16,9 +17,14 @@ import {
 } from '../../src/presets/nodesSource'
 import { TWIN_2D_PALETTE } from '../../src/presets/palette'
 import { applyVariants, evalCondition } from '../../src/variants'
-import type { Twin2dNodeStyle, Twin2dVariant } from '../../src/types'
+import type {
+  Twin2dNodeStyle,
+  Twin2dSlot,
+  Twin2dVariant,
+} from '../../src/types'
 import type {
   Twin2dBoxPrim,
+  Twin2dExpr,
   Twin2dIcoPrim,
   Twin2dPrim,
   Twin2dPrimPatch,
@@ -87,6 +93,24 @@ function vecOf(style: Twin2dNodeStyle, id: string): Twin2dVecPrim {
   const prim = primOf(style, id)
   if (prim.kind !== 'vec') throw new Error(`${id} 不是 vec`)
   return prim
+}
+
+/**
+ * 求一条算式的值；口径表给空。
+ * ⚠ 本文件那两条兜底链产出的是**数**、不经 `join`，逐段口径用不上；水箱那条读数行
+ * 才要口径（`nodesVessel.test.ts`）。
+ */
+function evalOf(
+  expr: Twin2dExpr,
+  values: ReadonlyMap<string, unknown>,
+): number | string | null {
+  return evalExpr(expr, values, new Map())
+}
+
+function slotOf(style: Twin2dNodeStyle, key: string): Twin2dSlot {
+  const slot = style.slots.find((one) => one.key === key)
+  if (slot === undefined) throw new Error(`样式 ${style.id} 没有槽位 ${key}`)
+  return slot
 }
 
 function styleOf(id: string): Twin2dNodeStyle {
@@ -661,15 +685,39 @@ describe('四个能源源预置样式', () => {
     })
   })
 
+  // 参考项目 `formatKwhShort` 是 `(v / 1000).toFixed(abs >= 10_000 ? 0 : 1)`：千位那一支
+  // 留一位小数、万位那一支不留。两支都得对上，钉死一个位数只能对上其中一支
+  it('主读数压缩档：3300 显 3.3k、12345 显 12k、千位以下显整数', () => {
+    const output = slotOf(styleOf('air-source'), 'output')
+
+    expect(formatSlotValue(3300, output)).toBe('3.3k')
+    expect(formatSlotValue(1400, output)).toBe('1.4k')
+    expect(formatSlotValue(12345, output)).toBe('12k')
+    expect(formatSlotValue(880, output)).toBe('880')
+    expect(formatSlotValue(-3300, output)).toBe('-3.3k')
+  })
+
+  // 参考项目 `formatPct` 是 `${fmtTrim(v, 2)}%`：百分号紧贴数值；同一张卡上的
+  // `formatKwhFull` 是 `${…} kWh`，字母单位前留一个空格
+  it('能效那一槽百分号紧贴，kWh 那两槽照旧留空格', () => {
+    const style = styleOf('air-source')
+
+    expect(formatSlotValue(32, slotOf(style, 'efficiency'))).toBe('32%')
+    expect(formatSlotValue(63.456, slotOf(style, 'efficiency'))).toBe('63.46%')
+    expect(formatSlotValue(1234.6, slotOf(style, 'input_kwh'))).toBe(
+      '1,235 kWh',
+    )
+  })
+
   it('输出兜底链：output_kwh 优先，缺了落 today_kwh，两个都没有给空', () => {
     const expr = styleOf('air-source').slots.find(
       (s) => s.key === 'output',
     )?.expr
     if (expr == null) throw new Error('output 槽没有算式')
-    expect(evalExpr(expr, new Map([['output_kwh', 820]]))).toBe(820)
-    expect(evalExpr(expr, new Map([['today_kwh', 640]]))).toBe(640)
+    expect(evalOf(expr, new Map([['output_kwh', 820]]))).toBe(820)
+    expect(evalOf(expr, new Map([['today_kwh', 640]]))).toBe(640)
     expect(
-      evalExpr(
+      evalOf(
         expr,
         new Map([
           ['output_kwh', 0],
@@ -677,7 +725,7 @@ describe('四个能源源预置样式', () => {
         ]),
       ),
     ).toBe(0)
-    expect(evalExpr(expr, new Map([['power_kw', 12]]))).toBe(null)
+    expect(evalOf(expr, new Map([['power_kw', 12]]))).toBe(null)
   })
 
   it('能效兜底链三级：显式能效 → COP×100 → 输出÷投入×100，投入为 0 时整式为空', () => {
@@ -685,10 +733,10 @@ describe('四个能源源预置样式', () => {
       (s) => s.key === 'efficiency',
     )?.expr
     if (expr == null) throw new Error('efficiency 槽没有算式')
-    expect(evalExpr(expr, new Map([['efficiency_pct', 88]]))).toBe(88)
-    expect(evalExpr(expr, new Map([['cop', 3.2]]))).toBeCloseTo(320, 10)
+    expect(evalOf(expr, new Map([['efficiency_pct', 88]]))).toBe(88)
+    expect(evalOf(expr, new Map([['cop', 3.2]]))).toBeCloseTo(320, 10)
     expect(
-      evalExpr(
+      evalOf(
         expr,
         new Map([
           ['output_kwh', 90],
@@ -697,7 +745,7 @@ describe('四个能源源预置样式', () => {
       ),
     ).toBe(45)
     expect(
-      evalExpr(
+      evalOf(
         expr,
         new Map([
           ['output_kwh', 90],

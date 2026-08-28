@@ -414,14 +414,15 @@ const SOURCE_SLOTS: readonly Twin2dSlot[] = [
     expr: null,
   },
   liveSlot({ key: 'cop', label: '性能系数', unit: '', precision: null }),
-  // ⚠ 主读数走压缩档：`precision: 0` 在这一档是「压缩后不留小数」，于是 12345 显 12k
-  //   而不是 12.35k——与参考项目 `abs >= 10000` 那一支同值（§7.12 #93）
+  // ⚠ 主读数走压缩档且**不给 precision**：这一档的缺省位数随值分两支（千位留一位、
+  //   万位不留），与参考项目的 `toFixed(abs >= 10_000 ? 0 : 1)` 同源。写死一个位数
+  //   只对得上其中一支——写 0 会把 3300 显成「3k」（§7.12 #93）
   {
     ...derivedSlot({
       key: 'output',
       label: '输出（读数行）',
       unit: '',
-      precision: 0,
+      precision: null,
       expr: OUTPUT_EXPR,
     }),
     format: 'kwhShort',

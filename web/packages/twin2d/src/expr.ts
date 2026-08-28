@@ -1,12 +1,14 @@
 /**
  * @fileoverview 派生槽算式的求值：七档闭合小语言按文档序取值，深度上限与归一化同为 3。
  * 归一化在 `normalizeExprs.ts`，这里只负责算，以及数出一条算式引用了哪些槽键。
+ * `join` 拼出来的每一段过 `format.ts` 的 `formatSlotValue`——显示口径全仓只有那一份。
  * 口径见 docs/MODULE_TWIN_2D_DESIGN.md §4.5 与 §9.5。
  */
 import { TWIN_2D_MAX_EXPR_DEPTH } from './constants'
-import { isPresent } from './format'
+import { formatSlotValue, isPresent } from './format'
 import { trimmedString } from './sanitize'
 import { twin2dExprSlotRefs } from './slotRefs'
+import type { Twin2dSlotFormat } from './format'
 import type { Twin2dExpr } from './typesPrim'
 
 /** 算式的取值：一个有限数，或一段文本（`join` 与字符串字面量产出）。 */
@@ -14,6 +16,15 @@ export type Twin2dExprValue = number | string
 
 /** 槽键 → 读数 */
 export type Twin2dSlotValues = ReadonlyMap<string, unknown>
+
+/** 槽键 → 显示口径；`join` 逐段拿它出单位与精度。整个 `Twin2dSlot` 表也能直接喂进来。 */
+export type Twin2dSlotFormats = ReadonlyMap<string, Twin2dSlotFormat>
+
+/** 一次求值用得到的两张表：读数与显示口径。 */
+interface EvalScope {
+  values: Twin2dSlotValues
+  formats: Twin2dSlotFormats
+}
 
 // ⚠ 非有限数一律降为无值：让 Infinity 流下去，墙上会出现一个「∞」而每一层都不报错
 function finiteOrNull(value: number): number | null {
@@ -45,11 +56,11 @@ function litValue(value: number | string): Twin2dExprValue | null {
 // ⚠ 三级兜底链只认「有没有值」，不认大小：第一个非 null 的赢，哪怕它是 0
 function firstValue(
   of: readonly Twin2dExpr[],
-  values: Twin2dSlotValues,
+  scope: EvalScope,
   depth: number,
 ): Twin2dExprValue | null {
   for (const item of of) {
-    const value = evalAt(item, values, depth + 1)
+    const value = evalAt(item, scope, depth + 1)
     if (value !== null) return value
   }
   return null
@@ -59,13 +70,13 @@ function firstValue(
 //   而画面上没有任何迹象说明它少了一路
 function sumValue(
   of: readonly Twin2dExpr[],
-  values: Twin2dSlotValues,
+  scope: EvalScope,
   depth: number,
 ): number | null {
   if (of.length === 0) return null
   let total = 0
   for (const item of of) {
-    const num = numberOf(evalAt(item, values, depth + 1))
+    const num = numberOf(evalAt(item, scope, depth + 1))
     if (num === null) return null
     total += num
   }
@@ -74,46 +85,72 @@ function sumValue(
 
 function ratioValue(
   expr: Extract<Twin2dExpr, { kind: 'ratio' }>,
-  values: Twin2dSlotValues,
+  scope: EvalScope,
   depth: number,
 ): number | null {
-  const den = numberOf(evalAt(expr.den, values, depth + 1))
+  const den = numberOf(evalAt(expr.den, scope, depth + 1))
   // ⚠ 分母 0 给 0% 会让「没在跑」和「效率为零」在墙上长得一样；负分母同理，
   //   本档的分母是投入量，负数只可能是坏数据。⚠ 这里不必再判非有限：每一档都只
   //   产出有限数，非有限的在源头就降成了 null
   if (den === null || den <= 0) return null
-  const num = numberOf(evalAt(expr.num, values, depth + 1))
+  const num = numberOf(evalAt(expr.num, scope, depth + 1))
   if (num === null) return null
   return finiteOrNull((num / den) * expr.scale)
 }
 
 function scaleValue(
   expr: Extract<Twin2dExpr, { kind: 'scale' }>,
-  values: Twin2dSlotValues,
+  scope: EvalScope,
   depth: number,
 ): number | null {
-  const num = numberOf(evalAt(expr.of, values, depth + 1))
+  const num = numberOf(evalAt(expr.of, scope, depth + 1))
   return num === null ? null : finiteOrNull(num * expr.by)
+}
+
+/**
+ * 拼进一行里的一段文本：写在 `join` 里的 `slot` 一档过**那个槽位自己的口径**
+ * （映射表、格式档、精度、单位），其余档直拼。
+ * ⚠ 与那个槽独立成一格时**同一种写法**：单位紧贴与否归 `format.ts` 的 `withUnit`
+ *   按单位分档，这里不另开一档——同一个数在读数行与悬浮卡里长得不一样，看着就像
+ *   两处各自格式化的。
+ * ⚠ 口径只认**直接写在 `join` 里**的那一档 `slot`：`first` / `ratio` / `scale`
+ *   算出来的是个没有槽位身份的中间值，照旧直拼。要给它带单位就把它自己立成一个
+ *   带单位的派生槽（`nodesSource.ts` 的 `output` / `output_total` 就是这么分的）。
+ * ⚠ 槽位表里查不到这个键时直拼：那是一处悬空引用，`issues.ts` 出诊断，不在这里
+ *   编一份缺省口径出来。
+ * @param item 这一段的算式
+ * @param value 这一段已经求出来的值
+ * @param formats 槽键到显示口径
+ */
+function partText(
+  item: Twin2dExpr,
+  value: Twin2dExprValue,
+  formats: Twin2dSlotFormats,
+): string {
+  if (item.kind !== 'slot') return String(value)
+  const format = formats.get(item.slot)
+  if (format === undefined) return String(value)
+  return formatSlotValue(value, format)
 }
 
 // ⚠ 一项都拼不出时给 null 而不是空串：空串会让那一格变成一片空白，
 //   而占位符「—」才说得清「这里本该有个读数」
 function joinValue(
   expr: Extract<Twin2dExpr, { kind: 'join' }>,
-  values: Twin2dSlotValues,
+  scope: EvalScope,
   depth: number,
 ): string | null {
   const parts: string[] = []
   for (const item of expr.of) {
-    const value = evalAt(item, values, depth + 1)
-    if (value !== null) parts.push(String(value))
+    const value = evalAt(item, scope, depth + 1)
+    if (value !== null) parts.push(partText(item, value, scope.formats))
   }
   return parts.length === 0 ? null : parts.join(expr.sep)
 }
 
 function evalAt(
   expr: Twin2dExpr,
-  values: Twin2dSlotValues,
+  scope: EvalScope,
   depth: number,
 ): Twin2dExprValue | null {
   // ⚠ 超深整枝返回 null 而不是接着递归：归一化挡住的只是落库那一份，预置库与
@@ -121,19 +158,19 @@ function evalAt(
   if (depth >= TWIN_2D_MAX_EXPR_DEPTH) return null
   switch (expr.kind) {
     case 'slot':
-      return slotValue(values.get(expr.slot))
+      return slotValue(scope.values.get(expr.slot))
     case 'lit':
       return litValue(expr.value)
     case 'first':
-      return firstValue(expr.of, values, depth)
+      return firstValue(expr.of, scope, depth)
     case 'sum':
-      return sumValue(expr.of, values, depth)
+      return sumValue(expr.of, scope, depth)
     case 'ratio':
-      return ratioValue(expr, values, depth)
+      return ratioValue(expr, scope, depth)
     case 'scale':
-      return scaleValue(expr, values, depth)
+      return scaleValue(expr, scope, depth)
     default:
-      return joinValue(expr, values, depth)
+      return joinValue(expr, scope, depth)
   }
 }
 
@@ -142,12 +179,15 @@ function evalAt(
  * @param expr 派生槽算式，取归一化之后的那一份
  * @param values 槽键到读数的映射。⚠ 用 Map 不用普通对象：对象上 `constructor`
  *   这类键会取到原型链上的函数，于是一个从没绑过的槽突然「有值」了
+ * @param formats 槽键到显示口径，只有 `join` 用得上（见 `partText`）。⚠ 它是必填的：
+ *   给成可省的话，忘了传的那一处会安安静静地拼出一串没有单位、没有小数位的裸数
  */
 export function evalExpr(
   expr: Twin2dExpr,
   values: Twin2dSlotValues,
+  formats: Twin2dSlotFormats,
 ): Twin2dExprValue | null {
-  return evalAt(expr, values, 0)
+  return evalAt(expr, { values, formats }, 0)
 }
 
 /**

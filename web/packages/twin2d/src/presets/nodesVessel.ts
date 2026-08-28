@@ -67,11 +67,15 @@ function glowShadow(id: string, blur: number, color: string): Twin2dShadow {
   return { id, inset: false, x: 0, y: 0, blur, spread: 0, color }
 }
 
-/** 一个实时数值槽：`live` 档、无映射表、占位符走节点侧的 em dash。 */
+/**
+ * 一个实时数值槽：`live` 档、无映射表、占位符走节点侧的 em dash。
+ * @param spec 槽键、说明字、单位、小数位（null = 整数直出、小数一位）与是否主显
+ */
 function liveSlot(spec: {
   key: string
   label: string
   unit: string
+  precision: number | null
   primary: boolean
 }): Twin2dSlot {
   return {
@@ -80,7 +84,7 @@ function liveSlot(spec: {
     kind: 'live',
     dataType: 'number',
     unit: spec.unit,
-    precision: null,
+    precision: spec.precision,
     format: 'auto',
     enumMap: {},
     placeholder: TWIN_2D_DEFAULT_PLACEHOLDER,
@@ -91,9 +95,9 @@ function liveSlot(spec: {
 
 /**
  * 读数行的算式：温度与液位拼成一串（§7.4 #29、§7.12 #98）。
- * ⚠ 参考项目那一版逐段带单位与定点（`toFixed(1)℃` / `Math.round()%`），而 `join`
- * 是把每一项 `String()` 之后拼串、逐项不过槽位口径，故拼出来的是两个裸数。
- * 单位与精度是**槽位**上的口径，要带单位就得让每一段各是一个槽——那是另一件事。
+ * 每一段按**自己那个槽**的单位与精度出串（`expr.ts` 的 `partText`），拼出来是
+ * 「100.0℃ · 0%」，与参考项目的 `${t.toFixed(1)}℃` / `${Math.round(l)}%` 逐字相同。
+ * ⚠ 单位与精度只写在下面那张槽位表上一份：算式这一头一个数字都不带，改口径去改槽位。
  */
 const READING_EXPR: Twin2dExpr = {
   kind: 'join',
@@ -105,49 +109,79 @@ const READING_EXPR: Twin2dExpr = {
 }
 
 /**
- * 两形共用的槽位表：参考项目 `VESSEL_FIELDS` 的五个字段逐字照抄，再加一个派生读数槽。
- * ⚠ `status` 一档**不给 `enumMap`**：状态归一走 `toDeviceStatus`，在这里再写一张
- * 数值→文案的表就是给同一件事开第二份真源（§10.2）。
+ * 状态槽。
+ * ⚠ **不给 `enumMap`**：状态归一走 `toDeviceStatus`，在这里再写一张数值→文案的表
+ * 就是给同一件事开第二份真源（§10.2）。
  */
-function vesselSlots(): readonly Twin2dSlot[] {
-  return [
-    liveSlot({
-      key: 'temperature_c',
-      label: '当前温度',
-      unit: '℃',
-      primary: true,
-    }),
-    liveSlot({ key: 'target_c', label: '目标温度', unit: '℃', primary: false }),
-    liveSlot({ key: 'level_pct', label: '液位', unit: '%', primary: false }),
-    liveSlot({ key: 'stored_kwh', label: '储能', unit: 'kWh', primary: false }),
-    {
-      key: 'status',
-      label: '状态',
-      kind: 'live',
-      dataType: 'enum',
-      unit: '',
-      precision: null,
-      format: 'auto',
-      enumMap: {},
-      placeholder: TWIN_2D_DEFAULT_PLACEHOLDER,
-      primary: false,
-      expr: null,
-    },
-    {
-      key: 'reading',
-      label: '读数行（温度 · 液位）',
-      kind: 'derived',
-      dataType: 'string',
-      unit: '',
-      precision: null,
-      format: 'auto',
-      enumMap: {},
-      placeholder: TWIN_2D_DEFAULT_PLACEHOLDER,
-      primary: false,
-      expr: READING_EXPR,
-    },
-  ]
+const VESSEL_STATUS_SLOT: Twin2dSlot = {
+  key: 'status',
+  label: '状态',
+  kind: 'live',
+  dataType: 'enum',
+  unit: '',
+  precision: null,
+  format: 'auto',
+  enumMap: {},
+  placeholder: TWIN_2D_DEFAULT_PLACEHOLDER,
+  primary: false,
+  expr: null,
 }
+
+/** 读数行那个派生槽；单位与精度落在它引的两个实时槽上，这一层不带。 */
+const VESSEL_READING_SLOT: Twin2dSlot = {
+  key: 'reading',
+  label: '读数行（温度 · 液位）',
+  kind: 'derived',
+  dataType: 'string',
+  unit: '',
+  precision: null,
+  format: 'auto',
+  enumMap: {},
+  placeholder: TWIN_2D_DEFAULT_PLACEHOLDER,
+  primary: false,
+  expr: READING_EXPR,
+}
+
+/**
+ * 两形共用的槽位表：参考项目 `VESSEL_FIELDS` 的五个字段逐字照抄，再加一个派生读数槽。
+ * 温度与液位的精度就是读数行那两段的精度（§7.4 #29）。
+ */
+const VESSEL_SLOTS: readonly Twin2dSlot[] = [
+  // ⚠ 一位小数：参考项目的读数行是 `toFixed(1)`，缺省的 null 一档会让整数直出，
+  //   于是 100 显「100℃」，旁边又并排一个「63.4℃」，一列对不齐
+  liveSlot({
+    key: 'temperature_c',
+    label: '当前温度',
+    unit: '℃',
+    precision: 1,
+    primary: true,
+  }),
+  // ⚠ 目标温度照旧整数直出：参考项目只给当前温度定了一位小数
+  liveSlot({
+    key: 'target_c',
+    label: '目标温度',
+    unit: '℃',
+    precision: null,
+    primary: false,
+  }),
+  // ⚠ 液位取整：参考项目那一段是 `Math.round(l)`
+  liveSlot({
+    key: 'level_pct',
+    label: '液位',
+    unit: '%',
+    precision: 0,
+    primary: false,
+  }),
+  liveSlot({
+    key: 'stored_kwh',
+    label: '储能',
+    unit: 'kWh',
+    precision: null,
+    primary: false,
+  }),
+  VESSEL_STATUS_SLOT,
+  VESSEL_READING_SLOT,
+]
 
 /**
  * 一个四边中点端口。
@@ -778,7 +812,7 @@ function waterTankStyle(): Twin2dNodeStyle {
     size: { w: 196, h: 140 },
     prims: [tankFrame(), tankStubs(), statusDot()],
     ports: VESSEL_PORTS,
-    slots: vesselSlots(),
+    slots: VESSEL_SLOTS,
     variants: [tankHoverVariant(), tankSelectedVariant(), tankAlarmVariant()],
   })
 }
@@ -812,7 +846,7 @@ function manifoldStyle(): Twin2dNodeStyle {
       statusDot(),
     ],
     ports: VESSEL_PORTS,
-    slots: vesselSlots(),
+    slots: VESSEL_SLOTS,
     variants: [cylHoverVariant(), cylSelectedVariant(), cylAlarmVariant()],
   })
 }

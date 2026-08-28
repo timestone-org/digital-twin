@@ -125,7 +125,7 @@ describe('逐槽取数四档各自出色', () => {
   it('有值那一档画读数与单位，档位一条样式都不改', () => {
     const cell = cellOf(OK)
 
-    expect(cell.text).toBe('36.5 °C')
+    expect(cell.text).toBe('36.5°C')
     expect(cell.style).not.toContain(MUTED)
     expect(cell.style).not.toContain(DANGER)
     expect(cell.classes).not.toContain(BREATHE)
@@ -288,7 +288,7 @@ describe('档位的 title 与省略提示抢同一个属性', () => {
   it('有值时 title 照旧是完整读数', () => {
     const wrapper = render(() => OK, { styles: [ELLIPSIS_STYLE] })
 
-    expect(wrapper.get('.t2-prim').attributes('title')).toBe('36.5 °C')
+    expect(wrapper.get('.t2-prim').attributes('title')).toBe('36.5°C')
   })
 })
 

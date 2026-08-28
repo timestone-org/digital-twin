@@ -6,7 +6,36 @@
 import { describe, expect, it } from 'vitest'
 
 import { evalExpr, exprSlotRefs } from '../src/expr'
+import type {
+  Twin2dExprValue,
+  Twin2dSlotFormats,
+  Twin2dSlotValues,
+} from '../src/expr'
+import type { Twin2dSlotFormat } from '../src/format'
 import type { Twin2dExpr } from '../src/typesPrim'
+
+/** 一张空的口径表：`join` 查不到槽位时逐段直拼，其余六档本来就用不上它。 */
+const NO_FORMATS: Twin2dSlotFormats = new Map()
+
+/** 不带槽位口径的求值：本文件多数用例只关心取值，不关心显示串。 */
+function evalOf(
+  expr: Twin2dExpr,
+  values: Twin2dSlotValues,
+): Twin2dExprValue | null {
+  return evalExpr(expr, values, NO_FORMATS)
+}
+
+/** 一个槽位的显示口径，只给要改的那几项。 */
+function fmt(spec: Partial<Twin2dSlotFormat>): Twin2dSlotFormat {
+  return {
+    precision: null,
+    unit: '',
+    enumMap: {},
+    placeholder: '—',
+    format: 'auto',
+    ...spec,
+  }
+}
 
 function slot(key: string): Twin2dExpr {
   return { kind: 'slot', slot: key }
@@ -28,8 +57,8 @@ describe('slot 档', () => {
       ['a', 12.5],
       ['c', '运行中'],
     ])
-    expect(evalExpr(slot('a'), values)).toBe(12.5)
-    expect(evalExpr(slot('c'), values)).toBe('运行中')
+    expect(evalOf(slot('a'), values)).toBe(12.5)
+    expect(evalOf(slot('c'), values)).toBe('运行中')
   })
 
   it('槽键不存在、值为空或非有限时给 null 而不抛', () => {
@@ -40,16 +69,16 @@ describe('slot 档', () => {
       ['inf', Number.POSITIVE_INFINITY],
       ['flag', true],
     ])
-    expect(evalExpr(slot('missing'), values)).toBeNull()
-    expect(evalExpr(slot('nil'), values)).toBeNull()
-    expect(evalExpr(slot('blank'), values)).toBeNull()
-    expect(evalExpr(slot('nan'), values)).toBeNull()
-    expect(evalExpr(slot('inf'), values)).toBeNull()
-    expect(evalExpr(slot('flag'), values)).toBeNull()
+    expect(evalOf(slot('missing'), values)).toBeNull()
+    expect(evalOf(slot('nil'), values)).toBeNull()
+    expect(evalOf(slot('blank'), values)).toBeNull()
+    expect(evalOf(slot('nan'), values)).toBeNull()
+    expect(evalOf(slot('inf'), values)).toBeNull()
+    expect(evalOf(slot('flag'), values)).toBeNull()
   })
 
   it('显式 0 算有值——0 kWh 与「取不到」不是一回事', () => {
-    expect(evalExpr(slot('a'), vals([['a', 0]]))).toBe(0)
+    expect(evalOf(slot('a'), vals([['a', 0]]))).toBe(0)
   })
 
   it('⚠ 数字字符串保持为文本：实时读数上的引号是脏数据，不许强转成数参与运算', () => {
@@ -57,25 +86,25 @@ describe('slot 档', () => {
       ['v', '60'],
       ['w', 5],
     ])
-    expect(evalExpr(slot('v'), values)).toBe('60')
+    expect(evalOf(slot('v'), values)).toBe('60')
     expect(
-      evalExpr({ kind: 'sum', of: [slot('v'), slot('w')] }, values),
+      evalOf({ kind: 'sum', of: [slot('v'), slot('w')] }, values),
     ).toBeNull()
     expect(
-      evalExpr({ kind: 'join', of: [slot('v'), slot('w')], sep: '/' }, values),
+      evalOf({ kind: 'join', of: [slot('v'), slot('w')], sep: '/' }, values),
     ).toBe('60/5')
   })
 })
 
 describe('lit 档', () => {
   it('数与串原样给出，空串也是作者写死的取值', () => {
-    expect(evalExpr(lit(3), EMPTY)).toBe(3)
-    expect(evalExpr(lit('—'), EMPTY)).toBe('—')
-    expect(evalExpr(lit(''), EMPTY)).toBe('')
+    expect(evalOf(lit(3), EMPTY)).toBe(3)
+    expect(evalOf(lit('—'), EMPTY)).toBe('—')
+    expect(evalOf(lit(''), EMPTY)).toBe('')
   })
 
   it('非有限的字面量当无值', () => {
-    expect(evalExpr(lit(Number.NaN), EMPTY)).toBeNull()
+    expect(evalOf(lit(Number.NaN), EMPTY)).toBeNull()
   })
 })
 
@@ -85,7 +114,7 @@ describe('first 档', () => {
       kind: 'first',
       of: [slot('a'), slot('b'), lit(-1)],
     }
-    expect(evalExpr(expr, vals([['b', 5]]))).toBe(5)
+    expect(evalOf(expr, vals([['b', 5]]))).toBe(5)
   })
 
   it('⚠ 显式 0 赢过后面的候选，不许被当成「没取到」跳过去', () => {
@@ -94,14 +123,14 @@ describe('first 档', () => {
       ['a', 0],
       ['b', 99],
     ])
-    expect(evalExpr(expr, values)).toBe(0)
+    expect(evalOf(expr, values)).toBe(0)
   })
 
   it('一个候选都没值时给 null；空候选表同样给 null', () => {
     expect(
-      evalExpr({ kind: 'first', of: [slot('a'), slot('b')] }, EMPTY),
+      evalOf({ kind: 'first', of: [slot('a'), slot('b')] }, EMPTY),
     ).toBeNull()
-    expect(evalExpr({ kind: 'first', of: [] }, EMPTY)).toBeNull()
+    expect(evalOf({ kind: 'first', of: [] }, EMPTY)).toBeNull()
   })
 })
 
@@ -112,22 +141,22 @@ describe('sum 档', () => {
       ['a', 2],
       ['b', 3],
     ])
-    expect(evalExpr(expr, values)).toBe(6)
+    expect(evalOf(expr, values)).toBe(6)
   })
 
   it('⚠ 缺一项整式为空：少一路的合计会被当成总量读走', () => {
     const expr: Twin2dExpr = { kind: 'sum', of: [slot('a'), slot('b')] }
-    expect(evalExpr(expr, vals([['a', 2]]))).toBeNull()
+    expect(evalOf(expr, vals([['a', 2]]))).toBeNull()
   })
 
   it('文本项不参与相加，整式同样为空', () => {
-    expect(evalExpr({ kind: 'sum', of: [lit(1), lit('—')] }, EMPTY)).toBeNull()
+    expect(evalOf({ kind: 'sum', of: [lit(1), lit('—')] }, EMPTY)).toBeNull()
   })
 
   it('空项表给 null，溢出成非有限数也给 null', () => {
-    expect(evalExpr({ kind: 'sum', of: [] }, EMPTY)).toBeNull()
+    expect(evalOf({ kind: 'sum', of: [] }, EMPTY)).toBeNull()
     expect(
-      evalExpr({ kind: 'sum', of: [lit(1e308), lit(1e308)] }, EMPTY),
+      evalOf({ kind: 'sum', of: [lit(1e308), lit(1e308)] }, EMPTY),
     ).toBeNull()
   })
 })
@@ -144,7 +173,7 @@ describe('ratio 档', () => {
       ['out', 30],
       ['in', 120],
     ])
-    expect(evalExpr(expr, values)).toBe(25)
+    expect(evalOf(expr, values)).toBe(25)
   })
 
   it('⚠ 分母 0 或负数一律给 null：给 0% 会让「没在跑」和「效率为零」长得一样', () => {
@@ -154,20 +183,17 @@ describe('ratio 档', () => {
       den: slot('in'),
       scale: 100,
     }
-    expect(evalExpr(expr, vals([['in', 0]]))).toBeNull()
-    expect(evalExpr(expr, vals([['in', -5]]))).toBeNull()
-    expect(evalExpr(expr, EMPTY)).toBeNull()
+    expect(evalOf(expr, vals([['in', 0]]))).toBeNull()
+    expect(evalOf(expr, vals([['in', -5]]))).toBeNull()
+    expect(evalOf(expr, EMPTY)).toBeNull()
   })
 
   it('分子取不到、或结果溢出时给 null', () => {
     expect(
-      evalExpr(
-        { kind: 'ratio', num: slot('out'), den: lit(2), scale: 1 },
-        EMPTY,
-      ),
+      evalOf({ kind: 'ratio', num: slot('out'), den: lit(2), scale: 1 }, EMPTY),
     ).toBeNull()
     expect(
-      evalExpr(
+      evalOf(
         {
           kind: 'ratio',
           num: lit(1),
@@ -183,19 +209,16 @@ describe('ratio 档', () => {
 describe('scale 档', () => {
   it('乘一个常数', () => {
     expect(
-      evalExpr(
-        { kind: 'scale', of: slot('cop'), by: 100 },
-        vals([['cop', 4.2]]),
-      ),
+      evalOf({ kind: 'scale', of: slot('cop'), by: 100 }, vals([['cop', 4.2]])),
     ).toBe(420)
   })
 
   it('操作数取不到、或乘出非有限数时给 null', () => {
     expect(
-      evalExpr({ kind: 'scale', of: slot('cop'), by: 100 }, EMPTY),
+      evalOf({ kind: 'scale', of: slot('cop'), by: 100 }, EMPTY),
     ).toBeNull()
     expect(
-      evalExpr(
+      evalOf(
         { kind: 'scale', of: lit(2), by: Number.POSITIVE_INFINITY },
         EMPTY,
       ),
@@ -211,7 +234,7 @@ describe('join 档', () => {
       sep: ' · ',
     }
     expect(
-      evalExpr(
+      evalOf(
         expr,
         vals([
           ['temperature_c', 58],
@@ -219,12 +242,77 @@ describe('join 档', () => {
         ]),
       ),
     ).toBe('58 · 72')
-    expect(evalExpr(expr, vals([['temperature_c', 58]]))).toBe('58')
+    expect(evalOf(expr, vals([['temperature_c', 58]]))).toBe('58')
   })
 
   it('⚠ 一项都拼不出时给 null 而不是空串：空白格看起来像样式坏了', () => {
     const expr: Twin2dExpr = { kind: 'join', of: [slot('a')], sep: ' · ' }
-    expect(evalExpr(expr, EMPTY)).toBeNull()
+    expect(evalOf(expr, EMPTY)).toBeNull()
+  })
+})
+
+describe('join 档逐段过槽位口径', () => {
+  const reading: Twin2dExpr = {
+    kind: 'join',
+    of: [slot('temperature_c'), slot('level_pct')],
+    sep: ' · ',
+  }
+  const formats: Twin2dSlotFormats = new Map([
+    ['temperature_c', fmt({ precision: 1, unit: '℃' })],
+    ['level_pct', fmt({ precision: 0, unit: '%' })],
+  ])
+
+  it('单位与精度取自各自的槽位，单位紧贴数值', () => {
+    expect(
+      evalExpr(
+        reading,
+        vals([
+          ['temperature_c', 100],
+          ['level_pct', 0],
+        ]),
+        formats,
+      ),
+    ).toBe('100.0℃ · 0%')
+  })
+
+  it('缺的那一段照旧整段跳过，留下的那一段仍带自己的单位', () => {
+    expect(evalExpr(reading, vals([['level_pct', 82.6]]), formats)).toBe('83%')
+  })
+
+  it('映射表也是口径的一部分：命中时出词条且不拼单位', () => {
+    const expr: Twin2dExpr = { kind: 'join', of: [slot('s')], sep: '' }
+    const table: Twin2dSlotFormats = new Map([
+      ['s', fmt({ unit: 'kW', enumMap: { '1': '运行' } })],
+    ])
+    expect(evalExpr(expr, vals([['s', 1]]), table)).toBe('运行')
+  })
+
+  // ⚠ 中间值没有槽位身份：要带单位就把它自己立成一个带单位的派生槽
+  it('只有直接写在 join 里的 slot 一档过口径，算出来的中间值直拼', () => {
+    const expr: Twin2dExpr = {
+      kind: 'join',
+      of: [{ kind: 'scale', of: slot('temperature_c'), by: 2 }],
+      sep: ' · ',
+    }
+    expect(evalExpr(expr, vals([['temperature_c', 100]]), formats)).toBe('200')
+  })
+
+  it('口径表里查不到这个键时直拼，不编一份缺省口径', () => {
+    const expr: Twin2dExpr = { kind: 'join', of: [slot('stored_kwh')], sep: '' }
+    expect(evalExpr(expr, vals([['stored_kwh', 12.5]]), formats)).toBe('12.5')
+  })
+
+  it('口径只作用在拼接上：同一个槽进四则运算仍是数', () => {
+    expect(
+      evalExpr(
+        { kind: 'sum', of: [slot('temperature_c'), slot('level_pct')] },
+        vals([
+          ['temperature_c', 100],
+          ['level_pct', 0],
+        ]),
+        formats,
+      ),
+    ).toBe(100)
   })
 })
 
@@ -245,11 +333,11 @@ describe('深度上限', () => {
       of: { kind: 'scale', of: slot('a'), by: 2 },
       by: 3,
     }
-    expect(evalExpr(three, vals([['a', 5]]))).toBe(30)
+    expect(evalOf(three, vals([['a', 5]]))).toBe(30)
   })
 
   it('第四层整枝给 null，不递归下去', () => {
-    expect(evalExpr(deep, vals([['a', 5]]))).toBeNull()
+    expect(evalOf(deep, vals([['a', 5]]))).toBeNull()
   })
 
   it('超深的枝也不进槽引用表——报成「被引用」会多出一行永远喂不到的槽', () => {
@@ -298,17 +386,17 @@ describe('参考项目的两条三级兜底链', () => {
   }
 
   it('output 三级：三个键各命中一次', () => {
-    expect(evalExpr(output, vals([['output_kwh', 120]]))).toBe(120)
-    expect(evalExpr(output, vals([['outputKwh', 121]]))).toBe(121)
-    expect(evalExpr(output, vals([['today_kwh', 122]]))).toBe(122)
-    expect(evalExpr(output, EMPTY)).toBeNull()
+    expect(evalOf(output, vals([['output_kwh', 120]]))).toBe(120)
+    expect(evalOf(output, vals([['outputKwh', 121]]))).toBe(121)
+    expect(evalOf(output, vals([['today_kwh', 122]]))).toBe(122)
+    expect(evalOf(output, EMPTY)).toBeNull()
   })
 
   it('efficiency 三级：直读 → cop×100 → 出/入×100', () => {
-    expect(evalExpr(efficiency, vals([['efficiency_pct', 88]]))).toBe(88)
-    expect(evalExpr(efficiency, vals([['cop', 4.2]]))).toBeCloseTo(420, 10)
+    expect(evalOf(efficiency, vals([['efficiency_pct', 88]]))).toBe(88)
+    expect(evalOf(efficiency, vals([['cop', 4.2]]))).toBeCloseTo(420, 10)
     expect(
-      evalExpr(
+      evalOf(
         efficiency,
         vals([
           ['output_kwh', 30],
@@ -323,7 +411,7 @@ describe('参考项目的两条三级兜底链', () => {
       ['output_kwh', 30],
       ['input_kwh', 0],
     ])
-    expect(evalExpr(efficiency, values)).toBeNull()
+    expect(evalOf(efficiency, values)).toBeNull()
   })
 
   it('两条链引用到的槽键正是绑点面板要留的那几个', () => {

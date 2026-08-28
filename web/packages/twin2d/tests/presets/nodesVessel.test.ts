@@ -14,9 +14,14 @@ import { svgShapeAttrs } from '../../src/paintVec'
 import { TWIN_2D_PALETTE_RGB, mixTransparent } from '../../src/presets/palette'
 import { TWIN_2D_VESSEL_STYLES } from '../../src/presets/nodesVessel'
 import { evalCondition } from '../../src/variants'
-import type { Twin2dNodeStyle, Twin2dVariant } from '../../src/types'
+import type {
+  Twin2dNodeStyle,
+  Twin2dSlot,
+  Twin2dVariant,
+} from '../../src/types'
 import type {
   Twin2dBoxPrim,
+  Twin2dExpr,
   Twin2dIcoPrim,
   Twin2dPrim,
   Twin2dPrimPatch,
@@ -76,6 +81,18 @@ function vecOf(style: Twin2dNodeStyle, id: string): Twin2dVecPrim {
   const prim = primOf(style, id)
   if (prim.kind !== 'vec') throw new Error(`${id} 不是 vec`)
   return prim
+}
+
+/** 一个样式的槽位口径表：`evalExpr` 拿它给 `join` 的每一段过单位与精度。 */
+function formatsOf(style: Twin2dNodeStyle): Map<string, Twin2dSlot> {
+  return new Map(style.slots.map((slot) => [slot.key, slot]))
+}
+
+/** 一个样式的读数行算式。 */
+function readingOf(style: Twin2dNodeStyle): Twin2dExpr {
+  const expr = style.slots.find((slot) => slot.key === 'reading')?.expr
+  if (expr === null || expr === undefined) throw new Error('读数必须是派生槽')
+  return expr
 }
 
 function styleOf(id: string): Twin2dNodeStyle {
@@ -262,8 +279,8 @@ describe('两个储能容器预置样式', () => {
       ],
       sep: ' · ',
     })
-    const expr = reading?.expr
-    if (expr === null || expr === undefined) throw new Error('派生槽必须带算式')
+    const style = styleOf('water-tank')
+    const expr = readingOf(style)
     expect(
       evalExpr(
         expr,
@@ -271,12 +288,48 @@ describe('两个储能容器预置样式', () => {
           ['temperature_c', 63.4],
           ['level_pct', 82],
         ]),
+        formatsOf(style),
       ),
-    ).toBe('63.4 · 82')
-    expect(evalExpr(expr, new Map<string, unknown>([['level_pct', 82]]))).toBe(
-      '82',
-    )
-    expect(evalExpr(expr, new Map<string, unknown>())).toBeNull()
+    ).toBe('63.4℃ · 82%')
+    expect(
+      evalExpr(
+        expr,
+        new Map<string, unknown>([['level_pct', 82]]),
+        formatsOf(style),
+      ),
+    ).toBe('82%')
+    expect(
+      evalExpr(expr, new Map<string, unknown>(), formatsOf(style)),
+    ).toBeNull()
+  })
+
+  // 参考项目 `TopologyNodeView.vue` 的 vesselReading：`${t.toFixed(1)}℃` 与
+  // `${Math.round(l)}%`，两段之间才是 ' · '
+  it('读数行逐段过槽位口径：温度一位小数带 ℃、液位取整带 %', () => {
+    for (const style of TWIN_2D_VESSEL_STYLES) {
+      const expr = readingOf(style)
+
+      expect(
+        evalExpr(
+          expr,
+          new Map<string, unknown>([
+            ['temperature_c', 100],
+            ['level_pct', 0],
+          ]),
+          formatsOf(style),
+        ),
+      ).toBe('100.0℃ · 0%')
+      expect(
+        evalExpr(
+          expr,
+          new Map<string, unknown>([
+            ['temperature_c', 63.44],
+            ['level_pct', 82.6],
+          ]),
+          formatsOf(style),
+        ),
+      ).toBe('63.4℃ · 83%')
+    }
   })
 
   it('每处槽引用都落在自己声明的槽位里（零悬空槽）', () => {

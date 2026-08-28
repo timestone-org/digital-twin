@@ -328,7 +328,7 @@ describe('逐槽取数四档在墙上各自可辨', () => {
       meta: { slots: { [READING_FIELD]: { state: 'ok' } } },
     })
 
-    expect(readingText(wrapper)).toBe('36.5 °C')
+    expect(readingText(wrapper)).toBe('36.5°C')
     expect(wrapper.find('.dt-twin2d__readout').exists()).toBe(false)
   })
 
@@ -345,7 +345,7 @@ describe('逐槽取数四档在墙上各自可辨', () => {
   it('没有下发逐槽结论时照常画值，设计态与独立挂载走这条', () => {
     const wrapper = render({ values: { nodeValues: [{ value: 36.5 }] } })
 
-    expect(readingText(wrapper)).toBe('36.5 °C')
+    expect(readingText(wrapper)).toBe('36.5°C')
   })
 
   /**
@@ -359,7 +359,7 @@ describe('逐槽取数四档在墙上各自可辨', () => {
       meta: { slots: { [READING_FIELD]: { state: 'ok' } } },
     })
 
-    expect(readingText(wrapper)).toBe('37.5 °C')
+    expect(readingText(wrapper)).toBe('37.5°C')
   })
 
   // ⚠ 槽键拼错时回的是全局占位符而不是槽位自己那个：两者不一样才看得出
