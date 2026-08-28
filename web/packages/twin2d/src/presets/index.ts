@@ -39,6 +39,11 @@ export { TWIN_2D_VESSEL_STYLES } from './nodesVessel'
 export { TWIN_2D_PALETTE, TWIN_2D_PALETTE_RGB, mixTransparent } from './palette'
 export type { Twin2dPaletteKey } from './palette'
 export {
+  TWIN_2D_PRESET_MIN_FONT_SIZE,
+  TWIN_2D_PRESET_SCALE,
+  twin2dScaleNodeStyle,
+} from './scale'
+export {
   TWIN_2D_SENSOR_DEFAULT_AT,
   TWIN_2D_SENSOR_DEFS,
   TWIN_2D_SENSOR_PILLS,
