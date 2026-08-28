@@ -14,6 +14,9 @@
  *   不带的话改完 A 接着改 B，两笔会并进同一帧。
  * ⚠ 取点那一路本层不给 `canPick`：画布还接不住取点请求，给了就是一枚按下去毫无
  *   反应的键（`PrimFields` 的口径）。
+ * ⚠ 预览钉在这一栏顶上，画的是**当下生效**的那一份——一份刚新建、画布上还没有节点在用
+ *   的样式，除了这里没有第二个地方看得见它长什么样。样式编辑面自带一张更大的，那边
+ *   给 `showPreview: false` 关掉这一张，两张一起摆会把配置挤出屏外。
  */
 import type {
   Twin2dConfig,
@@ -37,19 +40,25 @@ import {
   updateVariant,
 } from '../../scripts/styleOps'
 import type { Twin2dVariantSeed } from '../../scripts/styleOps'
+import Twin2dStylePreview from '../Twin2dStylePreview.vue'
 import EdgeStyleInspector from './EdgeStyleInspector.vue'
 import PrimFields from './PrimFields.vue'
 import StyleInspector from './StyleInspector.vue'
 import VariantFields from './VariantFields.vue'
 
-const props = defineProps<{
-  /** 整份配置；改动整份产出往上 emit。 */
-  config: Twin2dConfig
-  /** 正在编辑哪一份样式。 */
-  focus: Twin2dStyleFocus
-  /** 图元树上选中的那一枚；空串 = 一枚都没选。 */
-  selectedPrim: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    /** 整份配置；改动整份产出往上 emit。 */
+    config: Twin2dConfig
+    /** 正在编辑哪一份样式。 */
+    focus: Twin2dStyleFocus
+    /** 图元树上选中的那一枚；空串 = 一枚都没选。 */
+    selectedPrim: string
+    /** 顶上那张预览画不画；样式编辑面自带一张更大的，那边关掉这一张。 */
+    showPreview?: boolean
+  }>(),
+  { showPreview: true },
+)
 
 const emit = defineEmits<{
   /** 一次性改动，落一帧撤销。 */
@@ -171,6 +180,12 @@ function onMerge(next: Twin2dConfig, key: string): void {
 
 <template>
   <div data-test="style-pane" :data-kind="focus.kind">
+    <Twin2dStylePreview
+      v-if="showPreview && nodeStyle !== null"
+      class="mb-3"
+      :node-style="nodeStyle"
+    />
+
     <StyleInspector
       v-if="nodeStyle !== null"
       :node-style="nodeStyle"

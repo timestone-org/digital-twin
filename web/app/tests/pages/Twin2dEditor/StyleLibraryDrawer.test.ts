@@ -9,6 +9,10 @@
  * ⚠ 往返一致断的是**字节**：导出的那串文本再读回来、并进一份空配置，得到的样式与
  * 原样式逐字相同。导出时漏一个字段，只看「导入成功」是看不出来的。
  * ⚠ 撞名三档要摆在面上，缺省改名并存：静默覆盖会把用户正在用的那份样式换掉。
+ * ⚠ 新建 / 复制 / 「预览并编辑」三条入口都要把右栏的样式焦点一起切过去：图元剪贴板
+ * 按 `styleFocus` 判要不要走图元那一支，不切的话编辑面上的复制粘贴会去动画布上选中
+ * 的实体，且这一步零报错。
+ * ⚠ 连线样式不进编辑面：那张预览画的是一个节点，连线在框里没有东西可画。
  */
 import { TWIN_2D_BUILTIN_NODE_STYLES, normalizeTwin2dConfig } from '@dt/twin2d'
 import type { Twin2dConfig, Twin2dNodeStyle } from '@dt/twin2d'
@@ -39,6 +43,7 @@ vi.mock('@dt/ui', async () => {
 })
 
 import StyleLibraryDrawer from '@/pages/Twin2dEditor/components/StyleLibraryDrawer.vue'
+import Twin2dStyleWizard from '@/pages/Twin2dEditor/components/Twin2dStyleWizard.vue'
 import {
   importTwin2dStyles,
   readTwin2dStylePackage,
@@ -444,5 +449,106 @@ describe('关闭', () => {
     await close?.trigger('click')
 
     expect(wrapper.emitted('update:open')?.at(-1)).toEqual([false])
+  })
+})
+
+/**
+ * 编辑面正开在哪一份样式上；没开着给空串。
+ * @param wrapper 挂好的抽屉
+ */
+function wizardOn(wrapper: Wrapper): string {
+  const wizard = wrapper.getComponent(Twin2dStyleWizard)
+  return wizard.props('open') === true ? String(wizard.props('styleId')) : ''
+}
+
+describe('带预览的编辑面', () => {
+  it('一开始没开着', () => {
+    expect(wizardOn(mountDrawer())).toBe('')
+  })
+
+  it('新建节点样式之后直接开在新出炉的那一份上', async () => {
+    const wrapper = mountDrawer()
+
+    await click(wrapper, 'style-lib-add-node')
+
+    const added = lastChange(wrapper).styles.at(-1)?.id ?? ''
+    expect(added).not.toBe('')
+    expect(wizardOn(wrapper)).toBe(added)
+  })
+
+  it('新建连线样式不开编辑面——那张预览画的是一个节点', async () => {
+    const wrapper = mountDrawer()
+
+    await click(wrapper, 'style-lib-add-edge')
+
+    expect(wizardOn(wrapper)).toBe('')
+    expect(wrapper.emitted('focus')?.at(-1)?.[0]).toBe('edgeStyles')
+  })
+
+  it('复制一份内置样式之后开在副本上', async () => {
+    const wrapper = mountDrawer()
+
+    await click(wrapper, `style-lib-copy-styles:${BUILTIN.id}`)
+
+    expect(wizardOn(wrapper)).toBe(lastChange(wrapper).styles.at(-1)?.id)
+  })
+
+  it('每一行的那枚键开在那一行上，并把右栏也切过去', async () => {
+    const wrapper = mountDrawer()
+
+    await click(wrapper, 'style-lib-edit-styles:mine')
+
+    expect(wizardOn(wrapper)).toBe('mine')
+    expect(wrapper.emitted('focus')?.at(-1)).toEqual(['styles', 'mine'])
+  })
+
+  it('连线那一行没有这枚键', () => {
+    const wrapper = mountDrawer()
+
+    expect(
+      wrapper.find('[data-test="style-lib-edit-edgeStyles:wire"]').exists(),
+    ).toBe(false)
+  })
+
+  it('抽屉一关就把编辑面一起带走，不留一张关不掉的浮层', async () => {
+    const wrapper = mountDrawer()
+    await click(wrapper, 'style-lib-edit-styles:mine')
+
+    const close = wrapper
+      .findAll('button')
+      .find((item) => item.text().includes('关闭'))
+    await close?.trigger('click')
+
+    expect(wizardOn(wrapper)).toBe('')
+    expect(wrapper.emitted('update:open')?.at(-1)).toEqual([false])
+  })
+
+  it('关掉之后那份 id 一起清了，下次不会开在上一份上', async () => {
+    const wrapper = mountDrawer()
+    await click(wrapper, 'style-lib-edit-styles:mine')
+
+    wrapper.getComponent(Twin2dStyleWizard).vm.$emit('update:open', false)
+    await nextTick()
+
+    expect(wizardOn(wrapper)).toBe('')
+  })
+
+  it('编辑面里的连续输入与断段原样上抛，撤销栈仍归页面持有', async () => {
+    const wrapper = mountDrawer()
+    await click(wrapper, 'style-lib-edit-styles:mine')
+    const wizard = wrapper.getComponent(Twin2dStyleWizard)
+
+    wizard.vm.$emit('merge', BARE, 'style:mine:name')
+    wizard.vm.$emit('endMerge')
+    wizard.vm.$emit('pickPrim', 'p1')
+    wizard.vm.$emit('copyPrim')
+    wizard.vm.$emit('pastePrim')
+    await nextTick()
+
+    expect(wrapper.emitted('merge')?.at(-1)).toEqual([BARE, 'style:mine:name'])
+    expect(wrapper.emitted('endMerge')).toHaveLength(1)
+    expect(wrapper.emitted('pickPrim')?.at(-1)).toEqual(['p1'])
+    expect(wrapper.emitted('copyPrim')).toHaveLength(1)
+    expect(wrapper.emitted('pastePrim')).toHaveLength(1)
   })
 })
