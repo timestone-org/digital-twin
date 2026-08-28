@@ -135,6 +135,9 @@ icon: {
 > 模块库已隐藏，DOM 与 CSS 与 v2 逐字相同，六处差异全是被 v2 修掉的语义与可达性回归。
 > 跨仓迁移没有存量，不列为覆盖行。
 
+⚠ 预设摆的是**观感**。`source-card`（第 7 行）与 `vessel-card`（第 9 行）还各带一条领域算式
+（COP / 净产能 / 水储能），它们落在**绑定层**的 `computed` 来源上，配法与缺值口径见 §6.5。
+
 ### 1.4 与已有 `metric-card` 的分工：并存
 
 `metric-card` **一个字都不动**，不加 `replacedBy`，它的四个文件与 655 行测试继续留仓里跑。
@@ -777,6 +780,68 @@ bindings: [{
 ⚠ **格内点击必须有条件吞冒泡**：配了 `emitValue` 就 `@click.stop`，没配就放它上去让整块兜底
 捕获。两边都吞或都不吞，toggle 类动作会当场自我抵消或整块兜底失效。空值不上抛由
 `shared/interaction.ts` 的 `rowClickEmitter` 兜着。
+
+### 6.5 三条领域算式怎么配出来（COP / 净产能 / 水储能）
+
+`source-card` 与 `vessel-card` 两套预设摆得出观感，摆不出参考仓那三条算式。**它们落在绑定层，
+不落在模块层**：`BINDING_SOURCE_KINDS` 的 `computed` 一档就是「同一节点内其它槽的运算」，
+七个算子在 `packages/datasources/src/computed/provider.ts` 的 `REDUCERS` 里，
+而 `packages/runtime/src/moduleValues.ts` 的 `resolveDerived` 按依赖拓扑求解、**派生可以引用派生**
+（`packages/runtime/tests/moduleValues.test.ts` 有「派生引用派生时按依赖迭代求解」那条用例）。
+
+理由是分层，不是省事：`info-list` 的抽象是**怎么摆一行**，把 `V×ΔT×1.163` 写进它的取值层就变成
+**算什么**；而那条式子里的 1.163 只对**水**成立，换蓄冷、熔盐、电池全错且屏上不会有任何提示——
+一个通用列表模块里藏一个只对一种介质正确的常数，与 §5.2.1「假件不许比真接口宽松」是同一类错。
+
+| 算式 | 怎么配 | 缺值 / 除零 |
+|---|---|---|
+| COP（能效） | `ratio(输出, 投入)` | 分母为 `0` → `null`；任一输入缺席或非有限数 → `null`；分子为 `0` → `0` |
+| 净产能 | `diff(输出, 投入)`；蒸汽档那一行**直接绑输出**（燃气投入不抵扣） | 任一输入缺席 → `null`；可为负，不钳 |
+| 水储能 | `diff(温度, 基准)` 出 ΔT，再 `product(ΔT, 容量, 1.163)`，后两项走 `static` 常量槽 | 链上任一环 `null` 则整条 `null`；可为负，不钳 |
+
+⚠ **任一输入不是有限数，整条算式就是 `null`**，绝不做部分聚合（`toFiniteNumbers` 的口径）——
+少了一台机组的平均值看上去完全正常，但它是错的。
+
+**逐槽落点。** `vessel-card` 一行七个可参与算术的数值槽（`LIST_SLOT_FIELDS` 十一个子槽里
+`value` / `aux` / `aux2` / `aux3` / `extra1` / `extra2` / `extra3`），水储能这条链**正好占满、零余量**：
+
+⚠ 下表的 `inputs` 写的是子槽名，**落库时是整条 `fieldKey`**——数组槽形如 `listValues[0].aux3`，
+逐行各带各的下标。绑点面板给的候选就是同节点全部 `fieldKey`（`BindingPanel.vue` 的 `siblingKeys`），
+挑的时候别跨行挑错下标：跨行挑不报错，只是这一行拿了另一行的温度。
+
+| 子槽 | 装什么 | 来源 |
+|---|---|---|
+| `value` | 当前储能 kWh | `computed` `product(aux3, extra2, extra3)`，`precision: 1` |
+| `aux` | 水温 ℃（`subSource:'aux'` + `subLabel:'水温'`） | `opcua` |
+| `aux2` | 液位 %（`meter.source2:'aux2'`） | `opcua` |
+| `aux3` | ΔT | `computed` `diff(aux, extra1)` |
+| `extra1` | 基准温度（缺省 20） | `static` |
+| `extra2` | 容量 m³ | `static` |
+| `extra3` | 1.163 kWh/(m³·℃) | `static` |
+
+⚠ `extra1` / `extra2` / `extra3` 只在 `rowShape.extras` 打开时才画，`vessel-card` 是关的，
+所以这三个槽在这里是**不渲染的载体**。要同时用扩展指标行（如 `source-card` 的功率 / 温度 / 流量），
+这三个槽就腾不出来。
+⚠ **储能占比不走第四条派生**：槽已占满。它走进度条的 `range` 档——`meter.source:'range'`，
+分母取行内 `range.max`（设定储能，配置常量）。`rangePercent` 的口径是 `max <= min` → `null`、
+结果可 `> 100`（读数诚实，只有条宽夹 0–100）。
+
+**与参考仓的三处口径差，都在这一层显式接受：**
+
+1. **不钳非负。** 参考仓 `waterStorageKwh` 是 `max(0, V × max(0, T−T0) × 1.163)` 钳了两道；
+   `computed` 链一道都没有，水温低于基准时储能读数是**负数**（实测 ΔT `−8`、50 m³ → `−465.2`）。
+   要钳就得再花一个 `static 0` 槽走 `max` 算子，而槽已占满——**接受负值并让它可见**，
+   因为「比基准还冷」本来就该看得出来，显示成 0 反而把它藏了。
+2. **除零守卫窄一档。** 参考仓 `derivedCop` 要求 `inputKwh > 0`；`ratio` 只挡 `=== 0`，
+   投入为负时得到负 COP（实测 `720 / −200 = −3.6`）。负投入是脏数据不是工况，判它要在点位侧。
+3. **「输出」是哪个点由绑定决定。** 参考仓刻意分两个口径——占比与 COP 用含 `todayKwh` 回退的
+   输出，净产能只用真实输出（`outputRaw`）。绑定层没有这个分叉，**绑哪个点就是哪个口径**：
+   净产能那条 `diff` 必须绑真实输出点，绑到「今日发电」上算出来的不是净产能。
+
+> 要秒级实时以外的口径（跨天累计、按批次归集），这条链的落点是**数据台账**而不是绑定层：
+> 台账公式引擎收全套算术（`formula/parser.py` 的 `ast.Mult`），容量 / 基准 / 设计温度在那里
+> 本来就是行上的常量列，`dataset` 也已经是 `BINDING_SOURCE_KINDS` 的一档。代价是台账服务端
+> 求值、跟刷新周期走，不是逐帧。
 
 ---
 
