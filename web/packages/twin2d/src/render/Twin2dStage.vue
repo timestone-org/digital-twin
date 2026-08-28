@@ -15,6 +15,7 @@ import {
   TWIN_2D_DEFAULT_FIT_PADDING,
   TWIN_2D_DEFAULT_FLOW_SPEED,
 } from '../constants'
+import { twin2dFitScales } from '../stageFit'
 import Twin2dEdgeLayer from './Twin2dEdgeLayer.vue'
 import Twin2dIconSprite from './Twin2dIconSprite.vue'
 import Twin2dMarkLayer from './Twin2dMarkLayer.vue'
@@ -34,9 +35,6 @@ import type {
 
 /** 空态文案：这张图上一个节点、一条标注都没有时的那一行 */
 const EMPTY_TEXT = '这张 2D 孪生还没有画任何节点'
-/** 归一百分比的分母 */
-const PERCENT = 100
-
 /**
  * 同一个 DOM 文档里 sprite 宿主已经有主了的标记。
  * ⚠ 记在文档上而不是模块变量里：宿主挂进的是文档，判据就该在文档上。同一份包被打进
@@ -165,9 +163,17 @@ function claimSprite(): boolean {
  */
 const ownsSprite = claimSprite()
 
+/**
+ * 量一次宿主。
+ * ⚠ 量的是**排版盒**（`offsetWidth/Height`），绝不能用 `getBoundingClientRect`：后者
+ * 返回被祖先 `transform: scale` 缩过的**视觉**盒，而大屏编辑器正是把整个设计坐标系整块
+ * 缩放的。拿视觉盒去贴合的表现是「编辑器里这块图只占了格子的一角」——缩放几成就画成
+ * 几成，且缩放越小缩得越狠，运行态与预览上却一切正常。
+ * ⚠ 单测抓不到：happy-dom 没有排版引擎，两个取法都恒回 0。
+ * @param el 宿主元素
+ */
 function measure(el: HTMLElement): void {
-  const rect = el.getBoundingClientRect()
-  measured.value = { w: rect.width, h: rect.height }
+  measured.value = { w: el.offsetWidth, h: el.offsetHeight }
 }
 
 onMounted(() => {
@@ -190,37 +196,6 @@ onBeforeUnmount(() => {
 })
 
 /**
- * 两轴缩放倍率。
- * ⚠ 只有 `contain` 吃 `fitPadding`：其余三档的意思就是「把某一轴填满」，再乘一个安全
- * 留白就填不满了，而表现是「配了 width 却两边留白」（§9.1 那张表）。
- * @param mode 缩放档
- * @param canvas 画布坐标系
- * @param box 容器尺寸
- * @param padding 安全留白（百分比）
- */
-function scalesOf(
-  mode: Twin2dFitMode,
-  canvas: Twin2dCanvas,
-  box: Twin2dStageBox,
-  padding: number,
-): [number, number] {
-  const kx = box.w / canvas.width
-  const ky = box.h / canvas.height
-  switch (mode) {
-    case 'contain': {
-      const scale = Math.min(kx, ky) * (1 - padding / PERCENT)
-      return [scale, scale]
-    }
-    case 'width':
-      return [kx, kx]
-    case 'height':
-      return [ky, ky]
-    case 'stretch':
-      return [kx, ky]
-  }
-}
-
-/**
  * ⚠ 首帧或被隐藏时容器宽高是 0，这时整个贴合结果是 `null`：少了这条保护，
  * `translate(NaN, NaN)` 会让整块空白，而 devtools 里看什么都正常（§9.1）。
  */
@@ -228,9 +203,16 @@ const fit = computed<Twin2dStageFit | null>(() => {
   const box = props.containerSize ?? measured.value
   if (box.w <= 0 || box.h <= 0) return null
   const view = props.view
-  const [sx, sy] = scalesOf(view.fitMode, props.canvas, box, view.fitPadding)
+  // ⚠ 倍率只有 `twin2dFitScales` 一份：编辑器的「1:1」按它的反函数算画布尺寸，
+  // 在这里另写一份的表现是「编辑器说 1:1、上了大屏还是缩了一点」
+  const [sx, sy] = twin2dFitScales(view, props.canvas, {
+    width: box.w,
+    height: box.h,
+  })
   // 只有 contain 居中，`width` 顶端对齐、`height` 左对齐、`stretch` 两轴都填满
-  const centered = view.fitMode === 'contain'
+  // ⚠ `none` 与 `contain` 一样居中：不居中的话原尺寸那一档会死死钉在左上角，格子比
+  // 画布大时右下角空一大片，而用户想要的是「摆正中、不缩放」
+  const centered = view.fitMode === 'contain' || view.fitMode === 'none'
   return {
     sx,
     sy,

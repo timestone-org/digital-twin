@@ -17,6 +17,7 @@ import {
   projectToPerimT,
   sideNormal,
 } from './geometry'
+import { twin2dOutlinePoint } from './outline'
 import {
   svgPaintLayers,
   svgShapeAttrs,
@@ -225,7 +226,12 @@ function portEnd(pair: NodePair, portId: string): EndView | null {
 function endOf(end: Twin2dEndpoint, pair: NodePair, toward: Pt): EndView {
   const box = worldBoxOf(pair)
   if (end.t !== null) {
-    const local = perimeterPoint(centerBoxOf(pair.node, pair.style.size), end.t)
+    const own = centerBoxOf(pair.node, pair.style.size)
+    const local = twin2dOutlinePoint(
+      own,
+      pair.style.outline,
+      perimeterPoint(own, end.t),
+    )
     const point = applyNodeTransform(local.point, pair.node, pair.style.size)
     return { point, side: perimTToSide(projectToPerimT(box, point)) }
   }
@@ -233,9 +239,15 @@ function endOf(end: Twin2dEndpoint, pair: NodePair, toward: Pt): EndView {
     const port = portEnd(pair, end.portId)
     if (port !== null) return port
   }
+  // ⚠ 朝向对方那一档也要投：不投的话，没挂端口的那些线一律停在外接矩形上，而挂了
+  // 端口的邻居就贴着画出来的边——同一张图上两种接法，看着像「有几条线没接好」
   const facing = projectToPerimT(box, toward)
   return {
-    point: perimeterPoint(box, facing).point,
+    point: twin2dOutlinePoint(
+      box,
+      pair.style.outline,
+      perimeterPoint(box, facing),
+    ).point,
     side: perimTToSide(facing),
   }
 }

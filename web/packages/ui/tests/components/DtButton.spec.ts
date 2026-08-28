@@ -184,11 +184,25 @@ describe('xs 档', () => {
     expect(svg.attributes('height')).toBe('12')
   })
 
-  it('xs 是 icon-only 场景：无文字时压成正方形图标键', () => {
+  it('无文字时压成正方形图标键', () => {
     const button = mount(DtButton, {
       props: { size: 'xs', icon: 'trash' },
     }).find('button')
     expect(button.classes()).toContain('dt-btn--icon-only')
+  })
+
+  // ⚠ 带标签的 xs 曾被无条件压成 20px 宽，文字裁成两个字加一个省略号；typecheck、
+  // lint 与全部单测一律放行，只有人眼盯着那一处才看得见。宽度归 CSS，这里守的是
+  // 「不认作 icon-only」——正方形那条规则正是挂在这个类上的
+  it('带文字时不认作 icon-only，宽度让给文字', () => {
+    const button = mount(DtButton, {
+      props: { size: 'xs', icon: 'trash' },
+      slots: { default: '反转方向' },
+    }).find('button')
+
+    expect(button.classes()).toContain('dt-btn--xs')
+    expect(button.classes()).not.toContain('dt-btn--icon-only')
+    expect(button.text()).toBe('反转方向')
   })
 
   it('xs 也吃 disabled：禁用且不 emit click', async () => {

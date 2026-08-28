@@ -8,6 +8,7 @@
 import type { DashboardNodePayload, DashboardPayload } from '@dt/contracts'
 import { TWIN_2D_CONFIG_KEY, normalizeTwin2dConfig } from '@dt/twin2d'
 
+import { twin2dCellOf, twin2dSeedCanvas } from './hostFit'
 import { createTwin2dDoc } from './twin2dDoc'
 import type { Twin2dDoc } from './twin2dDoc'
 
@@ -17,6 +18,10 @@ export const TWIN_2D_MISSING_NODE_MESSAGE =
 
 /**
  * 把这个节点上的配置与绑定装成一份文档态；节点不在就返回 null。
+ * ⚠ 这个节点上还没有 2D 孪生配置时，画布起手就取「1:1 的设计尺寸」：新图一开局
+ * 编辑的一像素就是大屏上的一像素，不必先去点一次对齐。
+ * ⚠ 起手尺寸算进的是**基线**（`createTwin2dDoc` 的入参），不是打开页面后改的一笔：
+ * 算成改动的话，一进来就是「未保存」，离开还要拦一道确认，而用户什么都没动。
  * @param nodes 服务端返回的整棵节点树
  * @param nodeId 要编辑的节点
  */
@@ -26,8 +31,17 @@ export function twin2dDocOf(
 ): Twin2dDoc | null {
   const target = nodes.find((item) => item.id === nodeId)
   if (target === undefined) return null
+  const config = normalizeTwin2dConfig(target.configJson[TWIN_2D_CONFIG_KEY])
+  const seed = twin2dSeedCanvas(
+    target.configJson,
+    TWIN_2D_CONFIG_KEY,
+    twin2dCellOf(target),
+  )
   return createTwin2dDoc({
-    config: normalizeTwin2dConfig(target.configJson[TWIN_2D_CONFIG_KEY]),
+    config:
+      seed === null
+        ? config
+        : { ...config, canvas: { ...config.canvas, ...seed } },
     bindings: target.bindings,
   })
 }

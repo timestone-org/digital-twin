@@ -38,6 +38,8 @@ import type {
   Twin2dEditorSelection,
   Twin2dPickKind,
 } from '../scripts/editorSelection'
+import { addNode } from '../scripts/nodeOps'
+import { twin2dDropPoint } from '../scripts/paletteDrag'
 import { TWIN_2D_DEFAULT_SNAP } from '../scripts/snapping'
 import type { Twin2dGuideLine, Twin2dSnapBox } from '../scripts/snapping'
 import { edgePolyline } from '../scripts/waypointOps'
@@ -281,6 +283,34 @@ function connect(from: Twin2dEndpoint, to: Twin2dEndpoint): void {
 }
 
 /**
+ * 从调色板拖下来一份样式：在落点新建一个节点，并把选中换成它。
+ * ⚠ 走 `addNode` 而不是就地拼一个（与「点一下加一个」同一支）：缺省值抄一份出来，
+ * 抄的那份一旦与归一化不一致，新节点会在「存一次再读回来」之后悄悄变样。
+ * ⚠ 落点先过 `twin2dDropPoint`：不摆正、不吸网格的话，拖出来的节点会偏在光标右下方，
+ * 且与键盘挪出来的节点从此对不齐，而图上看着只是「差一点点」。
+ * ⚠ 样式落不到就整手作废：摆正那一步要按样式的缺省尺寸算，而拿不到尺寸时落下去的
+ * 是一个画不出来的节点。
+ * ⚠ 新节点必须接着选中：右栏那时正画着上一个选中的东西，拖完不换的话，用户改的
+ * 每一项都落在别的节点上。
+ * @param styleId 拖下来的那份样式
+ * @param at 松手那一点（设计坐标）
+ */
+function dropStyle(styleId: string, at: Pt): void {
+  const style = nodeStyles.value.find((item) => item.id === styleId)
+  if (style === undefined) return
+  const where = twin2dDropPoint(at, style.size, props.config.canvas, snap.value)
+  const added = addNode(props.config, {
+    styleId,
+    x: where.x,
+    y: where.y,
+  })
+  // 归一化没收下这一条时（`addNode` 交回原样的配置）就当没拖过，不塞一格空步进撤销栈
+  if (added.id === null) return
+  emit('change', added.config)
+  props.selection.select('nodes', added.id)
+}
+
+/**
  * 标注层这一帧吸出来的参考线。
  * ⚠ 两层共用这一支：各写各的内联处理器，改一处必漏另一处。
  * @param lines 这一帧要画的参考线；手势收场时是空表
@@ -324,6 +354,7 @@ function pickMany(
     :canvas="config.canvas"
     :fit-request="fitAt"
     @background-down="marqueeSource = $event"
+    @drop-style="dropStyle"
   >
     <template #default="api">
       <CanvasMarkLayer

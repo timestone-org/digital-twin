@@ -17,7 +17,7 @@ import {
   solidFill,
   txtOf,
 } from './primKit'
-import type { Twin2dNodeStyle, Twin2dVariant } from '../types'
+import type { Twin2dNodeStyle, Twin2dOutline, Twin2dVariant } from '../types'
 import type {
   Twin2dBoxPrim,
   Twin2dCondition,
@@ -261,9 +261,20 @@ export function twin2dChromePrims(): readonly Twin2dPrim[] {
  * 而合并序是「文档序在后的赢」（§4.5）。
  * @param style 已经写好形状、槽位与自己那几条变体的样式
  */
-export function twin2dWithChrome(style: Twin2dNodeStyle): Twin2dNodeStyle {
+/**
+ * 一份预置样式的原料：外缘可以不写，其余与 `Twin2dNodeStyle` 逐字相同。
+ * ⚠ 只有**外缘**可缺席：它是后加的一项，缺省回外接矩形正是老口径。其余字段一个都不许
+ * 省——省一个就得在这里补一份缺省，而那份缺省与归一化那份迟早漂开。
+ */
+type Twin2dStyleSeed = Omit<Twin2dNodeStyle, 'outline'> & {
+  outline?: Twin2dOutline
+}
+
+export function twin2dWithChrome(style: Twin2dStyleSeed): Twin2dNodeStyle {
   return {
     ...style,
+    // ⚠ 不声明外缘的按外接矩形算：那是老口径，逐个预置去补之前所有图一像素不动
+    outline: style.outline ?? { kind: 'rect', r: 0 },
     prims: [...style.prims, ...twin2dChromePrims()],
     variants: [...style.variants, ...TWIN_2D_LABEL_VARIANTS],
   }

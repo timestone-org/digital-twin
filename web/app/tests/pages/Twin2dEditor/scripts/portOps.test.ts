@@ -89,6 +89,7 @@ function makeStyle(over: Partial<Twin2dNodeStyle> = {}): Twin2dNodeStyle {
     prims: [],
     ports: STYLE_PORTS,
     slots: [],
+    outline: { kind: 'rect', r: 0 },
     variants: [],
     ...over,
   }

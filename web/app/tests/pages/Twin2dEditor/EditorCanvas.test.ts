@@ -1,7 +1,11 @@
 /**
  * @fileoverview 契约：视口壳把取景、缩放、平移与指针总线收在一处——一次平移只改视口
  * 这份纯状态、按累计位移走且松手才收一次场，卸载把 window 上的监听与 `ResizeObserver`
- * 一起摘干净，各层从插槽里接手势与换算，而 sprite 宿主在这里挂了且只挂一次。
+ * 一起摘干净，各层从插槽里接手势与换算，而 sprite 宿主在这里挂了且只挂一次；
+ * 从调色板拖下来的那一手在这里被接住，上抛的是换算过的设计坐标。
+ *
+ * ⚠ `dragover` 不 `preventDefault` 的话 `drop` 根本不发：表现是拖下来松手什么都
+ * 没有，且零报错。
  *
  * ⚠ 漏挂 sprite 时图标**静默消失**：`<use>` 元素照样在，只是解析不到任何目标。
  * ⚠ 卸载不摘监听同样不报错：离开这一页之后，整站的指针事件都还在被它拦。
@@ -14,6 +18,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { h } from 'vue'
 
 import EditorCanvas from '@/pages/Twin2dEditor/components/EditorCanvas.vue'
+import { TWIN_2D_STYLE_DRAG_MIME } from '@/pages/Twin2dEditor/scripts/paletteDrag'
 import type {
   Twin2dGestureEnd,
   Twin2dGestureFrame,
@@ -108,6 +113,55 @@ function fire(
   y: number,
 ): void {
   window.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y }))
+}
+
+/** 一次拖拽带着的那份 dataTransfer，只留画布真读的三样。 */
+interface FakeTransfer {
+  types: string[]
+  dropEffect: string
+  getData: (mime: string) => string
+}
+
+/**
+ * 造一份 dataTransfer。
+ * ⚠ `types` 与 `getData` 必须一口气对上：桩比真件宽的话，「类型说没有、取数却取得到」
+ * 这种真件产不出的组合会让用例绿在一个不存在的世界里。
+ * @param styleId 载荷
+ * @param mime 装在哪个类型下，缺省就是画布认的那个
+ */
+function styleTransfer(
+  styleId: string,
+  mime: string = TWIN_2D_STYLE_DRAG_MIME,
+): FakeTransfer {
+  return {
+    types: [mime],
+    dropEffect: 'none',
+    getData: (key: string) => (key === mime ? styleId : ''),
+  }
+}
+
+/**
+ * 往画布上派一次拖拽事件，返回派出去的那一个好查 `defaultPrevented`。
+ * ⚠ 不走 `trigger`：VTU 造的是真的 `DragEvent`，而 `dataTransfer` 是它原型上的只读
+ * 取值器，赋值在严格模式下直接抛。
+ * @param wrapper 挂好的画布
+ * @param type dragover 还是 drop
+ * @param transfer 这一手带着的载荷
+ * @param at 指针在窗口里的位置
+ */
+function drag(
+  wrapper: Wrapper,
+  type: 'dragenter' | 'dragover' | 'drop',
+  transfer: FakeTransfer,
+  at: { x: number; y: number },
+): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'dataTransfer', { value: transfer })
+  Object.defineProperty(event, 'clientX', { value: at.x })
+  Object.defineProperty(event, 'clientY', { value: at.y })
+  const host: Element = wrapper.get('[data-test="canvas-host"]').element
+  host.dispatchEvent(event)
+  return event
 }
 
 describe('sprite 宿主', () => {
@@ -389,5 +443,57 @@ describe('卸载', () => {
     wrapper.unmount()
 
     expect(disconnect).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('调色板拖放', () => {
+  it.each(['dragenter', 'dragover'] as const)(
+    '拖着一份样式悬上来的 %s 都拦下缺省动作，光标给「复制」',
+    (type) => {
+      const wrapper = mountCanvas()
+      const transfer = styleTransfer('steam-source')
+
+      const event = drag(wrapper, type, transfer, { x: 300, y: 200 })
+
+      expect(event.defaultPrevented).toBe(true)
+      expect(transfer.dropEffect).toBe('copy')
+    },
+  )
+
+  it('不认识的那些一律不拦，画布不装成收得下', () => {
+    const wrapper = mountCanvas()
+    const transfer = styleTransfer('steam-source', 'text/plain')
+
+    const event = drag(wrapper, 'dragover', transfer, { x: 300, y: 200 })
+
+    expect(event.defaultPrevented).toBe(false)
+    expect(transfer.dropEffect).toBe('none')
+  })
+
+  it('松手上抛的是设计坐标的落点，不是屏幕坐标', () => {
+    const wrapper = mountCanvas()
+    const at = { x: 300, y: 200 }
+    const design = toDesignPoint(lastView(wrapper), at)
+
+    drag(wrapper, 'drop', styleTransfer('steam-source'), at)
+
+    expect(wrapper.emitted('dropStyle')).toEqual([['steam-source', design]])
+    expect(design).not.toEqual(at)
+  })
+
+  it('不认识的那些松手也不抛', () => {
+    const wrapper = mountCanvas()
+
+    drag(wrapper, 'drop', styleTransfer('x', 'text/plain'), { x: 10, y: 10 })
+
+    expect(wrapper.emitted('dropStyle')).toBeUndefined()
+  })
+
+  it('载荷是空串时安安静静地不做事', () => {
+    const wrapper = mountCanvas()
+
+    drag(wrapper, 'drop', styleTransfer(''), { x: 10, y: 10 })
+
+    expect(wrapper.emitted('dropStyle')).toBeUndefined()
   })
 })

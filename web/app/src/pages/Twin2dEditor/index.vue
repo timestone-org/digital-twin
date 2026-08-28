@@ -46,6 +46,7 @@ import type { Twin2dEntityKind } from './scripts/types'
 import { TWIN_2D_AI_STARTERS, useTwin2dAi } from './scripts/useTwin2dAi'
 import { useTwin2dBindings } from './scripts/useTwin2dBindings'
 import { useTwin2dEditorPage } from './scripts/useTwin2dEditorPage'
+import { useTwin2dSizing } from './scripts/useTwin2dSizing'
 
 // ⚠ 子编辑器也要装：直接刷新到这条路由时大屏那三页一个都没跑过，
 // 不装的话素材地址与内置图标解析恒回空串，画面上是一张只剩底色的图
@@ -114,10 +115,19 @@ const outlineSummary = computed(() => {
 
 const canvasSummary = computed(() => {
   const canvas = config.value?.canvas
-  return canvas === undefined
-    ? ''
-    : `画布 ${canvas.width} × ${canvas.height} · 栅格 ${canvas.grid}`
+  if (canvas === undefined) return ''
+  const size = `画布 ${canvas.width} × ${canvas.height} · 栅格 ${canvas.grid}`
+  const state = parity.value
+  return state === null ? size : `${size} · ${state.summary}`
 })
+
+/** 画布尺寸那一簇：1:1 判据、裁到内容，与把它们改过去的两个动作。 */
+const sizing = useTwin2dSizing(
+  () => config.value,
+  () => page.node.value,
+  commit,
+)
+const parity = computed(() => sizing.parity.value)
 
 const targetSummary = computed(() => {
   const size = page.targetSize.value
@@ -273,10 +283,16 @@ onBeforeUnmount(page.dispose)
         :can-undo="page.doc.value?.canUndo.value ?? false"
         :can-redo="page.doc.value?.canRedo.value ?? false"
         :issue-count="issues.length + setupIssues.length"
+        :parity-text="parity?.summary ?? ''"
+        :parity-exact="parity?.exact ?? false"
+        :crop-exact="sizing.contentFit.value?.exact ?? true"
+        :align-crops="sizing.alignCrops.value"
         @save="save"
         @undo="page.doc.value?.undo()"
         @redo="page.doc.value?.redo()"
         @fit="fitRequest += 1"
+        @align-cell="sizing.alignToCell"
+        @crop-to-content="sizing.cropToContent"
         @toggle-issues="showIssues = !showIssues"
       />
     </template>
@@ -413,6 +429,7 @@ onBeforeUnmount(page.dispose)
               class="min-h-0 flex-1"
               :config="config"
               :selection="selection.inspect.value"
+              :pick="selection.pick.value"
               :style-focus="selection.styleFocus.value"
               :selected-prim="selectedPrim"
               :bindings="binding.bindings.value"

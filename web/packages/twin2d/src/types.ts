@@ -15,6 +15,7 @@ import type {
   Twin2dMarkLabelPos,
   Twin2dMarkZOrder,
   Twin2dNodeRotation,
+  Twin2dOutlineKind,
   Twin2dPattern,
   Twin2dPortDir,
   Twin2dPortSide,
@@ -134,6 +135,17 @@ export interface Twin2dNodeSize {
  * 一个节点样式：图元树、端口、槽位与变体的集合。
  * 预置库与用户自建的样式走同一条路径，同 id 以文档为准（§13.4）。
  */
+/**
+ * 一条外缘轮廓：端口与连线端点按它取点。
+ * ⚠ 只描述**外缘**，不参与渲染：图形该怎么画归图元树，这一份只回答「线该接在哪」。
+ * 两处对不上时，表现是线头悬在符号外面、或扎进符号里，而两处单看都对。
+ */
+export interface Twin2dOutline {
+  kind: Twin2dOutlineKind
+  /** `round` 的圆角半径（设计像素）；其余三档不读它。 */
+  r: number
+}
+
 export interface Twin2dNodeStyle {
   id: string
   name: string
@@ -144,6 +156,11 @@ export interface Twin2dNodeStyle {
   defaultStatus: Twin2dDefaultStatus
   /** 从调色板拖进画布时的初始尺寸。 */
   size: Twin2dNodeSize
+  /**
+   * 外缘形状；缺省是外接矩形（= 老口径，存量图零回归）。
+   * ⚠ 声明错了不会报错：线头照样画得出来，只是接在一个符号上没有的地方。
+   */
+  outline: Twin2dOutline
   prims: readonly Twin2dPrim[]
   ports: readonly Twin2dPort[]
   slots: readonly Twin2dSlot[]

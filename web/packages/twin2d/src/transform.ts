@@ -5,12 +5,14 @@
  */
 import { perimeterPoint, resolveSide, sideNormal } from './geometry'
 import { TWIN_2D_SIDE_PRIORITY } from './kinds'
-import type { Box, Pt } from './geometry'
+import { twin2dOutlinePoint } from './outline'
+import type { Box, PerimeterPoint, Pt } from './geometry'
 import type { Twin2dNodeRotation, Twin2dSide } from './kinds'
 import type {
   Twin2dNode,
   Twin2dNodeSize,
   Twin2dNodeStyle,
+  Twin2dOutline,
   Twin2dPort,
   Twin2dPortAt,
 } from './types'
@@ -161,18 +163,31 @@ function resolvePort(
 }
 
 /**
- * 端口落点在未变换的盒里的位置。
+ * 端口在节点自己盒里的落点，已投到样式声明的外缘上。
  * ⚠ 周长那一档转手给 `perimeterPoint`，本文件不另写一份参数化：两份的表现是只有下边
  * 与左边的端口左右（上下）镜像、其余两段全对，看图基本发现不了（§8）。
+ * ⚠ 投影只往里收（`twin2dOutlinePoint` 的口径），所以摆在符号内部的 `xy` 端口原地不动，
+ * 只有贴着外接矩形的那些会被拉到画出来的边上。
+ * @param box 节点自己的盒（中心参考）
+ * @param at 端口的落点声明
+ * @param outline 这份样式的外缘
  */
-function portLocalPoint(box: Box, at: Twin2dPortAt): Pt {
-  if (at.kind === 'xy') {
-    return {
-      x: box.x - box.w / 2 + box.w * at.x,
-      y: box.y - box.h / 2 + box.h * at.y,
-    }
-  }
-  return perimeterPoint(box, at.t).point
+function portLocalPoint(
+  box: Box,
+  at: Twin2dPortAt,
+  outline: Twin2dOutline,
+): Pt {
+  const raw: PerimeterPoint =
+    at.kind === 'xy'
+      ? {
+          point: {
+            x: box.x - box.w / 2 + box.w * at.x,
+            y: box.y - box.h / 2 + box.h * at.y,
+          },
+          normal: { x: 0, y: 0 },
+        }
+      : perimeterPoint(box, at.t)
+  return twin2dOutlinePoint(box, outline, raw).point
 }
 
 /** 轴对齐的单位向量 → 四档朝向。 */
@@ -196,7 +211,11 @@ export function portWorldPos(
   const port = resolvePort(node, style, portId)
   if (port === null) return null
   const box = centerBoxOf(node, style.size)
-  return worldPoint(portLocalPoint(box, port.at), box, poseOf(node))
+  return worldPoint(
+    portLocalPoint(box, port.at, style.outline),
+    box,
+    poseOf(node),
+  )
 }
 
 /**

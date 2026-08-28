@@ -159,7 +159,7 @@ describe('预置节点样式的清单', () => {
     expect(families.flat()).toEqual(ids)
   })
 
-  it('每一条都过得了「样式必备的九项」这道形状检查', () => {
+  it('每一条都过得了「样式必备的十项」这道形状检查', () => {
     for (const style of TWIN_2D_BUILTIN_NODE_STYLES) {
       expect(Object.keys(style).sort()).toEqual([
         'accent',
@@ -167,6 +167,7 @@ describe('预置节点样式的清单', () => {
         'defaultStatus',
         'id',
         'name',
+        'outline',
         'ports',
         'prims',
         'size',

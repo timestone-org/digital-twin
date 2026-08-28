@@ -182,6 +182,7 @@ describe('twin2dWithChrome 只做追加', () => {
       prims: [labelOuterPrim()],
       ports: [],
       slots: [],
+      outline: { kind: 'rect', r: 0 },
       variants: [],
     }
     const dressed = twin2dWithChrome(bare)

@@ -170,6 +170,7 @@ function styleOf(patch: Partial<Twin2dNodeStyle> = {}): Twin2dNodeStyle {
     prims: [boxOf({ children: [txtOf()] }), vecOf()],
     ports: [],
     slots: [],
+    outline: { kind: 'rect', r: 0 },
     variants: [],
     ...patch,
   }

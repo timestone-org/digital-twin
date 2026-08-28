@@ -125,6 +125,16 @@ describe('尺寸', () => {
     )
   })
 
+  // ⚠ 「按格子对齐」那一下在顶栏、不在这一节里：不在这里指一句，用户只会在这两个
+  // 数字框上手动凑，而凑出来的尺寸差之毫厘就不是 1:1
+  it('面上指出「1:1」那一下在顶栏', () => {
+    const wrapper = mountInspector()
+
+    expect(wrapper.find('[data-test="canvas-size-hint"]').text()).toContain(
+      '一像素就是大屏上的一像素',
+    )
+  })
+
   // ⚠ 数字框每次失焦都回抛一次当前值，不比一遍就白记一帧撤销
   it('值没变不记一帧', async () => {
     const wrapper = mountInspector({ width: 1600 })

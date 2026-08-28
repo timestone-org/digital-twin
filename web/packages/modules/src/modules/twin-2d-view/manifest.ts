@@ -29,6 +29,7 @@ const FIT_MODE_LABELS: Record<Twin2dFitMode, string> = {
   width: '按宽铺满',
   height: '按高铺满',
   stretch: '拉满（会变形）',
+  none: '原尺寸（不缩放）',
 }
 
 /**
@@ -124,7 +125,7 @@ export default defineModule({
       default: 'contain',
       span: 'half',
       options: FIT_MODE_OPTIONS,
-      help: '完整显示会留出安全边距；拉满两轴各自缩放，电路图别用。',
+      help: '完整显示会留出安全边距；拉满两轴各自缩放，电路图别用。原尺寸一点不缩放（字与线最清晰），格子比画布小的部分会被裁掉。',
     },
     {
       key: 'fitPadding',

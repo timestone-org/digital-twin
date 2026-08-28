@@ -17,7 +17,10 @@ const props = withDefaults(
   defineProps<{
     variant?: DtButtonVariant
     intent?: DtIntent
-    /** `xs` 是 20×20 的微型图标键档，仅 icon-only 场景（塞进 20px 行高的行内动作）。 */
+    /**
+     * `xs` 是 20px 高的微型行内动作档（塞进 20px 行高的行内动作）；不带标签时压成
+     * 20×20 的正方形图标键，带标签时宽度跟着文字走。
+     */
     size?: DtSize | 'xs' | undefined
     type?: 'button' | 'submit' | 'reset'
     disabled?: boolean | undefined
@@ -190,13 +193,22 @@ function onClick(event: MouseEvent): void {
   }
 }
 
-// xs 不在 --ctl-* 尺寸轴上：它只服务 icon-only 的行内动作键，20px 对齐行高
+// xs 不在 --ctl-* 尺寸轴上：它为「塞进 20px 行高的行内动作」而设，所以只钉高不钉宽
+// ⚠ 宽度只在 icon-only 时才压成正方形，与上面那几档同一个写法：无条件钉死 20px 宽的话，
+//   带标签的那些会被裁成两个字加一个省略号（`.dt-btn__label` 上有 truncate），而
+//   typecheck、lint 与全部单测一律放行——只有人眼盯着那一处才看得见
 .dt-btn--xs {
-  width: 20px;
   height: 20px;
-  padding: 0;
+  // 横向内边距是 sm 档（--ctl-btn-px-sm: 12px）的一半：xs 不在 --ctl-* 尺寸轴上，
+  // 与上面那 20px / 12px 一样只能就地写
+  padding: 0 6px;
   border-radius: var(--radius-sm);
   font-size: 12px;
+}
+
+.dt-btn--icon-only.dt-btn--xs {
+  width: 20px;
+  padding: 0;
 }
 
 .dt-btn--solid {

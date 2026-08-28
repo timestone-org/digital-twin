@@ -192,6 +192,7 @@ function styleWith(patch: Partial<Twin2dNodeStyle>): Twin2dNodeStyle {
     prims: [],
     ports: [],
     slots: [],
+    outline: { kind: 'rect', r: 0 },
     variants: [],
     ...patch,
   }

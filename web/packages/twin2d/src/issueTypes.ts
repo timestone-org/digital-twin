@@ -18,6 +18,7 @@ export const TWIN_2D_ISSUE_CODES = [
   'dangling-gradient',
   'dangling-sprite',
   'waypoint-out-of-canvas',
+  'node-out-of-canvas',
   'prim-too-deep',
   'dropped-node',
   'dropped-edge',
