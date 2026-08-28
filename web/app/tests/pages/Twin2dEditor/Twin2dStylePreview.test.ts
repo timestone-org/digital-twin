@@ -8,6 +8,10 @@
  * 变体的用户在预览里永远切不到它，且一处都不报错。
  * ⚠ 状态缺省那一档必须喂 `null` 而不是某个具体档：喂具体档等于把样式自己的
  * `defaultStatus` 悄悄盖掉，于是预览里看到的状态点与画布上那个对不上。
+ * ⚠ 局部渐变的 DOM id 是 `t2g-<实例前缀>-<渐变 id>`，按**样式 id** 拼前缀的话，同一份
+ * 样式的两张预览（右栏一张、编辑面一张，开编辑面时必然同时在场）会把同一个 id 写进
+ * 文档两遍，`url(#…)` 只认头一个——第二张的渐变悄悄取到第一张那份。所以两张预览的
+ * 渐变 id 必须不同，且这条只能在**同一个应用实例**里验：`useId()` 是按应用计数的。
  */
 import {
   TWIN_2D_STATES,
@@ -18,6 +22,7 @@ import type { Twin2dNodeStyle } from '@dt/twin2d'
 import { DtSegmented, DtSelect } from '@dt/ui'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import { defineComponent, h } from 'vue'
 
 import Twin2dStylePreview from '@/pages/Twin2dEditor/components/Twin2dStylePreview.vue'
 
@@ -256,5 +261,69 @@ describe('缩略档', () => {
     expect(wrapper.find('[data-test="style-preview-status"]').exists()).toBe(
       false,
     )
+  })
+})
+
+/** 一份带局部渐变的样式：渐变的 DOM id 会写进 `<linearGradient id>`。 */
+const GRADIENT_STYLE: Twin2dNodeStyle =
+  normalizeTwin2dConfig({
+    styles: [
+      {
+        id: 'grad',
+        name: '带渐变的',
+        size: { w: 120, h: 80 },
+        prims: [
+          {
+            id: 'v1',
+            kind: 'vec',
+            shape: { kind: 'rect', x: 0, y: 0, w: 10, h: 10, r: 0 },
+            fill: { kind: 'gradient', ref: 'g1' },
+            gradients: [
+              {
+                id: 'g1',
+                kind: 'linear',
+                stops: [
+                  { at: 0, color: '#0ff' },
+                  { at: 1, color: '#f0f' },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  }).styles[0] ?? throwMissing()
+
+/** 同一个应用实例里并排摆两张预览，与「右栏一张 + 编辑面一张」同形。 */
+const TwoPreviews = defineComponent({
+  setup() {
+    return () =>
+      h('div', [
+        h(Twin2dStylePreview, { nodeStyle: GRADIENT_STYLE }),
+        h(Twin2dStylePreview, { nodeStyle: GRADIENT_STYLE }),
+      ])
+  },
+})
+
+describe('两张预览同时在场', () => {
+  it('渐变的 DOM id 不撞号，否则第二张取到第一张那份渐变', () => {
+    const wrapper = mount(TwoPreviews)
+    const ids = wrapper
+      .findAll('linearGradient')
+      .map((node) => node.attributes('id'))
+
+    expect(ids).toHaveLength(2)
+    expect(new Set(ids).size).toBe(2)
+  })
+})
+
+describe('自定义尺寸的种子', () => {
+  it('同一份样式改了缺省尺寸，再切到自定义时种的是新的那个数', async () => {
+    const wrapper = mountPreview(styleOf('原样', { w: 120, h: 80 }))
+
+    await wrapper.setProps({ nodeStyle: styleOf('原样', { w: 300, h: 200 }) })
+    await switchToCustom(wrapper)
+
+    expect(boxProps(wrapper).node).toMatchObject({ w: 300, h: 200 })
   })
 })

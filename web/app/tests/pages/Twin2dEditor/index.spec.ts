@@ -81,6 +81,7 @@ import AiDock from '@/components/ai/AiDock.vue'
 import PointPickerDialog from '@/components/binding/PointPickerDialog.vue'
 import { activeSurface } from '@/features/ai/surfaces'
 import EditorStage from '@/pages/Twin2dEditor/components/EditorStage.vue'
+import Twin2dStyleWizard from '@/pages/Twin2dEditor/components/Twin2dStyleWizard.vue'
 import Twin2dBindingPane from '@/pages/Twin2dEditor/components/Twin2dBindingPane.vue'
 import Twin2dInspector from '@/pages/Twin2dEditor/components/Twin2dInspector.vue'
 import Twin2dRuntimePreview from '@/pages/Twin2dEditor/components/Twin2dRuntimePreview.vue'
@@ -682,6 +683,72 @@ async function pickNodeA(wrapper: ReturnType<typeof mountPage>): Promise<void> {
   selectionOf(wrapper).select('nodes', 'a')
   await nextTick()
 }
+
+/**
+ * 真发一次删除键。
+ * @param key 'Delete' 或 'Backspace'
+ */
+function pressKey(key: string): void {
+  window.dispatchEvent(
+    new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+  )
+}
+
+/**
+ * 从样式库开出带预览的编辑面。
+ * ⚠ 这一步会顺手把右栏焦点切过去，而 `focusStyle` 把抽屉关了——于是「抽屉开着」
+ * 这条硬闸自己失效，编辑面必须自己顶上，否则画布手势一路穿透到文档上。
+ * @param wrapper 挂好的这一页
+ */
+async function openStyleWizard(
+  wrapper: ReturnType<typeof mountPage>,
+): Promise<void> {
+  await wrapper.find('[data-test="open-style-library"]').trigger('click')
+  await wrapper
+    .findAll('[data-test^="style-lib-edit-styles:"]')[0]
+    ?.trigger('click')
+  await nextTick()
+}
+
+describe('编辑面开着时画布手势整体让位', () => {
+  it('编辑面开着，方向键不 nudge 画布上选中的节点', async () => {
+    const wrapper = mountPage()
+    await pickNodeA(wrapper)
+    const before = xNow()
+
+    await openStyleWizard(wrapper)
+    pressArrow()
+    await nextTick()
+
+    expect(xNow()).toBe(before)
+  })
+
+  it('编辑面开着，Delete 不删画布上选中的节点', async () => {
+    const wrapper = mountPage()
+    await pickNodeA(wrapper)
+    const before = controls.doc.value?.config.value.nodes.length ?? 0
+
+    await openStyleWizard(wrapper)
+    pressKey('Delete')
+    await nextTick()
+
+    expect(controls.doc.value?.config.value.nodes.length).toBe(before)
+  })
+
+  it('编辑面关掉之后手势又回来', async () => {
+    const wrapper = mountPage()
+    await pickNodeA(wrapper)
+    await openStyleWizard(wrapper)
+    const before = xNow()
+
+    wrapper.getComponent(Twin2dStyleWizard).vm.$emit('update:open', false)
+    await nextTick()
+    pressArrow()
+    await nextTick()
+
+    expect(xNow()).not.toBe(before)
+  })
+})
 
 describe('键盘手势让位表单', () => {
   it('焦点在下拉触发器上按方向键，节点一步不动', async () => {

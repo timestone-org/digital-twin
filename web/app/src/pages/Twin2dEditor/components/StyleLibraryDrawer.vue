@@ -20,6 +20,10 @@
  *   「选中的是哪一枚图元」都归页面持有，而页面按 `styleFocus` 判要不要走图元那一支。
  *   不切的话，编辑面上的复制粘贴会去动画布上选中的实体，且这一步零报错。
  * ⚠ 只有节点样式进编辑面：预览画的是一个节点，连线样式在那张框里没有东西可画。
+ * ⚠ 编辑面开在哪一份上归**页面**持有（`wizardId` 是受控 prop，不是本层的 ref）：画布的
+ *   键盘手势按「有没有覆盖层开着」整体让位，而那道闸在页面上。留在本层的话，开编辑面
+ *   这一步会顺手把抽屉关掉（`focus` → 页面 `focusStyle`），于是唯一那道硬闸自己失效，
+ *   Delete 与方向键一路穿到画布上选中的节点身上，且一处都不报错。
  */
 import type { Twin2dConfig } from '@dt/twin2d'
 import {
@@ -76,10 +80,12 @@ const props = withDefaults(
     config: Twin2dConfig
     /** 图元树上选中的那一枚；空串 = 一枚都没选。归页面持有，与 ⌘C / ⌘V 同一份。 */
     selectedPrim?: string
+    /** 编辑面开在哪一份节点样式上；空串 = 没开着。归页面持有，画布手势按它让位。 */
+    wizardId?: string
     /** 导出文件名（不含扩展名）。 */
     fileName?: string
   }>(),
-  { selectedPrim: '', fileName: 'twin2d-styles' },
+  { selectedPrim: '', wizardId: '', fileName: 'twin2d-styles' },
 )
 
 const emit = defineEmits<{
@@ -88,6 +94,8 @@ const emit = defineEmits<{
   change: [config: Twin2dConfig]
   /** 请求把右栏切到这份样式上。 */
   focus: [kind: Twin2dStyleKind, id: string]
+  /** 请求把编辑面开到这份样式上；空串 = 关掉它。 */
+  'update:wizardId': [id: string]
   /** 编辑面里的连续输入：同 `key` 的连着并成一帧。 */
   merge: [config: Twin2dConfig, key: string]
   /** 焦点离开输入框，这一段连续输入到此为止。 */
@@ -121,8 +129,8 @@ const selectedPrim = computed(() => props.selectedPrim ?? '')
 const keyword = ref('')
 const mode = ref<Twin2dImportMode>('rename')
 
-/** 正在编辑外观的那份节点样式；空串 = 编辑面没开着。 */
-const wizardId = ref('')
+// ⚠ 同上：受控 prop 的读取端在 exactOptionalPropertyTypes 下仍是 `| undefined`
+const wizardId = computed(() => props.wizardId ?? '')
 
 const rows = computed<readonly Twin2dStyleLibRow[]>(() =>
   twin2dStyleLibFilter(twin2dStyleLibRows(props.config), keyword.value),
@@ -156,7 +164,7 @@ function landed(kind: Twin2dStyleKind, added: Twin2dAdded): void {
  * @param id 节点样式 id
  */
 function openWizard(id: string): void {
-  wizardId.value = id
+  emit('update:wizardId', id)
   emit('focus', 'styles', id)
 }
 
@@ -165,7 +173,7 @@ function openWizard(id: string): void {
  * @param open 开着没有
  */
 function setWizardOpen(open: boolean): void {
-  if (!open) wizardId.value = ''
+  if (!open) emit('update:wizardId', '')
 }
 
 /**

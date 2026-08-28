@@ -73,6 +73,12 @@ const fitRequest = ref(0)
 /** 样式库抽屉开着没有。 */
 const libraryOpen = ref(false)
 /**
+ * 带预览的样式编辑面开在哪一份上；空串 = 没开着。
+ * ⚠ 住在这一层而不是抽屉里：画布的键盘手势按它整体让位，而开编辑面这一步会顺手把
+ * 抽屉关掉，闸门只认抽屉的话它自己就失效了。
+ */
+const styleEditId = ref('')
+/**
  * 图元树上选中的那一枚；空串 = 一枚都没选。
  * ⚠ 住在这一层而不是样式面里：右栏的图元字段面与将来画布上的高亮都要读它。
  */
@@ -176,7 +182,9 @@ const commands = createTwin2dCommands({
 useTwin2dShortcuts({
   handlers: commands.handlers,
   grid: () => config.value?.canvas.grid ?? 0,
-  suspended: () => libraryOpen.value,
+  // ⚠ 编辑面也算一道覆盖层：它开着的时候抽屉已经被 `focusStyle` 关掉了，只认
+  //   `libraryOpen` 的话这道硬闸自己失效，Delete 会去删画布上选中的那个节点
+  suspended: () => libraryOpen.value || styleEditId.value !== '',
 })
 
 /**
@@ -451,6 +459,7 @@ onBeforeUnmount(page.dispose)
 
         <StyleLibraryDrawer
           v-model:open="libraryOpen"
+          v-model:wizard-id="styleEditId"
           :config="config"
           :selected-prim="selectedPrim"
           :file-name="`${page.dashboard.value?.name ?? '2d'}-样式包`"
