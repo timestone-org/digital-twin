@@ -34,7 +34,10 @@ from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
-from ai_assistant.apps.chat.services.tool_specs import ToolSpec, openai_schema
+from ai_assistant.apps.chat.services.tool_shapes import (
+    ToolSpec,
+    openai_schema,
+)
 from ai_assistant.apps.chat.services.turn_types import (
     ClientToolCall,
     TurnDelta,

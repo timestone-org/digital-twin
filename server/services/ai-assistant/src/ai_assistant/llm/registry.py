@@ -7,6 +7,7 @@
 配置留下的，那时正确的行为是照常能说话，不是整个会话打不开。
 """
 
+from collections.abc import Collection
 from dataclasses import dataclass
 
 from langchain_core.language_models import BaseChatModel
@@ -78,10 +79,25 @@ class ModelRegistry:
             )
         return tuple(found)
 
-    def default_id(self) -> str:
-        """没选过时用哪一路。"""
-        listed = self.profiles()
-        return listed[0].id if listed else DEFAULT_PROFILE
+    def default_id(self, *, ready_ids: Collection[str] | None = None) -> str:
+        """没选过时用哪一路：订阅那一路在册就选它，否则退按量。
+
+        ⚠ 「配了」不等于「能用」——订阅那一路还得登录过，而登录状态在库里、
+        这一层看不见，所以由调用方把此刻真能用的档位传进来。把默认钉在一个
+        点了就报错的选项上，等于整套助手开箱即坏。
+
+        Args: ready_ids（此刻真能用的档位名；不给则只按配置判断）。
+        """
+        listed = [one.id for one in self.profiles()]
+        usable = [
+            one for one in listed if ready_ids is None or one in ready_ids
+        ]
+        # 一路都不可用时仍从在册的里挑：那时整个助手都发不出回合，
+        # 界面要的是「有这么一路、它没登录」，而不是一个空档位名
+        chosen = usable or listed
+        if CODEX_PROFILE in chosen:
+            return CODEX_PROFILE
+        return chosen[0] if chosen else DEFAULT_PROFILE
 
     def resolves(self, profile_id: str) -> bool:
         """这个档位名此刻取得出模型吗。

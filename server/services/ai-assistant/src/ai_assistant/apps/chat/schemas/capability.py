@@ -49,5 +49,8 @@ class CapabilityOut(BaseModel):
     skills: list[SkillOut]
     # 这套部署接了哪几路模型。空 = 一路都没接
     models: list[ModelProfileOut] = Field(default_factory=list[ModelProfileOut])
-    # 没选过时用哪一路
+    # 没选过时用哪一路。⚠ 必须是此刻**真能用**的那一路：订阅配了但没登录过时
+    # 这里给的是按量那一路，否则助手开箱就是一个点了报错的下拉
     default_model_id: str = ""
+    # 没选过时用哪一档推理。只有订阅那一路吃这一格，别的路忽略它
+    default_effort: str = "medium"

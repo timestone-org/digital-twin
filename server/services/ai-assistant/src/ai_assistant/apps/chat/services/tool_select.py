@@ -13,7 +13,8 @@
 
 from collections.abc import Sequence
 
-from ai_assistant.apps.chat.services.tool_specs import TOOL_SPECS, ToolSpec
+from ai_assistant.apps.chat.services.tool_shapes import ToolSpec
+from ai_assistant.apps.chat.services.tool_specs import TOOL_SPECS
 from ai_assistant.apps.chat.skills import skills_for
 
 # 哪个工作面都有的服务端工具：拉技能正文、写执行计划
@@ -25,6 +26,7 @@ CROSS_MODULE_READ_TOOLS: tuple[str, ...] = (
     "points.list_sources",
     "points.search",
     "points.detail",
+    "points.resolve",
     "dashboards.list",
     "datasets.list_tables",
     "datasets.read_columns",

@@ -18,6 +18,7 @@ from ai_assistant.apps.chat.services import skill_catalog
 from ai_assistant.container import Container
 from ai_assistant.deps import get_container, require
 from ai_assistant.llm import CODEX_PROFILE
+from ai_assistant.llm.registry import ModelRegistry
 from ai_assistant.settings import API_PREFIX
 from lib.auth import CallerContext
 from lib.web import ApiResponse, ok
@@ -36,17 +37,38 @@ async def read_capabilities(
 
     Args: container, _caller。
     """
-    profiles = await _profiles_of(container)
     return ok(
-        CapabilityOut(
-            is_model_enabled=any(one.is_ready for one in profiles),
-            is_vision_enabled=any(
-                one.is_ready and one.has_vision for one in profiles
-            ),
-            skills=skill_catalog(),
-            models=profiles,
-            default_model_id=container.models.default_id(),
+        capability_of(
+            container.models,
+            await _profiles_of(container),
+            container.settings.codex_reasoning_effort,
         )
+    )
+
+
+def capability_of(
+    models: ModelRegistry,
+    profiles: list[ModelProfileOut],
+    default_effort: str,
+) -> CapabilityOut:
+    """把探测到的几路模型摊成出参。
+
+    ⚠ 默认那一路要落在**此刻真能用**的档位上：订阅配了却没登录过时退回按量。
+    只按配置挑的话，助手开箱就是一个点了报错的下拉，而报出来的错是
+    「模型暂时不可用」，与「去登录一下」完全对不上。
+
+    Args: models, profiles（各自此刻能不能用）, default_effort。
+    """
+    ready = [one.id for one in profiles if one.is_ready]
+    return CapabilityOut(
+        is_model_enabled=bool(ready),
+        is_vision_enabled=any(
+            one.is_ready and one.has_vision for one in profiles
+        ),
+        skills=skill_catalog(),
+        models=profiles,
+        default_model_id=models.default_id(ready_ids=ready),
+        default_effort=default_effort,
     )
 
 

@@ -11,6 +11,8 @@ DASHBOARD_COMPOSE = SkillManifest(
         "在大屏上摆模块、改模块配置与外观、对齐排版。"
         "用户说「加一个…」「把边框去掉」「这几个对齐」时用它。"
     ),
+    # ⚠ 只在大屏画布上：摆模块、改几何、对齐这些工具 2D 孪生舞台一个都没有，
+    # 在那里宣告本技能等于摆一排调一次失败一次的名字
     surface_kinds=("dashboard-editor",),
     required_codes=("dashboard:edit",),
     server_tools=("modules.catalog",),

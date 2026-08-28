@@ -169,6 +169,14 @@ async def test_without_an_upstream_the_tools_say_they_cannot() -> None:
         await ServerTools()("points.list_sources", {})
 
 
+async def test_resolving_points_is_reachable_by_its_registered_name() -> None:
+    """分派表的键与工具规格里的名字对不上时，模型每次调都失败。"""
+    tools = _tools(_pages([[]]))
+    got = await tools("points.resolve", {"node_keys": []})
+    assert isinstance(got, dict)
+    assert got["points"] == []
+
+
 def _catalog(modules: list[dict[str, object]]) -> Handler:
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -291,6 +299,72 @@ async def test_a_keyword_that_matches_nothing_still_lists_everything() -> None:
     got = await tools("modules.catalog", {"keyword": "毫不相干"})
     assert isinstance(got, dict)
     assert len(got["modules"]) == 1
+
+
+def _described(module_type: str, name: str, said: str) -> dict[str, object]:
+    body = _module(module_type, name)
+    body["description"] = said
+    return body
+
+
+async def test_a_narrowed_card_says_what_the_module_is_for() -> None:
+    """模型分不清 info-card 与 metric-card，靠的就是这一段。"""
+    tools = _tools(
+        _catalog(
+            [
+                _described("metric-card", "实时数值", "一块摆 1..N 个读数。"),
+                _described("text-block", "文本块", "一段死文字。"),
+            ]
+        )
+    )
+
+    got = await tools("modules.catalog", {"keyword": "实时数值"})
+    assert isinstance(got, dict)
+    modules = got["modules"]
+    assert isinstance(modules, list)
+    assert modules[0]["description"] == "一块摆 1..N 个读数。"
+
+
+async def test_the_whole_table_stays_lean_and_says_where_to_get_more() -> None:
+    """说明每条 3–6 句，整表带上就把技能正文与工具结果挤出去了。"""
+    tools = _tools(
+        _catalog(
+            [
+                _described("metric-card", "实时数值", "一块摆 1..N 个读数。"),
+                _described("text-block", "文本块", "一段死文字。"),
+            ]
+        )
+    )
+
+    got = await tools("modules.catalog", {})
+    assert isinstance(got, dict)
+    modules = got["modules"]
+    assert isinstance(modules, list)
+    assert all("description" not in one for one in modules)
+    assert "keyword" in str(got["note"])
+
+
+async def test_a_module_without_keywords_is_still_searchable_by_name() -> None:
+    bare = _module("metric-card", "实时数值")
+    bare["keywords"] = None
+    tools = _tools(_catalog([bare]))
+
+    got = await tools("modules.catalog", {"keyword": "实时数值"})
+    assert isinstance(got, dict)
+    modules = got["modules"]
+    assert isinstance(modules, list)
+    assert modules[0]["type"] == "metric-card"
+
+
+async def test_a_module_without_a_description_gets_none_invented() -> None:
+    """编出来的说明会被当成事实，照着它去配一个并不存在的槽。"""
+    tools = _tools(_catalog([_module("metric-card", "实时数值")]))
+
+    got = await tools("modules.catalog", {"keyword": "实时数值"})
+    assert isinstance(got, dict)
+    modules = got["modules"]
+    assert isinstance(modules, list)
+    assert "description" not in modules[0]
 
 
 def _functions(rows: list[dict[str, object]]) -> Handler:

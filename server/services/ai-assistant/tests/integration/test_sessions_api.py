@@ -52,6 +52,20 @@ async def _create(
     return _data(response)
 
 
+async def test_a_session_can_live_on_the_2d_twin_surface(
+    db_client: httpx.AsyncClient, sign: HeaderFactory
+) -> None:
+    """新工作面同时要过 schema 的闭合集合与库里那条 CHECK。
+
+    ⚠ 只改 `SURFACE_KINDS` 不迁移的话，用例在 SQLite 上全绿、真库上每一次
+    建会话都是 500——而 CHECK 是建表时定死的。
+    """
+    created = await _create(
+        db_client, sign([ASSISTANT_USE]), surface_kind="twin2d-editor"
+    )
+    assert created["surface_kind"] == "twin2d-editor"
+
+
 async def test_a_new_session_belongs_to_its_caller(
     db_client: httpx.AsyncClient, sign: HeaderFactory
 ) -> None:

@@ -7,6 +7,9 @@
 
 from ai_assistant.apps.chat.enums import SURFACE_KINDS
 from ai_assistant.apps.chat.services import skill_catalog
+from ai_assistant.apps.chat.services.plan import is_plan_tool
+from ai_assistant.apps.chat.services.server_tools import ServerTools
+from ai_assistant.apps.chat.services.tool_select import specs_for
 from ai_assistant.apps.chat.services.tool_specs import TOOL_SPECS
 from ai_assistant.apps.chat.skills import list_skills
 
@@ -20,6 +23,9 @@ KNOWN_SERVER_TOOLS = frozenset(
 KNOWN_CLIENT_TOOLS = frozenset(
     spec.name for spec in TOOL_SPECS if spec.runs_on == "client"
 )
+
+# 2D 孪生工作面。⚠ 它的舞台是 SVG/DOM，截图那条链路只在大屏与 3D 替身上验过
+TWIN_2D = "twin2d-editor"
 
 
 def test_the_registry_is_not_empty() -> None:
@@ -84,3 +90,39 @@ def test_the_catalog_never_leaks_instruction_bodies() -> None:
 def test_the_catalog_is_ordered_by_name() -> None:
     names = [entry.name for entry in skill_catalog()]
     assert names == sorted(names)
+
+
+def _implemented() -> set[str]:
+    """服务端工具的两个实现家：工具分派表，与计划子系统自己收走的那一个。"""
+    return {
+        *ServerTools()._handlers(),
+        *(name for name in KNOWN_SERVER_TOOLS if is_plan_tool(name)),
+    }
+
+
+def test_every_server_tool_has_an_implementation_behind_it() -> None:
+    """规格里有、没人实现的工具，模型看得见却每次调都失败。"""
+    assert KNOWN_SERVER_TOOLS - _implemented() == set()
+
+
+def test_the_dispatch_table_never_grows_a_tool_nobody_declared() -> None:
+    # 反过来也守：实现了却没进规格的工具，模型永远看不见它
+    assert set(ServerTools()._handlers()) - KNOWN_SERVER_TOOLS == set()
+
+
+def test_the_2d_twin_surface_is_offered_the_binding_loop() -> None:
+    offered = {spec.name for spec in specs_for(TWIN_2D, None)}
+    assert {
+        "dashboard.read_bindings",
+        "dashboard.write_binding",
+        "dashboard.copy_bindings",
+        "dashboard.read_values",
+        "dashboard.save",
+        "points.resolve",
+    } <= offered
+
+
+def test_the_2d_twin_surface_is_never_offered_a_screenshot() -> None:
+    """没验过的工具摆出来就是每次调都失败（AI_ASSISTANT_V3_PLAN §2.7）。"""
+    offered = {spec.name for spec in specs_for(TWIN_2D, None)}
+    assert "dashboard.capture" not in offered

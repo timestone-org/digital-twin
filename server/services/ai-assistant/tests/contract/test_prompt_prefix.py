@@ -19,7 +19,7 @@ from ai_assistant.apps.chat.services.advance_service import (
 )
 from ai_assistant.apps.chat.services.prompt import build_system_prompt
 from ai_assistant.apps.chat.services.tool_select import specs_for
-from ai_assistant.apps.chat.services.tool_specs import openai_schema
+from ai_assistant.apps.chat.services.tool_shapes import openai_schema
 from ai_assistant.settings import HISTORY_DROP_STEP, MAX_HISTORY_MESSAGES
 
 SURFACE = "dashboard-editor"
