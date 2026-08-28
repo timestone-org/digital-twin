@@ -3,8 +3,8 @@
  * @fileoverview 孪生编辑器的浮层：批量加部件、挑点弹窗，外加助手面板。
  * 只做转发；状态全归页面持有。
  *
- * ⚠ 助手在这一页**只有绑点**，没有截图：整块视口是 WebGL，截图库取到的一定
- * 是空的（见 `scripts/aiSurface.ts` 的文件头）。
+ * ⚠ 助手在这一页截得了图，但走的不是截图库直读：整块视口是 WebGL，直读取到的
+ * 一定是空的，所以插一张场景登记的快照替身（见 `scripts/aiSurface.ts` 的文件头）。
  */
 import type { BulkParts } from '../scripts/useBulkParts'
 import type { TwinBindings } from '../scripts/useTwinBindings'
@@ -45,10 +45,11 @@ const emit = defineEmits<{
   <AiDock
     :ai="ai"
     surface-label="孪生编辑器"
-    hint="助手改的是草稿，保存要你自己按。"
+    hint="助手改的是草稿；它自己会问你要不要保存，保存之后实时读数才认得新绑的点位。"
     :starters="[
-      '把选中的部件绑到对应的点位',
-      '按温度点位给这个部件配色',
+      '把选中的这个实体绑到对应的点位',
+      '照着 1 号机组，把 2 号机组的点位接一遍',
+      '这段孪生现在有几行没接上？都在等什么',
       '截一张当前场景，讲讲你看到了什么',
     ]"
   />

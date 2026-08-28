@@ -121,11 +121,14 @@ const viewportRef = viewport.viewportRef
 // 右栏那几个距离阈值旁边的「量当前距离」按它取数
 provideTwinMeasure(viewport.measureDistance)
 
-// 助手：绑点 + 截视口（WebGL 走场景登记的快照替身，见 captureWithGl）
+// 助手：绑点 + 照抄 + 读数 + 保存 + 截视口（WebGL 走场景登记的快照替身，
+// 见 captureWithGl）。⚠ 选中要透进去：用户在大纲里点了一个说「把这个接上」，
+// 快照里没有选中的话，模型只能挑一个它自己觉得像的去改
 const ai = useTwinAi(
   page,
   binding,
   () => config.value,
+  () => selection.value,
   () => viewportRef.value?.stageEl() ?? null,
 )
 

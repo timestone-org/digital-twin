@@ -23,6 +23,7 @@ import { usePointSamples } from '@/composables/usePointSamples'
 import { useRealtimeChannel } from '@/composables/useRealtimeChannel'
 import { boundPointKeysOf } from '@/features/dashboard/editorDoc'
 import { createBindingReader } from '@/runtime/bindingReader'
+import type { ReadPointSample } from '@/runtime/bindingReader'
 import { dashboardTopic } from '@/runtime/pointFrames'
 import { createPointSubscribe } from '@/runtime/pointStream'
 
@@ -35,6 +36,12 @@ export interface TwinLiveValues {
    * 拿一个存下来的读取器反复用，值再变也不会重算，且不报任何错。
    */
   readBinding: () => BindingValueReader
+  /**
+   * 取一个点位此刻的快照；没收到过给 undefined。
+   * ⚠ 助手读值走的就是它，不许另开一份缓存：另开一份的表现是「助手说有值、
+   * 画面上是占位符」，而两处单看都对。
+   */
+  read: ReadPointSample
 }
 
 /**
@@ -88,5 +95,5 @@ export function useTwinLiveValues(
     }
   })
 
-  return { scene, readBinding }
+  return { scene, readBinding, read: samples.read }
 }

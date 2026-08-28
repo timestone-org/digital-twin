@@ -7,14 +7,25 @@
  * ⚠ 落库的是 `node_key`（点位在设备上的身份）不是 `code`：写成 code 的表现是标签上有
  * 点位名、推送方却永远匹配不到这个键，读数一直是占位符。
  * ⚠ 文档还没读出来时全部动作都必须是空操作，而不是抛异常把整页带白。
+ * ⚠ 这一支现在还挂着那份实时读数，所以必须在组件里装：`usePointSamples` 的退订
+ * 挂在 `onUnmounted` 上，光秃秃地调只会得到一句警告和一份永远不退的订阅。
  */
 import type { BindingPayload, CollectPoint } from '@dt/contracts'
 import { nodeRowFieldKey, normalizeTwin2dConfig } from '@dt/twin2d'
-import { describe, expect, it } from 'vitest'
+import { mount } from '@vue/test-utils'
+import { describe, expect, it, vi } from 'vitest'
+import { defineComponent, h } from 'vue'
 
 import { createTwin2dDoc } from '@/pages/Twin2dEditor/scripts/twin2dDoc'
 import type { Twin2dDoc } from '@/pages/Twin2dEditor/scripts/twin2dDoc'
 import { useTwin2dBindings } from '@/pages/Twin2dEditor/scripts/useTwin2dBindings'
+import type { Twin2dBindings } from '@/pages/Twin2dEditor/scripts/useTwin2dBindings'
+
+// ⚠ 实时那条链会去建一条真的 WebSocket（模块级单例），不桩掉的话这一份用例每跑
+// 一次都往网上打一次，而红不红取决于机器上有没有人在听那个端口
+vi.mock('@/composables/useRealtimeChannel', () => ({
+  useRealtimeChannel: () => ({ subscribe: () => () => undefined }),
+}))
 
 /** 水箱有两个有效槽位，于是这一个节点就占了 `nodeValues` 的头两行。 */
 const CONFIG = normalizeTwin2dConfig({
@@ -46,11 +57,28 @@ function docOf(bindings: readonly BindingPayload[] = []): Twin2dDoc {
   return createTwin2dDoc({ config: CONFIG, bindings })
 }
 
-function bindingsOf(doc: Twin2dDoc | null) {
-  return useTwin2dBindings(
-    () => doc,
-    () => 'host',
+/** 在一个组件里把这一支装起来；订阅与退订这才有主。 */
+function bindingsOf(doc: Twin2dDoc | null): Twin2dBindings {
+  const box: Twin2dBindings[] = []
+  mount(
+    defineComponent({
+      setup() {
+        box.push(
+          useTwin2dBindings(
+            () => doc,
+            // ⚠ 空串 = 还没读出哪张屏，于是一个主题都不订：这一份用例验的是绑定
+            //   动作，不该顺带拉起一条订阅
+            () => '',
+            () => 'host',
+          ),
+        )
+        return () => h('div')
+      },
+    }),
   )
+  const found = box[0]
+  if (found === undefined) throw new Error('绑定这一支没装起来')
+  return found
 }
 
 /** 一条已经挑好点位的绑定，用来铺垫「换来源」「删行」这类动作。 */

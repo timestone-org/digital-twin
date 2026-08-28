@@ -77,7 +77,9 @@ import {
   __resetDashboardBootstrap,
   installDashboardModules,
 } from '@/bootstrap/dashboard'
+import AiDock from '@/components/ai/AiDock.vue'
 import PointPickerDialog from '@/components/binding/PointPickerDialog.vue'
+import { activeSurface } from '@/features/ai/surfaces'
 import EditorStage from '@/pages/Twin2dEditor/components/EditorStage.vue'
 import Twin2dBindingPane from '@/pages/Twin2dEditor/components/Twin2dBindingPane.vue'
 import Twin2dInspector from '@/pages/Twin2dEditor/components/Twin2dInspector.vue'
@@ -1012,6 +1014,43 @@ describe('画中画预览', () => {
       .props('bindings')
 
     expect(Array.isArray(given) ? given : []).toHaveLength(1)
+  })
+})
+
+describe('助手工作面', () => {
+  // ⚠ 页面不登记工作面 = 助手在这一页什么都干不了，而界面上看不出区别：
+  //   它照样开得出来、照样能聊天
+  it('挂上就登记这一页的工作面', () => {
+    mountPage()
+
+    expect(activeSurface()?.kind).toBe('twin2d-editor')
+  })
+
+  // ⚠ 2D 舞台是 SVG/DOM，截图那条链路只在大屏与 3D 替身上验过。摆一个没验过的
+  //   工具出来就是每次调都失败，而模型每轮都要先撞一次墙
+  it('摆出来的工具里没有截图', () => {
+    mountPage()
+
+    expect(activeSurface()?.tools).not.toContain('dashboard.capture')
+  })
+
+  // ⚠ 模板里的 prop 名与注册名写错，typecheck 与 lint 双双放行——只有挂起来看
+  it('助手浮层挂在页面上', () => {
+    const wrapper = mountPage()
+
+    expect(wrapper.findComponent(AiDock).exists()).toBe(true)
+  })
+
+  // ⚠ 助手与画中画必须读同一份快照缓存：各订各的会出现「助手说有值、画面上是
+  //   占位符」，而两处单看都对
+  it('画中画拿到的实时读数是页面装配的那一份', () => {
+    const wrapper = mountPage()
+
+    const given: unknown = wrapper
+      .findComponent(Twin2dRuntimePreview)
+      .props('live')
+
+    expect(given).toHaveProperty('read')
   })
 })
 

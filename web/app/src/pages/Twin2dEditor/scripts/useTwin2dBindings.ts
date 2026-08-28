@@ -7,6 +7,8 @@
  * 无条件做一次（`remapTwin2dBindings`，见 docs/MODULE_TWIN_2D_DESIGN.md §14.3）。
  * ⚠ 挑到的点位落库的是 `node_key`（点位在设备上的身份）不是 `code`：写成 code 的表现
  * 是标签上有点位名、推送方却永远匹配不到这个键，读数一直是占位符。
+ * ⚠ 实时读数也挂在这一层：画中画与助手读的必须是**同一份**快照缓存，各订各的
+ * 会出现「助手说有值、画面上是占位符」，而两处单看都对。
  */
 import type { BindingPayload, CollectPoint } from '@dt/contracts'
 import { computed, ref } from 'vue'
@@ -16,6 +18,8 @@ import { withRowRemoved } from '@/features/dashboard/bindingSlots'
 import { createBinding, sortBindings } from '@/features/dashboard/editorDoc'
 
 import type { Twin2dDoc } from './twin2dDoc'
+import { useTwin2dLiveValues } from './useTwin2dLiveValues'
+import type { Twin2dLiveValues } from './useTwin2dLiveValues'
 
 export interface Twin2dBindings {
   /** 当前这一份绑定，含还没保存的草稿。 */
@@ -38,6 +42,8 @@ export interface Twin2dBindings {
   pickPoint: (point: CollectPoint) => void
   /** 弹窗的开关回传；关上时结束这一次挑点。 */
   closePicker: (isOpen: boolean) => void
+  /** 这一页唯一那份实时读数：画中画拿它渲染，助手拿它读值。 */
+  live: Twin2dLiveValues
 }
 
 /**
@@ -78,18 +84,21 @@ function withPoint(current: BindingPayload, pointKey: string): BindingPayload {
 }
 
 /**
- * 装上绑定与挑点。
+ * 装上绑定、挑点与实时读数。须在 setup 内调用。
  * @param doc 2D 孪生文档态；null = 还没读出来，此时全部动作都是空操作
+ * @param dashboardId 这段孪生所在的大屏 id；空串 = 还没读出来，不订任何主题
  * @param nodeId 这段孪生所在的大屏节点 id；新建的绑定挂在它上面
  */
 export function useTwin2dBindings(
   doc: () => Twin2dDoc | null,
+  dashboardId: () => string,
   nodeId: () => string,
 ): Twin2dBindings {
   const bindings = computed<readonly BindingPayload[]>(
     () => doc()?.bindings.value ?? [],
   )
   const pickingFieldKey = ref<string | null>(null)
+  const live = useTwin2dLiveValues(dashboardId, () => bindings.value)
 
   /**
    * 写回文档态。带 `slotKey` 的是同一个槽的连续编辑（逐键输入、挑点覆写），按
@@ -131,5 +140,6 @@ export function useTwin2dBindings(
     closePicker: (isOpen) => {
       if (!isOpen) pickingFieldKey.value = null
     },
+    live,
   }
 }

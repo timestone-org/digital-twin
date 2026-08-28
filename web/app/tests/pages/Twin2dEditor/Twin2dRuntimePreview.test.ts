@@ -9,6 +9,9 @@
  * ⚠ 取不到读数要说出口：一块空白既可能是没绑点位，也可能是绑了还没保存，两者查法不同。
  * ⚠ 用真注册表而不是替身：`getModule` 换成假的之后，这一页与清单之间的那条约定
  * 就只在替身上成立。
+ * ⚠ 实时读数由**页面**传进来（助手读的是同一份），所以这里要在一个宿主组件里把
+ * `useTwin2dLiveValues` 真装一遍再喂给它：换成手搓的假件的话，「取数与运行态同源」
+ * 这一整段验的就只是那个假件。
  */
 import type {
   BindingView,
@@ -19,6 +22,7 @@ import { __resetProviders } from '@dt/datasources'
 import { getModule, registerModule } from '@dt/modules'
 import { useRuntimeData } from '@dt/runtime'
 import { TWIN_2D_CONFIG_KEY, normalizeTwin2dConfig } from '@dt/twin2d'
+import type { Twin2dConfig } from '@dt/twin2d'
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
@@ -26,6 +30,7 @@ import type { PropType } from 'vue'
 
 import { installDashboardModules } from '@/bootstrap/dashboard'
 import Twin2dRuntimePreview from '@/pages/Twin2dEditor/components/Twin2dRuntimePreview.vue'
+import { useTwin2dLiveValues } from '@/pages/Twin2dEditor/scripts/useTwin2dLiveValues'
 
 type PointListener = (nodeKey: string, sample: unknown) => void
 
@@ -151,14 +156,42 @@ const RendererStub = defineComponent({
   },
 })
 
-function mountPreview(props: Record<string, unknown> = {}) {
-  return mount(Twin2dRuntimePreview, {
-    props: { node: node(), config: DRAFT, bindings: [], ...props },
-    global: { stubs: { ModuleRenderer: RendererStub } },
-  })
+/** 这一份用例覆盖得了的那几格；其余按缺省。 */
+interface PreviewProps {
+  node?: DashboardNodePayload | null
+  config?: Twin2dConfig | null
+  bindings?: readonly BindingView[]
 }
 
-async function opened(props: Record<string, unknown> = {}) {
+/**
+ * 把预览挂在一个宿主里，实时读数由宿主装配——与页面上的接法逐字相同。
+ * @param props 覆盖掉的那几格
+ * @param isStubbed 用替身渲染件；为假时挂真的那一份
+ */
+function mountHost(props: PreviewProps = {}, isStubbed = true) {
+  const given = {
+    node: props.node === undefined ? node() : props.node,
+    config: props.config === undefined ? DRAFT : props.config,
+    bindings: props.bindings ?? [],
+  }
+  const host = defineComponent({
+    setup() {
+      const live = useTwin2dLiveValues(
+        () => given.node?.dashboardId ?? '',
+        () => given.bindings,
+      )
+      return () => h(Twin2dRuntimePreview, { ...given, live })
+    },
+  })
+  const stubs = isStubbed ? { ModuleRenderer: RendererStub } : {}
+  return mount(host, { global: { stubs } })
+}
+
+function mountPreview(props: PreviewProps = {}) {
+  return mountHost(props)
+}
+
+async function opened(props: PreviewProps = {}) {
   const wrapper = mountPreview(props)
   await wrapper.get('[data-test="open-preview"]').trigger('click')
   return wrapper
@@ -361,16 +394,15 @@ describe('挂的确实是运行态那条链', () => {
    * 时长在忙一点的机器上就是一条随机红灯。轮询到出现为止。
    */
   async function mountReal() {
-    const wrapper = mount(Twin2dRuntimePreview, {
-      props: {
+    const wrapper = mountHost(
+      {
         node: node({
           moduleType: 'twin-2d-view',
           configJson: { title: '余热系统' },
         }),
-        config: DRAFT,
-        bindings: [],
       },
-    })
+      false,
+    )
     await wrapper.get('[data-test="open-preview"]').trigger('click')
     await vi.waitFor(() => {
       expect(wrapper.find('[data-test="preview-box"]').text()).not.toBe('')
