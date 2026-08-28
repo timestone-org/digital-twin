@@ -473,6 +473,7 @@ export {
   twin2dSensorIdPrefix,
   twin2dSensorPill,
   twin2dSensorSlot,
+  twin2dShippedSensorPill,
   twin2dSubtypeVariant,
   twin2dWithChrome,
   twin2dWithSubtypes,

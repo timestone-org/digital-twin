@@ -1,8 +1,10 @@
 /**
  * @fileoverview 内置预置的出厂尺度：各族按参考尺度产样式，这一道把**长度类**取值等比
- * 缩到 1080p 大屏上的观感档。缩哪些、不缩哪些与为什么见
- * docs/MODULE_TWIN_2D_DESIGN.md §7.13。
+ * 缩到 1080p 大屏上的观感档；发货给外面的带尺度工厂也在这里出。缩哪些、不缩哪些与
+ * 为什么见 docs/MODULE_TWIN_2D_DESIGN.md §7.13。
  */
+import { twin2dSensorPill } from './sensors'
+import type { Twin2dSensorDef } from './sensors'
 import type { Twin2dVecCoord } from '../kinds'
 import type {
   Twin2dNodeStyle,
@@ -18,6 +20,7 @@ import type {
   Twin2dInset,
   Twin2dLen,
   Twin2dPad,
+  Twin2dPlacement,
   Twin2dPrim,
   Twin2dPrimBase,
   Twin2dPrimPatch,
@@ -514,4 +517,26 @@ export function twin2dScaleNodeStyle(
     ports: style.ports.map((port) => scalePort(port, scale)),
     variants: style.variants.map((one) => scaleVariant(one, coords, scale)),
   }
+}
+
+/**
+ * 一枚**出厂尺度**的传感器药丸：参考尺度那一支（`twin2dSensorPill`）原样留在
+ * `sensors.ts` 里不动，发货前在这里过一道 `TWIN_2D_PRESET_SCALE`。
+ * ⚠ 编辑器新加药丸必须走这一支：走参考那支会让新加的药丸比同一张图上已有的那些大
+ * 一号（16/16/12.48 对 12/12/12），而两边单看都对、一处都不报错（§7.13）。
+ * ⚠ 落点原样带回、**不缩**：`at` 是调用方在实例坐标里选的位置，出厂缩放只管药丸
+ * 自己那点几何。跟着缩的话，把药丸挪出去 84px 之后再新建一枚同落点的，会差出 25%。
+ * ⚠ 描边宽照旧不缩（`PILL_BORDER_WIDTH` 恒 1）：与整条线宽规矩同源，存量迁移那一侧
+ * 也是这么定的，两边漂开就是「旧药丸的边比新的细」。
+ * @param def 这一种传感器的身份
+ * @param at 药丸落在哪儿
+ * @param idPrefix 四个图元 id 的前缀，同一个节点里不许重名
+ */
+export function twin2dShippedSensorPill(
+  def: Twin2dSensorDef,
+  at: Twin2dPlacement,
+  idPrefix: string,
+): Twin2dBoxPrim {
+  const pill = twin2dSensorPill(def, at, idPrefix)
+  return { ...scaleBoxPrim(pill, TWIN_2D_PRESET_SCALE), at }
 }
