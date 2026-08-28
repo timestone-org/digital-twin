@@ -913,11 +913,11 @@ export const TWIN_2D_PALETTE = {
 
 | # | 视觉件 | 参考项目的实现 | 新模型如何表达 | |
 |---|---|---|---|---|
-| 31 | `.tnv-cyl__svg` | `viewBox="0 0 W H"` + `preserveAspectRatio="none"` + abs inset 0 + overflow visible | `vec` 图元统一渲在一层 `<svg>` 里，`stretch:true` 即 `preserveAspectRatio="none"` | ✅ |
-| 32 | `__outline` | `<rect x=10 y=0 width=W-20 height=H>`（**无 rx，直角**）/ fill `--topo-cyl-fill` = `var(--surface-panel)` / stroke `rgba(series-5-rgb, .62)` / 1.2 / non-scaling | `vec{coord:'px',shape:{kind:'rect',x:10,y:0,w:W-20,h:H,rx:0},fill:{kind:'color',color:'var(--surface-panel)'},strokes:[{width:1.2,color:'color-mix(in srgb, <palette.water> 62%, transparent)',nonScaling:true}]}` | 🔁 |
+| 31 | `.tnv-cyl__svg` | `viewBox="0 0 W H"` + `preserveAspectRatio="none"` + abs inset 0 + overflow visible | `vec` 图元统一渲在一层 `<svg>` 里，`stretch:true` 即 `preserveAspectRatio="none"`；五枚的几何一律走 `coord:'unit'`（本图元盒的 0..1 归一值）。⚠ 参考项目那份 W 是**实例**宽（`node.width ?? 默认宽`）现算的，抄成设计像素常量等于把圆柱钉死在 224 宽上，见本节末的坐标档 ⚠ | ✅ |
+| 32 | `__outline` | `<rect x=10 y=0 width=W-20 height=H>`（**无 rx，直角**）/ fill `--topo-cyl-fill` = `var(--surface-panel)` / stroke `rgba(series-5-rgb, .62)` / 1.2 / non-scaling | `vec{coord:'unit',shape:{kind:'rect',x:10/W,y:0,w:(W−20)/W,h:1,rx:0},fill:{kind:'color',color:'var(--surface-panel)'},strokes:[{width:1.2,color:'color-mix(in srgb, <palette.water> 62%, transparent)',nonScaling:true}]}`——设计盒（224×126）上画出来逐值就是 `x=10 / width=204 / height=126` | 🔁 |
 | 33 | `__cap` ×2 的**填充** | `--topo-cap-fill: var(--surface-overlay)`——**端盖与体身不同色**（体身是 `--surface-panel`） | 两个 `vec` 的 `fill` 取 `var(--surface-overlay)`。⚠ **圆柱的立体感全在这一处**：抄成同色就变成一个平的矩形加两个椭圆边，而每一项数值都"对" | ✅ |
-| 34 | `__cap` ×2 的几何与描边 | `<ellipse cx=10 / cx=W-10 cy=H/2 rx=10 ry=H/2>`（横半径固定 10、竖半径 = 半高）/ stroke `series-5 .7` | 两个 `vec{shape:{kind:'ellipse'}}` | ✅ |
-| 35 | `__line--warm` | `y = cy-3`，x 14→W-14，stroke `series-2 .6`，1.2，round，non-scaling | `vec{shape:{kind:'line'}}` | ✅ |
+| 34 | `__cap` ×2 的几何与描边 | `<ellipse cx=10 / cx=W-10 cy=H/2 rx=10 ry=H/2>`（横半径固定 10、竖半径 = 半高）/ stroke `series-5 .7` | 两个 `vec{shape:{kind:'ellipse'}}`，归一坐标 `cx:10/W` 与 `(W−10)/W`、`cy:.5`、`rx:10/W`、`ry:.5`。**横半径归宽、竖半径归高**这条不对称照旧：把节点拉高一倍，端盖只变长不变宽 | ✅ |
+| 35 | `__line--warm` | `y = cy-3`，x 14→W-14，stroke `series-2 .6`，1.2，round，non-scaling | `vec{shape:{kind:'line'}}`，归一坐标 `x1:14/W`、`x2:(W−14)/W`、`y:(cy−3)/H` | ✅ |
 | 36 | `__line--cool` | `y = cy+6`（⚠ 与 warm 的 -3 **不对称**），stroke `series-4 .6` | 同上，**含那个不对称的 -3 / +6** | ✅ |
 | 37 | cyl `selected` / `alarm` | selected：stroke-width 2.5 + drop-shadow；alarm：stroke `--state-danger` + drop-shadow | 两条变体 | ✅ |
 | 38 | `__icon` | abs left 7% top 50% ty -50% / 26×26 / z 2 | `ico{at:{kind:'abs',left:'7%',top:'50%',ty:'-50%'},z:2}` | ✅ |
@@ -927,6 +927,19 @@ export const TWIN_2D_PALETTE = {
 > ⚠ 圆柱几何是 `W = node.width ?? def.defaultSize.w`，且尺寸为 0/负数时
 > **回退到样式默认而不是 0**（防 viewBox 除零）。归一化里 `posDim()` 照抄：
 > 写成 `?? fallback` 只挡 `undefined`，挡不住显式的 `0`。
+>
+> ⚠ **坐标档必须是 `unit`，不能是 `px`。** `paintVec` 的 viewBox 取的就是实例盒尺寸，
+> viewBox 与元素同尺时 `preserveAspectRatio="none"` 一点缩放都不产生——几何按设计像素
+> 直写的话，把节点放宽到 400，圆柱仍旧停在 224 宽上、右边空出一大块，而一处都不报错。
+> 参考项目躲开这一条靠的是**按实例 W/H 现算**每一个坐标，本模型没有「常量 px + 随盒
+> 长度」的混合坐标，故整体按比例走 `unit`：**设计盒（224×126）上逐像素与参考项目相同**，
+> 改宽之后的差别是插入量（体身 10、管线 14）与端盖横半径跟着按比例变宽，而参考项目
+> 那三个量恒是 10/14 px。这一处口径差异是有意的，断言落在
+> `tests/presets/nodesVessel.test.ts`（默认盒逐像素 + 放宽一倍跟着变宽两条）。
+>
+> ⚠ 样式上的外缘 `outline:{kind:'round',r:10}` 是**设计盒**上的取值，跟着出厂缩放走
+> （§7.13），故与端盖在缺省尺寸下严丝合缝；节点被改宽之后端盖变宽而外缘半径不变，
+> 是同一处近似的另一头。外缘只影响线头落点，不影响画出来的形状。
 
 ### 7.6 `shape=square` / `text`（5 件）
 

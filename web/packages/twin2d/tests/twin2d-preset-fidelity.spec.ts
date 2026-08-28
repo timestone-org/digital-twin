@@ -56,6 +56,7 @@ import {
   statusColor,
 } from '../src/paintCommon'
 import { paintText } from '../src/paintText'
+import { svgShapeAttrs } from '../src/paintVec'
 import { anchor9Css, perimCss } from '../src/placement'
 import { TWIN_2D_CIRCUIT_STYLES } from '../src/presets/circuit'
 import { TWIN_2D_EDGE_PRESETS } from '../src/presets/edges'
@@ -1116,6 +1117,21 @@ describe('§7.4 shape=tank（6 件）', () => {
   })
 })
 
+/** 圆柱的设计盒，五枚 vec 的几何按它落回设计像素 */
+const CYL_W = 224
+const CYL_H = 126
+
+/**
+ * 圆柱一枚 vec 在设计盒上真正画出来的 SVG 几何属性。
+ * ⚠ 逐像素断言必须落在**画出来的属性**上而不是 `shape` 里的裸数：坐标档决定同一组
+ * 数字画在哪，直读 `shape` 的用例在「几何恒定不随盒走」这个缺陷面前是全绿的。
+ * @param id 五枚 vec 之一的图元 id
+ */
+function cylAt(id: string): Record<string, string> {
+  const vec = vecOf('manifold', id)
+  return svgShapeAttrs(vec.shape, vec.coord, CYL_W, CYL_H)
+}
+
 /** 圆柱那五枚 vec 的描边色，逐值等于参考项目的 `rgba(var(--chart-series-N-rgb), a)` */
 const CYL_BODY_INK = 'rgba(123, 213, 255, 0.62)'
 const CYL_CAP_INK = 'rgba(123, 213, 255, 0.7)'
@@ -1133,7 +1149,10 @@ describe('§7.5 shape=cylinder（10 件，全 SVG）', () => {
     ]) {
       const vec = vecOf('manifold', id)
       expect(vec.stretch).toBe(true)
-      expect(vec.coord).toBe('px')
+      // ⚠ 参考项目那份 viewBox 是按**实例**宽高现算的（`W = node.width ?? 默认宽`），
+      //   照抄成设计像素常量就等于把圆柱钉死在 224 宽上——本模型用归一坐标表达
+      //   「随盒拉伸」这件事，口径差异（参考项目的插入量是固定 10/14 px）记在 §7.5
+      expect(vec.coord).toBe('unit')
       expect(vec.at).toEqual({ kind: 'fill', inset: [0, 0, 0, 0] })
     }
   })
@@ -1142,13 +1161,13 @@ describe('§7.5 shape=cylinder（10 件，全 SVG）', () => {
     const outline = vecOf('manifold', 'frame')
     const pass = strokeAt(outline.strokes, 0)
 
-    expect(outline.shape).toEqual({
-      kind: 'rect',
-      x: 10,
-      y: 0,
-      w: 204,
-      h: 126,
-      rx: 0,
+    expect(cylAt('frame')).toEqual({
+      x: '10',
+      y: '0',
+      width: '204',
+      height: '126',
+      rx: '0',
+      ry: '0',
     })
     expect(outline.fill).toEqual({
       kind: 'color',
@@ -1175,19 +1194,17 @@ describe('§7.5 shape=cylinder（10 件，全 SVG）', () => {
     const left = vecOf('manifold', 'cap-left')
     const right = vecOf('manifold', 'cap-right')
 
-    expect(left.shape).toEqual({
-      kind: 'ellipse',
-      cx: 10,
-      cy: 63,
-      rx: 10,
-      ry: 63,
+    expect(cylAt('cap-left')).toEqual({
+      cx: '10',
+      cy: '63',
+      rx: '10',
+      ry: '63',
     })
-    expect(right.shape).toEqual({
-      kind: 'ellipse',
-      cx: 214,
-      cy: 63,
-      rx: 10,
-      ry: 63,
+    expect(cylAt('cap-right')).toEqual({
+      cx: '214',
+      cy: '63',
+      rx: '10',
+      ry: '63',
     })
     expect(strokeAt(left.strokes, 0).color).toBe(CYL_CAP_INK)
     expect(strokeAt(right.strokes, 0).color).toBe(CYL_CAP_INK)
@@ -1197,12 +1214,11 @@ describe('§7.5 shape=cylinder（10 件，全 SVG）', () => {
     const warm = vecOf('manifold', 'line-warm')
     const pass = strokeAt(warm.strokes, 0)
 
-    expect(warm.shape).toEqual({
-      kind: 'line',
-      x1: 14,
-      y1: 60,
-      x2: 210,
-      y2: 60,
+    expect(cylAt('line-warm')).toEqual({
+      x1: '14',
+      y1: '60',
+      x2: '210',
+      y2: '60',
     })
     expect([pass.color, pass.width, pass.cap, pass.nonScaling]).toEqual([
       CYL_WARM_INK,
@@ -1214,18 +1230,16 @@ describe('§7.5 shape=cylinder（10 件，全 SVG）', () => {
 
   it('§7-36 __line--cool：y = cy+6（与暖管的 −3 **不对称**），太阳能色 60%', () => {
     const cool = vecOf('manifold', 'line-cool')
-    const warm = vecOf('manifold', 'line-warm')
 
-    expect(cool.shape).toEqual({
-      kind: 'line',
-      x1: 14,
-      y1: 69,
-      x2: 210,
-      y2: 69,
+    expect(cylAt('line-cool')).toEqual({
+      x1: '14',
+      y1: '69',
+      x2: '210',
+      y2: '69',
     })
     expect(strokeAt(cool.strokes, 0).color).toBe(CYL_COOL_INK)
-    const warmY = warm.shape.kind === 'line' ? warm.shape.y1 : 0
-    const coolY = cool.shape.kind === 'line' ? cool.shape.y1 : 0
+    const warmY = Number(cylAt('line-warm')['y1'])
+    const coolY = Number(cylAt('line-cool')['y1'])
     expect([63 - warmY, coolY - 63]).toEqual([3, 6])
   })
 

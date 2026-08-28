@@ -425,7 +425,7 @@ function tankAlarmVariant(): Twin2dVariant {
 
 // 分集水器（cylinder）
 
-/** 圆柱的设计宽，SVG 几何按它落成设计像素 */
+/** 圆柱的设计宽，SVG 几何按它折成 0..1 归一值 */
 const CYL_W = 224
 /** 圆柱的设计高 */
 const CYL_H = 126
@@ -433,7 +433,7 @@ const CYL_H = 126
 const CYL_BODY_INSET = 10
 /** 双集管线左右各内缩多少 */
 const CYL_LINE_INSET = 14
-/** 端盖的横半径；**固定 10**，不随高度走 */
+/** 端盖的横半径：设计尺内**固定 10**、不随设计高走，落到实例盒上随盒宽等比 */
 const CYL_CAP_RX = 10
 /** 圆柱竖向中线 */
 const CYL_CY = CYL_H / 2
@@ -452,6 +452,26 @@ const CYL_HOVER_WIDTH = 1.8
 const CYL_SELECTED_WIDTH = 2.5
 /** 选中与报警那一圈发光的模糊半径，取自参考项目的 `drop-shadow(0 0 8px …)` */
 const CYL_GLOW_BLUR = 8
+
+/**
+ * 一个设计横坐标折成 0..1 归一值。
+ * ⚠ 五枚 vec 的几何一律走这一对而不是直写设计像素：`coord: 'px'` 的坐标不随实例盒走，
+ * 而 `paintVec` 的 viewBox 取的正是实例盒尺寸——两者同尺时 `preserveAspectRatio="none"`
+ * 一点缩放都不产生，于是节点放宽之后圆柱纹丝不动地留在 224 宽上，右边空出一大块，
+ * 而一处都不报错（§7.5）。
+ * @param px 设计横坐标
+ */
+function unitX(px: number): number {
+  return px / CYL_W
+}
+
+/**
+ * 一个设计纵坐标折成 0..1 归一值。
+ * @param px 设计纵坐标
+ */
+function unitY(px: number): number {
+  return px / CYL_H
+}
 
 /**
  * 体身填充：`--topo-cyl-fill` 指向的语义层。
@@ -509,13 +529,13 @@ function cylStroke(spec: {
 }
 
 /**
- * 一枚圆柱本体的 vec：铺满节点盒、按设计像素直写几何、两轴各自拉伸。
+ * 一枚圆柱本体的 vec：铺满节点盒、几何按盒尺寸的 0..1 归一值走、两轴各自拉伸。
  * ⚠ `stretch` 即 `preserveAspectRatio="none"`，参考项目的圆柱就是拉伸的（§7.5 #31）。
  * ⚠ 照旧吃指针事件：参考项目的 `.tnv-cyl__svg` 没有 `pointer-events` 规则，整个圆柱
  * 本体是可点的，只有压在它上面的文字层显式让开。这五枚摘成 `none` 会让圆柱只有图标
  * 那一小块能点中。
  * @param id 样式内唯一的图元 id
- * @param shape 几何，坐标按设计像素
+ * @param shape 几何，坐标是本图元盒的 0..1 归一值（走 `unitX` / `unitY` 折算）
  * @param fill 填充
  * @param strokes 多遍描边
  */
@@ -528,7 +548,7 @@ function cylVec(
   return {
     ...primBase(id, FILL_PARENT, AUTO_SIZE),
     kind: 'vec',
-    coord: 'px',
+    coord: 'unit',
     shape,
     fill,
     strokes,
@@ -549,10 +569,10 @@ function cylFrame(): Twin2dVecPrim {
     'frame',
     {
       kind: 'rect',
-      x: CYL_BODY_INSET,
+      x: unitX(CYL_BODY_INSET),
       y: 0,
-      w: CYL_W - CYL_BODY_INSET * 2,
-      h: CYL_H,
+      w: unitX(CYL_W - CYL_BODY_INSET * 2),
+      h: 1,
       rx: 0,
     },
     CYL_BODY_FILL,
@@ -575,7 +595,13 @@ function cylFrame(): Twin2dVecPrim {
 function cylCap(id: string, cx: number): Twin2dVecPrim {
   return cylVec(
     id,
-    { kind: 'ellipse', cx, cy: CYL_CY, rx: CYL_CAP_RX, ry: CYL_CY },
+    {
+      kind: 'ellipse',
+      cx: unitX(cx),
+      cy: 0.5,
+      rx: unitX(CYL_CAP_RX),
+      ry: 0.5,
+    },
     CYL_CAP_FILL,
     [
       cylStroke({
@@ -595,14 +621,14 @@ function cylCap(id: string, cx: number): Twin2dVecPrim {
  * @param color 描边色
  */
 function cylLine(id: string, dy: number, color: string): Twin2dVecPrim {
-  const y = CYL_CY + dy
+  const y = unitY(CYL_CY + dy)
   return cylVec(
     id,
     {
       kind: 'line',
-      x1: CYL_LINE_INSET,
+      x1: unitX(CYL_LINE_INSET),
       y1: y,
-      x2: CYL_W - CYL_LINE_INSET,
+      x2: unitX(CYL_W - CYL_LINE_INSET),
       y2: y,
     },
     NO_PAINT,
@@ -772,6 +798,8 @@ function manifoldStyle(): Twin2dNodeStyle {
     size: { w: CYL_W, h: CYL_H },
     // 外缘 = 矩形 + 两头 10px 的圆角：端盖是**横半径 10** 的椭圆而不是半个圆，取
     // `capsule`（半径 = 短边之半 = 63）会把贴近四角的线头往里拽出一大截
+    // ⚠ 这个 10 与端盖一样是**设计盒**上的取值：节点改宽之后端盖跟着变宽而它不变，
+    //   是已知的近似，只影响线头落点、不影响画出来的形状（§7.5）
     outline: { kind: 'round', r: CYL_CAP_RX },
     prims: [
       cylFrame(),
