@@ -27,6 +27,7 @@ DASHBOARD_COMPOSE = SkillManifest(
         "dashboard.read_bindings",
         "dashboard.read_config",
         "dashboard.chrome_keys",
+        "dashboard.apply_style",
         "dashboard.add_module",
         "dashboard.remove_node",
         "dashboard.set_config",

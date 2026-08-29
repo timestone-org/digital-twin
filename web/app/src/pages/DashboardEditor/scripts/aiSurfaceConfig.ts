@@ -12,9 +12,12 @@
  *
  * ⚠ 外观键的真源在前端契约（`CHROME_KEYS`），服务端的模块目录里没有这一段。
  * 所以它只能是个客户端工具——服务端答不出这个问题。
+ *
+ * ⚠ 套一整套观感也只能在这一侧：一套外壳 40 个键，逐键调 `set_config` 就是 40 次
+ * 工具调用，中途被上下文截断的话画面停在半套样式上——而半套样式看着像「配错了」。
  */
-import { CHROME_KEYS, type ConfigField } from '@dt/contracts'
-import type { AssistantToolCall } from '@dt/contracts'
+import { CHROME_KEYS, isChromeKey, styleKeysOf } from '@dt/contracts'
+import type { AssistantToolCall, ConfigField } from '@dt/contracts'
 import { configDefaults } from '@dt/modules'
 
 import { readConfigAt } from '@/features/dashboard/configPath'
@@ -27,6 +30,7 @@ export const CONFIG_TOOLS = [
   'dashboard.add_config_item',
   'dashboard.remove_config_item',
   'dashboard.chrome_keys',
+  'dashboard.apply_style',
 ] as const
 
 /** 模块级卡片外观住在配置袋子的这一段。 */
@@ -41,7 +45,58 @@ export function runConfig(
   if (call.name === 'dashboard.add_config_item') return addItem(deps, call)
   if (call.name === 'dashboard.remove_config_item') return dropItem(deps, call)
   if (call.name === 'dashboard.chrome_keys') return chromeKeys()
+  if (call.name === 'dashboard.apply_style') return applyStyle(deps, call)
   return null
+}
+
+/**
+ * 把一整套观感一次写到节点上：外壳**整袋替换**、内芯浅合并，一次调用一步撤销。
+ *
+ * ⚠ 外壳整袋换而不是逐键合并：逐键合并会留残留——上一套设过
+ * `titleRule: 'hatch'`、新样式没提这个键，合并后斜纹带还在，用户看到的是
+ * 「换了样式但没换干净」（CARD_STYLE_LIBRARY_DESIGN §2.1）。
+ * ⚠ 内芯逐键校验：一个模块的观感键写到另一个模块上，既不报错也不生效。
+ * 这里把这类静默失效翻成一句能读的错——模型看不见画布，它只有响应。
+ */
+function applyStyle(
+  deps: EditorSurfaceDeps,
+  call: AssistantToolCall,
+): SurfaceSnapshot {
+  const node = nodeOf(deps, call)
+  const chrome = objectArg(call, 'chrome')
+  const config = objectArg(call, 'config')
+  const strayChrome = Object.keys(chrome).filter((key) => !isChromeKey(key))
+  if (strayChrome.length > 0) {
+    throw new Error(
+      `外观键不在词汇表里：${strayChrome.join('、')}；` +
+        '用 dashboard.chrome_keys 看有哪些',
+    )
+  }
+  const manifest = deps.getManifest(node.moduleType)
+  const allowed = new Set(manifest === undefined ? [] : styleKeysOf(manifest))
+  const stray = Object.keys(config).filter((key) => !allowed.has(key))
+  if (stray.length > 0) {
+    throw new Error(
+      `${node.moduleType} 没有这些观感键：${stray.join('、')}；` +
+        '这套样式多半绑的是别的模块类型，换一条或只套它的外壳',
+    )
+  }
+  const next: Record<string, unknown> = { ...node.configJson, ...config }
+  // 空袋子按「删键」处理：外壳的语义是「键不存在 = 没设置」，留一只空对象
+  // 与删掉它同义，但会让下次读配置时多出一段说不清的噪声
+  if (Object.keys(chrome).length === 0) delete next[CARD_STYLE]
+  else next[CARD_STYLE] = chrome
+  deps.editor.select(node.id)
+  deps.editor.flush()
+  deps.actions.changeConfig([], next, false)
+  return {
+    ok: true,
+    node_id: node.id,
+    module_type: node.moduleType,
+    chrome_keys: Object.keys(chrome).length,
+    config_keys: Object.keys(config).length,
+    note: '外壳整袋换掉了，内芯按键覆盖；用户按一次 Ctrl+Z 整套退回',
+  }
 }
 
 /** 一个画布节点此刻配成什么样，外加它吃不吃统一外观。 */

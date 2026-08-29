@@ -44,7 +44,10 @@ const MANIFEST: ModuleManifest = {
         { key: 'precision', label: '小数位', type: 'number', default: 1 },
       ],
     },
+    { key: 'align', label: '对齐', type: 'enum', default: 'center' },
   ],
+  // 标题与指标列表是内容，`align` 是观感——套样式时只许写后者
+  contentKeys: ['title', 'items'],
   unsupportedChromeKeys: ['backdropBlur'],
   bindings: [
     { key: 'itemValues', label: '读数', dataType: 'number', isArray: true },
@@ -396,5 +399,92 @@ describe('选中项', () => {
 
     expect(shot.selected).toEqual([])
     expect(shot.selected_ids).toEqual([])
+  })
+})
+
+describe('套一整套观感', () => {
+  it('外壳整袋换掉，内芯逐键覆盖，一次一步撤销', async () => {
+    const { editor, surface } = setup()
+    await run(surface, 'dashboard.set_config', {
+      node_id: 'a',
+      path: ['__cardStyle', 'titleRule'],
+      value: 'hatch',
+    })
+
+    const got = await run(surface, 'dashboard.apply_style', {
+      node_id: 'a',
+      chrome: { radius: 4 },
+      config: { align: 'left' },
+    })
+    const config = editor.nodes.value[0]?.configJson ?? {}
+
+    expect(got.ok).toBe(true)
+    // ⚠ 整袋换：上一套的 titleRule 必须消失，否则就是「换了样式没换干净」
+    expect(config.__cardStyle).toEqual({ radius: 4 })
+    expect(config.align).toBe('left')
+    // 内容键原样留着：样式换的是观感，不是把用户配好的指标抹掉
+    expect(config.items).toHaveLength(1)
+  })
+
+  it('空外壳袋按删键处理，回落平台默认', async () => {
+    const { editor, surface } = setup()
+    await run(surface, 'dashboard.set_config', {
+      node_id: 'a',
+      path: ['__cardStyle', 'radius'],
+      value: 8,
+    })
+
+    await run(surface, 'dashboard.apply_style', { node_id: 'a', chrome: {} })
+
+    expect(editor.nodes.value[0]?.configJson).not.toHaveProperty('__cardStyle')
+  })
+
+  // ⚠ 一个模块的观感键写到另一个模块上，既不报错也不生效——这里把它翻成一句能读的错
+  it('内芯里有这个模块没有的观感键就当场拒绝', async () => {
+    const { surface } = setup()
+
+    await expect(
+      run(surface, 'dashboard.apply_style', {
+        node_id: 'a',
+        chrome: {},
+        config: { cellShell: 'accent' },
+      }),
+    ).rejects.toThrow(/cellShell/)
+  })
+
+  it('内容键混进内芯里同样拒绝：它会把用户配好的指标抹掉', async () => {
+    const { surface } = setup()
+
+    await expect(
+      run(surface, 'dashboard.apply_style', {
+        node_id: 'a',
+        chrome: {},
+        config: { items: [] },
+      }),
+    ).rejects.toThrow(/items/)
+  })
+
+  it('词汇表外的外壳键当场拒绝，并指路 chrome_keys', async () => {
+    const { surface } = setup()
+
+    await expect(
+      run(surface, 'dashboard.apply_style', {
+        node_id: 'a',
+        chrome: { 出土文物: 1 },
+      }),
+    ).rejects.toThrow(/chrome_keys/)
+  })
+
+  it('只套外壳时内芯一个键都不动', async () => {
+    const { editor, surface } = setup()
+
+    await run(surface, 'dashboard.apply_style', {
+      node_id: 'a',
+      chrome: { radius: 4 },
+    })
+    const config = editor.nodes.value[0]?.configJson ?? {}
+
+    expect(config.items).toHaveLength(1)
+    expect(config.align).toBeUndefined()
   })
 })

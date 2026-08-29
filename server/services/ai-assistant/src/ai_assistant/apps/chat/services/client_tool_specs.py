@@ -57,8 +57,7 @@ CLIENT_SPECS: tuple[ToolSpec, ...] = (
                 "allow_free_text": {
                     "type": "boolean",
                     "description": (
-                        "除选项外再给一个输入框，缺省 false；"
-                        "给了也仍然要给选项"
+                        "除选项外再给一个输入框，缺省 false；给了也仍然要给选项"
                     ),
                 },
                 "free_text_label": string_schema(
@@ -433,6 +432,43 @@ CLIENT_SPECS: tuple[ToolSpec, ...] = (
                 },
             },
             ["node_id", "path", "value"],
+        ),
+        runs_on="client",
+    ),
+    ToolSpec(
+        name="dashboard.apply_style",
+        description=(
+            "把**一整套观感**一次套到一个画布节点上，一次调用、用户一步撤销。"
+            "取值来自 `styles.get`：`chrome` 原样传它的 chrome，"
+            "`config` 原样传它的 config。"
+            "⚠ 别用 set_config 逐键去凑：一套外壳 40 个键就是 40 次调用，"
+            "中途断在半路，画面停在半套样式上，看着像配错了。"
+            "⚠ 外壳是**整袋替换**：这套没写的外壳键会被清掉，回落平台默认。"
+            "这正是要的——逐键合并会把上一套的残留留在屏上。"
+            "⚠ 内芯只能套回同类型的节点：样式绑了模块类型时，"
+            "套到别的类型上会被拒（那些键在那个模块里根本不存在）。"
+            "只想套外壳基调就把 config 留空。"
+        ),
+        parameters=object_schema(
+            {
+                "node_id": string_schema("画布节点 id"),
+                "chrome": {
+                    "type": "object",
+                    "description": (
+                        "外壳整袋，键取自 dashboard.chrome_keys；"
+                        "给空对象表示回落平台默认外观"
+                    ),
+                    "additionalProperties": True,
+                },
+                "config": {
+                    "type": "object",
+                    "description": (
+                        "内芯，逐键覆盖节点配置；只套外壳时省略或给空对象"
+                    ),
+                    "additionalProperties": True,
+                },
+            },
+            ["node_id", "chrome"],
         ),
         runs_on="client",
     ),

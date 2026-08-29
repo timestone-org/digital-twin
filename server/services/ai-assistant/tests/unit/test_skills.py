@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from ai_assistant.apps.chat.services import skills_of_surface
+from ai_assistant.apps.chat.services.tool_specs import TOOL_SPECS
 from ai_assistant.apps.chat.skills import (
     SkillInstructionsMissing,
     SkillManifest,
@@ -74,3 +75,39 @@ def test_instructions_missing_is_reported_loudly() -> None:
     )
     with pytest.raises(SkillInstructionsMissing):
         orphan.instructions()
+
+
+def test_every_tool_a_skill_names_really_exists() -> None:
+    """技能点名的工具都在总表里。
+
+    ⚠ 写错一个字的表现不是报错，而是模型看得见那个工具、每次调用都失败——
+    与「这一页没实现它」一模一样，只能靠这条兜。
+    """
+    known = {spec.name for spec in TOOL_SPECS}
+    named = {
+        name
+        for skill in list_skills()
+        for name in (*skill.server_tools, *skill.client_tools)
+    }
+
+    assert sorted(named - known) == []
+
+
+def test_skills_do_not_mix_up_the_two_sides() -> None:
+    """服务端工具不许出现在 `client_tools` 里，反之亦然。
+
+    ⚠ 摆错一侧同样静默：客户端那批要靠页面报了才下发，把一个服务端工具写进
+    `client_tools`，它就只在恰好报了同名的页面上出现。
+    """
+    side = {spec.name: spec.runs_on for spec in TOOL_SPECS}
+    offenders = [
+        f"{skill.name}.{name}({side.get(name)})"
+        for skill in list_skills()
+        for name, want in (
+            *((one, "server") for one in skill.server_tools),
+            *((one, "client") for one in skill.client_tools),
+        )
+        if side.get(name) != want
+    ]
+
+    assert offenders == []
