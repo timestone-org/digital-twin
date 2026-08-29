@@ -3,8 +3,11 @@
  * @fileoverview 卡片外观（chrome）的字段组：外观风格 + 常显九项 + 四个可折叠高级分组。
  * ⚠ 铁律「未设置 = 不写值」：没动过的控件一条键都不写，清空控件 = 删键，
  * 渲染因此落回平台默认；写进去就等于把当下的默认观感固化进这张大屏。
+ *
+ * 「外观风格」下拉里另有一段**用户自己存下来的样式**（卡片样式库），由页面
+ * `provide` 下来；没装就只有内置那两档（`cardStyleLibrary.ts`）。
  */
-import type { CardChrome, DtSelectOption } from '@dt/contracts'
+import type { CardChrome, CardStyle, DtSelectOption } from '@dt/contracts'
 import { DtIcon, DtSelect } from '@dt/ui'
 import { computed, ref } from 'vue'
 
@@ -19,10 +22,17 @@ import {
   type CardFieldContext,
 } from '@/features/dashboard/cardStyleFields'
 import {
+  stylesForModule,
+  useCardStyles,
+} from '@/features/dashboard/cardStyleLibrary'
+import {
   CARD_STYLE_VARIANTS,
   CUSTOM_STYLE_ID,
   matchCardStyle,
 } from '@/features/dashboard/cardStyleVariants'
+
+/** 用户样式在下拉里的取值前缀，与内置那两档的 id 不会撞。 */
+const SAVED_PREFIX = 'saved:'
 
 const props = defineProps<{
   modelValue: CardChrome
@@ -31,6 +41,12 @@ const props = defineProps<{
    * 大屏级面板（页面缺省）不传 = 全量摆出、不禁用。
    */
   context?: CardFieldContext | undefined
+  /**
+   * 这一格是哪个模块；用来过滤能套的用户样式。
+   * ⚠ 大屏级缺省面板不传 = 只列通用外壳样式：那一层没有「哪个模块」这个上下文，
+   * 列出绑了模块的样式，点下去只会写它外壳的一半。
+   */
+  moduleType?: string | null | undefined
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [value: CardChrome] }>()
@@ -52,7 +68,40 @@ function applyPatch(patch: CardChrome): void {
   emit('update:modelValue', next)
 }
 
-const styleId = computed(() => matchCardStyle(props.modelValue))
+const readStyles = useCardStyles()
+
+/** 这一格能套的用户样式。 */
+const savedStyles = computed<CardStyle[]>(() =>
+  stylesForModule(readStyles(), props.moduleType ?? null),
+)
+
+const builtinId = computed(() => matchCardStyle(props.modelValue))
+
+/**
+ * 下拉此刻回填哪一项。用户样式**优先于**内置判定：一条照极简描边存下来的样式，
+ * 取值与内置那档逐键相同，回填成内置的话用户会以为自己那条没存上。
+ */
+const styleId = computed(() => {
+  const hit = savedStyles.value.find((one) => sameChrome(one.chrome))
+  return hit === undefined ? builtinId.value : `${SAVED_PREFIX}${hit.id}`
+})
+
+/**
+ * 当前袋子是否就是这一套样式。**逐键全等**，不是子集：样式的语义是一整套外壳，
+ * 少一个键就不是它了。
+ * @param chrome 一套样式的外壳袋
+ */
+function sameChrome(chrome: CardChrome): boolean {
+  // 走 `chromeEntries` 而不是 `Object.keys`：袋子落库时是自由 JSON，
+  // 没登记进词汇表的键在两侧都不该参与比较
+  const mine = new Map(chromeEntries(props.modelValue))
+  const theirs = new Map(chromeEntries(chrome))
+  if (mine.size !== theirs.size) return false
+  for (const [key, value] of theirs) {
+    if (JSON.stringify(mine.get(key)) !== JSON.stringify(value)) return false
+  }
+  return true
+}
 
 /**
  * 「自定义」只在当前取值落在所有风格之外时才追加，且置灰不可选——
@@ -63,19 +112,42 @@ const styleOptions = computed<DtSelectOption[]>(() => {
     value: variant.id,
     label: variant.label,
   }))
+  for (const one of savedStyles.value) {
+    options.push({ value: `${SAVED_PREFIX}${one.id}`, label: one.name })
+  }
   if (styleId.value === CUSTOM_STYLE_ID) {
     options.push({ value: CUSTOM_STYLE_ID, label: '自定义', disabled: true })
   }
   return options
 })
 
-const styleHint = computed(
-  () =>
+const styleHint = computed(() => {
+  const saved = savedStyles.value.find(
+    (one) => `${SAVED_PREFIX}${one.id}` === styleId.value,
+  )
+  if (saved !== undefined) return saved.description ?? '我存下来的样式'
+  return (
     CARD_STYLE_VARIANTS.find((variant) => variant.id === styleId.value)?.hint ??
-    '已在风格基础上改过单项',
-)
+    '已在风格基础上改过单项'
+  )
+})
 
+/**
+ * 套一套风格。
+ * ⚠ 用户样式是**整袋替换**，内置那两档仍是逐键覆盖：内置档表达的是「在平台默认
+ * 之上加这一层」（「平台默认」那档的 patch 就是「把这批键删掉」），而一条存下来的
+ * 样式表达的是「外壳整个就长这样」——按内置那套逐键合并的话，这一套没写的键会留着
+ * 上一套的残留，用户看到的是「换了样式但没换干净」（CARD_STYLE_LIBRARY_DESIGN §2.1）。
+ * @param id 下拉的取值
+ */
 function applyStyle(id: string): void {
+  if (id.startsWith(SAVED_PREFIX)) {
+    const saved = savedStyles.value.find(
+      (one) => `${SAVED_PREFIX}${one.id}` === id,
+    )
+    if (saved !== undefined) emit('update:modelValue', { ...saved.chrome })
+    return
+  }
   const variant = CARD_STYLE_VARIANTS.find((item) => item.id === id)
   if (variant) applyPatch(variant.patch())
 }

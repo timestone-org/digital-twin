@@ -24,6 +24,7 @@ import { useEditorDataSources } from './scripts/useEditorDataSources'
 import { createArrangeActions } from './scripts/editorArrange'
 import { useEditorChrome } from './scripts/useEditorChrome'
 import { useEditorCanvasState } from './scripts/useEditorCanvasState'
+import { useEditorCardStyles } from './scripts/useEditorCardStyles'
 import { useEditorExtras } from './scripts/useEditorExtras'
 import { useEditorMeta } from './scripts/useEditorMeta'
 import { createEditorPageOps } from './scripts/useEditorPageOps'
@@ -48,6 +49,9 @@ installDashboardModules()
 const manifests = listModules()
 const getManifest = (moduleType: string): ModuleManifest | undefined =>
   getModule(moduleType)
+
+// 外观面板的下拉据此多出一段「我的样式」；取不到就只剩内置那两档
+useEditorCardStyles()
 
 const file = useDashboardDoc()
 const editor = useDashboardEditor(getManifest)

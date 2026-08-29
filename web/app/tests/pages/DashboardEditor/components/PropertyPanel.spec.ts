@@ -5,13 +5,16 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { defineComponent, h } from 'vue'
 import type {
+  CardStyle,
   DashboardNodePayload,
   ModuleManifest,
   ModuleSubEditor,
 } from '@dt/contracts'
 import { __resetConfigControls } from '@dt/modules'
 
+import { provideCardStyles } from '@/features/dashboard/cardStyleLibrary'
 import { installConfigControls } from '@/features/dashboard/configControls'
 import { EDITOR_SUB_EDITOR_KEY } from '@/features/dashboard/editorContext'
 import PropertyPanel from '@/pages/DashboardEditor/components/PropertyPanel.vue'
@@ -300,5 +303,85 @@ describe('子编辑器入口', () => {
     })
 
     expect(wrapper.text()).toContain('已配置')
+  })
+})
+
+/** 库里的一条样式。 */
+function style(over: Partial<CardStyle> = {}): CardStyle {
+  return {
+    id: 's1',
+    name: '蓝调科技卡',
+    description: '呼吸描边',
+    moduleType: 'demo',
+    chrome: { radius: 4 },
+    config: { accent: 'var(--accent-primary)' },
+    thumbnail: null,
+    createdAt: '',
+    updatedAt: '',
+    ...over,
+  }
+}
+
+/** 把面板挂在一个装了样式库的宿主里。 */
+function mountWithLibrary(
+  styles: readonly CardStyle[],
+  onPreset: (preset: unknown) => void = () => {},
+): ReturnType<typeof mount> {
+  const host = defineComponent({
+    setup() {
+      provideCardStyles(() => styles)
+      return () =>
+        h(PropertyPanel, {
+          node: NODE,
+          manifest: MANIFEST,
+          onPreset,
+        })
+    },
+  })
+  return mount(host)
+}
+
+describe('我存下来的样式', () => {
+  it('绑了这个类型的摆成一排按钮', () => {
+    const wrapper = mountWithLibrary([style()])
+
+    expect(wrapper.text()).toContain('我的样式')
+    expect(wrapper.text()).toContain('蓝调科技卡')
+  })
+
+  // ⚠ 通用外壳样式归「通用」页那个下拉：两处都列的话，同一条样式在右栏出现两次，
+  //   而点哪一个结果还不一样
+  it('通用外壳样式不列在这里', () => {
+    const wrapper = mountWithLibrary([style({ moduleType: null })])
+
+    expect(wrapper.text()).not.toContain('我的样式')
+  })
+
+  it('别的模块的样式也不列', () => {
+    const wrapper = mountWithLibrary([style({ moduleType: '别的模块' })])
+
+    expect(wrapper.text()).not.toContain('我的样式')
+  })
+
+  // ⚠ 外壳与内芯要一起落：只落内芯的话，用户看到「换了但边框没变」
+  it('点下去上抛的预设里外壳与内芯都在', async () => {
+    const seen: unknown[] = []
+    const wrapper = mountWithLibrary([style()], (preset) => seen.push(preset))
+    const button = wrapper
+      .findAll('button')
+      .find((one) => one.text() === '蓝调科技卡')
+    await button?.trigger('click')
+
+    expect(seen).toHaveLength(1)
+    expect(seen[0]).toMatchObject({
+      id: 'saved:s1',
+      config: { accent: 'var(--accent-primary)', __cardStyle: { radius: 4 } },
+    })
+  })
+
+  it('一条样式都没有时不摆那一段标题', () => {
+    const wrapper = mountWithLibrary([])
+
+    expect(wrapper.text()).not.toContain('我的样式')
   })
 })
