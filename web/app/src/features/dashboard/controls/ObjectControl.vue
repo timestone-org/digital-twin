@@ -24,7 +24,7 @@ const depth = computed(() => (props.depth ?? 0) + 1)
 // 子字段的 `when` 判的是**这一块子对象**里的同级取值，不是整块配置
 const visibleFields = computed(() => {
   const values = { ...configDefaults(fields.value), ...record.value }
-  return fields.value.filter((sub) => isFieldVisible(sub, values))
+  return fields.value.filter((sub) => isFieldVisible(sub, values, fields.value))
 })
 
 function writeKey(key: string, next: unknown, isContinuous: boolean): void {

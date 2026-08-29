@@ -48,7 +48,9 @@ const rowDefaults = computed(() => configDefaults(itemSchema.value))
 /** 这一行现在该摆哪几个字段。 */
 function visibleCells(row: unknown): ConfigField[] {
   const values = { ...rowDefaults.value, ...asRecord(row) }
-  return itemSchema.value.filter((sub) => isFieldVisible(sub, values))
+  return itemSchema.value.filter((sub) =>
+    isFieldVisible(sub, values, itemSchema.value),
+  )
 }
 
 function asRecord(row: unknown): Record<string, unknown> {

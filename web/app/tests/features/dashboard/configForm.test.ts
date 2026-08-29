@@ -35,6 +35,35 @@ const ACCENT: ConfigField = {
 
 const LOOSE: ConfigField = { key: 'note', label: '备注', type: 'string' }
 
+/**
+ * 三级链：风格 → 横向扫光 → 扫光宽度，页头就是这个形状。
+ * ⚠ `when` 只说得出一个键，所以链上的每一环只声明自己那一环。
+ */
+const VARIANT: ConfigField = {
+  key: 'variant',
+  label: '风格',
+  type: 'enum',
+  group: '外观',
+}
+
+const SCAN: ConfigField = {
+  key: 'scan',
+  label: '横向扫光',
+  type: 'boolean',
+  group: '动效',
+  when: { key: 'variant', in: ['tech'] },
+}
+
+const SCAN_WIDTH: ConfigField = {
+  key: 'scanWidth',
+  label: '扫光宽度',
+  type: 'number',
+  group: '动效',
+  when: { key: 'scan', in: [true] },
+}
+
+const CHAIN: readonly ConfigField[] = [VARIANT, SCAN, SCAN_WIDTH]
+
 describe('条件显示', () => {
   it('没有 when 的字段永远显示', () => {
     expect(isFieldVisible(ACCENT, {})).toBe(true)
@@ -132,5 +161,60 @@ describe('预设命中', () => {
 
   it('没有预设就给空集', () => {
     expect(activePresetIds([], { size: 12 })).toEqual(new Set())
+  })
+})
+
+/**
+ * ⚠ 这一组守的是「配了没反应」那一类：把风格切回素净之后，扫光那几项本身的
+ * `when` 仍然满足（开关还留着 true），只判自己那一环的话它们会继续摆在面板上，
+ * 而模块根本不画扫光——调了没有任何变化，且两侧都不报错。
+ */
+describe('条件沿 when 链传递', () => {
+  it('链上每一环都满足时显示', () => {
+    const config = { variant: 'tech', scan: true }
+
+    expect(isFieldVisible(SCAN_WIDTH, config, CHAIN)).toBe(true)
+  })
+
+  it('上游那一环不满足时，下游也不显示', () => {
+    const config = { variant: 'plain', scan: true }
+
+    expect(isFieldVisible(SCAN_WIDTH, config, CHAIN)).toBe(false)
+  })
+
+  it('formGroups 里也不会漏出下游字段', () => {
+    const groups = formGroups(CHAIN, { variant: 'plain', scan: true })
+    const keys = groups.flatMap((group) => group.fields.map((one) => one.key))
+
+    expect(keys).toEqual(['variant'])
+  })
+
+  // 清单是人写的，`a → b → a` 写得出来；不防的话属性面板整个卡死，
+  // 而红的是浏览器不是测试
+  it('声明成环时不死循环', () => {
+    const left: ConfigField = {
+      key: 'a',
+      label: 'A',
+      type: 'boolean',
+      when: { key: 'b', in: [true] },
+    }
+    const right: ConfigField = {
+      key: 'b',
+      label: 'B',
+      type: 'boolean',
+      when: { key: 'a', in: [true] },
+    }
+
+    expect(isFieldVisible(left, { a: true, b: true }, [left, right])).toBe(true)
+    expect(isFieldVisible(left, { a: true, b: false }, [left, right])).toBe(
+      false,
+    )
+  })
+
+  // 不给同级清单时退回只判自己那一环，旧调用点不受影响
+  it('不给同级清单时只判自己那一环', () => {
+    expect(isFieldVisible(SCAN_WIDTH, { variant: 'plain', scan: true })).toBe(
+      true,
+    )
   })
 })

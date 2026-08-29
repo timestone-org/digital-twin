@@ -69,7 +69,7 @@ function visibleKeys(
 ): Set<string> {
   return new Set(
     schema
-      .filter((field) => isFieldVisible(field, config))
+      .filter((field) => isFieldVisible(field, config, schema))
       .map((field) => field.key),
   )
 }
