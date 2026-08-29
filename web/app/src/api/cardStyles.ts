@@ -13,10 +13,13 @@ import { newIdempotencyKey } from './idempotency'
 const URL = '/card-styles'
 
 /**
- * 样式不存在（领域段续号）。
+ * 样式不存在。
  * ⚠ 按码分支，不按 message：文案会改、会翻译。
  */
-export const CARD_STYLE_NOT_FOUND_CODE = 41016
+export const CARD_STYLE_NOT_FOUND_CODE = 41021
+
+/** 样式的取值与模块清单对不上：类型没注册，或写了清单外的键。 */
+export const CARD_STYLE_INVALID_CODE = 41022
 
 export interface CardStyleListQuery {
   /** 只要绑这个模块类型的；不给则连通用外壳样式一起列。 */
@@ -35,16 +38,34 @@ export interface CardStyleInput {
   thumbnail?: string | null | undefined
 }
 
-/** 入参的线形。⚠ 逐字段写，不 `as`：多一个键服务端会 400，少一个键会静默走缺省。 */
-function toBody(input: CardStyleInput): Record<string, unknown> {
+/**
+ * 建一条时的线形。
+ * ⚠ 逐字段写，不 `as`：多一个键服务端整条 400（入参是 `extra="forbid"`），
+ * 少一个键则静默走缺省。
+ */
+function toCreateBody(input: CardStyleInput): Record<string, unknown> {
   return {
+    ...toUpdateBody(input),
+    module_type: input.moduleType ?? null,
+  }
+}
+
+/**
+ * 改一条时的线形。
+ * ⚠ **不带 `module_type`**：改的入参根本不收它（换了类型整段内芯当场作废，
+ * 而库里那袋值不会跟着消失），多带一个键会让整条 PATCH 400。要换归属得复制一条。
+ * ⚠ 缩略图只在**给了**的时候才写：PATCH 里显式的 `null` 是「清空」，
+ * 每次保存都捎上一个 null，等于每存一次就把缩略图抹一次。
+ */
+function toUpdateBody(input: CardStyleInput): Record<string, unknown> {
+  const body: Record<string, unknown> = {
     name: input.name,
     description: input.description ?? null,
-    module_type: input.moduleType ?? null,
     chrome_json: input.chrome,
     config_json: input.config ?? {},
-    thumbnail: input.thumbnail ?? null,
   }
+  if (input.thumbnail !== undefined) body.thumbnail = input.thumbnail
+  return body
 }
 
 /**
@@ -90,7 +111,7 @@ export async function createCardStyle(
       URL,
       onPlatform({
         method: 'POST',
-        body: toBody(input),
+        body: toCreateBody(input),
         headers: idempotent(key),
       }),
     ),
@@ -109,7 +130,7 @@ export async function updateCardStyle(
   return toCardStyle(
     await requestData<CardStyleWire>(
       `${URL}/${styleId}`,
-      onPlatform({ method: 'PATCH', body: toBody(input) }),
+      onPlatform({ method: 'PATCH', body: toUpdateBody(input) }),
     ),
   )
 }

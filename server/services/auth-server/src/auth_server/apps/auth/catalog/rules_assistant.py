@@ -26,8 +26,7 @@ ASSISTANT_RULES: tuple[RouteRuleSpec, ...] = (
         codes=(ASSISTANT_USE,),
         priority=900,
         description=(
-            "能力探测。前端靠它决定摆不摆助手入口——"
-            "没有这个码的账号连问都不会问"
+            "能力探测。前端靠它决定摆不摆助手入口——没有这个码的账号连问都不会问"
         ),
     ),
     RouteRuleSpec(

@@ -120,8 +120,8 @@ describe('写', () => {
     expect(options.headers).toEqual({ 'Idempotency-Key': 'key-1' })
   })
 
-  // ⚠ 逐字段写而不是 `as`：多一个键服务端会 400，少一个键会静默走缺省
-  it('入参逐字段转成 snake_case，没给的落成 null 或空对象', async () => {
+  // ⚠ 逐字段写而不是 `as`：多一个键服务端整条 400（入参是 extra="forbid"）
+  it('建的入参逐字段转成 snake_case，没给的落成 null 或空对象', async () => {
     await styles.createCardStyle({ name: '蓝调', chrome: {} }, 'key-2')
     const [, options] = call()
 
@@ -131,7 +131,6 @@ describe('写', () => {
       module_type: null,
       chrome_json: {},
       config_json: {},
-      thumbnail: null,
     })
   })
 
@@ -141,6 +140,36 @@ describe('写', () => {
 
     expect(path).toBe('/card-styles/s1')
     expect(options.method).toBe('PATCH')
+  })
+
+  // ⚠ 改的入参根本不收 module_type：多带一个键会让整条 PATCH 400
+  it('改的时候不捎上归属，也不捎上一个会把缩略图抹掉的 null', async () => {
+    await styles.updateCardStyle('s1', {
+      name: '蓝调',
+      chrome: {},
+      moduleType: 'info-card',
+    })
+    const [, options] = call()
+
+    expect(options.body).toEqual({
+      name: '蓝调',
+      description: null,
+      chrome_json: {},
+      config_json: {},
+    })
+  })
+
+  it('显式给了缩略图才写它', async () => {
+    await styles.updateCardStyle('s1', {
+      name: '蓝调',
+      chrome: {},
+      thumbnail: 'data:image/png;base64,AAA',
+    })
+    const [, options] = call()
+
+    expect(options.body).toMatchObject({
+      thumbnail: 'data:image/png;base64,AAA',
+    })
   })
 
   it('删走 DELETE 到那一条上', async () => {
