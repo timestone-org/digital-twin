@@ -5,10 +5,6 @@ from platform_server.apps.dashboard.crud.binding import (
     BindingCrud,
     binding_crud,
 )
-from platform_server.apps.dashboard.crud.card_style import (
-    CardStyleCrud,
-    card_style_crud,
-)
 from platform_server.apps.dashboard.crud.dashboard import (
     DashboardCrud,
     dashboard_crud,
@@ -21,12 +17,10 @@ from platform_server.apps.dashboard.crud.project import (
 
 __all__ = [
     "BindingCrud",
-    "CardStyleCrud",
     "DashboardCrud",
     "NodeCrud",
     "ProjectCrud",
     "binding_crud",
-    "card_style_crud",
     "dashboard_crud",
     "node_crud",
     "project_crud",

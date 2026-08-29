@@ -93,12 +93,6 @@ DASHBOARD_PREFIXES = (
     f"{API_PREFIX}/dashboard-nodes",
     f"{API_PREFIX}/dashboard-bindings",
     f"{API_PREFIX}/module-types",
-    # ⚠ 卡片样式库不带 `dashboard` 前缀，故闸 1 那条按 `dashboard*` 的窄规则
-    # **盖不到它**：auth-server 的 `rules_platform.py` 必须为 `card-styles*`
-    # 单开一组规则（读 view / 写 manage），否则它会掉进 900 的方法兜底，表现是
-    # 「只有大屏权限的人在边缘就被 403」——与运行参数当年靠 925/927 托住同理。
-    # 这里登记的是**目标口径**，两头对齐靠人，没有机器把它们钉在一起
-    f"{API_PREFIX}/card-styles",
 )
 # 建删项目与大屏归 manage，改内容归 edit，读面归 view
 DASHBOARD_MANAGED = (
@@ -117,11 +111,6 @@ DASHBOARD_MANAGED = (
     (f"{API_PREFIX}/dashboard-templates", "POST"),
     (f"{API_PREFIX}/dashboard-templates/{{template_id}}", "DELETE"),
     (f"{API_PREFIX}/dashboard-templates/{{template_id}}:instantiate", "POST"),
-    # 卡片样式同样全局可见：存一条等于给所有大屏加一个可套用的观感起点，
-    # 删一条影响全部还想再套它的人，故与建删模板同档
-    (f"{API_PREFIX}/card-styles", "POST"),
-    (f"{API_PREFIX}/card-styles/{{style_id}}", "PATCH"),
-    (f"{API_PREFIX}/card-styles/{{style_id}}", "DELETE"),
 )
 # 读面里唯一一条要 manage 的：读到的就是那条谁拿到谁能看的公开链接。
 # ⚠ 能看见一张屏与能把它发给全互联网不是同一件事，故它不随 GET 落到 view
@@ -375,7 +364,7 @@ def test_the_dashboard_face_was_actually_covered() -> None:
         for path, method in ROUTE_CASES
         if dashboard_expectation(path, method) is not None
     ]
-    assert len(covered) == 45
+    assert len(covered) == 40
 
 
 def test_every_manage_entry_still_points_at_a_live_route() -> None:
