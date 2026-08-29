@@ -1232,6 +1232,21 @@
               "help": "这一格的名称。⚠ 画不画由「名称」部件决定，这里只管叫什么；绑点面板上仍按「第 N 格」称呼它。"
             },
             {
+              "key": "icon",
+              "label": "图标",
+              "type": "image",
+              "default": "",
+              "help": "素材库里的图标。⚠ 画不画由「图标」部件决定；图标是逐格配的，配在部件上会让整卡十个格画同一个。"
+            },
+            {
+              "key": "group",
+              "label": "分组",
+              "type": "string",
+              "default": "",
+              "placeholder": "如 洗浴 / 空调",
+              "help": "分段与页签按它归堆；留空则归到「其他」。卡片上的「分组」档选了不分组时这一项不起作用。"
+            },
+            {
               "key": "unit",
               "label": "单位",
               "type": "string",
@@ -1286,8 +1301,24 @@
                   "label": "名称"
                 },
                 {
+                  "value": "icon",
+                  "label": "图标"
+                },
+                {
+                  "value": "tag",
+                  "label": "短标签"
+                },
+                {
+                  "value": "badge",
+                  "label": "状态徽标"
+                },
+                {
                   "value": "value",
                   "label": "读数"
+                },
+                {
+                  "value": "extra",
+                  "label": "附加字段"
                 },
                 {
                   "value": "meter",
@@ -1298,7 +1329,29 @@
                   "label": "分隔线"
                 }
               ],
-              "span": "full"
+              "span": "half"
+            },
+            {
+              "key": "place",
+              "label": "占位",
+              "type": "enum",
+              "default": "block",
+              "options": [
+                {
+                  "value": "block",
+                  "label": "整行"
+                },
+                {
+                  "value": "left",
+                  "label": "同行·靠左"
+                },
+                {
+                  "value": "right",
+                  "label": "同行·靠右"
+                }
+              ],
+              "help": "整行独占，或与相邻的同行件左右分列。",
+              "span": "half"
             },
             {
               "key": "label-size",
@@ -1362,6 +1415,176 @@
               "min": 0.2,
               "max": 1,
               "step": 0.05
+            },
+            {
+              "key": "icon-fallback",
+              "label": "回落图标",
+              "type": "image",
+              "default": "",
+              "help": "格上没配图标时画它。整卡用同一个图标时只配这里即可。",
+              "span": "full",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "icon"
+                ]
+              }
+            },
+            {
+              "key": "icon-size",
+              "label": "尺寸 (px)",
+              "type": "range",
+              "default": 20,
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "icon"
+                ]
+              },
+              "min": 10,
+              "max": 72,
+              "step": 1
+            },
+            {
+              "key": "icon-shape",
+              "label": "底衬",
+              "type": "enum",
+              "default": "none",
+              "options": [
+                {
+                  "value": "none",
+                  "label": "无"
+                },
+                {
+                  "value": "circle",
+                  "label": "圆形"
+                },
+                {
+                  "value": "square",
+                  "label": "圆角方"
+                }
+              ],
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "icon"
+                ]
+              }
+            },
+            {
+              "key": "tag-text",
+              "label": "文字",
+              "type": "string",
+              "default": "",
+              "placeholder": "如 1# / A 区",
+              "span": "full",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "tag"
+                ]
+              }
+            },
+            {
+              "key": "tag-look",
+              "label": "样式",
+              "type": "enum",
+              "default": "chip",
+              "options": [
+                {
+                  "value": "chip",
+                  "label": "胶囊"
+                },
+                {
+                  "value": "plain",
+                  "label": "纯文字"
+                },
+                {
+                  "value": "outline",
+                  "label": "描边"
+                }
+              ],
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "tag"
+                ]
+              }
+            },
+            {
+              "key": "tag-size",
+              "label": "字号 (px)",
+              "type": "range",
+              "default": 11,
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "tag"
+                ]
+              },
+              "min": 8,
+              "max": 24,
+              "step": 1
+            },
+            {
+              "key": "tag-color",
+              "label": "颜色",
+              "type": "color",
+              "default": "",
+              "help": "留空则跟随卡片的次要文字色。",
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "tag"
+                ]
+              }
+            },
+            {
+              "key": "badge-style",
+              "label": "样式",
+              "type": "enum",
+              "default": "outline",
+              "options": [
+                {
+                  "value": "outline",
+                  "label": "描边"
+                },
+                {
+                  "value": "solid",
+                  "label": "实心"
+                },
+                {
+                  "value": "dot",
+                  "label": "只留圆点"
+                }
+              ],
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "badge"
+                ]
+              }
+            },
+            {
+              "key": "badge-text",
+              "label": "覆盖文案",
+              "type": "string",
+              "default": "",
+              "placeholder": "留空则按状态显示",
+              "help": "填了就固定显示这段字，圆点仍随状态变色。",
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "badge"
+                ]
+              }
             },
             {
               "key": "value-size",
@@ -1465,6 +1688,193 @@
               "step": 1
             },
             {
+              "key": "extra-slot",
+              "label": "读哪个槽",
+              "type": "enum",
+              "default": "extra1",
+              "options": [
+                {
+                  "value": "extra1",
+                  "label": "附加字段一"
+                },
+                {
+                  "value": "extra2",
+                  "label": "附加字段二"
+                },
+                {
+                  "value": "extra3",
+                  "label": "附加字段三"
+                },
+                {
+                  "value": "aux",
+                  "label": "副读数"
+                },
+                {
+                  "value": "aux2",
+                  "label": "第三个数"
+                }
+              ],
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "extra"
+                ]
+              }
+            },
+            {
+              "key": "extra-label",
+              "label": "标签",
+              "type": "string",
+              "default": "",
+              "placeholder": "如 功率",
+              "help": "留空则只画读数。",
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "extra"
+                ]
+              }
+            },
+            {
+              "key": "extra-unit",
+              "label": "单位",
+              "type": "string",
+              "default": "",
+              "placeholder": "如 kW",
+              "help": "逐件配；不吃格级单位——附加字段装的多半是另一种量。",
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "extra"
+                ]
+              }
+            },
+            {
+              "key": "extra-precision",
+              "label": "小数位",
+              "type": "range",
+              "default": 1,
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "extra"
+                ]
+              },
+              "min": 0,
+              "max": 6,
+              "step": 1
+            },
+            {
+              "key": "extra-size",
+              "label": "字号 (px)",
+              "type": "range",
+              "default": 12,
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "extra"
+                ]
+              },
+              "min": 8,
+              "max": 32,
+              "step": 1
+            },
+            {
+              "key": "extra-color",
+              "label": "读数色",
+              "type": "color",
+              "default": "",
+              "help": "留空则跟随卡片的正文色。",
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "extra"
+                ]
+              }
+            },
+            {
+              "key": "meter-source",
+              "label": "占比怎么来",
+              "type": "enum",
+              "default": "auto",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "自动"
+                },
+                {
+                  "value": "ratio",
+                  "label": "直读占比"
+                },
+                {
+                  "value": "range",
+                  "label": "按量程折算"
+                },
+                {
+                  "value": "share",
+                  "label": "占全卡之比"
+                }
+              ],
+              "help": "自动 = 接了「占比」槽就直读它、没接则按量程折算主读数（多数场合够用）。另三档是显式指定。",
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "meter"
+                ]
+              }
+            },
+            {
+              "key": "meter-slot",
+              "label": "读哪个槽",
+              "type": "enum",
+              "default": "value",
+              "options": [
+                {
+                  "value": "ratio",
+                  "label": "占比"
+                },
+                {
+                  "value": "value",
+                  "label": "主读数"
+                },
+                {
+                  "value": "aux",
+                  "label": "副读数"
+                },
+                {
+                  "value": "aux2",
+                  "label": "第三个数"
+                },
+                {
+                  "value": "extra1",
+                  "label": "附加字段一"
+                },
+                {
+                  "value": "extra2",
+                  "label": "附加字段二"
+                },
+                {
+                  "value": "extra3",
+                  "label": "附加字段三"
+                }
+              ],
+              "help": "「自动」档不看这一项。其余三档：直读档读它取占比，量程与占全卡之比档读它取原值。",
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "meter"
+                ]
+              }
+            },
+            {
               "key": "meter-look",
               "label": "形态",
               "type": "enum",
@@ -1507,7 +1917,7 @@
               "label": "量程下限",
               "type": "number",
               "default": 0,
-              "help": "接了「占比」槽时这两项不参与计算。",
+              "help": "只有「按量程折算」档用这两项。",
               "span": "half",
               "when": {
                 "key": "kind",
@@ -1720,6 +2130,223 @@
           "span": "half"
         },
         {
+          "key": "grouping",
+          "label": "分组",
+          "type": "enum",
+          "default": "none",
+          "options": [
+            {
+              "value": "none",
+              "label": "不分组"
+            },
+            {
+              "value": "section",
+              "label": "分段组头"
+            },
+            {
+              "value": "tabs",
+              "label": "分类页签"
+            }
+          ],
+          "group": "分组",
+          "help": "按格上的「分组」字符串分段或分页签。⚠ 页签的计数用全量格数，不是当前页签的子集。",
+          "span": "half"
+        },
+        {
+          "key": "defaultGroup",
+          "label": "初始页签",
+          "type": "string",
+          "default": "",
+          "group": "分组",
+          "help": "进来时停在哪一页；留空或写错则停在第一页。",
+          "span": "half",
+          "when": {
+            "key": "grouping",
+            "in": [
+              "tabs"
+            ]
+          }
+        },
+        {
+          "key": "autoScroll",
+          "label": "自动滚动",
+          "type": "boolean",
+          "default": true,
+          "group": "滚动",
+          "help": "内容超出时慢速垂直滚动；关掉改为原生滚动条手动滚。",
+          "span": "half"
+        },
+        {
+          "key": "scrollSpeed",
+          "label": "滚动速度（每项秒数）",
+          "type": "range",
+          "default": 3,
+          "group": "滚动",
+          "help": "每个条目经过视区所需的秒数，越大越慢。",
+          "span": "half",
+          "when": {
+            "key": "autoScroll",
+            "in": [
+              true
+            ]
+          },
+          "min": 1,
+          "max": 30,
+          "step": 1
+        },
+        {
+          "key": "rules",
+          "label": "值规则",
+          "type": "array",
+          "default": [],
+          "help": "命中的格按规则的颜色描边并呼吸；按声明顺序取首个命中，高危规则放前面。",
+          "item_schema": [
+            {
+              "key": "op",
+              "label": "判断",
+              "type": "enum",
+              "default": "gt",
+              "options": [
+                {
+                  "value": "lt",
+                  "label": "< 小于"
+                },
+                {
+                  "value": "lte",
+                  "label": "≤ 小于等于"
+                },
+                {
+                  "value": "gt",
+                  "label": "> 大于"
+                },
+                {
+                  "value": "gte",
+                  "label": "≥ 大于等于"
+                },
+                {
+                  "value": "between",
+                  "label": "区间内 [a,b]"
+                },
+                {
+                  "value": "outside",
+                  "label": "区间外"
+                },
+                {
+                  "value": "eq",
+                  "label": "= 等于"
+                },
+                {
+                  "value": "neq",
+                  "label": "≠ 不等于"
+                }
+              ]
+            },
+            {
+              "key": "value",
+              "label": "阈值",
+              "type": "number",
+              "default": 0
+            },
+            {
+              "key": "value2",
+              "label": "阈值上界",
+              "type": "number",
+              "when": {
+                "key": "op",
+                "in": [
+                  "between",
+                  "outside"
+                ]
+              }
+            },
+            {
+              "key": "level",
+              "label": "严重度",
+              "type": "enum",
+              "default": "warning",
+              "options": [
+                {
+                  "value": "normal",
+                  "label": "正常（绿）"
+                },
+                {
+                  "value": "info",
+                  "label": "提示（蓝）"
+                },
+                {
+                  "value": "warning",
+                  "label": "警告（黄）"
+                },
+                {
+                  "value": "danger",
+                  "label": "危险（红）"
+                }
+              ]
+            },
+            {
+              "key": "color",
+              "label": "颜色",
+              "type": "color",
+              "default": "",
+              "help": "留空跟随严重度语义色；能源类型、水温梯度这类非严重度的配色填这里。"
+            },
+            {
+              "key": "label",
+              "label": "文案",
+              "type": "string",
+              "default": ""
+            },
+            {
+              "key": "blink",
+              "label": "闪烁",
+              "type": "boolean",
+              "default": false
+            }
+          ],
+          "item_label_key": "label"
+        },
+        {
+          "key": "alarmOn",
+          "label": "规则判哪个槽",
+          "type": "enum",
+          "default": "value",
+          "options": [
+            {
+              "value": "value",
+              "label": "主读数"
+            },
+            {
+              "value": "aux",
+              "label": "副读数"
+            },
+            {
+              "value": "aux2",
+              "label": "第三个数"
+            },
+            {
+              "value": "ratio",
+              "label": "占比"
+            },
+            {
+              "value": "state",
+              "label": "状态码"
+            },
+            {
+              "value": "extra1",
+              "label": "附加字段一"
+            },
+            {
+              "value": "extra2",
+              "label": "附加字段二"
+            },
+            {
+              "value": "extra3",
+              "label": "附加字段三"
+            }
+          ],
+          "span": "half"
+        },
+        {
           "key": "columns",
           "label": "列数",
           "type": "enum",
@@ -1908,6 +2535,11 @@
               "data_type": "number"
             },
             {
+              "key": "aux2",
+              "label": "第三个数",
+              "data_type": "number"
+            },
+            {
               "key": "ratio",
               "label": "占比（0–100）",
               "data_type": "number"
@@ -1915,6 +2547,21 @@
             {
               "key": "state",
               "label": "状态码",
+              "data_type": "number"
+            },
+            {
+              "key": "extra1",
+              "label": "附加字段一",
+              "data_type": "number"
+            },
+            {
+              "key": "extra2",
+              "label": "附加字段二",
+              "data_type": "number"
+            },
+            {
+              "key": "extra3",
+              "label": "附加字段三",
               "data_type": "number"
             }
           ]

@@ -14,6 +14,20 @@ import type { CardPartDefinition, CardPartInput } from './types'
 export const CARD_PART_KIND_KEY = 'kind'
 
 /**
+ * 部件在格里怎么占位，存在这个键上。
+ * ⚠ 与 `kind` 一样是**内建**字段：它不属于任何一档，故不前缀化，也不该由某个部件
+ * 自己声明——声明了就会与这一份撞名，而两份的取值语义只能靠人记住。
+ */
+export const CARD_PART_PLACE_KEY = 'place'
+
+/**
+ * 部件占位的三档。成行规则见 MODULE_DATA_CARD_DESIGN §11.3。
+ * ⚠ `block` 排在最前：它是缺省，也是加一个部件时绝大多数人要的那一档。
+ */
+export const CARD_PART_PLACES = ['block', 'left', 'right'] as const
+export type CardPartPlace = (typeof CARD_PART_PLACES)[number]
+
+/**
  * 字段键的前缀分隔符。
  * ⚠ 用 `-` 不用 `.`：仓里有按点号切配置路径的地方，带点的键会在那里被劈成两段。
  */

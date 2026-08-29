@@ -5,6 +5,7 @@
  * 而族里每个卡片模块都是「一套观感 + N 行数据」，逐格会让这一个与兄弟们的心智
  * 模型分叉（MODULE_DATA_CARD_DESIGN §1）。
  */
+import { resolveImageValue } from '../../shared/assetImage'
 import type { CardCellFormat } from '../../cardParts/types'
 import {
   readArray,
@@ -23,6 +24,10 @@ export const DATA_CARD_SLOT_KEY = 'cellValues'
 /** 归一后的一个格。 */
 export interface CardCell {
   label: string
+  /** 已解析成可直接用的图标地址；空串 = 没配。 */
+  icon: string
+  /** 分组名，分段与页签按它归堆；空串 = 没起名字。 */
+  group: string
   unit: string
   precision: number
   /** 点这一格时上抛的值，空串 = 这一格点了不上抛。 */
@@ -45,6 +50,8 @@ export function readCells(raw: unknown): CardCell[] {
     const row = readRecord(one)
     return {
       label: readText(row.label),
+      icon: resolveImageValue(readText(row.icon).trim()),
+      group: readText(row.group),
       unit: readText(row.unit),
       precision: readNumber(row.precision, 1),
       emitValue: readText(row.emitValue),

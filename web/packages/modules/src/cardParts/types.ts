@@ -9,7 +9,7 @@ import type { ConfigField, ModuleSlotMeta } from '@dt/contracts'
 import type { Component } from 'vue'
 
 /**
- * 一格能接的子槽。部件从这四个里**挑**，不新增。
+ * 一格能接的子槽。部件从这八个里**挑**，不新增。
  *
  * ⚠ 槽位静态是整条链的地基：槽键要落库成 `field_key` 并被服务端按**构建期导出的**
  * 目录校验（ADR-0012 五）。部件是用户动态加的，若让它生成槽，服务端就得跟着动态
@@ -17,7 +17,16 @@ import type { Component } from 'vue'
  * ⚠ 摆卡片的模块必须把 `arrayFields` 声明成与这里逐字相同的一组，由契约测试钉死——
  * 两边漂了的表现是「绑点面板提示接 A、部件其实读 B」，而两侧都不报错。
  */
-export const CARD_SLOT_KEYS = ['value', 'aux', 'ratio', 'state'] as const
+export const CARD_SLOT_KEYS = [
+  'value',
+  'aux',
+  'aux2',
+  'ratio',
+  'state',
+  'extra1',
+  'extra2',
+  'extra3',
+] as const
 export type CardSlotKey = (typeof CARD_SLOT_KEYS)[number]
 
 /** 逐档子槽是什么意思。给人看，也随模块清单下发给模型。 */
@@ -28,6 +37,11 @@ export const CARD_SLOT_DOCS: Readonly<Record<CardSlotKey, string>> = {
     '占比，0–100。进度条优先读它；不接时由 `value` 与部件自己配的量程算，所以多数场合可以不接。',
   state:
     '状态码。徽章与状态点按它分档，工控点位的状态多半是 0/1/2/3 这样的数字编码。',
+  aux2: '第三个数：第二条进度条读它（占比 + 液位这种一格两条的场合），或给附加字段。',
+  extra1:
+    '附加字段一。一格里除主读数与两个副读数之外还要摆的量，如功率 / 温度 / 流量。',
+  extra2: '附加字段二。',
+  extra3: '附加字段三。',
 }
 
 /**
@@ -54,8 +68,21 @@ export interface CardCellView {
    * ⚠ 它不是槽：名字是配置，不从点位来。
    */
   label: string
+  /**
+   * 这一格的图标，已解析成可直接用的地址；空串 = 没配。
+   * ⚠ 与 `label` 同理是**格的配置**：部件是卡片级的，图标若配在部件上，
+   * 一整张卡片十个格会画同一个图标。
+   */
+  icon: string
   /** 这一格各子槽的取值；**取不到的键不存在**，不拿 null 冒充「现场报的就是空」。 */
   values: Readonly<Partial<Record<CardSlotKey, unknown>>>
+  /**
+   * 全卡各子槽的合计，「占全卡之比」那一档用它。
+   * ⚠ 由卡片算好下发，而不是让部件去翻别的格：部件看得见别的格之后，
+   * 「这一件画什么」就不再只取决于自己这一格，排查时无从下手。
+   * ⚠ 一个数都取不到的槽**不在表里**（不是 0）：0 会让占比算成除零。
+   */
+  totals: Readonly<Partial<Record<CardSlotKey, number>>>
   format: CardCellFormat
 }
 

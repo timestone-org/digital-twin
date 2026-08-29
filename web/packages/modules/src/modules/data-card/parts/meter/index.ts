@@ -2,8 +2,9 @@
  * @fileoverview 进度条部件：把这一格的读数画成一条占比。画法整件复用
  * `shared/MeterBar.vue`——info-list 的行里用的是同一份，不留第二套 CSS。
  *
- * ⚠ 占比优先读 `ratio` 槽；没接就由 `value` 与这里配的量程算。两条路都算不出时整件
- * 不画——**绝不拿 0% 冒充「算不出来」**，那会让一条满量程的管道看着像空的。
+ * ⚠ 算不出占比时整件不画——**绝不拿 0% 冒充「算不出来」**，那会让一条满量程的
+ * 管道看着像空的。
+ * ⚠ 一格里摆两条（占比 + 液位）就是摆两个这件、各自选槽，不需要第二个部件档。
  */
 import { defineCardPart } from '../../../../cardParts/define'
 
@@ -11,9 +12,40 @@ export default defineCardPart({
   kind: 'meter',
   label: '进度条',
   icon: 'gauge',
-  hint: '把读数画成一条占比。接了「占比」槽就直接用它，否则按下面的量程算。',
-  slots: ['value', 'ratio', 'aux'],
+  hint: '把读数画成一条占比。三种口径：直读占比槽、按量程折算、或占全卡之和的比。一格里摆两条就是摆两个这件、各自选槽。',
+  slots: ['value', 'ratio', 'aux', 'aux2', 'extra1', 'extra2', 'extra3'],
   fields: [
+    {
+      key: 'source',
+      label: '占比怎么来',
+      type: 'enum',
+      default: 'auto',
+      span: 'half',
+      help: '自动 = 接了「占比」槽就直读它、没接则按量程折算主读数（多数场合够用）。另三档是显式指定。',
+      options: [
+        { value: 'auto', label: '自动' },
+        { value: 'ratio', label: '直读占比' },
+        { value: 'range', label: '按量程折算' },
+        { value: 'share', label: '占全卡之比' },
+      ],
+    },
+    {
+      key: 'slot',
+      label: '读哪个槽',
+      type: 'enum',
+      default: 'value',
+      span: 'half',
+      help: '「自动」档不看这一项。其余三档：直读档读它取占比，量程与占全卡之比档读它取原值。',
+      options: [
+        { value: 'ratio', label: '占比' },
+        { value: 'value', label: '主读数' },
+        { value: 'aux', label: '副读数' },
+        { value: 'aux2', label: '第三个数' },
+        { value: 'extra1', label: '附加字段一' },
+        { value: 'extra2', label: '附加字段二' },
+        { value: 'extra3', label: '附加字段三' },
+      ],
+    },
     {
       key: 'look',
       label: '形态',
@@ -40,7 +72,7 @@ export default defineCardPart({
       type: 'number',
       default: 0,
       span: 'half',
-      help: '接了「占比」槽时这两项不参与计算。',
+      help: '只有「按量程折算」档用这两项。',
     },
     {
       key: 'max',

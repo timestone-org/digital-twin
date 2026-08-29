@@ -224,3 +224,63 @@ describe('读数的四档', () => {
     )
   })
 })
+
+describe('排布', () => {
+  it('缺省整行流，一件一行', async () => {
+    const wrapper = await mountOne([{ kind: 'label' }, { kind: 'value' }])
+
+    expect(wrapper.find('.dc-line').exists()).toBe(false)
+  })
+
+  it('左右两件配成一行，各归各簇', async () => {
+    const wrapper = await mountOne([
+      { kind: 'label', place: 'left' },
+      { kind: 'value', place: 'right' },
+    ])
+    const line = wrapper.find('.dc-line')
+
+    expect(line.exists()).toBe(true)
+    expect(
+      line
+        .find('.dc-line__side:not(.dc-line__side--end)')
+        .find('.dc-label')
+        .exists(),
+    ).toBe(true)
+    expect(line.find('.dc-line__side--end').find('.dc-value').exists()).toBe(
+      true,
+    )
+  })
+
+  // ⚠ 不断开的话两组会挤成一行四件，而用户摆的是两行
+  it('右件之后再来左件就换行', async () => {
+    const wrapper = await mountOne([
+      { kind: 'label', place: 'left' },
+      { kind: 'value', place: 'right' },
+      { kind: 'label', place: 'left' },
+      { kind: 'value', place: 'right' },
+    ])
+
+    expect(wrapper.findAll('.dc-line')).toHaveLength(2)
+  })
+
+  it('整行件把前后两组配对切开', async () => {
+    const wrapper = await mountOne([
+      { kind: 'label', place: 'left' },
+      { kind: 'value', place: 'right' },
+      { kind: 'divider' },
+      { kind: 'label', place: 'left' },
+      { kind: 'value', place: 'right' },
+    ])
+
+    expect(wrapper.findAll('.dc-line')).toHaveLength(2)
+    expect(wrapper.find('.dc-rule').exists()).toBe(true)
+  })
+
+  // ⚠ 认不出的占位档要当整行画，不能把那一件扔掉
+  it('占位档写错时那一件仍在，按整行画', async () => {
+    const wrapper = await mountOne([{ kind: 'value', place: 'middle' }])
+
+    expect(wrapper.find('.dc-value').exists()).toBe(true)
+    expect(wrapper.find('.dc-line').exists()).toBe(false)
+  })
+})

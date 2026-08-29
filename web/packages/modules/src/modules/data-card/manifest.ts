@@ -8,7 +8,9 @@
  */
 import type { BindingRowLabel, ConfigField } from '@dt/contracts'
 
-import { CARD_PART_KIND_KEY } from '../../cardParts/define'
+import { CARD_PART_KIND_KEY, CARD_PART_PLACE_KEY } from '../../cardParts/define'
+import { scrollConfigFields } from '../../shared/scroll'
+import { valueRulesField } from '../../shared/valueRules'
 import { CARD_SLOT_DOCS } from '../../cardParts/types'
 import { defineModule } from '../../registry'
 import type { CardCell } from './cells'
@@ -29,7 +31,7 @@ const KIND_FIELD: ConfigField = {
   label: '部件',
   type: 'enum',
   default: 'value',
-  span: 'full',
+  span: 'half',
   options: BUILTIN_CARD_PARTS.map((part) => ({
     value: part.kind,
     label: part.label,
@@ -41,8 +43,28 @@ const KIND_FIELD: ConfigField = {
  * ⚠ 并集靠 `when: { key: 'kind' }` 各露各的，属性面板与助手因此白拿——
  * 这条路完全落在现有机制内，一行适配代码都不用写（§3.1）。
  */
+/**
+ * 这一件在格里怎么占位。与 `kind` 一样是内建字段，不属于任何一档，故不前缀化。
+ * ⚠ 成行规则在 `cardParts/lines.ts`：整行独占；连续的左件聚成左簇、右件聚成右簇；
+ * 右件之后再来左件就起新的一行。
+ */
+const PLACE_FIELD: ConfigField = {
+  key: CARD_PART_PLACE_KEY,
+  label: '占位',
+  type: 'enum',
+  default: 'block',
+  span: 'half',
+  help: '整行独占，或与相邻的同行件左右分列。',
+  options: [
+    { value: 'block', label: '整行' },
+    { value: 'left', label: '同行·靠左' },
+    { value: 'right', label: '同行·靠右' },
+  ],
+}
+
 const PART_ITEM_SCHEMA: ConfigField[] = [
   KIND_FIELD,
+  PLACE_FIELD,
   ...BUILTIN_CARD_PARTS.flatMap((part) => part.fields),
 ]
 
@@ -122,6 +144,21 @@ export default defineModule({
           help: '这一格的名称。⚠ 画不画由「名称」部件决定，这里只管叫什么；绑点面板上仍按「第 N 格」称呼它。',
         },
         {
+          key: 'icon',
+          label: '图标',
+          type: 'image',
+          default: '',
+          help: '素材库里的图标。⚠ 画不画由「图标」部件决定；图标是逐格配的，配在部件上会让整卡十个格画同一个。',
+        },
+        {
+          key: 'group',
+          label: '分组',
+          type: 'string',
+          default: '',
+          placeholder: '如 洗浴 / 空调',
+          help: '分段与页签按它归堆；留空则归到「其他」。卡片上的「分组」档选了不分组时这一项不起作用。',
+        },
+        {
           key: 'unit',
           label: '单位',
           type: 'string',
@@ -168,6 +205,53 @@ export default defineModule({
       default: '—',
       span: 'half',
       help: '取不到值时画在读数位的那个符号。⚠ 缺值绝不伪造 0。',
+    },
+    {
+      key: 'grouping',
+      label: '分组',
+      type: 'enum',
+      group: '分组',
+      default: 'none',
+      span: 'half',
+      help: '按格上的「分组」字符串分段或分页签。⚠ 页签的计数用全量格数，不是当前页签的子集。',
+      options: [
+        { value: 'none', label: '不分组' },
+        { value: 'section', label: '分段组头' },
+        { value: 'tabs', label: '分类页签' },
+      ],
+    },
+    {
+      key: 'defaultGroup',
+      label: '初始页签',
+      type: 'string',
+      group: '分组',
+      default: '',
+      span: 'half',
+      when: { key: 'grouping', in: ['tabs'] },
+      help: '进来时停在哪一页；留空或写错则停在第一页。',
+    },
+    ...scrollConfigFields(),
+    valueRulesField(
+      'rules',
+      '值规则',
+      '命中的格按规则的颜色描边并呼吸；按声明顺序取首个命中，高危规则放前面。',
+    ),
+    {
+      key: 'alarmOn',
+      label: '规则判哪个槽',
+      type: 'enum',
+      default: 'value',
+      span: 'half',
+      options: [
+        { value: 'value', label: '主读数' },
+        { value: 'aux', label: '副读数' },
+        { value: 'aux2', label: '第三个数' },
+        { value: 'ratio', label: '占比' },
+        { value: 'state', label: '状态码' },
+        { value: 'extra1', label: '附加字段一' },
+        { value: 'extra2', label: '附加字段二' },
+        { value: 'extra3', label: '附加字段三' },
+      ],
     },
     {
       key: 'columns',
@@ -320,8 +404,12 @@ export default defineModule({
       arrayFields: [
         { key: 'value', label: '主读数', dataType: 'number' },
         { key: 'aux', label: '对比值 / 目标', dataType: 'number' },
+        { key: 'aux2', label: '第三个数', dataType: 'number' },
         { key: 'ratio', label: '占比（0–100）', dataType: 'number' },
         { key: 'state', label: '状态码', dataType: 'number' },
+        { key: 'extra1', label: '附加字段一', dataType: 'number' },
+        { key: 'extra2', label: '附加字段二', dataType: 'number' },
+        { key: 'extra3', label: '附加字段三', dataType: 'number' },
       ],
     },
   ],

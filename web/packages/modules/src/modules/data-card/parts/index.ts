@@ -10,14 +10,24 @@
 import { registerCardPart } from '../../../cardParts/registry'
 import type { CardPartDefinition } from '../../../cardParts/types'
 
+import badge from './badge'
 import divider from './divider'
+import extra from './extra'
+import icon from './icon'
 import label from './label'
 import meter from './meter'
+import tag from './tag'
 import value from './value'
 
+// 顺序即菜单顺序：先「这一格是什么」（名称/图标/标签/徽标），再「值是多少」
+// （读数/附加字段/进度条），最后是纯排版的分隔线
 export const BUILTIN_CARD_PARTS: readonly CardPartDefinition[] = [
   label,
+  icon,
+  tag,
+  badge,
   value,
+  extra,
   meter,
   divider,
 ]

@@ -9,8 +9,11 @@
 import { computed, type CSSProperties } from 'vue'
 
 import CardPartRenderer from '../../cardParts/CardPartRenderer.vue'
+import { CARD_PART_PLACE_KEY } from '../../cardParts/define'
+import { readPlace, toCardLines } from '../../cardParts/lines'
 import type { CardCellView, CardPartMeta } from '../../cardParts/types'
 import type { CardPartRow } from './cells'
+import type { CardAlarm } from './groups'
 
 const props = defineProps<{
   cell: CardCellView
@@ -23,11 +26,28 @@ const props = defineProps<{
   vars: CSSProperties
   /** 这一格点了上抛什么；空串 = 不上抛，也就不该有可点的手感。 */
   emitValue: string
+  /** 这一格的告警结论；null = 没规则或没命中。 */
+  alarm: CardAlarm | null
 }>()
 
 const emit = defineEmits<{ pick: [value: string] }>()
 
 const isPickable = computed(() => props.emitValue !== '')
+
+/**
+ * 命中规则时把这一格染成规则的颜色。
+ * ⚠ 写成变量而不是直接写 `border-color`：格外壳有三档，直接写会让「左色条」档
+ * 当场丢掉自己那套描边（info-list 踩过的同一条）。
+ */
+const alarmVars = computed<CSSProperties>(() => {
+  const color = props.alarm?.hit?.color ?? ''
+  return color === '' ? {} : { '--dc-alarm': color }
+})
+
+/** 部件摊成行；规则在 `cardParts/lines.ts`，这里只管画。 */
+const lines = computed(() =>
+  toCardLines(props.parts, (row) => readPlace(row[CARD_PART_PLACE_KEY])),
+)
 
 /**
  * ⚠ `.stop`：整块可点由宿主接管，不吞掉的话同一次点击会被兜底再抛一次，
@@ -44,19 +64,47 @@ function onPick(): void {
     :class="[
       `dc-cell--${shell}`,
       `dc-cell--${align}`,
-      { 'dc-cell--pick': isPickable },
+      {
+        'dc-cell--pick': isPickable,
+        'dc-cell--alarm': alarm?.hit != null,
+        'dc-cell--blink': alarm?.blink === true,
+      },
     ]"
-    :style="vars"
+    :style="[vars, alarmVars]"
     @click.stop="onPick"
   >
-    <CardPartRenderer
-      v-for="(row, index) in parts"
-      :key="`${row.kind}-${String(index)}`"
-      :kind="row.kind"
-      :row="row"
-      :cell="cell"
-      :meta="meta"
-    />
+    <template v-for="(line, at) in lines" :key="`line-${String(at)}`">
+      <CardPartRenderer
+        v-if="line.block !== null"
+        :key="`part-${String(line.block.index)}`"
+        :kind="line.block.part.kind"
+        :row="line.block.part"
+        :cell="cell"
+        :meta="meta"
+      />
+      <div v-else class="dc-line">
+        <span class="dc-line__side">
+          <CardPartRenderer
+            v-for="one in line.left"
+            :key="`part-${String(one.index)}`"
+            :kind="one.part.kind"
+            :row="one.part"
+            :cell="cell"
+            :meta="meta"
+          />
+        </span>
+        <span class="dc-line__side dc-line__side--end">
+          <CardPartRenderer
+            v-for="one in line.right"
+            :key="`part-${String(one.index)}`"
+            :kind="one.part.kind"
+            :row="one.part"
+            :cell="cell"
+            :meta="meta"
+          />
+        </span>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -67,6 +115,29 @@ function onPick(): void {
   gap: var(--dc-part-gap, 4px);
   min-width: 0;
   padding: var(--dc-cell-py, 8px) var(--dc-cell-px, 12px);
+}
+
+/* 一行：左簇推到左、右簇推到右，中间的空档自己撑开 */
+.dc-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.dc-line__side {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* ⚠ 右簇要 `justify-content:end` 而不是 `margin-left:auto`：只有一件时两者等效，
+   多件时后者只推第一件，其余仍贴着它 */
+.dc-line__side--end {
+  justify-content: flex-end;
 }
 
 .dc-cell--start {
@@ -98,5 +169,46 @@ function onPick(): void {
 
 .dc-cell--pick {
   cursor: pointer;
+}
+
+/* 告警态叠在外壳之上：做成第四档外壳的话，左色条档会当场丢掉自己那套描边 */
+.dc-cell--alarm {
+  border-color: var(--dc-alarm, var(--state-danger));
+  animation: dc-cell-alarm 1.2s ease-in-out infinite;
+}
+
+.dc-cell--blink {
+  animation: dc-cell-blink 1s steps(1, end) infinite;
+}
+
+/* 两态同时成立时两条动画都要在：只写一条的话后写的那条会整条顶掉前一条 */
+.dc-cell--alarm.dc-cell--blink {
+  animation:
+    dc-cell-alarm 1.2s ease-in-out infinite,
+    dc-cell-blink 1s steps(1, end) infinite;
+}
+
+@keyframes dc-cell-alarm {
+  0%,
+  100% {
+    box-shadow: 0 0 0
+      color-mix(in srgb, var(--dc-alarm, var(--state-danger)) 0%, transparent);
+  }
+
+  50% {
+    box-shadow: 0 0 14px
+      color-mix(in srgb, var(--dc-alarm, var(--state-danger)) 55%, transparent);
+  }
+}
+
+@keyframes dc-cell-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.45;
+  }
 }
 </style>
