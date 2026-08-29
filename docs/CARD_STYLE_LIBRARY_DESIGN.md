@@ -148,6 +148,12 @@ CardStyle
 
 三栏，左窄右窄中间大——与大屏编辑器同构，用户不用重新学。
 
+⚠ **覆盖哪些模块由清单推导，不写名单**：判据是「清单里声明了 `contentKeys`」——
+没声明的模块说不出哪些键是观感，给它存样式只会把标题与行列表一起存进去。
+一处模块类型字面量就意味着第三方模块永远进不来，`moduleTypeLiterals.contract.spec.ts`
+连注释里的类型名都拦。**副作用：消息流模块也声明了 `contentKeys`，于是它也在覆盖范围内**
+——它本就与本族同源（MODULE_INFO_CARD_DESIGN §1.1 的四个模块），多它一个不违和。
+
 ### 3.2 左栏：样式列表
 
 - 按 `moduleType` 分组：「通用外壳」在最上，然后每个卡片模块一组。
@@ -167,9 +173,15 @@ CardStyle
 
 ⚠ **要新写一件**：取数源是注入下来的（`provideRuntimeData`），不装就是「诚实空源」——
 每条绑定都返回 `state: 'error'`，卡片上画的是缺值占位而不是演示数字。仓里现在**没有**
-按 `manifest.preview.values` 供值的假源（`preview` 至今只有 `CanvasNode.vue` 用了它的
-`config` 那一半）。所以要在 `@dt/runtime` 里补一个 `previewRuntimeData(values)`，
-本页与将来的模块库缩略图共用。
+按 `manifest.preview.values` 供值的路子（`preview` 至今只有 `CanvasNode.vue` 用了它的
+`config` 那一半）。补的这一件是 `previewBindings(specs, preview)`：把演示值摊成一组
+`static` 绑定，走**与画布同一条求值链**，模块看到的 `values` 与 `meta.slots` 因此与真
+跑起来时逐字同形。另开一条「直接塞 values」的后门，预览会在状态四档上与运行态分叉，
+而那正是预览要验的东西。
+
+⚠ 它住在 `web/app/src/features/dashboard/`，**不在 `@dt/runtime`**：运行时对来源种类
+无感知是硬规矩（DASHBOARD_DESIGN §5.5，由 `sourceLiterals.contract.spec.ts` 守着），
+而这件事非写 `sourceKind: 'static'` 不可。
 
 三个旋钮摆在预览区下沿：
 - **模块**：`moduleType` 为空的通用样式可以换模块看，看外壳套在不同模块上的样子。

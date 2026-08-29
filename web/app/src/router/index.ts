@@ -92,6 +92,18 @@ export const routes: RouteRecordRaw[] = [
     },
   },
   {
+    // 卡片样式与素材同类：跨大屏的公共资产，不挂在某张大屏或某个项目下面。
+    // ⚠ 读码是 dashboard:view、写由页面自己的 PermGuard 判 dashboard:manage——
+    //   进得来看得到不等于存得下，与整屏模板同一档
+    path: '/card-styles',
+    name: 'card-styles',
+    component: () => import('@/pages/CardStyles/index.vue'),
+    meta: {
+      title: '卡片样式库',
+      permissions: [PERMISSION_CODES.dashboardView],
+    },
+  },
+  {
     // 素材是跨大屏的公共资源，故不挂在某张大屏或某个项目下面
     path: '/assets',
     name: 'assets',

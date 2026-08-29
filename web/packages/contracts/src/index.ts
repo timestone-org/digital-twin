@@ -249,6 +249,7 @@ export type {
   DashboardTemplateDetail,
   DashboardTemplateSummary,
 } from './template'
+export type { CardStyle } from './cardStyle'
 export type { DashboardPublication, PublicDashboardPayload } from './share'
 export type { DashboardThumbnail } from './thumbnail'
 export type { ProjectThemeMode, ProjectThemePayload } from './theme'

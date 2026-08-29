@@ -32,6 +32,15 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permission: [PERMISSION_CODES.assetView],
   },
   {
+    // 样式库挨着素材库：两者都是跨大屏复用的资产，不属于系统管理那一组。
+    // ⚠ 挂 dashboard:view 与路由 meta 逐字一致，由 navItems 的契约测试钉死
+    key: 'card-styles',
+    label: '卡片样式',
+    icon: 'palette',
+    to: '/card-styles',
+    permission: [PERMISSION_CODES.dashboardView],
+  },
+  {
     // 采集是「去连现场设备读写点位」，与「工具 / OPC UA 服务端」方向相反：
     // 那边本平台是服务端、被上位机连。两组刻意不合并（COLLECT_DESIGN §1）
     key: 'collect',
