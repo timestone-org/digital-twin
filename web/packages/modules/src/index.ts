@@ -9,6 +9,39 @@ export {
 export type { ModuleWarn } from './registry'
 export { registerBuiltinModules } from './registerBuiltins'
 export {
+  CARD_PART_KIND_KEY,
+  defineCardPart,
+  partConfigOf,
+  partFieldKey,
+} from './cardParts/define'
+export {
+  __resetCardParts,
+  getCardPart,
+  listCardParts,
+  missingCardParts,
+  registerCardPart,
+  setCardPartWarn,
+} from './cardParts/registry'
+export {
+  danglingPartConditions,
+  duplicateFieldKeys,
+  fieldsWithoutKindCondition,
+  incompleteParts,
+  strayPartSlots,
+} from './cardParts/audit'
+export { CARD_SLOT_DOCS, CARD_SLOT_KEYS } from './cardParts/types'
+export type {
+  CardCellFormat,
+  CardCellView,
+  CardPartDefinition,
+  CardPartInput,
+  CardPartMeta,
+  CardPartProps,
+  CardSlotKey,
+} from './cardParts/types'
+export type { CardPartWarn } from './cardParts/registry'
+export { default as CardPartRenderer } from './cardParts/CardPartRenderer.vue'
+export {
   __resetConfigControls,
   getConfigControl,
   listConfigControls,

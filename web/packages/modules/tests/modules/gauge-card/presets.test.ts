@@ -225,7 +225,6 @@ describe('预设写的取值', () => {
 
   // ⚠ 不是「写成空数组」而是**这个键根本不出现**：预设是浅合并落库的，写一个
   //   空数组等于把用户配好的阈值静默清空，而他只是想换个样子
-  //   （CARD_STYLE_LIBRARY_DESIGN §1.3）
   it('六套都不碰取值规则：没有判据就不该染色，也不该把别人的判据抹掉', () => {
     expect(
       GAUGE_CARD_PRESETS.filter((preset) => 'rules' in preset.config),

@@ -208,7 +208,6 @@ describe('预设写的取值', () => {
 
   // ⚠ 不是「写成空数组」而是**这个键根本不出现**：预设是浅合并落库的，写一个
   //   空数组等于把用户配好的阈值静默清空，而他只是想换个样子
-  //   （CARD_STYLE_LIBRARY_DESIGN §1.3）
   it('五套都不碰取值规则，也都不画状态点：没有判据就连正常都不该说', () => {
     expect(
       INFO_CARD_PRESETS.filter((preset) => 'rules' in preset.config),
