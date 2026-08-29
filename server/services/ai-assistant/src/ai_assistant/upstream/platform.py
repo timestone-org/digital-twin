@@ -28,7 +28,6 @@ _DASHBOARDS = "/api/v1/platform/dashboards"
 _MODULES = "/api/v1/platform/module-types"
 _TABLES = "/api/v1/platform/dataset-tables"
 _ASSETS = "/api/v1/platform/assets"
-_CARD_STYLES = "/api/v1/platform/card-styles"
 
 
 class PlatformUnavailable(DependencyUnavailable):
@@ -237,58 +236,6 @@ class PlatformClient:
         rows = _items_of(await self._get(_POINTS, query, headers))
         return next((row for row in rows if _code_of(row) == code), None)
 
-    async def list_card_styles(
-        self, headers: dict[str, str], *, module_type: str | None = None
-    ) -> object:
-        """翻第一页卡片样式清单。回整个分页体，`total` 留给调用方做截断说明。
-
-        Args: headers, module_type（只列绑这个模块类型的那一组）。
-        """
-        query: dict[str, Any] = {"page": 1, "size": self._page_size}
-        if module_type:
-            query["module_type"] = module_type
-        return await self._get(_CARD_STYLES, query, headers)
-
-    async def read_card_style(
-        self, headers: dict[str, str], style_id: str
-    ) -> object:
-        """取一条卡片样式的完整取值。
-
-        Args: headers, style_id。
-        """
-        return await self._get(f"{_CARD_STYLES}/{style_id}", {}, headers)
-
-    async def create_card_style(
-        self, headers: dict[str, str], body: dict[str, Any]
-    ) -> object:
-        """新建一条卡片样式。
-
-        ⚠ 幂等键每次现取：内容派生的键会在样式被删掉之后仍然回放出那条已经
-        不存在的记录，而助手会把那个 id 当成刚存好的一条报给用户。
-
-        Args: headers, body。
-        """
-        keyed = {**headers, "Idempotency-Key": str(uuid4())}
-        return await self._post(_CARD_STYLES, keyed, body)
-
-    async def update_card_style(
-        self, headers: dict[str, str], style_id: str, body: dict[str, Any]
-    ) -> object:
-        """改一条卡片样式，只写 body 里给了的那几格。
-
-        Args: headers, style_id, body。
-        """
-        return await self._patch(f"{_CARD_STYLES}/{style_id}", headers, body)
-
-    async def delete_card_style(
-        self, headers: dict[str, str], style_id: str
-    ) -> None:
-        """删一条卡片样式。
-
-        Args: headers, style_id。
-        """
-        await self._delete(f"{_CARD_STYLES}/{style_id}", headers)
-
     async def validate_dashboard(
         self, headers: dict[str, str], dashboard_id: str
     ) -> object:
@@ -326,14 +273,6 @@ class PlatformClient:
         body: dict[str, Any] | None = None,
     ) -> object:
         return await self._call("POST", path, headers, json=body or {})
-
-    async def _patch(
-        self, path: str, headers: dict[str, str], body: dict[str, Any]
-    ) -> object:
-        return await self._call("PATCH", path, headers, json=body)
-
-    async def _delete(self, path: str, headers: dict[str, str]) -> object:
-        return await self._call("DELETE", path, headers)
 
     async def _call(
         self,

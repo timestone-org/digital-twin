@@ -439,8 +439,8 @@ CLIENT_SPECS: tuple[ToolSpec, ...] = (
         name="dashboard.apply_style",
         description=(
             "把**一整套观感**一次套到一个画布节点上，一次调用、用户一步撤销。"
-            "取值来自 `styles.get`：`chrome` 原样传它的 chrome，"
-            "`config` 原样传它的 config。"
+            "一整套观感的起手取值可以从 modules.catalog 的 preset 取，"
+            "也可以自己拼。"
             "⚠ 别用 set_config 逐键去凑：一套外壳 40 个键就是 40 次调用，"
             "中途断在半路，画面停在半套样式上，看着像配错了。"
             "⚠ 外壳是**整袋替换**：这套没写的外壳键会被清掉，回落平台默认。"

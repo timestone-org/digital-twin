@@ -17,10 +17,6 @@ DASHBOARD_COMPOSE = SkillManifest(
     required_codes=("dashboard:edit",),
     server_tools=(
         "modules.catalog",
-        "styles.list",
-        "styles.get",
-        "styles.save",
-        "styles.delete",
     ),
     client_tools=(
         "dashboard.read_canvas",
