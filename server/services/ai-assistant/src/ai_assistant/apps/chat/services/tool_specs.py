@@ -206,6 +206,116 @@ SERVER_SPECS: tuple[ToolSpec, ...] = (
         runs_on="server",
     ),
     ToolSpec(
+        name="styles.list",
+        description=(
+            "卡片样式库：用户自己存下来的**整套观感**，全站共享。"
+            "只给 id / 名字 / 一句话 / 绑的模块类型，不带取值。"
+            "用户说「换个样子」「好看点」「跟那张屏一样」时**先调它**——"
+            "一套外壳有 40 个键，逐个字段凑既慢又必然凑不全，"
+            "而库里多半已经有一条现成的。"
+            "module_type 为空的是通用外壳样式，套到任何模块上都只写外壳；"
+            "非空的连内芯一起，只能套回同类型的节点。"
+            "要某一条的完整取值再用 styles.get。"
+        ),
+        parameters=object_schema(
+            {
+                "module_type": string_schema(
+                    "只列绑这个模块类型的那一组，如 info-card。"
+                    "⚠ 通用外壳样式不在其中，两样都要看就别给这一格"
+                )
+            },
+            [],
+        ),
+        runs_on="server",
+    ),
+    ToolSpec(
+        name="styles.get",
+        description=(
+            "展开一条样式：外壳 `chrome`（写进节点的 `__cardStyle`）与内芯 "
+            "`config`（这个模块自己的观感键）的完整取值。"
+            "style_id 取自 styles.list，**不要猜一个**——猜的那个回的是一次"
+            "调用失败，而那与「这一条样式不存在」看着一模一样。"
+            "⚠ 外壳的语义是「键不存在 = 没设置」：套的时候，节点上有、而这套"
+            "样式里没有的外壳键要写 null 删掉，留着就是上一套样式的残留。"
+        ),
+        parameters=object_schema(
+            {"style_id": string_schema("样式 id，取自 styles.list")},
+            ["style_id"],
+        ),
+        runs_on="server",
+    ),
+    ToolSpec(
+        name="styles.save",
+        description=(
+            "把一整套观感存进样式库（全站共享），或改一条已有的——"
+            "给了 style_id 就是改那一条，不给就是新建。"
+            "调好一套用户满意的观感之后存一条，下次直接套。"
+            "⚠ 存的是**观感**：标题、行/项列表、缺值占位、阈值规则这些内容键"
+            "一个都不许写进去。它们跟着数据走不跟着样子走，混进样式里，"
+            "别人套用时他配好的格与阈值会被整片抹掉，而两侧都不报错。"
+            "⚠ chrome 是**整袋替换**：套用时它就是全部，没写进去的键"
+            "在别人那儿会被删成「未设置」。所以要么写全，要么别改这一袋"
+            "（改一条已有样式时不给 chrome，那一袋就原样不动）。"
+            "⚠ 不给 module_type 就是通用外壳样式，那一档不许带 config。"
+            "⚠ 改一条已有样式时**不要给 module_type**：类型改不了，"
+            "要换类型就不给 style_id、新建一条。"
+            "存之前先 styles.list 看有没有该改的那一条，"
+            "别每调一次观感就存一条新的。"
+        ),
+        parameters=object_schema(
+            {
+                "name": string_schema(
+                    "样式名，人看得懂的一句，如「暗金报表风」"
+                ),
+                "description": string_schema(
+                    "一句话说清它长什么样、什么时候用；"
+                    "用户在样式列表里看到的就是这句"
+                ),
+                "module_type": string_schema(
+                    "绑哪个模块类型，如 info-card；"
+                    "不给就是通用外壳样式（那时不许给 config）。"
+                    "只在新建时给，改一条已有样式时不许给"
+                ),
+                "chrome": {
+                    "type": "object",
+                    "additionalProperties": True,
+                    "description": (
+                        "外壳取值，键取自 dashboard.chrome_keys，"
+                        '如 {"borderStyle": "none", "radius": 4}。'
+                        "新建时必给（除非这一条只有内芯）"
+                    ),
+                },
+                "config": {
+                    "type": "object",
+                    "additionalProperties": True,
+                    "description": (
+                        "内芯取值：这个模块 config_schema 里的**观感键**，"
+                        "键名从 modules.catalog 展开结果里取；"
+                        "内容键一个都不许放进来"
+                    ),
+                },
+                "style_id": string_schema(
+                    "要改的那一条的 id；不给就是新建一条"
+                ),
+            },
+            ["name"],
+        ),
+        runs_on="server",
+    ),
+    ToolSpec(
+        name="styles.delete",
+        description=(
+            "从样式库里删一条。⚠ 样式库全站共享：删了别人也没有了，"
+            "动手之前先跟用户确认这一条确实是他要删的那一条。"
+            "已经套用过它的节点不受影响——套用是把取值抄进节点，不是引用。"
+        ),
+        parameters=object_schema(
+            {"style_id": string_schema("样式 id，取自 styles.list")},
+            ["style_id"],
+        ),
+        runs_on="server",
+    ),
+    ToolSpec(
         name="formula.catalog",
         description=(
             "公式的**唯一函数真源**：函数、运算符、时间窗写法、九条求值口径、"

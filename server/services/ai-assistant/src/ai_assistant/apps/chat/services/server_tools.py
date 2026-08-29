@@ -15,6 +15,12 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
 
+from ai_assistant.apps.chat.services.card_styles import (
+    delete_style,
+    list_styles,
+    read_style,
+    save_style,
+)
 from ai_assistant.apps.chat.services.formula_catalog import (
     catalog_of as formula_catalog_of,
 )
@@ -91,6 +97,10 @@ class ServerTools:
             "datasets.list_tables": self._list_tables,
             "datasets.read_columns": self._read_saved_columns,
             "assets.search": self._search_assets,
+            "styles.list": self._list_styles,
+            "styles.get": self._read_style,
+            "styles.save": self._save_style,
+            "styles.delete": self._delete_style,
         }
 
     def _upstream(self) -> PlatformClient:
@@ -268,6 +278,42 @@ class ServerTools:
             "assets": [_asset_of(row) for row in shown],
             "note": _list_note(len(shown), len(rows) > limit),
         }
+
+    async def _list_styles(self, arguments: dict[str, Any]) -> Any:
+        """列卡片样式的名片。取值另问，见 `services/card_styles.py`。
+
+        Args: arguments。
+        """
+        return await list_styles(
+            self._upstream(),
+            self.headers,
+            _text_or_none(arguments.get("module_type")),
+        )
+
+    async def _read_style(self, arguments: dict[str, Any]) -> Any:
+        """展开一条样式：外壳与内芯的完整取值。
+
+        Args: arguments。
+        """
+        return await read_style(
+            self._upstream(), self.headers, _required(arguments, "style_id")
+        )
+
+    async def _save_style(self, arguments: dict[str, Any]) -> Any:
+        """建或改一条样式。给了 style_id 就是改那一条。
+
+        Args: arguments。
+        """
+        return await save_style(self._upstream(), self.headers, arguments)
+
+    async def _delete_style(self, arguments: dict[str, Any]) -> Any:
+        """删一条样式。
+
+        Args: arguments。
+        """
+        return await delete_style(
+            self._upstream(), self.headers, _required(arguments, "style_id")
+        )
 
     async def _resolve_points(self, arguments: dict[str, Any]) -> Any:
         """把一批 node_key 换成人话，认不出的进 unknown。
