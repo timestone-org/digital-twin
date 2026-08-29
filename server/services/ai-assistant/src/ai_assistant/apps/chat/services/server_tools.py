@@ -18,7 +18,10 @@ from typing import Any, cast
 from ai_assistant.apps.chat.services.formula_catalog import (
     catalog_of as formula_catalog_of,
 )
-from ai_assistant.apps.chat.services.module_catalog import catalog_of
+from ai_assistant.apps.chat.services.module_catalog import (
+    catalog_of,
+    detail_of,
+)
 from ai_assistant.apps.chat.services.point_recall import (
     PointCandidate,
     ScoredPoint,
@@ -98,12 +101,17 @@ class ServerTools:
     async def _modules(self, arguments: dict[str, Any]) -> Any:
         """给模块清单：不点名就给名片表，点名就把那一个展开。
 
+        ⚠ 展开那一路不是原样透传：上游的详情里带着整套预设（一个模块能有一万
+        多字符），而模型多半只用其中一套。收窄成「字段全表 + 图例 + 预设索引」，
+        要某一套预设的值再带 `preset` 调一次。
+
         Args: arguments。
         """
         wanted = _text_or_none(arguments.get("module_type"))
         client = self._upstream()
         if wanted is not None:
-            return await client.read_module_type(self.headers, wanted)
+            body = await client.read_module_type(self.headers, wanted)
+            return detail_of(body, _text_or_none(arguments.get("preset")))
         body = await client.list_module_types(self.headers)
         return catalog_of(body, _text_or_none(arguments.get("keyword")))
 

@@ -74,9 +74,12 @@ SERVER_SPECS: tuple[ToolSpec, ...] = (
         name="modules.catalog",
         description=(
             "模块清单，**唯一的模块真源**。不给参数时列出全部模块的名片；"
-            "给 module_type 时把那一个的配置字段与绑定槽全部展开。"
+            "给 module_type 时把那一个展开——配置字段全表、绑定槽、"
+            "每一档字段类型该写什么形状的值（field_types 图例）、"
+            "出厂配置与现成观感预设的目录。"
             "摆模块或改配置之前必须先把那一个展开——"
-            "清单里没有的配置键写进去不报错也不生效。"
+            "清单里没有的配置键、或形状不对的值，写进去不报错也不生效。"
+            "要套某一套预设，再带 preset=<id> 调一次拿它的完整配置。"
         ),
         parameters=object_schema(
             {
@@ -85,6 +88,10 @@ SERVER_SPECS: tuple[ToolSpec, ...] = (
                 ),
                 "keyword": string_schema(
                     "按中文名或别名筛名片表；展开时不用给"
+                ),
+                "preset": string_schema(
+                    "要哪一套预设的完整配置，取自展开结果里的 presets[].id；"
+                    "与 module_type 同时给"
                 ),
             },
             [],
