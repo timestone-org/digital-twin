@@ -19,6 +19,7 @@ import type { CardCellView, CardPartMeta } from '../../src/cardParts/types'
 
 const CELL: CardCellView = {
   label: '出口温度',
+  color: '',
   icon: '',
   values: { value: 42 },
   totals: { value: 42 },

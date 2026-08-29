@@ -131,6 +131,7 @@ const rendered = computed(() =>
     emitValue: cell.emitValue,
     view: {
       label: cell.label,
+      color: cell.color,
       icon: cell.icon,
       values: slotValues(index),
       totals: slotTotals.value,

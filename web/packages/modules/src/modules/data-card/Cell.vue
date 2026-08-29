@@ -44,6 +44,21 @@ const alarmVars = computed<CSSProperties>(() => {
   return color === '' ? {} : { '--dc-alarm': color }
 })
 
+/**
+ * 这一格的基色。
+ * ⚠ 「没配 = 不写键」：写了就再也回落不到卡片自己的配色。
+ * ⚠ 顺带把共用进度条的底色钉在它上面——与 info-list 的 `--il-row-color` 是同一条链，
+ * 各写一套的话同一格里的条会与文字不同色。
+ */
+const colorVars = computed<CSSProperties>(() =>
+  props.cell.color === ''
+    ? {}
+    : {
+        '--dc-cell-color': props.cell.color,
+        '--dt-meter-base': props.cell.color,
+      },
+)
+
 /** 部件摊成行；规则在 `cardParts/lines.ts`，这里只管画。 */
 const lines = computed(() =>
   toCardLines(props.parts, (row) => readPlace(row[CARD_PART_PLACE_KEY])),
@@ -70,7 +85,7 @@ function onPick(): void {
         'dc-cell--blink': alarm?.blink === true,
       },
     ]"
-    :style="[vars, alarmVars]"
+    :style="[vars, colorVars, alarmVars]"
     @click.stop="onPick"
   >
     <template v-for="(line, at) in lines" :key="`line-${String(at)}`">

@@ -1,0 +1,444 @@
+{
+  "configs": {
+    "e52cc3a1-2e27-43f2-ad10-5e63196fc5e1": {
+      "title": "末端负荷",
+      "columns": "1",
+      "align": "start",
+      "cellShell": "card",
+      "gapX": 0,
+      "gapY": 4,
+      "padX": 6,
+      "padY": 4,
+      "cellPadX": 8,
+      "cellPadY": 4,
+      "partGap": 4,
+      "thousands": true,
+      "emptyText": "—",
+      "grouping": "tabs",
+      "autoScroll": true,
+      "scrollSpeed": 4,
+      "defaultGroup": "",
+      "cells": [
+        {
+          "label": "联合工房洗浴",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--accent-secondary)",
+          "group": "洗浴"
+        },
+        {
+          "label": "培训楼洗浴",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--state-info)",
+          "group": "洗浴"
+        },
+        {
+          "label": "动力中心洗浴",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--accent-primary)",
+          "group": "洗浴"
+        },
+        {
+          "label": "动力中心风机盘管空调",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--state-warning)",
+          "group": "空调"
+        },
+        {
+          "label": "联合工房四区空调",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--accent-secondary)",
+          "group": "空调"
+        },
+        {
+          "label": "联合工房二区空调",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--state-info)",
+          "group": "空调"
+        },
+        {
+          "label": "厂区采暖",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--state-warning)",
+          "group": "采暖"
+        },
+        {
+          "label": "技术中心采暖",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--accent-primary)",
+          "group": "采暖"
+        },
+        {
+          "label": "营销中心采暖",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--accent-secondary)",
+          "group": "采暖"
+        },
+        {
+          "label": "职工餐厅采暖",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--state-info)",
+          "group": "采暖"
+        },
+        {
+          "label": "培训楼采暖",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--state-warning)",
+          "group": "采暖"
+        },
+        {
+          "label": "办公楼采暖",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--accent-primary)",
+          "group": "采暖"
+        }
+      ],
+      "parts": [
+        {
+          "kind": "label",
+          "place": "left",
+          "label-size": 12,
+          "label-tone": "title"
+        },
+        {
+          "kind": "badge",
+          "place": "right",
+          "badge-style": "outline"
+        },
+        {
+          "kind": "value",
+          "place": "left",
+          "value-size": 17,
+          "value-glow": 8,
+          "value-color": "var(--accent-secondary)",
+          "value-unitSize": 11,
+          "value-font": "digit"
+        },
+        {
+          "kind": "meter",
+          "place": "right",
+          "meter-source": "share",
+          "meter-slot": "value",
+          "meter-look": "bar",
+          "meter-caption": "占比",
+          "meter-showPercent": true,
+          "meter-width": 50,
+          "meter-height": 3,
+          "meter-glow": 6
+        }
+      ]
+    },
+    "9bc9d105-d076-401b-8fa8-1baab9dc0d3e": {
+      "title": "储能容器",
+      "columns": "1",
+      "align": "start",
+      "cellShell": "card",
+      "gapX": 0,
+      "gapY": 4,
+      "padX": 6,
+      "padY": 4,
+      "cellPadX": 7,
+      "cellPadY": 6,
+      "partGap": 4,
+      "thousands": true,
+      "emptyText": "—",
+      "grouping": "section",
+      "autoScroll": true,
+      "scrollSpeed": 4,
+      "cells": [
+        {
+          "label": "联合工房补充水箱",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--accent-secondary)"
+        },
+        {
+          "label": "联合工房洗浴水箱",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--state-info)"
+        },
+        {
+          "label": "培训楼洗浴水箱",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--accent-primary)"
+        },
+        {
+          "label": "动力中心洗浴水箱",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--state-warning)"
+        },
+        {
+          "label": "动力中心辅房分集水器",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--accent-secondary)"
+        },
+        {
+          "label": "动力中心分集水器",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--state-info)"
+        },
+        {
+          "label": "技术中心（新）分集水器",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--accent-primary)"
+        },
+        {
+          "label": "技术中心（原）分集水器",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--state-warning)"
+        },
+        {
+          "label": "办公楼分集水器",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--accent-secondary)"
+        }
+      ],
+      "rules": [
+        {
+          "op": "gt",
+          "blink": false,
+          "color": "var(--state-danger)",
+          "label": "高温",
+          "level": "danger",
+          "value": 55
+        },
+        {
+          "op": "gt",
+          "blink": false,
+          "color": "var(--state-warning)",
+          "label": "偏热",
+          "level": "warning",
+          "value": 45
+        },
+        {
+          "op": "lt",
+          "blink": false,
+          "color": "var(--state-info)",
+          "label": "偏冷",
+          "level": "info",
+          "value": 30
+        },
+        {
+          "op": "between",
+          "blink": false,
+          "color": "var(--accent-secondary)",
+          "label": "适温",
+          "level": "normal",
+          "value": 30,
+          "value2": 45
+        }
+      ],
+      "alarmOn": "aux",
+      "parts": [
+        {
+          "kind": "label",
+          "place": "left",
+          "label-size": 13,
+          "label-tone": "title"
+        },
+        {
+          "kind": "value",
+          "place": "right",
+          "value-size": 17,
+          "value-glow": 8,
+          "value-color": "var(--accent-secondary)",
+          "value-unitSize": 11,
+          "value-font": "digit"
+        },
+        {
+          "kind": "meter",
+          "place": "left",
+          "meter-source": "range",
+          "meter-slot": "value",
+          "meter-look": "bar",
+          "meter-caption": "占比",
+          "meter-showPercent": true,
+          "meter-width": 0,
+          "meter-height": 4,
+          "meter-glow": 6
+        },
+        {
+          "kind": "extra",
+          "place": "right",
+          "extra-slot": "aux",
+          "extra-label": "水温",
+          "extra-unit": "℃",
+          "extra-precision": 1,
+          "extra-size": 12
+        },
+        {
+          "kind": "meter",
+          "place": "block",
+          "meter-source": "ratio",
+          "meter-slot": "aux2",
+          "meter-look": "bar",
+          "meter-caption": "液位",
+          "meter-showPercent": true,
+          "meter-width": 0,
+          "meter-height": 4,
+          "meter-glow": 6
+        }
+      ]
+    },
+    "2c5113d4-a71f-4573-b905-d8fd6828870c": {
+      "title": "能源源",
+      "columns": "1",
+      "align": "start",
+      "cellShell": "accent",
+      "gapX": 0,
+      "gapY": 4,
+      "padX": 6,
+      "padY": 4,
+      "cellPadX": 9,
+      "cellPadY": 5,
+      "partGap": 4,
+      "thousands": true,
+      "emptyText": "—",
+      "grouping": "none",
+      "autoScroll": true,
+      "scrollSpeed": 5,
+      "cells": [
+        {
+          "label": "联合工房制丝排潮余热回收",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--accent-secondary)"
+        },
+        {
+          "label": "培训楼太阳能",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--state-warning)"
+        },
+        {
+          "label": "培训楼空气能",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--state-info)"
+        },
+        {
+          "label": "动力中心空气能",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--accent-primary)"
+        },
+        {
+          "label": "联合工房烟气余热回收",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--accent-secondary)"
+        },
+        {
+          "label": "动力中心综合站房余热回收",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--state-info)"
+        },
+        {
+          "label": "锅炉蒸汽",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--state-danger)"
+        },
+        {
+          "label": "办公楼空气能",
+          "unit": "kWh",
+          "precision": 1,
+          "color": "var(--accent-primary)"
+        }
+      ],
+      "parts": [
+        {
+          "kind": "label",
+          "place": "block",
+          "label-size": 13,
+          "label-tone": "title"
+        },
+        {
+          "kind": "badge",
+          "place": "left",
+          "badge-style": "outline"
+        },
+        {
+          "kind": "value",
+          "place": "right",
+          "value-size": 18,
+          "value-glow": 8,
+          "value-color": "var(--accent-secondary)",
+          "value-unitSize": 11,
+          "value-font": "digit"
+        },
+        {
+          "kind": "extra",
+          "place": "left",
+          "extra-slot": "aux",
+          "extra-label": "能效",
+          "extra-unit": "",
+          "extra-precision": 1,
+          "extra-size": 12
+        },
+        {
+          "kind": "meter",
+          "place": "right",
+          "meter-source": "share",
+          "meter-slot": "value",
+          "meter-look": "bar",
+          "meter-caption": "占比",
+          "meter-showPercent": true,
+          "meter-width": 128,
+          "meter-height": 4,
+          "meter-glow": 6
+        },
+        {
+          "kind": "extra",
+          "place": "left",
+          "extra-slot": "extra1",
+          "extra-label": "功率",
+          "extra-unit": "kW",
+          "extra-precision": 1,
+          "extra-size": 11
+        },
+        {
+          "kind": "extra",
+          "place": "left",
+          "extra-slot": "extra2",
+          "extra-label": "温度",
+          "extra-unit": "℃",
+          "extra-precision": 1,
+          "extra-size": 11
+        },
+        {
+          "kind": "extra",
+          "place": "right",
+          "extra-slot": "extra3",
+          "extra-label": "流量",
+          "extra-unit": "m³/h",
+          "extra-precision": 1,
+          "extra-size": 11
+        }
+      ]
+    }
+  },
+  "deviations": [
+    "能源源：原卡 rowShape.lead=icon，但 8 个格一个都没配图标，info-list 画的是回退的圆点。新卡不摆图标部件，左色条外壳（accent）保留。"
+  ]
+}

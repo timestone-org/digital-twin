@@ -438,3 +438,43 @@ describe('告警规则', () => {
     expect(wrapper.find('.dc-cell').classes()).not.toContain('dc-cell--alarm')
   })
 })
+
+describe('格基色', () => {
+  const PAINTED = { label: '甲', color: 'var(--state-info)' }
+  const BARE = { label: '乙' }
+  const CELLS = [PAINTED, BARE]
+
+  // ⚠ 一列里逐格换色是列表族最常见的做法，而部件是卡片级的，配在部件上会同一个色
+  it('配了的格写下变量，没配的不写——不写才回落得到卡片配色', async () => {
+    const wrapper = await card([{ kind: 'label' }], [{}, {}], CELLS)
+    const styles = wrapper
+      .findAll('.dc-cell')
+      .map((one) => one.attributes('style') ?? '')
+
+    expect(styles[0]).toContain('--dc-cell-color: var(--state-info)')
+    expect(styles[1]).not.toContain('--dc-cell-color')
+  })
+
+  // ⚠ 各写一套的话同一格里的条会与文字不同色
+  it('顺带把共用进度条的底色钉在同一个值上', async () => {
+    const wrapper = await card([{ kind: 'meter' }], [{ ratio: 50 }], [PAINTED])
+
+    expect(wrapper.find('.dc-cell').attributes('style')).toContain(
+      '--dt-meter-base: var(--state-info)',
+    )
+  })
+
+  // ⚠ 配色走档位类而不是内联：纯 token 引用写进样式表才带得了回落，而格上没配
+  //   基色时那个变量根本没写，不带回落的 var() 会让整条 color 声明作废
+  it('名称的配色是档位类，跟随格基色也是一档', async () => {
+    const follow = await card(
+      [{ kind: 'label', 'label-tone': 'cell' }],
+      [{}],
+      [BARE],
+    )
+    const plain = await card([{ kind: 'label' }], [{}], [BARE])
+
+    expect(follow.find('.dc-label').classes()).toContain('dc-label--cell')
+    expect(plain.find('.dc-label').classes()).toContain('dc-label--secondary')
+  })
+})

@@ -32,6 +32,7 @@ export default defineCardPart({
         { value: 'primary', label: '正文' },
         { value: 'title', label: '标题色' },
         { value: 'accent', label: '强调色' },
+        { value: 'cell', label: '跟随格基色' },
       ],
     },
     {

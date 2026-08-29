@@ -28,6 +28,12 @@ export interface CardCell {
   icon: string
   /** 分组名，分段与页签按它归堆；空串 = 没起名字。 */
   group: string
+  /**
+   * 这一格的基色，只填 `var(--…)` 引用。空串 = 跟随卡片。
+   * ⚠ 它是**格**的属性不是部件的：一列里逐格换色是列表族最常见的做法，
+   * 而部件是卡片级的，配在部件上会让十个格同一个颜色。
+   */
+  color: string
   unit: string
   precision: number
   /** 点这一格时上抛的值，空串 = 这一格点了不上抛。 */
@@ -52,6 +58,7 @@ export function readCells(raw: unknown): CardCell[] {
       label: readText(row.label),
       icon: resolveImageValue(readText(row.icon).trim()),
       group: readText(row.group),
+      color: readText(row.color),
       unit: readText(row.unit),
       precision: readNumber(row.precision, 1),
       emitValue: readText(row.emitValue),

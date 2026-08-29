@@ -13,25 +13,28 @@ import { readEnum, readNumber } from '../../../../shared/config'
 //   `meta="[object Object]"` 这种脏东西，而两侧都不报错
 const props = defineProps<CardPartProps>()
 
-const TONES = ['secondary', 'primary', 'title', 'accent'] as const
+const TONES = ['secondary', 'primary', 'title', 'accent', 'cell'] as const
 
-/** 四档文字色，逐档指向主题变量——不写死色值，换肤才跟着走。 */
-const TONE_COLORS: Readonly<Record<(typeof TONES)[number], string>> = {
-  secondary: 'var(--text-secondary)',
-  primary: 'var(--text-primary)',
-  title: 'var(--text-title)',
-  accent: 'var(--accent-primary)',
-}
+/**
+ * 文字色走**档位类**而不是内联样式：五档都是纯 token 引用，写进样式表才好带回落
+ * （「跟随格基色」那一档必须带：格上没配基色时那个变量根本没写，不带回落的 `var()`
+ * 会让整条 color 声明作废，字变成继承色）。
+ */
+const tone = computed(() => readEnum(props.part.tone, TONES, 'secondary'))
 
 const style = computed<CSSProperties>(() => ({
   fontSize: `${String(readNumber(props.part.size, 12))}px`,
-  color: TONE_COLORS[readEnum(props.part.tone, TONES, 'secondary')],
   opacity: readNumber(props.part.opacity, 1),
 }))
 </script>
 
 <template>
-  <span v-if="cell.label !== ''" class="dc-label" :style="style">
+  <span
+    v-if="cell.label !== ''"
+    class="dc-label"
+    :class="`dc-label--${tone}`"
+    :style="style"
+  >
     {{ cell.label }}
   </span>
 </template>
@@ -43,5 +46,26 @@ const style = computed<CSSProperties>(() => ({
   line-height: 1.4;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+.dc-label--secondary {
+  color: var(--text-secondary);
+}
+
+.dc-label--primary {
+  color: var(--text-primary);
+}
+
+.dc-label--title {
+  color: var(--text-title);
+}
+
+.dc-label--accent {
+  color: var(--accent-primary);
+}
+
+/* ⚠ 回落不能省：格上没配基色时那个变量根本没写 */
+.dc-label--cell {
+  color: var(--dc-cell-color, var(--text-title));
 }
 </style>
