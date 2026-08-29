@@ -145,6 +145,24 @@ class RuntimeParamUnknown(AppError):
     http_status = 400
 
 
+class CardStyleNotFound(AppError):
+    """卡片样式不存在。"""
+
+    code = 41021
+    http_status = 404
+
+
+class CardStyleInvalid(AppError):
+    """样式的取值与模块清单对不上：模块类型没注册，或写了清单外的键。
+
+    ⚠ 逐条指到字段回：外壳与内芯加起来六七十个键，只回一句「样式不合法」的话，
+    存不下去的人得靠二分法找出是哪一个键写错了。
+    """
+
+    code = 41022
+    http_status = 400
+
+
 class ModuleCatalogUnreadable(AppError):
     """模块清单文件损坏或缺失，属于部署产物问题。"""
 

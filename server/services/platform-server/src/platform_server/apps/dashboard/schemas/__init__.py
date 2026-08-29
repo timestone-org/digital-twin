@@ -5,6 +5,11 @@ from platform_server.apps.dashboard.schemas.binding import (
     BindingOut,
     BindingUpdateIn,
 )
+from platform_server.apps.dashboard.schemas.card_style import (
+    CardStyleCreateIn,
+    CardStyleOut,
+    CardStyleUpdateIn,
+)
 from platform_server.apps.dashboard.schemas.dashboard import (
     DashboardCreateIn,
     DashboardOut,
@@ -35,6 +40,9 @@ __all__ = [
     "BindingCreateIn",
     "BindingOut",
     "BindingUpdateIn",
+    "CardStyleCreateIn",
+    "CardStyleOut",
+    "CardStyleUpdateIn",
     "DashboardCreateIn",
     "DashboardOut",
     "DashboardSummaryOut",
