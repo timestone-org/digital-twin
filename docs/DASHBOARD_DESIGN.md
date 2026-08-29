@@ -112,6 +112,15 @@ platform 这一个服务里同时有采集点位（`collect-points`）与画布�
 1. **可发现。** `GET /module-types` 返回每个模块的 `displayName` / `category` /
    `defaultSize` / `configSchema` / `bindings`。没有它，Agent 要生成一张大屏
    就得先去读前端源码。
+   ⚠ 光有字段表还不够，**得让它读得懂**：清单里另有三段与一张图例——
+   `config_presets`（一次落一整套观感，逐个字段去凑必漏）、
+   `default_config`（出厂就落库的键，与字段的 `default` 不落库兜底不是一回事）、
+   `sub_editor`（这一段配置由整页子编辑器接管，形状不在清单里，照猜着写不报错也不渲染），
+   以及 `field_types` / `binding_data_types`（每一档 `type` 该写什么形状的值）。
+   属性面板按 `type` 选控件，Agent 没有控件可看——`type: "enum"` 那一格该写
+   `options[].value` 里的哪一个、`type: "image"` 接不接 CSS 渐变，只有图例说得出来。
+   图例的真源在 `@dt/contracts` 的 `CONFIG_FIELD_TYPE_DOCS` / `BINDING_DATA_TYPE_DOCS`，
+   与模块表同一份产物、由同一道快照测试锁死。
 2. **可寻址且稳定。** 每个节点、每个绑定有永不改变的 id。Agent 的工作方式是
    "做一步、看结果、决定下一步"，这要求每一步都有可以指回去的名字。
 3. **可校验。** 写错立刻 `400` 且指到字段。Agent 看不见画布，它只有响应；
