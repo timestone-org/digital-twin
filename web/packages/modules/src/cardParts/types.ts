@@ -5,7 +5,7 @@
  *
  * ⚠ 本文件只定**机制**的词汇表，不认识任何一个具体部件，也不认识任何模块类型。
  */
-import type { ConfigField, ModuleStatus } from '@dt/contracts'
+import type { ConfigField, ModuleSlotMeta } from '@dt/contracts'
 import type { Component } from 'vue'
 
 /**
@@ -49,6 +49,11 @@ export interface CardCellFormat {
 
 /** 部件收到的这一格的取值与口径。 */
 export interface CardCellView {
+  /**
+   * 这一格的名称，格自己配的；空串 = 没起名字。
+   * ⚠ 它不是槽：名字是配置，不从点位来。
+   */
+  label: string
   /** 这一格各子槽的取值；**取不到的键不存在**，不拿 null 冒充「现场报的就是空」。 */
   values: Readonly<Partial<Record<CardSlotKey, unknown>>>
   format: CardCellFormat
@@ -60,8 +65,11 @@ export interface CardCellView {
  * 「整块都没绑就别画」这种越权判断，而那是模块壳的事。
  */
 export interface CardPartMeta {
-  /** 逐子槽的状态；**没配过来源的槽不在表里**——「没接」与「接了取不到」靠键在不在分。 */
-  slots: Readonly<Partial<Record<CardSlotKey, ModuleStatus>>>
+  /**
+   * 逐子槽的取数结论；**没配过来源的槽不在表里**——「没接」与「接了取不到」
+   * 靠键在不在分得开。
+   */
+  slots: Readonly<Partial<Record<CardSlotKey, ModuleSlotMeta>>>
 }
 
 /** 一个部件的渲染组件收到的 props。三件套固定，与 `ModuleComponentProps` 同理。 */

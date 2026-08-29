@@ -29,6 +29,7 @@ afterEach(() => {
 const BUILTIN_TYPES = [
   'action-button',
   'container',
+  'data-card',
   'footer',
   'gauge-card',
   'header',

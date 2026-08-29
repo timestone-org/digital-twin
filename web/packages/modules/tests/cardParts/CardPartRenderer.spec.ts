@@ -18,6 +18,7 @@ import {
 import type { CardCellView, CardPartMeta } from '../../src/cardParts/types'
 
 const CELL: CardCellView = {
+  label: '出口温度',
   values: { value: 42 },
   format: {
     unit: '℃',
@@ -28,7 +29,7 @@ const CELL: CardCellView = {
   },
 }
 
-const META: CardPartMeta = { slots: { value: 'connected' } }
+const META: CardPartMeta = { slots: { value: { state: 'ok' } } }
 
 /** 一个把收到的 props 原样吐出来的部件，用来验三件套确实喂对了。 */
 const Probe = defineComponent({

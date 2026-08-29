@@ -10,7 +10,7 @@ import type { ConfigField } from '@dt/contracts'
 
 import type { CardPartDefinition, CardPartInput } from './types'
 
-/** 部件档名在行里存在这个键上。⚠ 与 `data-card` 的 itemSchema 逐字相同。 */
+/** 部件档名在行里存在这个键上。⚠ 与摆卡片那个模块的 itemSchema 逐字相同。 */
 export const CARD_PART_KIND_KEY = 'kind'
 
 /**

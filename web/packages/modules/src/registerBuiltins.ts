@@ -3,9 +3,13 @@
  * @fileoverview 内置模块的自动发现：扫 `modules/<type>/manifest.ts` 逐个交给
  * `registerModule`。新增一个内置模块 = 建一个目录，本文件不用动。
  * ⚠ glob 只是便利，注册的机制是 `registerModule`（registry.ts 文件头）。
+ *
+ * ⚠ 卡片部件**不走 glob**：它们的顺序就是「加部件」菜单的顺序，而 glob 的顺序是
+ * 文件名排出来的。清单在 `modules/data-card/parts/index.ts` 里显式写着。
  */
 import type { ModuleManifest } from '@dt/contracts'
 
+import { registerBuiltinCardParts } from './modules/data-card/parts'
 import { registerModule } from './registry'
 
 interface ManifestModule {
@@ -32,4 +36,6 @@ export function registerBuiltinModules(
     }
     registerModule(manifest)
   }
+  // ⚠ 与模块同一趟装：漏了这一步，卡片上每一个部件都画成「没有这种部件」的占位
+  registerBuiltinCardParts()
 }

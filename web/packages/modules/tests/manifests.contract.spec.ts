@@ -31,6 +31,11 @@ import {
   GAUGE_ITEMS_KEY,
   GAUGE_SLOT_KEY,
 } from '../src/modules/gauge-card/gauges'
+import {
+  DATA_CARD_CELLS_KEY,
+  DATA_CARD_PARTS_KEY,
+  DATA_CARD_SLOT_KEY,
+} from '../src/modules/data-card/cells'
 import { CARD_ITEMS_KEY, CARD_SLOT_KEY } from '../src/modules/info-card/cells'
 import { FEED_SLOT_KEY } from '../src/modules/info-feed/feed'
 import { LIST_ITEMS_KEY, LIST_SLOT_KEY } from '../src/modules/info-list/rows'
@@ -52,6 +57,9 @@ const MODULES_DIR = join(SRC_DIR, 'modules')
 // 组件按常量取键时，扫源码看到的是常量名——这张表把它翻回真正的键
 const KEY_CONSTANTS: Record<string, string> = {
   CARD_ITEMS_KEY,
+  DATA_CARD_CELLS_KEY,
+  DATA_CARD_PARTS_KEY,
+  DATA_CARD_SLOT_KEY,
   CARD_SLOT_KEY,
   CONTAINER_CONFIG_KEY,
   FEED_SLOT_KEY,
@@ -212,6 +220,7 @@ describe('一个模块 = 一个目录', () => {
     expect(directories).toEqual([
       'action-button',
       'container',
+      'data-card',
       'footer',
       'gauge-card',
       'header',

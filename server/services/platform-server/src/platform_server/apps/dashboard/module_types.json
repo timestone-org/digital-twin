@@ -1175,6 +1175,764 @@
       "bindings": []
     },
     {
+      "type": "data-card",
+      "display_name": "可组合卡片",
+      "category": "数据",
+      "description": "可组合卡片：一块摆 1..N 个格，**每格画什么由用户自己拼**——一张部件列表（名称 / 读数 / 进度条 / 分隔线），可增删、可排序，所有格共用这一份。要在卡片里嵌进度条、或要一种兄弟模块摆不出来的段序时用它；只要朴素的数字加单位用 metric-card，要量程 / 液位那种图形用 gauge-card，要一行多字段的清单用 info-list，要一条条推来的消息用 info-feed。一个数组绑定槽 `cellValues`，行钉在 `cells` 配置项上：第 i 行喂第 i 格。四个子槽 `value` / `aux` / `ratio` / `state` 是**固定**的，部件从里面挑着读，不会因为加了部件而多出槽。⚠ 部件读哪个槽由它自己声明：读数与进度条读 `value`，进度条接了 `ratio` 就直接用它、不再按量程算。⚠ 单位与小数位是**逐格**的配置，不从点位来，同一格里所有部件共用一份。⚠ 删掉 `cells` 中间一格，它之后每一格的绑定都会改喂前一格。",
+      "icon": "layers",
+      "keywords": [
+        "datacard",
+        "zuhe",
+        "kapian",
+        "可组合",
+        "卡片",
+        "部件",
+        "进度条",
+        "自定义"
+      ],
+      "default_size": {
+        "width": 420,
+        "height": 220,
+        "min_width": 120,
+        "min_height": 64
+      },
+      "chrome": "card",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "default": "",
+          "placeholder": "留空则不画标题栏",
+          "group": "内容",
+          "span": "full"
+        },
+        {
+          "key": "cells",
+          "label": "格",
+          "type": "array",
+          "default": [
+            {
+              "label": "点位 1",
+              "unit": "",
+              "precision": 1
+            }
+          ],
+          "group": "内容",
+          "help": "每一项在绑点面板上是一行。⚠ 删掉中间一项，它之后每一格的绑定都会改喂前一格——删完请核对绑点面板。",
+          "span": "full",
+          "item_schema": [
+            {
+              "key": "label",
+              "label": "名称",
+              "type": "string",
+              "default": "",
+              "placeholder": "留空则这一格不画名称",
+              "help": "这一格的名称。⚠ 画不画由「名称」部件决定，这里只管叫什么；绑点面板上仍按「第 N 格」称呼它。"
+            },
+            {
+              "key": "unit",
+              "label": "单位",
+              "type": "string",
+              "default": "",
+              "placeholder": "如 ℃ / kWh / m³/h",
+              "help": "首尾空格照原样保留，「° C」这种写法是有意的排版。"
+            },
+            {
+              "key": "precision",
+              "label": "小数位",
+              "type": "range",
+              "default": 1,
+              "min": 0,
+              "max": 6,
+              "step": 1
+            },
+            {
+              "key": "emitValue",
+              "label": "联动值",
+              "type": "string",
+              "default": "",
+              "help": "点这一格时上抛的值，留空则这一格点了不上抛。"
+            }
+          ],
+          "item_label_key": "label",
+          "min_items": 1
+        },
+        {
+          "key": "parts",
+          "label": "部件",
+          "type": "array",
+          "default": [
+            {
+              "kind": "label"
+            },
+            {
+              "kind": "value"
+            }
+          ],
+          "group": "内容",
+          "help": "每一格画成什么样。所有格共用这一份——它是观感不是数据。整页编辑器里拖着排更顺手。",
+          "span": "full",
+          "item_schema": [
+            {
+              "key": "kind",
+              "label": "部件",
+              "type": "enum",
+              "default": "value",
+              "options": [
+                {
+                  "value": "label",
+                  "label": "名称"
+                },
+                {
+                  "value": "value",
+                  "label": "读数"
+                },
+                {
+                  "value": "meter",
+                  "label": "进度条"
+                },
+                {
+                  "value": "divider",
+                  "label": "分隔线"
+                }
+              ],
+              "span": "full"
+            },
+            {
+              "key": "label-size",
+              "label": "字号 (px)",
+              "type": "range",
+              "default": 12,
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "label"
+                ]
+              },
+              "min": 8,
+              "max": 48,
+              "step": 1
+            },
+            {
+              "key": "label-tone",
+              "label": "文字色",
+              "type": "enum",
+              "default": "secondary",
+              "options": [
+                {
+                  "value": "secondary",
+                  "label": "次要"
+                },
+                {
+                  "value": "primary",
+                  "label": "正文"
+                },
+                {
+                  "value": "title",
+                  "label": "标题色"
+                },
+                {
+                  "value": "accent",
+                  "label": "强调色"
+                }
+              ],
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "label"
+                ]
+              }
+            },
+            {
+              "key": "label-opacity",
+              "label": "透明度",
+              "type": "range",
+              "default": 1,
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "label"
+                ]
+              },
+              "min": 0.2,
+              "max": 1,
+              "step": 0.05
+            },
+            {
+              "key": "value-size",
+              "label": "字号 (px)",
+              "type": "range",
+              "default": 0,
+              "help": "0 = 跟着格宽自适应。填正数即钉死一个字号，多格并排时字号才对得齐。",
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "value"
+                ]
+              },
+              "min": 0,
+              "max": 200,
+              "step": 1
+            },
+            {
+              "key": "value-color",
+              "label": "颜色",
+              "type": "color",
+              "default": "var(--accent-primary)",
+              "help": "只填 var(--…) 引用，填死色值换肤时不跟着走。",
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "value"
+                ]
+              }
+            },
+            {
+              "key": "value-font",
+              "label": "字体",
+              "type": "enum",
+              "default": "digit",
+              "options": [
+                {
+                  "value": "digit",
+                  "label": "数字字体"
+                },
+                {
+                  "value": "sans",
+                  "label": "正文字体"
+                }
+              ],
+              "help": "数字字体是等宽的，读数逐帧跳动时列宽不抖。",
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "value"
+                ]
+              }
+            },
+            {
+              "key": "value-glow",
+              "label": "辉光 (px)",
+              "type": "range",
+              "default": 0,
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "value"
+                ]
+              },
+              "min": 0,
+              "max": 24,
+              "step": 1
+            },
+            {
+              "key": "value-showUnit",
+              "label": "带单位",
+              "type": "boolean",
+              "default": true,
+              "help": "单位取格级口径里的那一个；这里只管画不画。",
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "value"
+                ]
+              }
+            },
+            {
+              "key": "value-unitSize",
+              "label": "单位字号 (px)",
+              "type": "range",
+              "default": 12,
+              "span": "half",
+              "when": {
+                "key": "value-showUnit",
+                "in": [
+                  true
+                ]
+              },
+              "min": 8,
+              "max": 32,
+              "step": 1
+            },
+            {
+              "key": "meter-look",
+              "label": "形态",
+              "type": "enum",
+              "default": "bar",
+              "options": [
+                {
+                  "value": "bar",
+                  "label": "细条"
+                },
+                {
+                  "value": "track",
+                  "label": "粗轨道"
+                }
+              ],
+              "help": "细条 = 小字 + 占比读数 + 轨道；粗轨道另带四根刻度与目标标记。",
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "meter"
+                ]
+              }
+            },
+            {
+              "key": "meter-caption",
+              "label": "条前小字",
+              "type": "string",
+              "default": "",
+              "placeholder": "如 占比 / 液位；留空则不画",
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "meter"
+                ]
+              }
+            },
+            {
+              "key": "meter-min",
+              "label": "量程下限",
+              "type": "number",
+              "default": 0,
+              "help": "接了「占比」槽时这两项不参与计算。",
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "meter"
+                ]
+              }
+            },
+            {
+              "key": "meter-max",
+              "label": "量程上限",
+              "type": "number",
+              "default": 100,
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "meter"
+                ]
+              }
+            },
+            {
+              "key": "meter-height",
+              "label": "条高 (px)",
+              "type": "range",
+              "default": 4,
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "meter"
+                ]
+              },
+              "min": 2,
+              "max": 24,
+              "step": 1
+            },
+            {
+              "key": "meter-width",
+              "label": "条宽 (px)",
+              "type": "range",
+              "default": 0,
+              "help": "0 = 铺满整格。",
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "meter"
+                ]
+              },
+              "min": 0,
+              "max": 400,
+              "step": 4
+            },
+            {
+              "key": "meter-color",
+              "label": "颜色",
+              "type": "color",
+              "default": "",
+              "placeholder": "留空 = 跟随强调色",
+              "help": "只填 var(--…) 引用，填死色值换肤时不跟着走。",
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "meter"
+                ]
+              }
+            },
+            {
+              "key": "meter-glow",
+              "label": "辉光 (px)",
+              "type": "range",
+              "default": 6,
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "meter"
+                ]
+              },
+              "min": 0,
+              "max": 24,
+              "step": 1
+            },
+            {
+              "key": "meter-showPercent",
+              "label": "显示占比",
+              "type": "boolean",
+              "default": true,
+              "help": "⚠ 条宽夹在 0–100% 之间，而这个读数不夹——120% 正是要让人看见的那个异常。",
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "meter"
+                ]
+              }
+            },
+            {
+              "key": "meter-dot",
+              "label": "条前圆点",
+              "type": "boolean",
+              "default": false,
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "meter"
+                ]
+              }
+            },
+            {
+              "key": "meter-showTarget",
+              "label": "目标标记",
+              "type": "boolean",
+              "default": false,
+              "help": "接了「对比值」槽才画，画在量程上的那个位置。只有粗轨道有。",
+              "span": "half",
+              "when": {
+                "key": "meter-look",
+                "in": [
+                  "track"
+                ]
+              }
+            },
+            {
+              "key": "meter-targetLabel",
+              "label": "目标标注",
+              "type": "string",
+              "default": "目标 ",
+              "span": "half",
+              "when": {
+                "key": "meter-showTarget",
+                "in": [
+                  true
+                ]
+              }
+            },
+            {
+              "key": "divider-look",
+              "label": "画法",
+              "type": "enum",
+              "default": "line",
+              "options": [
+                {
+                  "value": "line",
+                  "label": "实线"
+                },
+                {
+                  "value": "dashed",
+                  "label": "虚线"
+                },
+                {
+                  "value": "blank",
+                  "label": "只留空"
+                }
+              ],
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "divider"
+                ]
+              }
+            },
+            {
+              "key": "divider-gap",
+              "label": "上下留白 (px)",
+              "type": "range",
+              "default": 6,
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "divider"
+                ]
+              },
+              "min": 0,
+              "max": 40,
+              "step": 1
+            },
+            {
+              "key": "divider-color",
+              "label": "线色",
+              "type": "color",
+              "default": "",
+              "placeholder": "留空 = 跟随卡片边框色",
+              "help": "留空则跟随卡片边框色。只填 var(--…) 引用，填死色值换肤时不跟着走。",
+              "span": "half",
+              "when": {
+                "key": "divider-look",
+                "in": [
+                  "line",
+                  "dashed"
+                ]
+              }
+            }
+          ],
+          "item_label_key": "kind",
+          "min_items": 1
+        },
+        {
+          "key": "emptyText",
+          "label": "缺值占位",
+          "type": "string",
+          "default": "—",
+          "group": "内容",
+          "help": "取不到值时画在读数位的那个符号。⚠ 缺值绝不伪造 0。",
+          "span": "half"
+        },
+        {
+          "key": "columns",
+          "label": "列数",
+          "type": "enum",
+          "default": "auto",
+          "options": [
+            {
+              "value": "auto",
+              "label": "自动"
+            },
+            {
+              "value": "1",
+              "label": "1 列"
+            },
+            {
+              "value": "2",
+              "label": "2 列"
+            },
+            {
+              "value": "3",
+              "label": "3 列"
+            },
+            {
+              "value": "4",
+              "label": "4 列"
+            }
+          ],
+          "group": "排布",
+          "help": "自动 = 按最小列宽自适应铺满；行数一律随格数自适应。",
+          "span": "half"
+        },
+        {
+          "key": "align",
+          "label": "格内对齐",
+          "type": "enum",
+          "default": "center",
+          "options": [
+            {
+              "value": "start",
+              "label": "左对齐"
+            },
+            {
+              "value": "center",
+              "label": "居中"
+            },
+            {
+              "value": "end",
+              "label": "右对齐"
+            }
+          ],
+          "group": "排布",
+          "span": "half"
+        },
+        {
+          "key": "gapX",
+          "label": "列间距 (px)",
+          "type": "range",
+          "default": 10,
+          "group": "排布",
+          "span": "half",
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "gapY",
+          "label": "行间距 (px)",
+          "type": "range",
+          "default": 10,
+          "group": "排布",
+          "span": "half",
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "padX",
+          "label": "整块左右内边距 (px)",
+          "type": "range",
+          "default": 10,
+          "group": "排布",
+          "span": "half",
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "padY",
+          "label": "整块上下内边距 (px)",
+          "type": "range",
+          "default": 6,
+          "group": "排布",
+          "span": "half",
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "cellShell",
+          "label": "格外壳",
+          "type": "enum",
+          "default": "plain",
+          "options": [
+            {
+              "value": "plain",
+              "label": "无"
+            },
+            {
+              "value": "card",
+              "label": "描边小卡"
+            },
+            {
+              "value": "accent",
+              "label": "描边 + 左侧竖条"
+            }
+          ],
+          "group": "外壳",
+          "span": "half"
+        },
+        {
+          "key": "cellPadX",
+          "label": "格左右内边距 (px)",
+          "type": "range",
+          "default": 12,
+          "group": "外壳",
+          "span": "half",
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "cellPadY",
+          "label": "格上下内边距 (px)",
+          "type": "range",
+          "default": 8,
+          "group": "外壳",
+          "span": "half",
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "partGap",
+          "label": "部件间距 (px)",
+          "type": "range",
+          "default": 4,
+          "group": "外壳",
+          "span": "half",
+          "min": 0,
+          "max": 24,
+          "step": 1
+        },
+        {
+          "key": "thousands",
+          "label": "千分位分隔",
+          "type": "boolean",
+          "default": false,
+          "group": "格式",
+          "span": "half"
+        },
+        {
+          "key": "fixedDecimals",
+          "label": "固定小数位",
+          "type": "boolean",
+          "default": false,
+          "group": "格式",
+          "help": "开着时按「小数位」补零对齐（42.00 / 3.50），读数跳动时位数不变。",
+          "span": "half"
+        }
+      ],
+      "bindings": [
+        {
+          "key": "cellValues",
+          "label": "格读数",
+          "data_type": "number",
+          "is_array": true,
+          "is_entity_pinned": true,
+          "array_fields": [
+            {
+              "key": "value",
+              "label": "主读数",
+              "data_type": "number"
+            },
+            {
+              "key": "aux",
+              "label": "对比值 / 目标",
+              "data_type": "number"
+            },
+            {
+              "key": "ratio",
+              "label": "占比（0–100）",
+              "data_type": "number"
+            },
+            {
+              "key": "state",
+              "label": "状态码",
+              "data_type": "number"
+            }
+          ]
+        }
+      ],
+      "content_keys": [
+        "title",
+        "cells",
+        "emptyText"
+      ],
+      "sub_editor": {
+        "config_key": "parts",
+        "route_name": "card-editor",
+        "label": "自定义卡片",
+        "hint": "格、部件与排布都在那里边配边看。"
+      }
+    },
+    {
       "type": "footer",
       "display_name": "页脚",
       "category": "布局",
