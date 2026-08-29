@@ -81,7 +81,15 @@ function setup(nodes: DashboardNodePayload[] = [node('a'), node('b')]) {
     removeSelected,
     zoom,
   })
-  return { editor, arrange, menu, centerOn, removeSelected, zoom }
+  return {
+    editor,
+    arrange,
+    menu,
+    centerOn,
+    removeSelected,
+    zoom,
+    openSubEditor,
+  }
 }
 
 /** 右键点在某个节点上：画布会先把它选中，这里照做。 */
@@ -266,5 +274,24 @@ describe('置灰读的是真实状态', () => {
     expect(
       ctx.editor.nodes.value.find((item) => item.id === 'a')?.isVisible,
     ).toBe(true)
+  })
+})
+
+describe('自定义卡片', () => {
+  it('点它把落点节点交给子编辑器入口', () => {
+    const ctx = openOn(setup(), 'a')
+
+    ctx.menu.run('customize')
+
+    expect(ctx.openSubEditor).toHaveBeenCalledWith('a')
+  })
+
+  // ⚠ 空白处右键没有落点节点：不判的话会拿 null 去找节点，界面上只是「点了没反应」
+  it('空白处右键点不到它，也不会拿空落点去开', () => {
+    const ctx = openOn(setup(), null)
+
+    ctx.menu.run('customize')
+
+    expect(ctx.openSubEditor).not.toHaveBeenCalled()
   })
 })

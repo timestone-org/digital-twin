@@ -109,7 +109,10 @@ interface Harness {
   wrapper: ReturnType<typeof mount>
 }
 
-function setup(nodes: DashboardNodePayload[]): Harness {
+function setup(
+  nodes: DashboardNodePayload[],
+  manifest?: ModuleManifest,
+): Harness {
   const picking = ref<string | null>(null)
   let editor!: DashboardEditor
   let ops!: EditorPageOps
@@ -148,7 +151,7 @@ function setup(nodes: DashboardNodePayload[]): Harness {
         toast: { error: vi.fn(), success: vi.fn() },
         dashboardId: () => 'db1',
         pickingFieldKey: picking,
-        getManifest: () => undefined,
+        getManifest: () => manifest,
       })
       return () => h('div')
     },
@@ -259,5 +262,32 @@ describe('装配', () => {
     expect(ctx.picking.value).toBeNull()
     expect(ctx.ops.consumePicker()).toBe(false)
     ctx.wrapper.unmount()
+  })
+})
+
+describe('子编辑器入口', () => {
+  // ⚠ 与属性面板落到同一个出口：各写一份的话「先保存再跳」这条前置只会在其中一条上
+  it('按节点开时先把它选中，动作层与用户都看得见是哪一个', () => {
+    const ctx = setup([node('a'), node('b')], {
+      ...MANIFEST,
+      subEditor: {
+        configKey: 'parts',
+        routeName: 'card-editor',
+        label: '自定义卡片',
+      },
+    })
+
+    ctx.ops.openSubEditor('b')
+
+    expect(ctx.editor.selectedId.value).toBe('b')
+  })
+
+  // ⚠ 读声明不读模块类型：没有声明的节点这条入口本就不该出现，点了也不该有反应
+  it('没有声明子编辑器的节点点了什么都不做', () => {
+    const ctx = setup([node('a')])
+
+    ctx.ops.openSubEditor('a')
+
+    expect(ctx.editor.selectedId.value).toBeNull()
   })
 })

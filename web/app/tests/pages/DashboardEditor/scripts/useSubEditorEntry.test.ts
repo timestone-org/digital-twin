@@ -5,7 +5,7 @@
  * 行版本，本页的本地草稿随即因版本对不上被丢弃。所以脏着直接跳走 = 用户回来时
  * 未保存的布局改动没了，而且全程没有任何提示。
  */
-import type { ModuleSubEditor } from '@dt/contracts'
+import type { ModuleManifest, ModuleSubEditor } from '@dt/contracts'
 import { flushPromises, mount } from '@vue/test-utils'
 import { computed, defineComponent, h, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -13,8 +13,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const push = vi.fn()
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 
+import type { DashboardEditor } from '@/composables/useDashboardEditor'
 import { useOpenSubEditor } from '@/features/dashboard/editorContext'
-import { useSubEditorEntry } from '@/pages/DashboardEditor/scripts/useSubEditorEntry'
+import {
+  openSubEditor,
+  useSubEditorEntry,
+} from '@/pages/DashboardEditor/scripts/useSubEditorEntry'
 
 const SUB_EDITOR: ModuleSubEditor = {
   configKey: 'twin',
@@ -142,5 +146,75 @@ describe('子编辑器入口', () => {
     expect(pair.error).toHaveBeenCalledWith(
       expect.stringContaining('twin-editor'),
     )
+  })
+})
+
+describe('按节点开', () => {
+  const NODE = { id: 'node-1', moduleType: 'demo' }
+
+  /**
+   * 一份只有必填项的清单。
+   * @param subEditor 声明了子编辑器没有
+   */
+  function manifest(subEditor?: ModuleSubEditor): ModuleManifest {
+    return {
+      type: 'demo',
+      displayName: '演示',
+      category: '演示',
+      chrome: 'bare',
+      defaultSize: { width: 100, height: 100 },
+      configSchema: [],
+      bindings: [],
+      preview: { config: {} },
+      component: () => Promise.resolve({ default: { template: '<i />' } }),
+      ...(subEditor === undefined ? {} : { subEditor }),
+    }
+  }
+
+  /**
+   * 一份只够 `openSubEditor` 用的编辑器替身。
+   * @param nodes 画布上有哪些节点
+   */
+  function fakeEditor(nodes: readonly { id: string; moduleType: string }[]) {
+    return {
+      nodes: computed(() => nodes),
+      select: vi.fn(),
+      flush: vi.fn(),
+    } as unknown as DashboardEditor & {
+      select: ReturnType<typeof vi.fn>
+      flush: ReturnType<typeof vi.fn>
+    }
+  }
+
+  // ⚠ 先选中再进：动作层按选中项走，用户也得看见是哪一个被打开了
+  it('先选中再进，且先把在飞的改动落下', () => {
+    const editor = fakeEditor([NODE])
+    const enter = vi.fn()
+
+    openSubEditor(editor, () => manifest(SUB_EDITOR), enter, 'node-1')
+
+    expect(editor.select).toHaveBeenCalledWith('node-1')
+    expect(editor.flush).toHaveBeenCalled()
+    expect(enter).toHaveBeenCalledWith(SUB_EDITOR)
+  })
+
+  // ⚠ 读**声明**不读模块类型：写死类型名的话第三方模块永远拿不到这条入口
+  it('没有声明子编辑器的模块什么都不做', () => {
+    const editor = fakeEditor([NODE])
+    const enter = vi.fn()
+
+    openSubEditor(editor, () => manifest(), enter, 'node-1')
+
+    expect(enter).not.toHaveBeenCalled()
+    expect(editor.select).not.toHaveBeenCalled()
+  })
+
+  it('节点已经不在了也不做', () => {
+    const editor = fakeEditor([])
+    const enter = vi.fn()
+
+    openSubEditor(editor, () => manifest(SUB_EDITOR), enter, 'gone')
+
+    expect(enter).not.toHaveBeenCalled()
   })
 })

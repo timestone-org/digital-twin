@@ -3,6 +3,9 @@
  * @fileoverview 读数部件的画法：主读数 + 单位。
  * ⚠ 取不到值时画格级口径里的那个占位符，**绝不伪造 0**——一个停机的机组显示 0
  * 与显示「—」，运维要做的事完全不同。
+ * ⚠ 「没配来源／等首帧／取不到」这三档不许合成一档：模块自报 `ownsStatusDisplay`，
+ * 整格浮层已经被让开了，这里不分开的话现场断了的那一格与从没配过的那一格在墙上
+ * 一模一样。原因整句挂 `title`——一格的宽度摆不下短标签。
  */
 import { computed, type CSSProperties } from 'vue'
 
@@ -19,6 +22,7 @@ import {
   isPresent,
   toNumOrNull,
 } from '../../../../shared/format'
+import { cellState, reasonOf } from '../../../../shared/slotState'
 
 // ⚠ 三件套一个都不能少：没声明的那个会掉成透传属性，在 DOM 上留下
 //   `meta="[object Object]"` 这种脏东西，而两侧都不报错
@@ -30,6 +34,18 @@ const FONTS = ['digit', 'sans'] as const
 const AUTO_SIZE = 'clamp(18px, 22cqw, 56px)'
 
 const numeric = computed(() => toNumOrNull(props.cell.values.value))
+
+/** 主读数这一槽落在哪一档。⚠ 没接过来源的槽不在 `slots` 表里，故缺席即「没配来源」。 */
+const state = computed(() =>
+  cellState(
+    props.meta.slots.value,
+    props.cell.values.value,
+    props.meta.hasSlots,
+  ),
+)
+
+/** 没有值时鼠标停上去看得全的那句话；有值时空串。 */
+const reason = computed(() => reasonOf(state.value, props.meta.slots.value))
 
 /**
  * 读数文本。
@@ -51,15 +67,20 @@ const text = computed(() => {
 })
 
 const hasValue = computed(
-  () => isPresent(numeric.value) || text.value !== props.cell.format.emptyText,
+  () =>
+    state.value === 'ok' &&
+    (isPresent(numeric.value) || text.value !== props.cell.format.emptyText),
 )
 
 const style = computed<CSSProperties>(() => {
   const size = readNumber(props.part.size, 0)
   const glow = readNumber(props.part.glow, 0)
   const color = readText(props.part.color, 'var(--accent-primary)')
+  const base = { fontSize: size === 0 ? AUTO_SIZE : `${String(size)}px` }
+  // ⚠ 没有值的三档不写配色：写了就把内联样式压在类上面，占位符会被画成读数色
+  if (!hasValue.value) return base
   return {
-    fontSize: size === 0 ? AUTO_SIZE : `${String(size)}px`,
+    ...base,
     color,
     // 「没配 = 不写值」：0 辉光写成 `0 0 0` 仍会让浏览器多算一层
     ...(glow === 0 ? {} : { textShadow: `0 0 ${String(glow)}px ${color}` }),
@@ -86,10 +107,13 @@ const unitStyle = computed<CSSProperties>(() => ({
   <span class="dc-value">
     <b
       class="dc-value__num"
-      :class="{ 'dc-value__num--digit': isDigitFont }"
+      :class="[
+        `dc-value__num--${state}`,
+        { 'dc-value__num--digit': isDigitFont },
+      ]"
       :style="style"
-      :title="text"
-      >{{ text }}</b
+      :title="reason === '' ? text : reason"
+      >{{ hasValue ? text : cell.format.emptyText }}</b
     >
     <i v-if="showUnit" class="dc-value__unit" :style="unitStyle">{{
       cell.format.unit
@@ -111,6 +135,21 @@ const unitStyle = computed<CSSProperties>(() => ({
   line-height: 1.1;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* 没有读数的三档：占位符是同一个「—」，全靠颜色与透明度分开，与列表族同一套口径 */
+.dc-value__num--pending {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+.dc-value__num--unbound {
+  color: var(--text-disabled);
+}
+
+/* 取不到要显眼：它是「去查现场」的信号，与「还没配」不是一回事 */
+.dc-value__num--error {
+  color: var(--state-danger);
 }
 
 /* 等宽数字：读数逐帧跳动时列宽不抖 */

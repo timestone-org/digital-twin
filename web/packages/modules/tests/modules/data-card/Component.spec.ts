@@ -189,3 +189,61 @@ describe('联动', () => {
     ])
   })
 })
+
+describe('栅格', () => {
+  it('缺省按格宽自适应列数', async () => {
+    const wrapper = await mountCard()
+
+    expect(wrapper.find('.dc-grid').attributes('style')).toContain('auto-fit')
+  })
+
+  it('钉死列数时按列数摆', async () => {
+    const wrapper = await mountCard({ columns: '3' })
+    const style = wrapper.find('.dc-grid').attributes('style') ?? ''
+
+    expect(style).toContain('repeat(3,')
+    expect(style).not.toContain('auto-fit')
+  })
+
+  it('行列间距与内边距都按配置走', async () => {
+    const wrapper = await mountCard({ gapX: 20, gapY: 14, padX: 18, padY: 9 })
+    const style = wrapper.find('.dc-grid').attributes('style') ?? ''
+
+    expect(style).toContain('column-gap: 20px')
+    expect(style).toContain('row-gap: 14px')
+    expect(style).toContain('padding: 9px 18px')
+  })
+})
+
+describe('逐槽结论摊到格上', () => {
+  // ⚠ 键拼错不报错也不渲染：整张卡片一律落到「没配来源」，而配置一字没错
+  it('按「槽键[行号].子槽」认领这一格自己的那几条结论', async () => {
+    const wrapper = await mountCard(
+      { cells: CELLS, parts: [{ kind: 'value' }] },
+      { cellValues: [{}, {}] },
+      {
+        slots: {
+          'cellValues[0].value': { state: 'error', message: '通道断了' },
+          'cellValues[1].value': { state: 'pending' },
+        },
+      },
+    )
+    const nums = wrapper.findAll('.dc-value__num')
+
+    expect(nums[0]?.classes()).toContain('dc-value__num--error')
+    expect(nums[0]?.attributes('title')).toContain('通道断了')
+    expect(nums[1]?.classes()).toContain('dc-value__num--pending')
+  })
+
+  it('别人家的槽键不认领', async () => {
+    const wrapper = await mountCard(
+      { cells: [CELLS[0]], parts: [{ kind: 'value' }] },
+      { cellValues: [{}] },
+      { slots: { 'listValues[0].value': { state: 'error' } } },
+    )
+
+    expect(wrapper.find('.dc-value__num').classes()).toContain(
+      'dc-value__num--unbound',
+    )
+  })
+})

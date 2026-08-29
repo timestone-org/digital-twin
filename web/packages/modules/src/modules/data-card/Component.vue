@@ -83,12 +83,12 @@ function slotValues(index: number): CardCellView['values'] {
 function slotMeta(index: number): CardPartMeta {
   const table = props.meta?.slots
   const out: Partial<Record<CardSlotKey, ModuleSlotMeta>> = {}
-  if (table === undefined) return { slots: out }
+  if (table === undefined) return { slots: out, hasSlots: false }
   for (const key of CARD_SLOT_KEYS) {
     const found = table[`${DATA_CARD_SLOT_KEY}[${String(index)}].${key}`]
     if (found !== undefined) out[key] = found
   }
-  return { slots: out }
+  return { slots: out, hasSlots: true }
 }
 
 /** 逐格摊平成模板要的那几样，一次算完——模板里不判档位。 */

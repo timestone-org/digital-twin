@@ -29,7 +29,10 @@ const CELL: CardCellView = {
   },
 }
 
-const META: CardPartMeta = { slots: { value: { state: 'ok' } } }
+const META: CardPartMeta = {
+  slots: { value: { state: 'ok' } },
+  hasSlots: true,
+}
 
 /** 一个把收到的 props 原样吐出来的部件，用来验三件套确实喂对了。 */
 const Probe = defineComponent({

@@ -70,6 +70,12 @@ export interface CardPartMeta {
    * 靠键在不在分得开。
    */
   slots: Readonly<Partial<Record<CardSlotKey, ModuleSlotMeta>>>
+  /**
+   * 运行时下发了逐槽结论没有。
+   * ⚠ 少了它，「运行时没下发」与「下发了但这一槽没接」在 `slots` 里长得一模一样，
+   * 于是设计态画布与独立挂载会把注进来的演示值一律判成没配来源，整张卡片是「—」。
+   */
+  hasSlots: boolean
 }
 
 /** 一个部件的渲染组件收到的 props。三件套固定，与 `ModuleComponentProps` 同理。 */
