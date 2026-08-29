@@ -41,6 +41,7 @@ EXPECTED_TYPES = frozenset(
     {
         "action-button",
         "container",
+        "data-card",
         "footer",
         "gauge-card",
         "header",

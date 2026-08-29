@@ -22,6 +22,7 @@ async def test_the_listing_names_every_registered_module(
     assert types == {
         "action-button",
         "container",
+        "data-card",
         "footer",
         "gauge-card",
         "header",
