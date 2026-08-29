@@ -12,7 +12,6 @@
 """
 
 from typing import Any, cast
-from uuid import uuid4
 
 import httpx
 from pydantic import BaseModel, ValidationError
