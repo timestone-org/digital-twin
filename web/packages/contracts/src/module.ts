@@ -27,6 +27,46 @@ export const CONFIG_FIELD_TYPES = [
 ] as const
 export type ConfigFieldType = (typeof CONFIG_FIELD_TYPES)[number]
 
+/**
+ * 每一档 `ConfigFieldType` 落库时是什么形状、有哪个坑。
+ *
+ * 这张表是**给模型读的**：属性面板按 `type` 选控件，模型没有控件可看，只能靠
+ * 这一句知道该往配置里写什么。经 `catalog.ts` 序列化进服务端目录，AI 助手展开
+ * 一个模块时随配置字段一起下发（DASHBOARD_DESIGN §5.2）。
+ *
+ * ⚠ 逐档铺满：`CONFIG_FIELD_TYPES` 里加一档而这里漏了，`Record` 的完备性检查
+ * 当场红。漏了的后果是模型对那一档只能猜值的形状，而写错形状的值存得下去、
+ * 也不报错，画面上表现为「配了没反应」。
+ */
+export const CONFIG_FIELD_TYPE_DOCS: Readonly<Record<ConfigFieldType, string>> =
+  {
+    string:
+      '单行文本。写 JSON 字符串；`placeholder` 只是输入框提示，不是缺省值。',
+    textarea:
+      '多行文本。与 string 同为字符串，差别只在控件；换行就是字符串里的换行符。',
+    number:
+      '数字输入框。写 JSON number（不是数字串）。有 `min`/`max` 时越界的值渲染时会被夹回去——面板上拖不到，写进去也不生效。',
+    boolean:
+      '开关。只认真正的 `true` / `false`；`"true"` 这种字符串一律按 false 处理，且不报错。',
+    enum: '下拉单选。值必须逐字等于 `options[].value` 里的某一个（`label` 只是界面文案，别写它）；名单外的值渲染时静默回落缺省档。',
+    color:
+      'CSS 颜色。优先写主题变量 `var(--accent-primary)` 这类引用——写死色值的节点换肤时不跟着变。留空多半表示「跟随主题/继承」，看该字段的 `help`。',
+    range:
+      '滑杆。值与 number 同为 JSON number，受 `min`/`max`/`step` 约束；差别只在控件。',
+    array:
+      '可增删的行列表。值是对象数组，每个对象按 `item_schema` 的字段构成，缺的字段渲染时按各自的 `default` 兜底。`min_items`/`max_items` 是行数上下限。⚠ 数组配置项与数据槽的行号一一对应：删中间一项，其后每一行的绑定都会改喂前一项。',
+    object:
+      '子表单。值是对象，键按 `fields` 构成。⚠ `fields` 缺席的 object 由整页子编辑器接管（见 `sub_editor`），它的内部形状不在清单里——不许照猜着往里写，写进去多半渲染不出来。',
+    font: '字体组。值是对象，键可缺席，缺席即「跟随主题」：`family` / `size`（设计像素） / `weight` / `letterSpacing` / `color`。',
+    style:
+      '样式槽。值是对象，键可缺席，缺席即「不写这条样式」：`color` / `background` / `border` / `borderRadius` / `boxShadow` / `padding` / `opacity`。',
+    image:
+      '图。值是字符串，三种写法各走一条画法：素材引用 `asset:<id>`（推荐，换部署不失效）、图片地址 `https://…`、或一整条 CSS background 值（`linear-gradient(…)` / `url(…)` / `var(…)`）。⚠ 把渐变填成图片地址只会得到一个碎图图标。',
+    json: '自由 JSON。值是任意 JSON；模块自己解释它的形状，清单说不出更多。',
+    'dashboard-ref':
+      '大屏引用。值是目标大屏的句柄字符串，不是大屏标题、也不是节点 id。',
+  }
+
 /** 字段在两列栅格里占半行还是整行。 */
 export const CONFIG_FIELD_SPANS = ['half', 'full'] as const
 export type ConfigFieldSpan = (typeof CONFIG_FIELD_SPANS)[number]
@@ -95,7 +135,12 @@ export interface StyleSlotValue {
   opacity?: number
 }
 
-/** 绑定槽期望的数据类型。绑点面板据此过滤可选点位。 */
+/**
+ * 绑定槽期望的数据类型。
+ * ⚠ 它**不过滤可选点位**——任何一档都绑得上任何一个点位。它决定的只有
+ * 「静态常量」那一档的输入控件（`BindingSourceEditor.vue`），以及模块该按
+ * 什么类型去理解收到的值。逐档的意思见 `BINDING_DATA_TYPE_DOCS`。
+ */
 export const BINDING_DATA_TYPES = [
   'number',
   'boolean',
@@ -103,6 +148,24 @@ export const BINDING_DATA_TYPES = [
   'enum',
 ] as const
 export type BindingDataType = (typeof BINDING_DATA_TYPES)[number]
+
+/**
+ * 每一档 `BindingDataType` 是什么意思。与 `CONFIG_FIELD_TYPE_DOCS` 同理，
+ * 给模型读，随目录一起下发。
+ *
+ * ⚠ 它**不过滤可选点位**：任何一档都绑得上任何一个点位，它决定的只有
+ * 「静态常量」那一档用什么输入控件（`BindingSourceEditor.vue`），以及模型
+ * 该按什么类型去理解这个槽收到的值。
+ */
+export const BINDING_DATA_TYPE_DOCS: Readonly<Record<BindingDataType, string>> =
+  {
+    number:
+      '数值。状态码、档位这类「数字编码的枚举」也走这一档——原样进来由模块自己分档。',
+    boolean:
+      '真假。⚠ 工控点位的开关量多半是 0/1 数值而不是 JSON 布尔，模块按「非 0 即真」判。',
+    string: '文本。后端推来的成品文案、时间文本这类。',
+    enum: '数值 → 文案的映射档，必须与 `enum_map` 同时声明；没有 `enum_map` 的槽不要用这一档。',
+  }
 
 /** 模块声明的一个数据入口。绑点面板读它摆槽位，服务端读它校验 fieldKey。 */
 export interface BindingSpec {

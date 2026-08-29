@@ -2,15 +2,23 @@
  * @fileoverview 模块清单 → 服务端目录（`module_types.json`）的构建期序列化。
  * 清单的唯一真源在前端（渲染组件与它同处一地才不会漂），服务端那份是本文件的
  * 产物：Agent 生成大屏读它、服务端校验 `field_key` 也读它（ADR-0012 五）。
- * ⚠ 只序列化与渲染无关的那部分——`component` / `preview` / `configPresets` /
- * `defaultConfig` 是编辑器与画布的事，服务端读了也没有用处。
+ * ⚠ 只序列化与渲染无关的那部分：`component` 与 `preview` 是画布的事，
+ * `unsupportedChromeKeys` / `interactionEvents` 是属性面板的适配声明——
+ * 服务端与模型都没有消费点，序列化它们只会平添一段要跨仓同步的 diff。
+ * ⚠ `configPresets` / `defaultConfig` / `subEditor` 反过来**必须**导出：
+ * 它们回答的是「这个模块该怎么配」，而模型只有这一份目录可读。少了预设，
+ * 模型只能逐个字段去凑一套观感（十几个键，漏一个也看不出漏在哪）；少了
+ * `subEditor`，它会照着猜往子编辑器那一段里写，而写进去既不报错也不渲染。
  */
 import type {
   BindingSpec,
   ConfigField,
+  ConfigPreset,
   ModuleManifest,
   ModuleDefaultSize,
+  ModuleSubEditor,
 } from '@dt/contracts'
+import { BINDING_DATA_TYPE_DOCS, CONFIG_FIELD_TYPE_DOCS } from '@dt/contracts'
 
 /** 服务端目录的格式版本，与 `ModuleCatalogOut.catalog_version` 同源。 */
 export const MODULE_CATALOG_VERSION = 1
@@ -97,6 +105,33 @@ function bindingSpec(spec: BindingSpec): CatalogJson {
   return out
 }
 
+/**
+ * 预设里那一袋任意 JSON。
+ * ⚠ 不做任何收窄：预设可以写 schema 之外的段（`__cardStyle` 就是），
+ * 按 `ConfigField` 的形状去过滤会把它们整段吃掉，而吃掉之后模型套上预设
+ * 得到的是半套观感，且两侧都不报错。
+ */
+function freeJson(value: unknown): CatalogValue {
+  return value as CatalogValue
+}
+
+function configPreset(preset: ConfigPreset): CatalogJson {
+  const out: CatalogJson = { id: preset.id, label: preset.label }
+  put(out, 'hint', preset.hint)
+  out.config = freeJson(preset.config)
+  return out
+}
+
+function subEditor(editor: ModuleSubEditor): CatalogJson {
+  const out: CatalogJson = {
+    config_key: editor.configKey,
+    route_name: editor.routeName,
+    label: editor.label,
+  }
+  put(out, 'hint', editor.hint)
+  return out
+}
+
 function moduleType(manifest: ModuleManifest): CatalogJson {
   const out: CatalogJson = {
     type: manifest.type,
@@ -114,6 +149,24 @@ function moduleType(manifest: ModuleManifest): CatalogJson {
   out.version = manifest.version ?? 1
   out.config_schema = manifest.configSchema.map(configField)
   out.bindings = manifest.bindings.map(bindingSpec)
+  // 一次写一整套观感的按钮。模型逐个字段去凑同样的效果时，漏一个也看不出漏在哪
+  put(out, 'config_presets', manifest.configPresets?.map(configPreset))
+  // 新建节点时**显式落库**的出厂配置，与 `ConfigField.default` 的不落库兜底不是一回事
+  put(
+    out,
+    'default_config',
+    manifest.defaultConfig === undefined
+      ? undefined
+      : freeJson(manifest.defaultConfig),
+  )
+  // 这一段配置由整页子编辑器接管：模型照猜着往里写，既不报错也不渲染
+  put(
+    out,
+    'sub_editor',
+    manifest.subEditor === undefined
+      ? undefined
+      : subEditor(manifest.subEditor),
+  )
   return out
 }
 
@@ -128,6 +181,22 @@ export function buildModuleCatalog(
   const sorted = [...modules].sort((a, b) => (a.type < b.type ? -1 : 1))
   return {
     catalog_version: MODULE_CATALOG_VERSION,
+    // ⚠ 摆在模块表**之前**：这两张表是读下面那些 `type` / `data_type` 的图例，
+    //   放在末尾的话，被上下文截断时先没的正是图例
+    field_types: docTable(CONFIG_FIELD_TYPE_DOCS),
+    binding_data_types: docTable(BINDING_DATA_TYPE_DOCS),
     modules: sorted.map(moduleType),
   }
+}
+
+/**
+ * 把「档位 → 一句话」的说明表摊成有序数组。
+ * ⚠ 用数组不用对象：JSON 对象的键序在跨语言往返里没有保证，而这份产物是
+ * 逐字比对的快照——键序一漂，每次生成都是一份假 diff。
+ * @param docs 契约里逐档铺满的说明表
+ */
+function docTable(docs: Readonly<Record<string, string>>): CatalogValue[] {
+  return Object.entries(docs)
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([type, doc]) => ({ type, doc }))
 }
