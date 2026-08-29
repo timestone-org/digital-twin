@@ -15,6 +15,7 @@ from platform_server.apps.dashboard.errors import ModuleCatalogUnreadable
 from platform_server.apps.dashboard.schemas.module_type import (
     BindingSpecOut,
     CatalogTypeDocOut,
+    ChromeKeyOut,
     ModuleCatalogOut,
     ModuleTypeOut,
 )
@@ -50,6 +51,9 @@ class ModuleCatalog:
     # 没跟上时，Agent 读到的是一个它不认识的 `type`，只能猜值的形状
     field_types: tuple[CatalogTypeDocOut, ...] = ()
     binding_data_types: tuple[CatalogTypeDocOut, ...] = ()
+    # 卡片外壳的键词汇表。⚠ 它对所有模块通用，不在任何模块的 `config_schema`
+    # 里，故服务端校验一条卡片样式的外壳段只有这一处依据
+    chrome_keys: tuple[ChromeKeyOut, ...] = ()
 
     def known_types(self) -> frozenset[str]:
         """全部已注册的模块类型。"""
@@ -63,6 +67,25 @@ class ModuleCatalog:
         return next(
             (item for item in self.modules if item.type == module_type), None
         )
+
+    def chrome_key_names(self) -> frozenset[str]:
+        """外壳词汇表里的全部键名。"""
+        return frozenset(spec.key for spec in self.chrome_keys)
+
+    def look_keys(self, module_type: str) -> frozenset[str]:
+        """一个模块的**观感键**：顶层配置键减去它自己声明的内容键。
+
+        ⚠ 没声明内容键的模块，顶层键就全是观感键——这是清单的字面语义。
+        未注册的类型给空集，调用方须先确认类型在目录里，否则「键一个都不许写」
+        会被读成「这个模块没有观感键」。
+        Args: module_type。
+        """
+        module = self.find(module_type)
+        if module is None:
+            return frozenset()
+        return frozenset(
+            field.key for field in module.config_schema
+        ) - frozenset(module.content_keys or ())
 
     def slots(self, module_type: str) -> ModuleSlots:
         """一个模块的绑定槽。未注册的类型给空槽集。
@@ -132,4 +155,5 @@ def load_module_catalog() -> ModuleCatalog:
         modules=tuple(parsed.modules),
         field_types=tuple(parsed.field_types),
         binding_data_types=tuple(parsed.binding_data_types),
+        chrome_keys=tuple(parsed.chrome_keys),
     )

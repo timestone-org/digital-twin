@@ -12,6 +12,7 @@ from typing import Any, get_args
 
 from platform_server.apps.dashboard.schemas.module_type import (
     BindingDataType,
+    ChromeKeyType,
     ConfigFieldSpan,
     ConfigFieldType,
     ModuleChrome,
@@ -29,6 +30,8 @@ _UNION = re.compile(
     r"export const (?P<name>\w+) = \[(?P<body>[^\]]*)\] as const", re.DOTALL
 )
 _MEMBER = re.compile(r"'([^']+)'")
+# `CHROME_KEYS` 是一张对象表，不是 `_UNION` 认的那种字符串联合，故单挑它的键名
+_CHROME_KEY = re.compile(r"\{\s*key:\s*'([^']+)'")
 
 # 已登记的模块：两个钉位/通用容器、两个装饰块、一个纯配置页头、
 # 一个带 3D 资源与数组绑定、一张按文档序钉行的 2D 孪生画面，
@@ -287,4 +290,56 @@ def test_presets_only_touch_keys_the_module_actually_has() -> None:
                 for key in preset["config"]
                 if key not in known
             )
+    assert offenders == []
+
+
+def frontend_chrome_keys() -> frozenset[str]:
+    """`@dt/contracts` 里登记的全部外壳键名。"""
+    text = (CONTRACTS / "chrome.ts").read_text(encoding="utf-8")
+    return frozenset(_CHROME_KEY.findall(text))
+
+
+def test_the_committed_catalog_carries_the_chrome_key_vocabulary() -> None:
+    """产物里的外壳词汇表与前端逐字相同。
+
+    ⚠ 服务端校验一条卡片样式的外壳段只有这一份依据：漏了这一段，样式里写进
+    一个不存在的键，值存得下去、渲染时静默不注入变量——用户看到的是「存下来的
+    样式套上去少了一半」，而两侧都不报错。
+    """
+    catalog = catalog_json()
+    keys = {row["key"] for row in catalog["chrome_keys"]}
+
+    assert keys == frontend_chrome_keys()
+    assert keys
+
+
+def test_every_chrome_key_declares_the_shape_of_its_value() -> None:
+    """每个外壳键的 `type` 是登记过的一档，且只有 `enum` 带取值白名单。
+
+    ⚠ 非枚举键带上 `values` 会让校验侧把一个自由数值收成白名单内的几个串；
+    枚举键缺了 `values` 则等于放行任何字符串——两种都只在运行期表现为
+    「配了没反应」。
+    """
+    known = set(get_args(ChromeKeyType))
+    offenders = [
+        row["key"]
+        for row in catalog_json()["chrome_keys"]
+        if row["type"] not in known
+        or (row["type"] == "enum") != bool(row.get("values"))
+    ]
+    assert offenders == []
+
+
+def test_content_keys_only_name_keys_the_module_actually_has() -> None:
+    """内容键必须真在该模块的顶层配置字段里。
+
+    ⚠ 观感键是「顶层键减去内容键」算出来的：内容键写错一个字，那个真正的内容
+    键就落进观感键里，被一条卡片样式存下来、套用时把别人配好的格整片抹掉。
+    """
+    offenders = [
+        f"{module['type']}.{key}"
+        for module in catalog_json()["modules"]
+        for key in module.get("content_keys") or []
+        if key not in {field["key"] for field in module["config_schema"]}
+    ]
     assert offenders == []

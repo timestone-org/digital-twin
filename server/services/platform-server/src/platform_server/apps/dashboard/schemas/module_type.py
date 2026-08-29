@@ -28,6 +28,7 @@ ConfigFieldType = Literal[
 ]
 ConfigFieldSpan = Literal["full", "half"]
 BindingDataType = Literal["boolean", "enum", "number", "string"]
+ChromeKeyType = Literal["boolean", "color", "enum", "number", "number3"]
 ModuleChrome = Literal["bare", "card"]
 ModuleRegion = Literal["footer", "header"]
 
@@ -138,6 +139,21 @@ class CatalogTypeDocOut(OutputModel):
     doc: str
 
 
+class ChromeKeyOut(OutputModel):
+    """卡片外壳词汇表里的一个键。
+
+    ⚠ 这批键**不在任何模块的 `config_schema` 里**：它们住在模块配置的
+    `__cardStyle` 段与大屏级 `chrome_json.card` 两处，对所有模块通用。铁律是
+    「键不存在 = 未设置」，故 `values` 里不含「缺省档」——那一档是删键，
+    不是一个可写的值。
+    """
+
+    key: str
+    type: ChromeKeyType
+    # 合法取值白名单，仅 `enum` 有。⚠ 写错档位存得下去、渲染时静默回落
+    values: list[str] | None = None
+
+
 class ModuleTypeOut(OutputModel):
     """一个模块类型的清单，即前端 manifest 中与渲染无关的那部分。"""
 
@@ -167,10 +183,17 @@ class ModuleTypeOut(OutputModel):
     # 不是一回事：读一个新节点的配置时看得见它
     default_config: dict[str, Any] = Field(default_factory=dict[str, Any])
     sub_editor: ModuleSubEditorOut | None = None
+    # 顶层配置键里属于**内容**的那几个（标题、格、阈值规则）。其余即观感键，
+    # 一条卡片样式写的就是那一批。
+    # ⚠ 只能逐模块声明，不能按键名或 `group` 通配：三个模块的缺值占位键名各不
+    # 相同，而 group 是给人看的中文串，改一个字就会把内容键当观感键存进样式，
+    # 套用时把用户配好的格整片抹掉——两侧都不报错。
+    # ⚠ 缺省的 `None` 表示这个模块没声明过内容键，与「声明了空表」不是一回事
+    content_keys: list[str] | None = None
 
 
 class ModuleCatalogOut(OutputModel):
-    """整份模块清单，外加两张读它要用的图例。"""
+    """整份模块清单，外加三张读它要用的图例。"""
 
     catalog_version: int
     # ⚠ 图例摆在模块表之前：被上下文截断时，先没的不该是读表的图例
@@ -180,11 +203,13 @@ class ModuleCatalogOut(OutputModel):
     binding_data_types: list[CatalogTypeDocOut] = Field(
         default_factory=list[CatalogTypeDocOut]
     )
+    # 卡片外壳的键词汇表，对所有模块通用，故只挂在整表与详情上、不进模块表
+    chrome_keys: list[ChromeKeyOut] = Field(default_factory=list[ChromeKeyOut])
     modules: list[ModuleTypeOut]
 
 
 class ModuleTypeDetailOut(ModuleTypeOut):
-    """一个模块的清单，外加两张图例。
+    """一个模块的清单，外加三张图例。
 
     ⚠ 图例跟着**详情**走而不是只挂在整表上：Agent 要摆一个模块时只拉这一个，
     拉不到图例就只能猜 `type` 那一格是什么形状的值——而写错形状的值存得下去、
@@ -197,3 +222,4 @@ class ModuleTypeDetailOut(ModuleTypeOut):
     binding_data_types: list[CatalogTypeDocOut] = Field(
         default_factory=list[CatalogTypeDocOut]
     )
+    chrome_keys: list[ChromeKeyOut] = Field(default_factory=list[ChromeKeyOut])

@@ -44,6 +44,40 @@ def test_the_metric_card_slot_is_an_entity_pinned_array() -> None:
     assert slots.entity_pinned == frozenset({"itemValues"})
 
 
+def test_the_look_keys_are_the_top_keys_minus_the_content_keys() -> None:
+    """观感键 = 顶层配置键 − 清单声明的内容键。
+
+    ⚠ 内容键（标题、格、阈值规则）跟着数据走，不跟观感走：漏减一个就会让它被
+    一条卡片样式存下来，套用时把别人配好的那一格整片抹掉。
+    """
+    catalog = load_module_catalog()
+    module = catalog.find("metric-card")
+    assert module is not None
+    top = {field.key for field in module.config_schema}
+
+    assert catalog.look_keys("metric-card") == top - {
+        "title",
+        "items",
+        "emptyText",
+    }
+
+
+def test_an_unregistered_module_type_has_no_look_keys() -> None:
+    """⚠ 空集是「一个键都不许写」，不是「随便写」——调用方须先确认类型认得出。"""
+    assert load_module_catalog().look_keys("not-a-module") == frozenset()
+
+
+def test_the_chrome_vocabulary_loads_with_the_module_table() -> None:
+    """外壳词汇表与模块表同一份产物、同一次装载。
+
+    ⚠ 装不出这一段就等于服务端没有校验外壳的依据，而那时写错的键会静默存进库。
+    """
+    catalog = load_module_catalog()
+
+    assert "borderStyle" in catalog.chrome_key_names()
+    assert len(catalog.chrome_key_names()) == len(catalog.chrome_keys)
+
+
 def test_a_module_carries_the_description_the_agent_reads() -> None:
     """名片上那段说明要装得出来。
 

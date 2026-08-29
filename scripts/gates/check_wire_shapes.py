@@ -53,6 +53,7 @@ EXEMPT: dict[str, str] = {
     "platform-server:ConfigPresetOut": _CATALOG_IS_FRONTEND_OWNED,
     "platform-server:ModuleSubEditorOut": _CATALOG_IS_FRONTEND_OWNED,
     "platform-server:CatalogTypeDocOut": _CATALOG_IS_FRONTEND_OWNED,
+    "platform-server:ChromeKeyOut": _CATALOG_IS_FRONTEND_OWNED,
     "platform-server:DashboardExportOut": _PARSED_FIELD_BY_FIELD,
     "platform-server:UnresolvedBindingOut": _PARSED_FIELD_BY_FIELD,
     "platform-server:ExportNodeIn": _PARSED_FIELD_BY_FIELD,
