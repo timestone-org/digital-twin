@@ -9,6 +9,7 @@
 import type { CSSProperties } from 'vue'
 
 import { fmtTrim, NO_DATA } from '../../shared/format'
+import type { MeterView } from '../../shared/meter'
 import { toDeviceStatus, type DeviceStatus } from '../../shared/status'
 import { isAlarmLevel, levelColor } from '../../shared/thresholds'
 
@@ -41,17 +42,11 @@ export interface BadgeView {
   vars: ListBadgeVars
 }
 
-/** 一条进度条要画的东西。 */
-export interface MeterView {
-  /** 画不画这一条。 */
-  show: boolean
-  /** 条前面那个小字，空串 = 不画。 */
-  label: string
-  /** 「xx%」读数；关掉读数或算不出时是空串 / 占位符。 */
-  text: string
-  /** 填充宽度，形如 `'42.0%'`；空串 = 整条填充不渲染。 */
-  fill: string
-}
+/**
+ * 一条进度条要画的东西。画法在 `shared/MeterBar.vue`——**算在这里、画在那边**。
+ * 从本模块转出，是为了让行模型的消费方不必知道它搬了家。
+ */
+export type { MeterView } from '../../shared/meter'
 
 /** 一行算百分比要用到的数。 */
 export interface MeterInput {

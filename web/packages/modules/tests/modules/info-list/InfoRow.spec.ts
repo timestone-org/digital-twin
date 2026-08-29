@@ -162,7 +162,7 @@ describe('四个参考模块的行结构', () => {
     expect(place(wrapper, 'right2')).toContain('grid-row: 2')
     expect(place(wrapper, 'left3')).toContain('grid-row: 3')
     expect(wrapper.get('.il-group--right2').text()).toContain('水温')
-    expect(wrapper.findAll('.il-meter')).toHaveLength(2)
+    expect(wrapper.findAll('.dt-meter')).toHaveLength(2)
   })
 
   it('末端卡：行首名称与分类标签同组、状态徽章在右，第二段是读数与占比条', () => {
@@ -182,7 +182,7 @@ describe('四个参考模块的行结构', () => {
 
     expect(texts(wrapper, '.il-group--left1 > *')).toEqual(['一号机组', '采暖'])
     expect(wrapper.get('.il-group--right1').text()).toBe('运行')
-    expect(wrapper.find('.il-group--right2 .il-meter').exists()).toBe(true)
+    expect(wrapper.find('.il-group--right2 .dt-meter').exists()).toBe(true)
   })
 
   it('告警行：行首严重度词 + 名称与命中文案上下两行 + 右侧读数与时刻', () => {
@@ -349,7 +349,7 @@ describe('三列对齐档', () => {
     expect(place(wrapper, 'col-name')).toContain('grid-column: 1')
     expect(place(wrapper, 'col-value')).toContain('grid-column: 2')
     expect(place(wrapper, 'col-unit')).toContain('grid-column: 3')
-    expect(wrapper.find('.il-meter').exists()).toBe(false)
+    expect(wrapper.find('.dt-meter').exists()).toBe(false)
   })
 
   it('列宽写成变量，与表头共用同一份——拆成两处字符串就会错列', () => {
@@ -487,7 +487,7 @@ describe('长描述与进度件', () => {
       look({ rowLines: [{ left: 'meter', right: 'meter2' }] }),
     )
 
-    expect(wrapper.findAll('.il-meter')).toHaveLength(0)
+    expect(wrapper.findAll('.dt-meter')).toHaveLength(0)
     expect(wrapper.findAll('.il-group')).toHaveLength(0)
   })
 })

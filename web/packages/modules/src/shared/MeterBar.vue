@@ -1,38 +1,16 @@
-<script lang="ts">
-/**
- * @fileoverview 行里的进度件：`bar` 是细条（小字 + 占比读数 + 可选发光圆点 + 轨道），
- * `track` 是粗轨道（四根等距刻度 + 虚线目标标记 + 轨道内 pill）。
- * ⚠ 条宽由取值层夹到 [0,100] 而占比读数不夹：120% 正是要让人看见的那个异常
- * （MODULE_INFO_CARD_DESIGN §4.2）。
- */
-
-/** 进度件的两档形态。 */
-export type MeterKind = 'bar' | 'track'
-
-/** 粗轨道那一档的量程：刻度、目标标记与轨道内 pill 都从它来。 */
-export interface MeterScale {
-  min: number
-  max: number
-  /** 目标标记的原值；`null` = 不画标记 */
-  target: number | null
-  targetLabel: string
-  /** 「万」格式；⚠ `max` 不到一万时整件回落，小量程走万会让刻度全塌成「0.0万」 */
-  wanFormat: boolean
-  /** ⚠ 刻度与 pill 共用这一份小数位：参考仓刻度写死 1 位而 pill 另有一档，同一张卡两套口径 */
-  wanDigits: number
-  /** pill 读数的小数位；刻度一律取整 */
-  precision: number
-  /** 轨道内 pill 的读数原值；`null` = 不画 pill */
-  pillValue: number | null
-  pillUnit: string
-}
-</script>
-
 <script setup lang="ts">
+/**
+ * @fileoverview 进度件的**画法**：`bar` 是细条（小字 + 占比读数 + 可选发光圆点 + 轨道），
+ * `track` 是粗轨道（四根等距刻度 + 虚线目标标记 + 轨道内 pill）。
+ *
+ * ⚠ 它只画，不算：`MeterView` 进来时百分比已经算完了。算法是各模块自己的行/格语义，
+ * 画法是同一件事——两者分家才有得复用（MODULE_DATA_CARD_DESIGN §5.1）。
+ * ⚠ 尺寸与配色**只认 `--dt-meter-*` 变量**，由调用方注入（`shared/meter.ts`）。
+ */
 import { computed, type CSSProperties } from 'vue'
 
-import { fmtDecimal, fmtNumber, NO_DATA } from '../../shared/format'
-import type { MeterView } from './rowAlarm'
+import { fmtDecimal, fmtNumber, NO_DATA } from './format'
+import type { MeterKind, MeterScale, MeterView } from './meter'
 
 const props = withDefaults(
   defineProps<{
@@ -140,38 +118,38 @@ const pillText = computed(() => {
 </script>
 
 <template>
-  <div class="il-meter" :class="`il-meter--${kind}`">
-    <i v-if="meter.label !== ''" class="il-meter__label">{{ meter.label }}</i>
-    <b v-if="meter.text !== ''" class="il-meter__pct">{{ meter.text }}</b>
-    <i v-if="dot" class="il-meter__dot" aria-hidden="true" />
-    <span class="il-meter__wrap">
-      <span class="il-meter__track">
+  <div class="dt-meter" :class="`dt-meter--${kind}`">
+    <i v-if="meter.label !== ''" class="dt-meter__label">{{ meter.label }}</i>
+    <b v-if="meter.text !== ''" class="dt-meter__pct">{{ meter.text }}</b>
+    <i v-if="dot" class="dt-meter__dot" aria-hidden="true" />
+    <span class="dt-meter__wrap">
+      <span class="dt-meter__track">
         <span
           v-if="meter.fill !== ''"
-          class="il-meter__fill"
+          class="dt-meter__fill"
           :style="{ width: meter.fill }"
         />
-        <span v-if="pillText !== ''" class="il-meter__pill">{{
+        <span v-if="pillText !== ''" class="dt-meter__pill">{{
           pillText
         }}</span>
         <i
           v-if="targetFrac !== null"
-          class="il-meter__target"
+          class="dt-meter__target"
           :style="{ left: `${targetFrac * 100}%` }"
           aria-hidden="true"
         />
         <span
           v-if="targetText !== ''"
-          class="il-meter__target-label"
+          class="dt-meter__target-label"
           :style="targetLabelStyle"
           >{{ targetText }}</span
         >
       </span>
-      <span v-if="ticks.length > 0" class="il-meter__ticks">
+      <span v-if="ticks.length > 0" class="dt-meter__ticks">
         <i
           v-for="tick in ticks"
           :key="tick.key"
-          class="il-meter__tick"
+          class="dt-meter__tick"
           :style="tick.style"
           >{{ tick.label }}</i
         >
@@ -181,9 +159,15 @@ const pillText = computed(() => {
 </template>
 
 <style scoped lang="scss">
-.il-meter {
+.dt-meter {
   // 条色只在这一层解析一次，下面四处都读它
-  --il-bar: var(--il-meter-color, var(--il-row-color, var(--accent-primary)));
+  /* 颜色三级回落：调用方显式给的 → 调用方声明的「跟随行/格色」→ 主题强调色。
+     ⚠ 第二级是给 info-list 这类**按行染色**的调用方留的口子：它的行色靠 CSS 级联
+     往下走，逐行注入 meter 色表达不了。⚠ 这里只认中性名，不认任何一个模块自己的变量。 */
+  --dt-meter-ink: var(
+    --dt-meter-color,
+    var(--dt-meter-base, var(--accent-primary))
+  );
 
   display: flex;
   flex: 1 1 auto;
@@ -193,7 +177,7 @@ const pillText = computed(() => {
   gap: 5px;
 }
 
-.il-meter__label {
+.dt-meter__label {
   flex: none;
   color: var(--text-secondary);
   font-style: normal;
@@ -201,34 +185,34 @@ const pillText = computed(() => {
   line-height: 1;
 }
 
-.il-meter__pct {
+.dt-meter__pct {
   flex: none;
-  color: var(--il-bar);
+  color: var(--dt-meter-ink);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: 12px;
   font-weight: 600;
   line-height: 1;
-  text-shadow: 0 0 6px var(--il-bar);
+  text-shadow: 0 0 6px var(--dt-meter-ink);
 }
 
-.il-meter__dot {
+.dt-meter__dot {
   flex: none;
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: var(--il-bar);
-  box-shadow: 0 0 6px var(--il-bar);
+  background: var(--dt-meter-ink);
+  box-shadow: 0 0 6px var(--dt-meter-ink);
 }
 
-.il-meter__wrap {
+.dt-meter__wrap {
   display: block;
   flex: 1 1 auto;
   min-width: 36px;
-  max-width: var(--il-meter-w, 100%);
+  max-width: var(--dt-meter-w, 100%);
 }
 
-.il-meter__track {
+.dt-meter__track {
   position: relative;
   display: block;
   width: 100%;
@@ -236,39 +220,39 @@ const pillText = computed(() => {
   background: color-mix(in srgb, var(--accent-primary) 16%, transparent);
 }
 
-.il-meter--bar .il-meter__track {
+.dt-meter--bar .dt-meter__track {
   overflow: hidden;
-  height: var(--il-meter-h, 4px);
+  height: var(--dt-meter-h, 4px);
   min-height: 2px;
 }
 
 // 粗轨道要露出目标标记与它上方的标签，所以这一档不裁
-.il-meter--track .il-meter__track {
+.dt-meter--track .dt-meter__track {
   overflow: visible;
   height: 18px;
   background: color-mix(in srgb, var(--border-strong) 55%, transparent);
 }
 
-.il-meter__fill {
+.dt-meter__fill {
   position: absolute;
   inset: 0 auto 0 0;
   min-width: 2px;
   height: 100%;
   border-radius: var(--radius-pill);
-  background: var(--il-bar);
-  box-shadow: 0 0 var(--il-meter-glow, 6px) var(--il-bar);
+  background: var(--dt-meter-ink);
+  box-shadow: 0 0 var(--dt-meter-glow, 6px) var(--dt-meter-ink);
   transition: width 0.4s ease;
 }
 
-.il-meter--track .il-meter__fill {
+.dt-meter--track .dt-meter__fill {
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--il-bar) 60%, transparent),
-    var(--il-bar)
+    color-mix(in srgb, var(--dt-meter-ink) 60%, transparent),
+    var(--dt-meter-ink)
   );
 }
 
-.il-meter__pill {
+.dt-meter__pill {
   position: absolute;
   top: 50%;
   left: 10px;
@@ -283,7 +267,7 @@ const pillText = computed(() => {
   pointer-events: none;
 }
 
-.il-meter__target {
+.dt-meter__target {
   position: absolute;
   top: -3px;
   bottom: -3px;
@@ -291,7 +275,7 @@ const pillText = computed(() => {
   border-left: 1px dashed var(--state-warning);
 }
 
-.il-meter__target-label {
+.dt-meter__target-label {
   position: absolute;
   bottom: calc(100% + 2px);
   color: var(--state-warning);
@@ -299,14 +283,14 @@ const pillText = computed(() => {
   white-space: nowrap;
 }
 
-.il-meter__ticks {
+.dt-meter__ticks {
   position: relative;
   display: block;
   height: 14px;
   margin-top: 5px;
 }
 
-.il-meter__tick {
+.dt-meter__tick {
   position: absolute;
   top: 0;
   color: var(--text-secondary);
@@ -316,7 +300,7 @@ const pillText = computed(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .il-meter__fill {
+  .dt-meter__fill {
     transition: none;
   }
 }

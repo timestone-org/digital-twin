@@ -140,14 +140,14 @@ describe('没配就不注入变量', () => {
 
   it('进度条颜色与辉光同一条口径', () => {
     expect(varsOf({ meter: { color: '', glow: 0 } })).not.toHaveProperty(
-      '--il-meter-color',
+      '--dt-meter-color',
     )
     expect(varsOf({ meter: { color: '', glow: 0 } })).not.toHaveProperty(
-      '--il-meter-glow',
+      '--dt-meter-glow',
     )
     const filled = varsOf({ meter: { color: 'var(--state-info)', glow: 8 } })
-    expect(filled['--il-meter-color']).toBe('var(--state-info)')
-    expect(filled['--il-meter-glow']).toBe('8px')
+    expect(filled['--dt-meter-color']).toBe('var(--state-info)')
+    expect(filled['--dt-meter-glow']).toBe('8px')
   })
 
   it('尺寸类变量一律注入，缺省也算一次显式选择', () => {
@@ -157,12 +157,12 @@ describe('没配就不注入变量', () => {
     expect(vars['--il-row-py']).toBe('6px')
     expect(vars['--il-value-size']).toBe('16px')
     expect(vars['--il-unit-size']).toBe('11px')
-    expect(vars['--il-meter-h']).toBe('4px')
+    expect(vars['--dt-meter-h']).toBe('4px')
   })
 
   it('进度条宽度 0 = 铺满，非 0 才给定宽', () => {
-    expect(varsOf({ meter: { width: 0 } })['--il-meter-w']).toBe('100%')
-    expect(varsOf({ meter: { width: 128 } })['--il-meter-w']).toBe('128px')
+    expect(varsOf({ meter: { width: 0 } })['--dt-meter-w']).toBe('100%')
+    expect(varsOf({ meter: { width: 128 } })['--dt-meter-w']).toBe('128px')
   })
 })
 
@@ -402,7 +402,7 @@ describe('变量名与样式表双向吻合', () => {
   })
 
   it('样式表里的别名真的只有那两个，别名不许悄悄替掉注入的变量', () => {
-    expect(localVars()).toEqual(['--il-bar', '--il-line-style'])
+    expect(localVars()).toEqual(['--il-line-style'])
   })
 
   it('块级变量真的全都摊在 vars 里，没有只声明不注入的', () => {

@@ -185,7 +185,7 @@ const UNIT_COLUMN_CLASS = 'il--unit-column'
 import { computed, type CSSProperties } from 'vue'
 
 import CellBadge from './CellBadge.vue'
-import CellMeter from './CellMeter.vue'
+import MeterBar from '../../shared/MeterBar.vue'
 import type { ListLook } from './look'
 
 const props = defineProps<{ row: ListRow; look: ListLook }>()
@@ -444,7 +444,7 @@ function onPick(event: MouseEvent): void {
           :badge="cell.badge"
           :variant="look.badge.style"
         />
-        <CellMeter
+        <MeterBar
           v-else-if="cell.meter !== null"
           :meter="cell.meter"
           :dot="look.meter.dot"

@@ -7,25 +7,22 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
-import CellMeter from '../../../src/modules/info-list/CellMeter.vue'
-import type { MeterView } from '../../../src/modules/info-list/rowAlarm'
+import MeterBar from '../../src/shared/MeterBar.vue'
+import type { MeterKind, MeterScale, MeterView } from '../../src/shared/meter'
 
-// ⚠ 量程的形状在这里再写一份：`.vue` 的具名类型导出只有 vue-tsc 解析得出来，
-// typescript-eslint 眼里它是 any。挂载那一步仍由 vue-tsc 逐字对着组件的 props 校验。
-const BASE_SCALE = {
+// 量程搬进 `shared/meter.ts` 之后这里直接用真类型——以前那份手抄的副本是因为
+// `.vue` 的具名类型导出只有 vue-tsc 解析得出来，typescript-eslint 眼里它是 any
+const BASE_SCALE: MeterScale = {
   min: 0,
   max: 100,
-  target: null as number | null,
+  target: null,
   targetLabel: '计划',
   wanFormat: false,
   wanDigits: 2,
   precision: 0,
-  pillValue: null as number | null,
+  pillValue: null,
   pillUnit: '',
 }
-
-type MeterScale = typeof BASE_SCALE
-type MeterKind = 'bar' | 'track'
 
 function meter(over: Partial<MeterView> = {}): MeterView {
   return { show: true, label: '占比', text: '42.5%', fill: '42.5%', ...over }
@@ -43,7 +40,7 @@ interface RenderInput {
 }
 
 function render(input: RenderInput = {}) {
-  return mount(CellMeter, {
+  return mount(MeterBar, {
     props: {
       meter: meter(input.meter),
       dot: input.dot ?? false,
@@ -54,12 +51,12 @@ function render(input: RenderInput = {}) {
 }
 
 function tickLabels(wrapper: ReturnType<typeof render>): string[] {
-  return wrapper.findAll('.il-meter__tick').map((node) => node.text())
+  return wrapper.findAll('.dt-meter__tick').map((node) => node.text())
 }
 
 function tickShifts(wrapper: ReturnType<typeof render>): string[] {
   return wrapper
-    .findAll('.il-meter__tick')
+    .findAll('.dt-meter__tick')
     .map((node) => node.attributes('style') ?? '')
 }
 
@@ -67,16 +64,16 @@ describe('细条档', () => {
   it('小字与占比读数各画各的，轨道永远在', () => {
     const wrapper = render()
 
-    expect(wrapper.get('.il-meter__label').text()).toBe('占比')
-    expect(wrapper.get('.il-meter__pct').text()).toBe('42.5%')
-    expect(wrapper.find('.il-meter__track').exists()).toBe(true)
-    expect(wrapper.get('.il-meter').classes()).toContain('il-meter--bar')
+    expect(wrapper.get('.dt-meter__label').text()).toBe('占比')
+    expect(wrapper.get('.dt-meter__pct').text()).toBe('42.5%')
+    expect(wrapper.find('.dt-meter__track').exists()).toBe(true)
+    expect(wrapper.get('.dt-meter').classes()).toContain('dt-meter--bar')
   })
 
   it('填充宽度原样来自取值层，不在模板里再算一次', () => {
     const wrapper = render({ meter: { fill: '87.5%' } })
 
-    expect(wrapper.get('.il-meter__fill').attributes('style')).toContain(
+    expect(wrapper.get('.dt-meter__fill').attributes('style')).toContain(
       'width: 87.5%',
     )
   })
@@ -84,20 +81,20 @@ describe('细条档', () => {
   it('占比为 0 时整条填充不渲染——条自己有最小宽度，画出来像「有一点点」', () => {
     const wrapper = render({ meter: { fill: '', text: '0%' } })
 
-    expect(wrapper.find('.il-meter__fill').exists()).toBe(false)
-    expect(wrapper.get('.il-meter__pct').text()).toBe('0%')
+    expect(wrapper.find('.dt-meter__fill').exists()).toBe(false)
+    expect(wrapper.get('.dt-meter__pct').text()).toBe('0%')
   })
 
   it('关掉占比读数与小字时那两处整个不占位', () => {
     const wrapper = render({ meter: { label: '', text: '' } })
 
-    expect(wrapper.find('.il-meter__label').exists()).toBe(false)
-    expect(wrapper.find('.il-meter__pct').exists()).toBe(false)
+    expect(wrapper.find('.dt-meter__label').exists()).toBe(false)
+    expect(wrapper.find('.dt-meter__pct').exists()).toBe(false)
   })
 
   it('发光圆点由开关决定', () => {
-    expect(render({ dot: true }).find('.il-meter__dot').exists()).toBe(true)
-    expect(render({ dot: false }).find('.il-meter__dot').exists()).toBe(false)
+    expect(render({ dot: true }).find('.dt-meter__dot').exists()).toBe(true)
+    expect(render({ dot: false }).find('.dt-meter__dot').exists()).toBe(false)
   })
 
   it('细条档不画刻度、目标标记与轨道内 pill', () => {
@@ -105,8 +102,8 @@ describe('细条档', () => {
       scale: scale({ target: 80, pillValue: 8500, pillUnit: 'kWh' }),
     })
 
-    expect(wrapper.findAll('.il-meter__tick')).toHaveLength(0)
-    expect(wrapper.find('.il-meter__pill').exists()).toBe(false)
+    expect(wrapper.findAll('.dt-meter__tick')).toHaveLength(0)
+    expect(wrapper.find('.dt-meter__pill').exists()).toBe(false)
   })
 })
 
@@ -162,7 +159,7 @@ describe('粗轨道档的刻度', () => {
     })
 
     expect(tickLabels(wrapper)[0]).toBe('0.0万')
-    expect(wrapper.get('.il-meter__pill').text()).toBe('0.9万')
+    expect(wrapper.get('.dt-meter__pill').text()).toBe('0.9万')
   })
 })
 
@@ -173,20 +170,20 @@ describe('粗轨道档的目标标记', () => {
       scale: scale({ target: 80, targetLabel: '计划' }),
     })
 
-    expect(wrapper.get('.il-meter__target').attributes('style')).toContain(
+    expect(wrapper.get('.dt-meter__target').attributes('style')).toContain(
       'left: 80%',
     )
-    expect(wrapper.get('.il-meter__target-label').text()).toBe('计划80')
+    expect(wrapper.get('.dt-meter__target-label').text()).toBe('计划80')
   })
 
   it('贴到两端时标签换对齐基准', () => {
     const left = render({ kind: 'track', scale: scale({ target: 1 }) })
     const right = render({ kind: 'track', scale: scale({ target: 99 }) })
 
-    expect(left.get('.il-meter__target-label').attributes('style')).toContain(
+    expect(left.get('.dt-meter__target-label').attributes('style')).toContain(
       'translateX(0)',
     )
-    expect(right.get('.il-meter__target-label').attributes('style')).toContain(
+    expect(right.get('.dt-meter__target-label').attributes('style')).toContain(
       'translateX(-100%)',
     )
   })
@@ -198,8 +195,8 @@ describe('粗轨道档的目标标记', () => {
       scale: scale({ min: 50, max: 50, target: 50 }),
     })
 
-    expect(none.find('.il-meter__target').exists()).toBe(false)
-    expect(flat.find('.il-meter__target').exists()).toBe(false)
+    expect(none.find('.dt-meter__target').exists()).toBe(false)
+    expect(flat.find('.dt-meter__target').exists()).toBe(false)
   })
 })
 
@@ -211,7 +208,7 @@ describe('轨道内的 pill', () => {
       meter: { text: '85.0%' },
     })
 
-    expect(wrapper.get('.il-meter__pill').text()).toBe('8,500kWh (85.0%)')
+    expect(wrapper.get('.dt-meter__pill').text()).toBe('8,500kWh (85.0%)')
   })
 
   it('占比算不出来时不拼一对空括号', () => {
@@ -221,13 +218,13 @@ describe('轨道内的 pill', () => {
       meter: { text: '—' },
     })
 
-    expect(wrapper.get('.il-meter__pill').text()).toBe('8,500kWh')
+    expect(wrapper.get('.dt-meter__pill').text()).toBe('8,500kWh')
   })
 
   it('没给读数原值就不画 pill', () => {
     const wrapper = render({ kind: 'track', scale: scale({ pillValue: null }) })
 
-    expect(wrapper.find('.il-meter__pill').exists()).toBe(false)
+    expect(wrapper.find('.dt-meter__pill').exists()).toBe(false)
   })
 
   it('pill 读数按量程的小数位补齐', () => {
@@ -237,6 +234,6 @@ describe('轨道内的 pill', () => {
       meter: { text: '' },
     })
 
-    expect(wrapper.get('.il-meter__pill').text()).toBe('12.35')
+    expect(wrapper.get('.dt-meter__pill').text()).toBe('12.35')
   })
 })

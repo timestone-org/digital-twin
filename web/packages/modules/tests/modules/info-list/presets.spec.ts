@@ -106,7 +106,7 @@ const EXPECTED: Record<string, Expected> = {
       '--il-value-color: var(--accent-secondary)',
     ],
     present: ['.il-group--lead', '.il-icon-dot', '.il-text--label'],
-    absent: ['.il-head', '.il-meter', '.il-badge', '.il-tabs'],
+    absent: ['.il-head', '.dt-meter', '.il-badge', '.il-tabs'],
     speed: 3,
     extra: {},
   },
@@ -120,7 +120,7 @@ const EXPECTED: Record<string, Expected> = {
       '.il-group--col-unit',
       '.il-text--unit',
     ],
-    absent: ['.il-group--lead', '.il-meter'],
+    absent: ['.il-group--lead', '.dt-meter'],
     speed: 3,
     extra: {},
   },
@@ -132,18 +132,18 @@ const EXPECTED: Record<string, Expected> = {
       '--il-label-color: var(--text-primary)',
     ],
     present: ['.il-text--sub', '.il-text--value'],
-    absent: ['.il-badge', '.il-meter', '.il-head'],
+    absent: ['.il-badge', '.dt-meter', '.il-head'],
     speed: 3,
     extra: {},
   },
   'source-card': {
     classes: ['il--shell-accent', 'il--hover-lift'],
-    vars: ['--il-meter-w: 128px', '--il-value-glow: 8px'],
+    vars: ['--dt-meter-w: 128px', '--il-value-glow: 8px'],
     present: [
       '.il-group--lead',
       '.dt-status-badge',
       '.il-text--tag',
-      '.il-meter',
+      '.dt-meter',
       '.il-group--extras',
       '.il-text--extra',
     ],
@@ -153,7 +153,7 @@ const EXPECTED: Record<string, Expected> = {
   },
   'terminal-card': {
     classes: ['il--shell-card', 'il--group-tabs', 'il--hover-tint'],
-    vars: ['--il-meter-w: 50px', '--il-meter-h: 3px', '--il-value-size: 17px'],
+    vars: ['--dt-meter-w: 50px', '--dt-meter-h: 3px', '--il-value-size: 17px'],
     present: ['.il-tabs', '.il-tab', '.il-text--tag', '.dt-status-badge'],
     absent: ['.il-section', '.il-head'],
     speed: 4,
@@ -161,8 +161,8 @@ const EXPECTED: Record<string, Expected> = {
   },
   'vessel-card': {
     classes: ['il--shell-card', 'il--group-section', 'il--meter-dot'],
-    vars: ['--il-value-size: 17px', '--il-meter-h: 4px'],
-    present: ['.il-section', '.il-meter__dot', '.il-text--sub', '.il-meter'],
+    vars: ['--il-value-size: 17px', '--dt-meter-h: 4px'],
+    present: ['.il-section', '.dt-meter__dot', '.il-text--sub', '.dt-meter'],
     absent: ['.il-tabs', '.il-badge'],
     speed: 4,
     extra: {},
@@ -171,7 +171,7 @@ const EXPECTED: Record<string, Expected> = {
     classes: ['il--shell-edge', 'il--badge-solid'],
     vars: ['--il-label-color: var(--text-primary)'],
     present: ['.il-desc', '.il-text--time', '.il-badge--solid'],
-    absent: ['.il-meter', '.il-tabs'],
+    absent: ['.dt-meter', '.il-tabs'],
     speed: 3,
     extra: {},
   },
@@ -186,7 +186,7 @@ const EXPECTED: Record<string, Expected> = {
       '.il-text--alarmText',
       '.il-text--time',
     ],
-    absent: ['.il-meter', '.il-head'],
+    absent: ['.dt-meter', '.il-head'],
     speed: 3,
     extra: { rules: OVER_RULE },
   },
@@ -280,8 +280,8 @@ describe('容器卡与工单条目的两处取值', () => {
     await nextTick()
     const first = wrapper.findAll('.il-row')[0]
 
-    expect(first?.findAll('.il-meter')).toHaveLength(2)
-    expect(first?.findAll('.il-meter__pct').map((node) => node.text())).toEqual(
+    expect(first?.findAll('.dt-meter')).toHaveLength(2)
+    expect(first?.findAll('.dt-meter__pct').map((node) => node.text())).toEqual(
       ['60%', '64%'],
     )
   })

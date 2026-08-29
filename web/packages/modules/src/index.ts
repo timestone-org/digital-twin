@@ -48,6 +48,15 @@ export {
   missingConfigControls,
   registerConfigControl,
 } from './configControls'
+export { METER_VAR_NAMES } from './shared/meter'
+export type {
+  MeterKind,
+  MeterScale,
+  MeterVarName,
+  MeterVars,
+  MeterView,
+} from './shared/meter'
+export { default as MeterBar } from './shared/MeterBar.vue'
 export {
   bannerBackground,
   coverBackground,

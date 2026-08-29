@@ -4,6 +4,9 @@
 // 免得把列表根自己那一层也一并染上。
 
 .il-row {
+  // 行色顺着级联往下喂给共用的进度件——它只认中性名，不认本模块的变量
+  --dt-meter-base: var(--il-row-color, var(--accent-primary));
+
   display: grid;
   box-sizing: border-box;
   align-items: center;

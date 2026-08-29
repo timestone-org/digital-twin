@@ -6,6 +6,8 @@
  */
 import type { CSSProperties } from 'vue'
 
+import type { MeterVars } from '../../shared/meter'
+
 import {
   readBoolean,
   readEnum,
@@ -68,10 +70,6 @@ type IlVarName =
   | '--il-value-color'
   | '--il-value-glow'
   | '--il-unit-size'
-  | '--il-meter-h'
-  | '--il-meter-w'
-  | '--il-meter-color'
-  | '--il-meter-glow'
   | '--il-cols-tpl'
 
 /**
@@ -79,9 +77,15 @@ type IlVarName =
  * ⚠ 这套变量没有全局闸看着（`css-variables.contract.spec.ts` 扫不到 `packages/modules/src`），
  * 拼错既不报错也不生效，只能靠 `look.test.ts` 里那条与 scss 双向吻合的断言。
  */
-export type ListVars = CSSProperties & Partial<Record<IlVarName, string>>
+export type ListVars = CSSProperties &
+  Partial<Record<IlVarName, string>> &
+  MeterVars
 
-/** 变量名清单，给「联合 ⟷ scss 引用集合双向吻合」那条契约测试用。 */
+/**
+ * 变量名清单，给「联合 ⟷ scss 引用集合双向吻合」那条契约测试用。
+ * ⚠ 进度件那四个 `--dt-meter-*` 不在这里：画法搬去了 `shared/MeterBar.vue`，
+ * 它们由 `shared/meter.ts` 的 `METER_VAR_NAMES` 与那边的测试守着。本模块只**注入**。
+ */
 export const IL_VAR_NAMES: readonly IlVarName[] = [
   '--il-pad-x',
   '--il-pad-y',
@@ -93,10 +97,6 @@ export const IL_VAR_NAMES: readonly IlVarName[] = [
   '--il-value-color',
   '--il-value-glow',
   '--il-unit-size',
-  '--il-meter-h',
-  '--il-meter-w',
-  '--il-meter-color',
-  '--il-meter-glow',
   '--il-cols-tpl',
 ]
 
@@ -246,15 +246,15 @@ function cssVars(
     '--il-label-color': LIST_LABEL_TONE_COLORS[tone],
     '--il-value-size': `${nums.valueSize}px`,
     '--il-unit-size': `${nums.unitSize}px`,
-    '--il-meter-h': `${nums.meterHeight}px`,
-    '--il-meter-w': nums.meterWidth === 0 ? '100%' : `${nums.meterWidth}px`,
+    '--dt-meter-h': `${nums.meterHeight}px`,
+    '--dt-meter-w': nums.meterWidth === 0 ? '100%' : `${nums.meterWidth}px`,
     '--il-cols-tpl': columnsTemplate(nums.unitSize),
   }
   // 以下四项「没配 = 不写键」：注入了就再也回落不到 _variants.scss 里的档位缺省
   if (valueColor !== '') vars['--il-value-color'] = valueColor
   if (nums.valueGlow > 0) vars['--il-value-glow'] = `${nums.valueGlow}px`
-  if (meterColor !== '') vars['--il-meter-color'] = meterColor
-  if (nums.meterGlow > 0) vars['--il-meter-glow'] = `${nums.meterGlow}px`
+  if (meterColor !== '') vars['--dt-meter-color'] = meterColor
+  if (nums.meterGlow > 0) vars['--dt-meter-glow'] = `${nums.meterGlow}px`
   return vars
 }
 
