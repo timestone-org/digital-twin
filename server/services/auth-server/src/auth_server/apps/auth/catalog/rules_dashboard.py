@@ -47,29 +47,6 @@ DASHBOARD_RULES: tuple[RouteRuleSpec, ...] = (
         description="模块清单只读，它是编辑器与 Agent 的地图，没有写面",
     ),
     RouteRuleSpec(
-        f"{_PLATFORM}/card-styles*",
-        "*",
-        codes=(DASHBOARD_MANAGE,),
-        priority=910,
-        description=(
-            "卡片样式库的写面。⚠ 这个资源**不带 `dashboard` 前缀**，上面那两条"
-            "按 `dashboard*` 的规则一条都盖不到它；没有本条它会掉进 900 的方法"
-            "兜底，表现是「只有大屏权限的人在边缘就被 403」。归 manage 而不是"
-            "edit：样式是全站共享的资产，加一条等于给所有大屏加一个可套用的"
-            "起点，与另存为模板同档"
-        ),
-    ),
-    RouteRuleSpec(
-        f"{_PLATFORM}/card-styles*",
-        "GET",
-        codes=(DASHBOARD_VIEW,),
-        priority=912,
-        description=(
-            "卡片样式库的读面。必须压过上面那条写兜底——那条用的是 `*` 方法，"
-            "会把 GET 一并收进 manage，于是只读用户连样式墙都打不开"
-        ),
-    ),
-    RouteRuleSpec(
         f"{_PLATFORM}/dashboard-projects",
         "POST",
         codes=(DASHBOARD_MANAGE,),
