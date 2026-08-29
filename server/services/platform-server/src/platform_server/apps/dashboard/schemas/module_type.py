@@ -97,6 +97,47 @@ class BindingSpecOut(OutputModel):
     is_time_series: bool = False
 
 
+class ConfigPresetOut(OutputModel):
+    """模块级「外观预设」：一次浅合并写入一整套 config 字段。
+
+    ⚠ 与 `ConfigFieldOut.default` 的语义刻意不同：default 是**不落库**的渲染
+    兜底，预设是用户（或 Agent）点了之后**显式落库**的一笔，未列出的键原样保留。
+    有些观感是十几个字段的组合，逐个照抄必漏、漏了也看不出漏在哪。
+    """
+
+    id: str
+    label: str
+    hint: str | None = None
+    # 逐键浅合并进 config 的值，可含 config_schema 之外的段
+    # （`__cardStyle` 就是）
+    config: dict[str, Any] = Field(default_factory=dict[str, Any])
+
+
+class ModuleSubEditorOut(OutputModel):
+    """某个 config 键由一个整页子编辑器接管。
+
+    ⚠ 这一段的内部形状**不在清单里**：照猜着往 `config_key` 那一段里写，
+    值存得下去、也不报错，画面上表现为「配了没反应」。
+    """
+
+    config_key: str
+    route_name: str
+    label: str
+    hint: str | None = None
+
+
+class CatalogTypeDocOut(OutputModel):
+    """一档类型的一句话说明：值是什么形状、有哪个坑。
+
+    给**模型**读的图例——属性面板按 `type` 选控件，模型没有控件可看，只能靠
+    这一句知道该往配置里写什么形状的值。真源在前端契约的
+    `CONFIG_FIELD_TYPE_DOCS` / `BINDING_DATA_TYPE_DOCS`。
+    """
+
+    type: str
+    doc: str
+
+
 class ModuleTypeOut(OutputModel):
     """一个模块类型的清单，即前端 manifest 中与渲染无关的那部分。"""
 
@@ -118,10 +159,41 @@ class ModuleTypeOut(OutputModel):
     is_container: bool = False
     region: ModuleRegion | None = None
     version: int = 1
+    # 一次写一整套观感的按钮。少了它，Agent 只能逐个字段去凑同样的效果
+    config_presets: list[ConfigPresetOut] = Field(
+        default_factory=list[ConfigPresetOut]
+    )
+    # 新建节点时**显式落库**的出厂配置，与 `ConfigFieldOut.default` 的不落库兜底
+    # 不是一回事：读一个新节点的配置时看得见它
+    default_config: dict[str, Any] = Field(default_factory=dict[str, Any])
+    sub_editor: ModuleSubEditorOut | None = None
 
 
 class ModuleCatalogOut(OutputModel):
-    """整份模块清单。"""
+    """整份模块清单，外加两张读它要用的图例。"""
 
     catalog_version: int
+    # ⚠ 图例摆在模块表之前：被上下文截断时，先没的不该是读表的图例
+    field_types: list[CatalogTypeDocOut] = Field(
+        default_factory=list[CatalogTypeDocOut]
+    )
+    binding_data_types: list[CatalogTypeDocOut] = Field(
+        default_factory=list[CatalogTypeDocOut]
+    )
     modules: list[ModuleTypeOut]
+
+
+class ModuleTypeDetailOut(ModuleTypeOut):
+    """一个模块的清单，外加两张图例。
+
+    ⚠ 图例跟着**详情**走而不是只挂在整表上：Agent 要摆一个模块时只拉这一个，
+    拉不到图例就只能猜 `type` 那一格是什么形状的值——而写错形状的值存得下去、
+    也不报错。整表那一份是给「浏览有哪些模块」用的，两处都要有。
+    """
+
+    field_types: list[CatalogTypeDocOut] = Field(
+        default_factory=list[CatalogTypeDocOut]
+    )
+    binding_data_types: list[CatalogTypeDocOut] = Field(
+        default_factory=list[CatalogTypeDocOut]
+    )

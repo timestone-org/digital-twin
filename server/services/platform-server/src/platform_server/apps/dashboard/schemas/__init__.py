@@ -16,6 +16,7 @@ from platform_server.apps.dashboard.schemas.dashboard import (
 )
 from platform_server.apps.dashboard.schemas.module_type import (
     ModuleCatalogOut,
+    ModuleTypeDetailOut,
     ModuleTypeOut,
 )
 from platform_server.apps.dashboard.schemas.node import (
@@ -41,6 +42,7 @@ __all__ = [
     "LayoutIssueOut",
     "LayoutNodeIn",
     "ModuleCatalogOut",
+    "ModuleTypeDetailOut",
     "ModuleTypeOut",
     "NodeCreateIn",
     "NodeOut",

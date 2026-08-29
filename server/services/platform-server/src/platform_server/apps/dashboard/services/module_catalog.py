@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from platform_server.apps.dashboard.errors import ModuleCatalogUnreadable
 from platform_server.apps.dashboard.schemas.module_type import (
     BindingSpecOut,
+    CatalogTypeDocOut,
     ModuleCatalogOut,
     ModuleTypeOut,
 )
@@ -44,6 +45,11 @@ class ModuleCatalog:
 
     catalog_version: int
     modules: tuple[ModuleTypeOut, ...]
+    # 「配置字段的 type / 绑定槽的 data_type 各是什么形状的值」这两张图例。
+    # ⚠ 与模块表同一份产物、同一次装载：分开维护的话，前端加一档类型而这里
+    # 没跟上时，Agent 读到的是一个它不认识的 `type`，只能猜值的形状
+    field_types: tuple[CatalogTypeDocOut, ...] = ()
+    binding_data_types: tuple[CatalogTypeDocOut, ...] = ()
 
     def known_types(self) -> frozenset[str]:
         """全部已注册的模块类型。"""
@@ -122,5 +128,8 @@ def load_module_catalog() -> ModuleCatalog:
     except (OSError, ValidationError) as error:
         raise ModuleCatalogUnreadable("模块清单不可用") from error
     return ModuleCatalog(
-        catalog_version=parsed.catalog_version, modules=tuple(parsed.modules)
+        catalog_version=parsed.catalog_version,
+        modules=tuple(parsed.modules),
+        field_types=tuple(parsed.field_types),
+        binding_data_types=tuple(parsed.binding_data_types),
     )

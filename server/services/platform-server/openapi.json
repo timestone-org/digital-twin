@@ -2025,7 +2025,7 @@
         "title": "ApiResponse[ModuleCatalogOut]",
         "type": "object"
       },
-      "ApiResponse_ModuleTypeOut_": {
+      "ApiResponse_ModuleTypeDetailOut_": {
         "properties": {
           "code": {
             "default": 0,
@@ -2035,7 +2035,7 @@
           "data": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ModuleTypeOut"
+                "$ref": "#/components/schemas/ModuleTypeDetailOut"
               },
               {
                 "type": "null"
@@ -2067,7 +2067,7 @@
             "type": "string"
           }
         },
-        "title": "ApiResponse[ModuleTypeOut]",
+        "title": "ApiResponse[ModuleTypeDetailOut]",
         "type": "object"
       },
       "ApiResponse_NodeOut_": {
@@ -5276,6 +5276,25 @@
         "title": "CatalogFunctionOut",
         "type": "object"
       },
+      "CatalogTypeDocOut": {
+        "description": "一档类型的一句话说明：值是什么形状、有哪个坑。\n\n给**模型**读的图例——属性面板按 `type` 选控件，模型没有控件可看，只能靠\n这一句知道该往配置里写什么形状的值。真源在前端契约的\n`CONFIG_FIELD_TYPE_DOCS` / `BINDING_DATA_TYPE_DOCS`。",
+        "properties": {
+          "doc": {
+            "title": "Doc",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "doc"
+        ],
+        "title": "CatalogTypeDocOut",
+        "type": "object"
+      },
       "ColumnCreateIn": {
         "additionalProperties": false,
         "description": "新增一列。`order_index` 缺省表示排到最后。",
@@ -5995,6 +6014,41 @@
           "label"
         ],
         "title": "ConfigOptionOut",
+        "type": "object"
+      },
+      "ConfigPresetOut": {
+        "description": "模块级「外观预设」：一次浅合并写入一整套 config 字段。\n\n⚠ 与 `ConfigFieldOut.default` 的语义刻意不同：default 是**不落库**的渲染\n兜底，预设是用户（或 Agent）点了之后**显式落库**的一笔，未列出的键原样保留。\n有些观感是十几个字段的组合，逐个照抄必漏、漏了也看不出漏在哪。",
+        "properties": {
+          "config": {
+            "additionalProperties": true,
+            "title": "Config",
+            "type": "object"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "ConfigPresetOut",
         "type": "object"
       },
       "ConnectivityOut": {
@@ -8738,11 +8792,25 @@
         "type": "object"
       },
       "ModuleCatalogOut": {
-        "description": "整份模块清单。",
+        "description": "整份模块清单，外加两张读它要用的图例。",
         "properties": {
+          "binding_data_types": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogTypeDocOut"
+            },
+            "title": "Binding Data Types",
+            "type": "array"
+          },
           "catalog_version": {
             "title": "Catalog Version",
             "type": "integer"
+          },
+          "field_types": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogTypeDocOut"
+            },
+            "title": "Field Types",
+            "type": "array"
           },
           "modules": {
             "items": {
@@ -8800,6 +8868,182 @@
         "title": "ModuleDefaultSizeOut",
         "type": "object"
       },
+      "ModuleSubEditorOut": {
+        "description": "某个 config 键由一个整页子编辑器接管。\n\n⚠ 这一段的内部形状**不在清单里**：照猜着往 `config_key` 那一段里写，\n值存得下去、也不报错，画面上表现为「配了没反应」。",
+        "properties": {
+          "config_key": {
+            "title": "Config Key",
+            "type": "string"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "route_name": {
+            "title": "Route Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "config_key",
+          "route_name",
+          "label"
+        ],
+        "title": "ModuleSubEditorOut",
+        "type": "object"
+      },
+      "ModuleTypeDetailOut": {
+        "description": "一个模块的清单，外加两张图例。\n\n⚠ 图例跟着**详情**走而不是只挂在整表上：Agent 要摆一个模块时只拉这一个，\n拉不到图例就只能猜 `type` 那一格是什么形状的值——而写错形状的值存得下去、\n也不报错。整表那一份是给「浏览有哪些模块」用的，两处都要有。",
+        "properties": {
+          "binding_data_types": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogTypeDocOut"
+            },
+            "title": "Binding Data Types",
+            "type": "array"
+          },
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/BindingSpecOut"
+            },
+            "title": "Bindings",
+            "type": "array"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "chrome": {
+            "default": "card",
+            "enum": [
+              "bare",
+              "card"
+            ],
+            "title": "Chrome",
+            "type": "string"
+          },
+          "config_presets": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigPresetOut"
+            },
+            "title": "Config Presets",
+            "type": "array"
+          },
+          "config_schema": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigFieldOut"
+            },
+            "title": "Config Schema",
+            "type": "array"
+          },
+          "default_config": {
+            "additionalProperties": true,
+            "title": "Default Config",
+            "type": "object"
+          },
+          "default_size": {
+            "$ref": "#/components/schemas/ModuleDefaultSizeOut"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "field_types": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogTypeDocOut"
+            },
+            "title": "Field Types",
+            "type": "array"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "is_container": {
+            "default": false,
+            "title": "Is Container",
+            "type": "boolean"
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Keywords",
+            "type": "array"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "enum": [
+                  "footer",
+                  "header"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
+          },
+          "sub_editor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModuleSubEditorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "version": {
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "type",
+          "display_name",
+          "category",
+          "default_size"
+        ],
+        "title": "ModuleTypeDetailOut",
+        "type": "object"
+      },
       "ModuleTypeOut": {
         "description": "一个模块类型的清单，即前端 manifest 中与渲染无关的那部分。",
         "properties": {
@@ -8823,12 +9067,24 @@
             "title": "Chrome",
             "type": "string"
           },
+          "config_presets": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigPresetOut"
+            },
+            "title": "Config Presets",
+            "type": "array"
+          },
           "config_schema": {
             "items": {
               "$ref": "#/components/schemas/ConfigFieldOut"
             },
             "title": "Config Schema",
             "type": "array"
+          },
+          "default_config": {
+            "additionalProperties": true,
+            "title": "Default Config",
+            "type": "object"
           },
           "default_size": {
             "$ref": "#/components/schemas/ModuleDefaultSizeOut"
@@ -8885,6 +9141,16 @@
               }
             ],
             "title": "Region"
+          },
+          "sub_editor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModuleSubEditorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "type": {
             "title": "Type",
@@ -21651,7 +21917,7 @@
     },
     "/api/v1/platform/module-types/{module_type}": {
       "get": {
-        "description": "单个模块类型的配置字段与绑定槽。\n\nArgs: module_type, container, _viewer。",
+        "description": "单个模块类型的配置字段、绑定槽、预设，外加两张读它要用的图例。\n\n⚠ 图例跟着详情一起给：Agent 要摆一个模块时只拉这一个，拉不到图例就只能\n猜每一格 `type` 是什么形状的值——而写错形状的值存得下去、也不报错。\n\nArgs: module_type, container, _viewer。",
         "operationId": "read_module_type_api_v1_platform_module_types__module_type__get",
         "parameters": [
           {
@@ -21669,7 +21935,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponse_ModuleTypeOut_"
+                  "$ref": "#/components/schemas/ApiResponse_ModuleTypeDetailOut_"
                 }
               }
             },

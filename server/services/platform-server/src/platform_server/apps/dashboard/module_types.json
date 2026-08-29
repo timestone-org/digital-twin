@@ -1,5 +1,81 @@
 {
   "catalog_version": 1,
+  "field_types": [
+    {
+      "type": "array",
+      "doc": "可增删的行列表。值是对象数组，每个对象按 `item_schema` 的字段构成，缺的字段渲染时按各自的 `default` 兜底。`min_items`/`max_items` 是行数上下限。⚠ 数组配置项与数据槽的行号一一对应：删中间一项，其后每一行的绑定都会改喂前一项。"
+    },
+    {
+      "type": "boolean",
+      "doc": "开关。只认真正的 `true` / `false`；`\"true\"` 这种字符串一律按 false 处理，且不报错。"
+    },
+    {
+      "type": "color",
+      "doc": "CSS 颜色。优先写主题变量 `var(--accent-primary)` 这类引用——写死色值的节点换肤时不跟着变。留空多半表示「跟随主题/继承」，看该字段的 `help`。"
+    },
+    {
+      "type": "dashboard-ref",
+      "doc": "大屏引用。值是目标大屏的句柄字符串，不是大屏标题、也不是节点 id。"
+    },
+    {
+      "type": "enum",
+      "doc": "下拉单选。值必须逐字等于 `options[].value` 里的某一个（`label` 只是界面文案，别写它）；名单外的值渲染时静默回落缺省档。"
+    },
+    {
+      "type": "font",
+      "doc": "字体组。值是对象，键可缺席，缺席即「跟随主题」：`family` / `size`（设计像素） / `weight` / `letterSpacing` / `color`。"
+    },
+    {
+      "type": "image",
+      "doc": "图。值是字符串，三种写法各走一条画法：素材引用 `asset:<id>`（推荐，换部署不失效）、图片地址 `https://…`、或一整条 CSS background 值（`linear-gradient(…)` / `url(…)` / `var(…)`）。⚠ 把渐变填成图片地址只会得到一个碎图图标。"
+    },
+    {
+      "type": "json",
+      "doc": "自由 JSON。值是任意 JSON；模块自己解释它的形状，清单说不出更多。"
+    },
+    {
+      "type": "number",
+      "doc": "数字输入框。写 JSON number（不是数字串）。有 `min`/`max` 时越界的值渲染时会被夹回去——面板上拖不到，写进去也不生效。"
+    },
+    {
+      "type": "object",
+      "doc": "子表单。值是对象，键按 `fields` 构成。⚠ `fields` 缺席的 object 由整页子编辑器接管（见 `sub_editor`），它的内部形状不在清单里——不许照猜着往里写，写进去多半渲染不出来。"
+    },
+    {
+      "type": "range",
+      "doc": "滑杆。值与 number 同为 JSON number，受 `min`/`max`/`step` 约束；差别只在控件。"
+    },
+    {
+      "type": "string",
+      "doc": "单行文本。写 JSON 字符串；`placeholder` 只是输入框提示，不是缺省值。"
+    },
+    {
+      "type": "style",
+      "doc": "样式槽。值是对象，键可缺席，缺席即「不写这条样式」：`color` / `background` / `border` / `borderRadius` / `boxShadow` / `padding` / `opacity`。"
+    },
+    {
+      "type": "textarea",
+      "doc": "多行文本。与 string 同为字符串，差别只在控件；换行就是字符串里的换行符。"
+    }
+  ],
+  "binding_data_types": [
+    {
+      "type": "boolean",
+      "doc": "真假。⚠ 工控点位的开关量多半是 0/1 数值而不是 JSON 布尔，模块按「非 0 即真」判。"
+    },
+    {
+      "type": "enum",
+      "doc": "数值 → 文案的映射档，必须与 `enum_map` 同时声明；没有 `enum_map` 的槽不要用这一档。"
+    },
+    {
+      "type": "number",
+      "doc": "数值。状态码、档位这类「数字编码的枚举」也走这一档——原样进来由模块自己分档。"
+    },
+    {
+      "type": "string",
+      "doc": "文本。后端推来的成品文案、时间文本这类。"
+    }
+  ],
   "modules": [
     {
       "type": "action-button",
@@ -656,7 +732,52 @@
           "step": 0.2
         }
       ],
-      "bindings": []
+      "bindings": [],
+      "config_presets": [
+        {
+          "id": "primary-action",
+          "label": "主行动",
+          "hint": "实心主色 + 圆角 + 辉光，一屏里最重要的那一个入口。",
+          "config": {
+            "variant": "solid",
+            "tone": "primary",
+            "shape": "rounded",
+            "radius": 8,
+            "glow": true,
+            "glowRadius": 14,
+            "hover": "brighten",
+            "press": "sink"
+          }
+        },
+        {
+          "id": "hud-cut",
+          "label": "科技切角",
+          "hint": "斜切角 + 亮边斜面 + 悬停扫光，与页头、卡片的科技风一致。",
+          "config": {
+            "variant": "hud",
+            "tone": "primary",
+            "shape": "cut",
+            "radius": 12,
+            "glow": false,
+            "hover": "sweep",
+            "press": "sink"
+          }
+        },
+        {
+          "id": "quiet-outline",
+          "label": "次要描边",
+          "hint": "中性描边胶囊，放在主行动旁边当「返回 / 取消」这类次要入口。",
+          "config": {
+            "variant": "outline",
+            "tone": "neutral",
+            "shape": "pill",
+            "borderWidth": 1,
+            "glow": false,
+            "hover": "glow",
+            "press": "shrink"
+          }
+        }
+      ]
     },
     {
       "type": "container",
@@ -724,12 +845,12 @@
         },
         {
           "key": "backgroundImage",
-          "label": "背景图 / 渐变",
-          "type": "string",
+          "label": "背景底图",
+          "type": "image",
           "default": "",
-          "placeholder": "留空 = 无；填 CSS：linear-gradient(…) 或 url(…)",
+          "placeholder": "留空 = 无，只有背景色",
           "group": "外观",
-          "help": "叠在背景色之上的 CSS background-image 值；留空不注入，纯色背景不受影响。",
+          "help": "可从素材库挑一张，也可填图片地址（按 cover 居中盖满）或 CSS 值（渐变 / url() / var()，铺法用浏览器默认，可拿它铺底纹）。叠在背景色之上，留空不注入。",
           "span": "full"
         },
         {
@@ -1734,6 +1855,284 @@
             }
           ]
         }
+      ],
+      "config_presets": [
+        {
+          "id": "target-track",
+          "label": "目标进度",
+          "hint": "顶行标题与读数，下方带刻度与目标标记的粗轨道。",
+          "config": {
+            "layout": "single",
+            "columns": "auto",
+            "gap": 10,
+            "padX": 16,
+            "padY": 6,
+            "shape": "track",
+            "geometry": {
+              "thickness": 18,
+              "arcSpan": 270,
+              "tankWidth": 56,
+              "tubeWidth": 14,
+              "bulbSize": 26
+            },
+            "fillStyle": "gradient",
+            "scale": {
+              "showRange": false,
+              "ticks": true,
+              "tickCount": 4,
+              "wanFormat": false,
+              "wanDigits": 2
+            },
+            "tickSize": 10,
+            "targetMark": true,
+            "targetLabel": "计划",
+            "showPercent": true,
+            "readout": "value",
+            "readoutPlace": "beside",
+            "valueSize": 0,
+            "valueColor": "var(--accent-primary)",
+            "valueGlow": 12,
+            "unitSize": 13,
+            "unitPlace": "baseline",
+            "labelPlace": "left",
+            "labelSize": 15,
+            "labelTone": "title",
+            "fillColor": "",
+            "trackColor": "",
+            "thousands": true,
+            "rules": []
+          }
+        },
+        {
+          "id": "arc-gauge",
+          "label": "弧度盘",
+          "hint": "270° 圆弧 + 居中读数 + 量程端点。",
+          "config": {
+            "layout": "single",
+            "columns": "auto",
+            "gap": 10,
+            "padX": 6,
+            "padY": 6,
+            "shape": "arc",
+            "geometry": {
+              "thickness": 0,
+              "arcSpan": 270,
+              "tankWidth": 56,
+              "tubeWidth": 14,
+              "bulbSize": 26
+            },
+            "fillStyle": "solid",
+            "scale": {
+              "showRange": true,
+              "ticks": false,
+              "tickCount": 4,
+              "wanFormat": false,
+              "wanDigits": 2
+            },
+            "tickSize": 11,
+            "targetMark": false,
+            "targetLabel": "计划",
+            "showPercent": false,
+            "readout": "value",
+            "readoutPlace": "center",
+            "valueSize": 0,
+            "valueColor": "var(--accent-primary)",
+            "valueGlow": 0,
+            "unitSize": 12,
+            "unitPlace": "attached",
+            "labelPlace": "below",
+            "labelSize": 12,
+            "labelTone": "secondary",
+            "fillColor": "",
+            "trackColor": "",
+            "thousands": true,
+            "rules": []
+          }
+        },
+        {
+          "id": "linear-bar",
+          "label": "横向条",
+          "hint": "细长胶囊条 + 上方读数，窄块用。",
+          "config": {
+            "layout": "single",
+            "columns": "auto",
+            "gap": 10,
+            "padX": 6,
+            "padY": 6,
+            "shape": "linear",
+            "geometry": {
+              "thickness": 0,
+              "arcSpan": 270,
+              "tankWidth": 56,
+              "tubeWidth": 14,
+              "bulbSize": 26
+            },
+            "fillStyle": "solid",
+            "scale": {
+              "showRange": true,
+              "ticks": false,
+              "tickCount": 4,
+              "wanFormat": false,
+              "wanDigits": 2
+            },
+            "tickSize": 11,
+            "targetMark": false,
+            "targetLabel": "计划",
+            "showPercent": false,
+            "readout": "value",
+            "readoutPlace": "beside",
+            "valueSize": 0,
+            "valueColor": "var(--accent-primary)",
+            "valueGlow": 0,
+            "unitSize": 12,
+            "unitPlace": "attached",
+            "labelPlace": "right",
+            "labelSize": 11,
+            "labelTone": "secondary",
+            "fillColor": "",
+            "trackColor": "",
+            "thousands": true,
+            "rules": []
+          }
+        },
+        {
+          "id": "tank",
+          "label": "储罐",
+          "hint": "竖向液面 + 液面高光 + 居中读数。",
+          "config": {
+            "layout": "single",
+            "columns": "auto",
+            "gap": 10,
+            "padX": 6,
+            "padY": 6,
+            "shape": "tank",
+            "geometry": {
+              "thickness": 0,
+              "arcSpan": 270,
+              "tankWidth": 56,
+              "tubeWidth": 14,
+              "bulbSize": 26
+            },
+            "fillStyle": "gradient",
+            "scale": {
+              "showRange": false,
+              "ticks": false,
+              "tickCount": 4,
+              "wanFormat": false,
+              "wanDigits": 2
+            },
+            "tickSize": 10,
+            "targetMark": false,
+            "targetLabel": "计划",
+            "showPercent": false,
+            "readout": "value",
+            "readoutPlace": "center",
+            "valueSize": 16,
+            "valueColor": "var(--accent-primary)",
+            "valueGlow": 0,
+            "unitSize": 12,
+            "unitPlace": "attached",
+            "labelPlace": "below",
+            "labelSize": 12,
+            "labelTone": "secondary",
+            "fillColor": "",
+            "trackColor": "",
+            "thousands": true,
+            "rules": []
+          }
+        },
+        {
+          "id": "thermometer",
+          "label": "温度计",
+          "hint": "管 + 球 + 右侧读数。",
+          "config": {
+            "layout": "single",
+            "columns": "auto",
+            "gap": 10,
+            "padX": 6,
+            "padY": 6,
+            "shape": "thermometer",
+            "geometry": {
+              "thickness": 0,
+              "arcSpan": 270,
+              "tankWidth": 56,
+              "tubeWidth": 14,
+              "bulbSize": 26
+            },
+            "fillStyle": "solid",
+            "scale": {
+              "showRange": false,
+              "ticks": false,
+              "tickCount": 4,
+              "wanFormat": false,
+              "wanDigits": 2
+            },
+            "tickSize": 10,
+            "targetMark": false,
+            "targetLabel": "计划",
+            "showPercent": false,
+            "readout": "value",
+            "readoutPlace": "beside",
+            "valueSize": 0,
+            "valueColor": "var(--accent-primary)",
+            "valueGlow": 0,
+            "unitSize": 12,
+            "unitPlace": "attached",
+            "labelPlace": "below",
+            "labelSize": 12,
+            "labelTone": "secondary",
+            "fillColor": "",
+            "trackColor": "",
+            "thousands": true,
+            "rules": []
+          }
+        },
+        {
+          "id": "gauge-grid",
+          "label": "仪表阵列",
+          "hint": "一行几个同款仪表，网格等分。",
+          "config": {
+            "layout": "grid",
+            "columns": "3",
+            "gap": 12,
+            "padX": 8,
+            "padY": 8,
+            "shape": "arc",
+            "geometry": {
+              "thickness": 0,
+              "arcSpan": 270,
+              "tankWidth": 56,
+              "tubeWidth": 14,
+              "bulbSize": 26
+            },
+            "fillStyle": "solid",
+            "scale": {
+              "showRange": false,
+              "ticks": false,
+              "tickCount": 4,
+              "wanFormat": false,
+              "wanDigits": 2
+            },
+            "tickSize": 10,
+            "targetMark": false,
+            "targetLabel": "计划",
+            "showPercent": false,
+            "readout": "value",
+            "readoutPlace": "center",
+            "valueSize": 0,
+            "valueColor": "var(--accent-primary)",
+            "valueGlow": 0,
+            "unitSize": 12,
+            "unitPlace": "attached",
+            "labelPlace": "below",
+            "labelSize": 12,
+            "labelTone": "secondary",
+            "fillColor": "",
+            "trackColor": "",
+            "thousands": true,
+            "rules": []
+          }
+        }
       ]
     },
     {
@@ -1795,7 +2194,9 @@
               "label": "翼台"
             }
           ],
-          "group": "外观"
+          "group": "外观",
+          "help": "⚠ 选「素净」等于把整个花纹层关掉：两侧装饰、CRT 扫描线、横向扫光在它下面一律不画，那几项也随之从面板上收起。",
+          "span": "full"
         },
         {
           "key": "deco",
@@ -1829,15 +2230,28 @@
             }
           ],
           "group": "外观",
-          "help": "沿中线左右对称的一对装饰；选「无」即不添加。"
+          "help": "沿中线左右对称的一对装饰；选「无」即不添加。",
+          "span": "half",
+          "when": {
+            "key": "variant",
+            "in": [
+              "default",
+              "winged",
+              "glass",
+              "minimal",
+              "ribbon",
+              "podium"
+            ]
+          }
         },
         {
           "key": "decoGap",
-          "label": "装饰中缝",
+          "label": "装饰中缝 (px)",
           "type": "number",
           "default": 0,
           "group": "外观",
           "help": "两条装饰之间留出的空 (px)；0 = 随宽度自适应。中间的子节点（标题文字块之类）较宽或屏幕较窄时调大它避免重叠。",
+          "span": "half",
           "when": {
             "key": "deco",
             "in": [
@@ -1892,11 +2306,12 @@
         },
         {
           "key": "glowLineInset",
-          "label": "底线内缩",
+          "label": "底线内缩 (%)",
           "type": "number",
           "default": 0,
           "group": "外观",
           "help": "底部辉光分隔线左右各内缩的百分比。0 = 整条贯通；填 10 则只有中间八成有线。",
+          "span": "half",
           "when": {
             "key": "variant",
             "in": [
@@ -1918,6 +2333,7 @@
           "default": true,
           "group": "外观",
           "help": "关掉后只剩 1px 渐变线本体，观感更硬朗。",
+          "span": "half",
           "when": {
             "key": "variant",
             "in": [
@@ -1936,6 +2352,7 @@
           "default": true,
           "group": "动效",
           "help": "页头表面的横向扫描线纹理。",
+          "span": "half",
           "when": {
             "key": "variant",
             "in": [
@@ -1955,6 +2372,7 @@
           "default": false,
           "group": "动效",
           "help": "一条自左向右循环掠过页头的渐变光带。",
+          "span": "half",
           "when": {
             "key": "variant",
             "in": [
@@ -1969,11 +2387,12 @@
         },
         {
           "key": "scanWidth",
-          "label": "扫光宽度",
+          "label": "扫光宽度 (%)",
           "type": "number",
           "default": 30,
           "group": "动效",
           "help": "光带宽度占页头宽度的百分比。行程固定为 -30% → 130%，宽度偏离 30 太多时两端会有跳入感。",
+          "span": "half",
           "when": {
             "key": "scan",
             "in": [
@@ -1986,11 +2405,12 @@
         },
         {
           "key": "scanDuration",
-          "label": "扫光周期",
+          "label": "扫光周期 (s)",
           "type": "number",
           "default": 4,
           "group": "动效",
           "help": "光带匀速跑完一趟的秒数，循环播放。",
+          "span": "half",
           "when": {
             "key": "scan",
             "in": [
@@ -2008,6 +2428,7 @@
           "default": "var(--card-border)",
           "group": "动效",
           "help": "光带中心色，两端自动淡出为透明。",
+          "span": "half",
           "when": {
             "key": "scan",
             "in": [
@@ -2022,6 +2443,7 @@
           "default": true,
           "group": "动效",
           "help": "开着时光带盖在花纹与扫描线之上，是「光扫过页头」的手感；关掉则沉到花纹层附近。子节点始终在光带之上。",
+          "span": "half",
           "when": {
             "key": "scan",
             "in": [
@@ -2051,7 +2473,33 @@
           ]
         }
       ],
-      "bindings": []
+      "bindings": [],
+      "config_presets": [
+        {
+          "id": "podium",
+          "label": "翼台横幅",
+          "hint": "翼台轮廓 + 倒角横带底图 + 4 秒横向扫光。下沿由轮廓自己收口，不画分隔线。节点高度与子节点（文字块、时钟）仍需自己摆。",
+          "config": {
+            "variant": "podium",
+            "bgImage": "var(--fx-decor-topbg) center bottom / 100% 100% no-repeat",
+            "deco": "none",
+            "scanlines": false,
+            "scan": true,
+            "scanWidth": 30,
+            "scanDuration": 4,
+            "scanColor": "var(--card-border)",
+            "scanAbove": true,
+            "__cardStyle": {
+              "borderStyle": "none"
+            }
+          }
+        }
+      ],
+      "default_config": {
+        "__cardStyle": {
+          "corners": false
+        }
+      }
     },
     {
       "type": "image-block",
@@ -3354,6 +3802,308 @@
             }
           ]
         }
+      ],
+      "config_presets": [
+        {
+          "id": "kpi-single",
+          "label": "单值大字",
+          "hint": "一块一个读数，居中大字 + 下方标签 + 涨跌对比。",
+          "config": {
+            "layout": "single",
+            "columns": "auto",
+            "gapX": 10,
+            "gapY": 10,
+            "padX": 12,
+            "padY": 4,
+            "cellShell": "plain",
+            "cellPadX": 0,
+            "cellPadY": 0,
+            "hover": "none",
+            "align": "center",
+            "labelPlace": "below",
+            "labelSize": 12,
+            "labelTone": "secondary",
+            "labelOpacity": 1,
+            "valueSize": 0,
+            "valueColor": "var(--accent-primary)",
+            "valueFill": "solid",
+            "valueGradient": [],
+            "gradientAngle": 0,
+            "valueGlow": 12,
+            "valueFont": "digit",
+            "textPlainFallback": true,
+            "unit": {
+              "place": "baseline",
+              "size": 13,
+              "tone": "secondary",
+              "opacity": 1
+            },
+            "thousands": false,
+            "fixedDecimals": false,
+            "icon": {
+              "mode": "corner",
+              "position": "left",
+              "size": 20,
+              "shape": "circle",
+              "bgFrom": "",
+              "bgTo": "",
+              "bgAngle": 135,
+              "borderColor": "",
+              "glow": 8,
+              "gap": 10,
+              "fontSize": 18,
+              "opacity": 0.85
+            },
+            "compare": {
+              "show": true,
+              "mode": "percent",
+              "label": "",
+              "invertTrend": false
+            },
+            "rules": [],
+            "statusDot": "none"
+          }
+        },
+        {
+          "id": "kpi-grid",
+          "label": "指标小卡",
+          "hint": "自适应网格，每格描边渐变小卡 + 左侧发光竖条。",
+          "config": {
+            "layout": "grid",
+            "columns": "auto",
+            "gapX": 10,
+            "gapY": 10,
+            "padX": 10,
+            "padY": 6,
+            "cellShell": "accent",
+            "cellPadX": 12,
+            "cellPadY": 8,
+            "hover": "lift",
+            "align": "left",
+            "labelPlace": "above",
+            "labelSize": 12,
+            "labelTone": "secondary",
+            "labelOpacity": 1,
+            "valueSize": 0,
+            "valueColor": "var(--accent-primary)",
+            "valueFill": "solid",
+            "valueGradient": [],
+            "gradientAngle": 0,
+            "valueGlow": 10,
+            "valueFont": "digit",
+            "textPlainFallback": true,
+            "unit": {
+              "place": "baseline",
+              "size": 12,
+              "tone": "secondary",
+              "opacity": 1
+            },
+            "thousands": false,
+            "fixedDecimals": false,
+            "icon": {
+              "mode": "none",
+              "position": "left",
+              "size": 20,
+              "shape": "circle",
+              "bgFrom": "",
+              "bgTo": "",
+              "bgAngle": 135,
+              "borderColor": "",
+              "glow": 8,
+              "gap": 10,
+              "fontSize": 18,
+              "opacity": 1
+            },
+            "compare": {
+              "show": false,
+              "mode": "percent",
+              "label": "",
+              "invertTrend": false
+            },
+            "rules": [],
+            "statusDot": "none"
+          }
+        },
+        {
+          "id": "icon-grid",
+          "label": "图标网格",
+          "hint": "圆形图标 + 右侧「标签上 / 读数下」，气象与环境量的排法。",
+          "config": {
+            "layout": "grid",
+            "columns": "2",
+            "gapX": 0,
+            "gapY": 0,
+            "padX": 0,
+            "padY": 0,
+            "cellShell": "plain",
+            "cellPadX": 10,
+            "cellPadY": 5,
+            "hover": "none",
+            "align": "left",
+            "labelPlace": "above",
+            "labelSize": 13,
+            "labelTone": "title",
+            "labelOpacity": 0.6,
+            "valueSize": 26,
+            "valueColor": "var(--accent-primary)",
+            "valueFill": "solid",
+            "valueGradient": [],
+            "gradientAngle": 0,
+            "valueGlow": 0,
+            "valueFont": "digit",
+            "textPlainFallback": true,
+            "unit": {
+              "place": "baseline",
+              "size": 12,
+              "tone": "primary",
+              "opacity": 0.5
+            },
+            "thousands": false,
+            "fixedDecimals": false,
+            "icon": {
+              "mode": "badge",
+              "position": "left",
+              "size": 40,
+              "shape": "circle",
+              "bgFrom": "",
+              "bgTo": "",
+              "bgAngle": 135,
+              "borderColor": "",
+              "glow": 8,
+              "gap": 10,
+              "fontSize": 18,
+              "opacity": 1
+            },
+            "compare": {
+              "show": false,
+              "mode": "percent",
+              "label": "",
+              "invertTrend": false
+            },
+            "rules": [],
+            "statusDot": "none"
+          }
+        },
+        {
+          "id": "icon-column",
+          "label": "图标竖排",
+          "hint": "图标在上、标签与读数居中，窄块用。",
+          "config": {
+            "layout": "grid",
+            "columns": "2",
+            "gapX": 0,
+            "gapY": 0,
+            "padX": 0,
+            "padY": 0,
+            "cellShell": "plain",
+            "cellPadX": 10,
+            "cellPadY": 5,
+            "hover": "none",
+            "align": "center",
+            "labelPlace": "above",
+            "labelSize": 13,
+            "labelTone": "title",
+            "labelOpacity": 0.6,
+            "valueSize": 26,
+            "valueColor": "var(--accent-primary)",
+            "valueFill": "solid",
+            "valueGradient": [],
+            "gradientAngle": 0,
+            "valueGlow": 0,
+            "valueFont": "digit",
+            "textPlainFallback": true,
+            "unit": {
+              "place": "baseline",
+              "size": 12,
+              "tone": "primary",
+              "opacity": 0.5
+            },
+            "thousands": false,
+            "fixedDecimals": false,
+            "icon": {
+              "mode": "badge",
+              "position": "top",
+              "size": 40,
+              "shape": "circle",
+              "bgFrom": "",
+              "bgTo": "",
+              "bgAngle": 135,
+              "borderColor": "",
+              "glow": 8,
+              "gap": 10,
+              "fontSize": 18,
+              "opacity": 1
+            },
+            "compare": {
+              "show": false,
+              "mode": "percent",
+              "label": "",
+              "invertTrend": false
+            },
+            "rules": [],
+            "statusDot": "none"
+          }
+        },
+        {
+          "id": "plain-grid",
+          "label": "裸排网格",
+          "hint": "无边框无底，纯标签与读数，密排大屏用。",
+          "config": {
+            "layout": "grid",
+            "columns": "auto",
+            "gapX": 8,
+            "gapY": 8,
+            "padX": 8,
+            "padY": 6,
+            "cellShell": "plain",
+            "cellPadX": 8,
+            "cellPadY": 6,
+            "hover": "none",
+            "align": "left",
+            "labelPlace": "above",
+            "labelSize": 12,
+            "labelTone": "secondary",
+            "labelOpacity": 1,
+            "valueSize": 0,
+            "valueColor": "var(--accent-primary)",
+            "valueFill": "solid",
+            "valueGradient": [],
+            "gradientAngle": 0,
+            "valueGlow": 0,
+            "valueFont": "digit",
+            "textPlainFallback": true,
+            "unit": {
+              "place": "baseline",
+              "size": 12,
+              "tone": "secondary",
+              "opacity": 1
+            },
+            "thousands": false,
+            "fixedDecimals": false,
+            "icon": {
+              "mode": "none",
+              "position": "left",
+              "size": 20,
+              "shape": "circle",
+              "bgFrom": "",
+              "bgTo": "",
+              "bgAngle": 135,
+              "borderColor": "",
+              "glow": 8,
+              "gap": 10,
+              "fontSize": 18,
+              "opacity": 1
+            },
+            "compare": {
+              "show": false,
+              "mode": "percent",
+              "label": "",
+              "invertTrend": false
+            },
+            "rules": [],
+            "statusDot": "none"
+          }
+        }
       ]
     },
     {
@@ -3639,7 +4389,8 @@
           "type": "boolean",
           "default": true,
           "group": "滚动",
-          "help": "内容超出时慢速垂直滚动；关掉改为原生滚动条手动滚。"
+          "help": "内容超出时慢速垂直滚动；关掉改为原生滚动条手动滚。",
+          "span": "half"
         },
         {
           "key": "scrollSpeed",
@@ -3648,6 +4399,7 @@
           "default": 3,
           "group": "滚动",
           "help": "每个条目经过视区所需的秒数，越大越慢。",
+          "span": "half",
           "when": {
             "key": "autoScroll",
             "in": [
@@ -3682,6 +4434,85 @@
               "data_type": "string"
             }
           ]
+        }
+      ],
+      "config_presets": [
+        {
+          "id": "feed-plain",
+          "label": "消息流",
+          "hint": "圆点 + 级别 + 正文 + 右侧时间，点线分隔。",
+          "config": {
+            "showDot": true,
+            "dotSize": 8,
+            "dotGlow": 6,
+            "showLevel": true,
+            "levelSize": 12,
+            "textSize": 13,
+            "showTime": true,
+            "timeSize": 12,
+            "timePlace": "right",
+            "rowBorderStyle": "dotted",
+            "rowPadX": 4,
+            "rowPadY": 7,
+            "levels": [],
+            "sortByRank": false,
+            "autoScroll": true,
+            "scrollSpeed": 3
+          }
+        },
+        {
+          "id": "weather-alert",
+          "label": "气象预警",
+          "hint": "预警五色（含橙）+ 按级别排序：红橙黄蓝四档，外加一档解除。",
+          "config": {
+            "showDot": true,
+            "dotSize": 8,
+            "dotGlow": 6,
+            "showLevel": true,
+            "levelSize": 12,
+            "textSize": 13,
+            "showTime": true,
+            "timeSize": 12,
+            "timePlace": "right",
+            "rowBorderStyle": "dotted",
+            "rowPadX": 4,
+            "rowPadY": 7,
+            "levels": [
+              {
+                "key": "red",
+                "label": "红色预警",
+                "color": "var(--state-danger)",
+                "rank": 5
+              },
+              {
+                "key": "orange",
+                "label": "橙色预警",
+                "color": "color-mix(in srgb, var(--state-warning) 55%, var(--state-danger))",
+                "rank": 4
+              },
+              {
+                "key": "yellow",
+                "label": "黄色预警",
+                "color": "var(--state-warning)",
+                "rank": 3
+              },
+              {
+                "key": "blue",
+                "label": "蓝色预警",
+                "color": "var(--state-info)",
+                "rank": 2
+              },
+              {
+                "key": "green",
+                "label": "预警解除",
+                "color": "var(--state-success)",
+                "rank": 1
+              }
+            ],
+            "sortByRank": true,
+            "autoScroll": true,
+            "scrollSpeed": 3
+          }
         }
       ]
     },
@@ -4365,7 +5196,8 @@
           "type": "boolean",
           "default": true,
           "group": "滚动",
-          "help": "内容超出时慢速垂直滚动；关掉改为原生滚动条手动滚。"
+          "help": "内容超出时慢速垂直滚动；关掉改为原生滚动条手动滚。",
+          "span": "half"
         },
         {
           "key": "scrollSpeed",
@@ -4374,6 +5206,7 @@
           "default": 3,
           "group": "滚动",
           "help": "每个条目经过视区所需的秒数，越大越慢。",
+          "span": "half",
           "when": {
             "key": "autoScroll",
             "in": [
@@ -5099,13 +5932,752 @@
             }
           ]
         }
+      ],
+      "config_presets": [
+        {
+          "id": "row-list",
+          "label": "点线行列表",
+          "hint": "一行一个点位，左标签右读数，点线分隔 + 自动滚动。",
+          "config": {
+            "rowLayout": "stack",
+            "rowLines": [
+              {
+                "left": "label",
+                "left2": "none",
+                "right": "value",
+                "right2": "none"
+              }
+            ],
+            "rowShape": {
+              "lead": "icon",
+              "tail": "none",
+              "tail2": "none",
+              "extras": false
+            },
+            "columnHeader": {
+              "show": false,
+              "name": "名称",
+              "value": "数值",
+              "unit": "单位"
+            },
+            "spacing": {
+              "padX": 6,
+              "padY": 4,
+              "rowPadX": 4,
+              "rowPadY": 6
+            },
+            "rowShell": "divider",
+            "dividerStyle": "dotted",
+            "hover": "none",
+            "autoScroll": true,
+            "scrollSpeed": 3,
+            "grouping": "none",
+            "defaultGroup": "",
+            "labelSize": 13,
+            "labelTone": "secondary",
+            "valueSize": 16,
+            "valueColor": "var(--accent-secondary)",
+            "valueGlow": 0,
+            "unitPlace": "attached",
+            "unitSize": 11,
+            "subSource": "aux",
+            "subLabel": "",
+            "badge": {
+              "kind": "none",
+              "style": "outline"
+            },
+            "meter": {
+              "kind": "none",
+              "source": "range",
+              "label": "",
+              "height": 4,
+              "width": 0,
+              "color": "",
+              "glow": 6,
+              "dot": false,
+              "showPercent": true,
+              "source2": "none",
+              "label2": ""
+            },
+            "extras": [],
+            "thousands": true,
+            "rules": [],
+            "alarmOn": "value",
+            "rowFilter": "all",
+            "rowSort": "docOrder",
+            "holdSeconds": 0,
+            "calmText": "无活动告警",
+            "timeSource": "sample"
+          }
+        },
+        {
+          "id": "three-col",
+          "label": "三列表",
+          "hint": "名称 / 数值 / 单位三列对齐，带表头，超长自动滚动。",
+          "config": {
+            "rowLayout": "columns",
+            "rowLines": [
+              {
+                "left": "label",
+                "left2": "none",
+                "right": "value",
+                "right2": "none"
+              }
+            ],
+            "rowShape": {
+              "lead": "none",
+              "tail": "none",
+              "tail2": "none",
+              "extras": false
+            },
+            "columnHeader": {
+              "show": true,
+              "name": "名称",
+              "value": "数值",
+              "unit": "单位"
+            },
+            "spacing": {
+              "padX": 8,
+              "padY": 4,
+              "rowPadX": 4,
+              "rowPadY": 6
+            },
+            "rowShell": "divider",
+            "dividerStyle": "dotted",
+            "hover": "tint",
+            "autoScroll": true,
+            "scrollSpeed": 3,
+            "grouping": "none",
+            "defaultGroup": "",
+            "labelSize": 13,
+            "labelTone": "secondary",
+            "valueSize": 13,
+            "valueColor": "var(--accent-secondary)",
+            "valueGlow": 0,
+            "unitPlace": "column",
+            "unitSize": 13,
+            "subSource": "aux",
+            "subLabel": "",
+            "badge": {
+              "kind": "none",
+              "style": "outline"
+            },
+            "meter": {
+              "kind": "none",
+              "source": "range",
+              "label": "",
+              "height": 4,
+              "width": 0,
+              "color": "",
+              "glow": 6,
+              "dot": false,
+              "showPercent": true,
+              "source2": "none",
+              "label2": ""
+            },
+            "extras": [],
+            "thousands": true,
+            "rules": [],
+            "alarmOn": "value",
+            "rowFilter": "all",
+            "rowSort": "docOrder",
+            "holdSeconds": 0,
+            "calmText": "无活动告警",
+            "timeSource": "sample"
+          }
+        },
+        {
+          "id": "target-badge-list",
+          "label": "指标维护表",
+          "hint": "双行行卡：名称与读数在上，目标与状态徽章在下。徽章要配了取值规则才出。",
+          "config": {
+            "rowLayout": "stack",
+            "rowLines": [
+              {
+                "left": "label",
+                "left2": "none",
+                "right": "value",
+                "right2": "none"
+              },
+              {
+                "left": "sub",
+                "left2": "none",
+                "right": "badge",
+                "right2": "none"
+              }
+            ],
+            "rowShape": {
+              "lead": "none",
+              "tail": "none",
+              "tail2": "none",
+              "extras": false
+            },
+            "columnHeader": {
+              "show": false,
+              "name": "名称",
+              "value": "数值",
+              "unit": "单位"
+            },
+            "spacing": {
+              "padX": 8,
+              "padY": 4,
+              "rowPadX": 4,
+              "rowPadY": 8
+            },
+            "rowShell": "divider",
+            "dividerStyle": "dotted",
+            "hover": "none",
+            "autoScroll": true,
+            "scrollSpeed": 3,
+            "grouping": "none",
+            "defaultGroup": "",
+            "labelSize": 14,
+            "labelTone": "primary",
+            "valueSize": 22,
+            "valueColor": "var(--accent-secondary)",
+            "valueGlow": 10,
+            "unitPlace": "attached",
+            "unitSize": 11,
+            "subSource": "target",
+            "subLabel": "目标",
+            "badge": {
+              "kind": "rule",
+              "style": "outline"
+            },
+            "meter": {
+              "kind": "none",
+              "source": "range",
+              "label": "",
+              "height": 4,
+              "width": 0,
+              "color": "",
+              "glow": 6,
+              "dot": false,
+              "showPercent": true,
+              "source2": "none",
+              "label2": ""
+            },
+            "extras": [],
+            "thousands": true,
+            "rules": [],
+            "alarmOn": "value",
+            "rowFilter": "all",
+            "rowSort": "docOrder",
+            "holdSeconds": 0,
+            "calmText": "无活动告警",
+            "timeSource": "sample"
+          }
+        },
+        {
+          "id": "source-card",
+          "label": "能源源卡片",
+          "hint": "左图标 + 状态徽章 + 分类标签 + 占比条 + 扩展指标行。",
+          "config": {
+            "rowLayout": "stack",
+            "rowLines": [
+              {
+                "left": "label",
+                "left2": "none",
+                "right": "none",
+                "right2": "none"
+              },
+              {
+                "left": "badge",
+                "left2": "tag",
+                "right": "value",
+                "right2": "none"
+              },
+              {
+                "left": "sub",
+                "left2": "none",
+                "right": "meter",
+                "right2": "none"
+              }
+            ],
+            "rowShape": {
+              "lead": "icon",
+              "tail": "none",
+              "tail2": "none",
+              "extras": true
+            },
+            "columnHeader": {
+              "show": false,
+              "name": "名称",
+              "value": "数值",
+              "unit": "单位"
+            },
+            "spacing": {
+              "padX": 6,
+              "padY": 4,
+              "rowPadX": 9,
+              "rowPadY": 5
+            },
+            "rowShell": "accent",
+            "dividerStyle": "none",
+            "hover": "lift",
+            "autoScroll": true,
+            "scrollSpeed": 5,
+            "grouping": "none",
+            "defaultGroup": "",
+            "labelSize": 13,
+            "labelTone": "title",
+            "valueSize": 18,
+            "valueColor": "var(--accent-secondary)",
+            "valueGlow": 8,
+            "unitPlace": "attached",
+            "unitSize": 11,
+            "subSource": "aux",
+            "subLabel": "能效",
+            "badge": {
+              "kind": "device",
+              "style": "outline"
+            },
+            "meter": {
+              "kind": "bar",
+              "source": "share",
+              "label": "占比",
+              "height": 4,
+              "width": 128,
+              "color": "",
+              "glow": 6,
+              "dot": false,
+              "showPercent": true,
+              "source2": "none",
+              "label2": ""
+            },
+            "extras": [
+              {
+                "label": "功率",
+                "unit": "kW",
+                "precision": 1
+              },
+              {
+                "label": "温度",
+                "unit": "℃",
+                "precision": 1
+              },
+              {
+                "label": "流量",
+                "unit": "m³/h",
+                "precision": 1
+              }
+            ],
+            "thousands": true,
+            "rules": [],
+            "alarmOn": "value",
+            "rowFilter": "all",
+            "rowSort": "docOrder",
+            "holdSeconds": 0,
+            "calmText": "无活动告警",
+            "timeSource": "sample"
+          }
+        },
+        {
+          "id": "terminal-card",
+          "label": "分类末端卡",
+          "hint": "顶部分类页签，行内「当日读数 + 定宽占比条」。",
+          "config": {
+            "rowLayout": "stack",
+            "rowLines": [
+              {
+                "left": "label",
+                "left2": "tag",
+                "right": "badge",
+                "right2": "none"
+              },
+              {
+                "left": "value",
+                "left2": "none",
+                "right": "meter",
+                "right2": "none"
+              }
+            ],
+            "rowShape": {
+              "lead": "none",
+              "tail": "none",
+              "tail2": "none",
+              "extras": false
+            },
+            "columnHeader": {
+              "show": false,
+              "name": "名称",
+              "value": "数值",
+              "unit": "单位"
+            },
+            "spacing": {
+              "padX": 6,
+              "padY": 4,
+              "rowPadX": 8,
+              "rowPadY": 4
+            },
+            "rowShell": "card",
+            "dividerStyle": "none",
+            "hover": "tint",
+            "autoScroll": true,
+            "scrollSpeed": 4,
+            "grouping": "tabs",
+            "defaultGroup": "",
+            "labelSize": 12,
+            "labelTone": "title",
+            "valueSize": 17,
+            "valueColor": "var(--accent-secondary)",
+            "valueGlow": 8,
+            "unitPlace": "attached",
+            "unitSize": 11,
+            "subSource": "aux",
+            "subLabel": "",
+            "badge": {
+              "kind": "device",
+              "style": "outline"
+            },
+            "meter": {
+              "kind": "bar",
+              "source": "share",
+              "label": "占比",
+              "height": 3,
+              "width": 50,
+              "color": "",
+              "glow": 6,
+              "dot": false,
+              "showPercent": true,
+              "source2": "none",
+              "label2": ""
+            },
+            "extras": [],
+            "thousands": true,
+            "rules": [],
+            "alarmOn": "value",
+            "rowFilter": "all",
+            "rowSort": "docOrder",
+            "holdSeconds": 0,
+            "calmText": "无活动告警",
+            "timeSource": "sample"
+          }
+        },
+        {
+          "id": "vessel-card",
+          "label": "容器卡片",
+          "hint": "按类型分段的组头，行内两条同构进度条（占比 / 液位），水温按色相分档。",
+          "config": {
+            "rowLayout": "stack",
+            "rowLines": [
+              {
+                "left": "label",
+                "left2": "none",
+                "right": "value",
+                "right2": "none"
+              },
+              {
+                "left": "meter",
+                "left2": "none",
+                "right": "sub",
+                "right2": "none"
+              },
+              {
+                "left": "meter2",
+                "left2": "none",
+                "right": "none",
+                "right2": "none"
+              }
+            ],
+            "rowShape": {
+              "lead": "none",
+              "tail": "none",
+              "tail2": "none",
+              "extras": false
+            },
+            "columnHeader": {
+              "show": false,
+              "name": "名称",
+              "value": "数值",
+              "unit": "单位"
+            },
+            "spacing": {
+              "padX": 6,
+              "padY": 4,
+              "rowPadX": 7,
+              "rowPadY": 6
+            },
+            "rowShell": "card",
+            "dividerStyle": "none",
+            "hover": "tint",
+            "autoScroll": true,
+            "scrollSpeed": 4,
+            "grouping": "section",
+            "defaultGroup": "",
+            "labelSize": 13,
+            "labelTone": "title",
+            "valueSize": 17,
+            "valueColor": "var(--accent-secondary)",
+            "valueGlow": 8,
+            "unitPlace": "attached",
+            "unitSize": 11,
+            "subSource": "aux",
+            "subLabel": "水温",
+            "badge": {
+              "kind": "none",
+              "style": "outline"
+            },
+            "meter": {
+              "kind": "bar",
+              "source": "range",
+              "label": "占比",
+              "height": 4,
+              "width": 0,
+              "color": "",
+              "glow": 6,
+              "dot": true,
+              "showPercent": true,
+              "source2": "aux2",
+              "label2": "液位"
+            },
+            "extras": [],
+            "thousands": true,
+            "rules": [
+              {
+                "op": "gt",
+                "value": 55,
+                "level": "danger",
+                "color": "var(--state-danger)",
+                "label": "高温",
+                "blink": false
+              },
+              {
+                "op": "gt",
+                "value": 45,
+                "level": "warning",
+                "color": "var(--state-warning)",
+                "label": "偏热",
+                "blink": false
+              },
+              {
+                "op": "lt",
+                "value": 30,
+                "level": "info",
+                "color": "var(--state-info)",
+                "label": "偏冷",
+                "blink": false
+              },
+              {
+                "op": "between",
+                "value": 30,
+                "value2": 45,
+                "level": "normal",
+                "color": "var(--accent-secondary)",
+                "label": "适温",
+                "blink": false
+              }
+            ],
+            "alarmOn": "sub",
+            "rowFilter": "all",
+            "rowSort": "docOrder",
+            "holdSeconds": 0,
+            "calmText": "无活动告警",
+            "timeSource": "sample"
+          }
+        },
+        {
+          "id": "work-order",
+          "label": "工单条目",
+          "hint": "左侧状态色边 + 底纹，实心徽章 + 描述 + 时间；状态由三条等值规则给。",
+          "config": {
+            "rowLayout": "stack",
+            "rowLines": [
+              {
+                "left": "label",
+                "left2": "none",
+                "right": "badge",
+                "right2": "none"
+              },
+              {
+                "left": "desc",
+                "left2": "none",
+                "right": "none",
+                "right2": "none"
+              },
+              {
+                "left": "time",
+                "left2": "none",
+                "right": "none",
+                "right2": "none"
+              }
+            ],
+            "rowShape": {
+              "lead": "none",
+              "tail": "none",
+              "tail2": "none",
+              "extras": false
+            },
+            "columnHeader": {
+              "show": false,
+              "name": "名称",
+              "value": "数值",
+              "unit": "单位"
+            },
+            "spacing": {
+              "padX": 6,
+              "padY": 4,
+              "rowPadX": 8,
+              "rowPadY": 9
+            },
+            "rowShell": "edge",
+            "dividerStyle": "dotted",
+            "hover": "none",
+            "autoScroll": true,
+            "scrollSpeed": 3,
+            "grouping": "none",
+            "defaultGroup": "",
+            "labelSize": 14,
+            "labelTone": "primary",
+            "valueSize": 16,
+            "valueColor": "var(--accent-secondary)",
+            "valueGlow": 0,
+            "unitPlace": "attached",
+            "unitSize": 11,
+            "subSource": "aux",
+            "subLabel": "",
+            "badge": {
+              "kind": "rule",
+              "style": "solid"
+            },
+            "meter": {
+              "kind": "none",
+              "source": "range",
+              "label": "",
+              "height": 4,
+              "width": 0,
+              "color": "",
+              "glow": 6,
+              "dot": false,
+              "showPercent": true,
+              "source2": "none",
+              "label2": ""
+            },
+            "extras": [],
+            "thousands": true,
+            "rules": [
+              {
+                "op": "eq",
+                "value": 0,
+                "level": "normal",
+                "color": "var(--state-warning)",
+                "label": "待执行",
+                "blink": false
+              },
+              {
+                "op": "eq",
+                "value": 1,
+                "level": "normal",
+                "color": "var(--state-info)",
+                "label": "执行中",
+                "blink": false
+              },
+              {
+                "op": "eq",
+                "value": 2,
+                "level": "normal",
+                "color": "var(--state-success)",
+                "label": "已完成",
+                "blink": false
+              }
+            ],
+            "alarmOn": "sub",
+            "rowFilter": "all",
+            "rowSort": "docOrder",
+            "holdSeconds": 0,
+            "calmText": "无活动告警",
+            "timeSource": "bound"
+          }
+        },
+        {
+          "id": "alarm-rows",
+          "label": "活动告警",
+          "hint": "只显示命中告警的行，按严重度降序，行首严重度点 + 起始时刻。",
+          "config": {
+            "rowLayout": "stack",
+            "rowLines": [
+              {
+                "left": "label",
+                "left2": "none",
+                "right": "none",
+                "right2": "none"
+              },
+              {
+                "left": "alarmText",
+                "left2": "none",
+                "right": "none",
+                "right2": "none"
+              }
+            ],
+            "rowShape": {
+              "lead": "badge",
+              "tail": "value",
+              "tail2": "time",
+              "extras": false
+            },
+            "columnHeader": {
+              "show": false,
+              "name": "名称",
+              "value": "数值",
+              "unit": "单位"
+            },
+            "spacing": {
+              "padX": 6,
+              "padY": 4,
+              "rowPadX": 6,
+              "rowPadY": 7
+            },
+            "rowShell": "edge",
+            "dividerStyle": "dotted",
+            "hover": "none",
+            "autoScroll": true,
+            "scrollSpeed": 3,
+            "grouping": "none",
+            "defaultGroup": "",
+            "labelSize": 13,
+            "labelTone": "primary",
+            "valueSize": 15,
+            "valueColor": "var(--accent-secondary)",
+            "valueGlow": 0,
+            "unitPlace": "attached",
+            "unitSize": 11,
+            "subSource": "aux",
+            "subLabel": "",
+            "badge": {
+              "kind": "severity",
+              "style": "dot"
+            },
+            "meter": {
+              "kind": "none",
+              "source": "range",
+              "label": "",
+              "height": 4,
+              "width": 0,
+              "color": "",
+              "glow": 6,
+              "dot": false,
+              "showPercent": true,
+              "source2": "none",
+              "label2": ""
+            },
+            "extras": [],
+            "thousands": true,
+            "rules": [],
+            "alarmOn": "value",
+            "rowFilter": "alarm",
+            "rowSort": "severity",
+            "holdSeconds": 0,
+            "calmText": "无活动告警",
+            "timeSource": "alarmSince"
+          }
+        }
       ]
     },
     {
       "type": "metric-card",
       "display_name": "实时数值",
       "category": "数据",
-      "description": "实时数值：一块摆 1..N 个点位读数，一格是「名称 + 大字读数 + 单位 + 状态点」，带四段阈值（危险下限 / 预警下限 / 预警上限 / 危险上限）与逐格四档取数状态（未绑定 / 等待首帧 / 取不到 / 有读数）。墙上「看一眼现场此刻是多少」的首选，最朴素、字最大；要图标、渐变数字与涨跌对比用 info-card，要量程 / 进度 / 液位那种图形用 gauge-card，要一行里带副读数与徽章的清单用 info-list。一个数组绑定槽 `itemValues`，行钉在 `items` 配置项上：第 i 行喂第 i 个指标，唯一子槽 `value` 收数值；单位、小数位、真假文案与四条阈值边界都是逐项的配置，不从点位来，开关量档按「非 0 即真」判（工控点位的开关量多半是 0/1 数值而不是 JSON 布尔）。⚠ 四条阈值边界都是开区间：`warnAbove: 80` 的意思是超过 80 才预警，等于 80 不预警；四条全留空时连状态点都不画——没有判据就连「正常」都不该说。⚠ 删掉 `items` 中间一项，它之后每一行的绑定都会改喂前一个指标。",
+      "description": "实时数值：一块摆 1..N 个点位读数，一格是「名称 + 大字读数 + 单位 + 状态点」，带四段阈值（危险下限 / 预警下限 / 预警上限 / 危险上限）与逐格四档取数状态（未绑定 / 等待首帧 / 取不到 / 有读数）。墙上「看一眼现场此刻是多少」的首选，最朴素、字最大；要图标、渐变数字与涨跌对比用 info-card，要量程 / 进度 / 液位那种图形用 gauge-card，要一行里带副读数与徽章的清单用 info-list。一个数组绑定槽 `itemValues`，行钉在 `items` 配置项上：第 i 行喂第 i 个指标，唯一子槽 `value` 收数值；单位、小数位、真假文案与四条阈值边界都是逐项的配置，不从点位来，开关量档按「非 0 即真」判（工控点位的开关量多半是 0/1 数值而不是 JSON 布尔）。⚠ 四条阈值边界都是开区间：`warnAbove: 80` 的意思是超过 80 才预警，等于 80 不预警；四条全留空时连状态点都不画——没有判据就连「正常」都不该说。⚠ 删掉 `items` 中间一项，它之后每一行的绑定都会改喂前一个指标。⚠ 两个键名与兄弟模块不一致，照着它们写会静默不生效：千分位在这里叫 `grouping`（别的模块叫 `thousands`），逐项联动值在这里叫 `items[].key`（别的模块叫 `emitValue`）。",
       "icon": "gauge",
       "keywords": [
         "metric",
@@ -5252,7 +6824,7 @@
               "label": "联动值",
               "type": "string",
               "default": "",
-              "help": "点这一格时上抛的值，留空则这一格点了不上抛。"
+              "help": "点这一格时上抛的值，留空则这一格点了不上抛。与其他数据模块的「联动值」同义，但这个模块的键名是 `key` 而不是 `emitValue`。"
             }
           ],
           "item_label_key": "label",
@@ -5379,10 +6951,11 @@
         },
         {
           "key": "grouping",
-          "label": "千分位",
+          "label": "千分位分隔",
           "type": "boolean",
           "default": false,
           "group": "文字",
+          "help": "与信息卡片 / 仪表卡片 / 信息列表的「千分位分隔」是同一件事，但这个模块的键名是 `grouping` 而不是 `thousands`。",
           "span": "half"
         },
         {
@@ -5840,14 +7413,14 @@
         {
           "key": "nodeStatus",
           "label": "节点状态",
-          "data_type": "enum",
+          "data_type": "number",
           "is_array": true,
           "is_entity_pinned": true,
           "array_fields": [
             {
               "key": "status",
               "label": "状态",
-              "data_type": "enum"
+              "data_type": "number"
             }
           ]
         },
@@ -5875,7 +7448,13 @@
             }
           ]
         }
-      ]
+      ],
+      "sub_editor": {
+        "config_key": "twin2d",
+        "route_name": "twin-2d-editor",
+        "label": "打开 2D 孪生编辑器",
+        "hint": "节点、连线、标注与节点样式都在那里画。"
+      }
     },
     {
       "type": "twin-view",
@@ -6059,7 +7638,13 @@
             }
           ]
         }
-      ]
+      ],
+      "sub_editor": {
+        "config_key": "twin",
+        "route_name": "twin-editor",
+        "label": "打开孪生编辑器",
+        "hint": "模型摆放、部件、锚点、信息牌与能量流都在那里配。"
+      }
     }
   ]
 }

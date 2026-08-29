@@ -222,3 +222,69 @@ def test_config_field_keys_are_unique_inside_a_module() -> None:
         != len(module["config_schema"])
     ]
     assert duplicated == []
+
+
+def test_the_committed_catalog_carries_both_type_legends() -> None:
+    """产物里带着两张给模型读的图例，且逐档铺满。
+
+    ⚠ 模型没有属性面板可看：`type: "enum"` 那一格该写 `options[].value` 里的
+    哪一个、`type: "image"` 接不接 CSS 渐变，只有图例说得出来。漏了这一段，
+    Agent 写进去的值形状不对，而值存得下去、也不报错。
+    """
+    catalog = catalog_json()
+    field_docs = {row["type"] for row in catalog["field_types"]}
+    data_docs = {row["type"] for row in catalog["binding_data_types"]}
+
+    assert field_docs == set(get_args(ConfigFieldType))
+    assert data_docs == set(get_args(BindingDataType))
+    assert all(
+        len(row["doc"]) > 10
+        for row in catalog["field_types"] + catalog["binding_data_types"]
+    )
+
+
+def test_every_sub_editor_points_at_a_declared_config_key() -> None:
+    """子编辑器接管的那个键必须真在配置字段里。
+
+    ⚠ 指错键的话属性面板永远开不出那个入口，而清单本身看着完全正常。
+    """
+    offenders = [
+        f"{module['type']}.{module['sub_editor']['config_key']}"
+        for module in catalog_json()["modules"]
+        if module.get("sub_editor")
+        and module["sub_editor"]["config_key"]
+        not in {field["key"] for field in module["config_schema"]}
+    ]
+    assert offenders == []
+
+
+def test_preset_ids_are_unique_inside_a_module() -> None:
+    """一个模块里预设 id 不重名——重名时按 id 取那一套永远取到头一个。"""
+    duplicated = [
+        module["type"]
+        for module in catalog_json()["modules"]
+        if len({one["id"] for one in module.get("config_presets") or []})
+        != len(module.get("config_presets") or [])
+    ]
+    assert duplicated == []
+
+
+def test_presets_only_touch_keys_the_module_actually_has() -> None:
+    """预设写的键要么在配置字段里，要么是外观那一段。
+
+    ⚠ 预设是**浅合并落库**的一笔：写进去一个模块不认识的键，值存得下去、
+    也不报错，用户点了按钮却只得到半套观感。
+    """
+    # 模块级卡片外观住在配置袋子的这一段，不在 config_schema 里
+    card_style = "__cardStyle"
+    offenders: list[str] = []
+    for module in catalog_json()["modules"]:
+        known = {field["key"] for field in module["config_schema"]}
+        known.add(card_style)
+        for preset in module.get("config_presets") or []:
+            offenders.extend(
+                f"{module['type']}.{preset['id']}.{key}"
+                for key in preset["config"]
+                if key not in known
+            )
+    assert offenders == []
