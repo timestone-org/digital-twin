@@ -92,6 +92,18 @@ export const routes: RouteRecordRaw[] = [
     },
   },
   {
+    // 卡片子编辑器：与两条孪生平级，改的同样是某个节点的一段 config。
+    // ⚠ 路径必须同时接 `:dashboardId` 与 `:nodeId`：入口按这两个参数跳，
+    // 少一个就跳到一个空页，而 `sub-editor-routes` 契约按字面查这两段
+    path: '/dashboards/:dashboardId/edit/card/:nodeId',
+    name: 'card-editor',
+    component: () => import('@/pages/CardEditor/index.vue'),
+    meta: {
+      title: '自定义卡片',
+      permissions: [PERMISSION_CODES.dashboardEdit],
+    },
+  },
+  {
     // 素材是跨大屏的公共资源，故不挂在某张大屏或某个项目下面
     path: '/assets',
     name: 'assets',

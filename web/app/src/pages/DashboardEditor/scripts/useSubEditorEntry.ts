@@ -7,10 +7,12 @@
  * 先存成功再跳，绝不静默带走。
  */
 import type { ModuleSubEditor } from '@dt/contracts'
+import type { GetModuleManifest } from '@dt/runtime'
 import { provide } from 'vue'
 import type { ComputedRef } from 'vue'
 import { useRouter } from 'vue-router'
 
+import type { DashboardEditor } from '@/composables/useDashboardEditor'
 import { EDITOR_SUB_EDITOR_KEY } from '@/features/dashboard/editorContext'
 
 export interface SubEditorEntryDeps {
@@ -32,8 +34,15 @@ export interface SubEditorEntryDeps {
   toast: { error: (message: string) => void }
 }
 
-/** 装上子编辑器入口，向属性面板下发打开函数。 */
-export function useSubEditorEntry(deps: SubEditorEntryDeps): void {
+/**
+ * 装上子编辑器入口：向属性面板下发打开函数，并把同一个函数交回给调用方——
+ * 右键菜单那条走的是它。
+ * ⚠ 两处必须落到同一个出口：各写一份的话，「先保存再跳」这条前置只会在其中一条上，
+ * 而两条看起来一模一样。
+ */
+export function useSubEditorEntry(
+  deps: SubEditorEntryDeps,
+): (subEditor: ModuleSubEditor) => void {
   const router = useRouter()
 
   async function open(subEditor: ModuleSubEditor): Promise<void> {
@@ -68,5 +77,32 @@ export function useSubEditorEntry(deps: SubEditorEntryDeps): void {
     }
   }
 
-  provide(EDITOR_SUB_EDITOR_KEY, (subEditor) => void open(subEditor))
+  const enter = (subEditor: ModuleSubEditor): void => void open(subEditor)
+  provide(EDITOR_SUB_EDITOR_KEY, enter)
+  return enter
+}
+
+/**
+ * 进这个节点的子编辑器；没有声明子编辑器的节点什么都不做。右键菜单那条走它。
+ * ⚠ 先选中再进：动作层按选中项走，用户也得看见是哪一个被打开了。
+ * ⚠ 与属性面板落到**同一个** `enter`：各写一份的话，「先保存再跳」这条前置
+ * 只会在其中一条上，而两条看起来一模一样。
+ * @param editor 编辑器文档
+ * @param getManifest 取模块清单
+ * @param enter `useSubEditorEntry` 交回来的那个出口
+ * @param nodeId 要进哪个节点
+ */
+export function openSubEditor(
+  editor: DashboardEditor,
+  getManifest: GetModuleManifest,
+  enter: (subEditor: ModuleSubEditor) => void,
+  nodeId: string,
+): void {
+  const node = editor.nodes.value.find((one) => one.id === nodeId)
+  const sub =
+    node === undefined ? undefined : getManifest(node.moduleType)?.subEditor
+  if (sub === undefined) return
+  editor.select(nodeId)
+  editor.flush()
+  enter(sub)
 }

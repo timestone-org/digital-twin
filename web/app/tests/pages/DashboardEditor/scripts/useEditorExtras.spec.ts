@@ -114,6 +114,7 @@ function setup(
         grid: () => normalizeEditorGrid(),
         zoom: ref<CanvasZoom>(1),
         fitScale: () => 1,
+        openSubEditor: vi.fn(),
         removeSelected: vi.fn(),
         consumePicker,
         save,

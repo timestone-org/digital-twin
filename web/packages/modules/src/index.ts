@@ -72,6 +72,7 @@ export {
 export type { ResolveAssetImage } from './shared/assetImage'
 export {
   configDefaults,
+  readArray,
   readBoolean,
   readNumber,
   readRecord,

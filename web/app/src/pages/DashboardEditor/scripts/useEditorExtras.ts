@@ -41,6 +41,8 @@ export interface EditorExtrasDeps {
   fitScale: () => number
   /** 带确认的整批删除。 */
   removeSelected: () => void
+  /** 进某个节点的子编辑器；右键菜单那条走它，与属性面板同一个出口。 */
+  openSubEditor: (nodeId: string) => void
   /** Esc 的前置出口（关挑点面板）。 */
   consumePicker: () => boolean
   /** ops.save；截图挂在它成功之后。回执带失败原因，助手那条保存工具要如实抛。 */
@@ -116,6 +118,8 @@ function contextMenuOf(deps: EditorExtrasDeps): EditorContextMenu {
     editor: deps.editor,
     actions: deps.actions,
     arrange: deps.arrange,
+    getManifest: deps.getManifest,
+    openSubEditor: deps.openSubEditor,
     centerOn: deps.centerOn,
     removeSelected: deps.removeSelected,
     zoom: deps.zoom,

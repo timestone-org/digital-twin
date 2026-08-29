@@ -32,6 +32,7 @@ function stateOf(
       canSelectAll: true,
       isFitted: false,
       mod: '⌘',
+      subEditorLabel: '',
       ...over,
     }),
   }

@@ -20,6 +20,7 @@ function input(over: Partial<ContextMenuInput> = {}): ContextMenuInput {
     canSelectAll: true,
     isFitted: false,
     mod: '⌘',
+    subEditorLabel: '',
     ...over,
   }
 }
@@ -117,5 +118,52 @@ describe('置灰', () => {
     const hidden = entryOf('hide', { isNodeVisible: false })
     expect(hidden?.label).toBe('显示本节点')
     expect(hidden?.disabled).toBe(false)
+  })
+})
+
+describe('子编辑器入口', () => {
+  // ⚠ 读**声明**不读模块类型：写死类型名的话第三方模块永远拿不到这条入口，
+  //   而那类判断 typecheck 与 lint 双双放行
+  it('清单声明了子编辑器才摆这一条，且用声明里的文案', () => {
+    const groups = contextMenuGroups(
+      input({ nodeId: 'n1', subEditorLabel: '自定义卡片' }),
+    )
+    const entry = groups
+      .flatMap((group) => group.items)
+      .find((one) => one.action === 'customize')
+
+    expect(entry?.label).toBe('自定义卡片…')
+  })
+
+  it('没声明的模块一条都不摆', () => {
+    const groups = contextMenuGroups(input({ nodeId: 'n1' }))
+
+    expect(
+      groups.flatMap((group) => group.items).map((one) => one.action),
+    ).not.toContain('customize')
+  })
+
+  // ⚠ 空白处右键没有节点，也就没有「进它的子编辑器」这回事
+  it('空白处右键不摆它', () => {
+    const groups = contextMenuGroups(
+      input({ nodeId: null, subEditorLabel: '自定义卡片' }),
+    )
+
+    expect(
+      groups.flatMap((group) => group.items).map((one) => one.action),
+    ).not.toContain('customize')
+  })
+
+  it('排在层序之后、画布动作之前，与「在画布上摆弄它」分开成组', () => {
+    const groups = contextMenuGroups(
+      input({ nodeId: 'n1', subEditorLabel: '自定义卡片' }),
+    )
+
+    expect(groups.map((group) => group.key)).toEqual([
+      'node-order',
+      'node-sub-editor',
+      'node',
+      'node-visibility',
+    ])
   })
 })

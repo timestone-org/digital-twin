@@ -70,10 +70,13 @@ function setup(nodes: DashboardNodePayload[] = [node('a'), node('b')]) {
   const centerOn = vi.fn()
   const removeSelected = vi.fn()
   const zoom = ref<CanvasZoom>(1)
+  const openSubEditor = vi.fn()
   const menu = useEditorContextMenu({
     editor,
     actions,
     arrange,
+    getManifest: () => undefined,
+    openSubEditor,
     centerOn,
     removeSelected,
     zoom,

@@ -148,6 +148,7 @@ function setup(nodes: DashboardNodePayload[]): Harness {
         toast: { error: vi.fn(), success: vi.fn() },
         dashboardId: () => 'db1',
         pickingFieldKey: picking,
+        getManifest: () => undefined,
       })
       return () => h('div')
     },

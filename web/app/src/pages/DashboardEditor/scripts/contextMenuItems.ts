@@ -17,6 +17,7 @@ export type ContextMenuAction =
   | 'paste'
   | 'select-all'
   | 'fit'
+  | 'customize'
 
 export interface ContextMenuEntry {
   action: ContextMenuAction
@@ -50,6 +51,12 @@ export interface ContextMenuInput {
   isFitted: boolean
   /** 修饰键展示名，由 `modLabel` 给。 */
   mod: string
+  /**
+   * 这个节点的清单声明的子编辑器入口文案；空串 = 它没有子编辑器，不摆这一条。
+   * ⚠ 读**声明**不读模块类型：按类型名判的话，第三方模块与后加的模块永远拿不到
+   * 这条入口，而那类判断 typecheck 与 lint 双双放行（DASHBOARD_DESIGN §5.3 陷阱 ③）。
+   */
+  subEditorLabel: string
 }
 
 function entry(
@@ -74,6 +81,16 @@ function nodeGroups(input: ContextMenuInput): ContextMenuGroup[] {
         entry('back', '置底', `${input.mod} ⇧ [`, !input.canBackward),
       ],
     },
+    // 子编辑器排在最前：它是「进去整页改这一个」，与下面那组「在画布上摆弄它」
+    // 不是一类动作
+    ...(input.subEditorLabel === ''
+      ? []
+      : [
+          {
+            key: 'node-sub-editor',
+            items: [entry('customize', `${input.subEditorLabel}…`, '', false)],
+          },
+        ]),
     {
       key: 'node',
       items: [

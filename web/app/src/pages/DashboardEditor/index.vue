@@ -111,6 +111,7 @@ const ops = createEditorPageOps({
   toast,
   dashboardId: () => dashboardId.value,
   pickingFieldKey,
+  getManifest,
 })
 
 const extras = useEditorExtras({
@@ -125,6 +126,7 @@ const extras = useEditorExtras({
   fitScale: () => fitScale.value,
   save: () => ops.save(),
   removeSelected: () => void ops.removeSelected(),
+  openSubEditor: ops.openSubEditor,
   consumePicker: () => ops.consumePicker(),
   confirm,
   stageEl: () => canvasRef.value?.stageRef ?? null,

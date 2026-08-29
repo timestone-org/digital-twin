@@ -2,6 +2,7 @@
  * @fileoverview 页面级操作组：加载/保存/删除确认/选中项的几何与显隐/挑点回填，
  * 加上本地草稿流与离开守卫的装配。只做把状态层与动作层串起来这一件事。
  */
+import type { GetModuleManifest } from '@dt/runtime'
 import type { Ref } from 'vue'
 import type { DashboardNodePayload, ModuleManifest } from '@dt/contracts'
 
@@ -18,7 +19,7 @@ import type { SaveOutcome } from '@/features/ai/saveTool'
 import { saveDashboard } from './editorSave'
 import { useEditorDraftFlow } from './useEditorDraftFlow'
 import type { EditorMeta } from './useEditorMeta'
-import { useSubEditorEntry } from './useSubEditorEntry'
+import { openSubEditor, useSubEditorEntry } from './useSubEditorEntry'
 
 interface ConfirmPort {
   ask: (input: {
@@ -44,9 +45,12 @@ export interface EditorPageOpsDeps {
   toast: ToastPort
   dashboardId: () => string
   pickingFieldKey: Ref<string | null>
+  getManifest: GetModuleManifest
 }
 
 export interface EditorPageOps {
+  /** 没有声明子编辑器的节点什么都不做。 */
+  openSubEditor: (nodeId: string) => void
   /** 模块库点击添加；钉位撞单例时提示而不是静默没反应。 */
   addModule: (manifest: ModuleManifest) => void
   removeNode: (nodeId: string) => Promise<void>
@@ -144,7 +148,7 @@ export function createEditorPageOps(deps: EditorPageOpsDeps): EditorPageOps {
 
   // 子编辑器入口挂在这里而不是页面上：它要的东西（选中、脏、保存、提示、路由参数）
   // 与本工厂完全重合，搬到页面上等于把同一批依赖再列一遍
-  useSubEditorEntry({
+  const enterSubEditor = useSubEditorEntry({
     dashboardId: deps.dashboardId,
     selectedId: editor.selectedId,
     isDirty: () => editor.isDirty.value || meta.isDirty.value,
@@ -156,6 +160,8 @@ export function createEditorPageOps(deps: EditorPageOpsDeps): EditorPageOps {
   installDraftFlow(deps)
 
   return {
+    openSubEditor: (nodeId: string) =>
+      openSubEditor(editor, deps.getManifest, enterSubEditor, nodeId),
     addModule: (manifest) => {
       if (!actions.addModule(manifest)) {
         toast.error('这类钉位模块每张大屏最多一个')
