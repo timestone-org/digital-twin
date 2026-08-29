@@ -15,9 +15,7 @@ DASHBOARD_COMPOSE = SkillManifest(
     # 在那里宣告本技能等于摆一排调一次失败一次的名字
     surface_kinds=("dashboard-editor",),
     required_codes=("dashboard:edit",),
-    server_tools=(
-        "modules.catalog",
-    ),
+    server_tools=("modules.catalog",),
     client_tools=(
         "dashboard.read_canvas",
         "dashboard.read_bindings",
