@@ -1178,7 +1178,7 @@
       "type": "data-card",
       "display_name": "可组合卡片",
       "category": "数据",
-      "description": "可组合卡片：一块摆 1..N 个格，**每格画什么由用户自己拼**——一张部件列表（名称 / 读数 / 进度条 / 分隔线），可增删、可排序，所有格共用这一份。要在卡片里嵌进度条、或要一种兄弟模块摆不出来的段序时用它；只要朴素的数字加单位用 metric-card，要量程 / 液位那种图形用 gauge-card，要一行多字段的清单用 info-list，要一条条推来的消息用 info-feed。一个数组绑定槽 `cellValues`，行钉在 `cells` 配置项上：第 i 行喂第 i 格。四个子槽 `value` / `aux` / `ratio` / `state` 是**固定**的，部件从里面挑着读，不会因为加了部件而多出槽。⚠ 部件读哪个槽由它自己声明：读数与进度条读 `value`，进度条接了 `ratio` 就直接用它、不再按量程算。⚠ 单位与小数位是**逐格**的配置，不从点位来，同一格里所有部件共用一份。⚠ 删掉 `cells` 中间一格，它之后每一格的绑定都会改喂前一格。",
+      "description": "可组合卡片：一块摆 1..N 个格，**每格画什么由用户自己拼**——一张部件列表（名称 / 读数 / 进度条 / 分隔线），可增删、可排序，所有格共用这一份。要在卡片里嵌进度条、或要一种兄弟模块摆不出来的段序时用它；只要朴素的数字加单位、不必自己拼段序用 info-card，要量程 / 液位那种图形用 gauge-card，要一行多字段的清单用 info-list，要一条条推来的消息用 info-feed。一个数组绑定槽 `cellValues`，行钉在 `cells` 配置项上：第 i 行喂第 i 格。四个子槽 `value` / `aux` / `ratio` / `state` 是**固定**的，部件从里面挑着读，不会因为加了部件而多出槽。⚠ 部件读哪个槽由它自己声明：读数与进度条读 `value`，进度条接了 `ratio` 就直接用它、不再按量程算。⚠ 单位与小数位是**逐格**的配置，不从点位来，同一格里所有部件共用一份。⚠ 删掉 `cells` 中间一格，它之后每一格的绑定都会改喂前一格。",
       "icon": "layers",
       "keywords": [
         "datacard",
@@ -2045,7 +2045,7 @@
       "type": "gauge-card",
       "display_name": "仪表卡片",
       "category": "数据",
-      "description": "仪表卡片：一块摆 1..N 个带量程的读数，五档几何（弧度盘 / 横向条 / 目标轨道 / 储罐 / 温度计）共用「量程 → 百分比 → 填充」同一条链，可画刻度、量程端点与目标标记。读数要表达「离满还有多远」「完成了多少」「液位到哪儿」时用它；只要裸数字加单位用 metric-card，要带图标与涨跌对比的卡片网格用 info-card，要一行里带副读数与徽章的清单用 info-list。一个数组绑定槽 `gaugeValues`，行钉在 `items` 配置项上：第 i 行喂第 i 个仪表，子槽 `value` 是主读数、`aux` 是目标值的实时来源（绑了就顶掉行内那个静态「目标值」），都收数值；量程上下限、单位、小数位是逐项的配置，不从点位来。⚠ 每一项的「量程上限」必须大于「量程下限」，否则这一个仪表既不画填充也不伪造 0%；「目标值」留空 = 不画目标标记且完成率退回按量程算。⚠ 删掉 `items` 中间一项，它之后每一个仪表的绑定都会改喂前一个。",
+      "description": "仪表卡片：一块摆 1..N 个带量程的读数，五档几何（弧度盘 / 横向条 / 目标轨道 / 储罐 / 温度计）共用「量程 → 百分比 → 填充」同一条链，可画刻度、量程端点与目标标记。读数要表达「离满还有多远」「完成了多少」「液位到哪儿」时用它；只要裸数字加单位用 data-card 或 info-card，要带图标与涨跌对比的卡片网格用 info-card，要一行里带副读数与徽章的清单用 info-list。一个数组绑定槽 `gaugeValues`，行钉在 `items` 配置项上：第 i 行喂第 i 个仪表，子槽 `value` 是主读数、`aux` 是目标值的实时来源（绑了就顶掉行内那个静态「目标值」），都收数值；量程上下限、单位、小数位是逐项的配置，不从点位来。⚠ 每一项的「量程上限」必须大于「量程下限」，否则这一个仪表既不画填充也不伪造 0%；「目标值」留空 = 不画目标标记且完成率退回按量程算。⚠ 删掉 `items` 中间一项，它之后每一个仪表的绑定都会改喂前一个。",
       "icon": "gauge",
       "keywords": [
         "gauge",
@@ -3756,7 +3756,7 @@
       "type": "info-card",
       "display_name": "信息卡片",
       "category": "数据",
-      "description": "信息卡片：一块摆 1..N 个格，一格纵向四段「徽章·标签 ｜ 读数 + 单位 ｜ 涨跌块 ｜ 脚注」，排布、格外壳、标签、数值、单位、图标六组档位正交可配，读数可走渐变文字与素材图标 / emoji。要一屏好看的 KPI 网格、带图标或带「较上期」对比时用它；只要朴素的数字 + 单位 + 阈值灯用 metric-card，要量程 / 进度 / 液位那种图形用 gauge-card，要竖着一列多字段的行用 info-list。一个数组绑定槽 `cardValues`，行钉在 `items` 配置项上：第 i 行喂第 i 格，子槽 `value` 是主读数、`aux` 是涨跌块要的对比值（上期 / 目标），都收数值；单位、小数位、emoji 与固定颜色是逐格的配置项，不从点位来。⚠ 涨跌块要 `value` 与 `aux` 两个子槽都有值才画，缺一整块不出。⚠ 删掉 `items` 中间一格，它之后每一格的绑定都会改喂前一格。",
+      "description": "信息卡片：一块摆 1..N 个格，一格纵向四段「徽章·标签 ｜ 读数 + 单位 ｜ 涨跌块 ｜ 脚注」，排布、格外壳、标签、数值、单位、图标六组档位正交可配，读数可走渐变文字与素材图标 / emoji。要一屏好看的 KPI 网格、带图标或带「较上期」对比时用它；要自己拼段序、或要在格里嵌进度条用 data-card，要量程 / 进度 / 液位那种图形用 gauge-card，要竖着一列多字段的行用 info-list。一个数组绑定槽 `cardValues`，行钉在 `items` 配置项上：第 i 行喂第 i 格，子槽 `value` 是主读数、`aux` 是涨跌块要的对比值（上期 / 目标），都收数值；单位、小数位、emoji 与固定颜色是逐格的配置项，不从点位来。⚠ 涨跌块要 `value` 与 `aux` 两个子槽都有值才画，缺一整块不出。⚠ 删掉 `items` 中间一格，它之后每一格的绑定都会改喂前一格。",
       "icon": "layout-grid",
       "keywords": [
         "infocard",
@@ -5483,7 +5483,7 @@
       "type": "info-list",
       "display_name": "信息列表",
       "category": "数据",
-      "description": "信息列表：一块摆 N 行，每行由「前导列 ｜ 最多三段左右分列的行段 ｜ 两个尾列」声明式编排，行内可挂徽章、分类标签、两条进度件、命中文案、描述与时刻，另有一条有值才出的扩展指标行；整块还能按行内「分组」分段或分页签，按严重度排序，只看命中规则或只看告警的行。一屏里要竖着列十几个点位、每行还带副读数 / 状态 / 进度条时用它；一格一个大数字的网格用 metric-card 或 info-card，带量程图形用 gauge-card，条目由后端推送、条数不固定的用 info-feed。一个数组绑定槽 `listValues`，行钉在 `items` 配置项上：第 i 行喂第 i 项，子槽十一个——`value` 主读数、`aux` / `aux2` / `aux3` 副读数、`extra1` / `extra2` / `extra3` 扩展指标、`status` 设备状态（收数值，不要配 enum 映射）这八个收数值，`name` 行名、`text` 描述、`time` 时刻文本这三个收字符串；单位、小数位、量程与目标值是逐行的配置项。⚠ 删掉 `items` 中间一项，它之后每一行的绑定都会改喂前一行。",
+      "description": "信息列表：一块摆 N 行，每行由「前导列 ｜ 最多三段左右分列的行段 ｜ 两个尾列」声明式编排，行内可挂徽章、分类标签、两条进度件、命中文案、描述与时刻，另有一条有值才出的扩展指标行；整块还能按行内「分组」分段或分页签，按严重度排序，只看命中规则或只看告警的行。一屏里要竖着列十几个点位、每行还带副读数 / 状态 / 进度条时用它；一格一个大数字的网格用 info-card 或 data-card，带量程图形用 gauge-card，条目由后端推送、条数不固定的用 info-feed。一个数组绑定槽 `listValues`，行钉在 `items` 配置项上：第 i 行喂第 i 项，子槽十一个——`value` 主读数、`aux` / `aux2` / `aux3` 副读数、`extra1` / `extra2` / `extra3` 扩展指标、`status` 设备状态（收数值，不要配 enum 映射）这八个收数值，`name` 行名、`text` 描述、`time` 时刻文本这三个收字符串；单位、小数位、量程与目标值是逐行的配置项。⚠ 删掉 `items` 中间一项，它之后每一行的绑定都会改喂前一行。",
       "icon": "table",
       "keywords": [
         "infolist",
@@ -7637,345 +7637,10 @@
       ]
     },
     {
-      "type": "metric-card",
-      "display_name": "实时数值",
-      "category": "数据",
-      "description": "实时数值：一块摆 1..N 个点位读数，一格是「名称 + 大字读数 + 单位 + 状态点」，带四段阈值（危险下限 / 预警下限 / 预警上限 / 危险上限）与逐格四档取数状态（未绑定 / 等待首帧 / 取不到 / 有读数）。墙上「看一眼现场此刻是多少」的首选，最朴素、字最大；要图标、渐变数字与涨跌对比用 info-card，要量程 / 进度 / 液位那种图形用 gauge-card，要一行里带副读数与徽章的清单用 info-list。一个数组绑定槽 `itemValues`，行钉在 `items` 配置项上：第 i 行喂第 i 个指标，唯一子槽 `value` 收数值；单位、小数位、真假文案与四条阈值边界都是逐项的配置，不从点位来，开关量档按「非 0 即真」判（工控点位的开关量多半是 0/1 数值而不是 JSON 布尔）。⚠ 四条阈值边界都是开区间：`warnAbove: 80` 的意思是超过 80 才预警，等于 80 不预警；四条全留空时连状态点都不画——没有判据就连「正常」都不该说。⚠ 删掉 `items` 中间一项，它之后每一行的绑定都会改喂前一个指标。⚠ 两个键名与兄弟模块不一致，照着它们写会静默不生效：千分位在这里叫 `grouping`（别的模块叫 `thousands`），逐项联动值在这里叫 `items[].key`（别的模块叫 `emitValue`）。",
-      "icon": "gauge",
-      "keywords": [
-        "metric",
-        "shuzhi",
-        "数值",
-        "指标",
-        "读数",
-        "实时",
-        "kpi"
-      ],
-      "default_size": {
-        "width": 420,
-        "height": 180,
-        "min_width": 120,
-        "min_height": 64
-      },
-      "chrome": "card",
-      "version": 1,
-      "config_schema": [
-        {
-          "key": "title",
-          "label": "标题",
-          "type": "string",
-          "default": "",
-          "placeholder": "留空则不画标题栏",
-          "group": "内容",
-          "span": "full"
-        },
-        {
-          "key": "items",
-          "label": "指标",
-          "type": "array",
-          "default": [
-            {
-              "label": "指标 1",
-              "unit": "",
-              "kind": "number",
-              "precision": 1
-            }
-          ],
-          "group": "内容",
-          "help": "每一项在绑点面板上是一行。⚠ 删掉中间一项，它之后每一行的绑定都会改喂前一个指标——删完请核对绑点面板。",
-          "item_schema": [
-            {
-              "key": "label",
-              "label": "名称",
-              "type": "string",
-              "default": "",
-              "placeholder": "留空显示「指标 N」"
-            },
-            {
-              "key": "kind",
-              "label": "值的类型",
-              "type": "enum",
-              "default": "number",
-              "options": [
-                {
-                  "value": "number",
-                  "label": "数值"
-                },
-                {
-                  "value": "boolean",
-                  "label": "开关量"
-                },
-                {
-                  "value": "text",
-                  "label": "文本"
-                }
-              ]
-            },
-            {
-              "key": "unit",
-              "label": "单位",
-              "type": "string",
-              "default": "",
-              "placeholder": "如 °C / kV / MW"
-            },
-            {
-              "key": "precision",
-              "label": "小数位",
-              "type": "range",
-              "default": 1,
-              "when": {
-                "key": "kind",
-                "in": [
-                  "number"
-                ]
-              },
-              "min": 0,
-              "max": 6,
-              "step": 1
-            },
-            {
-              "key": "trueText",
-              "label": "真值文案",
-              "type": "string",
-              "default": "运行",
-              "help": "点位值非 0 时显示它；点位是 0/1 数值也算开关量。",
-              "when": {
-                "key": "kind",
-                "in": [
-                  "boolean"
-                ]
-              }
-            },
-            {
-              "key": "falseText",
-              "label": "假值文案",
-              "type": "string",
-              "default": "停止",
-              "when": {
-                "key": "kind",
-                "in": [
-                  "boolean"
-                ]
-              }
-            },
-            {
-              "key": "dangerBelow",
-              "label": "危险下限",
-              "type": "number",
-              "help": "低于它标红。留空 = 这一侧不判。"
-            },
-            {
-              "key": "warnBelow",
-              "label": "预警下限",
-              "type": "number",
-              "help": "低于它标黄。留空 = 这一侧不判。"
-            },
-            {
-              "key": "warnAbove",
-              "label": "预警上限",
-              "type": "number",
-              "help": "高于它标黄。留空 = 这一侧不判。"
-            },
-            {
-              "key": "dangerAbove",
-              "label": "危险上限",
-              "type": "number",
-              "help": "高于它标红。留空 = 这一侧不判。"
-            },
-            {
-              "key": "key",
-              "label": "联动值",
-              "type": "string",
-              "default": "",
-              "help": "点这一格时上抛的值，留空则这一格点了不上抛。与其他数据模块的「联动值」同义，但这个模块的键名是 `key` 而不是 `emitValue`。"
-            }
-          ],
-          "item_label_key": "label",
-          "min_items": 1
-        },
-        {
-          "key": "layout",
-          "label": "排布",
-          "type": "enum",
-          "default": "auto",
-          "options": [
-            {
-              "value": "auto",
-              "label": "自动"
-            },
-            {
-              "value": "grid",
-              "label": "网格"
-            },
-            {
-              "value": "list",
-              "label": "列表行"
-            }
-          ],
-          "group": "排布",
-          "help": "自动：只有一项时大字居中，多项时按网格。",
-          "span": "half"
-        },
-        {
-          "key": "columns",
-          "label": "列数",
-          "type": "range",
-          "default": 2,
-          "group": "排布",
-          "span": "half",
-          "when": {
-            "key": "layout",
-            "in": [
-              "grid"
-            ]
-          },
-          "min": 1,
-          "max": 6,
-          "step": 1
-        },
-        {
-          "key": "density",
-          "label": "疏密",
-          "type": "enum",
-          "default": "normal",
-          "options": [
-            {
-              "value": "compact",
-              "label": "紧凑"
-            },
-            {
-              "value": "normal",
-              "label": "标准"
-            },
-            {
-              "value": "loose",
-              "label": "宽松"
-            }
-          ],
-          "group": "排布",
-          "span": "half"
-        },
-        {
-          "key": "align",
-          "label": "格内对齐",
-          "type": "enum",
-          "default": "left",
-          "options": [
-            {
-              "value": "left",
-              "label": "左"
-            },
-            {
-              "value": "center",
-              "label": "中"
-            }
-          ],
-          "group": "排布",
-          "span": "half",
-          "when": {
-            "key": "layout",
-            "in": [
-              "auto",
-              "grid"
-            ]
-          }
-        },
-        {
-          "key": "valueSize",
-          "label": "读数字号 (px)",
-          "type": "range",
-          "default": 0,
-          "group": "文字",
-          "help": "0 = 跟着格子大小自动缩放。",
-          "span": "half",
-          "min": 0,
-          "max": 96,
-          "step": 1
-        },
-        {
-          "key": "labelSize",
-          "label": "名称字号 (px)",
-          "type": "range",
-          "default": 12,
-          "group": "文字",
-          "span": "half",
-          "min": 8,
-          "max": 32,
-          "step": 1
-        },
-        {
-          "key": "valueColor",
-          "label": "读数颜色",
-          "type": "color",
-          "default": "var(--card-text, var(--text-primary))",
-          "group": "文字",
-          "help": "命中阈值的那一格改用严重度颜色，这里配的是没有告警时的颜色。",
-          "span": "half"
-        },
-        {
-          "key": "grouping",
-          "label": "千分位分隔",
-          "type": "boolean",
-          "default": false,
-          "group": "文字",
-          "help": "与信息卡片 / 仪表卡片 / 信息列表的「千分位分隔」是同一件事，但这个模块的键名是 `grouping` 而不是 `thousands`。",
-          "span": "half"
-        },
-        {
-          "key": "emptyText",
-          "label": "无数据占位",
-          "type": "string",
-          "default": "—",
-          "group": "文字",
-          "help": "⚠ 别填 0：墙上的「0」与「没有数据」长得一样时，停机与归零就再也分不出来。",
-          "span": "half"
-        },
-        {
-          "key": "showStatusDot",
-          "label": "状态点",
-          "type": "boolean",
-          "default": true,
-          "group": "状态",
-          "help": "配了阈值边界的指标才有状态点：没有判据就连「正常」都不该说。",
-          "span": "half"
-        },
-        {
-          "key": "showUpdatedAt",
-          "label": "更新时刻",
-          "type": "boolean",
-          "default": false,
-          "group": "状态",
-          "help": "显示这一格读数的采样时刻（时:分:秒），用来看现场还动不动。",
-          "span": "half"
-        }
-      ],
-      "bindings": [
-        {
-          "key": "itemValues",
-          "label": "指标读数",
-          "data_type": "number",
-          "is_array": true,
-          "is_entity_pinned": true,
-          "array_fields": [
-            {
-              "key": "value",
-              "label": "读数",
-              "data_type": "number"
-            }
-          ]
-        }
-      ],
-      "content_keys": [
-        "title",
-        "items",
-        "emptyText"
-      ]
-    },
-    {
       "type": "text-block",
       "display_name": "文本块",
       "category": "装饰",
-      "description": "装饰文本块：几行固定文案加一整套排版旋钮（字号、行高、字重、字间距、四档字体、水平/垂直对齐、内边距、不透明度、溢出处理、辉光）。大屏上的说明、标注、副标题、单位注解，以及页头/页脚里的大屏标题，都由它出。⚠ 它没有任何绑定槽、不取任何数：要显示读数请用 metric-card 或 info-card，那边才有单位、小数位与阈值。整块可点，配了以它为源的联动规则时点它上抛一个不带值的 click。⚠ 「字间距」的 0 是哨兵不是零——表示沿用内置的约 0.02em；⚠ 「不透明度」量纲是 0–1，与 image-block 同名字段的 0–100 不是一回事。",
+      "description": "装饰文本块：几行固定文案加一整套排版旋钮（字号、行高、字重、字间距、四档字体、水平/垂直对齐、内边距、不透明度、溢出处理、辉光）。大屏上的说明、标注、副标题、单位注解，以及页头/页脚里的大屏标题，都由它出。⚠ 它没有任何绑定槽、不取任何数：要显示读数请用 info-card 或 data-card，那边才有单位、小数位与阈值。整块可点，配了以它为源的联动规则时点它上抛一个不带值的 click。⚠ 「字间距」的 0 是哨兵不是零——表示沿用内置的约 0.02em；⚠ 「不透明度」量纲是 0–1，与 image-block 同名字段的 0–100 不是一回事。",
       "icon": "type",
       "keywords": [
         "text",

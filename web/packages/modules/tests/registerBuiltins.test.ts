@@ -37,7 +37,6 @@ const BUILTIN_TYPES = [
   'info-card',
   'info-feed',
   'info-list',
-  'metric-card',
   'text-block',
   'twin-2d-view',
   'twin-view',

@@ -322,21 +322,23 @@ packages/modules/src/
 「能力上多余」与「删了没代价」是两件事，本仓的规矩是「代码可回滚、数据不回滚」
 （engineering-workflow）。
 
-### 9.3 建议的处置顺序
+### 9.3 处置：已删
 
-1. **先查它到底有没有被用**：`select module_type, count(*) from platform.dashboard_nodes
-   group by 1 order by 2 desc;` 一条 SQL 就知道。
-2. **没人用** → 直接删（代码 + 测试 + 覆盖表 + 目录快照），零代价。
-3. **有人用** → 先写一次性迁移把节点转成 `info-card`，迁完再删。迁移写得出来，因为
-   `info-card` 是真子集：`items[].{label,unit,precision,trueText,falseText}` 原样过、
-   `grouping` → `thousands`、`items[].key` → `items[].emitValue`、四段阈值 → `rules` 四条。
-   ⚠ 唯一转不过去的是 §9.2 表里第 2 条那个绿点，得跟用户说一声。
-   ⚠ 迁移**不在 alembic 里做**（迁移里禁回填数据，database-standard），走 worker 批处理
-   或一次性脚本。
+用户在看过上面这份取证与「先数一遍用量再动手」的建议后，**两次确认直接删**。
+`metric-card` 的源码、测试、设计文档与目录名单已一并移除。
 
-**我的建议：先跑第 1 步。** 在拿到那张计数表之前删掉一个核心模块，是拿存量大屏赌它没人用。
+⚠ **已知代价**：存量大屏上每一个 `metric-card` 节点渲染成「未知模块类型」占位块，
+不可恢复。要救只有两条路——把模块加回来，或写一次性脚本把那些节点转成 `info-card`
+（转得过去，它是真子集：`items[].{label,unit,precision,trueText,falseText}` 原样过、
+`grouping` → `thousands`、`items[].key` → `items[].emitValue`、四段阈值 → `rules` 四条；
+唯一转不过去的是 §9.2 表里第 2 条那个绿点）。
+⚠ 真要转的话**不在 alembic 里做**：迁移里禁回填数据（database-standard），走 worker
+批处理或一次性脚本。
 
----
+⚠ 删它牵出的一处**本来就该修**的东西：四个兄弟模块的 `description` 里写着
+「只要朴素的数字用 metric-card」——那是**给模型读的**。不改的话助手会一直推荐一个
+不存在的模块，而两侧都不报错。同类引用在服务端的模块清单测试与助手的工具描述里
+各还有一处。**删一个模块的成本不在它自己那个目录，在这些指向它的名字上。**
 
 ## 10. 分期
 

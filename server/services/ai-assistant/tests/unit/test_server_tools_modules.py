@@ -117,7 +117,7 @@ def _detail_handler(module_type: str, name: str) -> Handler:
 
 
 async def test_the_module_list_gives_cards_not_config_fields() -> None:
-    tools = _tools(_catalog([_module("metric-card", "实时数值")]))
+    tools = _tools(_catalog([_module("info-card", "信息卡片")]))
     got = await tools("modules.catalog", {})
     assert isinstance(got, dict)
     modules = got["modules"]
@@ -165,8 +165,8 @@ async def test_a_pinned_module_says_which_region_it_lives_in() -> None:
 
 
 async def test_naming_a_module_type_pulls_its_full_schema() -> None:
-    got = await _tools(_detail_handler("metric-card", "实时数值"))(
-        "modules.catalog", {"module_type": "metric-card"}
+    got = await _tools(_detail_handler("info-card", "信息卡片"))(
+        "modules.catalog", {"module_type": "info-card"}
     )
     assert isinstance(got, dict)
     assert got["config_schema"] == [{"key": "title"}, {"key": "unit"}]
@@ -179,8 +179,8 @@ async def test_the_expansion_carries_the_type_legends() -> None:
     `type: "image"` 接不接 CSS 渐变，只有图例说得出来。少了它，模型写进去的
     值形状不对，而值存得下去、也不报错，画面上表现为「配了没反应」。
     """
-    got = await _tools(_detail_handler("metric-card", "实时数值"))(
-        "modules.catalog", {"module_type": "metric-card"}
+    got = await _tools(_detail_handler("info-card", "信息卡片"))(
+        "modules.catalog", {"module_type": "info-card"}
     )
     assert isinstance(got, dict)
     kinds = {row["type"] for row in got["field_types"]}
@@ -190,8 +190,8 @@ async def test_the_expansion_carries_the_type_legends() -> None:
 
 async def test_the_expansion_lists_presets_without_their_values() -> None:
     """预设只给目录页：八套预设一万多字符，而模型多半只用其中一套。"""
-    got = await _tools(_detail_handler("metric-card", "实时数值"))(
-        "modules.catalog", {"module_type": "metric-card"}
+    got = await _tools(_detail_handler("info-card", "信息卡片"))(
+        "modules.catalog", {"module_type": "info-card"}
     )
     assert isinstance(got, dict)
     assert got["presets"] == [
@@ -202,8 +202,8 @@ async def test_the_expansion_lists_presets_without_their_values() -> None:
 
 
 async def test_naming_a_preset_pulls_that_one_whole_config() -> None:
-    got = await _tools(_detail_handler("metric-card", "实时数值"))(
-        "modules.catalog", {"module_type": "metric-card", "preset": "compact"}
+    got = await _tools(_detail_handler("info-card", "信息卡片"))(
+        "modules.catalog", {"module_type": "info-card", "preset": "compact"}
     )
     assert isinstance(got, dict)
     preset = got["preset"]
@@ -219,8 +219,8 @@ async def test_an_unknown_preset_id_answers_with_the_menu() -> None:
 
     ⚠ 回一张空表，模型就以为这个模块没有预设，转头去逐个字段凑那套观感。
     """
-    got = await _tools(_detail_handler("metric-card", "实时数值"))(
-        "modules.catalog", {"module_type": "metric-card", "preset": "没有这个"}
+    got = await _tools(_detail_handler("info-card", "信息卡片"))(
+        "modules.catalog", {"module_type": "info-card", "preset": "没有这个"}
     )
     assert isinstance(got, dict)
     assert got["preset"] is None
@@ -243,8 +243,8 @@ async def test_the_expansion_flags_the_segment_a_sub_editor_owns() -> None:
 
 async def test_the_expansion_carries_the_seeded_factory_config() -> None:
     """出厂就落库的那几个键要给：它与字段的 default 不是一回事。"""
-    got = await _tools(_detail_handler("metric-card", "实时数值"))(
-        "modules.catalog", {"module_type": "metric-card"}
+    got = await _tools(_detail_handler("info-card", "信息卡片"))(
+        "modules.catalog", {"module_type": "info-card"}
     )
     assert isinstance(got, dict)
     assert got["default_config"] == {"__cardStyle": {"corners": False}}
@@ -254,7 +254,7 @@ async def test_the_keyword_filters_by_chinese_name_and_alias() -> None:
     tools = _tools(
         _catalog(
             [
-                _module("metric-card", "实时数值"),
+                _module("info-card", "信息卡片"),
                 _module("text-block", "文本块"),
             ]
         )
@@ -268,7 +268,7 @@ async def test_the_keyword_filters_by_chinese_name_and_alias() -> None:
 
 async def test_a_keyword_that_matches_nothing_still_lists_everything() -> None:
     # 给空表模型就以为没有这个模块；而用户说的叫法与清单对不上是常事
-    tools = _tools(_catalog([_module("metric-card", "实时数值")]))
+    tools = _tools(_catalog([_module("info-card", "信息卡片")]))
     got = await tools("modules.catalog", {"keyword": "毫不相干"})
     assert isinstance(got, dict)
     assert len(got["modules"]) == 1
@@ -281,17 +281,17 @@ def _described(module_type: str, name: str, said: str) -> dict[str, object]:
 
 
 async def test_a_narrowed_card_says_what_the_module_is_for() -> None:
-    """模型分不清 info-card 与 metric-card，靠的就是这一段。"""
+    """模型分不清 info-card 与 info-card，靠的就是这一段。"""
     tools = _tools(
         _catalog(
             [
-                _described("metric-card", "实时数值", "一块摆 1..N 个读数。"),
+                _described("info-card", "信息卡片", "一块摆 1..N 个读数。"),
                 _described("text-block", "文本块", "一段死文字。"),
             ]
         )
     )
 
-    got = await tools("modules.catalog", {"keyword": "实时数值"})
+    got = await tools("modules.catalog", {"keyword": "信息卡片"})
     assert isinstance(got, dict)
     modules = got["modules"]
     assert isinstance(modules, list)
@@ -303,7 +303,7 @@ async def test_the_whole_table_stays_lean_and_says_where_to_get_more() -> None:
     tools = _tools(
         _catalog(
             [
-                _described("metric-card", "实时数值", "一块摆 1..N 个读数。"),
+                _described("info-card", "信息卡片", "一块摆 1..N 个读数。"),
                 _described("text-block", "文本块", "一段死文字。"),
             ]
         )
@@ -318,22 +318,22 @@ async def test_the_whole_table_stays_lean_and_says_where_to_get_more() -> None:
 
 
 async def test_a_module_without_keywords_is_still_searchable_by_name() -> None:
-    bare = _module("metric-card", "实时数值")
+    bare = _module("info-card", "信息卡片")
     bare["keywords"] = None
     tools = _tools(_catalog([bare]))
 
-    got = await tools("modules.catalog", {"keyword": "实时数值"})
+    got = await tools("modules.catalog", {"keyword": "信息卡片"})
     assert isinstance(got, dict)
     modules = got["modules"]
     assert isinstance(modules, list)
-    assert modules[0]["type"] == "metric-card"
+    assert modules[0]["type"] == "info-card"
 
 
 async def test_a_module_without_a_description_gets_none_invented() -> None:
     """编出来的说明会被当成事实，照着它去配一个并不存在的槽。"""
-    tools = _tools(_catalog([_module("metric-card", "实时数值")]))
+    tools = _tools(_catalog([_module("info-card", "信息卡片")]))
 
-    got = await tools("modules.catalog", {"keyword": "实时数值"})
+    got = await tools("modules.catalog", {"keyword": "信息卡片"})
     assert isinstance(got, dict)
     modules = got["modules"]
     assert isinstance(modules, list)
@@ -385,7 +385,7 @@ async def test_a_sub_slot_without_a_type_is_listed_by_key_alone() -> None:
     ⚠ 不许写一个 `None` 上去：那一串会被模型当成「这个子槽的类型叫 None」，
     照着它去猜值的形状。
     """
-    module = _module("metric-card", "实时数值")
+    module = _module("info-card", "信息卡片")
     module["bindings"] = [
         {
             "key": "itemValues",

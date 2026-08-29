@@ -143,14 +143,14 @@ async def test_the_snapshot_of_the_page_reaches_the_model(
         user_text="把这个模块的标题改成机组温度",
         surface_context={
             "selected_id": "n7",
-            "selected": {"id": "n7", "module_type": "metric-card"},
+            "selected": {"id": "n7", "module_type": "info-card"},
         },
     )
 
     seen = model.seen[0]
     state = str(seen[-1].content)
     assert "n7" in state
-    assert "metric-card" in state
+    assert "info-card" in state
     assert "n7" not in str(seen[0].content)
 
 

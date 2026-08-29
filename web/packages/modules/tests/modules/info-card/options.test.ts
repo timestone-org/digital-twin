@@ -238,7 +238,7 @@ describe('档数以参考源码为准', () => {
     expect([...CARD_STATUS_DOT_VALUES]).toEqual(['none', 'auto'])
   })
 
-  it('值类型三档，开关量与本仓 metric-card 是同一个词', () => {
+  it('值类型三档，开关量那一档叫 boolean', () => {
     expect([...CARD_VALUE_KIND_VALUES]).toEqual(['number', 'boolean', 'text'])
   })
 })

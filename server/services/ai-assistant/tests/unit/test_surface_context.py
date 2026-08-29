@@ -39,14 +39,14 @@ def test_the_selected_node_gets_a_sentence_of_its_own() -> None:
             selected_id="n7",
             selected={
                 "id": "n7",
-                "module_type": "metric-card",
+                "module_type": "info-card",
                 "label": "机组温度",
             },
         )
     )
 
     assert "机组温度" in text
-    assert "metric-card" in text
+    assert "info-card" in text
     assert "n7" in text
 
 
@@ -59,8 +59,8 @@ def test_a_multi_selection_names_every_one_of_them() -> None:
         _shot(
             selected_ids=["n1", "n2", "n3"],
             selected=[
-                {"id": "n1", "module_type": "metric-card", "label": "进水温度"},
-                {"id": "n2", "module_type": "metric-card", "label": "出水温度"},
+                {"id": "n1", "module_type": "info-card", "label": "进水温度"},
+                {"id": "n2", "module_type": "info-card", "label": "出水温度"},
                 {"id": "n3", "module_type": "gauge-card", "label": "负荷"},
             ],
         )

@@ -19,7 +19,7 @@
 - 联动编辑面里选「跳转到大屏」，挑一张同项目的屏，点源控件就切过去。
 - 按控件上抛的**值**分流：一块摆六个指标的卡片，点第 N 个进第 N 张明细屏。
 - 谁能当源沿用既有口径：清单自报 `hostClickable` 或 `emitsInteractions` 的模块，
-  目前是 `text-block`、`image-block`、`metric-card`、`twin-view`。摆一张图当入口不用写任何代码。
+  目前是 `text-block`、`image-block`、`info-card`、`data-card`、`twin-view`。摆一张图当入口不用写任何代码。
 
 不在范围内：导航菜单模块、项目级导航源、自动轮播、跨项目跳转（见 §9）。
 
@@ -230,7 +230,7 @@ A 一旦被删或改了绑定，B 屏当场没数据，且现场看不出这跟�
 |---|---|---|
 | `action-button` | 原生 `<button>`，`emitsInteractions`（含 Enter/Space 与禁用语义） | 配了「联动值」就有 |
 | `text-block` / `image-block` | 清单 `hostClickable`，整块可点由渲染宿主接管（含 Enter/Space） | 无 → 只能配 `navigate` |
-| `metric-card` | 整块可点 + 逐行 `rowClickEmitter` 上抛 `{event:'click', value}` | 有 → `navigateByValue` 的主要用户 |
+| `info-card` / `data-card` | 整块可点 + 逐格 `rowClickEmitter` 上抛 `{event:'click', value}` | 有 → `navigateByValue` 的主要用户 |
 | `twin-view` | `emitsInteractions`（3D 里点对象） | 有 |
 
 配了以某节点为源的规则，`meta.interactive` 会为真，展示类模块自动摆出可点击外观——

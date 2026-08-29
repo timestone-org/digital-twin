@@ -231,7 +231,7 @@ export type CardStatusDot = (typeof CARD_STATUS_DOTS)[number]['value']
 export const CARD_STATUS_DOT_VALUES = valuesOf(CARD_STATUS_DOTS)
 
 /**
- * 一格的值按哪种类型解读，三档与本仓 metric-card 的 `kind` 逐字相同。
+ * 一格的值按哪种类型解读，三档。
  * ⚠ 只有 `number` 评估规则：文本与开关量命中不了阈值，也就没有告警色。
  */
 export const CARD_VALUE_KINDS = [

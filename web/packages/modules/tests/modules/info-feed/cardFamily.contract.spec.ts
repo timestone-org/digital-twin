@@ -5,8 +5,6 @@
  * ⚠ 这张对照表只有四个模块全落地了才校得动，故收在最后一个模块的用例里。
  * ⚠ 覆盖表漏一行不会有任何报错：漏掉的那个参考模块只是「没人做」，而设计文档里
  * 写着「一个不漏」——纸面与仓库各说各话，只有把表写成断言才拦得住。
- * ⚠ `metric-card` 并存不动：它与本族三处不等价（密度的行列间距、状态点的正常档、
- * 读数色缺省），那正是并存的理由，所以它不许挂 `replacedBy`。
  */
 import { isIconName } from '@dt/ui'
 import { describe, expect, it } from 'vitest'
@@ -15,7 +13,6 @@ import gaugeCard from '../../../src/modules/gauge-card/manifest'
 import infoCard from '../../../src/modules/info-card/manifest'
 import infoFeed from '../../../src/modules/info-feed/manifest'
 import infoList from '../../../src/modules/info-list/manifest'
-import metricCard from '../../../src/modules/metric-card/manifest'
 
 const FAMILY = [infoCard, infoList, infoFeed, gaugeCard]
 
@@ -99,8 +96,7 @@ describe('卡片族四个模块的身份', () => {
     ])
   })
 
-  it('实时数值并存不动：它没被判成谁的旧版', () => {
-    expect(metricCard.replacedBy).toBeUndefined()
+  it('四个都没被判成谁的旧版', () => {
     expect(FAMILY.map((item) => item.replacedBy)).toEqual([
       undefined,
       undefined,

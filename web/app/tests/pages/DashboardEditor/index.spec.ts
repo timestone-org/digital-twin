@@ -402,7 +402,7 @@ describe('多选面板的页面接线', () => {
         nodes: [
           block('n1'),
           block('n2', { x: 300, zIndex: 1 }),
-          { ...node('n3'), moduleType: 'metric-card', x: 600, zIndex: 2 },
+          { ...node('n3'), moduleType: 'info-card', x: 600, zIndex: 2 },
         ],
       }),
     )

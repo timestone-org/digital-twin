@@ -83,9 +83,7 @@ SERVER_SPECS: tuple[ToolSpec, ...] = (
         ),
         parameters=object_schema(
             {
-                "module_type": string_schema(
-                    "要展开的模块类型，如 metric-card"
-                ),
+                "module_type": string_schema("要展开的模块类型，如 info-card"),
                 "keyword": string_schema(
                     "按中文名或别名筛名片表；展开时不用给"
                 ),

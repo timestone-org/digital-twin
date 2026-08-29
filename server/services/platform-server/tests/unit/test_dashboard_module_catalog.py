@@ -26,7 +26,6 @@ def test_the_committed_catalog_registers_the_known_modules() -> None:
             "info-card",
             "info-feed",
             "info-list",
-            "metric-card",
             "text-block",
             "twin-2d-view",
             "twin-view",
@@ -34,15 +33,15 @@ def test_the_committed_catalog_registers_the_known_modules() -> None:
     )
 
 
-def test_the_metric_card_slot_is_an_entity_pinned_array() -> None:
-    """读数槽的行钉在配置里的指标上，故免掉「索引连续」那条校验。
+def test_a_card_slot_is_an_entity_pinned_array() -> None:
+    """卡片的读数槽的行钉在配置里的格上，故免掉「索引连续」那条校验。
 
-    ⚠ 漏了这个标记的话，只绑第 2 个指标就会被服务端拒掉，而现象是
+    ⚠ 漏了这个标记的话，只绑第 2 格就会被服务端拒掉，而现象是
     「绑点面板上填好了，保存报 422」。
     """
-    slots = load_module_catalog().slots("metric-card")
-    assert slots.array_fields == {"itemValues": frozenset({"value"})}
-    assert slots.entity_pinned == frozenset({"itemValues"})
+    slots = load_module_catalog().slots("info-card")
+    assert slots.array_fields == {"cardValues": frozenset({"value", "aux"})}
+    assert slots.entity_pinned == frozenset({"cardValues"})
 
 
 def test_the_look_keys_are_the_top_keys_minus_the_content_keys() -> None:
@@ -52,14 +51,15 @@ def test_the_look_keys_are_the_top_keys_minus_the_content_keys() -> None:
     一条卡片样式存下来，套用时把别人配好的那一格整片抹掉。
     """
     catalog = load_module_catalog()
-    module = catalog.find("metric-card")
+    module = catalog.find("info-card")
     assert module is not None
     top = {field.key for field in module.config_schema}
 
-    assert catalog.look_keys("metric-card") == top - {
+    assert catalog.look_keys("info-card") == top - {
         "title",
         "items",
         "emptyText",
+        "rules",
     }
 
 
@@ -88,8 +88,8 @@ def test_a_module_carries_the_description_the_agent_reads() -> None:
     module = load_module_catalog().find("gauge-card")
     assert module is not None
     assert module.description is not None
-    # 划界那半句是描述最要紧的部分：模型正是在这三个卡片族之间选错模块
-    assert "metric-card" in module.description
+    # 划界那半句是描述最要紧的部分：模型正是在这几个卡片族之间选错模块
+    assert "info-card" in module.description
 
 
 def test_an_unknown_type_has_no_manifest() -> None:
