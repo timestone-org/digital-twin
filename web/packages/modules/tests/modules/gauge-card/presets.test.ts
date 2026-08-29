@@ -11,7 +11,6 @@
 import type { ConfigField } from '@dt/contracts'
 import { describe, expect, it } from 'vitest'
 
-import { GAUGE_ITEMS_KEY } from '../../../src/modules/gauge-card/gauges'
 import manifest from '../../../src/modules/gauge-card/manifest'
 import { GAUGE_SHAPES } from '../../../src/modules/gauge-card/options'
 import { GAUGE_CARD_PRESETS } from '../../../src/modules/gauge-card/presets'
@@ -21,7 +20,7 @@ const TOP_KEYS = new Set(SCHEMA.map((field) => field.key))
 const OBJECT_FIELDS = SCHEMA.filter((field) => field.type === 'object')
 
 /** 预设换的是观感，这三个内容键写了就会抹掉用户配好的仪表。 */
-const CONTENT_KEYS = ['title', GAUGE_ITEMS_KEY, 'emptyText']
+const CONTENT_KEYS = manifest.contentKeys ?? []
 
 /** 参考仓 entity-gauge 那四档：共用同一份留白、单位贴法与「不画目标」的口径。 */
 const ENTITY_GAUGE_IDS = ['arc-gauge', 'linear-bar', 'tank', 'thermometer']
@@ -138,7 +137,7 @@ describe('预设写的键', () => {
     )
 
     expect(new Set(shapes).size).toBe(1)
-    expect(Object.keys(GAUGE_CARD_PRESETS[0]?.config ?? {})).toHaveLength(27)
+    expect(Object.keys(GAUGE_CARD_PRESETS[0]?.config ?? {})).toHaveLength(26)
   })
 
   it('观感键一个不落：顶层三十个字段里除去三个内容键，全在预设里', () => {
@@ -224,15 +223,13 @@ describe('预设写的取值', () => {
     ])
   })
 
-  it('六套都不带取值规则：没有判据就不该染色', () => {
-    expect(GAUGE_CARD_PRESETS.map((preset) => preset.config.rules)).toEqual([
-      [],
-      [],
-      [],
-      [],
-      [],
-      [],
-    ])
+  // ⚠ 不是「写成空数组」而是**这个键根本不出现**：预设是浅合并落库的，写一个
+  //   空数组等于把用户配好的阈值静默清空，而他只是想换个样子
+  //   （CARD_STYLE_LIBRARY_DESIGN §1.3）
+  it('六套都不碰取值规则：没有判据就不该染色，也不该把别人的判据抹掉', () => {
+    expect(
+      GAUGE_CARD_PRESETS.filter((preset) => 'rules' in preset.config),
+    ).toEqual([])
   })
 
   it('千分位六套都开着——两个参考模块都走 toLocaleString 且没关分组', () => {

@@ -78,6 +78,7 @@ export default defineModule({
   ],
   defaultSize: { width: 420, height: 220, minWidth: 120, minHeight: 64 },
   configPresets: INFO_CARD_PRESETS,
+  contentKeys: ['title', CARD_ITEMS_KEY, 'emptyText', 'rules'],
   configSchema: [
     {
       key: 'title',

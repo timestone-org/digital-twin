@@ -207,6 +207,7 @@ export {
   MODULE_CONNECTION_STATES,
   MODULE_REGIONS,
   MODULE_STATUSES,
+  styleKeysOf,
 } from './module'
 export type {
   CardChrome,

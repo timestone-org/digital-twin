@@ -24,6 +24,7 @@ export default defineModule({
   icon: 'gauge',
   keywords: ['metric', 'shuzhi', '数值', '指标', '读数', '实时', 'kpi'],
   defaultSize: { width: 420, height: 180, minWidth: 120, minHeight: 64 },
+  contentKeys: ['title', METRIC_ITEMS_KEY, 'emptyText'],
   configSchema: [
     {
       key: 'title',

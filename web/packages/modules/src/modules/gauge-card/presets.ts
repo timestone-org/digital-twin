@@ -69,7 +69,6 @@ export const GAUGE_CARD_PRESETS: ConfigPreset[] = [
       fillColor: '',
       trackColor: '',
       thousands: true,
-      rules: [],
     },
   },
   {
@@ -128,7 +127,6 @@ export const GAUGE_CARD_PRESETS: ConfigPreset[] = [
       trackColor: '',
       // 参考仓走 toLocaleString 且没关分组，四档都带千分位
       thousands: true,
-      rules: [],
     },
   },
   {
@@ -178,7 +176,6 @@ export const GAUGE_CARD_PRESETS: ConfigPreset[] = [
       fillColor: '',
       trackColor: '',
       thousands: true,
-      rules: [],
     },
   },
   {
@@ -229,7 +226,6 @@ export const GAUGE_CARD_PRESETS: ConfigPreset[] = [
       fillColor: '',
       trackColor: '',
       thousands: true,
-      rules: [],
     },
   },
   {
@@ -279,7 +275,6 @@ export const GAUGE_CARD_PRESETS: ConfigPreset[] = [
       fillColor: '',
       trackColor: '',
       thousands: true,
-      rules: [],
     },
   },
   {
@@ -328,7 +323,6 @@ export const GAUGE_CARD_PRESETS: ConfigPreset[] = [
       fillColor: '',
       trackColor: '',
       thousands: true,
-      rules: [],
     },
   },
 ]

@@ -5,7 +5,11 @@
  *
  * 目录变了就重新生成：`pnpm vitest run packages/modules/tests/catalog.contract.spec.ts -u`
  */
-import { BINDING_DATA_TYPES, CONFIG_FIELD_TYPES } from '@dt/contracts'
+import {
+  BINDING_DATA_TYPES,
+  CHROME_KEYS,
+  CONFIG_FIELD_TYPES,
+} from '@dt/contracts'
 import { join } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 
@@ -143,6 +147,46 @@ describe('给模型读的那几段', () => {
     // 被上下文截断时先没的不该是读表的图例
     const keys = Object.keys(catalog)
     expect(keys.indexOf('field_types')).toBeLessThan(keys.indexOf('modules'))
+  })
+
+  it('外壳键词汇表整份序列化，枚举档带上取值名单', () => {
+    const catalog = buildModuleCatalog(listModules())
+    const rows = catalog.chrome_keys as CatalogJson[]
+
+    expect(rows.map((row) => row.key)).toEqual(
+      CHROME_KEYS.map((spec) => spec.key),
+    )
+    for (const [index, row] of rows.entries()) {
+      const spec = CHROME_KEYS[index]
+      expect(row.type).toBe(spec?.type)
+      // 枚举档没有名单 = 服务端校不出档位、模型也猜不出该写哪个字面量
+      expect(row.values).toEqual(
+        spec !== undefined && 'values' in spec ? [...spec.values] : undefined,
+      )
+    }
+  })
+
+  it('内容键序列化，且每一个都真在该模块的顶层键里', () => {
+    const catalog = buildModuleCatalog(listModules())
+    const declared = listModules().filter(
+      (manifest) => manifest.contentKeys !== undefined,
+    )
+    const serializedOnes = modulesOf(catalog).filter(
+      (module) => module.content_keys !== undefined,
+    )
+
+    expect(declared.length).toBeGreaterThan(0)
+    expect(serializedOnes).toHaveLength(declared.length)
+    // ⚠ 指了一个清单里没有的键，那个键就永远不会被当成内容——它会被当成观感
+    //   存进样式，别人套用时把自己配好的行整片抹掉，而两侧都不报错
+    for (const module of serializedOnes) {
+      const keys = (module.config_schema as CatalogJson[]).map(
+        (field) => field.key,
+      )
+      for (const key of module.content_keys as string[]) {
+        expect(keys).toContain(key)
+      }
+    }
   })
 })
 

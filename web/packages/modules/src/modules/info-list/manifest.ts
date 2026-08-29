@@ -61,6 +61,7 @@ export default defineModule({
   ],
   defaultSize: { width: 360, height: 420, minWidth: 160, minHeight: 96 },
   configPresets: INFO_LIST_PRESETS,
+  contentKeys: ['title', LIST_ITEMS_KEY, 'noRowsText', 'rules'],
   configSchema: [
     {
       key: 'title',

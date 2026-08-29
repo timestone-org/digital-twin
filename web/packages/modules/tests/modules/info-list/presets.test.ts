@@ -18,7 +18,7 @@ const TOP_KEYS = new Set(SCHEMA.map((field) => field.key))
 const OBJECT_FIELDS = SCHEMA.filter((field) => field.type === 'object')
 
 /** 预设换的是观感，这三个内容键写了就会抹掉用户配好的行。 */
-const CONTENT_KEYS = ['title', 'items', 'noRowsText']
+const CONTENT_KEYS = manifest.contentKeys ?? []
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -114,24 +114,47 @@ describe('预设写的键', () => {
     expect(unknown).toEqual([])
   })
 
-  it('八套写的是同一组键——少一个键就会让上一套的那个取值原样残留', () => {
+  it('八套写的是同一组观感键——少一个键就会让上一套的那个取值原样残留', () => {
     const shapes = INFO_LIST_PRESETS.map((preset) =>
-      Object.keys(preset.config).sort().join(','),
+      Object.keys(preset.config)
+        .filter((key) => key !== 'rules')
+        .sort()
+        .join(','),
     )
 
     expect(new Set(shapes).size).toBe(1)
-    expect(Object.keys(INFO_LIST_PRESETS[0]?.config ?? {})).toHaveLength(32)
+    expect(
+      Object.keys(INFO_LIST_PRESETS[0]?.config ?? {}).filter(
+        (key) => key !== 'rules',
+      ),
+    ).toHaveLength(31)
   })
 
+  /**
+   * `rules` 是内容键，所以它被排除在上面那条「同一组键」之外，代价要说清：
+   * 从带出厂规则的那两套换成别的一套，那组规则**原样留着**（别的套不写这个键）。
+   * 这是刻意的取舍——反过来让每一套都写 `rules: []` 的话，任何一次换观感都会把
+   * 用户自己配的阈值静默清空，那是数据丢失，比留一组看得见的颜色严重得多
+   * （CARD_STYLE_LIBRARY_DESIGN §1.3）。
+   */
+  it('只有这两套带出厂规则，其余六套一个字都不碰它', () => {
+    const carriers = INFO_LIST_PRESETS.filter(
+      (preset) => 'rules' in preset.config,
+    ).map((preset) => preset.id)
+
+    expect(carriers).toEqual(['vessel-card', 'work-order'])
+  })
+
+  // `rules` 也是内容键，但它有出厂规则那一条例外，由上面那条用例单独管
   it('内容键一个都不写：预设换的是观感，不是把用户配好的行抹掉', () => {
     const wiped = INFO_LIST_PRESETS.flatMap((preset) =>
-      CONTENT_KEYS.filter((key) => key in preset.config).map(
+      CONTENT_KEYS.filter((key) => key !== 'rules' && key in preset.config).map(
         (key) => `${preset.id}.${key}`,
       ),
     )
 
     expect(wiped).toEqual([])
-    // 反过来锁住这三个键真的在清单里，免得改名之后这条断言变成空转
+    // 反过来锁住这几个键真的在清单里，免得改名之后这条断言变成空转
     expect(CONTENT_KEYS.filter((key) => TOP_KEYS.has(key))).toEqual(
       CONTENT_KEYS,
     )

@@ -9,6 +9,8 @@
  * 它们回答的是「这个模块该怎么配」，而模型只有这一份目录可读。少了预设，
  * 模型只能逐个字段去凑一套观感（十几个键，漏一个也看不出漏在哪）；少了
  * `subEditor`，它会照着猜往子编辑器那一段里写，而写进去既不报错也不渲染。
+ * ⚠ `contentKeys` 与 `CHROME_KEYS` 同理**必须**导出：服务端校验一条卡片样式时，
+ * 要按它们分出「哪些键是观感、哪些键是这张屏自己的内容」（CARD_STYLE_LIBRARY_DESIGN §5.3）。
  */
 import type {
   BindingSpec,
@@ -18,7 +20,11 @@ import type {
   ModuleDefaultSize,
   ModuleSubEditor,
 } from '@dt/contracts'
-import { BINDING_DATA_TYPE_DOCS, CONFIG_FIELD_TYPE_DOCS } from '@dt/contracts'
+import {
+  BINDING_DATA_TYPE_DOCS,
+  CHROME_KEYS,
+  CONFIG_FIELD_TYPE_DOCS,
+} from '@dt/contracts'
 
 /** 服务端目录的格式版本，与 `ModuleCatalogOut.catalog_version` 同源。 */
 export const MODULE_CATALOG_VERSION = 1
@@ -159,6 +165,8 @@ function moduleType(manifest: ModuleManifest): CatalogJson {
       ? undefined
       : freeJson(manifest.defaultConfig),
   )
+  // 顶层键里属于内容的那几个；其余即观感键，一整套样式写的就是那一批
+  put(out, 'content_keys', manifest.contentKeys?.map(String))
   // 这一段配置由整页子编辑器接管：模型照猜着往里写，既不报错也不渲染
   put(
     out,
@@ -185,6 +193,7 @@ export function buildModuleCatalog(
     //   放在末尾的话，被上下文截断时先没的正是图例
     field_types: docTable(CONFIG_FIELD_TYPE_DOCS),
     binding_data_types: docTable(BINDING_DATA_TYPE_DOCS),
+    chrome_keys: CHROME_KEYS.map(chromeKey),
     modules: sorted.map(moduleType),
   }
 }
@@ -195,6 +204,19 @@ export function buildModuleCatalog(
  * 逐字比对的快照——键序一漂，每次生成都是一份假 diff。
  * @param docs 契约里逐档铺满的说明表
  */
+/**
+ * 卡片外壳的一个键。这批键**不在任何模块的 `configSchema` 里**——它们住在
+ * `config_json.__cardStyle` 与大屏级 `chrome_json.card` 两处，对所有模块通用。
+ * ⚠ 不导出就没人校得动一条卡片样式的外壳段：服务端没有别的地方能知道
+ * `borderStyle` 有哪几档，而写错的档位存得下去、渲染时静默回落。
+ * @param spec 词汇表里的一条
+ */
+function chromeKey(spec: (typeof CHROME_KEYS)[number]): CatalogJson {
+  const out: CatalogJson = { key: spec.key, type: spec.type }
+  put(out, 'values', 'values' in spec ? [...spec.values] : undefined)
+  return out
+}
+
 function docTable(docs: Readonly<Record<string, string>>): CatalogValue[] {
   return Object.entries(docs)
     .sort(([a], [b]) => (a < b ? -1 : 1))

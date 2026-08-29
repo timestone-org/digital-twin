@@ -86,6 +86,7 @@ export default defineModule({
   ],
   defaultSize: { width: 320, height: 220, minWidth: 120, minHeight: 96 },
   configPresets: GAUGE_CARD_PRESETS,
+  contentKeys: ['title', GAUGE_ITEMS_KEY, 'emptyText', 'rules'],
   configSchema: [
     {
       key: 'title',

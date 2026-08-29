@@ -41,6 +41,7 @@ export default defineModule({
   ],
   defaultSize: { width: 400, height: 260, minWidth: 160, minHeight: 96 },
   configPresets: INFO_FEED_PRESETS,
+  contentKeys: ['title', 'emptyText'],
   configSchema: [
     {
       key: 'title',

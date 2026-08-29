@@ -317,6 +317,18 @@ export interface ModuleManifest {
   /** 属性面板顶部的一排预设按钮，缺省不显示。只放「整套观感」级的组合。 */
   configPresets?: ConfigPreset[]
   /**
+   * `configSchema` 顶层键里属于**内容**的那几个：标题、行列表、缺值占位、阈值规则。
+   * 其余顶层键即**观感键**，一整套观感预设写的就是它们。
+   *
+   * 观感与内容的分界只有模块自己说得清，而分错的两个方向都静默：把内容键当观感
+   * 存进一套样式，别人套用时他配好的行整片被抹掉；把观感键漏在名单外，那一项就
+   * 存不进样式，换一套样式时它原样残留。
+   *
+   * ⚠ 不靠 `group` 名判：group 是给人看的中文串，改一个字就把内容键翻成观感键。
+   * ⚠ 阈值规则算内容：它是数据判据（这个点位超过 80 报警），跟点位走不跟观感走。
+   */
+  contentKeys?: readonly string[]
+  /**
    * 新建节点时种入 config 的初始值（深克隆落库）。与 `ConfigField.default` 的
    * 区别同 `ConfigPreset` 注释：这里是显式落库的出厂配置，用于 schema 之外的段，
    * 保证属性面板显示与实际渲染一致。只影响新节点，存量不变。
@@ -407,6 +419,25 @@ export interface ModuleManifest {
    * ⚠ 必须异步：不打开孪生模块的大屏不该为 three.js 付首屏包体。
    */
   component: () => Promise<{ default: Component }>
+}
+
+/**
+ * 一个模块的**观感键**：顶层配置键去掉 `contentKeys` 里那几个。
+ * 一整套观感（内置预设、用户存下来的卡片样式）写的就是这一批，
+ * 一个不多一个不少（CARD_STYLE_LIBRARY_DESIGN §1.2）。
+ *
+ * ⚠ 顺序照 `configSchema` 的书写序，不排序：这一批要逐字进快照产物，
+ * 排序换一种写法就是一份假 diff。
+ * @param manifest 模块清单
+ */
+export function styleKeysOf(manifest: {
+  configSchema: readonly ConfigField[]
+  contentKeys?: readonly string[]
+}): string[] {
+  const content = new Set(manifest.contentKeys ?? [])
+  return manifest.configSchema
+    .map((field) => field.key)
+    .filter((key) => !content.has(key))
 }
 
 /**

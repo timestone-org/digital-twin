@@ -55,7 +55,6 @@ export const INFO_LIST_PRESETS: ConfigPreset[] = [
       },
       extras: [],
       thousands: true,
-      rules: [],
       alarmOn: 'value',
       rowFilter: 'all',
       rowSort: 'docOrder',
@@ -109,7 +108,6 @@ export const INFO_LIST_PRESETS: ConfigPreset[] = [
       },
       extras: [],
       thousands: true,
-      rules: [],
       alarmOn: 'value',
       rowFilter: 'all',
       rowSort: 'docOrder',
@@ -169,7 +167,6 @@ export const INFO_LIST_PRESETS: ConfigPreset[] = [
       extras: [],
       thousands: true,
       // 指标的达标线逐块不同，没有一组通用阈值可以出厂预置
-      rules: [],
       alarmOn: 'value',
       rowFilter: 'all',
       rowSort: 'docOrder',
@@ -229,7 +226,6 @@ export const INFO_LIST_PRESETS: ConfigPreset[] = [
       ],
       thousands: true,
       // 能源类型是静态元数据不是值驱动的：五色走逐行「固定颜色」
-      rules: [],
       alarmOn: 'value',
       rowFilter: 'all',
       rowSort: 'docOrder',
@@ -283,7 +279,6 @@ export const INFO_LIST_PRESETS: ConfigPreset[] = [
       },
       extras: [],
       thousands: true,
-      rules: [],
       alarmOn: 'value',
       rowFilter: 'all',
       rowSort: 'docOrder',
@@ -515,7 +510,6 @@ export const INFO_LIST_PRESETS: ConfigPreset[] = [
       extras: [],
       thousands: true,
       // 报警线逐个点位不同，没有一组通用阈值可以出厂预置
-      rules: [],
       alarmOn: 'value',
       rowFilter: 'alarm',
       rowSort: 'severity',

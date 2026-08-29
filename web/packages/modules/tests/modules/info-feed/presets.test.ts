@@ -17,7 +17,7 @@ const SCHEMA = manifest.configSchema
 const TOP_KEYS = new Set(SCHEMA.map((field) => field.key))
 
 /** 预设换的是观感，这两个内容键写了就会抹掉用户自己写的字。 */
-const CONTENT_KEYS = ['title', 'emptyText']
+const CONTENT_KEYS = manifest.contentKeys ?? []
 
 /** 气象五色里唯一一处没有对应 token 的颜色，由黄与红调出来。 */
 const WEATHER_ORANGE =

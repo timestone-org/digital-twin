@@ -76,6 +76,206 @@
       "doc": "文本。后端推来的成品文案、时间文本这类。"
     }
   ],
+  "chrome_keys": [
+    {
+      "key": "borderStyle",
+      "type": "enum",
+      "values": [
+        "solid",
+        "glow",
+        "double",
+        "dashed",
+        "bracket",
+        "cut",
+        "breathe",
+        "none"
+      ]
+    },
+    {
+      "key": "bg",
+      "type": "color"
+    },
+    {
+      "key": "border",
+      "type": "color"
+    },
+    {
+      "key": "borderHover",
+      "type": "color"
+    },
+    {
+      "key": "cornerColor",
+      "type": "color"
+    },
+    {
+      "key": "radius",
+      "type": "number"
+    },
+    {
+      "key": "corners",
+      "type": "boolean"
+    },
+    {
+      "key": "showTitle",
+      "type": "boolean"
+    },
+    {
+      "key": "titleColor",
+      "type": "color"
+    },
+    {
+      "key": "borderPulse",
+      "type": "boolean"
+    },
+    {
+      "key": "borderPulseDuration",
+      "type": "number"
+    },
+    {
+      "key": "borderSide",
+      "type": "enum",
+      "values": [
+        "top",
+        "bottom",
+        "left",
+        "right"
+      ]
+    },
+    {
+      "key": "cornerStyle",
+      "type": "enum",
+      "values": [
+        "bracket",
+        "dot"
+      ]
+    },
+    {
+      "key": "cornerSize",
+      "type": "number"
+    },
+    {
+      "key": "cornerGlow",
+      "type": "number"
+    },
+    {
+      "key": "cornerOpacity",
+      "type": "number"
+    },
+    {
+      "key": "cornerOffset",
+      "type": "number"
+    },
+    {
+      "key": "titleAlign",
+      "type": "enum",
+      "values": [
+        "bottom"
+      ]
+    },
+    {
+      "key": "titlePadding",
+      "type": "number3"
+    },
+    {
+      "key": "titleGap",
+      "type": "number"
+    },
+    {
+      "key": "titleFontSize",
+      "type": "number"
+    },
+    {
+      "key": "titleFontWeight",
+      "type": "enum",
+      "values": [
+        "400",
+        "500",
+        "600",
+        "700"
+      ]
+    },
+    {
+      "key": "titleLetterSpacing",
+      "type": "number"
+    },
+    {
+      "key": "titleBarWidth",
+      "type": "number"
+    },
+    {
+      "key": "titleBarFull",
+      "type": "boolean"
+    },
+    {
+      "key": "titleBarRadius",
+      "type": "number"
+    },
+    {
+      "key": "titleBarGlow",
+      "type": "number"
+    },
+    {
+      "key": "titleBarColor",
+      "type": "color"
+    },
+    {
+      "key": "titleBarColorAlt",
+      "type": "color"
+    },
+    {
+      "key": "titlePulse",
+      "type": "boolean"
+    },
+    {
+      "key": "titlePulseDuration",
+      "type": "number"
+    },
+    {
+      "key": "titleRule",
+      "type": "enum",
+      "values": [
+        "line",
+        "hatch"
+      ]
+    },
+    {
+      "key": "titleRuleHeight",
+      "type": "number"
+    },
+    {
+      "key": "titleRuleOpacity",
+      "type": "number"
+    },
+    {
+      "key": "fontFamily",
+      "type": "enum",
+      "values": [
+        "sans",
+        "display",
+        "mono"
+      ]
+    },
+    {
+      "key": "fontSize",
+      "type": "number"
+    },
+    {
+      "key": "textColor",
+      "type": "color"
+    },
+    {
+      "key": "backdropBlur",
+      "type": "number"
+    },
+    {
+      "key": "hoverLift",
+      "type": "number"
+    },
+    {
+      "key": "hoverGlow",
+      "type": "boolean"
+    }
+  ],
   "modules": [
     {
       "type": "action-button",
@@ -1899,8 +2099,7 @@
             "labelTone": "title",
             "fillColor": "",
             "trackColor": "",
-            "thousands": true,
-            "rules": []
+            "thousands": true
           }
         },
         {
@@ -1945,8 +2144,7 @@
             "labelTone": "secondary",
             "fillColor": "",
             "trackColor": "",
-            "thousands": true,
-            "rules": []
+            "thousands": true
           }
         },
         {
@@ -1991,8 +2189,7 @@
             "labelTone": "secondary",
             "fillColor": "",
             "trackColor": "",
-            "thousands": true,
-            "rules": []
+            "thousands": true
           }
         },
         {
@@ -2037,8 +2234,7 @@
             "labelTone": "secondary",
             "fillColor": "",
             "trackColor": "",
-            "thousands": true,
-            "rules": []
+            "thousands": true
           }
         },
         {
@@ -2083,8 +2279,7 @@
             "labelTone": "secondary",
             "fillColor": "",
             "trackColor": "",
-            "thousands": true,
-            "rules": []
+            "thousands": true
           }
         },
         {
@@ -2129,10 +2324,15 @@
             "labelTone": "secondary",
             "fillColor": "",
             "trackColor": "",
-            "thousands": true,
-            "rules": []
+            "thousands": true
           }
         }
+      ],
+      "content_keys": [
+        "title",
+        "items",
+        "emptyText",
+        "rules"
       ]
     },
     {
@@ -3860,7 +4060,6 @@
               "label": "",
               "invertTrend": false
             },
-            "rules": [],
             "statusDot": "none"
           }
         },
@@ -3920,7 +4119,6 @@
               "label": "",
               "invertTrend": false
             },
-            "rules": [],
             "statusDot": "none"
           }
         },
@@ -3980,7 +4178,6 @@
               "label": "",
               "invertTrend": false
             },
-            "rules": [],
             "statusDot": "none"
           }
         },
@@ -4040,7 +4237,6 @@
               "label": "",
               "invertTrend": false
             },
-            "rules": [],
             "statusDot": "none"
           }
         },
@@ -4100,10 +4296,15 @@
               "label": "",
               "invertTrend": false
             },
-            "rules": [],
             "statusDot": "none"
           }
         }
+      ],
+      "content_keys": [
+        "title",
+        "items",
+        "emptyText",
+        "rules"
       ]
     },
     {
@@ -4514,6 +4715,10 @@
             "scrollSpeed": 3
           }
         }
+      ],
+      "content_keys": [
+        "title",
+        "emptyText"
       ]
     },
     {
@@ -6001,7 +6206,6 @@
             },
             "extras": [],
             "thousands": true,
-            "rules": [],
             "alarmOn": "value",
             "rowFilter": "all",
             "rowSort": "docOrder",
@@ -6077,7 +6281,6 @@
             },
             "extras": [],
             "thousands": true,
-            "rules": [],
             "alarmOn": "value",
             "rowFilter": "all",
             "rowSort": "docOrder",
@@ -6159,7 +6362,6 @@
             },
             "extras": [],
             "thousands": true,
-            "rules": [],
             "alarmOn": "value",
             "rowFilter": "all",
             "rowSort": "docOrder",
@@ -6263,7 +6465,6 @@
               }
             ],
             "thousands": true,
-            "rules": [],
             "alarmOn": "value",
             "rowFilter": "all",
             "rowSort": "docOrder",
@@ -6345,7 +6546,6 @@
             },
             "extras": [],
             "thousands": true,
-            "rules": [],
             "alarmOn": "value",
             "rowFilter": "all",
             "rowSort": "docOrder",
@@ -6662,7 +6862,6 @@
             },
             "extras": [],
             "thousands": true,
-            "rules": [],
             "alarmOn": "value",
             "rowFilter": "alarm",
             "rowSort": "severity",
@@ -6671,6 +6870,12 @@
             "timeSource": "alarmSince"
           }
         }
+      ],
+      "content_keys": [
+        "title",
+        "items",
+        "noRowsText",
+        "rules"
       ]
     },
     {
@@ -7001,6 +7206,11 @@
             }
           ]
         }
+      ],
+      "content_keys": [
+        "title",
+        "items",
+        "emptyText"
       ]
     },
     {

@@ -10,7 +10,6 @@
 import type { ConfigField } from '@dt/contracts'
 import { describe, expect, it } from 'vitest'
 
-import { CARD_ITEMS_KEY } from '../../../src/modules/info-card/cells'
 import manifest from '../../../src/modules/info-card/manifest'
 import { INFO_CARD_PRESETS } from '../../../src/modules/info-card/presets'
 
@@ -18,8 +17,11 @@ const SCHEMA = manifest.configSchema
 const TOP_KEYS = new Set(SCHEMA.map((field) => field.key))
 const OBJECT_FIELDS = SCHEMA.filter((field) => field.type === 'object')
 
-/** 预设换的是观感，这三个内容键写了就会抹掉用户配好的格。 */
-const CONTENT_KEYS = ['title', CARD_ITEMS_KEY, 'emptyText']
+/**
+ * 内容键的真源在清单上（`ModuleManifest.contentKeys`），这里只取来用。
+ * 预设换的是观感，这几个键写了就会抹掉用户配好的格与他自己配的阈值。
+ */
+const CONTENT_KEYS = manifest.contentKeys ?? []
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -122,10 +124,10 @@ describe('预设写的键', () => {
     )
 
     expect(new Set(shapes).size).toBe(1)
-    expect(Object.keys(INFO_CARD_PRESETS[0]?.config ?? {})).toHaveLength(30)
+    expect(Object.keys(INFO_CARD_PRESETS[0]?.config ?? {})).toHaveLength(29)
   })
 
-  it('观感键一个不落：顶层三十三个字段里除去三个内容键，全在预设里', () => {
+  it('观感键一个不落：顶层字段里除去四个内容键，全在预设里', () => {
     const wrote = new Set(Object.keys(INFO_CARD_PRESETS[0]?.config ?? {}))
     const missing = [...TOP_KEYS].filter(
       (key) => !wrote.has(key) && !CONTENT_KEYS.includes(key),
@@ -204,14 +206,13 @@ describe('预设写的取值', () => {
     expect(found).toContain('icon-grid.icon.borderColor')
   })
 
-  it('五套都不带取值规则也不画状态点：没有判据就连正常都不该说', () => {
-    expect(INFO_CARD_PRESETS.map((preset) => preset.config.rules)).toEqual([
-      [],
-      [],
-      [],
-      [],
-      [],
-    ])
+  // ⚠ 不是「写成空数组」而是**这个键根本不出现**：预设是浅合并落库的，写一个
+  //   空数组等于把用户配好的阈值静默清空，而他只是想换个样子
+  //   （CARD_STYLE_LIBRARY_DESIGN §1.3）
+  it('五套都不碰取值规则，也都不画状态点：没有判据就连正常都不该说', () => {
+    expect(
+      INFO_CARD_PRESETS.filter((preset) => 'rules' in preset.config),
+    ).toEqual([])
     expect(
       INFO_CARD_PRESETS.every((preset) => preset.config.statusDot === 'none'),
     ).toBe(true)
