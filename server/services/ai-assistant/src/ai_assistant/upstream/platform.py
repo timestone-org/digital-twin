@@ -12,6 +12,7 @@
 """
 
 from typing import Any, cast
+from uuid import uuid4
 
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -27,6 +28,7 @@ _DASHBOARDS = "/api/v1/platform/dashboards"
 _MODULES = "/api/v1/platform/module-types"
 _TABLES = "/api/v1/platform/dataset-tables"
 _ASSETS = "/api/v1/platform/assets"
+_CARD_STYLES = "/api/v1/platform/card-styles"
 
 
 class PlatformUnavailable(DependencyUnavailable):
@@ -235,6 +237,58 @@ class PlatformClient:
         rows = _items_of(await self._get(_POINTS, query, headers))
         return next((row for row in rows if _code_of(row) == code), None)
 
+    async def list_card_styles(
+        self, headers: dict[str, str], *, module_type: str | None = None
+    ) -> object:
+        """翻第一页卡片样式清单。回整个分页体，`total` 留给调用方做截断说明。
+
+        Args: headers, module_type（只列绑这个模块类型的那一组）。
+        """
+        query: dict[str, Any] = {"page": 1, "size": self._page_size}
+        if module_type:
+            query["module_type"] = module_type
+        return await self._get(_CARD_STYLES, query, headers)
+
+    async def read_card_style(
+        self, headers: dict[str, str], style_id: str
+    ) -> object:
+        """取一条卡片样式的完整取值。
+
+        Args: headers, style_id。
+        """
+        return await self._get(f"{_CARD_STYLES}/{style_id}", {}, headers)
+
+    async def create_card_style(
+        self, headers: dict[str, str], body: dict[str, Any]
+    ) -> object:
+        """新建一条卡片样式。
+
+        ⚠ 幂等键每次现取：内容派生的键会在样式被删掉之后仍然回放出那条已经
+        不存在的记录，而助手会把那个 id 当成刚存好的一条报给用户。
+
+        Args: headers, body。
+        """
+        keyed = {**headers, "Idempotency-Key": str(uuid4())}
+        return await self._post(_CARD_STYLES, keyed, body)
+
+    async def update_card_style(
+        self, headers: dict[str, str], style_id: str, body: dict[str, Any]
+    ) -> object:
+        """改一条卡片样式，只写 body 里给了的那几格。
+
+        Args: headers, style_id, body。
+        """
+        return await self._patch(f"{_CARD_STYLES}/{style_id}", headers, body)
+
+    async def delete_card_style(
+        self, headers: dict[str, str], style_id: str
+    ) -> None:
+        """删一条卡片样式。
+
+        Args: headers, style_id。
+        """
+        await self._delete(f"{_CARD_STYLES}/{style_id}", headers)
+
     async def validate_dashboard(
         self, headers: dict[str, str], dashboard_id: str
     ) -> object:
@@ -273,6 +327,14 @@ class PlatformClient:
     ) -> object:
         return await self._call("POST", path, headers, json=body or {})
 
+    async def _patch(
+        self, path: str, headers: dict[str, str], body: dict[str, Any]
+    ) -> object:
+        return await self._call("PATCH", path, headers, json=body)
+
+    async def _delete(self, path: str, headers: dict[str, str]) -> object:
+        return await self._call("DELETE", path, headers)
+
     async def _call(
         self,
         method: str,
@@ -289,6 +351,10 @@ class PlatformClient:
                 method, path, headers=_with_trace(headers), **options
             )
             response.raise_for_status()
+            # ⚠ 204 没有响应体：照常去解信封的话，一次**成功**的删除会被读成
+            # 「响应不是预期的形状」，而调用方据此告诉用户没删掉
+            if not response.content:
+                return None
             return _Envelope.model_validate(response.json()).data
         except (httpx.HTTPError, ValidationError, ValueError) as error:
             _logger.warning(
@@ -359,9 +425,30 @@ def _reason(error: Exception) -> str:
     Args: error。
     """
     if isinstance(error, httpx.HTTPStatusError):
-        return f"platform 回了 {error.response.status_code}"
+        status = error.response.status_code
+        return f"platform 回了 {status}{_said(error.response)}"
     if isinstance(error, httpx.TimeoutException):
         return "platform 超时未响应"
     if isinstance(error, ValidationError):
         return "platform 的响应不是预期的形状"
     return "platform 不可达"
+
+
+def _said(response: httpx.Response) -> str:
+    """上游信封里那句话，取不出就不带。
+
+    ⚠ 光一个状态码不够：400 的正文里指着是哪一个字段写错了，只报「回了 400」
+    的话，调用方知道不行却不知道改哪儿，于是原样再试一次。
+
+    Args: response。
+    """
+    try:
+        body: object = response.json()
+    except ValueError:
+        return ""
+    if not isinstance(body, dict):
+        return ""
+    message = cast("dict[str, object]", body).get("message")
+    if not isinstance(message, str) or not message.strip():
+        return ""
+    return f"：{message.strip()}"
