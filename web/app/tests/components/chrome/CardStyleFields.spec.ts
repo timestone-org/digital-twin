@@ -13,8 +13,8 @@ import {
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
-import CardStyleFields from '@/pages/DashboardEditor/components/CardStyleFields.vue'
-import type { CardFieldContext } from '@/pages/DashboardEditor/scripts/cardStyleFields'
+import CardStyleFields from '@/components/chrome/CardStyleFields.vue'
+import type { CardFieldContext } from '@/features/dashboard/cardStyleFields'
 
 function mountFields(
   modelValue: Record<string, unknown> = {},

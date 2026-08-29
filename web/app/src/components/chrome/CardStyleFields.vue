@@ -17,12 +17,12 @@ import {
   chromeEntries,
   visibleCardFields,
   type CardFieldContext,
-} from '../scripts/cardStyleFields'
+} from '@/features/dashboard/cardStyleFields'
 import {
   CARD_STYLE_VARIANTS,
   CUSTOM_STYLE_ID,
   matchCardStyle,
-} from '../scripts/cardStyleVariants'
+} from '@/features/dashboard/cardStyleVariants'
 
 const props = defineProps<{
   modelValue: CardChrome

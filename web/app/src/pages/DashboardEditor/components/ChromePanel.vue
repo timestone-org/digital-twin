@@ -32,7 +32,7 @@ import {
 } from '@/features/dashboard/canvasSnap'
 import { parseInteractionRules } from '@/features/dashboard/interactionRules'
 import type { EditorMetaDraft } from '../scripts/useEditorMeta'
-import CardStyleFields from './CardStyleFields.vue'
+import CardStyleFields from '@/components/chrome/CardStyleFields.vue'
 import InteractionEditor from './InteractionEditor.vue'
 
 const props = defineProps<{

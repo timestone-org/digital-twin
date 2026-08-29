@@ -12,7 +12,7 @@ import {
   MINIMAL_OUTLINE_STYLE,
   matchCardStyle,
   resetStylePatch,
-} from '@/pages/DashboardEditor/scripts/cardStyleVariants'
+} from '@/features/dashboard/cardStyleVariants'
 
 describe('风格取值', () => {
   it('涉及的键全部登记在外观键清单里', () => {

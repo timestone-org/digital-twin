@@ -16,7 +16,7 @@ import {
   visibleCardFields,
   type CardField,
   type CardFieldContext,
-} from '@/pages/DashboardEditor/scripts/cardStyleFields'
+} from '@/features/dashboard/cardStyleFields'
 
 const ALL_FIELDS: CardField[] = [
   ...CARD_COMMON_FIELDS,

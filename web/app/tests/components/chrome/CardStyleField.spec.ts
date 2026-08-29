@@ -7,8 +7,8 @@ import { DtHelpTip } from '@dt/ui'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
-import CardStyleField from '@/pages/DashboardEditor/components/CardStyleField.vue'
-import type { CardField } from '@/pages/DashboardEditor/scripts/cardStyleFields'
+import CardStyleField from '@/components/chrome/CardStyleField.vue'
+import type { CardField } from '@/features/dashboard/cardStyleFields'
 
 function mountField(field: CardField, value: unknown = undefined) {
   return mount(CardStyleField, { props: { field, value } })

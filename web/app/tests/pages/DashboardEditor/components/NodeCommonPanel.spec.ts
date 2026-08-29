@@ -11,7 +11,7 @@ import { ref, type Ref } from 'vue'
 
 import { EDITOR_CANVAS_CARD_KEY } from '@/features/dashboard/editorContext'
 import type { LayerPosition } from '@/features/dashboard/editorDoc'
-import CardStyleFields from '@/pages/DashboardEditor/components/CardStyleFields.vue'
+import CardStyleFields from '@/components/chrome/CardStyleFields.vue'
 import NodeCommonPanel from '@/pages/DashboardEditor/components/NodeCommonPanel.vue'
 
 const MANIFEST: ModuleManifest = {

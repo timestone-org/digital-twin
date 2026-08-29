@@ -5,7 +5,7 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
-import CardStyleFields from '@/pages/DashboardEditor/components/CardStyleFields.vue'
+import CardStyleFields from '@/components/chrome/CardStyleFields.vue'
 import ChromePanel from '@/pages/DashboardEditor/components/ChromePanel.vue'
 
 function mountPanel() {

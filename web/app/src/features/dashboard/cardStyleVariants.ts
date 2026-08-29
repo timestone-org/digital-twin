@@ -1,6 +1,9 @@
 /**
  * @fileoverview 卡片外观风格：把一整套旋钮取值压成一次整批写入，「平台默认」则按同一批键
  * 清空（不写值 = 渲染走平台默认）。键的词汇表出自 `@dt/contracts` 的 `CHROME_KEYS`。
+ *
+ * ⚠ 这里只有**内置**的两档。用户自己存下来的那些是「卡片样式」，住在后端表里，
+ * 由 `api/cardStyles.ts` 取（docs/CARD_STYLE_LIBRARY_DESIGN.md）。
  */
 import type { CardChrome, ChromeKey } from '@dt/contracts'
 

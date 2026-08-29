@@ -31,9 +31,9 @@ import { nodeLabelOf } from '@/features/dashboard/nodeLabel'
 import {
   chromeEntries,
   type CardFieldContext,
-} from '../scripts/cardStyleFields'
+} from '@/features/dashboard/cardStyleFields'
 import type { OrderKind } from '../scripts/useEditorInspector'
-import CardStyleFields from './CardStyleFields.vue'
+import CardStyleFields from '@/components/chrome/CardStyleFields.vue'
 
 const props = defineProps<{
   node: DashboardNodePayload
