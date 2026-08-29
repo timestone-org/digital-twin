@@ -1,7 +1,6 @@
 /**
- * @fileoverview 清单里的演示值 → 一组 `static` 绑定。样式库、模块库缩略图这类
- * **不连实时数据**的地方靠它把 `ModulePreview.values` 喂进正常的求值链
- * （docs/CARD_STYLE_LIBRARY_DESIGN.md §3.3）。
+ * @fileoverview 清单里的演示值 → 一组 `static` 绑定。模块库缩略图这类
+ * **不连实时数据**的地方靠它把 `ModulePreview.values` 喂进正常的求值链。
  *
  * ⚠ 不新开一条注入口而是造绑定：走的是与画布同一条求值链，模块因此看到的
  * `values` 与 `meta.slots` 与真跑起来时逐字同形。另开一条「直接塞 values」的

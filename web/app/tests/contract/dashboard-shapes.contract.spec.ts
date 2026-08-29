@@ -25,7 +25,6 @@ import type {
   PublicDashboardWire,
   PublicNodeWire,
 } from '@/api/dashboardShareWire'
-import type { CardStyleWire } from '@/api/cardStylesWire'
 import type {
   DashboardTemplateDetailWire,
   DashboardTemplateSummaryWire,
@@ -216,17 +215,6 @@ const SHAPES = {
     thumbnail: true,
     updated_at: true,
   } satisfies Keys<DashboardTemplateDetailWire>,
-  CardStyleOut: {
-    chrome_json: true,
-    config_json: true,
-    created_at: true,
-    description: true,
-    id: true,
-    module_type: true,
-    name: true,
-    thumbnail: true,
-    updated_at: true,
-  } satisfies Keys<CardStyleWire>,
   ThumbnailOut: {
     dashboard_id: true,
     data: true,

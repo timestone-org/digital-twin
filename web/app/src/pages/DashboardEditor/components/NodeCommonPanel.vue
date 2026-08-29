@@ -262,7 +262,6 @@ function writeCardStyle(next: CardChrome): void {
       <CardStyleFields
         :model-value="cardStyle"
         :context="cardFieldContext"
-        :module-type="node.moduleType"
         @update:model-value="writeCardStyle"
       />
     </section>

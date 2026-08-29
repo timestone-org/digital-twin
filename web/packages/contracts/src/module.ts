@@ -423,8 +423,7 @@ export interface ModuleManifest {
 
 /**
  * 一个模块的**观感键**：顶层配置键去掉 `contentKeys` 里那几个。
- * 一整套观感（内置预设、用户存下来的卡片样式）写的就是这一批，
- * 一个不多一个不少（CARD_STYLE_LIBRARY_DESIGN §1.2）。
+ * 一整套观感（内置预设）写的就是这一批，一个不多一个不少。
  *
  * ⚠ 顺序照 `configSchema` 的书写序，不排序：这一批要逐字进快照产物，
  * 排序换一种写法就是一份假 diff。
