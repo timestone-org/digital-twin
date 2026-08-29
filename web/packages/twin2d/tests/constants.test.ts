@@ -100,10 +100,19 @@ describe('绑定槽清单', () => {
     expect(field?.enumMap).toBeUndefined()
   })
 
-  it('三个槽的 dataType 分别是数值、枚举、数值', () => {
+  // ⚠ 状态槽也是 `number`：状态在这里是数字编码（0/1/2/3），由 toDeviceStatus
+  //   分档。`enum` 那一档的意思是「配了 enumMap，值要换成映射里的文案」——
+  //   声明成 enum 却不给 map，等于摆着一个「看起来该配映射」的槽等人踩，
+  //   还让绑点面板上静态常量那一格从数字框退化成文本框
+  it('三个槽的 dataType 都是数值', () => {
     expect(specOf(TWIN_2D_NODE_BINDING_KEY).dataType).toBe('number')
-    expect(specOf(TWIN_2D_STATUS_BINDING_KEY).dataType).toBe('enum')
+    expect(specOf(TWIN_2D_STATUS_BINDING_KEY).dataType).toBe('number')
     expect(specOf(TWIN_2D_EDGE_BINDING_KEY).dataType).toBe('number')
+  })
+
+  it('节点状态的子槽也是数值', () => {
+    const [field] = specOf(TWIN_2D_STATUS_BINDING_KEY).arrayFields ?? []
+    expect(field?.dataType).toBe('number')
   })
 
   // ⚠ 一张纯静态工艺图是合法用法，所以本模块没有必绑槽

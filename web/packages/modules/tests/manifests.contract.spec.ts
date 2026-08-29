@@ -465,3 +465,91 @@ describe('壳适配声明的不变量', () => {
     expect(offenders).toEqual([])
   })
 })
+
+/**
+ * 面板上默认占整行的那几档：形状本来就宽（多行文本、图、子表单、行列表），
+ * 缺 `span` 是对的。其余是紧凑控件，缺 `span` 就等于**默认铺满一整行**，
+ * 而作者八成只是忘了写——页头曾因此有 11 个控件各占一整行。
+ */
+const WIDE_FIELD_TYPES = new Set<ConfigField['type']>([
+  'array',
+  'object',
+  'textarea',
+  'image',
+  'json',
+  'font',
+  'style',
+  'dashboard-ref',
+])
+
+describe('条件显示与栅格的不变量', () => {
+  // ⚠ 指错键的 `when` 恒不满足（配置里取不到那个键），表现是那个字段
+  //   **永远不出现**在面板上，而 typecheck 与 lint 双双放行
+  it('when 指向的键在同一层里真的存在', () => {
+    const offenders = listModules().flatMap((manifest) =>
+      danglingConditions(manifest.configSchema).map(
+        (text) => `${manifest.type}.${text}`,
+      ),
+    )
+
+    expect(offenders).toEqual([])
+  })
+
+  // ⚠ 名单外的取值恒不命中，同上：那个字段永远不出现，且没有任何一处报错
+  it('when 判的取值都在控制字段的 options 名单里', () => {
+    const offenders = listModules().flatMap((manifest) =>
+      strayConditionValues(manifest.configSchema).map(
+        (text) => `${manifest.type}.${text}`,
+      ),
+    )
+
+    expect(offenders).toEqual([])
+  })
+
+  it('紧凑控件都显式声明了 span', () => {
+    const offenders = listModules().flatMap((manifest) =>
+      manifest.configSchema
+        .filter(
+          (field) =>
+            !WIDE_FIELD_TYPES.has(field.type) && field.span === undefined,
+        )
+        .map((field) => `${manifest.type}.${field.key}(${field.type})`),
+    )
+
+    expect(offenders).toEqual([])
+  })
+})
+
+/** `when` 指向同层里并不存在的键的那些字段，逐层递归。 */
+function danglingConditions(fields: readonly ConfigField[]): string[] {
+  const keys = new Set(fields.map((field) => field.key))
+  const out: string[] = []
+  for (const field of fields) {
+    if (field.when !== undefined && !keys.has(field.when.key)) {
+      out.push(`${field.key} → ${field.when.key}`)
+    }
+    out.push(...danglingConditions(field.fields ?? []))
+    out.push(...danglingConditions(field.itemSchema ?? []))
+  }
+  return out
+}
+
+/** `when` 判的取值落在控制字段 `options` 名单之外的那些字段，逐层递归。 */
+function strayConditionValues(fields: readonly ConfigField[]): string[] {
+  const byKey = new Map(fields.map((field) => [field.key, field]))
+  const out: string[] = []
+  for (const field of fields) {
+    const condition = field.when
+    const parent = condition && byKey.get(condition.key)
+    if (condition !== undefined && parent?.options !== undefined) {
+      const allowed = new Set(parent.options.map((option) => option.value))
+      const stray = condition.in.filter((value) => !allowed.has(value))
+      if (stray.length > 0) {
+        out.push(`${field.key} → ${condition.key} in ${stray.join(',')}`)
+      }
+    }
+    out.push(...strayConditionValues(field.fields ?? []))
+    out.push(...strayConditionValues(field.itemSchema ?? []))
+  }
+  return out
+}

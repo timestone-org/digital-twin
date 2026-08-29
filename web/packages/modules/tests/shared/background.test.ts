@@ -5,7 +5,11 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { bannerBackground, imageSourceKind } from '../../src/shared/background'
+import {
+  bannerBackground,
+  coverBackground,
+  imageSourceKind,
+} from '../../src/shared/background'
 
 describe('来源判别', () => {
   it('空与纯空白都是没填', () => {
@@ -46,5 +50,44 @@ describe('整宽贴底的横幅铺法', () => {
     expect(bannerBackground('a".png')).toContain('url("a.png")')
     expect(bannerBackground('a\n.png')).toContain('url("a.png")')
     expect(bannerBackground('a\\.png')).toContain('url("a.png")')
+  })
+})
+
+describe('盖满整块的铺法', () => {
+  it('没填时 image 是空串，调用方据此不渲染这一层', () => {
+    expect(coverBackground('  ')).toEqual({
+      image: '',
+      size: '',
+      position: '',
+      repeat: '',
+    })
+  })
+
+  // ⚠ 这一条守的是存量：用户拿 repeating-gradient 或小图平铺铺的底纹，
+  //   靠的正是浏览器默认的 repeat；替他钉成 no-repeat 就把底纹改成了一张孤图
+  it('CSS 值原样透传，且不替它钉铺法', () => {
+    const value = 'repeating-linear-gradient(45deg, #111 0 4px, #222 4px 8px)'
+
+    expect(coverBackground(value)).toEqual({
+      image: value,
+      size: '',
+      position: '',
+      repeat: '',
+    })
+  })
+
+  it('地址包成 url() 并按 cover 居中不平铺', () => {
+    expect(coverBackground('/a.png')).toEqual({
+      image: 'url("/a.png")',
+      size: 'cover',
+      position: 'center',
+      repeat: 'no-repeat',
+    })
+  })
+
+  it('地址里的引号 / 反斜杠 / 换行一律剔掉，免得截断声明', () => {
+    expect(coverBackground('a".png').image).toBe('url("a.png")')
+    expect(coverBackground('a\n.png').image).toBe('url("a.png")')
+    expect(coverBackground('a\\.png').image).toBe('url("a.png")')
   })
 })

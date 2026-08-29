@@ -77,14 +77,15 @@ export default defineModule({
       placeholder: '留空 = 透明，继承大屏背景',
     },
     {
+      // 与页头页脚同一格：素材库能挑，也接图片地址与 CSS 值
       key: 'backgroundImage',
-      label: '背景图 / 渐变',
-      type: 'string',
+      label: '背景底图',
+      type: 'image',
       group: '外观',
       default: '',
       span: 'full',
-      placeholder: '留空 = 无；填 CSS：linear-gradient(…) 或 url(…)',
-      help: '叠在背景色之上的 CSS background-image 值；留空不注入，纯色背景不受影响。',
+      placeholder: '留空 = 无，只有背景色',
+      help: '可从素材库挑一张，也可填图片地址（按 cover 居中盖满）或 CSS 值（渐变 / url() / var()，铺法用浏览器默认，可拿它铺底纹）。叠在背景色之上，留空不注入。',
     },
     {
       key: 'radius',

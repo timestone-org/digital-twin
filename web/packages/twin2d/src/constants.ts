@@ -99,13 +99,17 @@ export const TWIN_2D_VIEW_BINDINGS: readonly BindingSpec[] = [
   {
     key: TWIN_2D_STATUS_BINDING_KEY,
     label: '节点状态',
-    dataType: 'enum',
+    // ⚠ 是 `number` 而不是 `enum`：状态在这里是**数字编码**（0 离线 / 1 在线 /
+    //   2 警告 / 3 报警），由 `toDeviceStatus` 分档。`enum` 那一档的意思是
+    //   「配了 enumMap，值要换成映射里的文案」——而求值层的 applyEnumMap 一旦
+    //   把 1 换成语义词表里的串，toDeviceStatus 就认不出来，全图状态集体退回
+    //   unknown（灰），且没有任何一处报错（§10.2）。声明成 enum 却不给 map，
+    //   等于摆着一个「看起来该配映射」的槽等人踩，还让静态常量那一格从数字框
+    //   退化成文本框。
+    dataType: 'number',
     isArray: true,
     isEntityPinned: true,
-    // ⚠ 刻意不给 enumMap：求值层的 applyEnumMap 只对 number 生效，会把 1 换成映射表里
-    //   的那个串；换成语义词表之后 toDeviceStatus 认不出来，于是全图状态集体退回
-    //   unknown（灰），而没有任何一处报错。数值原样进来才对（§10.2）。
-    arrayFields: [{ key: 'status', label: '状态', dataType: 'enum' }],
+    arrayFields: [{ key: 'status', label: '状态', dataType: 'number' }],
   },
   {
     key: TWIN_2D_EDGE_BINDING_KEY,

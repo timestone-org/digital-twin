@@ -97,6 +97,30 @@ describe('容器外观', () => {
     expect(style).not.toContain('background-color')
   })
 
+  // ⚠ 这一条守的是存量：CSS 值那条路上，用户拿 repeating-gradient 或小图平铺
+  //   铺的底纹靠的正是浏览器默认的 repeat，替他钉成 no-repeat 就把底纹改成了
+  //   一张孤零零的图
+  it('CSS 值那条路不替它钉铺法', () => {
+    const wrapper = render({
+      backgroundImage: 'linear-gradient(var(--accent-primary), transparent)',
+    })
+    const style = wrapper.get('.dt-container').attributes('style') ?? ''
+
+    expect(style).not.toContain('background-size')
+    expect(style).not.toContain('background-repeat')
+  })
+
+  // 与页头页脚同一格：素材库挑的一张图落库成 `asset:<id>`，直接写进
+  // `background-image` 是无效 CSS——整层静默不画，而配置看着完全正常
+  it('图片地址包成 url() 并按 cover 居中盖满', () => {
+    const wrapper = render({ backgroundImage: '/media/plant.png' })
+    const style = wrapper.get('.dt-container').attributes('style') ?? ''
+
+    expect(style).toContain('background-image: url("/media/plant.png")')
+    expect(style).toContain('background-size: cover')
+    expect(style).toContain('background-repeat: no-repeat')
+  })
+
   it('缺省铺点阵，关掉后不再铺', () => {
     expect(render({}).get('.dt-container__content').classes()).toContain(
       'dt-container__content--dotted',

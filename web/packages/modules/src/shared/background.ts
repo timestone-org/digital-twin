@@ -38,3 +38,49 @@ export function bannerBackground(value: string): string {
   if (kind === 'css') return text
   return `url("${text.replace(/["\\\r\n]/g, '')}") center bottom / 100% 100% no-repeat`
 }
+
+/** 一层背景图，摊成能直接写进 style 的几个键。缺图时 `image` 是空串。 */
+export interface BackgroundLayer {
+  /** `background-image` 的值。 */
+  image: string
+  /**
+   * `background-size`；空串 = 不写这条，用浏览器默认。
+   * ⚠ 只有素材引用与图片地址那条路才给尺寸与不平铺：CSS 值那条路上，用户写的
+   * `repeating-linear-gradient(…)` 或小图平铺靠的正是默认的 `repeat`，
+   * 替他钉成 `no-repeat` 就把存量大屏里的底纹改成了一张孤零零的图。
+   */
+  size: string
+  /** `background-position`；空串 = 不写这条。 */
+  position: string
+  /** `background-repeat`；空串 = 不写这条。 */
+  repeat: string
+}
+
+/** 没有图的那一层。 */
+const NO_LAYER: BackgroundLayer = Object.freeze({
+  image: '',
+  size: '',
+  position: '',
+  repeat: '',
+})
+
+/**
+ * 盖满整块的铺法：素材引用与图片地址包成 `url(…)` 并按 cover 居中不平铺，
+ * CSS 值原样返回、铺法留空。通用容器这类方块用它（页头页脚的整宽贴底用
+ * `bannerBackground`）。
+ * @param value 配置里存的原始字符串
+ */
+export function coverBackground(value: string): BackgroundLayer {
+  // 素材引用先摊成地址，漏进下面那条 url("…") 的话包出来的是 url("asset:…")
+  const text = resolveImageValue(value).trim()
+  const kind = imageSourceKind(text)
+  if (kind === 'empty') return NO_LAYER
+  if (kind === 'css') return { ...NO_LAYER, image: text }
+  return {
+    // 引号 / 反斜杠 / 换行会把这条声明从中间截断，整层背景随即静默消失
+    image: `url("${text.replace(/["\\\r\n]/g, '')}")`,
+    size: 'cover',
+    position: 'center',
+    repeat: 'no-repeat',
+  }
+}

@@ -7,6 +7,7 @@
 import type { ModuleMeta } from '@dt/contracts'
 import { computed, type CSSProperties } from 'vue'
 
+import { coverBackground } from '../../shared/background'
 import { readBoolean, readNumber, readText } from '../../shared/config'
 import {
   CONTAINER_CONFIG_KEY,
@@ -50,7 +51,10 @@ const accent = computed(() =>
   readText(props.config.accent, 'var(--accent-primary)'),
 )
 const background = computed(() => readText(props.config.background))
-const backgroundImage = computed(() => readText(props.config.backgroundImage))
+// 素材引用 / 图片地址 / CSS 值三条路各有各的铺法，见 shared/background.ts
+const backgroundLayer = computed(() =>
+  coverBackground(readText(props.config.backgroundImage)),
+)
 const showDotGrid = computed(() => readBoolean(props.config.showDotGrid, true))
 const dotSize = computed(() =>
   readNumber(props.config.dotSize, DOT_SIZE_DEFAULT_PX),
@@ -85,8 +89,14 @@ const shellStyle = computed<CSSProperties>(() => {
   }
   // 背景色与背景图各写各的：填了渐变而没填底色时，底色仍该透出大屏背景
   if (background.value !== '') style.backgroundColor = background.value
-  if (backgroundImage.value !== '') {
-    style.backgroundImage = backgroundImage.value
+  const layer = backgroundLayer.value
+  if (layer.image !== '') {
+    style.backgroundImage = layer.image
+    // ⚠ 铺法只在图片地址那条路上写：CSS 值那条路留白，否则用户拿
+    //   repeating-gradient 铺的底纹会被钉成 no-repeat（shared/background.ts）
+    if (layer.size !== '') style.backgroundSize = layer.size
+    if (layer.position !== '') style.backgroundPosition = layer.position
+    if (layer.repeat !== '') style.backgroundRepeat = layer.repeat
   }
   return style
 })

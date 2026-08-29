@@ -15,8 +15,12 @@ export {
   missingConfigControls,
   registerConfigControl,
 } from './configControls'
-export { bannerBackground, imageSourceKind } from './shared/background'
-export type { ImageSourceKind } from './shared/background'
+export {
+  bannerBackground,
+  coverBackground,
+  imageSourceKind,
+} from './shared/background'
+export type { BackgroundLayer, ImageSourceKind } from './shared/background'
 export {
   __resetAssetImages,
   configureAssetImages,
