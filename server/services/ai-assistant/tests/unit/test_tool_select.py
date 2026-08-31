@@ -32,6 +32,14 @@ def test_dataset_tools_do_not_leak_onto_the_dashboard_surface() -> None:
     assert "dataset.propose_formula" not in names
 
 
+def test_interaction_tools_do_not_leak_onto_the_twin_surfaces() -> None:
+    """联动规则与整屏外观住在大屏级 chromeJson，孪生舞台没有这一层。"""
+    for surface in ("twin-editor", "twin2d-editor"):
+        names = _names(surface, None)
+        assert "dashboard.write_interaction" not in names
+        assert "dashboard.set_page_style" not in names
+
+
 def test_client_tools_follow_the_pages_own_report() -> None:
     names = _names("dashboard-editor", ["dashboard.read_canvas"])
     assert "dashboard.read_canvas" in names

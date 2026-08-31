@@ -39,11 +39,12 @@ def test_dataset_surface_only_offers_the_formula_skill() -> None:
     assert names == {"formula-author"}
 
 
-def test_dashboard_editor_offers_the_three_dashboard_skills() -> None:
+def test_dashboard_editor_offers_every_dashboard_skill() -> None:
     names = {skill.name for skill in skills_for("dashboard-editor")}
     assert names == {
         "dashboard-binding",
         "dashboard-compose",
+        "dashboard-interact",
         "dashboard-review",
     }
 
