@@ -19,6 +19,7 @@ import type { SaveOutcome } from '@/features/ai/saveTool'
 import type { ReadPointSample } from '@/runtime/bindingReader'
 import { downloadJson } from '@/utils/downloadJson'
 import { createEditorSurface } from './aiSurface'
+import type { MetaChrome } from './aiSurfaceTypes'
 import type { EditorActions } from './editorActions'
 import type { ArrangeActions } from './editorArrange'
 import { useEditorHotkeys } from './useEditorHotkeys'
@@ -33,6 +34,8 @@ export interface EditorExtrasDeps {
   editor: DashboardEditor
   actions: EditorActions
   arrange: ArrangeActions
+  /** 整屏外观缺省与联动规则的读写口；助手那两半改的是元数据轴。 */
+  chrome: MetaChrome
   dashboard: Ref<DashboardPayload | null>
   design: () => DesignSize
   snap: () => SnapConfig
@@ -102,6 +105,7 @@ function aiPanelOf(
         editor: deps.editor,
         actions: deps.actions,
         arrange: deps.arrange,
+        chrome: deps.chrome,
         stageEl: deps.stageEl,
         getManifest: deps.getManifest,
         readSample: deps.readSample,

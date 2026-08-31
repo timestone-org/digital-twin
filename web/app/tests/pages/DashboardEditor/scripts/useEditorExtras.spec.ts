@@ -119,6 +119,12 @@ function setup(
         consumePicker,
         save,
         confirm: { ask: vi.fn(() => Promise.resolve(false)) },
+        chrome: {
+          card: computed(() => ({})),
+          rules: computed(() => []),
+          setCard: vi.fn(),
+          setInteractions: vi.fn(),
+        },
         stageEl: () => null,
         centerOn: vi.fn(),
         onExportFailed: vi.fn(),

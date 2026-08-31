@@ -116,6 +116,12 @@ function setup(options: Options = {}): Harness {
           },
           notify: vi.fn(),
         }),
+        chrome: {
+          card: computed(() => ({})),
+          rules: computed(() => []),
+          setCard: vi.fn(),
+          setInteractions: vi.fn(),
+        },
         stageEl: () => null,
         getManifest: () => MANIFEST,
         readSample: options.read ?? (() => undefined),

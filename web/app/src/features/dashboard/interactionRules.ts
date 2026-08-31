@@ -85,7 +85,13 @@ function parseNavigateByValue(
   return { type: 'navigateByValue', routes }
 }
 
-function parseAction(raw: unknown): InteractionAction | null {
+/**
+ * 解析一个动作；形状不对给 null。
+ * ⚠ 导出给助手那条路复用：另写一份校验必然与这一份漂开，而漂开的表现是
+ * 助手写得进去、渲染侧读不出来，两侧都不报错。
+ * @param raw 自由 JSON 里的一个动作
+ */
+export function parseInteractionAction(raw: unknown): InteractionAction | null {
   if (!isRecord(raw)) return null
   const type = raw.type
   if (type === 'show' || type === 'hide' || type === 'toggle') {
@@ -110,7 +116,7 @@ function parseRule(raw: unknown): InteractionRule | null {
   ) {
     return null
   }
-  const action = parseAction(raw.action)
+  const action = parseInteractionAction(raw.action)
   if (action === null) return null
   return {
     id: raw.id,
