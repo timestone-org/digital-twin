@@ -293,6 +293,7 @@ useUnsavedGuard(() => page.doc.value?.isDirty.value === true)
           @cancel-pick="viewport.cancelPick"
           @capture-camera="viewport.captureCamera"
           @capture-part-view="viewport.capturePartView"
+          @select-part="select({ kind: 'parts', id: $event })"
           @preview-roam="viewport.previewRoam"
           @stop-roam-preview="viewport.stopRoamPreview"
           @write-binding="binding.write"

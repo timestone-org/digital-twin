@@ -32,7 +32,7 @@ const OWNERS: Readonly<Record<string, readonly string[]>> = {
   TwinPedestal: ['fields/SceneEffectsFields.vue'],
   TwinLightColumn: ['fields/SceneEffectsFields.vue'],
   TwinSceneEffects: ['fields/SceneEffectsFields.vue'],
-  TwinPart: ['inspector/PartInspector.vue'],
+  TwinPart: ['inspector/PartInspector.vue', 'fields/PartParentFields.vue'],
   TwinPartClick: ['fields/PartClickFields.vue'],
   TwinClickDistanceRule: ['fields/PartClickFields.vue'],
   TwinPartDetail: ['fields/PartDetailFields.vue'],
