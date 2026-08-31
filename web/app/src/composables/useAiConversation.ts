@@ -43,7 +43,7 @@ export interface AiConversation {
   /** 当前执行计划；没有就是 null。整份快照，来一份盖一份。 */
   plan: Ref<AssistantPlan | null>
   /** 发一句话，跑一个回合。 */
-  send: (text: string) => Promise<void>
+  send: (text: string, images?: string[]) => Promise<void>
   /** 掐掉正在跑的那个回合。 */
   stop: () => void
   /** 清空这一屏的对话（不动库里的历史）。 */

@@ -21,6 +21,9 @@ from ai_assistant.settings import MAX_IMAGE_CHARS
 # 尾部那批孤儿调用现在由 `history.unanswered` 兜底，但上限本身也得够用。
 MAX_TOOL_RESULTS = 128
 MAX_USER_TEXT = 4000
+# 一句话最多贴几张图。⚠ 有上限：每张图都是一份完整的视觉档载荷，贴上十张
+# 会把这一轮的上下文与账单一起顶穿，而现象只是「这一句特别慢」
+MAX_USER_IMAGES = 4
 MAX_SURFACE_LABEL = 64
 # 页面自报的客户端工具名单上限。真实页面十几个，64 已是数倍余量
 MAX_CLIENT_TOOLS = 64
@@ -64,6 +67,13 @@ class AdvanceIn(InputModel):
     # 只在用户发话那次带的话，助手动了两下之后看到的是一屏过期的画布
     surface_context: dict[str, Any] | None = None
     user_text: str | None = Field(default=None, max_length=MAX_USER_TEXT)
+    # 用户随这句话贴的图，完整的 `data:image/...;base64,...`。
+    # ⚠ 这里只卡条数与长度；**认不认这种图由解码器判**（按字节魔数，不按声明的
+    # media type——声明是调用方说了算的）。判定收在 `perception/decoders/image`，
+    # 前端那道只管界面提示，拦不住直接打端点的调用方
+    user_images: list[
+        Annotated[str, Field(min_length=1, max_length=MAX_IMAGE_CHARS)]
+    ] = Field(default_factory=list[str], max_length=MAX_USER_IMAGES)
     tool_results: list[ToolResultIn] = Field(
         default_factory=list[ToolResultIn], max_length=MAX_TOOL_RESULTS
     )
@@ -96,9 +106,15 @@ class AdvanceIn(InputModel):
 
     @model_validator(mode="after")
     def check_exactly_one_source(self) -> Self:
-        """发话与回填二选一，且必须有一个。"""
+        """发话与回填二选一，且必须有一个；图只跟着发话走。
+
+        ⚠ 图不许跟工具回填一起来：那一批消息与它们的调用必须相邻，中间插一条
+        带图的用户消息会把它们拆开，而有的端点按相邻性校验这一段。
+        """
         has_text = self.user_text is not None
         has_results = bool(self.tool_results)
         if has_text == has_results:
             raise ValueError("user_text 与 tool_results 必须二选一")
+        if self.user_images and not has_text:
+            raise ValueError("user_images 只能跟着 user_text 一起发")
         return self

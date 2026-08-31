@@ -27,9 +27,12 @@ MAX_CELL = 120
 MAX_TEXT_CHARS = 24_000
 
 _XLSX_SUFFIXES = (".xlsx", ".xlsm")
+# 摊成表头加数据行的那几种。⚠ 与解码器共用同一份：各写一份的表现是
+# 「选得中的文件传上去被拒」，而两边看起来都对
+TABLE_SUFFIXES = (*_XLSX_SUFFIXES, ".csv")
 # 逐字读的纯文本类。⚠ 名单是显式的：兜底「读得动就收」会把 pdf / 图片这类
 # 二进制也放进来，解出一堆乱码还占满上下文
-_TEXT_SUFFIXES = (
+TEXT_SUFFIXES = (
     ".txt",
     ".md",
     ".markdown",
@@ -70,7 +73,7 @@ def parse_table(filename: str, content: bytes) -> ParsedTable:
         return _shape(_read_xlsx(content))
     if lowered.endswith(".csv"):
         return _shape(_read_csv(content))
-    if lowered.endswith(_TEXT_SUFFIXES):
+    if lowered.endswith(TEXT_SUFFIXES):
         return _shape_text(_decode(content))
     raise UnsupportedTable(
         "只认得表格（.xlsx / .xlsm / .csv）或纯文本（.txt / .md / .json 等）"
@@ -179,3 +182,20 @@ def to_text(table: ParsedTable) -> str:
             f"（只列了前 {MAX_ROWS} 行，整张表共 {table.total_rows} 行）"
         )
     return "\n".join(lines)
+
+
+def summary_of(table: ParsedTable) -> str:
+    """给人看的一句概况：这份文件有多大、截没截。
+
+    ⚠ 算在服务端而不是界面上：界面各算一份的话，「几列几行」的口径会与
+    真正喂给模型的那一份漂开，而用户看到的是前者。
+
+    Args: table。
+    """
+    if table.body != "":
+        shape = f"{table.total_rows} 行"
+    elif table.columns:
+        shape = f"{len(table.columns)} 列 × {table.total_rows} 行"
+    else:
+        return "空文件"
+    return f"{shape}，已截断" if table.is_truncated else shape

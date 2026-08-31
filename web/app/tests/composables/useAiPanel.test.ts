@@ -164,6 +164,7 @@ describe('能力探测', () => {
           models: [],
           default_model_id: '',
           default_effort: '',
+          attachment_suffixes: [],
         }),
     })
     const ctx = setup()
@@ -301,6 +302,7 @@ describe('下拉显示的那一路', () => {
           models: [],
           default_model_id: 'codex',
           default_effort: 'medium',
+          attachment_suffixes: [],
         }),
     })
   }

@@ -22,6 +22,10 @@ from ai_assistant.apps.chat.deps import get_advance_deps
 from ai_assistant.apps.chat.schemas.advance import AdvanceIn
 from ai_assistant.apps.chat.services import advance_service
 from ai_assistant.apps.chat.services.output import events
+from ai_assistant.apps.chat.services.perception import UnsupportedInput
+from ai_assistant.apps.chat.services.perception.decoders.image import (
+    check_data_uri,
+)
 from ai_assistant.apps.chat.services.planning.plan import PlanUpdate
 from ai_assistant.apps.chat.services.planning.turn_types import (
     TurnDelta,
@@ -31,7 +35,7 @@ from ai_assistant.apps.chat.services.session_service import require_session
 from ai_assistant.deps import get_session, require
 from ai_assistant.settings import API_PREFIX
 from lib.auth import CallerContext
-from lib.errors import AppError
+from lib.errors import AppError, ValidationFailed
 from lib.logging import current_log_context, get_logger
 
 router = APIRouter(prefix=f"{API_PREFIX}/sessions", tags=["turn"])
@@ -60,10 +64,29 @@ async def advance_turn(
     Args: session_id, payload, session, deps, caller。
     """
     await require_session(session, chat_session_id=session_id, caller=caller)
+    _check_images(payload)
     stream = _frames(deps, session_id, payload)
     return StreamingResponse(
         stream, media_type="text/event-stream", headers=_STREAM_HEADERS
     )
+
+
+def _check_images(payload: AdvanceIn) -> None:
+    """贴进来的图必须过白名单，且**在开流之前**判。
+
+    ⚠ 开流之后就改不了状态码了，那时只能回一个 `error` 事件——而「这张图不收」
+    是调用方能当场改的事，该拿到一个 422 而不是一条流里的错。
+
+    ⚠ 判的是解出来的字节而不是 URI 里声明的 media type，判定与解码器同一份
+    （`perception/decoders/image`）。
+
+    Args: payload。
+    """
+    for at, uri in enumerate(payload.user_images, start=1):
+        try:
+            check_data_uri(uri, f"第 {at} 张图")
+        except UnsupportedInput as error:
+            raise ValidationFailed(str(error)) from error
 
 
 async def _frames(
@@ -114,6 +137,7 @@ def _to_input(payload: AdvanceIn) -> advance_service.AdvanceInput:
         surface_context=payload.surface_context,
         client_tools=payload.client_tools,
         user_text=payload.user_text,
+        user_images=list(payload.user_images),
         tool_results=[
             advance_service.ClientToolResult(
                 call_id=result.call_id,

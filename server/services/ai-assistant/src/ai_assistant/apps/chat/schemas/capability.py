@@ -52,3 +52,7 @@ class CapabilityOut(BaseModel):
     default_model_id: str = ""
     # 没选过时用哪一档推理。只有订阅那一路吃这一格，别的路忽略它
     default_effort: str = "medium"
+    # 附件收哪些后缀，界面的 accept 名单直接用它。
+    # ⚠ 由解码器注册表算出来下发，前端不再各写一份：两份漂开的表现是
+    # 「选得中的文件传上去被拒」，而两边单看都对
+    attachment_suffixes: list[str] = Field(default_factory=list[str])

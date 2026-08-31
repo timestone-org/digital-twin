@@ -47,6 +47,11 @@ export interface AiPanel {
   isAvailable: Ref<boolean>
   /** 这套部署接了哪几路模型。空 = 不摆那个下拉。 */
   models: Ref<AssistantModelProfile[]>
+  /**
+   * 附件收哪些后缀。⚠ 服务端下发的那一份，前端不写死——两份漂开的表现是
+   * 「选得中的文件传上去被拒」，而两边单看都对。
+   */
+  attachmentSuffixes: Ref<string[]>
   /** 这个会话选了哪一路。 */
   choice: Ref<ModelChoice>
   /** 换一路模型。⚠ 落到会话上，不是只改这一屏。 */
@@ -66,6 +71,7 @@ export interface AiPanel {
 export function useAiPanel(options: AiPanelOptions): AiPanel {
   const isAvailable = ref(false)
   const models = ref<AssistantModelProfile[]>([])
+  const attachmentSuffixes = ref<string[]>([])
   const choice = newModelChoice()
   const isOpen = ref(false)
   const sessionId = ref<string | null>(null)
@@ -86,7 +92,7 @@ export function useAiPanel(options: AiPanelOptions): AiPanel {
   })
 
   onMounted(() => {
-    void probeInto({ isAvailable, models, choice })
+    void probeInto({ isAvailable, models, attachmentSuffixes, choice })
   })
 
   const open = openerOf({
@@ -101,6 +107,7 @@ export function useAiPanel(options: AiPanelOptions): AiPanel {
   return {
     isAvailable,
     models,
+    attachmentSuffixes,
     choice,
     pickModel: (next) => pickModel(next, choice, sessionId),
     isOpen,
@@ -150,6 +157,7 @@ function openerOf(parts: {
 async function probeInto(into: {
   isAvailable: Ref<boolean>
   models: Ref<AssistantModelProfile[]>
+  attachmentSuffixes: Ref<string[]>
   choice: Ref<ModelChoice>
 }): Promise<void> {
   const ask = aiPorts()?.probe
@@ -157,5 +165,6 @@ async function probeInto(into: {
   const capability = await ask()
   into.isAvailable.value = capability?.is_model_enabled === true
   into.models.value = capability?.models ?? []
+  into.attachmentSuffixes.value = capability?.attachment_suffixes ?? []
   fillDefaults(into.choice, capability)
 }

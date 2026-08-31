@@ -11,11 +11,21 @@ from ai_assistant.apps.chat.services.perception.ports import (
     InputDecoder,
     UnsupportedInput,
 )
+from ai_assistant.apps.chat.services.perception.registry import (
+    DECODERS,
+    accepted_suffixes,
+    decode,
+    decoder_for,
+)
 
 __all__ = [
+    "DECODERS",
     "AsImage",
     "AsText",
     "Decoded",
     "InputDecoder",
     "UnsupportedInput",
+    "accepted_suffixes",
+    "decode",
+    "decoder_for",
 ]

@@ -114,6 +114,8 @@ export interface RunnerInput {
   surfaceKind: AssistantSurfaceKind
   surfaceLabel: string
   userText: string
+  /** 用户随这句话贴的图；只在**第一帧**带，后续回填帧不带。 */
+  userImages?: string[]
   signal?: AbortSignal
 }
 
@@ -136,7 +138,12 @@ export async function runTurn(
 ): Promise<void> {
   const watch: PlanWatch = { plan: null }
   let nudges = 0
-  let body: AdvanceBody = { ...envelope(input), user_text: input.userText }
+  // ⚠ 图只随第一帧走：后面每一帧都是工具回填，而回填不许夹带图
+  let body: AdvanceBody = {
+    ...envelope(input),
+    user_text: input.userText,
+    ...(input.userImages?.length ? { user_images: input.userImages } : {}),
+  }
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
     const outcome = await pump(input, body, sink, watch)
     if (outcome.kind === 'error') return

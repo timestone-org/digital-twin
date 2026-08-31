@@ -15,6 +15,7 @@ from ai_assistant.apps.chat.schemas.capability import (
     ModelProfileOut,
 )
 from ai_assistant.apps.chat.services import model_profiles, skill_catalog
+from ai_assistant.apps.chat.services.perception import accepted_suffixes
 from ai_assistant.container import Container
 from ai_assistant.deps import get_container, require
 from ai_assistant.llm.registry import ModelRegistry
@@ -71,4 +72,5 @@ def capability_of(
         models=profiles,
         default_model_id=model_profiles.default_id_of(models, profiles),
         default_effort=default_effort,
+        attachment_suffixes=list(accepted_suffixes()),
     )
