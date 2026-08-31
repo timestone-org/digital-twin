@@ -238,7 +238,7 @@ describe('没配就不注入变量', () => {
 })
 
 describe('档位修饰类', () => {
-  it('五组档位各挂一个类，认不出的取值回落缺省档', () => {
+  it('六组档位各挂一个类，认不出的取值回落缺省档', () => {
     const classes = readGaugeLook({
       shape: 'tank',
       fillStyle: 'gradient',
@@ -251,6 +251,7 @@ describe('档位修饰类', () => {
       'gc--layout-grid',
       'gc--shape-tank',
       'gc--fill-gradient',
+      'gc--ind-fill',
       'gc--read-below',
       'gc--unit-attached',
     ])

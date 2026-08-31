@@ -1,0 +1,170 @@
+{
+  "gauge": {
+    "title": "能源银行效率",
+    "items": [
+      {
+        "label": "系统热能 COP",
+        "unit": "",
+        "precision": 1,
+        "min": 0,
+        "max": 4,
+        "emitValue": ""
+      }
+    ],
+    "layout": "single",
+    "columns": "auto",
+    "gap": 10,
+    "padX": 6,
+    "padY": 10,
+    "shape": "arc",
+    "geometry": {
+      "thickness": 14,
+      "arcSpan": 200,
+      "tankWidth": 56,
+      "tubeWidth": 14,
+      "bulbSize": 26
+    },
+    "fillStyle": "stops",
+    "indicator": "needle",
+    "colorStops": [
+      {
+        "at": 0,
+        "color": "var(--state-danger)"
+      },
+      {
+        "at": 35,
+        "color": "var(--state-warning)"
+      },
+      {
+        "at": 70,
+        "color": "var(--state-success)"
+      },
+      {
+        "at": 100,
+        "color": "var(--accent-secondary)"
+      }
+    ],
+    "scale": {
+      "showRange": false,
+      "ticks": false,
+      "tickCount": 4,
+      "wanFormat": false,
+      "wanDigits": 2
+    },
+    "tickSize": 11,
+    "targetMark": false,
+    "targetLabel": "计划",
+    "showPercent": false,
+    "readout": "value",
+    "readoutPlace": "center",
+    "valueSize": 0,
+    "valueColor": "var(--state-success)",
+    "valueGlow": 10,
+    "unitSize": 12,
+    "unitPlace": "attached",
+    "labelPlace": "below",
+    "labelSize": 13,
+    "labelTone": "secondary",
+    "fillColor": "",
+    "trackColor": "",
+    "thousands": true,
+    "emptyText": "—"
+  },
+  "card": {
+    "title": "",
+    "cells": [
+      {
+        "label": "绿能净产热量",
+        "color": "var(--state-success)",
+        "unit": "kWh",
+        "precision": 0,
+        "group": "",
+        "icon": "",
+        "emitValue": ""
+      },
+      {
+        "label": "空气能净产热量",
+        "color": "var(--state-warning)",
+        "unit": "kWh",
+        "precision": 0,
+        "group": "",
+        "icon": "",
+        "emitValue": ""
+      },
+      {
+        "label": "蒸汽产热量",
+        "color": "var(--state-danger)",
+        "unit": "kWh",
+        "precision": 0,
+        "group": "",
+        "icon": "",
+        "emitValue": ""
+      }
+    ],
+    "parts": [
+      {
+        "kind": "label",
+        "place": "left",
+        "label-dot": true,
+        "label-size": 12,
+        "label-tone": "cell",
+        "label-opacity": 1
+      },
+      {
+        "kind": "extra",
+        "place": "right",
+        "extra-slot": "ratio",
+        "extra-label": "",
+        "extra-unit": "%",
+        "extra-precision": 1,
+        "extra-size": 12,
+        "extra-color": ""
+      },
+      {
+        "kind": "value",
+        "place": "block",
+        "value-size": 26,
+        "value-glow": 8,
+        "value-color": "var(--dc-cell-color)",
+        "value-unitSize": 11,
+        "value-font": "digit",
+        "value-showUnit": true
+      },
+      {
+        "kind": "meter",
+        "place": "block",
+        "meter-look": "segments",
+        "meter-source": "ratio",
+        "meter-slot": "ratio",
+        "meter-segments": 16,
+        "meter-gap": 3,
+        "meter-height": 7,
+        "meter-glow": 5,
+        "meter-caption": "",
+        "meter-showPercent": false,
+        "meter-min": 0,
+        "meter-max": 100,
+        "meter-width": 0,
+        "meter-color": ""
+      }
+    ],
+    "columns": "1",
+    "align": "start",
+    "cellShell": "accent",
+    "gapX": 0,
+    "gapY": 8,
+    "padX": 0,
+    "padY": 0,
+    "cellPadX": 10,
+    "cellPadY": 8,
+    "partGap": 5,
+    "thousands": true,
+    "fixedDecimals": false,
+    "emptyText": "—",
+    "grouping": "none",
+    "autoScroll": false,
+    "scrollSpeed": 4,
+    "rules": [],
+    "alarmOn": "value"
+  }
+}

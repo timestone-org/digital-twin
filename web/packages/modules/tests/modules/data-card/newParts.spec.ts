@@ -478,3 +478,125 @@ describe('格基色', () => {
     expect(plain.find('.dc-label').classes()).toContain('dc-label--secondary')
   })
 })
+
+describe('分段格子条', () => {
+  it('摆出配的那么多格，按占比点亮前几格', async () => {
+    const wrapper = await card(
+      [{ kind: 'meter', 'meter-look': 'segments', 'meter-segments': 16 }],
+      [{ ratio: 37.5 }],
+    )
+
+    expect(wrapper.findAll('.dt-meter__block')).toHaveLength(16)
+    expect(wrapper.findAll('.dt-meter__block--on')).toHaveLength(6)
+  })
+
+  // ⚠ 分段档不该同时画连续轨道：两条一起出现时用户不知道该读哪一条
+  it('分段档不画连续轨道，细条档不画格子', async () => {
+    const seg = await card(
+      [{ kind: 'meter', 'meter-look': 'segments' }],
+      [{ ratio: 50 }],
+    )
+    const bar = await card([{ kind: 'meter' }], [{ ratio: 50 }])
+
+    expect(seg.find('.dt-meter__track').exists()).toBe(false)
+    expect(bar.find('.dt-meter__block').exists()).toBe(false)
+  })
+
+  it('格间隙走变量，配了才写', async () => {
+    const wrapper = await card(
+      [{ kind: 'meter', 'meter-look': 'segments', 'meter-gap': 5 }],
+      [{ ratio: 50 }],
+    )
+
+    expect(wrapper.find('.dc-meter').attributes('style')).toContain(
+      '--dt-meter-gap: 5px',
+    )
+  })
+
+  // ⚠ 算不出占比时整件不画，与另两档同一条口径——绝不拿一片灭着的格子冒充 0
+  it('算不出占比时整件不画', async () => {
+    const wrapper = await card([
+      {
+        kind: 'meter',
+        'meter-look': 'segments',
+        'meter-source': 'ratio',
+        'meter-slot': 'ratio',
+      },
+    ])
+
+    expect(wrapper.find('.dc-meter').exists()).toBe(false)
+  })
+})
+
+describe('名称的前导圆点', () => {
+  it('开了才画，圆点跟格基色', async () => {
+    const on = await card(
+      [{ kind: 'label', 'label-dot': true }],
+      [{}],
+      [{ label: '甲', color: 'var(--state-info)' }],
+    )
+    const off = await card([{ kind: 'label' }], [{}], [{ label: '甲' }])
+
+    expect(on.find('.dc-label__dot').exists()).toBe(true)
+    expect(off.find('.dc-label__dot').exists()).toBe(false)
+    expect(on.find('.dc-cell').attributes('style')).toContain(
+      '--dc-cell-color: var(--state-info)',
+    )
+  })
+
+  it('没起名字的格连圆点也不画——整件本就不渲染', async () => {
+    const wrapper = await card(
+      [{ kind: 'label', 'label-dot': true }],
+      [{}],
+      [{ label: '' }],
+    )
+
+    expect(wrapper.find('.dc-label').exists()).toBe(false)
+  })
+})
+
+describe('千分位', () => {
+  /**
+   * 摆一格，格级口径由调用方给。
+   * @param format 格级的两个格式开关
+   */
+  async function withFormat(format: Record<string, unknown>) {
+    const wrapper = mount(Component, {
+      props: {
+        config: {
+          cells: [{ label: '甲' }],
+          parts: [
+            { kind: 'value' },
+            { kind: 'extra', 'extra-slot': 'extra1', 'extra-precision': 0 },
+          ],
+          ...format,
+        },
+        values: { cellValues: [{ value: 2578, extra1: 1273 }] },
+      },
+    })
+    await vi.dynamicImportSettled()
+    await flushPromises()
+    return wrapper
+  }
+
+  // ⚠ 只在补零档接千分位，等于这个开关单开时点了没反应，而两侧都不报错
+  it('单开千分位就生效，不必同时开补零对齐', async () => {
+    const wrapper = await withFormat({ thousands: true })
+
+    expect(wrapper.find('.dc-value__num').text()).toBe('2,578')
+    expect(wrapper.find('.dc-extra__num').text()).toBe('1,273')
+  })
+
+  it('关着时不分组', async () => {
+    const wrapper = await withFormat({ thousands: false })
+
+    expect(wrapper.find('.dc-value__num').text()).toBe('2578')
+    expect(wrapper.find('.dc-extra__num').text()).toBe('1273')
+  })
+
+  it('补零档也照样分组', async () => {
+    const wrapper = await withFormat({ thousands: true, fixedDecimals: true })
+
+    expect(wrapper.find('.dc-value__num').text()).toContain('2,578')
+  })
+})

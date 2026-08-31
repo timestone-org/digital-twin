@@ -277,6 +277,24 @@
     stroke 0.4s ease;
 }
 
+// 满弧档不按读数裁，故没有 dashoffset 可过渡
+.gc-arc__fill--full {
+  transition: stroke 0.4s ease;
+}
+
+// 指针：一个窄三角 + 圆心的发光轴。⚠ 转动要有过渡，否则读数一跳指针就瞬移，
+// 看不出往哪边走
+.gc-needle__blade {
+  fill: var(--gc-tone);
+  filter: drop-shadow(0 0 4px var(--gc-tone));
+  transition: d 0.6s ease;
+}
+
+.gc-needle__hub {
+  fill: var(--gc-tone);
+  filter: drop-shadow(0 0 6px var(--gc-tone));
+}
+
 // 渐变描边只能走 SVG 的 <linearGradient>：CSS 的 linear-gradient() 上不了 stroke
 .gc-arc__stop-a {
   stop-color: var(--gc-tone);

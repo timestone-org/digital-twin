@@ -68,10 +68,24 @@ export const GAUGE_COLUMN_VALUES = valuesOf(GAUGE_COLUMNS)
 export const GAUGE_FILL_STYLES = [
   { value: 'solid', label: '纯色' },
   { value: 'gradient', label: '渐变' },
+  { value: 'stops', label: '自定义色标' },
 ] as const satisfies readonly ConfigOption[]
 
 export type GaugeFillStyle = (typeof GAUGE_FILL_STYLES)[number]['value']
 export const GAUGE_FILL_STYLE_VALUES = valuesOf(GAUGE_FILL_STYLES)
+
+/**
+ * 读数指示方式。
+ * ⚠ 两档的表意完全不同：`fill` 是「填到这里」，`needle` 是「整条弧是量程、指针指位置」。
+ * 后者只有弧度盘吃得下——横条与储罐上没有「圆心」可以摆指针。
+ */
+export const GAUGE_INDICATORS = [
+  { value: 'fill', label: '填充到读数' },
+  { value: 'needle', label: '满弧 + 指针' },
+] as const satisfies readonly ConfigOption[]
+
+export type GaugeIndicator = (typeof GAUGE_INDICATORS)[number]['value']
+export const GAUGE_INDICATOR_VALUES = valuesOf(GAUGE_INDICATORS)
 
 /**
  * 主读数显示什么。

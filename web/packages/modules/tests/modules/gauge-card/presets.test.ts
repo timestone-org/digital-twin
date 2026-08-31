@@ -85,11 +85,12 @@ function colorsIn(value: unknown, at: string): { at: string; color: string }[] {
   )
 }
 
-describe('仪表卡片的六套预设', () => {
-  it('id 集合恰是写死的这六个，顺序即面板上的排布', () => {
+describe('仪表卡片的七套预设', () => {
+  it('id 集合恰是写死的这七个，顺序即面板上的排布', () => {
     expect(GAUGE_CARD_PRESETS.map((preset) => preset.id)).toEqual([
       'target-track',
       'arc-gauge',
+      'arc-spectrum',
       'linear-bar',
       'tank',
       'thermometer',
@@ -131,13 +132,13 @@ describe('预设写的键', () => {
     expect(unknown).toEqual([])
   })
 
-  it('六套写的是同一组键——少一个键就会让上一套的那个取值原样残留', () => {
+  it('七套写的是同一组键——少一个键就会让上一套的那个取值原样残留', () => {
     const shapes = GAUGE_CARD_PRESETS.map((preset) =>
       Object.keys(preset.config).sort().join(','),
     )
 
     expect(new Set(shapes).size).toBe(1)
-    expect(Object.keys(GAUGE_CARD_PRESETS[0]?.config ?? {})).toHaveLength(26)
+    expect(Object.keys(GAUGE_CARD_PRESETS[0]?.config ?? {})).toHaveLength(28)
   })
 
   it('观感键一个不落：顶层三十个字段里除去三个内容键，全在预设里', () => {
@@ -185,7 +186,15 @@ describe('预设写的取值', () => {
   it('列数写的是字符串档值——写成数字判不中白名单，静默回落自动', () => {
     const columns = GAUGE_CARD_PRESETS.map((preset) => preset.config.columns)
 
-    expect(columns).toEqual(['auto', 'auto', 'auto', 'auto', 'auto', '3'])
+    expect(columns).toEqual([
+      'auto',
+      'auto',
+      'auto',
+      'auto',
+      'auto',
+      'auto',
+      '3',
+    ])
     expect(columns.every((value) => typeof value === 'string')).toBe(true)
   })
 

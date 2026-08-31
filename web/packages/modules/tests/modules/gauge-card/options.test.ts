@@ -9,6 +9,7 @@ import {
   GAUGE_COLUMN_VALUES,
   GAUGE_COLUMNS,
   GAUGE_FILL_STYLE_VALUES,
+  GAUGE_INDICATOR_VALUES,
   GAUGE_FILL_STYLES,
   GAUGE_LABEL_PLACE_VALUES,
   GAUGE_LABEL_PLACES,
@@ -181,8 +182,13 @@ describe('档数以参考源码为准', () => {
     ).toBe(true)
   })
 
-  it('填充两档：弧与条是纯色，储罐与轨道是渐变', () => {
-    expect([...GAUGE_FILL_STYLE_VALUES]).toEqual(['solid', 'gradient'])
+  it('填充三档：纯色、按填充色调深浅的渐变、自定义色标', () => {
+    expect([...GAUGE_FILL_STYLE_VALUES]).toEqual(['solid', 'gradient', 'stops'])
+  })
+
+  // ⚠ 两档的表意完全不同：填充是「填到这里」，指针是「整弧是量程、指针指位置」
+  it('读数指示两档', () => {
+    expect([...GAUGE_INDICATOR_VALUES]).toEqual(['fill', 'needle'])
   })
 
   it('读数四档，量程百分比与完成率不是一个数', () => {

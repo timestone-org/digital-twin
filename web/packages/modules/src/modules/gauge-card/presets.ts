@@ -38,6 +38,8 @@ export const GAUGE_CARD_PRESETS: ConfigPreset[] = [
       },
       // .tp-fill 是 90deg 的两段渐变，向右加深
       fillStyle: 'gradient',
+      indicator: 'fill',
+      colorStops: [],
       // 参考仓的刻度写死四个等距，量程端点由首末刻度顶替，故不另画端点
       scale: {
         showRange: false,
@@ -94,6 +96,8 @@ export const GAUGE_CARD_PRESETS: ConfigPreset[] = [
       },
       // .eg-arc-fill 是纯色描边
       fillStyle: 'solid',
+      indicator: 'fill',
+      colorStops: [],
       // 参考仓这一档的量程端点开关缺省是开的（.eg-range--arc）
       scale: {
         showRange: true,
@@ -130,6 +134,63 @@ export const GAUGE_CARD_PRESETS: ConfigPreset[] = [
     },
   },
   {
+    id: 'arc-spectrum',
+    label: '光谱弧 + 指针',
+    hint: '半圆彩虹弧当量程，指针指读数；效率、COP 这类「落在区间的哪一段」比「填了多少」更要紧的量用它。',
+    config: {
+      layout: 'single',
+      columns: 'auto',
+      gap: 10,
+      padX: 6,
+      padY: 6,
+      shape: 'arc',
+      // 张角 200°：半圆略张，缺口在正下方给读数让出位置
+      geometry: {
+        thickness: 14,
+        arcSpan: 200,
+        tankWidth: 56,
+        tubeWidth: 14,
+        bulbSize: 26,
+      },
+      fillStyle: 'stops',
+      // ⚠ 满弧 + 指针：整条弧是量程，读数由指针指。填充档在这里没有意义——
+      //   彩虹弧被裁掉一半之后，颜色说的是「填到哪」而不是「落在哪一段」
+      indicator: 'needle',
+      // 左红右青：低效在红区、高效在青区，与温度色序一致。
+      // ⚠ 一律走语义 token 而不是十六进制：算出来的色值换肤时不跟着走
+      colorStops: [
+        { at: 0, color: 'var(--state-danger)' },
+        { at: 35, color: 'var(--state-warning)' },
+        { at: 70, color: 'var(--state-success)' },
+        { at: 100, color: 'var(--accent-secondary)' },
+      ],
+      scale: {
+        showRange: false,
+        ticks: false,
+        tickCount: 4,
+        wanFormat: false,
+        wanDigits: 2,
+      },
+      tickSize: 11,
+      targetMark: false,
+      targetLabel: '计划',
+      showPercent: false,
+      readout: 'value',
+      readoutPlace: 'center',
+      valueSize: 0,
+      valueColor: 'var(--accent-primary)',
+      valueGlow: 10,
+      unitSize: 12,
+      unitPlace: 'attached',
+      labelPlace: 'below',
+      labelSize: 13,
+      labelTone: 'secondary',
+      fillColor: '',
+      trackColor: '',
+      thousands: true,
+    },
+  },
+  {
     id: 'linear-bar',
     label: '横向条',
     hint: '细长胶囊条 + 上方读数，窄块用。',
@@ -149,6 +210,8 @@ export const GAUGE_CARD_PRESETS: ConfigPreset[] = [
         bulbSize: 26,
       },
       fillStyle: 'solid',
+      indicator: 'fill',
+      colorStops: [],
       scale: {
         showRange: true,
         ticks: false,
@@ -199,6 +262,8 @@ export const GAUGE_CARD_PRESETS: ConfigPreset[] = [
       },
       // ⚠ .eg-tank-fill 是 0deg 的两段渐变（自下而上淡出），不是纯色
       fillStyle: 'gradient',
+      indicator: 'fill',
+      colorStops: [],
       // 参考仓这一档不画量程端点：罐身太窄，两端摆不下
       scale: {
         showRange: false,
@@ -249,6 +314,8 @@ export const GAUGE_CARD_PRESETS: ConfigPreset[] = [
       },
       // .eg-thermo-fill 是纯色
       fillStyle: 'solid',
+      indicator: 'fill',
+      colorStops: [],
       scale: {
         showRange: false,
         ticks: false,
@@ -298,6 +365,8 @@ export const GAUGE_CARD_PRESETS: ConfigPreset[] = [
         bulbSize: 26,
       },
       fillStyle: 'solid',
+      indicator: 'fill',
+      colorStops: [],
       // 一格几十像素宽，量程端点与刻度都摆不下
       scale: {
         showRange: false,

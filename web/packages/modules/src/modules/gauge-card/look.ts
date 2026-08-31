@@ -10,9 +10,11 @@
 import type { CSSProperties } from 'vue'
 
 import {
+  readArray,
   readEnum,
   readNumber,
   readRecord,
+  readText,
   readTrimmedText,
 } from '../../shared/config'
 
@@ -26,6 +28,7 @@ import {
 import {
   GAUGE_COLUMN_VALUES,
   GAUGE_FILL_STYLE_VALUES,
+  GAUGE_INDICATOR_VALUES,
   GAUGE_LABEL_PLACE_VALUES,
   GAUGE_LABEL_TONE_COLORS,
   GAUGE_LABEL_TONE_VALUES,
@@ -35,6 +38,7 @@ import {
   GAUGE_UNIT_PLACE_VALUES,
   type GaugeColumns,
   type GaugeFillStyle,
+  type GaugeIndicator,
   type GaugeLabelPlace,
   type GaugeLayout,
   type GaugeReadoutPlace,
@@ -120,6 +124,34 @@ export const GC_VAR_NAMES: readonly GcVarName[] = [
   '--gc-outline',
 ]
 
+/**
+ * 一档色标：落在量程的百分之几处、什么颜色。
+ * ⚠ 颜色只填 `var(--…)` 引用或十六进制；算出来的色值换肤时不跟着走。
+ */
+export interface GaugeColorStop {
+  at: number
+  color: string
+}
+
+/**
+ * 读自定义色标，按位置排好序。
+ * ⚠ 排序不能省：SVG 的 `<stop>` 按**文档序**生效，位置写倒了的那两档会被浏览器
+ * 静默夹平成一段纯色，而配置里明明是两个颜色。
+ * ⚠ 不足两档时返回空表：一档渐变没有意义，而 `<linearGradient>` 只有一个 stop 时
+ * 画出来是透明。
+ * @param raw 配置里那个数组
+ */
+export function readColorStops(raw: unknown): GaugeColorStop[] {
+  const stops = readArray(raw).flatMap((one) => {
+    const row = readRecord(one)
+    const color = readText(row.color).trim()
+    return color === ''
+      ? []
+      : [{ at: clamp(readNumber(row.at, 0), 0, 100), color }]
+  })
+  return stops.length < 2 ? [] : [...stops].sort((a, b) => a.at - b.at)
+}
+
 /** 五档几何真正用到的那几个数，模板与 svg 直接绑它。 */
 export interface GaugeGeometryLook {
   /**
@@ -157,6 +189,10 @@ export interface GaugeLook {
   layout: GaugeGridLayout
   shape: GaugeShape
   fillStyle: GaugeFillStyle
+  /** 读数怎么指示：填到读数，还是满弧加指针。⚠ 只有弧度盘吃 `needle`。 */
+  indicator: GaugeIndicator
+  /** 自定义色标；空表 = 不走这一档。 */
+  colorStops: GaugeColorStop[]
   readoutPlace: GaugeReadoutPlace
   /** ⚠ 类名由仪表自己在标签真渲染时才挂，这里只给档位。 */
   labelPlace: GaugeLabelPlace
@@ -323,6 +359,7 @@ function textVars(config: Record<string, unknown>, nums: GaugeNums): GaugeVars {
 interface GaugeModes {
   shape: GaugeShape
   fillStyle: GaugeFillStyle
+  indicator: GaugeIndicator
   readoutPlace: GaugeReadoutPlace
 }
 
@@ -336,6 +373,7 @@ function readModes(config: Record<string, unknown>): GaugeModes {
   return {
     shape: readEnum(config.shape, GAUGE_SHAPE_VALUES, 'arc'),
     fillStyle: readEnum(config.fillStyle, GAUGE_FILL_STYLE_VALUES, 'solid'),
+    indicator: readEnum(config.indicator, GAUGE_INDICATOR_VALUES, 'fill'),
     readoutPlace: readEnum(
       config.readoutPlace,
       GAUGE_READOUT_PLACE_VALUES,
@@ -360,6 +398,7 @@ function classesOf(
     `gc--layout-${layout}`,
     `gc--shape-${modes.shape}`,
     `gc--fill-${modes.fillStyle}`,
+    `gc--ind-${modes.indicator}`,
     `gc--read-${modes.readoutPlace}`,
     `gc--unit-${readEnum(config.unitPlace, GAUGE_UNIT_PLACE_VALUES, 'baseline')}`,
   ]
@@ -385,6 +424,7 @@ export function readGaugeLook(
     nums,
     layout,
     ...modes,
+    colorStops: readColorStops(config.colorStops),
     labelPlace: readEnum(config.labelPlace, GAUGE_LABEL_PLACE_VALUES, 'below'),
     geometry,
     gridStyle: gridStyle(nums, columns, layout),

@@ -125,12 +125,12 @@ describe('仪表卡片清单的身份', () => {
 })
 
 describe('仪表卡片的字段预算', () => {
-  it('顶层三十个字段，键唯一', () => {
-    expect(SCHEMA).toHaveLength(30)
-    expect(TOP_KEYS.size).toBe(30)
+  it('顶层三十二个字段，键唯一', () => {
+    expect(SCHEMA).toHaveLength(32)
+    expect(TOP_KEYS.size).toBe(32)
   })
 
-  it('三十个字段分段摆开，每一段的字段数就是设计里的那份预算', () => {
+  it('三十二个字段分段摆开，每一段的字段数就是设计里的那份预算', () => {
     const counts = new Map<string, number>()
     for (const item of SCHEMA) {
       const group = item.group ?? ''
@@ -140,7 +140,7 @@ describe('仪表卡片的字段预算', () => {
     expect([...counts]).toEqual([
       ['内容', 3],
       ['排布', 5],
-      ['几何', 3],
+      ['几何', 5],
       ['刻度', 2],
       ['目标', 3],
       ['读数', 5],

@@ -18,6 +18,7 @@ import {
 } from '../../../../shared/config'
 import {
   fmtDecimal,
+  fmtNumber,
   fmtTrim,
   isPresent,
   toNumOrNull,
@@ -61,9 +62,10 @@ const text = computed(() => {
   const num = numeric.value
   if (num === null) return props.cell.format.emptyText
   const { precision, fixedDecimals, thousands } = props.cell.format
-  return fixedDecimals
-    ? fmtDecimal(num, precision, thousands)
-    : fmtTrim(num, precision)
+  // ⚠ 千分位在两档下都要生效：只在补零档接它，等于「千分位」这个开关单开时
+  //   点了没反应，而两侧都不报错
+  if (fixedDecimals) return fmtDecimal(num, precision, thousands)
+  return thousands ? fmtNumber(num, precision) : fmtTrim(num, precision)
 })
 
 const hasValue = computed(
