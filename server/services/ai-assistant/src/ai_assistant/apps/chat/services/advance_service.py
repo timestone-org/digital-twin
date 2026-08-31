@@ -45,7 +45,11 @@ from ai_assistant.apps.chat.services.planning.turn_types import (
     TurnOutcome,
     TurnStep,
 )
+from ai_assistant.apps.chat.services.tools.providers.mcp import (
+    PROVIDER as MCP_PROVIDER,
+)
 from ai_assistant.apps.chat.services.tools.registry import build_registry
+from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
 from ai_assistant.container import Container
 from ai_assistant.llm import (
     DEFAULT_PROFILE,
@@ -77,19 +81,38 @@ class AdvanceDeps:
     model: GuardedModel
     server_tools: ServerToolRunner
     summarizer: SummarizerFactory
+    # 这一轮才知道的那几个工具规格（眼下只有 MCP：某一路连不上时它的工具这一轮
+    # 就不在）。⚠ 它们不在静态的 `TOOL_SPECS` 里，要单独交给 `specs_for`
+    extra_specs: tuple[ToolSpec, ...] = ()
+    # 调用者持有的权限码，`PermissionGate` 按它收窄技能。
+    # ⚠ 只能来自已认证的 `CallerContext`，绝不从载荷取——载荷是用户可控的。
+    # ⚠ `None` 与空集不是一回事：`None` 是「没给」这一道不收窄，空集是「一个码
+    # 都没有」该收窄的一个不留（`intent/ports.py` 的 `TurnContext.codes`）
+    codes: frozenset[str] | None = None
 
 
-def deps_of(container: Container, headers: dict[str, str]) -> AdvanceDeps:
+def deps_of(
+    container: Container,
+    headers: dict[str, str],
+    codes: frozenset[str] | None = None,
+) -> AdvanceDeps:
     """从容器取出这几样；没接模型就抛。
 
     ⚠ `headers` 是这一次调用要转发给 platform 的身份头，**每请求一份**。
     做成进程级的话，两个用户的请求会互相借用对方的身份。
 
-    Args: container, headers。
+    Args: container, headers, codes（调用者的权限码；只许由路由从已认证的
+        `CallerContext` 传进来）。
     """
     if container.model is None:
         raise ModelDisabled("本部署没有接模型")
     model = container.model
+    registry = build_registry(
+        platform=container.platform,
+        headers=headers,
+        mcp=container.mcp,
+        write_allowed=container.settings.mcp_write_names(),
+    )
     return AdvanceDeps(
         sessions=container.database.session,
         model=model,
@@ -97,9 +120,11 @@ def deps_of(container: Container, headers: dict[str, str]) -> AdvanceDeps:
         # ⚠ 走注册表而不是直接造 `ServerTools`：客户端那一路的名字也在表里，
         # 于是「本该交给浏览器的工具走到了服务端」会得到一句说得清的错
         # （`RunsElsewhere`），而不是与「模型编了个工具名」混成同一档
-        server_tools=build_registry(
-            platform=container.platform, headers=headers
-        ).run,
+        server_tools=registry.run,
+        # ⚠ 与 `registry.run` 取自**同一份**注册表：各造一份的话，下发的清单
+        # 与真能跑的那一份会漂开，而两边都不报错
+        extra_specs=registry.specs_of(MCP_PROVIDER),
+        codes=codes,
     )
 
 
@@ -288,7 +313,12 @@ async def advance(
     )
     turn = TurnDeps(
         model=deps.model,
-        specs=tool_select.specs_for(payload.surface_kind, payload.client_tools),
+        specs=tool_select.specs_for(
+            payload.surface_kind,
+            payload.client_tools,
+            codes=deps.codes,
+            extra=deps.extra_specs,
+        ),
         run_tool=_with_plan_tools(plans, deps.server_tools),
         choice=choice,
     )

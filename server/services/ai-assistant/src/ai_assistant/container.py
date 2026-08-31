@@ -17,7 +17,12 @@ from ai_assistant.llm import (
     ModelRegistry,
 )
 from ai_assistant.settings import SERVICE_NAME, Settings
-from ai_assistant.upstream import PlatformClient
+from ai_assistant.upstream import (
+    McpCatalog,
+    McpClient,
+    McpServer,
+    PlatformClient,
+)
 from lib.cache import Cache
 from lib.crypto import SecretCipher
 from lib.db import Database, PoolProfile
@@ -46,6 +51,11 @@ class Container:
     # 这套部署接了哪几路模型。⚠ 与 `model` 分开：能力面要在模型关着时
     # 也能如实回答「这里本来能接哪几路」
     models: ModelRegistry
+    # 外部 MCP 那一路的工具目录。⚠ 一个进程一份、长活：连接池与各路的断路器
+    # 都要跨请求活着，每次现造一个的话断路器永远停在「closed」，等于没有它。
+    # 没配任何一路时它仍在，只是 `servers` 是空的——空目录报空清单，
+    # 与「装不上就如实缺席」同一口径
+    mcp: McpCatalog
     # 订阅账号那一路的凭据读写与登录。没开 codex 时同样是 `None`
     credentials: CredentialStore | None
     device_login: DeviceLogin | None
@@ -142,6 +152,37 @@ def _build_codex(
     return (store, login, http)
 
 
+def _build_mcp(settings: Settings) -> McpCatalog:
+    """按配置装出 MCP 目录。一路一个断路器。
+
+    ⚠ 断路器**按 server 分**，不共用一个：一个 server 挂掉不该把其余几路一起
+    短路，而它们本来好好的（ADR-0031 决策四）。
+
+    Args: settings。
+    """
+    servers = tuple(
+        McpServer(
+            name=str(one["name"]),
+            url=str(one["url"]),
+            is_auth_required=bool(one.get("is_auth_required")),
+        )
+        for one in settings.mcp_server_list()
+    )
+    return McpCatalog(
+        client=McpClient(timeout_s=settings.mcp_timeout_s),
+        servers=servers,
+        tokens=settings.mcp_token_map(),
+        breakers={
+            one.name: CircuitBreaker(
+                name=f"mcp:{one.name}",
+                failure_threshold=settings.mcp_breaker_failures,
+                reset_after_s=settings.mcp_breaker_reset_s,
+            )
+            for one in servers
+        },
+    )
+
+
 def build_container(settings: Settings) -> Container:
     """按配置装配容器。
 
@@ -167,6 +208,7 @@ def build_container(settings: Settings) -> Container:
             timeout_s=settings.platform_timeout_s,
         ),
         models=registry,
+        mcp=_build_mcp(settings),
         credentials=credentials,
         device_login=device_login,
         oauth_http=oauth_http,

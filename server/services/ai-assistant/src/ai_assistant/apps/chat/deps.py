@@ -78,9 +78,10 @@ def get_write_context(
     )
 
 
-def get_advance_deps(
+async def get_advance_deps(
     request: Request,
     container: Annotated[Container, Depends(get_container)],
+    caller: Annotated[CallerContext, Depends(require(ASSISTANT_USE))],
 ) -> AdvanceDeps:
     """推进一个回合要的那几样。
 
@@ -90,9 +91,18 @@ def get_advance_deps(
     ⚠ 身份头从**入站请求**上原样取走：助手代表用户去调 platform，而那一侧按
     用户自己的权限码判定——助手因此不是绕过权限的通道。
 
-    Args: request, container。
+    ⚠ 权限码只从**已认证的** `caller` 取，绝不从 `AdvanceIn` 载荷取：载荷是
+    用户可控的，从那里取等于让人自己声明自己有哪些权限码。
+
+    Args: request, container, caller。
     """
-    return deps_of(container, caller_headers(request.headers))
+    # ⚠ 每轮刷一次外部工具目录：某一路 MCP 连不上时它的工具这一轮就不该下发
+    # （ADR-0031 决策五）。刷在这里而不是装配期——装配期问一次的话，一路 server
+    # 中途挂掉之后模型还会一直看得见它的工具，调一次失败一次
+    await container.mcp.refresh()
+    return deps_of(
+        container, caller_headers(request.headers), codes=caller.permissions
+    )
 
 
 async def get_model_defaults(

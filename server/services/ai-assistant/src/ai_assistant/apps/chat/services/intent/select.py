@@ -85,15 +85,23 @@ def specs_for(
     surface_kind: str,
     client_tools: Sequence[str] | None,
     codes: frozenset[str] | None = None,
+    extra: Sequence[ToolSpec] = (),
 ) -> tuple[ToolSpec, ...]:
     """这一轮下发给模型的工具集，保持 `TOOL_SPECS` 的原序。
 
     这是两层的合成口：层 2 出名字（`allowed_for`），层 5 按名字取规格
     （`tools/selection.py`）。合成口留着是因为调用方只关心「这一轮发哪些」。
 
+    ⚠ `extra` 是**逐轮才知道**的那几个（眼下只有 MCP：某一路连不上时它的工具
+    这一轮就不在），一律放在末尾且不过技能过滤——它们是部署方显式装上的，
+    不归任何技能，与 `user.ask` 那条「报了就下发」同一个道理。
+
+    ⚠ 放末尾不是审美：工具声明属于前缀缓存唯一能命中的那一段（ADR-0025 的
+    B 层），把逐轮可变的那几个排在前面，会让后面所有内建工具的声明整体位移。
+
     Args: surface_kind, client_tools（前端自报的客户端工具名；None = 老前端，
         退回技能声明推导）, codes（调用者持有的权限码；None = 没给，不按权限
-        收窄）。
+        收窄）, extra（这一轮额外可用的工具规格）。
     """
     allowed = allowed_for(
         TurnContext(
@@ -102,4 +110,4 @@ def specs_for(
             codes=codes,
         )
     )
-    return specs_named(TOOL_SPECS, allowed.tools)
+    return specs_named(TOOL_SPECS, allowed.tools) + tuple(extra)

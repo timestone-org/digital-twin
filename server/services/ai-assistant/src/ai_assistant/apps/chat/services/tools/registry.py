@@ -20,9 +20,10 @@ from ai_assistant.apps.chat.services.tools.ports import (
     UnknownTool,
 )
 from ai_assistant.apps.chat.services.tools.providers.client import ClientTools
+from ai_assistant.apps.chat.services.tools.providers.mcp import McpTools
 from ai_assistant.apps.chat.services.tools.providers.server import ServerTools
 from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
-from ai_assistant.upstream import PlatformClient
+from ai_assistant.upstream import McpCatalog, PlatformClient
 
 
 class DuplicateTool(RuntimeError):
@@ -56,6 +57,20 @@ class ToolRegistry:
             raise UnknownTool(f"没有这个工具：{name}")
         return await owner.run(name, arguments)
 
+    def specs_of(self, provider: str) -> tuple[ToolSpec, ...]:
+        """只要某一路的规格。
+
+        ⚠ 给「逐轮才知道的那几个」用：它们不在静态的 `TOOL_SPECS` 里，
+        要单独交给 `intent.specs_for` 的 `extra`。
+
+        Args: provider（那一路在注册表里的名字）。
+        """
+        return tuple(
+            spec
+            for spec in self.specs
+            if self.owners[spec.name].name == provider
+        )
+
 
 def registry_of(providers: tuple[ToolProvider, ...]) -> ToolRegistry:
     """把几路来源装成一个注册表，顺路查重名。
@@ -79,21 +94,30 @@ def registry_of(providers: tuple[ToolProvider, ...]) -> ToolRegistry:
 def build_registry(
     platform: PlatformClient | None = None,
     headers: dict[str, str] | None = None,
+    mcp: McpCatalog | None = None,
+    write_allowed: frozenset[str] = frozenset(),
 ) -> ToolRegistry:
     """这套部署的工具注册表。
 
     ⚠ 顺序是契约：服务端那一路在前，客户端那一路在后。它决定工具在提示词里的
     先后，而先后影响模型的第一反应（`intent/select.py` 有一条闸守着原序）。
 
+    ⚠ **MCP 那一路排在最末尾**，这不是审美。它的规格逐轮可变（某一路连不上时
+    它的工具这一轮就不在），排在前面的话，一路 MCP 抖一下会让后面所有内建工具的
+    声明整体位移——而工具声明属于前缀缓存唯一能命中的那一段（ADR-0025 的 B 层）。
+    放在最末尾，抖动只影响它自己那一截。
+
     Args: platform（上游业务面；只取规格时不用给）, headers（这一次要转发的
-        身份头）。
+        身份头）, mcp（外部工具目录；不给即这一路缺席）, write_allowed（许下发的
+        写操作规范名）。
     """
-    return registry_of(
-        (
-            ServerTools(platform=platform, headers=dict(headers or {})),
-            ClientTools(),
-        )
-    )
+    providers: list[ToolProvider] = [
+        ServerTools(platform=platform, headers=dict(headers or {})),
+        ClientTools(),
+    ]
+    if mcp is not None and mcp.servers:
+        providers.append(McpTools(catalog=mcp, write_allowed=write_allowed))
+    return registry_of(tuple(providers))
 
 
 def all_specs() -> tuple[ToolSpec, ...]:
