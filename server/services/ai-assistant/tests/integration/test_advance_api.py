@@ -22,6 +22,7 @@ from ai_assistant.apps.chat.catalog import ASSISTANT_USE
 from ai_assistant.apps.chat.deps import get_advance_deps
 from ai_assistant.apps.chat.services.advance_service import AdvanceDeps
 from ai_assistant.apps.chat.services.memory import NullSummarizer
+from ai_assistant.apps.chat.services.perception import vision
 from ai_assistant.apps.chat.services.tools.providers.server import ServerTools
 from ai_assistant.llm import GuardedModel
 from ai_assistant.llm.ports import ModelChoice, ModelKind
@@ -361,7 +362,7 @@ async def test_a_screenshot_goes_to_the_vision_model_and_stays_out_of_the_db(
     stored = json.dumps(detail.json()["data"], ensure_ascii=False)
     # 几兆字节的 base64 存一次、每次重放再喂一遍，上下文与账单一起翻倍
     assert PNG not in stored
-    assert "[截图]" in stored
+    assert vision.PLACEHOLDER in stored
 
 
 async def test_writing_a_plan_streams_a_snapshot_and_persists_it(
