@@ -30,6 +30,7 @@ async def test_the_listing_names_every_registered_module(
         "info-card",
         "info-feed",
         "info-list",
+        "nav-tabs",
         "text-block",
         "twin-2d-view",
         "twin-view",

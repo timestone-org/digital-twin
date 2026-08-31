@@ -49,6 +49,7 @@ EXPECTED_TYPES = frozenset(
         "info-feed",
         "info-list",
         "image-block",
+        "nav-tabs",
         "text-block",
         "twin-2d-view",
         "twin-view",
