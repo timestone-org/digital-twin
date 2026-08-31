@@ -43,5 +43,10 @@ export default defineConfig({
   build: {
     target: 'es2022',
     sourcemap: true,
+    // ⚠ 抬过 rollup 那条 500 kB 的泛用提醒，不是放宽预算：真正的预算是
+    // `scripts/gates/check_bundle_budget.py` 判的**首屏 gzip**（JS 300 KB /
+    // CSS 100 KB），而这条提醒量的是任意分片压缩前的体积——唯一超它的是
+    // 懒加载的 three 那一块，首屏根本不下载。留着它只会让构建日志天天黄一行。
+    chunkSizeWarningLimit: 800,
   },
 })

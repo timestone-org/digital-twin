@@ -93,27 +93,30 @@ onMounted(() => {
         />
       </div>
 
-      <DtPageState
-        class="min-h-0 flex-1"
-        :loading="loading"
-        :error="error"
-        :empty="groups.length === 0"
-        empty-hint="没有匹配的权限码"
-        @retry="load()"
-      >
-        <!-- ⚠ 这一页是「若干个分组各一张小表」，滚动归这一层，
-             每张小表都按内容高度渲染（fill=false），否则它们会互相抢高度 -->
-        <div class="flex h-full min-h-0 flex-col gap-5 overflow-y-auto pr-1">
-          <PermissionGroupCard
-            v-for="group in groups"
-            :key="group.code"
-            :title="group.label"
-            :items="group.items"
-            :view="view"
-            :held="held"
-          />
-        </div>
-      </DtPageState>
+      <!-- ⚠ 外面这一层不是多余的：DtPageState 渲染的是 fragment，
+           class 落不到任何节点上，min-h-0 flex-1 会静默失效 -->
+      <div class="min-h-0 flex-1">
+        <DtPageState
+          :loading="loading"
+          :error="error"
+          :empty="groups.length === 0"
+          empty-hint="没有匹配的权限码"
+          @retry="load()"
+        >
+          <!-- ⚠ 这一页是「若干个分组各一张小表」，滚动归这一层，
+               每张小表都按内容高度渲染（fill=false），否则它们会互相抢高度 -->
+          <div class="flex h-full min-h-0 flex-col gap-5 overflow-y-auto pr-1">
+            <PermissionGroupCard
+              v-for="group in groups"
+              :key="group.code"
+              :title="group.label"
+              :items="group.items"
+              :view="view"
+              :held="held"
+            />
+          </div>
+        </DtPageState>
+      </div>
     </div>
   </AppShell>
 </template>

@@ -6,6 +6,7 @@
  * 并把后果写进确认文案里——现场的 SCADA 掉线不是一句「操作成功」能交代的。
  */
 import { computed, onMounted, ref } from 'vue'
+import { RouterLink } from 'vue-router'
 import type { DtDataColumn, OpcuaInstance } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import { DtButton, DtDataView, DtIcon, DtInput, DtNotice, DtTag } from '@dt/ui'
