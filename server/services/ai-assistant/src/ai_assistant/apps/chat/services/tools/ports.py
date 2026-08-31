@@ -19,6 +19,16 @@ class UnknownTool(LookupError):
     """这一路来源里没有这个工具名。"""
 
 
+class RunsElsewhere(RuntimeError):
+    """这个工具认得，但不在这一侧执行。
+
+    ⚠ 与 `UnknownTool` 分开是刻意的，两者要做的事完全相反：认不出的名字是模型编
+    出来的，该让它换一条路；而这一档说明**编排层把活派错了地方**——客户端工具本
+    该随回合交给浏览器，走到服务端的分派表里就是编排出了错。混成一档的话，后者会
+    被当成「模型又编了个工具名」而永远查不到。
+    """
+
+
 @runtime_checkable
 class ToolProvider(Protocol):
     """一批工具的来源。加一路来源 = 加一个文件 + 注册表一行。"""

@@ -5,11 +5,13 @@
 """
 
 from ai_assistant.apps.chat.services.tools.ports import (
+    RunsElsewhere,
     ToolProvider,
     UnknownTool,
 )
 
 __all__ = [
+    "RunsElsewhere",
     "ToolProvider",
     "UnknownTool",
 ]
