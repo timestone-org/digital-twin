@@ -13,6 +13,7 @@ import { GC_ITEM_VAR_NAMES } from '../../../src/modules/gauge-card/gauges'
 import {
   GAUGE_SIZE_BOUNDS,
   GC_VAR_NAMES,
+  readColorStops,
   readGaugeLook,
   type GaugeVars,
 } from '../../../src/modules/gauge-card/look'
@@ -355,5 +356,50 @@ describe('读数辉光对回参考仓', () => {
       .match(/0 0 var\(--gc-value-glow[^,]*,[^;]*/)
 
     expect(glow?.[0]).toContain('color-mix(in srgb, currentcolor 50%')
+  })
+})
+
+describe('自定义色标怎么读', () => {
+  // ⚠ `<stop>` 按文档序生效：位置写倒了的两档会被浏览器静默夹平成一段纯色
+  it('按位置排好序，位置钳进 0–100', () => {
+    expect(
+      readColorStops([
+        { at: 200, color: 'var(--a)' },
+        { at: -50, color: 'var(--b)' },
+      ]),
+    ).toEqual([
+      { at: 0, color: 'var(--b)' },
+      { at: 100, color: 'var(--a)' },
+    ])
+  })
+
+  // ⚠ 没填颜色的那一行不是「透明档」，是没配完：留着它会在弧上开一段透明缺口
+  it('没填颜色的行直接丢掉', () => {
+    expect(
+      readColorStops([
+        { at: 0, color: 'var(--a)' },
+        { at: 50, color: '  ' },
+        { at: 100, color: 'var(--b)' },
+      ]).map((one) => one.at),
+    ).toEqual([0, 100])
+  })
+
+  // ⚠ 只有一个 stop 的 linearGradient 画出来是透明，一档渐变也没有意义
+  it('不足两档时返回空表，让画法退回缺省色标', () => {
+    expect(readColorStops([{ at: 0, color: 'var(--a)' }])).toEqual([])
+    expect(
+      readColorStops([
+        { at: 0, color: '' },
+        { at: 9, color: '' },
+      ]),
+    ).toEqual([])
+    expect(readColorStops(undefined)).toEqual([])
+    expect(readColorStops('不是数组')).toEqual([])
+  })
+
+  it('没写位置的行落在 0', () => {
+    expect(
+      readColorStops([{ color: 'var(--a)' }, { at: 60, color: 'var(--b)' }])[0],
+    ).toEqual({ at: 0, color: 'var(--a)' })
   })
 })
