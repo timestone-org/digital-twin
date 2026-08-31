@@ -101,5 +101,5 @@ async def test_an_image_is_turned_away_from_this_endpoint(
     # 而助手一个字都没收到
     png = b"\x89PNG\r\n\x1a\n" + b"0" * 32
     response = await db_client.post(PARSE_URL, json=_body("现场.png", png))
-    assert response.status_code == 422
+    assert response.status_code == 400
     assert "图片" in response.json()["message"]
