@@ -3,7 +3,8 @@
  * 夹视图与散行清单，外加「删了会连带影响什么」与「一条诊断落在哪个实体上」两处
  * 映射。判断全在这里、组件只管画，这些规则才测得动。
  */
-import type { TwinConfig, TwinConfigIssue } from '@dt/twin-config'
+import type { TwinConfig, TwinConfigIssue, TwinPart } from '@dt/twin-config'
+import { partChildren } from '@dt/twin-config'
 
 import {
   TWIN_ENTITY_LABELS,
@@ -129,6 +130,9 @@ export const TWIN_ISSUE_LABELS: Readonly<
   'part-far-unreachable': '远档没分界',
   'part-detail-unreachable': '详情弹不出来',
   'part-detail-empty': '详情没有字段',
+  'dangling-part-parent': '上级不存在',
+  'part-parent-cycle': '上级成环',
+  'part-parent-too-deep': '装配压太深',
   'roam-too-short': '漫游飞不起来',
   'tint-no-stops': '染色没档位',
   'tint-empty-range': '档位区间为空',
@@ -144,6 +148,22 @@ interface RowInput {
   visible: boolean | null
 }
 
+/**
+ * 部件行的补充信息：节点数，再加上它在装配里的位置。
+ * ⚠ 大纲**不改成嵌套树**：行的序号就是数组绑定的对齐位次，一嵌套，可见次序与
+ * 行号就对不上了，而绑点面板正是靠这个次序核对的。层级只当一行文字写在这里。
+ */
+function partMeta(config: TwinConfig, part: TwinPart): string {
+  const bits = [`${part.nodes.length} 节点`]
+  const parent = config.parts.find((item) => item.id === part.parentId)
+  if (parent !== undefined) {
+    bits.push(`属于 ${parent.name === '' ? parent.id : parent.name}`)
+  }
+  const children = partChildren(config.parts, part.id)
+  if (children.length > 0) bits.push(`收 ${children.length} 件`)
+  return bits.join(' · ')
+}
+
 /** 六类实体各自怎么摊成行。⚠ 视点没有 visibility，`visible` 恒为 null。 */
 const ROW_INPUTS: Readonly<
   Record<TwinEntityKind, (config: TwinConfig) => RowInput[]>
@@ -153,7 +173,7 @@ const ROW_INPUTS: Readonly<
       kind: 'parts',
       id: part.id,
       name: part.name,
-      meta: `${part.nodes.length} 节点`,
+      meta: partMeta(config, part),
       visible: part.visibility.visible,
     })),
   anchors: (config) =>

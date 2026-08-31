@@ -221,6 +221,22 @@ describe('往上转发的动作', () => {
     expect(wrapper.emitted('capturePartView')?.[0]).toEqual(['pt2'])
   })
 
+  it('部件检查器拿得到全部部件，从属一节才列得出候选', () => {
+    const wrapper = mountInspector({ kind: 'parts', id: 'pt1' })
+
+    expect(wrapper.findComponent(PartInspector).props('parts')).toEqual(
+      CONFIG.parts,
+    )
+  })
+
+  it('从检查器里跳到另一个部件原样上抛', () => {
+    const wrapper = mountInspector({ kind: 'parts', id: 'pt1' })
+
+    wrapper.findComponent(PartInspector).vm.$emit('selectPart', 'pt2')
+
+    expect(wrapper.emitted('selectPart')).toEqual([['pt2']])
+  })
+
   it('漫游的预览与停止各自上抛', () => {
     const wrapper = mountInspector({ kind: 'roam' })
     const roam = wrapper.findComponent(RoamTourInspector)

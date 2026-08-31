@@ -4,6 +4,13 @@
  */
 import { MIN_ROAM_TOUR_STOPS } from './normalizeScene'
 import { panelFieldSpan, panelKindUsesRange } from './panelGraph'
+import {
+  MAX_ASSEMBLY_DEPTH,
+  hasFieldedDescendant,
+  partAncestors,
+  partDetailReachable,
+  partOnParentCycle,
+} from './partTree'
 import type { TwinConfig } from './types'
 
 /** 漫游是单例段，没有实体 id；诊断面板按它跳到漫游那一节。 */
@@ -20,6 +27,9 @@ export const TWIN_CONFIG_ISSUE_KINDS = [
   'part-far-unreachable',
   'part-detail-unreachable',
   'part-detail-empty',
+  'dangling-part-parent',
+  'part-parent-cycle',
+  'part-parent-too-deep',
   'roam-too-short',
   'tint-no-stops',
   'tint-empty-range',
@@ -193,15 +203,17 @@ function unreachablePartFarAction(config: TwinConfig): TwinConfigIssue[] {
 }
 
 /**
- * 配了详情字段，近距点击却不弹窗。
+ * 配了详情字段，自己不弹窗、也没有一个弹得出来的上级。
  * ⚠ 这些字段照样占绑定行——不报出来的话，用户绑完点位怎么点都看不到它们，
  * 而绑点面板上那几行看起来一切正常。
+ * ⚠ 判定必须连**祖先**一起看：子件是从父件的装配栏里带出来看的，按「只看自己的
+ * near」判会把每一个子件都报一遍，而那正是这次要显示的东西。
  */
 function unreachablePartDetails(config: TwinConfig): TwinConfigIssue[] {
   return config.parts
     .map((part, index) => ({ part, index }))
     .filter((ref) => ref.part.detail.fields.length > 0)
-    .filter((ref) => ref.part.click.near !== 'detail')
+    .filter((ref) => !partDetailReachable(config.parts, ref.part.id))
     .map((ref) => ({
       kind: 'part-detail-unreachable' as const,
       entityId: ref.part.id,
@@ -210,17 +222,82 @@ function unreachablePartDetails(config: TwinConfig): TwinConfigIssue[] {
     }))
 }
 
-/** 近距点击要弹窗，详情却一个字段都没有：弹出来是一张空卡片。 */
+/**
+ * 近距点击要弹窗，详情却一个字段都没有：弹出来是一张空卡片。
+ * ⚠ 后代里有取数的部件时不报：那是**纯容器父件**——机组自己不取数，四个子件
+ * 各自取数，弹窗左栏正好把它们列出来。报了的话这个合法配法会一直挂着红点。
+ */
 function emptyPartDetails(config: TwinConfig): TwinConfigIssue[] {
   return config.parts
     .map((part, index) => ({ part, index }))
     .filter((ref) => ref.part.click.near === 'detail')
     .filter((ref) => ref.part.detail.fields.length === 0)
+    .filter((ref) => !hasFieldedDescendant(config.parts, ref.part.id))
     .map((ref) => ({
       kind: 'part-detail-empty' as const,
       entityId: ref.part.id,
       path: `parts[${ref.index}].detail.fields`,
       detail: '近距点击要弹详情，但一个字段都没配，弹出来是一张空卡片',
+    }))
+}
+
+/**
+ * 上级指到一个不存在的部件。
+ * ⚠ 运行态对这种部件是「当顶层照常弹」——不报出来的话，它安静地从父件的装配栏里
+ * 没了，而配置里明明写着上级。
+ */
+function danglingPartParents(config: TwinConfig): TwinConfigIssue[] {
+  const known = new Set(config.parts.map((item) => item.id))
+  return config.parts
+    .map((part, index) => ({ part, index }))
+    .filter((ref) => ref.part.parentId !== '')
+    .filter((ref) => !known.has(ref.part.parentId))
+    .map((ref) => ({
+      kind: 'dangling-part-parent' as const,
+      entityId: ref.part.id,
+      path: `parts[${ref.index}].parentId`,
+      detail: `找不到部件 ${ref.part.parentId}，这个部件会当顶层处理`,
+    }))
+}
+
+/**
+ * 沿上级往上走回到了自己（含直接指向自己）。
+ * ⚠ 建树的那一支会断在重复那一环——不报出来的话，装配栏上安静地少几行，
+ * 而没有任何迹象说明为什么少的是它们。
+ */
+function partParentCycles(config: TwinConfig): TwinConfigIssue[] {
+  return config.parts
+    .map((part, index) => ({ part, index }))
+    .filter((ref) => partOnParentCycle(config.parts, ref.part.id))
+    .map((ref) => ({
+      kind: 'part-parent-cycle' as const,
+      entityId: ref.part.id,
+      path: `parts[${ref.index}].parentId`,
+      detail:
+        ref.part.parentId === ref.part.id
+          ? '上级指向了自己，这个部件会当顶层处理'
+          : '沿上级往上走回到了自己，装配清单会断在这一环',
+    }))
+}
+
+/**
+ * 装配压得太深。
+ * ⚠ 这是可用性提醒不是错误：弹窗左栏每深一层缩进一格，压到第五层往后一行
+ * 只剩两三个字的宽度。
+ */
+function deepPartParents(config: TwinConfig): TwinConfigIssue[] {
+  return config.parts
+    .map((part, index) => ({
+      part,
+      index,
+      depth: partAncestors(config.parts, part.id).length,
+    }))
+    .filter((ref) => ref.depth > MAX_ASSEMBLY_DEPTH)
+    .map((ref) => ({
+      kind: 'part-parent-too-deep' as const,
+      entityId: ref.part.id,
+      path: `parts[${ref.index}].parentId`,
+      detail: `上面压了 ${ref.depth} 层，装配栏的缩进会吃光行宽`,
     }))
 }
 
@@ -347,10 +424,13 @@ export function collectTwinConfigIssues(config: TwinConfig): TwinConfigIssue[] {
     ...shortFlows(config, anchorIds),
     ...shortRoamTour(config, cameraIds),
     ...danglingPartCameras(config, cameraIds),
+    ...danglingPartParents(config),
     ...partFocusWithoutTarget(config),
     ...unreachablePartFarAction(config),
     ...unreachablePartDetails(config),
     ...emptyPartDetails(config),
+    ...partParentCycles(config),
+    ...deepPartParents(config),
     ...tintWithoutStops(config),
     ...emptyTintRanges(config),
     ...emptyPanelRanges(config),

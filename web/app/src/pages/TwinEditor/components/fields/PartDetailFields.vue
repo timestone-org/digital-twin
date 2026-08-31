@@ -9,6 +9,8 @@
  * 行号与信息牌各数各的，两边互不影响。
  * ⚠ 字段一律占绑定行，与「近距点击弹不弹窗」无关：按动作过滤会让用户在下拉里
  * 翻一下就把这个部件已经绑好的点位整片丢掉。配了字段却不弹窗由诊断报出来。
+ * ⚠ 弹窗宽度与模型区高度是**框级**的：这个部件被上级带出来看时用上级的那一份。
+ * 不禁用这两项——它可能同时还能在主场景里被单独点开。
  */
 import type { TwinPanelField, TwinPartDetail } from '@dt/twin-config'
 import {
@@ -145,6 +147,10 @@ function writeFields(fields: TwinPanelField[]): void {
       size="sm"
       @update:model-value="write({ width: $event ?? WIDTH_RANGE.min })"
     />
+    <p v-if="part.parentId !== ''" class="text-xs text-text-disabled">
+      被上级带出来看时，弹窗宽度与模型区高度用上级的那一份——框属于那一次打开，
+      逐个子件换宽高会让弹窗在屏幕上跳。上面这两个数只在单独点开这个部件时生效。
+    </p>
 
     <PanelFieldList
       :panel="preview"

@@ -9,6 +9,8 @@
  * 挂在别处的部件会以模型原点为准摆放，看着像「模型跑到画面外去了」。
  * ⚠ 上下文有硬上限：开一次弹窗多一个 WebGL 上下文，关掉必须 `forceContextLoss`，
  * 否则来回点几次部件之后最早的那个会被浏览器静默回收，主画布毫无征兆地黑掉。
+ * ⚠ 父件带着后代一起进来时先按祖先关系去重：GLB 里子件的网格通常就挂在父件节点
+ * 下面，不去重就是同一块几何重叠着画两遍，表面闪烁得像模型坏了。
  */
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
@@ -74,6 +76,40 @@ function bakedClone(source: THREE.Object3D): THREE.Object3D {
   return clone
 }
 
+/** 这个对象的某个祖先也在清单里吗。 */
+function hasAncestorIn(
+  object: THREE.Object3D,
+  all: ReadonlySet<THREE.Object3D>,
+): boolean {
+  let cursor = object.parent
+  while (cursor !== null) {
+    if (all.has(cursor)) return true
+    cursor = cursor.parent
+  }
+  return false
+}
+
+/**
+ * 丢掉重复的、以及祖先已经在清单里的对象。
+ * ⚠ 父件与子件在 GLB 里常常就是同一棵树上的两层：两份一起克隆进来，同一块几何
+ * 会严丝合缝地重叠着画两遍，表面互相穿插闪烁——看着像模型本身坏了，而没有任何
+ * 日志指回这里。
+ * @param objects 要展示的对象，可能来自一个部件与它的全部后代
+ */
+export function dropNestedObjects(
+  objects: readonly THREE.Object3D[],
+): THREE.Object3D[] {
+  const all = new Set(objects)
+  const kept = new Set<THREE.Object3D>()
+  const out: THREE.Object3D[] = []
+  for (const object of objects) {
+    if (kept.has(object) || hasAncestorIn(object, all)) continue
+    kept.add(object)
+    out.push(object)
+  }
+  return out
+}
+
 /** 把这一组对象搬到原点附近，免得相机得先飞很远才看得见。 */
 function centerAt(group: THREE.Group): THREE.Box3 {
   const box = new THREE.Box3().setFromObject(group)
@@ -98,7 +134,9 @@ export function createPartPreview(
   const scene = new THREE.Scene()
   const lighting = createLighting()
   const stage = new THREE.Group()
-  for (const object of options.objects) stage.add(bakedClone(object))
+  for (const object of dropNestedObjects(options.objects)) {
+    stage.add(bakedClone(object))
+  }
   const box = centerAt(stage)
   scene.add(lighting, stage)
 

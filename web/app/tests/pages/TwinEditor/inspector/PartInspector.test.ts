@@ -27,10 +27,12 @@ function mountPart(
   nodeNames: readonly string[] = ['Cube', 'Pump_01'],
   picking = false,
   cameras: readonly TwinCamera[] = [],
+  parts: readonly TwinPart[] = [],
 ) {
   return mount(PartInspector, {
     props: {
       modelValue,
+      parts: parts.length === 0 ? [modelValue] : parts,
       nodeNames,
       picking,
       cameras,
@@ -46,6 +48,15 @@ function lastPart(wrapper: Wrapper): TwinPart {
   const events = wrapper.emitted('update:modelValue')
   if (!events?.length) throw new Error('没有整份写回部件')
   return events[events.length - 1]?.[0] as TwinPart
+}
+
+/** 按无障碍名找下拉：检查器里不止一个 DtSelect。 */
+function selectLabeled(wrapper: Wrapper, label: string) {
+  const found = wrapper
+    .findAllComponents(DtSelect)
+    .find((item) => item.props('ariaLabel') === label)
+  if (!found) throw new Error(`没有 aria-label 为「${label}」的下拉`)
+  return found
 }
 
 function buttonByText(wrapper: Wrapper, text: string) {
@@ -80,7 +91,8 @@ describe('关联节点', () => {
     const wrapper = mountPart()
 
     // 候选下拉的选项是运行时开合的浮层，这里直接从组件口子上给值
-    wrapper.findComponent(DtSelect).vm.$emit('update:modelValue', 'Cube')
+    // ⚠ 按 aria-label 认人：检查器里不止一个 DtSelect，取第一个会挑到「上级部件」
+    selectLabeled(wrapper, '从候选里挑').vm.$emit('update:modelValue', 'Cube')
     await wrapper.vm.$nextTick()
 
     expect(lastPart(wrapper).nodes).toEqual(['Cube'])

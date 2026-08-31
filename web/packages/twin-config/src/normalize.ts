@@ -38,6 +38,9 @@ function normalizePart(raw: unknown, index: number): TwinPart | null {
   return {
     id: entityId(raw.id, 'part', index),
     name: trimmedString(raw.name),
+    // ⚠ 悬空/自指/成环一律原样留着，由诊断报出来：清掉的话，用户把上级名字
+    //   改错一个字看起来与「本来就是顶层」一模一样
+    parentId: trimmedString(raw.parentId),
     nodes: stringList(raw.nodes),
     visibility: normalizeVisibility(raw.visibility, raw.visible),
     look: normalizePartLook(raw.look),

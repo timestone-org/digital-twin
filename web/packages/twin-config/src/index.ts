@@ -83,6 +83,16 @@ export {
 export { detailPanelOf, flattenPartFields } from './partFields'
 export type { FlatPartField } from './partFields'
 export {
+  MAX_ASSEMBLY_DEPTH,
+  hasFieldedDescendant,
+  partAncestors,
+  partAssembly,
+  partChildren,
+  partDetailReachable,
+  partOnParentCycle,
+} from './partTree'
+export type { TwinAssemblyNode } from './partTree'
+export {
   finiteValue,
   normalizeColorSpec,
   normalizeHexColor,

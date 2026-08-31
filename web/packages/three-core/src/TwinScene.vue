@@ -215,6 +215,8 @@ function liveValues(): SceneLayerValues {
 
 /** 详情卡片那一路。 */
 const detailValues = computed(() => partFieldValuesOf(props))
+/** 部件状态染色那一路；装配栏的连接轨用它上色。 */
+const tintValues = computed(() => sceneValuesOf(props).parts)
 
 function refreshLayers(): void {
   if (core === null) return
@@ -334,9 +336,13 @@ watch(liveValues, (values) => layers?.setValues(values))
     />
     <TwinPartModal
       :part="detail.part.value"
+      :parts="config.parts"
+      :current-id="detail.currentId.value"
       :values="detailValues"
+      :part-values="tintValues"
       :objects-of="partObjectsOf"
       @close="detail.close()"
+      @select="detail.select($event)"
     />
   </div>
 </template>

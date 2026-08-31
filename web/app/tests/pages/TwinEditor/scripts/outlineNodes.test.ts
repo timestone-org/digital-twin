@@ -159,6 +159,38 @@ describe('行', () => {
     expect(sectionOf(config, 'anchors').rows[0]?.meta).toBe('℃')
   })
 
+  it('部件行写出它在装配里的位置', () => {
+    const config = makeConfig({
+      parts: [
+        { id: 'unit', name: '机组', nodes: ['n1'] },
+        { id: 'air', name: '主机', parentId: 'unit', nodes: [] },
+        { id: 'rotor', name: '转子', parentId: 'air', nodes: [] },
+      ],
+    })
+    const rows = sectionOf(config, 'parts').rows
+
+    expect(rows[0]?.meta).toBe('1 节点 · 收 1 件')
+    expect(rows[1]?.meta).toBe('0 节点 · 属于 机组 · 收 1 件')
+    expect(rows[2]?.meta).toBe('0 节点 · 属于 主机')
+  })
+
+  // ⚠ 大纲不改成嵌套树：行序号就是数组绑定的对齐位次，一嵌套，可见次序与
+  //   行号就对不上了，而绑点面板正是靠这个次序核对的
+  it('挂了上级也不改行序号，仍是文档序', () => {
+    const config = makeConfig({
+      parts: [
+        { id: 'air', name: '主机', parentId: 'unit' },
+        { id: 'unit', name: '机组' },
+      ],
+    })
+    const rows = sectionOf(config, 'parts').rows
+
+    expect(rows.map((row) => [row.id, row.index])).toEqual([
+      ['air', 1],
+      ['unit', 2],
+    ])
+  })
+
   it('非默认视点的 meta 是空串，不写「默认」', () => {
     const config = makeConfig({ cameras: [{ id: 'c1', name: '侧视' }] })
 
