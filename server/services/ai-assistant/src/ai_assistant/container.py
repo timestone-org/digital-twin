@@ -13,8 +13,10 @@ from ai_assistant.apps.credential.services import (
 from ai_assistant.llm import (
     DEFAULT_PROFILE,
     MODEL_KINDS,
+    EmbeddingAdapter,
     GuardedModel,
     ModelRegistry,
+    build_openai_embedding,
 )
 from ai_assistant.settings import SERVICE_NAME, Settings
 from ai_assistant.upstream import (
@@ -62,6 +64,9 @@ class Container:
     # 打 OAuth 端点的 http 客户端。⚠ 与凭据一起活：没开 codex 时不建，
     # 建了就要在关停时收掉（见 app.py 的 lifespan 钩子）
     oauth_http: httpx.AsyncClient | None
+    # 嵌入那一路（ADR-0030）。⚠ 没配时是 `None`：长期记忆仍然记得住
+    # （存文本、标没有向量），只是检索用不了——能力缺席就如实缺席
+    embedder: EmbeddingAdapter | None
 
 
 def _build_database(settings: Settings) -> Database:
@@ -212,4 +217,5 @@ def build_container(settings: Settings) -> Container:
         credentials=credentials,
         device_login=device_login,
         oauth_http=oauth_http,
+        embedder=build_openai_embedding(settings),
     )

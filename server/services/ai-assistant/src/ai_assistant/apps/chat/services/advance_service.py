@@ -47,7 +47,10 @@ from ai_assistant.apps.chat.services.planning.turn_types import (
 from ai_assistant.apps.chat.services.tools.providers.mcp import (
     PROVIDER as MCP_PROVIDER,
 )
-from ai_assistant.apps.chat.services.tools.registry import build_registry
+from ai_assistant.apps.chat.services.tools.registry import (
+    ProviderDeps,
+    build_registry,
+)
 from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
 from ai_assistant.container import Container
 from ai_assistant.llm import (
@@ -107,10 +110,16 @@ def deps_of(
         raise ModelDisabled("本部署没有接模型")
     model = container.model
     registry = build_registry(
-        platform=container.platform,
-        headers=headers,
-        mcp=container.mcp,
-        write_allowed=container.settings.mcp_write_names(),
+        ProviderDeps(
+            platform=container.platform,
+            headers=headers,
+            mcp=container.mcp,
+            write_allowed=container.settings.mcp_write_names(),
+            # ⚠ 这两样不接上，长期记忆那两个工具就只能回一句「还没接上仓储」
+            # ——而模型看得见它们，于是每次都会先调一次再改口
+            sessions=container.database.session,
+            embedder=container.embedder,
+        )
     )
     return AdvanceDeps(
         sessions=container.database.session,

@@ -211,6 +211,20 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     # 共用一格意味着要么对话档等得过久、要么视觉档被过早掐断
     vision_timeout_s: float | None = Field(default=None, gt=0)
     vision_extra_body: str = ""
+    # 嵌入那一路（ADR-0030）。⚠ 它不是 `ModelKind` 的又一档：返回的是向量不是
+    # 对话模型，所以走独立的一组配置与独立的适配器。全留空即本部署没接嵌入——
+    # 那时长期记忆仍然记得住（存文本、标没有向量），只是检索用不了
+    embedding_base_url: str = ""
+    # ⚠ 密钥类无默认值，也不回落成空串。留空时回落「对话档那一把」，
+    # 而配了另一家端点却不配它 = 拿甲家密钥打乙家端点，见下面那条校验
+    embedding_api_key: SecretStr | None = None
+    # 留空即这一路没接。⚠ 没有兜底模型名：嵌入模型与对话模型不通用，
+    # 拿对话模型名去打 embeddings 端点是一条必然失败的调用
+    embedding_model: str = ""
+    # 向量维数。⚠ 落库前拿它核对端点回来的长度：换了嵌入模型而维数变了的话，
+    # 旧条目与新条目算不出有意义的余弦，而表现只是「召回忽然变差了」
+    embedding_dimensions: int = Field(default=1536, gt=0)
+    embedding_timeout_s: float | None = Field(default=None, gt=0)
     # 逐字流式。⚠ 关掉它 = 用户在整个回合里只看得见「做了哪一步」，模型说的
     # 那段话要等回合结束才整段出现，而模型想的十几秒是纯黑箱。留成配置只为
     # 一种场合：个别 OpenAI 兼容端点在带工具时不支持流式，那时表现是一条 400
@@ -322,6 +336,46 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
                 _parsed_object(self.vision_extra_body) or self.extra_body()
             ),
         )
+
+    def embedding_endpoint(self) -> "ModelEndpoint | None":
+        """嵌入那一路要打的端点；没配模型名就是没接这一路。
+
+        ⚠ 回落链在这里逐格写全，与 `endpoint_of` 同一条口径。
+        ⚠ **模型名没有兜底**：嵌入模型与对话模型不通用，拿对话模型名去打
+        embeddings 端点是一条必然失败的调用，而它每次只在 remember 时才炸。
+        """
+        key = self.model_api_key
+        if not self.embedding_model.strip() or not _has_secret(key):
+            return None
+        own = self.embedding_api_key
+        return ModelEndpoint(
+            base_url=self.embedding_base_url or self.model_base_url,
+            api_key=(
+                own if _has_secret(own) and own is not None else key
+            ),  # pyright: ignore[reportArgumentType]  # 理由：上一行已判非空
+            model=self.embedding_model,
+            timeout_s=self.embedding_timeout_s or self.model_timeout_s,
+            # 嵌入端点没有「思考过程」一类的方言开关，不透传对话档那一段
+            extra_body=None,
+        )
+
+    @model_validator(mode="after")
+    def _embedding_endpoint_needs_its_own_key(self) -> Self:
+        """嵌入配了**另一家**端点，就必须配它自己的密钥。
+
+        ⚠ 与看图那一条同源：不拦的话，回落会拿对话档那把密钥去打另一家端点，
+        每次 remember 都撞 401，而降级路径会把它吞成「这条暂时检索不到」——
+        于是现象是「记是记住了，就是永远查不到」，与「这一格没填」毫无关系。
+        """
+        endpoint = self.embedding_base_url.strip()
+        if not endpoint or endpoint == self.model_base_url.strip():
+            return self
+        if not _has_secret(self.embedding_api_key):
+            raise ValueError(
+                "配了 ASSISTANT_EMBEDDING_BASE_URL（与对话档不同）时"
+                "必须配 ASSISTANT_EMBEDDING_API_KEY"
+            )
+        return self
 
     @field_validator("vision_extra_body")
     @classmethod

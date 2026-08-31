@@ -19,6 +19,7 @@ from ai_assistant.apps.chat.services.tools.providers.mcp import (
 )
 from ai_assistant.apps.chat.services.tools.registry import (
     DuplicateTool,
+    ProviderDeps,
     build_registry,
     registry_of,
 )
@@ -176,7 +177,7 @@ async def test_the_mcp_specs_land_at_the_very_end_of_the_registry() -> None:
     工具的声明整体位移，而工具声明属于前缀缓存唯一能命中的那一段（ADR-0025）。"""
     catalog = _catalog(lambda _request: _reply([_tool("forecast")]))
     await catalog.refresh()
-    registry = build_registry(mcp=catalog)
+    registry = build_registry(ProviderDeps(mcp=catalog))
     assert registry.specs[-1].name == "mcp.weather.forecast"
     assert registry.specs_of("mcp") == (registry.specs[-1],)
 
@@ -196,7 +197,10 @@ async def test_no_mcp_configured_leaves_the_registry_exactly_as_it_was() -> (
 ):
     """没配任何一路时这一路根本不进注册表——空 provider 也是噪声。"""
     catalog = _catalog(lambda _request: _reply([]), servers=())
-    assert build_registry(mcp=catalog).specs == build_registry().specs
+    assert (
+        build_registry(ProviderDeps(mcp=catalog)).specs
+        == build_registry().specs
+    )
 
 
 async def test_the_selector_appends_the_round_only_specs() -> None:
