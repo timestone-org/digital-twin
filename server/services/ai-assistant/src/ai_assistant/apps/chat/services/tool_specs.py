@@ -1,11 +1,16 @@
 """工具规格：一个工具叫什么、收什么参数、**在哪一侧执行**。
 
 这一份是服务端工具——在本进程里跑完就有结果，实现按名字在
-`services/server_tools.py` 里装。客户端那一批在 `client_tool_specs.py`。
+`services/server_tools.py` 里装。客户端那几批分住 `client_tool_specs.py`、
+`client_tool_specs_interaction.py` 与 `client_tool_specs_look.py`。
 `TOOL_SPECS` 把两侧并成一张表，技能清单与提示词都按它取。
 """
 
 from ai_assistant.apps.chat.services.client_tool_specs import CLIENT_SPECS
+from ai_assistant.apps.chat.services.client_tool_specs_interaction import (
+    INTERACTION_SPECS,
+)
+from ai_assistant.apps.chat.services.client_tool_specs_look import LOOK_SPECS
 from ai_assistant.apps.chat.services.tool_shapes import (
     ToolSpec,
     integer_schema,
@@ -296,7 +301,9 @@ SERVER_SPECS: tuple[ToolSpec, ...] = (
 
 # 两侧并成一张表。⚠ 名字在全表内唯一：重名的那一个会被 `spec_of` 遮掉，
 # 而遮掉的是哪一个从外面看不出来
-TOOL_SPECS: tuple[ToolSpec, ...] = SERVER_SPECS + CLIENT_SPECS
+TOOL_SPECS: tuple[ToolSpec, ...] = (
+    SERVER_SPECS + CLIENT_SPECS + INTERACTION_SPECS + LOOK_SPECS
+)
 
 
 def spec_of(name: str) -> ToolSpec | None:

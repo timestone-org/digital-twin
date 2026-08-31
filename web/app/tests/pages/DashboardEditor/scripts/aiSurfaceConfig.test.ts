@@ -108,6 +108,12 @@ function setup(): { editor: DashboardEditor; surface: AiSurface } {
           },
           notify: vi.fn(),
         }),
+        chrome: {
+          card: computed(() => ({})),
+          rules: computed(() => []),
+          setCard: vi.fn(),
+          setInteractions: vi.fn(),
+        },
         stageEl: () => null,
         readSample: () => undefined,
         save: () => Promise.resolve({ isSaved: true, message: null }),

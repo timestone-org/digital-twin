@@ -7,6 +7,7 @@
 
 from ai_assistant.apps.chat.skills.dashboard_binding import DASHBOARD_BINDING
 from ai_assistant.apps.chat.skills.dashboard_compose import DASHBOARD_COMPOSE
+from ai_assistant.apps.chat.skills.dashboard_interact import DASHBOARD_INTERACT
 from ai_assistant.apps.chat.skills.dashboard_review import DASHBOARD_REVIEW
 from ai_assistant.apps.chat.skills.formula_author import FORMULA_AUTHOR
 from ai_assistant.apps.chat.skills.manifest import (
@@ -17,6 +18,7 @@ from ai_assistant.apps.chat.skills.manifest import (
 SKILLS: tuple[SkillManifest, ...] = (
     DASHBOARD_BINDING,
     DASHBOARD_COMPOSE,
+    DASHBOARD_INTERACT,
     DASHBOARD_REVIEW,
     FORMULA_AUTHOR,
 )

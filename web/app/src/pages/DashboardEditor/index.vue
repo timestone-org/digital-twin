@@ -118,6 +118,7 @@ const extras = useEditorExtras({
   editor,
   actions,
   arrange,
+  chrome,
   dashboard: file.dashboard,
   design: () => design.value,
   snap: () => snap.value,

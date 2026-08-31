@@ -22,6 +22,8 @@ import type { AiSurface, SurfaceSnapshot } from '@/features/ai/surfaces'
 import { BINDING_TOOLS, runBindingTool } from './aiSurfaceBindings'
 import { COMPOSE_TOOLS, runCompose } from './aiSurfaceCompose'
 import { CONFIG_TOOLS, runConfig } from './aiSurfaceConfig'
+import { INTERACTION_TOOLS, runInteraction } from './aiSurfaceInteraction'
+import { PAGE_STYLE_TOOLS, runPageStyle } from './aiSurfacePageStyle'
 import type {
   ComposeDeps,
   EditorSurfaceDeps,
@@ -46,6 +48,8 @@ export const EDITOR_TOOLS = [
   ...BINDING_TOOLS,
   ...COMPOSE_TOOLS,
   ...CONFIG_TOOLS,
+  ...INTERACTION_TOOLS,
+  ...PAGE_STYLE_TOOLS,
 ] as const
 
 /** 造出大屏编辑器这个工作面。 */
@@ -113,16 +117,32 @@ function settle(
   }
 }
 
+/**
+ * 一半工具的分派入口：认领了就给结果，认不出给 null。
+ * ⚠ 收成一张表按序问，而不是一串 `??`：每加一半就多一格 `??`，加到第六半时
+ * 复杂度闸会红，那时最省事的改法是把新工具塞进已有的某一半里——名字与实现
+ * 于是开始分家。
+ */
+type ToolRunner = (deps: EditorToolDeps, call: AssistantToolCall) => unknown
+
+const RUNNERS: readonly ToolRunner[] = [
+  runBindingTool,
+  runCompose,
+  runConfig,
+  runInteraction,
+  runPageStyle,
+]
+
 function dispatch(deps: EditorToolDeps, call: AssistantToolCall): unknown {
   if (call.name === 'dashboard.read_canvas') return snapshotOf(deps)
   if (call.name === 'dashboard.write_binding') return writeBinding(deps, call)
   if (call.name === 'dashboard.remove_binding') return dropBinding(deps, call)
   if (call.name === 'dashboard.set_config') return setConfig(deps, call)
   if (call.name === 'dashboard.capture') return captureCanvas(deps.stageEl())
-  const bound = runBindingTool(deps, call)
-  if (bound !== null) return bound
-  const composed = runCompose(deps, call) ?? runConfig(deps, call)
-  if (composed !== null) return composed
+  for (const run of RUNNERS) {
+    const got = run(deps, call)
+    if (got !== null) return got
+  }
   throw new Error(`当前页面没有实现 ${call.name}`)
 }
 

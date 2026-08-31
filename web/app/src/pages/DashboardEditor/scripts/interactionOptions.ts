@@ -65,6 +65,17 @@ const ACTION_TYPES = [
 const DEFAULT_INTERACTION_EVENTS: readonly InteractionEventName[] = ['click']
 
 /**
+ * 这个模块真发得出的事件。
+ * ⚠ 助手那条路也读它：另写一份缺省会让面板与助手对同一个模块给出两套答案。
+ * @param manifest 源节点的模块清单；节点已删 / 类型未注册时给 undefined
+ */
+export function supportedEventsOf(
+  manifest: ModuleManifest | undefined,
+): readonly InteractionEventName[] {
+  return manifest?.interactionEvents ?? DEFAULT_INTERACTION_EVENTS
+}
+
+/**
  * 源节点的「触发事件」下拉项：按源模块清单声明的 `interactionEvents` 过滤。
  * 存量规则引用了源发不出的事件时**保留该项并标注**，不许静默吞掉存量配置。
  * @param manifest 源节点的模块清单；节点已删 / 类型未注册时给 undefined
@@ -74,7 +85,7 @@ export function eventOptionsFor(
   manifest: ModuleManifest | undefined,
   currentEvent: InteractionEventName,
 ): DtSelectOption[] {
-  const supported = manifest?.interactionEvents ?? DEFAULT_INTERACTION_EVENTS
+  const supported = supportedEventsOf(manifest)
   return INTERACTION_EVENTS.filter(
     (event) => supported.includes(event) || event === currentEvent,
   ).map((event) => ({

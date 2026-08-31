@@ -20,6 +20,12 @@ import { CHROME_KEYS, isChromeKey, styleKeysOf } from '@dt/contracts'
 import type { AssistantToolCall, ConfigField } from '@dt/contracts'
 import { configDefaults } from '@dt/modules'
 
+import {
+  BARE_HIDDEN_KEYS,
+  CARD_COMMON_FIELDS,
+  CARD_FIELD_GROUPS,
+  type CardField,
+} from '@/features/dashboard/cardStyleFields'
 import { readConfigAt } from '@/features/dashboard/configPath'
 import type { SurfaceSnapshot } from '@/features/ai/surfaces'
 import type { EditorSurfaceDeps } from './aiSurfaceTypes'
@@ -185,18 +191,60 @@ function dropItem(
   }
 }
 
-/** 卡片外观的全部可用键。⚠ 真源在前端契约，服务端答不出这个问题。 */
+/**
+ * 面板上那一行的说明：中文名、所属分组、留空时的平台现值。
+ * ⚠ 真源是右栏那份字段表，不另抄一份中文名：抄一份就一定漂成
+ * 「面板叫这个名、助手叫那个名」，而用户说的是面板上的那个。
+ * @param field 一条外观字段声明
+ * @param group 它在面板上归哪一组
+ */
+function docOf(field: CardField, group: string): [string, SurfaceSnapshot] {
+  return [
+    field.key,
+    {
+      label: field.label,
+      group,
+      // 留空时渲染成什么样；开关类的平台现值是「开」，其余写在占位符里
+      platform_default:
+        field.placeholder ?? (field.defaultOn === true ? '开' : undefined),
+      hint: field.hint,
+      help: field.help,
+      range: field.range,
+    },
+  ]
+}
+
+/** 键 → 面板上那一行。 */
+const CHROME_DOCS = new Map<string, SurfaceSnapshot>([
+  ...CARD_COMMON_FIELDS.map((field) => docOf(field, '常用')),
+  ...CARD_FIELD_GROUPS.flatMap((group) =>
+    group.fields.map((field) => docOf(field, group.label)),
+  ),
+])
+
+/**
+ * 卡片外观的全部可用键，带上面板里的中文名与分组。
+ * ⚠ 真源在前端契约，服务端答不出这个问题。
+ * ⚠ 中文名必须给：用户说的是「毛玻璃」「呼吸描边」「竖条」，而键名是
+ * `backdropBlur` / `borderPulse` / `titleBarWidth`，光看键名对不上。
+ */
 function chromeKeys(): SurfaceSnapshot {
   return {
     keys: CHROME_KEYS.map((spec) => ({
       key: spec.key,
       type: spec.type,
       values: 'values' in spec ? spec.values : undefined,
+      ...(CHROME_DOCS.get(spec.key) ?? {}),
     })),
+    // 裸渲染壳（清单里 chrome: 'bare'）压根没有卡片框，这几个键落不到任何地方
+    bare_ignores: [...BARE_HIDDEN_KEYS],
     note:
-      '写在 set_config 的 `["__cardStyle","<键>"]` 路径上。' +
+      '单个节点写在 set_config 的 `["__cardStyle","<键>"]` 路径上，' +
+      '整套用 apply_style，整屏缺省用 set_page_style。' +
       '⚠ 「键不存在 = 未设置」——要恢复缺省就把值设成 null 删掉这个键，' +
-      '不要写一个你以为的默认值进去。',
+      '不要写一个你以为的默认值进去。' +
+      '⚠ 个别模块还会自己拒收其中几个键，那一份在 read_config 的 ' +
+      '`unsupported_chrome_keys` 里。',
   }
 }
 

@@ -9,12 +9,28 @@ import type { SaveOutcome } from '@/features/ai/saveTool'
 import type { ReadPointSample } from '@/runtime/bindingReader'
 import type { ArrangeActions } from './editorArrange'
 import type { EditorActions } from './editorActions'
+import type { EditorChrome } from './useEditorChrome'
 
 /** 绑点与改配置要的那几样。 */
 export interface EditorSurfaceDeps {
   editor: DashboardEditor
   actions: EditorActions
   getManifest: GetModuleManifest
+}
+
+/**
+ * 元数据轴那一小片：整屏外观缺省与联动规则的读写口。
+ * ⚠ 只取这四格而不是整个 `EditorChrome`：吸附与栅格是编辑器自己的偏好，
+ * 助手碰它没有任何用户能看见的效果。
+ */
+export type MetaChrome = Pick<
+  EditorChrome,
+  'card' | 'rules' | 'setCard' | 'setInteractions'
+>
+
+/** 整屏外观与联动那两半握的东西。 */
+export interface MetaSurfaceDeps extends EditorSurfaceDeps {
+  chrome: MetaChrome
 }
 
 /** 组态还要排布动作；看图还要画布舞台那个元素。 */
@@ -25,7 +41,7 @@ export interface ComposeDeps extends EditorSurfaceDeps {
 }
 
 /** 读值与落库还要这三样。 */
-export interface EditorToolDeps extends ComposeDeps {
+export interface EditorToolDeps extends ComposeDeps, MetaSurfaceDeps {
   /**
    * 画布渲染用的那份快照缓存。
    * ⚠ 助手不许另发一次请求：另发的话会出现「助手说有值、画面上是占位符」。

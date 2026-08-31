@@ -1,6 +1,6 @@
 """常驻提示词：只放名字与简介，正文按需拉。
 
-守的是上下文工程的主轴。四份技能正文全铺进去会占掉上下文的前三分之一，
+守的是上下文工程的主轴。几份技能正文全铺进去会占掉上下文的前三分之一，
 而被挤掉的是工作面快照与工具结果——模型真正需要看的那些东西，
 且挤掉了哪一段从外面完全看不出来。
 """
@@ -8,8 +8,9 @@
 from ai_assistant.apps.chat.services.prompt import build_system_prompt
 from ai_assistant.apps.chat.skills import find_skill, skills_for
 
-# 常驻部分的字数上限。松一点没关系，它拦的是「有人把整份正文铺进来」
-MAX_CHARS = 1500
+# 常驻部分的字数上限。松一点没关系，它拦的是「有人把整份正文铺进来」——
+# 一份正文四千字起，而每多装一个技能，常驻部分只多它那一句简介
+MAX_CHARS = 1800
 
 
 def test_the_roster_lists_every_skill_of_the_surface() -> None:

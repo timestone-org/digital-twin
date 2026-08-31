@@ -29,6 +29,8 @@ export interface EditorChrome {
   grid: Ref<EditorGridConfig>
   /** 联动规则表：右栏读它，跨屏复制也读它——单一真源是元数据草稿。 */
   rules: ComputedRef<InteractionRule[]>
+  /** 大屏级卡片外观缺省那只袋子；落库是自由 JSON，读侧自己容错。 */
+  card: ComputedRef<Record<string, unknown>>
   setSnap: (patch: Partial<SnapConfig>) => void
   setGrid: (patch: Partial<EditorGridConfig>) => void
   setField: (
@@ -37,6 +39,12 @@ export interface EditorChrome {
   ) => void
   setCard: (card: CardChrome) => void
   setInteractions: (rules: InteractionRule[]) => void
+}
+
+/** 自由 JSON 里的一节；不是对象一律当空袋子。 */
+function bagOf(raw: unknown): Record<string, unknown> {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {}
+  return { ...raw }
 }
 
 function editorSectionOf(payload: DashboardPayload): {
@@ -92,18 +100,29 @@ function metaWriters(
   }
 }
 
+/**
+ * 联动规则与整屏外观缺省两段。
+ * ⚠ 读的是**草稿**而不是已保存的载荷：右栏一改，画布上当场跟着变。
+ * @param meta 元数据轴的草稿
+ */
+function draftSections(meta: EditorMeta): Pick<EditorChrome, 'rules' | 'card'> {
+  return {
+    rules: computed(() =>
+      meta.draft.value === null
+        ? []
+        : parseInteractionRules(meta.draft.value.chromeJson),
+    ),
+    card: computed(() => bagOf(meta.draft.value?.chromeJson.card)),
+  }
+}
+
 export function useEditorChrome(
   dashboard: Ref<DashboardPayload | null>,
   meta: EditorMeta,
 ): EditorChrome {
   const snap = ref(normalizeSnapConfig(null))
   const grid = ref(normalizeEditorGrid(null))
-  // 规则住在大屏级 chromeJson；读**草稿**而不是已保存的载荷，右栏一改画布当场跟着变
-  const rules = computed(() =>
-    meta.draft.value === null
-      ? []
-      : parseInteractionRules(meta.draft.value.chromeJson),
-  )
+  const { rules, card } = draftSections(meta)
 
   // 属性面板里按项目取数的控件（挑另一张大屏这类）只认这个注入键
   provide(
@@ -140,6 +159,7 @@ export function useEditorChrome(
     snap,
     grid,
     rules,
+    card,
     setSnap: (patch) => {
       snap.value = normalizeSnapConfig({ ...snap.value, ...patch })
       persist()
