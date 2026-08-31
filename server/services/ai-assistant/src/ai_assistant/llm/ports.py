@@ -19,10 +19,13 @@ from langchain_core.language_models import BaseChatModel
 
 # 对话用与看图用分两档：视觉模型的单价与延迟都高得多，混成一档等于每次
 # 对话都按视觉计费
-ModelKind = Literal["chat", "vision"]
+# ⚠ `summary` 单列一档不是为了换模型，是为了**换断路器**：折叠是后台性质的
+# 一次调用，它连挂几次不该把用户正在说的那句话一起短路掉（断路器按
+# (profile, kind) 逐格建）。端点缺省与对话档同一个，只有模型名可以单配
+ModelKind = Literal["chat", "vision", "summary"]
 
 # 全部档位。⚠ 断路器按 (profile, kind) 逐格建，靠的就是这一份
-MODEL_KINDS: tuple[ModelKind, ...] = ("chat", "vision")
+MODEL_KINDS: tuple[ModelKind, ...] = ("chat", "vision", "summary")
 
 # 没选过时走哪一路。⚠ 是线上契约的一部分：会话里存的就是这个字面量
 DEFAULT_PROFILE = "default"

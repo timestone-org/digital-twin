@@ -77,14 +77,23 @@ class Summarizer(Protocol):
     """把窗口外那一截折成一段。"""
 
     async def fold(
-        self, dropped: list[ChatMessage], through_seq: int
+        self,
+        dropped: list[ChatMessage],
+        through_seq: int,
+        previous: Summary | None,
     ) -> Summary | None:
         """折一次；折不出来给 `None`。
 
         ⚠ 折不出来要给 `None` 而不是抛：折叠失败退回「直接丢」是可接受的降级，
         而让一个回合因为摘要没折成就发不出去不是。
 
-        Args: dropped, through_seq（这一截的右边界，钉在台阶上）。
+        ⚠ **增量折**：`previous` 是上一个台阶折出来的那一段。不给它的话，
+        每跨一个台阶就要把从头到现在的全部脱落消息再喂一遍——会话越长这一次
+        调用越贵，最后贵过它省下来的那点上下文。给了它，喂进去的只有
+        「上一段摘要 + 这一个台阶新脱落的那几条」，长度是有界的。
+
+        Args: dropped（这一截全部脱落的消息，按 seq）, through_seq（右边界，
+            钉在台阶上）, previous（上一个台阶的摘要，没有就是 None）。
         """
         ...
 

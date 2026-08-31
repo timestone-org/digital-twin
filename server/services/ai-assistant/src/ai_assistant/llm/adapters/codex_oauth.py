@@ -29,11 +29,14 @@ class CodexOAuthAdapter:
     id: str = CODEX_PROFILE
 
     def supports(self, kind: ModelKind) -> bool:
-        """只吃对话档。
+        """吃对话档与摘要档，不吃视觉档。
+
+        ⚠ 摘要档也吃：折叠是一次纯文本调用，这一路做得了。不吃的话，一个只
+        登录了订阅账号的部署永远折不出摘要，而它表现为「摘要偶尔就是没有」。
 
         Args: kind。
         """
-        return kind == "chat"
+        return kind in ("chat", "summary")
 
     async def build(self, choice: ModelChoice) -> BaseChatModel:
         """先摸一次令牌，再造模型。

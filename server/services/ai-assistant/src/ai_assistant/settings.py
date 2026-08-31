@@ -135,6 +135,10 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     # 模型」成为一次配置改动而不是一次发版。
     model_chat: str = "qwen3.8-max"
     model_vision: str = "qwen3.8-max"
+    # 折叠窗口外那一截用的模型。留空即用 `model_chat`。⚠ 端点与密钥**不单配**：
+    # 折叠是后台性质的一次调用，配一整套独立端点的收益抵不上多一条回落链的
+    # 代价；真要换供应商时，它跟着对话档走就够了
+    summary_model: str = ""
 
     # 看图那一档的**独立端点**。留空即整格回落到上面对话档那一格——回落链在
     # `endpoint_of` 里逐格写全，不许靠「反正都是同一个默认值」蒙混。
@@ -212,7 +216,7 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
 
         ⚠ 密钥回落的是**对话档那一把**，不是空串：弱默认的密钥等于没有密钥。
 
-        Args: kind（`chat` 或 `vision`；别的一律按对话档）。
+        Args: kind（`chat` / `vision` / `summary`；别的一律按对话档）。
         """
         key = self.model_api_key
         if not self.model_enabled or not _has_secret(key) or key is None:
@@ -221,7 +225,13 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
             return ModelEndpoint(
                 base_url=self.model_base_url,
                 api_key=key,
-                model=self.model_chat,
+                # ⚠ 只有模型名按档分：摘要档共用对话档的端点、密钥与超时，
+                # 单配一整套的收益抵不上多一条回落链的代价
+                model=(
+                    self.summary_model or self.model_chat
+                    if kind == "summary"
+                    else self.model_chat
+                ),
                 timeout_s=self.model_timeout_s,
                 extra_body=self.extra_body(),
             )

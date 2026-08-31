@@ -15,12 +15,83 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from ai_assistant.apps.chat.models import ChatMessage
 from ai_assistant.apps.chat.services.memory import history
+from ai_assistant.settings import HISTORY_DROP_STEP, MAX_HISTORY_MESSAGES
 
 
 def _row(role: str, body: dict[str, object], seq: int = 1) -> ChatMessage:
     return ChatMessage(
         session_id=uuid.uuid4(), seq=seq, role=role, content_json=body
     )
+
+
+def _seq_rows(count: int) -> list[ChatMessage]:
+    """一段一问一答，seq 从 1 数起。
+
+    Args: count（几条）。
+    """
+    return [
+        _row(
+            "user" if index % 2 else "assistant",
+            {"text": f"第 {index} 句"},
+            seq=index,
+        )
+        for index in range(1, count + 1)
+    ]
+
+
+def test_the_two_halves_cover_every_row_exactly_once() -> None:
+    """折叠区与窗口区拼起来就是原样那一段，一条不多一条不少。
+
+    ⚠ 少一条的表现最难查：那一条既没进摘要也没进窗口，于是它从对话里凭空
+    消失，而两边看起来都正常。
+    """
+    rows = _seq_rows(MAX_HISTORY_MESSAGES + 15)
+    dropped, kept = history.split(rows, MAX_HISTORY_MESSAGES)
+
+    assert [one.seq for one in [*dropped, *kept]] == [one.seq for one in rows]
+
+
+def test_nothing_drops_while_the_session_is_short() -> None:
+    rows = _seq_rows(4)
+    dropped, kept = history.split(rows, MAX_HISTORY_MESSAGES)
+
+    assert dropped == []
+    assert len(kept) == 4
+
+
+def test_the_orphan_tool_replies_go_to_the_folded_half() -> None:
+    """掐掉的孤儿回执归折叠区——它们不是凭空消失，只是不进窗口。
+
+    切点正落在「带调用的助手消息」与它的回执之间时，窗口会以一条没有调用的
+    回执开头，端点直接判 400。掐掉是对的，但掐掉的那条得有个去处。
+    """
+    rows = [
+        _row("user", {"text": "问"}, seq=1),
+        _row("assistant", {"text": "调工具"}, seq=2),
+        _row("tool", {"text": "回执"}, seq=3),
+        _row("user", {"text": "继续"}, seq=4),
+        _row("assistant", {"text": "好"}, seq=5),
+    ]
+    # 切点落在 seq=3 那条回执上：它进不了窗口，于是归折叠区
+    dropped, kept = history.split(rows, 3, step=1)
+
+    assert [one.seq for one in dropped] == [1, 2, 3]
+    assert [one.seq for one in kept] == [4, 5]
+
+
+def test_the_fold_boundary_holds_still_inside_one_step() -> None:
+    """折叠区的右边界与窗口的左边界是同一个位置，且每 `step` 条才动一次。
+
+    ⚠ 这是摘要能被逐字复用的全部依据。边界每轮都动的话，摘要每轮都要重折，
+    而它排在历史区前面——那就是一个新的前缀断点。
+    """
+    over = MAX_HISTORY_MESSAGES + 1
+    edges = {
+        history.split(_seq_rows(count), MAX_HISTORY_MESSAGES)[1][0].seq
+        for count in range(over, over + HISTORY_DROP_STEP)
+    }
+
+    assert len(edges) == 1
 
 
 def test_a_user_message_round_trips() -> None:
