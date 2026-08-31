@@ -6,6 +6,7 @@
 import { computed } from 'vue'
 import type {
   DashboardNodePayload,
+  InteractionEventName,
   InteractionRule,
   ModuleManifest,
 } from '@dt/contracts'
@@ -20,6 +21,7 @@ import {
   nodeOptionsOf,
   ruleSummary,
   ruleTouchesNode,
+  supportedEventsOf,
 } from '../scripts/interactionOptions'
 
 const props = defineProps<{
@@ -103,6 +105,19 @@ const defaultSourceId = computed(() => {
 /** 有没有任何节点能当触发源；没有就只能看，不能新增。 */
 const canAdd = computed(() => defaultSourceId.value !== undefined)
 
+/**
+ * 新规则的触发事件：取源模块自报的第一档。
+ * ⚠ 不许恒给 `click`：只发 `select` 的控件（页签栏、2D 孪生）会当场拿到一条
+ * 永远不触发的规则，而面板上只在下拉里标一句「该模块不会发出此事件」。
+ * @param nodeId 事件源节点
+ */
+function defaultEventOf(nodeId: string): InteractionEventName {
+  const node = props.nodes.find((item) => item.id === nodeId)
+  const manifest =
+    node === undefined ? undefined : props.getManifest(node.moduleType)
+  return supportedEventsOf(manifest)[0] ?? 'click'
+}
+
 function addRule(): void {
   const nodeId = defaultSourceId.value
   if (nodeId === undefined) return
@@ -110,7 +125,7 @@ function addRule(): void {
     ...props.rules,
     {
       id: newClientUuid(),
-      source: { nodeId, event: 'click' },
+      source: { nodeId, event: defaultEventOf(nodeId) },
       action: { type: 'show', targets: [] },
     },
   ])

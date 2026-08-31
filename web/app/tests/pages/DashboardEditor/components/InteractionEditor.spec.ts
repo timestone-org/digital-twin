@@ -42,10 +42,19 @@ const EMITTER = manifest({
   interactionEvents: ['click', 'select'],
 })
 
+/** 只发「选项点击」的控件，页签栏与 2D 孪生就是这一类。 */
+const SELECTOR = manifest({
+  type: 'selector',
+  displayName: '页签栏',
+  emitsInteractions: true,
+  interactionEvents: ['select'],
+})
+
 function getManifest(moduleType: string): ModuleManifest | undefined {
   if (moduleType === 'clickable') return CLICKABLE
   if (moduleType === 'emitter') return EMITTER
   if (moduleType === 'plain') return PLAIN
+  if (moduleType === 'selector') return SELECTOR
   return undefined
 }
 
@@ -180,6 +189,21 @@ describe('联动规则编辑面', () => {
     expect(rules[0]).toEqual(rule())
     expect(rules[1]?.source).toEqual({ nodeId: 'n1', event: 'click' })
     expect(rules[1]?.action).toEqual({ type: 'show', targets: [] })
+  })
+
+  it('新规则的事件取源模块自报的第一档，不是恒给 click', async () => {
+    const nodes = [node('n4', 'selector'), ...NODES]
+    const wrapper = mount(InteractionEditor, {
+      props: { rules: [], nodes, getManifest },
+    })
+
+    await wrapper.find('[data-test="ix-add"]').trigger('click')
+
+    // ⚠ 恒给 click 的话，这条规则永远不触发，而面板上只在下拉里标一句话
+    expect(lastRules(wrapper)[0]?.source).toEqual({
+      nodeId: 'n4',
+      event: 'select',
+    })
   })
 
   it('新增规则各自拿到 uuid 形状且互不相同的 id', async () => {

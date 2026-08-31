@@ -402,6 +402,12 @@ ModuleSlotMeta = { state: 'ok' | 'pending' | 'error', message?, timestampMs? }
 （退出平台卡片外观）的第一个使用者，设计见
 [MODULE_ACTION_BUTTON_DESIGN](MODULE_ACTION_BUTTON_DESIGN.md)。
 
+`nav-tabs`（页签栏）是第二个控件类模块：一排互斥的页签，点一格上抛一次带值的
+「选项点击」，跨屏切换配「按值跳转大屏」、页内分区配「按值互斥切换」。
+⚠ 目标大屏存在**规则**里而不是节点配置里——节点配置逐字透传给公开载荷，
+把大屏 id 配进页签既泄露内部标识（ADR-0014）、在公开态也跳不动。设计见
+[MODULE_NAV_TABS_DESIGN](MODULE_NAV_TABS_DESIGN.md)。
+
 `twin-2d-view`（2D 孪生）是第二个**文档型**模块，也是 §5.1 那条判据在
 「一整张图」上的兑现：一块画布上摆 N 个节点、N 条连线，而**节点与连线长什么样
 本身也是文档**——一组可配置的图元描述（几何 / 槽位 / 变体 / 端口）。内置的那批

@@ -232,6 +232,7 @@ A 一旦被删或改了绑定，B 屏当场没数据，且现场看不出这跟�
 | `text-block` / `image-block` | 清单 `hostClickable`，整块可点由渲染宿主接管（含 Enter/Space） | 无 → 只能配 `navigate` |
 | `info-card` / `data-card` | 整块可点 + 逐格 `rowClickEmitter` 上抛 `{event:'click', value}` | 有 → `navigateByValue` 的主要用户 |
 | `twin-view` | `emitsInteractions`（3D 里点对象） | 有 |
+| `nav-tabs` | 一排原生 `<button>`，`emitsInteractions`，只发 `select` | 有 → 跨屏切换的主要用户 |
 
 配了以某节点为源的规则，`meta.interactive` 会为真，展示类模块自动摆出可点击外观——
 「配了规则才像能点」这条既有口径对跳转一样成立，不用另加开关。
@@ -240,6 +241,9 @@ A 一旦被删或改了绑定，B 屏当场没数据，且现场看不出这跟�
 
 一个"看起来就是按钮"的入口用 `action-button`，设计见
 [MODULE_ACTION_BUTTON_DESIGN](MODULE_ACTION_BUTTON_DESIGN.md)。
+一排互斥的入口（这一屏在哪、点另一格换一屏）用 `nav-tabs`，设计见
+[MODULE_NAV_TABS_DESIGN](MODULE_NAV_TABS_DESIGN.md)——它把目标留在规则里，
+正是为了 §6 那条「公开面把句柄改写成令牌」还能接得上。
 
 ---
 
@@ -251,7 +255,10 @@ A 一旦被删或改了绑定，B 屏当场没数据，且现场看不出这跟�
 3. **陈旧路由的清理**。`setActive` 有一个 `reconcileSetActiveGroups`，
    因为陈旧组会**错误隐藏**目标；`navigateByValue` 的陈旧路由只是永不命中，不会错杀，
    所以一期不清，只要求编辑面看得出来。
-4. **自动轮播 / 导航菜单模块**。都能架在同一条动作上，但都是另一次讨论。
+4. ~~**导航菜单模块**~~ —— 已做，见 `nav-tabs`（[MODULE_NAV_TABS_DESIGN](MODULE_NAV_TABS_DESIGN.md)）：
+   它架在 `navigateByValue` 这条既有动作上，一行代码都没往引擎里加。
+5. **自动轮播**。同样能架在这条动作上，但它要的是一个定时器与「谁来停」的口径，
+   是另一次讨论。
 
 ---
 
