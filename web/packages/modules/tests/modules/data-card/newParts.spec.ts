@@ -5,6 +5,8 @@
  * ⚠ 这些件多半是「没接数据时该画什么」出问题：藏了整件会让一排卡片里那一格
  * 少一行、看着像布局坏了；画成 0 又是在伪造读数。每一件的缺值分支都在这里钉住。
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -453,6 +455,19 @@ describe('格基色', () => {
 
     expect(styles[0]).toContain('--dc-cell-color: var(--state-info)')
     expect(styles[1]).not.toContain('--dc-cell-color')
+  })
+
+  // ⚠ 左色条是这一格最显眼的身份色：写死强调色的话一列十格全一个颜色，
+  //   而用户明明逐格配了色
+  it('左色条那一档的边跟着格基色走，且带回落', () => {
+    const sheet = readFileSync(
+      join(process.cwd(), 'packages/modules/src/modules/data-card/Cell.vue'),
+      'utf8',
+    )
+
+    expect(sheet).toContain(
+      'border-left: 3px solid var(--dc-cell-color, var(--accent-primary))',
+    )
   })
 
   // ⚠ 各写一套的话同一格里的条会与文字不同色

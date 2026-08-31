@@ -239,6 +239,13 @@
   pointer-events: none;
 }
 
+// ⚠ 指针档的轴心就落在图形正中：读数不让开的话，指针会从数字中间穿过去。
+//   往下挪到弧口里——那正是这一档留出缺口的用处。
+.gc--ind-needle .gc-center {
+  align-items: flex-end;
+  padding-bottom: 12%;
+}
+
 .gc-range {
   display: flex;
   width: 100%;
@@ -254,14 +261,23 @@
   flex-direction: column;
 }
 
+// ⚠ 弧这一档必须有**一处**把宽度定死。`.gc-cell` 是 `align-items: center`，图形层
+// 按内容收缩；而 `aspect-ratio` 只在另一维已经确定时才推得出这一维——两维都不确定
+// 就一路塌成 0 宽，整只表一个像素都不画，而 typecheck / lint / 测试全绿。
+// 方形交给 svg 自己的 `preserveAspectRatio="xMidYMid meet"` 去等比缩，
+// 样式这一侧只管把可用的盒子给足。
+.gc-shape--arc {
+  align-self: stretch;
+}
+
 .gc-shape--arc .gc-figure {
-  aspect-ratio: 1 / 1;
+  width: 100%;
 }
 
 .gc-arc {
+  width: 100%;
   max-height: 100%;
   height: 100%;
-  aspect-ratio: 1 / 1;
 }
 
 .gc-arc__track {
