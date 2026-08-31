@@ -12,8 +12,12 @@
  */
 import type { CSSProperties } from 'vue'
 
-/** 进度件的两档形态。 */
-export type MeterKind = 'bar' | 'track'
+/**
+ * 进度件的三档形态。
+ * ⚠ `segments` 是**离散**的：按百分比点亮前 N 格。它与 `bar` 的差别不只是观感——
+ * 一格代表 1/N，读数落在格与格之间时看不出来，要精确读数得同时摆占比读数。
+ */
+export type MeterKind = 'bar' | 'track' | 'segments'
 
 /** 一条进度条要画的东西。⚠ 已经是算完的结果，`MeterBar` 不再做任何取值判断。 */
 export interface MeterView {
@@ -29,6 +33,34 @@ export interface MeterView {
    * （MODULE_INFO_CARD_DESIGN §4.2）。
    */
   fill: string
+  /**
+   * 分段档要点亮几格、共几格。
+   * ⚠ 由取值层算好：`MeterBar` 不做任何取值判断（本文件头那条分家的口径）。
+   * 非分段档给 `null`。
+   */
+  segments: MeterSegments | null
+}
+
+/** 分段档的点亮结果。 */
+export interface MeterSegments {
+  /** 共几格。 */
+  total: number
+  /** 点亮前几格；已夹到 [0, total]。 */
+  lit: number
+}
+
+/**
+ * 按百分比算点亮几格。
+ * ⚠ 四舍五入而不是向下取整：37.5% × 16 = 6 格，向下取整会让「刚过半」的读数
+ * 少亮一格，一排卡片放在一起时看着像数据不对。
+ * ⚠ 非正的格数返回 0 格：除零算出来是 NaN，画出来是一片空轨道。
+ * @param percent 未夹取的百分比
+ * @param total 共几格
+ */
+export function litSegments(percent: number, total: number): MeterSegments {
+  if (total <= 0) return { total: 0, lit: 0 }
+  const clamped = Math.max(0, Math.min(100, percent))
+  return { total, lit: Math.round((clamped / 100) * total) }
 }
 
 /** 粗轨道那一档的量程：刻度、目标标记与轨道内 pill 都从它来。 */
@@ -60,6 +92,7 @@ export type MeterVarName =
   | '--dt-meter-color'
   | '--dt-meter-base'
   | '--dt-meter-glow'
+  | '--dt-meter-gap'
 
 /** 变量名清单，给「联合 ⟷ scss 引用集合双向吻合」那条契约测试用。 */
 export const METER_VAR_NAMES: readonly MeterVarName[] = [
@@ -68,6 +101,7 @@ export const METER_VAR_NAMES: readonly MeterVarName[] = [
   '--dt-meter-color',
   '--dt-meter-base',
   '--dt-meter-glow',
+  '--dt-meter-gap',
 ]
 
 /**

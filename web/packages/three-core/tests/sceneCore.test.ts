@@ -159,6 +159,33 @@ describe('尺寸与渲染', () => {
     expect(renderer.renders[0]?.camera).toBe(core.camera)
     expect(labelRender).toHaveBeenCalledTimes(1)
   })
+
+  // ⚠ 两个 CSS 渲染器每帧都会把传进去的树整个递归一遍、还各自再
+  //   `updateMatrixWorld` 一次。传整个 scene 的话，一棵几千节点的模型每帧被白走
+  //   四遍，表现只是「模型一大就掉帧」
+  it('给了覆盖层根时，两个 CSS 渲染器只走它，不走整个 scene', () => {
+    const { core, renderer } = mount()
+    const overlay = new THREE.Scene()
+    core.scene.add(overlay)
+    const labelRender = vi.spyOn(core.labelRenderer, 'render')
+    const spatialRender = vi.spyOn(core.spatialRenderer, 'render')
+
+    renderScene(core, overlay)
+
+    expect(labelRender.mock.calls[0]?.[0]).toBe(overlay)
+    expect(spatialRender.mock.calls[0]?.[0]).toBe(overlay)
+    // WebGL 那一层照旧画整个场景，模型不在覆盖层里
+    expect(renderer.renders[0]?.scene).toBe(core.scene)
+  })
+
+  it('不给覆盖层根时退回整个 scene', () => {
+    const { core } = mount()
+    const labelRender = vi.spyOn(core.labelRenderer, 'render')
+
+    renderScene(core)
+
+    expect(labelRender.mock.calls[0]?.[0]).toBe(core.scene)
+  })
 })
 
 describe('模型摆放与取景', () => {

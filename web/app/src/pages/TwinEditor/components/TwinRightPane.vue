@@ -37,6 +37,8 @@ const emit = defineEmits<{
   previewRoam: []
   stopRoamPreview: []
   'update:gizmoMode': [GizmoMode]
+  /** 从检查器里跳到另一个部件。 */
+  selectPart: [partId: string]
   writeBinding: [binding: BindingPayload]
   dropBinding: [fieldKey: string]
   addBinding: [fieldKey: string]
@@ -93,6 +95,7 @@ function onTab(value: string): void {
       @preview-roam="emit('previewRoam')"
       @stop-roam-preview="emit('stopRoamPreview')"
       @update:gizmo-mode="emit('update:gizmoMode', $event)"
+      @select-part="emit('selectPart', $event)"
     />
     <TwinBindingPane
       v-else

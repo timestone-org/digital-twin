@@ -91,7 +91,13 @@ const EMPTY_BADGE: BadgeView = {
   vars: {},
 }
 
-const EMPTY_METER: MeterView = { show: false, label: '', text: '', fill: '' }
+const EMPTY_METER: MeterView = {
+  show: false,
+  label: '',
+  text: '',
+  fill: '',
+  segments: null,
+}
 
 /** 三个副读数槽按名字取值，其余档给 null。 */
 function auxOf(source: string, input: MeterInput): number | null {
@@ -160,6 +166,8 @@ export function buildMeter(build: MeterBuild): MeterView {
     label: build.label,
     text: build.meter.showPercent ? percentText(pct) : '',
     fill: fillWidth(pct),
+    // info-list 的行不摆分段档：一行只有一条细条的高度，格子挤不开
+    segments: null,
   }
 }
 

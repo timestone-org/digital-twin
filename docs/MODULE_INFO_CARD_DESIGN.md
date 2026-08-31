@@ -1365,11 +1365,19 @@ config + values + meta.slots ──► rows.ts / cells.ts ──► RowView[] / 
 
 ## 14. 这一版不做
 
-1. **`efficiency-overview`**。`Component.vue` 真的 `import` 了 `shared/chart/echarts`：
-   `PieChart` 半环 + `GaugeChart` COP 仪表 + 40 段光谱离散化的渐变弧 + 最大余数法配比修正 +
-   `heroSignature` 防重复 `setOption`。真要做的前提是先把图表族的第一个模块落地
-   （`shared/chart/*` 与 `ChartShell.vue` 已就位但一个使用者都还没有），并确认它不会被
-   `check_bundle_budget.py` 的 `HEAVY` 名单拦在首屏。
+1. **`efficiency-overview`** —— **部分做了，整块仍不迁**。`Component.vue` 真的
+   `import` 了 `shared/chart/echarts`：`PieChart` 半环 + `GaugeChart` COP 仪表 +
+   40 段光谱离散化的渐变弧 + 最大余数法配比修正 + `heroSignature` 防重复 `setOption`。
+
+   **已经绕开 echarts 做出来的那一半**：COP 那只弧走纯 SVG——`gauge-card` 补了
+   「满弧 + 指针」的读数指示与可配色标（预设 `arc-spectrum`），`data-card` 的进度条
+   补了分段格子档。⚠ 与参考实现有一处**有意的**差别：参考是把弧**离散成 40 段**分别
+   上色，这里用的是一条连续的 `<linearGradient>`。连续渐变省掉 40 个节点，代价是
+   色标沿**直线**投影而不是沿弧长分布——张角接近半圆时两者肉眼难分，张角越大差得越多。
+
+   **仍然不迁的**：半环饼图与最大余数法配比修正。那两件绕不开图表库，前提照旧是先把
+   图表族的第一个模块落地（`shared/chart/*` 与 `ChartShell.vue` 已就位但一个使用者
+   都还没有），并确认它不会被 `check_bundle_budget.py` 的 `HEAVY` 名单拦在首屏。
 2. **`kpi-group` 的计算源浮层**。三个行内字段 + 一个 Teleport 浮层（手算 fixed 定位避开舞台
    `transform: scale` 的裁剪 + hover/focus 双来源生命周期 + esc + scroll/resize 关闭 +
    `role=tooltip` / `aria-describedby`）。前提是行内字段预算腾得出三格，或者它做成一个

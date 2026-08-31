@@ -196,6 +196,7 @@ describe('normalizeTwinConfig 的实体', () => {
       {
         id: 'part-1',
         name: '主机',
+        parentId: '',
         nodes: ['pump'],
         visibility: shown(true),
         look: DEFAULT_PART_LOOK,
@@ -207,6 +208,7 @@ describe('normalizeTwinConfig 的实体', () => {
       {
         id: 'p-fan',
         name: '',
+        parentId: '',
         nodes: [],
         // 老写法 `visible: false` 仍然读得进来：存量手写配置不该一升级就全亮
         visibility: shown(false),

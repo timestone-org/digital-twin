@@ -25,7 +25,14 @@ const BASE_SCALE: MeterScale = {
 }
 
 function meter(over: Partial<MeterView> = {}): MeterView {
-  return { show: true, label: '占比', text: '42.5%', fill: '42.5%', ...over }
+  return {
+    show: true,
+    label: '占比',
+    text: '42.5%',
+    fill: '42.5%',
+    segments: null,
+    ...over,
+  }
 }
 
 function scale(over: Partial<MeterScale> = {}): MeterScale {

@@ -799,7 +799,7 @@ export class EditorScene {
     // 世界尺寸会把相机整个包进标记球里，之后连点都点不中，而画面上什么异常都看不出
     const height = this.container.clientHeight
     if (height > 0) this.picks?.updateForCamera(core.camera, height)
-    renderScene(core)
+    renderScene(core, this.layers?.root ?? null)
     this.frameHandle = requestAnimationFrame(this.tick)
   }
 

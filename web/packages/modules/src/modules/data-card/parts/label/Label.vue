@@ -7,7 +7,7 @@
 import { computed, type CSSProperties } from 'vue'
 
 import type { CardPartProps } from '../../../../cardParts/types'
-import { readEnum, readNumber } from '../../../../shared/config'
+import { readBoolean, readEnum, readNumber } from '../../../../shared/config'
 
 // ⚠ 三件套一个都不能少：没声明的那个会掉成透传属性，在 DOM 上留下
 //   `meta="[object Object]"` 这种脏东西，而两侧都不报错
@@ -22,6 +22,8 @@ const TONES = ['secondary', 'primary', 'title', 'accent', 'cell'] as const
  */
 const tone = computed(() => readEnum(props.part.tone, TONES, 'secondary'))
 
+const hasDot = computed(() => readBoolean(props.part.dot, false))
+
 const style = computed<CSSProperties>(() => ({
   fontSize: `${String(readNumber(props.part.size, 12))}px`,
   opacity: readNumber(props.part.opacity, 1),
@@ -32,9 +34,10 @@ const style = computed<CSSProperties>(() => ({
   <span
     v-if="cell.label !== ''"
     class="dc-label"
-    :class="`dc-label--${tone}`"
+    :class="[`dc-label--${tone}`, { 'dc-label--dot': hasDot }]"
     :style="style"
   >
+    <i v-if="hasDot" class="dc-label__dot" aria-hidden="true" />
     {{ cell.label }}
   </span>
 </template>
@@ -67,5 +70,22 @@ const style = computed<CSSProperties>(() => ({
 /* ⚠ 回落不能省：格上没配基色时那个变量根本没写 */
 .dc-label--cell {
   color: var(--dc-cell-color, var(--text-title));
+}
+
+/* 带圆点时改成行内弹性盒：块级下圆点与文字的基线对不齐 */
+.dc-label--dot {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ⚠ 圆点吃格基色而不是文字色：文字多半是次要灰，圆点要的是那一格的身份色 */
+.dc-label__dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dc-cell-color, var(--accent-primary));
+  box-shadow: 0 0 5px var(--dc-cell-color, var(--accent-primary));
 }
 </style>

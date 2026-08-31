@@ -8,7 +8,11 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 
-import { createPartPreview } from '../src/partPreview'
+import {
+  createPartPreview,
+  dropNestedObjects,
+  fitDistance,
+} from '../src/partPreview'
 import { createHeadlessRenderer } from '../src/testing/createHeadlessRenderer'
 
 interface FakeModel {
@@ -196,5 +200,145 @@ describe('释放', () => {
     preview.dispose()
 
     expect(disposed).toBe(0)
+  })
+})
+
+describe('父件带着后代一起摆进来', () => {
+  // ⚠ 不去重就是同一块几何重叠着画两遍，表面互相穿插闪烁——看着像模型坏了
+  it('祖先已经在清单里的丢掉', () => {
+    const parent = new THREE.Group()
+    const child = new THREE.Mesh()
+    const deep = new THREE.Mesh()
+    child.add(deep)
+    parent.add(child)
+
+    expect(dropNestedObjects([parent, child, deep])).toEqual([parent])
+  })
+
+  it('重复列到的同一个对象只留一份', () => {
+    const mesh = new THREE.Mesh()
+
+    expect(dropNestedObjects([mesh, mesh])).toEqual([mesh])
+  })
+
+  it('互不相干的兄弟一个都不丢，次序照旧', () => {
+    const root = new THREE.Group()
+    const left = new THREE.Mesh()
+    const right = new THREE.Mesh()
+    root.add(left, right)
+
+    expect(dropNestedObjects([left, right])).toEqual([left, right])
+  })
+})
+
+describe('换宽高比时的取景', () => {
+  /**
+   * 一台长条形机组：20 长、2 高、4 深。
+   * ⚠ 不能拿立方体验这一条：立方体的取景距离由**高度**那一支定，宽高比再怎么变
+   * 都是同一个数，用例会绿得毫无意义。
+   */
+  function longPart() {
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(20, 2, 4),
+      new THREE.MeshStandardMaterial(),
+    )
+    const renderer = createHeadlessRenderer()
+    const preview = createPartPreview({
+      container: document.createElement('div'),
+      objects: [mesh],
+      autoRotate: false,
+      renderer: () => renderer,
+    })
+    if (preview === null) throw new Error('预览没造出来')
+    return { preview, renderer }
+  }
+
+  /** 这一帧画出去的相机机位；渲染记账里记的就是那台真相机。 */
+  function eyeAfter(
+    preview: ReturnType<typeof setup>['preview'],
+    renderer: ReturnType<typeof setup>['renderer'],
+    width: number,
+    height: number,
+  ): THREE.Vector3 {
+    preview.measure(width, height)
+    preview.frame(0)
+    const last = renderer.renders[renderer.renders.length - 1]
+    if (last === undefined) throw new Error('没有画过一帧')
+    return last.camera.position.clone()
+  }
+
+  // 舞台变宽了就该凑近，否则放大弹窗只是把黑边一起放大
+  it('还没人碰过镜头时，舞台一变就重新取景', () => {
+    const { preview, renderer } = longPart()
+
+    const square = eyeAfter(preview, renderer, 400, 400)
+    const wide = eyeAfter(preview, renderer, 1200, 400)
+
+    expect(wide.length()).toBeLessThan(square.length())
+  })
+
+  // ⚠ 换宽高比时把用户正看的角度拽走，比画面小得多更让人火大
+  it('用户接管镜头之后就不再动它', () => {
+    const { preview, renderer } = longPart()
+    const before = eyeAfter(preview, renderer, 400, 400)
+
+    preview.releaseFraming()
+    const after = eyeAfter(preview, renderer, 1200, 400)
+
+    // 不逐位比：`controls.update()` 每帧把机位在球坐标上来回换一趟，末位会飘
+    expect(after.distanceTo(before)).toBeLessThan(1e-6)
+  })
+})
+
+describe('取景距离', () => {
+  /** 一台长条形机组：长 20、高 2、深 4。 */
+  function unitBox(): THREE.Box3 {
+    return new THREE.Box3(
+      new THREE.Vector3(-10, -1, -2),
+      new THREE.Vector3(10, 1, 2),
+    )
+  }
+
+  function cameraAt(aspect: number): THREE.PerspectiveCamera {
+    return new THREE.PerspectiveCamera(45, aspect, 0.1, 100)
+  }
+
+  // ⚠ 舞台宽了却按方形取景的话，放大弹窗只是把黑边一起放大
+  it('舞台越宽，相机凑得越近', () => {
+    const box = unitBox()
+
+    expect(fitDistance(cameraAt(2.4), box)).toBeLessThan(
+      fitDistance(cameraAt(1), box),
+    )
+  })
+
+  // ⚠ 自转绕的是竖轴：按盒宽贴边取景的话，长轴转到正对镜头那一刻两头会被裁掉
+  it('横着摆与竖着摆的同一个部件，取景距离相同', () => {
+    const lying = new THREE.Box3(
+      new THREE.Vector3(-10, -1, -2),
+      new THREE.Vector3(10, 1, 2),
+    )
+    const turned = new THREE.Box3(
+      new THREE.Vector3(-2, -1, -10),
+      new THREE.Vector3(2, 1, 10),
+    )
+
+    expect(fitDistance(cameraAt(1.6), lying)).toBeCloseTo(
+      fitDistance(cameraAt(1.6), turned),
+      6,
+    )
+  })
+
+  // 高个子部件在窄舞台上由高度定距离，不该被宽度那一支盖掉
+  it('又高又窄的部件按高度取景', () => {
+    const tower = new THREE.Box3(
+      new THREE.Vector3(-0.5, -20, -0.5),
+      new THREE.Vector3(0.5, 20, 0.5),
+    )
+    const halfFov = THREE.MathUtils.degToRad(45) / 2
+
+    expect(fitDistance(cameraAt(2), tower)).toBeGreaterThan(
+      20 / Math.tan(halfFov),
+    )
   })
 })

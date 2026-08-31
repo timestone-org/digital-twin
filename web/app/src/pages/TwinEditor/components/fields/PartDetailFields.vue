@@ -9,6 +9,8 @@
  * 行号与信息牌各数各的，两边互不影响。
  * ⚠ 字段一律占绑定行，与「近距点击弹不弹窗」无关：按动作过滤会让用户在下拉里
  * 翻一下就把这个部件已经绑好的点位整片丢掉。配了字段却不弹窗由诊断报出来。
+ * ⚠ 弹窗宽度与模型区高度是**框级**的：这个部件被上级带出来看时用上级的那一份。
+ * 不禁用这两项——它可能同时还能在主场景里被单独点开。
  */
 import type { TwinPanelField, TwinPartDetail } from '@dt/twin-config'
 import {
@@ -41,8 +43,8 @@ const emit = defineEmits<{ 'update:modelValue': [TwinPartDetail] }>()
 const COLUMN_RANGE = { min: 1, max: 4, step: 1 }
 // ⚠ 两条区间必须与 `normalizePartDetail` 的夹取区间一致：给得出、收得回，
 // 用户会看到自己刚填的值被弹回去，而没有任何提示说明为什么
-const HEIGHT_RANGE = { min: 120, max: 720, step: 10 }
-const WIDTH_RANGE = { min: 320, max: 1200, step: 20 }
+const HEIGHT_RANGE = { min: 120, max: 1080, step: 10 }
+const WIDTH_RANGE = { min: 320, max: 2400, step: 20 }
 
 /** 常用的几个语义色，省得每次去翻 token 名。 */
 const SWATCHES = [
@@ -145,6 +147,10 @@ function writeFields(fields: TwinPanelField[]): void {
       size="sm"
       @update:model-value="write({ width: $event ?? WIDTH_RANGE.min })"
     />
+    <p v-if="part.parentId !== ''" class="text-xs text-text-disabled">
+      被上级带出来看时，弹窗宽度与模型区高度用上级的那一份——框属于那一次打开，
+      逐个子件换宽高会让弹窗在屏幕上跳。上面这两个数只在单独点开这个部件时生效。
+    </p>
 
     <PanelFieldList
       :panel="preview"

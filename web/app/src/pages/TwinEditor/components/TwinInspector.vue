@@ -68,6 +68,8 @@ const emit = defineEmits<{
   previewRoam: []
   stopRoamPreview: []
   'update:gizmoMode': [GizmoMode]
+  /** 从检查器里跳到另一个部件。 */
+  selectPart: [partId: string]
 }>()
 
 /**
@@ -197,6 +199,7 @@ function writeFlow(next: TwinFlowLink): void {
     <PartInspector
       v-else-if="part !== null"
       :model-value="part"
+      :parts="config.parts"
       :node-names="modelNodes"
       :cameras="config.cameras"
       :field-row-offset="partFieldRowOffset"
@@ -206,6 +209,7 @@ function writeFlow(next: TwinFlowLink): void {
       @request-pick-node="emit('requestPick', 'node')"
       @cancel-pick="emit('cancelPick')"
       @capture-view="emit('capturePartView', part.id)"
+      @select-part="emit('selectPart', $event)"
     />
     <AnchorInspector
       v-else-if="anchor !== null"

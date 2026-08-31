@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
  * @fileoverview 进度件的**画法**：`bar` 是细条（小字 + 占比读数 + 可选发光圆点 + 轨道），
- * `track` 是粗轨道（四根等距刻度 + 虚线目标标记 + 轨道内 pill）。
+ * `track` 是粗轨道（四根等距刻度 + 虚线目标标记 + 轨道内 pill），
+ * `segments` 是一排离散格子，按点亮数上色。
  *
  * ⚠ 它只画，不算：`MeterView` 进来时百分比已经算完了。算法是各模块自己的行/格语义，
  * 画法是同一件事——两者分家才有得复用（MODULE_DATA_CARD_DESIGN §5.1）。
@@ -105,6 +106,19 @@ const ticks = computed(() => {
   })
 })
 
+/**
+ * 分段档那一排格子。
+ * ⚠ 点亮数由取值层算好（`litSegments`）：这里只按下标比大小。
+ */
+const blocks = computed(() => {
+  const seg = props.meter.segments
+  if (props.kind !== 'segments' || seg === null) return []
+  return Array.from({ length: seg.total }, (_, index) => ({
+    key: `seg-${String(index)}`,
+    on: index < seg.lit,
+  }))
+})
+
 /** 轨道内 pill：读数 + 单位 +（占比算得出来时）占比。 */
 const pillText = computed(() => {
   const scale = props.scale
@@ -123,7 +137,16 @@ const pillText = computed(() => {
     <b v-if="meter.text !== ''" class="dt-meter__pct">{{ meter.text }}</b>
     <i v-if="dot" class="dt-meter__dot" aria-hidden="true" />
     <span class="dt-meter__wrap">
-      <span class="dt-meter__track">
+      <span v-if="blocks.length > 0" class="dt-meter__blocks">
+        <i
+          v-for="block in blocks"
+          :key="block.key"
+          class="dt-meter__block"
+          :class="{ 'dt-meter__block--on': block.on }"
+          aria-hidden="true"
+        />
+      </span>
+      <span v-else class="dt-meter__track">
         <span
           v-if="meter.fill !== ''"
           class="dt-meter__fill"
@@ -231,6 +254,29 @@ const pillText = computed(() => {
   overflow: visible;
   height: 18px;
   background: color-mix(in srgb, var(--border-strong) 55%, transparent);
+}
+
+// 分段档：一排等宽格子，靠 flex 均分而不是按格数算宽度——算出来的宽度在容器
+// 变窄时会溢出，而格子数是用户配的，多到十几格很常见
+.dt-meter__blocks {
+  display: flex;
+  gap: var(--dt-meter-gap, 3px);
+  width: 100%;
+}
+
+.dt-meter__block {
+  flex: 1 1 0;
+  min-width: 0;
+  height: var(--dt-meter-h, 8px);
+  border-radius: 1px;
+  // 灭着的格子只留一点底，与轨道底同一个口径
+  background: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  transition: background 0.3s ease;
+}
+
+.dt-meter__block--on {
+  background: var(--dt-meter-ink);
+  box-shadow: 0 0 var(--dt-meter-glow, 6px) var(--dt-meter-ink);
 }
 
 .dt-meter__fill {

@@ -178,8 +178,10 @@ function onPick(): void {
   background: var(--surface-raised);
 }
 
+/* ⚠ 左色条吃格基色：它是这一格最显眼的身份色，写死强调色的话一列十格全一个颜色，
+   而用户明明逐格配了色（回落不能省——没配基色的格那个变量根本没写） */
 .dc-cell--accent {
-  border-left: 3px solid var(--accent-primary);
+  border-left: 3px solid var(--dc-cell-color, var(--accent-primary));
 }
 
 .dc-cell--pick {

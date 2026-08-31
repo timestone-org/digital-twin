@@ -1361,6 +1361,20 @@
               "span": "half"
             },
             {
+              "key": "label-dot",
+              "label": "前导圆点",
+              "type": "boolean",
+              "default": false,
+              "help": "名称前画一个小圆点，颜色跟随这一格的基色。",
+              "span": "half",
+              "when": {
+                "key": "kind",
+                "in": [
+                  "label"
+                ]
+              }
+            },
+            {
               "key": "label-size",
               "label": "字号 (px)",
               "type": "range",
@@ -1898,9 +1912,13 @@
                 {
                   "value": "track",
                   "label": "粗轨道"
+                },
+                {
+                  "value": "segments",
+                  "label": "分段格子"
                 }
               ],
-              "help": "细条 = 小字 + 占比读数 + 轨道；粗轨道另带四根刻度与目标标记。",
+              "help": "细条 = 小字 + 占比读数 + 轨道；粗轨道另带四根刻度与目标标记；分段格子按占比点亮前 N 格。",
               "span": "half",
               "when": {
                 "key": "kind",
@@ -1949,6 +1967,39 @@
                   "meter"
                 ]
               }
+            },
+            {
+              "key": "meter-segments",
+              "label": "格数",
+              "type": "range",
+              "default": 16,
+              "help": "⚠ 一格代表 1/N：读数落在格与格之间时看不出来，要精确读数就同时开占比读数。",
+              "span": "half",
+              "when": {
+                "key": "meter-look",
+                "in": [
+                  "segments"
+                ]
+              },
+              "min": 4,
+              "max": 40,
+              "step": 1
+            },
+            {
+              "key": "meter-gap",
+              "label": "格间隙 (px)",
+              "type": "range",
+              "default": 3,
+              "span": "half",
+              "when": {
+                "key": "meter-look",
+                "in": [
+                  "segments"
+                ]
+              },
+              "min": 0,
+              "max": 10,
+              "step": 1
             },
             {
               "key": "meter-height",
@@ -3030,11 +3081,63 @@
             {
               "value": "gradient",
               "label": "渐变"
+            },
+            {
+              "value": "stops",
+              "label": "自定义色标"
             }
           ],
           "group": "几何",
-          "help": "渐变档由填充色自己调深浅，不另开色标：弧与条向前加深，储罐自下而上淡出。",
+          "help": "渐变档由填充色自己调深浅；自定义色标档按下面那张表左右分色（红区→绿区那种彩虹弧）。",
           "span": "half"
+        },
+        {
+          "key": "indicator",
+          "label": "读数指示",
+          "type": "enum",
+          "default": "fill",
+          "options": [
+            {
+              "value": "fill",
+              "label": "填充到读数"
+            },
+            {
+              "value": "needle",
+              "label": "满弧 + 指针"
+            }
+          ],
+          "group": "几何",
+          "help": "填充 = 填到读数处；满弧 + 指针 = 整条弧是量程、指针指位置。⚠ 只有弧度盘吃这一项，其余四档摆着不生效。",
+          "span": "half"
+        },
+        {
+          "key": "colorStops",
+          "label": "色标",
+          "type": "array",
+          "default": [],
+          "group": "几何",
+          "help": "只有「填充上色 = 自定义色标」那一档吃它，且至少要两档才生效。⚠ 颜色只填 var(--…) 引用或十六进制；算出来的色值换肤时不跟着走。",
+          "span": "full",
+          "item_schema": [
+            {
+              "key": "at",
+              "label": "位置 (%)",
+              "type": "range",
+              "default": 0,
+              "span": "half",
+              "min": 0,
+              "max": 100,
+              "step": 1
+            },
+            {
+              "key": "color",
+              "label": "颜色",
+              "type": "color",
+              "default": "",
+              "span": "half"
+            }
+          ],
+          "item_label_key": "color"
         },
         {
           "key": "scale",
@@ -3492,6 +3595,8 @@
               "bulbSize": 26
             },
             "fillStyle": "gradient",
+            "indicator": "fill",
+            "colorStops": [],
             "scale": {
               "showRange": false,
               "ticks": true,
@@ -3537,6 +3642,8 @@
               "bulbSize": 26
             },
             "fillStyle": "solid",
+            "indicator": "fill",
+            "colorStops": [],
             "scale": {
               "showRange": true,
               "ticks": false,
@@ -3564,6 +3671,70 @@
           }
         },
         {
+          "id": "arc-spectrum",
+          "label": "光谱弧 + 指针",
+          "hint": "半圆彩虹弧当量程，指针指读数；效率、COP 这类「落在区间的哪一段」比「填了多少」更要紧的量用它。",
+          "config": {
+            "layout": "single",
+            "columns": "auto",
+            "gap": 10,
+            "padX": 6,
+            "padY": 6,
+            "shape": "arc",
+            "geometry": {
+              "thickness": 14,
+              "arcSpan": 200,
+              "tankWidth": 56,
+              "tubeWidth": 14,
+              "bulbSize": 26
+            },
+            "fillStyle": "stops",
+            "indicator": "needle",
+            "colorStops": [
+              {
+                "at": 0,
+                "color": "var(--state-danger)"
+              },
+              {
+                "at": 35,
+                "color": "var(--state-warning)"
+              },
+              {
+                "at": 70,
+                "color": "var(--state-success)"
+              },
+              {
+                "at": 100,
+                "color": "var(--accent-secondary)"
+              }
+            ],
+            "scale": {
+              "showRange": false,
+              "ticks": false,
+              "tickCount": 4,
+              "wanFormat": false,
+              "wanDigits": 2
+            },
+            "tickSize": 11,
+            "targetMark": false,
+            "targetLabel": "计划",
+            "showPercent": false,
+            "readout": "value",
+            "readoutPlace": "center",
+            "valueSize": 0,
+            "valueColor": "var(--accent-primary)",
+            "valueGlow": 10,
+            "unitSize": 12,
+            "unitPlace": "attached",
+            "labelPlace": "below",
+            "labelSize": 13,
+            "labelTone": "secondary",
+            "fillColor": "",
+            "trackColor": "",
+            "thousands": true
+          }
+        },
+        {
           "id": "linear-bar",
           "label": "横向条",
           "hint": "细长胶囊条 + 上方读数，窄块用。",
@@ -3582,6 +3753,8 @@
               "bulbSize": 26
             },
             "fillStyle": "solid",
+            "indicator": "fill",
+            "colorStops": [],
             "scale": {
               "showRange": true,
               "ticks": false,
@@ -3627,6 +3800,8 @@
               "bulbSize": 26
             },
             "fillStyle": "gradient",
+            "indicator": "fill",
+            "colorStops": [],
             "scale": {
               "showRange": false,
               "ticks": false,
@@ -3672,6 +3847,8 @@
               "bulbSize": 26
             },
             "fillStyle": "solid",
+            "indicator": "fill",
+            "colorStops": [],
             "scale": {
               "showRange": false,
               "ticks": false,
@@ -3717,6 +3894,8 @@
               "bulbSize": 26
             },
             "fillStyle": "solid",
+            "indicator": "fill",
+            "colorStops": [],
             "scale": {
               "showRange": false,
               "ticks": false,

@@ -19,7 +19,13 @@ import type {
 import type { ListRow } from '../../../src/modules/info-list/rows'
 import type { ReadingView } from '../../../src/modules/info-list/rowValue'
 
-const NO_METER: MeterView = { show: false, label: '', text: '', fill: '' }
+const NO_METER: MeterView = {
+  show: false,
+  label: '',
+  text: '',
+  fill: '',
+  segments: null,
+}
 const NO_BADGE: BadgeView = {
   kind: 'none',
   status: null,
@@ -33,7 +39,7 @@ function reading(text: string, unit = ''): ReadingView {
 }
 
 function bar(label: string, text: string): MeterView {
-  return { show: true, label, text, fill: '40%' }
+  return { show: true, label, text, fill: '40%', segments: null }
 }
 
 function row(over: Partial<ListRow> = {}): ListRow {

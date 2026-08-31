@@ -245,6 +245,41 @@ export function arcAngleAt(percent: number | null, spanDeg: number): number {
   return start + ((end - start) * fillPercent(percent)) / 100
 }
 
+/** 指针尖离弧内缘留这么远，太贴会看着像戳在弧上。 */
+const NEEDLE_TIP_GAP = 6
+/** 指针根部半宽；再宽就成了扇形，再窄在缩放后会消失。 */
+const NEEDLE_HALF_WIDTH = 2.6
+
+/**
+ * 指针的 `d`：一个从圆心指向读数角度的窄三角。
+ * ⚠ 尖端**不落在弧上**而是留一段：贴着画时描边的圆头会与指针尖糊成一团，
+ * 读者分不清指的是哪一格。
+ * @param percent 量程百分比，`null` = 指向起点
+ * @param spanDeg 张角
+ * @param thickness 弧的描边宽，用来算内缘
+ */
+export function needlePath(
+  percent: number | null,
+  spanDeg: number,
+  thickness: number,
+): string {
+  const angle = arcAngleAt(percent, spanDeg)
+  const inner =
+    arcRadius(thickness) -
+    resolveThickness('arc', thickness) / 2 -
+    NEEDLE_TIP_GAP
+  const c = GAUGE_ARC_CENTER
+  const tip = polarToCartesian(c, c, Math.max(0, inner), angle)
+  const left = polarToCartesian(c, c, NEEDLE_HALF_WIDTH, angle - 90)
+  const right = polarToCartesian(c, c, NEEDLE_HALF_WIDTH, angle + 90)
+  return `M ${fmt(left.x)} ${fmt(left.y)} L ${fmt(tip.x)} ${fmt(tip.y)} L ${fmt(right.x)} ${fmt(right.y)} Z`
+}
+
+/** SVG 路径里的数留一位小数就够，长串小数只是把 DOM 撑大。 */
+function fmt(value: number): string {
+  return value.toFixed(1)
+}
+
 /**
  * 填充用的 `stroke-dashoffset`：配合 `pathLength="100"`，0% 时整条藏起来。
  * @param percent 量程百分比，`null` = 没有读数即不填

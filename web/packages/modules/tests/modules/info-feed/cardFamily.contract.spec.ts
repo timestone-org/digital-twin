@@ -56,11 +56,20 @@ const COVERAGE: { source: string; type: string; presets: string[] }[] = [
 ]
 
 /**
- * 表外的两套预设：它们不还原任何一个参考模块，是新模型多出来的排布。
- * ⚠ 列在这里而不是放它们自生自灭：表外冒出第三套时这条会红，逼着新增的那一套
+ * 表外的三套预设：它们不还原任何一个参考模块，是新模型多出来的排布。
+ * ⚠ 列在这里而不是放它们自生自灭：表外冒出新的一套时这条会红，逼着新增的那一套
  * 要么进覆盖表、要么在这里交代自己为什么是额外的。
+ *
+ * ⚠ `arc-spectrum` **不认领** `efficiency-overview`：那个参考模块是「半环饼图 +
+ * COP 仪表 + 40 段光谱离散弧 + 最大余数法配比修正」的整块，而这一套只做了其中
+ * 那只弧，且走的是纯 SVG 渐变而不是离散 40 段（MODULE_INFO_CARD_DESIGN §14 一）。
+ * 认领了就等于宣称那一块迁完了，而半环与配比修正一行都没有。
  */
-const EXTRA_PRESETS = ['info-card:plain-grid', 'gauge-card:gauge-grid']
+const EXTRA_PRESETS = [
+  'info-card:plain-grid',
+  'gauge-card:arc-spectrum',
+  'gauge-card:gauge-grid',
+]
 
 function presetIds(type: string): string[] {
   const manifest = FAMILY.find((item) => item.type === type)
@@ -146,6 +155,6 @@ describe('参考仓那 15 个模块的落点', () => {
     )
 
     expect(all.filter((id) => !claimed.has(id))).toEqual(EXTRA_PRESETS)
-    expect(all).toHaveLength(21)
+    expect(all).toHaveLength(22)
   })
 })

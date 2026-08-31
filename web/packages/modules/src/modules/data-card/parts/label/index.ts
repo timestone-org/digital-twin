@@ -12,6 +12,14 @@ export default defineCardPart({
   slots: [],
   fields: [
     {
+      key: 'dot',
+      label: '前导圆点',
+      type: 'boolean',
+      default: false,
+      span: 'half',
+      help: '名称前画一个小圆点，颜色跟随这一格的基色。',
+    },
+    {
       key: 'size',
       label: '字号 (px)',
       type: 'range',

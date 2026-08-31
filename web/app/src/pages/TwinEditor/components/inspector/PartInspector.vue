@@ -5,6 +5,8 @@
  *
  * ⚠ `nodes` 是模型文件里的对象名，本包看不见模型：模型里改了名字，这个部件就
  * 静默地什么都不再命中。所以拿得到节点清单时必须把对不上的那几条标出来。
+ * ⚠ 「从属」一节摆在名字与关联节点之间：它讲的是这个部件在装配里的位置，
+ * 属于身份，不属于外观。
  * ⚠ 部件占**两个绑定槽**：状态染色一行，详情字段每个字段一行，行号各数各的。
  */
 import type {
@@ -22,6 +24,7 @@ import { DtButton, DtField, DtInput } from '@dt/ui'
 import InspectorSection from '../fields/InspectorSection.vue'
 import NodePicker from '../fields/NodePicker.vue'
 import PartClickFields from '../fields/PartClickFields.vue'
+import PartParentFields from '../fields/PartParentFields.vue'
 import PartDetailFields from '../fields/PartDetailFields.vue'
 import PartLookFields from '../fields/PartLookFields.vue'
 import PartTintFields from '../fields/PartTintFields.vue'
@@ -29,6 +32,8 @@ import VisibilityFields from '../fields/VisibilityFields.vue'
 
 const props = defineProps<{
   modelValue: TwinPart
+  /** 全部部件；从属一节的候选与子件清单从它来。 */
+  parts: readonly TwinPart[]
   /** 模型里全部节点名，视口加载完给的。空数组 = 模型还没加载。 */
   nodeNames: readonly string[]
   /** 预设视点，远距取景可以挑一个。 */
@@ -46,6 +51,8 @@ const emit = defineEmits<{
   requestPickNode: []
   cancelPick: []
   captureView: []
+  /** 跳到另一个部件。 */
+  selectPart: [partId: string]
 }>()
 
 function write(patch: Partial<TwinPart>): void {
@@ -101,6 +108,15 @@ function togglePick(): void {
           >{{ modelValue.id }}</code
         >
       </DtField>
+    </InspectorSection>
+
+    <InspectorSection title="从属">
+      <PartParentFields
+        :model-value="modelValue"
+        :parts="parts"
+        @update:model-value="emit('update:modelValue', $event)"
+        @select-part="emit('selectPart', $event)"
+      />
     </InspectorSection>
 
     <InspectorSection title="关联节点">

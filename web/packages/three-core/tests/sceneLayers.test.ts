@@ -100,6 +100,94 @@ function allHidden(group: THREE.Object3D): boolean {
   return group.children.length > 0 && group.children.every((c) => !c.visible)
 }
 
+describe('覆盖层根', () => {
+  // ⚠ 五个组必须挂在同一个根上：两个 CSS 渲染器每帧只遍历它，漏挂的那一层的
+  //   DOM 会整片不再更新——牌还在原地画着，只是不跟着镜头动了
+  it('五个组都挂在覆盖层根上，根挂进场景', () => {
+    const scene = new THREE.Scene()
+    const layers = new SceneLayers(host())
+    built.push(layers)
+
+    layers.addTo(scene)
+
+    expect(scene.children).toContain(layers.root)
+    for (const group of [
+      layers.anchors.group,
+      layers.arrows.group,
+      layers.panels.group,
+      layers.flows.group,
+      layers.effects.group,
+    ]) {
+      expect(group.parent).toBe(layers.root)
+    }
+  })
+})
+
+describe('镜头没动就整帧跳过', () => {
+  /** 部件这一刻可见吗；距离规则的结果落在模型节点上。 */
+  function visible(root: THREE.Object3D): boolean {
+    return root.getObjectByName('pump')?.visible === true
+  }
+
+  it('同一个取景状态连着来两次，第二次不再动显隐', () => {
+    const { layers, root } = layersOf(everything())
+    layers.applyDistanceRules(farAway())
+    // 手工掰回来：跳过了就没人再把它改回去，掰的这一下会留在原处
+    const pump = root.getObjectByName('pump')
+    if (pump !== undefined) pump.visible = true
+
+    layers.applyDistanceRules(farAway())
+
+    expect(visible(root)).toBe(true)
+  })
+
+  it('镜头动了就重新算', () => {
+    const { layers, root } = layersOf(everything())
+    layers.applyDistanceRules(nearby())
+
+    layers.applyDistanceRules(farAway())
+
+    expect(visible(root)).toBe(false)
+  })
+
+  it('轨道中心动了也重新算', () => {
+    const { layers, root } = layersOf(everything())
+    layers.applyDistanceRules(nearby())
+
+    layers.applyDistanceRules({
+      cameraPosition: new THREE.Vector3(1, 0, 0),
+      orbitTarget: new THREE.Vector3(500, 0, 0),
+    })
+
+    expect(visible(root)).toBe(false)
+  })
+
+  // ⚠ 少了这一条，镜头停着不动时点位再怎么变，部件的颜色都不会跟着走
+  it('喂了新值之后，镜头没动也要重新算', () => {
+    const { layers, root } = layersOf(everything())
+    layers.applyDistanceRules(farAway())
+    const pump = root.getObjectByName('pump')
+    if (pump !== undefined) pump.visible = true
+
+    layers.setValues(EMPTY_VALUES)
+    layers.applyDistanceRules(farAway())
+
+    expect(visible(root)).toBe(false)
+  })
+
+  it('重建之后，镜头没动也要重新算', () => {
+    const { layers, root } = layersOf(everything())
+    layers.applyDistanceRules(farAway())
+    const pump = root.getObjectByName('pump')
+    if (pump !== undefined) pump.visible = true
+
+    layers.build(everything(), EMPTY_VALUES, buildNodeIndex(root))
+    layers.applyDistanceRules(farAway())
+
+    expect(visible(root)).toBe(false)
+  })
+})
+
 describe('距离规则一处都不许漏', () => {
   it('远到阈值之外时，五类元素全部隐藏', () => {
     const { layers, root } = layersOf(everything())

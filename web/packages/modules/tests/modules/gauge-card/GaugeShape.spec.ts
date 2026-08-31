@@ -238,3 +238,107 @@ describe('量程端点与居中读数', () => {
     expect(withSlot.get('.gc-center .probe').text()).toBe('42')
   })
 })
+
+describe('满弧 + 指针', () => {
+  const NEEDLE = { shape: 'arc', indicator: 'needle' }
+
+  // ⚠ 整条弧不按读数裁：裁了的话彩虹弧只剩一半，颜色说的就成了「填到哪」
+  it('整条弧上色，不带 dashoffset', () => {
+    const wrapper = render(NEEDLE)
+    const fill = wrapper.get('.gc-arc__fill')
+
+    expect(fill.classes()).toContain('gc-arc__fill--full')
+    expect(fill.attributes('stroke-dashoffset')).toBeUndefined()
+  })
+
+  it('画出指针与圆心轴', () => {
+    const wrapper = render(NEEDLE)
+
+    expect(wrapper.find('.gc-needle__blade').exists()).toBe(true)
+    expect(wrapper.find('.gc-needle__hub').exists()).toBe(true)
+  })
+
+  // ⚠ 指在起点会被读成「现在是最小值」
+  // ⚠ 这里传 `null` 不传 `undefined`：`render` 的形参有默认值 42，显式传
+  //   `undefined` 会触发默认值，用例就变成在测「有读数」那一路
+  it('读数取不到时一根指针都不画', () => {
+    const wrapper = render(NEEDLE, null)
+
+    expect(wrapper.find('.gc-needle').exists()).toBe(false)
+  })
+
+  it('读数变了指针跟着转——两个读数的路径不一样', () => {
+    const low = render(NEEDLE, 10).get('.gc-needle__blade').attributes('d')
+    const high = render(NEEDLE, 90).get('.gc-needle__blade').attributes('d')
+
+    expect(low).not.toBe(high)
+  })
+
+  it('缺省仍是填充档：不配 indicator 时画的是按读数截断的那条', () => {
+    const wrapper = render({ shape: 'arc' })
+
+    expect(wrapper.get('.gc-arc__fill').classes()).not.toContain(
+      'gc-arc__fill--full',
+    )
+    expect(wrapper.find('.gc-needle__blade').exists()).toBe(false)
+  })
+
+  // ⚠ 只有弧度盘有圆心可以摆指针：其余四档配了也不该画
+  it('别的几何档配了指针也不画', () => {
+    const wrapper = render({ shape: 'linear', indicator: 'needle' })
+
+    expect(wrapper.find('.gc-needle__blade').exists()).toBe(false)
+  })
+})
+
+describe('自定义色标', () => {
+  const STOPS = {
+    shape: 'arc',
+    fillStyle: 'stops',
+    colorStops: [
+      { at: 0, color: 'var(--state-danger)' },
+      { at: 100, color: 'var(--accent-secondary)' },
+    ],
+  }
+
+  it('配几档就摆几个 stop，颜色逐个落到 stop-color 上', () => {
+    const stops = render(STOPS).findAll('stop')
+
+    expect(stops).toHaveLength(2)
+    expect(stops[0]?.attributes('stop-color')).toBe('var(--state-danger)')
+    expect(stops[0]?.attributes('offset')).toBe('0%')
+    expect(stops[1]?.attributes('offset')).toBe('100%')
+  })
+
+  // ⚠ `<stop>` 按文档序生效：位置写倒了的两档会被浏览器静默夹平成一段纯色
+  it('位置写倒了也按位置排好', () => {
+    const stops = render({
+      ...STOPS,
+      colorStops: [
+        { at: 90, color: 'var(--accent-secondary)' },
+        { at: 10, color: 'var(--state-danger)' },
+      ],
+    }).findAll('stop')
+
+    expect(stops.map((one) => one.attributes('offset'))).toEqual(['10%', '90%'])
+  })
+
+  // ⚠ 一档渐变没有意义，而只有一个 stop 的 linearGradient 画出来是透明
+  it('不足两档时退回样式表里那两个缺省 stop', () => {
+    const stops = render({
+      ...STOPS,
+      colorStops: [{ at: 0, color: 'var(--state-danger)' }],
+    }).findAll('stop')
+
+    expect(stops.map((one) => one.attributes('stop-color'))).toEqual([
+      undefined,
+      undefined,
+    ])
+  })
+
+  it('纯色档一个 stop 都不摆', () => {
+    expect(
+      render({ shape: 'arc', fillStyle: 'solid' }).findAll('stop'),
+    ).toEqual([])
+  })
+})

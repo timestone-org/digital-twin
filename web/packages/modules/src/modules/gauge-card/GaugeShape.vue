@@ -11,6 +11,8 @@
  */
 import { computed, useId } from 'vue'
 
+import { needlePath } from './geometry'
+
 import type { GaugeView } from './gauges'
 import type { GaugeLook } from './look'
 
@@ -38,7 +40,29 @@ const shapeClasses = computed(() => [
  * 那条 `.gc-arc__fill { stroke: … }` 会把它整个盖掉——弧照样画，只是永远是纯色。
  */
 const arcStroke = computed(() =>
-  props.look.fillStyle === 'gradient' ? `url(#${gradientId})` : '',
+  props.look.fillStyle === 'solid' ? '' : `url(#${gradientId})`,
+)
+
+/**
+ * 自定义色标那一档摆几个 `<stop>`；其余两档摆写死在样式表里的那两个。
+ * ⚠ 顺序已由 `readColorStops` 排好：`<stop>` 按**文档序**生效，倒着写的两档会被
+ * 浏览器静默夹平成一段纯色。
+ */
+const stops = computed(() =>
+  props.look.fillStyle === 'stops' ? props.look.colorStops : [],
+)
+
+/** 满弧 + 指针那一档：整条弧都上色，读数由指针指。只有弧度盘吃得下。 */
+const hasNeedle = computed(
+  () => props.look.shape === 'arc' && props.look.indicator === 'needle',
+)
+
+const needleD = computed(() =>
+  needlePath(
+    props.view.percent,
+    props.look.geometry.arcSpan,
+    props.look.geometry.thickness,
+  ),
 )
 
 /** 刻度、目标标记与 pill 只有粗轨道那一档摆。 */
@@ -56,9 +80,27 @@ const isTrack = computed(() => props.look.shape === 'track')
         aria-hidden="true"
       >
         <defs v-if="arcStroke !== ''">
-          <linearGradient :id="gradientId" x1="0" y1="1" x2="0" y2="0">
-            <stop class="gc-arc__stop-a" offset="0%" />
-            <stop class="gc-arc__stop-b" offset="100%" />
+          <!-- ⚠ 自定义色标走横向（左→右），与图上「左红右青」的读法一致；
+               两档缺省色标仍走竖向，改了会让存量大屏的弧整体换个方向 -->
+          <linearGradient
+            :id="gradientId"
+            :x1="stops.length > 0 ? 0 : 0"
+            :y1="stops.length > 0 ? 0 : 1"
+            :x2="stops.length > 0 ? 1 : 0"
+            :y2="0"
+          >
+            <template v-if="stops.length > 0">
+              <stop
+                v-for="(stop, at) in stops"
+                :key="`stop-${String(at)}`"
+                :offset="`${String(stop.at)}%`"
+                :stop-color="stop.color"
+              />
+            </template>
+            <template v-else>
+              <stop class="gc-arc__stop-a" offset="0%" />
+              <stop class="gc-arc__stop-b" offset="100%" />
+            </template>
           </linearGradient>
         </defs>
         <path
@@ -68,8 +110,18 @@ const isTrack = computed(() => props.look.shape === 'track')
           :stroke-width="look.geometry.thickness"
           stroke-linecap="round"
         />
+        <!-- 满弧档：整条弧上色，不按读数裁；读数交给指针 -->
         <path
-          v-if="view.fill !== ''"
+          v-if="hasNeedle"
+          class="gc-arc__fill gc-arc__fill--full"
+          :d="look.geometry.arcPath"
+          fill="none"
+          :stroke-width="look.geometry.thickness"
+          stroke-linecap="round"
+          :style="{ stroke: arcStroke }"
+        />
+        <path
+          v-else-if="view.fill !== ''"
           class="gc-arc__fill"
           :d="look.geometry.arcPath"
           fill="none"
@@ -80,6 +132,11 @@ const isTrack = computed(() => props.look.shape === 'track')
           :stroke-dashoffset="view.dashOffset"
           :style="{ stroke: arcStroke }"
         />
+        <!-- ⚠ 读数取不到时不画指针：指在起点会被读成「现在是最小值」 -->
+        <g v-if="hasNeedle && view.percent !== null" class="gc-needle">
+          <path class="gc-needle__blade" :d="needleD" />
+          <circle class="gc-needle__hub" cx="50" cy="50" r="4" />
+        </g>
       </svg>
       <span
         v-else-if="look.shape === 'linear' || look.shape === 'track'"

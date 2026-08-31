@@ -18,13 +18,16 @@ import {
 } from '../../../../shared/config'
 import { fmtTrim, toNumOrNull } from '../../../../shared/format'
 import MeterBar from '../../../../shared/MeterBar.vue'
+import { litSegments } from '../../../../shared/meter'
 import type { MeterScale, MeterVars, MeterView } from '../../../../shared/meter'
 
 // ⚠ 三件套一个都不能少：没声明的那个会掉成透传属性，在 DOM 上留下
 //   `meta="[object Object]"` 这种脏东西，而两侧都不报错
 const props = defineProps<CardPartProps>()
 
-const LOOKS = ['bar', 'track'] as const
+const LOOKS = ['bar', 'track', 'segments'] as const
+// 分段档缺省几格：图上那种一排格子多在十几格，太少看着像刻度、太多糊成一条
+const DEFAULT_SEGMENTS = 16
 const SOURCES = ['auto', 'ratio', 'range', 'share'] as const
 
 const look = computed(() => readEnum(props.part.look, LOOKS, 'bar'))
@@ -72,7 +75,8 @@ const percent = computed<number | null>(() => {
  */
 const view = computed<MeterView>(() => {
   const pct = percent.value
-  if (pct === null) return { show: false, label: '', text: '', fill: '' }
+  if (pct === null)
+    return { show: false, label: '', text: '', fill: '', segments: null }
   const clamped = Math.max(0, Math.min(100, pct))
   return {
     show: true,
@@ -81,6 +85,10 @@ const view = computed<MeterView>(() => {
       ? `${fmtTrim(pct, 1)}%`
       : '',
     fill: `${fmtTrim(clamped, 1)}%`,
+    segments:
+      look.value === 'segments'
+        ? litSegments(pct, readNumber(props.part.segments, DEFAULT_SEGMENTS))
+        : null,
   }
 })
 
@@ -114,6 +122,9 @@ const vars = computed<MeterVars>(() => {
   }
   if (color !== '') out['--dt-meter-color'] = color
   if (glow > 0) out['--dt-meter-glow'] = `${String(glow)}px`
+  if (look.value === 'segments') {
+    out['--dt-meter-gap'] = `${String(readNumber(props.part.gap, 3))}px`
+  }
   return out
 })
 </script>

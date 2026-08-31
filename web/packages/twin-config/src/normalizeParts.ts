@@ -122,10 +122,14 @@ export function normalizePartTint(raw: unknown): TwinPartTint | null {
 
 /** 弹窗里那块 3D 的高度区间 px；太矮的话一个设备也摆不下。 */
 const MIN_MODEL_HEIGHT = 120
-const MAX_MODEL_HEIGHT = 720
-/** 弹窗宽度区间 px。 */
+const MAX_MODEL_HEIGHT = 1080
+/**
+ * 弹窗宽度区间 px。
+ * ⚠ 上限按大屏给，不按笔记本给：这个弹窗是在 2K/4K 的墙上看的，1200px 在那种
+ * 尺寸下只占屏幕的三分之一。窄屏上由 `DtModal` 的 `max-width: 100%` 收住。
+ */
 const MIN_MODAL_WIDTH = 320
-const MAX_MODAL_WIDTH = 1200
+const MAX_MODAL_WIDTH = 2400
 
 /**
  * 一条都没配的点击动作。
@@ -147,8 +151,8 @@ export const DEFAULT_PART_DETAIL: TwinPartDetail = Object.freeze({
   fields: [],
   showModel: true,
   autoRotate: true,
-  modelHeight: 260,
-  width: 720,
+  modelHeight: 420,
+  width: 1120,
   variant: 'card',
   accent: '',
   columns: 1,

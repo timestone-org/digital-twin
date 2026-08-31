@@ -10,7 +10,12 @@ import { computed, type CSSProperties } from 'vue'
 import type { CardPartProps, CardSlotKey } from '../../../../cardParts/types'
 import { CARD_SLOT_KEYS } from '../../../../cardParts/types'
 import { readEnum, readNumber, readText } from '../../../../shared/config'
-import { fmtDecimal, fmtTrim, toNumOrNull } from '../../../../shared/format'
+import {
+  fmtDecimal,
+  fmtNumber,
+  fmtTrim,
+  toNumOrNull,
+} from '../../../../shared/format'
 import { cellState, reasonOf } from '../../../../shared/slotState'
 
 // ⚠ 三件套一个都不能少：没声明的那个会掉成透传属性，在 DOM 上留下
@@ -40,8 +45,11 @@ const text = computed(() => {
   if (!hasValue.value || numeric.value === null)
     return props.cell.format.emptyText
   const precision = readNumber(props.part.precision, 1)
-  return props.cell.format.fixedDecimals
-    ? fmtDecimal(numeric.value, precision, props.cell.format.thousands)
+  const { fixedDecimals, thousands } = props.cell.format
+  // ⚠ 与读数部件同一条口径：千分位在两档下都要生效
+  if (fixedDecimals) return fmtDecimal(numeric.value, precision, thousands)
+  return thousands
+    ? fmtNumber(numeric.value, precision)
     : fmtTrim(numeric.value, precision)
 })
 
