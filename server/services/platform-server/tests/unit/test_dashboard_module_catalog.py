@@ -26,6 +26,7 @@ def test_the_committed_catalog_registers_the_known_modules() -> None:
             "info-card",
             "info-feed",
             "info-list",
+            "nav-tabs",
             "text-block",
             "twin-2d-view",
             "twin-view",

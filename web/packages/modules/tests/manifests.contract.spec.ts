@@ -222,6 +222,7 @@ describe('一个模块 = 一个目录', () => {
       'info-card',
       'info-feed',
       'info-list',
+      'nav-tabs',
       'text-block',
       'twin-2d-view',
       'twin-view',

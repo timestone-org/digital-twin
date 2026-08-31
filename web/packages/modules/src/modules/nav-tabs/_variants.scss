@@ -1,0 +1,192 @@
+// 页签栏的五档风格、四档轮廓、两档指示条、分隔线与两组动效，一档一个修饰类。
+// 由 Component.vue 的 scoped 块 @use 进来——摊在同一个文件里会把它撑过行数闸门。
+// 颜色一律从 --tab-accent 派生：换肤与换语义色都只动那一个变量。
+
+/* —— 凹槽：一条槽，选中块浮在槽里，与 DtSegmented 的控件档同一套观感 —— */
+.dt-tabs--track {
+  border-color: var(--border-subtle);
+  background: var(--tab-track, var(--surface-sunken));
+  // 往下凹一点：轨道是槽、选中块是浮在槽里的那一块，两者不该在同一个平面上
+  box-shadow: var(--fx-shadow-inset);
+}
+
+.dt-tabs--track .dt-tabs__item.is-active {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tab-accent) 22%, transparent),
+    color-mix(in srgb, var(--tab-accent) 7%, transparent)
+  );
+  color: var(--tab-active-text, var(--tab-accent));
+}
+
+/* —— 页签：没有轨道底，只有贴着内容那一侧的一条分界线 —— */
+.dt-tabs--underline {
+  background: var(--tab-track, transparent);
+}
+
+.dt-tabs--underline.dt-tabs--row {
+  border-bottom-color: color-mix(in srgb, var(--tab-accent) 22%, transparent);
+}
+
+.dt-tabs--underline.dt-tabs--column {
+  border-right-color: color-mix(in srgb, var(--tab-accent) 22%, transparent);
+}
+
+.dt-tabs--underline .dt-tabs__item.is-active {
+  background: color-mix(in srgb, var(--tab-accent) 12%, transparent);
+  color: var(--tab-active-text, var(--tab-accent));
+}
+
+/* —— 实心：选中格整块上主色，其余格全透明 —— */
+.dt-tabs--solid {
+  background: var(--tab-track, transparent);
+}
+
+.dt-tabs--solid .dt-tabs__item.is-active {
+  background: var(--tab-accent);
+  color: var(--tab-active-text, var(--tab-on));
+}
+
+/* —— 科技：上亮下暗的斜面 + 亮边，选中格再压一层更亮的斜面 —— */
+.dt-tabs--hud {
+  border-color: color-mix(in srgb, var(--tab-accent) 40%, transparent);
+  background: var(
+    --tab-track,
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--tab-accent) 14%, transparent),
+      color-mix(in srgb, var(--tab-accent) 4%, transparent)
+    )
+  );
+}
+
+.dt-tabs--hud .dt-tabs__item.is-active {
+  border-color: color-mix(in srgb, var(--tab-accent) 65%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tab-accent) 34%, transparent),
+    color-mix(in srgb, var(--tab-accent) 10%, transparent)
+  );
+  color: var(--tab-active-text, var(--tab-accent));
+}
+
+/* —— 无底：一格底色都不上，只靠文字色与指示条表达当前那一格 —— */
+.dt-tabs--plain {
+  background: var(--tab-track, transparent);
+}
+
+.dt-tabs--plain .dt-tabs__item.is-active {
+  color: var(--tab-active-text, var(--tab-accent));
+}
+
+// 切角：轮廓由 clip-path 裁，故这一档的斜边上没有描边线——那正是它的样子。
+// ⚠ 它连格子外的伪元素一起裁：这一档与「分隔线」同时开时，分隔线看不见
+.dt-tabs--shape-cut .dt-tabs__item {
+  clip-path: polygon(
+    var(--tab-cut) 0,
+    100% 0,
+    100% calc(100% - var(--tab-cut)),
+    calc(100% - var(--tab-cut)) 100%,
+    0 100%,
+    0 var(--tab-cut)
+  );
+}
+
+// 指示条：与模块标题栏那根强调竖条同一套观感（同色、同 6px 辉光）。
+// 长度夹在 12–28px：只摆一枚图标的格子按比例算会缩成一小截
+.dt-tabs--ind-bar .dt-tabs__item.is-active::after,
+.dt-tabs--ind-edge .dt-tabs__item.is-active::after {
+  position: absolute;
+  border-radius: var(--radius-pill);
+  background: var(--tab-accent);
+  box-shadow: 0 0 6px var(--tab-accent);
+  content: '';
+  pointer-events: none;
+}
+
+.dt-tabs--ind-bar .dt-tabs__item.is-active::after {
+  bottom: 0;
+  left: 50%;
+  width: clamp(12px, 56%, 28px);
+  height: var(--tab-ind);
+  transform: translateX(-50%);
+}
+
+.dt-tabs--ind-edge .dt-tabs__item.is-active::after {
+  top: 50%;
+  left: 0;
+  width: var(--tab-ind);
+  height: clamp(12px, 56%, 28px);
+  transform: translateY(-50%);
+}
+
+// 格内对齐：一格自己是个横向 flex（图标 + 文案），故两种排布方向下都是这一条
+.dt-tabs--just-left .dt-tabs__item {
+  justify-content: flex-start;
+}
+
+.dt-tabs--just-right .dt-tabs__item {
+  justify-content: flex-end;
+}
+
+// 分隔线画在格与格之间的空当里，故位置要往回退半个间距
+.dt-tabs--divider .dt-tabs__item + .dt-tabs__item::before {
+  position: absolute;
+  background: color-mix(in srgb, var(--tab-accent) 22%, transparent);
+  content: '';
+  pointer-events: none;
+}
+
+.dt-tabs--divider.dt-tabs--row .dt-tabs__item + .dt-tabs__item::before {
+  top: 22%;
+  bottom: 22%;
+  left: calc(-0.5 * var(--tab-gap) - 0.5px);
+  width: 1px;
+}
+
+.dt-tabs--divider.dt-tabs--column .dt-tabs__item + .dt-tabs__item::before {
+  top: calc(-0.5 * var(--tab-gap) - 0.5px);
+  right: 22%;
+  left: 22%;
+  height: 1px;
+}
+
+.dt-tabs--glow .dt-tabs__item.is-active {
+  box-shadow: 0 0 var(--tab-glow)
+    color-mix(in srgb, var(--tab-accent) 60%, transparent);
+}
+
+// 悬停只对**没选中**的格生效：选中格已经是终态，再提亮一次只会让人以为点错了
+.dt-tabs--hover-tint .dt-tabs__item:hover:not(:disabled, .is-active) {
+  background: color-mix(in srgb, var(--tab-accent) 10%, transparent);
+  color: var(--text-primary);
+}
+
+.dt-tabs--hover-brighten .dt-tabs__item:hover:not(:disabled, .is-active) {
+  filter: brightness(1.15);
+}
+
+.dt-tabs--hover-lift .dt-tabs__item:hover:not(:disabled, .is-active) {
+  transform: translateY(-2px);
+}
+
+.dt-tabs--hover-glow .dt-tabs__item:hover:not(:disabled, .is-active) {
+  border-color: color-mix(in srgb, var(--tab-accent) 55%, transparent);
+  box-shadow: 0 0 14px -4px
+    color-mix(in srgb, var(--tab-accent) 75%, transparent);
+}
+
+// ⚠ 按下的位移必须排在悬停之后：两条选择器特异度相同，按住时要让按下那一档赢
+.dt-tabs--press-sink .dt-tabs__item:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.dt-tabs--press-shrink .dt-tabs__item:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dt-tabs__item {
+    transition: none;
+  }
+}
