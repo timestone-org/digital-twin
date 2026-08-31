@@ -394,7 +394,7 @@ export interface CardFieldContext {
 }
 
 /** 只挂 `.dt-module--card` 的框类键（chrome.scss）：裸渲染壳没有消费点。 */
-const BARE_HIDDEN_KEYS: ReadonlySet<string> = new Set([
+export const BARE_HIDDEN_KEYS: ReadonlySet<string> = new Set([
   'bg',
   'backdropBlur',
   'hoverLift',
