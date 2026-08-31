@@ -9,9 +9,21 @@ from ai_assistant.apps.chat.services.tools.ports import (
     ToolProvider,
     UnknownTool,
 )
+from ai_assistant.apps.chat.services.tools.registry import (
+    DuplicateTool,
+    ToolRegistry,
+    all_specs,
+    build_registry,
+    registry_of,
+)
 
 __all__ = [
+    "DuplicateTool",
     "RunsElsewhere",
     "ToolProvider",
+    "ToolRegistry",
     "UnknownTool",
+    "all_specs",
+    "build_registry",
+    "registry_of",
 ]
