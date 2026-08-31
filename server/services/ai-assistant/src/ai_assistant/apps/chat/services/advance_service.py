@@ -16,7 +16,6 @@ from typing import Any
 
 from langchain_core.messages import (
     BaseMessage,
-    HumanMessage,
     SystemMessage,
     ToolMessage,
 )
@@ -123,6 +122,9 @@ class AdvanceInput:
     surface_kind: str
     surface_label: str = ""
     user_text: str | None = None
+    # 用户随这句话贴的图（完整 data URI）。⚠ 与截图同口径：只活这一轮，
+    # 落库存一句占位——存下来的话这个会话每重放一次就再喂一遍
+    user_images: list[str] = field(default_factory=list[str])
     tool_results: list[ClientToolResult] = field(
         default_factory=list[ClientToolResult]
     )
@@ -143,7 +145,7 @@ def incoming_messages(payload: AdvanceInput) -> list[BaseMessage]:
     Args: payload。
     """
     if payload.user_text is not None:
-        return [HumanMessage(content=payload.user_text)]
+        return [vision.user_message(payload.user_text, payload.user_images)]
     replies: list[BaseMessage] = [
         ToolMessage(content=result.as_text(), tool_call_id=result.call_id)
         for result in payload.tool_results
@@ -344,10 +346,14 @@ def _with_plan_tools(
 
 
 def has_image(payload: AdvanceInput) -> bool:
-    """这一次回填里有没有图，也就是这一轮要不要走视觉档。
+    """这一次里有没有图，也就是这一轮要不要走视觉档。
+
+    两条来路：用户随这句话贴的，与工具截回来的。
 
     Args: payload。
     """
+    if payload.user_images:
+        return True
     return any(one.image() is not None for one in payload.tool_results)
 
 

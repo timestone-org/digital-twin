@@ -34,6 +34,7 @@ function fakeAi(open = false, available = true): AiPanel {
   return {
     isAvailable: ref<boolean>(available),
     models: ref([]),
+    attachmentSuffixes: ref([]),
     choice: ref({ profile: '', effort: '' }),
     pickModel: vi.fn(() => Promise.resolve()),
     isOpen,

@@ -10,10 +10,13 @@
 回一句「图在下一条」，图另起一条用户消息。
 """
 
+from typing import Any
+
 from langchain_core.messages import BaseMessage, HumanMessage
 
-# 落库与重放时代替图本身的那句话
-PLACEHOLDER = "[截图]"
+# 落库与重放时代替图本身的那句话。⚠ 说「图片」而不是「截图」：用户贴进来的
+# 图与助手自己截的图共用这一句，写成「截图」会让模型以为那张照片是它自己截的
+PLACEHOLDER = "[图片]"
 
 _PREFIX = "data:image/"
 
@@ -27,6 +30,25 @@ def is_image(value: object) -> bool:
     Args: value。
     """
     return isinstance(value, str) and value.startswith(_PREFIX)
+
+
+def user_message(text: str, uris: list[str]) -> BaseMessage:
+    """用户这一句话，外加他贴的几张图。
+
+    ⚠ 没有图时回一条**纯字符串**的消息，不是只有一个文字块的列表：两者喂给
+    端点是等价的，但落库与重放的路径只对前者验过，改形状等于把那条路重走一遍。
+
+    Args: text, uris（`data:image/...;base64,...`，已过解码器的白名单）。
+    """
+    if not uris:
+        return HumanMessage(content=text)
+    # ⚠ 标成 `str | dict` 的列表而不是 `list[dict[...]]`：上游那一格是不变量
+    # 泛型，窄一点的元素类型直接判不兼容
+    blocks: list[str | dict[Any, Any]] = [{"type": "text", "text": text}]
+    blocks.extend(
+        {"type": "image_url", "image_url": {"url": one}} for one in uris
+    )
+    return HumanMessage(content=blocks)
 
 
 def image_message(uri: str) -> BaseMessage:

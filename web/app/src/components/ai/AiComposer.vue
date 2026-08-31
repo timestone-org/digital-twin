@@ -18,9 +18,12 @@ import AiAttachmentChip from '@/components/ai/AiAttachmentChip.vue'
 import AiModelPicker from '@/components/ai/AiModelPicker.vue'
 import type { ComposeState, ModelChoice } from '@/composables/useAiPanel'
 import {
-  ATTACHMENT_ACCEPT,
+  acceptOf,
+  imagesOf,
+  looksLikeImage,
   toBase64,
   toPending,
+  toPendingImage,
   withAttachments,
 } from '@/features/ai/attachment'
 import { composeKeyOf } from '@/features/ai/composeKeys'
@@ -44,10 +47,12 @@ const props = defineProps<{
   models?: readonly AssistantModelProfile[] | undefined
   /** 这个会话选了哪一路。 */
   choice?: ModelChoice | undefined
+  /** 附件收哪些后缀，服务端下发。空表时退到兜底名单。 */
+  attachmentSuffixes?: readonly string[] | undefined
 }>()
 
 const emit = defineEmits<{
-  send: [text: string]
+  send: [text: string, images: string[]]
   stop: []
   pick: [value: ModelChoice]
 }>()
@@ -60,15 +65,17 @@ const canSend = computed(
       props.compose.attachments.value.length > 0),
 )
 
+const accept = computed(() => acceptOf(props.attachmentSuffixes ?? []))
+
 function send(): void {
   if (!canSend.value) return
-  const text = withAttachments(
-    props.compose.draft.value,
-    props.compose.attachments.value,
-  )
+  const pending = props.compose.attachments.value
+  // 文本类并进那句话，图片类单独走：图要进视觉档的图片块，摊成文字就没了
+  const text = withAttachments(props.compose.draft.value, pending)
+  const images = imagesOf(pending)
   props.compose.setDraft('')
   props.compose.setAttachments([])
-  emit('send', text)
+  emit('send', text, images)
 }
 
 function onKeydown(event: KeyboardEvent): void {
@@ -95,11 +102,13 @@ async function attach(files: File[]): Promise<void> {
   attaching.value = true
   attachError.value = ''
   try {
-    const parsed = await parseAttachment(file.name, await toBase64(file))
-    props.compose.setAttachments([
-      ...props.compose.attachments.value,
-      toPending(file.name, parsed),
-    ])
+    // 图不上传去解析：它是几兆字节，上去再原样下来纯属浪费——手里本来就有
+    // 那份字节。收不收由服务端在 :advance 那条路上按字节判
+    const base64 = await toBase64(file)
+    const one = looksLikeImage(file.name)
+      ? toPendingImage(file, base64)
+      : toPending(file.name, await parseAttachment(file.name, base64))
+    props.compose.setAttachments([...props.compose.attachments.value, one])
   } catch (error) {
     attachError.value =
       error instanceof Error ? error.message : '读不了这个文件'
@@ -167,7 +176,7 @@ defineExpose({ focusInput })
 
       <div class="ai-inputbox__tools">
         <DtFilePicker
-          :accept="ATTACHMENT_ACCEPT"
+          :accept="accept"
           :disabled="attaching"
           @select="(files) => void attach(files)"
         >
@@ -179,7 +188,7 @@ defineExpose({ focusInput })
               icon="paperclip"
               :loading="attaching"
               aria-label="附一份参考文件"
-              title="附文件：表格附成竖线表，文本原样附上"
+              title="附文件或图片：表格附成竖线表，图只这一轮看得见"
               @click="open"
             />
           </template>

@@ -59,6 +59,12 @@ export interface AssistantCapability {
   /** 没选过时用哪一路。 */
   default_model_id: string
   /**
+   * 附件收哪些后缀，file input 的 accept 直接用它。
+   * ⚠ 由服务端的解码器注册表算出来下发，前端不再写死一份：两份漂开的表现是
+   * 「选得中的文件传上去被拒」，而两边单看都对。
+   */
+  attachment_suffixes: string[]
+  /**
    * 没选过时用哪一档推理。
    * ⚠ 前端**不许再判一次**这一档配不配得上 `default_model_id` 那一路：
    * 两份口径迟早分叉，而分叉的表现是界面上选着一档、发出去的是另一档。
@@ -261,15 +267,17 @@ export interface AssistantToolCall {
  * ⚠ 服务端**不存文件**：读完就把内容交出来，由前端附在用户那句话后面——
  * 用户看得见助手将要看到什么，这一点比省几行界面重要。
  */
-export interface AssistantParsedTable {
-  columns: string[]
-  rows: string[][]
+export interface AssistantParsedAttachment {
   /** 内容超上限时截断了。⚠ 截断了要在界面上说出来。 */
   is_truncated: boolean
-  /** 截断前的总行数。 */
-  total_rows: number
   /** 摊平给模型看的那一段：表格是竖线分隔，纯文本是原文（含截断说明）。 */
   text: string
+  /**
+   * 给人看的一句概况（「12 列 × 200 行，已截断」）。
+   * ⚠ 由服务端跟正文一起算：界面自己再算一份的话，用户看到的口径会与真正
+   * 喂给模型的那一份漂开。
+   */
+  summary: string
 }
 
 /**

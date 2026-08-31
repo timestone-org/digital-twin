@@ -11,7 +11,7 @@ import type {
   AssistantCredentialStatus,
   AssistantDeviceLoginPoll,
   AssistantDeviceLoginStart,
-  AssistantParsedTable,
+  AssistantParsedAttachment,
   AssistantSession,
   AssistantSessionDetail,
   AssistantSurfaceKind,
@@ -177,6 +177,12 @@ export interface AdvanceBody {
    */
   client_tools?: string[]
   user_text?: string
+  /**
+   * 用户随这句话贴的图，完整的 data URI。
+   * ⚠ 只跟 `user_text` 一起发：那一批工具消息与它们的调用必须相邻，
+   * 中间插一条带图的用户消息会把它们拆开。
+   */
+  user_images?: string[]
   tool_results?: {
     call_id: string
     output?: unknown
@@ -214,8 +220,8 @@ export function advanceTurn(
 export async function parseAttachment(
   filename: string,
   contentBase64: string,
-): Promise<AssistantParsedTable> {
-  return requestData<AssistantParsedTable>(
+): Promise<AssistantParsedAttachment> {
+  return requestData<AssistantParsedAttachment>(
     '/attachments:parse',
     onAssistant({
       method: 'POST',

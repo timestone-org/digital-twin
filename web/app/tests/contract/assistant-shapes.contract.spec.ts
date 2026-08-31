@@ -22,7 +22,7 @@ import type {
   AssistantDeviceLoginStart,
   AssistantModelProfile,
   AssistantMessage,
-  AssistantParsedTable,
+  AssistantParsedAttachment,
   AssistantSession,
   AssistantSessionDetail,
   AssistantSkill,
@@ -115,6 +115,7 @@ const SHAPES: Record<string, Record<string, true>> = {
     models: true,
     default_model_id: true,
     default_effort: true,
+    attachment_suffixes: true,
   } satisfies Keys<AssistantCapability>,
   ModelProfileOut: {
     id: true,
@@ -193,12 +194,10 @@ const SHAPES: Record<string, Record<string, true>> = {
     created_at: true,
   } satisfies Keys<AssistantMessage>,
   AttachmentParseOut: {
-    columns: true,
-    rows: true,
     is_truncated: true,
-    total_rows: true,
     text: true,
-  } satisfies Keys<AssistantParsedTable>,
+    summary: true,
+  } satisfies Keys<AssistantParsedAttachment>,
   StepOut: {
     id: true,
     message_id: true,

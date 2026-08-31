@@ -39,6 +39,8 @@ const props = defineProps<{
   models?: readonly AssistantModelProfile[] | undefined
   /** 这个会话选了哪一路。 */
   choice?: ModelChoice | undefined
+  /** 附件收哪些后缀，服务端下发；前端不写死一份。 */
+  attachmentSuffixes?: readonly string[] | undefined
 }>()
 
 const emit = defineEmits<{
@@ -129,7 +131,8 @@ function onEscape(event: KeyboardEvent): void {
       :last-said="lastSaid"
       :models="models"
       :choice="choice"
-      @send="(text) => void chat.send(text)"
+      :attachment-suffixes="attachmentSuffixes"
+      @send="(text, images) => void chat.send(text, images)"
       @stop="chat.stop"
       @pick="(value) => emit('pick', value)"
     />

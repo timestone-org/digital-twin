@@ -60,6 +60,16 @@
             "title": "Tool Results",
             "type": "array"
           },
+          "user_images": {
+            "items": {
+              "maxLength": 4000000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 4,
+            "title": "User Images",
+            "type": "array"
+          },
           "user_text": {
             "anyOf": [
               {
@@ -464,44 +474,25 @@
         "type": "object"
       },
       "AttachmentParseOut": {
-        "description": "读出来的内容。表格有 columns/rows；纯文本两者为空，正文只在 text 里。",
+        "description": "读出来的内容。\n\n⚠ 只回摊平后的正文与一句概况，不再回 columns/rows：界面唯一用它们的地方\n是拼「几列几行」那句话，而那句话现在由服务端跟正文一起算（`summary_of`）。\n各算一份的话，用户看到的口径会与真正喂给模型的那一份漂开。\n\n⚠ 这条端点**不收图**。图是几兆字节，上去再原样下来纯属浪费——浏览器手里\n本来就有那份字节。它随 `:advance` 的 `user_images` 走，白名单在那条路上判。",
         "properties": {
-          "columns": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Columns",
-            "type": "array"
-          },
           "is_truncated": {
             "title": "Is Truncated",
             "type": "boolean"
           },
-          "rows": {
-            "items": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "title": "Rows",
-            "type": "array"
+          "summary": {
+            "title": "Summary",
+            "type": "string"
           },
           "text": {
             "title": "Text",
             "type": "string"
-          },
-          "total_rows": {
-            "title": "Total Rows",
-            "type": "integer"
           }
         },
         "required": [
-          "columns",
-          "rows",
           "is_truncated",
-          "total_rows",
-          "text"
+          "text",
+          "summary"
         ],
         "title": "AttachmentParseOut",
         "type": "object"
@@ -509,6 +500,13 @@
       "CapabilityOut": {
         "description": "助手能力。\n\n⚠ 前端把「取不到这份」当作「助手不存在」而不是「暂时故障」：某些现场\n根本不部署本服务，那时边缘直接 502，入口就该干净地不出现。",
         "properties": {
+          "attachment_suffixes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Attachment Suffixes",
+            "type": "array"
+          },
           "default_effort": {
             "default": "medium",
             "title": "Default Effort",
@@ -1431,7 +1429,7 @@
   "paths": {
     "/api/v1/assistant/attachments:parse": {
       "post": {
-        "description": "读一份 xlsx / csv / 纯文本：表格摊成表头加数据行，文本原样截取。\n\nArgs: payload, _caller。",
+        "description": "读一份 xlsx / csv / 纯文本：表格摊成竖线表，文本原样截取。\n\nArgs: payload, _caller。",
         "operationId": "parse_attachment_api_v1_assistant_attachments_parse_post",
         "requestBody": {
           "content": {
