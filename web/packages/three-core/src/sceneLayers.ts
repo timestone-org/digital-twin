@@ -14,7 +14,7 @@ import type {
   TwinPartValues,
   Vec3,
 } from '@dt/twin-config'
-import type * as THREE from 'three'
+import * as THREE from 'three'
 
 import { AnchorLayer } from './anchorLayer'
 import { ArrowLayer } from './arrowLayer'
@@ -37,6 +37,18 @@ export interface SceneLayerValues {
 
 /** 一套覆盖层。宿主挂载时建一份，卸载时 `dispose`。 */
 export class SceneLayers {
+  /**
+   * 五个组的共同父节点，**CSS2D 与 CSS3D 两个渲染器只遍历它**。
+   *
+   * ⚠ 这不是收纳：那两个渲染器每帧都会把传进去的那棵树整个走一遍（还各自
+   * 再 `updateMatrixWorld` 一次）。传整个 scene 的话，一棵几千节点的模型每帧
+   * 要被白走四遍——而它只在「模型一大就掉帧」时才看得出来，看不出是谁干的。
+   * ⚠ 类型是 `Scene` 不是 `Group`：三方那两个渲染器的签名要 `Scene`，而运行期
+   * 它们只当普通 `Object3D` 用。嵌在主场景里的 `Scene` 对 WebGL 渲染器也只是
+   * 一个节点（背景与雾只认最外层那一份），所以这样接得上、也不用写断言。
+   */
+  readonly root = new THREE.Scene()
+
   readonly anchors: AnchorLayer
   readonly arrows: ArrowLayer
   readonly panels: PanelLayer
@@ -48,7 +60,17 @@ export class SceneLayers {
   /** 宿主元素，CSS2D 标签与主题色解析都要用它。 */
   private readonly host: HTMLElement | null
 
+  /**
+   * 上一次真算过距离规则时的取景状态。镜头没动、值也没变的那些帧整帧跳过。
+   * ⚠ 初值是 NaN：NaN 与谁比都不等，所以第一帧一定会算。
+   */
+  private readonly lastCamera = new THREE.Vector3(NaN, NaN, NaN)
+  private readonly lastTarget = new THREE.Vector3(NaN, NaN, NaN)
+  /** 配置或实时值刚变过，下一帧必须算一次，与镜头动没动无关。 */
+  private distanceDirty = true
+
   constructor(host: HTMLElement | null) {
+    this.root.name = 'twin-overlays'
     this.host = host
     this.parts = new PartsLayer(host)
     this.anchors = new AnchorLayer(host)
@@ -58,15 +80,16 @@ export class SceneLayers {
     this.effects = new SceneEffectsLayer()
   }
 
-  /** 五个组一次性挂进场景。 */
+  /** 五个组一次性挂进场景，共用一个覆盖层根。 */
   addTo(scene: THREE.Scene): void {
-    scene.add(
+    this.root.add(
       this.anchors.group,
       this.arrows.group,
       this.panels.group,
       this.flows.group,
       this.effects.group,
     )
+    scene.add(this.root)
   }
 
   /**
@@ -79,6 +102,7 @@ export class SceneLayers {
     values: SceneLayerValues,
     nodeIndex: NodeIndex,
   ): void {
+    this.distanceDirty = true
     this.parts.build(nodeIndex, config.parts)
     this.anchors.build(config.anchors)
     this.arrows.build(config.arrows)
@@ -93,6 +117,9 @@ export class SceneLayers {
    * @param values 六路实时值
    */
   setValues(values: SceneLayerValues): void {
+    // ⚠ 部件的染色是从值来的，不是从距离来的：漏了这一句，镜头停着不动时
+    //   点位再怎么变，部件的颜色都不会跟着走
+    this.distanceDirty = true
     this.parts.setValues(values.parts)
     this.anchors.setValues(values.anchors)
     this.arrows.setValues(values.arrows)
@@ -106,10 +133,22 @@ export class SceneLayers {
    * ⚠ 每帧都调，故这里只算距离、不重建任何对象。配置变了走 `build`。
    * ⚠ 少调一处，那一类元素上配的距离规则就完全不生效——而它既不报错，
    * 也不会在别处露出任何痕迹。
+   * ⚠ 镜头没动且值没变的那些帧整帧跳过：结果与上一帧逐字相同，算了也是原样
+   * 写回去。判据里的「值没变」一条不能少，否则镜头停着时染色就冻住了。
    *
    * @param context 这一帧的相机与轨道中心
    */
   applyDistanceRules(context: DistanceContext): void {
+    // ⚠ 镜头没动、值也没变时这一整趟的结果与上一帧逐字相同：几百个部件各算一遍
+    //   显隐与外观，算完再原样写回去。跳过它不改变任何一帧的画面
+    const still =
+      !this.distanceDirty &&
+      this.lastCamera.equals(context.cameraPosition) &&
+      this.lastTarget.equals(context.orbitTarget)
+    if (still) return
+    this.lastCamera.copy(context.cameraPosition)
+    this.lastTarget.copy(context.orbitTarget)
+    this.distanceDirty = false
     this.parts.apply(context)
     this.anchors.applyDistance(context)
     this.arrows.applyDistance(context)
