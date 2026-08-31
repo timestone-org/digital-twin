@@ -30,12 +30,19 @@ class AttachmentParseIn(InputModel):
 
 
 class AttachmentParseOut(OutputModel):
-    """读出来的内容。表格有 columns/rows；纯文本两者为空，正文只在 text 里。"""
+    """读出来的内容。
 
-    columns: list[str]
-    rows: list[list[str]]
+    ⚠ 只回摊平后的正文与一句概况，不再回 columns/rows：界面唯一用它们的地方
+    是拼「几列几行」那句话，而那句话现在由服务端跟正文一起算（`summary_of`）。
+    各算一份的话，用户看到的口径会与真正喂给模型的那一份漂开。
+
+    ⚠ 这条端点**不收图**。图是几兆字节，上去再原样下来纯属浪费——浏览器手里
+    本来就有那份字节。它随 `:advance` 的 `user_images` 走，白名单在那条路上判。
+    """
+
     is_truncated: bool
-    total_rows: int
     # 摊平给模型看的那一段。前端把它附在用户这句话后面——**用户看得见**
     # 助手将要看到什么，这一点比省几行界面重要
     text: str
+    # 给人看的一句概况（「12 列 × 200 行，已截断」）
+    summary: str

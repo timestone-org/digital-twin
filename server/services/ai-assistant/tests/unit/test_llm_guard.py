@@ -27,7 +27,7 @@ from ai_assistant.llm import (
     ModelUnavailable,
 )
 from ai_assistant.llm.guard import usage_of
-from ai_assistant.llm.provider import ModelChoice
+from ai_assistant.llm.ports import ModelChoice
 from lib.resilience import CircuitBreaker
 from lib.testing.clock import FrozenClock
 from unit.llm_fakes import ScriptedChat, StreamingChat, asks
@@ -359,3 +359,55 @@ async def test_the_pay_per_token_route_keeps_the_names_as_they_are() -> None:
     assert isinstance(sent, dict)
     assert sent["function"]["name"] == "points.search"
     assert answer.tool_calls[0]["name"] == "points.search"
+
+
+_Breakers = dict[tuple[str, str], CircuitBreaker]
+
+
+def _two_kind_guard() -> tuple[GuardedModel, _Breakers]:
+    """同一路的两档各配一份断路器。"""
+    breakers = {
+        ("default", kind): CircuitBreaker(
+            name=f"model:default:{kind}",
+            failure_threshold=THRESHOLD,
+            reset_after_s=RESET_AFTER_S,
+            clock=FrozenClock(),
+        )
+        for kind in ("chat", "vision")
+    }
+
+    # 挂的是**端点**，所以失败要从模型调用里出来，不是从取模型那一步
+    broken = ScriptedChat(
+        reply=AIMessage(content=""),
+        error=APIConnectionError(request=httpx.Request("POST", "http://x")),
+    )
+
+    async def source(_choice: ModelChoice) -> BaseChatModel:
+        return broken
+
+    guarded = GuardedModel(
+        source=source,
+        breaker=breakers[("default", "chat")],
+        breakers=breakers,
+    )
+    return guarded, breakers
+
+
+async def test_a_broken_vision_endpoint_does_not_short_circuit_the_chat_one(
+    # 看图那一档可以配成另一家端点（ASSISTANT_VISION_BASE_URL）。断路器只按
+    # 档位分的话，它连挂几次会把同一路的对话一起短路掉，
+    # 而用户看到的是「助手整个不能说话了」
+) -> None:
+    """⚠ 断路器的键是 (档位, 用途) 两维，少一维就是跨档误伤。"""
+    guarded, breakers = _two_kind_guard()
+
+    for _ in range(THRESHOLD):
+        with pytest.raises(ModelUnavailable):
+            await guarded.respond(
+                choice=ModelChoice(kind="vision"),
+                messages=[HumanMessage(content="看图")],
+                tools=[],
+            )
+
+    assert breakers[("default", "vision")].state == "open"
+    assert breakers[("default", "chat")].state == "closed"

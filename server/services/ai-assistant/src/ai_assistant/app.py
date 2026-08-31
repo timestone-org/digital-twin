@@ -60,6 +60,12 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
             shutdown_order=40,
         ),
         LifespanHook(
+            name="mcp",
+            # ⚠ 与 platform 同一档：在途的回合还可能正等某一路 MCP 答复
+            shutdown=container.mcp.client.close,
+            shutdown_order=45,
+        ),
+        LifespanHook(
             name="platform",
             # ⚠ 停在存储之前：在途的回合还可能正等它答复，而那之后才轮到
             # 把「这一步失败了」写回步骤表

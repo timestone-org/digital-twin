@@ -32,8 +32,9 @@ async def test_a_csv_comes_back_as_a_table(
     )
     assert response.status_code == 200
     data = response.json()["data"]
-    assert data["columns"] == ["code", "name"]
-    assert data["rows"] == [["a", "出口温度"]]
+    assert "code | name" in data["text"]
+    # 概况由服务端跟正文一起算：界面另算一份的话，两边口径会漂
+    assert data["summary"] == "2 列 × 1 行"
 
 
 async def test_the_flattened_text_is_pipe_separated(
@@ -54,8 +55,8 @@ async def test_a_plain_text_file_comes_back_verbatim(
     )
     assert response.status_code == 200
     data = response.json()["data"]
-    assert data["columns"] == []
     assert data["text"] == "1 号机组一切正常"
+    assert data["summary"] == "1 行"
 
 
 async def test_content_that_is_not_base64_is_refused(
@@ -91,3 +92,14 @@ async def test_a_caller_without_the_code_is_refused(
         headers=make(["dashboard:view"]),
     )
     assert response.status_code == 403
+
+
+async def test_an_image_is_turned_away_from_this_endpoint(
+    db_client: httpx.AsyncClient,
+) -> None:
+    # 图随消息走，不上这条端点——静默回一段空文本的话，用户会以为附上了，
+    # 而助手一个字都没收到
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 32
+    response = await db_client.post(PARSE_URL, json=_body("现场.png", png))
+    assert response.status_code == 422
+    assert "图片" in response.json()["message"]

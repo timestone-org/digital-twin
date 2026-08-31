@@ -14,7 +14,7 @@ from collections.abc import Callable
 
 import httpx
 
-from ai_assistant.apps.chat.services.server_tools import ServerTools
+from ai_assistant.apps.chat.services.tools.providers.server import ServerTools
 from ai_assistant.upstream import PlatformClient
 
 Handler = Callable[[httpx.Request], httpx.Response]

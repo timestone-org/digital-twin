@@ -9,6 +9,7 @@ import { DtFilePicker } from '@dt/ui'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { effectScope, type EffectScope } from 'vue'
 
+import { parseAttachment } from '@/api/assistant'
 import AiAssistantPanel from '@/components/ai/AiAssistantPanel.vue'
 import { useAiConversation } from '@/composables/useAiConversation'
 import { newComposeState } from '@/composables/useAiPanel'
@@ -21,20 +22,16 @@ vi.mock('@/api/assistant', () => ({
   parseAttachment: vi.fn((filename: string) => {
     if (filename.endsWith('.txt'))
       return Promise.resolve({
-        columns: [],
-        rows: [],
         is_truncated: false,
-        total_rows: 2,
         text: '上午一切正常\n下午停机',
+        summary: '2 行',
       })
     if (!filename.endsWith('.csv'))
       return Promise.reject(new Error('只认得表格或纯文本'))
     return Promise.resolve({
-      columns: ['code', 'name'],
-      rows: [['a', '温度']],
       is_truncated: false,
-      total_rows: 1,
       text: 'code | name\na | 温度',
+      summary: '2 列 × 1 行',
     })
   }),
 }))
@@ -226,6 +223,29 @@ describe('附文件', () => {
       expect(wrapper.text()).toContain('巡检.txt')
     })
     expect(wrapper.text()).toContain('2 行')
+  })
+
+  it('贴图不走解析端点——它几兆字节，上去再原样下来纯属浪费', async () => {
+    // ⚠ 假件的调用记录在本文件内跨用例累积，先清一次再断言「没被调过」
+    vi.mocked(parseAttachment).mockClear()
+    const wrapper = mountPanel()
+    pick(wrapper, new File(['x'], '现场.png', { type: 'image/png' }))
+    await vi.waitFor(() => {
+      expect(wrapper.text()).toContain('现场.png')
+    })
+    expect(vi.mocked(parseAttachment)).not.toHaveBeenCalled()
+    // 概况里要说清只这一轮看得见，否则第二句「再看看那张图」没人解释得了
+    expect(wrapper.text()).toContain('只这一轮看得见')
+  })
+
+  it('图点开是缩略图，不是几兆字节的 data URI 摊在 pre 里', async () => {
+    const wrapper = mountPanel()
+    pick(wrapper, new File(['x'], '现场.png', { type: 'image/png' }))
+    await vi.waitFor(() => {
+      expect(wrapper.text()).toContain('现场.png')
+    })
+    await wrapper.find('.ai-file__head').trigger('click')
+    expect(wrapper.find('img.ai-file__thumb').exists()).toBe(true)
   })
 
   it('发送时附件并进那句话，随后清空待发区', async () => {

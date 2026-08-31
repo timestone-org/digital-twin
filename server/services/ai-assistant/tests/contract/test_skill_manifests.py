@@ -7,10 +7,11 @@
 
 from ai_assistant.apps.chat.enums import SURFACE_KINDS
 from ai_assistant.apps.chat.services import skill_catalog
-from ai_assistant.apps.chat.services.plan import is_plan_tool
-from ai_assistant.apps.chat.services.server_tools import ServerTools
-from ai_assistant.apps.chat.services.tool_select import specs_for
-from ai_assistant.apps.chat.services.tool_specs import TOOL_SPECS
+from ai_assistant.apps.chat.services.intent.select import specs_for
+from ai_assistant.apps.chat.services.planning.plan import is_plan_tool
+from ai_assistant.apps.chat.services.tools.providers.memory import MemoryTools
+from ai_assistant.apps.chat.services.tools.providers.server import ServerTools
+from ai_assistant.apps.chat.services.tools.specs import TOOL_SPECS
 from ai_assistant.apps.chat.skills import list_skills
 
 # 登记名直接取自工具规格真源。⚠ 不许手抄一份：手抄的名单会让「技能声明了、
@@ -93,9 +94,18 @@ def test_the_catalog_is_ordered_by_name() -> None:
 
 
 def _implemented() -> set[str]:
-    """服务端工具的两个实现家：工具分派表，与计划子系统自己收走的那一个。"""
+    """服务端工具的实现家：各路 provider 的分派表，加计划子系统收走的那一个。
+
+    ⚠ **逐路问，不走注册表的 `owners`**：`owners` 是从各路的 `specs()` 建的，
+    拿它来比等于拿规格跟自己比，这条闸会变成恒真。
+    ⚠ 加一路**规格进得了 `TOOL_SPECS`** 的服务端 provider 要在这里加一行，
+    否则它实现的工具会被判成「没人实现」。
+    ⚠ MCP 那一路**不用加**：它的规格逐轮才知道（某一路连不上时那几个工具这一轮
+    就不在），因此根本不进这张静态表——把它加进来反而会让这条闸恒红。
+    """
     return {
         *ServerTools()._handlers(),
+        *MemoryTools()._handlers(),
         *(name for name in KNOWN_SERVER_TOOLS if is_plan_tool(name)),
     }
 
@@ -107,7 +117,7 @@ def test_every_server_tool_has_an_implementation_behind_it() -> None:
 
 def test_the_dispatch_table_never_grows_a_tool_nobody_declared() -> None:
     # 反过来也守：实现了却没进规格的工具，模型永远看不见它
-    assert set(ServerTools()._handlers()) - KNOWN_SERVER_TOOLS == set()
+    assert _implemented() - KNOWN_SERVER_TOOLS == set()
 
 
 def test_no_skill_claims_the_builtin_ask_tool() -> None:

@@ -43,7 +43,6 @@ function user(codes: string[]) {
 function capability(models: unknown[]) {
   return {
     is_model_enabled: models.length > 0,
-    is_vision_enabled: false,
     skills: [],
     models,
     default_model_id: 'default',

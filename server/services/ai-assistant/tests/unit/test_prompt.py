@@ -5,7 +5,7 @@
 且挤掉了哪一段从外面完全看不出来。
 """
 
-from ai_assistant.apps.chat.services.prompt import build_system_prompt
+from ai_assistant.apps.chat.services.memory.prompt import build_system_prompt
 from ai_assistant.apps.chat.skills import find_skill, skills_for
 
 # 常驻部分的字数上限。松一点没关系，它拦的是「有人把整份正文铺进来」——

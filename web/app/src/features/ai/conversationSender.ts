@@ -36,8 +36,8 @@ export interface SenderParts {
 /** 造出「发一句话」这个动作。 */
 export function createSender(
   parts: SenderParts,
-): (text: string) => Promise<void> {
-  return async function send(text: string): Promise<void> {
+): (text: string, images?: string[]) => Promise<void> {
+  return async function send(text: string, images?: string[]): Promise<void> {
     const id = parts.sessionId()
     const advance = aiPorts()?.advance
     if (id === null || advance === undefined) {
@@ -52,7 +52,7 @@ export function createSender(
     parts.edit((log) => withSaid(log, 'user', text))
     try {
       await runTurn(
-        inputOf(parts, id, advance, text, controller),
+        inputOf(parts, id, advance, { text, images: images ?? [] }, controller),
         sinkOf(parts),
       )
     } catch (error) {
@@ -72,7 +72,9 @@ function inputOf(
   parts: SenderParts,
   sessionId: string,
   advance: AdvanceStream,
-  userText: string,
+  // ⚠ 话与图打成一包而不是两个形参：这个函数的形参上限是 5，而这两样本来
+  // 就是同一句话的两半——拆开传的下一步就是有人只更新其中一半
+  said: { text: string; images: string[] },
   controller: AbortController,
 ): Parameters<typeof runTurn>[0] {
   const where = parts.surface()
@@ -81,7 +83,8 @@ function inputOf(
     sessionId,
     surfaceKind: where.kind,
     surfaceLabel: where.label,
-    userText,
+    userText: said.text,
+    userImages: said.images,
     signal: controller.signal,
   }
 }

@@ -16,32 +16,42 @@ from typing import Any
 
 from langchain_core.messages import (
     BaseMessage,
-    HumanMessage,
     SystemMessage,
     ToolMessage,
 )
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_assistant.apps.chat.crud import session_crud
 from ai_assistant.apps.chat.models import ChatMessage, ChatSession, ChatStep
-from ai_assistant.apps.chat.services import (
+from ai_assistant.apps.chat.services.intent import select as tool_select
+from ai_assistant.apps.chat.services.memory import (
     history,
     state_block,
-    tool_select,
-    vision,
+    summarize,
 )
-from ai_assistant.apps.chat.services import (
-    plan as plan_service,
-)
-from ai_assistant.apps.chat.services.prompt import build_system_prompt
-from ai_assistant.apps.chat.services.server_tools import ServerTools
-from ai_assistant.apps.chat.services.turn import (
+from ai_assistant.apps.chat.services.memory.ports import Summarizer, Summary
+from ai_assistant.apps.chat.services.memory.prompt import build_system_prompt
+from ai_assistant.apps.chat.services.perception import vision
+from ai_assistant.apps.chat.services.planning import plan as plan_service
+from ai_assistant.apps.chat.services.planning.turn import (
     ServerToolRunner,
     TurnDeps,
     TurnEvent,
     stream_turn,
 )
-from ai_assistant.apps.chat.services.turn_types import TurnOutcome, TurnStep
+from ai_assistant.apps.chat.services.planning.turn_types import (
+    TurnOutcome,
+    TurnStep,
+)
+from ai_assistant.apps.chat.services.tools.providers.mcp import (
+    PROVIDER as MCP_PROVIDER,
+)
+from ai_assistant.apps.chat.services.tools.registry import (
+    ProviderDeps,
+    build_registry,
+)
+from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
 from ai_assistant.container import Container
 from ai_assistant.llm import (
     DEFAULT_PROFILE,
@@ -60,6 +70,10 @@ _logger = get_logger("assistant.advance")
 # 回滚连接，否则跑一遍回合就在库里留下真数据
 SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 
+# 按会话的档位造一个折叠器。⚠ 是工厂不是单例：折叠要跟着这个会话选的那一路走，
+# 否则一个只登录了订阅账号的部署永远折不出摘要（`memory/summarize.py`）
+SummarizerFactory = Callable[[str], Summarizer]
+
 
 @dataclass(frozen=True)
 class AdvanceDeps:
@@ -68,23 +82,70 @@ class AdvanceDeps:
     sessions: SessionFactory
     model: GuardedModel
     server_tools: ServerToolRunner
+    summarizer: SummarizerFactory
+    # 这一轮才知道的那几个工具规格（眼下只有 MCP：某一路连不上时它的工具这一轮
+    # 就不在）。⚠ 它们不在静态的 `TOOL_SPECS` 里，要单独交给 `specs_for`
+    extra_specs: tuple[ToolSpec, ...] = ()
+    # 调用者持有的权限码，`PermissionGate` 按它收窄技能。
+    # ⚠ 只能来自已认证的 `CallerContext`，绝不从载荷取——载荷是用户可控的。
+    # ⚠ `None` 与空集不是一回事：`None` 是「没给」这一道不收窄，空集是「一个码
+    # 都没有」该收窄的一个不留（`intent/ports.py` 的 `TurnContext.codes`）
+    codes: frozenset[str] | None = None
 
 
-def deps_of(container: Container, headers: dict[str, str]) -> AdvanceDeps:
+def deps_of(
+    container: Container,
+    headers: dict[str, str],
+    codes: frozenset[str] | None = None,
+) -> AdvanceDeps:
     """从容器取出这几样；没接模型就抛。
 
     ⚠ `headers` 是这一次调用要转发给 platform 的身份头，**每请求一份**。
     做成进程级的话，两个用户的请求会互相借用对方的身份。
 
-    Args: container, headers。
+    Args: container, headers, codes（调用者的权限码；只许由路由从已认证的
+        `CallerContext` 传进来）。
     """
     if container.model is None:
         raise ModelDisabled("本部署没有接模型")
+    model = container.model
+    registry = build_registry(
+        ProviderDeps(
+            platform=container.platform,
+            headers=headers,
+            mcp=container.mcp,
+            write_allowed=container.settings.mcp_write_names(),
+            # ⚠ 这两样不接上，长期记忆那两个工具就只能回一句「还没接上仓储」
+            # ——而模型看得见它们，于是每次都会先调一次再改口
+            sessions=container.database.session,
+            embedder=container.embedder,
+        )
+    )
     return AdvanceDeps(
         sessions=container.database.session,
-        model=container.model,
-        server_tools=ServerTools(platform=container.platform, headers=headers),
+        model=model,
+        summarizer=_summarizer_factory(model),
+        # ⚠ 走注册表而不是直接造 `ServerTools`：客户端那一路的名字也在表里，
+        # 于是「本该交给浏览器的工具走到了服务端」会得到一句说得清的错
+        # （`RunsElsewhere`），而不是与「模型编了个工具名」混成同一档
+        server_tools=registry.run,
+        # ⚠ 与 `registry.run` 取自**同一份**注册表：各造一份的话，下发的清单
+        # 与真能跑的那一份会漂开，而两边都不报错
+        extra_specs=registry.specs_of(MCP_PROVIDER),
+        codes=codes,
     )
+
+
+def _summarizer_factory(model: GuardedModel) -> SummarizerFactory:
+    """按档位造折叠器的那个口子。
+
+    Args: model（带断路器的模型调用面）。
+    """
+
+    def make(profile: str) -> Summarizer:
+        return summarize.ModelSummarizer(model=model, profile=profile)
+
+    return make
 
 
 @dataclass(frozen=True)
@@ -120,6 +181,9 @@ class AdvanceInput:
     surface_kind: str
     surface_label: str = ""
     user_text: str | None = None
+    # 用户随这句话贴的图（完整 data URI）。⚠ 与截图同口径：只活这一轮，
+    # 落库存一句占位——存下来的话这个会话每重放一次就再喂一遍
+    user_images: list[str] = field(default_factory=list[str])
     tool_results: list[ClientToolResult] = field(
         default_factory=list[ClientToolResult]
     )
@@ -140,7 +204,7 @@ def incoming_messages(payload: AdvanceInput) -> list[BaseMessage]:
     Args: payload。
     """
     if payload.user_text is not None:
-        return [HumanMessage(content=payload.user_text)]
+        return [vision.user_message(payload.user_text, payload.user_images)]
     replies: list[BaseMessage] = [
         ToolMessage(content=result.as_text(), tool_call_id=result.call_id)
         for result in payload.tool_results
@@ -156,18 +220,24 @@ def assemble(
     payload: AdvanceInput,
     rows: list[ChatMessage],
     plan: dict[str, Any] | None,
+    summary: Summary | None = None,
 ) -> list[BaseMessage]:
     """把这一轮喂给模型的消息列表拼出来。
 
     ⚠ 顺序就是上下文的分层，从最稳到每轮都变：常驻提示词 → 历史 → 这一次的
     输入 → **末尾的状态块**。易变的东西一旦挪到前面去，它后面的工具声明与整段
-    历史会跟着一起丢掉端点的前缀缓存（`prompt.py` 与 `state_block.py` 文件头）。
+    历史会跟着一起丢掉端点的前缀缓存（`memory/prompt.py`
+    与 `memory/state_block.py` 文件头）。
 
     ⚠ 状态块**不落库**：`_persist` 落的是 `incoming_messages` 与本回合新增的
     那几条，而它两者都不是。
 
     ⚠ 历史只带最近的一截，且截断点不许把工具调用与它的回应切开
     （`history.window`）。全带的话，一个跑了几十轮的会话会把上下文占满。
+
+    ⚠ 摘要排在历史**之前**、常驻提示词**之后**：它代表的就是更早的那一截。
+    它与历史窗口锚在同一个台阶上，同一个台阶内两者都逐字不变——挪到别处或者
+    每轮现折，它就成了第五个前缀断点（`memory/summarize.py`）。
 
     ⚠ 尾部**没等到回执的调用要就地补一条失败回执**：上一轮被掐掉、页面被关掉、
     回执整批被判不合法，都会留下这样一批孤儿，而端点对「有调用没回应」的一段
@@ -187,6 +257,7 @@ def assemble(
     orphans = history.unanswered([*past, *incoming])
     return [
         system,
+        *summarize.messages_of(summary),
         *past,
         *history.fillers(orphans),
         *incoming,
@@ -194,22 +265,38 @@ def assemble(
     ]
 
 
+@dataclass(frozen=True)
+class LoadedContext:
+    """一次读库拿到的原料。折叠与拼装都在事务之外用它。"""
+
+    rows: list[ChatMessage]
+    plan: dict[str, Any] | None
+    summary: Summary | None
+    choice: ModelChoice
+
+
 async def load_context(
     session: AsyncSession,
     *,
     chat_session_id: uuid.UUID,
     payload: AdvanceInput,
-) -> list[BaseMessage]:
-    """读出这个会话的历史与计划，拼成这一轮的上下文。
+) -> LoadedContext:
+    """读出这个会话的历史、计划、已有摘要与模型选择。
+
+    ⚠ 只读不拼：拼装要等折叠的结果，而折叠是一次模型调用，不能在这个事务里跑
+    （database-standard：事务里禁止外部 IO）。
 
     Args: session, chat_session_id, payload。
     """
     rows = await session_crud.messages_of(session, chat_session_id)
     row = await session.get(ChatSession, chat_session_id)
-    return assemble(
-        payload=payload,
+    return LoadedContext(
         rows=rows,
         plan=row.plan_json if row is not None else None,
+        summary=(
+            summarize.stored_of(row.summary_json) if row is not None else None
+        ),
+        choice=_choice_of(row, payload),
     )
 
 
@@ -237,7 +324,12 @@ async def advance(
     )
     turn = TurnDeps(
         model=deps.model,
-        specs=tool_select.specs_for(payload.surface_kind, payload.client_tools),
+        specs=tool_select.specs_for(
+            payload.surface_kind,
+            payload.client_tools,
+            codes=deps.codes,
+            extra=deps.extra_specs,
+        ),
         run_tool=_with_plan_tools(plans, deps.server_tools),
         choice=choice,
     )
@@ -267,19 +359,82 @@ async def advance(
 async def _opened(
     deps: AdvanceDeps, chat_session_id: uuid.UUID, payload: AdvanceInput
 ) -> tuple[list[BaseMessage], ModelChoice]:
-    """开一次库：把这一轮的上下文与模型选择一起读出来。
+    """读原料 → 折叠 → 拼上下文。
 
-    ⚠ 一次会话里读完：分两次开的话，中途改过模型的那一轮会读到两份不一致的
-    状态（提示词按旧的拼、模型按新的取）。
+    ⚠ 原料一次会话里读完：分两次开的话，中途改过模型的那一轮会读到两份不一致
+    的状态（提示词按旧的拼、模型按新的取）。
+
+    ⚠ 折叠**在事务之外**：那是一次模型调用，耗时不可控，放在事务里会把数据库
+    连接与锁一起长期占住（database-standard）。所以是「短事务读 → 调用 →
+    短事务写」，不是「一个事务包住全程」。
 
     Args: deps, chat_session_id, payload。
     """
     async with deps.sessions() as session:
-        messages = await load_context(
+        loaded = await load_context(
             session, chat_session_id=chat_session_id, payload=payload
         )
-        row = await session.get(ChatSession, chat_session_id)
-        return messages, _choice_of(row, payload)
+    summary = await _summary_of(deps, chat_session_id, loaded)
+    messages = assemble(
+        payload=payload,
+        rows=loaded.rows,
+        plan=loaded.plan,
+        summary=summary,
+    )
+    return messages, loaded.choice
+
+
+async def _summary_of(
+    deps: AdvanceDeps, chat_session_id: uuid.UUID, loaded: LoadedContext
+) -> Summary | None:
+    """这一轮该挂哪一段摘要：同台阶复用，跨台阶重折。
+
+    ⚠ **同一个台阶内必须原样复用**，不许重折。重折出来的字句一定与上一轮不同，
+    而它排在历史区前面——那就是一个新的前缀断点，后面整段历史跟着作废。
+
+    ⚠ 换了模型也要重折：两截摘要由不同模型折出来时口径可以差很远，
+    而拼在一起看不出接缝。
+
+    ⚠ 折不出来时退回**上一段**（可能是 `None`）：那一段仍然逐字稳定，
+    比没有强，也比抛出去让整个回合发不出去强。
+
+    Args: deps, chat_session_id, loaded。
+    """
+    dropped, kept = history.split(loaded.rows, MAX_HISTORY_MESSAGES)
+    if not dropped:
+        return None
+    through = kept[0].seq if kept else dropped[-1].seq + 1
+    stored = loaded.summary
+    stamp = summarize.stamp_of(
+        ModelChoice(kind="summary", profile=loaded.choice.profile)
+    )
+    kept_as_is = summarize.reuse(stored, through, stamp)
+    if kept_as_is is not None:
+        return kept_as_is
+    folded = await deps.summarizer(loaded.choice.profile).fold(
+        dropped, through, stored
+    )
+    if folded is None:
+        return stored
+    await _save_summary(deps, chat_session_id, folded)
+    return folded
+
+
+async def _save_summary(
+    deps: AdvanceDeps, chat_session_id: uuid.UUID, summary: Summary
+) -> None:
+    """把折出来的那段落库。
+
+    ⚠ 单开一次短事务：折叠那次模型调用已经跑完了，这里只写一行。
+
+    Args: deps, chat_session_id, summary。
+    """
+    async with deps.sessions() as session:
+        await session.execute(
+            update(ChatSession)
+            .where(ChatSession.id == chat_session_id)
+            .values(summary_json=summarize.as_json(summary))
+        )
 
 
 def _choice_of(row: ChatSession | None, payload: AdvanceInput) -> ModelChoice:
@@ -340,10 +495,14 @@ def _with_plan_tools(
 
 
 def has_image(payload: AdvanceInput) -> bool:
-    """这一次回填里有没有图，也就是这一轮要不要走视觉档。
+    """这一次里有没有图，也就是这一轮要不要走视觉档。
+
+    两条来路：用户随这句话贴的，与工具截回来的。
 
     Args: payload。
     """
+    if payload.user_images:
+        return True
     return any(one.image() is not None for one in payload.tool_results)
 
 

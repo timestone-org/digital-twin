@@ -6,8 +6,8 @@
 
 import json
 
-from ai_assistant.apps.chat.services import events
-from ai_assistant.apps.chat.services.turn_types import (
+from ai_assistant.apps.chat.services.output import events
+from ai_assistant.apps.chat.services.planning.turn_types import (
     ClientToolCall,
     TurnDelta,
     TurnOutcome,

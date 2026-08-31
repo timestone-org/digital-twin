@@ -62,6 +62,7 @@ function panel(isAvailable: boolean): AiPanel {
   return {
     isAvailable: ref(isAvailable),
     models: ref([]),
+    attachmentSuffixes: ref([]),
     choice: ref({ profile: '', effort: '' }),
     pickModel: vi.fn(() => Promise.resolve()),
     isOpen: ref(false),

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from ai_assistant.apps.chat.services import skills_of_surface
-from ai_assistant.apps.chat.services.tool_specs import TOOL_SPECS
+from ai_assistant.apps.chat.services.tools.specs import TOOL_SPECS
 from ai_assistant.apps.chat.skills import (
     SkillInstructionsMissing,
     SkillManifest,

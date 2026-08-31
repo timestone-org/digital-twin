@@ -1,19 +1,25 @@
 <script setup lang="ts">
 /**
- * @fileoverview 输入框里的一条待发附件：名字、概况、可展开的全文、移除。
- * 点开全文是这条链的要点——用户发出去前能核对助手将要看到什么。
+ * @fileoverview 输入框里的一条待发附件：名字、概况、可展开的全文或缩略图、移除。
+ * 点开是这条链的要点——用户发出去前能核对助手将要看到什么。
+ *
+ * ⚠ 图片走 `<img>` 而文本走 `<pre>`：图的 data URI 摊进 `<pre>` 是几兆字节的
+ * 乱码，而那一条会把整个输入框撑爆。
  */
+import { computed } from 'vue'
 import { DtButton, DtIcon } from '@dt/ui'
 
-import type { PendingAttachment } from '@/features/ai/attachment'
+import { isImage, type PendingAttachment } from '@/features/ai/attachment'
 
-defineProps<{
+const props = defineProps<{
   attachment: PendingAttachment
   /** 全文此刻是不是摊开着。开合由外面记，同屏只摊开一条。 */
   expanded: boolean
 }>()
 
 const emit = defineEmits<{ toggle: []; remove: [] }>()
+
+const picture = computed(() => isImage(props.attachment))
 </script>
 
 <template>
@@ -25,7 +31,11 @@ const emit = defineEmits<{ toggle: []; remove: [] }>()
         :aria-expanded="expanded"
         @click="emit('toggle')"
       >
-        <DtIcon name="paperclip" :size="13" class="ai-file__clip" />
+        <DtIcon
+          :name="picture ? 'image' : 'paperclip'"
+          :size="13"
+          class="ai-file__clip"
+        />
         <span class="ai-file__name">{{ attachment.name }}</span>
         <span class="ai-file__meta">{{ attachment.meta }}</span>
       </button>
@@ -37,7 +47,15 @@ const emit = defineEmits<{ toggle: []; remove: [] }>()
         @click="emit('remove')"
       />
     </div>
-    <pre v-if="expanded" class="ai-file__preview">{{ attachment.text }}</pre>
+    <img
+      v-if="expanded && picture"
+      class="ai-file__thumb"
+      :src="attachment.dataUri"
+      :alt="`附件 ${attachment.name}`"
+    />
+    <pre v-else-if="expanded" class="ai-file__preview">{{
+      attachment.text
+    }}</pre>
   </li>
 </template>
 

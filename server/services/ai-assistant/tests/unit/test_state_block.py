@@ -16,13 +16,13 @@ from langchain_core.messages import (
 )
 
 from ai_assistant.apps.chat.models import ChatMessage
-from ai_assistant.apps.chat.services import history, state_block
 from ai_assistant.apps.chat.services.advance_service import (
     AdvanceInput,
     ClientToolResult,
     assemble,
     incoming_messages,
 )
+from ai_assistant.apps.chat.services.memory import history, state_block
 
 SURFACE = "dashboard-editor"
 

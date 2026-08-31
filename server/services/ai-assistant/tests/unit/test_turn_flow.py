@@ -16,13 +16,13 @@ from langchain_core.messages import (
     SystemMessage,
 )
 
-from ai_assistant.apps.chat.services.prompt import build_system_prompt
-from ai_assistant.apps.chat.services.server_tools import ServerTools
-from ai_assistant.apps.chat.services.tool_specs import specs_named
-from ai_assistant.apps.chat.services.turn import TurnDeps, run_turn
+from ai_assistant.apps.chat.services.memory.prompt import build_system_prompt
+from ai_assistant.apps.chat.services.planning.turn import TurnDeps, run_turn
+from ai_assistant.apps.chat.services.tools.providers.server import ServerTools
+from ai_assistant.apps.chat.services.tools.specs import specs_named
 from ai_assistant.apps.chat.skills import find_skill
 from ai_assistant.llm import GuardedModel
-from ai_assistant.llm.provider import ModelChoice
+from ai_assistant.llm.ports import ModelChoice
 from lib.resilience import CircuitBreaker
 from unit.llm_fakes import ScriptedChat, tool_call
 

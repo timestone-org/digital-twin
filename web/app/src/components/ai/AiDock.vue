@@ -80,6 +80,7 @@ onUnmounted(() => {
           :is-wide="isWide"
           :models="ai.models.value"
           :choice="ai.choice.value"
+          :attachment-suffixes="ai.attachmentSuffixes.value"
           @pick="(value) => void ai.pickModel(value)"
           @toggle-wide="isWide = !isWide"
           @close="ai.close"

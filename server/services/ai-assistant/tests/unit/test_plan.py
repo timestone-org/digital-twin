@@ -9,8 +9,8 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ai_assistant.apps.chat.services import plan as plan_service
-from ai_assistant.apps.chat.services.plan import (
+from ai_assistant.apps.chat.services.planning import plan as plan_service
+from ai_assistant.apps.chat.services.planning.plan import (
     MAX_PLAN_ITEMS,
     PlanInvalid,
     is_plan_tool,

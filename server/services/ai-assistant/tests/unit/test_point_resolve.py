@@ -10,7 +10,7 @@ import uuid
 
 import httpx
 
-from ai_assistant.apps.chat.services.point_resolve import (
+from ai_assistant.apps.chat.services.tools.points.resolve import (
     MAX_IN_FLIGHT,
     MAX_KEYS,
     resolve_points,

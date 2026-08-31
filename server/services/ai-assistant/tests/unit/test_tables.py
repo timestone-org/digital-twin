@@ -10,7 +10,7 @@ import io
 import pytest
 from openpyxl import Workbook
 
-from ai_assistant.apps.chat.services.tables import (
+from ai_assistant.apps.chat.services.perception.tables import (
     MAX_ROWS,
     MAX_TEXT_CHARS,
     UnsupportedTable,

@@ -160,11 +160,11 @@ describe('能力探测', () => {
       probe: () =>
         Promise.resolve({
           is_model_enabled: true,
-          is_vision_enabled: true,
           skills: [],
           models: [],
           default_model_id: '',
           default_effort: '',
+          attachment_suffixes: [],
         }),
     })
     const ctx = setup()
@@ -298,11 +298,11 @@ describe('下拉显示的那一路', () => {
       probe: () =>
         Promise.resolve({
           is_model_enabled: true,
-          is_vision_enabled: false,
           skills: [],
           models: [],
           default_model_id: 'codex',
           default_effort: 'medium',
+          attachment_suffixes: [],
         }),
     })
   }

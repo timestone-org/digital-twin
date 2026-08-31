@@ -12,14 +12,15 @@ from typing import Any
 from langchain_core.messages import BaseMessage
 
 from ai_assistant.apps.chat.models import ChatMessage
-from ai_assistant.apps.chat.services import history
 from ai_assistant.apps.chat.services.advance_service import (
     AdvanceInput,
     assemble,
 )
-from ai_assistant.apps.chat.services.prompt import build_system_prompt
-from ai_assistant.apps.chat.services.tool_select import specs_for
-from ai_assistant.apps.chat.services.tool_shapes import openai_schema
+from ai_assistant.apps.chat.services.intent.select import specs_for
+from ai_assistant.apps.chat.services.memory import history, summarize
+from ai_assistant.apps.chat.services.memory.ports import Summary
+from ai_assistant.apps.chat.services.memory.prompt import build_system_prompt
+from ai_assistant.apps.chat.services.tools.shapes import openai_schema
 from ai_assistant.settings import HISTORY_DROP_STEP, MAX_HISTORY_MESSAGES
 
 SURFACE = "dashboard-editor"
@@ -88,7 +89,11 @@ def _wire(messages: list[BaseMessage]) -> str:
 
 
 def _turn(
-    rows: list[ChatMessage], text: str, label: str, current: str
+    rows: list[ChatMessage],
+    text: str,
+    label: str,
+    current: str,
+    summary: Summary | None = None,
 ) -> list[BaseMessage]:
     return assemble(
         payload=AdvanceInput(
@@ -99,6 +104,7 @@ def _turn(
         ),
         rows=rows,
         plan=_plan(current),
+        summary=summary,
     )
 
 
@@ -156,3 +162,49 @@ def test_the_history_window_only_slides_on_a_step() -> None:
         _talk(over + HISTORY_DROP_STEP), MAX_HISTORY_MESSAGES
     )[0].seq
     assert moved > next(iter(seen))
+
+
+def _stored() -> Summary:
+    return Summary(
+        through_seq=7, text="更早那截的结论", model="default:summary"
+    )
+
+
+def test_the_summary_holds_still_inside_one_step() -> None:
+    """同一个台阶内，摘要那一段逐字相同——而它排在历史区**前面**。
+
+    ⚠ 每轮现折的话，折出来的字句一定与上一轮不同，于是常驻提示词与 25 个工具
+    声明之后立刻就是一个断点，后面整段历史跟着作废。摘要省下的那点上下文远不够
+    抵这一下——而它没有任何运行期迹象。
+    """
+    stored = _stored()
+    first = _talk(6)
+    earlier = _turn(first, "改标题", "卡片甲", "读画布", stored)
+    later = _turn(
+        [*first, _row("user", {"text": "改标题"}, seq=7)],
+        "再绑一个槽",
+        "卡片乙",
+        "绑温度槽",
+        stored,
+    )
+
+    stable = _wire(
+        [earlier[0], *summarize.messages_of(stored), *history.replay(first)]
+    )
+    assert _wire(later).startswith(stable)
+
+
+def test_the_summary_sits_between_the_resident_prompt_and_the_history() -> None:
+    """位置也是契约：挂到末尾去的话，模型会把它读成「刚刚发生的事」。"""
+    said = _turn(_talk(4), "改标题", "卡片甲", "读画布", _stored())
+
+    assert "更早那截的结论" in str(said[1].content)
+
+
+def test_no_summary_leaves_the_shape_exactly_as_it_was() -> None:
+    """没折出摘要时这一段一条都不挂，历史退回今天的样子。"""
+    rows = _talk(4)
+
+    assert _wire(_turn(rows, "改标题", "卡片甲", "读画布")) == _wire(
+        _turn(rows, "改标题", "卡片甲", "读画布", None)
+    )

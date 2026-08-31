@@ -25,9 +25,14 @@ def test_every_table_lives_in_the_services_own_schema() -> None:
     assert schemas == {DB_SCHEMA}
 
 
-def test_the_three_tables_are_registered() -> None:
+def test_the_four_tables_are_registered() -> None:
     names = {table.name for table in Base.metadata.tables.values()}
-    assert names == {"chat_sessions", "chat_messages", "chat_steps"}
+    assert names == {
+        "chat_sessions",
+        "chat_messages",
+        "chat_steps",
+        "knowledge_chunks",
+    }
 
 
 def test_session_columns_match_the_migration() -> None:
@@ -44,6 +49,7 @@ def test_session_columns_match_the_migration() -> None:
         "row_version",
         "last_error",
         "plan_json",
+        "summary_json",
         "created_at",
         "updated_at",
     }

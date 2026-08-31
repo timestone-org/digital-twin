@@ -8,8 +8,8 @@
 
 from typing import Any
 
-from ai_assistant.apps.chat.services.tool_shapes import ToolSpec
-from ai_assistant.apps.chat.services.tool_specs import spec_of
+from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
+from ai_assistant.apps.chat.services.tools.specs import spec_of
 
 ASK = "user.ask"
 

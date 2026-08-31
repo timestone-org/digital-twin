@@ -37,11 +37,10 @@ const CHAT_DIR = join(
 )
 
 /** 规格分住这几个模块；加了新的一份要记得挂进来，否则这道闸只对了一半。 */
-const SPEC_FILES = [
-  'client_tool_specs.py',
-  'client_tool_specs_interaction.py',
-  'client_tool_specs_look.py',
-]
+const SPEC_FILES = ['core.py', 'interaction.py', 'look.py']
+
+/** 客户端规格所在的包，相对 `CHAT_DIR`。 */
+const SPEC_DIR = ['services', 'tools', 'providers', 'client_specs']
 
 /** 工作面 → 那一页自报实现了哪些工具。 */
 const SURFACE_TOOLS: Record<string, readonly string[]> = {
@@ -55,7 +54,7 @@ const SURFACE_TOOLS: Record<string, readonly string[]> = {
 function backendClientTools(): string[] {
   const found: string[] = []
   for (const file of SPEC_FILES) {
-    const source = readFileSync(join(CHAT_DIR, 'services', file), 'utf8')
+    const source = readFileSync(join(CHAT_DIR, ...SPEC_DIR, file), 'utf8')
     for (const block of source.split('ToolSpec(').slice(1)) {
       const name = /name="([^"]+)"/.exec(block)?.[1]
       if (name !== undefined && block.includes('runs_on="client"')) {

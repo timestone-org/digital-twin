@@ -427,7 +427,7 @@ export type {
   AssistantMessage,
   AssistantMessageRole,
   AssistantModelProfile,
-  AssistantParsedTable,
+  AssistantParsedAttachment,
   AssistantPlan,
   AssistantPlanItem,
   AssistantPlanStatus,

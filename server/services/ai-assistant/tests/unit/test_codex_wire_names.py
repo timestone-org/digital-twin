@@ -9,8 +9,8 @@ import re
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from ai_assistant.apps.chat.services.tool_shapes import openai_schema
-from ai_assistant.apps.chat.services.tool_specs import TOOL_SPECS
+from ai_assistant.apps.chat.services.tools.shapes import openai_schema
+from ai_assistant.apps.chat.services.tools.specs import TOOL_SPECS
 from ai_assistant.llm.codex import wire_names
 from unit.llm_fakes import asks
 

@@ -22,7 +22,7 @@ import type {
   AssistantDeviceLoginStart,
   AssistantModelProfile,
   AssistantMessage,
-  AssistantParsedTable,
+  AssistantParsedAttachment,
   AssistantSession,
   AssistantSessionDetail,
   AssistantSkill,
@@ -82,6 +82,7 @@ const EVENTS_PATH = join(
   'apps',
   'chat',
   'services',
+  'output',
   'events.py',
 )
 
@@ -99,7 +100,10 @@ const CLIENT_SPECS_PATH = join(
   'apps',
   'chat',
   'services',
-  'client_tool_specs.py',
+  'tools',
+  'providers',
+  'client_specs',
+  'core.py',
 )
 
 type Keys<T> = Record<keyof T, true>
@@ -107,11 +111,11 @@ type Keys<T> = Record<keyof T, true>
 const SHAPES: Record<string, Record<string, true>> = {
   CapabilityOut: {
     is_model_enabled: true,
-    is_vision_enabled: true,
     skills: true,
     models: true,
     default_model_id: true,
     default_effort: true,
+    attachment_suffixes: true,
   } satisfies Keys<AssistantCapability>,
   ModelProfileOut: {
     id: true,
@@ -190,12 +194,10 @@ const SHAPES: Record<string, Record<string, true>> = {
     created_at: true,
   } satisfies Keys<AssistantMessage>,
   AttachmentParseOut: {
-    columns: true,
-    rows: true,
     is_truncated: true,
-    total_rows: true,
     text: true,
-  } satisfies Keys<AssistantParsedTable>,
+    summary: true,
+  } satisfies Keys<AssistantParsedAttachment>,
   StepOut: {
     id: true,
     message_id: true,
@@ -279,9 +281,11 @@ describe('事件流的事件名两侧逐字相同', () => {
   // 静默丢弃，而两边代码单看都对。
   function backendEventNames(): string[] {
     const source = readFileSync(EVENTS_PATH, 'utf8')
-    const block = /EVENT_NAMES = \(([\s\S]*?)\)/.exec(source)?.[1] ?? ''
-    const constants = [...block.matchAll(/EVENT_[A-Z_]+/g)].map(
-      (match) => match[0],
+    // ⚠ 认的是 `EVENT_SPECS` 那张声明表，不是 `EVENT_NAMES`：后者现在由前者
+    // 推导，扫推导式只会扫到一个 `EVENT_SPECS`，六个名字一个都取不到
+    const block = /EVENT_SPECS: [\s\S]*?\n\)/.exec(source)?.[0] ?? ''
+    const constants = [...block.matchAll(/name=(EVENT_[A-Z_]+)/g)].map(
+      (match) => match[1] ?? '',
     )
     return constants.map((name) => {
       const assigned = new RegExp(`^${name} = "([^"]+)"`, 'm').exec(source)
