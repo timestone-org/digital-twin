@@ -69,7 +69,19 @@ def test_every_layer_reexports_exactly_its_public_port_names(
     }
     # 类型别名（`Decoded` / `Scope` / `Verdict`）没有 `__module__`，单独收进来
     aliases = {"Decoded", "Scope", "Verdict"} & set(vars(ports))
-    assert listed == public | aliases
+    # ⚠ 判据是「不许漏」而不是「恰好等于」：一层的公开面本来就可能比 ports 宽
+    # （它自己的注册表、具体实现都该露出来）。而漏掉一个 port 的表现是别的功能
+    # 模块绕过再导出面直接伸进子模块——结构闸只判路径第 4 段，那种事它不会拦
+    assert public | aliases <= listed
+
+
+@pytest.mark.parametrize("layer", LAYERS)
+def test_every_reexported_name_actually_resolves(layer: str) -> None:
+    """`__all__` 里写错的名字只在 `import *` 时才炸，平时一声不吭。"""
+    package = _package(layer)
+    listed: list[str] = list(vars(package)["__all__"])
+    missing = [name for name in listed if not hasattr(package, name)]
+    assert missing == []
 
 
 @pytest.mark.parametrize(("layer", "name"), PROTOCOLS)
