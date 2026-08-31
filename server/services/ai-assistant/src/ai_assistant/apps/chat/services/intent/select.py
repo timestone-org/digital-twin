@@ -18,8 +18,8 @@
 
 from collections.abc import Sequence
 
-from ai_assistant.apps.chat.services.tool_shapes import ToolSpec
-from ai_assistant.apps.chat.services.tool_specs import TOOL_SPECS
+from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
+from ai_assistant.apps.chat.services.tools.specs import TOOL_SPECS
 from ai_assistant.apps.chat.skills import skills_for
 
 # 哪个工作面都有的服务端工具：拉技能正文、写执行计划

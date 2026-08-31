@@ -7,7 +7,7 @@
 `i=2253` 这样的裸数字，零语义），以及编码要按工业缩写表解读才比得了。
 """
 
-from ai_assistant.apps.chat.services.point_recall import (
+from ai_assistant.apps.chat.services.tools.points.recall import (
     PointCandidate,
     expand_code,
     rank,

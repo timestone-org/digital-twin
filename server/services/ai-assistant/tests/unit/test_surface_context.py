@@ -7,9 +7,9 @@
 
 from typing import Any
 
-from ai_assistant.apps.chat.services import state_block
-from ai_assistant.apps.chat.services.prompt import build_system_prompt
-from ai_assistant.apps.chat.services.surface_context import (
+from ai_assistant.apps.chat.services.memory import state_block
+from ai_assistant.apps.chat.services.memory.prompt import build_system_prompt
+from ai_assistant.apps.chat.services.perception.surface_context import (
     MAX_CONTEXT_CHARS,
     MAX_NAMED,
     render,

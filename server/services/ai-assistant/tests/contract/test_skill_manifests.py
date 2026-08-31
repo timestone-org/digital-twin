@@ -7,10 +7,10 @@
 
 from ai_assistant.apps.chat.enums import SURFACE_KINDS
 from ai_assistant.apps.chat.services import skill_catalog
-from ai_assistant.apps.chat.services.plan import is_plan_tool
-from ai_assistant.apps.chat.services.server_tools import ServerTools
-from ai_assistant.apps.chat.services.tool_select import specs_for
-from ai_assistant.apps.chat.services.tool_specs import TOOL_SPECS
+from ai_assistant.apps.chat.services.intent.select import specs_for
+from ai_assistant.apps.chat.services.planning.plan import is_plan_tool
+from ai_assistant.apps.chat.services.tools.providers.server import ServerTools
+from ai_assistant.apps.chat.services.tools.specs import TOOL_SPECS
 from ai_assistant.apps.chat.skills import list_skills
 
 # 登记名直接取自工具规格真源。⚠ 不许手抄一份：手抄的名单会让「技能声明了、

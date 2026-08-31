@@ -1,13 +1,13 @@
 """整屏外观缺省那两个客户端工具的规格：读大屏级卡片外观、整袋写它。
 
-⚠ 与 `client_tool_specs.py` 同一口径——只有形状，实现在浏览器里；名字必须与
+⚠ 与同目录的 `core.py` 同一口径——只有形状，实现在浏览器里；名字必须与
 前端工作面的 `tools` 数组逐字相同。
 
 单节点的外观归 `dashboard.set_config` 与 `dashboard.apply_style`；这两个改的是
 **整屏的底**，每个节点自己的那一段盖在它上面。
 """
 
-from ai_assistant.apps.chat.services.tool_shapes import (
+from ai_assistant.apps.chat.services.tools.shapes import (
     ToolSpec,
     object_schema,
 )

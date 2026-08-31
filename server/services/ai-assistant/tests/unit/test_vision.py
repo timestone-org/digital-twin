@@ -14,13 +14,14 @@ from pydantic import ValidationError
 
 from ai_assistant.apps.chat.models import ChatMessage
 from ai_assistant.apps.chat.schemas.advance import ToolResultIn
-from ai_assistant.apps.chat.services import history, vision
 from ai_assistant.apps.chat.services.advance_service import (
     AdvanceInput,
     ClientToolResult,
     has_image,
     incoming_messages,
 )
+from ai_assistant.apps.chat.services.memory import history
+from ai_assistant.apps.chat.services.perception import vision
 from ai_assistant.settings import MAX_IMAGE_CHARS
 
 PNG = "data:image/png;base64,iVBORw0KGgo="

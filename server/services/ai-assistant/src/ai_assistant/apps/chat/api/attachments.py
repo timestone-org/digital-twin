@@ -15,7 +15,7 @@ from ai_assistant.apps.chat.schemas.attachment import (
     AttachmentParseIn,
     AttachmentParseOut,
 )
-from ai_assistant.apps.chat.services.tables import (
+from ai_assistant.apps.chat.services.perception.tables import (
     ParsedTable,
     UnsupportedTable,
     parse_table,

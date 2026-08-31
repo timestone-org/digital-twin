@@ -5,12 +5,12 @@
 """
 
 from ai_assistant.apps.chat.enums import SURFACE_KINDS
-from ai_assistant.apps.chat.services.tool_select import (
+from ai_assistant.apps.chat.services.intent.select import (
     CORE_SERVER_TOOLS,
     CROSS_MODULE_READ_TOOLS,
     specs_for,
 )
-from ai_assistant.apps.chat.services.tool_specs import TOOL_SPECS
+from ai_assistant.apps.chat.services.tools.specs import TOOL_SPECS
 
 # 内建客户端工具：任何工作面上都该有，前提是这一页报了它
 ASK = "user.ask"

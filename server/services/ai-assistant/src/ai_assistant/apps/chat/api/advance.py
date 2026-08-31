@@ -20,13 +20,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ai_assistant.apps.chat.catalog import ASSISTANT_USE
 from ai_assistant.apps.chat.deps import get_advance_deps
 from ai_assistant.apps.chat.schemas.advance import AdvanceIn
-from ai_assistant.apps.chat.services import advance_service, events
-from ai_assistant.apps.chat.services.plan import PlanUpdate
-from ai_assistant.apps.chat.services.session_service import require_session
-from ai_assistant.apps.chat.services.turn_types import (
+from ai_assistant.apps.chat.services import advance_service
+from ai_assistant.apps.chat.services.output import events
+from ai_assistant.apps.chat.services.planning.plan import PlanUpdate
+from ai_assistant.apps.chat.services.planning.turn_types import (
     TurnDelta,
     TurnStep,
 )
+from ai_assistant.apps.chat.services.session_service import require_session
 from ai_assistant.deps import get_session, require
 from ai_assistant.settings import API_PREFIX
 from lib.auth import CallerContext

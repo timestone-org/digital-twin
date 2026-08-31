@@ -12,7 +12,7 @@
 
 from typing import Any, Protocol, runtime_checkable
 
-from ai_assistant.apps.chat.services.tool_shapes import ToolSpec
+from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
 
 
 class UnknownTool(LookupError):

@@ -15,19 +15,19 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from ai_assistant.apps.chat.services.formula_catalog import (
+from ai_assistant.apps.chat.services.tools.catalog.formulas import (
     catalog_of as formula_catalog_of,
 )
-from ai_assistant.apps.chat.services.module_catalog import (
+from ai_assistant.apps.chat.services.tools.catalog.modules import (
     catalog_of,
     detail_of,
 )
-from ai_assistant.apps.chat.services.point_recall import (
+from ai_assistant.apps.chat.services.tools.points.recall import (
     PointCandidate,
     ScoredPoint,
     rank,
 )
-from ai_assistant.apps.chat.services.point_resolve import (
+from ai_assistant.apps.chat.services.tools.points.resolve import (
     resolve_points,
     split_node_key,
 )

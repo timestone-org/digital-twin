@@ -12,14 +12,14 @@ from typing import Any
 from langchain_core.messages import BaseMessage
 
 from ai_assistant.apps.chat.models import ChatMessage
-from ai_assistant.apps.chat.services import history
 from ai_assistant.apps.chat.services.advance_service import (
     AdvanceInput,
     assemble,
 )
-from ai_assistant.apps.chat.services.prompt import build_system_prompt
-from ai_assistant.apps.chat.services.tool_select import specs_for
-from ai_assistant.apps.chat.services.tool_shapes import openai_schema
+from ai_assistant.apps.chat.services.intent.select import specs_for
+from ai_assistant.apps.chat.services.memory import history
+from ai_assistant.apps.chat.services.memory.prompt import build_system_prompt
+from ai_assistant.apps.chat.services.tools.shapes import openai_schema
 from ai_assistant.settings import HISTORY_DROP_STEP, MAX_HISTORY_MESSAGES
 
 SURFACE = "dashboard-editor"

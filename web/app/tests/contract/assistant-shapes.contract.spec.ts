@@ -82,6 +82,7 @@ const EVENTS_PATH = join(
   'apps',
   'chat',
   'services',
+  'output',
   'events.py',
 )
 
@@ -99,7 +100,10 @@ const CLIENT_SPECS_PATH = join(
   'apps',
   'chat',
   'services',
-  'client_tool_specs.py',
+  'tools',
+  'providers',
+  'client_specs',
+  'core.py',
 )
 
 type Keys<T> = Record<keyof T, true>

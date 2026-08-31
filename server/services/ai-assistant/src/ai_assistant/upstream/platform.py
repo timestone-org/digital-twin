@@ -90,7 +90,7 @@ class PlatformClient:
         """按关键词与数据源翻一页点位。
 
         ⚠ 后端那侧的 `q` 只对**名字与编码**做子串匹配，且永远是顺序扫描。
-        真正的挑选在助手侧做（见 `services/point_recall.py`），这里只负责取。
+        真正的挑选在助手侧做（见 `tools/points/recall.py`），这里只负责取。
 
         Args: headers, keyword, source_id, page。
         """

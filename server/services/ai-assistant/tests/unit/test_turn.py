@@ -14,17 +14,17 @@ import pytest
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
-from ai_assistant.apps.chat.services.tool_shapes import ToolSpec
-from ai_assistant.apps.chat.services.turn import (
+from ai_assistant.apps.chat.services.planning.turn import (
     TurnDeps,
     run_turn,
     stream_turn,
 )
-from ai_assistant.apps.chat.services.turn_types import (
+from ai_assistant.apps.chat.services.planning.turn_types import (
     TurnDelta,
     TurnOutcome,
     TurnStep,
 )
+from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
 from ai_assistant.llm import GuardedModel
 from ai_assistant.llm.provider import ModelChoice
 from lib.resilience import CircuitBreaker

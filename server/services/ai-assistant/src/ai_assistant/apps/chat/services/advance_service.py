@@ -24,24 +24,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_assistant.apps.chat.crud import session_crud
 from ai_assistant.apps.chat.models import ChatMessage, ChatSession, ChatStep
-from ai_assistant.apps.chat.services import (
-    history,
-    state_block,
-    tool_select,
-    vision,
-)
-from ai_assistant.apps.chat.services import (
-    plan as plan_service,
-)
-from ai_assistant.apps.chat.services.prompt import build_system_prompt
-from ai_assistant.apps.chat.services.server_tools import ServerTools
-from ai_assistant.apps.chat.services.turn import (
+from ai_assistant.apps.chat.services.intent import select as tool_select
+from ai_assistant.apps.chat.services.memory import history, state_block
+from ai_assistant.apps.chat.services.memory.prompt import build_system_prompt
+from ai_assistant.apps.chat.services.perception import vision
+from ai_assistant.apps.chat.services.planning import plan as plan_service
+from ai_assistant.apps.chat.services.planning.turn import (
     ServerToolRunner,
     TurnDeps,
     TurnEvent,
     stream_turn,
 )
-from ai_assistant.apps.chat.services.turn_types import TurnOutcome, TurnStep
+from ai_assistant.apps.chat.services.planning.turn_types import (
+    TurnOutcome,
+    TurnStep,
+)
+from ai_assistant.apps.chat.services.tools.providers.server import ServerTools
 from ai_assistant.container import Container
 from ai_assistant.llm import (
     DEFAULT_PROFILE,
@@ -161,7 +159,8 @@ def assemble(
 
     ⚠ 顺序就是上下文的分层，从最稳到每轮都变：常驻提示词 → 历史 → 这一次的
     输入 → **末尾的状态块**。易变的东西一旦挪到前面去，它后面的工具声明与整段
-    历史会跟着一起丢掉端点的前缀缓存（`prompt.py` 与 `state_block.py` 文件头）。
+    历史会跟着一起丢掉端点的前缀缓存（`memory/prompt.py`
+    与 `memory/state_block.py` 文件头）。
 
     ⚠ 状态块**不落库**：`_persist` 落的是 `incoming_messages` 与本回合新增的
     那几条，而它两者都不是。

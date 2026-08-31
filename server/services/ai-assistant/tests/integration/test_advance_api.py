@@ -21,7 +21,7 @@ from unit.llm_fakes import ScriptedChat, StreamingChat, tool_call
 from ai_assistant.apps.chat.catalog import ASSISTANT_USE
 from ai_assistant.apps.chat.deps import get_advance_deps
 from ai_assistant.apps.chat.services.advance_service import AdvanceDeps
-from ai_assistant.apps.chat.services.server_tools import ServerTools
+from ai_assistant.apps.chat.services.tools.providers.server import ServerTools
 from ai_assistant.llm import GuardedModel
 from ai_assistant.llm.provider import ModelChoice, ModelKind
 from integration.conftest import DbStack

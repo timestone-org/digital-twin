@@ -15,7 +15,7 @@
 
 ⚠ **图不落库**，落的是一句占位。一张截图是几兆字节的 base64，存进去之后这个
 会话每重放一次就把它再喂给模型一遍，上下文与账单一起翻倍。图只活在截它的那
-一轮（`services/vision.py`）。
+一轮（`perception/vision.py`）。
 """
 
 from math import ceil
@@ -30,7 +30,7 @@ from langchain_core.messages import (
 from langchain_core.messages.tool import ToolCall
 
 from ai_assistant.apps.chat.models import ChatMessage
-from ai_assistant.apps.chat.services.vision import PLACEHOLDER
+from ai_assistant.apps.chat.services.perception.vision import PLACEHOLDER
 from ai_assistant.settings import HISTORY_DROP_STEP
 
 _USER = "user"

@@ -10,8 +10,8 @@
 import json
 from typing import Any
 
-from ai_assistant.apps.chat.services import step_preview
-from ai_assistant.apps.chat.services.turn_types import (
+from ai_assistant.apps.chat.services.output import step_preview
+from ai_assistant.apps.chat.services.planning.turn_types import (
     TurnDelta,
     TurnOutcome,
     TurnStep,

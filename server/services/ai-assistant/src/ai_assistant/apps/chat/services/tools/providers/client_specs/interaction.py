@@ -1,6 +1,6 @@
 """联动那一批客户端工具的规格：读规则表、写一条、删一条、改初始显隐。
 
-⚠ 与 `client_tool_specs.py` 同一口径——只有形状，实现在浏览器里；名字必须与
+⚠ 与同目录的 `core.py` 同一口径——只有形状，实现在浏览器里；名字必须与
 前端工作面的 `tools` 数组逐字相同。对不上时模型看得见那个工具、
 调用却每次都失败，而失败的样子与「这一页没实现它」一模一样。
 
@@ -8,7 +8,7 @@
 挤在一起的那一天最省事的改法是把新工具塞进别的段落里——名字与实现于是开始漂。
 """
 
-from ai_assistant.apps.chat.services.tool_shapes import (
+from ai_assistant.apps.chat.services.tools.shapes import (
     ToolSpec,
     object_schema,
     string_schema,

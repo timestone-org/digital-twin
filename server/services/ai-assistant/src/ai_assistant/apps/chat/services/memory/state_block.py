@@ -16,8 +16,8 @@ from typing import Any
 
 from langchain_core.messages import BaseMessage, HumanMessage
 
-from ai_assistant.apps.chat.services import plan as plan_service
-from ai_assistant.apps.chat.services import surface_context
+from ai_assistant.apps.chat.services.perception import surface_context
+from ai_assistant.apps.chat.services.planning import plan as plan_service
 
 # 包住这一段的标记。⚠ 要说清它不是用户说的话：不说的话，模型会把这一大段
 # JSON 当成用户刚敲进去的东西，然后回一句「你贴的这个是什么意思」

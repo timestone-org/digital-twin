@@ -10,7 +10,7 @@ from collections.abc import Callable
 import httpx
 import pytest
 
-from ai_assistant.apps.chat.services.server_tools import (
+from ai_assistant.apps.chat.services.tools.providers.server import (
     ServerTools,
     UnknownServerTool,
 )

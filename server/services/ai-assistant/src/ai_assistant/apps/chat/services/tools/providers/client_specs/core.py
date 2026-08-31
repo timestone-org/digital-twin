@@ -7,7 +7,7 @@
 ⚠ 这里只有形状，没有实现——客户端工具在服务端压根没有实现。
 """
 
-from ai_assistant.apps.chat.services.tool_shapes import (
+from ai_assistant.apps.chat.services.tools.shapes import (
     ToolSpec,
     integer_schema,
     object_schema,

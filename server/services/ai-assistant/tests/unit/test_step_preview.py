@@ -4,7 +4,7 @@
 一行文字，产出那一层的壳要剥掉。
 """
 
-from ai_assistant.apps.chat.services import step_preview
+from ai_assistant.apps.chat.services.output import step_preview
 
 
 def test_no_input_is_none_not_an_empty_table() -> None:

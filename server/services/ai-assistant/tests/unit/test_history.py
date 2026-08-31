@@ -14,7 +14,7 @@ import uuid
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from ai_assistant.apps.chat.models import ChatMessage
-from ai_assistant.apps.chat.services import history
+from ai_assistant.apps.chat.services.memory import history
 
 
 def _row(role: str, body: dict[str, object], seq: int = 1) -> ChatMessage:
