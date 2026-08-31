@@ -52,9 +52,21 @@ class InputDecoder(Protocol):
     svg 还能内嵌脚本，而界面要给用户看一张缩略图。
     """
 
-    name: str
-    suffixes: tuple[str, ...]
-    media_types: tuple[str, ...]
+    @property
+    def name(self) -> str:
+        """这一路解码器在注册表里的名字。⚠ 这三格声明成只读属性而不是可写
+        字段：实现一律是冻结 dataclass，而冻结字段满足不了可写的协议成员。"""
+        ...
+
+    @property
+    def suffixes(self) -> tuple[str, ...]:
+        """认哪些后缀。"""
+        ...
+
+    @property
+    def media_types(self) -> tuple[str, ...]:
+        """认哪些 media type。"""
+        ...
 
     def decode(self, raw: bytes, filename: str) -> Decoded:
         """把一份原始输入解成模型看得懂的东西。

@@ -31,7 +31,11 @@ class Finding:
 class Verifier(Protocol):
     """一种检验。"""
 
-    name: str
+    @property
+    def name(self) -> str:
+        """这一种检验在注册表里的名字。⚠ 声明成只读属性而不是可写字段：
+        实现一律是冻结 dataclass，而冻结字段满足不了一个可写的协议成员。"""
+        ...
 
     def applies(self, step: TurnStep) -> bool:
         """这一步归不归我管。

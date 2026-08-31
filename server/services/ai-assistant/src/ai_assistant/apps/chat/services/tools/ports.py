@@ -33,7 +33,12 @@ class RunsElsewhere(RuntimeError):
 class ToolProvider(Protocol):
     """一批工具的来源。加一路来源 = 加一个文件 + 注册表一行。"""
 
-    name: str
+    @property
+    def name(self) -> str:
+        """这一路来源在注册表里的名字。⚠ 声明成只读属性而不是可写字段：
+        实现一律是冻结 dataclass，而冻结字段满足不了一个可写的协议成员。
+        绕法（省掉类型标注）很脆——下一个人顺手补个类型就把它弄坏了。"""
+        ...
 
     def specs(self) -> tuple[ToolSpec, ...]:
         """这一路提供哪些工具。

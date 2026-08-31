@@ -57,7 +57,11 @@ class Gate(Protocol):
     契约测试守：对任意输入，`narrow` 的产出必须是入参的子集。
     """
 
-    name: str
+    @property
+    def name(self) -> str:
+        """这一道收窄在注册表里的名字。⚠ 声明成只读属性而不是可写字段：
+        实现一律是冻结 dataclass，而冻结字段满足不了一个可写的协议成员。"""
+        ...
 
     def narrow(self, context: TurnContext, allowed: Allowed) -> Allowed:
         """收窄一次。
