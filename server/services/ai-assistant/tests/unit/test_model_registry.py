@@ -12,7 +12,13 @@ import pytest
 from pydantic import SecretStr
 
 from ai_assistant.apps.credential.errors import CredentialNotFound
-from ai_assistant.llm import CODEX_PROFILE, DEFAULT_PROFILE, ModelChoice
+from ai_assistant.llm import (
+    CODEX_PROFILE,
+    DEFAULT_PROFILE,
+    ModelChoice,
+    ModelDisabled,
+    ModelRejected,
+)
 from ai_assistant.llm.registry import ModelRegistry
 from ai_assistant.settings import Settings
 
@@ -155,3 +161,40 @@ async def test_a_never_logged_in_subscription_fails_here_not_at_the_endpoint(
     registry = ModelRegistry(_with_codex(), tokens=_Tokens(is_connected=False))
     with pytest.raises(CredentialNotFound):
         await registry.resolve(ModelChoice(profile=CODEX_PROFILE))
+
+
+async def test_the_subscription_route_refuses_an_image_instead_of_sending_it(
+    # 这一路自报 has_vision=False，而 dashboard.capture 是页面自报的工具、
+    # 不按档位过滤——不在这里拦的话，图会被喂给一个不接图的模型，
+    # 而它多半只回一句「我没看到图」：调用成功、照常计费、结论是错的
+) -> None:
+    """⚠ 拒绝走 `ModelRejected`：那一档不打开断路器，这不是下游不行。"""
+    registry = ModelRegistry(_with_codex(), tokens=_Tokens())
+    with pytest.raises(ModelRejected) as caught:
+        await registry.resolve(
+            ModelChoice(profile=CODEX_PROFILE, kind="vision")
+        )
+    # 要说清下一步能干什么，否则模型原样再试一次，每次都走完一个回合才失败
+    assert "不接图" in str(caught.value)
+
+
+async def test_the_subscription_route_still_takes_a_chat_turn() -> None:
+    """拒的只是看图那一档，别把整路一起关掉。"""
+    registry = ModelRegistry(_with_codex(), tokens=_Tokens())
+    chosen = await registry.resolve(ModelChoice(profile=CODEX_PROFILE))
+    assert chosen is not None
+
+
+async def test_a_deployment_without_any_route_says_so_instead_of_crashing(
+    # 一路都没接时取模型要给一句能读的话，而不是让调用方吃一个 IndexError
+) -> None:
+    registry = ModelRegistry(_settings(), tokens=None)
+    with pytest.raises(ModelDisabled):
+        await registry.resolve(ModelChoice())
+
+
+def test_the_registry_reports_which_kinds_a_route_takes() -> None:
+    """能力面按它如实报，前端才说得出「这一路不接图」。"""
+    registry = ModelRegistry(_with_both(), tokens=_Tokens())
+    assert registry.supports(DEFAULT_PROFILE, "vision") is True
+    assert registry.supports(CODEX_PROFILE, "vision") is False

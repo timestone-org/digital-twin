@@ -30,9 +30,8 @@ from ai_assistant.llm import deltas
 from ai_assistant.llm.codex import wire_names
 from ai_assistant.llm.deltas import DeltaSink
 from ai_assistant.llm.errors import ModelRejected, ModelUnavailable
-from ai_assistant.llm.provider import (
+from ai_assistant.llm.ports import (
     CODEX_PROFILE,
-    DEFAULT_PROFILE,
     ModelChoice,
     ModelSource,
 )
@@ -54,10 +53,12 @@ class GuardedModel:
     # 逐字流式的总开关。⚠ 关着时 `on_delta` 被忽略而不是报错：调用方不必
     # 为了「这套部署关了流式」再写一条分支
     is_streaming: bool = True
-    # 除默认那一路之外，每一路各有一份断路器。⚠ 共用一份的话，订阅账号那一路
-    # 挂掉会把按量那一路一起短路，而后者本来好好的
-    breakers: Mapping[str, CircuitBreaker] = field(
-        default_factory=dict[str, CircuitBreaker]
+    # 每一个 (档位, 用途) 各有一份断路器。⚠ 共用一份的话，订阅账号那一路挂掉
+    # 会把按量那一路一起短路，而后者本来好好的；**用途这一维同理**——看图那一档
+    # 可以是另一家端点，它连挂几次不该把同一路的对话一起短路，而那时用户看到的
+    # 是「助手整个不能说话了」
+    breakers: Mapping[tuple[str, str], CircuitBreaker] = field(
+        default_factory=dict[tuple[str, str], CircuitBreaker]
     )
 
     async def respond(
@@ -78,7 +79,7 @@ class GuardedModel:
 
         Args: choice, messages, tools, on_delta。
         """
-        breaker = self._breaker_of(choice.profile)
+        breaker = self._breaker_of(choice)
         self._guard(breaker)
         model = await self.source(choice)
         # ⚠ 订阅账号那一路的端点不认工具名里的点号：出去的路上换掉，
@@ -106,14 +107,18 @@ class GuardedModel:
         _log_usage(choice, answer)
         return answer
 
-    def _breaker_of(self, profile: str) -> CircuitBreaker:
-        """这一路自己那份断路器；没单独配就用默认那一路的。
+    def _breaker_of(self, choice: ModelChoice) -> CircuitBreaker:
+        """这一格 (档位, 用途) 自己那份断路器；没单独配就用兜底那一份。
 
-        Args: profile。
+        ⚠ 键是两维的。只按档位分的话，看图那一档换成另一家端点之后，
+        它连挂几次会把同一路的对话一起短路掉。
+
+        Args: choice。
         """
-        if profile == DEFAULT_PROFILE:
-            return self.breaker
-        return self.breakers.get(profile, self.breaker)
+        return self.breakers.get(
+            (choice.profile, choice.kind),
+            self.breaker,
+        )
 
     def _guard(self, breaker: CircuitBreaker) -> None:
         try:

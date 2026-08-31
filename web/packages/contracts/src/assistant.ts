@@ -53,8 +53,6 @@ export interface AssistantModelProfile {
 export interface AssistantCapability {
   /** 模型端点是否配好并开着。关着时会话仍可读，但发不出新回合。 */
   is_model_enabled: boolean
-  /** 视觉输入是否可用。看截图提建议那类技能据它决定摆不摆。 */
-  is_vision_enabled: boolean
   skills: AssistantSkill[]
   /** 这套部署接了哪几路模型。空 = 一路都没接。 */
   models: AssistantModelProfile[]

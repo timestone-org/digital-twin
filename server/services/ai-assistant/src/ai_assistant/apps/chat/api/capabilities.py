@@ -67,9 +67,6 @@ def capability_of(
     ready = [one.id for one in profiles if one.is_ready]
     return CapabilityOut(
         is_model_enabled=bool(ready),
-        is_vision_enabled=any(
-            one.is_ready and one.has_vision for one in profiles
-        ),
         skills=skill_catalog(),
         models=profiles,
         default_model_id=model_profiles.default_id_of(models, profiles),

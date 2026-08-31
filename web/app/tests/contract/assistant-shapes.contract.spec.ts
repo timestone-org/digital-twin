@@ -111,7 +111,6 @@ type Keys<T> = Record<keyof T, true>
 const SHAPES: Record<string, Record<string, true>> = {
   CapabilityOut: {
     is_model_enabled: true,
-    is_vision_enabled: true,
     skills: true,
     models: true,
     default_model_id: true,

@@ -44,8 +44,6 @@ class CapabilityOut(BaseModel):
 
     # 模型端点是否配好并开着。关着时会话仍可读，但发不出新回合
     is_model_enabled: bool
-    # 视觉输入是否可用。看截图提布局建议这类技能据它决定摆不摆
-    is_vision_enabled: bool
     skills: list[SkillOut]
     # 这套部署接了哪几路模型。空 = 一路都没接
     models: list[ModelProfileOut] = Field(default_factory=list[ModelProfileOut])
