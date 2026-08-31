@@ -231,6 +231,65 @@ describe('父件带着后代一起摆进来', () => {
   })
 })
 
+describe('换宽高比时的取景', () => {
+  /**
+   * 一台长条形机组：20 长、2 高、4 深。
+   * ⚠ 不能拿立方体验这一条：立方体的取景距离由**高度**那一支定，宽高比再怎么变
+   * 都是同一个数，用例会绿得毫无意义。
+   */
+  function longPart() {
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(20, 2, 4),
+      new THREE.MeshStandardMaterial(),
+    )
+    const renderer = createHeadlessRenderer()
+    const preview = createPartPreview({
+      container: document.createElement('div'),
+      objects: [mesh],
+      autoRotate: false,
+      renderer: () => renderer,
+    })
+    if (preview === null) throw new Error('预览没造出来')
+    return { preview, renderer }
+  }
+
+  /** 这一帧画出去的相机机位；渲染记账里记的就是那台真相机。 */
+  function eyeAfter(
+    preview: ReturnType<typeof setup>['preview'],
+    renderer: ReturnType<typeof setup>['renderer'],
+    width: number,
+    height: number,
+  ): THREE.Vector3 {
+    preview.measure(width, height)
+    preview.frame(0)
+    const last = renderer.renders[renderer.renders.length - 1]
+    if (last === undefined) throw new Error('没有画过一帧')
+    return last.camera.position.clone()
+  }
+
+  // 舞台变宽了就该凑近，否则放大弹窗只是把黑边一起放大
+  it('还没人碰过镜头时，舞台一变就重新取景', () => {
+    const { preview, renderer } = longPart()
+
+    const square = eyeAfter(preview, renderer, 400, 400)
+    const wide = eyeAfter(preview, renderer, 1200, 400)
+
+    expect(wide.length()).toBeLessThan(square.length())
+  })
+
+  // ⚠ 换宽高比时把用户正看的角度拽走，比画面小得多更让人火大
+  it('用户接管镜头之后就不再动它', () => {
+    const { preview, renderer } = longPart()
+    const before = eyeAfter(preview, renderer, 400, 400)
+
+    preview.releaseFraming()
+    const after = eyeAfter(preview, renderer, 1200, 400)
+
+    // 不逐位比：`controls.update()` 每帧把机位在球坐标上来回换一趟，末位会飘
+    expect(after.distanceTo(before)).toBeLessThan(1e-6)
+  })
+})
+
 describe('取景距离', () => {
   /** 一台长条形机组：长 20、高 2、深 4。 */
   function unitBox(): THREE.Box3 {
