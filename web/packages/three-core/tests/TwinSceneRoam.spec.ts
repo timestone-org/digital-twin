@@ -10,6 +10,7 @@ import * as THREE from 'three'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { configureTwinModelHost, resetTwinModelHost } from '../src/host'
+import type { TwinModelAsset } from '../src/modelLoader'
 import type * as SceneCoreModule from '../src/sceneCore'
 import {
   createHeadlessRenderer,
@@ -37,10 +38,15 @@ const CONTROLS = '[data-test="twin-roam-controls"]'
 
 let renderer: HeadlessRenderer
 
-function fakeModel(): THREE.Object3D {
+/**
+ * ⚠ 形状必须是 `TwinModelAsset`（`{ root, clips }`），不是裸的 Object3D：
+ * 桩比真实现宽的时候装配点拿到的是 `undefined`，模型压根没进场景，而用例
+ * 只断言浮层、照样全绿——唯一的痕迹是一行 THREE 的控制台报错。
+ */
+function fakeAsset(): TwinModelAsset {
   const root = new THREE.Group()
   root.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1)))
-  return root
+  return { root, clips: [] }
 }
 
 function config(roamTour: Record<string, unknown>): TwinConfig {
@@ -64,7 +70,7 @@ function mountScene(roamTour: Record<string, unknown>) {
 beforeEach(() => {
   renderer = createHeadlessRenderer()
   seam.createWebGLRenderer.mockReturnValue(renderer)
-  seam.loadTwinModel.mockResolvedValue(fakeModel())
+  seam.loadTwinModel.mockResolvedValue(fakeAsset())
   configureTwinModelHost({ resolveModelUrl: (ref) => `/assets/${ref}.glb` })
 })
 
