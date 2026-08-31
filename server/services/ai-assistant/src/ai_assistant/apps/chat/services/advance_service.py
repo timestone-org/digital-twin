@@ -39,7 +39,11 @@ from ai_assistant.apps.chat.services.planning.turn_types import (
     TurnOutcome,
     TurnStep,
 )
+from ai_assistant.apps.chat.services.tools.providers.mcp import (
+    PROVIDER as MCP_PROVIDER,
+)
 from ai_assistant.apps.chat.services.tools.registry import build_registry
+from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
 from ai_assistant.container import Container
 from ai_assistant.llm import (
     DEFAULT_PROFILE,
@@ -66,6 +70,9 @@ class AdvanceDeps:
     sessions: SessionFactory
     model: GuardedModel
     server_tools: ServerToolRunner
+    # 这一轮才知道的那几个工具规格（眼下只有 MCP：某一路连不上时它的工具这一轮
+    # 就不在）。⚠ 它们不在静态的 `TOOL_SPECS` 里，要单独交给 `specs_for`
+    extra_specs: tuple[ToolSpec, ...] = ()
 
 
 def deps_of(container: Container, headers: dict[str, str]) -> AdvanceDeps:
@@ -78,15 +85,22 @@ def deps_of(container: Container, headers: dict[str, str]) -> AdvanceDeps:
     """
     if container.model is None:
         raise ModelDisabled("本部署没有接模型")
+    registry = build_registry(
+        platform=container.platform,
+        headers=headers,
+        mcp=container.mcp,
+        write_allowed=container.settings.mcp_write_names(),
+    )
     return AdvanceDeps(
         sessions=container.database.session,
         model=container.model,
         # ⚠ 走注册表而不是直接造 `ServerTools`：客户端那一路的名字也在表里，
         # 于是「本该交给浏览器的工具走到了服务端」会得到一句说得清的错
         # （`RunsElsewhere`），而不是与「模型编了个工具名」混成同一档
-        server_tools=build_registry(
-            platform=container.platform, headers=headers
-        ).run,
+        server_tools=registry.run,
+        # ⚠ 与 `registry.run` 取自**同一份**注册表：各造一份的话，下发的清单
+        # 与真能跑的那一份会漂开，而两边都不报错
+        extra_specs=registry.specs_of(MCP_PROVIDER),
     )
 
 
@@ -241,7 +255,9 @@ async def advance(
     )
     turn = TurnDeps(
         model=deps.model,
-        specs=tool_select.specs_for(payload.surface_kind, payload.client_tools),
+        specs=tool_select.specs_for(
+            payload.surface_kind, payload.client_tools, deps.extra_specs
+        ),
         run_tool=_with_plan_tools(plans, deps.server_tools),
         choice=choice,
     )

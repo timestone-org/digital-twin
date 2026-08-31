@@ -56,6 +56,61 @@ def _parsed_object(given: str) -> dict[str, Any] | None:
     return cast("dict[str, Any]", body)
 
 
+def _parsed_list(given: str) -> list[object] | None:
+    """把一段 JSON 解成列表；空的、或者不是列表，都给 `None`。
+
+    Args: given。
+    """
+    text = given.strip()
+    if not text:
+        return None
+    try:
+        body: object = json.loads(text)
+    except ValueError:
+        return None
+    return cast("list[object]", body) if isinstance(body, list) else None
+
+
+def _parsed_names(given: str) -> list[str] | None:
+    """一段 JSON 字符串列表；不成形给 `None`，没配给空表。
+
+    Args: given。
+    """
+    if not given.strip():
+        return []
+    rows = _parsed_list(given)
+    if rows is None or not all(isinstance(one, str) for one in rows):
+        return None
+    return [one for one in rows if isinstance(one, str)]
+
+
+def _parsed_servers(given: str) -> list[dict[str, Any]]:
+    """一段 MCP server 列表；任一项不成形则整体判空。
+
+    ⚠ **只收 http/https 的 url**：MCP 还有 stdio 传输，而这套部署不接它
+    （ADR-0031 决策一）。收下一个 stdio 命令的表现会是「配了却一个工具都没有」。
+
+    Args: given。
+    """
+    rows = _parsed_list(given)
+    if rows is None:
+        return []
+    found: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            return []
+        entry = cast("dict[str, Any]", row)
+        name, url = entry.get("name"), entry.get("url")
+        if not isinstance(name, str) or not name:
+            return []
+        if not isinstance(url, str) or not url.startswith(
+            ("http://", "https://")
+        ):
+            return []
+        found.append(entry)
+    return found
+
+
 def _has_secret(given: SecretStr | None) -> bool:
     """密钥是不是真配了。⚠ 空白与缺席同档。
 
@@ -192,6 +247,24 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     platform_base_url: str = "http://platform-server:8005"
     platform_timeout_s: float = Field(default=5.0, gt=0)
 
+    # 外部 MCP server（ADR-0031）。一段 JSON 列表，逐项含
+    # `name` / `url` / `is_auth_required`。
+    # ⚠ **只认 HTTP 传输**：配一个 stdio 命令进来是配不进的，那一档要每个副本
+    # 起子进程，而 api 角色无状态且要水平扩。
+    # ⚠ 令牌**不进这一格**、更不进 URL——URL 会进日志、进链路追踪、进错误消息
+    mcp_servers: str = ""
+    # 各路的令牌，一段 JSON 对象 `{server 名: 令牌}`。⚠ 密钥类无默认值；
+    # 某一路 `is_auth_required` 为真却缺它 = 启动即失败，见
+    # `_mcp_auth_is_complete`
+    mcp_tokens: SecretStr | None = None
+    # 许下发的**写操作**规范名，一段 JSON 字符串列表（`["mcp.a.b"]`）。
+    # ⚠ 默认空：MCP 的 `readOnlyHint` 是可选的，缺了那一格的工具可能删东西，
+    # 所以说不清就当写操作、不下发。放行的代价不可逆，拦下的只是补一行
+    mcp_write_allowed: str = ""
+    mcp_timeout_s: float = Field(default=10.0, gt=0)
+    mcp_breaker_failures: int = Field(default=3, ge=1)
+    mcp_breaker_reset_s: float = Field(default=60.0, gt=0)
+
     def codex_model_choices(self) -> tuple[str, ...]:
         """面板上可选的模型代号，第一个是默认。"""
         listed = [one.strip() for one in self.codex_models.split(",")]
@@ -267,6 +340,83 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
             raise ValueError(
                 "配了 ASSISTANT_VISION_BASE_URL（与对话档不同）时"
                 "必须配 ASSISTANT_VISION_API_KEY"
+            )
+        return self
+
+    def mcp_server_list(self) -> tuple[dict[str, Any], ...]:
+        """配了哪几路 MCP；没配就是空。
+
+        ⚠ 回的是原始字典而不是 `McpServer`：配置层不认上游那一层的类型，
+        免得两边互相 import。
+        """
+        return tuple(_parsed_servers(self.mcp_servers))
+
+    def mcp_token_map(self) -> dict[str, str]:
+        """各路的令牌；没配就是空表。"""
+        if not _has_secret(self.mcp_tokens) or self.mcp_tokens is None:
+            return {}
+        parsed = _parsed_object(self.mcp_tokens.get_secret_value())
+        if parsed is None:
+            return {}
+        return {
+            str(key): str(value)
+            for key, value in parsed.items()
+            if isinstance(value, str) and value
+        }
+
+    def mcp_write_names(self) -> frozenset[str]:
+        """许下发的写操作规范名。⚠ 配歪时给空集——校验器已经在启动期拦过一次，
+        走到这里还是 `None` 只可能是校验被绕开了，那时空集是安全的一端。"""
+        return frozenset(_parsed_names(self.mcp_write_allowed) or ())
+
+    @field_validator("mcp_servers")
+    @classmethod
+    def _mcp_servers_must_be_a_list(cls, given: str) -> str:
+        """配错了就不许起。
+
+        ⚠ 留到第一次对话才发现的话，现象是「MCP 工具一个都没出现」，
+        而那与「装不上就如实缺席」长得一模一样——查不出是配歪了。
+
+        Args: given。
+        """
+        if given.strip() and not _parsed_servers(given):
+            raise ValueError(
+                "ASSISTANT_MCP_SERVERS 必须是一段 JSON 列表，"
+                "逐项含 name 与 url（url 只收 http/https）"
+            )
+        return given
+
+    @field_validator("mcp_write_allowed")
+    @classmethod
+    def _mcp_write_allowed_must_be_a_list(cls, given: str) -> str:
+        """配错了就不许起。
+
+        Args: given。
+        """
+        if given.strip() and _parsed_names(given) is None:
+            raise ValueError(
+                "ASSISTANT_MCP_WRITE_ALLOWED 必须是一段 JSON 字符串列表"
+            )
+        return given
+
+    @model_validator(mode="after")
+    def _mcp_auth_is_complete(self) -> Self:
+        """某一路要鉴权却没给它令牌——启动即失败。
+
+        ⚠ 不给 WARN continue：留到运行期的话，那一路每次 `tools/list` 都撞 401、
+        断路器打开，现象是「这一路的工具时有时无」，而它指不回这一格。
+        """
+        tokens = self.mcp_token_map()
+        missing = [
+            str(one.get("name"))
+            for one in self.mcp_server_list()
+            if one.get("is_auth_required")
+            and not tokens.get(str(one.get("name")))
+        ]
+        if missing:
+            raise ValueError(
+                f"这几路 MCP 要鉴权却没在 ASSISTANT_MCP_TOKENS 里配令牌："
+                f"{'、'.join(missing)}"
             )
         return self
 

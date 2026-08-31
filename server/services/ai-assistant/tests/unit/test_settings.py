@@ -142,3 +142,37 @@ def test_the_same_endpoint_for_both_kinds_needs_no_second_key() -> None:
     resolved = settings.endpoint_of("vision")
     assert resolved is not None
     assert resolved.api_key.get_secret_value() == "sk-chat"
+
+
+def test_an_mcp_server_needing_auth_without_a_token_refuses_to_start() -> None:
+    """⚠ 不给 WARN continue：留到运行期的话，那一路每次 `tools/list` 都撞 401、
+    断路器打开，现象是「这一路的工具时有时无」，而它指不回这一格。"""
+    with pytest.raises(ValidationError):
+        _settings(
+            mcp_servers=(
+                '[{"name":"a","url":"https://a/mcp","is_auth_required":true}]'
+            )
+        )
+
+
+def test_an_mcp_server_with_its_token_starts_fine() -> None:
+    settings = _settings(
+        mcp_servers='[{"name":"a","url":"https://a/mcp","is_auth_required":true}]',
+        mcp_tokens=SecretStr('{"a":"tok"}'),
+    )
+    assert settings.mcp_token_map() == {"a": "tok"}
+    assert len(settings.mcp_server_list()) == 1
+
+
+def test_a_non_http_mcp_url_is_refused() -> None:
+    """⚠ MCP 还有 stdio 传输，这套部署不接它——收下的话表现是「配了却一个
+    工具都没有」，而那与「server 连不上」长得一模一样（ADR-0031 决策一）。"""
+    with pytest.raises(ValidationError):
+        _settings(mcp_servers='[{"name":"a","url":"stdio:///usr/bin/thing"}]')
+
+
+def test_no_mcp_configured_is_simply_empty() -> None:
+    """没配就是空，不是失败——装不上就如实缺席。"""
+    settings = _settings()
+    assert settings.mcp_server_list() == ()
+    assert settings.mcp_write_names() == frozenset()

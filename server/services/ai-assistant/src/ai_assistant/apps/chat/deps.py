@@ -78,7 +78,7 @@ def get_write_context(
     )
 
 
-def get_advance_deps(
+async def get_advance_deps(
     request: Request,
     container: Annotated[Container, Depends(get_container)],
 ) -> AdvanceDeps:
@@ -92,6 +92,10 @@ def get_advance_deps(
 
     Args: request, container。
     """
+    # ⚠ 每轮刷一次外部工具目录：某一路 MCP 连不上时它的工具这一轮就不该下发
+    # （ADR-0031 决策五）。刷在这里而不是装配期——装配期问一次的话，一路 server
+    # 中途挂掉之后模型还会一直看得见它的工具，调一次失败一次
+    await container.mcp.refresh()
     return deps_of(container, caller_headers(request.headers))
 
 

@@ -40,12 +40,21 @@ CROSS_MODULE_READ_TOOLS: tuple[str, ...] = (
 
 
 def specs_for(
-    surface_kind: str, client_tools: Sequence[str] | None
+    surface_kind: str,
+    client_tools: Sequence[str] | None,
+    extra: Sequence[ToolSpec] = (),
 ) -> tuple[ToolSpec, ...]:
     """这一轮下发给模型的工具集，保持 `TOOL_SPECS` 的原序。
 
+    ⚠ `extra` 是**逐轮才知道**的那几个（眼下只有 MCP：某一路连不上时它的工具
+    这一轮就不在），一律放在末尾且不过技能过滤——它们是部署方显式装上的，
+    不归任何技能，与 `user.ask` 那条「报了就下发」同一个道理。
+
+    ⚠ 放末尾不是审美：工具声明属于前缀缓存唯一能命中的那一段（ADR-0025 的
+    B 层），把逐轮可变的那几个排在前面，会让后面所有内建工具的声明整体位移。
+
     Args: surface_kind, client_tools（前端自报的客户端工具名；None = 老前端，
-        退回技能声明推导）。
+        退回技能声明推导）, extra（这一轮额外可用的工具规格）。
     """
     skills = skills_for(surface_kind)
     server_allowed = {
@@ -58,9 +67,10 @@ def specs_for(
         if client_tools is not None
         else {name for skill in skills for name in skill.client_tools}
     )
-    return tuple(
+    picked = tuple(
         spec
         for spec in TOOL_SPECS
         if spec.name
         in (server_allowed if spec.runs_on == "server" else client_allowed)
     )
+    return picked + tuple(extra)
