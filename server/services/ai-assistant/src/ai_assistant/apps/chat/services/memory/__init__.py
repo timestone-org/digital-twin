@@ -13,11 +13,17 @@ from ai_assistant.apps.chat.services.memory.ports import (
     Summarizer,
     Summary,
 )
+from ai_assistant.apps.chat.services.memory.summarize import (
+    ModelSummarizer,
+    NullSummarizer,
+)
 
 __all__ = [
     "Hit",
     "Knowledge",
     "LongTermStore",
+    "ModelSummarizer",
+    "NullSummarizer",
     "Scope",
     "ShortTermStore",
     "Summarizer",

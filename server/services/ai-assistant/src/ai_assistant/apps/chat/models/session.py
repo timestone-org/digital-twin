@@ -55,6 +55,12 @@ class ChatSession(UuidPrimaryKeyMixin, TimestampMixin, Base):
     plan_json: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB, nullable=True
     )
+    # 窗口外那一截折成的摘要（`memory/summarize.py`）。⚠ 落库不重算：它锚在
+    # 历史窗口的台阶上，同一个台阶内必须**逐字复用**——每轮现折的话它就是
+    # 历史区前面的一个新前缀断点，而那没有任何运行期迹象。没折出来就是 NULL
+    summary_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
     # 这个会话用哪一路模型、哪一档推理。⚠ 落在会话上而不是每次请求带：
     # 工具回填那几次推进是循环自己发的，那时前端手上没有用户的选择。
     # ⚠ 建行时就盖上此刻的默认，不留 NULL：留着的话推进那一层退按量，

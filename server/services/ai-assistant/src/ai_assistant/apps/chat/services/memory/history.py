@@ -84,22 +84,27 @@ def replay(rows: list[ChatMessage]) -> list[BaseMessage]:
     return [to_message(row) for row in sorted(rows, key=lambda one: one.seq)]
 
 
-def window(
+def split(
     rows: list[ChatMessage],
     limit: int,
     step: int = HISTORY_DROP_STEP,
-) -> list[ChatMessage]:
-    """取最近的一截历史，**脱落按台阶走**，且不许把工具调用与它的回应切开。
+) -> tuple[list[ChatMessage], list[ChatMessage]]:
+    """把历史切成「折叠区」与「窗口区」两截，**切点按台阶走**。
 
     ⚠ 裸的 `[-limit:]` 会让窗口每多一条消息就整体前移一格。端点的前缀缓存认的是
     逐字相同的前缀，于是会话一过 `limit`，历史区**每一轮**都对不上——一个跑了
     几十轮的会话从此再也吃不到缓存，而这件事没有任何运行期迹象。按台阶脱落之后
     起点每 `step` 条才动一次，窗口在 `limit - step` 与 `limit` 之间浮动。
 
-    ⚠ 掐掉头部的孤儿工具消息：切点落在「带工具调用的助手消息」与它的工具回应
-    之间时，窗口会以几条没有调用的工具回应开头，端点直接判请求不合法，报出来的
-    400 与真实原因毫无关系。掐头是安全的——窗口保住的是尾部，助手消息在窗口里
-    时它的回应一定也在。
+    ⚠ 掐掉窗口头部的孤儿工具消息：切点落在「带工具调用的助手消息」与它的工具
+    回应之间时，窗口会以几条没有调用的工具回应开头，端点直接判请求不合法，
+    报出来的 400 与真实原因毫无关系。掐头是安全的——窗口保住的是尾部，助手消息
+    在窗口里时它的回应一定也在。掐掉的那几条归**折叠区**，不是凭空消失。
+
+    ⚠ **切点是摘要的锚**（`memory/summarize.py`）：折叠区的右边界与窗口的左边界
+    是同一个位置，所以摘要与窗口同频——同一个台阶内两者都逐字不变。分两处各算
+    一遍的话，两边会在掐孤儿那一步上错开，而错开的表现是摘要每轮都变，
+    也就是第五个前缀断点。
 
     Args: rows, limit（高水位）, step（一次脱落几条）。
     """
@@ -109,11 +114,24 @@ def window(
     # 一个台阶就能把整段历史削光，而表现是模型突然什么都不记得了
     floor = max(limit - step, 1)
     drop = min(ceil(overflow / step) * step, max(0, len(ordered) - floor))
+    orphans = 0
     recent = ordered[drop:]
-    start = 0
-    while start < len(recent) and recent[start].role == _TOOL:
-        start += 1
-    return recent[start:]
+    while orphans < len(recent) and recent[orphans].role == _TOOL:
+        orphans += 1
+    cut = drop + orphans
+    return ordered[:cut], ordered[cut:]
+
+
+def window(
+    rows: list[ChatMessage],
+    limit: int,
+    step: int = HISTORY_DROP_STEP,
+) -> list[ChatMessage]:
+    """取最近的一截历史。切点口径见 `split`。
+
+    Args: rows, limit（高水位）, step（一次脱落几条）。
+    """
+    return split(rows, limit, step)[1]
 
 
 def _text_of(message: BaseMessage) -> str:
