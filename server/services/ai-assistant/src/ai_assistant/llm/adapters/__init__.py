@@ -17,6 +17,10 @@ from ai_assistant.llm.adapters.openai_compat import (
     OpenAiCompatAdapter,
     build_openai_compat,
 )
+from ai_assistant.llm.adapters.openai_embedding import (
+    OpenAiCompatEmbeddingAdapter,
+    build_openai_embedding,
+)
 from ai_assistant.llm.codex.token_provider import TokenSource
 from ai_assistant.llm.ports import ModelAdapter
 from ai_assistant.settings import Settings
@@ -57,7 +61,9 @@ __all__ = [
     "AdapterBuilder",
     "CodexOAuthAdapter",
     "OpenAiCompatAdapter",
+    "OpenAiCompatEmbeddingAdapter",
     "build_adapters",
     "build_codex_oauth",
     "build_openai_compat",
+    "build_openai_embedding",
 ]

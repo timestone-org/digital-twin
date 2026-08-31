@@ -15,13 +15,19 @@ MCP 那一路留的（ADR-0031）：那一路的 `specs()` 要走网络，每次
 from dataclasses import dataclass
 from typing import Any
 
+from ai_assistant.apps.chat.services.memory.longterm import (
+    PgLongTermStore,
+    SessionFactory,
+)
 from ai_assistant.apps.chat.services.tools.ports import (
     ToolProvider,
     UnknownTool,
 )
 from ai_assistant.apps.chat.services.tools.providers.client import ClientTools
+from ai_assistant.apps.chat.services.tools.providers.memory import MemoryTools
 from ai_assistant.apps.chat.services.tools.providers.server import ServerTools
 from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
+from ai_assistant.llm import EmbeddingAdapter
 from ai_assistant.upstream import PlatformClient
 
 
@@ -79,18 +85,36 @@ def registry_of(providers: tuple[ToolProvider, ...]) -> ToolRegistry:
 def build_registry(
     platform: PlatformClient | None = None,
     headers: dict[str, str] | None = None,
+    sessions: SessionFactory | None = None,
+    embedder: EmbeddingAdapter | None = None,
 ) -> ToolRegistry:
     """这套部署的工具注册表。
 
-    ⚠ 顺序是契约：服务端那一路在前，客户端那一路在后。它决定工具在提示词里的
-    先后，而先后影响模型的第一反应（`intent/select.py` 有一条闸守着原序）。
+    ⚠ 顺序是契约：服务端那一路在前，长期记忆居中，客户端那一路在后。它决定
+    工具在提示词里的先后，而先后影响模型的第一反应（`intent/select.py` 有一条
+    闸守着原序）。
+
+    ⚠ `sessions` 不给时长期记忆那两个工具**照样进规格表**。这是刻意的：
+    `TOOL_SPECS` 是不带请求上下文取的一份静态清单（`all_specs`），而下发给模型
+    的那一份按它过滤——按 `sessions` 有无来增删规格，会让「装配期看得见、
+    运行期看不见」两份清单漂开，那比一句说得清的错更难查。没接上仓储时由
+    `MemoryTools.run` 抛一句点名的错。
 
     Args: platform（上游业务面；只取规格时不用给）, headers（这一次要转发的
-        身份头）。
+        身份头）, sessions（数据库会话工厂）, embedder（嵌入档，没接就是
+        None）。
     """
     return registry_of(
         (
             ServerTools(platform=platform, headers=dict(headers or {})),
+            MemoryTools(
+                store=(
+                    None
+                    if sessions is None
+                    else PgLongTermStore(sessions=sessions, embedder=embedder)
+                ),
+                headers=dict(headers or {}),
+            ),
             ClientTools(),
         )
     )

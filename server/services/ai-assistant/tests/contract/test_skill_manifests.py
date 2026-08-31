@@ -9,6 +9,7 @@ from ai_assistant.apps.chat.enums import SURFACE_KINDS
 from ai_assistant.apps.chat.services import skill_catalog
 from ai_assistant.apps.chat.services.intent.select import specs_for
 from ai_assistant.apps.chat.services.planning.plan import is_plan_tool
+from ai_assistant.apps.chat.services.tools.providers.memory import MemoryTools
 from ai_assistant.apps.chat.services.tools.providers.server import ServerTools
 from ai_assistant.apps.chat.services.tools.specs import TOOL_SPECS
 from ai_assistant.apps.chat.skills import list_skills
@@ -93,9 +94,16 @@ def test_the_catalog_is_ordered_by_name() -> None:
 
 
 def _implemented() -> set[str]:
-    """服务端工具的两个实现家：工具分派表，与计划子系统自己收走的那一个。"""
+    """服务端工具的实现家：各路 provider 的分派表，加计划子系统收走的那一个。
+
+    ⚠ **逐路问，不走注册表的 `owners`**：`owners` 是从各路的 `specs()` 建的，
+    拿它来比等于拿规格跟自己比，这条闸会变成恒真。
+    ⚠ 加一路服务端 provider（MCP 那一路将来就是）要在这里加一行，
+    否则它实现的工具会被判成「没人实现」。
+    """
     return {
         *ServerTools()._handlers(),
+        *MemoryTools()._handlers(),
         *(name for name in KNOWN_SERVER_TOOLS if is_plan_tool(name)),
     }
 
@@ -107,7 +115,7 @@ def test_every_server_tool_has_an_implementation_behind_it() -> None:
 
 def test_the_dispatch_table_never_grows_a_tool_nobody_declared() -> None:
     # 反过来也守：实现了却没进规格的工具，模型永远看不见它
-    assert set(ServerTools()._handlers()) - KNOWN_SERVER_TOOLS == set()
+    assert _implemented() - KNOWN_SERVER_TOOLS == set()
 
 
 def test_no_skill_claims_the_builtin_ask_tool() -> None:

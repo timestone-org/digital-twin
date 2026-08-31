@@ -4,7 +4,10 @@
 而 `planning/turn.py` 与 `advance_service.py` 只该认 `ModelChoice`。
 """
 
-from ai_assistant.llm.adapters import build_adapters
+from ai_assistant.llm.adapters import (
+    build_adapters,
+    build_openai_embedding,
+)
 from ai_assistant.llm.deltas import DeltaChannel, DeltaSink
 from ai_assistant.llm.errors import (
     ModelDisabled,
@@ -43,4 +46,5 @@ __all__ = [
     "ModelSource",
     "ModelUnavailable",
     "build_adapters",
+    "build_openai_embedding",
 ]

@@ -4,6 +4,10 @@
 （它只判跨功能 import 路径的第 4 段是不是 `services`），只能靠这份清单与评审守。
 """
 
+from ai_assistant.apps.chat.services.memory.longterm import (
+    PgLongTermStore,
+    SessionFactory,
+)
 from ai_assistant.apps.chat.services.memory.ports import (
     Hit,
     Knowledge,
@@ -24,7 +28,9 @@ __all__ = [
     "LongTermStore",
     "ModelSummarizer",
     "NullSummarizer",
+    "PgLongTermStore",
     "Scope",
+    "SessionFactory",
     "ShortTermStore",
     "Summarizer",
     "Summary",

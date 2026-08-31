@@ -28,6 +28,15 @@ from ai_assistant.apps.chat.skills import skills_for
 # 哪个工作面都有的服务端工具：拉技能正文、写执行计划
 CORE_SERVER_TOOLS = ("skills.load", "plan.write")
 
+# 长期记忆档：助手自己的记忆，不碰任何业务数据，故不受工作面约束
+# （ADR-0030）。⚠ `memory.remember` 是写动作却进了这一档——它写的是助手自己
+# schema 里那张表、按签名身份隔离，与「替用户改业务数据」不是一回事；
+# 跟着工作面走反而会让「在台账页交代的口径，回大屏页就查不到」
+CROSS_MODULE_MEMORY_TOOLS: tuple[str, ...] = (
+    "memory.remember",
+    "memory.search",
+)
+
 # 跨模块只读档：任何工作面都能查的东西（V2_PLAN §3 的读侧）。
 # ⚠ 只进只读工具。写动作跟着它的工作面与确认界面走，不进这一档
 CROSS_MODULE_READ_TOOLS: tuple[str, ...] = (
@@ -64,6 +73,7 @@ def allowed_for(context: TurnContext) -> Allowed:
     kept = tuple(one for one in on_surface if one.name in gated.skills)
     server_allowed = {
         *CORE_SERVER_TOOLS,
+        *CROSS_MODULE_MEMORY_TOOLS,
         *CROSS_MODULE_READ_TOOLS,
         *(name for skill in kept for name in skill.server_tools),
     }

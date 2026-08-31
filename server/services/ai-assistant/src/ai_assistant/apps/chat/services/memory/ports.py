@@ -102,6 +102,15 @@ class Summarizer(Protocol):
 class LongTermStore(Protocol):
     """长期知识的读写面。"""
 
+    @property
+    def can_rank(self) -> bool:
+        """检索排得了序吗。
+
+        ⚠ 调用方要据它如实告诉用户：没接嵌入档时检索恒为空，而「查不到」与
+        「没记过」是两件事——不说清的话，模型会当成用户从没交代过。
+        """
+        ...
+
     async def remember(self, item: Knowledge) -> str:
         """记一条，回它的 id。
 
