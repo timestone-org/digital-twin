@@ -189,6 +189,8 @@ const rows = computed<RailRow[]>(() =>
     flex: none;
     width: 14px;
 
+    // ⚠ 不用 `--border-default`：那是 18% 的一层，1px 宽压在深底上基本看不见，
+    //   层级就只剩缩进在表达了
     &::before {
       content: '';
       position: absolute;
@@ -196,7 +198,7 @@ const rows = computed<RailRow[]>(() =>
       bottom: 0;
       left: 6px;
       width: 1px;
-      background: var(--border-default);
+      background: color-mix(in srgb, var(--tp-accent) 28%, transparent);
     }
 
     &.is-tip::after {
@@ -228,6 +230,14 @@ const rows = computed<RailRow[]>(() =>
       border-radius: 2px;
       background: var(--tone, var(--border-hover));
       transform: translateY(-50%) rotate(45deg);
+    }
+  }
+
+  // 弹窗窄到左右两栏摆不下时装配栏挪到上面：那时它有整行可用，不再自己滚，
+  // 免得在本来就能滚的弹窗正文里再套一层滚动区
+  @container (max-width: 620px) {
+    &__list {
+      max-height: none;
     }
   }
 
