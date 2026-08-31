@@ -1,42 +1,32 @@
-"""这套部署接了哪几路模型，以及按名字取出其中一路。
+"""这套部署接了哪几路模型，以及按 (档位, 用途) 取出其中一路。
 
 ⚠ 取模型是**异步**的：订阅账号那一路要先拿一个此刻能用的令牌，而那可能触发
 一次续期。做成同步的话，续期只能在事件循环里阻塞地等一次网络往返。
 
-⚠ 认不出的档位名一律退回默认那一路，而不是抛：会话里存着的档位名可能是上一版
+⚠ 认不出的档位名一律退回第一路，而不是抛：会话里存着的档位名可能是上一版
 配置留下的，那时正确的行为是照常能说话，不是整个会话打不开。
+
+⚠ **档位认得出，不代表这一档吃得下这次调用。** 一路不接图的模型收到图片块时
+不会报错——它多半只回一句「我没看到图」，而调用照样成功、照样计费。所以
+`supports` 为假时在这里**如实拒绝**，别让它出门。
 """
 
 from collections.abc import Collection
-from dataclasses import dataclass
 
 from langchain_core.language_models import BaseChatModel
 
-from ai_assistant.llm.codex import StoredTokenProvider, build_codex_model
+from ai_assistant.llm.adapters import build_adapters
 from ai_assistant.llm.codex.token_provider import TokenSource
-from ai_assistant.llm.errors import ModelDisabled
-from ai_assistant.llm.provider import (
+from ai_assistant.llm.errors import ModelDisabled, ModelRejected
+from ai_assistant.llm.ports import (
     CODEX_PROFILE,
     DEFAULT_PROFILE,
+    ModelAdapter,
     ModelChoice,
-    build_model_source,
+    ModelKind,
+    ModelProfile,
 )
 from ai_assistant.settings import Settings
-
-
-@dataclass(frozen=True)
-class ModelProfile:
-    """一路模型在能力面上的样子。"""
-
-    id: str
-    label: str
-    # 这一路能不能马上用。为假时前端把它灰着并指向系统页
-    is_ready: bool
-    has_vision: bool
-    # 可选的模型代号，第一个是默认
-    models: tuple[str, ...]
-    # 可选的推理档位；空表示这一路没有这一档可调
-    efforts: tuple[str, ...]
 
 
 class ModelRegistry:
@@ -46,38 +36,11 @@ class ModelRegistry:
         self, settings: Settings, *, tokens: TokenSource | None
     ) -> None:
         """Args: settings, tokens（订阅账号那一路的凭据面；没接就是 None）。"""
-        self._settings = settings
-        self._tokens = tokens
-        self._openai = build_model_source(settings)
+        self._adapters = build_adapters(settings, tokens)
 
     def profiles(self) -> tuple[ModelProfile, ...]:
         """这套部署接了哪几路。没接的一路根本不出现在清单里。"""
-        found: list[ModelProfile] = []
-        if self._openai is not None:
-            found.append(
-                ModelProfile(
-                    id=DEFAULT_PROFILE,
-                    label="按量计费端点",
-                    is_ready=True,
-                    has_vision=bool(self._settings.model_vision),
-                    models=(self._settings.model_chat,),
-                    efforts=(),
-                )
-            )
-        if self._tokens is not None:
-            found.append(
-                ModelProfile(
-                    id=CODEX_PROFILE,
-                    label="订阅账号",
-                    # ⚠ 装配得起来不代表登录过：真假由凭据面在能力端点上补
-                    is_ready=True,
-                    # 这一路眼下不接图：截图那条链路只在按量那一路验过
-                    has_vision=False,
-                    models=self._settings.codex_model_choices(),
-                    efforts=("low", "medium", "high", "xhigh"),
-                )
-            )
-        return tuple(found)
+        return tuple(one.profile() for one in self._adapters)
 
     def default_id(self, *, ready_ids: Collection[str] | None = None) -> str:
         """没选过时用哪一路：订阅那一路在册就选它，否则退按量。
@@ -104,36 +67,58 @@ class ModelRegistry:
 
         Args: profile_id。
         """
-        return any(one.id == profile_id for one in self.profiles())
+        return any(one.id == profile_id for one in self._adapters)
+
+    def supports(self, profile_id: str, kind: ModelKind) -> bool:
+        """这一路吃不吃这一档。认不出的档位名按退回的那一路算。
+
+        Args: profile_id, kind。
+        """
+        adapter = self._adapter_of(profile_id)
+        return adapter is not None and adapter.supports(kind)
 
     async def resolve(self, choice: ModelChoice) -> BaseChatModel:
         """按选择取一路模型。
 
-        ⚠ 认不出的名字退回默认那一路：会话里存的名字可能来自上一版配置。
+        ⚠ 认不出的名字退回第一路：会话里存的名字可能来自上一版配置。
+        ⚠ 这一路不吃这一档时**抛 `ModelRejected`**：那一档不打开断路器，因为
+        这不是下游不行、是我们发错了（`errors.py` 里那条注释）。
 
         Args: choice。
         """
-        if choice.profile == CODEX_PROFILE and self._tokens is not None:
-            return await self._codex(choice.effort)
-        if self._openai is None:
+        adapter = self._adapter_of(choice.profile)
+        if adapter is None:
             raise ModelDisabled("本部署没有接模型")
-        return self._openai(choice.kind)
+        if not adapter.supports(choice.kind):
+            raise ModelRejected(_refusal(adapter.id, choice.kind))
+        return await adapter.build(choice)
 
-    async def _codex(self, effort: str | None) -> BaseChatModel:
-        # ⚠ 先摸一次令牌：没登录过就在这里失败，而不是等模型端点回 401——
-        # 后者报出来的是「模型暂时不可用」，与「去登录一下」完全对不上
-        source = self._tokens
-        # pragma 理由：调用方在进这条分支前已经判过 `_tokens is not None`
-        if source is None:  # pragma: no cover
-            raise ModelDisabled("本部署没有接订阅账号那一路模型")
-        seed = await source.usable(CODEX_PROFILE)
-        settings = self._settings
-        chosen = settings.codex_model_choices()
-        return build_codex_model(
-            model=chosen[0] if chosen else settings.codex_model,
-            # ⚠ 刚摸到的那一份直接当快照：上游把 api_key 焊成同步可调用件，
-            # 第一次请求会从执行器线程回来要它
-            token_provider=StoredTokenProvider(source, seed=seed),
-            effort=effort or settings.codex_reasoning_effort,
-            timeout_s=settings.model_timeout_s,
-        )
+    def _adapter_of(self, profile_id: str) -> ModelAdapter | None:
+        """按档位名取适配器；认不出就退回第一路，一路都没有时给 `None`。
+
+        Args: profile_id。
+        """
+        for one in self._adapters:
+            if one.id == profile_id:
+                return one
+        return self._adapters[0] if self._adapters else None
+
+
+# 每一档被拒时该给的下一步。⚠ 查表而不是一串 if：加一档 `ModelKind` 时，
+# 漏了这里只会退回那句泛泛的兜底，而不是让某个分支永远走不到
+_REFUSAL_HINTS: dict[str, str] = {
+    "vision": "换到按量计费那一路，或者这一轮别截图",
+}
+
+
+def _refusal(profile_id: str, kind: ModelKind) -> str:
+    """拒绝这次调用的那句话。
+
+    ⚠ 要说清**下一步能干什么**：只说「不支持」的话，模型会原样再试一次，
+    而每一次都要走完一个回合才失败。
+
+    Args: profile_id, kind。
+    """
+    hint = _REFUSAL_HINTS.get(kind, "换一路模型，或者这一轮别用这一档")
+    label = "不接图" if kind == "vision" else f"不吃 {kind} 这一档"
+    return f"「{profile_id}」这一路{label}；{hint}"

@@ -11,8 +11,8 @@ from ai_assistant.apps.credential.services import (
     OAuthClient,
 )
 from ai_assistant.llm import (
-    CODEX_PROFILE,
     DEFAULT_PROFILE,
+    MODEL_KINDS,
     GuardedModel,
     ModelRegistry,
 )
@@ -80,24 +80,32 @@ def _build_model(
     ⚠ 断路器一个进程一份、跟着模型一起活：每次调用现造一个的话它永远停在
     「closed」，等于没有断路器。
 
-    ⚠ **每一路各有一份断路器**：共用一份的话，订阅账号那一路挂掉会把按量
-    那一路一起短路，而后者本来好好的。
+    ⚠ **每一格 (档位, 用途) 各有一份断路器**：共用一份的话，订阅账号那一路
+    挂掉会把按量那一路一起短路，而后者本来好好的。用途这一维同理——看图那一档
+    可以配成另一家端点（`ASSISTANT_VISION_BASE_URL`），它连挂几次不该把同一路
+    的对话一起短路掉，而那时用户看到的是「助手整个不能说话了」。
 
     Args: settings, registry。
     """
-    if not registry.profiles():
+    profiles = registry.profiles()
+    if not profiles:
         return None
     return GuardedModel(
         source=registry.resolve,
         is_streaming=settings.model_stream_enabled,
-        breaker=_breaker_of(settings, DEFAULT_PROFILE),
-        breakers={CODEX_PROFILE: _breaker_of(settings, CODEX_PROFILE)},
+        # 兜底那一份只在「档位认不出、用途也没登记」时用得上
+        breaker=_breaker_of(settings, DEFAULT_PROFILE, "chat"),
+        breakers={
+            (one.id, kind): _breaker_of(settings, one.id, kind)
+            for one in profiles
+            for kind in MODEL_KINDS
+        },
     )
 
 
-def _breaker_of(settings: Settings, profile: str) -> CircuitBreaker:
+def _breaker_of(settings: Settings, profile: str, kind: str) -> CircuitBreaker:
     return CircuitBreaker(
-        name=f"model:{profile}",
+        name=f"model:{profile}:{kind}",
         failure_threshold=settings.model_breaker_failures,
         reset_after_s=settings.model_breaker_reset_s,
     )

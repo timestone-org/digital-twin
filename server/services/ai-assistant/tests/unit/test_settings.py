@@ -18,23 +18,28 @@ def _settings(
     model_enabled: bool = False,
     model_api_key: SecretStr | None = None,
     model_extra_body: str = "",
+    **overrides: object,
 ) -> Settings:
     """一份只连占位值的配置，模型那几项由调用方指定。
 
-    Args: model_enabled, model_api_key, model_extra_body。
+    Args: model_enabled, model_api_key, model_extra_body, overrides。
     """
+    base: dict[str, object] = {
+        "postgres_host": PLACEHOLDER,
+        "postgres_user": PLACEHOLDER,
+        "postgres_password": SecretStr(PLACEHOLDER),
+        "postgres_db": PLACEHOLDER,
+        "redis_host": PLACEHOLDER,
+        "edge_signing_secret": SecretStr("s" * 32),
+        "edge_service_key": SecretStr("k" * 32),
+        "model_enabled": model_enabled,
+        "model_api_key": model_api_key,
+        "model_extra_body": model_extra_body,
+    }
+    base.update(overrides)
     return Settings(
-        postgres_host=PLACEHOLDER,
-        postgres_user=PLACEHOLDER,
-        postgres_password=SecretStr(PLACEHOLDER),
-        postgres_db=PLACEHOLDER,
-        redis_host=PLACEHOLDER,
-        edge_signing_secret=SecretStr("s" * 32),
-        edge_service_key=SecretStr("k" * 32),
-        model_enabled=model_enabled,
-        model_api_key=model_api_key,
-        model_extra_body=model_extra_body,
-    )
+        **base
+    )  # pyright: ignore[reportArgumentType]  # 理由：用例造件按名传参
 
 
 def test_model_is_off_by_default_and_needs_no_key() -> None:
@@ -100,3 +105,40 @@ def test_a_broken_extra_body_refuses_to_start() -> None:
 def test_extra_body_must_be_an_object_not_a_list() -> None:
     with pytest.raises(ValidationError):
         _settings(model_extra_body="[1, 2]")
+
+
+def test_a_broken_vision_extra_body_refuses_to_start() -> None:
+    """看图那一档与对话档同一条口径：配错了就不许起。"""
+    with pytest.raises(ValidationError):
+        _settings(vision_extra_body="not-json")
+
+
+def test_a_separate_vision_endpoint_without_its_own_key_refuses_to_start() -> (
+    None
+):
+    """⚠ 不拦的话，回落会拿对话档那把密钥去打另一家的端点。
+
+    每次看图都撞 401，而那一档刻意不打开断路器（是我们配错了，不是下游不行），
+    于是每次都要等一个完整往返才失败——现象是「截图功能时好时坏」，
+    与「这一格没填」看着毫无关系。
+    """
+    with pytest.raises(ValidationError):
+        _settings(
+            model_enabled=True,
+            model_api_key=SecretStr("sk-chat"),
+            model_base_url="https://one/v1",
+            vision_base_url="https://two/v1",
+        )
+
+
+def test_the_same_endpoint_for_both_kinds_needs_no_second_key() -> None:
+    """两档同一家时不必配第二把——那是最常见的部署形态，别给它添麻烦。"""
+    settings = _settings(
+        model_enabled=True,
+        model_api_key=SecretStr("sk-chat"),
+        model_base_url="https://one/v1",
+        vision_base_url="https://one/v1",
+    )
+    resolved = settings.endpoint_of("vision")
+    assert resolved is not None
+    assert resolved.api_key.get_secret_value() == "sk-chat"

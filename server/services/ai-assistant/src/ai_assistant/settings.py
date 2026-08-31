@@ -4,6 +4,7 @@
 """
 
 import json
+from dataclasses import dataclass
 from typing import Any, Self, cast
 
 from pydantic import Field, SecretStr, field_validator, model_validator
@@ -63,6 +64,22 @@ def _has_secret(given: SecretStr | None) -> bool:
     return given is not None and given.get_secret_value().strip() != ""
 
 
+@dataclass(frozen=True)
+class ModelEndpoint:
+    """一档模型实际要打的那个端点，回落链已经算完。
+
+    ⚠ 适配器只认这个形状，不再自己去读 `Settings` 的某一格：读格子的话，
+    「视觉档回落到对话档」这条链会在每个适配器里各写一遍，而写漏的那一份
+    表现为「改了配置没生效」。
+    """
+
+    base_url: str
+    api_key: SecretStr
+    model: str
+    timeout_s: float
+    extra_body: dict[str, Any] | None
+
+
 class MigrationSettings(PostgresSettings):
     """迁移只需要连库这一组。
 
@@ -118,6 +135,23 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     # 模型」成为一次配置改动而不是一次发版。
     model_chat: str = "qwen3.8-max"
     model_vision: str = "qwen3.8-max"
+
+    # 看图那一档的**独立端点**。留空即整格回落到上面对话档那一格——回落链在
+    # `endpoint_of` 里逐格写全，不许靠「反正都是同一个默认值」蒙混。
+    # ⚠ 存在的理由是「对话走一家、看图走另一家」：两档共用一个 base_url 时，
+    # 换看图供应商只能连对话一起换。
+    vision_base_url: str = ""
+    # ⚠ 密钥类**无默认值**，也不许回落成空串——弱默认的密钥等于没有密钥。
+    # 留空时回落的是「用对话档那一把」，而不是「用一个空的」。
+    # ⚠ 配了独立端点却不配它 = 拿甲家的密钥打乙家的端点，见
+    # `_vision_endpoint_needs_its_own_key`
+    vision_api_key: SecretStr | None = None
+    # 留空即用 `model_vision`。分出来是为了让「独立端点 + 独立模型名」成立
+    vision_model: str = ""
+    # 留空（None）即用 `model_timeout_s`。⚠ 看图那一档的延迟本来就高得多，
+    # 共用一格意味着要么对话档等得过久、要么视觉档被过早掐断
+    vision_timeout_s: float | None = Field(default=None, gt=0)
+    vision_extra_body: str = ""
     # 逐字流式。⚠ 关掉它 = 用户在整个回合里只看得见「做了哪一步」，模型说的
     # 那段话要等回合结束才整段出现，而模型想的十几秒是纯黑箱。留成配置只为
     # 一种场合：个别 OpenAI 兼容端点在带工具时不支持流式，那时表现是一条 400
@@ -168,6 +202,73 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     def extra_body(self) -> dict[str, Any] | None:
         """透传给端点的额外请求体；没配就是 `None`。"""
         return _parsed_object(self.model_extra_body)
+
+    def endpoint_of(self, kind: str) -> "ModelEndpoint | None":
+        """这一档实际要打的那个端点；没开模型或没配密钥时给 `None`。
+
+        ⚠ **回落链在这里逐格写全**，不靠「两档默认值恰好相同」。写不全的表现是
+        非对称失效：改了对话档的 base_url，看图那一档还在打旧地址，而两边都
+        不报错（config-and-secrets §4）。
+
+        ⚠ 密钥回落的是**对话档那一把**，不是空串：弱默认的密钥等于没有密钥。
+
+        Args: kind（`chat` 或 `vision`；别的一律按对话档）。
+        """
+        key = self.model_api_key
+        if not self.model_enabled or not _has_secret(key) or key is None:
+            return None
+        if kind != "vision":
+            return ModelEndpoint(
+                base_url=self.model_base_url,
+                api_key=key,
+                model=self.model_chat,
+                timeout_s=self.model_timeout_s,
+                extra_body=self.extra_body(),
+            )
+        return ModelEndpoint(
+            base_url=self.vision_base_url or self.model_base_url,
+            api_key=(
+                self.vision_api_key
+                if _has_secret(self.vision_api_key)
+                and self.vision_api_key is not None
+                else key
+            ),
+            model=self.vision_model or self.model_vision,
+            timeout_s=self.vision_timeout_s or self.model_timeout_s,
+            extra_body=(
+                _parsed_object(self.vision_extra_body) or self.extra_body()
+            ),
+        )
+
+    @field_validator("vision_extra_body")
+    @classmethod
+    def _vision_extra_body_must_be_an_object(cls, given: str) -> str:
+        """与对话档同一条口径：配错了就不许起。
+
+        Args: given。
+        """
+        if given.strip() and _parsed_object(given) is None:
+            raise ValueError("ASSISTANT_VISION_EXTRA_BODY 必须是一段 JSON 对象")
+        return given
+
+    @model_validator(mode="after")
+    def _vision_endpoint_needs_its_own_key(self) -> Self:
+        """看图配了**另一家**端点，就必须配它自己的密钥。
+
+        ⚠ 不拦的话，回落会拿对话档那一把密钥去打另一家的端点——每一次看图都
+        撞 401，而那一档刻意不打开断路器（是我们配错了，不是下游不行），
+        于是每次都要等一个完整往返才失败。现象是「截图功能时好时坏」，
+        与「这一格没填」看着毫无关系。
+        """
+        endpoint = self.vision_base_url.strip()
+        if not endpoint or endpoint == self.model_base_url.strip():
+            return self
+        if not _has_secret(self.vision_api_key):
+            raise ValueError(
+                "配了 ASSISTANT_VISION_BASE_URL（与对话档不同）时"
+                "必须配 ASSISTANT_VISION_API_KEY"
+            )
+        return self
 
     @field_validator("model_extra_body")
     @classmethod

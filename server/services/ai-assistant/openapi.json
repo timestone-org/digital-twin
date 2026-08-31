@@ -523,10 +523,6 @@
             "title": "Is Model Enabled",
             "type": "boolean"
           },
-          "is_vision_enabled": {
-            "title": "Is Vision Enabled",
-            "type": "boolean"
-          },
           "models": {
             "items": {
               "$ref": "#/components/schemas/ModelProfileOut"
@@ -544,7 +540,6 @@
         },
         "required": [
           "is_model_enabled",
-          "is_vision_enabled",
           "skills"
         ],
         "title": "CapabilityOut",

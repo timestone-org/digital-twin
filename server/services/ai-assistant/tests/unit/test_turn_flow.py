@@ -22,7 +22,7 @@ from ai_assistant.apps.chat.services.tools.providers.server import ServerTools
 from ai_assistant.apps.chat.services.tools.specs import specs_named
 from ai_assistant.apps.chat.skills import find_skill
 from ai_assistant.llm import GuardedModel
-from ai_assistant.llm.provider import ModelChoice
+from ai_assistant.llm.ports import ModelChoice
 from lib.resilience import CircuitBreaker
 from unit.llm_fakes import ScriptedChat, tool_call
 
