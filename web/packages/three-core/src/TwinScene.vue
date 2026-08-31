@@ -196,6 +196,7 @@ const MS_PER_S = 1000
 const loop = useRenderLoop({
   core: () => core,
   element: () => containerRef.value,
+  overlayRoot: () => layers?.root ?? null,
   onFrame: (deltaS) => {
     if (core !== null) layers?.update(deltaS, core.camera)
     if (deltaS > 0) animations?.update(deltaS)

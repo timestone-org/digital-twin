@@ -4,6 +4,7 @@
  * ⚠ 帧钟夹过的时长不能换成 rAF 的原始时刻：切走标签页再回来那一帧有几十秒，
  * 直接算下去的话，一帧就能把整条漫游轨迹走完、把动画跳过一大截。
  */
+import type * as THREE from 'three'
 import { onBeforeUnmount } from 'vue'
 
 import { createFrameClock } from './frameClock'
@@ -13,6 +14,11 @@ export interface RenderLoopOptions {
   core: () => SceneCore | null
   /** 量尺寸用的宿主元素。 */
   element: () => HTMLElement | null
+  /**
+   * 挂着 CSS2D / CSS3D 元素的那棵子树；不给就让两个 CSS 渲染器走整个 scene。
+   * ⚠ 给它是为了别让它们每帧把整棵模型白走一遍，见 `renderScene`。
+   */
+  overlayRoot?: () => THREE.Scene | null
   /**
    * 每帧回调，在画之前。
    * @param deltaS 距上一帧多少秒（已夹过上限）
@@ -47,7 +53,7 @@ export function useRenderLoop(options: RenderLoopOptions): RenderLoop {
     const core = options.core()
     if (core === null) return
     options.onFrame(clock.tick(now))
-    renderScene(core)
+    renderScene(core, options.overlayRoot?.() ?? null)
     frameHandle = requestAnimationFrame(tick)
   }
 

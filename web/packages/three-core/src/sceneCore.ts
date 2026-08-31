@@ -247,12 +247,25 @@ export function resizeScene(
   core.spatialRenderer.setSize(w, h)
 }
 
-/** 渲染一帧：阻尼需要每帧 update，否则惯性停在半路。 */
-export function renderScene(core: SceneCore): void {
+/**
+ * 渲染一帧：阻尼需要每帧 update，否则惯性停在半路。
+ *
+ * ⚠ 两个 CSS 渲染器只该走**覆盖层那一棵**，不该走整个 scene：它们每帧都会把
+ * 传进去的树整个递归一遍、并各自再 `updateMatrixWorld` 一次，而 DOM 元素只可能
+ * 挂在覆盖层里。传 scene 的话一棵几千节点的模型每帧被白走四遍，表现只是
+ * 「模型一大就掉帧」，看不出是谁干的。
+ * @param core 场景核心
+ * @param overlayRoot 挂着 CSS2D / CSS3D 元素的那棵子树；不给就退回整个 scene
+ */
+export function renderScene(
+  core: SceneCore,
+  overlayRoot: THREE.Scene | null = null,
+): void {
   core.controls.update()
   core.renderer.render(core.scene, core.camera)
-  core.labelRenderer.render(core.scene, core.camera)
-  core.spatialRenderer.render(core.scene, core.camera)
+  const labels = overlayRoot ?? core.scene
+  core.labelRenderer.render(labels, core.camera)
+  core.spatialRenderer.render(labels, core.camera)
 }
 
 /**
