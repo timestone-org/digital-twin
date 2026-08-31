@@ -301,9 +301,11 @@ onBeforeUnmount(() => {
     min-width: 0;
   }
 
+  // ⚠ 富余的宽度全给舞台，读数卡只按内容取一个稳定宽度：反过来的话，把弹窗
+  //   调宽只是把卡片摊得更开，而设备大多是长条形的，缺的正是舞台的宽度
   &__stage {
     position: relative;
-    flex: 2 1 260px;
+    flex: 1 1 360px;
     height: var(--tp-stage-height, 260px);
     overflow: hidden;
     border: 1px solid var(--border-subtle);
@@ -312,8 +314,8 @@ onBeforeUnmount(() => {
   }
 
   &__data {
-    flex: 1 1 200px;
-    min-width: 0;
+    flex: 0 1 320px;
+    min-width: 240px;
   }
 
   &__blank {

@@ -43,8 +43,8 @@ const emit = defineEmits<{ 'update:modelValue': [TwinPartDetail] }>()
 const COLUMN_RANGE = { min: 1, max: 4, step: 1 }
 // ⚠ 两条区间必须与 `normalizePartDetail` 的夹取区间一致：给得出、收得回，
 // 用户会看到自己刚填的值被弹回去，而没有任何提示说明为什么
-const HEIGHT_RANGE = { min: 120, max: 720, step: 10 }
-const WIDTH_RANGE = { min: 320, max: 1200, step: 20 }
+const HEIGHT_RANGE = { min: 120, max: 1080, step: 10 }
+const WIDTH_RANGE = { min: 320, max: 2400, step: 20 }
 
 /** 常用的几个语义色，省得每次去翻 token 名。 */
 const SWATCHES = [
