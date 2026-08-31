@@ -8,7 +8,11 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 
-import { createPartPreview, dropNestedObjects } from '../src/partPreview'
+import {
+  createPartPreview,
+  dropNestedObjects,
+  fitDistance,
+} from '../src/partPreview'
 import { createHeadlessRenderer } from '../src/testing/createHeadlessRenderer'
 
 interface FakeModel {
@@ -224,5 +228,58 @@ describe('父件带着后代一起摆进来', () => {
     root.add(left, right)
 
     expect(dropNestedObjects([left, right])).toEqual([left, right])
+  })
+})
+
+describe('取景距离', () => {
+  /** 一台长条形机组：长 20、高 2、深 4。 */
+  function unitBox(): THREE.Box3 {
+    return new THREE.Box3(
+      new THREE.Vector3(-10, -1, -2),
+      new THREE.Vector3(10, 1, 2),
+    )
+  }
+
+  function cameraAt(aspect: number): THREE.PerspectiveCamera {
+    return new THREE.PerspectiveCamera(45, aspect, 0.1, 100)
+  }
+
+  // ⚠ 舞台宽了却按方形取景的话，放大弹窗只是把黑边一起放大
+  it('舞台越宽，相机凑得越近', () => {
+    const box = unitBox()
+
+    expect(fitDistance(cameraAt(2.4), box)).toBeLessThan(
+      fitDistance(cameraAt(1), box),
+    )
+  })
+
+  // ⚠ 自转绕的是竖轴：按盒宽贴边取景的话，长轴转到正对镜头那一刻两头会被裁掉
+  it('横着摆与竖着摆的同一个部件，取景距离相同', () => {
+    const lying = new THREE.Box3(
+      new THREE.Vector3(-10, -1, -2),
+      new THREE.Vector3(10, 1, 2),
+    )
+    const turned = new THREE.Box3(
+      new THREE.Vector3(-2, -1, -10),
+      new THREE.Vector3(2, 1, 10),
+    )
+
+    expect(fitDistance(cameraAt(1.6), lying)).toBeCloseTo(
+      fitDistance(cameraAt(1.6), turned),
+      6,
+    )
+  })
+
+  // 高个子部件在窄舞台上由高度定距离，不该被宽度那一支盖掉
+  it('又高又窄的部件按高度取景', () => {
+    const tower = new THREE.Box3(
+      new THREE.Vector3(-0.5, -20, -0.5),
+      new THREE.Vector3(0.5, 20, 0.5),
+    )
+    const halfFov = THREE.MathUtils.degToRad(45) / 2
+
+    expect(fitDistance(cameraAt(2), tower)).toBeGreaterThan(
+      20 / Math.tan(halfFov),
+    )
   })
 })
