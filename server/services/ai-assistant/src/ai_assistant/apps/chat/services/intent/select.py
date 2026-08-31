@@ -18,6 +18,9 @@
 
 from collections.abc import Sequence
 
+from ai_assistant.apps.chat.services.intent.ports import Allowed, TurnContext
+from ai_assistant.apps.chat.services.intent.registry import narrow_all
+from ai_assistant.apps.chat.services.tools.selection import specs_named
 from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
 from ai_assistant.apps.chat.services.tools.specs import TOOL_SPECS
 from ai_assistant.apps.chat.skills import skills_for
@@ -39,28 +42,64 @@ CROSS_MODULE_READ_TOOLS: tuple[str, ...] = (
 )
 
 
-def specs_for(
-    surface_kind: str, client_tools: Sequence[str] | None
-) -> tuple[ToolSpec, ...]:
-    """这一轮下发给模型的工具集，保持 `TOOL_SPECS` 的原序。
+def allowed_for(context: TurnContext) -> Allowed:
+    """这一轮准许出现的**名字集合**，工具与技能各一份。
 
-    Args: surface_kind, client_tools（前端自报的客户端工具名；None = 老前端，
-        退回技能声明推导）。
+    ⚠ 收窄先跑、再由活下来的技能推工具：反过来的话，被权限拦掉的技能贡献的
+    那几个服务端工具还留在表上，模型照样看得见、照样调一次被 platform 拒。
+
+    ⚠ 两侧的名字合成一个集合是安全的：一个工具名只属于一路 provider，
+    重名在装配期就被 `tools/registry.py` 的 `DuplicateTool` 拦掉了。
+
+    Args: context。
     """
-    skills = skills_for(surface_kind)
+    on_surface = skills_for(context.surface_kind)
+    gated = narrow_all(
+        context,
+        Allowed(
+            tools=frozenset(spec.name for spec in TOOL_SPECS),
+            skills=frozenset(skill.name for skill in on_surface),
+        ),
+    )
+    kept = tuple(one for one in on_surface if one.name in gated.skills)
     server_allowed = {
         *CORE_SERVER_TOOLS,
         *CROSS_MODULE_READ_TOOLS,
-        *(name for skill in skills for name in skill.server_tools),
+        *(name for skill in kept for name in skill.server_tools),
     }
     client_allowed = (
-        set(client_tools)
-        if client_tools is not None
-        else {name for skill in skills for name in skill.client_tools}
+        set(context.client_tools)
+        if context.client_tools is not None
+        else {name for skill in kept for name in skill.client_tools}
     )
-    return tuple(
-        spec
+    named = {
+        spec.name
         for spec in TOOL_SPECS
         if spec.name
         in (server_allowed if spec.runs_on == "server" else client_allowed)
+    }
+    return Allowed(tools=frozenset(named) & gated.tools, skills=gated.skills)
+
+
+def specs_for(
+    surface_kind: str,
+    client_tools: Sequence[str] | None,
+    codes: frozenset[str] | None = None,
+) -> tuple[ToolSpec, ...]:
+    """这一轮下发给模型的工具集，保持 `TOOL_SPECS` 的原序。
+
+    这是两层的合成口：层 2 出名字（`allowed_for`），层 5 按名字取规格
+    （`tools/selection.py`）。合成口留着是因为调用方只关心「这一轮发哪些」。
+
+    Args: surface_kind, client_tools（前端自报的客户端工具名；None = 老前端，
+        退回技能声明推导）, codes（调用者持有的权限码；None = 没给，不按权限
+        收窄）。
+    """
+    allowed = allowed_for(
+        TurnContext(
+            surface_kind=surface_kind,
+            client_tools=None if client_tools is None else tuple(client_tools),
+            codes=codes,
+        )
     )
+    return specs_named(TOOL_SPECS, allowed.tools)
