@@ -13,6 +13,7 @@
 握手失败；而回凭据本身等于把它写进响应头，会落进代理与浏览器的日志。
 """
 
+import asyncio
 import json
 import uuid
 from typing import Annotated, cast
@@ -113,7 +114,10 @@ async def _serve(
     except WebSocketDisconnect:
         pass
     finally:
-        await session.close(connection.id)
+        # ⚠ shield：连接是被**取消**掉的时候（进程关停、上游把这条任务撤了）
+        # 摘除本身也在取消范围内，第一个 await 就断，于是索引与订阅行都留着
+        # 一条已死的连接。shield 让摘除跑完，取消照旧往外抛
+        await asyncio.shield(session.close(connection.id))
 
 
 async def _handshake(
