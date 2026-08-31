@@ -39,7 +39,7 @@ from ai_assistant.apps.chat.services.planning.turn_types import (
     TurnOutcome,
     TurnStep,
 )
-from ai_assistant.apps.chat.services.tools.providers.server import ServerTools
+from ai_assistant.apps.chat.services.tools.registry import build_registry
 from ai_assistant.container import Container
 from ai_assistant.llm import (
     DEFAULT_PROFILE,
@@ -81,7 +81,12 @@ def deps_of(container: Container, headers: dict[str, str]) -> AdvanceDeps:
     return AdvanceDeps(
         sessions=container.database.session,
         model=container.model,
-        server_tools=ServerTools(platform=container.platform, headers=headers),
+        # ⚠ 走注册表而不是直接造 `ServerTools`：客户端那一路的名字也在表里，
+        # 于是「本该交给浏览器的工具走到了服务端」会得到一句说得清的错
+        # （`RunsElsewhere`），而不是与「模型编了个工具名」混成同一档
+        server_tools=build_registry(
+            platform=container.platform, headers=headers
+        ).run,
     )
 
 

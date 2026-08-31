@@ -1,4 +1,9 @@
-"""服务端工具的执行面：按名字分派到实现。
+"""服务端工具这一路来源：交出自己的规格，并按名字分派到实现。
+
+⚠ 规格与实现**在同一个对象上**（`specs()` 与 `_handlers()`）。分成两份文件只为
+不破模块行数闸——规格在同目录的 `server_specs.py`。加一个工具要同时动那两处，
+而漏一处由契约测试双向拦下，不再靠人记。
+
 
 ⚠ 认不出的名字**抛**，不返回一个看起来正常的空结果。模型编出一个不存在的工具名
 是常事；静默给它一个空结果，它会当成「查过了，没有」继续往下走，最后给用户一个
@@ -31,6 +36,10 @@ from ai_assistant.apps.chat.services.tools.points.resolve import (
     resolve_points,
     split_node_key,
 )
+from ai_assistant.apps.chat.services.tools.providers.server_specs import (
+    SERVER_SPECS,
+)
+from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
 from ai_assistant.apps.chat.skills import find_skill
 from ai_assistant.upstream import PlatformClient
 
@@ -51,12 +60,36 @@ class UnknownServerTool(RuntimeError):
 
 @dataclass(frozen=True)
 class ServerTools:
-    """服务端工具的实现集合。按请求造，握着这一次要转发的身份头。"""
+    """服务端工具这一路来源：**规格与实现收在同一个对象上**。
+
+    按请求造，握着这一次要转发的身份头。
+    """
 
     platform: PlatformClient | None = None
     headers: dict[str, str] = field(default_factory=dict[str, str])
 
+    # 这一路在注册表里的名字。⚠ 不加类型标注：加了它就成了 dataclass 字段，
+    # 出现在构造签名里，而调用点没有任何理由去改它
+    name = "server"
+
+    def specs(self) -> tuple[ToolSpec, ...]:
+        """这一路提供哪些工具。
+
+        ⚠ 与 `_handlers()` 的键必须逐字对上，由契约测试双向守：规格里有而没人
+        实现的，模型看得见却每次调都失败；实现了而没进规格的，模型永远看不见它。
+        `plan.write` 是唯一的例外——它在规格里，实现由计划子系统自己收走
+        （`advance_service._with_plan_tools`）。
+        """
+        return SERVER_SPECS
+
     async def __call__(self, name: str, arguments: dict[str, Any]) -> Any:
+        """兼 `ServerToolRunner` 的可调用形状；`turn.py` 按它调。
+
+        Args: name, arguments。
+        """
+        return await self.run(name, arguments)
+
+    async def run(self, name: str, arguments: dict[str, Any]) -> Any:
         """按名字跑一个工具。
 
         ⚠ 查表而不是一串 `if`：工具是会一直加的，而一串 `if` 加到第十个就过不了
@@ -73,7 +106,7 @@ class ServerTools:
     def _handlers(self) -> dict[str, ToolHandler]:
         """工具名 → 实现。
 
-        ⚠ 键必须与 `tool_specs.TOOL_SPECS` 里的名字逐字相同：对不上时模型
+        ⚠ 键必须与 `specs()` 里的名字逐字相同：对不上时模型
         看得见那个工具、调用它却每次都失败。
         """
         return {
