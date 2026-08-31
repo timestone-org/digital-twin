@@ -8,7 +8,7 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 
-import { createPartPreview } from '../src/partPreview'
+import { createPartPreview, dropNestedObjects } from '../src/partPreview'
 import { createHeadlessRenderer } from '../src/testing/createHeadlessRenderer'
 
 interface FakeModel {
@@ -196,5 +196,33 @@ describe('释放', () => {
     preview.dispose()
 
     expect(disposed).toBe(0)
+  })
+})
+
+describe('父件带着后代一起摆进来', () => {
+  // ⚠ 不去重就是同一块几何重叠着画两遍，表面互相穿插闪烁——看着像模型坏了
+  it('祖先已经在清单里的丢掉', () => {
+    const parent = new THREE.Group()
+    const child = new THREE.Mesh()
+    const deep = new THREE.Mesh()
+    child.add(deep)
+    parent.add(child)
+
+    expect(dropNestedObjects([parent, child, deep])).toEqual([parent])
+  })
+
+  it('重复列到的同一个对象只留一份', () => {
+    const mesh = new THREE.Mesh()
+
+    expect(dropNestedObjects([mesh, mesh])).toEqual([mesh])
+  })
+
+  it('互不相干的兄弟一个都不丢，次序照旧', () => {
+    const root = new THREE.Group()
+    const left = new THREE.Mesh()
+    const right = new THREE.Mesh()
+    root.add(left, right)
+
+    expect(dropNestedObjects([left, right])).toEqual([left, right])
   })
 })

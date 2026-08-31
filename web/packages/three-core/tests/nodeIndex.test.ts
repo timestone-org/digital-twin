@@ -24,6 +24,7 @@ function part(id: string, nodes: string[], visible = true): TwinPart {
   return {
     id,
     name: id,
+    parentId: '',
     nodes,
     visibility: { visible, hideBelow: null, hideAbove: null, fade: null },
     look: DEFAULT_PART_LOOK,

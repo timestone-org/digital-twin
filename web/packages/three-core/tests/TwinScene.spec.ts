@@ -1033,6 +1033,44 @@ describe('远近两档的点击动作', () => {
     wrapper.unmount()
   })
 
+  // ⚠ 模板里的 prop 名与事件名写错，typecheck 与 lint 双双放行；宿主到弹窗
+  //   这一段接线只有这一条兜得住
+  it('装配栏里点子件，弹窗换成那个子件的读数', async () => {
+    const wrapper = mountScene({
+      config: config({
+        parts: [
+          {
+            id: 'part-pump',
+            name: '泵',
+            nodes: ['pump'],
+            click: { near: 'detail' },
+            detail: { fields: [{ key: 'p', label: '总功率' }] },
+          },
+          {
+            id: 'part-motor',
+            name: '电机',
+            parentId: 'part-pump',
+            detail: { fields: [{ key: 'i', label: '定子电流' }] },
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+    const element = wrapper.element as HTMLElement
+    element.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 100, height: 100 }) as DOMRect
+    clickPart(element)
+    await flushPromises()
+
+    document
+      .querySelector<HTMLElement>('[data-test="assembly-row-part-motor"]')
+      ?.click()
+    await flushPromises()
+
+    expect(modal()?.textContent).toContain('定子电流')
+    wrapper.unmount()
+  })
+
   // ⚠ 删掉一个正弹着详情的部件，弹窗里克隆的那份对象已经不在场上了
   it('配置里这个部件没了就把弹窗收掉', async () => {
     const { wrapper, element } = await scene({ click: { near: 'detail' } })
