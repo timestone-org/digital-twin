@@ -273,6 +273,8 @@ export const ICONS = {
   ],
   'trending-up': ['m3 16 5.5-5.5 3.5 3.5L21 5', 'M15 5h6v6'],
   'panel-bottom': ['M4 4h16v16H4z', 'M4 15h16'],
+  // 页签栏：顶栏被一条竖线分成两格，与只有一条横线的 panel-bottom 区分开
+  'panel-tabs': ['M4 4h16v16H4z', 'M4 10h16', 'M11 4v6'],
   'layout-template': ['M4 4h16v5H4z', 'M4 13h7v7H4z', 'M13 13h7v7h-7z'],
   type: ['M5 6V5h14v1', 'M12 5v14', 'M9 19h6'],
   // 引用：两个扣在一起的环。半圆的圆心在 (7,12) / (17,12)、半径 4，
