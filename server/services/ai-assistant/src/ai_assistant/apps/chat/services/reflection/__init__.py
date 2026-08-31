@@ -4,14 +4,32 @@
 （它只判跨功能 import 路径的第 4 段是不是 `services`），只能靠这份清单与评审守。
 """
 
+from ai_assistant.apps.chat.services.reflection.hitl import (
+    SURFACE_UNDO,
+    UndoModel,
+    must_propose_only,
+    undo_model_of,
+)
 from ai_assistant.apps.chat.services.reflection.ports import (
     Finding,
     Verdict,
     Verifier,
 )
+from ai_assistant.apps.chat.services.reflection.registry import check_step
+from ai_assistant.apps.chat.services.reflection.verifiers import (
+    VERIFIERS,
+    ToolFailureVerifier,
+)
 
 __all__ = [
+    "SURFACE_UNDO",
+    "VERIFIERS",
     "Finding",
+    "ToolFailureVerifier",
+    "UndoModel",
     "Verdict",
     "Verifier",
+    "check_step",
+    "must_propose_only",
+    "undo_model_of",
 ]

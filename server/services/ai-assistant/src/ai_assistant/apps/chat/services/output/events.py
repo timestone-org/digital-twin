@@ -10,31 +10,65 @@
 import json
 from typing import Any
 
-from ai_assistant.apps.chat.services.output import step_preview
+from ai_assistant.apps.chat.services.output import payloads, step_preview
+from ai_assistant.apps.chat.services.output.ports import EventSpec
 from ai_assistant.apps.chat.services.planning.turn_types import (
     TurnDelta,
     TurnOutcome,
     TurnStep,
 )
 
-# 闭合集合。加一档要同时改前端的解帧表
-# 模型逐字吐出来的一小块：`channel` 分「说的话」与「想的过程」两路
+# 闭合集合
 EVENT_DELTA = "message.delta"
 EVENT_STEP = "step"
 EVENT_CLIENT_TOOL = "client_tool.request"
 EVENT_DONE = "turn.done"
 EVENT_ERROR = "error"
-# 计划变了：整份快照下发，前端不做增量合并（ADR-0024）
 EVENT_PLAN = "plan"
 
-EVENT_NAMES = (
-    EVENT_DELTA,
-    EVENT_STEP,
-    EVENT_CLIENT_TOOL,
-    EVENT_DONE,
-    EVENT_ERROR,
-    EVENT_PLAN,
+# 六档事件的**唯一声明**：名字 + 载荷形状 + 什么时候出现。
+#
+# ⚠ 加一档要同步四处，而漏掉任何一处的表现都是「助手做了一步但界面上没有」：
+#   1. 这张表      2. `api/advance.py` 的分帧
+#   3. 前端 `contracts/assistant.ts` 的名字表
+#   4. 前端 `turnRunner.ts` 的解帧分支 ← **最容易漏的一处**，它只有一串字面量
+# 前三处由契约测试对着这张表比，第四处由 `test_event_specs.py` 扫源码比。
+EVENT_SPECS: tuple[EventSpec, ...] = (
+    EventSpec(
+        name=EVENT_DELTA,
+        payload=payloads.DeltaPayload,
+        note="模型每吐一小块发一帧，不攒",
+    ),
+    EventSpec(
+        name=EVENT_STEP,
+        payload=payloads.StepPayload,
+        note="一步跑完，带一份钳过的入参与产出预览",
+    ),
+    EventSpec(
+        name=EVENT_CLIENT_TOOL,
+        payload=payloads.ClientToolPayload,
+        note="回合停下来等浏览器执行这几件",
+    ),
+    EventSpec(
+        name=EVENT_DONE,
+        payload=payloads.DonePayload,
+        note="回合结束",
+    ),
+    EventSpec(
+        name=EVENT_ERROR,
+        payload=payloads.ErrorPayload,
+        note="回合内失败；⚠ 不等于 HTTP 错误",
+    ),
+    EventSpec(
+        name=EVENT_PLAN,
+        payload=payloads.PlanPayload,
+        note="计划变了，整份快照下发（ADR-0024）",
+    ),
 )
+
+# ⚠ 从声明推导，不再手写第二份：两份并存时改了一处忘了另一处，
+# 而闭合集合少一个名字的表现是那一档事件被前端静默丢弃
+EVENT_NAMES = tuple(spec.name for spec in EVENT_SPECS)
 
 
 def frame(name: str, body: dict[str, Any]) -> str:

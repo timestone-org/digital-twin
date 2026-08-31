@@ -4,6 +4,14 @@
 （它只判跨功能 import 路径的第 4 段是不是 `services`），只能靠这份清单与评审守。
 """
 
+from ai_assistant.apps.chat.services.output.events import (
+    EVENT_NAMES,
+    EVENT_SPECS,
+)
 from ai_assistant.apps.chat.services.output.ports import EventSpec
 
-__all__ = ["EventSpec"]
+__all__ = [
+    "EVENT_NAMES",
+    "EVENT_SPECS",
+    "EventSpec",
+]

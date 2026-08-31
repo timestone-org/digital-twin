@@ -22,8 +22,11 @@ class TurnContext:
     surface_kind: str
     # 前端自报实现了哪些客户端工具；`None` = 老前端没报这一格
     client_tools: tuple[str, ...] | None
-    # 调用者此刻持有的权限码
-    codes: frozenset[str]
+    # 调用者此刻持有的权限码。
+    # ⚠ `None` 与空集**不是一回事**：`None` 是「调用方没给权限信息」，这一道
+    # 不收窄；空集是「这个人一个码都没有」，该收窄的一个不留。两者混成一个的话，
+    # 忘了传的调用点会把所有技能静默藏光，而现象是「助手忽然什么都不会了」
+    codes: frozenset[str] | None = None
 
 
 @dataclass(frozen=True)

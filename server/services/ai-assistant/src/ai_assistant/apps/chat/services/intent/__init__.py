@@ -4,14 +4,22 @@
 （它只判跨功能 import 路径的第 4 段是不是 `services`），只能靠这份清单与评审守。
 """
 
+from ai_assistant.apps.chat.services.intent.gates import GATES, PermissionGate
 from ai_assistant.apps.chat.services.intent.ports import (
     Allowed,
     Gate,
     TurnContext,
 )
+from ai_assistant.apps.chat.services.intent.registry import narrow_all
+from ai_assistant.apps.chat.services.intent.select import allowed_for, specs_for
 
 __all__ = [
+    "GATES",
     "Allowed",
     "Gate",
+    "PermissionGate",
     "TurnContext",
+    "allowed_for",
+    "narrow_all",
+    "specs_for",
 ]
