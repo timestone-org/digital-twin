@@ -8474,6 +8474,820 @@
       ]
     },
     {
+      "type": "nav-tabs",
+      "display_name": "页签栏",
+      "category": "控件",
+      "description": "页签栏：一排互斥的页签，点一格高亮它并上抛一次「选项点击」事件，带上这一格的联动值。它不取任何数、也不认识任何一种动作——切到哪张大屏、显隐哪一组节点，全由大屏级联动规则按上抛的值分流：跨屏切换配「按值跳转大屏」，同屏内换一组内容配「按值互斥切换」。要一排并列、同时只有一个当前项的入口时用它；单独一个入口用 action-button，那是按钮不是页签。⚠ 每一格的「联动值」留空的话，点它只会挪一下高亮、不上抛任何事件，于是什么也不会发生。⚠ 「默认选中」是**这张屏自己**的事：把同一条页签栏摆到第二张屏上时要把它改成那张屏对应的那一格，否则跳过去后高亮还停在原来那一格。",
+      "icon": "panel-tabs",
+      "keywords": [
+        "tabs",
+        "nav",
+        "yeqian",
+        "页签",
+        "标签",
+        "导航",
+        "切换",
+        "分段",
+        "控件"
+      ],
+      "default_size": {
+        "width": 420,
+        "height": 48,
+        "min_width": 80,
+        "min_height": 28
+      },
+      "chrome": "bare",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "items",
+          "label": "页签",
+          "type": "array",
+          "default": [
+            {
+              "label": "总览",
+              "emitValue": "overview"
+            },
+            {
+              "label": "能耗",
+              "emitValue": "energy"
+            },
+            {
+              "label": "设备",
+              "emitValue": "device"
+            }
+          ],
+          "group": "内容",
+          "help": "每一项是一格。⚠ 「联动值」留空的那一格点了不上抛任何事件，也就什么都不会发生。",
+          "span": "full",
+          "item_schema": [
+            {
+              "key": "label",
+              "label": "文案",
+              "type": "string",
+              "default": "",
+              "placeholder": "留空显示「页签 N」"
+            },
+            {
+              "key": "emitValue",
+              "label": "联动值",
+              "type": "string",
+              "default": "",
+              "help": "点这一格时上抛的值，留空则这一格点了不上抛。联动规则按它分流：跨屏切换配「按值跳转大屏」，页内分区配「按值互斥切换」。"
+            },
+            {
+              "key": "icon",
+              "label": "图标",
+              "type": "enum",
+              "default": "",
+              "options": [
+                {
+                  "value": "",
+                  "label": "无"
+                },
+                {
+                  "value": "layout-grid",
+                  "label": "总览"
+                },
+                {
+                  "value": "home",
+                  "label": "首页"
+                },
+                {
+                  "value": "chart-line",
+                  "label": "折线图"
+                },
+                {
+                  "value": "chart-column",
+                  "label": "柱状图"
+                },
+                {
+                  "value": "chart-pie",
+                  "label": "饼图"
+                },
+                {
+                  "value": "gauge",
+                  "label": "仪表"
+                },
+                {
+                  "value": "activity",
+                  "label": "波形"
+                },
+                {
+                  "value": "trending-up",
+                  "label": "趋势"
+                },
+                {
+                  "value": "table",
+                  "label": "表格"
+                },
+                {
+                  "value": "layers",
+                  "label": "图层"
+                },
+                {
+                  "value": "building",
+                  "label": "楼栋"
+                },
+                {
+                  "value": "server",
+                  "label": "机柜"
+                },
+                {
+                  "value": "database",
+                  "label": "数据库"
+                },
+                {
+                  "value": "network",
+                  "label": "拓扑"
+                },
+                {
+                  "value": "power",
+                  "label": "电源"
+                },
+                {
+                  "value": "snowflake",
+                  "label": "制冷"
+                },
+                {
+                  "value": "sun",
+                  "label": "光照"
+                },
+                {
+                  "value": "wind",
+                  "label": "风机"
+                },
+                {
+                  "value": "droplets",
+                  "label": "水"
+                },
+                {
+                  "value": "recycle",
+                  "label": "环保"
+                },
+                {
+                  "value": "shield",
+                  "label": "安防"
+                },
+                {
+                  "value": "users",
+                  "label": "人员"
+                },
+                {
+                  "value": "settings",
+                  "label": "设置"
+                },
+                {
+                  "value": "route",
+                  "label": "路线"
+                },
+                {
+                  "value": "alert-triangle",
+                  "label": "告警"
+                }
+              ]
+            },
+            {
+              "key": "disabled",
+              "label": "禁用",
+              "type": "boolean",
+              "default": false,
+              "help": "压暗并挡住点击。⚠ 它是常态置灰，不随数据变。"
+            }
+          ],
+          "item_label_key": "label",
+          "min_items": 1,
+          "max_items": 12
+        },
+        {
+          "key": "activeIndex",
+          "label": "默认选中第几项",
+          "type": "number",
+          "default": 1,
+          "group": "内容",
+          "help": "开屏时高亮哪一格，超出格数时夹到最后一格。⚠ 这是**这张屏自己**的事：把同一条页签栏摆到第二张屏上时要改成那张屏对应的那一格，否则跳过去后高亮还停在原来那一格。",
+          "span": "half",
+          "min": 1,
+          "max": 12,
+          "step": 1
+        },
+        {
+          "key": "variant",
+          "label": "风格",
+          "type": "enum",
+          "default": "track",
+          "options": [
+            {
+              "value": "track",
+              "label": "凹槽"
+            },
+            {
+              "value": "underline",
+              "label": "页签"
+            },
+            {
+              "value": "solid",
+              "label": "实心"
+            },
+            {
+              "value": "hud",
+              "label": "科技"
+            },
+            {
+              "value": "plain",
+              "label": "无底"
+            }
+          ],
+          "group": "外观",
+          "span": "half"
+        },
+        {
+          "key": "tone",
+          "label": "语义色",
+          "type": "enum",
+          "default": "primary",
+          "options": [
+            {
+              "value": "primary",
+              "label": "主色"
+            },
+            {
+              "value": "success",
+              "label": "正常"
+            },
+            {
+              "value": "warning",
+              "label": "预警"
+            },
+            {
+              "value": "danger",
+              "label": "危险"
+            },
+            {
+              "value": "neutral",
+              "label": "中性"
+            },
+            {
+              "value": "custom",
+              "label": "自定义"
+            }
+          ],
+          "group": "外观",
+          "help": "取主题里的语义色，换肤时整屏页签一起变。",
+          "span": "half"
+        },
+        {
+          "key": "accent",
+          "label": "自定义主色",
+          "type": "color",
+          "default": "",
+          "placeholder": "留空 = 主题强调色",
+          "group": "外观",
+          "span": "half",
+          "when": {
+            "key": "tone",
+            "in": [
+              "custom"
+            ]
+          }
+        },
+        {
+          "key": "textColor",
+          "label": "未选中文字色",
+          "type": "color",
+          "default": "",
+          "placeholder": "留空 = 主题次要文字色",
+          "group": "外观",
+          "span": "half"
+        },
+        {
+          "key": "activeTextColor",
+          "label": "选中文字色",
+          "type": "color",
+          "default": "",
+          "placeholder": "留空 = 跟风格自动",
+          "group": "外观",
+          "help": "实心档默认压深色字。自定义主色配浅色时，用这里显式指定字色。",
+          "span": "half"
+        },
+        {
+          "key": "trackColor",
+          "label": "轨道底色",
+          "type": "color",
+          "default": "",
+          "placeholder": "留空 = 跟风格自动",
+          "group": "外观",
+          "span": "half"
+        },
+        {
+          "key": "shape",
+          "label": "每格轮廓",
+          "type": "enum",
+          "default": "rounded",
+          "options": [
+            {
+              "value": "rounded",
+              "label": "圆角"
+            },
+            {
+              "value": "pill",
+              "label": "胶囊"
+            },
+            {
+              "value": "sharp",
+              "label": "直角"
+            },
+            {
+              "value": "cut",
+              "label": "切角"
+            }
+          ],
+          "group": "外观",
+          "span": "half"
+        },
+        {
+          "key": "itemRadius",
+          "label": "每格圆角 / 切角 (px)",
+          "type": "range",
+          "default": 6,
+          "group": "外观",
+          "help": "圆角档是半径，切角档是斜边的边长。",
+          "span": "half",
+          "when": {
+            "key": "shape",
+            "in": [
+              "rounded",
+              "cut"
+            ]
+          },
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "trackRadius",
+          "label": "轨道圆角 (px)",
+          "type": "range",
+          "default": 10,
+          "group": "外观",
+          "span": "half",
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "borderWidth",
+          "label": "描边粗细 (px)",
+          "type": "range",
+          "default": 1,
+          "group": "外观",
+          "help": "同时是轨道与每一格的描边；「页签」风格的那条底线也用它，配 0 就没有线了。",
+          "span": "half",
+          "min": 0,
+          "max": 4,
+          "step": 0.5
+        },
+        {
+          "key": "divider",
+          "label": "分隔线",
+          "type": "boolean",
+          "default": false,
+          "group": "外观",
+          "help": "格与格之间一条细线。⚠ 「切角」轮廓会把它一起削掉，两者不要同时开。",
+          "span": "half"
+        },
+        {
+          "key": "glow",
+          "label": "选中辉光",
+          "type": "boolean",
+          "default": false,
+          "group": "外观",
+          "help": "选中那一格外一圈与主色同色的光晕。",
+          "span": "half"
+        },
+        {
+          "key": "glowRadius",
+          "label": "辉光半径 (px)",
+          "type": "range",
+          "default": 12,
+          "group": "外观",
+          "span": "half",
+          "when": {
+            "key": "glow",
+            "in": [
+              true
+            ]
+          },
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "indicator",
+          "label": "指示条",
+          "type": "enum",
+          "default": "bar",
+          "options": [
+            {
+              "value": "none",
+              "label": "无"
+            },
+            {
+              "value": "bar",
+              "label": "底部横条"
+            },
+            {
+              "value": "edge",
+              "label": "首侧竖条"
+            }
+          ],
+          "group": "外观",
+          "help": "选中格上那一道亮条。竖排时用「首侧竖条」，底部横条在一列页签里读不出层次。",
+          "span": "half"
+        },
+        {
+          "key": "indicatorSize",
+          "label": "指示条粗细 (px)",
+          "type": "range",
+          "default": 2,
+          "group": "外观",
+          "span": "half",
+          "when": {
+            "key": "indicator",
+            "in": [
+              "bar",
+              "edge"
+            ]
+          },
+          "min": 1,
+          "max": 12,
+          "step": 1
+        },
+        {
+          "key": "fontSize",
+          "label": "字号 (px)",
+          "type": "range",
+          "default": 14,
+          "group": "文字",
+          "span": "half",
+          "min": 8,
+          "max": 64,
+          "step": 1
+        },
+        {
+          "key": "fontWeight",
+          "label": "字重",
+          "type": "range",
+          "default": 500,
+          "group": "文字",
+          "span": "half",
+          "min": 100,
+          "max": 900,
+          "step": 100
+        },
+        {
+          "key": "activeFontWeight",
+          "label": "选中字重",
+          "type": "range",
+          "default": 0,
+          "group": "文字",
+          "help": "0 = 与未选中同一个字重。⚠ 只给选中格加粗会让那一格变宽，「按内容」尺寸下每切一格整条轨道都要抖一下。",
+          "span": "half",
+          "min": 0,
+          "max": 900,
+          "step": 100
+        },
+        {
+          "key": "letterSpacing",
+          "label": "字间距 (px)",
+          "type": "range",
+          "default": 0,
+          "group": "文字",
+          "span": "half",
+          "min": 0,
+          "max": 20,
+          "step": 0.5
+        },
+        {
+          "key": "iconSize",
+          "label": "图标字号 (px)",
+          "type": "range",
+          "default": 0,
+          "group": "文字",
+          "help": "0 = 跟着文字字号走（约 1.1 倍）。",
+          "span": "half",
+          "min": 0,
+          "max": 64,
+          "step": 1
+        },
+        {
+          "key": "orientation",
+          "label": "排布方向",
+          "type": "enum",
+          "default": "row",
+          "options": [
+            {
+              "value": "row",
+              "label": "横排"
+            },
+            {
+              "value": "column",
+              "label": "竖排"
+            }
+          ],
+          "group": "排布",
+          "help": "竖排用来当左侧或右侧的一列导航。",
+          "span": "half"
+        },
+        {
+          "key": "itemAlign",
+          "label": "格内对齐",
+          "type": "enum",
+          "default": "center",
+          "options": [
+            {
+              "value": "center",
+              "label": "居中"
+            },
+            {
+              "value": "left",
+              "label": "靠左"
+            },
+            {
+              "value": "right",
+              "label": "靠右"
+            }
+          ],
+          "group": "排布",
+          "help": "图标与文案在一格之内靠哪一边。竖排导航一般靠左，横排一般居中。",
+          "span": "half"
+        },
+        {
+          "key": "sizing",
+          "label": "尺寸",
+          "type": "enum",
+          "default": "fill",
+          "options": [
+            {
+              "value": "fill",
+              "label": "充满模块"
+            },
+            {
+              "value": "auto",
+              "label": "按内容"
+            }
+          ],
+          "group": "排布",
+          "help": "充满模块：轨道就是这个矩形，拖尺寸即改轨道大小。按内容：由字号与内边距撑开，再摆到矩形的某一处。",
+          "span": "half"
+        },
+        {
+          "key": "stretch",
+          "label": "每格等分",
+          "type": "boolean",
+          "default": true,
+          "group": "排布",
+          "help": "各格平分轨道，关掉则每格按自己的文案宽度收缩。",
+          "span": "half"
+        },
+        {
+          "key": "align",
+          "label": "水平位置",
+          "type": "enum",
+          "default": "center",
+          "options": [
+            {
+              "value": "left",
+              "label": "左"
+            },
+            {
+              "value": "center",
+              "label": "中"
+            },
+            {
+              "value": "right",
+              "label": "右"
+            }
+          ],
+          "group": "排布",
+          "span": "half",
+          "when": {
+            "key": "sizing",
+            "in": [
+              "auto"
+            ]
+          }
+        },
+        {
+          "key": "vAlign",
+          "label": "垂直位置",
+          "type": "enum",
+          "default": "center",
+          "options": [
+            {
+              "value": "top",
+              "label": "上"
+            },
+            {
+              "value": "center",
+              "label": "中"
+            },
+            {
+              "value": "bottom",
+              "label": "下"
+            }
+          ],
+          "group": "排布",
+          "span": "half",
+          "when": {
+            "key": "sizing",
+            "in": [
+              "auto"
+            ]
+          }
+        },
+        {
+          "key": "gap",
+          "label": "格间距 (px)",
+          "type": "range",
+          "default": 4,
+          "group": "排布",
+          "span": "half",
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "itemPaddingX",
+          "label": "格内左右边距 (px)",
+          "type": "range",
+          "default": 16,
+          "group": "排布",
+          "span": "half",
+          "min": 0,
+          "max": 64,
+          "step": 1
+        },
+        {
+          "key": "itemPaddingY",
+          "label": "格内上下边距 (px)",
+          "type": "range",
+          "default": 8,
+          "group": "排布",
+          "help": "「按内容」尺寸时它决定轨道高度；「充满模块」时高度由矩形定。",
+          "span": "half",
+          "min": 0,
+          "max": 48,
+          "step": 1
+        },
+        {
+          "key": "trackPadding",
+          "label": "轨道内边距 (px)",
+          "type": "range",
+          "default": 3,
+          "group": "排布",
+          "help": "槽与格子之间的那一圈。「凹槽」风格靠它才看得出格子是浮在槽里的。",
+          "span": "half",
+          "min": 0,
+          "max": 32,
+          "step": 1
+        },
+        {
+          "key": "hover",
+          "label": "悬停反馈",
+          "type": "enum",
+          "default": "tint",
+          "options": [
+            {
+              "value": "none",
+              "label": "无"
+            },
+            {
+              "value": "tint",
+              "label": "染色"
+            },
+            {
+              "value": "brighten",
+              "label": "提亮"
+            },
+            {
+              "value": "lift",
+              "label": "上浮"
+            },
+            {
+              "value": "glow",
+              "label": "辉光"
+            }
+          ],
+          "group": "动效",
+          "help": "只作用在没选中的格上。⚠ 触摸屏没有悬停：只靠这一档的大屏，在触摸屏上按下去是没有反馈的。",
+          "span": "half"
+        },
+        {
+          "key": "press",
+          "label": "按下反馈",
+          "type": "enum",
+          "default": "none",
+          "options": [
+            {
+              "value": "none",
+              "label": "无"
+            },
+            {
+              "value": "sink",
+              "label": "下沉"
+            },
+            {
+              "value": "shrink",
+              "label": "缩小"
+            }
+          ],
+          "group": "动效",
+          "help": "按住时的位移，触摸屏上唯一看得到的那一档反馈。",
+          "span": "half"
+        }
+      ],
+      "bindings": [],
+      "config_presets": [
+        {
+          "id": "control-track",
+          "label": "凹槽控件",
+          "hint": "槽里浮着一块选中块，与平台里的分段切换器同一套观感。",
+          "config": {
+            "variant": "track",
+            "tone": "primary",
+            "shape": "rounded",
+            "itemRadius": 6,
+            "trackRadius": 10,
+            "trackPadding": 3,
+            "borderWidth": 1,
+            "indicator": "bar",
+            "divider": false,
+            "glow": false,
+            "hover": "tint"
+          }
+        },
+        {
+          "id": "page-tabs",
+          "label": "页签底线",
+          "hint": "一条底线加淡染的选中格，与应用里的页签导航同一套观感。",
+          "config": {
+            "variant": "underline",
+            "tone": "primary",
+            "shape": "rounded",
+            "itemRadius": 6,
+            "trackRadius": 0,
+            "trackPadding": 0,
+            "borderWidth": 1,
+            "indicator": "bar",
+            "divider": false,
+            "glow": false,
+            "hover": "tint"
+          }
+        },
+        {
+          "id": "hud-cut",
+          "label": "科技切角",
+          "hint": "斜切角 + 亮边斜面 + 选中辉光，与页头、按钮的科技风一致。",
+          "config": {
+            "variant": "hud",
+            "tone": "primary",
+            "shape": "cut",
+            "itemRadius": 10,
+            "trackRadius": 0,
+            "trackPadding": 4,
+            "borderWidth": 1,
+            "indicator": "none",
+            "divider": false,
+            "glow": true,
+            "glowRadius": 14,
+            "hover": "glow"
+          }
+        },
+        {
+          "id": "solid-pill",
+          "label": "实心胶囊",
+          "hint": "选中格整块上主色的胶囊，一眼就看得出当前在哪一格。",
+          "config": {
+            "variant": "solid",
+            "tone": "primary",
+            "shape": "pill",
+            "trackRadius": 40,
+            "trackPadding": 4,
+            "borderWidth": 0,
+            "indicator": "none",
+            "divider": false,
+            "glow": false,
+            "hover": "tint"
+          }
+        }
+      ],
+      "content_keys": [
+        "items",
+        "activeIndex"
+      ]
+    },
+    {
       "type": "text-block",
       "display_name": "文本块",
       "category": "装饰",
