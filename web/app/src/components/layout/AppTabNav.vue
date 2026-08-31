@@ -10,7 +10,7 @@
  * 都该照常可用。同理不用 `DtSegmented`——那个组件切换的是**同一块内容的呈现**
  * （表格/卡片），而这里切的是不同内容。
  */
-import { useRoute } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 
 import { DtIcon } from '@dt/ui'
 

@@ -44,9 +44,12 @@ export function fakeModuleComponent(options: FakeModuleOptions): Component {
       meta: { type: Object as PropType<ModuleMeta>, required: false },
     },
     setup(props, { slots }) {
-      if (options.throws !== undefined) throw new Error(options.throws)
-      return () =>
-        h(
+      // ⚠ 抛在 render 里而不是 setup 里：setup 抛掉之后这个组件连 render 都
+      // 没有，Vue 会再补一条「missing template or render function」的告警，
+      // 而边界要验的只是「渲染抛错」这一件事
+      return () => {
+        if (options.throws !== undefined) throw new Error(options.throws)
+        return h(
           'div',
           {
             class: options.mark,
@@ -56,6 +59,7 @@ export function fakeModuleComponent(options: FakeModuleOptions): Component {
           },
           options.hasSlot === true ? slots.default?.() : undefined,
         )
+      }
     },
   })
 }

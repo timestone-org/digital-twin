@@ -13,6 +13,9 @@ import type { AppTabItem } from '@/components/layout'
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ path: '/system/users' }),
+  // ⚠ 组件是从 vue-router 显式 import 进 RouterLink 的（全靠路由插件装的
+  // 全局名的话，这里 mock 掉模块不管用，得改用 global.stubs 替身）
+  RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
 }))
 
 const ITEMS: AppTabItem[] = [
@@ -21,19 +24,7 @@ const ITEMS: AppTabItem[] = [
 ]
 
 function nav(items: AppTabItem[] = ITEMS) {
-  return mount(AppTabNav, {
-    props: { items, label: '系统管理' },
-    global: {
-      // ⚠ RouterLink 是路由插件装的全局组件，不是从 vue-router import 进来的，
-      // 所以 mock 那个模块不管用，得在这里替身
-      stubs: {
-        RouterLink: {
-          props: ['to'],
-          template: '<a :href="to"><slot /></a>',
-        },
-      },
-    },
-  })
+  return mount(AppTabNav, { props: { items, label: '系统管理' } })
 }
 
 enableAutoUnmount(afterEach)
