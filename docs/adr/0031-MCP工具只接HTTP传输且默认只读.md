@@ -32,11 +32,17 @@ MCP server 是外部代码，而**它的工具描述会原样进提示词**—�
 ⚠ 没进白名单的写操作**一律不下发**，不是「下发了再拦」：模型看得见就会调，
 拦一次换一次往返，而那次往返里它多半会换个说法再试一遍。
 
-**三、工具名前缀 `mcp__<server>__<tool>`。**
+**三、工具名前缀 `mcp.<server>.<tool>`，与 `points.search` 同一口径。**
 
-⚠ **不能用点号。** Codex 那一路对线名有约束（`llm/codex/wire_names.py`），
-MCP 工具名要过同一道转换——不过的话，用户选了订阅账号档就整批调不动，
-而现象是「这几个工具在这一档上永远失败」。
+⚠ **规范名里不许出现 `__`**，而不是不许出现点号——两者恰好相反。
+`llm/codex/wire_names.py` 的口径是：出去 `.` → `__`，回来 `__` → `.`。所以一个
+带 `__` 的规范名（`mcp__weather__forecast`）转一圈回来会变成 `mcp.weather.forecast`，
+与注册表里的键对不上，现象是**选了订阅账号档之后这一批工具整批派发失败**。
+`test_codex_wire_names.py::test_every_declared_tool_name_survives_the_round_trip`
+正是钉这条的。
+
+⚠ 因此 server 名与工具名里含 `.` 或 `__` 的一律拒收：前者会把命名空间切错，
+后者会在往返里被吃掉。
 
 **四、每个 MCP server 一个断路器，与模型那套同构（`lib.resilience.CircuitBreaker`）。**
 
