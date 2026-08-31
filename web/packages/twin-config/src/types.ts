@@ -330,6 +330,15 @@ export interface TwinPartDetail {
 export interface TwinPart {
   id: string
   name: string
+  /**
+   * 上级部件 id；空串 = 顶层。父件的详情弹窗里能逐级看到它的后代。
+   * ⚠ `parts` 永远是**扁平数组**：它的文档序就是 `partValues` / `partFieldValues`
+   * 的行号（见 `bindingRows.ts` 文件头）。层级只是这一个引用字段，换成嵌套结构
+   * 会让存量大屏每一行绑定改喂另一个部件——读数照常刷新，界面上看不出来。
+   * ⚠ 指到不存在的部件、指向自己、或沿上级走成环时都**原样留着**，由
+   * `collectTwinConfigIssues` 报出来；建树的那一支自己防环。
+   */
+  parentId: string
   nodes: string[]
   visibility: TwinVisibilityRule
   look: TwinPartLook
