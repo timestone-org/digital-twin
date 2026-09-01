@@ -114,6 +114,18 @@ export const routes: RouteRecordRaw[] = [
     },
   },
   {
+    // 知识库是**跨大屏、跨模块**的公共资源，故与素材同级挂在顶层。
+    // ⚠ 这一条只挂**读码**：写码（knowledge:write / knowledge:manage）在页内
+    // 逐个入口门控，挂到路由上会把只读账号整个挡在门外——而他们本该能检索
+    path: '/knowledge',
+    name: 'knowledge',
+    component: () => import('@/pages/Knowledge/index.vue'),
+    meta: {
+      title: '知识库',
+      permissions: [PERMISSION_CODES.knowledgeUse],
+    },
+  },
+  {
     // 数据采集：一个协议一个页面（主从单页，左列表右详情）。第二个驱动进来
     // 时它是同级的另一条，而不是把这条改成通配——协议不同，配置字段就不同
     path: '/collect/opcua',
