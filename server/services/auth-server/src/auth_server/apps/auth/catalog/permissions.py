@@ -61,6 +61,13 @@ MODELING_VIEW = "modeling:view"
 MODELING_MANAGE = "modeling:manage"
 MODELING_RUN = "modeling:run"
 MODELING_PUBLISH = "modeling:publish"
+# knowledge-server 复述一份，同上。⚠ 粒度是**这个库**而不是这份文档：
+# 一期不做文档级权限，界面上要说清这件事，别让人以为传进去的东西只有自己看得见。
+# ⚠ 这里**只有 use 一个码**。设计里还有 `knowledge:write` 与 `knowledge:manage`
+# （见 docs/KNOWLEDGE_BASE_DESIGN.md §6），但闸 1 的规则按 路径 + 方法 匹配，
+# 而它们要管的那些路径此刻一条都还没有——现在登记进来就是一个没有任何规则要它的
+# 死开关，在角色配置界面上表现为一个点了没效果的勾。各自随端点落地时再加
+KNOWLEDGE_USE = "knowledge:use"
 
 PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(
@@ -424,6 +431,15 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
             "张台账的数值都会跟着模型走，而变化的原因是几千个浮点参数，"
             "没有任何地方 diff 得出来"
         ),
+    ),
+    PermissionSpec(
+        code=KNOWLEDGE_USE,
+        name="使用知识库",
+        kind="view",
+        group_code="knowledge",
+        group_label="知识库",
+        sort_order=10,
+        description="检索、问答、看命中的原文块",
     ),
 )
 

@@ -25,6 +25,7 @@ from auth_server.apps.auth.catalog.permissions import (
     DATASET_VIEW,
     FORMULA_MANAGE,
     FORMULA_VIEW,
+    KNOWLEDGE_USE,
     MODELING_MANAGE,
     MODELING_PUBLISH,
     MODELING_RUN,
@@ -46,6 +47,7 @@ from auth_server.apps.auth.catalog.permissions import (
 from auth_server.apps.auth.catalog.roles import ROLE_ADMIN, ROLE_VIEWER, ROLES
 from auth_server.apps.auth.catalog.rules_assistant import ASSISTANT_RULES
 from auth_server.apps.auth.catalog.rules_auth import AUTH_RULES
+from auth_server.apps.auth.catalog.rules_knowledge import KNOWLEDGE_RULES
 from auth_server.apps.auth.catalog.rules_modeling import MODELING_RULES
 from auth_server.apps.auth.catalog.rules_opcua import OPCUA_RULES
 from auth_server.apps.auth.catalog.rules_platform import PLATFORM_RULES
@@ -64,6 +66,7 @@ ROUTE_RULES: tuple[RouteRuleSpec, ...] = (
     *OPCUA_RULES,
     *REALTIME_RULES,
     *ASSISTANT_RULES,
+    *KNOWLEDGE_RULES,
 )
 
 __all__ = [
@@ -88,6 +91,8 @@ __all__ = [
     "DATASET_VIEW",
     "FORMULA_MANAGE",
     "FORMULA_VIEW",
+    "KNOWLEDGE_RULES",
+    "KNOWLEDGE_USE",
     "MODELING_MANAGE",
     "MODELING_PUBLISH",
     "MODELING_RULES",
