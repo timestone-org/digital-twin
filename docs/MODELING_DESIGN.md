@@ -207,6 +207,20 @@ dataset.record_read.scan_effective(session, window=, limit=)  → 生效值，ts
 与执行记录，不是时序）。命名与约束显式化，主键 UUIDv7，时刻一律 `timestamptz` 存 UTC，
 **禁原生 ENUM**（取值集合用 CHECK 约束的字面量表达，与 `dataset_*` 同款）。
 
+落地时定下的三处，记在这里免得后人当成遗漏：
+
+- **只有流水线与绑定挂 `TimestampMixin`。** 运行、节点记录、模型版本只有 `created_at`——
+  模型版本按 D8 是不可变的，给它挂一个 `updated_at` 是句假话。为此 `models/base.py` 另出两个
+  混入：`CreatedAtMixin` 与 `EagerDefaultsMixin`。⚠ **`eager_defaults` 不能省**：这三张表都有
+  服务端默认值（`attempt` / `cancel_requested` / `preview_truncated` / `created_at`），少了它，
+  写过这行之后同步访问那些属性会在 asyncio 会话里抛 `MissingGreenlet`。
+- **`trigger` 的取值集合现在只有 `manual` / `api`，不含 `schedule`。** 往一个闭合集合里塞一个
+  当前没有任何代码产得出的取值，等于把一个永远为假的分支钉进 CHECK；真要定时触发时走一次
+  放宽 CHECK 的扩展迁移（本仓已有先例）。
+- **`error_text` 没有长度 CHECK。** 8 KiB 截断是写入方的责任（常量在 `models/run.py`）。让它
+  因为超长而整个失败，等于把一次可解释的失败变成一次无声的失败——而这一列存在的意义正是
+  记录失败。
+
 ### 4.1 `modeling_pipelines` · 流水线
 
 | 列 | 类型 | 说明 |
@@ -897,7 +911,25 @@ DB 查询）。加载阶段允许查库，求值阶段一次都不许。由契�
 | `formula/evaluator.py` | `_call` 加一条 `PREDICT` 分支：取出模型对象、逐个求值实参、同步调用 | 与 `_history_key` 三族并列 |
 | `services/analysis_provider.py`（新） | `AnalysisProvider` ABC + 进程内注册表 + `register_provider` | ABC 反转的落点。**台账编译期不认识 modeling** |
 | `services/record_history.py` | `load_models(codes)`：按 provider 分组、一次批量加载 | 与 `load_history` / `load_whole_stats` 并列，是同一层的第四个加载器 |
-| `services/record_compute.py` | 把 `load_models` 接进相位装配 | 唯一的编排点 |
+| `services/record_compute.py` | 把 `load_models` 接进相位装配，**两条路径都要接** | 见下方的 ⚠ |
+
+⚠ **`ComputePlan` 上必须同步加一个 `model_refs` 派生属性。** 取数层是照着
+`prev_refs` / `window_refs` / `whole_refs` / `external_refs` / `needs_history` 这组派生属性
+决定装哪些相位的；不加的话新引用在两条路径上都**静默读不到东西**——而
+`ExternalsNotPrefetched` 那道守卫只在「键建了但没填」时才响，**键压根没建是不响的**。
+
+⚠ **相位装配有两条路径，形状不同，漏一条的症状是「单行试算对、全表重算全空」。**
+单行走 `compute_row`（`load_history` 一把取齐）；批量走 `_run_passes`（批级预取一次）+
+`_one_pass`（每趟一次）+ `_cache_of`（靠内存里滚动的 `series` 供 `PREV` 与窗口用）。
+模型定义是整批共用的一份，两条路径各接一处即可，但**必须各接一处**。
+
+⚠ **失败要落到 `compute_error` 那一列**（`dataset_records.compute_error`，JSONB
+`{列key: 原因}`，整行无错时是 `null` 而不是空字典）。同一个 key 会**同时**出现在
+`computed[key] = null` 与 `compute_error[key] = 原因` 两处——光看 `computed` 分不出
+「这一格本来就是空」与「这一格算挂了」。
+
+⚠ **`FormulaLibrary` 是快照不是活查询**，同一条纪律适用于模型：**一批算完之前不许换版本**，
+否则同一批数据按两套口径算出来，且没有任何症状。模型版本不可变（D8）让这条天然成立。
 
 ⚠ **`dataset_formulas` 表一列不加、一条 CHECK 不改。** 模型调用是一个**函数**，不是一种新的
 库条目类型。用户在公式库里建的仍然是一条普通条目：
@@ -1400,6 +1432,12 @@ CI 不重试）。
 ## 12. 从参考仓继承什么、反着做什么
 
 > 上文各节已就地标注，这里汇总成一张表便于评审时逐条对照。
+>
+> ⚠ **先说一条边界**：参考仓的 `apps/modeling` 只落地了流水线 CRUD、图校验、执行引擎、
+> 算子体系与保留期。**模型版本发布、公式绑定、`AnalysisProvider`、导出导入这四块它一行代码
+> 都没有**——5 张表建了 5 张，代码只用了 3 张；`register_provider` 在它的生产代码里一次都
+> 没被调用过（恰好与它自己列为翻车点的第 26 条同款状态）。所以本文档 §6（模型版本）与
+> §7（台账接缝）**不是迁移，是原创设计**，参考仓在那两处只有文字口径可参考、没有可抄的实现。
 
 **原样继承（那仓少有的干净设计）**：
 

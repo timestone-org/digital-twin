@@ -33,6 +33,36 @@ export type {
   UserListItem,
 } from './auth'
 export { PERMISSION_CODES, PERMISSION_KINDS } from './auth'
+export type {
+  ModelingCategory,
+  ModelingContract,
+  ModelingGraph,
+  ModelingGraphCheck,
+  ModelingGraphEdge,
+  ModelingGraphIssue,
+  ModelingGraphNode,
+  ModelingNodePosition,
+  ModelingNodeRun,
+  ModelingNodeRunSummary,
+  ModelingNodeStatus,
+  ModelingOperator,
+  ModelingPipeline,
+  ModelingPipelineSummary,
+  ModelingPort,
+  ModelingPreviewKind,
+  ModelingRun,
+  ModelingRunStatus,
+  ModelingRunSummary,
+  ModelingTrigger,
+} from './modeling'
+export {
+  MODELING_CATEGORIES,
+  MODELING_CONTRACTS,
+  MODELING_NODE_STATUSES,
+  MODELING_PREVIEW_KINDS,
+  MODELING_RUN_STATUSES,
+  MODELING_TRIGGERS,
+} from './modeling'
 export type { ApiKey, ApiKeyFilters, ApiKeySecret } from './apiKey'
 export type {
   HttpMethod,
