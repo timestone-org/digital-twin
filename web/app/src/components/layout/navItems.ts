@@ -68,6 +68,16 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permission: [PERMISSION_CODES.formulaView],
   },
   {
+    // 建模挨着台账：它的上游就是台账，下游又回到台账（发布成公式）。
+    // ⚠ 只挂读码 `modeling:view`，与路由 meta 逐字一致——两边漂移会造出
+    // 「看得见点不进」或「看不见但输地址能进」，由 navItems 的契约测试钉死。
+    key: 'modeling',
+    label: '分析建模',
+    icon: 'workflow',
+    to: '/modeling/pipelines',
+    permission: [PERMISSION_CODES.modelingView],
+  },
+  {
     // 趋势分析横跨两层数据：上游的点位历史与派生出来的台账。挂在台账旁边而
     // 不是塞进采集组里——它的入口是「我想看一条曲线」，不是「我要配采集」。
     // ⚠ 两个码是**任一即可**，与路由的 permissionMode: 'any' 对应；导航项的码

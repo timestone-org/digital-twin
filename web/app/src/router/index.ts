@@ -207,6 +207,41 @@ export const routes: RouteRecordRaw[] = [
     },
   },
   {
+    // 分析建模：把台账数据串成一张算子图，训练出模型，再发布成台账公式。
+    // ⚠ 这一条只挂**读码** `modeling:view`——写（modeling:manage）、跑
+    // （modeling:run）、发布（modeling:publish）三档在页内逐个入口门控。把写码
+    // 挂到路由上会把只读账号整个挡在门外，连算子面板都打不开
+    // （docs/MODELING_DESIGN.md §7.7）。
+    path: '/modeling/pipelines',
+    name: 'modeling-pipelines',
+    component: () => import('@/pages/Modeling/Pipelines/index.vue'),
+    meta: {
+      title: '分析建模',
+      permissions: [PERMISSION_CODES.modelingView],
+    },
+  },
+  {
+    // ⚠ 带 `:pipelineId` 故不进 NAV_ITEMS；回列表靠 AppShell 的 backTo。
+    path: '/modeling/pipelines/:pipelineId',
+    name: 'modeling-canvas',
+    component: () => import('@/pages/Modeling/Canvas/index.vue'),
+    meta: {
+      title: '画布',
+      permissions: [PERMISSION_CODES.modelingView],
+    },
+  },
+  {
+    // 模型库与流水线**平级**：一个版本一旦发布出去就脱离了产它的那条流水线，
+    // 绑定与下线都按版本自己走（设计 §6.1）。
+    path: '/modeling/models',
+    name: 'modeling-models',
+    component: () => import('@/pages/Modeling/Models/index.vue'),
+    meta: {
+      title: '模型库',
+      permissions: [PERMISSION_CODES.modelingView],
+    },
+  },
+  {
     // 趋势分析：点位历史与台账曲线合在一页。
     // ⚠ 两个源的读码互不蕴含，故按**下界**放行（`permissionMode: 'any'`）：
     // 只有其中一个码的账号该看得到自己那一半，而不是被整页挡在门外。页内按
