@@ -13,6 +13,11 @@ dependencies = [
     #   s3     —— 上传来源的原件落在对象存储里
     #   web    —— FastAPI 与 uvicorn
     "lib[auth,db,redis,s3,web]",
+    # 解析 Office 三件套。⚠ 三路各要一个库，没有哪一个吃得下另外两种；
+    # 它们都是**阻塞且吃 CPU** 的，调用方必须扔进进程池
+    "python-docx>=1.1",
+    "openpyxl>=3.1",
+    "python-pptx>=1.0",
 ]
 
 [project.scripts]
