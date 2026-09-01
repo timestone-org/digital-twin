@@ -65,6 +65,22 @@ export {
 } from './modeling'
 export type { ApiKey, ApiKeyFilters, ApiKeySecret } from './apiKey'
 export type {
+  KnowledgeCapability,
+  KnowledgeDocumentStatus,
+  KnowledgeIndexCapability,
+  KnowledgeKeywordLane,
+  KnowledgeSourceKind,
+  KnowledgeStrategy,
+  KnowledgeVectorLane,
+} from './knowledge'
+export {
+  KNOWLEDGE_DOCUMENT_STATUSES,
+  KNOWLEDGE_KEYWORD_LANES,
+  KNOWLEDGE_SOURCE_KINDS,
+  KNOWLEDGE_STRATEGIES,
+  KNOWLEDGE_VECTOR_LANES,
+} from './knowledge'
+export type {
   HttpMethod,
   MatchMode,
   RoleSummary,

@@ -43,6 +43,9 @@ export const PERMISSION_CODES = {
   // ⚠ 比 use 严一档：模型账号是**整套部署共用的一份**，换掉它等于替所有人
   // 换了说话的账号
   assistantManage: 'assistant:manage',
+  // ⚠ 设计里还有 `knowledge:write` 与 `knowledge:manage`，但它们要管的端点
+  // 此刻一条都还没有。auth-server 那边也只登记了 use——两边同源，各自随端点落地
+  knowledgeUse: 'knowledge:use',
 } as const
 
 export type PermissionCode =
