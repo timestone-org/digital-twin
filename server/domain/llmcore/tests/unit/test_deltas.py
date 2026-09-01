@@ -10,7 +10,7 @@ from typing import Any
 
 from langchain_core.messages import AIMessageChunk
 
-from ai_assistant.llm.deltas import (
+from llmcore.deltas import (
     REASONING_KEY,
     DeltaChannel,
     emit,

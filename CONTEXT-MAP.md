@@ -6,7 +6,7 @@
 | 上下文 | 位置 | `CONTEXT.md` | 状态 |
 |---|---|---|---|
 | 后端基础设施 | `server/lib/` | `server/lib/README.md` | 已建 |
-| 领域共享包 | `server/domain/` | 各包 `README.md`（`timeseries` / `collectwire`） | 已建 |
+| 领域共享包 | `server/domain/` | 各包 `README.md`（`timeseries` / `collectwire` / `llmcore`） | 已建 |
 | 认证与授权 | `server/services/auth-server/` | [`server/services/auth-server/CONTEXT.md`](server/services/auth-server/CONTEXT.md) | 已建 |
 | 业务平台 | `server/services/platform-server/` | [`server/services/platform-server/CONTEXT.md`](server/services/platform-server/CONTEXT.md) | 已建（`api` 角色：空调台账 / 大屏组态 / 采集配置面 / 分析建模；`publisher` 角色：大屏实时发布） |
 | 采集运行时 | `server/services/collector-server/` | [`server/services/collector-server/CONTEXT.md`](server/services/collector-server/CONTEXT.md) | 已建（驱动层 + OPC UA 驱动 + 运行时 + 归档管道） |

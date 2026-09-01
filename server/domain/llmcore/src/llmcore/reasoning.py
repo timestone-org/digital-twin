@@ -19,7 +19,7 @@ from typing import Any, cast
 from langchain_core.outputs import ChatGenerationChunk
 from langchain_openai import ChatOpenAI
 
-from ai_assistant.llm.deltas import REASONING_KEY
+from llmcore.deltas import REASONING_KEY
 
 
 class ReasoningChatOpenAI(ChatOpenAI):

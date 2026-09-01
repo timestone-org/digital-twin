@@ -4,13 +4,13 @@
 """
 
 import json
-from dataclasses import dataclass
 from typing import Any, Self, cast
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from lib.config import AppSettings, PostgresSettings, RedisSettings
+from llmcore import ChatEndpoint, EmbeddingEndpoint
 
 SERVICE_NAME = "ai-assistant"
 API_PREFIX = "/api/v1/assistant"
@@ -117,22 +117,6 @@ def _has_secret(given: SecretStr | None) -> bool:
     Args: given。
     """
     return given is not None and given.get_secret_value().strip() != ""
-
-
-@dataclass(frozen=True)
-class ModelEndpoint:
-    """一档模型实际要打的那个端点，回落链已经算完。
-
-    ⚠ 适配器只认这个形状，不再自己去读 `Settings` 的某一格：读格子的话，
-    「视觉档回落到对话档」这条链会在每个适配器里各写一遍，而写漏的那一份
-    表现为「改了配置没生效」。
-    """
-
-    base_url: str
-    api_key: SecretStr
-    model: str
-    timeout_s: float
-    extra_body: dict[str, Any] | None
 
 
 class MigrationSettings(PostgresSettings):
@@ -302,7 +286,7 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
         """透传给端点的额外请求体；没配就是 `None`。"""
         return _parsed_object(self.model_extra_body)
 
-    def endpoint_of(self, kind: str) -> "ModelEndpoint | None":
+    def endpoint_of(self, kind: str) -> ChatEndpoint | None:
         """这一档实际要打的那个端点；没开模型或没配密钥时给 `None`。
 
         ⚠ **回落链在这里逐格写全**，不靠「两档默认值恰好相同」。写不全的表现是
@@ -317,7 +301,7 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
         if not self.model_enabled or not _has_secret(key) or key is None:
             return None
         if kind != "vision":
-            return ModelEndpoint(
+            return ChatEndpoint(
                 base_url=self.model_base_url,
                 api_key=key,
                 # ⚠ 只有模型名按档分：摘要档共用对话档的端点、密钥与超时，
@@ -330,7 +314,7 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
                 timeout_s=self.model_timeout_s,
                 extra_body=self.extra_body(),
             )
-        return ModelEndpoint(
+        return ChatEndpoint(
             base_url=self.vision_base_url or self.model_base_url,
             api_key=(
                 self.vision_api_key
@@ -345,7 +329,7 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
             ),
         )
 
-    def embedding_endpoint(self) -> "ModelEndpoint | None":
+    def embedding_endpoint(self) -> EmbeddingEndpoint | None:
         """嵌入那一路要打的端点；没配模型名就是没接这一路。
 
         ⚠ 回落链在这里逐格写全，与 `endpoint_of` 同一条口径。
@@ -356,15 +340,14 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
         if not self.embedding_model.strip() or not _has_secret(key):
             return None
         own = self.embedding_api_key
-        return ModelEndpoint(
+        return EmbeddingEndpoint(
             base_url=self.embedding_base_url or self.model_base_url,
             api_key=(
                 own if _has_secret(own) and own is not None else key
             ),  # pyright: ignore[reportArgumentType]  # 理由：上一行已判非空
             model=self.embedding_model,
             timeout_s=self.embedding_timeout_s or self.model_timeout_s,
-            # 嵌入端点没有「思考过程」一类的方言开关，不透传对话档那一段
-            extra_body=None,
+            dimensions=self.embedding_dimensions,
         )
 
     @model_validator(mode="after")

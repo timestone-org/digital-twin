@@ -1,11 +1,10 @@
-"""嵌入那一路来源：OpenAI 兼容的 embeddings 端点（ADR-0030 决策五）。
+"""嵌入那一路来源：OpenAI 兼容的 embeddings 端点。
 
 ⚠ 与对话那几路分开而不是当成 `ModelKind` 的又一档：它返回的是向量不是
-`BaseChatModel`，单价与上下文形状也都不同。混成一档等于每次 remember 都按
-对话档计费。
+`BaseChatModel`，单价与上下文形状也都不同。混成一档等于每次嵌入都按对话档计费。
 
-⚠ 客户端**造一次留着**，不每次调用现造：现造会让每一次 remember 都新开一组
-连接，而连接不会自己回收——表现是跑久了之后端口耗尽，与嵌入这件事毫无关系。
+⚠ 客户端**造一次留着**，不每次调用现造：现造会让每一次嵌入都新开一组连接，
+而连接不会自己回收——表现是跑久了之后端口耗尽，与嵌入这件事毫无关系。
 """
 
 from collections.abc import Sequence
@@ -13,10 +12,10 @@ from dataclasses import dataclass
 
 from openai import AsyncOpenAI
 
-from ai_assistant.settings import Settings
+from llmcore.endpoints import EmbeddingEndpoint
 
 # 这一路在能力面上的名字。⚠ 是线上契约的一部分：落库的 `embedding_model`
-# 存的就是它，换名字会让存量条目看着像另一路算的
+# 旁边存的就是它，换名字会让存量条目看着像另一路算的
 EMBEDDING_SOURCE = "openai-compat"
 
 
@@ -57,16 +56,15 @@ class OpenAiCompatEmbeddingAdapter:
 
 
 def build_openai_embedding(
-    settings: Settings,
+    endpoint: EmbeddingEndpoint | None,
 ) -> OpenAiCompatEmbeddingAdapter | None:
-    """按配置装嵌入那一路；没配就给 `None`。
+    """按端点装嵌入那一路；没解出端点就给 `None`。
 
-    ⚠ 接不上时给 `None` 而不是抛：本部署可以只记不查（`remember` 仍然写入，
-    条目标成没有向量），而整个服务在没接嵌入时仍然要能起。
+    ⚠ 接不上时给 `None` 而不是抛：消费方可以「只存不排」，而整个服务在没接
+    嵌入时仍然要能起。
 
-    Args: settings。
+    Args: endpoint。
     """
-    endpoint = settings.embedding_endpoint()
     if endpoint is None:
         return None
     return OpenAiCompatEmbeddingAdapter(
@@ -74,10 +72,10 @@ def build_openai_embedding(
             base_url=endpoint.base_url,
             api_key=endpoint.api_key.get_secret_value(),
             timeout=endpoint.timeout_s,
-            # ⚠ 这一层不重试：一条链路只有一层负责重试，而那一层是编排层
-            # （runtime-resilience §4.2）
+            # ⚠ 这一层不重试：一条链路只有一层负责重试，而那一层是调用方的
+            # 编排层
             max_retries=0,
         ),
         model=endpoint.model,
-        dimensions=settings.embedding_dimensions,
+        dimensions=endpoint.dimensions,
     )

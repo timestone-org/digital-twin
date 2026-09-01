@@ -391,6 +391,15 @@ jobs:
             --junitxml=../../../collectwire-junit.xml 2>&1 \
             | tee ../../../collectwire-pytest.log
 
+      - name: domain/llmcore 单元 + 契约
+        working-directory: server/domain/llmcore
+        run: |
+          set -o pipefail
+          uv run pytest -q --cov=llmcore --cov-branch \
+            --cov-report=xml:../../../llmcore-coverage.xml \
+            --junitxml=../../../llmcore-junit.xml 2>&1 \
+            | tee ../../../llmcore-pytest.log
+
       - name: auth-server 全层
         working-directory: server/services/auth-server
         run: |
@@ -472,6 +481,8 @@ jobs:
           uv run --project server python scripts/gates/check_pytest_run.py \
             collectwire-junit.xml collectwire-pytest.log
           uv run --project server python scripts/gates/check_pytest_run.py \
+            llmcore-junit.xml llmcore-pytest.log
+          uv run --project server python scripts/gates/check_pytest_run.py \
             auth-junit.xml auth-pytest.log
           uv run --project server python scripts/gates/check_pytest_run.py \
             platform-junit.xml platform-pytest.log
@@ -495,6 +506,8 @@ jobs:
             timeseries timeseries-coverage.xml
           uv run --project server python scripts/gates/check_coverage.py \
             collectwire collectwire-coverage.xml
+          uv run --project server python scripts/gates/check_coverage.py \
+            llmcore llmcore-coverage.xml
           uv run --project server python scripts/gates/check_coverage.py \
             auth-server auth-coverage.xml
           uv run --project server python scripts/gates/check_coverage.py \
@@ -526,10 +539,11 @@ jobs:
             || git fetch --no-tags origin "${BASELINE}"
           uv run --project server diff-cover \
             lib-coverage.xml timeseries-coverage.xml \
-            collectwire-coverage.xml auth-coverage.xml \
+            collectwire-coverage.xml llmcore-coverage.xml \
+            auth-coverage.xml \
             platform-coverage.xml opcua-coverage.xml \
             collector-coverage.xml realtime-coverage.xml \
-            assistant-coverage.xml \
+            assistant-coverage.xml knowledge-coverage.xml \
             --compare-branch "${BASELINE}" --fail-under=85
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

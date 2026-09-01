@@ -17,31 +17,22 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, BaseMessage, BaseMessageChunk
 from langchain_core.tools import BaseTool
-from openai import (
-    APIConnectionError,
-    APIStatusError,
-    AuthenticationError,
-    BadRequestError,
-    OpenAIError,
-    PermissionDeniedError,
-)
+from openai import OpenAIError
 
-from ai_assistant.llm import deltas
 from ai_assistant.llm.codex import wire_names
-from ai_assistant.llm.deltas import DeltaSink
-from ai_assistant.llm.errors import ModelRejected, ModelUnavailable
-from ai_assistant.llm.ports import (
-    CODEX_PROFILE,
-    ModelChoice,
-    ModelSource,
-)
+from ai_assistant.llm.ports import CODEX_PROFILE, ModelChoice, ModelSource
 from lib.logging import get_logger
 from lib.resilience import BreakerOpen, CircuitBreaker
+from llmcore import deltas
+from llmcore.deltas import DeltaSink
+from llmcore.errors import (
+    OUR_FAULT,
+    ModelRejected,
+    ModelUnavailable,
+    reason_of,
+)
 
 _logger = get_logger("assistant.llm")
-
-# 这几档说明「是我们发错了」，重试与短路都没有意义
-_OUR_FAULT = (AuthenticationError, PermissionDeniedError, BadRequestError)
 
 
 @dataclass(frozen=True)
@@ -95,11 +86,11 @@ class GuardedModel:
                 if sink is None
                 else await _drain(bound.astream(messages), sink)
             )
-        except _OUR_FAULT as error:
-            raise ModelRejected(_reason(error)) from error
+        except OUR_FAULT as error:
+            raise ModelRejected(reason_of(error)) from error
         except OpenAIError as error:
             breaker.record_failure(type(error).__name__)
-            raise ModelUnavailable(_reason(error)) from error
+            raise ModelUnavailable(reason_of(error)) from error
         breaker.record_success()
         answer = _as_ai_message(reply)
         if choice.profile == CODEX_PROFILE:
@@ -225,24 +216,3 @@ def _as_ai_message(reply: BaseMessage) -> AIMessage:
     if isinstance(reply, AIMessage):
         return reply
     raise ModelUnavailable("模型回包不是一条助手消息")
-
-
-def _reason(error: OpenAIError) -> str:
-    """给人看的失败原因。
-
-    ⚠ 只带异常类型与状态码，**不带 URL、密钥与响应体原文**：这句话会显示在
-    界面上（api-contract §4.2）。
-
-    Args: error。
-    """
-    if isinstance(error, APIConnectionError):
-        return "连不上模型端点"
-    if isinstance(error, AuthenticationError):
-        return "模型端点拒绝了凭据"
-    if isinstance(error, PermissionDeniedError):
-        return "模型端点拒绝了这次调用"
-    if isinstance(error, BadRequestError):
-        return "模型端点认为请求不合法"
-    if isinstance(error, APIStatusError):
-        return f"模型端点回了 {error.status_code}"
-    return "模型端点未响应"

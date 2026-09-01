@@ -19,8 +19,8 @@ from ai_assistant.llm.adapters import (
     build_adapters,
     build_openai_compat,
 )
-from ai_assistant.llm.reasoning import ReasoningChatOpenAI
 from ai_assistant.settings import Settings
+from llmcore.reasoning import ReasoningChatOpenAI
 
 PLACEHOLDER = "ai-assistant-test"
 

@@ -14,6 +14,7 @@ members = [
     "collectwire",
     "knowledge-server",
     "lib",
+    "llmcore",
     "opcua-server",
     "platform-server",
     "realtime-hub",
@@ -44,6 +45,7 @@ dependencies = [
     { name = "langchain-openai" },
     { name = "langgraph" },
     { name = "lib", extra = ["auth", "crypto", "db", "redis", "web"] },
+    { name = "llmcore" },
     { name = "openai" },
     { name = "openpyxl" },
 ]
@@ -54,6 +56,7 @@ requires-dist = [
     { name = "langchain-openai", specifier = ">=1.6" },
     { name = "langgraph", specifier = ">=1.2" },
     { name = "lib", extras = ["auth", "crypto", "db", "redis", "web"], editable = "lib" },
+    { name = "llmcore", editable = "domain/llmcore" },
     { name = "openai", specifier = ">=3.3" },
     { name = "openpyxl", specifier = ">=3.1" },
 ]
@@ -1368,6 +1371,27 @@ requires-dist = [
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'web'", specifier = ">=0.32" },
 ]
 provides-extras = ["db", "crypto", "mssql", "redis", "s3", "web", "auth"]
+
+[[package]]
+name = "llmcore"
+version = "0.1.0"
+source = { editable = "domain/llmcore" }
+dependencies = [
+    { name = "langchain-core" },
+    { name = "langchain-openai" },
+    { name = "lib" },
+    { name = "openai" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "langchain-core", specifier = ">=1.0" },
+    { name = "langchain-openai", specifier = ">=1.6" },
+    { name = "lib", editable = "lib" },
+    { name = "openai", specifier = ">=3.3" },
+    { name = "pydantic", specifier = ">=2.10" },
+]
 
 [[package]]
 name = "mako"

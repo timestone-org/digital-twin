@@ -14,11 +14,13 @@ WORKDIR /src
 # 先只拷元数据装依赖：源码改动不会让依赖层失效
 COPY pyproject.toml uv.lock ./
 COPY lib/pyproject.toml lib/
+COPY domain/llmcore/pyproject.toml domain/llmcore/
 COPY services/ai-assistant/pyproject.toml services/ai-assistant/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --package ai-assistant --frozen --no-install-project --no-dev
 
 COPY lib/ lib/
+COPY domain/llmcore/ domain/llmcore/
 COPY services/ai-assistant/ services/ai-assistant/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --package ai-assistant --frozen --no-dev

@@ -10,8 +10,8 @@ from typing import Any
 
 from langchain_core.messages import AIMessageChunk
 
-from ai_assistant.llm.deltas import REASONING_KEY, reasoning_of
-from ai_assistant.llm.reasoning import ReasoningChatOpenAI
+from llmcore.deltas import REASONING_KEY, reasoning_of
+from llmcore.reasoning import ReasoningChatOpenAI
 
 
 def _model() -> ReasoningChatOpenAI:
