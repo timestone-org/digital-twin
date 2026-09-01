@@ -114,9 +114,9 @@ async def test_a_deactivated_account_cannot_renew(
 ) -> None:
     token = await admin_token(app_client)
     auth = {"Authorization": f"Bearer {token}"}
-    role_id = (await app_client.get(f"{API_PREFIX}/roles", headers=auth)).json()[
-        "data"
-    ]["items"][0]["id"]
+    role_id = (
+        await app_client.get(f"{API_PREFIX}/roles", headers=auth)
+    ).json()["data"]["items"][0]["id"]
     created = await app_client.post(
         f"{API_PREFIX}/users",
         headers=auth,
