@@ -48,9 +48,9 @@ MIN_PUBLISH_INTERVAL_MS = 100
 QUEUE_SIZE = 1
 # 指纹里口令那一段的长度。留指纹不留口令：指纹进得了日志，口令进不了
 DIGEST_LENGTH = 16
-# 一次问多少个节点的类型。⚠ 服务端普遍有 MaxNodesPerRead 上限，超了是整批回
-# BadTooManyOperations 而不是截断——切批是唯一的解
-DATA_TYPE_CHUNK = 100
+# 一次 Read 最多问多少个节点。⚠ 服务端普遍有 MaxNodesPerRead 上限，超了是
+# 整批回 BadTooManyOperations 而不是截断——切批是唯一的解
+MAX_NODES_PER_READ = 100
 
 ClientFactory = Callable[[DriverConnection], Client]
 
@@ -237,8 +237,8 @@ async def data_types_of(
     """
     found: dict[str, DataType] = {}
     try:
-        for start in range(0, len(addresses), DATA_TYPE_CHUNK):
-            batch = addresses[start : start + DATA_TYPE_CHUNK]
+        for start in range(0, len(addresses), MAX_NODES_PER_READ):
+            batch = addresses[start : start + MAX_NODES_PER_READ]
             nodes = [
                 client.get_node(mapping.node_id_of(address))
                 for address in batch
@@ -401,6 +401,9 @@ class OpcuaDriver:
     async def read_many(self, point_codes: Sequence[str]) -> list[Sample]:
         """一次性读取，返回值与入参逐位对齐。
 
+        ⚠ 按 `MAX_NODES_PER_READ` 切批，各批的回包**按批次顺序首尾相接**才
+        与 `queried` 对得上位——拼错是把值配到别的点位上，且不会报错。
+
         Args: point_codes。
         """
         client = self._require_client()
@@ -408,8 +411,11 @@ class OpcuaDriver:
         queried, nodes = self._nodes_for(point_codes)
         if not nodes:
             return [(None, now_ms, "bad") for _ in point_codes]
-        async with asyncio.timeout(self._connection.timeouts.request_s):
-            values = await client.read_attributes(nodes)
+        values: list[ua.DataValue] = []
+        for start in range(0, len(nodes), MAX_NODES_PER_READ):
+            batch = nodes[start : start + MAX_NODES_PER_READ]
+            async with asyncio.timeout(self._connection.timeouts.request_s):
+                values.extend(await client.read_attributes(batch))
         return align_samples(point_codes, queried, values, now_ms=now_ms)
 
     async def write(self, point_code: str, value: object) -> None:

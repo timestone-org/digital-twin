@@ -62,7 +62,7 @@ export interface ModelingPipelinePatchInput {
 /** 算子目录。前端的算子面板与参数表单都由它驱动。 */
 export async function listModelingOperators(): Promise<ModelingOperator[]> {
   return await requestData<ModelingOperator[]>(
-    '/api/v1/platform/modeling-operators',
+    '/modeling-operators',
     onPlatform(),
   )
 }
@@ -72,7 +72,7 @@ export async function listModelingPipelines(
   query: ModelingPageQuery = {},
 ): Promise<Page<ModelingPipelineSummary>> {
   return await requestData<Page<ModelingPipelineSummary>>(
-    '/api/v1/platform/modeling-pipelines',
+    '/modeling-pipelines',
     onPlatform({ query: { page: query.page, size: query.size } }),
   )
 }
@@ -81,7 +81,7 @@ export async function getModelingPipeline(
   pipelineId: string,
 ): Promise<ModelingPipeline> {
   return await requestData<ModelingPipeline>(
-    `/api/v1/platform/modeling-pipelines/${pipelineId}`,
+    `/modeling-pipelines/${pipelineId}`,
     onPlatform(),
   )
 }
@@ -90,7 +90,7 @@ export async function createModelingPipeline(
   input: ModelingPipelineCreateInput,
 ): Promise<ModelingPipeline> {
   return await requestData<ModelingPipeline>(
-    '/api/v1/platform/modeling-pipelines',
+    '/modeling-pipelines',
     onPlatform({
       method: 'POST',
       body: input,
@@ -104,7 +104,7 @@ export async function updateModelingPipeline(
   input: ModelingPipelinePatchInput,
 ): Promise<ModelingPipeline> {
   return await requestData<ModelingPipeline>(
-    `/api/v1/platform/modeling-pipelines/${pipelineId}`,
+    `/modeling-pipelines/${pipelineId}`,
     onPlatform({ method: 'PATCH', body: input }),
   )
 }
@@ -114,7 +114,7 @@ export async function deleteModelingPipeline(
 ): Promise<void> {
   // ⚠ 走 request 不走 requestData：这条返回 204，没有 data
   await request<null>(
-    `/api/v1/platform/modeling-pipelines/${pipelineId}`,
+    `/modeling-pipelines/${pipelineId}`,
     onPlatform({ method: 'DELETE', headers: idempotent(newIdempotencyKey()) }),
   )
 }
@@ -128,7 +128,7 @@ export async function validateModelingGraph(
   graph: ModelingGraph,
 ): Promise<ModelingGraphCheck> {
   return await requestData<ModelingGraphCheck>(
-    `/api/v1/platform/modeling-pipelines/${pipelineId}:validate`,
+    `/modeling-pipelines/${pipelineId}:validate`,
     onPlatform({ method: 'POST', body: { graph } }),
   )
 }
@@ -139,7 +139,7 @@ export async function startModelingRun(
   trigger: ModelingTrigger = 'manual',
 ): Promise<ModelingRun> {
   return await requestData<ModelingRun>(
-    `/api/v1/platform/modeling-pipelines/${pipelineId}:run`,
+    `/modeling-pipelines/${pipelineId}:run`,
     onPlatform({
       method: 'POST',
       body: { trigger },
@@ -154,7 +154,7 @@ export async function listModelingRuns(
   query: ModelingPageQuery = {},
 ): Promise<Page<ModelingRunSummary>> {
   return await requestData<Page<ModelingRunSummary>>(
-    '/api/v1/platform/modeling-runs',
+    '/modeling-runs',
     onPlatform({
       query: { pipeline_id: pipelineId, page: query.page, size: query.size },
     }),
@@ -170,7 +170,7 @@ export async function getModelingRun(
   signal?: AbortSignal,
 ): Promise<ModelingRun> {
   return await requestData<ModelingRun>(
-    `/api/v1/platform/modeling-runs/${runId}`,
+    `/modeling-runs/${runId}`,
     onPlatform(signal === undefined ? {} : { signal }),
   )
 }
@@ -181,7 +181,7 @@ export async function getModelingNodeRun(
   nodeId: string,
 ): Promise<ModelingNodeRun> {
   return await requestData<ModelingNodeRun>(
-    `/api/v1/platform/modeling-runs/${runId}/nodes/${nodeId}`,
+    `/modeling-runs/${runId}/nodes/${nodeId}`,
     onPlatform(),
   )
 }
@@ -189,7 +189,7 @@ export async function getModelingNodeRun(
 /** 请求取消。回执是「已受理」，真正停下来要等当前这一步跑完。 */
 export async function cancelModelingRun(runId: string): Promise<ModelingRun> {
   return await requestData<ModelingRun>(
-    `/api/v1/platform/modeling-runs/${runId}:cancel`,
+    `/modeling-runs/${runId}:cancel`,
     onPlatform({ method: 'POST', headers: idempotent(newIdempotencyKey()) }),
   )
 }
@@ -199,7 +199,7 @@ export async function listModelingVersions(
   query: ModelingPageQuery & { pipelineId?: string | undefined } = {},
 ): Promise<Page<ModelingVersionSummary>> {
   return await requestData<Page<ModelingVersionSummary>>(
-    '/api/v1/platform/modeling-model-versions',
+    '/modeling-model-versions',
     onPlatform({
       query: {
         pipeline_id: query.pipelineId,
@@ -217,7 +217,7 @@ export async function publishModelingVersion(input: {
   description?: string | null | undefined
 }): Promise<ModelingVersion> {
   return await requestData<ModelingVersion>(
-    '/api/v1/platform/modeling-model-versions',
+    '/modeling-model-versions',
     onPlatform({
       method: 'POST',
       body: input,
@@ -230,7 +230,7 @@ export async function getModelingVersion(
   versionId: string,
 ): Promise<ModelingVersion> {
   return await requestData<ModelingVersion>(
-    `/api/v1/platform/modeling-model-versions/${versionId}`,
+    `/modeling-model-versions/${versionId}`,
     onPlatform(),
   )
 }
@@ -240,7 +240,7 @@ export async function retireModelingVersion(
   versionId: string,
 ): Promise<ModelingVersion> {
   return await requestData<ModelingVersion>(
-    `/api/v1/platform/modeling-model-versions/${versionId}:retire`,
+    `/modeling-model-versions/${versionId}:retire`,
     onPlatform({ method: 'POST', headers: idempotent(newIdempotencyKey()) }),
   )
 }
@@ -250,7 +250,7 @@ export async function listModelingBindings(
   query: ModelingPageQuery = {},
 ): Promise<Page<ModelingBinding>> {
   return await requestData<Page<ModelingBinding>>(
-    '/api/v1/platform/modeling-bindings',
+    '/modeling-bindings',
     onPlatform({ query: { page: query.page, size: query.size } }),
   )
 }
@@ -261,7 +261,7 @@ export async function createModelingBinding(input: {
   model_version_id: string
 }): Promise<ModelingBindingImpact> {
   return await requestData<ModelingBindingImpact>(
-    '/api/v1/platform/modeling-bindings',
+    '/modeling-bindings',
     onPlatform({
       method: 'POST',
       body: input,
@@ -279,14 +279,14 @@ export async function updateModelingBinding(
   },
 ): Promise<ModelingBindingImpact> {
   return await requestData<ModelingBindingImpact>(
-    `/api/v1/platform/modeling-bindings/${bindingId}`,
+    `/modeling-bindings/${bindingId}`,
     onPlatform({ method: 'PATCH', body: input }),
   )
 }
 
 export async function deleteModelingBinding(bindingId: string): Promise<void> {
   await request<null>(
-    `/api/v1/platform/modeling-bindings/${bindingId}`,
+    `/modeling-bindings/${bindingId}`,
     onPlatform({ method: 'DELETE', headers: idempotent(newIdempotencyKey()) }),
   )
 }
