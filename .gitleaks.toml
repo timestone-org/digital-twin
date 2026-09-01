@@ -35,3 +35,15 @@ condition = "AND"
 regexTarget = "line"
 paths = ['''\.(ts|tsx|vue)$''']
 regexes = ['''^\s*[A-Za-z_$][\w$]*\??:\s*[A-Z][A-Za-z0-9]*(?:\[\])?,?\s*$''']
+
+# 三、`Sec-WebSocket-Key` 是**协议本身要求明文发送**的握手随机串（RFC 6455
+# §4.1）：客户端每次握手现生成一个 16 字节 nonce 做 base64，服务端拿它拼一个
+# 固定 GUID 算 SHA-1 回给 `Sec-WebSocket-Accept`。它不鉴权、不携带身份、
+# 用完即弃，抓包就能看见——按定义不是凭据，而启发式只看见「名字里带 Key
+# 且冒号后跟一串 base64」。
+# 判据卡到两条同时成立：整行匹配这个头，且值是标准的 24 字符 base64。
+# 真凭据放不进这个形状——头名是写死的字面量，不是任何可变的键名。
+[[rules.allowlists]]
+description = "Sec-WebSocket-Key 是 RFC 6455 的明文握手随机串，不是凭据"
+regexTarget = "line"
+regexes = ['''Sec-WebSocket-Key:\s*[A-Za-z0-9+/]{22}==''']
