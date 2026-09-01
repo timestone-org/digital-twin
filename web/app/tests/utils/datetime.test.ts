@@ -8,7 +8,9 @@ import {
   formatDay,
   formatMinuteStamp,
   formatMonthDay,
+  formatElapsed,
   formatSince,
+  nowStamp,
 } from '@/utils/datetime'
 
 describe('formatDateTime', () => {
@@ -64,5 +66,41 @@ describe('formatSince', () => {
 
   it('非法时间给占位符', () => {
     expect(formatSince('nonsense', now)).toBe('—')
+  })
+})
+
+describe('formatElapsed', () => {
+  const now = new Date('2026-08-12T12:00:00.000Z')
+
+  it('不到一分钟给秒', () => {
+    expect(formatElapsed('2026-08-12T11:59:53.000Z', now)).toBe('7s')
+  })
+
+  it('过了一分钟给分秒，秒补零', () => {
+    expect(formatElapsed('2026-08-12T11:57:46.000Z', now)).toBe('2m14s')
+  })
+
+  it('刚好整分时秒位是 00 而不是空', () => {
+    expect(formatElapsed('2026-08-12T11:55:00.000Z', now)).toBe('5m00s')
+  })
+
+  // ⚠ 服务端与浏览器有时钟偏差，起点会落在「未来」
+  it('未来时刻夹到 0，不写负数', () => {
+    expect(formatElapsed('2026-08-12T12:00:30.000Z', now)).toBe('0s')
+  })
+
+  it('读不出来的时刻给占位符，不给 NaN', () => {
+    expect(formatElapsed('不是时刻', now)).toBe('—')
+  })
+})
+
+describe('nowStamp', () => {
+  // 组件里不许 `new Date(`，走秒的时钟从这里取此刻
+  it('给出一个当下的 Date', () => {
+    const before = Date.now()
+    const at = nowStamp()
+
+    expect(at).toBeInstanceOf(Date)
+    expect(at.getTime()).toBeGreaterThanOrEqual(before)
   })
 })

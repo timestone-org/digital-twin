@@ -18,11 +18,12 @@ import {
   DtTag,
   useToast,
 } from '@dt/ui'
-import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
+import { formatElapsed, nowStamp } from '@/utils/datetime'
 import { useAuthStore } from '@/stores/auth'
 
 import ConfigForm from './components/ConfigForm.vue'
@@ -32,11 +33,17 @@ import ResultView from './components/ResultView.vue'
 import RunHistory from './components/RunHistory.vue'
 import { defaultsOf, fieldsOf } from './scripts/schemaForm'
 import { useCanvasPage } from './scripts/useCanvasPage'
+import { useCanvasShortcuts } from './scripts/useCanvasShortcuts'
 
 const route = useRoute()
+const router = useRouter()
 const page = useCanvasPage()
 const auth = useAuthStore()
 const toast = useToast()
+
+// 「已用多久」要自己走字：只靠轮询回包重算的话，两拍之间那一秒是不动的
+const tick = ref(nowStamp())
+const clock = ref<ReturnType<typeof setInterval> | null>(null)
 
 const configNodeId = ref<string | null>(null)
 const resultNodeId = ref<string | null>(null)
@@ -95,6 +102,24 @@ function addOperator(code: string): void {
   )
 }
 
+/**
+ * 「第 3/8 个节点 · 已用 2m14s」。
+ *
+ * ⚠ 没有进度的话，一个跑三十分钟的训练与一个卡死的节点在界面上长得一模一样。
+ */
+const progress = computed(() => {
+  const current = page.runner.run.value
+  if (current === null || current.status !== 'running') return ''
+  const nodes = current.nodes
+  const settled = nodes.filter(
+    (node) => node.status !== 'pending' && node.status !== 'running',
+  ).length
+  const since = current.started_at
+  const spent =
+    since === null ? '' : ` · 已用 ${formatElapsed(since, tick.value)}`
+  return `第 ${settled + 1}/${nodes.length} 个节点${spent}`
+})
+
 function openConfig(nodeId: string): void {
   configNodeId.value = nodeId
 }
@@ -125,16 +150,49 @@ async function runOnce(): Promise<void> {
   await page.loadRuns(pipelineId.value)
 }
 
+/**
+ * 回看某一次运行。
+ *
+ * ⚠ 运行 id 进地址栏：不进的话「把这次跑的结果发给同事看」只能靠口述第几条，
+ * 而刷新一下就回到编辑态了。
+ */
 async function pickRun(runId: string): Promise<void> {
   isHistoryOpen.value = false
+  await router.replace({ query: { ...route.query, run_id: runId } })
   await page.replay(runId)
 }
 
-function leaveReplay(): void {
+async function leaveReplay(): Promise<void> {
+  const query = { ...route.query }
+  delete query['run_id']
+  await router.replace({ query })
   page.backToEditing(page.doc.pipeline.value?.graph ?? null)
 }
 
-onMounted(() => void page.open(pipelineId.value))
+useCanvasShortcuts({
+  removeSelected: () => {
+    page.graph.removeSelection(
+      page.selection.selectedNodeIds.value,
+      page.selection.selectedEdgeIds.value,
+    )
+    page.selection.clear()
+  },
+  undo: () => page.graph.undo(),
+  clearSelection: () => page.selection.clear(),
+  canEdit: () => !isReadonly.value,
+})
+
+onBeforeUnmount(() => {
+  if (clock.value !== null) clearInterval(clock.value)
+})
+
+onMounted(async () => {
+  clock.value = setInterval(() => (tick.value = nowStamp()), 1000)
+  await page.open(pipelineId.value)
+  // 带着 ?run_id= 进来的（同事发过来的链接、或刷新）直接落到只读回看
+  const wanted = route.query['run_id']
+  if (typeof wanted === 'string' && wanted !== '') await page.replay(wanted)
+})
 </script>
 
 <template>
@@ -147,12 +205,13 @@ onMounted(() => void page.open(pipelineId.value))
       <DtTag v-if="page.isReplaying.value" intent="info" size="sm">
         正在回看历史运行
       </DtTag>
+      <span v-if="progress" class="dt-ml-page__progress">{{ progress }}</span>
       <DtButton
         v-if="page.isReplaying.value"
         variant="ghost"
         size="sm"
         icon="undo"
-        @click="leaveReplay"
+        @click="void leaveReplay()"
       >
         回到编辑
       </DtButton>
@@ -295,6 +354,12 @@ onMounted(() => void page.open(pipelineId.value))
 
 <style scoped lang="scss">
 .dt-ml-page {
+  &__progress {
+    color: var(--text-secondary);
+    font-family: var(--font-digit);
+    font-size: var(--ctl-hint-fs-sm);
+  }
+
   &__main {
     display: flex;
     flex: 1;

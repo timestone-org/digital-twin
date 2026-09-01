@@ -72,6 +72,35 @@ export function formatSince(value: string, now: Date = new Date()): string {
 }
 
 /**
+ * 此刻。
+ * ⚠ 组件里不许 `new Date(`（闸门盯着，理由是时间格式化要集中在这里），
+ * 走秒的时钟要一个能塞进 ref 的当前时刻，就从这里取。
+ */
+export function nowStamp(): Date {
+  return new Date()
+}
+
+/**
+ * 从某个时刻到现在有多久，**秒级**。
+ *
+ * ⚠ 与 `formatSince` 不是一回事：那个是「多久之前」的粗粒度口径（最小档「刚刚」
+ * 覆盖整整一分钟），跑着的任务要看的是秒在走，一分钟不动等于没有进度。
+ * ⚠ 未来时刻（服务端与浏览器的时钟偏差）夹到 0，不写负数。
+ * @param value 起始时刻，UTC RFC3339
+ * @param now 参照时刻，缺省取当前
+ */
+export function formatElapsed(value: string, now: Date = new Date()): string {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return '—'
+  const seconds = Math.max(
+    Math.floor((now.getTime() - parsed.getTime()) / 1000),
+    0,
+  )
+  if (seconds < 60) return `${seconds}s`
+  return `${Math.floor(seconds / 60)}m${String(seconds % 60).padStart(2, '0')}s`
+}
+
+/**
  * 常驻时钟的时分秒。
  * @param at 要渲染的时刻，缺省取当前
  */

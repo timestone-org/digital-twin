@@ -134,6 +134,27 @@ describe('画布上的图状态', () => {
     expect(graph.graph.value.nodes[1]?.position).toEqual({ left: 100, top: 0 })
   })
 
+  it('删一整份选中是**一步**撤销，不是节点一步、边一步', () => {
+    const graph = useModelingGraph()
+    graph.reset(loaded())
+
+    graph.removeSelection(['a'], ['a:out->b:in'])
+    graph.undo()
+
+    expect(graph.nodeIds.value).toEqual(['a', 'b'])
+    expect(graph.edgeIds.value).toEqual(['a:out->b:in'])
+  })
+
+  it('什么都没选中时不入撤销栈，免得攒一堆按不出效果的空步', () => {
+    const graph = useModelingGraph()
+    graph.reset(loaded())
+
+    graph.removeSelection([], [])
+
+    expect(graph.canUndo.value).toBe(false)
+    expect(graph.isDirty.value).toBe(false)
+  })
+
   it('连着落好几个节点时位置逐个错开，不叠在一起', () => {
     const graph = useModelingGraph()
 

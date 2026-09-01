@@ -26,12 +26,16 @@ function open() {
 
 const STAMP = '2026-01-01T00:00:00.000Z'
 
+/** 地址栏的查询串。深链回看那两条用例会改它。 */
+const query: Record<string, string> = {}
+const replace = vi.fn()
+
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ replace, push: vi.fn() }),
   useRoute: () => ({
     path: '/modeling/pipelines/p1',
     params: { pipelineId: 'p1' },
-    query: {},
+    query,
   }),
   RouterLink: { template: '<a><slot /></a>' },
 }))
@@ -136,6 +140,8 @@ const WRITER = [
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  for (const key of Object.keys(query)) delete query[key]
+  replace.mockReset()
 })
 
 afterEach(() => {
@@ -251,6 +257,114 @@ describe('画布页', () => {
     expect(
       wrapper.find('.dt-ml-palette__item').attributes('disabled'),
     ).toBeDefined()
+  })
+
+  it('选中一个节点再按 Delete，它真的从画布上没了', async () => {
+    stubApi()
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+    await wrapper.findAll('.dt-ml-palette__item')[0]?.trigger('click')
+    await flushPromises()
+    await wrapper.find('.dt-ml-canvas__node').trigger('pointerdown')
+    await flushPromises()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete' }))
+    await flushPromises()
+
+    expect(wrapper.find('.dt-ml-node').exists()).toBe(false)
+  })
+
+  it('删错了按 Ctrl+Z 能退回来', async () => {
+    stubApi()
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+    await wrapper.findAll('.dt-ml-palette__item')[0]?.trigger('click')
+    await flushPromises()
+    await wrapper.find('.dt-ml-canvas__node').trigger('pointerdown')
+    await flushPromises()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete' }))
+    await flushPromises()
+
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'z', ctrlKey: true }),
+    )
+    await flushPromises()
+
+    expect(wrapper.find('.dt-ml-node').exists()).toBe(true)
+  })
+
+  it('跑起来之后顶栏给进度，不然卡死与慢跑长得一样', async () => {
+    stubApi()
+    const running = {
+      ...runOf('running'),
+      nodes: [
+        {
+          node_id: 'n1',
+          operator: 'ledger_source',
+          alias: null,
+          ordinal: 0,
+          status: 'succeeded' as const,
+          duration_ms: 30,
+          has_preview: true,
+          error_text: null,
+        },
+        {
+          node_id: 'n2',
+          operator: 'ledger_source',
+          alias: null,
+          ordinal: 1,
+          status: 'running' as const,
+          duration_ms: null,
+          has_preview: false,
+          error_text: null,
+        },
+      ],
+    }
+    vi.spyOn(modeling, 'startModelingRun').mockResolvedValue(running)
+    vi.spyOn(modeling, 'getModelingRun').mockResolvedValue(running)
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === '运行')
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('第 2/2 个节点')
+  })
+
+  it('带着 ?run_id= 进来直接落到只读回看——同事发过来的链接要能用', async () => {
+    stubApi()
+    vi.spyOn(modeling, 'getModelingRun').mockResolvedValue(runOf('succeeded'))
+    query['run_id'] = 'r1'
+    signIn(WRITER)
+
+    const wrapper = open()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('正在回看历史运行')
+  })
+
+  it('回到编辑时把 run_id 从地址栏清掉，刷新不会又跳回只读', async () => {
+    stubApi()
+    vi.spyOn(modeling, 'getModelingRun').mockResolvedValue(runOf('succeeded'))
+    query['run_id'] = 'r1'
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === '回到编辑')
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(replace).toHaveBeenLastCalledWith({ query: {} })
+    expect(wrapper.text()).not.toContain('正在回看历史运行')
   })
 
   it('流水线取不回来时给出错页，而不是一张空画布', async () => {
