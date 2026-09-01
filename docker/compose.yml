@@ -477,6 +477,9 @@ services:
       # ⚠ 续签委托身份用：边缘签的身份头只有几十秒，而一个回合能跑几分钟。
       # 这一格指错的现象是「回合后半段每个工具都报 platform 回了 401」
       ASSISTANT_AUTH_BASE_URL: http://auth-server:8004
+      # 知识库读侧。⚠ 留空即助手侧「查知识库」那两个工具报「这套部署没接
+      # 知识库」；不留空但服务没起时是另一回事——那时如实报「暂时不可用」
+      ASSISTANT_KNOWLEDGE_BASE_URL: ${ASSISTANT_KNOWLEDGE_BASE_URL:-http://knowledge-server:8009}
       # 模型。⚠ 开关开着却没配密钥 = 启动即失败，而不是起来之后每次对话报错
       ASSISTANT_MODEL_ENABLED: ${ASSISTANT_MODEL_ENABLED:-false}
       ASSISTANT_MODEL_BASE_URL: ${ASSISTANT_MODEL_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}

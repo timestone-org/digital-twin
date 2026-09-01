@@ -48,6 +48,10 @@ CROSS_MODULE_READ_TOOLS: tuple[str, ...] = (
     "datasets.list_tables",
     "datasets.read_columns",
     "assets.search",
+    # 知识库的读侧。⚠ 与点位、大屏那几个同一档：问一句资料这件事与用户站在
+    # 哪一页无关，跟着工作面走反而会让「在大屏页问得到的，回台账页就问不到」
+    "knowledge.list_bases",
+    "knowledge.search",
 )
 
 

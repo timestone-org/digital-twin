@@ -155,6 +155,12 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     app_http_port: int = HTTP_PORT
     postgres_schema: str = DB_SCHEMA
 
+    # 知识库读侧。⚠ 留空即这套部署**没接知识库**：那两个工具照样进规格表
+    # （理由与长期记忆同源），由 `KnowledgeTools.run` 抛一句点得出名字的错。
+    # 不留空但服务没起时是另一回事——那时打过去 502，如实报「暂时不可用」
+    knowledge_base_url: str = ""
+    knowledge_timeout_s: float = 20.0
+
     # 边缘注入的身份头由这枚密钥签名，本服务验它、并原样转发给 platform
     edge_signing_secret: SecretStr = Field(min_length=32)
     # 内部端点之间的服务级密钥

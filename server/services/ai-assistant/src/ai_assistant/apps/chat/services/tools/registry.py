@@ -24,12 +24,15 @@ from ai_assistant.apps.chat.services.tools.ports import (
     UnknownTool,
 )
 from ai_assistant.apps.chat.services.tools.providers.client import ClientTools
+from ai_assistant.apps.chat.services.tools.providers.knowledge import (
+    KnowledgeTools,
+)
 from ai_assistant.apps.chat.services.tools.providers.mcp import McpTools
 from ai_assistant.apps.chat.services.tools.providers.memory import MemoryTools
 from ai_assistant.apps.chat.services.tools.providers.server import ServerTools
 from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
 from ai_assistant.llm import EmbeddingAdapter
-from ai_assistant.upstream import McpCatalog, PlatformClient
+from ai_assistant.upstream import KnowledgeClient, McpCatalog, PlatformClient
 
 
 class DuplicateTool(RuntimeError):
@@ -115,6 +118,8 @@ class ProviderDeps:
     # 长期记忆的仓储与嵌入档
     sessions: SessionFactory | None = None
     embedder: EmbeddingAdapter | None = None
+    # 知识库的读侧；不给即这一路缺席（这套部署没起 knowledge-server）
+    knowledge: KnowledgeClient | None = None
 
 
 def build_registry(deps: ProviderDeps | None = None) -> ToolRegistry:
@@ -151,6 +156,9 @@ def build_registry(deps: ProviderDeps | None = None) -> ToolRegistry:
             ),
             headers=headers,
         ),
+        # ⚠ 排在长期记忆之后、客户端之前。顺序是契约：它决定工具在提示词里的
+        # 先后，而先后影响模型的第一反应（`intent/select.py` 有一条闸守着原序）
+        KnowledgeTools(client=given.knowledge, headers=headers),
         ClientTools(),
     ]
     # ⚠ MCP 排在最后：它的规格逐轮才知道，而工具声明属于前缀缓存唯一能命中的

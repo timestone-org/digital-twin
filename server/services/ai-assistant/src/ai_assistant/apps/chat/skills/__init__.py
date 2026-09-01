@@ -10,6 +10,7 @@ from ai_assistant.apps.chat.skills.dashboard_compose import DASHBOARD_COMPOSE
 from ai_assistant.apps.chat.skills.dashboard_interact import DASHBOARD_INTERACT
 from ai_assistant.apps.chat.skills.dashboard_review import DASHBOARD_REVIEW
 from ai_assistant.apps.chat.skills.formula_author import FORMULA_AUTHOR
+from ai_assistant.apps.chat.skills.knowledge_qa import KNOWLEDGE_QA
 from ai_assistant.apps.chat.skills.manifest import (
     SkillInstructionsMissing,
     SkillManifest,
@@ -21,6 +22,7 @@ SKILLS: tuple[SkillManifest, ...] = (
     DASHBOARD_INTERACT,
     DASHBOARD_REVIEW,
     FORMULA_AUTHOR,
+    KNOWLEDGE_QA,
 )
 
 

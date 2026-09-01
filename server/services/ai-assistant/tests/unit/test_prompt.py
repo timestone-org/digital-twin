@@ -26,7 +26,10 @@ def test_the_roster_hides_skills_from_other_surfaces() -> None:
 
 
 def test_a_surface_without_skills_says_so() -> None:
-    prompt = build_system_prompt("collect-source")
+    """⚠ 拿一个真的没有技能的工作面来验。`collect-source` 从查知识库那一路
+    落地起就有技能了——继续拿它当例子的话，这条闸会在下一次「某个技能扩到
+    所有工作面」时无声地变成恒真。"""
+    prompt = build_system_prompt("no-such-surface")
     assert "没有可用的技能" in prompt
 
 

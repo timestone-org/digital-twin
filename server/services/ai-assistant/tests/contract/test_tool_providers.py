@@ -21,6 +21,9 @@ from ai_assistant.apps.chat.services.tools.providers.client_specs import (
     interaction,
     look,
 )
+from ai_assistant.apps.chat.services.tools.providers.knowledge import (
+    KNOWLEDGE_SPECS,
+)
 from ai_assistant.apps.chat.services.tools.providers.memory import (
     MEMORY_SPECS,
 )
@@ -56,6 +59,7 @@ def test_the_registry_keeps_the_declared_order() -> None:
     expected = (
         SERVER_SPECS
         + MEMORY_SPECS
+        + KNOWLEDGE_SPECS
         + core.CLIENT_SPECS
         + interaction.INTERACTION_SPECS
         + look.LOOK_SPECS

@@ -9,6 +9,9 @@ from ai_assistant.apps.chat.enums import SURFACE_KINDS
 from ai_assistant.apps.chat.services import skill_catalog
 from ai_assistant.apps.chat.services.intent.select import specs_for
 from ai_assistant.apps.chat.services.planning.plan import is_plan_tool
+from ai_assistant.apps.chat.services.tools.providers.knowledge import (
+    KnowledgeTools,
+)
 from ai_assistant.apps.chat.services.tools.providers.memory import MemoryTools
 from ai_assistant.apps.chat.services.tools.providers.server import ServerTools
 from ai_assistant.apps.chat.services.tools.specs import TOOL_SPECS
@@ -106,6 +109,7 @@ def _implemented() -> set[str]:
     return {
         *ServerTools()._handlers(),
         *MemoryTools()._handlers(),
+        *KnowledgeTools()._handlers(),
         *(name for name in KNOWN_SERVER_TOOLS if is_plan_tool(name)),
     }
 

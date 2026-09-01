@@ -34,9 +34,11 @@ def test_find_skill_returns_the_manifest_for_a_known_name() -> None:
     assert skill.title == "批量绑点"
 
 
-def test_dataset_surface_only_offers_the_formula_skill() -> None:
+def test_dataset_surface_offers_the_formula_skill_and_knowledge() -> None:
+    """⚠ 查知识库那一路**每个工作面都装**：问一句资料这件事与用户站在哪一页
+    无关。技能是渐进披露的，多装一个的常驻成本只有一句简介。"""
     names = {skill.name for skill in skills_for("dataset-table")}
-    assert names == {"formula-author"}
+    assert names == {"formula-author", "knowledge-qa"}
 
 
 def test_dashboard_editor_offers_every_dashboard_skill() -> None:
@@ -46,13 +48,14 @@ def test_dashboard_editor_offers_every_dashboard_skill() -> None:
         "dashboard-compose",
         "dashboard-interact",
         "dashboard-review",
+        "knowledge-qa",
     }
 
 
 def test_twin_editor_offers_binding_and_review() -> None:
     # 看图技能也在列：孪生视口的截图走「先画一帧再拷」的替身，3D 画面截得到
     names = {skill.name for skill in skills_for("twin-editor")}
-    assert names == {"dashboard-binding", "dashboard-review"}
+    assert names == {"dashboard-binding", "dashboard-review", "knowledge-qa"}
 
 
 def test_an_unknown_surface_offers_nothing() -> None:

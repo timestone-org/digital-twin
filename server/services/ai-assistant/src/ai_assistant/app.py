@@ -65,6 +65,8 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
             shutdown=container.mcp.client.close,
             shutdown_order=45,
         ),
+        # ⚠ 与 platform 同档：在途的回合还可能正等一次检索答复
+        _knowledge_hook(container),
         LifespanHook(
             name="platform",
             # ⚠ 停在存储之前：在途的回合还可能正等它答复，而那之后才轮到
@@ -89,6 +91,19 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
             shutdown=container.database.dispose,
             shutdown_order=99,
         ),
+    )
+
+
+def _knowledge_hook(container: Container) -> LifespanHook:
+    """知识库读侧的关停钩子。没接时 `shutdown` 是 `None`。
+
+    Args: container。
+    """
+    client = container.knowledge
+    return LifespanHook(
+        name="knowledge",
+        shutdown=None if client is None else client.close,
+        shutdown_order=48,
     )
 
 

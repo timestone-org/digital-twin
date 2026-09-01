@@ -5,6 +5,10 @@ from ai_assistant.upstream.identity import (
     DelegatedIdentity,
     caller_headers,
 )
+from ai_assistant.upstream.knowledge import (
+    KnowledgeClient,
+    KnowledgeUnavailable,
+)
 from ai_assistant.upstream.mcp import (
     McpCatalog,
     McpClient,
@@ -18,6 +22,8 @@ __all__ = [
     "AuthClient",
     "AuthUnavailable",
     "DelegatedIdentity",
+    "KnowledgeClient",
+    "KnowledgeUnavailable",
     "McpCatalog",
     "McpClient",
     "McpServer",

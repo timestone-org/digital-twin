@@ -22,6 +22,7 @@ from ai_assistant.settings import SERVICE_NAME, Settings
 from ai_assistant.upstream import (
     AuthClient,
     DelegatedIdentity,
+    KnowledgeClient,
     McpCatalog,
     McpClient,
     McpServer,
@@ -72,6 +73,9 @@ class Container:
     # 嵌入那一路（ADR-0030）。⚠ 没配时是 `None`：长期记忆仍然记得住
     # （存文本、标没有向量），只是检索用不了——能力缺席就如实缺席
     embedder: EmbeddingAdapter | None
+    # 知识库读侧。⚠ 没配地址时是 `None`——那两个工具照样进规格表，
+    # 由 `KnowledgeTools.run` 抛一句点得出名字的错
+    knowledge: KnowledgeClient | None
 
 
 def _build_database(settings: Settings) -> Database:
@@ -232,4 +236,25 @@ def build_container(settings: Settings) -> Container:
         device_login=device_login,
         oauth_http=oauth_http,
         embedder=build_openai_embedding(settings),
+        knowledge=_build_knowledge(settings, auth),
+    )
+
+
+def _build_knowledge(
+    settings: Settings, auth: AuthClient
+) -> KnowledgeClient | None:
+    """按配置装知识库读侧；没配地址就是这套部署没接它。
+
+    ⚠ 与 platform 同样接上 `DelegatedIdentity`：一个回合能跑几分钟，而边缘签的
+    那组头只有几十秒——不续的话回合后半段每一次检索都是 401，而现象是
+    「knowledge.search 没跑成」，原因却在身份头上。
+
+    Args: settings, auth。
+    """
+    if not settings.knowledge_base_url.strip():
+        return None
+    return KnowledgeClient(
+        base_url=settings.knowledge_base_url,
+        timeout_s=settings.knowledge_timeout_s,
+        identity=DelegatedIdentity(auth),
     )
