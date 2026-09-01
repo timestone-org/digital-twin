@@ -17,14 +17,24 @@ from knowledge_server.apps.knowledge.schemas.library import (
     SourceIn,
     SourceOut,
 )
+from knowledge_server.apps.knowledge.schemas.search import (
+    HitOut,
+    LocatorOut,
+    SearchIn,
+    SearchOut,
+)
 
 __all__ = [
     "CapabilityOut",
     "DocumentOut",
+    "HitOut",
     "IndexCapabilityOut",
     "KnowledgeBaseIn",
     "KnowledgeBaseOut",
+    "LocatorOut",
     "RegisterDocumentIn",
+    "SearchIn",
+    "SearchOut",
     "SourceIn",
     "SourceOut",
     "UploadTicketIn",

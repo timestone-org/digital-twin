@@ -144,3 +144,48 @@ export interface KnowledgeUploadTicket {
   object_key: string
   expires_seconds: number
 }
+
+/**
+ * 一条召回在原件里的位置。
+ *
+ * ⚠ 各格按格式各取所需：pdf 与 pptx 用 `page`，xlsx 用 `sheet` + `row`，
+ * md 与 docx 用 `path`。硬凑一个统一的「行号」会让「第 3 行」在不同格式里
+ * 指着完全不同的东西。
+ */
+export interface KnowledgeLocator {
+  page: number | null
+  sheet: string
+  row: number | null
+  path: string[]
+  /** 给人看的一句位置。⚠ 由后端拼：各端各拼一份一定会漂。 */
+  label: string
+}
+
+/** 一条召回，自带够用来核对的出处。 */
+export interface KnowledgeHit {
+  /** ⚠ 引用指到**块**不指到文档：指到文档等于没给出处。 */
+  chunk_id: string
+  document_id: string
+  document_title: string
+  text: string
+  heading_path: string
+  locator: KnowledgeLocator
+  score: number
+  /** 它凭什么排在这。选哪一条由用户定，因为只有用户知道自己这句话的上下文。 */
+  why: string
+}
+
+/** 一次检索的结果。 */
+export interface KnowledgeSearchResult {
+  hits: KnowledgeHit[]
+  strategy: string
+  rounds: number
+  /** 到顶了没查全吗。⚠ 界面要如实显示，不许装作查完了。 */
+  is_complete: boolean
+  /**
+   * 给人看的一句说明。
+   * ⚠ 「这套部署没接嵌入档，本次只走了关键词那一路」这类话走这里，
+   * **不走空表**：空表与「确实没有相关内容」长得一模一样。
+   */
+  note: string
+}

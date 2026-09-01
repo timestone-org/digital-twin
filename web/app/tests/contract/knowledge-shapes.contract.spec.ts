@@ -17,7 +17,10 @@ import type {
   KnowledgeBase,
   KnowledgeCapability,
   KnowledgeDocument,
+  KnowledgeHit,
   KnowledgeIndexCapability,
+  KnowledgeLocator,
+  KnowledgeSearchResult,
   KnowledgeSource,
   KnowledgeUploadTicket,
 } from '@dt/contracts'
@@ -112,6 +115,33 @@ const SHAPES: Record<string, Record<string, true>> = {
     object_key: true,
     expires_seconds: true,
   } satisfies Keys<KnowledgeUploadTicket>,
+
+  LocatorOut: {
+    page: true,
+    sheet: true,
+    row: true,
+    path: true,
+    label: true,
+  } satisfies Keys<KnowledgeLocator>,
+
+  HitOut: {
+    chunk_id: true,
+    document_id: true,
+    document_title: true,
+    text: true,
+    heading_path: true,
+    locator: true,
+    score: true,
+    why: true,
+  } satisfies Keys<KnowledgeHit>,
+
+  SearchOut: {
+    hits: true,
+    strategy: true,
+    rounds: true,
+    is_complete: true,
+    note: true,
+  } satisfies Keys<KnowledgeSearchResult>,
 }
 
 /**

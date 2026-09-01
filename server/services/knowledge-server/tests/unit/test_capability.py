@@ -13,7 +13,7 @@ from knowledge_server.apps.knowledge.services.capability import (
     keyword_choice,
     vector_choice,
 )
-from knowledge_server.container import IndexProbe
+from knowledge_server.probe import IndexProbe
 from knowledge_server.settings import Settings
 
 PLACEHOLDER = "knowledge-test"

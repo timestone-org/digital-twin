@@ -4,11 +4,8 @@ import asyncio
 from typing import Any, Self
 
 from knowledge_server.apps.knowledge.services.embedding import NullEmbedder
-from knowledge_server.container import (
-    Container,
-    IndexProbe,
-    build_container,
-)
+from knowledge_server.container import Container, build_container
+from knowledge_server.probe import IndexProbe
 from knowledge_server.settings import Settings
 from knowledge_server.worker import (
     WorkerRuntime,

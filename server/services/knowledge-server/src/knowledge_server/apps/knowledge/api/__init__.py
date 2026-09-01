@@ -4,8 +4,18 @@
 它是前端进这套知识库的第一道门，取不到它就什么都不摆。
 """
 
-from knowledge_server.apps.knowledge.api import bases, capabilities, documents
+from knowledge_server.apps.knowledge.api import (
+    bases,
+    capabilities,
+    documents,
+    search,
+)
 
-ROUTERS = (capabilities.router, bases.router, documents.router)
+ROUTERS = (
+    capabilities.router,
+    bases.router,
+    documents.router,
+    search.router,
+)
 
 __all__ = ["ROUTERS"]

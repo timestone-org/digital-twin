@@ -7,13 +7,38 @@
 「没装」处理，并把「我们没探到」与「我们探到它没装」分开报——两者该说的话不一样。
 """
 
+from dataclasses import dataclass
+
 from sqlalchemy import text
 
-from knowledge_server.container import Container
 from knowledge_server.settings import DB_SCHEMA
+from lib.db import Database
 from lib.logging import get_logger
 
 _logger = get_logger("knowledge.probe")
+
+
+@dataclass
+class IndexProbe:
+    """库里到底装了哪几样加速件——启动时问一次，之后不再问。
+
+    ⚠ 这几格**不是配置**，是探测结果。配置说的是「想用哪一档」，这里说的是
+    「此刻真能用哪一档」，两者不一致时以这里为准，并如实上 `/capabilities`
+    （ADR-0034 决策四、决策五）。
+
+    ⚠ 探测放在启动而不是每次检索：每次检索问一遍是一次多余的往返，
+    而扩展装没装这件事在进程活着的这段时间里不会变。
+    """
+
+    # `vector` 扩展在不在，以及加速表建没建
+    has_pgvector: bool = False
+    has_vector_table: bool = False
+    # `pg_trgm` 在不在
+    has_trgm: bool = False
+    # 探测本身失败了吗。⚠ 与「探测到没装」分开：前者是我们不知道，
+    # 后者是我们知道它没装，而两者该说的话不一样
+    is_probed: bool = False
+
 
 # 加速表的名字。⚠ 与 `python -m knowledge_server.index` 建的那张逐字一致：
 # 两处漂开的表现是「建好了但一直报没建」
@@ -28,13 +53,13 @@ _VECTOR_TABLE = text(
 )
 
 
-async def probe_indexes(container: Container) -> None:
-    """问一次库，把结果填进容器的 `index`。
+async def probe_indexes(database: Database, probe: IndexProbe) -> None:
+    """问一次库，把结果填进这份探测。
 
-    Args: container。
+    Args: database, probe。
     """
     try:
-        async with container.database.session() as session:
+        async with database.session() as session:
             rows = await session.execute(_EXTENSIONS)
             installed = {str(one) for one in rows.scalars()}
             found = await session.execute(
@@ -50,14 +75,14 @@ async def probe_indexes(container: Container) -> None:
             "index_probe_failed", "加速件探测失败，按未启用处理", error=error
         )
         return
-    container.index.has_pgvector = "vector" in installed
-    container.index.has_trgm = "pg_trgm" in installed
-    container.index.has_vector_table = has_table
-    container.index.is_probed = True
+    probe.has_pgvector = "vector" in installed
+    probe.has_trgm = "pg_trgm" in installed
+    probe.has_vector_table = has_table
+    probe.is_probed = True
     _logger.info(
         "index_probe_done",
         "加速件探测完成",
-        has_pgvector=container.index.has_pgvector,
-        has_trgm=container.index.has_trgm,
+        has_pgvector=probe.has_pgvector,
+        has_trgm=probe.has_trgm,
         has_vector_table=has_table,
     )

@@ -51,7 +51,7 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
     """
 
     async def probe() -> None:
-        await probe_indexes(container)
+        await probe_indexes(container.database, container.index)
 
     return (
         LifespanHook(name="index-probe", startup=probe, startup_order=20),

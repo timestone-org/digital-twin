@@ -11,6 +11,7 @@ from knowledge_server.apps.knowledge.services.sources import (
     SourceDeps,
     build_sources,
 )
+from knowledge_server.probe import IndexProbe
 from knowledge_server.settings import SERVICE_NAME, Settings
 from lib.cache import Cache
 from lib.db import Database, PoolProfile
@@ -21,28 +22,6 @@ from lib.stream import RedisStream, StreamGroup, StreamLike
 # 幂等键的命名空间。⚠ 必须带服务名：共用一个 Redis 的两个服务，同一个端点名
 # 撞上同一个幂等键时会互相返回对方的结果
 IDEMPOTENCY_NAMESPACE = SERVICE_NAME
-
-
-@dataclass
-class IndexProbe:
-    """库里到底装了哪几样加速件——启动时问一次，之后不再问。
-
-    ⚠ 这几格**不是配置**，是探测结果。配置说的是「想用哪一档」，这里说的是
-    「此刻真能用哪一档」，两者不一致时以这里为准，并如实上 `/capabilities`
-    （ADR-0034 决策四、决策五）。
-
-    ⚠ 探测放在启动而不是每次检索：每次检索问一遍是一次多余的往返，
-    而扩展装没装这件事在进程活着的这段时间里不会变。
-    """
-
-    # `vector` 扩展在不在，以及加速表建没建
-    has_pgvector: bool = False
-    has_vector_table: bool = False
-    # `pg_trgm` 在不在
-    has_trgm: bool = False
-    # 探测本身失败了吗。⚠ 与「探测到没装」分开：前者是我们不知道，
-    # 后者是我们知道它没装，而两者该说的话不一样
-    is_probed: bool = False
 
 
 @dataclass(frozen=True)

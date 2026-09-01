@@ -226,6 +226,51 @@
         "title": "ApiResponse[Page[KnowledgeBaseOut]]",
         "type": "object"
       },
+      "ApiResponse_SearchOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SearchOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[SearchOut]",
+        "type": "object"
+      },
       "ApiResponse_SourceOut_": {
         "properties": {
           "code": {
@@ -529,6 +574,56 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HitOut": {
+        "description": "一条召回，自带够用来核对的出处。",
+        "properties": {
+          "chunk_id": {
+            "format": "uuid",
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_title": {
+            "title": "Document Title",
+            "type": "string"
+          },
+          "heading_path": {
+            "title": "Heading Path",
+            "type": "string"
+          },
+          "locator": {
+            "$ref": "#/components/schemas/LocatorOut"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "why": {
+            "title": "Why",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "document_id",
+          "document_title",
+          "text",
+          "heading_path",
+          "locator",
+          "score",
+          "why"
+        ],
+        "title": "HitOut",
+        "type": "object"
+      },
       "IndexCapabilityOut": {
         "description": "检索那两路各自走在哪一档上。\n\n⚠ `reason` 不是装饰：走在回退档上时用户要看得见**为什么**。\n悄悄退化的表现是「有点慢」「有点不准」，而没有人会去查一件没人说过的事\n（ADR-0034 决策五）。",
         "properties": {
@@ -656,6 +751,52 @@
         "title": "KnowledgeBaseOut",
         "type": "object"
       },
+      "LocatorOut": {
+        "description": "一条召回在原件里的位置。\n\n⚠ 各格按格式各取所需：pdf 与 pptx 用 `page`，xlsx 用 `sheet` + `row`，\nmd 与 docx 用 `path`。硬凑一个统一的「行号」会让「第 3 行」在不同格式里\n指着完全不同的东西。",
+        "properties": {
+          "label": {
+            "default": "",
+            "title": "Label",
+            "type": "string"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "path": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Path",
+            "type": "array"
+          },
+          "row": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row"
+          },
+          "sheet": {
+            "default": "",
+            "title": "Sheet",
+            "type": "string"
+          }
+        },
+        "title": "LocatorOut",
+        "type": "object"
+      },
       "Page_DocumentOut_": {
         "properties": {
           "items": {
@@ -738,6 +879,71 @@
           "filename"
         ],
         "title": "RegisterDocumentIn",
+        "type": "object"
+      },
+      "SearchIn": {
+        "description": "一次检索。",
+        "properties": {
+          "limit": {
+            "default": 8,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "query": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "strategy": {
+            "default": "",
+            "title": "Strategy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "SearchIn",
+        "type": "object"
+      },
+      "SearchOut": {
+        "description": "一次检索的结果。",
+        "properties": {
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/HitOut"
+            },
+            "title": "Hits",
+            "type": "array"
+          },
+          "is_complete": {
+            "title": "Is Complete",
+            "type": "boolean"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "rounds": {
+            "title": "Rounds",
+            "type": "integer"
+          },
+          "strategy": {
+            "title": "Strategy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hits",
+          "strategy",
+          "rounds",
+          "is_complete",
+          "note"
+        ],
+        "title": "SearchOut",
         "type": "object"
       },
       "SourceIn": {
@@ -1559,6 +1765,60 @@
         "summary": "Add Source",
         "tags": [
           "library"
+        ]
+      }
+    },
+    "/api/v1/knowledge/knowledge-bases/{base_id}:search": {
+      "post": {
+        "description": "按库上配的（或这次点名的）策略召回几条，每条带够用来核对的出处。\n\n⚠ 检索不了时回 409 而不是空表：空表与「确实没有相关内容」长得一模一样，\n而调用方会把它读成「查过了，没有」然后接着往下走。\n\nArgs: session, container, _viewer, base_id, body。",
+        "operationId": "search_api_v1_knowledge_knowledge_bases__base_id__search_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "base_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Base Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_SearchOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "在一个知识库里检索",
+        "tags": [
+          "search"
         ]
       }
     },

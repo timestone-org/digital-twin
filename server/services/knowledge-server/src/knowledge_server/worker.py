@@ -181,5 +181,5 @@ async def run_worker(settings: Settings) -> None:
     )
     # ⚠ 探测排在装配之前，理由见 `build_runtime` 的告诫
     container = build_container(settings)
-    await probe_indexes(container)
+    await probe_indexes(container.database, container.index)
     await run_until_stopped(build_runtime(container, wait_for_termination))

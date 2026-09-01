@@ -17,7 +17,7 @@ from knowledge_server.apps.knowledge.services.sources import (
     KnowledgeSource,
     source_kinds,
 )
-from knowledge_server.container import IndexProbe
+from knowledge_server.probe import IndexProbe
 from knowledge_server.settings import Settings
 
 # 与 `services/indexing/registry.py` 的注册名逐字对齐
