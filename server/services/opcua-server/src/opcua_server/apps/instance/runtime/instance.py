@@ -56,8 +56,10 @@ from opcua_server.apps.instance.runtime.valuewatch import (
 
 _logger = get_logger("opcua.instance")
 
-# 探活连不上就是没在监听，不需要更久——本地回环上 1 秒已经很宽
+# 单次探活的上限。本地回环上 1 秒已经很宽
 LISTEN_PROBE_TIMEOUT_S = 1.0
+# 探活的总预算。只有含糊的那一档才重试，端口真关着一次就得出结论
+LISTEN_READY_BUDGET_S = 3.0
 # 停止时等 asyncua 收尾的上限，超时就记一条并往下走，不无限等
 STOP_TIMEOUT_S = 10.0
 
@@ -306,6 +308,24 @@ class RunningInstance:
     ) -> bool:
         """真的去连一次本地端口，而不是读标志位。
 
+        ⚠ 超时不等于没在跑：机器忙时事件循环晚一拍，一次性探测就会把一台
+        好实例报成停了。端口真关着是**当场被拒**、根本吃不满预算，所以只有
+        「连不上也没被拒」这一档含糊的才重试。
+
+        Args: timeout_s（单次探测的上限）。
+        """
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + LISTEN_READY_BUDGET_S
+        while True:
+            probed = await self._probe_once(timeout_s)
+            if probed is not None:
+                return probed
+            if loop.time() >= deadline:
+                return False
+
+    async def _probe_once(self, timeout_s: float) -> bool | None:
+        """连一次端口：True 连上了，False 被拒，None 没得出结论。
+
         Args: timeout_s。
         """
         try:
@@ -313,7 +333,9 @@ class RunningInstance:
                 _, writer = await asyncio.open_connection(
                     _probe_host(self.spec.host), self.spec.port
                 )
-        except (OSError, TimeoutError):
+        except TimeoutError:
+            return None
+        except OSError:
             return False
         writer.close()
         with contextlib.suppress(OSError):

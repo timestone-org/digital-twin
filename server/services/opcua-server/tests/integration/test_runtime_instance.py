@@ -28,6 +28,7 @@ from opcua_server.apps.instance.runtime.addressspace import (
     NodeDefinition,
 )
 from opcua_server.apps.instance.runtime.instance import (
+    LISTEN_READY_BUDGET_S,
     LOOPBACK,
     InstanceSpec,
     RunningInstance,
@@ -121,6 +122,47 @@ async def test_stopped_instance_stops_listening(pki: PkiStore) -> None:
     await running.start()
     await running.stop()
     assert not await running.is_listening()
+
+
+async def test_a_probe_that_times_out_is_not_read_as_stopped(
+    instance: RunningInstance, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """⚠ 机器忙时事件循环晚一拍，一次性探测会把好实例报成「停了」。
+
+    Args: instance, monkeypatch。
+    """
+    opened = asyncio.open_connection
+    attempts = 0
+
+    async def hang_once(
+        host: str | None = None, port: int | None = None
+    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            # 连不上也不被拒——正是忙机器上的那一档
+            await asyncio.Event().wait()
+        return await opened(host, port)
+
+    monkeypatch.setattr(asyncio, "open_connection", hang_once)
+    assert await instance.is_listening(timeout_s=0.05) is True
+    assert attempts == 2
+
+
+async def test_a_refused_port_costs_only_one_probe(pki: PkiStore) -> None:
+    """⚠ 只有含糊的那一档才重试：端口真关着必须一次得出结论。
+
+    否则每张列表页都要按实例数乘上整个预算。
+
+    Args: pki。
+    """
+    running = RunningInstance(_spec(_free_port(), nodes=()), pki=pki)
+    await running.start()
+    await running.stop()
+    loop = asyncio.get_running_loop()
+    began = loop.time()
+    assert not await running.is_listening()
+    assert loop.time() - began < LISTEN_READY_BUDGET_S
 
 
 async def test_stopping_twice_is_a_no_op(pki: PkiStore) -> None:

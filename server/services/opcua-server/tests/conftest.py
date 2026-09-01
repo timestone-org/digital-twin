@@ -9,6 +9,7 @@ L2/L3 打真实 Postgres（SQLite 上全绿的迁移与查询可以在生产直�
 """
 
 import os
+import secrets
 import socket
 from collections.abc import AsyncIterator, Callable, Iterator
 from uuid import UUID, uuid4
@@ -57,8 +58,15 @@ def _reachable(host: str, port: int) -> bool:
         return False
 
 
-# 一次探测里最多往后挪多少个起点。探不到就说明这台机器上没有连续空窗。
+# 一次探测里最多换多少个起点。探不到就说明这台机器上没有连续空窗。
 _WINDOW_ATTEMPTS = 200
+# 选窗的地带。⚠ 起点不许拿 `bind(port=0)` 要：那给的是**临时端口**，而实例
+# 要一直占着窗口里的号——本进程随后连库、连缓存开出去的任何一条连接都可能
+# 被内核分到窗口里，等实例去 bind 就是 EADDRINUSE，现象是「实例没起来」，
+# 与真缺陷长得一模一样。这一段在 Linux（32768 起）与 macOS（49152 起）的
+# 临时端口段之下，也避开了本项目自己那几段固定端口。
+_WINDOW_LOW = 20000
+_WINDOW_HIGH = 29999
 
 
 def _free_window(size: int) -> str:
@@ -70,11 +78,10 @@ def _free_window(size: int) -> str:
 
     Args: size。
     """
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        base = int(probe.getsockname()[1])
-    for offset in range(_WINDOW_ATTEMPTS):
-        low = base + offset * size
+    span = _WINDOW_HIGH - _WINDOW_LOW + 1 - size
+    for _ in range(_WINDOW_ATTEMPTS):
+        # 随机起点：同一台机器上并发的几份用例各挑各的窗，不互相踩
+        low = _WINDOW_LOW + secrets.randbelow(span)
         if all(_is_free(low + step) for step in range(size)):
             return f"{low}-{low + size - 1}"
     raise RuntimeError(f"找不到 {size} 个连续空闲端口")
