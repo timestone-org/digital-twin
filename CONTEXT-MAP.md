@@ -13,6 +13,7 @@
 | OPC UA 服务端 | `server/services/opcua-server/` | [`server/services/opcua-server/CONTEXT.md`](server/services/opcua-server/CONTEXT.md) | 已建 |
 | 实时通道 | `server/services/realtime-hub/` | [`server/services/realtime-hub/CONTEXT.md`](server/services/realtime-hub/CONTEXT.md) | 已建 |
 | AI 助手 | `server/services/ai-assistant/` | [`server/services/ai-assistant/CONTEXT.md`](server/services/ai-assistant/CONTEXT.md) | 已建 |
+| 知识库 | `server/services/knowledge-server/` | [`server/services/knowledge-server/CONTEXT.md`](server/services/knowledge-server/CONTEXT.md) | 🟡 设计已定稿，代码未落地 |
 | 前端 | `web/` | [`web/CONTEXT.md`](web/CONTEXT.md) | 已建 |
 | 边缘网关 | `docker/nginx/` | 见 `docker/README.md` | 已建 |
 
@@ -25,6 +26,7 @@
 - 孪生部件交互：[`docs/TWIN_PART_INTERACTION_DESIGN.md`](docs/TWIN_PART_INTERACTION_DESIGN.md)
 - AI 助手：[`docs/AI_ASSISTANT_DESIGN.md`](docs/AI_ASSISTANT_DESIGN.md)
 - 分析建模：[`docs/MODELING_DESIGN.md`](docs/MODELING_DESIGN.md)
+- 知识库与 AgenticRAG：[`docs/KNOWLEDGE_BASE_DESIGN.md`](docs/KNOWLEDGE_BASE_DESIGN.md)
 - 预测下发与每日增量：[`docs/AC_PUBLISH_DESIGN.md`](docs/AC_PUBLISH_DESIGN.md)
 - 对外接口口径：[`docs/agents/api-contract.md`](docs/agents/api-contract.md)
 - 各语言的结构、风格、注释、测试规范：[`docs/agents/`](docs/agents/)
@@ -48,3 +50,6 @@
 7. ⬜ `platform-worker`（按点位保留期的夜间批处理仍未落地，见 `COLLECT_DESIGN.md` §6）
 8. 🟡 `ai-assistant`（服务、四个技能、服务端与客户端两侧工具、大屏编辑器与台账页
    两个工作面已建；**尚未在现场跑过真模型**，本地只用假件验过编排）
+9. ⬜ `knowledge-server`（知识库：可插拔的知识来源与解析、摄取管线、混合检索与
+   AgenticRAG 编排。设计与四份 ADR 已定稿，代码未落地，见
+   [`docs/KNOWLEDGE_BASE_DESIGN.md`](docs/KNOWLEDGE_BASE_DESIGN.md)）

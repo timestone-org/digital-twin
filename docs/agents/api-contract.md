@@ -16,7 +16,7 @@
 
 | 规则 | 说明 |
 |---|---|
-| 服务段 | `auth` / `platform` / `realtime` / `opcua` / `assistant`，与 [ARCHITECTURE](../ARCHITECTURE_MICROSERVICES.md) §2.1 一致 |
+| 服务段 | `auth` / `platform` / `realtime` / `opcua` / `assistant` / `knowledge`，与 [ARCHITECTURE](../ARCHITECTURE_MICROSERVICES.md) §2.1 一致 |
 | 资源用**复数名词** | `/dashboards`、`/nodes`、`/tables`。不用动词——动作由 HTTP 方法表达 |
 | 多词用 **kebab-case** | `/node-types`、`/report-templates`。不用下划线，不用驼峰 |
 | 嵌套**不超过两层** | `/projects/{id}/dashboards` 可以；`/projects/{id}/dashboards/{id}/modules/{id}/bindings` 不行——第三层起用顶层资源加过滤：`/bindings?module_id=` |
@@ -132,6 +132,8 @@ POST /api/v1/platform/nodes/{id}:write        ← 向 PLC 下发写值
 | 16 | 空调与空间 | `41601` 车间不存在 / `41606` 空调序号已被占用 |
 | 20 | 实时通道 | —— |
 | 21 | OPC UA 服务端 | —— |
+| 22 | AI 助手会话 | `42201` 会话不存在 |
+| 23 | 知识库 | `42301` 知识库不存在 / `42302` 这一路来源不认识这份原件 |
 
 **错误码一经发布不许改变含义**，只能新增。它是对外契约的一部分，前端会按它分支。
 
