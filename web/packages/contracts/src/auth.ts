@@ -39,6 +39,13 @@ export const PERMISSION_CODES = {
   // ⚠ 与 dataset:manage 分家是刻意的：改一条库公式会同时改掉**所有**引用它的
   // 台账列，爆炸半径比改单张表的一列大一个量级（docs/DATASET_DESIGN.md §9）
   formulaManage: 'formula:manage',
+  modelingView: 'modeling:view',
+  modelingManage: 'modeling:manage',
+  // ⚠ 与 manage 分家：一次训练吃满一个核，能改图不等于能随手起一轮
+  modelingRun: 'modeling:run',
+  // ⚠ 比 run 再严一档：发布出去的版本会被台账公式直接引用，改一次绑定影响的
+  // 是**所有**引用那条公式的台账列（docs/MODELING_DESIGN.md §7.7）
+  modelingPublish: 'modeling:publish',
   assistantUse: 'assistant:use',
   // ⚠ 比 use 严一档：模型账号是**整套部署共用的一份**，换掉它等于替所有人
   // 换了说话的账号
