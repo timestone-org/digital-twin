@@ -22,7 +22,9 @@ from _report import (
     service_dirs,
 )
 
-SETTINGS_BASE = ROOT / "server" / "lib" / "src" / "lib" / "config" / "base.py"
+# ⚠ 配置组不止 base.py 一处（对象存储那组在 lib/objectstore/settings.py）。
+# 只认 base.py 的话，别处那些组的字段对本闸是隐形的——模板漏了也不会红。
+LIB_ROOT = ROOT / "server" / "lib" / "src" / "lib"
 COMPOSE = ROOT / "docker" / "compose.yml"
 ROOT_ENV_EXAMPLE = ROOT / ".env.example"
 
@@ -169,15 +171,29 @@ def _settings_fields(service: Path) -> tuple[str, list[str]] | None:
     if not matches:
         return None
     tree = parse(matches[0])
-    base_tree = parse(SETTINGS_BASE)
-    if tree is None or base_tree is None:
+    if tree is None:
         return None
     own = _class_fields(tree)
-    shared = _class_fields(base_tree)
+    shared = _lib_class_fields()
     names = [name for name, _ in own.get("Settings", [])]
     for base in _base_names(tree, "Settings"):
         names.extend(name for name, _ in shared.get(base, []))
     return _env_prefix(tree), sorted(set(names))
+
+
+def _lib_class_fields() -> dict[str, list[tuple[str, ast.expr | None]]]:
+    """lib 里全部配置组的字段，按类名索引。
+
+    ⚠ 不能只读 base.py：服务的 Settings 会继承别处的组（如
+    `lib.objectstore.ObjectStoreSettings`），漏掉那些文件等于那一组字段
+    对本闸隐形——模板少了几行也照样绿。
+    """
+    shared: dict[str, list[tuple[str, ast.expr | None]]] = {}
+    for path in sorted(LIB_ROOT.rglob("*.py")):
+        tree = parse(path)
+        if tree is not None:
+            shared.update(_class_fields(tree))
+    return shared
 
 
 def _env_prefix(tree: ast.Module) -> str:
