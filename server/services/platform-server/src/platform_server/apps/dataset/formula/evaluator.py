@@ -9,6 +9,10 @@ import ast
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from platform_server.apps.dataset.formula.analysis import (
+    AnalysisModel,
+    AnalysisUnavailable,
+)
 from platform_server.apps.dataset.formula.errors import (
     ExternalsNotPrefetched,
     FormulaError,
@@ -26,6 +30,7 @@ from platform_server.apps.dataset.formula.parser import (
 from platform_server.apps.dataset.formula.refs import ParsedFormula
 from platform_server.apps.dataset.formula.signatures import (
     ALL_FUNCS,
+    PREDICT_FUNC,
     PREV_FUNC,
     WINDOW_FUNCS,
 )
@@ -169,6 +174,8 @@ class _Evaluator:
         Args: node。
         """
         name = call_name(node)
+        if name == PREDICT_FUNC:
+            return self._predict(node)
         key = self._history_key(name, node)
         if key is not None:
             return self._external(key)
@@ -179,6 +186,26 @@ class _Evaluator:
         if scalar is None:  # pragma: no cover - 三张名单由契约测试锁死
             raise FormulaError(f"未实现的函数 {name}")
         return scalar([self.visit(arg) for arg in node.args])
+
+    def _predict(self, node: ast.Call) -> object:
+        """`PREDICT('模型标识', 实参…)`：把实参算出来交给模型。
+
+        ⚠ 实参在**行内**求值，所以它们可以是任意表达式、含公式列——依赖图会
+        把被引用的公式列排在前面。这正是走 `externals` 装「模型定义」而不是
+        「逐行请求」换来的（docs/MODELING_DESIGN.md D26）。
+        ⚠ 模型用不了时抛 `FormulaError`，那句原因会落到这一格的
+        `compute_error` 上——空着而不说原因，用户无从判断是数据没有还是没接上。
+        Args: node。
+        """
+        code = str(const_value(node.args[0]))
+        model = self._external(("model", code))
+        if isinstance(model, AnalysisUnavailable):
+            raise FormulaError(model.reason)
+        if not isinstance(model, AnalysisModel):  # pragma: no cover - 装配保证
+            raise FormulaError(f"模型「{code}」不可用")
+        return model.predict(
+            [to_number(self.visit(item)) for item in node.args[1:]]
+        )
 
     def _history_key(self, name: str, node: ast.Call) -> ExternalKey | None:
         """要读历史的三族：算出它的预取键；不是这三族给 None。

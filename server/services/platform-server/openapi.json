@@ -2025,6 +2025,141 @@
         "title": "ApiResponse[MetricLimitsOut]",
         "type": "object"
       },
+      "ApiResponse_ModelBindingImpactOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelBindingImpactOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ModelBindingImpactOut]",
+        "type": "object"
+      },
+      "ApiResponse_ModelBindingOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelBindingOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ModelBindingOut]",
+        "type": "object"
+      },
+      "ApiResponse_ModelVersionOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelVersionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ModelVersionOut]",
+        "type": "object"
+      },
       "ApiResponse_ModuleCatalogOut_": {
         "properties": {
           "code": {
@@ -2428,6 +2563,51 @@
           }
         },
         "title": "ApiResponse[Page[ModelPredictionOut]]",
+        "type": "object"
+      },
+      "ApiResponse_Page_ModelVersionSummaryOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page_ModelVersionSummaryOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Page[ModelVersionSummaryOut]]",
         "type": "object"
       },
       "ApiResponse_Page_PipelineSummaryOut__": {
@@ -4526,6 +4706,55 @@
           }
         },
         "title": "ApiResponse[list[FormulaUsageOut]]",
+        "type": "object"
+      },
+      "ApiResponse_list_ModelBindingOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ModelBindingOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[list[ModelBindingOut]]",
         "type": "object"
       },
       "ApiResponse_list_NodeOut__": {
@@ -7898,6 +8127,13 @@
             "title": "External",
             "type": "array"
           },
+          "model": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Model",
+            "type": "array"
+          },
           "prev": {
             "items": {
               "$ref": "#/components/schemas/FormulaPrevDepOut"
@@ -7940,6 +8176,7 @@
           "window",
           "whole",
           "external",
+          "model",
           "referenced_keys"
         ],
         "title": "FormulaDepsOut",
@@ -9206,6 +9443,222 @@
         "title": "MetricsBlockOut",
         "type": "object"
       },
+      "ModelBindingCreateIn": {
+        "additionalProperties": false,
+        "description": "把一个版本绑到一条公式条目上。",
+        "properties": {
+          "fx_code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Fx Code",
+            "type": "string"
+          },
+          "model_version_id": {
+            "format": "uuid",
+            "title": "Model Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fx_code",
+          "model_version_id"
+        ],
+        "title": "ModelBindingCreateIn",
+        "type": "object"
+      },
+      "ModelBindingImpactOut": {
+        "description": "换绑的回执：连同「哪些台账列会跟着变」。\n\n⚠ 回执必须带影响面，但**重算不在这里做**：批量重算是 `dataset:backfill`\n档位的权限，不该被 `modeling:publish` 顺带授予（§7.7）。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "fx_code": {
+            "title": "Fx Code",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "is_orphaned": {
+            "title": "Is Orphaned",
+            "type": "boolean"
+          },
+          "model_version_id": {
+            "format": "uuid",
+            "title": "Model Version Id",
+            "type": "string"
+          },
+          "param_map": {
+            "items": {
+              "$ref": "#/components/schemas/ParamMapOut"
+            },
+            "title": "Param Map",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "usages": {
+            "items": {
+              "$ref": "#/components/schemas/ModelBindingUsageOut"
+            },
+            "title": "Usages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "fx_code",
+          "model_version_id",
+          "param_map",
+          "is_enabled",
+          "is_orphaned",
+          "created_by_name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ModelBindingImpactOut",
+        "type": "object"
+      },
+      "ModelBindingOut": {
+        "description": "一条绑定。\n\n⚠ `orphaned` 是**每次列表时现算**的：公式条目可能被删掉，而绑定是逻辑引用\n拦不住。不做后台对账任务——那与「发现对不上就从上游重拉」是同一类错。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "fx_code": {
+            "title": "Fx Code",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "is_orphaned": {
+            "title": "Is Orphaned",
+            "type": "boolean"
+          },
+          "model_version_id": {
+            "format": "uuid",
+            "title": "Model Version Id",
+            "type": "string"
+          },
+          "param_map": {
+            "items": {
+              "$ref": "#/components/schemas/ParamMapOut"
+            },
+            "title": "Param Map",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "fx_code",
+          "model_version_id",
+          "param_map",
+          "is_enabled",
+          "is_orphaned",
+          "created_by_name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ModelBindingOut",
+        "type": "object"
+      },
+      "ModelBindingUpdateIn": {
+        "additionalProperties": false,
+        "description": "换版本或启停。两样都不给就是空操作。",
+        "properties": {
+          "is_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Enabled"
+          },
+          "model_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version Id"
+          }
+        },
+        "title": "ModelBindingUpdateIn",
+        "type": "object"
+      },
+      "ModelBindingUsageOut": {
+        "description": "一条受影响的台账列。",
+        "properties": {
+          "column_key": {
+            "title": "Column Key",
+            "type": "string"
+          },
+          "table_code": {
+            "title": "Table Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "table_code",
+          "column_key"
+        ],
+        "title": "ModelBindingUsageOut",
+        "type": "object"
+      },
       "ModelMetricsOut": {
         "description": "总体 + 按服务组合的评估。⚠ 没样本的组合是 null 不是零。",
         "properties": {
@@ -9280,6 +9733,289 @@
           "fold"
         ],
         "title": "ModelPredictionOut",
+        "type": "object"
+      },
+      "ModelVersionCreateIn": {
+        "additionalProperties": false,
+        "description": "把一次成功运行发布成一个版本。",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "name"
+        ],
+        "title": "ModelVersionCreateIn",
+        "type": "object"
+      },
+      "ModelVersionOut": {
+        "description": "版本详情，带指标与指纹。",
+        "properties": {
+          "algo": {
+            "title": "Algo",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "feature_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Feature Keys",
+            "type": "array"
+          },
+          "fingerprint": {
+            "additionalProperties": true,
+            "title": "Fingerprint",
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_servable": {
+            "title": "Is Servable",
+            "type": "boolean"
+          },
+          "metrics": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Metrics",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pipeline_id": {
+            "format": "uuid",
+            "title": "Pipeline Id",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "serving_channel": {
+            "enum": [
+              "binary",
+              "json"
+            ],
+            "title": "Serving Channel",
+            "type": "string"
+          },
+          "target_key": {
+            "title": "Target Key",
+            "type": "string"
+          },
+          "task": {
+            "enum": [
+              "classification",
+              "regression"
+            ],
+            "title": "Task",
+            "type": "string"
+          },
+          "unservable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unservable Reason"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "pipeline_id",
+          "run_id",
+          "version",
+          "name",
+          "algo",
+          "task",
+          "is_servable",
+          "serving_channel",
+          "unservable_reason",
+          "feature_keys",
+          "target_key",
+          "created_by_name",
+          "created_at",
+          "description"
+        ],
+        "title": "ModelVersionOut",
+        "type": "object"
+      },
+      "ModelVersionSummaryOut": {
+        "description": "版本列表里的一条。",
+        "properties": {
+          "algo": {
+            "title": "Algo",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "feature_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Feature Keys",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_servable": {
+            "title": "Is Servable",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pipeline_id": {
+            "format": "uuid",
+            "title": "Pipeline Id",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "serving_channel": {
+            "enum": [
+              "binary",
+              "json"
+            ],
+            "title": "Serving Channel",
+            "type": "string"
+          },
+          "target_key": {
+            "title": "Target Key",
+            "type": "string"
+          },
+          "task": {
+            "enum": [
+              "classification",
+              "regression"
+            ],
+            "title": "Task",
+            "type": "string"
+          },
+          "unservable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unservable Reason"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "pipeline_id",
+          "run_id",
+          "version",
+          "name",
+          "algo",
+          "task",
+          "is_servable",
+          "serving_channel",
+          "unservable_reason",
+          "feature_keys",
+          "target_key",
+          "created_by_name",
+          "created_at"
+        ],
+        "title": "ModelVersionSummaryOut",
         "type": "object"
       },
       "ModuleCatalogOut": {
@@ -10614,6 +11350,37 @@
         "title": "Page[ModelPredictionOut]",
         "type": "object"
       },
+      "Page_ModelVersionSummaryOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ModelVersionSummaryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total"
+        ],
+        "title": "Page[ModelVersionSummaryOut]",
+        "type": "object"
+      },
       "Page_PipelineSummaryOut_": {
         "properties": {
           "items": {
@@ -10891,6 +11658,25 @@
           "total"
         ],
         "title": "Page[WorkshopOut]",
+        "type": "object"
+      },
+      "ParamMapOut": {
+        "description": "一个形参落到哪个特征列上。",
+        "properties": {
+          "feature": {
+            "title": "Feature",
+            "type": "string"
+          },
+          "param": {
+            "title": "Param",
+            "type": "string"
+          }
+        },
+        "required": [
+          "param",
+          "feature"
+        ],
+        "title": "ParamMapOut",
         "type": "object"
       },
       "PipelineCreateIn": {
@@ -23340,6 +24126,434 @@
         "summary": "存活探针",
         "tags": [
           "probe"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-bindings": {
+      "get": {
+        "description": "全部绑定，逐条现算孤儿标志。\n\nArgs: session, _viewer。",
+        "operationId": "list_bindings_api_v1_platform_modeling_bindings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_ModelBindingOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "绑定列表",
+        "tags": [
+          "modeling-binding"
+        ]
+      },
+      "post": {
+        "description": "按位置把形参映射到特征列上。\n\nArgs: payload, session, response, write。",
+        "operationId": "create_binding_api_v1_platform_modeling_bindings_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelBindingCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelBindingOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "绑定模型到公式条目",
+        "tags": [
+          "modeling-binding"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-bindings/{binding_id}": {
+      "delete": {
+        "description": "删绑定。之后那一列变空并给「模型未绑定」。\n\nArgs: binding_id, session, _write。",
+        "operationId": "remove_binding_api_v1_platform_modeling_bindings__binding_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "binding_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Binding Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除绑定",
+        "tags": [
+          "modeling-binding"
+        ]
+      },
+      "patch": {
+        "description": "回执带影响面：哪些台账列会跟着变。重算由用户在台账页显式发起。\n\nArgs: binding_id, payload, session, _write。",
+        "operationId": "update_binding_api_v1_platform_modeling_bindings__binding_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "binding_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Binding Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelBindingUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelBindingImpactOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "换版本或启停",
+        "tags": [
+          "modeling-binding"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-model-versions": {
+      "get": {
+        "description": "分页列出模型版本，可按流水线筛。\n\nArgs: session, page, _viewer, pipeline_id。",
+        "operationId": "list_versions_api_v1_platform_modeling_model_versions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "pipeline_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pipeline Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Page_ModelVersionSummaryOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "模型版本列表",
+        "tags": [
+          "modeling-model"
+        ]
+      },
+      "post": {
+        "description": "把一次成功运行发布成一个不可变的版本。\n\nArgs: payload, session, response, write。",
+        "operationId": "publish_version_api_v1_platform_modeling_model_versions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelVersionCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelVersionOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "发布模型版本",
+        "tags": [
+          "modeling-model"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-model-versions/{version_id}": {
+      "delete": {
+        "description": "退役。还有绑定指着它时 409。\n\nArgs: version_id, session, _write。",
+        "operationId": "retire_version_api_v1_platform_modeling_model_versions__version_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Version Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "退役模型版本",
+        "tags": [
+          "modeling-model"
+        ]
+      },
+      "get": {
+        "description": "详情，含指标与指纹。\n\nArgs: version_id, session, _viewer。",
+        "operationId": "get_version_api_v1_platform_modeling_model_versions__version_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Version Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelVersionOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "模型版本详情",
+        "tags": [
+          "modeling-model"
         ]
       }
     },

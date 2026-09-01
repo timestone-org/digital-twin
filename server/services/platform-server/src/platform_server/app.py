@@ -12,8 +12,12 @@ from platform_server.apps.assets.api import ROUTERS as ASSET_ROUTERS
 from platform_server.apps.collect.api import ROUTERS as COLLECT_ROUTERS
 from platform_server.apps.dashboard.api import ROUTERS as DASHBOARD_ROUTERS
 from platform_server.apps.dataset.api import ROUTERS as DATASET_ROUTERS
+from platform_server.apps.dataset.services import register_provider
 from platform_server.apps.hvac.api import ROUTERS as HVAC_ROUTERS
 from platform_server.apps.modeling.api import ROUTERS as MODELING_ROUTERS
+from platform_server.apps.modeling.services.model_provider import (
+    ModelingAnalysisProvider,
+)
 from platform_server.apps.runtime_params.api import (
     ROUTERS as RUNTIME_PARAM_ROUTERS,
 )
@@ -54,6 +58,10 @@ def build_app(settings: Settings) -> FastAPI:
             drain_timeout_s=settings.app_drain_timeout_s,
         ),
     )
+    # ⚠ 每个角色都要注册：注册表是**进程内**的，而单行写触发的重算会落到
+    # 任意 API 副本。漏一处的现象是「有时候出数、有时候是空」，且与副本编号
+    # 相关，极难复现（docs/MODELING_DESIGN.md §3.2）
+    register_provider(ModelingAnalysisProvider())
     app.state.container = container
     return app
 

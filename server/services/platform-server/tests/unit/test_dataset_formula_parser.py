@@ -260,6 +260,7 @@ def test_every_reference_kind_lands_in_its_own_bucket() -> None:
         "+ {out.基准} * SUM_OVER({out.产量}, '3月'))"
     )
     assert parsed.deps.to_json() == {
+        "model": [],
         "same_row": ["产量", "能耗"],
         "prev": [{"key": "能耗", "steps": 1}],
         "window": [

@@ -1,7 +1,7 @@
-"""把取好的历史行折算成求值器要的 `externals`。
+"""把取好的历史行与模型定义折算成求值器要的 `externals`。
 
 取数（异步，调用方做）与折算（纯同步，这里）分成两段。
-⚠ 四类引用**整份**收，不拆成四个可省的入参：省掉一类不会报错，只会让那一类
+⚠ 五类引用**整份**收，不拆成五个可省的入参：省掉一类不会报错，只会让那一类
 引用悄悄读到空值——试算就是这么与落库算出了两个不同的数
 （docs/DATASET_DESIGN.md §5.6）。
 """
@@ -10,6 +10,10 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, tzinfo
 
+from platform_server.apps.dataset.formula.analysis import (
+    AnalysisModel,
+    AnalysisUnavailable,
+)
 from platform_server.apps.dataset.formula.errors import FormulaError
 from platform_server.apps.dataset.formula.evaluator import ExternalKey
 from platform_server.apps.dataset.formula.refs import FormulaDeps, WindowRef
@@ -92,6 +96,11 @@ class HistoryCache:
         default_factory=dict[str, WholeStats]
     )
     #: {表code: 对方表的行（按 ts 升序）}，用于 as-of 取值
+    #: 这一批共用的模型定义。⚠ 一次重算装一次、全批复用：模型版本不可变，
+    #: 故一批算完之前不会换定义——换了就是同一批数据按两套口径算出来
+    models: dict[str, "AnalysisModel | AnalysisUnavailable"] = field(
+        default_factory=dict[str, "AnalysisModel | AnalysisUnavailable"]
+    )
     external_rows: dict[str, list[RowSnapshot]] = field(
         default_factory=dict[str, list[RowSnapshot]]
     )
@@ -111,6 +120,10 @@ def build_externals(
         本表窗口含当前行，缺行或缺列则不贡献）。
     """
     externals: dict[ExternalKey, object] = {}
+    for model in deps.model:
+        externals[("model", model.code)] = cache.models.get(
+            model.code, AnalysisUnavailable(reason="模型未绑定")
+        )
     for ref in deps.external:
         row = _as_of(cache.external_rows.get(ref.table_code) or [], current)
         externals[("ext", ref.table_code, ref.key)] = (

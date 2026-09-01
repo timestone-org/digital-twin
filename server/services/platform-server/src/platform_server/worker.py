@@ -20,6 +20,7 @@ from platform_server.apps.assets.services.compress_worker import (
     CompressOptions,
     ModelCompressor,
 )
+from platform_server.apps.dataset.services import register_provider
 from platform_server.apps.dataset.services.collector import (
     CollectorContext,
     DatasetCollector,
@@ -57,6 +58,9 @@ from platform_server.apps.modeling.services import (
     NodePool,
     RunConsumer,
     RunConsumerOptions,
+)
+from platform_server.apps.modeling.services.model_provider import (
+    ModelingAnalysisProvider,
 )
 from platform_server.apps.modeling.services.retention import (
     ModelingRetention,
@@ -446,6 +450,8 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
     Args: settings, wait。
     """
     container = build_container(settings)
+    # ⚠ worker 也要注册：回填与重算跑在这里
+    register_provider(ModelingAnalysisProvider())
     await selfcheck(container)
     # 单 worker 进程池：训练一次只跑一个，防止两次训练互相抢核
     pool = TrainerPool()

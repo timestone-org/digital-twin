@@ -15,6 +15,7 @@ from platform_server.apps.dataset.formula import (
     CATEGORIES,
     EMPTY_LIBRARY,
     OPERATORS,
+    PREDICT_FUNC,
     PREV_FUNC,
     RULES,
     SCALAR_FUNCS,
@@ -52,7 +53,7 @@ from platform_server.apps.dataset.schemas import (
 CATALOG = build_catalog(EMPTY_LIBRARY)
 CATALOG_NAMES = {item.doc.name for item in CATALOG.functions}
 # 五族的总数。写死是为了让「加了函数没加目录」在这里红
-BUILTIN_COUNT = 59
+BUILTIN_COUNT = 60
 # 有专属节点类型、故不进 `_FN_LABELS` 的那几个
 OWN_NOTATION_NODE = frozenset({"IF", "IFS", "SQRT", "POW"})
 # 逐字符比对两份列 key 规则时用的探针
@@ -77,12 +78,13 @@ def test_the_catalog_lists_every_built_in_and_nothing_else() -> None:
     assert all_function_names() == CATALOG_NAMES
 
 
-def test_the_five_families_do_not_overlap() -> None:
+def test_the_six_families_do_not_overlap() -> None:
     families = [
         set(SCALAR_FUNCS),
         set(WINDOW_FUNCS),
         set(ALL_FUNCS),
         {PREV_FUNC},
+        {PREDICT_FUNC},
     ]
     total = sum(len(family) for family in families)
     assert len(set().union(*families)) == total == BUILTIN_COUNT

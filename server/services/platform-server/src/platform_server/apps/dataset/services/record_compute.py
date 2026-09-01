@@ -21,6 +21,8 @@ from platform_server.apps.dataset.crud import (
     table_crud,
 )
 from platform_server.apps.dataset.formula import (
+    AnalysisModel,
+    AnalysisUnavailable,
     ColumnFormula,
     EvalContext,
     FormulaError,
@@ -45,6 +47,7 @@ from platform_server.apps.dataset.services.record_history import (
     fold_current,
     load_external_rows,
     load_history,
+    load_models,
     load_whole_stats,
 )
 
@@ -210,6 +213,8 @@ async def _run_passes(
         values=[effective_values(record) for record in targets],
         seeds=await _seed_rows(session, scope, table_id, span.start),
         externals=await load_external_rows(session, scope, span),
+        # ⚠ 模型定义整批装一次：漏了这一处的症状是「单行试算对、全表重算全空」
+        models=await load_models(session, scope),
     )
     failed = 0
     for _ in range(_MAX_PASSES if _needs_extra_passes(scope) else 1):
@@ -226,6 +231,9 @@ class _Batch:
     values: list[dict[str, Any]]
     seeds: list[RowSnapshot]
     externals: dict[str, list[RowSnapshot]]
+    #: 这一批共用的模型定义。⚠ 整批装一次：漏了这一处的症状是「单行试算对、
+    #: 全表重算全空」（docs/MODELING_DESIGN.md §7.2）
+    models: dict[str, AnalysisModel | AnalysisUnavailable]
 
 
 async def _one_pass(
@@ -248,7 +256,7 @@ async def _one_pass(
     has_changed = False
     for position, record in enumerate(targets):
         values = batch.values[position]
-        cache = _cache_of(scope, series, whole, batch.externals)
+        cache = _cache_of(scope, series, whole, batch)
         computed, errors = evaluate_row(scope, record.ts, values, cache)
         has_changed = has_changed or computed != (record.computed_json or {})
         record.computed_json = computed
@@ -265,20 +273,23 @@ def _cache_of(
     scope: ComputeScope,
     series: list[RowSnapshot],
     whole: dict[str, WholeStats],
-    externals: dict[str, list[RowSnapshot]],
+    batch: "_Batch",
 ) -> HistoryCache:
     """从内存里那串已算过的行切出下一行要用的历史。
 
     ⚠ 窗口不在这里精确切：求值层会按各自的下界再切一次，多给几行不会算错，
     而少给一行会静默少算（`formula.context._window_value`）。
-    Args: scope, series, whole, externals。
+    Args: scope, series, whole, batch。
     """
+    externals = batch.externals
+    models = batch.models
     cache = HistoryCache(tz=scope.timezone)
     if scope.max_prev > 0:
         cache.prev_rows = list(reversed(series[-scope.max_prev :]))
     cache.window_rows = {spec.literal: series for spec in scope.local_windows}
     cache.whole_stats = whole
     cache.external_rows = externals
+    cache.models = models
     return cache
 
 

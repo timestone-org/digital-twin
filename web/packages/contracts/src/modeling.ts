@@ -197,3 +197,76 @@ export interface ModelingRun extends ModelingRunSummary {
   graph: ModelingGraph
   nodes: ModelingNodeRunSummary[]
 }
+
+/** 模型的任务类型，决定评估指标用哪一套。 */
+export const MODELING_TASKS = ['regression', 'classification'] as const
+export type ModelingTask = (typeof MODELING_TASKS)[number]
+
+/**
+ * 拟合参数怎么带到推理侧。`json` = 纯数据表达，`binary` = 二进制产物。
+ *
+ * ⚠ 只有 `json` 的版本才可上线：能走纯数据的一律不许走二进制，否则二进制会
+ * 因为「省事」逐渐吃掉纯数据那条路，反序列化面越铺越大。
+ */
+export const MODELING_SERVING_CHANNELS = ['json', 'binary'] as const
+export type ModelingServingChannel = (typeof MODELING_SERVING_CHANNELS)[number]
+
+/** 版本列表里的一条。 */
+export interface ModelingVersionSummary {
+  id: string
+  pipeline_id: string
+  run_id: string
+  version: number
+  name: string
+  algo: string
+  task: ModelingTask
+  is_servable: boolean
+  serving_channel: ModelingServingChannel
+  unservable_reason: string | null
+  feature_keys: string[]
+  target_key: string
+  created_by_name: string | null
+  created_at: string
+}
+
+/** 版本详情，带发布时冻结的指标与指纹。 */
+export interface ModelingVersion extends ModelingVersionSummary {
+  metrics: Record<string, number | null>
+  fingerprint: Record<string, unknown>
+  description: string | null
+}
+
+/** 一个形参落到哪个特征列上。⚠ 映射按**位置**定，名字只用于展示。 */
+export interface ModelingParamMap {
+  param: string
+  feature: string
+}
+
+/** 一条受影响的台账列。 */
+export interface ModelingBindingUsage {
+  table_code: string
+  column_key: string
+}
+
+/**
+ * 一条绑定：公式库条目 ⇄ 模型版本。
+ *
+ * ⚠ `is_orphaned` 是每次列表时现算的——公式条目可能被删掉，而绑定是逻辑引用
+ * 拦不住。界面上要如实标出来，不要装作它还好着。
+ */
+export interface ModelingBinding {
+  id: string
+  fx_code: string
+  model_version_id: string
+  param_map: ModelingParamMap[]
+  is_enabled: boolean
+  is_orphaned: boolean
+  created_by_name: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** 换绑的回执：连同「哪些台账列会跟着变」。重算由用户在台账页显式发起。 */
+export interface ModelingBindingImpact extends ModelingBinding {
+  usages: ModelingBindingUsage[]
+}

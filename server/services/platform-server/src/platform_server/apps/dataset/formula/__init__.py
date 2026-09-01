@@ -4,6 +4,10 @@
 一个 fixture 都不用。跨模块只从这个桶导入，不深链到内部文件。
 """
 
+from platform_server.apps.dataset.formula.analysis import (
+    AnalysisModel,
+    AnalysisUnavailable,
+)
 from platform_server.apps.dataset.formula.catalog import (
     CATEGORIES,
     OPERATORS,
@@ -69,6 +73,7 @@ from platform_server.apps.dataset.formula.refs import (
 from platform_server.apps.dataset.formula.signatures import (
     ALL_FUNCS,
     MAX_PREV_N,
+    PREDICT_FUNC,
     PREV_FUNC,
     SCALAR_FUNCS,
     WINDOW_FUNCS,
@@ -90,11 +95,14 @@ __all__ = [
     "OPERATORS",
     "PARAM_COLUMN",
     "PARAM_VALUE",
+    "PREDICT_FUNC",
     "PREV_FUNC",
     "RULES",
     "SCALAR_FUNCS",
     "WINDOW_FUNCS",
     "WINDOW_UNITS",
+    "AnalysisModel",
+    "AnalysisUnavailable",
     "CatalogFunction",
     "ColumnFormula",
     "ColumnLabel",

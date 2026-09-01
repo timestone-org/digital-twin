@@ -89,6 +89,18 @@ class ComputePlan:
         return {ref for item in self.parsed.values() for ref in item.deps.whole}
 
     @property
+    def model_refs(self) -> set[str]:
+        """这张表的公式一共调了哪几个模型。
+
+        ⚠ 取数层照着这组派生属性决定装哪些相位；不加这一条的话，新引用在两条
+        路径上都**静默读不到东西**——而 `ExternalsNotPrefetched` 只在「键建了
+        但没填」时才响，键压根没建是不响的（docs/MODELING_DESIGN.md §7.2）。
+        """
+        return {
+            ref.code for item in self.parsed.values() for ref in item.deps.model
+        }
+
+    @property
     def external_refs(self) -> set[ExternalRef]:
         """全部跨表直接引用。"""
         return {

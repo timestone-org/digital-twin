@@ -15,6 +15,14 @@ from platform_server.apps.dataset.services import (
     record_write,
     table_service,
 )
+from platform_server.apps.dataset.services.analysis_provider import (
+    AnalysisModel,
+    AnalysisProvider,
+    AnalysisUnavailable,
+    LoadedModels,
+    register_provider,
+    registered_providers,
+)
 from platform_server.apps.dataset.services.backfill_jobs import (
     BackfillJobs,
     BackfillJobState,
@@ -38,10 +46,14 @@ from platform_server.apps.dataset.services.record_write import (
     RecordLocator,
     RecordWriter,
 )
+from platform_server.apps.dataset.services.sessions import Sessions
 
 __all__ = [
     "DIRTY_TABLES_KEY",
     "Actor",
+    "AnalysisModel",
+    "AnalysisProvider",
+    "AnalysisUnavailable",
     "BackfillJobState",
     "BackfillJobs",
     "BackfillRunner",
@@ -50,9 +62,11 @@ __all__ = [
     "EffectiveRow",
     "EffectiveScan",
     "EffectiveWindow",
+    "LoadedModels",
     "RecordFilters",
     "RecordLocator",
     "RecordWriter",
+    "Sessions",
     "backfill_service",
     "column_service",
     "formula_library",
@@ -62,5 +76,7 @@ __all__ = [
     "record_overrides",
     "record_read",
     "record_write",
+    "register_provider",
+    "registered_providers",
     "table_service",
 ]

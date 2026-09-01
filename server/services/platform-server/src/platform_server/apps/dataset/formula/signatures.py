@@ -79,14 +79,23 @@ ALL_FUNCS: tuple[str, ...] = (
     "COUNT_ALL",
 )
 
+# 模型族只有一个成员。`PREDICT('模型标识', 实参…)`
+# ⚠ 第一个实参必须是**字符串字面量**：模型标识要在解析期就拿得到，才建得出
+# 预取键。实参个数不限，够不够由绑定说了算（docs/MODELING_DESIGN.md §7.4）
+PREDICT_FUNC = "PREDICT"
+
 # 跨行族只有一个成员
 PREV_FUNC = "PREV"
 # `PREV({列}, n)` 的 n 上限
 MAX_PREV_N = 100
+# 一次模型调用最多几个实参（含模型标识那一个）。⚠ 有上限不是省空间：
+# 它是个无界的入参列表
+MAX_PREDICT_ARGS = 33
 
 # 三族的固定元数，给目录注入用；标量族的从 `SCALAR_FUNCS` 取
 FIXED_ARITY: dict[str, tuple[int, int]] = {
     PREV_FUNC: (1, 2),
+    PREDICT_FUNC: (2, MAX_PREDICT_ARGS),
     **dict.fromkeys(WINDOW_FUNCS, (2, 2)),
     **dict.fromkeys(ALL_FUNCS, (1, 1)),
 }

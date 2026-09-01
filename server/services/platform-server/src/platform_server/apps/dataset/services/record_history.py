@@ -1,11 +1,13 @@
-"""公式求值要用到的历史行：跨行 / 时间窗 / 整列 / 跨表四类，全在这里取。
+"""公式求值要用到的外部值：跨行 / 时间窗 / 整列 / 跨表四类历史，外加模型定义。
 
-取数（异步，这一层）与求值（纯同步，`formula` 包）分成两段。⚠ 四类**一次装齐**：
+取数（异步，这一层）与求值（纯同步，`formula` 包）分成两段。⚠ 五类**一次装齐**：
 少装一类不会报错，只会让那一类引用悄悄读到空值，而界面上它与「数据本身就是空」
 分不开（docs/DATASET_DESIGN.md §5.6）。
 """
 
+import contextlib
 import uuid
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import datetime, tzinfo
 from typing import Any
@@ -18,6 +20,8 @@ from platform_server.apps.dataset.crud import (
     record_crud,
 )
 from platform_server.apps.dataset.formula import (
+    AnalysisModel,
+    AnalysisUnavailable,
     ComputePlan,
     HistoryCache,
     RowSnapshot,
@@ -26,6 +30,7 @@ from platform_server.apps.dataset.formula import (
     WindowSpec,
     window_lower_bound,
 )
+from platform_server.apps.dataset.services import analysis_provider
 from platform_server.apps.dataset.services.effective import to_snapshot
 
 
@@ -95,11 +100,14 @@ class RowSpan:
 async def load_history(
     session: AsyncSession, scope: ComputeScope, target: RowTarget
 ) -> HistoryCache:
-    """为「算某一行」把四类历史一次取齐。
+    """为「算某一行」把四类历史与模型定义一次取齐。
 
+    ⚠ 模型定义在 `needs_history` 的早退**之前**装：一张表可以只有模型引用、
+    一条历史引用都没有，早退之后再装就是「单行试算永远算不出模型列」。
     Args: session, scope, target。
     """
     cache = HistoryCache(tz=scope.timezone)
+    cache.models = await load_models(session, scope)
     if not scope.plan.needs_history:
         return cache
     span = RowSpan(table_id=target.table_id, start=target.ts, end=target.ts)
@@ -110,6 +118,34 @@ async def load_history(
     cache.prev_rows = await _load_prev(session, scope, target)
     cache.window_rows = await _load_windows(session, scope, target)
     return cache
+
+
+async def load_models(
+    session: AsyncSession, scope: ComputeScope
+) -> dict[str, AnalysisModel | AnalysisUnavailable]:
+    """把这张表用到的模型定义装出来。一次重算装一次，全批复用。
+
+    Args: session, scope。
+    """
+    return await analysis_provider.load_models(
+        _OneShot(session), frozenset(scope.plan.model_refs)
+    )
+
+
+@dataclass(frozen=True)
+class _OneShot:
+    """把手上这个会话包成「开短事务」的最小面。
+
+    ⚠ 装模型这一步跑在调用方已经开好的事务里，不另开：另开一条连接的话，
+    同一次请求里刚写下、还没提交的绑定它看不见。
+    """
+
+    opened: AsyncSession
+
+    @contextlib.asynccontextmanager
+    async def session(self) -> AsyncGenerator[AsyncSession]:
+        """交出手上这个会话，不提交也不回滚——事务归调用方。"""
+        yield self.opened
 
 
 async def load_whole_stats(

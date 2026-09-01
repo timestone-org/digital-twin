@@ -58,6 +58,9 @@ class FormulaDepsOut(OutputModel):
     window: list[FormulaWindowDepOut]
     whole: list[FormulaWholeDepOut]
     external: list[FormulaExternalDepOut]
+    #: 这条公式调了哪几个模型（`PREDICT('标识', …)`）。⚠ 不连边：模型调用不读
+    #: 别的行，实参的先后由那些实参自己的同行引用决定
+    model: list[str]
     # 上面几项里**本表**列 key 的并集，供「谁引用了这一列」反查
     referenced_keys: list[str]
 

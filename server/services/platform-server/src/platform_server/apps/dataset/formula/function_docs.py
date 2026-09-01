@@ -408,6 +408,18 @@ FUNCTION_DOCS: tuple[FunctionDoc, ...] = (
         example="VARP({班1}, {班2}, {班3})",
         args=("a", "b"),
     ),
+    # 分析模型
+    FunctionDoc(
+        name="PREDICT",
+        category="history",
+        signature="PREDICT('模型标识', 实参…)",
+        description=(
+            "把实参交给一个已经绑定好的分析模型，算出一个预测值。"
+            "模型标识就是公式库里那条条目的标识"
+        ),
+        example="PREDICT('能耗预测', {环境温度}, {瞬时负荷})",
+        args=("模型标识", "实参"),
+    ),
     # 跨行与时间窗
     FunctionDoc(
         name="PREV",

@@ -11,12 +11,14 @@ from typing import Any
 from platform_server.apps.dataset.formula.errors import FormulaError
 from platform_server.apps.dataset.formula.library import (
     EMPTY_LIBRARY,
+    FX_CODE_RE,
     FormulaLibrary,
 )
 from platform_server.apps.dataset.formula.macros import Expansion, expand_macros
 from platform_server.apps.dataset.formula.refs import (
     ExternalRef,
     FormulaDeps,
+    ModelRef,
     ParsedFormula,
     PrevRef,
     WholeRef,
@@ -24,7 +26,9 @@ from platform_server.apps.dataset.formula.refs import (
 )
 from platform_server.apps.dataset.formula.signatures import (
     ALL_FUNCS,
+    MAX_PREDICT_ARGS,
     MAX_PREV_N,
+    PREDICT_FUNC,
     PREV_FUNC,
     SCALAR_FUNCS,
     WINDOW_FUNCS,
@@ -68,6 +72,8 @@ _ALLOWED_OPS = (
     ast.GtE,
 )
 _LITERAL_TYPES = (int, float, str, bool, type(None))
+# `PREDICT` 至少要有模型标识 + 一个实参
+_MIN_PREDICT_ARGS = 2
 # 标量聚合 → 对应的整列聚合，用于把「MIN({列})」这类写法拦下来并指出该用哪个
 _SCALAR_TO_ALL = {
     "MIN": "MIN_ALL",
@@ -257,16 +263,23 @@ class _Walker:
         if not isinstance(node.func, ast.Name):
             raise FormulaError("只能调用内置函数，不支持属性调用")
         name = node.func.id
+        # ⚠ 按族查表而不是长 elif 链：加一族只加一行，链子长了会顶穿嵌套上限，
+        # 而那时被迫做的拆分与「哪一族归谁管」这件事毫无关系
         if name == PREV_FUNC:
             self._prev(node)
-        elif name in WINDOW_FUNCS:
+            return
+        if name == PREDICT_FUNC:
+            self._predict(node)
+            return
+        if name in WINDOW_FUNCS:
             self._window(name, node)
-        elif name in ALL_FUNCS:
+            return
+        if name in ALL_FUNCS:
             self._whole(name, node)
-        elif name in SCALAR_FUNCS:
-            self._scalar(name, node)
-        else:
+            return
+        if name not in SCALAR_FUNCS:
             raise FormulaError(_unknown_function(name))
+        self._scalar(name, node)
 
     def _prev(self, node: ast.Call) -> None:
         """`PREV({列})` / `PREV({列}, n)`。
@@ -283,6 +296,18 @@ class _Walker:
         if not 1 <= steps <= MAX_PREV_N:
             raise FormulaError(f"PREV 的 n 需在 1..{MAX_PREV_N}")
         self._deps.prev.add(PrevRef(key=key, steps=steps))
+
+    def _predict(self, node: ast.Call) -> None:
+        """`PREDICT('模型标识', 实参…)`。
+
+        ⚠ 第一个实参必须是**字符串字面量**：模型标识要在解析期就拿得到，
+        才建得出预取键。其余实参照常走白名单遍历——它们可以是任意表达式，
+        含公式列，因为模型是在**行内**求值的。
+        Args: node。
+        """
+        self._deps.model.add(ModelRef(code=_predict_code_of(node)))
+        for argument in node.args[1:]:
+            self.walk(argument)
 
     def _window(self, name: str, node: ast.Call) -> None:
         """`FN_OVER({列}, '窗口')`。
@@ -415,6 +440,22 @@ def _const_steps_of(node: ast.expr) -> int:
     ):
         return node.value
     raise FormulaError("PREV 的第 2 个参数必须是正整数字面量")
+
+
+def _predict_code_of(node: ast.Call) -> str:
+    """`PREDICT` 的模型标识。必须是字符串字面量且形状合法。
+
+    Args: node。
+    """
+    if not _MIN_PREDICT_ARGS <= len(node.args) <= MAX_PREDICT_ARGS:
+        raise FormulaError(
+            f"{PREDICT_FUNC} 用法：{PREDICT_FUNC}('模型标识', 实参…)，"
+            f"最多 {MAX_PREDICT_ARGS - 1} 个实参"
+        )
+    code = _const_str_of(node.args[0])
+    if not FX_CODE_RE.match(code):
+        raise FormulaError("模型标识不合法")
+    return code
 
 
 def _unknown_function(name: str) -> str:

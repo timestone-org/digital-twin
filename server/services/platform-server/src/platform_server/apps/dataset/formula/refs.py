@@ -49,6 +49,17 @@ class WindowRef:
 
 
 @dataclass(frozen=True)
+class ModelRef:
+    """`PREDICT('模型标识', 实参…)`：一次模型调用。
+
+    ⚠ 只登记**模型标识**，不登记实参：实参在行内求值（可以是任意表达式，含
+    公式列），而预取相位要的只是「把哪几个模型的定义装进来」。
+    """
+
+    code: str
+
+
+@dataclass(frozen=True)
 class WholeRef:
     """`FN_ALL({列})`。`key` 可能是 `表code.列key`。"""
 
@@ -75,6 +86,9 @@ class FormulaDeps:
     window: set[WindowRef] = field(default_factory=set[WindowRef])
     whole: set[WholeRef] = field(default_factory=set[WholeRef])
     external: set[ExternalRef] = field(default_factory=set[ExternalRef])
+    #: 模型调用。⚠ **不连边**：它不读别的行，实参的先后由那些实参自己的
+    #: 同行引用决定
+    model: set[ModelRef] = field(default_factory=set[ModelRef])
 
     def to_json(self) -> dict[str, Any]:
         """落进 `dataset_columns.formula_deps` 的形态。
@@ -117,6 +131,7 @@ class FormulaDeps:
                 ),
                 key=lambda entry: (entry["table"], entry["key"]),
             ),
+            "model": sorted(item.code for item in self.model),
             # 上面几项里本表列 key 的并集。⚠ 派生项，但它是「谁引用了这一列」
             # 那条反查的索引：只按 same_row 查会放行一次让 `PREV({x})` 那几列
             # 从此算不出数的删除

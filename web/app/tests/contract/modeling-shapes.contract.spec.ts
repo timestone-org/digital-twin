@@ -11,6 +11,9 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import type {
+  ModelingBinding,
+  ModelingBindingImpact,
+  ModelingBindingUsage,
   ModelingGraph,
   ModelingGraphCheck,
   ModelingGraphEdge,
@@ -22,9 +25,12 @@ import type {
   ModelingOperator,
   ModelingPipeline,
   ModelingPipelineSummary,
+  ModelingParamMap,
   ModelingPort,
   ModelingRun,
   ModelingRunSummary,
+  ModelingVersion,
+  ModelingVersionSummary,
 } from '@dt/contracts'
 
 interface OpenApiSchema {
@@ -164,6 +170,57 @@ const RUN = {
   nodes: true,
 } satisfies Keys<ModelingRun>
 
+const VERSION_SUMMARY = {
+  id: true,
+  pipeline_id: true,
+  run_id: true,
+  version: true,
+  name: true,
+  algo: true,
+  task: true,
+  is_servable: true,
+  serving_channel: true,
+  unservable_reason: true,
+  feature_keys: true,
+  target_key: true,
+  created_by_name: true,
+  created_at: true,
+} satisfies Keys<ModelingVersionSummary>
+
+const VERSION = {
+  ...VERSION_SUMMARY,
+  metrics: true,
+  fingerprint: true,
+  description: true,
+} satisfies Keys<ModelingVersion>
+
+const PARAM_MAP = {
+  param: true,
+  feature: true,
+} satisfies Keys<ModelingParamMap>
+
+const BINDING_USAGE = {
+  table_code: true,
+  column_key: true,
+} satisfies Keys<ModelingBindingUsage>
+
+const BINDING = {
+  id: true,
+  fx_code: true,
+  model_version_id: true,
+  param_map: true,
+  is_enabled: true,
+  is_orphaned: true,
+  created_by_name: true,
+  created_at: true,
+  updated_at: true,
+} satisfies Keys<ModelingBinding>
+
+const BINDING_IMPACT = {
+  ...BINDING,
+  usages: true,
+} satisfies Keys<ModelingBindingImpact>
+
 const PAIRS: ReadonlyArray<readonly [string, Record<string, true>]> = [
   ['PortOut', PORT],
   ['OperatorOut', OPERATOR],
@@ -179,6 +236,12 @@ const PAIRS: ReadonlyArray<readonly [string, Record<string, true>]> = [
   ['NodeRunOut', NODE_RUN],
   ['RunSummaryOut', RUN_SUMMARY],
   ['RunOut', RUN],
+  ['ModelVersionSummaryOut', VERSION_SUMMARY],
+  ['ModelVersionOut', VERSION],
+  ['ParamMapOut', PARAM_MAP],
+  ['ModelBindingUsageOut', BINDING_USAGE],
+  ['ModelBindingOut', BINDING],
+  ['ModelBindingImpactOut', BINDING_IMPACT],
 ]
 
 describe('分析建模线形与 openapi 一致', () => {

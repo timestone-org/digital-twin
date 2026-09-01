@@ -44,16 +44,24 @@ export type {
   ModelingNodePosition,
   ModelingNodeRun,
   ModelingNodeRunSummary,
+  ModelingBinding,
+  ModelingBindingImpact,
+  ModelingBindingUsage,
   ModelingNodeStatus,
   ModelingOperator,
   ModelingPipeline,
   ModelingPipelineSummary,
+  ModelingParamMap,
   ModelingPort,
   ModelingPreviewKind,
   ModelingRun,
   ModelingRunStatus,
   ModelingRunSummary,
+  ModelingServingChannel,
+  ModelingTask,
   ModelingTrigger,
+  ModelingVersion,
+  ModelingVersionSummary,
 } from './modeling'
 export {
   MODELING_CATEGORIES,
@@ -61,6 +69,8 @@ export {
   MODELING_NODE_STATUSES,
   MODELING_PREVIEW_KINDS,
   MODELING_RUN_STATUSES,
+  MODELING_SERVING_CHANNELS,
+  MODELING_TASKS,
   MODELING_TRIGGERS,
 } from './modeling'
 export type { ApiKey, ApiKeyFilters, ApiKeySecret } from './apiKey'
