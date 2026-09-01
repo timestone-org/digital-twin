@@ -3,7 +3,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -100,6 +100,67 @@ class RunCrud(CrudBase[ModelingRun]):
         )
         return list(rows.scalars().all())
 
+    async def ids_beyond_keep(
+        self,
+        session: AsyncSession,
+        *,
+        pipeline_id: uuid.UUID,
+        keep: int,
+        exclude: frozenset[uuid.UUID],
+    ) -> list[uuid.UUID]:
+        """一条流水线里排在最近 `keep` 次之外的那些运行 id。
+
+        ⚠ 已发布过模型版本的运行**既不入名单、也不占 `keep` 名额**：让它们参与
+        计数只会把还想留着的那 20 次实验提前挤出去（§6.5）。
+        ⚠ 排序带第二个键：同一时刻建的两条运行不定序时，分页边界会来回抖。
+        Args: session, pipeline_id, keep, exclude。
+        """
+        statement = select(ModelingRun.id).where(
+            ModelingRun.pipeline_id == pipeline_id
+        )
+        if exclude:
+            statement = statement.where(ModelingRun.id.not_in(exclude))
+        rows = await session.execute(
+            statement.order_by(*NEWEST_FIRST).offset(max(0, keep))
+        )
+        return list(rows.scalars().all())
+
+    async def expired_ids(
+        self,
+        session: AsyncSession,
+        *,
+        before: datetime,
+        exclude: frozenset[uuid.UUID],
+        limit: int,
+    ) -> list[uuid.UUID]:
+        """过了保留期的运行 id。已发布过的一律跳过。
+
+        Args: session, before, exclude, limit。
+        """
+        statement = select(ModelingRun.id).where(
+            ModelingRun.created_at < before
+        )
+        if exclude:
+            statement = statement.where(ModelingRun.id.not_in(exclude))
+        rows = await session.execute(
+            statement.order_by(ModelingRun.created_at.asc()).limit(limit)
+        )
+        return list(rows.scalars().all())
+
+    async def delete_by_ids(
+        self, session: AsyncSession, run_ids: list[uuid.UUID]
+    ) -> int:
+        """按 id 批量删运行，回真实删掉的行数。空清单不发 SQL。
+
+        Args: session, run_ids。
+        """
+        if not run_ids:
+            return 0
+        result = await session.execute(
+            delete(ModelingRun).where(ModelingRun.id.in_(run_ids))
+        )
+        return int(getattr(result, "rowcount", 0) or 0)
+
     @staticmethod
     def touch(run: ModelingRun) -> None:
         """记一次心跳。执行者每跑完一个节点调一次。
@@ -146,13 +207,15 @@ class NodeRunCrud(CrudBase[ModelingNodeRun]):
 
     async def delete_by_run(
         self, session: AsyncSession, run_id: uuid.UUID
-    ) -> None:
-        """清掉一次运行的全部节点记录。重跑与保留期收敛都用它。
+    ) -> int:
+        """清掉一次运行的全部节点记录，回删了几条。
 
         Args: session, run_id。
         """
-        for row in await self.list_by_run(session, run_id):
-            await session.delete(row)
+        result = await session.execute(
+            delete(ModelingNodeRun).where(ModelingNodeRun.run_id == run_id)
+        )
+        return int(getattr(result, "rowcount", 0) or 0)
 
 
 run_crud = RunCrud()

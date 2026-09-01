@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
+from unit.database_fakes import MakerSessions
 
 from integration.dataset_helpers import create_column, create_table
 from integration.modeling_helpers import (
@@ -28,6 +29,7 @@ from integration.modeling_helpers import (
     code_of,
     create_pipeline,
     data_of,
+    drive_run,
     linear_graph,
     pipeline_body,
 )
@@ -93,17 +95,22 @@ async def _seed_ledger(
 
 
 async def _run_pipeline(
-    client: httpx.AsyncClient, pipeline_id: str
+    client: httpx.AsyncClient, sessions: MakerSessions, pipeline_id: str
 ) -> dict[str, Any]:
-    """发起一次运行并回它的详情。
+    """发起一次运行、扮演一次 worker 跑完，再回它的最终详情。
 
-    Args: client, pipeline_id。
+    ⚠ `:run` 只入队：它返回的是一个 `pending` 的运行，断言终态之前必须先让
+    worker 跑一趟（D16）。
+    Args: client, sessions, pipeline_id。
     """
     response = await client.post(
         f"{PIPELINES}/{pipeline_id}:run", json={"trigger": "manual"}
     )
     assert response.status_code == HTTP_ACCEPTED, response.text
-    return dict(data_of(response))
+    accepted = dict(data_of(response))
+    assert accepted["status"] == "pending"
+    await drive_run(sessions, uuid.UUID(accepted["id"]))
+    return dict(data_of(await client.get(f"{RUNS}/{accepted['id']}")))
 
 
 async def test_the_operator_catalog_exposes_ports_and_schemas(
@@ -188,14 +195,16 @@ async def test_an_empty_pipeline_cannot_be_run(
 
 
 async def test_a_run_recovers_the_true_coefficients(
-    app_client: httpx.AsyncClient, db_session: AsyncSession
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    worker_sessions: MakerSessions,
 ) -> None:
     """整条链路跑下来，每个节点都有结果，且模型学出的系数逐位吻合。"""
     await _seed_ledger(app_client, db_session, "energy_ok")
     created = await create_pipeline(
         app_client, "ok", _without_standardize("energy_ok")
     )
-    run = await _run_pipeline(app_client, created["id"])
+    run = await _run_pipeline(app_client, worker_sessions, created["id"])
     assert run["status"] == "succeeded"
     assert run["row_count"] == ROWS
     assert run["is_source_truncated"] is False
@@ -211,14 +220,16 @@ async def test_a_run_recovers_the_true_coefficients(
 
 
 async def test_metrics_are_perfect_on_a_strictly_linear_ledger(
-    app_client: httpx.AsyncClient, db_session: AsyncSession
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    worker_sessions: MakerSessions,
 ) -> None:
     """严格线性的台账上 R² 恰为 1，评估节点的摘要按 `kind` 派发。"""
     await _seed_ledger(app_client, db_session, "energy_metrics")
     created = await create_pipeline(
         app_client, "metrics", linear_graph("energy_metrics")
     )
-    run = await _run_pipeline(app_client, created["id"])
+    run = await _run_pipeline(app_client, worker_sessions, created["id"])
     assert run["status"] == "succeeded"
     preview = data_of(await app_client.get(f"{RUNS}/{run['id']}/nodes/e"))
     assert preview["preview"]["metrics"]["kind"] == "metrics"
@@ -226,14 +237,16 @@ async def test_metrics_are_perfect_on_a_strictly_linear_ledger(
 
 
 async def test_the_run_list_and_detail_carry_the_frozen_graph(
-    app_client: httpx.AsyncClient, db_session: AsyncSession
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    worker_sessions: MakerSessions,
 ) -> None:
     """运行详情带的是**当时那份图**，改了流水线也不跟着变。"""
     await _seed_ledger(app_client, db_session, "energy_snap")
     created = await create_pipeline(
         app_client, "snap", linear_graph("energy_snap")
     )
-    run = await _run_pipeline(app_client, created["id"])
+    run = await _run_pipeline(app_client, worker_sessions, created["id"])
 
     await app_client.patch(
         f"{PIPELINES}/{created['id']}",
@@ -249,17 +262,13 @@ async def test_the_run_list_and_detail_carry_the_frozen_graph(
 
 
 async def test_a_failed_run_stops_and_skips_the_rest(
-    app_client: httpx.AsyncClient,
+    app_client: httpx.AsyncClient, worker_sessions: MakerSessions
 ) -> None:
     """取数取不到台账时整条运行失败，后面的节点显式落 skipped。"""
     created = await create_pipeline(
         app_client, "fail", linear_graph("查无此表")
     )
-    response = await app_client.post(
-        f"{PIPELINES}/{created['id']}:run", json={"trigger": "manual"}
-    )
-    assert response.status_code == HTTP_ACCEPTED
-    run = data_of(response)
+    run = await _run_pipeline(app_client, worker_sessions, created["id"])
     assert run["status"] == "failed"
     assert [item["status"] for item in run["nodes"]] == ["failed"] + [
         "skipped"
@@ -270,28 +279,32 @@ async def test_a_failed_run_stops_and_skips_the_rest(
 
 
 async def test_a_missing_node_result_is_a_not_found(
-    app_client: httpx.AsyncClient, db_session: AsyncSession
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    worker_sessions: MakerSessions,
 ) -> None:
     """取不到的节点结果是 404 + 明确原因，绝不静默返回空。"""
     await _seed_ledger(app_client, db_session, "energy_404")
     created = await create_pipeline(
         app_client, "n404", linear_graph("energy_404")
     )
-    run = await _run_pipeline(app_client, created["id"])
+    run = await _run_pipeline(app_client, worker_sessions, created["id"])
     response = await app_client.get(f"{RUNS}/{run['id']}/nodes/没有这个节点")
     assert response.status_code == HTTP_NOT_FOUND
     assert code_of(response) == NODE_RUN_NOT_FOUND
 
 
 async def test_a_finished_run_cannot_be_cancelled(
-    app_client: httpx.AsyncClient, db_session: AsyncSession
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    worker_sessions: MakerSessions,
 ) -> None:
     """已经是终态的运行取消不了。"""
     await _seed_ledger(app_client, db_session, "energy_cancel")
     created = await create_pipeline(
         app_client, "cancel", linear_graph("energy_cancel")
     )
-    run = await _run_pipeline(app_client, created["id"])
+    run = await _run_pipeline(app_client, worker_sessions, created["id"])
     response = await app_client.post(f"{RUNS}/{run['id']}:cancel")
     assert response.status_code == HTTP_CONFLICT
     assert code_of(response) == RUN_NOT_CANCELLABLE
@@ -307,14 +320,16 @@ async def test_a_missing_run_is_a_not_found(
 
 
 async def test_a_pipeline_is_deleted_with_its_runs(
-    app_client: httpx.AsyncClient, db_session: AsyncSession
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    worker_sessions: MakerSessions,
 ) -> None:
     """删流水线，它的运行记录随之级联消失。"""
     await _seed_ledger(app_client, db_session, "energy_del")
     created = await create_pipeline(
         app_client, "del", linear_graph("energy_del")
     )
-    run = await _run_pipeline(app_client, created["id"])
+    run = await _run_pipeline(app_client, worker_sessions, created["id"])
     response = await app_client.delete(f"{PIPELINES}/{created['id']}")
     assert response.status_code == HTTP_NO_CONTENT
     assert (

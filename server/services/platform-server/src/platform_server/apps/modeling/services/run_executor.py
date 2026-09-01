@@ -3,12 +3,16 @@
 失败即停：任一节点抛错，该节点落 `failed` + traceback，其余未执行的节点**显式**
 落 `skipped`——留空的话界面分不清「没跑」与「记录丢了」
 （docs/MODELING_DESIGN.md D18）。
+
+⚠ 引擎本身不认识 Redis 也不认识进程池：算子怎么跑、取消从哪读、节点记录往哪
+写，都是调用方注入的三件协作件。于是单测给一个进程内的假跑法就能验完状态机。
 """
 
 import time
 import traceback
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
 
 from platform_server.apps.modeling.operators import (
     PREFETCHED_KEY,
@@ -23,9 +27,18 @@ from platform_server.apps.modeling.services.graph_walk import (
     split_plan_of,
     topological_order,
 )
+from platform_server.apps.modeling.services.node_task import NodePayload
 
-# 错误文本落库前的截断长度，与节点记录的列一致
+# 错误文本落库前的截断长度，与节点记录那一列一致
 MAX_ERROR_TEXT = 8 * 1024
+# 超时被掐断时给用户看的那句话
+TIMEOUT_REASON = "这一步超过了单节点时限被掐断"
+
+
+class NodeRunner(Protocol):
+    """把一个算子跑起来的那只手。真实现是进程池，测试用进程内假件。"""
+
+    async def run(self, payload: NodePayload) -> dict[str, Any]: ...
 
 
 @dataclass(frozen=True)
@@ -56,58 +69,94 @@ class RunOutcome:
     error_text: str = ""
 
 
-def execute_graph(
-    graph: PipelineGraph,
-    *,
-    prefetched: dict[str, Frame],
-    tz_offset_minutes: int,
-    prefetch_failures: dict[str, str] | None = None,
+@dataclass(frozen=True)
+class Sources:
+    """取数阶段的产出：取到的帧，与取不到的那些节点各自的原因。"""
+
+    frames: dict[str, Frame]
+    failures: dict[str, str] = field(default_factory=dict[str, str])
+
+
+@dataclass(frozen=True)
+class Execution:
+    """跑一次运行要的全部协作件。打成一包是因为形参上限是 5。"""
+
+    sources: Sources
+    tz_offset_minutes: int
+    runner: NodeRunner
+    #: 每个节点边界问一次「用户点取消了吗」
+    should_cancel: Callable[[], Awaitable[bool]]
+    #: 每个节点落一次库。⚠ 必须逐节点落而不是攒到最后：跑到一半的进度要对
+    #: 别的副本可见，前端轮询读的就是这些行
+    on_node_finished: Callable[[NodeOutcome], Awaitable[None]]
+
+
+async def execute_graph(
+    graph: PipelineGraph, *, execution: Execution
 ) -> RunOutcome:
     """跑完一张图。
 
     ⚠ 上下文键一律是 `(节点 id, 端口名)`，**不用别名**：别名没有唯一约束，
     拿它当键时两个同名节点会静默互相覆盖输出（设计文档 D5）。
-    Args: graph, prefetched, tz_offset_minutes, prefetch_failures。
+    Args: graph, execution。
     """
-    failures = prefetch_failures or {}
     nodes = graph.node_by_id()
     order = topological_order(graph)
     context: dict[tuple[str, str], Any] = {}
     outcomes: list[NodeOutcome] = []
     budget = _Budget()
     for ordinal, node_id in enumerate(order):
-        node = nodes[node_id]
-        outcome = _run_one(
-            node,
-            _Setting(
-                graph=graph,
-                nodes=nodes,
-                ordinal=ordinal,
-                tz_offset_minutes=tz_offset_minutes,
-                prefetched=prefetched.get(node_id),
-                prefetch_error=failures.get(node_id),
-            ),
+        if await execution.should_cancel():
+            skipped = _skipped(order[ordinal:], nodes, ordinal)
+            await _persist_all(execution, skipped)
+            return _cancelled(outcomes + skipped, context)
+        outcome = await _run_one(
+            nodes[node_id],
+            _setting_of(graph, nodes, ordinal, execution),
             context,
             budget,
         )
         outcomes.append(outcome)
+        await execution.on_node_finished(outcome)
         if outcome.status == "failed":
-            outcomes += _skipped(order[ordinal + 1 :], nodes, ordinal + 1)
-            return _failed(outcomes, outcome, context)
+            skipped = _skipped(order[ordinal + 1 :], nodes, ordinal + 1)
+            await _persist_all(execution, skipped)
+            return _failed(outcomes + skipped, outcome, context)
     return _succeeded(outcomes, context)
+
+
+async def _persist_all(
+    execution: Execution, outcomes: list[NodeOutcome]
+) -> None:
+    """把一批节点记录落库。
+
+    ⚠ 跳过的节点也要落：留空的话界面分不清「没跑」与「记录丢了」，而取消掉的
+    运行整片空白看着像执行器坏了。
+    Args: execution, outcomes。
+    """
+    for item in outcomes:
+        await execution.on_node_finished(item)
 
 
 @dataclass(frozen=True)
 class _Setting:
-    """跑一个节点要的上下文，打成一包是因为形参上限是 5。"""
+    """跑一个节点要的上下文。"""
 
     graph: PipelineGraph
     nodes: dict[str, GraphNode]
     ordinal: int
-    tz_offset_minutes: int
-    prefetched: Frame | None
-    # 取数阶段就失败了的话，这里是那句人话原因，节点直接落 failed
-    prefetch_error: str | None = None
+    execution: Execution
+
+
+def _setting_of(
+    graph: PipelineGraph,
+    nodes: dict[str, GraphNode],
+    ordinal: int,
+    execution: Execution,
+) -> _Setting:
+    return _Setting(
+        graph=graph, nodes=nodes, ordinal=ordinal, execution=execution
+    )
 
 
 class _Budget:
@@ -140,7 +189,7 @@ class _Budget:
         return kept, truncated
 
 
-def _run_one(
+async def _run_one(
     node: GraphNode,
     setting: _Setting,
     context: dict[tuple[str, str], Any],
@@ -151,12 +200,15 @@ def _run_one(
     Args: node, setting, context, budget。
     """
     started = time.monotonic()
-    if setting.prefetch_error is not None:
-        return _node_failed(node, setting, started, setting.prefetch_error)
+    failure = setting.execution.sources.failures.get(node.id)
+    if failure is not None:
+        return _node_failed(node, setting, started, failure)
     try:
-        outputs = run_node(node, setting, context)
+        outputs = await _run_node(node, setting, context)
     except OperatorError as error:
         return _node_failed(node, setting, started, str(error))
+    except TimeoutError:
+        return _node_failed(node, setting, started, TIMEOUT_REASON)
     except Exception:
         return _node_failed(node, setting, started, traceback.format_exc())
     for port, payload in outputs.items():
@@ -179,22 +231,26 @@ def _run_one(
     )
 
 
-def run_node(
+async def _run_node(
     node: GraphNode,
     setting: _Setting,
     context: dict[tuple[str, str], Any],
 ) -> dict[str, Any]:
-    """跑一个算子实例。**这是将来要整体挪进子进程的那一步。**
+    """把一个算子实例交给注入的跑法。
 
     Args: node, setting, context。
     """
-    operator, _ = registry.build(node.operator, node.config)
-    operator.bind_runtime(
-        tz_offset_minutes=setting.tz_offset_minutes,
-        split_plan=split_plan_of(setting.graph, setting.nodes, node.id),
+    registry.get(node.operator)
+    execution = setting.execution
+    return await execution.runner.run(
+        NodePayload(
+            operator=node.operator,
+            config=dict(node.config),
+            inputs=_inputs_of(node, setting, context),
+            tz_offset_minutes=execution.tz_offset_minutes,
+            split_plan=split_plan_of(setting.graph, setting.nodes, node.id),
+        )
     )
-    inputs = _inputs_of(node, setting, context)
-    return operator.run(inputs)
 
 
 def _inputs_of(
@@ -207,8 +263,9 @@ def _inputs_of(
     Args: node, setting, context。
     """
     inputs: dict[str, Any] = {}
-    if setting.prefetched is not None:
-        inputs[PREFETCHED_KEY] = setting.prefetched
+    prefetched = setting.execution.sources.frames.get(node.id)
+    if prefetched is not None:
+        inputs[PREFETCHED_KEY] = prefetched
     for edge in setting.graph.edges:
         if edge.to_node != node.id:
             continue
@@ -236,7 +293,7 @@ def _node_failed(
 def _skipped(
     remaining: list[str], nodes: dict[str, GraphNode], first: int
 ) -> list[NodeOutcome]:
-    """上游失败之后没跑的那些节点，显式落 `skipped`。
+    """没跑的那些节点，显式落 `skipped`。
 
     ⚠ 序号要接着往下排：从 0 重新数的话，界面按序号排出来的顺序会与拓扑序对
     不上，而两组序号各自看着都正常。
@@ -264,6 +321,14 @@ def _failed(
         nodes=tuple(outcomes),
         error_text=failure.error_text[:MAX_ERROR_TEXT],
         **_source_facts(context),
+    )
+
+
+def _cancelled(
+    outcomes: list[NodeOutcome], context: dict[tuple[str, str], Any]
+) -> RunOutcome:
+    return RunOutcome(
+        status="cancelled", nodes=tuple(outcomes), **_source_facts(context)
     )
 
 

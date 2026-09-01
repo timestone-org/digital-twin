@@ -7,8 +7,10 @@
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
+from zoneinfo import ZoneInfo
 
 from lib.lifespan import wait_for_termination
 from lib.logging import configure_logging, get_logger
@@ -51,10 +53,23 @@ from platform_server.apps.hvac.services.ac_startup_worker import (
     ConsumerOptions,
     ShardConsumer,
 )
+from platform_server.apps.modeling.services import (
+    NodePool,
+    RunConsumer,
+    RunConsumerOptions,
+)
+from platform_server.apps.modeling.services.retention import (
+    ModelingRetention,
+    RetentionOptions,
+)
 from platform_server.container import Container, build_container
 from platform_server.settings import Settings
 
 _logger = get_logger("platform.worker")
+
+# 一天与一分钟的秒数，清理周期与时区偏移换算用
+_DAY_S = 86400.0
+_MINUTE_S = 60
 
 Wait = Callable[[], Awaitable[None]]
 
@@ -165,6 +180,64 @@ def build_trainer(
             timezone=settings.acsource_timezone,
         ),
     )
+
+
+def build_modeling_runner(
+    container: Container, *, pool: NodePool
+) -> RunConsumer:
+    """按配置装出建模运行的消费者。
+
+    Args: container, pool（⚠ 必须是进程池：算子拟合是 CPU 密集，线程池救不了
+    GIL，会把同一事件循环上的其它消费循环一起卡住）。
+    """
+    settings = container.settings
+    return RunConsumer(
+        sessions=container.database,
+        stream=container.stream,
+        pool=pool,
+        options=RunConsumerOptions(
+            target=StreamGroup(
+                stream=settings.modeling_stream,
+                group=settings.modeling_group,
+                consumer=settings.app_instance,
+            ),
+            prefetch=settings.modeling_prefetch,
+            block_ms=settings.modeling_block_ms,
+            claim_idle_ms=settings.modeling_claim_idle_ms,
+            node_timeout_s=settings.modeling_node_timeout_s,
+            tz_offset_minutes=_business_tz_offset_minutes(container),
+        ),
+    )
+
+
+def build_modeling_retention(container: Container) -> ModelingRetention:
+    """按配置装出建模的保留期清理循环。
+
+    ⚠ 它不持租约：删的是「按流水线的老运行」与「过期的运行行」，两台一起删也
+    只是各自删到一部分，没有互相踩的写。
+    Args: container。
+    """
+    settings = container.settings
+    return ModelingRetention(
+        sessions=container.database,
+        options=RetentionOptions(
+            keep_per_pipeline=settings.modeling_run_keep_per_pipeline,
+            retention_days=settings.modeling_run_retention_days,
+            stale_minutes=settings.modeling_stale_minutes,
+            interval_s=_DAY_S,
+        ),
+    )
+
+
+def _business_tz_offset_minutes(container: Container) -> int:
+    """业务时区相对 UTC 的分钟偏移。
+
+    ⚠ 时间特征按 UTC 算会整体偏 8 小时，且不报任何错。
+    Args: container。
+    """
+    zone = ZoneInfo(container.settings.dataset_bucket_timezone)
+    offset = datetime.now(UTC).astimezone(zone).utcoffset()
+    return 0 if offset is None else int(offset.total_seconds() // _MINUTE_S)
 
 
 def build_publish_loop(container: Container) -> PublishLoop:
@@ -376,6 +449,9 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
     await selfcheck(container)
     # 单 worker 进程池：训练一次只跑一个，防止两次训练互相抢核
     pool = TrainerPool()
+    # 建模的算子池与它分开：一次训练跑几分钟，共用一个池的话建模会被空调训练
+    # 整个堵住，而两边的超时口径也不一样
+    node_pool = NodePool()
     publisher = build_publish_loop(container)
     scheduler = build_daily_scheduler(container)
     collector = build_dataset_collector(container)
@@ -392,6 +468,8 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
                     build_model_compressor(container),
                     collector,
                     retention,
+                    build_modeling_runner(container, pool=node_pool),
+                    build_modeling_retention(container),
                 ),
                 leaseholders=(publisher, scheduler, collector, retention),
                 container=container,
@@ -401,6 +479,7 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
         )
     finally:
         pool.shutdown()
+        node_pool.shutdown()
 
 
 def run(settings: Settings) -> None:  # pragma: no cover - 进程入口

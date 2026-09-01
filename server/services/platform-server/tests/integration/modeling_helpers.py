@@ -1,8 +1,17 @@
-"""建模面用例共用的 URL、请求体与建资源的捷径。"""
+"""建模面用例共用的 URL、请求体、建资源的捷径，以及「扮演一次 worker」。"""
 
+import uuid
 from typing import Any
 
 import httpx
+from unit.database_fakes import MakerSessions
+from unit.modeling_fakes import DirectRunner
+
+from platform_server.apps.modeling.services.run_dispatch import (
+    DispatchOptions,
+    DispatchReport,
+    execute_run,
+)
 
 PIPELINES = "/api/v1/platform/modeling-pipelines"
 RUNS = "/api/v1/platform/modeling-runs"
@@ -118,3 +127,21 @@ async def create_pipeline(
     response = await client.post(PIPELINES, json=pipeline_body(code, graph))
     assert response.status_code == HTTP_CREATED, response.text
     return dict(data_of(response))
+
+
+async def drive_run(
+    sessions: MakerSessions, run_id: uuid.UUID
+) -> DispatchReport:
+    """扮演一次 worker，把队列里那次运行就地跑完。
+
+    ⚠ 用例这一侧不起进程池：算子直跑就够验编排，而进程池在单测里只会把用例
+    时长变成主要成本。真进程池由 `run_pool` 自己的用例守着。
+    ⚠ 会话工厂必须落在用例那条回滚事务上——编排自己开短事务，另开一条连接的话
+    它看不见用例经 HTTP 种下的数据，而现象是「运行说台账不存在」。
+    Args: sessions, run_id。
+    """
+    return await execute_run(
+        sessions,
+        run_id=run_id,
+        options=DispatchOptions(runner=DirectRunner(), tz_offset_minutes=480),
+    )

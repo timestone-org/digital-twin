@@ -6,7 +6,6 @@
 
 from datetime import UTC, datetime
 from typing import Annotated
-from zoneinfo import ZoneInfo
 
 from fastapi import Depends
 
@@ -25,6 +24,7 @@ from platform_server.deps import (
     get_session,
     require,
 )
+from platform_server.stream import StreamGroup
 
 __all__ = [
     "WriteGate",
@@ -36,9 +36,6 @@ __all__ = [
     "get_session",
     "require",
 ]
-
-# 一小时的秒数，把时区偏移换算成分钟用
-_SECONDS_PER_MINUTE = 60
 
 
 def get_manage_context(
@@ -79,30 +76,20 @@ def get_run_context(
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(MODELING_RUN))],
 ) -> RunContext:
-    """发起 / 取消运行用的上下文，连同业务时区。
+    """发起 / 取消运行用的上下文，连同投队列要的那条流。
 
-    ⚠ 时区从组合根注入，算子不自己读配置：按 UTC 算时间特征会整体偏 8 小时
-    且不报任何错（§3.3）。
+    ⚠ 只带「往哪儿投」，不带「怎么跑」：执行整个在 worker 角色里，API 这边
+    连时区都不需要知道。
     Args: container, caller。
     """
-    now = datetime.now(UTC)
+    settings = container.settings
     return RunContext(
         actor=Actor(user_id=str(caller.user_id), name=caller.username),
-        tz_offset_minutes=_offset_minutes(
-            container.settings.dataset_bucket_timezone, now
+        stream=container.stream,
+        target=StreamGroup(
+            stream=settings.modeling_stream,
+            group=settings.modeling_group,
+            consumer=settings.app_instance,
         ),
-        now=now,
+        now=datetime.now(UTC),
     )
-
-
-def _offset_minutes(zone_name: str, now: datetime) -> int:
-    """业务时区在这一刻相对 UTC 的分钟偏移。
-
-    ⚠ 按「此刻」算而不是取一个常数：有夏令时的时区上，常数会在换季那天让全部
-    时间特征整体错一小时，而没有任何一处会报错。
-    Args: zone_name, now。
-    """
-    offset = now.astimezone(ZoneInfo(zone_name)).utcoffset()
-    if offset is None:  # pragma: no cover - ZoneInfo 恒给得出偏移
-        return 0
-    return int(offset.total_seconds() // _SECONDS_PER_MINUTE)

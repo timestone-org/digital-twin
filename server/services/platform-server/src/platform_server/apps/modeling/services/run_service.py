@@ -1,15 +1,19 @@
 """发起、读取与取消一次运行。
 
-本期是**同步执行**：`POST :run` 在同一个请求里跑完再返回。队列与进程池在第 2
-期接上，接缝就是 `_execute` 这一处（docs/MODELING_DESIGN.md §11 第 2 期）。
+⚠ 发起只做两件事：建运行行、**提交之后**把 run_id 投进队列，随即 202 返回一个
+`pending` 的运行。真正的执行在 worker 角色里（`run_dispatch` / `run_worker`），
+所以 API 副本重启不影响在跑的运行，训练的 CPU 也不与业务 API 抢核（D16）。
+⚠ 投递必须走 `lib.db.after_commit` 而不是 FastAPI 的 BackgroundTasks——后者在
+发响应时就地 await，排在会话提交**之前**，消费者会先于提交读到运行行还不存在。
 """
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lib.db import after_commit
 from lib.errors.base import FieldError
 from lib.web import Page, PageParams
 from platform_server.apps.modeling.crud import node_run_crud, run_crud
@@ -19,7 +23,7 @@ from platform_server.apps.modeling.errors import (
     RunNotCancellable,
     RunNotFound,
 )
-from platform_server.apps.modeling.models import ModelingNodeRun, ModelingRun
+from platform_server.apps.modeling.models import ModelingRun
 from platform_server.apps.modeling.protocols import ACTIVE_RUN_STATUSES
 from platform_server.apps.modeling.schemas import (
     NodeRunOut,
@@ -28,25 +32,22 @@ from platform_server.apps.modeling.schemas import (
     RunStartIn,
     RunSummaryOut,
 )
-from platform_server.apps.modeling.services import frame_source, presenters
+from platform_server.apps.modeling.services import presenters, run_queue
 from platform_server.apps.modeling.services.graph_check import check_graph
 from platform_server.apps.modeling.services.pipeline_service import (
     Actor,
     require_pipeline,
 )
-from platform_server.apps.modeling.services.run_executor import (
-    NodeOutcome,
-    RunOutcome,
-    execute_graph,
-)
+from platform_server.stream import StreamGroup, StreamLike
 
 
 @dataclass(frozen=True)
 class RunContext:
-    """跑一次运行要的外部条件。时区注入进来，算子不自己读配置。"""
+    """发起一次运行要的外部条件。"""
 
     actor: Actor
-    tz_offset_minutes: int
+    stream: StreamLike
+    target: StreamGroup
     now: datetime
 
 
@@ -57,7 +58,7 @@ async def start_run(
     payload: RunStartIn,
     context: RunContext,
 ) -> RunOut:
-    """校验图 → 建运行行 → 跑完 → 落终态。
+    """校验图 → 建运行行 → 提交后投队列。返回的是一个 `pending` 的运行。
 
     ⚠ 图快照在建行那一刻冻结：之后流水线被改被删，这次运行依然复现得出当时的
     拓扑与参数（D6）。
@@ -77,8 +78,28 @@ async def start_run(
             created_by_name=context.actor.name,
         ),
     )
-    await _execute(session, run=run, graph=graph, context=context)
+    _enqueue_after_commit(session, run.id, context)
     return await get_run(session, run.id)
+
+
+def _enqueue_after_commit(
+    session: AsyncSession, run_id: uuid.UUID, context: RunContext
+) -> None:
+    """排一次提交后的投递。
+
+    ⚠ 钩子失败只记日志、不回滚已落库的运行行：那一行的状态是 `pending`，
+    在途集合里占着位，保留期清理的心跳判定会把它收成 `failed` 并说明原因。
+    比起「响应 500 但运行行已经在库里」，这个方向更容易解释。
+    Args: session, run_id, context。
+    """
+    message = run_queue.new_message(run_id)
+
+    async def publish() -> None:
+        await run_queue.publish_run(
+            context.stream, target=context.target, message=message
+        )
+
+    after_commit(session, publish)
 
 
 async def list_runs(
@@ -178,65 +199,3 @@ def _require_valid(graph: PipelineGraph) -> None:
             for item in issues
         ),
     )
-
-
-async def _execute(
-    session: AsyncSession,
-    *,
-    run: ModelingRun,
-    graph: PipelineGraph,
-    context: RunContext,
-) -> None:
-    """跑完一张图并把结果落库。
-
-    Args: session, run, graph, context。
-    """
-    run.status = "running"
-    run.started_at = context.now
-    await session.flush()
-    prefetched = await frame_source.prefetch(
-        session, graph=graph, now=context.now
-    )
-    outcome = execute_graph(
-        graph,
-        prefetched=prefetched.frames,
-        tz_offset_minutes=context.tz_offset_minutes,
-        prefetch_failures=prefetched.failures,
-    )
-    for node in outcome.nodes:
-        node_run_crud.add(session, _node_row(run.id, node))
-    _finish(run, outcome)
-    await session.flush()
-
-
-def _node_row(run_id: uuid.UUID, node: NodeOutcome) -> ModelingNodeRun:
-    return ModelingNodeRun(
-        run_id=run_id,
-        node_id=node.node_id,
-        operator=node.operator,
-        alias=node.alias or None,
-        ordinal=node.ordinal,
-        status=node.status,
-        duration_ms=node.duration_ms,
-        error_text=node.error_text or None,
-        preview_json=node.preview or None,
-        preview_truncated=node.is_preview_truncated,
-    )
-
-
-def _finish(run: ModelingRun, outcome: RunOutcome) -> None:
-    """把终态写到运行行上。
-
-    Args: run, outcome。
-    """
-    finished = datetime.now(UTC)
-    run.status = outcome.status
-    run.finished_at = finished
-    run.row_count = outcome.row_count
-    run.source_truncated = outcome.is_source_truncated
-    run.error_text = outcome.error_text or None
-    if run.started_at is not None:
-        run.duration_ms = int(
-            (finished - run.started_at).total_seconds() * 1000
-        )
-    run_crud.touch(run)

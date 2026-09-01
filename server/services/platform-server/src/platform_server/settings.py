@@ -190,6 +190,26 @@ class Settings(
     # 是分钟级；这条线是硬故障线，穿了按不可重试标失败
     acmodel_train_timeout_s: float = 900.0
 
+    # 分析建模的运行队列，见 docs/MODELING_DESIGN.md §6
+    modeling_stream: str = "platform:modeling:run"
+    modeling_group: str = "modeling-runners"
+    modeling_block_ms: int = 5000
+    # ⚠ 认领门槛要盖得住一整次运行：比它短的话，一次跑得久的运行会在跑到一半
+    # 时被另一个副本认领走，而那一侧会判成重投递、把它标成「执行中断」
+    modeling_claim_idle_ms: int = 1800000
+    # ⚠ 恒为 1：一次取两条的话，第二条要等第一条整条流水线跑完才轮得到，
+    # 而它已经算「派发过」了——超时判定会从它排队的那一刻开始算
+    modeling_prefetch: int = 1
+    # 单个节点的时限。⚠ 掐断的只是等待，算子还在子进程里烧，所以超时后换池
+    modeling_node_timeout_s: float = 300.0
+    # 心跳陈旧多久判「执行中断」。要比 claim_idle_ms 宽，否则还没轮到重投递
+    # 就先被清理循环判死了
+    modeling_stale_minutes: int = 60
+    # 每条流水线保留几次运行的节点级明细（含中间结果）
+    modeling_run_keep_per_pipeline: int = 20
+    # 运行记录保留天数
+    modeling_run_retention_days: int = 90
+
     # 预测下发，见 docs/AC_PUBLISH_DESIGN.md §5
     # opcua-server 的地址。⚠ 直连不经边缘：边缘对 `/internal/` 一律 deny。
     # ⚠ 端口是 **8008** 不是 8000——8000 是 realtime-hub 的，两个抄串了的表现是

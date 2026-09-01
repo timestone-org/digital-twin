@@ -1,8 +1,10 @@
-"""建模用例的公共件：造帧、造图。
+"""建模用例的公共件：造帧、造图、假跑法。
 
 ⚠ 数据造成**严格线性**关系 `能耗 = 2×温度 + 3×负荷 + 5`：能拿它逐个系数手算
 核对，「跑完没报错」不等于「算对了」（docs/MODELING_DESIGN.md §10.3）。
 """
+
+from typing import Any, cast
 
 from platform_server.apps.modeling.operators import (
     CellValue,
@@ -14,6 +16,16 @@ from platform_server.apps.modeling.schemas.graph import (
     GraphEdge,
     GraphNode,
     PipelineGraph,
+)
+from platform_server.apps.modeling.services.node_task import (
+    NodePayload,
+    run_node_payload,
+)
+from platform_server.apps.modeling.services.run_executor import (
+    Execution,
+    NodeOutcome,
+    NodeRunner,
+    Sources,
 )
 
 # 真实关系的三个参数
@@ -122,3 +134,72 @@ def _edge(
         to_node=target,
         to_port=in_port,
     )
+
+
+class DirectRunner:
+    """进程内直跑算子的假跑法。用例不必起进程池就能验完状态机。"""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def run(self, payload: NodePayload) -> dict[str, Any]:
+        """就地跑一个算子。
+
+        Args: payload。
+        """
+        self.calls.append(payload.operator)
+        return run_node_payload(payload)
+
+
+class BoomRunner:
+    """指定算子上抛指定异常的假跑法，用来验失败即停与超时。"""
+
+    def __init__(self, *, on: str, error: Exception) -> None:
+        self._on = on
+        self._error = error
+        self._direct = DirectRunner()
+
+    async def run(self, payload: NodePayload) -> dict[str, Any]:
+        """撞上目标算子就抛，其余照跑。
+
+        Args: payload。
+        """
+        if payload.operator == self._on:
+            raise self._error
+        return await self._direct.run(payload)
+
+
+def execution_of(
+    runner: object,
+    *,
+    frames: dict[str, Frame] | None = None,
+    failures: dict[str, str] | None = None,
+    cancel_after: int | None = None,
+) -> Execution:
+    """拼一份执行上下文。`cancel_after` 表示第几个节点边界开始说「已取消」。
+
+    Args: runner, frames, failures, cancel_after。
+    """
+    seen = {"count": 0}
+
+    async def should_cancel() -> bool:
+        seen["count"] += 1
+        return cancel_after is not None and seen["count"] > cancel_after
+
+    async def on_node_finished(node: NodeOutcome) -> None:
+        persisted.append(node)
+
+    persisted: list[NodeOutcome] = []
+    execution = Execution(
+        sources=Sources(frames=frames or {}, failures=failures or {}),
+        tz_offset_minutes=480,
+        runner=cast("NodeRunner", runner),
+        should_cancel=should_cancel,
+        on_node_finished=on_node_finished,
+    )
+    PERSISTED[id(execution)] = persisted
+    return execution
+
+
+#: 每份执行上下文落库过哪些节点。用例据此断言「逐节点落库」而不是攒到最后
+PERSISTED: dict[int, list[NodeOutcome]] = {}

@@ -293,6 +293,10 @@ class AppContext:
     """回填的起跑口。⚠ 与应用同一个实例：端点用例据它看「起过没有」，
     而 `sessions` 就是用例那条回滚事务的会话工厂。"""
     backfill: BackfillRunner
+    """用例那条回滚事务上的会话工厂。⚠ worker 侧的编排自己开短事务，用例要
+    扮演一次 worker 就得把这个工厂交给它——另开一条连接的话，它看不见用例经
+    HTTP 种下的数据，而现象是「运行说台账不存在」。"""
+    sessions: MakerSessions
 
 
 @dataclass(frozen=True)
@@ -542,6 +546,7 @@ async def app_context(
             object_store=object_store,
             dirty=external_fakes.dirty,
             backfill=container.dataset.backfill,
+            sessions=MakerSessions(maker),
         )
 
     await transaction.rollback()
@@ -562,6 +567,12 @@ async def db_session(app_context: AppContext) -> AsyncSession:
 async def app_client(app_context: AppContext) -> httpx.AsyncClient:
     """整装应用的客户端，默认带全权身份头。"""
     return app_context.client
+
+
+@pytest.fixture
+async def worker_sessions(app_context: AppContext) -> MakerSessions:
+    """扮演 worker 时用的会话工厂，与 HTTP 那侧共用同一条连接。"""
+    return app_context.sessions
 
 
 @pytest.fixture

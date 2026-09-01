@@ -75,6 +75,23 @@ class ModelVersionCrud(CrudBase[ModelingModelVersion]):
             limit=limit,
         )
 
+    async def published_run_ids(
+        self, session: AsyncSession, pipeline_id: uuid.UUID | None
+    ) -> frozenset[uuid.UUID]:
+        """发布过模型版本的那些运行 id。
+
+        ⚠ 保留期清理靠它绕开这些运行：版本行的 `run_id` 是 RESTRICT 外键，
+        删它们会在 DELETE 那一刻炸，而那时清理已经走了一半。
+        Args: session, pipeline_id（给 None 就是全库）。
+        """
+        statement = select(ModelingModelVersion.run_id)
+        if pipeline_id is not None:
+            statement = statement.where(
+                ModelingModelVersion.pipeline_id == pipeline_id
+            )
+        rows = await session.execute(statement)
+        return frozenset(rows.scalars().all())
+
     async def count_of_pipeline(
         self, session: AsyncSession, pipeline_id: uuid.UUID
     ) -> int:
