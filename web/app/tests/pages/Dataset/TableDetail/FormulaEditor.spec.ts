@@ -69,6 +69,7 @@ function validation(over: Partial<DatasetFormulaValidation> = {}) {
       window: [],
       whole: [],
       external: [],
+      model: [],
       referenced_keys: ['进水量'],
     },
     notation: { t: 'col', name: '进水量', unit: 'm³', key: '进水量' },

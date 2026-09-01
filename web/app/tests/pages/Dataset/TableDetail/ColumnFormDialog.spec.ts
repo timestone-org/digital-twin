@@ -61,6 +61,7 @@ function validation(over: Partial<DatasetFormulaValidation> = {}) {
       window: [],
       whole: [],
       external: [],
+      model: [],
       referenced_keys: [],
     },
     notation: null,

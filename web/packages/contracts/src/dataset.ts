@@ -130,6 +130,11 @@ export interface DatasetFormulaDeps {
   window: DatasetWindowDep[]
   whole: DatasetWholeDep[]
   external: DatasetExternalDep[]
+  /**
+   * 这条公式调了哪几个模型（`PREDICT('标识', …)`）。
+   * ⚠ **不连边**：模型调用不读别的行，实参的先后由那些实参自己的同行引用决定。
+   */
+  model: string[]
   /** 上面几项里本表列 key 的并集，反查「谁引用了这一列」用。 */
   referenced_keys: string[]
 }

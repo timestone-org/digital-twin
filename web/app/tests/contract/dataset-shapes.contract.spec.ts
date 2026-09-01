@@ -150,6 +150,7 @@ const DEPS_KEYS = {
   window: true,
   whole: true,
   external: true,
+  model: true,
   referenced_keys: true,
 } satisfies Keys<DatasetFormulaDeps>
 
