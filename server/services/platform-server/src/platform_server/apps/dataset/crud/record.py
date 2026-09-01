@@ -118,6 +118,10 @@ class RecordWindow:
     #: 倒序键集翻页的锚点：`(ts, row_id) < 锚点`。⚠ 两个键都要——同一个 ts 上
     #: 可以有多行，只锚 ts 会在翻页时重复或漏掉其中一行
     after_key: tuple[datetime, uuid.UUID] | None = None
+    #: 只要这几种来源的行。⚠ 空元组是「全都要」而不是「一个都不要」：同一个
+    #: `ts` 上采集行至多一条，而人工与导入行合法地有多条，混在一起取到的时间
+    #: 索引不再唯一（docs/DATASET_DESIGN.md §4.4b）
+    sources: tuple[str, ...] = ()
 
     def narrow(
         self, statement: Select[tuple[DatasetRecord]]
@@ -149,6 +153,8 @@ class RecordWindow:
             statement = statement.where(
                 tuple_(DatasetRecord.ts, DatasetRecord.row_id) < self.after_key
             )
+        if self.sources:
+            statement = statement.where(DatasetRecord.source.in_(self.sources))
         return statement
 
 

@@ -133,6 +133,67 @@ async def scan_window(
     )
 
 
+@dataclass(frozen=True)
+class EffectiveRow:
+    """一行的生效值，纯数据。跨模块取数只经这个形状，ORM 实例不出本模块。"""
+
+    ts: datetime
+    source: str
+    values: dict[str, object]
+
+
+@dataclass(frozen=True)
+class EffectiveScan:
+    """一段时间窗上的生效值。`rows` 按 ts **正序**，最早的在前。"""
+
+    rows: tuple[EffectiveRow, ...]
+    is_truncated: bool
+
+
+@dataclass(frozen=True)
+class EffectiveWindow:
+    """整段取数的边界。`sources` 空元组表示不限来源。"""
+
+    table_id: uuid.UUID
+    since: datetime | None = None
+    until: datetime | None = None
+    sources: tuple[str, ...] = ()
+
+
+async def scan_effective(
+    session: AsyncSession, *, window: EffectiveWindow, limit: int
+) -> EffectiveScan:
+    """按时间窗取一段行的**生效值**，供台账之外的模块整段取数用。
+
+    ⚠ 取的是 `effective_merged`：人工修正优先、公式结果覆盖同名键。跨模块自己
+    拼一份 `values ∪ overrides` 的现象是「拿去算的是原值、界面上看的是修正值」，
+    两边各自自洽，排查时几乎不会怀疑到取值口径上（§11.2 D8）。
+    ⚠ 触顶时留下的是**最新**那批，与 `scan_window` 同一口径；`is_truncated`
+    必须被调用方如实往上传，不许吞掉。
+    Args: session, window, limit。
+    """
+    table = await require_table(session, window.table_id)
+    scan = await scan_window(
+        session,
+        window=RecordWindow(
+            table_id=table.id,
+            since=window.since,
+            until=window.until,
+            sources=window.sources,
+        ),
+        limit=limit,
+    )
+    return EffectiveScan(
+        rows=tuple(
+            EffectiveRow(
+                ts=row.ts, source=row.source, values=effective_merged(row)
+            )
+            for row in reversed(scan.rows)
+        ),
+        is_truncated=scan.is_truncated,
+    )
+
+
 async def read_latest(
     session: AsyncSession, *, table_id: uuid.UUID
 ) -> LatestOut:

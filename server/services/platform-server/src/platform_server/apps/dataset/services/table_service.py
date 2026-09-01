@@ -155,6 +155,18 @@ async def delete_table(
     await table_crud.delete(session, table)
 
 
+async def resolve_table_code(session: AsyncSession, code: str) -> uuid.UUID:
+    """按编码取台账 id；取不到即 404。
+
+    ⚠ 只回 id 不回整行：这是给台账之外的模块用的入口，ORM 实例不出本模块。
+    Args: session, code。
+    """
+    table = await table_crud.get_by_code(session, code)
+    if table is None:
+        raise DatasetTableNotFound("台账不存在")
+    return table.id
+
+
 async def require_table(
     session: AsyncSession, table_id: uuid.UUID
 ) -> DatasetTable:

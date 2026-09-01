@@ -54,6 +54,13 @@ DATASET_BACKFILL = "dataset:backfill"
 # 所有引用它的台账列，爆炸半径大一个量级（docs/DATASET_DESIGN.md §9）
 FORMULA_VIEW = "formula:view"
 FORMULA_MANAGE = "formula:manage"
+# platform-server 的 apps/modeling 复述一份，同上。⚠ `run` 与 `publish` 必须
+# 分家：能跑实验 ≠ 能把模型接进生产台账——发布之后，引用那条公式条目的每一张
+# 台账的数值都会跟着变，爆炸半径与 `formula:manage` 同一量级
+MODELING_VIEW = "modeling:view"
+MODELING_MANAGE = "modeling:manage"
+MODELING_RUN = "modeling:run"
+MODELING_PUBLISH = "modeling:publish"
 
 PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(
@@ -368,6 +375,54 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
             "建改删库公式、停用与恢复出厂口径。⚠ 与「管理数据台账」分家是"
             "刻意的：改一条库公式会同时改掉**所有**引用它的台账列，"
             "停用一条还在被引用的公式会让那些表的录入与重算一起报错"
+        ),
+    ),
+    PermissionSpec(
+        code=MODELING_VIEW,
+        name="查看分析建模",
+        kind="view",
+        group_code="modeling",
+        group_label="分析建模",
+        sort_order=10,
+        description=(
+            "流水线、运行记录、节点中间结果、模型版本与绑定的全部读面。"
+            "⚠ 中间结果里含所取台账的前若干行原始数据——不然「看得到每一步的"
+            "结果」这条诉求无从满足"
+        ),
+    ),
+    PermissionSpec(
+        code=MODELING_MANAGE,
+        name="管理分析流水线",
+        kind="manage",
+        group_code="modeling",
+        group_label="分析建模",
+        sort_order=20,
+        description="建改删流水线、图校验、导出与导入",
+    ),
+    PermissionSpec(
+        code=MODELING_RUN,
+        name="发起分析运行",
+        kind="manage",
+        group_code="modeling",
+        group_label="分析建模",
+        sort_order=30,
+        description=(
+            "发起与取消一次运行。⚠ 与「管理分析流水线」分家：一次训练会吃满"
+            "一个 CPU 核，配得了图未必该在业务高峰跑得起来"
+        ),
+    ),
+    PermissionSpec(
+        code=MODELING_PUBLISH,
+        name="发布模型并接入公式",
+        kind="admin",
+        group_code="modeling",
+        group_label="分析建模",
+        sort_order=40,
+        description=(
+            "把一次成功运行发布成模型版本，并绑定到公式库条目上。"
+            "⚠ 与「发起分析运行」分家是刻意的：绑定生效后，引用那条公式的每一"
+            "张台账的数值都会跟着模型走，而变化的原因是几千个浮点参数，"
+            "没有任何地方 diff 得出来"
         ),
     ),
 )

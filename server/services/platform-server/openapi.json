@@ -1845,6 +1845,51 @@
         "title": "ApiResponse[FormulaValidateOut]",
         "type": "object"
       },
+      "ApiResponse_GraphCheckOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GraphCheckOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[GraphCheckOut]",
+        "type": "object"
+      },
       "ApiResponse_LatestOut_": {
         "properties": {
           "code": {
@@ -2115,6 +2160,51 @@
         "title": "ApiResponse[NodeOut]",
         "type": "object"
       },
+      "ApiResponse_NodeRunOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NodeRunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[NodeRunOut]",
+        "type": "object"
+      },
       "ApiResponse_OverrideBulkClearOut_": {
         "properties": {
           "code": {
@@ -2340,6 +2430,51 @@
         "title": "ApiResponse[Page[ModelPredictionOut]]",
         "type": "object"
       },
+      "ApiResponse_Page_PipelineSummaryOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page_PipelineSummaryOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Page[PipelineSummaryOut]]",
+        "type": "object"
+      },
       "ApiResponse_Page_PointOut__": {
         "properties": {
           "code": {
@@ -2473,6 +2608,51 @@
           }
         },
         "title": "ApiResponse[Page[RoomOut]]",
+        "type": "object"
+      },
+      "ApiResponse_Page_RunSummaryOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page_RunSummaryOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Page[RunSummaryOut]]",
         "type": "object"
       },
       "ApiResponse_Page_SourceOut__": {
@@ -2653,6 +2833,51 @@
           }
         },
         "title": "ApiResponse[Page[WorkshopOut]]",
+        "type": "object"
+      },
+      "ApiResponse_PipelineOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PipelineOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[PipelineOut]",
         "type": "object"
       },
       "ApiResponse_PointBatchOut_": {
@@ -3238,6 +3463,51 @@
           }
         },
         "title": "ApiResponse[RoomOut]",
+        "type": "object"
+      },
+      "ApiResponse_RunOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[RunOut]",
         "type": "object"
       },
       "ApiResponse_SeriesOut_": {
@@ -4305,6 +4575,55 @@
           }
         },
         "title": "ApiResponse[list[NodeOut]]",
+        "type": "object"
+      },
+      "ApiResponse_list_OperatorOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OperatorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[list[OperatorOut]]",
         "type": "object"
       },
       "ApiResponse_list_RuntimeParamOut__": {
@@ -8150,6 +8469,138 @@
         "title": "FormulaWindowDepOut",
         "type": "object"
       },
+      "GraphCheckOut": {
+        "description": "一次图校验的结果。\n\n⚠ 问题**逐条列出**而不是只报第一条：改完一条再跑一次才发现第二条，是最\n劝退的交互。",
+        "properties": {
+          "is_valid": {
+            "title": "Is Valid",
+            "type": "boolean"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/GraphIssueOut"
+            },
+            "title": "Issues",
+            "type": "array"
+          }
+        },
+        "required": [
+          "is_valid"
+        ],
+        "title": "GraphCheckOut",
+        "type": "object"
+      },
+      "GraphEdge": {
+        "additionalProperties": false,
+        "description": "一条数据流。两端都必须指明端口名。",
+        "properties": {
+          "from_node": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "From Node",
+            "type": "string"
+          },
+          "from_port": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "From Port",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "to_node": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "To Node",
+            "type": "string"
+          },
+          "to_port": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "To Port",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "from_node",
+          "from_port",
+          "to_node",
+          "to_port"
+        ],
+        "title": "GraphEdge",
+        "type": "object"
+      },
+      "GraphIssueOut": {
+        "description": "一条图校验问题。`node_id` / `edge_id` 给界面定位。",
+        "properties": {
+          "edge_id": {
+            "default": "",
+            "title": "Edge Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "node_id": {
+            "default": "",
+            "title": "Node Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "GraphIssueOut",
+        "type": "object"
+      },
+      "GraphNode": {
+        "additionalProperties": false,
+        "description": "图上的一个算子实例。\n\n⚠ `alias` **只做展示**：上下文寻址、边的两端、节点级执行记录一律用 `id`。\n参考实现拿 alias 当上下文主键却不给唯一约束，两个同名节点会静默互相覆盖\n输出（设计文档 D5）。",
+        "properties": {
+          "alias": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Alias",
+            "type": "string"
+          },
+          "config": {
+            "additionalProperties": true,
+            "title": "Config",
+            "type": "object"
+          },
+          "id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "operator": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Operator",
+            "type": "string"
+          },
+          "position": {
+            "$ref": "#/components/schemas/NodePosition",
+            "default": {
+              "left": 0.0,
+              "top": 0.0
+            }
+          }
+        },
+        "required": [
+          "id",
+          "operator"
+        ],
+        "title": "GraphNode",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -9446,6 +9897,192 @@
         "title": "NodeOut",
         "type": "object"
       },
+      "NodePosition": {
+        "additionalProperties": false,
+        "description": "节点在画布上的位置。只影响观感，不参与任何寻址。",
+        "properties": {
+          "left": {
+            "default": 0.0,
+            "title": "Left",
+            "type": "number"
+          },
+          "top": {
+            "default": 0.0,
+            "title": "Top",
+            "type": "number"
+          }
+        },
+        "title": "NodePosition",
+        "type": "object"
+      },
+      "NodeRunOut": {
+        "description": "单个节点的详情，含结果摘要。按节点懒加载。",
+        "properties": {
+          "alias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alias"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "error_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Text"
+          },
+          "has_preview": {
+            "title": "Has Preview",
+            "type": "boolean"
+          },
+          "is_preview_truncated": {
+            "title": "Is Preview Truncated",
+            "type": "boolean"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "operator": {
+            "title": "Operator",
+            "type": "string"
+          },
+          "ordinal": {
+            "title": "Ordinal",
+            "type": "integer"
+          },
+          "preview": {
+            "additionalProperties": true,
+            "title": "Preview",
+            "type": "object"
+          },
+          "status": {
+            "enum": [
+              "cancelled",
+              "cancelling",
+              "failed",
+              "pending",
+              "running",
+              "skipped",
+              "succeeded"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_id",
+          "operator",
+          "alias",
+          "ordinal",
+          "status",
+          "duration_ms",
+          "has_preview",
+          "error_text",
+          "is_preview_truncated"
+        ],
+        "title": "NodeRunOut",
+        "type": "object"
+      },
+      "NodeRunSummaryOut": {
+        "description": "一个节点在这次运行里的状态，**不含结果摘要**。\n\n⚠ 列表接口不带摘要：一次运行的全部摘要合起来可以到 MB 级，而前端每秒轮询\n的正是这个接口。",
+        "properties": {
+          "alias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alias"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "error_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Text"
+          },
+          "has_preview": {
+            "title": "Has Preview",
+            "type": "boolean"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "operator": {
+            "title": "Operator",
+            "type": "string"
+          },
+          "ordinal": {
+            "title": "Ordinal",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "cancelled",
+              "cancelling",
+              "failed",
+              "pending",
+              "running",
+              "skipped",
+              "succeeded"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_id",
+          "operator",
+          "alias",
+          "ordinal",
+          "status",
+          "duration_ms",
+          "has_preview",
+          "error_text"
+        ],
+        "title": "NodeRunSummaryOut",
+        "type": "object"
+      },
       "NodeUpdateIn": {
         "additionalProperties": false,
         "description": "改节点。缺省的字段表示本次不涉及；`parent_id: null` 表示升为顶层。",
@@ -9578,6 +10215,86 @@
           }
         },
         "title": "NodeUpdateIn",
+        "type": "object"
+      },
+      "OperatorOut": {
+        "description": "一个算子的完整对外描述。前端算子面板与参数表单都由它驱动。",
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "config_schema": {
+            "additionalProperties": true,
+            "title": "Config Schema",
+            "type": "object"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "fit_required": {
+            "title": "Fit Required",
+            "type": "boolean"
+          },
+          "icon": {
+            "title": "Icon",
+            "type": "string"
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/PortOut"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "outputs": {
+            "items": {
+              "$ref": "#/components/schemas/PortOut"
+            },
+            "title": "Outputs",
+            "type": "array"
+          },
+          "serving_channel": {
+            "title": "Serving Channel",
+            "type": "string"
+          },
+          "serving_enabled": {
+            "title": "Serving Enabled",
+            "type": "boolean"
+          },
+          "serving_window_required": {
+            "title": "Serving Window Required",
+            "type": "boolean"
+          },
+          "spec_version": {
+            "title": "Spec Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "description",
+          "category",
+          "spec_version",
+          "icon",
+          "inputs",
+          "outputs",
+          "fit_required",
+          "serving_enabled",
+          "serving_window_required",
+          "serving_channel"
+        ],
+        "title": "OperatorOut",
         "type": "object"
       },
       "OverrideBulkClearIn": {
@@ -9897,6 +10614,37 @@
         "title": "Page[ModelPredictionOut]",
         "type": "object"
       },
+      "Page_PipelineSummaryOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PipelineSummaryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total"
+        ],
+        "title": "Page[PipelineSummaryOut]",
+        "type": "object"
+      },
       "Page_PointOut_": {
         "properties": {
           "items": {
@@ -9988,6 +10736,37 @@
           "total"
         ],
         "title": "Page[RoomOut]",
+        "type": "object"
+      },
+      "Page_RunSummaryOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RunSummaryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total"
+        ],
+        "title": "Page[RunSummaryOut]",
         "type": "object"
       },
       "Page_SourceOut_": {
@@ -10112,6 +10891,277 @@
           "total"
         ],
         "title": "Page[WorkshopOut]",
+        "type": "object"
+      },
+      "PipelineCreateIn": {
+        "additionalProperties": false,
+        "description": "建一条流水线。图可以先留空，之后再存。",
+        "properties": {
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "title": "Code",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/PipelineGraph",
+            "default": {
+              "edges": [],
+              "format_version": "1.0",
+              "nodes": []
+            }
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "PipelineCreateIn",
+        "type": "object"
+      },
+      "PipelineGraph": {
+        "additionalProperties": false,
+        "description": "一张完整的流水线图。整体保存、整体校验、整体运行。",
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/GraphEdge"
+            },
+            "maxItems": 400,
+            "title": "Edges",
+            "type": "array"
+          },
+          "format_version": {
+            "default": "1.0",
+            "title": "Format Version",
+            "type": "string"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/GraphNode"
+            },
+            "maxItems": 200,
+            "title": "Nodes",
+            "type": "array"
+          }
+        },
+        "title": "PipelineGraph",
+        "type": "object"
+      },
+      "PipelineOut": {
+        "description": "详情，带整张图。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/PipelineGraph"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_count": {
+            "title": "Node Count",
+            "type": "integer"
+          },
+          "source_table_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Table Codes",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "description",
+          "node_count",
+          "source_table_codes",
+          "created_by_name",
+          "created_at",
+          "updated_at",
+          "graph"
+        ],
+        "title": "PipelineOut",
+        "type": "object"
+      },
+      "PipelineSummaryOut": {
+        "description": "列表页要的那几样，不带图。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_count": {
+            "title": "Node Count",
+            "type": "integer"
+          },
+          "source_table_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Table Codes",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "description",
+          "node_count",
+          "source_table_codes",
+          "created_by_name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PipelineSummaryOut",
+        "type": "object"
+      },
+      "PipelineUpdateIn": {
+        "additionalProperties": false,
+        "description": "整体保存一条流水线。\n\n⚠ `code` 不在里面：它是导出 / 导入的对齐键，建后不可改。",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "graph": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PipelineGraph"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "PipelineUpdateIn",
         "type": "object"
       },
       "PointBatchOut": {
@@ -10533,6 +11583,40 @@
           }
         },
         "title": "PointUpdateIn",
+        "type": "object"
+      },
+      "PortOut": {
+        "description": "一个端口。`contract` 是唯一的类型判据。",
+        "properties": {
+          "contract": {
+            "title": "Contract",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "is_required": {
+            "title": "Is Required",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "contract",
+          "label",
+          "is_required",
+          "description"
+        ],
+        "title": "PortOut",
         "type": "object"
       },
       "PredictIn": {
@@ -12211,6 +13295,290 @@
           }
         },
         "title": "RoomUpdateIn",
+        "type": "object"
+      },
+      "RunOut": {
+        "description": "运行详情：状态 + 节点清单 + 当时那份图。\n\n⚠ 带的是**运行时冻结的快照**而不是流水线现在的图：不然历史运行的界面会\n显示当前的参数、配着当时的结果（docs/MODELING_DESIGN.md D6）。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "error_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Text"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/PipelineGraph"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_source_truncated": {
+            "title": "Is Source Truncated",
+            "type": "boolean"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/NodeRunSummaryOut"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "pipeline_id": {
+            "format": "uuid",
+            "title": "Pipeline Id",
+            "type": "string"
+          },
+          "row_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Count"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "cancelled",
+              "cancelling",
+              "failed",
+              "pending",
+              "running",
+              "succeeded"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trigger": {
+            "enum": [
+              "api",
+              "manual"
+            ],
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "pipeline_id",
+          "status",
+          "trigger",
+          "started_at",
+          "finished_at",
+          "duration_ms",
+          "row_count",
+          "is_source_truncated",
+          "error_text",
+          "created_by_name",
+          "created_at",
+          "graph"
+        ],
+        "title": "RunOut",
+        "type": "object"
+      },
+      "RunStartIn": {
+        "additionalProperties": false,
+        "description": "发起一次运行。当前没有可调的参数，留着是为了以后加而不破坏契约。",
+        "properties": {
+          "trigger": {
+            "default": "manual",
+            "enum": [
+              "api",
+              "manual"
+            ],
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "title": "RunStartIn",
+        "type": "object"
+      },
+      "RunSummaryOut": {
+        "description": "运行列表里的一条。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "error_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Text"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_source_truncated": {
+            "title": "Is Source Truncated",
+            "type": "boolean"
+          },
+          "pipeline_id": {
+            "format": "uuid",
+            "title": "Pipeline Id",
+            "type": "string"
+          },
+          "row_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Count"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "cancelled",
+              "cancelling",
+              "failed",
+              "pending",
+              "running",
+              "succeeded"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trigger": {
+            "enum": [
+              "api",
+              "manual"
+            ],
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "pipeline_id",
+          "status",
+          "trigger",
+          "started_at",
+          "finished_at",
+          "duration_ms",
+          "row_count",
+          "is_source_truncated",
+          "error_text",
+          "created_by_name",
+          "created_at"
+        ],
+        "title": "RunSummaryOut",
         "type": "object"
       },
       "RuntimeParamOut": {
@@ -21972,6 +23340,651 @@
         "summary": "存活探针",
         "tags": [
           "probe"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-operators": {
+      "get": {
+        "description": "全部算子的完整描述：端口、契约、参数 schema 一次给全。\n\nArgs: _viewer。",
+        "operationId": "list_operators_api_v1_platform_modeling_operators_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_OperatorOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "算子目录",
+        "tags": [
+          "modeling-operator"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-pipelines": {
+      "get": {
+        "description": "分页列出流水线。`q` 按名称与编码模糊搜。\n\nArgs: session, page, _viewer, q。",
+        "operationId": "list_pipelines_api_v1_platform_modeling_pipelines_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Page_PipelineSummaryOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "流水线列表",
+        "tags": [
+          "modeling-pipeline"
+        ]
+      },
+      "post": {
+        "description": "建流水线。支持 `Idempotency-Key`。\n\nArgs: payload, session, response, write。",
+        "operationId": "create_pipeline_api_v1_platform_modeling_pipelines_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PipelineCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PipelineOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "创建流水线",
+        "tags": [
+          "modeling-pipeline"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-pipelines/{pipeline_id}": {
+      "delete": {
+        "description": "删流水线。还有模型版本时 409。\n\nArgs: pipeline_id, session, _write。",
+        "operationId": "delete_pipeline_api_v1_platform_modeling_pipelines__pipeline_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Pipeline Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除流水线",
+        "tags": [
+          "modeling-pipeline"
+        ]
+      },
+      "get": {
+        "description": "详情，带整张图。\n\nArgs: pipeline_id, session, _viewer。",
+        "operationId": "get_pipeline_api_v1_platform_modeling_pipelines__pipeline_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Pipeline Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PipelineOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "流水线详情",
+        "tags": [
+          "modeling-pipeline"
+        ]
+      },
+      "patch": {
+        "description": "整体保存。`code` 不可改。\n\nArgs: pipeline_id, payload, session, _write。",
+        "operationId": "update_pipeline_api_v1_platform_modeling_pipelines__pipeline_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Pipeline Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PipelineUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_PipelineOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "保存流水线",
+        "tags": [
+          "modeling-pipeline"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-pipelines/{pipeline_id}:run": {
+      "post": {
+        "description": "发起一次运行。同一条流水线已有在途运行时 409。\n\nArgs: pipeline_id, payload, session, context, response。",
+        "operationId": "start_run_api_v1_platform_modeling_pipelines__pipeline_id__run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Pipeline Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunStartIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RunOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "发起运行",
+        "tags": [
+          "modeling-pipeline"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-pipelines/{pipeline_id}:validate": {
+      "post": {
+        "description": "把图的问题一次列全。与保存、导入、运行前用的是同一份实现。\n\nArgs: pipeline_id, session, _write。",
+        "operationId": "validate_pipeline_api_v1_platform_modeling_pipelines__pipeline_id__validate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Pipeline Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_GraphCheckOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "校验流水线",
+        "tags": [
+          "modeling-pipeline"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-runs": {
+      "get": {
+        "description": "分页列出运行记录，可按流水线筛。\n\nArgs: session, page, _viewer, pipeline_id。",
+        "operationId": "list_runs_api_v1_platform_modeling_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "pipeline_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pipeline Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Page_RunSummaryOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "运行列表",
+        "tags": [
+          "modeling-run"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-runs/{run_id}": {
+      "get": {
+        "description": "状态 + 节点清单 + 当时那份图。**不含结果摘要**，前端每秒轮询它。\n\nArgs: run_id, session, _viewer。",
+        "operationId": "get_run_api_v1_platform_modeling_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RunOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "运行详情",
+        "tags": [
+          "modeling-run"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-runs/{run_id}/nodes/{node_id}": {
+      "get": {
+        "description": "单个节点的中间结果，按节点懒加载。\n\nArgs: run_id, node_id, session, _viewer。",
+        "operationId": "get_node_run_api_v1_platform_modeling_runs__run_id__nodes__node_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_NodeRunOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "节点结果",
+        "tags": [
+          "modeling-run"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-runs/{run_id}:cancel": {
+      "post": {
+        "description": "请求取消。终态在下一个节点边界才落，中间态是 `cancelling`。\n\nArgs: run_id, session, _context。",
+        "operationId": "cancel_run_api_v1_platform_modeling_runs__run_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RunOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "取消运行",
+        "tags": [
+          "modeling-run"
         ]
       }
     },

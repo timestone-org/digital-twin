@@ -1,0 +1,38 @@
+"""建模的服务面。跨功能模块只走这里，不许深链到内部文件。
+
+事务边界在这一层：crud 不提交，api 不写业务。
+"""
+
+from platform_server.apps.modeling.services import (
+    frame_source,
+    pipeline_service,
+    presenters,
+    preview,
+    run_service,
+)
+from platform_server.apps.modeling.services.graph_check import (
+    GraphIssue,
+    check_graph,
+)
+from platform_server.apps.modeling.services.pipeline_service import Actor
+from platform_server.apps.modeling.services.run_executor import (
+    NodeOutcome,
+    RunOutcome,
+    execute_graph,
+)
+from platform_server.apps.modeling.services.run_service import RunContext
+
+__all__ = [
+    "Actor",
+    "GraphIssue",
+    "NodeOutcome",
+    "RunContext",
+    "RunOutcome",
+    "check_graph",
+    "execute_graph",
+    "frame_source",
+    "pipeline_service",
+    "presenters",
+    "preview",
+    "run_service",
+]

@@ -1,0 +1,74 @@
+"""流水线面的入参与出参。ORM 模型绝不直接返给 HTTP 层。"""
+
+import uuid
+
+from pydantic import Field
+
+from platform_server.apps.modeling.schemas.common import (
+    InputModel,
+    Label,
+    Note,
+    OutputModel,
+    PipelineCode,
+    Utc,
+)
+from platform_server.apps.modeling.schemas.graph import PipelineGraph
+
+
+class PipelineCreateIn(InputModel):
+    """建一条流水线。图可以先留空，之后再存。"""
+
+    code: PipelineCode
+    name: Label
+    description: Note | None = None
+    graph: PipelineGraph = PipelineGraph()
+
+
+class PipelineUpdateIn(InputModel):
+    """整体保存一条流水线。
+
+    ⚠ `code` 不在里面：它是导出 / 导入的对齐键，建后不可改。
+    """
+
+    name: Label | None = None
+    description: Note | None = None
+    graph: PipelineGraph | None = None
+
+
+class PipelineSummaryOut(OutputModel):
+    """列表页要的那几样，不带图。"""
+
+    id: uuid.UUID
+    code: str
+    name: str
+    description: str | None
+    node_count: int
+    source_table_codes: list[str]
+    created_by_name: str | None
+    created_at: Utc
+    updated_at: Utc
+
+
+class PipelineOut(PipelineSummaryOut):
+    """详情，带整张图。"""
+
+    graph: PipelineGraph
+
+
+class GraphIssueOut(OutputModel):
+    """一条图校验问题。`node_id` / `edge_id` 给界面定位。"""
+
+    message: str
+    node_id: str = ""
+    edge_id: str = ""
+
+
+class GraphCheckOut(OutputModel):
+    """一次图校验的结果。
+
+    ⚠ 问题**逐条列出**而不是只报第一条：改完一条再跑一次才发现第二条，是最
+    劝退的交互。
+    """
+
+    is_valid: bool
+    issues: list[GraphIssueOut] = Field(default_factory=list[GraphIssueOut])

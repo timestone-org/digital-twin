@@ -23,6 +23,12 @@ from auth_server.apps.auth.catalog.permissions import (
     DATASET_OVERRIDE,
     DATASET_RECORD_WRITE,
     DATASET_VIEW,
+    FORMULA_MANAGE,
+    FORMULA_VIEW,
+    MODELING_MANAGE,
+    MODELING_PUBLISH,
+    MODELING_RUN,
+    MODELING_VIEW,
     OPCUA_MANAGE,
     OPCUA_OPERATE,
     OPCUA_VIEW,
@@ -40,6 +46,7 @@ from auth_server.apps.auth.catalog.permissions import (
 from auth_server.apps.auth.catalog.roles import ROLE_ADMIN, ROLE_VIEWER, ROLES
 from auth_server.apps.auth.catalog.rules_assistant import ASSISTANT_RULES
 from auth_server.apps.auth.catalog.rules_auth import AUTH_RULES
+from auth_server.apps.auth.catalog.rules_modeling import MODELING_RULES
 from auth_server.apps.auth.catalog.rules_opcua import OPCUA_RULES
 from auth_server.apps.auth.catalog.rules_platform import PLATFORM_RULES
 from auth_server.apps.auth.catalog.rules_realtime import REALTIME_RULES
@@ -53,6 +60,7 @@ from auth_server.apps.auth.catalog.specs import (
 ROUTE_RULES: tuple[RouteRuleSpec, ...] = (
     *AUTH_RULES,
     *PLATFORM_RULES,
+    *MODELING_RULES,
     *OPCUA_RULES,
     *REALTIME_RULES,
     *ASSISTANT_RULES,
@@ -78,6 +86,13 @@ __all__ = [
     "DATASET_OVERRIDE",
     "DATASET_RECORD_WRITE",
     "DATASET_VIEW",
+    "FORMULA_MANAGE",
+    "FORMULA_VIEW",
+    "MODELING_MANAGE",
+    "MODELING_PUBLISH",
+    "MODELING_RULES",
+    "MODELING_RUN",
+    "MODELING_VIEW",
     "OPCUA_MANAGE",
     "OPCUA_OPERATE",
     "OPCUA_RULES",

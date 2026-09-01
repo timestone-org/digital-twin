@@ -16,6 +16,7 @@ from platform_server.apps.collect.models import Base as CollectBase
 from platform_server.apps.dashboard.models import Base as DashboardBase
 from platform_server.apps.dataset.models import Base as DatasetBase
 from platform_server.apps.hvac.models import Base as HvacBase
+from platform_server.apps.modeling.models import Base as ModelingBase
 from platform_server.apps.runtime_params.models import Base as RuntimeParamsBase
 from platform_server.settings import DB_SCHEMA, Settings
 
@@ -29,6 +30,7 @@ target_metadata = [
     DatasetBase.metadata,
     RuntimeParamsBase.metadata,
     AssetsBase.metadata,
+    ModelingBase.metadata,
 ]
 
 _settings = load_settings_or_exit(Settings)

@@ -13,6 +13,7 @@ from platform_server.apps.collect.api import ROUTERS as COLLECT_ROUTERS
 from platform_server.apps.dashboard.api import ROUTERS as DASHBOARD_ROUTERS
 from platform_server.apps.dataset.api import ROUTERS as DATASET_ROUTERS
 from platform_server.apps.hvac.api import ROUTERS as HVAC_ROUTERS
+from platform_server.apps.modeling.api import ROUTERS as MODELING_ROUTERS
 from platform_server.apps.runtime_params.api import (
     ROUTERS as RUNTIME_PARAM_ROUTERS,
 )
@@ -43,6 +44,7 @@ def build_app(settings: Settings) -> FastAPI:
             *DASHBOARD_ROUTERS,
             *COLLECT_ROUTERS,
             *DATASET_ROUTERS,
+            *MODELING_ROUTERS,
             *RUNTIME_PARAM_ROUTERS,
             *ASSET_ROUTERS,
         ),

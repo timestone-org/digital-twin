@@ -1,6 +1,7 @@
 """列管理面。事务边界在这一层：crud 不提交，api 不写业务。"""
 
 import uuid
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,6 +38,37 @@ from platform_server.apps.dataset.services.presenters import to_column_out
 from platform_server.apps.dataset.services.table_service import require_table
 
 _logger = get_logger("platform.dataset.column")
+
+
+@dataclass(frozen=True)
+class ColumnSpec:
+    """一列的最小对外形态：跨模块取数只需要这四样，纯数据。"""
+
+    key: str
+    name: str
+    data_type: str
+    unit: str
+
+
+async def list_column_specs(
+    session: AsyncSession, *, table_id: uuid.UUID
+) -> tuple[ColumnSpec, ...]:
+    """一张台账**当前**的列清单，按展示序。
+
+    ⚠ 取数必须按它投影：已删列的残值刻意留在 `values_json` 里（一次编辑不承担
+    清理历史数据的职责，§4.4a），直接把 values 展开成矩阵会长出幽灵列，且不同
+    年份的行列集合还不一样。
+    Args: session, table_id。
+    """
+    return tuple(
+        ColumnSpec(
+            key=column.key,
+            name=column.name,
+            data_type=column.data_type,
+            unit=column.unit or "",
+        )
+        for column in await list_columns(session, table_id=table_id)
+    )
 
 
 async def list_columns(

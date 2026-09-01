@@ -22,11 +22,17 @@ from platform_server.apps.dataset.services.backfill_jobs import (
 from platform_server.apps.dataset.services.backfill_service import (
     BackfillRunner,
 )
+from platform_server.apps.dataset.services.column_service import ColumnSpec
 from platform_server.apps.dataset.services.dirty import (
     DIRTY_TABLES_KEY,
     DatasetDirtyLog,
 )
-from platform_server.apps.dataset.services.record_read import RecordFilters
+from platform_server.apps.dataset.services.record_read import (
+    EffectiveRow,
+    EffectiveScan,
+    EffectiveWindow,
+    RecordFilters,
+)
 from platform_server.apps.dataset.services.record_values import Actor
 from platform_server.apps.dataset.services.record_write import (
     RecordLocator,
@@ -39,7 +45,11 @@ __all__ = [
     "BackfillJobState",
     "BackfillJobs",
     "BackfillRunner",
+    "ColumnSpec",
     "DatasetDirtyLog",
+    "EffectiveRow",
+    "EffectiveScan",
+    "EffectiveWindow",
     "RecordFilters",
     "RecordLocator",
     "RecordWriter",
