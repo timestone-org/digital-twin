@@ -1,0 +1,44 @@
+"""能力面：没配任何模型档时也必须答得出来，而不是 5xx。"""
+
+import httpx
+
+from knowledge_server.app import build_app
+from knowledge_server.settings import API_PREFIX
+
+PATH = f"{API_PREFIX}/capabilities"
+
+
+async def test_capabilities_answers_without_any_model(
+    app_client: httpx.AsyncClient,
+) -> None:
+    """⚠ 前端靠它决定摆不摆知识库入口，一个 5xx 会被读成「后端坏了」，
+    于是本该干净缺席的场合变成了一条红色告警。"""
+    response = await app_client.get(PATH)
+    assert response.status_code == httpx.codes.OK
+    body = response.json()
+    assert body["code"] == 0
+    assert body["data"]["is_embedding_enabled"] is False
+    assert body["data"]["is_model_enabled"] is False
+
+
+async def test_capabilities_reports_the_fallback_reason(
+    app_client: httpx.AsyncClient,
+) -> None:
+    """没连上库时探测拿不到结果，那也要说出来——不说的话，
+    「检索为什么这么慢」永远查不到源头。"""
+    response = await app_client.get(PATH)
+    index = response.json()["data"]["index"]
+    assert index["vector"] == "bruteforce"
+    assert index["reason"]
+
+
+async def test_anonymous_is_rejected(settings: object) -> None:
+    """⚠ 能力面同样要认人：它泄露的是「这套部署接了什么」。"""
+    transport = httpx.ASGITransport(
+        app=build_app(settings)  # pyright: ignore[reportArgumentType]
+    )
+    async with httpx.AsyncClient(
+        transport=transport, base_url="http://knowledge-test"
+    ) as client:
+        response = await client.get(PATH)
+    assert response.status_code == httpx.codes.UNAUTHORIZED

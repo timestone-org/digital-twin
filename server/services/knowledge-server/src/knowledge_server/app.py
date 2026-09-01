@@ -1,0 +1,86 @@
+"""装配本服务的 FastAPI 实例。
+
+中间件、异常映射、探针由 `lib.web.create_app` 统一给。
+"""
+
+from fastapi import FastAPI
+
+from knowledge_server.apps.knowledge.api import ROUTERS
+from knowledge_server.container import Container, build_container
+from knowledge_server.probe import probe_indexes
+from knowledge_server.settings import API_PREFIX, Settings
+from lib.lifespan import LifespanHook
+from lib.logging import configure_logging
+from lib.web import ReadinessProbe, Runtime, create_app
+
+
+def build_app(settings: Settings) -> FastAPI:
+    """按配置造出应用。测试可传入自造的 Settings。
+
+    Args: settings。
+    """
+    configure_logging(
+        service=settings.app_name,
+        role=settings.app_role,
+        instance=settings.app_instance,
+        level=settings.app_log_level,
+        log_format=settings.app_log_format,
+    )
+    container = build_container(settings)
+    app = create_app(
+        title="DigitalTwin Knowledge",
+        prefix=API_PREFIX,
+        routers=ROUTERS,
+        runtime=Runtime(
+            lifespan_hooks=_hooks(container),
+            readiness_probes=_probes(container),
+            drain_timeout_s=settings.app_drain_timeout_s,
+        ),
+    )
+    app.state.container = container
+    return app
+
+
+def _hooks(container: Container) -> tuple[LifespanHook, ...]:
+    """启停钩子。
+
+    ⚠ 关停顺序不是启动的逆序：外部存储最后关，在途的摄取还要用它们把
+    「这一步失败了」写回文档行——写不进去的话，界面上那份文档会永远转圈。
+
+    Args: container。
+    """
+
+    async def probe() -> None:
+        await probe_indexes(container)
+
+    return (
+        LifespanHook(name="index-probe", startup=probe, startup_order=20),
+        LifespanHook(
+            name="cache",
+            shutdown=container.cache.close,
+            shutdown_order=90,
+        ),
+        LifespanHook(
+            name="database",
+            shutdown=container.database.dispose,
+            shutdown_order=99,
+        ),
+    )
+
+
+def _probes(container: Container) -> tuple[ReadinessProbe, ...]:
+    """就绪探针。
+
+    ⚠ 嵌入端点与对话端点**不进探针**：它们是外部依赖，抖一下就让整组副本被
+    摘掉，而知识库在模型不可达时仍要能列文档、看块。接没接由 `/capabilities`
+    如实回答，不由就绪状态代表。
+
+    ⚠ 对象存储也不进：上传那一路用它，而读侧完全不需要——它挂了不该让检索
+    跟着不可用。
+
+    Args: container。
+    """
+    return (
+        ReadinessProbe(name="postgres", check=container.database.ping),
+        ReadinessProbe(name="redis", check=container.cache.ping),
+    )

@@ -1,0 +1,217 @@
+{
+  "components": {
+    "schemas": {
+      "ApiResponse_CapabilityOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CapabilityOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[CapabilityOut]",
+        "type": "object"
+      },
+      "CapabilityOut": {
+        "description": "知识库能力。",
+        "properties": {
+          "accepted_suffixes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Accepted Suffixes",
+            "type": "array"
+          },
+          "index": {
+            "$ref": "#/components/schemas/IndexCapabilityOut"
+          },
+          "is_embedding_enabled": {
+            "title": "Is Embedding Enabled",
+            "type": "boolean"
+          },
+          "is_model_enabled": {
+            "title": "Is Model Enabled",
+            "type": "boolean"
+          },
+          "ready_strategies": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ready Strategies",
+            "type": "array"
+          },
+          "source_kinds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Kinds",
+            "type": "array"
+          },
+          "strategies": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Strategies",
+            "type": "array"
+          }
+        },
+        "required": [
+          "is_embedding_enabled",
+          "is_model_enabled",
+          "index"
+        ],
+        "title": "CapabilityOut",
+        "type": "object"
+      },
+      "FieldErrorOut": {
+        "description": "字段级校验错误的对外形状。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "code",
+          "message"
+        ],
+        "title": "FieldErrorOut",
+        "type": "object"
+      },
+      "IndexCapabilityOut": {
+        "description": "检索那两路各自走在哪一档上。\n\n⚠ `reason` 不是装饰：走在回退档上时用户要看得见**为什么**。\n悄悄退化的表现是「有点慢」「有点不准」，而没有人会去查一件没人说过的事\n（ADR-0034 决策五）。",
+        "properties": {
+          "keyword": {
+            "title": "Keyword",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "vector": {
+            "title": "Vector",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vector",
+          "keyword"
+        ],
+        "title": "IndexCapabilityOut",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "DigitalTwin Knowledge",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/knowledge/capabilities": {
+      "get": {
+        "description": "嵌入档与对话档接没接，两路索引各自走在哪一档上。\n\nArgs: container, _caller。",
+        "operationId": "read_capabilities_api_v1_knowledge_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_CapabilityOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "知识库能力",
+        "tags": [
+          "capability"
+        ]
+      }
+    },
+    "/api/v1/knowledge/health": {
+      "get": {
+        "operationId": "health_api_v1_knowledge_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "存活探针",
+        "tags": [
+          "probe"
+        ]
+      }
+    },
+    "/api/v1/knowledge/ready": {
+      "get": {
+        "operationId": "ready_api_v1_knowledge_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "就绪探针",
+        "tags": [
+          "probe"
+        ]
+      }
+    }
+  }
+}
