@@ -32,6 +32,17 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permission: [PERMISSION_CODES.assetView],
   },
   {
+    // 知识库挨着素材库：两者都是**跨大屏的公共资料**，不属于任何一张屏，
+    // 也不属于系统管理那一组（那一组管的是账号与权限）。
+    // ⚠ 只挂读码 `knowledge:use`，与路由 meta 逐字一致——两边漂移会造出
+    // 「看得见点不进」或「看不见但输地址能进」，由 navItems 的契约测试钉死。
+    key: 'knowledge',
+    label: '知识库',
+    icon: 'search',
+    to: '/knowledge',
+    permission: [PERMISSION_CODES.knowledgeUse],
+  },
+  {
     // 采集是「去连现场设备读写点位」，与「工具 / OPC UA 服务端」方向相反：
     // 那边本平台是服务端、被上位机连。两组刻意不合并（COLLECT_DESIGN §1）
     key: 'collect',

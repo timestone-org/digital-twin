@@ -17,6 +17,21 @@ from collector_server.apps.collect.drivers.opcua import driver as opcua_driver
 from collector_server.apps.collect.drivers.opcua.driver import OpcuaDriver
 
 NOW_MS = 1_767_323_045_000
+MAX_NODES = opcua_driver.MAX_NODES_PER_READ
+
+
+def _readings(codes: list[str]) -> dict[str, ua.DataValue]:
+    """每个点位一个互不相同的读数，配错位当场看得出来。
+
+    Args: codes。
+    """
+    return {
+        f"ns=2;s={code}": ua.DataValue(
+            Value=ua.Variant(float(index)),
+            StatusCode_=ua.StatusCode(0),
+        )
+        for index, code in enumerate(codes)
+    }
 
 
 class FakeNode:
@@ -76,12 +91,15 @@ class FakeClient:
         self.is_checked = False
         self.nodes = FakeShortcuts(FakeNode(ua.NodeId(85)))
         self.subscription = FakeSubscription()
-        self.values: list[ua.DataValue] = []
+        # 寻址串 → 现场回的读数；表里没有的回一条坏读数
+        self.values: dict[str, ua.DataValue] = {}
         self.built: dict[str, FakeNode] = {}
         # 寻址串 → 现场说它是哪个内建类型；表里没有的回一条坏读数
         self.types: dict[str, int] = {}
         self.type_error: Exception | None = None
         self.asked: list[tuple[int, list[str]]] = []
+        # 现场的 MaxNodesPerRead；超了整批回 BadTooManyOperations
+        self.max_nodes_per_read: int | None = None
 
     async def connect(self) -> None:
         self.is_connected = True
@@ -102,11 +120,22 @@ class FakeClient:
     ) -> list[ua.DataValue]:
         addresses = [node.nodeid.to_string() for node in nodes]
         self.asked.append((int(attribute), addresses))
+        if (
+            self.max_nodes_per_read is not None
+            and len(nodes) > self.max_nodes_per_read
+        ):
+            raise ua.UaStatusCodeError(ua.StatusCodes.BadTooManyOperations)
         if attribute != ua.AttributeIds.DataType:
-            return self.values[: len(nodes)]
+            return [self._value_of(address) for address in addresses]
         if self.type_error is not None:
             raise self.type_error
         return [self._type_of(address) for address in addresses]
+
+    def _value_of(self, address: str) -> ua.DataValue:
+        found = self.values.get(address)
+        if found is None:
+            return ua.DataValue(StatusCode_=ua.StatusCode(0x80000000))
+        return found
 
     def _type_of(self, address: str) -> ua.DataValue:
         found = self.types.get(address)
@@ -330,7 +359,7 @@ async def test_read_many_returns_one_entry_per_requested_point() -> None:
     made, built = _driver()
     await made.connect()
     made.load_points([_spec("a")])
-    built[0].values = [ua.DataValue(Value=ua.Variant(3.5))]
+    built[0].values = {"ns=2;s=a": ua.DataValue(Value=ua.Variant(3.5))}
     samples = await made.read_many(["a", "unregistered"])
     assert samples == [(3.5, NOW_MS, "good"), (None, NOW_MS, "bad")]
 
@@ -341,6 +370,32 @@ async def test_read_many_without_any_known_point_asks_nobody() -> None:
     samples = await made.read_many(["ghost"])
     assert samples == [(None, NOW_MS, "bad")]
     assert built[0].built == {}
+
+
+async def test_read_many_splits_batches_at_max_nodes_per_read() -> None:
+    """⚠ 超 MaxNodesPerRead 是整批被拒，现象是这一轮**一个值都没有**。"""
+    made, built = _driver()
+    await made.connect()
+    codes = [f"p{index}" for index in range(MAX_NODES + 1)]
+    made.load_points([_spec(code) for code in codes])
+    built[0].values = _readings(codes)
+    built[0].max_nodes_per_read = MAX_NODES
+    samples = await made.read_many(codes)
+    assert samples == [
+        (float(index), NOW_MS, "good") for index in range(len(codes))
+    ]
+
+
+async def test_read_many_keeps_the_order_across_the_batch_seam() -> None:
+    """⚠ 各批的回包按位置拼回请求顺序：拼错是把值配到别的点位上，不报错。"""
+    made, built = _driver()
+    await made.connect()
+    codes = [f"p{index}" for index in range(MAX_NODES + 2)]
+    made.load_points([_spec(code) for code in codes])
+    built[0].values = _readings(codes)
+    built[0].max_nodes_per_read = MAX_NODES
+    await made.read_many(codes)
+    assert [len(asked) for _, asked in built[0].asked] == [MAX_NODES, 2]
 
 
 async def test_browse_from_the_root_uses_the_objects_folder() -> None:
@@ -412,13 +467,13 @@ async def test_the_type_read_is_split_into_batches() -> None:
     """⚠ 服务端的 MaxNodesPerRead 一超就是整批被拒，不是截断。"""
     made, built = _driver()
     await made.connect()
-    count = opcua_driver.DATA_TYPE_CHUNK + 1
+    count = MAX_NODES + 1
     built[0].nodes.objects.children = [
         _child(f"T{index}", is_variable=True) for index in range(count)
     ]
     await made.browse(None)
     assert [len(addresses) for _, addresses in built[0].asked] == [
-        opcua_driver.DATA_TYPE_CHUNK,
+        MAX_NODES,
         1,
     ]
 

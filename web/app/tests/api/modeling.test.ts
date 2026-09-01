@@ -90,7 +90,16 @@ describe('每一条都打 platform 前缀', () => {
 
     const [path, options] = call()
     expect(options['baseUrl']).toBe(PLATFORM_BASE_URL)
-    expect(path.startsWith('/api/v1/platform/modeling-')).toBe(true)
+    expect(path.startsWith('/modeling-')).toBe(true)
+  })
+
+  // ⚠ 前缀由 `baseUrl` 给，路径里**不能再写一遍**：客户端是 `${baseUrl}${path}`
+  // 直接拼，写全了会拼成 /api/v1/platform/api/v1/platform/… 一律 404，而
+  // typecheck、lint 与打了桩的单测全都拦不住
+  it.each(CALLS)('%s 的路径不重复带前缀', async (_name, run) => {
+    await run()
+
+    expect(call()[0].startsWith(PLATFORM_BASE_URL)).toBe(false)
   })
 })
 
@@ -99,35 +108,35 @@ describe('URL 与方法', () => {
     await modeling.listModelingOperators()
 
     const [path, options] = call()
-    expect(path).toBe('/api/v1/platform/modeling-operators')
+    expect(path).toBe('/modeling-operators')
     expect(options['method']).toBeUndefined()
   })
 
   it('校验与发起运行都是动作端点，冒号在路径末尾', async () => {
     await modeling.validateModelingGraph('p1', EMPTY_GRAPH)
-    expect(call()[0]).toBe('/api/v1/platform/modeling-pipelines/p1:validate')
+    expect(call()[0]).toBe('/modeling-pipelines/p1:validate')
 
     await modeling.startModelingRun('p1')
-    expect(call()[0]).toBe('/api/v1/platform/modeling-pipelines/p1:run')
+    expect(call()[0]).toBe('/modeling-pipelines/p1:run')
   })
 
   it('取消运行打在运行自己身上，不是打在流水线上', async () => {
     await modeling.cancelModelingRun('r1')
 
-    expect(call()[0]).toBe('/api/v1/platform/modeling-runs/r1:cancel')
+    expect(call()[0]).toBe('/modeling-runs/r1:cancel')
   })
 
   it('节点结果是运行下面的一条子路径', async () => {
     await modeling.getModelingNodeRun('r1', 'n1')
 
-    expect(call()[0]).toBe('/api/v1/platform/modeling-runs/r1/nodes/n1')
+    expect(call()[0]).toBe('/modeling-runs/r1/nodes/n1')
   })
 
   it('运行列表按流水线过滤，翻页参数原样带上', async () => {
     await modeling.listModelingRuns('p1', { page: 2, size: 20 })
 
     const [path, options] = call()
-    expect(path).toBe('/api/v1/platform/modeling-runs')
+    expect(path).toBe('/modeling-runs')
     expect(options['query']).toEqual({
       pipeline_id: 'p1',
       page: 2,
@@ -149,7 +158,7 @@ describe('URL 与方法', () => {
     await modeling.updateModelingPipeline('p1', { name: '新名' })
 
     const [path, options] = call()
-    expect(path).toBe('/api/v1/platform/modeling-pipelines/p1')
+    expect(path).toBe('/modeling-pipelines/p1')
     expect(options['method']).toBe('PATCH')
     expect(options['body']).toEqual({ name: '新名' })
   })
