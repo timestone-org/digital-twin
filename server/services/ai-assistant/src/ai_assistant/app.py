@@ -73,6 +73,13 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
             shutdown_order=50,
         ),
         LifespanHook(
+            name="auth",
+            # ⚠ 排在 platform 之后：在途的调用可能正卡在续签那一跳上，
+            # 先收它的池子等于把那次调用变成一条连接被拔掉的错
+            shutdown=container.auth.close,
+            shutdown_order=55,
+        ),
+        LifespanHook(
             name="cache",
             shutdown=container.cache.close,
             shutdown_order=90,

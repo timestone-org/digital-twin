@@ -9,6 +9,10 @@
 
 ⚠ 失败一律抛，不返回空清单。把「取不到点位」读成「没有点位」，会让助手对着
 一屏它以为空的画布下结论。
+
+⚠ 身份头在**发出去之前**过一次 `DelegatedIdentity`：一个回合能跑几分钟，而边缘
+签的那组头只有几十秒，不续的话回合后半段每一次调用都是 401。续签只发生在这一层，
+调用方拿着入站那组头一路传就行（`upstream/identity.py` 的文件头记着为什么）。
 """
 
 from typing import Any, cast
@@ -16,6 +20,7 @@ from typing import Any, cast
 import httpx
 from pydantic import BaseModel, ValidationError
 
+from ai_assistant.upstream.identity import DelegatedIdentity
 from lib.errors import DependencyUnavailable
 from lib.logging import current_traceparent, get_logger
 
@@ -45,14 +50,24 @@ class PlatformClient:
     """构造不连网；连接池一个进程一份。"""
 
     def __init__(
-        self, *, base_url: str, timeout_s: float, page_size: int = 200
+        self,
+        *,
+        base_url: str,
+        timeout_s: float,
+        identity: DelegatedIdentity | None = None,
+        page_size: int = 200,
     ) -> None:
         """按地址与超时初始化。
 
-        Args: base_url, timeout_s, page_size（一次拉多少条点位）。
+        ⚠ `identity` 不接的话身份头**原样发出**，回合跑过几十秒之后一律 401。
+        它只在用例里可以是 None，装配一定接上，由契约测试守着。
+
+        Args: base_url, timeout_s, identity（到期前换新的那一件）,
+            page_size（一次拉多少条点位）。
         """
         self._base_url = base_url.rstrip("/")
         self._timeout_s = timeout_s
+        self._identity = identity
         self._page_size = page_size
         # 传输层留成可替换的：用例验的是调用形状与失败处置，不是 httpx 本身
         self._transport: httpx.AsyncBaseTransport | None = None
@@ -285,8 +300,9 @@ class PlatformClient:
         Args: method, path, headers, options。
         """
         try:
+            fresh = await self._fresh(headers)
             response = await self._client().request(
-                method, path, headers=_with_trace(headers), **options
+                method, path, headers=_with_trace(fresh), **options
             )
             response.raise_for_status()
             # ⚠ 204 没有响应体：照常去解信封的话，一次**成功**的删除会被读成
@@ -302,6 +318,15 @@ class PlatformClient:
                 error_type=type(error).__name__,
             )
             raise PlatformUnavailable(_reason(error)) from error
+
+    async def _fresh(self, headers: dict[str, str]) -> dict[str, str]:
+        """把快到期的身份头换成新的。没接续签件时原样交回。
+
+        Args: headers。
+        """
+        if self._identity is None:
+            return headers
+        return await self._identity.fresh(headers)
 
 
 def _with_trace(headers: dict[str, str]) -> dict[str, str]:

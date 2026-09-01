@@ -265,6 +265,14 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     platform_base_url: str = "http://platform-server:8005"
     platform_timeout_s: float = Field(default=5.0, gt=0)
 
+    # auth-server 的内部面地址。只用来给长回合的委托身份续签——边缘签的那组头
+    # 只有几十秒，不续的话回合后半段每一次工具调用都是 401
+    # （`upstream/identity.py`）
+    auth_base_url: str = "http://auth-server:8004"
+    # ⚠ 要比 platform 那条短：它是 platform 调用**之前**的一跳，
+    # 下游之和必须小于上游（runtime-resilience §3）
+    auth_timeout_s: float = Field(default=3.0, gt=0)
+
     # 外部 MCP server（ADR-0031）。一段 JSON 列表，逐项含
     # `name` / `url` / `is_auth_required`。
     # ⚠ **只认 HTTP 传输**：配一个 stdio 命令进来是配不进的，那一档要每个副本

@@ -20,6 +20,8 @@ from ai_assistant.llm import (
 )
 from ai_assistant.settings import SERVICE_NAME, Settings
 from ai_assistant.upstream import (
+    AuthClient,
+    DelegatedIdentity,
     McpCatalog,
     McpClient,
     McpServer,
@@ -50,6 +52,9 @@ class Container:
     # 打业务面的客户端。⚠ 连接池一个进程一份、长活——每次调用现造一个再关掉，
     # 等于每次都重新握一次 TCP 手
     platform: PlatformClient
+    # 给长回合的委托身份续签的客户端。⚠ 与 platform 分开一个字段只为关停时
+    # 收得掉它的连接池；调用方一律经 platform，不直接用它
+    auth: AuthClient
     # 这套部署接了哪几路模型。⚠ 与 `model` 分开：能力面要在模型关着时
     # 也能如实回答「这里本来能接哪几路」
     models: ModelRegistry
@@ -200,6 +205,13 @@ def build_container(settings: Settings) -> Container:
     )
     # ⚠ 一个进程一份：造两份的话，两份各自的档位清单可以在将来漂开
     registry = ModelRegistry(settings, tokens=credentials)
+    # ⚠ 也是一个进程一份：续签件把签好的头按用户缓存在自己身上，
+    # 每请求现造一个的话每次调用都要再签一趟
+    auth = AuthClient(
+        base_url=settings.auth_base_url,
+        service_key=settings.edge_service_key.get_secret_value(),
+        timeout_s=settings.auth_timeout_s,
+    )
     return Container(
         settings=settings,
         database=database,
@@ -211,7 +223,9 @@ def build_container(settings: Settings) -> Container:
         platform=PlatformClient(
             base_url=settings.platform_base_url,
             timeout_s=settings.platform_timeout_s,
+            identity=DelegatedIdentity(auth),
         ),
+        auth=auth,
         models=registry,
         mcp=_build_mcp(settings),
         credentials=credentials,
