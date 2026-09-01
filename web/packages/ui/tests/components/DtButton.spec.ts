@@ -38,6 +38,25 @@ describe('DtButton', () => {
     )
   })
 
+  // ⚠ neutral 的强调色是纯白（浅色主题里是纯墨），而 outline 档的描边与底色都由
+  // --_tint-rgb 调出来：这一档一旦改回自身的中性三元组，满屏主题色描边里就多出唯一
+  // 一处白边——typecheck、lint 与其余用例一律放行，只有人眼盯着那一处才看得见。
+  it('neutral 的染色三元组取主题强调色，彩色 intent 取自身强调色', () => {
+    const neutral = mount(DtButton, {
+      props: { variant: 'outline', intent: 'neutral' },
+    })
+    expect(neutral.find('button').attributes('style')).toContain(
+      '--_tint-rgb: var(--accent-primary-rgb)',
+    )
+
+    const danger = mount(DtButton, {
+      props: { variant: 'outline', intent: 'danger' },
+    })
+    expect(danger.find('button').attributes('style')).toContain(
+      '--_tint-rgb: var(--state-danger-rgb)',
+    )
+  })
+
   it('type=submit 透到原生属性上', () => {
     const wrapper = mount(DtButton, { props: { type: 'submit' } })
     expect(wrapper.find('button').attributes('type')).toBe('submit')

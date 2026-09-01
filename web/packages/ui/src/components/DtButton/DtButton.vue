@@ -84,10 +84,18 @@ const accentVars = computed<Record<string, string>>(() => {
     neutral: ['--text-secondary', '--neutral-fg-rgb', '--text-primary'],
   }
   const [accent, rgb, foreground] = table[effectiveIntent.value]
+  // ⚠ neutral 的强调色是纯白（浅色主题里是纯墨），描边与底色不能像别的 intent 那样
+  // 由它按 alpha 派生：每套主题的 --border-* 都是强调色调 alpha 调出来的，满屏面板与
+  // 输入框因此全是彩色描边，白描边会成为唯一一处无彩边、且比周围任何一条都重。故这一
+  // 档的染色三元组改取主题强调色，落在同一族里。
+  const neutral = effectiveIntent.value === 'neutral'
   return {
     '--_a': `var(${accent})`,
     '--_a-rgb': `var(${rgb})`,
     '--_on': `var(${foreground})`,
+    // 描边/底色的染色源与点亮后的文字色，只有 outline 档用，见那条规则的注释
+    '--_tint-rgb': neutral ? 'var(--accent-primary-rgb)' : `var(${rgb})`,
+    '--_lit': neutral ? 'var(--text-primary)' : `var(${accent})`,
   }
 })
 
@@ -241,14 +249,23 @@ function onClick(event: MouseEvent): void {
   }
 }
 
+// outline 是次级动作档，出现得最多的地方是工具条里跟 DtInput / DtSelect 并排，故走
+// 与那些控件同一套工业底盘：下沉底色 + 上沿高光 + 主题色描边。底色不能留空——一圈裸
+// 描边浮在面板上读成占位框而不是能按的控件；描边则比 --border-default 重一档，才和
+// 旁边的输入框拉开「这个能按」的差别。染色一律走 --_tint-rgb，理由见 accentVars。
 .dt-btn--outline {
-  background: transparent;
+  background: var(--surface-sunken);
   color: var(--_a);
-  border-color: rgba(var(--_a-rgb), 0.5);
+  border-color: rgba(var(--_tint-rgb), 0.32);
+  box-shadow: inset 0 1px 0 var(--fx-sheen);
 
   &:hover:not(:disabled) {
-    border-color: var(--_a);
-    box-shadow: 0 0 12px -4px rgba(var(--_a-rgb), 0.6);
+    background: rgba(var(--_tint-rgb), 0.12);
+    color: var(--_lit);
+    border-color: rgba(var(--_tint-rgb), 0.8);
+    box-shadow:
+      inset 0 1px 0 var(--fx-sheen),
+      0 0 14px -4px rgba(var(--_tint-rgb), 0.6);
   }
 }
 
