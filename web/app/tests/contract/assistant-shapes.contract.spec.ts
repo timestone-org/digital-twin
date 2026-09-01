@@ -305,16 +305,18 @@ describe('事件流的事件名两侧逐字相同', () => {
 
   it('增量的两路与后端的字面量一致', () => {
     // 混成一路或多出一路，界面会把模型的自言自语当成结论铺出来
+    // ⚠ 真源在 `server/domain/llmcore/`，不在助手服务里：这两路增量是**所有**
+    // 接模型的服务共用的一份（ADR-0032），跟着助手走会让第二个服务改到时这条
+    // 闸看不见
     const source = readFileSync(
       join(
         process.cwd(),
         '..',
         'server',
-        'services',
-        'ai-assistant',
+        'domain',
+        'llmcore',
         'src',
-        'ai_assistant',
-        'llm',
+        'llmcore',
         'deltas.py',
       ),
       'utf8',
