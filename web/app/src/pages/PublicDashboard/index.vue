@@ -132,8 +132,12 @@ function goToDashboard(handle: string): void {
   })
 }
 
-// 联动引擎：规则来自 chromeJson，节点表一换整套易失态清零重放
-const interaction = createInteractionRuntime({ navigate: goToDashboard })
+// 联动引擎：规则来自 chromeJson，节点表一换整套易失态清零重放。
+// 当前句柄就是地址里那枚令牌——公开面没有大屏 id（ADR-0014）
+const interaction = createInteractionRuntime({
+  navigate: goToDashboard,
+  currentHandle: () => publicToken(),
+})
 provide(INTERACTION_KEY, interaction)
 watch(
   () => doc.dashboard.value,

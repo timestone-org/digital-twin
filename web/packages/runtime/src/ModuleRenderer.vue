@@ -165,6 +165,10 @@ const { evaluated, meta, showStatusOverlay } = useModuleEvaluation({
     interaction !== null && props.nodeId !== undefined
       ? interactive.value
       : undefined,
+  activeValue: () =>
+    interaction === null || props.nodeId === undefined
+      ? ''
+      : interaction.activeValueOf(props.nodeId),
   // 没装取数源、或装的那份不说连接态 = 这里没有实时通道，模块永不标陈旧
   connectionState: () => runtimeData.connectionState?.(),
 })

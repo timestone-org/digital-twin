@@ -84,6 +84,8 @@ export interface InteractionNavigateByValueAction {
 export interface InteractionPorts {
   /** 跳到某张大屏。不传 = 这一档动作静默 no-op（设计态画布、独立渲染、测试）。 */
   navigate?: (handle: DashboardHandle) => void
+  /** 当前这张屏的句柄，与上面收的是同一套句柄。不传 = 推不出「当前在哪一格」。 */
+  currentHandle?: () => DashboardHandle
 }
 
 export function createInteractionRuntime(ports: InteractionPorts = {}): InteractionRuntime
@@ -97,16 +99,34 @@ export function createInteractionRuntime(ports: InteractionPorts = {}): Interact
 | 宿主 | 传什么 | 结果 |
 |---|---|---|
 | 登录运行态 `DashboardView` | `(h) => { if (h === 当前 id) return; router.push({ name:'dashboard-view', params:{ dashboardId:h } }) }` | 真跳 |
-| 设计态编辑器 | **不传**（它现在根本不 provide `INTERACTION_KEY`，画布上一切联动本就不触发） | 静默不跳，与显隐类动作现有行为一致 |
+| 设计态**画布** | **不传**（画布不 provide `INTERACTION_KEY`，设计态一切联动本就不触发） | 静默不跳，与显隐类动作现有行为一致 |
+| 编辑器**全屏预览** | 自己装一份引擎（`usePreviewInteraction`，只 provide 给预览这一棵子树），`navigate` 换成一条提示 | 页内联动全真、跨屏只说不跳 |
 | 公开态 `PublicDashboard` | `(h) => { if (h === 当前令牌) return; router.push({ name:'public-dashboard', params:{ publicToken:h } }) }` | 真跳（ADR-0021） |
 
 ⚠ **自跳挡在宿主里，不挡在引擎里**：目标就是当前这张屏时直接返回。
 不挡的话 `router.push` 到同一路由既不重载也不报错，表现是「点了没反应」，
 而 vue-router 还会在控制台留一条重复导航告警把人往错的方向带。
 
+⚠ **预览不跳走，但必须出声**：跳走等于把没保存的草稿丢在身后；而静默不动就是
+这套一路在躲的「点了没反应」——预览里点一格页签，屏不换又一句话都没有，与
+「模块坏了」分不出来。所以预览里的 `navigate` 接一条 3.2 秒后自收的提示条。
+
 ⚠ **弹窗里的跳转**：换屏会让 `DashboardView` 那条 watch 重新 `init()`，
 易失显隐与 `activeModal` 一并清零，所以弹窗自己会关。这条要写进注释——
 它是「运行态与持久态严格分离」那条铁律顺带给的，不是巧合。
+
+### 4.0 当前在哪一格：`activeValueOf`
+
+`navigateByValue` 的规则表里，目标就是 `currentHandle()` 的那一条路由，它的
+`value` 就是「此刻该选中的值」。引擎把它算出来（`activeValueOf(nodeId)`），
+渲染层下发为 `meta.activeValue`，选择类控件（页签栏）据此高亮自己那一格。
+
+⚠ **这是一条页签栏认出自己所在那张屏的唯一途径**。没有它，当前格只能靠每张屏
+各配一次静态下标：配漏一张，那张屏上的高亮就停在别处，用户跟着高亮去点，点的
+正是自己那一格，被自跳挡下 —— 表面上就是「切换大屏无法生效」。
+
+⚠ 比的是**句柄对句柄**，所以公开面照样成立（两边都是令牌）。引擎仍然不解释
+句柄，也不认识任何一个具体模块——它只是把规则里已有的对应关系反过来查一次。
 
 ### 4.1 目标已删怎么办：跳过去，让目标页说话
 

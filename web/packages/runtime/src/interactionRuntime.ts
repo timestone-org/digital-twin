@@ -32,6 +32,12 @@ import type {
 export interface InteractionPorts {
   /** 跳到某张大屏。句柄的含义由宿主自己解释（`DashboardHandle`）。 */
   navigate?: (handle: DashboardHandle) => void
+  /**
+   * 当前这张屏的句柄，与 `navigate` 收的是同一套句柄（登录态是大屏 id，
+   * 公开态是公开令牌），同样由宿主解释——引擎只拿它跟规则里的目标比字符串。
+   * ⚠ 缺席即「推不出当前在哪一格」，选择类控件退回各自配置里的静态下标。
+   */
+  currentHandle?: () => DashboardHandle
 }
 
 /** 参与联动的一个节点：id 与它的持久初始显隐。 */
@@ -75,6 +81,12 @@ export interface InteractionRuntime {
    * 避免「模块可点但没配规则 → 点了没反应」。
    */
   hasRules(sourceNodeId: string, event?: InteractionEventName): boolean
+  /**
+   * 这个源节点此刻该选中的值：它的按值跳转规则里，目标就是当前这张屏的
+   * 那一条路由的值。渲染层据此下发 `meta.activeValue`。
+   * 空串 = 推不出（宿主没给当前句柄 / 没有一条路由指向本屏）。
+   */
+  activeValueOf(sourceNodeId: string): string
 }
 
 export const INTERACTION_KEY: InjectionKey<InteractionRuntime> =
@@ -272,6 +284,26 @@ function dispatchIn(
   }
 }
 
+/**
+ * 指向当前这张屏的那条路由的值。
+ * ⚠ 只认按值跳转：单目标跳转不带值，拿它推「当前哪一格」只会指到一格
+ * 与它毫无关系的页签上。
+ * @param sourceNodeId 事件源节点
+ */
+function activeValueIn(state: RuntimeState, sourceNodeId: string): string {
+  const handle = state.ports.currentHandle?.() ?? ''
+  if (handle === '') return ''
+  for (const rule of state.rules.value) {
+    if (rule.source.nodeId !== sourceNodeId) continue
+    if (rule.action.type !== 'navigateByValue') continue
+    const hit = rule.action.routes.find(
+      (route) => route.value !== '' && route.target === handle,
+    )
+    if (hit !== undefined) return hit.value
+  }
+  return ''
+}
+
 function hasRulesIn(
   state: RuntimeState,
   sourceNodeId: string,
@@ -312,5 +344,6 @@ export function createInteractionRuntime(
       state.activeModal.value = null
     },
     hasRules: (sourceNodeId, event) => hasRulesIn(state, sourceNodeId, event),
+    activeValueOf: (sourceNodeId) => activeValueIn(state, sourceNodeId),
   }
 }

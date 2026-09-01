@@ -1,7 +1,8 @@
 /**
  * @fileoverview 守页签栏的渲染与上抛契约：点一格带值上抛「选项点击」、
  * 没配联动值的格只挪高亮不上抛、禁用格两样都不做、选中态跟着配置里的
- * 「默认选中」走，以及每一格都是原生 button（键盘、焦点与读屏全靠它）。
+ * 「默认选中」走（宿主推出来的「当前这张屏那一格」赢过它），以及每一格都是原生
+ * button（键盘、焦点与读屏全靠它）。
  */
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
@@ -16,8 +17,14 @@ const THREE_TABS = [
   { label: '设备', emitValue: 'device' },
 ]
 
-function render(config: Record<string, unknown> = {}) {
-  return mount(Component, { props: { config, values: {} } })
+function render(config: Record<string, unknown> = {}, activeValue?: string) {
+  return mount(Component, {
+    props: {
+      config,
+      values: {},
+      ...(activeValue === undefined ? {} : { meta: { activeValue } }),
+    },
+  })
 }
 
 /** 按清单缺省摊一份完整配置，与属性面板里没动过任何旋钮时一致。 */
@@ -88,6 +95,35 @@ describe('页签栏的选中态', () => {
     await wrapper.setProps({ config: { items: THREE_TABS, activeIndex: 2 } })
 
     expect(activeLabels(wrapper)).toEqual(['能耗'])
+  })
+
+  // 宿主拿本节点的按值跳转规则跟当前这张屏比出来的那一格。一条页签栏原样摆到
+  // 每张屏上，配置里的静态下标只对其中一张是对的，全靠这一档纠正
+  it('宿主说当前在哪一格，就高亮哪一格，不看「默认选中」', () => {
+    const wrapper = render({ items: THREE_TABS, activeIndex: 3 }, 'energy')
+
+    expect(activeLabels(wrapper)).toEqual(['能耗'])
+  })
+
+  it('宿主给的值不在任何一格上时回落「默认选中」', () => {
+    const wrapper = render({ items: THREE_TABS, activeIndex: 3 }, '不认识')
+
+    expect(activeLabels(wrapper)).toEqual(['设备'])
+  })
+
+  it('刚点过的那一格赢过宿主推的那一格：跳转在途时先给出反馈', async () => {
+    const wrapper = render({ items: THREE_TABS }, 'overview')
+    await wrapper.findAll('button')[1]?.trigger('click')
+
+    expect(activeLabels(wrapper)).toEqual(['能耗'])
+  })
+
+  it('宿主换了一张屏就回到它推的那一格，不停在上次点过的格上', async () => {
+    const wrapper = render({ items: THREE_TABS }, 'overview')
+    await wrapper.findAll('button')[1]?.trigger('click')
+    await wrapper.setProps({ meta: { activeValue: 'device' } })
+
+    expect(activeLabels(wrapper)).toEqual(['设备'])
   })
 
   it('点过之后把格删到更少时高亮回落配置档，不会落在空处', async () => {

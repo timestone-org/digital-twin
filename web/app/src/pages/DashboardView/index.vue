@@ -99,8 +99,13 @@ function goToDashboard(handle: string): void {
   })
 }
 
-// 联动引擎：规则来自 chromeJson，节点表一换整套易失态清零重放
-const interaction = createInteractionRuntime({ navigate: goToDashboard })
+// 联动引擎：规则来自 chromeJson，节点表一换整套易失态清零重放。
+// ⚠ 当前句柄取**已加载**的那张屏而不是地址栏：切屏期间地址已经换了、文档还没到，
+// 按地址走会让上一屏的页签先跳到新屏那一格
+const interaction = createInteractionRuntime({
+  navigate: goToDashboard,
+  currentHandle: () => file.dashboard.value?.id ?? '',
+})
 provide(INTERACTION_KEY, interaction)
 watch(
   () => file.dashboard.value,

@@ -278,6 +278,7 @@ onUnmounted(file.dispose)
       :design="design"
       :get-manifest="getManifest"
       :chrome-json="meta.draft.value?.chromeJson ?? {}"
+      :dashboard-id="dashboardId"
       :ai="extras.ai"
       :context-menu="extras.contextMenu.state.value"
       @close-picker="ops.closePicker"

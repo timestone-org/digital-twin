@@ -33,6 +33,8 @@ export interface ModuleEvaluationInput {
   hasRenderError: () => boolean
   /** 本节点真配了以它为源的联动规则；无联动运行时给 undefined。 */
   interactive: () => boolean | undefined
+  /** 联动推出的当前选中值；推不出或无联动运行时给空串。 */
+  activeValue: () => string
   /** 实时通道连接态；设计态与独立渲染时给 undefined，那时永不降 `stale`。 */
   connectionState: () => ModuleConnectionState | undefined
 }
@@ -114,6 +116,9 @@ export function useModuleEvaluation(
     if (reason !== '') value.errorMessage = reason
     const interactive = input.interactive()
     if (interactive !== undefined) value.interactive = interactive
+    // 空串是「推不出」而不是一个能比中的值，缺席掉，别让模块拿空串去找格子
+    const activeValue = input.activeValue()
+    if (activeValue !== '') value.activeValue = activeValue
     if (connectionState.value !== undefined) {
       value.connectionState = connectionState.value
     }

@@ -285,3 +285,67 @@ describe('跨屏跳转', () => {
     expect(navigate).toHaveBeenCalledWith('d-7')
   })
 })
+
+describe('当前在哪一格', () => {
+  /** 一条页签栏两格，各自指向一张屏。 */
+  function tabsRule(): InteractionRule {
+    return {
+      id: 'r-tabs',
+      source: { nodeId: 'btn', event: 'select' },
+      action: {
+        type: 'navigateByValue',
+        routes: [
+          { value: 'pv', target: 'd-pv' },
+          { value: 'ac', target: 'd-ac' },
+        ],
+      },
+    }
+  }
+
+  // 一条页签栏摆在几张屏上时，配置里那个静态下标只对其中一张是对的；
+  // 高亮必须由「哪一条路由指向当前这张屏」推出来，否则在别的屏上就是
+  // 「高亮停在别处、点自己那一格没反应」
+  it('取指向当前这张屏的那条路由的值', () => {
+    const runtime = createInteractionRuntime({ currentHandle: () => 'd-ac' })
+    runtime.init([tabsRule()], NODES)
+
+    expect(runtime.activeValueOf('btn')).toBe('ac')
+  })
+
+  it('没有一条路由指向本屏就推不出，给空串', () => {
+    const runtime = createInteractionRuntime({ currentHandle: () => 'd-别的' })
+    runtime.init([tabsRule()], NODES)
+
+    expect(runtime.activeValueOf('btn')).toBe('')
+  })
+
+  it('宿主没给当前句柄时不猜，给空串', () => {
+    const runtime = createInteractionRuntime({})
+    runtime.init([tabsRule()], NODES)
+
+    expect(runtime.activeValueOf('btn')).toBe('')
+  })
+
+  it('别的节点的规则不算在本节点头上', () => {
+    const runtime = createInteractionRuntime({ currentHandle: () => 'd-ac' })
+    runtime.init([tabsRule()], NODES)
+
+    expect(runtime.activeValueOf('card')).toBe('')
+  })
+
+  it('单目标跳转推不出：它不带值，拿它当选中值会指到一格毫不相干的页签上', () => {
+    const runtime = createInteractionRuntime({ currentHandle: () => 'd-1' })
+    runtime.init(
+      [
+        {
+          id: 'r-one',
+          source: { nodeId: 'btn', event: 'select' },
+          action: { type: 'navigate', target: 'd-1' },
+        },
+      ],
+      NODES,
+    )
+
+    expect(runtime.activeValueOf('btn')).toBe('')
+  })
+})

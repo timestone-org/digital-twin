@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
  * @fileoverview nav-tabs 的渲染：一排原生 `<button>`，点一格上抛一次 `select`
- * 联动事件。选中态只活在本组件里——跳大屏那条路点完就换页，页内分区那条路
- * 由联动规则去改别的节点的显隐，两条路都不需要把选中态写回配置。
+ * 联动事件。选中态不写回配置——高亮由「用户刚点的那一格 > 宿主推出来的当前屏
+ * 那一格（`meta.activeValue`）> 配置里的默认选中」三档定。
  * ⚠ 形态全部收敛在 `look.ts`，本文件只摆模板与那一次上抛。
  */
 import type { InteractionEvent, ModuleMeta } from '@dt/contracts'
@@ -21,23 +21,35 @@ const emit = defineEmits<{ interaction: [event: InteractionEvent] }>()
 
 const spec = computed(() => readTabsSpec(props.config))
 
-/** 用户点过的那一格；null = 还没点过，跟着配置里的「默认选中」走。 */
+/** 用户点过的那一格；null = 还没点过，跟着下面那两档走。 */
 const picked = ref<number | null>(null)
 
-// 改了「默认选中」就回到配置那一档：编辑器里改一个数要当场看得见，
-// 而不是还停在上一次点过的那一格上
+/**
+ * 联动推出的「你现在在这一格」：宿主拿本节点的按值跳转规则跟当前这张屏比出来的
+ * （`meta.activeValue`），-1 = 推不出（页内分区那条路本就没有跳转规则）。
+ * ⚠ 它必须赢过配置里的「默认选中」：同一条页签栏摆在几张屏上时那个静态下标
+ * 只对其中一张是对的，在别的屏上就成了「高亮停在别处、点自己那一格没反应」。
+ */
+const boundAt = computed(() => {
+  const value = props.meta?.activeValue ?? ''
+  if (value === '') return -1
+  return spec.value.items.findIndex((tab) => tab.emitValue === value)
+})
+
+// 改了「默认选中」、或宿主说这一屏换了，都回到推出来的那一档：编辑器里改一个数
+// 要当场看得见，而不是还停在上一次点过的那一格上
 watch(
-  () => spec.value.activeAt,
+  () => [spec.value.activeAt, boundAt.value] as const,
   () => {
     picked.value = null
   },
 )
 
-/** 当前高亮哪一格。⚠ 点过之后把格删到更少时回落配置档，否则高亮落在空处。 */
+/** 当前高亮哪一格。⚠ 点过之后把格删到更少时回落，否则高亮落在空处。 */
 const activeAt = computed(() => {
   const at = picked.value
-  if (at === null || at >= spec.value.items.length) return spec.value.activeAt
-  return at
+  if (at !== null && at < spec.value.items.length) return at
+  return boundAt.value >= 0 ? boundAt.value : spec.value.activeAt
 })
 
 /**

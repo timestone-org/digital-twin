@@ -27,6 +27,8 @@ defineProps<{
   design: DesignSize
   getManifest: GetModuleManifest
   chromeJson: Record<string, unknown>
+  /** 正在编辑的这张屏；预览里的页签栏靠它认出「当前在哪一格」。 */
+  dashboardId: string
   contextMenu: ContextMenuState | null
   ai: AiPanel
 }>()
@@ -58,6 +60,7 @@ const emit = defineEmits<{
     :design="design"
     :get-manifest="getManifest"
     :chrome-json="chromeJson"
+    :dashboard-id="dashboardId"
     @close="emit('close-preview')"
   />
   <CanvasContextMenu

@@ -1,8 +1,11 @@
 /**
  * @fileoverview 契约：跨屏跳转的「怎么跳」只有宿主页面这一份实现——
  * 联动引擎只算出目标句柄，路由由这一页拼；跳到当前这张屏一律不跳。
+ * 这一页还要告诉每个控件**当前是哪张屏**，页签栏据此高亮自己那一格。
  * ⚠ 自跳不挡的话，`router.push` 到同一路由既不重载也不报错，
- * 表现正好是这套里最不想要的那种「点了没反应」。
+ * 表现正好是这套里最不想要的那种「点了没反应」；而不给当前句柄的话，
+ * 一条摆在几张屏上的页签栏高亮永远停在配置里那个静态下标上，用户按着
+ * 高亮去点，点的正是自己那一格，同样是「点了没反应」。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -127,6 +130,92 @@ describe('跨屏跳转', () => {
     const wrapper = await clickTheModule('d-1')
 
     expect(push).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})
+
+/** 一张摆了页签栏的屏：两格各指一张屏，「默认选中」故意配成指向**别的**屏那一格。 */
+function payloadWithTabs(): DashboardPayload {
+  return {
+    ...payloadJumpingTo('d-2'),
+    chromeJson: {
+      interactions: [
+        {
+          id: 'r-tabs',
+          source: { nodeId: 'n-1', event: 'select' },
+          action: {
+            type: 'navigateByValue',
+            routes: [
+              { value: 'here', target: 'd-1' },
+              { value: 'there', target: 'd-2' },
+            ],
+          },
+        },
+      ],
+    },
+    nodes: [
+      {
+        id: 'n-1',
+        dashboardId: 'd-1',
+        parentId: null,
+        clientKey: null,
+        moduleType: 'nav-tabs',
+        x: 0,
+        y: 0,
+        w: 420,
+        h: 48,
+        zIndex: 0,
+        isVisible: true,
+        configJson: {
+          items: [
+            { label: '本屏', emitValue: 'here' },
+            { label: '那屏', emitValue: 'there' },
+          ],
+          activeIndex: 2,
+        },
+        createdAt: '2026-08-18T00:00:00Z',
+        updatedAt: '2026-08-18T00:00:00Z',
+        bindings: [],
+      },
+    ],
+  }
+}
+
+/** 挂上页面，等页签栏那两格出来。 */
+async function openTabs() {
+  dashboard.value = payloadWithTabs()
+  const wrapper = mount(DashboardView)
+  await flushPromises()
+  await vi.waitFor(() =>
+    expect(wrapper.findAll('.dt-tabs__item').length).toBe(2),
+  )
+  return wrapper
+}
+
+function activeLabels(wrapper: Awaited<ReturnType<typeof openTabs>>): string[] {
+  return wrapper
+    .findAll('.dt-tabs__item')
+    .filter((item) => item.attributes('aria-pressed') === 'true')
+    .map((item) => item.text())
+}
+
+describe('页签栏认出自己在哪张屏', () => {
+  it('高亮落在指向当前这张屏的那一格，压过配置里的「默认选中」', async () => {
+    const wrapper = await openTabs()
+
+    expect(activeLabels(wrapper)).toEqual(['本屏'])
+    wrapper.unmount()
+  })
+
+  it('点另一格照旧跳过去', async () => {
+    const wrapper = await openTabs()
+
+    await wrapper.findAll('.dt-tabs__item')[1]?.trigger('click')
+
+    expect(push).toHaveBeenCalledWith({
+      name: 'dashboard-view',
+      params: { dashboardId: 'd-2' },
+    })
     wrapper.unmount()
   })
 })
