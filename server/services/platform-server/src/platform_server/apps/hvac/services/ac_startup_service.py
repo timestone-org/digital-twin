@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import Database
 from lib.logging import current_traceparent, get_logger
+from lib.stream import StreamGroup, StreamLike
 from lib.utils.timeutils import format_rfc3339
 from platform_server.apps.hvac.crud import (
     ac_startup_batch_crud,
@@ -58,7 +59,6 @@ from platform_server.apps.hvac.startups import (
     SHARD_STATUS_DONE,
     SHARD_STATUS_FAILED,
 )
-from platform_server.stream import StreamGroup, StreamLike
 
 _logger = get_logger("platform.hvac.ac_startup")
 

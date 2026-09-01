@@ -1,0 +1,36 @@
+"""能力面的出参：这套部署此刻能干什么。"""
+
+from pydantic import BaseModel, Field
+
+
+class IndexCapabilityOut(BaseModel):
+    """检索那两路各自走在哪一档上。
+
+    ⚠ `reason` 不是装饰：走在回退档上时用户要看得见**为什么**。
+    悄悄退化的表现是「有点慢」「有点不准」，而没有人会去查一件没人说过的事
+    （ADR-0034 决策五）。
+    """
+
+    # 实际生效的那一档，取值同 `services/indexing/registry.py` 的注册名
+    vector: str
+    keyword: str
+    # 走在回退档上的原因；走在首选档上时是空串
+    reason: str = ""
+
+
+class CapabilityOut(BaseModel):
+    """知识库能力。"""
+
+    # 嵌入档接上了吗。没接时文档照常摄取，检索如实回答「这个库还没建索引」
+    is_embedding_enabled: bool
+    # 对话档接上了吗。它只决定 `agentic` 策略可不可用
+    is_model_enabled: bool
+    # 这套部署装了哪些检索策略，以及哪些此刻真能用
+    strategies: list[str] = Field(default_factory=list)
+    ready_strategies: list[str] = Field(default_factory=list)
+    # 装了哪些来源与解析器；界面的 accept 名单由后者算出来下发。
+    # ⚠ 前端不再写死一份：两份漂开的表现是「选得中的文件传上去被拒」，
+    # 而两边单看都对
+    source_kinds: list[str] = Field(default_factory=list)
+    accepted_suffixes: list[str] = Field(default_factory=list)
+    index: IndexCapabilityOut

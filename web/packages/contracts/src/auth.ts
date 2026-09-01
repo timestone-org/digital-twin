@@ -43,6 +43,11 @@ export const PERMISSION_CODES = {
   // ⚠ 比 use 严一档：模型账号是**整套部署共用的一份**，换掉它等于替所有人
   // 换了说话的账号
   assistantManage: 'assistant:manage',
+  knowledgeUse: 'knowledge:use',
+  knowledgeWrite: 'knowledge:write',
+  // ⚠ 比另外两条严：改嵌入档等于让整库的既有向量作废，而那件事没有任何
+  // 运行期迹象，只表现为召回忽然全错
+  knowledgeManage: 'knowledge:manage',
 } as const
 
 export type PermissionCode =

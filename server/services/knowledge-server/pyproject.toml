@@ -1,0 +1,79 @@
+[project]
+name = "knowledge-server"
+version = "0.1.0"
+description = "知识库：可插拔的知识来源与文档解析、摄取管线、混合检索与 AgenticRAG 编排。"
+requires-python = ">=3.12"
+dependencies = [
+    # ⚠ 每一档都必须自己声明：开发用的是 workspace 共享 venv，别的服务装进来的
+    # 包在本地和全部用例里都 import 得到，只有按自己声明的依赖装的独立镜像会
+    # 启动即崩（check_service_deps.py 守这条）。
+    #   auth   —— 边缘签名身份头要 lib.auth 解，服务级密钥要它的定长比较
+    #   db     —— 库、来源、文档、块、块向量五张表
+    #   redis  —— 摄取队列、幂等键存储、断路器状态
+    #   s3     —— 上传来源的原件落在对象存储里
+    #   web    —— FastAPI 与 uvicorn
+    "lib[auth,db,redis,s3,web]",
+    # OpenAI 兼容端点的调用面。⚠ 与助手共用同一份（ADR-0032）：服务之间不许
+    # 互相 import，而复制一份一定会漂——漂的表现是「同一个端点，助手调得通、
+    # 知识库调不通」
+    "llmcore",
+    # 解析 Office 三件套。⚠ 三路各要一个库，没有哪一个吃得下另外两种；
+    # 它们都是**阻塞且吃 CPU** 的，调用方必须扔进进程池
+    "python-docx>=1.1",
+    "openpyxl>=3.1",
+    "python-pptx>=1.0",
+]
+
+[project.scripts]
+knowledge-server = "knowledge_server.__main__:main"
+# ⚠ 这里**不**登记 openapi 导出的 console 入口：`scripts` 是顶层包名，别的服务
+# 已经把它打进 wheel，同一个 venv 里两份会互相覆盖——导出脚本可能改写**另一个
+# 服务**的 openapi.json。导出一律按路径调：
+#   uv run python scripts/export_openapi.py
+
+[tool.uv.sources]
+lib = { workspace = true }
+llmcore = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/knowledge_server"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-q"
+markers = [
+    "requires_postgres: 需要真实 Postgres（L2/L3/L4）",
+    "requires_redis: 需要真实 Redis",
+    "requires_pgvector: 需要装了 pgvector 的 Postgres（加速索引那一路）",
+]
+# ⚠ 警告一律当红灯：CI 日志里的黄字没人回头看，而一条 DeprecationWarning
+# 就是下次升级依赖时的失败。要留的例外必须逐条写在这里，说清为什么留。
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+branch = true
+source = ["knowledge_server"]
+omit = [
+    "*/migrations/*",
+    "*/__main__.py",
+    "*/conftest.py",
+]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = false
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+    "\\.\\.\\.",
+]
+
+[tool.coverage.xml]
+output = "coverage.xml"

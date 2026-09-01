@@ -267,7 +267,14 @@ def _own_schema(service: Path) -> str:
 
 def check_migrations_touch_one_schema_only() -> list[Violation]:
     """⚠ 一个服务的迁移里出现另一个 schema 的名字，即为写权限越界。"""
-    known = {"auth", "platform", "collect", "realtime", "assistant"}
+    known = {
+        "auth",
+        "platform",
+        "collect",
+        "realtime",
+        "assistant",
+        "knowledge",
+    }
     found: list[Violation] = []
     for service in service_dirs():
         own = _own_schema(service)

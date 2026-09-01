@@ -45,6 +45,9 @@ PUBLISHED_CODES = frozenset(
         "modeling:manage",
         "modeling:run",
         "modeling:publish",
+        "knowledge:use",
+        "knowledge:write",
+        "knowledge:manage",
     }
 )
 
@@ -161,6 +164,7 @@ def test_permission_groups_keep_catalog_order_and_sorting() -> None:
         "dataset",
         "formula",
         "modeling",
+        "knowledge",
     ]
     for group in groups:
         orders = [item.sort_order for item in group.items]

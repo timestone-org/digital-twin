@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from lib.logging import current_traceparent, get_logger
-from platform_server.stream import StreamGroup, StreamLike
+from lib.stream import StreamGroup, StreamLike
 
 _logger = get_logger("platform.assets.compress")
 

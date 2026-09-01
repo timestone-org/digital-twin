@@ -61,6 +61,13 @@ MODELING_VIEW = "modeling:view"
 MODELING_MANAGE = "modeling:manage"
 MODELING_RUN = "modeling:run"
 MODELING_PUBLISH = "modeling:publish"
+# knowledge-server 复述一份，同上。⚠ 粒度是**这个库**而不是这份文档：
+# 一期不做文档级权限，界面上要说清这件事，别让人以为传进去的东西只有自己看得见。
+# ⚠ 三个码按「读 / 写内容 / 管库」分档，而闸 1 按 路径 + 方法 匹配——所以它们
+# 各有自己的路径段（见 rules_knowledge.py），码才不会成为点了没效果的勾
+KNOWLEDGE_USE = "knowledge:use"
+KNOWLEDGE_WRITE = "knowledge:write"
+KNOWLEDGE_MANAGE = "knowledge:manage"
 
 PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(
@@ -423,6 +430,40 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
             "⚠ 与「发起分析运行」分家是刻意的：绑定生效后，引用那条公式的每一"
             "张台账的数值都会跟着模型走，而变化的原因是几千个浮点参数，"
             "没有任何地方 diff 得出来"
+        ),
+    ),
+    PermissionSpec(
+        code=KNOWLEDGE_USE,
+        name="使用知识库",
+        kind="view",
+        group_code="knowledge",
+        group_label="知识库",
+        sort_order=10,
+        description="检索、问答、看命中的原文块",
+    ),
+    PermissionSpec(
+        code=KNOWLEDGE_WRITE,
+        name="维护知识库内容",
+        kind="operate",
+        group_code="knowledge",
+        group_label="知识库",
+        sort_order=20,
+        description=(
+            "传文档、删文档、重新解析、手动跑一次来源同步。"
+            "⚠ 粒度是**这个库**：一期没有文档级权限"
+        ),
+    ),
+    PermissionSpec(
+        code=KNOWLEDGE_MANAGE,
+        name="管理知识库",
+        kind="admin",
+        group_code="knowledge",
+        group_label="知识库",
+        sort_order=30,
+        description=(
+            "建库删库、改嵌入档与检索策略、配来源。"
+            "⚠ 比另外两条严：改嵌入档等于让整库的既有向量作废，"
+            "而那件事没有任何运行期迹象，只表现为召回忽然全错"
         ),
     ),
 )

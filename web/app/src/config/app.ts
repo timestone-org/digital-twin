@@ -19,6 +19,13 @@ export const OPCUA_BASE_URL = '/api/v1/opcua'
 export const ASSISTANT_BASE_URL = '/api/v1/assistant'
 
 /**
+ * 知识库前缀。
+ * ⚠ 这套部署不起 knowledge-server 时，这几条一律 502——能力探测把 502 读成
+ * 「这套部署没有知识库」，入口于是干净地不出现。
+ */
+export const KNOWLEDGE_BASE_URL = '/api/v1/knowledge'
+
+/**
  * 素材字节的取回与直传前缀，由边缘反代到对象存储的桶根。
  * ⚠ 与 platform-server 的 `PLATFORM_OBJECTSTORE_PUBLIC_BASE` 以及 nginx 那条
  * `location ^~ /oss/` 是同一个值：三处分叉的表现是上传 404、模型加载不出来，

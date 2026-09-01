@@ -11,11 +11,11 @@ from dataclasses import dataclass
 from datetime import date
 
 from lib.logging import current_traceparent
+from lib.stream import StreamGroup, StreamLike
 from platform_server.apps.hvac.services.ac_startup_daily import (
     format_business_date,
     parse_business_date,
 )
-from platform_server.stream import StreamGroup, StreamLike
 
 # 信封版本。字段改形状时 +1，消费端据此拒掉读不懂的消息而不是猜
 ENVELOPE_VERSION = "1"

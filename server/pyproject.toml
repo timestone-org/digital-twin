@@ -80,7 +80,9 @@ ignore = [
 [tool.ruff.lint.isort]
 known-first-party = [
     "ai_assistant",
+    "knowledge_server",
     "lib",
+    "llmcore",
     "timeseries",
     "collectwire",
     "auth_server",

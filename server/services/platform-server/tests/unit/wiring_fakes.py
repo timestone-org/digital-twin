@@ -13,6 +13,7 @@ from lib.cache import Cache, PubSub
 from lib.cache.protocol import CacheLike
 from lib.db import Database, ReadOnlySqlSource
 from lib.idempotency import IdempotencyStore
+from lib.stream import RedisStream
 from lib.testing import FakeObjectStore, InMemoryCache
 from platform_server.apps.collect.services import (
     CommandBus,
@@ -36,7 +37,6 @@ from platform_server.lease import Lease
 from platform_server.opcua import OpcuaClient
 from platform_server.realtime import RealtimeClient
 from platform_server.settings import ROLE_WORKER, Settings
-from platform_server.stream import RedisStream
 from unit.collect_fakes import (
     FakeChannelPublisher,
     FakeCommandTransport,

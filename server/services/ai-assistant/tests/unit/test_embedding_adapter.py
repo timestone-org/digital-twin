@@ -9,12 +9,12 @@ from dataclasses import dataclass
 import pytest
 from pydantic import SecretStr
 
-from ai_assistant.llm.adapters.openai_embedding import (
+from ai_assistant.llm.adapters import build_openai_embedding
+from ai_assistant.settings import Settings
+from llmcore.openai_embedding import (
     EmbeddingShapeChanged,
     OpenAiCompatEmbeddingAdapter,
-    build_openai_embedding,
 )
-from ai_assistant.settings import Settings
 
 PLACEHOLDER = "placeholder"
 KEY = SecretStr("chat-key")

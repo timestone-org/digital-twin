@@ -285,6 +285,25 @@ jobs:
       ASSISTANT_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
       ASSISTANT_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
 
+      # ⚠ 知识库的嵌入档与对话档**在 CI 里保持关**：打开就要真密钥，而用例验的
+      # 是解析、切块与检索的编排，模型本身由假件顶。关着时照常构造得出 Settings
+      KNOWLEDGE_POSTGRES_HOST: localhost
+      KNOWLEDGE_POSTGRES_PORT: '55432'
+      KNOWLEDGE_POSTGRES_USER: dt
+      KNOWLEDGE_POSTGRES_PASSWORD: dt
+      KNOWLEDGE_POSTGRES_DB: dt
+      KNOWLEDGE_POSTGRES_SCHEMA: knowledge
+      KNOWLEDGE_REDIS_HOST: localhost
+      KNOWLEDGE_REDIS_PORT: '56379'
+      KNOWLEDGE_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
+      KNOWLEDGE_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
+      # 对象存储在 CI 里没有实例，摄取用例一律打假存储。⚠ endpoint 写成解析不
+      # 出来的名字：真有用例去连它，要当场炸而不是连到别的什么东西上
+      KNOWLEDGE_OBJECTSTORE_ENDPOINT: http://objectstore-not-used-in-this-job:9000
+      KNOWLEDGE_OBJECTSTORE_BUCKET: ci-bucket
+      KNOWLEDGE_OBJECTSTORE_ACCESS_KEY: ci-only-objectstore-access
+      KNOWLEDGE_OBJECTSTORE_SECRET_KEY: ci-only-objectstore-0123456789abcdef
+
       COLLECT_POSTGRES_HOST: localhost
       COLLECT_POSTGRES_PORT: '55432'
       COLLECT_POSTGRES_USER: dt
@@ -341,6 +360,18 @@ jobs:
         working-directory: server/services/ai-assistant
         run: uv run alembic upgrade head
 
+      - name: 建 knowledge schema
+        working-directory: server/services/knowledge-server
+        run: uv run alembic upgrade head
+
+      # ⚠ 加速档必须在 CI 里真的开起来：pgvector 与 pg_trgm 那两路平时没人跑，
+      # 而「长期没人跑」等于没有。CI 的库镜像两个扩展都带。
+      # ⚠ 它**不在 alembic 里**是刻意的（ADR-0034 决策三）：迁移是 compose 的
+      # 前置作业，目标库装不上扩展时迁移失败会让整栈起不来。
+      - name: 启用加速索引（两路一起）
+        working-directory: server/services/knowledge-server
+        run: uv run python -m knowledge_server.index --enable
+
       # ⚠ --cov 必须用点号模块名：写成路径形式时 coverage 静默跳过、数字虚高
       - name: lib 单元 + 契约
         working-directory: server/lib
@@ -367,6 +398,15 @@ jobs:
             --cov-report=xml:../../../collectwire-coverage.xml \
             --junitxml=../../../collectwire-junit.xml 2>&1 \
             | tee ../../../collectwire-pytest.log
+
+      - name: domain/llmcore 单元 + 契约
+        working-directory: server/domain/llmcore
+        run: |
+          set -o pipefail
+          uv run pytest -q --cov=llmcore --cov-branch \
+            --cov-report=xml:../../../llmcore-coverage.xml \
+            --junitxml=../../../llmcore-junit.xml 2>&1 \
+            | tee ../../../llmcore-pytest.log
 
       - name: auth-server 全层
         working-directory: server/services/auth-server
@@ -428,6 +468,17 @@ jobs:
             --junitxml=../../../assistant-junit.xml 2>&1 \
             | tee ../../../assistant-pytest.log
 
+      # ⚠ 索引档的两条实现只有真库能分开验：pgvector 装没装决定走哪一路，
+      # 而回退那一路平时没人跑，长期没人跑等于没有
+      - name: knowledge-server 全层
+        working-directory: server/services/knowledge-server
+        run: |
+          set -o pipefail
+          uv run pytest -q --cov=knowledge_server --cov-branch \
+            --cov-report=xml:../../../knowledge-coverage.xml \
+            --junitxml=../../../knowledge-junit.xml 2>&1 \
+            | tee ../../../knowledge-pytest.log
+
       # CI 里 skip 掉的用例等于没跑：环境能力由服务容器保证，缺了就该红
       - name: 运行结果自检（无 skip、无外网、覆盖率口径）
         run: |
@@ -437,6 +488,8 @@ jobs:
             timeseries-junit.xml timeseries-pytest.log
           uv run --project server python scripts/gates/check_pytest_run.py \
             collectwire-junit.xml collectwire-pytest.log
+          uv run --project server python scripts/gates/check_pytest_run.py \
+            llmcore-junit.xml llmcore-pytest.log
           uv run --project server python scripts/gates/check_pytest_run.py \
             auth-junit.xml auth-pytest.log
           uv run --project server python scripts/gates/check_pytest_run.py \
@@ -449,6 +502,8 @@ jobs:
             realtime-junit.xml realtime-pytest.log
           uv run --project server python scripts/gates/check_pytest_run.py \
             assistant-junit.xml assistant-pytest.log
+          uv run --project server python scripts/gates/check_pytest_run.py \
+            knowledge-junit.xml knowledge-pytest.log
 
       # 整体覆盖率不许低于基线——哪怕仍在阈值之上
       - name: 覆盖率棘轮
@@ -459,6 +514,8 @@ jobs:
             timeseries timeseries-coverage.xml
           uv run --project server python scripts/gates/check_coverage.py \
             collectwire collectwire-coverage.xml
+          uv run --project server python scripts/gates/check_coverage.py \
+            llmcore llmcore-coverage.xml
           uv run --project server python scripts/gates/check_coverage.py \
             auth-server auth-coverage.xml
           uv run --project server python scripts/gates/check_coverage.py \
@@ -471,6 +528,8 @@ jobs:
             realtime-hub realtime-coverage.xml
           uv run --project server python scripts/gates/check_coverage.py \
             ai-assistant assistant-coverage.xml
+          uv run --project server python scripts/gates/check_coverage.py \
+            knowledge-server knowledge-coverage.xml
 
       # 基线是**本次推送前的 main**（`github.event.before`）：刚合进来的那一坨
       # 改动正好落在这段区间里。⚠ 没有 before（分支首推、手动补跑）时无基线
@@ -488,10 +547,11 @@ jobs:
             || git fetch --no-tags origin "${BASELINE}"
           uv run --project server diff-cover \
             lib-coverage.xml timeseries-coverage.xml \
-            collectwire-coverage.xml auth-coverage.xml \
+            collectwire-coverage.xml llmcore-coverage.xml \
+            auth-coverage.xml \
             platform-coverage.xml opcua-coverage.xml \
             collector-coverage.xml realtime-coverage.xml \
-            assistant-coverage.xml \
+            assistant-coverage.xml knowledge-coverage.xml \
             --compare-branch "${BASELINE}" --fail-under=85
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -639,6 +699,24 @@ jobs:
           ASSISTANT_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
         run: uv run python scripts/export_openapi.py --check
 
+      - name: knowledge-server 的 openapi.json 与代码一致
+        working-directory: server/services/knowledge-server
+        env:
+          KNOWLEDGE_POSTGRES_HOST: localhost
+          KNOWLEDGE_POSTGRES_PORT: '55432'
+          KNOWLEDGE_POSTGRES_USER: dt
+          KNOWLEDGE_POSTGRES_PASSWORD: dt
+          KNOWLEDGE_POSTGRES_DB: dt
+          KNOWLEDGE_POSTGRES_SCHEMA: knowledge
+          KNOWLEDGE_REDIS_HOST: redis-not-used-in-this-job
+          KNOWLEDGE_OBJECTSTORE_ENDPOINT: http://objectstore-not-used-in-this-job:9000
+          KNOWLEDGE_OBJECTSTORE_BUCKET: ci-bucket
+          KNOWLEDGE_OBJECTSTORE_ACCESS_KEY: ci-only-objectstore-access
+          KNOWLEDGE_OBJECTSTORE_SECRET_KEY: ci-only-objectstore-0123456789abcdef
+          KNOWLEDGE_EDGE_SIGNING_SECRET: ci-only-edge-signing-0123456789abcdef
+          KNOWLEDGE_EDGE_SERVICE_KEY: ci-only-edge-service-0123456789abcdef
+        run: uv run python scripts/export_openapi.py --check
+
       # ⚠ 代码可以回滚、数据库不回滚，所以每个迁移都必须真的能上能下
       - name: auth 迁移 upgrade → downgrade → upgrade
         working-directory: server/services/auth-server
@@ -691,6 +769,20 @@ jobs:
           ASSISTANT_POSTGRES_PASSWORD: dt
           ASSISTANT_POSTGRES_DB: dt
           ASSISTANT_POSTGRES_SCHEMA: assistant
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+
+      - name: knowledge-server 的迁移 upgrade → downgrade → upgrade
+        working-directory: server/services/knowledge-server
+        env:
+          KNOWLEDGE_POSTGRES_HOST: localhost
+          KNOWLEDGE_POSTGRES_PORT: '55432'
+          KNOWLEDGE_POSTGRES_USER: dt
+          KNOWLEDGE_POSTGRES_PASSWORD: dt
+          KNOWLEDGE_POSTGRES_DB: dt
+          KNOWLEDGE_POSTGRES_SCHEMA: knowledge
         run: |
           uv run alembic upgrade head
           uv run alembic downgrade base

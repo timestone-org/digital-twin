@@ -3,8 +3,9 @@
   "npm:lightningcss*": "MPL-2.0：文件级 copyleft，只要不改它的源文件就不传染到本仓；各平台二进制同源，故用通配。",
   "py:asyncua": "LGPLv3+：以 import 方式原样引用、未修改、未静态链接，传染只及于对它自身源码的修改。本仓靠子类扩展点接入而非 patch 它的私有类（见 server/services/opcua-server/CONTEXT.md §5），且它按版本从 PyPI 装、可被替换成同接口的其它版本，满足 LGPL 的可替换要求。⚠ 一旦改动它的源码或把它 vendor 进仓，本条结论即失效，须重新评估。",
   "py:certifi": "MPL-2.0：只是一份 CA 证书数据包，未修改，不传染。",
-  "py:pathspec": "MPL-2.0：文件级 copyleft，作为库原样引用，未修改。",
-  "py:pymssql": "GNU LESSER GENERAL PUBLIC LICENSE v2.1：作为独立轮子原样动态链接使用，未修改其源码，故文件级 copyleft 不传染到本仓；自带 FreeTDS，换成同接口的实现不需要改本仓代码。⚠ 它既没有 License-Expression 也没有许可证分类器，License 字段里塞的是整份许可证正文，故闸门读到的是首行。",
   "py:orjson": "MPL-2.0 AND (Apache-2.0 OR MIT)：MPL 是文件级 copyleft，作为轮子原样引用、未修改，故不传染到本仓。它经 langgraph-sdk 进入 ai-assistant，仅用于序列化。⚠ 一旦改动它的源码或把它 vendor 进仓，本条结论即失效。",
+  "py:pathspec": "MPL-2.0：文件级 copyleft，作为库原样引用，未修改。",
+  "py:pillow": "MIT-CMU：即 PIL 沿用至今的那份历史许可（HPND 家族），条款只有「保留版权与许可声明」，无 copyleft、无署名广告条款，与 MIT 等价。它经 python-pptx 进入 knowledge-server，只在解析 .pptx 时被那个库用来读图元数据，本仓不直接 import、未修改、未 vendor。",
+  "py:pymssql": "GNU LESSER GENERAL PUBLIC LICENSE v2.1：作为独立轮子原样动态链接使用，未修改其源码，故文件级 copyleft 不传染到本仓；自带 FreeTDS，换成同接口的实现不需要改本仓代码。⚠ 它既没有 License-Expression 也没有许可证分类器，License 字段里塞的是整份许可证正文，故闸门读到的是首行。",
   "py:regex": "Apache-2.0 AND CNRI-Python：两者都是宽松许可，CNRI-Python 是 Python 自身早期许可的变体，只要求保留声明。它经 tiktoken 进入 ai-assistant，用于分词器的正则引擎，原样引用、未修改。"
 }

@@ -23,7 +23,7 @@ from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from pydantic import ConfigDict, Field
 
-from ai_assistant.llm.deltas import REASONING_KEY
+from llmcore.deltas import REASONING_KEY
 
 
 class ScriptedChat(BaseChatModel):

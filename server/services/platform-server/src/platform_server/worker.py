@@ -12,6 +12,7 @@ from typing import Protocol
 
 from lib.lifespan import wait_for_termination
 from lib.logging import configure_logging, get_logger
+from lib.stream import StreamGroup
 from platform_server.apps.assets.services.compress_worker import (
     CompressConsumer,
     CompressOptions,
@@ -52,7 +53,6 @@ from platform_server.apps.hvac.services.ac_startup_worker import (
 )
 from platform_server.container import Container, build_container
 from platform_server.settings import Settings
-from platform_server.stream import StreamGroup
 
 _logger = get_logger("platform.worker")
 

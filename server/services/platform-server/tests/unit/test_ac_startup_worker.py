@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lib.db import Database
 from lib.errors import DependencyUnavailable
 from lib.logging import current_log_context
+from lib.stream import StreamEntry, StreamGroup, StreamLike
 from platform_server.apps.hvac.services import (
     ac_startup_service,
     ac_startup_worker,
@@ -36,7 +37,6 @@ from platform_server.apps.hvac.services.ac_startup_worker import (
     ConsumerOptions,
     ShardConsumer,
 )
-from platform_server.stream import StreamEntry, StreamGroup, StreamLike
 
 TARGET = StreamGroup(stream="s", group="g", consumer="c")
 TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736"

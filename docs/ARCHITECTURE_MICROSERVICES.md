@@ -36,7 +36,7 @@
 
 ## 2. 服务清单
 
-### 2.1 代码单元（`server/services/*`，6 个）
+### 2.1 代码单元（`server/services/*`，7 个）
 
 | 服务 | 职责 | 对外前缀 | 端口 |
 |---|---|---|---|
@@ -46,8 +46,9 @@
 | `opcua-server` | 对上位系统暴露 opc.tcp 端点，托管多个 OPC UA 服务器实例 | `/api/v1/opcua` | 8008 |
 | `realtime-hub` | WebSocket 连接与订阅、服务→客户端扇出、通知 | `/api/v1/realtime` | 8000 |
 | `ai-assistant` | 技能驱动的对话式助手：按页面装技能、点位召回、改画布的工具下发到浏览器 | `/api/v1/assistant` | 8006 |
+| `knowledge-server` | 知识库：可插拔的知识来源与文档解析、切块与嵌入、混合检索与 AgenticRAG 编排 | `/api/v1/knowledge` | 8009 |
 
-### 2.2 部署单元（9 个）
+### 2.2 部署单元（11 个）
 
 | # | 部署单元 | 代码单元 | 角色 | 副本策略 |
 |---|---|---|---|---|
@@ -60,6 +61,8 @@
 | 7 | `platform-worker` | platform-server | `worker` | HPA（队列深度） |
 | 8 | `platform-publisher` | platform-server | `publisher` | **单活**（租约） |
 | 9 | `ai-assistant` | ai-assistant | api | HPA |
+| 10 | `knowledge-api` | knowledge-server | `api` | HPA（QPS），**完全无状态** |
+| 11 | `knowledge-worker` | knowledge-server | `worker` | HPA（队列深度） |
 | — | `migrate` | 各服务 | one-shot | 部署前 Job |
 
 `platform-publisher` 与 `platform-worker` 可以合成一个进程（`ROLE=worker,publisher`）省一份内存。一旦实测批任务的 CPU 抖动把推送延迟拉高就拆开——两者是同一镜像换启动参数，拆分成本接近零。
@@ -129,6 +132,12 @@
 ### 3.7 `ai-assistant`
 
 对话式助手。它是**纯消费方**：经 HTTP 调 platform 取业务数据、调 auth 校验身份，不直连任何其它服务的数据库。
+
+### 3.8 `knowledge-server`
+
+知识库。它是本仓第二个**数据属主兼消费方**的服务：拥有自己的文档、块与向量（schema `knowledge`），同时经 HTTP 调 platform 取外部系统来源的数据。`api` 角色只做读写与检索，解析、嵌入、来源同步这些重活全在 `worker` 角色（[ADR-0032](adr/0032-知识库独立成代码单元且LLM客户端下沉domain.md)）。
+
+它与 `ai-assistant` 共用 `server/domain/llm/`，但**两者互不调用**——助手经 HTTP 调知识库的只读面，知识库不回调助手。设计见 [KNOWLEDGE_BASE_DESIGN](KNOWLEDGE_BASE_DESIGN.md)。
 
 ---
 

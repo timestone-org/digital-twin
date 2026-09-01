@@ -13,6 +13,10 @@ dependencies = [
     #   redis  —— 幂等键存储、断路器状态、设备码登录的在途会话
     #   web    —— FastAPI 与 uvicorn
     "lib[auth,crypto,db,redis,web]",
+    # OpenAI 兼容端点的调用面。⚠ 下沉到 domain 是因为知识库也要用同一套
+    # （ADR-0032）：服务之间不许互相 import，而复制一份一定会漂，
+    # 漂的表现是「同一个端点，助手调得通、知识库调不通」
+    "llmcore",
     # 打模型端点与 platform 内部面。⚠ 必须自己声明：httpx 在工作区根的 dev 组里，
     # 本地与全部用例都 import 得到，只有按自己声明的依赖装的镜像会崩。
     "httpx>=0.28",
@@ -48,6 +52,7 @@ ai-assistant = "ai_assistant.__main__:main"
 
 [tool.uv.sources]
 lib = { workspace = true }
+llmcore = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

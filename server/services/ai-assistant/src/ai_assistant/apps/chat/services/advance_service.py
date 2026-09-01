@@ -119,6 +119,7 @@ def deps_of(
             # ——而模型看得见它们，于是每次都会先调一次再改口
             sessions=container.database.session,
             embedder=container.embedder,
+            knowledge=container.knowledge,
         )
     )
     return AdvanceDeps(

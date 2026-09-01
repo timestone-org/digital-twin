@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import Database
 from lib.logging import get_logger
+from lib.stream import StreamGroup, StreamLike
 from platform_server.apps.hvac.crud import (
     ac_model_crud,
     ac_model_prediction_crud,
@@ -52,7 +53,6 @@ from platform_server.apps.hvac.services.ac_model_queue import TrainMessage
 from platform_server.apps.hvac.services.ac_model_trainer import (
     metrics_to_json,
 )
-from platform_server.stream import StreamGroup, StreamLike
 
 _logger = get_logger("platform.hvac.ac_model_service")
 
