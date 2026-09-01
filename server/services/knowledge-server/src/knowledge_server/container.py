@@ -2,11 +2,17 @@
 
 from dataclasses import dataclass, field
 
+from knowledge_server.apps.knowledge.services.sources import (
+    KnowledgeSource,
+    SourceDeps,
+    build_sources,
+)
 from knowledge_server.settings import SERVICE_NAME, Settings
 from lib.cache import Cache
 from lib.db import Database, PoolProfile
 from lib.idempotency import IdempotencyStore
 from lib.objectstore import ObjectStore, create_object_store
+from lib.stream import RedisStream, StreamGroup, StreamLike
 
 # 幂等键的命名空间。⚠ 必须带服务名：共用一个 Redis 的两个服务，同一个端点名
 # 撞上同一个幂等键时会互相返回对方的结果
@@ -46,9 +52,39 @@ class Container:
     # 上传来源的原件落点。⚠ 一个进程一份、长活：每次调用现造一个客户端，
     # 等于每次都重新握一次手
     objectstore: ObjectStore
+    # 摄取队列。⚠ api 侧投、worker 侧消费，一个进程一份、长活：每次现造一个
+    # 客户端等于每次都重新握一次手
+    stream: StreamLike
+    # 接了哪几路知识来源。⚠ 顺序即界面上的先后
+    sources: tuple[KnowledgeSource, ...]
     # 启动时探测填进去。⚠ 可变对象，故不带 frozen——它是这份容器里唯一
     # 「装配之后才知道」的东西
     index: IndexProbe = field(default_factory=IndexProbe)
+
+    def ingest_group(self) -> StreamGroup:
+        """摄取队列的消费组身份。
+
+        ⚠ 消费者名带实例号：同一个组里两个消费者同名的话，`XAUTOCLAIM`
+        会把对方手上还在跑的消息认领过来，于是同一份文档被两个进程一起解。
+        """
+        return StreamGroup(
+            stream=self.settings.ingest_stream,
+            group=self.settings.ingest_group,
+            consumer=self.settings.app_instance,
+        )
+
+    def embedding_choice(self) -> tuple[str | None, int | None]:
+        """建库那一刻此刻接得上的嵌入档（模型名, 维数）。
+
+        ⚠ 没接时两格都是 `None`，而不是填一个「将来大概会用」的名字：
+        填了的话，库上写着一路根本没算过的模型名，而检索会以为它已经建过索引。
+        """
+        if not self.settings.embedding_enabled:
+            return (None, None)
+        return (
+            self.settings.embedding_model,
+            self.settings.embedding_dimensions,
+        )
 
 
 def _build_database(settings: Settings) -> Database:
@@ -78,6 +114,7 @@ def build_container(settings: Settings) -> Container:
     Args: settings。
     """
     cache = Cache(url=settings.url(), timeout_s=settings.redis_timeout_s)
+    store = create_object_store(settings)
     return Container(
         settings=settings,
         database=_build_database(settings),
@@ -85,5 +122,9 @@ def build_container(settings: Settings) -> Container:
         idempotency=IdempotencyStore(
             cache=cache, namespace=IDEMPOTENCY_NAMESPACE
         ),
-        objectstore=create_object_store(settings),
+        objectstore=store,
+        stream=RedisStream(
+            url=settings.url(), timeout_s=settings.redis_timeout_s
+        ),
+        sources=build_sources(SourceDeps(store=store)),
     )

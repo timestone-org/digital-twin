@@ -12,6 +12,7 @@ from typing import Protocol, cast
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lib.stream import StreamEntry, StreamGroup, StreamLike
 from platform_server.apps.hvac.crud import (
     ac_startup_batch_crud,
     ac_startup_shard_crud,
@@ -54,7 +55,6 @@ from platform_server.apps.hvac.startups import (
     SHARD_STATUS_FAILED,
     SHARD_STATUS_SKIPPED,
 )
-from platform_server.stream import StreamEntry, StreamGroup, StreamLike
 
 
 class RecordingStream(Protocol):

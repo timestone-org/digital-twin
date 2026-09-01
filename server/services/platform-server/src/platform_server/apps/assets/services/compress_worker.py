@@ -21,10 +21,10 @@ from pathlib import Path
 from lib.db import Database
 from lib.logging import get_logger
 from lib.objectstore import ObjectStore, ObjectStoreError
+from lib.stream import StreamEntry, StreamGroup, StreamLike
 from platform_server.apps.assets import crud, keys, variants
 from platform_server.apps.assets.crud.asset_variant import VariantResult
 from platform_server.apps.assets.services.compress_queue import decode
-from platform_server.stream import StreamEntry, StreamGroup, StreamLike
 
 _logger = get_logger("platform.assets.compress_worker")
 

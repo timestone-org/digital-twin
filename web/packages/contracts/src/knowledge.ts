@@ -73,3 +73,74 @@ export interface KnowledgeCapability {
   accepted_suffixes: string[]
   index: KnowledgeIndexCapability
 }
+
+/** 一个知识库。 */
+export interface KnowledgeBase {
+  id: string
+  name: string
+  description: string
+  retrieval_strategy: string
+  /**
+   * 算这个库全部向量的那一路与维数。
+   * ⚠ 没接嵌入时都是 null——那时检索**如实回答「这个库还没建索引」**，
+   * 不是返回空表：空表与「确实没有相关内容」长得一模一样。
+   */
+  embedding_model: string | null
+  dimensions: number | null
+  owner_id: string
+  document_count: number
+  created_at: string
+  updated_at: string
+}
+
+/** 一个库下的一路来源。文件上传只是其中一路。 */
+export interface KnowledgeSource {
+  id: string
+  base_id: string
+  kind: string
+  name: string
+  config: Record<string, unknown>
+  last_synced_at: string | null
+  /**
+   * 上一次同步失败的原因。
+   * ⚠ 留着而不是清掉：清掉的话界面上是「从没同步过」，而那与「同步了但一直
+   * 失败」是两件事。
+   */
+  last_error: string
+  created_at: string
+}
+
+/** 一份文档。 */
+export interface KnowledgeDocument {
+  id: string
+  base_id: string
+  source_id: string
+  title: string
+  media_type: string
+  byte_size: number
+  /** 摄取状态机走到哪了。闭合集合，与数据库 CHECK 同源。 */
+  status: string
+  /**
+   * 失败原因，一句人话。
+   * ⚠ 它会原样上界面，所以后端保证里面不含表名、SQL 与内网地址。
+   */
+  failure_reason: string
+  chunk_count: number
+  created_at: string
+  ready_at: string | null
+}
+
+/**
+ * 一张把键、类型与大小都钉死的直传表单。
+ *
+ * ⚠ `fields` 必须**原样按序**写进 multipart 表单，且文件字段排在最后：
+ * S3 的 POST 语义是「文件之后的字段一律忽略」，把 key 或签名排到文件后面，
+ * 存储端读到的是一份缺字段的表单，报出来的是含糊的 403。
+ */
+export interface KnowledgeUploadTicket {
+  document_id: string
+  url: string
+  fields: Record<string, string>
+  object_key: string
+  expires_seconds: number
+}

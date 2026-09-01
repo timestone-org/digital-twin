@@ -61,6 +61,8 @@ def _runtime(loops: tuple[_Loop, ...], closed: list[str]) -> WorkerRuntime:
         cache=_Closable(closed, "cache"),
         idempotency=None,
         objectstore=None,
+        stream=None,
+        sources=(),
         index=IndexProbe(),
     )
 

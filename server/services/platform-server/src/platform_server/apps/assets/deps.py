@@ -11,6 +11,7 @@ from fastapi import BackgroundTasks, Depends
 
 from lib.db import Database
 from lib.objectstore import ObjectStore
+from lib.stream import StreamGroup, StreamLike
 from platform_server.apps.assets.services.compress_queue import (
     CompressMessage,
     dispatch_compression,
@@ -22,7 +23,6 @@ from platform_server.deps import (
     get_session,
     require,
 )
-from platform_server.stream import StreamGroup, StreamLike
 
 __all__ = [
     "CompressDispatcher",

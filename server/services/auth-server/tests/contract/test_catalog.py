@@ -46,6 +46,8 @@ PUBLISHED_CODES = frozenset(
         "modeling:run",
         "modeling:publish",
         "knowledge:use",
+        "knowledge:write",
+        "knowledge:manage",
     }
 )
 

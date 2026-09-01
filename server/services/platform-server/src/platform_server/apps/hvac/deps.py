@@ -10,6 +10,7 @@ from typing import Annotated
 from fastapi import BackgroundTasks, Depends
 
 from lib.db import Database
+from lib.stream import StreamGroup, StreamLike
 from platform_server.apps.hvac.services.ac_model_queue import TrainMessage
 from platform_server.apps.hvac.services.ac_model_service import (
     dispatch_training,
@@ -28,7 +29,6 @@ from platform_server.deps import (
     require,
 )
 from platform_server.opcua import NodeWriter
-from platform_server.stream import StreamGroup, StreamLike
 
 __all__ = [
     "Dispatcher",

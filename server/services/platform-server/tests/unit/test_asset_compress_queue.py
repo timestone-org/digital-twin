@@ -9,8 +9,8 @@ from typing import cast
 
 import pytest
 
+from lib.stream import StreamGroup, StreamLike
 from platform_server.apps.assets.services import compress_queue
-from platform_server.stream import StreamGroup, StreamLike
 
 ASSET_ID = uuid.UUID("0192f0aa-0000-7000-8000-000000000001")
 TRACE = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"

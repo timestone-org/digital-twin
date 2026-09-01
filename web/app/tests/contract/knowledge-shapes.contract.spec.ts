@@ -14,8 +14,12 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type {
+  KnowledgeBase,
   KnowledgeCapability,
+  KnowledgeDocument,
   KnowledgeIndexCapability,
+  KnowledgeSource,
+  KnowledgeUploadTicket,
 } from '@dt/contracts'
 import {
   KNOWLEDGE_DOCUMENT_STATUSES,
@@ -62,6 +66,52 @@ const SHAPES: Record<string, Record<string, true>> = {
     keyword: true,
     reason: true,
   } satisfies Keys<KnowledgeIndexCapability>,
+
+  KnowledgeBaseOut: {
+    id: true,
+    name: true,
+    description: true,
+    retrieval_strategy: true,
+    embedding_model: true,
+    dimensions: true,
+    owner_id: true,
+    document_count: true,
+    created_at: true,
+    updated_at: true,
+  } satisfies Keys<KnowledgeBase>,
+
+  SourceOut: {
+    id: true,
+    base_id: true,
+    kind: true,
+    name: true,
+    config: true,
+    last_synced_at: true,
+    last_error: true,
+    created_at: true,
+  } satisfies Keys<KnowledgeSource>,
+
+  DocumentOut: {
+    id: true,
+    base_id: true,
+    source_id: true,
+    title: true,
+    media_type: true,
+    byte_size: true,
+    status: true,
+    failure_reason: true,
+    chunk_count: true,
+    created_at: true,
+    ready_at: true,
+  } satisfies Keys<KnowledgeDocument>,
+
+  UploadTicketOut: {
+    document_id: true,
+    url: true,
+    fields: true,
+    object_key: true,
+    expires_seconds: true,
+  } satisfies Keys<KnowledgeUploadTicket>,
 }
 
 /**

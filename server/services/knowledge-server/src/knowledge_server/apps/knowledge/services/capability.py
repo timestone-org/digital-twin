@@ -5,9 +5,17 @@
 一件没人说过的事（ADR-0034 决策五）。
 """
 
+from knowledge_server.apps.knowledge.models.knowledge_base import STRATEGIES
 from knowledge_server.apps.knowledge.schemas import (
     CapabilityOut,
     IndexCapabilityOut,
+)
+from knowledge_server.apps.knowledge.services.parsing import (
+    accepted_suffixes,
+)
+from knowledge_server.apps.knowledge.services.sources import (
+    KnowledgeSource,
+    source_kinds,
 )
 from knowledge_server.container import IndexProbe
 from knowledge_server.settings import Settings
@@ -74,13 +82,35 @@ def index_capability_of(
     )
 
 
-def capability_of(settings: Settings, probe: IndexProbe) -> CapabilityOut:
+def ready_strategies(settings: Settings) -> list[str]:
+    """此刻**真能用**的检索策略。
+
+    ⚠ 与「装了哪些」分开报：`agentic` 要一路对话档，没配时它如实不可用，
+    **不悄悄退化成 naive**——悄悄退化的表现是「质量忽然变差了」，
+    而没有任何一处报错（ADR-0035 决策二）。
+
+    Args: settings。
+    """
+    if settings.model_enabled:
+        return list(STRATEGIES)
+    return [one for one in STRATEGIES if one != "agentic"]
+
+
+def capability_of(
+    settings: Settings,
+    probe: IndexProbe,
+    sources: tuple[KnowledgeSource, ...] = (),
+) -> CapabilityOut:
     """这套部署此刻的知识库能力。
 
-    Args: settings, probe。
+    Args: settings, probe, sources（接了哪几路来源）。
     """
     return CapabilityOut(
         is_embedding_enabled=settings.embedding_enabled,
         is_model_enabled=settings.model_enabled,
+        strategies=list(STRATEGIES),
+        ready_strategies=ready_strategies(settings),
+        source_kinds=list(source_kinds(sources)),
+        accepted_suffixes=list(accepted_suffixes()),
         index=index_capability_of(settings, probe),
     )

@@ -59,3 +59,28 @@ class RetrievalUnavailable(AppError):
 
     code = 42306
     http_status = 409
+
+
+class UnknownDocumentStatus(AppError):
+    """点名的文档状态不在闭合集合里。
+
+    ⚠ 当成「不筛」处理的表现是「筛了跟没筛一样」，而用户会以为这个库里
+    所有文档都是这个状态。
+    """
+
+    code = 42307
+    http_status = 400
+
+
+class DuplicateDocument(AppError):
+    """这份内容已经在这个库里了。
+
+    ⚠ 判据是**内容哈希**不是文件名：文件名一改就当成新文档，是最常见的重复
+    来源，而重复的表现是同一段话在检索里出现两次。
+
+    ⚠ 如实回 409 而不是悄悄忽略：忽略的话用户以为传成功了，而界面上永远等不到
+    那份新文档——它压根没有新的一行。
+    """
+
+    code = 42308
+    http_status = 409

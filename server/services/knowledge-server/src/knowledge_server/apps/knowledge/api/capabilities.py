@@ -32,4 +32,6 @@ async def read_capabilities(
 
     Args: container, _caller。
     """
-    return ok(capability_of(container.settings, container.index))
+    return ok(
+        capability_of(container.settings, container.index, container.sources)
+    )

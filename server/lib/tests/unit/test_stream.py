@@ -11,7 +11,7 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import ResponseError
 
 from lib.errors import DependencyUnavailable
-from platform_server.stream import (
+from lib.stream import (
     RedisStream,
     StreamGroup,
     _entries,

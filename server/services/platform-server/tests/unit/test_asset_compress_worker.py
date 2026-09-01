@@ -18,11 +18,11 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import Database
+from lib.stream import StreamEntry, StreamGroup
 from lib.testing import FakeObjectStore
 from platform_server.apps.assets import keys
 from platform_server.apps.assets.services import compress_worker
 from platform_server.apps.assets.services.compress_queue import new_message
-from platform_server.stream import StreamEntry, StreamGroup
 
 ASSET_ID = uuid.UUID("0192f0aa-0000-7000-8000-000000000001")
 TARGET = StreamGroup(stream="s", group="g", consumer="c")

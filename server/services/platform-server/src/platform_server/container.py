@@ -8,6 +8,7 @@ from lib.cache import Cache, PubSub
 from lib.db import Database, PoolProfile, ReadOnlySqlSource, SourceProfile
 from lib.idempotency import IdempotencyStore
 from lib.objectstore import ObjectStore, create_object_store
+from lib.stream import RedisStream
 from platform_server.apps.collect.crud import HistorySource
 from platform_server.apps.collect.services import (
     CommandBus,
@@ -37,7 +38,6 @@ from platform_server.lease import Lease, RedisLease
 from platform_server.opcua import OpcuaClient
 from platform_server.realtime import RealtimeClient
 from platform_server.settings import Settings
-from platform_server.stream import RedisStream
 from timeseries import HISTORY_SCHEMA
 
 # 阻塞读之外留给服务端应答与网络的余量

@@ -58,6 +58,8 @@ def _container(database: object) -> Container:
         cache=None,
         idempotency=None,
         objectstore=None,
+        stream=None,
+        sources=(),
         index=IndexProbe(),
     )
 

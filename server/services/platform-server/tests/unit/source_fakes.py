@@ -10,13 +10,13 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
+from lib.stream import StreamEntry, StreamGroup
 from platform_server.apps.hvac.datasets import (
     DATASET_RAW_MINUTE,
     SOURCE_TIME_COLUMN,
     find_dataset,
     metric_keys,
 )
-from platform_server.stream import StreamEntry, StreamGroup
 
 
 def full_shape() -> dict[str, str]:

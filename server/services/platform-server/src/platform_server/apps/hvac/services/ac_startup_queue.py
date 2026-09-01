@@ -9,7 +9,7 @@ import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from platform_server.stream import StreamGroup, StreamLike
+from lib.stream import StreamGroup, StreamLike
 
 # 信封版本。字段改形状时 +1，消费端据此拒掉读不懂的消息而不是猜
 ENVELOPE_VERSION = "1"

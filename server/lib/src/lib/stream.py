@@ -1,8 +1,11 @@
 """Redis Stream 的最小读写面：发布、消费组、认领滞留消息、确认。
 
 ⚠ 队列是 at-least-once，重复投递是常态而非异常：去重不在这一层做，消费者
-必须自己幂等（docs/agents/runtime-resilience.md §5）。本模块零业务名词，
-第二个消费方出现时可以整体上移到 `lib`。
+必须自己幂等（docs/agents/runtime-resilience.md §5）。
+
+⚠ 本层只搬字段，**不认识业务信封**：`traceparent` 必须由调用方放进 `fields`，
+队列不会自动传播它——漏了的话链路在异步处齐断，而每一段单看都是完整的
+（docs/agents/observability.md §4.2）。
 """
 
 from collections.abc import Mapping
@@ -15,7 +18,7 @@ from redis.exceptions import RedisError, ResponseError
 from lib.errors import DependencyUnavailable
 from lib.logging import get_logger
 
-_logger = get_logger("platform.stream")
+_logger = get_logger("stream")
 
 # 消费组已存在时 XGROUP CREATE 抛的错，按已就绪处理
 _GROUP_EXISTS = "BUSYGROUP"
