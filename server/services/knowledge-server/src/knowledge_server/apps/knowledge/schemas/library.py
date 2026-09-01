@@ -85,3 +85,15 @@ class SourceOut(BaseModel):
     # 而那与「同步了但一直失败」是两件事
     last_error: str
     created_at: datetime
+
+
+class SyncOut(BaseModel):
+    """跑一次来源同步的结果。"""
+
+    registered: int
+    # 内容重复而跳过的条数。⚠ 单独报：与「登记了 0 条」分开，
+    # 前者是「没有新东西」，后者可能是路径配错了
+    skipped: int
+    # 到了页数上限还没拉完吗。⚠ 如实说：装作拉完了的话，用户不会再按第二次，
+    # 而剩下的记录永远进不来
+    has_more: bool

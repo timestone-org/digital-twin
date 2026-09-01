@@ -10,6 +10,12 @@ from typing import Annotated
 from fastapi import Depends, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from knowledge_server.apps.knowledge.services.identity import caller_headers
+from knowledge_server.apps.knowledge.services.sources import (
+    KnowledgeSource,
+    SourceDeps,
+    build_sources,
+)
 from knowledge_server.container import Container
 from lib.web.authdeps import build_auth_deps
 
@@ -64,3 +70,21 @@ _auth = build_auth_deps(
 get_caller = _auth.caller
 require = _auth.require
 require_service_key = _auth.service_key
+
+
+def request_sources(request: Request) -> tuple[KnowledgeSource, ...]:
+    """按这一次请求造一份来源集，把调用者的签名身份头带上。
+
+    ⚠ **按请求造**：做成进程级单例会让两个用户互相借用对方的身份，而那
+    从外面完全看不出来——两次同步都成功，只是其中一次读到了它不该读的东西。
+
+    Args: request。
+    """
+    container = get_container(request)
+    return build_sources(
+        SourceDeps(
+            store=container.objectstore,
+            platform=container.platform,
+            headers=caller_headers(dict(request.headers)),
+        )
+    )

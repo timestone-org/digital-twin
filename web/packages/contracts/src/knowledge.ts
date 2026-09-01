@@ -11,7 +11,7 @@ export const KNOWLEDGE_STRATEGIES = ['naive', 'hybrid', 'agentic'] as const
 export type KnowledgeStrategy = (typeof KNOWLEDGE_STRATEGIES)[number]
 
 /** 知识来源的种类。文件上传只是其中一路。 */
-export const KNOWLEDGE_SOURCE_KINDS = ['upload', 'dataset'] as const
+export const KNOWLEDGE_SOURCE_KINDS = ['upload', 'platform'] as const
 
 export type KnowledgeSourceKind = (typeof KNOWLEDGE_SOURCE_KINDS)[number]
 
@@ -205,4 +205,20 @@ export interface KnowledgeAnswer {
   /** 到顶了没查全吗。⚠ 界面要如实显示，不许装作查完了。 */
   is_complete: boolean
   note: string
+}
+
+/** 跑一次来源同步的结果。 */
+export interface KnowledgeSyncResult {
+  registered: number
+  /**
+   * 内容重复而跳过的条数。
+   * ⚠ 与「登记了 0 条」分开显示：前者是「没有新东西」，后者可能是路径配错了。
+   */
+  skipped: number
+  /**
+   * 到了页数上限还没拉完吗。
+   * ⚠ 界面要如实提示「还有更多，再按一次」——装作拉完了的话，用户不会再按，
+   * 而剩下的记录永远进不来。
+   */
+  has_more: boolean
 }

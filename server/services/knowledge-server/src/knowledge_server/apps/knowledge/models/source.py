@@ -28,7 +28,7 @@ NAME_MAX_LENGTH = 120
 CURSOR_MAX_LENGTH = 512
 
 # 与 `services/sources/registry.py` 的注册名逐字对齐，由契约测试守着不漂
-KINDS = ("upload", "dataset")
+KINDS = ("upload", "platform")
 
 
 class KnowledgeSource(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -63,7 +63,7 @@ class KnowledgeSource(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     __table_args__ = (
-        CheckConstraint("kind IN ('upload', 'dataset')", name="kind_known"),
+        CheckConstraint("kind IN ('upload', 'platform')", name="kind_known"),
         CheckConstraint("length(name) > 0", name="name_present"),
         Index("ix_kb_sources_base", "base_id"),
     )

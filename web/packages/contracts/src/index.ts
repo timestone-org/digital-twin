@@ -78,6 +78,7 @@ export type {
   KnowledgeSource,
   KnowledgeSourceKind,
   KnowledgeStrategy,
+  KnowledgeSyncResult,
   KnowledgeUploadTicket,
   KnowledgeVectorLane,
 } from './knowledge'

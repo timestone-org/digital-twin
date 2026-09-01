@@ -6,6 +6,10 @@ from knowledge_server.apps.knowledge.services.sources.keys import (
     staging_key,
     suffix_of,
 )
+from knowledge_server.apps.knowledge.services.sources.platform_source import (
+    PLATFORM_KIND,
+    PlatformSource,
+)
 from knowledge_server.apps.knowledge.services.sources.ports import (
     DiscoveredItem,
     DiscoveredPage,
@@ -26,11 +30,13 @@ from knowledge_server.apps.knowledge.services.sources.upload import (
 )
 
 __all__ = [
+    "PLATFORM_KIND",
     "UPLOAD_KIND",
     "DiscoveredItem",
     "DiscoveredPage",
     "DuplicateSource",
     "KnowledgeSource",
+    "PlatformSource",
     "SourceDeps",
     "SourceUnavailable",
     "UnknownSource",

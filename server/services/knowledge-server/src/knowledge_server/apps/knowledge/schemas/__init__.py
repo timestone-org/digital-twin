@@ -16,6 +16,7 @@ from knowledge_server.apps.knowledge.schemas.library import (
     KnowledgeBaseOut,
     SourceIn,
     SourceOut,
+    SyncOut,
 )
 from knowledge_server.apps.knowledge.schemas.search import (
     AskIn,
@@ -41,6 +42,7 @@ __all__ = [
     "SearchOut",
     "SourceIn",
     "SourceOut",
+    "SyncOut",
     "UploadTicketIn",
     "UploadTicketOut",
     "checked_status",

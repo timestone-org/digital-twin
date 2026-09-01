@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass, field
 
+import httpx
+
 from knowledge_server.apps.knowledge.services.embedding import (
     Embedder,
     build_embedder,
@@ -51,6 +53,9 @@ class Container:
     # 对话档。⚠ 没接时是 `NullAnswerer` 而不是 `None`：`agentic` 策略照样
     # 装得出来，只是它自己会如实说「用不了」
     answerer: Answerer
+    # 打 platform 的客户端。⚠ 一个进程一份、长活：每次调用现造一个再关掉，
+    # 等于每次都重新握一次 TCP 手
+    platform: httpx.AsyncClient
     # 启动时探测填进去。⚠ 可变对象，故不带 frozen——它是这份容器里唯一
     # 「装配之后才知道」的东西
     index: IndexProbe = field(default_factory=IndexProbe)
@@ -109,6 +114,10 @@ def build_container(settings: Settings) -> Container:
     """
     cache = Cache(url=settings.url(), timeout_s=settings.redis_timeout_s)
     store = create_object_store(settings)
+    platform = httpx.AsyncClient(
+        base_url=settings.platform_base_url,
+        timeout=settings.platform_timeout_s,
+    )
     return Container(
         settings=settings,
         database=_build_database(settings),
@@ -120,7 +129,10 @@ def build_container(settings: Settings) -> Container:
         stream=RedisStream(
             url=settings.url(), timeout_s=settings.redis_timeout_s
         ),
-        sources=build_sources(SourceDeps(store=store)),
+        platform=platform,
+        # ⚠ 这一份是**不带身份头**的：能力面报「接了哪几路来源」用得着它，
+        # 而真要代表用户去拉数据时，api 侧会按请求另造一份带头的
+        sources=build_sources(SourceDeps(store=store, platform=platform)),
         embedder=build_embedder(settings.embedding_endpoint()),
         answerer=build_answerer(
             settings.chat_endpoint(),

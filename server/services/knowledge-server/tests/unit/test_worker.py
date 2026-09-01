@@ -69,6 +69,7 @@ def _runtime(loops: tuple[_Loop, ...], closed: list[str]) -> WorkerRuntime:
         sources=(),
         embedder=NullEmbedder(),
         answerer=NullAnswerer(),
+        platform=None,
         index=IndexProbe(),
     )
 

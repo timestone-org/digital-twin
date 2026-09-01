@@ -17,7 +17,7 @@ from knowledge_server.apps.knowledge.services.capability import (
 
 # 迁移里那几条 CHECK 的字面量，逐字抄过来
 MIGRATION_STRATEGIES = ("naive", "hybrid", "agentic")
-MIGRATION_KINDS = ("upload", "dataset")
+MIGRATION_KINDS = ("upload", "platform")
 MIGRATION_STATUSES = (
     "pending",
     "parsing",

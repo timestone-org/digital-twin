@@ -33,6 +33,10 @@ class DiscoveredItem:
     media_type: str = ""
     byte_size: int = 0
     content_hash: str = ""
+    # 内容。⚠ 拉取型来源在 `discover` 那一刻顺手就把它取回来了——为一行几百字
+    # 的记录再往回打一次是两倍的往返，而对方那一侧的分页游标也未必还能定位到它。
+    # 推送型来源（上传）留空，内容由 `fetch` 从对象存储取
+    content: bytes = b""
 
 
 @dataclass(frozen=True)

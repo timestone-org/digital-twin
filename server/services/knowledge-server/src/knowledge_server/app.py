@@ -56,6 +56,13 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
     return (
         LifespanHook(name="index-probe", startup=probe, startup_order=20),
         LifespanHook(
+            name="platform",
+            # ⚠ 停在存储之前：在途的同步还可能正等它答复，而那之后才轮到
+            # 把结果写回来源行
+            shutdown=container.platform.aclose,
+            shutdown_order=50,
+        ),
+        LifespanHook(
             name="cache",
             shutdown=container.cache.close,
             shutdown_order=90,

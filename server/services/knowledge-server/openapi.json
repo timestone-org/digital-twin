@@ -361,6 +361,51 @@
         "title": "ApiResponse[SourceOut]",
         "type": "object"
       },
+      "ApiResponse_SyncOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SyncOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[SyncOut]",
+        "type": "object"
+      },
       "ApiResponse_UploadTicketOut_": {
         "properties": {
           "code": {
@@ -1148,6 +1193,30 @@
           "created_at"
         ],
         "title": "SourceOut",
+        "type": "object"
+      },
+      "SyncOut": {
+        "description": "跑一次来源同步的结果。",
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "registered": {
+            "title": "Registered",
+            "type": "integer"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "registered",
+          "skipped",
+          "has_more"
+        ],
+        "title": "SyncOut",
         "type": "object"
       },
       "UploadTicketIn": {
@@ -2007,6 +2076,50 @@
         "summary": "就绪探针",
         "tags": [
           "probe"
+        ]
+      }
+    },
+    "/api/v1/knowledge/sources/{source_id}:sync": {
+      "post": {
+        "description": "把这一路来源里的新条目摄进来。\n\n⚠ **用调用者自己的身份**去打上游，不存任何凭据：存了的话，一次配置泄露\n等于把那个人的权限交出去，而无人值守的 worker 会拿着它不停地读。\n\n⚠ 一次调用有页数上限；到顶就把游标存好并如实回 `has_more`。\n\nArgs: session, container, _actor, source_id, sources。",
+        "operationId": "sync_api_v1_knowledge_sources__source_id__sync_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_SyncOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "跑一次来源同步",
+        "tags": [
+          "source"
         ]
       }
     }

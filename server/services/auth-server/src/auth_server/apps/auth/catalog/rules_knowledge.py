@@ -60,6 +60,17 @@ KNOWLEDGE_RULES: tuple[RouteRuleSpec, ...] = (
         ),
     ),
     RouteRuleSpec(
+        f"{_K}/sources/*",
+        "*",
+        codes=(KNOWLEDGE_WRITE,),
+        priority=880,
+        description=(
+            "跑一次来源同步。⚠ 与建库配来源分档：能把外部记录摄进来"
+            "不等于能改来源配置——前者用的是调用者自己的身份去打上游，"
+            "后者决定的是**去打哪里**"
+        ),
+    ),
+    RouteRuleSpec(
         f"{_K}/documents",
         "GET",
         codes=(KNOWLEDGE_USE,),

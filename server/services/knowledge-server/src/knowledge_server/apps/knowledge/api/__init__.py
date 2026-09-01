@@ -9,11 +9,13 @@ from knowledge_server.apps.knowledge.api import (
     capabilities,
     documents,
     search,
+    sources,
 )
 
 ROUTERS = (
     capabilities.router,
     bases.router,
+    sources.router,
     documents.router,
     search.router,
 )

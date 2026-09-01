@@ -85,10 +85,10 @@ async def test_adding_a_second_source(db_client: httpx.AsyncClient) -> None:
     made = await _create(db_client)
     response = await db_client.post(
         f"{BASES}/{made['id']}/sources",
-        json={"kind": "dataset", "name": "台账", "config": {"table": "t"}},
+        json={"kind": "platform", "name": "台账", "config": {"path": "/x"}},
     )
     assert response.status_code == httpx.codes.CREATED
-    assert response.json()["data"]["config"] == {"table": "t"}
+    assert response.json()["data"]["config"] == {"path": "/x"}
 
 
 async def test_sources_of_a_missing_base_are_404(
@@ -117,7 +117,7 @@ async def test_a_source_that_does_not_exist_is_404(
 ) -> None:
     response = await db_client.post(
         f"{BASES}/{uuid.uuid4()}/sources",
-        json={"kind": "dataset", "name": "台账", "config": {}},
+        json={"kind": "platform", "name": "台账", "config": {}},
     )
     assert response.status_code == httpx.codes.NOT_FOUND
 

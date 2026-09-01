@@ -107,7 +107,7 @@ def _create_sources() -> None:
             name="fk_kb_sources_base_id_kb_bases",
             ondelete="CASCADE",
         ),
-        sa.CheckConstraint("kind IN ('upload', 'dataset')", name="kind_known"),
+        sa.CheckConstraint("kind IN ('upload', 'platform')", name="kind_known"),
         sa.CheckConstraint("length(name) > 0", name="name_present"),
         schema=SCHEMA,
     )

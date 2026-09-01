@@ -23,6 +23,7 @@ import type {
   KnowledgeLocator,
   KnowledgeSearchResult,
   KnowledgeSource,
+  KnowledgeSyncResult,
   KnowledgeUploadTicket,
 } from '@dt/contracts'
 import {
@@ -152,6 +153,12 @@ const SHAPES: Record<string, Record<string, true>> = {
     is_complete: true,
     note: true,
   } satisfies Keys<KnowledgeAnswer>,
+
+  SyncOut: {
+    registered: true,
+    skipped: true,
+    has_more: true,
+  } satisfies Keys<KnowledgeSyncResult>,
 }
 
 /**

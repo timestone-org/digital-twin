@@ -22,7 +22,7 @@
 真正会变的不是「支持几种文件格式」，是「知识从哪来」。所以最外面那一层不是解析器，
 是 `KnowledgeSource`：
 
-| | 上传来源 `upload` | 外部系统来源 `dataset` |
+| | 上传来源 `upload` | 外部系统来源 `platform` |
 |---|---|---|
 | 原件在哪 | 对象存储里的一个 key | 别人服务的 HTTP 面 |
 | 谁触发同步 | 用户传一个文件 | 周期拉取 / 手动触发 |
@@ -98,7 +98,7 @@ AgenticRAG 的「agentic」落在**两侧**，各解决一半：
 
 | 层 | 扩展点 | Protocol | 一期实现 |
 |---|---|---|---|
-| `sources/` | 知识**从哪来** | `KnowledgeSource` | `UploadSource`、`DatasetSource` |
+| `sources/` | 知识**从哪来** | `KnowledgeSource` | `UploadSource`、`PlatformSource` |
 | `parsing/` | 一份原件**解成什么** | `DocumentParser` | `TextParser`、`DocxParser`、`XlsxParser`、`PptxParser` |
 | `chunking/` | 怎么**切块** | `Chunker` | `HeadingChunker`、`FixedWindowChunker`、`RowChunker` |
 | `embedding/` | 用哪一路**嵌入** | `Embedder` | `DomainEmbedder`（走 `server/domain/llm`）、`NullEmbedder` |

@@ -6,8 +6,14 @@
 一次调用要转发的身份头——做成进程级单例会让两个用户互相借用对方的身份。
 """
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 
+import httpx
+
+from knowledge_server.apps.knowledge.services.sources.platform_source import (
+    PlatformSource,
+)
 from knowledge_server.apps.knowledge.services.sources.ports import (
     KnowledgeSource,
 )
@@ -29,6 +35,15 @@ class DuplicateSource(RuntimeError):
     """
 
 
+def _no_headers() -> Mapping[str, str]:
+    """没给身份头时的空表。
+
+    ⚠ 写成函数而不是 `default_factory=dict`：裸 `dict` 在类型检查里是
+    `dict[Unknown, Unknown]`，那一格的未知会一路带进两路来源的构造。
+    """
+    return {}
+
+
 @dataclass(frozen=True)
 class SourceDeps:
     """造一份来源注册表要的那几样资源。
@@ -39,6 +54,11 @@ class SourceDeps:
     """
 
     store: ObjectStore
+    # 打 platform 的客户端；不给即外部系统那一路缺席
+    platform: httpx.AsyncClient | None = None
+    # 这一次要转发的签名身份头。⚠ 按请求给：做成进程级单例会让两个用户
+    # 互相借用对方的身份
+    headers: Mapping[str, str] = field(default_factory=_no_headers)
 
 
 def build_sources(deps: SourceDeps) -> tuple[KnowledgeSource, ...]:
@@ -48,7 +68,10 @@ def build_sources(deps: SourceDeps) -> tuple[KnowledgeSource, ...]:
 
     Args: deps。
     """
-    return (UploadSource(store=deps.store),)
+    made: list[KnowledgeSource] = [UploadSource(store=deps.store)]
+    if deps.platform is not None:
+        made.append(PlatformSource(client=deps.platform, headers=deps.headers))
+    return tuple(made)
 
 
 def source_for(
