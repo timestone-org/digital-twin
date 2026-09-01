@@ -59,3 +59,26 @@ class SearchOut(BaseModel):
     # 给人看的一句说明（「这套部署没接嵌入档，本次只走了关键词那一路」这类）。
     # ⚠ 走这里而不是走空表：空表与「确实没有相关内容」长得一模一样
     note: str
+
+
+class AskIn(BaseModel):
+    """对着一个库问一句话，要一个带引用的答案。"""
+
+    question: str = Field(min_length=1, max_length=2_000)
+    limit: int = Field(default=8, ge=1, le=MAX_RETRIEVAL_HITS)
+    # 这一次走哪种策略；留空即用库上配的那一种。
+    # ⚠ 只召回不作答的策略在这里会被拒——把一个空答案交给用户比报错更糟
+    strategy: str = ""
+
+
+class AskOut(BaseModel):
+    """一次问答。"""
+
+    # 合成好的答案。每句结论后面挂着角标，角标对应 `citations` 的序号
+    answer: str
+    # 答案依据的那几段。⚠ 顺序即角标：乱序的话引用全指错，而看着完全正常
+    citations: list[HitOut]
+    strategy: str
+    rounds: int
+    is_complete: bool
+    note: str

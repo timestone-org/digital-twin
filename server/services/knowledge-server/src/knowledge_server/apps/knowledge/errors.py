@@ -84,3 +84,14 @@ class DuplicateDocument(AppError):
 
     code = 42308
     http_status = 409
+
+
+class StrategyCannotAnswer(AppError):
+    """点名的策略只召回不作答。
+
+    ⚠ 明说而不是回一个空答案：空答案看着像「模型没查到」，而其实是这一路
+    压根不作答——用户会以为库里没有，然后不再找了。
+    """
+
+    code = 42309
+    http_status = 409

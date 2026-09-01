@@ -9,11 +9,16 @@
 不悄悄换一路：悄悄换的表现是「质量忽然变差了」，一处都不报错。
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from knowledge_server.apps.knowledge.errors import UnknownRetrievalStrategy
 from knowledge_server.apps.knowledge.services.embedding import Embedder
 from knowledge_server.apps.knowledge.services.indexing import IndexPair
+from knowledge_server.apps.knowledge.services.llm import Answerer, NullAnswerer
+from knowledge_server.apps.knowledge.services.retrieval.agentic import (
+    AGENTIC,
+    Agentic,
+)
 from knowledge_server.apps.knowledge.services.retrieval.hybrid import (
     HYBRID,
     Hybrid,
@@ -38,6 +43,10 @@ class RetrievalDeps:
 
     indexes: IndexPair
     embedder: Embedder
+    # 对话档。⚠ 没接时给 `NullAnswerer` 而不是 `None`：`agentic` 于是仍然
+    # 装得出来，只是它自己会如实说「用不了」——按 None 来判的话，
+    # 「这套部署装了哪几种策略」会随配置变，而那份清单是要上界面的
+    answerer: Answerer = field(default_factory=NullAnswerer)
 
 
 def build_strategies(
@@ -49,9 +58,11 @@ def build_strategies(
 
     Args: deps。
     """
+    hybrid = Hybrid(indexes=deps.indexes, embedder=deps.embedder)
     return (
         NaiveVector(indexes=deps.indexes, embedder=deps.embedder),
-        Hybrid(indexes=deps.indexes, embedder=deps.embedder),
+        hybrid,
+        Agentic(hybrid=hybrid, answerer=deps.answerer),
     )
 
 
@@ -83,6 +94,7 @@ def strategy_for(
 
 
 __all__ = [
+    "AGENTIC",
     "HYBRID",
     "NAIVE",
     "RetrievalDeps",

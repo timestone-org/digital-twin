@@ -1,5 +1,9 @@
 """层 6 检索编排：一次检索怎么走。"""
 
+from knowledge_server.apps.knowledge.services.retrieval.agentic import (
+    AGENTIC,
+    Agentic,
+)
 from knowledge_server.apps.knowledge.services.retrieval.hybrid import (
     HYBRID,
     NO_EMBEDDING_NOTE,
@@ -27,10 +31,12 @@ from knowledge_server.apps.knowledge.services.retrieval.registry import (
 )
 
 __all__ = [
+    "AGENTIC",
     "HYBRID",
     "NAIVE",
     "NO_EMBEDDING_NOTE",
     "RRF_K",
+    "Agentic",
     "Fused",
     "Hit",
     "Hybrid",

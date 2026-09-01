@@ -14,6 +14,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type {
+  KnowledgeAnswer,
   KnowledgeBase,
   KnowledgeCapability,
   KnowledgeDocument,
@@ -142,6 +143,15 @@ const SHAPES: Record<string, Record<string, true>> = {
     is_complete: true,
     note: true,
   } satisfies Keys<KnowledgeSearchResult>,
+
+  AskOut: {
+    answer: true,
+    citations: true,
+    strategy: true,
+    rounds: true,
+    is_complete: true,
+    note: true,
+  } satisfies Keys<KnowledgeAnswer>,
 }
 
 /**

@@ -6,6 +6,10 @@ from knowledge_server.apps.knowledge.services.embedding import (
     Embedder,
     build_embedder,
 )
+from knowledge_server.apps.knowledge.services.llm import (
+    Answerer,
+    build_answerer,
+)
 from knowledge_server.apps.knowledge.services.sources import (
     KnowledgeSource,
     SourceDeps,
@@ -17,6 +21,7 @@ from lib.cache import Cache
 from lib.db import Database, PoolProfile
 from lib.idempotency import IdempotencyStore
 from lib.objectstore import ObjectStore, create_object_store
+from lib.resilience import CircuitBreaker
 from lib.stream import RedisStream, StreamGroup, StreamLike
 
 # 幂等键的命名空间。⚠ 必须带服务名：共用一个 Redis 的两个服务，同一个端点名
@@ -43,6 +48,9 @@ class Container:
     # 嵌入那一路。⚠ 没接时是 `NullEmbedder` 而不是 `None`：调用方于是不必
     # 写「这一路在不在」的分支，而缺席由 `can_embed` 如实说出来
     embedder: Embedder
+    # 对话档。⚠ 没接时是 `NullAnswerer` 而不是 `None`：`agentic` 策略照样
+    # 装得出来，只是它自己会如实说「用不了」
+    answerer: Answerer
     # 启动时探测填进去。⚠ 可变对象，故不带 frozen——它是这份容器里唯一
     # 「装配之后才知道」的东西
     index: IndexProbe = field(default_factory=IndexProbe)
@@ -114,4 +122,14 @@ def build_container(settings: Settings) -> Container:
         ),
         sources=build_sources(SourceDeps(store=store)),
         embedder=build_embedder(settings.embedding_endpoint()),
+        answerer=build_answerer(
+            settings.chat_endpoint(),
+            # ⚠ 断路器一个进程一份、跟着容器活：每次调用现造一个的话它永远停在
+            # 「closed」，等于没有断路器
+            CircuitBreaker(
+                name="knowledge:chat",
+                failure_threshold=settings.model_breaker_failures,
+                reset_after_s=settings.model_breaker_reset_s,
+            ),
+        ),
     )

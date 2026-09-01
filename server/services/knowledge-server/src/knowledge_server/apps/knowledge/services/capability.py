@@ -13,6 +13,9 @@ from knowledge_server.apps.knowledge.schemas import (
 from knowledge_server.apps.knowledge.services.parsing import (
     accepted_suffixes,
 )
+from knowledge_server.apps.knowledge.services.retrieval import (
+    RetrievalStrategy,
+)
 from knowledge_server.apps.knowledge.services.sources import (
     KnowledgeSource,
     source_kinds,
@@ -82,34 +85,44 @@ def index_capability_of(
     )
 
 
-def ready_strategies(settings: Settings) -> list[str]:
+def ready_strategies(
+    settings: Settings, strategies: tuple[RetrievalStrategy, ...]
+) -> list[str]:
     """此刻**真能用**的检索策略。
 
-    ⚠ 与「装了哪些」分开报：`agentic` 要一路对话档，没配时它如实不可用，
-    **不悄悄退化成 naive**——悄悄退化的表现是「质量忽然变差了」，
+    ⚠ 与「装了哪些」分开报：靠模型撑起来的那一路在没配对话档时如实不可用，
+    **不悄悄退化成别的**——悄悄退化的表现是「质量忽然变差了」，
     而没有任何一处报错（ADR-0035 决策二）。
 
-    Args: settings。
+    ⚠ 判据问的是**策略自己**（`is_llm_backed`），不是在这里写死一句
+    「agentic 要模型」：写死的话，加第二路要模型的策略时这里会漏判，
+    而漏判的表现是界面上把一路点不动的策略摆出来。
+
+    Args: settings, strategies。
     """
-    if settings.model_enabled:
-        return list(STRATEGIES)
-    return [one for one in STRATEGIES if one != "agentic"]
+    return [
+        one.name
+        for one in strategies
+        if settings.model_enabled or not one.is_llm_backed
+    ]
 
 
 def capability_of(
     settings: Settings,
     probe: IndexProbe,
     sources: tuple[KnowledgeSource, ...] = (),
+    strategies: tuple[RetrievalStrategy, ...] = (),
 ) -> CapabilityOut:
     """这套部署此刻的知识库能力。
 
-    Args: settings, probe, sources（接了哪几路来源）。
+    Args: settings, probe, sources（接了哪几路来源）, strategies（装了哪几种
+        检索策略）。
     """
     return CapabilityOut(
         is_embedding_enabled=settings.embedding_enabled,
         is_model_enabled=settings.model_enabled,
         strategies=list(STRATEGIES),
-        ready_strategies=ready_strategies(settings),
+        ready_strategies=ready_strategies(settings, strategies),
         source_kinds=list(source_kinds(sources)),
         accepted_suffixes=list(accepted_suffixes()),
         index=index_capability_of(settings, probe),

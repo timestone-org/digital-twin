@@ -18,6 +18,8 @@ from knowledge_server.apps.knowledge.schemas.library import (
     SourceOut,
 )
 from knowledge_server.apps.knowledge.schemas.search import (
+    AskIn,
+    AskOut,
     HitOut,
     LocatorOut,
     SearchIn,
@@ -25,6 +27,8 @@ from knowledge_server.apps.knowledge.schemas.search import (
 )
 
 __all__ = [
+    "AskIn",
+    "AskOut",
     "CapabilityOut",
     "DocumentOut",
     "HitOut",

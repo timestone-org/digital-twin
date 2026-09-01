@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends
 from knowledge_server.apps.knowledge.catalog import KNOWLEDGE_USE
 from knowledge_server.apps.knowledge.schemas import CapabilityOut
 from knowledge_server.apps.knowledge.services import capability_of
+from knowledge_server.apps.knowledge.services.assembly import Lanes, strategies
 from knowledge_server.container import Container
 from knowledge_server.deps import get_container, require
 from knowledge_server.settings import API_PREFIX
@@ -32,6 +33,16 @@ async def read_capabilities(
 
     Args: container, _caller。
     """
+    lanes = strategies(
+        Lanes(
+            settings=container.settings,
+            probe=container.index,
+            embedder=container.embedder,
+            answerer=container.answerer,
+        )
+    )
     return ok(
-        capability_of(container.settings, container.index, container.sources)
+        capability_of(
+            container.settings, container.index, container.sources, lanes
+        )
     )

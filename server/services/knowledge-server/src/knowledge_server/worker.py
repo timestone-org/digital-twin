@@ -13,11 +13,7 @@ from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from typing import Protocol
 
-from knowledge_server.apps.knowledge.services.capability import (
-    keyword_choice,
-    vector_choice,
-)
-from knowledge_server.apps.knowledge.services.indexing import build_indexes
+from knowledge_server.apps.knowledge.services.assembly import index_pair
 from knowledge_server.apps.knowledge.services.ingest_pipeline import (
     IngestDeps,
 )
@@ -103,15 +99,13 @@ def _ingest_consumer(
     Args: container, pool。
     """
     settings = container.settings
-    vector, _reason = vector_choice(settings, container.index)
-    keyword, _keyword_reason = keyword_choice(settings, container.index)
     return IngestConsumer(
         stream=container.stream,
         database=container.database,
         deps=IngestDeps(
             sources=container.sources,
             embedder=container.embedder,
-            indexes=build_indexes(vector, keyword),
+            indexes=index_pair(settings, container.index),
             pool=pool,
             parse_timeout_s=settings.parse_timeout_s,
             batch_size=settings.embedding_batch_size,

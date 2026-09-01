@@ -4,6 +4,7 @@ import asyncio
 from typing import Any, Self
 
 from knowledge_server.apps.knowledge.services.embedding import NullEmbedder
+from knowledge_server.apps.knowledge.services.llm import NullAnswerer
 from knowledge_server.container import Container, build_container
 from knowledge_server.probe import IndexProbe
 from knowledge_server.settings import Settings
@@ -67,6 +68,7 @@ def _runtime(loops: tuple[_Loop, ...], closed: list[str]) -> WorkerRuntime:
         stream=None,
         sources=(),
         embedder=NullEmbedder(),
+        answerer=NullAnswerer(),
         index=IndexProbe(),
     )
 

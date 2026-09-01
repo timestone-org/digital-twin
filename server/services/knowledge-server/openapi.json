@@ -1,6 +1,51 @@
 {
   "components": {
     "schemas": {
+      "ApiResponse_AskOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AskOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[AskOut]",
+        "type": "object"
+      },
       "ApiResponse_CapabilityOut_": {
         "properties": {
           "code": {
@@ -408,6 +453,76 @@
           }
         },
         "title": "ApiResponse[list[SourceOut]]",
+        "type": "object"
+      },
+      "AskIn": {
+        "description": "对着一个库问一句话，要一个带引用的答案。",
+        "properties": {
+          "limit": {
+            "default": 8,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "question": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "strategy": {
+            "default": "",
+            "title": "Strategy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "AskIn",
+        "type": "object"
+      },
+      "AskOut": {
+        "description": "一次问答。",
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/HitOut"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "is_complete": {
+            "title": "Is Complete",
+            "type": "boolean"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "rounds": {
+            "title": "Rounds",
+            "type": "integer"
+          },
+          "strategy": {
+            "title": "Strategy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "answer",
+          "citations",
+          "strategy",
+          "rounds",
+          "is_complete",
+          "note"
+        ],
+        "title": "AskOut",
         "type": "object"
       },
       "CapabilityOut": {
@@ -1765,6 +1880,60 @@
         "summary": "Add Source",
         "tags": [
           "library"
+        ]
+      }
+    },
+    "/api/v1/knowledge/knowledge-bases/{base_id}:ask": {
+      "post": {
+        "description": "整套编排跑完：改写、召回、评分、补检、合成带角标的答案。\n\n⚠ 只召回不作答的策略在这里回 409 并指路去 `:search`——回一个空答案的话，\n用户会以为库里没有，然后不再找了。\n\nArgs: session, container, _viewer, base_id, body。",
+        "operationId": "ask_api_v1_knowledge_knowledge_bases__base_id__ask_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "base_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Base Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AskOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "对着一个知识库提问",
+        "tags": [
+          "search"
         ]
       }
     },

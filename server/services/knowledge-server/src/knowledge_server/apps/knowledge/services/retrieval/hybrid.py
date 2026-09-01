@@ -44,6 +44,8 @@ class Hybrid:
     embedder: Embedder
     name: str = HYBRID
     is_llm_backed: bool = False
+    # 只召回不作答：答案由调用方自己写（助手、或人）
+    is_answering: bool = False
 
     async def retrieve(
         self, session: AsyncSession, request: RetrievalRequest

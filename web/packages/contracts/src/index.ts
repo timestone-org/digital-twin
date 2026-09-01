@@ -65,6 +65,7 @@ export {
 } from './modeling'
 export type { ApiKey, ApiKeyFilters, ApiKeySecret } from './apiKey'
 export type {
+  KnowledgeAnswer,
   KnowledgeBase,
   KnowledgeCapability,
   KnowledgeDocument,

@@ -189,3 +189,20 @@ export interface KnowledgeSearchResult {
    */
   note: string
 }
+
+/** 一次问答的结果。 */
+export interface KnowledgeAnswer {
+  /** 合成好的答案。每句结论后面挂着角标，角标对应 `citations` 的序号。 */
+  answer: string
+  /**
+   * 答案依据的那几段。
+   * ⚠ **顺序即角标**：界面按数组下标 + 1 渲染角标，重排一次引用就全指错了，
+   * 而看着完全正常。
+   */
+  citations: KnowledgeHit[]
+  strategy: string
+  rounds: number
+  /** 到顶了没查全吗。⚠ 界面要如实显示，不许装作查完了。 */
+  is_complete: boolean
+  note: string
+}

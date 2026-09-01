@@ -104,6 +104,10 @@ class Settings(
     model_api_key: SecretStr | None = None
     model_chat: str = ""
     model_timeout_s: float = 60.0
+    # 断路器。⚠ 只有「下游此刻不行」那一档让它计数：401/403/400 一律不计——
+    # 断路器一开，真正的原因就被盖成「暂时不可用」，而那会让人去查网络
+    model_breaker_failures: int = 5
+    model_breaker_reset_s: float = 30.0
 
     # 摄取队列。⚠ 与 worker 侧读的是同一对，改一处不改另一处的表现是
     # 「投得进去、没人消费」，而两边单看都对

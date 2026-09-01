@@ -273,3 +273,41 @@ async def test_an_ingested_document_comes_back_with_its_citation(
     assert first.chunk_id
     assert first.heading_path
     assert first.why
+
+
+async def test_ask_refuses_a_strategy_that_only_retrieves(
+    db_client: httpx.AsyncClient,
+) -> None:
+    """⚠ 回一个空答案的话，用户会以为库里没有，然后不再找了。"""
+    base_id = await _base(db_client)
+    response = await db_client.post(
+        f"{BASES}/{base_id}:ask", json={"question": "出口温度多少"}
+    )
+    assert response.status_code == httpx.codes.CONFLICT
+    assert response.json()["code"] == 42309
+    assert "agentic" in response.json()["message"]
+
+
+async def test_ask_with_agentic_reports_the_missing_model(
+    db_client: httpx.AsyncClient,
+) -> None:
+    """⚠ 没接对话档时 agentic **如实不可用**，不悄悄退化成 hybrid。"""
+    base_id = await _base(db_client, "agentic")
+    response = await db_client.post(
+        f"{BASES}/{base_id}:ask", json={"question": "出口温度多少"}
+    )
+    assert response.status_code == httpx.codes.CONFLICT
+    assert response.json()["code"] == 42306
+    assert "对话档" in response.json()["message"]
+
+
+async def test_capabilities_lists_agentic_as_installed_but_not_ready(
+    db_client: httpx.AsyncClient,
+) -> None:
+    """⚠ 「装了哪些」与「此刻能用哪些」分开报：合成一份的话，界面上要么把
+    一路点不动的策略摆出来，要么把一路装了的策略藏起来。"""
+    response = await db_client.get(f"{API_PREFIX}/capabilities")
+    body = response.json()["data"]
+    assert "agentic" in body["strategies"]
+    assert "agentic" not in body["ready_strategies"]
+    assert "hybrid" in body["ready_strategies"]
