@@ -6,7 +6,7 @@
 
 import pytest
 
-from ai_assistant.apps.chat.services.memory import vectors
+from lib import vectors
 
 
 def test_a_vector_survives_a_round_trip() -> None:

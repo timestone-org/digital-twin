@@ -364,6 +364,14 @@ jobs:
         working-directory: server/services/knowledge-server
         run: uv run alembic upgrade head
 
+      # ⚠ 加速档必须在 CI 里真的开起来：pgvector 与 pg_trgm 那两路平时没人跑，
+      # 而「长期没人跑」等于没有。CI 的库镜像两个扩展都带。
+      # ⚠ 它**不在 alembic 里**是刻意的（ADR-0034 决策三）：迁移是 compose 的
+      # 前置作业，目标库装不上扩展时迁移失败会让整栈起不来。
+      - name: 启用加速索引（两路一起）
+        working-directory: server/services/knowledge-server
+        run: uv run python -m knowledge_server.index --enable
+
       # ⚠ --cov 必须用点号模块名：写成路径形式时 coverage 静默跳过、数字虚高
       - name: lib 单元 + 契约
         working-directory: server/lib

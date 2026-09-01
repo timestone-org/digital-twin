@@ -18,9 +18,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_assistant.apps.chat.models import KnowledgeChunk
-from ai_assistant.apps.chat.services.memory import vectors
 from ai_assistant.apps.chat.services.memory.ports import Hit, Knowledge, Scope
 from ai_assistant.llm import EmbeddingAdapter
+from lib import vectors
 from lib.logging import get_logger
 
 _logger = get_logger("assistant.memory")

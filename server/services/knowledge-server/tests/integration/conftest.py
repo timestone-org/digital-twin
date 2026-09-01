@@ -14,6 +14,7 @@ from dataclasses import dataclass, replace
 import httpx
 import pytest
 from fastapi import FastAPI
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
     AsyncSession,
@@ -222,3 +223,74 @@ async def db_client(db_stack: DbStack) -> httpx.AsyncClient:
     Args: db_stack。
     """
     return db_stack.client
+
+
+class CommittingSession:
+    """一个会话的上下文管理器：正常出块提交，异常回滚。
+
+    ⚠ 必须**提交**：`AsyncSession.__aexit__` 只关不提交，照搬它的话被测代码
+    写下去的每一笔都在出块时被丢掉——而用例看到的现象是「状态一直停在
+    pending」，与「这段代码根本没跑」长得一模一样。生产那一侧的
+    `Database.session()` 是提交的，这里要与它同构。
+    """
+
+    def __init__(self, maker: SessionMaker) -> None:
+        self._maker = maker
+        self._opened: AsyncSession | None = None
+
+    async def __aenter__(self) -> AsyncSession:
+        opened = self._maker()
+        self._opened = opened
+        return opened
+
+    async def __aexit__(self, kind: object, *_rest: object) -> None:
+        opened = self._opened
+        if opened is None:  # pragma: no cover - 进得来就一定开过
+            return
+        if kind is None:
+            await opened.commit()
+        else:
+            await opened.rollback()
+        await opened.close()
+
+
+@pytest.fixture
+def db_sessions(
+    db_stack: DbStack,
+) -> Callable[[], CommittingSession]:
+    """开一个新事务的口子，与生产的 `Database.session` 同构。
+
+    ⚠ 跨事务的被测代码（摄取管线每一段自己一个事务）只能用它验：给一个
+    现成的会话，那些代码会在自己的 `async with` 里把它关掉。
+
+    Args: db_stack。
+    """
+
+    def make() -> CommittingSession:
+        return CommittingSession(db_stack.sessions)
+
+    return make
+
+
+@pytest.fixture
+async def db_accelerated(db_sessions: Callable[[], CommittingSession]) -> None:
+    """这套库装了加速档的两个扩展吗；没装就跳过。
+
+    ⚠ 环境能力的判定**只许写在 conftest**（`check_tests` 守着这条）：散在用例
+    里的 `skip` 会慢慢长成一片，而 CI 里 skip 掉的用例等于没跑。CI 的库两个
+    扩展都带，且流水线会跑一次 `python -m knowledge_server.index --enable`——
+    所以在 CI 里这条永远不跳。
+
+    Args: db_sessions。
+    """
+    async with db_sessions() as session:
+        found = await session.execute(
+            text(
+                "SELECT extname FROM pg_extension "
+                "WHERE extname IN ('vector', 'pg_trgm')"
+            )
+        )
+        installed = {str(one) for one in found.scalars()}
+    missing = {"vector", "pg_trgm"} - installed
+    if missing:
+        pytest.skip(f"这套库没装：{'、'.join(sorted(missing))}")

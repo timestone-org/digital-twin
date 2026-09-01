@@ -3,7 +3,13 @@
 import asyncio
 from typing import Any, Self
 
-from knowledge_server.container import Container, IndexProbe
+from knowledge_server.apps.knowledge.services.embedding import NullEmbedder
+from knowledge_server.container import (
+    Container,
+    IndexProbe,
+    build_container,
+)
+from knowledge_server.settings import Settings
 from knowledge_server.worker import (
     WorkerRuntime,
     build_runtime,
@@ -63,6 +69,7 @@ def _runtime(loops: tuple[_Loop, ...], closed: list[str]) -> WorkerRuntime:
         objectstore=None,
         stream=None,
         sources=(),
+        embedder=NullEmbedder(),
         index=IndexProbe(),
     )
 
@@ -109,15 +116,19 @@ async def test_resources_close_even_with_no_consumers() -> None:
     assert closed == ["cache", "database"]
 
 
-def test_consumers_are_an_explicit_tuple(settings: object) -> None:
+def test_consumers_are_an_explicit_tuple(settings: Settings) -> None:
     """⚠ 不靠 import 副作用登记：隐式登记让「这个进程在跑什么」取决于
-    import 顺序，而顺序在测试里与生产里可以不同。"""
+    import 顺序，而顺序在测试里与生产里可以不同。
+
+    ⚠ 顺手钉住「装配收的是容器不是配置」：收配置的那一版会自己再造一份容器，
+    于是消费者拿到的永远是**没探测过**的索引档——而 `/capabilities` 报的是
+    探测过的那一档，两边都不报错。"""
 
     async def wait() -> None:
         await asyncio.sleep(0)
 
-    runtime = build_runtime(
-        settings,  # pyright: ignore[reportArgumentType]
-        wait,
-    )
+    runtime = build_runtime(build_container(settings), wait)
     assert isinstance(runtime.consumers, tuple)
+    assert len(runtime.consumers) == 1
+    assert runtime.pool is not None
+    runtime.pool.shutdown(wait=False)

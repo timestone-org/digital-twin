@@ -13,6 +13,10 @@ dependencies = [
     #   s3     —— 上传来源的原件落在对象存储里
     #   web    —— FastAPI 与 uvicorn
     "lib[auth,db,redis,s3,web]",
+    # OpenAI 兼容端点的调用面。⚠ 与助手共用同一份（ADR-0032）：服务之间不许
+    # 互相 import，而复制一份一定会漂——漂的表现是「同一个端点，助手调得通、
+    # 知识库调不通」
+    "llmcore",
     # 解析 Office 三件套。⚠ 三路各要一个库，没有哪一个吃得下另外两种；
     # 它们都是**阻塞且吃 CPU** 的，调用方必须扔进进程池
     "python-docx>=1.1",
@@ -29,6 +33,7 @@ knowledge-server = "knowledge_server.__main__:main"
 
 [tool.uv.sources]
 lib = { workspace = true }
+llmcore = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

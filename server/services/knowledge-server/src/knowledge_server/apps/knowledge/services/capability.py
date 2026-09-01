@@ -45,7 +45,7 @@ def vector_choice(settings: Settings, probe: IndexProbe) -> tuple[str, str]:
         return (
             VECTOR_FALLBACK,
             "pgvector 装了但加速表还没建，跑一次 "
-            "`python -m knowledge_server.index --enable-pgvector`",
+            "`python -m knowledge_server.index --enable`",
         )
     return (VECTOR_FAST, "")
 

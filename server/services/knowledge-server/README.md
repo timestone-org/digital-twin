@@ -22,7 +22,7 @@ KNOWLEDGE_APP_ROLE=worker uv run knowledge-server   # worker 角色，跑摄取
 pgvector 那一路是**可选的加速物化**，不由迁移建：
 
 ```bash
-uv run python -m knowledge_server.index --enable-pgvector
+uv run python -m knowledge_server.index --enable
 ```
 
 装不上就别装——服务启动时会探测，探测不到就走

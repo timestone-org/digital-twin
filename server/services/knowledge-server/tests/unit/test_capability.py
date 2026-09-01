@@ -77,7 +77,7 @@ def test_extension_without_table_points_at_the_command(
         IndexProbe(is_probed=True, has_pgvector=True, has_vector_table=False),
     )
     assert choice == VECTOR_FALLBACK
-    assert "--enable-pgvector" in reason
+    assert "--enable" in reason
 
 
 def test_forced_fallback_is_honoured(settings: Settings) -> None:

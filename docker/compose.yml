@@ -562,7 +562,10 @@ services:
       KNOWLEDGE_INGEST_STREAM: ${KNOWLEDGE_INGEST_STREAM:-knowledge:ingest}
       KNOWLEDGE_INGEST_GROUP: ${KNOWLEDGE_INGEST_GROUP:-knowledge-ingest-workers}
       # 索引档：auto 按探测选 / pgvector 强制加速档 / bruteforce 强制回退档。
-      # ⚠ 这是**取值**不是行为——加速结构不由迁移建，见 ADR-0034
+      # ⚠ 这是**取值**不是行为——加速结构不由迁移建（ADR-0034）。要用加速档
+      # 就先跑一次（两路一起开，装不上就别装，服务会自己退回回退档）：
+      #   docker compose run --rm knowledge-server \
+      #     python -m knowledge_server.index --enable
       KNOWLEDGE_VECTOR_INDEX: ${KNOWLEDGE_VECTOR_INDEX:-auto}
       KNOWLEDGE_KEYWORD_INDEX: ${KNOWLEDGE_KEYWORD_INDEX:-auto}
     expose: ['8009']
@@ -625,7 +628,10 @@ services:
       KNOWLEDGE_INGEST_STREAM: ${KNOWLEDGE_INGEST_STREAM:-knowledge:ingest}
       KNOWLEDGE_INGEST_GROUP: ${KNOWLEDGE_INGEST_GROUP:-knowledge-ingest-workers}
       # 索引档：auto 按探测选 / pgvector 强制加速档 / bruteforce 强制回退档。
-      # ⚠ 这是**取值**不是行为——加速结构不由迁移建，见 ADR-0034
+      # ⚠ 这是**取值**不是行为——加速结构不由迁移建（ADR-0034）。要用加速档
+      # 就先跑一次（两路一起开，装不上就别装，服务会自己退回回退档）：
+      #   docker compose run --rm knowledge-server \
+      #     python -m knowledge_server.index --enable
       KNOWLEDGE_VECTOR_INDEX: ${KNOWLEDGE_VECTOR_INDEX:-auto}
       KNOWLEDGE_KEYWORD_INDEX: ${KNOWLEDGE_KEYWORD_INDEX:-auto}
     restart: unless-stopped

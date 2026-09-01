@@ -106,3 +106,56 @@ def test_migration_settings_need_only_the_database() -> None:
         postgres_db=PLACEHOLDER,
     )
     assert settings.postgres_schema == "knowledge"
+
+
+def test_no_embedding_endpoint_when_the_switch_is_off() -> None:
+    """⚠ 没接时给 `None` 而不是一个「将来大概会用」的端点：给了的话，库上会
+    写着一路根本没算过的模型名，而检索会以为它已经建过索引。"""
+    settings = Settings(**_base())  # pyright: ignore[reportArgumentType]
+    assert settings.embedding_endpoint() is None
+    assert settings.chat_endpoint() is None
+
+
+def test_the_embedding_endpoint_carries_its_dimensions() -> None:
+    """⚠ 维数跟着端点走：`vector(N)` 的 N 是建表时定死的，对不上时 pgvector
+    回的是「expected N dimensions」，而那条错不会提到「你改过配置」。"""
+    settings = Settings(  # pyright: ignore[reportArgumentType]
+        **_base(),
+        embedding_enabled=True,
+        embedding_base_url="http://embed/v1",
+        embedding_model="text-embedding",
+        embedding_api_key=SecretStr("key"),
+        embedding_dimensions=1024,
+    )
+    made = settings.embedding_endpoint()
+    assert made is not None
+    assert made.dimensions == 1024
+    assert made.model == "text-embedding"
+
+
+def test_the_chat_endpoint_only_appears_when_wired() -> None:
+    """⚠ 它只决定 agentic 策略可不可用；没接时那个策略**如实不可用**，
+    不悄悄退化成 naive。"""
+    settings = Settings(  # pyright: ignore[reportArgumentType]
+        **_base(),
+        model_enabled=True,
+        model_base_url="http://chat/v1",
+        model_chat="qwen",
+        model_api_key=SecretStr("key"),
+    )
+    made = settings.chat_endpoint()
+    assert made is not None
+    assert made.model == "qwen"
+
+
+def test_the_two_lanes_are_independent() -> None:
+    """只做混合检索不做 agentic 时，对话档整个用不上——不该被嵌入档拖下水。"""
+    settings = Settings(  # pyright: ignore[reportArgumentType]
+        **_base(),
+        embedding_enabled=True,
+        embedding_base_url="http://embed/v1",
+        embedding_model="text-embedding",
+        embedding_api_key=SecretStr("key"),
+    )
+    assert settings.embedding_endpoint() is not None
+    assert settings.chat_endpoint() is None

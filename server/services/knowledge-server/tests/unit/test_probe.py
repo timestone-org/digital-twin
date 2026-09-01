@@ -4,6 +4,7 @@ from typing import Any, Self
 
 import pytest
 
+from knowledge_server.apps.knowledge.services.embedding import NullEmbedder
 from knowledge_server.container import Container, IndexProbe
 from knowledge_server.probe import probe_indexes
 
@@ -60,6 +61,7 @@ def _container(database: object) -> Container:
         objectstore=None,
         stream=None,
         sources=(),
+        embedder=NullEmbedder(),
         index=IndexProbe(),
     )
 

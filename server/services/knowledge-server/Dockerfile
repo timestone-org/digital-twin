@@ -17,11 +17,13 @@ WORKDIR /src
 # 先只拷元数据装依赖：源码改动不会让依赖层失效
 COPY pyproject.toml uv.lock ./
 COPY lib/pyproject.toml lib/
+COPY domain/llmcore/pyproject.toml domain/llmcore/
 COPY services/knowledge-server/pyproject.toml services/knowledge-server/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --package knowledge-server --frozen --no-install-project --no-dev
 
 COPY lib/ lib/
+COPY domain/llmcore/ domain/llmcore/
 COPY services/knowledge-server/ services/knowledge-server/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --package knowledge-server --frozen --no-dev

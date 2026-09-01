@@ -1179,6 +1179,7 @@ version = "0.1.0"
 source = { editable = "services/knowledge-server" }
 dependencies = [
     { name = "lib", extra = ["auth", "db", "redis", "s3", "web"] },
+    { name = "llmcore" },
     { name = "openpyxl" },
     { name = "python-docx" },
     { name = "python-pptx" },
@@ -1187,6 +1188,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "lib", extras = ["auth", "db", "redis", "s3", "web"], editable = "lib" },
+    { name = "llmcore", editable = "domain/llmcore" },
     { name = "openpyxl", specifier = ">=3.1" },
     { name = "python-docx", specifier = ">=1.1" },
     { name = "python-pptx", specifier = ">=1.0" },

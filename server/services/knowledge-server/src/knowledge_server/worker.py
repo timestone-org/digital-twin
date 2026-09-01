@@ -9,9 +9,22 @@
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from typing import Protocol
 
+from knowledge_server.apps.knowledge.services.capability import (
+    keyword_choice,
+    vector_choice,
+)
+from knowledge_server.apps.knowledge.services.indexing import build_indexes
+from knowledge_server.apps.knowledge.services.ingest_pipeline import (
+    IngestDeps,
+)
+from knowledge_server.apps.knowledge.services.ingest_worker import (
+    ConsumerOptions,
+    IngestConsumer,
+)
 from knowledge_server.container import Container, build_container
 from knowledge_server.probe import probe_indexes
 from knowledge_server.settings import Settings
@@ -44,20 +57,71 @@ class WorkerRuntime:
     consumers: tuple[Consumer, ...]
     container: Container
     wait: Wait
+    # 解析用的进程池。⚠ 只有 worker 角色有它：api 角色一行解析都不跑，
+    # 给它开一个池子等于白占一份内存
+    pool: ProcessPoolExecutor | None = None
 
 
-def build_runtime(settings: Settings, wait: Wait) -> WorkerRuntime:
-    """按配置装出这一次要跑的消费循环。
+def build_runtime(container: Container, wait: Wait) -> WorkerRuntime:
+    """按已经探测过的容器装出这一次要跑的消费循环。
 
     ⚠ 消费者是一个显式元组，不靠 import 副作用登记：隐式登记让「这个进程在跑
     什么」取决于 import 顺序，而顺序在测试里与生产里可以不同。
 
-    Args: settings, wait（等停止信号，测试换一个立刻返回的）。
+    ⚠ 解析走**进程池**而不是线程池：解析是纯 CPU 的活，线程池救不了 GIL——
+    池里跑着一份 xlsx 时，整条消费循环连同健康探针一起冻住。
+
+    ⚠ 池子**单工**（`max_workers=1`）：一份文档解到一半吃满内存是常事，
+    并行两份的峰值内存翻倍，而 worker 的内存上限是编排给的。要更快就多起
+    一个 worker 副本——那是队列消费组本来就支持的。
+
+    ⚠ 收的是**已经探测过的**容器而不是配置：消费者在装配那一刻就要知道走哪一
+    档索引，自己再造一份容器的话拿到的永远是回退档，而 `/capabilities` 报的是
+    加速档——两边都不报错。
+
+    Args: container（已经跑过 `probe_indexes`）, wait（等停止信号，
+        测试换一个立刻返回的）。
     """
+    pool = ProcessPoolExecutor(max_workers=1)
     return WorkerRuntime(
-        consumers=(),
-        container=build_container(settings),
+        consumers=(_ingest_consumer(container, pool),),
+        container=container,
         wait=wait,
+        pool=pool,
+    )
+
+
+def _ingest_consumer(
+    container: Container, pool: ProcessPoolExecutor
+) -> IngestConsumer:
+    """装出摄取消费者。
+
+    ⚠ 索引档按**启动探测**选，与 `/capabilities` 报的是同一份判定
+    （`capability.py`）。各算各的话，界面说走加速档而写入走的是回退档——
+    那时两边都不报错。
+
+    Args: container, pool。
+    """
+    settings = container.settings
+    vector, _reason = vector_choice(settings, container.index)
+    keyword, _keyword_reason = keyword_choice(settings, container.index)
+    return IngestConsumer(
+        stream=container.stream,
+        database=container.database,
+        deps=IngestDeps(
+            sources=container.sources,
+            embedder=container.embedder,
+            indexes=build_indexes(vector, keyword),
+            pool=pool,
+            parse_timeout_s=settings.parse_timeout_s,
+            batch_size=settings.embedding_batch_size,
+        ),
+        options=ConsumerOptions(
+            target=container.ingest_group(),
+            block_ms=settings.ingest_block_ms,
+            batch=settings.ingest_batch,
+            claim_idle_ms=settings.ingest_claim_idle_ms,
+        ),
     )
 
 
@@ -66,7 +130,6 @@ async def run_until_stopped(runtime: WorkerRuntime) -> None:
 
     Args: runtime。
     """
-    await probe_indexes(runtime.container)
     tasks = [
         asyncio.create_task(one.run(), name=type(one).__name__)
         for one in runtime.consumers
@@ -95,6 +158,10 @@ async def _shutdown(
     for task in tasks:
         task.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
+    if runtime.pool is not None:
+        # ⚠ 不等在跑的那一个：`ProcessPoolExecutor` 没有公开的「杀掉在跑任务」
+        # 的口，而 drain 已经等过一轮了。再等下去只会让编排器的强杀先到
+        runtime.pool.shutdown(wait=False, cancel_futures=True)
     await runtime.container.cache.close()
     await runtime.container.database.dispose()
     _logger.info("worker_stopped", "摄取循环已收摊")
@@ -112,4 +179,7 @@ async def run_worker(settings: Settings) -> None:
         level=settings.app_log_level,
         log_format=settings.app_log_format,
     )
-    await run_until_stopped(build_runtime(settings, wait_for_termination))
+    # ⚠ 探测排在装配之前，理由见 `build_runtime` 的告诫
+    container = build_container(settings)
+    await probe_indexes(container)
+    await run_until_stopped(build_runtime(container, wait_for_termination))

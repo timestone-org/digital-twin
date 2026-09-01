@@ -10,6 +10,7 @@ from pydantic_settings import SettingsConfigDict
 
 from lib.config import AppSettings, PostgresSettings, RedisSettings
 from lib.objectstore import ObjectStoreSettings
+from llmcore import ChatEndpoint, EmbeddingEndpoint
 
 SERVICE_NAME = "knowledge-server"
 API_PREFIX = "/api/v1/knowledge"
@@ -165,6 +166,40 @@ class Settings(
         if missing:
             raise ValueError(f"开了对话档就必须配：{'、'.join(missing)}")
         return self
+
+    def embedding_endpoint(self) -> EmbeddingEndpoint | None:
+        """嵌入那一路要打的端点；没开就是没接这一路。
+
+        ⚠ 开关为真时密钥与模型名已经由校验器兜住了（缺一格就启动即失败），
+        所以这里不再写一条「没配就降级」的分支——写了反而会让配置漏填悄悄
+        变成「服务起着但从来没建过索引」。
+        """
+        key = self.embedding_api_key
+        if not self.embedding_enabled or key is None:
+            return None
+        return EmbeddingEndpoint(
+            base_url=self.embedding_base_url,
+            api_key=key,
+            model=self.embedding_model,
+            timeout_s=self.embedding_timeout_s,
+            dimensions=self.embedding_dimensions,
+        )
+
+    def chat_endpoint(self) -> ChatEndpoint | None:
+        """agentic 检索策略要打的对话端点；没开就是没接这一路。
+
+        ⚠ 没接时那个策略**如实不可用**，不悄悄退化成 naive——悄悄退化的表现是
+        「质量忽然变差了」，而没有任何一处报错（ADR-0035 决策二）。
+        """
+        key = self.model_api_key
+        if not self.model_enabled or key is None:
+            return None
+        return ChatEndpoint(
+            base_url=self.model_base_url,
+            api_key=key,
+            model=self.model_chat,
+            timeout_s=self.model_timeout_s,
+        )
 
     @property
     def is_worker(self) -> bool:

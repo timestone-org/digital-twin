@@ -2,6 +2,10 @@
 
 from dataclasses import dataclass, field
 
+from knowledge_server.apps.knowledge.services.embedding import (
+    Embedder,
+    build_embedder,
+)
 from knowledge_server.apps.knowledge.services.sources import (
     KnowledgeSource,
     SourceDeps,
@@ -57,6 +61,9 @@ class Container:
     stream: StreamLike
     # 接了哪几路知识来源。⚠ 顺序即界面上的先后
     sources: tuple[KnowledgeSource, ...]
+    # 嵌入那一路。⚠ 没接时是 `NullEmbedder` 而不是 `None`：调用方于是不必
+    # 写「这一路在不在」的分支，而缺席由 `can_embed` 如实说出来
+    embedder: Embedder
     # 启动时探测填进去。⚠ 可变对象，故不带 frozen——它是这份容器里唯一
     # 「装配之后才知道」的东西
     index: IndexProbe = field(default_factory=IndexProbe)
@@ -127,4 +134,5 @@ def build_container(settings: Settings) -> Container:
             url=settings.url(), timeout_s=settings.redis_timeout_s
         ),
         sources=build_sources(SourceDeps(store=store)),
+        embedder=build_embedder(settings.embedding_endpoint()),
     )

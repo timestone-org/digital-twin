@@ -96,3 +96,40 @@ async def test_sources_of_a_missing_base_are_404(
 ) -> None:
     response = await db_client.get(f"{BASES}/{uuid.uuid4()}/sources")
     assert response.status_code == httpx.codes.NOT_FOUND
+
+
+async def test_deleting_a_base_sweeps_its_objects(
+    db_stack: object, db_client: httpx.AsyncClient
+) -> None:
+    """⚠ 清对象挂在提交之后：事务里禁做外部 IO。清失败只留下一堆没人引用的
+    字节，不影响正确性——但不清的话，删掉的库会一直占着存储。"""
+    made = await _create(db_client)
+    store = (
+        db_stack.app.state.container.objectstore
+    )  # pyright: ignore[reportAttributeAccessIssue]
+    store.objects[f"knowledge/{made['id']}/x.md"] = b"x"
+    await db_client.delete(f"{BASES}/{made['id']}")
+    assert store.objects == {}
+
+
+async def test_a_source_that_does_not_exist_is_404(
+    db_client: httpx.AsyncClient,
+) -> None:
+    response = await db_client.post(
+        f"{BASES}/{uuid.uuid4()}/sources",
+        json={"kind": "dataset", "name": "台账", "config": {}},
+    )
+    assert response.status_code == httpx.codes.NOT_FOUND
+
+
+async def test_the_source_row_reports_its_sync_state(
+    db_client: httpx.AsyncClient,
+) -> None:
+    """⚠ `last_error` 留着而不是清掉：清掉的话界面上是「从没同步过」，
+    而那与「同步了但一直失败」是两件事。"""
+    made = await _create(db_client)
+    response = await db_client.get(f"{BASES}/{made['id']}/sources")
+    row = response.json()["data"][0]
+    assert row["last_synced_at"] is None
+    assert row["last_error"] == ""
+    assert row["config"] == {}

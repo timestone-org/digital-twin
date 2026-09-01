@@ -163,7 +163,7 @@ schema `knowledge`，域前缀 `kb_`（database-standard §1）。
 - `kb_chunk_vectors.embedding` 是 `BYTEA`（小端 float32），**全环境都有**，
   由主线迁移建。它是「不想再花一次嵌入的钱」那一份。
 - pgvector 那一路的 `kb_chunk_vectors_pgv(chunk_id, embedding vector(N))` + HNSW 索引
-  **不由主线迁移建**，是一步显式的运维动作（`python -m knowledge_server.index --enable-pgvector`）。
+  **不由主线迁移建**，是一步显式的运维动作（`python -m knowledge_server.index --enable`，向量与关键词两路一起开）。
   它是「查得快」那一份。
 - 服务**启动时探测扩展与加速表在不在**，据此选 `PgVectorIndex` 或 `BruteForceIndex`，
   探测结果如实进 `/capabilities`。
