@@ -199,8 +199,9 @@ async def _execute(
     )
     outcome = execute_graph(
         graph,
-        prefetched=prefetched,
+        prefetched=prefetched.frames,
         tz_offset_minutes=context.tz_offset_minutes,
+        prefetch_failures=prefetched.failures,
     )
     for node in outcome.nodes:
         node_run_crud.add(session, _node_row(run.id, node))

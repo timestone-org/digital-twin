@@ -83,6 +83,7 @@ from platform_server.apps.hvac.deps import (
     get_sessions,
 )
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
+from platform_server.apps.modeling import catalog as modeling_catalog
 from platform_server.container import (
     IDEMPOTENCY_NAMESPACE,
     TIMESCALE_SCHEMA,
@@ -117,6 +118,10 @@ FULL_CODES = (
     dataset_catalog.DATASET_BACKFILL,
     dataset_catalog.FORMULA_VIEW,
     dataset_catalog.FORMULA_MANAGE,
+    modeling_catalog.MODELING_VIEW,
+    modeling_catalog.MODELING_MANAGE,
+    modeling_catalog.MODELING_RUN,
+    modeling_catalog.MODELING_PUBLISH,
 )
 # 命令总线的两档预算，用例里固定住，断言里的信封才是可手写的常量
 BROWSE_TIMEOUT_S = 10.0

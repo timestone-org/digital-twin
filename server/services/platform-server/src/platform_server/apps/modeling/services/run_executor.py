@@ -61,13 +61,15 @@ def execute_graph(
     *,
     prefetched: dict[str, Frame],
     tz_offset_minutes: int,
+    prefetch_failures: dict[str, str] | None = None,
 ) -> RunOutcome:
     """跑完一张图。
 
     ⚠ 上下文键一律是 `(节点 id, 端口名)`，**不用别名**：别名没有唯一约束，
     拿它当键时两个同名节点会静默互相覆盖输出（设计文档 D5）。
-    Args: graph, prefetched, tz_offset_minutes。
+    Args: graph, prefetched, tz_offset_minutes, prefetch_failures。
     """
+    failures = prefetch_failures or {}
     nodes = graph.node_by_id()
     order = topological_order(graph)
     context: dict[tuple[str, str], Any] = {}
@@ -83,6 +85,7 @@ def execute_graph(
                 ordinal=ordinal,
                 tz_offset_minutes=tz_offset_minutes,
                 prefetched=prefetched.get(node_id),
+                prefetch_error=failures.get(node_id),
             ),
             context,
             budget,
@@ -103,6 +106,8 @@ class _Setting:
     ordinal: int
     tz_offset_minutes: int
     prefetched: Frame | None
+    # 取数阶段就失败了的话，这里是那句人话原因，节点直接落 failed
+    prefetch_error: str | None = None
 
 
 class _Budget:
@@ -146,6 +151,8 @@ def _run_one(
     Args: node, setting, context, budget。
     """
     started = time.monotonic()
+    if setting.prefetch_error is not None:
+        return _node_failed(node, setting, started, setting.prefetch_error)
     try:
         outputs = run_node(node, setting, context)
     except OperatorError as error:

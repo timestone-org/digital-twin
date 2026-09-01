@@ -12,6 +12,7 @@ from typing import cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lib.errors import AppError
 from lib.errors.base import FieldError, ValidationFailed
 from platform_server.apps.dataset.services import (
     ColumnSpec,
@@ -224,16 +225,29 @@ def _moment(raw: str, now: datetime, field: str) -> datetime | None:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
+@dataclass(frozen=True)
+class Prefetched:
+    """预取的结果：取到的帧，以及取不到的那些节点各自的原因。"""
+
+    frames: dict[str, Frame]
+    failures: dict[str, str]
+
+
 async def prefetch(
     session: AsyncSession, *, graph: PipelineGraph, now: datetime
-) -> dict[str, Frame]:
+) -> Prefetched:
     """给图里每个取数节点先把数据取好，按节点 id 交给执行引擎。
 
     ⚠ 取数不在算子里跑：算子将来要整体挪进没有数据库连接的子进程
     （docs/MODELING_DESIGN.md D17b）。
+    ⚠ **取不到数不许抛成 HTTP 错**：抛出去的话请求事务回滚，那次运行的记录整个
+    消失——用户点了运行、拿到一个 404，而运行历史里什么都没有，看不到为什么。
+    台账被删、列被改名都是运行期才知道的事，它们属于「这个源节点失败了」，
+    照 D18 落 `failed` + 原因，下游落 `skipped`。
     Args: session, graph, now。
     """
     frames: dict[str, Frame] = {}
+    failures: dict[str, str] = {}
     for node in graph.nodes:
         loader = _LOADERS.get(node.operator)
         if loader is None:
@@ -241,8 +255,11 @@ async def prefetch(
         config = registry.get(node.operator).CONFIG_MODEL.model_validate(
             node.config
         )
-        frames[node.id] = await loader(session, config.model_dump(), now)
-    return frames
+        try:
+            frames[node.id] = await loader(session, config.model_dump(), now)
+        except AppError as error:
+            failures[node.id] = error.message
+    return Prefetched(frames=frames, failures=failures)
 
 
 async def _load_ledger(
