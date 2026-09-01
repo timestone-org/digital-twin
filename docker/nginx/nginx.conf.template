@@ -62,6 +62,10 @@ http {
   # AI 助手。⚠ 它可缺席：这套部署不起 ai-assistant 时，这几条 location 会 502，
   # 而前端的能力探测把任何失败都读成「没有助手」，入口于是干净地不出现。
   map $host $assistant_upstream { default 'ai-assistant:8006'; }
+  # 知识库。⚠ 与助手同档可缺席：这套部署不起 knowledge-server 时，
+  # 这几条 location 会 502，而前端的能力探测把 502 读成「这套部署没有知识库」，
+  # 于是入口干净地不出现
+  map $host $knowledge_upstream { default 'knowledge-server:8009'; }
   # 素材字节面。⚠ 字节永远不穿过 platform：一个 200MB 的模型经过 API 进程
   # 会把一个 worker 占住几十秒。
   # ⚠ 对象存储在本编排之外（与库同档），故这里是取自环境的 host:port 而不是
@@ -296,6 +300,26 @@ http {
       proxy_pass http://$assistant_upstream$request_uri;
       include /etc/nginx/conf.d/proxy-common.conf;
       # 上传点表走这条：几百 KB 的表 base64 之后仍然超过默认的 1m
+      client_max_body_size 8m;
+    }
+
+    # —— 知识库 ——
+    location = /api/v1/knowledge/health { proxy_pass http://$knowledge_upstream$request_uri; }
+    location = /api/v1/knowledge/ready  { proxy_pass http://$knowledge_upstream$request_uri; }
+    location = /api/v1/knowledge/docs   { proxy_pass http://$knowledge_upstream$request_uri; }
+    location = /api/v1/knowledge/redoc  { proxy_pass http://$knowledge_upstream$request_uri; }
+    location = /api/v1/knowledge/openapi.json {
+      proxy_pass http://$knowledge_upstream$request_uri;
+    }
+
+    # ⚠ 知识库完全依赖这里注入的签名头来认人；它转发同一组头去打 platform，
+    # 于是「外部系统来源能读到什么」严格等于「这个用户自己能读什么」。
+    location /api/v1/knowledge/ {
+      include /etc/nginx/conf.d/auth-inject.conf;
+      proxy_pass http://$knowledge_upstream$request_uri;
+      include /etc/nginx/conf.d/proxy-common.conf;
+      # ⚠ 文档原件**不走这条**：浏览器直传对象存储（ADR-0015），边缘只过
+      # 签名与元数据。留 8m 是给「一次登记几十份外部条目」那种批量请求体的
       client_max_body_size 8m;
     }
 

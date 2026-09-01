@@ -20,6 +20,7 @@ services:
       opcua-server: {condition: service_started}
       realtime-hub: {condition: service_started}
       ai-assistant: {condition: service_started}
+      knowledge-server: {condition: service_started}
     ports: ['${EDGE_HTTP_PORT:-8080}:80']
     environment:
       AUTH_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填：/internal/ 的服务级密钥}
@@ -46,8 +47,8 @@ services:
     restart: unless-stopped
 
   # ---- 一次性任务：迁移与种子 ----
-  # ⚠ 每个代码单元一个作业，各用自己的镜像跑自己那份 alembic：五套迁移分属五个
-  # schema，合成一个作业就要求某一个镜像装得下全部五份代码。
+  # ⚠ 每个代码单元一个作业，各用自己的镜像跑自己那份 alembic：七套迁移分属七个
+  # schema，合成一个作业就要求某一个镜像装得下全部七份代码。
   # ⚠ 真服务用 `service_completed_successfully` 等它们：这正是「迁移先行」那条
   # 规矩（engineering-workflow §4）——代码可回滚、数据库不回滚，故必须先让
   # 新结构就位，再放新代码进来。
@@ -317,6 +318,41 @@ services:
         alembic upgrade head
     restart: 'no'
 
+  knowledge-migrate:
+    build:
+      context: ../server
+      dockerfile: services/knowledge-server/Dockerfile
+    environment:
+      DB_HOST: ${POSTGRES_HOST:?必填}
+      DB_PORT: ${POSTGRES_PORT:-5432}
+      KNOWLEDGE_APP_LOG_FORMAT: json
+      KNOWLEDGE_POSTGRES_HOST: ${POSTGRES_HOST:?必填}
+      KNOWLEDGE_POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      KNOWLEDGE_POSTGRES_USER: ${POSTGRES_USER:?必填}
+      KNOWLEDGE_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必填}
+      KNOWLEDGE_POSTGRES_DB: ${POSTGRES_DB:?必填}
+      KNOWLEDGE_POSTGRES_SCHEMA: knowledge
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        set -e
+        python - <<'PY'
+        import os, socket, sys, time
+        # ⚠ 库在本编排之外（与对象存储同档），compose 没法给它挂 healthcheck。
+        # 不等就迁移，主机重启时 Docker 常比 Postgres 先起来，于是整栈拒绝启动。
+        host, port = os.environ['DB_HOST'], int(os.environ['DB_PORT'])
+        for _ in range(60):
+            try:
+                socket.create_connection((host, port), timeout=2).close()
+                sys.exit(0)
+            except OSError:
+                time.sleep(2)
+        print(f'等不到数据库 {host}:{port}', file=sys.stderr)
+        sys.exit(1)
+        PY
+        alembic upgrade head
+    restart: 'no'
+
   auth-server:
     build:
       context: ../server
@@ -477,6 +513,121 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+    restart: unless-stopped
+
+  knowledge-server:
+    build:
+      context: ../server
+      dockerfile: services/knowledge-server/Dockerfile
+    depends_on:
+      knowledge-migrate: {condition: service_completed_successfully}
+    environment:
+      KNOWLEDGE_APP_ROLE: api
+      KNOWLEDGE_APP_LOG_FORMAT: json
+      KNOWLEDGE_POSTGRES_HOST: ${POSTGRES_HOST:?必填}
+      KNOWLEDGE_POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      KNOWLEDGE_POSTGRES_USER: ${POSTGRES_USER:?必填}
+      KNOWLEDGE_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必填}
+      KNOWLEDGE_POSTGRES_DB: ${POSTGRES_DB:?必填}
+      KNOWLEDGE_POSTGRES_SCHEMA: knowledge
+      KNOWLEDGE_REDIS_HOST: ${REDIS_HOST:?必填}
+      KNOWLEDGE_REDIS_PORT: ${REDIS_PORT:-6379}
+      KNOWLEDGE_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      # ⚠ 与 auth-server 取同一个值：分叉就是知识库一律 401
+      KNOWLEDGE_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
+      KNOWLEDGE_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
+      # 外部系统来源经业务面取数，**不读别人的库**
+      KNOWLEDGE_PLATFORM_BASE_URL: http://platform-server:8005
+      # ⚠ 两个角色共用一份 Settings，故对象存储这四项**每个角色都要给全**，
+      # 哪怕本角色一个字节都不读：启动即全量校验，少给一处就是这个角色起不来，
+      # 而现象是「检索面好好的，传上去的文档一直不动」
+      KNOWLEDGE_OBJECTSTORE_ENDPOINT: ${OSS_ENDPOINT:?必填}
+      KNOWLEDGE_OBJECTSTORE_BUCKET: ${OSS_BUCKET:-digitaltwin}
+      KNOWLEDGE_OBJECTSTORE_ACCESS_KEY: ${OSS_ACCESS_KEY:?必填}
+      KNOWLEDGE_OBJECTSTORE_SECRET_KEY: ${OSS_SECRET_KEY:?必填}
+      KNOWLEDGE_OBJECTSTORE_PUBLIC_BASE: ${OSS_PUBLIC_BASE:-/oss/}
+      # 嵌入档。⚠ 开关开着却没配密钥 = 启动即失败，而不是起来之后每次摄取报错
+      KNOWLEDGE_EMBEDDING_ENABLED: ${KNOWLEDGE_EMBEDDING_ENABLED:-false}
+      KNOWLEDGE_EMBEDDING_BASE_URL: ${KNOWLEDGE_EMBEDDING_BASE_URL:-}
+      KNOWLEDGE_EMBEDDING_API_KEY: ${KNOWLEDGE_EMBEDDING_API_KEY:-}
+      KNOWLEDGE_EMBEDDING_MODEL: ${KNOWLEDGE_EMBEDDING_MODEL:-}
+      KNOWLEDGE_EMBEDDING_DIMENSIONS: ${KNOWLEDGE_EMBEDDING_DIMENSIONS:-1536}
+      # 对话档：只决定 agentic 检索策略可不可用
+      KNOWLEDGE_MODEL_ENABLED: ${KNOWLEDGE_MODEL_ENABLED:-false}
+      KNOWLEDGE_MODEL_BASE_URL: ${KNOWLEDGE_MODEL_BASE_URL:-}
+      KNOWLEDGE_MODEL_API_KEY: ${KNOWLEDGE_MODEL_API_KEY:-}
+      KNOWLEDGE_MODEL_CHAT: ${KNOWLEDGE_MODEL_CHAT:-}
+      # ⚠ 与 worker 侧读的是同一对，改一处不改另一处的表现是
+      # 「投得进去、没人消费」，而两边单看都对
+      KNOWLEDGE_INGEST_STREAM: ${KNOWLEDGE_INGEST_STREAM:-knowledge:ingest}
+      KNOWLEDGE_INGEST_GROUP: ${KNOWLEDGE_INGEST_GROUP:-knowledge-ingest-workers}
+      # 索引档：auto 按探测选 / pgvector 强制加速档 / bruteforce 强制回退档。
+      # ⚠ 这是**取值**不是行为——加速结构不由迁移建，见 ADR-0034
+      KNOWLEDGE_VECTOR_INDEX: ${KNOWLEDGE_VECTOR_INDEX:-auto}
+      KNOWLEDGE_KEYWORD_INDEX: ${KNOWLEDGE_KEYWORD_INDEX:-auto}
+    expose: ['8009']
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8009/api/v1/knowledge/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+  # 同一份镜像的 worker 角色：解析、切块、嵌入、来源同步。
+  # ⚠ **无 expose、无探针**——它不接流量，「摘掉它」没有意义；能不能干活由队列
+  # 深度与日志说话。
+  # ⚠ 它**可以多副本**：队列是消费组，副本之间自动分活。与 publisher 那种
+  # 单活租约不是一回事。
+  knowledge-worker:
+    build:
+      context: ../server
+      dockerfile: services/knowledge-server/Dockerfile
+    depends_on:
+      knowledge-migrate: {condition: service_completed_successfully}
+    environment:
+      KNOWLEDGE_APP_ROLE: worker
+      KNOWLEDGE_APP_LOG_FORMAT: json
+      KNOWLEDGE_POSTGRES_HOST: ${POSTGRES_HOST:?必填}
+      KNOWLEDGE_POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      KNOWLEDGE_POSTGRES_USER: ${POSTGRES_USER:?必填}
+      KNOWLEDGE_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必填}
+      KNOWLEDGE_POSTGRES_DB: ${POSTGRES_DB:?必填}
+      KNOWLEDGE_POSTGRES_SCHEMA: knowledge
+      KNOWLEDGE_REDIS_HOST: ${REDIS_HOST:?必填}
+      KNOWLEDGE_REDIS_PORT: ${REDIS_PORT:-6379}
+      KNOWLEDGE_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      # ⚠ 与 auth-server 取同一个值：分叉就是知识库一律 401
+      KNOWLEDGE_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
+      KNOWLEDGE_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
+      # 外部系统来源经业务面取数，**不读别人的库**
+      KNOWLEDGE_PLATFORM_BASE_URL: http://platform-server:8005
+      # ⚠ 两个角色共用一份 Settings，故对象存储这四项**每个角色都要给全**，
+      # 哪怕本角色一个字节都不读：启动即全量校验，少给一处就是这个角色起不来，
+      # 而现象是「检索面好好的，传上去的文档一直不动」
+      KNOWLEDGE_OBJECTSTORE_ENDPOINT: ${OSS_ENDPOINT:?必填}
+      KNOWLEDGE_OBJECTSTORE_BUCKET: ${OSS_BUCKET:-digitaltwin}
+      KNOWLEDGE_OBJECTSTORE_ACCESS_KEY: ${OSS_ACCESS_KEY:?必填}
+      KNOWLEDGE_OBJECTSTORE_SECRET_KEY: ${OSS_SECRET_KEY:?必填}
+      KNOWLEDGE_OBJECTSTORE_PUBLIC_BASE: ${OSS_PUBLIC_BASE:-/oss/}
+      # 嵌入档。⚠ 开关开着却没配密钥 = 启动即失败，而不是起来之后每次摄取报错
+      KNOWLEDGE_EMBEDDING_ENABLED: ${KNOWLEDGE_EMBEDDING_ENABLED:-false}
+      KNOWLEDGE_EMBEDDING_BASE_URL: ${KNOWLEDGE_EMBEDDING_BASE_URL:-}
+      KNOWLEDGE_EMBEDDING_API_KEY: ${KNOWLEDGE_EMBEDDING_API_KEY:-}
+      KNOWLEDGE_EMBEDDING_MODEL: ${KNOWLEDGE_EMBEDDING_MODEL:-}
+      KNOWLEDGE_EMBEDDING_DIMENSIONS: ${KNOWLEDGE_EMBEDDING_DIMENSIONS:-1536}
+      # 对话档：只决定 agentic 检索策略可不可用
+      KNOWLEDGE_MODEL_ENABLED: ${KNOWLEDGE_MODEL_ENABLED:-false}
+      KNOWLEDGE_MODEL_BASE_URL: ${KNOWLEDGE_MODEL_BASE_URL:-}
+      KNOWLEDGE_MODEL_API_KEY: ${KNOWLEDGE_MODEL_API_KEY:-}
+      KNOWLEDGE_MODEL_CHAT: ${KNOWLEDGE_MODEL_CHAT:-}
+      # ⚠ 与 worker 侧读的是同一对，改一处不改另一处的表现是
+      # 「投得进去、没人消费」，而两边单看都对
+      KNOWLEDGE_INGEST_STREAM: ${KNOWLEDGE_INGEST_STREAM:-knowledge:ingest}
+      KNOWLEDGE_INGEST_GROUP: ${KNOWLEDGE_INGEST_GROUP:-knowledge-ingest-workers}
+      # 索引档：auto 按探测选 / pgvector 强制加速档 / bruteforce 强制回退档。
+      # ⚠ 这是**取值**不是行为——加速结构不由迁移建，见 ADR-0034
+      KNOWLEDGE_VECTOR_INDEX: ${KNOWLEDGE_VECTOR_INDEX:-auto}
+      KNOWLEDGE_KEYWORD_INDEX: ${KNOWLEDGE_KEYWORD_INDEX:-auto}
     restart: unless-stopped
 
   # 素材字节面的建桶脚本：建桶并把三个公开前缀设成匿名可读；跑完即退出。
