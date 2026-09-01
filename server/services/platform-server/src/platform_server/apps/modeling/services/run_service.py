@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import after_commit
 from lib.errors.base import FieldError
+from lib.stream import StreamGroup, StreamLike
 from lib.web import Page, PageParams
 from platform_server.apps.modeling.crud import node_run_crud, run_crud
 from platform_server.apps.modeling.errors import (
@@ -38,7 +39,6 @@ from platform_server.apps.modeling.services.pipeline_service import (
     Actor,
     require_pipeline,
 )
-from platform_server.stream import StreamGroup, StreamLike
 
 
 @dataclass(frozen=True)

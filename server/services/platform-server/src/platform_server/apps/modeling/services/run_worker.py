@@ -15,6 +15,7 @@ from lib.logging import (
     parse_traceparent,
     reset_log_context,
 )
+from lib.stream import StreamEntry, StreamGroup, StreamLike
 from platform_server.apps.modeling.services import run_queue
 from platform_server.apps.modeling.services.run_dispatch import (
     RUN_DONE,
@@ -28,7 +29,6 @@ from platform_server.apps.modeling.services.run_pool import (
     PooledRunner,
 )
 from platform_server.apps.modeling.services.sessions import Sessions
-from platform_server.stream import StreamEntry, StreamGroup, StreamLike
 
 _logger = get_logger("platform.modeling.worker")
 

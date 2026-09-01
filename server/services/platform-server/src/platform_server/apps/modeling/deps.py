@@ -10,6 +10,7 @@ from typing import Annotated
 from fastapi import Depends
 
 from lib.auth import CallerContext
+from lib.stream import StreamGroup
 from platform_server.apps.modeling.catalog import (
     MODELING_MANAGE,
     MODELING_PUBLISH,
@@ -24,7 +25,6 @@ from platform_server.deps import (
     get_session,
     require,
 )
-from platform_server.stream import StreamGroup
 
 __all__ = [
     "WriteGate",

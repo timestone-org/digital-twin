@@ -9,13 +9,13 @@ from dataclasses import dataclass, field
 
 import pytest
 
+from lib.stream import StreamGroup
 from platform_server.apps.modeling.services import run_queue
 from platform_server.apps.modeling.services.run_pool import NodePool
 from platform_server.apps.modeling.services.run_worker import (
     RunConsumer,
     RunConsumerOptions,
 )
-from platform_server.stream import StreamGroup
 from unit.source_fakes import InMemoryStream
 
 TARGET = StreamGroup(
