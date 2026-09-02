@@ -1,0 +1,270 @@
+"""模型供应商面打真库：建、列、改、删、分配用途、内部目录。
+
+守的是这一族最要紧的四件事：密钥**只以密文落库**且出参一个字都不回；
+还被用途指着的供应商删不掉（放行的话消费方静默退回环境变量那一档）；
+分配时用途、模型与种类要对齐（嵌入用途不许指对话模型）；内部目录只认服务级
+密钥、解开的密钥只在那一条端点上出现。
+"""
+
+from dataclasses import replace
+from typing import Any
+
+import httpx
+import pytest
+from conftest import AppContext, SignHeaders
+from pydantic import SecretStr
+from sqlalchemy import select
+
+from lib.crypto import SecretCipher
+from platform_server.apps.llm_providers.catalog import LLM_VIEW
+from platform_server.apps.llm_providers.models import LlmProvider
+
+pytestmark = pytest.mark.requires_postgres
+
+PROVIDERS = "/api/v1/platform/llm-providers"
+PURPOSES = "/api/v1/platform/llm-purposes"
+CATALOG = "/internal/v1/platform/llm-catalog"
+SECRET = "llm-provider-secret-0123456789abcdef"
+HTTP_CREATED = 201
+HTTP_NO_CONTENT = 204
+HTTP_BAD_REQUEST = 400
+HTTP_UNAUTHORIZED = 401
+HTTP_FORBIDDEN = 403
+HTTP_NOT_FOUND = 404
+HTTP_CONFLICT = 409
+HTTP_UNAVAILABLE = 503
+
+
+def data_of(response: httpx.Response) -> Any:
+    """取信封里的 data。"""
+    return response.json()["data"]
+
+
+def _body(name: str = "百炼", **overrides: object) -> dict[str, object]:
+    base: dict[str, object] = {
+        "name": name,
+        "base_url": "https://endpoint/compatible-mode/v1/",
+        "api_key": "sk-very-secret-1234",
+        "models": [
+            {"name": "qwen-plus", "kind": "chat", "has_vision": True},
+            {
+                "name": "text-embedding-v3",
+                "kind": "embedding",
+                "dimensions": 1024,
+            },
+        ],
+    }
+    base.update(overrides)
+    return base
+
+
+@pytest.fixture
+def llm_context(app_context: AppContext) -> AppContext:
+    """把加解密器装进容器：根 conftest 那份配置没配加密密钥。
+
+    Args: app_context。
+    """
+    application = (
+        app_context.client._transport.app
+    )  # pyright: ignore[reportPrivateUsage, reportAttributeAccessIssue]  # 理由：用例要往容器里换件
+    container = application.state.container
+    application.state.container = replace(
+        container,
+        llm_cipher=SecretCipher(SECRET, label="test"),
+        settings=container.settings.model_copy(
+            update={"llm_provider_secret": SecretStr(SECRET)}
+        ),
+    )
+    return app_context
+
+
+async def _create(client: httpx.AsyncClient, **overrides: object) -> Any:
+    response = await client.post(PROVIDERS, json=_body(**overrides))
+    assert response.status_code == HTTP_CREATED, response.text
+    return data_of(response)
+
+
+async def test_the_key_is_stored_encrypted_and_never_returned(
+    llm_context: AppContext,
+) -> None:
+    created = await _create(llm_context.client)
+    assert created["api_key_hint"] == "…1234"
+    assert "api_key" not in created
+    # 端点尾巴的斜杠要吃掉，否则拼出来的路径里是两个斜杠
+    assert created["base_url"] == "https://endpoint/compatible-mode/v1"
+    row = (await llm_context.session.execute(select(LlmProvider))).scalar_one()
+    assert "sk-very-secret" not in row.api_key_enc
+    listed = data_of(await llm_context.client.get(PROVIDERS))
+    assert listed["total"] == 1
+    assert "api_key" not in listed["items"][0]
+
+
+async def test_creating_twice_with_the_same_name_conflicts(
+    llm_context: AppContext,
+) -> None:
+    await _create(llm_context.client)
+    response = await llm_context.client.post(PROVIDERS, json=_body())
+    assert response.status_code == HTTP_CONFLICT
+
+
+async def test_the_idempotency_key_makes_the_create_replayable(
+    llm_context: AppContext,
+) -> None:
+    headers = {"Idempotency-Key": "k-1"}
+    first = await llm_context.client.post(
+        PROVIDERS, json=_body(), headers=headers
+    )
+    again = await llm_context.client.post(
+        PROVIDERS, json=_body(), headers=headers
+    )
+    assert first.status_code == HTTP_CREATED
+    assert again.status_code == HTTP_CREATED
+    assert data_of(first)["id"] == data_of(again)["id"]
+
+
+async def test_updating_without_a_key_keeps_the_old_one(
+    llm_context: AppContext,
+) -> None:
+    created = await _create(llm_context.client)
+    response = await llm_context.client.patch(
+        f"{PROVIDERS}/{created['id']}",
+        json={"name": "改名", "extra_body": None},
+    )
+    assert response.status_code == httpx.codes.OK
+    assert data_of(response)["name"] == "改名"
+    assert data_of(response)["api_key_hint"] == "…1234"
+
+
+async def test_assigning_a_purpose_then_the_provider_cannot_be_deleted(
+    llm_context: AppContext,
+) -> None:
+    created = await _create(llm_context.client)
+    assigned = await llm_context.client.put(
+        f"{PURPOSES}/assistant.chat",
+        json={"provider_id": created["id"], "model_name": "qwen-plus"},
+    )
+    assert assigned.status_code == httpx.codes.OK, assigned.text
+    assert data_of(assigned)["provider_name"] == "百炼"
+    detail = data_of(
+        await llm_context.client.get(f"{PROVIDERS}/{created['id']}")
+    )
+    assert detail["assigned_purposes"] == ["assistant.chat"]
+
+    blocked = await llm_context.client.delete(f"{PROVIDERS}/{created['id']}")
+    assert blocked.status_code == HTTP_CONFLICT
+
+    cleared = await llm_context.client.delete(f"{PURPOSES}/assistant.chat")
+    assert cleared.status_code == HTTP_NO_CONTENT
+    gone = await llm_context.client.delete(f"{PROVIDERS}/{created['id']}")
+    assert gone.status_code == HTTP_NO_CONTENT
+
+
+@pytest.mark.parametrize(
+    ("purpose", "model", "expected"),
+    [
+        ("assistant.embedding", "qwen-plus", HTTP_BAD_REQUEST),
+        ("assistant.chat", "text-embedding-v3", HTTP_BAD_REQUEST),
+        ("assistant.chat", "no-such-model", HTTP_BAD_REQUEST),
+        ("assistant.nonsense", "qwen-plus", HTTP_NOT_FOUND),
+    ],
+    ids=[
+        "chat-for-embedding",
+        "embedding-for-chat",
+        "unknown-model",
+        "unknown",
+    ],
+)
+async def test_a_mismatched_assignment_is_rejected(
+    llm_context: AppContext, purpose: str, model: str, expected: int
+) -> None:
+    created = await _create(llm_context.client)
+    response = await llm_context.client.put(
+        f"{PURPOSES}/{purpose}",
+        json={"provider_id": created["id"], "model_name": model},
+    )
+    assert response.status_code == expected
+
+
+async def test_a_vision_purpose_needs_a_vision_model(
+    llm_context: AppContext,
+) -> None:
+    created = await _create(
+        llm_context.client,
+        models=[{"name": "blind", "kind": "chat", "has_vision": False}],
+    )
+    response = await llm_context.client.put(
+        f"{PURPOSES}/assistant.vision",
+        json={"provider_id": created["id"], "model_name": "blind"},
+    )
+    assert response.status_code == HTTP_BAD_REQUEST
+
+
+async def test_the_purpose_list_covers_every_purpose_once(
+    llm_context: AppContext,
+) -> None:
+    listed = data_of(await llm_context.client.get(PURPOSES))
+    codes = [one["purpose"] for one in listed]
+    assert len(codes) == len(set(codes))
+    assert "assistant.chat" in codes
+    assert "knowledge.embedding" in codes
+    assert all(one["provider_id"] is None for one in listed)
+
+
+async def test_the_internal_catalog_carries_the_plain_key(
+    llm_context: AppContext, settings: Any
+) -> None:
+    created = await _create(llm_context.client)
+    await llm_context.client.put(
+        f"{PURPOSES}/knowledge.embedding",
+        json={"provider_id": created["id"], "model_name": "text-embedding-v3"},
+    )
+    service_key = settings.edge_service_key.get_secret_value()
+    response = await llm_context.client.get(
+        CATALOG, headers={"X-Service-Key": service_key}
+    )
+    assert response.status_code == httpx.codes.OK
+    catalog = data_of(response)
+    assert catalog["version"]
+    assert catalog["providers"][0]["api_key"] == "sk-very-secret-1234"
+    assert catalog["assignments"] == [
+        {
+            "purpose": "knowledge.embedding",
+            "provider_id": created["id"],
+            "model_name": "text-embedding-v3",
+        }
+    ]
+
+
+async def test_the_internal_catalog_refuses_without_the_service_key(
+    llm_context: AppContext,
+) -> None:
+    response = await llm_context.client.get(CATALOG)
+    assert response.status_code == HTTP_UNAUTHORIZED
+
+
+async def test_a_viewer_can_list_but_not_write(
+    llm_context: AppContext, sign: SignHeaders
+) -> None:
+    viewer = sign((LLM_VIEW,))
+    listed = await llm_context.client.get(PROVIDERS, headers=viewer)
+    assert listed.status_code == httpx.codes.OK
+    denied = await llm_context.client.post(
+        PROVIDERS, json=_body(), headers=viewer
+    )
+    assert denied.status_code == HTTP_FORBIDDEN
+
+
+async def test_without_the_secret_the_face_is_absent_not_broken(
+    app_context: AppContext, settings: Any
+) -> None:
+    """没配加密密钥：对外端点如实 503，内部目录回空——不是 500。"""
+    response = await app_context.client.post(PROVIDERS, json=_body())
+    assert response.status_code == HTTP_UNAVAILABLE
+    listed = await app_context.client.get(PROVIDERS)
+    assert listed.status_code == httpx.codes.OK
+    catalog = await app_context.client.get(
+        CATALOG,
+        headers={"X-Service-Key": settings.edge_service_key.get_secret_value()},
+    )
+    assert catalog.status_code == httpx.codes.OK
+    assert data_of(catalog)["providers"] == []

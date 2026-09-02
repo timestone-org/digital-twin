@@ -3,7 +3,7 @@
 变量名 = `PLATFORM_<组>_<键>`。密钥类一律无默认值——缺失即拒绝启动。
 """
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import SettingsConfigDict
 
 from lib.config import (
@@ -27,6 +27,8 @@ ROLE_PUBLISHER = "publisher"
 
 # 合并窗口的下限。配成 0 会让发布循环空转打满一个核
 PUBLISH_WINDOW_FLOOR_MS = 100
+# 目录密钥的最短长度：Fernet 钥从它派生，短钥派生出的密文钥等于没加密
+LLM_PROVIDER_SECRET_MIN_LENGTH = 32
 # 租约存活期的下限。低于它时一次网络抖动就会丢主
 LEASE_TTL_FLOOR_S = 5
 # 单帧条目数的上界，取 realtime-hub 的 `max_payload_items` **默认值**（500）。
@@ -70,6 +72,32 @@ class Settings(
     # 数据源口令的加密密钥（Fernet 密钥由它派生）。⚠ 密钥类无默认值——缺失即
     # 拒绝启动。换钥后旧密文解不开：计划按未配置凭据下发并响亮记日志，重填即恢复
     collect_credential_secret: SecretStr = Field(min_length=32)
+
+    # 模型供应商目录（ADR-0039）：供应商密钥的加密密钥（Fernet 密钥由它派生）。
+    # ⚠ 密钥类无默认值。留空即本部署**没开目录**：对外端点回 503、内部目录回空，
+    # 助手与知识库退回各自环境变量配的那一档——不是启动失败，这套环境就没接。
+    # 换钥后旧密文解不开：那一路整路不下发并响亮记日志，界面上重填密钥即恢复
+    llm_provider_secret: SecretStr | None = None
+    # 探一次端点通不通的预算。⚠ 必须小于浏览器那侧的请求预算（web 的
+    # `REQUEST_TIMEOUT_MS`），否则界面先放弃、这边还在等一个慢端点
+    llm_probe_timeout_s: float = Field(default=10.0, gt=0)
+
+    @field_validator("llm_provider_secret")
+    @classmethod
+    def _llm_secret_long_enough(
+        cls, given: SecretStr | None
+    ) -> SecretStr | None:
+        """配了就得够长：短钥派生出的密文钥等于没加密。
+
+        Args: given。
+        """
+        if (
+            given is not None
+            and len(given.get_secret_value()) < LLM_PROVIDER_SECRET_MIN_LENGTH
+        ):
+            raise ValueError("PLATFORM_LLM_PROVIDER_SECRET 至少 32 个字符")
+        return given
+
     # 计划变更的广播频道。⚠ pub/sub 即发即弃，collector 仍按周期全量重拉兜底
     collect_plan_channel: str = "collect:plan:changed"
     # 浏览地址空间要走一趟现场设备，预算比别的命令宽

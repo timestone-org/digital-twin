@@ -5,6 +5,7 @@ from datetime import tzinfo
 from zoneinfo import ZoneInfo
 
 from lib.cache import Cache, PubSub
+from lib.crypto import SecretCipher
 from lib.db import Database, PoolProfile, ReadOnlySqlSource, SourceProfile
 from lib.idempotency import IdempotencyStore
 from lib.objectstore import ObjectStore, create_object_store
@@ -127,6 +128,10 @@ class Container:
     # 数据源口令的加解密器。密钥派生只在装配时做一次
     credential_cipher: CredentialCipher
     dataset: DatasetParts
+    # 模型供应商密钥的加解密器（ADR-0039）。⚠ 没配加密密钥时是 `None`，
+    # 而不是一个「调了会报错」的壳：那是「这套部署没开目录」，对外端点如实
+    # 回 503、内部目录回空，两个消费方退回各自环境变量那一档
+    llm_cipher: SecretCipher | None = None
 
 
 def build_container(settings: Settings) -> Container:
@@ -174,6 +179,7 @@ def build_container(settings: Settings) -> Container:
         object_store=create_object_store(settings),
         credential_cipher=_build_cipher(settings),
         dataset=_dataset(settings, database, history_database, cache),
+        llm_cipher=_build_llm_cipher(settings),
     )
 
 
@@ -241,6 +247,17 @@ def _build_cipher(settings: Settings) -> CredentialCipher:
     return CredentialCipher(
         settings.collect_credential_secret.get_secret_value()
     )
+
+
+def _build_llm_cipher(settings: Settings) -> SecretCipher | None:
+    """模型供应商密钥的加解密器；没配加密密钥就不装（目录整个缺席）。
+
+    Args: settings。
+    """
+    secret = settings.llm_provider_secret
+    if secret is None:
+        return None
+    return SecretCipher(secret.get_secret_value(), label="llm-provider")
 
 
 def _build_nodes(settings: Settings) -> OpcuaClient:

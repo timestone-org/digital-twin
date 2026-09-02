@@ -1980,6 +1980,141 @@
         "title": "ApiResponse[LiveReadingsOut]",
         "type": "object"
       },
+      "ApiResponse_LlmProbeOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LlmProbeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[LlmProbeOut]",
+        "type": "object"
+      },
+      "ApiResponse_LlmProviderOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LlmProviderOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[LlmProviderOut]",
+        "type": "object"
+      },
+      "ApiResponse_LlmPurposeOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LlmPurposeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[LlmPurposeOut]",
+        "type": "object"
+      },
       "ApiResponse_MetricLimitsOut_": {
         "properties": {
           "code": {
@@ -2518,6 +2653,51 @@
           }
         },
         "title": "ApiResponse[Page[DashboardSummaryOut]]",
+        "type": "object"
+      },
+      "ApiResponse_Page_LlmProviderOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page_LlmProviderOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Page[LlmProviderOut]]",
         "type": "object"
       },
       "ApiResponse_Page_ModelPredictionOut__": {
@@ -4706,6 +4886,55 @@
           }
         },
         "title": "ApiResponse[list[FormulaUsageOut]]",
+        "type": "object"
+      },
+      "ApiResponse_list_LlmPurposeOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/LlmPurposeOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[list[LlmPurposeOut]]",
         "type": "object"
       },
       "ApiResponse_list_ModelBindingOut__": {
@@ -9190,6 +9419,508 @@
         "title": "LiveUnitReadingOut",
         "type": "object"
       },
+      "LlmAssignmentIn": {
+        "additionalProperties": false,
+        "description": "把一个用途指到一路供应商上的一个模型。",
+        "properties": {
+          "model_name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Model Name",
+            "type": "string"
+          },
+          "provider_id": {
+            "format": "uuid",
+            "title": "Provider Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_id",
+          "model_name"
+        ],
+        "title": "LlmAssignmentIn",
+        "type": "object"
+      },
+      "LlmModelIn": {
+        "additionalProperties": false,
+        "description": "一路供应商上登记的一个模型。",
+        "properties": {
+          "dimensions": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 65536.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimensions"
+          },
+          "has_vision": {
+            "default": false,
+            "title": "Has Vision",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "chat",
+              "embedding"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind"
+        ],
+        "title": "LlmModelIn",
+        "type": "object"
+      },
+      "LlmModelOut": {
+        "description": "一路供应商上登记的一个模型。",
+        "properties": {
+          "dimensions": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimensions"
+          },
+          "has_vision": {
+            "title": "Has Vision",
+            "type": "boolean"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "has_vision",
+          "dimensions"
+        ],
+        "title": "LlmModelOut",
+        "type": "object"
+      },
+      "LlmProbeIn": {
+        "additionalProperties": false,
+        "description": "保存前先探一次端点通不通。",
+        "properties": {
+          "api_key": {
+            "format": "password",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Api Key",
+            "type": "string",
+            "writeOnly": true
+          },
+          "base_url": {
+            "maxLength": 512,
+            "minLength": 8,
+            "pattern": "^https?://[^\\s/]+",
+            "title": "Base Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base_url",
+          "api_key"
+        ],
+        "title": "LlmProbeIn",
+        "type": "object"
+      },
+      "LlmProbeOut": {
+        "description": "探一次端点的结果。",
+        "properties": {
+          "is_ok": {
+            "title": "Is Ok",
+            "type": "boolean"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "model_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Model Names",
+            "type": "array"
+          }
+        },
+        "required": [
+          "is_ok",
+          "message"
+        ],
+        "title": "LlmProbeOut",
+        "type": "object"
+      },
+      "LlmProviderIn": {
+        "additionalProperties": false,
+        "description": "新建一路供应商。",
+        "properties": {
+          "api_key": {
+            "format": "password",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Api Key",
+            "type": "string",
+            "writeOnly": true
+          },
+          "base_url": {
+            "maxLength": 512,
+            "minLength": 8,
+            "pattern": "^https?://[^\\s/]+",
+            "title": "Base Url",
+            "type": "string"
+          },
+          "extra_body": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Body"
+          },
+          "is_enabled": {
+            "default": true,
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/LlmModelIn"
+            },
+            "maxItems": 64,
+            "title": "Models",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Notes",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "base_url",
+          "api_key"
+        ],
+        "title": "LlmProviderIn",
+        "type": "object"
+      },
+      "LlmProviderOut": {
+        "description": "一路供应商。密钥只露尾巴。",
+        "properties": {
+          "api_key_hint": {
+            "title": "Api Key Hint",
+            "type": "string"
+          },
+          "assigned_purposes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Assigned Purposes",
+            "type": "array"
+          },
+          "base_url": {
+            "title": "Base Url",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "extra_body": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Body"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/LlmModelOut"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "title": "Notes",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "base_url",
+          "api_key_hint",
+          "is_enabled",
+          "extra_body",
+          "models",
+          "notes",
+          "updated_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "LlmProviderOut",
+        "type": "object"
+      },
+      "LlmProviderUpdateIn": {
+        "additionalProperties": false,
+        "description": "改一路供应商。缺省的字段不动；`api_key` 不给即沿用旧的。",
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "format": "password",
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 8,
+                "pattern": "^https?://[^\\s/]+",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "extra_body": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Body"
+          },
+          "is_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Enabled"
+          },
+          "models": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/LlmModelIn"
+                },
+                "maxItems": 64,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Models"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "title": "LlmProviderUpdateIn",
+        "type": "object"
+      },
+      "LlmPurposeOut": {
+        "description": "一个用途，以及它此刻指向哪里。没分配时后四格都是 null。",
+        "properties": {
+          "consumer": {
+            "title": "Consumer",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "is_vision_required": {
+            "title": "Is Vision Required",
+            "type": "boolean"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name"
+          },
+          "provider_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Id"
+          },
+          "provider_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Name"
+          },
+          "purpose": {
+            "title": "Purpose",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "purpose",
+          "label",
+          "description",
+          "kind",
+          "consumer",
+          "is_vision_required",
+          "provider_id",
+          "provider_name",
+          "model_name",
+          "updated_at"
+        ],
+        "title": "LlmPurposeOut",
+        "type": "object"
+      },
       "MetricLimitIn": {
         "additionalProperties": false,
         "description": "一个指标的达标范围。两端都省略等同于不配置该指标。",
@@ -11317,6 +12048,37 @@
           "total"
         ],
         "title": "Page[DashboardSummaryOut]",
+        "type": "object"
+      },
+      "Page_LlmProviderOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LlmProviderOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total"
+        ],
+        "title": "Page[LlmProviderOut]",
         "type": "object"
       },
       "Page_ModelPredictionOut_": {
@@ -24126,6 +24888,545 @@
         "summary": "存活探针",
         "tags": [
           "probe"
+        ]
+      }
+    },
+    "/api/v1/platform/llm-providers": {
+      "get": {
+        "description": "分页列出供应商。密钥只露尾巴。\n\nArgs: session, _viewer, page。",
+        "operationId": "list_all_api_v1_platform_llm_providers_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Page_LlmProviderOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "供应商列表",
+        "tags": [
+          "llm-provider"
+        ]
+      },
+      "post": {
+        "description": "建一路供应商。支持 `Idempotency-Key`。\n\nArgs: body, session, cipher, write, response。",
+        "operationId": "create_api_v1_platform_llm_providers_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LlmProviderIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_LlmProviderOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "新建供应商",
+        "tags": [
+          "llm-provider"
+        ]
+      }
+    },
+    "/api/v1/platform/llm-providers/{provider_id}": {
+      "delete": {
+        "description": "删一路供应商。还被用途指着就 409。\n\nArgs: provider_id, session, write。",
+        "operationId": "remove_api_v1_platform_llm_providers__provider_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除供应商",
+        "tags": [
+          "llm-provider"
+        ]
+      },
+      "get": {
+        "description": "取一路供应商。\n\nArgs: session, _viewer, provider_id。",
+        "operationId": "get_one_api_v1_platform_llm_providers__provider_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_LlmProviderOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "供应商详情",
+        "tags": [
+          "llm-provider"
+        ]
+      },
+      "patch": {
+        "description": "改一路供应商；不带 `api_key` 就沿用旧的。\n\nArgs: provider_id, body, session, cipher, write。",
+        "operationId": "update_api_v1_platform_llm_providers__provider_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LlmProviderUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_LlmProviderOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "更新供应商",
+        "tags": [
+          "llm-provider"
+        ]
+      }
+    },
+    "/api/v1/platform/llm-providers/{provider_id}:probe": {
+      "post": {
+        "description": "拿库里那一把密钥探一次。密钥不出门。\n\nArgs: provider_id, session, cipher, _write, timeout_s。",
+        "operationId": "probe_stored_api_v1_platform_llm_providers__provider_id__probe_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_LlmProbeOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "按已存的密钥探一次端点",
+        "tags": [
+          "llm-provider"
+        ]
+      }
+    },
+    "/api/v1/platform/llm-providers:probe": {
+      "post": {
+        "description": "拿表单里填的地址与密钥探一次，不落任何东西。\n\nArgs: body, _write, timeout_s。",
+        "operationId": "probe_draft_api_v1_platform_llm_providers_probe_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LlmProbeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_LlmProbeOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "保存前探一次端点",
+        "tags": [
+          "llm-provider"
+        ]
+      }
+    },
+    "/api/v1/platform/llm-purposes": {
+      "get": {
+        "description": "全部用途，带各自此刻的分配。\n\nArgs: session, _viewer。",
+        "operationId": "list_all_api_v1_platform_llm_purposes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_LlmPurposeOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "用途清单",
+        "tags": [
+          "llm-purpose"
+        ]
+      }
+    },
+    "/api/v1/platform/llm-purposes/{purpose}": {
+      "delete": {
+        "description": "清掉之后那一侧退回自己环境变量配的那一档。本来就没分配也算成功。\n\nArgs: purpose, session, write。",
+        "operationId": "clear_api_v1_platform_llm_purposes__purpose__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "purpose",
+            "required": true,
+            "schema": {
+              "title": "Purpose",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "清掉一个用途的分配",
+        "tags": [
+          "llm-purpose"
+        ]
+      },
+      "put": {
+        "description": "把一个用途指到一路供应商上的一个模型。幂等：重复 PUT 结果一致。\n\nArgs: purpose, body, session, write。",
+        "operationId": "assign_api_v1_platform_llm_purposes__purpose__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "purpose",
+            "required": true,
+            "schema": {
+              "title": "Purpose",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LlmAssignmentIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_LlmPurposeOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "给一个用途指定模型",
+        "tags": [
+          "llm-purpose"
         ]
       }
     },
