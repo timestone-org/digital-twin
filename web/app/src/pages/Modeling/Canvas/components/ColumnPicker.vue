@@ -1,10 +1,14 @@
 <script setup lang="ts">
 /**
- * @fileoverview 列选择器：从上游台账的列里勾几列。
+ * @fileoverview 列选择器：从上游帧的列里勾几列。
  *
  * ⚠ 勾中的顺序**跟着台账的列序**，不按点击先后：按点击顺序存的话，同一份选择
  * 在两个人手里会存出两份不同的图，比对流水线时满屏都是无意义的差异。
- * ⚠ 列不出候选时要说清是**哪一种**空：还没选台账、台账真没有列、还是权限不够。
+ * ⚠ 列不出候选时要说清是**哪一种**空：还没选台账、台账真没有列、还是上游取数
+ * 把列挑窄了。
+ * ⚠ 勾着却已经不在候选里的列要**单独列出来**，不能直接不画：上游取数改窄之后
+ * 那几列会从选择器里消失，而保存与运行仍被后端拦下——用户看得见的只有一句
+ * 报错，界面上却找不到该动哪里。
  */
 import { DtCheckbox, DtField, DtInput } from '@dt/ui'
 import { computed, ref } from 'vue'
@@ -29,6 +33,11 @@ const SEARCH_FROM = 8
 const keyword = ref('')
 
 const picked = computed(() => new Set(props.modelValue))
+const known = computed(() => new Set(props.columns.map((item) => item.key)))
+/** 勾着、但上游已经不产出的那些列。 */
+const strays = computed(() =>
+  props.modelValue.filter((key) => !known.value.has(key)),
+)
 const matched = computed(() => {
   const needle = keyword.value.trim().toLowerCase()
   if (needle === '') return props.columns
@@ -39,9 +48,12 @@ const matched = computed(() => {
   )
 })
 
-/** 按台账列序重排一份选择。 */
+/** 按台账列序重排一份选择；候选之外的那几列排在最后，直到被显式取消。 */
 function ordered(keys: ReadonlySet<string>): string[] {
-  return props.columns.filter((item) => keys.has(item.key)).map((i) => i.key)
+  const inOrder = props.columns
+    .filter((item) => keys.has(item.key))
+    .map((item) => item.key)
+  return [...inOrder, ...strays.value.filter((key) => keys.has(key))]
 }
 
 function toggle(key: string, isOn: boolean): void {
@@ -57,11 +69,22 @@ function pickAll(): void {
     matched.value.map((item) => item.key),
   )
 }
+
+/** 只丢掉上游没有的那几列，已勾的正常列原样留着。 */
+function dropStrays(): void {
+  emit(
+    'update:modelValue',
+    props.modelValue.filter((key) => known.value.has(key)),
+  )
+}
 </script>
 
 <template>
   <DtField :label="props.label" :hint="props.hint">
-    <p v-if="props.columns.length === 0" class="dt-ml-cols__note">
+    <p
+      v-if="props.columns.length === 0 && strays.length === 0"
+      class="dt-ml-cols__note"
+    >
       {{ props.note }}
     </p>
     <template v-else>
@@ -90,6 +113,15 @@ function pickAll(): void {
         >
           清空
         </button>
+        <button
+          v-if="strays.length > 0"
+          type="button"
+          class="dt-ml-cols__act dt-ml-cols__act--warn"
+          :disabled="props.isReadonly"
+          @click="dropStrays"
+        >
+          清掉上游没有的 {{ strays.length }} 列
+        </button>
       </div>
       <div class="dt-ml-cols__list">
         <DtCheckbox
@@ -99,6 +131,15 @@ function pickAll(): void {
           :label="column.name || column.key"
           :disabled="props.isReadonly"
           @update:model-value="toggle(column.key, $event)"
+        />
+        <DtCheckbox
+          v-for="key in strays"
+          :key="key"
+          class="dt-ml-cols__stray"
+          :model-value="true"
+          :label="`${key}（上游没有这一列）`"
+          :disabled="props.isReadonly"
+          @update:model-value="toggle(key, $event)"
         />
       </div>
       <p class="dt-ml-cols__note">
@@ -112,6 +153,7 @@ function pickAll(): void {
 .dt-ml-cols {
   &__bar {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.5rem;
     align-items: center;
     margin-bottom: 0.25rem;
@@ -131,6 +173,11 @@ function pickAll(): void {
       opacity: 0.5;
       cursor: not-allowed;
     }
+
+    &--warn {
+      border-color: var(--state-warning);
+      color: var(--state-warning);
+    }
   }
 
   &__list {
@@ -139,6 +186,10 @@ function pickAll(): void {
     gap: 0.25rem;
     max-height: 12rem;
     overflow-y: auto;
+  }
+
+  &__stray {
+    color: var(--state-warning);
   }
 
   &__note {

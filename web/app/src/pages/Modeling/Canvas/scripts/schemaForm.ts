@@ -6,13 +6,21 @@
  * 而错误要等到运行那一刻才由后端报出来。
  */
 
-/** 一个字段该用哪种控件。`table`/`column`/`moment` 来自 `x-dt-widget`。 */
+/**
+ * 一个字段该用哪种控件。`table`/`column`/`moment` 来自 `x-dt-widget`。
+ *
+ * ⚠ `column` 与 `columns` 是两种控件而不是一种：`x-dt-widget:"column"` 同时挂在
+ * 单值字段（切分的「目标列」是一个 `string`）与多值字段（「处理哪些列」是一个
+ * 数组）上，一律当多选渲染的话，单值字段会被存成数组——typecheck 与 lint 都不
+ * 拦，要到后端才报「要填一段文字」。
+ */
 export type FieldWidget =
   | 'text'
   | 'number'
   | 'integer'
   | 'switch'
   | 'select'
+  | 'column'
   | 'columns'
   | 'table'
   | 'moment'
@@ -95,11 +103,11 @@ function widgetOf(
   options: FormField['options'],
 ): FieldWidget {
   const marked = asText(field['x-dt-widget'])
+  const type = asText(field['type'])
   if (marked === 'table') return 'table'
   if (marked === 'moment') return 'moment'
-  if (marked === 'column') return 'columns'
+  if (marked === 'column') return type === 'array' ? 'columns' : 'column'
   if (options.length > 0) return 'select'
-  const type = asText(field['type'])
   if (type === 'boolean') return 'switch'
   if (type === 'integer') return 'integer'
   if (type === 'number') return 'number'
