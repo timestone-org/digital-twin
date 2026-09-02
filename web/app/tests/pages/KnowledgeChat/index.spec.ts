@@ -34,6 +34,12 @@ vi.mock('vue-router', () => ({
   RouterLink: { template: '<a><slot /></a>' },
 }))
 
+const confirmSpy = vi.fn<() => Promise<boolean>>()
+vi.mock('@dt/ui', async () => {
+  const actual = await vi.importActual<Record<string, unknown>>('@dt/ui')
+  return { ...actual, useConfirm: () => ({ ask: confirmSpy }) }
+})
+
 function sessionOf(id: string, title = ''): KnowledgeChatSession {
   return {
     id,
@@ -262,9 +268,25 @@ describe('管理对话', () => {
     await flushPromises()
     expect(api.createSession).toHaveBeenCalledTimes(1)
 
+    // ⚠ vi.resetAllMocks 会把确认桩清成 undefined，要「确定」的用例每条自己置位
+    confirmSpy.mockResolvedValue(true)
     await wrapper.find('button[aria-label="删除"]').trigger('click')
     await flushPromises()
     expect(api.deleteSession).toHaveBeenCalledWith('s9')
+  })
+
+  it('删除要二次确认，取消就不打接口', async () => {
+    // ⚠ 问答记录跟着一起没，没有确认框的话误点一下就全没了
+    api.deleteSession.mockResolvedValue(undefined)
+    confirmSpy.mockResolvedValue(false)
+    const wrapper = await render()
+
+    await wrapper.find('button[aria-label="删除"]').trigger('click')
+    await flushPromises()
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    expect(api.deleteSession).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('锅炉那几台')
   })
 
   it('后端的那句原话原样摆出来', async () => {
