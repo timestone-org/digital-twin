@@ -29,7 +29,7 @@ from ai_assistant.apps.credential.services import (
     OAuthClient,
     TokenBundle,
 )
-from ai_assistant.llm import ModelRegistry
+from ai_assistant.llm import AdapterDeps, ModelRegistry
 from ai_assistant.settings import API_PREFIX, Settings
 from integration.conftest import DbStack, HeaderFactory
 from lib.crypto import SecretCipher
@@ -108,7 +108,13 @@ def _wire_codex(
         credentials=store,
         device_login=DeviceLogin(oauth=oauth, cache=cache, store=store),
         # 能力面按注册表铺清单，不换的话这套部署里根本没有订阅账号那一路
-        models=ModelRegistry(settings, tokens=store),
+        models=ModelRegistry(
+            AdapterDeps(
+                settings=settings,
+                tokens=store,
+                catalog=stack.app.state.container.catalog,
+            )
+        ),
     )
     return cache
 

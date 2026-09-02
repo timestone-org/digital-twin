@@ -13,6 +13,7 @@ from ai_assistant.apps.credential.services import (
 from ai_assistant.llm import (
     DEFAULT_PROFILE,
     MODEL_KINDS,
+    AdapterDeps,
     EmbeddingAdapter,
     GuardedModel,
     ModelRegistry,
@@ -34,6 +35,7 @@ from lib.crypto import SecretCipher
 from lib.db import Database, PoolProfile
 from lib.idempotency import IdempotencyStore
 from lib.resilience import CircuitBreaker
+from llmcore import CatalogCache, CatalogClient
 
 # 幂等键的命名空间。⚠ 必须带服务名：共用一个 Redis 的两个服务，同一个端点名
 # 撞上同一个幂等键时会互相返回对方的结果
@@ -77,6 +79,10 @@ class Container:
     # 知识库读侧。⚠ 没配地址时是 `None`——那两个工具照样进规格表，
     # 由 `KnowledgeTools.run` 抛一句点得出名字的错
     knowledge: KnowledgeClient | None
+    # 模型目录（ADR-0039）：平台上配的「各用途走哪一路模型」，按 TTL 重拉。
+    # ⚠ 一个进程一份：注册表与嵌入那一路读的都是它的快照，各造一份的话
+    # 两边看到的目录可以在同一次回合里不一样
+    catalog: CatalogCache
 
 
 def _build_database(settings: Settings) -> Database:
@@ -110,9 +116,12 @@ def _build_model(
     可以配成另一家端点（`ASSISTANT_VISION_BASE_URL`），它连挂几次不该把同一路
     的对话一起短路掉，而那时用户看到的是「助手整个不能说话了」。
 
+    ⚠ 按**装配了的**那几路建，不按此刻解得出端点的那几路：目录还没拉到时
+    后者是空的，那一路就永远没有断路器、也永远装不出模型面。
+
     Args: settings, registry。
     """
-    profiles = registry.profiles()
+    profiles = registry.adapters()
     if not profiles:
         return None
     return GuardedModel(
@@ -211,8 +220,13 @@ def build_container(settings: Settings) -> Container:
     credentials, device_login, oauth_http = _build_codex(
         settings, database, cache
     )
+    # ⚠ 目录一个进程一份：注册表与嵌入那一路读的都是它的快照
+    catalog = _build_catalog(settings)
+    adapter_deps = AdapterDeps(
+        settings=settings, tokens=credentials, catalog=catalog
+    )
     # ⚠ 一个进程一份：造两份的话，两份各自的档位清单可以在将来漂开
-    registry = ModelRegistry(settings, tokens=credentials)
+    registry = ModelRegistry(adapter_deps)
     # ⚠ 也是一个进程一份：续签件把签好的头按用户缓存在自己身上，
     # 每请求现造一个的话每次调用都要再签一趟
     auth = AuthClient(
@@ -239,8 +253,28 @@ def build_container(settings: Settings) -> Container:
         credentials=credentials,
         device_login=device_login,
         oauth_http=oauth_http,
-        embedder=build_openai_embedding(settings),
+        embedder=build_openai_embedding(adapter_deps),
         knowledge=_build_knowledge(settings, auth),
+        catalog=catalog,
+    )
+
+
+def _build_catalog(settings: Settings) -> CatalogCache:
+    """模型目录的缓存（ADR-0039）。构造不连网，第一次拉在启动钩子里。
+
+    ⚠ 拿 `edge_service_key` 去打 platform 的内部面：与 platform 那边
+    `PLATFORM_EDGE_SERVICE_KEY` 取同一个值，分叉就是目录永远拉不到、
+    而两侧代码单看都对。
+
+    Args: settings。
+    """
+    return CatalogCache(
+        CatalogClient(
+            base_url=settings.platform_base_url,
+            service_key=settings.edge_service_key.get_secret_value(),
+            timeout_s=settings.llm_catalog_timeout_s,
+        ),
+        ttl_s=settings.llm_catalog_refresh_s,
     )
 
 

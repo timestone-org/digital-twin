@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import pytest
 from pydantic import SecretStr
 
-from ai_assistant.llm.adapters import build_openai_embedding
+from ai_assistant.llm.adapters import AdapterDeps, build_openai_embedding
 from ai_assistant.settings import Settings
 from llmcore.openai_embedding import (
     EmbeddingShapeChanged,
@@ -69,7 +69,7 @@ class FakeClient:
 
 def test_no_model_name_means_this_route_is_not_wired() -> None:
     """嵌入模型名没有兜底：拿对话模型名去打 embeddings 端点必然失败。"""
-    assert build_openai_embedding(_settings()) is None
+    assert build_openai_embedding(AdapterDeps(settings=_settings())) is None
 
 
 def test_the_endpoint_falls_back_to_the_chat_one() -> None:

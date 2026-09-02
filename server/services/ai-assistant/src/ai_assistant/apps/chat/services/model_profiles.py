@@ -53,6 +53,9 @@ async def profiles_of(
 
     Args: models, credentials（凭据面；没接订阅那一路时是 None）。
     """
+    # ⚠ 先让目录刷新：按量那一路「此刻能不能用」读的是目录快照，不刷新的话
+    # 界面上分配了新模型、这里报的还是旧的
+    await models.refresh()
     connected = await _codex_connected(credentials)
     return [
         ModelProfileOut(

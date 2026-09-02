@@ -16,6 +16,7 @@ from ai_assistant.llm import (
 )
 from ai_assistant.llm.adapters import (
     ADAPTER_BUILDERS,
+    AdapterDeps,
     build_adapters,
     build_openai_compat,
 )
@@ -73,16 +74,18 @@ async def _built(adapter: ModelAdapter, kind: ModelKind) -> ReasoningChatOpenAI:
 
 
 def test_a_disabled_model_yields_no_adapter() -> None:
-    assert build_openai_compat(_settings()) is None
+    assert build_openai_compat(AdapterDeps(settings=_settings())) is None
 
 
 def test_an_enabled_model_yields_an_adapter() -> None:
-    assert build_openai_compat(_enabled()) is not None
+    assert build_openai_compat(AdapterDeps(settings=_enabled())) is not None
 
 
 async def test_each_kind_resolves_to_its_own_configured_name() -> None:
     adapter = build_openai_compat(
-        _enabled(model_chat="talker", model_vision="looker")
+        AdapterDeps(
+            settings=_enabled(model_chat="talker", model_vision="looker")
+        )
     )
     assert adapter is not None
     # 两项默认同值（当前旗舰原生吃图），但各自的取值必须真的被用上——
@@ -92,7 +95,7 @@ async def test_each_kind_resolves_to_its_own_configured_name() -> None:
 
 
 async def test_the_client_does_not_retry_on_its_own() -> None:
-    adapter = build_openai_compat(_enabled())
+    adapter = build_openai_compat(AdapterDeps(settings=_enabled()))
     assert adapter is not None
     # 一条链路只有一层负责重试；留着 SDK 自带的会把上游预算悄悄用光三倍
     assert (await _built(adapter, "chat")).max_retries == 0
@@ -100,7 +103,9 @@ async def test_the_client_does_not_retry_on_its_own() -> None:
 
 async def test_vision_falls_back_to_the_chat_endpoint_when_unset() -> None:
     """回落链的默认那一头：没配视觉端点时两档打同一个地址。"""
-    adapter = build_openai_compat(_enabled(model_base_url="https://one/v1"))
+    adapter = build_openai_compat(
+        AdapterDeps(settings=_enabled(model_base_url="https://one/v1"))
+    )
     assert adapter is not None
     built = await _built(adapter, "vision")
     assert str(built.openai_api_base) == "https://one/v1"
@@ -109,12 +114,14 @@ async def test_vision_falls_back_to_the_chat_endpoint_when_unset() -> None:
 async def test_vision_uses_its_own_endpoint_when_configured() -> None:
     """回落链的另一头：配了就用自己的，这正是「看图换一家」的全部意义。"""
     adapter = build_openai_compat(
-        _enabled(
-            model_base_url="https://one/v1",
-            vision_base_url="https://two/v1",
-            vision_api_key=SecretStr("sk-two"),
-            vision_model="其他家的看图模型",
-            vision_timeout_s=300.0,
+        AdapterDeps(
+            settings=_enabled(
+                model_base_url="https://one/v1",
+                vision_base_url="https://two/v1",
+                vision_api_key=SecretStr("sk-two"),
+                vision_model="其他家的看图模型",
+                vision_timeout_s=300.0,
+            )
         )
     )
     assert adapter is not None
@@ -147,18 +154,23 @@ def test_the_registry_tuple_is_explicit_and_ordered() -> None:
 
 def test_only_the_reachable_routes_are_built() -> None:
     """没接的一路根本不出现——出现了就是一个点了报错的选项。"""
-    built = build_adapters(_enabled(), None)
+    built = build_adapters(AdapterDeps(settings=_enabled()))
     assert [one.id for one in built] == ["default"]
 
 
 def test_every_built_adapter_satisfies_the_port() -> None:
     """注册表的实现要真的对得上 Protocol，否则注册表本身就是静默失效点。"""
-    for one in build_adapters(_enabled(), None):
+    for one in build_adapters(AdapterDeps(settings=_enabled())):
         assert isinstance(one, ModelAdapter)
 
 
-def test_the_container_leaves_the_model_absent_when_it_is_off() -> None:
-    assert build_container(_settings()).model is None
+def test_the_container_keeps_the_model_face_but_reports_nothing_ready() -> None:
+    """⚠ 目录在时模型面**总是**装得出来：端点可以在运行期由目录给。
+    但能力面按此刻真能用的报——环境变量没配、目录还是空的，就一路都没有。"""
+    container = build_container(_settings())
+    assert container.model is not None
+    assert container.models.profiles() == ()
+    assert container.models.adapters() != ()
 
 
 def test_the_container_wires_a_guarded_model_when_it_is_on() -> None:

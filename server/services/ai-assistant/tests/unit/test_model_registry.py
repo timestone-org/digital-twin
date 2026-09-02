@@ -19,6 +19,7 @@ from ai_assistant.llm import (
     ModelDisabled,
     ModelRejected,
 )
+from ai_assistant.llm.adapters import AdapterDeps
 from ai_assistant.llm.registry import ModelRegistry
 from ai_assistant.settings import Settings
 
@@ -77,17 +78,19 @@ def _with_codex() -> Settings:
 
 def test_a_deployment_without_a_model_lists_nothing() -> None:
     # 摆出一个点了报错的选项，比干净地不摆更难查
-    registry = ModelRegistry(_settings(), tokens=None)
+    registry = ModelRegistry(AdapterDeps(settings=_settings(), tokens=None))
     assert registry.profiles() == ()
 
 
 def test_the_pay_per_token_route_shows_up_when_it_is_configured() -> None:
-    registry = ModelRegistry(_with_openai(), tokens=None)
+    registry = ModelRegistry(AdapterDeps(settings=_with_openai(), tokens=None))
     assert [one.id for one in registry.profiles()] == [DEFAULT_PROFILE]
 
 
 def test_the_subscription_route_lists_its_models_and_efforts() -> None:
-    registry = ModelRegistry(_with_codex(), tokens=_Tokens())
+    registry = ModelRegistry(
+        AdapterDeps(settings=_with_codex(), tokens=_Tokens())
+    )
     codex = next(one for one in registry.profiles() if one.id == CODEX_PROFILE)
     # 配置里写重了只是手滑，不该让下拉里出现两个一样的
     assert codex.models == ("some-codex", "another-codex")
@@ -106,23 +109,27 @@ def _with_both() -> Settings:
 
 def test_a_deployment_without_any_route_still_names_a_default() -> None:
     # 空档位名会被会话原样存下去，然后在取模型那一层变成一条认不出的名字
-    registry = ModelRegistry(_settings(), tokens=None)
+    registry = ModelRegistry(AdapterDeps(settings=_settings(), tokens=None))
     assert registry.default_id() == DEFAULT_PROFILE
 
 
 def test_only_the_pay_per_token_route_means_it_is_the_default() -> None:
-    registry = ModelRegistry(_with_openai(), tokens=None)
+    registry = ModelRegistry(AdapterDeps(settings=_with_openai(), tokens=None))
     assert registry.default_id(ready_ids=[DEFAULT_PROFILE]) == DEFAULT_PROFILE
 
 
 def test_only_the_subscription_route_means_it_is_the_default() -> None:
-    registry = ModelRegistry(_with_codex(), tokens=_Tokens())
+    registry = ModelRegistry(
+        AdapterDeps(settings=_with_codex(), tokens=_Tokens())
+    )
     assert registry.default_id(ready_ids=[CODEX_PROFILE]) == CODEX_PROFILE
 
 
 def test_with_both_and_the_subscription_logged_in_it_wins() -> None:
     # 默认烧按量计费是本期要修的第 6 条
-    registry = ModelRegistry(_with_both(), tokens=_Tokens())
+    registry = ModelRegistry(
+        AdapterDeps(settings=_with_both(), tokens=_Tokens())
+    )
     ready = [DEFAULT_PROFILE, CODEX_PROFILE]
     assert registry.default_id(ready_ids=ready) == CODEX_PROFILE
 
@@ -131,26 +138,30 @@ def test_a_configured_but_never_logged_in_subscription_is_not_the_default(
     # 「配了」不等于「能用」：默认钉在一个点了就报错的选项上，
     # 等于整套助手开箱即坏
 ) -> None:
-    registry = ModelRegistry(_with_both(), tokens=_Tokens(is_connected=False))
+    registry = ModelRegistry(
+        AdapterDeps(settings=_with_both(), tokens=_Tokens(is_connected=False))
+    )
     assert registry.default_id(ready_ids=[DEFAULT_PROFILE]) == DEFAULT_PROFILE
 
 
 def test_when_no_route_is_usable_the_default_still_names_one() -> None:
     """一路都不可用时界面要的是「有这么一路、它没登录」，不是空档位名。"""
-    registry = ModelRegistry(_with_codex(), tokens=_Tokens())
+    registry = ModelRegistry(
+        AdapterDeps(settings=_with_codex(), tokens=_Tokens())
+    )
     assert registry.default_id(ready_ids=[]) == CODEX_PROFILE
 
 
 async def test_an_unknown_profile_falls_back_instead_of_blowing_up() -> None:
     # 会话里存的名字可能来自上一版配置：那时该照常能说话
-    registry = ModelRegistry(_with_openai(), tokens=None)
+    registry = ModelRegistry(AdapterDeps(settings=_with_openai(), tokens=None))
     model = await registry.resolve(ModelChoice(profile="没这一路"))
     assert model is not None
 
 
 async def test_the_subscription_route_touches_the_token_first() -> None:
     tokens = _Tokens()
-    registry = ModelRegistry(_with_codex(), tokens=tokens)
+    registry = ModelRegistry(AdapterDeps(settings=_with_codex(), tokens=tokens))
     await registry.resolve(ModelChoice(profile=CODEX_PROFILE))
     assert tokens.asked == 1
 
@@ -158,7 +169,9 @@ async def test_the_subscription_route_touches_the_token_first() -> None:
 async def test_a_never_logged_in_subscription_fails_here_not_at_the_endpoint(
     # 等端点回 401 的话，报出来的是「模型暂时不可用」，与「去登录一下」对不上
 ) -> None:
-    registry = ModelRegistry(_with_codex(), tokens=_Tokens(is_connected=False))
+    registry = ModelRegistry(
+        AdapterDeps(settings=_with_codex(), tokens=_Tokens(is_connected=False))
+    )
     with pytest.raises(CredentialNotFound):
         await registry.resolve(ModelChoice(profile=CODEX_PROFILE))
 
@@ -169,7 +182,9 @@ async def test_the_subscription_route_refuses_an_image_instead_of_sending_it(
     # 而它多半只回一句「我没看到图」：调用成功、照常计费、结论是错的
 ) -> None:
     """⚠ 拒绝走 `ModelRejected`：那一档不打开断路器，这不是下游不行。"""
-    registry = ModelRegistry(_with_codex(), tokens=_Tokens())
+    registry = ModelRegistry(
+        AdapterDeps(settings=_with_codex(), tokens=_Tokens())
+    )
     with pytest.raises(ModelRejected) as caught:
         await registry.resolve(
             ModelChoice(profile=CODEX_PROFILE, kind="vision")
@@ -180,7 +195,9 @@ async def test_the_subscription_route_refuses_an_image_instead_of_sending_it(
 
 async def test_the_subscription_route_still_takes_a_chat_turn() -> None:
     """拒的只是看图那一档，别把整路一起关掉。"""
-    registry = ModelRegistry(_with_codex(), tokens=_Tokens())
+    registry = ModelRegistry(
+        AdapterDeps(settings=_with_codex(), tokens=_Tokens())
+    )
     chosen = await registry.resolve(ModelChoice(profile=CODEX_PROFILE))
     assert chosen is not None
 
@@ -188,13 +205,15 @@ async def test_the_subscription_route_still_takes_a_chat_turn() -> None:
 async def test_a_deployment_without_any_route_says_so_instead_of_crashing(
     # 一路都没接时取模型要给一句能读的话，而不是让调用方吃一个 IndexError
 ) -> None:
-    registry = ModelRegistry(_settings(), tokens=None)
+    registry = ModelRegistry(AdapterDeps(settings=_settings(), tokens=None))
     with pytest.raises(ModelDisabled):
         await registry.resolve(ModelChoice())
 
 
 def test_the_registry_reports_which_kinds_a_route_takes() -> None:
     """能力面按它如实报，前端才说得出「这一路不接图」。"""
-    registry = ModelRegistry(_with_both(), tokens=_Tokens())
+    registry = ModelRegistry(
+        AdapterDeps(settings=_with_both(), tokens=_Tokens())
+    )
     assert registry.supports(DEFAULT_PROFILE, "vision") is True
     assert registry.supports(CODEX_PROFILE, "vision") is False

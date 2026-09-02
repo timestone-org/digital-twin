@@ -9,14 +9,17 @@
 ⚠ **档位认得出，不代表这一档吃得下这次调用。** 一路不接图的模型收到图片块时
 不会报错——它多半只回一句「我没看到图」，而调用照样成功、照样计费。所以
 `supports` 为假时在这里**如实拒绝**，别让它出门。
+
+⚠ 按量那一路的端点来自运行期可改的目录（ADR-0039）：`profiles()` 报的是
+**此刻**解得出端点的那几路，`adapters()` 才是装配了的全部。断路器按后者建，
+能力面按前者报——用前者建断路器的话，目录还没拉到时这一路就永远没有断路器。
 """
 
 from collections.abc import Collection
 
 from langchain_core.language_models import BaseChatModel
 
-from ai_assistant.llm.adapters import build_adapters
-from ai_assistant.llm.codex.token_provider import TokenSource
+from ai_assistant.llm.adapters import AdapterDeps, build_adapters
 from ai_assistant.llm.errors import ModelDisabled, ModelRejected
 from ai_assistant.llm.ports import (
     CODEX_PROFILE,
@@ -26,21 +29,31 @@ from ai_assistant.llm.ports import (
     ModelKind,
     ModelProfile,
 )
-from ai_assistant.settings import Settings
 
 
 class ModelRegistry:
     """按档位名取模型。一个进程一份。"""
 
-    def __init__(
-        self, settings: Settings, *, tokens: TokenSource | None
-    ) -> None:
-        """Args: settings, tokens（订阅账号那一路的凭据面；没接就是 None）。"""
-        self._adapters = build_adapters(settings, tokens)
+    def __init__(self, deps: AdapterDeps) -> None:
+        """Args: deps（配置、订阅账号的凭据面、模型目录）。"""
+        self._deps = deps
+        self._adapters = build_adapters(deps)
+
+    async def refresh(self) -> None:
+        """目录过了 TTL 就重拉一次。⚠ 每个异步入口先调它：`profiles()` 与
+        `resolve()` 读的都是目录的快照，不刷新的话改了分配永远看不见。"""
+        if self._deps.catalog is not None:
+            await self._deps.catalog.refresh()
+
+    def adapters(self) -> tuple[ModelAdapter, ...]:
+        """装配了的全部来源，不问此刻能不能用。断路器按这一份建。"""
+        return self._adapters
 
     def profiles(self) -> tuple[ModelProfile, ...]:
-        """这套部署接了哪几路。没接的一路根本不出现在清单里。"""
-        return tuple(one.profile() for one in self._adapters)
+        """这套部署此刻接得上哪几路。解不出对话端点的一路不出现在清单里。"""
+        return tuple(
+            one.profile() for one in self._adapters if one.supports("chat")
+        )
 
     def default_id(self, *, ready_ids: Collection[str] | None = None) -> str:
         """没选过时用哪一路：订阅那一路在册就选它，否则退按量。
@@ -81,13 +94,15 @@ class ModelRegistry:
         """按选择取一路模型。
 
         ⚠ 认不出的名字退回第一路：会话里存的名字可能来自上一版配置。
-        ⚠ 这一路不吃这一档时**抛 `ModelRejected`**：那一档不打开断路器，因为
-        这不是下游不行、是我们发错了（`errors.py` 里那条注释）。
+        ⚠ 这一路连对话档都解不出时抛 `ModelDisabled`：那是「没接模型」，
+        不是「发错了」。吃对话档却不吃这一档时**抛 `ModelRejected`**：那一档
+        不打开断路器，因为这不是下游不行、是我们发错了（`errors.py`）。
 
         Args: choice。
         """
+        await self.refresh()
         adapter = self._adapter_of(choice.profile)
-        if adapter is None:
+        if adapter is None or not adapter.supports("chat"):
             raise ModelDisabled("本部署没有接模型")
         if not adapter.supports(choice.kind):
             raise ModelRejected(_refusal(adapter.id, choice.kind))

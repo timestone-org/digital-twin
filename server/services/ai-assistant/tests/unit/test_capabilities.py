@@ -10,6 +10,7 @@ from pydantic import SecretStr
 from ai_assistant.apps.chat.api.capabilities import capability_of
 from ai_assistant.apps.chat.schemas.capability import ModelProfileOut
 from ai_assistant.llm import CODEX_PROFILE, DEFAULT_PROFILE
+from ai_assistant.llm.adapters import AdapterDeps
 from ai_assistant.llm.registry import ModelRegistry
 from ai_assistant.settings import Settings
 
@@ -47,7 +48,9 @@ def _settings(**overrides: object) -> Settings:
 
 
 def _registry(**overrides: object) -> ModelRegistry:
-    return ModelRegistry(_settings(**overrides), tokens=_Tokens())
+    return ModelRegistry(
+        AdapterDeps(settings=_settings(**overrides), tokens=_Tokens())
+    )
 
 
 def _profile(profile_id: str, *, is_ready: bool) -> ModelProfileOut:
