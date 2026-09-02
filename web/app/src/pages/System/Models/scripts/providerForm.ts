@@ -1,11 +1,16 @@
 /**
- * @fileoverview 供应商表单的取值与它到入参的换算：模型行、方言体 JSON、密钥留空即沿用。
+ * @fileoverview 供应商表单的取值与它到入参的换算：形态、模型行、方言体 JSON、
+ * 密钥留空即沿用。
+ *
+ * ⚠ 要填哪几格由**形态**说了算，而形态清单是后端下发的：靠登录的那些形态
+ * 不填端点与密钥，带了后端当场拒。前端另写一份判断的话，表现是「表单里填了、
+ * 保存时 422」，而那句话指不回是哪一格多余。
  *
  * ⚠ 校验在这里而不是散在弹窗模板里：嵌入模型没维数、方言体不是 JSON 对象，
  * 后端都会 400，但那时表单已经提交、用户只看到一句「参数校验失败」，
  * 指不回是哪一格。
  */
-import type { LlmModelKind, LlmProvider } from '@dt/contracts'
+import type { LlmModelKind, LlmProvider, LlmProviderKind } from '@dt/contracts'
 import { LLM_MODEL_KINDS } from '@dt/contracts'
 
 import type {
@@ -26,26 +31,50 @@ export interface ModelRow {
 
 export interface ProviderForm {
   name: string
+  /** 接入形态。⚠ 只在新建时选得了：改形态等于换一路接法。 */
+  kind: string
   baseUrl: string
   /** 编辑态留空即沿用旧密钥。 */
   apiKey: string
   isEnabled: boolean
   /** 透传给端点的额外请求体，原文；空串即不加。 */
   extraBody: string
+  /** 这一形态的默认推理档位；空串即不配。 */
+  defaultEffort: string
   notes: string
   models: ModelRow[]
+}
+
+/** 推理档位落在形态配置的哪一格。与后端 `rules.py` 逐字一致。 */
+const OPTION_DEFAULT_EFFORT = 'default_effort'
+
+/** 缺省的形态：不带这一格的旧调用建出来的正是它。 */
+export const DEFAULT_KIND = 'openai_compat'
+
+/**
+ * 按码取形态；认不出给 null。
+ * @param kinds 后端下发的形态清单
+ * @param code 形态码
+ */
+export function kindOf(
+  kinds: readonly LlmProviderKind[],
+  code: string,
+): LlmProviderKind | null {
+  return kinds.find((one) => one.code === code) ?? null
 }
 
 /** 一路供应商最多登记几个模型，与后端 `MAX_MODELS_PER_PROVIDER` 同值。 */
 export const MAX_MODELS = 64
 
-export function emptyForm(): ProviderForm {
+export function emptyForm(kind: string = DEFAULT_KIND): ProviderForm {
   return {
     name: '',
+    kind,
     baseUrl: '',
     apiKey: '',
     isEnabled: true,
     extraBody: '',
+    defaultEffort: '',
     notes: '',
     models: [],
   }
@@ -70,6 +99,7 @@ export function emptyRow(kind: LlmModelKind = 'chat'): ModelRow {
 export function formOf(provider: LlmProvider): ProviderForm {
   return {
     name: provider.name,
+    kind: provider.kind,
     baseUrl: provider.base_url,
     apiKey: '',
     isEnabled: provider.is_enabled,
@@ -77,6 +107,7 @@ export function formOf(provider: LlmProvider): ProviderForm {
       provider.extra_body === null
         ? ''
         : JSON.stringify(provider.extra_body, null, 2),
+    defaultEffort: effortOf(provider.options),
     notes: provider.notes,
     models: provider.models.map((one) => ({
       key: nextRowKey(),
@@ -101,6 +132,16 @@ export function suggestedRow(name: string): ModelRow {
     hasVision: !isEmbedding && /vision|vl|omni|4o/i.test(name),
     dimensions: '',
   }
+}
+
+/**
+ * 读这一路配的推理档位；没配或不成形给空串。
+ * ⚠ 防着读：这一格要原样进请求体，塞个数字进去是后端一条 400。
+ * @param options 形态配置
+ */
+export function effortOf(options: Record<string, unknown> | null): string {
+  const found = options?.[OPTION_DEFAULT_EFFORT]
+  return typeof found === 'string' ? found : ''
 }
 
 export function isModelKind(value: string): value is LlmModelKind {
@@ -129,21 +170,29 @@ export function parseExtraBody(text: string): Record<string, unknown> | null {
 /**
  * 逐格校验；第一条错就返回，给人一次改一格。
  * @param form 表单取值
+ * @param kind 这一路的形态；认不出时只做与形态无关的那几条
  * @param isEdit 编辑态密钥可留空
  */
 export function validateForm(
   form: ProviderForm,
+  kind: LlmProviderKind | null,
   isEdit: boolean,
 ): string | null {
   return (
-    validateEndpoint(form, isEdit) ??
-    validateModels(form.models) ??
+    validateEndpoint(form, kind, isEdit) ??
+    validateModels(form.models, kind) ??
     validateExtraBody(form.extraBody)
   )
 }
 
-function validateEndpoint(form: ProviderForm, isEdit: boolean): string | null {
+function validateEndpoint(
+  form: ProviderForm,
+  kind: LlmProviderKind | null,
+  isEdit: boolean,
+): string | null {
   if (form.name.trim() === '') return '请填供应商名称'
+  // ⚠ 靠登录的那些形态整格没有端点：在这里也要求填的话，那一路根本建不出来
+  if (kind !== null && !kind.is_endpoint_required) return null
   if (!/^https?:\/\/[^\s/]+/.test(form.baseUrl.trim())) {
     return '端点地址要以 http:// 或 https:// 开头，且带主机名'
   }
@@ -151,11 +200,18 @@ function validateEndpoint(form: ProviderForm, isEdit: boolean): string | null {
   return null
 }
 
-function validateModels(rows: ModelRow[]): string | null {
+function validateModels(
+  rows: ModelRow[],
+  kind: LlmProviderKind | null,
+): string | null {
   if (rows.length > MAX_MODELS) return `最多登记 ${MAX_MODELS} 个模型`
   const names = new Set<string>()
   for (const [index, row] of rows.entries()) {
-    const rejected = validateRow(row, `第 ${index + 1} 行模型`, names)
+    const label = `第 ${index + 1} 行模型`
+    if (kind !== null && !kind.model_kinds.includes(row.kind)) {
+      return `${label}：「${kind.label}」登记不了这一种`
+    }
+    const rejected = validateRow(row, label, names)
     if (rejected !== null) return rejected
     names.add(row.name.trim())
   }
@@ -196,34 +252,63 @@ function modelInputs(rows: ModelRow[]): LlmModelInput[] {
 }
 
 /**
- * 表单 → 新建入参。调用前先过 `validateForm`。
+ * 这一形态自己那几格配置；没有可配的就给 null。
  * @param form 表单取值
+ * @param kind 这一路的形态
  */
-export function toCreateInput(form: ProviderForm): LlmProviderCreateInput {
-  return {
+function optionsOf(
+  form: ProviderForm,
+  kind: LlmProviderKind | null,
+): Record<string, unknown> | null {
+  if (kind === null || kind.efforts.length === 0) return null
+  if (form.defaultEffort === '') return null
+  return { [OPTION_DEFAULT_EFFORT]: form.defaultEffort }
+}
+
+/**
+ * 表单 → 新建入参。调用前先过 `validateForm`。
+ * ⚠ 靠登录的那些形态**不带**端点与密钥两格：带了后端当场拒。
+ * @param form 表单取值
+ * @param kind 这一路的形态
+ */
+export function toCreateInput(
+  form: ProviderForm,
+  kind: LlmProviderKind | null,
+): LlmProviderCreateInput {
+  const input: LlmProviderCreateInput = {
     name: form.name.trim(),
-    base_url: form.baseUrl.trim(),
-    api_key: form.apiKey.trim(),
+    kind: form.kind,
     is_enabled: form.isEnabled,
-    extra_body: parseExtraBody(form.extraBody),
+    options: optionsOf(form, kind),
     models: modelInputs(form.models),
     notes: form.notes.trim(),
   }
+  if (kind !== null && !kind.is_endpoint_required) return input
+  input.base_url = form.baseUrl.trim()
+  input.api_key = form.apiKey.trim()
+  input.extra_body = parseExtraBody(form.extraBody)
+  return input
 }
 
 /**
  * 表单 → 更新入参。密钥留空即不带那一格，后端沿用旧的。
  * @param form 表单取值
+ * @param kind 这一路的形态
  */
-export function toUpdateInput(form: ProviderForm): LlmProviderUpdateInput {
+export function toUpdateInput(
+  form: ProviderForm,
+  kind: LlmProviderKind | null,
+): LlmProviderUpdateInput {
   const input: LlmProviderUpdateInput = {
     name: form.name.trim(),
-    base_url: form.baseUrl.trim(),
     is_enabled: form.isEnabled,
-    extra_body: parseExtraBody(form.extraBody),
+    options: optionsOf(form, kind),
     models: modelInputs(form.models),
     notes: form.notes.trim(),
   }
+  if (kind !== null && !kind.is_endpoint_required) return input
+  input.base_url = form.baseUrl.trim()
+  input.extra_body = parseExtraBody(form.extraBody)
   if (form.apiKey.trim() !== '') input.api_key = form.apiKey.trim()
   return input
 }

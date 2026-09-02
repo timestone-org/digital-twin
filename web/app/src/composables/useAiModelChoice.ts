@@ -22,6 +22,27 @@ export function newModelChoice(): Ref<ModelChoice> {
 }
 
 /**
+ * 会话行上存的那一路此刻不在册时，退回部署的默认。
+ * ⚠ 档位名会随配置变：一路供应商删了、或环境变量那一路让位给目录里配的那一路，
+ * 而会话行是历史。不退的话下拉是空的、发出去的却是服务端退回的第一路——
+ * 显示与生效各算各的，而差异只出现在账单上。
+ * @param choice 面板此刻选中的那一路
+ * @param capability 探到的能力；探不到时是 null
+ */
+export function keepInRange(
+  choice: Ref<ModelChoice>,
+  capability: AssistantCapability | null,
+): void {
+  const listed = capability?.models ?? []
+  if (listed.length === 0 || choice.value.profile === '') return
+  if (listed.some((one) => one.id === choice.value.profile)) return
+  choice.value = {
+    profile: capability?.default_model_id ?? '',
+    effort: capability?.default_effort ?? '',
+  }
+}
+
+/**
  * 会话还没建起来时，先拿部署的默认占着下拉。
  * ⚠ 只在还没选过时填：填过头会把用户在别的标签页里换的那一路盖回去。
  * @param choice 面板此刻选中的那一路

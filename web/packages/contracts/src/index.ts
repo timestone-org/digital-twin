@@ -527,7 +527,15 @@ export type {
   LlmModelKind,
   LlmProbeResult,
   LlmProvider,
+  LlmProviderKind,
+  LlmProviderKindCode,
+  LlmProviderPreset,
   LlmPurpose,
   LlmPurposeCode,
 } from './llm'
-export { LLM_CONSUMERS, LLM_MODEL_KINDS, LLM_PURPOSES } from './llm'
+export {
+  LLM_CONSUMERS,
+  LLM_MODEL_KINDS,
+  LLM_PROVIDER_KINDS,
+  LLM_PURPOSES,
+} from './llm'

@@ -9,6 +9,9 @@
  * ⚠ 用途码是**三方契约**：平台登记它、助手与知识库各自复述自己那几条去目录里
  * 查，三处漂开的表现是「界面上分配了、那一侧却还在用环境变量那一档」，
  * 而三边代码单看都对。服务之间不许互相 import，只有这里能把三份放在一起比。
+ *
+ * ⚠ 接入形态同理（ADR-0040）：平台登记它、助手按它挑适配器、前端按它渲染表单。
+ * 漂开的表现是「界面上配好了一路 Codex、助手却当它不存在」。
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -17,9 +20,15 @@ import type {
   LlmModel,
   LlmProbeResult,
   LlmProvider,
+  LlmProviderKind,
+  LlmProviderPreset,
   LlmPurpose,
 } from '@dt/contracts'
-import { LLM_MODEL_KINDS, LLM_PURPOSES } from '@dt/contracts'
+import {
+  LLM_MODEL_KINDS,
+  LLM_PROVIDER_KINDS,
+  LLM_PURPOSES,
+} from '@dt/contracts'
 
 interface OpenApiSchema {
   properties?: Record<string, unknown>
@@ -71,6 +80,14 @@ const MIGRATION = join(
   'versions',
   '2026_09_02_1200-c4d8e2a71f35_add_llm_providers.py',
 )
+const KIND_MIGRATION = join(
+  SERVER,
+  'services',
+  'platform-server',
+  'migrations',
+  'versions',
+  '2026_09_03_1000-a7e1c93b6d40_add_llm_provider_kind.py',
+)
 
 const schemas = (
   JSON.parse(readFileSync(SPEC_PATH, 'utf8')) as {
@@ -84,10 +101,12 @@ const SHAPES: Record<string, Record<string, true>> = {
   LlmProviderOut: {
     id: true,
     name: true,
+    kind: true,
     base_url: true,
     api_key_hint: true,
     is_enabled: true,
     extra_body: true,
+    options: true,
     models: true,
     notes: true,
     assigned_purposes: true,
@@ -95,6 +114,22 @@ const SHAPES: Record<string, Record<string, true>> = {
     created_at: true,
     updated_at: true,
   } satisfies Keys<LlmProvider>,
+  LlmProviderKindOut: {
+    code: true,
+    label: true,
+    description: true,
+    is_endpoint_required: true,
+    is_login_required: true,
+    model_kinds: true,
+    consumers: true,
+    efforts: true,
+    presets: true,
+  } satisfies Keys<LlmProviderKind>,
+  LlmProviderPresetOut: {
+    code: true,
+    label: true,
+    base_url: true,
+  } satisfies Keys<LlmProviderPreset>,
   LlmModelOut: {
     name: true,
     kind: true,
@@ -206,5 +241,49 @@ describe('模型种类两侧逐字一致', () => {
     expect(kindsOf(LLMCORE_CATALOG, 'MODEL_SPEC_KINDS')).toEqual(
       [...LLM_MODEL_KINDS].sort(),
     )
+  })
+})
+
+/** 一份 Python 源码里 `PROVIDER_KIND_X = "…"` 的取值。 */
+function kindLiterals(source: string): string[] {
+  return [...source.matchAll(/PROVIDER_KIND_[A-Z_]+ = "([a-z_]+)"/g)].map(
+    (match) => match[1] ?? '',
+  )
+}
+
+describe('接入形态三方逐字一致', () => {
+  const platform = [
+    ...new Set(kindLiterals(readFileSync(PLATFORM_ENUMS, 'utf8'))),
+  ].sort()
+
+  it('确实读到了平台那份清单（读不到就等于这条闸没跑）', () => {
+    expect(platform.length).toBeGreaterThan(0)
+  })
+
+  it('前端与平台一致', () => {
+    expect([...LLM_PROVIDER_KINDS].sort()).toEqual(platform)
+  })
+
+  it('助手认得出平台登记的每一种', () => {
+    // ⚠ 端点那一形态的名字在 llmcore（协议名，两个消费方共用），
+    // 订阅那一形态的名字在助手自己那份 ports——认不出的形态如实缺席，
+    // 而「缺席」在界面上看起来与「还没配」一模一样
+    const assistant = [
+      ...new Set([
+        ...kindLiterals(readFileSync(ASSISTANT_PORTS, 'utf8')),
+        ...kindLiterals(readFileSync(LLMCORE_CATALOG, 'utf8')),
+      ]),
+    ].sort()
+    expect(assistant).toEqual(platform)
+  })
+
+  it('迁移里写死的 CHECK 集合与平台清单一致', () => {
+    // ⚠ 迁移是冻结件、活常量是活的：加一种形态时两边都要动，这里就是那道红灯
+    const source = readFileSync(KIND_MIGRATION, 'utf8')
+    const block = /KINDS = "(.*?)"/.exec(source)?.[1] ?? ''
+    const listed = [...block.matchAll(/'([a-z_]+)'/g)]
+      .map((match) => match[1] ?? '')
+      .sort()
+    expect(listed).toEqual(platform)
   })
 })

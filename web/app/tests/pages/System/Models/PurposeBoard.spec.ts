@@ -17,10 +17,12 @@ function provider(over: Partial<LlmProvider> = {}): LlmProvider {
   return {
     id: 'p1',
     name: '百炼',
+    kind: 'openai_compat',
     base_url: 'https://endpoint/v1',
     api_key_hint: '…1234',
     is_enabled: true,
     extra_body: null,
+    options: null,
     models: [
       { name: 'qwen-plus', kind: 'chat', has_vision: false, dimensions: null },
       { name: 'qwen-vl', kind: 'chat', has_vision: true, dimensions: null },

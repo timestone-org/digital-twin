@@ -24,7 +24,10 @@ import {
   startDeviceLogin,
 } from '@/api/assistant'
 
-/** 订阅账号那一路的名字。与后端的闭合集合逐字一致。 */
+/**
+ * 环境变量配出来的那一路订阅账号用哪个键。目录里配出来的那几路各用自己的 id。
+ * ⚠ 与后端 `apps/credential/enums.py` 的 `LEGACY_CODEX_REF` 逐字一致。
+ */
 export const CODEX_PROVIDER = 'codex'
 
 /** 上游没给间隔时按这个数轮询。 */
@@ -84,8 +87,15 @@ function createPolling(
   return { startAt, stop }
 }
 
-/** 造一段设备码登录的状态。 */
-export function useCodexLogin(): CodexLogin {
+/**
+ * 造一段设备码登录的状态。
+ * ⚠ 收一个**那一路的键**而不是写死 `codex`：目录里能配出好几路订阅账号，
+ * 各自一份登录态；写死的话，第二路点登录时改的是第一路。
+ * ⚠ 收的是个**取值口子**而不是取值：调用方多半是从 props 里拿它的，
+ * 在根作用域读一次会把响应性丢掉（`vue/no-setup-props-reactivity-loss`）。
+ * @param providerRef 取那一路供应商的 id；环境变量那一路是 `codex`
+ */
+export function useCodexLogin(providerRef: () => string): CodexLogin {
   const status = ref<AssistantCredentialStatus | null>(null)
   const pending = ref<AssistantDeviceLoginStart | null>(null)
   const isBusy = ref(false)
@@ -93,7 +103,7 @@ export function useCodexLogin(): CodexLogin {
 
   const polling = createPolling(async (ref_, signal) => {
     try {
-      const polled = await pollDeviceLogin(CODEX_PROVIDER, ref_, signal)
+      const polled = await pollDeviceLogin(providerRef(), ref_, signal)
       if (!polled.is_done) {
         // ⚠ 用回来的那个间隔，不是我们自己记的
         return polled.interval_s || FALLBACK_INTERVAL_S
@@ -111,14 +121,14 @@ export function useCodexLogin(): CodexLogin {
   async function begin(): Promise<void> {
     polling.stop()
     await guarded({ isBusy, error }, async () => {
-      const started = await startDeviceLogin(CODEX_PROVIDER)
+      const started = await startDeviceLogin(providerRef())
       pending.value = started
       polling.startAt(started.ref, started.interval_s)
     })
   }
 
   async function refresh(): Promise<void> {
-    status.value = await readCredential(CODEX_PROVIDER)
+    status.value = await readCredential(providerRef())
   }
 
   return {
@@ -134,7 +144,7 @@ export function useCodexLogin(): CodexLogin {
     },
     signOut: () =>
       guarded({ isBusy, error }, async () => {
-        await forgetCredential(CODEX_PROVIDER)
+        await forgetCredential(providerRef())
         status.value = null
         await refresh()
       }),

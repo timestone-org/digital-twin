@@ -10,6 +10,7 @@
 import type {
   LlmProbeResult,
   LlmProvider,
+  LlmProviderKind,
   LlmPurpose,
   Page,
 } from '@dt/contracts'
@@ -19,6 +20,7 @@ import { request, requestData, type RequestOptions } from './client'
 import { newIdempotencyKey } from './idempotency'
 
 const PROVIDERS = '/llm-providers'
+const KINDS = '/llm-provider-kinds'
 const PURPOSES = '/llm-purposes'
 
 function onPlatform(options: RequestOptions = {}): RequestOptions {
@@ -33,26 +35,44 @@ export interface LlmModelInput {
   dimensions: number | null
 }
 
-/** 建一路供应商的入参。 */
+/**
+ * 建一路供应商的入参。要带哪几格由 `kind` 说了算：靠登录的那些形态**不带**
+ * 端点与密钥，带了后端当场拒——存下来的那一格填了、读得回来，唯独没有任何
+ * 一侧会读它。
+ */
 export interface LlmProviderCreateInput {
   name: string
-  base_url: string
-  api_key: string
+  kind: string
+  base_url?: string | undefined
+  api_key?: string | undefined
   is_enabled: boolean
-  extra_body: Record<string, unknown> | null
+  extra_body?: Record<string, unknown> | null | undefined
+  /** 这一形态自己的那几格配置（推理档位一类）。 */
+  options?: Record<string, unknown> | null | undefined
   models: LlmModelInput[]
   notes: string
 }
 
-/** 改一路供应商的入参。缺省的字段不动；`api_key` 不给即沿用旧的。 */
+/**
+ * 改一路供应商的入参。缺省的字段不动；`api_key` 不给即沿用旧的。
+ * ⚠ 没有 `kind`：改形态等于换一路接法，密钥、登录态与模型清单全部作废。
+ */
 export interface LlmProviderUpdateInput {
   name?: string | undefined
   base_url?: string | undefined
   api_key?: string | undefined
   is_enabled?: boolean | undefined
   extra_body?: Record<string, unknown> | null | undefined
+  options?: Record<string, unknown> | null | undefined
   models?: LlmModelInput[] | undefined
   notes?: string | undefined
+}
+
+/** 这套部署接得了哪几种供应商，各自要配哪几格。 */
+export async function listKinds(
+  signal?: AbortSignal,
+): Promise<LlmProviderKind[]> {
+  return requestData<LlmProviderKind[]>(KINDS, onPlatform({ signal }))
 }
 
 /** 列一页供应商。 */

@@ -23,6 +23,7 @@ import {
 import {
   adoptRow,
   fillDefaults,
+  keepInRange,
   newModelChoice,
   pickModel,
   type ModelChoice,
@@ -167,4 +168,7 @@ async function probeInto(into: {
   into.models.value = capability?.models ?? []
   into.attachmentSuffixes.value = capability?.attachment_suffixes ?? []
   fillDefaults(into.choice, capability)
+  // ⚠ 会话行上那一路可能已经不在册了（配置改过）：下拉要么显示它、要么退回默认，
+  // 不能停在一个空值上而回合照常发出去
+  keepInRange(into.choice, capability)
 }

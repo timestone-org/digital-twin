@@ -19,12 +19,12 @@ import { AppShell } from '@/components/layout'
 import { describeError } from '@/composables/useAsyncList'
 import { useAuthStore } from '@/stores/auth'
 import SystemTabs from '../components/SystemTabs.vue'
-import CodexAccountPanel from './components/CodexAccountPanel.vue'
+import SubscriptionAccounts from './components/SubscriptionAccounts.vue'
 import EffectiveModelsCard from './components/EffectiveModelsCard.vue'
 import ProviderFormDialog from './components/ProviderFormDialog.vue'
 import ProviderTable from './components/ProviderTable.vue'
 import PurposeBoard from './components/PurposeBoard.vue'
-import { CODEX_PROVIDER } from './scripts/useCodexLogin'
+import { subscriptionAccounts } from './scripts/subscriptions'
 import { useModelCatalog } from './scripts/useModelCatalog'
 
 const toast = useToast()
@@ -38,15 +38,26 @@ const probing = ref<string | null>(null)
 
 const canManage = computed(() => auth.can([PERMISSION_CODES.llmManage], 'all'))
 /**
- * 订阅账号那一节只在助手接了那一路、且持 assistant:manage 时摆出来：
+ * 要先登录的那几路。⚠ 按后端下发的形态判，不按名字猜。
+ * 目录里没有订阅型供应商时才认环境变量那一路——它不在目录里，只在助手的
+ * 能力面上露过一次面。
+ */
+const accounts = computed(() =>
+  subscriptionAccounts(
+    catalog.providers.value,
+    catalog.kinds.value,
+    (catalog.assistant.value?.models ?? []).map((one) => one.id),
+  ),
+)
+
+/**
+ * 订阅账号那一节只在真有这么一路、且持 assistant:manage 时摆出来：
  * 没接的部署不该出现一个点了报错的登录键，没那个码的人也不该看见它。
  */
-const showsCodex = computed(
+const showsAccounts = computed(
   () =>
     auth.can([PERMISSION_CODES.assistantManage], 'all') &&
-    (catalog.assistant.value?.models ?? []).some(
-      (one) => one.id === CODEX_PROVIDER,
-    ),
+    accounts.value.length > 0,
 )
 
 function openCreate(): void {
@@ -152,9 +163,13 @@ onMounted(() => void catalog.reload())
             再回来。此刻助手与知识库各用各的环境变量配置。
           </DtNotice>
 
-          <DtCard title="供应商" subtitle="OpenAI 兼容端点与它上面登记的模型">
+          <DtCard
+            title="供应商"
+            subtitle="按类型配：兼容端点填地址与密钥，订阅账号改为登录一次"
+          >
             <ProviderTable
               :providers="catalog.providers.value"
+              :kinds="catalog.kinds.value"
               :is-loading="catalog.isLoading.value"
               :error="catalog.error.value"
               :probing-id="probing"
@@ -186,11 +201,14 @@ onMounted(() => void catalog.reload())
           </DtCard>
 
           <DtCard
-            v-if="showsCodex"
+            v-if="showsAccounts"
             title="订阅账号"
-            subtitle="ChatGPT / Codex 订阅直连，助手专用"
+            subtitle="上面配的每一路订阅各登录一次，助手专用"
           >
-            <CodexAccountPanel @changed="catalog.reloadEffective()" />
+            <SubscriptionAccounts
+              :accounts="accounts"
+              @changed="catalog.reloadEffective()"
+            />
           </DtCard>
         </PermGuard>
       </div>
@@ -199,6 +217,7 @@ onMounted(() => void catalog.reload())
     <ProviderFormDialog
       v-model="formOpen"
       :provider="editing"
+      :kinds="catalog.kinds.value"
       @saved="afterWrite"
     />
   </AppShell>

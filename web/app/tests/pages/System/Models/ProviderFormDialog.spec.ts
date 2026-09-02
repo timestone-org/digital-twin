@@ -7,7 +7,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
-import type { LlmProvider } from '@dt/contracts'
+import type { LlmProvider, LlmProviderKind } from '@dt/contracts'
 
 import * as llm from '@/api/llmProviders'
 import ProviderFormDialog from '@/pages/System/Models/components/ProviderFormDialog.vue'
@@ -16,10 +16,12 @@ function provider(over: Partial<LlmProvider> = {}): LlmProvider {
   return {
     id: 'p1',
     name: '百炼',
+    kind: 'openai_compat',
     base_url: 'https://endpoint/v1',
     api_key_hint: '…1234',
     is_enabled: true,
     extra_body: null,
+    options: null,
     models: [
       { name: 'qwen-plus', kind: 'chat', has_vision: false, dimensions: null },
     ],
@@ -32,9 +34,41 @@ function provider(over: Partial<LlmProvider> = {}): LlmProvider {
   }
 }
 
+/** 后端下发的形态清单：表单按它摆格子。 */
+const KINDS: LlmProviderKind[] = [
+  {
+    code: 'openai_compat',
+    label: 'OpenAI 兼容端点',
+    description: '填端点与密钥',
+    is_endpoint_required: true,
+    is_login_required: false,
+    model_kinds: ['chat', 'embedding'],
+    consumers: ['assistant', 'knowledge'],
+    efforts: [],
+    presets: [
+      {
+        code: 'dashscope',
+        label: '阿里云百炼',
+        base_url: 'https://dashscope.example/v1',
+      },
+    ],
+  },
+  {
+    code: 'codex_oauth',
+    label: 'Codex 订阅',
+    description: '登录一次',
+    is_endpoint_required: false,
+    is_login_required: true,
+    model_kinds: ['chat'],
+    consumers: ['assistant'],
+    efforts: ['low', 'medium', 'high', 'xhigh'],
+    presets: [],
+  },
+]
+
 function render(editing: LlmProvider | null = null) {
   return mount(ProviderFormDialog, {
-    props: { modelValue: true, provider: editing },
+    props: { modelValue: true, provider: editing, kinds: KINDS },
     global: { stubs: { teleport: true } },
   })
 }
@@ -98,10 +132,12 @@ describe('供应商弹窗', () => {
     await clickButton(wrapper, '保存')
     expect(llm.createProvider).toHaveBeenCalledWith({
       name: '百炼',
+      kind: 'openai_compat',
       base_url: 'https://endpoint/v1/',
       api_key: 'sk-secret',
       is_enabled: true,
       extra_body: null,
+      options: null,
       models: [
         {
           name: 'qwen-plus',

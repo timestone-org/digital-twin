@@ -1,25 +1,45 @@
 <script setup lang="ts">
 /**
- * @fileoverview 供应商清单：端点、密钥尾巴、登记的模型、被几个用途指着，以及行内三个动作。
+ * @fileoverview 供应商清单：类型、端点或登录、登记的模型、被几个用途指着，以及行内动作。
+ *
+ * ⚠ 「测试连接」只对有端点的那些形态摆：靠登录的那一路没有地址可探，
+ * 摆出来的话点下去收到的是一条 400。
  *
  * ⚠ 列表里永远没有密钥明文，只有尾巴几位；写按钮套 PermGuard，无权限时不存在于 DOM。
  * ⚠ 拆成独立组件不只为了行数：页面入口的模板嵌套有上限，把表格连同它的单元格
  * 插槽留在入口里会把「卡片 → 表格 → 单元格 → 标签」四层全压在那一页上。
  */
-import type { DtDataColumn, LlmProvider } from '@dt/contracts'
+import type { DtDataColumn, LlmProvider, LlmProviderKind } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import { DtButton, DtDataView, DtTag } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
 import { useViewMode } from '@/composables/useViewMode'
 
-defineProps<{
+const props = defineProps<{
   providers: readonly LlmProvider[]
+  /** 后端下发的形态清单；摆哪几个动作按它判 */
+  kinds: readonly LlmProviderKind[]
   isLoading: boolean
   error: string | null
   /** 正在探的那一路的 id；没有就是 null */
   probingId: string | null
 }>()
+
+/** 这一路的形态；清单还没拉到时是 undefined。 */
+function kindOf(provider: LlmProvider): LlmProviderKind | undefined {
+  return props.kinds.find((one) => one.code === provider.kind)
+}
+
+/** 这一路探不探得了：没有端点就没得探。 */
+function isProbable(provider: LlmProvider): boolean {
+  return kindOf(provider)?.is_endpoint_required !== false
+}
+
+/** 这一路在界面上的类型名；认不出就把码原样显示出来。 */
+function kindLabel(provider: LlmProvider): string {
+  return kindOf(provider)?.label ?? provider.kind
+}
 
 const emit = defineEmits<{
   probe: [provider: LlmProvider]
@@ -30,6 +50,7 @@ const emit = defineEmits<{
 
 const COLUMNS: readonly DtDataColumn[] = [
   { key: 'name', label: '供应商', card: 'title' },
+  { key: 'kind', label: '类型', width: '9rem' },
   { key: 'models', label: '登记的模型' },
   { key: 'usage', label: '用途', width: '10rem' },
   { key: 'state', label: '状态', width: '6rem' },
@@ -53,14 +74,14 @@ const view = useViewMode('system-models')
     :loading="isLoading"
     :error="error"
     :layout="{
-      minWidth: '52rem',
+      minWidth: '58rem',
       cardColumns: 2,
       cardMinWidth: '20rem',
       fill: false,
     }"
     :empty="{
       title: '还没有供应商',
-      hint: '新建一路，填上端点与密钥，登记要用的模型',
+      hint: '新建一路：选类型，配它要的那几格，登记要用的模型',
     }"
     @retry="emit('retry')"
   >
@@ -68,9 +89,16 @@ const view = useViewMode('system-models')
 
     <template #cell-name="{ row }">
       <p class="m-0 text-text-primary">{{ row.name }}</p>
-      <p class="m-0 font-mono text-2xs text-text-disabled">
+      <p v-if="row.base_url" class="m-0 font-mono text-2xs text-text-disabled">
         {{ row.base_url }} · 密钥 {{ row.api_key_hint }}
       </p>
+      <p v-else class="m-0 text-2xs text-text-disabled">
+        登录一次即可，不按 token 计费
+      </p>
+    </template>
+
+    <template #cell-kind="{ row }">
+      <DtTag size="sm" intent="neutral">{{ kindLabel(row) }}</DtTag>
     </template>
 
     <template #cell-models="{ row }">
@@ -113,6 +141,7 @@ const view = useViewMode('system-models')
       <PermGuard :codes="[PERMISSION_CODES.llmManage]">
         <div class="flex justify-end gap-1">
           <DtButton
+            v-if="isProbable(row)"
             variant="ghost"
             size="sm"
             icon="link"
