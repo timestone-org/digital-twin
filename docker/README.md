@@ -99,11 +99,16 @@ WS 的 token 走 `Sec-WebSocket-Protocol` 子协议，而 `auth_request` 的子�
 **不随数据库备份一起走**。卷丢了等于全部实例的证书作废，每台上位机都要重新信任新证书。
 备份策略要单独覆盖它。
 
-### ai-assistant 的两条模型来路
+### ai-assistant 接几路模型
 
 助手整套是**可缺席**的：不起这个服务，前端探测不到就干净地不出现入口，别的功能
-一件不少。起了它，两条模型来路各配各的，且**并存**——两边都配好时由每个会话
-自己选走哪一路（[ADR-0026](../docs/adr/0026-助手接订阅账号模型走上游私有面.md)）。
+一件不少。起了它，**接几路模型在界面上配**：系统管理 → 模型管理 里新建供应商，
+先选类型（OpenAI 兼容端点 / Codex 订阅），再配这一类要的那几项
+（[ADR-0040](../docs/adr/0040-供应商按接入形态配置且档位即供应商.md)）。
+配出来的每一路都是面板下拉里的一档，会话自己选走哪一路。
+
+下面这两组环境变量是**按类型逐格**的永久默认值：目录里配了同一类型的供应商就以
+目录为准，一路都没配时才轮到它们。存量部署一行不改也照常跑。
 
 | 变量 | 说明 |
 |---|---|
@@ -113,7 +118,7 @@ WS 的 token 走 `Sec-WebSocket-Protocol` 子协议，而 `auth_request` 的子�
 | `ASSISTANT_CODEX_ENABLED` | 订阅账号那一路，默认关 |
 | `ASSISTANT_CODEX_MODEL` / `ASSISTANT_CREDENTIAL_SECRET` | 开关为真时**两个都必填**，否则启动即失败 |
 | `ASSISTANT_CODEX_MODELS` / `ASSISTANT_CODEX_REASONING_EFFORT` | 可选模型清单、缺省推理档位（`low`/`medium`/`high`/`xhigh` 闭合集合） |
-| `LLM_PROVIDER_SECRET` | 模型供应商目录的加密密钥（ADR-0039）。配上之后在 系统管理 → 模型管理 里填供应商、给各用途分配模型，助手与知识库十秒内生效；留空即目录整个缺席，两边各用各的环境变量 |
+| `LLM_PROVIDER_SECRET` | 模型供应商目录的加密密钥（ADR-0039）。**配上它才配得出供应商**；留空即目录整个缺席，两边各用各的环境变量 |
 
 ⚠ **`ASSISTANT_MODEL_*` 与 `KNOWLEDGE_*` 那两组模型变量是目录的永久默认值**：目录里
 没给某个用途分配时才用它们，分配了就走目录。存量部署一行不改也照常跑。
@@ -123,10 +128,10 @@ WS 的 token 走 `Sec-WebSocket-Protocol` 子协议，而 `auth_request` 的子�
 始终「未启用」，而 `.env` 单看是配好的、两边都不报错。加新配置项时记得同时改
 `compose.yml`、根目录的 `.env.example`，还有这张表。
 
-⚠ **订阅那一路配好之后还要登录一次。** 去 系统管理 → 模型管理 页面走设备码登录
-（需要 `assistant:manage`）；不登录的话面板上这一路是灰的，标「未登录」。
-令牌整包加密存在 `assistant.model_credentials`，整套部署共用一行——换掉
-`ASSISTANT_CREDENTIAL_SECRET` 等于那一行解不开，界面上会变回「从来没登录过」。
+⚠ **订阅那一路配好之后还要登录一次。** 去 系统管理 → 模型管理 页面，在那一路
+供应商下面走设备码登录（需要 `assistant:manage`）；不登录的话面板上这一路是灰的，
+标「未登录」。令牌整包加密存在 `assistant.model_credentials`，**一路供应商一行**——
+换掉 `ASSISTANT_CREDENTIAL_SECRET` 等于那些行解不开，界面上会变回「从来没登录过」。
 
 ⚠ **`ASSISTANT_MODEL_TIMEOUT_S` 要小于边缘那条事件流 location 的
 `proxy_read_timeout`（300s）**，否则边缘先掐断，服务端这条超时与它的失败分档一次
