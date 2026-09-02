@@ -1,0 +1,71 @@
+/**
+ * @fileoverview 知识库对话这一侧的回合循环：内核在 `features/ai/turnLoop.ts`，
+ * 这里只是知识库的门面。
+ *
+ * 与助手那个门面的差别只有三处：信封里**没有工作面**（对话不在任何一页上）；
+ * 客户端工具只有内建的 `user.ask`（模型看得见的就这一个）；没有计划子系统，
+ * 模型收了嘴就是收了嘴，不代用户催。
+ *
+ * ⚠ 信封里一格都不许多带：知识库那边的入参是 `extra="forbid"`，多一格
+ * `surface_kind` 整个回合就是 400。
+ */
+import type { KnowledgeChatAdvanceIn } from '@dt/contracts'
+
+import {
+  BUILTIN_CLIENT_TOOLS,
+  isBuiltinTool,
+  runBuiltinTool,
+} from '@/features/ai/builtinTools'
+import { UnsupportedTool } from '@/features/ai/surfaces'
+import { runLoop, type LoopSink } from '@/features/ai/turnLoop'
+
+export type { LoopSink as KnowledgeRunnerSink } from '@/features/ai/turnLoop'
+
+/** 推进一个回合，逐块交出事件流。 */
+export type KnowledgeAdvanceStream = (
+  sessionId: string,
+  body: KnowledgeChatAdvanceIn,
+  signal?: AbortSignal,
+) => AsyncGenerator<string>
+
+/**
+ * 一次往返的上限。这里的一轮 = 一次反问：检索几次是服务端一个回合里的事，
+ * 不占往返。问二十次还没问清，该交还给人了。
+ */
+export const MAX_ROUNDS = 20
+
+export interface KnowledgeRunnerInput {
+  advance: KnowledgeAdvanceStream
+  sessionId: string
+  userText: string
+  signal?: AbortSignal | undefined
+}
+
+/**
+ * 跑完一个回合，中途把每一步交给 `sink`。
+ * @param input 从哪推进、说了什么
+ * @param sink 事件交给谁
+ */
+export async function runKnowledgeTurn(
+  input: KnowledgeRunnerInput,
+  sink: LoopSink,
+): Promise<void> {
+  await runLoop<KnowledgeChatAdvanceIn>(
+    {
+      advance: input.advance,
+      sessionId: input.sessionId,
+      envelope: () => ({ client_tools: [...BUILTIN_CLIENT_TOOLS] }),
+      userText: input.userText,
+      signal: input.signal,
+      dispatch,
+      maxRounds: MAX_ROUNDS,
+    },
+    sink,
+  )
+}
+
+/** 只认内建表。别的名字一律不支持——这一页没有工作面，也就没有别的工具。 */
+async function dispatch(call: Parameters<typeof runBuiltinTool>[0]) {
+  if (isBuiltinTool(call.name)) return runBuiltinTool(call)
+  throw new UnsupportedTool(call.name)
+}

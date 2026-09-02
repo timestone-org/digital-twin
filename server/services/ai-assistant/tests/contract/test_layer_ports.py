@@ -16,8 +16,10 @@ from ai_assistant.apps.chat.services.intent import Allowed
 from ai_assistant.apps.chat.services.memory import Scope
 from ai_assistant.apps.chat.services.reflection import Verdict
 
-# 七个层包。⚠ 显式列出而不是扫目录：扫出来的名单会把将来某个忘了 `__init__.py`
-# 的目录悄悄漏掉，而漏掉的那一层的闸就此不跑
+# 六个仍在助手这边的层包。⚠ 显式列出而不是扫目录：扫出来的名单会把将来某个
+# 忘了 `__init__.py` 的目录悄悄漏掉，而漏掉的那一层的闸就此不跑。
+# ⚠ 少了 `output`：那一层整个搬进了 `llmcore`（ADR-0037），助手这边连空壳
+# 都没留——留一个只做转发的空包，是下一次「改了 llmcore 却忘了改这里」的温床
 LAYERS = (
     "perception",
     "intent",
@@ -25,8 +27,19 @@ LAYERS = (
     "memory",
     "tools",
     "reflection",
-    "output",
 )
+
+# 每一层的 ports 此刻住在哪。⚠ 搬进 llmcore 的那几层要在这里点名：
+# 不点名的话 `_ports` 会 ModuleNotFoundError，而那读起来像「这一层没了」，
+# 实际是「它的端口换了地址」
+PORTS_HOME = {
+    "perception": "ai_assistant.apps.chat.services.perception.ports",
+    "memory": "ai_assistant.apps.chat.services.memory.ports",
+    "planning": "ai_assistant.apps.chat.services.planning.ports",
+    "intent": "llmcore.intent.ports",
+    "tools": "llmcore.tools.ports",
+    "reflection": "llmcore.reflection.ports",
+}
 
 # 这几个是 Protocol，各层的注册表要靠 `isinstance` 逐个校验注册进来的实现
 PROTOCOLS = (
@@ -45,9 +58,7 @@ def _package(layer: str) -> ModuleType:
 
 
 def _ports(layer: str) -> ModuleType:
-    return importlib.import_module(
-        f"ai_assistant.apps.chat.services.{layer}.ports"
-    )
+    return importlib.import_module(PORTS_HOME[layer])
 
 
 @pytest.mark.parametrize("layer", LAYERS)

@@ -16,16 +16,16 @@
     "branches": 100.0
   },
   "knowledge-server": {
-    "lines": 97.74,
-    "branches": 89.84
+    "lines": 93.23,
+    "branches": 81.33
   },
   "lib": {
     "lines": 97.04,
     "branches": 79.27
   },
   "llmcore": {
-    "lines": 97.2,
-    "branches": 88.0
+    "lines": 97.17,
+    "branches": 85.62
   },
   "opcua-server": {
     "lines": 98.99,

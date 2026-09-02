@@ -8,7 +8,7 @@
 挤在一起的那一天最省事的改法是把新工具塞进别的段落里——名字与实现于是开始漂。
 """
 
-from ai_assistant.apps.chat.services.tools.shapes import (
+from llmcore.tools.shapes import (
     ToolSpec,
     object_schema,
     string_schema,

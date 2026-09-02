@@ -126,6 +126,16 @@ export const routes: RouteRecordRaw[] = [
     },
   },
   {
+    // 知识库对话：对着资料多轮提问。与管理页同一个读码——能检索就能问
+    path: '/knowledge/chat',
+    name: 'knowledge-chat',
+    component: () => import('@/pages/KnowledgeChat/index.vue'),
+    meta: {
+      title: '知识库对话',
+      permissions: [PERMISSION_CODES.knowledgeUse],
+    },
+  },
+  {
     // 数据采集：一个协议一个页面（主从单页，左列表右详情）。第二个驱动进来
     // 时它是同级的另一条，而不是把这条改成通配——协议不同，配置字段就不同
     path: '/collect/opcua',

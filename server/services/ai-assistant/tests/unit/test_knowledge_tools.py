@@ -4,12 +4,12 @@ from typing import Any
 
 import pytest
 
-from ai_assistant.apps.chat.services.tools.ports import UnknownTool
 from ai_assistant.apps.chat.services.tools.providers.knowledge import (
     KNOWLEDGE_SPECS,
     MAX_SNIPPET_CHARS,
     KnowledgeTools,
 )
+from llmcore.tools.ports import UnknownTool
 
 
 class _Client:

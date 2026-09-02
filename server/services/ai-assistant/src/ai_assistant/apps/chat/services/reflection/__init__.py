@@ -10,13 +10,13 @@ from ai_assistant.apps.chat.services.reflection.hitl import (
     must_propose_only,
     undo_model_of,
 )
-from ai_assistant.apps.chat.services.reflection.ports import (
+from llmcore.reflection.ports import (
     Finding,
     Verdict,
     Verifier,
 )
-from ai_assistant.apps.chat.services.reflection.registry import check_step
-from ai_assistant.apps.chat.services.reflection.verifiers import (
+from llmcore.reflection.registry import check_step
+from llmcore.reflection.verifiers import (
     VERIFIERS,
     ToolFailureVerifier,
 )

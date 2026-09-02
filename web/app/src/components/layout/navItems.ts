@@ -34,13 +34,28 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     // 知识库挨着素材库：两者都是**跨大屏的公共资料**，不属于任何一张屏，
     // 也不属于系统管理那一组（那一组管的是账号与权限）。
-    // ⚠ 只挂读码 `knowledge:use`，与路由 meta 逐字一致——两边漂移会造出
-    // 「看得见点不进」或「看不见但输地址能进」，由 navItems 的契约测试钉死。
+    // 一级分组，下面两页：管资料的，与对着资料提问的。
+    // ⚠ 两页都只挂读码 `knowledge:use`，与路由 meta 逐字一致——两边漂移会
+    // 造出「看得见点不进」或「看不见但输地址能进」，由 navItems 的契约测试钉死。
     key: 'knowledge',
     label: '知识库',
     icon: 'search',
-    to: '/knowledge',
-    permission: [PERMISSION_CODES.knowledgeUse],
+    children: [
+      {
+        key: 'knowledge-manage',
+        label: '知识库管理',
+        icon: 'folder-open',
+        to: '/knowledge',
+        permission: [PERMISSION_CODES.knowledgeUse],
+      },
+      {
+        key: 'knowledge-chat',
+        label: '知识库对话',
+        icon: 'sparkles',
+        to: '/knowledge/chat',
+        permission: [PERMISSION_CODES.knowledgeUse],
+      },
+    ],
   },
   {
     // 采集是「去连现场设备读写点位」，与「工具 / OPC UA 服务端」方向相反：

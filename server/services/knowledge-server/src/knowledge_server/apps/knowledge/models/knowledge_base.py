@@ -8,7 +8,7 @@
 from sqlalchemy import CheckConstraint, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from knowledge_server.apps.knowledge.models.base import Base
+from knowledge_server.orm import Base
 from lib.db import TimestampMixin, UuidPrimaryKeyMixin
 
 NAME_MAX_LENGTH = 120

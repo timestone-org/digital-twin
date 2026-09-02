@@ -25,6 +25,8 @@ from lib.idempotency import IdempotencyStore
 from lib.objectstore import ObjectStore, create_object_store
 from lib.resilience import CircuitBreaker
 from lib.stream import RedisStream, StreamGroup, StreamLike
+from llmcore import ChatEndpoint, OpenAiCompatAdapter
+from llmcore.guard import GuardedModel
 
 # 幂等键的命名空间。⚠ 必须带服务名：共用一个 Redis 的两个服务，同一个端点名
 # 撞上同一个幂等键时会互相返回对方的结果
@@ -56,6 +58,9 @@ class Container:
     # 打 platform 的客户端。⚠ 一个进程一份、长活：每次调用现造一个再关掉，
     # 等于每次都重新握一次 TCP 手
     platform: httpx.AsyncClient
+    # 对话面用的带断路器的模型调用面；没接对话档就是 `None`——那时对话面整个
+    # 如实不可用（`ChatUnavailable`），而 `:ask` 那一路照样由 `answerer` 答
+    responder: GuardedModel | None = None
     # 启动时探测填进去。⚠ 可变对象，故不带 frozen——它是这份容器里唯一
     # 「装配之后才知道」的东西
     index: IndexProbe = field(default_factory=IndexProbe)
@@ -118,6 +123,11 @@ def build_container(settings: Settings) -> Container:
         base_url=settings.platform_base_url,
         timeout=settings.platform_timeout_s,
     )
+    chat_breaker = CircuitBreaker(
+        name="knowledge:chat",
+        failure_threshold=settings.model_breaker_failures,
+        reset_after_s=settings.model_breaker_reset_s,
+    )
     return Container(
         settings=settings,
         database=_build_database(settings),
@@ -134,14 +144,25 @@ def build_container(settings: Settings) -> Container:
         # 而真要代表用户去拉数据时，api 侧会按请求另造一份带头的
         sources=build_sources(SourceDeps(store=store, platform=platform)),
         embedder=build_embedder(settings.embedding_endpoint()),
-        answerer=build_answerer(
-            settings.chat_endpoint(),
-            # ⚠ 断路器一个进程一份、跟着容器活：每次调用现造一个的话它永远停在
-            # 「closed」，等于没有断路器
-            CircuitBreaker(
-                name="knowledge:chat",
-                failure_threshold=settings.model_breaker_failures,
-                reset_after_s=settings.model_breaker_reset_s,
-            ),
-        ),
+        # ⚠ 断路器一个进程一份、跟着容器活，且 `:ask` 与对话面**共用**这一份：
+        # 它们打的是同一个端点，那个端点不行就是整个不行
+        answerer=build_answerer(settings.chat_endpoint(), chat_breaker),
+        responder=_build_responder(settings.chat_endpoint(), chat_breaker),
     )
+
+
+def _build_responder(
+    endpoint: ChatEndpoint | None, breaker: CircuitBreaker
+) -> GuardedModel | None:
+    """对话面的模型调用面；没配端点就没有。
+
+    Args: endpoint, breaker。
+    """
+    if endpoint is None:
+        return None
+    adapter = OpenAiCompatAdapter(
+        resolve=lambda _kind: endpoint,
+        label="知识库对话档",
+        models=(endpoint.model,),
+    )
+    return GuardedModel(source=adapter.build, breaker=breaker)

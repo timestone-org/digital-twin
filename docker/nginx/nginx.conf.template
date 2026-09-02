@@ -314,6 +314,41 @@ http {
 
     # ⚠ 知识库完全依赖这里注入的签名头来认人；它转发同一组头去打 platform，
     # 于是「外部系统来源能读到什么」严格等于「这个用户自己能读什么」。
+    # 知识库对话的推进：**事件流**，与助手那条同一口径——关缓冲、写全超时。
+    # ⚠ 正则 location 压过前缀 location，必须写在 `/api/v1/knowledge/` 之前
+    location ~ ^/api/v1/knowledge/chat-sessions/[^/]+:advance$ {
+      include /etc/nginx/conf.d/auth-inject.conf;
+      proxy_pass http://$knowledge_upstream$request_uri;
+
+      # ⚠ 刻意**不** include proxy-common.conf：那份的 `proxy_read_timeout 25s`
+      # 会在模型还在想的时候把连接掐掉，而现象是「助手转了半分钟然后什么都
+      # 没发生」——查起来会一路怀疑到模型那边去。nginx 不允许在同一个 location
+      # 里重复声明同一条指令，想覆盖就只能不 include、逐条写全。
+      proxy_set_header Host              $host;
+      proxy_set_header X-Real-IP         $remote_addr;
+      proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header traceparent       $http_traceparent;
+      proxy_http_version 1.1;
+      proxy_connect_timeout 5s;
+      # ⚠ 要比 ASSISTANT_MODEL_TIMEOUT_S 大：小了的话边缘先掐，
+      # 服务端那条超时与它的失败分档一次都轮不到
+      proxy_read_timeout 300s;
+      proxy_send_timeout 300s;
+
+      # ⚠ 这两行缺一条，事件流就退化成「一次性把全部内容攒完再吐」，
+      # 界面上表现为整个回合毫无动静、最后突然全部出现——而「一步一步看得见」
+      # 正是这个功能的一半（ADR-0023）
+      proxy_buffering off;
+      proxy_cache off;
+      # SSE 经过反代时的老规矩：告诉上游别启用压缩缓冲
+      proxy_set_header Connection "";
+
+      # ⚠ 截图与点表都走这条请求体上来。默认 1m 会让每一张截图都 413，
+      # 而那条 413 在界面上只是一句「工具失败」
+      client_max_body_size 8m;
+    }
+
     location /api/v1/knowledge/ {
       include /etc/nginx/conf.d/auth-inject.conf;
       proxy_pass http://$knowledge_upstream$request_uri;

@@ -9,7 +9,7 @@
 改一个字就是行为改动，不是重构。
 """
 
-from ai_assistant.apps.chat.services.tools.shapes import (
+from llmcore.tools.shapes import (
     ToolSpec,
     integer_schema,
     object_schema,

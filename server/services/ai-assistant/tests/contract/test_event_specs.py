@@ -1,8 +1,8 @@
 """六档 SSE 事件：声明、真帧、两处前端，四份必须对得上。
 
 漏掉任何一处的表现都是同一句「助手做了一步但界面上没有」，而四处单看都对。
-其中**前端解帧表那一处此前一道闸都没有**——它只是 `turnRunner.ts` 里一串
-字面量，加一档事件忘了改它，那一档就被静默丢弃。
+其中**前端解帧表那一处此前一道闸都没有**——它只是 `turnLoop.ts`（内核）与
+`turnRunner.ts`（助手门面）里的一串字面量，加一档事件忘了改它，那一档就被静默丢弃。
 """
 
 import json
@@ -11,10 +11,10 @@ from typing import Any
 
 import pytest
 
-from ai_assistant.apps.chat.services.output import events
-from ai_assistant.apps.chat.services.output.events import EVENT_SPECS
-from ai_assistant.apps.chat.services.output.ports import EventSpec
-from ai_assistant.apps.chat.services.planning.turn_types import (
+from llmcore.output import events
+from llmcore.output.events import EVENT_SPECS
+from llmcore.output.ports import EventSpec
+from llmcore.turn.types import (
     ClientToolCall,
     TurnDelta,
     TurnOutcome,
@@ -24,7 +24,12 @@ from ai_assistant.apps.chat.services.planning.turn_types import (
 # ⚠ 用仓库根相对路径找前端：测试的工作目录是服务目录，写死绝对路径换台机器就断。
 # 层级是 tests/contract → tests → ai-assistant → services → server → 仓库根
 _REPO = Path(__file__).resolve().parents[5]
-_TURN_RUNNER = _REPO / "web/app/src/features/ai/turnRunner.ts"
+# ⚠ 解帧表分在两处：通用的五档在内核，助手独有的 `plan` 在门面。两份都要读，
+# 只读一份的话，抽内核那一次就会把这条闸读成「前端漏了五档」
+_DECODERS = (
+    _REPO / "web/app/src/features/ai/turnLoop.ts",
+    _REPO / "web/app/src/features/ai/turnRunner.ts",
+)
 _CONTRACTS = _REPO / "web/packages/contracts/src/assistant.ts"
 
 
@@ -106,11 +111,11 @@ def test_every_declared_payload_matches_the_real_frame(
 
 
 def test_the_frontend_decoder_handles_every_declared_event() -> None:
-    """⚠ 此前没有闸的那一处：`turnRunner.ts` 只有一串字面量。
+    """⚠ 此前没有闸的那一处：解帧表只是内核与门面里的一串字面量。
 
     加一档事件而忘了改它，那一档就被静默丢弃——助手做了一步，界面上没有。
     """
-    source = _source_of(_TURN_RUNNER)
+    source = "\n".join(_source_of(path) for path in _DECODERS)
     missing = [one.name for one in EVENT_SPECS if f"'{one.name}'" not in source]
     assert missing == []
 

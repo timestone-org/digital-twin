@@ -11,8 +11,8 @@
   它约束的是模型怎么排计划，落不到某一个 `TurnStep` 上。
 """
 
-from ai_assistant.apps.chat.services.reflection.ports import Verifier
-from ai_assistant.apps.chat.services.reflection.verifiers.tool_failure import (
+from llmcore.reflection.ports import Verifier
+from llmcore.reflection.verifiers.tool_failure import (
     ToolFailureVerifier,
 )
 

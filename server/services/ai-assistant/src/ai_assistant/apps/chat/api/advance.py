@@ -21,22 +21,22 @@ from ai_assistant.apps.chat.catalog import ASSISTANT_USE
 from ai_assistant.apps.chat.deps import get_advance_deps
 from ai_assistant.apps.chat.schemas.advance import AdvanceIn
 from ai_assistant.apps.chat.services import advance_service
-from ai_assistant.apps.chat.services.output import events
 from ai_assistant.apps.chat.services.perception import UnsupportedInput
 from ai_assistant.apps.chat.services.perception.decoders.image import (
     check_data_uri,
 )
 from ai_assistant.apps.chat.services.planning.plan import PlanUpdate
-from ai_assistant.apps.chat.services.planning.turn_types import (
-    TurnDelta,
-    TurnStep,
-)
 from ai_assistant.apps.chat.services.session_service import require_session
 from ai_assistant.deps import get_session, require
 from ai_assistant.settings import API_PREFIX
 from lib.auth import CallerContext
 from lib.errors import AppError, ValidationFailed
 from lib.logging import current_log_context, get_logger
+from llmcore.output import events
+from llmcore.turn.types import (
+    TurnDelta,
+    TurnStep,
+)
 
 router = APIRouter(prefix=f"{API_PREFIX}/sessions", tags=["turn"])
 

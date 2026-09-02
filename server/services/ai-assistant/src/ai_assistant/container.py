@@ -18,6 +18,7 @@ from ai_assistant.llm import (
     ModelRegistry,
     build_openai_embedding,
 )
+from ai_assistant.llm.codex.rewire import CodexRewire
 from ai_assistant.settings import SERVICE_NAME, Settings
 from ai_assistant.upstream import (
     AuthClient,
@@ -117,6 +118,9 @@ def _build_model(
     return GuardedModel(
         source=registry.resolve,
         is_streaming=settings.model_stream_enabled,
+        # ⚠ 订阅账号那一路要改线形（不认工具名里的点号）；外壳在 llmcore、
+        # 两个服务共用，特例只能以钩子注进去
+        rewire=CodexRewire(),
         # 兜底那一份只在「档位认不出、用途也没登记」时用得上
         breaker=_breaker_of(settings, DEFAULT_PROFILE, "chat"),
         breakers={

@@ -5,13 +5,13 @@
 """
 
 from ai_assistant.apps.chat.services.intent.gates import GATES, PermissionGate
-from ai_assistant.apps.chat.services.intent.ports import (
+from ai_assistant.apps.chat.services.intent.registry import narrow_all
+from ai_assistant.apps.chat.services.intent.select import allowed_for, specs_for
+from llmcore.intent.ports import (
     Allowed,
     Gate,
     TurnContext,
 )
-from ai_assistant.apps.chat.services.intent.registry import narrow_all
-from ai_assistant.apps.chat.services.intent.select import allowed_for, specs_for
 
 __all__ = [
     "GATES",

@@ -39,9 +39,9 @@ from ai_assistant.apps.chat.services.tools.points.resolve import (
 from ai_assistant.apps.chat.services.tools.providers.server_specs import (
     SERVER_SPECS,
 )
-from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
 from ai_assistant.apps.chat.skills import find_skill
 from ai_assistant.upstream import PlatformClient
+from llmcore.tools.shapes import ToolSpec
 
 # 一次检索最多回几条。再多模型也读不完，而每一条都在占上下文
 MAX_RESULTS = 20

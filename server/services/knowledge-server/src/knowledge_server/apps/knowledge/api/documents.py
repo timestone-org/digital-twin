@@ -12,10 +12,6 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.knowledge import crud
-from knowledge_server.apps.knowledge.catalog import (
-    KNOWLEDGE_USE,
-    KNOWLEDGE_WRITE,
-)
 from knowledge_server.apps.knowledge.schemas import (
     DocumentOut,
     RegisterDocumentIn,
@@ -26,6 +22,10 @@ from knowledge_server.apps.knowledge.schemas import (
 from knowledge_server.apps.knowledge.services import (
     document_service,
     library_service,
+)
+from knowledge_server.catalog import (
+    KNOWLEDGE_USE,
+    KNOWLEDGE_WRITE,
 )
 from knowledge_server.container import Container
 from knowledge_server.deps import get_container, get_session, require

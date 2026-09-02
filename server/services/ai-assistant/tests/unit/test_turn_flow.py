@@ -17,14 +17,14 @@ from langchain_core.messages import (
 )
 
 from ai_assistant.apps.chat.services.memory.prompt import build_system_prompt
-from ai_assistant.apps.chat.services.planning.turn import TurnDeps, run_turn
 from ai_assistant.apps.chat.services.tools.providers.server import ServerTools
 from ai_assistant.apps.chat.services.tools.specs import specs_named
 from ai_assistant.apps.chat.skills import find_skill
 from ai_assistant.llm import GuardedModel
 from ai_assistant.llm.ports import ModelChoice
 from lib.resilience import CircuitBreaker
-from unit.llm_fakes import ScriptedChat, tool_call
+from llmcore.testing import ScriptedChat, tool_call
+from llmcore.turn.loop import TurnDeps, run_turn
 
 SURFACE = "dashboard-editor"
 TOOLS = ("skills.load", "points.search", "dashboard.write_binding")

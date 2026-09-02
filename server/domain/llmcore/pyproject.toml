@@ -1,13 +1,18 @@
 [project]
 name = "llmcore"
 version = "0.1.0"
-description = "OpenAI 兼容端点的调用面：端点形状、适配器口径、失败分档、逐字增量。零项目名词。"
+description = "跟模型打交道的一整层：端点与适配器、失败分档、逐字增量，以及回合编排、工具注册表、SSE 摊平。零项目名词。"
 requires-python = ">=3.12"
 dependencies = [
     # 失败分档要 lib.errors 的 AppError 基类
     "lib",
     # 对话模型走 langchain 的抽象；嵌入直接走 openai 客户端
     "langchain-core>=1.0",
+    # 回合编排：「跑到一半停下来等外部把工具跑完、再接着跑」是它的一等公民。
+    # ⚠ 必须在这里声明而不是靠消费方带：`turn/loop.py` 直接 import 它，只声明在
+    # 助手那边的话，知识库按自己声明的依赖装出的镜像会启动即崩
+    # （check_service_deps 逮到过一次）
+    "langgraph>=1.2",
     "langchain-openai>=1.6",
     "openai>=3.3",
     # 端点密钥用 SecretStr 装着——从形状上就不许它被 print 出去
@@ -26,6 +31,9 @@ packages = ["src/llmcore"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# ⚠ 让 `tests/` 自己成为 import 根：用例之间共用假件时写 `from unit.fakes import`，
+# 不给这一条就是 ModuleNotFoundError，而错误信息指向的是用例不是配置
+pythonpath = ["tests"]
 asyncio_mode = "auto"
 addopts = "-q"
 filterwarnings = ["error"]

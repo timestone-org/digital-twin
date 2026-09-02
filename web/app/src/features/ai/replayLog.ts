@@ -7,11 +7,7 @@
  * `user.ask` 在历史里就是一条普通的工具步骤，走 `withStep` 而不是 `withAsk`
  * ——这里只造 said 与 step 两种条目，所以是结构上做不到，不是靠自觉。
  */
-import type {
-  AssistantMessage,
-  AssistantSessionDetail,
-  AssistantStep,
-} from '@dt/contracts'
+import type { AssistantMessage, AssistantStep } from '@dt/contracts'
 
 import {
   emptyLog,
@@ -26,16 +22,30 @@ import type { RunnerStep } from './turnRunner'
 export const AUTO_CONTINUE_PREFIX = '（自动继续）'
 
 /**
+ * 回放只读消息的这三格；助手与知识库对话的会话详情都长这个样子。
+ * ⚠ 写成结构类型而不是收 `AssistantSessionDetail`：知识库那份没有工作面
+ * 与计划，而回放本来就一格都不读它们。
+ */
+export type ReplayableMessage = Pick<
+  AssistantMessage,
+  'role' | 'content_json' | 'steps'
+>
+
+export interface Replayable {
+  messages: readonly ReplayableMessage[]
+}
+
+/**
  * 把一份会话详情回放成一条时间线。
  * @param detail 库里的会话详情，消息与步骤已按 seq 升序
  */
-export function replayedLog(detail: AssistantSessionDetail): ConversationLog {
+export function replayedLog(detail: Replayable): ConversationLog {
   return detail.messages.reduce(replayed, emptyLog())
 }
 
 function replayed(
   log: ConversationLog,
-  message: AssistantMessage,
+  message: ReplayableMessage,
 ): ConversationLog {
   if (message.role === 'user') return withUserSaid(log, message)
   if (message.role === 'assistant') return withAssistantSaid(log, message)
@@ -46,7 +56,7 @@ function replayed(
 /** 用户的一条。⚠ 「（自动继续）」开头的是循环代发的催促，回放成 note。 */
 function withUserSaid(
   log: ConversationLog,
-  message: AssistantMessage,
+  message: ReplayableMessage,
 ): ConversationLog {
   const text = readText(message.content_json.text)
   if (text === '') return log
@@ -57,7 +67,7 @@ function withUserSaid(
 /** 助手的一条：先摆它做的每一步，再摆正文（空正文跳过）。 */
 function withAssistantSaid(
   log: ConversationLog,
-  message: AssistantMessage,
+  message: ReplayableMessage,
 ): ConversationLog {
   const stepped = message.steps.reduce(
     (grown, step) => withStep(grown, runnerStepOf(step)),

@@ -14,12 +14,12 @@ from ai_assistant.apps.chat.services.memory.ports import (
     Knowledge,
     Scope,
 )
-from ai_assistant.apps.chat.services.tools.ports import UnknownTool
 from ai_assistant.apps.chat.services.tools.providers.memory import (
     MAX_LIMIT,
     MemoryTools,
 )
 from lib.auth.edge_headers import HEADER_USER_ID
+from llmcore.tools.ports import UnknownTool
 
 OWNER = "11111111-1111-4111-8111-111111111111"
 

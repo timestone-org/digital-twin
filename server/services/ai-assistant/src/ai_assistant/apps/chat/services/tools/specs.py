@@ -11,7 +11,7 @@
 """
 
 from ai_assistant.apps.chat.services.tools.registry import all_specs
-from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
+from llmcore.tools.shapes import ToolSpec
 
 TOOL_SPECS: tuple[ToolSpec, ...] = all_specs()
 

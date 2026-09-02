@@ -18,6 +18,11 @@ INTERNAL_PREFIX = "/internal/v1/knowledge"
 DB_SCHEMA = "knowledge"
 HTTP_PORT = 8009
 
+# 对话面的历史窗口高水位与一次脱落几条（`llmcore.memory.history`）。
+# ⚠ 是常量不是配置：按环境改行为会让两套部署跑出两种对话
+MAX_HISTORY_MESSAGES = 40
+HISTORY_DROP_STEP = 10
+
 ROLE_API = "api"
 ROLE_WORKER = "worker"
 

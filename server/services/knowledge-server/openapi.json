@@ -91,6 +91,96 @@
         "title": "ApiResponse[CapabilityOut]",
         "type": "object"
       },
+      "ApiResponse_ChatSessionDetailOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatSessionDetailOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ChatSessionDetailOut]",
+        "type": "object"
+      },
+      "ApiResponse_ChatSessionOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatSessionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ChatSessionOut]",
+        "type": "object"
+      },
       "ApiResponse_DocumentOut_": {
         "properties": {
           "code": {
@@ -179,6 +269,51 @@
           }
         },
         "title": "ApiResponse[KnowledgeBaseOut]",
+        "type": "object"
+      },
+      "ApiResponse_Page_ChatSessionOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page_ChatSessionOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Page[ChatSessionOut]]",
         "type": "object"
       },
       "ApiResponse_Page_DocumentOut__": {
@@ -621,6 +756,390 @@
         "title": "CapabilityOut",
         "type": "object"
       },
+      "ChatAdvanceIn": {
+        "additionalProperties": false,
+        "description": "推进一个回合。",
+        "properties": {
+          "client_tools": {
+            "items": {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Client Tools",
+            "type": "array"
+          },
+          "tool_results": {
+            "items": {
+              "$ref": "#/components/schemas/ToolResultIn"
+            },
+            "maxItems": 8,
+            "title": "Tool Results",
+            "type": "array"
+          },
+          "user_text": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Text"
+          }
+        },
+        "title": "ChatAdvanceIn",
+        "type": "object"
+      },
+      "ChatMessageOut": {
+        "description": "一条消息，连着它走过的那几步。",
+        "properties": {
+          "content_json": {
+            "additionalProperties": true,
+            "title": "Content Json",
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/ChatStepOut"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "usage_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage Json"
+          }
+        },
+        "required": [
+          "id",
+          "session_id",
+          "seq",
+          "role",
+          "content_json",
+          "usage_json",
+          "created_at"
+        ],
+        "title": "ChatMessageOut",
+        "type": "object"
+      },
+      "ChatSessionCreateIn": {
+        "additionalProperties": false,
+        "description": "建会话。\n\n⚠ 入参里没有 `user_id`：归属钉在调用者身上。开一个字段让客户端指定归属，\n就是一条替别人建会话的越权入口。",
+        "properties": {
+          "title": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "ChatSessionCreateIn",
+        "type": "object"
+      },
+      "ChatSessionDetailOut": {
+        "description": "会话详情：连着全部消息与步骤，两级都按 `seq` 升序。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_archived": {
+            "title": "Is Archived",
+            "type": "boolean"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessageOut"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "row_version": {
+            "title": "Row Version",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "user_id",
+          "title",
+          "is_archived",
+          "row_version",
+          "last_error",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ChatSessionDetailOut",
+        "type": "object"
+      },
+      "ChatSessionOut": {
+        "description": "一次对话。`row_version` 让前端判断手上那份旧没旧。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_archived": {
+            "title": "Is Archived",
+            "type": "boolean"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "row_version": {
+            "title": "Row Version",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "user_id",
+          "title",
+          "is_archived",
+          "row_version",
+          "last_error",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ChatSessionOut",
+        "type": "object"
+      },
+      "ChatSessionUpdateIn": {
+        "additionalProperties": false,
+        "description": "改会话。缺省的字段表示本次不涉及。",
+        "properties": {
+          "is_archived": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Archived"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "ChatSessionUpdateIn",
+        "type": "object"
+      },
+      "ChatStepOut": {
+        "description": "回合里的一步：一次模型调用或一次工具执行。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "input_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Json"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "message_id": {
+            "format": "uuid",
+            "title": "Message Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "output_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Json"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "message_id",
+          "seq",
+          "kind",
+          "name",
+          "state",
+          "input_json",
+          "output_json",
+          "error",
+          "started_at",
+          "ended_at",
+          "created_at"
+        ],
+        "title": "ChatStepOut",
+        "type": "object"
+      },
       "DocumentOut": {
         "description": "一份文档的样子。",
         "properties": {
@@ -957,6 +1476,37 @@
         "title": "LocatorOut",
         "type": "object"
       },
+      "Page_ChatSessionOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ChatSessionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total"
+        ],
+        "title": "Page[ChatSessionOut]",
+        "type": "object"
+      },
       "Page_DocumentOut_": {
         "properties": {
           "items": {
@@ -1219,6 +1769,38 @@
         "title": "SyncOut",
         "type": "object"
       },
+      "ToolResultIn": {
+        "additionalProperties": false,
+        "description": "浏览器跑完一个客户端工具（反问）之后带回来的东西。",
+        "properties": {
+          "call_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Call Id",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "output": {
+            "title": "Output"
+          }
+        },
+        "required": [
+          "call_id"
+        ],
+        "title": "ToolResultIn",
+        "type": "object"
+      },
       "UploadTicketIn": {
         "description": "申请直传凭证的入参。",
         "properties": {
@@ -1352,6 +1934,320 @@
         "summary": "知识库能力",
         "tags": [
           "capability"
+        ]
+      }
+    },
+    "/api/v1/knowledge/chat-sessions": {
+      "get": {
+        "description": "分页列出调用者看得见的对话。\n\nArgs: session, page, caller, is_archived。",
+        "operationId": "list_sessions_api_v1_knowledge_chat_sessions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "is_archived",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Is Archived"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Page_ChatSessionOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "对话列表",
+        "tags": [
+          "chat"
+        ]
+      },
+      "post": {
+        "description": "建对话；支持 `Idempotency-Key`。\n\nArgs: payload, session, response, write。",
+        "operationId": "create_session_api_v1_knowledge_chat_sessions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatSessionCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ChatSessionOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "新建对话",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/api/v1/knowledge/chat-sessions/{session_id}": {
+      "delete": {
+        "description": "删对话。消息与步骤跟着走。\n\nArgs: session_id, session, caller。",
+        "operationId": "delete_session_api_v1_knowledge_chat_sessions__session_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除对话",
+        "tags": [
+          "chat"
+        ]
+      },
+      "get": {
+        "description": "对话详情，连着全部消息与步骤。\n\nArgs: session_id, session, caller。",
+        "operationId": "read_session_api_v1_knowledge_chat_sessions__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ChatSessionDetailOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "对话详情",
+        "tags": [
+          "chat"
+        ]
+      },
+      "patch": {
+        "description": "改标题或归档。归档只是不再默认列出，历史一条都不删。\n\nArgs: session_id, payload, session, caller。",
+        "operationId": "update_session_api_v1_knowledge_chat_sessions__session_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatSessionUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ChatSessionOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "更新对话",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/api/v1/knowledge/chat-sessions/{session_id}:advance": {
+      "post": {
+        "description": "跑一个回合，每走完一步就推一帧。\n\nArgs: session_id, payload, session, deps, caller。",
+        "operationId": "advance_turn_api_v1_knowledge_chat_sessions__session_id__advance_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatAdvanceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "推进一个回合（事件流）",
+        "tags": [
+          "chat"
         ]
       }
     },

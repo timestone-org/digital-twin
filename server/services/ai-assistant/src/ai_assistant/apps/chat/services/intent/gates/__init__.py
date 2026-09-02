@@ -10,7 +10,7 @@
 from ai_assistant.apps.chat.services.intent.gates.permission import (
     PermissionGate,
 )
-from ai_assistant.apps.chat.services.intent.ports import Gate
+from llmcore.intent.ports import Gate
 
 GATES: tuple[Gate, ...] = (PermissionGate(),)
 

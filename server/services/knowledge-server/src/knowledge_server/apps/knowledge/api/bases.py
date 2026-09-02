@@ -7,10 +7,6 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.knowledge import crud
-from knowledge_server.apps.knowledge.catalog import (
-    KNOWLEDGE_MANAGE,
-    KNOWLEDGE_USE,
-)
 from knowledge_server.apps.knowledge.schemas import (
     KnowledgeBaseIn,
     KnowledgeBaseOut,
@@ -18,6 +14,10 @@ from knowledge_server.apps.knowledge.schemas import (
     SourceOut,
 )
 from knowledge_server.apps.knowledge.services import library_service
+from knowledge_server.catalog import (
+    KNOWLEDGE_MANAGE,
+    KNOWLEDGE_USE,
+)
 from knowledge_server.container import Container
 from knowledge_server.deps import get_container, get_session, require
 from knowledge_server.settings import API_PREFIX

@@ -24,12 +24,11 @@ from ai_assistant.apps.chat.services.advance_service import (
     LoadedContext,
     _summary_of,
 )
-from ai_assistant.apps.chat.services.memory import history, summarize
-from ai_assistant.apps.chat.services.memory.ports import Summary
 from ai_assistant.llm import GuardedModel, ModelChoice
 from ai_assistant.settings import MAX_HISTORY_MESSAGES
 from lib.resilience import CircuitBreaker
-from unit.llm_fakes import ScriptedChat
+from llmcore.memory import Summary, history, summarize
+from llmcore.testing import ScriptedChat
 from unit.summarize_fakes import RecordingSession, RecordingSummarizer
 
 STAMP = "default:summary"

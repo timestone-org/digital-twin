@@ -9,13 +9,13 @@
 
 from typing import Any
 
-from ai_assistant.apps.chat.services.tools.ports import RunsElsewhere
 from ai_assistant.apps.chat.services.tools.providers.client_specs import (
     core,
     interaction,
     look,
 )
-from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
+from llmcore.tools.ports import RunsElsewhere
+from llmcore.tools.shapes import ToolSpec
 
 
 class ClientTools:
