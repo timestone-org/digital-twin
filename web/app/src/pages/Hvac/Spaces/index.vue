@@ -206,7 +206,9 @@ onMounted(() => {
           @clear="selectedIds = []"
         />
 
+        <!-- 一个车间都没有时只留下面那句「先选一个车间」，不再叠一句「还没有房间」 -->
         <RoomBoard
+          v-if="board.workshopId.value !== '' || board.loading.value"
           :rooms="board.rooms.value"
           :units-by-room="board.unitsByRoom.value"
           :selected-ids="selectedIds"
@@ -221,6 +223,7 @@ onMounted(() => {
 
         <DtEmpty
           v-if="board.workshopId.value === '' && !board.loading.value"
+          class="flex-1"
           icon="building"
           title="先选一个车间"
           hint="左侧还没有车间时，先建一个。"

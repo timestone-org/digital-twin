@@ -102,9 +102,10 @@ function labelOf(index: number, width: number): string {
       这个组合没有热行（全部开机都是一开机就已达标），画不出误差分布。
     </p>
     <template v-else>
-      <!-- preserveAspectRatio 用默认的 xMidYMid meet：none 会把条压变形 -->
+      <!-- preserveAspectRatio 取 meet 不取 none：none 会把条压变形；xMin 让图贴着标题靠左 -->
       <svg
         :viewBox="`0 0 ${WIDTH} ${HEIGHT}`"
+        preserveAspectRatio="xMinYMid meet"
         class="h-44 w-full"
         role="img"
         aria-label="热行有符号误差的分布直方图"

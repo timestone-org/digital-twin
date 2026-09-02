@@ -24,15 +24,15 @@ import { usePipelineOps } from './scripts/usePipelineOps'
 
 const COLUMNS: readonly DtDataColumn[] = [
   { key: 'name', label: '名称', card: 'title' },
-  { key: 'code', label: '编码', width: '12rem', card: 'meta' },
+  { key: 'code', label: '编码', width: '14rem', card: 'meta' },
   { key: 'node_count', label: '算子数', width: '6rem', align: 'right' },
-  { key: 'sources', label: '取自台账', width: '16rem' },
-  { key: 'updated_at', label: '最近改动', width: '12rem' },
+  { key: 'sources', label: '取自台账', width: '14rem' },
+  { key: 'updated_at', label: '最近改动', width: '11rem' },
   {
     key: 'actions',
     label: '操作',
     align: 'right',
-    width: '8rem',
+    width: '7rem',
     card: 'actions',
   },
 ]
@@ -111,14 +111,23 @@ onMounted(() => void list.reload())
         :loading="list.loading.value"
         :error="list.error.value"
         :empty="emptyState"
+        :layout="{
+          fixedLayout: true,
+          minWidth: '64rem',
+          cardColumns: 3,
+          cardMinWidth: '20rem',
+        }"
       >
         <template #toolbar>
           <DtInput
             v-model="keyword"
+            class="w-72"
             type="search"
             size="sm"
             placeholder="按名称或编码搜索"
-          />
+          >
+            <template #leading><DtIcon name="search" :size="14" /></template>
+          </DtInput>
         </template>
         <template #cell-name="{ row }">
           <RouterLink
@@ -129,7 +138,11 @@ onMounted(() => void list.reload())
           </RouterLink>
         </template>
         <template #cell-code="{ row }">
-          <DtTag intent="neutral" size="sm" mono>{{ row.code }}</DtTag>
+          <DtTag class="dt-ml-list__code" intent="neutral" size="sm" mono>
+            <span class="dt-ml-list__code-text" :title="row.code">
+              {{ row.code }}
+            </span>
+          </DtTag>
         </template>
         <template #cell-node_count="{ row }">{{ row.node_count }}</template>
         <template #cell-sources="{ row }">
@@ -184,6 +197,16 @@ onMounted(() => void list.reload())
 .dt-ml-list {
   &__link {
     color: var(--accent-primary);
+  }
+
+  &__code {
+    max-width: 100%;
+  }
+
+  &__code-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   &__sources {

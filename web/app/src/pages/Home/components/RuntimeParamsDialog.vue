@@ -218,24 +218,17 @@ async function reset(): Promise<void> {
     </DtPageState>
 
     <template #footer>
-      <DtButton
-        variant="ghost"
-        size="sm"
-        :disabled="busy || loading"
-        @click="reset"
-      >
+      <DtButton variant="ghost" :disabled="busy || loading" @click="reset">
         恢复默认
       </DtButton>
       <DtButton
         variant="ghost"
-        size="sm"
         :disabled="busy"
         @click="emit('update:open', false)"
       >
         关闭
       </DtButton>
       <DtButton
-        size="sm"
         icon="save"
         :loading="busy"
         :disabled="loading || fields.length === 0"

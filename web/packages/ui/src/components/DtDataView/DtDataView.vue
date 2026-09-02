@@ -33,7 +33,7 @@ export interface DtDataViewLayout {
   /** 关掉内置切换器：多块数据共用页面上一个切换器时用。 */
   toggle?: boolean | undefined
   /** 卡片视图每行**最多**几张。够宽才铺满，窄了自己降列。 */
-  cardColumns?: 1 | 2 | 3 | undefined
+  cardColumns?: 1 | 2 | 3 | 4 | undefined
   /**
    * 一张卡还读得下去的最小宽度。轨道窄到这个值就少铺一列，
    * 所以它决定的是「什么时候降列」，不是卡片的实际宽度。

@@ -46,7 +46,16 @@ onBeforeUnmount(() => {
       <span class="topbar-scan absolute inset-y-0 left-0 w-1/3" />
     </span>
 
-    <div class="relative z-10 flex min-w-0 items-center gap-3">
+    <!--
+      shrink-[1000]：装不下时标题先让——它是说明性的，可以截断；右侧 actions 槽里
+      是要点的控件。两边同为 shrink-1 时按内容宽度按比例分摊，宽工具条的页面
+      （大屏编辑器）在 1440 下就是「标题还剩一半、保存钮已经滚出屏外」。标题让
+      到底（min-w-0）之后才轮到 actions 收缩，那时工具条自己的横向滚动才接手。
+    -->
+    <div
+      class="relative z-10 flex min-w-0 shrink-[1000] items-center gap-3"
+      :class="{ 'min-w-8': backTo }"
+    >
       <!--
         用 RouterLink 而不是按钮：返回是导航、地址会变，中键新标签打开与复制链接
         都该照常可用。同理不用 router.back()——那条路径在直接进子页面时会退出站外。

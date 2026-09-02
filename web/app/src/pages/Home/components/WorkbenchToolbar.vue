@@ -41,7 +41,7 @@ const summary = computed(() => {
 
 <template>
   <header class="flex flex-wrap items-end justify-between gap-3">
-    <div class="min-w-0">
+    <div class="min-w-0 shrink grow basis-64">
       <h2
         class="dt-glow-text truncate font-display text-xl font-bold tracking-wide"
       >

@@ -31,6 +31,7 @@ const COLUMNS: readonly DtDataColumn[] = [
 const LAYOUT: DtDataViewLayout = {
   toggle: false,
   fill: false,
+  fixedLayout: true,
   minWidth: '38rem',
 }
 
@@ -79,12 +80,16 @@ const emit = defineEmits<{
         @retry="emit('retry')"
       >
         <template #cell-table_name="{ row }">
-          <span class="truncate">{{ row.table_name }}</span>
+          <span class="block truncate" :title="row.table_name">
+            {{ row.table_name }}
+          </span>
         </template>
 
         <template #cell-column_name="{ row }">
-          <span class="flex items-center gap-1">
-            <span class="truncate">{{ row.column_name }}</span>
+          <span class="flex min-w-0 items-center gap-1">
+            <span class="min-w-0 truncate" :title="row.column_name">
+              {{ row.column_name }}
+            </span>
             <DtTag v-if="!row.is_direct" size="sm" intent="warning">间接</DtTag>
           </span>
         </template>

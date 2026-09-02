@@ -65,7 +65,7 @@ const fields = computed(() => [
     </div>
 
     <dl
-      class="grid grid-cols-2 gap-x-6 gap-y-2 text-xs md:grid-cols-4"
+      class="grid grid-cols-2 gap-x-6 gap-y-2 text-xs xl:grid-cols-4"
       aria-label="账号信息"
     >
       <div v-for="field in fields" :key="field.key">

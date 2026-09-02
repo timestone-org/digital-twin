@@ -238,7 +238,7 @@ function errorOf(field: FormField): string {
   &__row {
     display: flex;
     gap: 0.5rem;
-    align-items: flex-end;
+    align-items: center;
 
     > :first-child {
       flex: 1;

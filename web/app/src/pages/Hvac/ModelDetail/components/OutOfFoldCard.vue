@@ -135,7 +135,7 @@ function onScale(value: string): void {
     />
 
     <template v-else>
-      <div class="grid min-w-0 gap-4 xl:grid-cols-[24rem_minmax(0,1fr)]">
+      <div class="grid min-w-0 gap-4 lg:grid-cols-[24rem_minmax(0,1fr)]">
         <PredictionScatter
           :rows="props.outOfFold.filtered.value"
           :hot-mae="props.outOfFold.hotMae.value"

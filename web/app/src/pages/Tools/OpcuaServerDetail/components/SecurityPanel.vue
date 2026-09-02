@@ -225,10 +225,13 @@ onMounted(() => {
         }"
       >
         <template #cell-subject="{ row }">
-          <span class="truncate">{{ row.subject }}</span>
+          <span class="block truncate" :title="row.subject">{{
+            row.subject
+          }}</span>
         </template>
+        <!-- 指纹没有空格，不许它换行就会把整张表撑出卡片；按字符折行，主体那一列才留得住 -->
         <template #cell-fingerprint="{ row }">
-          <span class="font-mono text-2xs text-text-disabled">
+          <span class="font-mono text-2xs break-all text-text-disabled">
             {{ row.fingerprint }}
           </span>
         </template>
@@ -248,12 +251,14 @@ onMounted(() => {
     </DtCard>
 
     <DtModal v-model="credentialFormOpen" title="新建接入凭据">
-      <DtNotice intent="warning" icon="alert-triangle">
-        口令由服务端生成，创建后只显示这一次，关掉就再也取不回来。
-      </DtNotice>
-      <DtField label="用户名" required>
-        <DtInput v-model="newUsername" placeholder="scada-01" />
-      </DtField>
+      <div class="flex flex-col gap-3">
+        <DtNotice intent="warning" icon="alert-triangle">
+          口令由服务端生成，创建后只显示这一次，关掉就再也取不回来。
+        </DtNotice>
+        <DtField label="用户名" required>
+          <DtInput v-model="newUsername" placeholder="scada-01" />
+        </DtField>
+      </div>
       <template #footer>
         <DtButton variant="ghost" @click="credentialFormOpen = false">
           取消

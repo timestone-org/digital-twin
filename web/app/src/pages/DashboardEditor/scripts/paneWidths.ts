@@ -16,7 +16,7 @@ export interface PaneWidths {
 export const PANE_DEFAULTS: PaneWidths = { left: 240, right: 320 }
 
 /** 侧栏最窄。再窄模块库的卡片与属性面板的两列栅格都摆不下。 */
-export const PANE_MIN_PX = 200
+export const PANE_MIN_PX = 240
 
 /** 画布至少留这么宽：拖到极限时总得还有块能编辑的地方。 */
 export const CANVAS_MIN_PX = 280

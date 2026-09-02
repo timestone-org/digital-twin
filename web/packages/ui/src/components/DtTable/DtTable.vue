@@ -163,6 +163,9 @@ function onSort(column: DtTableColumn): void {
     font-weight: 400;
     color: var(--text-disabled);
     white-space: nowrap;
+    // 定宽列里列名长过列宽时截成省略号：表头不裁切会直接盖到相邻表头上
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   td {

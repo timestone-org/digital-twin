@@ -169,6 +169,13 @@ function onKeydown(event: KeyboardEvent): void {
   background: var(--ai-edge);
 }
 
+/* 与时间线的消息列同宽同轴（ChatPanel 里钉的 56rem），发送键才对得上右对齐的自己那条 */
+.kb-compose :deep(.ai-inputbox),
+.kb-compose :deep(.dt-notice) {
+  max-width: 56rem;
+  margin-inline: auto;
+}
+
 .kb-compose__listening {
   display: inline-flex;
   align-items: center;

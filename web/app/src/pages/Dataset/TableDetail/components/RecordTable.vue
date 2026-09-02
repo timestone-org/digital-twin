@@ -94,6 +94,8 @@ const tableColumns = computed<DtDataColumn[]>(() => [
     key: valueKey(column.key),
     label: headerOf(column),
     width: '9rem',
+    // 数值靠右：位数一变，左对齐的数字就对不上行
+    ...(column.data_type === 'number' ? { align: 'right' as const } : {}),
   })),
   ...TAIL_COLUMNS,
 ])
@@ -103,7 +105,7 @@ const medians = computed(() => sampleMedians(props.columns, props.rows))
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col gap-2">
+  <div class="record-table flex min-h-0 flex-1 flex-col gap-2">
     <!-- 钉死表格视图：数据表读的是「一列一列对下来」，卡片视图给不了这件事 -->
     <DtDataView
       class="min-h-0 flex-1"
@@ -188,3 +190,11 @@ const medians = computed(() => sampleMedians(props.columns, props.rows))
     />
   </div>
 </template>
+
+<style scoped>
+/* 列名由用户自定且带单位，定宽列里不换行会盖到相邻表头上 */
+.record-table :deep(.dt-table thead th) {
+  white-space: normal;
+  vertical-align: bottom;
+}
+</style>

@@ -149,7 +149,7 @@ function move(index: number, delta: number): void {
       size="inline"
       title="场景里还没有锚点，先加锚点再连能量流。"
     />
-    <div v-else class="grid grid-cols-[1fr_auto] gap-1.5">
+    <div v-else class="grid grid-cols-[minmax(0,1fr)_auto] gap-1.5">
       <DtSelect
         :model-value="picked"
         :options="anchorOptions"

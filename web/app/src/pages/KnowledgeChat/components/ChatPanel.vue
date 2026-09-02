@@ -127,4 +127,10 @@ defineEmits<{
   color: var(--text-secondary);
   font-size: 0.75rem;
 }
+
+/* 消息列钉在可读的宽度上居中：铺满整块面板时一行有一千多像素，读起来要甩头 */
+.chat-panel :deep(.ai-stream__list) {
+  max-width: 56rem;
+  margin-inline: auto;
+}
 </style>

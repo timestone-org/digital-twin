@@ -131,7 +131,13 @@ async function onChangePassword(): Promise<void> {
               autocomplete="email"
             />
             <DtInput v-model="profile.phone" label="手机号" size="lg" />
-            <DtButton type="submit" :loading="profileState.busy">保存</DtButton>
+            <DtButton
+              type="submit"
+              class="self-start"
+              :loading="profileState.busy"
+            >
+              保存
+            </DtButton>
             <DtNotice
               v-if="profileState.note"
               :intent="profileState.ok ? 'success' : 'danger'"
@@ -161,7 +167,11 @@ async function onChangePassword(): Promise<void> {
               hint="至少 10 位，且同时包含字母与数字"
               autocomplete="new-password"
             />
-            <DtButton type="submit" :loading="passwordState.busy">
+            <DtButton
+              type="submit"
+              class="self-start"
+              :loading="passwordState.busy"
+            >
               修改密码
             </DtButton>
             <DtNotice

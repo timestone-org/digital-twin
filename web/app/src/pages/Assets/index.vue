@@ -107,9 +107,9 @@ onMounted(() => void library.reload(page.kind.value))
         :rows="library.assets.value"
         :loading="library.isLoading.value"
         :layout="{
-          minWidth: '54rem',
+          minWidth: '52rem',
           fixedLayout: true,
-          cardColumns: 3,
+          cardColumns: 4,
           cardMinWidth: '18rem',
         }"
         :empty="page.empty.value"

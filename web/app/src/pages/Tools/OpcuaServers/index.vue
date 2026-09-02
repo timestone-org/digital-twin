@@ -22,7 +22,8 @@ import InstanceStatusTag from './components/InstanceStatusTag.vue'
 import { useInstanceOps } from './scripts/useInstanceOps'
 
 const COLUMNS: readonly DtDataColumn[] = [
-  { key: 'name', label: '名称', card: 'title' },
+  // ⚠ 名称必须给宽：不给的话端点那一串会把它挤到一百像素，实例名折成五行
+  { key: 'name', label: '名称', width: '16rem', card: 'title' },
   { key: 'endpoint', label: '端点' },
   { key: 'port', label: '端口', width: '6rem', card: 'meta' },
   { key: 'status', label: '状态', width: '11rem' },
@@ -96,7 +97,12 @@ onMounted(() => {
         :loading="list.loading.value"
         :error="list.error.value"
         :pagination="list.pager.value"
-        :layout="{ minWidth: '64rem', cardColumns: 3, cardMinWidth: '22rem' }"
+        :layout="{
+          minWidth: '68rem',
+          fixedLayout: true,
+          cardColumns: 3,
+          cardMinWidth: '22rem',
+        }"
         @update:page="list.goToPage"
         @update:size="list.setSize"
         @retry="list.reload()"
@@ -124,21 +130,28 @@ onMounted(() => {
 
         <template #cell-name="{ row }">
           <RouterLink
-            class="font-medium text-accent-on-surface"
+            class="block truncate font-medium text-accent-on-surface"
             :to="`/tools/opcua-servers/${row.id}`"
+            :title="row.name"
           >
             {{ row.name }}
           </RouterLink>
           <p
             v-if="row.description"
-            class="m-0 mt-1 text-2xs text-text-disabled"
+            class="m-0 mt-1 truncate text-2xs text-text-disabled"
+            :title="row.description"
           >
             {{ row.description }}
           </p>
         </template>
 
+        <!-- ⚠ 端点单行截断、完整值挂 title（与点位表寻址串同一口径）：它没有空格，
+             auto 布局下它的最小宽度会把名称列挤到一百像素，换行又只能按字符断 -->
         <template #cell-endpoint="{ row }">
-          <span class="font-mono text-xs text-text-secondary">
+          <span
+            class="block truncate font-mono text-xs text-text-secondary"
+            :title="row.endpoint_url"
+          >
             {{ row.endpoint_url }}
           </span>
         </template>

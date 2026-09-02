@@ -230,7 +230,6 @@ async function copyLink(): Promise<void> {
         <DtButton
           variant="ghost"
           intent="danger"
-          size="sm"
           icon="close"
           :disabled="busy"
           @click="unpublish"
@@ -239,19 +238,13 @@ async function copyLink(): Promise<void> {
         </DtButton>
         <DtButton
           variant="outline"
-          size="sm"
           icon="refresh-cw"
           :loading="busy"
           @click="publish"
         >
           重新发布
         </DtButton>
-        <DtButton
-          size="sm"
-          icon="copy"
-          :disabled="busy || link === ''"
-          @click="copyLink"
-        >
+        <DtButton icon="copy" :disabled="busy || link === ''" @click="copyLink">
           复制链接
         </DtButton>
       </template>

@@ -134,6 +134,10 @@ onMounted(() => {
         class="min-h-0 flex-1"
         :columns="COLUMNS"
         :rows="list.items.value"
+        :empty="{
+          title: '还没有角色',
+          hint: '新建一个角色，再给它勾上权限码。',
+        }"
         :loading="list.loading.value"
         :error="list.error.value"
         :pagination="list.pager.value"
@@ -155,8 +159,10 @@ onMounted(() => {
         </template>
 
         <template #cell-name="{ row }">
-          <span class="truncate">{{ row.name }}</span>
-          <DtTag v-if="row.is_builtin" intent="primary">内置</DtTag>
+          <span class="flex items-center gap-1.5">
+            <span class="truncate">{{ row.name }}</span>
+            <DtTag v-if="row.is_builtin" intent="primary">内置</DtTag>
+          </span>
         </template>
 
         <template #cell-description="{ row }">

@@ -104,7 +104,7 @@ const emit = defineEmits<{
     </template>
 
     <template #cell-name="{ row }">
-      <div class="flex min-w-0 flex-col">
+      <div class="dt-models__name flex min-w-0 flex-col">
         <!-- 名字本身就是打开详情的入口。⚠ 用 DtButton 而不是自己画一个
              `<button>`：手搓的那颗要自带焦点环、禁用态与换肤色，漏哪样都不报错 -->
         <DtButton
@@ -141,7 +141,7 @@ const emit = defineEmits<{
       </span>
     </template>
     <template #cell-sample="{ row }">
-      <div class="flex flex-col items-end">
+      <div class="flex flex-col">
         <span>{{ row.sample }}</span>
         <span v-if="row.sampleSplit" class="text-2xs text-text-disabled">
           {{ row.sampleSplit }}
@@ -152,7 +152,7 @@ const emit = defineEmits<{
       <span :class="row.r2Class">{{ row.r2 }}</span>
     </template>
     <template #cell-mae="{ row }">
-      <div class="flex flex-col items-end">
+      <div class="flex flex-col">
         <span>{{ row.mae }}</span>
         <span
           v-if="row.coverage"
@@ -214,5 +214,11 @@ const emit = defineEmits<{
   max-width: 100%;
   justify-content: flex-start;
   padding-inline: 0;
+}
+
+// 表格里名称列限宽：auto 布局下不限的话，长描述会把这一列撑开、把样本列挤成两行；
+// 卡片里宽度由卡片自己定，不限
+td .dt-models__name {
+  max-width: 16rem;
 }
 </style>

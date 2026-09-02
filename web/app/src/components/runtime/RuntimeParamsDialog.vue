@@ -262,7 +262,6 @@ function onChange(key: string, value: number | boolean): void {
       <DtButton
         v-if="canWrite"
         variant="ghost"
-        size="sm"
         :disabled="busy || loading"
         @click="reset"
       >
@@ -270,7 +269,6 @@ function onChange(key: string, value: number | boolean): void {
       </DtButton>
       <DtButton
         variant="ghost"
-        size="sm"
         :disabled="busy"
         @click="emit('update:modelValue', false)"
       >
@@ -278,7 +276,6 @@ function onChange(key: string, value: number | boolean): void {
       </DtButton>
       <DtButton
         v-if="canWrite"
-        size="sm"
         icon="save"
         :loading="busy"
         :disabled="loading || !dirty || hasPendingDanger"

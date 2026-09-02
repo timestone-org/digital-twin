@@ -85,6 +85,7 @@ const emit = defineEmits<{
 
     <DtEmpty
       v-else
+      class="flex-1"
       icon="building"
       title="还没有车间"
       hint="先建一个车间，再往里分房间。"

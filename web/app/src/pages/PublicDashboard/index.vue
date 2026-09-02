@@ -222,13 +222,17 @@ onBeforeUnmount(() => {
   >
     <!-- ⚠ 整屏的加载/错误态只留给「手上一张都没有」：跳转时把画面整片换掉，
          墙上每跳一次先白一下（`DashboardView` 同口径） -->
-    <DtPageState
+    <div
       v-if="doc.dashboard.value === null"
-      :loading="doc.loading.value"
-      :error="doc.error.value"
-      :empty="false"
-      @retry="doc.load(publicToken())"
-    />
+      class="flex h-full items-center justify-center"
+    >
+      <DtPageState
+        :loading="doc.loading.value"
+        :error="doc.error.value"
+        :empty="false"
+        @retry="doc.load(publicToken())"
+      />
+    </div>
 
     <template v-else>
       <div data-test="public-stage" :style="stageStyle">

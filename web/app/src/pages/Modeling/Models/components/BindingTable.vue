@@ -17,14 +17,14 @@ import PermGuard from '@/components/PermGuard.vue'
 
 const COLUMNS: readonly DtDataColumn[] = [
   { key: 'fx_code', label: '公式编码', card: 'title' },
-  { key: 'version', label: '绑的版本', width: '16rem' },
+  { key: 'version', label: '绑的版本', width: '15rem' },
   { key: 'params', label: '形参对应', width: '18rem' },
   { key: 'enabled', label: '启用', width: '6rem' },
   {
     key: 'actions',
     label: '操作',
     align: 'right',
-    width: '7rem',
+    width: '6rem',
     card: 'actions',
   },
 ]
@@ -63,17 +63,37 @@ function paramsOf(row: ModelingBinding): string {
     :loading="props.isLoading"
     :error="props.error"
     :empty="EMPTY"
+    :layout="{
+      fixedLayout: true,
+      minWidth: '60rem',
+      cardColumns: 3,
+      cardMinWidth: '20rem',
+    }"
   >
+    <template #toolbar><slot name="toolbar" /></template>
     <template #cell-fx_code="{ row }">
-      <code>{{ row.fx_code }}</code>
-      <DtTag v-if="row.is_orphaned" intent="danger" size="sm">公式已删</DtTag>
+      <span class="dt-ml-bindings__code">
+        <code class="dt-ml-bindings__clip" :title="row.fx_code">
+          {{ row.fx_code }}
+        </code>
+        <DtTag v-if="row.is_orphaned" intent="danger" size="sm">公式已删</DtTag>
+      </span>
     </template>
     <template #cell-version="{ row }">
-      {{
-        props.versionLabels.get(row.model_version_id) ?? row.model_version_id
-      }}
+      <span
+        class="dt-ml-bindings__clip"
+        :title="props.versionLabels.get(row.model_version_id)"
+      >
+        {{
+          props.versionLabels.get(row.model_version_id) ?? row.model_version_id
+        }}
+      </span>
     </template>
-    <template #cell-params="{ row }">{{ paramsOf(row) }}</template>
+    <template #cell-params="{ row }">
+      <span class="dt-ml-bindings__clip" :title="paramsOf(row)">
+        {{ paramsOf(row) }}
+      </span>
+    </template>
     <template #cell-enabled="{ row }">
       <PermGuard :codes="[PERMISSION_CODES.modelingPublish]">
         <DtSwitch
@@ -101,3 +121,22 @@ function paramsOf(row: ModelingBinding): string {
     </template>
   </DtDataView>
 </template>
+
+<style scoped lang="scss">
+.dt-ml-bindings {
+  &__code {
+    display: flex;
+    gap: 0.375rem;
+    align-items: center;
+    min-width: 0;
+  }
+
+  &__clip {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+</style>

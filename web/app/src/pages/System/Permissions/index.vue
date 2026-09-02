@@ -76,46 +76,52 @@ onMounted(() => {
     <div class="flex h-full min-h-0 flex-col gap-4">
       <SystemTabs />
 
-      <div class="flex flex-wrap items-center gap-3">
-        <DtInput
-          v-model="keyword"
-          class="w-72"
-          size="sm"
-          placeholder="搜索权限码或名称"
-        >
-          <template #leading><DtIcon name="search" :size="14" /></template>
-        </DtInput>
-        <DtSegmented
-          v-model="view"
-          class="ml-auto"
-          :options="VIEW_OPTIONS"
-          aria-label="切换展示方式"
-        />
-      </div>
+      <!-- 工具条与内容之间取 gap-3：与兄弟页里 DtDataView 工具条到表格的 12px 同距 -->
+      <div class="flex min-h-0 flex-1 flex-col gap-3">
+        <div class="flex flex-wrap items-center gap-3">
+          <DtInput
+            v-model="keyword"
+            class="w-72"
+            size="sm"
+            placeholder="搜索权限码或名称"
+          >
+            <template #leading><DtIcon name="search" :size="14" /></template>
+          </DtInput>
+          <DtSegmented
+            v-model="view"
+            class="ml-auto"
+            :options="VIEW_OPTIONS"
+            aria-label="切换展示方式"
+          />
+        </div>
 
-      <!-- ⚠ 外面这一层不是多余的：DtPageState 渲染的是 fragment，
-           class 落不到任何节点上，min-h-0 flex-1 会静默失效 -->
-      <div class="min-h-0 flex-1">
-        <DtPageState
-          :loading="loading"
-          :error="error"
-          :empty="groups.length === 0"
-          empty-hint="没有匹配的权限码"
-          @retry="load()"
-        >
-          <!-- ⚠ 这一页是「若干个分组各一张小表」，滚动归这一层，
-               每张小表都按内容高度渲染（fill=false），否则它们会互相抢高度 -->
-          <div class="flex h-full min-h-0 flex-col gap-5 overflow-y-auto pr-1">
-            <PermissionGroupCard
-              v-for="group in groups"
-              :key="group.code"
-              :title="group.label"
-              :items="group.items"
-              :view="view"
-              :held="held"
-            />
-          </div>
-        </DtPageState>
+        <!-- ⚠ 外面这一层不是多余的：DtPageState 渲染的是 fragment，
+             class 落不到任何节点上，min-h-0 flex-1 会静默失效。
+             justify-center 只对空态/加载态生效：分组列表自己是 h-full -->
+        <div class="flex min-h-0 flex-1 flex-col justify-center">
+          <DtPageState
+            :loading="loading"
+            :error="error"
+            :empty="groups.length === 0"
+            empty-hint="没有匹配的权限码"
+            @retry="load()"
+          >
+            <!-- ⚠ 这一页是「若干个分组各一张小表」，滚动归这一层，
+                 每张小表都按内容高度渲染（fill=false），否则它们会互相抢高度 -->
+            <div
+              class="flex h-full min-h-0 flex-col gap-5 overflow-y-auto pr-1"
+            >
+              <PermissionGroupCard
+                v-for="group in groups"
+                :key="group.code"
+                :title="group.label"
+                :items="group.items"
+                :view="view"
+                :held="held"
+              />
+            </div>
+          </DtPageState>
+        </div>
       </div>
     </div>
   </AppShell>

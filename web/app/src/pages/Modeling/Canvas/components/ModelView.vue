@@ -137,6 +137,7 @@ const bars = computed(() =>
     grid-template-columns: 7rem 1fr;
     gap: 0.375rem 0.75rem;
     margin: 0;
+    font-size: var(--ctl-fs-md);
 
     dt {
       color: var(--text-secondary);

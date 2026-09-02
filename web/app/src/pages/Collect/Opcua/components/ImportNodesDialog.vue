@@ -187,14 +187,12 @@ function confirm(): void {
     <template #footer>
       <DtButton
         variant="ghost"
-        size="sm"
         :disabled="isBusy"
         @click="emit('update:modelValue', false)"
       >
         取消
       </DtButton>
       <DtButton
-        size="sm"
         icon="download"
         :loading="isBusy"
         :disabled="count === 0 || problems.size > 0"

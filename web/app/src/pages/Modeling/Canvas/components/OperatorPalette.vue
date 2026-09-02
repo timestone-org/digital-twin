@@ -125,7 +125,9 @@ function onDragStart(event: DragEvent, code: string): void {
   gap: 0.5rem;
   width: 13rem;
   padding: 0.75rem;
-  border-right: 1px solid var(--border-subtle);
+  // 与大屏编辑器的侧栏面板同一副样子：整圈描边 + 圆角，而不是只贴一条右边线
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   background: var(--surface-panel);
 
   &__body {

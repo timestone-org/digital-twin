@@ -76,7 +76,7 @@ function onTab(value: string): void {
 
 <template>
   <div class="flex h-full min-h-0 flex-col" data-test="twin2d-right-pane">
-    <div class="shrink-0 border-b border-border-subtle p-2">
+    <div class="shrink-0 p-2">
       <DtSegmented
         :model-value="pane"
         :options="TABS"

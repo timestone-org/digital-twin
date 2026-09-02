@@ -89,14 +89,12 @@ function submit(): void {
     <template #footer>
       <DtButton
         variant="ghost"
-        size="sm"
         :disabled="loading"
         @click="emit('update:open', false)"
       >
         取消
       </DtButton>
       <DtButton
-        size="sm"
         icon="save"
         :loading="loading ?? false"
         :disabled="!canSubmit"

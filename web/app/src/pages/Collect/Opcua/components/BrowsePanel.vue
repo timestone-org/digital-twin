@@ -212,8 +212,9 @@ onMounted(() => {
       </DtNotice>
 
       <!-- ⚠ 外面这层 div 不能省：DtPageState 渲染的是 fragment，直接挂在它上
-           面的 class 会被 Vue 静默丢掉，树区域于是没有高度约束 -->
-      <div class="min-h-0 flex-1">
+           面的 class 会被 Vue 静默丢掉，树区域于是没有高度约束。
+           justify-center 只对空态/加载态生效：树自己是 h-full，与右边点位表的空态同高 -->
+      <div class="flex min-h-0 flex-1 flex-col justify-center">
         <DtPageState
           :loading="tree.loading.value"
           :error="tree.error.value"

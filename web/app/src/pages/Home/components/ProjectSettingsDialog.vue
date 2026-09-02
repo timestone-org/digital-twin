@@ -228,7 +228,6 @@ function save(): void {
     <template #footer>
       <DtButton
         variant="ghost"
-        size="sm"
         :disabled="loading"
         @click="emit('update:open', false)"
       >
@@ -236,7 +235,6 @@ function save(): void {
       </DtButton>
       <DtButton
         v-if="canUpdate"
-        size="sm"
         icon="save"
         :loading="loading ?? false"
         :disabled="!canSubmit"

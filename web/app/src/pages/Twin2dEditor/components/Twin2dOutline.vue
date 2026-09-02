@@ -408,6 +408,7 @@ const sections = computed<readonly OutlineSection[]>(() => {
         <DtEmpty
           v-if="section.rows.length === 0"
           size="inline"
+          class="flex-wrap"
           :title="section.empty"
           :hint="section.hint"
           :data-test="`outline-empty-${section.key}`"

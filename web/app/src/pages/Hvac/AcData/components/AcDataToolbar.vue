@@ -59,7 +59,6 @@ function onView(value: string): void {
         size="sm"
         :model-value="from"
         label="开始时间"
-        :error="rangeError ?? undefined"
         @update:model-value="emit('update:from', $event)"
       />
     </div>
@@ -91,5 +90,13 @@ function onView(value: string): void {
       aria-label="呈现方式"
       @update:model-value="onView"
     />
+    <!-- 区间错误单独占一行：塞进某个控件下面会把那一格撑高，整行控件跟着错位 -->
+    <p
+      v-if="rangeError"
+      class="m-0 basis-full text-xs text-state-danger"
+      role="alert"
+    >
+      {{ rangeError }}
+    </p>
   </div>
 </template>

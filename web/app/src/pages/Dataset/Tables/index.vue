@@ -34,12 +34,12 @@ import { useTableOps } from './scripts/useTableOps'
 
 const COLUMNS: readonly DtDataColumn[] = [
   { key: 'name', label: '名称', card: 'title' },
-  { key: 'code', label: '编码', width: '12rem', card: 'meta' },
+  { key: 'code', label: '编码', width: '11rem', card: 'meta' },
   { key: 'collect', label: '取数方式', width: '14rem' },
-  { key: 'column_count', label: '列数', width: '5rem', align: 'right' },
-  { key: 'retention', label: '保留期', width: '9rem' },
-  { key: 'status', label: '状态', width: '6rem' },
-  { key: 'created_at', label: '创建时间', width: '12rem' },
+  { key: 'column_count', label: '列数', width: '4.5rem', align: 'right' },
+  { key: 'retention', label: '保留期', width: '8rem' },
+  { key: 'status', label: '状态', width: '5rem' },
+  { key: 'created_at', label: '创建时间', width: '11rem' },
   {
     key: 'actions',
     label: '操作',
@@ -152,7 +152,12 @@ onMounted(() => {
         :loading="list.loading.value"
         :error="list.error.value"
         :empty="emptyState"
-        :layout="{ minWidth: '68rem', cardColumns: 3, cardMinWidth: '20rem' }"
+        :layout="{
+          minWidth: '72rem',
+          fixedLayout: true,
+          cardColumns: 3,
+          cardMinWidth: '20rem',
+        }"
         @retry="list.reload()"
       >
         <template #toolbar>
@@ -191,7 +196,9 @@ onMounted(() => {
         </template>
 
         <template #cell-code="{ row }">
-          <DtTag mono size="sm">{{ row.code }}</DtTag>
+          <DtTag mono size="sm" class="max-w-full" :title="row.code">
+            <span class="min-w-0 truncate">{{ row.code }}</span>
+          </DtTag>
         </template>
 
         <template #cell-collect="{ row }">

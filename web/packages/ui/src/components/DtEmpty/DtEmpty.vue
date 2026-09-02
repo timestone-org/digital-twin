@@ -46,6 +46,8 @@ const iconPx = computed(() => (isInline.value ? 12 : 26))
 .dt-empty {
   display: flex;
   flex-direction: column;
+  // 被外层拉高（flex-1）时内容居中，而不是贴在顶边下面留一整块空白
+  justify-content: center;
   align-items: center;
   gap: 8px;
   padding: 40px 16px;

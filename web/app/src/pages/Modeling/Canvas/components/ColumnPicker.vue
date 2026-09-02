@@ -118,7 +118,8 @@ function pickAll(): void {
   }
 
   &__act {
-    padding: 0.125rem 0.5rem;
+    height: var(--ctl-h-sm);
+    padding: 0 0.5rem;
     border: 1px solid var(--border-default);
     border-radius: var(--radius-sm);
     background: var(--surface-base);
