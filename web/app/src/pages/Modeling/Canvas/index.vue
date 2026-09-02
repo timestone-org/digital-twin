@@ -23,17 +23,19 @@ import { useRoute, useRouter } from 'vue-router'
 
 import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
-import { formatElapsed, nowStamp } from '@/utils/datetime'
+import { nowStamp } from '@/utils/datetime'
 import { useAuthStore } from '@/stores/auth'
 
 import CanvasMenu from './components/CanvasMenu.vue'
 import ConfigForm from './components/ConfigForm.vue'
 import EditorCanvas from './components/EditorCanvas.vue'
+import GraphIssues from './components/GraphIssues.vue'
 import OperatorPalette from './components/OperatorPalette.vue'
 import ResultView from './components/ResultView.vue'
 import RunHistory from './components/RunHistory.vue'
 import ShortcutsHelp from './components/ShortcutsHelp.vue'
 import { cascadeFrom } from './scripts/nodeLayout'
+import { progressOf } from './scripts/runProgress'
 import type { CanvasPoint } from './scripts/useCanvasViewport'
 import { defaultsOf, fieldsOf } from './scripts/schemaForm'
 import type { CanvasHandle } from './scripts/useCanvasActions'
@@ -104,6 +106,12 @@ const resultPayload = computed(
     page.runner.previews.value.get(resultNodeId.value ?? '')?.preview ?? null,
 )
 
+/** 点问题条里的卡片名：选中它并把参数面板开在那一项上。 */
+function focusIssue(nodeId: string): void {
+  page.selection.select({ kind: 'node', id: nodeId })
+  config.open(nodeId)
+}
+
 /** 点算子面板：落在视野正中，连着点几次就错开一点，免得叠在一起。 */
 function addOperator(code: string): void {
   const at = canvasRef.value?.center() ?? { left: 80, top: 80 }
@@ -122,23 +130,7 @@ function dropOperator(code: string, at: CanvasPoint): void {
   page.selection.select({ kind: 'node', id })
 }
 
-/**
- * 「第 3/8 个节点 · 已用 2m14s」。
- *
- * ⚠ 没有进度的话，一个跑三十分钟的训练与一个卡死的节点在界面上长得一模一样。
- */
-const progress = computed(() => {
-  const current = page.runner.run.value
-  if (current === null || current.status !== 'running') return ''
-  const nodes = current.nodes
-  const settled = nodes.filter(
-    (node) => node.status !== 'pending' && node.status !== 'running',
-  ).length
-  const since = current.started_at
-  const spent =
-    since === null ? '' : ` · 已用 ${formatElapsed(since, tick.value)}`
-  return `第 ${settled + 1}/${nodes.length} 个节点${spent}`
-})
+const progress = computed(() => progressOf(page.runner.run.value, tick.value))
 
 async function openResult(nodeId: string): Promise<void> {
   resultNodeId.value = nodeId
@@ -161,6 +153,12 @@ async function saveGraph(): Promise<void> {
   if (await page.doc.save(page.graph.graph.value)) page.graph.markSaved()
 }
 
+/**
+ * 存图 → 校验 → 起一次运行。
+ *
+ * ⚠ 校验要在前端这一步拦下来：后端那条 400 只带一句「流水线还有问题」，逐条
+ * 定位信息在信封的 details 里，而 `describeError` 只取 message。
+ */
 async function runOnce(): Promise<void> {
   if (
     page.graph.isDirty.value &&
@@ -168,6 +166,13 @@ async function runOnce(): Promise<void> {
   )
     return
   page.graph.markSaved()
+  page.stopChecking()
+  if (!(await page.doc.validate(page.graph.graph.value))) {
+    toast.warning(
+      page.issueViews.value[0]?.message ?? '流水线还有问题，先改好再运行',
+    )
+    return
+  }
   await page.runner.start(pipelineId.value)
   await page.loadRuns(pipelineId.value)
 }
@@ -344,13 +349,11 @@ onMounted(async () => {
         @pick="addOperator"
       />
       <div class="dt-ml-page__main">
-        <DtNotice
-          v-if="page.doc.issues.value.length > 0"
-          intent="warning"
-          icon="alert-triangle"
-        >
-          {{ page.doc.issues.value.map((issue) => issue.message).join('；') }}
-        </DtNotice>
+        <GraphIssues
+          v-if="page.issueViews.value.length > 0"
+          :issues="page.issueViews.value"
+          @pick="focusIssue"
+        />
         <DtNotice
           v-else-if="page.graph.graph.value.nodes.length === 0 && !isReadonly"
           intent="info"

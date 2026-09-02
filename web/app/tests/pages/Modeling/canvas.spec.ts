@@ -4,6 +4,7 @@
  */
 import { PERMISSION_CODES } from '@dt/contracts'
 import type {
+  DatasetColumn,
   ModelingOperator,
   ModelingPipeline,
   ModelingRun,
@@ -180,6 +181,11 @@ function stubApi(
     page: 1,
     size: 50,
     total: 0,
+  })
+  // 画布现在边改边校验、并在运行前再校一次，不打桩的话每条用例都会真发请求
+  vi.spyOn(modeling, 'validateModelingGraph').mockResolvedValue({
+    is_valid: true,
+    issues: [],
   })
 }
 
@@ -666,5 +672,191 @@ describe('没有台账查看权限时', () => {
 
     expect(listTables).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('dataset:view')
+  })
+})
+
+// ⚠ 候选只按台账列的话，下游能勾到一列上游根本不产出的列，而报错要到保存 /
+// 运行才出来——用户读成「取数必须把列选全」，于是每次都全选
+describe('下游的列候选跟着上游取数收窄', () => {
+  const PICK_FIELD = {
+    title: '处理哪些列',
+    type: 'array',
+    items: { type: 'string' },
+    'x-dt-widget': 'column',
+  }
+  const PICK_SCHEMA = { properties: { columns: PICK_FIELD }, type: 'object' }
+  const SOURCE_SCHEMA = {
+    properties: {
+      table_code: TABLE_SCHEMA.properties.table_code,
+      columns: { ...PICK_FIELD, title: '取哪些列' },
+    },
+    required: ['table_code'],
+    type: 'object',
+  }
+
+  function column(key: string): DatasetColumn {
+    return {
+      id: key,
+      table_id: 't1',
+      key,
+      name: key,
+      unit: null,
+      decimals: null,
+      data_type: 'number',
+      source: 'point',
+      agg: 'avg',
+      node_key: null,
+      formula: null,
+      formula_deps: null,
+      order_index: 0,
+      is_required: false,
+      default_value: null,
+      created_at: STAMP,
+      updated_at: STAMP,
+    }
+  }
+
+  /** 取数（只挑了 F2、F3）→ 填缺失。 */
+  function wired(): ModelingPipeline {
+    return {
+      ...pipeline(),
+      graph: {
+        format_version: '1',
+        nodes: [
+          {
+            id: 'n1',
+            operator: 'ledger_source',
+            alias: '',
+            position: { left: 0, top: 0 },
+            config: { table_code: 'energy_log', columns: ['F2', 'F3'] },
+          },
+          {
+            id: 'n2',
+            operator: 'fill_missing',
+            alias: '',
+            position: { left: 200, top: 0 },
+            config: { columns: [] },
+          },
+        ],
+        edges: [
+          {
+            id: 'e1',
+            from_node: 'n1',
+            from_port: 'out',
+            to_node: 'n2',
+            to_port: 'in',
+          },
+        ],
+      },
+    }
+  }
+
+  async function openNode(
+    wrapper: ReturnType<typeof open>,
+    index: number,
+  ): Promise<void> {
+    await wrapper.findAll('.dt-ml-node')[index]?.trigger('click')
+    await wrapper.vm.$nextTick()
+    const buttons = wrapper
+      .findAll('.dt-ml-node__action')
+      .filter((item) => item.text() === '参数')
+    await buttons[index]?.trigger('click')
+    await flushPromises()
+  }
+
+  function stubWired() {
+    stubApi({
+      operators: [
+        operator({ config_schema: SOURCE_SCHEMA }),
+        operator({
+          code: 'fill_missing',
+          name: '填缺失',
+          category: 'preprocess',
+          config_schema: PICK_SCHEMA,
+        }),
+      ],
+      pipeline: wired(),
+    })
+    vi.spyOn(dataset, 'listDatasetColumns').mockResolvedValue([
+      column('F1'),
+      column('F2'),
+      column('F3'),
+    ])
+  }
+
+  it('下游只列得出上游真的会产出的那几列', async () => {
+    stubWired()
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+
+    await openNode(wrapper, 1)
+
+    expect(wrapper.text()).toContain('F2')
+    expect(wrapper.text()).not.toContain('F1')
+  })
+
+  // ⚠ 拿它自己的选择去收窄它自己的候选，等于一取消勾选就再也勾不回来
+  it('取数节点自己看的仍是台账的全部列', async () => {
+    stubWired()
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+
+    await openNode(wrapper, 0)
+
+    expect(wrapper.text()).toContain('F1')
+  })
+})
+
+// ⚠ 这一组守的是一期的一个洞：`:validate` 端点、`issues` 状态与那条提示条都在，
+// 但全仓零调用——列引用、空台账这类问题只有按下「运行」才由后端拦下，而那条
+// 400 只带一句「流水线还有问题」，逐条定位信息在 toast 里全丢了
+describe('保存前的整图校验', () => {
+  const ISSUE = {
+    message: '参数「数据台账」不能留空',
+    node_id: 'n1',
+    edge_id: '',
+  }
+
+  it('图一改就自动校验，问题逐条挂在画布上', async () => {
+    vi.useFakeTimers()
+    try {
+      stubApi()
+      vi.spyOn(modeling, 'validateModelingGraph').mockResolvedValue({
+        is_valid: false,
+        issues: [ISSUE],
+      })
+      signIn(WRITER)
+      const wrapper = open()
+      await vi.runOnlyPendingTimersAsync()
+
+      await wrapper.find('.dt-ml-palette__item').trigger('click')
+      await vi.runOnlyPendingTimersAsync()
+
+      expect(wrapper.text()).toContain('参数「数据台账」不能留空')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('图有问题时不发起运行，并把第一条问题说出来', async () => {
+    stubApi()
+    vi.spyOn(modeling, 'validateModelingGraph').mockResolvedValue({
+      is_valid: false,
+      issues: [ISSUE],
+    })
+    const start = vi.spyOn(modeling, 'startModelingRun')
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === '运行')
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(start).not.toHaveBeenCalled()
   })
 })

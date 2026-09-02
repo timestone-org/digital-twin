@@ -23,6 +23,7 @@ import { headlineOf } from './nodeHeadline'
 import type { NodeRuntime } from './nodeState'
 import { stateOf } from './nodeState'
 import { previewOf } from './preview'
+import { useGraphIssues } from './useGraphIssues'
 import { useCanvasSelection } from './useCanvasSelection'
 import { useModelingGraph } from './useModelingGraph'
 import { usePipelineDoc } from './usePipelineDoc'
@@ -130,6 +131,8 @@ async function replay(state: PageState, runId: string): Promise<void> {
   if (picked === null) return
   state.selection.clear()
   state.isReplaying.value = true
+  // 问题清单是「正在编辑的那张图」的，回看时它与画面上这张对不上
+  state.doc.issues.value = []
   state.graph.reset(picked.graph)
   state.runner.watchRun(picked)
 }
@@ -161,6 +164,14 @@ export function useCanvasPage() {
   const runtime = computed(() =>
     runtimeOf(state.runner.run.value?.nodes ?? [], state.runner.previews.value),
   )
+  const check = useGraphIssues({
+    graph: state.graph.graph,
+    operators: operatorMap,
+    issues: state.doc.issues,
+    isReplaying: state.isReplaying,
+    check: (graph) => state.doc.validate(graph, true),
+    stopChecking: state.doc.stopChecking,
+  })
 
   // 节点一跑成，就把它的摘要拉回来——卡片上那行数字要靠它
   watch(
@@ -179,5 +190,9 @@ export function useCanvasPage() {
     replay: (runId: string) => replay(state, runId),
     backToEditing: (current: ModelingGraph | null) =>
       backToEditing(state, current),
+    /** 问题清单在界面上的样子。 */
+    issueViews: check.views,
+    /** 离开画布 / 起一次运行之前，把排着的那次边改边校验作废。 */
+    stopChecking: check.cancel,
   }
 }
