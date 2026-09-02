@@ -10,6 +10,7 @@ from pydantic import SecretStr
 
 from llmcore import (
     EMPTY_CATALOG,
+    PROVIDER_KIND_OPENAI_COMPAT,
     Assignment,
     CatalogMalformed,
     ModelCatalog,
@@ -23,11 +24,15 @@ EMBED = ModelSpec(name="embed-1", kind="embedding", dimensions=1024)
 
 
 def _provider(
-    *, is_enabled: bool = True, models: tuple[ModelSpec, ...] = (CHAT, EMBED)
+    *,
+    is_enabled: bool = True,
+    models: tuple[ModelSpec, ...] = (CHAT, EMBED),
+    kind: str = PROVIDER_KIND_OPENAI_COMPAT,
 ) -> ProviderSpec:
     return ProviderSpec(
         id="p1",
         name="百炼",
+        kind=kind,
         base_url="https://endpoint/v1",
         api_key=SecretStr("sk-secret"),
         is_enabled=is_enabled,
@@ -146,6 +151,7 @@ def test_the_version_digest_ignores_the_secret() -> None:
     other = ProviderSpec(
         id=one.id,
         name=one.name,
+        kind=one.kind,
         base_url=one.base_url,
         api_key=SecretStr("another-secret"),
         is_enabled=one.is_enabled,
@@ -162,3 +168,118 @@ def test_the_version_digest_changes_with_the_assignment() -> None:
         (provider,), (Assignment("a.chat", "p1", "chat-1"),)
     )
     assert before != after
+
+
+def test_a_non_endpoint_provider_resolves_to_no_endpoint() -> None:
+    """⚠ 要先登录的那些形态没有端点与密钥：放行等于拿空地址打出去，
+    而报出来的是一条连不上的网络错，与「这一路不是这么接的」对不上。"""
+    catalog = _catalog(
+        _provider(kind="codex_oauth"), Assignment("a.chat", "p1", "chat-1")
+    )
+    assert catalog.chat_endpoint("a.chat", timeout_s=30.0) is None
+    assert catalog.resolve("a.chat") is not None
+
+
+def test_a_non_endpoint_provider_resolves_to_no_embedding_endpoint() -> None:
+    catalog = _catalog(
+        _provider(kind="codex_oauth"), Assignment("a.embed", "p1", "embed-1")
+    )
+    assert catalog.embedding_endpoint("a.embed", timeout_s=10.0) is None
+
+
+def test_an_endpoint_can_be_built_on_a_named_model() -> None:
+    """会话里选了另一路时按那一路上的模型现打一个端点。"""
+    provider = _provider()
+    endpoint = ModelCatalog(providers=(provider,), assignments=()).endpoint_on(
+        provider, CHAT, timeout_s=12.0
+    )
+    assert endpoint is not None
+    assert endpoint.model == "chat-1"
+    assert endpoint.timeout_s == 12.0
+
+
+def test_an_embedding_model_never_becomes_a_chat_endpoint() -> None:
+    provider = _provider()
+    assert (
+        ModelCatalog(providers=(provider,), assignments=()).endpoint_on(
+            provider, EMBED, timeout_s=12.0
+        )
+        is None
+    )
+
+
+def test_disabled_providers_stay_out_of_the_enabled_list() -> None:
+    """⚠ 停用的那一路仍要按 id 取得到：「配了但停着」与「没这一路」是两回事。"""
+    catalog = _catalog(_provider(is_enabled=False))
+    assert catalog.enabled_providers() == ()
+    assert catalog.provider("p1") is not None
+    assert catalog.provider("nope") is None
+
+
+def test_models_are_listed_per_kind_in_registration_order() -> None:
+    assert _provider().models_of("chat") == (CHAT,)
+    assert _provider().models_of("embedding") == (EMBED,)
+
+
+def test_an_assignment_is_readable_even_when_it_points_at_a_disabled_one() -> (
+    None
+):
+    catalog = _catalog(
+        _provider(is_enabled=False), Assignment("a.chat", "p1", "chat-1")
+    )
+    assert catalog.resolve("a.chat") is None
+    assigned = catalog.assigned("a.chat")
+    assert assigned is not None
+    assert assigned.provider_id == "p1"
+
+
+def test_the_wire_defaults_to_the_openai_compatible_kind() -> None:
+    """⚠ 平台比消费方先升级不是必然的：没有这一格的旧目录里每一路
+    本来就都是这一形态。"""
+    catalog = ModelCatalog.from_wire(
+        {
+            "version": "v1",
+            "providers": [
+                {
+                    "id": "p1",
+                    "name": "百炼",
+                    "base_url": "https://endpoint/v1",
+                    "api_key": "sk-1",
+                    "models": [{"name": "chat-1", "kind": "chat"}],
+                }
+            ],
+            "assignments": [],
+        }
+    )
+    assert catalog.providers[0].kind == PROVIDER_KIND_OPENAI_COMPAT
+    assert catalog.providers[0].is_endpoint_based
+
+
+def test_the_wire_carries_the_kind_and_its_options() -> None:
+    catalog = ModelCatalog.from_wire(
+        {
+            "version": "v1",
+            "providers": [
+                {
+                    "id": "p2",
+                    "name": "Codex",
+                    "kind": "codex_oauth",
+                    "options": {"default_effort": "high"},
+                    "models": [{"name": "gpt-5-codex", "kind": "chat"}],
+                }
+            ],
+            "assignments": [],
+        }
+    )
+    provider = catalog.providers[0]
+    assert provider.kind == "codex_oauth"
+    assert provider.options == {"default_effort": "high"}
+    assert not provider.is_endpoint_based
+    assert provider.base_url == ""
+
+
+def test_the_version_digest_changes_with_the_kind() -> None:
+    """⚠ 形态变了必须算成另一份目录：不然消费方会拿旧适配器接新形态。"""
+    plain = _provider()
+    other = _provider(kind="codex_oauth")
+    assert catalog_version((plain,), ()) != catalog_version((other,), ())

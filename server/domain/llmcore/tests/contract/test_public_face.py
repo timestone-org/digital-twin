@@ -16,6 +16,7 @@ from llmcore.ports import EmbeddingAdapter, ModelAdapter
 # 消费方按这份名单 import。少一个就是有人得绕过再导出面
 REQUIRED = (
     "CATALOG_PATH",
+    "PROVIDER_KIND_OPENAI_COMPAT",
     "CatalogCache",
     "CatalogClient",
     "CatalogSource",

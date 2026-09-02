@@ -26,6 +26,12 @@ MODEL_KIND_CHAT = "chat"
 MODEL_KIND_EMBEDDING = "embedding"
 MODEL_SPEC_KINDS: tuple[str, ...] = (MODEL_KIND_CHAT, MODEL_KIND_EMBEDDING)
 
+# 一路供应商的**接入形态**。⚠ 这一层只认协议不认厂商：`openai_compat` 说的是
+# 「按 OpenAI 兼容口径打一个 HTTP 端点」，谁家的端点都算。要先登录、走自家方言
+# 的那些形态由消费方各自的适配器认领，这里把它们的名字当成不透明的字符串——
+# 认领不了的形态在这一层解不出端点，而不是解出一个空地址打出去
+PROVIDER_KIND_OPENAI_COMPAT = "openai_compat"
+
 
 class CatalogMalformed(ValueError):
     """内部接口回来的目录不成形。"""
@@ -44,16 +50,32 @@ class ModelSpec:
 
 @dataclass(frozen=True)
 class ProviderSpec:
-    """一路供应商：一个 OpenAI 兼容端点 + 它上面登记的几个模型。"""
+    """一路供应商：一种接入形态 + 它上面登记的几个模型。
+
+    ⚠ `openai_compat` 之外的形态**没有端点与密钥**（那一路的登录态在消费方
+    那一侧），`base_url` 与 `api_key` 于是是空的。解端点的几条方法据 `kind`
+    拦住它们——放行的话，一个空地址会被当成端点打出去，而报出来的是一条
+    连不上的网络错，与「这一路根本不是这么接的」完全对不上。
+    """
 
     id: str
     name: str
+    # 接入形态。⚠ 认不出的形态一律当成「这一层接不了」，不猜
+    kind: str
     base_url: str
     api_key: SecretStr
     is_enabled: bool
     models: tuple[ModelSpec, ...]
     # 端点方言里的额外请求体（思考开关一类），随目录一起下发
     extra_body: dict[str, Any] | None = None
+    # 这一形态自己的那几格配置（推理档位一类）。⚠ 形状由平台侧按形态校验，
+    # 这一层只透传：认了它的取值就等于在这里认厂商
+    options: dict[str, Any] | None = None
+
+    @property
+    def is_endpoint_based(self) -> bool:
+        """这一路打得出一个 OpenAI 兼容端点吗。"""
+        return self.kind == PROVIDER_KIND_OPENAI_COMPAT
 
     def model_named(self, name: str) -> ModelSpec | None:
         """按名字取登记的那一个模型；没有给 `None`。
@@ -61,6 +83,13 @@ class ProviderSpec:
         Args: name。
         """
         return next((one for one in self.models if one.name == name), None)
+
+    def models_of(self, kind: str) -> tuple[ModelSpec, ...]:
+        """这一路上属于某一种的那几个模型，保持登记序。
+
+        Args: kind（`chat` / `embedding`）。
+        """
+        return tuple(one for one in self.models if one.kind == kind)
 
 
 @dataclass(frozen=True)
@@ -93,20 +122,41 @@ class ModelCatalog:
         """一路供应商都没配。"""
         return not self.providers
 
+    def provider(self, provider_id: str) -> ProviderSpec | None:
+        """按 id 取一路供应商，停用的也给——「配了但停着」与「没这一路」是
+        两回事，消费方要能分别如实说。
+
+        Args: provider_id。
+        """
+        return next(
+            (one for one in self.providers if one.id == provider_id), None
+        )
+
+    def enabled_providers(self) -> tuple[ProviderSpec, ...]:
+        """此刻开着的那几路，保持目录序。消费方按它逐路装适配器。"""
+        return tuple(one for one in self.providers if one.is_enabled)
+
+    def assigned(self, purpose: str) -> Assignment | None:
+        """这个用途此刻的分配行；没配给 `None`。
+
+        ⚠ 与 `resolve` 分开：分配指着一路已停用的供应商时 `resolve` 给 `None`，
+        而「分配指的是谁」这一问在那时仍然有答案，界面与日志都要它。
+
+        Args: purpose。
+        """
+        return next(
+            (one for one in self.assignments if one.purpose == purpose), None
+        )
+
     def resolve(self, purpose: str) -> Resolved | None:
         """这个用途此刻落在哪一路的哪个模型上；没配、或那一路停用了，给 `None`。
 
         Args: purpose。
         """
-        assigned = next(
-            (one for one in self.assignments if one.purpose == purpose), None
-        )
+        assigned = self.assigned(purpose)
         if assigned is None:
             return None
-        provider = next(
-            (one for one in self.providers if one.id == assigned.provider_id),
-            None,
-        )
+        provider = self.provider(assigned.provider_id)
         if provider is None or not provider.is_enabled:
             return None
         model = provider.model_named(assigned.model_name)
@@ -114,22 +164,39 @@ class ModelCatalog:
             return None
         return Resolved(provider=provider, model=model)
 
+    def endpoint_on(
+        self, provider: ProviderSpec, model: ModelSpec, *, timeout_s: float
+    ) -> ChatEndpoint | None:
+        """在指定的一路上按指定的模型打一个对话端点。
+
+        ⚠ 形态不是 OpenAI 兼容、或那不是个对话模型时给 `None`：这两条都不是
+        「暂时不可用」，而是「这一路不该这么打」。
+
+        Args: provider, model, timeout_s（消费方自己的调用预算）。
+        """
+        if not provider.is_endpoint_based or model.kind != MODEL_KIND_CHAT:
+            return None
+        return ChatEndpoint(
+            base_url=provider.base_url,
+            api_key=provider.api_key,
+            model=model.name,
+            timeout_s=timeout_s,
+            extra_body=provider.extra_body,
+        )
+
     def chat_endpoint(
         self, purpose: str, *, timeout_s: float
     ) -> ChatEndpoint | None:
-        """这个用途要打的对话端点。种类不是对话模型时给 `None`。
+        """这个用途要打的对话端点。种类不是对话模型、或那一路不是
+        OpenAI 兼容形态时给 `None`。
 
         Args: purpose, timeout_s（消费方自己的调用预算）。
         """
         found = self.resolve(purpose)
-        if found is None or found.model.kind != MODEL_KIND_CHAT:
+        if found is None:
             return None
-        return ChatEndpoint(
-            base_url=found.provider.base_url,
-            api_key=found.provider.api_key,
-            model=found.model.name,
-            timeout_s=timeout_s,
-            extra_body=found.provider.extra_body,
+        return self.endpoint_on(
+            found.provider, found.model, timeout_s=timeout_s
         )
 
     def embedding_endpoint(
@@ -141,6 +208,10 @@ class ModelCatalog:
         """
         found = self.resolve(purpose)
         if found is None or found.model.kind != MODEL_KIND_EMBEDDING:
+            return None
+        # ⚠ 形态闸：不是 OpenAI 兼容的那些路没有端点与密钥，下发空地址等于
+        # 让每一次嵌入都撞一条连不上的网络错
+        if not found.provider.is_endpoint_based:
             return None
         if found.model.dimensions is None:
             return None
@@ -194,9 +265,11 @@ def catalog_version(
             {
                 "id": one.id,
                 "name": one.name,
+                "kind": one.kind,
                 "base_url": one.base_url,
                 "is_enabled": one.is_enabled,
                 "extra_body": one.extra_body,
+                "options": one.options,
                 "models": [
                     {
                         "name": model.name,
@@ -240,10 +313,15 @@ class _ProviderWire(BaseModel):
 
     id: str = Field(min_length=1)
     name: str = Field(min_length=1)
-    base_url: str = Field(min_length=1)
-    api_key: str
+    # ⚠ 缺省当成 OpenAI 兼容：平台比消费方先升级不是必然的，而一份没有这一格
+    # 的旧目录里每一路本来就都是这一形态
+    kind: str = PROVIDER_KIND_OPENAI_COMPAT
+    # ⚠ 只有 OpenAI 兼容那一形态才有这两格，别的形态是空串
+    base_url: str = ""
+    api_key: str = ""
     is_enabled: bool = True
     extra_body: dict[str, Any] | None = None
+    options: dict[str, Any] | None = None
     models: list[_ModelWire] = Field(default_factory=list[_ModelWire])
 
 
@@ -273,10 +351,12 @@ def _provider_of(wire: _ProviderWire) -> ProviderSpec:
     return ProviderSpec(
         id=wire.id,
         name=wire.name,
+        kind=wire.kind,
         base_url=wire.base_url,
         api_key=SecretStr(wire.api_key),
         is_enabled=wire.is_enabled,
         extra_body=wire.extra_body,
+        options=wire.options,
         models=tuple(
             ModelSpec(
                 name=one.name,
