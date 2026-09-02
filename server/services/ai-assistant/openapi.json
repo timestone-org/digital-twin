@@ -608,9 +608,8 @@
             "title": "Plan Label"
           },
           "provider": {
-            "enum": [
-              "codex"
-            ],
+            "maxLength": 64,
+            "minLength": 1,
             "title": "Provider",
             "type": "string"
           }
@@ -1501,9 +1500,6 @@
             "name": "provider",
             "required": true,
             "schema": {
-              "enum": [
-                "codex"
-              ],
               "title": "Provider",
               "type": "string"
             }
@@ -1538,9 +1534,6 @@
             "name": "provider",
             "required": true,
             "schema": {
-              "enum": [
-                "codex"
-              ],
               "title": "Provider",
               "type": "string"
             }
@@ -1584,9 +1577,6 @@
             "name": "provider",
             "required": true,
             "schema": {
-              "enum": [
-                "codex"
-              ],
               "title": "Provider",
               "type": "string"
             }
@@ -1640,9 +1630,6 @@
             "name": "provider",
             "required": true,
             "schema": {
-              "enum": [
-                "codex"
-              ],
               "title": "Provider",
               "type": "string"
             }

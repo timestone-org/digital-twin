@@ -1,6 +1,11 @@
-"""模型凭据的数据访问。只读写，不提交。"""
+"""模型凭据的数据访问。只读写，不提交。
 
-from sqlalchemy import select
+⚠ 认行按 `coalesce(provider_ref, provider)`：目录里配出来的那几路各带自己的
+供应商 id，而环境变量那一路（连同存量那一行）只有种类那一格。少了 coalesce
+的表现是「升级之后订阅账号忽然说没登录」，而库里那一行好端端躺着。
+"""
+
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_assistant.apps.credential.models import ModelCredential
@@ -8,7 +13,7 @@ from lib.db import CrudBase
 
 
 class CredentialCrud(CrudBase[ModelCredential]):
-    """`model_credentials` 的数据访问。一路模型一行。"""
+    """`model_credentials` 的数据访问。一路供应商一行。"""
 
     def __init__(self) -> None:
         super().__init__(ModelCredential)
@@ -16,13 +21,11 @@ class CredentialCrud(CrudBase[ModelCredential]):
     async def by_provider(
         self, session: AsyncSession, provider: str
     ) -> ModelCredential | None:
-        """取某一路模型的那一行；没登录过给 `None`。
+        """取某一路的那一行；没登录过给 `None`。
 
-        Args: session, provider。
+        Args: session, provider（目录里那一路的 id，或环境变量那一路的种类）。
         """
-        rows = await session.execute(
-            select(ModelCredential).where(ModelCredential.provider == provider)
-        )
+        rows = await session.execute(_where(select(ModelCredential), provider))
         return rows.scalars().one_or_none()
 
     async def by_provider_for_update(
@@ -36,11 +39,22 @@ class CredentialCrud(CrudBase[ModelCredential]):
         Args: session, provider。
         """
         rows = await session.execute(
-            select(ModelCredential)
-            .where(ModelCredential.provider == provider)
-            .with_for_update()
+            _where(select(ModelCredential), provider).with_for_update()
         )
         return rows.scalars().one_or_none()
+
+
+def _where(
+    statement: Select[tuple[ModelCredential]], provider: str
+) -> Select[tuple[ModelCredential]]:
+    """按键认那一行。
+
+    Args: statement, provider。
+    """
+    return statement.where(
+        func.coalesce(ModelCredential.provider_ref, ModelCredential.provider)
+        == provider
+    )
 
 
 credential_crud = CredentialCrud()

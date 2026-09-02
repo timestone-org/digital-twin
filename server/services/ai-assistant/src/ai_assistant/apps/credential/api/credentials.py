@@ -4,6 +4,9 @@
 ⚠ 这一份凭据是**整套部署共用的**：换掉它等于替所有人换了说话的账号。
 所以它比会话那几条更严——那几条只要 `assistant:use`。
 
+⚠ 路径上那个键是**那一路供应商的 id**（环境变量配出来的那一路是 `codex`）：
+认不认得出由 `deps.get_provider` 问注册表，端点自己不判。
+
 ⚠ 轮询由浏览器驱动：服务端每次只问上游一次，不起后台任务。api 角色无状态，
 下一次轮询可能落到另一个副本上。
 """
@@ -14,6 +17,7 @@ from ai_assistant.apps.credential.deps import (
     IdempotencyKeyDep,
     LoginDep,
     ManageDep,
+    ProviderDep,
     StoreDep,
 )
 from ai_assistant.apps.credential.errors import CredentialNotFound
@@ -22,7 +26,6 @@ from ai_assistant.apps.credential.schemas import (
     DeviceLoginPollIn,
     DeviceLoginPollOut,
     DeviceLoginStartOut,
-    Provider,
 )
 from ai_assistant.apps.credential.services import CredentialStatus
 from ai_assistant.settings import API_PREFIX
@@ -39,7 +42,7 @@ router = APIRouter(
     summary="模型账号登录态",
 )
 async def read_status(
-    provider: Provider, store: StoreDep, _caller: ManageDep
+    provider: ProviderDep, store: StoreDep, _caller: ManageDep
 ) -> ApiResponse[CredentialStatusOut]:
     """挂着的是哪个账号、什么时候过期。
 
@@ -54,7 +57,7 @@ async def read_status(
     summary="开始设备码登录",
 )
 async def start_login(
-    provider: Provider,
+    provider: ProviderDep,
     login: LoginDep,
     _caller: ManageDep,
     _key: IdempotencyKeyDep = None,
@@ -81,7 +84,7 @@ async def start_login(
     summary="问一次登录好了没",
 )
 async def poll_login(
-    provider: Provider,
+    provider: ProviderDep,
     store: StoreDep,
     login: LoginDep,
     caller: ManageDep,
@@ -108,7 +111,7 @@ async def poll_login(
     summary="退出模型账号",
 )
 async def forget(
-    provider: Provider, store: StoreDep, _caller: ManageDep
+    provider: ProviderDep, store: StoreDep, _caller: ManageDep
 ) -> Response:
     """把这一路的凭据整行删掉。
 

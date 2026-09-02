@@ -12,13 +12,13 @@ from ai_assistant.apps.credential.services import (
 )
 from ai_assistant.llm import (
     DEFAULT_PROFILE,
-    MODEL_KINDS,
     AdapterDeps,
     EmbeddingAdapter,
     GuardedModel,
     ModelRegistry,
     build_openai_embedding,
 )
+from ai_assistant.llm.breakers import BreakerBook
 from ai_assistant.llm.codex.rewire import CodexRewire
 from ai_assistant.settings import SERVICE_NAME, Settings
 from ai_assistant.upstream import (
@@ -104,9 +104,13 @@ def _build_database(settings: Settings) -> Database:
 
 
 def _build_model(
-    settings: Settings, registry: ModelRegistry
+    settings: Settings, registry: ModelRegistry, *, is_catalog_on: bool
 ) -> GuardedModel | None:
-    """按配置装模型；一路都没接就不装。
+    """按配置装模型；一路都没接、目录也没接时才不装。
+
+    ⚠ 目录在时**总是**装得出来：模型面是启动时装一次的，而目录是运行期可改的
+    ——不装的话，在界面上新配出来的那一路要重启才用得上，而现象是「配好了、
+    助手仍说没接模型」。
 
     ⚠ 断路器一个进程一份、跟着模型一起活：每次调用现造一个的话它永远停在
     「closed」，等于没有断路器。
@@ -116,13 +120,13 @@ def _build_model(
     可以配成另一家端点（`ASSISTANT_VISION_BASE_URL`），它连挂几次不该把同一路
     的对话一起短路掉，而那时用户看到的是「助手整个不能说话了」。
 
-    ⚠ 按**装配了的**那几路建，不按此刻解得出端点的那几路：目录还没拉到时
-    后者是空的，那一路就永远没有断路器、也永远装不出模型面。
+    ⚠ 那一本册子**按需生长**：档位来自运行期可改的目录，启动时一次建完的话，
+    之后在界面上新配的那一路会落到兜底那一个上——于是一路挂掉会把别的路一起
+    短路，而那几路本来好好的（`llm/breakers.py`）。
 
-    Args: settings, registry。
+    Args: settings, registry, is_catalog_on。
     """
-    profiles = registry.adapters()
-    if not profiles:
+    if not is_catalog_on and not registry.adapters():
         return None
     return GuardedModel(
         source=registry.resolve,
@@ -132,11 +136,9 @@ def _build_model(
         rewire=CodexRewire(),
         # 兜底那一份只在「档位认不出、用途也没登记」时用得上
         breaker=_breaker_of(settings, DEFAULT_PROFILE, "chat"),
-        breakers={
-            (one.id, kind): _breaker_of(settings, one.id, kind)
-            for one in profiles
-            for kind in MODEL_KINDS
-        },
+        breakers=BreakerBook(
+            lambda profile, kind: _breaker_of(settings, profile, kind)
+        ),
     )
 
 
@@ -241,7 +243,8 @@ def build_container(settings: Settings) -> Container:
         idempotency=IdempotencyStore(
             cache=cache, namespace=IDEMPOTENCY_NAMESPACE
         ),
-        model=_build_model(settings, registry),
+        # ⚠ 目录一定在（`_build_catalog` 不会给 `None`），故模型面总是装得出来
+        model=_build_model(settings, registry, is_catalog_on=True),
         platform=PlatformClient(
             base_url=settings.platform_base_url,
             timeout_s=settings.platform_timeout_s,

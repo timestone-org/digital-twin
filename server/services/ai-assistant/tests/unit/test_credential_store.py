@@ -30,14 +30,16 @@ def test_the_settings_refuse_to_start_without_a_secret() -> None:
 
 
 def test_a_credential_row_belongs_to_one_provider_only() -> None:
-    # 同一路两行的话，读到哪一行取决于排序，而「换了账号却没生效」最难查
+    # 同一路两行的话，读到哪一行取决于排序，而「换了账号却没生效」最难查。
+    # ⚠ 唯一的是**那一路供应商**（`provider_ref`）而不是种类：目录里能配出
+    # 好几路订阅账号，种类那一格它们共用
     unique = {
         column.name
         for constraint in ModelCredential.__table__.constraints
         for column in getattr(constraint, "columns", [])
         if constraint.__class__.__name__ == "UniqueConstraint"
     }
-    assert "provider" in unique
+    assert "provider_ref" in unique
 
 
 def test_an_account_label_keeps_only_its_tail() -> None:

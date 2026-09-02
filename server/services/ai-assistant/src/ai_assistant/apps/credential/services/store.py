@@ -22,6 +22,10 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_assistant.apps.credential.crud import credential_crud
+from ai_assistant.apps.credential.enums import (
+    LEGACY_CODEX_REF,
+    PROVIDER_KIND_CODEX,
+)
 from ai_assistant.apps.credential.errors import (
     CredentialNotFound,
     LoginRejected,
@@ -126,7 +130,15 @@ class CredentialStore:
                 session, provider
             )
             if row is None:
-                row = ModelCredential(provider=provider, auth_mode=auth_mode)
+                row = ModelCredential(
+                    provider=PROVIDER_KIND_CODEX,
+                    # ⚠ 环境变量那一路不在目录里，它那一行只有种类那一格；
+                    # 存量那一行也是这个形状，于是升级之后不用重新登录
+                    provider_ref=(
+                        None if provider == LEGACY_CODEX_REF else provider
+                    ),
+                    auth_mode=auth_mode,
+                )
                 session.add(row)
             _apply(
                 row,

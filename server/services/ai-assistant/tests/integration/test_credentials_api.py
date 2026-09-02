@@ -34,6 +34,7 @@ from ai_assistant.settings import API_PREFIX, Settings
 from integration.conftest import DbStack, HeaderFactory
 from lib.crypto import SecretCipher
 from lib.testing import InMemoryCache
+from llmcore import ModelCatalog, ModelSpec, ProviderSpec
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -236,8 +237,9 @@ async def test_an_unknown_provider_is_rejected(
     response = await db_stack.client.get(
         f"{API_PREFIX}/credentials/nope", headers=manage_headers
     )
-    # 放行的话它会建出一行永远没人读的凭据
-    assert response.status_code == 400
+    # 放行的话它会建出一行永远没人读的凭据，而界面上表现为
+    # 「登录成功了但助手说没登录」
+    assert response.status_code == 404
 
 
 async def test_a_polled_handle_that_expired_is_a_404(
@@ -433,3 +435,110 @@ async def test_a_logged_in_route_is_listed_as_ready(
     ]
     codex = next(one for one in body["models"] if one["id"] == "codex")
     assert codex["is_ready"] is True
+
+
+# 目录里配出来的一路订阅账号；凭据按它的 id 认行
+CATALOG_PROVIDER_ID = "8b1f0f24-6a9e-4a0e-9a3f-1c2d3e4f5a6b"
+CATALOG_CREDENTIALS = f"{API_PREFIX}/credentials/{CATALOG_PROVIDER_ID}"
+
+
+class _StaticCatalog:
+    """目录源的替身：手里钉着一份快照。"""
+
+    def __init__(self, catalog: ModelCatalog) -> None:
+        self._catalog = catalog
+
+    def snapshot(self) -> ModelCatalog:
+        return self._catalog
+
+    async def refresh(self, *, is_forced: bool = False) -> ModelCatalog:
+        del is_forced
+        return self._catalog
+
+
+def _with_catalog_codex(
+    stack: DbStack, *bodies: tuple[int, dict[str, Any]]
+) -> None:
+    """把目录换成「配了一路订阅账号」的那一份。
+
+    Args: stack, bodies（假上游按顺序回的那几条）。
+    """
+    _wire_codex(stack, *bodies)
+    container = stack.app.state.container
+    catalog = _StaticCatalog(
+        ModelCatalog(
+            providers=(
+                ProviderSpec(
+                    id=CATALOG_PROVIDER_ID,
+                    name="我的 Codex",
+                    kind="codex_oauth",
+                    base_url="",
+                    api_key=SecretStr(""),
+                    is_enabled=True,
+                    models=(ModelSpec(name="gpt-5-codex", kind="chat"),),
+                ),
+            ),
+            assignments=(),
+            version="v1",
+        )
+    )
+    stack.app.state.container = replace(
+        container,
+        models=ModelRegistry(
+            AdapterDeps(
+                settings=container.settings,
+                tokens=container.credentials,
+                catalog=catalog,
+            )
+        ),
+    )
+
+
+async def test_a_catalog_route_is_logged_in_by_its_provider_id(
+    db_stack: DbStack, manage_headers: dict[str, str]
+) -> None:
+    """⚠ 目录里能配出好几路订阅账号，各自一份登录态：认行按那一路的 id，
+    而不是按一个写死的种类名——按种类认的话，第二路一登录就把第一路顶掉。"""
+    _with_catalog_codex(
+        db_stack, (200, START_BODY), (200, GRANT_BODY), (200, TOKEN_BODY)
+    )
+    started = (
+        await db_stack.client.post(
+            f"{CATALOG_CREDENTIALS}:start-login", headers=manage_headers
+        )
+    ).json()["data"]
+    polled = (
+        await db_stack.client.post(
+            f"{CATALOG_CREDENTIALS}:poll-login",
+            headers=manage_headers,
+            json={"ref": started["ref"]},
+        )
+    ).json()["data"]
+    assert polled["is_done"] is True
+
+    async with db_stack.sessions() as session:
+        row = (
+            await session.execute(
+                text(
+                    "SELECT provider, provider_ref"
+                    " FROM assistant.model_credentials"
+                )
+            )
+        ).one()
+    # 种类那一格几路共用，认行的是 provider_ref
+    assert row.provider == "codex"
+    assert row.provider_ref == CATALOG_PROVIDER_ID
+
+
+async def test_the_environment_route_steps_aside_for_a_catalog_one(
+    db_stack: DbStack, manage_headers: dict[str, str]
+) -> None:
+    """⚠ 目录里有了同一形态的一路，环境变量那一路就让位：两路并排摆着的话，
+    人会在界面上看到两个「订阅账号」，而其中一个是配置文件里的影子。"""
+    _with_catalog_codex(db_stack)
+    listed = await db_stack.client.get(
+        CATALOG_CREDENTIALS, headers=manage_headers
+    )
+    assert listed.status_code == 200
+    shadow = await db_stack.client.get(CREDENTIALS, headers=manage_headers)
+    assert shadow.status_code == 404
