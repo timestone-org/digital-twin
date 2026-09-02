@@ -4,23 +4,21 @@
  *
  * 新增算子**不用改这里**：控件由 `x-dt-widget` 与 JSON Schema 的类型推出来
  * （MODELING_DESIGN §9.3）。
+ * ⚠ 每一项都能一键回到默认值：schema 里给了默认的字段，改坏之后用户没有别的
+ * 路能确认「原来是多少」——而参数写歪的表现往往是模型指标莫名其妙地差。
  */
-import {
-  DtCheckbox,
-  DtField,
-  DtInput,
-  DtNumberInput,
-  DtSelect,
-  DtSwitch,
-} from '@dt/ui'
+import { DtField, DtInput, DtNumberInput, DtSelect, DtSwitch } from '@dt/ui'
 
-import type { FormField } from '../scripts/schemaForm'
+import type { FormField, FormOptions } from '../scripts/schemaForm'
+import { isDefault, missingHint } from '../scripts/schemaForm'
+
+import ColumnPicker from './ColumnPicker.vue'
+import MomentInput from './MomentInput.vue'
 
 const props = defineProps<{
   fields: readonly FormField[]
   config: Record<string, unknown>
-  columns: readonly string[]
-  tables: readonly { code: string; name: string }[]
+  options: FormOptions
   isReadonly: boolean
 }>()
 
@@ -62,44 +60,67 @@ function rangeOf(field: FormField): {
 
 /** 台账下拉的选项。编码即值，名字用来认。 */
 function tableOptions(): readonly { value: string; label: string }[] {
-  return props.tables.map((item) => ({
+  return props.options.tables.map((item) => ({
     value: item.code,
     label: `${item.name}（${item.code}）`,
   }))
 }
 
-/** 勾选一列或取消一列。**保持 schema 里那份顺序**，不按点击先后排。 */
-function toggleColumn(key: string, column: string, isOn: boolean): void {
-  const current = new Set(listOf(key))
-  if (isOn) current.add(column)
-  else current.delete(column)
-  emit(
-    'change',
-    key,
-    props.columns.filter((item) => current.has(item)),
-  )
+/** 这一项现在偏离默认值了吗——偏离了才给「恢复默认」。 */
+function canReset(field: FormField): boolean {
+  if (props.isReadonly || field.fallback === undefined) return false
+  return !isDefault(field, props.config[field.key])
+}
+
+/** 这一项的提示语：必填没填时说出来，否则用 schema 的说明。 */
+function hintOf(field: FormField): string {
+  return missingHint(field, props.config[field.key]) || field.hint
+}
+
+function errorOf(field: FormField): string {
+  return missingHint(field, props.config[field.key])
 }
 </script>
 
 <template>
   <div class="dt-ml-form">
-    <template v-for="field in props.fields" :key="field.key">
-      <DtSelect
-        v-if="field.widget === 'select'"
+    <div v-for="field in props.fields" :key="field.key" class="dt-ml-form__row">
+      <MomentInput
+        v-if="field.widget === 'moment'"
         :model-value="textOf(field.key)"
-        :options="field.options"
         :label="field.label"
         :hint="field.hint"
+        :is-readonly="props.isReadonly"
+        @update:model-value="emit('change', field.key, $event)"
+      />
+      <ColumnPicker
+        v-else-if="field.widget === 'columns'"
+        :model-value="listOf(field.key)"
+        :columns="props.options.columns"
+        :label="field.label"
+        :hint="field.hint"
+        :note="props.options.columnsNote"
+        :is-readonly="props.isReadonly"
+        @update:model-value="emit('change', field.key, $event)"
+      />
+      <DtSelect
+        v-else-if="field.widget === 'table' && tableOptions().length > 0"
+        :model-value="textOf(field.key)"
+        :options="tableOptions()"
+        :label="field.label"
+        :hint="hintOf(field)"
+        :error="errorOf(field)"
         :required="field.isRequired"
         :disabled="props.isReadonly"
         @update:model-value="emit('change', field.key, $event)"
       />
       <DtSelect
-        v-else-if="field.widget === 'table'"
+        v-else-if="field.widget === 'select'"
         :model-value="textOf(field.key)"
-        :options="tableOptions()"
+        :options="field.options"
         :label="field.label"
-        :hint="field.hint"
+        :hint="hintOf(field)"
+        :error="errorOf(field)"
         :required="field.isRequired"
         :disabled="props.isReadonly"
         @update:model-value="emit('change', field.key, $event)"
@@ -109,7 +130,8 @@ function toggleColumn(key: string, column: string, isOn: boolean): void {
         :model-value="numberOf(field.key)"
         :range="rangeOf(field)"
         :label="field.label"
-        :hint="field.hint"
+        :hint="hintOf(field)"
+        :error="errorOf(field)"
         :required="field.isRequired"
         :disabled="props.isReadonly"
         @update:model-value="emit('change', field.key, $event)"
@@ -123,34 +145,44 @@ function toggleColumn(key: string, column: string, isOn: boolean): void {
         />
       </DtField>
       <DtField
-        v-else-if="field.widget === 'columns'"
+        v-else-if="field.widget === 'table'"
         :label="field.label"
         :hint="field.hint"
       >
-        <p v-if="props.columns.length === 0" class="dt-ml-form__empty">
-          先在上游选好台账，这里才会列出可用的列
+        <DtInput
+          :model-value="textOf(field.key)"
+          placeholder="填台账编码"
+          :error="errorOf(field)"
+          :required="field.isRequired"
+          :disabled="props.isReadonly"
+          @update:model-value="emit('change', field.key, $event)"
+        />
+        <!-- ⚠ 这句必须**总是**看得见：空下拉读起来是「一张台账都没建」，
+             而真相往往是「你看不到」，两者的处置完全不同 -->
+        <p v-if="props.options.tablesNote" class="dt-ml-form__note">
+          {{ props.options.tablesNote }}
         </p>
-        <div v-else class="dt-ml-form__columns">
-          <DtCheckbox
-            v-for="column in props.columns"
-            :key="column"
-            :model-value="listOf(field.key).includes(column)"
-            :label="column"
-            :disabled="props.isReadonly"
-            @update:model-value="toggleColumn(field.key, column, $event)"
-          />
-        </div>
       </DtField>
       <DtInput
         v-else
         :model-value="textOf(field.key)"
         :label="field.label"
-        :hint="field.hint"
+        :hint="hintOf(field)"
+        :error="errorOf(field)"
         :required="field.isRequired"
         :disabled="props.isReadonly"
         @update:model-value="emit('change', field.key, $event)"
       />
-    </template>
+      <button
+        v-if="canReset(field)"
+        type="button"
+        class="dt-ml-form__reset"
+        :title="`恢复默认：${JSON.stringify(field.fallback)}`"
+        @click="emit('change', field.key, field.fallback)"
+      >
+        恢复默认
+      </button>
+    </div>
   </div>
 </template>
 
@@ -160,18 +192,39 @@ function toggleColumn(key: string, column: string, isOn: boolean): void {
   flex-direction: column;
   gap: 0.75rem;
 
-  &__columns {
+  &__row {
     display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    max-height: 12rem;
-    overflow-y: auto;
+    gap: 0.5rem;
+    align-items: flex-end;
+
+    > :first-child {
+      flex: 1;
+      min-width: 0;
+    }
   }
 
-  &__empty {
-    margin: 0;
+  &__note {
+    margin: 0.25rem 0 0;
     color: var(--text-disabled);
     font-size: var(--ctl-hint-fs-sm);
+  }
+
+  &__reset {
+    flex: none;
+    height: var(--ctl-h-sm);
+    padding: 0 0.5rem;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    background: var(--surface-base);
+    color: var(--text-secondary);
+    font-size: var(--ctl-hint-fs-sm);
+    white-space: nowrap;
+    cursor: pointer;
+
+    &:hover {
+      border-color: var(--border-hover);
+      color: var(--text-primary);
+    }
   }
 }
 </style>

@@ -1,17 +1,38 @@
 <script setup lang="ts">
 /**
- * @fileoverview 一份帧的结果视图：形状、每列统计、前若干行。
+ * @fileoverview 一份帧的结果视图：取数来源、形状、每列统计、前若干行。
  *
  * ⚠ 截断要**说出来**：只显示前几行却不标注的话，用户会以为这一步只产出了这
  * 么点数据，然后照着去调上游的行数上限。
+ * ⚠ 取数触顶（`provenance.is_truncated`）与「摘要只带回前几行」是两回事：前者
+ * 是**数据根本没进来**，模型是在半截数据上训的；后者只影响这一屏好不好看。
  */
 import type { DtTableColumn } from '@dt/contracts'
-import { DtNotice, DtTable } from '@dt/ui'
+import { DtNotice, DtTable, DtTag } from '@dt/ui'
 import { computed } from 'vue'
 
+import { formatDateTime } from '@/utils/datetime'
+
+import { grouped, niceNumber } from '../scripts/numbers'
 import type { ColumnStat, FramePreview } from '../scripts/preview'
 
 const props = defineProps<{ preview: FramePreview }>()
+
+/** 列角色的中文名。认不出的角色不摆徽标，不瞎猜。 */
+const ROLE_LABELS: Record<string, string> = {
+  target: '目标列',
+  feature: '特征列',
+  index: '时间索引',
+}
+
+/** 「台账 energy_log · 2026-01-01 00:00 ~ 至今」。取不到来源时给空串。 */
+const provenance = computed(() => {
+  const source = props.preview.provenance
+  if (source.tableCodes.length === 0) return ''
+  const since = formatDateTime(source.since, '最早')
+  const until = formatDateTime(source.until, '此刻')
+  return `台账 ${source.tableCodes.join('、')} · ${since} ~ ${until}`
+})
 
 const STAT_COLUMNS: readonly DtTableColumn[] = [
   { key: 'name', label: '列' },
@@ -56,35 +77,36 @@ const statRows = computed(() =>
 /** 单元格文案。空值显式写成「—」，不显示成空白。 */
 function display(value: unknown): string {
   if (value === null || value === undefined) return '—'
-  if (typeof value === 'number') return round(value)
+  if (typeof value === 'number') return niceNumber(value)
   if (typeof value === 'string') return value
   if (typeof value === 'boolean') return value ? '是' : '否'
   return JSON.stringify(value) ?? ''
 }
 
-/** 统计数字保留四位有效小数，整数不补零。 */
-function round(value: number): string {
-  if (Number.isInteger(value)) return String(value)
-  return value.toFixed(4).replace(/0+$/, '').replace(/\.$/, '')
-}
-
 function statOf(column: ColumnStat, key: string): string {
-  if (key === 'nullRatio') return `${round(column.nullRatio * 100)}%`
-  if (key === 'uniqueCount') return String(column.uniqueCount)
-  const value = {
-    min: column.min,
-    max: column.max,
-    mean: column.mean,
-    p50: column.p50,
-  }[key]
-  return value === null || value === undefined ? '—' : round(value)
+  if (key === 'nullRatio') return `${niceNumber(column.nullRatio * 100)}%`
+  if (key === 'uniqueCount') return grouped(column.uniqueCount)
+  return niceNumber(
+    { min: column.min, max: column.max, mean: column.mean, p50: column.p50 }[
+      key
+    ],
+  )
 }
 </script>
 
 <template>
   <div class="dt-ml-frame">
+    <p v-if="provenance" class="dt-ml-frame__source">{{ provenance }}</p>
+    <DtNotice
+      v-if="props.preview.provenance.isTruncated"
+      intent="warning"
+      icon="alert-triangle"
+    >
+      取数触了行数上限：这一段时间里靠后的数据根本没有取进来，模型是在半截数据
+      上训的。要么把「行数上限」调大，要么把时间范围缩小。
+    </DtNotice>
     <p class="dt-ml-frame__shape">
-      {{ props.preview.rowCount }} 行 × {{ props.preview.colCount }} 列
+      {{ grouped(props.preview.rowCount) }} 行 × {{ props.preview.colCount }} 列
     </p>
     <DtNotice v-if="props.preview.isColsTruncated" intent="warning">
       列太多，这里只列出前面一部分
@@ -93,6 +115,9 @@ function statOf(column: ColumnStat, key: string): string {
       <template #cell-name="{ row }">
         {{ row.name || row.key }}
         <span v-if="row.unit" class="dt-ml-frame__unit">{{ row.unit }}</span>
+        <DtTag v-if="ROLE_LABELS[row.role]" intent="info" size="sm">
+          {{ ROLE_LABELS[row.role] }}
+        </DtTag>
       </template>
       <template #cell-dtype="{ row }">
         <code>{{ row.dtype }}</code>
@@ -121,6 +146,12 @@ function statOf(column: ColumnStat, key: string): string {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+
+  &__source {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: var(--ctl-hint-fs-sm);
+  }
 
   &__shape {
     margin: 0;

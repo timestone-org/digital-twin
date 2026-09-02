@@ -37,22 +37,49 @@ export interface Viewport extends CanvasPoint {
  *
  * @param host 视口那个 DOM 元素的引用，用来量真实尺寸与做坐标换算
  */
-export function useCanvasViewport(
-  host: Readonly<{ value: HTMLElement | null }>,
-) {
+type Host = Readonly<{ value: HTMLElement | null }>
+
+/** 把屏幕坐标换成画布坐标。 */
+function toCanvasIn(
+  host: Host,
+  viewport: Viewport,
+  clientLeft: number,
+  clientTop: number,
+): CanvasPoint {
+  const box = host.value?.getBoundingClientRect()
+  return {
+    left: (clientLeft - (box?.left ?? 0) - viewport.left) / viewport.zoom,
+    top: (clientTop - (box?.top ?? 0) - viewport.top) / viewport.zoom,
+  }
+}
+
+/**
+ * 换成新倍率，并把某个屏幕点钉在原处。
+ *
+ * ⚠ 必须以某个具体的点为锚：不钉锚点的话，用户放大时正在看的内容会整体滑走，
+ * 手感像是画布在躲他。
+ */
+function zoomAround(
+  host: Host,
+  viewport: Viewport,
+  at: { left: number; top: number },
+  next: number,
+): void {
+  const before = toCanvasIn(host, viewport, at.left, at.top)
+  viewport.zoom = clamp(next)
+  const after = toCanvasIn(host, viewport, at.left, at.top)
+  viewport.left += (after.left - before.left) * viewport.zoom
+  viewport.top += (after.top - before.top) * viewport.zoom
+}
+
+export function useCanvasViewport(host: Host) {
   const viewport = reactive<Viewport>({ left: 0, top: 0, zoom: 1 })
   const size = reactive({ width: 0, height: 0 })
   const observer = ref<ResizeObserver | null>(null)
 
   /** 把屏幕坐标换成画布坐标。 */
   function toCanvas(clientLeft: number, clientTop: number): CanvasPoint {
-    const box = host.value?.getBoundingClientRect()
-    const originLeft = box?.left ?? 0
-    const originTop = box?.top ?? 0
-    return {
-      left: (clientLeft - originLeft - viewport.left) / viewport.zoom,
-      top: (clientTop - originTop - viewport.top) / viewport.zoom,
-    }
+    return toCanvasIn(host, viewport, clientLeft, clientTop)
   }
 
   /** 平移一段屏幕距离。 */
@@ -61,19 +88,24 @@ export function useCanvasViewport(
     viewport.top += deltaTop
   }
 
-  /**
-   * 以某个屏幕点为锚缩放。
-   *
-   * ⚠ 必须以指针所在的点为锚：以视口中心为锚的话，用户放大时目标会往边上跑，
-   * 手感像是画布在躲他。
-   */
+  /** 以指针所在那一点为锚滚轮缩放。 */
   function zoomAt(clientLeft: number, clientTop: number, delta: number): void {
-    const before = toCanvas(clientLeft, clientTop)
-    const next = clamp(viewport.zoom * (1 - delta * WHEEL_STEP))
-    viewport.zoom = next
-    const after = toCanvas(clientLeft, clientTop)
-    viewport.left += (after.left - before.left) * next
-    viewport.top += (after.top - before.top) * next
+    const next = viewport.zoom * (1 - delta * WHEEL_STEP)
+    zoomAround(host, viewport, { left: clientLeft, top: clientTop }, next)
+  }
+
+  /** 以视口正中为锚把缩放设成 `next`。工具条上那几颗按钮走它。 */
+  function zoomTo(next: number): void {
+    const box = host.value?.getBoundingClientRect()
+    zoomAround(
+      host,
+      viewport,
+      {
+        left: (box?.left ?? 0) + size.width / 2,
+        top: (box?.top ?? 0) + size.height / 2,
+      },
+      next,
+    )
   }
 
   /** 把一组矩形整体放进视野。空清单时回到原点。 */
@@ -93,7 +125,16 @@ export function useCanvasViewport(
     observer.value = null
   })
 
-  return { viewport, size: readonly(size), toCanvas, pan, zoomAt, fit, observe }
+  return {
+    viewport,
+    size: readonly(size),
+    toCanvas,
+    pan,
+    zoomAt,
+    zoomTo,
+    fit,
+    observe,
+  }
 }
 
 /** 把一组矩形整体放进视野时该有的平移与缩放。 */

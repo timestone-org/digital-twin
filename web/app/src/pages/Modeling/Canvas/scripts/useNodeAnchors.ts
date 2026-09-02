@@ -7,6 +7,7 @@
 import type { ModelingGraph, ModelingOperator } from '@dt/contracts'
 import { onBeforeUnmount, reactive, shallowRef } from 'vue'
 
+import type { NodeRect } from './nodeLayout'
 import type { CanvasPoint, CanvasRect } from './useCanvasViewport'
 
 /** 卡片没量到尺寸时的兜底，与样式表里的宽度一致。 */
@@ -36,6 +37,51 @@ function offsetIn(
   return {
     left: side === 'in' ? 0 : size.width,
     top: (size.height * (port.index + 1)) / (port.total + 1),
+  }
+}
+
+/** 某个节点的外接矩形（画布坐标）。「适应视图」按它算。 */
+function rectIn(
+  sizes: Sizes,
+  graph: ModelingGraph,
+  id: string,
+): CanvasRect | null {
+  const node = graph.nodes.find((item) => item.id === id)
+  if (node === undefined) return null
+  return { ...node.position, ...(sizes.get(id) ?? FALLBACK_SIZE) }
+}
+
+/** 一批节点的带身份矩形。对齐、分布与吸附都吃它。 */
+function rectsIn(
+  sizes: Sizes,
+  graph: ModelingGraph,
+  ids?: readonly string[],
+): NodeRect[] {
+  const wanted = ids === undefined ? null : new Set(ids)
+  return graph.nodes
+    .filter((node) => wanted === null || wanted.has(node.id))
+    .map((node) => ({
+      id: node.id,
+      ...node.position,
+      ...(sizes.get(node.id) ?? FALLBACK_SIZE),
+    }))
+}
+
+/** 某个接点的坐标（画布坐标）。认不出这个节点时给 null。 */
+function anchorIn(
+  sizes: Sizes,
+  graph: ModelingGraph,
+  operators: ReadonlyMap<string, ModelingOperator>,
+  at: { node: string; port: string; side: Side },
+): CanvasPoint | null {
+  const node = graph.nodes.find((item) => item.id === at.node)
+  if (node === undefined) return null
+  const size = sizes.get(at.node) ?? FALLBACK_SIZE
+  const rank = rankOf(operators.get(node.operator), at.side, at.port)
+  const offset = offsetIn(size, at.side, rank)
+  return {
+    left: node.position.left + offset.left,
+    top: node.position.top + offset.top,
   }
 }
 
@@ -85,30 +131,6 @@ export function useNodeAnchors() {
     observer.value.observe(element)
   }
 
-  /** 某个节点的外接矩形（画布坐标）。「适应视图」按它算。 */
-  function rectOf(graph: ModelingGraph, id: string): CanvasRect | null {
-    const node = graph.nodes.find((item) => item.id === id)
-    if (node === undefined) return null
-    return { ...node.position, ...(sizes.get(id) ?? FALLBACK_SIZE) }
-  }
-
-  /** 某个接点的坐标（画布坐标）。认不出这个节点时给 null。 */
-  function anchorOf(
-    graph: ModelingGraph,
-    operators: ReadonlyMap<string, ModelingOperator>,
-    at: { node: string; port: string; side: Side },
-  ): CanvasPoint | null {
-    const node = graph.nodes.find((item) => item.id === at.node)
-    if (node === undefined) return null
-    const size = sizes.get(at.node) ?? FALLBACK_SIZE
-    const rank = rankOf(operators.get(node.operator), at.side, at.port)
-    const offset = offsetIn(size, at.side, rank)
-    return {
-      left: node.position.left + offset.left,
-      top: node.position.top + offset.top,
-    }
-  }
-
   onBeforeUnmount(() => {
     observer.value?.disconnect()
     observer.value = null
@@ -116,5 +138,17 @@ export function useNodeAnchors() {
     sizes.clear()
   })
 
-  return { bind, rectOf, anchorOf }
+  return {
+    bind,
+    rectOf: (graph: ModelingGraph, id: string) => rectIn(sizes, graph, id),
+    rectsOf: (graph: ModelingGraph, ids?: readonly string[]) =>
+      rectsIn(sizes, graph, ids),
+    anchorOf: (
+      graph: ModelingGraph,
+      operators: ReadonlyMap<string, ModelingOperator>,
+      at: { node: string; port: string; side: Side },
+    ) => anchorIn(sizes, graph, operators, at),
+    /** 各卡片的实测尺寸。一键整理按它算版面。 */
+    sizes,
+  }
 }

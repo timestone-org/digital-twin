@@ -1,17 +1,21 @@
 /**
- * @fileoverview 结果视图与节点卡片：按 kind 派发、截断要说出来、空值不显示成
- * 空白，以及节点上每个端口一个具名接点。
+ * @fileoverview 结果视图：按 kind 派发、截断要说出来、空值不显示成空白。
  */
-import type { ModelingGraphNode, ModelingOperator } from '@dt/contracts'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
-import ModelingNode from '@/pages/Modeling/Canvas/components/ModelingNode.vue'
 import ResultView from '@/pages/Modeling/Canvas/components/ResultView.vue'
-import {
-  PORT_NAME_ATTR,
-  PORT_SIDE_ATTR,
-} from '@/pages/Modeling/Canvas/scripts/useCanvasWiring'
+
+const MODEL = {
+  kind: 'model',
+  algo: 'linear',
+  task: 'regression',
+  hyper_params: { use_intercept: true },
+  feature_keys: ['power', 'temp'],
+  target_key: 'y',
+  serving_channel: 'json',
+  fitted: { coef: { power: 2, temp: -0.5 }, intercept: 1 },
+}
 
 const FRAME = {
   kind: 'frame',
@@ -54,18 +58,7 @@ describe('结果视图按 kind 派发', () => {
 
   it('模型：没训练出来的要明说下游用不了', () => {
     const wrapper = mount(ResultView, {
-      props: {
-        payload: {
-          kind: 'model',
-          algo: 'linear',
-          task: 'regression',
-          hyper_params: {},
-          feature_keys: [],
-          target_key: '',
-          serving_channel: 'json',
-          fitted: false,
-        },
-      },
+      props: { payload: { ...MODEL, fitted: {} } },
     })
 
     expect(wrapper.text()).toContain('还没有训练出模型')
@@ -122,124 +115,131 @@ describe('结果视图按 kind 派发', () => {
   })
 })
 
-function spec(): ModelingOperator {
-  const port = (name: string) => ({
-    name,
-    contract: 'frame',
-    label: name,
-    is_required: true,
-    description: '',
+describe('模型结果', () => {
+  // ⚠ `fitted` 是拟合参数字典不是布尔，按布尔读的话每个训好的模型都会喊没训出来
+  it('训好了就不喊「还没训练出来」', () => {
+    const wrapper = mount(ResultView, { props: { payload: MODEL } })
+
+    expect(wrapper.text()).not.toContain('还没有训练出模型')
   })
-  return {
-    code: 'join',
-    name: '两表相接',
-    description: '',
-    category: 'preprocess',
-    spec_version: '1',
-    icon: 'workflow',
-    inputs: [port('left'), port('right')],
-    outputs: [port('out')],
-    config_schema: {},
-    fit_required: false,
-    serving_enabled: false,
-    serving_window_required: false,
-    serving_channel: 'json',
+
+  it('系数按绝对值从大到小排，截距单独写出来', () => {
+    const wrapper = mount(ResultView, { props: { payload: MODEL } })
+
+    const names = wrapper.findAll('.dt-ml-model__name').map((el) => el.text())
+    expect(names).toEqual(['power', 'temp'])
+    expect(wrapper.text()).toContain('截距 1')
+  })
+
+  it('负权重画在零线另一边，色也不一样', () => {
+    const wrapper = mount(ResultView, { props: { payload: MODEL } })
+
+    const bars = wrapper.findAll('.dt-ml-model__bar')
+    expect(bars[0]?.classes()).not.toContain('dt-ml-model__bar--minus')
+    expect(bars[1]?.classes()).toContain('dt-ml-model__bar--minus')
+  })
+
+  it('可服务性说清楚能不能配到台账里去', () => {
+    expect(mount(ResultView, { props: { payload: MODEL } }).text()).toContain(
+      '可上线',
+    )
+    expect(
+      mount(ResultView, {
+        props: { payload: { ...MODEL, serving_channel: 'binary' } },
+      }).text(),
+    ).toContain('不可上线')
+  })
+
+  // ⚠ 「摘要被截断」与「没训出来」是两回事，混作一处会冤枉一个跑成功的模型
+  it('摘要被截掉拟合参数时说的是被截断，不是没训出来', () => {
+    const trimmed: Record<string, unknown> = { ...MODEL }
+    delete trimmed['fitted']
+
+    const wrapper = mount(ResultView, { props: { payload: trimmed } })
+
+    expect(wrapper.text()).toContain('没有一起带回来')
+    expect(wrapper.text()).not.toContain('还没有训练出模型')
+  })
+})
+
+describe('评估结果', () => {
+  const METRICS = {
+    kind: 'metrics',
+    task: 'regression',
+    metrics: { r2: 0.95, mape: 8, mae: 3, rmse: null },
+    pairs: [[1, 1.1]],
+    pairs_truncated: false,
+    residual_bins: [
+      [-2, -1, 3],
+      [-1, 0, 9],
+      [0, 1, 4],
+    ],
   }
-}
 
-const NODE: ModelingGraphNode = {
-  id: 'n1',
-  operator: 'join',
-  alias: '',
-  position: { left: 0, top: 0 },
-  config: {},
-}
+  it('残差直方图按桶画出来', () => {
+    const wrapper = mount(ResultView, { props: { payload: METRICS } })
 
-describe('节点卡片', () => {
-  it('每个端口一个具名接点，多输入算子分得清主副', () => {
-    const wrapper = mount(ModelingNode, {
-      props: {
-        node: NODE,
-        spec: spec(),
-        state: 'idle',
-        isSelected: false,
-        isReadonly: false,
-        errorText: '',
-        hasResult: false,
-      },
-    })
-
-    const names = wrapper
-      .findAll(`[${PORT_NAME_ATTR}]`)
-      .map((el) => el.attributes(PORT_NAME_ATTR))
-    expect(names).toEqual(['left', 'right', 'out'])
+    expect(wrapper.findAll('.dt-ml-residual__bar')).toHaveLength(3)
   })
 
-  it('入口与出口分得开，命中测试才认得出方向', () => {
-    const wrapper = mount(ModelingNode, {
-      props: {
-        node: NODE,
-        spec: spec(),
-        state: 'idle',
-        isSelected: false,
-        isReadonly: false,
-        errorText: '',
-        hasResult: false,
-      },
-    })
+  it('残差跨过 0 时把零线画出来', () => {
+    const wrapper = mount(ResultView, { props: { payload: METRICS } })
 
-    const sides = wrapper
-      .findAll(`[${PORT_SIDE_ATTR}]`)
-      .map((el) => el.attributes(PORT_SIDE_ATTR))
-    expect(sides).toEqual(['in', 'in', 'out'])
+    expect(wrapper.find('.dt-ml-residual__zero').exists()).toBe(true)
   })
 
-  it('失败时把后端那句错误显示在卡片上', () => {
-    const wrapper = mount(ModelingNode, {
+  it('残差全在一侧时不画零线，免得画到框外去', () => {
+    const wrapper = mount(ResultView, {
       props: {
-        node: NODE,
-        spec: spec(),
-        state: 'failed',
-        isSelected: false,
-        isReadonly: false,
-        errorText: '台账 energy_log 不存在',
-        hasResult: false,
+        payload: { ...METRICS, residual_bins: [[1, 2, 5]] },
       },
     })
 
-    expect(wrapper.text()).toContain('台账 energy_log 不存在')
-    expect(wrapper.classes()).toContain('dt-ml-node--failed')
+    expect(wrapper.find('.dt-ml-residual__zero').exists()).toBe(false)
   })
 
-  it('没有结果时不给「结果」那颗键', () => {
-    const wrapper = mount(ModelingNode, {
-      props: {
-        node: NODE,
-        spec: spec(),
-        state: 'succeeded',
-        isSelected: false,
-        isReadonly: false,
-        errorText: '',
-        hasResult: false,
-      },
-    })
+  // ⚠ 无定义写成 0 会被读成「一点都不准」
+  it('无定义的指标写「无定义」，不写 0', () => {
+    const wrapper = mount(ResultView, { props: { payload: METRICS } })
 
-    expect(wrapper.text()).not.toContain('结果')
+    expect(wrapper.text()).toContain('无定义')
   })
 
-  it('认不出算子时用节点自己的 operator 顶上，不显示成空标题', () => {
-    const wrapper = mount(ModelingNode, {
-      props: {
-        node: NODE,
-        spec: undefined,
-        state: 'idle',
-        isSelected: false,
-        isReadonly: false,
-        errorText: '',
-        hasResult: false,
-      },
-    })
+  it('MAPE 按百分数显示，阈值也按百分数判', () => {
+    const wrapper = mount(ResultView, { props: { payload: METRICS } })
 
-    expect(wrapper.text()).toContain('join')
+    expect(wrapper.text()).toContain('8%')
+  })
+})
+
+describe('取数溯源', () => {
+  const SOURCED = {
+    ...FRAME,
+    provenance: {
+      table_codes: ['energy_log'],
+      since: '2026-01-01T00:00:00Z',
+      until: null,
+      is_truncated: true,
+    },
+  }
+
+  it('台账编码与时间范围写在最上面', () => {
+    const wrapper = mount(ResultView, { props: { payload: SOURCED } })
+
+    expect(wrapper.text()).toContain('energy_log')
+    expect(wrapper.text()).toContain('此刻')
+  })
+
+  // ⚠ 取数触顶是「数据根本没进来」，与「摘要只带回前几行」不是一回事
+  it('取数触顶时给一条告警，说清是数据没进来', () => {
+    const wrapper = mount(ResultView, { props: { payload: SOURCED } })
+
+    expect(wrapper.text()).toContain('根本没有取进来')
+  })
+
+  it('列角色印在列名旁边', () => {
+    const wrapper = mount(ResultView, { props: { payload: SOURCED } })
+
+    expect(wrapper.text()).toContain('特征列')
   })
 })

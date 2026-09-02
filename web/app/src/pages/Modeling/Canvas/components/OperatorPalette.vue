@@ -1,13 +1,18 @@
 <script setup lang="ts">
 /**
- * @fileoverview 算子面板：按大类分组列出可用算子，点一下往画布上落一个。
+ * @fileoverview 算子面板：按大类分组列出可用算子，拖到画布上摆，或点一下落在
+ * 视野正中。
  *
  * 目录**整份来自后端**（`GET /modeling-operators`）：新增一个算子不用改前端，
  * 这是「可扩展」那条要求落到界面上的样子（MODELING_DESIGN §9.3）。
+ * ⚠ 拖拽走自定义 MIME：认 `text/plain` 的话，从别处拖进来的任意文本都会被当成
+ * 一次添加。
  */
 import type { ModelingCategory, ModelingOperator } from '@dt/contracts'
 import { DtEmpty, DtIcon, DtInput } from '@dt/ui'
 import { computed, ref } from 'vue'
+
+import { OPERATOR_MIME } from '../scripts/dragMime'
 
 const props = defineProps<{
   operators: readonly ModelingOperator[]
@@ -65,6 +70,14 @@ function rank(category: string): number {
   const at = CATEGORY_ORDER.indexOf(category as ModelingCategory)
   return at < 0 ? CATEGORY_ORDER.length : at
 }
+
+/** 开始把一个算子拖向画布。只读时不给拖。 */
+function onDragStart(event: DragEvent, code: string): void {
+  if (props.isReadonly || event.dataTransfer === null)
+    return event.preventDefault()
+  event.dataTransfer.setData(OPERATOR_MIME, code)
+  event.dataTransfer.effectAllowed = 'copy'
+}
 </script>
 
 <template>
@@ -90,8 +103,10 @@ function rank(category: string): number {
           :key="item.code"
           type="button"
           class="dt-ml-palette__item"
+          :draggable="!props.isReadonly"
           :disabled="props.isReadonly"
           :title="item.description"
+          @dragstart="onDragStart($event, item.code)"
           @click="emit('pick', item.code)"
         >
           <DtIcon :name="item.icon" :size="14" />
@@ -99,6 +114,7 @@ function rank(category: string): number {
         </button>
       </section>
     </div>
+    <p class="dt-ml-palette__hint">拖到画布上摆放，或点一下落在视野正中</p>
   </aside>
 </template>
 
@@ -156,6 +172,13 @@ function rank(category: string): number {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  &__hint {
+    margin: 0;
+    color: var(--text-disabled);
+    font-size: var(--ctl-hint-fs-sm);
+    line-height: 1.4;
   }
 }
 </style>

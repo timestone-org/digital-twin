@@ -12,7 +12,16 @@ function actions(canEdit = true) {
   return {
     removeSelected: vi.fn(),
     undo: vi.fn(),
+    redo: vi.fn(),
     clearSelection: vi.fn(),
+    selectAll: vi.fn(),
+    copy: vi.fn(),
+    paste: vi.fn(),
+    duplicate: vi.fn(),
+    rename: vi.fn(),
+    openConfig: vi.fn(),
+    fit: vi.fn(),
+    nudge: vi.fn(),
     canEdit: () => canEdit,
   }
 }

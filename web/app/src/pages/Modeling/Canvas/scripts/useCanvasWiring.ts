@@ -1,8 +1,10 @@
 /**
- * @fileoverview 连线：接点命中、连接前置校验、边的几何。
+ * @fileoverview 连线规则：契约是否相符、落点归一、自动选口、连接前置校验。
  *
  * ⚠ 校验放在**连线手势结束的那一刻**，不是等运行时才报：长流水线里一个笔误
  * 要跑到那一步才炸，而那时用户已经等了几十秒（MODELING_DESIGN §8.2）。
+ * ⚠ 松手落在卡片上也算数：只认那个十来像素的圆点的话，用户得瞄准一个比光标
+ * 大不了多少的靶子，十次里落空七次——现象与「连线根本用不了」无从区分。
  */
 import type {
   ModelingGraph,
@@ -10,22 +12,11 @@ import type {
   ModelingOperator,
 } from '@dt/contracts'
 
-import type { CanvasPoint } from './useCanvasViewport'
+import type { WireEnd } from './portHits'
+import { nodeIdOf, portHitOf } from './portHits'
 
-/** 接点在 DOM 上的两个标记，命中测试只认它们。 */
-export const PORT_NODE_ATTR = 'data-port-node'
-export const PORT_NAME_ATTR = 'data-port-name'
-export const PORT_SIDE_ATTR = 'data-port-side'
-
-/** 贝塞尔的水平控制点距离（画布像素）。 */
-const CURVE_TENSION = 60
-
-/** 松手时落在的那个接点。 */
-export interface PortHit {
-  node: string
-  port: string
-  side: 'in' | 'out'
-}
+type Side = 'in' | 'out'
+type Operators = ReadonlyMap<string, ModelingOperator>
 
 /** 一次连接尝试的结论。不合法时 `reason` 是给用户看的人话。 */
 export interface WireVerdict {
@@ -33,15 +24,82 @@ export interface WireVerdict {
   reason: string
 }
 
-/** 从松手时的 DOM 元素上找出接点。没落在接点上给 null。 */
-export function portHitOf(element: HTMLElement | null): PortHit | null {
-  const host = element?.closest(`[${PORT_NODE_ATTR}]`)
-  if (!(host instanceof HTMLElement)) return null
-  const node = host.getAttribute(PORT_NODE_ATTR)
-  const port = host.getAttribute(PORT_NAME_ATTR)
-  const side = host.getAttribute(PORT_SIDE_ATTR)
-  if (node === null || port === null) return null
-  return { node, port, side: side === 'in' ? 'in' : 'out' }
+/** 一个口的数据契约。认不出这个口时给 null。 */
+export function contractOf(
+  graph: ModelingGraph,
+  operators: Operators,
+  at: WireEnd,
+): string | null {
+  const node = graph.nodes.find((item) => item.id === at.node)
+  const spec = node === undefined ? undefined : operators.get(node.operator)
+  const ports = at.side === 'in' ? spec?.inputs : spec?.outputs
+  return ports?.find((item) => item.name === at.port)?.contract ?? null
+}
+
+/** 这个入口已经接了线吗。出口可以一对多，不受此限。 */
+function isTaken(graph: ModelingGraph, at: WireEnd): boolean {
+  if (at.side !== 'in') return false
+  return graph.edges.some(
+    (edge) => edge.to_node === at.node && edge.to_port === at.port,
+  )
+}
+
+/**
+ * 落在某张卡片上时替用户选一个口：契约相符、还空着、排在最前的那个。
+ *
+ * @param source 手势起点那一端
+ * @param nodeId 松手落在的那张卡片
+ */
+export function autoEndOf(
+  graph: ModelingGraph,
+  operators: Operators,
+  source: WireEnd,
+  nodeId: string,
+): WireEnd | null {
+  const wanted = contractOf(graph, operators, source)
+  const node = graph.nodes.find((item) => item.id === nodeId)
+  const spec = node === undefined ? undefined : operators.get(node.operator)
+  const side: Side = source.side === 'out' ? 'in' : 'out'
+  const ports = (side === 'in' ? spec?.inputs : spec?.outputs) ?? []
+  for (const port of ports) {
+    const end: WireEnd = { node: nodeId, port: port.name, side }
+    if (port.contract === wanted && !isTaken(graph, end)) return end
+  }
+  return null
+}
+
+/**
+ * 松手落在哪一端上：先认接点，认不出再退到整张卡片替用户选口。
+ *
+ * @param source 手势起点那一端
+ * @param element 松手时指针底下的元素
+ */
+export function dropEndOf(
+  graph: ModelingGraph,
+  operators: Operators,
+  source: WireEnd,
+  element: HTMLElement | null,
+): WireEnd | null {
+  const hit = portHitOf(element)
+  if (hit !== null) return hit
+  const nodeId = nodeIdOf(element)
+  if (nodeId === null || nodeId === source.node) return null
+  return autoEndOf(graph, operators, source, nodeId)
+}
+
+/**
+ * 把两端归一成「出口 → 入口」。
+ *
+ * ⚠ 从入口反着往回拉也要认：只支持一个方向的话，用户接第二个输入时得先绕到
+ * 上游那张卡片上去起手，而两张卡片往往不在同一屏里。
+ */
+export function orderEnds(
+  from: WireEnd,
+  to: WireEnd,
+): { out: WireEnd; into: WireEnd } | null {
+  if (from.side === 'out' && to.side === 'in') return { out: from, into: to }
+  if (from.side === 'in' && to.side === 'out') return { out: to, into: from }
+  return null
 }
 
 /**
@@ -52,76 +110,50 @@ export function portHitOf(element: HTMLElement | null): PortHit | null {
  */
 export function verdictOf(
   graph: ModelingGraph,
-  operators: ReadonlyMap<string, ModelingOperator>,
-  from: { node: string; port: string },
-  to: PortHit,
+  operators: Operators,
+  out: WireEnd,
+  into: WireEnd,
 ): WireVerdict {
-  if (to.side !== 'in') return { ok: false, reason: '要接到下游的入口上' }
-  if (from.node === to.node) return { ok: false, reason: '不能接到自己身上' }
-  const out = portOf(operators, graph, from.node, from.port, 'out')
-  const into = portOf(operators, graph, to.node, to.port, 'in')
-  if (out === null || into === null) {
+  if (out.node === into.node) return { ok: false, reason: '不能接到自己身上' }
+  const source = contractOf(graph, operators, out)
+  const target = contractOf(graph, operators, into)
+  if (source === null || target === null) {
     return { ok: false, reason: '这个接点不存在' }
   }
-  if (out !== into) {
+  if (source !== target) {
     return { ok: false, reason: '这两个口的数据类型对不上' }
   }
-  if (
-    graph.edges.some(
-      (edge) => edge.to_node === to.node && edge.to_port === to.port,
-    )
-  ) {
+  if (isTaken(graph, into)) {
     return { ok: false, reason: '这个入口已经接了一条线' }
   }
-  if (reaches(graph, to.node, from.node)) {
+  if (reaches(graph, into.node, out.node)) {
     return { ok: false, reason: '这样连会绕成一个环' }
   }
   return { ok: true, reason: '' }
 }
 
-/** 一条已经算好两端坐标的边，交给 SVG 那一层去画。 */
-export interface DrawnEdge {
-  id: string
-  from: CanvasPoint
-  to: CanvasPoint
-}
-
-/** 一条边的贝塞尔路径。两端都给画布坐标。 */
-export function curveOf(from: CanvasPoint, to: CanvasPoint): string {
-  const tension = Math.max(CURVE_TENSION, Math.abs(to.left - from.left) / 2)
-  return [
-    `M ${from.left} ${from.top}`,
-    `C ${from.left + tension} ${from.top}`,
-    `${to.left - tension} ${to.top}`,
-    `${to.left} ${to.top}`,
-  ].join(' ')
+/** 从起点拉过来的线，能不能接在这个口上。拉线期间照它给端口染色。 */
+export function isReachableFrom(
+  graph: ModelingGraph,
+  operators: Operators,
+  source: WireEnd | null,
+  target: WireEnd,
+): boolean {
+  if (source === null) return false
+  const ends = orderEnds(source, target)
+  if (ends === null) return false
+  return verdictOf(graph, operators, ends.out, ends.into).ok
 }
 
 /** 造一条新边。id 由两端拼出来，天然唯一且可读。 */
-export function edgeOf(
-  from: { node: string; port: string },
-  to: PortHit,
-): ModelingGraphEdge {
+export function edgeOf(out: WireEnd, into: WireEnd): ModelingGraphEdge {
   return {
-    id: `${from.node}:${from.port}->${to.node}:${to.port}`,
-    from_node: from.node,
-    from_port: from.port,
-    to_node: to.node,
-    to_port: to.port,
+    id: `${out.node}:${out.port}->${into.node}:${into.port}`,
+    from_node: out.node,
+    from_port: out.port,
+    to_node: into.node,
+    to_port: into.port,
   }
-}
-
-function portOf(
-  operators: ReadonlyMap<string, ModelingOperator>,
-  graph: ModelingGraph,
-  nodeId: string,
-  portName: string,
-  side: 'in' | 'out',
-): string | null {
-  const node = graph.nodes.find((item) => item.id === nodeId)
-  const spec = node === undefined ? undefined : operators.get(node.operator)
-  const ports = side === 'in' ? spec?.inputs : spec?.outputs
-  return ports?.find((item) => item.name === portName)?.contract ?? null
 }
 
 /** 从 `start` 顺着边走，够不够得到 `target`。够得到就说明会成环。 */

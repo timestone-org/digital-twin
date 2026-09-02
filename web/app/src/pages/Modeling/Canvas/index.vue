@@ -4,14 +4,14 @@
  * 见 docs/MODELING_DESIGN.md §9。
  *
  * ⚠ 画布是**自绘**的，不引图编辑框架（ADR-0028 同一条理由）。手势、视口与
- * 几何都在 `scripts/` 下的几个组合式里。
+ * 几何都在 `scripts/` 下的那几个组合式里。
  * ⚠ 「运行中」不锁编辑：运行吃的是发起那一刻**冻结的**图，改画布不影响它。
  * 锁编辑的只有回看历史与没有写权限两种。
  */
-import type { ModelingGraphNode } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import {
   DtButton,
+  DtInput,
   DtModal,
   DtNotice,
   DtPageState,
@@ -26,12 +26,21 @@ import { AppShell } from '@/components/layout'
 import { formatElapsed, nowStamp } from '@/utils/datetime'
 import { useAuthStore } from '@/stores/auth'
 
+import CanvasMenu from './components/CanvasMenu.vue'
 import ConfigForm from './components/ConfigForm.vue'
 import EditorCanvas from './components/EditorCanvas.vue'
 import OperatorPalette from './components/OperatorPalette.vue'
 import ResultView from './components/ResultView.vue'
 import RunHistory from './components/RunHistory.vue'
+import ShortcutsHelp from './components/ShortcutsHelp.vue'
+import { cascadeFrom } from './scripts/nodeLayout'
+import type { CanvasPoint } from './scripts/useCanvasViewport'
 import { defaultsOf, fieldsOf } from './scripts/schemaForm'
+import type { CanvasHandle } from './scripts/useCanvasActions'
+import { useCanvasActions } from './scripts/useCanvasActions'
+import { useConfigPanel } from './scripts/useConfigPanel'
+import { edgeOf } from './scripts/useCanvasWiring'
+import { useCanvasMenu } from './scripts/useCanvasMenu'
 import { useCanvasPage } from './scripts/useCanvasPage'
 import { useCanvasShortcuts } from './scripts/useCanvasShortcuts'
 
@@ -45,9 +54,16 @@ const toast = useToast()
 const tick = ref(nowStamp())
 const clock = ref<ReturnType<typeof setInterval> | null>(null)
 
-const configNodeId = ref<string | null>(null)
+// ⚠ 手工与 EditorCanvas 的 `defineExpose` 对齐：`InstanceType<typeof 组件>` 取不到
+// `defineExpose` 的类型（会塌成 any），写错了 typecheck 与 lint 都不拦
+const canvasRef = ref<CanvasHandle | null>(null)
 const resultNodeId = ref<string | null>(null)
+const renameNodeId = ref<string | null>(null)
+const renameDraft = ref('')
 const isHistoryOpen = ref(false)
+const isKeysOpen = ref(false)
+/** 吸附对齐默认开着：图一多，手摆的卡片很难对齐，而歪一点点就看着乱。 */
+const isSnapping = ref(true)
 
 const pipelineId = computed(() => String(route.params['pipelineId'] ?? ''))
 // ⚠ 只读来自两个互不相同的理由，界面上也要分开说：回看历史时给的是「回到编辑」
@@ -58,48 +74,52 @@ const isReadonly = computed(
     !auth.can([PERMISSION_CODES.modelingManage], 'all'),
 )
 
-const configNode = computed<ModelingGraphNode | null>(
-  () =>
-    page.graph.graph.value.nodes.find(
-      (item) => item.id === configNodeId.value,
-    ) ?? null,
-)
-const configSpec = computed(() =>
-  configNode.value === null
-    ? undefined
-    : page.operatorMap.value.get(configNode.value.operator),
-)
-const configFields = computed(() =>
-  configSpec.value === undefined
-    ? []
-    : fieldsOf(configSpec.value.config_schema),
-)
+const config = useConfigPanel({
+  graph: page.graph.graph,
+  operators: page.operatorMap,
+  setConfig: page.graph.setConfig,
+  canViewLedger: () => auth.can([PERMISSION_CODES.datasetView]),
+})
+
+const actions = useCanvasActions({
+  graph: page.graph,
+  selection: page.selection,
+  canvas: () => canvasRef.value,
+  toast,
+})
+
+const menu = useCanvasMenu({
+  actions,
+  selection: page.selection,
+  graph: page.graph.graph,
+  isReadonly: () => isReadonly.value,
+  hasResult: (id) => page.runtime.value.get(id)?.hasResult === true,
+  onRename: (id) => openRename(id),
+  onOpenConfig: (id) => config.open(id),
+  onOpenResult: (id) => void openResult(id),
+})
+
 const resultPayload = computed(
   () =>
     page.runner.previews.value.get(resultNodeId.value ?? '')?.preview ?? null,
 )
 
-/** 上游取数算子选了哪张台账的哪些列——列选择器照着它列候选。 */
-const columnCandidates = computed<readonly string[]>(() => {
-  const sources = page.graph.graph.value.nodes.filter(
-    (node) => page.operatorMap.value.get(node.operator)?.category === 'source',
-  )
-  const picked = sources.flatMap<string>((node) => {
-    const columns = node.config['columns']
-    if (!Array.isArray(columns)) return []
-    return columns.filter((item): item is string => typeof item === 'string')
-  })
-  return [...new Set(picked)]
-})
-
+/** 点算子面板：落在视野正中，连着点几次就错开一点，免得叠在一起。 */
 function addOperator(code: string): void {
+  const at = canvasRef.value?.center() ?? { left: 80, top: 80 }
+  dropOperator(code, cascadeFrom(at, page.graph.graph.value.nodes.length))
+}
+
+/** 拖进画布：落在指针指的那一点。 */
+function dropOperator(code: string, at: CanvasPoint): void {
   const spec = page.operatorMap.value.get(code)
   if (spec === undefined) return
-  page.graph.addNode(
+  const id = page.graph.addNode(
     code,
-    { left: 80, top: 80 },
+    at,
     defaultsOf(fieldsOf(spec.config_schema)),
   )
+  page.selection.select({ kind: 'node', id })
 }
 
 /**
@@ -120,19 +140,21 @@ const progress = computed(() => {
   return `第 ${settled + 1}/${nodes.length} 个节点${spent}`
 })
 
-function openConfig(nodeId: string): void {
-  configNodeId.value = nodeId
-}
-
 async function openResult(nodeId: string): Promise<void> {
   resultNodeId.value = nodeId
   await page.runner.loadPreview(nodeId)
 }
 
-function setConfigValue(key: string, value: unknown): void {
-  const node = configNode.value
-  if (node === null) return
-  page.graph.setConfig(node.id, { ...node.config, [key]: value })
+function openRename(nodeId: string): void {
+  const node = page.graph.graph.value.nodes.find((item) => item.id === nodeId)
+  renameDraft.value = node?.alias ?? ''
+  renameNodeId.value = nodeId
+}
+
+function applyRename(): void {
+  const id = renameNodeId.value
+  if (id !== null) page.graph.setAlias(id, renameDraft.value.trim())
+  renameNodeId.value = null
 }
 
 async function saveGraph(): Promise<void> {
@@ -169,16 +191,30 @@ async function leaveReplay(): Promise<void> {
   page.backToEditing(page.doc.pipeline.value?.graph ?? null)
 }
 
+/** 选中的头一个节点；改名与「回车看参数」都对着它。 */
+function firstSelected(): string | null {
+  return page.selection.selectedNodeIds.value[0] ?? null
+}
+
 useCanvasShortcuts({
-  removeSelected: () => {
-    page.graph.removeSelection(
-      page.selection.selectedNodeIds.value,
-      page.selection.selectedEdgeIds.value,
-    )
-    page.selection.clear()
-  },
+  removeSelected: actions.removeSelected,
   undo: () => page.graph.undo(),
+  redo: () => page.graph.redo(),
   clearSelection: () => page.selection.clear(),
+  selectAll: actions.selectAll,
+  copy: actions.copy,
+  paste: actions.paste,
+  duplicate: actions.duplicate,
+  nudge: actions.nudge,
+  fit: actions.fit,
+  rename: () => {
+    const id = firstSelected()
+    if (id !== null) openRename(id)
+  },
+  openConfig: () => {
+    const id = firstSelected()
+    if (id !== null) config.open(id)
+  },
   canEdit: () => !isReadonly.value,
 })
 
@@ -188,6 +224,7 @@ onBeforeUnmount(() => {
 
 onMounted(async () => {
   clock.value = setInterval(() => (tick.value = nowStamp()), 1000)
+  void config.loadTables()
   await page.open(pipelineId.value)
   // 带着 ?run_id= 进来的（同事发过来的链接、或刷新）直接落到只读回看
   const wanted = route.query['run_id']
@@ -218,12 +255,41 @@ onMounted(async () => {
       <DtButton
         variant="ghost"
         size="sm"
+        icon="keyboard"
+        title="快捷键与手势"
+        @click="isKeysOpen = true"
+      >
+        快捷键
+      </DtButton>
+      <DtButton
+        variant="ghost"
+        size="sm"
         icon="list-checks"
         @click="isHistoryOpen = true"
       >
         运行历史
       </DtButton>
       <PermGuard :codes="[PERMISSION_CODES.modelingManage]">
+        <DtButton
+          variant="ghost"
+          size="sm"
+          icon="undo"
+          title="撤销（⌘Z）"
+          :disabled="isReadonly || !page.graph.canUndo.value"
+          @click="page.graph.undo()"
+        >
+          撤销
+        </DtButton>
+        <DtButton
+          variant="ghost"
+          size="sm"
+          icon="redo"
+          title="重做（⌘⇧Z）"
+          :disabled="isReadonly || !page.graph.canRedo.value"
+          @click="page.graph.redo()"
+        >
+          重做
+        </DtButton>
         <DtButton
           variant="ghost"
           size="sm"
@@ -278,7 +344,16 @@ onMounted(async () => {
         >
           {{ page.doc.issues.value.map((issue) => issue.message).join('；') }}
         </DtNotice>
+        <DtNotice
+          v-else-if="page.graph.graph.value.nodes.length === 0 && !isReadonly"
+          intent="info"
+          icon="circle-question"
+        >
+          把左边的算子拖到画布上开始；连线是从卡片右侧的圆点拉到下游那张卡片上，
+          松手落在卡片任意位置都算。选中多个之后右键可以对齐。
+        </DtNotice>
         <EditorCanvas
+          ref="canvasRef"
           class="dt-ml-page__canvas"
           :graph="page.graph.graph.value"
           :operators="page.operatorMap.value"
@@ -288,6 +363,7 @@ onMounted(async () => {
             edges: page.selection.selectedEdgeIds.value,
           }"
           :is-readonly="isReadonly"
+          :is-snapping="isSnapping"
           @pick-node="
             (id, additive) =>
               additive
@@ -298,38 +374,52 @@ onMounted(async () => {
           @pick-nothing="page.selection.clear"
           @box-select="page.selection.selectNodes"
           @move-nodes="page.graph.moveNodes"
-          @connect="
-            (from, to) =>
-              page.graph.addEdge({
-                id: `${from.node}:${from.port}->${to.node}:${to.port}`,
-                from_node: from.node,
-                from_port: from.port,
-                to_node: to.node,
-                to_port: to.port,
-              })
-          "
+          @connect="(out, into) => page.graph.addEdge(edgeOf(out, into))"
+          @remove-edge="actions.removeEdge"
           @reject="(reason) => toast.warning(reason)"
-          @open-config="openConfig"
+          @open-config="config.open"
           @open-result="(id) => void openResult(id)"
+          @drop-operator="dropOperator"
+          @open-menu="menu.open"
+          @auto-layout="actions.autoLayout"
+          @toggle-snap="isSnapping = !isSnapping"
         />
       </div>
     </div>
 
+    <CanvasMenu :menu="menu.menu.value" @pick="menu.run" @close="menu.close" />
+
     <DtModal
-      :model-value="configNode !== null"
-      :title="configSpec?.name ?? '参数'"
-      :description="configSpec?.description"
-      width="32rem"
-      @update:model-value="configNodeId = null"
+      :model-value="config.node.value !== null"
+      :title="config.spec.value?.name ?? '参数'"
+      :description="config.spec.value?.description"
+      width="34rem"
+      @update:model-value="config.close"
     >
       <ConfigForm
-        v-if="configNode"
-        :fields="configFields"
-        :config="configNode.config"
-        :columns="columnCandidates"
-        :tables="[]"
+        v-if="config.node.value"
+        :fields="config.fields.value"
+        :config="config.node.value.config"
+        :options="config.options.value"
         :is-readonly="isReadonly"
-        @change="setConfigValue"
+        @change="config.setValue"
+      />
+    </DtModal>
+
+    <DtModal
+      :model-value="renameNodeId !== null"
+      title="给这一步改个名"
+      description="留空就用算子本来的名字。"
+      width="22rem"
+      confirm-text="改名"
+      @confirm="applyRename"
+      @update:model-value="renameNodeId = null"
+    >
+      <DtInput
+        v-model="renameDraft"
+        label="显示名"
+        placeholder="例如：剔除异常行"
+        @keyup.enter="applyRename"
       />
     </DtModal>
 
@@ -340,6 +430,10 @@ onMounted(async () => {
       @update:model-value="resultNodeId = null"
     >
       <ResultView v-if="resultPayload" :payload="resultPayload" />
+    </DtModal>
+
+    <DtModal v-model="isKeysOpen" title="快捷键与手势" width="34rem">
+      <ShortcutsHelp />
     </DtModal>
 
     <DtModal v-model="isHistoryOpen" title="运行历史" width="26rem">

@@ -20,6 +20,15 @@ export interface ColumnStat {
   p50: number | null
 }
 
+/** 这一帧是从哪儿、哪一段时间取来的。数字看着不对时先看它。 */
+export interface FrameProvenance {
+  tableCodes: string[]
+  since: string | null
+  until: string | null
+  /** 取数触了行数上限——后面的数据根本没进来。 */
+  isTruncated: boolean
+}
+
 /** 一份帧的摘要。 */
 export interface FramePreview {
   kind: 'frame'
@@ -31,6 +40,7 @@ export interface FramePreview {
   head: unknown[][]
   isRowsTruncated: boolean
   isColsTruncated: boolean
+  provenance: FrameProvenance
 }
 
 /** 一个模型的摘要。 */
@@ -41,16 +51,36 @@ export interface ModelPreview {
   featureKeys: string[]
   targetKey: string
   hyperParams: [string, string][]
+  /** 真训出参数来了没有。 */
   isFitted: boolean
+  /**
+   * ⚠ 与 `isFitted` 分开：摘要撑爆字节预算时后端会把拟合参数整个摘掉
+   * （`preview.py::_stripped`），那时「看不到系数」与「没训练出来」是两回事，
+   * 混作一处会让一个跑成功的模型在界面上被说成没训出来。
+   */
+  isFittedTrimmed: boolean
+  /** 特征列 → 权重。算法不给系数时为空。 */
+  coefficients: [string, number][]
+  intercept: number | null
+  servingChannel: string
+}
+
+/** 残差直方图的一根柱：这个区间里落了多少行。 */
+export interface ResidualBin {
+  low: number
+  high: number
+  count: number
 }
 
 /** 一次评估的摘要。`pairs` 是画散点用的真值/预测值。 */
 export interface MetricsPreview {
   kind: 'metrics'
   task: string
-  metrics: [string, number][]
+  /** ⚠ 值可能是 null：R² 与 MAPE 在无定义时给 null，显示成 0 是假数。 */
+  metrics: [string, number | null][]
   pairs: [number, number][]
   isPairsTruncated: boolean
+  residualBins: ResidualBin[]
 }
 
 /** 认不出来的摘要，照实说明。 */
@@ -105,6 +135,18 @@ function columnStatOf(raw: unknown): ColumnStat {
   }
 }
 
+function provenanceOf(raw: unknown): FrameProvenance {
+  const item = asRecord(raw)
+  const since = asText(item['since'])
+  const until = asText(item['until'])
+  return {
+    tableCodes: asTexts(item['table_codes']),
+    since: since === '' ? null : since,
+    until: until === '' ? null : until,
+    isTruncated: item['is_truncated'] === true,
+  }
+}
+
 function frameOf(raw: Record<string, unknown>): FramePreview {
   const shape = asRecord(raw['shape'])
   return {
@@ -117,10 +159,25 @@ function frameOf(raw: Record<string, unknown>): FramePreview {
     head: asList(raw['head']).map((row) => asList(row)),
     isRowsTruncated: raw['rows_truncated'] === true,
     isColsTruncated: raw['cols_truncated'] === true,
+    provenance: provenanceOf(raw['provenance']),
   }
 }
 
+/** 拟合参数里的系数表。算法不给 `coef` 时为空——那不算出错。 */
+function coefficientsOf(fitted: Record<string, unknown>): [string, number][] {
+  const pairs: [string, number][] = []
+  for (const [key, value] of Object.entries(asRecord(fitted['coef']))) {
+    const number = asNumber(value)
+    if (number !== null) pairs.push([key, number])
+  }
+  return pairs
+}
+
 function modelOf(raw: Record<string, unknown>): ModelPreview {
+  // ⚠ 后端给的 `fitted` 是一份**拟合参数字典**，不是布尔。按布尔读的话每个训
+  // 好的模型都会被说成没训出来，而这是一条只在真跑过之后才看得见的错
+  const hasFitted = 'fitted' in raw
+  const fitted = asRecord(raw['fitted'])
   return {
     kind: 'model',
     algo: asText(raw['algo']),
@@ -130,8 +187,26 @@ function modelOf(raw: Record<string, unknown>): ModelPreview {
     hyperParams: Object.entries(asRecord(raw['hyper_params'])).map(
       ([key, value]) => [key, String(value)],
     ),
-    isFitted: raw['fitted'] === true,
+    isFitted: hasFitted && Object.keys(fitted).length > 0,
+    isFittedTrimmed: !hasFitted,
+    coefficients: coefficientsOf(fitted),
+    intercept: asNumber(fitted['intercept']),
+    servingChannel: asText(raw['serving_channel']),
   }
+}
+
+function residualBinsOf(raw: unknown): ResidualBin[] {
+  const bins: ResidualBin[] = []
+  for (const item of asList(raw)) {
+    const bin = asList(item)
+    const low = asNumber(bin[0])
+    const high = asNumber(bin[1])
+    const count = asNumber(bin[2])
+    if (low !== null && high !== null && count !== null) {
+      bins.push({ low, high, count })
+    }
+  }
+  return bins
 }
 
 function metricsOf(raw: Record<string, unknown>): MetricsPreview {
@@ -142,17 +217,18 @@ function metricsOf(raw: Record<string, unknown>): MetricsPreview {
     const right = asNumber(pair[1])
     if (left !== null && right !== null) pairs.push([left, right])
   }
-  const metrics: [string, number][] = []
-  for (const [key, value] of Object.entries(asRecord(raw['metrics']))) {
-    const number = asNumber(value)
-    if (number !== null) metrics.push([key, number])
-  }
+  // ⚠ 值为 null 的指标要留着：R² 与 MAPE 在无定义时后端给的就是 null，
+  // 丢掉它等于把「算不出来」显示成「没有这个指标」
+  const metrics: [string, number | null][] = Object.entries(
+    asRecord(raw['metrics']),
+  ).map(([key, value]) => [key, asNumber(value)])
   return {
     kind: 'metrics',
     task: asText(raw['task']),
     metrics,
     pairs,
     isPairsTruncated: raw['pairs_truncated'] === true,
+    residualBins: residualBinsOf(raw['residual_bins']),
   }
 }
 

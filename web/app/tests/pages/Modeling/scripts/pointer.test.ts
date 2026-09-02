@@ -115,12 +115,12 @@ describe('画布手势', () => {
     const target = document.createElement('div')
     document.body.append(target)
 
-    pointer.startWiring(down(0, 0), 'n1', 'out')
+    pointer.startWiring(down(0, 0), { node: 'n1', port: 'out', side: 'out' })
     move(80, 0)
     up(target)
 
     expect(hooks.onWire).toHaveBeenCalledExactlyOnceWith(
-      { node: 'n1', port: 'out' },
+      { node: 'n1', port: 'out', side: 'out' },
       target,
     )
     target.remove()

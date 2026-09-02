@@ -6,6 +6,7 @@
  */
 import type {
   ModelingGraph,
+  ModelingNodeRun,
   ModelingNodeRunSummary,
   ModelingOperator,
   ModelingRun,
@@ -13,13 +14,15 @@ import type {
 } from '@dt/contracts'
 import { useToast } from '@dt/ui'
 import type { Ref, ShallowRef } from 'vue'
-import { computed, ref, shallowRef } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 
 import * as modeling from '@/api/modeling'
 import { describeError } from '@/composables/useAsyncList'
 
+import { headlineOf } from './nodeHeadline'
 import type { NodeRuntime } from './nodeState'
 import { stateOf } from './nodeState'
+import { previewOf } from './preview'
 import { useCanvasSelection } from './useCanvasSelection'
 import { useModelingGraph } from './useModelingGraph'
 import { usePipelineDoc } from './usePipelineDoc'
@@ -28,20 +31,44 @@ import { useRunPolling } from './useRunPolling'
 /** 运行历史一次取这么多。够翻半天了，再多就该做分页了。 */
 const RUN_PAGE_SIZE = 50
 
-/** 把节点的运行状态摊成画布要的四态表。 */
+/**
+ * 一轮运行最多替用户预取这么多份结果摘要。
+ *
+ * ⚠ 必须封顶：卡片上那行数字要靠摘要才算得出来，但每份摘要最大 256KB，一条
+ * 几十个节点的流水线全预取会一口气拉下十几兆。
+ */
+const MAX_PREFETCH = 24
+
+/** 把节点的运行状态摊成画布要的表，顺带算出卡片上那行数字。 */
 function runtimeOf(
   nodes: readonly ModelingNodeRunSummary[],
-  hasPreview: ReadonlySet<string>,
+  previews: ReadonlyMap<string, ModelingNodeRun>,
 ): ReadonlyMap<string, NodeRuntime> {
   const table = new Map<string, NodeRuntime>()
   for (const node of nodes) {
+    const detail = previews.get(node.node_id)
     table.set(node.node_id, {
       state: stateOf(node.status),
       errorText: node.error_text ?? '',
-      hasResult: node.has_preview || hasPreview.has(node.node_id),
+      hasResult: node.has_preview || detail !== undefined,
+      headline:
+        detail === undefined ? '' : headlineOf(previewOf(detail.preview)),
     })
   }
   return table
+}
+
+/** 跑成功的节点顺手把摘要拉回来，卡片上那行数字才有得算。 */
+function prefetchPreviews(state: PageState): void {
+  const nodes = state.runner.run.value?.nodes ?? []
+  let budget = MAX_PREFETCH - state.runner.previews.value.size
+  for (const node of nodes) {
+    if (budget <= 0) return
+    if (node.status !== 'succeeded' || !node.has_preview) continue
+    if (state.runner.previews.value.has(node.node_id)) continue
+    budget -= 1
+    void state.runner.loadPreview(node.node_id)
+  }
 }
 
 /** 拉一页运行历史。出错时弹一次并给空。 */
@@ -132,10 +159,13 @@ export function useCanvasPage() {
     () => new Map(state.operators.value.map((item) => [item.code, item])),
   )
   const runtime = computed(() =>
-    runtimeOf(
-      state.runner.run.value?.nodes ?? [],
-      new Set(state.runner.previews.value.keys()),
-    ),
+    runtimeOf(state.runner.run.value?.nodes ?? [], state.runner.previews.value),
+  )
+
+  // 节点一跑成，就把它的摘要拉回来——卡片上那行数字要靠它
+  watch(
+    () => state.runner.run.value?.nodes.map((node) => node.status).join(','),
+    () => prefetchPreviews(state),
   )
 
   return {

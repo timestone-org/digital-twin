@@ -155,13 +155,52 @@ describe('画布上的图状态', () => {
     expect(graph.isDirty.value).toBe(false)
   })
 
-  it('连着落好几个节点时位置逐个错开，不叠在一起', () => {
+  // 错开落点由调用方用 `cascadeFrom` 算好再传进来——拖拽落件要的是指哪落哪，
+  // 而点算子面板要的是错开。两种落法共用一个 `addNode`，位置一律由外面给
+  it('落点原样落下，不在这里悄悄改', () => {
     const graph = useModelingGraph()
 
     graph.addNode('src', { left: 40, top: 40 })
-    graph.addNode('src', { left: 40, top: 40 })
 
-    const [first, second] = graph.graph.value.nodes
-    expect(second?.position).not.toEqual(first?.position)
+    expect(graph.graph.value.nodes[0]?.position).toEqual({ left: 40, top: 40 })
+  })
+
+  it('落一个节点回它的 id，好把它选中', () => {
+    const graph = useModelingGraph()
+
+    const id = graph.addNode('src', { left: 0, top: 0 })
+
+    expect(graph.graph.value.nodes[0]?.id).toBe(id)
+  })
+
+  it('撤销之后能重做回来', () => {
+    const graph = useModelingGraph()
+    graph.addNode('src', { left: 0, top: 0 })
+
+    graph.undo()
+    expect(graph.graph.value.nodes).toHaveLength(0)
+    graph.redo()
+
+    expect(graph.graph.value.nodes).toHaveLength(1)
+  })
+
+  // ⚠ 不清空的话，改一笔之后按重做会跳回另一条已经被覆盖的分支上
+  it('重做栈在新改动落下时清空', () => {
+    const graph = useModelingGraph()
+    graph.addNode('src', { left: 0, top: 0 })
+    graph.undo()
+
+    graph.addNode('mid', { left: 10, top: 10 })
+
+    expect(graph.canRedo.value).toBe(false)
+  })
+
+  it('改显示名只动那一个节点', () => {
+    const graph = useModelingGraph()
+    const id = graph.addNode('src', { left: 0, top: 0 })
+
+    graph.setAlias(id, '取数')
+
+    expect(graph.graph.value.nodes[0]?.alias).toBe('取数')
   })
 })

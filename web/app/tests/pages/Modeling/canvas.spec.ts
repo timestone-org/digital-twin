@@ -8,10 +8,12 @@ import type {
   ModelingPipeline,
   ModelingRun,
 } from '@dt/contracts'
+import { DtSelect } from '@dt/ui'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import * as dataset from '@/api/dataset'
 import * as modeling from '@/api/modeling'
 import CanvasPage from '@/pages/Modeling/Canvas/index.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -119,7 +121,32 @@ function signIn(permissions: string[]): void {
   auth.accessToken = 'token'
 }
 
+/** 台账清单。给 `null` 表示接口拒绝——只有 modeling:* 的人会吃这个 403。 */
+function stubLedger(
+  tables: { id: string; code: string; name: string }[] | null,
+) {
+  if (tables === null) {
+    vi.spyOn(dataset, 'listDatasetTables').mockRejectedValue(new Error('403'))
+    return
+  }
+  vi.spyOn(dataset, 'listDatasetTables').mockResolvedValue({
+    items: tables.map((table) => ({
+      ...table,
+      description: null,
+      column_count: 1,
+      cadence: 'day',
+      created_at: STAMP,
+      updated_at: STAMP,
+    })),
+    page: 1,
+    size: 200,
+    total: tables.length,
+  } as never)
+  vi.spyOn(dataset, 'listDatasetColumns').mockResolvedValue([])
+}
+
 function stubApi(over: { operators?: ModelingOperator[] } = {}) {
+  stubLedger([{ id: 't1', code: 'energy_log', name: '能耗台账' }])
   vi.spyOn(modeling, 'listModelingOperators').mockResolvedValue(
     over.operators ?? [operator()],
   )
@@ -132,7 +159,17 @@ function stubApi(over: { operators?: ModelingOperator[] } = {}) {
   })
 }
 
+// 种子里的 admin 与 viewer 两个角色都同时带着 dataset:view 与 modeling:view，
+// 所以「有写权限的人」的常态是两组码都有
 const WRITER = [
+  PERMISSION_CODES.modelingView,
+  PERMISSION_CODES.modelingManage,
+  PERMISSION_CODES.modelingRun,
+  PERMISSION_CODES.datasetView,
+]
+
+/** 管理员能手工配出「只有建模那一组」的角色，那时台账清单一趟都请求不动。 */
+const MODELING_ONLY = [
   PERMISSION_CODES.modelingView,
   PERMISSION_CODES.modelingManage,
   PERMISSION_CODES.modelingRun,
@@ -384,5 +421,179 @@ describe('画布页', () => {
     await flushPromises()
 
     expect(wrapper.find('.dt-ml-canvas').exists()).toBe(false)
+  })
+})
+
+describe('摆算子', () => {
+  /** 打开页面并把算子面板第一项点一下。 */
+  async function addOnce(wrapper: ReturnType<typeof open>): Promise<void> {
+    await wrapper.find('.dt-ml-palette__item').trigger('click')
+    await wrapper.vm.$nextTick()
+  }
+
+  // ⚠ 落点全一样的话，卡片会叠成一摞，下面那张的接点根本点不到——
+  // 表象就是「模块连不上线」
+  it('连着点两次，两张卡片不落在同一个点上', async () => {
+    stubApi()
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+
+    await addOnce(wrapper)
+    await addOnce(wrapper)
+
+    const spots = wrapper
+      .findAll('.dt-ml-canvas__node')
+      .map((el) => el.attributes('style') ?? '')
+    expect(spots).toHaveLength(2)
+    expect(spots[0]).not.toBe(spots[1])
+  })
+
+  it('算子面板的每一项都能拖', async () => {
+    stubApi()
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+
+    expect(wrapper.find('.dt-ml-palette__item').attributes('draggable')).toBe(
+      'true',
+    )
+  })
+
+  it('只读时拖不动，也点不动', async () => {
+    stubApi()
+    signIn([PERMISSION_CODES.modelingView])
+    const wrapper = open()
+    await flushPromises()
+
+    const item = wrapper.find('.dt-ml-palette__item')
+    expect(item.attributes('draggable')).toBe('false')
+    expect(item.attributes('disabled')).toBeDefined()
+  })
+})
+
+describe('参数面板', () => {
+  /** 开页面、落一个节点、点开它的「参数」。 */
+  async function openConfig(wrapper: ReturnType<typeof open>): Promise<void> {
+    await wrapper.find('.dt-ml-palette__item').trigger('click')
+    await wrapper.vm.$nextTick()
+    await wrapper
+      .findAll('.dt-ml-node__action')
+      .find((b) => b.text() === '参数')
+      ?.trigger('click')
+    await flushPromises()
+  }
+
+  it('台账下拉列的是真台账，不是一个空下拉', async () => {
+    stubApi({
+      operators: [
+        operator({
+          config_schema: {
+            properties: {
+              table_code: {
+                title: '数据台账',
+                type: 'string',
+                'x-dt-widget': 'table',
+              },
+            },
+            required: ['table_code'],
+            type: 'object',
+          },
+        }),
+      ],
+    })
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+
+    await openConfig(wrapper)
+
+    // ⚠ 选项要断在 props 上：DtSelect 的选项只在浮层打开时才进 DOM，
+    // 按渲染出来的文字断言会把「下拉是空的」也判成通过
+    expect(wrapper.findComponent(DtSelect).props('options')).toEqual([
+      { value: 'energy_log', label: '能耗台账（energy_log）' },
+    ])
+  })
+
+  // ⚠ 空下拉读起来是「一张台账都没建」，而真相是「你看不到」
+  it('看不到台账清单时退回手填，并把原因说出来', async () => {
+    stubApi({
+      operators: [
+        operator({
+          config_schema: {
+            properties: {
+              table_code: {
+                title: '数据台账',
+                type: 'string',
+                'x-dt-widget': 'table',
+              },
+            },
+            required: ['table_code'],
+            type: 'object',
+          },
+        }),
+      ],
+    })
+    stubLedger(null)
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+
+    await openConfig(wrapper)
+
+    expect(wrapper.text()).toContain('dataset:view')
+  })
+
+  it('改过的参数能一键回到默认值', async () => {
+    stubApi()
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+    await openConfig(wrapper)
+    // 默认是 100，改成别的之后才会冒出「恢复默认」
+    expect(wrapper.text()).not.toContain('恢复默认')
+
+    await wrapper.find('.dt-ml-form input').setValue('7')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain('恢复默认')
+  })
+})
+
+describe('没有台账查看权限时', () => {
+  // ⚠ 那一趟必被边缘挡下，发出去只是白等一次 403
+  it('一趟请求都不发，并把原因说出来', async () => {
+    stubApi({
+      operators: [
+        operator({
+          config_schema: {
+            properties: {
+              table_code: {
+                title: '数据台账',
+                type: 'string',
+                'x-dt-widget': 'table',
+              },
+            },
+            required: ['table_code'],
+            type: 'object',
+          },
+        }),
+      ],
+    })
+    const listTables = vi.spyOn(dataset, 'listDatasetTables')
+    signIn(MODELING_ONLY)
+    const wrapper = open()
+    await flushPromises()
+
+    await wrapper.find('.dt-ml-palette__item').trigger('click')
+    await wrapper.vm.$nextTick()
+    await wrapper
+      .findAll('.dt-ml-node__action')
+      .find((b) => b.text() === '参数')
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(listTables).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('dataset:view')
   })
 })

@@ -8,6 +8,7 @@
  */
 import { onBeforeUnmount, readonly, ref, shallowRef } from 'vue'
 
+import type { WireEnd } from './portHits'
 import type { CanvasPoint } from './useCanvasViewport'
 
 /** 分辨「点了一下」与「拖了一段」的阈值（屏幕像素）。 */
@@ -19,7 +20,7 @@ export type Gesture =
   | { kind: 'panning' }
   | { kind: 'dragging'; nodeIds: readonly string[]; from: CanvasPoint }
   | { kind: 'marquee'; from: CanvasPoint; to: CanvasPoint }
-  | { kind: 'wiring'; fromNode: string; fromPort: string; to: CanvasPoint }
+  | { kind: 'wiring'; from: WireEnd; to: CanvasPoint }
 
 /** 手势各阶段要回调给页面的那几件事。 */
 export interface PointerHandlers {
@@ -31,8 +32,8 @@ export interface PointerHandlers {
   onDragEnd: (nodeIds: readonly string[]) => void
   /** 框选结束：这个矩形里的节点。 */
   onMarquee: (from: CanvasPoint, to: CanvasPoint) => void
-  /** 连线结束：松手时落在哪个接点上（没落在接点上给 null）。 */
-  onWire: (from: { node: string; port: string }, to: HTMLElement | null) => void
+  /** 连线结束：松手时指针底下是哪个元素（可能什么都没有）。 */
+  onWire: (from: WireEnd, to: HTMLElement | null) => void
 }
 
 /** 手势在移动一步之后的样子。平移不经这里——它改的是视口不是手势。 */
@@ -73,9 +74,7 @@ function commit(
     handlers.onMarquee(current.from, current.to)
     return
   }
-  if (current.kind === 'wiring') {
-    handlers.onWire({ node: current.fromNode, port: current.fromPort }, dropped)
-  }
+  if (current.kind === 'wiring') handlers.onWire(current.from, dropped)
 }
 
 /**
@@ -144,9 +143,9 @@ export function useCanvasPointer(
     /** 开始框选。 */
     startMarquee: (event: PointerEvent) =>
       begin(marqueeFrom(event, toCanvas), event),
-    /** 从一个输出接点开始拉线。 */
-    startWiring: (event: PointerEvent, node: string, port: string) =>
-      begin(wiringFrom(event, node, port, toCanvas), event),
+    /** 从一个接点开始拉线。出口与入口两侧都能起手。 */
+    startWiring: (event: PointerEvent, from: WireEnd) =>
+      begin(wiringFrom(event, from, toCanvas), event),
   }
 }
 
@@ -171,14 +170,12 @@ function marqueeFrom(event: PointerEvent, toCanvas: ToCanvas): Gesture {
 
 function wiringFrom(
   event: PointerEvent,
-  node: string,
-  port: string,
+  from: WireEnd,
   toCanvas: ToCanvas,
 ): Gesture {
   return {
     kind: 'wiring',
-    fromNode: node,
-    fromPort: port,
+    from,
     to: toCanvas(event.clientX, event.clientY),
   }
 }

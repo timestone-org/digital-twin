@@ -1,12 +1,14 @@
 /**
  * @fileoverview 画布组件：拖节点只在松手时提交一次、按住接点是拉线不是拖卡片、
- * 连线不合法当场给人话、框选算命中、只读时手势全不生效。
+ * 松手落在卡片上也算连上、连线不合法当场给人话、框选算命中、从算子面板拖进来
+ * 落件、右键弹菜单、只读时手势全不生效。
  */
 import type { ModelingGraph, ModelingOperator } from '@dt/contracts'
 import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import EditorCanvas from '@/pages/Modeling/Canvas/components/EditorCanvas.vue'
+import { OPERATOR_MIME } from '@/pages/Modeling/Canvas/scripts/dragMime'
 import type { NodeRuntime } from '@/pages/Modeling/Canvas/scripts/nodeState'
 
 function operator(code: string, inputs: string[], outputs: string[]) {
@@ -60,15 +62,24 @@ const GRAPH: ModelingGraph = {
   edges: [],
 }
 
-function open(over: { isReadonly?: boolean; graph?: ModelingGraph } = {}) {
+function open(
+  over: {
+    isReadonly?: boolean
+    graph?: ModelingGraph
+    isSnapping?: boolean
+    selection?: { nodes: string[]; edges: string[] }
+  } = {},
+) {
   return mount(EditorCanvas, {
     attachTo: document.body,
     props: {
       graph: over.graph ?? GRAPH,
       operators: OPERATORS,
       runtime: new Map<string, NodeRuntime>(),
-      selection: { format_version: '1', nodes: [], edges: [] },
+      selection: over.selection ?? { nodes: [], edges: [] },
       isReadonly: over.isReadonly ?? false,
+      // 吸附默认关掉：开着的话拖动的位移会被吸到邻居的边线上，用例断言的是原始位移
+      isSnapping: over.isSnapping ?? false,
     },
   })
 }
@@ -148,8 +159,8 @@ describe('画布组件', () => {
     up(into.element)
 
     expect(wrapper.emitted('connect')?.[0]).toEqual([
-      { node: 'a', port: 'out' },
-      { node: 'b', port: 'in' },
+      { node: 'a', port: 'out', side: 'out' },
+      { node: 'b', port: 'in', side: 'in' },
     ])
   })
 
@@ -248,7 +259,7 @@ describe('画布组件', () => {
       },
     })
 
-    await wrapper.find('.dt-ml-edges__line').trigger('pointerdown')
+    await wrapper.find('.dt-ml-edges__hit').trigger('pointerdown')
 
     expect(wrapper.emitted('pickEdge')?.[0]).toEqual(['a:out->b:in'])
   })
@@ -270,5 +281,258 @@ describe('画布组件', () => {
     })
 
     expect(wrapper.findAll('.dt-ml-edges__line')).toHaveLength(0)
+  })
+})
+
+/** 一份能被 `getData` 读出算子码的假 dataTransfer。 */
+function transfer(code: string) {
+  return {
+    dropEffect: '',
+    effectAllowed: '',
+    getData: (type: string) => (type === OPERATOR_MIME ? code : ''),
+    setData: () => undefined,
+  }
+}
+
+describe('从算子面板拖进来', () => {
+  it('松手落在哪就在哪落一张卡片', async () => {
+    const wrapper = open()
+
+    await wrapper.find('.dt-ml-canvas').trigger('drop', {
+      clientX: 300,
+      clientY: 200,
+      dataTransfer: transfer('mid'),
+    })
+
+    const dropped = wrapper.emitted('dropOperator')?.[0]
+    expect(dropped?.[0]).toBe('mid')
+    expect(dropped?.[1]).toEqual({ left: 300 - 112, top: 200 - 34 })
+  })
+
+  // ⚠ 认 text/plain 的话，从别处拖进来的任意文本都会被当成一次添加
+  it('不是自定义 MIME 就不落件', async () => {
+    const wrapper = open()
+
+    await wrapper.find('.dt-ml-canvas').trigger('drop', {
+      clientX: 10,
+      clientY: 10,
+      dataTransfer: { getData: () => '', dropEffect: '' },
+    })
+
+    expect(wrapper.emitted('dropOperator')).toBeUndefined()
+  })
+
+  it('只读时拖进来也不落件', async () => {
+    const wrapper = open({ isReadonly: true })
+
+    await wrapper.find('.dt-ml-canvas').trigger('drop', {
+      clientX: 10,
+      clientY: 10,
+      dataTransfer: transfer('mid'),
+    })
+
+    expect(wrapper.emitted('dropOperator')).toBeUndefined()
+  })
+
+  it('拖到画布上空时先把卡片将落在哪儿画出来', async () => {
+    const wrapper = open()
+
+    await wrapper.find('.dt-ml-canvas').trigger('dragover', {
+      clientX: 300,
+      clientY: 200,
+      dataTransfer: transfer('mid'),
+    })
+
+    expect(wrapper.find('.dt-ml-canvas__ghost').exists()).toBe(true)
+  })
+
+  it('拖出画布之后那个落点框收掉', async () => {
+    const wrapper = open()
+    await wrapper.find('.dt-ml-canvas').trigger('dragover', {
+      clientX: 1,
+      clientY: 1,
+      dataTransfer: transfer('mid'),
+    })
+
+    await wrapper.find('.dt-ml-canvas').trigger('dragleave')
+
+    expect(wrapper.find('.dt-ml-canvas__ghost').exists()).toBe(false)
+  })
+})
+
+describe('松手落在卡片上也算连上', () => {
+  // ⚠ 只认那个十来像素的圆点的话，十次里落空七次，看着就像连线根本用不了
+  it('落在下游卡片的空白处，替用户挑一个契约相符的入口', async () => {
+    const wrapper = open()
+    const out = wrapper.findAll('.dt-ml-node__port--out')[0]
+    const card = wrapper.findAll('.dt-ml-canvas__node')[1]
+
+    await out?.trigger('pointerdown', { clientX: 0, clientY: 0 })
+    move(300, 0)
+    if (card !== undefined) up(card.element)
+
+    expect(wrapper.emitted('connect')?.[0]?.[1]).toEqual({
+      node: 'b',
+      port: 'in',
+      side: 'in',
+    })
+  })
+
+  it('从入口反着往回拉也认', async () => {
+    const wrapper = open()
+    const into = wrapper.find('.dt-ml-node__port--in')
+    const out = wrapper.findAll('.dt-ml-node__port--out')[0]
+
+    await into.trigger('pointerdown', { clientX: 300, clientY: 0 })
+    move(0, 0)
+    if (out !== undefined) up(out.element)
+
+    expect(wrapper.emitted('connect')?.[0]).toEqual([
+      { node: 'a', port: 'out', side: 'out' },
+      { node: 'b', port: 'in', side: 'in' },
+    ])
+  })
+
+  it('拉线时接得住的口高亮起来', async () => {
+    const wrapper = open()
+
+    await wrapper
+      .findAll('.dt-ml-node__port--out')[0]
+      ?.trigger('pointerdown', { clientX: 0, clientY: 0 })
+    move(150, 0)
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('.dt-ml-node__port--open').exists()).toBe(true)
+  })
+})
+
+describe('右键', () => {
+  it('在卡片上右键，落点带上是哪个节点', async () => {
+    const wrapper = open()
+
+    await wrapper.findAll('.dt-ml-canvas__node')[0]?.trigger('contextmenu', {
+      clientX: 40,
+      clientY: 50,
+    })
+
+    expect(wrapper.emitted('openMenu')?.[0]).toEqual([
+      { x: 40, y: 50 },
+      { nodeId: 'a', edgeId: null },
+    ])
+  })
+
+  it('在空白处右键，两个身份都是空', async () => {
+    const wrapper = open()
+
+    await wrapper.find('.dt-ml-canvas').trigger('contextmenu')
+
+    expect(wrapper.emitted('openMenu')?.[0]?.[1]).toEqual({
+      nodeId: null,
+      edgeId: null,
+    })
+  })
+})
+
+describe('吸附', () => {
+  it('开着吸附时贴近邻居会吸上去，并画一条参考线', async () => {
+    const wrapper = open({ isSnapping: true })
+    await wrapper.findAll('.dt-ml-canvas__node')[0]?.trigger('pointerdown', {
+      clientX: 0,
+      clientY: 0,
+    })
+
+    // b 在 left=300；把 a 拖到 297 处，差 3px 在容差内
+    move(297, 0)
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('.dt-ml-canvas__guide').exists()).toBe(true)
+  })
+
+  it('关掉吸附时不画参考线，位移原样', async () => {
+    const wrapper = open({ isSnapping: false })
+    await wrapper.findAll('.dt-ml-canvas__node')[0]?.trigger('pointerdown', {
+      clientX: 0,
+      clientY: 0,
+    })
+
+    move(297, 0)
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('.dt-ml-canvas__guide').exists()).toBe(false)
+  })
+})
+
+describe('层序', () => {
+  // ⚠ 卡片一叠，下面那张的接点就点不到了——那正是「连不上线」的另一半原因
+  it('选中的卡片压在上面', () => {
+    const wrapper = open({ selection: { nodes: ['b'], edges: [] } })
+
+    const layers = wrapper
+      .findAll('.dt-ml-canvas__node')
+      .map((el) => el.attributes('style') ?? '')
+    expect(layers[1]).toContain('z-index: 2')
+    expect(layers[0]).toContain('z-index: 1')
+  })
+})
+
+/** 工具条上的一颗按钮。⚠ 按 aria-label 找：写错事件名 typecheck 与 lint 都放行。 */
+function tool(wrapper: ReturnType<typeof open>, label: string) {
+  return wrapper.find(`[aria-label="${label}"]`)
+}
+
+describe('工具条', () => {
+  it('放大与缩小真的改画布比例', async () => {
+    const wrapper = open()
+    const world = () =>
+      wrapper.find('.dt-ml-canvas__world').attributes('style') ?? ''
+    const before = world()
+
+    await tool(wrapper, '放大').trigger('click')
+    const zoomedIn = world()
+    await tool(wrapper, '缩小').trigger('click')
+
+    expect(zoomedIn).not.toBe(before)
+    expect(world()).not.toBe(zoomedIn)
+  })
+
+  it('「回到 100%」把比例拨回 1', async () => {
+    const wrapper = open()
+    await tool(wrapper, '放大').trigger('click')
+
+    await tool(wrapper, '回到 100%').trigger('click')
+
+    expect(wrapper.find('.dt-ml-canvas__world').attributes('style')).toContain(
+      'scale(1)',
+    )
+  })
+
+  it('一键整理与吸附开关交给页面去做', async () => {
+    const wrapper = open()
+
+    await tool(wrapper, '一键整理').trigger('click')
+    await tool(wrapper, '吸附对齐').trigger('click')
+
+    expect(wrapper.emitted('autoLayout')).toHaveLength(1)
+    expect(wrapper.emitted('toggleSnap')).toHaveLength(1)
+  })
+
+  it('空图时「适应视图」与「一键整理」都点不动', () => {
+    const wrapper = open({
+      graph: { format_version: '1', nodes: [], edges: [] },
+    })
+
+    expect(tool(wrapper, '适应视图').attributes('disabled')).toBeDefined()
+    expect(tool(wrapper, '一键整理').attributes('disabled')).toBeDefined()
+  })
+
+  // ⚠ 滚轮方向反了的话，用户往前推滚轮画布反而缩小，手感立刻就不对
+  it('滚轮往前推是放大', async () => {
+    const wrapper = open()
+
+    await wrapper.find('.dt-ml-canvas').trigger('wheel', { deltaY: -100 })
+
+    const style = wrapper.find('.dt-ml-canvas__world').attributes('style') ?? ''
+    const zoom = Number(/scale\(([\d.]+)\)/.exec(style)?.[1] ?? '1')
+    expect(zoom).toBeGreaterThan(1)
   })
 })

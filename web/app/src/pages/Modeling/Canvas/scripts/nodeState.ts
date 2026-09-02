@@ -42,6 +42,8 @@ export interface NodeRuntime {
   state: NodeRunState
   errorText: string
   hasResult: boolean
+  /** 直接印在卡片上的一句话结果，例如「1,200 行 × 8 列」。没有就给空串。 */
+  headline: string
 }
 
 /** 还没跑过任何一轮时的样子。 */
@@ -49,4 +51,5 @@ export const EMPTY_RUNTIME: NodeRuntime = {
   state: 'idle',
   errorText: '',
   hasResult: false,
+  headline: '',
 }

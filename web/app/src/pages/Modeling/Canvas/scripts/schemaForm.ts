@@ -150,3 +150,34 @@ export function defaultsOf(
   }
   return config
 }
+
+/** 参数面板要的两份下拉数据，以及拿不到时的那句人话。 */
+export interface FormOptions {
+  tables: readonly { code: string; name: string }[]
+  /** 台账下拉列不出东西时的原因。 */
+  tablesNote: string
+  columns: readonly { key: string; name: string }[]
+  /** 列选择器列不出东西时的原因。 */
+  columnsNote: string
+}
+
+/** 这个字段现在的值是不是就是 schema 给的默认值。 */
+export function isDefault(field: FormField, value: unknown): boolean {
+  if (field.fallback === undefined) return value === undefined
+  return JSON.stringify(value) === JSON.stringify(field.fallback)
+}
+
+/**
+ * 必填却空着时的那句话；不该报的时候给空串。
+ *
+ * ⚠ 只挡**必填且没有默认值**的：有默认值的字段留空是合法的，运行时按默认走。
+ */
+export function missingHint(field: FormField, value: unknown): string {
+  if (!field.isRequired || field.fallback !== undefined) return ''
+  const isBlank =
+    value === undefined ||
+    value === null ||
+    value === '' ||
+    (Array.isArray(value) && value.length === 0)
+  return isBlank ? '这一项必须填' : ''
+}
