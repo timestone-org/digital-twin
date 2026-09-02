@@ -3,18 +3,20 @@
  * @fileoverview 展开态的二级导航：一级项是开合按钮，二级项就地展开成真实链接。
  * 与折叠态的飞出面板（AppNavGroupFlyout）是同一份数据的两种呈现。
  */
-import { computed, ref, watch } from 'vue'
+import { computed, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { DtButton, DtIcon } from '@dt/ui'
 
+import { useNavGroupOpen } from '@/composables/useNavGroupOpen'
 import type { NavItem } from './navItems'
 import { activeChildKey, isGroupActive } from './navTree'
 
 const props = defineProps<{ item: NavItem; currentPath: string }>()
 
 const groupActive = computed(() => isGroupActive(props.currentPath, props.item))
-// 当前路由落在组内时默认摊开，否则进这一页看不到自己在哪
-const isOpen = ref(groupActive.value)
+// 当前路由落在组内时默认摊开，否则进这一页看不到自己在哪；
+// 手动开合的结果记在存储里，切页重挂侧栏也不丢
+const isOpen = useNavGroupOpen(() => props.item.key, groupActive.value)
 
 watch(groupActive, (active) => {
   if (active) isOpen.value = true

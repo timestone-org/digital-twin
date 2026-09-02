@@ -168,7 +168,7 @@ async function onLogout(): Promise<void> {
       <DtButton
         variant="soft"
         intent="primary"
-        size="sm"
+        size="xs"
         :icon="isCollapsed ? 'chevron-down' : 'chevron-up'"
         :aria-label="toggleLabel"
         :aria-expanded="!isCollapsed"
@@ -183,9 +183,11 @@ async function onLogout(): Promise<void> {
 <style scoped lang="scss">
 @use '@/styles/tokens-bridge' as t;
 
-// 骑在边界上的小圆钮。24px 是 WCAG 2.5.8 给的点击目标下限，不要再往下调；
+// 骑在边界上的小圆钮。视觉 20px（xs 档），点击面用伪元素外扩到 24px——
+// 那是 WCAG 2.5.8 给的点击目标下限，钮身可以更小，点击面不要再往下调；
 // ⚠ right 必须等于 -(尺寸 / 2)，否则它不在分界线上而是偏到一侧
-$toggle-size: 24px;
+$toggle-size: 20px;
+$toggle-hit-size: 24px;
 
 .nav-toggle {
   position: absolute;
@@ -198,11 +200,19 @@ $toggle-size: 24px;
   // 挡住身下的分界线，否则边框会从半透明的钮身里透出来
   background: var(--surface-base);
 
-  // 比 sm 档再小一号：它是贴边的辅助控件，按正常按钮的分量做会盖过导航本身
+  // 它是贴边的辅助控件，按正常按钮的分量做会盖过导航本身
   :deep(.dt-btn) {
+    position: relative;
     width: $toggle-size;
     height: $toggle-size;
     border-radius: var(--radius-pill);
+
+    // 透明的点击面：伪元素归按钮所有，点在上面命中的还是按钮
+    &::before {
+      content: '';
+      position: absolute;
+      inset: ($toggle-size - $toggle-hit-size) * 0.5;
+    }
   }
 
   // ⚠ 图标库只有上下向的 chevron；统一转 -90° 后 up 读作「收起」、down 读作「展开」

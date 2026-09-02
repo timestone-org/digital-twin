@@ -1,8 +1,8 @@
 /**
  * @fileoverview 展开态分组的开合契约：路由切进组内要自动摊开，
- * 手动摊开的组不因路由离开而被合上。
+ * 手动摊开的组不因路由离开而被合上，也不因侧栏重挂而被合上。
  */
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 
 import AppNavGroupTree from '@/components/layout/AppNavGroupTree.vue'
@@ -28,6 +28,10 @@ function render(currentPath: string) {
   return mount(AppNavGroupTree, { props: { item: SYSTEM, currentPath } })
 }
 
+beforeEach(() => {
+  localStorage.clear()
+})
+
 describe('AppNavGroupTree', () => {
   it('路由切进组内时自动摊开——否则跳进子页面后看不到自己在哪', async () => {
     const wrapper = render('/')
@@ -41,6 +45,31 @@ describe('AppNavGroupTree', () => {
     const wrapper = render('/system/users')
     await wrapper.setProps({ currentPath: '/' })
     expect(wrapper.find('a[href="/system/users"]').exists()).toBe(true)
+  })
+
+  // 每一页都各套一层 AppShell，切页即整条侧栏重挂：开合若只放在组件里，
+  // 点进别的菜单时刚摊开的那组就合回去了
+  it('手动摊开的组在重挂后仍摊开——切页时侧栏整条重挂', async () => {
+    const first = render('/')
+    await first.get('[aria-controls="nav-group-system"]').trigger('click')
+    first.unmount()
+
+    expect(render('/assets').find('a[href="/system/users"]').exists()).toBe(
+      true,
+    )
+  })
+
+  it('手动合上的组在重挂后仍合上', async () => {
+    const first = render('/system/users')
+    await first.get('[aria-controls="nav-group-system"]').trigger('click')
+    first.unmount()
+
+    expect(render('/').find('a[href="/system/users"]').exists()).toBe(false)
+  })
+
+  it('路由曾落在组内的那组，离开后重挂仍摊开', () => {
+    render('/system/users').unmount()
+    expect(render('/').find('a[href="/system/users"]').exists()).toBe(true)
   })
 
   // 开合动画会在离场那几帧里留住节点。收完必须真摘掉：只是看不见的话，
