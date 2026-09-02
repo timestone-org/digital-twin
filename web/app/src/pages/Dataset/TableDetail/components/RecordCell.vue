@@ -64,7 +64,7 @@ const badge = computed(() => {
   <!-- data-column 让一格在 DOM 里自报是哪一列：动态插槽名接错时，屏幕上只是
        某一列静静显示成另一列的数，没有任何一道现成的闸门会响 -->
   <span
-    class="inline-flex min-w-0 items-center gap-1"
+    class="record-cell inline-flex min-w-0 items-center gap-1"
     :data-column="props.column.key"
   >
     <DtTooltip v-if="failure !== null" :content="failure" side="bottom">
@@ -121,3 +121,10 @@ const badge = computed(() => {
     </DtTooltip>
   </span>
 </template>
+
+<style scoped>
+/* 靠右的数值列把角标翻到数字左边：数字的右缘才能逐行对齐，带角标的行不会被顶开 24px */
+td.is-right .record-cell {
+  flex-direction: row-reverse;
+}
+</style>

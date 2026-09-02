@@ -55,7 +55,7 @@ const emit = defineEmits<{
     :columns="COLUMNS"
     :rows="props.columns"
     :empty="EMPTY"
-    :layout="{ minWidth: '62rem', toggle: false }"
+    :layout="{ minWidth: '62rem', toggle: false, fixedLayout: true }"
   >
     <template #summary>共 {{ props.columns.length }} 列</template>
 

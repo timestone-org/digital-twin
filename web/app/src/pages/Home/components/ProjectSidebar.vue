@@ -75,7 +75,7 @@ function onRenamed(projectId: string, name: string): void {
         <div
           v-for="project in projects"
           :key="project.id"
-          class="group relative flex cursor-pointer items-center gap-2.5 rounded-md px-3 py-2.5 text-sm transition-colors"
+          class="group relative flex min-h-13 cursor-pointer items-center gap-2.5 rounded-md px-3 py-2.5 text-sm transition-colors"
           :class="
             selectedProjectId === project.id
               ? 'bg-accent-primary/10 text-accent-on-surface'
@@ -115,24 +115,26 @@ function onRenamed(projectId: string, name: string): void {
           </span>
 
           <template v-if="renamingId !== project.id">
-            <DtButton
+            <!-- ⚠ hidden 不能直接挂在 DtButton / DtTag 上：它们的 display 写在未分层的组件样式里，压得过 @layer utilities 里的 .hidden -->
+            <span
               v-if="canManage"
-              size="sm"
-              variant="ghost"
-              intent="neutral"
-              icon="pencil"
               class="hidden shrink-0 group-hover:inline-flex"
-              aria-label="重命名项目"
-              data-test="project-rename"
-              @click.stop="startRename(project.id)"
-            />
-            <DtTag
-              class="shrink-0"
-              :class="{ 'group-hover:hidden': canManage }"
-              data-test="project-count"
             >
-              {{ project.dashboardCount }}
-            </DtTag>
+              <DtButton
+                size="sm"
+                variant="ghost"
+                intent="neutral"
+                icon="pencil"
+                aria-label="重命名项目"
+                data-test="project-rename"
+                @click.stop="startRename(project.id)"
+              />
+            </span>
+            <span class="shrink-0" :class="{ 'group-hover:hidden': canManage }">
+              <DtTag data-test="project-count">
+                {{ project.dashboardCount }}
+              </DtTag>
+            </span>
           </template>
         </div>
       </TransitionGroup>

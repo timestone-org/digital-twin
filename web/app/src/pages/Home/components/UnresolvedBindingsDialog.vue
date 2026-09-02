@@ -54,12 +54,8 @@ const emit = defineEmits<{
     </div>
 
     <template #footer>
-      <DtButton variant="ghost" size="sm" @click="emit('dismiss')">
-        留在此页
-      </DtButton>
-      <DtButton size="sm" icon="play" @click="emit('preview')">
-        去预览
-      </DtButton>
+      <DtButton variant="ghost" @click="emit('dismiss')"> 留在此页 </DtButton>
+      <DtButton icon="play" @click="emit('preview')"> 去预览 </DtButton>
     </template>
   </DtModal>
 </template>

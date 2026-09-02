@@ -147,11 +147,7 @@ function choose(point: CollectPoint): void {
     </div>
 
     <template #footer>
-      <DtButton
-        variant="ghost"
-        size="sm"
-        @click="emit('update:modelValue', false)"
-      >
+      <DtButton variant="ghost" @click="emit('update:modelValue', false)">
         取消
       </DtButton>
     </template>

@@ -26,14 +26,14 @@ const COLUMNS: readonly DtDataColumn[] = [
     card: 'meta',
   },
   { key: 'algo', label: '算法', width: '10rem' },
-  { key: 'target_key', label: '目标列', width: '10rem' },
-  { key: 'servable', label: '可用于取数', width: '14rem' },
-  { key: 'created_at', label: '发布时间', width: '12rem' },
+  { key: 'target_key', label: '目标列', width: '11rem' },
+  { key: 'servable', label: '可用于取数', width: '13rem' },
+  { key: 'created_at', label: '发布时间', width: '10rem' },
   {
     key: 'actions',
     label: '操作',
     align: 'right',
-    width: '9rem',
+    width: '8rem',
     card: 'actions',
   },
 ]
@@ -65,14 +65,23 @@ defineEmits<{
     :loading="props.isLoading"
     :error="props.error"
     :empty="EMPTY"
+    :layout="{
+      fixedLayout: true,
+      minWidth: '69rem',
+      cardColumns: 3,
+      cardMinWidth: '20rem',
+    }"
   >
+    <template #toolbar><slot name="toolbar" /></template>
     <template #cell-name="{ row }">{{ row.name }}</template>
     <template #cell-version="{ row }">v{{ row.version }}</template>
     <template #cell-algo="{ row }">
-      <code>{{ row.algo }}</code>
+      <code class="dt-ml-versions__code" :title="row.algo">{{ row.algo }}</code>
     </template>
     <template #cell-target_key="{ row }">
-      <code>{{ row.target_key }}</code>
+      <code class="dt-ml-versions__code" :title="row.target_key">
+        {{ row.target_key }}
+      </code>
     </template>
     <template #cell-servable="{ row }">
       <DtTag v-if="row.is_servable" intent="success" size="sm">可用</DtTag>
@@ -108,12 +117,19 @@ defineEmits<{
 
 <style scoped lang="scss">
 .dt-ml-versions {
+  &__code {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   &__why {
     display: inline-flex;
     gap: 0.375rem;
-    align-items: center;
+    align-items: flex-start;
     color: var(--text-secondary);
-    font-size: var(--ctl-hint-fs-sm);
+    font-size: var(--ctl-hint-fs-md);
   }
 }
 </style>

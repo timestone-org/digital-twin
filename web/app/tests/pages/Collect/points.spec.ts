@@ -325,7 +325,7 @@ describe('寻址串那一列', () => {
   const LONG = 'ns=2;s=DLS01.IFIX.Server.Tags.Analog Input.K01_X.Value.F_CV'
 
   function addressCell(wrapper: VueWrapper) {
-    return wrapper.find('tbody tr td:nth-child(4) span')
+    return wrapper.find('tbody tr td:nth-child(8) span')
   }
 
   it('⚠ 单行截断，绝不按字符换行', async () => {

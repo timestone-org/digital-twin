@@ -179,7 +179,9 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="grid h-full min-h-0 gap-4 lg:grid-cols-[minmax(18rem,24rem)_1fr]">
+  <div
+    class="grid h-full min-h-0 gap-4 lg:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)] 2xl:grid-cols-[minmax(18rem,30rem)_minmax(0,1fr)]"
+  >
     <DtCard class="flex min-h-0 flex-col">
       <div class="mb-3 flex items-center justify-between gap-2">
         <h3 class="m-0 text-sm font-medium">地址空间</h3>

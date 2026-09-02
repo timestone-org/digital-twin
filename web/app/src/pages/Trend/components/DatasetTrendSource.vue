@@ -66,7 +66,7 @@ onUnmounted(picker.dispose)
       </template>
     </DatasetTrendChart>
     <template v-else>
-      <div class="w-64">
+      <div class="w-72">
         <DtSelect
           :model-value="picker.tableId.value"
           :options="picker.options.value"

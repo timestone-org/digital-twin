@@ -78,7 +78,6 @@ const modalTitle = computed(() =>
     <template #footer>
       <DtButton
         variant="ghost"
-        size="sm"
         :disabled="isBusy"
         @click="emit('update:modelValue', false)"
       >
@@ -86,7 +85,6 @@ const modalTitle = computed(() =>
       </DtButton>
       <DtButton
         intent="danger"
-        size="sm"
         :icon="hasConflict ? 'alert-triangle' : 'trash'"
         :loading="isBusy"
         data-test="force-delete-confirm"

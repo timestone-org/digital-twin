@@ -51,7 +51,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col gap-2">
+  <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
     <DtDataView
       class="min-h-0 flex-1"
       view="table"
@@ -67,7 +67,12 @@ const emit = defineEmits<{
       @retry="emit('retry')"
     >
       <template #cell-started="{ row }">
-        <span :class="{ 'opacity-50': row.isExcluded }">{{ row.started }}</span>
+        <span
+          class="whitespace-nowrap"
+          :class="{ 'opacity-50': row.isExcluded }"
+        >
+          {{ row.started }}
+        </span>
       </template>
       <template #cell-combination="{ row }">
         <span class="truncate" :class="{ 'opacity-50': row.isExcluded }">
@@ -75,9 +80,12 @@ const emit = defineEmits<{
         </span>
       </template>
       <template #cell-duration="{ row }">
-        <span :class="{ 'opacity-50': row.isExcluded }">{{
-          row.duration
-        }}</span>
+        <span
+          class="whitespace-nowrap"
+          :class="{ 'opacity-50': row.isExcluded }"
+        >
+          {{ row.duration }}
+        </span>
       </template>
       <template #cell-outcome="{ row }">
         <DtTag size="sm" :intent="row.intent">{{ row.outcome }}</DtTag>

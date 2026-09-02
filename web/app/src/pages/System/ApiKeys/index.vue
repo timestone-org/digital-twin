@@ -135,7 +135,7 @@ onMounted(async () => {
         :loading="list.loading.value"
         :error="list.error.value"
         :pagination="list.pager.value"
-        :layout="{ minWidth: '58rem', cardColumns: 3, cardMinWidth: '19rem' }"
+        :layout="{ minWidth: '64rem', cardColumns: 3, cardMinWidth: '19rem' }"
         :empty="{
           hint: '还没有签发过密钥。第三方系统要写点位时，在这里发一枚',
         }"

@@ -245,7 +245,7 @@ onBeforeRouteLeave(async () => {
         v-else-if="page.node.value !== null"
         class="flex min-h-0 flex-1 gap-3"
       >
-        <aside class="w-56 shrink-0">
+        <aside class="w-56 shrink-0 border-r border-border-subtle pr-2">
           <StructurePane
             :parts="partRows"
             :cells="cellRows"
@@ -270,7 +270,7 @@ onBeforeRouteLeave(async () => {
             :height="size.height"
           />
         </section>
-        <aside class="w-72 shrink-0">
+        <aside class="w-72 shrink-0 border-l border-border-subtle pl-3">
           <FieldsPane
             :schema="activeSchema"
             :row="activeRow"

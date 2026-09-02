@@ -113,7 +113,8 @@ function statusOf(job: UploadJob): string {
       display: grid;
       align-items: center;
       gap: 12px;
-      grid-template-columns: minmax(6rem, 1fr) 2fr minmax(7rem, auto);
+      // 末列定宽：按内容自适应的话，失败那一行的长原因会把它自己的进度条挤短，条与条不齐
+      grid-template-columns: minmax(6rem, 1fr) 2fr 12rem;
     }
 
     .is-failed .dt-upload-panel__state {
@@ -128,6 +129,7 @@ function statusOf(job: UploadJob): string {
   }
 
   &__state {
+    overflow-wrap: anywhere;
     color: var(--text-secondary);
     font-size: var(--ctl-hint-fs-md);
     text-align: right;

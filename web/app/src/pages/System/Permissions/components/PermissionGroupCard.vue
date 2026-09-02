@@ -14,10 +14,10 @@ import PermissionKindTag from './PermissionKindTag.vue'
 import PermissionOriginTag from './PermissionOriginTag.vue'
 
 const COLUMNS: readonly DtDataColumn[] = [
-  { key: 'name', label: '名称', width: '14rem', card: 'title' },
-  { key: 'code', label: '权限码', width: '14rem', card: 'meta' },
+  { key: 'name', label: '名称', width: '11rem', card: 'title' },
+  { key: 'code', label: '权限码', width: '11rem', card: 'meta' },
   { key: 'kind', label: '档位', width: '8rem' },
-  { key: 'held', label: '我是否持有', width: '8rem' },
+  { key: 'held', label: '我是否持有', width: '6rem' },
   { key: 'description', label: '说明' },
 ]
 

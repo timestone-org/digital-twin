@@ -199,17 +199,19 @@ onMounted(() => {
         </template>
 
         <template #cell-name="{ row }">
-          <span class="truncate">{{ row.name }}</span>
+          <span class="block truncate">{{ row.name }}</span>
         </template>
 
         <template #cell-location="{ row }">
-          <span class="truncate text-secondary">
+          <span class="block truncate text-secondary">
             {{ row.workshop.name }} · {{ row.room.name }}
           </span>
         </template>
 
         <template #cell-created_at="{ row }">
-          {{ formatDateTime(row.created_at) }}
+          <span class="whitespace-nowrap">
+            {{ formatDateTime(row.created_at) }}
+          </span>
         </template>
 
         <template #cell-actions="{ row }">

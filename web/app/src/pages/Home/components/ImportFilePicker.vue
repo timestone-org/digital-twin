@@ -39,7 +39,7 @@ function onSelect(files: File[]): void {
       />
     </div>
     <template #footer>
-      <DtButton variant="ghost" size="sm" @click="emit('update:open', false)">
+      <DtButton size="sm" variant="ghost" @click="emit('update:open', false)">
         取消
       </DtButton>
     </template>

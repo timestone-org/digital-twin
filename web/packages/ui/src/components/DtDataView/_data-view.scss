@@ -55,6 +55,16 @@
     min-height: 0;
   }
 
+  // 铺满态的三态（加载 / 出错 / 空）在剩余高度里垂直居中：顶在工具条下面时，
+  // 下方整块面板都是空白，看起来像没渲染完
+  &.is-fill &__panel > :deep(.dt-empty),
+  &.is-fill &__panel > :deep(.dt-page-state__center),
+  &.is-fill > :deep(.dt-empty),
+  &.is-fill > :deep(.dt-page-state__center) {
+    flex: 1;
+    justify-content: center;
+  }
+
   // 卡片网格自己纵向滚，工具条与分页器不跟着走
   &.is-fill &__grid {
     flex: 1;
@@ -105,6 +115,19 @@
           min(
             100%,
             max(var(--dt-card-min), calc((100% - var(--dt-card-gap) * 2) / 3))
+          ),
+          1fr
+        )
+      );
+    }
+
+    &.is-cols-4 {
+      grid-template-columns: repeat(
+        auto-fill,
+        minmax(
+          min(
+            100%,
+            max(var(--dt-card-min), calc((100% - var(--dt-card-gap) * 3) / 4))
           ),
           1fr
         )

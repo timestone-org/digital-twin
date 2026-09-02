@@ -116,6 +116,7 @@ function onEdit(
     </template>
     <template #cell-sampled="{ row }">
       <span
+        class="whitespace-nowrap"
         :class="row.isStale ? 'text-state-warning' : ''"
         :title="row.sampledTitle"
       >

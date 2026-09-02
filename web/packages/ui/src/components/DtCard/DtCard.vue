@@ -81,6 +81,8 @@ withDefaults(
 
   &__hd {
     display: flex;
+    // 装不下时 actions 整组换到下一行，而不是把标题挤成一字一行
+    flex-wrap: wrap;
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;

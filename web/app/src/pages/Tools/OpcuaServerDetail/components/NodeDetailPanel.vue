@@ -205,7 +205,7 @@ async function write(): Promise<void> {
       该节点的访问级别不含「可写」，上位机与这里都只能读。
     </DtNotice>
 
-    <dl class="m-0 grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+    <dl class="m-0 grid grid-cols-2 gap-x-4 gap-y-3 text-xs xl:grid-cols-3">
       <div>
         <dt class="text-text-disabled">标识</dt>
         <dd class="m-0 break-all font-mono">{{ node.identifier }}</dd>

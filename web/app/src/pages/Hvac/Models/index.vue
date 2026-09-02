@@ -197,9 +197,11 @@ function onCreated(modelId: string): void {
   >
     <!-- 两侧都要 min-h-0，右区还要 min-w-0：少 min-h-0 不是滚动而是把整页撑长，
          而 AppShell 的 main 是 overflow-hidden；少 min-w-0 则宽表格顶破页面横滚 -->
-    <div class="flex h-full min-h-0 flex-col gap-4 lg:flex-row">
+    <!-- 并排的门槛是 2xl：xl 那一档右区只有八百多像素，八列的模型表要横滚才见得到
+         操作列；2xl 以下房间栏叠在上面，表格拿整行宽 -->
+    <div class="flex h-full min-h-0 flex-col gap-4 2xl:flex-row">
       <RoomSidebar
-        class="max-h-64 shrink-0 lg:max-h-none lg:w-72"
+        class="max-h-64 shrink-0 2xl:max-h-none 2xl:w-72"
         :entries="listing.entries"
         :hidden-count="listing.hiddenCount"
         :selected="roomId"

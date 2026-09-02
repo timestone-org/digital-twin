@@ -25,11 +25,13 @@ export function nodeTableColumns(canManage: boolean): readonly DtDataColumn[] {
     // 13rem 是量出来的：`K01_START_TIME_FORECAST` 这类 23 字符编码在 12rem 上
     // 还差 8px，会被徽标截掉尾巴
     { key: 'code', label: '编码', width: '13rem' },
-    { key: 'address', label: '寻址串' },
-    { key: 'type', label: '类型', width: '4.5rem' },
-    { key: 'unit', label: '单位', width: '3.5rem' },
+    // 实时值排在寻址串前面：窄屏横滚时先露出来的该是「现在是多少」，
+    // 寻址串是这张表最长的一列，放后面被截也不影响认点位
     { key: 'value', label: '实时值', width: '9rem', card: 'meta' },
+    { key: 'unit', label: '单位', width: '3.5rem' },
+    { key: 'type', label: '类型', width: '4.5rem' },
     { key: 'archive', label: '记录历史', width: '5rem' },
+    { key: 'address', label: '寻址串' },
     {
       key: 'actions',
       label: '操作',

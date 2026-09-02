@@ -74,7 +74,6 @@ onMounted(() => {
       class="dt-ml-models flex h-full min-h-0 flex-col gap-5 overflow-y-auto"
     >
       <section class="dt-ml-models__block">
-        <h2 class="dt-ml-models__title">模型版本</h2>
         <VersionTable
           v-model:view="versionView"
           :rows="versions.items.value"
@@ -82,11 +81,14 @@ onMounted(() => {
           :error="versions.error.value"
           @bind="(row) => (binding = row)"
           @retire="(row) => void ops.retire(row)"
-        />
+        >
+          <template #toolbar>
+            <h2 class="dt-ml-models__title">模型版本</h2>
+          </template>
+        </VersionTable>
       </section>
 
       <section class="dt-ml-models__block">
-        <h2 class="dt-ml-models__title">公式绑定</h2>
         <BindingTable
           v-model:view="bindingView"
           :rows="bindings.items.value"
@@ -95,7 +97,11 @@ onMounted(() => {
           :error="bindings.error.value"
           @toggle="(row, isOn) => void ops.update(row.id, { is_enabled: isOn })"
           @unbind="(row) => void ops.unbind(row.id)"
-        />
+        >
+          <template #toolbar>
+            <h2 class="dt-ml-models__title">公式绑定</h2>
+          </template>
+        </BindingTable>
       </section>
     </div>
 

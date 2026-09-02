@@ -128,11 +128,10 @@ function confirm(): void {
     </div>
 
     <template #footer>
-      <DtButton size="sm" variant="ghost" intent="neutral" @click="close">
+      <DtButton variant="ghost" intent="neutral" @click="close">
         取消
       </DtButton>
       <DtButton
-        size="sm"
         :disabled="chosen.length === 0"
         data-test="bulk-confirm"
         @click="confirm"

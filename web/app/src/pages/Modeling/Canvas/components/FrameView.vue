@@ -36,13 +36,13 @@ const provenance = computed(() => {
 
 const STAT_COLUMNS: readonly DtTableColumn[] = [
   { key: 'name', label: '列' },
-  { key: 'dtype', label: '类型', width: '6rem' },
-  { key: 'nullRatio', label: '空值率', width: '6rem', align: 'right' },
-  { key: 'uniqueCount', label: '不同值', width: '6rem', align: 'right' },
-  { key: 'min', label: '最小', width: '7rem', align: 'right' },
-  { key: 'p50', label: '中位', width: '7rem', align: 'right' },
-  { key: 'mean', label: '均值', width: '7rem', align: 'right' },
-  { key: 'max', label: '最大', width: '7rem', align: 'right' },
+  { key: 'dtype', label: '类型', width: '5rem' },
+  { key: 'nullRatio', label: '空值率', width: '5rem', align: 'right' },
+  { key: 'uniqueCount', label: '不同值', width: '5.5rem', align: 'right' },
+  { key: 'min', label: '最小', width: '6.5rem', align: 'right' },
+  { key: 'p50', label: '中位', width: '6.5rem', align: 'right' },
+  { key: 'mean', label: '均值', width: '6.5rem', align: 'right' },
+  { key: 'max', label: '最大', width: '6.5rem', align: 'right' },
 ]
 
 const headColumns = computed<DtTableColumn[]>(() => [

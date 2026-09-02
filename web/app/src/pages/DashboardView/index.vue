@@ -194,13 +194,17 @@ onBeforeUnmount(() => {
   >
     <!-- ⚠ 整屏的加载/错误态只留给「手上一张都没有」：跨屏跳转时把画面整片换掉，
          墙上每跳一次先白一下。取数失败时 docIo 会把文档置空，于是照样落到这里 -->
-    <DtPageState
+    <div
       v-if="file.dashboard.value === null"
-      :loading="file.loading.value"
-      :error="file.error.value"
-      :empty="false"
-      @retry="file.load(dashboardId())"
-    />
+      class="flex h-full items-center justify-center"
+    >
+      <DtPageState
+        :loading="file.loading.value"
+        :error="file.error.value"
+        :empty="false"
+        @retry="file.load(dashboardId())"
+      />
+    </div>
 
     <div v-else data-test="dashboard-stage" :style="stageStyle">
       <NodeTree

@@ -136,7 +136,7 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
       <div
         class="grid min-h-0 grid-cols-1 gap-4 xl:flex-1 xl:grid-cols-[20rem_minmax(0,1fr)]"
       >
-        <aside class="flex h-60 min-w-0 shrink-0 flex-col xl:h-auto xl:min-h-0">
+        <aside class="flex h-80 min-w-0 shrink-0 flex-col xl:h-auto xl:min-h-0">
           <KnowledgeBaseList
             :bases="page.bases.value"
             :selected-id="page.selectedId.value"
@@ -179,14 +179,14 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
               class="grid min-h-0 grid-cols-1 gap-4 2xl:flex-1 2xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] 2xl:grid-rows-1"
             >
               <KnowledgeDocumentTable
-                class="h-120 shrink-0 2xl:h-auto"
+                class="h-100 shrink-0 2xl:h-auto"
                 :documents="page.documents.value"
                 :loading="page.isLoading.value"
                 @reparse="reparse"
                 @remove="removeDocument"
               />
               <KnowledgeSearchPanel
-                class="h-120 shrink-0 2xl:h-auto"
+                class="h-100 shrink-0 2xl:h-auto"
                 :query="page.query.value"
                 :searched="page.searched.value"
                 :result="page.result.value"

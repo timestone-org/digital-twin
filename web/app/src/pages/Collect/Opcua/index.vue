@@ -155,8 +155,8 @@ onUnmounted(() => {
       </PermGuard>
     </template>
 
-    <!-- ⚠ 这一页必须自己能滚：窄屏（<xl）时左栏 15rem + 浏览 20rem + 点位表
-         30rem 是竖着堆的，加起来必然高过视口，而 AppShell 的 `<main>` 是
+    <!-- ⚠ 这一页必须自己能滚：窄屏时左栏 15rem（<xl）+ 浏览 20rem + 点位表
+         37.5rem（<2xl）是竖着堆的，加起来必然高过视口，而 AppShell 的 `<main>` 是
          overflow-hidden、自己不滚。装不下又没处滚，多出来的部分既看不见也够
          不着；更糟的是 overflow-hidden **能被程序滚动**——点一下裁切线以下
          的勾选框，浏览器会把 `<main>` 滚过去露出焦点元素，而它没有滚动条，
@@ -177,7 +177,7 @@ onUnmounted(() => {
         class="grid min-h-0 grid-cols-1 gap-4 xl:flex-1 xl:grid-cols-[20rem_minmax(0,1fr)]"
       >
         <!-- 左栏：数据源列表 -->
-        <aside class="flex h-60 min-w-0 shrink-0 flex-col xl:h-auto xl:min-h-0">
+        <aside class="flex h-80 min-w-0 shrink-0 flex-col xl:h-auto xl:min-h-0">
           <SourceListPanel
             :sources="sources"
             :loading="sourcesLoading"
@@ -204,18 +204,21 @@ onUnmounted(() => {
               @remove="removal.ask(activeSource)"
             />
 
-            <!-- 浏览 + 点位表：<xl 竖排固定高，≥xl 铺满两栏内部滚动 -->
+            <!-- 浏览 + 点位表：<2xl 竖排固定高、交给外层滚；≥2xl 并排铺满内部滚动。
+                 ⚠ 并排的门槛是 2xl 不是 xl：xl 那一档右区只剩八百多像素，点位表分到
+                 五百像素时工具条要折三行、表体只剩两行，浏览树那边连「在线浏览」四个
+                 字都竖着排——与知识库页同一条口径 -->
             <div
-              class="grid min-h-0 grid-cols-1 gap-4 xl:flex-1 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:grid-rows-1"
+              class="grid min-h-0 grid-cols-1 gap-4 2xl:flex-1 2xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] 2xl:grid-rows-1"
             >
               <BrowsePanel
-                class="h-80 shrink-0 xl:h-auto"
+                class="h-80 shrink-0 2xl:h-auto"
                 :source="activeSource"
                 @imported="onImported"
               />
               <NodeTable
                 ref="nodeTableRef"
-                class="h-120 shrink-0 xl:h-auto"
+                class="h-150 shrink-0 2xl:h-auto"
                 :source="activeSource"
               />
             </div>

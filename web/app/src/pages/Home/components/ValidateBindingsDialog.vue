@@ -56,7 +56,7 @@ const emit = defineEmits<{ 'update:open': [open: boolean] }>()
     </div>
 
     <template #footer>
-      <DtButton size="sm" @click="emit('update:open', false)">关闭</DtButton>
+      <DtButton @click="emit('update:open', false)">关闭</DtButton>
     </template>
   </DtModal>
 </template>

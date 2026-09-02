@@ -52,10 +52,11 @@ const boxStyle = computed(() => ({
 <template>
   <div class="flex h-full min-h-0 flex-col gap-2">
     <div
-      class="ce-stage flex min-h-0 flex-1 items-center justify-center overflow-auto rounded p-6"
+      class="ce-stage flex min-h-0 flex-1 overflow-auto rounded p-6"
       :class="`ce-stage--${backdrop}`"
     >
-      <div :style="boxStyle" class="shrink-0">
+      <!-- 居中靠 m-auto 而不是 justify-center：卡片比舞台宽时后者会把左半边推出可滚动范围 -->
+      <div :style="boxStyle" class="m-auto shrink-0">
         <ModuleRenderer
           class="h-full w-full"
           :module-type="moduleType"

@@ -149,9 +149,9 @@ function patchRange(patch: Partial<TrendRangeValue>): void {
           class="min-h-0 max-h-48 flex-1 overflow-y-auto rounded-md border border-border-subtle bg-surface-sunken/40 p-2 xl:max-h-none"
         >
           <legend class="sr-only">要画哪几条曲线</legend>
+          <!-- 竖排档：这一栏只有 18rem 宽，行式空态会把标题挤成两行 -->
           <DtEmpty
             v-if="items.length === 0"
-            size="inline"
             icon="chart-line"
             title="没有可画的量"
             :hint="blankHint"
@@ -190,6 +190,14 @@ function patchRange(patch: Partial<TrendRangeValue>): void {
         <DtNotice v-if="failure" intent="danger" icon="alert-circle">
           {{ failure }}
         </DtNotice>
+        <!-- 失败时图的位置也要有东西占着，否则右边整块空白像没渲染完 -->
+        <DtEmpty
+          v-if="failure"
+          class="min-h-0 flex-1"
+          icon="alert-circle"
+          title="这一次没取到数"
+          hint="改一下条件再点「查询」。"
+        />
         <DtEmpty
           v-else-if="selected.length === 0"
           class="min-h-0 flex-1"

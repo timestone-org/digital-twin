@@ -7,7 +7,7 @@
  * ⚠ 取数失败一律走 `failure`，绝不把 `fetched` 留成空对象了事：一张空图与
  * 「这段时间确实没有数据」在界面上长得一模一样。
  */
-import { computed, ref, type ComputedRef, type Ref } from 'vue'
+import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
 
 import type { DatasetColumn, DatasetSeriesPoint } from '@dt/contracts'
 import type { DtChartSeries } from '@dt/ui'
@@ -129,6 +129,20 @@ export function useDatasetTrend(
   const range = ref<TrendRangeValue>(defaultTrendRange())
   const state = createState()
   const raced = useRacedFetch()
+
+  // 列是后到的（/trend 页先定表再拉列）：挂载那一刻按空列播种什么都没勾上，
+  // 列到了而用户还没动过勾选、也没查过，就补播一次
+  watch(items, (next, prev) => {
+    if (
+      prev.length === 0 &&
+      selected.value.length === 0 &&
+      !state.hasQueried.value
+    ) {
+      selected.value = seedTrendSelection(next)
+      // 挂载那一次的「进来就画」是按空勾选跑的，等于没画；补播之后再画一次
+      void runQuery(state, raced, tableId(), selected.value, range.value)
+    }
+  })
 
   const series = computed(() =>
     datasetChartSeries(state.fetched.value, items.value, selected.value),

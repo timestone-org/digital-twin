@@ -253,6 +253,7 @@ onMounted(async () => {
         回到编辑
       </DtButton>
       <DtButton
+        class="dt-ml-page__terse"
         variant="ghost"
         size="sm"
         icon="keyboard"
@@ -262,15 +263,18 @@ onMounted(async () => {
         快捷键
       </DtButton>
       <DtButton
+        class="dt-ml-page__terse"
         variant="ghost"
         size="sm"
         icon="list-checks"
+        title="运行历史"
         @click="isHistoryOpen = true"
       >
         运行历史
       </DtButton>
       <PermGuard :codes="[PERMISSION_CODES.modelingManage]">
         <DtButton
+          class="dt-ml-page__terse"
           variant="ghost"
           size="sm"
           icon="undo"
@@ -281,6 +285,7 @@ onMounted(async () => {
           撤销
         </DtButton>
         <DtButton
+          class="dt-ml-page__terse"
           variant="ghost"
           size="sm"
           icon="redo"
@@ -291,9 +296,11 @@ onMounted(async () => {
           重做
         </DtButton>
         <DtButton
+          class="dt-ml-page__terse"
           variant="ghost"
           size="sm"
           icon="save"
+          title="保存"
           :disabled="isReadonly || !page.graph.isDirty.value"
           :loading="page.doc.isSaving.value"
           @click="void saveGraph()"
@@ -412,8 +419,6 @@ onMounted(async () => {
       title="给这一步改个名"
       description="留空就用算子本来的名字。"
       width="22rem"
-      confirm-text="改名"
-      @confirm="applyRename"
       @update:model-value="renameNodeId = null"
     >
       <DtInput
@@ -422,12 +427,16 @@ onMounted(async () => {
         placeholder="例如：剔除异常行"
         @keyup.enter="applyRename"
       />
+      <template #footer>
+        <DtButton variant="ghost" @click="renameNodeId = null">取消</DtButton>
+        <DtButton @click="applyRename">改名</DtButton>
+      </template>
     </DtModal>
 
     <DtModal
       :model-value="resultPayload !== null"
       title="这一步的结果"
-      width="52rem"
+      width="56rem"
       @update:model-value="resultNodeId = null"
     >
       <ResultView v-if="resultPayload" :payload="resultPayload" />
@@ -453,6 +462,14 @@ onMounted(async () => {
     color: var(--text-secondary);
     font-family: var(--font-digit);
     font-size: var(--ctl-hint-fs-sm);
+    white-space: nowrap;
+  }
+
+  // 顶栏在 2xl 以下摆不开八颗按钮；这几颗都带图标与 title，缩成只有图标
+  @media (width < 96rem) {
+    &__terse :deep(.dt-btn__label) {
+      display: none;
+    }
   }
 
   &__main {
@@ -462,7 +479,8 @@ onMounted(async () => {
     gap: 0.5rem;
     min-width: 0;
     min-height: 0;
-    padding: 0.5rem;
+    // 只留左侧一格：画布框的上下边要与算子面板的外描边齐平
+    padding: 0 0 0 0.75rem;
   }
 
   &__canvas {

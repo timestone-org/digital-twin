@@ -67,7 +67,9 @@ const emit = defineEmits<{
 
       <!-- 调用写法直接给出来：台账列里要照着它写 @标识(实参) -->
       <template #cell-signature="{ row }">
-        <DtTag mono size="sm">{{ row.signature }}</DtTag>
+        <DtTag mono size="sm" class="max-w-full" :title="row.signature">
+          <span class="min-w-0 truncate">{{ row.signature }}</span>
+        </DtTag>
       </template>
 
       <template #cell-expression="{ row }">
