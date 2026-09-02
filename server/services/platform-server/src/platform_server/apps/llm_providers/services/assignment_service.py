@@ -14,17 +14,20 @@ from platform_server.apps.llm_providers import crud
 from platform_server.apps.llm_providers.enums import (
     PURPOSES,
     PurposeSpec,
+    provider_kind_of,
     purpose_of,
 )
 from platform_server.apps.llm_providers.errors import (
     LlmModelUnknown,
     LlmProviderNotFound,
+    LlmPurposeMismatch,
     LlmPurposeUnknown,
 )
 from platform_server.apps.llm_providers.models import (
     LlmAssignment,
     LlmProvider,
 )
+from platform_server.apps.llm_providers.rules import purpose_mismatch
 from platform_server.apps.llm_providers.schemas import (
     LlmAssignmentIn,
     LlmModelOut,
@@ -92,6 +95,7 @@ async def assign(
     provider = await crud.provider.get(session, body.provider_id)
     if provider is None:
         raise LlmProviderNotFound("没有这一路供应商")
+    _check_kind(spec, provider)
     _check_model(spec, provider, body.model_name)
     row = await crud.assignment.get(session, purpose)
     if row is None:
@@ -132,6 +136,20 @@ def _spec(purpose: str) -> PurposeSpec:
     if spec is None:
         raise LlmPurposeUnknown("未登记的用途")
     return spec
+
+
+def _check_kind(spec: PurposeSpec, provider: LlmProvider) -> None:
+    """这一路的接入形态接不接得了这个用途。
+
+    Args: spec, provider。
+    """
+    kind = provider_kind_of(provider.kind)
+    # pragma 理由：库里那一格由 CHECK 约束拦着
+    if kind is None:  # pragma: no cover
+        return
+    rejected = purpose_mismatch(kind, spec)
+    if rejected is not None:
+        raise LlmPurposeMismatch(rejected)
 
 
 def _check_model(spec: PurposeSpec, provider: LlmProvider, name: str) -> None:

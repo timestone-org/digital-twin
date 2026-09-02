@@ -22,6 +22,7 @@ from platform_server.apps.llm_providers.models import LlmProvider
 pytestmark = pytest.mark.requires_postgres
 
 PROVIDERS = "/api/v1/platform/llm-providers"
+KINDS = "/api/v1/platform/llm-provider-kinds"
 PURPOSES = "/api/v1/platform/llm-purposes"
 CATALOG = "/internal/v1/platform/llm-catalog"
 SECRET = "llm-provider-secret-0123456789abcdef"
@@ -268,3 +269,118 @@ async def test_without_the_secret_the_face_is_absent_not_broken(
     )
     assert catalog.status_code == httpx.codes.OK
     assert data_of(catalog)["providers"] == []
+
+
+def _codex_body(**overrides: object) -> dict[str, object]:
+    """一路靠登录的供应商：没有端点与密钥。"""
+    base: dict[str, object] = {
+        "name": "Codex",
+        "kind": "codex_oauth",
+        "models": [{"name": "gpt-5-codex", "kind": "chat"}],
+        "options": {"default_effort": "high"},
+    }
+    base.update(overrides)
+    return base
+
+
+async def test_a_login_based_provider_is_created_without_an_endpoint(
+    llm_context: AppContext,
+) -> None:
+    response = await llm_context.client.post(PROVIDERS, json=_codex_body())
+    assert response.status_code == HTTP_CREATED, response.text
+    created = data_of(response)
+    assert created["kind"] == "codex_oauth"
+    assert created["base_url"] == ""
+    assert created["api_key_hint"] == ""
+    assert created["options"] == {"default_effort": "high"}
+
+
+async def test_a_login_based_provider_cannot_be_probed(
+    llm_context: AppContext,
+) -> None:
+    """⚠ 没有端点就没得探：放行的话它会拿空地址打出去，
+    而报出来的是一条连不上的网络错。"""
+    created = data_of(
+        await llm_context.client.post(PROVIDERS, json=_codex_body())
+    )
+    response = await llm_context.client.post(
+        f"{PROVIDERS}/{created['id']}:probe"
+    )
+    assert response.status_code == HTTP_BAD_REQUEST
+
+
+async def test_a_login_based_provider_serves_the_assistant(
+    llm_context: AppContext,
+) -> None:
+    created = data_of(
+        await llm_context.client.post(PROVIDERS, json=_codex_body())
+    )
+    response = await llm_context.client.put(
+        f"{PURPOSES}/assistant.chat",
+        json={"provider_id": created["id"], "model_name": "gpt-5-codex"},
+    )
+    assert response.status_code == 200, response.text
+
+
+async def test_a_login_based_provider_is_refused_by_the_other_consumer(
+    llm_context: AppContext,
+) -> None:
+    """⚠ 知识库没接这一路的适配器：放行的话分配写得进去、那一侧却永远
+    沿用环境变量那一档，而界面上显示配好了。"""
+    created = data_of(
+        await llm_context.client.post(PROVIDERS, json=_codex_body())
+    )
+    response = await llm_context.client.put(
+        f"{PURPOSES}/knowledge.chat",
+        json={"provider_id": created["id"], "model_name": "gpt-5-codex"},
+    )
+    assert response.status_code == HTTP_BAD_REQUEST
+
+
+async def test_an_update_that_breaks_the_shape_is_rejected(
+    llm_context: AppContext,
+) -> None:
+    """⚠ 按改完的样子判：只传 models 的那一次也能让一路 Codex 上多出一个
+    没有任何一侧读得到的嵌入模型。"""
+    created = data_of(
+        await llm_context.client.post(PROVIDERS, json=_codex_body())
+    )
+    response = await llm_context.client.patch(
+        f"{PROVIDERS}/{created['id']}",
+        json={"models": [{"name": "e", "kind": "embedding", "dimensions": 8}]},
+    )
+    assert response.status_code == HTTP_BAD_REQUEST
+
+
+async def test_the_internal_catalog_carries_the_kind_and_options(
+    llm_context: AppContext, settings: Any
+) -> None:
+    await llm_context.client.post(PROVIDERS, json=_codex_body())
+    body = data_of(
+        await llm_context.client.get(
+            CATALOG,
+            headers={
+                "X-Service-Key": settings.edge_service_key.get_secret_value()
+            },
+        )
+    )
+    provider = body["providers"][0]
+    assert provider["kind"] == "codex_oauth"
+    assert provider["api_key"] == ""
+    assert provider["options"] == {"default_effort": "high"}
+
+
+async def test_the_kind_catalog_describes_what_to_configure(
+    llm_context: AppContext,
+) -> None:
+    """⚠ 前端按它渲染表单：这一份与后端校验漂开的表现是「表单里填了、
+    保存时 422」，而那句话指不回是哪一格多余。"""
+    listed = data_of(await llm_context.client.get(KINDS))
+    by_code = {one["code"]: one for one in listed}
+    assert by_code["openai_compat"]["is_endpoint_required"] is True
+    assert by_code["openai_compat"]["presets"][0]["code"] == "dashscope"
+    codex = by_code["codex_oauth"]
+    assert codex["is_endpoint_required"] is False
+    assert codex["is_login_required"] is True
+    assert codex["consumers"] == ["assistant"]
+    assert codex["efforts"] == ["low", "medium", "high", "xhigh"]

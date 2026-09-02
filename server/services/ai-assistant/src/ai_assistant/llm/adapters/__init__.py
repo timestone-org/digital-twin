@@ -1,15 +1,16 @@
-"""这套部署能接哪几路模型来源。
+"""这套部署接得上哪几路模型，以及一路供应商怎么变成一个适配器。
 
-⚠ 注册是**显式的一步**（下面那个字面量元组），不靠 import 副作用（ADR-0029
-决策四）：隐式注册会让「装了哪几路」取决于 import 顺序，而顺序在测试里与生产里
-可以不同。加一路 = 加一个文件 + 这个元组里一行。
+⚠ **形态 → 装配口子**的注册表是显式的一份字面量表（ADR-0029 决策四），不靠
+import 副作用：隐式注册会让「接得了哪几种」取决于 import 顺序，而顺序在测试里
+与生产里可以不同。接一种新形态 = 加一个文件 + 这张表里一行 + 一条契约测试。
 
-⚠ 顺序即优先级：`profiles()` 与「认不出的档位名退回第一路」都按它。
+⚠ 认不出的形态**如实缺席**而不是猜着接：平台那边加了一档而这一侧还没接时，
+正确的行为是「界面上配得出、助手说这一路我接不了」，不是拿端点那一路的接法
+去打一个根本不是那么接的地方。
 
-⚠ 按量那一路的端点**先问目录、再退环境变量**（ADR-0039）：目录是平台上配的
-「各用途走哪一路模型」，运行期可改；环境变量是它的永久默认值。有目录时这一路
-总是装得出来（此刻解不解得出端点由 `supports` 如实回答），没目录也没环境变量
-时才不装。
+⚠ 环境变量那两路是目录的**永久默认值**（config-and-secrets §7.1）：目录里有了
+同一形态的供应商就以目录为准，一路都没有时才轮到它们。按形态逐格顶替而不是
+「目录一非空就全顶掉」——配了一路订阅账号不该把好端端的按量那一路挤没。
 """
 
 from collections.abc import Callable
@@ -17,24 +18,33 @@ from dataclasses import dataclass
 
 from ai_assistant.llm.adapters.codex_oauth import (
     CodexOAuthAdapter,
-    build_codex_oauth,
+    build_catalog_codex,
+    build_env_codex,
+)
+from ai_assistant.llm.adapters.endpoint import (
+    build_env_endpoint,
+    endpoint_on,
+    timeout_of,
 )
 from ai_assistant.llm.codex.token_provider import TokenSource
 from ai_assistant.llm.ports import (
-    DEFAULT_PROFILE,
+    PROVIDER_KIND_CODEX_OAUTH,
+    PROVIDER_KIND_OPENAI_COMPAT,
     PURPOSE_EMBEDDING,
-    PURPOSE_OF_KIND,
     ModelAdapter,
     ModelKind,
 )
 from ai_assistant.settings import Settings
 from llmcore import (
+    MODEL_KIND_CHAT,
     CatalogSource,
     ChatEndpoint,
     DynamicEmbeddingAdapter,
     EmbeddingAdapter,
     EmbeddingEndpoint,
+    ModelCatalog,
     OpenAiCompatAdapter,
+    ProviderSpec,
 )
 
 
@@ -42,7 +52,7 @@ from llmcore import (
 class AdapterDeps:
     """装一路来源要的那几样。
 
-    ⚠ 打成一包而不是逐个形参：装配口子的形状要全部来源共用，而每多接一种
+    ⚠ 打成一包而不是逐个形参：装配口子的形状要全部形态共用，而每多接一种
     东西（目录、凭据面）就要改每一路的签名。
     """
 
@@ -53,28 +63,82 @@ class AdapterDeps:
     catalog: CatalogSource | None = None
 
 
-# 一路来源的装配口子。⚠ 接不上时给 `None` 而不是抛：那一路就是没接，
-# 而整个服务在没接模型时仍然要能起、会话历史仍然要能读
-AdapterBuilder = Callable[[AdapterDeps], ModelAdapter | None]
+# 把目录里的一路供应商变成一个适配器。⚠ 接不上时给 `None` 而不是抛：
+# 那一路就是没接，而整个服务在没接模型时仍然要能起、会话历史仍然要能读
+ProviderAdapterBuilder = Callable[
+    [ProviderSpec, AdapterDeps], ModelAdapter | None
+]
 
 
-def resolve_chat_endpoint(
-    deps: AdapterDeps, kind: ModelKind
-) -> ChatEndpoint | None:
-    """这一档此刻该打哪：目录里分配了就走目录，否则退环境变量那一档。
+def _endpoint(provider: ProviderSpec, deps: AdapterDeps) -> ModelAdapter:
+    catalog = deps.catalog
+    provider_id = provider.id
 
-    ⚠ 回落链在这里逐格写全：目录里的用途与 `Settings.endpoint_of` 的档位一一
-    对应，漏一格的表现是「界面上分配了看图模型，看图那一轮还在打旧地址」。
+    def resolve(kind: ModelKind) -> ChatEndpoint | None:
+        # pragma 理由：只有装了目录才会走到这里，见 `build_adapters`
+        if catalog is None:  # pragma: no cover
+            return None
+        snapshot = catalog.snapshot()
+        # ⚠ 按 id 从**此刻**的快照里取，不用装配时那一份：换密钥不改目录摘要
+        # （摘要刻意不含密钥），而适配器是按摘要缓存的——用装配时那一份的话，
+        # 换了密钥要等到别的什么改动才生效，而现象是每次调用都撞 401
+        live = snapshot.provider(provider_id) or provider
+        return endpoint_on(live, kind, snapshot, deps.settings)
 
-    Args: deps, kind。
+    return OpenAiCompatAdapter(
+        resolve=resolve,
+        label=provider.name,
+        models=tuple(one.name for one in provider.models_of(MODEL_KIND_CHAT)),
+        id=provider.id,
+    )
+
+
+def _codex(provider: ProviderSpec, deps: AdapterDeps) -> ModelAdapter | None:
+    return build_catalog_codex(provider, deps.settings, deps.tokens)
+
+
+# 形态 → 装配口子。⚠ 这张表就是「本服务接得了哪几种供应商」的全部答案
+KIND_BUILDERS: dict[str, ProviderAdapterBuilder] = {
+    PROVIDER_KIND_OPENAI_COMPAT: _endpoint,
+    PROVIDER_KIND_CODEX_OAUTH: _codex,
+}
+
+
+def build_adapters(deps: AdapterDeps) -> tuple[ModelAdapter, ...]:
+    """按此刻的目录装出接得上的那几路，保持目录序。
+
+    Args: deps。
     """
-    if deps.catalog is not None:
-        from_catalog = deps.catalog.snapshot().chat_endpoint(
-            PURPOSE_OF_KIND[kind], timeout_s=_timeout_of(deps.settings, kind)
-        )
-        if from_catalog is not None:
-            return from_catalog
-    return deps.settings.endpoint_of(kind)
+    listed: list[ModelAdapter] = []
+    covered: set[str] = set()
+    for provider in _providers(deps.catalog):
+        make = KIND_BUILDERS.get(provider.kind)
+        if make is None:
+            continue
+        made = make(provider, deps)
+        if made is None:
+            continue
+        listed.append(made)
+        covered.add(provider.kind)
+    listed.extend(_env_adapters(deps, covered))
+    return tuple(listed)
+
+
+def build_openai_embedding(deps: AdapterDeps) -> EmbeddingAdapter | None:
+    """嵌入那一路。目录与环境变量都没接时给 `None`——本部署可以只记不查。
+
+    ⚠ 它不是一个档位：返回的是向量不是对话模型，故不进 `build_adapters`
+    那一串，也不出现在面板的下拉里。
+
+    Args: deps。
+    """
+    if deps.catalog is None and deps.settings.embedding_endpoint() is None:
+        return None
+    catalog = deps.catalog
+    return DynamicEmbeddingAdapter(
+        resolve=lambda: resolve_embedding_endpoint(deps),
+        refresh=None if catalog is None else catalog.refresh,
+    )
 
 
 def resolve_embedding_endpoint(deps: AdapterDeps) -> EmbeddingEndpoint | None:
@@ -95,79 +159,42 @@ def resolve_embedding_endpoint(deps: AdapterDeps) -> EmbeddingEndpoint | None:
     return deps.settings.embedding_endpoint()
 
 
-def build_openai_compat(deps: AdapterDeps) -> OpenAiCompatAdapter | None:
-    """按量计费那一路。目录与环境变量都没接时给 `None`——这一路就是没接。
+def _providers(catalog: CatalogSource | None) -> tuple[ProviderSpec, ...]:
+    """目录里此刻开着的那几路；没接目录时是空的。
 
-    Args: deps。
+    Args: catalog。
     """
-    if deps.catalog is None and deps.settings.endpoint_of("chat") is None:
-        return None
-
-    def resolve(kind: ModelKind) -> ChatEndpoint | None:
-        return resolve_chat_endpoint(deps, kind)
-
-    return OpenAiCompatAdapter(
-        resolve=resolve,
-        label="按量计费端点",
-        models=(deps.settings.model_chat,),
-        id=DEFAULT_PROFILE,
-    )
+    if catalog is None:
+        return ()
+    snapshot: ModelCatalog = catalog.snapshot()
+    return snapshot.enabled_providers()
 
 
-def build_openai_embedding(deps: AdapterDeps) -> EmbeddingAdapter | None:
-    """嵌入那一路。目录与环境变量都没接时给 `None`——本部署可以只记不查。
+def _env_adapters(deps: AdapterDeps, covered: set[str]) -> list[ModelAdapter]:
+    """环境变量配出来的那几路里，还没被目录顶替掉的。
 
-    Args: deps。
+    Args: deps, covered（目录里已经出现过的形态）。
     """
-    if deps.catalog is None and deps.settings.embedding_endpoint() is None:
-        return None
-    catalog = deps.catalog
-    return DynamicEmbeddingAdapter(
-        resolve=lambda: resolve_embedding_endpoint(deps),
-        refresh=None if catalog is None else catalog.refresh,
-    )
-
-
-def _timeout_of(settings: Settings, kind: ModelKind) -> float:
-    """这一档的调用预算：看图那一档单配，别的档共用对话档的。
-
-    Args: settings, kind。
-    """
-    if kind == "vision" and settings.vision_timeout_s is not None:
-        return settings.vision_timeout_s
-    return settings.model_timeout_s
-
-
-def _openai(deps: AdapterDeps) -> ModelAdapter | None:
-    return build_openai_compat(deps)
-
-
-def _codex(deps: AdapterDeps) -> ModelAdapter | None:
-    return build_codex_oauth(deps.settings, deps.tokens)
-
-
-ADAPTER_BUILDERS: tuple[AdapterBuilder, ...] = (_openai, _codex)
-
-
-def build_adapters(deps: AdapterDeps) -> tuple[ModelAdapter, ...]:
-    """按配置装出这套部署真接得上的那几路，保持注册序。
-
-    Args: deps。
-    """
-    found = [make(deps) for make in ADAPTER_BUILDERS]
-    return tuple(one for one in found if one is not None)
+    listed: list[ModelAdapter] = []
+    if PROVIDER_KIND_OPENAI_COMPAT not in covered:
+        made = build_env_endpoint(deps.settings)
+        if made is not None:
+            listed.append(made)
+    if PROVIDER_KIND_CODEX_OAUTH not in covered:
+        codex = build_env_codex(deps.settings, deps.tokens)
+        if codex is not None:
+            listed.append(codex)
+    return listed
 
 
 __all__ = [
-    "ADAPTER_BUILDERS",
-    "AdapterBuilder",
+    "KIND_BUILDERS",
     "AdapterDeps",
     "CodexOAuthAdapter",
     "OpenAiCompatAdapter",
+    "ProviderAdapterBuilder",
     "build_adapters",
-    "build_codex_oauth",
-    "build_openai_compat",
     "build_openai_embedding",
-    "resolve_chat_endpoint",
     "resolve_embedding_endpoint",
+    "timeout_of",
 ]

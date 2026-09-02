@@ -10,6 +10,7 @@ import { computed, ref, shallowRef, type Ref } from 'vue'
 import type {
   AssistantCapability,
   LlmProvider,
+  LlmProviderKind,
   LlmPurpose,
 } from '@dt/contracts'
 
@@ -28,6 +29,8 @@ export const LLM_DISABLED_CODE = 52401
 
 export interface ModelCatalog {
   providers: Ref<LlmProvider[]>
+  /** 这套部署接得了哪几种供应商；表单按它摆格子 */
+  kinds: Ref<LlmProviderKind[]>
   purposes: Ref<LlmPurpose[]>
   assistant: Ref<AssistantCapability | null>
   knowledge: Ref<KnowledgeCapability | null>
@@ -50,6 +53,7 @@ export interface ModelCatalog {
 /** 页面持有的那几格状态，函数之间靠它传，不靠闭包。 */
 interface State {
   providers: Ref<LlmProvider[]>
+  kinds: Ref<LlmProviderKind[]>
   purposes: Ref<LlmPurpose[]>
   assistant: Ref<AssistantCapability | null>
   knowledge: Ref<KnowledgeCapability | null>
@@ -61,15 +65,17 @@ interface State {
 
 interface Loaded {
   providers: LlmProvider[]
+  kinds: LlmProviderKind[]
   purposes: LlmPurpose[]
 }
 
 async function fetchCatalog(signal: AbortSignal): Promise<Loaded> {
-  const [page, listed] = await Promise.all([
+  const [page, kinds, listed] = await Promise.all([
     llm.listProviders({ size: PAGE_SIZE }, signal),
+    llm.listKinds(signal),
     llm.listPurposes(signal),
   ])
-  return { providers: page.items, purposes: listed }
+  return { providers: page.items, kinds, purposes: listed }
 }
 
 async function reloadEffective(state: State): Promise<void> {
@@ -91,6 +97,7 @@ async function reload(state: State): Promise<void> {
     state.raced.run(fetchCatalog, {
       ok: (loaded) => {
         state.providers.value = loaded.providers
+        state.kinds.value = loaded.kinds
         state.purposes.value = loaded.purposes
         state.isDisabled.value = false
       },
@@ -146,6 +153,7 @@ async function remove(state: State, provider: LlmProvider): Promise<void> {
 export function useModelCatalog(): ModelCatalog {
   const state: State = {
     providers: shallowRef<LlmProvider[]>([]),
+    kinds: shallowRef<LlmProviderKind[]>([]),
     purposes: shallowRef<LlmPurpose[]>([]),
     assistant: shallowRef<AssistantCapability | null>(null),
     knowledge: shallowRef<KnowledgeCapability | null>(null),
@@ -156,6 +164,7 @@ export function useModelCatalog(): ModelCatalog {
   }
   return {
     providers: state.providers,
+    kinds: state.kinds,
     purposes: state.purposes,
     assistant: state.assistant,
     knowledge: state.knowledge,

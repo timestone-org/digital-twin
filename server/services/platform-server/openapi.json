@@ -4888,6 +4888,55 @@
         "title": "ApiResponse[list[FormulaUsageOut]]",
         "type": "object"
       },
+      "ApiResponse_list_LlmProviderKindOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/LlmProviderKindOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[list[LlmProviderKindOut]]",
+        "type": "object"
+      },
       "ApiResponse_list_LlmPurposeOut__": {
         "properties": {
           "code": {
@@ -9577,22 +9626,36 @@
       },
       "LlmProviderIn": {
         "additionalProperties": false,
-        "description": "新建一路供应商。",
+        "description": "新建一路供应商。要配哪几格由 `kind` 说了算。",
         "properties": {
           "api_key": {
-            "format": "password",
-            "maxLength": 512,
-            "minLength": 1,
-            "title": "Api Key",
-            "type": "string",
-            "writeOnly": true
+            "anyOf": [
+              {
+                "format": "password",
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
           },
           "base_url": {
-            "maxLength": 512,
-            "minLength": 8,
-            "pattern": "^https?://[^\\s/]+",
-            "title": "Base Url",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 8,
+                "pattern": "^https?://[^\\s/]+",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
           },
           "extra_body": {
             "anyOf": [
@@ -9610,6 +9673,15 @@
             "default": true,
             "title": "Is Enabled",
             "type": "boolean"
+          },
+          "kind": {
+            "default": "openai_compat",
+            "enum": [
+              "openai_compat",
+              "codex_oauth"
+            ],
+            "title": "Kind",
+            "type": "string"
           },
           "models": {
             "items": {
@@ -9630,14 +9702,90 @@
             "maxLength": 2000,
             "title": "Notes",
             "type": "string"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
           }
         },
         "required": [
-          "name",
-          "base_url",
-          "api_key"
+          "name"
         ],
         "title": "LlmProviderIn",
+        "type": "object"
+      },
+      "LlmProviderKindOut": {
+        "description": "一种接入形态：界面按它决定摆哪几格、后端按它校验。\n\n⚠ 由后端下发而不是前端写死：两份漂开的表现是「表单里填了、保存时 422」，\n而报出来的那句话指不回是哪一格多余。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "consumers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Consumers",
+            "type": "array"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "efforts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Efforts",
+            "type": "array"
+          },
+          "is_endpoint_required": {
+            "title": "Is Endpoint Required",
+            "type": "boolean"
+          },
+          "is_login_required": {
+            "title": "Is Login Required",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "model_kinds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Model Kinds",
+            "type": "array"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/LlmProviderPresetOut"
+            },
+            "title": "Presets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "code",
+          "label",
+          "description",
+          "is_endpoint_required",
+          "is_login_required",
+          "model_kinds",
+          "consumers",
+          "efforts",
+          "presets"
+        ],
+        "title": "LlmProviderKindOut",
         "type": "object"
       },
       "LlmProviderOut": {
@@ -9684,6 +9832,10 @@
             "title": "Is Enabled",
             "type": "boolean"
           },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
           "models": {
             "items": {
               "$ref": "#/components/schemas/LlmModelOut"
@@ -9698,6 +9850,18 @@
           "notes": {
             "title": "Notes",
             "type": "string"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
           },
           "updated_at": {
             "format": "date-time",
@@ -9719,10 +9883,12 @@
         "required": [
           "id",
           "name",
+          "kind",
           "base_url",
           "api_key_hint",
           "is_enabled",
           "extra_body",
+          "options",
           "models",
           "notes",
           "updated_by",
@@ -9732,9 +9898,33 @@
         "title": "LlmProviderOut",
         "type": "object"
       },
+      "LlmProviderPresetOut": {
+        "description": "建一路时能一键填上的一套取值。",
+        "properties": {
+          "base_url": {
+            "title": "Base Url",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "label",
+          "base_url"
+        ],
+        "title": "LlmProviderPresetOut",
+        "type": "object"
+      },
       "LlmProviderUpdateIn": {
         "additionalProperties": false,
-        "description": "改一路供应商。缺省的字段不动；`api_key` 不给即沿用旧的。",
+        "description": "改一路供应商。缺省的字段不动；`api_key` 不给即沿用旧的。\n\n⚠ 没有 `kind`：改形态等于换一路接法，密钥、登录态与模型清单全部作废——\n那是「删了重建」，不是「改一格」。",
         "properties": {
           "api_key": {
             "anyOf": [
@@ -9827,6 +10017,18 @@
               }
             ],
             "title": "Notes"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
           }
         },
         "title": "LlmProviderUpdateIn",
@@ -24888,6 +25090,28 @@
         "summary": "存活探针",
         "tags": [
           "probe"
+        ]
+      }
+    },
+    "/api/v1/platform/llm-provider-kinds": {
+      "get": {
+        "description": "接得了哪几种供应商，按目录顺序。\n\nArgs: _viewer。",
+        "operationId": "list_all_api_v1_platform_llm_provider_kinds_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_LlmProviderKindOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "供应商形态清单",
+        "tags": [
+          "llm-provider"
         ]
       }
     },

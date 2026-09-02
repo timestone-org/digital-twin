@@ -7,37 +7,16 @@
 
 from typing import Annotated
 
-from pydantic import (
-    AfterValidator,
-    BaseModel,
-    ConfigDict,
-    Field,
-    WithJsonSchema,
-)
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from ai_assistant.apps.credential.enums import PROVIDERS
 from ai_assistant.apps.credential.schemas.common import Utc
 
-
-def _known_provider(value: str) -> str:
-    """未登记的模型来路一律拒。
-
-    ⚠ 放行的话它会建出一行永远不会被任何一路读到的凭据，
-    而界面上表现为「登录成功了但助手说没登录」。
-
-    Args: value。
-    """
-    if value not in PROVIDERS:
-        raise ValueError(f"未登记的模型来路：{value}")
-    return value
-
-
-# ⚠ `WithJsonSchema` 里必须摊出取值：闭合集合只写在校验器里的话，openapi 里
-# 它就是裸 `string`，前端由它生成的类型于是允许任意字符串
+# 一路要登录的供应商的键：目录里那一路的 id，或环境变量那一路的种类
+# （`codex`）。⚠ **不是闭合集合**——目录是运行期配出来的，写死一份取值等于
+# 让新配的那一路永远登录不了。认不认得出由端点问注册表，见 `deps.py`
 Provider = Annotated[
     str,
-    AfterValidator(_known_provider),
-    WithJsonSchema({"type": "string", "enum": list(PROVIDERS)}),
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=64),
 ]
 
 

@@ -1,4 +1,8 @@
-"""模型凭据表：一路模型一行，整套部署共用。
+"""模型凭据表：一路要登录的供应商一行，整套部署共用。
+
+⚠ 认这一行的是 `provider_ref`（目录里那一路供应商的 id），而 `provider` 存的是
+**凭据种类**。环境变量配出来的那一路没有目录 id，它的 `provider_ref` 是空的，
+读侧于是按 `coalesce(provider_ref, provider)` 认——这也让存量那一行照旧读得到。
 
 ⚠ 令牌**只以密文入库**（`token_enc`），明文一个字都不落。旁边那几列
 （账号、订阅档、过期时刻）是给界面看的，从令牌里解出来时顺手抄一份——
@@ -14,7 +18,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from ai_assistant.apps.credential.enums import (
     AUTH_MODES,
-    PROVIDERS,
+    PROVIDER_KINDS,
     sql_values,
 )
 from ai_assistant.apps.credential.models.base import Base
@@ -26,12 +30,20 @@ ACCOUNT_MAX_LENGTH = 128
 
 
 class ModelCredential(UuidPrimaryKeyMixin, TimestampMixin, Base):
-    """一路模型的登录态。一个 provider 只有一行。"""
+    """一路供应商的登录态。一路只有一行。"""
 
     __tablename__ = "model_credentials"
 
+    # 凭据种类。⚠ 闭合集合，不是那一路的身份——身份在 `provider_ref`
     provider: Mapped[str] = mapped_column(
-        String(PROVIDER_MAX_LENGTH), nullable=False, unique=True
+        String(PROVIDER_MAX_LENGTH), nullable=False
+    )
+    # 目录里那一路供应商的 id。⚠ 可空：环境变量配出来的那一路不在目录里，
+    # 它那一行靠 `provider` 认。不建外键指向平台的表——跨 schema 外键是三条
+    # 禁令之一，何况那张表在另一个服务的属主范围里
+    # ⚠ 一路供应商只许有一行；空值互不相撞，故环境变量那一路那几行不受它管
+    provider_ref: Mapped[str | None] = mapped_column(
+        Text, nullable=True, unique=True
     )
     auth_mode: Mapped[str] = mapped_column(
         String(AUTH_MODE_MAX_LENGTH), nullable=False
@@ -64,7 +76,8 @@ class ModelCredential(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
     __table_args__ = (
         CheckConstraint(
-            f"provider IN ({sql_values(PROVIDERS)})", name="provider_known"
+            f"provider IN ({sql_values(PROVIDER_KINDS)})",
+            name="provider_known",
         ),
         CheckConstraint(
             f"auth_mode IN ({sql_values(AUTH_MODES)})", name="auth_mode_known"

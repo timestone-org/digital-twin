@@ -9,7 +9,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { DtConfirmHost, DtToastHost, useConfirm, useToast } from '@dt/ui'
-import type { LlmProvider, LlmPurpose } from '@dt/contracts'
+import type { LlmProvider, LlmProviderKind, LlmPurpose } from '@dt/contracts'
 
 import * as assistant from '@/api/assistant'
 import { BizError } from '@/api/client'
@@ -52,10 +52,12 @@ function provider(over: Partial<LlmProvider> = {}): LlmProvider {
   return {
     id: 'p1',
     name: '百炼',
+    kind: 'openai_compat',
     base_url: 'https://endpoint/compatible-mode/v1',
     api_key_hint: '…1234',
     is_enabled: true,
     extra_body: null,
+    options: null,
     models: [
       { name: 'qwen-plus', kind: 'chat', has_vision: true, dimensions: null },
     ],
@@ -104,6 +106,32 @@ const CODEX = {
   efforts: ['low', 'medium'],
 }
 
+/** 目录里配出来的一路订阅账号：它在这一页上摆的是登录，不是端点。 */
+const CODEX_KIND: LlmProviderKind = {
+  code: 'codex_oauth',
+  label: 'Codex 订阅',
+  description: '登录一次',
+  is_endpoint_required: false,
+  is_login_required: true,
+  model_kinds: ['chat'],
+  consumers: ['assistant'],
+  efforts: ['low', 'medium', 'high', 'xhigh'],
+  presets: [],
+}
+
+/** 后端下发的形态清单：表格与表单都按它摆。 */
+const KIND: LlmProviderKind = {
+  code: 'openai_compat',
+  label: 'OpenAI 兼容端点',
+  description: '填端点与密钥',
+  is_endpoint_required: true,
+  is_login_required: false,
+  model_kinds: ['chat', 'embedding'],
+  consumers: ['assistant', 'knowledge'],
+  efforts: [],
+  presets: [],
+}
+
 function page<T>(items: T[]) {
   return { items, page: 1, size: 200, total: items.length }
 }
@@ -112,6 +140,7 @@ beforeEach(() => {
   setActivePinia(createPinia())
   localStorage.clear()
   vi.spyOn(llm, 'listProviders').mockResolvedValue(page([provider()]))
+  vi.spyOn(llm, 'listKinds').mockResolvedValue([KIND])
   vi.spyOn(llm, 'listPurposes').mockResolvedValue([purpose()])
   vi.spyOn(assistant, 'probeCapability').mockResolvedValue(capability([]))
   vi.spyOn(assistant, 'readCredential').mockResolvedValue(null)
@@ -268,6 +297,31 @@ describe('模型管理页', () => {
     withCode.unmount()
     const without = await render([VIEW, MANAGE])
     expect(without.text()).not.toContain('登录账号')
+  })
+
+  it('目录里配出来的订阅账号那一路各摆一份登录，端点那几路不受影响', async () => {
+    vi.spyOn(llm, 'listKinds').mockResolvedValue([KIND, CODEX_KIND])
+    vi.spyOn(llm, 'listProviders').mockResolvedValue(
+      page([
+        provider(),
+        provider({ id: 'p2', name: '我的 Codex', kind: 'codex_oauth' }),
+      ]),
+    )
+    const wrapper = await render([VIEW, MANAGE, ASSISTANT_MANAGE])
+    expect(wrapper.text()).toContain('我的 Codex')
+    expect(wrapper.text()).toContain('登录账号')
+    expect(assistant.readCredential).toHaveBeenCalledWith('p2')
+  })
+
+  it('没有端点的那一路不摆「测试连接」', async () => {
+    // ⚠ 摆出来的话点下去收到的是一条 400：那一路根本没有地址可探
+    vi.spyOn(llm, 'listKinds').mockResolvedValue([CODEX_KIND])
+    vi.spyOn(llm, 'listProviders').mockResolvedValue(
+      page([provider({ id: 'p2', name: '我的 Codex', kind: 'codex_oauth' })]),
+    )
+    const wrapper = await render()
+    expect(wrapper.find('button[aria-label="测试连接"]').exists()).toBe(false)
+    expect(wrapper.find('button[aria-label="编辑"]').exists()).toBe(true)
   })
 
   it('只有 llm:view 的人看得见目录但没有任何写按钮', async () => {

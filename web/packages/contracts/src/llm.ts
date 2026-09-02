@@ -12,6 +12,14 @@
 export const LLM_MODEL_KINDS = ['chat', 'embedding'] as const
 export type LlmModelKind = (typeof LLM_MODEL_KINDS)[number]
 
+/**
+ * 一路供应商的接入形态。⚠ 与 platform-server `apps/llm_providers/enums.py`
+ * 和助手的 `llm/ports.py` 逐字一致；漂开的表现是「界面上配好了一路 Codex、
+ * 助手却当它不存在」，而两边代码单看都对。
+ */
+export const LLM_PROVIDER_KINDS = ['openai_compat', 'codex_oauth'] as const
+export type LlmProviderKindCode = (typeof LLM_PROVIDER_KINDS)[number]
+
 /** 用途属于哪个消费方，界面按它分组。 */
 export const LLM_CONSUMERS = ['assistant', 'knowledge'] as const
 export type LlmConsumer = (typeof LLM_CONSUMERS)[number]
@@ -31,6 +39,35 @@ export const LLM_PURPOSES = [
 ] as const
 export type LlmPurposeCode = (typeof LLM_PURPOSES)[number]
 
+/** 建一路供应商时能一键填上的一套取值。 */
+export interface LlmProviderPreset {
+  code: string
+  label: string
+  base_url: string
+}
+
+/**
+ * 一种接入形态：界面按它决定摆哪几格、后端按同一份校验。
+ * ⚠ 由后端下发而不是前端写死：两份漂开的表现是「表单里填了、保存时 422」，
+ * 而那句话指不回是哪一格多余。
+ */
+export interface LlmProviderKind {
+  code: string
+  label: string
+  description: string
+  /** 要不要填端点与密钥。为假的那些形态靠登录拿令牌。 */
+  is_endpoint_required: boolean
+  /** 要不要先走一次登录（设备码）。 */
+  is_login_required: boolean
+  /** 这一形态登记得了哪几种模型。 */
+  model_kinds: string[]
+  /** 哪几个消费方接得了它。 */
+  consumers: string[]
+  /** 可调的推理档位；空表示这一形态没有这一档。 */
+  efforts: string[]
+  presets: LlmProviderPreset[]
+}
+
 /** 一路供应商上登记的一个模型。 */
 export interface LlmModel {
   name: string
@@ -44,12 +81,17 @@ export interface LlmModel {
 export interface LlmProvider {
   id: string
   name: string
+  /** 接入形态。建了就不许改——改形态等于换一路接法。 */
+  kind: string
+  /** 靠登录的那些形态没有端点，这一格是空串。 */
   base_url: string
   /** 密钥尾巴，形如 `…a1b2`。只回答「填的是不是那一把」。 */
   api_key_hint: string
   is_enabled: boolean
   /** 透传给端点的额外请求体（思考开关一类）；没配是 null。 */
   extra_body: Record<string, unknown> | null
+  /** 这一形态自己的那几格配置（推理档位一类）；没配是 null。 */
+  options: Record<string, unknown> | null
   models: LlmModel[]
   notes: string
   /** 此刻指着这一路的用途码；删之前界面要把它们摆出来。 */

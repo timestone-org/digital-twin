@@ -7,7 +7,9 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
-import type { LlmProvider } from '@dt/contracts'
+import type { LlmProvider, LlmProviderKind } from '@dt/contracts'
+
+import { DtSelect } from '@dt/ui'
 
 import * as llm from '@/api/llmProviders'
 import ProviderFormDialog from '@/pages/System/Models/components/ProviderFormDialog.vue'
@@ -16,10 +18,12 @@ function provider(over: Partial<LlmProvider> = {}): LlmProvider {
   return {
     id: 'p1',
     name: '百炼',
+    kind: 'openai_compat',
     base_url: 'https://endpoint/v1',
     api_key_hint: '…1234',
     is_enabled: true,
     extra_body: null,
+    options: null,
     models: [
       { name: 'qwen-plus', kind: 'chat', has_vision: false, dimensions: null },
     ],
@@ -32,9 +36,41 @@ function provider(over: Partial<LlmProvider> = {}): LlmProvider {
   }
 }
 
+/** 后端下发的形态清单：表单按它摆格子。 */
+const KINDS: LlmProviderKind[] = [
+  {
+    code: 'openai_compat',
+    label: 'OpenAI 兼容端点',
+    description: '填端点与密钥',
+    is_endpoint_required: true,
+    is_login_required: false,
+    model_kinds: ['chat', 'embedding'],
+    consumers: ['assistant', 'knowledge'],
+    efforts: [],
+    presets: [
+      {
+        code: 'dashscope',
+        label: '阿里云百炼',
+        base_url: 'https://dashscope.example/v1',
+      },
+    ],
+  },
+  {
+    code: 'codex_oauth',
+    label: 'Codex 订阅',
+    description: '登录一次',
+    is_endpoint_required: false,
+    is_login_required: true,
+    model_kinds: ['chat'],
+    consumers: ['assistant'],
+    efforts: ['low', 'medium', 'high', 'xhigh'],
+    presets: [],
+  },
+]
+
 function render(editing: LlmProvider | null = null) {
   return mount(ProviderFormDialog, {
-    props: { modelValue: true, provider: editing },
+    props: { modelValue: true, provider: editing, kinds: KINDS },
     global: { stubs: { teleport: true } },
   })
 }
@@ -98,10 +134,12 @@ describe('供应商弹窗', () => {
     await clickButton(wrapper, '保存')
     expect(llm.createProvider).toHaveBeenCalledWith({
       name: '百炼',
+      kind: 'openai_compat',
       base_url: 'https://endpoint/v1/',
       api_key: 'sk-secret',
       is_enabled: true,
       extra_body: null,
+      options: null,
       models: [
         {
           name: 'qwen-plus',
@@ -152,5 +190,60 @@ describe('供应商弹窗', () => {
     expect(llm.probeProvider).toHaveBeenCalledWith('p1')
     expect(llm.probeDraft).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('拒绝了这把密钥')
+  })
+})
+
+describe('按类型摆格子', () => {
+  /** 把类型下拉切到某一档。⚠ 打的是 DtSelect 的口子，不是原生 select。 */
+  async function pickKind(
+    wrapper: ReturnType<typeof render>,
+    code: string,
+  ): Promise<void> {
+    const found = wrapper.findAllComponents(DtSelect)[0]
+    found?.vm.$emit('update:modelValue', code)
+    await flushPromises()
+  }
+
+  it('端点那一类摆地址、密钥与测试连接', () => {
+    const wrapper = render()
+    expect(inputOf(wrapper, '端点地址').exists()).toBe(true)
+    expect(inputOf(wrapper, 'API 密钥').exists()).toBe(true)
+    expect(wrapper.text()).toContain('测试连接')
+    expect(wrapper.text()).not.toContain('默认推理档位')
+  })
+
+  it('订阅那一类整格不摆端点与密钥，改摆推理档位', async () => {
+    // ⚠ 摆出来的话人会填、填了后端当场拒，而那句话指不回是哪一格多余
+    const wrapper = render()
+    await pickKind(wrapper, 'codex_oauth')
+    expect(inputOf(wrapper, '端点地址').exists()).toBe(false)
+    expect(inputOf(wrapper, 'API 密钥').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('测试连接')
+    expect(wrapper.text()).toContain('默认推理档位')
+  })
+
+  it('预设点一下填上地址', async () => {
+    const wrapper = render()
+    await clickButton(wrapper, '阿里云百炼')
+    expect(
+      (inputOf(wrapper, '端点地址').element as HTMLInputElement).value,
+    ).toBe('https://dashscope.example/v1')
+  })
+
+  it('换类型时把上一类填的东西清掉', async () => {
+    // ⚠ 留着的话，切回去会看到一份属于另一类的残留，而保存时后端拒
+    const wrapper = render()
+    await inputOf(wrapper, '端点地址').setValue('https://someone/v1')
+    await pickKind(wrapper, 'codex_oauth')
+    await pickKind(wrapper, 'openai_compat')
+    expect(
+      (inputOf(wrapper, '端点地址').element as HTMLInputElement).value,
+    ).toBe('')
+  })
+
+  it('编辑态只报类型，不给改', () => {
+    const wrapper = render(provider({ kind: 'codex_oauth' }))
+    expect(wrapper.text()).toContain('类型：Codex 订阅')
+    expect(wrapper.text()).not.toContain('供应商类型')
   })
 })

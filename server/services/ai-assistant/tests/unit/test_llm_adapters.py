@@ -15,11 +15,11 @@ from ai_assistant.llm import (
     ModelKind,
 )
 from ai_assistant.llm.adapters import (
-    ADAPTER_BUILDERS,
+    KIND_BUILDERS,
     AdapterDeps,
     build_adapters,
-    build_openai_compat,
 )
+from ai_assistant.llm.adapters.endpoint import build_env_endpoint
 from ai_assistant.settings import Settings
 from llmcore.reasoning import ReasoningChatOpenAI
 
@@ -74,18 +74,16 @@ async def _built(adapter: ModelAdapter, kind: ModelKind) -> ReasoningChatOpenAI:
 
 
 def test_a_disabled_model_yields_no_adapter() -> None:
-    assert build_openai_compat(AdapterDeps(settings=_settings())) is None
+    assert build_env_endpoint(_settings()) is None
 
 
 def test_an_enabled_model_yields_an_adapter() -> None:
-    assert build_openai_compat(AdapterDeps(settings=_enabled())) is not None
+    assert build_env_endpoint(_enabled()) is not None
 
 
 async def test_each_kind_resolves_to_its_own_configured_name() -> None:
-    adapter = build_openai_compat(
-        AdapterDeps(
-            settings=_enabled(model_chat="talker", model_vision="looker")
-        )
+    adapter = build_env_endpoint(
+        _enabled(model_chat="talker", model_vision="looker")
     )
     assert adapter is not None
     # 两项默认同值（当前旗舰原生吃图），但各自的取值必须真的被用上——
@@ -95,7 +93,7 @@ async def test_each_kind_resolves_to_its_own_configured_name() -> None:
 
 
 async def test_the_client_does_not_retry_on_its_own() -> None:
-    adapter = build_openai_compat(AdapterDeps(settings=_enabled()))
+    adapter = build_env_endpoint(_enabled())
     assert adapter is not None
     # 一条链路只有一层负责重试；留着 SDK 自带的会把上游预算悄悄用光三倍
     assert (await _built(adapter, "chat")).max_retries == 0
@@ -103,9 +101,7 @@ async def test_the_client_does_not_retry_on_its_own() -> None:
 
 async def test_vision_falls_back_to_the_chat_endpoint_when_unset() -> None:
     """回落链的默认那一头：没配视觉端点时两档打同一个地址。"""
-    adapter = build_openai_compat(
-        AdapterDeps(settings=_enabled(model_base_url="https://one/v1"))
-    )
+    adapter = build_env_endpoint(_enabled(model_base_url="https://one/v1"))
     assert adapter is not None
     built = await _built(adapter, "vision")
     assert str(built.openai_api_base) == "https://one/v1"
@@ -113,15 +109,13 @@ async def test_vision_falls_back_to_the_chat_endpoint_when_unset() -> None:
 
 async def test_vision_uses_its_own_endpoint_when_configured() -> None:
     """回落链的另一头：配了就用自己的，这正是「看图换一家」的全部意义。"""
-    adapter = build_openai_compat(
-        AdapterDeps(
-            settings=_enabled(
-                model_base_url="https://one/v1",
-                vision_base_url="https://two/v1",
-                vision_api_key=SecretStr("sk-two"),
-                vision_model="其他家的看图模型",
-                vision_timeout_s=300.0,
-            )
+    adapter = build_env_endpoint(
+        _enabled(
+            model_base_url="https://one/v1",
+            vision_base_url="https://two/v1",
+            vision_api_key=SecretStr("sk-two"),
+            vision_model="其他家的看图模型",
+            vision_timeout_s=300.0,
         )
     )
     assert adapter is not None
@@ -147,9 +141,10 @@ def test_an_unconfigured_deployment_has_no_endpoint_at_all() -> None:
     assert _settings().endpoint_of("chat") is None
 
 
-def test_the_registry_tuple_is_explicit_and_ordered() -> None:
-    """注册是显式一步：靠 import 副作用的话，装了哪几路取决于 import 顺序。"""
-    assert len(ADAPTER_BUILDERS) == 2
+def test_the_kind_table_is_explicit() -> None:
+    """注册是显式一步：靠 import 副作用的话，接得了哪几种形态取决于
+    import 顺序，而顺序在测试里与生产里可以不同。"""
+    assert set(KIND_BUILDERS) == {"openai_compat", "codex_oauth"}
 
 
 def test_only_the_reachable_routes_are_built() -> None:
@@ -165,12 +160,15 @@ def test_every_built_adapter_satisfies_the_port() -> None:
 
 
 def test_the_container_keeps_the_model_face_but_reports_nothing_ready() -> None:
-    """⚠ 目录在时模型面**总是**装得出来：端点可以在运行期由目录给。
-    但能力面按此刻真能用的报——环境变量没配、目录还是空的，就一路都没有。"""
+    """⚠ 目录在时模型面**总是**装得出来：那几路是运行期由目录给的，
+    而模型面是启动时装一次的——不装的话，在界面上新配出来的那一路要重启
+    才用得上，而现象是「配好了、助手仍说没接模型」。
+
+    但能力面按此刻真接得上的报：环境变量没配、目录还是空的，就一路都没有。"""
     container = build_container(_settings())
     assert container.model is not None
     assert container.models.profiles() == ()
-    assert container.models.adapters() != ()
+    assert container.models.adapters() == ()
 
 
 def test_the_container_wires_a_guarded_model_when_it_is_on() -> None:
@@ -180,10 +178,15 @@ def test_the_container_wires_a_guarded_model_when_it_is_on() -> None:
     assert container.model.breaker.state == "closed"
 
 
-def test_the_container_builds_one_breaker_per_profile_and_kind() -> None:
-    """⚠ 少了用途这一维，看图那一档挂掉会把同一路的对话一起短路掉。"""
+def test_breakers_are_minted_per_profile_and_kind() -> None:
+    """⚠ 少了用途这一维，看图那一档挂掉会把同一路的对话一起短路掉。
+    ⚠ 按需生长：档位来自运行期可改的目录，启动时建完的话新配的那一路
+    会落到兜底那一个上，于是一路挂掉把别的路一起短路。"""
     container = build_container(_enabled())
     assert container.model is not None
-    assert set(container.model.breakers) == {
-        ("default", kind) for kind in MODEL_KINDS
-    }
+    book = container.model.breakers
+    names = {book[("p-1", kind)].name for kind in MODEL_KINDS}
+    assert len(names) == len(MODEL_KINDS)
+    assert set(book) == {("p-1", kind) for kind in MODEL_KINDS}
+    # 同一格问两次是同一个：每次现造一个的话它永远停在 closed
+    assert book[("p-1", "chat")] is book[("p-1", "chat")]

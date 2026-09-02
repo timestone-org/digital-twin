@@ -17,6 +17,9 @@ vi.mock('@/api/assistant', () => ({
 }))
 
 const api = await import('@/api/assistant')
+/** 目录里那一路订阅账号的 id；登录接口认的就是它 */
+const PROVIDER_REF = 'codex'
+
 const { useCodexLogin } =
   await import('@/pages/System/Models/scripts/useCodexLogin')
 
@@ -61,7 +64,7 @@ describe('设备码登录', () => {
       status: null,
     })
     const scope = effectScope()
-    const login = scope.run(() => useCodexLogin())
+    const login = scope.run(() => useCodexLogin(() => PROVIDER_REF))
     await login?.begin()
 
     expect(login?.pending.value?.user_code).toBe('ABCD-1234')
@@ -80,7 +83,7 @@ describe('设备码登录', () => {
       status: null,
     })
     const scope = effectScope()
-    const login = scope.run(() => useCodexLogin())
+    const login = scope.run(() => useCodexLogin(() => PROVIDER_REF))
     await login?.begin()
 
     await vi.advanceTimersByTimeAsync(2_500)
@@ -101,7 +104,7 @@ describe('设备码登录', () => {
       status: connected(),
     })
     const scope = effectScope()
-    const login = scope.run(() => useCodexLogin())
+    const login = scope.run(() => useCodexLogin(() => PROVIDER_REF))
     await login?.begin()
 
     await vi.advanceTimersByTimeAsync(6_000)
@@ -122,7 +125,7 @@ describe('设备码登录', () => {
       status: null,
     })
     const scope = effectScope()
-    const login = scope.run(() => useCodexLogin())
+    const login = scope.run(() => useCodexLogin(() => PROVIDER_REF))
     await login?.begin()
     await login?.begin()
 
@@ -141,7 +144,7 @@ describe('设备码登录', () => {
       status: null,
     })
     const scope = effectScope()
-    const login = scope.run(() => useCodexLogin())
+    const login = scope.run(() => useCodexLogin(() => PROVIDER_REF))
     await login?.begin()
     scope.stop()
 
@@ -152,7 +155,7 @@ describe('设备码登录', () => {
   it('开头就失败时说出来，并且不留一个转着圈的框', async () => {
     vi.mocked(api.startDeviceLogin).mockRejectedValue(new Error('上游连不上'))
     const scope = effectScope()
-    const login = scope.run(() => useCodexLogin())
+    const login = scope.run(() => useCodexLogin(() => PROVIDER_REF))
     await login?.begin()
 
     expect(login?.error.value).toBe('上游连不上')
@@ -168,7 +171,7 @@ describe('设备码登录', () => {
       status: null,
     })
     const scope = effectScope()
-    const login = scope.run(() => useCodexLogin())
+    const login = scope.run(() => useCodexLogin(() => PROVIDER_REF))
     await login?.begin()
     login?.cancel()
 
@@ -181,7 +184,7 @@ describe('设备码登录', () => {
   it('读一次登录态', async () => {
     vi.mocked(api.readCredential).mockResolvedValue(connected())
     const scope = effectScope()
-    const login = scope.run(() => useCodexLogin())
+    const login = scope.run(() => useCodexLogin(() => PROVIDER_REF))
     await login?.refresh()
 
     expect(login?.status.value?.account_label).toBe('…a1b2c3')
@@ -192,7 +195,7 @@ describe('设备码登录', () => {
     vi.mocked(api.forgetCredential).mockResolvedValue(undefined)
     vi.mocked(api.readCredential).mockResolvedValue(null)
     const scope = effectScope()
-    const login = scope.run(() => useCodexLogin())
+    const login = scope.run(() => useCodexLogin(() => PROVIDER_REF))
     if (login !== undefined) login.status.value = connected()
     await login?.signOut()
 
@@ -204,7 +207,7 @@ describe('设备码登录', () => {
   it('退出登录失败时说出来，不假装退成了', async () => {
     vi.mocked(api.forgetCredential).mockRejectedValue(new Error('删不掉'))
     const scope = effectScope()
-    const login = scope.run(() => useCodexLogin())
+    const login = scope.run(() => useCodexLogin(() => PROVIDER_REF))
     if (login !== undefined) login.status.value = connected()
     await login?.signOut()
 
@@ -217,7 +220,7 @@ describe('设备码登录', () => {
     vi.mocked(api.startDeviceLogin).mockResolvedValue(started())
     vi.mocked(api.pollDeviceLogin).mockRejectedValue(new Error('上游拒了'))
     const scope = effectScope()
-    const login = scope.run(() => useCodexLogin())
+    const login = scope.run(() => useCodexLogin(() => PROVIDER_REF))
     await login?.begin()
 
     await vi.advanceTimersByTimeAsync(6_000)

@@ -3,6 +3,7 @@
 from platform_server.apps.llm_providers.services import (
     assignment_service,
     catalog_service,
+    kind_service,
     provider_service,
 )
 from platform_server.apps.llm_providers.services.catalog_service import (
@@ -20,6 +21,7 @@ __all__ = [
     "assignment_service",
     "build_catalog",
     "catalog_service",
+    "kind_service",
     "probe_endpoint",
     "provider_service",
 ]

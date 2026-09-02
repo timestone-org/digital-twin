@@ -45,6 +45,28 @@ class LlmModelUnknown(AppError):
     http_status = 400
 
 
+class LlmProviderShapeRejected(AppError):
+    """配的那几格与这一路的接入形态对不上。
+
+    ⚠ 与「参数不合法」分开：这一条的处置是「这一形态不要填这一格」，
+    而不是「换个取值」。
+    """
+
+    code = 42406
+    http_status = 400
+
+
+class LlmPurposeMismatch(AppError):
+    """这一路的接入形态接不了这个用途。
+
+    ⚠ 拦在写入侧：放行的话分配写得进去，而那一侧解不出任何东西、仍在用
+    环境变量那一档，界面上却显示配好了。
+    """
+
+    code = 42407
+    http_status = 400
+
+
 class LlmProvidersDisabled(AppError):
     """本部署没开模型供应商目录（没配加密密钥）。不是故障，是这套环境就没接。"""
 

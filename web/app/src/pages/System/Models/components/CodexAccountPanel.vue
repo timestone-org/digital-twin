@@ -1,6 +1,9 @@
 <script setup lang="ts">
 /**
- * @fileoverview 订阅账号那一路（ADR-0026）：登没登录、设备码登录、退出。
+ * @fileoverview 一路订阅账号（ADR-0026 / ADR-0040）：登没登录、设备码登录、退出。
+ *
+ * ⚠ 每一路各一份登录态，故这一份状态按**那一路的键**建：写死一个名字的话，
+ * 第二路点登录时改的是第一路。
  *
  * ⚠ 这一份凭据是**整套部署共用的**：换掉它等于替所有人换了说话的账号，
  * 所以它要 `assistant:manage`，与目录那边的 `llm:manage` 是两个码。
@@ -13,10 +16,15 @@ import { formatDateTime } from '@/utils/datetime'
 import DeviceCodeCard from './DeviceCodeCard.vue'
 import { useCodexLogin } from '../scripts/useCodexLogin'
 
+const props = defineProps<{
+  /** 那一路供应商的 id；环境变量配出来的那一路是 `codex` */
+  providerRef: string
+}>()
+
 const emit = defineEmits<{ changed: [] }>()
 
 const confirm = useConfirm()
-const login = useCodexLogin()
+const login = useCodexLogin(() => props.providerRef)
 
 async function signOut(): Promise<void> {
   const ok = await confirm.ask({

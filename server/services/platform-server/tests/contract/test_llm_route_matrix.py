@@ -20,7 +20,7 @@ from platform_server.deps import REQUIRED_CODES_ATTR
 from platform_server.settings import API_PREFIX, INTERNAL_PREFIX
 
 # 对外端点的条数。写死是为了让「加了端点没加规则」在这里红
-PUBLIC_ROUTE_COUNT = 10
+PUBLIC_ROUTE_COUNT = 11
 
 
 def _routes() -> list[APIRoute]:

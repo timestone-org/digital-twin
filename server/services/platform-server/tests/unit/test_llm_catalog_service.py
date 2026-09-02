@@ -7,6 +7,10 @@
 import uuid
 
 from lib.crypto import SecretCipher
+from platform_server.apps.llm_providers.enums import (
+    PROVIDER_KIND_CODEX_OAUTH,
+    PROVIDER_KIND_OPENAI_COMPAT,
+)
 from platform_server.apps.llm_providers.models import LlmProvider
 from platform_server.apps.llm_providers.services.catalog_service import (
     CatalogAssignmentOut,
@@ -28,6 +32,7 @@ def _row(
     return LlmProvider(
         id=uuid.UUID("3fa85f64-5717-4562-b3fc-2c963f66afa6"),
         name="百炼",
+        kind=PROVIDER_KIND_OPENAI_COMPAT,
         base_url="https://endpoint/v1",
         api_key_enc=cipher.encrypt(api_key),
         api_key_hint=key_hint(api_key),
@@ -82,3 +87,35 @@ def test_the_key_hint_shows_only_a_tail() -> None:
     assert key_hint("sk-1234567890") == "…7890"
     # 本来就短的密钥连尾巴都不露：露了等于露了整把
     assert key_hint("abc") == "…***"
+
+
+def test_a_login_based_provider_ships_without_a_key() -> None:
+    """⚠ 没有密钥的形态不是「解不开」：整路照常下发，能不能用由消费方那一侧
+    的登录态回答。判成解不开的话，配好的那一路在界面上是「已启用」而助手
+    永远看不见它。"""
+    row = LlmProvider(
+        id=uuid.UUID("3fa85f64-5717-4562-b3fc-2c963f66afa7"),
+        name="Codex",
+        kind=PROVIDER_KIND_CODEX_OAUTH,
+        base_url=None,
+        api_key_enc=None,
+        api_key_hint="",
+        is_enabled=True,
+        options_json={"default_effort": "high"},
+        models_json=[{"name": "gpt-5-codex", "kind": "chat"}],
+        notes="",
+    )
+    out = _provider_out(row, CIPHER)
+    assert out is not None
+    assert out.kind == PROVIDER_KIND_CODEX_OAUTH
+    assert out.api_key == ""
+    assert out.base_url == ""
+    assert out.options == {"default_effort": "high"}
+
+
+def test_the_version_changes_with_the_kind() -> None:
+    """⚠ 形态进摘要：不进的话，改了形态的那一份目录看着与旧的一模一样。"""
+    plain = _provider_out(_row(), CIPHER)
+    assert plain is not None
+    switched = plain.model_copy(update={"kind": PROVIDER_KIND_CODEX_OAUTH})
+    assert _version([plain], []) != _version([switched], [])

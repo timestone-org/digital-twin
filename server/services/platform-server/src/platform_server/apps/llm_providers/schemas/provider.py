@@ -18,7 +18,11 @@ from pydantic import (
 from platform_server.apps.llm_providers.enums import (
     MODEL_KIND_EMBEDDING,
     MODEL_KINDS,
+    PROVIDER_KIND_CODES,
+    PROVIDER_KIND_OPENAI_COMPAT,
+    provider_kind_of,
 )
+from platform_server.apps.llm_providers.rules import shape_mismatch
 from platform_server.apps.llm_providers.schemas.common import (
     BaseUrl,
     InputModel,
@@ -50,6 +54,23 @@ ModelKind = Annotated[
     str,
     AfterValidator(_known_kind),
     WithJsonSchema({"type": "string", "enum": list(MODEL_KINDS)}),
+]
+
+
+def _known_provider_kind(value: str) -> str:
+    """未登记的接入形态一律拒。
+
+    Args: value。
+    """
+    if value not in PROVIDER_KIND_CODES:
+        raise ValueError(f"未登记的供应商形态：{value}")
+    return value
+
+
+ProviderKind = Annotated[
+    str,
+    AfterValidator(_known_provider_kind),
+    WithJsonSchema({"type": "string", "enum": list(PROVIDER_KIND_CODES)}),
 ]
 
 
@@ -91,22 +112,53 @@ Models = Annotated[
 ]
 # 透传给端点的额外请求体，一段 JSON 对象
 ExtraBody = dict[str, Any] | None
+# 这一形态自己的那几格配置。⚠ 认得的键由形态说了算，见 `rules.options_mismatch`
+ProviderOptions = dict[str, Any] | None
 
 
 class LlmProviderIn(InputModel):
-    """新建一路供应商。"""
+    """新建一路供应商。要配哪几格由 `kind` 说了算。"""
 
     name: ProviderName
-    base_url: BaseUrl
-    api_key: SecretStr = Field(min_length=1, max_length=512)
+    # ⚠ 缺省是端点那一形态：这一格是后加的，不带它的客户端建的正是那一种
+    kind: ProviderKind = PROVIDER_KIND_OPENAI_COMPAT
+    # ⚠ 只有端点那一形态填这两格；靠登录的那些形态带了就拒，
+    # 而不是存下来当没看见
+    base_url: BaseUrl | None = None
+    api_key: SecretStr | None = Field(
+        default=None, min_length=1, max_length=512
+    )
     is_enabled: bool = True
     extra_body: ExtraBody = None
+    options: ProviderOptions = None
     models: Models = Field(default_factory=list[LlmModelIn])
     notes: Notes = ""
 
+    @model_validator(mode="after")
+    def _fields_match_the_kind(self) -> "LlmProviderIn":
+        """配的那几格与形态对不对得上。"""
+        spec = provider_kind_of(self.kind)
+        # pragma 理由：形态码在上面那个校验器里已经拦过一遍
+        if spec is None:  # pragma: no cover
+            raise ValueError("未登记的供应商形态")
+        rejected = shape_mismatch(
+            spec,
+            has_base_url=self.base_url is not None,
+            has_api_key=self.api_key is not None,
+            model_kinds=[one.kind for one in self.models],
+            options=self.options,
+        )
+        if rejected is not None:
+            raise ValueError(rejected)
+        return self
+
 
 class LlmProviderUpdateIn(InputModel):
-    """改一路供应商。缺省的字段不动；`api_key` 不给即沿用旧的。"""
+    """改一路供应商。缺省的字段不动；`api_key` 不给即沿用旧的。
+
+    ⚠ 没有 `kind`：改形态等于换一路接法，密钥、登录态与模型清单全部作废——
+    那是「删了重建」，不是「改一格」。
+    """
 
     name: ProviderName | None = None
     base_url: BaseUrl | None = None
@@ -116,8 +168,35 @@ class LlmProviderUpdateIn(InputModel):
     is_enabled: bool | None = None
     # ⚠ 与「不动」分开：要清空方言体就传 `null`，而缺省是「不动」
     extra_body: ExtraBody | None = None
+    options: ProviderOptions | None = None
     models: Models | None = None
     notes: Notes | None = None
+
+
+class LlmProviderPresetOut(OutputModel):
+    """建一路时能一键填上的一套取值。"""
+
+    code: str
+    label: str
+    base_url: str
+
+
+class LlmProviderKindOut(OutputModel):
+    """一种接入形态：界面按它决定摆哪几格、后端按它校验。
+
+    ⚠ 由后端下发而不是前端写死：两份漂开的表现是「表单里填了、保存时 422」，
+    而报出来的那句话指不回是哪一格多余。
+    """
+
+    code: str
+    label: str
+    description: str
+    is_endpoint_required: bool
+    is_login_required: bool
+    model_kinds: list[str]
+    consumers: list[str]
+    efforts: list[str]
+    presets: list[LlmProviderPresetOut]
 
 
 class LlmProbeIn(InputModel):
@@ -141,11 +220,14 @@ class LlmProviderOut(OutputModel):
 
     id: uuid.UUID
     name: str
+    kind: str
+    # 靠登录的那些形态没有端点，这一格是空串
     base_url: str
     # 密钥尾巴几位，形如 `…a1b2`。只回答「填的是不是那一把」
     api_key_hint: str
     is_enabled: bool
     extra_body: dict[str, Any] | None
+    options: dict[str, Any] | None
     models: list[LlmModelOut]
     notes: str
     # 此刻指着这一路的用途码；删之前界面要把它们摆出来
