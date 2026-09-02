@@ -8,7 +8,6 @@ from ai_assistant.llm.adapters import (
     build_adapters,
     build_openai_embedding,
 )
-from ai_assistant.llm.guard import GuardedModel
 from ai_assistant.llm.ports import (
     CODEX_PROFILE,
     DEFAULT_PROFILE,
@@ -28,6 +27,7 @@ from llmcore import (
     ModelRejected,
     ModelUnavailable,
 )
+from llmcore.guard import GuardedModel
 
 __all__ = [
     "CODEX_PROFILE",

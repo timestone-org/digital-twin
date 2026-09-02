@@ -1389,6 +1389,7 @@ source = { editable = "domain/llmcore" }
 dependencies = [
     { name = "langchain-core" },
     { name = "langchain-openai" },
+    { name = "langgraph" },
     { name = "lib" },
     { name = "openai" },
     { name = "pydantic" },
@@ -1398,6 +1399,7 @@ dependencies = [
 requires-dist = [
     { name = "langchain-core", specifier = ">=1.0" },
     { name = "langchain-openai", specifier = ">=1.6" },
+    { name = "langgraph", specifier = ">=1.2" },
     { name = "lib", editable = "lib" },
     { name = "openai", specifier = ">=3.3" },
     { name = "pydantic", specifier = ">=2.10" },

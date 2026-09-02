@@ -8,6 +8,11 @@ dependencies = [
     "lib",
     # 对话模型走 langchain 的抽象；嵌入直接走 openai 客户端
     "langchain-core>=1.0",
+    # 回合编排：「跑到一半停下来等外部把工具跑完、再接着跑」是它的一等公民。
+    # ⚠ 必须在这里声明而不是靠消费方带：`turn/loop.py` 直接 import 它，只声明在
+    # 助手那边的话，知识库按自己声明的依赖装出的镜像会启动即崩
+    # （check_service_deps 逮到过一次）
+    "langgraph>=1.2",
     "langchain-openai>=1.6",
     "openai>=3.3",
     # 端点密钥用 SecretStr 装着——从形状上就不许它被 print 出去

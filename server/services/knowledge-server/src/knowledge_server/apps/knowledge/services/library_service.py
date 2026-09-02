@@ -55,6 +55,42 @@ class EmbeddingChoice:
         return cls(model=given[0], dimensions=given[1])
 
 
+@dataclass(frozen=True)
+class BaseBrief:
+    """一个库给模型看的简报：只有挑库要用的那几格。"""
+
+    id: uuid.UUID
+    name: str
+    description: str
+    strategy: str
+    is_indexed: bool
+
+
+async def brief_bases(
+    session: AsyncSession, *, limit: int
+) -> tuple[list[BaseBrief], int]:
+    """列一页库的简报与总数。给对话面的 `kb.list_bases` 用。
+
+    Args: session, limit。
+    """
+    rows, total = await crud.knowledge_base.list_bases(
+        session, offset=0, limit=limit
+    )
+    return (
+        [
+            BaseBrief(
+                id=one.id,
+                name=one.name,
+                description=one.description,
+                strategy=one.retrieval_strategy,
+                is_indexed=one.embedding_model is not None,
+            )
+            for one in rows
+        ],
+        total,
+    )
+
+
 def base_out(row: KnowledgeBase, document_count: int) -> KnowledgeBaseOut:
     """一行库摊成出参。
 

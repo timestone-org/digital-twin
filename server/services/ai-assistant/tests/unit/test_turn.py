@@ -17,6 +17,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from ai_assistant.llm import GuardedModel
 from ai_assistant.llm.ports import ModelChoice
 from lib.resilience import CircuitBreaker
+from llmcore.testing import ScriptedChat, tool_call
 from llmcore.tools.shapes import ToolSpec
 from llmcore.turn.loop import (
     TurnDeps,
@@ -28,7 +29,6 @@ from llmcore.turn.types import (
     TurnOutcome,
     TurnStep,
 )
-from unit.llm_fakes import ScriptedChat, tool_call
 
 SERVER_TOOL = ToolSpec(
     name="points.search",

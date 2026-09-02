@@ -44,6 +44,9 @@ packages = ["src/knowledge_server"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# ⚠ 让 `tests/` 自己成为 import 根：用例之间共用东西时写 `from integration.conftest import`，
+# 不给这一条就是 ModuleNotFoundError，而错误信息指向的是用例不是配置
+pythonpath = ["tests"]
 asyncio_mode = "auto"
 addopts = "-q"
 markers = [

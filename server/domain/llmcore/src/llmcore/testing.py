@@ -1,11 +1,16 @@
-"""按脚本作答或抛错的假模型。
+"""给用例用的假模型：按脚本作答、按块吐字、或抛一个写好的异常。
+
+⚠ 放在包里而不是各服务的 `tests/` 下：三个消费方（助手、知识库、llmcore 自己）
+各抄一份的话一定会漂，而漂的表现是「同一个回合形状在一边能测出来、另一边测不
+出来」。与 `lib.testing` 同一口径。
+
 
 ⚠ 它是真的 `BaseChatModel` 子类而不是随手拼的对象：被测代码会调 `bind_tools`，
 鸭子类型的假件在类型上过不去，而放宽类型等于让用例不再守「我们调的是这套
 接口」这件事。
 """
 
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
 from typing import Any, cast
 
 from langchain_core.callbacks import (
@@ -14,6 +19,7 @@ from langchain_core.callbacks import (
 )
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
+from langchain_core.messages.tool import ToolCallChunk
 from langchain_core.outputs import (
     ChatGeneration,
     ChatGenerationChunk,
@@ -42,8 +48,10 @@ class ScriptedChat(BaseChatModel):
         default_factory=list[list[BaseMessage]]
     )
     # 绑过的工具声明。⚠ 记下来才守得住「发出去的名字长什么样」
-    bound: list[dict[str, Any] | type | BaseTool] = Field(
-        default_factory=list[dict[str, Any] | type | BaseTool]
+    bound: list[dict[str, Any] | type | Callable[..., Any] | BaseTool] = Field(
+        default_factory=list[
+            dict[str, Any] | type | Callable[..., Any] | BaseTool
+        ]
     )
 
     @property
@@ -52,13 +60,14 @@ class ScriptedChat(BaseChatModel):
 
     def bind_tools(
         self,
-        tools: Sequence[dict[str, Any] | type | BaseTool],
+        tools: Sequence[dict[str, Any] | type | Callable[..., Any] | BaseTool],
         **kwargs: Any,
     ) -> Runnable[Any, AIMessage]:
         """假件不真绑工具，只记下声明，原样返回自己。
 
         Args: tools, kwargs。
         """
+        del kwargs
         self.bound = list(tools)
         # ⚠ 收窄一次而不是压制类型：假件的产出永远是 `AIMessage`（`_generate`
         # 只造这一种），但基类的输出类型是 `BaseMessage`，直接返回过不去
@@ -75,6 +84,7 @@ class ScriptedChat(BaseChatModel):
 
         Args: messages, stop, run_manager, kwargs。
         """
+        del stop, run_manager, kwargs
         self.calls += 1
         self.seen.append(list(messages))
         if self.error is not None:
@@ -114,8 +124,8 @@ class StreamingChat(BaseChatModel):
 
     # 每一块：(正文, 思考)。工具调用另给
     parts: list[tuple[str, str]] = Field(default_factory=list[tuple[str, str]])
-    tool_chunks: list[dict[str, Any]] = Field(
-        default_factory=list[dict[str, Any]]
+    tool_chunks: list[ToolCallChunk] = Field(
+        default_factory=list[ToolCallChunk]
     )
     error: Exception | None = None
 
@@ -125,13 +135,14 @@ class StreamingChat(BaseChatModel):
 
     def bind_tools(
         self,
-        tools: Sequence[dict[str, Any] | type | BaseTool],
+        tools: Sequence[dict[str, Any] | type | Callable[..., Any] | BaseTool],
         **kwargs: Any,
     ) -> Runnable[Any, AIMessage]:
         """假件不真绑工具，原样返回自己。
 
         Args: tools, kwargs。
         """
+        del tools, kwargs
         return cast("Runnable[Any, AIMessage]", self)
 
     def _generate(
@@ -145,6 +156,7 @@ class StreamingChat(BaseChatModel):
 
         Args: messages, stop, run_manager, kwargs。
         """
+        del messages, stop, run_manager, kwargs
         said = "".join(text for text, _ in self.parts)
         return ChatResult(
             generations=[ChatGeneration(message=AIMessage(content=said))]
@@ -161,6 +173,7 @@ class StreamingChat(BaseChatModel):
 
         Args: messages, stop, run_manager, kwargs。
         """
+        del messages, stop, run_manager, kwargs
         if self.error is not None:
             raise self.error
         for text, thought in self.parts:

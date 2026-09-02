@@ -13,14 +13,12 @@
 
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from langchain_core.messages import AIMessage, BaseMessage, BaseMessageChunk
 from langchain_core.tools import BaseTool
 from openai import OpenAIError
 
-from ai_assistant.llm.codex import wire_names
-from ai_assistant.llm.ports import CODEX_PROFILE, ModelChoice, ModelSource
 from lib.logging import get_logger
 from lib.resilience import BreakerOpen, CircuitBreaker
 from llmcore import deltas
@@ -31,8 +29,39 @@ from llmcore.errors import (
     ModelUnavailable,
     reason_of,
 )
+from llmcore.ports import ModelChoice, ModelSource
 
-_logger = get_logger("assistant.llm")
+# ⚠ 记作 `chat.llm` 而不是某一家的名字：这一份被两个服务共用（ADR-0037）
+_logger = get_logger("chat.llm")
+
+ToolDecl = dict[str, Any] | BaseTool
+
+
+@runtime_checkable
+class Rewire(Protocol):
+    """某一路端点要求的线形改写：出去的路上改一遍，回来的路上改回来。
+
+    ⚠ 做成钩子而不是写死在外壳里：需要改写的只有订阅账号那一路（它不认工具名
+    里的点号），而那是助手一家的事。外壳本身两个服务共用，写死等于把一家的
+    特例塞进 domain。
+
+    ⚠ 两头都要改：只改出去的那一头，模型回来的调用名对不上注册表，表现是
+    「模型只会说话不会动手」。
+    """
+
+    def applies(self, choice: ModelChoice) -> bool:
+        """这一次选择要不要改写。"""
+        ...
+
+    def outbound(
+        self, tools: Sequence[ToolDecl], messages: list[BaseMessage]
+    ) -> tuple[list[ToolDecl], list[BaseMessage]]:
+        """出去之前改一遍。"""
+        ...
+
+    def inbound(self, reply: AIMessage) -> AIMessage:
+        """回来之后改回来。"""
+        ...
 
 
 @dataclass(frozen=True)
@@ -51,6 +80,8 @@ class GuardedModel:
     breakers: Mapping[tuple[str, str], CircuitBreaker] = field(
         default_factory=dict[tuple[str, str], CircuitBreaker]
     )
+    # 某一路端点要的线形改写；不给即没有哪一路需要
+    rewire: Rewire | None = None
 
     async def respond(
         self,
@@ -73,11 +104,11 @@ class GuardedModel:
         breaker = self._breaker_of(choice)
         self._guard(breaker)
         model = await self.source(choice)
-        # ⚠ 订阅账号那一路的端点不认工具名里的点号：出去的路上换掉，
-        # 回来的路上换回来，两头都换才对得上（wire_names 文件头）
-        if choice.profile == CODEX_PROFILE:
-            tools = wire_names.wired_tools(tools)
-            messages = wire_names.wired_messages(messages)
+        # ⚠ 有的端点要改线形（如不认工具名里的点号）：出去的路上改掉，
+        # 回来的路上改回来，两头都改才对得上
+        rewire = self.rewire if self._rewires(choice) else None
+        if rewire is not None:
+            tools, messages = rewire.outbound(tools, messages)
         bound = model.bind_tools(list(tools)) if tools else model
         sink = on_delta if self.is_streaming else None
         try:
@@ -93,10 +124,13 @@ class GuardedModel:
             raise ModelUnavailable(reason_of(error)) from error
         breaker.record_success()
         answer = _as_ai_message(reply)
-        if choice.profile == CODEX_PROFILE:
-            answer = wire_names.restored(answer)
+        if rewire is not None:
+            answer = rewire.inbound(answer)
         _log_usage(choice, answer)
         return answer
+
+    def _rewires(self, choice: ModelChoice) -> bool:
+        return self.rewire is not None and self.rewire.applies(choice)
 
     def _breaker_of(self, choice: ModelChoice) -> CircuitBreaker:
         """这一格 (档位, 用途) 自己那份断路器；没单独配就用兜底那一份。

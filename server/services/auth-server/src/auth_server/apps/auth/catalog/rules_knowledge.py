@@ -71,6 +71,17 @@ KNOWLEDGE_RULES: tuple[RouteRuleSpec, ...] = (
         ),
     ),
     RouteRuleSpec(
+        f"{_K}/chat-sessions*",
+        "*",
+        codes=(KNOWLEDGE_USE,),
+        priority=890,
+        description=(
+            "知识库对话：会话的列建看改删与推进一个回合。⚠ 只要 use，与检索"
+            "同一个码：能检索就能问，问不出比检索更多的东西——对话面只读，"
+            "模型手上一个写工具都没有（docs/KNOWLEDGE_CHAT_DESIGN.md §6）"
+        ),
+    ),
+    RouteRuleSpec(
         f"{_K}/documents",
         "GET",
         codes=(KNOWLEDGE_USE,),

@@ -28,7 +28,7 @@ from ai_assistant.llm import GuardedModel, ModelChoice
 from ai_assistant.settings import MAX_HISTORY_MESSAGES
 from lib.resilience import CircuitBreaker
 from llmcore.memory import Summary, history, summarize
-from unit.llm_fakes import ScriptedChat
+from llmcore.testing import ScriptedChat
 from unit.summarize_fakes import RecordingSession, RecordingSummarizer
 
 STAMP = "default:summary"

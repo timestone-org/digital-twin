@@ -5,6 +5,7 @@
 
 from fastapi import FastAPI
 
+from knowledge_server.apps.chat.api import CHAT_ROUTERS
 from knowledge_server.apps.knowledge.api import ROUTERS
 from knowledge_server.container import Container, build_container
 from knowledge_server.probe import probe_indexes
@@ -30,7 +31,7 @@ def build_app(settings: Settings) -> FastAPI:
     app = create_app(
         title="DigitalTwin Knowledge",
         prefix=API_PREFIX,
-        routers=ROUTERS,
+        routers=(*ROUTERS, *CHAT_ROUTERS),
         runtime=Runtime(
             lifespan_hooks=_hooks(container),
             readiness_probes=_probes(container),

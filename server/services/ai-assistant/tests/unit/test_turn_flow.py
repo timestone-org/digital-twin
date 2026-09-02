@@ -23,8 +23,8 @@ from ai_assistant.apps.chat.skills import find_skill
 from ai_assistant.llm import GuardedModel
 from ai_assistant.llm.ports import ModelChoice
 from lib.resilience import CircuitBreaker
+from llmcore.testing import ScriptedChat, tool_call
 from llmcore.turn.loop import TurnDeps, run_turn
-from unit.llm_fakes import ScriptedChat, tool_call
 
 SURFACE = "dashboard-editor"
 TOOLS = ("skills.load", "points.search", "dashboard.write_binding")

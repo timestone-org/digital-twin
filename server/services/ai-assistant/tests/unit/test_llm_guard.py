@@ -26,11 +26,12 @@ from ai_assistant.llm import (
     ModelRejected,
     ModelUnavailable,
 )
-from ai_assistant.llm.guard import usage_of
+from ai_assistant.llm.codex.rewire import CodexRewire
 from ai_assistant.llm.ports import ModelChoice
 from lib.resilience import CircuitBreaker
 from lib.testing.clock import FrozenClock
-from unit.llm_fakes import ScriptedChat, StreamingChat, asks
+from llmcore.guard import usage_of
+from llmcore.testing import ScriptedChat, StreamingChat, asks
 
 THRESHOLD = 2
 
@@ -51,7 +52,10 @@ def _guarded(
     async def source(_choice: ModelChoice) -> BaseChatModel:
         return model
 
-    return GuardedModel(source=source, breaker=breaker), breaker
+    return (
+        GuardedModel(source=source, breaker=breaker, rewire=CodexRewire()),
+        breaker,
+    )
 
 
 async def _respond(guarded: GuardedModel) -> AIMessage:

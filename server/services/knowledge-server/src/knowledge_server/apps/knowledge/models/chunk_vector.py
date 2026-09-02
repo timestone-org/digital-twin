@@ -25,7 +25,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from knowledge_server.apps.knowledge.models.base import Base
+from knowledge_server.orm import Base
 from lib.db import TimestampMixin, UuidPrimaryKeyMixin
 
 EMBEDDING_MODEL_MAX_LENGTH = 128

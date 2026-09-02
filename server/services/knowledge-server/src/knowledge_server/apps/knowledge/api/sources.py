@@ -11,10 +11,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from knowledge_server.apps.knowledge.catalog import KNOWLEDGE_WRITE
 from knowledge_server.apps.knowledge.schemas import SyncOut
 from knowledge_server.apps.knowledge.services import sync_service
 from knowledge_server.apps.knowledge.services.sources import KnowledgeSource
+from knowledge_server.catalog import KNOWLEDGE_WRITE
 from knowledge_server.container import Container
 from knowledge_server.deps import (
     get_container,

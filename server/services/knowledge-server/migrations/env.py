@@ -10,14 +10,19 @@ from alembic import context
 from sqlalchemy import Connection, pool, text
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from knowledge_server.apps.knowledge.models import Base as KnowledgeBaseTable
+from knowledge_server.apps.chat import models as chat_models
+from knowledge_server.apps.knowledge import models as knowledge_models
+from knowledge_server.orm import Base
 from knowledge_server.settings import DB_SCHEMA, MigrationSettings
 from lib.config import load_settings_or_exit
 
 config = context.config
-# ⚠ 每个 apps/<feature> 各有一个声明基类，故元数据是一组而不是一份：
-# 漏登记一个，那个模块的表在 autogenerate 眼里就是「该删掉的多余表」
-target_metadata = [KnowledgeBaseTable.metadata]
+# ⚠ 两个功能模块的表共用同一份 `Base`，但表只在各自的 models 包被 import 时
+# 才登记进 metadata。这里显式点名并**引用**它们——只 import 不引用的话，
+# lint 会把那行当未使用删掉，之后 autogenerate 眼里全部表都是「该删掉的多余表」
+# （逮到过一次：`alembic check` 列出要删的表正好是整个 schema）
+_REGISTERED = (knowledge_models, chat_models)
+target_metadata = [Base.metadata]
 
 _settings = load_settings_or_exit(MigrationSettings)
 

@@ -11,8 +11,8 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from ai_assistant.apps.chat.services.tools.specs import TOOL_SPECS
 from ai_assistant.llm.codex import wire_names
+from llmcore.testing import asks
 from llmcore.tools.shapes import openai_schema
-from unit.llm_fakes import asks
 
 # 端点认的名字长什么样（实测出来的那条正则）
 ENDPOINT_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")

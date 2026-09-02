@@ -9,10 +9,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from knowledge_server.apps.knowledge.catalog import KNOWLEDGE_USE
 from knowledge_server.apps.knowledge.schemas import CapabilityOut
 from knowledge_server.apps.knowledge.services import capability_of
 from knowledge_server.apps.knowledge.services.assembly import Lanes, strategies
+from knowledge_server.catalog import KNOWLEDGE_USE
 from knowledge_server.container import Container
 from knowledge_server.deps import get_container, require
 from knowledge_server.settings import API_PREFIX

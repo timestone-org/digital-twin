@@ -15,7 +15,7 @@ import pytest
 from pydantic import SecretStr
 
 from knowledge_server.app import build_app
-from knowledge_server.apps.knowledge.catalog import (
+from knowledge_server.catalog import (
     KNOWLEDGE_MANAGE,
     KNOWLEDGE_USE,
     KNOWLEDGE_WRITE,

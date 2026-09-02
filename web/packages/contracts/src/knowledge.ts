@@ -222,3 +222,78 @@ export interface KnowledgeSyncResult {
    */
   has_more: boolean
 }
+
+/**
+ * 知识库对话（docs/KNOWLEDGE_CHAT_DESIGN.md）。
+ *
+ * ⚠ 步骤、消息两个形状与助手那边**逐字相同**（`AssistantStep` /
+ * `AssistantMessage`）：渲染它们的组件两边共用，多一格少一格界面就画不出来。
+ * 后端有一条契约测试钉住三个闭合集合；这里由 `knowledge-shapes` 契约钉字段。
+ */
+
+/** 对话回合里的一步：一次模型调用或一次工具执行。 */
+export interface KnowledgeChatStep {
+  id: string
+  message_id: string
+  seq: number
+  kind: string
+  name: string
+  state: string
+  input_json: Record<string, unknown> | null
+  output_json: Record<string, unknown> | null
+  error: string | null
+  started_at: string | null
+  ended_at: string | null
+  created_at: string
+}
+
+/** 对话里的一条消息。`content_json` 的形状随 role 变，前端按 role 分支读。 */
+export interface KnowledgeChatMessage {
+  id: string
+  session_id: string
+  seq: number
+  role: string
+  content_json: Record<string, unknown>
+  usage_json: Record<string, unknown> | null
+  steps: KnowledgeChatStep[]
+  created_at: string
+}
+
+/** 对话列表里的一行。⚠ 没有 `base_id`：对话是跨库的，模型自己决定去哪个库找。 */
+export interface KnowledgeChatSession {
+  id: string
+  user_id: string
+  title: string
+  is_archived: boolean
+  /** 乐观锁行版本。改标题与归档都推进它。 */
+  row_version: number
+  /** 最近一次失败的原因，给人看。不带上游地址与密钥。 */
+  last_error: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** 对话详情：列表那一行加上全部消息与步骤。 */
+export interface KnowledgeChatSessionDetail extends KnowledgeChatSession {
+  messages: KnowledgeChatMessage[]
+}
+
+/** 浏览器跑完反问之后带回来的东西。`call_id` 必须是模型给的那个逐字原样。 */
+export interface KnowledgeChatToolResult {
+  call_id: string
+  output?: unknown
+  error?: string | null
+}
+
+/**
+ * 推进一个回合。⚠ `user_text` 与 `tool_results` 二选一，且必须有一个。
+ * `client_tools` 是这一页实现了哪些客户端工具——对话页只会报 `user.ask`。
+ */
+export interface KnowledgeChatAdvanceIn {
+  user_text?: string | null
+  tool_results?: KnowledgeChatToolResult[]
+  client_tools?: string[]
+}
+
+/** 这套部署没接对话档（领域 23）。⚠ 按码分支，不按 message。 */
+export const KNOWLEDGE_CHAT_UNAVAILABLE_CODE = 42321

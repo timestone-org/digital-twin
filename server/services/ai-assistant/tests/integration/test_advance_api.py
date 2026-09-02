@@ -16,7 +16,6 @@ import pytest
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from sqlalchemy.ext.asyncio import AsyncSession
-from unit.llm_fakes import ScriptedChat, StreamingChat, tool_call
 
 from ai_assistant.apps.chat.catalog import ASSISTANT_USE
 from ai_assistant.apps.chat.deps import get_advance_deps
@@ -28,6 +27,7 @@ from ai_assistant.llm import GuardedModel
 from ai_assistant.llm.ports import ModelChoice, ModelKind
 from integration.conftest import DbStack
 from lib.resilience import CircuitBreaker
+from llmcore.testing import ScriptedChat, StreamingChat, tool_call
 
 pytestmark = pytest.mark.requires_postgres
 

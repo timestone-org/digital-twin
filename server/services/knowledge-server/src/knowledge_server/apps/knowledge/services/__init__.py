@@ -9,6 +9,28 @@
 后两层，而 `agentic` 策略会反复重入 `indexing/`。
 """
 
+from knowledge_server.apps.knowledge.errors import (
+    KnowledgeBaseNotFound,
+    RetrievalUnavailable,
+)
+from knowledge_server.apps.knowledge.schemas import HitOut, SearchIn, SearchOut
+from knowledge_server.apps.knowledge.services import (
+    chunk_service,
+    library_service,
+    search_service,
+)
 from knowledge_server.apps.knowledge.services.capability import capability_of
 
-__all__ = ["capability_of"]
+# ⚠ 下面这几样是给**对话模块**用的公开面：它调检索、列库、看块，还要认得
+# 检索面会抛的两种错与出入参的形状。多露一样就是多一条它能伸进来的路
+__all__ = [
+    "HitOut",
+    "KnowledgeBaseNotFound",
+    "RetrievalUnavailable",
+    "SearchIn",
+    "SearchOut",
+    "capability_of",
+    "chunk_service",
+    "library_service",
+    "search_service",
+]

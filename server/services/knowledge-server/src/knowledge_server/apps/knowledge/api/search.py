@@ -6,7 +6,6 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from knowledge_server.apps.knowledge.catalog import KNOWLEDGE_USE
 from knowledge_server.apps.knowledge.schemas import (
     AskIn,
     AskOut,
@@ -18,6 +17,7 @@ from knowledge_server.apps.knowledge.services.assembly import Lanes, strategies
 from knowledge_server.apps.knowledge.services.retrieval import (
     RetrievalStrategy,
 )
+from knowledge_server.catalog import KNOWLEDGE_USE
 from knowledge_server.container import Container
 from knowledge_server.deps import get_container, get_session, require
 from knowledge_server.settings import API_PREFIX
