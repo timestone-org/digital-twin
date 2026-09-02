@@ -129,6 +129,11 @@ class SourceSession:
         """此刻是否连着。"""
         return self._is_online
 
+    @property
+    def is_subscribing(self) -> bool:
+        """此刻是否连着且靠订阅取数。归档心跳只补这一类数据源的点位。"""
+        return self._is_online and self._wants_subscribe()
+
     async def run(self) -> None:
         """跑到被叫停为止：断了就退避重连。
 

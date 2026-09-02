@@ -69,6 +69,7 @@ class FakeSession:
         self.source_id = source.source_id
         self.applied: list[Any] = []
         self.is_online = True
+        self.is_subscribing = True
         self.is_stopped = False
         self.driver = object()
         self._forever = asyncio.Event()
@@ -166,6 +167,43 @@ async def test_losing_the_lease_stops_every_session(build_plan: Any) -> None:
     await supervisor.tick()
     assert built[0].is_stopped is True
     assert supervisor.is_leader is False
+
+
+async def test_subscribing_is_answered_by_the_live_session(
+    build_plan: Any,
+) -> None:
+    supervisor, built = _supervisor(FakeLease(), FakeFetcher([build_plan()]))
+    source_id = build_plan().sources[0].source_id
+    assert supervisor.is_subscribing(source_id) is False
+    await supervisor.tick()
+    assert supervisor.is_subscribing(source_id) is True
+    built[0].is_subscribing = False
+    assert supervisor.is_subscribing(source_id) is False
+    assert supervisor.is_subscribing(uuid4()) is False
+    await supervisor.stop()
+
+
+async def test_a_dropped_session_is_no_longer_subscribing(
+    build_plan: Any,
+) -> None:
+    # 丢主拆掉会话之后再补心跳，就是一个非 leader 在造行
+    lease = FakeLease(answers=[True, False])
+    supervisor, _ = _supervisor(lease, FakeFetcher([build_plan()]))
+    source_id = build_plan().sources[0].source_id
+    await supervisor.tick()
+    await supervisor.tick()
+    assert supervisor.is_subscribing(source_id) is False
+    assert supervisor.is_online(source_id) is False
+
+
+async def test_online_is_answered_by_the_live_session(build_plan: Any) -> None:
+    supervisor, built = _supervisor(FakeLease(), FakeFetcher([build_plan()]))
+    source_id = build_plan().sources[0].source_id
+    await supervisor.tick()
+    assert supervisor.is_online(source_id) is True
+    built[0].is_online = False
+    assert supervisor.is_online(source_id) is False
+    await supervisor.stop()
 
 
 async def test_an_unchanged_plan_version_leaves_sessions_alone(

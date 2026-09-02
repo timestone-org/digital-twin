@@ -1,6 +1,7 @@
-"""归档缓冲：准入判定 + 有界缓冲 + 定期落 Redis Stream。
+"""归档缓冲：心跳补发 + 有界缓冲 + 定期落 Redis Stream。
 
-数据流见 COLLECT_DESIGN.md §4.3 的 ③⑥；从 Stream 到库的那一段在 writer.py。
+数据流见 COLLECT_DESIGN.md §4.3 的 ③⑥；准入判定在 admission.py，从 Stream
+到库的那一段在 writer.py。
 ⚠ 本模块只认四元组 `(point_code, value, ts_ms, quality)`，不认识任何驱动。
 """
 
@@ -9,13 +10,21 @@ import contextlib
 from collections import deque
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from typing import Protocol
 from uuid import UUID
 
 from collector_server.apps.collect import tuning
+from collector_server.apps.collect.archive.admission import (
+    DEFAULT_POLICY,
+    AdmissionGate,
+    ArchivePolicy,
+    PointKey,
+    policies_of,
+)
 from collector_server.apps.collect.drivers.base import ValueSink
 from collector_server.apps.collect.tuning import PlanView
+from collector_server.clock import Clock, utc_now_ms
 from collector_server.stream import ArchiveStream
-from collectwire import CollectPlan
 from lib.logging import get_logger
 from timeseries import Quality
 
@@ -23,22 +32,21 @@ _logger = get_logger("collect.archive.buffer")
 
 # 一次 flush 之间的最小间隔下限，防止把配置写成 0 之后空转打满 CPU
 MIN_FLUSH_INTERVAL_MS = 50
-
-PointKey = tuple[UUID, str]
-
-
-@dataclass(frozen=True)
-class ArchivePolicy:
-    """一个点位的归档准入参数。取值来自计划，口径见 COLLECT_DESIGN.md §4.3。"""
-
-    archive_enabled: bool = True
-    deadband: float = 0.0
-    max_interval_ms: int = 0
+# 心跳补发的扫描周期。⚠ 不跟 flush 走：flush 默认 300ms，两万个点位每拍扫一遍
+# 是白烧 CPU，而心跳本身是秒级以上的粒度，一秒扫一遍绰绰有余
+HEARTBEAT_SWEEP_INTERVAL_MS = 1_000
 
 
-# ⚠ 计划里查不到的点位按「照常归档」处理：计划刚变而索引还没重建的那一瞬，
-# 宁可多写几行也不要在库里留一段没人察觉的空白
-DEFAULT_POLICY = ArchivePolicy()
+class SourceLiveness(Protocol):
+    """数据源此刻连着没有、是不是靠订阅取数。真实现是 supervisor，测试用假件。
+
+    ⚠ 两问都要：只有**在线且订阅**的数据源需要补心跳（订阅只在值变了才回调），
+    而**掉线**的数据源要把「见过」的读数忘掉；轮询着的数据源两样都不做。
+    """
+
+    def is_online(self, source_id: UUID) -> bool: ...
+
+    def is_subscribing(self, source_id: UUID) -> bool: ...
 
 
 @dataclass(frozen=True)
@@ -63,106 +71,6 @@ class ArchiveRow:
         }
 
 
-def policies_of(plan: CollectPlan) -> dict[PointKey, ArchivePolicy]:
-    """把一份计划压成按点位取策略的平表——热路径上只查一次字典。
-
-    Args: plan。
-    """
-    return {
-        (source.source_id, point.point_code): ArchivePolicy(
-            archive_enabled=point.archive_enabled,
-            deadband=point.deadband,
-            max_interval_ms=point.archive_max_interval_ms,
-        )
-        for source in plan.sources
-        for point in source.points
-    }
-
-
-def is_beyond_deadband(
-    previous: object, value: object, deadband: float
-) -> bool:
-    """两个读数之间的差值算不算越过了死区。
-
-    ⚠ 用 `>` 而不是 `>=`：死区 0 的语义是「变了就记」，取 `>=` 会连没变的
-    读数一起记下来。
-    ⚠ bool 走相等比较：开关量的「死区」没有意义，而 bool 是 int 的子类，
-    不先挡下来就会掉进数值分支。
-
-    Args: previous, value, deadband。
-    """
-    if isinstance(previous, bool) or isinstance(value, bool):
-        return previous != value
-    if isinstance(previous, int | float) and isinstance(value, int | float):
-        return abs(float(value) - float(previous)) > deadband
-    return previous != value
-
-
-class AdmissionGate:
-    """按策略决定一条读数要不要进归档，并记住每个点位**上一条已归档**的读数。"""
-
-    def __init__(self) -> None:
-        self._archived: dict[PointKey, tuple[object, int, Quality]] = {}
-
-    def admit(
-        self,
-        key: PointKey,
-        policy: ArchivePolicy,
-        sample: tuple[object, int, Quality],
-    ) -> bool:
-        """首值 ∨ 心跳到期 ∨ 质量变了 ∨ 超死区 —— 命中任一就收。
-
-        ⚠ 基线是上一条**已归档**的读数，不是上一条见过的读数：拿见过的当
-        基线，一条缓慢爬升的曲线可以永远不触发死区而一行都不落库。
-
-        Args: key, policy, sample。
-        """
-        if not policy.archive_enabled:
-            return False
-        value, ts_ms, quality = sample
-        previous = self._archived.get(key)
-        if previous is None or self._is_due(previous, sample, policy):
-            self._archived[key] = (value, ts_ms, quality)
-            return True
-        return False
-
-    def retain(self, keys: frozenset[PointKey]) -> None:
-        """只留这些点位的基线，其余丢掉。计划变了时用。
-
-        ⚠ 也是「删掉再加回来」的正确解：基线跟着点位一起走，加回来的点位
-        因此重新算首值，而不是被一条几个月前的旧基线挡住。
-
-        Args: keys。
-        """
-        for key in [key for key in self._archived if key not in keys]:
-            del self._archived[key]
-
-    def size(self) -> int:
-        """记着基线的点位数。"""
-        return len(self._archived)
-
-    @staticmethod
-    def _is_due(
-        previous: tuple[object, int, Quality],
-        sample: tuple[object, int, Quality],
-        policy: ArchivePolicy,
-    ) -> bool:
-        """除首值外的三条准入。
-
-        Args: previous, sample, policy。
-        """
-        last_value, last_ts_ms, last_quality = previous
-        value, ts_ms, quality = sample
-        if quality != last_quality:
-            return True
-        if (
-            policy.max_interval_ms > 0
-            and ts_ms - last_ts_ms >= policy.max_interval_ms
-        ):
-            return True
-        return is_beyond_deadband(last_value, value, policy.deadband)
-
-
 @dataclass(frozen=True)
 class ArchiveOptions:
     """缓冲的容量与节奏（环境变量给的默认值；计划里的运行参数覆盖它们）。"""
@@ -179,15 +87,21 @@ class ArchiveBuffer:
     """全部数据源的归档缓冲，加一条定期落 Stream 的循环。"""
 
     def __init__(
-        self, *, stream: ArchiveStream, plan: PlanView, options: ArchiveOptions
+        self,
+        *,
+        stream: ArchiveStream,
+        plan: PlanView,
+        options: ArchiveOptions,
+        clock: Clock = utc_now_ms,
     ) -> None:
         """按流、计划面与容量初始化，构造时不起任何任务。
 
-        Args: stream, plan, options。
+        Args: stream, plan, options, clock。
         """
         self._stream = stream
         self._plan = plan
         self._options = options
+        self._clock = clock
         self._interval_s = (
             max(options.flush_interval_ms, MIN_FLUSH_INTERVAL_MS) / 1000
         )
@@ -196,9 +110,13 @@ class ArchiveBuffer:
         self._rows: deque[tuple[UUID, ArchiveRow]] = deque(
             maxlen=options.max_rows
         )
-        self._gate = AdmissionGate()
+        self._gate = AdmissionGate(clock=clock)
         self._policies: dict[PointKey, ArchivePolicy] = {}
         self._plan_version: str | None = None
+        # 数据源在线状态的口。⚠ 晚绑（见 `bind_liveness`），没绑之前不补心跳
+        self._liveness: SourceLiveness | None = None
+        self._swept_at_ms = 0
+        self._heartbeats = 0
         self._stopped = asyncio.Event()
         # ⚠ 强引用：事件循环只持有任务的弱引用，丢了引用的任务可能随时消失
         self._task: asyncio.Task[None] | None = None
@@ -222,6 +140,22 @@ class ArchiveBuffer:
     def pending(self) -> int:
         """此刻缓冲里的行数。"""
         return len(self._rows)
+
+    @property
+    def heartbeats(self) -> int:
+        """累计补发的心跳行数。"""
+        return self._heartbeats
+
+    def bind_liveness(self, liveness: SourceLiveness) -> None:
+        """挂上「数据源在线状态」的口。
+
+        ⚠ 构造之后才挂而不是构造时传：真实现是 supervisor，而 supervisor 的
+        会话工厂又要拿本缓冲的 sink——两头互相持有，只能有一头晚绑。没挂之前
+        不补任何心跳：宁可少写，也不拿一份不知道在不在线的基线造行。
+
+        Args: liveness。
+        """
+        self._liveness = liveness
 
     def sink_for(self, source_id: UUID) -> ValueSink:
         """取一个数据源的归档支线，与快照支线并联挂在同一个 `ValueSink` 上。
@@ -257,20 +191,25 @@ class ArchiveBuffer:
         policy = self._policies.get(key, DEFAULT_POLICY)
         if not self._gate.admit(key, policy, (value, ts_ms, quality)):
             return
+        self._push(
+            source_id,
+            ArchiveRow(
+                point_code=point_code,
+                value=value,
+                ts_ms=ts_ms,
+                quality=quality,
+            ),
+        )
+
+    def _push(self, source_id: UUID, row: ArchiveRow) -> None:
+        """把一行排进缓冲；满了就挤掉最旧的并记账。
+
+        Args: source_id, row。
+        """
         if len(self._rows) == self._rows.maxlen:
             self._dropped += 1
             self._overflowed += 1
-        self._rows.append(
-            (
-                source_id,
-                ArchiveRow(
-                    point_code=point_code,
-                    value=value,
-                    ts_ms=ts_ms,
-                    quality=quality,
-                ),
-            )
-        )
+        self._rows.append((source_id, row))
 
     async def start(self) -> None:
         """起 flush 循环。"""
@@ -291,12 +230,62 @@ class ArchiveBuffer:
         await self.flush_once()
 
     async def flush_once(self) -> None:
-        """把这一窗的行按数据源分组推进各自的流。"""
+        """先补心跳，再把这一窗的行按数据源分组推进各自的流。"""
         self._refresh_policies()
+        self._heartbeat()
         pending = self._swap()
         for source_id, rows in _by_source(pending):
             await self._append(source_id, rows)
         self._report_overflow()
+
+    def _heartbeat(self) -> None:
+        """给在线订阅着、却很久没变的点位补心跳行（COLLECT_DESIGN.md §4.3 ③'）。
+
+        ⚠ 订阅只在值变了才回调：稳定的点位在 `record` 里永远等不到「心跳到期」
+        那条准入，库里就是几个月一行，台账按桶折算的每一档都取不到它。轮询
+        不在此列——每一轮都把读数送进准入，那条准入自己会收。
+        ⚠ 掉线的数据源不补，且忘掉它「见过」的读数：重连之前谁也不知道现场
+        的值还是不是这个；重连后订阅会把初值重新推一遍，从那一条起再补。
+        """
+        liveness = self._liveness
+        if liveness is None or not self._enabled_now():
+            return
+        now_ms = self._clock()
+        if now_ms - self._swept_at_ms < HEARTBEAT_SWEEP_INTERVAL_MS:
+            return
+        self._swept_at_ms = now_ms
+        states: dict[UUID, tuple[bool, bool]] = {}
+        for key in self._gate.seen_keys():
+            source_id = key[0]
+            state = states.get(source_id)
+            if state is None:
+                state = states[source_id] = (
+                    liveness.is_online(source_id),
+                    liveness.is_subscribing(source_id),
+                )
+            is_online, is_subscribing = state
+            if not is_online:
+                self._gate.forget_seen(key)
+            elif is_subscribing:
+                self._heartbeat_one(key, now_ms)
+
+    def _heartbeat_one(self, key: PointKey, now_ms: int) -> None:
+        """一个点位到期就补一行。
+
+        Args: key, now_ms。
+        """
+        policy = self._policies.get(key, DEFAULT_POLICY)
+        sample = self._gate.heartbeat(key, policy, now_ms)
+        if sample is None:
+            return
+        value, ts_ms, quality = sample
+        self._heartbeats += 1
+        self._push(
+            key[0],
+            ArchiveRow(
+                point_code=key[1], value=value, ts_ms=ts_ms, quality=quality
+            ),
+        )
 
     def _swap(self) -> list[tuple[UUID, ArchiveRow]]:
         """取走这一窗的全部行，并换上一个空队列。

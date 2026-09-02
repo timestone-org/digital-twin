@@ -257,6 +257,29 @@ async def test_stopping_closes_the_connection(
     assert session.is_online is False
 
 
+async def test_an_open_subscription_says_it_is_subscribing(
+    driver: Any, reporter: Any, build_source: Any
+) -> None:
+    session = _session(build_source(), driver, reporter)
+    assert session.is_subscribing is False
+    await session._open()
+    assert session.is_subscribing is True
+    await session.stop()
+    assert session.is_subscribing is False
+
+
+async def test_a_polling_session_is_not_subscribing(
+    driver: Any, reporter: Any, build_source: Any
+) -> None:
+    # 轮询每一轮都把读数送进准入，心跳到期那条自己会收，不需要补发
+    session = _session(build_source(read_mode=READ_MODE_POLL), driver, reporter)
+    await session._open()
+    await asyncio.sleep(0)
+    is_subscribing = session.is_subscribing
+    await session.stop()
+    assert is_subscribing is False
+
+
 async def test_stop_before_the_task_starts_is_not_swallowed(
     driver: Any, reporter: Any, build_source: Any
 ) -> None:
