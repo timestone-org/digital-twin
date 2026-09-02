@@ -7,7 +7,7 @@ import { RouterLink } from 'vue-router'
 import { DtButton, DtIcon } from '@dt/ui'
 
 import type { NavItem } from './navItems'
-import { isGroupActive, isPathActive } from './navTree'
+import { activeChildKey, isGroupActive } from './navTree'
 
 const props = defineProps<{ item: NavItem; currentPath: string }>()
 
@@ -21,9 +21,8 @@ const isOpen = computed(
 )
 const groupActive = computed(() => isGroupActive(props.currentPath, props.item))
 
-function isActive(to: string | undefined): boolean {
-  return isPathActive(props.currentPath, to)
-}
+/** 只点亮一个子项：子项目标互为前缀时（知识库那组）按前缀各判会亮两个。 */
+const activeKey = computed(() => activeChildKey(props.currentPath, props.item))
 
 /**
  * 指针与焦点都离开这一组之后才解除 Esc 压制。
@@ -113,11 +112,11 @@ function onEsc(event: KeyboardEvent): void {
           :to="child.to ?? '/'"
           class="flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs transition-colors"
           :class="
-            isActive(child.to)
+            child.key === activeKey
               ? 'bg-accent-primary/10 text-accent-on-surface'
               : 'text-text-secondary hover:bg-accent-primary/10 hover:text-text-primary'
           "
-          :aria-current="isActive(child.to) ? 'page' : undefined"
+          :aria-current="child.key === activeKey ? 'page' : undefined"
         >
           <DtIcon :name="child.icon" :size="15" />
           <span class="whitespace-nowrap">{{ child.label }}</span>

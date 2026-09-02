@@ -65,6 +65,41 @@ describe('AppNavGroupTree', () => {
     expect(trigger.classes()).toContain('dt-btn--ghost')
   })
 
+  it('子项目标互为前缀时只有一个标 aria-current', () => {
+    // ⚠ 知识库管理 /knowledge 是知识库对话 /knowledge/chat 的前缀：
+    // 各按前缀判会把两个子项一起点亮
+    const wrapper = mount(AppNavGroupTree, {
+      props: {
+        item: {
+          key: 'knowledge',
+          label: '知识库',
+          icon: 'search',
+          children: [
+            {
+              key: 'manage',
+              label: '管理',
+              icon: 'folder-open',
+              to: '/knowledge',
+            },
+            {
+              key: 'chat',
+              label: '对话',
+              icon: 'sparkles',
+              to: '/knowledge/chat',
+            },
+          ],
+        },
+        currentPath: '/knowledge/chat',
+      },
+    })
+    const current = wrapper
+      .findAll('a')
+      .filter((link) => link.attributes('aria-current') === 'page')
+    expect(current.map((link) => link.attributes('href'))).toEqual([
+      '/knowledge/chat',
+    ])
+  })
+
   it('子项没有目标时退回工作台，而不是渲染一个死链接', async () => {
     const wrapper = mount(AppNavGroupTree, {
       props: {

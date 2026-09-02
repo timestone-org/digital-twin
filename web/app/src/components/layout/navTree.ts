@@ -34,7 +34,8 @@ export function visibleNavItems(
 }
 
 /**
- * 当前路由是否落在这个目标上。'/' 只精确匹配，否则每一页都会把工作台点亮。
+ * 当前路由是否落在这个目标上。'/' 只精确匹配，否则每一页都会把工作台点亮；
+ * 其余按整段路径前缀匹配，/knowledgebase 不算落在 /knowledge 上。
  * @param currentPath 当前路由的 path
  * @param to 导航项目标，分组项没有
  */
@@ -43,12 +44,37 @@ export function isPathActive(
   to: string | undefined,
 ): boolean {
   if (to === undefined || to === '') return false
-  return to === '/' ? currentPath === '/' : currentPath.startsWith(to)
+  if (to === '/') return currentPath === '/'
+  return currentPath === to || currentPath.startsWith(`${to}/`)
 }
 
 /** 分组是否含当前路由所在的子项。 */
 export function isGroupActive(currentPath: string, item: NavItem): boolean {
-  return (item.children ?? []).some((child) =>
+  return activeChildKey(currentPath, item) !== null
+}
+
+/**
+ * 分组里该点亮哪个子项：命中的里面目标最长的那一个；没有就是 null。
+ * ⚠ 不能各按前缀判：知识库管理 /knowledge 是知识库对话 /knowledge/chat 的前缀，
+ * 各判各的会让两个子项一起亮。
+ * @param currentPath 当前路由的 path
+ * @param item 分组项
+ */
+export function activeChildKey(
+  currentPath: string,
+  item: NavItem,
+): string | null {
+  const hits = (item.children ?? []).filter((child) =>
     isPathActive(currentPath, child.to),
   )
+  const best = hits.reduce<NavItem | null>(
+    (kept, child) =>
+      kept === null || targetLength(child) > targetLength(kept) ? child : kept,
+    null,
+  )
+  return best?.key ?? null
+}
+
+function targetLength(item: NavItem): number {
+  return item.to?.length ?? 0
 }
