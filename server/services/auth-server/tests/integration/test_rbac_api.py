@@ -224,5 +224,6 @@ async def test_permission_catalog_is_readable_and_grouped(
         "formula",
         "modeling",
         "knowledge",
+        "llm",
     }
     assert all(item["kind"] for item in body["items"])
