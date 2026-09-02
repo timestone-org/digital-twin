@@ -21,6 +21,8 @@ const props = defineProps<{
   entries: readonly ChatEntry[]
   /** 空态里可点的几句开场；点了填进草稿，不直接发。 */
   starters?: readonly string[] | undefined
+  /** 空态那一句标题；缺省是助手的口吻。知识库对话换成问句。 */
+  emptyTitle?: string | undefined
 }>()
 
 const emit = defineEmits<{
@@ -56,7 +58,7 @@ watch(
     <!-- 空态不走 DtEmpty：它的 icon 只收注册名，塞不进这个会动的图标 -->
     <div v-if="entries.length === 0" class="ai-stream__empty">
       <AiCoreIcon :size="72" />
-      <p class="ai-stream__empty-title">说说你想做什么</p>
+      <p class="ai-stream__empty-title">{{ emptyTitle ?? '说说你想做什么' }}</p>
       <p
         v-if="starters === undefined || starters.length === 0"
         class="ai-stream__empty-hint"

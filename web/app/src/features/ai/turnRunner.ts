@@ -1,28 +1,18 @@
 /**
- * @fileoverview 浏览器这一侧的回合循环：收流 → 派发客户端工具 → 把结果送回去。
+ * @fileoverview 助手这一侧的回合循环：内核在 `turnLoop.ts`，这里只是助手的门面。
  *
- * 服务端跑到客户端工具那一步就把流结束了，待办交给我们；我们在**当前工作面**
- * 上执行它们，再带着结果发下一次推进。一个回合因此可能是好几次 HTTP 往返，
- * 而用户看到的是连续的一串步骤（ADR-0023）。
- *
- * ⚠ 往返有上限。模型绕进「调一个工具 → 看结果 → 再调同一个」的循环时，
- * 每一步看起来都合理，只有总轮数拦得住它。
- *
- * ⚠ 工具失败**照样要把结果送回去**，而且要说清失败了。不送的话服务端那次
- * 调用永远没有答复，模型下一轮会被端点判成请求不合法——报出来的是一条与
- * 真实原因毫无关系的错。
+ * 门面决定三件事：每一轮的信封里带什么（工作面、这一屏的快照、自报的工具）；
+ * 认不出的帧归谁（`plan`）；模型收嘴之后要不要代用户催一句（ADR-0024）。
  *
  * ⚠ 每一轮都重新读一次工作面快照。攒一份在第一轮用的话，助手自己动过两下
  * 之后，它读到的还是动手之前那一屏。
  *
- * ⚠ 计划没走完而模型停了嘴时，这里代用户催一句「按计划继续」（ADR-0024）。
- * 有上限：模型反复停下说明它自己也拿不准，那时该交还给人，不是继续催。
+ * ⚠ 计划没走完而模型停了嘴时，这里代用户催一句「按计划继续」。有上限：模型
+ * 反复停下说明它自己也拿不准，那时该交还给人，不是继续催。
  *
  * ⚠ 派发先看内建表再落到工作面：`user.ask` 不归任何一页（`builtinTools.ts`）。
- * 它还必须**单独成一批**，理由见 `ASK_MUST_BE_ALONE`。
  */
 import type {
-  AssistantDeltaChannel,
   AssistantPlan,
   AssistantPlanItem,
   AssistantPlanStatus,
@@ -31,8 +21,6 @@ import type {
 } from '@dt/contracts'
 import { ASSISTANT_PLAN_STATUSES } from '@dt/contracts'
 
-import { ASSISTANT_ASK_TOOL } from '@dt/contracts'
-
 import type { AdvanceBody } from '@/api/assistant'
 import {
   BUILTIN_CLIENT_TOOLS,
@@ -40,9 +28,10 @@ import {
   runBuiltinTool,
 } from './builtinTools'
 import type { AdvanceStream } from './ports'
-import { createFrameReader } from './sseFrames'
-import { inputPreview, isImageOutput, outputPreview } from './stepPreview'
 import { activeSurface, runClientTool } from './surfaces'
+import { readObject, readText, runLoop, type LoopSink } from './turnLoop'
+
+export { ASK_MUST_BE_ALONE, type RunnerStep } from './turnLoop'
 
 /**
  * 一次往返的上限。到顶就停下并如实告诉用户，而不是继续烧钱。
@@ -54,17 +43,6 @@ import { activeSurface, runClientTool } from './surfaces'
  */
 export const MAX_ROUNDS = 60
 
-/**
- * 一批里混了 `user.ask` 与别的调用时，退给那几个的失败话术。
- *
- * ⚠ 这条守卫拦的是确认：模型很容易发出 `user.ask("要覆盖这 12 条绑定吗？")
- * + write_binding × 12` 这样一批，按顺序跑的话用户点了「取消」而覆盖照样
- * 发生了。而「哪个选项算取消」是模型的语义、前端读不出来，所以只能从批次
- * 这一层拦（AI_ASSISTANT_ASK_DESIGN §1）。
- */
-export const ASK_MUST_BE_ALONE =
-  'user.ask 必须单独发：要先拿到用户的回答才能动手'
-
 /** 计划未完时最多代用户催几次。 */
 export const MAX_PLAN_NUDGES = 3
 
@@ -72,40 +50,10 @@ export const MAX_PLAN_NUDGES = 3
 export const PLAN_CONTINUE_TEXT =
   '（自动继续）按计划把剩下的项做完；做不下去就把那一项标成 failed 并说明原因。'
 
-/** 界面要渲染的一步。 */
-export interface RunnerStep {
-  kind: string
-  name: string
-  state: string
-  title: string
-  error: string | null
-  /** 入参，已摊成键值表。 */
-  input?: Record<string, string>
-  /** 产出摘要。 */
-  output?: string
-  /**
-   * 这一步截到的图（`data:image/…`）。
-   * ⚠ 只有最近几步留着原图，更早的会被丢掉换成 `isImageDropped` —— 一张截图
-   * 几百 KB，一个截了几十次的会话会把这个标签页拖垮。
-   */
-  image?: string
-  /** 这一步有过图，但为省内存没留下。 */
-  isImageDropped?: true
-}
-
-/** 循环把发生的事交给谁。 */
-export interface RunnerSink {
-  /** 模型又吐了一小块：`text` 是它说的话，`reasoning` 是它想的过程。 */
-  onDelta: (channel: AssistantDeltaChannel, text: string) => void
-  onStep: (step: RunnerStep) => void
-  /** 一批客户端工具跑完了，附带它们各自成没成。 */
-  onToolsRun: (steps: readonly RunnerStep[]) => void
-  onDone: (reply: string) => void
-  onError: (message: string) => void
+/** 循环把发生的事交给谁。比内核多一格：计划变了。 */
+export interface RunnerSink extends LoopSink {
   /** 计划变了：整份快照，直接盖掉手上那份。 */
   onPlan: (plan: AssistantPlan) => void
-  /** 循环自己说的一句话（「计划未完，自动继续」这类），不是模型说的。 */
-  onNote: (text: string) => void
 }
 
 export interface RunnerInput {
@@ -117,12 +65,6 @@ export interface RunnerInput {
   /** 用户随这句话贴的图；只在**第一帧**带，后续回填帧不带。 */
   userImages?: string[]
   signal?: AbortSignal
-}
-
-interface ToolResult {
-  call_id: string
-  output?: unknown
-  error?: string | null
 }
 
 /**
@@ -138,28 +80,33 @@ export async function runTurn(
 ): Promise<void> {
   const watch: PlanWatch = { plan: null }
   let nudges = 0
-  // ⚠ 图只随第一帧走：后面每一帧都是工具回填，而回填不许夹带图
-  let body: AdvanceBody = {
-    ...envelope(input),
-    user_text: input.userText,
-    ...(input.userImages?.length ? { user_images: input.userImages } : {}),
-  }
-  for (let round = 0; round < MAX_ROUNDS; round += 1) {
-    const outcome = await pump(input, body, sink, watch)
-    if (outcome.kind === 'error') return
-    if (outcome.kind === 'pending') {
-      const results = await runAll(outcome.calls, sink)
-      body = { ...envelope(input), tool_results: results }
-      continue
-    }
-    // 模型收了嘴而计划没走完：代用户催一句，让它接着干（ADR-0024）
-    if (!planUnfinished(watch.plan) || nudges >= MAX_PLAN_NUDGES) return
-    nudges += 1
-    sink.onNote('计划还没走完，自动继续。')
-    body = { ...envelope(input), user_text: PLAN_CONTINUE_TEXT }
-  }
-  sink.onError(
-    `助手来回了 ${MAX_ROUNDS} 轮还没做完，先停下了。说一句「继续」就接着做。`,
+  await runLoop<AdvanceBody>(
+    {
+      advance: input.advance,
+      sessionId: input.sessionId,
+      envelope: () => envelope(input),
+      userText: input.userText,
+      userImages: input.userImages,
+      signal: input.signal,
+      dispatch,
+      onFrame: (name, data) => {
+        if (name !== 'plan') return
+        const plan = readPlan(data.plan)
+        if (plan === null) return
+        watch.plan = plan
+        sink.onPlan(plan)
+      },
+      // 模型收了嘴而计划没走完：代用户催一句，让它接着干（ADR-0024）
+      nudge: () => {
+        if (!planUnfinished(watch.plan) || nudges >= MAX_PLAN_NUDGES) {
+          return null
+        }
+        nudges += 1
+        return { note: '计划还没走完，自动继续。', text: PLAN_CONTINUE_TEXT }
+      },
+      maxRounds: MAX_ROUNDS,
+    },
+    sink,
   )
 }
 
@@ -188,180 +135,10 @@ function envelope(input: RunnerInput): AdvanceBody {
   }
 }
 
-/** 一次收流的结果。 */
-type PumpOutcome =
-  | { kind: 'pending'; calls: readonly AssistantToolCall[] }
-  | { kind: 'done' }
-  | { kind: 'error' }
-
-/**
- * 收一次流：跑完 / 出错 / 停在一批客户端工具上。
- */
-async function pump(
-  input: RunnerInput,
-  body: AdvanceBody,
-  sink: RunnerSink,
-  watch: PlanWatch,
-): Promise<PumpOutcome> {
-  const reader = createFrameReader()
-  let pending: readonly AssistantToolCall[] | null = null
-  const stream = input.advance(input.sessionId, body, input.signal)
-  for await (const chunk of stream) {
-    for (const frame of reader.push(chunk)) {
-      pending = handle(frame.name, frame.data, sink, watch) ?? pending
-      if (frame.name === 'turn.done') return { kind: 'done' }
-      if (frame.name === 'error') return { kind: 'error' }
-    }
-  }
-  for (const frame of reader.flush()) {
-    pending = handle(frame.name, frame.data, sink, watch) ?? pending
-  }
-  return pending === null
-    ? { kind: 'done' }
-    : { kind: 'pending', calls: pending }
-}
-
-function handle(
-  name: string,
-  data: Record<string, unknown>,
-  sink: RunnerSink,
-  watch: PlanWatch,
-): readonly AssistantToolCall[] | null {
-  if (name === 'message.delta') {
-    sink.onDelta(readChannel(data.channel), readText(data.text))
-    return null
-  }
-  if (name === 'step') {
-    sink.onStep(readStep(data))
-    return null
-  }
-  if (name === 'client_tool.request') return readCalls(data)
-  if (name === 'plan') {
-    const plan = readPlan(data.plan)
-    if (plan !== null) {
-      watch.plan = plan
-      sink.onPlan(plan)
-    }
-    return null
-  }
-  if (name === 'turn.done') {
-    sink.onDone(readText(data.reply))
-    return null
-  }
-  if (name === 'error') sink.onError(readText(data.message))
-  return null
-}
-
-/**
- * 把一批待办跑完，成败都收成结果。
- * ⚠ 每一个都顺手记成一步交给界面：这几步是助手唯一真正改动画布的地方，
- * 而服务端看不见它们——不记的话，一次绑二十个点在界面上是二十秒的空白。
- * ⚠ 提问不记步：问题与答案已经就在时间线的那张卡片上，再记一行
- * 「user.ask 做完了」只是同一件事说两遍。
- */
-async function runAll(
-  calls: readonly AssistantToolCall[],
-  sink: RunnerSink,
-): Promise<ToolResult[]> {
-  const results: ToolResult[] = []
-  const steps: RunnerStep[] = []
-  const isMixedBatch = calls.some(isAsk) && calls.length > 1
-  for (const call of calls) {
-    if (isMixedBatch && !isAsk(call)) {
-      results.push({ call_id: call.call_id, error: ASK_MUST_BE_ALONE })
-      steps.push(stepOf(call, undefined, ASK_MUST_BE_ALONE))
-      continue
-    }
-    try {
-      const output = await dispatch(call)
-      results.push({ call_id: call.call_id, output })
-      if (!isAsk(call)) steps.push(stepOf(call, output, null))
-    } catch (error) {
-      // 失败也要送回去，而且要说清——不送的话那次调用永远没有答复
-      const reason = describe(error)
-      results.push({ call_id: call.call_id, error: reason })
-      steps.push(stepOf(call, undefined, reason))
-    }
-  }
-  sink.onToolsRun(steps)
-  return results
-}
-
-function isAsk(call: AssistantToolCall): boolean {
-  return call.name === ASSISTANT_ASK_TOOL
-}
-
 /** 先看内建表，再落到工作面。 */
 async function dispatch(call: AssistantToolCall): Promise<unknown> {
   if (isBuiltinTool(call.name)) return runBuiltinTool(call)
   return runClientTool(call)
-}
-
-/**
- * 一次客户端工具执行记成一步。标题是给人看的一句话，不是工具名。
- * ⚠ 入参与产出就地留下：这几步**服务端看不见**（它们跑在浏览器里），
- * 不在这里留，界面上就永远只有一句「做完了」。
- * ⚠ 截图单拎一格：混进产出的话，展开看到的是几十万字符的 base64。
- */
-function stepOf(
-  call: AssistantToolCall,
-  output: unknown,
-  error: string | null,
-): RunnerStep {
-  const input = inputPreview(call.arguments)
-  const text = outputPreview(output)
-  return {
-    kind: 'client_tool',
-    name: call.name,
-    state: error === null ? 'succeeded' : 'failed',
-    title: error === null ? `${call.name} 做完了` : `${call.name} 没做成`,
-    error,
-    ...(input === null ? {} : { input }),
-    ...(text === null ? {} : { output: text }),
-    ...(isImageOutput(output) ? { image: output } : {}),
-  }
-}
-
-function readStep(data: Record<string, unknown>): RunnerStep {
-  const input = inputPreview(data.input)
-  const output = readText(data.output)
-  return {
-    kind: readText(data.kind),
-    name: readText(data.name),
-    state: readText(data.state),
-    title: readText(data.title),
-    error: typeof data.error === 'string' ? data.error : null,
-    ...(input === null ? {} : { input }),
-    ...(output === '' ? {} : { output }),
-  }
-}
-
-/** 认不出的路一律当正文：宁可多显示一段，也不要把模型说的话丢掉。 */
-function readChannel(given: unknown): AssistantDeltaChannel {
-  return given === 'reasoning' ? 'reasoning' : 'text'
-}
-
-function readCalls(data: Record<string, unknown>): AssistantToolCall[] {
-  const given: unknown = data.calls
-  if (!Array.isArray(given)) return []
-  // ⚠ 收成 `unknown[]` 再逐项判：`Array.isArray` 把 `unknown` narrow 成
-  // `any[]`，直接展开每一项就把 any 放进了业务层
-  const items: unknown[] = given
-  return items.flatMap((item) => {
-    if (typeof item !== 'object' || item === null) return []
-    const shape: Record<string, unknown> = { ...item }
-    const callId = readText(shape.call_id)
-    const name = readText(shape.name)
-    if (callId === '' || name === '') return []
-    return [{ call_id: callId, name, arguments: readObject(shape.arguments) }]
-  })
-}
-
-function readObject(given: unknown): Record<string, unknown> {
-  if (typeof given !== 'object' || given === null || Array.isArray(given)) {
-    return {}
-  }
-  return { ...given }
 }
 
 /**
@@ -399,12 +176,4 @@ function readStatus(given: unknown): AssistantPlanStatus {
     if (given === status) return status
   }
   return 'pending'
-}
-
-function readText(given: unknown): string {
-  return typeof given === 'string' ? given : ''
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : '执行失败'
 }
