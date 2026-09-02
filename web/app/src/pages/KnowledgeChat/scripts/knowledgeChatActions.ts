@@ -1,6 +1,7 @@
 /**
  * @fileoverview 知识库对话页的动作：列、建、选、改名、归档、删、发一句。
  */
+import { readCapability } from '@/api/knowledge'
 import {
   archiveSession,
   createSession,
@@ -12,11 +13,18 @@ import { guarded, replaySelected } from './knowledgeChatState'
 import type { KnowledgeChatState } from './knowledgeChatState'
 
 /**
- * 取对话清单。⚠ 不自动选中第一个：用户进来多半是要开新的一问，
- * 自动选中上一次的会让他对着一段旧对话发新问题。
+ * 首屏：对话清单与「接没接语音识别」并行取。
  * @param state 页面状态
  */
 export async function reload(state: KnowledgeChatState): Promise<void> {
+  await Promise.all([loadSessions(state), loadSpeechCapability(state)])
+}
+
+/**
+ * 取对话清单。⚠ 不自动选中第一个：用户进来多半是要开新的一问，
+ * 自动选中上一次的会让他对着一段旧对话发新问题。
+ */
+async function loadSessions(state: KnowledgeChatState): Promise<void> {
   await guarded(state, async () => {
     state.isLoading.value = true
     try {
@@ -25,6 +33,15 @@ export async function reload(state: KnowledgeChatState): Promise<void> {
       state.isLoading.value = false
     }
   })
+}
+
+/** 取不到能力就当没接语音：麦克风键只是锦上添花，不为它挡对话、也不报错。 */
+async function loadSpeechCapability(state: KnowledgeChatState): Promise<void> {
+  try {
+    state.isAsrEnabled.value = (await readCapability()).isAsrEnabled
+  } catch {
+    state.isAsrEnabled.value = false
+  }
 }
 
 /**

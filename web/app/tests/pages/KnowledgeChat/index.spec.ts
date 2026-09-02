@@ -3,7 +3,8 @@
  *
  * ⚠ 最要紧的三条：没有对话时发第一句要**自动建一个**（进来就想问的人不该先找
  * 「新建」按钮）；切对话要回放它的历史且慢回来的那次不许盖后选的；出错把后端
- * 那句原话摆出来。
+ * 那句原话摆出来。另守语音输入的接线：接了才有麦克风键，说出来的话进草稿、
+ * 发出去的就是它。
  */
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -13,6 +14,7 @@ import type {
   KnowledgeChatSessionDetail,
 } from '@dt/contracts'
 
+import type { KnowledgeCapability } from '@/api/knowledge'
 import KnowledgeChatPage from '@/pages/KnowledgeChat/index.vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -27,6 +29,77 @@ const api = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api/knowledgeChat', () => api)
+
+const knowledgeApi = vi.hoisted(() => ({ readCapability: vi.fn() }))
+
+vi.mock('@/api/knowledge', () => knowledgeApi)
+
+const mic = vi.hoisted(() => ({
+  onFrame: null as ((frame: ArrayBuffer) => void) | null,
+  stop: vi.fn(),
+}))
+
+vi.mock('@/features/speech/pcmCapture', () => ({
+  startPcmCapture: (onFrame: (frame: ArrayBuffer) => void) => {
+    mic.onFrame = onFrame
+    return Promise.resolve({ stop: mic.stop })
+  },
+}))
+
+type Listener = (event: unknown) => void
+
+/** 记下每次构造与发送的假 WebSocket（同 useSpeechInput 那份用例）。 */
+class FakeSocket {
+  static instances: FakeSocket[] = []
+  static readonly OPEN = 1
+
+  readyState = FakeSocket.OPEN
+  sent: (string | ArrayBuffer)[] = []
+  private listeners = new Map<string, Listener[]>()
+
+  constructor(
+    readonly url: string,
+    readonly protocols: string[],
+  ) {
+    FakeSocket.instances.push(this)
+  }
+
+  addEventListener(type: string, handler: Listener): void {
+    const bucket = this.listeners.get(type) ?? []
+    bucket.push(handler)
+    this.listeners.set(type, bucket)
+  }
+
+  send(data: string | ArrayBuffer): void {
+    this.sent.push(data)
+  }
+
+  close(): void {
+    this.emit('close', { code: 1000 })
+  }
+
+  emit(type: string, event: unknown = {}): void {
+    for (const handler of this.listeners.get(type) ?? []) handler(event)
+  }
+}
+
+function hear(body: unknown): void {
+  const socket = FakeSocket.instances.at(-1)
+  if (socket === undefined) throw new Error('还没有建立过语音连接')
+  socket.emit('message', { data: JSON.stringify(body) })
+}
+
+function capabilityOf(isAsrEnabled: boolean): KnowledgeCapability {
+  return {
+    isEmbeddingEnabled: true,
+    isModelEnabled: true,
+    isAsrEnabled,
+    strategies: ['naive', 'hybrid', 'agentic'],
+    readyStrategies: ['naive', 'hybrid', 'agentic'],
+    acceptedSuffixes: ['.md', '.docx'],
+    index: { vector: 'pgvector', keyword: 'trgm', reason: '' },
+  }
+}
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
@@ -97,11 +170,16 @@ beforeEach(() => {
   api.listSessions.mockResolvedValue([sessionOf('s1', '锅炉那几台')])
   api.readSession.mockResolvedValue(detailOf('s1', '早先问过'))
   api.advanceTurn.mockImplementation(() => reply('上限 65 ℃ [1]'))
+  knowledgeApi.readCapability.mockResolvedValue(capabilityOf(false))
+  FakeSocket.instances = []
+  mic.onFrame = null
+  vi.stubGlobal('WebSocket', FakeSocket)
 })
 
 enableAutoUnmount(afterEach)
 
 afterEach(() => {
+  vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
 
@@ -354,5 +432,67 @@ describe('面板标题栏', () => {
 
     expect(wrapper.text()).not.toContain('上限 65 ℃')
     expect(wrapper.text()).toContain('问一句资料里的事')
+  })
+})
+
+describe('语音输入', () => {
+  it('接了语音识别才有麦克风键', async () => {
+    knowledgeApi.readCapability.mockResolvedValue(capabilityOf(true))
+    const wrapper = await render()
+
+    expect(wrapper.find('button[aria-label="开始语音输入"]').exists()).toBe(
+      true,
+    )
+  })
+
+  it('没接就没有那枚键', async () => {
+    const wrapper = await render()
+
+    expect(wrapper.find('button[aria-label="开始语音输入"]').exists()).toBe(
+      false,
+    )
+  })
+
+  it('能力接口挂了不挡对话：没有键、也不报错', async () => {
+    knowledgeApi.readCapability.mockRejectedValue(new Error('后端没起'))
+    const wrapper = await render()
+
+    expect(wrapper.find('button[aria-label="开始语音输入"]').exists()).toBe(
+      false,
+    )
+    expect(wrapper.text()).not.toContain('后端没起')
+    expect(wrapper.text()).toContain('锅炉那几台')
+  })
+
+  it('点麦克风说一句，转写进草稿，发出去的就是它', async () => {
+    knowledgeApi.readCapability.mockResolvedValue(capabilityOf(true))
+    api.listSessions.mockResolvedValue([])
+    api.createSession.mockResolvedValue(sessionOf('s9'))
+    api.readSession.mockResolvedValue({ ...sessionOf('s9'), messages: [] })
+    const wrapper = await render()
+
+    await wrapper.find('button[aria-label="开始语音输入"]').trigger('click')
+    await flushPromises()
+    hear({ type: 'system', event: 'ready' })
+    hear({ type: 'data', payload: { stage: 'partial', text: '冷却水出口' } })
+    await flushPromises()
+    expect(wrapper.find<HTMLTextAreaElement>('textarea').element.value).toBe(
+      '冷却水出口',
+    )
+
+    await wrapper.find('button[aria-label="结束语音输入"]').trigger('click')
+    hear({
+      type: 'data',
+      payload: { stage: 'final', text: '冷却水出口温度的上限是多少？' },
+    })
+    hear({ type: 'system', event: 'done' })
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('整理中')
+
+    await wrapper.find('button[aria-label="发送"]').trigger('click')
+    await flushPromises()
+
+    const body = api.advanceTurn.mock.calls[0]?.[1] as Record<string, unknown>
+    expect(body.user_text).toBe('冷却水出口温度的上限是多少？')
   })
 })

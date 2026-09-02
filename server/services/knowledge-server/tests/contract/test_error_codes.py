@@ -6,17 +6,23 @@
 
 import inspect
 
-from knowledge_server.apps.knowledge import errors
+from knowledge_server.apps.chat import errors as chat_errors
+from knowledge_server.apps.knowledge import errors as knowledge_errors
+from knowledge_server.apps.speech import errors as speech_errors
 from lib.errors import AppError
 
 DOMAIN_PREFIX = 23
 CODE_LENGTH = 5
+# ⚠ 三个功能模块各有一份 errors.py，码却共用领域号 23：漏扫一份，那一份里
+# 与别处撞号的码就没人拦
+ERROR_MODULES = (knowledge_errors, chat_errors, speech_errors)
 
 
 def _error_types() -> list[type[AppError]]:
     return [
         one
-        for _, one in inspect.getmembers(errors, inspect.isclass)
+        for module in ERROR_MODULES
+        for _, one in inspect.getmembers(module, inspect.isclass)
         if issubclass(one, AppError) and one is not AppError
     ]
 

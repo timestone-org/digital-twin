@@ -71,6 +71,17 @@ KNOWLEDGE_RULES: tuple[RouteRuleSpec, ...] = (
         ),
     ),
     RouteRuleSpec(
+        f"{_K}/speech/ws",
+        "GET",
+        codes=(KNOWLEDGE_USE,),
+        priority=895,
+        description=(
+            "语音输入的 WebSocket。⚠ token 走子协议，边缘用 /_auth_ws 把它"
+            "映射成 Authorization 再来问这条规则；与检索同一个码：能问就能"
+            "用嘴问（ADR-0038）"
+        ),
+    ),
+    RouteRuleSpec(
         f"{_K}/chat-sessions*",
         "*",
         codes=(KNOWLEDGE_USE,),

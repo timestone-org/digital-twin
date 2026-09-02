@@ -62,6 +62,8 @@ export interface KnowledgeCapability {
   is_embedding_enabled: boolean
   /** 对话档接上了吗。它只决定 `agentic` 策略可不可用。 */
   is_model_enabled: boolean
+  /** 语音输入接上了吗：自建 FunASR 经 knowledge-server 中继（ADR-0038）。 */
+  is_asr_enabled: boolean
   strategies: string[]
   ready_strategies: string[]
   source_kinds: string[]

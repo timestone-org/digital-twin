@@ -718,6 +718,10 @@
           "index": {
             "$ref": "#/components/schemas/IndexCapabilityOut"
           },
+          "is_asr_enabled": {
+            "title": "Is Asr Enabled",
+            "type": "boolean"
+          },
           "is_embedding_enabled": {
             "title": "Is Embedding Enabled",
             "type": "boolean"
@@ -751,6 +755,7 @@
         "required": [
           "is_embedding_enabled",
           "is_model_enabled",
+          "is_asr_enabled",
           "index"
         ],
         "title": "CapabilityOut",

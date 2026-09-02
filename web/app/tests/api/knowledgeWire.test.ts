@@ -110,6 +110,8 @@ describe('知识库的窄化', () => {
 
     expect(made.isEmbeddingEnabled).toBe(false)
     expect(made.isModelEnabled).toBe(true)
+    // 旧后端没有这一格：当没接语音，而不是 undefined 流进模板
+    expect(made.isAsrEnabled).toBe(false)
     expect(made.strategies).toEqual(['naive'])
     expect(made.acceptedSuffixes).toEqual(['.md', '.docx'])
     expect(made.index.reason).toBe('没装 pgvector')

@@ -65,6 +65,7 @@ const SHAPES: Record<string, Record<string, true>> = {
   CapabilityOut: {
     is_embedding_enabled: true,
     is_model_enabled: true,
+    is_asr_enabled: true,
     strategies: true,
     ready_strategies: true,
     source_kinds: true,

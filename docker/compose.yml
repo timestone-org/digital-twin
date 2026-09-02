@@ -573,6 +573,13 @@ services:
       #     python -m knowledge_server.index --enable
       KNOWLEDGE_VECTOR_INDEX: ${KNOWLEDGE_VECTOR_INDEX:-auto}
       KNOWLEDGE_KEYWORD_INDEX: ${KNOWLEDGE_KEYWORD_INDEX:-auto}
+      # 语音输入：到自建 FunASR 的中继（ADR-0038）。超时那几项用代码缺省。
+      # ⚠ 开关开着却没给地址 = 启动即失败，而不是第一次开麦才报错
+      KNOWLEDGE_ASR_ENABLED: ${KNOWLEDGE_ASR_ENABLED:-false}
+      KNOWLEDGE_ASR_URL: ${KNOWLEDGE_ASR_URL:-}
+      KNOWLEDGE_ASR_HOTWORDS: ${KNOWLEDGE_ASR_HOTWORDS:-}
+      # 收口前补的尾部静音：FunASR 的 VAD 靠它判「说完了」，按现场调
+      KNOWLEDGE_ASR_TAIL_SILENCE_S: ${KNOWLEDGE_ASR_TAIL_SILENCE_S:-3.0}
     expose: ['8009']
     healthcheck:
       test: ['CMD', 'python', '-c', "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8009/api/v1/knowledge/health')"]
@@ -641,6 +648,13 @@ services:
       #     python -m knowledge_server.index --enable
       KNOWLEDGE_VECTOR_INDEX: ${KNOWLEDGE_VECTOR_INDEX:-auto}
       KNOWLEDGE_KEYWORD_INDEX: ${KNOWLEDGE_KEYWORD_INDEX:-auto}
+      # 语音输入：到自建 FunASR 的中继（ADR-0038）。超时那几项用代码缺省。
+      # ⚠ 开关开着却没给地址 = 启动即失败，而不是第一次开麦才报错
+      KNOWLEDGE_ASR_ENABLED: ${KNOWLEDGE_ASR_ENABLED:-false}
+      KNOWLEDGE_ASR_URL: ${KNOWLEDGE_ASR_URL:-}
+      KNOWLEDGE_ASR_HOTWORDS: ${KNOWLEDGE_ASR_HOTWORDS:-}
+      # 收口前补的尾部静音：FunASR 的 VAD 靠它判「说完了」，按现场调
+      KNOWLEDGE_ASR_TAIL_SILENCE_S: ${KNOWLEDGE_ASR_TAIL_SILENCE_S:-3.0}
     restart: unless-stopped
 
   # 素材字节面的建桶脚本：建桶并把三个公开前缀设成匿名可读；跑完即退出。

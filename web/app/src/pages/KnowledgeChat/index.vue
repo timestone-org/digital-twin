@@ -96,6 +96,7 @@ onMounted(() => void page.reload())
             :chat="page.chat"
             :title="selectedLabel"
             :starters="STARTERS"
+            :speech-enabled="page.isAsrEnabled.value"
             @send="(text: string) => void page.send(text)"
           />
         </section>

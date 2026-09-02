@@ -20,6 +20,8 @@ export function createState(chat?: KnowledgeConversation) {
   const selectedId = ref<string | null>(null)
   const error = ref('')
   const isLoading = ref(false)
+  /** 这套部署接了语音识别。取不到当 false，只是少一枚麦克风键，不挡对话。 */
+  const isAsrEnabled = ref(false)
   const replayRace = useRacedFetch()
   const conversation = chat ?? useKnowledgeConversation(() => selectedId.value)
 
@@ -34,6 +36,7 @@ export function createState(chat?: KnowledgeConversation) {
     selectedId,
     error,
     isLoading,
+    isAsrEnabled,
     replayRace,
     chat: conversation,
   }
