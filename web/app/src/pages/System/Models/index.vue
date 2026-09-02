@@ -1,231 +1,205 @@
 <script setup lang="ts">
 /**
- * @fileoverview 助手模型：这套部署接了哪几路，订阅账号那一路登没登录。
+ * @fileoverview 模型管理：供应商目录、各用途走哪个模型、订阅账号，以及两个消费方
+ * 此刻真在用什么（ADR-0039）。
  *
- * ⚠ 这一页管的凭据是**整套部署共用的一份**：换掉它等于替所有人换了说话的账号，
- * 所以它要 `assistant:manage` 而不是 `assistant:use`。
- *
- * ⚠ 页面上不出现任何令牌。后端也不回——账号只以掩码露面。
+ * ⚠ 三个码各管各的：`llm:view` 看目录、`llm:manage` 改目录与测试端点、
+ * `assistant:manage` 管订阅账号——订阅账号是助手一家的事，不随目录走。
+ * ⚠ 目录没开（后端没配加密密钥）时供应商与用途两栏如实说「没开」并指向配置项，
+ * 不摆一个永远空着的列表。
  */
 import { computed, onMounted, ref } from 'vue'
-import type { AssistantModelProfile } from '@dt/contracts'
+import type { LlmProvider } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtNotice, DtTag, useConfirm } from '@dt/ui'
+import { DtButton, DtCard, DtNotice, useConfirm, useToast } from '@dt/ui'
 
-import { probeCapability } from '@/api/assistant'
+import * as llm from '@/api/llmProviders'
 import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
-import { formatDateTime } from '@/utils/datetime'
+import { describeError } from '@/composables/useAsyncList'
+import { useAuthStore } from '@/stores/auth'
 import SystemTabs from '../components/SystemTabs.vue'
-import DeviceCodeCard from './components/DeviceCodeCard.vue'
-import { CODEX_PROVIDER, useCodexLogin } from './scripts/useCodexLogin'
+import CodexAccountPanel from './components/CodexAccountPanel.vue'
+import EffectiveModelsCard from './components/EffectiveModelsCard.vue'
+import ProviderFormDialog from './components/ProviderFormDialog.vue'
+import ProviderTable from './components/ProviderTable.vue'
+import PurposeBoard from './components/PurposeBoard.vue'
+import { CODEX_PROVIDER } from './scripts/useCodexLogin'
+import { useModelCatalog } from './scripts/useModelCatalog'
 
+const toast = useToast()
 const confirm = useConfirm()
-const login = useCodexLogin()
+const auth = useAuthStore()
+const catalog = useModelCatalog()
 
-const profiles = ref<AssistantModelProfile[]>([])
-const defaultId = ref('')
+const formOpen = ref(false)
+const editing = ref<LlmProvider | null>(null)
+const probing = ref<string | null>(null)
 
-const codex = computed(() =>
-  profiles.value.find((one) => one.id === CODEX_PROVIDER),
+const canManage = computed(() => auth.can([PERMISSION_CODES.llmManage], 'all'))
+/**
+ * 订阅账号那一节只在助手接了那一路、且持 assistant:manage 时摆出来：
+ * 没接的部署不该出现一个点了报错的登录键，没那个码的人也不该看见它。
+ */
+const showsCodex = computed(
+  () =>
+    auth.can([PERMISSION_CODES.assistantManage], 'all') &&
+    (catalog.assistant.value?.models ?? []).some(
+      (one) => one.id === CODEX_PROVIDER,
+    ),
 )
 
-async function loadCapability(): Promise<void> {
-  const capability = await probeCapability()
-  profiles.value = capability?.models ?? []
-  defaultId.value = capability?.default_model_id ?? ''
+function openCreate(): void {
+  editing.value = null
+  formOpen.value = true
 }
 
-async function signOut(): Promise<void> {
+function openEdit(provider: LlmProvider): void {
+  editing.value = provider
+  formOpen.value = true
+}
+
+async function afterWrite(message: string): Promise<void> {
+  toast.success(message)
+  await catalog.reload()
+}
+
+async function probe(provider: LlmProvider): Promise<void> {
+  probing.value = provider.id
+  try {
+    const result = await llm.probeProvider(provider.id)
+    if (result.is_ok) toast.success(`${provider.name}：${result.message}`)
+    else toast.error(`${provider.name}：${result.message}`)
+  } catch (caught) {
+    toast.error(describeError(caught))
+  } finally {
+    probing.value = null
+  }
+}
+
+async function remove(provider: LlmProvider): Promise<void> {
+  const inUse = provider.assigned_purposes.length
   const ok = await confirm.ask({
-    title: '退出模型账号',
+    title: '删除供应商',
     message:
-      '这一份凭据是整套部署共用的：退出之后，所有人的助手都会立刻停在' +
-      '「这一路还没登录」。会话历史不受影响。',
-    confirmText: '退出登录',
-    danger: true,
+      inUse > 0
+        ? `「${provider.name}」还被 ${inUse} 个用途指着，删不掉：先把那些用途改指别处。`
+        : `将删除「${provider.name}」及它的密钥，且不可恢复。`,
+    confirmText: inUse > 0 ? '知道了' : '删除',
+    danger: inUse === 0,
   })
-  if (!ok) return
-  await login.signOut()
-  await loadCapability()
+  if (!ok || inUse > 0) return
+  try {
+    await catalog.remove(provider)
+    await afterWrite('供应商已删除')
+  } catch (caught) {
+    toast.error(describeError(caught))
+  }
 }
 
-async function onLoggedIn(): Promise<void> {
-  await loadCapability()
+async function assign(
+  purpose: string,
+  providerId: string,
+  modelName: string,
+): Promise<void> {
+  try {
+    await catalog.assign(purpose, providerId, modelName)
+    toast.success('用途已更新，两侧十秒内生效')
+    await catalog.reloadEffective()
+  } catch (caught) {
+    toast.error(describeError(caught))
+  }
 }
 
-onMounted(async () => {
-  await Promise.all([loadCapability(), login.refresh()])
-})
+async function clear(purpose: string): Promise<void> {
+  try {
+    await catalog.clear(purpose)
+    toast.success('已清除，那一侧退回环境变量里的配置')
+    await catalog.reloadEffective()
+  } catch (caught) {
+    toast.error(describeError(caught))
+  }
+}
+
+onMounted(() => void catalog.reload())
 </script>
 
 <template>
-  <AppShell title="助手模型" subtitle="这套部署接了哪几路模型">
-    <template #tabs><SystemTabs /></template>
+  <AppShell title="模型管理" subtitle="供应商、各用途走哪个模型、订阅账号">
+    <template #actions>
+      <PermGuard :codes="[PERMISSION_CODES.llmManage]" explain>
+        <DtButton
+          size="sm"
+          icon="plus"
+          :disabled="catalog.isDisabled.value"
+          @click="openCreate"
+        >
+          新建供应商
+        </DtButton>
+      </PermGuard>
+    </template>
 
-    <PermGuard :codes="[PERMISSION_CODES.assistantManage]" explain>
-      <section class="model-page h-full min-h-0">
-        <DtNotice v-if="login.error.value" intent="danger">
-          {{ login.error.value }}
-        </DtNotice>
+    <!-- h-full + min-h-0：AppShell 的 main 不再滚动；本页分几节，滚动交给下面那层 -->
+    <div class="flex h-full min-h-0 flex-col gap-4">
+      <SystemTabs />
 
-        <ul v-if="profiles.length > 0" class="model-list">
-          <li v-for="one in profiles" :key="one.id" class="model-row">
-            <span class="model-row__name">{{ one.label }}</span>
-            <DtTag v-if="one.id === defaultId" size="sm">默认</DtTag>
-            <DtTag :intent="one.is_ready ? 'success' : 'warning'" size="sm">
-              {{ one.is_ready ? '可用' : '未登录' }}
-            </DtTag>
-            <span class="model-row__models">{{ one.models.join('、') }}</span>
-          </li>
-        </ul>
-        <DtNotice v-else intent="warning">
-          这套部署一路模型都没接，助手只能读历史会话。
-        </DtNotice>
-
-        <section v-if="codex" class="model-codex">
-          <h2 class="model-codex__title">订阅账号</h2>
-          <p class="model-codex__hint">
-            用手上那份订阅跑助手，而不是按 token 计费。⚠
-            这条路走的是未公开接口，是否允许这么用取决于你的账号与订阅条款。
-          </p>
-
-          <dl v-if="login.status.value?.is_connected" class="model-facts">
-            <dt>账号</dt>
-            <dd>{{ login.status.value.account_label ?? '—' }}</dd>
-            <dt>订阅档</dt>
-            <dd>{{ login.status.value.plan_label ?? '—' }}</dd>
-            <dt>令牌到期</dt>
-            <dd>{{ formatDateTime(login.status.value.expires_at) }}</dd>
-            <dt>最近续期</dt>
-            <dd>{{ formatDateTime(login.status.value.last_refresh_at) }}</dd>
-          </dl>
-
-          <DtNotice v-if="login.status.value?.last_error" intent="warning">
-            上次续期没成：{{
-              login.status.value.last_error
-            }}。重新登录一次即可。
+      <!-- ⚠ PermGuard 是片段没有根节点，滚动容器得是它外面这一层 div -->
+      <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
+        <PermGuard :codes="[PERMISSION_CODES.llmView]" explain>
+          <DtNotice v-if="catalog.isDisabled.value" intent="warning">
+            这套部署还没开模型供应商目录：给 platform-server 配上
+            <code>PLATFORM_LLM_PROVIDER_SECRET</code>
+            再回来。此刻助手与知识库各用各的环境变量配置。
           </DtNotice>
 
-          <DeviceCodeCard
-            v-if="login.pending.value"
-            :pending="login.pending.value"
-            @cancel="login.cancel"
-            @done="onLoggedIn"
-          />
+          <DtCard title="供应商" subtitle="OpenAI 兼容端点与它上面登记的模型">
+            <ProviderTable
+              :providers="catalog.providers.value"
+              :is-loading="catalog.isLoading.value"
+              :error="catalog.error.value"
+              :probing-id="probing"
+              @probe="probe"
+              @edit="openEdit"
+              @remove="remove"
+              @retry="catalog.reload()"
+            />
+          </DtCard>
 
-          <div class="model-codex__actions">
-            <DtButton
-              size="sm"
-              :disabled="login.isBusy.value || login.pending.value !== null"
-              @click="() => void login.begin()"
-            >
-              {{ login.status.value?.is_connected ? '换一个账号' : '登录账号' }}
-            </DtButton>
-            <DtButton
-              v-if="login.status.value?.is_connected"
-              variant="ghost"
-              size="sm"
-              :disabled="login.isBusy.value"
-              @click="() => void signOut()"
-            >
-              退出登录
-            </DtButton>
-          </div>
-        </section>
-      </section>
-    </PermGuard>
+          <DtCard
+            title="用途分配"
+            subtitle="助手与知识库的每一种用途走哪一路的哪个模型；没分配的沿用各自环境变量"
+          >
+            <PurposeBoard
+              :purposes="catalog.purposes.value"
+              :providers="catalog.providers.value"
+              :can-manage="canManage"
+              @assign="assign"
+              @clear="clear"
+            />
+          </DtCard>
+
+          <DtCard title="当前生效" subtitle="两个消费方自己报回来的状态">
+            <EffectiveModelsCard
+              :assistant="catalog.assistant.value"
+              :knowledge="catalog.knowledge.value"
+            />
+          </DtCard>
+
+          <DtCard
+            v-if="showsCodex"
+            title="订阅账号"
+            subtitle="ChatGPT / Codex 订阅直连，助手专用"
+          >
+            <CodexAccountPanel @changed="catalog.reloadEffective()" />
+          </DtCard>
+        </PermGuard>
+      </div>
+    </div>
+
+    <ProviderFormDialog
+      v-model="formOpen"
+      :provider="editing"
+      @saved="afterWrite"
+    />
   </AppShell>
 </template>
-
-<style scoped lang="scss">
-/* ⚠ AppShell 的 main 是 overflow-hidden：页面不自己吃满高度并留出滚动，
-   超出的部分会被裁掉，而页面上任何位置都没有滚动条 */
-.model-page {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  width: 100%;
-  overflow-y: auto;
-}
-
-.model-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.model-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.625rem 0.75rem;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--surface-raised);
-}
-
-.model-row__name {
-  color: var(--text-title);
-  font-weight: 600;
-}
-
-.model-row__models {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-secondary);
-  font-size: 0.8125rem;
-  text-align: right;
-}
-
-.model-codex {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  padding: 1rem;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--surface-panel);
-}
-
-.model-codex__title {
-  margin: 0;
-  color: var(--text-title);
-  font-size: 1rem;
-}
-
-.model-codex__hint {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 0.8125rem;
-  line-height: 1.6;
-}
-
-.model-facts {
-  display: grid;
-  grid-template-columns: 6rem 1fr;
-  gap: 0.25rem 1rem;
-  margin: 0;
-  font-size: 0.875rem;
-}
-
-.model-facts dt {
-  color: var(--text-secondary);
-}
-
-.model-facts dd {
-  margin: 0;
-  color: var(--text-primary);
-}
-
-.model-codex__actions {
-  display: flex;
-  gap: 0.5rem;
-}
-</style>

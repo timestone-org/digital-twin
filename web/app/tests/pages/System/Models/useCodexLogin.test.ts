@@ -18,7 +18,7 @@ vi.mock('@/api/assistant', () => ({
 
 const api = await import('@/api/assistant')
 const { useCodexLogin } =
-  await import('@/pages/System/Assistant/scripts/useCodexLogin')
+  await import('@/pages/System/Models/scripts/useCodexLogin')
 
 function started(ref_ = 'r1', interval = 5) {
   return {

@@ -204,11 +204,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
         permission: [PERMISSION_CODES.userView],
       },
       {
-        key: 'assistant',
-        label: '助手模型',
+        // 供应商目录同时喂助手与知识库，故叫「模型管理」而不是「助手模型」；
+        // 订阅账号那一节仍归 assistant:manage，在页内另判
+        key: 'models',
+        label: '模型管理',
         icon: 'sparkles',
-        to: '/system/assistant',
-        permission: [PERMISSION_CODES.assistantManage],
+        to: '/system/models',
+        permission: [PERMISSION_CODES.llmView],
       },
     ],
   },

@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type { AssistantDeviceLoginStart } from '@dt/contracts'
 
-import DeviceCodeCard from '@/pages/System/Assistant/components/DeviceCodeCard.vue'
+import DeviceCodeCard from '@/pages/System/Models/components/DeviceCodeCard.vue'
 
 function pending(
   over: Partial<AssistantDeviceLoginStart> = {},

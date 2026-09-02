@@ -1,25 +1,33 @@
 /**
- * @fileoverview 助手模型页的行为契约。
+ * @fileoverview 模型管理页的行为契约。
  *
- * ⚠ 两条最要紧：页面上**永远不出现令牌**（后端也不回，账号只以掩码露面），
- * 以及退出登录必须二次确认——那一份凭据是整套部署共用的，退的是所有人的。
+ * ⚠ 最要紧的几条：页面上**永远不出现密钥明文**（后端也不回，只有尾巴）；
+ * 删供应商要二次确认，还被用途指着的一路根本删不了；没有 `llm:view` 的人
+ * 看不到目录；订阅账号那一节只在助手接了那一路、且持 `assistant:manage` 时出现。
  */
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
-import { DtConfirmHost, useConfirm } from '@dt/ui'
+import { DtConfirmHost, DtToastHost, useConfirm, useToast } from '@dt/ui'
+import type { LlmProvider, LlmPurpose } from '@dt/contracts'
 
 import * as assistant from '@/api/assistant'
-import AssistantModelsPage from '@/pages/System/Assistant/index.vue'
+import { BizError } from '@/api/client'
+import * as knowledge from '@/api/knowledge'
+import * as llm from '@/api/llmProviders'
+import PurposeBoard from '@/pages/System/Models/components/PurposeBoard.vue'
+import ModelsPage from '@/pages/System/Models/index.vue'
 import { useAuthStore } from '@/stores/auth'
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
-  useRoute: () => ({ path: '/system/assistant', query: {} }),
+  useRoute: () => ({ path: '/system/models', query: {} }),
   RouterLink: { template: '<a><slot /></a>' },
 }))
 
-const MANAGE = 'assistant:manage'
+const VIEW = 'llm:view'
+const MANAGE = 'llm:manage'
+const ASSISTANT_MANAGE = 'assistant:manage'
 
 function user(codes: string[]) {
   return {
@@ -40,86 +48,115 @@ function user(codes: string[]) {
   } as never
 }
 
+function provider(over: Partial<LlmProvider> = {}): LlmProvider {
+  return {
+    id: 'p1',
+    name: '百炼',
+    base_url: 'https://endpoint/compatible-mode/v1',
+    api_key_hint: '…1234',
+    is_enabled: true,
+    extra_body: null,
+    models: [
+      { name: 'qwen-plus', kind: 'chat', has_vision: true, dimensions: null },
+    ],
+    notes: '',
+    assigned_purposes: [],
+    updated_by: null,
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
+    ...over,
+  }
+}
+
+function purpose(over: Partial<LlmPurpose> = {}): LlmPurpose {
+  return {
+    purpose: 'assistant.chat',
+    label: '对话',
+    description: '助手每一轮对话走的模型',
+    kind: 'chat',
+    consumer: 'assistant',
+    is_vision_required: false,
+    provider_id: null,
+    provider_name: null,
+    model_name: null,
+    updated_at: null,
+    ...over,
+  }
+}
+
 function capability(models: unknown[]) {
   return {
     is_model_enabled: models.length > 0,
     skills: [],
     models,
     default_model_id: 'default',
+    default_effort: 'medium',
+    attachment_suffixes: [],
   } as never
 }
 
-function profile(over: Record<string, unknown> = {}) {
-  return {
-    id: 'default',
-    label: '按量计费端点',
-    is_ready: true,
-    has_vision: true,
-    models: ['qwen3.8-max'],
-    efforts: [],
-    ...over,
-  }
-}
-
-const CODEX = profile({
+const CODEX = {
   id: 'codex',
   label: '订阅账号',
   is_ready: false,
   has_vision: false,
   models: ['some-codex'],
   efforts: ['low', 'medium'],
-})
+}
 
-function statusOf(over: Record<string, unknown> = {}) {
-  return {
-    provider: 'codex',
-    is_connected: true,
-    account_label: '…a1b2c3',
-    plan_label: 'plus',
-    expires_at: '2026-08-27T00:00:00.000Z',
-    last_refresh_at: null,
-    last_error: null,
-    ...over,
-  } as never
+function page<T>(items: T[]) {
+  return { items, page: 1, size: 200, total: items.length }
 }
 
 beforeEach(() => {
   setActivePinia(createPinia())
-  const auth = useAuthStore()
-  auth.user = user([MANAGE])
-  auth.accessToken = 'token'
-  vi.spyOn(assistant, 'probeCapability').mockResolvedValue(
-    capability([profile(), CODEX]),
-  )
+  localStorage.clear()
+  vi.spyOn(llm, 'listProviders').mockResolvedValue(page([provider()]))
+  vi.spyOn(llm, 'listPurposes').mockResolvedValue([purpose()])
+  vi.spyOn(assistant, 'probeCapability').mockResolvedValue(capability([]))
   vi.spyOn(assistant, 'readCredential').mockResolvedValue(null)
+  vi.spyOn(knowledge, 'readCapability').mockRejectedValue(new Error('502'))
 })
 
 enableAutoUnmount(afterEach)
 
 afterEach(() => {
+  useToast().clear()
   useConfirm().resolve(false)
   vi.restoreAllMocks()
 })
 
-async function render() {
-  const wrapper = mount(AssistantModelsPage)
+async function render(codes: string[] = [VIEW, MANAGE]) {
+  const auth = useAuthStore()
+  auth.user = user(codes)
+  auth.accessToken = 'token'
+  const wrapper = mount(ModelsPage)
   await flushPromises()
   return wrapper
 }
 
-/** 点页面里那个按钮。⚠ VTU 默认挂在游离节点上，`document` 里找不到它。 */
+async function renderWithHosts(codes?: string[]) {
+  const wrapper = await render(codes)
+  mount(DtConfirmHost)
+  mount(DtToastHost)
+  await flushPromises()
+  return wrapper
+}
+
 async function click(
   wrapper: ReturnType<typeof mount>,
-  text: string,
+  label: string,
 ): Promise<void> {
   const button = wrapper
     .findAll('button')
-    .find((node) => node.text().includes(text))
+    .find(
+      (node) =>
+        node.text().includes(label) || node.attributes('aria-label') === label,
+    )
   await button?.trigger('click')
   await flushPromises()
 }
 
-/** 点二次确认框里那个按钮。它 teleport 到 body，只能从 document 里找。 */
 async function clickInConfirm(text: string): Promise<void> {
   const button = [...document.querySelectorAll('button')].find((node) =>
     node.textContent?.includes(text),
@@ -128,80 +165,120 @@ async function clickInConfirm(text: string): Promise<void> {
   await flushPromises()
 }
 
-describe('助手模型页', () => {
-  it('把接了的每一路都列出来，并标出哪一路还没登录', async () => {
+describe('模型管理页', () => {
+  it('列出供应商、登记的模型与密钥尾巴，永远没有明文', async () => {
     const wrapper = await render()
-    expect(wrapper.text()).toContain('按量计费端点')
-    expect(wrapper.text()).toContain('订阅账号')
-    // 配了却没登录时摆成可用的话，用户点下去收到的是一条「模型暂时不可用」
-    expect(wrapper.text()).toContain('未登录')
+    expect(wrapper.text()).toContain('百炼')
+    expect(wrapper.text()).toContain('qwen-plus')
+    expect(wrapper.text()).toContain('…1234')
+    expect(wrapper.text()).not.toContain('sk-')
   })
 
-  it('一路都没接时如实说，不摆一个空清单', async () => {
-    vi.spyOn(assistant, 'probeCapability').mockResolvedValue(capability([]))
+  it('用途那一栏列出每个用途，没分配的写清沿用环境变量', async () => {
     const wrapper = await render()
-    expect(wrapper.text()).toContain('一路模型都没接')
+    expect(wrapper.text()).toContain('对话')
+    expect(wrapper.text()).toContain('沿用该服务环境变量里的配置')
   })
 
-  it('登录之后只露账号掩码，不露令牌', async () => {
-    vi.spyOn(assistant, 'readCredential').mockResolvedValue(statusOf())
-    const wrapper = await render()
-    expect(wrapper.text()).toContain('…a1b2c3')
-    expect(wrapper.text()).toContain('plus')
-  })
-
-  it('续期失败过就把原因说出来，并让人重新登录一次', async () => {
-    vi.spyOn(assistant, 'readCredential').mockResolvedValue(
-      statusOf({ last_error: 'refresh_token 已作废' }),
+  it('目录没开时如实说，并指向那一格配置', async () => {
+    vi.spyOn(llm, 'listProviders').mockRejectedValue(
+      new BizError(52401, '本部署没开模型供应商目录', 503, 't'),
+    )
+    vi.spyOn(llm, 'listPurposes').mockRejectedValue(
+      new BizError(52401, '本部署没开模型供应商目录', 503, 't'),
     )
     const wrapper = await render()
-    expect(wrapper.text()).toContain('refresh_token 已作废')
-    expect(wrapper.text()).toContain('换一个账号')
+    expect(wrapper.text()).toContain('PLATFORM_LLM_PROVIDER_SECRET')
   })
 
-  it('点登录就要来一次设备码，并把用户码摆出来', async () => {
-    const start = vi.spyOn(assistant, 'startDeviceLogin').mockResolvedValue({
-      ref: 'r1',
-      user_code: 'ABCD-1234',
-      verification_uri: 'https://example.test/activate',
-      interval_s: 5,
-      expires_in_s: 900,
+  it('助手没部署时「当前生效」那一栏如实缺席，整页照常', async () => {
+    vi.spyOn(assistant, 'probeCapability').mockResolvedValue(null)
+    const wrapper = await render()
+    expect(wrapper.text()).toContain('没接助手')
+    expect(wrapper.text()).toContain('没接知识库')
+    expect(wrapper.text()).toContain('百炼')
+  })
+
+  it('删供应商要二次确认', async () => {
+    const remove = vi.spyOn(llm, 'deleteProvider').mockResolvedValue(undefined)
+    const wrapper = await renderWithHosts()
+    await click(wrapper, '删除')
+    expect(remove).not.toHaveBeenCalled()
+    await clickInConfirm('删除')
+    expect(remove).toHaveBeenCalledWith('p1')
+  })
+
+  it('还被用途指着的供应商删不了，只告诉人先改用途', async () => {
+    vi.spyOn(llm, 'listProviders').mockResolvedValue(
+      page([provider({ assigned_purposes: ['assistant.chat'] })]),
+    )
+    const remove = vi.spyOn(llm, 'deleteProvider').mockResolvedValue(undefined)
+    const wrapper = await renderWithHosts()
+    await click(wrapper, '删除')
+    expect(document.body.textContent).toContain('先把那些用途改指别处')
+    await clickInConfirm('知道了')
+    expect(remove).not.toHaveBeenCalled()
+  })
+
+  it('点新建就打开表单弹窗', async () => {
+    const wrapper = await render()
+    await click(wrapper, '新建供应商')
+    expect(document.body.textContent).toContain('新建供应商')
+    expect(document.body.textContent).toContain('端点地址')
+  })
+
+  it('测试连接把结果作为一条反馈说出来', async () => {
+    vi.spyOn(llm, 'probeProvider').mockResolvedValue({
+      is_ok: true,
+      message: '端点可用，自报 3 个模型',
+      model_names: [],
     })
-    const wrapper = await render()
-    await click(wrapper, '登录账号')
-    expect(start).toHaveBeenCalledOnce()
-    expect(wrapper.text()).toContain('ABCD-1234')
+    const wrapper = await renderWithHosts()
+    await click(wrapper, '测试连接')
+    expect(document.body.textContent).toContain('端点可用')
   })
 
-  it('退出登录要二次确认——退的是所有人的', async () => {
-    vi.spyOn(assistant, 'readCredential').mockResolvedValue(statusOf())
-    const forget = vi
-      .spyOn(assistant, 'forgetCredential')
-      .mockResolvedValue(undefined)
-    const wrapper = await render()
-    mount(DtConfirmHost)
-    await flushPromises()
-
-    await click(wrapper, '退出登录')
-    expect(forget).not.toHaveBeenCalled()
-    // 确认框里的那个按钮才算数
-    await clickInConfirm('退出登录')
-    expect(forget).toHaveBeenCalledOnce()
-  })
-
-  it('开头就失败时把话说出来', async () => {
-    vi.spyOn(assistant, 'startDeviceLogin').mockRejectedValue(
-      new Error('登录服务此刻连不上'),
+  it('改了一个用途之后重拉两侧的能力面', async () => {
+    const assign = vi.spyOn(llm, 'assignPurpose').mockResolvedValue(
+      purpose({
+        provider_id: 'p1',
+        provider_name: '百炼',
+        model_name: 'qwen-plus',
+      }),
     )
-    const wrapper = await render()
-    await click(wrapper, '登录账号')
-    expect(wrapper.text()).toContain('登录服务此刻连不上')
+    const wrapper = await renderWithHosts()
+    const board = wrapper.findComponent(PurposeBoard)
+    board.vm.$emit('assign', 'assistant.chat', 'p1', 'qwen-plus')
+    await flushPromises()
+    expect(assign).toHaveBeenCalledWith('assistant.chat', {
+      provider_id: 'p1',
+      model_name: 'qwen-plus',
+    })
+    // 首次加载一次 + 分配之后一次
+    expect(assistant.probeCapability).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('当前：百炼 / qwen-plus')
   })
 
-  it('没有 assistant:manage 的人看不到这一页的内容', async () => {
-    const auth = useAuthStore()
-    auth.user = user([])
-    const wrapper = await render()
-    expect(wrapper.text()).not.toContain('按量计费端点')
+  it('订阅账号那一节只在助手接了那一路且持 assistant:manage 时出现', async () => {
+    vi.spyOn(assistant, 'probeCapability').mockResolvedValue(
+      capability([CODEX]),
+    )
+    const withCode = await render([VIEW, MANAGE, ASSISTANT_MANAGE])
+    expect(withCode.text()).toContain('登录账号')
+    withCode.unmount()
+    const without = await render([VIEW, MANAGE])
+    expect(without.text()).not.toContain('登录账号')
+  })
+
+  it('只有 llm:view 的人看得见目录但没有任何写按钮', async () => {
+    const wrapper = await render([VIEW])
+    expect(wrapper.text()).toContain('百炼')
+    expect(wrapper.text()).toContain('只读')
+    expect(wrapper.find('button[aria-label="删除"]').exists()).toBe(false)
+  })
+
+  it('没有 llm:view 的人什么目录都看不到', async () => {
+    const wrapper = await render([])
+    expect(wrapper.text()).not.toContain('百炼')
   })
 })

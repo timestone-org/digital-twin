@@ -521,3 +521,13 @@ export {
   ASSISTANT_STEP_STATES,
   ASSISTANT_SURFACE_KINDS,
 } from './assistant'
+export type {
+  LlmConsumer,
+  LlmModel,
+  LlmModelKind,
+  LlmProbeResult,
+  LlmProvider,
+  LlmPurpose,
+  LlmPurposeCode,
+} from './llm'
+export { LLM_CONSUMERS, LLM_MODEL_KINDS, LLM_PURPOSES } from './llm'

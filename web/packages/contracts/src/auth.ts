@@ -55,6 +55,10 @@ export const PERMISSION_CODES = {
   // ⚠ 比另外两条严：改嵌入档等于让整库的既有向量作废，而那件事没有任何
   // 运行期迹象，只表现为召回忽然全错
   knowledgeManage: 'knowledge:manage',
+  llmView: 'llm:view',
+  // ⚠ 模型供应商是**整套部署共用的**：一个端点同时喂助手与知识库，改了之后
+  // 两边十秒内都改用新端点说话，且密钥会拿去打外部地址（ADR-0039）
+  llmManage: 'llm:manage',
 } as const
 
 export type PermissionCode =
