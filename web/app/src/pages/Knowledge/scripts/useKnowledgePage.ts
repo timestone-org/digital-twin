@@ -16,7 +16,8 @@ export function useKnowledgePage() {
     reload: () => actions.reload(state),
     select: (baseId: string) => actions.select(state, baseId),
     refreshDocuments: () => refreshDocuments(state),
-    create: (name: string) => actions.create(state, name),
+    create: (name: string, description: string) =>
+      actions.create(state, name, description),
     drop: (baseId: string) => actions.drop(state, baseId),
     addFiles: (files: readonly File[]) => actions.addFiles(state, files),
     reparse: (documentId: string) => actions.reparse(state, documentId),

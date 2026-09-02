@@ -122,6 +122,15 @@ describe('首屏', () => {
 
     expect(wrapper.text()).toContain('未命名')
   })
+
+  it('一个对话都没有时空态说清第一句怎么发', async () => {
+    api.listSessions.mockResolvedValue([])
+
+    const wrapper = await render()
+
+    expect(wrapper.text()).toContain('还没有对话')
+    expect(wrapper.text()).toContain('直接在右边发第一句')
+  })
 })
 
 describe('切对话', () => {
@@ -178,6 +187,26 @@ describe('发一句', () => {
     expect(api.createSession).toHaveBeenCalledTimes(1)
     expect(api.advanceTurn.mock.calls[0]?.[0]).toBe('s9')
     expect(wrapper.text()).toContain('上限 65 ℃')
+  })
+
+  it('普通 Enter 发送，IME 选字中的 Enter 不发送', async () => {
+    api.listSessions.mockResolvedValue([])
+    api.createSession.mockResolvedValue(sessionOf('s9'))
+    api.readSession.mockResolvedValue({ ...sessionOf('s9'), messages: [] })
+    const wrapper = await render()
+
+    // ⚠ 选字那一下也是 Enter：不认 isComposing 就会把半截拼音发出去
+    await wrapper.find('textarea').setValue('shang xian')
+    await wrapper
+      .find('textarea')
+      .trigger('keydown', { key: 'Enter', isComposing: true })
+    await flushPromises()
+    expect(api.advanceTurn).not.toHaveBeenCalled()
+
+    await wrapper.find('textarea').setValue('上限多少')
+    await wrapper.find('textarea').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(api.advanceTurn).toHaveBeenCalledTimes(1)
   })
 
   it('信封里只自报 user.ask，没有工作面', async () => {
@@ -249,5 +278,59 @@ describe('管理对话', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('这套部署没有接对话档')
+  })
+})
+
+describe('面板标题栏', () => {
+  it('没选中时写「新对话」，选中后写它的名字', async () => {
+    const wrapper = await render()
+    expect(wrapper.find('.chat-panel__where').text()).toBe('新对话')
+
+    await wrapper.find('button[title="锅炉那几台"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.chat-panel__where').text()).toBe('锅炉那几台')
+  })
+
+  it('回合跑着时标出「回答中」，答完就撤', async () => {
+    let release: () => void = () => undefined
+    api.advanceTurn.mockImplementation(async function* () {
+      await new Promise<void>((resolve) => {
+        release = resolve
+      })
+      yield frame('turn.done', { reply: '好' })
+    })
+    api.listSessions.mockResolvedValue([])
+    api.createSession.mockResolvedValue(sessionOf('s9'))
+    api.readSession.mockResolvedValue({ ...sessionOf('s9'), messages: [] })
+    const wrapper = await render()
+
+    await wrapper.find('textarea').setValue('上限多少')
+    await wrapper.find('button[aria-label="发送"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('回答中')
+
+    release()
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('回答中')
+  })
+
+  it('清空键没内容时禁着，答完一轮点它就清掉这一屏', async () => {
+    api.listSessions.mockResolvedValue([])
+    api.createSession.mockResolvedValue(sessionOf('s9'))
+    api.readSession.mockResolvedValue({ ...sessionOf('s9'), messages: [] })
+    const wrapper = await render()
+    const clear = () => wrapper.find('button[aria-label="清空这一屏的对话"]')
+    expect(clear().attributes('disabled')).toBeDefined()
+
+    await wrapper.find('textarea').setValue('上限多少')
+    await wrapper.find('button[aria-label="发送"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('上限 65 ℃')
+
+    await clear().trigger('click')
+
+    expect(wrapper.text()).not.toContain('上限 65 ℃')
+    expect(wrapper.text()).toContain('问一句资料里的事')
   })
 })

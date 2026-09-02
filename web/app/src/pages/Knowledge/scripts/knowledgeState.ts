@@ -31,8 +31,10 @@ export function createState() {
   const upload = shallowRef<UploadState | null>(null)
   const selectedId = ref('')
   const query = ref('')
+  const searched = ref('')
   const error = ref('')
   const isLoading = ref(false)
+  const isRefreshing = ref(false)
   const isSearching = ref(false)
   const documentsRace = useRacedFetch()
 
@@ -60,8 +62,10 @@ export function createState() {
     upload,
     selectedId,
     query,
+    searched,
     error,
     isLoading,
+    isRefreshing,
     isSearching,
     documentsRace,
     selected,
@@ -74,7 +78,7 @@ export function createState() {
 export type KnowledgeState = ReturnType<typeof createState>
 
 /**
- * 跑一个动作，出错时把**后端那句原话**显示出来。
+ * 跑一个动作，出错时把**后端那句原话**显示出来；跑完没炸才回 true。
  *
  * ⚠ 换成一句笼统的「操作失败」等于把唯一有用的信息扔掉：后端那句是写给最终
  * 用户的（「这份内容已经在这个库里了」「这个库还没建索引」）。
@@ -84,12 +88,14 @@ export type KnowledgeState = ReturnType<typeof createState>
 export async function guarded(
   state: KnowledgeState,
   run: () => Promise<void>,
-): Promise<void> {
+): Promise<boolean> {
   state.error.value = ''
   try {
     await run()
+    return true
   } catch (cause) {
     state.error.value = messageOf(cause)
+    return false
   }
 }
 
@@ -112,8 +118,10 @@ export async function refreshDocuments(state: KnowledgeState): Promise<void> {
   if (baseId === '') {
     state.documentsRace.cancel()
     state.documents.value = []
+    state.isRefreshing.value = false
     return
   }
+  state.isRefreshing.value = true
   // ⚠ 慢回来的那一次由 `useRacedFetch` 丢掉：不丢的话，右边显示的是上一个库
   // 的文档，而两边看着都正常
   await state.documentsRace.run((signal) => listDocuments(baseId, signal), {
@@ -123,6 +131,8 @@ export async function refreshDocuments(state: KnowledgeState): Promise<void> {
     fail: (cause) => {
       state.error.value = messageOf(cause)
     },
-    settled: () => undefined,
+    settled: () => {
+      state.isRefreshing.value = false
+    },
   })
 }
