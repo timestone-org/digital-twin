@@ -22,6 +22,8 @@ from auth_server.apps.auth.catalog.permissions import (
     DATASET_VIEW,
     FORMULA_MANAGE,
     FORMULA_VIEW,
+    LLM_MANAGE,
+    LLM_VIEW,
 )
 from auth_server.apps.auth.catalog.rules_dashboard import DASHBOARD_RULES
 from auth_server.apps.auth.catalog.specs import RouteRuleSpec
@@ -387,6 +389,36 @@ _FORMULA_RULES: tuple[RouteRuleSpec, ...] = (
     ),
 )
 
+# 模型供应商目录（ADR-0039）。阶梯：923 写兜底 → 924 读。两条都必须压过 900
+# 那五条按方法兜底的规则——不压过去就成了拿 `ac:manage` 改整套部署的模型密钥。
+# ⚠ `llm-*` 同时罩住 `llm-providers*` 与 `llm-purposes*`：两族共一套码，分开写
+# 只会在将来加第三族时漏一条。探测那两条动作端点是 POST，落在写兜底里正是它们
+# 要的 manage——拿着密钥去打外部地址，不该只要读码
+_LLM_RULES: tuple[RouteRuleSpec, ...] = (
+    RouteRuleSpec(
+        f"{_PLATFORM}/llm-*",
+        "*",
+        codes=(LLM_MANAGE,),
+        priority=923,
+        description=(
+            "模型供应商面写操作的兜底：增删改供应商与密钥、给用途分配模型、"
+            "测试端点。⚠ 用 `*` 方法而不是逐个方法列，是为了让将来新增的"
+            "方法也落在供应商自己的码上"
+        ),
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/llm-*",
+        "GET",
+        codes=(LLM_VIEW,),
+        priority=924,
+        description=(
+            "供应商列表、详情与用途清单。必须压过上面那条写兜底——那条用的是 "
+            "`*` 方法，会把 GET 一并收进 manage，只读用户于是连接了哪几路"
+            "都看不到"
+        ),
+    ),
+)
+
 PLATFORM_RULES: tuple[RouteRuleSpec, ...] = (
     *_PROBE_RULES,
     *_HVAC_RULES,
@@ -394,6 +426,7 @@ PLATFORM_RULES: tuple[RouteRuleSpec, ...] = (
     *_RUNTIME_PARAM_RULES,
     *_COLLECT_RULES,
     *_ASSET_RULES,
+    *_LLM_RULES,
     *_DATASET_RULES,
     *_FORMULA_RULES,
     *_PUBLIC_RULES,

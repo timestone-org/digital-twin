@@ -68,6 +68,11 @@ MODELING_PUBLISH = "modeling:publish"
 KNOWLEDGE_USE = "knowledge:use"
 KNOWLEDGE_WRITE = "knowledge:write"
 KNOWLEDGE_MANAGE = "knowledge:manage"
+# platform-server 的 apps/llm_providers 复述一份，同上。模型供应商是**整套部署
+# 共用的**：一个端点同时喂助手与知识库，换掉它等于替所有人换了说话的模型，
+# 故自成一族而不是挂在 `assistant:*` 或 `knowledge:*` 下（ADR-0039）
+LLM_VIEW = "llm:view"
+LLM_MANAGE = "llm:manage"
 
 PERMISSIONS: tuple[PermissionSpec, ...] = (
     PermissionSpec(
@@ -464,6 +469,28 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
             "建库删库、改嵌入档与检索策略、配来源。"
             "⚠ 比另外两条严：改嵌入档等于让整库的既有向量作废，"
             "而那件事没有任何运行期迹象，只表现为召回忽然全错"
+        ),
+    ),
+    PermissionSpec(
+        code=LLM_VIEW,
+        name="查看模型供应商",
+        kind="view",
+        group_code="llm",
+        group_label="模型供应商",
+        sort_order=10,
+        description="看接了哪几路模型供应商、各用途走哪个模型。密钥只露尾巴",
+    ),
+    PermissionSpec(
+        code=LLM_MANAGE,
+        name="管理模型供应商",
+        kind="admin",
+        group_code="llm",
+        group_label="模型供应商",
+        sort_order=20,
+        description=(
+            "增删改供应商与密钥、给各用途分配模型、测试端点。"
+            "⚠ 这一份是**整套部署共用的**：改了之后助手与知识库十秒内"
+            "都改用新端点说话，且密钥会拿去打外部地址"
         ),
     ),
 )
