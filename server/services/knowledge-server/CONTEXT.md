@@ -31,6 +31,10 @@
 - **不被 ai-assistant 之外的服务调用，也不回调任何人**（禁双向同步 RPC，
   ARCHITECTURE §6）。
 - 与 ai-assistant 共用 `server/domain/llm/`，但两者互不 import。
+- 嵌入档与对话档的端点**先问模型目录、再退环境变量**（ADR-0039）：目录由 platform
+  持有，经内部面拉、按 TTL 缓存；`KNOWLEDGE_EMBEDDING_*` / `KNOWLEDGE_MODEL_*` 是
+  目录的永久默认值。用途码在 `llm_purposes.py` 复述一份，与平台逐字一致由前端契约
+  用例守。
 
 ## 3. 不变式
 

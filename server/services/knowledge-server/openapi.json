@@ -1922,7 +1922,7 @@
   "paths": {
     "/api/v1/knowledge/capabilities": {
       "get": {
-        "description": "嵌入档与对话档接没接，两路索引各自走在哪一档上。\n\nArgs: container, _caller。",
+        "description": "嵌入档与对话档接没接，两路索引各自走在哪一档上。\n\n⚠ 先让目录刷新：两路接没接读的是目录快照，不刷新的话界面上刚分配的\n模型这里报的还是「没接」。\n\nArgs: container, _caller。",
         "operationId": "read_capabilities_api_v1_knowledge_capabilities_get",
         "responses": {
           "200": {

@@ -5,6 +5,8 @@
 一件没人说过的事（ADR-0034 决策五）。
 """
 
+from dataclasses import dataclass
+
 from knowledge_server.apps.knowledge.models.knowledge_base import STRATEGIES
 from knowledge_server.apps.knowledge.schemas import (
     CapabilityOut,
@@ -86,7 +88,7 @@ def index_capability_of(
 
 
 def ready_strategies(
-    settings: Settings, strategies: tuple[RetrievalStrategy, ...]
+    strategies: tuple[RetrievalStrategy, ...], *, is_model_enabled: bool
 ) -> list[str]:
     """此刻**真能用**的检索策略。
 
@@ -98,13 +100,25 @@ def ready_strategies(
     「agentic 要模型」：写死的话，加第二路要模型的策略时这里会漏判，
     而漏判的表现是界面上把一路点不动的策略摆出来。
 
-    Args: settings, strategies。
+    Args: strategies, is_model_enabled（对话档此刻接没接）。
     """
     return [
         one.name
         for one in strategies
-        if settings.model_enabled or not one.is_llm_backed
+        if is_model_enabled or not one.is_llm_backed
     ]
+
+
+@dataclass(frozen=True)
+class ModelLanes:
+    """两路模型此刻接没接。
+
+    ⚠ 由适配器**此刻**回答，不由配置回答：端点来自运行期可改的目录
+    （ADR-0039），配置里的开关只是它的永久默认值。
+    """
+
+    is_embedding_enabled: bool
+    is_model_enabled: bool
 
 
 def capability_of(
@@ -112,18 +126,26 @@ def capability_of(
     probe: IndexProbe,
     sources: tuple[KnowledgeSource, ...] = (),
     strategies: tuple[RetrievalStrategy, ...] = (),
+    lanes: ModelLanes | None = None,
 ) -> CapabilityOut:
     """这套部署此刻的知识库能力。
 
     Args: settings, probe, sources（接了哪几路来源）, strategies（装了哪几种
-        检索策略）。
+        检索策略）, lanes（两路模型此刻接没接；不给就按配置里的开关答）。
     """
+    if lanes is None:
+        lanes = ModelLanes(
+            is_embedding_enabled=settings.embedding_enabled,
+            is_model_enabled=settings.model_enabled,
+        )
     return CapabilityOut(
-        is_embedding_enabled=settings.embedding_enabled,
-        is_model_enabled=settings.model_enabled,
+        is_embedding_enabled=lanes.is_embedding_enabled,
+        is_model_enabled=lanes.is_model_enabled,
         is_asr_enabled=settings.asr_enabled,
         strategies=list(STRATEGIES),
-        ready_strategies=ready_strategies(settings, strategies),
+        ready_strategies=ready_strategies(
+            strategies, is_model_enabled=lanes.is_model_enabled
+        ),
         source_kinds=list(source_kinds(sources)),
         accepted_suffixes=list(accepted_suffixes()),
         index=index_capability_of(settings, probe),

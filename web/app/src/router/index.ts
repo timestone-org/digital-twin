@@ -423,14 +423,20 @@ export const routes: RouteRecordRaw[] = [
     },
   },
   {
-    // 管的是整套部署共用的那一份模型凭据，故比 assistant:use 严一档
-    path: '/system/assistant',
-    name: 'system-assistant',
-    component: () => import('@/pages/System/Assistant/index.vue'),
+    // 模型供应商目录同时喂助手与知识库（ADR-0039）：读面挂 llm:view，
+    // 写面与订阅账号那一节在页内按各自的码另判
+    path: '/system/models',
+    name: 'system-models',
+    component: () => import('@/pages/System/Models/index.vue'),
     meta: {
-      title: '助手模型',
-      permissions: [PERMISSION_CODES.assistantManage],
+      title: '模型管理',
+      permissions: [PERMISSION_CODES.llmView],
     },
+  },
+  {
+    // 旧地址：书签与文档里还有它，直接带到新页
+    path: '/system/assistant',
+    redirect: '/system/models',
   },
   {
     path: '/forbidden',

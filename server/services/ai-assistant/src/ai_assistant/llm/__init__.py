@@ -5,6 +5,7 @@
 """
 
 from ai_assistant.llm.adapters import (
+    AdapterDeps,
     build_adapters,
     build_openai_embedding,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "CODEX_PROFILE",
     "DEFAULT_PROFILE",
     "MODEL_KINDS",
+    "AdapterDeps",
     "DeltaChannel",
     "DeltaSink",
     "EmbeddingAdapter",

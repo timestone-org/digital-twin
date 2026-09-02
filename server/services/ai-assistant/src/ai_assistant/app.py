@@ -53,6 +53,7 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
     Args: container。
     """
     return (
+        _catalog_hook(container),
         # 没开订阅账号那一路时它不存在，那时这个钩子的 shutdown 是 None
         LifespanHook(
             name="oauth-http",
@@ -92,6 +93,22 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
             shutdown_order=99,
         ),
     )
+
+
+def _catalog_hook(container: Container) -> LifespanHook:
+    """启动时把目录拉一次再接流量。拉不到也不阻塞启动。
+
+    ⚠ 不拉的话第一批回合读到的是空目录，全部退回环境变量那一档——而那一档
+    可能根本没配。拉不到不抛：目录缓存自己吞掉失败、沿用空的那一份，随后
+    每次调用按 TTL 再试。
+
+    Args: container。
+    """
+
+    async def prefetch() -> None:
+        await container.catalog.refresh(is_forced=True)
+
+    return LifespanHook(name="llm-catalog", startup=prefetch, startup_order=20)
 
 
 def _knowledge_hook(container: Container) -> LifespanHook:

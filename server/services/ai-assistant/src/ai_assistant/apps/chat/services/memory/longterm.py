@@ -48,8 +48,12 @@ class PgLongTermStore:
 
     @property
     def can_rank(self) -> bool:
-        """检索排得了序吗。没接嵌入档时排不了，由调用方如实告诉用户。"""
-        return self.embedder is not None
+        """检索排得了序吗。没接嵌入档时排不了，由调用方如实告诉用户。
+
+        ⚠ 问的是**此刻**：嵌入那一路的端点来自运行期可改的目录，装配了
+        不等于此刻解得出端点。
+        """
+        return self.embedder is not None and self.embedder.is_ready
 
     async def remember(self, item: Knowledge) -> str:
         """记一条，回它的 id。

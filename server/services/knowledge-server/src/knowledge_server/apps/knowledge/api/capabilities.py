@@ -10,7 +10,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from knowledge_server.apps.knowledge.schemas import CapabilityOut
-from knowledge_server.apps.knowledge.services import capability_of
+from knowledge_server.apps.knowledge.services import ModelLanes, capability_of
 from knowledge_server.apps.knowledge.services.assembly import Lanes, strategies
 from knowledge_server.catalog import KNOWLEDGE_USE
 from knowledge_server.container import Container
@@ -31,7 +31,19 @@ async def read_capabilities(
 ) -> ApiResponse[CapabilityOut]:
     """嵌入档与对话档接没接，两路索引各自走在哪一档上。
 
+    ⚠ 先让目录刷新：两路接没接读的是目录快照，不刷新的话界面上刚分配的
+    模型这里报的还是「没接」。
+
     Args: container, _caller。
+    """
+    await container.catalog.refresh()
+    return ok(_capability_of(container))
+
+
+def _capability_of(container: Container) -> CapabilityOut:
+    """按容器此刻的状态拼出能力面。
+
+    Args: container。
     """
     lanes = strategies(
         Lanes(
@@ -41,8 +53,13 @@ async def read_capabilities(
             answerer=container.answerer,
         )
     )
-    return ok(
-        capability_of(
-            container.settings, container.index, container.sources, lanes
-        )
+    return capability_of(
+        container.settings,
+        container.index,
+        container.sources,
+        lanes,
+        ModelLanes(
+            is_embedding_enabled=container.embedder.can_embed,
+            is_model_enabled=container.answerer.can_answer,
+        ),
     )

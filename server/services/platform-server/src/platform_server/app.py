@@ -14,6 +14,7 @@ from platform_server.apps.dashboard.api import ROUTERS as DASHBOARD_ROUTERS
 from platform_server.apps.dataset.api import ROUTERS as DATASET_ROUTERS
 from platform_server.apps.dataset.services import register_provider
 from platform_server.apps.hvac.api import ROUTERS as HVAC_ROUTERS
+from platform_server.apps.llm_providers.api import ROUTERS as LLM_ROUTERS
 from platform_server.apps.modeling.api import ROUTERS as MODELING_ROUTERS
 from platform_server.apps.modeling.services.model_provider import (
     ModelingAnalysisProvider,
@@ -51,6 +52,7 @@ def build_app(settings: Settings) -> FastAPI:
             *MODELING_ROUTERS,
             *RUNTIME_PARAM_ROUTERS,
             *ASSET_ROUTERS,
+            *LLM_ROUTERS,
         ),
         runtime=Runtime(
             lifespan_hooks=_hooks(container),

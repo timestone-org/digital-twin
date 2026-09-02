@@ -70,6 +70,8 @@ def _runtime(loops: tuple[_Loop, ...], closed: list[str]) -> WorkerRuntime:
         embedder=NullEmbedder(),
         answerer=NullAnswerer(),
         platform=None,
+        catalog=None,
+        responder=None,
         index=IndexProbe(),
     )
 

@@ -4,7 +4,28 @@
 `ModelChoice`、`ChatEndpoint`、`EmbeddingEndpoint` 与两个适配器协议。
 """
 
+from llmcore.catalog import (
+    EMPTY_CATALOG,
+    MODEL_KIND_CHAT,
+    MODEL_KIND_EMBEDDING,
+    MODEL_SPEC_KINDS,
+    Assignment,
+    CatalogMalformed,
+    ModelCatalog,
+    ModelSpec,
+    ProviderSpec,
+    Resolved,
+    catalog_version,
+)
+from llmcore.catalog_client import (
+    CATALOG_PATH,
+    CatalogCache,
+    CatalogClient,
+    CatalogSource,
+    CatalogUnavailable,
+)
 from llmcore.deltas import DeltaChannel, DeltaSink
+from llmcore.dynamic_embedding import DynamicEmbeddingAdapter
 from llmcore.endpoints import ChatEndpoint, EmbeddingEndpoint
 from llmcore.errors import (
     ModelDisabled,
@@ -37,28 +58,45 @@ from llmcore.ports import (
 from llmcore.reasoning import ReasoningChatOpenAI
 
 __all__ = [
+    "CATALOG_PATH",
     "DEFAULT_PROFILE",
     "EMBEDDING_SOURCE",
+    "EMPTY_CATALOG",
     "MODEL_KINDS",
+    "MODEL_KIND_CHAT",
+    "MODEL_KIND_EMBEDDING",
+    "MODEL_SPEC_KINDS",
+    "Assignment",
+    "CatalogCache",
+    "CatalogClient",
+    "CatalogMalformed",
+    "CatalogSource",
+    "CatalogUnavailable",
     "ChatEndpoint",
     "DeltaChannel",
     "DeltaSink",
+    "DynamicEmbeddingAdapter",
     "EmbeddingAdapter",
     "EmbeddingEndpoint",
     "EmbeddingShapeChanged",
     "EndpointResolver",
     "ModelAdapter",
+    "ModelCatalog",
     "ModelChoice",
     "ModelDisabled",
     "ModelKind",
     "ModelProfile",
     "ModelRejected",
     "ModelSource",
+    "ModelSpec",
     "ModelUnavailable",
     "OpenAiCompatAdapter",
     "OpenAiCompatEmbeddingAdapter",
+    "ProviderSpec",
     "ReasoningChatOpenAI",
+    "Resolved",
     "build_openai_embedding",
+    "catalog_version",
     "classified",
     "is_our_fault",
     "reason_of",

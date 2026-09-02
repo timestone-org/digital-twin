@@ -42,6 +42,10 @@ class _Adapter:
     def __init__(self, model: _Model) -> None:
         self._model = model
 
+    def supports(self, kind: str) -> bool:
+        del kind
+        return True
+
     async def build(self, choice: object) -> _Model:
         del choice
         return self._model

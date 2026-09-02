@@ -1,12 +1,18 @@
-"""组合根：把配置拧成各个协作对象。装配只在这里发生，模块顶层不做副作用。"""
+"""组合根：把配置拧成各个协作对象。装配只在这里发生，模块顶层不做副作用。
+
+⚠ 嵌入档与对话档的端点**先问模型目录、再退环境变量**（ADR-0039）：目录是
+平台上配的「各用途走哪一路模型」，运行期可改；环境变量是它的永久默认值。
+两路的适配器都按「此刻解得出端点吗」如实回答可用性，装配期不再钉死。
+"""
 
 from dataclasses import dataclass, field
 
 import httpx
+from langchain_core.language_models import BaseChatModel
 
 from knowledge_server.apps.knowledge.services.embedding import (
     Embedder,
-    build_embedder,
+    build_dynamic_embedder,
 )
 from knowledge_server.apps.knowledge.services.llm import (
     Answerer,
@@ -17,6 +23,7 @@ from knowledge_server.apps.knowledge.services.sources import (
     SourceDeps,
     build_sources,
 )
+from knowledge_server.llm_purposes import PURPOSE_CHAT, PURPOSE_EMBEDDING
 from knowledge_server.probe import IndexProbe
 from knowledge_server.settings import SERVICE_NAME, Settings
 from lib.cache import Cache
@@ -25,7 +32,16 @@ from lib.idempotency import IdempotencyStore
 from lib.objectstore import ObjectStore, create_object_store
 from lib.resilience import CircuitBreaker
 from lib.stream import RedisStream, StreamGroup, StreamLike
-from llmcore import ChatEndpoint, OpenAiCompatAdapter
+from llmcore import (
+    CatalogCache,
+    CatalogClient,
+    ChatEndpoint,
+    DynamicEmbeddingAdapter,
+    EmbeddingEndpoint,
+    ModelChoice,
+    ModelDisabled,
+    OpenAiCompatAdapter,
+)
 from llmcore.guard import GuardedModel
 
 # 幂等键的命名空间。⚠ 必须带服务名：共用一个 Redis 的两个服务，同一个端点名
@@ -49,18 +65,21 @@ class Container:
     stream: StreamLike
     # 接了哪几路知识来源。⚠ 顺序即界面上的先后
     sources: tuple[KnowledgeSource, ...]
-    # 嵌入那一路。⚠ 没接时是 `NullEmbedder` 而不是 `None`：调用方于是不必
+    # 嵌入那一路。⚠ 没接时 `can_embed` 为假而不是 `None`：调用方于是不必
     # 写「这一路在不在」的分支，而缺席由 `can_embed` 如实说出来
     embedder: Embedder
-    # 对话档。⚠ 没接时是 `NullAnswerer` 而不是 `None`：`agentic` 策略照样
+    # 对话档。⚠ 没接时 `can_answer` 为假而不是 `None`：`agentic` 策略照样
     # 装得出来，只是它自己会如实说「用不了」
     answerer: Answerer
     # 打 platform 的客户端。⚠ 一个进程一份、长活：每次调用现造一个再关掉，
     # 等于每次都重新握一次 TCP 手
     platform: httpx.AsyncClient
-    # 对话面用的带断路器的模型调用面；没接对话档就是 `None`——那时对话面整个
-    # 如实不可用（`ChatUnavailable`），而 `:ask` 那一路照样由 `answerer` 答
-    responder: GuardedModel | None = None
+    # 模型目录（ADR-0039）：平台上配的「各用途走哪一路模型」，按 TTL 重拉。
+    # ⚠ 一个进程一份：嵌入与对话两路读的都是它的快照
+    catalog: CatalogCache
+    # 对话面用的带断路器的模型调用面。⚠ 端点此刻解不出时它抛 `ModelDisabled`，
+    # 对话入口按 `answerer.can_answer` 先判一次再进回合
+    responder: GuardedModel
     # 启动时探测填进去。⚠ 可变对象，故不带 frozen——它是这份容器里唯一
     # 「装配之后才知道」的东西
     index: IndexProbe = field(default_factory=IndexProbe)
@@ -82,13 +101,12 @@ class Container:
 
         ⚠ 没接时两格都是 `None`，而不是填一个「将来大概会用」的名字：
         填了的话，库上写着一路根本没算过的模型名，而检索会以为它已经建过索引。
+        ⚠ 问的是嵌入那一路**此刻**解出的端点，不是环境变量：目录里分配了
+        别的模型时，环境变量那一格早已不是真正会算向量的那一个。
         """
-        if not self.settings.embedding_enabled:
+        if not self.embedder.can_embed:
             return (None, None)
-        return (
-            self.settings.embedding_model,
-            self.settings.embedding_dimensions,
-        )
+        return (self.embedder.model, self.embedder.dimensions)
 
 
 def _build_database(settings: Settings) -> Database:
@@ -123,11 +141,13 @@ def build_container(settings: Settings) -> Container:
         base_url=settings.platform_base_url,
         timeout=settings.platform_timeout_s,
     )
+    catalog = _build_catalog(settings)
     chat_breaker = CircuitBreaker(
         name="knowledge:chat",
         failure_threshold=settings.model_breaker_failures,
         reset_after_s=settings.model_breaker_reset_s,
     )
+    chat_adapter = _chat_adapter(settings, catalog)
     return Container(
         settings=settings,
         database=_build_database(settings),
@@ -143,26 +163,97 @@ def build_container(settings: Settings) -> Container:
         # ⚠ 这一份是**不带身份头**的：能力面报「接了哪几路来源」用得着它，
         # 而真要代表用户去拉数据时，api 侧会按请求另造一份带头的
         sources=build_sources(SourceDeps(store=store, platform=platform)),
-        embedder=build_embedder(settings.embedding_endpoint()),
+        embedder=build_dynamic_embedder(
+            DynamicEmbeddingAdapter(
+                resolve=lambda: _embedding_endpoint(settings, catalog),
+                refresh=catalog.refresh,
+            )
+        ),
+        catalog=catalog,
         # ⚠ 断路器一个进程一份、跟着容器活，且 `:ask` 与对话面**共用**这一份：
         # 它们打的是同一个端点，那个端点不行就是整个不行
-        answerer=build_answerer(settings.chat_endpoint(), chat_breaker),
-        responder=_build_responder(settings.chat_endpoint(), chat_breaker),
+        answerer=build_answerer(
+            chat_adapter, chat_breaker, refresh=catalog.refresh
+        ),
+        responder=_build_responder(chat_adapter, chat_breaker, catalog),
+    )
+
+
+def _build_catalog(settings: Settings) -> CatalogCache:
+    """模型目录的缓存。构造不连网，第一次拉在启动钩子里。
+
+    ⚠ 拿 `edge_service_key` 去打 platform 的内部面：与 platform 那边
+    `PLATFORM_EDGE_SERVICE_KEY` 取同一个值，分叉就是目录永远拉不到。
+
+    Args: settings。
+    """
+    return CatalogCache(
+        CatalogClient(
+            base_url=settings.platform_base_url,
+            service_key=settings.edge_service_key.get_secret_value(),
+            timeout_s=settings.llm_catalog_timeout_s,
+        ),
+        ttl_s=settings.llm_catalog_refresh_s,
+    )
+
+
+def _chat_endpoint(
+    settings: Settings, catalog: CatalogCache
+) -> ChatEndpoint | None:
+    """对话档此刻该打哪：目录里分配了就走目录，否则退环境变量那一档。
+
+    Args: settings, catalog。
+    """
+    from_catalog = catalog.snapshot().chat_endpoint(
+        PURPOSE_CHAT, timeout_s=settings.model_timeout_s
+    )
+    return from_catalog or settings.chat_endpoint()
+
+
+def _embedding_endpoint(
+    settings: Settings, catalog: CatalogCache
+) -> EmbeddingEndpoint | None:
+    """嵌入档此刻该打哪：目录优先，否则退环境变量。
+
+    Args: settings, catalog。
+    """
+    from_catalog = catalog.snapshot().embedding_endpoint(
+        PURPOSE_EMBEDDING, timeout_s=settings.embedding_timeout_s
+    )
+    return from_catalog or settings.embedding_endpoint()
+
+
+def _chat_adapter(
+    settings: Settings, catalog: CatalogCache
+) -> OpenAiCompatAdapter:
+    """对话档的适配器。端点由目录与环境变量在调用时解出。
+
+    Args: settings, catalog。
+    """
+    return OpenAiCompatAdapter(
+        resolve=lambda _kind: _chat_endpoint(settings, catalog),
+        label="知识库对话档",
+        models=(settings.model_chat,) if settings.model_chat else (),
     )
 
 
 def _build_responder(
-    endpoint: ChatEndpoint | None, breaker: CircuitBreaker
-) -> GuardedModel | None:
-    """对话面的模型调用面；没配端点就没有。
+    adapter: OpenAiCompatAdapter,
+    breaker: CircuitBreaker,
+    catalog: CatalogCache,
+) -> GuardedModel:
+    """对话面的模型调用面。
 
-    Args: endpoint, breaker。
+    ⚠ 端点此刻解不出时抛 `ModelDisabled`，而不是让适配器撞一条编排错：
+    前者是「没接对话档」，回给用户的是一句点得出名字的话。
+
+    Args: adapter, breaker, catalog。
     """
-    if endpoint is None:
-        return None
-    adapter = OpenAiCompatAdapter(
-        resolve=lambda _kind: endpoint,
-        label="知识库对话档",
-        models=(endpoint.model,),
-    )
-    return GuardedModel(source=adapter.build, breaker=breaker)
+
+    async def source(choice: ModelChoice) -> BaseChatModel:
+        await catalog.refresh()
+        if not adapter.supports("chat"):
+            raise ModelDisabled("这套部署没有接对话档")
+        return await adapter.build(choice)
+
+    return GuardedModel(source=source, breaker=breaker)

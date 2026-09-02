@@ -129,6 +129,9 @@ services:
       PLATFORM_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
       PLATFORM_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
       PLATFORM_COLLECT_CREDENTIAL_SECRET: ${COLLECT_CREDENTIAL_SECRET:?必填}
+      # 模型供应商目录的加密密钥（ADR-0039）。⚠ 留空即目录整个缺席：模型管理页
+      # 回 503，助手与知识库退回各自环境变量那一档——不是启动失败
+      PLATFORM_LLM_PROVIDER_SECRET: ${LLM_PROVIDER_SECRET:-}
       PLATFORM_OBJECTSTORE_ENDPOINT: ${OSS_ENDPOINT:?必填}
       PLATFORM_OBJECTSTORE_BUCKET: ${OSS_BUCKET:-digitaltwin}
       PLATFORM_OBJECTSTORE_ACCESS_KEY: ${OSS_ACCESS_KEY:?必填}
@@ -415,6 +418,9 @@ services:
       PLATFORM_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
       # 数据源口令的加密密钥（≥32 字符）。⚠ 换钥后旧密文解不开，要重填口令
       PLATFORM_COLLECT_CREDENTIAL_SECRET: ${COLLECT_CREDENTIAL_SECRET:?必填}
+      # 模型供应商目录的加密密钥（ADR-0039）。⚠ 留空即目录整个缺席：模型管理页
+      # 回 503，助手与知识库退回各自环境变量那一档——不是启动失败
+      PLATFORM_LLM_PROVIDER_SECRET: ${LLM_PROVIDER_SECRET:-}
       # ⚠ 8008 不是 8000——8000 是 realtime-hub 的
       PLATFORM_OPCUA_BASE_URL: http://opcua-server:8008
       # 采集计划变更的广播频道，collector 订阅同一个
@@ -768,6 +774,9 @@ services:
       PLATFORM_EDGE_SIGNING_SECRET: ${AUTH_EDGE_SIGNING_SECRET:?必填}
       PLATFORM_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
       PLATFORM_COLLECT_CREDENTIAL_SECRET: ${COLLECT_CREDENTIAL_SECRET:?必填}
+      # 模型供应商目录的加密密钥（ADR-0039）。⚠ 留空即目录整个缺席：模型管理页
+      # 回 503，助手与知识库退回各自环境变量那一档——不是启动失败
+      PLATFORM_LLM_PROVIDER_SECRET: ${LLM_PROVIDER_SECRET:-}
       # ⚠ 8008 不是 8000——8000 是 realtime-hub 的
       PLATFORM_OPCUA_BASE_URL: http://opcua-server:8008
       PLATFORM_REDIS_HOST: ${REDIS_HOST:?必填}
@@ -820,6 +829,9 @@ services:
       # 打 hub 内部推送端点用的服务级密钥，与 realtime-hub 同值
       PLATFORM_EDGE_SERVICE_KEY: ${AUTH_EDGE_SERVICE_KEY:?必填}
       PLATFORM_COLLECT_CREDENTIAL_SECRET: ${COLLECT_CREDENTIAL_SECRET:?必填}
+      # 模型供应商目录的加密密钥（ADR-0039）。⚠ 留空即目录整个缺席：模型管理页
+      # 回 503，助手与知识库退回各自环境变量那一档——不是启动失败
+      PLATFORM_LLM_PROVIDER_SECRET: ${LLM_PROVIDER_SECRET:-}
       # 快照读侧与租约都用它，与 collector 写快照的是同一个实例
       PLATFORM_REDIS_HOST: ${REDIS_HOST:?必填}
       PLATFORM_REDIS_PORT: ${REDIS_PORT:-6379}

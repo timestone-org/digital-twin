@@ -132,6 +132,24 @@ class EmbeddingAdapter(Protocol):
         """
         ...
 
+    @property
+    def is_ready(self) -> bool:
+        """此刻真能算吗。
+
+        ⚠ 端点来自运行期可改的目录时它会变：消费方要按它如实说「这一路没接」，
+        而不是把一次没算出来的向量当成空向量落库。
+        """
+        ...
+
+    @property
+    def model(self) -> str | None:
+        """此刻用的模型名；没接时是 `None`。
+
+        ⚠ 要如实报：消费方把它钉在库上对账，换了模型而名字没跟着变的话，
+        旧向量看着像同一路算的。
+        """
+        ...
+
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         """把一批文本转成向量，顺序与入参一一对应。
 

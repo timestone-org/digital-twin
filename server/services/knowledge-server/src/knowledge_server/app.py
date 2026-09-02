@@ -3,6 +3,8 @@
 中间件、异常映射、探针由 `lib.web.create_app` 统一给。
 """
 
+from collections.abc import Awaitable, Callable
+
 from fastapi import FastAPI
 
 from knowledge_server.apps.chat.api import CHAT_ROUTERS
@@ -57,6 +59,14 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
 
     return (
         LifespanHook(name="index-probe", startup=probe, startup_order=20),
+        # ⚠ 目录先拉一次再接流量：不拉的话第一批检索与摄取读到的是空目录，
+        # 全部退回环境变量那一档——而那一档可能根本没配。拉不到不阻塞启动：
+        # 目录缓存自己吞掉失败、沿用空的那一份，随后每次调用按 TTL 再试
+        LifespanHook(
+            name="llm-catalog",
+            startup=_prefetch_catalog(container),
+            startup_order=25,
+        ),
         LifespanHook(
             name="platform",
             # ⚠ 停在存储之前：在途的同步还可能正等它答复，而那之后才轮到
@@ -75,6 +85,18 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
             shutdown_order=99,
         ),
     )
+
+
+def _prefetch_catalog(container: Container) -> Callable[[], Awaitable[None]]:
+    """把「启动时拉一次目录」包成启动动作。拉不到也不抛。
+
+    Args: container。
+    """
+
+    async def prefetch() -> None:
+        await container.catalog.refresh(is_forced=True)
+
+    return prefetch
 
 
 def _probes(container: Container) -> tuple[ReadinessProbe, ...]:
