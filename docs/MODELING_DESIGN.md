@@ -450,7 +450,7 @@ CREATE UNIQUE INDEX modeling_runs_one_active_per_pipeline
   NAME                 中文显示名
   DESCRIPTION          一句话；同时喂给前端与将来的 LLM 目录
   CATEGORY             source | preprocess | feature | model | evaluate
-  SPEC_VERSION         算子契约版本，导入时比对（"1.0"）
+  SPEC_VERSION         算子契约版本，导入时比对（"1.1"）
   ICON                 DtIcon 注册表里**已登记**的名字
   CONFIG_MODEL         pydantic v2 模型，参数 schema 的唯一来源
   INPUTS / OUTPUTS     tuple[PortSpec, ...]
@@ -597,12 +597,12 @@ X / y 的对齐因此是**结构上不可能出错**的：它们本来就是同�
 
 | 类别 | code | 名称 | 关键参数 | fit? | serving? |
 | --- | --- | --- | --- | --- | --- |
-| source | `ledger_source` | 台账取数 | `table_code` / `columns[]` / `since` `until`（绝对或相对）/ `row_source` / `row_limit` | 否 | **否** |
-| preprocess | `fill_missing` | 填缺失 | `strategy`（mean/median/constant）/ `columns[]` / `value` | **是** | 是 |
-| feature | `standardize` | 标准化 | `method`（zscore/minmax）/ `columns[]` | **是** | 是 |
-| model | `split_dataset` | 训练 / 测试切分 | `target_column` / `method`（time_order/random）/ `test_ratio` / `random_state` | 否 | **否** |
-| model | `linear_regression` | 线性回归 | `fit_intercept` | 否（拟合结果即模型） | 是 |
-| evaluate | `regression_metrics` | 回归评估 | —— | 否 | **否** |
+| source | `ledger_source` | 台账取数 | `table_code` / `columns[]` / `since` `until`（绝对或相对）/ `row_source` / `row_limit` / `should_drop_empty_columns` | 否 | **否** |
+| preprocess | `fill_missing` | 填缺失 | `strategy`（mean/median/constant）/ `columns[]` / `value` / `on_all_null`（error/skip） | **是** | 是 |
+| feature | `standardize` | 标准化 | `method`（zscore/minmax）/ `columns[]` / `on_constant_column`（error/skip） | **是** | 是 |
+| model | `split_dataset` | 训练 / 测试切分 | `target_column` / `method`（time_order/random）/ `test_ratio` / `random_state` / `min_test_rows` | 否 | **否** |
+| model | `linear_regression` | 线性回归 | `use_intercept` / `regularization`（none/ridge）/ `ridge_alpha` | 否（拟合结果即模型） | 是 |
+| evaluate | `regression_metrics` | 回归评估 | `residual_bins` / `max_scatter_points` | 否 | **否** |
 
 `split_dataset` **默认 `time_order`**——台账数据是时序的，随机切分会让未来数据泄漏进训练集，
 指标虚高而线上崩，这是工业时序场景最常见的一类错。界面上选 `random` 时给一条明确警告。
@@ -611,6 +611,10 @@ X / y 的对齐因此是**结构上不可能出错**的：它们本来就是同�
 `regression_metrics` 输出 R² / RMSE / MAE / MAPE / 最大误差，外加**真实值-预测值对**
 （有上限，供散点图）与**残差直方图**（分桶计数，供可视化）。
 
+岭回归是 `linear_regression` 的一个参数而不是另一个算子：算法与最小二乘同一份闭式解，
+差别只在 `(XᵀX + αI)` 这一项，**截距不参与惩罚**；拆成两个算子会让拟合参数、可服务表示与
+打分路径各多出一份同源实现。
+
 #### 下一轮的扩容位（结构上已经留好，加类即可）
 
 | 类别 | 候选 |
@@ -618,7 +622,7 @@ X / y 的对齐因此是**结构上不可能出错**的：它们本来就是同�
 | source | `ledger_join`（多台账按时间对齐） |
 | preprocess | `cast_type` / `drop_missing` / `clip_outlier` / `resample` / `filter_rows` |
 | feature | `time_feature` / `one_hot` / `lag_feature` / `rolling_feature` / `select_feature` / `pca` |
-| model | `ridge` / `lasso` / `logistic_regression` / `random_forest_regressor`（通道 B） / `kmeans` |
+| model | `lasso` / `logistic_regression` / `random_forest_regressor`（通道 B） / `kmeans` |
 | evaluate | `classification_metrics` / `residual_analysis` / `feature_importance` / `cross_validate` |
 
 ⚠ `SERVING_NEEDS_WINDOW=True` 的算子（滞后 / 滚动）会让整条流水线**不可服务**（§7.6）。
@@ -647,7 +651,7 @@ schema 有两份（DB 一份、代码一份），只要有一处不同步就出�
 GET /api/v1/platform/modeling-operators
 [{
   "code": "standardize", "name": "标准化", "description": "…",
-  "category": "feature", "spec_version": "1.0", "icon": "workflow",
+  "category": "feature", "spec_version": "1.1", "icon": "workflow",
   "inputs":  [{ "name": "frame", "contract": "frame@v1", "label": "输入", "is_required": true }],
   "outputs": [{ "name": "frame", "contract": "frame@v1", "label": "输出" }],
   "config_schema": { /* CONFIG_MODEL 的 JSON Schema，字段按定义顺序 */ },
@@ -1138,6 +1142,90 @@ typecheck 与 lint 双双放行——这是本仓已经吃过的亏，只有契�
 **保存前整图校验**：调 `POST /modeling-pipelines/{id}:validate`（与保存同一份实现），
 问题逐条列出。**运行前自动静默保存，保存失败即中止运行**——杜绝「我改了参数但跑的是旧图」。
 
+### 8.2.1 编辑手感：一期跑通之后补的那一轮
+
+一期把画布跑通了，但真上手用会撞上三件事，第二轮逐条补掉。**根因值得记下来**，
+因为它们各自都在单元测试里全绿。
+
+**① 「模块连不上线」不是连线代码坏了。** 单测里拉线一直是通的，真实版面上不通，
+因为两条几何账：
+
+- 新卡片按 32px 级联落点，而卡片是 224×68——下一张正好盖住上一张的**输出接点**
+  （只差 `h/2 = 34 > 32` 这一点点）。除了最后落的那张，其余节点的出口根本点不到，
+  而最后那张只连得到自己，于是恒定收到「不能接到自己身上」；
+- 接点的命中区只有 10px，比光标热点大不了多少。
+
+对应三条改动：落点由用户决定（拖拽落件）、级联步长放到 40px 且叠放的卡片按
+**选中 / 拖动 / 常态**分三层压序、接点用一层 `::after` 把命中区放到 24px 而视觉圆点不变。
+
+**② 松手落在卡片任意位置都算连上。** `dropEndOf` 先认接点，认不出就退到整张卡片，
+替用户挑一个**契约相符且还空着**的口（`autoEndOf`）。只认那个圆点的话，十次里落空七次，
+而那个表象与「连线根本用不了」无从区分。
+
+**③ 两个方向都能起手。** 从入口反着往回拉也认，`orderEnds` 把两端归一成「出口 → 入口」。
+只支持一个方向的话，接第二个输入时得先绕到上游那张卡片上去起手，而两张卡片往往不在同一屏里。
+
+**拉线期间给判定结果染色**：`openPortsOf` 对全图每个口真判一次（不只是比契约，
+入口被占与会成环也算），接得住的口放大变绿、接不住的变淡。不这么做的话用户要一路拖过去、
+松手才被拒，而那时他已经忘了自己是从哪个口起的手。
+
+**摆放辅助**（几何全在 `scripts/nodeLayout.ts`，纯函数）：
+
+| 能力 | 口径 |
+| --- | --- |
+| 吸附 | 拖动中与其余卡片的**前缘 / 中线 / 后缘**比，6px 容差内吸上去并画一条参考线 |
+| 对齐 | 六向（左 / 水平居中 / 右 / 上 / 垂直居中 / 下），选中 ≥2 张才有 |
+| 等距分布 | 两头不动、**匀间隙不匀中心距**，选中 ≥3 张才亮 |
+| 一键整理 | 按拓扑分层重排，层号取**最长路径**；每列在整块版面里居中 |
+
+⚠ 吸附只按选中集里**头一张**卡片算，算出的修正量整批共用：逐张各吸各的会把选中集拆散，
+用户拖的是一组、松手却发现它们之间的相对位置变了。
+
+⚠ 层号取最长路径而不是最短：按最短算的话，一个直接连到末端的旁路会把末端拽到很靠前的一层，
+边要往回画，读起来像是图接反了。⚠ 分层的轮数必须封顶——连线时挡过成环，但一份从别处导入
+或被旧版本存坏的图仍可能带环，不封顶就是整页卡死。
+
+**右键菜单**与**快捷键**共用同一份动作（`useCanvasActions`）。两套实现迟早各自漂移，
+而漂移的表现是「菜单能用、快捷键不能用」这种只在某一条路径上出现的怪事。
+对齐那一组**只在选中 ≥2 张时才摆出来**：常摆着的话，一张卡片上右键会弹出一列点了没反应的
+灰条，而右键菜单正是用户找功能的地方。
+
+**快捷键**：`Delete` 删、`⌘Z`/`⌘⇧Z` 撤销重做、`⌘A` 全选、`⌘C`/`⌘V`/`⌘D` 复制粘贴再制、
+方向键微调（`Shift` 走大格）、`F2` 改名、`Enter` 看参数、`Esc` 取消选中。
+只读时**只放行不改图的那几个**（取消选中 / 全选 / 复制 / 看参数 / 适应视图）。
+
+**剪贴板走 `localStorage`** 而不是页面内的一个 ref：复制一段子图去另一条流水线里复用，
+正是这颗按钮最主要的用处，而换页面就意味着组件已经卸载了。读回来的东西一律**逐项验形**
+——存进去的可能是上一个版本写的。⚠ 只搬两端都在选中集里的边：一端在外的边跟过来会凭空多出
+一个入口占用，而那个入口上原本的线还在。
+
+**别的补齐**：重做（一期只有撤销）、节点改名（`alias` 字段一期就有、界面上没有入口）、
+「适应视图」（一期 `fit` 暴露了但没有任何按钮调用）、缩放工具条、边上的箭头与中点删除键、
+空画布时的一句上手提示。
+
+⚠ 滚轮方向一期是反的（`-$event.deltaY` 传进去之后，往前推滚轮反而缩小）。这类错
+typecheck 与 lint 都不管，只有一条断言「往前推之后 zoom 变大」拦得住。
+
+### D27 · 摆放几何自己写一份，不复用大屏那套
+
+大屏编辑器的 `features/dashboard/canvasAlign.ts` / `canvasSnap.ts` 是纯函数，看着能直接拿来用。
+**没有拿**，理由是数据形状不同而不是懒：
+
+- 那两个模块吃的是 `{x, y, w, h}` —— 大屏节点的宽高**存在文档里**；建模节点只存 `position`，
+  尺寸是卡片自己撑出来的、只能**实测**。硬接的话得在每个调用点先造一份假的 w/h；
+- 它们还带着大屏的层级语义（`clampRect` 要一个 `design` 边界、对齐只在同父层内成立），
+  而建模画布是无边界的单层平面；
+- 建模这份只要六向对齐 + 两轴分布 + 边线吸附，`nodeLayout.ts` 187 行装得下，
+  比适配层还短。
+
+⚠ 这意味着仓里现在有**三份**同类几何（大屏、2D 孪生、建模）——2D 孪生那份也是各写各的。
+这是一处**明知故犯的重复**，记在这里而不是等它自己漂：真要合并，该合的是「一批带 id 的矩形
+怎么对齐 / 分布 / 吸附」这一层抽象，落在 `packages/` 而不是任何一个 `features/<某个页面>/` 下。
+
+⚠ 有一条**必须照抄**的教训：吸附容差是**屏幕像素**，用之前要除以当前缩放
+（大屏那份的 `SMART_SNAP_SCREEN_PX` 注释写着这一条）。当画布像素用的话，缩到 25% 时它只相当于
+1.5 个屏幕像素——吸附等于没了；放到 250% 又变成 15 个，卡片离得老远就被吸走。
+
 ### 8.3 参数表单：schema 驱动
 
 用 `config_schema`（pydantic 生成的标准 JSON Schema）→ 控件映射：
@@ -1157,6 +1245,25 @@ typecheck 与 lint 双双放行——这是本仓已经吃过的亏，只有契�
 ⚠ 不要与大屏组件那套 `configSchema` 复用同一个渲染器——两套 schema 的方言不同
 （pydantic 的 `Optional[T]` 生成 `anyOf:[{T},{null}]`、`Literal` 生成 `enum`），
 混用会在两边各埋一半的特例。
+
+**候选值从哪来**（一期这两处是空的，参数面板因此根本配不动）：
+
+- `x-dt-widget:"table"` 的候选是 `GET /dataset-tables` 的真实清单。
+  ⚠ 那条接口归 `dataset:view` 管，而建模是另一套权限码：只有 `modeling:*` 的人会吃 403。
+  那时**不能只显示一个空下拉**——空下拉读起来是「一张台账都没建」，而真相是「你看不到」，
+  两者的处置完全不同。拿不到就退回让人手填编码，并把原因原话说出来。
+  ⚠ 这句提示必须**总是**看得见：挂在 `hint` 上会被必填错误顶掉（DtField 只显示其中一条），
+  要单独一行。
+- `x-dt-widget:"column"` 的候选是**上游那条支路**上的取数节点选的台账的列。
+  ⚠ 不是「图里所有取数节点」：一条流水线接两张台账时，另一支的列名会被列进来，
+  用户勾了要等运行时才报「这一列不存在」。一期的做法更远——它读的是上游节点
+  `config['columns']` 里已经勾中的值，而那个字段留空的语义正是「取全部列」，于是恒为空。
+- `x-dt-widget:"moment"` 是「相对 / 绝对 / 不限」三选一的组合控件；相对写法给常用档下拉
+  外加自由输入，写歪了当场标红。
+
+**每一项都能一键回到默认值**：schema 里给了默认的字段，改坏之后用户没有别的路能确认
+「原来是多少」，而参数写歪的表现往往是模型指标莫名其妙地差。⚠ 只对**必填且没有默认值**的
+字段报「必须填」：有默认值的字段留空是合法的，运行时按默认走。
 
 ### 8.4 中间结果与可视化
 
@@ -1178,6 +1285,40 @@ kind = "metrics" → 指标网格（按阈值染色）+ 真实-预测散点 + �
 
 **每种结果都是三段式**：统计摘要卡（指标按阈值染色）→ 图 → 分页明细表。
 第一屏永远是数字摘要而不是原始表格。
+
+⚠ **`fitted` 是一份拟合参数字典，不是布尔**。一期前端按 `raw['fitted'] === true` 读，
+于是每一个训练成功的模型都在界面上喊「这一步还没有训练出模型，下游用不了」，而单测里
+那份夹具写的正是 `fitted: false`——一个后端从来不会发出的形状。这类错只有把夹具对齐到
+**后端真实产出**才拦得住。
+
+⚠ **「摘要被截断」与「没训练出来」是两回事**：摘要撑爆字节预算时 `preview.py::_stripped`
+会把 `fitted` 整个键摘掉，混作一处会让一个跑成功的模型被说成没训出来。判据是**键在不在**，
+不是值是不是空。
+
+⚠ **无定义的指标写「无定义」，不写 0**：R² 在整列取值相同时、MAPE 在真值有 0 时都是算不出来的，
+一期的读法是把 null 的那几项**整个丢掉**，于是「算不出来」在界面上长得像「没有这个指标」。
+
+**指标染色逐指标定方向**（`scripts/metricBands.ts`）：R² 越大越好、MAPE 越小越好，
+用同一套阈值去套的话一个 8% 的 MAPE 会被染成「差」。⚠ MAPE 后端**已经乘过 100**，
+阈值按百分数写。⚠ 没有分档口径的指标（MAE / RMSE / 最大误差）一律不染色：
+一个 3 是好是坏只有知道那一列的量纲才答得上来，替用户拍一个颜色等于给一个没根据的结论。
+
+**后端一期就算好、前端一期一个都没读**的三样，第二轮补齐：
+
+| 字段 | 补成什么 |
+| --- | --- |
+| `residual_bins` | 残差直方图（自绘 SVG）。看它是为了分辨两种「误差大」：整体偏在一边（有系统性偏差）与两边对称散开（噪声大） |
+| `provenance` | 取数溯源：台账编码 + 时间范围 + **触顶告警**。⚠ 取数触顶是「数据根本没进来」，与「摘要只带回前几行」不是一回事——前者意味着模型是在半截数据上训的 |
+| `serving_channel` | 可服务性徽标：这一版能不能配到台账公式里去 |
+
+另加**特征权重条**（按 |权重| 排序，零线在正中，正负分色）与**列角色徽标**（目标列 / 特征列）。
+⚠ 权重条用 HTML 而不是 SVG：名字与数值要跟着条子对齐、还要能 `text-overflow`，
+用 SVG 就得自己算基线与截断。
+
+**卡片上直接印一行结果**（`scripts/nodeHeadline.ts`）：帧给「1,200 行 × 8 列」、
+模型给特征个数、评估给前两个指标。都藏在弹窗里的话，用户想比较两步之间行数掉了多少，
+得把两个弹窗轮流开关四次——而这正是看中间结果最常见的用法。为此在运行的节点转成成功时
+**顺手预取摘要**，预取有硬上限（24 份），因为每份最大 256KB。
 
 **图怎么画**：散点与直方图**手写 SVG**，不引 echarts。理由是本仓已有先例
 （空调建模页的散点 / 误差直方图 / 按折条全部手写 SVG），且 echarts 只注册了折线，
@@ -1210,12 +1351,21 @@ kind = "metrics" → 指标网格（按阈值染色）+ 真实-预测散点 + �
 - 外壳槽名（顶栏动作）写错的现象是**顶栏内容整块消失**，打了桩的测试会照抄这个错还全绿。
   必须另写一个用真件的 shell 契约测试；
 - **SFC ≤ 500 裸行、组合式函数 ≤ 200 行、props ≤ 10 个、模板嵌套 ≤ 6 层**（闸门数字）。
-  画布页落地拆成八个组合式函数 + 一个薄页面壳：`useModelingGraph`（图 + 撤销栈 + 脏标记，
-  撤销与图状态没有分家——分开的话「删一下」会变成两步撤销）、`useCanvasViewport`（平移缩放
-  与坐标换算）、`useCanvasPointer`（四种手势的状态机）、`useCanvasSelection`、
-  `useCanvasWiring`（命中测试 + 四条连线判据 + 边的几何）、`useNodeAnchors`（接点坐标，
-  按卡片实测尺寸算）、`useRunPolling`（轮询状态机）、`useCanvasShortcuts`（键盘），
-  外加 `usePipelineDoc`（读存校验）与 `useCanvasPage`（把它们接起来）。
+  画布页拆成一个薄页面壳 + 一批组合式函数与纯模块。有反应式状态的（`use*`，各自 ≤200 行）：
+  `useModelingGraph`（图 + 撤销/重做栈 + 脏标记，撤销与图状态没有分家——分开的话「删一下」
+  会变成两步撤销）、`useCanvasViewport`（平移缩放与坐标换算）、`useCanvasPointer`（四种手势
+  的状态机）、`useCanvasSelection`、`useNodeAnchors`（接点坐标，按卡片实测尺寸算）、
+  `useRunPolling`（轮询状态机）、`useCanvasShortcuts`（键盘）、`useCanvasActions`（右键菜单
+  与快捷键**共用**的那一份动作）、`useCanvasMenu`（菜单开合与派发）、`useConfigPanel`（参数
+  面板那一摊）、`useLedgerOptions`（台账与列的候选）、`usePipelineDoc`（读存校验）、
+  `useCanvasPage`（把它们接起来）。
+  纯模块（不带 `use` 前缀，因而不受 200 行那条闸约束，但同样各自单测）：`graphOps`（图草稿上
+  的纯操作）、`portHits`（DOM 命中）、`useCanvasWiring`（连线四条判据 + 方向归一 + 自动选口）、
+  `openPorts`（拉线时的端口染色表）、`edgeCurve`（边的几何）、`nodeLayout`（对齐/分布/吸附）、
+  `autoLayout`（拓扑分层）、`clipboard`、`menuItems` + `menuPosition`、`schemaForm`、`moment`、
+  `upstream`、`preview`、`nodeHeadline`、`metricBands`、`numbers`、`nodeState`、`dragMime`。
+  ⚠ `useCanvasWiring` 名字带 `use` 但没有反应式状态——它是一期就这么命名的，改名会牵动一批
+  用例，留着但知道它其实是纯模块。
   ⚠ 参考仓的画布页是一个 **1925 行的上帝组件**，且因为把回调挂在节点 data 上，
   同一段「剥回调 → 重绑回调」的闭包在文件里出现 5 次；
 - **组件内禁 `new Date(` / `toLocale*`**，时间格式化集中在既有的 datetime 工具里；
