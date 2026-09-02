@@ -454,11 +454,12 @@ apps/dashboard/crud/publish   三条只读查询：大屏清单、行版本、�
 
 ---
 
-## 模型供应商目录（`apps/llm_providers`，ADR-0039）
+## 模型供应商目录（`apps/llm_providers`，ADR-0039 / ADR-0040）
 
 | 词 | 指什么 | 不叫什么 |
 |---|---|---|
-| **供应商** `llm_provider` | 一个 OpenAI 兼容端点（地址 + 密钥）+ 它上面登记的几个模型 | 不叫厂商 / 账号 |
+| **供应商** `llm_provider` | 一路模型来源：一种**接入形态** + 它上面登记的几个模型 | 不叫厂商 / 账号 |
+| **接入形态** `kind` | 这一路怎么接：`openai_compat`（地址 + 密钥）或 `codex_oauth`（登录一次），闭合集合 | 不叫厂商——它说的是协议与认证形态 |
 | **模型** `llm_model` | 供应商上登记的一个代号：种类 `chat` / `embedding`、接不接图、嵌入维数 | 不是画布的「模块」 |
 | **用途** `purpose` | 消费方的一个取模型的口子（`assistant.chat`、`knowledge.embedding` …），闭合集合 | 不叫场景 / 通道 |
 | **分配** `llm_assignment` | 一个用途指到一路供应商上的一个模型 | 不叫绑定（那是大屏的词） |
@@ -471,7 +472,12 @@ apps/dashboard/crud/publish   三条只读查询：大屏清单、行版本、�
    留到消费方那一侧才发现的话，表现是「界面上分配了、那一侧还在用环境变量那一档」。
 3. **本服务不调模型。** 目录只是配置；「测试连接」打的是 `GET {base_url}/models`，
    不产生任何计费调用。真正调模型的是助手与知识库，它们经 `domain/llmcore` 直连端点。
+4. **形态决定要配哪几格、谁接得了它**（`rules.py` 一处判定，写入面与更新面共用），
+   而形态清单经 `GET /llm-provider-kinds` 下发给前端渲染表单。前端另写一份的话，
+   表现是「表单里填了、保存时 422」。
+5. **形态建了不许改**：改形态等于换一路接法，密钥、登录态与模型清单全部作废。
 
-⚠ 用途码在助手（`llm/ports.py`）与知识库（`llm_purposes.py`）各复述一份，三边逐字一致
-由前端 `llm-shapes.contract.spec.ts` 对着源码比。加一档用途 = 三处字面量 + 一次放宽
-CHECK 的迁移。
+⚠ 用途码在助手（`llm/ports.py`）与知识库（`llm_purposes.py`）各复述一份，形态码在
+助手与 `llmcore` 各一半；四边逐字一致由前端 `llm-shapes.contract.spec.ts` 对着源码比。
+加一档用途或一种形态 = 几处字面量 + 一次放宽 CHECK 的迁移，且**一定要有一个消费方
+真接得了它**。
