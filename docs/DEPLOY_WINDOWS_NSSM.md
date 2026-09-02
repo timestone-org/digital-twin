@@ -596,7 +596,7 @@ worker 与 publisher 由 nssm 的环境变量覆盖（环境变量压过 `.env`�
 | 走哪一路 | 至少要填 |
 |---|---|
 | 按量计费的 OpenAI 兼容端点 | `ASSISTANT_MODEL_ENABLED=true` + `ASSISTANT_MODEL_API_KEY` + `_BASE_URL` / `_CHAT` / `_VISION` |
-| ChatGPT / Codex 订阅（ADR-0026）| `ASSISTANT_CODEX_ENABLED=true` + `ASSISTANT_CODEX_MODEL` + `ASSISTANT_CREDENTIAL_SECRET`（已生成），装好后还要去 系统管理 → 助手模型 走一次设备码登录 |
+| ChatGPT / Codex 订阅（ADR-0026）| `ASSISTANT_CODEX_ENABLED=true` + `ASSISTANT_CODEX_MODEL` + `ASSISTANT_CREDENTIAL_SECRET`（已生成），装好后还要去 系统管理 → 模型管理 走一次设备码登录 |
 
 ⚠ **开关为真却不给密钥/模型代号 = 启动即失败**，这是刻意的：「起来之后每次
 对话才报错」比起不来难查得多。
