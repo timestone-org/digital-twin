@@ -94,6 +94,8 @@ export interface KnowledgeIndexLanes {
 export interface KnowledgeCapability {
   isEmbeddingEnabled: boolean
   isModelEnabled: boolean
+  /** 语音输入接上了吗。为假时对话页不放麦克风键。 */
+  isAsrEnabled: boolean
   strategies: string[]
   readyStrategies: string[]
   acceptedSuffixes: string[]
@@ -238,6 +240,7 @@ export function toCapability(value: unknown): KnowledgeCapability {
   return {
     isEmbeddingEnabled: row.is_embedding_enabled === true,
     isModelEnabled: row.is_model_enabled === true,
+    isAsrEnabled: row.is_asr_enabled === true,
     strategies: strings(row.strategies),
     readyStrategies: strings(row.ready_strategies),
     acceptedSuffixes: strings(row.accepted_suffixes),

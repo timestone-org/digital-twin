@@ -25,6 +25,8 @@ class CapabilityOut(BaseModel):
     is_embedding_enabled: bool
     # 对话档接上了吗。它只决定 `agentic` 策略可不可用
     is_model_enabled: bool
+    # 语音输入接上了吗（ADR-0038）。前端靠它决定摆不摆麦克风键
+    is_asr_enabled: bool
     # 这套部署装了哪些检索策略，以及哪些此刻真能用
     strategies: list[str] = Field(default_factory=list)
     ready_strategies: list[str] = Field(default_factory=list)

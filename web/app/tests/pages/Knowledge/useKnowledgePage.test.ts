@@ -49,6 +49,7 @@ beforeEach(() => {
   vi.spyOn(api, 'readCapability').mockResolvedValue({
     isEmbeddingEnabled: true,
     isModelEnabled: true,
+    isAsrEnabled: false,
     strategies: ['naive', 'hybrid', 'agentic'],
     readyStrategies: ['naive', 'hybrid'],
     acceptedSuffixes: ['.md', '.docx'],
@@ -388,6 +389,7 @@ describe('首屏', () => {
     vi.mocked(api.readCapability).mockResolvedValue({
       isEmbeddingEnabled: false,
       isModelEnabled: false,
+      isAsrEnabled: false,
       strategies: ['naive'],
       readyStrategies: [],
       acceptedSuffixes: [],

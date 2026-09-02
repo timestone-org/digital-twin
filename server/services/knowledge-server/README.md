@@ -29,6 +29,20 @@ uv run python -m knowledge_server.index --enable
 `BruteForceIndex`（应用层余弦），并在 `/capabilities` 里如实写着「未启用加速索引」。
 理由见 [ADR-0034](../../../docs/adr/0034-向量索引走端口并按扩展探测选实现.md)。
 
+## 语音输入（可选）
+
+对话页的麦克风键把音频经本服务中继到现场自建的 FunASR（ADR-0038）：
+
+```bash
+KNOWLEDGE_ASR_ENABLED=true
+KNOWLEDGE_ASR_URL=ws://140.80.0.196:10095     # ws:// 或 wss://，开了开关就必填
+KNOWLEDGE_ASR_HOTWORDS=                       # 可选，原样交给 FunASR
+```
+
+开关开着却没给地址 = 启动即失败。三道时限（连接 / 等终稿 / 浏览器空闲 / 一句话
+上限）见 `.env.example`。⚠ 上线要重跑 auth 种子，否则 `/speech/ws` 一律 403；
+浏览器开麦另要 HTTPS 或 localhost，那是浏览器的规矩。
+
 ## 它不做什么
 
 - **不读别的服务的库。** 外部系统来源经对方的 HTTP 面拿数据。

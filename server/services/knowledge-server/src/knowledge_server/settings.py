@@ -130,6 +130,26 @@ class Settings(
     vector_index: IndexChoice = "auto"
     keyword_index: KeywordChoice = "auto"
 
+    # 语音输入：到自建 FunASR 的中继（ADR-0038）。关着时 `/speech/ws` 一律
+    # 以 1013 关掉，`/capabilities` 如实报 `is_asr_enabled=false`
+    asr_enabled: bool = False
+    # ws:// 或 wss://。⚠ 现场多半是明文 ws——它只在本服务与 FunASR 之间走，
+    # 浏览器那一段仍是 wss 到边缘
+    asr_url: str = ""
+    # 原样塞进 FunASR 的 hotwords
+    asr_hotwords: str = ""
+    asr_connect_timeout_s: float = 5.0
+    # stop 之后等终稿多久；到点就把手头的当 final 发出去
+    asr_final_timeout_s: float = 5.0
+    # 浏览器多久不送帧就当它走了
+    asr_idle_timeout_s: float = 30.0
+    # 一句话最长多久，超了当 stop
+    asr_max_utterance_s: float = 60.0
+    # 收口前补多长的尾部静音。⚠ FunASR 靠 VAD 判「说完了」，尾部静音不够长
+    # 它判不出来、不给终稿——本部署实测 1.5 s 不够、3 s 够；太短的表现是
+    # 每一句都要等到超时才拿到不带标点的在线整段
+    asr_tail_silence_s: float = Field(default=3.0, gt=0)
+
     @model_validator(mode="after")
     def _embedding_needs_a_key_and_a_model(self) -> Self:
         """开了嵌入档就必须把端点配全，否则启动即失败。
@@ -174,6 +194,22 @@ class Settings(
             missing.append("KNOWLEDGE_MODEL_API_KEY")
         if missing:
             raise ValueError(f"开了对话档就必须配：{'、'.join(missing)}")
+        return self
+
+    @model_validator(mode="after")
+    def _asr_needs_a_ws_url(self) -> Self:
+        """开了语音识别就必须给一个 ws:// 或 wss:// 的地址，否则启动即失败。
+
+        ⚠ 不打 WARN 继续：留到第一次开麦才发现的话，用户看到的只是
+        「语音识别此刻不可用」，而那句话与 FunASR 真挂了长得一模一样。
+        """
+        if not self.asr_enabled:
+            return self
+        url = self.asr_url.strip()
+        if not url:
+            raise ValueError("开了语音识别就必须配 KNOWLEDGE_ASR_URL")
+        if not url.startswith(("ws://", "wss://")):
+            raise ValueError("KNOWLEDGE_ASR_URL 必须以 ws:// 或 wss:// 开头")
         return self
 
     def embedding_endpoint(self) -> EmbeddingEndpoint | None:

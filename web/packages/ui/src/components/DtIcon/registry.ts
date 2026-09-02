@@ -376,6 +376,20 @@ export const ICONS = {
     'M14 19.8v-8.1',
     'M18 17.5V9.4',
   ],
+  // 语音输入：开麦 / 麦克风关着（lucide mic / mic-off；圆角矩形折成 path）
+  mic: [
+    'M12 19v3',
+    'M19 10v2a7 7 0 0 1-14 0v-2',
+    'M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3Z',
+  ],
+  'mic-off': [
+    'M12 19v3',
+    'M15 9.34V5a3 3 0 0 0-5.68-1.33',
+    'M16.95 16.95A7 7 0 0 1 5 12v-2',
+    'M18.89 13.23A7 7 0 0 0 19 12v-2',
+    'm2 2 20 20',
+    'M9 9v3a3 3 0 0 0 5.12 2.12',
+  ],
 } as const satisfies Record<string, readonly string[]>
 
 export type IconName = keyof typeof ICONS

@@ -60,6 +60,7 @@ vi.mock('@dt/ui', async () => {
 const READY: KnowledgeCapability = {
   isEmbeddingEnabled: true,
   isModelEnabled: true,
+  isAsrEnabled: false,
   strategies: ['naive', 'hybrid', 'agentic'],
   readyStrategies: ['naive', 'hybrid', 'agentic'],
   acceptedSuffixes: ['.md', '.txt', '.docx', '.xlsx', '.pptx'],

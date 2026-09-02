@@ -121,6 +121,7 @@ def capability_of(
     return CapabilityOut(
         is_embedding_enabled=settings.embedding_enabled,
         is_model_enabled=settings.model_enabled,
+        is_asr_enabled=settings.asr_enabled,
         strategies=list(STRATEGIES),
         ready_strategies=ready_strategies(settings, strategies),
         source_kinds=list(source_kinds(sources)),

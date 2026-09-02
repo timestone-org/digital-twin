@@ -20,6 +20,8 @@ defineProps<{
   title: string | null
   /** 空态里可点的几句开场。 */
   starters: readonly string[]
+  /** 这套部署接了语音识别：输入区多一枚麦克风键。 */
+  speechEnabled: boolean
 }>()
 
 defineEmits<{
@@ -65,6 +67,7 @@ defineEmits<{
     <KnowledgeChatComposer
       :running="chat.isRunning.value"
       :asking="chat.isAsking.value"
+      :speech-enabled="speechEnabled"
       @send="$emit('send', $event)"
       @stop="chat.stop"
     />
