@@ -26,6 +26,8 @@ from platform_server.apps.modeling.operators.frame import (
 from platform_server.apps.modeling.operators.registry import register_operator
 
 type ScaleMethod = Literal["zscore", "minmax"]
+# 训练行上只有一个取值时的处置。skip 那一档不给这列记尺度，推理时也就跟着不缩放
+type ConstantColumnAction = Literal["error", "skip"]
 
 # 尺度为 0 的列（整列同一个值）除不得。⚠ 这一条在**拟合期**就要拒绝，
 # 不能留到推理期才抛：那样模型训出来了、上线才炸（docs/MODELING_DESIGN.md §7.3）
@@ -44,6 +46,11 @@ class StandardizeConfig(OperatorConfig):
         title="处理哪些列",
         description="留空表示除目标列外的全部数值列",
         default_factory=list[str],
+    )
+    on_constant_column: ConstantColumnAction = Field(
+        default="error",
+        title="常量列时",
+        description="error=报错；skip=这一列原样放过不缩放",
     )
 
 
@@ -85,7 +92,7 @@ class Standardize(OperatorBase):
         )
         if not self._scales:
             self._fits(training_frame(frame, self.split_plan), keys)
-        for key in keys:
+        for key in self._scales:
             frame = with_column_values(frame, key, self._scaled(frame, key))
         return {"frame": frame}
 
@@ -117,13 +124,21 @@ class Standardize(OperatorBase):
                 raise OperatorError(f"列「{key}」的尺度为 0")
 
     def _fits(self, train: Frame, keys: tuple[str, ...]) -> None:
+        config = self._config
         for key in keys:
             present = [
                 value for value in numbers_of(train, key) if value is not None
             ]
             if not present:
                 raise OperatorError(f"列「{key}」在训练行上整列都是空值")
-            self._scales[key] = _scale_of(self._config.method, present, key)
+            scale = _scale_of(config.method, present)
+            if scale["scale"] != _ZERO_SCALE:
+                self._scales[key] = scale
+            elif config.on_constant_column != "skip":
+                raise OperatorError(
+                    f"列「{key}」在训练行上只有一个取值，标准化会除以 0，"
+                    "请把这一列从这一步里去掉"
+                )
 
     def _scaled(self, frame: Frame, key: str) -> list[CellValue]:
         scale = self._scales[key]
@@ -147,12 +162,10 @@ def _scale_entry(key: str, raw: object) -> dict[str, float]:
     return {name: float(str(entry[name])) for name in ("center", "scale")}
 
 
-def _scale_of(
-    method: ScaleMethod, present: list[float], key: str
-) -> dict[str, float]:
-    """一列的中心与尺度。整列同一个值时直接拒绝。
+def _scale_of(method: ScaleMethod, present: list[float]) -> dict[str, float]:
+    """一列的中心与尺度。整列同一个值时 scale 为 0，由调用方决定怎么处置。
 
-    Args: method, present, key。
+    Args: method, present。
     """
     if method == "minmax":
         low, high = min(present), max(present)
@@ -163,9 +176,4 @@ def _scale_of(
             present
         )
         span = variance**0.5
-    if span == _ZERO_SCALE:
-        raise OperatorError(
-            f"列「{key}」在训练行上只有一个取值，标准化会除以 0，"
-            "请把这一列从这一步里去掉"
-        )
     return {"center": center, "scale": span}

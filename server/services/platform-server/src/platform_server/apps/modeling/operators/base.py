@@ -172,7 +172,7 @@ class OperatorBase:
     DESCRIPTION: ClassVar[str] = ""
     CATEGORY: ClassVar[str] = ""
     # 算子契约版本，导入流水线时比对（不匹配给警告而非拒绝）
-    SPEC_VERSION: ClassVar[str] = "1.0"
+    SPEC_VERSION: ClassVar[str] = "1.1"
     # ⚠ 必须是 DtIcon 注册表里已登记的名字：未登记的名字前端静默不渲染
     ICON: ClassVar[str] = "network"
     CONFIG_MODEL: ClassVar[type[OperatorConfig]] = OperatorConfig

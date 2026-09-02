@@ -2,10 +2,13 @@
 
 from typing import Any
 
+from pydantic import Field
+
 from platform_server.apps.modeling.operators.base import (
     CONTRACT_FRAME,
     CONTRACT_METRICS,
     OperatorBase,
+    OperatorConfig,
     OperatorError,
     PortSpec,
 )
@@ -22,12 +25,31 @@ from platform_server.apps.modeling.operators.model import (
 from platform_server.apps.modeling.operators.payloads import MetricsPayload
 from platform_server.apps.modeling.operators.registry import register_operator
 
-# 散点图最多带回多少个点。再多前端也画不出信息，只会把响应撑大
-MAX_PAIRS = 500
-# 残差直方图的桶数
-RESIDUAL_BINS = 20
+# 散点图默认带回多少个点。再多前端也画不出信息，只会把响应撑大
+DEFAULT_SCATTER_POINTS = 500
+# 残差直方图的默认桶数
+DEFAULT_RESIDUAL_BINS = 20
 # 相对误差在真实值为 0 时无定义，那些行不计入
 _ZERO = 0.0
+
+
+class RegressionMetricsConfig(OperatorConfig):
+    """回归评估的参数。两项都只影响带回来画图的那两组数，不影响指标。"""
+
+    residual_bins: int = Field(
+        default=DEFAULT_RESIDUAL_BINS,
+        ge=5,
+        le=100,
+        title="残差直方图桶数",
+        description="残差分布切成多少个区间",
+    )
+    max_scatter_points: int = Field(
+        default=DEFAULT_SCATTER_POINTS,
+        ge=50,
+        le=5000,
+        title="散点图点数上限",
+        description="真实-预测散点最多带回多少个点，超出的部分标为已截断",
+    )
 
 
 @register_operator
@@ -39,6 +61,7 @@ class RegressionMetrics(OperatorBase):
     DESCRIPTION = "按测试集上的真实值与预测值算回归指标，并给出散点与残差分布"
     CATEGORY = "evaluate"
     ICON = "chart-column"
+    CONFIG_MODEL = RegressionMetricsConfig
     INPUTS = (
         PortSpec(
             name="scored",
@@ -53,24 +76,34 @@ class RegressionMetrics(OperatorBase):
     # 推理时不评估
     ENABLED_IN_SERVING = False
 
+    @property
+    def _config(self) -> RegressionMetricsConfig:
+        config = self.config
+        # pragma 理由 —— 参数由注册表按算子造，型别不会错
+        if not isinstance(config, RegressionMetricsConfig):  # pragma: no cover
+            raise OperatorError("回归评估拿到了不匹配的参数")
+        return config
+
     def run(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """算指标。
 
         Args: inputs。
         """
+        config = self._config
         scored = frame_input(inputs, "scored")
         truth, predicted = _columns_of(scored)
         residuals = [
             actual - guess
             for actual, guess in zip(truth, predicted, strict=True)
         ]
+        limit = config.max_scatter_points
         return {
             "metrics": MetricsPayload(
                 task=TASK_REGRESSION,
                 metrics=_metrics_of(truth, residuals),
-                pairs=tuple(zip(truth, predicted, strict=True))[:MAX_PAIRS],
-                is_truncated=len(truth) > MAX_PAIRS,
-                residual_bins=_histogram(residuals),
+                pairs=tuple(zip(truth, predicted, strict=True))[:limit],
+                is_truncated=len(truth) > limit,
+                residual_bins=_histogram(residuals, config.residual_bins),
             )
         }
 
@@ -119,20 +152,22 @@ def _metrics_of(
     }
 
 
-def _histogram(residuals: list[float]) -> tuple[tuple[float, float, int], ...]:
+def _histogram(
+    residuals: list[float], bins: int
+) -> tuple[tuple[float, float, int], ...]:
     """残差分布。全部残差相同时退化成单个桶。
 
-    Args: residuals。
+    Args: residuals, bins。
     """
     low, high = min(residuals), max(residuals)
     if low == high:
         return ((low, high, len(residuals)),)
-    width = (high - low) / RESIDUAL_BINS
-    counts = [0] * RESIDUAL_BINS
+    width = (high - low) / bins
+    counts = [0] * bins
     for value in residuals:
-        index = min(int((value - low) / width), RESIDUAL_BINS - 1)
+        index = min(int((value - low) / width), bins - 1)
         counts[index] += 1
     return tuple(
         (low + width * index, low + width * (index + 1), counts[index])
-        for index in range(RESIDUAL_BINS)
+        for index in range(bins)
     )

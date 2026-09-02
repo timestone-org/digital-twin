@@ -14,7 +14,10 @@ from platform_server.apps.modeling.operators.base import (
     PortSpec,
     column_field,
 )
-from platform_server.apps.modeling.operators.estimators import LeastSquares
+from platform_server.apps.modeling.operators.estimators import (
+    LeastSquares,
+    Regularization,
+)
 from platform_server.apps.modeling.operators.frame import (
     DTYPE_NUMBER,
     ROLE_FEATURE,
@@ -51,13 +54,22 @@ class SplitDatasetConfig(OperatorConfig):
         default=SPLIT_TIME_ORDER,
         title="切分方式",
         description=(
+            # ⚠ 警告要单独成段：前端按「值=说明；值=说明」拆这句话去做下拉的
+            # 选项文案，跟在 `random=` 后面的话，整句警告就变成了那一项的标签
             "time_order=按时间先后切，靠后的做测试集；"
-            "random=随机切。⚠ 台账数据是时序的，随机切会让未来数据泄漏进训练集"
+            "random=随机切；"
+            "⚠ 台账数据是时序的，随机切会让未来数据泄漏进训练集"
         ),
     )
     test_ratio: float = Field(default=0.2, gt=0.0, lt=1.0, title="测试集比例")
     random_state: int = Field(
         default=42, ge=0, title="随机种子", description="随机切分时才用得上"
+    )
+    min_test_rows: int = Field(
+        default=1,
+        ge=1,
+        title="测试集最少行数",
+        description="切出来的测试集少于这么多行就当场报错，不往下跑",
     )
 
 
@@ -98,6 +110,7 @@ class SplitDataset(OperatorBase):
             test_ratio=config.test_ratio,
             random_state=config.random_state,
         )
+        _check_test_rows(config, test_rows=len(test), row_count=frame.row_count)
         return {
             "train": select_rows(frame, sorted(train)),
             "test": select_rows(frame, sorted(test)),
@@ -111,6 +124,20 @@ class LinearRegressionConfig(OperatorConfig):
         default=True,
         title="拟合截距",
         description="关掉相当于强制过原点，一般不要关",
+    )
+    regularization: Regularization = Field(
+        default="none",
+        title="正则化",
+        description=(
+            "none=普通最小二乘；"
+            "ridge=岭回归，按 alpha 收缩系数（截距不参与）"
+        ),
+    )
+    ridge_alpha: float = Field(
+        default=1.0,
+        ge=0.0,
+        title="岭回归的 alpha",
+        description="正则化选 ridge 时才用得上，越大系数收得越狠",
     )
 
 
@@ -163,9 +190,7 @@ class LinearRegressionOperator(OperatorBase):
                 task=TASK_REGRESSION,
                 feature_keys=feature_keys,
                 target_key=target_key,
-                hyper_params={
-                    "use_intercept": _linear_config(self.config).use_intercept
-                },
+                hyper_params=_hyper_params_of(_linear_config(self.config)),
                 fitted=self.dump_fitted() or {},
                 serving_channel=self.SERVING_CHANNEL,
             ),
@@ -230,8 +255,11 @@ class LinearRegressionOperator(OperatorBase):
         target = numbers_of(train, target_key)
         if any(value is None for value in target):
             raise OperatorError("训练集的目标列里有空值，请先补上或去掉这些行")
+        config = _linear_config(self.config)
         estimator = LeastSquares(
-            use_intercept=_linear_config(self.config).use_intercept
+            use_intercept=config.use_intercept,
+            regularization=config.regularization,
+            ridge_alpha=config.ridge_alpha,
         )
         estimator.fit(
             matrix_of(train, feature_keys),
@@ -266,6 +294,34 @@ def _scored_frame(
         index_name=test.index_name,
         provenance=test.provenance,
     )
+
+
+def _check_test_rows(
+    config: SplitDatasetConfig, *, test_rows: int, row_count: int
+) -> None:
+    """测试集行数不够就当场报错，并说清是行太少还是比例太小。
+
+    Args: config, test_rows, row_count。
+    """
+    if test_rows >= config.min_test_rows:
+        return
+    raise OperatorError(
+        f"测试集只切出 {test_rows} 行，少于要求的 {config.min_test_rows} 行："
+        f"一共 {row_count} 行数据，按 {config.test_ratio:.0%} 的比例就这么多。"
+        "请把取数的范围放宽，或把测试集比例调大"
+    )
+
+
+def _hyper_params_of(config: LinearRegressionConfig) -> dict[str, Any]:
+    """落进模型版本、供模型卡展示的超参。
+
+    Args: config。
+    """
+    return {
+        "use_intercept": config.use_intercept,
+        "regularization": config.regularization,
+        "ridge_alpha": config.ridge_alpha,
+    }
 
 
 def _single_target(frame: Frame) -> str:

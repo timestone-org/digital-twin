@@ -136,6 +136,20 @@ def test_enumerated_fields_are_declared_as_enums() -> None:
             assert "enum" in resolved, f"{spec.code}.{name}"
 
 
+def test_every_enum_value_is_explained_in_its_description() -> None:
+    """枚举字段的 description 要给全每个取值的 `值=说明`。
+
+    ⚠ 前端按这个形状取下拉文案，只要有一个取值对不上就**整份丢掉**、退回显示
+    英文原值（web/app/src/pages/Modeling/Canvas/scripts/schemaForm.ts）。
+    """
+    for spec in registry.specs():
+        for name, field in _properties(spec.config_schema).items():
+            resolved = _resolved(spec.config_schema, field)
+            explained = _explained(str(field.get("description", "")))
+            for value in resolved.get("enum", []):
+                assert value in explained, f"{spec.code}.{name}:{value}"
+
+
 def test_no_operator_code_smells_of_running_user_code() -> None:
     """算子码里不许出现带代码执行意味的词。
 
@@ -215,6 +229,17 @@ def _tiny_frame() -> Frame:
         ),
         rows=((1.0, 2.0), (3.0, 5.0), (None, 8.0)),
     )
+
+
+def _explained(description: str) -> set[str]:
+    """描述里被 `值=说明` 讲到的那些取值。
+
+    Args: description。
+    """
+    parts = re.split(r"[；;]", description)
+    return {
+        part.split("=", 1)[0].strip() for part in parts if part.find("=") > 0
+    }
 
 
 def _properties(schema: dict[str, Any]) -> dict[str, dict[str, Any]]:

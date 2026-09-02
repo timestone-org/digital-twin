@@ -19,7 +19,11 @@ from platform_server.apps.modeling.operators.base import (
     moment_field,
     table_field,
 )
-from platform_server.apps.modeling.operators.frame import Frame
+from platform_server.apps.modeling.operators.frame import (
+    Frame,
+    empty_keys,
+    without_columns,
+)
 from platform_server.apps.modeling.operators.registry import register_operator
 
 # 一次取数的行上限。硬顶与运行参数里的 MAX_SOURCE_ROWS 同量级，两者取小
@@ -68,6 +72,14 @@ class LedgerSourceConfig(OperatorConfig):
         title="行数上限",
         description="取最新的这么多行；触顶会在运行记录与界面上如实标注",
     )
+    should_drop_empty_columns: bool = Field(
+        default=False,
+        title="丢掉整列全空的列",
+        description=(
+            "打开后，在这段时间里一个值都没有的列不再往下走。"
+            "下游若显式引用了被丢掉的列，会在那一步报「没有这一列」"
+        ),
+    )
 
 
 @register_operator
@@ -91,8 +103,15 @@ class LedgerSource(OperatorBase):
     # 推理时数据由调用方逐行给，取数这一步整个跳过
     ENABLED_IN_SERVING = False
 
+    @property
+    def _config(self) -> LedgerSourceConfig:
+        # pragma 理由 —— 参数由注册表按算子造，型别不会错
+        if not isinstance(self.config, LedgerSourceConfig):  # pragma: no cover
+            raise OperatorError("台账取数拿到了不匹配的参数")
+        return self.config
+
     def run(self, inputs: dict[str, Any]) -> dict[str, Any]:
-        """把引擎预取好的帧交出去。
+        """把引擎预取好的帧交出去，必要时先丢掉整列全空的列。
 
         Args: inputs。
         """
@@ -101,4 +120,9 @@ class LedgerSource(OperatorBase):
             raise OperatorError("引擎没有为取数节点准备数据")
         if not frame.columns:
             raise OperatorError("这张台账当前一列都没有，取不出数据")
-        return {"frame": frame}
+        if not self._config.should_drop_empty_columns:
+            return {"frame": frame}
+        kept = without_columns(frame, empty_keys(frame))
+        if not kept.columns:
+            raise OperatorError("这段时间里每一列都是空值，没有列能往下走")
+        return {"frame": kept}

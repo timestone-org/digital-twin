@@ -216,6 +216,46 @@ def select_rows(frame: Frame, indices: list[int]) -> Frame:
     return replace(frame, rows=rows, index=index)
 
 
+def empty_keys(frame: Frame) -> tuple[str, ...]:
+    """整列一个值都没有的列 key。
+
+    ⚠ 零行的帧一律当作没有空列：一行都没有时每一列看着都空，判下去会把
+    「这段时间没取到数据」说成「每一列都是空的」。
+    Args: frame。
+    """
+    if not frame.rows:
+        return ()
+    return tuple(
+        column.key
+        for position, column in enumerate(frame.columns)
+        if all(row[position] is None for row in frame.rows)
+    )
+
+
+def without_columns(frame: Frame, keys: tuple[str, ...]) -> Frame:
+    """去掉给定的几列，每一行随之收窄；列不存在即抛。
+
+    Args: frame, keys。
+    """
+    dropped = {frame.position_of(key) for key in keys}
+    if not dropped:
+        return frame
+    columns = tuple(
+        column
+        for position, column in enumerate(frame.columns)
+        if position not in dropped
+    )
+    rows = tuple(
+        tuple(
+            value
+            for position, value in enumerate(row)
+            if position not in dropped
+        )
+        for row in frame.rows
+    )
+    return replace(frame, columns=columns, rows=rows)
+
+
 def split_row_indices(
     row_count: int, *, method: str, test_ratio: float, random_state: int
 ) -> tuple[list[int], list[int]]:

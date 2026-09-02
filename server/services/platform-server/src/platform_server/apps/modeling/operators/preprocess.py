@@ -26,6 +26,8 @@ from platform_server.apps.modeling.operators.frame import (
 from platform_server.apps.modeling.operators.registry import register_operator
 
 type FillStrategy = Literal["mean", "median", "constant"]
+# 整列全空时的处置。skip 那一档不给这列记填充值，推理时也就跟着不填
+type AllNullAction = Literal["error", "skip"]
 
 
 class FillMissingConfig(OperatorConfig):
@@ -45,6 +47,13 @@ class FillMissingConfig(OperatorConfig):
         default=0.0,
         title="固定值",
         description="填法选 constant 时用它",
+    )
+    on_all_null: AllNullAction = Field(
+        default="error",
+        title="整列全空时",
+        description=(
+            "error=报错（固定值填法照填不误）；skip=这一列原样放过不填"
+        ),
     )
 
 
@@ -86,7 +95,7 @@ class FillMissing(OperatorBase):
         )
         if not self._fills:
             self._fits(training_frame(frame, self.split_plan), keys)
-        for key in keys:
+        for key in self._fills:
             frame = with_column_values(frame, key, self._filled(frame, key))
         return {"frame": frame}
 
@@ -113,13 +122,15 @@ class FillMissing(OperatorBase):
                 raise OperatorError(f"列「{key}」的填充值不是数")
 
     def _fits(self, train: Frame, keys: tuple[str, ...]) -> None:
-        strategy = self._config.strategy
+        config = self._config
         for key in keys:
             present = [
                 value for value in numbers_of(train, key) if value is not None
             ]
+            if not present and config.on_all_null == "skip":
+                continue
             self._fills[key] = _fill_value(
-                strategy, present, self._config.value, key
+                config.strategy, present, config.value, key
             )
 
     def _filled(self, frame: Frame, key: str) -> list[CellValue]:
