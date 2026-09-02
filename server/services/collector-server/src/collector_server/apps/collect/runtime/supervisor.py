@@ -86,6 +86,24 @@ class CollectSupervisor:
         """
         return self._sessions.get(source_id)
 
+    def is_online(self, source_id: UUID) -> bool:
+        """一个数据源此刻是否连着。没有会话（含丢主拆掉之后）就是没连。
+
+        Args: source_id。
+        """
+        session = self._sessions.get(source_id)
+        return session is not None and session.is_online
+
+    def is_subscribing(self, source_id: UUID) -> bool:
+        """一个数据源此刻是否连着且靠订阅取数。归档缓冲补心跳前要问这一句。
+
+        ⚠ 丢主之后必须答否：会话已经拆掉，再补心跳就是一个非 leader 在造行。
+
+        Args: source_id。
+        """
+        session = self._sessions.get(source_id)
+        return session is not None and session.is_subscribing
+
     async def start(self) -> None:
         """起主循环。"""
         self._stopped.clear()

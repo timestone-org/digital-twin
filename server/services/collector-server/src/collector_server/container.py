@@ -276,6 +276,9 @@ def build_container(settings: Settings) -> Container:
         plan,
         _build_session_builder(settings, plan, sink, archive, state),
     )
+    # 归档心跳要问 supervisor「谁在线订阅着」，而 supervisor 的会话工厂又要拿
+    # 归档的 sink：两头互相持有，只能这一头晚绑
+    archive.bind_liveness(supervisor)
     return Container(
         settings=settings,
         database=database,

@@ -1,7 +1,6 @@
-"""守归档缓冲的三件事：准入规则、有界丢弃与落 Stream 的分批。
+"""守归档缓冲的两件事：有界丢弃与落 Stream 的分批。
 
-⚠ 准入的基线是上一条**已归档**的读数——拿见过的当基线，一条缓慢爬升的曲线
-可以永远不触发死区而一行都不落库（COLLECT_DESIGN.md §4.3）。
+准入规则在 test_archive_admission.py，心跳补发在 test_archive_heartbeat.py。
 """
 
 import asyncio
@@ -9,22 +8,15 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 from uuid import UUID, uuid4
 
-import pytest
-
 from collector_server.apps.collect.archive.buffer import (
-    AdmissionGate,
     ArchiveBuffer,
     ArchiveOptions,
-    ArchivePolicy,
     ArchiveRow,
-    is_beyond_deadband,
-    policies_of,
 )
 from lib.errors import DependencyUnavailable
 
 SOURCE_ID = UUID("0192f000-0000-7000-8000-000000000001")
 TS_MS = 1_767_323_045_000
-KEY = (SOURCE_ID, "outlet_temp")
 # 等一个事件的上限。周期是 50ms，慢机器上也够跑好几拍
 WAIT_S = 5.0
 
@@ -69,134 +61,6 @@ def make_options(**overrides: int) -> ArchiveOptions:
     }
     fields.update(overrides)
     return ArchiveOptions(**fields)
-
-
-def test_the_first_reading_of_a_point_is_always_archived() -> None:
-    gate = AdmissionGate()
-    assert gate.admit(KEY, ArchivePolicy(), (21.5, TS_MS, "good")) is True
-
-
-def test_an_unchanged_reading_is_not_archived_again() -> None:
-    gate = AdmissionGate()
-    gate.admit(KEY, ArchivePolicy(), (21.5, TS_MS, "good"))
-    later = gate.admit(KEY, ArchivePolicy(), (21.5, TS_MS + 1000, "good"))
-    assert later is False
-
-
-def test_a_change_within_the_deadband_is_not_archived() -> None:
-    gate = AdmissionGate()
-    policy = ArchivePolicy(deadband=0.5)
-    gate.admit(KEY, policy, (21.5, TS_MS, "good"))
-    assert gate.admit(KEY, policy, (21.9, TS_MS + 1000, "good")) is False
-
-
-def test_a_change_beyond_the_deadband_is_archived() -> None:
-    gate = AdmissionGate()
-    policy = ArchivePolicy(deadband=0.5)
-    gate.admit(KEY, policy, (21.5, TS_MS, "good"))
-    assert gate.admit(KEY, policy, (22.1, TS_MS + 1000, "good")) is True
-
-
-def test_the_deadband_is_measured_against_the_last_archived_value() -> None:
-    gate = AdmissionGate()
-    policy = ArchivePolicy(deadband=2.0)
-    gate.admit(KEY, policy, (20.0, TS_MS, "good"))
-    # 三次爬升每次只走 0.4：拿「上一条见过的」当基线就永远越不过死区
-    for step in range(1, 4):
-        gate.admit(KEY, policy, (20.0 + 0.4 * step, TS_MS + step, "good"))
-    assert gate.admit(KEY, policy, (22.1, TS_MS + 9, "good")) is True
-
-
-def test_the_heartbeat_archives_a_value_that_never_changes() -> None:
-    gate = AdmissionGate()
-    policy = ArchivePolicy(max_interval_ms=60_000)
-    gate.admit(KEY, policy, (21.5, TS_MS, "good"))
-    assert gate.admit(KEY, policy, (21.5, TS_MS + 60_000, "good")) is True
-
-
-def test_without_a_heartbeat_a_held_value_is_archived_once() -> None:
-    gate = AdmissionGate()
-    policy = ArchivePolicy(max_interval_ms=0)
-    gate.admit(KEY, policy, (21.5, TS_MS, "good"))
-    assert gate.admit(KEY, policy, (21.5, TS_MS + 86_400_000, "good")) is False
-
-
-def test_a_quality_flip_is_archived_even_when_the_value_holds() -> None:
-    gate = AdmissionGate()
-    gate.admit(KEY, ArchivePolicy(), (21.5, TS_MS, "good"))
-    assert gate.admit(KEY, ArchivePolicy(), (21.5, TS_MS + 1, "bad")) is True
-
-
-def test_a_point_with_archiving_off_never_gets_in() -> None:
-    gate = AdmissionGate()
-    policy = ArchivePolicy(archive_enabled=False)
-    assert gate.admit(KEY, policy, (21.5, TS_MS, "good")) is False
-
-
-def test_dropping_a_point_from_the_plan_drops_its_baseline() -> None:
-    gate = AdmissionGate()
-    gate.admit(KEY, ArchivePolicy(), (21.5, TS_MS, "good"))
-    gate.retain(frozenset())
-    assert gate.size() == 0
-
-
-def test_a_point_that_comes_back_starts_from_a_first_value_again() -> None:
-    gate = AdmissionGate()
-    gate.admit(KEY, ArchivePolicy(), (21.5, TS_MS, "good"))
-    gate.retain(frozenset())
-    assert gate.admit(KEY, ArchivePolicy(), (21.5, TS_MS + 1, "good")) is True
-
-
-def test_a_baseline_still_in_the_plan_survives_a_refresh() -> None:
-    gate = AdmissionGate()
-    gate.admit(KEY, ArchivePolicy(), (21.5, TS_MS, "good"))
-    gate.retain(frozenset({KEY}))
-    assert gate.size() == 1
-
-
-@pytest.mark.parametrize(
-    ("previous", "value", "is_expected"),
-    [
-        (True, False, True),
-        (True, True, False),
-        # 1.0 与 True 落库后是同一行（split_value 把 True 编成 1.0），
-        # 所以这一步不该产生新历史
-        (1.0, True, False),
-        ("running", "stopped", True),
-        ("running", "running", False),
-        (None, 1.0, True),
-    ],
-    ids=[
-        "bool-flip",
-        "bool-hold",
-        "bool-equals-number",
-        "text-changed",
-        "text-held",
-        "none-to-number",
-    ],
-)
-def test_non_numeric_values_compare_by_equality(
-    previous: object, value: object, is_expected: bool
-) -> None:
-    assert is_beyond_deadband(previous, value, 10.0) is is_expected
-
-
-def test_the_plan_becomes_a_flat_table_keyed_by_point(
-    build_plan: Any, build_source: Any, build_point: Any
-) -> None:
-    plan = build_plan(
-        sources=(
-            build_source(
-                points=(
-                    build_point("outlet_temp", deadband=0.5),
-                    build_point("inlet_temp", archive_enabled=False),
-                )
-            ),
-        )
-    )
-    assert policies_of(plan)[(SOURCE_ID, "outlet_temp")] == ArchivePolicy(
-        archive_enabled=True, deadband=0.5, max_interval_ms=0
-    )
 
 
 async def test_a_point_the_plan_switched_off_is_kept_out_of_the_buffer(
