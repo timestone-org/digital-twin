@@ -132,6 +132,19 @@ describe('AppNavRail · 展开态', () => {
     expect(wrapper.find('a[href="/system/users"]').exists()).toBe(false)
   })
 
+  // 每一页都各套一层 AppShell，切页即整条侧栏重挂
+  it('切页重挂侧栏后，手动摊开的分组不合回去', async () => {
+    currentPath = '/'
+    const first = render(['user:view'])
+    await toggleGroup(first).trigger('click')
+    first.unmount()
+
+    currentPath = '/assets'
+    const second = render(['user:view'])
+    expect(toggleGroup(second).attributes('aria-expanded')).toBe('true')
+    expect(second.find('a[href="/system/users"]').exists()).toBe(true)
+  })
+
   it('当前子项标成 aria-current="page"', () => {
     const wrapper = render(['user:view'])
     expect(
@@ -202,6 +215,11 @@ describe('AppNavRail · 折叠态', () => {
 })
 
 describe('AppNavRail · 形态切换', () => {
+  // 贴边的辅助控件，走最小的 xs 档；点击面由样式外扩到 24px
+  it('折叠钮用 xs 档，不按正常按钮的分量做', () => {
+    expect(toggleButton(render([])).classes()).toContain('dt-btn--xs')
+  })
+
   it('折叠钮的可读名称与 aria-expanded 随形态走', async () => {
     const wrapper = render([])
     expect(toggleButton(wrapper).attributes('aria-label')).toBe('折叠侧栏')
