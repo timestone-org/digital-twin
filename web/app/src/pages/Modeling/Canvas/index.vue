@@ -403,6 +403,7 @@ onMounted(async () => {
         :options="config.options.value"
         :is-readonly="isReadonly"
         @change="config.setValue"
+        @reload-tables="config.loadTables"
       />
     </DtModal>
 

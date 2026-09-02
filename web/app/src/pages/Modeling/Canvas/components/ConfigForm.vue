@@ -6,7 +6,10 @@
  * （MODELING_DESIGN §9.3）。
  * ⚠ 每一项都能一键回到默认值：schema 里给了默认的字段，改坏之后用户没有别的
  * 路能确认「原来是多少」——而参数写歪的表现往往是模型指标莫名其妙地差。
+ * ⚠ 台账一律**选**不手填：手打的编码要等运行时取数才报「找不到台账」。只有
+ * 没有 `dataset:view` 拉不到清单时才退回手填，拉失败了给重试而不是手填。
  */
+import type { DtSelectOption } from '@dt/contracts'
 import { DtField, DtInput, DtNumberInput, DtSelect, DtSwitch } from '@dt/ui'
 
 import type { FormField, FormOptions } from '../scripts/schemaForm'
@@ -24,7 +27,16 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   change: [key: string, value: unknown]
+  /** 台账清单拉失败了，用户按了「重试」。 */
+  reloadTables: []
 }>()
+
+/** 台账下拉总带搜索框：台账靠编码认，只有一张也要能敲编码定位。 */
+const TABLE_DISPLAY = {
+  searchable: true,
+  placeholder: '选一张台账',
+  searchPlaceholder: '按名称或编码搜索',
+}
 
 function textOf(key: string): string {
   const value = props.config[key]
@@ -58,12 +70,30 @@ function rangeOf(field: FormField): {
   }
 }
 
-/** 台账下拉的选项。编码即值，名字用来认。 */
-function tableOptions(): readonly { value: string; label: string }[] {
-  return props.options.tables.map((item) => ({
+/**
+ * 台账下拉的选项：清单里的每一张，外加图里存着却不在清单里的那一个。
+ * 编码即值，名字用来认，两者都能搜。
+ *
+ * ⚠ 存着的编码不在清单里时不能空着显示「请选择」：台账可能被删了、清单可能
+ * 没拉全，用户得先看见自己配的是哪一个，才谈得上换不换。
+ */
+function tableOptions(field: FormField): readonly DtSelectOption[] {
+  const listed = props.options.tables.map((item) => ({
     value: item.code,
     label: `${item.name}（${item.code}）`,
   }))
+  const current = textOf(field.key)
+  if (current === '' || listed.some((item) => item.value === current)) {
+    return listed
+  }
+  return [{ value: current, label: missingLabel(current) }, ...listed]
+}
+
+/** 清单还没回来之前先别说「没有这张」——那句话要等清单到了才算数。 */
+function missingLabel(code: string): string {
+  return props.options.tablesState === 'loading'
+    ? code
+    : `${code}（清单里没有这张台账）`
 }
 
 /** 这一项现在偏离默认值了吗——偏离了才给「恢复默认」。 */
@@ -103,17 +133,49 @@ function errorOf(field: FormField): string {
         :is-readonly="props.isReadonly"
         @update:model-value="emit('change', field.key, $event)"
       />
-      <DtSelect
-        v-else-if="field.widget === 'table' && tableOptions().length > 0"
-        :model-value="textOf(field.key)"
-        :options="tableOptions()"
+      <DtField
+        v-else-if="
+          field.widget === 'table' && props.options.tablesState === 'denied'
+        "
         :label="field.label"
-        :hint="hintOf(field)"
-        :error="errorOf(field)"
-        :required="field.isRequired"
-        :disabled="props.isReadonly"
-        @update:model-value="emit('change', field.key, $event)"
-      />
+        :hint="field.hint"
+      >
+        <DtInput
+          :model-value="textOf(field.key)"
+          placeholder="填台账编码"
+          :error="errorOf(field)"
+          :required="field.isRequired"
+          :disabled="props.isReadonly"
+          @update:model-value="emit('change', field.key, $event)"
+        />
+        <!-- ⚠ 这句必须**总是**看得见：空下拉读起来是「一张台账都没建」，
+             而真相往往是「你看不到」，两者的处置完全不同 -->
+        <p class="dt-ml-form__note">{{ props.options.tablesNote }}</p>
+      </DtField>
+      <div v-else-if="field.widget === 'table'" class="dt-ml-form__stack">
+        <DtSelect
+          :model-value="textOf(field.key)"
+          :options="tableOptions(field)"
+          :display="TABLE_DISPLAY"
+          :label="field.label"
+          :hint="hintOf(field)"
+          :error="errorOf(field)"
+          :required="field.isRequired"
+          :disabled="props.isReadonly"
+          @update:model-value="emit('change', field.key, $event)"
+        />
+        <p v-if="props.options.tablesNote" class="dt-ml-form__note">
+          {{ props.options.tablesNote }}
+          <button
+            v-if="props.options.tablesState === 'failed'"
+            type="button"
+            class="dt-ml-form__reload"
+            @click="emit('reloadTables')"
+          >
+            重试
+          </button>
+        </p>
+      </div>
       <DtSelect
         v-else-if="field.widget === 'select'"
         :model-value="textOf(field.key)"
@@ -143,25 +205,6 @@ function errorOf(field: FormField): string {
           :disabled="props.isReadonly"
           @update:model-value="emit('change', field.key, $event)"
         />
-      </DtField>
-      <DtField
-        v-else-if="field.widget === 'table'"
-        :label="field.label"
-        :hint="field.hint"
-      >
-        <DtInput
-          :model-value="textOf(field.key)"
-          placeholder="填台账编码"
-          :error="errorOf(field)"
-          :required="field.isRequired"
-          :disabled="props.isReadonly"
-          @update:model-value="emit('change', field.key, $event)"
-        />
-        <!-- ⚠ 这句必须**总是**看得见：空下拉读起来是「一张台账都没建」，
-             而真相往往是「你看不到」，两者的处置完全不同 -->
-        <p v-if="props.options.tablesNote" class="dt-ml-form__note">
-          {{ props.options.tablesNote }}
-        </p>
       </DtField>
       <DtInput
         v-else
@@ -203,10 +246,29 @@ function errorOf(field: FormField): string {
     }
   }
 
+  &__stack {
+    display: flex;
+    flex-direction: column;
+  }
+
   &__note {
     margin: 0.25rem 0 0;
     color: var(--text-disabled);
     font-size: var(--ctl-hint-fs-sm);
+  }
+
+  &__reload {
+    margin-left: 0.25rem;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent-primary);
+    font-size: inherit;
+    cursor: pointer;
+
+    &:hover {
+      text-decoration: underline;
+    }
   }
 
   &__reset {
