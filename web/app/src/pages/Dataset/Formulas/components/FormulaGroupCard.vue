@@ -31,8 +31,9 @@ const LAYOUT: DtDataViewLayout = {
   fill: false,
   fixedLayout: true,
   minWidth: '64rem',
-  cardColumns: 2,
-  cardMinWidth: '22rem',
+  // 与台账列表等同类页面同档：够宽铺三列，窄了自己降列
+  cardColumns: 3,
+  cardMinWidth: '20rem',
 }
 
 defineProps<{
