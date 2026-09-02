@@ -72,12 +72,18 @@ ProviderAdapterBuilder = Callable[
 
 def _endpoint(provider: ProviderSpec, deps: AdapterDeps) -> ModelAdapter:
     catalog = deps.catalog
+    provider_id = provider.id
 
     def resolve(kind: ModelKind) -> ChatEndpoint | None:
         # pragma 理由：只有装了目录才会走到这里，见 `build_adapters`
         if catalog is None:  # pragma: no cover
             return None
-        return endpoint_on(provider, kind, catalog.snapshot(), deps.settings)
+        snapshot = catalog.snapshot()
+        # ⚠ 按 id 从**此刻**的快照里取，不用装配时那一份：换密钥不改目录摘要
+        # （摘要刻意不含密钥），而适配器是按摘要缓存的——用装配时那一份的话，
+        # 换了密钥要等到别的什么改动才生效，而现象是每次调用都撞 401
+        live = snapshot.provider(provider_id) or provider
+        return endpoint_on(live, kind, snapshot, deps.settings)
 
     return OpenAiCompatAdapter(
         resolve=resolve,

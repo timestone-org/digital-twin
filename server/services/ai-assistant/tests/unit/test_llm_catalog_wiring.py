@@ -348,3 +348,32 @@ def test_the_embedding_route_is_absent_without_catalog_or_environment() -> None:
     )
     assert made is not None
     assert made.is_ready is False
+
+
+async def test_a_rotated_key_takes_effect_without_any_other_change() -> None:
+    """⚠ 换密钥**不改目录摘要**（摘要刻意不含密钥），而适配器是按摘要缓存的：
+    用装配时那一份的话，换了密钥要等到别的什么改动才生效，而现象是每次调用
+    都撞一条 401。"""
+    source = _Catalog(_catalog(_endpoint_provider()))
+    registry = ModelRegistry(AdapterDeps(settings=_settings(), catalog=source))
+    await registry.resolve(ModelChoice(profile="p1"))
+    rotated = ProviderSpec(
+        id="p1",
+        name="百炼",
+        kind="openai_compat",
+        base_url="https://catalog/v1",
+        api_key=SecretStr("sk-rotated"),
+        is_enabled=True,
+        models=(CHAT,),
+    )
+    source.catalog = ModelCatalog(
+        providers=(rotated,), assignments=(), version="v1"
+    )
+    built = await registry.resolve(ModelChoice(profile="p1"))
+    assert (
+        built.openai_api_key is not None
+    )  # pyright: ignore[reportAttributeAccessIssue]
+    assert (
+        built.openai_api_key.get_secret_value()  # pyright: ignore[reportAttributeAccessIssue]
+        == "sk-rotated"
+    )
