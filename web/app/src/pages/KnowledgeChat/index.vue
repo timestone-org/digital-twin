@@ -10,7 +10,7 @@
  * 交互编排在 `scripts/useKnowledgeChatPage.ts`。
  */
 import { computed, onMounted } from 'vue'
-import { DtButton, DtNotice } from '@dt/ui'
+import { DtButton, DtNotice, useConfirm } from '@dt/ui'
 
 import { AppShell } from '@/components/layout'
 import ChatPanel from './components/ChatPanel.vue'
@@ -19,6 +19,7 @@ import { sessionLabel } from './scripts/sessionLabel'
 import { useKnowledgeChatPage } from './scripts/useKnowledgeChatPage'
 
 const page = useKnowledgeChatPage()
+const confirm = useConfirm()
 
 /** 空态里可点的几句开场。点了直接发出去。 */
 const STARTERS = [
@@ -34,6 +35,20 @@ const selectedLabel = computed<string | null>(() => {
   )
   return one === undefined ? null : sessionLabel(one)
 })
+
+/** 删对话要二次确认：全部问答记录一起没，只想收起来的那条路是归档。 */
+async function removeSession(sessionId: string): Promise<void> {
+  const one = page.sessions.value.find((each) => each.id === sessionId)
+  const name = one === undefined ? '这个对话' : sessionLabel(one)
+  const accepted = await confirm.ask({
+    title: '删除对话',
+    message: `「${name}」的全部问答记录会一起删，不可恢复；只是想收起来的话用「归档」。`,
+    confirmText: '删除',
+    danger: true,
+  })
+  if (!accepted) return
+  await page.remove(sessionId)
+}
 
 onMounted(() => void page.reload())
 </script>
@@ -72,7 +87,7 @@ onMounted(() => void page.reload())
             @select="page.select"
             @rename="page.rename"
             @archive="page.archive"
-            @remove="page.remove"
+            @remove="removeSession"
           />
         </aside>
 

@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { NavItem } from '@/components/layout/navItems'
 import {
+  activeChildKey,
   isGroupActive,
   isPathActive,
   visibleNavItems,
@@ -100,6 +101,45 @@ describe('isPathActive', () => {
   it('分组项没有目标，一律不算活跃', () => {
     expect(isPathActive('/system/users', undefined)).toBe(false)
     expect(isPathActive('/system/users', '')).toBe(false)
+  })
+
+  it('前缀只认整段路径，/knowledgebase 不算落在 /knowledge 上', () => {
+    expect(isPathActive('/knowledgebase', '/knowledge')).toBe(false)
+    expect(isPathActive('/knowledge', '/knowledge')).toBe(true)
+  })
+})
+
+/** 一个子项的目标是另一个的前缀：知识库那组正是这样。 */
+const KNOWLEDGE: NavItem = {
+  key: 'knowledge',
+  label: '知识库',
+  icon: 'search',
+  children: [
+    {
+      key: 'manage',
+      label: '知识库管理',
+      icon: 'folder-open',
+      to: '/knowledge',
+    },
+    {
+      key: 'chat',
+      label: '知识库对话',
+      icon: 'sparkles',
+      to: '/knowledge/chat',
+    },
+  ],
+}
+
+describe('activeChildKey', () => {
+  it('子项互为前缀时只点亮匹配最长的那一个', () => {
+    // ⚠ 按前缀各判各的会让两个子项同时亮，而其它分组看不出这个问题
+    expect(activeChildKey('/knowledge/chat', KNOWLEDGE)).toBe('chat')
+    expect(activeChildKey('/knowledge', KNOWLEDGE)).toBe('manage')
+  })
+
+  it('没有子项命中时是 null', () => {
+    expect(activeChildKey('/profile', KNOWLEDGE)).toBeNull()
+    expect(activeChildKey('/knowledge', HOME)).toBeNull()
   })
 })
 
