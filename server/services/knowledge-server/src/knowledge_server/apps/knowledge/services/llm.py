@@ -8,8 +8,12 @@
 的判据（ADR-0032 决策三）。
 
 ⚠ 这一层**不重试**：一条链路只有一层负责重试，而那一层是编排层。
+
+⚠ 端点来自运行期可改的目录（ADR-0039）：`can_answer` 问的是**此刻**解不解得出
+端点，`complete` 调用前先让目录刷新一次。
 """
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Protocol, cast, runtime_checkable
 
@@ -22,6 +26,8 @@ from llmcore import ChatEndpoint, ModelChoice, OpenAiCompatAdapter
 from llmcore.errors import ModelUnavailable, classified, is_our_fault
 
 _logger = get_logger("knowledge.llm")
+
+Refresh = Callable[[], Awaitable[object]]
 
 
 class AnswerUnavailable(RuntimeError):
@@ -70,7 +76,13 @@ class ChatAnswerer:
 
     adapter: OpenAiCompatAdapter
     breaker: CircuitBreaker
-    can_answer: bool = True
+    # 调用前先让目录刷新一次；没接目录就是 None
+    refresh: Refresh | None = None
+
+    @property
+    def can_answer(self) -> bool:
+        """此刻解得出对话端点吗。"""
+        return self.adapter.supports("chat")
 
     async def complete(self, system: str, user: str) -> str:
         """问一次；失败分两档，只有「下游此刻不行」那一档让断路器计数。
@@ -80,6 +92,10 @@ class ChatAnswerer:
 
         Args: system, user。
         """
+        if self.refresh is not None:
+            await self.refresh()
+        if not self.can_answer:
+            raise AnswerUnavailable("这套部署没有接对话档")
         try:
             self.breaker.guard()
         except BreakerOpen as error:
@@ -121,19 +137,27 @@ def _text_of(content: object) -> str:
 
 
 def build_answerer(
-    endpoint: ChatEndpoint | None, breaker: CircuitBreaker
+    endpoint: ChatEndpoint | OpenAiCompatAdapter | None,
+    breaker: CircuitBreaker,
+    *,
+    refresh: Refresh | None = None,
 ) -> Answerer:
-    """按端点装一路对话档；没配就给 `NullAnswerer`。
+    """按端点（或已装好的适配器）装一路对话档；没配就给 `NullAnswerer`。
 
-    Args: endpoint, breaker。
+    Args: endpoint（定死的端点，或按目录解端点的适配器）, breaker,
+        refresh（调用前让目录刷新一次的口子）。
     """
     if endpoint is None:
         return NullAnswerer()
+    if isinstance(endpoint, OpenAiCompatAdapter):
+        return ChatAnswerer(adapter=endpoint, breaker=breaker, refresh=refresh)
+    fixed = endpoint
     return ChatAnswerer(
         adapter=OpenAiCompatAdapter(
-            resolve=lambda _kind: endpoint,
+            resolve=lambda _kind: fixed,
             label="知识库对话档",
-            models=(endpoint.model,),
+            models=(fixed.model,),
         ),
         breaker=breaker,
+        refresh=refresh,
     )

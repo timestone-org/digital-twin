@@ -90,6 +90,13 @@ class Settings(
     # 上游业务面。外部系统来源经它取数，**不读别人的库**
     platform_base_url: str = "http://platform-server:8005"
     platform_timeout_s: float = 10.0
+    # 模型目录（ADR-0039）：从 platform 的内部面拉「各用途走哪一路模型」，
+    # 拿 `edge_service_key` 认证。⚠ 下面嵌入档与对话档那两组环境变量是它的
+    # **永久默认值**：目录里没给某个用途分配时才用环境变量那一档，不是一次性
+    # 播种（config-and-secrets §7.1）。多久重拉一次；拉不到就沿用上一份
+    llm_catalog_refresh_s: float = Field(default=10.0, gt=0)
+    # ⚠ 要比 platform 那条短：它与 platform 调用同一档，且在模型调用之前
+    llm_catalog_timeout_s: float = Field(default=3.0, gt=0)
 
     # 嵌入档。关着时文档照常摄取，检索如实回答「这个库还没建索引」——
     # 不是返回空表，空表与「确实没有相关内容」长得一模一样

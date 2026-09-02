@@ -7,6 +7,7 @@ from knowledge_server.apps.knowledge.services.embedding.ports import (
 )
 from knowledge_server.apps.knowledge.services.embedding.registry import (
     RemoteEmbedder,
+    build_dynamic_embedder,
     build_embedder,
 )
 
@@ -15,5 +16,6 @@ __all__ = [
     "EmbeddingUnavailable",
     "NullEmbedder",
     "RemoteEmbedder",
+    "build_dynamic_embedder",
     "build_embedder",
 ]

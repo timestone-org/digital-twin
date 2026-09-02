@@ -77,7 +77,8 @@ def deps_of(container: Container, caller: CallerContext) -> AdvanceDeps:
     Args: container, caller（只用来确认已认证；工具在进程内直调，不转发头）。
     """
     del caller
-    if container.responder is None:
+    # ⚠ 问的是**此刻**：对话档的端点来自运行期可改的目录，装配了不等于能用
+    if not container.answerer.can_answer:
         raise ChatUnavailable("这套部署没有接对话档，知识库对话用不了")
     lanes = strategies(
         Lanes(

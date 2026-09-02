@@ -36,6 +36,12 @@ class Embedder(Protocol):
         ...
 
     @property
+    def model(self) -> str | None:
+        """此刻用的模型名。⚠ 建库时钉在库上：换了模型而名字没跟着变的话，
+        旧向量看着像同一路算的。缺席时是 `None`。"""
+        ...
+
+    @property
     def can_embed(self) -> bool:
         """这一路此刻真能算吗。"""
         ...
@@ -58,6 +64,7 @@ class NullEmbedder:
 
     id: str = "none"
     dimensions: int = 0
+    model: str | None = None
     can_embed: bool = False
 
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
