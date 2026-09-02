@@ -18,6 +18,7 @@
 一轮（`perception/vision.py`）。
 """
 
+from collections.abc import Sequence
 from math import ceil
 from typing import Any, cast
 
@@ -29,9 +30,14 @@ from langchain_core.messages import (
 )
 from langchain_core.messages.tool import ToolCall
 
-from ai_assistant.apps.chat.models import ChatMessage
-from ai_assistant.apps.chat.services.perception.vision import PLACEHOLDER
-from ai_assistant.settings import HISTORY_DROP_STEP
+from llmcore.memory.ports import HistoryRow
+
+# 图片在历史里的占位。⚠ 回放时不重新塞图：一次回放会把会话里每一张图都再喂
+# 一遍，而模型早已在当时看过并给出了结论
+IMAGE_PLACEHOLDER = "[图片]"
+# 窗口一次脱落几条。⚠ 按台阶脱落而不是逐条：逐条会让窗口每多一条消息就整体
+# 前移一格，历史区的前缀从此再也对不上（ADR-0025）
+DEFAULT_DROP_STEP = 10
 
 _USER = "user"
 _ASSISTANT = "assistant"
@@ -60,7 +66,7 @@ def to_content(message: BaseMessage) -> tuple[str, dict[str, Any]]:
     return _USER, {"text": _text_of(message)}
 
 
-def to_message(row: ChatMessage) -> BaseMessage:
+def to_message(row: HistoryRow) -> BaseMessage:
     """把库里的一行还原成模型认的一条。
 
     Args: row。
@@ -76,7 +82,7 @@ def to_message(row: ChatMessage) -> BaseMessage:
     return HumanMessage(content=text)
 
 
-def replay(rows: list[ChatMessage]) -> list[BaseMessage]:
+def replay(rows: Sequence[HistoryRow]) -> list[BaseMessage]:
     """把一段历史按 `seq` 还原成模型认的消息列表。
 
     Args: rows。
@@ -85,10 +91,10 @@ def replay(rows: list[ChatMessage]) -> list[BaseMessage]:
 
 
 def split(
-    rows: list[ChatMessage],
+    rows: Sequence[HistoryRow],
     limit: int,
-    step: int = HISTORY_DROP_STEP,
-) -> tuple[list[ChatMessage], list[ChatMessage]]:
+    step: int = DEFAULT_DROP_STEP,
+) -> tuple[list[HistoryRow], list[HistoryRow]]:
     """把历史切成「折叠区」与「窗口区」两截，**切点按台阶走**。
 
     ⚠ 裸的 `[-limit:]` 会让窗口每多一条消息就整体前移一格。端点的前缀缓存认的是
@@ -123,10 +129,10 @@ def split(
 
 
 def window(
-    rows: list[ChatMessage],
+    rows: Sequence[HistoryRow],
     limit: int,
-    step: int = HISTORY_DROP_STEP,
-) -> list[ChatMessage]:
+    step: int = DEFAULT_DROP_STEP,
+) -> list[HistoryRow]:
     """取最近的一截历史。切点口径见 `split`。
 
     Args: rows, limit（高水位）, step（一次脱落几条）。
@@ -161,7 +167,7 @@ def _part_text(part: object) -> str:
     body = cast("dict[str, object]", part)
     if body.get("type") == "text":
         return str(body.get("text") or "")
-    return PLACEHOLDER
+    return IMAGE_PLACEHOLDER
 
 
 def _calls_of(body: dict[str, Any]) -> list[ToolCall]:

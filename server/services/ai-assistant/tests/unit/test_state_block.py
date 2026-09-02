@@ -22,7 +22,8 @@ from ai_assistant.apps.chat.services.advance_service import (
     assemble,
     incoming_messages,
 )
-from ai_assistant.apps.chat.services.memory import history, state_block
+from ai_assistant.apps.chat.services.memory import state_block
+from llmcore.memory import history
 
 SURFACE = "dashboard-editor"
 

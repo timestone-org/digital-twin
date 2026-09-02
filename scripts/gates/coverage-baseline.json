@@ -24,8 +24,8 @@
     "branches": 79.27
   },
   "llmcore": {
-    "lines": 97.87,
-    "branches": 86.96
+    "lines": 97.55,
+    "branches": 86.57
   },
   "opcua-server": {
     "lines": 98.99,

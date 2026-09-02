@@ -5,7 +5,7 @@
 """
 
 from ai_assistant.apps.chat.models import ChatMessage
-from ai_assistant.apps.chat.services.memory.ports import Summary
+from llmcore.memory import Summary
 
 
 class RecordingSummarizer:

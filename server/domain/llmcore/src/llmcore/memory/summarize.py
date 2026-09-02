@@ -16,6 +16,7 @@
 就发不出去——与模型不可用时 fail-open 同一口径（CONTEXT.md §3 不变式 4）。
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -25,18 +26,19 @@ from langchain_core.messages import (
     SystemMessage,
 )
 
-from ai_assistant.apps.chat.models import ChatMessage
-from ai_assistant.apps.chat.services.memory.ports import Summary
-from ai_assistant.llm import (
-    GuardedModel,
+from lib.logging import get_logger
+from llmcore import (
     ModelChoice,
     ModelDisabled,
     ModelRejected,
     ModelUnavailable,
 )
-from lib.logging import get_logger
+from llmcore.memory.ports import HistoryRow, Summary
+from llmcore.turn.ports import Responder
 
-_logger = get_logger("assistant.summarize")
+# ⚠ 记作 `chat.summarize` 而不是 `assistant.summarize`：这一份被两个服务共用，
+# 写死某一家的名字会让另一家的日志谎报出处（同 `turn/loop.py`）
+_logger = get_logger("chat.summarize")
 
 # 包住摘要的标记。⚠ 要说清它不是用户说的话：不说的话，模型会把这一段当成
 # 用户刚敲进去的东西，然后回一句「你贴的这个是什么意思」（与状态块同一个坑）
@@ -66,7 +68,7 @@ class NullSummarizer:
 
     async def fold(
         self,
-        dropped: list[ChatMessage],  # noqa: ARG002  # 理由：见下
+        dropped: Sequence[HistoryRow],  # noqa: ARG002  # 理由：见下
         through_seq: int,  # noqa: ARG002  # 理由：见下
         previous: Summary | None,  # noqa: ARG002  # 理由：见下
     ) -> Summary | None:
@@ -84,7 +86,7 @@ class NullSummarizer:
 class ModelSummarizer:
     """拿摘要那一档模型折。"""
 
-    model: GuardedModel
+    model: Responder
     # ⚠ 跟着会话的档位走：会话选了订阅账号那一路，摘要也该在那一路上折，
     # 否则一个只登录了订阅账号的部署永远折不出摘要，而它表现为「摘要偶尔没有」
     profile: str
@@ -96,7 +98,7 @@ class ModelSummarizer:
 
     async def fold(
         self,
-        dropped: list[ChatMessage],
+        dropped: Sequence[HistoryRow],
         through_seq: int,
         previous: Summary | None,
     ) -> Summary | None:
@@ -215,7 +217,7 @@ def stored_of(body: object) -> Summary | None:
     )
 
 
-def _fold_input(dropped: list[ChatMessage], previous: Summary | None) -> str:
+def _fold_input(dropped: Sequence[HistoryRow], previous: Summary | None) -> str:
     """喂给折叠那次调用的正文：上一段摘要 + 这一截新脱落的。
 
     ⚠ 只带**上一段摘要之后**新脱落的那几条，不是从头再来一遍：从头带的话，
@@ -235,7 +237,7 @@ def _fold_input(dropped: list[ChatMessage], previous: Summary | None) -> str:
     return body[-MAX_FOLD_CHARS:]
 
 
-def _line_of(row: ChatMessage) -> str:
+def _line_of(row: HistoryRow) -> str:
     """一条历史摊成一行。工具消息不进摘要——过程不是结论。
 
     Args: row。

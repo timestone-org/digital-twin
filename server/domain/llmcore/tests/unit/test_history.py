@@ -9,22 +9,23 @@
 没回应」的一段历史一律判 400——认不出来就是这个会话从此一句都发不出去。
 """
 
-import uuid
+from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from ai_assistant.apps.chat.models import ChatMessage
-from ai_assistant.apps.chat.services.memory import history
-from ai_assistant.settings import HISTORY_DROP_STEP, MAX_HISTORY_MESSAGES
+from llmcore.memory import HistoryRow, history
+
+# 助手用的那两个取值，钉在这里当被测口径。⚠ 不从某个服务的 settings 取：
+# 这一层被两个服务共用，取谁的都等于把另一家的口径写死
+MAX_HISTORY_MESSAGES = 40
+HISTORY_DROP_STEP = 10
 
 
-def _row(role: str, body: dict[str, object], seq: int = 1) -> ChatMessage:
-    return ChatMessage(
-        session_id=uuid.uuid4(), seq=seq, role=role, content_json=body
-    )
+def _row(role: str, body: dict[str, Any], seq: int = 1) -> HistoryRow:
+    return HistoryRow(role=role, seq=seq, content_json=body)
 
 
-def _seq_rows(count: int) -> list[ChatMessage]:
+def _seq_rows(count: int) -> list[HistoryRow]:
     """一段一问一答，seq 从 1 数起。
 
     Args: count（几条）。
@@ -245,3 +246,29 @@ def test_the_filler_says_there_was_no_answer() -> None:
     assert isinstance(one, ToolMessage)
     assert one.tool_call_id == "c1"
     assert "没有回执" in str(one.content)
+
+
+def test_a_multipart_message_flattens_to_its_text_parts() -> None:
+    """模型认的内容可以是一串块，而落库的是一段文字。"""
+    made = history.to_content(
+        HumanMessage(
+            content=[
+                {"type": "text", "text": "看这张"},
+                {"type": "image_url", "image_url": {"url": "data:..."}},
+            ]
+        )
+    )
+
+    assert "看这张" in made[1]["text"]
+
+
+def test_an_image_part_becomes_a_placeholder_not_the_bytes() -> None:
+    """⚠ 回放时不重新塞图：一次回放会把会话里每一张图都再喂一遍，而模型早已在
+    当时看过并给出了结论——重塞一遍既贵又可能让它改口。"""
+    made = history.to_content(
+        HumanMessage(
+            content=[{"type": "image_url", "image_url": {"url": "data:..."}}]
+        )
+    )
+
+    assert history.IMAGE_PLACEHOLDER in made[1]["text"]

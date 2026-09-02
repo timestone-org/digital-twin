@@ -9,7 +9,7 @@
 """
 
 import uuid
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, field
 from typing import Any
@@ -23,14 +23,10 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_assistant.apps.chat.crud import session_crud
-from ai_assistant.apps.chat.models import ChatMessage, ChatSession, ChatStep
+from ai_assistant.apps.chat.models import ChatMessage, ChatSession
+from ai_assistant.apps.chat.services import advance_persist
 from ai_assistant.apps.chat.services.intent import select as tool_select
-from ai_assistant.apps.chat.services.memory import (
-    history,
-    state_block,
-    summarize,
-)
-from ai_assistant.apps.chat.services.memory.ports import Summarizer, Summary
+from ai_assistant.apps.chat.services.memory import state_block
 from ai_assistant.apps.chat.services.memory.prompt import build_system_prompt
 from ai_assistant.apps.chat.services.perception import vision
 from ai_assistant.apps.chat.services.planning import plan as plan_service
@@ -51,6 +47,13 @@ from ai_assistant.llm import (
 )
 from ai_assistant.settings import MAX_HISTORY_MESSAGES
 from lib.logging import get_logger
+from llmcore.memory import (
+    HistoryRow,
+    Summarizer,
+    Summary,
+    history,
+    summarize,
+)
 from llmcore.tools.shapes import ToolSpec
 from llmcore.turn.loop import (
     ServerToolRunner,
@@ -219,7 +222,7 @@ def incoming_messages(payload: AdvanceInput) -> list[BaseMessage]:
 def assemble(
     *,
     payload: AdvanceInput,
-    rows: list[ChatMessage],
+    rows: Sequence[HistoryRow],
     plan: dict[str, Any] | None,
     summary: Summary | None = None,
 ) -> list[BaseMessage]:
@@ -230,8 +233,8 @@ def assemble(
     历史会跟着一起丢掉端点的前缀缓存（`memory/prompt.py`
     与 `memory/state_block.py` 文件头）。
 
-    ⚠ 状态块**不落库**：`_persist` 落的是 `incoming_messages` 与本回合新增的
-    那几条，而它两者都不是。
+    ⚠ 状态块**不落库**：`advance_persist.persist` 落的是入向消息与本回合新增
+    的那几条，而它两者都不是。
 
     ⚠ 历史只带最近的一截，且截断点不许把工具调用与它的回应切开
     （`history.window`）。全带的话，一个跑了几十轮的会话会把上下文占满。
@@ -270,7 +273,7 @@ def assemble(
 class LoadedContext:
     """一次读库拿到的原料。折叠与拼装都在事务之外用它。"""
 
-    rows: list[ChatMessage]
+    rows: list[HistoryRow]
     plan: dict[str, Any] | None
     summary: Summary | None
     choice: ModelChoice
@@ -292,13 +295,24 @@ async def load_context(
     rows = await session_crud.messages_of(session, chat_session_id)
     row = await session.get(ChatSession, chat_session_id)
     return LoadedContext(
-        rows=rows,
+        rows=[_history_row(one) for one in rows],
         plan=row.plan_json if row is not None else None,
         summary=(
             summarize.stored_of(row.summary_json) if row is not None else None
         ),
         choice=_choice_of(row, payload),
     )
+
+
+def _history_row(row: ChatMessage) -> HistoryRow:
+    """库里的一行 → 上下文那一层认的一条。
+
+    ⚠ 这一步是**边界**：`llmcore` 不许含 ORM（ADR-0037 决策二），所以从这里往下
+    全是领域类型。映一次的代价换来的是那一层能被两个服务共用。
+
+    Args: row。
+    """
+    return HistoryRow(role=row.role, seq=row.seq, content_json=row.content_json)
 
 
 # 一次推进往外吐的东西：回合事件，外加计划快照
@@ -347,10 +361,10 @@ async def advance(
         if _wrote_plan(item) and plans.latest is not None:
             yield plan_service.PlanUpdate(plan=plans.latest)
     if outcome is not None:
-        await _persist(
-            deps,
+        await advance_persist.persist(
+            deps.sessions,
             chat_session_id=chat_session_id,
-            payload=payload,
+            incoming=incoming_messages(payload),
             outcome=outcome,
             steps=produced,
         )
@@ -505,94 +519,3 @@ def has_image(payload: AdvanceInput) -> bool:
     if payload.user_images:
         return True
     return any(one.image() is not None for one in payload.tool_results)
-
-
-async def _persist(
-    deps: AdvanceDeps,
-    *,
-    chat_session_id: uuid.UUID,
-    payload: AdvanceInput,
-    outcome: TurnOutcome,
-    steps: list[TurnStep],
-) -> None:
-    """把这一回合的输入、产出与步骤落库。
-
-    Args: deps, chat_session_id, payload, outcome, steps。
-    """
-    async with deps.sessions() as session:
-        rows = await session_crud.messages_of(session, chat_session_id)
-        seq = max((row.seq for row in rows), default=0)
-        written: list[ChatMessage] = []
-        for message in [*incoming_messages(payload), *outcome.messages]:
-            seq += 1
-            role, body = history.to_content(message)
-            row = ChatMessage(
-                session_id=chat_session_id,
-                seq=seq,
-                role=role,
-                content_json=body,
-            )
-            session.add(row)
-            written.append(row)
-        # ⚠ 先 flush 拿到主键再挂步骤，且**必须自己攥着这些行**：flush 之后
-        # 它们就从 `session.new` 里出去了，回头再去那里找是一场空——表现是
-        # 步骤一条都没落库，而消息看着都在
-        await session.flush()
-        _attach_steps(session, written, steps, outcome)
-
-
-def _attach_steps(
-    session: AsyncSession,
-    written: list[ChatMessage],
-    steps: list[TurnStep],
-    outcome: TurnOutcome,
-) -> None:
-    """把步骤挂到本回合最后一条消息上。
-
-    ⚠ 等浏览器时补一条 `awaiting_client` 的步骤：界面上它是转着圈的那一行，
-    而浏览器回来时要能按它认出自己接的是哪一步。
-
-    Args: session, written, steps, outcome。
-    """
-    if not written:
-        _logger.warning("turn_message_missing", "本回合没有落下任何消息")
-        return
-    last = written[-1].id
-    order = 0
-    for step in steps:
-        order += 1
-        session.add(_row_of(last, order, step))
-    if outcome.is_waiting:
-        order += 1
-        session.add(
-            ChatStep(
-                message_id=last,
-                seq=order,
-                kind="client_tool",
-                name=outcome.pending[0].name,
-                state="awaiting_client",
-                input_json={
-                    "calls": [
-                        {
-                            "call_id": call.call_id,
-                            "name": call.name,
-                            "arguments": call.arguments,
-                        }
-                        for call in outcome.pending
-                    ]
-                },
-            )
-        )
-
-
-def _row_of(message_id: uuid.UUID, order: int, step: TurnStep) -> ChatStep:
-    return ChatStep(
-        message_id=message_id,
-        seq=order,
-        kind=step.kind,
-        name=step.name,
-        state="succeeded" if step.state == "succeeded" else "failed",
-        input_json=step.input_json,
-        output_json=step.output_json,
-        error=step.error,
-    )

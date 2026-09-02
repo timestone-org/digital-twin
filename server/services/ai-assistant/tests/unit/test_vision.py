@@ -20,9 +20,9 @@ from ai_assistant.apps.chat.services.advance_service import (
     has_image,
     incoming_messages,
 )
-from ai_assistant.apps.chat.services.memory import history
 from ai_assistant.apps.chat.services.perception import vision
 from ai_assistant.settings import MAX_IMAGE_CHARS
+from llmcore.memory import history
 
 PNG = "data:image/png;base64,iVBORw0KGgo="
 
