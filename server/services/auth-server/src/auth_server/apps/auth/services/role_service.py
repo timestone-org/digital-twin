@@ -19,6 +19,10 @@ from auth_server.apps.auth.services.grant_service import (
     resolve_permission_ids,
 )
 from auth_server.apps.auth.services.identity import Operation
+from auth_server.apps.auth.services.identity_cache import (
+    IdentityCache,
+    invalidate_all_after_commit,
+)
 from auth_server.apps.auth.services.presenters import to_role_out
 from lib.errors import Conflict, NotFound
 from lib.web import Page, PageParams
@@ -115,10 +119,14 @@ async def update_role(
     *,
     role_id: uuid.UUID,
     payload: RoleUpdateIn,
+    cache: IdentityCache,
 ) -> RoleOut:
     """改角色。
 
-    Args: session, operation, role_id, payload。
+    ⚠ 改名要整体丢缓存：角色名会进签名身份头，而缓存按用户分键，认不出
+    「这批人的角色刚改了名」。
+
+    Args: session, operation, role_id, payload, cache。
     """
     role = await _require_role(session, role_id)
     changes = payload.model_dump(exclude_unset=True)
@@ -141,6 +149,7 @@ async def update_role(
             after={"name": role.name, "description": role.description},
         ),
     )
+    invalidate_all_after_commit(session, cache)
     return await _present(session, role)
 
 
@@ -150,10 +159,13 @@ async def set_role_permissions(
     *,
     role_id: uuid.UUID,
     payload: RolePermissionsIn,
+    cache: IdentityCache,
 ) -> RoleOut:
     """覆盖式设置角色权限。
 
-    Args: session, operation, role_id, payload。
+    ⚠ 同样整体丢缓存：这一改动牵动持有该角色的**每一个**账号。
+
+    Args: session, operation, role_id, payload, cache。
     """
     role = await _require_role(session, role_id)
     guards.assert_builtin_role_mutable(
@@ -181,6 +193,7 @@ async def set_role_permissions(
         role,
         audit.Change(before=before, after={"permissions": sorted(requested)}),
     )
+    invalidate_all_after_commit(session, cache)
     return await _present(session, role)
 
 
@@ -191,6 +204,8 @@ async def delete_role(
     role_id: uuid.UUID,
 ) -> None:
     """删角色。内置角色不可删；角色上还挂着人时先改派。
+
+    ⚠ 这里不用动身份缓存：角色下还有人就删不掉，而改派本身已经逐个失效过。
 
     Args: session, operation, role_id。
     """

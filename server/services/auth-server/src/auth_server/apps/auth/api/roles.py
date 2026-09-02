@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth_server.apps.auth.catalog import ROLE_MANAGE, USER_VIEW
 from auth_server.apps.auth.deps import (
+    get_container,
     get_operation,
     get_session,
     require,
@@ -19,12 +20,14 @@ from auth_server.apps.auth.schemas import (
     RoleUpdateIn,
 )
 from auth_server.apps.auth.services import Identity, Operation, role_service
+from auth_server.container import Container
 from auth_server.settings import API_PREFIX
 from lib.web import ApiResponse, Page, PageParams, ok, page_params
 
 router = APIRouter(prefix=f"{API_PREFIX}/roles", tags=["role"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+ContainerDep = Annotated[Container, Depends(get_container)]
 PageDep = Annotated[PageParams, Depends(page_params)]
 OperationDep = Annotated[Operation, Depends(get_operation)]
 ViewDep = Annotated[Identity, Depends(require(USER_VIEW))]
@@ -95,15 +98,20 @@ async def update_role(
     role_id: uuid.UUID,
     payload: RoleUpdateIn,
     session: SessionDep,
+    container: ContainerDep,
     operation: OperationDep,
     _manager: ManageDep,
 ) -> ApiResponse[RoleOut]:
     """内置角色只允许改描述。
 
-    Args: role_id, payload, session, operation, _manager。
+    Args: role_id, payload, session, container, operation, _manager。
     """
     updated = await role_service.update_role(
-        session, operation, role_id=role_id, payload=payload
+        session,
+        operation,
+        role_id=role_id,
+        payload=payload,
+        cache=container.identities,
     )
     return ok(updated, message="角色已更新")
 
@@ -117,15 +125,20 @@ async def set_role_permissions(
     role_id: uuid.UUID,
     payload: RolePermissionsIn,
     session: SessionDep,
+    container: ContainerDep,
     operation: OperationDep,
     _manager: ManageDep,
 ) -> ApiResponse[RoleOut]:
     """提权入口，受「授予不超过自身」与「角色不高于自身」两条约束。
 
-    Args: role_id, payload, session, operation, _manager。
+    Args: role_id, payload, session, container, operation, _manager。
     """
     updated = await role_service.set_role_permissions(
-        session, operation, role_id=role_id, payload=payload
+        session,
+        operation,
+        role_id=role_id,
+        payload=payload,
+        cache=container.identities,
     )
     return ok(updated, message="角色权限已更新")
 

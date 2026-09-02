@@ -8,6 +8,7 @@ L2/L3 打真实 Postgres（SQLite 上全绿的迁移可以在生产直接失败�
 import os
 import socket
 from collections.abc import AsyncIterator
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -19,6 +20,7 @@ from auth_server.container import Container, build_container
 from auth_server.settings import Settings
 from lib.auth import PasswordHasher
 from lib.config import load_settings
+from lib.db.hooks import run_after_commit_hooks
 from lib.logging import configure_logging
 from lib.testing import InMemoryCache
 
@@ -78,10 +80,24 @@ async def container(settings: Settings) -> AsyncIterator[Container]:
         auth=built.auth,
         verify=built.verify,
         rules=built.rules,
+        identities=built.identities,
     )
     yield patched
     await built.database.dispose()
     await built.cache.close()
+
+
+@pytest.fixture
+def app_container(app_client: httpx.AsyncClient) -> Container:
+    """取 `app_client` 正在用的那一份容器。
+
+    ⚠ 与 `container` 夹具**不是**同一个：那份是另建的，改它不会影响经 HTTP
+    打进去的请求。
+
+    Args: app_client。
+    """
+    transport = cast(httpx.ASGITransport, app_client._transport)
+    return cast(Container, cast(Any, transport.app).state.container)
 
 
 @pytest.fixture
@@ -107,6 +123,9 @@ async def app_client(
     )
 
     # 每个请求一个会话，与生产同构：失败即回滚到保存点，不会把后续请求一起毒死
+    # ⚠ 提交后必须跑登记的副作用，与 `Database.session()` 逐行对齐：漏了这一步，
+    # 所有 `after_commit` 钩子（失效缓存、报脏、发通知）在用例里**静默不执行**，
+    # 于是靠它们成立的断言会全部假绿。
     async def override() -> AsyncIterator[AsyncSession]:
         async with maker() as session:
             try:
@@ -116,6 +135,7 @@ async def app_client(
                 raise
             else:
                 await session.commit()
+                await run_after_commit_hooks(session)
 
     application.dependency_overrides[get_session] = override
     transport = httpx.ASGITransport(app=application)
@@ -161,6 +181,7 @@ def _with_test_doubles(built: Container) -> Container:
         tokens=tokens,
         api_keys=api_keys,
         rules=built.rules,
+        identities=built.identities,
         signing_secret=built.verify.signing_secret,
         header_ttl_s=built.verify.header_ttl_s,
         clock=built.verify.clock,
@@ -175,6 +196,7 @@ def _with_test_doubles(built: Container) -> Container:
         auth=auth,
         verify=verify,
         rules=built.rules,
+        identities=built.identities,
     )
 
 

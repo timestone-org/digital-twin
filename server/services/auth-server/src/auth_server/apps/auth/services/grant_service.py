@@ -27,6 +27,10 @@ from auth_server.apps.auth.services.identity import (
     count_super_admins,
     load_identity,
 )
+from auth_server.apps.auth.services.identity_cache import (
+    IdentityCache,
+    invalidate_after_commit,
+)
 from auth_server.apps.auth.services.presenters import to_user_detail
 from lib.errors import NotFound, ValidationFailed
 from lib.errors.base import FieldError
@@ -43,10 +47,11 @@ async def assign_role(
     *,
     user_id: uuid.UUID,
     payload: AssignRoleIn,
+    cache: IdentityCache,
 ) -> UserDetailOut:
     """改派角色。
 
-    Args: session, operation, user_id, payload。
+    Args: session, operation, user_id, payload, cache。
     """
     target = await _require_identity(session, user_id)
     role = await role_crud.get(session, payload.role_id)
@@ -83,6 +88,7 @@ async def assign_role(
             source_ip=operation.source_ip,
         ),
     )
+    invalidate_after_commit(session, cache, user_id)
     return to_user_detail(await load_identity(session, target.user))
 
 
@@ -92,10 +98,11 @@ async def set_direct_permissions(
     *,
     user_id: uuid.UUID,
     payload: SetPermissionsIn,
+    cache: IdentityCache,
 ) -> UserDetailOut:
     """覆盖式写直权：给什么就是什么。
 
-    Args: session, operation, user_id, payload。
+    Args: session, operation, user_id, payload, cache。
     """
     target = await _require_identity(session, user_id)
     requested = frozenset(payload.codes)
@@ -129,6 +136,7 @@ async def set_direct_permissions(
             source_ip=operation.source_ip,
         ),
     )
+    invalidate_after_commit(session, cache, user_id)
     return to_user_detail(await load_identity(session, target.user))
 
 

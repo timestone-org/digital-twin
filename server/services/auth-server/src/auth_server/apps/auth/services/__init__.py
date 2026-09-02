@@ -14,6 +14,11 @@ from auth_server.apps.auth.services.identity import (
     load_identity,
     load_identity_by_id,
 )
+from auth_server.apps.auth.services.identity_cache import (
+    EdgeIdentity,
+    IdentityCache,
+    to_edge_identity,
+)
 from auth_server.apps.auth.services.matching import (
     Decision,
     DecisionReason,
@@ -38,7 +43,9 @@ __all__ = [
     "AuthService",
     "Decision",
     "DecisionReason",
+    "EdgeIdentity",
     "Identity",
+    "IdentityCache",
     "Operation",
     "RouteRuleCache",
     "RuleView",
@@ -53,4 +60,5 @@ __all__ = [
     "looks_like_api_key",
     "normalize_path",
     "sort_key",
+    "to_edge_identity",
 ]
