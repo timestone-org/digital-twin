@@ -4,11 +4,13 @@ from fastapi import APIRouter
 
 from platform_server.apps.llm_providers.api import (
     internal,
+    llm_provider_kinds,
     llm_providers,
     llm_purposes,
 )
 
 ROUTERS: tuple[APIRouter, ...] = (
+    llm_provider_kinds.router,
     llm_providers.router,
     llm_purposes.router,
     internal.router,

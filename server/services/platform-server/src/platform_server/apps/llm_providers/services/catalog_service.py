@@ -40,16 +40,23 @@ class CatalogModelOut(BaseModel):
 
 
 class CatalogProviderOut(BaseModel):
-    """目录里一路供应商的线形。⚠ 带明文密钥，只走内部面。"""
+    """目录里一路供应商的线形。⚠ 带明文密钥，只走内部面。
+
+    ⚠ 字段集与 llmcore 的 `catalog_version` 逐格对齐：内容摘要两侧各算一遍，
+    少一格就永远算不出同一个值，而「变没变」于是判错。
+    """
 
     model_config = ConfigDict(frozen=True)
 
     id: str
     name: str
+    kind: str
+    # 没有端点的那些形态是空串
     base_url: str
     api_key: str
     is_enabled: bool
     extra_body: dict[str, Any] | None
+    options: dict[str, Any] | None
     models: list[CatalogModelOut]
 
 
@@ -114,23 +121,31 @@ def _provider_out(
 ) -> CatalogProviderOut | None:
     """一路摊成线形；密钥解不开就整路不下发。
 
+    ⚠ 靠登录的那些形态本来就没有密钥，那时**不是**「解不开」：整路照常下发，
+    能不能用由消费方那一侧的登录态回答。
+
     Args: row, cipher。
     """
-    api_key = cipher.decrypt(row.api_key_enc)
-    if api_key is None:
-        _logger.error(
-            "llm_provider_key_undecryptable",
-            "这一路的密钥解不开（换过加密密钥），本轮不下发，请重填密钥",
-            provider=row.name,
-        )
-        return None
+    api_key = ""
+    if row.api_key_enc is not None:
+        decrypted = cipher.decrypt(row.api_key_enc)
+        if decrypted is None:
+            _logger.error(
+                "llm_provider_key_undecryptable",
+                "这一路的密钥解不开（换过加密密钥），本轮不下发，请重填密钥",
+                provider=row.name,
+            )
+            return None
+        api_key = decrypted
     return CatalogProviderOut(
         id=str(row.id),
         name=row.name,
-        base_url=row.base_url,
+        kind=row.kind,
+        base_url=row.base_url or "",
         api_key=api_key,
         is_enabled=row.is_enabled,
         extra_body=row.extra_body_json,
+        options=row.options_json,
         models=[
             CatalogModelOut(
                 name=one.name,

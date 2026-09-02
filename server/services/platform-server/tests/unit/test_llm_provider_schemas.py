@@ -8,6 +8,10 @@
 import pytest
 from pydantic import SecretStr, ValidationError
 
+from platform_server.apps.llm_providers.enums import (
+    PROVIDER_KIND_CODEX_OAUTH,
+    PROVIDER_KIND_OPENAI_COMPAT,
+)
 from platform_server.apps.llm_providers.schemas import (
     LlmModelIn,
     LlmProviderIn,
@@ -88,3 +92,97 @@ def test_the_update_body_distinguishes_absent_from_null_extra_body() -> None:
     assert "extra_body" not in untouched.model_fields_set
     assert "extra_body" in cleared.model_fields_set
     assert cleared.extra_body is None
+
+
+def test_the_default_kind_is_the_endpoint_one() -> None:
+    """⚠ 不带这一格的客户端建出来的正是端点那一形态：换个默认等于让存量
+    调用方建出一路没人接得了的供应商。"""
+    assert _provider().kind == PROVIDER_KIND_OPENAI_COMPAT
+
+
+def test_an_endpoint_provider_without_a_base_url_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="端点地址"):
+        _provider(base_url=None)
+
+
+def test_an_endpoint_provider_without_a_key_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="API 密钥"):
+        _provider(api_key=None)
+
+
+def test_a_login_based_provider_validates_without_an_endpoint() -> None:
+    made = LlmProviderIn.model_validate(
+        {
+            "name": "Codex",
+            "kind": PROVIDER_KIND_CODEX_OAUTH,
+            "models": [{"name": "gpt-5-codex", "kind": "chat"}],
+            "options": {"default_effort": "high"},
+        }
+    )
+    assert made.base_url is None
+    assert made.api_key is None
+
+
+def test_a_login_based_provider_must_not_carry_an_endpoint() -> None:
+    """⚠ 带了就拒而不是存下来当没看见：存下来的那一格填了、读得回来，
+    唯独没有任何一侧会读它。"""
+    with pytest.raises(ValidationError, match="靠登录"):
+        LlmProviderIn.model_validate(
+            {
+                "name": "Codex",
+                "kind": PROVIDER_KIND_CODEX_OAUTH,
+                "base_url": "https://endpoint/v1",
+                "models": [],
+            }
+        )
+
+
+def test_a_login_based_provider_rejects_embedding_models() -> None:
+    with pytest.raises(ValidationError, match="登记不了"):
+        LlmProviderIn.model_validate(
+            {
+                "name": "Codex",
+                "kind": PROVIDER_KIND_CODEX_OAUTH,
+                "models": [{"name": "e", "kind": "embedding", "dimensions": 8}],
+            }
+        )
+
+
+def test_an_unknown_effort_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="推理档位"):
+        LlmProviderIn.model_validate(
+            {
+                "name": "Codex",
+                "kind": PROVIDER_KIND_CODEX_OAUTH,
+                "models": [],
+                "options": {"default_effort": "turbo"},
+            }
+        )
+
+
+def test_an_unknown_option_key_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="不认识配置项"):
+        LlmProviderIn.model_validate(
+            {
+                "name": "Codex",
+                "kind": PROVIDER_KIND_CODEX_OAUTH,
+                "models": [],
+                "options": {"temperature": 1},
+            }
+        )
+
+
+def test_an_endpoint_provider_has_no_options_to_configure() -> None:
+    with pytest.raises(ValidationError, match="没有可配的选项"):
+        _provider(options={"default_effort": "high"})
+
+
+def test_an_unknown_provider_kind_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="未登记的供应商形态"):
+        _provider(kind="ollama")
+
+
+def test_the_update_body_carries_no_kind() -> None:
+    """⚠ 改形态等于换一路接法：密钥、登录态与模型清单全部作废，
+    那是删了重建。放行的话，一路配好的供应商会在改名的那一次静默换掉接法。"""
+    assert "kind" not in LlmProviderUpdateIn.model_fields

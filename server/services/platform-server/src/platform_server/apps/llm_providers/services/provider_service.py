@@ -12,15 +12,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lib.crypto import SecretCipher
 from lib.logging import get_logger
 from platform_server.apps.llm_providers import crud
+from platform_server.apps.llm_providers.enums import provider_kind_of
 from platform_server.apps.llm_providers.errors import (
     LlmProviderInUse,
     LlmProviderNameTaken,
     LlmProviderNotFound,
+    LlmProviderShapeRejected,
 )
 from platform_server.apps.llm_providers.models import LlmProvider
 from platform_server.apps.llm_providers.models.provider import (
     API_KEY_HINT_CHARS,
 )
+from platform_server.apps.llm_providers.rules import shape_mismatch
 from platform_server.apps.llm_providers.schemas import (
     LlmModelIn,
     LlmModelOut,
@@ -93,10 +96,14 @@ def provider_out(row: LlmProvider, assigned: list[str]) -> LlmProviderOut:
     return LlmProviderOut(
         id=row.id,
         name=row.name,
-        base_url=row.base_url,
+        kind=row.kind,
+        # ⚠ 没有端点的那些形态在库里是 NULL，对外摊成空串：出参的形状不随
+        # 形态变，前端才不必为一格地址写两条分支
+        base_url=row.base_url or "",
         api_key_hint=row.api_key_hint,
         is_enabled=row.is_enabled,
         extra_body=row.extra_body_json,
+        options=row.options_json,
         models=models_of(row),
         notes=row.notes,
         assigned_purposes=assigned,
@@ -146,16 +153,20 @@ async def create_provider(
     """
     if await crud.provider.by_name(session, body.name) is not None:
         raise LlmProviderNameTaken(f"已经有一路叫「{body.name}」的供应商")
-    secret = body.api_key.get_secret_value()
+    secret = None if body.api_key is None else body.api_key.get_secret_value()
     row = crud.provider.add(
         session,
         LlmProvider(
             name=body.name,
-            base_url=body.base_url.rstrip("/"),
-            api_key_enc=cipher.encrypt(secret),
-            api_key_hint=key_hint(secret),
+            kind=body.kind,
+            base_url=(
+                None if body.base_url is None else body.base_url.rstrip("/")
+            ),
+            api_key_enc=None if secret is None else cipher.encrypt(secret),
+            api_key_hint="" if secret is None else key_hint(secret),
             is_enabled=body.is_enabled,
             extra_body_json=body.extra_body,
+            options_json=body.options,
             models_json=models_json_of(body.models),
             notes=body.notes,
             updated_by=actor,
@@ -181,6 +192,9 @@ async def update_provider(
     Args: session, provider_id, body, cipher, actor。
     """
     row = await _row(session, provider_id)
+    rejected = _shape_rejected(row, body)
+    if rejected is not None:
+        raise LlmProviderShapeRejected(rejected)
     if body.name is not None and body.name != row.name:
         if await crud.provider.by_name(session, body.name) is not None:
             raise LlmProviderNameTaken(f"已经有一路叫「{body.name}」的供应商")
@@ -223,6 +237,8 @@ async def stored_api_key(
     Args: session, provider_id, cipher。
     """
     row = await _row(session, provider_id)
+    if row.base_url is None or row.api_key_enc is None:
+        raise LlmProviderShapeRejected("这一路没有端点，探不了")
     return row.base_url, cipher.decrypt(row.api_key_enc) or ""
 
 
@@ -233,6 +249,8 @@ def _apply_plain_fields(row: LlmProvider, body: LlmProviderUpdateIn) -> None:
     """
     if body.base_url is not None:
         row.base_url = body.base_url.rstrip("/")
+    if "options" in body.model_fields_set:
+        row.options_json = body.options
     if body.is_enabled is not None:
         row.is_enabled = body.is_enabled
     if "extra_body" in body.model_fields_set:
@@ -241,6 +259,31 @@ def _apply_plain_fields(row: LlmProvider, body: LlmProviderUpdateIn) -> None:
         row.models_json = models_json_of(body.models)
     if body.notes is not None:
         row.notes = body.notes
+
+
+def _shape_rejected(row: LlmProvider, body: LlmProviderUpdateIn) -> str | None:
+    """改完之后这一路还配不配得上它的形态。
+
+    ⚠ 按**改完的样子**判而不是按传进来的几格：只传 models 的那一次也可能
+    让一路 Codex 上多出一个嵌入模型，而那个模型没有任何一侧读得到。
+
+    Args: row, body。
+    """
+    spec = provider_kind_of(row.kind)
+    # pragma 理由：库里那一格由 CHECK 约束拦着
+    if spec is None:  # pragma: no cover
+        return None
+    models = models_of(row) if body.models is None else body.models
+    options = (
+        body.options if "options" in body.model_fields_set else row.options_json
+    )
+    return shape_mismatch(
+        spec,
+        has_base_url=(body.base_url or row.base_url) is not None,
+        has_api_key=body.api_key is not None or row.api_key_enc is not None,
+        model_kinds=[one.kind for one in models],
+        options=options,
+    )
 
 
 async def _row(session: AsyncSession, provider_id: uuid.UUID) -> LlmProvider:

@@ -8,7 +8,9 @@ from platform_server.apps.llm_providers.schemas.provider import (
     LlmProbeIn,
     LlmProbeOut,
     LlmProviderIn,
+    LlmProviderKindOut,
     LlmProviderOut,
+    LlmProviderPresetOut,
     LlmProviderUpdateIn,
     LlmPurposeOut,
 )
@@ -21,7 +23,9 @@ __all__ = [
     "LlmProbeIn",
     "LlmProbeOut",
     "LlmProviderIn",
+    "LlmProviderKindOut",
     "LlmProviderOut",
+    "LlmProviderPresetOut",
     "LlmProviderUpdateIn",
     "LlmPurposeOut",
 ]
