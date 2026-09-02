@@ -151,9 +151,16 @@ export function defaultsOf(
   return config
 }
 
+/**
+ * 台账清单现在处于哪一步。`denied` 退回手填、`failed` 给重试——两者的处置
+ * 完全不同，不能合成一句提示。
+ */
+export type TableListState = 'loading' | 'ready' | 'empty' | 'denied' | 'failed'
+
 /** 参数面板要的两份下拉数据，以及拿不到时的那句人话。 */
 export interface FormOptions {
   tables: readonly { code: string; name: string }[]
+  tablesState: TableListState
   /** 台账下拉列不出东西时的原因。 */
   tablesNote: string
   columns: readonly { key: string; name: string }[]

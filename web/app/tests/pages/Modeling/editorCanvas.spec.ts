@@ -3,6 +3,9 @@
  * 松手落在卡片上也算连上、连线不合法当场给人话、框选算命中、从算子面板拖进来
  * 落件、右键弹菜单、只读时手势全不生效。
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
 import type { ModelingGraph, ModelingOperator } from '@dt/contracts'
 import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -534,5 +537,47 @@ describe('工具条', () => {
     const style = wrapper.find('.dt-ml-canvas__world').attributes('style') ?? ''
     const zoom = Number(/scale\(([\d.]+)\)/.exec(style)?.[1] ?? '1')
     expect(zoom).toBeGreaterThan(1)
+  })
+})
+
+/** 边层组件的源码；样式契约只能从源码上钉，happy-dom 不做布局。 */
+// ⚠ vitest 的 cwd 就是 web/，不要再往上退一层
+const EDGE_LAYER_PATH = join(
+  process.cwd(),
+  'app/src/pages/Modeling/Canvas/components/EdgeLayer.vue',
+)
+
+/** 两张卡片之间连着一条边的图。 */
+const WIRED: ModelingGraph = {
+  ...GRAPH,
+  edges: [
+    {
+      id: 'a:out->b:in',
+      from_node: 'a',
+      from_port: 'out',
+      to_node: 'b',
+      to_port: 'in',
+    },
+  ],
+}
+
+// ⚠ `.dt-ml-canvas__world` 是个只装 absolute 子元素的变换容器，自己是 0×0；边层
+// SVG 若按父容器的百分比取尺寸就也是 0×0，而外层 <svg> 宽或高为 0 时浏览器**整个
+// 不绘制**它，`overflow: visible` 救不回来。表象是「连线看不见」而全部单测照常绿。
+describe('边层 SVG 的尺寸', () => {
+  it('挂在画布上时带着非零的显式宽高，而不是父容器的百分比', () => {
+    const wrapper = open({ graph: WIRED })
+    const svg = wrapper.find('.dt-ml-edges')
+
+    expect(Number(svg.attributes('width'))).toBeGreaterThan(0)
+    expect(Number(svg.attributes('height'))).toBeGreaterThan(0)
+  })
+
+  it('样式里不给这一层写百分比宽高，且视口外的线靠 overflow 放出来', () => {
+    const source = readFileSync(EDGE_LAYER_PATH, 'utf8')
+    const style = /<style[^>]*>([\s\S]*?)<\/style>/.exec(source)?.[1] ?? ''
+
+    expect(style).not.toMatch(/(width|height)\s*:\s*100%/)
+    expect(style).toMatch(/overflow\s*:\s*visible/)
   })
 })

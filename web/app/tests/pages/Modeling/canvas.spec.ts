@@ -121,15 +121,9 @@ function signIn(permissions: string[]): void {
   auth.accessToken = 'token'
 }
 
-/** 台账清单。给 `null` 表示接口拒绝——只有 modeling:* 的人会吃这个 403。 */
-function stubLedger(
-  tables: { id: string; code: string; name: string }[] | null,
-) {
-  if (tables === null) {
-    vi.spyOn(dataset, 'listDatasetTables').mockRejectedValue(new Error('403'))
-    return
-  }
-  vi.spyOn(dataset, 'listDatasetTables').mockResolvedValue({
+/** 台账清单接口的一页。 */
+function tablePage(tables: { id: string; code: string; name: string }[]) {
+  return {
     items: tables.map((table) => ({
       ...table,
       description: null,
@@ -141,16 +135,46 @@ function stubLedger(
     page: 1,
     size: 200,
     total: tables.length,
-  } as never)
-  vi.spyOn(dataset, 'listDatasetColumns').mockResolvedValue([])
+  } as never
 }
 
-function stubApi(over: { operators?: ModelingOperator[] } = {}) {
+/** 台账清单。给 `null` 表示接口失败（网络、5xx，或被边缘挡下的 403）。 */
+function stubLedger(
+  tables: { id: string; code: string; name: string }[] | null,
+) {
+  const listTables = vi.spyOn(dataset, 'listDatasetTables')
+  if (tables === null) {
+    listTables.mockRejectedValue(new Error('403'))
+    return listTables
+  }
+  listTables.mockResolvedValue(tablePage(tables))
+  vi.spyOn(dataset, 'listDatasetColumns').mockResolvedValue([])
+  return listTables
+}
+
+/** 只有一个台账引用字段的算子 schema。 */
+const TABLE_SCHEMA = {
+  properties: {
+    table_code: {
+      title: '数据台账',
+      type: 'string',
+      'x-dt-widget': 'table',
+    },
+  },
+  required: ['table_code'],
+  type: 'object',
+}
+
+function stubApi(
+  over: { operators?: ModelingOperator[]; pipeline?: ModelingPipeline } = {},
+) {
   stubLedger([{ id: 't1', code: 'energy_log', name: '能耗台账' }])
   vi.spyOn(modeling, 'listModelingOperators').mockResolvedValue(
     over.operators ?? [operator()],
   )
-  vi.spyOn(modeling, 'getModelingPipeline').mockResolvedValue(pipeline())
+  vi.spyOn(modeling, 'getModelingPipeline').mockResolvedValue(
+    over.pipeline ?? pipeline(),
+  )
   vi.spyOn(modeling, 'listModelingRuns').mockResolvedValue({
     items: [],
     page: 1,
@@ -515,33 +539,80 @@ describe('参数面板', () => {
     ])
   })
 
-  // ⚠ 空下拉读起来是「一张台账都没建」，而真相是「你看不到」
-  it('看不到台账清单时退回手填，并把原因说出来', async () => {
+  // ⚠ 搜索框不能按选项数量自动给：台账靠编码认，一张也要能敲编码定位
+  it('台账下拉不看选项多少，总有搜索框', async () => {
+    stubApi({ operators: [operator({ config_schema: TABLE_SCHEMA })] })
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
+    await openConfig(wrapper)
+
+    await wrapper.find('.dt-select__trigger').trigger('click')
+
+    expect(document.querySelector('.dt-select-menu__input')).not.toBeNull()
+  })
+
+  // ⚠ 下拉空着显示「请选择」是在骗人：图里明明存着一个编码
+  it('图里存的编码不在清单里时，下拉仍把它列出来并标注', async () => {
     stubApi({
-      operators: [
-        operator({
-          config_schema: {
-            properties: {
-              table_code: {
-                title: '数据台账',
-                type: 'string',
-                'x-dt-widget': 'table',
-              },
+      operators: [operator({ config_schema: TABLE_SCHEMA })],
+      pipeline: {
+        ...pipeline(),
+        graph: {
+          format_version: '1',
+          nodes: [
+            {
+              id: 'n1',
+              operator: 'ledger_source',
+              alias: '',
+              position: { left: 0, top: 0 },
+              config: { table_code: 'gone_table' },
             },
-            required: ['table_code'],
-            type: 'object',
-          },
-        }),
-      ],
+          ],
+          edges: [],
+        },
+      },
     })
-    stubLedger(null)
     signIn(WRITER)
     const wrapper = open()
     await flushPromises()
 
+    await wrapper
+      .findAll('.dt-ml-node__action')
+      .find((b) => b.text() === '参数')
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findComponent(DtSelect).props('options')).toEqual([
+      { value: 'gone_table', label: 'gone_table（清单里没有这张台账）' },
+      { value: 'energy_log', label: '能耗台账（energy_log）' },
+    ])
+  })
+
+  // ⚠ 拉取失败不是权限问题：说成权限问题会让人去找管理员要一个本来就有的码
+  it('台账清单拉取失败时给「重试」，不把它说成权限问题', async () => {
+    stubApi({ operators: [operator({ config_schema: TABLE_SCHEMA })] })
+    const listTables = stubLedger(null)
+    signIn(WRITER)
+    const wrapper = open()
+    await flushPromises()
     await openConfig(wrapper)
 
-    expect(wrapper.text()).toContain('dataset:view')
+    expect(wrapper.text()).not.toContain('dataset:view')
+    expect(wrapper.text()).toContain('没拉到台账清单')
+
+    listTables.mockResolvedValue(
+      tablePage([{ id: 't1', code: 'energy_log', name: '能耗台账' }]),
+    )
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === '重试')
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findComponent(DtSelect).props('options')).toEqual([
+      { value: 'energy_log', label: '能耗台账（energy_log）' },
+    ])
   })
 
   it('改过的参数能一键回到默认值', async () => {

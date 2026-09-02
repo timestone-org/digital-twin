@@ -73,6 +73,7 @@ function viewsOf(
       const picked = columnsFor(deps, ledger, nodeId.value)
       return {
         tables: ledger.tables.value,
+        tablesState: ledger.state.value,
         tablesNote: ledger.note.value,
         columns: picked.columns,
         columnsNote: picked.note,

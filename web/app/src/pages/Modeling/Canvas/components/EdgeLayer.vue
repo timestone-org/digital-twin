@@ -6,6 +6,10 @@
  * 不关掉的话节点全点不中，而表象是「卡片突然没反应了」。
  * ⚠ 线要有一条**加粗的透明命中带**：2px 的曲线用鼠标几乎点不中，而点不中就
  * 选不中，选不中就删不掉。
+ * ⚠ SVG 的宽高是模板上的 1×1 常量，线全靠 `overflow: visible` 画在视口外：它挂在
+ * `.dt-ml-canvas__world` 里，那是个只装 absolute 子元素的变换容器，自己 0×0，
+ * 百分比取到的还是 0；而外层 `<svg>` 宽或高为 0 时浏览器**整个不绘制**它，
+ * 表象是「连线看不见」而单测（happy-dom 不做布局）照常全绿。
  */
 import { computed } from 'vue'
 
@@ -34,7 +38,7 @@ function onMenu(id: string, event: MouseEvent): void {
 </script>
 
 <template>
-  <svg class="dt-ml-edges" aria-hidden="true">
+  <svg class="dt-ml-edges" width="1" height="1" aria-hidden="true">
     <g v-for="edge in props.edges" :key="edge.id">
       <path
         class="dt-ml-edges__hit"
@@ -82,9 +86,9 @@ function onMenu(id: string, event: MouseEvent): void {
   position: absolute;
   top: 0;
   left: 0;
+  // ⚠ 见文件头：尺寸是模板上的 1×1，这里不能再写百分比；线与命中带都在视口外，
+  // 全靠 overflow 放出来
   overflow: visible;
-  width: 100%;
-  height: 100%;
   // ⚠ 见文件头：这一层不能吃掉落在节点上的指针事件
   pointer-events: none;
 

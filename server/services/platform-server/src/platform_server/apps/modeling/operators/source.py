@@ -39,7 +39,7 @@ class LedgerSourceConfig(OperatorConfig):
     """台账取数的参数。"""
 
     table_code: str = table_field(
-        title="数据台账", description="从哪张台账取数，填台账编码"
+        title="数据台账", description="从哪张台账取数"
     )
     columns: list[str] = Field(
         default_factory=list[str],
