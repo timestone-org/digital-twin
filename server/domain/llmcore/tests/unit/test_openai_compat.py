@@ -72,8 +72,17 @@ def test_the_profile_reports_vision_by_probing_the_resolver() -> None:
     without = _adapter({"chat": "c"}).profile()
     assert with_vision.has_vision is True
     assert without.has_vision is False
-    assert without.models == ("chat-model",)
+    # ⚠ 模型名按此刻解出的端点报：端点来自运行期可改的目录时，报装配时那一份
+    # 会让界面上写着一个早已换掉的模型名
+    assert without.models == ("c",)
+    assert without.is_ready is True
     assert without.efforts == ()
+
+
+def test_the_profile_lists_the_given_models_when_nothing_resolves() -> None:
+    bare = _adapter({}).profile()
+    assert bare.is_ready is False
+    assert bare.models == ("chat-model",)
 
 
 async def test_building_an_unsupported_kind_is_a_programming_error() -> None:

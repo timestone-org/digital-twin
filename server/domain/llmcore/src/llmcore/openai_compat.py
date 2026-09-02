@@ -75,12 +75,18 @@ class OpenAiCompatAdapter:
         )
 
     def profile(self) -> ModelProfile:
-        """这一路在能力面上的样子。"""
+        """这一路在能力面上的样子。
+
+        ⚠ 模型名按**此刻解出的端点**报，装配时给的清单只是没解出时的兜底：
+        端点来自运行期可改的目录时，报装配时那一份会让界面上写着一个早已换掉
+        的模型名。
+        """
+        endpoint = self.resolve("chat")
         return ModelProfile(
             id=self.id,
             label=self.label,
-            is_ready=True,
+            is_ready=endpoint is not None,
             has_vision=self.supports("vision"),
-            models=self.models,
+            models=self.models if endpoint is None else (endpoint.model,),
             efforts=(),
         )

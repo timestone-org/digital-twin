@@ -35,6 +35,8 @@ class OpenAiCompatEmbeddingAdapter:
     model: str
     dimensions: int
     id: str = EMBEDDING_SOURCE
+    # 端点定死的这一路造出来就能用；动态那一路才会在运行期变成假
+    is_ready: bool = True
 
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         """把一批文本转成向量，顺序与入参一一对应。
