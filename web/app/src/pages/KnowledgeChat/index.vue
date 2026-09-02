@@ -9,23 +9,31 @@
  * 这一页不另拼一份——跨库是模型自己挑的，出处必须跟着它的答复走。
  * 交互编排在 `scripts/useKnowledgeChatPage.ts`。
  */
-import { onMounted } from 'vue'
-import { DtNotice } from '@dt/ui'
+import { computed, onMounted } from 'vue'
+import { DtButton, DtNotice } from '@dt/ui'
 
-import AiTimeline from '@/components/ai/AiTimeline.vue'
 import { AppShell } from '@/components/layout'
+import ChatPanel from './components/ChatPanel.vue'
 import ChatSessionList from './components/ChatSessionList.vue'
-import KnowledgeChatComposer from './components/KnowledgeChatComposer.vue'
+import { sessionLabel } from './scripts/sessionLabel'
 import { useKnowledgeChatPage } from './scripts/useKnowledgeChatPage'
 
 const page = useKnowledgeChatPage()
 
-/** 空态里可点的几句开场。点了填进输入框由用户自己发，不直接发出去。 */
+/** 空态里可点的几句开场。点了直接发出去。 */
 const STARTERS = [
   '这套资料里有哪些设备？',
   '冷却水出口温度的上限是多少？',
   '润滑周期是怎么规定的？',
 ] as const
+
+/** 标题栏上写的当前对话名；没选中时 null。 */
+const selectedLabel = computed<string | null>(() => {
+  const one = page.sessions.value.find(
+    (each) => each.id === page.selectedId.value,
+  )
+  return one === undefined ? null : sessionLabel(one)
+})
 
 onMounted(() => void page.reload())
 </script>
@@ -35,37 +43,47 @@ onMounted(() => void page.reload())
     title="知识库对话"
     subtitle="对着手册、规程与台账资料提问，答复带出处"
   >
-    <div class="flex h-full min-h-0 gap-4">
-      <ChatSessionList
-        :sessions="page.sessions.value"
-        :selected-id="page.selectedId.value"
-        :is-busy="page.isLoading.value"
-        @select="page.select"
-        @create="page.create"
-        @rename="page.rename"
-        @archive="page.archive"
-        @remove="page.remove"
-      />
+    <template #actions>
+      <DtButton
+        size="sm"
+        icon="plus"
+        :disabled="page.isLoading.value"
+        @click="page.create"
+      >
+        新对话
+      </DtButton>
+    </template>
 
-      <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-        <DtNotice v-if="page.error.value !== ''" intent="danger">
-          {{ page.error.value }}
-        </DtNotice>
+    <!-- ⚠ 这一页不整页滚：高度钉在视口里，时间线在面板内部自己滚，
+         输入区才能一直钉在底部 -->
+    <div class="flex h-full min-h-0 flex-col gap-4">
+      <DtNotice v-if="page.error.value !== ''" intent="danger">
+        {{ page.error.value }}
+      </DtNotice>
 
-        <AiTimeline
-          :entries="page.chat.entries.value"
-          :starters="STARTERS"
-          empty-title="问一句资料里的事"
-          @starter="(text: string) => void page.send(text)"
-          @answer="page.chat.answerAsk"
-        />
+      <!-- <xl 竖排：左栏定高，面板吃掉剩下的那一行；≥xl 并成两栏 -->
+      <div
+        class="grid min-h-0 flex-1 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] gap-4 xl:grid-cols-[20rem_minmax(0,1fr)] xl:grid-rows-1"
+      >
+        <aside class="flex h-56 min-w-0 shrink-0 flex-col xl:h-auto xl:min-h-0">
+          <ChatSessionList
+            :sessions="page.sessions.value"
+            :selected-id="page.selectedId.value"
+            @select="page.select"
+            @rename="page.rename"
+            @archive="page.archive"
+            @remove="page.remove"
+          />
+        </aside>
 
-        <KnowledgeChatComposer
-          :running="page.chat.isRunning.value"
-          :asking="page.chat.isAsking.value"
-          @send="page.send"
-          @stop="page.chat.stop"
-        />
+        <section class="flex min-h-0 min-w-0 flex-col">
+          <ChatPanel
+            :chat="page.chat"
+            :title="selectedLabel"
+            :starters="STARTERS"
+            @send="(text: string) => void page.send(text)"
+          />
+        </section>
       </div>
     </div>
   </AppShell>

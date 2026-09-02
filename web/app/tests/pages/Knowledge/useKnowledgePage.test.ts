@@ -93,6 +93,7 @@ describe('切库', () => {
     await page.select('b2')
 
     expect(page.result.value).toBeNull()
+    expect(page.searched.value).toBe('')
   })
 
   it('没选库时文档清空且不发请求', async () => {
@@ -147,10 +148,37 @@ describe('建库删库', () => {
     const page = useKnowledgePage()
     page.bases.value = [baseOf('b1', '旧库')]
 
-    await page.create('新库')
+    const made = await page.create('新库', '')
 
+    expect(made).toBe(true)
+    expect(api.createBase).toHaveBeenCalledWith('新库', '', 'hybrid')
     expect(page.bases.value.map((one) => one.id)).toEqual(['b9', 'b1'])
     expect(page.selectedId.value).toBe('b9')
+  })
+
+  it('描述原样带上，策略固定混合', async () => {
+    vi.spyOn(api, 'createBase').mockResolvedValue(baseOf('b9', '新库'))
+    const page = useKnowledgePage()
+
+    await page.create('新库', '锅炉相关的规程')
+
+    expect(api.createBase).toHaveBeenCalledWith(
+      '新库',
+      '锅炉相关的规程',
+      'hybrid',
+    )
+  })
+
+  it('建库炸了回 false，清单不动，那句话留在 error 上', async () => {
+    vi.spyOn(api, 'createBase').mockRejectedValue(new Error('同名的库已经有了'))
+    const page = useKnowledgePage()
+    page.bases.value = [baseOf('b1', '旧库')]
+
+    const made = await page.create('新库', '')
+
+    expect(made).toBe(false)
+    expect(page.bases.value.map((one) => one.id)).toEqual(['b1'])
+    expect(page.error.value).toBe('同名的库已经有了')
   })
 
   it('删掉当前库时把右边一起清空', async () => {
@@ -161,8 +189,9 @@ describe('建库删库', () => {
     page.selectedId.value = 'b1'
     page.documents.value = [documentOf('d1')]
 
-    await page.drop('b1')
+    const dropped = await page.drop('b1')
 
+    expect(dropped).toBe(true)
     expect(page.bases.value.map((one) => one.id)).toEqual(['b2'])
     expect(page.selectedId.value).toBe('')
     expect(page.documents.value).toEqual([])
@@ -192,11 +221,12 @@ describe('上传', () => {
     const page = useKnowledgePage()
     page.selectedId.value = 'b1'
 
-    await page.addFiles([
+    const uploaded = await page.addFiles([
       new File(['a'], 'a.md', { type: 'text/markdown' }),
       new File(['b'], 'b.md', { type: 'text/markdown' }),
     ])
 
+    expect(uploaded).toBe(2)
     expect(order).toEqual(['a.md', 'b.md'])
     expect(api.listDocuments).toHaveBeenCalledTimes(1)
     expect(page.upload.value).toBeNull()
@@ -226,8 +256,11 @@ describe('上传', () => {
     const page = useKnowledgePage()
     page.selectedId.value = 'b1'
 
-    await page.addFiles([new File(['a'], 'a.md', { type: 'text/markdown' })])
+    const uploaded = await page.addFiles([
+      new File(['a'], 'a.md', { type: 'text/markdown' }),
+    ])
 
+    expect(uploaded).toBe(0)
     expect(page.upload.value).toBeNull()
     expect(page.error.value).toBe('存储满了')
   })
@@ -249,10 +282,26 @@ describe('文档动作与检索', () => {
     const page = useKnowledgePage()
     page.selectedId.value = 'b1'
 
-    await page.reparse('d1')
-    await page.removeDocument('d1')
+    const reparsed = await page.reparse('d1')
+    const removed = await page.removeDocument('d1')
 
+    expect(reparsed).toBe(true)
+    expect(removed).toBe(true)
     expect(api.listDocuments).toHaveBeenCalledTimes(2)
+  })
+
+  it('重取文档时忙碌标记跟着请求走', async () => {
+    const slow = deferred<KnowledgeDocument[]>()
+    vi.mocked(api.listDocuments).mockReturnValue(slow.promise)
+    const page = useKnowledgePage()
+    page.selectedId.value = 'b1'
+
+    const pending = page.refreshDocuments()
+    expect(page.isRefreshing.value).toBe(true)
+    slow.settle([])
+    await pending
+
+    expect(page.isRefreshing.value).toBe(false)
   })
 
   it('空问句不发请求', async () => {
@@ -282,6 +331,21 @@ describe('文档动作与检索', () => {
 
     expect(page.isSearching.value).toBe(false)
     expect(page.error.value).toBe('这个库还检索不了')
+  })
+
+  it('发出去的那句记在 searched 上，去掉首尾空白', async () => {
+    vi.spyOn(api, 'searchBase').mockResolvedValue({
+      hits: [],
+      strategy: 'hybrid',
+      note: '',
+    })
+    const page = useKnowledgePage()
+    page.selectedId.value = 'b1'
+    page.query.value = '  锅炉 '
+
+    await page.search()
+
+    expect(page.searched.value).toBe('锅炉')
   })
 })
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @fileoverview 助手的输入区：一个集成输入框——附件、草稿、模型选择、发送/停止
- * 全在同一个框里，与主流对话组件同一形态。
+ * 全在同一个框里，壳是共用的 AiInputBox。
  *
  * ⚠ 附件解析完挂成**待发条目**而不是灌进草稿：一张两百行的表摊进输入框，
  * 草稿就没法编辑了。每一条点开能看全文——用户仍然先看见助手将要看到什么，
@@ -11,10 +11,11 @@
  */
 import { computed, ref } from 'vue'
 import type { AssistantModelProfile } from '@dt/contracts'
-import { DtButton, DtFilePicker, DtNotice, DtSpinner, DtTextarea } from '@dt/ui'
+import { DtButton, DtFilePicker, DtNotice, DtTextarea } from '@dt/ui'
 
 import { parseAttachment } from '@/api/assistant'
 import AiAttachmentChip from '@/components/ai/AiAttachmentChip.vue'
+import AiInputBox from '@/components/ai/AiInputBox.vue'
 import AiModelPicker from '@/components/ai/AiModelPicker.vue'
 import type { ComposeState, ModelChoice } from '@/composables/useAiPanel'
 import {
@@ -142,13 +143,14 @@ defineExpose({ focusInput })
 
     <DtNotice v-if="attachError" intent="danger">{{ attachError }}</DtNotice>
 
-    <!-- 集成输入框：附件条、草稿、工具行同一个框。焦点环打在框上，
-         里面的 DtTextarea 退成裸的（:deep 去壳），不然一个框里套两层边。 -->
-    <div class="ai-inputbox">
-      <ul
-        v-if="compose.attachments.value.length > 0"
-        class="ai-inputbox__files"
-      >
+    <AiInputBox
+      :running="running"
+      :can-send="canSend"
+      @send="send"
+      @stop="emit('stop')"
+    >
+      <!-- 有待发附件才给槽：给了空槽壳上也会多出一条空的附件区 -->
+      <template v-if="compose.attachments.value.length > 0" #files>
         <AiAttachmentChip
           v-for="(one, index) in compose.attachments.value"
           :key="`${index}:${one.name}`"
@@ -157,12 +159,11 @@ defineExpose({ focusInput })
           @toggle="previewAt = previewAt === index ? null : index"
           @remove="removeAt(index)"
         />
-      </ul>
+      </template>
 
       <DtTextarea
         ref="box"
         :model-value="compose.draft.value"
-        class="ai-inputbox__text"
         :rows="2"
         autosize
         :disabled="asking === true"
@@ -174,7 +175,7 @@ defineExpose({ focusInput })
         @keydown="onKeydown"
       />
 
-      <div class="ai-inputbox__tools">
+      <template #tools>
         <DtFilePicker
           :accept="accept"
           :disabled="attaching"
@@ -200,37 +201,8 @@ defineExpose({ focusInput })
           :choice="choice"
           @pick="(value) => emit('pick', value)"
         />
-
-        <span v-if="running" class="ai-inputbox__busy">
-          <DtSpinner :size="12" label="助手正在处理" />
-          正在处理…
-        </span>
-        <span v-else class="ai-inputbox__keys" aria-hidden="true">
-          ⏎ 发送 · ⇧⏎ 换行
-        </span>
-
-        <DtButton
-          v-if="running"
-          class="ai-inputbox__go"
-          intent="danger"
-          size="sm"
-          icon="square"
-          aria-label="停止这个回合"
-          title="停止（Esc）"
-          @click="emit('stop')"
-        />
-        <DtButton
-          v-else
-          class="ai-inputbox__go"
-          type="submit"
-          size="sm"
-          icon="send"
-          aria-label="发送"
-          title="发送（Enter）"
-          :disabled="!canSend"
-        />
-      </div>
-    </div>
+      </template>
+    </AiInputBox>
   </form>
 </template>
 
@@ -260,77 +232,5 @@ defineExpose({ focusInput })
   color: var(--text-secondary);
   font-size: 0.75rem;
   line-height: 1.5;
-}
-
-/* —— 集成输入框本体：边、底、焦点环都在这一层 —— */
-.ai-inputbox {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--surface-sunken);
-  transition:
-    border-color 0.18s ease,
-    box-shadow 0.18s ease;
-}
-
-.ai-inputbox:focus-within {
-  border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px rgba(var(--accent-primary-rgb), 0.18);
-}
-
-/* 里面的 DtTextarea 去壳：壳（边、底、焦点环）已经由外框统一画了 */
-.ai-inputbox__text :deep(.dt-textarea) {
-  padding: 0.5rem 0.75rem 0.25rem;
-  border: none;
-  background: transparent;
-}
-
-.ai-inputbox__text :deep(.dt-textarea:focus-within) {
-  box-shadow: none;
-}
-
-.ai-inputbox__files {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  margin: 0;
-  padding: 0.5rem 0.5rem 0;
-  list-style: none;
-}
-
-/* —— 框内工具行：附件、模型、状态、发送 —— */
-.ai-inputbox__tools {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.25rem 0.375rem 0.375rem;
-}
-
-/* 模型下拉一齐摆上时空间紧，被挤到放不下就整段隐去——它只是提示，不是功能 */
-.ai-inputbox__keys {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-disabled);
-  font-size: 0.6875rem;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.ai-inputbox__busy {
-  display: inline-flex;
-  flex: 1;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.375rem;
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-  white-space: nowrap;
-}
-
-/* 发送/停止：主流对话组件的圆形动作键 */
-.ai-inputbox__go {
-  border-radius: 50%;
 }
 </style>

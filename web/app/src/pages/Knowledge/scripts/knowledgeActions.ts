@@ -1,5 +1,6 @@
 /**
  * @fileoverview 知识库页的动作：建库删库、传文档、重新解析、删文档、检索。
+ * 每个动作回「跑成了没有」，页面按它决定要不要弹成功提示；失败原因在 `state.error`。
  */
 import {
   createBase,
@@ -13,6 +14,9 @@ import {
 } from '@/api/knowledge'
 import { guarded, refreshDocuments } from './knowledgeState'
 import type { KnowledgeState } from './knowledgeState'
+
+/** 建库时固定用的检索策略：关键词与向量两路一起召回。 */
+const DEFAULT_STRATEGY = 'hybrid'
 
 /**
  * 取能力与库清单，并选中第一个。
@@ -47,6 +51,7 @@ export async function select(
 ): Promise<void> {
   state.selectedId.value = baseId
   state.result.value = null
+  state.searched.value = ''
   await guarded(state, () => refreshDocuments(state))
 }
 
@@ -54,13 +59,15 @@ export async function select(
  * 建一个库并切过去。
  * @param state 页面状态
  * @param name 库名
+ * @param description 一句说明，可以为空
  */
 export async function create(
   state: KnowledgeState,
   name: string,
-): Promise<void> {
-  await guarded(state, async () => {
-    const made = await createBase(name, '', 'hybrid')
+  description: string,
+): Promise<boolean> {
+  return guarded(state, async () => {
+    const made = await createBase(name, description, DEFAULT_STRATEGY)
     state.bases.value = [made, ...state.bases.value]
     await select(state, made.id)
   })
@@ -74,8 +81,8 @@ export async function create(
 export async function drop(
   state: KnowledgeState,
   baseId: string,
-): Promise<void> {
-  await guarded(state, async () => {
+): Promise<boolean> {
+  return guarded(state, async () => {
     await deleteBase(baseId)
     state.bases.value = state.bases.value.filter((one) => one.id !== baseId)
     if (state.selectedId.value === baseId) {
@@ -86,7 +93,7 @@ export async function drop(
 }
 
 /**
- * 逐个传文件。
+ * 逐个传文件，回传成了几份。
  * ⚠ 一个一个传而不是并发：并发几份大文件时，进度条只能显示其中一个，
  * 而用户看到的是「卡住了」。
  * @param state 页面状态
@@ -95,9 +102,10 @@ export async function drop(
 export async function addFiles(
   state: KnowledgeState,
   files: readonly File[],
-): Promise<void> {
+): Promise<number> {
   const baseId = state.selectedId.value
-  if (baseId === '') return
+  if (baseId === '') return 0
+  let uploaded = 0
   await guarded(state, async () => {
     for (const file of files) {
       state.upload.value = { name: file.name, ratio: 0 }
@@ -109,10 +117,12 @@ export async function addFiles(
           }
         },
       })
+      uploaded += 1
     }
     await refreshDocuments(state)
   })
   state.upload.value = null
+  return uploaded
 }
 
 /**
@@ -123,8 +133,8 @@ export async function addFiles(
 export async function reparse(
   state: KnowledgeState,
   documentId: string,
-): Promise<void> {
-  await guarded(state, async () => {
+): Promise<boolean> {
+  return guarded(state, async () => {
     await reparseDocument(documentId)
     await refreshDocuments(state)
   })
@@ -138,15 +148,15 @@ export async function reparse(
 export async function removeDocument(
   state: KnowledgeState,
   documentId: string,
-): Promise<void> {
-  await guarded(state, async () => {
+): Promise<boolean> {
+  return guarded(state, async () => {
     await deleteDocument(documentId)
     await refreshDocuments(state)
   })
 }
 
 /**
- * 跑一次检索。
+ * 跑一次检索。发出去的那句记在 `searched` 上，召回高亮按它算。
  * @param state 页面状态
  */
 export async function search(state: KnowledgeState): Promise<void> {
@@ -155,6 +165,7 @@ export async function search(state: KnowledgeState): Promise<void> {
   if (baseId === '' || wanted === '') return
   await guarded(state, async () => {
     state.isSearching.value = true
+    state.searched.value = wanted
     try {
       state.result.value = await searchBase(baseId, wanted)
     } finally {
