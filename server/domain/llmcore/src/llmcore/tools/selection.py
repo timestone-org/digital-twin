@@ -10,7 +10,7 @@
 
 from collections.abc import Iterable
 
-from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
+from llmcore.tools.shapes import ToolSpec
 
 
 def specs_named(

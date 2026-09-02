@@ -9,9 +9,9 @@
 影响不同，而那是另一期的决定。
 """
 
-from ai_assistant.apps.chat.services.planning.turn_types import TurnStep
-from ai_assistant.apps.chat.services.reflection.ports import Finding, Verifier
-from ai_assistant.apps.chat.services.reflection.verifiers import VERIFIERS
+from llmcore.reflection.ports import Finding, Verifier
+from llmcore.reflection.verifiers import VERIFIERS
+from llmcore.turn.types import TurnStep
 
 
 async def check_step(

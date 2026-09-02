@@ -11,7 +11,7 @@
 from dataclasses import dataclass
 from typing import Literal, Protocol, runtime_checkable
 
-from ai_assistant.apps.chat.services.planning.turn_types import TurnStep
+from llmcore.turn.types import TurnStep
 
 # 三档结论。⚠ 没有「不确定」这一档：检验器答不出来就不该 `applies`，
 # 摆一个恒为「不确定」的结论，等于让模型每一步都多读一句废话

@@ -8,7 +8,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from ai_assistant.llm import DeltaChannel
+from llmcore import DeltaChannel
 
 StepKind = Literal["model", "server_tool", "client_tool"]
 StepState = Literal["succeeded", "failed", "awaiting_client"]

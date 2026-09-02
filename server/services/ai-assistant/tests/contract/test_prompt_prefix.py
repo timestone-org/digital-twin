@@ -20,8 +20,8 @@ from ai_assistant.apps.chat.services.intent.select import specs_for
 from ai_assistant.apps.chat.services.memory import history, summarize
 from ai_assistant.apps.chat.services.memory.ports import Summary
 from ai_assistant.apps.chat.services.memory.prompt import build_system_prompt
-from ai_assistant.apps.chat.services.tools.shapes import openai_schema
 from ai_assistant.settings import HISTORY_DROP_STEP, MAX_HISTORY_MESSAGES
+from llmcore.tools.shapes import openai_schema
 
 SURFACE = "dashboard-editor"
 

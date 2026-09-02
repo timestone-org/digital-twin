@@ -6,8 +6,8 @@
 
 import json
 
-from ai_assistant.apps.chat.services.output import events
-from ai_assistant.apps.chat.services.planning.turn_types import (
+from llmcore.output import events
+from llmcore.turn.types import (
     ClientToolCall,
     TurnDelta,
     TurnOutcome,

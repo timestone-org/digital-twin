@@ -16,14 +16,14 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from ai_assistant.apps.chat.services.tools.ports import UnknownTool
-from ai_assistant.apps.chat.services.tools.shapes import (
+from ai_assistant.upstream import KnowledgeClient
+from llmcore.tools.ports import UnknownTool
+from llmcore.tools.shapes import (
     ToolSpec,
     integer_schema,
     object_schema,
     string_schema,
 )
-from ai_assistant.upstream import KnowledgeClient
 
 ToolHandler = Callable[[dict[str, Any]], Awaitable[Any]]
 

@@ -34,16 +34,6 @@ from ai_assistant.apps.chat.services.memory.ports import Summarizer, Summary
 from ai_assistant.apps.chat.services.memory.prompt import build_system_prompt
 from ai_assistant.apps.chat.services.perception import vision
 from ai_assistant.apps.chat.services.planning import plan as plan_service
-from ai_assistant.apps.chat.services.planning.turn import (
-    ServerToolRunner,
-    TurnDeps,
-    TurnEvent,
-    stream_turn,
-)
-from ai_assistant.apps.chat.services.planning.turn_types import (
-    TurnOutcome,
-    TurnStep,
-)
 from ai_assistant.apps.chat.services.tools.providers.mcp import (
     PROVIDER as MCP_PROVIDER,
 )
@@ -51,7 +41,6 @@ from ai_assistant.apps.chat.services.tools.registry import (
     ProviderDeps,
     build_registry,
 )
-from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
 from ai_assistant.container import Container
 from ai_assistant.llm import (
     DEFAULT_PROFILE,
@@ -62,6 +51,17 @@ from ai_assistant.llm import (
 )
 from ai_assistant.settings import MAX_HISTORY_MESSAGES
 from lib.logging import get_logger
+from llmcore.tools.shapes import ToolSpec
+from llmcore.turn.loop import (
+    ServerToolRunner,
+    TurnDeps,
+    TurnEvent,
+    stream_turn,
+)
+from llmcore.turn.types import (
+    TurnOutcome,
+    TurnStep,
+)
 
 _logger = get_logger("assistant.advance")
 

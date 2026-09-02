@@ -8,8 +8,8 @@
 
 from dataclasses import dataclass
 
-from ai_assistant.apps.chat.services.planning.turn_types import TurnStep
-from ai_assistant.apps.chat.services.reflection.ports import Finding
+from llmcore.reflection.ports import Finding
+from llmcore.turn.types import TurnStep
 
 # 步骤没带原因时的兜底话术。⚠ 不能编一句「执行失败」了事：模型据它决定要不要
 # 重做这一步，而一句没有信息量的话会让它原样再试一次

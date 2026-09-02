@@ -14,20 +14,20 @@ import pytest
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
-from ai_assistant.apps.chat.services.planning.turn import (
+from ai_assistant.llm import GuardedModel
+from ai_assistant.llm.ports import ModelChoice
+from lib.resilience import CircuitBreaker
+from llmcore.tools.shapes import ToolSpec
+from llmcore.turn.loop import (
     TurnDeps,
     run_turn,
     stream_turn,
 )
-from ai_assistant.apps.chat.services.planning.turn_types import (
+from llmcore.turn.types import (
     TurnDelta,
     TurnOutcome,
     TurnStep,
 )
-from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
-from ai_assistant.llm import GuardedModel
-from ai_assistant.llm.ports import ModelChoice
-from lib.resilience import CircuitBreaker
 from unit.llm_fakes import ScriptedChat, tool_call
 
 SERVER_TOOL = ToolSpec(

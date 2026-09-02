@@ -4,7 +4,7 @@
 不建 planner/executor 双层（ADR-0024）——留一个策略接口在这里，等于邀请下一个人
 去实现那条已经被否决的路，而它与客户端驱动的回合边界正交性极差。
 
-真要重开那条路时，改的是 ADR 与 `planning/graph.py`，不是往这里插一个实现。
+真要重开那条路时，改的是 ADR 与 `llmcore/turn/loop.py`，不是往这里插一个实现。
 """
 
 from dataclasses import dataclass

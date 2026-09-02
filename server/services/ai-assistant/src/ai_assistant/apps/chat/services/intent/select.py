@@ -18,12 +18,12 @@
 
 from collections.abc import Sequence
 
-from ai_assistant.apps.chat.services.intent.ports import Allowed, TurnContext
 from ai_assistant.apps.chat.services.intent.registry import narrow_all
-from ai_assistant.apps.chat.services.tools.selection import specs_named
-from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
 from ai_assistant.apps.chat.services.tools.specs import TOOL_SPECS
 from ai_assistant.apps.chat.skills import skills_for
+from llmcore.intent.ports import Allowed, TurnContext
+from llmcore.tools.selection import specs_named
+from llmcore.tools.shapes import ToolSpec
 
 # 哪个工作面都有的服务端工具：拉技能正文、写执行计划
 CORE_SERVER_TOOLS = ("skills.load", "plan.write")

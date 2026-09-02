@@ -10,11 +10,6 @@ from typing import Any
 
 import pytest
 
-from ai_assistant.apps.chat.services.tools.ports import (
-    RunsElsewhere,
-    ToolProvider,
-    UnknownTool,
-)
 from ai_assistant.apps.chat.services.tools.providers.client import ClientTools
 from ai_assistant.apps.chat.services.tools.providers.client_specs import (
     core,
@@ -32,14 +27,18 @@ from ai_assistant.apps.chat.services.tools.providers.server_specs import (
     SERVER_SPECS,
 )
 from ai_assistant.apps.chat.services.tools.registry import (
-    DuplicateTool,
     ProviderDeps,
     all_specs,
     build_registry,
-    registry_of,
 )
-from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
 from ai_assistant.apps.chat.services.tools.specs import TOOL_SPECS
+from llmcore.tools.ports import (
+    RunsElsewhere,
+    ToolProvider,
+    UnknownTool,
+)
+from llmcore.tools.registry import DuplicateTool, registry_of
+from llmcore.tools.shapes import ToolSpec
 
 
 class _Clashing:

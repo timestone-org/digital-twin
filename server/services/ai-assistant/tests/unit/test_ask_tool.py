@@ -8,8 +8,8 @@
 
 from typing import Any
 
-from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
 from ai_assistant.apps.chat.services.tools.specs import spec_of
+from llmcore.tools.shapes import ToolSpec
 
 ASK = "user.ask"
 

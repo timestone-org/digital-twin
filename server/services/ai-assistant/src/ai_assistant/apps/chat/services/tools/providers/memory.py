@@ -17,14 +17,14 @@ from ai_assistant.apps.chat.services.memory.ports import (
     Knowledge,
     LongTermStore,
 )
-from ai_assistant.apps.chat.services.tools.ports import UnknownTool
-from ai_assistant.apps.chat.services.tools.shapes import (
+from lib.auth.edge_headers import HEADER_USER_ID
+from llmcore.tools.ports import UnknownTool
+from llmcore.tools.shapes import (
     ToolSpec,
     integer_schema,
     object_schema,
     string_schema,
 )
-from lib.auth.edge_headers import HEADER_USER_ID
 
 # 一个工具的实现：收一袋参数，给一份结果
 ToolHandler = Callable[[dict[str, Any]], Awaitable[Any]]

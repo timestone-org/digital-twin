@@ -7,7 +7,7 @@
 **整屏的底**，每个节点自己的那一段盖在它上面。
 """
 
-from ai_assistant.apps.chat.services.tools.shapes import (
+from llmcore.tools.shapes import (
     ToolSpec,
     object_schema,
 )

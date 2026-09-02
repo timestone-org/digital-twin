@@ -10,9 +10,9 @@
 import json
 from typing import Any
 
-from ai_assistant.apps.chat.services.output import payloads, step_preview
-from ai_assistant.apps.chat.services.output.ports import EventSpec
-from ai_assistant.apps.chat.services.planning.turn_types import (
+from llmcore.output import payloads, step_preview
+from llmcore.output.ports import EventSpec
+from llmcore.turn.types import (
     TurnDelta,
     TurnOutcome,
     TurnStep,

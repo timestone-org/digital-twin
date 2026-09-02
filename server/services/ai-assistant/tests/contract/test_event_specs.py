@@ -11,10 +11,10 @@ from typing import Any
 
 import pytest
 
-from ai_assistant.apps.chat.services.output import events
-from ai_assistant.apps.chat.services.output.events import EVENT_SPECS
-from ai_assistant.apps.chat.services.output.ports import EventSpec
-from ai_assistant.apps.chat.services.planning.turn_types import (
+from llmcore.output import events
+from llmcore.output.events import EVENT_SPECS
+from llmcore.output.ports import EventSpec
+from llmcore.turn.types import (
     ClientToolCall,
     TurnDelta,
     TurnOutcome,

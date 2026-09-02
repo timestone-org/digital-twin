@@ -34,26 +34,33 @@ from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
-from ai_assistant.apps.chat.services.planning.turn_types import (
+from lib.logging import get_logger
+from llmcore import (
+    DeltaChannel,
+    DeltaSink,
+    ModelChoice,
+)
+from llmcore.tools.shapes import (
+    ToolSpec,
+    openai_schema,
+)
+from llmcore.turn.ports import Responder
+from llmcore.turn.types import (
     ClientToolCall,
     TurnDelta,
     TurnOutcome,
     TurnStep,
 )
-from ai_assistant.apps.chat.services.tools.shapes import (
-    ToolSpec,
-    openai_schema,
-)
-from ai_assistant.llm import (
-    DeltaChannel,
-    DeltaSink,
-    GuardedModel,
-    ModelChoice,
-)
-from ai_assistant.settings import MAX_STEPS_PER_TURN, MAX_TOOL_RESULT_CHARS
-from lib.logging import get_logger
 
-_logger = get_logger("assistant.turn")
+# 一个回合最多走几步。⚠ 24 是助手上跑出来的经验值：够一次「查—改—核对」的
+# 完整来回，又不至于让模型与工具互相喂到把上下文填满
+DEFAULT_MAX_STEPS = 24
+# 单个工具产出的字数上限。⚠ 不设上限的话，一次超大结果能把整个上下文挤掉
+DEFAULT_MAX_TOOL_RESULT_CHARS = 20_000
+
+# ⚠ 记作 `chat.turn` 而不是 `assistant.turn`：这一份被两个服务共用，写死某一家
+# 的名字会让另一家的日志谎报出处。哪个服务发的由日志信封里的 `service` 字段答
+_logger = get_logger("chat.turn")
 
 _THINK = "think"
 _USE_TOOLS = "use_tools"
@@ -97,7 +104,7 @@ class ServerToolRunner(Protocol):
 class TurnDeps:
     """跑一个回合要的那几样。"""
 
-    model: GuardedModel
+    model: Responder
     specs: tuple[ToolSpec, ...]
     run_tool: ServerToolRunner
     # 这一轮用哪一路模型、哪一档。⚠ 每一轮现取而不是造图时定死：同一个会话
@@ -106,6 +113,11 @@ class TurnDeps:
     # 模型逐字吐出来的东西交给谁。⚠ 不给 = 不走流式：`run_turn` 那条路不需要
     # 增量，而流式会让每次作答多几百次回调
     on_delta: DeltaSink | None = None
+    # 一个回合最多走几步。⚠ 没有上限时，模型与工具可以互相喂到把整个上下文
+    # 填满，而每一步都在花钱
+    max_steps: int = DEFAULT_MAX_STEPS
+    # 单个工具产出的字数上限，超了截断并说出来（见 `_clamped`）
+    max_tool_result_chars: int = DEFAULT_MAX_TOOL_RESULT_CHARS
 
 
 async def run_turn(deps: TurnDeps, messages: list[BaseMessage]) -> TurnOutcome:
@@ -115,7 +127,7 @@ async def run_turn(deps: TurnDeps, messages: list[BaseMessage]) -> TurnOutcome:
     """
     graph = _build_graph(deps)
     seed: TurnState = {"messages": messages, "steps": [], "pending": ()}
-    final = await graph.ainvoke(seed, {"recursion_limit": MAX_STEPS_PER_TURN})
+    final = await graph.ainvoke(seed, {"recursion_limit": deps.max_steps})
     return _outcome(final, len(messages))
 
 
@@ -201,7 +213,7 @@ async def _walk(
     seen = 0
     latest: dict[str, Any] = {}
     async for state in graph.astream(  # type: ignore[reportUnknownMemberType]  # 理由：见文件头
-        seed, {"recursion_limit": MAX_STEPS_PER_TURN}, stream_mode="values"
+        seed, {"recursion_limit": deps.max_steps}, stream_mode="values"
     ):
         latest = dict(state)
         steps = list(latest.get("steps") or [])
@@ -287,7 +299,9 @@ def _tool_step(
         for call in asked:
             if call.name in client_names:
                 continue
-            message, step = await _run_one(deps.run_tool, call)
+            message, step = await _run_one(
+                deps.run_tool, call, deps.max_tool_result_chars
+            )
             outputs.append(message)
             steps.append(step)
         # ⚠ 不回 `pending`：上一步定下来的待办要原样留着
@@ -297,11 +311,11 @@ def _tool_step(
 
 
 async def _run_one(
-    run_tool: ServerToolRunner, call: ClientToolCall
+    run_tool: ServerToolRunner, call: ClientToolCall, max_chars: int
 ) -> tuple[ToolMessage, TurnStep]:
     """跑一个服务端工具，成功失败都产出一条工具消息。
 
-    Args: run_tool, call。
+    Args: run_tool, call, max_chars。
     """
     try:
         result = await run_tool(call.name, call.arguments)
@@ -321,7 +335,9 @@ async def _run_one(
                 error=reason,
             ),
         )
-    body = _clamped(json.dumps(result, ensure_ascii=False, default=str))
+    body = _clamped(
+        json.dumps(result, ensure_ascii=False, default=str), max_chars
+    )
     return (
         ToolMessage(content=body, tool_call_id=call.call_id),
         TurnStep(
@@ -337,17 +353,17 @@ async def _run_one(
     )
 
 
-def _clamped(body: str) -> str:
+def _clamped(body: str, max_chars: int) -> str:
     """把工具产出钳在上限内，截断要**说出来**。
 
-    ⚠ 不设上限的话，一次超大结果能把整个上下文挤掉，被挤走的正是工作面
-    快照与技能正文；静默截断则会让模型把半份结果当成全部。
+    ⚠ 不设上限的话，一次超大结果能把整个上下文挤掉，被挤走的正是常驻提示词
+    与技能正文；静默截断则会让模型把半份结果当成全部。
 
-    Args: body。
+    Args: body, max_chars。
     """
-    if len(body) <= MAX_TOOL_RESULT_CHARS:
+    if len(body) <= max_chars:
         return body
-    kept = body[:MAX_TOOL_RESULT_CHARS]
+    kept = body[:max_chars]
     tail = f"……（产出太大已截断，共 {len(body)} 字。要看后面请缩小范围再调）"
     return f"{kept}\n{tail}"
 

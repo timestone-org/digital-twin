@@ -7,7 +7,6 @@
 
 import pytest
 
-from ai_assistant.apps.chat.services.planning.turn_types import TurnStep
 from ai_assistant.apps.chat.services.reflection import (
     VERIFIERS,
     ToolFailureVerifier,
@@ -15,6 +14,7 @@ from ai_assistant.apps.chat.services.reflection import (
     must_propose_only,
     undo_model_of,
 )
+from llmcore.turn.types import TurnStep
 
 
 def _step(state: str, error: str | None = None) -> TurnStep:

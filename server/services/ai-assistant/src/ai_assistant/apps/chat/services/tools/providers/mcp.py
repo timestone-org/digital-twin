@@ -21,9 +21,9 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from ai_assistant.apps.chat.services.tools.ports import UnknownTool
-from ai_assistant.apps.chat.services.tools.shapes import ToolSpec
 from ai_assistant.upstream.mcp import McpCatalog, McpToolInfo
+from llmcore.tools.ports import UnknownTool
+from llmcore.tools.shapes import ToolSpec
 
 # 规范名的前缀段
 PREFIX = "mcp"

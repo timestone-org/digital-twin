@@ -11,8 +11,8 @@
 
 from dataclasses import dataclass
 
-from ai_assistant.apps.chat.services.intent.ports import Allowed, TurnContext
 from ai_assistant.apps.chat.skills import find_skill
+from llmcore.intent.ports import Allowed, TurnContext
 
 
 @dataclass(frozen=True)
