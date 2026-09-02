@@ -20,6 +20,7 @@ from platform_server.apps.modeling.deps import (
     require,
 )
 from platform_server.apps.modeling.schemas import (
+    GraphCheckIn,
     GraphCheckOut,
     PipelineCreateIn,
     PipelineOut,
@@ -153,13 +154,24 @@ async def delete_pipeline(
     summary="校验流水线",
 )
 async def validate_pipeline(
-    pipeline_id: uuid.UUID, session: SessionDep, _write: ManageDep
+    pipeline_id: uuid.UUID,
+    session: SessionDep,
+    _write: ManageDep,
+    payload: GraphCheckIn | None = None,
 ) -> ApiResponse[GraphCheckOut]:
     """把图的问题一次列全。与保存、导入、运行前用的是同一份实现。
 
-    Args: pipeline_id, session, _write。
+    ⚠ 校验的是**请求体里那张图**（画布上还没保存的那份）；整个请求体留空才回退
+    到库里那份。
+    Args: pipeline_id, session, _write, payload。
     """
-    return ok(await pipeline_service.check_pipeline(session, pipeline_id))
+    return ok(
+        await pipeline_service.check_pipeline(
+            session,
+            pipeline_id,
+            graph=None if payload is None else payload.graph,
+        )
+    )
 
 
 @router.post(

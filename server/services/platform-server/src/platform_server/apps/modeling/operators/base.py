@@ -126,14 +126,18 @@ def column_field(
 
 
 def table_field(*, title: str, description: str = "") -> Any:
-    """台账引用字段——schema 上带 `x-dt-widget=table`。
+    """台账引用字段——schema 上带 `x-dt-widget=table`，且不许是空串。
 
     前端据此渲染台账下拉而不是让用户手打编码：打错要等运行时取数才报
     「找不到台账」。
+    ⚠ `min_length=1` 不是装饰：光靠 `...` 的话空串是合法的 `str`，一个刚拖进来
+    还没选台账的取数节点于是**整份图校验一句话都不说**，要跑到取数那一步才报
+    「台账不存在」——而那时整次运行已经失败、下游节点全部 skipped。
     Args: title, description。
     """
     return Field(
         ...,
+        min_length=1,
         title=title,
         description=description,
         json_schema_extra={"x-dt-widget": "table"},

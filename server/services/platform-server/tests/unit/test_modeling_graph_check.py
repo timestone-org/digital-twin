@@ -33,9 +33,23 @@ def test_an_unknown_operator_is_rejected() -> None:
 
 
 def test_missing_required_config_is_reported_in_chinese() -> None:
-    """必填参数缺失报的是「是必填的」，不是 pydantic 的英文。"""
+    """必填参数缺失报的是「是必填的」，不是 pydantic 的英文。
+
+    ⚠ 点名的是**标题**而不是键名：界面上那一栏写的是「目标列」，报的要是
+    `target_column`，用户在参数面板上找不到是哪一项。
+    """
     graph = PipelineGraph(nodes=[node("p", "split_dataset")])
-    assert "参数「target_column」是必填的" in messages(graph)
+    assert "参数「目标列」是必填的" in messages(graph)
+
+
+def test_a_source_with_no_table_picked_is_caught_at_save_time() -> None:
+    """取数节点没选台账在保存期就报，不必等运行到那一步才报「台账不存在」。
+
+    ⚠ 空串是合法的 `str`：不加长度下限的话这一整张图校验全绿，跑起来却整次失败、
+    下游全部 skipped，而报错只有「台账不存在」四个字。
+    """
+    graph = PipelineGraph(nodes=[node("s", "ledger_source", table_code="")])
+    assert "参数「数据台账」不能留空" in messages(graph)
 
 
 def test_an_unknown_config_key_is_rejected() -> None:
@@ -51,7 +65,7 @@ def test_out_of_range_config_is_reported() -> None:
     graph = PipelineGraph(
         nodes=[node("p", "split_dataset", target_column="能耗", test_ratio=9.0)]
     )
-    assert "参数「test_ratio」太大了" in messages(graph)
+    assert "参数「测试集比例」太大了" in messages(graph)
 
 
 def test_contract_mismatch_is_rejected() -> None:
@@ -139,7 +153,32 @@ def test_a_column_typo_is_caught_at_save_time() -> None:
     """列名打错在**保存期**就报，不必等运行时取完数才知道。"""
     graph = linear_graph()
     graph.nodes[1].config = {"columns": ["没有这一列"]}
-    assert "上游没有列「没有这一列」" in messages(graph)
+    assert (
+        "参数「处理哪些列」里的列「没有这一列」上游没有，"
+        "上游现有：温度、能耗、负荷" in messages(graph)
+    )
+
+
+def test_a_narrowed_source_names_the_downstream_parameter() -> None:
+    """取数把列选窄之后，抱怨要落在**下游那个参数**上并说出上游还剩哪几列。
+
+    ⚠ 这条对应一次真实投诉：报错只说「上游没有列 F1」时，用户读成「取数必须把
+    列选全」，于是每次都全选——而真相是下游还留着窄之前勾的那一列。
+    """
+    graph = linear_graph()
+    graph.nodes[0].config["columns"] = ["负荷", "能耗"]
+    graph.nodes[1].config = {"columns": ["温度", "负荷"]}
+    assert messages(graph) == [
+        "参数「处理哪些列」里的列「温度」上游没有，上游现有：能耗、负荷"
+    ]
+
+
+def test_a_narrowed_source_alone_is_valid() -> None:
+    """只在取数里挑几列、下游不点名列，是完全合法的一张图。"""
+    graph = linear_graph()
+    graph.nodes[0].config["columns"] = ["负荷", "能耗"]
+    graph.nodes[3].config = {"target_column": "能耗"}
+    assert check_graph(graph) == []
 
 
 def test_column_checks_are_skipped_when_the_source_lists_no_columns() -> None:

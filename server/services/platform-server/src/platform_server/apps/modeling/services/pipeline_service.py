@@ -132,13 +132,20 @@ async def delete_pipeline(
 
 
 async def check_pipeline(
-    session: AsyncSession, pipeline_id: uuid.UUID
+    session: AsyncSession,
+    pipeline_id: uuid.UUID,
+    *,
+    graph: PipelineGraph | None = None,
 ) -> GraphCheckOut:
-    """校验存下来的那张图。与保存、导入、运行前用的是同一份实现。
+    """校验一张图。与保存、导入、运行前用的是同一份实现。
 
-    Args: session, pipeline_id。
+    ⚠ 给了 `graph` 就校验它、不给才回退到库里那份：画布上那份还没保存，只校验
+    库里那份的话，用户改完一条再按校验，看到的仍是上一次保存时的问题。
+    Args: session, pipeline_id, graph。
     """
     row = await require_pipeline(session, pipeline_id)
+    if graph is not None:
+        return check_result(graph)
     return check_result(presenters.graph_of(row.graph_json))
 
 

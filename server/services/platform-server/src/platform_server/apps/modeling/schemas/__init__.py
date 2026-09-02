@@ -28,6 +28,7 @@ from platform_server.apps.modeling.schemas.model import (
 )
 from platform_server.apps.modeling.schemas.operator import OperatorOut, PortOut
 from platform_server.apps.modeling.schemas.pipeline import (
+    GraphCheckIn,
     GraphCheckOut,
     GraphIssueOut,
     PipelineCreateIn,
@@ -45,6 +46,7 @@ from platform_server.apps.modeling.schemas.run import (
 
 __all__ = [
     "GRAPH_FORMAT_VERSION",
+    "GraphCheckIn",
     "GraphCheckOut",
     "GraphEdge",
     "GraphIssueOut",
