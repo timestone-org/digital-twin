@@ -144,6 +144,7 @@ const SHAPES: Record<string, Record<string, true>> = {
 
   LocatorOut: {
     page: true,
+    page_end: true,
     sheet: true,
     row: true,
     path: true,

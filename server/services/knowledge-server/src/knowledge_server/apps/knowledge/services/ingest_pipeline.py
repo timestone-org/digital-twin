@@ -20,25 +20,30 @@ CPU 且阻塞的，扔进**进程池**——放进事件循环会把整条消费
 冻住，而现象是「服务好好的，队列不动了」；外部解析服务那一路是**网络 IO**，
 必须带自己的超时，且**不自动重试**（重试只由人按「重新解析」那一层负责）。
 
-⚠ 没接嵌入档时**照样走完到 ready**：文档解析了、切块了、落库了，只是没有向量。
-检索那一侧会如实回答「这个库还没建索引」——判成 failed 的话，用户会以为是这
-份文档有问题。
+⚠ **嵌入是这条链路的必经段**，没接就判 failed 并说清楚缺什么（ADR-0045）：
+检索只有向量与关键词两路，而其中一路缺席的库在界面上与「建好了」长得一模一样，
+只是永远召不回意思相近的那几段。
+
+⚠ 判「接没接」之前先刷一次模型目录：worker 进程里没有别的地方刷它，而
+`can_embed` 问的是手上那份快照——不刷的话它恒假，于是每一份文档都跳过嵌入
+走到 ready，而界面上的能力面（api 进程刷过）说的是「已接」。
 """
 
 import asyncio
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from concurrent.futures import Executor
-from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from knowledge_server.apps.knowledge import crud
+from knowledge_server.apps.knowledge.services import ingest_figures
 from knowledge_server.apps.knowledge.services.chunking import (
     Chunk,
+    ChunkLimits,
     chunker_for,
+    limits_for,
+    oversized,
 )
 from knowledge_server.apps.knowledge.services.embedding import Embedder
 from knowledge_server.apps.knowledge.services.indexing import (
@@ -59,16 +64,29 @@ from knowledge_server.apps.knowledge.services.sources import (
     UnknownSource,
     source_for,
 )
+from knowledge_server.settings import (
+    DEFAULT_CHUNK_MIN_TOKENS,
+    DEFAULT_CHUNK_OVERLAP_CHARS,
+)
 from lib.logging import get_logger
+from lib.objectstore import ObjectStore
 
 _logger = get_logger("knowledge.ingest")
 
 READY = "ready"
 FAILED = "failed"
 
-# 开一个新事务的口子。⚠ 收工厂而不是收一个会话：每一段要自己一个事务，
-# 而一个会话给不出那件事
-Sessions = Callable[[], AbstractAsyncContextManager[AsyncSession]]
+# 开一个新事务的口子。⚠ 定义在 `ingest_figures` 里而不是这里：那一份不 import
+# 这一份，所以由它持有别名不会成环
+Sessions = ingest_figures.Sessions
+
+# 让模型目录刷新一次的口子。⚠ 收成一个口子而不是直接认 `CatalogCache`：
+# 管线在 apps 层，认了它就把领域逻辑钉死在某一路目录实现上
+Refresh = Callable[[], Awaitable[object]]
+
+
+async def _no_refresh() -> None:
+    """不刷目录。用例里那些自己塞了假嵌入档的用不着它。"""
 
 
 class IngestFailed(RuntimeError):
@@ -91,8 +109,18 @@ class IngestDeps:
     embedder: Embedder
     indexes: IndexPair
     pool: Executor
+    # 图的字节落在这。⚠ 缺省 None 是给用例用的：不接对象存储时图整个跳过，
+    # 而那与「这份文档没有图」在库里长得一样
+    store: ObjectStore | None
     parse_timeout_s: float
     batch_size: int = 16
+    # 切块的下限与重叠。⚠ 上限不在这里：它由嵌入档的窗口折算而来
+    # （`limits_for`），给它单独一格就等于允许两者漂开
+    chunk_min_tokens: int = DEFAULT_CHUNK_MIN_TOKENS
+    chunk_overlap_chars: int = DEFAULT_CHUNK_OVERLAP_CHARS
+    # 判「接没接嵌入档」之前先让目录刷新一次。⚠ 缺省不刷是给用例用的：
+    # 生产的 worker 必须把它接上，理由见模块头
+    refresh: Refresh = _no_refresh
     # 接了哪几路外部解析后端。⚠ 一期恒空——没接就是诚实缺席（ADR-0043）
     external_parsers: tuple[ExternalParserBackend, ...] = ()
     # 外部那一路一次调用最多等多久
@@ -247,12 +275,39 @@ async def _indexed(
             )
 
 
-def _chunked(document: ParsedDocument, chunker: str) -> tuple[Chunk, ...]:
-    """按库上配的切法切块。
+def _limits(deps: IngestDeps) -> ChunkLimits:
+    """这一次的切块两条边，上限由嵌入档的窗口折算而来。
 
-    Args: document, chunker。
+    Args: deps。
     """
-    return chunker_for(chunker).split(document)
+    return limits_for(
+        deps.embedder.max_input_tokens,
+        deps.chunk_min_tokens,
+        deps.chunk_overlap_chars,
+    )
+
+
+def _chunked(
+    document: ParsedDocument, chunker: str, limits: ChunkLimits
+) -> tuple[Chunk, ...]:
+    """按库上配的切法切块，切完当场验一遍有没有超窗的。
+
+    ⚠ 验这一道不是多余：超窗的块**不会有任何一处报错**——嵌入端点把超出的那
+    一截静默丢掉，文档照样走到 ready，而那一块的后半段从此对向量检索不存在。
+    判 failed 而不是凑合收下，与「算不出向量就判 failed」同源（ADR-0045）。
+
+    Args: document, chunker, limits。
+    """
+    made = chunker_for(chunker).split(document, limits)
+    over = oversized(made, limits)
+    if over:
+        raise IngestFailed(
+            f"切出来的 {len(over)} 块超过了嵌入档一次吃得下的长度"
+            f"（上限 {limits.max_tokens}，最长的一块 "
+            f"{max(one.token_count for one in over)}）。"
+            "多半是 KNOWLEDGE_EMBEDDING_MAX_INPUT_TOKENS 配得比模型的窗口大"
+        )
+    return made
 
 
 async def _claimed(
@@ -278,6 +333,23 @@ async def _claimed(
         )
 
 
+async def _embeddable(deps: IngestDeps) -> None:
+    """先刷一次目录，再确认这套部署此刻算得出向量；算不出就别往下走。
+
+    ⚠ 排在取原件之前：一份 200 MB 的文档解完再说「这套部署没配嵌入模型」，
+    是把一次必然的失败拖到最贵的那一步之后。
+
+    Args: deps。
+    """
+    await deps.refresh()
+    if deps.embedder.can_embed:
+        return
+    raise IngestFailed(
+        "这套部署此刻算不出向量：模型目录里没有给「知识库嵌入」这个用途"
+        "分配可用的模型。配好之后按「重新解析」"
+    )
+
+
 async def _staged(
     sessions: Sessions, document_id: uuid.UUID, status: str
 ) -> None:
@@ -287,6 +359,57 @@ async def _staged(
     """
     async with sessions() as session:
         await crud.document.mark_status(session, document_id, status)
+
+
+async def _figures_of(
+    sessions: Sessions,
+    deps: IngestDeps,
+    document: _Pending,
+    parsed: ParsedDocument,
+) -> dict[str, uuid.UUID]:
+    """存图那一段，把它的失败翻成「这份文档摄不进来」。
+
+    ⚠ **不新增摄取状态**：状态是线上契约（CHECK 与前端文案都按那几档写的），
+    而写图本来就是解析产出的一部分，算在 `parsing` 这一段里。
+
+    ⚠ 排在切块**之前**：切块要把「这一块引了哪几张图」记下来，而那需要图 id。
+
+    Args: sessions, deps, document, parsed。
+    """
+    if deps.store is None:
+        return {}
+    try:
+        return await ingest_figures.store_figures(
+            sessions,
+            deps.store,
+            (document.base_id, document.document_id),
+            parsed,
+        )
+    except ingest_figures.FigureStoreFailed as error:
+        raise IngestFailed(str(error)) from error
+
+
+async def _saved_chunks(
+    sessions: Sessions,
+    document: _Pending,
+    chunks: tuple[Chunk, ...],
+    figure_ids: dict[str, uuid.UUID],
+) -> list[uuid.UUID]:
+    """整体替换块行，并重建块—图联结行。
+
+    ⚠ 两件事必须在**同一个事务**里：换块行会级联删掉旧联结行，中间断开的话
+    引用面上会有一瞬间「一张图都没有」。
+
+    Args: sessions, document, chunks, figure_ids。
+    """
+    async with sessions() as session:
+        chunk_ids = await crud.chunk.replace_chunks(
+            session, document.base_id, document.document_id, chunks
+        )
+        await crud.figure.link_figures(
+            session, ingest_figures.links_of(chunks, chunk_ids, figure_ids)
+        )
+    return chunk_ids
 
 
 async def ingest(
@@ -307,15 +430,21 @@ async def ingest(
             document_id=str(document_id),
         )
         return "skipped"
+    await _embeddable(deps)
     raw = await _raw_of(sessions, deps, document)
     parsed = await _parsed(deps, raw)
     await _staged(sessions, document.document_id, "chunking")
-    chunks = _chunked(parsed, "")
-    async with sessions() as session:
-        chunk_ids = await crud.chunk.replace_chunks(
-            session, document.base_id, document.document_id, chunks
-        )
-    if deps.embedder.can_embed and chunks:
+    figure_ids = await _figures_of(sessions, deps, document, parsed)
+    chunks = _chunked(parsed, "", _limits(deps))
+    _logger.info(
+        "ingest_chunked",
+        "切块完成",
+        document_id=str(document.document_id),
+        chunks=len(chunks),
+        max_tokens=max((one.token_count for one in chunks), default=0),
+    )
+    chunk_ids = await _saved_chunks(sessions, document, chunks, figure_ids)
+    if chunks:
         await _staged(sessions, document.document_id, "embedding")
         await _indexed(
             sessions,

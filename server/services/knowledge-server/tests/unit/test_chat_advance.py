@@ -63,8 +63,24 @@ def test_the_prompt_is_the_first_message_and_never_varies() -> None:
 
 
 def test_the_prompt_demands_all_three_citation_parts() -> None:
-    """跨库的代价：角标必须指回库 / 文档 / 位置三样（ADR-0037 决策三）。"""
-    assert "哪个库 / 哪份文档 / 哪个位置" in SYSTEM_PROMPT
+    """跨库的代价：引用必须指回库 / 文档 / 位置三样（ADR-0037 决策三）。
+
+    ⚠ 这三样现在由**界面**按角标列出来，不再要求模型自己抄一份：抄的那份
+    又长又容易抄错。所以这里钉的是「提示词仍然承诺这三样」。
+    """
+    assert "哪个库 / 哪份文档 / 哪一页" in SYSTEM_PROMPT
+
+
+def test_the_prompt_makes_the_model_use_the_marker_it_was_given() -> None:
+    """⚠ 角标由服务端发：编号要跨多次检索连续，而模型只看得见这一次的回执。
+    让它自己编号的话，第二次检索会从 1 重新开始。"""
+    assert "不要自己编号" in SYSTEM_PROMPT
+
+
+def test_the_prompt_forbids_a_hand_written_reference_list() -> None:
+    """⚠ 界面已经按角标列了；再抄一遍只会长且容易抄错，而抄错的那一条
+    看起来与对的一模一样。"""
+    assert "不要在末尾自己抄一份" in SYSTEM_PROMPT
 
 
 def test_the_prompt_forbids_free_text_questions() -> None:

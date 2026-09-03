@@ -13,6 +13,9 @@ from dataclasses import dataclass, field
 import httpx
 from langchain_core.language_models import BaseChatModel
 
+from knowledge_server.apps.knowledge.services.assembly import (
+    external_parsers,
+)
 from knowledge_server.apps.knowledge.services.embedding import (
     Embedder,
     build_dynamic_embedder,
@@ -20,6 +23,9 @@ from knowledge_server.apps.knowledge.services.embedding import (
 from knowledge_server.apps.knowledge.services.llm import (
     Answerer,
     build_answerer,
+)
+from knowledge_server.apps.knowledge.services.parsing import (
+    ExternalParserBackend,
 )
 from knowledge_server.apps.knowledge.services.reranking import (
     Reranker,
@@ -32,7 +38,7 @@ from knowledge_server.apps.knowledge.services.sources import (
 )
 from knowledge_server.llm_adapters import AdapterDeps, CatalogChatAdapter
 from knowledge_server.llm_purposes import PURPOSE_EMBEDDING, PURPOSE_RERANK
-from knowledge_server.probe import IndexProbe
+from knowledge_server.schema import SchemaFacts
 from knowledge_server.settings import SERVICE_NAME, Settings
 from lib.cache import Cache
 from lib.db import Database, PoolProfile
@@ -75,6 +81,10 @@ class Container:
     stream: StreamLike
     # 接了哪几路知识来源。⚠ 顺序即界面上的先后
     sources: tuple[KnowledgeSource, ...]
+    # 接了哪几路外部解析后端（ADR-0043）。⚠ 装在容器上而不是各调用点各装一份：
+    # 能力面、上传校验与 worker 三处必须看到同一份，不然会出现「界面收 PDF 而
+    # worker 解不了」这种不对称，且两边单看都对
+    external_parsers: tuple[ExternalParserBackend, ...]
     # 嵌入那一路。⚠ 没接时 `can_embed` 为假而不是 `None`：调用方于是不必
     # 写「这一路在不在」的分支，而缺席由 `can_embed` 如实说出来
     embedder: Embedder
@@ -93,9 +103,9 @@ class Container:
     # 对话面用的带断路器的模型调用面。⚠ 这一路此刻装不出来时它抛
     # `ModelDisabled`，对话入口按 `answerer.can_answer` 先判一次再进回合
     responder: GuardedModel
-    # 启动时探测填进去。⚠ 可变对象，故不带 frozen——它是这份容器里唯一
-    # 「装配之后才知道」的东西
-    index: IndexProbe = field(default_factory=IndexProbe)
+    # 库上那几件启动之后才知道的事（向量列的维数）。⚠ 可变对象，故不带 frozen：
+    # 它是这份容器里唯一「装配之后才填得出来」的东西
+    schema: SchemaFacts = field(default_factory=SchemaFacts)
 
     def ingest_group(self) -> StreamGroup:
         """摄取队列的消费组身份。
@@ -176,11 +186,13 @@ def build_container(settings: Settings) -> Container:
         # ⚠ 这一份是**不带身份头**的：能力面报「接了哪几路来源」用得着它，
         # 而真要代表用户去拉数据时，api 侧会按请求另造一份带头的
         sources=build_sources(SourceDeps(store=store, platform=platform)),
+        external_parsers=external_parsers(settings),
         embedder=build_dynamic_embedder(
             DynamicEmbeddingAdapter(
                 resolve=lambda: _embedding_endpoint(settings, catalog),
                 refresh=catalog.refresh,
-            )
+            ),
+            settings.embedding_max_input_tokens,
         ),
         catalog=catalog,
         # ⚠ 断路器一个进程一份、跟着容器活，且 `:ask` 与对话面**共用**这一份：

@@ -11,11 +11,7 @@ from dataclasses import dataclass
 import pytest
 
 from knowledge_server.apps.knowledge.services.embedding import NullEmbedder
-from knowledge_server.apps.knowledge.services.indexing import (
-    BruteForceIndex,
-    IndexPair,
-    LikeKeywordIndex,
-)
+from knowledge_server.apps.knowledge.services.indexing import build_indexes
 from knowledge_server.apps.knowledge.services.ingest_pipeline import (
     IngestDeps,
     IngestFailed,
@@ -72,8 +68,9 @@ def _deps(
     return IngestDeps(
         sources=(),
         embedder=NullEmbedder(),
-        indexes=IndexPair(vector=BruteForceIndex(), keyword=LikeKeywordIndex()),
+        indexes=build_indexes(dimensions=4),
         pool=pool,
+        store=None,
         parse_timeout_s=30.0,
         external_parsers=external,
         external_parse_timeout_s=external_timeout_s,

@@ -1,23 +1,22 @@
-"""按配置与启动探测，装出这一次要用的索引与检索策略。
+"""按配置装出这一次要用的索引、外部解析后端与检索策略。
 
-⚠ 只有这一处做「走哪一档」的判定。api 侧与 worker 侧各判一遍的话，
-`/capabilities` 报的与实际写入/检索走的可以漂开——而那时账单与延迟是唯一的
-迹象（ADR-0034 决策四）。
+⚠ 只有这一处装。api 侧与 worker 侧各装一份的话，两边的维数、表名与「接了
+哪几路解析后端」可以漂开，而那时写进去查不出来、两边都不报错。
 """
 
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
-from knowledge_server.apps.knowledge.services.capability import (
-    keyword_choice,
-    vector_choice,
-)
 from knowledge_server.apps.knowledge.services.embedding import Embedder
 from knowledge_server.apps.knowledge.services.indexing import (
     IndexPair,
     build_indexes,
 )
 from knowledge_server.apps.knowledge.services.llm import Answerer
+from knowledge_server.apps.knowledge.services.parsing import (
+    ExternalParserBackend,
+    MineruBackend,
+)
 from knowledge_server.apps.knowledge.services.reranking import (
     NullReranker,
     Reranker,
@@ -27,18 +26,45 @@ from knowledge_server.apps.knowledge.services.retrieval import (
     RetrievalStrategy,
     build_strategies,
 )
-from knowledge_server.probe import IndexProbe
+from knowledge_server.schema import SchemaFacts
 from knowledge_server.settings import Settings
 
 
-def index_pair(settings: Settings, probe: IndexProbe) -> IndexPair:
+def index_pair(settings: Settings, facts: SchemaFacts) -> IndexPair:
     """这一次要用的两路索引。
 
-    Args: settings, probe。
+    ⚠ 维数以**库上那一列**为准，读不到才退回配置：配置说的是下一次建表会用
+    哪个数，而写入要比的是这张表现在是多少维。
+
+    Args: settings, facts。
     """
-    vector, _vector_reason = vector_choice(settings, probe)
-    keyword, _keyword_reason = keyword_choice(settings, probe)
-    return build_indexes(vector, keyword)
+    return build_indexes(facts.dimensions_or(settings.embedding_dimensions))
+
+
+def external_parsers(
+    settings: Settings,
+) -> tuple[ExternalParserBackend, ...]:
+    """这套部署接了哪几路外部解析后端（ADR-0043）。
+
+    ⚠ 没接就是**空元组，而空就是诚实缺席**：`/capabilities` 如实说没接，上传面
+    的 accept 名单里也就没有 `.pdf`。摆一个「看着能用、调下去报奇怪错」的占位
+    比缺席更糟。
+
+    ⚠ 只有这一处装：三个调用点（能力面、上传校验、worker）都从这里取同一份，
+    各装各的会让「界面收 PDF 而 worker 解不了」这种不对称成为可能。
+
+    Args: settings。
+    """
+    if not settings.mineru_enabled:
+        return ()
+    return (
+        MineruBackend(
+            base_url=settings.mineru_base_url,
+            lang=settings.mineru_lang,
+            formula_enabled=settings.mineru_formula_enabled,
+            table_enabled=settings.mineru_table_enabled,
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -51,7 +77,9 @@ class Lanes:
     """
 
     settings: Settings
-    probe: IndexProbe
+    # 库上那几件事实（向量列的维数）。⚠ 缺省是空的一份：不给的话按配置值算，
+    # 而那正是读不到库时的行为
+    facts: SchemaFacts
     embedder: Embedder
     answerer: Answerer
     # 重排那一路。⚠ 缺省是诚实缺席而不是 `None`：不给它的调用点拿到的是
@@ -70,7 +98,7 @@ class LanesSource(Protocol):
     def settings(self) -> Settings: ...
 
     @property
-    def index(self) -> IndexProbe: ...
+    def schema(self) -> SchemaFacts: ...
 
     @property
     def embedder(self) -> Embedder: ...
@@ -93,7 +121,7 @@ def lanes_of(source: LanesSource) -> Lanes:
     """
     return Lanes(
         settings=source.settings,
-        probe=source.index,
+        facts=source.schema,
         embedder=source.embedder,
         answerer=source.answerer,
         reranker=source.reranker,
@@ -107,7 +135,7 @@ def strategies(lanes: Lanes) -> tuple[RetrievalStrategy, ...]:
     """
     return build_strategies(
         RetrievalDeps(
-            indexes=index_pair(lanes.settings, lanes.probe),
+            indexes=index_pair(lanes.settings, lanes.facts),
             embedder=lanes.embedder,
             answerer=lanes.answerer,
             reranker=lanes.reranker,

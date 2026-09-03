@@ -3,8 +3,9 @@
 from knowledge_server.apps.knowledge.crud import (
     chunk,
     document,
+    figure,
     knowledge_base,
     source,
 )
 
-__all__ = ["chunk", "document", "knowledge_base", "source"]
+__all__ = ["chunk", "document", "figure", "knowledge_base", "source"]

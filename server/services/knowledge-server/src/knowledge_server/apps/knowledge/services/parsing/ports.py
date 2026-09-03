@@ -27,7 +27,9 @@ from typing import Literal, Protocol, runtime_checkable
 
 # 一个块是什么。⚠ 是闭合集合：切块层按它决定在哪里下刀，认不出的类型会被
 # 当成普通段落而丢掉层级信息
-BlockKind = Literal["heading", "paragraph", "table_row", "list_item", "caption"]
+BlockKind = Literal[
+    "heading", "paragraph", "table_row", "list_item", "caption", "figure"
+]
 
 BLOCK_KINDS: tuple[BlockKind, ...] = (
     "heading",
@@ -35,6 +37,7 @@ BLOCK_KINDS: tuple[BlockKind, ...] = (
     "table_row",
     "list_item",
     "caption",
+    "figure",
 )
 
 
@@ -50,8 +53,11 @@ class Locator:
     会让「第 3 行」在不同格式里指着完全不同的东西。
     """
 
-    # 页码 / 幻灯片序号，从 1 起
+    # 页码 / 幻灯片序号，从 1 起。一块横跨几页时这是**起页**
     page: int | None = None
+    # 止页。⚠ 与 `page` 不同才有意义：一块攒了好几页的内容时，只报起页的引用
+    # 会让人翻到第 4 页却找不到那句话——它在第 6 页。同页时留空
+    page_end: int | None = None
     # 工作表名
     sheet: str = ""
     # 表内行号，从 1 起
@@ -65,12 +71,18 @@ class Locator:
         if self.sheet:
             parts.append(self.sheet)
         if self.page is not None:
-            parts.append(f"第 {self.page} 页")
+            parts.append(f"第 {self._pages()} 页")
         if self.row is not None:
             parts.append(f"第 {self.row} 行")
         if self.path:
             parts.append(" > ".join(self.path))
         return " · ".join(parts)
+
+    def _pages(self) -> str:
+        """一页写「4」，跨页写「4–6」。"""
+        if self.page_end is None or self.page_end <= (self.page or 0):
+            return str(self.page)
+        return f"{self.page}–{self.page_end}"
 
 
 @dataclass(frozen=True)
@@ -84,6 +96,31 @@ class Block:
     # 而各开一格会让每个解析器都要决定另一格填什么
     level: int = 0
     locator: Locator = field(default_factory=Locator)
+    # `kind == "figure"` 的块指向 `ParsedDocument.figures` 里哪一张。
+    # ⚠ 别的 kind 一律空串：这一格一有值就意味着「这一块的正文里出现了那张
+    # 图」，而块与图的关系正是靠它连起来的
+    figure_ref: str = ""
+
+
+@dataclass(frozen=True)
+class Figure:
+    """解析出来的一张图（插图或表格截图）连它的字节。
+
+    ⚠ 字节跟着解析结果一起交出来，而不是让调用方拿 `ref` 再去问一次后端：
+    外部后端那一路是一次网络调用换一份产出，回头再问一次等于再解析一遍。
+
+    ⚠ `ref` 只在这一份产出内部有意义，不落库：落库的是内容哈希算出来的
+    对象键。后端换一路，`ref` 的形状就变了。
+    """
+
+    ref: str
+    content: bytes
+    media_type: str
+    kind: Literal["image", "table"] = "image"
+    page: int | None = None
+    caption: str = ""
+    # 版面框，归一化到 0–1000 的 x0/y0/x1/y1；拿不到就空着
+    bbox: tuple[int, int, int, int] | None = None
 
 
 @dataclass(frozen=True)
@@ -95,6 +132,9 @@ class ParsedDocument:
     # ⚠ 截断了**必须说出来**：悄悄截断的话，后面会把「我看到的就是全部」当成
     # 事实，然后对着半份手册下「这份文档里没有这一节」这种结论
     is_truncated: bool = False
+    # 解出来的图。⚠ 纯文本与 Markdown 那两路恒空，它们本来就没有图；docx
+    # 那一路按图**所在的那一段**给位置，不是拍平成文末一串
+    figures: tuple[Figure, ...] = ()
 
 
 @dataclass(frozen=True)

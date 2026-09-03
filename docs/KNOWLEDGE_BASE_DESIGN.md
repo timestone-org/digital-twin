@@ -105,10 +105,10 @@ AgenticRAG 的「agentic」落在**两侧**，各解决一半：
 | 层 | 扩展点 | Protocol | 一期实现 |
 |---|---|---|---|
 | `sources/` | 知识**从哪来** | `KnowledgeSource` | `UploadSource`、`PlatformSource` |
-| `parsing/` | 一份原件**由谁解、解成什么** | `ParserBackend` → `DocumentParser` / `ExternalParserBackend` | 本地：`TextParser`、`DocxParser`、`XlsxParser`、`PptxParser`；外部：**一期空着** |
-| `chunking/` | 怎么**切块** | `Chunker` | `HeadingChunker`、`FixedWindowChunker`、`RowChunker` |
+| `parsing/` | 一份原件**由谁解、解成什么** | `ParserBackend` → `DocumentParser` / `ExternalParserBackend` | 本地：`TextParser`、`DocxParser`、`XlsxParser`、`PptxParser`；外部：`MineruBackend` |
+| `chunking/` | 怎么**切块** | `Chunker` | `StructuralChunker`、`FixedWindowChunker`、`RowChunker` |
 | `embedding/` | 用哪一路**嵌入** | `Embedder` | `DomainEmbedder`（走 `server/domain/llm`）、`NullEmbedder` |
-| `indexing/` | 向量与关键词**存哪、怎么查** | `VectorIndex` / `KeywordIndex` | `PgVectorIndex` / `BruteForceIndex`；`TrgmKeywordIndex` / `LikeKeywordIndex` |
+| `indexing/` | 向量与关键词**存哪、怎么查** | `VectorIndex` / `KeywordIndex` | `PgVectorIndex`；`TrgmKeywordIndex`（各只有一个实现，ADR-0045） |
 | `retrieval/` | **检索策略** | `RetrievalStrategy` | `NaiveVector`、`Hybrid`、`Agentic` |
 | `reranking/` | 召回之后**怎么重排**（[ADR-0042](adr/0042-重排是第三种模型种类且方言可插拔.md)） | `Reranker` | `RemoteReranker`、`NullReranker` |
 
@@ -130,6 +130,35 @@ AgenticRAG 的「agentic」落在**两侧**，各解决一半：
 ⚠ 切块**只吃 `Block` 序列，不认原始格式**。这条缝让「加一种格式」与「改切块策略」
 彻底解耦：加 PDF 只是多一个解析器，`StructuralChunker` 一个字都不用改。
 
+### 2.1.1 切多大**由嵌入档的窗口说了算**，不是切块层的常量
+
+`Chunker.split(document, limits)` 收一份 `ChunkLimits`，它由
+`limits_for(embedder.max_input_tokens, …)` 折出来（留一成余量）。
+
+⚠ **嵌入端点对超出窗口的那一截静默截断、不报错。** 本部署实测：拿两段只有
+结尾不同的中文喂 `bge-large-zh-v1.5`，前缀 500 字时余弦 0.952，到 520 字
+**恰好等于 1**——两条向量逐位相同，结尾那句被整个丢掉了。而切块上限曾是写死的
+2000 字：库里那份报告 14 块有 7 块超窗，最长一块 2031 字里只有前 520 字进过
+向量，剩下 1500 字只剩字面那一路能命中。切块层定自己的常量，等于赌它比窗口
+窄，而赌输了没有任何一处报错。
+
+三条随之而来的规矩：
+
+- **单块本身超窗时在句读处断开**（`sentences.py`）。「只在块边界上下刀」这条
+  规矩对一个两千字的段落无能为力，而硬切出来的块从半句话开始，在向量空间里
+  几乎没有区分度。
+- **换了标题不一定断，还要攒够 `min_tokens`。** 只有一行标题的块又短又泛，与
+  任何查询都有中等相似度，专挤名次——那份报告里有 3 块是 25/29/32 字的光秃秃
+  标题行。攒过小节的块，标题路径取这几块的**公共祖先**：取其中任一节都会让
+  引用指向另一节，取祖先只是说得粗一点，从不指错，而每一节自己的标题行仍然
+  留在正文里。
+- **切完当场验一遍**（`oversized()`），有超窗的就把这份文档判 `failed` 并说清
+  是哪一格配错了。与「算不出向量就判 failed」同源（ADR-0045）：一份悄悄少了
+  四分之三的文档，与一份好文档在界面上长得一模一样。
+
+⚠ 换嵌入模型要跟着改 `KNOWLEDGE_EMBEDDING_MAX_INPUT_TOKENS`——窗口是模型的
+属性，而 OpenAI 兼容口径里**问不出来**。
+
 ### 2.2 解析层里还有一级扩展点：由**哪一路后端**去解（[ADR-0043](adr/0043-解析后端可插拔且外部解析服务留口.md)）
 
 外部解析服务（MinerU、PaddleOCR / PP-Structure 这一类）与本地解析库不是一个
@@ -140,7 +169,7 @@ AgenticRAG 的「agentic」落在**两侧**，各解决一半：
 | 跑在哪 | 本进程（由调用方扔进**进程池**） | 另一个进程 / 另一台带 GPU 的机器 |
 | 是什么活 | 阻塞的 CPU | 网络 IO，**每次调用必须有超时** |
 | 签名 | `def parse(raw)` | `async def parse_remote(raw, timeout_s)` |
-| 一期实现 | 四路 | **一个都没有** |
+| 实现 | 四路 | `MineruBackend`（PDF 与扫描件）|
 
 ⚠ **两个方法故意不同名。** 同名的话，把外部后端当本地的调用会拿到一个没
 `await` 的协程当 `ParsedDocument` 用，而那既不是类型错误也不是运行期异常——
@@ -170,24 +199,39 @@ JSON，翻成带 `locator` 的块序列这一步**在那一路后端的实现里
 | `.txt` / `.log` | 逐行成块，**任何记号都不当记号** | ⚠ 刻意不按 markdown 解：日志里的 `# 注意` 是内容不是标题，认了会把整份日志切成一棵假的标题树 |
 | `.html` | 剥标签取文本，`h1`–`h6` 成标题层级 | 不执行脚本、不跟外链、`script`/`style` 里的内容不当正文 |
 | `.json` | 摊成「路径 = 值」，深度有上限 | 解不动就退纯文本，不抛 |
-| `.docx` | 段落与表格**按文档序**穿（`iter_inner_content()`）、标题层级（认 `Heading N` 也认「标题 N」）、列表项、表格行（表头折进每一行、横向合并格折成一格）、超链接文字、文本框里的文字、每节的页眉页脚各一次 | 不取图片、不跑宏、不跟外部引用；**批注刻意不收**（审阅过程的对话，收进来会让检索答出还没定稿的说法）；脚注尾注与多级列表的真实层级（`w:numPr/w:ilvl`）**够不着**——python-docx 1.2 没有公开面 |
+| `.docx` | 段落与表格**按文档序**穿（`body.inner_content_elements`）、标题层级（认 `Heading N` 也认「标题 N」）、列表项、表格行（表头折进每一行、横向合并格折成一格）、超链接文字、文本框里的文字、每节的页眉页脚各一次、**嵌在段落里的图**（按它所在那一段定位，图注取紧挨着的下一段） | 不跑宏、不跟外部引用；**批注刻意不收**（审阅过程的对话，收进来会让检索答出还没定稿的说法）；脚注尾注与多级列表的真实层级（`w:numPr/w:ilvl`）**够不着**——python-docx 1.2 没有公开面 |
 | `.xlsx` / `.xlsm` | 一行一块，表头拼进每一行 | 只读值不读公式 |
 | `.pptx` | 一页一组块，页码进 `locator`，每页第一个文本框当标题 | 没有 `text_frame` 的形状跳过 |
 
 ⚠ **文本框收在正文之后且不带标题路径**：它是浮动对象，python-docx 没有公开面
 能把它定位到正文的哪一段，硬猜一个路径会让引用指错地方。
 
-### 2.4 一期不认 PDF——但它只是注册表里少一行
+### 2.4 PDF 走 MinerU 那一路（`parsing/mineru.py`）
 
-用户拍板一期只做 Office（docx/xlsx/pptx）与纯文本（md/txt/html/json）。
-PDF 是工业现场最常见的格式，所以这里明确记一笔：
+`KNOWLEDGE_MINERU_ENABLED` 开着时，`.pdf` 与图片交给 MinerU；关着时传 PDF 的
+用户拿到的是一句点得出名字的错，**不是**一个状态 ready 却检索不到的空文档。
+编排里它是一个独立 profile（`docker compose --profile mineru up`）——没起它
+整套照样跑，只是不收 PDF。
 
-- 加 PDF 有**两条**出路，都只加文件不改调用方：加一个本地 `parsing/pdf.py`
-  （原生文本 PDF），或者接一路外部后端（扫描件与复杂版面，§2.2）。
-- 在此之前，传 PDF 的用户拿到的是一句点得出名字的错（「暂不支持 .pdf」），
-  **不是**一个状态 ready 却检索不到的空文档。
-- 扫描件（图片型 PDF）与原生文本 PDF 是两件事，将来做的时候要分开报：
-  「这是扫描件，需要 OCR」比「解析失败」有用得多。
+几条从**真跑一遍**里得来的口径（线形夹具在
+`tests/fixtures/mineru_file_parse.json`）：
+
+- ⚠ **只声明 `.pdf` 与图片后缀，不声明 Office。** 外部那一路排在本地之前，
+  声明了 `.docx` 就会把它从解得更准的 `DocxParser` 手里抢走，还要多花几十秒
+  CPU。
+- ⚠ **吃 `content_list` 不吃 `md_content`。** markdown 那一份里没有页码，
+  用它等于在这一步把 `locator.page` 丢掉，而这一格丢了后面补不回来。
+  `content_list` 本身是**一个 JSON 字符串**，要再 `json.loads` 一次。
+- ⚠ **调用时必须显式带 `backend=pipeline`**（服务端缺省的 `hybrid-engine` 要
+  GPU），且 `return_content_list` 默认是 `false`。
+- ⚠ **走异步 `/tasks` 而不是 `/file_parse`**：纯 CPU 上一份几十页的扫描件按
+  分钟算，同步接口意味着一条 HTTP 连接挂那么久。
+- ⚠ **失败是 HTTP 409 不是 5xx**，包体是任务信封、原因在 `error` 里。
+- ⚠ **标题层级是 MinerU 自己判的**：实测一份 PDF 里 `h1` 与 `h2` 会一起回
+  `text_level=2`。所以标题栈多半是平的，`locator.path` 只到「最近的一个标题」。
+- 图这一期**只取图注**，字节不落地（那要一张表、一条取图端点与一次迁移）。
+- OCR 不是无损的：实测把表格里的破折号「—」读成了「二」。界面上别把它说成
+  「原文」。
 
 ---
 
@@ -201,7 +245,9 @@ schema `knowledge`，域前缀 `kb_`（database-standard §1）。
 | `kb_sources` | 一个库下的一路来源实例 | `base_id`、`kind`、`config_json`、`last_synced_at` |
 | `kb_documents` | 一份文档 | `base_id`、`source_id`、`external_ref`、`object_key`、`content_hash`、`status`、`failure_reason` |
 | `kb_chunks` | 一个块 | `document_id`、`ordinal`、`text`、`locator_json`、`token_count` |
-| `kb_chunk_vectors` | 一个块的嵌入结果（bytea） | `chunk_id`、`embedding`、`embedding_model`、`dimensions` |
+| `kb_document_figures` | 解析出来的一张图（插图或表格截图）| `document_id`、`ordinal`、`kind`、`page`、`caption`、`object_key`、`content_hash` |
+| `kb_chunk_figures` | 这一块的正文里出现了这张图 | `(chunk_id, figure_id)`、`ordinal` |
+| `kb_chunk_embeddings` | 一个块的嵌入结果（`vector(N)` + HNSW） | `chunk_id`、`base_id`、`embedding`、`embedding_model` |
 
 ⚠ **`embedding_model` 与 `dimensions` 钉在库上**，不是钉在块上。一个库里混两种维数
 的向量算不出有意义的余弦，而表现只是「召回忽然变差了」——没有任何一处会报错。
@@ -214,23 +260,61 @@ schema `knowledge`，域前缀 `kb_`（database-standard §1）。
 先按向量收窄再回表取正文，而列表页永远不需要向量。挂在一起的话，一次「列一下这个库
 有哪些块」就把几千条 6KB 的向量一起拖出来，而它只表现为「列表页有点慢」。
 
-### 3.1 pgvector 是**加速物化**，bytea 是**持久真相**（[ADR-0034](adr/0034-向量索引走端口并按扩展探测选实现.md)）
+### 3.1 向量存在 pgvector 的 `vector` 列上，且它是硬依赖（[ADR-0045](adr/0045-向量与关键词索引改为硬依赖.md)）
 
-- `kb_chunk_vectors.embedding` 是 `BYTEA`（小端 float32），**全环境都有**，
-  由主线迁移建。它是「不想再花一次嵌入的钱」那一份。
-- pgvector 那一路的 `kb_chunk_vectors_pgv(chunk_id, embedding vector(N))` + HNSW 索引
-  **不由主线迁移建**，是一步显式的运维动作（`python -m knowledge_server.index --enable`，向量与关键词两路一起开）。
-  它是「查得快」那一份。
-- 服务**启动时探测扩展与加速表在不在**，据此选 `PgVectorIndex` 或 `BruteForceIndex`，
-  探测结果如实进 `/capabilities`。
+- `kb_chunk_embeddings(chunk_id, base_id, embedding vector(N), embedding_model)` 是
+  **唯一**的向量存储，由迁移建；同一份迁移里 `CREATE EXTENSION vector / pg_trgm`，
+  并给 `kb_chunks.text` 建 GIN trigram 索引。
+- 检索走 HNSW（`vector_cosine_ops`，余弦距离 `<=>`）；库过滤那一列另有一个 b-tree，
+  因为 HNSW 索引本身不吃 `WHERE base_id = ?`。
+- **没有回退档**：没有 bytea 那份第二真相，也没有应用层余弦与 `ILIKE`。
+  库上装不了扩展 = 迁移失败 = 整栈起不来。
 
-⚠ 为什么加速结构不进 alembic：`CREATE EXTENSION` 是**库级**动作，而本仓的结构闸
-明令「一个服务的迁移不许动别的 schema」；更要紧的是，目标库装不上 pgvector 时
-迁移会当场失败，而迁移是 compose 的前置作业——**整栈起不来**。把它挪出迁移之后，
-「装没装 pgvector」就只是取值不同，不是行为不同（config-and-secrets §5）。
+⚠ 为什么这次把它做成硬依赖（作废 [ADR-0034](adr/0034-向量索引走端口并按扩展探测选实现.md)
+的决策二至五）：可选加速档在真实部署里是**没人开的那一档**——加速表要一步显式的运维
+动作，探测失败也只是退回回退档，而两者在界面上长得一模一样，只是召回悄悄变差。
+本部署实测过一次：扩展装了、加速表也建了，但 worker 启动那一刻库还没起来，探测失败，
+于是整个进程此后一直跑在回退档上，没有任何一处报错。
 
-⚠ 双份存储是**有意付的代价**：1536 维一条 6KB，十万块就是 1.2 GB 两份。换来的是
-重建索引不必重新调一遍嵌入 API——那是真金白银，而且重建索引这件事一定会发生。
+⚠ `vector(N)` 的 N 建表时定死，取自 `KNOWLEDGE_EMBEDDING_DIMENSIONS`，**必须**等于
+模型目录里分配给「知识库嵌入」那个模型的维数。对不上时一份文档都摄不进来，而
+`/capabilities` 会在传文档之前就把两个数字与该改哪个环境变量说出来——Postgres 自己
+那条「expected N dimensions」里两样都没有。换模型换维数 = 一次新迁移 + 重新解析。
+
+⚠ 重建索引**不必重算向量**：数据就在那一列上，`REINDEX` 读的也是它。这正是原先
+双份存储要买的那件事，而单列已经天然有了。
+
+### 3.2 图与块靠联结表连，不按页反查
+
+解析后端给出的插图与表格截图落 `kb_document_figures`，字节进对象存储；
+`kb_chunk_figures` 记「这一块的正文里真的出现了这张图」。
+
+⚠ **docx 的图也走这一条**，不只是 MinerU 那一路：`a:blip/@r:embed` 挂在
+`w:p` 底下，所以「图在哪一段」是准的（`Document.inline_shapes` 是一份拍平的
+清单，给不出位置）。docx 没有页的概念，那几张图的 `page` 因此是空的——**引用
+面上按文档名列，不编页码**。
+
+⚠ **不按页反查。** 一页上可能有五张图，而某一块只讲其中一张——按页反查会把
+另外四张也贴进引用，而那正是「依据里堆一堆没用的东西」。
+
+⚠ **字节落在 `knowledge/{base}/{doc}/figures/` 下，即不匿名可读。** 桶策略只给
+`models/`/`images/`/`icons/` 三个前缀开了匿名读；知识库里可能有涉密图纸，
+一条「谁拿到谁能看」的链接是不能给的。取图端点
+`GET /documents/{id}/figures/{fid}` **流字节**而不是发预签名 URL——预签名一旦
+生成就绕过了权限，而流字节每一次都经边缘的 `auth_request` 判 `knowledge:use`。
+
+⚠ 图的名字用**内容哈希**而不是序号：重新解析时同一张图算出同一个键，于是不必
+重传、桶里也不会留下一串孤儿。序号会随切分变化而漂。
+
+⚠ 图注**要进块的正文**：不进的话「图 1 冷却水回路示意图」这句话在库里根本
+不存在，检索不到。没有图注的图用一句占位——块的正文不许为空，而一张没有图注
+的图仍然值得在引用面上摆出来。
+
+⚠ 写图**不新增摄取状态**，算在 `parsing` 那一段里：状态是线上契约（CHECK 与
+前端文案都按那几档写的），而写图本来就是解析产出的一部分。
+
+⚠ 本地那几路解析器**恒不出图**（§2.3）。那不是缺陷：docx 里图与正文的对应
+关系 python-docx 给不出来，硬猜一个位置会让引用指错地方。
 
 ---
 
@@ -266,6 +350,13 @@ schema `knowledge`，域前缀 `kb_`（database-standard §1）。
 - **没接就在 `/capabilities` 里如实说，连同为什么**，不在每次检索的 `note` 里
   念一遍：那是这套部署的常态而不是这一次的意外，每次都念的话，真正的失败
   反而被淹掉。
+- ⚠ **「接了」与「接了而且排得成」是两件事**，能力面要分得开。实测过一次：
+  端点接着、`/v1/models` 秒回、`/v1/rerank` 挂住不回，于是每次检索先等满
+  `KNOWLEDGE_RERANK_TIMEOUT_S`（断路器连挂两次后短路，30 秒后再放一个探测），
+  而 `/capabilities` 报的是「接了、一切正常」。现在断路器不是关着的时候，
+  `rerank.reason` 会说「连着几次没排成，已暂时短路——去看一眼那个端点应不
+  应答」。⚠ **缺席不算失败**：没配重排的部署照旧只说「没接」，否则每一套
+  都会在界面上挂一条红字。
 - 重排端点**不在 OpenAI 兼容口径里**，各家线形不同：调用侧按「方言」挑实现，
   方言配在**供应商**上（跟着端点走，不跟着模型走）。
 

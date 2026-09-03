@@ -1,15 +1,10 @@
-"""加速档：`vector` 列 + HNSW 索引。
+"""向量那一路：`vector` 列 + HNSW 索引（ADR-0045）。
 
-⚠ 它**不替代** bytea 那一路，是叠在它上面（ADR-0034 决策二）：写的时候两边
-都写，查的时候只查加速表。双份存储是有意付的代价——换来的是**重建索引不必
-重新调一遍嵌入 API**，那是真金白银，而且重建索引这件事一定会发生。
+⚠ 这张表**由迁移建**，不由运维脚本建：它是唯一的向量存储，没有回退档。
+表与索引的形状见 `migrations/versions/*_require_pgvector.py`。
 
-⚠ 加速表**不由 alembic 建**：目标库装不上扩展时迁移会当场失败，而迁移是
-compose 的前置作业——那意味着整栈起不来。它由一步显式的运维动作建
-（`python -m knowledge_server.index --enable`），服务启动时探测。
-
-⚠ 表名与探测那一处逐字一致（`probe.VECTOR_TABLE`）：两处漂开的表现是
-「建好了但一直报没建」。
+⚠ 表名与列名与那份迁移逐字一致：两处漂开的表现是「写进去了、查不出来」，
+而两边都不报错。
 """
 
 from dataclasses import dataclass
@@ -17,9 +12,6 @@ from dataclasses import dataclass
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from knowledge_server.apps.knowledge.services.indexing.bruteforce import (
-    BruteForceIndex,
-)
 from knowledge_server.apps.knowledge.services.indexing.ports import (
     Scored,
     VectorQuery,
@@ -30,17 +22,31 @@ from knowledge_server.settings import DB_SCHEMA
 
 PGVECTOR = "pgvector"
 
-# ⚠ 与 `knowledge_server.probe.VECTOR_TABLE` 同值
-VECTOR_TABLE = "kb_chunk_vectors_pgv"
+# ⚠ 与迁移里那张表逐字一致
+VECTOR_TABLE = "kb_chunk_embeddings"
+
+
+class VectorDimensionMismatch(RuntimeError):
+    """算出来的维数与库上那一列对不上。
+
+    ⚠ 单独一档而不是让 Postgres 抛：它回的是一条「expected N dimensions」，
+    里面既没有模型名也没有那个环境变量的名字——而这件事只有一种修法，
+    就是把两处对齐。
+    """
+
 
 _UPSERT = text(
     # 理由：拼进这段 SQL 的只有本模块与 settings 的常量（schema 名与表名），
     # 全部外部输入一律走绑定参数
-    f"INSERT INTO {DB_SCHEMA}.{VECTOR_TABLE} "  # noqa: S608
-    "(chunk_id, base_id, embedding) "
-    "VALUES (:chunk_id, :base_id, :embedding) "
+    f'INSERT INTO "{DB_SCHEMA}"."{VECTOR_TABLE}" '  # noqa: S608
+    "(chunk_id, base_id, embedding, embedding_model) "
+    f'VALUES (:chunk_id, :base_id, CAST(:embedding AS "{DB_SCHEMA}".vector), '
+    ":embedding_model) "
+    # ⚠ 冲突键是主键：一个块只有一条向量，重复写要覆盖而不是追加。
+    # 留两条的话检索会把同一段话召回两次
     "ON CONFLICT (chunk_id) DO UPDATE SET embedding = EXCLUDED.embedding, "
-    "base_id = EXCLUDED.base_id"
+    "base_id = EXCLUDED.base_id, "
+    "embedding_model = EXCLUDED.embedding_model, updated_at = now()"
 )
 
 # ⚠ `<=>` 是余弦距离（0 最近），而调用方要的是相似度（1 最近）——所以这里
@@ -48,10 +54,10 @@ _UPSERT = text(
 _SEARCH = text(
     # 理由：同上——schema 名与表名是常量，探测向量与库 id 走绑定参数
     "SELECT chunk_id, "  # noqa: S608
-    "1 - (embedding <=> CAST(:probe AS vector)) AS score "
-    f"FROM {DB_SCHEMA}.{VECTOR_TABLE} "
+    f'1 - (embedding <=> CAST(:probe AS "{DB_SCHEMA}".vector)) AS score '
+    f'FROM "{DB_SCHEMA}"."{VECTOR_TABLE}" '
     "WHERE base_id = :base_id "
-    "ORDER BY embedding <=> CAST(:probe AS vector) "
+    f'ORDER BY embedding <=> CAST(:probe AS "{DB_SCHEMA}".vector) '
     "LIMIT :limit"
 )
 
@@ -69,22 +75,21 @@ def literal(vector: list[float]) -> str:
 
 @dataclass(frozen=True)
 class PgVectorIndex:
-    """加速档。写两边、查加速表。"""
+    """`vector` 列 + HNSW。这一层唯一的向量实现。"""
 
-    fallback: BruteForceIndex
+    # 库上那一列的维数（建表时定死的那个 N）。⚠ 收在这里而不是每次去库里问：
+    # 它在进程活着的这段时间里不会变，而每次检索问一遍是一次多余的往返
+    dimensions: int
     name: str = PGVECTOR
 
     async def upsert(self, session: AsyncSession, rows: VectorRows) -> None:
-        """两边都写：bytea 那份是真相，`vector` 那份是加速物化。
-
-        ⚠ 只写加速表的话，一次「重建索引」就要把整库重新嵌入一遍——
-        而那是按 token 计费的。
+        """把一批向量写进去；维数对不上就当场说清楚是哪两处对不上。
 
         Args: session, rows。
         """
-        await self.fallback.upsert(session, rows)
         if not rows.rows:
             return
+        self._checked(rows)
         await session.execute(
             _UPSERT,
             [
@@ -92,6 +97,7 @@ class PgVectorIndex:
                     "chunk_id": chunk_id,
                     "base_id": rows.base_id,
                     "embedding": literal(vector),
+                    "embedding_model": rows.model,
                 }
                 for chunk_id, vector in rows.rows
             ],
@@ -104,6 +110,8 @@ class PgVectorIndex:
 
         Args: session, query。
         """
+        if len(query.vector) != self.dimensions:
+            raise VectorDimensionMismatch(self._mismatch(len(query.vector)))
         found = await session.execute(
             _SEARCH,
             {
@@ -121,3 +129,23 @@ class PgVectorIndex:
             for chunk_id, score in found.all()
         ]
         return ranked(scored, query.limit)
+
+    def _checked(self, rows: VectorRows) -> None:
+        """写之前先比一次维数。
+
+        Args: rows。
+        """
+        if rows.dimensions == self.dimensions:
+            return
+        raise VectorDimensionMismatch(self._mismatch(rows.dimensions))
+
+    def _mismatch(self, made: int) -> str:
+        """两处维数对不上时说的那句话。
+
+        Args: made（这一路模型算出来的维数）。
+        """
+        return (
+            f"这套部署的向量列是 {self.dimensions} 维，而此刻这一路嵌入模型"
+            f"算出来的是 {made} 维。把 KNOWLEDGE_EMBEDDING_DIMENSIONS 改成"
+            "模型的维数，再重建向量表并重新解析已有文档"
+        )

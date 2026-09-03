@@ -8,7 +8,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.knowledge import crud
@@ -39,6 +39,10 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 ContainerDep = Annotated[Container, Depends(get_container)]
 UseDep = Annotated[CallerContext, Depends(require(KNOWLEDGE_USE))]
 WriteDep = Annotated[CallerContext, Depends(require(KNOWLEDGE_WRITE))]
+
+# 图的缓存时长。⚠ 只能是 `private`：这张图是某个库里的内容，不许被共享缓存
+# 留下来。ETag 用内容哈希，所以时长长一点也不会拿到旧图
+FIGURE_CACHE_S = 3600
 PageDep = Annotated[PageParams, Depends(page_params)]
 
 
@@ -57,15 +61,14 @@ async def upload_ticket(
 ) -> ApiResponse[UploadTicketOut]:
     """铸一个文档 id 并签一张把键、类型与大小都钉死的直传表单。
 
-    ⚠ 本步**不落行**：没传成的文档不会在库里留下半条记录，界面上也就不会
-    出现一份永远停在 pending 的鬼影。认不出的格式在这一步就拒——让用户传完
-    200 MB 再说「不收这种格式」是两次浪费。
-
     Args: session, container, _actor, base_id, body。
     """
     await library_service.read_base(session, base_id)
-    store = container.objectstore
-    return ok(await document_service.presign_upload(store, base_id, body))
+    return ok(
+        await document_service.presign_upload(
+            container.objectstore, base_id, body, container.external_parsers
+        )
+    )
 
 
 @router.post(
@@ -86,8 +89,9 @@ async def register(
     Args: session, container, _actor, base_id, body。
     """
     await library_service.read_base(session, base_id)
+    parsers = container.external_parsers
     made = await document_service.register_upload(
-        session, container.objectstore, base_id, body
+        session, container.objectstore, base_id, body, parsers
     )
     document_service.queue_ingest(
         session, container.stream, container.ingest_group(), made
@@ -150,6 +154,47 @@ async def reparse(
         await document_service.requeue_document(
             session, container.stream, container.ingest_group(), document_id
         )
+    )
+
+
+@router.get(
+    "/{document_id}/figures/{figure_id}",
+    summary="取一张解析出来的图",
+    response_class=Response,
+)
+async def read_figure(
+    session: SessionDep,
+    container: ContainerDep,
+    _viewer: UseDep,
+    document_id: uuid.UUID,
+    figure_id: uuid.UUID,
+) -> Response:
+    """把一张图的字节吐出去。⚠ 回的是字节不是信封（api-contract 的显式豁免）。
+
+    Args: session, container, _viewer, document_id, figure_id。
+    """
+    made = await document_service.read_figure(
+        session, container.objectstore, document_id, figure_id
+    )
+    return _figure_response(made)
+
+
+def _figure_response(made: document_service.FigureBytes) -> Response:
+    """一张图连缓存头。
+
+    ⚠ 缓存只能是 `private`：这张图是某个库里的内容，不许被共享缓存留下来。
+    ⚠ `ETag` 用内容哈希而不是时间戳：重新解析之后哈希不变，浏览器那份缓存
+    因此仍然有效——而按时间戳的话每次重新解析都要重下一遍全部图。
+
+    Args: made。
+    """
+    return Response(
+        content=made.content,
+        media_type=made.media_type,
+        headers={
+            "ETag": f'"{made.etag}"',
+            "Cache-Control": f"private, max-age={FIGURE_CACHE_S}",
+        },
     )
 
 

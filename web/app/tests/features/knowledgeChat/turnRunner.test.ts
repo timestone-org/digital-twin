@@ -180,4 +180,167 @@ describe('知识库对话的回合门面', () => {
     expect(errors).toHaveLength(1)
     expect(errors[0]).toContain(String(MAX_ROUNDS))
   })
+
+  it('自动起名那一帧摊开交给页面', async () => {
+    // ⚠ 只有首轮会来这一帧：起过名的会话后端不再起
+    const titled = frame('session_titled', {
+      title: '冷却水运行参数',
+      row_version: 2,
+    })
+    const { advance } = advanceOf([[titled, DONE]])
+    const { sink } = sinkOf()
+    const seen: Array<[string, number]> = []
+    await runKnowledgeTurn(
+      {
+        advance,
+        sessionId: 's1',
+        userText: '冷凝器上限',
+        onTitled: (title, version) => seen.push([title, version]),
+      },
+      sink,
+    )
+    expect(seen).toEqual([['冷却水运行参数', 2]])
+  })
+
+  it('标题为空的那一帧一律不改清单', async () => {
+    // ⚠ 拿空标题去改清单，那一行会变成一片空白——比「未命名」更难认
+    const { advance } = advanceOf([
+      [frame('session_titled', { title: '', row_version: 3 }), DONE],
+    ])
+    const { sink } = sinkOf()
+    const seen: string[] = []
+    await runKnowledgeTurn(
+      {
+        advance,
+        sessionId: 's1',
+        userText: '问一句',
+        onTitled: (title) => seen.push(title),
+      },
+      sink,
+    )
+    expect(seen).toEqual([])
+  })
+
+  it('行版本不是数字时退成 0，不写断言', async () => {
+    // ⚠ 这一帧来自后端，而给后端数据写 `as` 断言是被闸门拦的：逐格判类型
+    const { advance } = advanceOf([
+      [frame('session_titled', { title: '有标题', row_version: '2' }), DONE],
+    ])
+    const { sink } = sinkOf()
+    const seen: number[] = []
+    await runKnowledgeTurn(
+      {
+        advance,
+        sessionId: 's1',
+        userText: '问一句',
+        onTitled: (_title, version) => seen.push(version),
+      },
+      sink,
+    )
+    expect(seen).toEqual([0])
+  })
+})
+
+describe('引用那一帧', () => {
+  const CITED = {
+    marker: '①',
+    chunk_id: 'c1',
+    document_id: 'd1',
+    document_title: '冷却水操作规程.pdf',
+    base_name: '手册库',
+    heading_path: '二、运行参数',
+    where: '第 3 页',
+    page: 3,
+    page_end: null,
+    text: '出口温度不得高于 65 ℃',
+    figures: [],
+  }
+
+  it('摊开交给页面', async () => {
+    const { advance } = advanceOf([
+      [frame('citations', { items: [CITED] }), DONE],
+    ])
+    const { sink, replies } = sinkOf()
+    const cited: unknown[][] = []
+
+    await runKnowledgeTurn(
+      {
+        advance,
+        sessionId: 's1',
+        userText: '上限多少',
+        onCited: (items) => cited.push([...items]),
+      },
+      sink,
+    )
+
+    expect(replies).toEqual(['上限 65 ℃ [1]'])
+    expect(cited).toEqual([[CITED]])
+  })
+
+  it('少一格必需字段的那条不要', async () => {
+    // ⚠ 只认必需的那几格：少一格就画不出那一行，而画一半比不画更难查
+    const { advance } = advanceOf([
+      [
+        frame('citations', {
+          items: [CITED, { marker: '②', chunk_id: 'c2' }],
+        }),
+        DONE,
+      ],
+    ])
+    const { sink } = sinkOf()
+    const cited: unknown[][] = []
+
+    await runKnowledgeTurn(
+      {
+        advance,
+        sessionId: 's1',
+        userText: '上限多少',
+        onCited: (items) => cited.push([...items]),
+      },
+      sink,
+    )
+
+    expect(cited).toEqual([[CITED]])
+  })
+
+  it('items 不是数组就当没有这一帧', async () => {
+    const { advance } = advanceOf([
+      [frame('citations', { items: '一堆' }), DONE],
+    ])
+    const { sink } = sinkOf()
+    const cited: unknown[][] = []
+
+    await runKnowledgeTurn(
+      {
+        advance,
+        sessionId: 's1',
+        userText: '上限多少',
+        onCited: (items) => cited.push([...items]),
+      },
+      sink,
+    )
+
+    expect(cited).toEqual([])
+  })
+
+  it('一条都不合格时不叫回调', async () => {
+    // ⚠ 不叫：空数组会让时间线上多一张空引用卡片，而那看着像出了问题
+    const { advance } = advanceOf([
+      [frame('citations', { items: [{ marker: '②' }] }), DONE],
+    ])
+    const { sink } = sinkOf()
+    const cited: unknown[][] = []
+
+    await runKnowledgeTurn(
+      {
+        advance,
+        sessionId: 's1',
+        userText: '上限多少',
+        onCited: (items) => cited.push([...items]),
+      },
+      sink,
+    )
+
+    expect(cited).toEqual([])
+  })
 })

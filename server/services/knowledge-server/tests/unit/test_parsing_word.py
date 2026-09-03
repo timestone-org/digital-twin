@@ -9,17 +9,34 @@
 
 from io import BytesIO
 
+import pytest
 from docx import Document
 from docx.document import Document as DocxDocument
 from docx.enum.style import WD_STYLE_TYPE
 from docx.oxml.ns import nsdecls
 from docx.oxml.parser import parse_xml
+from docx.shared import Inches
 from docx.table import Table
 
-from knowledge_server.apps.knowledge.services.parsing import RawItem
+from knowledge_server.apps.knowledge.services.parsing import RawItem, word
 from knowledge_server.apps.knowledge.services.parsing.word import (
     MAX_BLOCKS,
+    NO_CAPTION,
     DocxParser,
+)
+
+# 一张 1×1 的透明 PNG。⚠ 现造而不是放夹具文件，与这一份里别的样件同源
+_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d4948445200000001000000010806"
+    "0000001f15c4890000000d4944415478da63fcffff3f03000500"
+    "01ff8a5dbe7f0000000049454e44ae426082"
+)
+# 另一张 1×1 的 PNG，字节与上面那张不同。⚠ 要不同：一样的话 Word 会复用同一个
+# 关系 id，于是「收满上限」那条用例其实只塞了一张图
+_OTHER_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d4948445200000001000000010806"
+    "0000001f15c4890000000d4944415478da6364f8cfc000000202"
+    "01003b0d1b0f0000000049454e44ae426082"
 )
 
 # 一个带 mc:AlternateContent 的文本框：Word 把同一段文字在 Choice 与 Fallback
@@ -259,3 +276,162 @@ def test_truncation_is_reported() -> None:
     made = DocxParser().parse(_raw("a.docx", _saved(document)))
     assert made.is_truncated is True
     assert len(made.blocks) == MAX_BLOCKS
+
+
+def _with_picture(document: DocxDocument, width: int = 1) -> None:
+    """在当前文档末尾插一张 1×1 的 PNG。
+
+    Args: document, width（英寸）。
+    """
+    document.paragraphs[-1].add_run().add_picture(
+        BytesIO(_PNG), width=Inches(width)
+    )
+
+
+def test_a_picture_becomes_a_figure_block_where_it_sits() -> None:
+    """⚠ 图要落在它在正文里的**那个位置**：拍平成文末一串的话，引用面上
+    「这句话旁边配的是哪张图」就成了瞎猜。"""
+    document = Document()
+    document.add_paragraph("第一章", style="Heading 1")
+    document.add_paragraph("正文一。")
+    document.add_paragraph("")
+    _with_picture(document)
+    document.add_paragraph("图 1 冷却水回路示意图")
+    made = DocxParser().parse(_raw("a.docx", _saved(document)))
+    kinds = [one.kind for one in made.blocks]
+    # ⚠ 图注那一段被图收走了，不再单独出一块——见「图注不印两遍」那一条
+    assert kinds == ["heading", "paragraph", "figure"]
+    figure = made.blocks[2]
+    assert figure.text == "图 1 冷却水回路示意图"
+    assert figure.figure_ref != ""
+    assert figure.locator.path == ("第一章",)
+
+
+def test_the_bytes_come_out_with_the_blocks() -> None:
+    """⚠ 字节跟着产出一起交：让调用方拿 `ref` 再去问一次等于再解析一遍。"""
+    document = Document()
+    document.add_paragraph("")
+    _with_picture(document)
+    made = DocxParser().parse(_raw("a.docx", _saved(document)))
+    assert len(made.figures) == 1
+    figure = made.figures[0]
+    assert figure.content == _PNG
+    assert figure.media_type == "image/png"
+    assert figure.ref == made.blocks[0].figure_ref
+
+
+def test_the_same_picture_used_twice_is_stored_once() -> None:
+    """⚠ Word 复用同一个关系 id 是常事；两份一样的字节到了对象存储那一步本来
+    也会被内容哈希合掉，这里先合能省一次上传。"""
+    document = Document()
+    document.add_paragraph("")
+    _with_picture(document)
+    document.add_paragraph("")
+    _with_picture(document)
+    made = DocxParser().parse(_raw("a.docx", _saved(document)))
+    figures = [one for one in made.blocks if one.kind == "figure"]
+    assert len(figures) == 2
+    assert len(made.figures) == 1
+    assert figures[0].figure_ref == figures[1].figure_ref
+
+
+def test_a_picture_without_a_caption_still_gets_a_block() -> None:
+    """⚠ 块的正文不许为空（`text_present` 那条 CHECK），而一张没有图注的图
+    仍然值得在引用面上摆出来。"""
+    document = Document()
+    document.add_paragraph("")
+    _with_picture(document)
+    document.add_paragraph("这不是图注，是一段正文。")
+    made = DocxParser().parse(_raw("a.docx", _saved(document)))
+    assert made.blocks[0].text == NO_CAPTION
+
+
+def test_the_paragraph_that_holds_the_picture_keeps_its_own_text() -> None:
+    """⚠ 图自己那一段的文字不当图注：它已经是一个正文块了，再当图注会让同
+    一句话在引用卡片上出现两遍。"""
+    document = Document()
+    document.add_paragraph("图前有字。")
+    _with_picture(document)
+    made = DocxParser().parse(_raw("a.docx", _saved(document)))
+    assert [(one.kind, one.text) for one in made.blocks] == [
+        ("paragraph", "图前有字。"),
+        ("figure", NO_CAPTION),
+    ]
+
+
+def test_a_document_without_pictures_reports_none() -> None:
+    """⚠ 没图的文档要给空元组而不是一个占位：`figures` 非空会让摄取那一段
+    白跑一趟对象存储。"""
+    document = Document()
+    document.add_paragraph("正文。")
+    assert DocxParser().parse(_raw("a.docx", _saved(document))).figures == ()
+
+
+def test_a_reference_that_points_at_nothing_is_skipped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 拿不到字节的引用跳过而不是整份失败：一张坏图不该让一份两百页的
+    手册摄不进来。文档里别的内容照旧解出来。"""
+    document = Document()
+    document.add_paragraph("正文。")
+    document.add_paragraph("")
+    _with_picture(document)
+    monkeypatch.setattr(
+        word, "_embedded", lambda element: ["rIdNotThere"]  # noqa: ARG005
+    )
+    made = DocxParser().parse(_raw("a.docx", _saved(document)))
+    assert made.figures == ()
+    assert [one.kind for one in made.blocks] == ["paragraph"]
+
+
+def test_a_document_stuffed_with_pictures_stops_at_the_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 有上限：图跟着正文一起进内存，一份塞了几千张小图的文件会变成几千次
+    对象存储写。到顶之后不再收图，正文照旧解。"""
+    monkeypatch.setattr(word, "MAX_FIGURES", 1)
+    document = Document()
+    for at in range(3):
+        document.add_paragraph("")
+        document.paragraphs[-1].add_run().add_picture(
+            BytesIO(_PNG if at == 0 else _OTHER_PNG), width=Inches(1)
+        )
+    made = DocxParser().parse(_raw("a.docx", _saved(document)))
+    assert len(made.figures) == 1
+
+
+def test_the_caption_paragraph_is_not_also_a_block_of_its_own() -> None:
+    """⚠ 图注被图那一块收走之后，它自己那一段就不该再出一块：出的话「图 1 …」
+    在检索到的原文里出现两遍，而引用卡片上也会跟着重复一行。
+
+    实测出来的：真跑一份带图的 docx，块正文里那句图注确实印了两遍。
+    """
+    document = Document()
+    document.add_paragraph("第一章", style="Heading 1")
+    document.add_paragraph("正文一。")
+    document.add_paragraph("")
+    _with_picture(document)
+    document.add_paragraph("图 1 冷却水回路示意图")
+    document.add_paragraph("正文二。")
+    made = DocxParser().parse(_raw("a.docx", _saved(document)))
+
+    assert [(one.kind, one.text) for one in made.blocks] == [
+        ("heading", "第一章"),
+        ("paragraph", "正文一。"),
+        ("figure", "图 1 冷却水回路示意图"),
+        ("paragraph", "正文二。"),
+    ]
+
+
+def test_a_caption_like_line_with_no_figure_above_it_stays_a_paragraph() -> (
+    None
+):
+    """⚠ 只有**真被图收走**的那一段才跳过：一份没有图的文档里「图 1 …」这种
+    行是正文，跳掉就是把内容吞了。"""
+    document = Document()
+    document.add_paragraph("图 1 这一行上面没有图")
+    made = DocxParser().parse(_raw("a.docx", _saved(document)))
+
+    assert [(one.kind, one.text) for one in made.blocks] == [
+        ("paragraph", "图 1 这一行上面没有图"),
+    ]

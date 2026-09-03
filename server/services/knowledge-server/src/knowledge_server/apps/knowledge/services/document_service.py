@@ -11,6 +11,7 @@
 import hashlib
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +20,7 @@ from knowledge_server.apps.knowledge import crud
 from knowledge_server.apps.knowledge.errors import (
     DocumentNotFound,
     DuplicateDocument,
+    FigureBytesGone,
     SourceNotFound,
     UnsupportedRawItem,
 )
@@ -31,6 +33,7 @@ from knowledge_server.apps.knowledge.schemas import (
 )
 from knowledge_server.apps.knowledge.services import ingest_queue
 from knowledge_server.apps.knowledge.services.parsing import (
+    ExternalParserBackend,
     accepted_suffixes,
 )
 from knowledge_server.apps.knowledge.services.sources import (
@@ -42,6 +45,7 @@ from knowledge_server.apps.knowledge.services.sources import (
 from knowledge_server.settings import MAX_RAW_BYTES
 from lib.db import after_commit
 from lib.objectstore import (
+    ObjectNotFound,
     ObjectStore,
     ObjectStoreError,
     PresignedPost,
@@ -94,34 +98,42 @@ def document_page(
     )
 
 
-def _checked_suffix(filename: str) -> str:
+def _checked_suffix(
+    filename: str, external: tuple[ExternalParserBackend, ...]
+) -> str:
     """取一个这套部署认得的后缀；认不出就当场拒。
 
     ⚠ 在**签凭证那一步**就拒，不等到摄取时：让用户传完 200 MB 再告诉他
     「不收这种格式」是两次浪费，而第二次那句错还夹在异步管线里。
 
-    Args: filename。
+    ⚠ `external` 必须真的传进来：漏了的话名单里只有本地那几路，于是接了
+    MinerU 之后传 PDF 仍会在这一步被拒——而能力面那边说的是「收 .pdf」。
+
+    Args: filename, external。
     """
+    allowed = accepted_suffixes(external)
     suffix = suffix_of(filename)
-    if suffix not in accepted_suffixes():
+    if suffix not in allowed:
         raise UnsupportedRawItem(
-            f"认不出 {filename} 是什么格式。这套部署收："
-            f"{'、'.join(accepted_suffixes())}"
+            f"认不出 {filename} 是什么格式。这套部署收：{'、'.join(allowed)}"
         )
     return suffix
 
 
 async def presign_upload(
-    store: ObjectStore, base_id: uuid.UUID, body: UploadTicketIn
+    store: ObjectStore,
+    base_id: uuid.UUID,
+    body: UploadTicketIn,
+    external: tuple[ExternalParserBackend, ...],
 ) -> UploadTicketOut:
     """铸一个文档 id 并签一张直传表单。**不落行**。
 
     ⚠ id 在这一步就铸好并编进对象键：登记那一步只认这个键，客户端没法把字节
     传到一个 id 下、再拿另一个 id 来登记。
 
-    Args: store, base_id, body。
+    Args: store, base_id, body, external（接了哪几路外部解析后端）。
     """
-    suffix = _checked_suffix(body.filename)
+    suffix = _checked_suffix(body.filename, external)
     if body.size_bytes > MAX_RAW_BYTES:
         raise UnsupportedRawItem(
             f"这份文件 {body.size_bytes} 字节，超过上限 {MAX_RAW_BYTES}"
@@ -179,20 +191,21 @@ async def register_upload(
     store: ObjectStore,
     base_id: uuid.UUID,
     body: RegisterDocumentIn,
+    external: tuple[ExternalParserBackend, ...],
 ) -> DocumentOut:
     """确认直传完成：算哈希、挪进正式键、落一行文档。
 
     ⚠ 这一步**不投队列**：投递要等事务提交之后。调用方拿到出参之后调
     `queue_ingest`。
 
-    Args: session, store, base_id, body。
+    Args: session, store, base_id, body, external。
     """
     source = await crud.source.find_source_by_kind(
         session, base_id, UPLOAD_KIND
     )
     if source is None:
         raise SourceNotFound("这个库没有上传通道")
-    suffix = _checked_suffix(body.filename)
+    suffix = _checked_suffix(body.filename, external)
     staging = staging_key(base_id, body.document_id, suffix)
     final = document_key(base_id, body.document_id, suffix)
     digest, size = await _hash_and_move(store, staging, final)
@@ -309,3 +322,47 @@ async def drop_document(
         await store.delete(key)
 
     after_commit(session, sweep)
+
+
+@dataclass(frozen=True)
+class FigureBytes:
+    """一张图连它的字节，交给端点直接吐出去。"""
+
+    content: bytes
+    media_type: str
+    # 内容哈希，当 ETag 用。⚠ 用它而不是 `updated_at`：同一张图重新解析之后
+    # 哈希不变，浏览器那份缓存因此仍然有效
+    etag: str
+
+
+async def read_figure(
+    session: AsyncSession,
+    store: ObjectStore,
+    document_id: uuid.UUID,
+    figure_id: uuid.UUID,
+) -> FigureBytes:
+    """取一张图的字节。
+
+    ⚠ **流字节而不是发预签名 URL。** 预签名 URL 一旦生成就是一条「谁拿到谁能
+    看」的链接，而边缘那条 `/oss/` 是免认证 location；流字节则每一次都经
+    `auth_request` 判过权限。图一般几十 KB，过一趟服务的代价可以接受。
+
+    ⚠ 按 `(document_id, figure_id)` 一起取：只按图 id 取的话，换一个文档 id
+    就能把别的库的图取出来——而那两个 id 单看都是合法的 uuid。
+
+    Args: session, store, document_id, figure_id。
+    """
+    row = await crud.figure.get_figure(session, document_id, figure_id)
+    if row is None:
+        raise DocumentNotFound("没有这张图")
+    try:
+        content = await store.get_bytes(row.object_key)
+    except ObjectNotFound as error:
+        # ⚠ 与「没这一行」分开报：行还在而字节没了意味着桶被清过，
+        # 而那是运维要知道的事，不是「用户点了个不存在的图」
+        raise FigureBytesGone("这张图的字节已不在对象存储里") from error
+    return FigureBytes(
+        content=content,
+        media_type=row.media_type or "application/octet-stream",
+        etag=row.content_hash,
+    )

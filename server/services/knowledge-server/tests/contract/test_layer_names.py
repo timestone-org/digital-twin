@@ -8,11 +8,11 @@
 from knowledge_server.apps.knowledge.models.document import STATUSES
 from knowledge_server.apps.knowledge.models.knowledge_base import STRATEGIES
 from knowledge_server.apps.knowledge.models.source import KINDS
-from knowledge_server.apps.knowledge.services.capability import (
-    KEYWORD_FALLBACK,
-    KEYWORD_FAST,
-    VECTOR_FALLBACK,
-    VECTOR_FAST,
+from knowledge_server.apps.knowledge.services.indexing import (
+    KEYWORD_INDEXES,
+    PGVECTOR,
+    TRGM,
+    VECTOR_INDEXES,
 )
 
 # 迁移里那几条 CHECK 的字面量，逐字抄过来
@@ -42,5 +42,12 @@ def test_document_statuses_match_the_check_constraint() -> None:
 
 
 def test_index_lane_names_are_distinct() -> None:
-    names = (VECTOR_FAST, VECTOR_FALLBACK, KEYWORD_FAST, KEYWORD_FALLBACK)
+    names = (*VECTOR_INDEXES, *KEYWORD_INDEXES)
     assert len(set(names)) == len(names)
+
+
+def test_the_only_lanes_are_the_two_hard_dependencies() -> None:
+    """⚠ 两路都没有回退档（ADR-0045）。加回一条的话，能力面与界面上那句
+    「检索是怎么做的」要跟着改——而漏改的表现是界面说的与实际走的不是一路。"""
+    assert VECTOR_INDEXES == (PGVECTOR,)
+    assert KEYWORD_INDEXES == (TRGM,)

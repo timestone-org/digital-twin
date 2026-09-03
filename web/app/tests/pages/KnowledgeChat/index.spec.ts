@@ -213,6 +213,48 @@ describe('首屏', () => {
     expect(wrapper.text()).toContain('未命名')
   })
 
+  it('服务端自动起名之后就地改清单那一行，不重拉清单', async () => {
+    // ⚠ 不重拉：重拉会把此刻的滚动位置与选中态一起抖一下，而 `session_titled`
+    // 那一帧带的信息已经够改那一行了
+    api.listSessions.mockResolvedValue([])
+    api.createSession.mockResolvedValue(sessionOf('s9'))
+    api.readSession.mockResolvedValue({ ...sessionOf('s9'), messages: [] })
+    api.advanceTurn.mockImplementation(async function* () {
+      await Promise.resolve()
+      yield frame('session_titled', { title: '冷却水上限', row_version: 2 })
+      yield frame('turn.done', { reply: '上限 65 ℃' })
+    })
+    const wrapper = await render()
+    const listed = api.listSessions.mock.calls.length
+
+    await wrapper.find('textarea').setValue('上限多少')
+    await wrapper.find('button[aria-label="发送"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('button[title="冷却水上限"]').exists()).toBe(true)
+    expect(api.listSessions.mock.calls).toHaveLength(listed)
+  })
+
+  it('自动起名那一帧标题是空的就不动清单', async () => {
+    // ⚠ 空标题要挡在页面之外：清单那一行会被改成空白，而它本来显示的是
+    // 「未命名 · 建立时刻」，比空白有用
+    api.listSessions.mockResolvedValue([])
+    api.createSession.mockResolvedValue(sessionOf('s9'))
+    api.readSession.mockResolvedValue({ ...sessionOf('s9'), messages: [] })
+    api.advanceTurn.mockImplementation(async function* () {
+      await Promise.resolve()
+      yield frame('session_titled', { title: '', row_version: 2 })
+      yield frame('turn.done', { reply: '上限 65 ℃' })
+    })
+    const wrapper = await render()
+
+    await wrapper.find('textarea').setValue('上限多少')
+    await wrapper.find('button[aria-label="发送"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('未命名')
+  })
+
   it('一个对话都没有时空态说清第一句怎么发', async () => {
     api.listSessions.mockResolvedValue([])
 

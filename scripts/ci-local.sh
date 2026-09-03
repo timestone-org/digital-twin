@@ -64,6 +64,10 @@ gates=(
   check_logic_version
   # 比其余快闸门慢一档（要按服务各装一次），但仍是秒级
   check_service_deps
+  # ⚠ 它在 CI 里排在第 4 段，而那一段要等前三段跑完：留到 `--all` 才暴露的话，
+  # 「改了 docstring 忘了重导 openapi」只能等合进 main 才发现（本轮踩过两次）。
+  # 代价是它要把每个服务的应用各构造一遍，十几秒
+  check_openapi_sync
 )
 
 # 第 2 段那几步的本地版。⚠ 它们不是闸门脚本，但**必须留在 --fast 里**：

@@ -9,7 +9,7 @@
  * ⚠ 信封里一格都不许多带：知识库那边的入参是 `extra="forbid"`，多一格
  * `surface_kind` 整个回合就是 400。
  */
-import type { KnowledgeChatAdvanceIn } from '@dt/contracts'
+import type { KnowledgeChatAdvanceIn, KnowledgeCitation } from '@dt/contracts'
 
 import {
   BUILTIN_CLIENT_TOOLS,
@@ -39,6 +39,16 @@ export interface KnowledgeRunnerInput {
   sessionId: string
   userText: string
   signal?: AbortSignal | undefined
+  /**
+   * 服务端刚给这个会话自动起了标题。
+   * ⚠ 只有首轮会来一帧：起过名的会话不再起（后端只在标题为空时起）。
+   */
+  onTitled?: ((title: string, rowVersion: number) => void) | undefined
+  /**
+   * 这一轮答案真正用到的那几条依据。
+   * ⚠ 一条都没用到时**不会来这一帧**：服务端不发空表。
+   */
+  onCited?: ((items: readonly KnowledgeCitation[]) => void) | undefined
 }
 
 /**
@@ -59,8 +69,50 @@ export async function runKnowledgeTurn(
       signal: input.signal,
       dispatch,
       maxRounds: MAX_ROUNDS,
+      onFrame: (name, data) => {
+        if (name === 'session_titled') titled(input, data)
+        if (name === 'citations') cited(input, data)
+      },
     },
     sink,
+  )
+}
+
+/**
+ * `session_titled` 那一帧摊开交给页面。
+ * ⚠ 逐格判类型不写 `as`：这一帧来自后端，而给后端数据写断言是被闸门拦的。
+ * @param input 这一次的入参（拿它的回调）
+ * @param data 帧里那一坨
+ */
+function titled(input: KnowledgeRunnerInput, data: Record<string, unknown>) {
+  const title = data.title
+  const version = data.row_version
+  if (typeof title !== 'string' || title === '') return
+  input.onTitled?.(title, typeof version === 'number' ? version : 0)
+}
+
+/**
+ * `citations` 那一帧摊开交给页面。
+ * ⚠ 逐格判类型不写 `as`：这一帧来自后端，而给后端数据写断言是被闸门拦的。
+ * @param input 这一次的入参（拿它的回调）
+ * @param data 帧里那一坨
+ */
+function cited(input: KnowledgeRunnerInput, data: Record<string, unknown>) {
+  const raw = data.items
+  if (!Array.isArray(raw)) return
+  const made = raw.filter(isCitation)
+  if (made.length > 0) input.onCited?.(made)
+}
+
+/** 一条依据长得对不对。⚠ 只认必需的那几格：少一格就画不出那一行。 */
+function isCitation(one: unknown): one is KnowledgeCitation {
+  if (typeof one !== 'object' || one === null) return false
+  const row: Record<string, unknown> = { ...one }
+  return (
+    typeof row.marker === 'string' &&
+    typeof row.chunk_id === 'string' &&
+    typeof row.document_title === 'string' &&
+    typeof row.where === 'string'
   )
 }
 

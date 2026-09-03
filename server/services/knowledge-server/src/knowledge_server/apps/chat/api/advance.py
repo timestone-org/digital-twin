@@ -19,9 +19,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from knowledge_server.apps.chat.deps import get_advance_deps
 from knowledge_server.apps.chat.schemas import ChatAdvanceIn
 from knowledge_server.apps.chat.services import advance_service
+from knowledge_server.apps.chat.services.citations import CitationsFound
 from knowledge_server.apps.chat.services.session_service import (
     require_session,
 )
+from knowledge_server.apps.chat.services.title_service import SessionTitled
 from knowledge_server.catalog import KNOWLEDGE_USE
 from knowledge_server.deps import get_session, require
 from knowledge_server.settings import API_PREFIX
@@ -82,8 +84,12 @@ async def _frames(
         yield events.error_frame(error.code, str(error), trace_id)
 
 
-def _frame_of(item: TurnEvent) -> str:
+def _frame_of(item: TurnEvent | SessionTitled | CitationsFound) -> str:
     """一件产出摊成一帧。分档必须穷尽。
+
+    ⚠ 新增的档要排在兜底那一行**之前**：兜底当的是 `TurnOutcome`，漏一档的
+    表现是那一帧被当成 outcome 序列化，而前端读到一个没有 reply 的结束帧——
+    回合看着结束了，答案没了。
 
     Args: item。
     """
@@ -91,7 +97,43 @@ def _frame_of(item: TurnEvent) -> str:
         return events.delta_frame(item)
     if isinstance(item, TurnStep):
         return events.step_frame(item)
+    if isinstance(item, SessionTitled):
+        return events.frame(
+            "session_titled",
+            {"title": item.title, "row_version": item.row_version},
+        )
+    if isinstance(item, CitationsFound):
+        return events.frame("citations", {"items": _cited_of(item)})
     return events.outcome_frame(item)
+
+
+def _cited_of(found: CitationsFound) -> list[dict[str, object]]:
+    """引用摊成线上那一份。
+
+    ⚠ `where` 由后端拼好：各端各拼一份一定会漂，而这一句要与检索面上那一句
+    逐字一致。
+
+    Args: found。
+    """
+    return [
+        {
+            "marker": one.marker,
+            "chunk_id": str(one.chunk_id),
+            "document_id": str(one.document_id),
+            "document_title": one.document_title,
+            "base_name": one.base_name,
+            "heading_path": one.heading_path,
+            "where": one.where,
+            "page": one.page,
+            "page_end": one.page_end,
+            "text": one.text,
+            "figures": [
+                {"id": str(fig.id), "caption": fig.caption, "page": fig.page}
+                for fig in one.figures
+            ],
+        }
+        for one in found.items
+    ]
 
 
 def _to_input(payload: ChatAdvanceIn) -> advance_service.AdvanceInput:

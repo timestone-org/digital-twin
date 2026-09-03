@@ -9,9 +9,13 @@
 
 from dataclasses import dataclass
 
-from knowledge_server.apps.knowledge.services.chunking.ports import Chunk
+from knowledge_server.apps.knowledge.services.chunking.ports import (
+    Chunk,
+    ChunkLimits,
+)
 from knowledge_server.apps.knowledge.services.chunking.structural import (
     path_label,
+    sized_blocks,
 )
 from knowledge_server.apps.knowledge.services.chunking.tokens import estimated
 from knowledge_server.apps.knowledge.services.parsing import ParsedDocument
@@ -23,13 +27,19 @@ class RowChunker:
 
     name: str = "rows"
 
-    def split(self, document: ParsedDocument) -> tuple[Chunk, ...]:
-        """逐块转成 chunk，空块跳过。
+    def split(
+        self, document: ParsedDocument, limits: ChunkLimits
+    ) -> tuple[Chunk, ...]:
+        """逐块转成 chunk，空块跳过；本身超窗的行先在句读处断开。
 
-        Args: document。
+        ⚠ 一行仍是一块，**不攒批**：表格的每一行本来就是一条独立记录。
+        但一行也可能超窗（一格里粘着整篇说明是现场常事），那时它先被断成
+        几块——不断的话超出的那一截会被嵌入端点悄悄丢掉。
+
+        Args: document, limits。
         """
         made: list[Chunk] = []
-        for block in document.blocks:
+        for block in sized_blocks(document.blocks, limits.max_tokens):
             if not block.text.strip():
                 continue
             heading = path_label(block.locator)
@@ -41,6 +51,7 @@ class RowChunker:
                     heading_path=heading,
                     locator=block.locator,
                     token_count=estimated(text),
+                    figure_refs=(block.figure_ref,) if block.figure_ref else (),
                 )
             )
         return tuple(made)

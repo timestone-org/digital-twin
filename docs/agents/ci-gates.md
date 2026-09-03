@@ -89,7 +89,7 @@ E2E、a11y、变异测试不进 PR 闸门是 `testing-standard-*.md` §9 的明�
 | 规范 | 闸门 |
 |---|---|
 | api-contract §1 URL 形状、§5.2 分页上限、§6 序列化口径、§4.1 错误码 | `check_api_contract.py`（读提交进仓的 `openapi.json`） |
-| 同 §9 openapi 与代码逐字节一致 | `contracts` 作业的 `python -m scripts.export_openapi --check`（每个服务各一次） |
+| 同 §9 openapi 与代码逐字节一致 | `contracts` 作业的 `python -m scripts.export_openapi --check`（每个服务各一次）；本地由 `check_openapi_sync.py` 跑同一批命令——它从 `ci.yml` 里现读，不另抄一份 |
 | database-standard §5 扩展—收缩、lock_timeout、禁回填/改名/改类型 | `check_migrations.py` |
 | 同 §5.5 可逆性 | `contracts` 作业的 `upgrade → downgrade → upgrade` |
 
@@ -188,11 +188,22 @@ scripts/ci-local.sh -j server-test  # act 跑指定作业（含服务容器）
 scripts/ci-local.sh --all           # act 跑整条流水线 —— 推送/合并前必须绿
 ```
 
-`--fast` 跑 20 道闸门脚本，外加与「2·前端/后端格式、lint、类型」逐字同源的六步：
+`--fast` 跑 21 道闸门脚本，外加与「2·前端/后端格式、lint、类型」逐字同源的六步：
 `prettier` / `black` / `ruff` / `eslint` / `typecheck` / `pyright`（含类型检查
 范围自检）。⚠ **格式与类型不许留到 `--all` 才暴露**：它们是全流水线里最早红、
 也最没有信息量的一档，为一个空格白等二三十分钟的容器启动与真库测试是纯浪费。
 代价是 `--fast` 从秒级变成分钟级，大头在 eslint 全量遍历。
+
+⚠ **`--fast` 里还有一道本属第 4 段的闸**：`check_openapi_sync.py`，因为
+「改了 docstring 忘了重导 openapi」这一类只有它拦得住，而第 4 段要等前三段
+跑完——留到那时等于每次都用一轮 main 的流水线去发现它。
+
+⚠ **`--fast` 仍然漏掉两样**：增量覆盖（diff-cover）与真库用例。合并前判增量
+覆盖要自己跑一遍带 `--cov-branch` 的 pytest，再
+`uv run --project server diff-cover <cov.xml> --compare-branch origin/main
+--fail-under=85`；前端那一侧是 `pnpm --dir web test:coverage` 之后拿
+`web/coverage/lcov.info` 比。⚠ 它是**每个 PR 都要过的闸**，而 `--fast` 一声
+不吭。
 
 ⚠ **跑 act 期间不要改工作树**：act 绑的是本地目录，跑到一半新写的文件会被当成
 被测内容，报出来的红与已提交的状态无关。

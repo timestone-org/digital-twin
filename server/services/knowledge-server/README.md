@@ -3,7 +3,7 @@
 知识库。它拥有自己的文档、块与向量，对上出检索面，对内跑摄取管线。
 
 设计见 [`docs/KNOWLEDGE_BASE_DESIGN.md`](../../../docs/KNOWLEDGE_BASE_DESIGN.md)，
-决策见 ADR-0032 至 ADR-0035。
+决策见 ADR-0032 至 ADR-0035、ADR-0045。
 
 ## 跑起来
 
@@ -16,18 +16,18 @@ KNOWLEDGE_APP_ROLE=worker uv run knowledge-server   # worker 角色，跑摄取
 
 配置见 `.env.example`。
 
-## 启用加速索引（可选）
+## 向量索引（硬依赖）
 
-向量的持久真相是 `kb_chunk_vectors.embedding`（bytea），**任何环境都有**。
-pgvector 那一路是**可选的加速物化**，不由迁移建：
+检索的两路都是硬依赖（[ADR-0045](../../../docs/adr/0045-向量与关键词索引改为硬依赖.md)）：
+向量走 pgvector 的 `vector` 列 + HNSW，关键词走 pg_trgm 的 trigram。两个扩展、
+向量表 `kb_chunk_embeddings` 与三个索引**都由迁移建**——库上装不了扩展就迁移失败，
+整栈起不来，这是有意的：留一条应用层余弦的回退档，代价是它在界面上与真检索长得
+一模一样，只是召回悄悄变差。
 
-```bash
-uv run python -m knowledge_server.index --enable
-```
-
-装不上就别装——服务启动时会探测，探测不到就走
-`BruteForceIndex`（应用层余弦），并在 `/capabilities` 里如实写着「未启用加速索引」。
-理由见 [ADR-0034](../../../docs/adr/0034-向量索引走端口并按扩展探测选实现.md)。
+`vector(N)` 的 N 取自 `KNOWLEDGE_EMBEDDING_DIMENSIONS`，**必须**等于模型管理页上
+分配给「知识库嵌入」那个模型的维数。对不上时一份文档都摄不进来，而
+`/capabilities` 会在传文档之前就把两个数字说出来。换模型换维数 = 重建向量表 +
+把已有文档重新解析一遍。
 
 ## 语音输入（可选）
 

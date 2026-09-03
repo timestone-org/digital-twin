@@ -66,7 +66,6 @@ addopts = "-q"
 markers = [
     "requires_postgres: 需要真实 Postgres（L2/L3/L4）",
     "requires_redis: 需要真实 Redis",
-    "requires_pgvector: 需要装了 pgvector 的 Postgres（加速索引那一路）",
 ]
 # ⚠ 警告一律当红灯：CI 日志里的黄字没人回头看，而一条 DeprecationWarning
 # 就是下次升级依赖时的失败。要留的例外必须逐条写在这里，说清为什么留。

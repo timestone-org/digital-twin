@@ -232,14 +232,15 @@ describe('首屏', () => {
   })
 })
 
-describe('如实报索引档', () => {
-  it('走回退档时把原因摆在页面上', async () => {
+describe('如实报索引的毛病', () => {
+  it('维数对不上时把原因摆在页面上', async () => {
     api.readCapability.mockResolvedValue({
       ...READY,
       index: {
-        vector: 'bruteforce',
-        keyword: 'like',
-        reason: '这套部署的数据库没装 pgvector，检索走的是全表暴力比对',
+        vector: 'pgvector',
+        keyword: 'trgm',
+        reason:
+          '这套部署的向量列是 1536 维，而分配的嵌入模型算出来的是 1024 维',
       },
       rerank: {
         isEnabled: false,
@@ -250,13 +251,15 @@ describe('如实报索引档', () => {
 
     const wrapper = await render()
 
-    expect(wrapper.text()).toContain('没装 pgvector')
+    expect(wrapper.text()).toContain('1024 维')
   })
 
-  it('走在首选档上时不摆这条提示', async () => {
+  it('一切正常时不摆这条提示', async () => {
+    // ⚠ 断言挑的是提示里独有的那半句：页面别处本来就写着「向量维数 1536」，
+    // 拿「维数」去断言的话，这条用例永远红着而提示其实没出现
     const wrapper = await render()
 
-    expect(wrapper.text()).not.toContain('pgvector')
+    expect(wrapper.text()).not.toContain('1024 维')
   })
 })
 

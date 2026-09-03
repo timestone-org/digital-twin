@@ -3,6 +3,9 @@
 from knowledge_server.apps.knowledge.services.chunking.ports import (
     Chunk,
     Chunker,
+    ChunkLimits,
+    limits_for,
+    oversized,
 )
 from knowledge_server.apps.knowledge.services.chunking.registry import (
     CHUNKERS,
@@ -17,9 +20,12 @@ __all__ = [
     "CHUNKERS",
     "DEFAULT_CHUNKER",
     "Chunk",
+    "ChunkLimits",
     "Chunker",
     "UnknownChunker",
     "chunker_for",
     "chunker_names",
     "estimated",
+    "limits_for",
+    "oversized",
 ]

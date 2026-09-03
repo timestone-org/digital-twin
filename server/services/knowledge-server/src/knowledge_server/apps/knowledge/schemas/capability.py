@@ -4,17 +4,18 @@ from pydantic import BaseModel, Field
 
 
 class IndexCapabilityOut(BaseModel):
-    """检索那两路各自走在哪一档上。
+    """检索由哪两路组成，以及此刻有没有毛病。
 
-    ⚠ `reason` 不是装饰：走在回退档上时用户要看得见**为什么**。
-    悄悄退化的表现是「有点慢」「有点不准」，而没有人会去查一件没人说过的事
-    （ADR-0034 决策五）。
+    ⚠ 两路都没有回退档了（ADR-0045），所以这两格恒为 `pgvector` 与 `trgm`。
+    留着它们是因为界面要说得出「检索是怎么做的」，而 `reason` 仍然不是装饰：
+    维数对不上这类毛病要在**传文档之前**就看得见——否则第一次发现它的方式是
+    每一份文档都摄取失败。
     """
 
-    # 实际生效的那一档，取值同 `services/indexing/registry.py` 的注册名
+    # 这套部署的两路索引，取值同 `services/indexing/registry.py` 的注册名
     vector: str
     keyword: str
-    # 走在回退档上的原因；走在首选档上时是空串
+    # 此刻的毛病；一切正常时是空串
     reason: str = ""
 
 
@@ -50,7 +51,7 @@ class RerankCapabilityOut(BaseModel):
 class CapabilityOut(BaseModel):
     """知识库能力。"""
 
-    # 嵌入档接上了吗。没接时文档照常摄取，检索如实回答「这个库还没建索引」
+    # 嵌入档接上了吗。⚠ 没接时**摄取不了任何文档**：向量是检索的必经一路
     is_embedding_enabled: bool
     # 对话档接上了吗。它只决定 `agentic` 策略可不可用
     is_model_enabled: bool

@@ -20,6 +20,7 @@ from knowledge_server.apps.knowledge.services import (
     search_service,
 )
 from knowledge_server.apps.knowledge.services.capability import (
+    Installed,
     ModelLanes,
     capability_of,
 )
@@ -28,6 +29,7 @@ from knowledge_server.apps.knowledge.services.capability import (
 # 检索面会抛的两种错与出入参的形状。多露一样就是多一条它能伸进来的路
 __all__ = [
     "HitOut",
+    "Installed",
     "KnowledgeBaseNotFound",
     "ModelLanes",
     "RetrievalUnavailable",

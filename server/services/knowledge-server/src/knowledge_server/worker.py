@@ -21,11 +21,8 @@ from knowledge_server.apps.knowledge.services.ingest_worker import (
     ConsumerOptions,
     IngestConsumer,
 )
-from knowledge_server.apps.knowledge.services.parsing import (
-    EXTERNAL_BACKENDS,
-)
 from knowledge_server.container import Container, build_container
-from knowledge_server.probe import probe_indexes
+from knowledge_server.schema import read_schema_facts
 from knowledge_server.settings import Settings
 from lib.lifespan import wait_for_termination
 from lib.logging import configure_logging, get_logger
@@ -62,7 +59,7 @@ class WorkerRuntime:
 
 
 def build_runtime(container: Container, wait: Wait) -> WorkerRuntime:
-    """按已经探测过的容器装出这一次要跑的消费循环。
+    """按容器装出这一次要跑的消费循环。
 
     ⚠ 消费者是一个显式元组，不靠 import 副作用登记：隐式登记让「这个进程在跑
     什么」取决于 import 顺序，而顺序在测试里与生产里可以不同。
@@ -74,12 +71,10 @@ def build_runtime(container: Container, wait: Wait) -> WorkerRuntime:
     并行两份的峰值内存翻倍，而 worker 的内存上限是编排给的。要更快就多起
     一个 worker 副本——那是队列消费组本来就支持的。
 
-    ⚠ 收的是**已经探测过的**容器而不是配置：消费者在装配那一刻就要知道走哪一
-    档索引，自己再造一份容器的话拿到的永远是回退档，而 `/capabilities` 报的是
-    加速档——两边都不报错。
+    ⚠ 收的是容器而不是配置：模型目录、嵌入档与队列客户端都是一个进程一份的
+    长生命周期对象，自己再造一份的话，刷新与断路器各算各的。
 
-    Args: container（已经跑过 `probe_indexes`）, wait（等停止信号，
-        测试换一个立刻返回的）。
+    Args: container, wait（等停止信号，测试换一个立刻返回的）。
     """
     pool = ProcessPoolExecutor(max_workers=1)
     return WorkerRuntime(
@@ -95,9 +90,9 @@ def _ingest_consumer(
 ) -> IngestConsumer:
     """装出摄取消费者。
 
-    ⚠ 索引档按**启动探测**选，与 `/capabilities` 报的是同一份判定
-    （`capability.py`）。各算各的话，界面说走加速档而写入走的是回退档——
-    那时两边都不报错。
+    ⚠ 把目录的刷新口子交给管线：`can_embed` 问的是手上那份快照，而这个进程
+    里没有别的地方刷它（api 那一侧有启动钩子与能力面，worker 一个都没有）。
+    不接的话每一份文档都会跳过嵌入走到 ready，而界面上说的是「已接」。
 
     Args: container, pool。
     """
@@ -108,11 +103,15 @@ def _ingest_consumer(
         deps=IngestDeps(
             sources=container.sources,
             embedder=container.embedder,
-            indexes=index_pair(settings, container.index),
+            indexes=index_pair(settings, container.schema),
             pool=pool,
+            store=container.objectstore,
             parse_timeout_s=settings.parse_timeout_s,
             batch_size=settings.embedding_batch_size,
-            external_parsers=EXTERNAL_BACKENDS,
+            chunk_min_tokens=settings.chunk_min_tokens,
+            chunk_overlap_chars=settings.chunk_overlap_chars,
+            refresh=container.catalog.refresh,
+            external_parsers=container.external_parsers,
             external_parse_timeout_s=settings.external_parse_timeout_s,
         ),
         options=ConsumerOptions(
@@ -178,7 +177,8 @@ async def run_worker(settings: Settings) -> None:
         level=settings.app_log_level,
         log_format=settings.app_log_format,
     )
-    # ⚠ 探测排在装配之前，理由见 `build_runtime` 的告诫
     container = build_container(settings)
-    await probe_indexes(container.database, container.index)
+    # ⚠ 读事实排在装配之前：消费者在装配那一刻就要知道向量列是多少维，
+    # 之后再读的话它手上那份索引比的仍是配置值
+    await read_schema_facts(container.database, container.schema)
     await run_until_stopped(build_runtime(container, wait_for_termination))

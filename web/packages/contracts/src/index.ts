@@ -94,6 +94,8 @@ export type {
   KnowledgeChatSessionPatch,
   KnowledgeChatStep,
   KnowledgeChatToolResult,
+  KnowledgeCitation,
+  KnowledgeCitedFigure,
   KnowledgeDocument,
   KnowledgeDocumentStatus,
   KnowledgeHit,

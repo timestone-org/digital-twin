@@ -10,7 +10,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from knowledge_server.apps.knowledge.schemas import CapabilityOut
-from knowledge_server.apps.knowledge.services import ModelLanes, capability_of
+from knowledge_server.apps.knowledge.services import (
+    Installed,
+    ModelLanes,
+    capability_of,
+)
 from knowledge_server.apps.knowledge.services.assembly import (
     lanes_of,
     strategies,
@@ -51,13 +55,18 @@ def _capability_of(container: Container) -> CapabilityOut:
     lanes = strategies(lanes_of(container))
     return capability_of(
         container.settings,
-        container.index,
-        container.sources,
-        lanes,
+        container.schema.vector_dimensions,
+        Installed(
+            sources=container.sources,
+            strategies=lanes,
+            external_parsers=container.external_parsers,
+        ),
         ModelLanes(
             is_embedding_enabled=container.embedder.can_embed,
             is_model_enabled=container.answerer.can_answer,
+            embedding_dimensions=container.embedder.dimensions,
             is_rerank_enabled=container.reranker.can_rerank,
+            is_rerank_failing=container.reranker.is_failing,
             rerank_model=container.reranker.model or "",
         ),
     )

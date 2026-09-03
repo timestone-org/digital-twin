@@ -40,6 +40,7 @@ from llmcore import (
     DeltaSink,
     ModelChoice,
 )
+from llmcore.deltas import text_of
 from llmcore.tools.shapes import (
     ToolSpec,
     openai_schema,
@@ -445,10 +446,15 @@ def _outcome(final: dict[str, Any], seeded: int) -> TurnOutcome:
 def _last_text(messages: Sequence[BaseMessage]) -> str:
     """最后一条助手消息的文本。
 
+    ⚠ `content` 可能是**一串块**而不是一个字符串：带思考摘要的那几路
+    （Responses 方言）把摘要与正文分别放进 `reasoning` 与 `text` 块里。当成
+    字符串取的表现极难认——回合看着答完了，答案也确实流到了界面上（增量是
+    另一条路），只有**依赖 `reply` 的东西**静默失灵：知识库那边靠它扫角标出
+    引用，于是引用一条都不出，而日志里没有任何异常。
+
     Args: messages。
     """
     for message in reversed(messages):
         if isinstance(message, AIMessage):
-            content = message.content
-            return content if isinstance(content, str) else ""
+            return text_of(message)
     return ""

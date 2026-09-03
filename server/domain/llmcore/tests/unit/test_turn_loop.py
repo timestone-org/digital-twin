@@ -168,3 +168,51 @@ async def test_the_step_ceiling_is_configurable() -> None:
 
     with pytest.raises(Exception):  # noqa: B017,PT011
         await run_turn(_deps(responder, max_steps=2), [])
+
+
+async def test_a_reply_split_into_content_blocks_is_still_a_reply() -> None:
+    """⚠ 带思考摘要的那几路（Responses 方言）把摘要与正文分别放进
+    `reasoning` 与 `text` 块里，`content` 于是是**一串块**而不是一个字符串。
+
+    当成字符串取的表现极难认：回合看着答完了，答案也确实流到了界面上（增量
+    是另一条路），只有**依赖 `reply` 的东西**静默失灵——知识库那边靠它扫角标
+    出引用，于是引用一条都不出，而日志里没有任何异常。
+    """
+    responder = ScriptedResponder(
+        [
+            AIMessage(
+                content=[
+                    {
+                        "type": "reasoning",
+                        "summary": [
+                            {"type": "summary_text", "text": "先查一下库"}
+                        ],
+                    },
+                    {"type": "text", "text": "上限是 65 ℃。①"},
+                ]
+            )
+        ]
+    )
+
+    got = await run_turn(_deps(responder), [])
+
+    assert got.reply == "上限是 65 ℃。①"
+
+
+async def test_a_block_that_is_not_text_never_reaches_the_reply() -> None:
+    """⚠ 认不出的块当没有，而不是 `str()` 它：那会把一段 Python 字面量摆进
+    用户的对话框，而且会让扫角标的正则在里面撞出假角标。"""
+    responder = ScriptedResponder(
+        [
+            AIMessage(
+                content=[
+                    {"type": "image_url", "image_url": {"url": "data:…"}},
+                    {"type": "text", "text": "看图说话"},
+                ]
+            )
+        ]
+    )
+
+    got = await run_turn(_deps(responder), [])
+
+    assert got.reply == "看图说话"

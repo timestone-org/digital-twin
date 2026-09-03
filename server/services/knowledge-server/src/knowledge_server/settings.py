@@ -3,7 +3,7 @@
 变量名 = `KNOWLEDGE_<组>_<键>`。密钥类一律无默认值——缺失即拒绝启动。
 """
 
-from typing import Literal, Self
+from typing import Self
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import SettingsConfigDict
@@ -26,17 +26,20 @@ HISTORY_DROP_STEP = 10
 ROLE_API = "api"
 ROLE_WORKER = "worker"
 
-# 索引档的取值。⚠ `auto` 是**探测**，不是「猜」：启动时问一次库装没装扩展，
-# 据此选实现。三个取值走的是同一段代码的不同实现，不是环境分支
-IndexChoice = Literal["auto", "pgvector", "bruteforce"]
-KeywordChoice = Literal["auto", "trgm", "like"]
+# 向量维数的缺省值。⚠ 它同时是**库上那一列的维数**（`vector(N)` 的 N，建表时
+# 定死）与环境变量那一路嵌入端点的维数：两处必须是同一个数，所以只有一个常量
+DEFAULT_EMBEDDING_DIMENSIONS = 1536
 
-# 一个块最多多少字符。⚠ 有上限：嵌入端点按 token 收费也按 token 截断，
-# 超了那一截**不报错**，只是没进向量——表现是「这一段怎么都检索不到」
-MAX_CHUNK_CHARS = 2_000
-# 相邻块的重叠字符数。⚠ 不能是 0：切在句子中间的那一刀会让两边都答不出
-# 跨刀的问题，而它看起来只是「这个问题模型不会」
-CHUNK_OVERLAP_CHARS = 200
+# 嵌入端点窗口的缺省值。⚠ 切块上限由它折算而来，**不是**切块层自己的常量：
+# 端点对超出窗口的那一截静默截断、不报错，配大了只表现为「这一段明明有，
+# 就是搜不到」。512 是 bge 系列这类 BERT 底座的常见窗口
+DEFAULT_EMBEDDING_MAX_INPUT_TOKENS = 512
+# 一块至少多少 token。⚠ 攒不够就跨标题继续攒：只有一行标题的块又短又泛，
+# 与任何查询都有中等相似度，专挤名次
+DEFAULT_CHUNK_MIN_TOKENS = 80
+# 相邻块的重叠字符数。⚠ 不能是 0：跨过一刀的问题两边都答不出，
+# 而它看起来只是「这个问题模型不会」
+DEFAULT_CHUNK_OVERLAP_CHARS = 120
 # 一次检索最多回多少条
 MAX_RETRIEVAL_HITS = 50
 # 一份原件最大多少字节。⚠ 有上限：一份几百兆的文件会把 worker 的内存吃干，
@@ -63,6 +66,9 @@ class MigrationSettings(PostgresSettings):
     )
 
     postgres_schema: str = DB_SCHEMA
+    # 建 `vector(N)` 的那个 N。⚠ 破例进这一份「只连库」的配置：迁移拿不到它
+    # 就只能把维数写死在迁移文件里，而维数是部署的取值不是代码的行为
+    embedding_dimensions: int = DEFAULT_EMBEDDING_DIMENSIONS
 
 
 class Settings(
@@ -102,14 +108,25 @@ class Settings(
     # 硬超时），故比目录那条宽一点；仍要小于模型调用自己的预算
     llm_login_timeout_s: float = Field(default=15.0, gt=0)
 
-    # 嵌入档。关着时文档照常摄取，检索如实回答「这个库还没建索引」——
-    # 不是返回空表，空表与「确实没有相关内容」长得一模一样
+    # 嵌入档的**永久默认值**：模型目录里没给「知识库嵌入」分配时用这一组。
+    # ⚠ 两处都没有就摄取不了任何文档——向量是检索的必经一路（ADR-0045），
+    # 而那时每一份文档会以一句点得出名字的话判失败，不是悄悄走到 ready
     embedding_enabled: bool = False
     embedding_base_url: str = ""
     embedding_api_key: SecretStr | None = None
     embedding_model: str = ""
-    embedding_dimensions: int = 1536
+    embedding_dimensions: int = DEFAULT_EMBEDDING_DIMENSIONS
+    # 嵌入端点一次吃得下多少 token。⚠ 切块上限由它折算而来：端点对超出窗口的
+    # 那一截**静默截断、不报错**，配大了的表现是「这一段明明有，就是搜不到」。
+    # 换嵌入模型要跟着改——它是模型的属性，而 OpenAI 兼容口径里问不出来
+    embedding_max_input_tokens: int = Field(
+        default=DEFAULT_EMBEDDING_MAX_INPUT_TOKENS, gt=0
+    )
     embedding_timeout_s: float = 30.0
+    # 切块的下限与重叠。⚠ 上限不在这里：它由上面那格窗口折算而来，
+    # 给它单独一格配置就等于允许两者漂开，而漂开的那一侧不报错
+    chunk_min_tokens: int = Field(default=DEFAULT_CHUNK_MIN_TOKENS, ge=0)
+    chunk_overlap_chars: int = Field(default=DEFAULT_CHUNK_OVERLAP_CHARS, ge=0)
     # 一次嵌入调用最多带几段。⚠ 有上限：端点对单次请求的总 token 有限，
     # 超了整批失败，而失败的是「这一次摄取」不是「这一段」
     embedding_batch_size: int = 16
@@ -142,14 +159,21 @@ class Settings(
     # 一份文档解析多久算卡死。⚠ 必须有：没有超时的解析会把这条消费循环
     # 永久占住，而现象是「队列不动了」，看不出是哪一份文档导致的
     parse_timeout_s: float = 10 * 60
-    # 外部解析服务（MinerU / PP-Structure 这一类）一次调用最多等多久。
-    # ⚠ 与上面那一档分开配：那一路是本地 CPU，这一路是网络 IO，几十秒是常态。
-    # 一期没有任何外部后端，这一格因此还没有生效路径（ADR-0043）
-    external_parse_timeout_s: float = Field(default=180.0, gt=0)
+    # ---- 外部解析服务 MinerU（ADR-0043）----
+    # ⚠ 开关开着却不给地址 = 启动即失败，与语音那一路同一条规矩：
+    # 「起来之后每次解析才报错」比起不来难查得多
+    mineru_enabled: bool = False
+    mineru_base_url: str = ""
+    # OCR 语言，原样交给 MinerU
+    mineru_lang: str = "ch"
+    mineru_formula_enabled: bool = True
+    mineru_table_enabled: bool = True
 
-    # 索引档，见 ADR-0034
-    vector_index: IndexChoice = "auto"
-    keyword_index: KeywordChoice = "auto"
+    # 外部解析服务投任务 + 轮询到出结果的总预算。
+    # ⚠ 与上面那一档分开配：那一路是本地 CPU，这一路是网络 IO。
+    # ⚠ 纯 CPU 上一份几十页的扫描件按分钟算，配小了的表现是「大文件一律
+    # 解析超时」；而容器起来后的**第一次**解析还要先把权重载进内存
+    external_parse_timeout_s: float = Field(default=180.0, gt=0)
 
     # 语音输入：到自建 FunASR 的中继（ADR-0038）。关着时 `/speech/ws` 一律
     # 以 1013 关掉，`/capabilities` 如实报 `is_asr_enabled=false`
@@ -231,6 +255,24 @@ class Settings(
             raise ValueError("开了语音识别就必须配 KNOWLEDGE_ASR_URL")
         if not url.startswith(("ws://", "wss://")):
             raise ValueError("KNOWLEDGE_ASR_URL 必须以 ws:// 或 wss:// 开头")
+        return self
+
+    @model_validator(mode="after")
+    def _mineru_needs_an_address(self) -> Self:
+        """开了 MinerU 就必须给地址，否则启动即失败。
+
+        ⚠ 不打 WARN 继续：留到第一份 PDF 才发现的话，用户看到的是这份文档
+        解析失败，而 `/capabilities` 说的是「接了 mineru」。
+        """
+        if not self.mineru_enabled:
+            return self
+        url = self.mineru_base_url.strip()
+        if not url:
+            raise ValueError("开了 MinerU 就必须配 KNOWLEDGE_MINERU_BASE_URL")
+        if not url.startswith(("http://", "https://")):
+            raise ValueError(
+                "KNOWLEDGE_MINERU_BASE_URL 必须以 http:// 或 https:// 开头"
+            )
         return self
 
     def embedding_endpoint(self) -> EmbeddingEndpoint | None:

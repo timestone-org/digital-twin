@@ -54,6 +54,39 @@ def document_key(
     return f"{PREFIX}/{base_id}/{document_id}{suffix}"
 
 
+def document_prefix(base_id: uuid.UUID, document_id: uuid.UUID) -> str:
+    """一份文档名下的派生物（图、表截图）。删文档时按它一把清。
+
+    ⚠ 与原件那个键**不冲突**：原件是 `knowledge/{base}/{doc}.pdf`（一个对象），
+    这里是 `knowledge/{base}/{doc}/`（一个前缀）。S3 的键是扁平字符串，
+    两者可以并存。
+
+    Args: base_id, document_id。
+    """
+    return f"{PREFIX}/{base_id}/{document_id}/"
+
+
+def figure_key(
+    base_id: uuid.UUID,
+    document_id: uuid.UUID,
+    content_hash: str,
+    suffix: str,
+) -> str:
+    """一张图的落点。
+
+    ⚠ 用**内容哈希**当名字而不是序号：重新解析时同一张图算出同一个键，
+    于是不必重传、也不会在桶里留下一串孤儿。序号会随切分变化而漂。
+
+    ⚠ 落在 `knowledge/` 前缀下 = **不匿名可读**。知识库里可能有涉密图纸，
+    而素材那三个前缀（models/images/icons）是给现场大屏机匿名取的。
+
+    Args: base_id, document_id, content_hash, suffix。
+    """
+    return (
+        f"{document_prefix(base_id, document_id)}figures/{content_hash}{suffix}"
+    )
+
+
 def base_prefix(base_id: uuid.UUID) -> str:
     """一个库名下的全部原件。删库时按它一把清。
 

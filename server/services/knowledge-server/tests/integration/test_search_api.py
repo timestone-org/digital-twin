@@ -11,11 +11,7 @@ import pytest
 from knowledge_server.apps.knowledge import crud
 from knowledge_server.apps.knowledge.schemas import SearchIn, SearchOut
 from knowledge_server.apps.knowledge.services import search_service
-from knowledge_server.apps.knowledge.services.indexing import (
-    BruteForceIndex,
-    IndexPair,
-    LikeKeywordIndex,
-)
+from knowledge_server.apps.knowledge.services.indexing import build_indexes
 from knowledge_server.apps.knowledge.services.ingest_pipeline import (
     IngestDeps,
     ingest,
@@ -35,22 +31,40 @@ pytestmark = pytest.mark.requires_postgres
 BASES = f"{API_PREFIX}/knowledge-bases"
 DOCS = f"{API_PREFIX}/documents"
 
-BODY = "# 冷却水\n出口温度不得高于 65 ℃\n\n# 润滑\n每 500 小时换一次油\n"
+# ⚠ 两节都要比切块下限长：太短的两节会被合成一块（那是刻意的，见
+# `chunking/structural.py`），于是这一摞验「多块」的用例会全部退化成一块
+BODY = (
+    "# 冷却水\n"
+    "出口温度不得高于 65 ℃。运行中每班巡检一次进出口压差，"
+    "压差超过 0.15 MPa 时先清洗板式换热器再复查。补水电导率长期"
+    "高于 300 μS/cm 的，按季度做一次全系统排污，排污后补水至视镜"
+    "中位线，并记录本次补水量与电导率读数备查。\n\n"
+    "# 润滑\n"
+    "每 500 小时换一次油。换油前先取样送检，含水量超过 0.1% 或"
+    "黏度偏离牌号 ±10% 的按提前换油处理。加注量以视镜中位线为准，"
+    "过量会让轴承温升偏高而不报警，因此加注后要复测一次温升并留档。\n"
+)
 
 
 @dataclass(frozen=True)
 class FakeEmbedder:
-    """按正文长度造一条稳定的假向量。"""
+    """按正文长度造一条稳定的假向量。
 
-    dimensions: int = 4
+    ⚠ 宽度必须**真的**等于库上那一列：列是 `vector(N)`，宽度对不上时写入
+    直接被拒——而假件里随手写个 4 维是最容易漏的一处。
+    """
+
+    dimensions: int
     id: str = "fake"
+    max_input_tokens: int = 512
     can_embed: bool = True
 
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
-        return [
-            [float(len(one) % 7), 1.0, 0.5, float(len(one) % 3)]
-            for one in texts
-        ]
+        made: list[list[float]] = []
+        for one in texts:
+            head = [float(len(one) % 7), 1.0, 0.5, float(len(one) % 3)]
+            made.append((head + [0.0] * self.dimensions)[: self.dimensions])
+        return made
 
 
 @dataclass(frozen=True)
@@ -81,8 +95,9 @@ def ingest_deps(embedder: FakeEmbedder) -> IngestDeps:
     return IngestDeps(
         sources=(FakeSource(),),  # pyright: ignore[reportArgumentType]
         embedder=embedder,  # pyright: ignore[reportArgumentType]
-        indexes=IndexPair(vector=BruteForceIndex(), keyword=LikeKeywordIndex()),
+        indexes=build_indexes(embedder.dimensions),
         pool=ThreadPoolExecutor(max_workers=1),
+        store=None,
         parse_timeout_s=30.0,
     )
 
@@ -240,7 +255,7 @@ async def test_a_registered_document_is_not_searchable_until_ingested(
 
 
 async def test_an_ingested_document_comes_back_with_its_citation(
-    db_sessions: object,
+    db_sessions: object, db_dimensions: int
 ) -> None:
     """整条链走通：摄取 → 检索 → 召回带着**指得到块**的出处。
 
@@ -248,7 +263,7 @@ async def test_an_ingested_document_comes_back_with_its_citation(
     手册里」，而那等于没给出处。
     """
     base_id, document_id = await seeded(db_sessions)
-    embedder = FakeEmbedder()
+    embedder = FakeEmbedder(dimensions=db_dimensions)
     await ingest(
         db_sessions,  # pyright: ignore[reportArgumentType]
         ingest_deps(embedder),
@@ -256,9 +271,7 @@ async def test_an_ingested_document_comes_back_with_its_citation(
     )
     lanes = build_strategies(
         RetrievalDeps(
-            indexes=IndexPair(
-                vector=BruteForceIndex(), keyword=LikeKeywordIndex()
-            ),
+            indexes=build_indexes(embedder.dimensions),
             embedder=embedder,  # pyright: ignore[reportArgumentType]
         )
     )
@@ -298,12 +311,12 @@ class FakeReranker:
 
 
 async def test_the_rerank_lane_decides_the_final_order(
-    db_sessions: object,
+    db_sessions: object, db_dimensions: int
 ) -> None:
     """⚠ 接了重排就**多召一批再排**：只召 limit 条的话，重排能做的只有把
     这几条换个顺序，而它真正的价值是把排在 limit 之外的那一条捞上来。"""
     base_id, document_id = await seeded(db_sessions)
-    embedder = FakeEmbedder()
+    embedder = FakeEmbedder(dimensions=db_dimensions)
     await ingest(
         db_sessions,  # pyright: ignore[reportArgumentType]
         ingest_deps(embedder),
@@ -321,12 +334,12 @@ async def test_the_rerank_lane_decides_the_final_order(
 
 
 async def test_the_rerank_lane_gets_a_wider_batch_than_what_is_asked_for(
-    db_sessions: object,
+    db_sessions: object, db_dimensions: int
 ) -> None:
     """⚠ 只送 limit 条的话，重排能做的只有把这几条换个顺序，
     而它真正的价值是把排在 limit 之外、其实最相关的那一条捞上来。"""
     base_id, document_id = await seeded(db_sessions)
-    embedder = FakeEmbedder()
+    embedder = FakeEmbedder(dimensions=db_dimensions)
     await ingest(
         db_sessions,  # pyright: ignore[reportArgumentType]
         ingest_deps(embedder),
@@ -350,7 +363,7 @@ async def _searched(
     Args: db_sessions, base_id, embedder, reranker, limit。
     """
     deps = RetrievalDeps(
-        indexes=IndexPair(vector=BruteForceIndex(), keyword=LikeKeywordIndex()),
+        indexes=build_indexes(embedder.dimensions),
         embedder=embedder,  # pyright: ignore[reportArgumentType]
         reranker=reranker,  # pyright: ignore[reportArgumentType]
     )

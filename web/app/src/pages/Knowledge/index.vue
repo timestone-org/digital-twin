@@ -4,8 +4,8 @@
  *
  * ⚠ 文档字节从不经过本站 API：上传是浏览器凭签好的表单直传对象存储（ADR-0015），
  * 这一页只管那张表与那几个按钮。
- * ⚠ 两路索引走在哪一档要如实显示：走回退档时检索会明显变慢变弱，而不说的话
- * 没有人会去查一件没人说过的事（ADR-0034 决策五）。
+ * ⚠ 索引那一格的毛病要如实显示：维数与库上那一列对不上时一份文档都摄不进来，
+ * 而这句提示是在传文档之前唯一看得见它的地方（ADR-0045）。
  * 交互编排在 `scripts/useKnowledgePage.ts`，摄取轮询在 `scripts/useIngestPolling.ts`。
  */
 import { onMounted, ref } from 'vue'
@@ -122,8 +122,8 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
         {{ page.error.value }}
       </DtNotice>
 
-      <!-- ⚠ 走回退档时如实说出来：悄悄退化的表现是「检索有点慢、有点不准」，
-           而没有人会去查一件没人说过的事 -->
+      <!-- ⚠ 索引有毛病时如实说出来：维数对不上会让每一份文档都摄取失败，
+           而只看文档状态的话，那条错像是文档本身有问题 -->
       <DtNotice
         v-if="page.indexHint.value !== ''"
         intent="warning"
