@@ -99,6 +99,7 @@ function run(over: Partial<ModelingRun>): ModelingRun {
     graph: GRAPH,
     row_count: null,
     is_source_truncated: false,
+    is_keeping_frames: false,
     error_text: null,
     duration_ms: null,
     created_by_name: null,

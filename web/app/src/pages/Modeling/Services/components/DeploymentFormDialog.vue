@@ -6,7 +6,14 @@
  * 对接方当场 404（docs/MODELING_PLATFORM_DESIGN.md D13）。
  */
 import type { ModelDeployment, ModelingVersionSummary } from '@dt/contracts'
-import { DtButton, DtInput, DtModal, DtNotice, DtSelect } from '@dt/ui'
+import {
+  DtButton,
+  DtInput,
+  DtModal,
+  DtNotice,
+  DtNumberInput,
+  DtSelect,
+} from '@dt/ui'
 import { computed, ref, watch } from 'vue'
 
 import { useFormDirty } from '@/composables/useFormDirty'
@@ -144,20 +151,18 @@ function submit(): void {
         hint="换版本时第三方不必改代码——地址跟着标识走，不跟着版本走"
         :options="options"
       />
-      <DtInput
-        v-model.number="form.maxRows"
-        type="number"
+      <!-- ⚠ 数值用 DtNumberInput 不是 DtInput：后者的 modelValue 是 string，
+           `v-model.number` 会把一个 number 塞进 string 里 -->
+      <DtNumberInput
+        v-model="form.maxRows"
         label="单次最多算几行"
-        :min="1"
-        :max="MAX_ROWS"
+        :range="{ min: 1, max: MAX_ROWS }"
         hint="超过就 400 并说清上限"
       />
-      <DtInput
-        v-model.number="form.rateLimit"
-        type="number"
+      <DtNumberInput
+        v-model="form.rateLimit"
         label="每分钟最多调几次"
-        :min="1"
-        :max="MAX_RATE"
+        :range="{ min: 1, max: MAX_RATE }"
         hint="按密钥计。边缘还有一层按来源 IP 的闸，两层缺一不可"
       />
     </div>

@@ -8,6 +8,7 @@
  */
 import type { DtDataColumn, ModelingSignatureInput } from '@dt/contracts'
 import { DtDataView, DtTag } from '@dt/ui'
+import { computed } from 'vue'
 
 const COLUMNS: readonly DtDataColumn[] = [
   { key: 'label', label: '要提供的列', card: 'title' },
@@ -23,13 +24,23 @@ const EMPTY = {
 }
 
 const props = defineProps<{ rows: readonly ModelingSignatureInput[] }>()
+
+/**
+ * 补一个 `id` 再交给表。
+ *
+ * ⚠ `DtDataView` 的行必须带 `id`（它按 id 建 key），而入口契约那几列没有
+ * 主键——列 key 本身就是它的唯一标识。
+ */
+const listed = computed(() =>
+  props.rows.map((row) => ({ ...row, id: row.key })),
+)
 </script>
 
 <template>
   <DtDataView
     view="table"
     :columns="COLUMNS"
-    :rows="props.rows"
+    :rows="listed"
     :empty="EMPTY"
     :layout="{ fixedLayout: true, minWidth: '44rem' }"
   >
