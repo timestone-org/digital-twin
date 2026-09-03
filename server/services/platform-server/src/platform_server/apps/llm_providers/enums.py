@@ -98,14 +98,15 @@ PROVIDER_KINDS: tuple[ProviderKindSpec, ...] = (
         label="Codex 订阅",
         description=(
             "用 ChatGPT 订阅账号直连 Codex 后端，不按 token 计费：不填密钥，"
-            "改为在这一行上走一次设备码登录。只有助手接得了这一路，且它不接图"
+            "改为在这一行上走一次设备码登录。助手与知识库都接得了，但它不接图"
         ),
         is_endpoint_required=False,
         is_login_required=True,
         # ⚠ 只有对话模型：这一路打的不是 embeddings 端点，登记了也没人读得到
         model_kinds=(MODEL_KIND_CHAT,),
-        # ⚠ 知识库没接这一路的适配器；放行的话分配得上、那一侧永远沿用环境变量
-        consumers=(CONSUMER_ASSISTANT,),
+        # ⚠ 两个消费方各有一张形态 → 适配器的表，都接得了这一路（ADR-0041）。
+        # 放行一个接不了的消费方等于「分配得上、那一侧永远沿用环境变量」
+        consumers=CONSUMERS,
         efforts=CODEX_EFFORTS,
     ),
 )

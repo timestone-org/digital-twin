@@ -322,16 +322,32 @@ async def test_a_login_based_provider_serves_the_assistant(
     assert response.status_code == 200, response.text
 
 
-async def test_a_login_based_provider_is_refused_by_the_other_consumer(
+async def test_a_login_based_provider_serves_both_consumers(
     llm_context: AppContext,
 ) -> None:
-    """⚠ 知识库没接这一路的适配器：放行的话分配写得进去、那一侧却永远
-    沿用环境变量那一档，而界面上显示配好了。"""
+    """⚠ 两个消费方都接得了这一路（ADR-0041）。放行一个接不了的消费方等于
+    「分配写得进去、那一侧却永远沿用环境变量那一档」，而界面上显示配好了。"""
+    created = data_of(
+        await llm_context.client.post(PROVIDERS, json=_codex_body())
+    )
+    for purpose in ("assistant.chat", "knowledge.chat"):
+        response = await llm_context.client.put(
+            f"{PURPOSES}/{purpose}",
+            json={"provider_id": created["id"], "model_name": "gpt-5-codex"},
+        )
+        assert response.status_code == httpx.codes.OK, response.text
+
+
+async def test_a_login_based_provider_is_refused_for_embeddings(
+    llm_context: AppContext,
+) -> None:
+    """⚠ 这一路打的不是 embeddings 端点：分配上去的话，每一次嵌入都撞一条
+    必然失败的调用，而界面上显示配好了。"""
     created = data_of(
         await llm_context.client.post(PROVIDERS, json=_codex_body())
     )
     response = await llm_context.client.put(
-        f"{PURPOSES}/knowledge.chat",
+        f"{PURPOSES}/knowledge.embedding",
         json={"provider_id": created["id"], "model_name": "gpt-5-codex"},
     )
     assert response.status_code == HTTP_BAD_REQUEST
@@ -382,5 +398,5 @@ async def test_the_kind_catalog_describes_what_to_configure(
     codex = by_code["codex_oauth"]
     assert codex["is_endpoint_required"] is False
     assert codex["is_login_required"] is True
-    assert codex["consumers"] == ["assistant"]
+    assert codex["consumers"] == ["assistant", "knowledge"]
     assert codex["efforts"] == ["low", "medium", "high", "xhigh"]
