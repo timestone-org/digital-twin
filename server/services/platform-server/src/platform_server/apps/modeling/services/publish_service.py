@@ -8,7 +8,7 @@ warning 一句就跳过，用户完全不知道自己上线了一个永远返回
 import sys
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import numpy
 import sklearn
@@ -31,6 +31,7 @@ from platform_server.apps.modeling.services import presenters
 from platform_server.apps.modeling.services.graph_walk import topological_order
 from platform_server.apps.modeling.services.jsonshape import (
     as_dict,
+    as_list,
     as_text,
     as_texts,
 )
@@ -39,7 +40,22 @@ from platform_server.apps.modeling.services.serving import (
     compile_model,
 )
 
-# 可服务表示里一步的键，与 `serving.py` 那份同源
+
+@dataclass(frozen=True)
+class NodeRecord:
+    """发布时要读的一个节点的三样东西。
+
+    ⚠ `fitted` 与 `io` **不在** `preview` 里：摘要有字节预算、超了会被静默削掉，
+    而这两样是发布件的原料（docs/MODELING_PLATFORM_DESIGN.md D1 / D3）。
+    """
+
+    #: 按输出端口建键的结果摘要
+    preview: dict[str, Any]
+    #: 这一步学到的参数；`None` 表示这一步没有拟合语义，**或者**这次运行早于
+    #: 那两列存在（历史运行），两者由算子的 `REQUIRES_FIT` 区分
+    fitted: dict[str, Any] | None
+    #: `{"inputs": {端口: [列 key…]}, "outputs": {端口: [列 key…]}}`
+    io: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -56,18 +72,20 @@ class Publishable:
     channel: str
 
 
-def inspect_run(graph: PipelineGraph, previews: dict[str, Any]) -> Publishable:
+def inspect_run(
+    graph: PipelineGraph, records: dict[str, NodeRecord]
+) -> Publishable:
     """扫一遍图与结果，判这次运行能不能发布。
 
     ⚠ 判据是**流水线的形状**加**算子的声明**，不是「跑通了没有」：跑通只说明
     训练没报错，与「这套东西在单行上算不算得出来」是两回事（§7.6）。
-    Args: graph, previews。
+    Args: graph, records。
     """
     nodes = graph.node_by_id()
     model_id = _model_node_of(graph)
     if model_id is None:
         return _unservable("这条流水线里没有建模算子，没有可发布的模型")
-    payload = as_dict(as_dict(previews.get(model_id)).get("model"))
+    payload = as_dict(_record(records, model_id).preview.get("model"))
     if not payload:
         return _unservable("这次运行没有产出模型")
     windowed = [
@@ -82,7 +100,7 @@ def inspect_run(graph: PipelineGraph, previews: dict[str, Any]) -> Publishable:
     channel = as_text(payload.get("serving_channel"))
     if channel != "json":
         return _unservable("这个算法的拟合参数没法用纯数据表达，暂不可上线")
-    return _servable(graph, previews, model_id, payload)
+    return _servable(graph, records, model_id, payload)
 
 
 def _model_node_of(graph: PipelineGraph) -> str | None:
@@ -97,30 +115,37 @@ def _model_node_of(graph: PipelineGraph) -> str | None:
 
 def _servable(
     graph: PipelineGraph,
-    previews: dict[str, Any],
+    records: dict[str, NodeRecord],
     model_id: str,
     payload: dict[str, Any],
 ) -> Publishable:
-    """拼出可服务表示，并当场编译一遍验证它真的算得出来。
+    """拼出可服务表示，并当场**实跑一行**验证它真的算得出来。
 
-    ⚠ 发布时就编译：常量列这类问题若留到推理期才炸，就成了「模型训出来了、
-    上线才发现用不了」（§7.3）。
+    ⚠ 发布时就跑：常量列、缺参数这类问题若留到推理期才炸，就成了「模型训出来
+    了、上线才发现用不了」（§7.3）。⚠ 只编译不够——编译只看形状，缺参数的那一步
+    编译得过、跑起来才抛。
     """
+    features = as_texts(payload.get("feature_keys"))
+    steps = _steps_of(graph, records, model_id, payload)
+    starved = _starved_step(graph, steps)
+    if starved:
+        return _unservable(starved)
     serving = {
         "format_version": SERVING_FORMAT_VERSION,
         "task": as_text(payload.get("task")),
-        "input_columns": as_texts(payload.get("feature_keys")),
-        "steps": _steps_of(graph, previews, model_id, payload),
+        "input_columns": features,
+        "steps": steps,
     }
     try:
-        compile_model(serving)
+        compiled = compile_model(serving)
+        compiled.predict(_smoke_row(graph, records, steps, features))
     except OperatorError as error:
         return _unservable(f"可服务表示校验没通过：{error}")
     return Publishable(
         is_servable=True,
         reason="",
         serving=serving,
-        feature_keys=tuple(as_texts(serving["input_columns"])),
+        feature_keys=tuple(features),
         target_key=as_text(payload.get("target_key")),
         algo=as_text(payload.get("algo")),
         task=as_text(payload.get("task")),
@@ -130,7 +155,7 @@ def _servable(
 
 def _steps_of(
     graph: PipelineGraph,
-    previews: dict[str, Any],
+    records: dict[str, NodeRecord],
     model_id: str,
     payload: dict[str, Any],
 ) -> list[dict[str, Any]]:
@@ -145,7 +170,7 @@ def _steps_of(
         operator = registry.get(nodes[node_id].operator)
         if not operator.ENABLED_IN_SERVING:
             continue
-        fitted = _fitted_of(previews, node_id, node_id == model_id, payload)
+        fitted = _fitted_of(records, node_id, node_id == model_id, payload)
         steps.append(
             {
                 "node_id": node_id,
@@ -159,14 +184,100 @@ def _steps_of(
 
 
 def _fitted_of(
-    previews: dict[str, Any],
+    records: dict[str, NodeRecord],
     node_id: str,
     is_model: bool,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
+    """这一步学到的参数。建模那一步在它自己的摘要里，其余在记录上。
+
+    Args: records, node_id, is_model, payload。
+    """
     if is_model:
         return as_dict(payload.get("fitted"))
-    return as_dict(as_dict(previews.get(node_id)).get("fitted"))
+    return as_dict(_record(records, node_id).fitted)
+
+
+def _starved_step(graph: PipelineGraph, steps: list[dict[str, Any]]) -> str:
+    """有没有哪一步该带参数却是空的；有就给一句人话，没有就给空串。
+
+    ⚠ 这是**必须拦下**的一条：空参数不会报错，它会让那一步在推理时拿请求里的
+    单行重新拟合，算出一个与线上模型毫无关系的数（缺陷 A）。
+    Args: graph, steps。
+    """
+    nodes = graph.node_by_id()
+    for step in steps:
+        operator = registry.get(nodes[as_text(step["node_id"])].operator)
+        if operator.REQUIRES_FIT and not step["fitted"]:
+            return (
+                f"步骤「{operator.NAME}」没有可用的拟合参数。"
+                "推理时它会拿单行重新拟合，算出来的数与训练结果无关，"
+                "故不可上线——请重跑一遍这条流水线再发布"
+            )
+    return ""
+
+
+def _smoke_row(
+    graph: PipelineGraph,
+    records: dict[str, NodeRecord],
+    steps: list[dict[str, Any]],
+    features: list[str],
+) -> list[float | None]:
+    """拿训练数据每列的均值拼一行，用来在发布时实跑一次。
+
+    ⚠ 用均值而不是摘要里的第一行：`head` 会被字节预算削掉，而列统计不会；
+    均值还必然落在训练区间内，不会额外触发外推那一类告警。
+    Args: graph, records, steps, features。
+    """
+    means = _entry_means(graph, records, steps)
+    return [means.get(key, 0.0) for key in features]
+
+
+def _entry_means(
+    graph: PipelineGraph,
+    records: dict[str, NodeRecord],
+    steps: list[dict[str, Any]],
+) -> dict[str, float]:
+    """推理链第一步的输入帧上，每一列的均值。
+
+    Args: graph, records, steps。
+    """
+    if not steps:
+        return {}
+    upstream = _upstream_of(graph, as_text(steps[0]["node_id"]), "frame")
+    if upstream is None:
+        return {}
+    node_id, port = upstream
+    stats = as_list(
+        _record(records, node_id).preview.get(port, {}).get("columns")
+    )
+    return {
+        as_text(as_dict(item).get("key")): float(
+            cast("float", as_dict(item).get("mean") or 0.0)
+        )
+        for item in stats
+    }
+
+
+def _upstream_of(
+    graph: PipelineGraph, node_id: str, port: str
+) -> tuple[str, str] | None:
+    """某个节点某个输入端口接的是谁的哪个输出端口。
+
+    Args: graph, node_id, port。
+    """
+    for edge in graph.edges:
+        if edge.to_node == node_id and edge.to_port == port:
+            return edge.from_node, edge.from_port
+    return None
+
+
+def _record(records: dict[str, NodeRecord], node_id: str) -> NodeRecord:
+    """某个节点的记录；没有记录时给一份空的，不抛。
+
+    Args: records, node_id。
+    """
+    return records.get(node_id) or NodeRecord(preview={}, fitted=None, io={})
 
 
 def _unservable(reason: str) -> Publishable:

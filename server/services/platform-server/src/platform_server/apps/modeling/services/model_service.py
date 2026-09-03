@@ -33,6 +33,7 @@ from platform_server.apps.modeling.services.jsonshape import (
 )
 from platform_server.apps.modeling.services.pipeline_service import Actor
 from platform_server.apps.modeling.services.publish_service import (
+    NodeRecord,
     fingerprint,
     graph_of_run,
     inspect_run,
@@ -51,8 +52,8 @@ async def publish_version(
     Args: session, payload, actor。
     """
     run = await require_publishable_run(session, payload.run_id)
-    previews = await _previews_of(session, run.id)
-    verdict = inspect_run(graph_of_run(run), previews)
+    records = await _records_of(session, run.id)
+    verdict = inspect_run(graph_of_run(run), records)
     row = model_version_crud.add(
         session,
         ModelingModelVersion(
@@ -70,7 +71,7 @@ async def publish_version(
             serving_json=verdict.serving,
             feature_keys=list(verdict.feature_keys),
             target_key=verdict.target_key,
-            metrics_json=_metrics_of(previews),
+            metrics_json=_metrics_of(records),
             fingerprint_json=fingerprint(run.row_count, _table_codes_of(run)),
             description=payload.description,
             created_by=actor.user_id,
@@ -177,20 +178,31 @@ async def update_binding(
     )
 
 
-async def _previews_of(
+async def _records_of(
     session: AsyncSession, run_id: uuid.UUID
-) -> dict[str, Any]:
+) -> dict[str, NodeRecord]:
+    """逐节点取回发布要用的三样东西。
+
+    Args: session, run_id。
+    """
     rows = await node_run_crud.list_by_run(session, run_id)
-    return {row.node_id: as_dict(row.preview_json) for row in rows}
+    return {
+        row.node_id: NodeRecord(
+            preview=as_dict(row.preview_json),
+            fitted=row.fitted_json,
+            io=as_dict(row.io_json),
+        )
+        for row in rows
+    }
 
 
-def _metrics_of(previews: dict[str, Any]) -> dict[str, Any]:
+def _metrics_of(records: dict[str, NodeRecord]) -> dict[str, Any]:
     """发布时冻结的指标。找不到评估节点时给空字典，不编数。
 
-    Args: previews。
+    Args: records。
     """
-    for preview in previews.values():
-        metrics = as_dict(as_dict(preview).get("metrics"))
+    for record in records.values():
+        metrics = as_dict(record.preview.get("metrics"))
         if metrics.get("kind") == "metrics":
             return as_dict(metrics.get("metrics"))
     return {}

@@ -3,6 +3,11 @@
 这是本模块存在的理由那一条。⚠ 造的数据是严格线性的
 `能耗 = 2×温度 + 3×负荷 + 5`，于是最后那一格算出来的数是可以手算核对的——
 「公式列不再报错」不等于「算的是那个模型」。
+
+⚠ 图里**必须留着标准化那一步**。这条链路曾经把它摘掉（「让系数留在原始尺度上
+便于手算核对」），而拟合参数没落库正是标准化才暴露的——唯一能逮到那条缺陷的用例，
+恰好把要逮的那个算子摘了（docs/MODELING_PLATFORM_DESIGN.md 缺陷 A）。数据是严格
+线性的，标准化是可逆的，故预测值仍然等于手算的那个数。
 """
 
 from typing import Any
@@ -95,33 +100,11 @@ async def _trained_version(
     """
     await _seed_ledger(client, session, f"energy_{code}")
     pipeline = await create_pipeline(
-        client, code, _no_scaling(f"energy_{code}")
+        client, code, linear_graph(f"energy_{code}")
     )
     run = await _run_pipeline(client, sessions, pipeline["id"])
     assert run["status"] == "succeeded", run
     return await _publish(client, run["id"], f"{code} 模型")
-
-
-def _no_scaling(table_code: str) -> dict[str, Any]:
-    """去掉标准化那一步，让系数留在原始尺度上便于手算核对。
-
-    Args: table_code。
-    """
-    graph = linear_graph(table_code)
-    graph["nodes"] = [item for item in graph["nodes"] if item["id"] != "z"]
-    graph["edges"] = [
-        item for item in graph["edges"] if item["id"] not in {"e2", "e3"}
-    ]
-    graph["edges"].append(
-        {
-            "id": "relink",
-            "from_node": "f",
-            "from_port": "frame",
-            "to_node": "p",
-            "to_port": "frame",
-        }
-    )
-    return graph
 
 
 async def test_a_trained_run_publishes_a_servable_version(
