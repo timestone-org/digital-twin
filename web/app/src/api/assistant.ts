@@ -8,9 +8,6 @@
  */
 import type {
   AssistantCapability,
-  AssistantCredentialStatus,
-  AssistantDeviceLoginPoll,
-  AssistantDeviceLoginStart,
   AssistantParsedAttachment,
   AssistantSession,
   AssistantSessionDetail,
@@ -99,55 +96,6 @@ export async function patchSession(
   return request<AssistantSession>(
     `/sessions/${sessionId}`,
     onAssistant({ method: 'PATCH', body: patch }),
-  )
-}
-
-/** 读一路模型账号的登录态。⚠ 回来的东西里没有令牌，也永远不该有。 */
-export async function readCredential(
-  provider: string,
-  signal?: AbortSignal,
-): Promise<AssistantCredentialStatus | null> {
-  return request<AssistantCredentialStatus>(
-    `/credentials/${provider}`,
-    onAssistant({ signal }),
-  )
-}
-
-/** 开一次设备码登录：拿用户码与验证地址。 */
-export async function startDeviceLogin(
-  provider: string,
-  key: string = newIdempotencyKey(),
-): Promise<AssistantDeviceLoginStart> {
-  return requestData<AssistantDeviceLoginStart>(
-    `/credentials/${provider}:start-login`,
-    onAssistant({ method: 'POST', headers: { 'Idempotency-Key': key } }),
-  )
-}
-
-/**
- * 问一次「用户点完了没」。
- * ⚠ 下一次要隔多久由**返回值**说了算：上游让慢下来时它会变大，照原间隔接着
- * 打的话，被限流的是整台机器而不只是这一次登录。
- * @param provider 哪一路
- * @param ref 这次登录的句柄
- * @param signal 中止信号
- */
-export async function pollDeviceLogin(
-  provider: string,
-  ref: string,
-  signal?: AbortSignal,
-): Promise<AssistantDeviceLoginPoll> {
-  return requestData<AssistantDeviceLoginPoll>(
-    `/credentials/${provider}:poll-login`,
-    onAssistant({ method: 'POST', body: { ref }, signal }),
-  )
-}
-
-/** 退出模型账号。⚠ 整套部署共用一份，退的是所有人的。 */
-export async function forgetCredential(provider: string): Promise<void> {
-  await request<null>(
-    `/credentials/${provider}`,
-    onAssistant({ method: 'DELETE' }),
   )
 }
 

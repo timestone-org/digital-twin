@@ -6,10 +6,10 @@
  * 分不开，而输错一次就要从头再来一遍。
  */
 import { computed, onUnmounted, ref, watch } from 'vue'
-import type { AssistantDeviceLoginStart } from '@dt/contracts'
+import type { LlmDeviceLoginStart } from '@dt/contracts'
 import { DtButton, DtSpinner } from '@dt/ui'
 
-const props = defineProps<{ pending: AssistantDeviceLoginStart }>()
+const props = defineProps<{ pending: LlmDeviceLoginStart }>()
 defineEmits<{ cancel: []; done: [] }>()
 
 /**
