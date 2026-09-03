@@ -71,7 +71,7 @@ def llm_context(app_context: AppContext) -> AppContext:
     container = application.state.container
     application.state.container = replace(
         container,
-        llm_cipher=SecretCipher(SECRET, label="test"),
+        llm=replace(container.llm, cipher=SecretCipher(SECRET, label="test")),
         settings=container.settings.model_copy(
             update={"llm_provider_secret": SecretStr(SECRET)}
         ),

@@ -18,6 +18,10 @@ MODEL_KIND_CHAT = "chat"
 MODEL_KIND_EMBEDDING = "embedding"
 MODEL_KINDS = (MODEL_KIND_CHAT, MODEL_KIND_EMBEDDING)
 
+# 登录那一路的认证方式。⚠ 闭合集合；API Key 那一路不落库，它在供应商行上
+AUTH_MODE_CHATGPT = "chatgpt"
+AUTH_MODES = (AUTH_MODE_CHATGPT,)
+
 # 用途属于哪一个消费方，界面按它分组
 CONSUMER_ASSISTANT = "assistant"
 CONSUMER_KNOWLEDGE = "knowledge"

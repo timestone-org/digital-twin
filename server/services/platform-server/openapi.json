@@ -1980,6 +1980,141 @@
         "title": "ApiResponse[LiveReadingsOut]",
         "type": "object"
       },
+      "ApiResponse_LlmCredentialOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LlmCredentialOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[LlmCredentialOut]",
+        "type": "object"
+      },
+      "ApiResponse_LlmDeviceLoginPollOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LlmDeviceLoginPollOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[LlmDeviceLoginPollOut]",
+        "type": "object"
+      },
+      "ApiResponse_LlmDeviceLoginStartOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LlmDeviceLoginStartOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[LlmDeviceLoginStartOut]",
+        "type": "object"
+      },
       "ApiResponse_LlmProbeOut_": {
         "properties": {
           "code": {
@@ -9489,6 +9624,163 @@
           "model_name"
         ],
         "title": "LlmAssignmentIn",
+        "type": "object"
+      },
+      "LlmCredentialOut": {
+        "description": "一路供应商的登录态。",
+        "properties": {
+          "account_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Label"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "is_connected": {
+            "title": "Is Connected",
+            "type": "boolean"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_refresh_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Refresh At"
+          },
+          "plan_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Label"
+          },
+          "provider_id": {
+            "format": "uuid",
+            "title": "Provider Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_id",
+          "is_connected"
+        ],
+        "title": "LlmCredentialOut",
+        "type": "object"
+      },
+      "LlmDeviceLoginPollIn": {
+        "additionalProperties": false,
+        "description": "问一次「用户点完了没」。",
+        "properties": {
+          "ref": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref"
+        ],
+        "title": "LlmDeviceLoginPollIn",
+        "type": "object"
+      },
+      "LlmDeviceLoginPollOut": {
+        "description": "问了一次的结果。",
+        "properties": {
+          "credential": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LlmCredentialOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "interval_s": {
+            "title": "Interval S",
+            "type": "integer"
+          },
+          "is_done": {
+            "title": "Is Done",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "is_done",
+          "interval_s"
+        ],
+        "title": "LlmDeviceLoginPollOut",
+        "type": "object"
+      },
+      "LlmDeviceLoginStartOut": {
+        "description": "设备码登录开了个头。",
+        "properties": {
+          "expires_in_s": {
+            "title": "Expires In S",
+            "type": "integer"
+          },
+          "interval_s": {
+            "title": "Interval S",
+            "type": "integer"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "user_code": {
+            "title": "User Code",
+            "type": "string"
+          },
+          "verification_uri": {
+            "title": "Verification Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "user_code",
+          "verification_uri",
+          "interval_s",
+          "expires_in_s"
+        ],
+        "title": "LlmDeviceLoginStartOut",
         "type": "object"
       },
       "LlmModelIn": {
@@ -25390,6 +25682,231 @@
         "summary": "更新供应商",
         "tags": [
           "llm-provider"
+        ]
+      }
+    },
+    "/api/v1/platform/llm-providers/{provider_id}/credential": {
+      "delete": {
+        "description": "把这一路的登录态整行删掉。\n\nArgs: provider_id, credentials, _write。",
+        "operationId": "forget_credential_api_v1_platform_llm_providers__provider_id__credential_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "退出订阅账号",
+        "tags": [
+          "llm-credential"
+        ]
+      },
+      "get": {
+        "description": "挂着的是哪个账号、什么时候过期。\n\n⚠ 读只要 `llm:view`：与边缘那条「`llm-*` 的 GET 要 view」逐字一致\n（auth-server 的 924 号规则）。收成 manage 的话，只读用户在边缘处放行、\n在端点上 403，而两边代码单看都对。令牌本来就不在这条的出参里。\n\nArgs: provider_id, credentials, _viewer。",
+        "operationId": "read_credential_api_v1_platform_llm_providers__provider_id__credential_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_LlmCredentialOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "订阅账号登录态",
+        "tags": [
+          "llm-credential"
+        ]
+      }
+    },
+    "/api/v1/platform/llm-providers/{provider_id}/credential:poll-login": {
+      "post": {
+        "description": "问一次；点完了就把令牌存下来并把最新状态一并带回。\n\nArgs: provider_id, body, credentials, login, write。",
+        "operationId": "poll_login_api_v1_platform_llm_providers__provider_id__credential_poll_login_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LlmDeviceLoginPollIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_LlmDeviceLoginPollOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "问一次登录好了没",
+        "tags": [
+          "llm-credential"
+        ]
+      }
+    },
+    "/api/v1/platform/llm-providers/{provider_id}/credential:start-login": {
+      "post": {
+        "description": "要一个用户码与验证地址，交给人去别的设备上确认。支持 `Idempotency-Key`。\n\nArgs: provider_id, login, write。",
+        "operationId": "start_login_api_v1_platform_llm_providers__provider_id__credential_start_login_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_LlmDeviceLoginStartOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "开始设备码登录",
+        "tags": [
+          "llm-credential"
         ]
       }
     },

@@ -5,6 +5,9 @@ alembic 的 `env.py` 通过本文件收集元数据，故须维护 `__all__`：�
 
 from platform_server.apps.llm_providers.models.assignment import LlmAssignment
 from platform_server.apps.llm_providers.models.base import Base
+from platform_server.apps.llm_providers.models.credential import (
+    LlmProviderCredential,
+)
 from platform_server.apps.llm_providers.models.provider import LlmProvider
 
-__all__ = ["Base", "LlmAssignment", "LlmProvider"]
+__all__ = ["Base", "LlmAssignment", "LlmProvider", "LlmProviderCredential"]
