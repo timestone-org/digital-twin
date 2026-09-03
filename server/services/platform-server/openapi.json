@@ -10054,6 +10054,10 @@
             "title": "Description",
             "type": "string"
           },
+          "has_env_default": {
+            "title": "Has Env Default",
+            "type": "boolean"
+          },
           "is_vision_required": {
             "title": "Is Vision Required",
             "type": "boolean"
@@ -10124,6 +10128,7 @@
           "kind",
           "consumer",
           "is_vision_required",
+          "has_env_default",
           "provider_id",
           "provider_name",
           "model_name",

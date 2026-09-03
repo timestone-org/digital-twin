@@ -177,6 +177,9 @@ class PurposeSpec:
     consumer: str
     # 只有接图的模型才配得上它
     is_vision_required: bool = False
+    # 没分配时那一侧还有没有环境变量那一档兜底。⚠ 为假即「不分配就是不启用」，
+    # 界面按它说话——说反了的话，人会去翻一个根本不存在的环境变量
+    has_env_default: bool = True
 
 
 PURPOSES: tuple[PurposeSpec, ...] = (
@@ -232,6 +235,8 @@ PURPOSES: tuple[PurposeSpec, ...] = (
         ),
         kind=MODEL_KIND_RERANK,
         consumer=CONSUMER_KNOWLEDGE,
+        # ⚠ 这一路只有目录一个来源：不分配就是不启用，检索按融合名次给出结果
+        has_env_default=False,
     ),
 )
 

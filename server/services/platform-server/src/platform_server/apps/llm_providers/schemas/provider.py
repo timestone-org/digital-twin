@@ -274,6 +274,8 @@ class LlmPurposeOut(OutputModel):
     kind: str
     consumer: str
     is_vision_required: bool
+    # 没分配时那一侧还有没有环境变量那一档兜底。⚠ 为假即「不分配就是不启用」
+    has_env_default: bool
     provider_id: uuid.UUID | None
     provider_name: str | None
     model_name: str | None
