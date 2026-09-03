@@ -20,7 +20,7 @@
 | 工作流跑完能把模型保存到 OSS，模型作为公式进公式库，台账能调它算数 | 模型产物有独立存放处（不再寄生在结果摘要里）；公式接缝从「两页手工对接」收成一步 | §2 §5 §7 |
 | 现在的建模模块规划得不好 | 算子只有 6 个、结果只能看 200 行、模型库页只有一张表；信息架构与算子清单都要补 | §8 §9 |
 | 每个部署完成的模型有一个接口供第三方系统调用 | 新的领域概念「部署」+ API 密钥 + 限流 + 一条免认证 location | §6 |
-| 每个模型要有 schema，告诉用户配哪些参数；有特征工程时输入应该是**特征工程之前**的数据 | 推理入口契约从「建模节点的特征列」改成「推理子图入口的真实列集」，并另出一份面向人的模型 schema | §3 §4 |
+| 每个模型要有 schema，告诉用户配哪些参数；有特征工程时输入应该是**特征工程之前**的数据 | 推理入口契约从「建模节点的特征列」改成「推理子图入口的真实列集」，并另出一份面向人的模型签名 | §3 §4 |
 
 第四条是四条里最深的一条，也是其它三条的地基：**没有一份说得清的输入契约，
 公式绑定按位置猜、第三方接口没有文档、产物存下来也不知道怎么喂。** 故本文档从它写起。
@@ -144,7 +144,7 @@ predict([25.0, 430.0]) 抛了：
 | --- | --- | --- |
 | **入口契约** `entry contract` | 推理时**调用方必须提供**的那组列：推理子链上第一个算子的输入列集。它在特征工程**之前** | 不叫特征列（`feature_keys` 是建模算子看到的列，在特征工程**之后**，两者只在「所有算子都不改列集」时才恰好相等） |
 | **派生列** `derived column` | 推理子链自己造出来的列（时间特征、独热、滞后…）。调用方不提供、也不该提供 | —— |
-| **模型 schema** `model schema` | 一份面向**人与第三方系统**的输入输出说明：每个入口列的标签、单位、类型、是否必填、训练取值域；输出是什么。它是 `serving_json` 的**人话投影**，不参与任何计算 | 不叫接口文档（它是数据，不是文字；接口文档由它生成） |
+| **模型签名** `signature` | 一份面向**人与第三方系统**的输入输出说明：每个入口列的标签、单位、类型、是否必填、训练取值域；输出是什么。它是 `serving_json` 的**人话投影**，不参与任何计算。界面文案里也叫「模型 schema」 | 代码与库里**不叫 `schema`**：那个名字在出参模型上会与 `BaseModel.schema` 撞并当场告警。也不叫接口文档（它是数据不是文字；文档由它生成） |
 | **产物** `artifact` | 一个模型版本的二进制可服务件（本服务自己训练、自己序列化、自己写入对象存储的字节）。只有通道 B 的算法有 | 不叫模型文件（「文件」暗示可上传可替换；这里只可由本服务写、按摘要校验后读） |
 | **部署** `deployment` | 一个模型版本的**对外服务实例**：一个 URL 段、一组 API 密钥、一份配额。有了它「部署」这个词才名副其实 | 与**绑定**（binding）分家：绑定是「进台账公式」，部署是「出系统给第三方」。同一个版本可以只绑不部署、只部署不绑、两者都有 |
 | **API 密钥** `api key` | 第三方调用部署时出示的凭据。明文只在创建回执里出现一次，库里只存哈希 | 不叫 token（本仓 token 已指会话令牌，两者生命周期与撤销语义都不同） |
@@ -215,7 +215,7 @@ def describe_columns(
 | `graph_walk.known_keys_by_node` | 保存期校验「这一列在上游存在吗」 | 假设列集不变（`graph_walk.py:82`） |
 | 前端列选择器 | 下游节点能勾哪些列 | 只按取数节点收窄，第二份口径（`upstream.ts`） |
 | 发布 | 算入口契约与逐步的 `expected_input_columns` | 一律写成 `feature_keys` |
-| 模型 schema | 区分「入口列」与「派生列」 | 不存在 |
+| 模型签名 | 区分「入口列」与「派生列」 | 不存在 |
 
 ⚠ **前端那一份必须删掉、改成读后端算好的结果**（`POST …:validate` 的回执里带
 `known_keys_by_node`）。两份口径就是[单向契约留下盲区](../CLAUDE.md)那一类：
@@ -299,11 +299,15 @@ def describe_columns(
 
 ---
 
-## 4. 模型 schema（诉求 4 · 下半）
+## 4. 模型签名（诉求 4 · 下半）
 
-### D6 · schema 是 `serving_json` 的人话投影，独立成列，**不参与任何计算**
+### D6 · 模型签名是 `serving_json` 的人话投影，独立成列，**不参与任何计算**
 
-`modeling_model_versions` 加一列 `schema_json JSONB NOT NULL DEFAULT '{}'::jsonb`。
+`modeling_model_versions` 加一列 `signature_json JSONB NOT NULL DEFAULT '{}'::jsonb`。
+
+⚠ **叫签名不叫 schema**：出参模型上那个字段名会与 `BaseModel.schema` 撞，pydantic
+当场告警，而本仓 CI 是零告警。签名（signature）是同一件东西的标准叫法，库、出参、
+前端契约、文档统一用它；界面文案仍可以说「模型 schema」。
 
 ```jsonc
 {
@@ -317,8 +321,7 @@ def describe_columns(
       "is_required": true,                  // 见 D7
       "default_on_missing": null,           // 可缺省时，填进去的那个值
       "training_stats": {                   // 见 D8：只在内部面给
-        "min": -5.2, "max": 41.0, "p1": 2.0, "p99": 38.4,
-        "mean": 22.4, "null_ratio": 0.012
+        "min": -5.2, "max": 41.0, "p50": 22.0, "null_ratio": 0.012
       }
     }
   ],
@@ -329,12 +332,15 @@ def describe_columns(
     "key": "能耗", "label": "小时能耗", "unit": "kWh",
     "dtype": "number", "task": "regression"
   },
-  "training": {
-    "rows": 12034, "table_codes": ["energy_h"],
-    "since": "2026-01-01T00:00:00Z", "until": "2026-08-31T00:00:00Z"
-  }
 }
 ```
+
+⚠ **训练规模与来源不重复放进签名**：它们已经在 `fingerprint_json` 里（行数、台账编码、
+python / numpy / sklearn 版本）。两处各存一份的下场是其中一处会先过时。
+
+⚠ **`requires_timestamp` 这一格现在没有**：本轮六个算子里没有需要时刻的（D19 的
+`time_feature` 在第四期）。留到那时候连同它的真分支一起加——现在加进来它恒为 `false`，
+真分支一条用例都写不出来。签名带 `format_version`，加字段不是破坏性变更。
 
 三个消费者：
 
@@ -343,9 +349,9 @@ def describe_columns(
    用户不必再理解「按位置映射」；
 3. **第三方接口**（§6）——`GET …/schema` 就是对外的接口文档。
 
-⚠ **schema 不参与计算。** 推理只读 `serving_json`。两份东西不同步时，
-错的是 schema（展示会不准），而不是预测值（会算错）。这条分界要写进注释，
-免得后人图省事从 schema 里读列名。
+⚠ **签名不参与计算。** 推理只读 `serving_json`。两份东西不同步时，
+错的是签名（展示会不准），而不是预测值（会算错）。这条分界要写进注释，
+免得后人图省事从签名里读列名。
 
 ### D7 · `is_required` 由推理链算出来，不由人填
 
@@ -365,9 +371,10 @@ def describe_columns(
 | 面 | 带 `training_stats` / `training` | 谁能看 |
 | --- | --- | --- |
 | `GET /modeling-model-versions/{id}` | 带 | `modeling:view` |
-| `GET /open-models/{code}/schema`（对外） | **剥掉** | 持 API 密钥的第三方 |
+| `GET /open-models/{code}`（对外） | **剥掉** | 持 API 密钥的第三方 |
 
-对外面仍然保留 `is_required` / `dtype` / `label` / `unit`——这些是用接口必须知道的。
+对外面仍然保留 `is_required` / `default_on_missing` / `dtype` / `label` / `unit`
+——这些是用接口必须知道的。
 
 **但超域告警仍然给**：`:predict` 的回执带 `warnings`，入参落在
 `[p1, p99]` 之外时明说「这一路输入超出训练区间，属于外推」。
@@ -565,7 +572,7 @@ for level in 0 .. max_depth:                     # 分层
 **对外面只有两个端点**：
 
 ```
-GET  /api/v1/platform/open-models/{code}          → 模型 schema（剥掉训练统计，见 D8）
+GET  /api/v1/platform/open-models/{code}          → 模型签名（剥掉训练统计，见 D8）
 POST /api/v1/platform/open-models/{code}:predict  → 预测
 ```
 
@@ -658,7 +665,7 @@ location ^~ /api/v1/platform/open-models/ {
 用户要同时理解「公式库条目」「形参」「按位置映射」三个概念，
 而这三个概念没有一个是他想要的——他想要的是「把这个模型当公式用」。
 
-### D17 · 一键「注册为公式」：一步建条目 + 建绑定，形参从模型 schema 生成
+### D17 · 一键「注册为公式」：一步建条目 + 建绑定，形参从模型签名生成
 
 模型详情页一个按钮，入参只有一个「公式标识」（默认填模型名）：
 
@@ -672,7 +679,7 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
                     "param_map": [ { "param": "环境温度", "feature": "温度" }, … ] } }
 ```
 
-- 形参名取模型 schema 的 `label`（台账列的显示名），重名时退回 `key`；
+- 形参名取模型签名的 `label`（台账列的显示名），重名时退回 `key`；
 - 顺序 = `entry_columns` 的顺序（D5），于是位置映射**天然对齐**，用户不必理解它；
 - 事务里一次做完两件事：建条目、建绑定。任一步失败整体回滚
   ——半成品（有条目没绑定）的表现是台账列报「模型未绑定」，比什么都没建更难排查。
@@ -859,7 +866,7 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 | 迁移 | 内容 | 期 |
 | --- | --- | --- |
 | 1 | `modeling_node_runs` 加 `fitted_json JSONB NULL`、`io_json JSONB NULL` | 一 |
-| 2 | `modeling_model_versions` 加 `schema_json JSONB NOT NULL DEFAULT '{}'::jsonb` | 二 |
+| 2 | `modeling_model_versions` 加 `signature_json JSONB NOT NULL DEFAULT '{}'::jsonb` | 二 |
 | 3 | 新表 `modeling_model_artifacts` | 五 |
 | 4 | 新表 `modeling_deployments` / `modeling_api_keys` / `modeling_call_logs` | 六 |
 
@@ -875,8 +882,8 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 
 | 期 | 名字 | 交付 | 依赖 |
 | --- | --- | --- | --- |
-| **一** | **拟合参数归位**（缺陷 A/B） | 迁移 1；子进程返回 `fitted`/`io`；执行器落库；发布读新列；发布期实跑一行核对；带 `standardize` 的端到端用例 | —— |
-| 二 | 入口契约与模型 schema | `describe_columns`；`known_keys_by_node` 改用它；`serving_json` 2.0 + 双版本分派；`schema_json` 生成器；前端删掉第二份收窄口径 | 一 |
+| **一** ✅ | **拟合参数归位**（缺陷 A/B） | 迁移 1；子进程返回 `fitted`/`io`；执行器落库；发布读新列；发布期实跑一行核对；带 `standardize` 的端到端用例 | —— |
+| 二 ✅ | 入口契约与模型签名 | `describe_columns`；`known_keys_by_node` 改用它；`serving_json` 2.0 + 双版本分派；`signature_json` 生成器；前端删掉第二份收窄口径 | 一 |
 | 三 | 算子扩容 A（不改列集的） | `cast_type` / `drop_missing` / `clip_outlier` / `filter_rows` / `resample` / `logistic_regression` / `kmeans` / `classification_metrics` / `residual_analysis` / `feature_importance` | 一 |
 | 四 | 算子扩容 B（改列集的） | `time_feature` / `one_hot` / `select_feature` / `pca` / `lag_feature` / `rolling_feature` / `ledger_join` / `cross_validate` | 二 |
 | **五** | **台账批量预测相位**（D11b） | 公式列分层；收集 / 回填两趟；`AnalysisModel.predict_batch`；`EvalContext.model_sink` 与 `row_ts`；ADR。**只碰 `apps/dataset`** | 二 |
