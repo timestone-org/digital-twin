@@ -9,7 +9,6 @@ from dataclasses import dataclass, field
 import pytest
 
 from knowledge_server.apps.knowledge.services.parsing import (
-    EXTERNAL_BACKENDS,
     PARSERS,
     Block,
     DocumentParser,
@@ -59,14 +58,10 @@ def _raw(name: str, media_type: str = "") -> RawItem:
     return RawItem(filename=name, media_type=media_type, content=b"body")
 
 
-def test_the_external_lane_is_empty_in_this_phase() -> None:
-    """⚠ 一期没接就是**诚实缺席**：留一个「看着能用、调下去报奇怪错」的占位
-    比缺席更糟，因为缺席能被 /capabilities 如实答出来。"""
-    assert EXTERNAL_BACKENDS == ()
-
-
 def test_nothing_is_picked_when_no_external_backend_is_configured() -> None:
-    assert external_for(_raw("图纸.pdf")) is None
+    """⚠ 没接就是**诚实缺席**：整条链路与「没有这一层」逐字相同，
+    而缺席能被 /capabilities 如实答出来。"""
+    assert external_for(_raw("图纸.pdf"), ()) is None
 
 
 def test_a_configured_external_backend_is_picked_by_suffix() -> None:
@@ -104,9 +99,9 @@ def test_the_accept_list_never_repeats_a_suffix() -> None:
 
 
 def test_pdf_stays_absent_while_no_external_backend_is_connected() -> None:
-    """⚠ 一期不收 PDF 是拍过板的。这条用例是那句话的凭证，改了要连着文档
-    一起改。"""
-    assert ".pdf" not in accepted_suffixes()
+    """⚠ 本地那几路一个都不吃 PDF：收 PDF 这件事完全靠外部后端，
+    没接的时候传 PDF 的人拿到的是一句点得出名字的错。"""
+    assert ".pdf" not in accepted_suffixes(())
 
 
 def test_both_lanes_satisfy_the_shared_backend_protocol() -> None:

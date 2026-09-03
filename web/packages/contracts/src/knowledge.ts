@@ -29,26 +29,26 @@ export const KNOWLEDGE_DOCUMENT_STATUSES = [
 export type KnowledgeDocumentStatus =
   (typeof KNOWLEDGE_DOCUMENT_STATUSES)[number]
 
-/** 向量那一路实际走在哪一档上。 */
-export const KNOWLEDGE_VECTOR_LANES = ['pgvector', 'bruteforce'] as const
+/** 向量那一路走在哪。⚠ 没有回退档了（ADR-0045），所以只有一个取值。 */
+export const KNOWLEDGE_VECTOR_LANES = ['pgvector'] as const
 
 export type KnowledgeVectorLane = (typeof KNOWLEDGE_VECTOR_LANES)[number]
 
-/** 关键词那一路实际走在哪一档上。 */
-export const KNOWLEDGE_KEYWORD_LANES = ['trgm', 'like'] as const
+/** 关键词那一路走在哪。⚠ 同上，`pg_trgm` 是硬依赖。 */
+export const KNOWLEDGE_KEYWORD_LANES = ['trgm'] as const
 
 export type KnowledgeKeywordLane = (typeof KNOWLEDGE_KEYWORD_LANES)[number]
 
 /**
- * 两路索引各自走在哪一档上。
+ * 检索由哪两路组成，以及此刻有没有毛病。
  *
- * ⚠ `reason` 不是装饰：走在回退档上时界面要把它显示出来。悄悄退化的表现是
- * 「有点慢」「有点不准」，而没有人会去查一件没人说过的事。
+ * ⚠ `reason` 不是装饰：向量维数与库上那一列对不上这类毛病要在**传文档之前**
+ * 就显示出来，否则第一次发现它的方式是每一份文档都摄取失败。
  */
 export interface KnowledgeIndexCapability {
   vector: string
   keyword: string
-  /** 走在回退档上的原因；走在首选档上时是空串。 */
+  /** 此刻的毛病；一切正常时是空串。 */
   reason: string
 }
 
@@ -188,7 +188,10 @@ export interface KnowledgeUploadTicket {
  * 指着完全不同的东西。
  */
 export interface KnowledgeLocator {
+  /** 起页。⚠ 一块可以横跨几页，那时 `page_end` 才有值。 */
   page: number | null
+  /** 止页；与起页同页时为 null。 */
+  page_end: number | null
   sheet: string
   row: number | null
   path: string[]

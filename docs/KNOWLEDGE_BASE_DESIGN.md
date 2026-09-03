@@ -105,7 +105,7 @@ AgenticRAG 的「agentic」落在**两侧**，各解决一半：
 | 层 | 扩展点 | Protocol | 一期实现 |
 |---|---|---|---|
 | `sources/` | 知识**从哪来** | `KnowledgeSource` | `UploadSource`、`PlatformSource` |
-| `parsing/` | 一份原件**由谁解、解成什么** | `ParserBackend` → `DocumentParser` / `ExternalParserBackend` | 本地：`TextParser`、`DocxParser`、`XlsxParser`、`PptxParser`；外部：**一期空着** |
+| `parsing/` | 一份原件**由谁解、解成什么** | `ParserBackend` → `DocumentParser` / `ExternalParserBackend` | 本地：`TextParser`、`DocxParser`、`XlsxParser`、`PptxParser`；外部：`MineruBackend` |
 | `chunking/` | 怎么**切块** | `Chunker` | `StructuralChunker`、`FixedWindowChunker`、`RowChunker` |
 | `embedding/` | 用哪一路**嵌入** | `Embedder` | `DomainEmbedder`（走 `server/domain/llm`）、`NullEmbedder` |
 | `indexing/` | 向量与关键词**存哪、怎么查** | `VectorIndex` / `KeywordIndex` | `PgVectorIndex`；`TrgmKeywordIndex`（各只有一个实现，ADR-0045） |
@@ -169,7 +169,7 @@ AgenticRAG 的「agentic」落在**两侧**，各解决一半：
 | 跑在哪 | 本进程（由调用方扔进**进程池**） | 另一个进程 / 另一台带 GPU 的机器 |
 | 是什么活 | 阻塞的 CPU | 网络 IO，**每次调用必须有超时** |
 | 签名 | `def parse(raw)` | `async def parse_remote(raw, timeout_s)` |
-| 一期实现 | 四路 | **一个都没有** |
+| 实现 | 四路 | `MineruBackend`（PDF 与扫描件）|
 
 ⚠ **两个方法故意不同名。** 同名的话，把外部后端当本地的调用会拿到一个没
 `await` 的协程当 `ParsedDocument` 用，而那既不是类型错误也不是运行期异常——
@@ -206,17 +206,32 @@ JSON，翻成带 `locator` 的块序列这一步**在那一路后端的实现里
 ⚠ **文本框收在正文之后且不带标题路径**：它是浮动对象，python-docx 没有公开面
 能把它定位到正文的哪一段，硬猜一个路径会让引用指错地方。
 
-### 2.4 一期不认 PDF——但它只是注册表里少一行
+### 2.4 PDF 走 MinerU 那一路（`parsing/mineru.py`）
 
-用户拍板一期只做 Office（docx/xlsx/pptx）与纯文本（md/txt/html/json）。
-PDF 是工业现场最常见的格式，所以这里明确记一笔：
+`KNOWLEDGE_MINERU_ENABLED` 开着时，`.pdf` 与图片交给 MinerU；关着时传 PDF 的
+用户拿到的是一句点得出名字的错，**不是**一个状态 ready 却检索不到的空文档。
+编排里它是一个独立 profile（`docker compose --profile mineru up`）——没起它
+整套照样跑，只是不收 PDF。
 
-- 加 PDF 有**两条**出路，都只加文件不改调用方：加一个本地 `parsing/pdf.py`
-  （原生文本 PDF），或者接一路外部后端（扫描件与复杂版面，§2.2）。
-- 在此之前，传 PDF 的用户拿到的是一句点得出名字的错（「暂不支持 .pdf」），
-  **不是**一个状态 ready 却检索不到的空文档。
-- 扫描件（图片型 PDF）与原生文本 PDF 是两件事，将来做的时候要分开报：
-  「这是扫描件，需要 OCR」比「解析失败」有用得多。
+几条从**真跑一遍**里得来的口径（线形夹具在
+`tests/fixtures/mineru_file_parse.json`）：
+
+- ⚠ **只声明 `.pdf` 与图片后缀，不声明 Office。** 外部那一路排在本地之前，
+  声明了 `.docx` 就会把它从解得更准的 `DocxParser` 手里抢走，还要多花几十秒
+  CPU。
+- ⚠ **吃 `content_list` 不吃 `md_content`。** markdown 那一份里没有页码，
+  用它等于在这一步把 `locator.page` 丢掉，而这一格丢了后面补不回来。
+  `content_list` 本身是**一个 JSON 字符串**，要再 `json.loads` 一次。
+- ⚠ **调用时必须显式带 `backend=pipeline`**（服务端缺省的 `hybrid-engine` 要
+  GPU），且 `return_content_list` 默认是 `false`。
+- ⚠ **走异步 `/tasks` 而不是 `/file_parse`**：纯 CPU 上一份几十页的扫描件按
+  分钟算，同步接口意味着一条 HTTP 连接挂那么久。
+- ⚠ **失败是 HTTP 409 不是 5xx**，包体是任务信封、原因在 `error` 里。
+- ⚠ **标题层级是 MinerU 自己判的**：实测一份 PDF 里 `h1` 与 `h2` 会一起回
+  `text_level=2`。所以标题栈多半是平的，`locator.path` 只到「最近的一个标题」。
+- 图这一期**只取图注**，字节不落地（那要一张表、一条取图端点与一次迁移）。
+- OCR 不是无损的：实测把表格里的破折号「—」读成了「二」。界面上别把它说成
+  「原文」。
 
 ---
 

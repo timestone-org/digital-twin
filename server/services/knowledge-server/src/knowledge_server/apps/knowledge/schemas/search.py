@@ -25,7 +25,9 @@ class LocatorOut(BaseModel):
     指着完全不同的东西。
     """
 
+    # 起页。一块横跨几页时 `page_end` 才有值，同页时留空
     page: int | None = None
+    page_end: int | None = None
     sheet: str = ""
     row: int | None = None
     path: list[str] = Field(default_factory=list)

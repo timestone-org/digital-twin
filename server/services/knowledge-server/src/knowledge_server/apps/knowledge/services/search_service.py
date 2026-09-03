@@ -34,6 +34,7 @@ def _locator_out(hit: Hit) -> LocatorOut:
     raw = asdict(hit.locator)
     return LocatorOut(
         page=raw["page"],
+        page_end=raw["page_end"],
         sheet=raw["sheet"],
         row=raw["row"],
         path=list(raw["path"]),

@@ -159,3 +159,34 @@ def test_the_two_lanes_are_independent() -> None:
     )
     assert settings.embedding_endpoint() is not None
     assert settings.chat_endpoint() is None
+
+
+def test_mineru_on_without_an_address_refuses_to_start() -> None:
+    """⚠ 不打 WARN 继续：留到第一份 PDF 才发现的话，用户看到的是这份文档
+    解析失败，而 `/capabilities` 说的是「接了 mineru」。"""
+    with pytest.raises(ValueError, match="KNOWLEDGE_MINERU_BASE_URL"):
+        Settings(  # pyright: ignore[reportArgumentType]
+            **_base(), mineru_enabled=True
+        )
+
+
+def test_mineru_address_must_carry_a_scheme() -> None:
+    """⚠ 少了 `http://` 的地址在 httpx 那边是一句 `Request URL is missing
+    an 'http://'`，而它发生在**第一次解析**时，不在启动时。"""
+    with pytest.raises(ValueError, match="http://"):
+        Settings(  # pyright: ignore[reportArgumentType]
+            **_base(), mineru_enabled=True, mineru_base_url="mineru:8000"
+        )
+
+
+def test_mineru_off_by_default_and_configurable() -> None:
+    settings = Settings(  # pyright: ignore[reportArgumentType]
+        **_base(),
+        mineru_enabled=True,
+        mineru_base_url="http://mineru:8000",
+    )
+    assert settings.mineru_base_url == "http://mineru:8000"
+    assert settings.mineru_lang == "ch"
+    assert (
+        Settings(**_base()).mineru_enabled is False
+    )  # pyright: ignore[reportArgumentType]

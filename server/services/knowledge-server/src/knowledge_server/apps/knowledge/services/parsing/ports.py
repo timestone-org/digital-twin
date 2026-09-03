@@ -50,8 +50,11 @@ class Locator:
     会让「第 3 行」在不同格式里指着完全不同的东西。
     """
 
-    # 页码 / 幻灯片序号，从 1 起
+    # 页码 / 幻灯片序号，从 1 起。一块横跨几页时这是**起页**
     page: int | None = None
+    # 止页。⚠ 与 `page` 不同才有意义：一块攒了好几页的内容时，只报起页的引用
+    # 会让人翻到第 4 页却找不到那句话——它在第 6 页。同页时留空
+    page_end: int | None = None
     # 工作表名
     sheet: str = ""
     # 表内行号，从 1 起
@@ -65,12 +68,18 @@ class Locator:
         if self.sheet:
             parts.append(self.sheet)
         if self.page is not None:
-            parts.append(f"第 {self.page} 页")
+            parts.append(f"第 {self._pages()} 页")
         if self.row is not None:
             parts.append(f"第 {self.row} 行")
         if self.path:
             parts.append(" > ".join(self.path))
         return " · ".join(parts)
+
+    def _pages(self) -> str:
+        """一页写「4」，跨页写「4–6」。"""
+        if self.page_end is None or self.page_end <= (self.page or 0):
+            return str(self.page)
+        return f"{self.page}–{self.page_end}"
 
 
 @dataclass(frozen=True)

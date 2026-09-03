@@ -84,7 +84,7 @@ def test_no_embedding_lane_reports_no_dimension_gap() -> None:
 
 
 def test_the_local_parser_lane_is_reported_by_name() -> None:
-    made = parsing_capability_of()
+    made = parsing_capability_of(())
     assert "docx" in made.local_backends
     assert "text" in made.local_backends
 
@@ -92,13 +92,13 @@ def test_the_local_parser_lane_is_reported_by_name() -> None:
 def test_an_absent_external_parser_lane_says_why() -> None:
     """⚠ 空表配空原因会被界面读成「一切正常」，而这里要说的是「这套部署根本
     没接那一路」——悄悄缺席的表现是「传上去的 PDF 一直失败，没人知道为什么」。"""
-    made = parsing_capability_of()
+    made = parsing_capability_of(())
     assert made.external_backends == []
     assert made.reason == EXTERNAL_PARSER_ABSENT
 
 
 def test_a_connected_external_parser_lane_reports_no_reason() -> None:
-    made = parsing_capability_of((), (_FakeRemote(),))
+    made = parsing_capability_of((_FakeRemote(),), ())
     assert made.external_backends == ["fake-remote"]
     assert made.reason == ""
 
