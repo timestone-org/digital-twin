@@ -9,6 +9,7 @@
 
 from io import BytesIO
 
+import pytest
 from docx import Document
 from docx.document import Document as DocxDocument
 from docx.enum.style import WD_STYLE_TYPE
@@ -17,7 +18,7 @@ from docx.oxml.parser import parse_xml
 from docx.shared import Inches
 from docx.table import Table
 
-from knowledge_server.apps.knowledge.services.parsing import RawItem
+from knowledge_server.apps.knowledge.services.parsing import RawItem, word
 from knowledge_server.apps.knowledge.services.parsing.word import (
     MAX_BLOCKS,
     NO_CAPTION,
@@ -29,6 +30,13 @@ _PNG = bytes.fromhex(
     "89504e470d0a1a0a0000000d4948445200000001000000010806"
     "0000001f15c4890000000d4944415478da63fcffff3f03000500"
     "01ff8a5dbe7f0000000049454e44ae426082"
+)
+# 另一张 1×1 的 PNG，字节与上面那张不同。⚠ 要不同：一样的话 Word 会复用同一个
+# 关系 id，于是「收满上限」那条用例其实只塞了一张图
+_OTHER_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d4948445200000001000000010806"
+    "0000001f15c4890000000d4944415478da6364f8cfc000000202"
+    "01003b0d1b0f0000000049454e44ae426082"
 )
 
 # 一个带 mc:AlternateContent 的文本框：Word 把同一段文字在 Choice 与 Fallback
@@ -356,3 +364,36 @@ def test_a_document_without_pictures_reports_none() -> None:
     document = Document()
     document.add_paragraph("正文。")
     assert DocxParser().parse(_raw("a.docx", _saved(document))).figures == ()
+
+
+def test_a_reference_that_points_at_nothing_is_skipped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 拿不到字节的引用跳过而不是整份失败：一张坏图不该让一份两百页的
+    手册摄不进来。文档里别的内容照旧解出来。"""
+    document = Document()
+    document.add_paragraph("正文。")
+    document.add_paragraph("")
+    _with_picture(document)
+    monkeypatch.setattr(
+        word, "_embedded", lambda element: ["rIdNotThere"]  # noqa: ARG005
+    )
+    made = DocxParser().parse(_raw("a.docx", _saved(document)))
+    assert made.figures == ()
+    assert [one.kind for one in made.blocks] == ["paragraph"]
+
+
+def test_a_document_stuffed_with_pictures_stops_at_the_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 有上限：图跟着正文一起进内存，一份塞了几千张小图的文件会变成几千次
+    对象存储写。到顶之后不再收图，正文照旧解。"""
+    monkeypatch.setattr(word, "MAX_FIGURES", 1)
+    document = Document()
+    for at in range(3):
+        document.add_paragraph("")
+        document.paragraphs[-1].add_run().add_picture(
+            BytesIO(_PNG if at == 0 else _OTHER_PNG), width=Inches(1)
+        )
+    made = DocxParser().parse(_raw("a.docx", _saved(document)))
+    assert len(made.figures) == 1
