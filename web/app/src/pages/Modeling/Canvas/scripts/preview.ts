@@ -36,6 +36,12 @@ export interface FramePreview {
   colCount: number
   columns: ColumnStat[]
   indexName: string
+  /**
+   * 时间索引的前若干行，**ISO 时刻串**。
+   *
+   * ⚠ 后端给的是毫秒时间戳整数（`Frame.index`），按字符串读会整列读成空串，
+   * 表现是时间那一列一片空白而其余列都正常。
+   */
   indexHead: string[]
   head: unknown[][]
   isRowsTruncated: boolean
@@ -118,6 +124,14 @@ function asTexts(value: unknown): string[] {
   return asList(value).map((item) => asText(item))
 }
 
+/** 毫秒时间戳的列表读成 ISO 时刻串。认不出的那一格给空串。 */
+function momentsOf(value: unknown): string[] {
+  return asList(value).map((item) => {
+    const at = asNumber(item)
+    return at === null ? '' : new Date(at).toISOString()
+  })
+}
+
 function columnStatOf(raw: unknown): ColumnStat {
   const item = asRecord(raw)
   return {
@@ -155,7 +169,7 @@ function frameOf(raw: Record<string, unknown>): FramePreview {
     colCount: asCount(shape['cols']),
     columns: asList(raw['columns']).map(columnStatOf),
     indexName: asText(raw['index_name']),
-    indexHead: asTexts(raw['index_head']),
+    indexHead: momentsOf(raw['index_head']),
     head: asList(raw['head']).map((row) => asList(row)),
     isRowsTruncated: raw['rows_truncated'] === true,
     isColsTruncated: raw['cols_truncated'] === true,
