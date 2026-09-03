@@ -189,6 +189,40 @@ def with_column_values(
     return replace(frame, rows=rows)
 
 
+def with_column_cast(
+    frame: Frame, key: str, values: list[CellValue], dtype: str
+) -> Frame:
+    """换掉一列的取值**并改它的类型**，其余原样。
+
+    ⚠ 与 `with_column_values` 分开：那个只换值不动类型。转完类型忘了改列定义的
+    话，下游 `numbers_of` 仍按旧类型判，一列数值会被当成文本拒掉。
+    Args: frame, key, values, dtype。
+    """
+    position = frame.position_of(key)
+    if len(values) != frame.row_count:
+        raise OperatorError(f"列「{key}」的新值行数与帧不一致")
+    columns = tuple(
+        replace(column, dtype=dtype) if index == position else column
+        for index, column in enumerate(frame.columns)
+    )
+    rows = tuple(
+        (*row[:position], values[index], *row[position + 1 :])
+        for index, row in enumerate(frame.rows)
+    )
+    return replace(frame, columns=columns, rows=rows)
+
+
+def null_ratio_of(frame: Frame, key: str) -> float:
+    """一列的空值率。零行的帧一律给 0。
+
+    Args: frame, key。
+    """
+    if not frame.rows:
+        return 0.0
+    values = frame.values_of(key)
+    return sum(1 for value in values if value is None) / len(values)
+
+
 def with_roles(frame: Frame, *, target_key: str) -> Frame:
     """把目标列打成 `target`、其余数值列打成 `feature`、非数值列打成 `ignored`。
 

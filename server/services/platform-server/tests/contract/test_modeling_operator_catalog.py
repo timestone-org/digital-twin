@@ -21,7 +21,10 @@ from platform_server.apps.modeling.operators.base import PREFETCHED_KEY
 
 # 本期算子的**写死名单**。加算子必须同时改这里——防的是重名静默覆盖与漏登记
 EXPECTED_CODES = (
+    "cast_type",
+    "drop_missing",
     "fill_missing",
+    "filter_rows",
     "ledger_source",
     "linear_regression",
     "regression_metrics",
@@ -46,6 +49,20 @@ MODELING_ROOT = (
     / "apps"
     / "modeling"
 )
+# 前端的图标注册表。算子的 ICON 取自它，而**取错了是纯静默的**：
+# `DtIcon` 拿到未登记的名字什么都不渲染，画布上那格就是空的
+ICON_REGISTRY = (
+    Path(__file__).resolve().parents[5]
+    / "web"
+    / "packages"
+    / "ui"
+    / "src"
+    / "components"
+    / "DtIcon"
+    / "registry.ts"
+)
+# 注册表里一行一个名字：`  name: [` 或 `  'name-with-dash': [`
+ICON_NAME = re.compile(r"^  '?([a-z][a-z0-9-]*)'?:", re.MULTILINE)
 
 
 def sources() -> list[Path]:
@@ -145,6 +162,23 @@ def test_column_declarations_keep_their_order() -> None:
             _least_config(code), {"frame": given}
         )
         assert declared["frame"] == given, code
+
+
+def test_every_operator_icon_is_registered_on_the_front_end() -> None:
+    """算子的图标名必须在 `DtIcon` 的注册表里。
+
+    ⚠ 这条只能在这里守：图标名是**运行期数据**，不进 openapi，前端那条「用到的
+    每个名字都在表里」的用例看不见它。写错了 `DtIcon` 什么都不渲染，画布上那一格
+    就是空的，两侧都不报错。
+    """
+    registered = set(
+        ICON_NAME.findall(ICON_REGISTRY.read_text(encoding="utf-8"))
+    )
+    assert registered, "图标注册表读出来是空的，路径大概挪了"
+    for spec in registry.specs():
+        assert (
+            spec.icon in registered
+        ), f"{spec.code} 的图标「{spec.icon}」没登记"
 
 
 def test_config_schemas_only_use_closed_types() -> None:
@@ -354,7 +388,11 @@ def _least_config(code: str) -> Any:
     没有默认值（空串会被 `min_length` 拒掉，那正是它该有的样子）。
     Args: code。
     """
-    least: dict[str, Any] = {"table_code": "t", "target_column": "甲"}
+    least: dict[str, Any] = {
+        "table_code": "t",
+        "target_column": "甲",
+        "column": "甲",
+    }
     schema: dict[str, Any] = registry.get(code).CONFIG_MODEL.model_json_schema()
     required = cast("list[str]", schema.get("required", []))
     return registry.get(code).CONFIG_MODEL.model_validate(

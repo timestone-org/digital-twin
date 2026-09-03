@@ -20,6 +20,11 @@ from platform_server.apps.modeling.operators.base import (
     OperatorSpec,
     PortSpec,
 )
+from platform_server.apps.modeling.operators.cleaning import (
+    CastType,
+    DropMissing,
+    FilterRows,
+)
 from platform_server.apps.modeling.operators.evaluate import RegressionMetrics
 from platform_server.apps.modeling.operators.feature import Standardize
 from platform_server.apps.modeling.operators.frame import (
@@ -63,10 +68,13 @@ __all__ = [
     "ROLE_IGNORED",
     "ROLE_TARGET",
     "SERVING_CHANNELS",
+    "CastType",
     "CellValue",
     "ColumnKeys",
     "ColumnsByPort",
+    "DropMissing",
     "FillMissing",
+    "FilterRows",
     "Frame",
     "FrameColumn",
     "LedgerSource",
