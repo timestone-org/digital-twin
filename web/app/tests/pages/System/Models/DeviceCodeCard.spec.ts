@@ -6,13 +6,11 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import type { AssistantDeviceLoginStart } from '@dt/contracts'
+import type { LlmDeviceLoginStart } from '@dt/contracts'
 
 import DeviceCodeCard from '@/pages/System/Models/components/DeviceCodeCard.vue'
 
-function pending(
-  over: Partial<AssistantDeviceLoginStart> = {},
-): AssistantDeviceLoginStart {
+function pending(over: Partial<LlmDeviceLoginStart> = {}): LlmDeviceLoginStart {
   return {
     ref: 'r1',
     user_code: 'ABCD-1234',

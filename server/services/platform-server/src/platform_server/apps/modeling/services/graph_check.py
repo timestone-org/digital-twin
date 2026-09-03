@@ -6,7 +6,7 @@
 """
 
 from dataclasses import dataclass
-from typing import cast
+from typing import Any, cast
 
 from pydantic import ValidationError
 from pydantic_core import ErrorDetails
@@ -29,9 +29,11 @@ from platform_server.apps.modeling.services.graph_walk import (
 
 # 参数 schema 上「这是一个列引用」的标记，与算子侧的 `column_field` 同一个键
 COLUMN_WIDGET = "column"
-_WIDGET_KEY = "x-dt-widget"
 # 少于两个节点时谈不上「谁没连进来」
 _MIN_CONNECTED_NODES = 2
+# 报「上游没有这一列」时最多把现有列名列出这么多个。⚠ 必须封顶：一张宽表能把
+# 一句提示撑成整屏，而用户要的只是「原来上游是这几列」
+_LISTED_KEYS = 8
 
 # pydantic 的报错类型 → 一句中文。它是给最终用户看的，不能出现英文与类型名
 _COMPLAINTS: dict[str, str] = {
@@ -112,12 +114,14 @@ def _check_config(node: GraphNode) -> list[GraphIssue]:
 
     Args: node。
     """
+    operator = registry.get(node.operator)
     try:
-        registry.get(node.operator).CONFIG_MODEL.model_validate(node.config)
+        operator.CONFIG_MODEL.model_validate(node.config)
     except ValidationError as error:
+        titles = _titles_of(operator)
         return [
             GraphIssue(
-                f"参数「{_field_of(item)}」{_complaint_of(item)}",
+                f"参数「{_field_of(item, titles)}」{_complaint_of(item)}",
                 node_id=node.id,
             )
             for item in error.errors()
@@ -229,25 +233,45 @@ def _check_columns(
         keys = known.get(node.id)
         if keys is None:
             continue
-        for name in _column_fields(registry.get(node.operator)):
-            issues += _check_one_column(node, name, keys)
+        for field in _column_fields(registry.get(node.operator)):
+            issues += _check_one_column(node, field, keys)
     return issues
 
 
 def _check_one_column(
-    node: GraphNode, field: str, keys: frozenset[str]
+    node: GraphNode, field: "_ColumnField", keys: frozenset[str]
 ) -> list[GraphIssue]:
     """一个列引用参数里的每个列名。
 
+    ⚠ 报错要同时说出**是哪个参数**与**上游现有哪些列**：只说「上游没有列 F1」
+    的话，用户看不出这条抱怨来自下游某个节点，只会以为是取数那一步必须把列
+    选全——真相是取数把列选窄了，而下游还留着窄之前勾的那几列。
     Args: node, field, keys。
     """
-    raw: object = node.config.get(field)
+    raw: object = node.config.get(field.name)
     referenced = cast("list[object]", raw) if isinstance(raw, list) else [raw]
     return [
-        GraphIssue(f"上游没有列「{value}」", node_id=node.id)
+        GraphIssue(
+            f"参数「{field.title}」里的列「{value}」上游没有，{_listed(keys)}",
+            node_id=node.id,
+        )
         for value in referenced
         if isinstance(value, str) and value and value not in keys
     ]
+
+
+def _listed(keys: frozenset[str]) -> str:
+    """把上游现有的列名折成一句可读的枚举。
+
+    Args: keys。
+    """
+    if not keys:
+        return "上游一列都没有"
+    ordered = sorted(keys)
+    shown = "、".join(ordered[:_LISTED_KEYS])
+    if len(ordered) <= _LISTED_KEYS:
+        return f"上游现有：{shown}"
+    return f"上游现有：{shown} 等 {len(ordered)} 列"
 
 
 def _check_fit_before_split(
@@ -281,14 +305,53 @@ def _check_fit_before_split(
     return issues
 
 
-def _column_fields(operator: type[OperatorBase]) -> list[str]:
+@dataclass(frozen=True)
+class _ColumnField:
+    """一个列引用参数：图里存的键名，以及给人看的标题。"""
+
+    name: str
+    title: str
+
+
+def _column_fields(operator: type[OperatorBase]) -> list[_ColumnField]:
     """算子参数里哪些字段是列引用。
 
     Args: operator。
     """
-    return fields_with_widget(
-        operator.CONFIG_MODEL.model_json_schema(), COLUMN_WIDGET
-    )
+    schema = operator.CONFIG_MODEL.model_json_schema()
+    titles = _titles_in(schema)
+    return [
+        _ColumnField(name=name, title=titles.get(name, name))
+        for name in fields_with_widget(schema, COLUMN_WIDGET)
+    ]
+
+
+def _titles_of(operator: type[OperatorBase]) -> dict[str, str]:
+    """算子参数的「键名 → 标题」表。
+
+    Args: operator。
+    """
+    return _titles_in(operator.CONFIG_MODEL.model_json_schema())
+
+
+def _titles_in(schema: dict[str, Any]) -> dict[str, str]:
+    """一份参数 schema 里每个字段的标题。没写标题的退回键名。
+
+    Args: schema。
+    """
+    raw: object = schema.get("properties", {})
+    if not isinstance(raw, dict):
+        return {}
+    properties = cast("dict[str, object]", raw)
+    titles: dict[str, str] = {}
+    for name, spec in properties.items():
+        found = (
+            cast("dict[str, object]", spec).get("title")
+            if isinstance(spec, dict)
+            else None
+        )
+        titles[name] = str(found) if isinstance(found, str) else name
+    return titles
 
 
 def _complaint_of(item: ErrorDetails) -> str:
@@ -303,10 +366,15 @@ def _complaint_of(item: ErrorDetails) -> str:
     return said if said is not None else str(item["msg"])
 
 
-def _field_of(item: ErrorDetails) -> str:
-    """报错落在哪个参数上。取不出来时给一个中性的占位。
+def _field_of(item: ErrorDetails, titles: dict[str, str]) -> str:
+    """报错落在哪个参数上，用标题而不是键名。取不出来时给中性的占位。
 
-    Args: item。
+    ⚠ 键名是英文标识（`table_code` / `target_column`），直接印给最终用户看的话
+    他在界面上找不到对应的那一栏——界面上写的是「数据台账」「目标列」。
+    Args: item, titles。
     """
     location = item["loc"]
-    return str(location[0]) if location else "参数"
+    if not location:
+        return "参数"
+    name = str(location[0])
+    return titles.get(name, name)

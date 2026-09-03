@@ -50,13 +50,17 @@ def test_the_endpoint_kind_serves_every_consumer(purpose: str) -> None:
     )
 
 
-def test_the_login_kind_is_rejected_for_the_other_consumer() -> None:
-    rejected = purpose_mismatch(
-        _kind(PROVIDER_KIND_CODEX_OAUTH),
-        _purpose("knowledge.chat"),
-    )
-    assert rejected is not None
-    assert "knowledge" in rejected
+def test_the_login_kind_serves_both_consumers() -> None:
+    """⚠ 加一个消费方的前提是**它真接得了**（ADR-0041）：光在这里放行只会让
+    界面上分配得上、那一侧永远沿用环境变量那一档，而两边代码单看都对。
+    知识库那一侧接得了它，由 `llm_adapters.KIND_BUILDERS` 与那组用例证明。"""
+    for purpose in ("assistant.chat", "knowledge.chat"):
+        assert (
+            purpose_mismatch(
+                _kind(PROVIDER_KIND_CODEX_OAUTH), _purpose(purpose)
+            )
+            is None
+        )
 
 
 def test_the_login_kind_is_rejected_for_embeddings() -> None:

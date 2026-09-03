@@ -87,6 +87,11 @@ withDefaults(
     justify-content: space-between;
     gap: 12px;
     margin-bottom: 12px;
+
+    // 只有抬头、没有正文的卡片（主从页右区的那一条）不该在底下留半截空隙
+    &:last-child {
+      margin-bottom: 0;
+    }
   }
 
   &__titles {

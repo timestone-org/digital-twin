@@ -1,6 +1,9 @@
 /**
  * @fileoverview 设备码登录的那一段状态：开个头、按上游给的间隔轮询、成了收摊。
  *
+ * ⚠ 打的是 **platform** 那一族端点（ADR-0041）：登录态与那一路供应商同属主，
+ * 助手与知识库都经平台的内部面领令牌，谁都不另存一份。
+ *
  * ⚠ 间隔**必须用返回值里的那个**。上游让慢下来时它会变大，照原间隔接着打的话，
  * 被限流的是整台机器而不只是这一次登录。
  *
@@ -11,10 +14,7 @@
  * 两条轮询会交替刷新同一块状态，界面在两个用户码之间来回跳。
  */
 import { onScopeDispose, ref, type Ref } from 'vue'
-import type {
-  AssistantCredentialStatus,
-  AssistantDeviceLoginStart,
-} from '@dt/contracts'
+import type { LlmCredential, LlmDeviceLoginStart } from '@dt/contracts'
 
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import {
@@ -22,21 +22,15 @@ import {
   pollDeviceLogin,
   readCredential,
   startDeviceLogin,
-} from '@/api/assistant'
-
-/**
- * 环境变量配出来的那一路订阅账号用哪个键。目录里配出来的那几路各用自己的 id。
- * ⚠ 与后端 `apps/credential/enums.py` 的 `LEGACY_CODEX_REF` 逐字一致。
- */
-export const CODEX_PROVIDER = 'codex'
+} from '@/api/llmProviders'
 
 /** 上游没给间隔时按这个数轮询。 */
 const FALLBACK_INTERVAL_S = 5
 
 export interface CodexLogin {
-  status: Ref<AssistantCredentialStatus | null>
+  status: Ref<LlmCredential | null>
   /** 正在等人去确认的那一次；没有就是 null。 */
-  pending: Ref<AssistantDeviceLoginStart | null>
+  pending: Ref<LlmDeviceLoginStart | null>
   isBusy: Ref<boolean>
   error: Ref<string>
   refresh: () => Promise<void>
@@ -89,15 +83,15 @@ function createPolling(
 
 /**
  * 造一段设备码登录的状态。
- * ⚠ 收一个**那一路的键**而不是写死 `codex`：目录里能配出好几路订阅账号，
- * 各自一份登录态；写死的话，第二路点登录时改的是第一路。
+ * ⚠ 收一个**那一路供应商的 id** 而不是写死一个名字：目录里能配出好几路订阅
+ * 账号，各自一份登录态；写死的话，第二路点登录时改的是第一路。
  * ⚠ 收的是个**取值口子**而不是取值：调用方多半是从 props 里拿它的，
  * 在根作用域读一次会把响应性丢掉（`vue/no-setup-props-reactivity-loss`）。
- * @param providerRef 取那一路供应商的 id；环境变量那一路是 `codex`
+ * @param providerRef 取那一路供应商的 id
  */
 export function useCodexLogin(providerRef: () => string): CodexLogin {
-  const status = ref<AssistantCredentialStatus | null>(null)
-  const pending = ref<AssistantDeviceLoginStart | null>(null)
+  const status = ref<LlmCredential | null>(null)
+  const pending = ref<LlmDeviceLoginStart | null>(null)
   const isBusy = ref(false)
   const error = ref('')
 
@@ -108,7 +102,7 @@ export function useCodexLogin(providerRef: () => string): CodexLogin {
         // ⚠ 用回来的那个间隔，不是我们自己记的
         return polled.interval_s || FALLBACK_INTERVAL_S
       }
-      status.value = polled.status
+      status.value = polled.credential
     } catch (caught) {
       error.value = describe(caught)
     }

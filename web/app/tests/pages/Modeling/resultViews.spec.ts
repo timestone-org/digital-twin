@@ -1,12 +1,16 @@
 /**
  * @fileoverview 结果视图：按 kind 派发、截断要说出来、空值不显示成空白。
+ *
+ * ⚠ 桩必须按**真实线形**建：后端给的摘要是按端口建键的
+ * （`{frame: {kind: 'frame', …}}`），摊平一层的桩会让 `previewOf` 与视图各自
+ * 自洽地全绿，而真跑起来每一步都显示「没有可展示的结果」。
  */
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import ResultView from '@/pages/Modeling/Canvas/components/ResultView.vue'
 
-const MODEL = {
+const MODEL_BODY = {
   kind: 'model',
   algo: 'linear',
   task: 'regression',
@@ -16,8 +20,9 @@ const MODEL = {
   serving_channel: 'json',
   fitted: { coef: { power: 2, temp: -0.5 }, intercept: 1 },
 }
+const MODEL = { model: MODEL_BODY }
 
-const FRAME = {
+const FRAME_BODY = {
   kind: 'frame',
   shape: { rows: 500, cols: 2 },
   columns: [
@@ -41,6 +46,7 @@ const FRAME = {
   rows_truncated: true,
   cols_truncated: false,
 }
+const FRAME = { frame: FRAME_BODY }
 
 describe('结果视图按 kind 派发', () => {
   it('帧：形状与截断都写在页面上', () => {
@@ -58,7 +64,7 @@ describe('结果视图按 kind 派发', () => {
 
   it('模型：没训练出来的要明说下游用不了', () => {
     const wrapper = mount(ResultView, {
-      props: { payload: { ...MODEL, fitted: {} } },
+      props: { payload: { model: { ...MODEL_BODY, fitted: {} } } },
     })
 
     expect(wrapper.text()).toContain('还没有训练出模型')
@@ -68,14 +74,16 @@ describe('结果视图按 kind 派发', () => {
     const wrapper = mount(ResultView, {
       props: {
         payload: {
-          kind: 'metrics',
-          task: 'regression',
-          metrics: { r2: 0.9 },
-          pairs: [
-            [1, 1.1],
-            [2, 1.9],
-          ],
-          pairs_truncated: false,
+          metrics: {
+            kind: 'metrics',
+            task: 'regression',
+            metrics: { r2: 0.9 },
+            pairs: [
+              [1, 1.1],
+              [2, 1.9],
+            ],
+            pairs_truncated: false,
+          },
         },
       },
     })
@@ -88,14 +96,16 @@ describe('结果视图按 kind 派发', () => {
     const wrapper = mount(ResultView, {
       props: {
         payload: {
-          kind: 'metrics',
-          task: 'regression',
-          metrics: {},
-          pairs: [
-            [5, 5],
-            [5, 5],
-          ],
-          pairs_truncated: false,
+          metrics: {
+            kind: 'metrics',
+            task: 'regression',
+            metrics: {},
+            pairs: [
+              [5, 5],
+              [5, 5],
+            ],
+            pairs_truncated: false,
+          },
         },
       },
     })
@@ -108,7 +118,7 @@ describe('结果视图按 kind 派发', () => {
 
   it('认不出的 kind 给一句照实的说明，不是一片空白', () => {
     const wrapper = mount(ResultView, {
-      props: { payload: { kind: '将来某种', note: '这一步没有摘要' } },
+      props: { payload: { out: { kind: '将来某种', note: '这一步没有摘要' } } },
     })
 
     expect(wrapper.text()).toContain('这一步没有摘要')
@@ -145,17 +155,21 @@ describe('模型结果', () => {
     )
     expect(
       mount(ResultView, {
-        props: { payload: { ...MODEL, serving_channel: 'binary' } },
+        props: {
+          payload: { model: { ...MODEL_BODY, serving_channel: 'binary' } },
+        },
       }).text(),
     ).toContain('不可上线')
   })
 
   // ⚠ 「摘要被截断」与「没训出来」是两回事，混作一处会冤枉一个跑成功的模型
   it('摘要被截掉拟合参数时说的是被截断，不是没训出来', () => {
-    const trimmed: Record<string, unknown> = { ...MODEL }
+    const trimmed: Record<string, unknown> = { ...MODEL_BODY }
     delete trimmed['fitted']
 
-    const wrapper = mount(ResultView, { props: { payload: trimmed } })
+    const wrapper = mount(ResultView, {
+      props: { payload: { model: trimmed } },
+    })
 
     expect(wrapper.text()).toContain('没有一起带回来')
     expect(wrapper.text()).not.toContain('还没有训练出模型')
@@ -163,7 +177,7 @@ describe('模型结果', () => {
 })
 
 describe('评估结果', () => {
-  const METRICS = {
+  const METRICS_BODY = {
     kind: 'metrics',
     task: 'regression',
     metrics: { r2: 0.95, mape: 8, mae: 3, rmse: null },
@@ -175,6 +189,7 @@ describe('评估结果', () => {
       [0, 1, 4],
     ],
   }
+  const METRICS = { metrics: METRICS_BODY }
 
   it('残差直方图按桶画出来', () => {
     const wrapper = mount(ResultView, { props: { payload: METRICS } })
@@ -191,7 +206,7 @@ describe('评估结果', () => {
   it('残差全在一侧时不画零线，免得画到框外去', () => {
     const wrapper = mount(ResultView, {
       props: {
-        payload: { ...METRICS, residual_bins: [[1, 2, 5]] },
+        payload: { metrics: { ...METRICS_BODY, residual_bins: [[1, 2, 5]] } },
       },
     })
 
@@ -214,12 +229,14 @@ describe('评估结果', () => {
 
 describe('取数溯源', () => {
   const SOURCED = {
-    ...FRAME,
-    provenance: {
-      table_codes: ['energy_log'],
-      since: '2026-01-01T00:00:00Z',
-      until: null,
-      is_truncated: true,
+    frame: {
+      ...FRAME_BODY,
+      provenance: {
+        table_codes: ['energy_log'],
+        since: '2026-01-01T00:00:00Z',
+        until: null,
+        is_truncated: true,
+      },
     },
   }
 
@@ -241,5 +258,101 @@ describe('取数溯源', () => {
     const wrapper = mount(ResultView, { props: { payload: SOURCED } })
 
     expect(wrapper.text()).toContain('特征列')
+  })
+})
+
+// ⚠ 这一组钉的是「摘要按端口建键」这条线形本身。二期把整包当成一份摊平的摘要
+// 去读 `kind`，于是每一步都显示成「没有可展示的结果」，而全套用例是绿的——
+// 因为桩也摊平了一层。
+describe('摘要按端口建键', () => {
+  it('取数那一路包在 frame 端口里，照样把形状读出来', () => {
+    const wrapper = mount(ResultView, { props: { payload: FRAME } })
+
+    expect(wrapper.text()).toContain('500 行 × 2 列')
+    expect(wrapper.text()).not.toContain('这一步没有可展示的结果')
+  })
+
+  it('多路输出逐路摆开，小标题用算子声明的端口标签', () => {
+    const wrapper = mount(ResultView, {
+      props: {
+        payload: { train: FRAME_BODY, test: FRAME_BODY },
+        labels: { train: '训练集', test: '测试集' },
+      },
+    })
+
+    expect(wrapper.text()).toContain('训练集')
+    expect(wrapper.text()).toContain('测试集')
+    expect(wrapper.findAll('.dt-ml-result__port')).toHaveLength(2)
+  })
+
+  it('只有一路时不摆小标题——那只是重复卡片名', () => {
+    const wrapper = mount(ResultView, {
+      props: { payload: FRAME, labels: { frame: '输出' } },
+    })
+
+    expect(wrapper.findAll('.dt-ml-result__port')).toHaveLength(0)
+  })
+
+  it('一路输出都没有时照实说一句，不是一片空白', () => {
+    const wrapper = mount(ResultView, { props: { payload: {} } })
+
+    expect(wrapper.text()).toContain('这一步没有可展示的结果')
+  })
+})
+
+// ⚠ DtTable **没有默认的单元格渲染**：列上没挂 `#cell-<key>` 插槽就渲染成占位符
+// 「—」，而「前 N 行」那张表的列是随台账变的（F1/F2/F3），只能逐列动态给。漏了
+// 的表现是列统计一切正常、下面那张表整屏「—」，看着像数据根本没取到。
+describe('前若干行那张表', () => {
+  function columnOf(key: string) {
+    return {
+      key,
+      name: key,
+      dtype: 'number',
+      role: 'feature',
+      unit: '',
+      null_ratio: 0,
+      n_unique: 2,
+      min: 0,
+      max: 2,
+      mean: 1,
+      p50: 1,
+    }
+  }
+
+  const ROWS = {
+    frame: {
+      kind: 'frame',
+      shape: { rows: 2, cols: 3 },
+      columns: [columnOf('F1'), columnOf('F2'), columnOf('F3')],
+      index_name: 'ts',
+      // ⚠ 后端给的是毫秒时间戳整数，不是时刻串
+      index_head: [1788331980000, 1788332040000],
+      head: [
+        [0, 0, -1.2032851449288888],
+        [null, 1.5, 2],
+      ],
+      rows_truncated: false,
+      cols_truncated: false,
+    },
+  }
+
+  it('每一列都真的印出值，不是一整屏占位符', () => {
+    const wrapper = mount(ResultView, { props: { payload: ROWS } })
+
+    expect(wrapper.text()).toContain('-1.2033')
+    expect(wrapper.text()).toContain('1.5')
+  })
+
+  it('时间索引按时刻印出来，不是一列空白也不是行号', () => {
+    const wrapper = mount(ResultView, { props: { payload: ROWS } })
+
+    expect(wrapper.text()).toContain('2026')
+  })
+
+  it('空的那一格仍旧显示「—」', () => {
+    const wrapper = mount(ResultView, { props: { payload: ROWS } })
+
+    expect(wrapper.text()).toContain('—')
   })
 })

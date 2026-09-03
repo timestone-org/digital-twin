@@ -5,6 +5,7 @@
 **未配置即拒绝**——fail-closed（api-contract §8）。
 """
 
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -12,10 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.web import ApiResponse, ok
 from platform_server.apps.llm_providers.deps import (
+    CredentialsDep,
     get_container,
     get_session,
     require_service_key,
 )
+from platform_server.apps.llm_providers.schemas import LlmCredentialTokenOut
 from platform_server.apps.llm_providers.services import (
     CatalogOut,
     build_catalog,
@@ -47,4 +50,27 @@ async def read_catalog(
 
     Args: session, container。
     """
-    return ok(await build_catalog(session, cipher=container.llm_cipher))
+    return ok(await build_catalog(session, cipher=container.llm.cipher))
+
+
+@router.post(
+    "/llm-credentials/{provider_id}:token",
+    response_model=ApiResponse[LlmCredentialTokenOut],
+    summary="领一份订阅账号的短时令牌",
+)
+async def lease_token(
+    provider_id: uuid.UUID, credentials: CredentialsDep
+) -> ApiResponse[LlmCredentialTokenOut]:
+    """给消费方下发一份此刻能用的令牌；快过期就先换一份再回。
+
+    ⚠ **续期只在这一侧做**（ADR-0041）：refresh_token 的属主只有平台一个。
+    让消费方各自去刷的话，两边各拿一份新令牌，后写的那份把先写的顶掉——
+    而被顶掉的那一份已经发出去用了，现象是「用着用着就掉登录」。
+
+    ⚠ 还没登录过是 404、登录已失效是 409：两档的处置不同（去登录 / 重新登录），
+    而两档都不是「等一会儿再试」。
+
+    Args: provider_id, credentials。
+    """
+    leased = await credentials.lease(provider_id)
+    return ok(LlmCredentialTokenOut.model_validate(leased))

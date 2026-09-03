@@ -38,6 +38,13 @@ const TABLE_DISPLAY = {
   searchPlaceholder: '按名称或编码搜索',
 }
 
+/** 单值列引用的下拉。宽表上没有搜索就只能一路滚。 */
+const COLUMN_DISPLAY = {
+  searchable: true,
+  placeholder: '选一列',
+  searchPlaceholder: '按列名搜索',
+}
+
 function textOf(key: string): string {
   const value = props.config[key]
   return typeof value === 'string' ? value : ''
@@ -96,6 +103,24 @@ function missingLabel(code: string): string {
     : `${code}（清单里没有这张台账）`
 }
 
+/**
+ * 单值列引用的选项：上游那份候选，外加图里存着却已经不在候选里的那一列。
+ *
+ * ⚠ 存着的列不在候选里时不能空着显示「请选择」：上游取数一改窄，用户会看到
+ * 这一栏莫名其妙地空了，而保存与运行仍被后端拦下。
+ */
+function columnOptions(field: FormField): readonly DtSelectOption[] {
+  const listed = props.options.columns.map((item) => ({
+    value: item.key,
+    label: item.name || item.key,
+  }))
+  const current = textOf(field.key)
+  if (current === '' || listed.some((item) => item.value === current)) {
+    return listed
+  }
+  return [{ value: current, label: `${current}（上游没有这一列）` }, ...listed]
+}
+
 /** 这一项现在偏离默认值了吗——偏离了才给「恢复默认」。 */
 function canReset(field: FormField): boolean {
   if (props.isReadonly || field.fallback === undefined) return false
@@ -133,6 +158,22 @@ function errorOf(field: FormField): string {
         :is-readonly="props.isReadonly"
         @update:model-value="emit('change', field.key, $event)"
       />
+      <div v-else-if="field.widget === 'column'" class="dt-ml-form__stack">
+        <DtSelect
+          :model-value="textOf(field.key)"
+          :options="columnOptions(field)"
+          :display="COLUMN_DISPLAY"
+          :label="field.label"
+          :hint="hintOf(field)"
+          :error="errorOf(field)"
+          :required="field.isRequired"
+          :disabled="props.isReadonly"
+          @update:model-value="emit('change', field.key, $event)"
+        />
+        <p v-if="props.options.columns.length === 0" class="dt-ml-form__note">
+          {{ props.options.columnsNote }}
+        </p>
+      </div>
       <DtField
         v-else-if="
           field.widget === 'table' && props.options.tablesState === 'denied'

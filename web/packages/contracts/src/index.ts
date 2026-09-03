@@ -491,10 +491,7 @@ export type {
   AssistantAskOption,
   AssistantAskRequest,
   AssistantCapability,
-  AssistantCredentialStatus,
   AssistantDeltaChannel,
-  AssistantDeviceLoginPoll,
-  AssistantDeviceLoginStart,
   AssistantEventName,
   AssistantToolCall,
   AssistantMessage,
@@ -524,6 +521,9 @@ export {
 } from './assistant'
 export type {
   LlmConsumer,
+  LlmCredential,
+  LlmDeviceLoginPoll,
+  LlmDeviceLoginStart,
   LlmModel,
   LlmModelKind,
   LlmProbeResult,

@@ -60,7 +60,10 @@ const headRows = computed<HeadRow[]>(() =>
   props.preview.head.map((row, line) => {
     const cells: HeadRow = {
       id: String(line),
-      index: props.preview.indexHead[line] ?? String(line + 1),
+      index: formatDateTime(
+        props.preview.indexHead[line] || null,
+        String(line + 1),
+      ),
     }
     props.preview.columns.forEach((column, at) => {
       cells[column.key] = display(row[at])
@@ -73,6 +76,11 @@ const headRows = computed<HeadRow[]>(() =>
 const statRows = computed(() =>
   props.preview.columns.map((column) => ({ ...column, id: column.key })),
 )
+
+/** 动态列的插槽名。窄化收口而不是 `as` 断言。 */
+function cellSlot(key: string): `cell-${string}` {
+  return `cell-${key}`
+}
 
 /** 单元格文案。空值显式写成「—」，不显示成空白。 */
 function display(value: unknown): string {
@@ -134,7 +142,17 @@ function statOf(column: ColumnStat, key: string): string {
       <template #cell-max="{ row }">{{ statOf(row, 'max') }}</template>
     </DtTable>
     <h4 class="dt-ml-frame__title">前 {{ headRows.length }} 行</h4>
-    <DtTable :columns="headColumns" :rows="headRows" min-width="52rem" />
+    <!-- ⚠ 每一列都要给插槽：DtTable 没有默认的单元格渲染，漏给的那些列会安静
+         地渲染成占位符「—」，看着像一整屏数据都是空的 -->
+    <DtTable :columns="headColumns" :rows="headRows" min-width="52rem">
+      <template
+        v-for="column in headColumns"
+        :key="column.key"
+        #[cellSlot(column.key)]="{ row }"
+      >
+        {{ row[column.key] }}
+      </template>
+    </DtTable>
     <p v-if="props.preview.isRowsTruncated" class="dt-ml-frame__note">
       只显示了开头这几行，完整结果在下游算子里
     </p>

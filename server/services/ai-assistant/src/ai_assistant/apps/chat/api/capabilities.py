@@ -41,7 +41,7 @@ async def read_capabilities(
         capability_of(
             container.models,
             await model_profiles.profiles_of(
-                container.models, container.credentials
+                container.models, container.logins
             ),
             container.settings.codex_reasoning_effort,
         )

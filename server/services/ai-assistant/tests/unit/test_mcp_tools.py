@@ -21,9 +21,9 @@ from ai_assistant.apps.chat.services.tools.registry import (
     ProviderDeps,
     build_registry,
 )
-from ai_assistant.llm.codex import wire_names
 from ai_assistant.upstream import McpCatalog, McpClient, McpServer
 from lib.resilience import CircuitBreaker
+from llmcore.codex import wire_names
 from llmcore.tools.registry import DuplicateTool, registry_of
 
 Handler = Callable[[httpx.Request], httpx.Response]

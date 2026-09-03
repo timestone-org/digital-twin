@@ -9,6 +9,7 @@
 """
 
 import llmcore
+from llmcore.codex.adapter import CodexOAuthAdapter
 from llmcore.openai_compat import OpenAiCompatAdapter
 from llmcore.openai_embedding import OpenAiCompatEmbeddingAdapter
 from llmcore.ports import EmbeddingAdapter, ModelAdapter
@@ -17,7 +18,13 @@ from llmcore.rerank import DynamicRerankAdapter, Reranker
 # 消费方按这份名单 import。少一个就是有人得绕过再导出面
 REQUIRED = (
     "CATALOG_PATH",
+    "CODEX_LEASE_PATH",
+    "PROVIDER_KIND_CODEX_OAUTH",
     "PROVIDER_KIND_OPENAI_COMPAT",
+    "CodexOAuthAdapter",
+    "CodexRewire",
+    "CodexTokenClient",
+    "CredentialNotConnected",
     "CatalogCache",
     "CatalogClient",
     "CatalogSource",
@@ -47,6 +54,9 @@ REQUIRED = (
     "OpenAiCompatAdapter",
     "OpenAiCompatEmbeddingAdapter",
     "ReasoningChatOpenAI",
+    "StoredTokenProvider",
+    "TokenSource",
+    "build_codex_model",
     "build_openai_embedding",
     "classified",
     "reason_of",
@@ -70,6 +80,28 @@ def test_the_chat_adapter_satisfies_the_protocol() -> None:
         OpenAiCompatAdapter(resolve=lambda _kind: None, label="", models=()),
         ModelAdapter,
     )
+
+
+def test_the_codex_adapter_satisfies_the_protocol() -> None:
+    """⚠ 订阅账号那一路与端点那一路装进的是同一张注册表：少写一个方法的那个
+    装得进去，只在被选中的那一次才炸。"""
+    made = CodexOAuthAdapter(
+        id="p1",
+        label="订阅账号",
+        models=("gpt-5",),
+        default_effort="medium",
+        timeout_s=1.0,
+        tokens=_NoTokens(),
+        originator="tests",
+    )
+    assert isinstance(made, ModelAdapter)
+
+
+class _NoTokens:
+    """一个不会被调到的令牌来源：这条用例只验形状。"""
+
+    async def usable(self, provider: str) -> object:
+        raise AssertionError(provider)
 
 
 def test_the_embedding_adapter_satisfies_the_protocol() -> None:

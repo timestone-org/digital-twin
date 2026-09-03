@@ -97,6 +97,10 @@ class Settings(
     llm_catalog_refresh_s: float = Field(default=10.0, gt=0)
     # ⚠ 要比 platform 那条短：它与 platform 调用同一档，且在模型调用之前
     llm_catalog_timeout_s: float = Field(default=3.0, gt=0)
+    # 向 platform 领订阅账号登录态那一跳的预算（ADR-0041）。⚠ 它在**每一次
+    # 模型调用之前**，且平台那一侧可能要先去换一份新的（上游那一跳有 10 秒
+    # 硬超时），故比目录那条宽一点；仍要小于模型调用自己的预算
+    llm_login_timeout_s: float = Field(default=15.0, gt=0)
 
     # 嵌入档。关着时文档照常摄取，检索如实回答「这个库还没建索引」——
     # 不是返回空表，空表与「确实没有相关内容」长得一模一样

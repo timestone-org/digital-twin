@@ -37,10 +37,14 @@ MODEL_SPEC_KINDS: tuple[str, ...] = (
 OPTION_RERANK_DIALECT = "rerank_dialect"
 
 # 一路供应商的**接入形态**。⚠ 这一层只认协议不认厂商：`openai_compat` 说的是
-# 「按 OpenAI 兼容口径打一个 HTTP 端点」，谁家的端点都算。要先登录、走自家方言
-# 的那些形态由消费方各自的适配器认领，这里把它们的名字当成不透明的字符串——
-# 认领不了的形态在这一层解不出端点，而不是解出一个空地址打出去
+# 「按 OpenAI 兼容口径打一个 HTTP 端点」，谁家的端点都算；`codex_oauth` 说的是
+# 「先走一次设备码登录，再拿令牌打订阅账号那条私有面」。解端点的那几条方法只
+# 认前者——后者没有端点与密钥，放行的话一个空地址会被当成端点打出去。
+# ⚠ 两个码都是**跨服务契约**：与 platform-server 的 `enums.py` 逐字一致，由前端
+# 的 `llm-shapes.contract.spec.ts` 对着几份源码比。漂开的表现是「界面上配好了
+# 一路、消费方却当它不存在」，而两边代码单看都对
 PROVIDER_KIND_OPENAI_COMPAT = "openai_compat"
+PROVIDER_KIND_CODEX_OAUTH = "codex_oauth"
 
 
 class CatalogMalformed(ValueError):

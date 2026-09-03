@@ -233,23 +233,12 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     model_breaker_failures: int = Field(default=5, ge=1)
     model_breaker_reset_s: float = Field(default=30.0, gt=0)
 
-    # 第二条模型来路：用 ChatGPT 订阅直连 Codex 后端，而不是按 token 付费的
-    # API Key。⚠ 默认关着，且与上面那条**并存**——两边都配好时由会话自己选。
-    # ⚠ 这条路走的是未公开接口，供应商随时可能改；它同时要求部署方自己确认
-    # 账号与订阅条款允许这么用（上游库自己也把这套标成 experimental）
-    codex_enabled: bool = False
-    # 走这条路时用哪个模型。⚠ 无默认值：模型代号随供应商发版变，写死一个
-    # 我们没验证过的名字，表现是每次对话都撞一条 404，而那与「这一格没填」
-    # 看起来毫无关系
-    codex_model: str = ""
-    # 面板上还能选哪几个，逗号分隔；留空就只有上面那一个
-    codex_models: str = ""
-    # 推理档位。⚠ 闭合集合，配错了不许起——端点对不认识的档位回 400，
-    # 而那条 400 里不会提到是哪一格配错了
+    # 订阅账号那一路（ADR-0026）的推理档位缺省。⚠ 闭合集合，配错了不许起——
+    # 端点对不认识的档位回 400，而那条 400 里不会提到是哪一格配错了。
+    # ⚠ 这一路**没有环境变量档**：它要先登录一次，而登录态挂在目录里那一路
+    # 供应商的行上（ADR-0041）——目录之外配出来的那一路无处存登录态。
+    # 那一路配在模型管理页上，这一格只是它没配推理档位时的缺省
     codex_reasoning_effort: str = "medium"
-    # 模型账号令牌的加密密钥（Fernet 密钥由它派生）。⚠ 密钥类无默认值；
-    # 开了 codex 却没配它 = 启动即失败，见 `_codex_needs_a_credential_secret`
-    credential_secret: SecretStr | None = None
 
     # platform 的内部面地址。助手是纯消费方，业务数据一律经它拿
     platform_base_url: str = "http://platform-server:8005"
@@ -261,6 +250,10 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     llm_catalog_refresh_s: float = Field(default=10.0, gt=0)
     # ⚠ 要比 platform 那条短：它与 platform 调用同一档，且在模型调用之前
     llm_catalog_timeout_s: float = Field(default=3.0, gt=0)
+    # 向平台领订阅账号登录态那一跳的预算（ADR-0041）。⚠ 它在**每一次模型调用
+    # 之前**，且平台那一侧可能要先去换一份新的（上游那一跳有 10 秒硬超时），
+    # 故比目录那条宽一点；仍要小于模型调用自己的预算
+    llm_login_timeout_s: float = Field(default=15.0, gt=0)
 
     # auth-server 的内部面地址。只用来给长回合的委托身份续签——边缘签的那组头
     # 只有几十秒，不续的话回合后半段每一次工具调用都是 401
@@ -287,13 +280,6 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     mcp_timeout_s: float = Field(default=10.0, gt=0)
     mcp_breaker_failures: int = Field(default=3, ge=1)
     mcp_breaker_reset_s: float = Field(default=60.0, gt=0)
-
-    def codex_model_choices(self) -> tuple[str, ...]:
-        """面板上可选的模型代号，第一个是默认。"""
-        listed = [one.strip() for one in self.codex_models.split(",")]
-        names = [self.codex_model, *listed]
-        # 去重且保序：写重了只是配置手滑，不该让下拉里出现两个一样的
-        return tuple(dict.fromkeys(one for one in names if one))
 
     def extra_body(self) -> dict[str, Any] | None:
         """透传给端点的额外请求体；没配就是 `None`。"""
@@ -538,23 +524,3 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
                 f"ASSISTANT_CODEX_REASONING_EFFORT 只能是 {allowed}"
             )
         return given
-
-    @model_validator(mode="after")
-    def _codex_needs_a_model_and_a_secret(self) -> Self:
-        """开着 codex 却没配模型代号或加密密钥——启动即失败。
-
-        ⚠ 两样都留到第一次用才发现的话：没配模型代号是一条 404，
-        没配密钥是「登录成功了但令牌存不进去」——两种现象都指不回这里。
-        """
-        if not self.codex_enabled:
-            return self
-        if not self.codex_model.strip():
-            raise ValueError(
-                "ASSISTANT_CODEX_ENABLED 为真时必须配 ASSISTANT_CODEX_MODEL"
-            )
-        if not _has_secret(self.credential_secret):
-            raise ValueError(
-                "ASSISTANT_CODEX_ENABLED 为真时必须配 "
-                "ASSISTANT_CREDENTIAL_SECRET"
-            )
-        return self

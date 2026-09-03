@@ -22,22 +22,30 @@ const emit = defineEmits<{ select: [] }>()
   <li>
     <button
       type="button"
-      class="flex w-full items-center gap-2 rounded-md border-l-2 px-2 py-1.5 text-left"
+      class="relative flex w-full items-center gap-2 overflow-hidden rounded-md border px-2.5 py-2 text-left transition-colors"
       :class="
         props.isSelected
-          ? 'border-accent-primary bg-accent-primary/10 text-accent-primary'
-          : 'border-transparent text-text-primary hover:bg-surface-raised'
+          ? 'border-accent-primary/50 bg-accent-primary/10'
+          : 'border-border-subtle bg-surface-sunken/40 hover:border-border-default hover:bg-accent-primary/5'
       "
       :aria-current="props.isSelected ? 'true' : undefined"
       :title="`${props.room.workshopName} · ${props.room.name}`"
       @click="emit('select')"
     >
       <span
+        v-if="props.isSelected"
+        class="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-accent-primary"
+        aria-hidden="true"
+      />
+      <span
         class="min-w-0 flex-1 truncate text-xs"
-        :class="{
-          'text-text-secondary':
-            props.room.modelCount === 0 && !props.isSelected,
-        }"
+        :class="
+          props.isSelected
+            ? 'font-medium text-text-title'
+            : props.room.modelCount === 0
+              ? 'text-text-secondary'
+              : 'text-text-primary'
+        "
       >
         {{ props.room.name }}
       </span>
@@ -47,7 +55,9 @@ const emit = defineEmits<{ select: [] }>()
         intent="info"
         aria-label="有模型正在训练"
       >
-        <DtTag size="sm" intent="neutral">{{ props.room.modelCount }}</DtTag>
+        <DtTag size="sm" :intent="props.isSelected ? 'primary' : 'neutral'">
+          {{ props.room.modelCount }}
+        </DtTag>
       </DtBadge>
     </button>
   </li>
