@@ -19,12 +19,17 @@ import * as modeling from '@/api/modeling'
 import CanvasPage from '@/pages/Modeling/Canvas/index.vue'
 import { useAuthStore } from '@/stores/auth'
 
+/** 这一条用例挂起来的页面，跑完逐个卸载。 */
+const mounted: { unmount: () => void }[] = []
+
 /** DtModal 会 Teleport 到 body，不打桩的话弹窗里的东西 wrapper 找不到。 */
 function open() {
-  return mount(CanvasPage, {
+  const wrapper = mount(CanvasPage, {
     attachTo: document.body,
     global: { stubs: { Teleport: true } },
   })
+  mounted.push(wrapper)
+  return wrapper
 }
 
 const STAMP = '2026-01-01T00:00:00.000Z'
@@ -212,6 +217,9 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  // ⚠ 必须卸载：画布页开着每秒一次的走字计时器与运行轮询，留着的话它们会跨
+  // 文件一直打请求，整套用例跑完了进程也停不下来
+  while (mounted.length > 0) mounted.pop()?.unmount()
   vi.restoreAllMocks()
 })
 
