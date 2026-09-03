@@ -28,6 +28,19 @@ const CONSUMER_LABELS: Record<string, string> = {
   knowledge: '知识库',
 }
 
+/** 模型种类在界面上叫什么。⚠ 与 `LLM_MODEL_KINDS` 逐档对应 */
+const KIND_LABELS: Record<string, string> = {
+  chat: '对话',
+  embedding: '嵌入',
+  rerank: '重排',
+}
+
+/** 这一档在标签上用哪种色，认不出的种类按中性走。 */
+const KIND_INTENTS: Record<string, 'info' | 'neutral'> = {
+  embedding: 'info',
+  rerank: 'info',
+}
+
 interface Draft {
   providerId: string
   modelName: string
@@ -156,11 +169,8 @@ function save(purpose: LlmPurpose): void {
         <div class="min-w-0">
           <div class="flex items-center gap-2">
             <span class="text-sm text-text-primary">{{ purpose.label }}</span>
-            <DtTag
-              size="sm"
-              :intent="purpose.kind === 'embedding' ? 'info' : 'neutral'"
-            >
-              {{ purpose.kind === 'embedding' ? '嵌入' : '对话' }}
+            <DtTag size="sm" :intent="KIND_INTENTS[purpose.kind] ?? 'neutral'">
+              {{ KIND_LABELS[purpose.kind] ?? purpose.kind }}
             </DtTag>
             <DtTag v-if="purpose.is_vision_required" size="sm">需接图</DtTag>
           </div>
@@ -171,7 +181,13 @@ function save(purpose: LlmPurpose): void {
             v-if="purpose.provider_name === null"
             class="m-0 text-2xs text-text-disabled"
           >
-            未指定 · 沿用该服务环境变量里的配置
+            <!-- ⚠ 没有环境变量兜底的用途不能说「沿用环境变量」：
+                 照着那句话去翻一个不存在的配置项，比不说更费时间 -->
+            {{
+              purpose.has_env_default
+                ? '未指定 · 沿用该服务环境变量里的配置'
+                : '未指定 · 这套部署不启用这一路'
+            }}
           </p>
           <p v-else class="m-0 text-2xs text-text-disabled">
             当前：{{ purpose.provider_name }} / {{ purpose.model_name }}

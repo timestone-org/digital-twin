@@ -21,6 +21,7 @@ const KINDS: LlmProviderKind[] = [
     model_kinds: ['chat', 'embedding'],
     consumers: ['assistant', 'knowledge'],
     efforts: [],
+    rerank_dialects: [],
     presets: [],
   },
   {
@@ -32,6 +33,7 @@ const KINDS: LlmProviderKind[] = [
     model_kinds: ['chat'],
     consumers: ['assistant'],
     efforts: ['low'],
+    rerank_dialects: [],
     presets: [],
   },
 ]

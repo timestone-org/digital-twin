@@ -34,6 +34,7 @@ export type {
   KnowledgeDocument,
   KnowledgeHit,
   KnowledgeIndexLanes,
+  KnowledgeRerankLane,
   KnowledgeSearchResult,
   KnowledgeSource,
   KnowledgeUploadTicket,

@@ -13,7 +13,7 @@
  * ⚠ 接入形态同理（ADR-0040）：平台登记它、助手按它挑适配器、前端按它渲染表单。
  * 漂开的表现是「界面上配好了一路 Codex、助手却当它不存在」。
  */
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type {
@@ -23,11 +23,13 @@ import type {
   LlmProviderKind,
   LlmProviderPreset,
   LlmPurpose,
+  LlmRerankDialect,
 } from '@dt/contracts'
 import {
   LLM_MODEL_KINDS,
   LLM_PROVIDER_KINDS,
   LLM_PURPOSES,
+  LLM_RERANK_DIALECTS,
 } from '@dt/contracts'
 
 interface OpenApiSchema {
@@ -88,6 +90,26 @@ const KIND_MIGRATION = join(
   'versions',
   '2026_09_03_1000-a7e1c93b6d40_add_llm_provider_kind.py',
 )
+// ⚠ 放宽用途码 CHECK 的那一次。迁移是**逐次叠加**的：只读第一份的话，
+// 加一档用途之后这条闸会红在「平台多了一个」上，而库上其实认得它
+const PURPOSE_MIGRATION = join(
+  SERVER,
+  'services',
+  'platform-server',
+  'migrations',
+  'versions',
+  '2026_09_03_1600-b6f4a20d75e1_add_rerank_purpose.py',
+)
+// ⚠ 扫整个目录而不是列文件名：列名单的话，加一路方言时新文件不在名单里，
+// 这条闸对它一声不吭
+const LLMCORE_RERANK_DIR = join(
+  SERVER,
+  'domain',
+  'llmcore',
+  'src',
+  'llmcore',
+  'rerank',
+)
 
 const schemas = (
   JSON.parse(readFileSync(SPEC_PATH, 'utf8')) as {
@@ -123,8 +145,14 @@ const SHAPES: Record<string, Record<string, true>> = {
     model_kinds: true,
     consumers: true,
     efforts: true,
+    rerank_dialects: true,
     presets: true,
   } satisfies Keys<LlmProviderKind>,
+  LlmRerankDialectOut: {
+    code: true,
+    label: true,
+    description: true,
+  } satisfies Keys<LlmRerankDialect>,
   LlmProviderPresetOut: {
     code: true,
     label: true,
@@ -148,6 +176,7 @@ const SHAPES: Record<string, Record<string, true>> = {
     kind: true,
     consumer: true,
     is_vision_required: true,
+    has_env_default: true,
     provider_id: true,
     provider_name: true,
     model_name: true,
@@ -212,12 +241,23 @@ describe('用途码三方逐字一致', () => {
 
   it('迁移里写死的 CHECK 集合与平台清单一致', () => {
     // ⚠ 迁移是冻结件、活常量是活的：加一档用途时两边都要动，这里就是那道红灯
-    const source = readFileSync(MIGRATION, 'utf8')
+    // ⚠ 取的是**最后一次放宽**那一份：迁移逐次叠加，库上认的是最新那个集合
+    const source = readFileSync(PURPOSE_MIGRATION, 'utf8')
     const block = /PURPOSES = \(([\s\S]*?)\n\)/.exec(source)?.[1] ?? ''
     const listed = [...block.matchAll(/'([a-z]+\.[a-z]+)'/g)]
       .map((match) => match[1] ?? '')
       .sort()
     expect(listed).toEqual(platform)
+  })
+
+  it('建表那一份的 CHECK 是这一份的子集（迁移只放宽不收窄）', () => {
+    const source = readFileSync(MIGRATION, 'utf8')
+    const block = /PURPOSES = \(([\s\S]*?)\n\)/.exec(source)?.[1] ?? ''
+    const listed = [...block.matchAll(/'([a-z]+\.[a-z]+)'/g)].map(
+      (match) => match[1] ?? '',
+    )
+    expect(listed.length).toBeGreaterThan(0)
+    expect(listed.filter((one) => !platform.includes(one))).toEqual([])
   })
 })
 
@@ -285,5 +325,43 @@ describe('接入形态三方逐字一致', () => {
       .map((match) => match[1] ?? '')
       .sort()
     expect(listed).toEqual(platform)
+  })
+})
+
+/** 一份 Python 源码里 `X_DIALECT_Y = "…"` / `DIALECT_Y = "…"` 的取值。 */
+function dialectLiterals(source: string): string[] {
+  return [...source.matchAll(/DIALECT_[A-Z_]+ = "([a-z_]+)"/g)].map(
+    (match) => match[1] ?? '',
+  )
+}
+
+describe('重排线形三方逐字一致', () => {
+  // ⚠ 平台配得出而调用侧没装的方言，表现是「界面上选得中、调用时说不认识」，
+  // 而两边代码单看都对
+  const platform = [
+    ...new Set(dialectLiterals(readFileSync(PLATFORM_ENUMS, 'utf8'))),
+  ].sort()
+
+  it('确实读到了平台那份清单（读不到就等于这条闸没跑）', () => {
+    expect(platform.length).toBeGreaterThan(0)
+  })
+
+  it('前端与平台一致', () => {
+    expect([...LLM_RERANK_DIALECTS].sort()).toEqual(platform)
+  })
+
+  it('llmcore 装了平台登记的每一套', () => {
+    const installed = [
+      ...new Set(
+        readdirSync(LLMCORE_RERANK_DIR)
+          .filter((one) => one.endsWith('.py'))
+          .flatMap((one) =>
+            dialectLiterals(
+              readFileSync(join(LLMCORE_RERANK_DIR, one), 'utf8'),
+            ),
+          ),
+      ),
+    ].sort()
+    expect(installed).toEqual(platform)
   })
 })
