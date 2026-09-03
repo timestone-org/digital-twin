@@ -39,6 +39,7 @@ HTTP_BAD_REQUEST = 400
 HTTP_UNAUTHORIZED = 401
 HTTP_FORBIDDEN = 403
 HTTP_NOT_FOUND = 404
+HTTP_CONFLICT = 409
 
 START_BODY = {
     "device_auth_id": "deviceauth_secret",
@@ -259,6 +260,65 @@ async def test_a_stale_token_is_refreshed_on_this_side_before_it_goes_out(
     assert data_of(response)["access_token"] == "at-second"
     # 换那一跳是平台自己发的
     assert upstream.sent == before + 1
+
+
+async def test_a_refresh_that_upstream_rejects_reads_as_reconnect_needed(
+    login_context: AppContext, upstream: _Upstream, settings: Any
+) -> None:
+    """⚠ 与「还没登录过」（404）和「暂时不可用」（503）都分开：这一档的处置是
+    「重新登录一次」。混进 503 的话人会去查网络；而**不删行**是刻意的——删了
+    界面上就成了「从来没登录过」，那句话与真实情况对不上。"""
+    provider_id = await _codex_provider(login_context.client)
+    await _logged_in(login_context, upstream, provider_id)
+    await _make_stale(login_context)
+    upstream.queue((400, {"error": {"message": "invalid_grant"}}))
+    response = await login_context.client.post(
+        LEASE.format(id=provider_id),
+        headers={"X-Service-Key": settings.edge_service_key.get_secret_value()},
+    )
+    assert response.status_code == HTTP_CONFLICT, response.text
+    read = await login_context.client.get(
+        f"{PROVIDERS}/{provider_id}/credential"
+    )
+    assert data_of(read)["is_connected"] is True
+    assert data_of(read)["last_error"]
+
+
+async def test_a_lane_that_someone_else_is_refreshing_does_not_queue_up(
+    login_context: AppContext, upstream: _Upstream, settings: Any
+) -> None:
+    """⚠ 等锁的人不排队：拿不到锁就去读库，读不到新的就拿手上这份去试。
+    最坏情况是一次多余的 401，而不是一串挂住的请求。"""
+    provider_id = await _codex_provider(login_context.client)
+    await _logged_in(login_context, upstream, provider_id)
+    await _make_stale(login_context)
+    await _hold_the_refresh_lock(login_context, provider_id)
+    before = upstream.sent
+    response = await login_context.client.post(
+        LEASE.format(id=provider_id),
+        headers={"X-Service-Key": settings.edge_service_key.get_secret_value()},
+    )
+    assert response.status_code == httpx.codes.OK, response.text
+    # 手上那份陈旧的照样下发；换那一跳一次都没发
+    assert data_of(response)["access_token"] == "at-first"
+    assert upstream.sent == before
+
+
+async def _hold_the_refresh_lock(context: AppContext, provider_id: str) -> None:
+    """假装另一个副本正拿着那把续期锁。
+
+    Args: context, provider_id。
+    """
+    application = (
+        context.client._transport.app
+    )  # pyright: ignore[reportPrivateUsage, reportAttributeAccessIssue]  # 理由：用例要摸容器里那份缓存
+    store = application.state.container.llm.credentials
+    cache = (
+        store._cache
+    )  # pyright: ignore[reportPrivateUsage]  # 理由：锁是实现细节，用例只为占住它
+    await cache.set_if_absent(
+        f"llm-credential-refresh:{provider_id}", "别人", ttl_s=30
+    )
 
 
 async def test_a_login_only_hangs_on_a_lane_that_actually_logs_in(
