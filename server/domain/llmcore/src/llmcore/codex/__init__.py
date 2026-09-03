@@ -21,6 +21,7 @@ from llmcore.codex.client import (
     CredentialUnavailable,
 )
 from llmcore.codex.model import build_codex_model
+from llmcore.codex.rewire import CodexRewire, IsCodex
 from llmcore.codex.tokens import (
     StoredTokenProvider,
     TokenSource,
@@ -31,9 +32,11 @@ __all__ = [
     "CODEX_LEASE_PATH",
     "OPTION_DEFAULT_EFFORT",
     "CodexOAuthAdapter",
+    "CodexRewire",
     "CodexTokenClient",
     "CredentialNotConnected",
     "CredentialUnavailable",
+    "IsCodex",
     "StoredTokenProvider",
     "TokenSource",
     "UsableToken",

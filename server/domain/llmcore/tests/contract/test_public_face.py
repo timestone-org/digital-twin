@@ -21,6 +21,7 @@ REQUIRED = (
     "PROVIDER_KIND_CODEX_OAUTH",
     "PROVIDER_KIND_OPENAI_COMPAT",
     "CodexOAuthAdapter",
+    "CodexRewire",
     "CodexTokenClient",
     "CredentialNotConnected",
     "CatalogCache",
