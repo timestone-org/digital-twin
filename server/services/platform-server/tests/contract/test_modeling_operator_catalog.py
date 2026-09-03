@@ -3,7 +3,7 @@
 import ast
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -110,6 +110,41 @@ def test_only_model_operators_declare_a_serving_channel() -> None:
             assert spec.serving_channel in SERVING_CHANNELS, spec.code
         else:
             assert spec.serving_channel == "", spec.code
+
+
+def test_every_operator_declares_the_columns_it_produces() -> None:
+    """列声明只给帧类输出端口建键，不多不少。
+
+    ⚠ 少一个端口，下游的列候选就是空的；多一个（比如给模型端口也建了键），
+    发布期那道「声明 = 实测」的核对会拿一个根本不是帧的端口去比
+    （docs/MODELING_PLATFORM_DESIGN.md D2）。
+    """
+    for code in EXPECTED_CODES:
+        operator = registry.get(code)
+        frame_ports = {
+            port.name
+            for port in operator.OUTPUTS
+            if port.contract == "frame@v1"
+        }
+        declared = operator.describe_columns(
+            _least_config(code),
+            {port.name: ("甲", "乙") for port in operator.INPUTS},
+        )
+        assert set(declared) == frame_ports, code
+
+
+def test_column_declarations_keep_their_order() -> None:
+    """透传型算子必须保持列序，不许排序或去重后重排。
+
+    ⚠ 绑定是**按位置**把形参映射到特征上的：顺序一变，存量绑定就静默错位——
+    温度喂进了负荷那一格，算出来的还是个数，没有任何一处会报错。
+    """
+    given = ("乙", "甲", "丙")
+    for code in ("fill_missing", "standardize"):
+        declared = registry.get(code).describe_columns(
+            _least_config(code), {"frame": given}
+        )
+        assert declared["frame"] == given, code
 
 
 def test_config_schemas_only_use_closed_types() -> None:
@@ -310,3 +345,18 @@ def _kind_of(field: dict[str, Any]) -> str:
         if isinstance(branch, dict) and branch.get("type") != "null":
             return str(branch.get("type", ""))
     return ""
+
+
+def _least_config(code: str) -> Any:
+    """填够必填项的最小参数。
+
+    ⚠ 必填项各算子不同，不能一律 `CONFIG_MODEL()`：台账取数的 `table_code`
+    没有默认值（空串会被 `min_length` 拒掉，那正是它该有的样子）。
+    Args: code。
+    """
+    least: dict[str, Any] = {"table_code": "t", "target_column": "甲"}
+    schema: dict[str, Any] = registry.get(code).CONFIG_MODEL.model_json_schema()
+    required = cast("list[str]", schema.get("required", []))
+    return registry.get(code).CONFIG_MODEL.model_validate(
+        {name: least[name] for name in required if name in least}
+    )

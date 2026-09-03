@@ -8,6 +8,7 @@ from pydantic import Field
 from platform_server.apps.modeling.operators.base import (
     CONTRACT_FRAME,
     CONTRACT_MODEL,
+    ColumnsByPort,
     OperatorBase,
     OperatorConfig,
     OperatorError,
@@ -196,6 +197,19 @@ class LinearRegressionOperator(OperatorBase):
             ),
             "scored": _scored_frame(test, target_key, self.predict_rows(test)),
         }
+
+    @classmethod
+    def describe_columns(
+        cls, config: OperatorConfig, inputs: ColumnsByPort
+    ) -> ColumnsByPort:
+        """打分帧是**新造**的两列，与两个输入的列集无关。
+
+        ⚠ 默认的恒等实现在这里是错的：它会把训练集那一堆特征列当成打分帧的列，
+        于是下游评估节点的列候选里出现一串根本不存在的名字。
+        Args: config, inputs。
+        """
+        del config, inputs
+        return {"scored": (SCORED_TRUE, SCORED_PRED)}
 
     def predict_rows(self, frame: Frame) -> list[float]:
         """按拟合参数给每一行算一个预测值。

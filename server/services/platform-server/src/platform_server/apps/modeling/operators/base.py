@@ -5,9 +5,16 @@
 设计见 docs/MODELING_DESIGN.md §5。
 """
 
+from collections.abc import Mapping
 from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
+
+# 一个帧端口上的列 key 与顺序；`None` = 静态推不出来。
+# ⚠ 是**有序**的元组不是集合：绑定按位置把形参映射到特征上，顺序一变，存量绑定
+# 就静默错位——温度喂进了负荷那一格，算出来的还是个数
+type ColumnKeys = tuple[str, ...] | None
+type ColumnsByPort = Mapping[str, ColumnKeys]
 
 # 步间唯一的表格载体
 CONTRACT_FRAME = "frame@v1"
@@ -230,6 +237,33 @@ class OperatorBase:
         Args: inputs。
         """
         raise NotImplementedError
+
+    @classmethod
+    def describe_columns(
+        cls, config: OperatorConfig, inputs: ColumnsByPort
+    ) -> ColumnsByPort:
+        """给定各输入端口的列 key，答各输出端口的列 key。`None` = 推不出来。
+
+        默认实现是**恒等**：唯一那个帧输入的列原样出现在每个帧输出上。会增删
+        改列的算子必须覆盖它。
+        ⚠ 这是**静态声明**，真值以运行时记下来的为准；两者对不上时发布失败并
+        指名是哪一步（docs/MODELING_PLATFORM_DESIGN.md D2 / D3）。不覆盖它的
+        代价不是「少一点提示」，而是入口契约算错——那会让调用方被要求提供一列
+        管线自己造的东西。
+        Args: config, inputs。
+        """
+        del config
+        sources = [
+            inputs.get(port.name)
+            for port in cls.INPUTS
+            if port.contract == CONTRACT_FRAME
+        ]
+        inherited = sources[0] if len(sources) == 1 else None
+        return {
+            port.name: inherited
+            for port in cls.OUTPUTS
+            if port.contract == CONTRACT_FRAME
+        }
 
     def predict_rows(self, frame: Any) -> list[float]:
         """按拟合参数给每一行算一个预测值（产模型的算子必须实现）。
