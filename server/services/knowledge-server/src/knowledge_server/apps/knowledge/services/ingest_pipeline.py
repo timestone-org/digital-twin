@@ -20,14 +20,18 @@ CPU 且阻塞的，扔进**进程池**——放进事件循环会把整条消费
 冻住，而现象是「服务好好的，队列不动了」；外部解析服务那一路是**网络 IO**，
 必须带自己的超时，且**不自动重试**（重试只由人按「重新解析」那一层负责）。
 
-⚠ 没接嵌入档时**照样走完到 ready**：文档解析了、切块了、落库了，只是没有向量。
-检索那一侧会如实回答「这个库还没建索引」——判成 failed 的话，用户会以为是这
-份文档有问题。
+⚠ **嵌入是这条链路的必经段**，没接就判 failed 并说清楚缺什么（ADR-0045）：
+检索只有向量与关键词两路，而其中一路缺席的库在界面上与「建好了」长得一模一样，
+只是永远召不回意思相近的那几段。
+
+⚠ 判「接没接」之前先刷一次模型目录：worker 进程里没有别的地方刷它，而
+`can_embed` 问的是手上那份快照——不刷的话它恒假，于是每一份文档都跳过嵌入
+走到 ready，而界面上的能力面（api 进程刷过）说的是「已接」。
 """
 
 import asyncio
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from concurrent.futures import Executor
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
@@ -70,6 +74,14 @@ FAILED = "failed"
 # 而一个会话给不出那件事
 Sessions = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 
+# 让模型目录刷新一次的口子。⚠ 收成一个口子而不是直接认 `CatalogCache`：
+# 管线在 apps 层，认了它就把领域逻辑钉死在某一路目录实现上
+Refresh = Callable[[], Awaitable[object]]
+
+
+async def _no_refresh() -> None:
+    """不刷目录。用例里那些自己塞了假嵌入档的用不着它。"""
+
 
 class IngestFailed(RuntimeError):
     """这一份文档摄不进来，而且重试没有意义。
@@ -93,6 +105,9 @@ class IngestDeps:
     pool: Executor
     parse_timeout_s: float
     batch_size: int = 16
+    # 判「接没接嵌入档」之前先让目录刷新一次。⚠ 缺省不刷是给用例用的：
+    # 生产的 worker 必须把它接上，理由见模块头
+    refresh: Refresh = _no_refresh
     # 接了哪几路外部解析后端。⚠ 一期恒空——没接就是诚实缺席（ADR-0043）
     external_parsers: tuple[ExternalParserBackend, ...] = ()
     # 外部那一路一次调用最多等多久
@@ -278,6 +293,23 @@ async def _claimed(
         )
 
 
+async def _embeddable(deps: IngestDeps) -> None:
+    """先刷一次目录，再确认这套部署此刻算得出向量；算不出就别往下走。
+
+    ⚠ 排在取原件之前：一份 200 MB 的文档解完再说「这套部署没配嵌入模型」，
+    是把一次必然的失败拖到最贵的那一步之后。
+
+    Args: deps。
+    """
+    await deps.refresh()
+    if deps.embedder.can_embed:
+        return
+    raise IngestFailed(
+        "这套部署此刻算不出向量：模型目录里没有给「知识库嵌入」这个用途"
+        "分配可用的模型。配好之后按「重新解析」"
+    )
+
+
 async def _staged(
     sessions: Sessions, document_id: uuid.UUID, status: str
 ) -> None:
@@ -307,6 +339,7 @@ async def ingest(
             document_id=str(document_id),
         )
         return "skipped"
+    await _embeddable(deps)
     raw = await _raw_of(sessions, deps, document)
     parsed = await _parsed(deps, raw)
     await _staged(sessions, document.document_id, "chunking")
@@ -315,7 +348,7 @@ async def ingest(
         chunk_ids = await crud.chunk.replace_chunks(
             session, document.base_id, document.document_id, chunks
         )
-    if deps.embedder.can_embed and chunks:
+    if chunks:
         await _staged(sessions, document.document_id, "embedding")
         await _indexed(
             sessions,

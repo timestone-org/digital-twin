@@ -3,7 +3,7 @@
 变量名 = `KNOWLEDGE_<组>_<键>`。密钥类一律无默认值——缺失即拒绝启动。
 """
 
-from typing import Literal, Self
+from typing import Self
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import SettingsConfigDict
@@ -26,10 +26,9 @@ HISTORY_DROP_STEP = 10
 ROLE_API = "api"
 ROLE_WORKER = "worker"
 
-# 索引档的取值。⚠ `auto` 是**探测**，不是「猜」：启动时问一次库装没装扩展，
-# 据此选实现。三个取值走的是同一段代码的不同实现，不是环境分支
-IndexChoice = Literal["auto", "pgvector", "bruteforce"]
-KeywordChoice = Literal["auto", "trgm", "like"]
+# 向量维数的缺省值。⚠ 它同时是**库上那一列的维数**（`vector(N)` 的 N，建表时
+# 定死）与环境变量那一路嵌入端点的维数：两处必须是同一个数，所以只有一个常量
+DEFAULT_EMBEDDING_DIMENSIONS = 1536
 
 # 一个块最多多少字符。⚠ 有上限：嵌入端点按 token 收费也按 token 截断，
 # 超了那一截**不报错**，只是没进向量——表现是「这一段怎么都检索不到」
@@ -63,6 +62,9 @@ class MigrationSettings(PostgresSettings):
     )
 
     postgres_schema: str = DB_SCHEMA
+    # 建 `vector(N)` 的那个 N。⚠ 破例进这一份「只连库」的配置：迁移拿不到它
+    # 就只能把维数写死在迁移文件里，而维数是部署的取值不是代码的行为
+    embedding_dimensions: int = DEFAULT_EMBEDDING_DIMENSIONS
 
 
 class Settings(
@@ -102,13 +104,14 @@ class Settings(
     # 硬超时），故比目录那条宽一点；仍要小于模型调用自己的预算
     llm_login_timeout_s: float = Field(default=15.0, gt=0)
 
-    # 嵌入档。关着时文档照常摄取，检索如实回答「这个库还没建索引」——
-    # 不是返回空表，空表与「确实没有相关内容」长得一模一样
+    # 嵌入档的**永久默认值**：模型目录里没给「知识库嵌入」分配时用这一组。
+    # ⚠ 两处都没有就摄取不了任何文档——向量是检索的必经一路（ADR-0045），
+    # 而那时每一份文档会以一句点得出名字的话判失败，不是悄悄走到 ready
     embedding_enabled: bool = False
     embedding_base_url: str = ""
     embedding_api_key: SecretStr | None = None
     embedding_model: str = ""
-    embedding_dimensions: int = 1536
+    embedding_dimensions: int = DEFAULT_EMBEDDING_DIMENSIONS
     embedding_timeout_s: float = 30.0
     # 一次嵌入调用最多带几段。⚠ 有上限：端点对单次请求的总 token 有限，
     # 超了整批失败，而失败的是「这一次摄取」不是「这一段」
@@ -146,10 +149,6 @@ class Settings(
     # ⚠ 与上面那一档分开配：那一路是本地 CPU，这一路是网络 IO，几十秒是常态。
     # 一期没有任何外部后端，这一格因此还没有生效路径（ADR-0043）
     external_parse_timeout_s: float = Field(default=180.0, gt=0)
-
-    # 索引档，见 ADR-0034
-    vector_index: IndexChoice = "auto"
-    keyword_index: KeywordChoice = "auto"
 
     # 语音输入：到自建 FunASR 的中继（ADR-0038）。关着时 `/speech/ws` 一律
     # 以 1013 关掉，`/capabilities` 如实报 `is_asr_enabled=false`

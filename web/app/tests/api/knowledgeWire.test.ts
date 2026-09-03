@@ -105,7 +105,7 @@ describe('知识库的窄化', () => {
       strategies: ['naive', 7, ''],
       ready_strategies: [],
       accepted_suffixes: ['.md', '.docx'],
-      index: { vector: 'bruteforce', keyword: 'like', reason: '没装 pgvector' },
+      index: { vector: 'pgvector', keyword: 'trgm', reason: '向量维数对不上' },
     })
 
     expect(made.isEmbeddingEnabled).toBe(false)
@@ -114,7 +114,7 @@ describe('知识库的窄化', () => {
     expect(made.isAsrEnabled).toBe(false)
     expect(made.strategies).toEqual(['naive'])
     expect(made.acceptedSuffixes).toEqual(['.md', '.docx'])
-    expect(made.index.reason).toBe('没装 pgvector')
+    expect(made.index.reason).toBe('向量维数对不上')
   })
 
   it('能力缺 index 那一格时在这一层就说出来', () => {

@@ -51,12 +51,13 @@ def _capability_of(container: Container) -> CapabilityOut:
     lanes = strategies(lanes_of(container))
     return capability_of(
         container.settings,
-        container.index,
+        container.schema.vector_dimensions,
         container.sources,
         lanes,
         ModelLanes(
             is_embedding_enabled=container.embedder.can_embed,
             is_model_enabled=container.answerer.can_answer,
+            embedding_dimensions=container.embedder.dimensions,
             is_rerank_enabled=container.reranker.can_rerank,
             rerank_model=container.reranker.model or "",
         ),

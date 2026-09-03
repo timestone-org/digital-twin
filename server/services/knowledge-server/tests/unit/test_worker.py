@@ -7,7 +7,6 @@ from knowledge_server.apps.knowledge.services.embedding import NullEmbedder
 from knowledge_server.apps.knowledge.services.llm import NullAnswerer
 from knowledge_server.apps.knowledge.services.reranking import NullReranker
 from knowledge_server.container import Container, build_container
-from knowledge_server.probe import IndexProbe
 from knowledge_server.settings import Settings
 from knowledge_server.worker import (
     WorkerRuntime,
@@ -74,7 +73,6 @@ def _runtime(loops: tuple[_Loop, ...], closed: list[str]) -> WorkerRuntime:
         platform=None,
         catalog=None,
         responder=None,
-        index=IndexProbe(),
     )
 
     async def wait() -> None:
@@ -125,8 +123,8 @@ def test_consumers_are_an_explicit_tuple(settings: Settings) -> None:
     import 顺序，而顺序在测试里与生产里可以不同。
 
     ⚠ 顺手钉住「装配收的是容器不是配置」：收配置的那一版会自己再造一份容器，
-    于是消费者拿到的永远是**没探测过**的索引档——而 `/capabilities` 报的是
-    探测过的那一档，两边都不报错。"""
+    于是模型目录、嵌入档与断路器各算各的——而 worker 里刷目录的只有管线那一处。
+    """
 
     async def wait() -> None:
         await asyncio.sleep(0)

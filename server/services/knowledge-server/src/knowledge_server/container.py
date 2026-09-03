@@ -32,7 +32,7 @@ from knowledge_server.apps.knowledge.services.sources import (
 )
 from knowledge_server.llm_adapters import AdapterDeps, CatalogChatAdapter
 from knowledge_server.llm_purposes import PURPOSE_EMBEDDING, PURPOSE_RERANK
-from knowledge_server.probe import IndexProbe
+from knowledge_server.schema import SchemaFacts
 from knowledge_server.settings import SERVICE_NAME, Settings
 from lib.cache import Cache
 from lib.db import Database, PoolProfile
@@ -93,9 +93,9 @@ class Container:
     # 对话面用的带断路器的模型调用面。⚠ 这一路此刻装不出来时它抛
     # `ModelDisabled`，对话入口按 `answerer.can_answer` 先判一次再进回合
     responder: GuardedModel
-    # 启动时探测填进去。⚠ 可变对象，故不带 frozen——它是这份容器里唯一
-    # 「装配之后才知道」的东西
-    index: IndexProbe = field(default_factory=IndexProbe)
+    # 库上那几件启动之后才知道的事（向量列的维数）。⚠ 可变对象，故不带 frozen：
+    # 它是这份容器里唯一「装配之后才填得出来」的东西
+    schema: SchemaFacts = field(default_factory=SchemaFacts)
 
     def ingest_group(self) -> StreamGroup:
         """摄取队列的消费组身份。

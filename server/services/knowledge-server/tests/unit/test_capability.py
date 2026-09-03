@@ -1,4 +1,4 @@
-"""能力面：报的是「此刻真能用哪一档」，而且走回退档时必须说出原因。"""
+"""能力面：报的是「此刻真能用什么」，而有毛病时必须说出是什么毛病。"""
 
 from dataclasses import dataclass
 
@@ -7,25 +7,21 @@ from pydantic import SecretStr
 
 from knowledge_server.apps.knowledge.services.capability import (
     EXTERNAL_PARSER_ABSENT,
-    KEYWORD_FALLBACK,
-    KEYWORD_FAST,
-    VECTOR_FALLBACK,
-    VECTOR_FAST,
     ModelLanes,
     capability_of,
     index_capability_of,
-    keyword_choice,
     parsing_capability_of,
-    vector_choice,
 )
+from knowledge_server.apps.knowledge.services.indexing import PGVECTOR, TRGM
 from knowledge_server.apps.knowledge.services.parsing import (
     ParsedDocument,
     RawItem,
 )
-from knowledge_server.probe import IndexProbe
 from knowledge_server.settings import Settings
 
 PLACEHOLDER = "knowledge-test"
+# 库上那一列的维数，取值本身不参与断言之外的任何判断
+COLUMN_DIMENSIONS = 1536
 
 
 @dataclass(frozen=True)
@@ -63,98 +59,28 @@ def settings() -> Settings:
     )
 
 
-def _ready() -> IndexProbe:
-    return IndexProbe(
-        has_pgvector=True,
-        has_vector_table=True,
-        has_trgm=True,
-        is_probed=True,
+def test_both_lanes_are_reported_by_name() -> None:
+    """⚠ 两路都没有回退档了（ADR-0045），但界面仍要说得出检索是怎么做的。"""
+    out = index_capability_of(COLUMN_DIMENSIONS)
+    assert (out.vector, out.keyword) == (PGVECTOR, TRGM)
+    assert out.reason == ""
+
+
+def test_a_dimension_gap_is_reported_before_any_upload() -> None:
+    """⚠ 维数对不上时每一份文档都会摄取失败，而那条错看着像文档的问题。
+    这一格要在传文档之前就说出两个数字，以及该改哪个环境变量。"""
+    out = index_capability_of(COLUMN_DIMENSIONS, model_dimensions=1024)
+    assert "1536" in out.reason
+    assert "1024" in out.reason
+    assert "KNOWLEDGE_EMBEDDING_DIMENSIONS" in out.reason
+
+
+def test_no_embedding_lane_reports_no_dimension_gap() -> None:
+    """⚠ 没接嵌入档时维数是 0，那不是「对不上」——那句话会把人引到
+    维数上去，而真正缺的是模型分配。"""
+    assert (
+        index_capability_of(COLUMN_DIMENSIONS, model_dimensions=0).reason == ""
     )
-
-
-def test_fast_lane_when_everything_is_installed(settings: Settings) -> None:
-    choice, reason = vector_choice(settings, _ready())
-    assert choice == VECTOR_FAST
-    assert reason == ""
-
-
-def test_unprobed_falls_back_and_says_so(settings: Settings) -> None:
-    choice, reason = vector_choice(settings, IndexProbe())
-    assert choice == VECTOR_FALLBACK
-    assert "探测不到" in reason
-
-
-def test_missing_extension_falls_back_and_says_so(
-    settings: Settings,
-) -> None:
-    choice, reason = vector_choice(
-        settings, IndexProbe(is_probed=True, has_pgvector=False)
-    )
-    assert choice == VECTOR_FALLBACK
-    assert "pgvector" in reason
-
-
-def test_extension_without_table_points_at_the_command(
-    settings: Settings,
-) -> None:
-    """⚠ 装了扩展但没建加速表时，要说清下一步该跑什么——只说「未启用」
-    的话，人会去查扩展装没装，而那一格是好的。"""
-    choice, reason = vector_choice(
-        settings,
-        IndexProbe(is_probed=True, has_pgvector=True, has_vector_table=False),
-    )
-    assert choice == VECTOR_FALLBACK
-    assert "--enable" in reason
-
-
-def test_forced_fallback_is_honoured(settings: Settings) -> None:
-    forced = settings.model_copy(update={"vector_index": VECTOR_FALLBACK})
-    choice, reason = vector_choice(forced, _ready())
-    assert choice == VECTOR_FALLBACK
-    assert "配置" in reason
-
-
-def test_forced_fast_lane_still_falls_back_when_absent(
-    settings: Settings,
-) -> None:
-    """⚠ 配置强制加速档而库里没有时仍然回退，不抛：这一档只是加速，
-    正确性不依赖它，而抛的话服务起不来。"""
-    forced = settings.model_copy(update={"vector_index": VECTOR_FAST})
-    choice, _ = vector_choice(forced, IndexProbe(is_probed=True))
-    assert choice == VECTOR_FALLBACK
-
-
-def test_keyword_lane_mirrors_the_vector_lane(settings: Settings) -> None:
-    assert keyword_choice(settings, _ready())[0] == KEYWORD_FAST
-    fallback, reason = keyword_choice(settings, IndexProbe(is_probed=True))
-    assert fallback == KEYWORD_FALLBACK
-    assert "pg_trgm" in reason
-
-
-def test_forced_keyword_fallback_is_honoured(settings: Settings) -> None:
-    forced = settings.model_copy(update={"keyword_index": KEYWORD_FALLBACK})
-    choice, reason = keyword_choice(forced, _ready())
-    assert choice == KEYWORD_FALLBACK
-    assert "ILIKE" in reason
-
-
-def test_two_lanes_report_their_own_reasons(settings: Settings) -> None:
-    """⚠ 一路走加速档、另一路走回退档是常态，合成一句之后
-    没人知道说的是哪一路。"""
-    half = IndexProbe(
-        has_pgvector=True, has_vector_table=True, has_trgm=False, is_probed=True
-    )
-    out = index_capability_of(settings, half)
-    assert out.vector == VECTOR_FAST
-    assert out.keyword == KEYWORD_FALLBACK
-    assert "pg_trgm" in out.reason
-
-
-def test_capability_reports_both_model_paths(settings: Settings) -> None:
-    out = capability_of(settings, _ready())
-    assert out.is_embedding_enabled is False
-    assert out.is_model_enabled is False
-    assert out.index.vector == VECTOR_FAST
 
 
 def test_the_local_parser_lane_is_reported_by_name() -> None:
@@ -180,7 +106,7 @@ def test_a_connected_external_parser_lane_reports_no_reason() -> None:
 def test_an_absent_rerank_lane_says_why(settings: Settings) -> None:
     """⚠ 没接重排时检索走的是融合名次那一档：不说的话，质量忽然变了
     却没有任何一处报错。"""
-    out = capability_of(settings, _ready())
+    out = capability_of(settings)
     assert out.rerank.is_enabled is False
     assert out.rerank.model == ""
     assert "知识库重排" in out.rerank.reason
@@ -189,7 +115,6 @@ def test_an_absent_rerank_lane_says_why(settings: Settings) -> None:
 def test_a_connected_rerank_lane_names_its_model(settings: Settings) -> None:
     out = capability_of(
         settings,
-        _ready(),
         lanes=ModelLanes(
             is_embedding_enabled=True,
             is_model_enabled=True,

@@ -14,7 +14,7 @@ class _Source:
     """只提供那五格的假容器；每一格都是个认得出的哨兵。"""
 
     settings: object
-    index: object
+    schema: object
     embedder: object
     answerer: object
     reranker: object
@@ -23,7 +23,7 @@ class _Source:
 def test_lanes_of_carries_every_lane() -> None:
     source = _Source(
         settings=object(),
-        index=object(),
+        schema=object(),
         embedder=object(),
         answerer=object(),
         reranker=object(),
@@ -32,7 +32,7 @@ def test_lanes_of_carries_every_lane() -> None:
     made = lanes_of(source)  # pyright: ignore[reportArgumentType]
 
     assert made.settings is source.settings
-    assert made.probe is source.index
+    assert made.facts is source.schema
     assert made.embedder is source.embedder
     assert made.answerer is source.answerer
     assert made.reranker is source.reranker

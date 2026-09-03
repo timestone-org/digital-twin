@@ -1,24 +1,23 @@
-"""摄取管线，打真库。两路索引各跑一遍。
+"""摄取管线，打真库。
 
-⚠ 索引档的两条实现只有真库能分开验：pgvector 装没装决定走哪一路，而回退档
-平时没人跑——长期没人跑等于没有。
+⚠ 打真库而不是假件：这条链的每一段都落在库上（状态、块、向量），而假件测出来
+的是「我调了哪几个方法」。向量那一路更是只有真库能验——`vector` 列与 HNSW 都在
+数据库那一侧。
 """
 
 import uuid
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import pytest
 
 from knowledge_server.apps.knowledge import crud
 from knowledge_server.apps.knowledge.services.indexing import (
-    BruteForceIndex,
     IndexPair,
-    LikeKeywordIndex,
     PgVectorIndex,
-    TrgmKeywordIndex,
     VectorQuery,
+    build_indexes,
 )
 from knowledge_server.apps.knowledge.services.ingest_pipeline import (
     IngestDeps,
@@ -87,7 +86,7 @@ class _Embedder:
     不会提到「你的嵌入档换过维数」。
     """
 
-    dimensions: int = 4
+    dimensions: int
     id: str = "fake"
     can_embed: bool = True
 
@@ -108,6 +107,34 @@ class _NoEmbedder:
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         del texts
         raise AssertionError("不该被调到")
+
+
+class _LateEmbedder:
+    """刷过目录之后才算得出向量的那一路，与生产的动态嵌入档同形。"""
+
+    id = "late"
+
+    def __init__(self, dimensions: int) -> None:
+        self.dimensions = dimensions
+        self.refreshes = 0
+        self._is_ready = False
+
+    @property
+    def can_embed(self) -> bool:
+        """刷过一次目录才算接上。"""
+        return self._is_ready
+
+    async def arrive(self) -> None:
+        """一次目录刷新：拉完之后这一路就解得出端点了。"""
+        self.refreshes += 1
+        self._is_ready = True
+
+    async def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        """与 `_Embedder` 同一套假向量。
+
+        Args: texts。
+        """
+        return await _Embedder(dimensions=self.dimensions).embed(texts)
 
 
 def _deps(source: object, embedder: object, pair: IndexPair) -> IngestDeps:
@@ -164,8 +191,8 @@ async def _seeded(sessions: object) -> tuple[uuid.UUID, uuid.UUID]:
     return (base_id, document_id)
 
 
-def _pair() -> IndexPair:
-    return IndexPair(vector=BruteForceIndex(), keyword=LikeKeywordIndex())
+def _pair(dimensions: int) -> IndexPair:
+    return build_indexes(dimensions)
 
 
 async def _status(sessions: object, document_id: uuid.UUID) -> str:
@@ -180,12 +207,16 @@ async def _chunks(sessions: object, base_id: uuid.UUID) -> int:
 
 
 async def test_a_document_walks_all_the_way_to_ready(
-    db_sessions: object,
+    db_sessions: object, db_dimensions: int
 ) -> None:
     base_id, document_id = await _seeded(db_sessions)
     made = await ingest(
         db_sessions,  # pyright: ignore[reportArgumentType]
-        _deps(_Source(BODY.encode("utf-8")), _Embedder(), _pair()),
+        _deps(
+            _Source(BODY.encode("utf-8")),
+            _Embedder(db_dimensions),
+            _pair(db_dimensions),
+        ),
         document_id,
     )
     assert made == "ready"
@@ -193,11 +224,17 @@ async def test_a_document_walks_all_the_way_to_ready(
     assert await _chunks(db_sessions, base_id) == 2
 
 
-async def test_running_twice_changes_nothing(db_sessions: object) -> None:
+async def test_running_twice_changes_nothing(
+    db_sessions: object, db_dimensions: int
+) -> None:
     """⚠ 队列是 at-least-once，重复投递是常态：判据是**那一行的状态**，
     已经 ready 的直接跳过。"""
     base_id, document_id = await _seeded(db_sessions)
-    deps = _deps(_Source(BODY.encode("utf-8")), _Embedder(), _pair())
+    deps = _deps(
+        _Source(BODY.encode("utf-8")),
+        _Embedder(db_dimensions),
+        _pair(db_dimensions),
+    )
     await ingest(
         db_sessions, deps, document_id
     )  # pyright: ignore[reportArgumentType]
@@ -208,21 +245,47 @@ async def test_running_twice_changes_nothing(db_sessions: object) -> None:
     assert await _chunks(db_sessions, base_id) == 2
 
 
-async def test_no_embedder_still_reaches_ready(db_sessions: object) -> None:
-    """⚠ 判成 failed 的话，用户会以为是这份文档有问题——而其实是这套部署
-    没接嵌入档。文档解析了、切块了、落库了，只是没有向量。"""
-    base_id, document_id = await _seeded(db_sessions)
+async def test_no_embedder_fails_the_document_and_says_what_is_missing(
+    db_sessions: object, db_dimensions: int
+) -> None:
+    """⚠ 算不出向量就别放它到 ready（ADR-0045）：一个只有块没有向量的库，
+    在界面上与建好的库长得一模一样，只是永远召不回意思相近的那几段。
+    理由要点得出名字——用户据它去配模型，而不是去怀疑这份文档。"""
+    _base_id, document_id = await _seeded(db_sessions)
+    with pytest.raises(IngestFailed, match="知识库嵌入"):
+        await ingest(
+            db_sessions,  # pyright: ignore[reportArgumentType]
+            _deps(
+                _Source(BODY.encode("utf-8")),
+                _NoEmbedder(),
+                _pair(db_dimensions),
+            ),
+            document_id,
+        )
+
+
+async def test_the_catalog_is_refreshed_before_asking_if_it_can_embed(
+    db_sessions: object, db_dimensions: int
+) -> None:
+    """⚠ worker 进程里没有别的地方刷模型目录：不刷的话 `can_embed` 问的是
+    一份空快照，恒假——而那正是「界面说已接、库里一条向量都没有」的成因。"""
+    _base_id, document_id = await _seeded(db_sessions)
+    late = _LateEmbedder(db_dimensions)
+    deps = replace(
+        _deps(_Source(BODY.encode("utf-8")), late, _pair(db_dimensions)),
+        refresh=late.arrive,
+    )
     made = await ingest(
         db_sessions,  # pyright: ignore[reportArgumentType]
-        _deps(_Source(BODY.encode("utf-8")), _NoEmbedder(), _pair()),
+        deps,
         document_id,
     )
     assert made == "ready"
-    assert await _chunks(db_sessions, base_id) == 2
+    assert late.refreshes == 1
 
 
 async def test_the_status_is_visible_between_stages(
-    db_sessions: object,
+    db_sessions: object, db_dimensions: int
 ) -> None:
     """⚠ 每一段自己一个事务，所以中途失败时**外面看得见它停在哪**。
     整条一个事务的话，这一步会读到 pending——而那句「界面上看得见它停在哪」
@@ -231,21 +294,21 @@ async def test_the_status_is_visible_between_stages(
     with pytest.raises(IngestFailed):
         await ingest(
             db_sessions,  # pyright: ignore[reportArgumentType]
-            _deps(_Missing(), _Embedder(), _pair()),
+            _deps(_Missing(), _Embedder(db_dimensions), _pair(db_dimensions)),
             document_id,
         )
     assert await _status(db_sessions, document_id) == "parsing"
 
 
 async def test_a_missing_original_fails_without_retrying(
-    db_sessions: object,
+    db_sessions: object, db_dimensions: int
 ) -> None:
     """⚠ 与「此刻拿不到」分开：原件没了重试一万次也一样。"""
     _base_id, document_id = await _seeded(db_sessions)
     with pytest.raises(IngestFailed, match="不在对象存储里"):
         await ingest(
             db_sessions,  # pyright: ignore[reportArgumentType]
-            _deps(_Missing(), _Embedder(), _pair()),
+            _deps(_Missing(), _Embedder(db_dimensions), _pair(db_dimensions)),
             document_id,
         )
 
@@ -269,69 +332,69 @@ async def test_a_failure_reason_lands_on_the_row(
 
 
 async def test_a_missing_document_is_not_an_error(
-    db_sessions: object,
+    db_sessions: object, db_dimensions: int
 ) -> None:
     """文档在消息还在路上的时候被删了：不是错误，安静收工。"""
     made = await ingest(
         db_sessions,  # pyright: ignore[reportArgumentType]
-        _deps(_Source(BODY.encode("utf-8")), _Embedder(), _pair()),
+        _deps(
+            _Source(BODY.encode("utf-8")),
+            _Embedder(db_dimensions),
+            _pair(db_dimensions),
+        ),
         uuid.uuid4(),
     )
     assert made == "skipped"
 
 
-async def test_bruteforce_finds_the_chunk_it_indexed(
-    db_sessions: object,
+async def test_the_indexed_chunk_comes_back_from_pgvector(
+    db_sessions: object, db_dimensions: int
 ) -> None:
+    """摄取跑完，块的向量必须真的在向量表里查得到。
+
+    ⚠ 这一条守的是「嵌入那一段真的落了库」：只断言状态到了 ready 的话，
+    一个跳过嵌入、一条向量都不写的实现照样全绿。
+    """
     base_id, document_id = await _seeded(db_sessions)
-    index = BruteForceIndex()
+    embedder = _Embedder(db_dimensions)
     await ingest(
         db_sessions,  # pyright: ignore[reportArgumentType]
-        _deps(
-            _Source(BODY.encode("utf-8")),
-            _Embedder(),
-            IndexPair(vector=index, keyword=LikeKeywordIndex()),
-        ),
+        _deps(_Source(BODY.encode("utf-8")), embedder, _pair(db_dimensions)),
         document_id,
     )
+    probe = (await embedder.embed(["出口温度不得高于 65 ℃"]))[0]
     async with db_sessions() as session:  # pyright: ignore[reportCallIssue]
-        found = await index.search(
-            session,
-            VectorQuery(base_id=base_id, vector=[1.0, 1.0, 0.5, 1.0], limit=5),
+        found = await PgVectorIndex(dimensions=db_dimensions).search(
+            session, VectorQuery(base_id=base_id, vector=probe, limit=5)
         )
     assert found
     assert all(one.score > 0 for one in found)
-    assert all("余弦" in one.why for one in found)
+    assert all("向量近邻" in one.why for one in found)
 
 
-async def test_pgvector_writes_both_sides(
-    db_accelerated: None, db_sessions: object
+async def test_a_reingest_replaces_the_old_vectors(
+    db_sessions: object, db_dimensions: int
 ) -> None:
-    """⚠ 加速档在写的时候**两边都写**：只写加速表的话，一次「重建索引」就要
-    把整库重新嵌入一遍，而那是按 token 计费的。"""
-    del db_accelerated
+    """⚠ 重新解析会整体换掉块，向量随外键级联删——补不回来的话，那份文档
+    在检索里就此消失，而它的状态是 ready。"""
     base_id, document_id = await _seeded(db_sessions)
-    fallback = BruteForceIndex()
+    embedder = _Embedder(db_dimensions)
+    deps = _deps(_Source(BODY.encode("utf-8")), embedder, _pair(db_dimensions))
     await ingest(
         db_sessions,  # pyright: ignore[reportArgumentType]
-        _deps(
-            _Source(BODY.encode("utf-8")),
-            _Embedder(dimensions=1536),
-            IndexPair(
-                vector=PgVectorIndex(fallback=fallback),
-                keyword=TrgmKeywordIndex(),
-            ),
-        ),
+        deps,
         document_id,
     )
-    probe = [1.0, 1.0, 0.5, 1.0] + [0.0] * 1532
     async with db_sessions() as session:  # pyright: ignore[reportCallIssue]
-        bytea = await fallback.search(
-            session, VectorQuery(base_id=base_id, vector=probe, limit=5)
+        await crud.document.mark_status(session, document_id, "pending")
+    await ingest(
+        db_sessions,  # pyright: ignore[reportArgumentType]
+        deps,
+        document_id,
+    )
+    probe = (await embedder.embed(["出口温度不得高于 65 ℃"]))[0]
+    async with db_sessions() as session:  # pyright: ignore[reportCallIssue]
+        found = await PgVectorIndex(dimensions=db_dimensions).search(
+            session, VectorQuery(base_id=base_id, vector=probe, limit=10)
         )
-        accel = await PgVectorIndex(fallback=fallback).search(
-            session, VectorQuery(base_id=base_id, vector=probe, limit=5)
-        )
-    assert bytea, "bytea 那份真相必须也写了——不然重建索引要重新花一次钱"
-    assert accel
-    assert {one.chunk_id for one in accel} == {one.chunk_id for one in bytea}
+    assert len(found) == await _chunks(db_sessions, base_id)
