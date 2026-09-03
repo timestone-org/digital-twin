@@ -11,7 +11,8 @@
 加一个实现文件、注册元组里加一行、加一条契约测试。
 
 决策见 [ADR-0032](adr/0032-知识库独立成代码单元且LLM客户端下沉domain.md)
-至 [ADR-0035](adr/0035-检索编排是策略注册表.md)。
+至 [ADR-0035](adr/0035-检索编排是策略注册表.md)，以及
+[ADR-0043](adr/0043-解析后端可插拔且外部解析服务留口.md)（解析后端可插拔）。
 
 ---
 
@@ -58,10 +59,12 @@ pending ──→ parsing ──→ chunking ──→ embedding ──→ index
   失败即写 `failed` + 一句人话，由人在界面上按「重新解析」
   （runtime-resilience §4：一条链路只有一层负责重试，而那一层是人按的那一下）。
 
-⚠ **解析跑在进程池里，不在事件循环里。** docx/xlsx/pptx 的解析是纯 CPU 且阻塞的，
+⚠ **本地那一路解析跑在进程池里，不在事件循环里。** docx/xlsx/pptx 的解析是纯 CPU 且阻塞的，
 放进 async 会把整条消费循环连同健康探针一起冻住，而现象是「服务好好的，队列不动了」。
 照抄 `TrainerPool` 的形状：单工进程池 + 超时 + 超时后杀进程换新池
 （`ProcessPoolExecutor` 没有公开的「杀掉在跑任务」的口，被掐断的解析会继续烧 CPU）。
+外部解析服务那一路是网络 IO，走的是另一条口径（§2.2）：不进进程池，但**每次
+调用必须有超时**。
 
 ⚠ **认不出的格式必须当场报错，不许静默给空。** 静默给空的表现是「这份文档传上去了、
 状态是 ready、检索却永远查不到它」——那与「这份文档里确实没这句话」长得一模一样。
@@ -102,7 +105,7 @@ AgenticRAG 的「agentic」落在**两侧**，各解决一半：
 | 层 | 扩展点 | Protocol | 一期实现 |
 |---|---|---|---|
 | `sources/` | 知识**从哪来** | `KnowledgeSource` | `UploadSource`、`PlatformSource` |
-| `parsing/` | 一份原件**解成什么** | `DocumentParser` | `TextParser`、`DocxParser`、`XlsxParser`、`PptxParser` |
+| `parsing/` | 一份原件**由谁解、解成什么** | `ParserBackend` → `DocumentParser` / `ExternalParserBackend` | 本地：`TextParser`、`DocxParser`、`XlsxParser`、`PptxParser`；外部：**一期空着** |
 | `chunking/` | 怎么**切块** | `Chunker` | `HeadingChunker`、`FixedWindowChunker`、`RowChunker` |
 | `embedding/` | 用哪一路**嵌入** | `Embedder` | `DomainEmbedder`（走 `server/domain/llm`）、`NullEmbedder` |
 | `indexing/` | 向量与关键词**存哪、怎么查** | `VectorIndex` / `KeywordIndex` | `PgVectorIndex` / `BruteForceIndex`；`TrgmKeywordIndex` / `LikeKeywordIndex` |
@@ -115,23 +118,72 @@ AgenticRAG 的「agentic」落在**两侧**，各解决一半：
 
 ### 2.1 解析产出的是**保结构的文档**，不是一坨字符串
 
-`DocumentParser.parse()` 给的是 `ParsedDocument`：一串 `Block`，每块带
-`kind`（`heading` / `paragraph` / `table_row` / `list_item`）、`level`、`text`、
-以及一格 `locator`（页码 / 工作表名与行号 / 幻灯片序号 / 标题路径）。
+解析给的是 `ParsedDocument`：一串 `Block`，每块带
+`kind`（`heading` / `paragraph` / `table_row` / `list_item` / `caption`）、
+`level`、`text`、以及一格 `locator`（页码 / 工作表名与行号 / 幻灯片序号 /
+标题路径）。
 
 ⚠ **`locator` 不是可选的锦上添花，是引用能不能落地的前提。** 解析时丢掉它，
 后面任何一层都补不回来，而表现是助手答得头头是道却指不出出处——用户没法核对，
 这份答案就等于没有。
 
 ⚠ 切块**只吃 `Block` 序列，不认原始格式**。这条缝让「加一种格式」与「改切块策略」
-彻底解耦：加 PDF 只是多一个 `PdfParser`，`HeadingChunker` 一个字都不用改。
+彻底解耦：加 PDF 只是多一个解析器，`StructuralChunker` 一个字都不用改。
 
-### 2.2 一期不认 PDF——但它只是注册表里少一行
+### 2.2 解析层里还有一级扩展点：由**哪一路后端**去解（[ADR-0043](adr/0043-解析后端可插拔且外部解析服务留口.md)）
+
+外部解析服务（MinerU、PaddleOCR / PP-Structure 这一类）与本地解析库不是一个
+形状，所以 `parsing/` 的扩展点分两级：
+
+| | 本地库解 `DocumentParser` | 外部服务解 `ExternalParserBackend` |
+|---|---|---|
+| 跑在哪 | 本进程（由调用方扔进**进程池**） | 另一个进程 / 另一台带 GPU 的机器 |
+| 是什么活 | 阻塞的 CPU | 网络 IO，**每次调用必须有超时** |
+| 签名 | `def parse(raw)` | `async def parse_remote(raw, timeout_s)` |
+| 一期实现 | 四路 | **一个都没有** |
+
+⚠ **两个方法故意不同名。** 同名的话，把外部后端当本地的调用会拿到一个没
+`await` 的协程当 `ParsedDocument` 用，而那既不是类型错误也不是运行期异常——
+它只表现为「这份文档解出来是空的」。
+
+⚠ **两路产出同一个 `ParsedDocument`。** MinerU 那类回的是 markdown + 版面
+JSON，翻成带 `locator` 的块序列这一步**在那一路后端的实现里做完**；放宽成一坨
+字符串的话，§2.1 那条缝就没了，而 `locator` 丢在这里就再也补不回来。
+
+⚠ **挑谁的判据只有一处**（`parsing/registry.py`）：已配置的外部后端按注册序
+排在本地之前，每一路里先按后缀再按 media type、先到先得。外部那一路没配就没有
+候选，于是整条链路与「没有这一层」逐字相同。界面的 accept 名单是两路的并集——
+接了一路能吃 PDF 的后端之后，上传面必须当场收 PDF。
+
+⚠ **一期外部那一路是空的，而空就是诚实缺席。** `/capabilities` 的 `parsing`
+一格如实报「本地装了哪几路、外部接了哪几路、没接的原因」。不留半吊子 stub：
+一个「看着能用、调下去报奇怪错」的占位比缺席更糟。
+
+⚠ 两路都**不自动重试**：外部服务此刻不可达与这份文件解不动，在管线里都写成
+`failed` + 一句人话，由人按「重新解析」（§1.2）。
+
+### 2.3 各格式解到什么程度
+
+| 格式 | 解出什么 | 明确不解什么 |
+|---|---|---|
+| `.md` | CommonMark 规范实现（markdown-it-py）：ATX 与 setext 标题、围栏与缩进代码块（整块一块）、GFM 表格（表头折进每一行）、引用、嵌套与有序列表、YAML front-matter 当元数据剔掉；行内记号只取文本 | 不把 markdown 记号带进正文——检索时 `**温度**` 与 `温度` 不该是两个词 |
+| `.txt` / `.log` | 逐行成块，**任何记号都不当记号** | ⚠ 刻意不按 markdown 解：日志里的 `# 注意` 是内容不是标题，认了会把整份日志切成一棵假的标题树 |
+| `.html` | 剥标签取文本，`h1`–`h6` 成标题层级 | 不执行脚本、不跟外链、`script`/`style` 里的内容不当正文 |
+| `.json` | 摊成「路径 = 值」，深度有上限 | 解不动就退纯文本，不抛 |
+| `.docx` | 段落与表格**按文档序**穿（`iter_inner_content()`）、标题层级（认 `Heading N` 也认「标题 N」）、列表项、表格行（表头折进每一行、横向合并格折成一格）、超链接文字、文本框里的文字、每节的页眉页脚各一次 | 不取图片、不跑宏、不跟外部引用；**批注刻意不收**（审阅过程的对话，收进来会让检索答出还没定稿的说法）；脚注尾注与多级列表的真实层级（`w:numPr/w:ilvl`）**够不着**——python-docx 1.2 没有公开面 |
+| `.xlsx` / `.xlsm` | 一行一块，表头拼进每一行 | 只读值不读公式 |
+| `.pptx` | 一页一组块，页码进 `locator`，每页第一个文本框当标题 | 没有 `text_frame` 的形状跳过 |
+
+⚠ **文本框收在正文之后且不带标题路径**：它是浮动对象，python-docx 没有公开面
+能把它定位到正文的哪一段，硬猜一个路径会让引用指错地方。
+
+### 2.4 一期不认 PDF——但它只是注册表里少一行
 
 用户拍板一期只做 Office（docx/xlsx/pptx）与纯文本（md/txt/html/json）。
 PDF 是工业现场最常见的格式，所以这里明确记一笔：
 
-- 加 PDF = 加一个 `parsing/pdf.py` + 注册元组一行 + 一条契约测试。**不动任何调用方。**
+- 加 PDF 有**两条**出路，都只加文件不改调用方：加一个本地 `parsing/pdf.py`
+  （原生文本 PDF），或者接一路外部后端（扫描件与复杂版面，§2.2）。
 - 在此之前，传 PDF 的用户拿到的是一句点得出名字的错（「暂不支持 .pdf」），
   **不是**一个状态 ready 却检索不到的空文档。
 - 扫描件（图片型 PDF）与原生文本 PDF 是两件事，将来做的时候要分开报：
@@ -278,7 +330,8 @@ schema `knowledge`，域前缀 `kb_`（database-standard §1）。
 
 ## 8. 一期不做
 
-- **PDF 与 OCR**（§2.2 已说清加它的代价只有一个文件）。
+- **PDF 与 OCR**（§2.4 已说清加它的代价只有一个文件）。
+- **外部解析服务的客户端**：端口与注册位摆好了，一期一个实现都没有（§2.2）。
 - 权限**下沉到文档**：一期权限的粒度是「这个库」，不是「这份文档」。
 - 多租户隔离：一期所有库对有权限的人都可见。
 - 增量重嵌：换嵌入档只能整库重嵌，没有「只补新块」的路径。

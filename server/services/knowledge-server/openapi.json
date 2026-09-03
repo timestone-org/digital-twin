@@ -730,6 +730,9 @@
             "title": "Is Model Enabled",
             "type": "boolean"
           },
+          "parsing": {
+            "$ref": "#/components/schemas/ParsingCapabilityOut"
+          },
           "ready_strategies": {
             "items": {
               "type": "string"
@@ -759,6 +762,7 @@
           "is_embedding_enabled",
           "is_model_enabled",
           "is_asr_enabled",
+          "parsing",
           "index",
           "rerank"
         ],
@@ -1576,6 +1580,32 @@
           "total"
         ],
         "title": "Page[KnowledgeBaseOut]",
+        "type": "object"
+      },
+      "ParsingCapabilityOut": {
+        "description": "解析那一层此刻装了哪几路后端（ADR-0043）。\n\n⚠ 外部那一路**没接就是空表**，不摆一个看着能用的占位：占位的表现是\n「界面上写着接了 MinerU，传上去却报一句谁也看不懂的错」。",
+        "properties": {
+          "external_backends": {
+            "items": {
+              "type": "string"
+            },
+            "title": "External Backends",
+            "type": "array"
+          },
+          "local_backends": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Local Backends",
+            "type": "array"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "title": "ParsingCapabilityOut",
         "type": "object"
       },
       "RegisterDocumentIn": {

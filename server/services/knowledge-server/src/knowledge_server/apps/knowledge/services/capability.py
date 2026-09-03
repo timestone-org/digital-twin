@@ -11,9 +11,14 @@ from knowledge_server.apps.knowledge.models.knowledge_base import STRATEGIES
 from knowledge_server.apps.knowledge.schemas import (
     CapabilityOut,
     IndexCapabilityOut,
+    ParsingCapabilityOut,
     RerankCapabilityOut,
 )
 from knowledge_server.apps.knowledge.services.parsing import (
+    EXTERNAL_BACKENDS,
+    PARSERS,
+    DocumentParser,
+    ExternalParserBackend,
     accepted_suffixes,
 )
 from knowledge_server.apps.knowledge.services.retrieval import (
@@ -25,6 +30,12 @@ from knowledge_server.apps.knowledge.services.sources import (
 )
 from knowledge_server.probe import IndexProbe
 from knowledge_server.settings import Settings
+
+# 外部解析后端一路都没接时报的原因。⚠ 是一句人话不是空串：空串会被界面读成
+# 「一切正常」，而这里要说的是「这套部署根本没接那一路」（ADR-0043）
+EXTERNAL_PARSER_ABSENT = (
+    "这套部署没接外部解析服务（MinerU / PP-Structure 这一类）"
+)
 
 # 与 `services/indexing/registry.py` 的注册名逐字对齐
 VECTOR_FAST = "pgvector"
@@ -85,6 +96,24 @@ def index_capability_of(
     reasons = [one for one in (vector_reason, keyword_reason) if one]
     return IndexCapabilityOut(
         vector=vector, keyword=keyword, reason="；".join(reasons)
+    )
+
+
+def parsing_capability_of(
+    parsers: tuple[DocumentParser, ...] = PARSERS,
+    external: tuple[ExternalParserBackend, ...] = EXTERNAL_BACKENDS,
+) -> ParsingCapabilityOut:
+    """解析那一层此刻装了哪几路后端。
+
+    ⚠ 外部那一路没接就如实报空表加一句原因，不装作接上了：装了的表现是
+    「界面写着接了 MinerU，传上去却报一句谁也看不懂的错」。
+
+    Args: parsers, external。
+    """
+    return ParsingCapabilityOut(
+        local_backends=[one.name for one in parsers],
+        external_backends=[one.name for one in external],
+        reason="" if external else EXTERNAL_PARSER_ABSENT,
     )
 
 
@@ -172,6 +201,7 @@ def capability_of(
         ),
         source_kinds=list(source_kinds(sources)),
         accepted_suffixes=list(accepted_suffixes()),
+        parsing=parsing_capability_of(),
         index=index_capability_of(settings, probe),
         rerank=rerank_capability_of(lanes),
     )

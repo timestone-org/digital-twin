@@ -53,6 +53,22 @@ export interface KnowledgeIndexCapability {
 }
 
 /**
+ * 解析那一层此刻装了哪几路后端。
+ *
+ * ⚠ 外部那一路（MinerU / PP-Structure 这一类）**没接就是空表**：占位的表现是
+ * 「界面上写着接了，传上去却报一句谁也看不懂的错」，所以缺席要连着 `reason`
+ * 一起如实报出来。
+ */
+export interface KnowledgeParsingCapability {
+  /** 本地库解那一路装了哪几个，按注册序。 */
+  local_backends: string[]
+  /** 外部解析服务那一路此刻接了哪几个。 */
+  external_backends: string[]
+  /** 外部那一路缺席的原因；接上了是空串。 */
+  reason: string
+}
+
+/**
  * 重排那一路此刻接没接（ADR-0042）。
  *
  * ⚠ `reason` 不是装饰：没接时检索走的是融合名次那一档，而悄悄退化的表现正是
@@ -88,6 +104,7 @@ export interface KnowledgeCapability {
    * 「选得中的文件传上去被拒」，而两边单看都对。
    */
   accepted_suffixes: string[]
+  parsing: KnowledgeParsingCapability
   index: KnowledgeIndexCapability
   rerank: KnowledgeRerankCapability
 }
