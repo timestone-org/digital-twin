@@ -180,4 +180,63 @@ describe('知识库对话的回合门面', () => {
     expect(errors).toHaveLength(1)
     expect(errors[0]).toContain(String(MAX_ROUNDS))
   })
+
+  it('自动起名那一帧摊开交给页面', async () => {
+    // ⚠ 只有首轮会来这一帧：起过名的会话后端不再起
+    const titled = frame('session_titled', {
+      title: '冷却水运行参数',
+      row_version: 2,
+    })
+    const { advance } = advanceOf([[titled, DONE]])
+    const { sink } = sinkOf()
+    const seen: Array<[string, number]> = []
+    await runKnowledgeTurn(
+      {
+        advance,
+        sessionId: 's1',
+        userText: '冷凝器上限',
+        onTitled: (title, version) => seen.push([title, version]),
+      },
+      sink,
+    )
+    expect(seen).toEqual([['冷却水运行参数', 2]])
+  })
+
+  it('标题为空的那一帧一律不改清单', async () => {
+    // ⚠ 拿空标题去改清单，那一行会变成一片空白——比「未命名」更难认
+    const { advance } = advanceOf([
+      [frame('session_titled', { title: '', row_version: 3 }), DONE],
+    ])
+    const { sink } = sinkOf()
+    const seen: string[] = []
+    await runKnowledgeTurn(
+      {
+        advance,
+        sessionId: 's1',
+        userText: '问一句',
+        onTitled: (title) => seen.push(title),
+      },
+      sink,
+    )
+    expect(seen).toEqual([])
+  })
+
+  it('行版本不是数字时退成 0，不写断言', async () => {
+    // ⚠ 这一帧来自后端，而给后端数据写 `as` 断言是被闸门拦的：逐格判类型
+    const { advance } = advanceOf([
+      [frame('session_titled', { title: '有标题', row_version: '2' }), DONE],
+    ])
+    const { sink } = sinkOf()
+    const seen: number[] = []
+    await runKnowledgeTurn(
+      {
+        advance,
+        sessionId: 's1',
+        userText: '问一句',
+        onTitled: (_title, version) => seen.push(version),
+      },
+      sink,
+    )
+    expect(seen).toEqual([0])
+  })
 })

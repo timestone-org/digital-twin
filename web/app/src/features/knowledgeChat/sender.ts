@@ -28,6 +28,8 @@ export interface KnowledgeSenderParts {
   edit: (next: (given: ConversationLog) => ConversationLog) => void
   /** 掐掉上一个回合，但**不往时间线上写字**。 */
   abort: () => void
+  /** 服务端给这个会话自动起了标题。 */
+  onTitled?: ((title: string, rowVersion: number) => void) | undefined
 }
 
 /** 造出「发一句话」这个动作。 */
@@ -53,6 +55,7 @@ export function createKnowledgeSender(
           sessionId: id,
           userText: text,
           signal: controller.signal,
+          onTitled: parts.onTitled,
         },
         sinkOf(parts),
       )

@@ -39,6 +39,11 @@ export interface KnowledgeRunnerInput {
   sessionId: string
   userText: string
   signal?: AbortSignal | undefined
+  /**
+   * 服务端刚给这个会话自动起了标题。
+   * ⚠ 只有首轮会来一帧：起过名的会话不再起（后端只在标题为空时起）。
+   */
+  onTitled?: ((title: string, rowVersion: number) => void) | undefined
 }
 
 /**
@@ -59,9 +64,25 @@ export async function runKnowledgeTurn(
       signal: input.signal,
       dispatch,
       maxRounds: MAX_ROUNDS,
+      onFrame: (name, data) => {
+        if (name === 'session_titled') titled(input, data)
+      },
     },
     sink,
   )
+}
+
+/**
+ * `session_titled` 那一帧摊开交给页面。
+ * ⚠ 逐格判类型不写 `as`：这一帧来自后端，而给后端数据写断言是被闸门拦的。
+ * @param input 这一次的入参（拿它的回调）
+ * @param data 帧里那一坨
+ */
+function titled(input: KnowledgeRunnerInput, data: Record<string, unknown>) {
+  const title = data.title
+  const version = data.row_version
+  if (typeof title !== 'string' || title === '') return
+  input.onTitled?.(title, typeof version === 'number' ? version : 0)
 }
 
 /** 只认内建表。别的名字一律不支持——这一页没有工作面，也就没有别的工具。 */

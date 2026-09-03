@@ -22,6 +22,7 @@ from knowledge_server.apps.chat.services import advance_service
 from knowledge_server.apps.chat.services.session_service import (
     require_session,
 )
+from knowledge_server.apps.chat.services.title_service import SessionTitled
 from knowledge_server.catalog import KNOWLEDGE_USE
 from knowledge_server.deps import get_session, require
 from knowledge_server.settings import API_PREFIX
@@ -82,8 +83,12 @@ async def _frames(
         yield events.error_frame(error.code, str(error), trace_id)
 
 
-def _frame_of(item: TurnEvent) -> str:
+def _frame_of(item: TurnEvent | SessionTitled) -> str:
     """一件产出摊成一帧。分档必须穷尽。
+
+    ⚠ 新增的档要排在兜底那一行**之前**：兜底当的是 `TurnOutcome`，
+    漏一档的表现是那一帧被当成 outcome 序列化，而前端读到一个没有 reply 的
+    结束帧——回合看着结束了，答案没了。
 
     Args: item。
     """
@@ -91,6 +96,11 @@ def _frame_of(item: TurnEvent) -> str:
         return events.delta_frame(item)
     if isinstance(item, TurnStep):
         return events.step_frame(item)
+    if isinstance(item, SessionTitled):
+        return events.frame(
+            "session_titled",
+            {"title": item.title, "row_version": item.row_version},
+        )
     return events.outcome_frame(item)
 
 
