@@ -8,6 +8,8 @@ import { ref } from 'vue'
 import * as modeling from '@/api/modeling'
 import { describeError } from '@/composables/useAsyncList'
 
+import { PIPELINE_TEMPLATES } from './templates'
+
 /** 表单弹窗当前在编辑谁。`id` 为 `null` 是新建。 */
 export interface PipelineDraft {
   id: string | null
@@ -18,13 +20,20 @@ export interface PipelineDraft {
 
 const BLANK: PipelineDraft = { id: null, code: '', name: '', description: '' }
 
-/** 建一条或改一条。返回是否成功。 */
-async function submit(input: PipelineDraft): Promise<void> {
+/** 建一条或改一条。新建时按模板键把一张能跑的图一并落下去。 */
+async function submit(
+  input: PipelineDraft,
+  templateKey: string,
+): Promise<void> {
   if (input.id === null) {
+    // ⚠ 找不到那张模板时给空白图而不是抛：模板是前端常量，键对不上是代码问题，
+    // 不该让用户的「新建」当场失败
+    const template = PIPELINE_TEMPLATES.find((item) => item.key === templateKey)
     await modeling.createModelingPipeline({
       code: input.code,
       name: input.name,
       description: input.description || null,
+      ...(template ? { graph: template.build() } : {}),
     })
     return
   }
@@ -65,10 +74,10 @@ export function usePipelineOps(onDone: () => void) {
   const toast = useToast()
   const confirm = useConfirm()
 
-  async function save(input: PipelineDraft): Promise<void> {
+  async function save(input: PipelineDraft, templateKey = ''): Promise<void> {
     isSaving.value = true
     try {
-      await submit(input)
+      await submit(input, templateKey)
       draft.value = null
       toast.success(input.id === null ? '流水线已建好' : '已保存')
       onDone()

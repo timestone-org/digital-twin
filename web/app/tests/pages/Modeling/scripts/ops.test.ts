@@ -11,6 +11,7 @@ import { defineComponent, h } from 'vue'
 import * as modeling from '@/api/modeling'
 import { usePipelineDoc } from '@/pages/Modeling/Canvas/scripts/usePipelineDoc'
 import { useBindingOps } from '@/pages/Modeling/Models/scripts/useBindingOps'
+import { useVersionOps } from '@/pages/Modeling/Models/scripts/useVersionOps'
 import { usePipelineOps } from '@/pages/Modeling/Pipelines/scripts/usePipelineOps'
 
 const STAMP = '2026-01-01T00:00:00.000Z'
@@ -278,7 +279,8 @@ describe('模型库上的动作', () => {
       fingerprint: {},
       description: null,
     })
-    const ops = host(() => useBindingOps(vi.fn()))
+    // ⚠ 下线是**版本**级动作，不在绑定那一组里：两者的对象与爆炸半径都不同
+    const ops = host(() => useVersionOps(vi.fn()))
 
     await ops.retire(version())
 

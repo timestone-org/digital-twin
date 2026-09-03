@@ -507,12 +507,18 @@ for level in 0 .. max_depth:                     # 分层
 [MODELING_DESIGN.md](./MODELING_DESIGN.md) §9.4 已经写死：
 「将来加了导出全量帧那个端点，必须同时要求 `dataset:record:export`」。本轮兑现：
 
-- 运行参数加一档「保留全量产物」（默认关）。开启时执行器把每个端口的帧写成 CSV 到对象存储，
-  带保留期（与运行记录同一个清理循环）；
-- `POST /modeling-runs/{id}/exports`（`modeling:view` **且** `dataset:record:export`）
-  换一个短时预签名 URL；
+- 运行参数加一档「保留全量结果」（默认关）。开启时落库那一层把每个端口的帧写成 CSV
+  到对象存储，与运行记录同一个保留期（清理按 `modeling/runs/{id}/` 整片删）；
+- `GET /modeling-runs/{id}/frames/{node_id}?port=…`（`modeling:view` **且**
+  `dataset:record:export`）把那份 CSV 交出去；
 - ⚠ 默认关是刻意的：默认开会让每次运行都往对象存储写几十 MB，
   而绝大多数运行只是在调参数。
+
+⚠ **落地时偏离了这一条的「短时预签名 URL」**，改成服务端转发：SigV4 把 Host 也签
+进去，而边缘那条 `/oss/` location 会把 Host 换成站点自己的域名，签出来的链接到了
+存储端一律验签失败。转发多一跳，但它是这个部署形态下唯一走得通的做法。字节量由
+那道 20 万行的上限框住。
+⚠ 这也是本模块唯一**不走统一信封**的端点：它交的是一个文件，不是一个结果。
 
 ---
 
@@ -887,6 +893,7 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 | 3 | 新表 `modeling_model_artifacts` | 五 |
 | 4 | `modeling_node_runs` 加 `artifact_json JSONB NULL` | 五 |
 | 5 | 新表 `modeling_deployments` / `modeling_api_keys` / `modeling_call_logs` | 七 |
+| 6 | `modeling_runs` 加 `is_keeping_frames`（默认 false）、`modeling_node_runs` 加 `frames_json JSONB NULL` | 九 |
 
 ⚠ 迁移 2 的两列都给默认值，故「新结构 + 旧代码」可用（旧代码不读这两列）。
 ⚠ 迁移 1 之后、代码更新之前，`fitted_json` 全是 `NULL`，与今天的行为一致（今天就是没有）。
@@ -907,13 +914,16 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 | **五+六** ✅ | **产物、通道 B 与台账批量相位** | 迁移 3/4；四条护栏；`tree_regressor`；发布搬产物 + 实跑；`converge_pipeline` 接上并清产物；`BatchAnalysisModel` / `ModelMemo` / 收集相位；ADR-0045、ADR-0046 | 二 |
 | 七 ✅ | 对外服务 | 迁移 5；管理面 + 对外面；边缘 location + 限流；auth 规则；ADR-0047 | 二（schema 就是接口文档） |
 | 八 ✅ | 公式一键化 | `:register-formula`；**绑定改按入口契约核对**（原来按特征列，带特征工程的链上必错）；换绑的入口契约比对 | 二 |
-| 九 | 前端四面 | 运行面、模型详情、服务面、模板、结果导出入口 | 六 / 七 / 八 |
+| 九 ✅ | 前端四面 | 运行面、模型详情（入口契约 + 一键注册）、服务面（服务 / 密钥 / 调用量）、开箱模板、结果全量导出（迁移 6 + 新权限码 `dataset:record:export`） | 六 / 七 / 八 |
 
 ⚠ **第一期必须最先**：它修的是一条已经在线上的静默错值缺陷，且后面每一期都压在它上面。
 ⚠ **五、六两期最终并成一次交付**：批量相位的验收件必须是一个**真的**通道 B
 模型——只有假件的话，「整批与逐行算出来的数相同」这条断言证明不了推理链在多行
 帧上跑得对。相位与树模型分两次做，第一次就没有可验的东西。
 ⚠ 三、四两期内部可高度并行（每 2–3 个算子一个 PR，互不相干）。
+⚠ **导出那一件顺带新增了一个权限码** `dataset:record:export`：它在 auth-server
+的目录里，admin 角色机械推导拿得到，但**存量会话看不到新权限码**（前端权限集只在
+登录时写一次）——部署后要重新登录一次。
 
 ### 需要的 ADR
 

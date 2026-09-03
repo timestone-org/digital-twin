@@ -146,7 +146,9 @@ describe('模型服务', () => {
 
     const wrapper = open()
     await flushPromises()
-    await wrapper.findAll('button').find((item) => item.text() === '密钥')
+    await wrapper
+      .findAll('button')
+      .find((item) => item.text() === '密钥')
       ?.trigger('click')
     await flushPromises()
 
@@ -160,7 +162,9 @@ describe('模型服务', () => {
 
     const wrapper = open()
     await flushPromises()
-    await wrapper.findAll('button').find((item) => item.text() === '密钥')
+    await wrapper
+      .findAll('button')
+      .find((item) => item.text() === '密钥')
       ?.trigger('click')
     await flushPromises()
 
@@ -172,19 +176,20 @@ describe('模型服务', () => {
   it('铸出来那把钥匙的明文摆在一个要显式关掉的窗口里', async () => {
     stub([deployment()], [apiKey()])
     vi.spyOn(modeling, 'createModelApiKey').mockResolvedValue(minted())
-    signIn([
-      PERMISSION_CODES.modelingView,
-      PERMISSION_CODES.modelingPublish,
-    ])
+    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
 
     const wrapper = open()
     await flushPromises()
-    await wrapper.findAll('button').find((item) => item.text() === '密钥')
+    await wrapper
+      .findAll('button')
+      .find((item) => item.text() === '密钥')
       ?.trigger('click')
     await flushPromises()
     const input = wrapper.findAll('input')
     await input[input.length - 1]?.setValue('新对接方')
-    await wrapper.findAll('button').find((item) => item.text() === '铸一把')
+    await wrapper
+      .findAll('button')
+      .find((item) => item.text() === '铸一把')
       ?.trigger('click')
     await flushPromises()
 

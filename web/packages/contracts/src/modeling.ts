@@ -178,6 +178,13 @@ export interface ModelingNodeRunSummary {
 export interface ModelingNodeRun extends ModelingNodeRunSummary {
   preview: Record<string, unknown>
   is_preview_truncated: boolean
+  /**
+   * 留下了全量结果的那些端口。
+   *
+   * ⚠ 只有端口名，没有对象键：键是服务端的事，交出去等于把「猜一个别的键」
+   * 那条路也一起交出去。
+   */
+  exported_ports: string[]
 }
 
 /** 运行列表里的一条。 */
@@ -191,6 +198,8 @@ export interface ModelingRunSummary {
   duration_ms: number | null
   row_count: number | null
   is_source_truncated: boolean
+  /** 这次运行有没有留下全量结果。界面按它决定下载入口显不显示。 */
+  is_keeping_frames: boolean
   error_text: string | null
   created_by_name: string | null
   created_at: string

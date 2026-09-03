@@ -7,6 +7,7 @@ import httpx
 from unit.database_fakes import MakerSessions
 from unit.modeling_fakes import DirectRunner
 
+from lib.objectstore import ObjectStore
 from platform_server.apps.modeling.services.run_dispatch import (
     DispatchOptions,
     DispatchReport,
@@ -130,7 +131,9 @@ async def create_pipeline(
 
 
 async def drive_run(
-    sessions: MakerSessions, run_id: uuid.UUID
+    sessions: MakerSessions,
+    run_id: uuid.UUID,
+    store: ObjectStore | None = None,
 ) -> DispatchReport:
     """扮演一次 worker，把队列里那次运行就地跑完。
 
@@ -138,10 +141,14 @@ async def drive_run(
     时长变成主要成本。真进程池由 `run_pool` 自己的用例守着。
     ⚠ 会话工厂必须落在用例那条回滚事务上——编排自己开短事务，另开一条连接的话
     它看不见用例经 HTTP 种下的数据，而现象是「运行说台账不存在」。
-    Args: sessions, run_id。
+    ⚠ 给了 `store` 才写得出二进制产物与全量结果：默认不给，绝大多数用例不关心
+    那两样，而每次都真写会把用例时长变成主要成本。
+    Args: sessions, run_id, store。
     """
     return await execute_run(
         sessions,
         run_id=run_id,
-        options=DispatchOptions(runner=DirectRunner(), tz_offset_minutes=480),
+        options=DispatchOptions(
+            runner=DirectRunner(), tz_offset_minutes=480, store=store
+        ),
     )

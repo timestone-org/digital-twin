@@ -9,6 +9,8 @@ import type { ModelDeployment, ModelingVersionSummary } from '@dt/contracts'
 import { DtButton, DtInput, DtModal, DtNotice, DtSelect } from '@dt/ui'
 import { computed, ref, watch } from 'vue'
 
+import { useFormDirty } from '@/composables/useFormDirty'
+
 // 配额的两个上限，与库上的 CHECK 同一份口径
 const MAX_ROWS = 1000
 const MAX_RATE = 6000
@@ -37,11 +39,24 @@ const emit = defineEmits<{
   close: []
 }>()
 
-const code = ref('')
-const name = ref('')
-const versionId = ref('')
-const maxRows = ref(200)
-const rateLimit = ref(60)
+interface DeploymentForm {
+  code: string
+  name: string
+  versionId: string
+  maxRows: number
+  rateLimit: number
+}
+
+// 新开一个时的缺省。⚠ 与后端的 server_default 同一份口径
+const BLANK: DeploymentForm = {
+  code: '',
+  name: '',
+  versionId: '',
+  maxRows: 200,
+  rateLimit: 60,
+}
+
+const form = ref<DeploymentForm>({ ...BLANK })
 
 /** 只有可上线的版本能开出去。 */
 const options = computed(() =>
@@ -54,33 +69,48 @@ const options = computed(() =>
 )
 
 const isCodeValid = computed(
-  () => props.editing !== null || CODE_SHAPE.test(code.value),
+  () => props.editing !== null || CODE_SHAPE.test(form.value.code),
 )
 const canSubmit = computed(
   () =>
-    name.value.trim() !== '' && versionId.value !== '' && isCodeValid.value,
+    form.value.name.trim() !== '' &&
+    form.value.versionId !== '' &&
+    isCodeValid.value,
 )
+
+// ⚠ 这个弹窗有五个输入，关掉前必须问一句：直接关等于把刚填的一整屏悄悄丢掉
+const dirty = useFormDirty(() => form.value)
+
+/** 打开时按「改哪一行」回填；新开一个就回到缺省。 */
+function refill(row: ModelDeployment | null): DeploymentForm {
+  if (row === null) {
+    return { ...BLANK, versionId: options.value[0]?.value ?? '' }
+  }
+  return {
+    code: row.code,
+    name: row.name,
+    versionId: row.model_version_id,
+    maxRows: row.max_rows_per_call,
+    rateLimit: row.rate_limit_per_minute,
+  }
+}
 
 watch(
   () => [props.isOpen, props.editing] as const,
   () => {
-    const row = props.editing
-    code.value = row?.code ?? ''
-    name.value = row?.name ?? ''
-    versionId.value = row?.model_version_id ?? options.value[0]?.value ?? ''
-    maxRows.value = row?.max_rows_per_call ?? 200
-    rateLimit.value = row?.rate_limit_per_minute ?? 60
+    form.value = refill(props.editing)
+    dirty.markClean()
   },
-  { immediate: true },
+  { immediate: true, flush: 'post' },
 )
 
 function submit(): void {
   emit('submit', {
-    code: code.value.trim(),
-    model_version_id: versionId.value,
-    name: name.value.trim(),
-    max_rows_per_call: maxRows.value,
-    rate_limit_per_minute: rateLimit.value,
+    code: form.value.code.trim(),
+    model_version_id: form.value.versionId,
+    name: form.value.name.trim(),
+    max_rows_per_call: form.value.maxRows,
+    rate_limit_per_minute: form.value.rateLimit,
   })
 }
 </script>
@@ -90,6 +120,7 @@ function submit(): void {
     :model-value="props.isOpen"
     :title="props.editing ? '改对外服务' : '开一个对外服务'"
     width="32rem"
+    :dirty="dirty.isDirty.value"
     @update:model-value="emit('close')"
   >
     <div class="flex flex-col gap-3">
@@ -97,24 +128,24 @@ function submit(): void {
         还没有可上线的模型版本。先在模型库里发布一个，再回来开服务。
       </DtNotice>
       <DtInput
-        v-model="code"
+        v-model="form.code"
         label="对外标识"
         hint="第三方调的地址是 /api/v1/platform/open-models/<标识>；小写字母、数字与连字符，建后不可改"
         :disabled="props.editing !== null"
         required
       />
-      <DtNotice v-if="code !== '' && !isCodeValid" intent="danger">
+      <DtNotice v-if="form.code !== '' && !isCodeValid" intent="danger">
         只能用小写字母、数字与连字符，且要以字母或数字开头。
       </DtNotice>
-      <DtInput v-model="name" label="名称" required />
+      <DtInput v-model="form.name" label="名称" required />
       <DtSelect
-        v-model="versionId"
+        v-model="form.versionId"
         label="钉住的模型版本"
         hint="换版本时第三方不必改代码——地址跟着标识走，不跟着版本走"
         :options="options"
       />
       <DtInput
-        v-model.number="maxRows"
+        v-model.number="form.maxRows"
         type="number"
         label="单次最多算几行"
         :min="1"
@@ -122,7 +153,7 @@ function submit(): void {
         hint="超过就 400 并说清上限"
       />
       <DtInput
-        v-model.number="rateLimit"
+        v-model.number="form.rateLimit"
         type="number"
         label="每分钟最多调几次"
         :min="1"

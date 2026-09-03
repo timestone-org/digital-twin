@@ -65,6 +65,15 @@ class ModelingRun(UuidPrimaryKeyMixin, CreatedAtMixin, Base):
         default=False,
         server_default=text("false"),
     )
+    # 要不要把每个端口的全量帧写成 CSV 存下来（D12）。
+    # ⚠ 默认**关**：默认开会让每一次运行都往对象存储写几十 MB，而绝大多数
+    # 运行只是在调参数。⚠ 那些 CSV 里含台账原始数据，故下载要另一个权限码
+    is_keeping_frames: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
     # 执行者每跑完一个节点写一次，陈旧即判「执行中断」并放开单飞索引
     heartbeat_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -176,6 +185,12 @@ class ModelingNodeRun(UuidPrimaryKeyMixin, EagerDefaultsMixin, Base):
     # ⚠ 摘要与库版本记在**训练那一侧**：发布跑在 api 进程里，那里的 numpy /
     # sklearn 版本未必与工进程一致，发布时现算会把跨版本那道拒载闸变成摆设
     artifact_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
+    # `{端口: {object_key, row_count, size_bytes, is_truncated}}`，
+    # 那次运行开了「保留全量产物」时才有（D12）。
+    # ⚠ 只留键与规模：字节在对象存储里，一次取数可以是几十万行
+    frames_json: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB, nullable=True
     )
     # `{端口名: 结果摘要}`，有硬上限（D19）

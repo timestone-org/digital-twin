@@ -24,6 +24,8 @@ const NAV_EXEMPT = new Set([
   '/modeling/models',
   // 模型服务同上：它的入口在「分析建模」页的顶栏，与模型库并排
   '/modeling/services',
+  // 运行记录同上
+  '/modeling/runs',
 ])
 
 describe('导航清单', () => {

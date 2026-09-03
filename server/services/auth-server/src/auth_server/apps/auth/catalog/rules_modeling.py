@@ -1,11 +1,13 @@
 """闸 1 对 `/api/v1/platform/modeling-*` 的规则。
 
-阶梯自下而上：981 写兜底 → 983 读 → 985 发起 / 取消运行 → 987 发布与绑定。
+阶梯自下而上：981 写兜底 → 983 读 → 985 发起 / 取消运行 → 987 发布与绑定
+→ 989 版本 / 绑定 / 服务的读面 → 991 下载全量结果（要两个码）。
 ⚠ 每一级都必须压过它下面那一级，而整摞又都要压过 900 那几条按方法兜底的规则
 ——`{_PLATFORM}/*` 的 `*` **跨斜杠**，不压过去就成了拿别的码来删流水线。
 """
 
 from auth_server.apps.auth.catalog.permissions import (
+    DATASET_RECORD_EXPORT,
     MODELING_MANAGE,
     MODELING_PUBLISH,
     MODELING_RUN,
@@ -85,6 +87,17 @@ MODELING_RULES: tuple[RouteRuleSpec, ...] = (
         codes=(MODELING_VIEW,),
         priority=989,
         description="同上，绑定列表与详情的读面",
+    ),
+    RouteRuleSpec(
+        f"{_PLATFORM}/modeling-runs*/frames*",
+        "GET",
+        codes=(MODELING_VIEW, DATASET_RECORD_EXPORT),
+        priority=991,
+        description=(
+            "下载一次运行的全量结果。⚠ 要**两个**码：那份 CSV 里是台账原始"
+            "数据，「能看」不等于「能带走」。必须压过 983 那条读面规则，"
+            "否则只有 `modeling:view` 的账号也能把整段历史拉走"
+        ),
     ),
     RouteRuleSpec(
         f"{_PLATFORM}/modeling-deployments*",

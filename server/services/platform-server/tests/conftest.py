@@ -118,6 +118,7 @@ FULL_CODES = (
     dataset_catalog.DATASET_RECORD_WRITE,
     dataset_catalog.DATASET_OVERRIDE,
     dataset_catalog.DATASET_BACKFILL,
+    modeling_catalog.DATASET_RECORD_EXPORT,
     dataset_catalog.FORMULA_VIEW,
     dataset_catalog.FORMULA_MANAGE,
     modeling_catalog.MODELING_VIEW,
@@ -127,7 +128,7 @@ FULL_CODES = (
     LLM_VIEW,
     LLM_MANAGE,
 )
-# 命令总线的两档预算，用例里固定住，断言里的信封才是可手写的常量
+# 命令总线的两档预算，固定住，断言里的信封才是可手写的常量
 BROWSE_TIMEOUT_S = 10.0
 COMMAND_TIMEOUT_S = 5.0
 SUBTREE_TIMEOUT_S = 15.0
@@ -136,11 +137,8 @@ PLAN_CHANNEL = "collect:plan:changed"
 # 大屏绑定用例引用的点位。⚠ 采集配置面未落地，故点位台账在用例里是一份名单假件
 SEEDED_SOURCE_ID = "0192f0c0-0000-7000-8000-00000000abcd"
 SEEDED_NODE_KEYS = frozenset(
-    {
-        f"{SEEDED_SOURCE_ID}:outlet_temp",
-        f"{SEEDED_SOURCE_ID}:inlet_temp",
-        f"{SEEDED_SOURCE_ID}:run_state",
-    }
+    f"{SEEDED_SOURCE_ID}:{name}"
+    for name in ("outlet_temp", "inlet_temp", "run_state")
 )
 # 用例里的源时区固定住，断言里的 UTC 时刻才是可手写的常量
 SOURCE_TIMEZONE = "Asia/Shanghai"

@@ -1,42 +1,19 @@
 /**
- * @fileoverview 模型库上的三个动作：发布下线、绑公式、换绑与启停。
+ * @fileoverview 绑定上的三个动作：绑公式、换绑与启停、解绑。
  *
  * ⚠ 换绑的回执带「哪些台账列会跟着变」，界面必须**如实报出来**：一条公式往往
  * 被多张台账引用，换一个版本等于同时改掉那些列的口径（MODELING_DESIGN §7.7）。
  * ⚠ 重算**不在这里做**：那是 `dataset:backfill` 档位的权限，由用户到台账页
  * 显式发起。
  */
-import type {
-  ModelFormulaRegistration,
-  ModelingBindingImpact,
-  ModelingVersionSummary,
-} from '@dt/contracts'
-import { useConfirm, useToast } from '@dt/ui'
+import type { ModelingBindingImpact } from '@dt/contracts'
+import { useToast } from '@dt/ui'
 import { ref } from 'vue'
 
 import * as modeling from '@/api/modeling'
 import { describeError } from '@/composables/useAsyncList'
 
-type Toast = ReturnType<typeof useToast>
-
-/** 下线前的问话。 */
-function retireAsk(
-  name: string,
-  version: number,
-): {
-  title: string
-  message: string
-  confirmText: string
-  danger: boolean
-} {
-  return {
-    title: `下线「${name}」v${version}？`,
-    message:
-      '绑在这个版本上的公式会立刻开始报「模型不可用」，引用那条公式的台账列取不到数。换一个版本再下线它更稳。',
-    confirmText: '下线',
-    danger: true,
-  }
-}
+export type Toast = ReturnType<typeof useToast>
 
 /** 把回执里的影响面说成一句人话。一条都没有时也要说清楚。 */
 export function impactText(impact: ModelingBindingImpact): string {
@@ -49,7 +26,8 @@ export function impactText(impact: ModelingBindingImpact): string {
   return `以下台账列的口径已经跟着变了，需要重算的话到台账页发起回填：${columns}`
 }
 
-async function attempt<T>(
+/** 跑一次动作，失败时把原因 toast 出来。给本目录另外那个组合式共用。 */
+export async function attempt<T>(
   task: () => Promise<T>,
   toast: Toast,
 ): Promise<T | null> {
@@ -64,7 +42,6 @@ async function attempt<T>(
 export function useBindingOps(onDone: () => void) {
   const isBusy = ref(false)
   const toast = useToast()
-  const confirm = useConfirm()
 
   async function run<T>(task: () => Promise<T>): Promise<T | null> {
     isBusy.value = true
@@ -76,13 +53,7 @@ export function useBindingOps(onDone: () => void) {
 
   return {
     isBusy,
-    /** 下线一个版本。 */
-    retire: async (row: ModelingVersionSummary) => {
-      if (!(await confirm.ask(retireAsk(row.name, row.version)))) return
-      const done = await run(() => modeling.retireModelingVersion(row.id))
-      if (done !== null) toast.success('已下线')
-    },
-    /** 把一个版本绑到一条公式上。 */
+    /** 把一个版本绑到一条已有的公式条目上。 */
     bind: async (fxCode: string, versionId: string) => {
       const impact = await run(() =>
         modeling.createModelingBinding({
@@ -101,29 +72,6 @@ export function useBindingOps(onDone: () => void) {
         modeling.updateModelingBinding(bindingId, patch),
       )
       if (impact !== null) toast.success(impactText(impact))
-    },
-    /**
-     * 一键注册为公式：一步建条目 + 建绑定。
-     *
-     * ⚠ 要**同时**有 `modeling:publish` 与 `dataset:manage`；缺后者时按钮
-     * 由 `PermGuard` 禁用并说明原因，不是点下去才报错。
-     */
-    register: async (
-      versionId: string,
-      fxCode: string,
-    ): Promise<ModelFormulaRegistration | null> => {
-      const done = await run(() =>
-        modeling.registerModelingFormula(versionId, fxCode),
-      )
-      if (done !== null) {
-        toast.success(
-          `已建好公式「${done.formula.code}」并绑上。` +
-            '到台账里给某一列写 @' +
-            done.formula.code +
-            '(…) 就能出数。',
-        )
-      }
-      return done
     },
     /** 解绑。公式条目本身不动。 */
     unbind: async (bindingId: string) => {

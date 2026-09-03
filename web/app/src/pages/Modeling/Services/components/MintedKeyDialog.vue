@@ -42,8 +42,8 @@ async function copy(): Promise<void> {
       </DtNotice>
       <p class="dt-ml-minted__value">{{ props.minted?.plaintext }}</p>
       <p class="dt-ml-minted__hint">
-        调用时放在请求头里：<code>X-Api-Key: &lt;这串&gt;</code>。
-        ⚠ 别放进 URL——URL 会进访问日志、浏览器历史与代理的缓存键。
+        调用时放在请求头里：<code>X-Api-Key: &lt;这串&gt;</code>。 ⚠ 别放进
+        URL——URL 会进访问日志、浏览器历史与代理的缓存键。
       </p>
     </div>
     <template #footer>

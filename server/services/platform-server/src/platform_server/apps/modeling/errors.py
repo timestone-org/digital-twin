@@ -190,3 +190,10 @@ class BindingEntryChanged(AppError):
 
     code = 41424
     http_status = 409
+
+
+class FrameExportMissing(AppError):
+    """这次运行没有留下这个端口的全量结果，或者它已经过了保留期。"""
+
+    code = 41425
+    http_status = 404

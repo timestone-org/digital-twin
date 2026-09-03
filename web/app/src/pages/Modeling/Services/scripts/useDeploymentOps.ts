@@ -43,7 +43,8 @@ function revokeAsk(name: string): {
 } {
   return {
     title: `撤销「${name}」？`,
-    message: '拿着这把钥匙的系统会立刻收到 401。撤销之后没法恢复，只能另发一把。',
+    message:
+      '拿着这把钥匙的系统会立刻收到 401。撤销之后没法恢复，只能另发一把。',
     confirmText: '撤销',
     danger: true,
   }
@@ -61,6 +62,21 @@ async function attempt<T>(
   }
 }
 
+/** 建一个对外服务时的入参。 */
+export interface DeploymentDraft {
+  code: string
+  model_version_id: string
+  name: string
+  description?: string | undefined
+  max_rows_per_call?: number | undefined
+  rate_limit_per_minute?: number | undefined
+}
+
+/** 改一个对外服务时的补丁。缺省的字段不动。 */
+export type DeploymentPatch = Partial<DeploymentDraft> & {
+  is_enabled?: boolean | undefined
+}
+
 export function useDeploymentOps(onDone: () => void) {
   const isBusy = ref(false)
   const toast = useToast()
@@ -74,46 +90,43 @@ export function useDeploymentOps(onDone: () => void) {
     return done
   }
 
+  /** 删一个对外服务。⚠ 删之前把爆炸半径说清楚。 */
+  async function remove(deployment: ModelDeployment): Promise<void> {
+    if (!(await confirm.ask(removeAsk(deployment)))) return
+    const done = await run(() => modeling.deleteModelDeployment(deployment.id))
+    if (done !== undefined) toast.success('已删除')
+  }
+
+  /** 撤销一把钥匙。立刻生效，没法恢复。 */
+  async function revokeKey(
+    deploymentId: string,
+    keyId: string,
+    name: string,
+  ): Promise<void> {
+    if (!(await confirm.ask(revokeAsk(name)))) return
+    const done = await run(() =>
+      modeling.revokeModelApiKey(deploymentId, keyId),
+    )
+    if (done !== null) toast.success('已撤销')
+  }
+
   return {
     isBusy,
+    remove,
+    revokeKey,
     /** 开一个对外服务。 */
-    create: async (input: {
-      code: string
-      model_version_id: string
-      name: string
-      description?: string | undefined
-      max_rows_per_call?: number | undefined
-      rate_limit_per_minute?: number | undefined
-    }) => {
+    create: async (input: DeploymentDraft) => {
       const done = await run(() => modeling.createModelDeployment(input))
       if (done !== null) toast.success('对外服务已开通')
       return done
     },
     /** 换版本、改配额、启停。 */
-    update: async (
-      deploymentId: string,
-      patch: {
-        name?: string | undefined
-        description?: string | undefined
-        model_version_id?: string | undefined
-        is_enabled?: boolean | undefined
-        max_rows_per_call?: number | undefined
-        rate_limit_per_minute?: number | undefined
-      },
-    ) => {
+    update: async (deploymentId: string, patch: DeploymentPatch) => {
       const done = await run(() =>
         modeling.updateModelDeployment(deploymentId, patch),
       )
       if (done !== null) toast.success('已保存')
       return done
-    },
-    /** 删一个对外服务。 */
-    remove: async (deployment: ModelDeployment) => {
-      if (!(await confirm.ask(removeAsk(deployment)))) return
-      const done = await run(() =>
-        modeling.deleteModelDeployment(deployment.id),
-      )
-      if (done !== undefined) toast.success('已删除')
     },
     /**
      * 铸一把新钥匙，把明文交回调用点。
@@ -125,17 +138,5 @@ export function useDeploymentOps(onDone: () => void) {
       input: { name: string; expires_at?: string | undefined },
     ): Promise<ModelApiKeyMinted | null> =>
       await run(() => modeling.createModelApiKey(deploymentId, input)),
-    /** 撤销一把钥匙。 */
-    revokeKey: async (
-      deploymentId: string,
-      keyId: string,
-      name: string,
-    ) => {
-      if (!(await confirm.ask(revokeAsk(name)))) return
-      const done = await run(() =>
-        modeling.revokeModelApiKey(deploymentId, keyId),
-      )
-      if (done !== null) toast.success('已撤销')
-    },
   }
 }

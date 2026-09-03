@@ -16,6 +16,14 @@ export interface ResultPanelDeps {
   previewOf: (nodeId: string) => Record<string, unknown> | undefined
   /** 按需拉一个节点的结果摘要。 */
   loadPreview: (nodeId: string) => Promise<void>
+  /**
+   * 这个节点留下了全量结果的那些端口。
+   *
+   * ⚠ 摘要那一份**有硬上限**（200 行）：它是给人看一眼的，不是数据。要把
+   * 处理好的数据拿走得靠这几个端口上的下载链接
+   * （docs/MODELING_PLATFORM_DESIGN.md D12）。
+   */
+  exportedPortsOf: (nodeId: string) => readonly string[]
 }
 
 export function useResultPanel(deps: ResultPanelDeps) {
@@ -33,8 +41,14 @@ export function useResultPanel(deps: ResultPanelDeps) {
 
   return {
     labels,
+    /** 当前开着的是哪个节点。⚠ 下载地址要用它，别从摘要里反推。 */
+    nodeId: computed(() => nodeId.value),
     payload: computed(() =>
       nodeId.value === null ? null : (deps.previewOf(nodeId.value) ?? null),
+    ),
+    /** 这个节点留下了全量结果的那些端口；没留过就是空。 */
+    exportedPorts: computed(() =>
+      nodeId.value === null ? [] : deps.exportedPortsOf(nodeId.value),
     ),
     open: async (id: string) => {
       nodeId.value = id

@@ -132,10 +132,16 @@ export function useRunPolling() {
     stop: () => stopPolling(state),
     loadPreview: (nodeId: string) =>
       loadPreview(nodeId, state, previews, toast),
-    start: async (pipelineId: string) => {
+    /**
+     * 发起一次运行。
+     *
+     * ⚠ `isKeepingFrames` 默认关：开着会让每一次运行都往对象存储写几十 MB，
+     * 而绝大多数运行只是在调参数（docs/MODELING_PLATFORM_DESIGN.md D12）。
+     */
+    start: async (pipelineId: string, isKeepingFrames = false) => {
       isStarting.value = true
       const started = await attempt(
-        () => modeling.startModelingRun(pipelineId),
+        () => modeling.startModelingRun(pipelineId, 'manual', isKeepingFrames),
         toast,
       )
       isStarting.value = false

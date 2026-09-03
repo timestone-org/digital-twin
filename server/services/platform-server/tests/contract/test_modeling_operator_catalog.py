@@ -474,3 +474,29 @@ def test_only_the_model_step_declares_a_serving_channel() -> None:
         )
     ]
     assert wrong == []
+
+
+# 前端那组开箱模板用例里写死的那份算子名单。⚠ 两条用例接成一条链才管用：
+# 前端那条钉「模板里的算子都在这份名单里」，这一条钉「这份名单里的算子都真的
+# 存在」。少任何一条，模板都能摆出一个渲染成空壳的节点，而 typecheck 与 lint
+# 双双放行（docs/MODELING_PLATFORM_DESIGN.md D21）
+TEMPLATE_SPEC = (
+    Path(__file__).resolve().parents[5]
+    / "web/app/tests/pages/Modeling/scripts/templates.test.ts"
+)
+_KNOWN_BLOCK = re.compile(
+    r"const KNOWN_OPERATORS = new Set\(\[(?P<body>.*?)\]\)", re.DOTALL
+)
+
+
+def test_the_frontend_template_roster_only_names_real_operators() -> None:
+    """前端那份名单里的每一个算子都真的在注册表里。
+
+    ⚠ 从**前端那一侧**遍历：反过来（「每个算子都被某张模板用到」）不成立，
+    也不是要钉的东西。钉错方向的表现是这条用例恒绿。
+    """
+    found = _KNOWN_BLOCK.search(TEMPLATE_SPEC.read_text("utf-8"))
+    assert found is not None, "前端那组模板用例里找不到算子名单"
+    named = set(re.findall(r"'([a-z_]+)'", found.group("body")))
+    assert named
+    assert sorted(named - set(registry.codes())) == []

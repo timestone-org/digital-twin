@@ -162,8 +162,7 @@ onMounted(() => {
       @mint="(name) => void mint(name)"
       @revoke="
         (key) =>
-          inspecting &&
-          void ops.revokeKey(inspecting.id, key.id, key.name)
+          inspecting && void ops.revokeKey(inspecting.id, key.id, key.name)
       "
       @close="inspecting = null"
     />

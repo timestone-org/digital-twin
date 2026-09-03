@@ -10,7 +10,6 @@ from typing import Annotated
 from fastapi import Depends
 
 from lib.auth import CallerContext
-from lib.objectstore import ObjectStore
 from lib.stream import StreamGroup
 from platform_server.apps.modeling.catalog import (
     MODELING_MANAGE,
@@ -27,6 +26,7 @@ from platform_server.deps import (
     WriteGate,
     get_container,
     get_idempotency_key,
+    get_object_store,
     get_session,
     require,
 )
@@ -45,16 +45,6 @@ __all__ = [
     "get_session",
     "require",
 ]
-
-
-def get_object_store(
-    container: Annotated[Container, Depends(get_container)],
-) -> ObjectStore:
-    """取对象存储客户端。进程内共用一个，构造在组合根。
-
-    Args: container。
-    """
-    return container.object_store
 
 
 def get_modeling_sessions(

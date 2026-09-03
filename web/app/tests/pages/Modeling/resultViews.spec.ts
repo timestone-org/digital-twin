@@ -356,3 +356,42 @@ describe('前若干行那张表', () => {
     expect(wrapper.text()).toContain('—')
   })
 })
+
+describe('全量结果的下载入口', () => {
+  it('留过的端口才摆下载链接', () => {
+    const wrapper = mount(ResultView, {
+      props: {
+        payload: FRAME,
+        runId: 'r1',
+        nodeId: 'n1',
+        exportedPorts: ['frame'],
+      },
+    })
+
+    const link = wrapper.find('a[download]')
+    expect(link.exists()).toBe(true)
+    expect(link.attributes('href')).toContain('/modeling-runs/r1/frames/n1')
+    expect(link.attributes('href')).toContain('port=frame')
+  })
+
+  it('没留过就一个链接都不摆', () => {
+    const wrapper = mount(ResultView, {
+      props: {
+        payload: FRAME,
+        runId: 'r1',
+        nodeId: 'n1',
+        exportedPorts: [],
+      },
+    })
+
+    expect(wrapper.find('a[download]').exists()).toBe(false)
+  })
+
+  it('不知道是哪次运行时也不摆——地址拼不出来', () => {
+    const wrapper = mount(ResultView, {
+      props: { payload: FRAME, exportedPorts: ['frame'] },
+    })
+
+    expect(wrapper.find('a[download]').exists()).toBe(false)
+  })
+})

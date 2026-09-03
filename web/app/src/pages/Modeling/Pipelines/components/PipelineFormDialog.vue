@@ -5,11 +5,12 @@
  * ⚠ 编码只在新建时可填：它是模型版本与公式绑定共同的引用键，改一次会让存量
  * 绑定集体指空（MODELING_DESIGN §5.2）。
  */
-import { DtButton, DtInput, DtModal, DtTextarea } from '@dt/ui'
+import { DtButton, DtInput, DtModal, DtSelect, DtTextarea } from '@dt/ui'
 import { computed, ref, watch } from 'vue'
 
 import { useFormDirty } from '@/composables/useFormDirty'
 
+import { PIPELINE_TEMPLATES } from '../scripts/templates'
 import type { PipelineDraft } from '../scripts/usePipelineOps'
 
 const props = defineProps<{
@@ -18,7 +19,8 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  submit: [draft: PipelineDraft]
+  /** ⚠ 第二个实参是模板键，只在新建时非空。 */
+  submit: [draft: PipelineDraft, templateKey: string]
   close: []
 }>()
 
@@ -28,6 +30,19 @@ const form = ref<PipelineDraft>({
   name: '',
   description: '',
 })
+
+// 新建时套哪张模板。⚠ 只在新建时给：改一条已有流水线时套模板等于把画布上
+// 已经搭好的图整个换掉，而那不是「改名称」这个动作该干的事
+const templateKey = ref('regression')
+const TEMPLATE_OPTIONS = PIPELINE_TEMPLATES.map((item) => ({
+  value: item.key,
+  label: item.label,
+}))
+const templateHint = computed(
+  () =>
+    PIPELINE_TEMPLATES.find((item) => item.key === templateKey.value)?.hint ??
+    '',
+)
 
 const isCreate = computed(() => form.value.id === null)
 const codeError = computed(() => {
@@ -81,6 +96,13 @@ watch(
         required
       />
       <DtInput v-model="form.name" label="名称" required />
+      <DtSelect
+        v-if="isCreate"
+        v-model="templateKey"
+        label="从哪儿起步"
+        :hint="templateHint"
+        :options="TEMPLATE_OPTIONS"
+      />
       <DtTextarea v-model="form.description" label="说明" :rows="3" />
     </div>
     <template #footer>
@@ -88,7 +110,7 @@ watch(
       <DtButton
         :disabled="!canSubmit"
         :loading="props.isSaving"
-        @click="emit('submit', form)"
+        @click="emit('submit', form, isCreate ? templateKey : '')"
       >
         保存
       </DtButton>

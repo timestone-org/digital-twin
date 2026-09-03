@@ -20,6 +20,7 @@ from platform_server.apps.modeling.protocols import ACTIVE_RUN_STATUSES
 from platform_server.apps.modeling.schemas.graph import PipelineGraph
 from platform_server.apps.modeling.services import (
     artifact_store,
+    frame_export,
     frame_source,
     presenters,
 )
@@ -91,7 +92,13 @@ async def execute_run(
             runner=options.runner,
             should_cancel=lambda: _is_cancelled(sessions, run_id),
             on_node_finished=lambda node: _persist(
-                sessions, run_id, node, options.store
+                sessions,
+                run_id,
+                node,
+                _Sinks(
+                    store=options.store,
+                    is_keeping_frames=claimed.is_keeping_frames,
+                ),
             ),
         ),
     )
@@ -110,6 +117,8 @@ class _Claimed:
     graph: PipelineGraph
     is_redelivery: bool
     pipeline_id: uuid.UUID
+    #: 这次运行要不要把每个端口的全量帧写成 CSV 存下来（D12）
+    is_keeping_frames: bool
 
 
 async def _claim(sessions: Sessions, run_id: uuid.UUID) -> "_Claimed | None":
@@ -133,6 +142,7 @@ async def _claim(sessions: Sessions, run_id: uuid.UUID) -> "_Claimed | None":
             graph=presenters.graph_of(run.graph_snapshot),
             is_redelivery=redelivery,
             pipeline_id=run.pipeline_id,
+            is_keeping_frames=run.is_keeping_frames,
         )
 
 
@@ -166,26 +176,45 @@ async def _is_cancelled(sessions: Sessions, run_id: uuid.UUID) -> bool:
         return False
 
 
+@dataclass(frozen=True)
+class _Sinks:
+    """落库那一步要往哪儿写字节，以及要不要写全量帧。"""
+
+    store: ObjectStore | None
+    is_keeping_frames: bool
+
+
 async def _persist(
     sessions: Sessions,
     run_id: uuid.UUID,
     node: NodeOutcome,
-    store: ObjectStore | None,
+    sinks: _Sinks,
 ) -> None:
     """把一个节点的执行记录落库，并记一次心跳；有产物就一并写进对象存储。
 
     ⚠ 产物**先写存储、再落库**：反过来的话库里会指着一个不存在的键，而那要
     到发布时才发现。写不进去就让这一步失败——一个没有产物的树模型发布出来
     就是个永远算不出数的版本。
-    Args: sessions, run_id, node, store。
+    ⚠ 全量帧那一份反过来：写不进去只记日志、不让节点失败。它是附加品，
+    为它把一次跑通的训练判成失败是本末倒置（D12）。
+    Args: sessions, run_id, node, sinks。
     """
     artifact = (
         None
         if node.artifact is None
-        else await _write_artifact(run_id, node, store)
+        else await _write_artifact(run_id, node, sinks.store)
+    )
+    frames = (
+        await frame_export.write_all(
+            sinks.store, str(run_id), node.node_id, node.frames
+        )
+        if sinks.is_keeping_frames
+        else {}
     )
     async with sessions.session() as session:
-        node_run_crud.add(session, _node_row(run_id, node, artifact))
+        node_run_crud.add(
+            session, _node_row(run_id, node, artifact, frames or None)
+        )
         run = await run_crud.get(session, run_id)
         if run is not None:
             run_crud.touch(run)
@@ -221,7 +250,10 @@ async def _write_artifact(
 
 
 def _node_row(
-    run_id: uuid.UUID, node: NodeOutcome, artifact: dict[str, Any] | None
+    run_id: uuid.UUID,
+    node: NodeOutcome,
+    artifact: dict[str, Any] | None,
+    frames: dict[str, dict[str, object]] | None,
 ) -> ModelingNodeRun:
     return ModelingNodeRun(
         run_id=run_id,
@@ -237,6 +269,7 @@ def _node_row(
         fitted_json=node.fitted,
         io_json=node.io or None,
         artifact_json=artifact,
+        frames_json=frames,
     )
 
 

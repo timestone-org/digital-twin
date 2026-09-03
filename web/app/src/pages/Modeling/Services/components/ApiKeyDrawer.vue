@@ -5,11 +5,7 @@
  * ⚠ 一把密钥对一家对接方：不做「一把钥匙开全部服务」——那把撤销的爆炸半径会
  * 放大到所有对接方（docs/MODELING_PLATFORM_DESIGN.md D13）。
  */
-import type {
-  ModelApiKey,
-  ModelCallStat,
-  ModelDeployment,
-} from '@dt/contracts'
+import type { ModelApiKey, ModelCallStat, ModelDeployment } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import { DtButton, DtInput, DtModal } from '@dt/ui'
 import { computed, ref } from 'vue'

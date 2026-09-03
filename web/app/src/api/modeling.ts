@@ -148,26 +148,53 @@ export async function validateModelingGraph(
 export async function startModelingRun(
   pipelineId: string,
   trigger: ModelingTrigger = 'manual',
+  isKeepingFrames = false,
 ): Promise<ModelingRun> {
   return await requestData<ModelingRun>(
     `/modeling-pipelines/${pipelineId}:run`,
     onPlatform({
       method: 'POST',
-      body: { trigger },
+      body: { trigger, is_keeping_frames: isKeepingFrames },
       headers: idempotent(newIdempotencyKey()),
     }),
   )
 }
 
-/** 一页运行记录。给流水线 id 就只看这一条流水线的。 */
+/**
+ * 某个端口那份全量结果的下载地址。
+ *
+ * ⚠ 只给地址不给字节：一份 CSV 可以到几十 MB，走 `fetch` 拉回内存再造 blob
+ * 是白付一遍内存；交给浏览器直接下更省，也天然带进度。
+ * ⚠ 这条要 `modeling:view` **且** `dataset:record:export`——那份 CSV 里是台账
+ * 原始数据（docs/MODELING_PLATFORM_DESIGN.md D12）。
+ */
+export function modelingFrameUrl(
+  runId: string,
+  nodeId: string,
+  port: string,
+): string {
+  const query = new URLSearchParams({ port })
+  return `${PLATFORM_BASE_URL}/modeling-runs/${runId}/frames/${nodeId}?${query.toString()}`
+}
+
+/**
+ * 一页运行记录。给流水线 id 就只看这一条流水线的；给 `null` 就是全部。
+ *
+ * ⚠ 跨流水线那一档不是「顺手加的」：一次训练跑在 worker 上，用户离开画布之后
+ * 就再也找不到它了——运行面存在的理由就是这个。
+ */
 export async function listModelingRuns(
-  pipelineId: string,
+  pipelineId: string | null,
   query: ModelingPageQuery = {},
 ): Promise<Page<ModelingRunSummary>> {
   return await requestData<Page<ModelingRunSummary>>(
     '/modeling-runs',
     onPlatform({
-      query: { pipeline_id: pipelineId, page: query.page, size: query.size },
+      query: {
+        ...(pipelineId === null ? {} : { pipeline_id: pipelineId }),
+        page: query.page,
+        size: query.size,
+      },
     }),
   )
 }

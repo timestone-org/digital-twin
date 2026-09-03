@@ -21,3 +21,7 @@ MODELING_PUBLISH = "modeling:publish"
 # `modeling:publish`——绝不能让发布权顺带获得往公式库写的能力，那两个码分家
 # 正是因为爆炸半径不同（docs/MODELING_PLATFORM_DESIGN.md D17）
 DATASET_MANAGE = "dataset:manage"
+
+# 导出台账原始数据。⚠ 同上逐字复述。下载建模的全量结果要它——那份 CSV 里的
+# 就是台账原始数据，「能看」不等于「能带走」（D12）
+DATASET_RECORD_EXPORT = "dataset:record:export"

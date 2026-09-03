@@ -12939,6 +12939,13 @@
             ],
             "title": "Error Text"
           },
+          "exported_ports": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Exported Ports",
+            "type": "array"
+          },
           "has_preview": {
             "title": "Has Preview",
             "type": "boolean"
@@ -16545,6 +16552,10 @@
             "title": "Id",
             "type": "string"
           },
+          "is_keeping_frames": {
+            "title": "Is Keeping Frames",
+            "type": "boolean"
+          },
           "is_source_truncated": {
             "title": "Is Source Truncated",
             "type": "boolean"
@@ -16615,6 +16626,7 @@
           "duration_ms",
           "row_count",
           "is_source_truncated",
+          "is_keeping_frames",
           "error_text",
           "created_by_name",
           "created_at",
@@ -16625,8 +16637,13 @@
       },
       "RunStartIn": {
         "additionalProperties": false,
-        "description": "发起一次运行。当前没有可调的参数，留着是为了以后加而不破坏契约。",
+        "description": "发起一次运行。",
         "properties": {
+          "is_keeping_frames": {
+            "default": false,
+            "title": "Is Keeping Frames",
+            "type": "boolean"
+          },
           "trigger": {
             "default": "manual",
             "enum": [
@@ -16698,6 +16715,10 @@
             "title": "Id",
             "type": "string"
           },
+          "is_keeping_frames": {
+            "title": "Is Keeping Frames",
+            "type": "boolean"
+          },
           "is_source_truncated": {
             "title": "Is Source Truncated",
             "type": "boolean"
@@ -16761,6 +16782,7 @@
           "duration_ms",
           "row_count",
           "is_source_truncated",
+          "is_keeping_frames",
           "error_text",
           "created_by_name",
           "created_at"
@@ -28827,6 +28849,62 @@
           }
         },
         "summary": "运行详情",
+        "tags": [
+          "modeling-run"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-runs/{run_id}/frames/{node_id}": {
+      "get": {
+        "description": "把某个端口那份 CSV 交出去。理由与偏离见 `services/frame_export`。\n\nArgs: run_id, node_id, session, store, _caller, port。",
+        "operationId": "download_frame_api_v1_platform_modeling_runs__run_id__frames__node_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "port",
+            "required": false,
+            "schema": {
+              "default": "frame",
+              "title": "Port",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "下载某个端口的全量结果",
         "tags": [
           "modeling-run"
         ]

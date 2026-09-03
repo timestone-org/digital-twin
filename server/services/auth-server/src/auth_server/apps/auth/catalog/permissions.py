@@ -50,6 +50,9 @@ DATASET_MANAGE = "dataset:manage"
 DATASET_RECORD_WRITE = "dataset:record:write"
 DATASET_OVERRIDE = "dataset:override"
 DATASET_BACKFILL = "dataset:backfill"
+# 导出台账原始数据。⚠ 与「查看」分家：界面上一次看几十行，导出一次拿走
+# 整段历史；能看不等于能带走
+DATASET_RECORD_EXPORT = "dataset:record:export"
 # 公式库是**跨台账的全局资源**，故与台账那五个码分家：改一条库公式会同时改掉
 # 所有引用它的台账列，爆炸半径大一个量级（docs/DATASET_DESIGN.md §9）
 FORMULA_VIEW = "formula:view"
@@ -365,6 +368,19 @@ PERMISSIONS: tuple[PermissionSpec, ...] = (
         description=(
             "按时间范围重算公式列、回填历史。⚠ 一次会改写大批历史行并吃满"
             "数据库，与「改一行」不是同一类风险"
+        ),
+    ),
+    PermissionSpec(
+        code=DATASET_RECORD_EXPORT,
+        name="导出台账原始数据",
+        kind="admin",
+        group_code="dataset",
+        group_label="数据台账",
+        sort_order=60,
+        description=(
+            "把整段台账数据带出系统。⚠ 与「查看」分家：界面上一次看几十行，"
+            "导出一次拿走整段历史。建模里那个「下载全量结果」也要它——"
+            "那份帧里含的就是台账原始数据"
         ),
     ),
     PermissionSpec(

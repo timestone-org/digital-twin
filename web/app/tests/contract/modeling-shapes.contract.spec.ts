@@ -156,6 +156,7 @@ const NODE_RUN = {
   ...NODE_RUN_SUMMARY,
   preview: true,
   is_preview_truncated: true,
+  exported_ports: true,
 } satisfies Keys<ModelingNodeRun>
 
 const RUN_SUMMARY = {
@@ -168,6 +169,7 @@ const RUN_SUMMARY = {
   duration_ms: true,
   row_count: true,
   is_source_truncated: true,
+  is_keeping_frames: true,
   error_text: true,
   created_by_name: true,
   created_at: true,

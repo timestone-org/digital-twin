@@ -39,6 +39,7 @@ PUBLISHED_CODES = frozenset(
         "dataset:record:write",
         "dataset:override",
         "dataset:backfill",
+        "dataset:record:export",
         "formula:view",
         "formula:manage",
         "modeling:view",

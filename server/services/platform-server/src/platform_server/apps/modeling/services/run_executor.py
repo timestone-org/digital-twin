@@ -70,6 +70,9 @@ class NodeOutcome:
     )
     #: 走二进制通道那一步的封存件。⚠ 不落库：它只是一串字节，落进对象存储
     artifact: SealedArtifact | None = None
+    #: 这一步每个输出端口的**全量**帧。⚠ 不落库：它只是 `context` 里那几张帧的
+    #: 引用，开了「保留全量产物」时由落库那一层写成 CSV 进对象存储（D12）
+    frames: dict[str, Frame] = field(default_factory=dict[str, Frame])
 
 
 @dataclass(frozen=True)
@@ -245,6 +248,11 @@ async def _run_one(
         fitted=result.fitted,
         io=result.io,
         artifact=result.artifact,
+        frames={
+            port: value
+            for port, value in result.outputs.items()
+            if isinstance(value, Frame)
+        },
     )
 
 
