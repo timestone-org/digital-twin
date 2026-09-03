@@ -562,6 +562,14 @@ services:
       # 它必须等于模型管理页上分配的那个嵌入模型的维数，否则一份文档都摄不进来。
       # 改它要重建向量表并重新解析已有文档，所以先定好再灌数据
       KNOWLEDGE_EMBEDDING_DIMENSIONS: ${KNOWLEDGE_EMBEDDING_DIMENSIONS:-1536}
+      # ⚠ 嵌入端点一次吃得下多少 token，**切块上限由它折算而来**。端点对超出
+      # 窗口的那一截静默截断、不报错，配大了只表现为「这一段明明有，就是
+      # 搜不到」——本部署实测 bge-large-zh-v1.5 的窗口约合 520 个汉字
+      KNOWLEDGE_EMBEDDING_MAX_INPUT_TOKENS: ${KNOWLEDGE_EMBEDDING_MAX_INPUT_TOKENS:-512}
+      # 切块的下限与重叠。⚠ 上限不在这里：它由上面那格窗口折算而来，
+      # 单开一格就等于允许两者漂开，而漂开的那一侧不报错
+      KNOWLEDGE_CHUNK_MIN_TOKENS: ${KNOWLEDGE_CHUNK_MIN_TOKENS:-80}
+      KNOWLEDGE_CHUNK_OVERLAP_CHARS: ${KNOWLEDGE_CHUNK_OVERLAP_CHARS:-120}
       # 对话档：只决定 agentic 检索策略可不可用
       KNOWLEDGE_MODEL_ENABLED: ${KNOWLEDGE_MODEL_ENABLED:-false}
       KNOWLEDGE_MODEL_BASE_URL: ${KNOWLEDGE_MODEL_BASE_URL:-}
@@ -634,6 +642,14 @@ services:
       # 它必须等于模型管理页上分配的那个嵌入模型的维数，否则一份文档都摄不进来。
       # 改它要重建向量表并重新解析已有文档，所以先定好再灌数据
       KNOWLEDGE_EMBEDDING_DIMENSIONS: ${KNOWLEDGE_EMBEDDING_DIMENSIONS:-1536}
+      # ⚠ 嵌入端点一次吃得下多少 token，**切块上限由它折算而来**。端点对超出
+      # 窗口的那一截静默截断、不报错，配大了只表现为「这一段明明有，就是
+      # 搜不到」——本部署实测 bge-large-zh-v1.5 的窗口约合 520 个汉字
+      KNOWLEDGE_EMBEDDING_MAX_INPUT_TOKENS: ${KNOWLEDGE_EMBEDDING_MAX_INPUT_TOKENS:-512}
+      # 切块的下限与重叠。⚠ 上限不在这里：它由上面那格窗口折算而来，
+      # 单开一格就等于允许两者漂开，而漂开的那一侧不报错
+      KNOWLEDGE_CHUNK_MIN_TOKENS: ${KNOWLEDGE_CHUNK_MIN_TOKENS:-80}
+      KNOWLEDGE_CHUNK_OVERLAP_CHARS: ${KNOWLEDGE_CHUNK_OVERLAP_CHARS:-120}
       # 对话档：只决定 agentic 检索策略可不可用
       KNOWLEDGE_MODEL_ENABLED: ${KNOWLEDGE_MODEL_ENABLED:-false}
       KNOWLEDGE_MODEL_BASE_URL: ${KNOWLEDGE_MODEL_BASE_URL:-}

@@ -1,28 +1,36 @@
-"""按结构切：同一个标题下的块攒成一段，攒太长就在块边界上断开。
+"""按结构切：同一个标题下的块攒成一段，攒够了才在标题边界断开。
 
 ⚠ **只在块边界上断**，绝不在句子中间下刀。定长切法切出来的块有一半从半句话
 开始，而那半句话在向量空间里几乎没有区分度——表现是「这一段明明有，就是搜不到」。
+单块本身就超窗时另说：那时只能在句读处断，见 `sentences.py`。
+
+⚠ 换了标题**不一定断**：还要攒够 `min_tokens`。只有一行标题的块又短又泛，
+与任何查询都有中等相似度，专挤名次。本部署实测过：一份 14 块的报告里有 3 块
+是 25/29/32 字的光秃秃标题行。
+
+⚠ 攒过了小节的块，标题路径取这几块的**公共祖先**。取第一块或最后一块的路径
+都会让引用指向其中一节，而正文里明明有两节；取祖先只是说得粗一点，从不指错。
+每一节自己的标题行仍然留在正文里，读的人看得见。
 
 ⚠ 标题路径拼进每一块的开头。不拼的话，一块「出口温度不得高于 65 ℃」读不出
 它说的是哪台设备，而模型会拿它去回答另一台的问题。
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from knowledge_server.apps.knowledge.services.chunking.ports import Chunk
+from knowledge_server.apps.knowledge.services.chunking.ports import (
+    Chunk,
+    ChunkLimits,
+)
+from knowledge_server.apps.knowledge.services.chunking.sentences import (
+    sized_pieces,
+)
 from knowledge_server.apps.knowledge.services.chunking.tokens import estimated
 from knowledge_server.apps.knowledge.services.parsing import (
     Block,
     Locator,
     ParsedDocument,
 )
-
-# 一块最多多少字符。⚠ 有上限：嵌入端点按 token 截断，超了那一截**不报错**，
-# 只是没进向量——表现是「这一段怎么都检索不到」
-MAX_CHUNK_CHARS = 2_000
-# 相邻块的重叠字符数。⚠ 不能是 0：跨过一刀的问题两边都答不出，
-# 而它看起来只是「这个问题模型不会」
-OVERLAP_CHARS = 200
 
 
 def path_label(locator: Locator) -> str:
@@ -33,59 +41,72 @@ def path_label(locator: Locator) -> str:
     return " > ".join(locator.path)
 
 
-def _joined(rows: list[Block]) -> str:
-    return "\n".join(one.text for one in rows)
+def sized_blocks(blocks: tuple[Block, ...], max_tokens: int) -> list[Block]:
+    """把每一个本身就超窗的块在句读处断成几块。
+
+    ⚠ 排在攒块之前：不断开的话，「只在块边界上下刀」这条规矩对一个两千字的
+    段落无能为力——切出来仍是一块超窗的，而超出的那一截被嵌入端点悄悄丢掉。
+
+    ⚠ 预算里先扣掉标题路径：它会拼进块的开头，一起进向量。不扣的话，
+    正文刚好卡在窗口上的那一块会因为顶着一行标题而超出去。
+
+    Args: blocks, max_tokens。
+    """
+    made: list[Block] = []
+    for block in blocks:
+        budget = max(1, max_tokens - estimated(path_label(block.locator)))
+        if estimated(block.text) <= budget:
+            made.append(block)
+            continue
+        made.extend(
+            replace(block, text=one) for one in sized_pieces(block.text, budget)
+        )
+    return made
 
 
 @dataclass(frozen=True)
 class StructuralChunker:
-    """按标题分段，段内按上限断开。"""
+    """按标题分段，攒够了才断，段内按上限断开。"""
 
     name: str = "structural"
-    max_chars: int = MAX_CHUNK_CHARS
-    overlap: int = OVERLAP_CHARS
 
-    def split(self, document: ParsedDocument) -> tuple[Chunk, ...]:
-        """同一条标题路径下的块攒成一段。
+    def split(
+        self, document: ParsedDocument, limits: ChunkLimits
+    ) -> tuple[Chunk, ...]:
+        """同一条标题路径下的块攒成一段，攒够下限才在标题边界断开。
 
-        Args: document。
+        Args: document, limits。
         """
         made: list[Chunk] = []
         pending: list[Block] = []
-        for block in document.blocks:
-            if pending and _cuts_here(pending[-1], block, self.max_chars):
-                made.extend(self._flush(pending, len(made)))
+        carry = ""
+        tokens = 0
+        # ⚠ 预算里先扣掉重叠：上一块带下来的那段尾巴会拼在这一块开头，
+        # 一起进向量。不扣的话，正文刚好卡在窗口上的那一块会因为顶着一段
+        # 尾巴而超出去——而超出的那一截没有任何一处报错
+        room = max(1, limits.max_tokens - limits.overlap_chars)
+        for block in sized_blocks(document.blocks, room):
+            cost = estimated(block.text)
+            if pending and _cuts_here(pending[-1], block, tokens, cost, limits):
+                made.append(_flushed(pending, carry, len(made)))
                 # ⚠ 只有「同一节里太长了」这一种断法才往下带尾巴。换节还带的
-                # 话，新块的标题路径会取自**上一节**的那一块——于是引用指向
-                # 上一节，而块里的正文是这一节的
-                pending = (
-                    _carried(pending, self.overlap)
+                # 话，新块的开头会挂着上一节的结论，而那正是「引用指错地方」
+                # 的来路
+                carry = (
+                    _carried(pending, limits.overlap_chars)
                     if _same_section(pending[-1], block)
-                    else []
+                    else ""
                 )
+                pending, tokens = [], estimated(carry)
+            if not pending:
+                # 标题路径会拼进这一块的开头，先把它的位子占上。⚠ 按首块的
+                # 路径预留：最后拼上去的是这几块的公共祖先，而祖先只会更短
+                tokens += estimated(path_label(block.locator))
             pending.append(block)
-        made.extend(self._flush(pending, len(made)))
+            tokens += cost
+        if pending:
+            made.append(_flushed(pending, carry, len(made)))
         return tuple(made)
-
-    def _flush(self, rows: list[Block], start: int) -> list[Chunk]:
-        """把攒着的那几块收成一个 chunk。
-
-        Args: rows, start（已经收了几个，用来接 ordinal）。
-        """
-        if not rows:
-            return []
-        heading = path_label(rows[0].locator)
-        body = _joined(rows)
-        text = f"{heading}\n{body}" if heading else body
-        return [
-            Chunk(
-                ordinal=start,
-                text=text,
-                heading_path=heading,
-                locator=rows[0].locator,
-                token_count=estimated(text),
-            )
-        ]
 
 
 def _same_section(previous: Block, current: Block) -> bool:
@@ -99,30 +120,88 @@ def _same_section(previous: Block, current: Block) -> bool:
     )
 
 
-def _cuts_here(previous: Block, current: Block, max_chars: int) -> bool:
+def _cuts_here(
+    previous: Block,
+    current: Block,
+    tokens: int,
+    cost: int,
+    limits: ChunkLimits,
+) -> bool:
     """这两块之间该不该断开。
 
-    ⚠ 换了标题路径就断，哪怕上一段很短：一块里混着两节的内容时，检索到它的人
-    会把两节的规定当成同一节的。
+    ⚠ 换了标题路径**且攒够了**才断。只看标题的话，「标题 → 紧接着下级标题」
+    会切出一个只有标题的块；只看长度的话，两节的规定会混进同一块。
 
-    Args: previous, current, max_chars。
+    Args: previous, current, tokens（已攒的）, cost（这一块的）, limits。
     """
-    if not _same_section(previous, current):
+    if tokens + cost > limits.max_tokens:
         return True
-    return len(previous.text) >= max_chars
+    if _same_section(previous, current):
+        return False
+    return tokens >= limits.min_tokens
 
 
-def _carried(rows: list[Block], overlap: int) -> list[Block]:
-    """断开时往下一块带一点尾巴。
+def _common_path(rows: list[Block]) -> tuple[str, ...]:
+    """这几块共同的标题路径（公共祖先）。
 
-    ⚠ 只在**同一条标题路径**内带：跨节带的话，下一节的开头会挂着上一节的
-    结论，而那正是「引用指错地方」的来路。
+    Args: rows。
+    """
+    paths = [one.locator.path for one in rows]
+    kept: list[str] = []
+    for at in range(min(len(one) for one in paths)):
+        step = paths[0][at]
+        if any(one[at] != step for one in paths):
+            break
+        kept.append(step)
+    return tuple(kept)
+
+
+def _carried(rows: list[Block], overlap: int) -> str:
+    """断开时往下一块带一段尾巴，按**字符**截，尽量从一句话的开头起。
+
+    ⚠ 带的是文本尾巴而不是「最后那一整块」。带整块的写法在尾块比重叠长时
+    一个字都不带——于是重叠这件事在多数情况下根本没发生，而它看起来只是
+    「这个问题模型不会」。
 
     Args: rows, overlap。
     """
     if overlap <= 0 or not rows:
-        return []
-    tail = rows[-1]
-    if tail.kind == "heading" or len(tail.text) > overlap:
-        return []
-    return [tail]
+        return ""
+    tail = "\n".join(one.text for one in rows)[-overlap:]
+    for at, one in enumerate(tail):
+        if one in "\n。！？；!?;":
+            return tail[at + 1 :].strip()
+    return tail.strip()
+
+
+def _flushed(rows: list[Block], carry: str, start: int) -> Chunk:
+    """把攒着的那几块收成一个 chunk。
+
+    Args: rows, carry（上一块带下来的尾巴）, start（已经收了几个）。
+    """
+    path = _common_path(rows)
+    heading = " > ".join(path)
+    body = "\n".join(one.text for one in _without_echo(rows, path))
+    core = f"{carry}\n{body}" if carry else body
+    text = f"{heading}\n{core}" if heading else core
+    return Chunk(
+        ordinal=start,
+        text=text,
+        heading_path=heading,
+        locator=replace(rows[0].locator, path=path),
+        token_count=estimated(text),
+    )
+
+
+def _without_echo(rows: list[Block], path: tuple[str, ...]) -> list[Block]:
+    """开头那一块若正是标题路径的最后一节，就别让它在正文里再念一遍。
+
+    ⚠ 不去掉的话，一块的正文会是「二、运行参数\n二、运行参数\n下表为…」：
+    前缀已经拼过一次，标题块自己又是一块。它既白占窗口预算，又把同一句话在
+    向量里加权两次——而两处单看都是对的。
+
+    Args: rows, path（这几块的公共标题路径）。
+    """
+    if not rows or not path or rows[0].kind != "heading":
+        return rows
+    return rows[1:] if rows[0].text.strip() == path[-1] else rows

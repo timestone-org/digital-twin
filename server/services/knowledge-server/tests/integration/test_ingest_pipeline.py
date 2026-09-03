@@ -31,7 +31,19 @@ from knowledge_server.apps.knowledge.services.sources import UPLOAD_KIND
 pytestmark = pytest.mark.requires_postgres
 
 # 一份小 markdown，够切出两块
-BODY = "# 冷却水\n出口温度不得高于 65 ℃\n\n# 润滑\n每 500 小时换一次油\n"
+# ⚠ 两节都要比切块下限长：太短的两节会被合成一块（那是刻意的，见
+# `chunking/structural.py`），于是这一摞验「多块」的用例会全部退化成一块
+BODY = (
+    "# 冷却水\n"
+    "出口温度不得高于 65 ℃。运行中每班巡检一次进出口压差，"
+    "压差超过 0.15 MPa 时先清洗板式换热器再复查。补水电导率长期"
+    "高于 300 μS/cm 的，按季度做一次全系统排污，排污后补水至视镜"
+    "中位线，并记录本次补水量与电导率读数备查。\n\n"
+    "# 润滑\n"
+    "每 500 小时换一次油。换油前先取样送检，含水量超过 0.1% 或"
+    "黏度偏离牌号 ±10% 的按提前换油处理。加注量以视镜中位线为准，"
+    "过量会让轴承温升偏高而不报警，因此加注后要复测一次温升并留档。\n"
+)
 
 
 @dataclass(frozen=True)
@@ -88,6 +100,7 @@ class _Embedder:
 
     dimensions: int
     id: str = "fake"
+    max_input_tokens: int = 512
     can_embed: bool = True
 
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
@@ -102,6 +115,7 @@ class _Embedder:
 class _NoEmbedder:
     dimensions: int = 0
     id: str = "none"
+    max_input_tokens: int = 0
     can_embed: bool = False
 
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
@@ -116,6 +130,7 @@ class _LateEmbedder:
 
     def __init__(self, dimensions: int) -> None:
         self.dimensions = dimensions
+        self.max_input_tokens = 512
         self.refreshes = 0
         self._is_ready = False
 

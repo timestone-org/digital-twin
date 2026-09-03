@@ -66,6 +66,7 @@ class _Embedder:
 
     dimensions: int
     id: str = "fake"
+    max_input_tokens: int = 512
     can_embed: bool = True
 
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:

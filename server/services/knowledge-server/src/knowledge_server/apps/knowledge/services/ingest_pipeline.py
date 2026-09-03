@@ -42,7 +42,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from knowledge_server.apps.knowledge import crud
 from knowledge_server.apps.knowledge.services.chunking import (
     Chunk,
+    ChunkLimits,
     chunker_for,
+    limits_for,
+    oversized,
 )
 from knowledge_server.apps.knowledge.services.embedding import Embedder
 from knowledge_server.apps.knowledge.services.indexing import (
@@ -62,6 +65,10 @@ from knowledge_server.apps.knowledge.services.sources import (
     KnowledgeSource,
     UnknownSource,
     source_for,
+)
+from knowledge_server.settings import (
+    DEFAULT_CHUNK_MIN_TOKENS,
+    DEFAULT_CHUNK_OVERLAP_CHARS,
 )
 from lib.logging import get_logger
 
@@ -105,6 +112,10 @@ class IngestDeps:
     pool: Executor
     parse_timeout_s: float
     batch_size: int = 16
+    # 切块的下限与重叠。⚠ 上限不在这里：它由嵌入档的窗口折算而来
+    # （`limits_for`），给它单独一格就等于允许两者漂开
+    chunk_min_tokens: int = DEFAULT_CHUNK_MIN_TOKENS
+    chunk_overlap_chars: int = DEFAULT_CHUNK_OVERLAP_CHARS
     # 判「接没接嵌入档」之前先让目录刷新一次。⚠ 缺省不刷是给用例用的：
     # 生产的 worker 必须把它接上，理由见模块头
     refresh: Refresh = _no_refresh
@@ -262,12 +273,39 @@ async def _indexed(
             )
 
 
-def _chunked(document: ParsedDocument, chunker: str) -> tuple[Chunk, ...]:
-    """按库上配的切法切块。
+def _limits(deps: IngestDeps) -> ChunkLimits:
+    """这一次的切块两条边，上限由嵌入档的窗口折算而来。
 
-    Args: document, chunker。
+    Args: deps。
     """
-    return chunker_for(chunker).split(document)
+    return limits_for(
+        deps.embedder.max_input_tokens,
+        deps.chunk_min_tokens,
+        deps.chunk_overlap_chars,
+    )
+
+
+def _chunked(
+    document: ParsedDocument, chunker: str, limits: ChunkLimits
+) -> tuple[Chunk, ...]:
+    """按库上配的切法切块，切完当场验一遍有没有超窗的。
+
+    ⚠ 验这一道不是多余：超窗的块**不会有任何一处报错**——嵌入端点把超出的那
+    一截静默丢掉，文档照样走到 ready，而那一块的后半段从此对向量检索不存在。
+    判 failed 而不是凑合收下，与「算不出向量就判 failed」同源（ADR-0045）。
+
+    Args: document, chunker, limits。
+    """
+    made = chunker_for(chunker).split(document, limits)
+    over = oversized(made, limits)
+    if over:
+        raise IngestFailed(
+            f"切出来的 {len(over)} 块超过了嵌入档一次吃得下的长度"
+            f"（上限 {limits.max_tokens}，最长的一块 "
+            f"{max(one.token_count for one in over)}）。"
+            "多半是 KNOWLEDGE_EMBEDDING_MAX_INPUT_TOKENS 配得比模型的窗口大"
+        )
+    return made
 
 
 async def _claimed(
@@ -343,7 +381,14 @@ async def ingest(
     raw = await _raw_of(sessions, deps, document)
     parsed = await _parsed(deps, raw)
     await _staged(sessions, document.document_id, "chunking")
-    chunks = _chunked(parsed, "")
+    chunks = _chunked(parsed, "", _limits(deps))
+    _logger.info(
+        "ingest_chunked",
+        "切块完成",
+        document_id=str(document.document_id),
+        chunks=len(chunks),
+        max_tokens=max((one.token_count for one in chunks), default=0),
+    )
     async with sessions() as session:
         chunk_ids = await crud.chunk.replace_chunks(
             session, document.base_id, document.document_id, chunks

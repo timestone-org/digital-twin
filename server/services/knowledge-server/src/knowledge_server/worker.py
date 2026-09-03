@@ -110,6 +110,8 @@ def _ingest_consumer(
             pool=pool,
             parse_timeout_s=settings.parse_timeout_s,
             batch_size=settings.embedding_batch_size,
+            chunk_min_tokens=settings.chunk_min_tokens,
+            chunk_overlap_chars=settings.chunk_overlap_chars,
             refresh=container.catalog.refresh,
             external_parsers=EXTERNAL_BACKENDS,
             external_parse_timeout_s=settings.external_parse_timeout_s,
