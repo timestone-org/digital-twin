@@ -17,6 +17,7 @@ const KNOWLEDGE_PREFIX = '/api/v1/knowledge'
 
 let requestData: ReturnType<typeof vi.fn>
 let request: ReturnType<typeof vi.fn>
+let requestBytes: ReturnType<typeof vi.fn>
 let postUploadForm: ReturnType<typeof vi.fn>
 
 const BASE_WIRE = {
@@ -51,9 +52,11 @@ const TICKET_WIRE = {
 beforeEach(() => {
   requestData = vi.fn().mockResolvedValue({ items: [] })
   request = vi.fn().mockResolvedValue(null)
+  requestBytes = vi.fn().mockResolvedValue(new Blob(['x']))
   postUploadForm = vi.fn().mockResolvedValue(undefined)
   vi.spyOn(client, 'requestData').mockImplementation(requestData)
   vi.spyOn(client, 'request').mockImplementation(request)
+  vi.spyOn(client, 'requestBytes').mockImplementation(requestBytes)
   vi.spyOn(upload, 'postUploadForm').mockImplementation(postUploadForm)
 })
 
@@ -198,5 +201,24 @@ describe('直传三步', () => {
       ),
     ).rejects.toThrow('网络断了')
     expect(requestData).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('取图', () => {
+  it('走取图端点并带上知识库前缀', async () => {
+    // ⚠ 走 `requestBytes` 而不是把地址写进 `<img src>`：浏览器给图片请求带不上
+    // Authorization，而知识库的图要认人（素材那条 `/oss/` 才是匿名可读的）
+    await knowledge.readFigureBytes('d1', 'f1')
+
+    expect(lastCall(requestBytes)[0]).toBe('/documents/d1/figures/f1')
+    expect(lastCall(requestBytes)[1].baseUrl).toBe(KNOWLEDGE_PREFIX)
+  })
+
+  it('给了中止信号就带上', async () => {
+    const controller = new AbortController()
+
+    await knowledge.readFigureBytes('d1', 'f1', controller.signal)
+
+    expect(lastCall(requestBytes)[1].signal).toBe(controller.signal)
   })
 })
