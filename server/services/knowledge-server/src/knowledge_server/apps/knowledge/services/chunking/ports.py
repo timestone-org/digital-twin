@@ -82,6 +82,10 @@ class Chunk:
     locator: Locator = field(default_factory=Locator)
     # 粗估的 token 数，只用来控批与显示，不参与打分
     token_count: int = 0
+    # 这一块的正文里出现了哪几张图（按 `Figure.ref`）。
+    # ⚠ 收在块上而不是按页反查：一页上可能有五张图而这一块只讲其中一张，
+    # 按页反查会把另外四张也贴进引用——那正是「依据里堆一堆没用的东西」
+    figure_refs: tuple[str, ...] = ()
 
 
 def oversized(

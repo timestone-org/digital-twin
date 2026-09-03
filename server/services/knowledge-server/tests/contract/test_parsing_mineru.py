@@ -77,12 +77,92 @@ def test_the_table_rows_land_on_the_page_the_table_is_on() -> None:
 
 
 def test_the_figure_caption_survives_as_searchable_text() -> None:
-    """⚠ 图这一期不落地，但**图注要留下**：不留的话「图 1 冷却水回路示意图」
-    这句话在库里根本不存在。"""
+    """⚠ 图注要进正文：不进的话「图 1 冷却水回路示意图」这句话在库里根本
+    不存在，检索不到。"""
     made = document_of("spec.pdf", _payload())
-    captions = [one for one in made.blocks if one.kind == "caption"]
-    assert any("冷却水回路示意图" in one.text for one in captions)
-    assert all(one.locator.page == 3 for one in captions)
+    figures = [one for one in made.blocks if one.kind == "figure"]
+    assert any("冷却水回路示意图" in one.text for one in figures)
+
+
+def test_a_figure_block_points_at_the_bytes_by_basename() -> None:
+    """⚠ `img_path` 是 `images/<sha>.jpg` 而 `images` 那个字典的键是
+    `<sha>.jpg`——两边靠 basename 对上。取整条路径的话一张也对不上，
+    而表现是「解析成功但一张图都没有」。"""
+    made = document_of("spec.pdf", _payload())
+    refs = {one.figure_ref for one in made.blocks if one.kind == "figure"}
+    assert refs
+    assert refs <= {one.ref for one in made.figures}
+    assert all("/" not in one for one in refs)
+
+
+def test_the_image_bytes_come_out_of_the_data_uri() -> None:
+    """⚠ `images` 的值是**完整的 data URI**，不是裸 base64：当成裸的去 decode
+    会在头几个字节上就失败，而那时一张图都出不来。"""
+    made = document_of("spec.pdf", _payload())
+    assert made.figures
+    assert all(one.content for one in made.figures)
+    assert all(one.media_type.startswith("image/") for one in made.figures)
+
+
+def test_a_figure_carries_the_page_and_caption_from_the_layout_list() -> None:
+    made = document_of("spec.pdf", _payload())
+    drawing = next(
+        one for one in made.figures if "冷却水回路示意图" in one.caption
+    )
+    assert drawing.kind == "image"
+    assert drawing.page == 3
+    assert drawing.bbox is not None
+
+
+def test_the_table_screenshot_comes_out_alongside_its_rows() -> None:
+    """⚠ 表格截图与那些 `table_row` 文本块**并存**：文本块负责被检索到，
+    截图负责让人看清合并单元格那类版面——两者缺一个都不够。"""
+    made = document_of("spec.pdf", _payload())
+    tables = [one for one in made.figures if one.kind == "table"]
+    assert len(tables) == 1
+    assert tables[0].page == 2
+    assert any(one.kind == "table_row" for one in made.blocks)
+
+
+def test_a_figure_without_a_caption_still_gets_a_block() -> None:
+    """⚠ 块的正文不许为空（`text_present` 那条 CHECK），而一张没有图注的图
+    仍然值得在引用面上摆出来——所以用一句占位，不是丢掉它。"""
+    body = {
+        "results": {
+            "spec": {
+                "content_list": json.dumps(
+                    [
+                        {
+                            "type": "image",
+                            "img_path": "images/x.jpg",
+                            "image_caption": [],
+                            "page_idx": 0,
+                        }
+                    ]
+                )
+            }
+        }
+    }
+    made = document_of("spec.pdf", body)
+    figure = next(one for one in made.blocks if one.kind == "figure")
+    assert figure.text
+    assert figure.figure_ref == "x.jpg"
+
+
+def test_a_reply_without_images_still_parses() -> None:
+    """⚠ 没要图（或后端没给）时不该整份失败：文本那一半仍然有用。"""
+    body = {
+        "results": {
+            "spec": {
+                "content_list": json.dumps(
+                    [{"type": "text", "text": "正文一句", "page_idx": 0}]
+                )
+            }
+        }
+    }
+    made = document_of("spec.pdf", body)
+    assert made.figures == ()
+    assert made.blocks
 
 
 def test_headings_become_headings_and_carry_a_path() -> None:

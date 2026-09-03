@@ -192,6 +192,7 @@ def _flushed(rows: list[Block], carry: str, start: int) -> Chunk:
         # 那句话——它在第 6 页
         locator=replace(rows[0].locator, path=path, page_end=_last_page(rows)),
         token_count=estimated(text),
+        figure_refs=_figure_refs(rows),
     )
 
 
@@ -207,6 +208,20 @@ def _without_echo(rows: list[Block], path: tuple[str, ...]) -> list[Block]:
     if not rows or not path or rows[0].kind != "heading":
         return rows
     return rows[1:] if rows[0].text.strip() == path[-1] else rows
+
+
+def _figure_refs(rows: list[Block]) -> tuple[str, ...]:
+    """这几块里出现过哪几张图，按出现序去重。
+
+    ⚠ 去重但保序：同一张图在一块里被引两次是解析后端的事，而引用面按序展示。
+
+    Args: rows。
+    """
+    seen: list[str] = []
+    for one in rows:
+        if one.figure_ref and one.figure_ref not in seen:
+            seen.append(one.figure_ref)
+    return tuple(seen)
 
 
 def _last_page(rows: list[Block]) -> int | None:

@@ -33,13 +33,11 @@ import asyncio
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from concurrent.futures import Executor
-from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from knowledge_server.apps.knowledge import crud
+from knowledge_server.apps.knowledge.services import ingest_figures
 from knowledge_server.apps.knowledge.services.chunking import (
     Chunk,
     ChunkLimits,
@@ -71,15 +69,16 @@ from knowledge_server.settings import (
     DEFAULT_CHUNK_OVERLAP_CHARS,
 )
 from lib.logging import get_logger
+from lib.objectstore import ObjectStore
 
 _logger = get_logger("knowledge.ingest")
 
 READY = "ready"
 FAILED = "failed"
 
-# 开一个新事务的口子。⚠ 收工厂而不是收一个会话：每一段要自己一个事务，
-# 而一个会话给不出那件事
-Sessions = Callable[[], AbstractAsyncContextManager[AsyncSession]]
+# 开一个新事务的口子。⚠ 定义在 `ingest_figures` 里而不是这里：那一份不 import
+# 这一份，所以由它持有别名不会成环
+Sessions = ingest_figures.Sessions
 
 # 让模型目录刷新一次的口子。⚠ 收成一个口子而不是直接认 `CatalogCache`：
 # 管线在 apps 层，认了它就把领域逻辑钉死在某一路目录实现上
@@ -110,6 +109,9 @@ class IngestDeps:
     embedder: Embedder
     indexes: IndexPair
     pool: Executor
+    # 图的字节落在这。⚠ 缺省 None 是给用例用的：不接对象存储时图整个跳过，
+    # 而那与「这份文档没有图」在库里长得一样
+    store: ObjectStore | None
     parse_timeout_s: float
     batch_size: int = 16
     # 切块的下限与重叠。⚠ 上限不在这里：它由嵌入档的窗口折算而来
@@ -359,6 +361,57 @@ async def _staged(
         await crud.document.mark_status(session, document_id, status)
 
 
+async def _figures_of(
+    sessions: Sessions,
+    deps: IngestDeps,
+    document: _Pending,
+    parsed: ParsedDocument,
+) -> dict[str, uuid.UUID]:
+    """存图那一段，把它的失败翻成「这份文档摄不进来」。
+
+    ⚠ **不新增摄取状态**：状态是线上契约（CHECK 与前端文案都按那几档写的），
+    而写图本来就是解析产出的一部分，算在 `parsing` 这一段里。
+
+    ⚠ 排在切块**之前**：切块要把「这一块引了哪几张图」记下来，而那需要图 id。
+
+    Args: sessions, deps, document, parsed。
+    """
+    if deps.store is None:
+        return {}
+    try:
+        return await ingest_figures.store_figures(
+            sessions,
+            deps.store,
+            (document.base_id, document.document_id),
+            parsed,
+        )
+    except ingest_figures.FigureStoreFailed as error:
+        raise IngestFailed(str(error)) from error
+
+
+async def _saved_chunks(
+    sessions: Sessions,
+    document: _Pending,
+    chunks: tuple[Chunk, ...],
+    figure_ids: dict[str, uuid.UUID],
+) -> list[uuid.UUID]:
+    """整体替换块行，并重建块—图联结行。
+
+    ⚠ 两件事必须在**同一个事务**里：换块行会级联删掉旧联结行，中间断开的话
+    引用面上会有一瞬间「一张图都没有」。
+
+    Args: sessions, document, chunks, figure_ids。
+    """
+    async with sessions() as session:
+        chunk_ids = await crud.chunk.replace_chunks(
+            session, document.base_id, document.document_id, chunks
+        )
+        await crud.figure.link_figures(
+            session, ingest_figures.links_of(chunks, chunk_ids, figure_ids)
+        )
+    return chunk_ids
+
+
 async def ingest(
     sessions: Sessions, deps: IngestDeps, document_id: uuid.UUID
 ) -> str:
@@ -381,6 +434,7 @@ async def ingest(
     raw = await _raw_of(sessions, deps, document)
     parsed = await _parsed(deps, raw)
     await _staged(sessions, document.document_id, "chunking")
+    figure_ids = await _figures_of(sessions, deps, document, parsed)
     chunks = _chunked(parsed, "", _limits(deps))
     _logger.info(
         "ingest_chunked",
@@ -389,10 +443,7 @@ async def ingest(
         chunks=len(chunks),
         max_tokens=max((one.token_count for one in chunks), default=0),
     )
-    async with sessions() as session:
-        chunk_ids = await crud.chunk.replace_chunks(
-            session, document.base_id, document.document_id, chunks
-        )
+    chunk_ids = await _saved_chunks(sessions, document, chunks, figure_ids)
     if chunks:
         await _staged(sessions, document.document_id, "embedding")
         await _indexed(

@@ -70,6 +70,7 @@ def _deps(
         embedder=NullEmbedder(),
         indexes=build_indexes(dimensions=4),
         pool=pool,
+        store=None,
         parse_timeout_s=30.0,
         external_parsers=external,
         external_parse_timeout_s=external_timeout_s,

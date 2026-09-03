@@ -105,6 +105,7 @@ def _ingest_consumer(
             embedder=container.embedder,
             indexes=index_pair(settings, container.schema),
             pool=pool,
+            store=container.objectstore,
             parse_timeout_s=settings.parse_timeout_s,
             batch_size=settings.embedding_batch_size,
             chunk_min_tokens=settings.chunk_min_tokens,

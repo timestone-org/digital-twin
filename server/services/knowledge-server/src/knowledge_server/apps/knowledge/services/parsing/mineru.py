@@ -21,12 +21,14 @@ ADR-0033 说这一格丢了后面任何一层都补不回来——表现是答�
 """
 
 import asyncio
+import base64
+import binascii
 import json
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import httpx
 
@@ -34,6 +36,7 @@ from knowledge_server.apps.knowledge.services.parsing.ports import (
     Block,
     BlockKind,
     ExternalParseFailed,
+    Figure,
     Locator,
     ParsedDocument,
     RawItem,
@@ -58,8 +61,15 @@ _CONNECT_TIMEOUT_S = 5.0
 _REQUEST_TIMEOUT_S = 120.0
 # 一份原件最多解出多少块，与本地那几路同一条口径
 _MAX_BLOCKS = 20_000
+# 版面框那个数组有几个数
+_BBOX_LENGTH = 4
 # 任务的终态
 _DONE = "completed"
+
+# 没有图注时的占位。⚠ 块的正文不许为空（`text_present` 那条 CHECK），
+# 而一张没有图注的图仍然值得在引用面上摆出来
+_NO_CAPTION = "（图，无图注）"
+_NO_TABLE_CAPTION = "（表格截图）"
 
 
 def _table_rows(html: str) -> list[list[str]]:
@@ -117,11 +127,16 @@ class _Walk:
     stack: list[tuple[int, str]] = field(default_factory=list[tuple[int, str]])
 
     def emit(
-        self, kind: BlockKind, text: str, page: int, level: int = 0
+        self,
+        kind: BlockKind,
+        text: str,
+        page: int,
+        level: int = 0,
+        ref: str = "",
     ) -> None:
         """收一块；空文本与超出上限的都不收。
 
-        Args: kind, text, page（从 1 起）, level。
+        Args: kind, text, page（从 1 起）, level, ref（figure 块指哪张图）。
         """
         body = text.strip()
         if not body or len(self.blocks) >= _MAX_BLOCKS:
@@ -132,6 +147,7 @@ class _Walk:
                 text=body,
                 level=level,
                 locator=Locator(page=page, path=path_of(self.stack)),
+                figure_ref=ref,
             )
         )
 
@@ -201,7 +217,10 @@ def _table_item(walk: _Walk, item: dict[str, Any], page: int) -> None:
 
     Args: walk, item, page。
     """
-    walk.emit("caption", _joined(item, "table_caption"), page)
+    caption = _joined(item, "table_caption")
+    # ⚠ 表格截图与下面那些 `table_row` 文本块**并存**：文本块负责被检索到，
+    # 截图负责让人看清合并单元格那类版面——两者缺一个都不够
+    walk.emit("figure", caption or _NO_TABLE_CAPTION, page, ref=_ref_of(item))
     rows = _table_rows(str(item.get("table_body") or ""))
     if not rows:
         return
@@ -219,15 +238,29 @@ def _equation_item(walk: _Walk, item: dict[str, Any], page: int) -> None:
     walk.emit("paragraph", str(item.get("text") or ""), page)
 
 
-def _image_item(walk: _Walk, item: dict[str, Any], page: int) -> None:
-    """一条 `image`：这一期**只取图注**，字节不落地。
+def _ref_of(item: dict[str, Any]) -> str:
+    """`img_path` 取 basename 当引用名。
 
-    ⚠ 图注要留下：不留的话「图 1 冷却水回路示意图」这句话在库里根本不存在。
-    存图要一张表、一条取图端点与一次迁移，那是另一件事。
+    ⚠ 取 basename 而不是整条路径：回包里 `img_path` 是 `images/<sha>.jpg`，
+    而 `images` 那个字典的键是 `<sha>.jpg`——两边靠 basename 对上。
+
+    Args: item。
+    """
+    raw = item.get("img_path")
+    return str(raw).rsplit("/", 1)[-1] if isinstance(raw, str) else ""
+
+
+def _image_item(walk: _Walk, item: dict[str, Any], page: int) -> None:
+    """一条 `image`：出一个 `figure` 块，正文取图注。
+
+    ⚠ 图注要进正文：不进的话「图 1 冷却水回路示意图」这句话在库里根本不存在，
+    检索不到。没有图注的图用一句占位——块的正文不许为空（`text_present`
+    那条 CHECK），而一张没有图注的图仍然值得在引用面上摆出来。
 
     Args: walk, item, page。
     """
-    walk.emit("caption", _joined(item, "image_caption"), page)
+    caption = _joined(item, "image_caption")
+    walk.emit("figure", caption or _NO_CAPTION, page, ref=_ref_of(item))
 
 
 # 条目类型 → 谁来翻。⚠ 查表而不是一串 elif：多一种类型就多一层缩进，
@@ -252,6 +285,122 @@ def blocks_of(items: list[object]) -> tuple[Block, ...]:
         if run is not None:
             run(walk, one, _page_of(one))
     return tuple(walk.blocks)
+
+
+def _figures_of(one: dict[str, Any], items: list[object]) -> tuple[Figure, ...]:
+    """回包里的 `images` 解成 `Figure`，并从 `content_list` 补上页码与图注。
+
+    ⚠ `images` 的值是**完整的 data URI**（`data:image/jpeg;base64,…`），
+    不是裸 base64。当成裸的去 decode 会在头几个字节上就失败。
+
+    ⚠ 键与 `content_list` 里的 `img_path` 靠 **basename** 对上：前者是
+    `<sha>.jpg`，后者是 `images/<sha>.jpg`。
+
+    ⚠ 解不开的那一张**跳过而不是整份失败**：一张图坏掉不该让一份两百页的
+    手册摄不进来，而它在引用面上的表现是「这一段没有配图」。
+
+    Args: one, items。
+    """
+    raw = one.get("images")
+    if not isinstance(raw, dict):
+        return ()
+    meta = _figure_meta(items)
+    made: list[Figure] = []
+    for name, value in cast(dict[str, object], raw).items():
+        content, media = _decoded(value)
+        if not content:
+            continue
+        kind, page, caption, bbox = meta.get(
+            str(name), ("image", None, "", None)
+        )
+        made.append(
+            Figure(
+                ref=str(name),
+                content=content,
+                media_type=media,
+                kind=kind,
+                page=page,
+                caption=caption,
+                bbox=bbox,
+            )
+        )
+    return tuple(made)
+
+
+def _decoded(value: object) -> tuple[bytes, str]:
+    """一个 data URI 解成字节与 media type；解不开给空。
+
+    Args: value。
+    """
+    if not isinstance(value, str) or not value.startswith("data:"):
+        return (b"", "")
+    head, _, payload = value.partition(",")
+    media = head[len("data:") :].split(";", 1)[0] or "image/jpeg"
+    try:
+        return (base64.b64decode(payload, validate=True), media)
+    except (ValueError, binascii.Error):
+        return (b"", "")
+
+
+_FigureMeta = tuple[
+    Literal["image", "table"],
+    int | None,
+    str,
+    tuple[int, int, int, int] | None,
+]
+
+
+def _figure_meta(items: list[object]) -> dict[str, _FigureMeta]:
+    """从 `content_list` 里把每张图的种类、页码、图注与版面框收出来。
+
+    Args: items。
+    """
+    made: dict[str, _FigureMeta] = {}
+    for item in items:
+        one = _mapping(item)
+        kind = one.get("type")
+        if kind not in ("image", "table"):
+            continue
+        ref = _ref_of(one)
+        if not ref:
+            continue
+        key = "image_caption" if kind == "image" else "table_caption"
+        made[ref] = (
+            "image" if kind == "image" else "table",
+            _page_of(one),
+            _joined(one, key),
+            _bbox_of(one),
+        )
+    return made
+
+
+def _bbox_of(item: dict[str, Any]) -> tuple[int, int, int, int] | None:
+    """版面框；给不出四个整数就当没有。
+
+    Args: item。
+    """
+    raw = item.get("bbox")
+    if not isinstance(raw, list):
+        return None
+    box = cast(list[object], raw)
+    if len(box) != _BBOX_LENGTH or not all(isinstance(one, int) for one in box):
+        return None
+    numbers = cast(list[int], box)
+    return (numbers[0], numbers[1], numbers[2], numbers[3])
+
+
+def _first_result(payload: dict[str, Any]) -> dict[str, Any]:
+    """回包里第一份文件那一格。
+
+    ⚠ 一次只投一份原件，所以「第一份」就是唯一那份。投多份要连着改摄取那一层
+    （一份文档一行），所以这里刻意不做多份。
+
+    Args: payload。
+    """
+    results = payload.get("results")
+    if not isinstance(results, dict) or not results:
+        return {}
+    return _mapping(next(iter(cast(dict[str, object], results).values())))
 
 
 def _items_of(payload: dict[str, Any]) -> list[object]:
@@ -285,7 +434,8 @@ def document_of(filename: str, payload: dict[str, Any]) -> ParsedDocument:
 
     Args: filename, payload。
     """
-    blocks = blocks_of(_items_of(payload))
+    items = _items_of(payload)
+    blocks = blocks_of(items)
     if not blocks:
         raise ExternalParseFailed(
             "MinerU 解出来是空的：这份原件可能是空白页或整页图片"
@@ -295,6 +445,7 @@ def document_of(filename: str, payload: dict[str, Any]) -> ParsedDocument:
         title=heading or filename,
         blocks=blocks,
         is_truncated=len(blocks) >= _MAX_BLOCKS,
+        figures=_figures_of(_first_result(payload), items),
     )
 
 
@@ -386,9 +537,11 @@ class MineruBackend:
             "lang_list": self.lang,
             # ⚠ 这一格默认是 false，不要就没有页码
             "return_content_list": "true",
-            # markdown 与图这一期都用不上，少传一份省带宽
+            # markdown 用不上，少传一份省带宽
             "return_md": "false",
-            "return_images": "false",
+            # ⚠ 这一格也默认 false：不要就没有图，而引用面上那几张图正是
+            # 用户要的东西
+            "return_images": "true",
             "formula_enable": str(self.formula_enabled).lower(),
             "table_enable": str(self.table_enabled).lower(),
         }

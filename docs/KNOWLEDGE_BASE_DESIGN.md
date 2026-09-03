@@ -245,6 +245,8 @@ schema `knowledge`，域前缀 `kb_`（database-standard §1）。
 | `kb_sources` | 一个库下的一路来源实例 | `base_id`、`kind`、`config_json`、`last_synced_at` |
 | `kb_documents` | 一份文档 | `base_id`、`source_id`、`external_ref`、`object_key`、`content_hash`、`status`、`failure_reason` |
 | `kb_chunks` | 一个块 | `document_id`、`ordinal`、`text`、`locator_json`、`token_count` |
+| `kb_document_figures` | 解析出来的一张图（插图或表格截图）| `document_id`、`ordinal`、`kind`、`page`、`caption`、`object_key`、`content_hash` |
+| `kb_chunk_figures` | 这一块的正文里出现了这张图 | `(chunk_id, figure_id)`、`ordinal` |
 | `kb_chunk_embeddings` | 一个块的嵌入结果（`vector(N)` + HNSW） | `chunk_id`、`base_id`、`embedding`、`embedding_model` |
 
 ⚠ **`embedding_model` 与 `dimensions` 钉在库上**，不是钉在块上。一个库里混两种维数
@@ -281,6 +283,33 @@ schema `knowledge`，域前缀 `kb_`（database-standard §1）。
 
 ⚠ 重建索引**不必重算向量**：数据就在那一列上，`REINDEX` 读的也是它。这正是原先
 双份存储要买的那件事，而单列已经天然有了。
+
+### 3.2 图与块靠联结表连，不按页反查
+
+解析后端给出的插图与表格截图落 `kb_document_figures`，字节进对象存储；
+`kb_chunk_figures` 记「这一块的正文里真的出现了这张图」。
+
+⚠ **不按页反查。** 一页上可能有五张图，而某一块只讲其中一张——按页反查会把
+另外四张也贴进引用，而那正是「依据里堆一堆没用的东西」。
+
+⚠ **字节落在 `knowledge/{base}/{doc}/figures/` 下，即不匿名可读。** 桶策略只给
+`models/`/`images/`/`icons/` 三个前缀开了匿名读；知识库里可能有涉密图纸，
+一条「谁拿到谁能看」的链接是不能给的。取图端点
+`GET /documents/{id}/figures/{fid}` **流字节**而不是发预签名 URL——预签名一旦
+生成就绕过了权限，而流字节每一次都经边缘的 `auth_request` 判 `knowledge:use`。
+
+⚠ 图的名字用**内容哈希**而不是序号：重新解析时同一张图算出同一个键，于是不必
+重传、桶里也不会留下一串孤儿。序号会随切分变化而漂。
+
+⚠ 图注**要进块的正文**：不进的话「图 1 冷却水回路示意图」这句话在库里根本
+不存在，检索不到。没有图注的图用一句占位——块的正文不许为空，而一张没有图注
+的图仍然值得在引用面上摆出来。
+
+⚠ 写图**不新增摄取状态**，算在 `parsing` 那一段里：状态是线上契约（CHECK 与
+前端文案都按那几档写的），而写图本来就是解析产出的一部分。
+
+⚠ 本地那几路解析器**恒不出图**（§2.3）。那不是缺陷：docx 里图与正文的对应
+关系 python-docx 给不出来，硬猜一个位置会让引用指错地方。
 
 ---
 
