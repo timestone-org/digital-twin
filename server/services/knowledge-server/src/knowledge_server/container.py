@@ -188,19 +188,7 @@ def build_container(settings: Settings) -> Container:
         answerer=build_answerer(
             chat_adapter, chat_breaker, refresh=catalog.refresh
         ),
-        # ⚠ 重排单独一个断路器：它与对话档打的不是同一个端点，共用一份的话，
-        # 重排端点连挂几次会把对话面一起短路掉
-        reranker=build_reranker(
-            DynamicRerankAdapter(
-                resolve=lambda: _rerank_endpoint(settings, catalog),
-                refresh=catalog.refresh,
-            ),
-            CircuitBreaker(
-                name="knowledge:rerank",
-                failure_threshold=settings.model_breaker_failures,
-                reset_after_s=settings.model_breaker_reset_s,
-            ),
-        ),
+        reranker=_build_reranker(settings, catalog),
         responder=_build_responder(chat_adapter, chat_breaker, catalog),
     )
 
@@ -261,6 +249,27 @@ def _rerank_endpoint(
     """
     return catalog.snapshot().rerank_endpoint(
         PURPOSE_RERANK, timeout_s=settings.rerank_timeout_s
+    )
+
+
+def _build_reranker(settings: Settings, catalog: CatalogCache) -> Reranker:
+    """重排那一路。端点由目录在调用时解出，没分配即这套部署没接。
+
+    ⚠ 断路器单开一个：它与对话档打的不是同一个端点，共用一份的话，
+    重排端点连挂几次会把对话面一起短路掉。
+
+    Args: settings, catalog。
+    """
+    return build_reranker(
+        DynamicRerankAdapter(
+            resolve=lambda: _rerank_endpoint(settings, catalog),
+            refresh=catalog.refresh,
+        ),
+        CircuitBreaker(
+            name="knowledge:rerank",
+            failure_threshold=settings.model_breaker_failures,
+            reset_after_s=settings.model_breaker_reset_s,
+        ),
     )
 
 

@@ -72,6 +72,7 @@ async def test_the_null_lane_refuses_by_name_instead_of_returning_nothing() -> (
 
 
 def test_readiness_and_the_model_name_come_from_the_adapter() -> None:
+    assert _made(_Adapter(), _breaker()).id == "remote-rerank"
     absent = _made(_Adapter(is_ready=False), _breaker())
     assert absent.can_rerank is False
     assert absent.model is None
