@@ -85,6 +85,7 @@ from platform_server.apps.hvac.deps import (
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.apps.llm_providers.catalog import LLM_MANAGE, LLM_VIEW
 from platform_server.apps.modeling import catalog as modeling_catalog
+from platform_server.apps.modeling.deps import get_modeling_sessions
 from platform_server.container import (
     IDEMPOTENCY_NAMESPACE,
     TIMESCALE_SCHEMA,
@@ -453,9 +454,10 @@ def _wire_fakes(
         AcSourceReader(source=fakes.ac_source, timezone=SOURCE_TIMEZONE)
     )
     application.dependency_overrides[get_node_writer] = lambda: fakes.nodes
-    application.dependency_overrides[get_sessions] = lambda: MakerSessions(
-        maker
-    )
+    # 自己开短事务的那两个口都换成用例这条。⚠ 漏换一个的表现是它另开一条
+    # 连接，看不见用例种下的数据——而那一侧只会静默地记不上
+    for opener in (get_sessions, get_modeling_sessions):
+        application.dependency_overrides[opener] = lambda: MakerSessions(maker)
     application.dependency_overrides[get_dashboard_validation_context] = (
         lambda: validation
     )

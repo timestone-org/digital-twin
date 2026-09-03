@@ -7,6 +7,7 @@
  * 显式发起。
  */
 import type {
+  ModelFormulaRegistration,
   ModelingBindingImpact,
   ModelingVersionSummary,
 } from '@dt/contracts'
@@ -100,6 +101,29 @@ export function useBindingOps(onDone: () => void) {
         modeling.updateModelingBinding(bindingId, patch),
       )
       if (impact !== null) toast.success(impactText(impact))
+    },
+    /**
+     * 一键注册为公式：一步建条目 + 建绑定。
+     *
+     * ⚠ 要**同时**有 `modeling:publish` 与 `dataset:manage`；缺后者时按钮
+     * 由 `PermGuard` 禁用并说明原因，不是点下去才报错。
+     */
+    register: async (
+      versionId: string,
+      fxCode: string,
+    ): Promise<ModelFormulaRegistration | null> => {
+      const done = await run(() =>
+        modeling.registerModelingFormula(versionId, fxCode),
+      )
+      if (done !== null) {
+        toast.success(
+          `已建好公式「${done.formula.code}」并绑上。` +
+            '到台账里给某一列写 @' +
+            done.formula.code +
+            '(…) 就能出数。',
+        )
+      }
+      return done
     },
     /** 解绑。公式条目本身不动。 */
     unbind: async (bindingId: string) => {

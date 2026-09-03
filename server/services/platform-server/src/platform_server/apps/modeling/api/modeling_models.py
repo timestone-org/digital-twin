@@ -9,7 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lib.auth import CallerContext
 from lib.objectstore import ObjectStore
 from lib.web import ApiResponse, Page, PageParams, ok, page_params
-from platform_server.apps.modeling.catalog import MODELING_VIEW
+from platform_server.apps.modeling.catalog import (
+    DATASET_MANAGE,
+    MODELING_PUBLISH,
+    MODELING_VIEW,
+)
 from platform_server.apps.modeling.deps import (
     WriteGate,
     get_object_store,
@@ -22,6 +26,8 @@ from platform_server.apps.modeling.schemas import (
     ModelBindingImpactOut,
     ModelBindingOut,
     ModelBindingUpdateIn,
+    ModelFormulaOut,
+    ModelFormulaRegisterIn,
     ModelVersionCreateIn,
     ModelVersionOut,
     ModelVersionSummaryOut,
@@ -45,6 +51,11 @@ PageDep = Annotated[PageParams, Depends(page_params)]
 ViewDep = Annotated[CallerContext, Depends(require(MODELING_VIEW))]
 PublishDep = Annotated[WriteGate, Depends(get_publish_context)]
 StoreDep = Annotated[ObjectStore, Depends(get_object_store)]
+# ⚠ 一键注册要**同时**要两个码：绝不能让发布权顺带获得往公式库写的能力，
+# 那两个码分家正是因为爆炸半径不同（D17）
+RegisterDep = Annotated[
+    CallerContext, Depends(require(MODELING_PUBLISH, DATASET_MANAGE))
+]
 
 
 @versions.get(
@@ -88,6 +99,33 @@ async def publish_version(
     """
     created = await model_service.publish_version(
         session, payload=payload, actor=_actor(write), store=store
+    )
+    response.status_code = status.HTTP_201_CREATED
+    return ok(created)
+
+
+@versions.post(
+    "/{version_id}:register-formula",
+    response_model=ApiResponse[ModelFormulaOut],
+    status_code=status.HTTP_201_CREATED,
+    summary="注册为公式",
+)
+async def register_formula(
+    version_id: uuid.UUID,
+    payload: ModelFormulaRegisterIn,
+    session: SessionDep,
+    response: Response,
+    caller: RegisterDep,
+) -> ApiResponse[ModelFormulaOut]:
+    """一步建库公式条目 + 建绑定。形参从模型签名生成，顺序天然对齐。
+
+    Args: version_id, payload, session, response, caller。
+    """
+    created = await model_service.register_formula(
+        session,
+        version_id=version_id,
+        fx_code=payload.fx_code,
+        actor=Actor(user_id=str(caller.user_id), name=caller.username),
     )
     response.status_code = status.HTTP_201_CREATED
     return ok(created)
@@ -182,10 +220,7 @@ async def update_binding(
     """
     return ok(
         await model_service.update_binding(
-            session,
-            binding_id=binding_id,
-            version_id=payload.model_version_id,
-            is_enabled=payload.is_enabled,
+            session, binding_id=binding_id, payload=payload
         )
     )
 

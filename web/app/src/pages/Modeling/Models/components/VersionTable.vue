@@ -33,7 +33,7 @@ const COLUMNS: readonly DtDataColumn[] = [
     key: 'actions',
     label: '操作',
     align: 'right',
-    width: '8rem',
+    width: '11rem',
     card: 'actions',
   },
 ]
@@ -52,6 +52,7 @@ const props = defineProps<{
 const view = defineModel<DtDataViewMode>('view', { required: true })
 
 defineEmits<{
+  detail: [row: ModelingVersionSummary]
   bind: [row: ModelingVersionSummary]
   retire: [row: ModelingVersionSummary]
 }>()
@@ -94,6 +95,9 @@ defineEmits<{
       {{ formatDateTime(row.created_at) }}
     </template>
     <template #cell-actions="{ row }">
+      <DtButton variant="ghost" size="xs" @click="$emit('detail', row)">
+        详情
+      </DtButton>
       <PermGuard :codes="[PERMISSION_CODES.modelingPublish]">
         <DtButton
           variant="ghost"

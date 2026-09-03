@@ -88,6 +88,9 @@ onMounted(() => void list.reload())
         <RouterLink to="/modeling/models">
           <DtButton variant="ghost" size="sm" icon="layers">模型库</DtButton>
         </RouterLink>
+        <RouterLink to="/modeling/services">
+          <DtButton variant="ghost" size="sm" icon="share">模型服务</DtButton>
+        </RouterLink>
       </PermGuard>
       <PermGuard :codes="[PERMISSION_CODES.modelingManage]" explain>
         <DtButton size="sm" icon="plus" @click="ops.openCreate">

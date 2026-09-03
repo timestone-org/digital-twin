@@ -905,8 +905,8 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 | 三 ✅ | 算子扩容 A（不改列集的） | `cast_type` / `drop_missing` / `filter_rows` / `clip_outlier` / `resample` / `logistic_regression` / `classification_metrics` / `residual_analysis` / `feature_importance`。⚠ `kmeans` 移出本期，见 D22 | 一 |
 | 四 ✅ | 算子扩容 B（改列集的） | `time_feature` / `one_hot` / `select_feature` / `pca` / `lag_feature` / `rolling_feature` / `ledger_join` / `cross_validate`；逐步期望列改按实测 io 推 | 二 |
 | **五+六** ✅ | **产物、通道 B 与台账批量相位** | 迁移 3/4；四条护栏；`tree_regressor`；发布搬产物 + 实跑；`converge_pipeline` 接上并清产物；`BatchAnalysisModel` / `ModelMemo` / 收集相位；ADR-0045、ADR-0046 | 二 |
-| 七 | 对外服务 | 迁移 5；管理面 + 对外面；边缘 location + 限流；auth 规则与种子；ADR | 二（schema 就是接口文档） |
-| 八 | 公式一键化 | `:register-formula`；换绑的入口契约比对；台账列显示「由哪个模型算」 | 二 |
+| 七 ✅ | 对外服务 | 迁移 5；管理面 + 对外面；边缘 location + 限流；auth 规则；ADR-0047 | 二（schema 就是接口文档） |
+| 八 ✅ | 公式一键化 | `:register-formula`；**绑定改按入口契约核对**（原来按特征列，带特征工程的链上必错）；换绑的入口契约比对 | 二 |
 | 九 | 前端四面 | 运行面、模型详情、服务面、模板、结果导出入口 | 六 / 七 / 八 |
 
 ⚠ **第一期必须最先**：它修的是一条已经在线上的静默错值缺陷，且后面每一期都压在它上面。
@@ -921,9 +921,17 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 | --- | --- |
 | ~~台账公式重算加批量预测相位，求值器保持纯同步~~ → **ADR-0046** | 五+六 ✅ |
 | ~~模型二进制产物走对象存储且只加载自产字节~~ → **ADR-0045** | 五+六 ✅ |
-| 对外推理面走 API 密钥并由边缘免认证 location 承载 | 七 |
+| ~~对外推理面走 API 密钥并由边缘免认证 location 承载~~ → **ADR-0047** | 七 ✅ |
 
-⚠ 编号取当前未占用的下一个。本分支已占 0045 与 0046。
+⚠ 编号取当前未占用的下一个。本分支已占 0045、0046 与 0047。
+
+### 部署时必做的两件事
+
+⚠ **重跑一次 auth 种子**：新增的 `modeling-deployments` 与 `open-models` 两段
+规则不进库的话，那两个前缀会被 900 那几条方法兜底收走，表现是「新端点全 403」。
+⚠ **两份边缘配置都要更新并 reload**：Linux 那份模板与 Windows 那份各有一条
+`open-models` 的免认证 location 与一个 `limit_req_zone`。只改一份的表现是
+「一边通、一边 401」。
 
 ---
 

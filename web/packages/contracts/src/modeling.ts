@@ -8,6 +8,8 @@
  * 规格见 docs/MODELING_DESIGN.md。
  */
 
+import type { DatasetFormulaDef } from './dataset'
+
 /** 算子分类，与算子面板的分组一一对应。 */
 export const MODELING_CATEGORIES = [
   'source',
@@ -316,4 +318,95 @@ export interface ModelingBinding {
 /** 换绑的回执：连同「哪些台账列会跟着变」。重算由用户在台账页显式发起。 */
 export interface ModelingBindingImpact extends ModelingBinding {
   usages: ModelingBindingUsage[]
+}
+
+/**
+ * 一个对外服务：把一个模型版本开给系统外的第三方调。
+ *
+ * ⚠ 与绑定并列而不是替代：绑定把模型接进系统**内**的台账，部署把它开给外面。
+ * 两者都钉一个不可变的版本，互不依赖。
+ */
+export interface ModelDeployment {
+  id: string
+  /** URL 段。⚠ 建后不可改——第三方的代码里写着它。 */
+  code: string
+  model_version_id: string
+  model_name: string
+  model_version: number
+  name: string
+  description: string | null
+  /** 人关的开关。关了立刻 403，不是静默返回旧值。 */
+  is_enabled: boolean
+  /** 钉的版本本身能不能上线。⚠ 与 `is_enabled` 是两回事，界面上要分开说。 */
+  is_servable: boolean
+  unservable_reason: string | null
+  max_rows_per_call: number
+  rate_limit_per_minute: number
+  key_count: number
+  created_by_name: string | null
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * 一把 API 密钥。
+ *
+ * ⚠ **没有明文这一格**：明文只在铸出来那一次的回执里出现（`ModelApiKeyMinted`），
+ * 之后任何接口都取不回来。界面上要在创建时说清楚并给「复制」。
+ */
+export interface ModelApiKey {
+  id: string
+  deployment_id: string
+  name: string
+  /** 明文的前 12 位，用于在列表里认出是哪一把。 */
+  key_prefix: string
+  expires_at: string | null
+  revoked_at: string | null
+  last_used_at: string | null
+  created_by_name: string | null
+  created_at: string
+}
+
+/** 刚铸出来那一把。⚠ `plaintext` 只有这一次拿得到。 */
+export interface ModelApiKeyMinted extends ModelApiKey {
+  plaintext: string
+}
+
+/** 某一天的调用量。 */
+export interface ModelCallStat {
+  day: string
+  total: number
+  failed: number
+}
+
+/** 算这一次的是哪个模型。 */
+export interface OpenModelInfo {
+  code: string
+  version: number
+}
+
+/** 一条预测告警。⚠ 有告警不等于算不出来——外推照样给数，只是标注出来。 */
+export interface OpenModelWarning {
+  row: number
+  column: string
+  kind: string
+  message: string
+}
+
+/** 一次对外预测的结果。⚠ 只有预测值与告警，没有任何训练区间的具体数值。 */
+export interface OpenModelPredict {
+  model: OpenModelInfo
+  predictions: (number | null)[]
+  warnings: OpenModelWarning[]
+}
+
+/**
+ * 一键「注册为公式」的回执：新建的库公式条目与新建的绑定。
+ *
+ * ⚠ 两样一起回：用户接下来要做的是「去台账把这条公式用上」，而那一步要的是
+ * 条目的形参名；只回一个的话他还得再查一次。
+ */
+export interface ModelFormulaRegistration {
+  formula: DatasetFormulaDef
+  binding: ModelingBinding
 }

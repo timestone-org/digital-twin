@@ -9,6 +9,11 @@
  */
 
 import type {
+  ModelApiKey,
+  ModelApiKeyMinted,
+  ModelCallStat,
+  ModelDeployment,
+  ModelFormulaRegistration,
   ModelingBinding,
   ModelingBindingImpact,
   ModelingGraph,
@@ -294,5 +299,130 @@ export async function deleteModelingBinding(bindingId: string): Promise<void> {
   await request<null>(
     `/modeling-bindings/${bindingId}`,
     onPlatform({ method: 'DELETE', headers: idempotent(newIdempotencyKey()) }),
+  )
+}
+
+/**
+ * 一键把一个版本注册成库公式并绑上。
+ *
+ * ⚠ 要**同时**有 `modeling:publish` 与 `dataset:manage`：绝不能让发布权顺带
+ * 获得往公式库写的能力。没有后者时按钮要禁用并说明原因。
+ */
+export async function registerModelingFormula(
+  versionId: string,
+  fxCode: string,
+): Promise<ModelFormulaRegistration> {
+  return await requestData<ModelFormulaRegistration>(
+    `/modeling-model-versions/${versionId}:register-formula`,
+    onPlatform({
+      method: 'POST',
+      body: { fx_code: fxCode },
+      headers: idempotent(newIdempotencyKey()),
+    }),
+  )
+}
+
+/** 全部对外服务。 */
+export async function listModelDeployments(): Promise<ModelDeployment[]> {
+  return await requestData<ModelDeployment[]>(
+    '/modeling-deployments',
+    onPlatform(),
+  )
+}
+
+/** 把一个模型版本开成第三方可调的服务。 */
+export async function createModelDeployment(input: {
+  code: string
+  model_version_id: string
+  name: string
+  description?: string | undefined
+  max_rows_per_call?: number | undefined
+  rate_limit_per_minute?: number | undefined
+}): Promise<ModelDeployment> {
+  return await requestData<ModelDeployment>(
+    '/modeling-deployments',
+    onPlatform({
+      method: 'POST',
+      body: input,
+      headers: idempotent(newIdempotencyKey()),
+    }),
+  )
+}
+
+/** 换版本、改配额、启停。`code` 不可改——第三方的代码里写着它。 */
+export async function updateModelDeployment(
+  deploymentId: string,
+  input: {
+    name?: string | undefined
+    description?: string | undefined
+    model_version_id?: string | undefined
+    is_enabled?: boolean | undefined
+    max_rows_per_call?: number | undefined
+    rate_limit_per_minute?: number | undefined
+  },
+): Promise<ModelDeployment> {
+  return await requestData<ModelDeployment>(
+    `/modeling-deployments/${deploymentId}`,
+    onPlatform({ method: 'PATCH', body: input }),
+  )
+}
+
+export async function deleteModelDeployment(
+  deploymentId: string,
+): Promise<void> {
+  await request<null>(
+    `/modeling-deployments/${deploymentId}`,
+    onPlatform({ method: 'DELETE', headers: idempotent(newIdempotencyKey()) }),
+  )
+}
+
+/** 一个服务下的全部密钥。⚠ 回执里没有明文。 */
+export async function listModelApiKeys(
+  deploymentId: string,
+): Promise<ModelApiKey[]> {
+  return await requestData<ModelApiKey[]>(
+    `/modeling-deployments/${deploymentId}/api-keys`,
+    onPlatform(),
+  )
+}
+
+/**
+ * 铸一把新钥匙。
+ *
+ * ⚠ 回执里的 `plaintext` 是**唯一**一次拿得到明文的机会，之后任何接口都取不
+ * 回来。界面上必须当场说清楚并给「复制」。
+ */
+export async function createModelApiKey(
+  deploymentId: string,
+  input: { name: string; expires_at?: string | undefined },
+): Promise<ModelApiKeyMinted> {
+  return await requestData<ModelApiKeyMinted>(
+    `/modeling-deployments/${deploymentId}/api-keys`,
+    onPlatform({
+      method: 'POST',
+      body: input,
+      headers: idempotent(newIdempotencyKey()),
+    }),
+  )
+}
+
+/** 撤销一把钥匙。立刻生效。 */
+export async function revokeModelApiKey(
+  deploymentId: string,
+  keyId: string,
+): Promise<ModelApiKey> {
+  return await requestData<ModelApiKey>(
+    `/modeling-deployments/${deploymentId}/api-keys/${keyId}:revoke`,
+    onPlatform({ method: 'POST', headers: idempotent(newIdempotencyKey()) }),
+  )
+}
+
+/** 近一个月按天的调用量与出错量。 */
+export async function listModelCallStats(
+  deploymentId: string,
+): Promise<ModelCallStat[]> {
+  return await requestData<ModelCallStat[]>(
+    `/modeling-deployments/${deploymentId}/call-stats`,
+    onPlatform(),
   )
 }

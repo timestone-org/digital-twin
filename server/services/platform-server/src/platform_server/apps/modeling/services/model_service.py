@@ -25,7 +25,9 @@ from platform_server.apps.modeling.protocols import ModelTask, ServingChannel
 from platform_server.apps.modeling.schemas import (
     ModelBindingImpactOut,
     ModelBindingOut,
+    ModelBindingUpdateIn,
     ModelBindingUsageOut,
+    ModelFormulaOut,
     ModelVersionCreateIn,
     ModelVersionOut,
     ModelVersionSummaryOut,
@@ -35,6 +37,7 @@ from platform_server.apps.modeling.services import (
     artifact_io,
     artifact_store,
     binding_service,
+    formula_registration,
 )
 from platform_server.apps.modeling.services.artifact_store import (
     ArtifactRejected,
@@ -213,6 +216,22 @@ def _artifact_row(
     )
 
 
+async def register_formula(
+    session: AsyncSession, *, version_id: uuid.UUID, fx_code: str, actor: Actor
+) -> ModelFormulaOut:
+    """一键把一个版本注册成库公式并绑上。两件事在同一个事务里。
+
+    Args: session, version_id, fx_code, actor。
+    """
+    registered = await formula_registration.register_formula(
+        session, version_id=version_id, fx_code=fx_code, actor=actor
+    )
+    return ModelFormulaOut(
+        formula=registered.formula,
+        binding=_to_binding_out(registered.binding, is_orphaned=False),
+    )
+
+
 async def list_versions(
     session: AsyncSession, *, pipeline_id: uuid.UUID | None, page: PageParams
 ) -> Page[ModelVersionSummaryOut]:
@@ -281,17 +300,22 @@ async def update_binding(
     session: AsyncSession,
     *,
     binding_id: uuid.UUID,
-    version_id: uuid.UUID | None,
-    is_enabled: bool | None,
+    payload: ModelBindingUpdateIn,
 ) -> ModelBindingImpactOut:
     """换版本 / 启停，回执带影响面。
 
-    Args: session, binding_id, version_id, is_enabled。
+    Args: session, binding_id, payload。
     """
+    version_id = payload.model_version_id
+    is_enabled = payload.is_enabled
+    is_remap_confirmed = payload.is_remap_confirmed
     row = await binding_service.require_binding(session, binding_id)
     if version_id is not None:
         row = await binding_service.rebind(
-            session, binding_id=binding_id, version_id=version_id
+            session,
+            binding_id=binding_id,
+            version_id=version_id,
+            is_remap_confirmed=is_remap_confirmed,
         )
     if is_enabled is not None:
         row = await binding_service.set_enabled(

@@ -16,12 +16,23 @@ from platform_server.apps.dataset.services import formula_library
 from platform_server.apps.modeling.crud import binding_crud
 from platform_server.apps.modeling.errors import (
     BindingCodeTaken,
+    BindingEntryChanged,
     BindingNotFound,
     BindingParamsMismatch,
     ModelVersionInUse,
     ModelVersionUnservable,
 )
-from platform_server.apps.modeling.models import ModelingBinding
+from platform_server.apps.modeling.models import (
+    ModelingBinding,
+    ModelingModelVersion,
+)
+from platform_server.apps.modeling.services.jsonshape import (
+    as_dict,
+    as_list,
+)
+from platform_server.apps.modeling.services.model_schema import (
+    entry_keys_of,
+)
 from platform_server.apps.modeling.services.pipeline_service import Actor
 from platform_server.apps.modeling.services.publish_service import (
     require_version,
@@ -54,7 +65,7 @@ async def create_binding(
             version.unservable_reason or "这个模型版本不可上线"
         )
     params = await _column_params(session, draft.fx_code)
-    features = [str(key) for key in version.feature_keys]
+    features = _entry_of(version)
     _require_same_arity(params, features)
     row = binding_crud.add(
         session,
@@ -76,13 +87,20 @@ async def create_binding(
 
 
 async def rebind(
-    session: AsyncSession, *, binding_id: uuid.UUID, version_id: uuid.UUID
+    session: AsyncSession,
+    *,
+    binding_id: uuid.UUID,
+    version_id: uuid.UUID,
+    is_remap_confirmed: bool = False,
 ) -> ModelingBinding:
     """把一条绑定换到另一个版本上。
 
     ⚠ 换版本之后，引用这条公式的台账**要重算才会按新版本出数**——重算是
     `dataset:backfill` 档位的动作，不在这里顺带做（§7.7）。
-    Args: session, binding_id, version_id。
+    ⚠ 新版本的入口契约与旧版本不同时**拒掉**，要用户确认过再来一次：
+    按名字自动重映射会在「两个版本恰好都有两个入口列、名字不同」时把甲的值
+    喂给乙，而结果看着完全正常（D18）。
+    Args: session, binding_id, version_id, is_remap_confirmed。
     """
     row = await require_binding(session, binding_id)
     version = await require_version(session, version_id)
@@ -91,10 +109,36 @@ async def rebind(
             version.unservable_reason or "这个模型版本不可上线"
         )
     params = [str(name) for name in row.param_names_snapshot]
-    _require_same_arity(params, [str(key) for key in version.feature_keys])
+    entry = _entry_of(version)
+    _require_same_arity(params, entry)
+    if not is_remap_confirmed:
+        _require_same_entry(row, entry)
     row.model_version_id = version.id
+    row.param_map_json = [
+        {"param": name, "feature": feature}
+        for name, feature in zip(params, entry, strict=True)
+    ]
     await session.flush()
     return row
+
+
+def _require_same_entry(row: ModelingBinding, entry: list[str]) -> None:
+    """新旧两个版本的入口契约必须逐位相同，否则要用户确认。
+
+    ⚠ 判据是**逐位**而不是集合：同样两列换个顺序，位置映射就整体错位，
+    而两边算出来的都是像模像样的数。
+    Args: row, entry。
+    """
+    current = [
+        str(as_dict(item).get("feature"))
+        for item in as_list(row.param_map_json)
+    ]
+    if current != entry:
+        raise BindingEntryChanged(
+            "新版本要的输入列与这条绑定当初对上的不一样"
+            f"（原来是 {current}，现在是 {entry}），"
+            "请确认新的对应关系后再换版本"
+        )
 
 
 async def set_enabled(
@@ -161,6 +205,18 @@ async def _column_params(
             "这条公式条目上有非列形参，进不了模型的特征矩阵"
         )
     return tuple(param.name for param in entry.params)
+
+
+def _entry_of(version: ModelingModelVersion) -> list[str]:
+    """这个版本的**入口契约**：调用方要提供的那几列，按序。
+
+    ⚠ 不是 `feature_keys`：带特征工程的链上两者个数就不同（一次独热能把一列
+    变成五列）。按特征列核对的表现是绑定建得出来、一算就抛「实参个数对不上」。
+    Args: version。
+    """
+    return entry_keys_of(
+        dict(version.signature_json), [str(key) for key in version.feature_keys]
+    )
 
 
 def _require_same_arity(params: Sequence[str], features: Sequence[str]) -> None:

@@ -11,6 +11,11 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import type {
+  ModelApiKey,
+  ModelApiKeyMinted,
+  ModelCallStat,
+  ModelDeployment,
+  ModelFormulaRegistration,
   ModelingBinding,
   ModelingBindingImpact,
   ModelingBindingUsage,
@@ -31,6 +36,9 @@ import type {
   ModelingRunSummary,
   ModelingVersion,
   ModelingVersionSummary,
+  OpenModelInfo,
+  OpenModelPredict,
+  OpenModelWarning,
 } from '@dt/contracts'
 
 interface OpenApiSchema {
@@ -223,6 +231,72 @@ const BINDING_IMPACT = {
   usages: true,
 } satisfies Keys<ModelingBindingImpact>
 
+const DEPLOYMENT = {
+  id: true,
+  code: true,
+  model_version_id: true,
+  model_name: true,
+  model_version: true,
+  name: true,
+  description: true,
+  is_enabled: true,
+  is_servable: true,
+  unservable_reason: true,
+  max_rows_per_call: true,
+  rate_limit_per_minute: true,
+  key_count: true,
+  created_by_name: true,
+  created_at: true,
+  updated_at: true,
+} satisfies Keys<ModelDeployment>
+
+// ⚠ 没有 `plaintext`：明文只在铸出来那一次的回执里出现
+const API_KEY = {
+  id: true,
+  deployment_id: true,
+  name: true,
+  key_prefix: true,
+  expires_at: true,
+  revoked_at: true,
+  last_used_at: true,
+  created_by_name: true,
+  created_at: true,
+} satisfies Keys<ModelApiKey>
+
+const API_KEY_MINTED = {
+  ...API_KEY,
+  plaintext: true,
+} satisfies Keys<ModelApiKeyMinted>
+
+const CALL_STAT = {
+  day: true,
+  total: true,
+  failed: true,
+} satisfies Keys<ModelCallStat>
+
+const OPEN_MODEL_INFO = {
+  code: true,
+  version: true,
+} satisfies Keys<OpenModelInfo>
+
+const OPEN_MODEL_WARNING = {
+  row: true,
+  column: true,
+  kind: true,
+  message: true,
+} satisfies Keys<OpenModelWarning>
+
+const OPEN_MODEL_PREDICT = {
+  model: true,
+  predictions: true,
+  warnings: true,
+} satisfies Keys<OpenModelPredict>
+
+const FORMULA_REGISTRATION = {
+  formula: true,
+  binding: true,
+} satisfies Keys<ModelFormulaRegistration>
+
 const PAIRS: ReadonlyArray<readonly [string, Record<string, true>]> = [
   ['PortOut', PORT],
   ['OperatorOut', OPERATOR],
@@ -244,6 +318,14 @@ const PAIRS: ReadonlyArray<readonly [string, Record<string, true>]> = [
   ['ModelBindingUsageOut', BINDING_USAGE],
   ['ModelBindingOut', BINDING],
   ['ModelBindingImpactOut', BINDING_IMPACT],
+  ['ModelFormulaOut', FORMULA_REGISTRATION],
+  ['ModelDeploymentOut', DEPLOYMENT],
+  ['ModelApiKeyOut', API_KEY],
+  ['ModelApiKeyMintedOut', API_KEY_MINTED],
+  ['ModelCallStatOut', CALL_STAT],
+  ['OpenModelInfoOut', OPEN_MODEL_INFO],
+  ['OpenModelWarningOut', OPEN_MODEL_WARNING],
+  ['OpenModelPredictOut', OPEN_MODEL_PREDICT],
 ]
 
 describe('分析建模线形与 openapi 一致', () => {

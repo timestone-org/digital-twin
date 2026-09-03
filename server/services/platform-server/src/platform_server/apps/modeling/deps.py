@@ -18,6 +18,10 @@ from platform_server.apps.modeling.catalog import (
     MODELING_RUN,
 )
 from platform_server.apps.modeling.services import Actor, RunContext
+from platform_server.apps.modeling.services.open_model_service import (
+    OpenModelDeps,
+)
+from platform_server.apps.modeling.services.sessions import Sessions
 from platform_server.container import Container
 from platform_server.deps import (
     WriteGate,
@@ -28,11 +32,14 @@ from platform_server.deps import (
 )
 
 __all__ = [
+    "OpenModelDeps",
     "WriteGate",
     "get_container",
     "get_idempotency_key",
     "get_manage_context",
+    "get_modeling_sessions",
     "get_object_store",
+    "get_open_model_deps",
     "get_publish_context",
     "get_run_context",
     "get_session",
@@ -48,6 +55,36 @@ def get_object_store(
     Args: container。
     """
     return container.object_store
+
+
+def get_modeling_sessions(
+    container: Annotated[Container, Depends(get_container)],
+) -> Sessions:
+    """开短事务的那一面。调用记录要走自己的事务，不能借请求那条。
+
+    ⚠ 用例用 `dependency_overrides` 把它换成那条回滚事务的会话工厂——不换的话
+    另开一条连接看不见用例种下的数据，而现象是「记录说部署不存在」。
+    Args: container。
+    """
+    return container.database
+
+
+def get_open_model_deps(
+    container: Annotated[Container, Depends(get_container)],
+    sessions: Annotated[Sessions, Depends(get_modeling_sessions)],
+) -> OpenModelDeps:
+    """对外推理面要的那几样。
+
+    ⚠ 产物缓存挂在**容器**上而不是每次请求新造一个：每次新造的表现是每一次
+    调用都把模型重新反序列化一遍，而那是这条路径上最贵的一步。
+    Args: container, sessions。
+    """
+    return OpenModelDeps(
+        cache=container.cache,
+        sessions=sessions,
+        store=container.object_store,
+        artifacts=container.modeling_artifacts,
+    )
 
 
 def get_manage_context(

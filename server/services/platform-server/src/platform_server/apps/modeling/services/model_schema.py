@@ -11,6 +11,7 @@ from typing import Any
 from platform_server.apps.modeling.operators import registry
 from platform_server.apps.modeling.services.jsonshape import (
     as_dict,
+    as_list,
     as_text,
     as_texts,
 )
@@ -116,3 +117,20 @@ def _derived_of(
                 {"key": key, "by": operator.CODE, "label": operator.NAME}
             )
     return derived
+
+
+def entry_keys_of(signature: dict[str, Any], fallback: list[str]) -> list[str]:
+    """调用方要提供的那几列，按序。
+
+    ⚠ 绑定的形参对的是**入口契约**，不是模型的特征列：带特征工程的链上两者
+    个数就不同（一次独热能把一列变成五列）。按特征列去核对的表现是绑定建得
+    出来、一算就抛「实参个数对不上」，而那句话指向的地方与真正的问题无关
+    （docs/MODELING_PLATFORM_DESIGN.md D4 / D5）。
+    ⚠ `fallback` 是给早于模型签名那次升级的历史版本用的：它们的签名是空的，
+    那时候入口契约与特征列本来就是同一份。
+    Args: signature, fallback。
+    """
+    inputs = as_list(signature.get("inputs"))
+    if not inputs:
+        return list(fallback)
+    return [as_text(as_dict(item).get("key")) for item in inputs]

@@ -8,6 +8,11 @@ from platform_server.apps.modeling.models.artifact import (
 )
 from platform_server.apps.modeling.models.base import Base
 from platform_server.apps.modeling.models.binding import ModelingBinding
+from platform_server.apps.modeling.models.deployment import (
+    ModelingApiKey,
+    ModelingCallLog,
+    ModelingDeployment,
+)
 from platform_server.apps.modeling.models.model_version import (
     ModelingModelVersion,
 )
@@ -21,7 +26,10 @@ from platform_server.apps.modeling.models.run import (
 __all__ = [
     "MAX_ERROR_TEXT_LENGTH",
     "Base",
+    "ModelingApiKey",
     "ModelingBinding",
+    "ModelingCallLog",
+    "ModelingDeployment",
     "ModelingModelArtifact",
     "ModelingModelVersion",
     "ModelingNodeRun",

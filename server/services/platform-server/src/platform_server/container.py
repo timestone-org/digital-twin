@@ -43,6 +43,9 @@ from platform_server.apps.llm_providers.services import (
     DeviceLogin,
     OAuthClient,
 )
+from platform_server.apps.modeling.services.artifact_io import (
+    ArtifactCache,
+)
 from platform_server.lease import Lease, RedisLease
 from platform_server.opcua import OpcuaClient
 from platform_server.realtime import RealtimeClient
@@ -153,6 +156,10 @@ class Container:
     ac_daily_lease: Lease
     nodes: OpcuaClient
     object_store: ObjectStore
+    # 建模二进制产物的进程内缓存。⚠ 挂在容器上而不是每次请求新造：
+    # 每次新造的表现是每一次对外调用都把模型重新反序列化一遍，
+    # 而那是那条路径上最贵的一步
+    modeling_artifacts: ArtifactCache
     # 数据源口令的加解密器。密钥派生只在装配时做一次
     credential_cipher: CredentialCipher
     dataset: DatasetParts
@@ -204,6 +211,7 @@ def build_container(settings: Settings) -> Container:
         nodes=_build_nodes(settings),
         # ⚠ 构造不连网：桶不存在要到第一次真正读写时才报，不在启动期误判
         object_store=create_object_store(settings),
+        modeling_artifacts=ArtifactCache(),
         credential_cipher=_build_cipher(settings),
         dataset=_dataset(settings, database, history_database, cache),
         llm=_llm_parts(settings, database, cache),

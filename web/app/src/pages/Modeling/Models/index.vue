@@ -5,7 +5,11 @@
  *
  * 两张表各自成件（`components/`），这一页只做编排与取数。
  */
-import type { ModelingBinding, ModelingVersionSummary } from '@dt/contracts'
+import type {
+  ModelingBinding,
+  ModelingVersion,
+  ModelingVersionSummary,
+} from '@dt/contracts'
 import { computed, onMounted, ref } from 'vue'
 
 import * as modeling from '@/api/modeling'
@@ -15,6 +19,7 @@ import { useViewMode } from '@/composables/useViewMode'
 
 import BindDialog from './components/BindDialog.vue'
 import BindingTable from './components/BindingTable.vue'
+import VersionDetailDialog from './components/VersionDetailDialog.vue'
 import VersionTable from './components/VersionTable.vue'
 import { useBindingOps } from './scripts/useBindingOps'
 
@@ -24,6 +29,8 @@ const PAGE_SIZE = 200
 const versionView = useViewMode('modeling-versions')
 const bindingView = useViewMode('modeling-bindings')
 const binding = ref<ModelingVersionSummary | null>(null)
+// 详情要签名与指纹，列表那份没有——点开时按 id 现取一次
+const detail = ref<ModelingVersion | null>(null)
 
 const versions = useAsyncList<ModelingVersionSummary>(
   (query) => modeling.listModelingVersions(query),
@@ -49,6 +56,17 @@ const versionLabels = computed(
       ]),
     ),
 )
+
+async function openDetail(row: ModelingVersionSummary): Promise<void> {
+  detail.value = await modeling.getModelingVersion(row.id)
+}
+
+async function register(fxCode: string): Promise<void> {
+  const version = detail.value
+  if (version === null) return
+  const done = await ops.register(version.id, fxCode)
+  if (done !== null) detail.value = null
+}
 
 async function submitBind(fxCode: string): Promise<void> {
   const version = binding.value
@@ -79,6 +97,7 @@ onMounted(() => {
           :rows="versions.items.value"
           :is-loading="versions.loading.value"
           :error="versions.error.value"
+          @detail="(row) => void openDetail(row)"
           @bind="(row) => (binding = row)"
           @retire="(row) => void ops.retire(row)"
         >
@@ -104,6 +123,13 @@ onMounted(() => {
         </BindingTable>
       </section>
     </div>
+
+    <VersionDetailDialog
+      :version="detail"
+      :is-busy="ops.isBusy.value"
+      @register="(code) => void register(code)"
+      @close="detail = null"
+    />
 
     <BindDialog
       :version="binding"
