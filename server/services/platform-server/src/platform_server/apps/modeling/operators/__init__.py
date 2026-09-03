@@ -63,6 +63,10 @@ from platform_server.apps.modeling.operators.preprocess import (
     ClipOutlier,
     FillMissing,
 )
+from platform_server.apps.modeling.operators.reduction import (
+    Pca,
+    SelectFeature,
+)
 from platform_server.apps.modeling.operators.registry import (
     OperatorRegistry,
     OperatorRegistryError,
@@ -121,12 +125,14 @@ __all__ = [
     "OperatorRegistry",
     "OperatorRegistryError",
     "OperatorSpec",
+    "Pca",
     "PortSpec",
     "Provenance",
     "RegressionMetrics",
     "Resample",
     "ResidualAnalysis",
     "RollingFeature",
+    "SelectFeature",
     "SplitDataset",
     "Standardize",
     "TimeFeature",

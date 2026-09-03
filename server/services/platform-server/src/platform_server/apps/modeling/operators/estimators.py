@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from typing import Literal, cast
 
 import numpy as np
+from sklearn.decomposition import PCA
 from sklearn.linear_model import (
     LinearRegression,
     LogisticRegression,
@@ -238,3 +239,81 @@ def logistic_probability(
     )
     clamped = min(max(linear, -_EXP_LIMIT), _EXP_LIMIT)
     return 1.0 / (1.0 + math.exp(-clamped))
+
+
+class PrincipalComponents:
+    """主成分：把若干列压成几条互不相关的轴。
+
+    拟合参数是**中心点 + 一组基向量**，都是纯数，因此走通道 A。
+    ⚠ 主成分对量纲极其敏感：没标准化时单位大的列会独占第一主成分。算子说明里
+    要讲清楚，这里不替用户偷偷标准化——那会让「同一份数据两种结果」无从解释。
+    """
+
+    def __init__(self, *, n_components: int) -> None:
+        self._n_components = n_components
+        self._mean: list[float] = []
+        self._components: list[list[float]] = []
+
+    def fit(self, rows: Sequence[Sequence[float]]) -> None:
+        """在给定矩阵上拟合。行数或列数不够时明说。
+
+        Args: rows。
+        """
+        if not rows:
+            raise OperatorError("训练集一行都没有，拟合不出主成分")
+        width = len(rows[0])
+        limit = min(len(rows), width)
+        if self._n_components > limit:
+            raise OperatorError(
+                f"要 {self._n_components} 个主成分，而这份数据最多给得出 "
+                f"{limit} 个（行数与列数的较小者）"
+            )
+        estimator = PCA(n_components=self._n_components)
+        # pyright: ignore 的理由 —— 主成分的 fit 在 sklearn 类型面上部分未知
+        estimator.fit(  # pyright: ignore[reportUnknownMemberType]
+            np.asarray(rows, dtype=float)
+        )
+        # pyright: ignore 的理由 —— mean_ / components_ 在类型面上部分未知
+        raw_mean = cast(
+            "Sequence[float]",
+            estimator.mean_,  # pyright: ignore[reportUnknownMemberType]
+        )
+        raw_axes = cast(
+            "Sequence[Sequence[float]]",
+            estimator.components_,  # pyright: ignore[reportUnknownMemberType]
+        )
+        mean = np.asarray(raw_mean, dtype=float).reshape(-1)
+        axes = np.asarray(raw_axes, dtype=float)
+        self._mean = [float(mean[index]) for index in range(mean.size)]
+        self._components = [
+            [float(axes[row][col]) for col in range(axes.shape[1])]
+            for row in range(axes.shape[0])
+        ]
+
+    @property
+    def mean(self) -> list[float]:
+        """各列的中心点。"""
+        return list(self._mean)
+
+    @property
+    def components(self) -> list[list[float]]:
+        """每一条主成分轴上的权重，与拟合时的列序一致。"""
+        return [list(row) for row in self._components]
+
+
+def projected(
+    mean: Sequence[float],
+    components: Sequence[Sequence[float]],
+    row: Sequence[float],
+) -> list[float]:
+    """把一行投到主成分轴上。
+
+    Args: mean, components, row。
+    """
+    centered = [value - center for value, center in zip(row, mean, strict=True)]
+    return [
+        sum(
+            weight * value for weight, value in zip(axis, centered, strict=True)
+        )
+        for axis in components
+    ]
