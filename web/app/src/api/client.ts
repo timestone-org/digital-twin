@@ -221,6 +221,42 @@ export async function request<T>(
 }
 
 /**
+ * 取一段**字节**而不是信封。
+ *
+ * ⚠ 有这一条是因为 `<img src>` 带不上 `Authorization`：浏览器给图片请求发不了
+ * 自定义头，而知识库的图不匿名可读（走的是同一条要认人的 API 前缀）。直接把
+ * 端点地址写进 `src` 的表现是**整张图 401、界面上一个碎图标**，而且不报错。
+ * 取回来的 Blob 由调用方转成 object URL，并在卸载时 revoke。
+ *
+ * ⚠ 401 的重试与 `request` 同一条口径：抖一下不该把人踢下线。
+ * @param path 相对前缀的路径
+ * @param options 前缀、query、中止信号
+ */
+export async function requestBytes(
+  path: string,
+  options: RequestOptions = {},
+): Promise<Blob> {
+  const first = await send(path, options)
+  if (first.status !== 401 || options.anonymous) {
+    return unwrapBytes(first)
+  }
+  const refreshed = await hooks.onRefresh()
+  if (!refreshed) {
+    hooks.onUnauthorized()
+    return unwrapBytes(first)
+  }
+  return unwrapBytes(await send(path, options))
+}
+
+/** 把一个字节响应拆成 Blob；非 2xx 一律抛。 */
+async function unwrapBytes(response: Response): Promise<Blob> {
+  if (!response.ok) {
+    throw new TransportError(response.status, '这张图取不回来')
+  }
+  return await response.blob()
+}
+
+/**
  * 发一个**必须带 data** 的请求。
  * ⚠ 用它而不是 `(await request(...)) as T`：断言会把 204 或空 data 当成对象放行，
  * 真正的崩溃点跑到几层之外的渲染里，看不出是接口没给数据。

@@ -4,20 +4,71 @@
  *
  * ⚠ 单拎成一个件是为了让父件的模板嵌套不超过 6 层（闸门守着）。它同时也让
  * 「一条引用长什么样」有了一个可以单测的落点。
+ *
+ * ⚠ 图**不能把端点地址写进 `<img src>`**：浏览器给图片请求带不上
+ * `Authorization`，而知识库的图要认人（与素材那条匿名可读的 `/oss/` 不同）。
+ * 写进 src 的表现是整张图 401、界面上一个碎图标，且不报任何错。所以这里取
+ * 字节、转 object URL，并在卸载与收起时 revoke。
  */
-import { ref } from 'vue'
+import { onUnmounted, ref, watch } from 'vue'
 import { DtIcon } from '@dt/ui'
 import type { KnowledgeCitation } from '@dt/contracts'
+
+import { readFigureBytes } from '@/api/knowledge'
+import { useRacedFetch } from '@/composables/useRacedFetch'
 
 const props = defineProps<{ item: KnowledgeCitation }>()
 
 /** ⚠ 默认收起：依据是给要核对的人看的，摊开会把答案挤到屏幕外。 */
 const isOpen = ref(false)
+/** 图 id → 这一张的 object URL。取不回来的那一张不在表里，于是不渲染。 */
+const shown = ref<Record<string, string>>({})
+/** ⚠ 快速开合会让先发的那一次后返回：走统一的竞态防护，不手搓序号。 */
+const race = useRacedFetch()
 
-/** 一张图的取回地址。⚠ 走服务端端点而不是对象存储直链：知识库的图不匿名可读。 */
-function figureSrc(figureId: string): string {
-  return `/api/v1/knowledge/documents/${props.item.document_id}/figures/${figureId}`
+/** 放掉手上全部的 object URL。⚠ 不放的话每翻一条依据就漏一批。 */
+function release(): void {
+  for (const url of Object.values(shown.value)) URL.revokeObjectURL(url)
+  shown.value = {}
 }
+
+/** 取回这一条引用带的那几张图的字节。 */
+async function fetched(signal: AbortSignal): Promise<[string, Blob][]> {
+  const made: [string, Blob][] = []
+  for (const figure of props.item.figures) {
+    try {
+      made.push([
+        figure.id,
+        await readFigureBytes(props.item.document_id, figure.id, signal),
+      ])
+    } catch {
+      // 取不回来的那一张就不摆出来。⚠ 不弹错：一张图取不到不该盖住答案
+    }
+  }
+  return made
+}
+
+watch(isOpen, (open) => {
+  if (!open) {
+    race.cancel()
+    release()
+    return
+  }
+  void race.run(fetched, {
+    ok: (got) => {
+      shown.value = Object.fromEntries(
+        got.map(([id, blob]) => [id, URL.createObjectURL(blob)]),
+      )
+    },
+    fail: () => undefined,
+    settled: () => undefined,
+  })
+})
+
+onUnmounted(() => {
+  race.cancel()
+  release()
+})
 </script>
 
 <template>
@@ -40,9 +91,9 @@ function figureSrc(figureId: string): string {
       <p class="cites__text">{{ item.text }}</p>
       <figure v-for="fig in item.figures" :key="fig.id" class="cites__figure">
         <img
-          :src="figureSrc(fig.id)"
+          v-if="shown[fig.id]"
+          :src="shown[fig.id]"
           :alt="fig.caption || '资料里的一张图'"
-          loading="lazy"
         />
         <figcaption v-if="fig.caption">{{ fig.caption }}</figcaption>
       </figure>

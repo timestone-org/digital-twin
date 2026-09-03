@@ -5,12 +5,35 @@
  * typecheck 与 lint 对那种错双双放行（见 [[vue-props-slots-unchecked]]），
  * 只有真挂载起来数一遍才逮得到。
  */
-import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { KnowledgeCitation } from '@dt/contracts'
 
 import AiCitations from '@/components/ai/AiCitations.vue'
 import AiTimeline from '@/components/ai/AiTimeline.vue'
+
+const api = vi.hoisted(() => ({ readFigureBytes: vi.fn() }))
+
+vi.mock('@/api/knowledge', () => api)
+
+// happy-dom 没有 object URL：桩成可预测的串，收起那一条才数得出放掉了谁
+let made = 0
+const revoked: string[] = []
+
+beforeEach(() => {
+  made = 0
+  revoked.length = 0
+  api.readFigureBytes.mockReset()
+  vi.stubGlobal('URL', {
+    ...URL,
+    createObjectURL: () => `blob:fake/f${(made += 1)}`,
+    revokeObjectURL: (url: string) => revoked.push(url),
+  })
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
 function cite(
   marker: string,
@@ -62,8 +85,10 @@ describe('引用卡片', () => {
       })
   })
 
-  it('图走服务端取图端点，不是对象存储直链', async () => {
-    // ⚠ 知识库的图不匿名可读：直链取不到，而那时界面上是一个坏掉的图标
+  it('图取字节再转 object URL，不把端点地址写进 src', async () => {
+    // ⚠ 浏览器给 `<img>` 的请求带不上 Authorization，而知识库的图要认人：
+    // 把端点地址写进 src 的表现是整张图 401、界面上一个碎图标，且不报任何错
+    api.readFigureBytes.mockResolvedValue(new Blob(['x']))
     const made = mount(AiCitations, {
       props: {
         items: [
@@ -73,10 +98,60 @@ describe('引用卡片', () => {
         ],
       },
     })
+
     await made.find('.cites__row').trigger('click')
-    expect(made.find('img').attributes('src')).toBe(
-      '/api/v1/knowledge/documents/d1/figures/f1',
-    )
+    await flushPromises()
+
+    expect(api.readFigureBytes.mock.calls[0]?.slice(0, 2)).toEqual(['d1', 'f1'])
+    expect(made.find('img').attributes('src')).toBe('blob:fake/f1')
+  })
+
+  it('收起时把 object URL 放掉', async () => {
+    // ⚠ 不放的表现是内存里攒着一堆图，翻十几条依据之后整页开始卡
+    api.readFigureBytes.mockResolvedValue(new Blob(['x']))
+    const made = mount(AiCitations, {
+      props: {
+        items: [cite('①', 'd1', 4, null, [{ id: 'f1', caption: '', page: 4 }])],
+      },
+    })
+    await made.find('.cites__row').trigger('click')
+    await flushPromises()
+
+    await made.find('.cites__row').trigger('click')
+
+    expect(revoked).toContain('blob:fake/f1')
+  })
+
+  it('卸载时把 object URL 放掉', async () => {
+    // ⚠ 卸载必须清理：对话翻页时整块时间线会被换掉，不放的话每翻一次就漏一批
+    api.readFigureBytes.mockResolvedValue(new Blob(['x']))
+    const made = mount(AiCitations, {
+      props: {
+        items: [cite('①', 'd1', 4, null, [{ id: 'f1', caption: '', page: 4 }])],
+      },
+    })
+    await made.find('.cites__row').trigger('click')
+    await flushPromises()
+
+    made.unmount()
+
+    expect(revoked).toContain('blob:fake/f1')
+  })
+
+  it('一张图取不回来时不摆出来，也不盖住答案', async () => {
+    // ⚠ 不弹错：一张图取不到不该把整条依据变成一条报错
+    api.readFigureBytes.mockRejectedValue(new Error('401'))
+    const made = mount(AiCitations, {
+      props: {
+        items: [cite('①', 'd1', 4, null, [{ id: 'f1', caption: '', page: 4 }])],
+      },
+    })
+
+    await made.find('.cites__row').trigger('click')
+    await flushPromises()
+
+    expect(made.find('img').exists()).toBe(false)
+    expect(made.text()).toContain('出口温度不得高于 65 ℃')
   })
 
   it('没有页码的格式不硬凑一个页码', () => {

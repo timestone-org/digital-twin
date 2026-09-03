@@ -8,7 +8,7 @@
  * 拿回来的是一个 403 的 HTML 页，前端只说得出「服务端响应格式异常」。
  */
 import { KNOWLEDGE_BASE_URL } from '@/config/app'
-import { request, requestData } from './client'
+import { request, requestBytes, requestData } from './client'
 import type { RequestOptions } from './client'
 import { postUploadForm } from './upload'
 import type { UploadOptions } from './upload'
@@ -234,5 +234,27 @@ export async function searchBase(
         body: { query, limit: 8, strategy },
       }),
     ),
+  )
+}
+
+/**
+ * 取一张图的字节。
+ *
+ * ⚠ **不能把这条地址直接写进 `<img src>`**：浏览器给图片请求带不上
+ * `Authorization`，而这条路要认人（知识库的图不匿名可读，与素材那条 `/oss/`
+ * 不同）。写进 src 的表现是整张图 401、界面上一个碎图标，且不报任何错。
+ *
+ * @param documentId 图属于哪份文档
+ * @param figureId 图 id
+ * @param signal 中止信号，调用方卸载时必须 abort
+ */
+export async function readFigureBytes(
+  documentId: string,
+  figureId: string,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  return await requestBytes(
+    `${DOCUMENTS}/${documentId}/figures/${figureId}`,
+    onKnowledge(signal ? { signal } : {}),
   )
 }

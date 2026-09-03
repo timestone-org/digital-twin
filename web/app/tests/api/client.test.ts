@@ -9,6 +9,7 @@ import {
   TransportError,
   configureApiClient,
   request,
+  requestBytes,
   requestData,
 } from '@/api/client'
 
@@ -197,5 +198,61 @@ describe('requestData', () => {
   it('信封里 data 是 null 时同样报错', async () => {
     fetchMock.mockResolvedValue(envelope({ ...ok, data: null }))
     await expect(requestData('/x')).rejects.toBeInstanceOf(TransportError)
+  })
+})
+
+describe('取字节', () => {
+  it('回的是 Blob 而不是信封', async () => {
+    // ⚠ 有这一条路是因为 `<img src>` 带不上 Authorization：知识库的图要认人，
+    // 把端点地址写进 src 的表现是整张图 401、界面上一个碎图标，且不报错
+    fetchMock.mockResolvedValue(
+      new Response(new Blob(['JPEGISH']), {
+        status: 200,
+        headers: { 'Content-Type': 'image/jpeg' },
+      }),
+    )
+
+    const made = await requestBytes('/documents/d1/figures/f1')
+
+    expect(await made.text()).toBe('JPEGISH')
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit
+    const headers = init.headers as Record<string, string>
+    expect(headers.Authorization).toBe('Bearer tok')
+  })
+
+  it('401 时先刷新再重试一次', async () => {
+    configureApiClient({ onRefresh: () => Promise.resolve(true) })
+    fetchMock
+      .mockResolvedValueOnce(new Response('', { status: 401 }))
+      .mockResolvedValueOnce(new Response(new Blob(['second'])))
+
+    const made = await requestBytes('/documents/d1/figures/f1')
+
+    expect(await made.text()).toBe('second')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('刷新也失败时把会话过期报上去', async () => {
+    const seen: string[] = []
+    configureApiClient({
+      onRefresh: () => Promise.resolve(false),
+      onUnauthorized: () => seen.push('out'),
+    })
+    fetchMock.mockResolvedValue(new Response('', { status: 401 }))
+
+    await expect(requestBytes('/x')).rejects.toBeInstanceOf(TransportError)
+    expect(seen).toEqual(['out'])
+  })
+
+  it('非 2xx 一律抛，不把错误页当成图', async () => {
+    // ⚠ 不抛的话，一个 403 的 HTML 会被当成图片字节存成 object URL，
+    // 界面上是一张永远画不出来的图
+    fetchMock.mockResolvedValue(
+      new Response('<html>403</html>', {
+        status: 403,
+      }),
+    )
+
+    await expect(requestBytes('/x')).rejects.toBeInstanceOf(TransportError)
   })
 })
