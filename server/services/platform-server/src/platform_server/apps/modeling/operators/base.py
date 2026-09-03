@@ -38,8 +38,10 @@ CATEGORIES: tuple[str, ...] = (
     "evaluate",
 )
 
-# 可服务通道：json=拟合参数纯 JSON 表达；binary=二进制产物（本轮不开）
-SERVING_CHANNELS: tuple[str, ...] = ("json", "binary")
+# 可服务通道：json=拟合参数纯 JSON 表达；binary=模型本体在二进制产物里
+CHANNEL_JSON = "json"
+CHANNEL_BINARY = "binary"
+SERVING_CHANNELS: tuple[str, ...] = (CHANNEL_JSON, CHANNEL_BINARY)
 
 # 引擎给来源类算子塞预取帧用的保留输入键。端口名不许占用它，注册期校验
 PREFETCHED_KEY = "__prefetched__"
@@ -288,6 +290,16 @@ class OperatorBase:
         算子层不认识序列化策略，也不许 import services——那是一个环。
         """
         return None
+
+    def attach_estimator(self, estimator: object) -> None:
+        """装上一个从产物里加载回来的估计器（同上，只有通道 B 实现它）。
+
+        ⚠ 缺省是**抛**而不是忽略：走到这里说明可服务表示说这一步要产物，而
+        这个算子根本不吃产物——静默忽略的表现是它拿单行重新拟合。
+        Args: estimator。
+        """
+        del estimator
+        raise OperatorError(f"算子「{self.CODE}」不吃二进制产物")
 
     def dump_fitted(self) -> dict[str, Any] | None:
         """导出拟合参数（`REQUIRES_FIT=True` 必须实现）。

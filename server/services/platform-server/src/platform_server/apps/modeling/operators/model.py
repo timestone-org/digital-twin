@@ -142,8 +142,7 @@ class LinearRegressionConfig(OperatorConfig):
         default="none",
         title="正则化",
         description=(
-            "none=普通最小二乘；"
-            "ridge=岭回归，按 alpha 收缩系数（截距不参与）"
+            "none=普通最小二乘；ridge=岭回归，按 alpha 收缩系数（截距不参与）"
         ),
     )
     ridge_alpha: float = Field(

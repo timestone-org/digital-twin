@@ -1,5 +1,9 @@
 """建模的数据访问层。只 flush，不提交——事务边界在 `services`。"""
 
+from platform_server.apps.modeling.crud.artifact import (
+    ModelArtifactCrud,
+    model_artifact_crud,
+)
 from platform_server.apps.modeling.crud.binding import BindingCrud, binding_crud
 from platform_server.apps.modeling.crud.model_version import (
     ModelVersionCrud,
@@ -18,11 +22,13 @@ from platform_server.apps.modeling.crud.run import (
 
 __all__ = [
     "BindingCrud",
+    "ModelArtifactCrud",
     "ModelVersionCrud",
     "NodeRunCrud",
     "PipelineCrud",
     "RunCrud",
     "binding_crud",
+    "model_artifact_crud",
     "model_version_crud",
     "node_run_crud",
     "pipeline_crud",

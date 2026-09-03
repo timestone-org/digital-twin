@@ -22,6 +22,8 @@ from platform_server.apps.modeling.errors import (
 )
 from platform_server.apps.modeling.models import ModelingModelVersion
 from platform_server.apps.modeling.operators import (
+    CHANNEL_BINARY,
+    CHANNEL_JSON,
     CONTRACT_MODEL,
     DTYPE_NUMBER,
     OperatorError,
@@ -67,6 +69,8 @@ class _Publishing:
     model_id: str
     #: 建模那一步的结果摘要
     payload: dict[str, Any]
+    #: 通道 B 的模型本体；纯 JSON 的模型是 `None`
+    estimator: object | None = None
 
 
 @dataclass(frozen=True)
@@ -84,16 +88,22 @@ class Publishable:
     entry_columns: tuple[EntryColumn, ...] = ()
     #: 模型签名（面向人与第三方的说明）。不可服务时是空字典
     signature: dict[str, Any] = field(default_factory=dict[str, Any])
+    #: 通道 B 的产物元信息；通道 A 是空字典
+    artifact: dict[str, Any] = field(default_factory=dict[str, Any])
 
 
 def inspect_run(
-    graph: PipelineGraph, records: dict[str, NodeRecord]
+    graph: PipelineGraph,
+    records: dict[str, NodeRecord],
+    estimator: object | None = None,
 ) -> Publishable:
     """扫一遍图与结果，判这次运行能不能发布。
 
     ⚠ 判据是**流水线的形状**加**算子的声明**，不是「跑通了没有」：跑通只说明
     训练没报错，与「这套东西在单行上算不算得出来」是两回事（§7.6）。
-    Args: graph, records。
+    ⚠ `estimator` 是通道 B 那份已经从对象存储加载回来的模型本体：发布前那一次
+    实跑要拿它真算一行，光有一份产物元信息证明不了那些字节还读得回来（D10）。
+    Args: graph, records, estimator。
     """
     nodes = graph.node_by_id()
     model_id = _model_node_of(graph)
@@ -111,18 +121,53 @@ def inspect_run(
         return _unservable(
             "滞后 / 滚动特征在单行预测时拿不到历史窗口，本流水线暂不可上线"
         )
-    channel = as_text(payload.get("serving_channel"))
-    if channel != "json":
-        return _unservable("这个算法的拟合参数没法用纯数据表达，暂不可上线")
-    return _servable(
-        _Publishing(
-            graph=graph,
-            records=records,
-            served=_served_nodes(graph),
-            model_id=model_id,
-            payload=payload,
-        )
+    publishing = _Publishing(
+        graph=graph,
+        records=records,
+        served=_served_nodes(graph),
+        model_id=model_id,
+        payload=payload,
+        estimator=estimator,
     )
+    unusable = _channel_refusal(publishing)
+    if unusable:
+        return _unservable(unusable)
+    return _servable(publishing)
+
+
+def _channel_refusal(publishing: _Publishing) -> str:
+    """这个模型的拟合结果**存不存得住**；存得住给空串。
+
+    ⚠ 通道 B 判的是「产物在不在」而不是「`fitted` 空不空」：树模型的 `fitted`
+    本来就只有一份列序，按空不空判会把每一个树模型都拒在门外（D9）。
+    Args: publishing。
+    """
+    channel = as_text(publishing.payload.get("serving_channel"))
+    if channel == CHANNEL_JSON:
+        return ""
+    if channel != CHANNEL_BINARY:
+        return "这个算法的拟合参数没法用纯数据表达，暂不可上线"
+    if not as_dict(record_of(publishing.records, publishing.model_id).artifact):
+        return (
+            "这个算法的模型存成了一份二进制产物，而这次运行没有留下它——"
+            "本部署可能没有配对象存储，请检查后重跑一遍这条流水线再发布"
+        )
+    return ""
+
+
+def model_artifact(
+    graph: PipelineGraph, records: dict[str, NodeRecord]
+) -> dict[str, Any]:
+    """建模那一步的产物元信息；纯 JSON 的模型给空字典。
+
+    ⚠ 发布那一侧要在 `inspect_run` **之前**问这一句：通道 B 的实跑得先把字节
+    从对象存储读回来，而读不读得回来正是那次实跑要验的东西。
+    Args: graph, records。
+    """
+    node_id = _model_node_of(graph)
+    if node_id is None:
+        return {}
+    return as_dict(record_of(records, node_id).artifact)
 
 
 def _model_node_of(graph: PipelineGraph) -> str | None:
@@ -160,7 +205,10 @@ def _servable(publishing: _Publishing) -> Publishable:
     if refused:
         return _unservable(refused)
     serving = _serving_of(publishing, steps, entry)
-    compiled = compile_model(serving)
+    try:
+        compiled = compile_model(serving, estimator=publishing.estimator)
+    except OperatorError as error:
+        return _unservable(f"可服务表示编译不出来：{error}")
     moment = (
         smoke_moment(publishing.graph, publishing.records, publishing.served)
         if compiled.requires_timestamp
@@ -246,7 +294,11 @@ def _published(
         target_key=target_key,
         algo=as_text(publishing.payload.get("algo")),
         task=task,
-        channel="json",
+        channel=as_text(publishing.payload.get("serving_channel"))
+        or CHANNEL_JSON,
+        artifact=as_dict(
+            record_of(publishing.records, publishing.model_id).artifact
+        ),
     )
 
 
@@ -343,13 +395,17 @@ def _fitted_of(
     is_model: bool,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    """这一步学到的参数。建模那一步在它自己的摘要里，其余在记录上。
+    """这一步学到的参数。节点记录上那份优先，摘要里那份只作旧运行的回落。
 
+    ⚠ 建模那一步**不能只看摘要**：通道 B 的模型描述里 `fitted` 是刻意空着的
+    （模型本体在产物里），而列序只在节点记录上。只看摘要的表现是每一个树模型
+    都被「该带参数的一步空着」那道闸拒在门外（D9）。
     Args: records, node_id, is_model, payload。
     """
-    if is_model:
-        return as_dict(payload.get("fitted"))
-    return as_dict(record_of(records, node_id).fitted)
+    recorded = record_of(records, node_id).fitted
+    if recorded is not None:
+        return as_dict(recorded)
+    return as_dict(payload.get("fitted")) if is_model else {}
 
 
 def _starved_step(graph: PipelineGraph, steps: list[dict[str, Any]]) -> str:
@@ -412,7 +468,7 @@ def _unservable(reason: str) -> Publishable:
         target_key="",
         algo="",
         task="",
-        channel="json",
+        channel=CHANNEL_JSON,
     )
 
 

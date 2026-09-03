@@ -96,6 +96,22 @@ def seal(estimator: object) -> SealedArtifact:
     )
 
 
+def meta_of(sealed: SealedArtifact, object_key: str) -> dict[str, Any]:
+    """一份产物落库时记的那几样。加载时逐条比对。
+
+    ⚠ 由**训练那一侧**生成：发布跑在 api 进程里，那里的库版本未必与工进程
+    一致，到发布时才现算会把跨版本那道拒载闸变成摆设。
+    Args: sealed, object_key。
+    """
+    return {
+        "object_key": object_key,
+        "digest": sealed.digest,
+        "size_bytes": sealed.size_bytes,
+        "format_version": sealed.format_version,
+        "runtime": dict(sealed.runtime),
+    }
+
+
 def load(
     payload: bytes,
     *,

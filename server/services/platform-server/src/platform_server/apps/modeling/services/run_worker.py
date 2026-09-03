@@ -6,6 +6,7 @@ at-least-once（docs/agents/runtime-resilience.md §5）。
 """
 
 import asyncio
+import uuid
 from dataclasses import dataclass
 
 from lib.errors import DependencyUnavailable
@@ -18,6 +19,9 @@ from lib.logging import (
 from lib.objectstore import ObjectStore
 from lib.stream import StreamEntry, StreamGroup, StreamLike
 from platform_server.apps.modeling.services import run_queue
+from platform_server.apps.modeling.services.retention import (
+    converge_pipeline,
+)
 from platform_server.apps.modeling.services.run_dispatch import (
     RUN_DONE,
     RUN_INTERRUPTED,
@@ -44,6 +48,8 @@ class RunConsumerOptions:
     claim_idle_ms: int
     node_timeout_s: float
     tz_offset_minutes: int
+    #: 每条流水线留几次运行的节点级明细
+    keep_per_pipeline: int
     #: 二进制产物的落脚处。缺省「没有」——纯 JSON 那些算子一个字节都不产
     store: ObjectStore | None = None
 
@@ -184,6 +190,31 @@ class RunConsumer:
             )
             return
         _log_report(message, report.outcome, report.status)
+        await self._converge(report.pipeline_id)
+
+    async def _converge(self, pipeline_id: uuid.UUID | None) -> None:
+        """跑完一次就把这条流水线的老明细与老产物收敛掉。
+
+        ⚠ 收敛失败**不影响这次运行的结论**：运行已经落终态了，清理只是省地方。
+        为一次存储抖动把运行判失败，会让用户重跑一次一模一样的训练。
+        Args: pipeline_id。
+        """
+        if pipeline_id is None:
+            return
+        try:
+            await converge_pipeline(
+                self._sessions,
+                pipeline_id=pipeline_id,
+                keep=self._options.keep_per_pipeline,
+                store=self._options.store,
+            )
+        except Exception as error:
+            _logger.warning(
+                "modeling_converge_failed",
+                "老运行明细没收敛掉",
+                pipeline_id=str(pipeline_id),
+                error=error,
+            )
 
 
 def _log_report(

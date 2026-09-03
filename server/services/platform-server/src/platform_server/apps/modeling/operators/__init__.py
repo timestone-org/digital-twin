@@ -6,6 +6,8 @@
 
 from platform_server.apps.modeling.operators.base import (
     CATEGORIES,
+    CHANNEL_BINARY,
+    CHANNEL_JSON,
     CONTRACT_FRAME,
     CONTRACT_METRICS,
     CONTRACT_MODEL,
@@ -90,6 +92,8 @@ from platform_server.apps.modeling.operators.window import (
 __all__ = [
     "AGG_FUNCS",
     "CATEGORIES",
+    "CHANNEL_BINARY",
+    "CHANNEL_JSON",
     "COLUMN_ROLES",
     "CONTRACTS",
     "CONTRACT_FRAME",

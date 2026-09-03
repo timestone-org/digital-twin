@@ -11,6 +11,9 @@ import pytest
 
 from lib.stream import StreamGroup
 from platform_server.apps.modeling.services import run_queue
+from platform_server.apps.modeling.services.run_dispatch import (
+    DispatchReport,
+)
 from platform_server.apps.modeling.services.run_pool import NodePool
 from platform_server.apps.modeling.services.run_worker import (
     RunConsumer,
@@ -22,6 +25,9 @@ TARGET = StreamGroup(
     stream="platform:modeling:run", group="modeling-runners", consumer="one"
 )
 BLOCK_MS = 5
+# 收敛老明细时留几次运行。这一组不真删，只要求消费循环把它传下去
+KEEP_PER_PIPELINE = 20
+
 NODE_TIMEOUT_S = 30.0
 
 
@@ -49,13 +55,7 @@ class RecordingDispatch:
         self.seen.append(run_id)
         if self.error is not None:
             raise self.error
-        return _Report()
-
-
-@dataclass(frozen=True)
-class _Report:
-    outcome: str = "done"
-    status: str = "succeeded"
+        return DispatchReport(outcome="done", status="succeeded")
 
 
 def consumer_of(stream: InMemoryStream) -> RunConsumer:
@@ -74,6 +74,7 @@ def consumer_of(stream: InMemoryStream) -> RunConsumer:
             claim_idle_ms=1000,
             node_timeout_s=NODE_TIMEOUT_S,
             tz_offset_minutes=480,
+            keep_per_pipeline=KEEP_PER_PIPELINE,
         ),
     )
 

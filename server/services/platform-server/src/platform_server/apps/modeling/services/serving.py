@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from platform_server.apps.modeling.operators import (
+    CHANNEL_BINARY,
     Frame,
     FrameColumn,
     OperatorError,
@@ -62,10 +63,23 @@ class CompiledModel:
     """
 
     def __init__(
-        self, *, features: tuple[str, ...], steps: tuple[_Step, ...]
+        self,
+        *,
+        features: tuple[str, ...],
+        steps: tuple[_Step, ...],
+        estimator: object | None = None,
     ) -> None:
         self._features = features
         self._steps = steps
+        self._estimator = estimator
+
+    @property
+    def needs_estimator(self) -> bool:
+        """这条链上有没有哪一步的模型本体在二进制产物里（通道 B）。"""
+        return any(
+            registry.get(step.operator).SERVING_CHANNEL == CHANNEL_BINARY
+            for step in self._steps
+        )
 
     @property
     def requires_timestamp(self) -> bool:
@@ -101,27 +115,35 @@ class CompiledModel:
             at=at,
         )
         for step in self._steps:
-            frame = _apply(step, frame)
+            frame = _apply(step, frame, self._estimator)
         return _single_value(frame)
 
 
-def compile_model(serving: dict[str, Any]) -> CompiledModel:
+def compile_model(
+    serving: dict[str, Any], *, estimator: object | None = None
+) -> CompiledModel:
     """把 `serving_json` 编译成可调用对象。形状不对即抛。
 
     ⚠ 按 `format_version` 分派而不是嗅探键：两版的入口契约含义不同——1.0 那份
     是**特征工程之后**的列，2.0 那份是之前的（docs/MODELING_PLATFORM_DESIGN.md
     D4）。嗅探键会让一份缺字段的 2.0 悄悄走 1.0 的路。
-    Args: serving。
+    ⚠ `estimator` 是通道 B 的模型本体，由**取数相位**从对象存储加载好了再交
+    进来：编译本身不许有 I/O，它跑在求值路径上（D20）。
+    Args: serving, estimator。
     """
     features = _entry_keys_of(serving)
     if not features:
         raise OperatorError("这个模型版本没有输入契约")
-    return CompiledModel(
+    compiled = CompiledModel(
         features=features,
         steps=tuple(
             _step_of(item) for item in as_list(serving.get(_FIELD_STEPS))
         ),
+        estimator=estimator,
     )
+    if compiled.needs_estimator and estimator is None:
+        raise OperatorError("这个模型的本体存在二进制产物里，还没有加载进来")
+    return compiled
 
 
 def _entry_keys_of(serving: dict[str, Any]) -> tuple[str, ...]:
@@ -156,12 +178,15 @@ def _step_of(raw: Any) -> _Step:
     )
 
 
-def _apply(step: _Step, frame: Frame) -> Frame:
+def _apply(step: _Step, frame: Frame, estimator: object | None) -> Frame:
     """跑一步。列集与训练时对不上就**显式失败**，不硬算。
 
     ⚠ 产模型的那一步走 `predict_rows` 而不是 `run`：`run` 是训练路径，它会拿
     这一行重新拟合一次，算出来的东西与线上模型毫无关系——而且不会报任何错。
-    Args: step, frame。
+    ⚠ 通道 B 那一步的拟合结果**不在** `fitted` 里：`fitted` 只有一份列序，
+    模型本体要靠 `attach_estimator` 装上。漏装的表现不是报错，是那一步说自己
+    「还没有拟合结果」——所以编译期就先拦一道。
+    Args: step, frame, estimator。
     """
     if step.expected and frame.keys != step.expected:
         raise OperatorError(
@@ -172,7 +197,10 @@ def _apply(step: _Step, frame: Frame) -> Frame:
     if step.fitted:
         operator.load_fitted(step.fitted)
     operator.bind_runtime(tz_offset_minutes=0, split_plan=None)
-    if registry.get(step.operator).SERVING_CHANNEL:
+    channel = registry.get(step.operator).SERVING_CHANNEL
+    if channel == CHANNEL_BINARY and estimator is not None:
+        operator.attach_estimator(estimator)
+    if channel:
         return _one_row(
             (_PREDICTION_KEY,), [float(operator.predict_rows(frame)[0])]
         )

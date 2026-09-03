@@ -1,19 +1,24 @@
 """模型版本与绑定的读写。事务边界在这一层。"""
 
 import uuid
+from dataclasses import dataclass, field
 from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from uuid_utils.compat import uuid7
 
+from lib.objectstore import ObjectStore
 from lib.web import Page, PageParams
 from platform_server.apps.dataset.services import formula_library, formula_usage
 from platform_server.apps.modeling.crud import (
     binding_crud,
+    model_artifact_crud,
     model_version_crud,
     node_run_crud,
 )
 from platform_server.apps.modeling.models import (
     ModelingBinding,
+    ModelingModelArtifact,
     ModelingModelVersion,
 )
 from platform_server.apps.modeling.protocols import ModelTask, ServingChannel
@@ -26,61 +31,186 @@ from platform_server.apps.modeling.schemas import (
     ModelVersionSummaryOut,
     ParamMapOut,
 )
-from platform_server.apps.modeling.services import binding_service
+from platform_server.apps.modeling.services import (
+    artifact_io,
+    artifact_store,
+    binding_service,
+)
+from platform_server.apps.modeling.services.artifact_store import (
+    ArtifactRejected,
+)
 from platform_server.apps.modeling.services.entry_contract import NodeRecord
 from platform_server.apps.modeling.services.jsonshape import (
     as_dict,
+    as_text,
     as_texts,
 )
 from platform_server.apps.modeling.services.pipeline_service import Actor
 from platform_server.apps.modeling.services.publish_service import (
+    Publishable,
     fingerprint,
     graph_of_run,
     inspect_run,
+    model_artifact,
     require_publishable_run,
     require_version,
 )
 
 
 async def publish_version(
-    session: AsyncSession, *, payload: ModelVersionCreateIn, actor: Actor
+    session: AsyncSession,
+    *,
+    payload: ModelVersionCreateIn,
+    actor: Actor,
+    store: ObjectStore | None = None,
 ) -> ModelVersionOut:
     """把一次成功运行发布成一个不可变的版本。
 
     ⚠ 不可服务的运行**照样发**，只是 `servable=false` 且带原因：能看指标、能
     做对比，只是绑不上去。全拒的话，用户连「为什么不能上线」都看不到。
-    Args: session, payload, actor。
+    ⚠ 通道 B 的次序是**先搬字节、再落两行**：反过来的话库里会指着一个还不存在
+    的键。搬完落库失败只留一份没人引用的字节，那由保留期收拾。
+    Args: session, payload, actor, store。
     """
     run = await require_publishable_run(session, payload.run_id)
     records = await _records_of(session, run.id)
-    verdict = inspect_run(graph_of_run(run), records)
-    row = model_version_crud.add(
-        session,
-        ModelingModelVersion(
-            pipeline_id=run.pipeline_id,
-            run_id=run.id,
-            version=await model_version_crud.next_version(
-                session, run.pipeline_id
-            ),
-            name=payload.name,
-            algo=verdict.algo or "unknown",
-            task=verdict.task or "regression",
-            servable=verdict.is_servable,
-            serving_channel=verdict.channel,
-            unservable_reason=verdict.reason or None,
-            serving_json=verdict.serving,
-            signature_json=verdict.signature,
-            feature_keys=list(verdict.feature_keys),
-            target_key=verdict.target_key,
-            metrics_json=_metrics_of(records),
-            fingerprint_json=fingerprint(run.row_count, _table_codes_of(run)),
-            description=payload.description,
-            created_by=actor.user_id,
-            created_by_name=actor.name,
+    graph = graph_of_run(run)
+    version_id = uuid7()
+    binary = await _binary_of(store, graph, records, version_id)
+    draft = _Draft(
+        version_id=version_id,
+        version=await model_version_crud.next_version(session, run.pipeline_id),
+        run=run,
+        payload=payload,
+        actor=actor,
+        verdict=_refused_if(
+            inspect_run(graph, records, binary.estimator), binary.reason
         ),
+        metrics=_metrics_of(records),
     )
+    row = model_version_crud.add(session, _version_row(draft))
+    if draft.verdict.is_servable and binary.meta:
+        model_artifact_crud.add(session, _artifact_row(version_id, binary.meta))
     await session.flush()
     return _to_version_out(row)
+
+
+@dataclass(frozen=True)
+class _Draft:
+    """要落成一行版本的一整包。打成一包是因为形参上限是 5。"""
+
+    version_id: uuid.UUID
+    version: int
+    run: Any
+    payload: ModelVersionCreateIn
+    actor: Actor
+    verdict: Publishable
+    metrics: dict[str, Any]
+
+
+def _version_row(draft: _Draft) -> ModelingModelVersion:
+    """一行不可变的模型版本。
+
+    ⚠ 版本 id 是**外面铸好的**：通道 B 的对象键按它拼，而字节要在这一行落库
+    之前就搬到位。
+    Args: draft。
+    """
+    verdict = draft.verdict
+    return ModelingModelVersion(
+        id=draft.version_id,
+        pipeline_id=draft.run.pipeline_id,
+        run_id=draft.run.id,
+        version=draft.version,
+        name=draft.payload.name,
+        algo=verdict.algo or "unknown",
+        task=verdict.task or "regression",
+        servable=verdict.is_servable,
+        serving_channel=verdict.channel,
+        unservable_reason=verdict.reason or None,
+        serving_json=verdict.serving,
+        signature_json=verdict.signature,
+        feature_keys=list(verdict.feature_keys),
+        target_key=verdict.target_key,
+        metrics_json=draft.metrics,
+        fingerprint_json=fingerprint(
+            draft.run.row_count, _table_codes_of(draft.run)
+        ),
+        description=draft.payload.description,
+        created_by=draft.actor.user_id,
+        created_by_name=draft.actor.name,
+    )
+
+
+def _refused_if(verdict: Publishable, reason: str) -> Publishable:
+    """产物那一侧的理由**盖过**图那一侧的结论。
+
+    ⚠ 顺序不能反：字节取不回来时，图看上去仍然完全正常，`inspect_run` 会给出
+    一个「可上线」——而那个版本上线后每一格都是空的。
+    Args: verdict, reason。
+    """
+    if not reason:
+        return verdict
+    return Publishable(
+        is_servable=False,
+        reason=reason,
+        serving={},
+        feature_keys=(),
+        target_key=verdict.target_key,
+        algo=verdict.algo,
+        task=verdict.task,
+        channel=verdict.channel,
+    )
+
+
+@dataclass(frozen=True)
+class _Binary:
+    """通道 B 那一份：搬好的产物元信息，加上已经加载回来的模型本体。"""
+
+    meta: dict[str, Any] = field(default_factory=dict[str, Any])
+    estimator: object | None = None
+    #: 取不回来时那句人话；取得回来是空串
+    reason: str = ""
+
+
+async def _binary_of(
+    store: ObjectStore | None,
+    graph: Any,
+    records: dict[str, NodeRecord],
+    version_id: uuid.UUID,
+) -> _Binary:
+    """通道 B 的发布前置：读回来验一遍，再搬到版本自己的键下。
+
+    ⚠ 读回来这一趟不能省：光有一份产物元信息证明不了那些字节还在、还读得回来。
+    读不回来就当不可服务发布出去，理由写在版本上——那比「上线后每一格都空着」
+    强得多（D10）。
+    Args: store, graph, records, version_id。
+    """
+    meta = model_artifact(graph, records)
+    if not meta:
+        return _Binary()
+    if store is None:
+        return _Binary(reason="本部署没有配对象存储，二进制模型上不了线")
+    try:
+        estimator = await artifact_io.fetch(store, meta)
+        promoted = await artifact_io.promote(
+            store, meta, artifact_store.model_key(str(version_id))
+        )
+    except ArtifactRejected as error:
+        return _Binary(reason=str(error))
+    return _Binary(meta=promoted, estimator=estimator)
+
+
+def _artifact_row(
+    version_id: uuid.UUID, meta: dict[str, Any]
+) -> ModelingModelArtifact:
+    return ModelingModelArtifact(
+        model_version_id=version_id,
+        object_key=as_text(meta.get("object_key")),
+        digest=as_text(meta.get("digest")),
+        size_bytes=int(meta.get("size_bytes") or 0),
+        format_version=int(meta.get("format_version") or 0),
+        runtime_json=as_dict(meta.get("runtime")),
+    )
 
 
 async def list_versions(

@@ -7,10 +7,12 @@ from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
+from lib.objectstore import ObjectStore
 from lib.web import ApiResponse, Page, PageParams, ok, page_params
 from platform_server.apps.modeling.catalog import MODELING_VIEW
 from platform_server.apps.modeling.deps import (
     WriteGate,
+    get_object_store,
     get_publish_context,
     get_session,
     require,
@@ -42,6 +44,7 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 PageDep = Annotated[PageParams, Depends(page_params)]
 ViewDep = Annotated[CallerContext, Depends(require(MODELING_VIEW))]
 PublishDep = Annotated[WriteGate, Depends(get_publish_context)]
+StoreDep = Annotated[ObjectStore, Depends(get_object_store)]
 
 
 @versions.get(
@@ -77,13 +80,14 @@ async def publish_version(
     session: SessionDep,
     response: Response,
     write: PublishDep,
+    store: StoreDep,
 ) -> ApiResponse[ModelVersionOut]:
     """把一次成功运行发布成一个不可变的版本。
 
-    Args: payload, session, response, write。
+    Args: payload, session, response, write, store。
     """
     created = await model_service.publish_version(
-        session, payload=payload, actor=_actor(write)
+        session, payload=payload, actor=_actor(write), store=store
     )
     response.status_code = status.HTTP_201_CREATED
     return ok(created)

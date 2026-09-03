@@ -10,6 +10,7 @@
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from lib.logging import get_logger
 from lib.objectstore import ObjectStore, ObjectStoreError
@@ -60,6 +61,8 @@ class DispatchReport:
 
     outcome: str
     status: str = ""
+    #: 这次运行属于哪条流水线。消费循环拿它就地收敛这条流水线的老明细
+    pipeline_id: uuid.UUID | None = None
 
 
 async def execute_run(
@@ -74,7 +77,11 @@ async def execute_run(
         return DispatchReport(outcome=RUN_ORPHANED)
     if claimed.is_redelivery:
         await _finish(sessions, run_id, _interrupted())
-        return DispatchReport(outcome=RUN_INTERRUPTED, status="failed")
+        return DispatchReport(
+            outcome=RUN_INTERRUPTED,
+            status="failed",
+            pipeline_id=claimed.pipeline_id,
+        )
     sources = await _load_sources(sessions, claimed)
     outcome = await execute_graph(
         claimed.graph,
@@ -89,7 +96,11 @@ async def execute_run(
         ),
     )
     await _finish(sessions, run_id, outcome)
-    return DispatchReport(outcome=RUN_DONE, status=outcome.status)
+    return DispatchReport(
+        outcome=RUN_DONE,
+        status=outcome.status,
+        pipeline_id=claimed.pipeline_id,
+    )
 
 
 @dataclass(frozen=True)
@@ -98,6 +109,7 @@ class _Claimed:
 
     graph: PipelineGraph
     is_redelivery: bool
+    pipeline_id: uuid.UUID
 
 
 async def _claim(sessions: Sessions, run_id: uuid.UUID) -> "_Claimed | None":
@@ -120,6 +132,7 @@ async def _claim(sessions: Sessions, run_id: uuid.UUID) -> "_Claimed | None":
         return _Claimed(
             graph=presenters.graph_of(run.graph_snapshot),
             is_redelivery=redelivery,
+            pipeline_id=run.pipeline_id,
         )
 
 
@@ -166,10 +179,13 @@ async def _persist(
     就是个永远算不出数的版本。
     Args: sessions, run_id, node, store。
     """
-    if node.artifact is not None:
-        await _write_artifact(run_id, node, store)
+    artifact = (
+        None
+        if node.artifact is None
+        else await _write_artifact(run_id, node, store)
+    )
     async with sessions.session() as session:
-        node_run_crud.add(session, _node_row(run_id, node))
+        node_run_crud.add(session, _node_row(run_id, node, artifact))
         run = await run_crud.get(session, run_id)
         if run is not None:
             run_crud.touch(run)
@@ -177,19 +193,20 @@ async def _persist(
 
 async def _write_artifact(
     run_id: uuid.UUID, node: NodeOutcome, store: ObjectStore | None
-) -> None:
-    """把一份产物写进对象存储。写不进去就让这一步失败。
+) -> dict[str, Any] | None:
+    """把一份产物写进对象存储，回一份要落库的元信息。写不进去就让这一步失败。
 
     Args: run_id, node, store。
     """
     if node.artifact is None:  # pragma: no cover —— 调用点已判过
-        return
+        return None
     if store is None:
         raise ObjectStoreError(
             "这条流水线产出了二进制模型，而本部署没有配对象存储"
         )
+    key = artifact_store.run_key(str(run_id), node.node_id)
     await store.put_bytes(
-        artifact_store.run_key(str(run_id), node.node_id),
+        key,
         node.artifact.payload,
         content_type=artifact_store.CONTENT_TYPE,
     )
@@ -200,9 +217,12 @@ async def _write_artifact(
         node_id=node.node_id,
         size_bytes=node.artifact.size_bytes,
     )
+    return artifact_store.meta_of(node.artifact, key)
 
 
-def _node_row(run_id: uuid.UUID, node: NodeOutcome) -> ModelingNodeRun:
+def _node_row(
+    run_id: uuid.UUID, node: NodeOutcome, artifact: dict[str, Any] | None
+) -> ModelingNodeRun:
     return ModelingNodeRun(
         run_id=run_id,
         node_id=node.node_id,
@@ -216,6 +236,7 @@ def _node_row(run_id: uuid.UUID, node: NodeOutcome) -> ModelingNodeRun:
         preview_truncated=node.is_preview_truncated,
         fitted_json=node.fitted,
         io_json=node.io or None,
+        artifact_json=artifact,
     )
 
 

@@ -4,6 +4,8 @@
 """
 
 from platform_server.apps.modeling.services import (
+    artifact_io,
+    artifact_store,
     binding_service,
     frame_source,
     model_service,
@@ -51,6 +53,8 @@ __all__ = [
     "RunContext",
     "RunOutcome",
     "Sources",
+    "artifact_io",
+    "artifact_store",
     "binding_service",
     "check_graph",
     "execute_graph",

@@ -32,6 +32,8 @@ class NodeRecord:
     fitted: dict[str, Any] | None
     #: `{"inputs": {端口: [列 key…]}, "outputs": {端口: [列 key…]}}`
     io: dict[str, Any]
+    #: 这一步产出的二进制模型的元信息（通道 B）；纯 JSON 的算子是 `None`
+    artifact: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

@@ -171,6 +171,13 @@ class ModelingNodeRun(UuidPrimaryKeyMixin, EagerDefaultsMixin, Base):
     # `{"inputs": {端口: [列 key…]}, "outputs": {端口: [列 key…]}}`，
     # 这一步**实际**看到与产出的列。发布时据它算逐步的输入契约（D3）
     io_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # `{object_key, digest, size_bytes, format_version, runtime}`，
+    # 这一步产出的二进制模型（通道 B）。纯 JSON 的算子是 NULL。
+    # ⚠ 摘要与库版本记在**训练那一侧**：发布跑在 api 进程里，那里的 numpy /
+    # sklearn 版本未必与工进程一致，发布时现算会把跨版本那道拒载闸变成摆设
+    artifact_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
     # `{端口名: 结果摘要}`，有硬上限（D19）
     preview_json: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB, nullable=True
