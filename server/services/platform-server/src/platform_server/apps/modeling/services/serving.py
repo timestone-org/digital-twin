@@ -22,11 +22,17 @@ from platform_server.apps.modeling.services.jsonshape import (
     as_texts,
 )
 
-# `serving_json` 的线形版本。改形状要升它，加载期据此拒掉读不懂的版本
-SERVING_FORMAT_VERSION = "1.0"
+# `serving_json` 的线形版本。发布写的是它，加载期据此分派
+SERVING_FORMAT_VERSION = "2.0"
+# 头一版：入口契约取 `input_columns`，且每一步的期望列都是同一份特征列。
+# ⚠ 这条加载路径**一行都不许改**：模型版本不可变，历史版本必须按它当初的口径
+# 继续算。改了不会报错，只是从某一天起某几列的历史值与新值口径不同
+SERVING_FORMAT_V1 = "1.0"
 
 _FIELD_VERSION = "format_version"
 _FIELD_INPUTS = "input_columns"
+_FIELD_ENTRY = "entry_columns"
+_FIELD_KEY = "key"
 _FIELD_STEPS = "steps"
 _FIELD_OPERATOR = "operator"
 _FIELD_CONFIG = "config"
@@ -81,11 +87,12 @@ class CompiledModel:
 def compile_model(serving: dict[str, Any]) -> CompiledModel:
     """把 `serving_json` 编译成可调用对象。形状不对即抛。
 
+    ⚠ 按 `format_version` 分派而不是嗅探键：两版的入口契约含义不同——1.0 那份
+    是**特征工程之后**的列，2.0 那份是之前的（docs/MODELING_PLATFORM_DESIGN.md
+    D4）。嗅探键会让一份缺字段的 2.0 悄悄走 1.0 的路。
     Args: serving。
     """
-    if serving.get(_FIELD_VERSION) != SERVING_FORMAT_VERSION:
-        raise OperatorError("这个模型版本的可服务表示读不懂")
-    features = tuple(as_texts(serving.get(_FIELD_INPUTS)))
+    features = _entry_keys_of(serving)
     if not features:
         raise OperatorError("这个模型版本没有输入契约")
     return CompiledModel(
@@ -94,6 +101,22 @@ def compile_model(serving: dict[str, Any]) -> CompiledModel:
             _step_of(item) for item in as_list(serving.get(_FIELD_STEPS))
         ),
     )
+
+
+def _entry_keys_of(serving: dict[str, Any]) -> tuple[str, ...]:
+    """调用方要提供的那几列，按序。
+
+    Args: serving。
+    """
+    version = as_text(serving.get(_FIELD_VERSION))
+    if version == SERVING_FORMAT_V1:
+        return tuple(as_texts(serving.get(_FIELD_INPUTS)))
+    if version == SERVING_FORMAT_VERSION:
+        return tuple(
+            as_text(as_dict(item).get(_FIELD_KEY))
+            for item in as_list(serving.get(_FIELD_ENTRY))
+        )
+    raise OperatorError("这个模型版本的可服务表示读不懂")
 
 
 def _step_of(raw: Any) -> _Step:
