@@ -20,8 +20,11 @@ from llmcore.errors import (
     ModelRejected,
     ModelUnavailable,
     classified,
+    classified_status,
     is_our_fault,
+    is_our_fault_status,
     reason_of,
+    reason_of_status,
 )
 
 _REQUEST = httpx.Request("POST", "http://model-endpoint/v1/chat/completions")
@@ -96,6 +99,26 @@ def test_the_reason_is_specific_enough_to_act_on(
     error: OpenAIError, expected: str
 ) -> None:
     assert expected in reason_of(error)
+
+
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 422])
+def test_the_status_bucket_agrees_with_the_exception_bucket(
+    status: int,
+) -> None:
+    """⚠ 按状态码分档与按异常类型分档必须给同一个答案：漂开的表现是同一个
+    401 在一条链路上短路、在另一条上不短路。"""
+    assert is_our_fault_status(status) is True
+    assert isinstance(classified_status(status), ModelRejected)
+
+
+@pytest.mark.parametrize("status", [429, 500, 502, 503])
+def test_downstream_status_codes_are_the_retryable_bucket(status: int) -> None:
+    assert is_our_fault_status(status) is False
+    assert classified_status(status).is_retryable is True
+
+
+def test_an_unnamed_status_still_says_which_one_it_was() -> None:
+    assert "418" in reason_of_status(418)
 
 
 def test_the_reason_never_leaks_the_endpoint() -> None:

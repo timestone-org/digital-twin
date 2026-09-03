@@ -21,6 +21,7 @@ from llmcore import (
 
 CHAT = ModelSpec(name="chat-1", kind="chat", has_vision=True)
 EMBED = ModelSpec(name="embed-1", kind="embedding", dimensions=1024)
+RERANK = ModelSpec(name="rerank-1", kind="rerank")
 
 
 def _provider(
@@ -283,3 +284,71 @@ def test_the_version_digest_changes_with_the_kind() -> None:
     plain = _provider()
     other = _provider(kind="codex_oauth")
     assert catalog_version((plain,), ()) != catalog_version((other,), ())
+
+
+def _rerank_provider(
+    options: dict[str, object] | None = None,
+) -> ProviderSpec:
+    return ProviderSpec(
+        id="p1",
+        name="重排那一路",
+        kind=PROVIDER_KIND_OPENAI_COMPAT,
+        base_url="https://endpoint/v1",
+        api_key=SecretStr("sk-secret"),
+        is_enabled=True,
+        models=(RERANK,),
+        options=options,
+    )
+
+
+def test_an_assigned_rerank_purpose_carries_the_configured_dialect() -> None:
+    catalog = _catalog(
+        _rerank_provider({"rerank_dialect": "dashscope"}),
+        Assignment("a.rerank", "p1", "rerank-1"),
+    )
+    endpoint = catalog.rerank_endpoint("a.rerank", timeout_s=8.0)
+    assert endpoint is not None
+    assert endpoint.model == "rerank-1"
+    assert endpoint.dialect == "dashscope"
+    assert endpoint.timeout_s == 8.0
+
+
+def test_an_unconfigured_dialect_is_an_empty_string_not_a_guess() -> None:
+    """⚠ 这一层不挑方言：挑哪一路是方言注册表的事，而它在调用侧。"""
+    catalog = _catalog(
+        _rerank_provider(), Assignment("a.rerank", "p1", "rerank-1")
+    )
+    endpoint = catalog.rerank_endpoint("a.rerank", timeout_s=8.0)
+    assert endpoint is not None
+    assert endpoint.dialect == ""
+
+
+def test_a_dialect_that_is_not_a_string_is_read_as_unconfigured() -> None:
+    """⚠ `options` 是一段透传 JSON，塞个数字进来也存得下。"""
+    provider = _rerank_provider({"rerank_dialect": 7})
+    assert provider.rerank_dialect == ""
+
+
+def test_a_rerank_purpose_never_resolves_to_a_chat_model() -> None:
+    """⚠ 拿对话模型名去打重排端点是一条必然失败的调用。"""
+    catalog = _catalog(_provider(), Assignment("a.rerank", "p1", "chat-1"))
+    assert catalog.rerank_endpoint("a.rerank", timeout_s=1.0) is None
+
+
+def test_a_login_based_lane_has_no_rerank_endpoint() -> None:
+    provider = ProviderSpec(
+        id="p1",
+        name="订阅那一路",
+        kind="codex_oauth",
+        base_url="",
+        api_key=SecretStr(""),
+        is_enabled=True,
+        models=(RERANK,),
+    )
+    catalog = _catalog(provider, Assignment("a.rerank", "p1", "rerank-1"))
+    assert catalog.rerank_endpoint("a.rerank", timeout_s=1.0) is None
+
+
+def test_rerank_models_are_listed_under_their_own_kind() -> None:
+    provider = _provider(models=(CHAT, EMBED, RERANK))
+    assert provider.models_of("rerank") == (RERANK,)
