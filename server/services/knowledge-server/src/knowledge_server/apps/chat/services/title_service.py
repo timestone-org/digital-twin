@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from knowledge_server.apps.chat.models import ChatSession
 from lib.logging import get_logger
 from llmcore import ModelChoice
+from llmcore.deltas import text_of
 from llmcore.errors import ModelDisabled, ModelRejected, ModelUnavailable
 from llmcore.turn import Responder
 
@@ -101,8 +102,11 @@ async def _asked(model: Responder, question: str, answer: str) -> str:
             reason=type(error).__name__,
         )
         return ""
-    content = reply.content
-    return _cleaned(content) if isinstance(content, str) else ""
+    # ⚠ 走 `text_of` 而不是 `isinstance(str)`：带思考摘要的那几路把摘要与正文
+    # 分别放进内容块里，`content` 于是是一串块。当成字符串取的话这里恒空，而空
+    # 的表现是**悄悄退回兜底**——清单上是用户那句问话被拦腰截断的前 16 个字，
+    # 看着像「模型就是这么起的」，没有任何报错
+    return _cleaned(text_of(reply))
 
 
 async def _needs_title(sessions: Sessions, chat_session_id: uuid.UUID) -> bool:

@@ -5,9 +5,11 @@
 """
 
 import pytest
+from langchain_core.messages import AIMessage
 
 from knowledge_server.apps.chat.services.title_service import (
     MAX_TITLE_CHARS,
+    _asked,
     _cleaned,
     fallback_title,
 )
@@ -50,3 +52,46 @@ def test_the_fallback_takes_the_head_of_what_the_user_asked() -> None:
 def test_the_fallback_collapses_whitespace() -> None:
     """⚠ 按**字符**截而不是按词：中文没有空格，按词截等于不截。"""
     assert fallback_title("冷却水\n\n出口温度") == "冷却水 出口温度"
+
+
+class _Blocky:
+    """一路把标题放进内容块里的模型（Responses 方言那种）。"""
+
+    def __init__(self, content: object) -> None:
+        self.content = content
+
+    async def respond(self, **kwargs: object) -> AIMessage:
+        """回一条 content 是块串的消息。
+
+        Args: **kwargs。
+        """
+        del kwargs
+        return AIMessage(
+            content=self.content
+        )  # pyright: ignore[reportArgumentType]
+
+
+async def test_a_title_split_into_content_blocks_is_still_a_title() -> None:
+    """⚠ 带思考摘要的那几路把摘要与正文分别放进块里，`content` 于是是一串块。
+    当成字符串取的话这里恒空，而空的表现是**悄悄退回兜底**——清单上是用户那
+    句问话被拦腰截断的前 16 个字，看着像「模型就是这么起的」，没有任何报错。"""
+    model = _Blocky(
+        [
+            {
+                "type": "reasoning",
+                "summary": [{"type": "summary_text", "text": "想想"}],
+            },
+            {"type": "text", "text": "「冷却水运行参数」。"},
+        ]
+    )
+
+    made = await _asked(model, "冷却水出口温度上限是多少", "上限 65 ℃")
+
+    assert made == "冷却水运行参数"
+
+
+async def test_a_block_reply_without_any_text_falls_back() -> None:
+    """⚠ 纯思考、没有正文块时给空串，让调用方走兜底——把空标题落库等于没起名。"""
+    model = _Blocky([{"type": "reasoning", "summary": []}])
+
+    assert await _asked(model, "问", "答") == ""
