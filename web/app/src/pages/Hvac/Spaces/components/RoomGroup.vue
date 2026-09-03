@@ -8,7 +8,7 @@
  */
 import type { AcUnit, Room } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtHelpTip, DtTag } from '@dt/ui'
+import { DtButton, DtCard, DtHelpTip, DtTag } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
 
@@ -32,8 +32,8 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <section class="room-group">
-    <header class="room-group__head">
+  <DtCard padding="sm" class="room-group">
+    <template #header>
       <div class="room-group__title">
         <span class="room-group__name">{{ props.room.name }}</span>
         <DtTag
@@ -48,29 +48,30 @@ const emit = defineEmits<{
           text="这几台空调共处一个房间，开停会互相影响，后续预测按房间整体算。"
         />
       </div>
+    </template>
+
+    <template #actions>
       <PermGuard :codes="[PERMISSION_CODES.acManage]">
-        <div class="room-group__actions">
-          <DtButton
-            variant="ghost"
-            intent="neutral"
-            size="sm"
-            icon="pencil"
-            aria-label="重命名房间"
-            title="重命名房间"
-            @click="emit('rename', props.room)"
-          />
-          <DtButton
-            variant="ghost"
-            intent="danger"
-            size="sm"
-            icon="trash"
-            aria-label="删除房间"
-            title="删除房间"
-            @click="emit('remove', props.room)"
-          />
-        </div>
+        <DtButton
+          variant="ghost"
+          intent="neutral"
+          size="sm"
+          icon="pencil"
+          aria-label="重命名房间"
+          title="重命名房间"
+          @click="emit('rename', props.room)"
+        />
+        <DtButton
+          variant="ghost"
+          intent="danger"
+          size="sm"
+          icon="trash"
+          aria-label="删除房间"
+          title="删除房间"
+          @click="emit('remove', props.room)"
+        />
       </PermGuard>
-    </header>
+    </template>
 
     <div v-if="props.units.length > 0" class="room-group__grid">
       <AcUnitChip
@@ -85,47 +86,27 @@ const emit = defineEmits<{
     <p v-else class="room-group__empty">
       这个房间还没有空调。到「空调台账」建档时选这个房间，或把别处的空调改派过来。
     </p>
-  </section>
+  </DtCard>
 </template>
 
 <style scoped lang="scss">
 .room-group {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px 14px;
-  border: 1px solid var(--card-border);
-  border-radius: var(--card-radius);
-  background: var(--card-bg);
-
-  &__head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    min-height: 28px;
-  }
-
   &__title {
     display: flex;
     align-items: center;
     gap: 8px;
     min-width: 0;
+    min-height: 24px;
   }
 
   &__name {
     color: var(--text-title);
+    font-family: var(--font-display);
+    font-size: 15px;
     font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  &__actions {
-    display: flex;
-    flex: none;
-    align-items: center;
-    gap: 2px;
   }
 
   &__grid {
@@ -134,8 +115,16 @@ const emit = defineEmits<{
     grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
   }
 
+  // 空房间的那句话画成一格虚线占位：它与上面那些实线小卡占同一条格线，
+  // 「这里本该有空调」才看得出来，而不是一段悬空的灰字
   &__empty {
+    display: flex;
+    align-items: center;
     margin: 0;
+    min-height: 3.25rem;
+    padding: 8px 12px;
+    border: 1px dashed var(--border-subtle);
+    border-radius: var(--radius-md);
     color: var(--text-disabled);
     font-size: 12px;
     line-height: 1.6;
