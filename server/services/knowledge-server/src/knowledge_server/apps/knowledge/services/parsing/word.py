@@ -4,7 +4,8 @@
 是两份平行清单，各走各的会把全部表格堆到文末，而它们的标题路径于是取自最后
 一个标题——第一章的表被引用成末章的。`iter_inner_content()` 才给真实先后。
 
-⚠ 只读**文本与结构**：不取嵌入的图片、不跑宏、不跟外部引用。
+⚠ 取**文本、结构与嵌入的图片**；不跑宏、不跟外部引用。图按它所在的那一段
+定位（`§P3`），所以引用面上「这句话旁边配的是哪张图」是准的。
 
 ⚠ 三件事各有决定，见 ADR-0043：页眉页脚**每节收一次**（文件号与版本常常只
 写在那儿，而它们在文件里本来就只存一份）；脚注尾注**够不着**（python-docx
@@ -14,17 +15,23 @@
 ⚠ 解析是**纯 CPU 且阻塞**的，调用方必须扔进进程池。
 """
 
+import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from io import BytesIO
+from typing import cast
 
 from docx import Document
 from docx.document import Document as DocxDocument
 from docx.oxml.ns import qn
+from docx.oxml.table import CT_Tbl
+from docx.oxml.text.paragraph import CT_P
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 
 from knowledge_server.apps.knowledge.services.parsing.ports import (
     Block,
+    Figure,
     Locator,
     ParsedDocument,
     RawItem,
@@ -38,6 +45,18 @@ from knowledge_server.apps.knowledge.services.parsing.structure import (
 
 # 与纯文本那一路同一个上限，理由也同源
 MAX_BLOCKS = 20_000
+# 一份文档最多收几张图。⚠ 要有上限：图跟着正文一起进内存，一份塞了几千张
+# 小图的文件会变成几千次对象存储写
+MAX_FIGURES = 500
+# 没有图注的图拿这句占位。⚠ 块的正文不许为空（`text_present` 那条 CHECK），
+# 而一张没有图注的插图仍然值得在引用面上摆出来
+NO_CAPTION = "（图，无图注）"
+# 图注那一段的开头：「图 1」「表 2-1」「Figure 3」。⚠ 只认这几个词打头**且**
+# 后面跟着编号的——认宽了会把图后面那一整段正文挂成图注，而错的图注比没有
+# 图注更难发现
+_CAPTION_HEAD = re.compile(
+    r"^(图|表|附图|Figure|Fig\.?|Table)\s*[0-9０-９一二三四五六七八九十]"
+)
 
 _DOCX_SUFFIXES = (".docx",)
 # 列表项的样式名前缀。⚠ 中英各一套：现场的模板多半是中文版 Word 存的
@@ -119,10 +138,124 @@ class _Walk:
     stack: list[tuple[int, str]] = field(default_factory=list[tuple[int, str]])
     # 已经摊过几张表，用来给 locator 编号
     tables: int = 0
+    # 收到的图，按出现序
+    figures: list[Figure] = field(default_factory=list[Figure])
+    # Word 的关系 id → 这一份产出里的 `ref`
+    refs: dict[str, str] = field(default_factory=dict[str, str])
 
 
-def _paragraph_into(walk: _Walk, paragraph: Paragraph) -> None:
-    """一个段落成一块：标题压栈，列表项带上嵌套深度。
+def _body_items(document: DocxDocument) -> list[CT_P | CT_Tbl]:
+    """正文里的段落与表格元素，按文档序。
+
+    ⚠ `inner_content_elements` 在 python-docx 1.2 里没有类型标注，`Any` 在
+    这一处**一次收敛**（code-style-python）：往外带的话每个取值点都要再判
+    一次，而漏判的那一处会在运行期才炸。
+
+    Args: document。
+    """
+    raw = cast(
+        list[object],
+        document.element.body.inner_content_elements,  # pyright: ignore[reportUnknownMemberType]
+    )
+    return [one for one in raw if isinstance(one, CT_P | CT_Tbl)]
+
+
+def _embedded(element: CT_P) -> list[str]:
+    """这一段里挂着的图，按出现序给它们的关系 id。
+
+    ⚠ 走 `a:blip/@r:embed` 而不是 `Document.inline_shapes`：后者是一份拍平的
+    清单，取得到图却取不到它在正文的哪一段，而「图在哪一段」正是引用要指的
+    那个位置。
+
+    ⚠ `xpath` 回的是 `Any`，所以在这个函数里一次收敛成字符串，不往外带——与
+    `_textbox_texts` 同源，python-docx 没有够得着图的公开面。
+
+    Args: element。
+    """
+    found = cast(list[object], element.xpath(".//a:blip/@r:embed"))
+    return [one for one in found if isinstance(one, str) and one]
+
+
+def _caption_at(
+    document: DocxDocument, elements: Sequence[CT_P | CT_Tbl], index: int
+) -> str:
+    """紧挨着的下一段如果是图注就拿来，不是给空串。
+
+    ⚠ 只看**下一段**且只认「图 1」「表 2-1」这种打头的：Word 的惯例是把图注
+    单独写成图下面的一段，而它在正文里就是一段普通文字。认宽了会把图后面那
+    一整段正文挂成图注，而错的图注比没有图注更难发现。
+
+    ⚠ 图自己那一段的文字**不当图注**：它已经是一个正文块了，再当图注会让同
+    一句话在引用卡片上出现两遍。
+
+    Args: document, elements, index。
+    """
+    nxt = elements[index + 1] if index + 1 < len(elements) else None
+    if not isinstance(nxt, CT_P):
+        return ""
+    text = Paragraph(nxt, document).text.strip()
+    return text if _CAPTION_HEAD.match(text) else ""
+
+
+def _figure_into(
+    walk: _Walk, document: DocxDocument, rid: str, caption: str
+) -> None:
+    """一张图：收字节、去重，并出一个 `figure` 块指向它。
+
+    ⚠ 同一个关系 id 在文里出现两次只收一份字节，两个块指同一个 `ref`：Word
+    复用同一张图是常事，而重复上传的那一份到了对象存储那一步本来也会被内容
+    哈希合掉。
+
+    ⚠ 关系拿不到、字节是空的、或者根本不是图片的一律**跳过而不是整份失败**：
+    一张坏图不该让一份两百页的手册摄不进来。
+
+    Args: walk, document, rid, caption。
+    """
+    ref = walk.refs.get(rid, "")
+    if not ref:
+        if len(walk.figures) >= MAX_FIGURES:
+            return
+        part = document.part.related_parts.get(rid)
+        blob = bytes(part.blob) if part is not None else b""
+        media = str(part.content_type) if part is not None else ""
+        if not blob or not media.startswith("image/"):
+            return
+        ref = f"docx-{len(walk.figures) + 1}"
+        walk.refs[rid] = ref
+        walk.figures.append(
+            Figure(ref=ref, content=blob, media_type=media, caption=caption)
+        )
+    walk.made.append(
+        Block(
+            kind="figure",
+            text=caption or NO_CAPTION,
+            locator=Locator(path=path_of(walk.stack)),
+            figure_ref=ref,
+        )
+    )
+
+
+def _paragraph_into(
+    walk: _Walk,
+    document: DocxDocument,
+    element: CT_P,
+    caption: str,
+) -> None:
+    """一个段落成一块：标题压栈，列表项带上嵌套深度；段里挂的图另出块。
+
+    ⚠ 先出正文块再出图块：图注多半写在图**后面**那一段，而块序就是引用面上
+    那几处的先后。
+
+    Args: walk, document, element, caption。
+    """
+    paragraph = Paragraph(element, document)
+    _text_into(walk, paragraph)
+    for rid in _embedded(element):
+        _figure_into(walk, document, rid, caption)
+
+
+def _text_into(walk: _Walk, paragraph: Paragraph) -> None:
+    """段落的文字成一块；空段落不收。
 
     Args: walk, paragraph。
     """
@@ -278,24 +411,35 @@ class DocxParser:
     )
 
     def parse(self, raw: RawItem) -> ParsedDocument:
-        """页眉页脚 → 正文（段落与表格按文档序）→ 文本框。
+        """页眉页脚 → 正文（段落、表格与插图按文档序）→ 文本框。
+
+        ⚠ 走的是 `body.inner_content_elements` 而不是 `iter_inner_content()`：
+        两者给的是同一串东西同一个次序，但前者连 XML 元素一起给——图挂在
+        `w:drawing` 上，只拿 `Paragraph` 够不着它。
 
         Args: raw。
         """
         document = Document(BytesIO(raw.content))
         walk = _Walk()
         walk.made.extend(_section_blocks(document))
-        for item in document.iter_inner_content():
+        elements = _body_items(document)
+        for index, element in enumerate(elements):
             if len(walk.made) >= MAX_BLOCKS:
                 break
-            if isinstance(item, Table):
-                _table_into(walk, item)
+            if isinstance(element, CT_P):
+                _paragraph_into(
+                    walk,
+                    document,
+                    element,
+                    _caption_at(document, elements, index),
+                )
             else:
-                _paragraph_into(walk, item)
+                _table_into(walk, Table(element, document))
         walk.made.extend(_textbox_blocks(document, len(walk.made)))
         made = walk.made[:MAX_BLOCKS]
         return ParsedDocument(
             title=raw.filename,
             blocks=tuple(made),
             is_truncated=len(made) >= MAX_BLOCKS,
+            figures=tuple(walk.figures),
         )
