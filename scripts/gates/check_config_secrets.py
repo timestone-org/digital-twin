@@ -68,6 +68,42 @@ def _class_fields(
     return classes
 
 
+# 数着数的类型。⚠ 密钥永远不是数：`max_input_tokens: int` 里的 token 是模型
+# 那个 token，与凭据没有一点关系，而只按名字判会把它当成密钥
+_COUNTING = frozenset({"int", "float", "bool"})
+
+
+def _numeric_fields(tree: ast.Module) -> set[tuple[str, str]]:
+    """标注成数值类型的字段，按 (类名, 字段名) 索引。
+
+    Args: tree。
+    """
+    found: set[tuple[str, str]] = set()
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for item in node.body:
+            if not isinstance(item, ast.AnnAssign):
+                continue
+            if not isinstance(item.target, ast.Name):
+                continue
+            if _annotation_name(item.annotation) in _COUNTING:
+                found.add((node.name, item.target.id))
+    return found
+
+
+def _annotation_name(node: ast.expr) -> str:
+    """标注摊成一个名字；`int | None` 取 `int`，认不出给空串。
+
+    Args: node。
+    """
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        return _annotation_name(node.left)
+    return ""
+
+
 def _base_names(tree: ast.Module, name: str) -> list[str]:
     for node in tree.body:
         if isinstance(node, ast.ClassDef) and node.name == name:
@@ -100,9 +136,14 @@ def check_secrets_have_no_default() -> list[Violation]:
         tree = parse(path)
         if tree is None:
             continue
-        for fields in _class_fields(tree).values():
+        counting = _numeric_fields(tree)
+        for owner, fields in _class_fields(tree).items():
             for name, value in fields:
                 if not SECRET_WORDS.search(name):
+                    continue
+                # ⚠ 数值字段放行：`token` 这个词在 LLM 语境里是计量单位
+                # （`max_input_tokens`），而密钥永远不是一个数
+                if (owner, name) in counting:
                     continue
                 if _has_string_default(value):
                     found.append(

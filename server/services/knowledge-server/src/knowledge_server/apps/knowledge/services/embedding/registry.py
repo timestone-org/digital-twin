@@ -31,6 +31,9 @@ class RemoteEmbedder:
     """
 
     adapter: EmbeddingAdapter
+    # 端点的窗口。⚠ 从配置来而不是从适配器来：OpenAI 兼容口径里没有哪一格会
+    # 告诉你它是多少，而问不出来的后果是切块层拿一个赌来的数当上限
+    max_input_tokens: int
 
     @property
     def id(self) -> str:
@@ -60,24 +63,30 @@ class RemoteEmbedder:
         return await self.adapter.embed(texts)
 
 
-def build_embedder(endpoint: EmbeddingEndpoint | None) -> Embedder:
+def build_embedder(
+    endpoint: EmbeddingEndpoint | None, max_input_tokens: int
+) -> Embedder:
     """按定死的端点装一路嵌入；没配就给 `NullEmbedder`。
 
     ⚠ 给 `Null*` 而不是 `None`：调用方于是不必写「这一路在不在」的分支，
     而缺席由 `can_embed` 如实说出来。
 
-    Args: endpoint。
+    Args: endpoint, max_input_tokens。
     """
     made = build_openai_embedding(endpoint)
-    return NullEmbedder() if made is None else RemoteEmbedder(adapter=made)
+    if made is None:
+        return NullEmbedder()
+    return RemoteEmbedder(adapter=made, max_input_tokens=max_input_tokens)
 
 
-def build_dynamic_embedder(adapter: DynamicEmbeddingAdapter) -> Embedder:
+def build_dynamic_embedder(
+    adapter: DynamicEmbeddingAdapter, max_input_tokens: int
+) -> Embedder:
     """按「调用时才解端点」的适配器装一路嵌入。
 
     ⚠ 总是装得出来：接没接由 `can_embed` 在每次问到时如实回答，而不是在
     装配期钉死——目录里的分配是运行期可改的。
 
-    Args: adapter。
+    Args: adapter, max_input_tokens。
     """
-    return RemoteEmbedder(adapter=adapter)
+    return RemoteEmbedder(adapter=adapter, max_input_tokens=max_input_tokens)

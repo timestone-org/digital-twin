@@ -6,6 +6,11 @@
 
 ⚠ `dimensions` 要如实报：它会跟着每一条向量落库，而库上钉的那一格是「现在用
 哪一路」。两者不一致即那条已作废，而不一致的表现只是「召回忽然变差了」。
+
+⚠ `max_input_tokens` 同样不是装饰：**嵌入端点对超出窗口的那一截静默截断、
+不报错**。本部署实测 `bge-large-zh-v1.5` 的窗口约 520 个汉字——拿两段只有结尾
+不同的长文本量余弦，超过窗口之后余弦恰好等于 1（两条向量逐位相同）。切块层
+要拿它当上限，而不是自己定一个常量赌它更窄。
 """
 
 from collections.abc import Sequence
@@ -42,6 +47,15 @@ class Embedder(Protocol):
         ...
 
     @property
+    def max_input_tokens(self) -> int:
+        """一次最多吃多少 token，超出的那一截会被端点**静默丢掉**。
+
+        ⚠ 缺席时是 0，而 0 不是「不限」：调用方要把它当成「这套部署此刻算不出
+        向量」，与 `can_embed` 同一档处理。
+        """
+        ...
+
+    @property
     def can_embed(self) -> bool:
         """这一路此刻真能算吗。"""
         ...
@@ -65,6 +79,7 @@ class NullEmbedder:
     id: str = "none"
     dimensions: int = 0
     model: str | None = None
+    max_input_tokens: int = 0
     can_embed: bool = False
 
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:

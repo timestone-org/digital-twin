@@ -180,7 +180,8 @@ def build_container(settings: Settings) -> Container:
             DynamicEmbeddingAdapter(
                 resolve=lambda: _embedding_endpoint(settings, catalog),
                 refresh=catalog.refresh,
-            )
+            ),
+            settings.embedding_max_input_tokens,
         ),
         catalog=catalog,
         # ⚠ 断路器一个进程一份、跟着容器活，且 `:ask` 与对话面**共用**这一份：

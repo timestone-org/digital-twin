@@ -30,12 +30,16 @@ ROLE_WORKER = "worker"
 # 定死）与环境变量那一路嵌入端点的维数：两处必须是同一个数，所以只有一个常量
 DEFAULT_EMBEDDING_DIMENSIONS = 1536
 
-# 一个块最多多少字符。⚠ 有上限：嵌入端点按 token 收费也按 token 截断，
-# 超了那一截**不报错**，只是没进向量——表现是「这一段怎么都检索不到」
-MAX_CHUNK_CHARS = 2_000
-# 相邻块的重叠字符数。⚠ 不能是 0：切在句子中间的那一刀会让两边都答不出
-# 跨刀的问题，而它看起来只是「这个问题模型不会」
-CHUNK_OVERLAP_CHARS = 200
+# 嵌入端点窗口的缺省值。⚠ 切块上限由它折算而来，**不是**切块层自己的常量：
+# 端点对超出窗口的那一截静默截断、不报错，配大了只表现为「这一段明明有，
+# 就是搜不到」。512 是 bge 系列这类 BERT 底座的常见窗口
+DEFAULT_EMBEDDING_MAX_INPUT_TOKENS = 512
+# 一块至少多少 token。⚠ 攒不够就跨标题继续攒：只有一行标题的块又短又泛，
+# 与任何查询都有中等相似度，专挤名次
+DEFAULT_CHUNK_MIN_TOKENS = 80
+# 相邻块的重叠字符数。⚠ 不能是 0：跨过一刀的问题两边都答不出，
+# 而它看起来只是「这个问题模型不会」
+DEFAULT_CHUNK_OVERLAP_CHARS = 120
 # 一次检索最多回多少条
 MAX_RETRIEVAL_HITS = 50
 # 一份原件最大多少字节。⚠ 有上限：一份几百兆的文件会把 worker 的内存吃干，
@@ -112,7 +116,17 @@ class Settings(
     embedding_api_key: SecretStr | None = None
     embedding_model: str = ""
     embedding_dimensions: int = DEFAULT_EMBEDDING_DIMENSIONS
+    # 嵌入端点一次吃得下多少 token。⚠ 切块上限由它折算而来：端点对超出窗口的
+    # 那一截**静默截断、不报错**，配大了的表现是「这一段明明有，就是搜不到」。
+    # 换嵌入模型要跟着改——它是模型的属性，而 OpenAI 兼容口径里问不出来
+    embedding_max_input_tokens: int = Field(
+        default=DEFAULT_EMBEDDING_MAX_INPUT_TOKENS, gt=0
+    )
     embedding_timeout_s: float = 30.0
+    # 切块的下限与重叠。⚠ 上限不在这里：它由上面那格窗口折算而来，
+    # 给它单独一格配置就等于允许两者漂开，而漂开的那一侧不报错
+    chunk_min_tokens: int = Field(default=DEFAULT_CHUNK_MIN_TOKENS, ge=0)
+    chunk_overlap_chars: int = Field(default=DEFAULT_CHUNK_OVERLAP_CHARS, ge=0)
     # 一次嵌入调用最多带几段。⚠ 有上限：端点对单次请求的总 token 有限，
     # 超了整批失败，而失败的是「这一次摄取」不是「这一段」
     embedding_batch_size: int = 16
