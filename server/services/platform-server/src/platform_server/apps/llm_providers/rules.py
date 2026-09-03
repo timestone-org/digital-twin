@@ -119,7 +119,9 @@ def _value_mismatch(
     if found is None:
         return None
     if not isinstance(found, str) or found not in values:
-        return f"{_OPTION_LABELS[key]}只能是 {'/'.join(values)}"
+        # ⚠ 没登记名字的那一格退回键名，不抛：这一条跑在请求路径上，
+        # 一个漏写的标签不该把一次 422 变成一条 500
+        return f"{_OPTION_LABELS.get(key, key)}只能是 {'/'.join(values)}"
     return None
 
 
