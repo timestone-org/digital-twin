@@ -15,7 +15,7 @@ import { computed, ref, watch } from 'vue'
 
 import type { FormOptions } from './schemaForm'
 import { fieldsOf } from './schemaForm'
-import { sourceTablesFor } from './upstream'
+import { sourceTablesFor, upstreamSourcesFor, visibleKeysOf } from './upstream'
 import { useLedgerOptions } from './useLedgerOptions'
 
 type Operators = ReadonlyMap<string, ModelingOperator>
@@ -31,21 +31,48 @@ export interface ConfigPanelDeps {
 }
 
 /** 列候选列不出东西时该说哪一句。 */
-function noteFor(tables: readonly string[], hasColumns: boolean): string {
+function noteFor(
+  tables: readonly string[],
+  hasColumns: boolean,
+  isNarrowed: boolean,
+): string {
   if (tables.length === 0) return '先在上游的取数算子里选好台账'
-  if (!hasColumns) return '这张台账还没有列，或者当前账号看不到它的列'
-  return ''
+  if (hasColumns) return ''
+  if (isNarrowed) return '上游那一步的取数把列挑窄了，这里一列都不剩'
+  return '这张台账还没有列，或者当前账号看不到它的列'
 }
 
-/** 当前这个节点该看哪些列。 */
+/**
+ * 当前这个节点该看哪些列。
+ *
+ * ⚠ 收窄只看**别人**挑了什么，正在配的那个取数节点自己不算：拿它自己的选择去
+ * 收窄自己的候选，等于一取消勾选就再也勾不回来。
+ */
 function columnsFor(
   deps: ConfigPanelDeps,
   ledger: Ledger,
   nodeId: string | null,
 ): { columns: readonly { key: string; name: string }[]; note: string } {
+  const sources = upstreamSourcesFor(
+    deps.graph.value,
+    deps.operators.value,
+    nodeId,
+  )
   const codes = sourceTablesFor(deps.graph.value, deps.operators.value, nodeId)
-  const columns = codes.flatMap((code) => [...ledger.columnsOf(code)])
-  return { columns, note: noteFor(codes, columns.length > 0) }
+  const all = codes.flatMap((code) => [...ledger.columnsOf(code)])
+  const visible = visibleKeysOf(
+    sources.filter((item) => item.nodeId !== nodeId),
+  )
+  const columns =
+    visible === null ? all : all.filter((item) => visible.has(item.key))
+  return {
+    columns,
+    note: noteFor(
+      codes,
+      columns.length > 0,
+      visible !== null && all.length > 0,
+    ),
+  }
 }
 
 /** 当前开着的那个节点、它的算子与摊平后的字段表。 */

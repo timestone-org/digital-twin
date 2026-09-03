@@ -55,6 +55,17 @@ class PipelineOut(PipelineSummaryOut):
     graph: PipelineGraph
 
 
+class GraphCheckIn(InputModel):
+    """校验**哪一张**图。
+
+    ⚠ 给了 `graph` 就校验这一张（画布上那份还没保存的），不给才回退到库里那份：
+    画布上边改边校验是这个端点存在的全部理由，只认库里那份的话，用户看到的
+    永远是上一次保存时的问题（docs/MODELING_DESIGN.md §8.2）。
+    """
+
+    graph: PipelineGraph | None = None
+
+
 class GraphIssueOut(OutputModel):
     """一条图校验问题。`node_id` / `edge_id` 给界面定位。"""
 

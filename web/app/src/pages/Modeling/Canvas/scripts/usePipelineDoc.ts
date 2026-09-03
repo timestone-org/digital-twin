@@ -13,23 +13,52 @@ import type {
   ModelingPipeline,
 } from '@dt/contracts'
 import { useToast } from '@dt/ui'
+import type { Ref, ShallowRef } from 'vue'
 import { ref, shallowRef } from 'vue'
 
 import * as modeling from '@/api/modeling'
 import { describeError } from '@/composables/useAsyncList'
+import type { RacedFetch } from '@/composables/useRacedFetch'
+import { useRacedFetch } from '@/composables/useRacedFetch'
 
-/** 静态检查一张图。出错时弹一次并给 null。 */
-async function checkGraph(
-  pipelineId: string,
+/** 跑一次校验要碰的那几摊状态。 */
+interface CheckDeps {
+  pipeline: ShallowRef<ModelingPipeline | null>
+  issues: Ref<readonly ModelingGraphIssue[]>
+  toast: ReturnType<typeof useToast>
+  raced: RacedFetch
+}
+
+/**
+ * 静态检查画布上这张图，把问题逐条挂到 `issues` 上。
+ *
+ * ⚠ 校验的是**画布上当前那张图**，不是库里那份：让用户在保存前就知道图有没有
+ * 问题，是这个端点存在的全部理由。
+ * ⚠ 边改边校验那一路要 `isQuiet`：每改一笔弹一次 toast 的话，掉线时整屏都是
+ * 红条；而按「运行」那一路必须出声，否则用户按了没反应。
+ */
+async function runCheck(
+  deps: CheckDeps,
   graph: ModelingGraph,
-  toast: ReturnType<typeof useToast>,
-): Promise<ModelingGraphCheck | null> {
-  try {
-    return await modeling.validateModelingGraph(pipelineId, graph)
-  } catch (caught) {
-    toast.error(describeError(caught))
-    return null
-  }
+  isQuiet: boolean,
+): Promise<boolean> {
+  const current = deps.pipeline.value
+  if (current === null) return false
+  let isValid = false
+  await deps.raced.run(
+    (signal) => modeling.validateModelingGraph(current.id, graph, signal),
+    {
+      ok: (check: ModelingGraphCheck) => {
+        deps.issues.value = check.issues
+        isValid = check.is_valid
+      },
+      fail: (caught) => {
+        if (!isQuiet) deps.toast.error(describeError(caught))
+      },
+      settled: () => undefined,
+    },
+  )
+  return isValid
 }
 
 /** 存图。出错时弹一次并给 null。 */
@@ -55,6 +84,8 @@ export function usePipelineDoc() {
   const isSaving = ref(false)
   const error = ref<string | null>(null)
   const toast = useToast()
+  // 边改边校验：慢的那次后返回不许盖掉快的那次，否则问题清单会退回上一版图的
+  const checking = useRacedFetch()
 
   async function load(pipelineId: string): Promise<ModelingPipeline | null> {
     isLoading.value = true
@@ -88,13 +119,9 @@ export function usePipelineDoc() {
       pipeline.value = next
       return true
     },
-    validate: async (graph: ModelingGraph) => {
-      const current = pipeline.value
-      if (current === null) return false
-      const check = await checkGraph(current.id, graph, toast)
-      if (check === null) return false
-      issues.value = check.issues
-      return check.is_valid
-    },
+    validate: (graph: ModelingGraph, isQuiet = false) =>
+      runCheck({ pipeline, issues, toast, raced: checking }, graph, isQuiet),
+    /** 离开画布时作废在飞的那一次校验。 */
+    stopChecking: () => checking.cancel(),
   }
 }

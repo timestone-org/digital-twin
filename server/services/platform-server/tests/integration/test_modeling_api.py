@@ -176,8 +176,51 @@ async def test_validation_lists_every_problem_at_once(
     assert response.status_code == HTTP_OK
     result = data_of(response)
     assert result["is_valid"] is False
-    assert "上游没有列「没有这一列」" in [
-        issue["message"] for issue in result["issues"]
+    assert (
+        "参数「目标列」里的列「没有这一列」上游没有，上游现有：温度、能耗、负荷"
+        in [issue["message"] for issue in result["issues"]]
+    )
+
+
+async def test_validation_checks_the_graph_in_the_request_body(
+    app_client: httpx.AsyncClient,
+) -> None:
+    """校验的是**请求体里那张图**，不是库里那份。
+
+    ⚠ 画布上那张还没保存：只认库里那份的话，用户改完一条再按校验，看到的仍是
+    上一次保存时的问题，而这正是这个端点存在的理由。
+    """
+    created = await create_pipeline(app_client, "draft", linear_graph("any"))
+    draft = linear_graph("any")
+    draft["nodes"][3]["config"] = {"target_column": "没有这一列"}
+
+    response = await app_client.post(
+        f"{PIPELINES}/{created['id']}:validate", json={"graph": draft}
+    )
+
+    assert response.status_code == HTTP_OK
+    assert data_of(response)["is_valid"] is False
+
+
+async def test_a_source_with_no_table_is_rejected_before_it_runs(
+    app_client: httpx.AsyncClient,
+) -> None:
+    """取数节点没选台账在保存期就报，不是跑到那一步才报「台账不存在」。
+
+    ⚠ 空串是合法的 `str`：不给长度下限的话这张图校验全绿，跑起来却整次失败、
+    下游全部 skipped，而错误文本只有「台账不存在」四个字。
+    """
+    graph = linear_graph("any")
+    graph["nodes"][0]["config"]["table_code"] = ""
+    created = await create_pipeline(app_client, "blank_table", graph)
+
+    response = await app_client.post(
+        f"{PIPELINES}/{created['id']}:run", json={"trigger": "manual"}
+    )
+
+    assert response.status_code == HTTP_BAD_REQUEST
+    assert "参数「数据台账」不能留空" in [
+        item["message"] for item in response.json()["details"]
     ]
 
 
@@ -335,6 +378,33 @@ async def test_a_pipeline_is_deleted_with_its_runs(
     assert (
         await app_client.get(f"{RUNS}/{run['id']}")
     ).status_code == HTTP_NOT_FOUND
+
+
+async def test_a_narrowed_source_runs_on_just_those_columns(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    worker_sessions: MakerSessions,
+) -> None:
+    """取数只挑几列是**完全合法**的，整条链路照跑，帧上就只有那几列。
+
+    ⚠ 这条对应一次真实投诉：用户以为「取数必须把列选全」，真相是他把取数改窄
+    之后，下游那个节点还留着窄之前勾的列（那一条由图校验单测守着）。
+    """
+    await _seed_ledger(app_client, db_session, "energy_narrow")
+    graph = _without_standardize("energy_narrow")
+    graph["nodes"][0]["config"]["columns"] = [TEMPERATURE, ENERGY]
+    created = await create_pipeline(app_client, "narrow", graph)
+
+    run = await _run_pipeline(app_client, worker_sessions, created["id"])
+
+    assert run["status"] == "succeeded", run["error_text"]
+    frame = data_of(await app_client.get(f"{RUNS}/{run['id']}/nodes/s"))[
+        "preview"
+    ]["frame"]
+    assert [column["key"] for column in frame["columns"]] == [
+        TEMPERATURE,
+        ENERGY,
+    ]
 
 
 def _without_standardize(table_code: str) -> dict[str, Any]:

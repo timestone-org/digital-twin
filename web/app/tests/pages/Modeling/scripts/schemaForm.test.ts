@@ -40,6 +40,11 @@ const LEDGER_SCHEMA = {
       type: 'integer',
     },
     keep_first: { default: true, title: '只留第一条', type: 'boolean' },
+    target_column: {
+      title: '目标列',
+      type: 'string',
+      'x-dt-widget': 'column',
+    },
   },
   required: ['table_code'],
   type: 'object',
@@ -52,6 +57,20 @@ describe('把算子 schema 摊成字段表', () => {
     expect(byKey.get('table_code')?.widget).toBe('table')
     expect(byKey.get('columns')?.widget).toBe('columns')
     expect(byKey.get('since')?.widget).toBe('moment')
+  })
+
+  // ⚠ 同一个标记挂在单值字段（切分的「目标列」）与数组字段上，一律当多选渲染
+  // 的话，单值字段会被存成数组——typecheck 与 lint 都不拦，要到后端才报
+  it('列引用按 schema 的类型分成单选与多选两种控件', () => {
+    const byKey = new Map(fieldsOf(LEDGER_SCHEMA).map((f) => [f.key, f]))
+
+    expect(byKey.get('target_column')?.widget).toBe('column')
+  })
+
+  it('单值列引用的初值是空串而不是空数组', () => {
+    const config = defaultsOf(fieldsOf(LEDGER_SCHEMA))
+
+    expect(config['target_column']).toBe('')
   })
 
   it('没有标记时按 JSON Schema 的类型选控件', () => {

@@ -8984,6 +8984,24 @@
         "title": "FormulaWindowDepOut",
         "type": "object"
       },
+      "GraphCheckIn": {
+        "additionalProperties": false,
+        "description": "校验**哪一张**图。\n\n⚠ 给了 `graph` 就校验这一张（画布上那份还没保存的），不给才回退到库里那份：\n画布上边改边校验是这个端点存在的全部理由，只认库里那份的话，用户看到的\n永远是上一次保存时的问题（docs/MODELING_DESIGN.md §8.2）。",
+        "properties": {
+          "graph": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PipelineGraph"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "GraphCheckIn",
+        "type": "object"
+      },
       "GraphCheckOut": {
         "description": "一次图校验的结果。\n\n⚠ 问题**逐条列出**而不是只报第一条：改完一条再跑一次才发现第二条，是最\n劝退的交互。",
         "properties": {
@@ -26454,7 +26472,7 @@
     },
     "/api/v1/platform/modeling-pipelines/{pipeline_id}:validate": {
       "post": {
-        "description": "把图的问题一次列全。与保存、导入、运行前用的是同一份实现。\n\nArgs: pipeline_id, session, _write。",
+        "description": "把图的问题一次列全。与保存、导入、运行前用的是同一份实现。\n\n⚠ 校验的是**请求体里那张图**（画布上还没保存的那份）；整个请求体留空才回退\n到库里那份。\nArgs: pipeline_id, session, _write, payload。",
         "operationId": "validate_pipeline_api_v1_platform_modeling_pipelines__pipeline_id__validate_post",
         "parameters": [
           {
@@ -26484,6 +26502,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/GraphCheckIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {

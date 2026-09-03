@@ -126,6 +126,26 @@ describe('盯着一次运行', () => {
     expect(runner.run.value?.status).toBe('failed')
   })
 
+  it('卸载时那一拍还在飞，它落地之后也不许再排下一拍', async () => {
+    const fails: ((reason: Error) => void)[] = []
+    const get = vi.spyOn(modeling, 'getModelingRun').mockImplementation(
+      () =>
+        new Promise<ModelingRun>((_ok, fail) => {
+          fails.push(fail)
+        }),
+    )
+    const { runner, wrapper } = setup()
+
+    runner.watchRun(run({ status: 'running' }))
+    await vi.advanceTimersByTimeAsync(1000)
+    wrapper.unmount()
+    // 卸载把在飞的那次 abort 掉，于是它以 reject 落地
+    fails[0]?.(new Error('已取消'))
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(get).toHaveBeenCalledTimes(1)
+  })
+
   it('组件卸下时停表，卸载之后不再打请求', async () => {
     const get = vi
       .spyOn(modeling, 'getModelingRun')
