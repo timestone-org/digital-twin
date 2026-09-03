@@ -13,21 +13,26 @@
  * ⚠ 接入形态同理（ADR-0040）：平台登记它、助手按它挑适配器、前端按它渲染表单。
  * 漂开的表现是「界面上配好了一路 Codex、助手却当它不存在」。
  */
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type {
+  LlmCredential,
+  LlmDeviceLoginPoll,
+  LlmDeviceLoginStart,
   LlmModel,
   LlmProbeResult,
   LlmProvider,
   LlmProviderKind,
   LlmProviderPreset,
   LlmPurpose,
+  LlmRerankDialect,
 } from '@dt/contracts'
 import {
   LLM_MODEL_KINDS,
   LLM_PROVIDER_KINDS,
   LLM_PURPOSES,
+  LLM_RERANK_DIALECTS,
 } from '@dt/contracts'
 
 interface OpenApiSchema {
@@ -88,6 +93,26 @@ const KIND_MIGRATION = join(
   'versions',
   '2026_09_03_1000-a7e1c93b6d40_add_llm_provider_kind.py',
 )
+// ⚠ 放宽用途码 CHECK 的那一次。迁移是**逐次叠加**的：只读第一份的话，
+// 加一档用途之后这条闸会红在「平台多了一个」上，而库上其实认得它
+const PURPOSE_MIGRATION = join(
+  SERVER,
+  'services',
+  'platform-server',
+  'migrations',
+  'versions',
+  '2026_09_03_1600-b6f4a20d75e1_add_rerank_purpose.py',
+)
+// ⚠ 扫整个目录而不是列文件名：列名单的话，加一路方言时新文件不在名单里，
+// 这条闸对它一声不吭
+const LLMCORE_RERANK_DIR = join(
+  SERVER,
+  'domain',
+  'llmcore',
+  'src',
+  'llmcore',
+  'rerank',
+)
 
 const schemas = (
   JSON.parse(readFileSync(SPEC_PATH, 'utf8')) as {
@@ -123,8 +148,14 @@ const SHAPES: Record<string, Record<string, true>> = {
     model_kinds: true,
     consumers: true,
     efforts: true,
+    rerank_dialects: true,
     presets: true,
   } satisfies Keys<LlmProviderKind>,
+  LlmRerankDialectOut: {
+    code: true,
+    label: true,
+    description: true,
+  } satisfies Keys<LlmRerankDialect>,
   LlmProviderPresetOut: {
     code: true,
     label: true,
@@ -148,11 +179,33 @@ const SHAPES: Record<string, Record<string, true>> = {
     kind: true,
     consumer: true,
     is_vision_required: true,
+    has_env_default: true,
     provider_id: true,
     provider_name: true,
     model_name: true,
     updated_at: true,
   } satisfies Keys<LlmPurpose>,
+  LlmCredentialOut: {
+    provider_id: true,
+    is_connected: true,
+    account_label: true,
+    plan_label: true,
+    expires_at: true,
+    last_refresh_at: true,
+    last_error: true,
+  } satisfies Keys<LlmCredential>,
+  LlmDeviceLoginStartOut: {
+    ref: true,
+    user_code: true,
+    verification_uri: true,
+    interval_s: true,
+    expires_in_s: true,
+  } satisfies Keys<LlmDeviceLoginStart>,
+  LlmDeviceLoginPollOut: {
+    is_done: true,
+    interval_s: true,
+    credential: true,
+  } satisfies Keys<LlmDeviceLoginPoll>,
 }
 
 describe('@dt/contracts 的模型供应商类型与 openapi.json 的字段一致', () => {
@@ -167,6 +220,16 @@ describe('@dt/contracts 的模型供应商类型与 openapi.json 的字段一致
   it('出参里永远没有密钥明文', () => {
     const provider = schemas['LlmProviderOut']
     expect(Object.keys(provider?.properties ?? {})).not.toContain('api_key')
+  })
+
+  it('登录态那几个出参里永远没有令牌', () => {
+    // ⚠ 出去过一次就永远躺在别人的 devtools 里：短时令牌只走 /internal/，
+    // 而那一族刻意不进 openapi
+    for (const name of ['LlmCredentialOut', 'LlmDeviceLoginPollOut']) {
+      const keys = Object.keys(schemas[name]?.properties ?? {})
+      expect(keys).not.toContain('access_token')
+      expect(keys).not.toContain('refresh_token')
+    }
   })
 })
 
@@ -212,12 +275,23 @@ describe('用途码三方逐字一致', () => {
 
   it('迁移里写死的 CHECK 集合与平台清单一致', () => {
     // ⚠ 迁移是冻结件、活常量是活的：加一档用途时两边都要动，这里就是那道红灯
-    const source = readFileSync(MIGRATION, 'utf8')
+    // ⚠ 取的是**最后一次放宽**那一份：迁移逐次叠加，库上认的是最新那个集合
+    const source = readFileSync(PURPOSE_MIGRATION, 'utf8')
     const block = /PURPOSES = \(([\s\S]*?)\n\)/.exec(source)?.[1] ?? ''
     const listed = [...block.matchAll(/'([a-z]+\.[a-z]+)'/g)]
       .map((match) => match[1] ?? '')
       .sort()
     expect(listed).toEqual(platform)
+  })
+
+  it('建表那一份的 CHECK 是这一份的子集（迁移只放宽不收窄）', () => {
+    const source = readFileSync(MIGRATION, 'utf8')
+    const block = /PURPOSES = \(([\s\S]*?)\n\)/.exec(source)?.[1] ?? ''
+    const listed = [...block.matchAll(/'([a-z]+\.[a-z]+)'/g)].map(
+      (match) => match[1] ?? '',
+    )
+    expect(listed.length).toBeGreaterThan(0)
+    expect(listed.filter((one) => !platform.includes(one))).toEqual([])
   })
 })
 
@@ -264,10 +338,18 @@ describe('接入形态三方逐字一致', () => {
     expect([...LLM_PROVIDER_KINDS].sort()).toEqual(platform)
   })
 
+  it('llmcore 与平台一致', () => {
+    // ⚠ 两个消费方按它挑适配器（ADR-0041）：llmcore 少一种的话，那一路在
+    // 两侧都如实缺席，而「缺席」在界面上看起来与「还没配」一模一样
+    const shared = [
+      ...new Set(kindLiterals(readFileSync(LLMCORE_CATALOG, 'utf8'))),
+    ].sort()
+    expect(shared).toEqual(platform)
+  })
+
   it('助手认得出平台登记的每一种', () => {
-    // ⚠ 端点那一形态的名字在 llmcore（协议名，两个消费方共用），
-    // 订阅那一形态的名字在助手自己那份 ports——认不出的形态如实缺席，
-    // 而「缺席」在界面上看起来与「还没配」一模一样
+    // ⚠ 端点与推理档位那几样从 llmcore 再导出，订阅那一形态在助手自己那份
+    // ports 里也复述一份
     const assistant = [
       ...new Set([
         ...kindLiterals(readFileSync(ASSISTANT_PORTS, 'utf8')),
@@ -285,5 +367,43 @@ describe('接入形态三方逐字一致', () => {
       .map((match) => match[1] ?? '')
       .sort()
     expect(listed).toEqual(platform)
+  })
+})
+
+/** 一份 Python 源码里 `X_DIALECT_Y = "…"` / `DIALECT_Y = "…"` 的取值。 */
+function dialectLiterals(source: string): string[] {
+  return [...source.matchAll(/DIALECT_[A-Z_]+ = "([a-z_]+)"/g)].map(
+    (match) => match[1] ?? '',
+  )
+}
+
+describe('重排线形三方逐字一致', () => {
+  // ⚠ 平台配得出而调用侧没装的方言，表现是「界面上选得中、调用时说不认识」，
+  // 而两边代码单看都对
+  const platform = [
+    ...new Set(dialectLiterals(readFileSync(PLATFORM_ENUMS, 'utf8'))),
+  ].sort()
+
+  it('确实读到了平台那份清单（读不到就等于这条闸没跑）', () => {
+    expect(platform.length).toBeGreaterThan(0)
+  })
+
+  it('前端与平台一致', () => {
+    expect([...LLM_RERANK_DIALECTS].sort()).toEqual(platform)
+  })
+
+  it('llmcore 装了平台登记的每一套', () => {
+    const installed = [
+      ...new Set(
+        readdirSync(LLMCORE_RERANK_DIR)
+          .filter((one) => one.endsWith('.py'))
+          .flatMap((one) =>
+            dialectLiterals(
+              readFileSync(join(LLMCORE_RERANK_DIR, one), 'utf8'),
+            ),
+          ),
+      ),
+    ].sort()
+    expect(installed).toEqual(platform)
   })
 })

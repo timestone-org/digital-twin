@@ -1,8 +1,10 @@
 """组合根：把配置拧成各个协作对象。装配只在这里发生，模块顶层不做副作用。"""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import tzinfo
 from zoneinfo import ZoneInfo
+
+import httpx
 
 from lib.cache import Cache, PubSub
 from lib.crypto import SecretCipher
@@ -34,6 +36,12 @@ from platform_server.apps.dataset.services import (
     BackfillJobs,
     BackfillRunner,
     DatasetDirtyLog,
+)
+from platform_server.apps.llm_providers.services import (
+    HTTP_TIMEOUT_S,
+    CredentialStore,
+    DeviceLogin,
+    OAuthClient,
 )
 from platform_server.lease import Lease, RedisLease
 from platform_server.opcua import OpcuaClient
@@ -93,6 +101,26 @@ class DatasetParts:
 
 
 @dataclass(frozen=True)
+class LlmParts:
+    """模型供应商那一面的长生命周期件。没配加密密钥时四格全是 `None`。
+
+    ⚠ 四件同生共死：密钥、登录态读写、设备码登录、打上游的 http 客户端都吊在
+    同一把 `PLATFORM_LLM_PROVIDER_SECRET` 上。没配即「这套部署没开目录」——
+    对外端点如实回 503、内部目录回空，两个消费方退回各自环境变量那一档。
+    ⚠ 收成一件而不是在容器上平铺四格：`build_container` 那一段贴着 50 行的上限。
+    """
+
+    #: 供应商密钥与登录令牌共用的加解密器（ADR-0039）
+    cipher: SecretCipher | None = None
+    #: 订阅账号登录态的读写与自动续期（ADR-0041）
+    credentials: CredentialStore | None = None
+    #: 设备码登录的两步
+    device_login: DeviceLogin | None = None
+    #: 打上游 OAuth 端点的客户端。⚠ 建了就要在关停时收掉（见 app.py）
+    oauth_http: httpx.AsyncClient | None = None
+
+
+@dataclass(frozen=True)
 class Container:
     """一个进程内的全部长生命周期对象。"""
 
@@ -128,10 +156,9 @@ class Container:
     # 数据源口令的加解密器。密钥派生只在装配时做一次
     credential_cipher: CredentialCipher
     dataset: DatasetParts
-    # 模型供应商密钥的加解密器（ADR-0039）。⚠ 没配加密密钥时是 `None`，
-    # 而不是一个「调了会报错」的壳：那是「这套部署没开目录」，对外端点如实
-    # 回 503、内部目录回空，两个消费方退回各自环境变量那一档
-    llm_cipher: SecretCipher | None = None
+    # 模型供应商那一面的几件（ADR-0039 / ADR-0041）。⚠ 缺省是「一件都没装」
+    # 而不是必填：没配加密密钥的部署本来就该是这个样子
+    llm: LlmParts = field(default_factory=LlmParts)
 
 
 def build_container(settings: Settings) -> Container:
@@ -179,7 +206,7 @@ def build_container(settings: Settings) -> Container:
         object_store=create_object_store(settings),
         credential_cipher=_build_cipher(settings),
         dataset=_dataset(settings, database, history_database, cache),
-        llm_cipher=_build_llm_cipher(settings),
+        llm=_llm_parts(settings, database, cache),
     )
 
 
@@ -249,15 +276,31 @@ def _build_cipher(settings: Settings) -> CredentialCipher:
     )
 
 
-def _build_llm_cipher(settings: Settings) -> SecretCipher | None:
-    """模型供应商密钥的加解密器；没配加密密钥就不装（目录整个缺席）。
+def _llm_parts(
+    settings: Settings, database: Database, cache: Cache
+) -> LlmParts:
+    """模型供应商那一面的四件；没配加密密钥就一件都不装（目录整个缺席）。
 
-    Args: settings。
+    ⚠ 客户端自己也带超时：逐个请求写的那份只兜住走 `_post` 的路径，
+    而「每个跨进程调用必须有超时」守的是整条连接。
+
+    Args: settings, database, cache。
     """
     secret = settings.llm_provider_secret
     if secret is None:
-        return None
-    return SecretCipher(secret.get_secret_value(), label="llm-provider")
+        return LlmParts()
+    cipher = SecretCipher(secret.get_secret_value(), label="llm-provider")
+    http = httpx.AsyncClient(timeout=HTTP_TIMEOUT_S)
+    store = CredentialStore(
+        sessions=database.session,
+        cipher=cipher,
+        oauth=OAuthClient(http),
+        cache=cache,
+    )
+    login = DeviceLogin(oauth=OAuthClient(http), cache=cache, store=store)
+    return LlmParts(
+        cipher=cipher, credentials=store, device_login=login, oauth_http=http
+    )
 
 
 def _build_nodes(settings: Settings) -> OpcuaClient:

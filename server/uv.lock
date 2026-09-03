@@ -1393,6 +1393,7 @@ name = "llmcore"
 version = "0.1.0"
 source = { editable = "domain/llmcore" }
 dependencies = [
+    { name = "httpx" },
     { name = "langchain-core" },
     { name = "langchain-openai" },
     { name = "langgraph" },
@@ -1403,6 +1404,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "httpx", specifier = ">=0.28" },
     { name = "langchain-core", specifier = ">=1.0" },
     { name = "langchain-openai", specifier = ">=1.6" },
     { name = "langgraph", specifier = ">=1.2" },
@@ -1972,6 +1974,7 @@ dependencies = [
     { name = "collectwire" },
     { name = "cryptography" },
     { name = "httpx" },
+    { name = "langchain-openai" },
     { name = "lib", extra = ["auth", "db", "mssql", "redis", "s3", "web"] },
     { name = "numpy" },
     { name = "scikit-learn" },
@@ -1984,6 +1987,7 @@ requires-dist = [
     { name = "collectwire", editable = "domain/collectwire" },
     { name = "cryptography", specifier = ">=43" },
     { name = "httpx", specifier = ">=0.28" },
+    { name = "langchain-openai", specifier = ">=1.6" },
     { name = "lib", extras = ["auth", "db", "mssql", "redis", "s3", "web"], editable = "lib" },
     { name = "numpy", specifier = ">=2.1" },
     { name = "scikit-learn", specifier = ">=1.7" },

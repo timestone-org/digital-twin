@@ -91,6 +91,7 @@ export type {
   KnowledgeLocator,
   KnowledgeKeywordLane,
   KnowledgeParsingCapability,
+  KnowledgeRerankCapability,
   KnowledgeSearchResult,
   KnowledgeSource,
   KnowledgeSourceKind,
@@ -491,10 +492,7 @@ export type {
   AssistantAskOption,
   AssistantAskRequest,
   AssistantCapability,
-  AssistantCredentialStatus,
   AssistantDeltaChannel,
-  AssistantDeviceLoginPoll,
-  AssistantDeviceLoginStart,
   AssistantEventName,
   AssistantToolCall,
   AssistantMessage,
@@ -524,6 +522,9 @@ export {
 } from './assistant'
 export type {
   LlmConsumer,
+  LlmCredential,
+  LlmDeviceLoginPoll,
+  LlmDeviceLoginStart,
   LlmModel,
   LlmModelKind,
   LlmProbeResult,
@@ -533,10 +534,13 @@ export type {
   LlmProviderPreset,
   LlmPurpose,
   LlmPurposeCode,
+  LlmRerankDialect,
+  LlmRerankDialectCode,
 } from './llm'
 export {
   LLM_CONSUMERS,
   LLM_MODEL_KINDS,
   LLM_PROVIDER_KINDS,
   LLM_PURPOSES,
+  LLM_RERANK_DIALECTS,
 } from './llm'

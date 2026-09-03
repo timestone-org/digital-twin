@@ -19,6 +19,9 @@ async def test_capabilities_answers_without_any_model(
     assert body["code"] == 0
     assert body["data"]["is_embedding_enabled"] is False
     assert body["data"]["is_model_enabled"] is False
+    # ⚠ 没接重排时如实说「没接」并说得出为什么，而不是干脆不提这一路
+    assert body["data"]["rerank"]["is_enabled"] is False
+    assert body["data"]["rerank"]["reason"]
 
 
 async def test_capabilities_reports_the_fallback_reason(

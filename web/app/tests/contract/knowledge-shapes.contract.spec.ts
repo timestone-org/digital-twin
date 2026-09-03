@@ -26,6 +26,7 @@ import type {
   KnowledgeDocument,
   KnowledgeHit,
   KnowledgeIndexCapability,
+  KnowledgeRerankCapability,
   KnowledgeLocator,
   KnowledgeParsingCapability,
   KnowledgeSearchResult,
@@ -73,6 +74,7 @@ const SHAPES: Record<string, Record<string, true>> = {
     accepted_suffixes: true,
     parsing: true,
     index: true,
+    rerank: true,
   } satisfies Keys<KnowledgeCapability>,
 
   ParsingCapabilityOut: {
@@ -86,6 +88,12 @@ const SHAPES: Record<string, Record<string, true>> = {
     keyword: true,
     reason: true,
   } satisfies Keys<KnowledgeIndexCapability>,
+
+  RerankCapabilityOut: {
+    is_enabled: true,
+    model: true,
+    reason: true,
+  } satisfies Keys<KnowledgeRerankCapability>,
 
   KnowledgeBaseOut: {
     id: true,

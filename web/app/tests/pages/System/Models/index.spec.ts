@@ -27,7 +27,6 @@ vi.mock('vue-router', () => ({
 
 const VIEW = 'llm:view'
 const MANAGE = 'llm:manage'
-const ASSISTANT_MANAGE = 'assistant:manage'
 
 function user(codes: string[]) {
   return {
@@ -78,6 +77,7 @@ function purpose(over: Partial<LlmPurpose> = {}): LlmPurpose {
     kind: 'chat',
     consumer: 'assistant',
     is_vision_required: false,
+    has_env_default: true,
     provider_id: null,
     provider_name: null,
     model_name: null,
@@ -97,15 +97,6 @@ function capability(models: unknown[]) {
   } as never
 }
 
-const CODEX = {
-  id: 'codex',
-  label: '订阅账号',
-  is_ready: false,
-  has_vision: false,
-  models: ['some-codex'],
-  efforts: ['low', 'medium'],
-}
-
 /** 目录里配出来的一路订阅账号：它在这一页上摆的是登录，不是端点。 */
 const CODEX_KIND: LlmProviderKind = {
   code: 'codex_oauth',
@@ -116,6 +107,7 @@ const CODEX_KIND: LlmProviderKind = {
   model_kinds: ['chat'],
   consumers: ['assistant'],
   efforts: ['low', 'medium', 'high', 'xhigh'],
+  rerank_dialects: [],
   presets: [],
 }
 
@@ -129,6 +121,7 @@ const KIND: LlmProviderKind = {
   model_kinds: ['chat', 'embedding'],
   consumers: ['assistant', 'knowledge'],
   efforts: [],
+  rerank_dialects: [],
   presets: [],
 }
 
@@ -143,7 +136,7 @@ beforeEach(() => {
   vi.spyOn(llm, 'listKinds').mockResolvedValue([KIND])
   vi.spyOn(llm, 'listPurposes').mockResolvedValue([purpose()])
   vi.spyOn(assistant, 'probeCapability').mockResolvedValue(capability([]))
-  vi.spyOn(assistant, 'readCredential').mockResolvedValue(null)
+  vi.spyOn(llm, 'readCredential').mockResolvedValue(null)
   vi.spyOn(knowledge, 'readCapability').mockRejectedValue(new Error('502'))
 })
 
@@ -288,14 +281,17 @@ describe('模型管理页', () => {
     expect(wrapper.text()).toContain('当前：百炼 / qwen-plus')
   })
 
-  it('订阅账号那一节只在助手接了那一路且持 assistant:manage 时出现', async () => {
-    vi.spyOn(assistant, 'probeCapability').mockResolvedValue(
-      capability([CODEX]),
+  it('订阅账号那一节只在目录里真配了那一路且持 llm:manage 时出现', async () => {
+    // ⚠ 登录态挂在那一行供应商上（ADR-0041）：目录里一路都没有时摆出登录键，
+    // 点下去是一条指不回任何地方的错
+    vi.spyOn(llm, 'listKinds').mockResolvedValue([KIND, CODEX_KIND])
+    vi.spyOn(llm, 'listProviders').mockResolvedValue(
+      page([provider({ id: 'p2', name: '我的 Codex', kind: 'codex_oauth' })]),
     )
-    const withCode = await render([VIEW, MANAGE, ASSISTANT_MANAGE])
+    const withCode = await render([VIEW, MANAGE])
     expect(withCode.text()).toContain('登录账号')
     withCode.unmount()
-    const without = await render([VIEW, MANAGE])
+    const without = await render([VIEW])
     expect(without.text()).not.toContain('登录账号')
   })
 
@@ -307,10 +303,11 @@ describe('模型管理页', () => {
         provider({ id: 'p2', name: '我的 Codex', kind: 'codex_oauth' }),
       ]),
     )
-    const wrapper = await render([VIEW, MANAGE, ASSISTANT_MANAGE])
+    const wrapper = await render([VIEW, MANAGE])
     expect(wrapper.text()).toContain('我的 Codex')
     expect(wrapper.text()).toContain('登录账号')
-    expect(assistant.readCredential).toHaveBeenCalledWith('p2')
+    // ⚠ 打的是 platform 那一族：登录态与那一行供应商同属主
+    expect(llm.readCredential).toHaveBeenCalledWith('p2')
   })
 
   it('没有端点的那一路不摆「测试连接」', async () => {
@@ -334,5 +331,27 @@ describe('模型管理页', () => {
   it('没有 llm:view 的人什么目录都看不到', async () => {
     const wrapper = await render([])
     expect(wrapper.text()).not.toContain('百炼')
+  })
+
+  it('知识库那一栏把重排接没接、没接的原因一并摆出来', async () => {
+    // ⚠ 没接时检索走的是融合名次那一档：不摆原因的话，「质量忽然变了」
+    // 没有任何线索
+    vi.spyOn(knowledge, 'readCapability').mockResolvedValue({
+      isEmbeddingEnabled: true,
+      isModelEnabled: false,
+      isAsrEnabled: false,
+      strategies: ['naive', 'hybrid', 'agentic'],
+      readyStrategies: ['naive', 'hybrid'],
+      acceptedSuffixes: ['.md'],
+      index: { vector: 'pgvector', keyword: 'trgm', reason: '' },
+      rerank: {
+        isEnabled: false,
+        model: '',
+        reason: '还没给「知识库重排」分配模型',
+      },
+    })
+    const wrapper = await render()
+    expect(wrapper.text()).toContain('检索重排')
+    expect(wrapper.text()).toContain('还没给「知识库重排」分配模型')
   })
 })

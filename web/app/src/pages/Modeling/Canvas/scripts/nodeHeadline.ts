@@ -5,6 +5,7 @@
  * 两个弹窗轮流开关四次——而这正是看中间结果最常见的用法。
  */
 import type { Preview } from './preview'
+import { portPreviewsOf } from './preview'
 
 /** 指标名在卡片上的短写法。列在这里的按顺序取前两个印出来。 */
 const HEADLINE_METRICS: readonly [string, string][] = [
@@ -57,5 +58,22 @@ export function headlineOf(preview: Preview): string {
     return features === 0 ? preview.algo : `${features} 个特征`
   }
   if (preview.kind === 'metrics') return metricsLine(preview.metrics)
+  return ''
+}
+
+/**
+ * 直接读一个节点的结果摘要，给出卡片上那行数字。
+ *
+ * ⚠ 摘要**按端口建键**（见 `preview.ts::portPreviewsOf`）：拿整包去读 `kind`
+ * 永远读不到，卡片上那行会一直是空的。
+ * ⚠ 只取头一路说得出话的：卡片上只有一行的位置，而多路输出的那几步（切分、
+ * 回归）在结果弹窗里是逐路摆开的。
+ * Args: payload。
+ */
+export function headlineFromPayload(payload: Record<string, unknown>): string {
+  for (const item of portPreviewsOf(payload)) {
+    const line = headlineOf(item.preview)
+    if (line !== '') return line
+  }
   return ''
 }

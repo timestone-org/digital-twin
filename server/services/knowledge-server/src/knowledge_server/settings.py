@@ -97,6 +97,10 @@ class Settings(
     llm_catalog_refresh_s: float = Field(default=10.0, gt=0)
     # ⚠ 要比 platform 那条短：它与 platform 调用同一档，且在模型调用之前
     llm_catalog_timeout_s: float = Field(default=3.0, gt=0)
+    # 向 platform 领订阅账号登录态那一跳的预算（ADR-0041）。⚠ 它在**每一次
+    # 模型调用之前**，且平台那一侧可能要先去换一份新的（上游那一跳有 10 秒
+    # 硬超时），故比目录那条宽一点；仍要小于模型调用自己的预算
+    llm_login_timeout_s: float = Field(default=15.0, gt=0)
 
     # 嵌入档。关着时文档照常摄取，检索如实回答「这个库还没建索引」——
     # 不是返回空表，空表与「确实没有相关内容」长得一模一样
@@ -120,6 +124,12 @@ class Settings(
     # 断路器一开，真正的原因就被盖成「暂时不可用」，而那会让人去查网络
     model_breaker_failures: int = 5
     model_breaker_reset_s: float = 30.0
+
+    # 重排档（ADR-0042）。⚠ 它**只有模型目录一个来源**，没有环境变量那一档：
+    # 这一路是新加的，一个存量部署都不是靠环境变量配着它的，而多一条回退链
+    # 就多一处「配了没生效」要排查的地方。
+    # ⚠ 预算要比检索那一步的总预算小得多：它排在召回之后，超时就是整次检索超时
+    rerank_timeout_s: float = Field(default=15.0, gt=0)
 
     # 摄取队列。⚠ 与 worker 侧读的是同一对，改一处不改另一处的表现是
     # 「投得进去、没人消费」，而两边单看都对

@@ -18,19 +18,33 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
 
-from llmcore.endpoints import ChatEndpoint, EmbeddingEndpoint
+from llmcore.endpoints import ChatEndpoint, EmbeddingEndpoint, RerankEndpoint
 
 # 一路模型的种类。⚠ 闭合集合：嵌入模型与对话模型不通用，拿对话模型名去打
 # embeddings 端点是一条必然失败的调用，按种类分开才拦得住这一档错配
 MODEL_KIND_CHAT = "chat"
 MODEL_KIND_EMBEDDING = "embedding"
-MODEL_SPEC_KINDS: tuple[str, ...] = (MODEL_KIND_CHAT, MODEL_KIND_EMBEDDING)
+MODEL_KIND_RERANK = "rerank"
+MODEL_SPEC_KINDS: tuple[str, ...] = (
+    MODEL_KIND_CHAT,
+    MODEL_KIND_EMBEDDING,
+    MODEL_KIND_RERANK,
+)
+
+# 重排线形落在供应商的这一格配置上。⚠ 跟着**端点**走而不是跟着模型走：
+# 方言说的是「打哪个路径、什么请求体」，同一路端点上的每个重排模型都一样。
+# 挂在模型上的话，同一路上配两个模型就能配出两套互相矛盾的线形
+OPTION_RERANK_DIALECT = "rerank_dialect"
 
 # 一路供应商的**接入形态**。⚠ 这一层只认协议不认厂商：`openai_compat` 说的是
-# 「按 OpenAI 兼容口径打一个 HTTP 端点」，谁家的端点都算。要先登录、走自家方言
-# 的那些形态由消费方各自的适配器认领，这里把它们的名字当成不透明的字符串——
-# 认领不了的形态在这一层解不出端点，而不是解出一个空地址打出去
+# 「按 OpenAI 兼容口径打一个 HTTP 端点」，谁家的端点都算；`codex_oauth` 说的是
+# 「先走一次设备码登录，再拿令牌打订阅账号那条私有面」。解端点的那几条方法只
+# 认前者——后者没有端点与密钥，放行的话一个空地址会被当成端点打出去。
+# ⚠ 两个码都是**跨服务契约**：与 platform-server 的 `enums.py` 逐字一致，由前端
+# 的 `llm-shapes.contract.spec.ts` 对着几份源码比。漂开的表现是「界面上配好了
+# 一路、消费方却当它不存在」，而两边代码单看都对
 PROVIDER_KIND_OPENAI_COMPAT = "openai_compat"
+PROVIDER_KIND_CODEX_OAUTH = "codex_oauth"
 
 
 class CatalogMalformed(ValueError):
@@ -87,9 +101,19 @@ class ProviderSpec:
     def models_of(self, kind: str) -> tuple[ModelSpec, ...]:
         """这一路上属于某一种的那几个模型，保持登记序。
 
-        Args: kind（`chat` / `embedding`）。
+        Args: kind（`MODEL_SPEC_KINDS` 里的一个）。
         """
         return tuple(one for one in self.models if one.kind == kind)
+
+    @property
+    def rerank_dialect(self) -> str:
+        """这一路的重排线形码；没配是空串，由方言注册表按默认那一路解。
+
+        ⚠ 防着读：`options` 是一段透传的 JSON，塞进来一个数字也存得下，
+        而那时拿它去挑方言是一条 `TypeError`，位置离配置面很远。
+        """
+        found = (self.options or {}).get(OPTION_RERANK_DIALECT)
+        return found if isinstance(found, str) else ""
 
 
 @dataclass(frozen=True)
@@ -221,6 +245,31 @@ class ModelCatalog:
             model=found.model.name,
             timeout_s=timeout_s,
             dimensions=found.model.dimensions,
+        )
+
+    def rerank_endpoint(
+        self, purpose: str, *, timeout_s: float
+    ) -> RerankEndpoint | None:
+        """这个用途要打的重排端点。种类不是重排模型时给 `None`。
+
+        ⚠ 没有维数那一格要核对：重排只排序、什么都不落库，故换一路重排模型
+        不作废任何存量向量——界面上别把它说成「换了要重建」。
+
+        Args: purpose, timeout_s。
+        """
+        found = self.resolve(purpose)
+        if found is None or found.model.kind != MODEL_KIND_RERANK:
+            return None
+        # ⚠ 形态闸：不是 OpenAI 兼容的那些路没有端点与密钥，下发空地址等于
+        # 让每一次重排都撞一条连不上的网络错
+        if not found.provider.is_endpoint_based:
+            return None
+        return RerankEndpoint(
+            base_url=found.provider.base_url,
+            api_key=found.provider.api_key,
+            model=found.model.name,
+            timeout_s=timeout_s,
+            dialect=found.provider.rerank_dialect,
         )
 
     @classmethod

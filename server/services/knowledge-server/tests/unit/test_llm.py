@@ -127,3 +127,18 @@ async def test_the_null_answerer_raises_instead_of_answering_empty() -> None:
     然后把一个空答案交给用户。"""
     with pytest.raises(AnswerUnavailable):
         await NullAnswerer().complete("s", "u")
+
+
+async def test_any_chat_adapter_answers_not_just_the_endpoint_one() -> None:
+    """⚠ 这一层认的是「对话模型适配器」这个协议，不是某个具体类（ADR-0041）：
+    认具体类的话，订阅账号那一路装进来会掉进「定死的端点」那条分支，
+    而现象是「配了订阅账号、知识库一句话都说不出来」。"""
+    breaker = CircuitBreaker(name="t", failure_threshold=1, reset_after_s=1)
+    made = build_answerer(
+        _Adapter(
+            _Model(reply="经订阅账号答的")
+        ),  # pyright: ignore[reportArgumentType]
+        breaker,
+    )
+    assert made.can_answer is True
+    assert await made.complete("s", "u") == "经订阅账号答的"

@@ -86,6 +86,50 @@ def reason_of(error: OpenAIError) -> str:
     return "模型端点未响应"
 
 
+# HTTP 状态码里属于「我们发错了」的那几档。⚠ 与 `OUR_FAULT` 是同一条判据的
+# 另一副面孔：不走 openai 客户端的那些线形手上只有一个状态码，而两副面孔必须
+# 给出同一个答案——漂开的表现是同一个 401 在一条链路上短路、在另一条上不短路
+OUR_FAULT_STATUS: tuple[int, ...] = (400, 401, 403, 404, 422)
+
+# 状态码到给人看的那句话。⚠ 只说状态码的语义，不带 URL、密钥与响应体原文
+_STATUS_REASONS: dict[int, str] = {
+    400: "模型端点认为请求不合法",
+    401: "模型端点拒绝了凭据",
+    403: "模型端点拒绝了这次调用",
+    404: "模型端点上没有这个模型",
+    422: "模型端点认为请求不合法",
+    429: "模型端点在限流",
+}
+
+
+def is_our_fault_status(status: int) -> bool:
+    """这个状态码是「我们发错了」还是「下游此刻不行」。
+
+    Args: status。
+    """
+    return status in OUR_FAULT_STATUS
+
+
+def reason_of_status(status: int) -> str:
+    """给人看的失败原因。
+
+    Args: status。
+    """
+    return _STATUS_REASONS.get(status, f"模型端点回了 {status}")
+
+
+def classified_status(status: int) -> AppError:
+    """把一个 HTTP 状态码收敛成本层的两档之一。
+
+    ⚠ 与 `classified` 同一条口径：只有「下游此刻不行」那一档该让断路器计数。
+
+    Args: status。
+    """
+    if is_our_fault_status(status):
+        return ModelRejected(reason_of_status(status))
+    return ModelUnavailable(reason_of_status(status))
+
+
 def classified(error: OpenAIError) -> AppError:
     """把上游异常收敛成本层的两档之一。
 

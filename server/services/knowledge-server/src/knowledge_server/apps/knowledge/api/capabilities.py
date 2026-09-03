@@ -11,7 +11,10 @@ from fastapi import APIRouter, Depends
 
 from knowledge_server.apps.knowledge.schemas import CapabilityOut
 from knowledge_server.apps.knowledge.services import ModelLanes, capability_of
-from knowledge_server.apps.knowledge.services.assembly import Lanes, strategies
+from knowledge_server.apps.knowledge.services.assembly import (
+    lanes_of,
+    strategies,
+)
 from knowledge_server.catalog import KNOWLEDGE_USE
 from knowledge_server.container import Container
 from knowledge_server.deps import get_container, require
@@ -45,14 +48,7 @@ def _capability_of(container: Container) -> CapabilityOut:
 
     Args: container。
     """
-    lanes = strategies(
-        Lanes(
-            settings=container.settings,
-            probe=container.index,
-            embedder=container.embedder,
-            answerer=container.answerer,
-        )
-    )
+    lanes = strategies(lanes_of(container))
     return capability_of(
         container.settings,
         container.index,
@@ -61,5 +57,7 @@ def _capability_of(container: Container) -> CapabilityOut:
         ModelLanes(
             is_embedding_enabled=container.embedder.can_embed,
             is_model_enabled=container.answerer.can_answer,
+            is_rerank_enabled=container.reranker.can_rerank,
+            rerank_model=container.reranker.model or "",
         ),
     )

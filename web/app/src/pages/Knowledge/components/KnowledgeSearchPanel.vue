@@ -4,10 +4,23 @@
  *
  * ⚠ `note` 必须显示出来：「这套部署没接嵌入档，本次只走了关键词那一路」这句话
  * 不显示的话，用户会把一次退化的召回当成「库里就这些」。
+ * ⚠ 接没接重排也摆出来（ADR-0042）：没接时召回按融合名次给出，而「质量跟
+ * 别处不一样」是查不动的——除非有人先说过这一路在哪一档上。
  */
-import { DtButton, DtCard, DtEmpty, DtIcon, DtInput, DtNotice } from '@dt/ui'
+import {
+  DtButton,
+  DtCard,
+  DtEmpty,
+  DtIcon,
+  DtInput,
+  DtNotice,
+  DtTag,
+} from '@dt/ui'
 
-import type { KnowledgeSearchResult } from '@/api/knowledge'
+import type {
+  KnowledgeRerankLane,
+  KnowledgeSearchResult,
+} from '@/api/knowledge'
 import KnowledgeHitCard from './KnowledgeHitCard.vue'
 
 const props = defineProps<{
@@ -16,6 +29,8 @@ const props = defineProps<{
   searched: string
   result: KnowledgeSearchResult | null
   isSearching: boolean
+  /** 重排那一路此刻接没接；目录还没拉到时是 null。 */
+  rerank: KnowledgeRerankLane | null
 }>()
 
 const emit = defineEmits<{
@@ -57,6 +72,17 @@ const emit = defineEmits<{
         </DtButton>
       </div>
 
+      <p v-if="props.rerank !== null" class="rerank-lane">
+        <DtTag size="sm" :intent="props.rerank.isEnabled ? 'info' : 'neutral'">
+          {{ props.rerank.isEnabled ? '已接重排' : '未接重排' }}
+        </DtTag>
+        <span class="min-w-0 flex-1 truncate">
+          {{
+            props.rerank.isEnabled ? props.rerank.model : props.rerank.reason
+          }}
+        </span>
+      </p>
+
       <DtNotice
         v-if="props.result !== null && props.result.note !== ''"
         intent="warning"
@@ -90,3 +116,14 @@ const emit = defineEmits<{
     </div>
   </DtCard>
 </template>
+
+<style scoped lang="scss">
+.rerank-lane {
+  display: flex;
+  gap: 0.375rem;
+  align-items: center;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+</style>

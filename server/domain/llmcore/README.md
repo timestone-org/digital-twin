@@ -28,6 +28,7 @@
 | `reasoning.py` | 覆写 langchain 的一个私有接缝，把第三方端点的 `reasoning_content` 捡回来 |
 | `openai_compat.py` | 按量计费的对话端点那一路 |
 | `openai_embedding.py` | 嵌入端点那一路 |
+| `rerank/` | 重排那一路：`Reranker` 协议 + 线形方言注册表 + 一份共用的调用面（ADR-0042） |
 
 ## 它不管什么
 

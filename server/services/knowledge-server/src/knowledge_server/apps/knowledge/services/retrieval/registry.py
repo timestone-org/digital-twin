@@ -9,12 +9,16 @@
 不悄悄换一路：悄悄换的表现是「质量忽然变差了」，一处都不报错。
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from knowledge_server.apps.knowledge.errors import UnknownRetrievalStrategy
 from knowledge_server.apps.knowledge.services.embedding import Embedder
 from knowledge_server.apps.knowledge.services.indexing import IndexPair
 from knowledge_server.apps.knowledge.services.llm import Answerer, NullAnswerer
+from knowledge_server.apps.knowledge.services.reranking import (
+    NullReranker,
+    Reranker,
+)
 from knowledge_server.apps.knowledge.services.retrieval.agentic import (
     AGENTIC,
     Agentic,
@@ -47,6 +51,9 @@ class RetrievalDeps:
     # 装得出来，只是它自己会如实说「用不了」——按 None 来判的话，
     # 「这套部署装了哪几种策略」会随配置变，而那份清单是要上界面的
     answerer: Answerer = field(default_factory=NullAnswerer)
+    # 重排那一路。⚠ 同理没接时给 `NullReranker`：接没接由它自己如实回答，
+    # 而不是让「装了哪几种策略」跟着变
+    reranker: Reranker = field(default_factory=NullReranker)
 
 
 def build_strategies(
@@ -56,13 +63,19 @@ def build_strategies(
 
     ⚠ 顺序即界面上的先后。加一种 = 加一个文件 + 这里一行 + 一条契约测试。
 
+    ⚠ `naive` **不接重排**：它是基线，也是「召回忽然变差了」时的对照组，
+    在它身上再叠一层就没有对照可言了。
+
+    ⚠ `agentic` 手上那份 hybrid 也不接重排：重排由它在合池之后对着原问题做
+    一次，让每条改写式各排一次的钱是白花的，而几路的分数还不是同一个基准。
+
     Args: deps。
     """
-    hybrid = Hybrid(indexes=deps.indexes, embedder=deps.embedder)
+    plain = Hybrid(indexes=deps.indexes, embedder=deps.embedder)
     return (
         NaiveVector(indexes=deps.indexes, embedder=deps.embedder),
-        hybrid,
-        Agentic(hybrid=hybrid, answerer=deps.answerer),
+        replace(plain, reranker=deps.reranker),
+        Agentic(hybrid=plain, answerer=deps.answerer, reranker=deps.reranker),
     )
 
 

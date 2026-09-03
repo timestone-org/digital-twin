@@ -21,12 +21,11 @@ from openai import (
 )
 
 from ai_assistant.llm import (
-    CODEX_PROFILE,
     GuardedModel,
     ModelRejected,
     ModelUnavailable,
 )
-from ai_assistant.llm.codex.rewire import CodexRewire
+from ai_assistant.llm.codex import CodexRewire
 from ai_assistant.llm.ports import ModelChoice
 from lib.resilience import CircuitBreaker
 from lib.testing.clock import FrozenClock
@@ -34,6 +33,8 @@ from llmcore.guard import usage_of
 from llmcore.testing import ScriptedChat, StreamingChat, asks
 
 THRESHOLD = 2
+# 目录里那一路订阅账号的档位名就是它的 id
+CODEX_ID = "8f0c1e3a-0000-7000-8000-000000000001"
 
 
 RESET_AFTER_S = 30.0
@@ -53,7 +54,13 @@ def _guarded(
         return model
 
     return (
-        GuardedModel(source=source, breaker=breaker, rewire=CodexRewire()),
+        GuardedModel(
+            source=source,
+            breaker=breaker,
+            # ⚠ 「是不是订阅账号那一路」问的是注册表，不是一个写死的档位名：
+            # 目录里那几路的档位名是 uuid
+            rewire=CodexRewire(is_codex=lambda one: one == CODEX_ID),
+        ),
         breaker,
     )
 
@@ -334,7 +341,7 @@ async def test_the_subscription_route_swaps_the_dots_out_and_back() -> None:
     guarded, _ = _guarded(model)
 
     answer = await guarded.respond(
-        choice=ModelChoice(profile=CODEX_PROFILE),
+        choice=ModelChoice(profile=CODEX_ID),
         messages=[HumanMessage(content="找点位"), asks("skills.load", "c0")],
         tools=[{"type": "function", "function": {"name": "points.search"}}],
     )

@@ -11,6 +11,7 @@ from platform_server.apps.llm_providers.enums import (
 from platform_server.apps.llm_providers.schemas import (
     LlmProviderKindOut,
     LlmProviderPresetOut,
+    LlmRerankDialectOut,
 )
 
 
@@ -28,6 +29,12 @@ def kind_out(spec: ProviderKindSpec) -> LlmProviderKindOut:
         model_kinds=list(spec.model_kinds),
         consumers=list(spec.consumers),
         efforts=list(spec.efforts),
+        rerank_dialects=[
+            LlmRerankDialectOut(
+                code=one.code, label=one.label, description=one.description
+            )
+            for one in spec.rerank_dialects
+        ],
         presets=[
             LlmProviderPresetOut(
                 code=one.code, label=one.label, base_url=one.base_url

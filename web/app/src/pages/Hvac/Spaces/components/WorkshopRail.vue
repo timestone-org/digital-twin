@@ -6,7 +6,7 @@
  */
 import type { Workshop } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtEmpty } from '@dt/ui'
+import { DtButton, DtCard, DtEmpty, DtTag } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
 
@@ -24,9 +24,16 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <aside class="workshop-rail">
-    <div class="workshop-rail__head">
-      <span class="workshop-rail__title">车间</span>
+  <DtCard
+    icon="building"
+    title="车间"
+    padding="sm"
+    class="workshop-rail flex min-h-0 flex-col"
+  >
+    <template #actions>
+      <DtTag v-if="props.workshops.length !== 0" size="sm">
+        {{ props.workshops.length }}
+      </DtTag>
       <PermGuard :codes="[PERMISSION_CODES.acManage]">
         <DtButton
           variant="ghost"
@@ -38,7 +45,7 @@ const emit = defineEmits<{
           @click="emit('create')"
         />
       </PermGuard>
-    </div>
+    </template>
 
     <ul v-if="props.workshops.length > 0" class="workshop-rail__list">
       <li v-for="workshop in props.workshops" :key="workshop.id">
@@ -46,6 +53,11 @@ const emit = defineEmits<{
           class="workshop-rail__row"
           :class="{ 'is-active': workshop.id === props.activeId }"
         >
+          <span
+            v-if="workshop.id === props.activeId"
+            class="workshop-rail__mark"
+            aria-hidden="true"
+          />
           <button
             type="button"
             class="workshop-rail__pick"
@@ -90,58 +102,61 @@ const emit = defineEmits<{
       title="还没有车间"
       hint="先建一个车间，再往里分房间。"
     />
-  </aside>
+  </DtCard>
 </template>
 
 <style scoped lang="scss">
 .workshop-rail {
-  display: flex;
-  width: 15rem;
+  // 随页宽伸缩而不是钉死一个数：钉死的话宽屏上它是一条越来越细的边条，
+  // 窄屏上又占掉近三成。上下限对齐达标预测页（18rem）与采集页（20rem）
+  width: clamp(16rem, 20vw, 20rem);
   flex: none;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--card-border);
-  border-radius: var(--card-radius);
-  background: var(--card-bg);
-  overflow: auto;
-
-  &__head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  &__title {
-    color: var(--text-secondary);
-    font-size: 12px;
-    letter-spacing: 0.08em;
-  }
 
   &__list {
     display: flex;
+    min-height: 0;
+    flex: 1;
     flex-direction: column;
-    gap: 2px;
+    gap: 6px;
     margin: 0;
     padding: 0;
     list-style: none;
+    overflow-y: auto;
   }
 
+  // 与达标预测页的房间栏同一副长相：描边小卡 + 选中时左侧一道竖条
   &__row {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 2px;
-    border-radius: var(--radius-md);
+    overflow: hidden;
     padding-right: 2px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--surface-sunken) 40%, transparent);
+    transition: var(--fx-transition);
 
     &:hover {
-      background: var(--surface-raised);
+      border-color: var(--border-default);
+      background: rgba(var(--accent-primary-rgb), 0.05);
     }
 
     &.is-active {
-      background: rgba(var(--accent-primary-rgb), 0.14);
+      border-color: rgba(var(--accent-primary-rgb), 0.5);
+      background: rgba(var(--accent-primary-rgb), 0.1);
     }
+  }
+
+  &__mark {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 2px;
+    height: 20px;
+    border-radius: 0 2px 2px 0;
+    background: var(--accent-primary);
+    transform: translateY(-50%);
   }
 
   &__pick {
@@ -150,7 +165,7 @@ const emit = defineEmits<{
     flex: 1;
     flex-direction: column;
     gap: 2px;
-    padding: 8px;
+    padding: 8px 10px;
     border: none;
     background: transparent;
     color: var(--text-primary);
@@ -166,13 +181,14 @@ const emit = defineEmits<{
 
   &__name {
     overflow: hidden;
+    font-size: 13px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   &__meta {
     color: var(--text-secondary);
-    font-size: 12px;
+    font-size: 11px;
   }
 
   &__actions {
@@ -180,5 +196,10 @@ const emit = defineEmits<{
     flex: none;
     align-items: center;
   }
+}
+
+.workshop-rail__row.is-active .workshop-rail__name {
+  color: var(--text-title);
+  font-weight: 500;
 }
 </style>

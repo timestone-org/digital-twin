@@ -70,7 +70,12 @@ markers = [
 ]
 # ⚠ 警告一律当红灯：CI 日志里的黄字没人回头看，而一条 DeprecationWarning
 # 就是下次升级依赖时的失败。要留的例外必须逐条写在这里，说清为什么留。
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    # 上游对订阅账号那一路的实验性声明。走这条路是拍过板的（理由见
+    # llmcore/codex/model.py 的文件头），每次构造都喊一遍只会淹掉真警告
+    "ignore:`_ChatOpenAICodex` is experimental:UserWarning",
+]
 
 [tool.coverage.run]
 branch = true

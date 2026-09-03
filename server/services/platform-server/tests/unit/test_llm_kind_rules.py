@@ -8,6 +8,7 @@
 import pytest
 
 from platform_server.apps.llm_providers.enums import (
+    DEFAULT_RERANK_DIALECT,
     PROVIDER_KIND_CODEX_OAUTH,
     PROVIDER_KIND_OPENAI_COMPAT,
     ProviderKindSpec,
@@ -16,8 +17,10 @@ from platform_server.apps.llm_providers.enums import (
     purpose_of,
 )
 from platform_server.apps.llm_providers.rules import (
+    allowed_options,
     default_effort_of,
     purpose_mismatch,
+    rerank_dialect_of,
 )
 
 
@@ -47,13 +50,17 @@ def test_the_endpoint_kind_serves_every_consumer(purpose: str) -> None:
     )
 
 
-def test_the_login_kind_is_rejected_for_the_other_consumer() -> None:
-    rejected = purpose_mismatch(
-        _kind(PROVIDER_KIND_CODEX_OAUTH),
-        _purpose("knowledge.chat"),
-    )
-    assert rejected is not None
-    assert "knowledge" in rejected
+def test_the_login_kind_serves_both_consumers() -> None:
+    """⚠ 加一个消费方的前提是**它真接得了**（ADR-0041）：光在这里放行只会让
+    界面上分配得上、那一侧永远沿用环境变量那一档，而两边代码单看都对。
+    知识库那一侧接得了它，由 `llm_adapters.KIND_BUILDERS` 与那组用例证明。"""
+    for purpose in ("assistant.chat", "knowledge.chat"):
+        assert (
+            purpose_mismatch(
+                _kind(PROVIDER_KIND_CODEX_OAUTH), _purpose(purpose)
+            )
+            is None
+        )
 
 
 def test_the_login_kind_is_rejected_for_embeddings() -> None:
@@ -89,3 +96,48 @@ def test_the_configured_effort_is_read_defensively(
     options: dict[str, object] | None, expected: str | None
 ) -> None:
     assert default_effort_of(options) == expected
+
+
+def test_the_endpoint_kind_serves_the_rerank_purpose() -> None:
+    assert (
+        purpose_mismatch(
+            _kind(PROVIDER_KIND_OPENAI_COMPAT), _purpose("knowledge.rerank")
+        )
+        is None
+    )
+
+
+def test_the_login_kind_is_rejected_for_rerank() -> None:
+    rejected = purpose_mismatch(
+        _kind(PROVIDER_KIND_CODEX_OAUTH), _purpose("knowledge.rerank")
+    )
+    assert rejected is not None
+    assert "knowledge" in rejected
+
+
+@pytest.mark.parametrize(
+    ("options", "expected"),
+    [
+        (None, DEFAULT_RERANK_DIALECT),
+        ({}, DEFAULT_RERANK_DIALECT),
+        # ⚠ 没配这一格的存量供应商打的正是默认那一套线形
+        ({"default_effort": "high"}, DEFAULT_RERANK_DIALECT),
+        ({"rerank_dialect": "dashscope"}, "dashscope"),
+        ({"rerank_dialect": 7}, DEFAULT_RERANK_DIALECT),
+        ({"rerank_dialect": ""}, DEFAULT_RERANK_DIALECT),
+    ],
+)
+def test_the_configured_dialect_falls_back_to_the_default(
+    options: dict[str, object] | None, expected: str
+) -> None:
+    assert rerank_dialect_of(options) == expected
+
+
+def test_only_the_endpoint_kind_offers_a_rerank_dialect() -> None:
+    """⚠ 形态之间的键不通用：混着存等于让一个形态读到另一个形态的取值。"""
+    assert "rerank_dialect" in allowed_options(
+        _kind(PROVIDER_KIND_OPENAI_COMPAT)
+    )
+    assert "rerank_dialect" not in allowed_options(
+        _kind(PROVIDER_KIND_CODEX_OAUTH)
+    )

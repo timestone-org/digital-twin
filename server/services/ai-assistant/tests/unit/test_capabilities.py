@@ -9,12 +9,45 @@ from pydantic import SecretStr
 
 from ai_assistant.apps.chat.api.capabilities import capability_of
 from ai_assistant.apps.chat.schemas.capability import ModelProfileOut
-from ai_assistant.llm import CODEX_PROFILE, DEFAULT_PROFILE
+from ai_assistant.llm import DEFAULT_PROFILE
 from ai_assistant.llm.adapters import AdapterDeps
 from ai_assistant.llm.registry import ModelRegistry
 from ai_assistant.settings import Settings
+from llmcore import ModelCatalog, ModelSpec, ProviderSpec
 
 SECRET = SecretStr("s" * 32)
+# 目录里那一路订阅账号的档位名就是它的 id（ADR-0041：那一路只从目录里来）
+CODEX_ID = "8f0c1e3a-0000-7000-8000-000000000003"
+
+
+def _codex_catalog() -> ModelCatalog:
+    """目录里配了一路订阅账号。"""
+    return ModelCatalog(
+        providers=(
+            ProviderSpec(
+                id=CODEX_ID,
+                name="我的 Codex",
+                kind="codex_oauth",
+                base_url="",
+                api_key=SecretStr(""),
+                is_enabled=True,
+                models=(ModelSpec(name="some-codex", kind="chat"),),
+            ),
+        ),
+        assignments=(),
+        version="v1",
+    )
+
+
+class _Catalog:
+    """目录源的替身：手里一份快照。"""
+
+    def snapshot(self) -> ModelCatalog:
+        return _codex_catalog()
+
+    async def refresh(self, *, is_forced: bool = False) -> ModelCatalog:
+        del is_forced
+        return _codex_catalog()
 
 
 class _Tokens:
@@ -37,9 +70,6 @@ def _settings(**overrides: object) -> Settings:
         "edge_service_key": SECRET,
         "model_enabled": True,
         "model_api_key": SecretStr("k" * 8),
-        "codex_enabled": True,
-        "codex_model": "some-codex",
-        "credential_secret": SECRET,
     }
     base.update(overrides)
     return Settings(
@@ -49,7 +79,11 @@ def _settings(**overrides: object) -> Settings:
 
 def _registry(**overrides: object) -> ModelRegistry:
     return ModelRegistry(
-        AdapterDeps(settings=_settings(**overrides), tokens=_Tokens())
+        AdapterDeps(
+            settings=_settings(**overrides),
+            tokens=_Tokens(),
+            catalog=_Catalog(),
+        )
     )
 
 
@@ -64,12 +98,12 @@ def test_the_subscription_route_is_the_default_once_it_is_logged_in() -> None:
         _registry(),
         [
             _profile(DEFAULT_PROFILE, is_ready=True),
-            _profile(CODEX_PROFILE, is_ready=True),
+            _profile(CODEX_ID, is_ready=True),
         ],
         "medium",
     )
 
-    assert body.default_model_id == CODEX_PROFILE
+    assert body.default_model_id == CODEX_ID
 
 
 def test_a_subscription_that_never_logged_in_does_not_become_the_default(
@@ -79,7 +113,7 @@ def test_a_subscription_that_never_logged_in_does_not_become_the_default(
         _registry(),
         [
             _profile(DEFAULT_PROFILE, is_ready=True),
-            _profile(CODEX_PROFILE, is_ready=False),
+            _profile(CODEX_ID, is_ready=False),
         ],
         "medium",
     )
@@ -90,7 +124,7 @@ def test_a_subscription_that_never_logged_in_does_not_become_the_default(
 
 def test_no_usable_route_reads_as_the_model_being_off() -> None:
     body = capability_of(
-        _registry(), [_profile(CODEX_PROFILE, is_ready=False)], "medium"
+        _registry(), [_profile(CODEX_ID, is_ready=False)], "medium"
     )
 
     assert body.is_model_enabled is False
@@ -99,7 +133,7 @@ def test_no_usable_route_reads_as_the_model_being_off() -> None:
 def test_the_default_effort_comes_from_the_deployment_config() -> None:
     body = capability_of(
         _registry(codex_reasoning_effort="high"),
-        [_profile(CODEX_PROFILE, is_ready=True)],
+        [_profile(CODEX_ID, is_ready=True)],
         "high",
     )
 

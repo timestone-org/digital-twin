@@ -15,6 +15,10 @@ dependencies = [
     "langgraph>=1.2",
     "langchain-openai>=1.6",
     "openai>=3.3",
+    # 拉目录与打重排端点都直接走 HTTP：重排不在 OpenAI 兼容口径里，各家一套
+    # 方言。⚠ 必须自己声明：openai 顺手把它装进了共享 venv，只有按声明的依赖
+    # 装的镜像会在第一次拉目录时 ModuleNotFoundError
+    "httpx>=0.28",
     # 端点密钥用 SecretStr 装着——从形状上就不许它被 print 出去
     "pydantic>=2.10",
 ]
@@ -36,7 +40,12 @@ testpaths = ["tests"]
 pythonpath = ["tests"]
 asyncio_mode = "auto"
 addopts = "-q"
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    # 上游对订阅账号那一路的实验性声明。走这条路是拍过板的（理由见
+    # codex/model.py 的文件头），每次构造都喊一遍只会淹掉真警告
+    "ignore:`_ChatOpenAICodex` is experimental:UserWarning",
+]
 
 [tool.coverage.run]
 branch = true

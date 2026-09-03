@@ -1,10 +1,23 @@
 /**
- * @fileoverview 顺着边往上游走：一个节点的列候选，来自它上游那些取数节点选的台账。
+ * @fileoverview 顺着边往上游走：一个节点的列候选，来自它上游那些取数节点。
  *
  * ⚠ 不能拿「图里所有取数节点」凑数：一条流水线接两张台账时，下游那一支的列
  * 选择器会列出另一支的列名，用户勾了之后要等运行时才报「这一列不存在」。
+ * ⚠ 也不能只按台账列：取数节点自己挑过列之后，帧上就只剩那几列了。候选不跟着
+ * 收窄的话，下游能勾到一列上游根本不产出的列，而保存与运行会被后端拦下——
+ * 用户读到的是「取数必须把列选全」，真相是这一勾。收窄口径与后端
+ * `graph_walk.known_keys_by_node` 一一对应。
  */
 import type { ModelingGraph, ModelingOperator } from '@dt/contracts'
+
+/** 上游的一个取数节点。 */
+export interface UpstreamSource {
+  nodeId: string
+  /** 它选的台账编码。 */
+  code: string
+  /** 它挑中的列 key。**空数组的语义是「取全部列」**，不是「一列都不取」。 */
+  picked: readonly string[]
+}
 
 /** 从某个节点往上游走，收集能到达的全部节点（含它自己）。 */
 export function withAncestorsOf(
@@ -24,21 +37,63 @@ export function withAncestorsOf(
   return seen
 }
 
+function textList(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is string => typeof item === 'string')
+}
+
 /**
- * 这个节点的列候选该看哪几张台账。
+ * 这个节点上游（含它自己）的那些取数节点。
  *
  * @param nodeId 正在配参数的那个节点；给 null 时看整张图
  */
+export function upstreamSourcesFor(
+  graph: ModelingGraph,
+  operators: ReadonlyMap<string, ModelingOperator>,
+  nodeId: string | null,
+): UpstreamSource[] {
+  const reach = nodeId === null ? null : withAncestorsOf(graph, nodeId)
+  return graph.nodes
+    .filter((node) => reach === null || reach.has(node.id))
+    .filter((node) => operators.get(node.operator)?.category === 'source')
+    .map((node) => ({
+      nodeId: node.id,
+      code:
+        typeof node.config['table_code'] === 'string'
+          ? node.config['table_code']
+          : '',
+      picked: textList(node.config['columns']),
+    }))
+    .filter((source) => source.code !== '')
+}
+
+/** 这个节点的列候选该看哪几张台账。 */
 export function sourceTablesFor(
   graph: ModelingGraph,
   operators: ReadonlyMap<string, ModelingOperator>,
   nodeId: string | null,
 ): string[] {
-  const reach = nodeId === null ? null : withAncestorsOf(graph, nodeId)
-  const codes = graph.nodes
-    .filter((node) => reach === null || reach.has(node.id))
-    .filter((node) => operators.get(node.operator)?.category === 'source')
-    .map((node) => node.config['table_code'])
-    .filter((code): code is string => typeof code === 'string' && code !== '')
-  return [...new Set(codes)]
+  return [
+    ...new Set(
+      upstreamSourcesFor(graph, operators, nodeId).map((item) => item.code),
+    ),
+  ]
+}
+
+/**
+ * 上游收窄到哪些列。`null` 表示推不出来，不收窄。
+ *
+ * ⚠ 只要有一个上游取数留空（= 取全部列），整个集合就是未知的：那时宁可多列
+ * 几个候选，也不要把用户真的能用的列藏起来——藏起来的表现是「我那一列不见了」。
+ */
+export function visibleKeysOf(
+  sources: readonly UpstreamSource[],
+): Set<string> | null {
+  if (sources.length === 0) return null
+  const keys = new Set<string>()
+  for (const source of sources) {
+    if (source.picked.length === 0) return null
+    for (const key of source.picked) keys.add(key)
+  }
+  return keys
 }

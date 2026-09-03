@@ -9,10 +9,14 @@
 
 ⚠ 没接对话档时它**如实不可用**，不悄悄退化成 `hybrid`：悄悄退化的表现是
 「质量忽然变差了」，而没有任何一处报错。
+
+⚠ 重排在**合池之后**做一次，对着原问题（ADR-0042）：让每条改写式各排一次的话，
+几路的分数不是同一个基准，合池之后按它们排序等于按噪声排序——而那笔钱还是
+按条算的。
 """
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,12 +25,20 @@ from knowledge_server.apps.knowledge.services.llm import (
     Answerer,
     AnswerUnavailable,
 )
+from knowledge_server.apps.knowledge.services.reranking import (
+    NullReranker,
+    Reranker,
+)
 from knowledge_server.apps.knowledge.services.retrieval.hybrid import Hybrid
 from knowledge_server.apps.knowledge.services.retrieval.ports import (
     Hit,
     RetrievalRequest,
     RetrievalResult,
     RetrievalUnavailable,
+)
+from knowledge_server.apps.knowledge.services.retrieval.reranked import (
+    candidate_width,
+    reranked,
 )
 
 AGENTIC = "agentic"
@@ -54,10 +66,14 @@ _ANSWER_SYSTEM = (
 
 @dataclass(frozen=True)
 class Agentic:
-    """改写、召回、评分、补检、合成。"""
+    """改写、召回、评分、补检、重排、合成。"""
 
     hybrid: Hybrid
     answerer: Answerer
+    # 重排那一路。⚠ 在**合池之后**对着原问题排一次，而不是让每条改写式各排
+    # 一次：各自的分数不是同一个基准，合池之后按它们排序等于按噪声排序，
+    # 而每条改写式各排一次的钱是白花的
+    reranker: Reranker = field(default_factory=NullReranker)
     name: str = AGENTIC
     is_llm_backed: bool = True
     is_answering: bool = True
@@ -83,14 +99,40 @@ class Agentic:
             found = list(seen.values())
             is_complete = await self._is_enough(request.query, found)
             query = request.query
-        hits = _best(list(seen.values()), request.limit)
+        hits, note = await self._ranked(request, list(seen.values()))
         return RetrievalResult(
             hits=hits,
             strategy=self.name,
             rounds=rounds,
             is_complete=is_complete,
             answer=await self._answer(request.query, hits),
-            note="" if is_complete else "到了轮数上限，这批资料可能没覆盖全",
+            note="；".join(
+                one
+                for one in (
+                    "" if is_complete else "到了轮数上限，这批资料可能没覆盖全",
+                    note,
+                )
+                if one
+            ),
+        )
+
+    async def _ranked(
+        self, request: RetrievalRequest, pool: list[Hit]
+    ) -> tuple[tuple[Hit, ...], str]:
+        """把几轮攒下的池子排定，并回一句「这次出了什么事」。
+
+        ⚠ 重排对着**原问题**做，不对着最后一条改写式：用户问的是前者，
+        而改写式只是为了把资料捞出来。
+
+        Args: request, pool。
+        """
+        wanted = (
+            candidate_width(request.limit)
+            if self.reranker.can_rerank
+            else request.limit
+        )
+        return await reranked(
+            self.reranker, request.query, _best(pool, wanted), request.limit
         )
 
     async def _round(

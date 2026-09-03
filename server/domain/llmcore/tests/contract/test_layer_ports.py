@@ -13,13 +13,14 @@ import pytest
 
 # llmcore 的层包。⚠ 显式列出而不是扫目录：扫出来的名单会把将来某个忘了
 # `__init__.py` 的目录悄悄漏掉，而漏掉的那一层的闸就此不跑
-LAYERS = ("turn", "tools", "output", "intent", "reflection")
+LAYERS = ("turn", "tools", "output", "intent", "reflection", "rerank")
 
 # 这几个是 Protocol，注册表要靠 `isinstance` 逐个校验注册进来的实现
 PROTOCOLS = (
     ("turn", "Responder"),
     ("tools", "ToolProvider"),
     ("reflection", "Verifier"),
+    ("rerank", "Reranker"),
 )
 
 # ⚠ 产品名词的黑名单。domain 层沾上任何一个，就等于把两个消费方之一写死进来：
