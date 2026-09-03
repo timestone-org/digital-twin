@@ -91,7 +91,10 @@ class JwtCodec:
 
     def _decode_with_any_key(self, token: str) -> dict[str, Any]:
         last_error: Exception | None = None
-        for key in self._keys():
+        keys = self._keys()
+        if not keys:
+            raise TokenError("没有可用的校验密钥")
+        for key in keys:
             try:
                 # ⚠ algorithms 必须显式给：留空会放行 alg=none 与算法混淆
                 decoded: dict[str, Any] = (
@@ -109,9 +112,19 @@ class JwtCodec:
         raise TokenError("令牌无效或已过期") from last_error
 
     def _keys(self) -> Sequence[str]:
-        ordered = [self.signing_key]
+        """这枚令牌可以拿哪几把钥匙去验，签名那把排在最前。
+
+        ⚠ **空串不是密钥**，必须滤掉：轮换那一格没配时它就是空串，而空串交给
+        pyjwt 回来的是 `InvalidKeyError`——它**不是** `InvalidTokenError` 的
+        子类，于是从 `decode` 里逃出去成了 500。实测过一次：令牌一过期，主密钥
+        先抛「已过期」（那一档是接住的），接着轮到空串，整站的 `auth_request`
+        于是回 500 而不是 401，用户看到的是「站坏了」而不是「请重新登录」。
+        """
+        ordered = [self.signing_key] if self.signing_key else []
         ordered.extend(
-            key for key in self.verification_keys if key != self.signing_key
+            key
+            for key in self.verification_keys
+            if key and key != self.signing_key
         )
         return ordered
 

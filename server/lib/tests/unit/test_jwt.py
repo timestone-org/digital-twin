@@ -124,3 +124,43 @@ def test_extra_claims_survive_the_roundtrip() -> None:
         now=NOW,
     )
     assert codec.decode(token, expected_type="access").extra == {"tenant": "t1"}
+
+
+def test_an_empty_rotation_key_is_not_a_key() -> None:
+    """⚠ 轮换那一格没配时是**空串**，而空串不是密钥——把它当密钥交给 pyjwt，
+    回来的是 `InvalidKeyError`，它**不是** `InvalidTokenError` 的子类，于是从
+    `decode` 里逃出去成了 500。
+
+    实测过一次：令牌一过期，主密钥先抛「已过期」（这一档是接住的），接着轮到
+    那个空串——整站的 `auth_request` 于是回 500 而不是 401，用户看到的是「站
+    坏了」而不是「请重新登录」。
+    """
+    codec = make_codec(previous="")
+    token, _ = codec.issue(
+        subject="u1",
+        token_type="access",
+        ttl_s=LONG_TTL_S,
+        now=utcnow() - timedelta(hours=2),
+    )
+
+    with pytest.raises(TokenError):
+        codec.decode(token, expected_type="access")
+
+
+def test_an_empty_rotation_key_still_verifies_a_good_token() -> None:
+    """⚠ 丢掉空串不许把好令牌一起丢掉：主密钥仍旧要认。"""
+    codec = make_codec(previous="")
+    token, _ = codec.issue(
+        subject="u1", token_type="access", ttl_s=LONG_TTL_S, now=NOW
+    )
+
+    assert codec.decode(token, expected_type="access").subject == "u1"
+
+
+def test_a_codec_with_no_usable_key_refuses_instead_of_crashing() -> None:
+    """⚠ 一把可用的密钥都没有时要抛 TokenError，不许把空串交给 pyjwt：
+    那条路上回来的异常没人接，最后变成 500。"""
+    codec = JwtCodec(signing_key="", verification_keys=("",), issuer="auth")
+
+    with pytest.raises(TokenError):
+        codec.decode("x.y.z", expected_type="access")
