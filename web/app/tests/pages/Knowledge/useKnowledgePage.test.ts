@@ -399,9 +399,9 @@ describe('首屏', () => {
       readyStrategies: [],
       acceptedSuffixes: [],
       index: {
-        vector: 'bruteforce',
-        keyword: 'like',
-        reason: '这套部署没装 pgvector',
+        vector: 'pgvector',
+        keyword: 'trgm',
+        reason: '这套部署的向量列是 1536 维，模型算出来的是 1024 维',
       },
       rerank: {
         isEnabled: false,
@@ -413,6 +413,8 @@ describe('首屏', () => {
 
     await page.reload()
 
-    expect(page.indexHint.value).toBe('这套部署没装 pgvector')
+    expect(page.indexHint.value).toBe(
+      '这套部署的向量列是 1536 维，模型算出来的是 1024 维',
+    )
   })
 })

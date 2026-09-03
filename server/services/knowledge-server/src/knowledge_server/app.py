@@ -11,7 +11,7 @@ from knowledge_server.apps.chat.api import CHAT_ROUTERS
 from knowledge_server.apps.knowledge.api import ROUTERS
 from knowledge_server.apps.speech.api import SPEECH_ROUTERS
 from knowledge_server.container import Container, build_container
-from knowledge_server.probe import probe_indexes
+from knowledge_server.schema import read_schema_facts
 from knowledge_server.settings import API_PREFIX, Settings
 from lib.lifespan import LifespanHook
 from lib.logging import configure_logging
@@ -54,11 +54,14 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
     Args: container。
     """
 
-    async def probe() -> None:
-        await probe_indexes(container.database, container.index)
-
     return (
-        LifespanHook(name="index-probe", startup=probe, startup_order=20),
+        # ⚠ 向量列的维数先读一次再接流量：读不到只是让维数对不上时那句话说得
+        # 不那么准，所以它不阻塞启动，也不进就绪探针
+        LifespanHook(
+            name="schema-facts",
+            startup=_read_schema_facts(container),
+            startup_order=20,
+        ),
         # ⚠ 目录先拉一次再接流量：不拉的话第一批检索与摄取读到的是空目录，
         # 全部退回环境变量那一档——而那一档可能根本没配。拉不到不阻塞启动：
         # 目录缓存自己吞掉失败、沿用空的那一份，随后每次调用按 TTL 再试
@@ -85,6 +88,18 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
             shutdown_order=99,
         ),
     )
+
+
+def _read_schema_facts(container: Container) -> Callable[[], Awaitable[None]]:
+    """把「启动时问一次库上向量列的维数」包成启动动作。读不到也不抛。
+
+    Args: container。
+    """
+
+    async def read() -> None:
+        await read_schema_facts(container.database, container.schema)
+
+    return read
 
 
 def _prefetch_catalog(container: Container) -> Callable[[], Awaitable[None]]:

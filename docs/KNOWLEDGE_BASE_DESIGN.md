@@ -106,9 +106,9 @@ AgenticRAG 的「agentic」落在**两侧**，各解决一半：
 |---|---|---|---|
 | `sources/` | 知识**从哪来** | `KnowledgeSource` | `UploadSource`、`PlatformSource` |
 | `parsing/` | 一份原件**由谁解、解成什么** | `ParserBackend` → `DocumentParser` / `ExternalParserBackend` | 本地：`TextParser`、`DocxParser`、`XlsxParser`、`PptxParser`；外部：**一期空着** |
-| `chunking/` | 怎么**切块** | `Chunker` | `HeadingChunker`、`FixedWindowChunker`、`RowChunker` |
+| `chunking/` | 怎么**切块** | `Chunker` | `StructuralChunker`、`FixedWindowChunker`、`RowChunker` |
 | `embedding/` | 用哪一路**嵌入** | `Embedder` | `DomainEmbedder`（走 `server/domain/llm`）、`NullEmbedder` |
-| `indexing/` | 向量与关键词**存哪、怎么查** | `VectorIndex` / `KeywordIndex` | `PgVectorIndex` / `BruteForceIndex`；`TrgmKeywordIndex` / `LikeKeywordIndex` |
+| `indexing/` | 向量与关键词**存哪、怎么查** | `VectorIndex` / `KeywordIndex` | `PgVectorIndex`；`TrgmKeywordIndex`（各只有一个实现，ADR-0045） |
 | `retrieval/` | **检索策略** | `RetrievalStrategy` | `NaiveVector`、`Hybrid`、`Agentic` |
 | `reranking/` | 召回之后**怎么重排**（[ADR-0042](adr/0042-重排是第三种模型种类且方言可插拔.md)） | `Reranker` | `RemoteReranker`、`NullReranker` |
 
@@ -201,7 +201,7 @@ schema `knowledge`，域前缀 `kb_`（database-standard §1）。
 | `kb_sources` | 一个库下的一路来源实例 | `base_id`、`kind`、`config_json`、`last_synced_at` |
 | `kb_documents` | 一份文档 | `base_id`、`source_id`、`external_ref`、`object_key`、`content_hash`、`status`、`failure_reason` |
 | `kb_chunks` | 一个块 | `document_id`、`ordinal`、`text`、`locator_json`、`token_count` |
-| `kb_chunk_vectors` | 一个块的嵌入结果（bytea） | `chunk_id`、`embedding`、`embedding_model`、`dimensions` |
+| `kb_chunk_embeddings` | 一个块的嵌入结果（`vector(N)` + HNSW） | `chunk_id`、`base_id`、`embedding`、`embedding_model` |
 
 ⚠ **`embedding_model` 与 `dimensions` 钉在库上**，不是钉在块上。一个库里混两种维数
 的向量算不出有意义的余弦，而表现只是「召回忽然变差了」——没有任何一处会报错。
@@ -214,23 +214,29 @@ schema `knowledge`，域前缀 `kb_`（database-standard §1）。
 先按向量收窄再回表取正文，而列表页永远不需要向量。挂在一起的话，一次「列一下这个库
 有哪些块」就把几千条 6KB 的向量一起拖出来，而它只表现为「列表页有点慢」。
 
-### 3.1 pgvector 是**加速物化**，bytea 是**持久真相**（[ADR-0034](adr/0034-向量索引走端口并按扩展探测选实现.md)）
+### 3.1 向量存在 pgvector 的 `vector` 列上，且它是硬依赖（[ADR-0045](adr/0045-向量与关键词索引改为硬依赖.md)）
 
-- `kb_chunk_vectors.embedding` 是 `BYTEA`（小端 float32），**全环境都有**，
-  由主线迁移建。它是「不想再花一次嵌入的钱」那一份。
-- pgvector 那一路的 `kb_chunk_vectors_pgv(chunk_id, embedding vector(N))` + HNSW 索引
-  **不由主线迁移建**，是一步显式的运维动作（`python -m knowledge_server.index --enable`，向量与关键词两路一起开）。
-  它是「查得快」那一份。
-- 服务**启动时探测扩展与加速表在不在**，据此选 `PgVectorIndex` 或 `BruteForceIndex`，
-  探测结果如实进 `/capabilities`。
+- `kb_chunk_embeddings(chunk_id, base_id, embedding vector(N), embedding_model)` 是
+  **唯一**的向量存储，由迁移建；同一份迁移里 `CREATE EXTENSION vector / pg_trgm`，
+  并给 `kb_chunks.text` 建 GIN trigram 索引。
+- 检索走 HNSW（`vector_cosine_ops`，余弦距离 `<=>`）；库过滤那一列另有一个 b-tree，
+  因为 HNSW 索引本身不吃 `WHERE base_id = ?`。
+- **没有回退档**：没有 bytea 那份第二真相，也没有应用层余弦与 `ILIKE`。
+  库上装不了扩展 = 迁移失败 = 整栈起不来。
 
-⚠ 为什么加速结构不进 alembic：`CREATE EXTENSION` 是**库级**动作，而本仓的结构闸
-明令「一个服务的迁移不许动别的 schema」；更要紧的是，目标库装不上 pgvector 时
-迁移会当场失败，而迁移是 compose 的前置作业——**整栈起不来**。把它挪出迁移之后，
-「装没装 pgvector」就只是取值不同，不是行为不同（config-and-secrets §5）。
+⚠ 为什么这次把它做成硬依赖（作废 [ADR-0034](adr/0034-向量索引走端口并按扩展探测选实现.md)
+的决策二至五）：可选加速档在真实部署里是**没人开的那一档**——加速表要一步显式的运维
+动作，探测失败也只是退回回退档，而两者在界面上长得一模一样，只是召回悄悄变差。
+本部署实测过一次：扩展装了、加速表也建了，但 worker 启动那一刻库还没起来，探测失败，
+于是整个进程此后一直跑在回退档上，没有任何一处报错。
 
-⚠ 双份存储是**有意付的代价**：1536 维一条 6KB，十万块就是 1.2 GB 两份。换来的是
-重建索引不必重新调一遍嵌入 API——那是真金白银，而且重建索引这件事一定会发生。
+⚠ `vector(N)` 的 N 建表时定死，取自 `KNOWLEDGE_EMBEDDING_DIMENSIONS`，**必须**等于
+模型目录里分配给「知识库嵌入」那个模型的维数。对不上时一份文档都摄不进来，而
+`/capabilities` 会在传文档之前就把两个数字与该改哪个环境变量说出来——Postgres 自己
+那条「expected N dimensions」里两样都没有。换模型换维数 = 一次新迁移 + 重新解析。
+
+⚠ 重建索引**不必重算向量**：数据就在那一列上，`REINDEX` 读的也是它。这正是原先
+双份存储要买的那件事，而单列已经天然有了。
 
 ---
 

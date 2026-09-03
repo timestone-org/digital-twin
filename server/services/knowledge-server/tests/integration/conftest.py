@@ -14,7 +14,6 @@ from dataclasses import dataclass, replace
 import httpx
 import pytest
 from fastapi import FastAPI
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
     AsyncSession,
@@ -276,24 +275,12 @@ def db_sessions(
 
 
 @pytest.fixture
-async def db_accelerated(db_sessions: Callable[[], CommittingSession]) -> None:
-    """这套库装了加速档的两个扩展吗；没装就跳过。
+def db_dimensions(db_settings: Settings) -> int:
+    """这套库上向量列的维数。
 
-    ⚠ 环境能力的判定**只许写在 conftest**（`check_tests` 守着这条）：散在用例
-    里的 `skip` 会慢慢长成一片，而 CI 里 skip 掉的用例等于没跑。CI 的库两个
-    扩展都带，且流水线会跑一次 `python -m knowledge_server.index --enable`——
-    所以在 CI 里这条永远不跳。
+    ⚠ 假向量必须**真的**是这个宽度：列是 `vector(N)`，宽度对不上时 Postgres
+    回一条「expected N dimensions」，而那条错读起来像是嵌入档配错了。
 
-    Args: db_sessions。
+    Args: db_settings。
     """
-    async with db_sessions() as session:
-        found = await session.execute(
-            text(
-                "SELECT extname FROM pg_extension "
-                "WHERE extname IN ('vector', 'pg_trgm')"
-            )
-        )
-        installed = {str(one) for one in found.scalars()}
-    missing = {"vector", "pg_trgm"} - installed
-    if missing:
-        pytest.skip(f"这套库没装：{'、'.join(sorted(missing))}")
+    return db_settings.embedding_dimensions

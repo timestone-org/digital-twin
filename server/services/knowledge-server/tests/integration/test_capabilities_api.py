@@ -24,15 +24,17 @@ async def test_capabilities_answers_without_any_model(
     assert body["data"]["rerank"]["reason"]
 
 
-async def test_capabilities_reports_the_fallback_reason(
+async def test_capabilities_names_the_two_lanes(
     app_client: httpx.AsyncClient,
 ) -> None:
-    """没连上库时探测拿不到结果，那也要说出来——不说的话，
-    「检索为什么这么慢」永远查不到源头。"""
+    """⚠ 两路都没有回退档了（ADR-0045），但界面仍要说得出检索是怎么做的：
+    这两格恒为 pgvector 与 trgm，而没接嵌入档时也不改口——改口的话，
+    「这套部署的检索是怎么做的」与「此刻能不能用」会被混成一句话。"""
     response = await app_client.get(PATH)
     index = response.json()["data"]["index"]
-    assert index["vector"] == "bruteforce"
-    assert index["reason"]
+    assert index["vector"] == "pgvector"
+    assert index["keyword"] == "trgm"
+    assert index["reason"] == ""
 
 
 async def test_anonymous_is_rejected(settings: object) -> None:

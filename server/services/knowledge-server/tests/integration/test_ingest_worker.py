@@ -16,11 +16,7 @@ import pytest
 
 from knowledge_server.apps.knowledge import crud
 from knowledge_server.apps.knowledge.services import ingest_queue
-from knowledge_server.apps.knowledge.services.indexing import (
-    BruteForceIndex,
-    IndexPair,
-    LikeKeywordIndex,
-)
+from knowledge_server.apps.knowledge.services.indexing import build_indexes
 from knowledge_server.apps.knowledge.services.ingest_pipeline import IngestDeps
 from knowledge_server.apps.knowledge.services.ingest_worker import (
     ConsumerOptions,
@@ -66,13 +62,19 @@ class _Source:
 
 @dataclass(frozen=True)
 class _Embedder:
-    dimensions: int = 0
-    id: str = "none"
-    can_embed: bool = False
+    """按正文长度造一条宽度正好的假向量。"""
+
+    dimensions: int
+    id: str = "fake"
+    can_embed: bool = True
 
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
-        del texts
-        raise AssertionError("不该被调到")
+        return [
+            ([float(len(one) % 7), 1.0] + [0.0] * self.dimensions)[
+                : self.dimensions
+            ]
+            for one in texts
+        ]
 
 
 class _Stream:
@@ -89,7 +91,9 @@ class _Stream:
         self.acked.append(entry_id)
 
 
-def _consumer(stream: _Stream, database: object, mode: str) -> IngestConsumer:
+def _consumer(
+    stream: _Stream, database: object, mode: str, dimensions: int
+) -> IngestConsumer:
     return IngestConsumer(
         stream=stream,  # pyright: ignore[reportArgumentType]
         database=database,  # pyright: ignore[reportArgumentType]
@@ -97,10 +101,10 @@ def _consumer(stream: _Stream, database: object, mode: str) -> IngestConsumer:
             sources=(
                 _Source(mode=mode),
             ),  # pyright: ignore[reportArgumentType]
-            embedder=_Embedder(),  # pyright: ignore[reportArgumentType]
-            indexes=IndexPair(
-                vector=BruteForceIndex(), keyword=LikeKeywordIndex()
+            embedder=_Embedder(  # pyright: ignore[reportArgumentType]
+                dimensions=dimensions
             ),
+            indexes=build_indexes(dimensions),
             pool=ThreadPoolExecutor(max_workers=1),
             parse_timeout_s=30.0,
         ),
@@ -162,13 +166,16 @@ class _Database:
         return self._sessions()  # pyright: ignore[reportCallIssue]
 
 
-async def test_a_finished_document_is_acked(db_sessions: object) -> None:
+async def test_a_finished_document_is_acked(
+    db_sessions: object, db_dimensions: int
+) -> None:
     document_id = await _document(db_sessions)
     stream = _Stream()
     consumer = _consumer(
         stream,
         _Database(db_sessions),
         "ok",
+        db_dimensions,
     )
     await consumer._handle(
         _entry(ingest_queue.new_message(document_id, uuid.uuid4()).to_fields())
@@ -178,7 +185,7 @@ async def test_a_finished_document_is_acked(db_sessions: object) -> None:
 
 
 async def test_a_hopeless_document_is_failed_then_acked(
-    db_sessions: object,
+    db_sessions: object, db_dimensions: int
 ) -> None:
     """⚠ 不确认的话，一份解不动的文档会被无限认领重投，占满 worker。"""
     document_id = await _document(db_sessions)
@@ -187,6 +194,7 @@ async def test_a_hopeless_document_is_failed_then_acked(
         stream,
         _Database(db_sessions),
         "gone",
+        db_dimensions,
     )
     await consumer._handle(
         _entry(ingest_queue.new_message(document_id, uuid.uuid4()).to_fields())
@@ -195,7 +203,9 @@ async def test_a_hopeless_document_is_failed_then_acked(
     assert await _status(db_sessions, document_id) == "failed"
 
 
-async def test_a_flaky_upstream_is_left_unacked(db_sessions: object) -> None:
+async def test_a_flaky_upstream_is_left_unacked(
+    db_sessions: object, db_dimensions: int
+) -> None:
     """⚠ 这一档重试有意义：确认掉的话，一次对象存储抖动会把那份文档永久判死。"""
     document_id = await _document(db_sessions)
     stream = _Stream()
@@ -203,6 +213,7 @@ async def test_a_flaky_upstream_is_left_unacked(db_sessions: object) -> None:
         stream,
         _Database(db_sessions),
         "flaky",
+        db_dimensions,
     )
     await consumer._handle(
         _entry(ingest_queue.new_message(document_id, uuid.uuid4()).to_fields())
@@ -211,13 +222,16 @@ async def test_a_flaky_upstream_is_left_unacked(db_sessions: object) -> None:
     assert await _status(db_sessions, document_id) == "parsing"
 
 
-async def test_an_unreadable_message_is_dropped(db_sessions: object) -> None:
+async def test_an_unreadable_message_is_dropped(
+    db_sessions: object, db_dimensions: int
+) -> None:
     """⚠ 不确认的话它会永远卡在待处理列表里，而没有任何一处报错。"""
     stream = _Stream()
     consumer = _consumer(
         stream,
         _Database(db_sessions),
         "ok",
+        db_dimensions,
     )
     await consumer._handle(_entry({"envelope_version": "0"}))
     assert stream.acked == ["1-0"]
@@ -252,7 +266,7 @@ class _Loop(_Stream):
 
 
 async def test_the_loop_claims_stale_before_reading_new(
-    db_sessions: object,
+    db_sessions: object, db_dimensions: int
 ) -> None:
     """⚠ 某个副本跑到一半被杀掉时，它手上那条既没确认也没人管——不认领的话
     它永远卡在待处理列表里，而队列深度看着一切正常。"""
@@ -264,7 +278,7 @@ async def test_the_loop_claims_stale_before_reading_new(
             )
         ]
     )
-    consumer = _consumer(stream, _Database(db_sessions), "ok")
+    consumer = _consumer(stream, _Database(db_sessions), "ok", db_dimensions)
 
     async def stop_soon() -> None:
         await asyncio.sleep(0.05)
@@ -276,16 +290,18 @@ async def test_the_loop_claims_stale_before_reading_new(
 
 
 async def test_drain_returns_once_the_loop_is_idle(
-    db_sessions: object,
+    db_sessions: object, db_dimensions: int
 ) -> None:
     """闲着的循环该立刻排空，而不是干等满一个宽限期。"""
-    consumer = _consumer(_Stream(), _Database(db_sessions), "ok")
+    consumer = _consumer(_Stream(), _Database(db_sessions), "ok", db_dimensions)
     started = asyncio.get_running_loop().time()
     await consumer.drain(5.0)
     assert asyncio.get_running_loop().time() - started < 1.0
 
 
-async def test_a_failed_ack_is_not_fatal(db_sessions: object) -> None:
+async def test_a_failed_ack_is_not_fatal(
+    db_sessions: object, db_dimensions: int
+) -> None:
     """⚠ 确认失败不致命：这条会被别人认领回去，而消费者是幂等的。
     抛出去的话，一次 Redis 抖动会让整条消费循环停掉。"""
     document_id = await _document(db_sessions)
@@ -295,7 +311,7 @@ async def test_a_failed_ack_is_not_fatal(db_sessions: object) -> None:
             del target, entry_id
             raise RuntimeError("Redis 此刻不可达")
 
-    consumer = _consumer(_Broken(), _Database(db_sessions), "ok")
+    consumer = _consumer(_Broken(), _Database(db_sessions), "ok", db_dimensions)
     await consumer._handle(
         _entry(ingest_queue.new_message(document_id, uuid.uuid4()).to_fields())
     )

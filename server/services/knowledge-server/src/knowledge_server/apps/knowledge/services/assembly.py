@@ -1,17 +1,12 @@
-"""按配置与启动探测，装出这一次要用的索引与检索策略。
+"""按配置装出这一次要用的索引与检索策略。
 
-⚠ 只有这一处做「走哪一档」的判定。api 侧与 worker 侧各判一遍的话，
-`/capabilities` 报的与实际写入/检索走的可以漂开——而那时账单与延迟是唯一的
-迹象（ADR-0034 决策四）。
+⚠ 只有这一处装索引。api 侧与 worker 侧各装一份的话，两边的维数与表名可以
+漂开，而那时写进去查不出来、两边都不报错。
 """
 
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
-from knowledge_server.apps.knowledge.services.capability import (
-    keyword_choice,
-    vector_choice,
-)
 from knowledge_server.apps.knowledge.services.embedding import Embedder
 from knowledge_server.apps.knowledge.services.indexing import (
     IndexPair,
@@ -27,18 +22,19 @@ from knowledge_server.apps.knowledge.services.retrieval import (
     RetrievalStrategy,
     build_strategies,
 )
-from knowledge_server.probe import IndexProbe
+from knowledge_server.schema import SchemaFacts
 from knowledge_server.settings import Settings
 
 
-def index_pair(settings: Settings, probe: IndexProbe) -> IndexPair:
+def index_pair(settings: Settings, facts: SchemaFacts) -> IndexPair:
     """这一次要用的两路索引。
 
-    Args: settings, probe。
+    ⚠ 维数以**库上那一列**为准，读不到才退回配置：配置说的是下一次建表会用
+    哪个数，而写入要比的是这张表现在是多少维。
+
+    Args: settings, facts。
     """
-    vector, _vector_reason = vector_choice(settings, probe)
-    keyword, _keyword_reason = keyword_choice(settings, probe)
-    return build_indexes(vector, keyword)
+    return build_indexes(facts.dimensions_or(settings.embedding_dimensions))
 
 
 @dataclass(frozen=True)
@@ -51,7 +47,9 @@ class Lanes:
     """
 
     settings: Settings
-    probe: IndexProbe
+    # 库上那几件事实（向量列的维数）。⚠ 缺省是空的一份：不给的话按配置值算，
+    # 而那正是读不到库时的行为
+    facts: SchemaFacts
     embedder: Embedder
     answerer: Answerer
     # 重排那一路。⚠ 缺省是诚实缺席而不是 `None`：不给它的调用点拿到的是
@@ -70,7 +68,7 @@ class LanesSource(Protocol):
     def settings(self) -> Settings: ...
 
     @property
-    def index(self) -> IndexProbe: ...
+    def schema(self) -> SchemaFacts: ...
 
     @property
     def embedder(self) -> Embedder: ...
@@ -93,7 +91,7 @@ def lanes_of(source: LanesSource) -> Lanes:
     """
     return Lanes(
         settings=source.settings,
-        probe=source.index,
+        facts=source.schema,
         embedder=source.embedder,
         answerer=source.answerer,
         reranker=source.reranker,
@@ -107,7 +105,7 @@ def strategies(lanes: Lanes) -> tuple[RetrievalStrategy, ...]:
     """
     return build_strategies(
         RetrievalDeps(
-            indexes=index_pair(lanes.settings, lanes.probe),
+            indexes=index_pair(lanes.settings, lanes.facts),
             embedder=lanes.embedder,
             answerer=lanes.answerer,
             reranker=lanes.reranker,
