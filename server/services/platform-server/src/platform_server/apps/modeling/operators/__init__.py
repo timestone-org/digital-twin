@@ -46,7 +46,10 @@ from platform_server.apps.modeling.operators.payloads import (
     MetricsPayload,
     ModelPayload,
 )
-from platform_server.apps.modeling.operators.preprocess import FillMissing
+from platform_server.apps.modeling.operators.preprocess import (
+    ClipOutlier,
+    FillMissing,
+)
 from platform_server.apps.modeling.operators.registry import (
     OperatorRegistry,
     OperatorRegistryError,
@@ -70,6 +73,7 @@ __all__ = [
     "SERVING_CHANNELS",
     "CastType",
     "CellValue",
+    "ClipOutlier",
     "ColumnKeys",
     "ColumnsByPort",
     "DropMissing",
