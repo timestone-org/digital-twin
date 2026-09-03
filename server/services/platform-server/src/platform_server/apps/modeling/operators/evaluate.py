@@ -104,7 +104,7 @@ class RegressionMetrics(OperatorBase):
         """
         config = self._config
         scored = frame_input(inputs, "scored")
-        truth, predicted = _columns_of(scored)
+        truth, predicted = scored_columns_of(scored)
         residuals = [
             actual - guess
             for actual, guess in zip(truth, predicted, strict=True)
@@ -116,12 +116,14 @@ class RegressionMetrics(OperatorBase):
                 metrics=_metrics_of(truth, residuals),
                 pairs=tuple(zip(truth, predicted, strict=True))[:limit],
                 is_truncated=len(truth) > limit,
-                residual_bins=_histogram(residuals, config.residual_bins),
+                residual_bins=residual_histogram(
+                    residuals, config.residual_bins
+                ),
             )
         }
 
 
-def _columns_of(scored: Frame) -> tuple[list[float], list[float]]:
+def scored_columns_of(scored: Frame) -> tuple[list[float], list[float]]:
     """取出真实值与预测值两列，顺带把空值挡掉。
 
     Args: scored。
@@ -165,7 +167,7 @@ def _metrics_of(
     }
 
 
-def _histogram(
+def residual_histogram(
     residuals: list[float], bins: int
 ) -> tuple[tuple[float, float, int], ...]:
     """残差分布。全部残差相同时退化成单个桶。

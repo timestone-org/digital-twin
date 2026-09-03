@@ -25,6 +25,10 @@ from platform_server.apps.modeling.operators.cleaning import (
     DropMissing,
     FilterRows,
 )
+from platform_server.apps.modeling.operators.diagnostics import (
+    FeatureImportance,
+    ResidualAnalysis,
+)
 from platform_server.apps.modeling.operators.evaluate import (
     ClassificationMetrics,
     RegressionMetrics,
@@ -82,6 +86,7 @@ __all__ = [
     "ColumnKeys",
     "ColumnsByPort",
     "DropMissing",
+    "FeatureImportance",
     "FillMissing",
     "FilterRows",
     "Frame",
@@ -100,6 +105,7 @@ __all__ = [
     "PortSpec",
     "Provenance",
     "RegressionMetrics",
+    "ResidualAnalysis",
     "SplitDataset",
     "Standardize",
     "register_operator",
