@@ -14,6 +14,7 @@ import type {
   AssistantAskAnswer,
   AssistantAskRequest,
   AssistantDeltaChannel,
+  KnowledgeCitation,
 } from '@dt/contracts'
 
 import type { RunnerStep } from './turnRunner'
@@ -31,6 +32,8 @@ export type ChatRole =
   | 'ask'
   /** 界面自己说的一句话（「已停下」这类），不是模型说的，也不是失败。 */
   | 'note'
+  /** 这一轮答案真正用到的那几条依据（知识库对话才有）。 */
+  | 'citations'
   | 'error'
 
 /**
@@ -49,6 +52,12 @@ export interface ChatEntry {
   text: string
   step?: RunnerStep
   ask?: AskEntry
+  /**
+   * 答案真正用到的那几条依据。
+   * ⚠ 只在 `role === 'citations'` 时有值；空数组不会产生这一条——
+   * 「这次没有引用」与「引用是空的」在界面上要是同一件事。
+   */
+  citations?: readonly KnowledgeCitation[]
   /** 还在逐字长。界面据它画光标、并且**不许折起来**。 */
   isStreaming?: boolean
 }
@@ -66,6 +75,27 @@ let seed = 0
 function nextId(): string {
   seed += 1
   return `e${seed}`
+}
+
+/**
+ * 往时间线上添一条引用。
+ * ⚠ 空数组直接原样返回：「这次没有引用」与「引用是空的」在界面上是同一件事，
+ * 而多一条空卡片会让用户以为出了什么问题。
+ * @param log 当前时间线
+ * @param citations 这一轮真正用到的那几条
+ */
+export function withCitations(
+  log: ConversationLog,
+  citations: readonly KnowledgeCitation[],
+): ConversationLog {
+  if (citations.length === 0) return log
+  return {
+    ...log,
+    entries: [
+      ...log.entries,
+      { id: nextId(), role: 'citations', text: '', citations },
+    ],
+  }
 }
 
 /** 空的时间线。 */

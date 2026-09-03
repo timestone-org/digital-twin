@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from knowledge_server.apps.chat.services.citations import Ledger
 from knowledge_server.apps.chat.services.scope import BaseScope
 from knowledge_server.apps.chat.services.tools.client import ClientTools
 from knowledge_server.apps.chat.services.tools.knowledge import (
@@ -42,6 +43,9 @@ class ToolDeps:
     # 这个会话能取哪几个库的数（ADR-0044）。⚠ 逐次造注册表时传进来：范围钉在
     # 会话上，做成进程级的那一份会让两个会话互相看见对方的库
     scope: BaseScope
+    # 这一回合的角标账本。⚠ 与 `scope` 同理逐次传进来：回合结束时要拿同一份
+    # 去解析答案里用到的那几个
+    ledger: Ledger
 
 
 def build_registry(deps: ToolDeps) -> ToolRegistry:
@@ -55,6 +59,7 @@ def build_registry(deps: ToolDeps) -> ToolRegistry:
                 sessions=deps.sessions,
                 strategies=deps.strategies,
                 scope=deps.scope,
+                ledger=deps.ledger,
             ),
             ClientTools(),
         )

@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.chat.deps import get_advance_deps
 from knowledge_server.apps.chat.services.advance_service import AdvanceDeps
+from knowledge_server.apps.chat.services.citations import Ledger
 from knowledge_server.apps.chat.services.scope import BaseScope
 from knowledge_server.apps.chat.services.tools import ToolDeps, build_registry
 from knowledge_server.apps.chat.services.tools.client import ASK_TOOL
@@ -50,9 +51,14 @@ def _install(stack: DbStack, model: BaseChatModel) -> None:
             yield session
             await session.commit()
 
-    def tools(scope: BaseScope) -> ToolRegistry:
+    def tools(scope: BaseScope, ledger: Ledger) -> ToolRegistry:
         return build_registry(
-            ToolDeps(sessions=sessions, strategies=(), scope=scope)
+            ToolDeps(
+                sessions=sessions,
+                strategies=(),
+                scope=scope,
+                ledger=ledger,
+            )
         )
 
     stack.app.dependency_overrides[get_advance_deps] = lambda: AdvanceDeps(

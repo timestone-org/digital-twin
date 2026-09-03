@@ -23,6 +23,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+from knowledge_server.apps.chat.services.citations import Ledger
 from knowledge_server.apps.chat.services.scope import BaseScope
 from knowledge_server.apps.knowledge.services import (
     HitOut,
@@ -84,9 +85,13 @@ KNOWLEDGE_SPECS: tuple[ToolSpec, ...] = (
             "查询**：它们在语义上几乎没有区分度，只能靠字面命中。"
             "⚠ 召回不足时**换个说法再查一轮**，或换一个范围内的库，不要拿"
             "半份资料下结论。"
-            "⚠ 每条回执带 `base_name`、`document_title` 与 `locator`，答复里"
-            "每句结论后面要挂角标并在末尾列出这三样——指不出出处的答案，"
-            "用户没法核对。"
+            "⚠ 每条回执带一个 `mark`（`①②③` 这样的角标）。**用到哪条，就把"
+            "它的 `mark` 原样写在那句结论后面**，例如「出口温度不得高于 "
+            "65 ℃③」。"
+            "⚠ **不要在末尾自己抄一份「参考资料」列表**：界面会按你挂的角标"
+            "自动列出文件名与页码，你再抄一遍只会长且容易抄错。"
+            "⚠ 没用到的那几条**不要挂角标**——挂了等于告诉用户「这句话是它"
+            "支撑的」，而那不是真的。"
         ),
         parameters=object_schema(
             {
@@ -124,6 +129,9 @@ class KnowledgeTools:
     # 这次对话能取哪几个库的数。⚠ 经依赖传进来而不是读模块级状态：两个用户的
     # 两个回合在同一个进程里并发跑，模块级的那一份会被后来的那个覆盖
     scope: BaseScope
+    # 这一回合发过的角标。⚠ 收进来而不是这里自己造：回合结束时要拿同一份
+    # 去解析答案里用到的那几个，而注册表是按回合现造的
+    ledger: Ledger
 
     # 这一路在注册表里的名字。⚠ 不加类型标注：加了它就成了 dataclass 字段
     name = "knowledge"
@@ -194,7 +202,7 @@ class KnowledgeTools:
                 # 往往能换一个库或换个说法，而穿出去等于整个回合断掉
                 raise UnknownTool(str(error)) from error
         return {
-            "hits": [_hit_of(one, base.name) for one in made.hits],
+            "hits": [_hit_of(one, base.name, self.ledger) for one in made.hits],
             "strategy": made.strategy,
             "note": made.note,
         }
@@ -233,21 +241,26 @@ def _scope_note(scope: BaseScope) -> str:
     )
 
 
-def _hit_of(hit: HitOut, base_name: str) -> dict[str, Any]:
-    """一条召回摊成给模型看的样子。
+def _hit_of(hit: HitOut, base_name: str, ledger: Ledger) -> dict[str, Any]:
+    """一条召回摊成给模型看的样子，并领一个角标。
 
     ⚠ `base_name` 一并带上：对话是跨库的，模型挑错库时用户看不出——
     每条召回都得标明来自哪个库（ADR-0037 决策三）。
 
-    Args: hit, base_name。
+    ⚠ 角标在**这里**发而不是等模型自己编号：编号要跨多次检索连续，而模型
+    只看得见这一次的回执。
+
+    Args: hit, base_name, ledger。
     """
+    text = hit.text[:MAX_SNIPPET_CHARS]
     return {
+        "mark": ledger.mark(hit, base_name, text),
         "chunk_id": str(hit.chunk_id),
         "base_name": base_name,
         "document_title": hit.document_title,
         "locator": hit.locator.label,
         "heading_path": hit.heading_path,
-        "text": hit.text[:MAX_SNIPPET_CHARS],
+        "text": text,
         "score": hit.score,
         "why": hit.why,
     }

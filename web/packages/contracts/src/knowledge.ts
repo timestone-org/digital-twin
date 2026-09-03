@@ -373,3 +373,31 @@ export const KNOWLEDGE_CHAT_SCOPE_UNKNOWN_CODE = 42322
 
 /** 这个对话在别处改过了，手上这份是旧的（领域 23）。 */
 export const KNOWLEDGE_CHAT_CONFLICT_CODE = 42323
+
+/** 引用里带的一张图。⚠ 只有 id 与图注，字节走取图端点——每一次都过权限。 */
+export interface KnowledgeCitedFigure {
+  id: string
+  caption: string
+  page: number | null
+}
+
+/**
+ * 答案里**真正用到**的一条依据。
+ * ⚠ 只有挂了角标的才在这里：检索回执里那十来条，模型多半只用了两三条，
+ * 把查到的全列出来等于让用户自己找哪几条支撑了那句话。
+ */
+export interface KnowledgeCitation {
+  /** 角标本身（`①②③`），与答案正文里那个字符逐字一致。 */
+  marker: string
+  chunk_id: string
+  document_id: string
+  document_title: string
+  base_name: string
+  heading_path: string
+  /** 给人看的一句位置（「第 4–6 页 · 二、运行参数」）。⚠ 由后端拼。 */
+  where: string
+  page: number | null
+  page_end: number | null
+  text: string
+  figures: KnowledgeCitedFigure[]
+}

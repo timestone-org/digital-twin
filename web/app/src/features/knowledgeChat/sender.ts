@@ -7,6 +7,7 @@
 import type { Ref } from 'vue'
 
 import {
+  withCitations,
   withDelta,
   withReply,
   withSaid,
@@ -56,6 +57,7 @@ export function createKnowledgeSender(
           userText: text,
           signal: controller.signal,
           onTitled: parts.onTitled,
+          onCited: (items) => parts.edit((log) => withCitations(log, items)),
         },
         sinkOf(parts),
       )
