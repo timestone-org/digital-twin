@@ -26,6 +26,10 @@ from llmcore.ports import ModelChoice, ModelKind, ModelProfile
 # 表现是「配了 high、发出去的还是 medium」
 OPTION_DEFAULT_EFFORT = "default_effort"
 
+# 这一路可调的推理档位。⚠ 与 platform-server 的 `enums.py` 逐字一致：漂开的
+# 表现是界面上选得中的档位被端点回一条 400，而那条 400 里不会提到是哪一格
+CODEX_EFFORTS: tuple[str, ...] = ("low", "medium", "high", "xhigh")
+
 # 这一路吃得下的那几档。⚠ 摘要档也吃：折叠是一次纯文本调用，这一路做得了。
 # 不吃的话，一个只登录了订阅账号的部署永远折不出摘要，而它表现为
 # 「摘要偶尔就是没有」

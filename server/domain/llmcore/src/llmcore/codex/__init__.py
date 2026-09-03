@@ -10,6 +10,7 @@
 """
 
 from llmcore.codex.adapter import (
+    CODEX_EFFORTS,
     OPTION_DEFAULT_EFFORT,
     CodexOAuthAdapter,
     effort_of,
@@ -29,6 +30,7 @@ from llmcore.codex.tokens import (
 )
 
 __all__ = [
+    "CODEX_EFFORTS",
     "CODEX_LEASE_PATH",
     "OPTION_DEFAULT_EFFORT",
     "CodexOAuthAdapter",

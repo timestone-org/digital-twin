@@ -27,6 +27,7 @@ from llmcore.catalog_client import (
     CatalogUnavailable,
 )
 from llmcore.codex import (
+    CODEX_EFFORTS,
     CODEX_LEASE_PATH,
     OPTION_DEFAULT_EFFORT,
     CodexOAuthAdapter,
@@ -75,6 +76,7 @@ from llmcore.reasoning import ReasoningChatOpenAI
 
 __all__ = [
     "CATALOG_PATH",
+    "CODEX_EFFORTS",
     "CODEX_LEASE_PATH",
     "DEFAULT_PROFILE",
     "EMBEDDING_SOURCE",
