@@ -17,6 +17,7 @@ from knowledge_server.apps.knowledge.models import (
     KnowledgeChunk,
     KnowledgeDocument,
 )
+from lib.objectstore import ObjectNotFound
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -184,3 +185,86 @@ async def test_deleting_the_document_takes_its_figures(
         await session.delete(row)
     async with db_sessions() as session:
         assert await crud.figure.figures_of_document(session, document_id) == []
+
+
+async def _stored(
+    sessions: Callable[[], Any],
+    stack: Any,
+    document_id: uuid.UUID,
+    figure_id: uuid.UUID,
+) -> None:
+    """把那一行的对象键在假桶里填上字节。"""
+    async with sessions() as session:
+        row = await crud.figure.get_figure(session, document_id, figure_id)
+    assert row is not None
+    stack.app.state.container.objectstore.objects[row.object_key] = b"JPEGISH"
+
+
+async def test_reading_a_figure_streams_the_bytes_with_a_content_etag(
+    db_stack: Any, db_sessions: Callable[[], Any]
+) -> None:
+    """⚠ 流字节而不是发预签名 URL：预签名一旦生成就是一条「谁拿到谁能看」的
+    链接。`ETag` 用内容哈希——重新解析之后哈希不变，浏览器那份缓存仍有效。"""
+    base_id, document_id, _chunks = await _seeded(db_sessions)
+    async with db_sessions() as session:
+        made = await crud.figure.replace_figures(
+            session, base_id, document_id, [_write(0, HASH_A)]
+        )
+    await _stored(db_sessions, db_stack, document_id, made[HASH_A])
+
+    response = await db_stack.client.get(
+        f"/api/v1/knowledge/documents/{document_id}/figures/{made[HASH_A]}"
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"JPEGISH"
+    assert response.headers["content-type"] == "image/jpeg"
+    assert response.headers["etag"] == f'"{HASH_A}"'
+    # ⚠ 只能是 private：这张图是某个库里的内容，不许被共享缓存留下来
+    assert response.headers["cache-control"].startswith("private")
+
+
+async def test_a_figure_under_another_document_answers_404(
+    db_stack: Any, db_sessions: Callable[[], Any]
+) -> None:
+    """⚠ 按 `(document_id, figure_id)` 一起取：只按图 id 取的话，换一个文档 id
+    就能把别的库的图取出来——而那两个 id 单看都是合法的 uuid。"""
+    base_id, document_id, _chunks = await _seeded(db_sessions)
+    async with db_sessions() as session:
+        made = await crud.figure.replace_figures(
+            session, base_id, document_id, [_write(0, HASH_A)]
+        )
+    other = uuid.uuid4()
+
+    response = await db_stack.client.get(
+        f"/api/v1/knowledge/documents/{other}/figures/{made[HASH_A]}"
+    )
+
+    assert response.status_code == 404
+
+
+async def test_a_row_whose_bytes_are_gone_is_reported_apart(
+    db_stack: Any,
+    db_sessions: Callable[[], Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⚠ 与「没这一行」分开报：行还在而字节没了意味着桶被清过，那是运维要
+    知道的事，不是「用户点了个不存在的图」。"""
+    base_id, document_id, _chunks = await _seeded(db_sessions)
+    async with db_sessions() as session:
+        made = await crud.figure.replace_figures(
+            session, base_id, document_id, [_write(0, HASH_A)]
+        )
+
+    async def _gone(key: str) -> bytes:
+        raise ObjectNotFound(f"没有 {key}")
+
+    monkeypatch.setattr(
+        db_stack.app.state.container.objectstore, "get_bytes", _gone
+    )
+    response = await db_stack.client.get(
+        f"/api/v1/knowledge/documents/{document_id}/figures/{made[HASH_A]}"
+    )
+
+    assert response.status_code == 410
+    assert response.json()["code"] == 42310
