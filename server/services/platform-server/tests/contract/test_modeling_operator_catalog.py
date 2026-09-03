@@ -7,7 +7,11 @@ from typing import Any, cast
 
 import pytest
 
+from platform_server.apps.dataset.protocols import (
+    AGG_FUNCS as LEDGER_AGG_FUNCS,
+)
 from platform_server.apps.modeling.operators import (
+    AGG_FUNCS,
     CATEGORIES,
     CONTRACTS,
     SERVING_CHANNELS,
@@ -18,6 +22,9 @@ from platform_server.apps.modeling.operators import (
     registry,
 )
 from platform_server.apps.modeling.operators.base import PREFETCHED_KEY
+from platform_server.apps.modeling.operators.cleaning import (
+    _FOLDERS as FOLDERS,
+)
 
 # 本期算子的**写死名单**。加算子必须同时改这里——防的是重名静默覆盖与漏登记
 EXPECTED_CODES = (
@@ -32,6 +39,7 @@ EXPECTED_CODES = (
     "linear_regression",
     "logistic_regression",
     "regression_metrics",
+    "resample",
     "residual_analysis",
     "split_dataset",
     "standardize",
@@ -167,6 +175,25 @@ def test_column_declarations_keep_their_order() -> None:
             _least_config(code), {"frame": given}
         )
         assert declared["frame"] == given, code
+
+
+def test_the_aggregation_roster_matches_the_ledger() -> None:
+    """重采样那八档与台账的八档**同集合**。
+
+    ⚠ 建模不许深链 `apps/dataset/protocols`，所以两边各出一份白名单——那就必须
+    有一条用例钉住它们不漂。漂了的表现是「台账里按小时看是一个数、建模里按小时
+    取是另一个数」，两边各自都对。
+    """
+    assert AGG_FUNCS == LEDGER_AGG_FUNCS
+
+
+def test_every_aggregation_has_a_way_to_fold() -> None:
+    """名单里的每一档都在折算表里有对应的算法。
+
+    ⚠ 折算表少一个键不会在登记期报错，要跑到那一档才 KeyError——而那时候用户
+    已经配好图按下运行了。
+    """
+    assert set(AGG_FUNCS) - {"count"} == set(FOLDERS)
 
 
 def test_every_operator_icon_is_registered_on_the_front_end() -> None:
