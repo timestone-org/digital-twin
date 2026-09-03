@@ -108,11 +108,18 @@ def test_the_endpoint_kind_serves_the_rerank_purpose() -> None:
 
 
 def test_the_login_kind_is_rejected_for_rerank() -> None:
+    """订阅账号那一形态接得了知识库，但它上面没有重排模型这一档。
+
+    ⚠ 拒绝的理由要指名**是哪一档模型没有**，而不是「知识库那一侧接不了」——
+    那一侧它是接得了的（见上一条）。两条理由都能让这次分配失败，但说错的那条
+    会把人引到消费方那边去查一个根本不存在的问题，所以两条都要钉住。
+    """
     rejected = purpose_mismatch(
         _kind(PROVIDER_KIND_CODEX_OAUTH), _purpose("knowledge.rerank")
     )
     assert rejected is not None
-    assert "knowledge" in rejected
+    assert "rerank" in rejected
+    assert "接不了" not in rejected
 
 
 @pytest.mark.parametrize(
