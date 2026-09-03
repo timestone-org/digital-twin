@@ -119,3 +119,9 @@ def test_a_citation_carries_what_the_panel_needs() -> None:
     assert one.page == 4
     assert one.text == "正文片段"
     assert one.figures == ()
+
+
+def test_a_character_from_no_run_is_not_a_marker() -> None:
+    """⚠ 认不出的字符给 0 而不是抛：模型偶尔会写一个别的圈字符（㊾ 之外的、
+    或者带圈的字母），而为它整轮失败比少画一条引用糟得多。"""
+    assert numbers_in("见Ⓐ与①。") == [1]

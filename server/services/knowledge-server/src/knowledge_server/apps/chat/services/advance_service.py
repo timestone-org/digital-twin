@@ -285,19 +285,38 @@ async def advance(
             outcome=outcome,
             steps=produced,
         )
-        # ⚠ 引用排在 outcome **之前**：前端拿到 outcome 就把回合标成结束了，
-        # 之后再来的帧要么被丢掉、要么显得像「答完了又冒出来一块」
-        cited = await with_figures(
-            deps.sessions, ledger.resolve(numbers_in(outcome.reply))
-        )
-        if cited:
-            yield CitationsFound(items=tuple(cited))
-        yield outcome
-        # ⚠ 排在 outcome 之后：起名字要再调一次模型，而用户此刻已经看到答案了。
-        # 排在前面的话，那一秒会被读成「还在答」
-        named = await _named(deps, chat_session_id, payload, outcome)
-        if named is not None:
-            yield named
+        async for tail in _closing(
+            deps, chat_session_id, payload, ledger, outcome
+        ):
+            yield tail
+
+
+async def _closing(
+    deps: AdvanceDeps,
+    chat_session_id: uuid.UUID,
+    payload: AdvanceInput,
+    ledger: Ledger,
+    outcome: TurnOutcome,
+) -> AsyncIterator[TurnEvent | title_service.SessionTitled | CitationsFound]:
+    """落库之后收尾的那几帧，次序是有讲究的。
+
+    ⚠ 引用排在 outcome **之前**：前端拿到 outcome 就把回合标成结束了，之后
+    再来的帧要么被丢掉、要么显得像「答完了又冒出来一块」。
+
+    ⚠ 起名字排在 outcome **之后**：它要再调一次模型，而用户此刻已经看到答案
+    了；排在前面的话，那一秒会被读成「还在答」。
+
+    Args: deps, chat_session_id, payload, ledger, outcome。
+    """
+    cited = await with_figures(
+        deps.sessions, ledger.resolve(numbers_in(outcome.reply))
+    )
+    if cited:
+        yield CitationsFound(items=tuple(cited))
+    yield outcome
+    named = await _named(deps, chat_session_id, payload, outcome)
+    if named is not None:
+        yield named
 
 
 async def _named(

@@ -15,6 +15,7 @@ import {
   emptyLog,
   withAnswered,
   withAsk,
+  withCitations,
   withDelta,
   withReply,
   withSaid,
@@ -223,5 +224,38 @@ describe('提问条目', () => {
       is_cancelled: true,
     })
     expect(log.entries[0]?.ask?.answer).toBeNull()
+  })
+})
+
+describe('引用那一条', () => {
+  const CITED = {
+    marker: '①',
+    chunk_id: 'c1',
+    document_id: 'd1',
+    document_title: '冷却水操作规程.pdf',
+    base_name: '手册库',
+    heading_path: '二、运行参数',
+    where: '第 3 页',
+    page: 3,
+    page_end: null,
+    text: '出口温度不得高于 65 ℃',
+    figures: [],
+  }
+
+  it('添在时间线末尾，自成一条', () => {
+    const log = withCitations(withReply(emptyLog(), '上限 65 ℃ ①'), [CITED])
+    expect(log.entries).toHaveLength(2)
+    const last = log.entries[1]
+    expect(last?.role).toBe('citations')
+    expect(last?.citations).toEqual([CITED])
+    // ⚠ 正文留空：这一条画的是卡片，有正文会在气泡里多出一行空白
+    expect(last?.text).toBe('')
+  })
+
+  it('一条引用都没有时原样返回', () => {
+    // ⚠ 「这次没有引用」与「引用是空的」在界面上是同一件事，而多一张空卡片
+    // 会让人以为出了什么问题
+    const before = withReply(emptyLog(), '上限 65 ℃')
+    expect(withCitations(before, [])).toBe(before)
   })
 })
