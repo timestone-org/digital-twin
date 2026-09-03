@@ -35,7 +35,22 @@ export function createState(chat?: KnowledgeConversation) {
    */
   const pendingScope = ref<string[] | null>(null)
   const replayRace = useRacedFetch()
-  const conversation = chat ?? useKnowledgeConversation(() => selectedId.value)
+  /**
+   * 服务端自动起名之后就地改清单那一行。
+   * ⚠ 不重拉清单：重拉会把用户此刻的滚动位置与选中态一起抖一下，
+   * 而这一帧带的信息已经够改那一行了。
+   * ⚠ 换一份数组而不是就地改：`shallowRef` 只认引用变化。
+   */
+  const renameInPlace = (title: string, rowVersion: number): void => {
+    const id = selectedId.value
+    if (id === null) return
+    sessions.value = sessions.value.map((one) =>
+      one.id === id ? { ...one, title, row_version: rowVersion } : one,
+    )
+  }
+  const conversation =
+    chat ??
+    useKnowledgeConversation(() => selectedId.value, undefined, renameInPlace)
 
   if (getCurrentScope() !== undefined) {
     onScopeDispose(() => {

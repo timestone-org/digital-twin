@@ -23,7 +23,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from knowledge_server.apps.chat.crud import session_crud
 from knowledge_server.apps.chat.errors import ChatUnavailable
 from knowledge_server.apps.chat.models import ChatMessage, ChatSession
-from knowledge_server.apps.chat.services import advance_persist
+from knowledge_server.apps.chat.services import (
+    advance_persist,
+    title_service,
+)
 from knowledge_server.apps.chat.services import scope as scope_service
 from knowledge_server.apps.chat.services.prompt import (
     SYSTEM_PROMPT,
@@ -240,7 +243,7 @@ async def advance(
     *,
     chat_session_id: uuid.UUID,
     payload: AdvanceInput,
-) -> AsyncIterator[TurnEvent]:
+) -> AsyncIterator[TurnEvent | title_service.SessionTitled]:
     """推进一个回合，边跑边吐，最后落库。
 
     ⚠ 增量**不进落库那一摞**：回合结束时落的是攒齐的那条助手消息，增量只是
@@ -275,6 +278,36 @@ async def advance(
             steps=produced,
         )
         yield outcome
+        # ⚠ 排在 outcome 之后：起名字要再调一次模型，而用户此刻已经看到答案了。
+        # 排在前面的话，那一秒会被读成「还在答」
+        named = await _named(deps, chat_session_id, payload, outcome)
+        if named is not None:
+            yield named
+
+
+async def _named(
+    deps: AdvanceDeps,
+    chat_session_id: uuid.UUID,
+    payload: AdvanceInput,
+    outcome: TurnOutcome,
+) -> title_service.SessionTitled | None:
+    """这一轮之后，会话还没有标题就给它起一个。
+
+    ⚠ 只拿**用户发话**那一轮起名：工具回填那一轮的 `user_text` 是空的，
+    拿它起名会得到一个基于半截上下文的标题。
+
+    ⚠ 停在等浏览器时不起名：那时 `reply` 是「我准备这么做」那句，不是答案。
+
+    Args: deps, chat_session_id, payload, outcome。
+    """
+    if payload.user_text is None or outcome.is_waiting:
+        return None
+    return await title_service.autotitle(
+        deps.sessions,
+        deps.model,
+        chat_session_id,
+        (payload.user_text, outcome.reply),
+    )
 
 
 def _offered(
