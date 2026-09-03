@@ -21,6 +21,7 @@ from auth_server.apps.auth.catalog.permissions import (
     DATASET_BACKFILL,
     DATASET_MANAGE,
     DATASET_OVERRIDE,
+    DATASET_RECORD_EXPORT,
     DATASET_RECORD_WRITE,
     DATASET_VIEW,
     FORMULA_MANAGE,
@@ -52,7 +53,10 @@ from auth_server.apps.auth.catalog.roles import ROLE_ADMIN, ROLE_VIEWER, ROLES
 from auth_server.apps.auth.catalog.rules_assistant import ASSISTANT_RULES
 from auth_server.apps.auth.catalog.rules_auth import AUTH_RULES
 from auth_server.apps.auth.catalog.rules_knowledge import KNOWLEDGE_RULES
-from auth_server.apps.auth.catalog.rules_modeling import MODELING_RULES
+from auth_server.apps.auth.catalog.rules_modeling import (
+    MODELING_RULES,
+    OPEN_MODEL_RULES,
+)
 from auth_server.apps.auth.catalog.rules_opcua import OPCUA_RULES
 from auth_server.apps.auth.catalog.rules_platform import PLATFORM_RULES
 from auth_server.apps.auth.catalog.rules_realtime import REALTIME_RULES
@@ -67,6 +71,7 @@ ROUTE_RULES: tuple[RouteRuleSpec, ...] = (
     *AUTH_RULES,
     *PLATFORM_RULES,
     *MODELING_RULES,
+    *OPEN_MODEL_RULES,
     *OPCUA_RULES,
     *REALTIME_RULES,
     *ASSISTANT_RULES,
@@ -91,6 +96,7 @@ __all__ = [
     "DATASET_BACKFILL",
     "DATASET_MANAGE",
     "DATASET_OVERRIDE",
+    "DATASET_RECORD_EXPORT",
     "DATASET_RECORD_WRITE",
     "DATASET_VIEW",
     "FORMULA_MANAGE",
@@ -110,6 +116,7 @@ __all__ = [
     "OPCUA_OPERATE",
     "OPCUA_RULES",
     "OPCUA_VIEW",
+    "OPEN_MODEL_RULES",
     "PERMISSIONS",
     "PLATFORM_RULES",
     "REALTIME_RULES",

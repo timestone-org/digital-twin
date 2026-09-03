@@ -3,6 +3,11 @@
 这是本模块存在的理由那一条。⚠ 造的数据是严格线性的
 `能耗 = 2×温度 + 3×负荷 + 5`，于是最后那一格算出来的数是可以手算核对的——
 「公式列不再报错」不等于「算的是那个模型」。
+
+⚠ 图里**必须留着标准化那一步**：带拟合的算子把参数丢掉这一类缺陷只有它才暴露
+得出来（标准化在单行上重算会当场除零），摘掉它这条链路就什么都验不到
+（docs/MODELING_PLATFORM_DESIGN.md 缺陷 A）。数据是严格线性的、标准化是可逆的，
+故预测值仍然等于手算的那个数。
 """
 
 from typing import Any
@@ -22,6 +27,7 @@ from integration.modeling_helpers import (
     ENERGY,
     HTTP_CONFLICT,
     HTTP_CREATED,
+    HTTP_OK,
     LOAD,
     TEMPERATURE,
     code_of,
@@ -39,6 +45,7 @@ FORMULAS = "/api/v1/platform/formulas"
 
 BINDING_PARAMS_MISMATCH = 41416
 MODEL_VERSION_IN_USE = 41413
+BINDING_ENTRY_CHANGED = 41424
 
 # 一次预测的两个实参与手算出来的答案
 SAMPLE_TEMPERATURE = 25.0
@@ -95,33 +102,11 @@ async def _trained_version(
     """
     await _seed_ledger(client, session, f"energy_{code}")
     pipeline = await create_pipeline(
-        client, code, _no_scaling(f"energy_{code}")
+        client, code, linear_graph(f"energy_{code}")
     )
     run = await _run_pipeline(client, sessions, pipeline["id"])
     assert run["status"] == "succeeded", run
     return await _publish(client, run["id"], f"{code} 模型")
-
-
-def _no_scaling(table_code: str) -> dict[str, Any]:
-    """去掉标准化那一步，让系数留在原始尺度上便于手算核对。
-
-    Args: table_code。
-    """
-    graph = linear_graph(table_code)
-    graph["nodes"] = [item for item in graph["nodes"] if item["id"] != "z"]
-    graph["edges"] = [
-        item for item in graph["edges"] if item["id"] not in {"e2", "e3"}
-    ]
-    graph["edges"].append(
-        {
-            "id": "relink",
-            "from_node": "f",
-            "from_port": "frame",
-            "to_node": "p",
-            "to_port": "frame",
-        }
-    )
-    return graph
 
 
 async def test_a_trained_run_publishes_a_servable_version(
@@ -347,3 +332,162 @@ async def test_a_disabled_binding_says_so(
         )
     )["record"]
     assert "已停用" in row["compute_error"]["预测"]
+
+
+async def test_one_click_registration_builds_both_halves(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    worker_sessions: MakerSessions,
+) -> None:
+    """一键注册一步建出条目与绑定，形参名取台账列的显示名。
+
+    ⚠ 这是本期存在的理由那一条：在它之前用户要自己理解「条目 / 形参 /
+    按位置映射」三个概念，而这三个没有一个是他想要的。
+    """
+    version = await _trained_version(
+        app_client, db_session, worker_sessions, "oneclick"
+    )
+    response = await app_client.post(
+        f"{VERSIONS}/{version['id']}:register-formula",
+        json={"fx_code": "一键能耗"},
+    )
+    assert response.status_code == HTTP_CREATED, response.text
+    registered = data_of(response)
+    assert registered["formula"]["code"] == "一键能耗"
+    assert [item["name"] for item in registered["formula"]["params"]] == [
+        TEMPERATURE,
+        LOAD,
+    ]
+    assert registered["binding"]["fx_code"] == "一键能耗"
+
+
+async def test_the_registered_formula_really_computes(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    worker_sessions: MakerSessions,
+) -> None:
+    """一键注册出来的公式，在台账列上算出的数与手算一致。
+
+    ⚠ 「建出来了」不等于「算得对」：形参顺序错位时两样都建得出来，只是数不对。
+    """
+    version = await _trained_version(
+        app_client, db_session, worker_sessions, "oneclickcalc"
+    )
+    await app_client.post(
+        f"{VERSIONS}/{version['id']}:register-formula",
+        json={"fx_code": "一键核对"},
+    )
+    table = data_of(
+        await app_client.post(
+            TABLES, json={"code": "oneclick_here", "name": "一键预测表"}
+        )
+    )
+    for key in (TEMPERATURE, LOAD):
+        await create_column(app_client, table["id"], key=key, name=key)
+    await app_client.post(
+        columns_url(table["id"]),
+        json={
+            "key": "预测能耗",
+            "name": "预测能耗",
+            "source": "formula",
+            "formula": f"@一键核对({{{TEMPERATURE}}}, {{{LOAD}}})",
+        },
+    )
+    row = data_of(
+        await app_client.post(
+            records_url(table["id"]),
+            json={
+                "values": {
+                    TEMPERATURE: SAMPLE_TEMPERATURE,
+                    LOAD: SAMPLE_LOAD,
+                }
+            },
+        )
+    )["record"]
+    assert row["computed"]["预测能耗"] == pytest.approx(EXPECTED, rel=1e-6)
+
+
+async def test_an_occupied_code_is_refused_not_overwritten(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    worker_sessions: MakerSessions,
+) -> None:
+    """标识被占了就拒掉，绝不静默覆盖别人在用的公式。"""
+    version = await _trained_version(
+        app_client, db_session, worker_sessions, "oneclicktaken"
+    )
+    await _library_entry(app_client, "已占用的", [TEMPERATURE, LOAD])
+    response = await app_client.post(
+        f"{VERSIONS}/{version['id']}:register-formula",
+        json={"fx_code": "已占用的"},
+    )
+    assert response.status_code == HTTP_CONFLICT
+
+
+async def test_an_occupied_code_keeps_the_other_entry_intact(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    worker_sessions: MakerSessions,
+) -> None:
+    """标识被占时，别人那条条目**原样还在**。
+
+    ⚠ 静默覆盖一条别人在用的公式是不可逆的：引用它的每一张台账的数值会跟着
+    换一套口径，而没有任何一处会报错。
+    """
+    version = await _trained_version(
+        app_client, db_session, worker_sessions, "oneclickintact"
+    )
+    await _library_entry(app_client, "别人的", [TEMPERATURE, LOAD])
+    before = _entry_named(data_of(await app_client.get(FORMULAS)), "别人的")
+    await app_client.post(
+        f"{VERSIONS}/{version['id']}:register-formula",
+        json={"fx_code": "别人的"},
+    )
+    after = _entry_named(data_of(await app_client.get(FORMULAS)), "别人的")
+    assert after["expression"] == before["expression"]
+    assert after["params"] == before["params"]
+
+
+def _entry_named(listed: list[dict[str, Any]], code: str) -> dict[str, Any]:
+    """公式库列表里那一条。
+
+    Args: listed, code。
+    """
+    for item in listed:
+        if item["code"] == code:
+            return item
+    raise AssertionError(f"公式库里没有「{code}」")
+
+
+async def test_rebinding_to_the_same_shape_needs_no_confirmation(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    worker_sessions: MakerSessions,
+) -> None:
+    """入口契约没变时换版本一步到位。
+
+    ⚠ 重训一版通常什么都没变——那一档不该逼用户点确认，否则确认框会被当成
+    「随手点掉」的东西，等到真变了那次也一样被点掉。
+    """
+    await _seed_ledger(app_client, db_session, "energy_rebindsame")
+    pipeline = await create_pipeline(
+        app_client, "rebindsame", linear_graph("energy_rebindsame")
+    )
+    run = await _run_pipeline(app_client, worker_sessions, pipeline["id"])
+    first = await _publish(app_client, run["id"], "第一版")
+    await _library_entry(app_client, "换版同形", [TEMPERATURE, LOAD])
+    binding = data_of(
+        await app_client.post(
+            BINDINGS,
+            json={"fx_code": "换版同形", "model_version_id": first["id"]},
+        )
+    )
+    # ⚠ 一次运行只发布得出一个版本，第二版要再跑一遍
+    again = await _run_pipeline(app_client, worker_sessions, pipeline["id"])
+    second = await _publish(app_client, again["id"], "第二版")
+    response = await app_client.patch(
+        f"{BINDINGS}/{binding['id']}",
+        json={"model_version_id": second["id"]},
+    )
+    assert response.status_code == HTTP_OK, response.text
+    assert data_of(response)["model_version_id"] == second["id"]

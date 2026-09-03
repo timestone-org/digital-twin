@@ -10,7 +10,6 @@ from typing import Annotated
 from fastapi import BackgroundTasks, Depends
 
 from lib.db import Database
-from lib.objectstore import ObjectStore
 from lib.stream import StreamGroup, StreamLike
 from platform_server.apps.assets.services.compress_queue import (
     CompressMessage,
@@ -20,6 +19,7 @@ from platform_server.container import Container
 from platform_server.deps import (
     get_caller,
     get_container,
+    get_object_store,
     get_session,
     require,
 )
@@ -33,16 +33,6 @@ __all__ = [
     "get_session",
     "require",
 ]
-
-
-def get_object_store(
-    container: Annotated[Container, Depends(get_container)],
-) -> ObjectStore:
-    """取对象存储客户端。进程内共用一个，构造在组合根。
-
-    Args: container。
-    """
-    return container.object_store
 
 
 @dataclass(frozen=True)

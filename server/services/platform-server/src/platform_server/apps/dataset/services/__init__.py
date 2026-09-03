@@ -3,6 +3,15 @@
 事务边界在这一层：crud 不提交，api 不写业务。
 """
 
+# 跨功能模块要用的三个形状与那份键的字符集。⚠ 让出来是刻意的：建模那一侧
+# 要建库公式条目，而「只走 services 公开面」这条规矩不许它深链进
+# `dataset/schemas` 与 `dataset/models`
+from platform_server.apps.dataset.models import KEY_PATTERN
+from platform_server.apps.dataset.schemas import (
+    FormulaCreateIn,
+    FormulaDefOut,
+    FormulaParamSpec,
+)
 from platform_server.apps.dataset.services import (
     backfill_service,
     column_service,
@@ -50,6 +59,7 @@ from platform_server.apps.dataset.services.sessions import Sessions
 
 __all__ = [
     "DIRTY_TABLES_KEY",
+    "KEY_PATTERN",
     "Actor",
     "AnalysisModel",
     "AnalysisProvider",
@@ -62,6 +72,9 @@ __all__ = [
     "EffectiveRow",
     "EffectiveScan",
     "EffectiveWindow",
+    "FormulaCreateIn",
+    "FormulaDefOut",
+    "FormulaParamSpec",
     "LoadedModels",
     "RecordFilters",
     "RecordLocator",

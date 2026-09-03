@@ -200,6 +200,7 @@ def build_modeling_runner(
         stream=container.stream,
         pool=pool,
         options=RunConsumerOptions(
+            store=container.object_store,
             target=StreamGroup(
                 stream=settings.modeling_stream,
                 group=settings.modeling_group,
@@ -210,6 +211,7 @@ def build_modeling_runner(
             claim_idle_ms=settings.modeling_claim_idle_ms,
             node_timeout_s=settings.modeling_node_timeout_s,
             tz_offset_minutes=_business_tz_offset_minutes(container),
+            keep_per_pipeline=settings.modeling_run_keep_per_pipeline,
         ),
     )
 
@@ -224,6 +226,7 @@ def build_modeling_retention(container: Container) -> ModelingRetention:
     settings = container.settings
     return ModelingRetention(
         sessions=container.database,
+        store=container.object_store,
         options=RetentionOptions(
             keep_per_pipeline=settings.modeling_run_keep_per_pipeline,
             retention_days=settings.modeling_run_retention_days,
@@ -451,7 +454,7 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
     """
     container = build_container(settings)
     # ⚠ worker 也要注册：回填与重算跑在这里
-    register_provider(ModelingAnalysisProvider())
+    register_provider(ModelingAnalysisProvider(store=container.object_store))
     await selfcheck(container)
     # 单 worker 进程池：训练一次只跑一个，防止两次训练互相抢核
     pool = TrainerPool()

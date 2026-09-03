@@ -5,9 +5,16 @@
 """
 
 from collections import deque
+from dataclasses import dataclass
 from typing import Any, cast
 
-from platform_server.apps.modeling.operators import registry
+from pydantic import ValidationError
+
+from platform_server.apps.modeling.operators import (
+    ColumnKeys,
+    ColumnsByPort,
+    registry,
+)
 from platform_server.apps.modeling.schemas.graph import GraphNode, PipelineGraph
 
 # 取数算子的列清单参数名。留空表示「取当前全部列」，那时列集合静态未知
@@ -62,43 +69,113 @@ def split_plan_of(
     return config.model_dump()
 
 
+@dataclass(frozen=True)
+class NodeColumns:
+    """一个节点各输入 / 输出端口上的列 key 与顺序。`None` = 静态推不出来。"""
+
+    inputs: dict[str, ColumnKeys]
+    outputs: dict[str, ColumnKeys]
+
+
+def column_flow(
+    graph: PipelineGraph, nodes: dict[str, GraphNode]
+) -> dict[str, NodeColumns]:
+    """沿数据流推算每个节点每个端口上的列。
+
+    ⚠ 每一步怎么改列集，**问算子自己**（`describe_columns`）。过去这里写死的是
+    「有上游就原样继承」——那等于假设没有任何算子会增删列，加进第一个时间特征 /
+    独热就整条错，且不报错（docs/MODELING_PLATFORM_DESIGN.md D2）。
+    ⚠ 推不出来时下游一律跟着未知，宁可漏报也不误报：取数没有显式列清单时，
+    列集合要到运行期取完数才知道。
+    Args: graph, nodes。
+    """
+    incoming = _incoming_ports(graph)
+    flow: dict[str, NodeColumns] = {}
+    for node_id in _order(graph):
+        node = nodes[node_id]
+        inputs = {
+            port: _produced(flow, source, source_port)
+            for port, (source, source_port) in incoming.get(node_id, {}).items()
+        }
+        flow[node_id] = NodeColumns(
+            inputs=inputs, outputs=dict(_declared(node, inputs))
+        )
+    return flow
+
+
 def known_keys_by_node(
     graph: PipelineGraph, nodes: dict[str, GraphNode]
 ) -> dict[str, frozenset[str] | None]:
     """每个节点在自己的输入上看得见哪些列。`None` = 静态推不出来。
 
-    ⚠ 推不出来时下游一律跟着未知，宁可漏报也不误报：取数没有显式列清单时，
-    列集合要到运行期取完数才知道。
+    ⚠ 顺序在这一层被丢掉是**故意的**：它的两个消费者（保存期的列存在性校验、
+    前端的列候选）都只问「在不在」。要顺序的地方用 `column_flow`。
     Args: graph, nodes。
     """
-    incoming = _incoming(graph)
-    outputs: dict[str, frozenset[str] | None] = {}
-    known: dict[str, frozenset[str] | None] = {}
-    for node_id in _order(graph):
-        node = nodes[node_id]
-        upstream = incoming.get(node_id, ())
-        inherited = _merged(outputs, upstream)
-        known[node_id] = None if not upstream else inherited
-        outputs[node_id] = _source_keys(node) if not upstream else inherited
-    return known
+    return {
+        node_id: _flattened(columns.inputs)
+        for node_id, columns in column_flow(graph, nodes).items()
+    }
 
 
-def _source_keys(node: GraphNode) -> frozenset[str] | None:
-    raw: object = node.config.get(SOURCE_COLUMNS_FIELD)
-    if not isinstance(raw, list) or not raw:
+def known_columns_by_node(
+    graph: PipelineGraph, nodes: dict[str, GraphNode]
+) -> dict[str, list[str] | None]:
+    """每个节点在自己的输入上看得见哪些列，**保持列序**。`None` = 推不出来。
+
+    ⚠ 前端的列选择器读的就是它。过去前端另写了一份「只按取数节点收窄」的口径，
+    两份各自自洽而真跑起来对不上（docs/MODELING_PLATFORM_DESIGN.md D2）。
+    Args: graph, nodes。
+    """
+    return {
+        node_id: _ordered(columns.inputs)
+        for node_id, columns in column_flow(graph, nodes).items()
+    }
+
+
+def _ordered(inputs: dict[str, ColumnKeys]) -> list[str] | None:
+    if not inputs:
         return None
-    return frozenset(str(item) for item in cast("list[object]", raw))
-
-
-def _merged(
-    outputs: dict[str, frozenset[str] | None], upstream: tuple[str, ...]
-) -> frozenset[str] | None:
-    keys: set[str] = set()
-    for node_id in upstream:
-        produced = outputs.get(node_id)
+    keys: list[str] = []
+    for produced in inputs.values():
         if produced is None:
             return None
-        keys |= produced
+        keys += [key for key in produced if key not in keys]
+    return keys
+
+
+def _declared(node: GraphNode, inputs: dict[str, ColumnKeys]) -> ColumnsByPort:
+    """问算子：给这些输入列，它各个输出端口会有哪些列。
+
+    ⚠ 参数要过一遍校验再交给算子：图里只存用户显式设过的键，直接拿原始 dict
+    会缺掉有默认值的那些项。参数不合法时当成推不出来，由图校验去报那条。
+    Args: node, inputs。
+    """
+    if not registry.has(node.operator):
+        return {}
+    operator = registry.get(node.operator)
+    try:
+        config = operator.CONFIG_MODEL.model_validate(node.config)
+    except ValidationError:
+        return {port.name: None for port in operator.OUTPUTS}
+    return operator.describe_columns(config, inputs)
+
+
+def _produced(
+    flow: dict[str, NodeColumns], node_id: str, port: str
+) -> ColumnKeys:
+    known = flow.get(node_id)
+    return None if known is None else known.outputs.get(port)
+
+
+def _flattened(inputs: dict[str, ColumnKeys]) -> frozenset[str] | None:
+    if not inputs:
+        return None
+    keys: set[str] = set()
+    for produced in inputs.values():
+        if produced is None:
+            return None
+        keys |= set(produced)
     return frozenset(keys)
 
 
@@ -109,11 +186,22 @@ def _following(graph: PipelineGraph) -> dict[str, tuple[str, ...]]:
     return {key: tuple(value) for key, value in edges.items()}
 
 
-def _incoming(graph: PipelineGraph) -> dict[str, tuple[str, ...]]:
-    edges: dict[str, list[str]] = {}
+def _incoming_ports(
+    graph: PipelineGraph,
+) -> dict[str, dict[str, tuple[str, str]]]:
+    """`{下游节点: {入口端口: (上游节点, 出口端口)}}`。
+
+    ⚠ 按端口建键而不是只记上游节点：一个算子的两个输入端口可以接不同上游，
+    只记节点会把两路的列混成一堆（线性回归的训练集与测试集正是这样）。
+    Args: graph。
+    """
+    edges: dict[str, dict[str, tuple[str, str]]] = {}
     for edge in graph.edges:
-        edges.setdefault(edge.to_node, []).append(edge.from_node)
-    return {key: tuple(value) for key, value in edges.items()}
+        edges.setdefault(edge.to_node, {})[edge.to_port] = (
+            edge.from_node,
+            edge.from_port,
+        )
+    return edges
 
 
 def topological_order(graph: PipelineGraph) -> list[str]:

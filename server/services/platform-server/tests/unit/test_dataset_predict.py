@@ -20,13 +20,25 @@ from platform_server.apps.dataset.formula import (
 
 TZ = datetime.now(UTC).tzinfo
 KNOWN = {"温度", "负荷", "能耗"}
+# 这一行的时刻。带时间特征的模型靠它算「小时」这类列
+ROW_TS = datetime(2026, 1, 5, 1, 0, tzinfo=UTC)
 
 
 class TwiceSum:
-    """一个假模型：把实参求和再乘二。空实参一律当算不出来。"""
+    """一个假模型：把实参求和再乘二。空实参一律当算不出来。
 
-    def predict(self, args: list[float | None]) -> float | None:
-        """Args: args。"""
+    ⚠ 形参与协议逐字对齐（含 `at`）：假件比协议窄的话，求值器往里传行时刻会
+    当场 TypeError，而那条路只有真接上模型才走得到。
+    """
+
+    def __init__(self) -> None:
+        self.seen_at: datetime | None = None
+
+    def predict(
+        self, args: list[float | None], at: datetime | None = None
+    ) -> float | None:
+        """Args: args, at。"""
+        self.seen_at = at
         if any(item is None for item in args):
             return None
         return 2 * sum(item or 0.0 for item in args)
@@ -45,6 +57,7 @@ def context_of(
     return parsed, EvalContext(
         values=values,
         externals=build_externals(parsed.deps, cache, datetime.now(UTC)),
+        row_ts=ROW_TS,
     )
 
 
@@ -123,3 +136,17 @@ def test_the_result_can_be_used_in_arithmetic() -> None:
         {"能耗预测": TwiceSum()},
     )
     assert evaluate(parsed, context) == pytest.approx(6.0)
+
+
+def test_the_row_moment_reaches_the_model() -> None:
+    """求值器把**这一行的时刻**交给模型。
+
+    ⚠ 不传的话带时间特征的模型在台账那侧永远算不出数，而公式本身、绑定、
+    模型版本三处都看着正常（docs/MODELING_PLATFORM_DESIGN.md D19）。
+    """
+    model = TwiceSum()
+    parsed, context = context_of(
+        "PREDICT('能耗预测', {温度})", {"温度": 1.0}, {"能耗预测": model}
+    )
+    evaluate(parsed, context)
+    assert model.seen_at == ROW_TS

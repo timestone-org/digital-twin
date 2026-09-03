@@ -5,7 +5,11 @@
  *
  * 两张表各自成件（`components/`），这一页只做编排与取数。
  */
-import type { ModelingBinding, ModelingVersionSummary } from '@dt/contracts'
+import type {
+  ModelingBinding,
+  ModelingVersion,
+  ModelingVersionSummary,
+} from '@dt/contracts'
 import { computed, onMounted, ref } from 'vue'
 
 import * as modeling from '@/api/modeling'
@@ -15,8 +19,10 @@ import { useViewMode } from '@/composables/useViewMode'
 
 import BindDialog from './components/BindDialog.vue'
 import BindingTable from './components/BindingTable.vue'
+import VersionDetailDialog from './components/VersionDetailDialog.vue'
 import VersionTable from './components/VersionTable.vue'
 import { useBindingOps } from './scripts/useBindingOps'
+import { useVersionOps } from './scripts/useVersionOps'
 
 // 后端 size 的上限。版本与绑定都是业务级资源，一次取满即可
 const PAGE_SIZE = 200
@@ -24,6 +30,8 @@ const PAGE_SIZE = 200
 const versionView = useViewMode('modeling-versions')
 const bindingView = useViewMode('modeling-bindings')
 const binding = ref<ModelingVersionSummary | null>(null)
+// 详情要签名与指纹，列表那份没有——点开时按 id 现取一次
+const detail = ref<ModelingVersion | null>(null)
 
 const versions = useAsyncList<ModelingVersionSummary>(
   (query) => modeling.listModelingVersions(query),
@@ -34,10 +42,14 @@ const bindings = useAsyncList<ModelingBinding>(
   PAGE_SIZE,
 )
 
-const ops = useBindingOps(() => {
+function refresh(): void {
   void versions.reload()
   void bindings.reload()
-})
+}
+
+const ops = useBindingOps(refresh)
+// 版本级动作单独一组：下线与注册的对象是版本，爆炸半径也与绑定那几个不同
+const versionOps = useVersionOps(refresh)
 
 /** 版本 id → 「名称 v版本号」。绑定表里显示它，而不是一串 id。 */
 const versionLabels = computed(
@@ -49,6 +61,17 @@ const versionLabels = computed(
       ]),
     ),
 )
+
+async function openDetail(row: ModelingVersionSummary): Promise<void> {
+  detail.value = await modeling.getModelingVersion(row.id)
+}
+
+async function register(fxCode: string): Promise<void> {
+  const version = detail.value
+  if (version === null) return
+  const done = await versionOps.register(version.id, fxCode)
+  if (done !== null) detail.value = null
+}
 
 async function submitBind(fxCode: string): Promise<void> {
   const version = binding.value
@@ -79,8 +102,9 @@ onMounted(() => {
           :rows="versions.items.value"
           :is-loading="versions.loading.value"
           :error="versions.error.value"
+          @detail="(row) => void openDetail(row)"
           @bind="(row) => (binding = row)"
-          @retire="(row) => void ops.retire(row)"
+          @retire="(row) => void versionOps.retire(row)"
         >
           <template #toolbar>
             <h2 class="dt-ml-models__title">模型版本</h2>
@@ -104,6 +128,13 @@ onMounted(() => {
         </BindingTable>
       </section>
     </div>
+
+    <VersionDetailDialog
+      :version="detail"
+      :is-busy="versionOps.isBusy.value"
+      @register="(code) => void register(code)"
+      @close="detail = null"
+    />
 
     <BindDialog
       :version="binding"

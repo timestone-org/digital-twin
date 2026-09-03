@@ -52,7 +52,11 @@ SLOPE_LOAD = 3.0
 INTERCEPT = 5.0
 ROWS = 120
 STEP_MS = 3_600_000
-OPERATOR_COUNT = 6
+# 算子目录里有几个。⚠ 与契约用例里那份写死的名单同源，加算子两处都要改
+CATALOG_SIZE = 24
+# 示例图的节点数与边数。⚠ 与目录大小**分开**：两者一度都是 6，共用一个常量
+# 之后，加一个算子会让「图存回来对不对」跟着目录一起红，而它根本没变
+LINEAR_GRAPH_NODES = 6
 
 
 async def _seed_ledger(
@@ -120,7 +124,7 @@ async def test_the_operator_catalog_exposes_ports_and_schemas(
     response = await app_client.get(OPERATORS)
     assert response.status_code == HTTP_OK
     catalog = data_of(response)
-    assert len(catalog) == OPERATOR_COUNT
+    assert len(catalog) == CATALOG_SIZE
     source = next(item for item in catalog if item["code"] == "ledger_source")
     assert [port["name"] for port in source["outputs"]] == ["frame"]
     assert source["config_schema"]["properties"]["table_code"]
@@ -131,11 +135,11 @@ async def test_a_pipeline_round_trips_through_the_api(
 ) -> None:
     """建、读、改、列，图原样存原样回。"""
     created = await create_pipeline(app_client, "rt", linear_graph("any"))
-    assert created["node_count"] == OPERATOR_COUNT
+    assert created["node_count"] == LINEAR_GRAPH_NODES
     assert created["source_table_codes"] == ["any"]
 
     detail = data_of(await app_client.get(f"{PIPELINES}/{created['id']}"))
-    assert len(detail["graph"]["edges"]) == OPERATOR_COUNT
+    assert len(detail["graph"]["edges"]) == LINEAR_GRAPH_NODES
 
     patched = await app_client.patch(
         f"{PIPELINES}/{created['id']}", json={"name": "改过的名字"}
@@ -296,7 +300,7 @@ async def test_the_run_list_and_detail_carry_the_frozen_graph(
         json={"graph": {"format_version": "1.0", "nodes": [], "edges": []}},
     )
     detail = data_of(await app_client.get(f"{RUNS}/{run['id']}"))
-    assert len(detail["graph"]["nodes"]) == OPERATOR_COUNT
+    assert len(detail["graph"]["nodes"]) == LINEAR_GRAPH_NODES
 
     listed = data_of(
         await app_client.get(RUNS, params={"pipeline_id": created["id"]})

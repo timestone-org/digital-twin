@@ -31,7 +31,8 @@ import ConfigForm from './components/ConfigForm.vue'
 import EditorCanvas from './components/EditorCanvas.vue'
 import GraphIssues from './components/GraphIssues.vue'
 import OperatorPalette from './components/OperatorPalette.vue'
-import ResultView from './components/ResultView.vue'
+import ResultDialog from './components/ResultDialog.vue'
+import RunControls from './components/RunControls.vue'
 import RunHistory from './components/RunHistory.vue'
 import ShortcutsHelp from './components/ShortcutsHelp.vue'
 import { cascadeFrom } from './scripts/nodeLayout'
@@ -70,6 +71,9 @@ const isSnapping = ref(true)
 const pipelineId = computed(() => String(route.params['pipelineId'] ?? ''))
 // ⚠ 只读来自两个互不相同的理由，界面上也要分开说：回看历史时给的是「回到编辑」
 // 那颗按钮，没有写权限时给的是 PermGuard 的那句说明
+// 这次运行要不要留全量结果。⚠ 默认关，理由见上面那条注释
+const isKeepingFrames = ref(false)
+
 const isReadonly = computed(
   () =>
     page.isReplaying.value ||
@@ -79,6 +83,7 @@ const isReadonly = computed(
 const config = useConfigPanel({
   graph: page.graph.graph,
   operators: page.operatorMap,
+  knownColumns: page.doc.knownColumns,
   setConfig: page.graph.setConfig,
   canViewLedger: () => auth.can([PERMISSION_CODES.datasetView]),
 })
@@ -106,6 +111,8 @@ const result = useResultPanel({
   operators: page.operatorMap,
   previewOf: (id) => page.runner.previews.value.get(id)?.preview,
   loadPreview: page.runner.loadPreview,
+  exportedPortsOf: (id) =>
+    page.runner.previews.value.get(id)?.exported_ports ?? [],
 })
 
 /** 点问题条里的卡片名：选中它并把参数面板开在那一项上。 */
@@ -170,7 +177,7 @@ async function runOnce(): Promise<void> {
     )
     return
   }
-  await page.runner.start(pipelineId.value)
+  await page.runner.start(pipelineId.value, isKeepingFrames.value)
   await page.loadRuns(pipelineId.value)
 }
 
@@ -311,24 +318,14 @@ onMounted(async () => {
         </DtButton>
       </PermGuard>
       <PermGuard :codes="[PERMISSION_CODES.modelingRun]" explain>
-        <DtButton
-          v-if="page.runner.run.value?.status === 'running'"
-          size="sm"
-          icon="power-off"
-          @click="void page.runner.cancel()"
-        >
-          取消运行
-        </DtButton>
-        <DtButton
-          v-else
-          size="sm"
-          icon="play"
-          :disabled="isReadonly"
-          :loading="page.runner.isStarting.value"
-          @click="void runOnce()"
-        >
-          运行
-        </DtButton>
+        <RunControls
+          v-model:is-keeping-frames="isKeepingFrames"
+          :is-running="page.runner.run.value?.status === 'running'"
+          :is-readonly="isReadonly"
+          :is-starting="page.runner.isStarting.value"
+          @run="void runOnce()"
+          @cancel="void page.runner.cancel()"
+        />
       </PermGuard>
     </template>
 
@@ -433,18 +430,14 @@ onMounted(async () => {
       </template>
     </DtModal>
 
-    <DtModal
-      :model-value="result.payload.value !== null"
-      title="这一步的结果"
-      width="56rem"
-      @update:model-value="result.close"
-    >
-      <ResultView
-        v-if="result.payload.value"
-        :payload="result.payload.value"
-        :labels="result.labels.value"
-      />
-    </DtModal>
+    <ResultDialog
+      :payload="result.payload.value"
+      :labels="result.labels.value"
+      :run-id="page.runner.run.value?.id"
+      :node-id="result.nodeId.value"
+      :exported-ports="result.exportedPorts.value"
+      @close="result.close"
+    />
 
     <DtModal v-model="isKeysOpen" title="快捷键与手势" width="34rem">
       <ShortcutsHelp />

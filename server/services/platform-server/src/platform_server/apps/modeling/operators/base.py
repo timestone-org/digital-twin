@@ -5,9 +5,16 @@
 设计见 docs/MODELING_DESIGN.md §5。
 """
 
+from collections.abc import Mapping
 from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
+
+# 一个帧端口上的列 key 与顺序；`None` = 静态推不出来。
+# ⚠ 是**有序**的元组不是集合：绑定按位置把形参映射到特征上，顺序一变，存量绑定
+# 就静默错位——温度喂进了负荷那一格，算出来的还是个数
+type ColumnKeys = tuple[str, ...] | None
+type ColumnsByPort = Mapping[str, ColumnKeys]
 
 # 步间唯一的表格载体
 CONTRACT_FRAME = "frame@v1"
@@ -31,8 +38,10 @@ CATEGORIES: tuple[str, ...] = (
     "evaluate",
 )
 
-# 可服务通道：json=拟合参数纯 JSON 表达；binary=二进制产物（本轮不开）
-SERVING_CHANNELS: tuple[str, ...] = ("json", "binary")
+# 可服务通道：json=拟合参数纯 JSON 表达；binary=模型本体在二进制产物里
+CHANNEL_JSON = "json"
+CHANNEL_BINARY = "binary"
+SERVING_CHANNELS: tuple[str, ...] = (CHANNEL_JSON, CHANNEL_BINARY)
 
 # 引擎给来源类算子塞预取帧用的保留输入键。端口名不许占用它，注册期校验
 PREFETCHED_KEY = "__prefetched__"
@@ -191,6 +200,13 @@ class OperatorBase:
     CHANGES_ROW_COUNT: ClassVar[bool] = False
     # 推理时需要历史窗口（滞后 / 滚动）——整条流水线因此不可服务
     SERVING_NEEDS_WINDOW: ClassVar[bool] = False
+    # 推理时需要**这一行的时刻**（时间特征）。单行预测里没有时间索引，
+    # 时刻只能由调用方给；整条链上有一个就够，模型签名据此标
+    # `requires_timestamp`（docs/MODELING_PLATFORM_DESIGN.md D19）
+    SERVING_NEEDS_INDEX: ClassVar[bool] = False
+    # 这个算子会把空值补上。模型 schema 据它判「这一列调用方可不可以不给」：
+    # ⚠ 用类变量而不是判 CODE——加第二种填充算子时不必回来改 schema 生成
+    FILLS_MISSING: ClassVar[bool] = False
     # 这个算子是不是「切分」：引擎从它身上提取切分计划注入给上游带拟合的算子，
     # 图校验也按它判「带拟合算子下游有几个切分」。⚠ 用类变量而不是判 CODE：
     # 判 CODE 的话，加第二种切分算子要回来改引擎与校验两处
@@ -231,6 +247,33 @@ class OperatorBase:
         """
         raise NotImplementedError
 
+    @classmethod
+    def describe_columns(
+        cls, config: OperatorConfig, inputs: ColumnsByPort
+    ) -> ColumnsByPort:
+        """给定各输入端口的列 key，答各输出端口的列 key。`None` = 推不出来。
+
+        默认实现是**恒等**：唯一那个帧输入的列原样出现在每个帧输出上。会增删
+        改列的算子必须覆盖它。
+        ⚠ 这是**静态声明**，真值以运行时记下来的为准；两者对不上时发布失败并
+        指名是哪一步（docs/MODELING_PLATFORM_DESIGN.md D2 / D3）。不覆盖它的
+        代价不是「少一点提示」，而是入口契约算错——那会让调用方被要求提供一列
+        管线自己造的东西。
+        Args: config, inputs。
+        """
+        del config
+        sources = [
+            inputs.get(port.name)
+            for port in cls.INPUTS
+            if port.contract == CONTRACT_FRAME
+        ]
+        inherited = sources[0] if len(sources) == 1 else None
+        return {
+            port.name: inherited
+            for port in cls.OUTPUTS
+            if port.contract == CONTRACT_FRAME
+        }
+
     def predict_rows(self, frame: Any) -> list[float]:
         """按拟合参数给每一行算一个预测值（产模型的算子必须实现）。
 
@@ -239,6 +282,24 @@ class OperatorBase:
         Args: frame。
         """
         raise NotImplementedError
+
+    def trained_estimator(self) -> object | None:
+        """把训练好的估计器交出来（只有走二进制通道的算子实现它）。
+
+        ⚠ 返回的是**对象本身**，封存与摘要由 `services/artifact_store` 做：
+        算子层不认识序列化策略，也不许 import services——那是一个环。
+        """
+        return None
+
+    def attach_estimator(self, estimator: object) -> None:
+        """装上一个从产物里加载回来的估计器（同上，只有通道 B 实现它）。
+
+        ⚠ 缺省是**抛**而不是忽略：走到这里说明可服务表示说这一步要产物，而
+        这个算子根本不吃产物——静默忽略的表现是它拿单行重新拟合。
+        Args: estimator。
+        """
+        del estimator
+        raise OperatorError(f"算子「{self.CODE}」不吃二进制产物")
 
     def dump_fitted(self) -> dict[str, Any] | None:
         """导出拟合参数（`REQUIRES_FIT=True` 必须实现）。

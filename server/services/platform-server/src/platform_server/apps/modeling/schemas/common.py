@@ -35,6 +35,17 @@ PipelineCode = Annotated[
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$",
     ),
 ]
+# 公式库里的标识。⚠ 与台账那一侧的 `ColumnKey` 同一份字符集：注册出来的条目
+# 要落进公式库那张表，两边字符集不同的话，界面收得下、落库时才拒
+FormulaCode = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        min_length=1,
+        max_length=64,
+        pattern=r"^[^\s@'\"(),.:{}\[\]]+$",
+    ),
+]
 # 显示名可能是中文，故只限长度不限字符集
 Label = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)

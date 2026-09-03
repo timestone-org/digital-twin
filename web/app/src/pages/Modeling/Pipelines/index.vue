@@ -85,8 +85,16 @@ onMounted(() => void list.reload())
   <AppShell title="分析建模" subtitle="算子图 · 训练 · 发布成台账公式">
     <template #actions>
       <PermGuard :codes="[PERMISSION_CODES.modelingView]">
+        <RouterLink to="/modeling/runs">
+          <DtButton variant="ghost" size="sm" icon="activity"
+            >运行记录</DtButton
+          >
+        </RouterLink>
         <RouterLink to="/modeling/models">
           <DtButton variant="ghost" size="sm" icon="layers">模型库</DtButton>
+        </RouterLink>
+        <RouterLink to="/modeling/services">
+          <DtButton variant="ghost" size="sm" icon="share">模型服务</DtButton>
         </RouterLink>
       </PermGuard>
       <PermGuard :codes="[PERMISSION_CODES.modelingManage]" explain>
@@ -187,7 +195,7 @@ onMounted(() => void list.reload())
     <PipelineFormDialog
       :draft="ops.draft.value"
       :is-saving="ops.isSaving.value"
-      @submit="(draft) => void ops.save(draft)"
+      @submit="(draft, template) => void ops.save(draft, template)"
       @close="ops.close"
     />
   </AppShell>

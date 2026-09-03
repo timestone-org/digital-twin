@@ -7,7 +7,7 @@ warning 一句就跳过，用户完全不知道自己上线了一个永远返回
 
 import sys
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy
@@ -22,24 +22,55 @@ from platform_server.apps.modeling.errors import (
 )
 from platform_server.apps.modeling.models import ModelingModelVersion
 from platform_server.apps.modeling.operators import (
+    CHANNEL_BINARY,
+    CHANNEL_JSON,
     CONTRACT_MODEL,
+    DTYPE_NUMBER,
     OperatorError,
     registry,
 )
 from platform_server.apps.modeling.schemas.graph import PipelineGraph
 from platform_server.apps.modeling.services import presenters
+from platform_server.apps.modeling.services.entry_contract import (
+    EntryColumn,
+    NodeRecord,
+    entry_meta,
+    entry_of,
+    frame_columns_of,
+    record_of,
+    smoke_moment,
+    without_target,
+)
 from platform_server.apps.modeling.services.graph_walk import topological_order
 from platform_server.apps.modeling.services.jsonshape import (
     as_dict,
     as_text,
     as_texts,
 )
+from platform_server.apps.modeling.services.model_schema import build_schema
 from platform_server.apps.modeling.services.serving import (
     SERVING_FORMAT_VERSION,
     compile_model,
 )
 
-# 可服务表示里一步的键，与 `serving.py` 那份同源
+# 指纹的线形版本。⚠ 与可服务表示那个版本号**各走各的**：两者形状变化的时机
+# 无关，共用一个的话，升可服务表示会让所有历史指纹看起来也换了口径
+FINGERPRINT_FORMAT_VERSION = "1.0"
+
+
+@dataclass(frozen=True)
+class _Publishing:
+    """发布一次运行要的一整包。打成一包是因为形参上限是 5。"""
+
+    graph: PipelineGraph
+    records: dict[str, NodeRecord]
+    #: 推理时还要跑的那些节点，按训练时的拓扑序
+    served: list[str]
+    model_id: str
+    #: 建模那一步的结果摘要
+    payload: dict[str, Any]
+    #: 通道 B 的模型本体；纯 JSON 的模型是 `None`
+    estimator: object | None = None
 
 
 @dataclass(frozen=True)
@@ -54,20 +85,31 @@ class Publishable:
     algo: str
     task: str
     channel: str
+    entry_columns: tuple[EntryColumn, ...] = ()
+    #: 模型签名（面向人与第三方的说明）。不可服务时是空字典
+    signature: dict[str, Any] = field(default_factory=dict[str, Any])
+    #: 通道 B 的产物元信息；通道 A 是空字典
+    artifact: dict[str, Any] = field(default_factory=dict[str, Any])
 
 
-def inspect_run(graph: PipelineGraph, previews: dict[str, Any]) -> Publishable:
+def inspect_run(
+    graph: PipelineGraph,
+    records: dict[str, NodeRecord],
+    estimator: object | None = None,
+) -> Publishable:
     """扫一遍图与结果，判这次运行能不能发布。
 
     ⚠ 判据是**流水线的形状**加**算子的声明**，不是「跑通了没有」：跑通只说明
     训练没报错，与「这套东西在单行上算不算得出来」是两回事（§7.6）。
-    Args: graph, previews。
+    ⚠ `estimator` 是通道 B 那份已经从对象存储加载回来的模型本体：发布前那一次
+    实跑要拿它真算一行，光有一份产物元信息证明不了那些字节还读得回来（D10）。
+    Args: graph, records, estimator。
     """
     nodes = graph.node_by_id()
     model_id = _model_node_of(graph)
     if model_id is None:
         return _unservable("这条流水线里没有建模算子，没有可发布的模型")
-    payload = as_dict(as_dict(previews.get(model_id)).get("model"))
+    payload = as_dict(record_of(records, model_id).preview.get("model"))
     if not payload:
         return _unservable("这次运行没有产出模型")
     windowed = [
@@ -79,10 +121,53 @@ def inspect_run(graph: PipelineGraph, previews: dict[str, Any]) -> Publishable:
         return _unservable(
             "滞后 / 滚动特征在单行预测时拿不到历史窗口，本流水线暂不可上线"
         )
-    channel = as_text(payload.get("serving_channel"))
-    if channel != "json":
-        return _unservable("这个算法的拟合参数没法用纯数据表达，暂不可上线")
-    return _servable(graph, previews, model_id, payload)
+    publishing = _Publishing(
+        graph=graph,
+        records=records,
+        served=_served_nodes(graph),
+        model_id=model_id,
+        payload=payload,
+        estimator=estimator,
+    )
+    unusable = _channel_refusal(publishing)
+    if unusable:
+        return _unservable(unusable)
+    return _servable(publishing)
+
+
+def _channel_refusal(publishing: _Publishing) -> str:
+    """这个模型的拟合结果**存不存得住**；存得住给空串。
+
+    ⚠ 通道 B 判的是「产物在不在」而不是「`fitted` 空不空」：树模型的 `fitted`
+    本来就只有一份列序，按空不空判会把每一个树模型都拒在门外（D9）。
+    Args: publishing。
+    """
+    channel = as_text(publishing.payload.get("serving_channel"))
+    if channel == CHANNEL_JSON:
+        return ""
+    if channel != CHANNEL_BINARY:
+        return "这个算法的拟合参数没法用纯数据表达，暂不可上线"
+    if not as_dict(record_of(publishing.records, publishing.model_id).artifact):
+        return (
+            "这个算法的模型存成了一份二进制产物，而这次运行没有留下它——"
+            "本部署可能没有配对象存储，请检查后重跑一遍这条流水线再发布"
+        )
+    return ""
+
+
+def model_artifact(
+    graph: PipelineGraph, records: dict[str, NodeRecord]
+) -> dict[str, Any]:
+    """建模那一步的产物元信息；纯 JSON 的模型给空字典。
+
+    ⚠ 发布那一侧要在 `inspect_run` **之前**问这一句：通道 B 的实跑得先把字节
+    从对象存储读回来，而读不读得回来正是那次实跑要验的东西。
+    Args: graph, records。
+    """
+    node_id = _model_node_of(graph)
+    if node_id is None:
+        return {}
+    return as_dict(record_of(records, node_id).artifact)
 
 
 def _model_node_of(graph: PipelineGraph) -> str | None:
@@ -95,78 +180,283 @@ def _model_node_of(graph: PipelineGraph) -> str | None:
     return None
 
 
-def _servable(
-    graph: PipelineGraph,
-    previews: dict[str, Any],
-    model_id: str,
-    payload: dict[str, Any],
-) -> Publishable:
-    """拼出可服务表示，并当场编译一遍验证它真的算得出来。
+def _servable(publishing: _Publishing) -> Publishable:
+    """拼出可服务表示，并当场**实跑一行**验证它真的算得出来。
 
-    ⚠ 发布时就编译：常量列这类问题若留到推理期才炸，就成了「模型训出来了、
-    上线才发现用不了」（§7.3）。
+    ⚠ 发布时就跑：常量列、缺参数这类问题若留到推理期才炸，就成了「模型训出来
+    了、上线才发现用不了」（§7.3）。⚠ 只编译不够——编译只看形状，缺参数的那一步
+    编译得过、跑起来才抛。
+    Args: publishing。
     """
-    serving = {
-        "format_version": SERVING_FORMAT_VERSION,
-        "task": as_text(payload.get("task")),
-        "input_columns": as_texts(payload.get("feature_keys")),
-        "steps": _steps_of(graph, previews, model_id, payload),
-    }
+    target_key = as_text(publishing.payload.get("target_key"))
+    entry = entry_of(
+        publishing.graph,
+        publishing.records,
+        publishing.served,
+        target_key,
+    )
+    if entry is None:
+        return _unservable(
+            "这次运行没有留下逐步的列记录，早于本次升级——"
+            "请重跑一遍这条流水线再发布"
+        )
+    steps = _steps_of(publishing, entry)
+    refused = _refusal(publishing, steps, entry)
+    if refused:
+        return _unservable(refused)
+    serving = _serving_of(publishing, steps, entry)
     try:
-        compile_model(serving)
+        compiled = compile_model(serving, estimator=publishing.estimator)
+    except OperatorError as error:
+        return _unservable(f"可服务表示编译不出来：{error}")
+    moment = (
+        smoke_moment(publishing.graph, publishing.records, publishing.served)
+        if compiled.requires_timestamp
+        else None
+    )
+    if compiled.requires_timestamp and moment is None:
+        return _unservable(
+            "这条链带时间特征，而这次运行的摘要里没有留下任何时刻，"
+            "发布前那一次实跑做不了——请重跑一遍这条流水线再发布"
+        )
+    try:
+        compiled.predict([item.mean for item in entry], moment)
     except OperatorError as error:
         return _unservable(f"可服务表示校验没通过：{error}")
+    return _published(publishing, serving, steps, entry)
+
+
+def _refusal(
+    publishing: _Publishing,
+    steps: list[dict[str, Any]],
+    entry: tuple[EntryColumn, ...],
+) -> str:
+    """不该上线的两条硬理由；都过得去就给空串。
+
+    Args: publishing, steps, entry。
+    """
+    starved = _starved_step(publishing.graph, steps)
+    if starved:
+        return starved
+    features = as_texts(publishing.payload.get("feature_keys"))
+    missing = sorted(set(features) - set(_last_expected(steps, entry)))
+    if missing:
+        return (
+            f"推理链算不出模型要的这几列：{'、'.join(missing)}。"
+            "请检查特征工程那几步的配置"
+        )
+    return ""
+
+
+def _serving_of(
+    publishing: _Publishing,
+    steps: list[dict[str, Any]],
+    entry: tuple[EntryColumn, ...],
+) -> dict[str, Any]:
+    """可服务表示。推理时读的就是它，别的都不读。
+
+    Args: publishing, steps, entry。
+    """
+    return {
+        "format_version": SERVING_FORMAT_VERSION,
+        "task": as_text(publishing.payload.get("task")),
+        "entry_columns": [
+            {"key": item.key, "dtype": item.dtype} for item in entry
+        ],
+        "steps": steps,
+    }
+
+
+def _published(
+    publishing: _Publishing,
+    serving: dict[str, Any],
+    steps: list[dict[str, Any]],
+    entry: tuple[EntryColumn, ...],
+) -> Publishable:
+    """一条可上线的结论。
+
+    Args: publishing, serving, steps, entry。
+    """
+    target_key = as_text(publishing.payload.get("target_key"))
+    task = as_text(publishing.payload.get("task"))
     return Publishable(
         is_servable=True,
         reason="",
         serving=serving,
-        feature_keys=tuple(as_texts(serving["input_columns"])),
-        target_key=as_text(payload.get("target_key")),
-        algo=as_text(payload.get("algo")),
-        task=as_text(payload.get("task")),
-        channel="json",
+        signature=build_schema(
+            entry=[_as_meta(item) for item in entry],
+            steps=steps,
+            target=_target_meta(publishing, target_key),
+            task=task,
+        ),
+        feature_keys=tuple(as_texts(publishing.payload.get("feature_keys"))),
+        entry_columns=entry,
+        target_key=target_key,
+        algo=as_text(publishing.payload.get("algo")),
+        task=task,
+        channel=as_text(publishing.payload.get("serving_channel"))
+        or CHANNEL_JSON,
+        artifact=as_dict(
+            record_of(publishing.records, publishing.model_id).artifact
+        ),
     )
 
 
+def _served_nodes(graph: PipelineGraph) -> list[str]:
+    """推理时还要跑的那些节点，按训练时的拓扑序。
+
+    Args: graph。
+    """
+    nodes = graph.node_by_id()
+    return [
+        node_id
+        for node_id in topological_order(graph)
+        if registry.get(nodes[node_id].operator).ENABLED_IN_SERVING
+    ]
+
+
 def _steps_of(
-    graph: PipelineGraph,
-    previews: dict[str, Any],
-    model_id: str,
-    payload: dict[str, Any],
+    publishing: _Publishing, entry: tuple[EntryColumn, ...]
 ) -> list[dict[str, Any]]:
-    """训练拓扑序里推理时还要跑的那些步骤。
+    """推理链上的每一步：参数、拟合值，以及它**真正**会看到什么列。
 
     ⚠ `fitted` 与用户配置 `config` **并列**而不是混在一起：混在一起之后，
     推理时要先把私有键剔出去才构造得出配置。
+    ⚠ 期望列取自**训练时实际流过的列**去掉目标列，不按算子的静态声明推：
+    独热这类算子产出哪几列取决于数据里有哪些类目，静态推不出来，而推不出来时
+    退化成「不断言」正是这道闸存在的理由（D3）。
+    Args: publishing, entry。
     """
-    nodes = graph.node_by_id()
+    nodes = publishing.graph.node_by_id()
+    target_key = as_text(publishing.payload.get("target_key"))
     steps: list[dict[str, Any]] = []
-    for node_id in topological_order(graph):
-        operator = registry.get(nodes[node_id].operator)
-        if not operator.ENABLED_IN_SERVING:
-            continue
-        fitted = _fitted_of(previews, node_id, node_id == model_id, payload)
+    flowed: list[str] | None = [item.key for item in entry]
+    for node_id in publishing.served:
+        record = record_of(publishing.records, node_id)
+        expected = _seen_by(record, flowed, target_key)
+        produced = without_target(
+            frame_columns_of(record, "outputs", "frame"), target_key
+        )
         steps.append(
             {
                 "node_id": node_id,
                 "operator": nodes[node_id].operator,
                 "config": dict(nodes[node_id].config),
-                "fitted": fitted,
-                "expected_input_columns": as_texts(payload.get("feature_keys")),
+                "fitted": _fitted_of(
+                    publishing.records,
+                    node_id,
+                    node_id == publishing.model_id,
+                    publishing.payload,
+                ),
+                "expected_input_columns": expected or [],
+                "produced_columns": produced or [],
             }
         )
+        flowed = produced if produced is not None else flowed
     return steps
 
 
+def _seen_by(
+    record: NodeRecord, flowed: list[str] | None, target_key: str
+) -> list[str] | None:
+    """这一步在推理时会看到哪些列。
+
+    ⚠ 建模那一步的输入端口叫 `train` / `test`，推理时却只有一份帧——那时候拿
+    上一步流出来的列，而不是它训练时的两个入口。
+    Args: record, flowed, target_key。
+    """
+    seen = without_target(
+        frame_columns_of(record, "inputs", "frame"), target_key
+    )
+    if seen is not None:
+        return seen
+    if flowed is not None:
+        return flowed
+    return without_target(
+        frame_columns_of(record, "inputs", "train"), target_key
+    )
+
+
+def _last_expected(
+    steps: list[dict[str, Any]], entry: tuple[EntryColumn, ...]
+) -> list[str]:
+    """建模那一步会看到的列。
+
+    Args: steps, entry。
+    """
+    if not steps:
+        return [item.key for item in entry]
+    return as_texts(steps[-1]["expected_input_columns"])
+
+
 def _fitted_of(
-    previews: dict[str, Any],
+    records: dict[str, NodeRecord],
     node_id: str,
     is_model: bool,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    if is_model:
-        return as_dict(payload.get("fitted"))
-    return as_dict(as_dict(previews.get(node_id)).get("fitted"))
+    """这一步学到的参数。节点记录上那份优先，摘要里那份只作旧运行的回落。
+
+    ⚠ 建模那一步**不能只看摘要**：通道 B 的模型描述里 `fitted` 是刻意空着的
+    （模型本体在产物里），而列序只在节点记录上。只看摘要的表现是每一个树模型
+    都被「该带参数的一步空着」那道闸拒在门外（D9）。
+    Args: records, node_id, is_model, payload。
+    """
+    recorded = record_of(records, node_id).fitted
+    if recorded is not None:
+        return as_dict(recorded)
+    return as_dict(payload.get("fitted")) if is_model else {}
+
+
+def _starved_step(graph: PipelineGraph, steps: list[dict[str, Any]]) -> str:
+    """有没有哪一步该带参数却是空的；有就给一句人话，没有就给空串。
+
+    ⚠ 这是**必须拦下**的一条：空参数不会报错，它会让那一步在推理时拿请求里的
+    单行重新拟合，算出一个与线上模型毫无关系的数（缺陷 A）。
+    Args: graph, steps。
+    """
+    nodes = graph.node_by_id()
+    for step in steps:
+        operator = registry.get(nodes[as_text(step["node_id"])].operator)
+        if operator.REQUIRES_FIT and not step["fitted"]:
+            return (
+                f"步骤「{operator.NAME}」没有可用的拟合参数。"
+                "推理时它会拿单行重新拟合，算出来的数与训练结果无关，"
+                "故不可上线——请重跑一遍这条流水线再发布"
+            )
+    return ""
+
+
+def _as_meta(item: EntryColumn) -> dict[str, Any]:
+    """入口列摊成模型签名生成器吃的形状。
+
+    Args: item。
+    """
+    return {
+        "key": item.key,
+        "label": item.label,
+        "unit": item.unit,
+        "dtype": item.dtype,
+        "stats": dict(item.stats),
+    }
+
+
+def _target_meta(publishing: _Publishing, target_key: str) -> dict[str, Any]:
+    """目标列的类型、显示名与单位；取数摘要里没有就只留 key。
+
+    Args: publishing, target_key。
+    """
+    if not publishing.served:
+        return {"key": target_key}
+    stat = entry_meta(
+        publishing.graph, publishing.records, publishing.served[0]
+    ).get(target_key, {})
+    return {
+        "key": target_key,
+        "label": as_text(stat.get("name")) or target_key,
+        "unit": as_text(stat.get("unit")),
+        "dtype": as_text(stat.get("dtype")) or DTYPE_NUMBER,
+    }
 
 
 def _unservable(reason: str) -> Publishable:
@@ -178,7 +468,7 @@ def _unservable(reason: str) -> Publishable:
         target_key="",
         algo="",
         task="",
-        channel="json",
+        channel=CHANNEL_JSON,
     )
 
 
@@ -192,7 +482,7 @@ def fingerprint(
     Args: row_count, table_codes。
     """
     return {
-        "format_version": SERVING_FORMAT_VERSION,
+        "format_version": FINGERPRINT_FORMAT_VERSION,
         "python": sys.version.split()[0],
         "numpy": numpy.__version__,
         "sklearn": sklearn.__version__,

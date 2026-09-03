@@ -149,6 +149,8 @@ def _metrics_preview(payload: MetricsPayload) -> dict[str, Any]:
         "pairs": [list(pair) for pair in payload.pairs],
         "pairs_truncated": payload.is_truncated,
         "residual_bins": [list(item) for item in payload.residual_bins],
+        "labels": list(payload.labels),
+        "matrix": [list(row) for row in payload.matrix],
     }
 
 

@@ -15,3 +15,13 @@ MODELING_RUN = "modeling:run"
 # 生产台账。它的爆炸半径是「所有引用该公式条目的台账列的数值全变」，
 # 与 `formula:manage` 同一量级（docs/MODELING_DESIGN.md §9.1）
 MODELING_PUBLISH = "modeling:publish"
+
+# 台账那一侧的写码。⚠ 逐字复述而不是 import `apps/dataset/catalog`：功能模块
+# 之间只走对方的 `services` 公开面。一键注册为公式要**同时**要它与
+# `modeling:publish`——绝不能让发布权顺带获得往公式库写的能力，那两个码分家
+# 正是因为爆炸半径不同（docs/MODELING_PLATFORM_DESIGN.md D17）
+DATASET_MANAGE = "dataset:manage"
+
+# 导出台账原始数据。⚠ 同上逐字复述。下载建模的全量结果要它——那份 CSV 里的
+# 就是台账原始数据，「能看」不等于「能带走」（D12）
+DATASET_RECORD_EXPORT = "dataset:record:export"

@@ -2295,6 +2295,96 @@
         "title": "ApiResponse[MetricLimitsOut]",
         "type": "object"
       },
+      "ApiResponse_ModelApiKeyMintedOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelApiKeyMintedOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ModelApiKeyMintedOut]",
+        "type": "object"
+      },
+      "ApiResponse_ModelApiKeyOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelApiKeyOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ModelApiKeyOut]",
+        "type": "object"
+      },
       "ApiResponse_ModelBindingImpactOut_": {
         "properties": {
           "code": {
@@ -2383,6 +2473,96 @@
           }
         },
         "title": "ApiResponse[ModelBindingOut]",
+        "type": "object"
+      },
+      "ApiResponse_ModelDeploymentOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelDeploymentOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ModelDeploymentOut]",
+        "type": "object"
+      },
+      "ApiResponse_ModelFormulaOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelFormulaOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ModelFormulaOut]",
         "type": "object"
       },
       "ApiResponse_ModelVersionOut_": {
@@ -2608,6 +2788,51 @@
           }
         },
         "title": "ApiResponse[NodeRunOut]",
+        "type": "object"
+      },
+      "ApiResponse_OpenModelPredictOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpenModelPredictOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[OpenModelPredictOut]",
         "type": "object"
       },
       "ApiResponse_OverrideBulkClearOut_": {
@@ -4680,6 +4905,53 @@
         "title": "ApiResponse[WriteOut]",
         "type": "object"
       },
+      "ApiResponse_dict_str__object__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[dict[str, object]]",
+        "type": "object"
+      },
       "ApiResponse_list_AcModelOut__": {
         "properties": {
           "code": {
@@ -5121,6 +5393,55 @@
         "title": "ApiResponse[list[LlmPurposeOut]]",
         "type": "object"
       },
+      "ApiResponse_list_ModelApiKeyOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ModelApiKeyOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[list[ModelApiKeyOut]]",
+        "type": "object"
+      },
       "ApiResponse_list_ModelBindingOut__": {
         "properties": {
           "code": {
@@ -5168,6 +5489,104 @@
           }
         },
         "title": "ApiResponse[list[ModelBindingOut]]",
+        "type": "object"
+      },
+      "ApiResponse_list_ModelCallStatOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ModelCallStatOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[list[ModelCallStatOut]]",
+        "type": "object"
+      },
+      "ApiResponse_list_ModelDeploymentOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ModelDeploymentOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[list[ModelDeploymentOut]]",
         "type": "object"
       },
       "ApiResponse_list_NodeOut__": {
@@ -9150,6 +9569,23 @@
             },
             "title": "Issues",
             "type": "array"
+          },
+          "known_columns": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Known Columns",
+            "type": "object"
           }
         },
         "required": [
@@ -10724,6 +11160,216 @@
         "title": "MetricsBlockOut",
         "type": "object"
       },
+      "ModelApiKeyCreateIn": {
+        "additionalProperties": false,
+        "description": "铸一把新钥匙。",
+        "properties": {
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ModelApiKeyCreateIn",
+        "type": "object"
+      },
+      "ModelApiKeyMintedOut": {
+        "description": "刚铸出来那一把，**只有这一次**带明文。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "deployment_id": {
+            "format": "uuid",
+            "title": "Deployment Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key_prefix": {
+            "title": "Key Prefix",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "plaintext": {
+            "title": "Plaintext",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          }
+        },
+        "required": [
+          "id",
+          "deployment_id",
+          "name",
+          "key_prefix",
+          "expires_at",
+          "revoked_at",
+          "last_used_at",
+          "created_by_name",
+          "created_at",
+          "plaintext"
+        ],
+        "title": "ModelApiKeyMintedOut",
+        "type": "object"
+      },
+      "ModelApiKeyOut": {
+        "description": "一把钥匙。⚠ 没有明文这一格。",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "deployment_id": {
+            "format": "uuid",
+            "title": "Deployment Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key_prefix": {
+            "title": "Key Prefix",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          }
+        },
+        "required": [
+          "id",
+          "deployment_id",
+          "name",
+          "key_prefix",
+          "expires_at",
+          "revoked_at",
+          "last_used_at",
+          "created_by_name",
+          "created_at"
+        ],
+        "title": "ModelApiKeyOut",
+        "type": "object"
+      },
       "ModelBindingCreateIn": {
         "additionalProperties": false,
         "description": "把一个版本绑到一条公式条目上。",
@@ -10905,6 +11551,11 @@
             ],
             "title": "Is Enabled"
           },
+          "is_remap_confirmed": {
+            "default": false,
+            "title": "Is Remap Confirmed",
+            "type": "boolean"
+          },
           "model_version_id": {
             "anyOf": [
               {
@@ -10938,6 +11589,321 @@
           "column_key"
         ],
         "title": "ModelBindingUsageOut",
+        "type": "object"
+      },
+      "ModelCallStatOut": {
+        "description": "某一天的调用量。",
+        "properties": {
+          "day": {
+            "format": "date-time",
+            "title": "Day",
+            "type": "string"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "day",
+          "total",
+          "failed"
+        ],
+        "title": "ModelCallStatOut",
+        "type": "object"
+      },
+      "ModelDeploymentCreateIn": {
+        "additionalProperties": false,
+        "description": "开一个对外服务。",
+        "properties": {
+          "code": {
+            "maxLength": 63,
+            "minLength": 2,
+            "pattern": "^[a-z0-9][a-z0-9-]{1,62}$",
+            "title": "Code",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "max_rows_per_call": {
+            "default": 200,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Max Rows Per Call",
+            "type": "integer"
+          },
+          "model_version_id": {
+            "format": "uuid",
+            "title": "Model Version Id",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "rate_limit_per_minute": {
+            "default": 60,
+            "maximum": 6000.0,
+            "minimum": 1.0,
+            "title": "Rate Limit Per Minute",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code",
+          "model_version_id",
+          "name"
+        ],
+        "title": "ModelDeploymentCreateIn",
+        "type": "object"
+      },
+      "ModelDeploymentOut": {
+        "description": "一个对外服务。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "is_servable": {
+            "title": "Is Servable",
+            "type": "boolean"
+          },
+          "key_count": {
+            "title": "Key Count",
+            "type": "integer"
+          },
+          "max_rows_per_call": {
+            "title": "Max Rows Per Call",
+            "type": "integer"
+          },
+          "model_name": {
+            "title": "Model Name",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "integer"
+          },
+          "model_version_id": {
+            "format": "uuid",
+            "title": "Model Version Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rate_limit_per_minute": {
+            "title": "Rate Limit Per Minute",
+            "type": "integer"
+          },
+          "unservable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unservable Reason"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "model_version_id",
+          "model_name",
+          "model_version",
+          "name",
+          "description",
+          "is_enabled",
+          "is_servable",
+          "unservable_reason",
+          "max_rows_per_call",
+          "rate_limit_per_minute",
+          "key_count",
+          "created_by_name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ModelDeploymentOut",
+        "type": "object"
+      },
+      "ModelDeploymentUpdateIn": {
+        "additionalProperties": false,
+        "description": "改一个对外服务。`code` 建后不可改——第三方的代码里写着它。",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Enabled"
+          },
+          "max_rows_per_call": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Rows Per Call"
+          },
+          "model_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "rate_limit_per_minute": {
+            "anyOf": [
+              {
+                "maximum": 6000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate Limit Per Minute"
+          }
+        },
+        "title": "ModelDeploymentUpdateIn",
+        "type": "object"
+      },
+      "ModelFormulaOut": {
+        "description": "一键注册的回执：新建的条目与新建的绑定。\n\n⚠ 两样一起回：用户接下来要做的是「去台账把这条公式用上」，而那一步要的是\n条目的形参名；只回一个的话他还得再查一次。",
+        "properties": {
+          "binding": {
+            "$ref": "#/components/schemas/ModelBindingOut"
+          },
+          "formula": {
+            "$ref": "#/components/schemas/FormulaDefOut"
+          }
+        },
+        "required": [
+          "formula",
+          "binding"
+        ],
+        "title": "ModelFormulaOut",
+        "type": "object"
+      },
+      "ModelFormulaRegisterIn": {
+        "additionalProperties": false,
+        "description": "一键注册为公式。",
+        "properties": {
+          "fx_code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[^\\s@'\\\"(),.:{}\\[\\]]+$",
+            "title": "Fx Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fx_code"
+        ],
+        "title": "ModelFormulaRegisterIn",
         "type": "object"
       },
       "ModelMetricsOut": {
@@ -11053,7 +12019,7 @@
         "type": "object"
       },
       "ModelVersionOut": {
-        "description": "版本详情，带指标与指纹。",
+        "description": "版本详情，带指标、指纹与模型签名。",
         "properties": {
           "algo": {
             "title": "Algo",
@@ -11142,6 +12108,11 @@
             ],
             "title": "Serving Channel",
             "type": "string"
+          },
+          "signature": {
+            "additionalProperties": true,
+            "title": "Signature",
+            "type": "object"
           },
           "target_key": {
             "title": "Target Key",
@@ -11968,6 +12939,13 @@
             ],
             "title": "Error Text"
           },
+          "exported_ports": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Exported Ports",
+            "type": "array"
+          },
           "has_preview": {
             "title": "Has Preview",
             "type": "boolean"
@@ -12232,6 +13210,124 @@
           }
         },
         "title": "NodeUpdateIn",
+        "type": "object"
+      },
+      "OpenModelInfoOut": {
+        "description": "算这一次的是哪个模型。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code",
+          "version"
+        ],
+        "title": "OpenModelInfoOut",
+        "type": "object"
+      },
+      "OpenModelPredictIn": {
+        "additionalProperties": false,
+        "description": "一次对外预测请求。",
+        "properties": {
+          "rows": {
+            "items": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "minItems": 1,
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rows"
+        ],
+        "title": "OpenModelPredictIn",
+        "type": "object"
+      },
+      "OpenModelPredictOut": {
+        "description": "一次对外预测的结果。",
+        "properties": {
+          "model": {
+            "$ref": "#/components/schemas/OpenModelInfoOut"
+          },
+          "predictions": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Predictions",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/OpenModelWarningOut"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "model",
+          "predictions"
+        ],
+        "title": "OpenModelPredictOut",
+        "type": "object"
+      },
+      "OpenModelWarningOut": {
+        "description": "一条告警。有告警不等于算不出来——外推照样给数，只是标注出来。",
+        "properties": {
+          "column": {
+            "title": "Column",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "row": {
+            "title": "Row",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "row",
+          "column",
+          "kind",
+          "message"
+        ],
+        "title": "OpenModelWarningOut",
         "type": "object"
       },
       "OperatorOut": {
@@ -15456,6 +16552,10 @@
             "title": "Id",
             "type": "string"
           },
+          "is_keeping_frames": {
+            "title": "Is Keeping Frames",
+            "type": "boolean"
+          },
           "is_source_truncated": {
             "title": "Is Source Truncated",
             "type": "boolean"
@@ -15526,6 +16626,7 @@
           "duration_ms",
           "row_count",
           "is_source_truncated",
+          "is_keeping_frames",
           "error_text",
           "created_by_name",
           "created_at",
@@ -15536,8 +16637,13 @@
       },
       "RunStartIn": {
         "additionalProperties": false,
-        "description": "发起一次运行。当前没有可调的参数，留着是为了以后加而不破坏契约。",
+        "description": "发起一次运行。",
         "properties": {
+          "is_keeping_frames": {
+            "default": false,
+            "title": "Is Keeping Frames",
+            "type": "boolean"
+          },
           "trigger": {
             "default": "manual",
             "enum": [
@@ -15609,6 +16715,10 @@
             "title": "Id",
             "type": "string"
           },
+          "is_keeping_frames": {
+            "title": "Is Keeping Frames",
+            "type": "boolean"
+          },
           "is_source_truncated": {
             "title": "Is Source Truncated",
             "type": "boolean"
@@ -15672,6 +16782,7 @@
           "duration_ms",
           "row_count",
           "is_source_truncated",
+          "is_keeping_frames",
           "error_text",
           "created_by_name",
           "created_at"
@@ -26428,6 +27539,475 @@
         ]
       }
     },
+    "/api/v1/platform/modeling-deployments": {
+      "get": {
+        "description": "全部对外服务。\n\nArgs: session, _viewer。",
+        "operationId": "list_deployments_api_v1_platform_modeling_deployments_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_ModelDeploymentOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "对外服务列表",
+        "tags": [
+          "modeling-deployment"
+        ]
+      },
+      "post": {
+        "description": "把一个模型版本开成一个第三方可调的服务。\n\nArgs: payload, session, response, write。",
+        "operationId": "create_deployment_api_v1_platform_modeling_deployments_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelDeploymentCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelDeploymentOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "开一个对外服务",
+        "tags": [
+          "modeling-deployment"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-deployments/{deployment_id}": {
+      "delete": {
+        "description": "删掉一个对外服务，连同它的密钥与调用记录。\n\nArgs: deployment_id, session, response, _write。",
+        "operationId": "delete_deployment_api_v1_platform_modeling_deployments__deployment_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删一个对外服务",
+        "tags": [
+          "modeling-deployment"
+        ]
+      },
+      "get": {
+        "description": "一个对外服务的详情。\n\nArgs: deployment_id, session, _viewer。",
+        "operationId": "get_deployment_api_v1_platform_modeling_deployments__deployment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelDeploymentOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "对外服务详情",
+        "tags": [
+          "modeling-deployment"
+        ]
+      },
+      "patch": {
+        "description": "换版本、改配额、启停。`code` 不可改。\n\nArgs: deployment_id, payload, session, _write。",
+        "operationId": "update_deployment_api_v1_platform_modeling_deployments__deployment_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelDeploymentUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelDeploymentOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "改一个对外服务",
+        "tags": [
+          "modeling-deployment"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-deployments/{deployment_id}/api-keys": {
+      "get": {
+        "description": "一个服务下的全部密钥。⚠ 回执里没有明文。\n\nArgs: deployment_id, session, _viewer。",
+        "operationId": "list_keys_api_v1_platform_modeling_deployments__deployment_id__api_keys_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_ModelApiKeyOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "密钥列表",
+        "tags": [
+          "modeling-deployment"
+        ]
+      },
+      "post": {
+        "description": "铸一把新钥匙。**明文只在这个回执里出现一次。**\n\nArgs: deployment_id, payload, session, response, write。",
+        "operationId": "create_key_api_v1_platform_modeling_deployments__deployment_id__api_keys_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelApiKeyCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelApiKeyMintedOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "铸一把密钥",
+        "tags": [
+          "modeling-deployment"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-deployments/{deployment_id}/api-keys/{key_id}:revoke": {
+      "post": {
+        "description": "撤销一把钥匙，立刻生效。\n\nArgs: deployment_id, key_id, session, _write。",
+        "operationId": "revoke_key_api_v1_platform_modeling_deployments__deployment_id__api_keys__key_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Key Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelApiKeyOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "撤销一把密钥",
+        "tags": [
+          "modeling-deployment"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-deployments/{deployment_id}/call-stats": {
+      "get": {
+        "description": "近一个月按天的调用量与出错量。\n\nArgs: deployment_id, session, _viewer。",
+        "operationId": "call_stats_api_v1_platform_modeling_deployments__deployment_id__call_stats_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_list_ModelCallStatOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "调用量",
+        "tags": [
+          "modeling-deployment"
+        ]
+      }
+    },
     "/api/v1/platform/modeling-model-versions": {
       "get": {
         "description": "分页列出模型版本，可按流水线筛。\n\nArgs: session, page, _viewer, pipeline_id。",
@@ -26502,7 +28082,7 @@
         ]
       },
       "post": {
-        "description": "把一次成功运行发布成一个不可变的版本。\n\nArgs: payload, session, response, write。",
+        "description": "把一次成功运行发布成一个不可变的版本。\n\nArgs: payload, session, response, write, store。",
         "operationId": "publish_version_api_v1_platform_modeling_model_versions_post",
         "parameters": [
           {
@@ -26650,6 +28230,60 @@
           }
         },
         "summary": "模型版本详情",
+        "tags": [
+          "modeling-model"
+        ]
+      }
+    },
+    "/api/v1/platform/modeling-model-versions/{version_id}:register-formula": {
+      "post": {
+        "description": "一步建库公式条目 + 建绑定。形参从模型签名生成，顺序天然对齐。\n\nArgs: version_id, payload, session, response, caller。",
+        "operationId": "register_formula_api_v1_platform_modeling_model_versions__version_id__register_formula_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Version Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelFormulaRegisterIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ModelFormulaOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "注册为公式",
         "tags": [
           "modeling-model"
         ]
@@ -27220,6 +28854,62 @@
         ]
       }
     },
+    "/api/v1/platform/modeling-runs/{run_id}/frames/{node_id}": {
+      "get": {
+        "description": "把某个端口那份 CSV 交出去。理由与偏离见 `services/frame_export`。\n\nArgs: run_id, node_id, session, store, _caller, port。",
+        "operationId": "download_frame_api_v1_platform_modeling_runs__run_id__frames__node_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "port",
+            "required": false,
+            "schema": {
+              "default": "frame",
+              "title": "Port",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "下载某个端口的全量结果",
+        "tags": [
+          "modeling-run"
+        ]
+      }
+    },
     "/api/v1/platform/modeling-runs/{run_id}/nodes/{node_id}": {
       "get": {
         "description": "单个节点的中间结果，按节点懒加载。\n\nArgs: run_id, node_id, session, _viewer。",
@@ -27379,6 +29069,122 @@
         "summary": "模块清单详情",
         "tags": [
           "module-type"
+        ]
+      }
+    },
+    "/api/v1/platform/open-models/{code}": {
+      "get": {
+        "description": "这个模型要哪些参数、给出什么。\n\n⚠ 回的是**剥掉训练统计**的那一份：训练区间的具体数值是训练数据的分布，\n属于内部信息（D8）。\nArgs: call。",
+        "operationId": "get_signature_api_v1_platform_open_models__code__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "title": "Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Api-Key",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_dict_str__object__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "模型签名",
+        "tags": [
+          "modeling-open"
+        ]
+      }
+    },
+    "/api/v1/platform/open-models/{code}:predict": {
+      "post": {
+        "description": "算一批数。\n\nArgs: payload, session, deps, call。",
+        "operationId": "predict_api_v1_platform_open_models__code__predict_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "title": "Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Api-Key",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenModelPredictIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_OpenModelPredictOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "预测",
+        "tags": [
+          "modeling-open"
         ]
       }
     },

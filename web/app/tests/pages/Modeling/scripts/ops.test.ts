@@ -11,6 +11,7 @@ import { defineComponent, h } from 'vue'
 import * as modeling from '@/api/modeling'
 import { usePipelineDoc } from '@/pages/Modeling/Canvas/scripts/usePipelineDoc'
 import { useBindingOps } from '@/pages/Modeling/Models/scripts/useBindingOps'
+import { useVersionOps } from '@/pages/Modeling/Models/scripts/useVersionOps'
 import { usePipelineOps } from '@/pages/Modeling/Pipelines/scripts/usePipelineOps'
 
 const STAMP = '2026-01-01T00:00:00.000Z'
@@ -207,6 +208,7 @@ describe('画布上的文档', () => {
     vi.spyOn(modeling, 'validateModelingGraph').mockResolvedValue({
       is_valid: false,
       issues: [{ message: '有一个入口没接线', node_id: 'n1', edge_id: '' }],
+      known_columns: {},
     })
     const doc = host(() => usePipelineDoc())
     await doc.load('p1')
@@ -272,11 +274,13 @@ describe('模型库上的动作', () => {
     const ask = asker(true)
     vi.spyOn(modeling, 'retireModelingVersion').mockResolvedValue({
       ...version(),
+      signature: {},
       metrics: {},
       fingerprint: {},
       description: null,
     })
-    const ops = host(() => useBindingOps(vi.fn()))
+    // ⚠ 下线是**版本**级动作，不在绑定那一组里：两者的对象与爆炸半径都不同
+    const ops = host(() => useVersionOps(vi.fn()))
 
     await ops.retire(version())
 

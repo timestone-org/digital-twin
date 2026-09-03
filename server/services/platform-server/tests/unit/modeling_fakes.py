@@ -4,7 +4,8 @@
 核对，「跑完没报错」不等于「算对了」（docs/MODELING_DESIGN.md §10.3）。
 """
 
-from typing import Any, cast
+from datetime import UTC, datetime
+from typing import cast
 
 from platform_server.apps.modeling.operators import (
     CellValue,
@@ -19,6 +20,7 @@ from platform_server.apps.modeling.schemas.graph import (
 )
 from platform_server.apps.modeling.services.node_task import (
     NodePayload,
+    NodeResult,
     run_node_payload,
 )
 from platform_server.apps.modeling.services.run_executor import (
@@ -63,7 +65,12 @@ def linear_frame(rows: int = 200) -> Frame:
         columns=COLUMNS,
         rows=tuple(matrix),
         index=tuple(START_MS + index * STEP_MS for index in range(rows)),
-        provenance=Provenance(table_codes=("energy_h",)),
+        provenance=Provenance(
+            table_codes=("energy_h",),
+            # ⚠ 真实取数一定带窗口：假件少一样，靠它的代码在用例里走的是
+            # 另一条分支
+            since=datetime.fromtimestamp(START_MS / 1000, UTC),
+        ),
     )
 
 
@@ -114,17 +121,17 @@ def linear_graph() -> PipelineGraph:
             node("e", "regression_metrics"),
         ],
         edges=[
-            _edge("e1", "s", "frame", "f", "frame"),
-            _edge("e2", "f", "frame", "z", "frame"),
-            _edge("e3", "z", "frame", "p", "frame"),
-            _edge("e4", "p", "train", "m", "train"),
-            _edge("e5", "p", "test", "m", "test"),
-            _edge("e6", "m", "scored", "e", "scored"),
+            edge("e1", "s", "frame", "f", "frame"),
+            edge("e2", "f", "frame", "z", "frame"),
+            edge("e3", "z", "frame", "p", "frame"),
+            edge("e4", "p", "train", "m", "train"),
+            edge("e5", "p", "test", "m", "test"),
+            edge("e6", "m", "scored", "e", "scored"),
         ],
     )
 
 
-def _edge(
+def edge(
     edge_id: str, source: str, out_port: str, target: str, in_port: str
 ) -> GraphEdge:
     return GraphEdge(
@@ -142,7 +149,7 @@ class DirectRunner:
     def __init__(self) -> None:
         self.calls: list[str] = []
 
-    async def run(self, payload: NodePayload) -> dict[str, Any]:
+    async def run(self, payload: NodePayload) -> NodeResult:
         """就地跑一个算子。
 
         Args: payload。
@@ -159,7 +166,7 @@ class BoomRunner:
         self._error = error
         self._direct = DirectRunner()
 
-    async def run(self, payload: NodePayload) -> dict[str, Any]:
+    async def run(self, payload: NodePayload) -> NodeResult:
         """撞上目标算子就抛，其余照跑。
 
         Args: payload。

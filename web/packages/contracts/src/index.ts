@@ -37,6 +37,10 @@ export type {
   ModelingCategory,
   ModelingContract,
   ModelingGraph,
+  ModelApiKey,
+  ModelApiKeyMinted,
+  ModelCallStat,
+  ModelDeployment,
   ModelingGraphCheck,
   ModelingGraphEdge,
   ModelingGraphIssue,
@@ -61,7 +65,11 @@ export type {
   ModelingTask,
   ModelingTrigger,
   ModelingVersion,
+  ModelFormulaRegistration,
   ModelingVersionSummary,
+  OpenModelInfo,
+  OpenModelPredict,
+  OpenModelWarning,
 } from './modeling'
 export {
   MODELING_CATEGORIES,

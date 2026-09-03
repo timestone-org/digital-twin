@@ -25,6 +25,8 @@ import { useRacedFetch } from '@/composables/useRacedFetch'
 interface CheckDeps {
   pipeline: ShallowRef<ModelingPipeline | null>
   issues: Ref<readonly ModelingGraphIssue[]>
+  /** 逐节点的列候选，参数面板的列选择器读它。 */
+  knownColumns: Ref<Readonly<Record<string, string[] | null>>>
   toast: ReturnType<typeof useToast>
   raced: RacedFetch
 }
@@ -50,6 +52,7 @@ async function runCheck(
     {
       ok: (check: ModelingGraphCheck) => {
         deps.issues.value = check.issues
+        deps.knownColumns.value = check.known_columns
         isValid = check.is_valid
       },
       fail: (caught) => {
@@ -77,9 +80,28 @@ async function putGraph(
   }
 }
 
+/** 拉一条流水线。拉不到时把原因留在 `error` 上，不抛。 */
+async function fetchPipeline(
+  pipelineId: string,
+  isLoading: Ref<boolean>,
+  error: Ref<string | null>,
+): Promise<ModelingPipeline | null> {
+  isLoading.value = true
+  error.value = null
+  try {
+    return await modeling.getModelingPipeline(pipelineId)
+  } catch (caught) {
+    error.value = describeError(caught)
+    return null
+  } finally {
+    isLoading.value = false
+  }
+}
+
 export function usePipelineDoc() {
   const pipeline = shallowRef<ModelingPipeline | null>(null)
   const issues = ref<readonly ModelingGraphIssue[]>([])
+  const knownColumns = ref<Readonly<Record<string, string[] | null>>>({})
   const isLoading = ref(false)
   const isSaving = ref(false)
   const error = ref<string | null>(null)
@@ -87,28 +109,18 @@ export function usePipelineDoc() {
   // 边改边校验：慢的那次后返回不许盖掉快的那次，否则问题清单会退回上一版图的
   const checking = useRacedFetch()
 
-  async function load(pipelineId: string): Promise<ModelingPipeline | null> {
-    isLoading.value = true
-    error.value = null
-    try {
-      const next = await modeling.getModelingPipeline(pipelineId)
-      pipeline.value = next
-      return next
-    } catch (caught) {
-      error.value = describeError(caught)
-      return null
-    } finally {
-      isLoading.value = false
-    }
-  }
-
   return {
     pipeline,
     issues,
+    knownColumns,
     isLoading,
     isSaving,
     error,
-    load,
+    load: async (pipelineId: string) => {
+      const next = await fetchPipeline(pipelineId, isLoading, error)
+      if (next !== null) pipeline.value = next
+      return next
+    },
     save: async (graph: ModelingGraph) => {
       const current = pipeline.value
       if (current === null) return false
@@ -120,7 +132,16 @@ export function usePipelineDoc() {
       return true
     },
     validate: (graph: ModelingGraph, isQuiet = false) =>
-      runCheck({ pipeline, issues, toast, raced: checking }, graph, isQuiet),
+      runCheck(
+        { pipeline, issues, knownColumns, toast, raced: checking },
+        graph,
+        isQuiet,
+      ),
+    /** 回看历史时清空：问题清单与列候选都是「正在编辑那张图」的。 */
+    clearCheck: () => {
+      issues.value = []
+      knownColumns.value = {}
+    },
     /** 离开画布时作废在飞的那一次校验。 */
     stopChecking: () => checking.cancel(),
   }

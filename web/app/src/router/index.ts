@@ -252,6 +252,30 @@ export const routes: RouteRecordRaw[] = [
     },
   },
   {
+    // 跨流水线的运行记录。⚠ 一次训练跑在 worker 上，用户离开画布之后就再也
+    // 找不到它了——这一页存在的理由就是这个。
+    path: '/modeling/runs',
+    name: 'modeling-runs',
+    component: () => import('@/pages/Modeling/Runs/index.vue'),
+    meta: {
+      title: '运行记录',
+      permissions: [PERMISSION_CODES.modelingView],
+    },
+  },
+  {
+    // 模型对外服务：把版本开给第三方系统调。
+    // ⚠ 与模型库分成两页：绑定是把模型接进系统**内**的台账，部署是把它开给
+    // 系统**外**，两者的爆炸半径与看的人都不同（MODELING_PLATFORM_DESIGN D13）。
+    // ⚠ 路由只挂读码，开通与铸钥匙那两档在页内按 `modeling:publish` 门控。
+    path: '/modeling/services',
+    name: 'modeling-services',
+    component: () => import('@/pages/Modeling/Services/index.vue'),
+    meta: {
+      title: '模型服务',
+      permissions: [PERMISSION_CODES.modelingView],
+    },
+  },
+  {
     // 趋势分析：点位历史与台账曲线合在一页。
     // ⚠ 两个源的读码互不蕴含，故按**下界**放行（`permissionMode: 'any'`）：
     // 只有其中一个码的账号该看得到自己那一半，而不是被整页挡在门外。页内按

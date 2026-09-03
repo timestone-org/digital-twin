@@ -8,10 +8,12 @@
 import ast
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from platform_server.apps.dataset.formula.analysis import (
     AnalysisModel,
     AnalysisUnavailable,
+    ModelMemo,
 )
 from platform_server.apps.dataset.formula.errors import (
     ExternalsNotPrefetched,
@@ -86,6 +88,11 @@ class EvalContext:
     externals: dict[ExternalKey, object] = field(
         default_factory=dict[ExternalKey, object]
     )
+    #: 这一行的时刻。⚠ 带默认值不能省：全仓几十处构造点大多与模型无关，
+    #: 不给默认值会让它们一起红
+    row_ts: datetime | None = None
+    #: 这一批共用的 `PREDICT` 备忘；`None` 表示这一批没开批量相位
+    model_memo: "ModelMemo | None" = None
 
 
 def evaluate(parsed: ParsedFormula, context: EvalContext) -> object:
@@ -203,9 +210,29 @@ class _Evaluator:
             raise FormulaError(model.reason)
         if not isinstance(model, AnalysisModel):  # pragma: no cover - 装配保证
             raise FormulaError(f"模型「{code}」不可用")
-        return model.predict(
-            [to_number(self.visit(item)) for item in node.args[1:]]
-        )
+        args = [to_number(self.visit(item)) for item in node.args[1:]]
+        return self._predicted(code, model, args)
+
+    def _predicted(
+        self, code: str, model: AnalysisModel, args: list[float | None]
+    ) -> object:
+        """备忘命中就用备忘，收集相位记一笔，其余现算。
+
+        ⚠ 命不中一律**现算**而不是给空：备忘是纯函数的记忆，只加速不改结果。
+        少一条就少一格数的话，这条相位就成了一个与行序有关的静默缺陷（D11b）。
+        Args: code, model, args。
+        """
+        memo = self._context.model_memo
+        at = self._context.row_ts
+        if memo is None:
+            return model.predict(args, at)
+        key = (code, tuple(args), at)
+        if key in memo.values:
+            return memo.values[key]
+        if memo.is_collecting:
+            memo.requests.append(key)
+            return None
+        return model.predict(args, at)
 
     def _history_key(self, name: str, node: ast.Call) -> ExternalKey | None:
         """要读历史的三族：算出它的预取键；不是这三族给 None。

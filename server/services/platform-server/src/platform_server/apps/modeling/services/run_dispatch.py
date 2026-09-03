@@ -10,13 +10,20 @@
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from lib.logging import get_logger
+from lib.objectstore import ObjectStore, ObjectStoreError
 from platform_server.apps.modeling.crud import node_run_crud, run_crud
 from platform_server.apps.modeling.models import ModelingNodeRun, ModelingRun
 from platform_server.apps.modeling.protocols import ACTIVE_RUN_STATUSES
 from platform_server.apps.modeling.schemas.graph import PipelineGraph
-from platform_server.apps.modeling.services import frame_source, presenters
+from platform_server.apps.modeling.services import (
+    artifact_store,
+    frame_export,
+    frame_source,
+    presenters,
+)
 from platform_server.apps.modeling.services.run_executor import (
     Execution,
     NodeOutcome,
@@ -44,6 +51,9 @@ class DispatchOptions:
 
     runner: NodeRunner
     tz_offset_minutes: int
+    #: 二进制产物的落脚处。⚠ 缺省是「没有」而不是必填：纯 JSON 那些算子
+    #: 一个字节都不产，没配对象存储的部署照样跑得起来
+    store: ObjectStore | None = None
 
 
 @dataclass(frozen=True)
@@ -52,6 +62,8 @@ class DispatchReport:
 
     outcome: str
     status: str = ""
+    #: 这次运行属于哪条流水线。消费循环拿它就地收敛这条流水线的老明细
+    pipeline_id: uuid.UUID | None = None
 
 
 async def execute_run(
@@ -66,7 +78,11 @@ async def execute_run(
         return DispatchReport(outcome=RUN_ORPHANED)
     if claimed.is_redelivery:
         await _finish(sessions, run_id, _interrupted())
-        return DispatchReport(outcome=RUN_INTERRUPTED, status="failed")
+        return DispatchReport(
+            outcome=RUN_INTERRUPTED,
+            status="failed",
+            pipeline_id=claimed.pipeline_id,
+        )
     sources = await _load_sources(sessions, claimed)
     outcome = await execute_graph(
         claimed.graph,
@@ -75,11 +91,23 @@ async def execute_run(
             tz_offset_minutes=options.tz_offset_minutes,
             runner=options.runner,
             should_cancel=lambda: _is_cancelled(sessions, run_id),
-            on_node_finished=lambda node: _persist(sessions, run_id, node),
+            on_node_finished=lambda node: _persist(
+                sessions,
+                run_id,
+                node,
+                _Sinks(
+                    store=options.store,
+                    is_keeping_frames=claimed.is_keeping_frames,
+                ),
+            ),
         ),
     )
     await _finish(sessions, run_id, outcome)
-    return DispatchReport(outcome=RUN_DONE, status=outcome.status)
+    return DispatchReport(
+        outcome=RUN_DONE,
+        status=outcome.status,
+        pipeline_id=claimed.pipeline_id,
+    )
 
 
 @dataclass(frozen=True)
@@ -88,6 +116,9 @@ class _Claimed:
 
     graph: PipelineGraph
     is_redelivery: bool
+    pipeline_id: uuid.UUID
+    #: 这次运行要不要把每个端口的全量帧写成 CSV 存下来（D12）
+    is_keeping_frames: bool
 
 
 async def _claim(sessions: Sessions, run_id: uuid.UUID) -> "_Claimed | None":
@@ -110,6 +141,8 @@ async def _claim(sessions: Sessions, run_id: uuid.UUID) -> "_Claimed | None":
         return _Claimed(
             graph=presenters.graph_of(run.graph_snapshot),
             is_redelivery=redelivery,
+            pipeline_id=run.pipeline_id,
+            is_keeping_frames=run.is_keeping_frames,
         )
 
 
@@ -143,21 +176,85 @@ async def _is_cancelled(sessions: Sessions, run_id: uuid.UUID) -> bool:
         return False
 
 
-async def _persist(
-    sessions: Sessions, run_id: uuid.UUID, node: NodeOutcome
-) -> None:
-    """把一个节点的执行记录落库，并记一次心跳。
+@dataclass(frozen=True)
+class _Sinks:
+    """落库那一步要往哪儿写字节，以及要不要写全量帧。"""
 
-    Args: sessions, run_id, node。
+    store: ObjectStore | None
+    is_keeping_frames: bool
+
+
+async def _persist(
+    sessions: Sessions,
+    run_id: uuid.UUID,
+    node: NodeOutcome,
+    sinks: _Sinks,
+) -> None:
+    """把一个节点的执行记录落库，并记一次心跳；有产物就一并写进对象存储。
+
+    ⚠ 产物**先写存储、再落库**：反过来的话库里会指着一个不存在的键，而那要
+    到发布时才发现。写不进去就让这一步失败——一个没有产物的树模型发布出来
+    就是个永远算不出数的版本。
+    ⚠ 全量帧那一份反过来：写不进去只记日志、不让节点失败。它是附加品，
+    为它把一次跑通的训练判成失败是本末倒置（D12）。
+    Args: sessions, run_id, node, sinks。
     """
+    artifact = (
+        None
+        if node.artifact is None
+        else await _write_artifact(run_id, node, sinks.store)
+    )
+    frames = (
+        await frame_export.write_all(
+            sinks.store, str(run_id), node.node_id, node.frames
+        )
+        if sinks.is_keeping_frames
+        else {}
+    )
     async with sessions.session() as session:
-        node_run_crud.add(session, _node_row(run_id, node))
+        node_run_crud.add(
+            session, _node_row(run_id, node, artifact, frames or None)
+        )
         run = await run_crud.get(session, run_id)
         if run is not None:
             run_crud.touch(run)
 
 
-def _node_row(run_id: uuid.UUID, node: NodeOutcome) -> ModelingNodeRun:
+async def _write_artifact(
+    run_id: uuid.UUID, node: NodeOutcome, store: ObjectStore | None
+) -> dict[str, Any] | None:
+    """把一份产物写进对象存储，回一份要落库的元信息。写不进去就让这一步失败。
+
+    Args: run_id, node, store。
+    """
+    if node.artifact is None:  # pragma: no cover —— 调用点已判过
+        return None
+    if store is None:
+        raise ObjectStoreError(
+            "这条流水线产出了二进制模型，而本部署没有配对象存储"
+        )
+    key = artifact_store.run_key(str(run_id), node.node_id)
+    await store.put_bytes(
+        key,
+        node.artifact.payload,
+        content_type=artifact_store.CONTENT_TYPE,
+    )
+    _logger.info(
+        "modeling_artifact_written",
+        "模型产物已落对象存储",
+        run_id=str(run_id),
+        node_id=node.node_id,
+        size_bytes=node.artifact.size_bytes,
+    )
+    return artifact_store.meta_of(node.artifact, key)
+
+
+def _node_row(
+    run_id: uuid.UUID,
+    node: NodeOutcome,
+    artifact: dict[str, Any] | None,
+    frames: dict[str, dict[str, object]] | None,
+) -> ModelingNodeRun:
     return ModelingNodeRun(
         run_id=run_id,
         node_id=node.node_id,
@@ -169,6 +266,10 @@ def _node_row(run_id: uuid.UUID, node: NodeOutcome) -> ModelingNodeRun:
         error_text=node.error_text or None,
         preview_json=node.preview or None,
         preview_truncated=node.is_preview_truncated,
+        fitted_json=node.fitted,
+        io_json=node.io or None,
+        artifact_json=artifact,
+        frames_json=frames,
     )
 
 

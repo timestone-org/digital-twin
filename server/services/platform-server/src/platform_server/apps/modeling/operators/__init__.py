@@ -6,20 +6,42 @@
 
 from platform_server.apps.modeling.operators.base import (
     CATEGORIES,
+    CHANNEL_BINARY,
+    CHANNEL_JSON,
     CONTRACT_FRAME,
     CONTRACT_METRICS,
     CONTRACT_MODEL,
     CONTRACTS,
     PREFETCHED_KEY,
     SERVING_CHANNELS,
+    ColumnKeys,
+    ColumnsByPort,
     OperatorBase,
     OperatorConfig,
     OperatorError,
     OperatorSpec,
     PortSpec,
 )
-from platform_server.apps.modeling.operators.evaluate import RegressionMetrics
-from platform_server.apps.modeling.operators.feature import Standardize
+from platform_server.apps.modeling.operators.cleaning import (
+    AGG_FUNCS,
+    CastType,
+    DropMissing,
+    FilterRows,
+    Resample,
+)
+from platform_server.apps.modeling.operators.diagnostics import (
+    CrossValidate,
+    FeatureImportance,
+    ResidualAnalysis,
+)
+from platform_server.apps.modeling.operators.evaluate import (
+    ClassificationMetrics,
+    RegressionMetrics,
+)
+from platform_server.apps.modeling.operators.feature import (
+    OneHot,
+    Standardize,
+)
 from platform_server.apps.modeling.operators.frame import (
     COLUMN_ROLES,
     DTYPE_NUMBER,
@@ -31,15 +53,24 @@ from platform_server.apps.modeling.operators.frame import (
     FrameColumn,
     Provenance,
 )
+from platform_server.apps.modeling.operators.join import LedgerJoin
 from platform_server.apps.modeling.operators.model import (
     LinearRegressionOperator,
+    LogisticRegressionOperator,
     SplitDataset,
 )
 from platform_server.apps.modeling.operators.payloads import (
     MetricsPayload,
     ModelPayload,
 )
-from platform_server.apps.modeling.operators.preprocess import FillMissing
+from platform_server.apps.modeling.operators.preprocess import (
+    ClipOutlier,
+    FillMissing,
+)
+from platform_server.apps.modeling.operators.reduction import (
+    Pca,
+    SelectFeature,
+)
 from platform_server.apps.modeling.operators.registry import (
     OperatorRegistry,
     OperatorRegistryError,
@@ -47,9 +78,22 @@ from platform_server.apps.modeling.operators.registry import (
     registry,
 )
 from platform_server.apps.modeling.operators.source import LedgerSource
+from platform_server.apps.modeling.operators.timefeature import (
+    TIME_PARTS,
+    TimeFeature,
+)
+from platform_server.apps.modeling.operators.trees import TreeRegressor
+from platform_server.apps.modeling.operators.window import (
+    ROLLING_STATS,
+    LagFeature,
+    RollingFeature,
+)
 
 __all__ = [
+    "AGG_FUNCS",
     "CATEGORIES",
+    "CHANNEL_BINARY",
+    "CHANNEL_JSON",
     "COLUMN_ROLES",
     "CONTRACTS",
     "CONTRACT_FRAME",
@@ -60,26 +104,48 @@ __all__ = [
     "ROLE_FEATURE",
     "ROLE_IGNORED",
     "ROLE_TARGET",
+    "ROLLING_STATS",
     "SERVING_CHANNELS",
+    "TIME_PARTS",
+    "CastType",
     "CellValue",
+    "ClassificationMetrics",
+    "ClipOutlier",
+    "ColumnKeys",
+    "ColumnsByPort",
+    "CrossValidate",
+    "DropMissing",
+    "FeatureImportance",
     "FillMissing",
+    "FilterRows",
     "Frame",
     "FrameColumn",
+    "LagFeature",
+    "LedgerJoin",
     "LedgerSource",
     "LinearRegressionOperator",
+    "LogisticRegressionOperator",
     "MetricsPayload",
     "ModelPayload",
+    "OneHot",
     "OperatorBase",
     "OperatorConfig",
     "OperatorError",
     "OperatorRegistry",
     "OperatorRegistryError",
     "OperatorSpec",
+    "Pca",
     "PortSpec",
     "Provenance",
     "RegressionMetrics",
+    "Resample",
+    "ResidualAnalysis",
+    "RollingFeature",
+    "SelectFeature",
     "SplitDataset",
     "Standardize",
+    "TimeFeature",
+    "TreeRegressor",
     "register_operator",
     "registry",
 ]

@@ -19,9 +19,13 @@ from platform_server.apps.modeling.schemas.graph import PipelineGraph
 
 
 class RunStartIn(InputModel):
-    """发起一次运行。当前没有可调的参数，留着是为了以后加而不破坏契约。"""
+    """发起一次运行。"""
 
     trigger: RunTrigger = "manual"
+    #: 要不要把每个端口的**全量**结果写成 CSV 存下来。
+    #: ⚠ 默认关是刻意的：默认开会让每一次运行都往对象存储写几十 MB，而绝大多数
+    #: 运行只是在调参数（docs/MODELING_PLATFORM_DESIGN.md D12）
+    is_keeping_frames: bool = False
 
 
 class NodeRunSummaryOut(OutputModel):
@@ -46,6 +50,9 @@ class NodeRunOut(NodeRunSummaryOut):
 
     preview: dict[str, Any] = Field(default_factory=dict[str, Any])
     is_preview_truncated: bool
+    #: 留下了全量结果的那些端口。⚠ 只给端口名，不给对象键——键是服务端的事，
+    #: 交出去等于把「猜一个别的键」这条路也一起交出去
+    exported_ports: list[str] = Field(default_factory=list[str])
 
 
 class RunSummaryOut(OutputModel):
@@ -60,6 +67,8 @@ class RunSummaryOut(OutputModel):
     duration_ms: int | None
     row_count: int | None
     is_source_truncated: bool
+    #: 这次运行有没有留下全量结果。界面按它决定「下载」那个入口显不显示
+    is_keeping_frames: bool
     error_text: str | None
     created_by_name: str | None
     created_at: Utc

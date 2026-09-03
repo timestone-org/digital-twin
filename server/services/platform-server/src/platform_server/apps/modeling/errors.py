@@ -121,3 +121,79 @@ class BindingParamsMismatch(AppError):
 
     code = 41416
     http_status = 409
+
+
+class DeploymentNotFound(AppError):
+    """部署不存在。
+
+    ⚠ 对外面拿不到部署时也用它：`code` 打错与「这个部署被删了」对调用方是
+    同一件事，分开报等于送一个「哪些 code 存在」的枚举接口。
+    """
+
+    code = 41417
+    http_status = 404
+
+
+class DeploymentCodeTaken(AppError):
+    """这个对外标识已经被别的部署占了。"""
+
+    code = 41418
+    http_status = 409
+
+
+class DeploymentDisabled(AppError):
+    """部署已停用。⚠ 403 而不是静默返回旧值。"""
+
+    code = 41419
+    http_status = 403
+
+
+class DeploymentUnservable(AppError):
+    """这个部署钉的版本上不了线（产物没了、跨版本、或本来就不可服务）。"""
+
+    code = 41420
+    http_status = 410
+
+
+class ApiKeyInvalid(AppError):
+    """密钥无效。
+
+    ⚠ 「不存在」「已撤销」「已过期」共用这一个：分开报等于送一个枚举接口。
+    消息里也**只有这四个字**。
+    """
+
+    code = 41421
+    http_status = 401
+
+
+class ApiKeyNotFound(AppError):
+    """管理面按 id 找不到这把密钥。"""
+
+    code = 41422
+    http_status = 404
+
+
+class PredictRequestInvalid(AppError):
+    """对外预测请求的形状不对：行数超限、缺列、或值不是数。"""
+
+    code = 41423
+    http_status = 400
+
+
+class BindingEntryChanged(AppError):
+    """新版本的入口契约与这条绑定当初对上的不一样，要用户确认过再换。
+
+    ⚠ 不自动重映射：按名字自动映射会在「两个版本恰好都有两个入口列、名字
+    不同」时把甲的值喂给乙，而结果看着完全正常
+    （docs/MODELING_PLATFORM_DESIGN.md D18）。
+    """
+
+    code = 41424
+    http_status = 409
+
+
+class FrameExportMissing(AppError):
+    """这次运行没有留下这个端口的全量结果，或者它已经过了保留期。"""
+
+    code = 41425
+    http_status = 404

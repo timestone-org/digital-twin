@@ -1,13 +1,13 @@
 /**
- * @fileoverview 列候选只看上游那条支路。
+ * @fileoverview 台账清单只看上游那条支路。
+ *
+ * ⚠ **列**候选不在这里：它由后端算好经 `:validate` 的 `known_columns` 给下来。
  */
 import type { ModelingGraph, ModelingOperator } from '@dt/contracts'
 import { describe, expect, it } from 'vitest'
 
 import {
   sourceTablesFor,
-  upstreamSourcesFor,
-  visibleKeysOf,
   withAncestorsOf,
 } from '@/pages/Modeling/Canvas/scripts/upstream'
 
@@ -136,47 +136,3 @@ describe('列候选看哪几张台账', () => {
 
 // ⚠ 收窄口径必须与后端 `graph_walk.known_keys_by_node` 一致：只列台账的全部列
 // 时，下游能勾到一列上游根本不产出的列，而报错要到保存 / 运行才出来
-describe('上游取数挑了列之后，下游候选跟着收窄', () => {
-  function narrowed(picked: string[]): ModelingGraph {
-    return {
-      ...GRAPH,
-      nodes: GRAPH.nodes.map((node) =>
-        node.id === 's1'
-          ? { ...node, config: { table_code: 'energy', columns: picked } }
-          : node,
-      ),
-    }
-  }
-
-  it('挑过列就只剩那几列', () => {
-    const sources = upstreamSourcesFor(narrowed(['F2', 'F3']), OPERATORS, 'm1')
-    expect(visibleKeysOf(sources)).toEqual(new Set(['F2', 'F3']))
-  })
-
-  it('留空的语义是「取全部列」，那时不收窄', () => {
-    const sources = upstreamSourcesFor(narrowed([]), OPERATORS, 'm1')
-    expect(visibleKeysOf(sources)).toBeNull()
-  })
-
-  it('上游一个取数都没有时也不收窄', () => {
-    expect(visibleKeysOf([])).toBeNull()
-  })
-
-  it('两支里只要有一支留空，整体就推不出来', () => {
-    const both: ModelingGraph = {
-      ...narrowed(['F2']),
-      edges: [
-        ...GRAPH.edges,
-        {
-          id: 'e3',
-          from_node: 's2',
-          from_port: 'o',
-          to_node: 'm1',
-          to_port: 'j',
-        },
-      ],
-    }
-
-    expect(visibleKeysOf(upstreamSourcesFor(both, OPERATORS, 'm1'))).toBeNull()
-  })
-})

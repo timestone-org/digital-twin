@@ -8,6 +8,8 @@
  * 规格见 docs/MODELING_DESIGN.md。
  */
 
+import type { DatasetFormulaDef } from './dataset'
+
 /** 算子分类，与算子面板的分组一一对应。 */
 export const MODELING_CATEGORIES = [
   'source',
@@ -133,6 +135,13 @@ export interface ModelingGraphIssue {
 export interface ModelingGraphCheck {
   is_valid: boolean
   issues: ModelingGraphIssue[]
+  /**
+   * `{节点 id: 这个节点输入上看得见的列}`；`null` = 静态推不出来，不收窄。
+   *
+   * ⚠ 列候选**由后端算**，前端不许再推一份：两份口径各自自洽而真跑起来对不上，
+   * 加进会造列的算子之后更是整条错。
+   */
+  known_columns: Record<string, string[] | null>
 }
 
 /** 流水线列表里的一条，不带图。 */
@@ -169,6 +178,13 @@ export interface ModelingNodeRunSummary {
 export interface ModelingNodeRun extends ModelingNodeRunSummary {
   preview: Record<string, unknown>
   is_preview_truncated: boolean
+  /**
+   * 留下了全量结果的那些端口。
+   *
+   * ⚠ 只有端口名，没有对象键：键是服务端的事，交出去等于把「猜一个别的键」
+   * 那条路也一起交出去。
+   */
+  exported_ports: string[]
 }
 
 /** 运行列表里的一条。 */
@@ -182,6 +198,8 @@ export interface ModelingRunSummary {
   duration_ms: number | null
   row_count: number | null
   is_source_truncated: boolean
+  /** 这次运行有没有留下全量结果。界面按它决定下载入口显不显示。 */
+  is_keeping_frames: boolean
   error_text: string | null
   created_by_name: string | null
   created_at: string
@@ -229,8 +247,48 @@ export interface ModelingVersionSummary {
   created_at: string
 }
 
-/** 版本详情，带发布时冻结的指标与指纹。 */
+/** 模型签名里的一个入口列：调用方要提供的东西。 */
+export interface ModelingSignatureInput {
+  key: string
+  label: string
+  unit: string
+  dtype: string
+  /** 推理链上没有哪一步会替它补空值时为真。 */
+  is_required: boolean
+  /** 可缺省时会被填成什么。 */
+  default_on_missing: number | null
+  training_stats: Record<string, number>
+}
+
+/** 管线自己造出来的一列。调用方不必给，只做展示。 */
+export interface ModelingSignatureDerived {
+  key: string
+  by: string
+  label: string
+}
+
+/**
+ * 模型签名：面向人与第三方系统的输入输出说明。
+ *
+ * ⚠ **不参与任何计算**：推理只读可服务表示。别从这里读列名。
+ */
+export interface ModelingSignature {
+  format_version: string
+  inputs: ModelingSignatureInput[]
+  derived: ModelingSignatureDerived[]
+  output: {
+    key: string
+    label: string
+    unit: string
+    dtype: string
+    task: string
+  }
+}
+
+/** 版本详情，带发布时冻结的指标、指纹与模型签名。 */
 export interface ModelingVersion extends ModelingVersionSummary {
+  /** ⚠ 不叫 `schema`：那个名字在后端会与 `BaseModel.schema` 撞并当场告警。 */
+  signature: ModelingSignature | Record<string, never>
   metrics: Record<string, number | null>
   fingerprint: Record<string, unknown>
   description: string | null
@@ -269,4 +327,95 @@ export interface ModelingBinding {
 /** 换绑的回执：连同「哪些台账列会跟着变」。重算由用户在台账页显式发起。 */
 export interface ModelingBindingImpact extends ModelingBinding {
   usages: ModelingBindingUsage[]
+}
+
+/**
+ * 一个对外服务：把一个模型版本开给系统外的第三方调。
+ *
+ * ⚠ 与绑定并列而不是替代：绑定把模型接进系统**内**的台账，部署把它开给外面。
+ * 两者都钉一个不可变的版本，互不依赖。
+ */
+export interface ModelDeployment {
+  id: string
+  /** URL 段。⚠ 建后不可改——第三方的代码里写着它。 */
+  code: string
+  model_version_id: string
+  model_name: string
+  model_version: number
+  name: string
+  description: string | null
+  /** 人关的开关。关了立刻 403，不是静默返回旧值。 */
+  is_enabled: boolean
+  /** 钉的版本本身能不能上线。⚠ 与 `is_enabled` 是两回事，界面上要分开说。 */
+  is_servable: boolean
+  unservable_reason: string | null
+  max_rows_per_call: number
+  rate_limit_per_minute: number
+  key_count: number
+  created_by_name: string | null
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * 一把 API 密钥。
+ *
+ * ⚠ **没有明文这一格**：明文只在铸出来那一次的回执里出现（`ModelApiKeyMinted`），
+ * 之后任何接口都取不回来。界面上要在创建时说清楚并给「复制」。
+ */
+export interface ModelApiKey {
+  id: string
+  deployment_id: string
+  name: string
+  /** 明文的前 12 位，用于在列表里认出是哪一把。 */
+  key_prefix: string
+  expires_at: string | null
+  revoked_at: string | null
+  last_used_at: string | null
+  created_by_name: string | null
+  created_at: string
+}
+
+/** 刚铸出来那一把。⚠ `plaintext` 只有这一次拿得到。 */
+export interface ModelApiKeyMinted extends ModelApiKey {
+  plaintext: string
+}
+
+/** 某一天的调用量。 */
+export interface ModelCallStat {
+  day: string
+  total: number
+  failed: number
+}
+
+/** 算这一次的是哪个模型。 */
+export interface OpenModelInfo {
+  code: string
+  version: number
+}
+
+/** 一条预测告警。⚠ 有告警不等于算不出来——外推照样给数，只是标注出来。 */
+export interface OpenModelWarning {
+  row: number
+  column: string
+  kind: string
+  message: string
+}
+
+/** 一次对外预测的结果。⚠ 只有预测值与告警，没有任何训练区间的具体数值。 */
+export interface OpenModelPredict {
+  model: OpenModelInfo
+  predictions: (number | null)[]
+  warnings: OpenModelWarning[]
+}
+
+/**
+ * 一键「注册为公式」的回执：新建的库公式条目与新建的绑定。
+ *
+ * ⚠ 两样一起回：用户接下来要做的是「去台账把这条公式用上」，而那一步要的是
+ * 条目的形参名；只回一个的话他还得再查一次。
+ */
+export interface ModelFormulaRegistration {
+  formula: DatasetFormulaDef
+  binding: ModelingBinding
 }

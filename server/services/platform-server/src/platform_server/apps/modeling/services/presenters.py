@@ -84,6 +84,7 @@ def to_run_summary(row: ModelingRun) -> RunSummaryOut:
         duration_ms=row.duration_ms,
         row_count=row.row_count,
         is_source_truncated=row.source_truncated,
+        is_keeping_frames=row.is_keeping_frames,
         error_text=row.error_text,
         created_by_name=row.created_by_name,
         created_at=row.created_at,
@@ -132,6 +133,7 @@ def to_node_out(row: ModelingNodeRun) -> NodeRunOut:
         **summary.model_dump(),
         preview=row.preview_json or {},
         is_preview_truncated=row.preview_truncated,
+        exported_ports=sorted(row.frames_json or {}),
     )
 
 

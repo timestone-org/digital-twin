@@ -12,6 +12,7 @@ from pydantic import Field
 from platform_server.apps.modeling.operators.base import (
     CONTRACT_FRAME,
     PREFETCHED_KEY,
+    ColumnsByPort,
     OperatorBase,
     OperatorConfig,
     OperatorError,
@@ -109,6 +110,23 @@ class LedgerSource(OperatorBase):
         if not isinstance(self.config, LedgerSourceConfig):  # pragma: no cover
             raise OperatorError("台账取数拿到了不匹配的参数")
         return self.config
+
+    @classmethod
+    def describe_columns(
+        cls, config: OperatorConfig, inputs: ColumnsByPort
+    ) -> ColumnsByPort:
+        """列来自参数里挑的那几列；留空表示取全部，静态推不出来。
+
+        ⚠ 这是个**上界**而不是等式：`should_drop_empty_columns` 开着时，整列全空
+        的列会在运行时被丢掉。所以发布期那道「声明 = 实测」的核对只查推理链上的
+        步骤，取数不在其中（它 `ENABLED_IN_SERVING=False`）。
+        Args: config, inputs。
+        """
+        del inputs
+        picked = (
+            config.columns if isinstance(config, LedgerSourceConfig) else []
+        )
+        return {"frame": tuple(picked) if picked else None}
 
     def run(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """把引擎预取好的帧交出去，必要时先丢掉整列全空的列。

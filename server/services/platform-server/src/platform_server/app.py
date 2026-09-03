@@ -63,7 +63,7 @@ def build_app(settings: Settings) -> FastAPI:
     # ⚠ 每个角色都要注册：注册表是**进程内**的，而单行写触发的重算会落到
     # 任意 API 副本。漏一处的现象是「有时候出数、有时候是空」，且与副本编号
     # 相关，极难复现（docs/MODELING_DESIGN.md §3.2）
-    register_provider(ModelingAnalysisProvider())
+    register_provider(ModelingAnalysisProvider(store=container.object_store))
     app.state.container = container
     return app
 

@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
 from lib.idempotency import IdempotencyStore
+from lib.objectstore import ObjectStore
 from lib.web.authdeps import (
     REQUIRED_CODES_ATTR,
     REQUIRED_MODE_ATTR,
@@ -32,6 +33,7 @@ __all__ = [
     "get_caller",
     "get_container",
     "get_idempotency_key",
+    "get_object_store",
     "get_session",
     "require",
     "require_service_key",
@@ -59,6 +61,18 @@ async def get_session(
     """
     async with container.database.session() as session:
         yield session
+
+
+def get_object_store(
+    container: Annotated[Container, Depends(get_container)],
+) -> ObjectStore:
+    """取对象存储客户端。进程内共用一个，构造在组合根。
+
+    ⚠ 放在服务级而不是各功能模块各写一份：`dependency_overrides` 按**函数对象**
+    换，各写一份的话用例只换得掉其中一个，而另一个会在用例里真去连对象存储。
+    Args: container。
+    """
+    return container.object_store
 
 
 def get_idempotency_key(

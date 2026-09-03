@@ -8,10 +8,10 @@
 import asyncio
 from collections.abc import Callable
 from concurrent.futures import Executor, ProcessPoolExecutor
-from typing import Any
 
 from platform_server.apps.modeling.services.node_task import (
     NodePayload,
+    NodeResult,
     run_node_payload,
 )
 
@@ -65,7 +65,7 @@ class PooledRunner:
         self._pool = pool
         self._timeout_s = timeout_s
 
-    async def run(self, payload: NodePayload) -> dict[str, Any]:
+    async def run(self, payload: NodePayload) -> NodeResult:
         """跑一个算子；超时抛 `TimeoutError` 并换池。
 
         Args: payload。

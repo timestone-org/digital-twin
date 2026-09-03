@@ -9,8 +9,13 @@ import uuid
 
 from pydantic import Field
 
-from platform_server.apps.modeling.protocols import ModelTask, ServingChannel
+from platform_server.apps.dataset.services import FormulaDefOut
+from platform_server.apps.modeling.protocols import (
+    ModelTask,
+    ServingChannel,
+)
 from platform_server.apps.modeling.schemas.common import (
+    FormulaCode,
     InputModel,
     Label,
     Note,
@@ -47,8 +52,11 @@ class ModelVersionSummaryOut(OutputModel):
 
 
 class ModelVersionOut(ModelVersionSummaryOut):
-    """版本详情，带指标与指纹。"""
+    """版本详情，带指标、指纹与模型签名。"""
 
+    #: 面向人与第三方的输入输出说明。⚠ 字段不叫 `schema`：那个名字会与
+    #: `BaseModel.schema` 撞并当场告警，而本仓 CI 是零告警
+    signature: dict[str, object] = Field(default_factory=dict[str, object])
     metrics: dict[str, float | None] = Field(
         default_factory=dict[str, float | None]
     )
@@ -68,6 +76,10 @@ class ModelBindingUpdateIn(InputModel):
 
     model_version_id: uuid.UUID | None = None
     is_enabled: bool | None = None
+    #: 新版本的输入列与当初对上的不一样时，要显式确认过才换。
+    #: ⚠ 不自动按名字重映射：两个版本恰好都有两个入口列、名字不同时，
+    #: 自动映射会把甲的值喂给乙，而结果看着完全正常（D18）
+    is_remap_confirmed: bool = False
 
 
 class ParamMapOut(OutputModel):
@@ -112,3 +124,21 @@ class ModelBindingImpactOut(ModelBindingOut):
     usages: list[ModelBindingUsageOut] = Field(
         default_factory=list[ModelBindingUsageOut]
     )
+
+
+class ModelFormulaRegisterIn(InputModel):
+    """一键注册为公式。"""
+
+    #: 公式库里的标识，也是调用点上写的那个字面量。⚠ 已存在时不覆盖，409
+    fx_code: FormulaCode
+
+
+class ModelFormulaOut(OutputModel):
+    """一键注册的回执：新建的条目与新建的绑定。
+
+    ⚠ 两样一起回：用户接下来要做的是「去台账把这条公式用上」，而那一步要的是
+    条目的形参名；只回一个的话他还得再查一次。
+    """
+
+    formula: FormulaDefOut
+    binding: ModelBindingOut

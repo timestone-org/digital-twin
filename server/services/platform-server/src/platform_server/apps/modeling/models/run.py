@@ -65,6 +65,15 @@ class ModelingRun(UuidPrimaryKeyMixin, CreatedAtMixin, Base):
         default=False,
         server_default=text("false"),
     )
+    # 要不要把每个端口的全量帧写成 CSV 存下来（D12）。
+    # ⚠ 默认**关**：默认开会让每一次运行都往对象存储写几十 MB，而绝大多数
+    # 运行只是在调参数。⚠ 那些 CSV 里含台账原始数据，故下载要另一个权限码
+    is_keeping_frames: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
     # 执行者每跑完一个节点写一次，陈旧即判「执行中断」并放开单飞索引
     heartbeat_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -161,6 +170,29 @@ class ModelingNodeRun(UuidPrimaryKeyMixin, EagerDefaultsMixin, Base):
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # 含 traceback
     error_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 这一步学到的参数，按列 key 建键；不带拟合的算子是 NULL。
+    # ⚠ 独立成列而不是塞进 `preview_json`：摘要有字节预算、超了会被静默削掉，
+    # 而这是发布件的原料，削掉的表现是「模型发布成功、上线才炸」
+    # （docs/MODELING_PLATFORM_DESIGN.md D1）
+    fitted_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
+    # `{"inputs": {端口: [列 key…]}, "outputs": {端口: [列 key…]}}`，
+    # 这一步**实际**看到与产出的列。发布时据它算逐步的输入契约（D3）
+    io_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # `{object_key, digest, size_bytes, format_version, runtime}`，
+    # 这一步产出的二进制模型（通道 B）。纯 JSON 的算子是 NULL。
+    # ⚠ 摘要与库版本记在**训练那一侧**：发布跑在 api 进程里，那里的 numpy /
+    # sklearn 版本未必与工进程一致，发布时现算会把跨版本那道拒载闸变成摆设
+    artifact_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
+    # `{端口: {object_key, row_count, size_bytes, is_truncated}}`，
+    # 那次运行开了「保留全量产物」时才有（D12）。
+    # ⚠ 只留键与规模：字节在对象存储里，一次取数可以是几十万行
+    frames_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
     # `{端口名: 结果摘要}`，有硬上限（D19）
     preview_json: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB, nullable=True

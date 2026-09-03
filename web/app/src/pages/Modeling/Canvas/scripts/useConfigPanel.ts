@@ -2,8 +2,11 @@
  * @fileoverview 参数面板那一摊：开着哪个节点、它的 schema 摊成什么字段、
  * 台账与列的候选从哪来。
  *
- * ⚠ 列候选取自**上游那条支路**上的取数节点，不是图里所有取数节点：一条流水线
- * 接两张台账时，另一支的列名会被列进来，用户勾了要等运行时才报「这一列不存在」。
+ * ⚠ 列候选**由后端算**（`:validate` 回执里的 `known_columns`）。前端只负责给
+ * 每个列 key 配上台账里的显示名，不许自己再推一份：两份口径各自自洽而真跑起来
+ * 对不上，加进会造列的算子之后更是整条错（docs/MODELING_PLATFORM_DESIGN.md D2）。
+ * ⚠ 台账清单仍然要按**上游那条支路**上的取数节点去拉：一条流水线接两张台账时，
+ * 另一支的列名不该被列进来。
  */
 import type {
   ModelingGraph,
@@ -15,7 +18,7 @@ import { computed, ref, watch } from 'vue'
 
 import type { FormOptions } from './schemaForm'
 import { fieldsOf } from './schemaForm'
-import { sourceTablesFor, upstreamSourcesFor, visibleKeysOf } from './upstream'
+import { sourceTablesFor } from './upstream'
 import { useLedgerOptions } from './useLedgerOptions'
 
 type Operators = ReadonlyMap<string, ModelingOperator>
@@ -24,6 +27,8 @@ type Ledger = ReturnType<typeof useLedgerOptions>
 export interface ConfigPanelDeps {
   graph: Ref<ModelingGraph>
   operators: ComputedRef<Operators>
+  /** 后端算好的逐节点列候选；`null` = 推不出来，不收窄。 */
+  knownColumns: Ref<Readonly<Record<string, string[] | null>>>
   /** 改一个节点的参数。 */
   setConfig: (nodeId: string, config: Record<string, unknown>) => void
   /** 当前账号有没有 `dataset:view`——没有就不去拉台账清单。 */
@@ -45,33 +50,27 @@ function noteFor(
 /**
  * 当前这个节点该看哪些列。
  *
- * ⚠ 收窄只看**别人**挑了什么，正在配的那个取数节点自己不算：拿它自己的选择去
- * 收窄自己的候选，等于一取消勾选就再也勾不回来。
+ * ⚠ 后端给的是**列 key 与顺序**，台账那边给的是显示名：按后端那份的顺序摆，
+ * 名字对不上的（管线自己造出来的派生列）就拿 key 当名字，不能把它丢掉。
  */
 function columnsFor(
   deps: ConfigPanelDeps,
   ledger: Ledger,
   nodeId: string | null,
 ): { columns: readonly { key: string; name: string }[]; note: string } {
-  const sources = upstreamSourcesFor(
-    deps.graph.value,
-    deps.operators.value,
-    nodeId,
-  )
   const codes = sourceTablesFor(deps.graph.value, deps.operators.value, nodeId)
   const all = codes.flatMap((code) => [...ledger.columnsOf(code)])
-  const visible = visibleKeysOf(
-    sources.filter((item) => item.nodeId !== nodeId),
-  )
+  const known =
+    nodeId === null ? null : (deps.knownColumns.value[nodeId] ?? null)
   const columns =
-    visible === null ? all : all.filter((item) => visible.has(item.key))
+    known === null
+      ? all
+      : known.map(
+          (key) => all.find((item) => item.key === key) ?? { key, name: key },
+        )
   return {
     columns,
-    note: noteFor(
-      codes,
-      columns.length > 0,
-      visible !== null && all.length > 0,
-    ),
+    note: noteFor(codes, columns.length > 0, known !== null && all.length > 0),
   }
 }
 

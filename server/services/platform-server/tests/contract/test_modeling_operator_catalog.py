@@ -3,12 +3,17 @@
 import ast
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
+from platform_server.apps.dataset.protocols import (
+    AGG_FUNCS as LEDGER_AGG_FUNCS,
+)
 from platform_server.apps.modeling.operators import (
+    AGG_FUNCS,
     CATEGORIES,
+    CONTRACT_MODEL,
     CONTRACTS,
     SERVING_CHANNELS,
     Frame,
@@ -18,15 +23,36 @@ from platform_server.apps.modeling.operators import (
     registry,
 )
 from platform_server.apps.modeling.operators.base import PREFETCHED_KEY
+from platform_server.apps.modeling.operators.cleaning import (
+    _FOLDERS as FOLDERS,
+)
 
 # 本期算子的**写死名单**。加算子必须同时改这里——防的是重名静默覆盖与漏登记
 EXPECTED_CODES = (
+    "cast_type",
+    "classification_metrics",
+    "clip_outlier",
+    "cross_validate",
+    "drop_missing",
+    "feature_importance",
     "fill_missing",
+    "filter_rows",
+    "lag_feature",
+    "ledger_join",
     "ledger_source",
     "linear_regression",
+    "logistic_regression",
+    "one_hot",
+    "pca",
     "regression_metrics",
+    "resample",
+    "residual_analysis",
+    "rolling_feature",
+    "select_feature",
     "split_dataset",
     "standardize",
+    "time_feature",
+    "tree_regressor",
 )
 # 带「跑用户给的东西」意味的词。撞上就该来读一遍设计文档 §9.3
 CODE_EXECUTION_WORDS = ("custom", "code", "script", "eval", "exec", "shell")
@@ -46,6 +72,20 @@ MODELING_ROOT = (
     / "apps"
     / "modeling"
 )
+# 前端的图标注册表。算子的 ICON 取自它，而**取错了是纯静默的**：
+# `DtIcon` 拿到未登记的名字什么都不渲染，画布上那格就是空的
+ICON_REGISTRY = (
+    Path(__file__).resolve().parents[5]
+    / "web"
+    / "packages"
+    / "ui"
+    / "src"
+    / "components"
+    / "DtIcon"
+    / "registry.ts"
+)
+# 注册表里一行一个名字：`  name: [` 或 `  'name-with-dash': [`
+ICON_NAME = re.compile(r"^  '?([a-z][a-z0-9-]*)'?:", re.MULTILINE)
 
 
 def sources() -> list[Path]:
@@ -110,6 +150,77 @@ def test_only_model_operators_declare_a_serving_channel() -> None:
             assert spec.serving_channel in SERVING_CHANNELS, spec.code
         else:
             assert spec.serving_channel == "", spec.code
+
+
+def test_every_operator_declares_the_columns_it_produces() -> None:
+    """列声明只给帧类输出端口建键，不多不少。
+
+    ⚠ 少一个端口，下游的列候选就是空的；多一个（比如给模型端口也建了键），
+    发布期那道「声明 = 实测」的核对会拿一个根本不是帧的端口去比
+    （docs/MODELING_PLATFORM_DESIGN.md D2）。
+    """
+    for code in EXPECTED_CODES:
+        operator = registry.get(code)
+        frame_ports = {
+            port.name
+            for port in operator.OUTPUTS
+            if port.contract == "frame@v1"
+        }
+        declared = operator.describe_columns(
+            _least_config(code),
+            {port.name: ("甲", "乙") for port in operator.INPUTS},
+        )
+        assert set(declared) == frame_ports, code
+
+
+def test_column_declarations_keep_their_order() -> None:
+    """透传型算子必须保持列序，不许排序或去重后重排。
+
+    ⚠ 绑定是**按位置**把形参映射到特征上的：顺序一变，存量绑定就静默错位——
+    温度喂进了负荷那一格，算出来的还是个数，没有任何一处会报错。
+    """
+    given = ("乙", "甲", "丙")
+    for code in ("fill_missing", "standardize"):
+        declared = registry.get(code).describe_columns(
+            _least_config(code), {"frame": given}
+        )
+        assert declared["frame"] == given, code
+
+
+def test_the_aggregation_roster_matches_the_ledger() -> None:
+    """重采样那八档与台账的八档**同集合**。
+
+    ⚠ 建模不许深链 `apps/dataset/protocols`，所以两边各出一份白名单——那就必须
+    有一条用例钉住它们不漂。漂了的表现是「台账里按小时看是一个数、建模里按小时
+    取是另一个数」，两边各自都对。
+    """
+    assert AGG_FUNCS == LEDGER_AGG_FUNCS
+
+
+def test_every_aggregation_has_a_way_to_fold() -> None:
+    """名单里的每一档都在折算表里有对应的算法。
+
+    ⚠ 折算表少一个键不会在登记期报错，要跑到那一档才 KeyError——而那时候用户
+    已经配好图按下运行了。
+    """
+    assert set(AGG_FUNCS) - {"count"} == set(FOLDERS)
+
+
+def test_every_operator_icon_is_registered_on_the_front_end() -> None:
+    """算子的图标名必须在 `DtIcon` 的注册表里。
+
+    ⚠ 这条只能在这里守：图标名是**运行期数据**，不进 openapi，前端那条「用到的
+    每个名字都在表里」的用例看不见它。写错了 `DtIcon` 什么都不渲染，画布上那一格
+    就是空的，两侧都不报错。
+    """
+    registered = set(
+        ICON_NAME.findall(ICON_REGISTRY.read_text(encoding="utf-8"))
+    )
+    assert registered, "图标注册表读出来是空的，路径大概挪了"
+    for spec in registry.specs():
+        assert (
+            spec.icon in registered
+        ), f"{spec.code} 的图标「{spec.icon}」没登记"
 
 
 def test_config_schemas_only_use_closed_types() -> None:
@@ -310,3 +421,82 @@ def _kind_of(field: dict[str, Any]) -> str:
         if isinstance(branch, dict) and branch.get("type") != "null":
             return str(branch.get("type", ""))
     return ""
+
+
+def _least_config(code: str) -> Any:
+    """填够必填项的最小参数。
+
+    ⚠ 必填项各算子不同，不能一律 `CONFIG_MODEL()`：台账取数的 `table_code`
+    没有默认值（空串会被 `min_length` 拒掉，那正是它该有的样子）。
+    Args: code。
+    """
+    least: dict[str, Any] = {
+        "table_code": "t",
+        "target_column": "甲",
+        "column": "甲",
+    }
+    schema: dict[str, Any] = registry.get(code).CONFIG_MODEL.model_json_schema()
+    required = cast("list[str]", schema.get("required", []))
+    return registry.get(code).CONFIG_MODEL.model_validate(
+        {name: least[name] for name in required if name in least}
+    )
+
+
+def test_no_serving_step_may_change_the_row_count() -> None:
+    """推理链上一步都不许增删行。
+
+    ⚠ 这是**批量相位**成立的前提：整批算是把 n 行一次喂进整条链，任何一步增删
+    行都会让答案与行错位。错位不报错——每一行都拿到了一个看着正常的数
+    （docs/MODELING_PLATFORM_DESIGN.md D11b）。
+    """
+    guilty = [
+        code
+        for code in registry.codes()
+        if registry.get(code).ENABLED_IN_SERVING
+        and registry.get(code).CHANGES_ROW_COUNT
+    ]
+    assert guilty == []
+
+
+def test_only_the_model_step_declares_a_serving_channel() -> None:
+    """只有产模型的那一步声明上线通道，别的都不许声明。
+
+    ⚠ 声明了通道的那一步在推理时走 `predict_rows` 而不是 `run`。一个特征算子
+    误声明的表现是它整步被换成一次预测，而列名照旧。
+    """
+    wrong = [
+        code
+        for code in registry.codes()
+        if registry.get(code).SERVING_CHANNEL
+        and not any(
+            port.contract == CONTRACT_MODEL
+            for port in registry.get(code).OUTPUTS
+        )
+    ]
+    assert wrong == []
+
+
+# 前端那组开箱模板用例里写死的那份算子名单。⚠ 两条用例接成一条链才管用：
+# 前端那条钉「模板里的算子都在这份名单里」，这一条钉「这份名单里的算子都真的
+# 存在」。少任何一条，模板都能摆出一个渲染成空壳的节点，而 typecheck 与 lint
+# 双双放行（docs/MODELING_PLATFORM_DESIGN.md D21）
+TEMPLATE_SPEC = (
+    Path(__file__).resolve().parents[5]
+    / "web/app/tests/pages/Modeling/scripts/templates.test.ts"
+)
+_KNOWN_BLOCK = re.compile(
+    r"const KNOWN_OPERATORS = new Set\(\[(?P<body>.*?)\]\)", re.DOTALL
+)
+
+
+def test_the_frontend_template_roster_only_names_real_operators() -> None:
+    """前端那份名单里的每一个算子都真的在注册表里。
+
+    ⚠ 从**前端那一侧**遍历：反过来（「每个算子都被某张模板用到」）不成立，
+    也不是要钉的东西。钉错方向的表现是这条用例恒绿。
+    """
+    found = _KNOWN_BLOCK.search(TEMPLATE_SPEC.read_text("utf-8"))
+    assert found is not None, "前端那组模板用例里找不到算子名单"
+    named = set(re.findall(r"'([a-z_]+)'", found.group("body")))
+    assert named
+    assert sorted(named - set(registry.codes())) == []

@@ -74,6 +74,7 @@ async def start_run(
             status="pending",
             graph_snapshot=graph.model_dump(),
             trigger=payload.trigger,
+            is_keeping_frames=payload.is_keeping_frames,
             created_by=context.actor.user_id,
             created_by_name=context.actor.name,
         ),

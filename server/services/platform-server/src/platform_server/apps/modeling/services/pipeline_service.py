@@ -28,6 +28,7 @@ from platform_server.apps.modeling.schemas import (
 from platform_server.apps.modeling.services import presenters
 from platform_server.apps.modeling.services.graph_check import check_graph
 from platform_server.apps.modeling.services.graph_walk import (
+    known_columns_by_node,
     source_table_codes,
 )
 
@@ -150,8 +151,10 @@ async def check_pipeline(
 
 
 def check_result(graph: PipelineGraph) -> GraphCheckOut:
-    """把校验问题折成对外形态。
+    """把校验问题折成对外形态，顺带回逐节点看得见哪些列。
 
+    ⚠ 列候选**由后端算**：前端另写一份收窄口径的话，两份各自自洽而真跑起来
+    对不上（docs/MODELING_PLATFORM_DESIGN.md D2）。
     Args: graph。
     """
     issues = check_graph(graph)
@@ -165,6 +168,7 @@ def check_result(graph: PipelineGraph) -> GraphCheckOut:
             )
             for item in issues
         ],
+        known_columns=known_columns_by_node(graph, graph.node_by_id()),
     )
 
 
