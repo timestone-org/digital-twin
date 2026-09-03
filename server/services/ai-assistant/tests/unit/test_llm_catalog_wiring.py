@@ -3,7 +3,7 @@
 守的是几件只在现场才看得见的事：界面上配出来的那一路要真的成为一个能选的档位
 （而不是仍旧只有环境变量那一路）；一路之内逐档挑模型，挑不出接图模型的那一路
 要**如实拒**而不是把图喂给一个不接图的模型（它只会回一句「我没看到图」，
-而调用照样计费）；环境变量那两路按形态逐格让位——配了一路订阅账号不该把好端端
+而调用照样计费）；环境变量那一路按形态让位——配了一路订阅账号不该把好端端
 的按量那一路挤没；以及每个异步入口先让目录刷新一次。
 """
 
@@ -14,7 +14,6 @@ from pydantic import SecretStr
 
 from ai_assistant.apps.chat.services import model_profiles
 from ai_assistant.llm import (
-    CODEX_PROFILE,
     DEFAULT_PROFILE,
     AdapterDeps,
     ModelChoice,
@@ -194,19 +193,11 @@ def test_the_environment_route_steps_aside_for_its_own_kind() -> None:
     assert [one.id for one in with_codex.profiles()] == ["p2", DEFAULT_PROFILE]
 
 
-def test_an_empty_catalog_leaves_both_environment_routes_alone() -> None:
-    registry = _registry(
-        EMPTY_CATALOG,
-        _env(
-            codex_enabled=True,
-            codex_model="env-codex",
-            credential_secret=SecretStr("c" * 32),
-        ),
-    )
-    assert [one.id for one in registry.profiles()] == [
-        DEFAULT_PROFILE,
-        CODEX_PROFILE,
-    ]
+def test_an_empty_catalog_leaves_the_environment_route_alone() -> None:
+    """⚠ 订阅账号那一形态**没有环境变量档**：登录态挂在目录里那一路供应商的
+    行上（ADR-0041），目录之外配出来的那一路无处存登录态、装出来也说不了话。"""
+    registry = _registry(EMPTY_CATALOG, _env())
+    assert [one.id for one in registry.profiles()] == [DEFAULT_PROFILE]
 
 
 def test_a_disabled_provider_is_not_a_profile() -> None:

@@ -3,13 +3,9 @@
 中间件、异常映射、探针由 `lib.web.create_app` 统一给。
 """
 
-from collections.abc import Awaitable, Callable
-
-import httpx
 from fastapi import FastAPI
 
 from ai_assistant.apps.chat.api import ROUTERS as CHAT_ROUTERS
-from ai_assistant.apps.credential.api import ROUTERS as CREDENTIAL_ROUTERS
 from ai_assistant.container import Container, build_container
 from ai_assistant.settings import API_PREFIX, Settings
 from lib.lifespan import LifespanHook
@@ -33,7 +29,7 @@ def build_app(settings: Settings) -> FastAPI:
     app = create_app(
         title="DigitalTwin AI Assistant",
         prefix=API_PREFIX,
-        routers=(*CHAT_ROUTERS, *CREDENTIAL_ROUTERS),
+        routers=CHAT_ROUTERS,
         runtime=Runtime(
             lifespan_hooks=_hooks(container),
             readiness_probes=_probes(container),
@@ -54,12 +50,6 @@ def _hooks(container: Container) -> tuple[LifespanHook, ...]:
     """
     return (
         _catalog_hook(container),
-        # 没开订阅账号那一路时它不存在，那时这个钩子的 shutdown 是 None
-        LifespanHook(
-            name="oauth-http",
-            shutdown=_close_of(container.oauth_http),
-            shutdown_order=40,
-        ),
         LifespanHook(
             name="mcp",
             # ⚠ 与 platform 同一档：在途的回合还可能正等某一路 MCP 答复
@@ -122,22 +112,6 @@ def _knowledge_hook(container: Container) -> LifespanHook:
         shutdown=None if client is None else client.close,
         shutdown_order=48,
     )
-
-
-def _close_of(
-    client: httpx.AsyncClient | None,
-) -> Callable[[], Awaitable[None]] | None:
-    """把一个可能不存在的 http 客户端包成关停动作。
-
-    Args: client。
-    """
-    if client is None:
-        return None
-
-    async def close() -> None:
-        await client.aclose()
-
-    return close
 
 
 def _probes(container: Container) -> tuple[ReadinessProbe, ...]:

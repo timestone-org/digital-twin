@@ -18,15 +18,10 @@ from llmcore.ports import (
     ModelSource,
 )
 
-# 环境变量配出来的那一路订阅账号的档位名（ADR-0026）。⚠ 是线上契约的一部分：
-# 会话里存的就是这个字面量，凭据行认的也是它。
-# ⚠ 留在助手而不是下沉：`llmcore` 里不许出现任何一路的具体来路名，
-# 而这一路只有助手接
-CODEX_PROFILE = "codex"
-
 # 目录里那几种接入形态（ADR-0040）。⚠ 与 platform-server 的
-# `apps/llm_providers/enums.py` 逐字一致：漂开的表现是「界面上配好了一路
-# Codex、助手却当它不存在」，而两边代码单看都对。
+# `apps/llm_providers/enums.py`、`llmcore/catalog.py` 与前端的
+# `LLM_PROVIDER_KINDS` 逐字一致，由前端的契约用例对着几份源码比：漂开的表现是
+# 「界面上配好了一路 Codex、助手却当它不存在」，而几边代码单看都对。
 # ⚠ 端点那一形态的名字从 `llmcore` 再导出——它是协议名不是厂商名，
 # 两个消费方共用
 PROVIDER_KIND_CODEX_OAUTH = "codex_oauth"
@@ -51,7 +46,6 @@ PURPOSE_OF_KIND: dict[ModelKind, str] = {
 
 __all__ = [
     "CODEX_EFFORTS",
-    "CODEX_PROFILE",
     "DEFAULT_PROFILE",
     "MODEL_KINDS",
     "PROVIDER_KIND_CODEX_OAUTH",

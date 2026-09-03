@@ -1,9 +1,8 @@
 """这套部署接了哪几路模型，以及按 (档位, 用途) 取出其中一路。
 
 ⚠ **档位就是供应商**（ADR-0040）：目录里开着的每一路各是一个档位，档位名就是
-那一路的 id；目录里缺哪一种形态，就由环境变量里配的那一路顶上（档位名
-`default` / `codex`）。会话行上存的是档位名，故它可能是一个 uuid，也可能是
-那两个字面量之一。
+那一路的 id；目录里没有端点那一形态时，由环境变量里配的那一路顶上（档位名
+`default`）。会话行上存的是档位名，故它可能是一个 uuid，也可能是那个字面量。
 
 ⚠ 取模型是**异步**的：订阅账号那一路要先拿一个此刻能用的令牌，而那可能触发
 一次续期。做成同步的话，续期只能在事件循环里阻塞地等一次网络往返。
@@ -24,11 +23,7 @@ from collections.abc import Collection
 
 from langchain_core.language_models import BaseChatModel
 
-from ai_assistant.llm.adapters import (
-    AdapterDeps,
-    CodexOAuthAdapter,
-    build_adapters,
-)
+from ai_assistant.llm.adapters import AdapterDeps, build_adapters
 from ai_assistant.llm.errors import ModelDisabled, ModelRejected
 from ai_assistant.llm.ports import (
     DEFAULT_PROFILE,
@@ -38,7 +33,7 @@ from ai_assistant.llm.ports import (
     ModelKind,
     ModelProfile,
 )
-from llmcore import EMPTY_CATALOG, ModelCatalog
+from llmcore import EMPTY_CATALOG, CodexOAuthAdapter, ModelCatalog
 
 
 class ModelRegistry:
@@ -112,6 +107,19 @@ class ModelRegistry:
             return flat_rate
         return chosen[0] if chosen else DEFAULT_PROFILE
 
+    def is_codex(self, profile_id: str) -> bool:
+        """这个档位名落在订阅账号那一形态上吗。
+
+        ⚠ 线形改写按它决定（`llm/codex/rewire.py`）：拿档位名与一个字面量
+        比的话，目录里配出来的那几路（id 是 uuid）一条都改写不到，
+        而现象是「一带工具就 400」。
+        ⚠ 认不出的名字按**退回的那一路**算，与 `resolve` 同一个判定：两处不一致
+        的话，改写按 A 决定、模型是 B，而那种错只在带工具的那一轮才现形。
+
+        Args: profile_id。
+        """
+        return _is_login_based(self._adapter_of(profile_id))
+
     def resolves(self, profile_id: str) -> bool:
         """这个档位名此刻取得出模型吗。
 
@@ -167,11 +175,11 @@ class ModelRegistry:
         return None if assigned is None else assigned.provider_id
 
 
-def _is_login_based(adapter: ModelAdapter) -> bool:
-    """这一路要不要先登录一次。
+def _is_login_based(adapter: ModelAdapter | None) -> bool:
+    """这一路要不要先登录一次。一路都没装出来时给假。
 
-    ⚠ 问的是适配器自己而不是形态码：形态码在目录里，而环境变量配出来的那一路
-    根本不在目录里，按码问会把它漏掉。
+    ⚠ 问的是适配器自己而不是形态码：认不出的档位名会退回第一路，那时要问的是
+    「真正会被用到的那一路」是不是要登录。
 
     Args: adapter。
     """

@@ -1,6 +1,9 @@
-"""订阅账号那一路模型。上游私有 API 的接触面全收在这一包里。"""
+"""订阅账号那一路里**本服务独有**的部分：工具名的线形改写。
 
-from ai_assistant.llm.codex.model import build_codex_model
-from ai_assistant.llm.codex.token_provider import StoredTokenProvider
+模型构造与令牌来源在 `llmcore.codex`（两个消费方共用，ADR-0041）；这里只留
+「本服务的工具名带点号，而那个端点不认」这一条特例。
+"""
 
-__all__ = ["StoredTokenProvider", "build_codex_model"]
+from ai_assistant.llm.codex.rewire import CodexRewire
+
+__all__ = ["CodexRewire"]
