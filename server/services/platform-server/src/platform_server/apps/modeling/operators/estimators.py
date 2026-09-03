@@ -4,16 +4,27 @@
 挂上一串 `pyright: ignore`，而其中任何一条日后都可能盖住一个真的类型错误。
 """
 
+import math
 from collections.abc import Sequence
 from typing import Literal, cast
 
 import numpy as np
-from sklearn.linear_model import LinearRegression, Ridge
+from sklearn.linear_model import (
+    LinearRegression,
+    LogisticRegression,
+    Ridge,
+)
 
 from platform_server.apps.modeling.operators.base import OperatorError
 
 # 正则化方式。ridge 的惩罚只落在系数上，截距不参与
 type Regularization = Literal["none", "ridge"]
+
+# 逻辑回归只做两类
+_BINARY_CLASSES = 2
+# 指数的安全上限。⚠ `math.exp(710)` 直接抛，而线性部分在特征没标准化时
+# 轻易越过它——夹住比抛出去有用：概率本来就在 0 / 1 处饱和
+_EXP_LIMIT = 700.0
 
 
 class LeastSquares:
@@ -140,3 +151,90 @@ def _flattened(
         [float(flat[index]) for index in range(flat.size)],
         float(raw_intercept),
     )
+
+
+class BinaryLogit:
+    """二分类逻辑回归。
+
+    ⚠ 只做**两类**：多分类的 sklearn 参数是每一类一行系数，拟合参数的形状、
+    可服务表示与打分帧全都要跟着变形，那是另一个算子的事。类目多于两个时当场
+    说清楚，不悄悄挑两个出来算。
+    拟合参数仍是纯数（一组系数 + 一个截距 + 两个类目），因此走通道 A。
+    """
+
+    def __init__(self, *, use_intercept: bool, regularization_strength: float):
+        self._use_intercept = use_intercept
+        self._strength = regularization_strength
+        self._coef: list[float] = []
+        self._intercept = 0.0
+        self._classes: list[float] = []
+
+    def fit(
+        self, rows: Sequence[Sequence[float]], target: Sequence[float]
+    ) -> None:
+        """在给定矩阵上拟合。类目不是两个时当场报错。
+
+        Args: rows, target。
+        """
+        if not rows:
+            raise OperatorError("训练集一行都没有，拟合不出模型")
+        classes = sorted({float(value) for value in target})
+        if len(classes) != _BINARY_CLASSES:
+            raise OperatorError(
+                f"逻辑回归只做两类，目标列上有 {len(classes)} 个不同取值。"
+                "请先把它归成两类，或换一个分类算法"
+            )
+        self._classes = classes
+        estimator = LogisticRegression(
+            fit_intercept=self._use_intercept, C=self._strength
+        )
+        # pyright: ignore 的理由 —— 逻辑回归的 fit 在 sklearn 类型面上部分未知
+        estimator.fit(  # pyright: ignore[reportUnknownMemberType]
+            np.asarray(rows, dtype=float),
+            np.asarray(target, dtype=float),
+        )
+        # pyright: ignore 的理由 —— coef_ / intercept_ 在类型面上部分未知
+        raw_coef = cast(
+            "Sequence[Sequence[float]]",
+            estimator.coef_,  # pyright: ignore[reportUnknownMemberType]
+        )
+        raw_intercept = cast(
+            "Sequence[float]",
+            estimator.intercept_,  # pyright: ignore[reportUnknownMemberType]
+        )
+        flat = np.asarray(raw_coef, dtype=float).reshape(-1)
+        self._coef, self._intercept = _flattened(
+            [float(flat[index]) for index in range(flat.size)],
+            float(np.asarray(raw_intercept, dtype=float).reshape(-1)[0]),
+        )
+
+    @property
+    def coef(self) -> list[float]:
+        """各特征的系数，与拟合时的列序一致。"""
+        return list(self._coef)
+
+    @property
+    def intercept(self) -> float:
+        """截距。"""
+        return self._intercept
+
+    @property
+    def classes(self) -> list[float]:
+        """两个类目，升序。下标 1 那个是「正类」。"""
+        return list(self._classes)
+
+
+def logistic_probability(
+    coef: Sequence[float], intercept: float, row: Sequence[float]
+) -> float:
+    """一行落在正类上的概率。
+
+    ⚠ 指数先夹到一个安全区间再算：`math.exp` 在 710 以上直接抛
+    `OverflowError`，而线性部分在特征没标准化时轻易越过它。
+    Args: coef, intercept, row。
+    """
+    linear = intercept + sum(
+        weight * value for weight, value in zip(coef, row, strict=True)
+    )
+    clamped = min(max(linear, -_EXP_LIMIT), _EXP_LIMIT)
+    return 1.0 / (1.0 + math.exp(-clamped))

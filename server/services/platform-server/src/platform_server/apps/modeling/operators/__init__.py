@@ -25,7 +25,10 @@ from platform_server.apps.modeling.operators.cleaning import (
     DropMissing,
     FilterRows,
 )
-from platform_server.apps.modeling.operators.evaluate import RegressionMetrics
+from platform_server.apps.modeling.operators.evaluate import (
+    ClassificationMetrics,
+    RegressionMetrics,
+)
 from platform_server.apps.modeling.operators.feature import Standardize
 from platform_server.apps.modeling.operators.frame import (
     COLUMN_ROLES,
@@ -40,6 +43,7 @@ from platform_server.apps.modeling.operators.frame import (
 )
 from platform_server.apps.modeling.operators.model import (
     LinearRegressionOperator,
+    LogisticRegressionOperator,
     SplitDataset,
 )
 from platform_server.apps.modeling.operators.payloads import (
@@ -73,6 +77,7 @@ __all__ = [
     "SERVING_CHANNELS",
     "CastType",
     "CellValue",
+    "ClassificationMetrics",
     "ClipOutlier",
     "ColumnKeys",
     "ColumnsByPort",
@@ -83,6 +88,7 @@ __all__ = [
     "FrameColumn",
     "LedgerSource",
     "LinearRegressionOperator",
+    "LogisticRegressionOperator",
     "MetricsPayload",
     "ModelPayload",
     "OperatorBase",

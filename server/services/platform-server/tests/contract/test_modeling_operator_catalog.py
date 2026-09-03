@@ -22,12 +22,14 @@ from platform_server.apps.modeling.operators.base import PREFETCHED_KEY
 # 本期算子的**写死名单**。加算子必须同时改这里——防的是重名静默覆盖与漏登记
 EXPECTED_CODES = (
     "cast_type",
+    "classification_metrics",
     "clip_outlier",
     "drop_missing",
     "fill_missing",
     "filter_rows",
     "ledger_source",
     "linear_regression",
+    "logistic_regression",
     "regression_metrics",
     "split_dataset",
     "standardize",

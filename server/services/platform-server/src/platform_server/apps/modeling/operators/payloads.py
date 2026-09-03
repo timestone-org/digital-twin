@@ -35,3 +35,7 @@ class MetricsPayload:
     is_truncated: bool = False
     # 残差直方图：(区间左端, 区间右端, 计数)
     residual_bins: tuple[tuple[float, float, int], ...] = ()
+    # 混淆矩阵的类目，按升序。分类任务才有
+    labels: tuple[str, ...] = ()
+    # 混淆矩阵：第 i 行第 j 列 = 真实是第 i 类而判成第 j 类的行数
+    matrix: tuple[tuple[int, ...], ...] = ()
