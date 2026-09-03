@@ -25,6 +25,8 @@ import { useRacedFetch } from '@/composables/useRacedFetch'
 interface CheckDeps {
   pipeline: ShallowRef<ModelingPipeline | null>
   issues: Ref<readonly ModelingGraphIssue[]>
+  /** 逐节点的列候选，参数面板的列选择器读它。 */
+  knownColumns: Ref<Readonly<Record<string, string[] | null>>>
   toast: ReturnType<typeof useToast>
   raced: RacedFetch
 }
@@ -50,6 +52,7 @@ async function runCheck(
     {
       ok: (check: ModelingGraphCheck) => {
         deps.issues.value = check.issues
+        deps.knownColumns.value = check.known_columns
         isValid = check.is_valid
       },
       fail: (caught) => {
@@ -80,6 +83,7 @@ async function putGraph(
 export function usePipelineDoc() {
   const pipeline = shallowRef<ModelingPipeline | null>(null)
   const issues = ref<readonly ModelingGraphIssue[]>([])
+  const knownColumns = ref<Readonly<Record<string, string[] | null>>>({})
   const isLoading = ref(false)
   const isSaving = ref(false)
   const error = ref<string | null>(null)
@@ -105,6 +109,7 @@ export function usePipelineDoc() {
   return {
     pipeline,
     issues,
+    knownColumns,
     isLoading,
     isSaving,
     error,
@@ -120,7 +125,11 @@ export function usePipelineDoc() {
       return true
     },
     validate: (graph: ModelingGraph, isQuiet = false) =>
-      runCheck({ pipeline, issues, toast, raced: checking }, graph, isQuiet),
+      runCheck(
+        { pipeline, issues, knownColumns, toast, raced: checking },
+        graph,
+        isQuiet,
+      ),
     /** 离开画布时作废在飞的那一次校验。 */
     stopChecking: () => checking.cancel(),
   }

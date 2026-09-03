@@ -118,6 +118,32 @@ def known_keys_by_node(
     }
 
 
+def known_columns_by_node(
+    graph: PipelineGraph, nodes: dict[str, GraphNode]
+) -> dict[str, list[str] | None]:
+    """每个节点在自己的输入上看得见哪些列，**保持列序**。`None` = 推不出来。
+
+    ⚠ 前端的列选择器读的就是它。过去前端另写了一份「只按取数节点收窄」的口径，
+    两份各自自洽而真跑起来对不上（docs/MODELING_PLATFORM_DESIGN.md D2）。
+    Args: graph, nodes。
+    """
+    return {
+        node_id: _ordered(columns.inputs)
+        for node_id, columns in column_flow(graph, nodes).items()
+    }
+
+
+def _ordered(inputs: dict[str, ColumnKeys]) -> list[str] | None:
+    if not inputs:
+        return None
+    keys: list[str] = []
+    for produced in inputs.values():
+        if produced is None:
+            return None
+        keys += [key for key in produced if key not in keys]
+    return keys
+
+
 def _declared(node: GraphNode, inputs: dict[str, ColumnKeys]) -> ColumnsByPort:
     """问算子：给这些输入列，它各个输出端口会有哪些列。
 

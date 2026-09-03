@@ -113,6 +113,7 @@ const GRAPH_ISSUE = {
 const GRAPH_CHECK = {
   is_valid: true,
   issues: true,
+  known_columns: true,
 } satisfies Keys<ModelingGraphCheck>
 
 const PIPELINE_SUMMARY = {
@@ -189,6 +190,7 @@ const VERSION_SUMMARY = {
 
 const VERSION = {
   ...VERSION_SUMMARY,
+  signature: true,
   metrics: true,
   fingerprint: true,
   description: true,

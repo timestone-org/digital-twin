@@ -1,12 +1,11 @@
 /**
- * @fileoverview 顺着边往上游走：一个节点的列候选，来自它上游那些取数节点。
+ * @fileoverview 顺着边往上游走：一个节点该拉哪几张台账的列定义。
  *
  * ⚠ 不能拿「图里所有取数节点」凑数：一条流水线接两张台账时，下游那一支的列
  * 选择器会列出另一支的列名，用户勾了之后要等运行时才报「这一列不存在」。
- * ⚠ 也不能只按台账列：取数节点自己挑过列之后，帧上就只剩那几列了。候选不跟着
- * 收窄的话，下游能勾到一列上游根本不产出的列，而保存与运行会被后端拦下——
- * 用户读到的是「取数必须把列选全」，真相是这一勾。收窄口径与后端
- * `graph_walk.known_keys_by_node` 一一对应。
+ * ⚠ 这里只管**台账清单**，不管列候选：列由后端算好经 `:validate` 的
+ * `known_columns` 给下来。前端曾经另写一份收窄口径，两份各自自洽而真跑起来
+ * 对不上（docs/MODELING_PLATFORM_DESIGN.md D2）。
  */
 import type { ModelingGraph, ModelingOperator } from '@dt/contracts'
 
@@ -78,22 +77,4 @@ export function sourceTablesFor(
       upstreamSourcesFor(graph, operators, nodeId).map((item) => item.code),
     ),
   ]
-}
-
-/**
- * 上游收窄到哪些列。`null` 表示推不出来，不收窄。
- *
- * ⚠ 只要有一个上游取数留空（= 取全部列），整个集合就是未知的：那时宁可多列
- * 几个候选，也不要把用户真的能用的列藏起来——藏起来的表现是「我那一列不见了」。
- */
-export function visibleKeysOf(
-  sources: readonly UpstreamSource[],
-): Set<string> | null {
-  if (sources.length === 0) return null
-  const keys = new Set<string>()
-  for (const source of sources) {
-    if (source.picked.length === 0) return null
-    for (const key of source.picked) keys.add(key)
-  }
-  return keys
 }

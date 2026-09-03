@@ -79,6 +79,7 @@ const isReadonly = computed(
 const config = useConfigPanel({
   graph: page.graph.graph,
   operators: page.operatorMap,
+  knownColumns: page.doc.knownColumns,
   setConfig: page.graph.setConfig,
   canViewLedger: () => auth.can([PERMISSION_CODES.datasetView]),
 })

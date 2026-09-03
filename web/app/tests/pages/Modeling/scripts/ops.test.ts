@@ -207,6 +207,7 @@ describe('画布上的文档', () => {
     vi.spyOn(modeling, 'validateModelingGraph').mockResolvedValue({
       is_valid: false,
       issues: [{ message: '有一个入口没接线', node_id: 'n1', edge_id: '' }],
+      known_columns: {},
     })
     const doc = host(() => usePipelineDoc())
     await doc.load('p1')
@@ -272,6 +273,7 @@ describe('模型库上的动作', () => {
     const ask = asker(true)
     vi.spyOn(modeling, 'retireModelingVersion').mockResolvedValue({
       ...version(),
+      signature: {},
       metrics: {},
       fingerprint: {},
       description: null,

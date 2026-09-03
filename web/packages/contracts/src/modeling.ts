@@ -133,6 +133,13 @@ export interface ModelingGraphIssue {
 export interface ModelingGraphCheck {
   is_valid: boolean
   issues: ModelingGraphIssue[]
+  /**
+   * `{节点 id: 这个节点输入上看得见的列}`；`null` = 静态推不出来，不收窄。
+   *
+   * ⚠ 列候选**由后端算**。前端曾经另写一份「只按取数节点收窄」的口径，两份各自
+   * 自洽而真跑起来对不上——加进会造列的算子之后更是整条错。
+   */
+  known_columns: Record<string, string[] | null>
 }
 
 /** 流水线列表里的一条，不带图。 */
@@ -229,8 +236,48 @@ export interface ModelingVersionSummary {
   created_at: string
 }
 
-/** 版本详情，带发布时冻结的指标与指纹。 */
+/** 模型签名里的一个入口列：调用方要提供的东西。 */
+export interface ModelingSignatureInput {
+  key: string
+  label: string
+  unit: string
+  dtype: string
+  /** 推理链上没有哪一步会替它补空值时为真。 */
+  is_required: boolean
+  /** 可缺省时会被填成什么。 */
+  default_on_missing: number | null
+  training_stats: Record<string, number>
+}
+
+/** 管线自己造出来的一列。调用方不必给，只做展示。 */
+export interface ModelingSignatureDerived {
+  key: string
+  by: string
+  label: string
+}
+
+/**
+ * 模型签名：面向人与第三方系统的输入输出说明。
+ *
+ * ⚠ **不参与任何计算**：推理只读可服务表示。别从这里读列名。
+ */
+export interface ModelingSignature {
+  format_version: string
+  inputs: ModelingSignatureInput[]
+  derived: ModelingSignatureDerived[]
+  output: {
+    key: string
+    label: string
+    unit: string
+    dtype: string
+    task: string
+  }
+}
+
+/** 版本详情，带发布时冻结的指标、指纹与模型签名。 */
 export interface ModelingVersion extends ModelingVersionSummary {
+  /** ⚠ 不叫 `schema`：那个名字在后端会与 `BaseModel.schema` 撞并当场告警。 */
+  signature: ModelingSignature | Record<string, never>
   metrics: Record<string, number | null>
   fingerprint: Record<string, unknown>
   description: string | null

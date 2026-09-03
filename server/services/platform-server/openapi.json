@@ -9150,6 +9150,23 @@
             },
             "title": "Issues",
             "type": "array"
+          },
+          "known_columns": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Known Columns",
+            "type": "object"
           }
         },
         "required": [

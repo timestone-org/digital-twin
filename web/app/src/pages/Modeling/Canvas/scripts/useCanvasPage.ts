@@ -120,7 +120,11 @@ async function open(state: PageState, pipelineId: string): Promise<void> {
   ])
   state.operators.value = catalog
   state.runs.value = history
-  if (loaded !== null) state.graph.reset(loaded.graph)
+  if (loaded === null) return
+  state.graph.reset(loaded.graph)
+  // ⚠ 进页面就校一次，不等那 400 毫秒防抖：问题清单与**列候选**都来自这一趟，
+  // 等编辑第一笔才有的话，刚打开时参数面板会把台账全部的列都列出来
+  void state.doc.validate(loaded.graph, true)
 }
 
 /** 回看一次历史运行：画布换成当时那份图，并切成只读。 */
@@ -131,6 +135,7 @@ async function replay(state: PageState, runId: string): Promise<void> {
   state.isReplaying.value = true
   // 问题清单是「正在编辑的那张图」的，回看时它与画面上这张对不上
   state.doc.issues.value = []
+  state.doc.knownColumns.value = {}
   state.graph.reset(picked.graph)
   state.runner.watchRun(picked)
 }

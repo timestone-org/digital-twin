@@ -191,6 +191,7 @@ function stubApi(
   vi.spyOn(modeling, 'validateModelingGraph').mockResolvedValue({
     is_valid: true,
     issues: [],
+    known_columns: {},
   })
 }
 
@@ -790,6 +791,13 @@ describe('下游的列候选跟着上游取数收窄', () => {
       column('F2'),
       column('F3'),
     ])
+    // ⚠ 收窄由**后端**算：取数挑了 F2/F3，下游就只看得见这两列。前端不再自己
+    // 推一份——两份口径各自自洽而真跑起来对不上
+    vi.spyOn(modeling, 'validateModelingGraph').mockResolvedValue({
+      is_valid: true,
+      issues: [],
+      known_columns: { n1: null, n2: ['F2', 'F3'] },
+    })
   }
 
   it('下游只列得出上游真的会产出的那几列', async () => {
@@ -799,12 +807,15 @@ describe('下游的列候选跟着上游取数收窄', () => {
     await flushPromises()
 
     await openNode(wrapper, 1)
+    await vi.waitFor(() => {
+      expect(wrapper.text()).toContain('F2')
+    })
 
-    expect(wrapper.text()).toContain('F2')
     expect(wrapper.text()).not.toContain('F1')
   })
 
-  // ⚠ 拿它自己的选择去收窄它自己的候选，等于一取消勾选就再也勾不回来
+  // ⚠ 取数节点自己的输入上没有上游，列集静态推不出来（`null`），于是不收窄：
+  // 拿它自己的选择去收窄它自己的候选，等于一取消勾选就再也勾不回来
   it('取数节点自己看的仍是台账的全部列', async () => {
     stubWired()
     signIn(WRITER)
@@ -834,6 +845,7 @@ describe('保存前的整图校验', () => {
       vi.spyOn(modeling, 'validateModelingGraph').mockResolvedValue({
         is_valid: false,
         issues: [ISSUE],
+        known_columns: {},
       })
       signIn(WRITER)
       const wrapper = open()
@@ -853,6 +865,7 @@ describe('保存前的整图校验', () => {
     vi.spyOn(modeling, 'validateModelingGraph').mockResolvedValue({
       is_valid: false,
       issues: [ISSUE],
+      known_columns: {},
     })
     const start = vi.spyOn(modeling, 'startModelingRun')
     signIn(WRITER)

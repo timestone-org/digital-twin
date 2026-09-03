@@ -83,3 +83,8 @@ class GraphCheckOut(OutputModel):
 
     is_valid: bool
     issues: list[GraphIssueOut] = Field(default_factory=list[GraphIssueOut])
+    #: `{节点 id: 这个节点输入上看得见的列}`；`null` = 静态推不出来，不收窄。
+    #: ⚠ 前端的列选择器读它，不许自己再算一份
+    known_columns: dict[str, list[str] | None] = Field(
+        default_factory=dict[str, list[str] | None]
+    )
