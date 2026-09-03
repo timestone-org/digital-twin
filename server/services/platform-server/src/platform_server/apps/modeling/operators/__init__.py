@@ -67,6 +67,10 @@ from platform_server.apps.modeling.operators.registry import (
     registry,
 )
 from platform_server.apps.modeling.operators.source import LedgerSource
+from platform_server.apps.modeling.operators.timefeature import (
+    TIME_PARTS,
+    TimeFeature,
+)
 
 __all__ = [
     "AGG_FUNCS",
@@ -82,6 +86,7 @@ __all__ = [
     "ROLE_IGNORED",
     "ROLE_TARGET",
     "SERVING_CHANNELS",
+    "TIME_PARTS",
     "CastType",
     "CellValue",
     "ClassificationMetrics",
@@ -112,6 +117,7 @@ __all__ = [
     "ResidualAnalysis",
     "SplitDataset",
     "Standardize",
+    "TimeFeature",
     "register_operator",
     "registry",
 ]

@@ -7,6 +7,7 @@
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from platform_server.apps.modeling.operators import (
@@ -66,19 +67,39 @@ class CompiledModel:
         self._features = features
         self._steps = steps
 
-    def predict(self, args: list[float | None]) -> float | None:
+    @property
+    def requires_timestamp(self) -> bool:
+        """这条链上有没有哪一步要这一行的时刻。"""
+        return any(
+            registry.get(step.operator).SERVING_NEEDS_INDEX
+            for step in self._steps
+        )
+
+    def predict(
+        self, args: list[float | None], at: datetime | None = None
+    ) -> float | None:
         """按实参算一个数；实参个数对不上或算不出来时给 None。
 
-        Args: args。
+        ⚠ `at` 是**这一行的时刻**，只有链上带时间特征时才用得上。要而没给时
+        当场说清楚——拿「现在」顶替会让同一行在不同时候算出不同的数（D19）。
+        Args: args, at。
         """
         if len(args) != len(self._features):
             raise OperatorError(
                 f"这个模型要 {len(self._features)} 个实参，"
                 f"这里给了 {len(args)} 个"
             )
+        if self.requires_timestamp and at is None:
+            raise OperatorError(
+                "这个模型带时间特征，预测时必须给出这一行的时刻"
+            )
         if any(item is None for item in args):
             return None
-        frame = _one_row(self._features, [float(item or 0.0) for item in args])
+        frame = _one_row(
+            self._features,
+            [float(item or 0.0) for item in args],
+            at=at,
+        )
         for step in self._steps:
             frame = _apply(step, frame)
         return _single_value(frame)
@@ -161,12 +182,19 @@ def _apply(step: _Step, frame: Frame) -> Frame:
     return produced
 
 
-def _one_row(keys: tuple[str, ...], values: list[float]) -> Frame:
+def _one_row(
+    keys: tuple[str, ...], values: list[float], at: datetime | None = None
+) -> Frame:
+    """推理时的那一行。带上时刻，时间特征才造得出列。
+
+    Args: keys, values, at。
+    """
     return Frame(
         columns=tuple(
             FrameColumn(key=key, name=key, dtype="number") for key in keys
         ),
         rows=(tuple(values),),
+        index=None if at is None else (int(at.timestamp() * 1000),),
     )
 
 

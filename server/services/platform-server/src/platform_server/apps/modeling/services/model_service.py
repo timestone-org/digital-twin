@@ -27,13 +27,13 @@ from platform_server.apps.modeling.schemas import (
     ParamMapOut,
 )
 from platform_server.apps.modeling.services import binding_service
+from platform_server.apps.modeling.services.entry_contract import NodeRecord
 from platform_server.apps.modeling.services.jsonshape import (
     as_dict,
     as_texts,
 )
 from platform_server.apps.modeling.services.pipeline_service import Actor
 from platform_server.apps.modeling.services.publish_service import (
-    NodeRecord,
     fingerprint,
     graph_of_run,
     inspect_run,

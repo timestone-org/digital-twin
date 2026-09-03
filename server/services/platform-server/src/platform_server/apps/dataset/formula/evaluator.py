@@ -8,6 +8,7 @@
 import ast
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from platform_server.apps.dataset.formula.analysis import (
     AnalysisModel,
@@ -86,6 +87,9 @@ class EvalContext:
     externals: dict[ExternalKey, object] = field(
         default_factory=dict[ExternalKey, object]
     )
+    #: 这一行的时刻。⚠ 带默认值不能省：全仓几十处构造点大多与模型无关，
+    #: 不给默认值会让它们一起红
+    row_ts: datetime | None = None
 
 
 def evaluate(parsed: ParsedFormula, context: EvalContext) -> object:
@@ -204,7 +208,8 @@ class _Evaluator:
         if not isinstance(model, AnalysisModel):  # pragma: no cover - 装配保证
             raise FormulaError(f"模型「{code}」不可用")
         return model.predict(
-            [to_number(self.visit(item)) for item in node.args[1:]]
+            [to_number(self.visit(item)) for item in node.args[1:]],
+            self._context.row_ts,
         )
 
     def _history_key(self, name: str, node: ast.Call) -> ExternalKey | None:

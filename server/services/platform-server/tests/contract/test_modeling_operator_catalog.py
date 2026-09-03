@@ -43,6 +43,7 @@ EXPECTED_CODES = (
     "residual_analysis",
     "split_dataset",
     "standardize",
+    "time_feature",
 )
 # 带「跑用户给的东西」意味的词。撞上就该来读一遍设计文档 §9.3
 CODE_EXECUTION_WORDS = ("custom", "code", "script", "eval", "exec", "shell")

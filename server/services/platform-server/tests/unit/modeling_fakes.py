@@ -4,6 +4,7 @@
 核对，「跑完没报错」不等于「算对了」（docs/MODELING_DESIGN.md §10.3）。
 """
 
+from datetime import UTC, datetime
 from typing import cast
 
 from platform_server.apps.modeling.operators import (
@@ -64,7 +65,12 @@ def linear_frame(rows: int = 200) -> Frame:
         columns=COLUMNS,
         rows=tuple(matrix),
         index=tuple(START_MS + index * STEP_MS for index in range(rows)),
-        provenance=Provenance(table_codes=("energy_h",)),
+        provenance=Provenance(
+            table_codes=("energy_h",),
+            # ⚠ 真实取数一定带窗口：假件少一样，靠它的代码在用例里走的是
+            # 另一条分支
+            since=datetime.fromtimestamp(START_MS / 1000, UTC),
+        ),
     )
 
 
@@ -115,17 +121,17 @@ def linear_graph() -> PipelineGraph:
             node("e", "regression_metrics"),
         ],
         edges=[
-            _edge("e1", "s", "frame", "f", "frame"),
-            _edge("e2", "f", "frame", "z", "frame"),
-            _edge("e3", "z", "frame", "p", "frame"),
-            _edge("e4", "p", "train", "m", "train"),
-            _edge("e5", "p", "test", "m", "test"),
-            _edge("e6", "m", "scored", "e", "scored"),
+            edge("e1", "s", "frame", "f", "frame"),
+            edge("e2", "f", "frame", "z", "frame"),
+            edge("e3", "z", "frame", "p", "frame"),
+            edge("e4", "p", "train", "m", "train"),
+            edge("e5", "p", "test", "m", "test"),
+            edge("e6", "m", "scored", "e", "scored"),
         ],
     )
 
 
-def _edge(
+def edge(
     edge_id: str, source: str, out_port: str, target: str, in_port: str
 ) -> GraphEdge:
     return GraphEdge(

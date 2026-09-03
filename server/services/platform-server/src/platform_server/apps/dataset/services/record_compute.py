@@ -124,7 +124,8 @@ def evaluate_row(
         try:
             externals = build_externals(parsed.deps, cache, current)
             computed[key] = evaluate(
-                parsed, EvalContext(values=merged, externals=externals)
+                parsed,
+                EvalContext(values=merged, externals=externals, row_ts=ts),
             )
         except FormulaError as error:
             computed[key] = None

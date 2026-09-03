@@ -7,6 +7,7 @@
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol, runtime_checkable
 
 
@@ -19,10 +20,14 @@ class AnalysisModel(Protocol):
     表现是**绑好的模型反而算不出来**。
     """
 
-    def predict(self, args: list[float | None]) -> float | None:
+    def predict(
+        self, args: list[float | None], at: datetime | None = None
+    ) -> float | None:
         """按位置吃实参，算一个数；算不出来给 None。
 
-        Args: args。
+        ⚠ `at` 是**这一行的时刻**。带时间特征的模型没有它算不出来，而拿
+        「现在」顶替会让同一行在不同时候算出不同的数。
+        Args: args, at。
         """
         ...
 

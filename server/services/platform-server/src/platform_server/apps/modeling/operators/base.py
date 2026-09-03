@@ -198,6 +198,10 @@ class OperatorBase:
     CHANGES_ROW_COUNT: ClassVar[bool] = False
     # 推理时需要历史窗口（滞后 / 滚动）——整条流水线因此不可服务
     SERVING_NEEDS_WINDOW: ClassVar[bool] = False
+    # 推理时需要**这一行的时刻**（时间特征）。单行预测里没有时间索引，
+    # 时刻只能由调用方给；整条链上有一个就够，模型签名据此标
+    # `requires_timestamp`（docs/MODELING_PLATFORM_DESIGN.md D19）
+    SERVING_NEEDS_INDEX: ClassVar[bool] = False
     # 这个算子会把空值补上。模型 schema 据它判「这一列调用方可不可以不给」：
     # ⚠ 用类变量而不是判 CODE——加第二种填充算子时不必回来改 schema 生成
     FILLS_MISSING: ClassVar[bool] = False

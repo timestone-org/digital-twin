@@ -6,17 +6,16 @@
 """
 
 from dataclasses import replace
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 
 from platform_server.apps.modeling.operators import OperatorError
 from platform_server.apps.modeling.schemas.graph import PipelineGraph
+from platform_server.apps.modeling.services.entry_contract import NodeRecord
 from platform_server.apps.modeling.services.model_schema import build_schema
-from platform_server.apps.modeling.services.publish_service import (
-    NodeRecord,
-    inspect_run,
-)
+from platform_server.apps.modeling.services.publish_service import inspect_run
 from platform_server.apps.modeling.services.run_executor import (
     RunOutcome,
     execute_graph,
@@ -30,9 +29,11 @@ from unit.modeling_fakes import (
     SLOPE_LOAD,
     SLOPE_TEMP,
     DirectRunner,
+    edge,
     execution_of,
     linear_frame,
     linear_graph,
+    node,
 )
 
 # 拿去预测的那一行，与它手算出来的答案
@@ -210,6 +211,72 @@ def test_an_unreadable_serving_format_is_refused() -> None:
         compile_model(
             {"format_version": "9.9", "entry_columns": [], "steps": []}
         )
+
+
+async def _with_time_feature() -> tuple[PipelineGraph, dict[str, NodeRecord]]:
+    """在取数与填缺失之间插一个时间特征，跑一遍。"""
+    graph = linear_graph()
+    graph.nodes.insert(1, node("t", "time_feature", parts=["hour"]))
+    graph.edges = [item for item in graph.edges if item.id != "e1"]
+    graph.edges.insert(0, edge("e1a", "s", "frame", "t", "frame"))
+    graph.edges.insert(1, edge("e1b", "t", "frame", "f", "frame"))
+    execution = execution_of(DirectRunner(), frames={"s": linear_frame(120)})
+    return graph, _records_of(await execute_graph(graph, execution=execution))
+
+
+async def test_derived_columns_stay_out_of_the_entry_contract() -> None:
+    """管线自己造的列不进入口契约，调用方只给原始那两列。
+
+    ⚠ 这是第二期那套地基的验收：把 `ts_hour` 列进契约，第三方就会被要求提供
+    一列管线自己会造的东西（docs/MODELING_PLATFORM_DESIGN.md D4）。
+    """
+    graph, records = await _with_time_feature()
+    verdict = inspect_run(graph, records)
+    assert verdict.is_servable is True, verdict.reason
+    entry = [item["key"] for item in verdict.serving["entry_columns"]]
+    assert entry == ["温度", "负荷"]
+    assert "ts_hour" in verdict.feature_keys
+
+
+async def test_each_step_sees_the_columns_that_exist_by_then() -> None:
+    """逐步的期望列跟着链路长出来，不再是所有步骤同一份。"""
+    graph, records = await _with_time_feature()
+    steps = inspect_run(graph, records).serving["steps"]
+    assert steps[0]["operator"] == "time_feature"
+    assert steps[0]["expected_input_columns"] == ["温度", "负荷"]
+    assert steps[1]["expected_input_columns"] == ["温度", "负荷", "ts_hour"]
+
+
+async def test_the_signature_lists_the_derived_column_apart() -> None:
+    """签名把派生列单列一栏，并标出要一个时刻。"""
+    graph, records = await _with_time_feature()
+    signature = inspect_run(graph, records).signature
+    assert [item["key"] for item in signature["inputs"]] == ["温度", "负荷"]
+    assert [item["key"] for item in signature["derived"]] == ["ts_hour"]
+    assert signature["requires_timestamp"] is True
+
+
+async def test_such_a_model_refuses_to_predict_without_a_moment() -> None:
+    """带时间特征的模型没给时刻时当场说清楚。
+
+    ⚠ 拿「现在」顶替会让同一行在不同时候算出不同的数。
+    """
+    graph, records = await _with_time_feature()
+    compiled = compile_model(inspect_run(graph, records).serving)
+    assert compiled.requires_timestamp is True
+    with pytest.raises(OperatorError, match="时刻"):
+        compiled.predict([SAMPLE_TEMPERATURE, SAMPLE_LOAD])
+
+
+async def test_with_a_moment_it_predicts_a_number() -> None:
+    """给了时刻就算得出数。"""
+    graph, records = await _with_time_feature()
+    compiled = compile_model(inspect_run(graph, records).serving)
+    got = compiled.predict(
+        [SAMPLE_TEMPERATURE, SAMPLE_LOAD],
+        datetime(2026, 1, 5, 1, 0, tzinfo=UTC),
+    )
+    assert got is not None
 
 
 def _step_of(serving: dict[str, Any], operator: str) -> dict[str, Any]:

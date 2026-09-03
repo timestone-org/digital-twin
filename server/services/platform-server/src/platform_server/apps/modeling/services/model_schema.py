@@ -33,6 +33,7 @@ def build_schema(
     filled = _fill_values(steps)
     return {
         "format_version": SCHEMA_FORMAT_VERSION,
+        "requires_timestamp": _needs_timestamp(steps),
         "inputs": [_input_of(item, filled) for item in entry],
         "derived": _derived_of(entry, steps),
         "output": {
@@ -43,6 +44,20 @@ def build_schema(
             "task": task,
         },
     }
+
+
+def _needs_timestamp(steps: list[dict[str, Any]]) -> bool:
+    """这条推理链要不要调用方给出这一行的时刻。
+
+    ⚠ 时间特征在单行预测里拿不到时间索引，时刻只能由调用方给；不标出来的话
+    第三方按签名把参数都填对了，调用仍然报错，而错的原因不在签名上
+    （docs/MODELING_PLATFORM_DESIGN.md D19）。
+    Args: steps。
+    """
+    return any(
+        registry.get(as_text(step.get("operator"))).SERVING_NEEDS_INDEX
+        for step in steps
+    )
 
 
 def _input_of(item: dict[str, Any], filled: dict[str, float]) -> dict[str, Any]:
