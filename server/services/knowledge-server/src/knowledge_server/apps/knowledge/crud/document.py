@@ -1,6 +1,7 @@
 """文档行的数据访问。只做查询与写入，**不提交**。"""
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
@@ -74,6 +75,29 @@ def _filtered(
     return (
         query if not status else query.where(KnowledgeDocument.status == status)
     )
+
+
+async def counts_by_base(
+    session: AsyncSession, base_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, int]:
+    """这几个库各有几份文档。
+
+    ⚠ 一次查完再按库分组，**不逐个库查**：库清单一页十来个，逐个查就是十来个
+    往返，而这一格只是列表上的一行字。
+
+    ⚠ 一份文档都没有的库**不在回表里**：调用方拿 0 兜底。让 SQL 去补零要多
+    一次外连接，而调用方本来就得处理「这个库不在表里」。
+
+    Args: session, base_ids。
+    """
+    if not base_ids:
+        return {}
+    rows = await session.execute(
+        select(KnowledgeDocument.base_id, func.count())
+        .where(KnowledgeDocument.base_id.in_(base_ids))
+        .group_by(KnowledgeDocument.base_id)
+    )
+    return {base_id: int(count) for base_id, count in rows.all()}
 
 
 async def list_documents(

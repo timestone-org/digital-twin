@@ -31,6 +31,7 @@ from knowledge_server.apps.knowledge.services.sources import (
 )
 from lib.db import after_commit
 from lib.objectstore import ObjectStore
+from lib.web import Page, PageParams
 
 # 建库时自动建出来的那一路来源叫什么
 UPLOAD_SOURCE_NAME = "文件上传"
@@ -109,6 +110,34 @@ async def base_names(
     Args: session, base_ids。
     """
     return await crud.knowledge_base.names_of(session, base_ids)
+
+
+async def base_page(
+    session: AsyncSession,
+    rows: Sequence[KnowledgeBase],
+    params: PageParams,
+    total: int,
+) -> Page[KnowledgeBaseOut]:
+    """一页库连各自的文档数。
+
+    ⚠ 一次查完这一页各库的文档数，**不逐个库查**：这一格只是列表上的一行字，
+    逐个查就是十来个往返。
+
+    ⚠ 这一格原来恒为 0：界面上每个库都写着「0 份文档」，而库里明明有东西。
+    契约里有这一格、界面也在画它，只有取值那一步没接上——一个「合法的 0」
+    typecheck 与用例都拦不住。
+
+    Args: session, rows, params, total。
+    """
+    counts = await crud.document.counts_by_base(
+        session, [one.id for one in rows]
+    )
+    return Page[KnowledgeBaseOut](
+        items=[base_out(one, counts.get(one.id, 0)) for one in rows],
+        page=params.page,
+        size=params.size,
+        total=total,
+    )
 
 
 def base_out(row: KnowledgeBase, document_count: int) -> KnowledgeBaseOut:
