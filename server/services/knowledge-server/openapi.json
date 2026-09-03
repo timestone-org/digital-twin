@@ -2678,7 +2678,7 @@
     },
     "/api/v1/knowledge/documents:upload-ticket": {
       "post": {
-        "description": "铸一个文档 id 并签一张把键、类型与大小都钉死的直传表单。\n\n⚠ 本步**不落行**：没传成的文档不会在库里留下半条记录，界面上也就不会\n出现一份永远停在 pending 的鬼影。认不出的格式在这一步就拒——让用户传完\n200 MB 再说「不收这种格式」是两次浪费。\n\nArgs: session, container, _actor, base_id, body。",
+        "description": "铸一个文档 id 并签一张把键、类型与大小都钉死的直传表单。\n\nArgs: session, container, _actor, base_id, body。",
         "operationId": "upload_ticket_api_v1_knowledge_documents_upload_ticket_post",
         "parameters": [
           {
