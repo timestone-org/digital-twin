@@ -20,10 +20,16 @@ import ModelView from './ModelView.vue'
 const props = defineProps<{
   payload: Record<string, unknown>
   /** 端口名 → 算子声明的中文标签。取不到就退回端口名本身。 */
-  labels?: Record<string, string>
-  /** 这次运行的 id 与这个节点的 id，只用来拼下载地址。 */
-  runId?: string
-  nodeId?: string
+  labels?: Record<string, string> | undefined
+  /**
+   * 这次运行的 id 与这个节点的 id，只用来拼下载地址。
+   *
+   * ⚠ 显式写上 `| undefined`：仓里开着 `exactOptionalPropertyTypes`，
+   * `?:` 只表示「可以不传」，不表示「可以传 undefined」——而调用点拿到的
+   * 恰恰是一个可能为 undefined 的值。
+   */
+  runId?: string | undefined
+  nodeId?: string | undefined
   /**
    * 留下了全量结果的那些端口。
    *
@@ -31,7 +37,7 @@ const props = defineProps<{
    * 好的数据拿走走这个链接，且它要另一个权限码
    * （docs/MODELING_PLATFORM_DESIGN.md D12）。
    */
-  exportedPorts?: readonly string[]
+  exportedPorts?: readonly string[] | undefined
 }>()
 
 const ports = computed(() => portPreviewsOf(props.payload))

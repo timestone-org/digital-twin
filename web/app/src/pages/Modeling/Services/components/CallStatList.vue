@@ -8,6 +8,7 @@
  */
 import type { DtDataColumn, ModelCallStat } from '@dt/contracts'
 import { DtDataView } from '@dt/ui'
+import { computed } from 'vue'
 
 import { formatDay } from '@/utils/datetime'
 
@@ -23,13 +24,23 @@ const EMPTY = {
 }
 
 const props = defineProps<{ rows: readonly ModelCallStat[] }>()
+
+/**
+ * 补一个 `id` 再交给表。
+ *
+ * ⚠ `DtDataView` 的行必须带 `id`（它按 id 建 key），而按天聚合出来的行没有
+ * 主键——那一天本身就是它的唯一标识。
+ */
+const listed = computed(() =>
+  props.rows.map((row) => ({ ...row, id: row.day })),
+)
 </script>
 
 <template>
   <DtDataView
     view="table"
     :columns="COLUMNS"
-    :rows="props.rows"
+    :rows="listed"
     :empty="EMPTY"
     :layout="{ fixedLayout: true, minWidth: '24rem' }"
   >

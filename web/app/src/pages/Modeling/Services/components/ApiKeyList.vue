@@ -5,7 +5,7 @@
  * ⚠ 表里**没有明文**，只有前 12 位前缀——明文只在铸出来那一次的回执里出现，
  * 之后任何接口都取不回来（docs/MODELING_PLATFORM_DESIGN.md D13）。
  */
-import type { DtDataColumn, ModelApiKey } from '@dt/contracts'
+import type { DtDataColumn, DtIntent, ModelApiKey } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import { DtButton, DtDataView, DtTag } from '@dt/ui'
 
@@ -30,7 +30,7 @@ const props = defineProps<{ rows: readonly ModelApiKey[] }>()
 defineEmits<{ revoke: [key: ModelApiKey] }>()
 
 /** 一把钥匙现在能不能用。三档各自一句话。 */
-function stateOf(key: ModelApiKey): { text: string; intent: string } {
+function stateOf(key: ModelApiKey): { text: string; intent: DtIntent } {
   if (key.revoked_at !== null) return { text: '已撤销', intent: 'neutral' }
   const expires = key.expires_at
   if (expires !== null && expires <= nowStamp().toISOString()) {

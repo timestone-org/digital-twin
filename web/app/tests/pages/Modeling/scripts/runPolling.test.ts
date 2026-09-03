@@ -23,6 +23,7 @@ function run(over: Partial<ModelingRun> = {}): ModelingRun {
     duration_ms: null,
     row_count: null,
     is_source_truncated: false,
+    is_keeping_frames: false,
     error_text: null,
     created_by_name: null,
     created_at: STAMP,
@@ -173,6 +174,7 @@ describe('节点结果', () => {
       error_text: null,
       preview: { kind: 'frame' },
       is_preview_truncated: false,
+      exported_ports: [],
     }
   }
 
