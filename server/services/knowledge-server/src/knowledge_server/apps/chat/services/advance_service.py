@@ -24,7 +24,12 @@ from knowledge_server.apps.chat.crud import session_crud
 from knowledge_server.apps.chat.errors import ChatUnavailable
 from knowledge_server.apps.chat.models import ChatMessage, ChatSession
 from knowledge_server.apps.chat.services import advance_persist
-from knowledge_server.apps.chat.services.prompt import SYSTEM_PROMPT
+from knowledge_server.apps.chat.services import scope as scope_service
+from knowledge_server.apps.chat.services.prompt import (
+    SYSTEM_PROMPT,
+    scope_messages,
+)
+from knowledge_server.apps.chat.services.scope import BaseScope
 from knowledge_server.apps.chat.services.tools import (
     ToolDeps,
     build_registry,
@@ -42,11 +47,11 @@ from llmcore.memory import (
     history,
     summarize,
 )
+from llmcore.tools.registry import ToolRegistry
 from llmcore.tools.selection import specs_named
 from llmcore.tools.shapes import ToolSpec
 from llmcore.turn import (
     Responder,
-    ServerToolRunner,
     TurnDeps,
     TurnEvent,
     TurnOutcome,
@@ -59,6 +64,10 @@ from llmcore.turn import (
 # 回滚连接，否则跑一遍回合就在库里留下真数据
 SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 
+# 按这次对话的范围造一份工具注册表。⚠ 收工厂而不是收一份现成的：范围钉在会话
+# 上，而依赖是按请求装的——装配那一刻还不知道这一次要推进的是哪个会话
+ToolFactory = Callable[[BaseScope], ToolRegistry]
+
 
 @dataclass(frozen=True)
 class AdvanceDeps:
@@ -66,8 +75,7 @@ class AdvanceDeps:
 
     sessions: SessionFactory
     model: Responder
-    server_tools: ServerToolRunner
-    specs: tuple[ToolSpec, ...]
+    tools: ToolFactory
     summarizer: Summarizer
 
 
@@ -88,16 +96,18 @@ def deps_of(container: Container, caller: CallerContext) -> AdvanceDeps:
             answerer=container.answerer,
         )
     )
-    registry = build_registry(
-        ToolDeps(sessions=container.database.session, strategies=lanes)
-    )
     return AdvanceDeps(
         sessions=container.database.session,
         model=container.responder,
         # ⚠ 走注册表而不是直接造 `KnowledgeTools`：客户端那一路的名字也在
         # 表里，于是「本该交给浏览器的工具走到了服务端」会得到一句说得清的错
-        server_tools=registry.run,
-        specs=registry.specs,
+        tools=lambda chosen: build_registry(
+            ToolDeps(
+                sessions=container.database.session,
+                strategies=lanes,
+                scope=chosen,
+            )
+        ),
         summarizer=summarize.ModelSummarizer(
             model=container.responder, profile="default"
         ),
@@ -153,12 +163,14 @@ class LoadedContext:
 
     rows: list[HistoryRow]
     summary: Summary | None
+    # 这个会话此刻的检索范围。⚠ 每一轮现读：用户可能在两轮之间刚改过它
+    scope: BaseScope
 
 
 async def load_context(
     session: AsyncSession, *, chat_session_id: uuid.UUID
 ) -> LoadedContext:
-    """读出这个会话的历史与已有摘要。
+    """读出这个会话的历史、已有摘要与检索范围。
 
     ⚠ 只读不拼：拼装要等折叠的结果，而折叠是一次模型调用，不能在这个事务里跑
     （database-standard：事务里禁止外部 IO）。
@@ -171,6 +183,9 @@ async def load_context(
         rows=[_history_row(one) for one in rows],
         summary=(
             summarize.stored_of(row.summary_json) if row is not None else None
+        ),
+        scope=await scope_service.resolve(
+            session, row.base_scope_ids if row is not None else None
         ),
     )
 
@@ -190,17 +205,18 @@ def assemble(
     payload: AdvanceInput,
     rows: list[HistoryRow],
     summary: Summary | None,
+    scope: BaseScope,
 ) -> list[BaseMessage]:
     """把这一轮喂给模型的消息列表拼出来。
 
-    ⚠ 顺序就是上下文的分层，从最稳到每轮都变：常驻提示词 → 摘要 → 历史窗口
-    → 这一次的输入。易变的东西一旦挪到前面去，它后面的整段历史会跟着一起丢掉
-    端点的前缀缓存（ADR-0025）。
+    ⚠ 顺序就是上下文的分层，从最稳到每轮都变：常驻提示词 → 检索范围（会话内
+    不变）→ 摘要 → 历史窗口 → 这一次的输入。易变的东西一旦挪到前面去，它后面
+    的整段历史会跟着一起丢掉端点的前缀缓存（ADR-0025）。
 
     ⚠ 尾部没应答的工具调用要补回执：否则端点判整段历史不合法，而这个会话再也
     发不出下一句。
 
-    Args: payload, rows, summary。
+    Args: payload, rows, summary, scope。
     """
     recent = history.window(rows, MAX_HISTORY_MESSAGES, HISTORY_DROP_STEP)
     replayed = history.replay(recent)
@@ -215,6 +231,7 @@ def assemble(
     )
     return [
         SystemMessage(content=SYSTEM_PROMPT),
+        *scope_messages(scope),
         *summarize.messages_of(summary),
         *replayed,
         *history.fillers(orphans),
@@ -235,11 +252,13 @@ async def advance(
 
     Args: deps, chat_session_id, payload。
     """
-    messages = await _opened(deps, chat_session_id, payload)
+    loaded, messages = await _opened(deps, chat_session_id, payload)
+    # ⚠ 注册表按这一轮读到的范围现造：范围改了下一轮就跟着改，不留隔夜的那份
+    registry = deps.tools(loaded.scope)
     turn = TurnDeps(
         model=deps.model,
-        specs=_offered(deps.specs, payload.client_tools),
-        run_tool=deps.server_tools,
+        specs=_offered(registry.specs, payload.client_tools),
+        run_tool=registry.run,
         choice=ModelChoice(),
     )
     produced: list[TurnStep] = []
@@ -280,7 +299,7 @@ def _offered(
 
 async def _opened(
     deps: AdvanceDeps, chat_session_id: uuid.UUID, payload: AdvanceInput
-) -> list[BaseMessage]:
+) -> tuple[LoadedContext, list[BaseMessage]]:
     """读原料 → 折叠 → 拼上下文。折叠在事务之外。
 
     Args: deps, chat_session_id, payload。
@@ -288,7 +307,12 @@ async def _opened(
     async with deps.sessions() as session:
         loaded = await load_context(session, chat_session_id=chat_session_id)
     summary = await _summary_of(deps, chat_session_id, loaded)
-    return assemble(payload=payload, rows=loaded.rows, summary=summary)
+    return loaded, assemble(
+        payload=payload,
+        rows=loaded.rows,
+        summary=summary,
+        scope=loaded.scope,
+    )
 
 
 async def _summary_of(

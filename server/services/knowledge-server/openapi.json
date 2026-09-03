@@ -862,10 +862,51 @@
         "title": "ChatMessageOut",
         "type": "object"
       },
+      "ChatScopeBaseOut": {
+        "description": "范围里的一个库。",
+        "properties": {
+          "base_id": {
+            "format": "uuid",
+            "title": "Base Id",
+            "type": "string"
+          },
+          "is_missing": {
+            "title": "Is Missing",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base_id",
+          "name",
+          "is_missing"
+        ],
+        "title": "ChatScopeBaseOut",
+        "type": "object"
+      },
       "ChatSessionCreateIn": {
         "additionalProperties": false,
         "description": "建会话。\n\n⚠ 入参里没有 `user_id`：归属钉在调用者身上。开一个字段让客户端指定归属，\n就是一条替别人建会话的越权入口。",
         "properties": {
+          "base_scope_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Scope Ids"
+          },
           "title": {
             "default": "",
             "maxLength": 200,
@@ -879,6 +920,20 @@
       "ChatSessionDetailOut": {
         "description": "会话详情：连着全部消息与步骤，两级都按 `seq` 升序。",
         "properties": {
+          "base_scope": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ChatScopeBaseOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Scope"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -934,6 +989,7 @@
           "id",
           "user_id",
           "title",
+          "base_scope",
           "is_archived",
           "row_version",
           "last_error",
@@ -946,6 +1002,20 @@
       "ChatSessionOut": {
         "description": "一次对话。`row_version` 让前端判断手上那份旧没旧。",
         "properties": {
+          "base_scope": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ChatScopeBaseOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Scope"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -994,6 +1064,7 @@
           "id",
           "user_id",
           "title",
+          "base_scope",
           "is_archived",
           "row_version",
           "last_error",
@@ -1007,6 +1078,34 @@
         "additionalProperties": false,
         "description": "改会话。缺省的字段表示本次不涉及。",
         "properties": {
+          "base_scope_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Scope Ids"
+          },
+          "expected_version": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Version"
+          },
           "is_archived": {
             "anyOf": [
               {
@@ -2015,7 +2114,7 @@
         ]
       },
       "post": {
-        "description": "建对话；支持 `Idempotency-Key`。\n\nArgs: payload, session, response, write。",
+        "description": "建对话；支持 `Idempotency-Key`。不给范围就是全部知识库。\n\nArgs: payload, session, response, write。",
         "operationId": "create_session_api_v1_knowledge_chat_sessions_post",
         "parameters": [
           {
@@ -2152,7 +2251,7 @@
         ]
       },
       "patch": {
-        "description": "改标题或归档。归档只是不再默认列出，历史一条都不删。\n\nArgs: session_id, payload, session, caller。",
+        "description": "改标题、归档或检索范围。归档只是不再默认列出，历史一条都不删。\n\n⚠ 带了 `expected_version` 就按它断言，对不上回 409：两个标签页开着同一条\n会话时，无条件覆盖会让后写的那次把先写的范围悄悄顶掉。\n\nArgs: session_id, payload, session, caller。",
         "operationId": "update_session_api_v1_knowledge_chat_sessions__session_id__patch",
         "parameters": [
           {

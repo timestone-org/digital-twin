@@ -25,6 +25,9 @@ NEIGHBOURS = 1
 class ChunkContext:
     """一块原文与它的前后文。"""
 
+    # 这一块属于哪个库。⚠ 一并带出来不是为了显示：对话面要拿它判这一块在不在
+    # 这次对话的范围里，而 `chunk_id` 可以是模型从历史消息里翻出来的
+    base_id: uuid.UUID
     document_title: str
     heading_path: str
     locator: dict[str, Any]
@@ -61,6 +64,7 @@ async def read_around(
         )
     )
     return ChunkContext(
+        base_id=row.base_id,
         document_title=str(title.scalar_one_or_none() or ""),
         heading_path=row.heading_path,
         locator=row.locator_json,

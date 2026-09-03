@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.chat.deps import get_advance_deps
 from knowledge_server.apps.chat.services.advance_service import AdvanceDeps
+from knowledge_server.apps.chat.services.scope import BaseScope
 from knowledge_server.apps.chat.services.tools import ToolDeps, build_registry
 from knowledge_server.apps.chat.services.tools.client import ASK_TOOL
 from knowledge_server.settings import API_PREFIX
@@ -27,6 +28,7 @@ from llmcore import ModelChoice
 from llmcore.guard import GuardedModel
 from llmcore.memory import NullSummarizer
 from llmcore.testing import ScriptedChat, StreamingChat, asks
+from llmcore.tools.registry import ToolRegistry
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -48,12 +50,15 @@ def _install(stack: DbStack, model: BaseChatModel) -> None:
             yield session
             await session.commit()
 
-    registry = build_registry(ToolDeps(sessions=sessions, strategies=()))
+    def tools(scope: BaseScope) -> ToolRegistry:
+        return build_registry(
+            ToolDeps(sessions=sessions, strategies=(), scope=scope)
+        )
+
     stack.app.dependency_overrides[get_advance_deps] = lambda: AdvanceDeps(
         sessions=sessions,
         model=GuardedModel(source=source, breaker=CircuitBreaker(name="m")),
-        server_tools=registry.run,
-        specs=registry.specs,
+        tools=tools,
         summarizer=NullSummarizer(),
     )
 

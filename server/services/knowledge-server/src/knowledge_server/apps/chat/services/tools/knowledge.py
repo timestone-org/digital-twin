@@ -10,6 +10,12 @@
 ⚠ **在进程内直调服务层**，不走 HTTP：这是把对话放进 knowledge-server 的红利——
 不用转发身份头、不多一跳、不会撞上委托身份几十秒就到期那个坑。权限在端点
 入口已经按 `knowledge:use` 判过。
+
+⚠ 会话的检索范围在这一层**硬过滤**（ADR-0044）：三个工具各自判一次，越界的
+当场抛。写在提示词里是不够的——模型多数时候听话、偶尔不听，而不听的那一次
+没有任何一处报错，用户看到的是一条来自他明确排除掉的库的答案。
+`kb.read_chunk` 那一道最容易漏：前两个拦住了，模型仍可能从历史消息里翻出一个
+越界的 `chunk_id`。
 """
 
 import uuid
@@ -17,6 +23,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+from knowledge_server.apps.chat.services.scope import BaseScope
 from knowledge_server.apps.knowledge.services import (
     HitOut,
     KnowledgeBaseNotFound,
@@ -58,8 +65,10 @@ KNOWLEDGE_SPECS: tuple[ToolSpec, ...] = (
     ToolSpec(
         name=LIST_BASES,
         description=(
-            "列出这个人看得见的知识库。**检索之前先列一次**——库 id 只能从"
-            "这里来，凭印象填一个多半是 404。"
+            "列出**这次对话能查的**知识库。**检索之前先列一次**——库 id 只能"
+            "从这里来，凭印象填一个多半是 404。"
+            "⚠ 用户可能把这次对话的范围收窄到了其中几个库；这里列出来的就是"
+            "范围内的那几个，范围外的库查不了。"
             "⚠ 一个都没有时先问用户这套部署建没建过库，别自己编一个 id。"
         ),
         parameters=object_schema({}, []),
@@ -73,8 +82,8 @@ KNOWLEDGE_SPECS: tuple[ToolSpec, ...] = (
             "两次检索。"
             "⚠ 设备编号、型号、标准号（如 K1_TMT_HOT、GB/T 4728）**原样写进"
             "查询**：它们在语义上几乎没有区分度，只能靠字面命中。"
-            "⚠ 召回不足时**换个说法再查一轮**，或换一个库，不要拿半份资料"
-            "下结论。"
+            "⚠ 召回不足时**换个说法再查一轮**，或换一个范围内的库，不要拿"
+            "半份资料下结论。"
             "⚠ 每条回执带 `base_name`、`document_title` 与 `locator`，答复里"
             "每句结论后面要挂角标并在末尾列出这三样——指不出出处的答案，"
             "用户没法核对。"
@@ -112,6 +121,9 @@ class KnowledgeTools:
 
     sessions: Sessions
     strategies: tuple[RetrievalStrategy, ...]
+    # 这次对话能取哪几个库的数。⚠ 经依赖传进来而不是读模块级状态：两个用户的
+    # 两个回合在同一个进程里并发跑，模块级的那一份会被后来的那个覆盖
+    scope: BaseScope
 
     # 这一路在注册表里的名字。⚠ 不加类型标注：加了它就成了 dataclass 字段
     name = "knowledge"
@@ -142,7 +154,7 @@ class KnowledgeTools:
         del arguments
         async with self.sessions() as session:
             rows, total = await library_service.brief_bases(
-                session, limit=MAX_BASES
+                session, limit=MAX_BASES, only_ids=self.scope.ids()
             )
             return {
                 "bases": [
@@ -157,13 +169,16 @@ class KnowledgeTools:
                 ],
                 "total": total,
                 "note": (
-                    "库 id 只能从这里来。`is_indexed` 为假的库还没建过向量"
-                    "索引，只能靠关键词命中。"
+                    f"{_scope_note(self.scope)}库 id 只能从这里来。"
+                    "`is_indexed` 为假的库还没建过向量索引，只能靠关键词命中。"
                 ),
             }
 
     async def _search(self, arguments: dict[str, Any]) -> Any:
         base_id = _uuid(arguments, "base_id")
+        # ⚠ 拦在检索之前，且抛而不是回空表：空表与「这个库里确实没这句话」
+        # 长得一模一样，模型会把它读成「查过了，没有」接着往下答
+        self.scope.require(base_id)
         body = SearchIn(
             query=_text(arguments, "query"),
             limit=_limit(arguments.get("limit")),
@@ -190,6 +205,9 @@ class KnowledgeTools:
             found = await chunk_service.read_around(session, chunk_id)
         if found is None:
             raise UnknownTool("没有这一块；chunk_id 要取自 kb.search 的回执")
+        # ⚠ 这一道最容易漏：列库与检索都拦住了，模型仍可能从历史消息里翻出
+        # 一个越界的 chunk_id——而那是整段原文，不是一条摘要
+        self.scope.require(found.base_id)
         return {
             "document_title": found.document_title,
             "heading_path": found.heading_path,
@@ -198,6 +216,21 @@ class KnowledgeTools:
             "text": found.text,
             "after": list(found.after),
         }
+
+
+def _scope_note(scope: BaseScope) -> str:
+    """给模型说清这次对话的范围；不限库时也说清。
+
+    Args: scope。
+    """
+    if scope.bases is None:
+        return "这次对话没有限定知识库，上面就是这套部署里全部的库。"
+    gone = sum(1 for one in scope.bases if one.is_missing)
+    tail = f"；另有 {gone} 个已经不存在、查不了。" if gone else "。"
+    return (
+        f"这次对话的范围被用户限定在 {len(scope.bases)} 个库，"
+        f"上面列的就是范围内还在的那几个{tail}"
+    )
 
 
 def _hit_of(hit: HitOut, base_name: str) -> dict[str, Any]:

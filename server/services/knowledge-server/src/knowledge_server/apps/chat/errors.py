@@ -22,3 +22,25 @@ class ChatUnavailable(AppError):
 
     code = 42321
     http_status = 409
+
+
+class ChatScopeBaseUnknown(AppError):
+    """范围里点名的知识库不存在。
+
+    ⚠ 当场拒而不是把认不出的那几个悄悄丢掉：丢掉之后剩下的范围比用户划的宽
+    （丢空了就成了「全部库」），而他从界面上看不出少了哪一个。
+    """
+
+    code = 42322
+    http_status = 400
+
+
+class ChatSessionVersionConflict(AppError):
+    """这条会话在别处改过了，调用者手上那份是旧的。
+
+    ⚠ 不做无条件覆盖：两个标签页开着同一条会话时，后写的那次会把先写的范围
+    悄悄顶掉，而先写的那个人以为自己已经改好了。
+    """
+
+    code = 42323
+    http_status = 409

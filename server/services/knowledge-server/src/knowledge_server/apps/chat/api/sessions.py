@@ -65,7 +65,7 @@ async def create_session(
     response: Response,
     write: WriteDep,
 ) -> ApiResponse[ChatSessionOut]:
-    """建对话；支持 `Idempotency-Key`。
+    """建对话；支持 `Idempotency-Key`。不给范围就是全部知识库。
 
     Args: payload, session, response, write。
     """
@@ -110,7 +110,10 @@ async def update_session(
     session: SessionDep,
     caller: UseDep,
 ) -> ApiResponse[ChatSessionOut]:
-    """改标题或归档。归档只是不再默认列出，历史一条都不删。
+    """改标题、归档或检索范围。归档只是不再默认列出，历史一条都不删。
+
+    ⚠ 带了 `expected_version` 就按它断言，对不上回 409：两个标签页开着同一条
+    会话时，无条件覆盖会让后写的那次把先写的范围悄悄顶掉。
 
     Args: session_id, payload, session, caller。
     """
