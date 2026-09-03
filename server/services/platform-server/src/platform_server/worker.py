@@ -200,6 +200,7 @@ def build_modeling_runner(
         stream=container.stream,
         pool=pool,
         options=RunConsumerOptions(
+            store=container.object_store,
             target=StreamGroup(
                 stream=settings.modeling_stream,
                 group=settings.modeling_group,

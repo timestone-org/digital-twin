@@ -15,6 +15,7 @@ from lib.logging import (
     parse_traceparent,
     reset_log_context,
 )
+from lib.objectstore import ObjectStore
 from lib.stream import StreamEntry, StreamGroup, StreamLike
 from platform_server.apps.modeling.services import run_queue
 from platform_server.apps.modeling.services.run_dispatch import (
@@ -43,6 +44,8 @@ class RunConsumerOptions:
     claim_idle_ms: int
     node_timeout_s: float
     tz_offset_minutes: int
+    #: 二进制产物的落脚处。缺省「没有」——纯 JSON 那些算子一个字节都不产
+    store: ObjectStore | None = None
 
 
 class RunConsumer:
@@ -169,6 +172,7 @@ class RunConsumer:
                         self._pool, timeout_s=options.node_timeout_s
                     ),
                     tz_offset_minutes=options.tz_offset_minutes,
+                    store=options.store,
                 ),
             )
         except Exception as error:  # pragma: no cover - 依赖同时不可用

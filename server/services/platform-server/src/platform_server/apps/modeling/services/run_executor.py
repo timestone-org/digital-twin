@@ -23,6 +23,9 @@ from platform_server.apps.modeling.operators import (
 from platform_server.apps.modeling.protocols import NodeRunStatus, RunStatus
 from platform_server.apps.modeling.schemas.graph import GraphNode, PipelineGraph
 from platform_server.apps.modeling.services import preview as preview_service
+from platform_server.apps.modeling.services.artifact_store import (
+    SealedArtifact,
+)
 from platform_server.apps.modeling.services.graph_walk import (
     split_plan_of,
     topological_order,
@@ -65,6 +68,8 @@ class NodeOutcome:
     io: dict[str, dict[str, list[str]]] = field(
         default_factory=dict[str, dict[str, list[str]]]
     )
+    #: 走二进制通道那一步的封存件。⚠ 不落库：它只是一串字节，落进对象存储
+    artifact: SealedArtifact | None = None
 
 
 @dataclass(frozen=True)
@@ -239,6 +244,7 @@ async def _run_one(
         is_preview_truncated=truncated,
         fitted=result.fitted,
         io=result.io,
+        artifact=result.artifact,
     )
 
 

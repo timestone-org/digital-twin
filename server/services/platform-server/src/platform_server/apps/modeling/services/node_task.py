@@ -11,6 +11,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from platform_server.apps.modeling.operators import Frame, registry
+from platform_server.apps.modeling.services.artifact_store import (
+    SealedArtifact,
+    seal,
+)
 
 
 @dataclass(frozen=True)
@@ -36,6 +40,10 @@ class NodeResult:
     io: dict[str, dict[str, list[str]]] = field(
         default_factory=dict[str, dict[str, list[str]]]
     )
+    #: 走二进制通道的算子交出来的封存件；纯 JSON 那些是 `None`。
+    #: ⚠ **在子进程里就封好**：估计器对象跨不回来（它自己就是要序列化的
+    #: 那个东西），而封存件是纯字节，跨得回来
+    artifact: SealedArtifact | None = None
 
 
 def run_node_payload(payload: NodePayload) -> NodeResult:
@@ -51,9 +59,11 @@ def run_node_payload(payload: NodePayload) -> NodeResult:
         split_plan=payload.split_plan,
     )
     outputs = operator.run(payload.inputs)
+    estimator = operator.trained_estimator()
     return NodeResult(
         outputs=outputs,
         fitted=operator.dump_fitted(),
+        artifact=None if estimator is None else seal(estimator),
         io={
             "inputs": _keys_by_port(payload.inputs),
             "outputs": _keys_by_port(outputs),

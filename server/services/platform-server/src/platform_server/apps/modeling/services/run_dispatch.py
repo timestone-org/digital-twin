@@ -12,11 +12,16 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from lib.logging import get_logger
+from lib.objectstore import ObjectStore, ObjectStoreError
 from platform_server.apps.modeling.crud import node_run_crud, run_crud
 from platform_server.apps.modeling.models import ModelingNodeRun, ModelingRun
 from platform_server.apps.modeling.protocols import ACTIVE_RUN_STATUSES
 from platform_server.apps.modeling.schemas.graph import PipelineGraph
-from platform_server.apps.modeling.services import frame_source, presenters
+from platform_server.apps.modeling.services import (
+    artifact_store,
+    frame_source,
+    presenters,
+)
 from platform_server.apps.modeling.services.run_executor import (
     Execution,
     NodeOutcome,
@@ -44,6 +49,9 @@ class DispatchOptions:
 
     runner: NodeRunner
     tz_offset_minutes: int
+    #: 二进制产物的落脚处。⚠ 缺省是「没有」而不是必填：纯 JSON 那些算子
+    #: 一个字节都不产，没配对象存储的部署照样跑得起来
+    store: ObjectStore | None = None
 
 
 @dataclass(frozen=True)
@@ -75,7 +83,9 @@ async def execute_run(
             tz_offset_minutes=options.tz_offset_minutes,
             runner=options.runner,
             should_cancel=lambda: _is_cancelled(sessions, run_id),
-            on_node_finished=lambda node: _persist(sessions, run_id, node),
+            on_node_finished=lambda node: _persist(
+                sessions, run_id, node, options.store
+            ),
         ),
     )
     await _finish(sessions, run_id, outcome)
@@ -144,17 +154,52 @@ async def _is_cancelled(sessions: Sessions, run_id: uuid.UUID) -> bool:
 
 
 async def _persist(
-    sessions: Sessions, run_id: uuid.UUID, node: NodeOutcome
+    sessions: Sessions,
+    run_id: uuid.UUID,
+    node: NodeOutcome,
+    store: ObjectStore | None,
 ) -> None:
-    """把一个节点的执行记录落库，并记一次心跳。
+    """把一个节点的执行记录落库，并记一次心跳；有产物就一并写进对象存储。
 
-    Args: sessions, run_id, node。
+    ⚠ 产物**先写存储、再落库**：反过来的话库里会指着一个不存在的键，而那要
+    到发布时才发现。写不进去就让这一步失败——一个没有产物的树模型发布出来
+    就是个永远算不出数的版本。
+    Args: sessions, run_id, node, store。
     """
+    if node.artifact is not None:
+        await _write_artifact(run_id, node, store)
     async with sessions.session() as session:
         node_run_crud.add(session, _node_row(run_id, node))
         run = await run_crud.get(session, run_id)
         if run is not None:
             run_crud.touch(run)
+
+
+async def _write_artifact(
+    run_id: uuid.UUID, node: NodeOutcome, store: ObjectStore | None
+) -> None:
+    """把一份产物写进对象存储。写不进去就让这一步失败。
+
+    Args: run_id, node, store。
+    """
+    if node.artifact is None:  # pragma: no cover —— 调用点已判过
+        return
+    if store is None:
+        raise ObjectStoreError(
+            "这条流水线产出了二进制模型，而本部署没有配对象存储"
+        )
+    await store.put_bytes(
+        artifact_store.run_key(str(run_id), node.node_id),
+        node.artifact.payload,
+        content_type=artifact_store.CONTENT_TYPE,
+    )
+    _logger.info(
+        "modeling_artifact_written",
+        "模型产物已落对象存储",
+        run_id=str(run_id),
+        node_id=node.node_id,
+        size_bytes=node.artifact.size_bytes,
+    )
 
 
 def _node_row(run_id: uuid.UUID, node: NodeOutcome) -> ModelingNodeRun:

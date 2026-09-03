@@ -1,4 +1,9 @@
-"""建模算子：切分训练 / 测试，以及在训练集上拟合出一个模型。"""
+"""建模算子：切分训练 / 测试，以及在训练集上拟合出一个模型。
+
+⚠ `scored_frame` 与 `single_target` 是公开的：树模型那一族在
+`trees.py` 里，两边必须共用同一份打分帧形状与同一条「唯一目标列」判据
+——各写一份的话，评估算子读得懂一族、读不懂另一族。
+"""
 
 import math
 from typing import Any, Literal, cast
@@ -188,7 +193,7 @@ class LinearRegressionOperator(OperatorBase):
         train = frame_input(inputs, "train")
         test = frame_input(inputs, "test")
         feature_keys = train.keys_by_role(ROLE_FEATURE)
-        target_key = _single_target(train)
+        target_key = single_target(train)
         if not feature_keys:
             raise OperatorError("训练集里一个特征列都没有")
         self._fit(train, feature_keys, target_key)
@@ -202,7 +207,7 @@ class LinearRegressionOperator(OperatorBase):
                 fitted=self.dump_fitted() or {},
                 serving_channel=self.SERVING_CHANNEL,
             ),
-            "scored": _scored_frame(test, target_key, self.predict_rows(test)),
+            "scored": scored_frame(test, target_key, self.predict_rows(test)),
         }
 
     @classmethod
@@ -290,7 +295,7 @@ class LinearRegressionOperator(OperatorBase):
         self._intercept = estimator.intercept
 
 
-def _scored_frame(
+def scored_frame(
     test: Frame, target_key: str, predictions: list[float]
 ) -> Frame:
     """把测试集的真实值与预测值拼成一份两列的帧。
@@ -345,7 +350,7 @@ def _hyper_params_of(config: LinearRegressionConfig) -> dict[str, Any]:
     }
 
 
-def _single_target(frame: Frame) -> str:
+def single_target(frame: Frame) -> str:
     keys = frame.keys_by_role(ROLE_TARGET)
     if len(keys) != 1:
         raise OperatorError("上游没有指定唯一的目标列，请先接一个切分算子")
@@ -453,7 +458,7 @@ class LogisticRegressionOperator(OperatorBase):
         train = frame_input(inputs, "train")
         test = frame_input(inputs, "test")
         feature_keys = train.keys_by_role(ROLE_FEATURE)
-        target_key = _single_target(train)
+        target_key = single_target(train)
         if not feature_keys:
             raise OperatorError("训练集里一个特征列都没有")
         self._fit(train, feature_keys, target_key)
@@ -467,7 +472,7 @@ class LogisticRegressionOperator(OperatorBase):
                 fitted=self.dump_fitted() or {},
                 serving_channel=self.SERVING_CHANNEL,
             ),
-            "scored": _scored_frame(test, target_key, self.predict_rows(test)),
+            "scored": scored_frame(test, target_key, self.predict_rows(test)),
         }
 
     def predict_rows(self, frame: Frame) -> list[float]:

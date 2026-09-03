@@ -80,6 +80,7 @@ from platform_server.apps.modeling.operators.timefeature import (
     TIME_PARTS,
     TimeFeature,
 )
+from platform_server.apps.modeling.operators.trees import TreeRegressor
 from platform_server.apps.modeling.operators.window import (
     ROLLING_STATS,
     LagFeature,
@@ -140,6 +141,7 @@ __all__ = [
     "SplitDataset",
     "Standardize",
     "TimeFeature",
+    "TreeRegressor",
     "register_operator",
     "registry",
 ]

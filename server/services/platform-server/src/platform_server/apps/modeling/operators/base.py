@@ -281,6 +281,14 @@ class OperatorBase:
         """
         raise NotImplementedError
 
+    def trained_estimator(self) -> object | None:
+        """把训练好的估计器交出来（只有走二进制通道的算子实现它）。
+
+        ⚠ 返回的是**对象本身**，封存与摘要由 `services/artifact_store` 做：
+        算子层不认识序列化策略，也不许 import services——那是一个环。
+        """
+        return None
+
     def dump_fitted(self) -> dict[str, Any] | None:
         """导出拟合参数（`REQUIRES_FIT=True` 必须实现）。
 

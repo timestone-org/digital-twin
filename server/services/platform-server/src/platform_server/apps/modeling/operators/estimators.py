@@ -6,10 +6,14 @@
 
 import math
 from collections.abc import Sequence
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import numpy as np
 from sklearn.decomposition import PCA
+from sklearn.ensemble import (
+    GradientBoostingRegressor,
+    RandomForestRegressor,
+)
 from sklearn.linear_model import (
     LinearRegression,
     LogisticRegression,
@@ -23,6 +27,11 @@ type Regularization = Literal["none", "ridge"]
 
 # 逻辑回归只做两类
 _BINARY_CLASSES = 2
+
+# 树集成的两种。⚠ 两者的 `max_depth` 语义不同：森林里 None = 长到纯，
+# 提升树里 None 不合法（它要浅树），所以那一档给一个明确的默认
+type TreeKind = Literal["forest", "gbdt"]
+_GBDT_DEPTH = 3
 # 指数的安全上限。⚠ `math.exp(710)` 直接抛，而线性部分在特征没标准化时
 # 轻易越过它——夹住比抛出去有用：概率本来就在 0 / 1 处饱和
 _EXP_LIMIT = 700.0
@@ -317,3 +326,123 @@ def projected(
         )
         for axis in components
     ]
+
+
+class TreeEnsemble:
+    """树的集合：随机森林或梯度提升。
+
+    ⚠ 拟合结果是**一堆对象**，纯 JSON 表达不出来——它走二进制通道
+    （docs/MODELING_PLATFORM_DESIGN.md D9）。这个包装类只做两件事：把 sklearn
+    的类型面收在这里，以及把估计器交出去封存。
+    ⚠ `n_jobs` 定死 1：算子已经跑在单工进程池的子进程里，再让 sklearn 开一把
+    线程会与同机别的消费循环抢核，而现象只是「偶尔整台机器一起变慢」。
+    """
+
+    def __init__(
+        self,
+        *,
+        kind: TreeKind,
+        n_estimators: int,
+        max_depth: int | None,
+        random_state: int,
+    ) -> None:
+        self._estimator = _tree_estimator(
+            kind=kind,
+            n_estimators=n_estimators,
+            max_depth=max_depth,
+            random_state=random_state,
+        )
+        self._feature_count = 0
+
+    def fit(
+        self, rows: Sequence[Sequence[float]], target: Sequence[float]
+    ) -> None:
+        """在给定矩阵上拟合。
+
+        Args: rows, target。
+        """
+        if not rows:
+            raise OperatorError("训练集一行都没有，拟合不出模型")
+        self._feature_count = len(rows[0])
+        # pyright: ignore 的理由 —— 集成模型的 fit 在 sklearn 类型面上部分未知
+        self._estimator.fit(  # pyright: ignore[reportUnknownMemberType]
+            np.asarray(rows, dtype=float),
+            np.asarray(target, dtype=float),
+        )
+
+    def predict(self, rows: Sequence[Sequence[float]]) -> list[float]:
+        """整批打分。
+
+        ⚠ **一次调用算一批**：逐行调等于逐行付一次 Python → C 的往返，而那正是
+        批量相位要省掉的东西（D11b）。
+        Args: rows。
+        """
+        if not rows:
+            return []
+        if len(rows[0]) != self._feature_count:
+            raise OperatorError(
+                f"这个模型要 {self._feature_count} 列，"
+                f"这里给了 {len(rows[0])} 列"
+            )
+        # pyright: ignore 的理由 —— predict 的返回在类型面上部分未知
+        raw = cast(
+            "Sequence[float]",
+            self._estimator.predict(  # pyright: ignore[reportUnknownMemberType]
+                np.asarray(rows, dtype=float)
+            ),
+        )
+        flat = np.asarray(raw, dtype=float).reshape(-1)
+        return [float(flat[index]) for index in range(flat.size)]
+
+    def adopt(self, estimator: object, *, feature_count: int) -> None:
+        """装上一个从产物里加载回来的估计器。
+
+        ⚠ 只认「有 predict 的东西」，且把列数一并记下来：产物自己不记列名，
+        投影按位置取——列数对不上时预测照样算得出来，只是每一列都错位了。
+        Args: estimator, feature_count。
+        """
+        if not callable(getattr(estimator, "predict", None)):
+            raise OperatorError("产物里那个东西不是一个能预测的模型")
+        self._estimator = cast("Any", estimator)
+        self._feature_count = feature_count
+
+    @property
+    def estimator(self) -> object:
+        """交出去封存的那个对象。"""
+        return self._estimator
+
+    @property
+    def importances(self) -> list[float]:
+        """树自己给的特征重要性，与拟合时的列序一致。"""
+        # pyright: ignore 的理由 —— feature_importances_ 在类型面上部分未知
+        raw = cast(
+            "Sequence[float]",
+            self._estimator.feature_importances_,  # pyright: ignore[reportUnknownMemberType]
+        )
+        flat = np.asarray(raw, dtype=float).reshape(-1)
+        return [float(flat[index]) for index in range(flat.size)]
+
+
+def _tree_estimator(
+    *,
+    kind: TreeKind,
+    n_estimators: int,
+    max_depth: int | None,
+    random_state: int,
+) -> Any:
+    """按种类造一个集成估计器。
+
+    Args: kind, n_estimators, max_depth, random_state。
+    """
+    if kind == "gbdt":
+        return GradientBoostingRegressor(
+            n_estimators=n_estimators,
+            max_depth=max_depth or _GBDT_DEPTH,
+            random_state=random_state,
+        )
+    return RandomForestRegressor(
+        n_estimators=n_estimators,
+        max_depth=max_depth,
+        random_state=random_state,
+        n_jobs=1,
+    )
