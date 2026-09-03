@@ -7,9 +7,13 @@
 ⚠ 没接嵌入档时**退成只走关键词**，并把这件事写进 `note`。这不是「悄悄退化」：
 悄悄退化指的是**不告诉任何人**，而这里如实说了——关键词那一路本来就不需要
 嵌入，为了一句「不可用」把它也关掉才是真损失。
+
+⚠ 接了重排就**多召一批再排**（ADR-0042）：只召 limit 条的话，重排能做的只有
+把这几条换个顺序，而它真正的价值是把融合名次里排在 limit 之外、其实最相关的
+那一条捞上来。重排排不成时退回融合名次，并如实标注这次没排。
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +23,10 @@ from knowledge_server.apps.knowledge.services.indexing import (
     KeywordQuery,
     VectorQuery,
 )
+from knowledge_server.apps.knowledge.services.reranking import (
+    NullReranker,
+    Reranker,
+)
 from knowledge_server.apps.knowledge.services.retrieval.hydrate import (
     hydrated,
 )
@@ -26,9 +34,14 @@ from knowledge_server.apps.knowledge.services.retrieval.naive import (
     LANE_WIDTH,
 )
 from knowledge_server.apps.knowledge.services.retrieval.ports import (
+    Fused,
     RetrievalRequest,
     RetrievalResult,
     fused,
+)
+from knowledge_server.apps.knowledge.services.retrieval.reranked import (
+    candidate_width,
+    reranked,
 )
 
 HYBRID = "hybrid"
@@ -38,10 +51,13 @@ NO_EMBEDDING_NOTE = "这套部署没接嵌入档，本次只走了关键词那�
 
 @dataclass(frozen=True)
 class Hybrid:
-    """两路各召一批，按名次融合。"""
+    """两路各召一批，按名次融合，接了重排就再排一次。"""
 
     indexes: IndexPair
     embedder: Embedder
+    # 重排那一路。⚠ 没接时给 `NullReranker` 而不是 `None`：调用点于是不必写
+    # 「这一路在不在」的分支，而缺席由 `can_rerank` 如实说出来
+    reranker: Reranker = field(default_factory=NullReranker)
     name: str = HYBRID
     is_llm_backed: bool = False
     # 只召回不作答：答案由调用方自己写（助手、或人）
@@ -50,7 +66,32 @@ class Hybrid:
     async def retrieve(
         self, session: AsyncSession, request: RetrievalRequest
     ) -> RetrievalResult:
-        """两路各召一批再融。
+        """两路各召一批再融，接了重排就把候选多召一批再重排。
+
+        Args: session, request。
+        """
+        ranked, note = await self._fused(session, request)
+        # ⚠ 接了重排才多召一批：不接时多召的那几条只会被原样丢掉，
+        # 而补出处那一步是要打库的
+        wanted = (
+            candidate_width(request.limit)
+            if self.reranker.can_rerank
+            else request.limit
+        )
+        candidates = await hydrated(session, ranked, wanted)
+        hits, rerank_note = await reranked(
+            self.reranker, request.query, candidates, request.limit
+        )
+        return RetrievalResult(
+            hits=hits,
+            strategy=self.name,
+            note="；".join(one for one in (note, rerank_note) if one),
+        )
+
+    async def _fused(
+        self, session: AsyncSession, request: RetrievalRequest
+    ) -> tuple[list[Fused], str]:
+        """两路各召一批再按名次融合，并回一句「这次少走了哪一路」。
 
         Args: session, request。
         """
@@ -73,9 +114,4 @@ class Hybrid:
             ),
         )
         lanes["keyword"] = [(one.chunk_id, one.why) for one in words]
-        ranked = fused(lanes)  # pyright: ignore[reportArgumentType]
-        return RetrievalResult(
-            hits=await hydrated(session, ranked, request.limit),
-            strategy=self.name,
-            note=note,
-        )
+        return (fused(lanes), note)  # pyright: ignore[reportArgumentType]

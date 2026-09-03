@@ -56,6 +56,7 @@ def purpose_out(
         kind=spec.kind,
         consumer=spec.consumer,
         is_vision_required=spec.is_vision_required,
+        has_env_default=spec.has_env_default,
         provider_id=None if row is None else row.provider_id,
         provider_name=None if provider is None else provider.name,
         model_name=None if row is None else row.model_name,

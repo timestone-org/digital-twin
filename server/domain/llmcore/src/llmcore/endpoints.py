@@ -39,3 +39,21 @@ class EmbeddingEndpoint:
     model: str
     timeout_s: float
     dimensions: int
+
+
+@dataclass(frozen=True)
+class RerankEndpoint:
+    """重排端点实际要打的地方。
+
+    ⚠ 多一格**方言**：重排不在 OpenAI 兼容口径里，各家的路径与请求体不同。
+    方言跟着端点走而不是跟着模型走——它说的是「打哪个路径、什么请求体」。
+
+    ⚠ 没有维数这一格：重排只排序、不落库，换一路重排模型不作废任何存量向量。
+    """
+
+    base_url: str
+    api_key: SecretStr
+    model: str
+    timeout_s: float
+    # 线形方言码；空串表示没配，由方言注册表按默认那一路解
+    dialect: str = ""

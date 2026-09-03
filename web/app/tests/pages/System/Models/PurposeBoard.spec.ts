@@ -44,6 +44,7 @@ function purpose(over: Partial<LlmPurpose> = {}): LlmPurpose {
     kind: 'chat',
     consumer: 'assistant',
     is_vision_required: false,
+    has_env_default: true,
     provider_id: null,
     provider_name: null,
     model_name: null,
@@ -199,5 +200,25 @@ describe('用途分配板', () => {
     const clear = wrapper.findAll('button').find((one) => one.text() === '清除')
     await clear?.trigger('click')
     expect(wrapper.emitted('clear')).toEqual([['assistant.chat']])
+  })
+
+  it('重排那一档带自己的标签，且不许说「沿用环境变量」', () => {
+    // ⚠ 这一路只有目录一个来源：照着「沿用环境变量」去翻一个不存在的配置项，
+    // 比不说更费时间
+    const wrapper = render(
+      [
+        purpose({
+          purpose: 'knowledge.rerank',
+          label: '检索重排',
+          kind: 'rerank',
+          consumer: 'knowledge',
+          has_env_default: false,
+        }),
+      ],
+      [],
+    )
+    expect(wrapper.text()).toContain('重排')
+    expect(wrapper.text()).toContain('这套部署不启用这一路')
+    expect(wrapper.text()).not.toContain('沿用该服务环境变量')
   })
 })

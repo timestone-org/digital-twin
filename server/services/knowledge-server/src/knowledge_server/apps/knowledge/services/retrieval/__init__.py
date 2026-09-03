@@ -29,12 +29,22 @@ from knowledge_server.apps.knowledge.services.retrieval.registry import (
     strategy_for,
     strategy_names,
 )
+from knowledge_server.apps.knowledge.services.retrieval.reranked import (
+    RERANK_FAILED_NOTE,
+    RERANK_MAX_CANDIDATES,
+    RERANK_WIDEN,
+    candidate_width,
+    reranked,
+)
 
 __all__ = [
     "AGENTIC",
     "HYBRID",
     "NAIVE",
     "NO_EMBEDDING_NOTE",
+    "RERANK_FAILED_NOTE",
+    "RERANK_MAX_CANDIDATES",
+    "RERANK_WIDEN",
     "RRF_K",
     "Agentic",
     "Fused",
@@ -47,7 +57,9 @@ __all__ = [
     "RetrievalStrategy",
     "RetrievalUnavailable",
     "build_strategies",
+    "candidate_width",
     "fused",
+    "reranked",
     "strategy_for",
     "strategy_names",
 ]

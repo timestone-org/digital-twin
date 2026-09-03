@@ -9,7 +9,7 @@ from knowledge_server.apps.knowledge.services.parsing import (
     RawItem,
     UnsupportedRawItem,
     accepted_suffixes,
-    parse,
+    parse_local,
     parser_for,
 )
 from knowledge_server.apps.knowledge.services.parsing.text import TextParser
@@ -90,7 +90,9 @@ def test_registry_order_decides_who_wins() -> None:
 
 
 def test_parse_goes_through_the_same_dispatch() -> None:
-    made = parse(RawItem(filename="a.md", media_type="", content=b"# title"))
+    made = parse_local(
+        RawItem(filename="a.md", media_type="", content=b"# title")
+    )
     assert isinstance(made, ParsedDocument)
     assert made.blocks[0].kind == "heading"
 

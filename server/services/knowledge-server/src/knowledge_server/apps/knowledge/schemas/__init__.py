@@ -3,6 +3,8 @@
 from knowledge_server.apps.knowledge.schemas.capability import (
     CapabilityOut,
     IndexCapabilityOut,
+    ParsingCapabilityOut,
+    RerankCapabilityOut,
 )
 from knowledge_server.apps.knowledge.schemas.document import (
     DocumentOut,
@@ -37,7 +39,9 @@ __all__ = [
     "KnowledgeBaseIn",
     "KnowledgeBaseOut",
     "LocatorOut",
+    "ParsingCapabilityOut",
     "RegisterDocumentIn",
+    "RerankCapabilityOut",
     "SearchIn",
     "SearchOut",
     "SourceIn",

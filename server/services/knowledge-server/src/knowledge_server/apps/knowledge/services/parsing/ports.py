@@ -1,7 +1,17 @@
-"""层 2 解析的扩展点：一份原件解成什么。
+"""层 2 解析的扩展点：一份原件解成什么，以及由**哪一路后端**去解。
+
+两级扩展点（ADR-0043）：
+
+- `ParserBackend` 是「谁来解」——一期两类，本地库解（`DocumentParser`）与
+  外部服务解（`ExternalParserBackend`，只有端口，没有实现）。
+- 每一路后端自己声明认哪些后缀与 media type。
 
 加一种格式 = 加一个解析器文件 + 注册元组里一行 + 一条契约测试（ADR-0029）。
-调用方只认 `ParsedDocument`，不认任何解析器。
+调用方只认 `ParsedDocument`，不认任何后端。
+
+⚠ 两类后端**产出同一个 `ParsedDocument`**（`Block` + 必填 `locator`）。外部
+服务回的多半是 markdown + 版面 JSON，那一步翻译由那一路后端的实现自己做完，
+不许把产出放宽成一坨字符串——放宽了的话，「换一个后端」就会连着改切块层。
 
 ⚠ 产出的是**保结构的块序列**，不是一坨字符串（ADR-0033 决策三）。解析器直接
 产出「切好的块」的话，「按标题切」这件事会被每个解析器各实现一遍，然后漂成
@@ -69,7 +79,9 @@ class Block:
 
     kind: BlockKind
     text: str
-    # 标题层级，从 1 起；非标题块是 0
+    # 标题层级 / 列表项的嵌套深度，都从 1 起；两者都不是的块是 0。
+    # ⚠ 一格两义靠 `kind` 分辨：标题与列表项各只用得上其中一种深度，
+    # 而各开一格会让每个解析器都要决定另一格填什么
     level: int = 0
     locator: Locator = field(default_factory=Locator)
 
@@ -102,16 +114,25 @@ class UnsupportedRawItem(ValueError):
     """没有哪一路解析器认得这份原件。由注册表翻成一句给用户看的话。"""
 
 
+class ExternalParseFailed(RuntimeError):
+    """外部解析服务这一次没给出结果。
+
+    ⚠ 实现必须把上游的任何失败（连不上、超时、报错、回了解不开的东西）都翻成
+    这一个异常，别让 http 客户端的异常漏给调用方：漏出去的话摄取管线要认得
+    每一种客户端库的异常类型，而那是把「接哪一路后端」这件事泄进管线里。
+    """
+
+
 @runtime_checkable
-class DocumentParser(Protocol):
-    """一种格式的解析器。
+class ParserBackend(Protocol):
+    """一路解析后端认得哪些原件。两类后端各自往下扩一层。
 
     ⚠ `suffixes` 与 `media_types` 是**显式白名单**，不做「读得动就收」的兜底。
     """
 
     @property
     def name(self) -> str:
-        """这一路解析器在注册表里的名字。⚠ 这三格声明成只读属性而不是可写
+        """这一路后端在注册表里的名字。⚠ 这三格声明成只读属性而不是可写
         字段：实现一律是冻结 dataclass，而冻结字段满足不了可写的协议成员。"""
         ...
 
@@ -125,6 +146,11 @@ class DocumentParser(Protocol):
         """认哪些 media type。"""
         ...
 
+
+@runtime_checkable
+class DocumentParser(ParserBackend, Protocol):
+    """本地库解那一路：在本进程里，用一个 Python 库把一种格式解开。"""
+
     def parse(self, raw: RawItem) -> ParsedDocument:
         """把一份原件解成保结构的块序列。
 
@@ -133,5 +159,35 @@ class DocumentParser(Protocol):
         一起冻住，而现象是「服务好好的，队列不动了」。
 
         Args: raw。
+        """
+        ...
+
+
+@runtime_checkable
+class ExternalParserBackend(ParserBackend, Protocol):
+    """外部服务解那一路：把原件交给另一个进程/另一台机器上的解析服务。
+
+    ⚠ 与本地那一路**故意不是同一个函数签名**：这一路是异步的网络 IO，一次
+    几十秒是常态，而本地那一路是同步的 CPU 活。签名混成一个的话，把外部后端
+    当本地的调用会拿到一个没 await 的协程当 `ParsedDocument` 用，而那不报错。
+
+    ⚠ 一期**没有任何实现**，注册表里是空的（ADR-0043）。留一个「看着能用、
+    调下去报奇怪错」的 stub 比缺席更糟：缺席能被 `/capabilities` 如实答出来。
+    """
+
+    async def parse_remote(
+        self, raw: RawItem, timeout_s: float
+    ) -> ParsedDocument:
+        """把一份原件交给外部服务解，回同样的 `ParsedDocument`。
+
+        ⚠ 实现**必须自己守住 `timeout_s`**（runtime-resilience §2：每个跨进程
+        调用都要有超时），也**绝不自己重试**：摄取那条链只有人按「重新解析」
+        那一层负责重试，逐层重试会相乘成雪崩。
+
+        ⚠ 上游回的 markdown / 版面 JSON 要在这里翻成带 `locator` 的块序列。
+        翻不动就抛 `ExternalParseFailed`，不要回一份没有 locator 的空壳——
+        引用指不出出处的答案等于没有。
+
+        Args: raw, timeout_s。
         """
         ...

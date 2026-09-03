@@ -71,7 +71,7 @@ def llm_context(app_context: AppContext) -> AppContext:
     container = application.state.container
     application.state.container = replace(
         container,
-        llm_cipher=SecretCipher(SECRET, label="test"),
+        llm=replace(container.llm, cipher=SecretCipher(SECRET, label="test")),
         settings=container.settings.model_copy(
             update={"llm_provider_secret": SecretStr(SECRET)}
         ),
@@ -211,6 +211,47 @@ async def test_the_purpose_list_covers_every_purpose_once(
     assert all(one["provider_id"] is None for one in listed)
 
 
+async def test_a_rerank_purpose_reaches_the_catalog_with_its_dialect(
+    llm_context: AppContext, settings: Any
+) -> None:
+    """⚠ 方言随**供应商**下发而不是随模型：调用侧按它挑线形，缺了这一格
+    它只能按默认那一套打，而那多半是一条 404。"""
+    created = await _create(
+        llm_context.client,
+        name="重排那一路",
+        models=[{"name": "gte-rerank-v2", "kind": "rerank"}],
+        options={"rerank_dialect": "dashscope"},
+    )
+    assigned = await llm_context.client.put(
+        f"{PURPOSES}/knowledge.rerank",
+        json={"provider_id": created["id"], "model_name": "gte-rerank-v2"},
+    )
+    assert assigned.status_code == httpx.codes.OK
+    service_key = settings.edge_service_key.get_secret_value()
+    catalog = data_of(
+        await llm_context.client.get(
+            CATALOG, headers={"X-Service-Key": service_key}
+        )
+    )
+    provider = catalog["providers"][0]
+    assert provider["options"] == {"rerank_dialect": "dashscope"}
+    assert provider["models"][0]["kind"] == "rerank"
+    assert provider["models"][0]["dimensions"] is None
+    assert catalog["assignments"][0]["purpose"] == "knowledge.rerank"
+
+
+async def test_a_rerank_purpose_refuses_a_chat_model(
+    llm_context: AppContext,
+) -> None:
+    """⚠ 拿对话模型名去打重排端点是一条必然失败的调用。"""
+    created = await _create(llm_context.client)
+    response = await llm_context.client.put(
+        f"{PURPOSES}/knowledge.rerank",
+        json={"provider_id": created["id"], "model_name": "qwen-plus"},
+    )
+    assert response.status_code == HTTP_BAD_REQUEST
+
+
 async def test_the_internal_catalog_carries_the_plain_key(
     llm_context: AppContext, settings: Any
 ) -> None:
@@ -322,16 +363,32 @@ async def test_a_login_based_provider_serves_the_assistant(
     assert response.status_code == 200, response.text
 
 
-async def test_a_login_based_provider_is_refused_by_the_other_consumer(
+async def test_a_login_based_provider_serves_both_consumers(
     llm_context: AppContext,
 ) -> None:
-    """⚠ 知识库没接这一路的适配器：放行的话分配写得进去、那一侧却永远
-    沿用环境变量那一档，而界面上显示配好了。"""
+    """⚠ 两个消费方都接得了这一路（ADR-0041）。放行一个接不了的消费方等于
+    「分配写得进去、那一侧却永远沿用环境变量那一档」，而界面上显示配好了。"""
+    created = data_of(
+        await llm_context.client.post(PROVIDERS, json=_codex_body())
+    )
+    for purpose in ("assistant.chat", "knowledge.chat"):
+        response = await llm_context.client.put(
+            f"{PURPOSES}/{purpose}",
+            json={"provider_id": created["id"], "model_name": "gpt-5-codex"},
+        )
+        assert response.status_code == httpx.codes.OK, response.text
+
+
+async def test_a_login_based_provider_is_refused_for_embeddings(
+    llm_context: AppContext,
+) -> None:
+    """⚠ 这一路打的不是 embeddings 端点：分配上去的话，每一次嵌入都撞一条
+    必然失败的调用，而界面上显示配好了。"""
     created = data_of(
         await llm_context.client.post(PROVIDERS, json=_codex_body())
     )
     response = await llm_context.client.put(
-        f"{PURPOSES}/knowledge.chat",
+        f"{PURPOSES}/knowledge.embedding",
         json={"provider_id": created["id"], "model_name": "gpt-5-codex"},
     )
     assert response.status_code == HTTP_BAD_REQUEST
@@ -382,5 +439,21 @@ async def test_the_kind_catalog_describes_what_to_configure(
     codex = by_code["codex_oauth"]
     assert codex["is_endpoint_required"] is False
     assert codex["is_login_required"] is True
-    assert codex["consumers"] == ["assistant"]
+    assert codex["consumers"] == ["assistant", "knowledge"]
     assert codex["efforts"] == ["low", "medium", "high", "xhigh"]
+
+
+async def test_the_kind_catalog_lists_the_rerank_dialects(
+    llm_context: AppContext,
+) -> None:
+    """⚠ 方言清单由后端下发而不是前端写死：漂开的表现是界面上选得中一个
+    调用侧根本没装的线形，而那要到第一次检索才看得见。"""
+    listed = data_of(await llm_context.client.get(KINDS))
+    by_code = {one["code"]: one for one in listed}
+    dialects = by_code["openai_compat"]["rerank_dialects"]
+    assert [one["code"] for one in dialects] == ["jina", "dashscope"]
+    assert all(one["label"] for one in dialects)
+    # ⚠ 订阅那一路打不出重排端点，故它一套线形都不该摆
+    assert by_code["codex_oauth"]["rerank_dialects"] == []
+    assert "rerank" in by_code["openai_compat"]["model_kinds"]
+    assert "rerank" not in by_code["codex_oauth"]["model_kinds"]

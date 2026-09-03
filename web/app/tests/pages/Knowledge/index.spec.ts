@@ -65,6 +65,11 @@ const READY: KnowledgeCapability = {
   readyStrategies: ['naive', 'hybrid', 'agentic'],
   acceptedSuffixes: ['.md', '.txt', '.docx', '.xlsx', '.pptx'],
   index: { vector: 'pgvector', keyword: 'trgm', reason: '' },
+  rerank: {
+    isEnabled: false,
+    model: '',
+    reason: '还没给「知识库重排」分配模型',
+  },
 }
 
 const BASE: KnowledgeBase = {
@@ -235,6 +240,11 @@ describe('如实报索引档', () => {
         vector: 'bruteforce',
         keyword: 'like',
         reason: '这套部署的数据库没装 pgvector，检索走的是全表暴力比对',
+      },
+      rerank: {
+        isEnabled: false,
+        model: '',
+        reason: '还没给「知识库重排」分配模型',
       },
     })
 
@@ -603,5 +613,13 @@ describe('权限', () => {
     expect(labels).toContain('重新解析')
     expect(labels).not.toContain('新建知识库')
     expect(wrapper.find('button[aria-label="删除知识库"]').exists()).toBe(false)
+  })
+
+  it('试验台上把重排接没接如实说出来', async () => {
+    // ⚠ 没接时召回按融合名次给出：谁都没说过这一路在哪一档上的话，
+    // 「质量跟别处不一样」是查不动的
+    const wrapper = await render()
+    expect(wrapper.text()).toContain('未接重排')
+    expect(wrapper.text()).toContain('还没给「知识库重排」分配模型')
   })
 })

@@ -61,6 +61,7 @@ const emit = defineEmits<{
 const MODEL_KIND_LABELS: Readonly<Record<string, string>> = {
   chat: '对话',
   embedding: '嵌入',
+  rerank: '重排',
 }
 // 方言体那一格的示例。⚠ 绑成表达式而不是写在模板属性里：JSON 里的双引号会让
 // 模板属性的引号风格在 prettier 与 eslint 之间打架
@@ -96,6 +97,24 @@ const effortOptions = computed<DtSelectOption[]>(() => [
   ...(kind.value?.efforts ?? []).map((one) => ({ value: one, label: one })),
 ])
 
+/** 后端下发的清单里第一个就是默认那一路，缺省项照着它说话。 */
+const dialectOptions = computed<DtSelectOption[]>(() => {
+  const listed = kind.value?.rerank_dialects ?? []
+  const first = listed[0]
+  return [
+    { value: '', label: first ? `按默认（${first.label}）` : '按默认' },
+    ...listed.map((one) => ({ value: one.code, label: one.label })),
+  ]
+})
+
+/** 此刻选中的那一套线形要怎么填端点，说给人听。 */
+const dialectHint = computed(
+  () =>
+    (kind.value?.rerank_dialects ?? []).find(
+      (one) => one.code === form.value.rerankDialect,
+    )?.description ?? '只有登记了重排模型才用得上；各家的路径与请求体不同',
+)
+
 /** 端点那几格只在这一形态真要它们时才摆。 */
 const hasEndpoint = computed(() => kind.value?.is_endpoint_required !== false)
 // ⚠ 摆不摆的判断写成 computed 而不是模板里的表达式：模板里出现 `>` 会把
@@ -104,6 +123,9 @@ const hasPresets = computed(
   () => !isEdit.value && (kind.value?.presets.length ?? 0) > 0,
 )
 const hasEfforts = computed(() => (kind.value?.efforts.length ?? 0) > 0)
+const hasDialects = computed(
+  () => (kind.value?.rerank_dialects.length ?? 0) > 0,
+)
 
 function pickKind(code: string): void {
   form.value = emptyForm(code)
@@ -280,6 +302,13 @@ async function onSubmit(): Promise<void> {
         label="默认推理档位"
         hint="没在面板里单选时按这一档发"
       />
+      <DtSelect
+        v-if="hasDialects"
+        v-model="form.rerankDialect"
+        :options="dialectOptions"
+        label="重排线形"
+        :hint="dialectHint"
+      />
 
       <div class="flex items-center gap-3">
         <DtButton
@@ -342,7 +371,13 @@ async function onSubmit(): Promise<void> {
             size="sm"
             placeholder="向量维数"
           />
-          <DtCheckbox v-else v-model="row.hasVision" label="接图" />
+          <DtCheckbox
+            v-else-if="row.kind === 'chat'"
+            v-model="row.hasVision"
+            label="接图"
+          />
+          <!-- 重排模型既没有维数也不接图；留一格空位撑住这一行的网格 -->
+          <span v-else />
           <DtButton
             variant="ghost"
             intent="danger"

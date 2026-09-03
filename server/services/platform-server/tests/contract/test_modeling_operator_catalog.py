@@ -34,6 +34,10 @@ CODE_EXECUTION_WORDS = ("custom", "code", "script", "eval", "exec", "shell")
 FORBIDDEN_NAMES = ("eval(", "exec(", "importlib", "__import__", "UploadFile")
 # 算子参数允许的字段类型。自由文本只许当标签或列 key
 ALLOWED_CONFIG_TYPES = ("string", "integer", "number", "boolean", "array")
+# 参数 schema 上的控件标记，与算子侧的 `column_field` / `table_field` 同一个键
+WIDGET_KEY = "x-dt-widget"
+COLUMN_WIDGET = "column"
+TABLE_WIDGET = "table"
 
 MODELING_ROOT = (
     Path(__file__).resolve().parents[2]
@@ -148,6 +152,39 @@ def test_every_enum_value_is_explained_in_its_description() -> None:
             explained = _explained(str(field.get("description", "")))
             for value in resolved.get("enum", []):
                 assert value in explained, f"{spec.code}.{name}:{value}"
+
+
+def test_column_references_are_either_one_column_or_a_list_of_them() -> None:
+    """列引用字段只有单值与列表两种形状。
+
+    ⚠ 前端按这个形状分派控件：单值渲染下拉、列表渲染多选。冒出第三种形状时它
+    会掉进兜底的自由文本框，而用户能敲进去任何东西，要到运行那一刻才报错
+    （web/app/src/pages/Modeling/Canvas/scripts/schemaForm.ts）。
+    """
+    for spec in registry.specs():
+        for name, field in _properties(spec.config_schema).items():
+            if field.get(WIDGET_KEY) != COLUMN_WIDGET:
+                continue
+            kind = _kind_of(_resolved(spec.config_schema, field))
+            assert kind in ("string", "array"), f"{spec.code}.{name}"
+            if kind == "array":
+                items = field.get("items", {})
+                assert _kind_of(items) == "string", f"{spec.code}.{name}"
+
+
+def test_a_required_table_reference_rejects_an_empty_code() -> None:
+    """必填的台账引用不许是空串。
+
+    ⚠ 空串是合法的 `str`：不给长度下限的话，一个还没选台账的取数节点整份图校验
+    全绿，要跑到取数那一步才报「台账不存在」，而那时整次运行已经失败。
+    """
+    for spec in registry.specs():
+        for name, field in _properties(spec.config_schema).items():
+            if field.get(WIDGET_KEY) != TABLE_WIDGET:
+                continue
+            if name not in spec.config_schema.get("required", []):
+                continue
+            assert field.get("minLength") == 1, f"{spec.code}.{name}"
 
 
 def test_no_operator_code_smells_of_running_user_code() -> None:

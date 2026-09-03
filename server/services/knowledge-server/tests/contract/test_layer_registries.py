@@ -13,8 +13,11 @@ from knowledge_server.apps.knowledge.services.chunking import (
 )
 from knowledge_server.apps.knowledge.services.parsing import (
     BLOCK_KINDS,
+    EXTERNAL_BACKENDS,
     PARSERS,
     DocumentParser,
+    ExternalParserBackend,
+    ParserBackend,
     accepted_suffixes,
 )
 
@@ -22,6 +25,25 @@ from knowledge_server.apps.knowledge.services.parsing import (
 def test_every_parser_satisfies_the_protocol() -> None:
     for one in PARSERS:
         assert isinstance(one, DocumentParser), one
+
+
+def test_every_external_backend_satisfies_the_protocol() -> None:
+    """⚠ 一期这条是空跑的，但它是接第一路外部后端时的第一道闸：少写一个
+    `suffixes` 的后端装得进去，只在真有人传那种文件时才炸。"""
+    for one in EXTERNAL_BACKENDS:
+        assert isinstance(one, ExternalParserBackend), one
+
+
+def test_both_lanes_satisfy_the_shared_backend_protocol() -> None:
+    for one in (*PARSERS, *EXTERNAL_BACKENDS):
+        assert isinstance(one, ParserBackend), one
+
+
+def test_no_backend_name_is_used_twice_across_the_two_lanes() -> None:
+    """⚠ 两路重名的话，`/capabilities` 报出来的那份名单指不清是哪一个，
+    而运维照着名字去查日志会查到另一路。"""
+    names = [one.name for one in (*PARSERS, *EXTERNAL_BACKENDS)]
+    assert len(names) == len(set(names))
 
 
 def test_every_chunker_satisfies_the_protocol() -> None:
@@ -77,5 +99,7 @@ def test_the_accept_list_is_what_gets_sent_to_the_browser() -> None:
     """⚠ 前端不写死一份：两份漂开的表现是「选得中的文件传上去被拒」，
     而两边单看都对。"""
     assert set(accepted_suffixes()) == {
-        one for parser in PARSERS for one in parser.suffixes
+        one
+        for backend in (*PARSERS, *EXTERNAL_BACKENDS)
+        for one in backend.suffixes
     }

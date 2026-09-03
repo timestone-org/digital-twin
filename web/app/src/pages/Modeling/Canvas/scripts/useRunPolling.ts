@@ -5,6 +5,8 @@
  * 打出几万次请求（MODELING_DESIGN §9.5）。
  * ⚠ 每一轮都带 `AbortSignal`：换一条运行看时上一轮的回包会晚到，不取消的话
  * 它会把新选中那次的状态盖回去。
+ * ⚠ 停表之后**不许再排下一拍**：停表是 abort 在飞的那次，而 abort 让它落进
+ * 「一次问失败」那条分支，径直往下排的话，卸载只是让计时器换了个来源。
  */
 import type { ModelingNodeRun, ModelingRun } from '@dt/contracts'
 import { useToast } from '@dt/ui'
@@ -49,6 +51,9 @@ async function tick(runId: string, state: PollState): Promise<void> {
   } catch {
     // 轮询失败不打断用户：下一拍再试，真出事了会在运行详情里显示
   }
+  // ⚠ 被掐掉之后不许再排下一拍：停表走的是 abort，而 abort 让上面那次请求落进
+  // catch，径直往下排的话，页面已经卸了轮询还在一秒一次地打，直到刷新为止
+  if (controller.signal.aborted) return
   schedule(runId, state)
 }
 

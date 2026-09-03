@@ -90,6 +90,15 @@ export interface KnowledgeIndexLanes {
   reason: string
 }
 
+/** 重排那一路此刻接没接。 */
+export interface KnowledgeRerankLane {
+  isEnabled: boolean
+  /** 此刻用的重排模型名；没接时是空串。 */
+  model: string
+  /** 没接时说得出为什么；接上了是空串。 */
+  reason: string
+}
+
 /** 这套部署此刻的知识库能力。 */
 export interface KnowledgeCapability {
   isEmbeddingEnabled: boolean
@@ -100,6 +109,11 @@ export interface KnowledgeCapability {
   readyStrategies: string[]
   acceptedSuffixes: string[]
   index: KnowledgeIndexLanes
+  /**
+   * 重排接没接。⚠ 没接时检索照常返回融合名次，而**不说**才是那条真正的坑：
+   * 质量忽然变了，却没有任何一处报错。
+   */
+  rerank: KnowledgeRerankLane
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -249,5 +263,16 @@ export function toCapability(value: unknown): KnowledgeCapability {
       keyword: text(index.keyword),
       reason: text(index.reason),
     },
+    rerank: toRerankLane(row.rerank),
+  }
+}
+
+/** 线形 → 重排那一路。⚠ 缺这一段时按「没接」读，不按「接了」读。 */
+function toRerankLane(value: unknown): KnowledgeRerankLane {
+  const row = isRecord(value) ? value : {}
+  return {
+    isEnabled: row.is_enabled === true,
+    model: text(row.model),
+    reason: text(row.reason),
   }
 }

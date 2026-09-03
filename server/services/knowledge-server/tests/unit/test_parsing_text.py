@@ -1,4 +1,7 @@
-"""纯文本族的解析：标题层级要如实解出来，html 里的脚本要剥掉。"""
+"""纯文本族里 markdown 以外的三路：逐行纯文本、html、json。
+
+markdown 那一路在 `test_parsing_markdown.py`。
+"""
 
 from knowledge_server.apps.knowledge.services.parsing import RawItem
 from knowledge_server.apps.knowledge.services.parsing.text import (
@@ -13,43 +16,16 @@ def _raw(name: str, body: str) -> RawItem:
     )
 
 
-def test_markdown_headings_build_a_path() -> None:
-    """⚠ 标题层级是切块质量的主要来源：按标题切出来的块每一块都是完整的意思
-    单元，按定长切出来的块有一半从句子中间开始。"""
-    made = TextParser().parse(
-        _raw("手册.md", "# 第一章\n## 1.1 冷却水\n出口温度不得高于 65 ℃\n")
-    )
-    body = made.blocks[-1]
-    assert body.text == "出口温度不得高于 65 ℃"
-    assert body.locator.path == ("第一章", "1.1 冷却水")
-
-
-def test_a_sibling_heading_pops_the_stack() -> None:
-    """⚠ 不弹栈的话「第二章」会挂在「第一章」下面，而那条错路径会一路带进
-    每一个块的引用里。"""
-    made = TextParser().parse(
-        _raw("手册.md", "# 第一章\n## 1.1 甲\n## 1.2 乙\n正文\n")
-    )
-    assert made.blocks[-1].locator.path == ("第一章", "1.2 乙")
-
-
-def test_a_shallower_heading_pops_everything_below() -> None:
-    made = TextParser().parse(
-        _raw("手册.md", "# 一\n## 1.1\n### 1.1.1\n# 二\n正文\n")
-    )
-    assert made.blocks[-1].locator.path == ("二",)
-
-
-def test_list_items_keep_their_own_kind() -> None:
-    made = TextParser().parse(_raw("a.md", "- 甲\n1. 乙\n普通段落\n"))
-    kinds = [one.kind for one in made.blocks]
-    assert kinds == ["list_item", "list_item", "paragraph"]
-    assert made.blocks[0].text == "甲"
-
-
 def test_blank_lines_never_become_blocks() -> None:
     made = TextParser().parse(_raw("a.txt", "甲\n\n\n乙\n"))
     assert [one.text for one in made.blocks] == ["甲", "乙"]
+
+
+def test_a_nameless_item_falls_back_to_plain_text() -> None:
+    """⚠ 靠 media type 选中的条目常常没有像样的文件名（外部系统拉回来的那一
+    批）。按 markdown 读它们会凭空造出标题层级。"""
+    made = TextParser().parse(_raw("没有后缀", "# 甲\n乙\n"))
+    assert [one.kind for one in made.blocks] == ["paragraph", "paragraph"]
 
 
 def test_html_script_and_style_are_dropped() -> None:

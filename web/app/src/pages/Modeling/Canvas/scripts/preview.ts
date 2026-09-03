@@ -36,6 +36,12 @@ export interface FramePreview {
   colCount: number
   columns: ColumnStat[]
   indexName: string
+  /**
+   * 时间索引的前若干行，**ISO 时刻串**。
+   *
+   * ⚠ 后端给的是毫秒时间戳整数（`Frame.index`），按字符串读会整列读成空串，
+   * 表现是时间那一列一片空白而其余列都正常。
+   */
   indexHead: string[]
   head: unknown[][]
   isRowsTruncated: boolean
@@ -118,6 +124,14 @@ function asTexts(value: unknown): string[] {
   return asList(value).map((item) => asText(item))
 }
 
+/** 毫秒时间戳的列表读成 ISO 时刻串。认不出的那一格给空串。 */
+function momentsOf(value: unknown): string[] {
+  return asList(value).map((item) => {
+    const at = asNumber(item)
+    return at === null ? '' : new Date(at).toISOString()
+  })
+}
+
 function columnStatOf(raw: unknown): ColumnStat {
   const item = asRecord(raw)
   return {
@@ -155,7 +169,7 @@ function frameOf(raw: Record<string, unknown>): FramePreview {
     colCount: asCount(shape['cols']),
     columns: asList(raw['columns']).map(columnStatOf),
     indexName: asText(raw['index_name']),
-    indexHead: asTexts(raw['index_head']),
+    indexHead: momentsOf(raw['index_head']),
     head: asList(raw['head']).map((row) => asList(row)),
     isRowsTruncated: raw['rows_truncated'] === true,
     isColsTruncated: raw['cols_truncated'] === true,
@@ -230,6 +244,27 @@ function metricsOf(raw: Record<string, unknown>): MetricsPreview {
     isPairsTruncated: raw['pairs_truncated'] === true,
     residualBins: residualBinsOf(raw['residual_bins']),
   }
+}
+
+/** 一个节点的一路输出：端口名与它那份摘要。 */
+export interface PortPreview {
+  port: string
+  preview: Preview
+}
+
+/**
+ * 把一个节点的结果摘要读成**逐端口**的清单。
+ *
+ * ⚠ 后端给的摘要是**按端口建键**的（取数是 `{frame: {…}}`，切分是
+ * `{train: {…}, test: {…}}`，回归是 `{model: {…}, scored: {…}}`），不是一份
+ * 摊平的摘要。拿整包去读 `kind` 永远读不到，界面于是把每一步都显示成
+ * 「这一步没有可展示的结果」——而卡片上那行数字也跟着一起空掉。
+ */
+export function portPreviewsOf(raw: Record<string, unknown>): PortPreview[] {
+  return Object.entries(raw).map(([port, value]) => ({
+    port,
+    preview: previewOf(asRecord(value)),
+  }))
 }
 
 /** 读一份摘要。`kind` 认不出来就当 `unknown`。 */

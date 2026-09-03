@@ -1,4 +1,6 @@
-"""Office 三件套的解析。用真库现造文档，不放二进制夹具进仓。
+"""工作簿与演示文稿的解析。用真库现造文档，不放二进制夹具进仓。
+
+Word 那一路在 `test_parsing_word.py`。
 
 ⚠ 现造而不是放夹具文件：一份 .docx 是一个 zip，改一个字都看不出 diff，
 而「夹具是怎么来的」半年后没人说得清。现造的代价是每条用例慢几毫秒。
@@ -6,14 +8,12 @@
 
 from io import BytesIO
 
-from docx import Document
 from openpyxl import Workbook
 from pptx import Presentation
 from pptx.util import Inches
 
 from knowledge_server.apps.knowledge.services.parsing import RawItem
 from knowledge_server.apps.knowledge.services.parsing.office import (
-    DocxParser,
     PptxParser,
     XlsxParser,
 )
@@ -21,57 +21,6 @@ from knowledge_server.apps.knowledge.services.parsing.office import (
 
 def _raw(name: str, body: bytes) -> RawItem:
     return RawItem(filename=name, media_type="", content=body)
-
-
-def _docx(rows: list[tuple[str, str]]) -> bytes:
-    document = Document()
-    for style, text in rows:
-        document.add_paragraph(text, style=style or None)
-    buffer = BytesIO()
-    document.save(buffer)
-    return buffer.getvalue()
-
-
-def test_docx_headings_build_a_path() -> None:
-    made = DocxParser().parse(
-        _raw(
-            "手册.docx",
-            _docx(
-                [
-                    ("Heading 1", "第一章"),
-                    ("Heading 2", "1.1 冷却水"),
-                    ("", "出口温度不得高于 65 ℃"),
-                ]
-            ),
-        )
-    )
-    body = made.blocks[-1]
-    assert body.text == "出口温度不得高于 65 ℃"
-    assert body.locator.path == ("第一章", "1.1 冷却水")
-
-
-def test_docx_tables_become_pipe_rows() -> None:
-    document = Document()
-    document.add_paragraph("说明")
-    table = document.add_table(rows=2, cols=2)
-    table.cell(0, 0).text = "点位"
-    table.cell(0, 1).text = "上限"
-    table.cell(1, 0).text = "出口温度"
-    table.cell(1, 1).text = "65"
-    buffer = BytesIO()
-    document.save(buffer)
-    made = DocxParser().parse(_raw("a.docx", buffer.getvalue()))
-    rows = [one for one in made.blocks if one.kind == "table_row"]
-    assert rows[0].text == "点位 | 上限"
-    assert rows[1].text == "出口温度 | 65"
-    assert rows[1].locator.row == 2
-
-
-def test_docx_empty_paragraphs_are_dropped() -> None:
-    made = DocxParser().parse(
-        _raw("a.docx", _docx([("", "甲"), ("", "   "), ("", "乙")]))
-    )
-    assert [one.text for one in made.blocks] == ["甲", "乙"]
 
 
 def _xlsx(sheets: dict[str, list[list[object]]]) -> bytes:

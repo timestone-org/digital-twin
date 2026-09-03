@@ -191,6 +191,7 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
                 :searched="page.searched.value"
                 :result="page.result.value"
                 :is-searching="page.isSearching.value"
+                :rerank="page.capability.value?.rerank ?? null"
                 @update:query="(value: string) => (page.query.value = value)"
                 @search="page.search"
               />

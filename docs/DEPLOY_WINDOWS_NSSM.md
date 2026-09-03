@@ -450,7 +450,7 @@ function New-B64 { param($n=18)
 "AUTH_EDGE_SIGNING_SECRET = $(New-Hex32)"
 "AUTH_EDGE_SERVICE_KEY    = $(New-Hex32)"
 "COLLECT_CREDENTIAL_SECRET= $(New-Hex32)"
-"ASSISTANT_CREDENTIAL_SECRET = $(New-Hex32)"
+"LLM_PROVIDER_SECRET      = $(New-Hex32)"
 "OSS_ACCESS_KEY           = $(New-B64 12)"
 "OSS_SECRET_KEY           = $(New-Hex32)"
 "AUTH_SEED_ADMIN_PASSWORD = $(New-B64 18)"
@@ -577,7 +577,7 @@ Windows 该改的地方（回环地址、Windows 路径、角色）都已经改�
 | 三个共享密钥（JWT / 边缘签名 / 服务级）| 随机 32 字节，**六份取值一致** | §5.2 |
 | `PLATFORM_OBJECTSTORE_ENDPOINT` | `http://127.0.0.1:9000` | §4.4 |
 | `PLATFORM_OBJECTSTORE_ACCESS_KEY` / `_SECRET_KEY` | MinIO 出厂凭据 —— ⚠ 装 MinIO 时的 root 凭据要用**同一对**（§4.4）| §5.2 |
-| `PLATFORM_COLLECT_CREDENTIAL_SECRET`、`ASSISTANT_CREDENTIAL_SECRET` | 随机 32 字节 | §5.2 |
+| `PLATFORM_COLLECT_CREDENTIAL_SECRET`、`PLATFORM_LLM_PROVIDER_SECRET` | 随机 32 字节 | §5.2 |
 | `PLATFORM_ASSETCOMPRESS_NODE` / `_SCRIPT`、`OPCUA_PKI_DIR` | Windows 路径 | §5.4 |
 | `PLATFORM_SQLSERVER_CHARSET` | `CP936` | §4.3 |
 
@@ -596,7 +596,7 @@ worker 与 publisher 由 nssm 的环境变量覆盖（环境变量压过 `.env`�
 | 走哪一路 | 至少要填 |
 |---|---|
 | 按量计费的 OpenAI 兼容端点 | `ASSISTANT_MODEL_ENABLED=true` + `ASSISTANT_MODEL_API_KEY` + `_BASE_URL` / `_CHAT` / `_VISION` |
-| ChatGPT / Codex 订阅（ADR-0026）| `ASSISTANT_CODEX_ENABLED=true` + `ASSISTANT_CODEX_MODEL` + `ASSISTANT_CREDENTIAL_SECRET`（已生成），装好后还要去 系统管理 → 模型管理 走一次设备码登录 |
+| ChatGPT / Codex 订阅（ADR-0026 / ADR-0041）| 不配环境变量：`PLATFORM_LLM_PROVIDER_SECRET`（已生成）之外，去 系统管理 → 模型管理 建一路「Codex 订阅」形态的供应商，在那一行上走一次设备码登录 |
 
 ⚠ **开关为真却不给密钥/模型代号 = 启动即失败**，这是刻意的：「起来之后每次
 对话才报错」比起不来难查得多。

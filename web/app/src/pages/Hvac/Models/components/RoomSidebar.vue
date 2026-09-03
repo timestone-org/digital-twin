@@ -4,9 +4,11 @@
  *
  * ⚠ 过滤只影响显示、不动选中：当前选中的房间被筛掉时它仍然是选中的，右区照常
  * 显示它的模型，栏里补一句说明。
+ * ⚠ 2xl 以下这一栏是横躺在表格上方的，排成一列会让房间名与它的模型数隔着整屏
+ * 宽——所以窄档按网格铺，只有真立成侧栏（2xl）时才收回一列。
  */
 import { computed, ref } from 'vue'
-import { DtEmpty, DtIcon, DtInput } from '@dt/ui'
+import { DtCard, DtEmpty, DtIcon, DtInput, DtTag } from '@dt/ui'
 
 import {
   ROOM_FILTER_MIN,
@@ -41,21 +43,20 @@ const isSelectedHidden = computed(
 </script>
 
 <template>
-  <nav
-    class="flex min-h-0 flex-col gap-2 rounded-lg border border-border-subtle bg-surface-panel p-3"
-    aria-label="房间"
+  <DtCard
+    icon="building"
+    title="房间"
+    padding="sm"
+    class="flex min-h-0 flex-col"
   >
-    <div class="flex shrink-0 items-baseline justify-between gap-2">
-      <span class="text-xs tracking-widest text-text-secondary">房间</span>
-      <span class="text-2xs text-text-disabled">
-        {{ props.entries.length }} 个
-      </span>
-    </div>
+    <template #actions>
+      <DtTag size="sm">{{ props.entries.length }}</DtTag>
+    </template>
 
     <DtInput
       v-if="showFilter"
       v-model="keyword"
-      class="shrink-0"
+      class="mb-2 shrink-0"
       type="search"
       size="sm"
       placeholder="筛房间"
@@ -64,19 +65,29 @@ const isSelectedHidden = computed(
       <template #leading><DtIcon name="search" :size="14" /></template>
     </DtInput>
 
+    <!-- ⚠ 出路那句话只写在右区那条空态上：两边同时铺开一模一样的一段，
+         2xl 以下它们是上下叠着的，读起来像同一句话说了两遍 -->
     <DtEmpty
       v-if="props.entries.length === 0"
       icon="building"
       title="还没有配置房间"
-      hint="先在空间配置页建车间与房间，并把空调挂到房间上。"
     />
 
-    <div v-else class="min-h-0 flex-1 space-y-2 overflow-y-auto">
+    <nav
+      v-else
+      class="min-h-0 flex-1 space-y-2.5 overflow-y-auto"
+      aria-label="房间"
+    >
       <section v-for="group in groups" :key="group.id">
-        <h3 v-if="showGroupHeads" class="px-2 py-1 text-2xs text-text-disabled">
+        <h3
+          v-if="showGroupHeads"
+          class="mb-1 text-2xs font-medium tracking-widest text-text-disabled"
+        >
           {{ group.name }}
         </h3>
-        <ul class="m-0 list-none space-y-0.5 p-0">
+        <ul
+          class="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-1.5 p-0 2xl:grid-cols-1"
+        >
           <RoomSidebarItem
             v-for="room in group.rooms"
             :key="room.id"
@@ -87,19 +98,22 @@ const isSelectedHidden = computed(
         </ul>
       </section>
 
-      <p v-if="visible.length === 0" class="px-2 text-2xs text-text-disabled">
+      <p v-if="visible.length === 0" class="text-2xs text-text-disabled">
         没有匹配「{{ keyword }}」的房间。
       </p>
-    </div>
+    </nav>
 
-    <p v-if="isSelectedHidden" class="shrink-0 text-2xs text-text-disabled">
+    <p
+      v-if="isSelectedHidden"
+      class="mt-2 shrink-0 text-2xs leading-relaxed text-text-disabled"
+    >
       当前选中的房间不在筛选结果里
     </p>
     <p
       v-if="props.hiddenCount > 0"
-      class="shrink-0 text-2xs text-text-disabled"
+      class="mt-2 shrink-0 text-2xs leading-relaxed text-text-disabled"
     >
       另有 {{ props.hiddenCount }} 个房间没有空调，不能建模
     </p>
-  </nav>
+  </DtCard>
 </template>

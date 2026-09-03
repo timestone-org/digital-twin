@@ -172,9 +172,58 @@ def test_an_unknown_option_key_is_rejected() -> None:
         )
 
 
-def test_an_endpoint_provider_has_no_options_to_configure() -> None:
-    with pytest.raises(ValidationError, match="没有可配的选项"):
+def test_an_endpoint_provider_has_no_reasoning_effort_to_configure() -> None:
+    """⚠ 形态之间的键不通用：端点那一路配得出重排线形，配不出推理档位。"""
+    with pytest.raises(ValidationError, match="不认识配置项"):
         _provider(options={"default_effort": "high"})
+
+
+def test_the_endpoint_kind_takes_a_rerank_dialect() -> None:
+    made = _provider(
+        models=[{"name": "gte-rerank", "kind": "rerank"}],
+        options={"rerank_dialect": "dashscope"},
+    )
+    assert made.options == {"rerank_dialect": "dashscope"}
+
+
+def test_an_unknown_rerank_dialect_is_rejected() -> None:
+    """⚠ 这边配得出而调用侧没装的话，表现是「选得中、调用时说不认识」。"""
+    with pytest.raises(ValidationError, match="重排线形"):
+        _provider(options={"rerank_dialect": "cohere-v3"})
+
+
+def test_a_login_based_provider_rejects_rerank_models() -> None:
+    """⚠ 订阅那一路打的不是重排端点，登记了也没人读得到。"""
+    with pytest.raises(ValidationError, match="登记不了"):
+        LlmProviderIn.model_validate(
+            {
+                "name": "Codex",
+                "kind": PROVIDER_KIND_CODEX_OAUTH,
+                "models": [{"name": "r", "kind": "rerank"}],
+            }
+        )
+
+
+def test_a_login_based_provider_has_no_rerank_dialect_to_configure() -> None:
+    with pytest.raises(ValidationError, match="不认识配置项"):
+        LlmProviderIn.model_validate(
+            {
+                "name": "Codex",
+                "kind": PROVIDER_KIND_CODEX_OAUTH,
+                "models": [],
+                "options": {"rerank_dialect": "jina"},
+            }
+        )
+
+
+def test_a_rerank_model_carries_no_dimensions() -> None:
+    """⚠ 重排什么都不落库：给它一格维数会让读侧把它当成嵌入模型。"""
+    with pytest.raises(ValidationError, match="只有嵌入模型"):
+        _provider(
+            models=[
+                {"name": "gte-rerank", "kind": "rerank", "dimensions": 1024}
+            ]
+        )
 
 
 def test_an_unknown_provider_kind_is_rejected() -> None:

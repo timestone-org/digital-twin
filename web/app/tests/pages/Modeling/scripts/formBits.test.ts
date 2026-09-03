@@ -8,7 +8,10 @@ import {
   isDefault,
   missingHint,
 } from '@/pages/Modeling/Canvas/scripts/schemaForm'
-import { headlineOf } from '@/pages/Modeling/Canvas/scripts/nodeHeadline'
+import {
+  headlineFromPayload,
+  headlineOf,
+} from '@/pages/Modeling/Canvas/scripts/nodeHeadline'
 import {
   RELATIVE_PRESETS,
   isRelative,
@@ -167,5 +170,26 @@ describe('无定义的指标不往卡片上印', () => {
         residualBins: [],
       }),
     ).toBe('RMSE 2 · MAE 1')
+  })
+})
+
+// ⚠ 卡片上那行数字与结果弹窗走的是同一份摘要，而它按端口建键。整包直接读
+// `kind` 的话这行会一直是空的，且没有任何报错——只是数字不见了。
+describe('卡片那行数字直接读摘要', () => {
+  const FRAME = { kind: 'frame', shape: { rows: 1200, cols: 8 } }
+
+  it('摘要包在端口里也读得出行列数', () => {
+    expect(headlineFromPayload({ frame: FRAME })).toBe('1,200 行 × 8 列')
+  })
+
+  it('多路输出取头一路说得出话的', () => {
+    expect(
+      headlineFromPayload({ model: { kind: 'unknown' }, scored: FRAME }),
+    ).toBe('1,200 行 × 8 列')
+  })
+
+  it('一路都说不出话时给空串，卡片就不印这一行', () => {
+    expect(headlineFromPayload({})).toBe('')
+    expect(headlineFromPayload({ out: { kind: '将来某种' } })).toBe('')
   })
 })

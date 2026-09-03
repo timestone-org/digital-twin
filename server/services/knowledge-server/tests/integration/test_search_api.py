@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from knowledge_server.apps.knowledge import crud
-from knowledge_server.apps.knowledge.schemas import SearchIn
+from knowledge_server.apps.knowledge.schemas import SearchIn, SearchOut
 from knowledge_server.apps.knowledge.services import search_service
 from knowledge_server.apps.knowledge.services.indexing import (
     BruteForceIndex,
@@ -21,12 +21,14 @@ from knowledge_server.apps.knowledge.services.ingest_pipeline import (
     ingest,
 )
 from knowledge_server.apps.knowledge.services.parsing import RawItem
+from knowledge_server.apps.knowledge.services.reranking import NullReranker
 from knowledge_server.apps.knowledge.services.retrieval import (
     RetrievalDeps,
     build_strategies,
 )
 from knowledge_server.apps.knowledge.services.sources import UPLOAD_KIND
 from knowledge_server.settings import API_PREFIX
+from llmcore.rerank import RerankScore
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -273,6 +275,92 @@ async def test_an_ingested_document_comes_back_with_its_citation(
     assert first.chunk_id
     assert first.heading_path
     assert first.why
+
+
+@dataclass
+class FakeReranker:
+    """把名次整个倒过来的假重排：真排过与没排过一眼就分得出。"""
+
+    id: str = "fake-rerank"
+    model: str | None = "rerank-1"
+    can_rerank: bool = True
+    batch: int = 0
+
+    async def rerank(
+        self, query: str, documents: Sequence[str], *, top_n: int
+    ) -> list[RerankScore]:
+        del query, top_n
+        self.batch = len(documents)
+        return [
+            RerankScore(index=index, score=float(index + 1))
+            for index in reversed(range(len(documents)))
+        ]
+
+
+async def test_the_rerank_lane_decides_the_final_order(
+    db_sessions: object,
+) -> None:
+    """⚠ 接了重排就**多召一批再排**：只召 limit 条的话，重排能做的只有把
+    这几条换个顺序，而它真正的价值是把排在 limit 之外的那一条捞上来。"""
+    base_id, document_id = await seeded(db_sessions)
+    embedder = FakeEmbedder()
+    await ingest(
+        db_sessions,  # pyright: ignore[reportArgumentType]
+        ingest_deps(embedder),
+        document_id,
+    )
+    lane = FakeReranker()
+    plain = await _searched(db_sessions, base_id, embedder, NullReranker())
+    ranked = await _searched(db_sessions, base_id, embedder, lane)
+    assert plain.hits
+    assert ranked.hits
+    assert [one.chunk_id for one in ranked.hits] == [
+        one.chunk_id for one in reversed(plain.hits)
+    ]
+    assert "重排" in ranked.hits[0].why
+
+
+async def test_the_rerank_lane_gets_a_wider_batch_than_what_is_asked_for(
+    db_sessions: object,
+) -> None:
+    """⚠ 只送 limit 条的话，重排能做的只有把这几条换个顺序，
+    而它真正的价值是把排在 limit 之外、其实最相关的那一条捞上来。"""
+    base_id, document_id = await seeded(db_sessions)
+    embedder = FakeEmbedder()
+    await ingest(
+        db_sessions,  # pyright: ignore[reportArgumentType]
+        ingest_deps(embedder),
+        document_id,
+    )
+    lane = FakeReranker()
+    made = await _searched(db_sessions, base_id, embedder, lane, limit=1)
+    assert len(made.hits) == 1
+    assert lane.batch > 1
+
+
+async def _searched(
+    db_sessions: object,
+    base_id: uuid.UUID,
+    embedder: FakeEmbedder,
+    reranker: object,
+    limit: int = 2,
+) -> SearchOut:
+    """按给定的重排跑一次 hybrid 检索。
+
+    Args: db_sessions, base_id, embedder, reranker, limit。
+    """
+    deps = RetrievalDeps(
+        indexes=IndexPair(vector=BruteForceIndex(), keyword=LikeKeywordIndex()),
+        embedder=embedder,  # pyright: ignore[reportArgumentType]
+        reranker=reranker,  # pyright: ignore[reportArgumentType]
+    )
+    async with db_sessions() as session:  # pyright: ignore[reportCallIssue]
+        return await search_service.search(
+            session,
+            build_strategies(deps),
+            base_id,
+            SearchIn(query="出口温度", limit=limit),
+        )
 
 
 async def test_ask_refuses_a_strategy_that_only_retrieves(

@@ -12,10 +12,10 @@ import { describe, expect, it } from 'vitest'
 import type { LlmProviderKind } from '@dt/contracts'
 
 import {
-  effortOf,
   emptyForm,
   emptyRow,
   formOf,
+  optionText,
   parseExtraBody,
   suggestedRow,
   toCreateInput,
@@ -32,7 +32,17 @@ const ENDPOINT_KIND: LlmProviderKind = {
   model_kinds: ['chat', 'embedding'],
   consumers: ['assistant', 'knowledge'],
   efforts: [],
+  rerank_dialects: [],
   presets: [],
+}
+
+const RERANK_KIND: LlmProviderKind = {
+  ...ENDPOINT_KIND,
+  model_kinds: ['chat', 'embedding', 'rerank'],
+  rerank_dialects: [
+    { code: 'jina', label: 'Jina 兼容', description: '' },
+    { code: 'dashscope', label: '原生', description: '' },
+  ],
 }
 
 const LOGIN_KIND: LlmProviderKind = {
@@ -44,6 +54,7 @@ const LOGIN_KIND: LlmProviderKind = {
   model_kinds: ['chat'],
   consumers: ['assistant'],
   efforts: ['low', 'medium', 'high', 'xhigh'],
+  rerank_dialects: [],
   presets: [],
 }
 
@@ -281,7 +292,83 @@ describe('形态', () => {
 
   it('形态配置里塞了个不是字符串的值时当没配', () => {
     // ⚠ 这一格要原样进请求体，塞个数字进去是后端一条 400
-    expect(effortOf({ default_effort: 3 })).toBe('')
-    expect(effortOf(null)).toBe('')
+    expect(optionText({ default_effort: 3 }, 'default_effort')).toBe('')
+    expect(optionText(null, 'default_effort')).toBe('')
+  })
+
+  it('端点那一形态带得出重排线形，且没选时不发这一格', () => {
+    const form = filled()
+    form.models = [
+      {
+        key: 'r1',
+        name: 'gte-rerank',
+        kind: 'rerank',
+        hasVision: false,
+        dimensions: '',
+      },
+    ]
+    expect(toCreateInput(form, RERANK_KIND).options).toBeNull()
+    form.rerankDialect = 'dashscope'
+    expect(toCreateInput(form, RERANK_KIND).options).toEqual({
+      rerank_dialect: 'dashscope',
+    })
+  })
+
+  it('重排模型不带维数：带了的话读侧会把它当成嵌入模型', () => {
+    const form = filled()
+    form.models = [
+      {
+        key: 'r1',
+        name: 'gte-rerank',
+        kind: 'rerank',
+        hasVision: true,
+        dimensions: '1024',
+      },
+    ]
+    const made = toCreateInput(form, RERANK_KIND).models[0]
+    expect(made?.dimensions).toBeNull()
+    expect(made?.has_vision).toBe(false)
+  })
+
+  it('这一形态登记不了重排时那一行被拦下', () => {
+    const form = filled()
+    form.models = [
+      {
+        key: 'r1',
+        name: 'gte-rerank',
+        kind: 'rerank',
+        hasVision: false,
+        dimensions: '',
+      },
+    ]
+    expect(validateForm(form, ENDPOINT_KIND, false)).toContain('登记不了')
+  })
+
+  it('从一路已有的供应商铺表单时读回它的重排线形', () => {
+    const form = formOf({
+      id: 'p3',
+      name: '重排那一路',
+      kind: 'openai_compat',
+      base_url: 'https://endpoint/api/v1',
+      api_key_hint: '…a1b2',
+      is_enabled: true,
+      extra_body: null,
+      options: { rerank_dialect: 'dashscope' },
+      models: [
+        {
+          name: 'gte-rerank',
+          kind: 'rerank',
+          has_vision: false,
+          dimensions: null,
+        },
+      ],
+      notes: '',
+      assigned_purposes: [],
+      updated_by: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+    })
+    expect(form.rerankDialect).toBe('dashscope')
+    expect(form.models[0]?.kind).toBe('rerank')
   })
 })

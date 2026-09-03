@@ -27,7 +27,9 @@ import type {
   KnowledgeDocument,
   KnowledgeHit,
   KnowledgeIndexCapability,
+  KnowledgeRerankCapability,
   KnowledgeLocator,
+  KnowledgeParsingCapability,
   KnowledgeSearchResult,
   KnowledgeSource,
   KnowledgeSyncResult,
@@ -71,14 +73,28 @@ const SHAPES: Record<string, Record<string, true>> = {
     ready_strategies: true,
     source_kinds: true,
     accepted_suffixes: true,
+    parsing: true,
     index: true,
+    rerank: true,
   } satisfies Keys<KnowledgeCapability>,
+
+  ParsingCapabilityOut: {
+    local_backends: true,
+    external_backends: true,
+    reason: true,
+  } satisfies Keys<KnowledgeParsingCapability>,
 
   IndexCapabilityOut: {
     vector: true,
     keyword: true,
     reason: true,
   } satisfies Keys<KnowledgeIndexCapability>,
+
+  RerankCapabilityOut: {
+    is_enabled: true,
+    model: true,
+    reason: true,
+  } satisfies Keys<KnowledgeRerankCapability>,
 
   KnowledgeBaseOut: {
     id: true,

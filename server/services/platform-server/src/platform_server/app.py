@@ -143,13 +143,14 @@ def _client_hooks(container: Container) -> tuple[LifespanHook, ...]:
 
 
 def _http_hooks(container: Container) -> tuple[LifespanHook, ...]:
-    """与 Redis 那批同批关的：两份内部 HTTP 客户端。
+    """与 Redis 那批同批关的：那几份内部 HTTP 客户端。
 
-    ⚠ 它们各持一个连接池、一个进程一份且长活，不关就是退出时留下两组还开着
+    ⚠ 它们各持一个连接池、一个进程一份且长活，不关就是退出时留下几组还开着
     的 socket。
 
     Args: container。
     """
+    oauth = container.llm.oauth_http
     return (
         LifespanHook(
             name="realtime",
@@ -160,6 +161,18 @@ def _http_hooks(container: Container) -> tuple[LifespanHook, ...]:
             name="opcua",
             shutdown=container.nodes.close,
             shutdown_order=97,
+        ),
+        # ⚠ 没开目录时它根本没建：装了才关，没装就不摆一个空钩子
+        *(
+            ()
+            if oauth is None
+            else (
+                LifespanHook(
+                    name="llm_oauth",
+                    shutdown=oauth.aclose,
+                    shutdown_order=97,
+                ),
+            )
         ),
     )
 

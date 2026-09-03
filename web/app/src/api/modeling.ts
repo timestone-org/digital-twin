@@ -122,14 +122,20 @@ export async function deleteModelingPipeline(
 /**
  * 静态检查一张图。**不落库、不排队**，画布上随时可以按。
  * @param graph 当前画布上那张图，可以是还没保存的
+ * @param signal 边改边校验用；下一次发起时要能把上一次作废
  */
 export async function validateModelingGraph(
   pipelineId: string,
   graph: ModelingGraph,
+  signal?: AbortSignal,
 ): Promise<ModelingGraphCheck> {
   return await requestData<ModelingGraphCheck>(
     `/modeling-pipelines/${pipelineId}:validate`,
-    onPlatform({ method: 'POST', body: { graph } }),
+    onPlatform({
+      method: 'POST',
+      body: { graph },
+      ...(signal === undefined ? {} : { signal }),
+    }),
   )
 }
 

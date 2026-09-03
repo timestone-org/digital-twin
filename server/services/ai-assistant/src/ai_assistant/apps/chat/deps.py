@@ -117,6 +117,6 @@ async def get_model_defaults(
     """
     return await model_profiles.defaults_of(
         container.models,
-        container.credentials,
+        container.logins,
         effort=container.settings.codex_reasoning_effort,
     )

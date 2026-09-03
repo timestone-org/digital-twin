@@ -9,16 +9,16 @@
 import { effectScope } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/api/assistant', () => ({
+vi.mock('@/api/llmProviders', () => ({
   startDeviceLogin: vi.fn(),
   pollDeviceLogin: vi.fn(),
   readCredential: vi.fn(),
   forgetCredential: vi.fn(),
 }))
 
-const api = await import('@/api/assistant')
+const api = await import('@/api/llmProviders')
 /** 目录里那一路订阅账号的 id；登录接口认的就是它 */
-const PROVIDER_REF = 'codex'
+const PROVIDER_REF = '8f0c1e3a-0000-7000-8000-000000000006'
 
 const { useCodexLogin } =
   await import('@/pages/System/Models/scripts/useCodexLogin')
@@ -35,7 +35,7 @@ function started(ref_ = 'r1', interval = 5) {
 
 function connected() {
   return {
-    provider: 'codex',
+    provider_id: PROVIDER_REF,
     is_connected: true,
     account_label: '…a1b2c3',
     plan_label: 'plus',
@@ -61,7 +61,7 @@ describe('设备码登录', () => {
     vi.mocked(api.pollDeviceLogin).mockResolvedValue({
       is_done: false,
       interval_s: 7,
-      status: null,
+      credential: null,
     })
     const scope = effectScope()
     const login = scope.run(() => useCodexLogin(() => PROVIDER_REF))
@@ -80,7 +80,7 @@ describe('设备码登录', () => {
     vi.mocked(api.pollDeviceLogin).mockResolvedValue({
       is_done: false,
       interval_s: 9,
-      status: null,
+      credential: null,
     })
     const scope = effectScope()
     const login = scope.run(() => useCodexLogin(() => PROVIDER_REF))
@@ -101,7 +101,7 @@ describe('设备码登录', () => {
     vi.mocked(api.pollDeviceLogin).mockResolvedValue({
       is_done: true,
       interval_s: 5,
-      status: connected(),
+      credential: connected(),
     })
     const scope = effectScope()
     const login = scope.run(() => useCodexLogin(() => PROVIDER_REF))
@@ -122,7 +122,7 @@ describe('设备码登录', () => {
     vi.mocked(api.pollDeviceLogin).mockResolvedValue({
       is_done: false,
       interval_s: 5,
-      status: null,
+      credential: null,
     })
     const scope = effectScope()
     const login = scope.run(() => useCodexLogin(() => PROVIDER_REF))
@@ -141,7 +141,7 @@ describe('设备码登录', () => {
     vi.mocked(api.pollDeviceLogin).mockResolvedValue({
       is_done: false,
       interval_s: 5,
-      status: null,
+      credential: null,
     })
     const scope = effectScope()
     const login = scope.run(() => useCodexLogin(() => PROVIDER_REF))
@@ -168,7 +168,7 @@ describe('设备码登录', () => {
     vi.mocked(api.pollDeviceLogin).mockResolvedValue({
       is_done: false,
       interval_s: 5,
-      status: null,
+      credential: null,
     })
     const scope = effectScope()
     const login = scope.run(() => useCodexLogin(() => PROVIDER_REF))
@@ -199,7 +199,7 @@ describe('设备码登录', () => {
     if (login !== undefined) login.status.value = connected()
     await login?.signOut()
 
-    expect(api.forgetCredential).toHaveBeenCalledWith('codex')
+    expect(api.forgetCredential).toHaveBeenCalledWith(PROVIDER_REF)
     expect(login?.status.value).toBeNull()
     scope.stop()
   })

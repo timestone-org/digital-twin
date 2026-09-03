@@ -20,6 +20,11 @@ dependencies = [
     # 上却会在第一次读外库时炸 `ZoneInfoNotFoundError: 'Asia/Shanghai'`。
     "tzdata>=2025.2",
     "cryptography>=43",
+    # 订阅账号那一路的设备码登录（ADR-0041）。⚠ 只借它的**协议常量**——
+    # client_id、几个端点地址与 scope；抄一份字面量进来的话，上游改地址时我们
+    # 静默失效，而现象是「登录页转圈转到超时」。设备码那两跳的线形不借它的，
+    # 见 `apps/llm_providers/services/oauth_client.py` 文件头列的四处差异
+    "langchain-openai>=1.6",
 ]
 
 [project.scripts]
