@@ -123,6 +123,7 @@ function sessionOf(id: string, title = ''): KnowledgeChatSession {
     id,
     user_id: 'u1',
     title,
+    base_scope: null,
     is_archived: false,
     row_version: 1,
     last_error: null,

@@ -24,6 +24,7 @@ function detailOf(text: string): KnowledgeChatSessionDetail {
     id: 's1',
     user_id: 'u1',
     title: '',
+    base_scope: null,
     is_archived: false,
     row_version: 1,
     last_error: null,

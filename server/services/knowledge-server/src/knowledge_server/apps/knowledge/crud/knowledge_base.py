@@ -1,6 +1,7 @@
 """知识库行的数据访问。只做查询与写入，**不提交**——事务边界归 service 层。"""
 
 import uuid
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -62,22 +63,51 @@ async def get_base(
 
 
 async def list_bases(
-    session: AsyncSession, *, offset: int, limit: int
+    session: AsyncSession,
+    *,
+    offset: int,
+    limit: int,
+    only_ids: Collection[uuid.UUID] | None = None,
 ) -> tuple[list[KnowledgeBase], int]:
     """列一页库与总数。
 
-    Args: session, offset, limit。
+    ⚠ `only_ids` 为空集合与为 `None` 是两回事：前者一个都不列，后者不筛。
+    收成「假值即不筛」的话，「这次对话一个库都取不到」会静默变成「全都能取」。
+
+    Args: session, offset, limit, only_ids（None = 不筛）。
     """
+    # ⚠ 空元组摊进 `where` 就是不加条件；`None` 与空集合的分别在这里定下来
+    narrowed = () if only_ids is None else (KnowledgeBase.id.in_(only_ids),)
     rows = await session.execute(
         select(KnowledgeBase)
+        .where(*narrowed)
         .order_by(KnowledgeBase.created_at.desc())
         .offset(offset)
         .limit(limit)
     )
     total = await session.execute(
-        select(func.count()).select_from(KnowledgeBase)
+        select(func.count()).select_from(KnowledgeBase).where(*narrowed)
     )
     return (list(rows.scalars()), int(total.scalar_one()))
+
+
+async def names_of(
+    session: AsyncSession, base_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, str]:
+    """这几个库各叫什么；查不到的 id 不出现在结果里。
+
+    ⚠ 一次问一批而不是逐个问：调用方拿它给一页会话解析范围，逐个问就是 N+1。
+
+    Args: session, base_ids。
+    """
+    if not base_ids:
+        return {}
+    rows = await session.execute(
+        select(KnowledgeBase.id, KnowledgeBase.name).where(
+            KnowledgeBase.id.in_(base_ids)
+        )
+    )
+    return {one.id: one.name for one in rows}
 
 
 async def delete_base(session: AsyncSession, base_id: uuid.UUID) -> int:

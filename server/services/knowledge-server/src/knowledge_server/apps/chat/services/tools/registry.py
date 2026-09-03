@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from knowledge_server.apps.chat.services.scope import BaseScope
 from knowledge_server.apps.chat.services.tools.client import ClientTools
 from knowledge_server.apps.chat.services.tools.knowledge import (
     KnowledgeTools,
@@ -38,6 +39,9 @@ class ToolDeps:
     sessions: Sessions
     # 这一次能用的那几种检索策略；由装配层按启动探测算好
     strategies: tuple[RetrievalStrategy, ...]
+    # 这个会话能取哪几个库的数（ADR-0044）。⚠ 逐次造注册表时传进来：范围钉在
+    # 会话上，做成进程级的那一份会让两个会话互相看见对方的库
+    scope: BaseScope
 
 
 def build_registry(deps: ToolDeps) -> ToolRegistry:
@@ -47,7 +51,11 @@ def build_registry(deps: ToolDeps) -> ToolRegistry:
     """
     return registry_of(
         (
-            KnowledgeTools(sessions=deps.sessions, strategies=deps.strategies),
+            KnowledgeTools(
+                sessions=deps.sessions,
+                strategies=deps.strategies,
+                scope=deps.scope,
+            ),
             ClientTools(),
         )
     )

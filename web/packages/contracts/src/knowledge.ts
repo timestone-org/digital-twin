@@ -294,11 +294,29 @@ export interface KnowledgeChatMessage {
   created_at: string
 }
 
-/** 对话列表里的一行。⚠ 没有 `base_id`：对话是跨库的，模型自己决定去哪个库找。 */
+/**
+ * 范围里的一个知识库。
+ * ⚠ `is_missing` 为真的那条是**已经被删掉的库**，仍然留在范围里：从范围里
+ * 抹掉等于替用户把边界改宽，而他从界面上看不出来。
+ */
+export interface KnowledgeChatScopeBase {
+  base_id: string
+  /** 库名；已经没有这个库时是空串。 */
+  name: string
+  is_missing: boolean
+}
+
+/**
+ * 对话列表里的一行。
+ * ⚠ 没有 `base_id`：对话默认跨全部库，模型自己决定去哪个库找；用户可以把
+ * 范围收窄到 `base_scope` 里那几个（ADR-0044）。
+ */
 export interface KnowledgeChatSession {
   id: string
   user_id: string
   title: string
+  /** 这次对话去哪几个库取数。⚠ `null` = 全部知识库，不是「一个都没有」。 */
+  base_scope: KnowledgeChatScopeBase[] | null
   is_archived: boolean
   /** 乐观锁行版本。改标题与归档都推进它。 */
   row_version: number
@@ -311,6 +329,20 @@ export interface KnowledgeChatSession {
 /** 对话详情：列表那一行加上全部消息与步骤。 */
 export interface KnowledgeChatSessionDetail extends KnowledgeChatSession {
   messages: KnowledgeChatMessage[]
+}
+
+/**
+ * 改一条对话。缺省的字段表示本次不涉及。
+ * ⚠ `base_scope_ids` 给成 `null` 是「改回全部知识库」，与缺省不是一回事；
+ * 空数组是非法入参，后端当场 400。
+ * ⚠ `expected_version` 带上才有乐观锁：不带就是无条件覆盖，两个标签页各改
+ * 各的时，后写的那次会把先写的范围悄悄顶掉。
+ */
+export interface KnowledgeChatSessionPatch {
+  title?: string
+  is_archived?: boolean
+  base_scope_ids?: string[] | null
+  expected_version?: number
 }
 
 /** 浏览器跑完反问之后带回来的东西。`call_id` 必须是模型给的那个逐字原样。 */
@@ -332,3 +364,9 @@ export interface KnowledgeChatAdvanceIn {
 
 /** 这套部署没接对话档（领域 23）。⚠ 按码分支，不按 message。 */
 export const KNOWLEDGE_CHAT_UNAVAILABLE_CODE = 42321
+
+/** 范围里点名的知识库不存在（领域 23）。 */
+export const KNOWLEDGE_CHAT_SCOPE_UNKNOWN_CODE = 42322
+
+/** 这个对话在别处改过了，手上这份是旧的（领域 23）。 */
+export const KNOWLEDGE_CHAT_CONFLICT_CODE = 42323

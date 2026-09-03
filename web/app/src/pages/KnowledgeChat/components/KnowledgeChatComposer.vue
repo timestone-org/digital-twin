@@ -17,22 +17,30 @@
  * + 整段转写」整体覆盖，改在转写那一截里的字会被下一帧冲掉。
  */
 import { computed, ref, watch } from 'vue'
+import type { KnowledgeChatScopeBase } from '@dt/contracts'
 import { DtButton, DtNotice, DtTextarea } from '@dt/ui'
 
 import AiInputBox from '@/components/ai/AiInputBox.vue'
 import { composeKeyOf } from '@/features/ai/composeKeys'
 import { useSpeechInput } from '@/features/speech/useSpeechInput'
+import type { KnowledgeBase } from '@/api/knowledge'
+import ChatScopePicker from './ChatScopePicker.vue'
 
 const props = defineProps<{
   running: boolean
   asking: boolean
   /** 这套部署接了语音识别（能力接口的 `is_asr_enabled`）。 */
   speechEnabled: boolean
+  /** 范围选择器能选的库。 */
+  bases: readonly KnowledgeBase[]
+  /** 这次对话的检索范围；null = 全部知识库。 */
+  scope: readonly KnowledgeChatScopeBase[] | null
 }>()
 
 const emit = defineEmits<{
   send: [text: string]
   stop: []
+  scope: [ids: string[] | null]
 }>()
 
 const draft = ref('')
@@ -107,6 +115,14 @@ function onKeydown(event: KeyboardEvent): void {
       {{ speech.error.value }}
     </DtNotice>
 
+    <!-- ⚠ 回合跑着或等着回答时不许改范围：这一轮的工具已经按旧范围发出去了 -->
+    <ChatScopePicker
+      :bases="props.bases"
+      :scope="props.scope"
+      :disabled="props.running || props.asking"
+      @change="(ids: string[] | null) => emit('scope', ids)"
+    />
+
     <AiInputBox
       :running="props.running"
       :can-send="canSend"
@@ -171,6 +187,7 @@ function onKeydown(event: KeyboardEvent): void {
 
 /* 与时间线的消息列同宽同轴（ChatPanel 里钉的 56rem），发送键才对得上右对齐的自己那条 */
 .kb-compose :deep(.ai-inputbox),
+.kb-compose :deep(.chat-scope),
 .kb-compose :deep(.dt-notice) {
   max-width: 56rem;
   margin-inline: auto;

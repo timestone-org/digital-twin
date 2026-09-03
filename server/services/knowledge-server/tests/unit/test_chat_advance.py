@@ -1,5 +1,7 @@
 """推进一个回合的纯逻辑：上下文怎么拼、哪些工具下发、回填怎么摊。"""
 
+import uuid
+
 from langchain_core.messages import (
     AIMessage,
     HumanMessage,
@@ -8,7 +10,15 @@ from langchain_core.messages import (
 )
 
 from knowledge_server.apps.chat.services import advance_service as svc
-from knowledge_server.apps.chat.services.prompt import SYSTEM_PROMPT
+from knowledge_server.apps.chat.services.prompt import (
+    SYSTEM_PROMPT,
+    render_scope,
+)
+from knowledge_server.apps.chat.services.scope import (
+    ALL_BASES,
+    BaseScope,
+    ScopeBase,
+)
 from knowledge_server.apps.chat.services.tools.client import ASK_TOOL
 from llmcore.memory import HistoryRow, Summary
 from llmcore.tools.shapes import ToolSpec, object_schema
@@ -16,6 +26,15 @@ from llmcore.tools.shapes import ToolSpec, object_schema
 
 def _row(role: str, text: str, seq: int) -> HistoryRow:
     return HistoryRow(role=role, seq=seq, content_json={"text": text})
+
+
+def _scoped(*names: str) -> BaseScope:
+    return BaseScope(
+        bases=tuple(
+            ScopeBase(base_id=uuid.uuid4(), name=one, is_missing=False)
+            for one in names
+        )
+    )
 
 
 def _spec(name: str, runs_on: str) -> ToolSpec:
@@ -28,9 +47,15 @@ def _spec(name: str, runs_on: str) -> ToolSpec:
 
 
 def test_the_prompt_is_the_first_message_and_never_varies() -> None:
-    """⚠ 常驻提示词是前缀缓存唯一能命中的那一段，一个字都不许跟着会话变。"""
+    """⚠ 常驻提示词是前缀缓存唯一能命中的那一段，一个字都不许跟着会话变。
+
+    范围那一句自成一条注入块排在它后面，故第一条永远逐字相同。
+    """
     made = svc.assemble(
-        payload=svc.AdvanceInput(user_text="锅炉压力"), rows=[], summary=None
+        payload=svc.AdvanceInput(user_text="锅炉压力"),
+        rows=[],
+        summary=None,
+        scope=_scoped("手册库"),
     )
 
     assert isinstance(made[0], SystemMessage)
@@ -53,6 +78,7 @@ def test_history_replays_after_the_summary_and_before_the_new_input() -> None:
         payload=svc.AdvanceInput(user_text="那润滑呢"),
         rows=[_row("user", "锅炉压力", 1), _row("assistant", "9.8 MPa", 2)],
         summary=Summary(through_seq=1, text="早先聊过", model="m"),
+        scope=ALL_BASES,
     )
 
     kinds = [type(one).__name__ for one in made]
@@ -60,10 +86,12 @@ def test_history_replays_after_the_summary_and_before_the_new_input() -> None:
         "SystemMessage",
         "HumanMessage",
         "HumanMessage",
+        "HumanMessage",
         "AIMessage",
         "HumanMessage",
     ]
-    assert "早先聊过" in str(made[1].content)
+    assert "检索范围" in str(made[1].content)
+    assert "早先聊过" in str(made[2].content)
     assert made[-1].content == "那润滑呢"
 
 
@@ -82,7 +110,10 @@ def test_an_unanswered_ask_in_history_gets_a_filler_reply() -> None:
     ]
 
     made = svc.assemble(
-        payload=svc.AdvanceInput(user_text="算了"), rows=rows, summary=None
+        payload=svc.AdvanceInput(user_text="算了"),
+        rows=rows,
+        summary=None,
+        scope=ALL_BASES,
     )
 
     fillers = [one for one in made if isinstance(one, ToolMessage)]
@@ -109,6 +140,7 @@ def test_a_tool_result_answers_the_call_instead_of_a_filler() -> None:
         ),
         rows=rows,
         summary=None,
+        scope=ALL_BASES,
     )
 
     replies = [one for one in made if isinstance(one, ToolMessage)]
@@ -152,7 +184,41 @@ def test_an_ai_reply_in_history_keeps_its_text() -> None:
         payload=svc.AdvanceInput(user_text="继续"),
         rows=[_row("assistant", "上限 9.8 MPa [1]", 1)],
         summary=None,
+        scope=ALL_BASES,
     )
 
-    assert isinstance(made[1], AIMessage)
-    assert "9.8" in str(made[1].content)
+    assert isinstance(made[2], AIMessage)
+    assert "9.8" in str(made[2].content)
+
+
+def test_the_scope_is_injected_right_after_the_resident_prompt() -> None:
+    """⚠ 会话内不变的东西排在摘要与历史之前：改范围只作废它往后的那一截。"""
+    made = svc.assemble(
+        payload=svc.AdvanceInput(user_text="上限"),
+        rows=[],
+        summary=None,
+        scope=_scoped("手册库", "规程库"),
+    )
+
+    assert made[0].content == SYSTEM_PROMPT
+    assert "手册库" in str(made[1].content)
+    assert "规程库" in str(made[1].content)
+
+
+def test_the_scope_note_says_so_even_when_nothing_is_narrowed() -> None:
+    """⚠ 不限库时也说清：不说的话模型会去猜它是不是被限住了。"""
+    assert "没有限定" in render_scope(ALL_BASES)
+
+
+def test_a_deleted_base_is_not_dropped_from_the_note() -> None:
+    """⚠ 略过的话模型看到的范围比用户划的窄，还以为那本手册从来不在里面。"""
+    scope = BaseScope(
+        bases=(ScopeBase(base_id=uuid.uuid4(), name="", is_missing=True),)
+    )
+
+    assert "已删掉" in render_scope(scope)
+
+
+def test_the_prompt_warns_that_out_of_scope_bases_are_refused() -> None:
+    """⚠ 提示词是辅助：不写的话模型会把硬过滤读成「这个库坏了」并反复重试。"""
+    assert "范围外的库" in SYSTEM_PROMPT

@@ -97,7 +97,10 @@ onMounted(() => void page.reload())
             :title="selectedLabel"
             :starters="STARTERS"
             :speech-enabled="page.isAsrEnabled.value"
+            :bases="page.bases.value"
+            :scope="page.scope.value"
             @send="(text: string) => void page.send(text)"
+            @scope="(ids: string[] | null) => void page.setScope(ids)"
           />
         </section>
       </div>

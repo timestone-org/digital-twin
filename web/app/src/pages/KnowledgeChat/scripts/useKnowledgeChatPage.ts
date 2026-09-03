@@ -17,5 +17,7 @@ export function useKnowledgeChatPage(chat?: KnowledgeConversation) {
     archive: (sessionId: string) => actions.archive(state, sessionId),
     remove: (sessionId: string) => actions.remove(state, sessionId),
     send: (text: string) => actions.send(state, text),
+    setScope: (baseScopeIds: string[] | null) =>
+      actions.setScope(state, baseScopeIds),
   }
 }

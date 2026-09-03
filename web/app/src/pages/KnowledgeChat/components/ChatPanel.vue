@@ -6,8 +6,10 @@
  * ⚠ `--ai-edge` 在这里的根上再声明一遍：助手把它声明在 `.ai-panel` 上，
  * 这一页不套那层壳，标题栏与输入区的两条发光线引的都是这一份。
  */
+import type { KnowledgeChatScopeBase } from '@dt/contracts'
 import { DtButton, DtCard, DtTag } from '@dt/ui'
 
+import type { KnowledgeBase } from '@/api/knowledge'
 import AiCoreIcon from '@/components/ai/AiCoreIcon.vue'
 import AiTimeline from '@/components/ai/AiTimeline.vue'
 import type { KnowledgeConversation } from '@/composables/useKnowledgeConversation'
@@ -22,10 +24,15 @@ defineProps<{
   starters: readonly string[]
   /** 这套部署接了语音识别：输入区多一枚麦克风键。 */
   speechEnabled: boolean
+  /** 范围选择器能选的库。 */
+  bases: readonly KnowledgeBase[]
+  /** 这次对话的检索范围；null = 全部知识库。 */
+  scope: readonly KnowledgeChatScopeBase[] | null
 }>()
 
 defineEmits<{
   send: [text: string]
+  scope: [ids: string[] | null]
 }>()
 </script>
 
@@ -68,8 +75,11 @@ defineEmits<{
       :running="chat.isRunning.value"
       :asking="chat.isAsking.value"
       :speech-enabled="speechEnabled"
+      :bases="bases"
+      :scope="scope"
       @send="$emit('send', $event)"
       @stop="chat.stop"
+      @scope="$emit('scope', $event)"
     />
   </DtCard>
 </template>

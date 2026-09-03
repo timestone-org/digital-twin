@@ -9,7 +9,10 @@ from collections.abc import Sequence
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.chat.crud import session_crud
-from knowledge_server.apps.chat.errors import ChatSessionNotFound
+from knowledge_server.apps.chat.errors import (
+    ChatSessionNotFound,
+    ChatSessionVersionConflict,
+)
 from knowledge_server.apps.chat.models import (
     ChatMessage,
     ChatSession,
@@ -17,12 +20,15 @@ from knowledge_server.apps.chat.models import (
 )
 from knowledge_server.apps.chat.schemas import (
     ChatMessageOut,
+    ChatScopeBaseOut,
     ChatSessionCreateIn,
     ChatSessionDetailOut,
     ChatSessionOut,
     ChatSessionUpdateIn,
     ChatStepOut,
 )
+from knowledge_server.apps.chat.services import scope as scope_service
+from knowledge_server.apps.chat.services.scope import BaseScope
 from lib.auth import CallerContext
 from lib.logging import get_logger
 from lib.web import Page, PageParams
@@ -59,8 +65,15 @@ async def list_sessions(
     rows, total = await session_crud.list_page(
         session, statement=statement, offset=page.offset, limit=page.size
     )
+    # ⚠ 一页的库名一次问齐：逐条解析范围就是一页 100 次往返
+    scopes = await scope_service.resolve_many(
+        session, [row.base_scope_ids for row in rows]
+    )
     return Page[ChatSessionOut](
-        items=[ChatSessionOut.model_validate(row) for row in rows],
+        items=[
+            _to_session_out(row, scope=one)
+            for row, one in zip(rows, scopes, strict=True)
+        ],
         page=page.page,
         size=page.size,
         total=total,
@@ -84,8 +97,10 @@ async def get_session(
     steps = await session_crud.steps_of(
         session, [message.id for message in messages]
     )
+    scope = await scope_service.resolve(session, chat_session.base_scope_ids)
     return _to_detail_out(
         chat_session,
+        scope=scope,
         messages=[
             _to_message_out(message, steps=steps.get(message.id, ()))
             for message in messages
@@ -101,17 +116,26 @@ async def create_session(
 ) -> ChatSessionOut:
     """建会话。归属钉在调用者身上，入参里给不了别人的 id。
 
+    ⚠ 不给范围就是**全部知识库**：新对话的缺省是不限库，收窄由用户自己来。
+
     Args: session, caller, payload。
     """
-    chat_session = ChatSession(user_id=caller.user_id, title=payload.title)
+    wanted = payload.base_scope_ids
+    chosen = (
+        None if wanted is None else await scope_service.checked(session, wanted)
+    )
+    chat_session = ChatSession(
+        user_id=caller.user_id, title=payload.title, base_scope_ids=chosen
+    )
     session_crud.add(session, chat_session)
     await session.flush()
     _logger.info(
         "kb_chat_session_created",
         "对话已创建",
         session_id=str(chat_session.id),
+        is_scoped=chosen is not None,
     )
-    return ChatSessionOut.model_validate(chat_session)
+    return await _presented(session, chat_session)
 
 
 async def update_session(
@@ -121,19 +145,28 @@ async def update_session(
     caller: CallerContext,
     payload: ChatSessionUpdateIn,
 ) -> ChatSessionOut:
-    """改标题或归档。缺省的字段不动。
+    """改标题、归档或检索范围。缺省的字段不动。
 
     ⚠ 一个字段都没给时不推进 `row_version`：推了的话 `updated_at` 跟着走，
     一次什么都没改的 PATCH 会把这条会话顶到列表最前面。
+
+    ⚠ `base_scope_ids` 给成 `null` 是「改回全部知识库」，与缺省不同——缺省
+    才是「本次不涉及」。
 
     Args: session, chat_session_id, caller, payload。
     """
     chat_session = await require_session(
         session, chat_session_id=chat_session_id, caller=caller
     )
+    _require_version(chat_session, payload.expected_version)
     changes = payload.model_dump(exclude_unset=True)
+    changes.pop("expected_version", None)
     if not changes:
-        return ChatSessionOut.model_validate(chat_session)
+        return await _presented(session, chat_session)
+    if payload.base_scope_ids is not None:
+        changes["base_scope_ids"] = await scope_service.checked(
+            session, payload.base_scope_ids
+        )
     session_crud.apply_changes(chat_session, changes)
     chat_session.row_version += 1
     await session.flush()
@@ -141,8 +174,33 @@ async def update_session(
         "kb_chat_session_updated",
         "对话已更新",
         session_id=str(chat_session.id),
+        fields=sorted(changes),
     )
-    return ChatSessionOut.model_validate(chat_session)
+    return await _presented(session, chat_session)
+
+
+def _require_version(chat_session: ChatSession, expected: int | None) -> None:
+    """带了行版本就断言，对不上即 409。
+
+    ⚠ 不带就是无条件覆盖：改标题那条路本来如此，为它强行加一格会把既有客户端
+    一次性打断。改范围的那一路一律带上。
+
+    Args: chat_session, expected。
+    """
+    if expected is None or chat_session.row_version == expected:
+        return
+    raise ChatSessionVersionConflict("这个对话在别处改过了，请重新载入再改")
+
+
+async def _presented(
+    session: AsyncSession, chat_session: ChatSession
+) -> ChatSessionOut:
+    """一行会话连它的范围一起摊成出参。
+
+    Args: session, chat_session。
+    """
+    scope = await scope_service.resolve(session, chat_session.base_scope_ids)
+    return _to_session_out(chat_session, scope=scope)
 
 
 async def delete_session(
@@ -199,13 +257,55 @@ def _to_message_out(
     )
 
 
+def _to_session_out(
+    chat_session: ChatSession, *, scope: BaseScope
+) -> ChatSessionOut:
+    """一行会话摊成出参。
+
+    ⚠ 不走 `model_validate`：范围那一格在库里是一串 id，出参要的是连库名的那份，
+    而库名不在这张表上。
+
+    Args: chat_session, scope。
+    """
+    return ChatSessionOut(
+        id=chat_session.id,
+        user_id=chat_session.user_id,
+        title=chat_session.title,
+        base_scope=_scope_out(scope),
+        is_archived=chat_session.is_archived,
+        row_version=chat_session.row_version,
+        last_error=chat_session.last_error,
+        created_at=chat_session.created_at,
+        updated_at=chat_session.updated_at,
+    )
+
+
+def _scope_out(scope: BaseScope) -> list[ChatScopeBaseOut] | None:
+    """范围摊成出参；不限库时给 `None`。
+
+    Args: scope。
+    """
+    if scope.bases is None:
+        return None
+    return [
+        ChatScopeBaseOut(
+            base_id=one.base_id, name=one.name, is_missing=one.is_missing
+        )
+        for one in scope.bases
+    ]
+
+
 def _to_detail_out(
-    chat_session: ChatSession, *, messages: Sequence[ChatMessageOut]
+    chat_session: ChatSession,
+    *,
+    scope: BaseScope,
+    messages: Sequence[ChatMessageOut],
 ) -> ChatSessionDetailOut:
     return ChatSessionDetailOut(
         id=chat_session.id,
         user_id=chat_session.user_id,
         title=chat_session.title,
+        base_scope=_scope_out(scope),
         is_archived=chat_session.is_archived,
         row_version=chat_session.row_version,
         last_error=chat_session.last_error,

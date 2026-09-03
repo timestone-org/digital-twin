@@ -4,15 +4,20 @@
  * ⚠ 切对话要**防竞态**：连点两个对话时，先发的那次读取可能后回来，于是时间线上
  * 是上一个对话的历史而标题是这一个的。走统一的 `useRacedFetch`。
  */
-import { getCurrentScope, onScopeDispose, ref, shallowRef } from 'vue'
-import type { KnowledgeChatSession } from '@dt/contracts'
+import { computed, getCurrentScope, onScopeDispose, ref, shallowRef } from 'vue'
+import type {
+  KnowledgeChatScopeBase,
+  KnowledgeChatSession,
+} from '@dt/contracts'
 
+import type { KnowledgeBase } from '@/api/knowledge'
 import { readSession } from '@/api/knowledgeChat'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import {
   useKnowledgeConversation,
   type KnowledgeConversation,
 } from '@/composables/useKnowledgeConversation'
+import { scopeOfIds } from './chatScope'
 
 /** 页面手上的全部状态。 */
 export function createState(chat?: KnowledgeConversation) {
@@ -22,6 +27,13 @@ export function createState(chat?: KnowledgeConversation) {
   const isLoading = ref(false)
   /** 这套部署接了语音识别。取不到当 false，只是少一枚麦克风键，不挡对话。 */
   const isAsrEnabled = ref(false)
+  /** 可选的知识库，给范围选择器用。取不到就只剩「全部」一项，不挡对话。 */
+  const bases = shallowRef<KnowledgeBase[]>([])
+  /**
+   * 还没选中会话时先记在这的范围；建会话那一刻带上去。
+   * ⚠ null = 全部知识库，与「一个都没选」不是一回事。
+   */
+  const pendingScope = ref<string[] | null>(null)
   const replayRace = useRacedFetch()
   const conversation = chat ?? useKnowledgeConversation(() => selectedId.value)
 
@@ -31,12 +43,26 @@ export function createState(chat?: KnowledgeConversation) {
     })
   }
 
+  const current = computed<KnowledgeChatSession | null>(
+    () => sessions.value.find((one) => one.id === selectedId.value) ?? null,
+  )
+  /** 此刻这一页在用的范围：选中了会话就是它的，没选就是暂存的那份。 */
+  const scope = computed<KnowledgeChatScopeBase[] | null>(() =>
+    current.value === null
+      ? scopeOfIds(pendingScope.value, bases.value)
+      : current.value.base_scope,
+  )
+
   return {
     sessions,
     selectedId,
     error,
     isLoading,
     isAsrEnabled,
+    bases,
+    pendingScope,
+    current,
+    scope,
     replayRace,
     chat: conversation,
   }

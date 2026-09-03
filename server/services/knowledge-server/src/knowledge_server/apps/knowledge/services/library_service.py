@@ -5,6 +5,7 @@
 """
 
 import uuid
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -67,14 +68,20 @@ class BaseBrief:
 
 
 async def brief_bases(
-    session: AsyncSession, *, limit: int
+    session: AsyncSession,
+    *,
+    limit: int,
+    only_ids: Collection[uuid.UUID] | None = None,
 ) -> tuple[list[BaseBrief], int]:
     """列一页库的简报与总数。给对话面的 `kb.list_bases` 用。
 
-    Args: session, limit。
+    ⚠ `only_ids` 是空集合就一个都不列，是 `None` 才不筛：两者在这里必须分得开，
+    否则「这次对话把范围收成了没有一个存在的库」会静默摊成「全部库」。
+
+    Args: session, limit, only_ids（None = 不筛）。
     """
     rows, total = await crud.knowledge_base.list_bases(
-        session, offset=0, limit=limit
+        session, offset=0, limit=limit, only_ids=only_ids
     )
     return (
         [
@@ -89,6 +96,19 @@ async def brief_bases(
         ],
         total,
     )
+
+
+async def base_names(
+    session: AsyncSession, base_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, str]:
+    """这几个库各叫什么；查不到的 id 不在结果里——那就是「已经没有这个库了」。
+
+    ⚠ 对话面解析会话范围时用它：只回名字，不回整行。范围要的是「叫什么、还在
+    不在」两件事，多给一行库就是多一条别的模块能依赖上的字段。
+
+    Args: session, base_ids。
+    """
+    return await crud.knowledge_base.names_of(session, base_ids)
 
 
 def base_out(row: KnowledgeBase, document_count: int) -> KnowledgeBaseOut:
