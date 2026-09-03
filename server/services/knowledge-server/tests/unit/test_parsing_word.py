@@ -299,7 +299,8 @@ def test_a_picture_becomes_a_figure_block_where_it_sits() -> None:
     document.add_paragraph("图 1 冷却水回路示意图")
     made = DocxParser().parse(_raw("a.docx", _saved(document)))
     kinds = [one.kind for one in made.blocks]
-    assert kinds == ["heading", "paragraph", "figure", "paragraph"]
+    # ⚠ 图注那一段被图收走了，不再单独出一块——见「图注不印两遍」那一条
+    assert kinds == ["heading", "paragraph", "figure"]
     figure = made.blocks[2]
     assert figure.text == "图 1 冷却水回路示意图"
     assert figure.figure_ref != ""
@@ -397,3 +398,40 @@ def test_a_document_stuffed_with_pictures_stops_at_the_cap(
         )
     made = DocxParser().parse(_raw("a.docx", _saved(document)))
     assert len(made.figures) == 1
+
+
+def test_the_caption_paragraph_is_not_also_a_block_of_its_own() -> None:
+    """⚠ 图注被图那一块收走之后，它自己那一段就不该再出一块：出的话「图 1 …」
+    在检索到的原文里出现两遍，而引用卡片上也会跟着重复一行。
+
+    实测出来的：真跑一份带图的 docx，块正文里那句图注确实印了两遍。
+    """
+    document = Document()
+    document.add_paragraph("第一章", style="Heading 1")
+    document.add_paragraph("正文一。")
+    document.add_paragraph("")
+    _with_picture(document)
+    document.add_paragraph("图 1 冷却水回路示意图")
+    document.add_paragraph("正文二。")
+    made = DocxParser().parse(_raw("a.docx", _saved(document)))
+
+    assert [(one.kind, one.text) for one in made.blocks] == [
+        ("heading", "第一章"),
+        ("paragraph", "正文一。"),
+        ("figure", "图 1 冷却水回路示意图"),
+        ("paragraph", "正文二。"),
+    ]
+
+
+def test_a_caption_like_line_with_no_figure_above_it_stays_a_paragraph() -> (
+    None
+):
+    """⚠ 只有**真被图收走**的那一段才跳过：一份没有图的文档里「图 1 …」这种
+    行是正文，跳掉就是把内容吞了。"""
+    document = Document()
+    document.add_paragraph("图 1 这一行上面没有图")
+    made = DocxParser().parse(_raw("a.docx", _saved(document)))
+
+    assert [(one.kind, one.text) for one in made.blocks] == [
+        ("paragraph", "图 1 这一行上面没有图"),
+    ]
