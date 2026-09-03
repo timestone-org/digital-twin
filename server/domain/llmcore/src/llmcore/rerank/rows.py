@@ -34,6 +34,11 @@ def scores_of_rows(
         _score_of(one, score_keys=score_keys, size=size)
         for one in cast("list[object]", rows)
     ]
+    # ⚠ 同一个下标回两次要当场认出来：放过去的话，同一段文字会以两条引用的样子
+    # 交出去，而模型会以为它有两个来源
+    seen = {one.index for one in made}
+    if len(seen) != len(made):
+        raise RerankShapeUnreadable("重排端点把同一个下标回了不止一次")
     made.sort(key=lambda one: one.score, reverse=True)
     return made
 

@@ -133,6 +133,21 @@ def test_a_row_that_is_missing_a_piece_is_refused(rows: object) -> None:
         dialect_of(DIALECT_JINA).scores_of({"results": rows}, 1)
 
 
+def test_the_same_index_twice_is_refused() -> None:
+    """⚠ 放过去的话，同一段文字会以两条引用的样子交出去，
+    而模型会以为它有两个来源。"""
+    with pytest.raises(RerankShapeUnreadable):
+        dialect_of(DIALECT_JINA).scores_of(
+            {
+                "results": [
+                    {"index": 0, "relevance_score": 0.5},
+                    {"index": 0, "relevance_score": 0.4},
+                ]
+            },
+            2,
+        )
+
+
 def test_an_out_of_range_index_is_caught_here_not_by_the_caller() -> None:
     """⚠ 交给调用方的话那是一条 IndexError，报出来的位置离方言很远。"""
     with pytest.raises(RerankShapeUnreadable) as caught:
