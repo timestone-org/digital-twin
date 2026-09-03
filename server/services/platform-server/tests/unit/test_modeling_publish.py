@@ -12,6 +12,7 @@ import pytest
 
 from platform_server.apps.modeling.operators import OperatorError
 from platform_server.apps.modeling.schemas.graph import PipelineGraph
+from platform_server.apps.modeling.services.model_schema import build_schema
 from platform_server.apps.modeling.services.publish_service import (
     NodeRecord,
     inspect_run,
@@ -145,6 +146,62 @@ async def test_a_version_published_before_the_upgrade_still_predicts() -> None:
     }
     got = compile_model(legacy).predict([SAMPLE_TEMPERATURE, SAMPLE_LOAD])
     assert got == pytest.approx(EXPECTED, rel=1e-6)
+
+
+async def test_the_signature_says_what_to_feed_the_model() -> None:
+    """模型签名逐列给出标签、单位、类型与训练区间，输出那一格说清算的是什么。"""
+    graph, records = await _run()
+    signature = inspect_run(graph, records).signature
+    assert [item["key"] for item in signature["inputs"]] == ["温度", "负荷"]
+    temperature = signature["inputs"][0]
+    assert temperature["label"] == "环境温度"
+    assert temperature["unit"] == "℃"
+    assert (
+        temperature["training_stats"]["max"]
+        > temperature["training_stats"]["min"]
+    )
+    assert signature["output"]["key"] == "能耗"
+    assert signature["output"]["task"] == "regression"
+    assert signature["derived"] == []
+
+
+async def test_a_filled_column_is_optional_and_says_what_it_falls_back_to() -> (
+    None
+):
+    """推理链头一步就把空值填上的列，调用方可以不给，并给出会填成什么。"""
+    graph, records = await _run()
+    inputs = inspect_run(graph, records).signature["inputs"]
+    fills = records["f"].fitted or {}
+    for item in inputs:
+        assert item["is_required"] is False
+        assert item["default_on_missing"] == pytest.approx(fills[item["key"]])
+
+
+async def test_a_fill_behind_a_scaler_does_not_make_a_column_optional() -> None:
+    """填充排在标准化后面时那一列仍然必填。
+
+    ⚠ 这条不能省：那时候这一列在被填之前就已经被读过了，不给它照样算错——
+    而界面上会写着「可缺省」（docs/MODELING_PLATFORM_DESIGN.md D7）。
+    """
+    graph, records = await _run()
+    verdict = inspect_run(graph, records)
+    swapped = list(reversed(verdict.serving["steps"][:2]))
+    signature = build_schema(
+        entry=[
+            {
+                "key": item.key,
+                "label": item.label,
+                "unit": item.unit,
+                "dtype": item.dtype,
+                "stats": item.stats,
+            }
+            for item in verdict.entry_columns
+        ],
+        steps=[*swapped, *verdict.serving["steps"][2:]],
+        target={"key": "能耗"},
+        task="regression",
+    )
+    assert all(item["is_required"] for item in signature["inputs"])
 
 
 def test_an_unreadable_serving_format_is_refused() -> None:

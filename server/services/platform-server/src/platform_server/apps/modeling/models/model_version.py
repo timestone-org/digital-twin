@@ -14,6 +14,7 @@ from sqlalchemy import (
     Integer,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -61,8 +62,15 @@ class ModelingModelVersion(UuidPrimaryKeyMixin, CreatedAtMixin, Base):
     # 纯数据的可服务表示 `{format_version, task, input_columns, steps}`，
     # 形状见 §7.3。推理时不读文件、不反序列化任何二进制
     serving_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    # 有序特征列 key，就是对外的输入契约
+    # 有序特征列 key，即**建模那一步**看到的列（特征工程之后）。
+    # ⚠ 它不是对外的输入契约——契约在 `serving_json.entry_columns` 上，在特征
+    # 工程之前。两者只在「没有任何算子增删列」时才相等
     feature_keys: Mapped[list[Any]] = mapped_column(JSONB, nullable=False)
+    # 模型签名：面向人与第三方系统的输入输出说明。**不参与任何计算**，
+    # 推理只读 `serving_json`（docs/MODELING_PLATFORM_DESIGN.md D6）
+    signature_json: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
     target_key: Mapped[str] = mapped_column(Text, nullable=False)
     # 发布时冻结的评估指标
     metrics_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
@@ -115,6 +123,10 @@ class ModelingModelVersion(UuidPrimaryKeyMixin, CreatedAtMixin, Base):
         CheckConstraint(
             "jsonb_typeof(serving_json) = 'object'",
             name="serving_is_an_object",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(signature_json) = 'object'",
+            name="signature_is_an_object",
         ),
         CheckConstraint(
             "jsonb_typeof(metrics_json) = 'object'",

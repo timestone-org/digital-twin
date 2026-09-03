@@ -198,6 +198,9 @@ class OperatorBase:
     CHANGES_ROW_COUNT: ClassVar[bool] = False
     # 推理时需要历史窗口（滞后 / 滚动）——整条流水线因此不可服务
     SERVING_NEEDS_WINDOW: ClassVar[bool] = False
+    # 这个算子会把空值补上。模型 schema 据它判「这一列调用方可不可以不给」：
+    # ⚠ 用类变量而不是判 CODE——加第二种填充算子时不必回来改 schema 生成
+    FILLS_MISSING: ClassVar[bool] = False
     # 这个算子是不是「切分」：引擎从它身上提取切分计划注入给上游带拟合的算子，
     # 图校验也按它判「带拟合算子下游有几个切分」。⚠ 用类变量而不是判 CODE：
     # 判 CODE 的话，加第二种切分算子要回来改引擎与校验两处

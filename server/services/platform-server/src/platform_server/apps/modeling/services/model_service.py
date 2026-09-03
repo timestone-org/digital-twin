@@ -69,6 +69,7 @@ async def publish_version(
             serving_channel=verdict.channel,
             unservable_reason=verdict.reason or None,
             serving_json=verdict.serving,
+            signature_json=verdict.signature,
             feature_keys=list(verdict.feature_keys),
             target_key=verdict.target_key,
             metrics_json=_metrics_of(records),
@@ -245,6 +246,7 @@ def _to_version_out(row: ModelingModelVersion) -> ModelVersionOut:
             key: _as_number(value)
             for key, value in as_dict(row.metrics_json).items()
         },
+        signature=as_dict(row.signature_json),
         fingerprint=as_dict(row.fingerprint_json),
         description=row.description,
     )

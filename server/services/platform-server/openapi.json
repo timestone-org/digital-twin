@@ -11053,7 +11053,7 @@
         "type": "object"
       },
       "ModelVersionOut": {
-        "description": "版本详情，带指标与指纹。",
+        "description": "版本详情，带指标、指纹与模型签名。",
         "properties": {
           "algo": {
             "title": "Algo",
@@ -11142,6 +11142,11 @@
             ],
             "title": "Serving Channel",
             "type": "string"
+          },
+          "signature": {
+            "additionalProperties": true,
+            "title": "Signature",
+            "type": "object"
           },
           "target_key": {
             "title": "Target Key",

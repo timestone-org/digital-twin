@@ -47,8 +47,11 @@ class ModelVersionSummaryOut(OutputModel):
 
 
 class ModelVersionOut(ModelVersionSummaryOut):
-    """版本详情，带指标与指纹。"""
+    """版本详情，带指标、指纹与模型签名。"""
 
+    #: 面向人与第三方的输入输出说明。⚠ 字段不叫 `schema`：那个名字会与
+    #: `BaseModel.schema` 撞并当场告警，而本仓 CI 是零告警
+    signature: dict[str, object] = Field(default_factory=dict[str, object])
     metrics: dict[str, float | None] = Field(
         default_factory=dict[str, float | None]
     )

@@ -70,6 +70,7 @@ class FillMissing(OperatorBase):
     INPUTS = (PortSpec(name="frame", contract=CONTRACT_FRAME, label="输入"),)
     OUTPUTS = (PortSpec(name="frame", contract=CONTRACT_FRAME, label="输出"),)
     REQUIRES_FIT = True
+    FILLS_MISSING = True
 
     def __init__(self, config: OperatorConfig) -> None:
         super().__init__(config)

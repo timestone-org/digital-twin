@@ -7,7 +7,7 @@ warning 一句就跳过，用户完全不知道自己上线了一个永远返回
 
 import sys
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, cast
 
 import numpy
@@ -39,6 +39,7 @@ from platform_server.apps.modeling.services.jsonshape import (
     as_text,
     as_texts,
 )
+from platform_server.apps.modeling.services.model_schema import build_schema
 from platform_server.apps.modeling.services.serving import (
     SERVING_FORMAT_VERSION,
     compile_model,
@@ -112,6 +113,8 @@ class Publishable:
     task: str
     channel: str
     entry_columns: tuple[EntryColumn, ...] = ()
+    #: 模型签名（面向人与第三方的说明）。不可服务时是空字典
+    signature: dict[str, Any] = field(default_factory=dict[str, Any])
 
 
 def inspect_run(
@@ -206,6 +209,12 @@ def _servable(ctx: _Publishing) -> Publishable:
         is_servable=True,
         reason="",
         serving=serving,
+        signature=build_schema(
+            entry=[_as_meta(item) for item in entry],
+            steps=steps,
+            target=_target_meta(ctx, target_key),
+            task=as_text(ctx.payload.get("task")),
+        ),
         feature_keys=tuple(features),
         entry_columns=entry,
         target_key=target_key,
@@ -384,6 +393,36 @@ def _entry_meta(ctx: _Publishing, first: str) -> dict[str, dict[str, Any]]:
         as_dict(_record(ctx.records, node_id).preview.get(port)).get("columns")
     )
     return {as_text(as_dict(item).get("key")): as_dict(item) for item in stats}
+
+
+def _as_meta(item: EntryColumn) -> dict[str, Any]:
+    """入口列摊成模型签名生成器吃的形状。
+
+    Args: item。
+    """
+    return {
+        "key": item.key,
+        "label": item.label,
+        "unit": item.unit,
+        "dtype": item.dtype,
+        "stats": dict(item.stats),
+    }
+
+
+def _target_meta(ctx: _Publishing, target_key: str) -> dict[str, Any]:
+    """目标列的类型、显示名与单位；取数摘要里没有就只留 key。
+
+    Args: ctx, target_key。
+    """
+    if not ctx.served:
+        return {"key": target_key}
+    stat = _entry_meta(ctx, ctx.served[0]).get(target_key, {})
+    return {
+        "key": target_key,
+        "label": as_text(stat.get("name")) or target_key,
+        "unit": as_text(stat.get("unit")),
+        "dtype": as_text(stat.get("dtype")) or DTYPE_NUMBER,
+    }
 
 
 def _number(value: object) -> float:
