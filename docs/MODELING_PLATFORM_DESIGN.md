@@ -721,11 +721,11 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 
 | code | 名称 | 关键参数 | fit? | 列变? | serving? |
 | --- | --- | --- | --- | --- | --- |
-| `cast_type` | 类型归一 | `columns[]` / `to`(number/bool/string) / `on_error`(coerce/error) | 否 | 否 | 是 |
-| `drop_missing` | 丢缺失 | `axis`(row/col) / `how`(any/all) / `subset[]` / `max_null_ratio` | 否 | **col 档是** | **否**（改行数） |
-| `clip_outlier` | 离群处理 | `method`(zscore/iqr) / `threshold` / `action`(clip/drop/mark) | **是** | mark 档是 | clip/mark 是，drop 否 |
-| `resample` | 时间重采样 | `bucket`(1h/1d/…) / 每列聚合口径 | 否 | 否 | **否**（改行数） |
-| `filter_rows` | 条件过滤 | `column` + `op ∈ Literal[…]` + `value`（**闭合三元组，不是表达式**，§9.3 防线②） | 否 | 否 | **否** |
+| `cast_type` ✅ | 类型归一 | `columns[]` / `to`(number/bool/string) / `on_error`(coerce/error) | 否 | 否 | 是 |
+| `drop_missing` ✅ | 丢缺失 | `axis`(row/col) / `how`(any/all) / `subset[]` / `max_null_ratio` | 否 | **col 档是** | **否**（改行数） |
+| `clip_outlier` ✅ | 离群裁剪 | `method`(zscore/iqr) / `threshold` / `on_no_bound`(error/skip) | **是** | 否 | 是 |
+| `resample` ✅ | 时间重采样 | `bucket`(1m…1d) / `agg`（台账那八档，全表一档） | 否 | 否 | **否**（改行数） |
+| `filter_rows` ✅ | 条件过滤 | `column` + `op ∈ Literal[…]` + `value`（**闭合三元组，不是表达式**，§9.3 防线②） | 否 | 否 | **否** |
 
 ⚠ `resample` 的聚合口径**复用台账的八档**（[DATASET_DESIGN.md](./DATASET_DESIGN.md)），
 不另写一份。两份聚合口径的表现是「台账里按小时看是一个数、建模里按小时取是另一个数」。
@@ -781,8 +781,8 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 
 | code | 名称 | 任务 | 通道 | 备注 |
 | --- | --- | --- | --- | --- |
-| `logistic_regression` | 逻辑回归 | 分类 | **A** | 系数是纯数，进得了台账 |
-| `kmeans` | K 均值 | 聚类 | **A** | 拟合参数是质心矩阵，纯数。⚠ 输出是簇号不是连续值，台账列的语义要说清 |
+| `logistic_regression` ✅ | 逻辑回归 | 分类 | **A** | 系数 + 截距 + **两个类目**都是纯数，进得了台账 |
+| `kmeans` ⏸ | K 均值 | 聚类 | **A** | 见 D22：它不是「再加一个算子」，拦路的有三条 |
 | `random_forest_regressor` | 随机森林回归 | 回归 | B | 要 §5 的产物通道 |
 | `gbdt_regressor` | 梯度提升回归 | 回归 | B | 同上 |
 | `random_forest_classifier` | 随机森林分类 | 分类 | B | 同上 |
@@ -791,13 +791,30 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 ⚠ 岭 / 套索仍然**是 `linear_regression` 的参数**而不是新算子
 （[MODELING_DESIGN.md](./MODELING_DESIGN.md) §5.5 的理由继续成立）。
 
+### D22 · K 均值不在算子扩容里，它要先解决三件事
+
+`kmeans` 看着只是「再加一个算子」，实际拦路的有三条，每一条都动契约：
+
+1. **第三种任务类型。** `ModelTask` 现在是 `classification | regression`，
+   而 `modeling_model_versions.task` 上有一条按它渲染的 CHECK。加 `clustering`
+   要走一次放宽 CHECK 的扩展迁移；
+2. **没有目标列。** 聚类是无监督的，而 `modeling_model_versions.target_key` 上有
+   `length(target_key) > 0` 的 CHECK，`_single_target` 也要求上游恰好一个目标角色。
+   往里写 `"__none__"` 这种假值正是「往闭合集合里塞一个当前没有语义的取值」，
+   [MODELING_DESIGN.md](./MODELING_DESIGN.md) §4 明确不许；
+3. **没有切分，也没有现成的评估。** 聚类不切训练 / 测试，`split_dataset` 那条路
+   整个不适用；指标要另出一套（轮廓系数 / 簇内平方和），与两套现成的都不同源。
+
+三条都不难，但它们是**契约级**的改动（一次迁移 + 两处 CHECK + 一种新任务的评估），
+与「加一个类 + 清单里加一行」不是一个量级。单独成期做，不混进算子扩容里。
+
 ### 8.5 评估 `evaluate`
 
 | code | 名称 | 输出 |
 | --- | --- | --- |
-| `classification_metrics` | 分类评估 | accuracy / precision / recall / F1 + 混淆矩阵 |
-| `residual_analysis` | 残差分析 | 残差直方图 + 统计量（含 Q-Q 分位点） |
-| `feature_importance` | 特征重要性 | 有序重要性表（线性模型取标准化系数绝对值，树模型取内建重要性） |
+| `classification_metrics` ✅ | 分类评估 | accuracy / precision / recall / F1 + 混淆矩阵。**分母为 0 一律 null 不给 0** |
+| `residual_analysis` ✅ | 残差分析 | 残差均值 / 标准差 / 分位数 / 最大绝对残差 + 直方图 |
+| `feature_importance` ✅ | 特征重要性 | **置换重要性**：打乱一列再打分，掉多少就是多重要。⚠ 不取系数绝对值——那只有特征已标准化时才可比，而画布上可以不接标准化 |
 | `cross_validate` | 交叉验证 | 每折指标 + 汇总。⚠ 时序数据默认用**前向链**折法，不是随机 K 折 |
 
 ### 8.6 依赖
@@ -884,7 +901,7 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 | --- | --- | --- | --- |
 | **一** ✅ | **拟合参数归位**（缺陷 A/B） | 迁移 1；子进程返回 `fitted`/`io`；执行器落库；发布读新列；发布期实跑一行核对；带 `standardize` 的端到端用例 | —— |
 | 二 ✅ | 入口契约与模型签名 | `describe_columns`；`known_keys_by_node` 改用它；`serving_json` 2.0 + 双版本分派；`signature_json` 生成器；前端删掉第二份收窄口径 | 一 |
-| 三 | 算子扩容 A（不改列集的） | `cast_type` / `drop_missing` / `clip_outlier` / `filter_rows` / `resample` / `logistic_regression` / `kmeans` / `classification_metrics` / `residual_analysis` / `feature_importance` | 一 |
+| 三 ✅ | 算子扩容 A（不改列集的） | `cast_type` / `drop_missing` / `filter_rows` / `clip_outlier` / `resample` / `logistic_regression` / `classification_metrics` / `residual_analysis` / `feature_importance`。⚠ `kmeans` 移出本期，见 D22 | 一 |
 | 四 | 算子扩容 B（改列集的） | `time_feature` / `one_hot` / `select_feature` / `pca` / `lag_feature` / `rolling_feature` / `ledger_join` / `cross_validate` | 二 |
 | **五** | **台账批量预测相位**（D11b） | 公式列分层；收集 / 回填两趟；`AnalysisModel.predict_batch`；`EvalContext.model_sink` 与 `row_ts`；ADR。**只碰 `apps/dataset`** | 二 |
 | 六 | 产物与通道 B | 迁移 3；对象存储写读；四条护栏；树模型三个；全量帧导出；ADR | 五 |
