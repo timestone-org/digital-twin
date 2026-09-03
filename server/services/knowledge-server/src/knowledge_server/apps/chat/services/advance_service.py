@@ -30,7 +30,10 @@ from knowledge_server.apps.chat.services.tools import (
     build_registry,
 )
 from knowledge_server.apps.chat.services.tools.client import ASK_TOOL
-from knowledge_server.apps.knowledge.services.assembly import Lanes, strategies
+from knowledge_server.apps.knowledge.services.assembly import (
+    lanes_of,
+    strategies,
+)
 from knowledge_server.container import Container
 from knowledge_server.settings import HISTORY_DROP_STEP, MAX_HISTORY_MESSAGES
 from lib.auth import CallerContext
@@ -80,14 +83,7 @@ def deps_of(container: Container, caller: CallerContext) -> AdvanceDeps:
     # ⚠ 问的是**此刻**：对话档的端点来自运行期可改的目录，装配了不等于能用
     if not container.answerer.can_answer:
         raise ChatUnavailable("这套部署没有接对话档，知识库对话用不了")
-    lanes = strategies(
-        Lanes(
-            settings=container.settings,
-            probe=container.index,
-            embedder=container.embedder,
-            answerer=container.answerer,
-        )
-    )
+    lanes = strategies(lanes_of(container))
     registry = build_registry(
         ToolDeps(sessions=container.database.session, strategies=lanes)
     )
