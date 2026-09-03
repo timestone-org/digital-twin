@@ -8,9 +8,20 @@
  * 钉在 openapi 上；用途码与模型种类还对着三个服务的源码逐字比。
  */
 
-/** 一路供应商上登记的模型种类。嵌入模型与对话模型不通用。 */
-export const LLM_MODEL_KINDS = ['chat', 'embedding'] as const
+/**
+ * 一路供应商上登记的模型种类。三种互不通用：拿对话模型名去打 embeddings
+ * 端点、或拿嵌入模型去做重排，都是必然失败的调用。
+ */
+export const LLM_MODEL_KINDS = ['chat', 'embedding', 'rerank'] as const
 export type LlmModelKind = (typeof LLM_MODEL_KINDS)[number]
+
+/**
+ * 重排的线形方言（ADR-0042）。重排不在 OpenAI 兼容口径里，各家的路径与请求体
+ * 不同。⚠ 与 platform-server `apps/llm_providers/enums.py` 和 llmcore 的
+ * `rerank/registry.py` 逐字一致；漂开的表现是「界面上选得中、调用时说不认识」。
+ */
+export const LLM_RERANK_DIALECTS = ['jina', 'dashscope'] as const
+export type LlmRerankDialectCode = (typeof LLM_RERANK_DIALECTS)[number]
 
 /**
  * 一路供应商的接入形态。⚠ 与 platform-server `apps/llm_providers/enums.py`
@@ -36,8 +47,16 @@ export const LLM_PURPOSES = [
   'assistant.embedding',
   'knowledge.chat',
   'knowledge.embedding',
+  'knowledge.rerank',
 ] as const
 export type LlmPurposeCode = (typeof LLM_PURPOSES)[number]
+
+/** 一套重排线形：打端点根下的哪个路径、请求体长什么样。 */
+export interface LlmRerankDialect {
+  code: string
+  label: string
+  description: string
+}
 
 /** 建一路供应商时能一键填上的一套取值。 */
 export interface LlmProviderPreset {
@@ -65,6 +84,11 @@ export interface LlmProviderKind {
   consumers: string[]
   /** 可调的推理档位；空表示这一形态没有这一档。 */
   efforts: string[]
+  /**
+   * 这一形态配得出哪几套重排线形；空表示它登记不了重排模型。
+   * ⚠ 第一个是默认那一路：没配这一格的供应商按它解。
+   */
+  rerank_dialects: LlmRerankDialect[]
   presets: LlmProviderPreset[]
 }
 
@@ -118,6 +142,11 @@ export interface LlmPurpose {
   kind: string
   consumer: string
   is_vision_required: boolean
+  /**
+   * 没分配时那一侧还有没有环境变量那一档兜底。
+   * ⚠ 为假即「不分配就是不启用」：说反了的话，人会去翻一个不存在的环境变量。
+   */
+  has_env_default: boolean
   provider_id: string | null
   provider_name: string | null
   model_name: string | null

@@ -54,6 +54,11 @@ beforeEach(() => {
     readyStrategies: ['naive', 'hybrid'],
     acceptedSuffixes: ['.md', '.docx'],
     index: { vector: 'pgvector', keyword: 'trgm', reason: '' },
+    rerank: {
+      isEnabled: false,
+      model: '',
+      reason: '还没给「知识库重排」分配模型',
+    },
   })
 })
 
@@ -397,6 +402,11 @@ describe('首屏', () => {
         vector: 'bruteforce',
         keyword: 'like',
         reason: '这套部署没装 pgvector',
+      },
+      rerank: {
+        isEnabled: false,
+        model: '',
+        reason: '还没给「知识库重排」分配模型',
       },
     })
     const page = useKnowledgePage()

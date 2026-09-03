@@ -16,7 +16,8 @@ from dataclasses import dataclass
 # 拿对话模型名去打 embeddings 端点是一条必然失败的调用
 MODEL_KIND_CHAT = "chat"
 MODEL_KIND_EMBEDDING = "embedding"
-MODEL_KINDS = (MODEL_KIND_CHAT, MODEL_KIND_EMBEDDING)
+MODEL_KIND_RERANK = "rerank"
+MODEL_KINDS = (MODEL_KIND_CHAT, MODEL_KIND_EMBEDDING, MODEL_KIND_RERANK)
 
 # 登录那一路的认证方式。⚠ 闭合集合；API Key 那一路不落库，它在供应商行上
 AUTH_MODE_CHATGPT = "chatgpt"
@@ -32,6 +33,49 @@ CONSUMERS = (CONSUMER_ASSISTANT, CONSUMER_KNOWLEDGE)
 # 消费方真接得了它，光在这里加一档只会让界面配得出、那一侧一句话都说不出来
 PROVIDER_KIND_OPENAI_COMPAT = "openai_compat"
 PROVIDER_KIND_CODEX_OAUTH = "codex_oauth"
+
+
+# 重排的**线形方言**：重排不在 OpenAI 兼容口径里，各家的路径与请求体不同。
+# ⚠ 与 llmcore 的 `RERANK_DIALECTS` 逐字一致：这边配得出而那边没装的话，
+# 表现是「界面上选得中、调用时说不认识」，而两边代码单看都对
+RERANK_DIALECT_JINA = "jina"
+RERANK_DIALECT_DASHSCOPE = "dashscope"
+
+
+@dataclass(frozen=True)
+class RerankDialectSpec:
+    """一套重排线形在目录上的样子。"""
+
+    code: str
+    label: str
+    description: str
+
+
+# ⚠ 第一个是默认那一路：没配方言的存量供应商按它解
+RERANK_DIALECTS: tuple[RerankDialectSpec, ...] = (
+    RerankDialectSpec(
+        code=RERANK_DIALECT_JINA,
+        label="Jina 兼容",
+        description=(
+            "打 `{端点}/rerank`，请求体是 "
+            "`{model, query, documents, top_n}`。"
+            "Jina、Cohere、TEI、Xinference、vLLM 都说这一套"
+        ),
+    ),
+    RerankDialectSpec(
+        code=RERANK_DIALECT_DASHSCOPE,
+        label="阿里云百炼原生",
+        description=(
+            "百炼的重排不在兼容口径里，挂在原生面上：端点要填到 "
+            "`https://dashscope.aliyuncs.com/api/v1` 这一层"
+        ),
+    ),
+)
+
+RERANK_DIALECT_CODES: tuple[str, ...] = tuple(
+    one.code for one in RERANK_DIALECTS
+)
+DEFAULT_RERANK_DIALECT = RERANK_DIALECT_CODES[0]
 
 
 @dataclass(frozen=True)
@@ -63,6 +107,9 @@ class ProviderKindSpec:
     consumers: tuple[str, ...]
     # 可调的推理档位；空表示这一形态没有这一档
     efforts: tuple[str, ...] = ()
+    # 这一形态配得出哪几套重排线形；空表示它登记不了重排模型。
+    # ⚠ 由后端下发而不是前端写死：漂开的表现是「界面上选得中、保存时 422」
+    rerank_dialects: tuple[RerankDialectSpec, ...] = ()
     presets: tuple[ProviderPreset, ...] = ()
 
 
@@ -82,6 +129,7 @@ PROVIDER_KINDS: tuple[ProviderKindSpec, ...] = (
         is_login_required=False,
         model_kinds=MODEL_KINDS,
         consumers=CONSUMERS,
+        rerank_dialects=RERANK_DIALECTS,
         presets=(
             ProviderPreset(
                 code="dashscope",
@@ -134,6 +182,9 @@ class PurposeSpec:
     consumer: str
     # 只有接图的模型才配得上它
     is_vision_required: bool = False
+    # 没分配时那一侧还有没有环境变量那一档兜底。⚠ 为假即「不分配就是不启用」，
+    # 界面按它说话——说反了的话，人会去翻一个根本不存在的环境变量
+    has_env_default: bool = True
 
 
 PURPOSES: tuple[PurposeSpec, ...] = (
@@ -179,6 +230,18 @@ PURPOSES: tuple[PurposeSpec, ...] = (
         description="文档切块后按它转成向量；已建库的向量钉在建库那一刻的模型上",
         kind=MODEL_KIND_EMBEDDING,
         consumer=CONSUMER_KNOWLEDGE,
+    ),
+    PurposeSpec(
+        code="knowledge.rerank",
+        label="检索重排",
+        description=(
+            "混合召回之后按它把候选重排一次再截断；只排序不落库，"
+            "换模型不作废任何存量向量、也不用重建索引"
+        ),
+        kind=MODEL_KIND_RERANK,
+        consumer=CONSUMER_KNOWLEDGE,
+        # ⚠ 这一路只有目录一个来源：不分配就是不启用，检索按融合名次给出结果
+        has_env_default=False,
     ),
 )
 

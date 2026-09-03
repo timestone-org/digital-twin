@@ -71,6 +71,23 @@ defineProps<{
             {{ knowledge.isModelEnabled ? '已接' : '没接' }}
           </DtTag>
         </li>
+        <li class="effective__row">
+          <span class="text-text-title">检索重排</span>
+          <DtTag
+            :intent="knowledge.rerank.isEnabled ? 'success' : 'neutral'"
+            size="sm"
+          >
+            {{ knowledge.rerank.isEnabled ? '已接' : '没接' }}
+          </DtTag>
+          <!-- ⚠ 没接时把原因摆出来：不摆的话，「质量忽然变了」没有任何线索 -->
+          <span class="effective__models">
+            {{
+              knowledge.rerank.isEnabled
+                ? knowledge.rerank.model
+                : knowledge.rerank.reason
+            }}
+          </span>
+        </li>
       </ul>
     </section>
   </div>

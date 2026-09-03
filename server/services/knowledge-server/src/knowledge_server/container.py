@@ -21,13 +21,17 @@ from knowledge_server.apps.knowledge.services.llm import (
     Answerer,
     build_answerer,
 )
+from knowledge_server.apps.knowledge.services.reranking import (
+    Reranker,
+    build_reranker,
+)
 from knowledge_server.apps.knowledge.services.sources import (
     KnowledgeSource,
     SourceDeps,
     build_sources,
 )
 from knowledge_server.llm_adapters import AdapterDeps, CatalogChatAdapter
-from knowledge_server.llm_purposes import PURPOSE_EMBEDDING
+from knowledge_server.llm_purposes import PURPOSE_EMBEDDING, PURPOSE_RERANK
 from knowledge_server.probe import IndexProbe
 from knowledge_server.settings import SERVICE_NAME, Settings
 from lib.cache import Cache
@@ -41,9 +45,11 @@ from llmcore import (
     CatalogClient,
     CodexTokenClient,
     DynamicEmbeddingAdapter,
+    DynamicRerankAdapter,
     EmbeddingEndpoint,
     ModelChoice,
     ModelDisabled,
+    RerankEndpoint,
 )
 from llmcore.codex import CodexRewire
 from llmcore.guard import GuardedModel
@@ -75,6 +81,9 @@ class Container:
     # 对话档。⚠ 没接时 `can_answer` 为假而不是 `None`：`agentic` 策略照样
     # 装得出来，只是它自己会如实说「用不了」
     answerer: Answerer
+    # 重排那一路（ADR-0042）。⚠ 没接时 `can_rerank` 为假而不是 `None`：
+    # 检索照常返回融合名次，而「接没接」由 `/capabilities` 如实回答
+    reranker: Reranker
     # 打 platform 的客户端。⚠ 一个进程一份、长活：每次调用现造一个再关掉，
     # 等于每次都重新握一次 TCP 手
     platform: httpx.AsyncClient
@@ -179,6 +188,7 @@ def build_container(settings: Settings) -> Container:
         answerer=build_answerer(
             chat_adapter, chat_breaker, refresh=catalog.refresh
         ),
+        reranker=_build_reranker(settings, catalog),
         responder=_build_responder(chat_adapter, chat_breaker, catalog),
     )
 
@@ -244,6 +254,42 @@ def _embedding_endpoint(
         PURPOSE_EMBEDDING, timeout_s=settings.embedding_timeout_s
     )
     return from_catalog or settings.embedding_endpoint()
+
+
+def _rerank_endpoint(
+    settings: Settings, catalog: CatalogCache
+) -> RerankEndpoint | None:
+    """重排档此刻该打哪；没分配即这套部署没接这一路。
+
+    ⚠ 只有目录一个来源，没有环境变量那一档：多一条回退链就多一处
+    「配了没生效」要排查的地方，而这一路没有任何存量部署靠环境变量配着它。
+
+    Args: settings, catalog。
+    """
+    return catalog.snapshot().rerank_endpoint(
+        PURPOSE_RERANK, timeout_s=settings.rerank_timeout_s
+    )
+
+
+def _build_reranker(settings: Settings, catalog: CatalogCache) -> Reranker:
+    """重排那一路。端点由目录在调用时解出，没分配即这套部署没接。
+
+    ⚠ 断路器单开一个：它与对话档打的不是同一个端点，共用一份的话，
+    重排端点连挂几次会把对话面一起短路掉。
+
+    Args: settings, catalog。
+    """
+    return build_reranker(
+        DynamicRerankAdapter(
+            resolve=lambda: _rerank_endpoint(settings, catalog),
+            refresh=catalog.refresh,
+        ),
+        CircuitBreaker(
+            name="knowledge:rerank",
+            failure_threshold=settings.model_breaker_failures,
+            reset_after_s=settings.model_breaker_reset_s,
+        ),
+    )
 
 
 def _build_responder(

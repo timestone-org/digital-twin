@@ -13,7 +13,10 @@ from knowledge_server.apps.knowledge.schemas import (
     SearchOut,
 )
 from knowledge_server.apps.knowledge.services import search_service
-from knowledge_server.apps.knowledge.services.assembly import Lanes, strategies
+from knowledge_server.apps.knowledge.services.assembly import (
+    lanes_of,
+    strategies,
+)
 from knowledge_server.apps.knowledge.services.retrieval import (
     RetrievalStrategy,
 )
@@ -84,11 +87,4 @@ def _lanes(container: Container) -> tuple[RetrievalStrategy, ...]:
 
     Args: container。
     """
-    return strategies(
-        Lanes(
-            settings=container.settings,
-            probe=container.index,
-            embedder=container.embedder,
-            answerer=container.answerer,
-        )
-    )
+    return strategies(lanes_of(container))

@@ -20,6 +20,7 @@ from platform_server.apps.llm_providers.schemas.provider import (
     LlmProviderPresetOut,
     LlmProviderUpdateIn,
     LlmPurposeOut,
+    LlmRerankDialectOut,
 )
 
 __all__ = [
@@ -40,4 +41,5 @@ __all__ = [
     "LlmProviderPresetOut",
     "LlmProviderUpdateIn",
     "LlmPurposeOut",
+    "LlmRerankDialectOut",
 ]

@@ -98,6 +98,11 @@ function capabilityOf(isAsrEnabled: boolean): KnowledgeCapability {
     readyStrategies: ['naive', 'hybrid', 'agentic'],
     acceptedSuffixes: ['.md', '.docx'],
     index: { vector: 'pgvector', keyword: 'trgm', reason: '' },
+    rerank: {
+      isEnabled: false,
+      model: '',
+      reason: '还没给「知识库重排」分配模型',
+    },
   }
 }
 

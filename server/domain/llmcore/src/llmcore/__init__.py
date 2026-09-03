@@ -1,14 +1,16 @@
 """OpenAI 兼容端点的调用面。零项目名词，两个服务共用（ADR-0032 决策三）。
 
 ⚠ 这一包对外只认这个再导出面：内部形状可以随时改，而消费方只该认
-`ModelChoice`、`ChatEndpoint`、`EmbeddingEndpoint` 与两个适配器协议。
+`ModelChoice`、三个端点形状与几个适配器协议。
 """
 
 from llmcore.catalog import (
     EMPTY_CATALOG,
     MODEL_KIND_CHAT,
     MODEL_KIND_EMBEDDING,
+    MODEL_KIND_RERANK,
     MODEL_SPEC_KINDS,
+    OPTION_RERANK_DIALECT,
     PROVIDER_KIND_CODEX_OAUTH,
     PROVIDER_KIND_OPENAI_COMPAT,
     Assignment,
@@ -43,14 +45,17 @@ from llmcore.codex import (
 )
 from llmcore.deltas import DeltaChannel, DeltaSink
 from llmcore.dynamic_embedding import DynamicEmbeddingAdapter
-from llmcore.endpoints import ChatEndpoint, EmbeddingEndpoint
+from llmcore.endpoints import ChatEndpoint, EmbeddingEndpoint, RerankEndpoint
 from llmcore.errors import (
     ModelDisabled,
     ModelRejected,
     ModelUnavailable,
     classified,
+    classified_status,
     is_our_fault,
+    is_our_fault_status,
     reason_of,
+    reason_of_status,
 )
 from llmcore.openai_compat import (
     EndpointResolver,
@@ -73,21 +78,35 @@ from llmcore.ports import (
     ModelSource,
 )
 from llmcore.reasoning import ReasoningChatOpenAI
+from llmcore.rerank import (
+    DEFAULT_RERANK_DIALECT,
+    RERANK_DIALECTS,
+    RERANK_SOURCE,
+    DynamicRerankAdapter,
+    Reranker,
+    RerankScore,
+    RerankUnavailable,
+)
 
 __all__ = [
     "CATALOG_PATH",
     "CODEX_EFFORTS",
     "CODEX_LEASE_PATH",
     "DEFAULT_PROFILE",
+    "DEFAULT_RERANK_DIALECT",
     "EMBEDDING_SOURCE",
     "EMPTY_CATALOG",
     "MODEL_KINDS",
     "MODEL_KIND_CHAT",
     "MODEL_KIND_EMBEDDING",
+    "MODEL_KIND_RERANK",
     "MODEL_SPEC_KINDS",
     "OPTION_DEFAULT_EFFORT",
+    "OPTION_RERANK_DIALECT",
     "PROVIDER_KIND_CODEX_OAUTH",
     "PROVIDER_KIND_OPENAI_COMPAT",
+    "RERANK_DIALECTS",
+    "RERANK_SOURCE",
     "Assignment",
     "CatalogCache",
     "CatalogClient",
@@ -103,6 +122,7 @@ __all__ = [
     "DeltaChannel",
     "DeltaSink",
     "DynamicEmbeddingAdapter",
+    "DynamicRerankAdapter",
     "EmbeddingAdapter",
     "EmbeddingEndpoint",
     "EmbeddingShapeChanged",
@@ -121,6 +141,10 @@ __all__ = [
     "OpenAiCompatEmbeddingAdapter",
     "ProviderSpec",
     "ReasoningChatOpenAI",
+    "RerankEndpoint",
+    "RerankScore",
+    "RerankUnavailable",
+    "Reranker",
     "Resolved",
     "StoredTokenProvider",
     "TokenSource",
@@ -129,7 +153,10 @@ __all__ = [
     "build_openai_embedding",
     "catalog_version",
     "classified",
+    "classified_status",
     "effort_of",
     "is_our_fault",
+    "is_our_fault_status",
     "reason_of",
+    "reason_of_status",
 ]

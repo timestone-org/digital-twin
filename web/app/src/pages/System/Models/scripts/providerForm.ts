@@ -41,12 +41,16 @@ export interface ProviderForm {
   extraBody: string
   /** 这一形态的默认推理档位；空串即不配。 */
   defaultEffort: string
+  /** 重排走哪一套线形；空串即按这一形态的默认那一路。 */
+  rerankDialect: string
   notes: string
   models: ModelRow[]
 }
 
 /** 推理档位落在形态配置的哪一格。与后端 `rules.py` 逐字一致。 */
 const OPTION_DEFAULT_EFFORT = 'default_effort'
+/** 重排线形落在形态配置的哪一格。与后端 `rules.py` 逐字一致。 */
+const OPTION_RERANK_DIALECT = 'rerank_dialect'
 
 /** 缺省的形态：不带这一格的旧调用建出来的正是它。 */
 export const DEFAULT_KIND = 'openai_compat'
@@ -75,6 +79,7 @@ export function emptyForm(kind: string = DEFAULT_KIND): ProviderForm {
     isEnabled: true,
     extraBody: '',
     defaultEffort: '',
+    rerankDialect: '',
     notes: '',
     models: [],
   }
@@ -107,7 +112,8 @@ export function formOf(provider: LlmProvider): ProviderForm {
       provider.extra_body === null
         ? ''
         : JSON.stringify(provider.extra_body, null, 2),
-    defaultEffort: effortOf(provider.options),
+    defaultEffort: optionText(provider.options, OPTION_DEFAULT_EFFORT),
+    rerankDialect: optionText(provider.options, OPTION_RERANK_DIALECT),
     notes: provider.notes,
     models: provider.models.map((one) => ({
       key: nextRowKey(),
@@ -135,12 +141,16 @@ export function suggestedRow(name: string): ModelRow {
 }
 
 /**
- * 读这一路配的推理档位；没配或不成形给空串。
- * ⚠ 防着读：这一格要原样进请求体，塞个数字进去是后端一条 400。
+ * 读形态配置里的一格；没配或不是字符串给空串。
+ * ⚠ 防着读：这几格要原样进请求体，塞个数字进去是后端一条 400。
  * @param options 形态配置
+ * @param key 要读哪一格
  */
-export function effortOf(options: Record<string, unknown> | null): string {
-  const found = options?.[OPTION_DEFAULT_EFFORT]
+export function optionText(
+  options: Record<string, unknown> | null,
+  key: string,
+): string {
+  const found = options?.[key]
   return typeof found === 'string' ? found : ''
 }
 
@@ -247,12 +257,15 @@ function modelInputs(rows: ModelRow[]): LlmModelInput[] {
     name: row.name.trim(),
     kind: row.kind,
     has_vision: row.kind === 'chat' && row.hasVision,
+    // ⚠ 只有嵌入模型才有维数：给重排模型带一格，读侧会把它当成嵌入模型
     dimensions: row.kind === 'embedding' ? Number(row.dimensions) : null,
   }))
 }
 
 /**
- * 这一形态自己那几格配置；没有可配的就给 null。
+ * 这一形态自己那几格配置；一格都没配就给 null。
+ * ⚠ 只带这一形态认得的键：认不得的那一格后端当场拒，而那句话指不回是哪一格。
+ * ⚠ 空串即「不配这一格」，不是「配成空串」：后端对空串按未登记的取值拒。
  * @param form 表单取值
  * @param kind 这一路的形态
  */
@@ -260,9 +273,15 @@ function optionsOf(
   form: ProviderForm,
   kind: LlmProviderKind | null,
 ): Record<string, unknown> | null {
-  if (kind === null || kind.efforts.length === 0) return null
-  if (form.defaultEffort === '') return null
-  return { [OPTION_DEFAULT_EFFORT]: form.defaultEffort }
+  if (kind === null) return null
+  const made: Record<string, unknown> = {}
+  if (kind.efforts.length > 0 && form.defaultEffort !== '') {
+    made[OPTION_DEFAULT_EFFORT] = form.defaultEffort
+  }
+  if (kind.rerank_dialects.length > 0 && form.rerankDialect !== '') {
+    made[OPTION_RERANK_DIALECT] = form.rerankDialect
+  }
+  return Object.keys(made).length === 0 ? null : made
 }
 
 /**

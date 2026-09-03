@@ -77,6 +77,7 @@ function purpose(over: Partial<LlmPurpose> = {}): LlmPurpose {
     kind: 'chat',
     consumer: 'assistant',
     is_vision_required: false,
+    has_env_default: true,
     provider_id: null,
     provider_name: null,
     model_name: null,
@@ -106,6 +107,7 @@ const CODEX_KIND: LlmProviderKind = {
   model_kinds: ['chat'],
   consumers: ['assistant'],
   efforts: ['low', 'medium', 'high', 'xhigh'],
+  rerank_dialects: [],
   presets: [],
 }
 
@@ -119,6 +121,7 @@ const KIND: LlmProviderKind = {
   model_kinds: ['chat', 'embedding'],
   consumers: ['assistant', 'knowledge'],
   efforts: [],
+  rerank_dialects: [],
   presets: [],
 }
 
@@ -328,5 +331,27 @@ describe('模型管理页', () => {
   it('没有 llm:view 的人什么目录都看不到', async () => {
     const wrapper = await render([])
     expect(wrapper.text()).not.toContain('百炼')
+  })
+
+  it('知识库那一栏把重排接没接、没接的原因一并摆出来', async () => {
+    // ⚠ 没接时检索走的是融合名次那一档：不摆原因的话，「质量忽然变了」
+    // 没有任何线索
+    vi.spyOn(knowledge, 'readCapability').mockResolvedValue({
+      isEmbeddingEnabled: true,
+      isModelEnabled: false,
+      isAsrEnabled: false,
+      strategies: ['naive', 'hybrid', 'agentic'],
+      readyStrategies: ['naive', 'hybrid'],
+      acceptedSuffixes: ['.md'],
+      index: { vector: 'pgvector', keyword: 'trgm', reason: '' },
+      rerank: {
+        isEnabled: false,
+        model: '',
+        reason: '还没给「知识库重排」分配模型',
+      },
+    })
+    const wrapper = await render()
+    expect(wrapper.text()).toContain('检索重排')
+    expect(wrapper.text()).toContain('还没给「知识库重排」分配模型')
   })
 })

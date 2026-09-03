@@ -737,6 +737,9 @@
             "title": "Ready Strategies",
             "type": "array"
           },
+          "rerank": {
+            "$ref": "#/components/schemas/RerankCapabilityOut"
+          },
           "source_kinds": {
             "items": {
               "type": "string"
@@ -756,7 +759,8 @@
           "is_embedding_enabled",
           "is_model_enabled",
           "is_asr_enabled",
-          "index"
+          "index",
+          "rerank"
         ],
         "title": "CapabilityOut",
         "type": "object"
@@ -1594,6 +1598,30 @@
           "filename"
         ],
         "title": "RegisterDocumentIn",
+        "type": "object"
+      },
+      "RerankCapabilityOut": {
+        "description": "重排那一路此刻接没接（ADR-0042）。\n\n⚠ `reason` 不是装饰：没接时检索走的是融合名次那一档，而**悄悄退化**的\n表现正是「质量忽然变了、一处都不报错」。这一格就是那句话。",
+        "properties": {
+          "is_enabled": {
+            "title": "Is Enabled",
+            "type": "boolean"
+          },
+          "model": {
+            "default": "",
+            "title": "Model",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "is_enabled"
+        ],
+        "title": "RerankCapabilityOut",
         "type": "object"
       },
       "SearchIn": {

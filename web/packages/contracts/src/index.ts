@@ -90,6 +90,7 @@ export type {
   KnowledgeIndexCapability,
   KnowledgeLocator,
   KnowledgeKeywordLane,
+  KnowledgeRerankCapability,
   KnowledgeSearchResult,
   KnowledgeSource,
   KnowledgeSourceKind,
@@ -532,10 +533,13 @@ export type {
   LlmProviderPreset,
   LlmPurpose,
   LlmPurposeCode,
+  LlmRerankDialect,
+  LlmRerankDialectCode,
 } from './llm'
 export {
   LLM_CONSUMERS,
   LLM_MODEL_KINDS,
   LLM_PROVIDER_KINDS,
   LLM_PURPOSES,
+  LLM_RERANK_DIALECTS,
 } from './llm'

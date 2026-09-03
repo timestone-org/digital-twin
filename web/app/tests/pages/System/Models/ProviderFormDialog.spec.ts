@@ -44,9 +44,13 @@ const KINDS: LlmProviderKind[] = [
     description: '填端点与密钥',
     is_endpoint_required: true,
     is_login_required: false,
-    model_kinds: ['chat', 'embedding'],
+    model_kinds: ['chat', 'embedding', 'rerank'],
     consumers: ['assistant', 'knowledge'],
     efforts: [],
+    rerank_dialects: [
+      { code: 'jina', label: 'Jina 兼容', description: '打 /rerank' },
+      { code: 'dashscope', label: '原生', description: '端点填到 /api/v1' },
+    ],
     presets: [
       {
         code: 'dashscope',
@@ -64,6 +68,7 @@ const KINDS: LlmProviderKind[] = [
     model_kinds: ['chat'],
     consumers: ['assistant'],
     efforts: ['low', 'medium', 'high', 'xhigh'],
+    rerank_dialects: [],
     presets: [],
   },
 ]
@@ -245,5 +250,29 @@ describe('按类型摆格子', () => {
     const wrapper = render(provider({ kind: 'codex_oauth' }))
     expect(wrapper.text()).toContain('类型：Codex 订阅')
     expect(wrapper.text()).not.toContain('供应商类型')
+  })
+
+  it('重排线形那一格只在配得出它的类型上摆，缺省项照着后端说的默认说话', () => {
+    // ⚠ 前端不写死一份「哪几套线形」：漂开的表现是界面上选得中一个调用侧
+    // 根本没装的线形，而那要到第一次检索才看得见
+    const wrapper = render()
+    expect(wrapper.text()).toContain('重排线形')
+    expect(wrapper.text()).toContain('按默认（Jina 兼容）')
+  })
+
+  it('登记不了重排的类型上没有这一格', async () => {
+    const wrapper = render()
+    await pickKind(wrapper, 'codex_oauth')
+    expect(wrapper.text()).not.toContain('重排线形')
+  })
+
+  it('选中的那一套线形把「端点要填到哪」说出来', async () => {
+    const wrapper = render()
+    const select = wrapper
+      .findAllComponents(DtSelect)
+      .find((one) => one.props('label') === '重排线形')
+    select?.vm.$emit('update:modelValue', 'dashscope')
+    await flushPromises()
+    expect(wrapper.text()).toContain('端点填到 /api/v1')
   })
 })

@@ -1,6 +1,7 @@
 """带补检的检索循环。用假模型跑——用例不许打真端点。"""
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 import pytest
@@ -10,13 +11,16 @@ from knowledge_server.apps.knowledge.services.llm import (
     NullAnswerer,
 )
 from knowledge_server.apps.knowledge.services.parsing import Locator
+from knowledge_server.apps.knowledge.services.reranking import RerankFailed
 from knowledge_server.apps.knowledge.services.retrieval import (
+    RERANK_FAILED_NOTE,
     Agentic,
     Hit,
     RetrievalRequest,
     RetrievalResult,
     RetrievalUnavailable,
 )
+from llmcore.rerank import RerankScore
 
 
 @dataclass
@@ -186,3 +190,69 @@ async def test_the_answer_prompt_numbers_the_snippets_from_one() -> None:
 async def test_the_null_answerer_raises_by_name() -> None:
     with pytest.raises(AnswerUnavailable):
         await NullAnswerer().complete("s", "u")
+
+
+class _Reranker:
+    """按脚本回分的假重排；也可以恒抛。"""
+
+    def __init__(
+        self,
+        scores: list[RerankScore] | None = None,
+        *,
+        raises: Exception | None = None,
+    ) -> None:
+        self.id = "remote-rerank"
+        self.model = "rerank-1"
+        self.can_rerank = True
+        self.scores = scores or []
+        self.raises = raises
+        self.asked: list[str] = []
+
+    async def rerank(
+        self, query: str, documents: Sequence[str], *, top_n: int
+    ) -> list[RerankScore]:
+        del documents, top_n
+        self.asked.append(query)
+        if self.raises is not None:
+            raise self.raises
+        return self.scores
+
+
+async def test_the_pool_is_reranked_once_against_the_original_question() -> (
+    None
+):
+    """⚠ 对着原问题排，不对着最后一条改写式：用户问的是前者，
+    而改写式只是为了把资料捞出来。"""
+    hybrid = _Hybrid(batches=[(_hit("甲", 0.9), _hit("乙", 0.8))])
+    lane = _Reranker(
+        [RerankScore(index=1, score=0.95), RerankScore(index=0, score=0.10)]
+    )
+    made = await Agentic(
+        hybrid=hybrid,  # pyright: ignore[reportArgumentType]
+        answerer=_Answerer(grade="yes"),  # pyright: ignore[reportArgumentType]
+        reranker=lane,  # pyright: ignore[reportArgumentType]
+    ).retrieve(
+        None,  # pyright: ignore[reportArgumentType]
+        _request(),
+    )
+    assert lane.asked == ["出口温度多少"]
+    assert [one.text for one in made.hits] == ["乙", "甲"]
+
+
+async def test_a_failed_rerank_still_answers_and_says_what_happened() -> None:
+    """⚠ 重排挂了不许把整次检索带塌：它是排序增强，退回融合名次就好——
+    但要说出来，不说的话质量忽然变了却一处不报错。"""
+    hybrid = _Hybrid(batches=[(_hit("甲", 0.9), _hit("乙", 0.8))])
+    made = await Agentic(
+        hybrid=hybrid,  # pyright: ignore[reportArgumentType]
+        answerer=_Answerer(grade="yes"),  # pyright: ignore[reportArgumentType]
+        reranker=_Reranker(  # pyright: ignore[reportArgumentType]
+            raises=RerankFailed("端点未响应")
+        ),
+    ).retrieve(
+        None,  # pyright: ignore[reportArgumentType]
+        _request(),
+    )
+    assert [one.text for one in made.hits] == ["甲", "乙"]
+    assert made.answer
+    assert RERANK_FAILED_NOTE in made.note
