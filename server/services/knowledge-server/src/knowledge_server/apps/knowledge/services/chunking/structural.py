@@ -188,7 +188,9 @@ def _flushed(rows: list[Block], carry: str, start: int) -> Chunk:
         ordinal=start,
         text=text,
         heading_path=heading,
-        locator=replace(rows[0].locator, path=path),
+        # ⚠ 起页取首块、止页取末块：只报首页的引用会让人翻到第 4 页却找不到
+        # 那句话——它在第 6 页
+        locator=replace(rows[0].locator, path=path, page_end=_last_page(rows)),
         token_count=estimated(text),
     )
 
@@ -205,3 +207,14 @@ def _without_echo(rows: list[Block], path: tuple[str, ...]) -> list[Block]:
     if not rows or not path or rows[0].kind != "heading":
         return rows
     return rows[1:] if rows[0].text.strip() == path[-1] else rows
+
+
+def _last_page(rows: list[Block]) -> int | None:
+    """这几块里最后一个有页码的块在第几页；都没有页码就给 `None`。
+
+    Args: rows。
+    """
+    for one in reversed(rows):
+        if one.locator.page is not None:
+            return one.locator.page
+    return None

@@ -109,9 +109,9 @@ def _carried(rows, overlap):
 
 | 期 | 做什么 | 依赖 | 见效 |
 |---|---|---|---|
-| **P0** | 把一台 MinerU 跑起来，**只抓真实线形**，不写代码 | — | 拿到夹具 |
+| **P0** ✅ | 把一台 MinerU 跑起来，**只抓真实线形**，不写代码 | — | 拿到夹具 |
 | **P1** ✅ | 切块口径与嵌入窗口对齐；反过度切分 | — | ⭐ 最大，立刻 |
-| **P2** | `MineruBackend` 接进来：PDF + 页码 | P0 | 收 PDF |
+| **P2** ✅ | `MineruBackend` 接进来：PDF + 页码 | P0 | 收 PDF |
 | **P3** | 图片落对象存储，能在对话里看 | P2 | 看得见图 |
 | **P4** | 引用展示重做：只列用到的页 | P2 | ⭐ 直接诉求 |
 | **P5** | 会话自动命名 | — | 直接诉求 |
@@ -156,6 +156,86 @@ ADR-0043 的备选表里明写了不选「一期就写一个 MinerU 客户端」
 - 图是随 JSON 回 base64，还是只能走 zip。**这决定 P3 的取图路径。**
 - 表格 `table_body` 是不是 HTML，行列结构能不能直接拆。
 - 超时与失败长什么样：打一份坏 PDF、打一份 300 页的，看它回什么。
+
+### 已经确认的事实（2026-09-03，本机 Docker Desktop / linux-arm64 / 16 核 32G）
+
+- **CPU 只能走 `pipeline` 后端。** `mineru-api` 的服务端默认后端是
+  `hybrid-auto-engine`，**那一档要 GPU**。所以每一次请求都必须显式带
+  `backend=pipeline`——不带的表现是「服务起着、一调就报错」，而错在服务端。
+- **装 `mineru[pipeline]`，不装 `[core]` / `[all]`。** `core` 会把 vlm 与
+  gradio 一起拖进来，而 vlm 那一路在没有显卡的机器上根本跑不了。
+  `fastapi` / `uvicorn` 是基础依赖，所以只装 pipeline 也有 `mineru-api`。
+- **arm64 装得上。** `mineru[pipeline]==3.4.5` 在 `python:3.12-slim-bookworm`
+  上一次装成，`torch` / `onnxruntime` / `opencv` 都有 aarch64 轮子；OCR 那一路是
+  `paddleocr_torch`（PaddleOCR 的 torch 移植），所以**不需要 paddlepaddle**——
+  那正是 arm64 上最容易卡住的一个依赖。
+- ⚠ **arm64 上 PyPI 默认给的 torch 是 CUDA 版**（`2.14.0+cu130`），镜像因此
+  10.1 GB。要先从 `https://download.pytorch.org/whl/cpu` 装
+  `torch==2.14.0` + `torchvision==0.29.0` 再装 mineru。不先钉住它，
+  镜像白白胖 7 GB 而且**一点报错都没有**——它只是永远用不到那些库。
+- **系统依赖两个**：`libgl1`、`libglib2.0-0`（opencv 用）。缺了的话
+  `import cv2` 在**第一次解析**时才炸，报的是 `libGL.so.1` 找不到。
+- **模型走 ModelScope**（`MINERU_MODEL_SOURCE=modelscope`，
+  `mineru-models-download -s modelscope -m pipeline`），pipeline 那套约 2.4 GB：
+  `PP-DocLayoutV2`（版面）+ `unimernet`（公式）+ `paddleocr_torch`（OCR）。
+  ⚠ 挂卷不烤进镜像：它与代码无关，烤进去每次重建都要重下一遍。
+
+### 抓到的真实线形（夹具在 `tests/fixtures/mineru_file_parse.json`）
+
+用一份**每页内容已知**的三页 PDF（每页埋一个哨兵串）打 `POST /file_parse`：
+
+**接口面**（取自服务自己的 `/openapi.json`，不是文档）：
+
+| 端点 | 是什么 |
+|---|---|
+| `POST /file_parse` | 同步解析，一次调用等到底 |
+| `POST /tasks` → `GET /tasks/{id}` → `GET /tasks/{id}/result` | 异步：投任务、轮状态、取结果 |
+| `GET /health` | 版本 + 队列深度 + 并发上限，给 compose 探针用 |
+
+- ⚠ **`backend` 的服务端缺省是 `hybrid-engine`，而那一档要 GPU。** 每次请求都必须
+  显式带 `backend=pipeline`，否则「服务起着、一调就报错」。
+- ⚠ **`return_content_list` 与 `return_images` 都默认 `false`。** 不显式要，回来的
+  只有 markdown——而 markdown 里**没有页码**。
+- 还有 `effort`、`image_analysis`、`start_page_id` / `end_page_id`、
+  `response_format_zip` 等格。
+
+**回包形状**：顶层是任务信封
+（`task_id` / `status` / `backend` / `error` / `status_url` / `result_url` /
+`version` / `results`），`results` 按**文件名（去后缀）**索引。每份文件是
+`{md_content, content_list, images}`：
+
+- ⚠ **`content_list` 是一个 JSON 字符串，不是数组**，要再 `json.loads` 一次。
+  当成数组用的话拿到的是三千多个单字符——而那不报错。
+- ⚠ **`images` 的值是完整的 `data:image/jpeg;base64,…`**，键是 `<sha256>.jpg`；
+  `content_list` 里的 `img_path` 是 `images/<同一个>.jpg`，两边靠 **basename** 对上。
+- **每一条都带 `page_idx`（从 0 起）与 `bbox`（归一化 0–1000），一条不缺**，
+  而且**页码是准的**：三个哨兵串分别落在 p0 / p1 / p2。
+- `text_level` 只有标题条目才有这个键，正文干脆没有。
+  ⚠ **层级是 MinerU 自己判的，不是原件的**：这份 PDF 里 `h1` 与 `h2`
+  都回了 `text_level=2`。所以标题栈可能是**平的**，`locator.path` 会退化成
+  「最近的一个标题」而不是完整路径——P2 要按这个事实设计，别指望层级。
+- `table` 给 `table_body`（带 `rowspan` / `colspan` 的 HTML）+ `table_caption` +
+  `table_footnote`，**并且另出一张表格截图**；`image` 给 `image_caption` /
+  `image_footnote` 两个数组。
+- ⚠ **失败是 HTTP 409**（不是 5xx），包体仍是那个任务信封，原因在 `error` 里。
+  客户端不能按 5xx 判失败，要按 `status != "completed"`。
+
+**跑起来的实测**（本机 arm64 / 纯 CPU）：三页文字版 PDF 热态 **约 10 秒**；
+服务默认把并发限到 3；`/health` 报得出排队数。表格内容基本全对，只有一处把
+破折号「—」OCR 成了「二」——**OCR 不是无损的**，这一点要在界面上说清楚。
+
+### ⚠ 一个只有真跑才会发现的坑：`mineru==3.4.5` 少声明了 `six`
+
+OCR 那一路 `import six`，而它不在依赖里。表现是**服务照常起来、健康探针也绿**，
+第一次解析才回一句 `No module named 'six'`（HTTP 409）。镜像里补装
+`six==1.17.0`。
+
+### 这改变了 P2 的一个决定：走异步 `/tasks`，不走 `/file_parse`
+
+三页文字 PDF 十秒，那一份两百页的扫描件在 CPU 上要几十分钟。同步接口意味着
+一条 HTTP 连接挂那么久——中间任何一跳超时都会让这次解析白跑，而 MinerU 那边
+仍在烧 CPU。改成投任务 + 轮询之后，`parse_remote(raw, timeout_s)` 这个端口签名
+不变（轮询在实现里面），但超时是我们自己数的，断了还能接着轮。
 
 ### 验收
 
@@ -327,10 +407,20 @@ MinerU 是**第三方镜像**，与 `minio/mc` 同档：**tag 钉死具体版本
 建议单开一个 compose profile（`--profile mineru`），因为它要 GPU、体量大、
 且没有它整套仍然能跑（只是不收 PDF）。
 
-### 验收
+### 验收（2026-09-03 在本机整套编排上跑过）
 
-真传一份 PDF → `kb_chunks.locator_json.page` 有值 →
-`POST …/knowledge-bases/{id}%3Asearch` 回来的 `locator.label` 是「第 N 页」。
+一份三页 PDF 经**上传凭证 → 直传 → 登记 → worker 摄取**走完：
+
+- `/capabilities` 的 `accepted_suffixes` 多出 `.pdf`，
+  `parsing.external_backends == ["mineru"]`，`reason` 空。
+- 上传凭证收了 `.pdf`（关着 MinerU 时这一步就会拒）。
+- worker 投任务到 `http://mineru:8000/tasks` 并轮询到完成。
+- 落库 3 块，`locator_json` 里 `page` 分别是 1 / 2 / 3——**与原件逐页对得上**。
+- 检索回来的 `locator.label` 是「第 2 页 · 二、运行参数」。
+
+⚠ 冷启那一次要留出时间：容器起来后的**第一次**解析要把版面/公式/OCR 三套权重
+载进内存，这份三页 PDF 花了约 2 分钟；热态约 10 秒。
+`KNOWLEDGE_EXTERNAL_PARSE_TIMEOUT_S` 的 180 秒缺省刚好够，**再大的文档要调大**。
 
 ---
 
@@ -486,9 +576,30 @@ GET /api/v1/knowledge/documents/{document_id}/figures/{figure_id}
 
 ## P6 · 检索质量（等 P1 落地、重新量过再定）
 
-1. **接上重排（零代码）。** `knowledge.rerank` 这个用途今天没分配（§0.7）。
-   在模型管理页配一个就生效，`hybrid` 会自动多召一批再排（`hybrid.py` 已经
-   写好了）。**建议 P1 合并后立刻配上，作为效果对照的一部分。**
+### ⚠ 现场发现（2026-09-03，在跑着的这套上实测）
+
+**重排端点接了但不应答。** `knowledge.rerank` 已经分配给
+`192.168.8.2:8091` 的 `bge-reranker-v2-m3`。实测：`/v1/models` 秒回（服务活着），
+`/rerank` 回 404，**`/v1/rerank` 挂住不回**。后果是每次检索先等满
+`KNOWLEDGE_RERANK_TIMEOUT_S=15` 秒。
+
+好的一面：断路器兜住了——前两次各 15 秒，之后短路成 0.2 秒，30 秒后再放一次
+试探；检索结果的 `note` 也如实说了「重排这一步没做成，本次按融合名次给出」。
+
+坏的一面：**`/capabilities` 报的是 `is_enabled: true`、`reason: ""`**，也就是
+「接了、一切正常」。§4.2 只覆盖了「没接要连原因一起说」，没覆盖「接了但每次都
+失败」——而后者恰恰是那条设计原则要防的「悄悄退化」。建议把断路器此刻的状态
+接进 `rerank.reason`：开着的时候说一句「这一路连着失败，已暂时短路」。
+
+**worker 空闲时刷 ERROR（既有缺陷，与本清单无关）。** `RedisStream` 把
+`socket_timeout` 设成 `KNOWLEDGE_REDIS_TIMEOUT_S=1` 秒，而摄取循环用
+`XREADGROUP ... BLOCK 5000`——队列空闲时每次阻塞读都必然客户端超时，日志里每
+6 秒一条 `队列暂时不可用`。消费本身没坏（有消息时服务端立刻返回），但真的队列
+故障与「没活干」现在长得一模一样。修法是让 socket 超时大于阻塞时长。
+
+### 原计划的三条
+
+1. **重排**：代码早写好了，端点得先能应答（见上）。
 2. **父块回填（small-to-big）。** 用小块做向量命中，回填时给出它所在那一节的整段。
    要给 `kb_chunks` 加一格 `parent_ordinal` 或一张节表。
    ⚠ **不要现在做**：P1 把窗口对齐之后要重新量一次召回，那时才知道还缺不缺这一层。

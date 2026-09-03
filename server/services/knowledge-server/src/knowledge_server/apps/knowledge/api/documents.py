@@ -57,15 +57,14 @@ async def upload_ticket(
 ) -> ApiResponse[UploadTicketOut]:
     """铸一个文档 id 并签一张把键、类型与大小都钉死的直传表单。
 
-    ⚠ 本步**不落行**：没传成的文档不会在库里留下半条记录，界面上也就不会
-    出现一份永远停在 pending 的鬼影。认不出的格式在这一步就拒——让用户传完
-    200 MB 再说「不收这种格式」是两次浪费。
-
     Args: session, container, _actor, base_id, body。
     """
     await library_service.read_base(session, base_id)
-    store = container.objectstore
-    return ok(await document_service.presign_upload(store, base_id, body))
+    return ok(
+        await document_service.presign_upload(
+            container.objectstore, base_id, body, container.external_parsers
+        )
+    )
 
 
 @router.post(
@@ -86,8 +85,9 @@ async def register(
     Args: session, container, _actor, base_id, body。
     """
     await library_service.read_base(session, base_id)
+    parsers = container.external_parsers
     made = await document_service.register_upload(
-        session, container.objectstore, base_id, body
+        session, container.objectstore, base_id, body, parsers
     )
     document_service.queue_ingest(
         session, container.stream, container.ingest_group(), made

@@ -1,5 +1,9 @@
 """层 2 解析：一份原件解成保结构的块序列，由某一路后端去解。"""
 
+from knowledge_server.apps.knowledge.services.parsing.mineru import (
+    MINERU_KIND,
+    MineruBackend,
+)
 from knowledge_server.apps.knowledge.services.parsing.ports import (
     BLOCK_KINDS,
     Block,
@@ -14,7 +18,6 @@ from knowledge_server.apps.knowledge.services.parsing.ports import (
     UnsupportedRawItem,
 )
 from knowledge_server.apps.knowledge.services.parsing.registry import (
-    EXTERNAL_BACKENDS,
     PARSERS,
     accepted_suffixes,
     external_for,
@@ -24,7 +27,7 @@ from knowledge_server.apps.knowledge.services.parsing.registry import (
 
 __all__ = [
     "BLOCK_KINDS",
-    "EXTERNAL_BACKENDS",
+    "MINERU_KIND",
     "PARSERS",
     "Block",
     "BlockKind",
@@ -32,6 +35,7 @@ __all__ = [
     "ExternalParseFailed",
     "ExternalParserBackend",
     "Locator",
+    "MineruBackend",
     "ParsedDocument",
     "ParserBackend",
     "RawItem",

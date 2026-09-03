@@ -21,9 +21,6 @@ from knowledge_server.apps.knowledge.services.ingest_worker import (
     ConsumerOptions,
     IngestConsumer,
 )
-from knowledge_server.apps.knowledge.services.parsing import (
-    EXTERNAL_BACKENDS,
-)
 from knowledge_server.container import Container, build_container
 from knowledge_server.schema import read_schema_facts
 from knowledge_server.settings import Settings
@@ -113,7 +110,7 @@ def _ingest_consumer(
             chunk_min_tokens=settings.chunk_min_tokens,
             chunk_overlap_chars=settings.chunk_overlap_chars,
             refresh=container.catalog.refresh,
-            external_parsers=EXTERNAL_BACKENDS,
+            external_parsers=container.external_parsers,
             external_parse_timeout_s=settings.external_parse_timeout_s,
         ),
         options=ConsumerOptions(

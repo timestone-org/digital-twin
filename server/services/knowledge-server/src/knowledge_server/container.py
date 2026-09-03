@@ -13,6 +13,9 @@ from dataclasses import dataclass, field
 import httpx
 from langchain_core.language_models import BaseChatModel
 
+from knowledge_server.apps.knowledge.services.assembly import (
+    external_parsers,
+)
 from knowledge_server.apps.knowledge.services.embedding import (
     Embedder,
     build_dynamic_embedder,
@@ -20,6 +23,9 @@ from knowledge_server.apps.knowledge.services.embedding import (
 from knowledge_server.apps.knowledge.services.llm import (
     Answerer,
     build_answerer,
+)
+from knowledge_server.apps.knowledge.services.parsing import (
+    ExternalParserBackend,
 )
 from knowledge_server.apps.knowledge.services.reranking import (
     Reranker,
@@ -75,6 +81,10 @@ class Container:
     stream: StreamLike
     # 接了哪几路知识来源。⚠ 顺序即界面上的先后
     sources: tuple[KnowledgeSource, ...]
+    # 接了哪几路外部解析后端（ADR-0043）。⚠ 装在容器上而不是各调用点各装一份：
+    # 能力面、上传校验与 worker 三处必须看到同一份，不然会出现「界面收 PDF 而
+    # worker 解不了」这种不对称，且两边单看都对
+    external_parsers: tuple[ExternalParserBackend, ...]
     # 嵌入那一路。⚠ 没接时 `can_embed` 为假而不是 `None`：调用方于是不必
     # 写「这一路在不在」的分支，而缺席由 `can_embed` 如实说出来
     embedder: Embedder
@@ -176,6 +186,7 @@ def build_container(settings: Settings) -> Container:
         # ⚠ 这一份是**不带身份头**的：能力面报「接了哪几路来源」用得着它，
         # 而真要代表用户去拉数据时，api 侧会按请求另造一份带头的
         sources=build_sources(SourceDeps(store=store, platform=platform)),
+        external_parsers=external_parsers(settings),
         embedder=build_dynamic_embedder(
             DynamicEmbeddingAdapter(
                 resolve=lambda: _embedding_endpoint(settings, catalog),

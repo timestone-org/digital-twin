@@ -159,9 +159,20 @@ class Settings(
     # 一份文档解析多久算卡死。⚠ 必须有：没有超时的解析会把这条消费循环
     # 永久占住，而现象是「队列不动了」，看不出是哪一份文档导致的
     parse_timeout_s: float = 10 * 60
-    # 外部解析服务（MinerU / PP-Structure 这一类）一次调用最多等多久。
-    # ⚠ 与上面那一档分开配：那一路是本地 CPU，这一路是网络 IO，几十秒是常态。
-    # 一期没有任何外部后端，这一格因此还没有生效路径（ADR-0043）
+    # ---- 外部解析服务 MinerU（ADR-0043）----
+    # ⚠ 开关开着却不给地址 = 启动即失败，与语音那一路同一条规矩：
+    # 「起来之后每次解析才报错」比起不来难查得多
+    mineru_enabled: bool = False
+    mineru_base_url: str = ""
+    # OCR 语言，原样交给 MinerU
+    mineru_lang: str = "ch"
+    mineru_formula_enabled: bool = True
+    mineru_table_enabled: bool = True
+
+    # 外部解析服务投任务 + 轮询到出结果的总预算。
+    # ⚠ 与上面那一档分开配：那一路是本地 CPU，这一路是网络 IO。
+    # ⚠ 纯 CPU 上一份几十页的扫描件按分钟算，配小了的表现是「大文件一律
+    # 解析超时」；而容器起来后的**第一次**解析还要先把权重载进内存
     external_parse_timeout_s: float = Field(default=180.0, gt=0)
 
     # 语音输入：到自建 FunASR 的中继（ADR-0038）。关着时 `/speech/ws` 一律
@@ -244,6 +255,24 @@ class Settings(
             raise ValueError("开了语音识别就必须配 KNOWLEDGE_ASR_URL")
         if not url.startswith(("ws://", "wss://")):
             raise ValueError("KNOWLEDGE_ASR_URL 必须以 ws:// 或 wss:// 开头")
+        return self
+
+    @model_validator(mode="after")
+    def _mineru_needs_an_address(self) -> Self:
+        """开了 MinerU 就必须给地址，否则启动即失败。
+
+        ⚠ 不打 WARN 继续：留到第一份 PDF 才发现的话，用户看到的是这份文档
+        解析失败，而 `/capabilities` 说的是「接了 mineru」。
+        """
+        if not self.mineru_enabled:
+            return self
+        url = self.mineru_base_url.strip()
+        if not url:
+            raise ValueError("开了 MinerU 就必须配 KNOWLEDGE_MINERU_BASE_URL")
+        if not url.startswith(("http://", "https://")):
+            raise ValueError(
+                "KNOWLEDGE_MINERU_BASE_URL 必须以 http:// 或 https:// 开头"
+            )
         return self
 
     def embedding_endpoint(self) -> EmbeddingEndpoint | None:

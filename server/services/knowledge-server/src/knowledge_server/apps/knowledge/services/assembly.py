@@ -1,7 +1,7 @@
-"""按配置装出这一次要用的索引与检索策略。
+"""按配置装出这一次要用的索引、外部解析后端与检索策略。
 
-⚠ 只有这一处装索引。api 侧与 worker 侧各装一份的话，两边的维数与表名可以
-漂开，而那时写进去查不出来、两边都不报错。
+⚠ 只有这一处装。api 侧与 worker 侧各装一份的话，两边的维数、表名与「接了
+哪几路解析后端」可以漂开，而那时写进去查不出来、两边都不报错。
 """
 
 from dataclasses import dataclass, field
@@ -13,6 +13,10 @@ from knowledge_server.apps.knowledge.services.indexing import (
     build_indexes,
 )
 from knowledge_server.apps.knowledge.services.llm import Answerer
+from knowledge_server.apps.knowledge.services.parsing import (
+    ExternalParserBackend,
+    MineruBackend,
+)
 from knowledge_server.apps.knowledge.services.reranking import (
     NullReranker,
     Reranker,
@@ -35,6 +39,32 @@ def index_pair(settings: Settings, facts: SchemaFacts) -> IndexPair:
     Args: settings, facts。
     """
     return build_indexes(facts.dimensions_or(settings.embedding_dimensions))
+
+
+def external_parsers(
+    settings: Settings,
+) -> tuple[ExternalParserBackend, ...]:
+    """这套部署接了哪几路外部解析后端（ADR-0043）。
+
+    ⚠ 没接就是**空元组，而空就是诚实缺席**：`/capabilities` 如实说没接，上传面
+    的 accept 名单里也就没有 `.pdf`。摆一个「看着能用、调下去报奇怪错」的占位
+    比缺席更糟。
+
+    ⚠ 只有这一处装：三个调用点（能力面、上传校验、worker）都从这里取同一份，
+    各装各的会让「界面收 PDF 而 worker 解不了」这种不对称成为可能。
+
+    Args: settings。
+    """
+    if not settings.mineru_enabled:
+        return ()
+    return (
+        MineruBackend(
+            base_url=settings.mineru_base_url,
+            lang=settings.mineru_lang,
+            formula_enabled=settings.mineru_formula_enabled,
+            table_enabled=settings.mineru_table_enabled,
+        ),
+    )
 
 
 @dataclass(frozen=True)

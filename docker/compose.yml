@@ -581,6 +581,17 @@ services:
       # 「投得进去、没人消费」，而两边单看都对
       KNOWLEDGE_INGEST_STREAM: ${KNOWLEDGE_INGEST_STREAM:-knowledge:ingest}
       KNOWLEDGE_INGEST_GROUP: ${KNOWLEDGE_INGEST_GROUP:-knowledge-ingest-workers}
+      # 外部解析服务 MinerU（ADR-0043）。⚠ 地址缺省指向同网的那个服务名——
+      # 起它要 `--profile mineru`，没起就把开关留在 false：开着却起不来的表现
+      # 是每一份 PDF 都解析失败，而能力面说的是「接了 mineru」
+      KNOWLEDGE_MINERU_ENABLED: ${KNOWLEDGE_MINERU_ENABLED:-false}
+      KNOWLEDGE_MINERU_BASE_URL: ${KNOWLEDGE_MINERU_BASE_URL:-http://mineru:8000}
+      KNOWLEDGE_MINERU_LANG: ${KNOWLEDGE_MINERU_LANG:-ch}
+      KNOWLEDGE_MINERU_FORMULA_ENABLED: ${KNOWLEDGE_MINERU_FORMULA_ENABLED:-true}
+      KNOWLEDGE_MINERU_TABLE_ENABLED: ${KNOWLEDGE_MINERU_TABLE_ENABLED:-true}
+      # ⚠ 投任务 + 轮询到出结果的总预算。纯 CPU 上一份几十页的扫描件按分钟算，
+      # 配小了的表现是「大文件一律解析超时」
+      KNOWLEDGE_EXTERNAL_PARSE_TIMEOUT_S: ${KNOWLEDGE_EXTERNAL_PARSE_TIMEOUT_S:-180}
       # 语音输入：到自建 FunASR 的中继（ADR-0038）。超时那几项用代码缺省。
       # ⚠ 开关开着却没给地址 = 启动即失败，而不是第一次开麦才报错
       KNOWLEDGE_ASR_ENABLED: ${KNOWLEDGE_ASR_ENABLED:-false}
@@ -661,6 +672,17 @@ services:
       # 「投得进去、没人消费」，而两边单看都对
       KNOWLEDGE_INGEST_STREAM: ${KNOWLEDGE_INGEST_STREAM:-knowledge:ingest}
       KNOWLEDGE_INGEST_GROUP: ${KNOWLEDGE_INGEST_GROUP:-knowledge-ingest-workers}
+      # 外部解析服务 MinerU（ADR-0043）。⚠ 地址缺省指向同网的那个服务名——
+      # 起它要 `--profile mineru`，没起就把开关留在 false：开着却起不来的表现
+      # 是每一份 PDF 都解析失败，而能力面说的是「接了 mineru」
+      KNOWLEDGE_MINERU_ENABLED: ${KNOWLEDGE_MINERU_ENABLED:-false}
+      KNOWLEDGE_MINERU_BASE_URL: ${KNOWLEDGE_MINERU_BASE_URL:-http://mineru:8000}
+      KNOWLEDGE_MINERU_LANG: ${KNOWLEDGE_MINERU_LANG:-ch}
+      KNOWLEDGE_MINERU_FORMULA_ENABLED: ${KNOWLEDGE_MINERU_FORMULA_ENABLED:-true}
+      KNOWLEDGE_MINERU_TABLE_ENABLED: ${KNOWLEDGE_MINERU_TABLE_ENABLED:-true}
+      # ⚠ 投任务 + 轮询到出结果的总预算。纯 CPU 上一份几十页的扫描件按分钟算，
+      # 配小了的表现是「大文件一律解析超时」
+      KNOWLEDGE_EXTERNAL_PARSE_TIMEOUT_S: ${KNOWLEDGE_EXTERNAL_PARSE_TIMEOUT_S:-180}
       # 语音输入：到自建 FunASR 的中继（ADR-0038）。超时那几项用代码缺省。
       # ⚠ 开关开着却没给地址 = 启动即失败，而不是第一次开麦才报错
       KNOWLEDGE_ASR_ENABLED: ${KNOWLEDGE_ASR_ENABLED:-false}
@@ -694,6 +716,44 @@ services:
         for prefix in models images icons; do
           mc anonymous set download "dt/$$OSS_BUCKET/$$prefix"
         done
+    restart: 'no'
+
+  # 外部解析服务（ADR-0043）：PDF 与扫描件走它，Office 与纯文本仍由
+  # knowledge-worker 在本进程里解——本地那几路解得更准，也不花这台机器的 CPU。
+  # ⚠ 单开一个 profile：镜像 2.4 GB、模型另有 2.4 GB，而**没有它整套照样跑得
+  # 起来**，只是不收 PDF。要它就 `docker compose --profile mineru up -d`。
+  # ⚠ 不对外开端口：只有同网的 knowledge-worker 调它。
+  mineru:
+    profiles: ['mineru']
+    build:
+      context: ./mineru
+    depends_on:
+      mineru-models: {condition: service_completed_successfully}
+    environment:
+      MINERU_MODEL_SOURCE: ${MINERU_MODEL_SOURCE:-modelscope}
+    volumes:
+      - mineru-models:/models
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      # ⚠ 比别的服务宽：它启动要把版面/公式/OCR 三套权重载进内存，
+      # 冷启在这台机器上要十几秒，而 10s×3 会让它一直被判不健康
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    restart: unless-stopped
+
+  # 模型下载作业：跑完即退出，与 minio-init 同档。
+  # ⚠ 做成一步显式作业而不是「第一次解析时顺手下」：顺手下的表现是第一份文档
+  # 解析超时，而原因是在下 2.4 GB 权重——那条链路上没有任何一处会这么说。
+  # ⚠ 已经下过的会被 ModelScope 的缓存跳过，所以每次 up 重跑它是廉价的。
+  mineru-models:
+    profiles: ['mineru']
+    build:
+      context: ./mineru
+    command: ['mineru-models-download', '-s', 'modelscope', '-m', 'pipeline']
+    volumes:
+      - mineru-models:/models
     restart: 'no'
 
   # ⚠ 与其它服务不同，这个服务**自己对外开端口**：opc.tcp 是二进制 TCP，
@@ -941,4 +1001,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  # MinerU 的模型权重（约 2.4 GB）与它的 `mineru.json`。⚠ 不烤进镜像：
+  # 它与代码无关，烤进去每次重建都要重下一遍
+  mineru-models:
   opcua-pki:

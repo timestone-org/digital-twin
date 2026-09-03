@@ -16,7 +16,6 @@ from knowledge_server.apps.knowledge.schemas import (
 )
 from knowledge_server.apps.knowledge.services.indexing import PGVECTOR, TRGM
 from knowledge_server.apps.knowledge.services.parsing import (
-    EXTERNAL_BACKENDS,
     PARSERS,
     DocumentParser,
     ExternalParserBackend,
@@ -72,15 +71,15 @@ def _dimension_gap(column: int, model: int) -> str:
 
 
 def parsing_capability_of(
+    external: tuple[ExternalParserBackend, ...],
     parsers: tuple[DocumentParser, ...] = PARSERS,
-    external: tuple[ExternalParserBackend, ...] = EXTERNAL_BACKENDS,
 ) -> ParsingCapabilityOut:
     """解析那一层此刻装了哪几路后端。
 
     ⚠ 外部那一路没接就如实报空表加一句原因，不装作接上了：装了的表现是
     「界面写着接了 MinerU，传上去却报一句谁也看不懂的错」。
 
-    Args: parsers, external。
+    Args: external, parsers。
     """
     return ParsingCapabilityOut(
         local_backends=[one.name for one in parsers],
@@ -149,19 +148,35 @@ def rerank_capability_of(lanes: ModelLanes) -> RerankCapabilityOut:
     )
 
 
+@dataclass(frozen=True)
+class Installed:
+    """这套部署装了哪几路。
+
+    ⚠ 打成一包而不是逐个形参：调用面的形参上限是 5，而「装了哪些」天然会继续
+    长（来源、检索策略、外部解析后端……）。到顶那天最省事的改法是把新的那一路
+    塞进已有的某一格里，而那正是让两路开始互相知道对方的第一步。
+    """
+
+    sources: tuple[KnowledgeSource, ...] = ()
+    strategies: tuple[RetrievalStrategy, ...] = ()
+    # ⚠ 这一格漏传过一次就够了：`accepted_suffixes` 少了它只报本地那几路，
+    # 表现是「接了 MinerU、界面还是不收 PDF」，而两边单看都对
+    external_parsers: tuple[ExternalParserBackend, ...] = ()
+
+
 def capability_of(
     settings: Settings,
     column_dimensions: int = 0,
-    sources: tuple[KnowledgeSource, ...] = (),
-    strategies: tuple[RetrievalStrategy, ...] = (),
+    installed: Installed | None = None,
     lanes: ModelLanes | None = None,
 ) -> CapabilityOut:
     """这套部署此刻的知识库能力。
 
     Args: settings, column_dimensions（库上向量列的维数；0 = 还没问到，
-        按配置值算）, sources（接了哪几路来源）, strategies（装了哪几种检索
-        策略）, lanes（几路模型此刻接没接；不给就按配置里的开关答）。
+        按配置值算）, installed（装了哪几路来源/策略/外部解析后端）,
+        lanes（几路模型此刻接没接；不给就按配置里的开关答）。
     """
+    installed = installed or Installed()
     if lanes is None:
         lanes = ModelLanes(
             is_embedding_enabled=settings.embedding_enabled,
@@ -173,11 +188,11 @@ def capability_of(
         is_asr_enabled=settings.asr_enabled,
         strategies=list(STRATEGIES),
         ready_strategies=ready_strategies(
-            strategies, is_model_enabled=lanes.is_model_enabled
+            installed.strategies, is_model_enabled=lanes.is_model_enabled
         ),
-        source_kinds=list(source_kinds(sources)),
-        accepted_suffixes=list(accepted_suffixes()),
-        parsing=parsing_capability_of(),
+        source_kinds=list(source_kinds(installed.sources)),
+        accepted_suffixes=list(accepted_suffixes(installed.external_parsers)),
+        parsing=parsing_capability_of(installed.external_parsers),
         index=index_capability_of(
             column_dimensions or settings.embedding_dimensions,
             lanes.embedding_dimensions,

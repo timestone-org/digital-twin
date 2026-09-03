@@ -67,6 +67,7 @@ def _runtime(loops: tuple[_Loop, ...], closed: list[str]) -> WorkerRuntime:
         objectstore=None,
         stream=None,
         sources=(),
+        external_parsers=(),
         embedder=NullEmbedder(),
         answerer=NullAnswerer(),
         reranker=NullReranker(),

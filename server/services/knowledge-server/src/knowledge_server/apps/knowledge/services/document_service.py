@@ -31,6 +31,7 @@ from knowledge_server.apps.knowledge.schemas import (
 )
 from knowledge_server.apps.knowledge.services import ingest_queue
 from knowledge_server.apps.knowledge.services.parsing import (
+    ExternalParserBackend,
     accepted_suffixes,
 )
 from knowledge_server.apps.knowledge.services.sources import (
@@ -94,34 +95,42 @@ def document_page(
     )
 
 
-def _checked_suffix(filename: str) -> str:
+def _checked_suffix(
+    filename: str, external: tuple[ExternalParserBackend, ...]
+) -> str:
     """取一个这套部署认得的后缀；认不出就当场拒。
 
     ⚠ 在**签凭证那一步**就拒，不等到摄取时：让用户传完 200 MB 再告诉他
     「不收这种格式」是两次浪费，而第二次那句错还夹在异步管线里。
 
-    Args: filename。
+    ⚠ `external` 必须真的传进来：漏了的话名单里只有本地那几路，于是接了
+    MinerU 之后传 PDF 仍会在这一步被拒——而能力面那边说的是「收 .pdf」。
+
+    Args: filename, external。
     """
+    allowed = accepted_suffixes(external)
     suffix = suffix_of(filename)
-    if suffix not in accepted_suffixes():
+    if suffix not in allowed:
         raise UnsupportedRawItem(
-            f"认不出 {filename} 是什么格式。这套部署收："
-            f"{'、'.join(accepted_suffixes())}"
+            f"认不出 {filename} 是什么格式。这套部署收：{'、'.join(allowed)}"
         )
     return suffix
 
 
 async def presign_upload(
-    store: ObjectStore, base_id: uuid.UUID, body: UploadTicketIn
+    store: ObjectStore,
+    base_id: uuid.UUID,
+    body: UploadTicketIn,
+    external: tuple[ExternalParserBackend, ...],
 ) -> UploadTicketOut:
     """铸一个文档 id 并签一张直传表单。**不落行**。
 
     ⚠ id 在这一步就铸好并编进对象键：登记那一步只认这个键，客户端没法把字节
     传到一个 id 下、再拿另一个 id 来登记。
 
-    Args: store, base_id, body。
+    Args: store, base_id, body, external（接了哪几路外部解析后端）。
     """
-    suffix = _checked_suffix(body.filename)
+    suffix = _checked_suffix(body.filename, external)
     if body.size_bytes > MAX_RAW_BYTES:
         raise UnsupportedRawItem(
             f"这份文件 {body.size_bytes} 字节，超过上限 {MAX_RAW_BYTES}"
@@ -179,20 +188,21 @@ async def register_upload(
     store: ObjectStore,
     base_id: uuid.UUID,
     body: RegisterDocumentIn,
+    external: tuple[ExternalParserBackend, ...],
 ) -> DocumentOut:
     """确认直传完成：算哈希、挪进正式键、落一行文档。
 
     ⚠ 这一步**不投队列**：投递要等事务提交之后。调用方拿到出参之后调
     `queue_ingest`。
 
-    Args: session, store, base_id, body。
+    Args: session, store, base_id, body, external。
     """
     source = await crud.source.find_source_by_kind(
         session, base_id, UPLOAD_KIND
     )
     if source is None:
         raise SourceNotFound("这个库没有上传通道")
-    suffix = _checked_suffix(body.filename)
+    suffix = _checked_suffix(body.filename, external)
     staging = staging_key(base_id, body.document_id, suffix)
     final = document_key(base_id, body.document_id, suffix)
     digest, size = await _hash_and_move(store, staging, final)

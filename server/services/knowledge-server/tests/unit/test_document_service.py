@@ -63,6 +63,7 @@ async def test_a_ticket_encodes_the_document_id_into_the_key() -> None:
         store,  # pyright: ignore[reportArgumentType]
         BASE,
         _ticket("手册.md"),
+        (),
     )
     assert str(made.document_id) in made.object_key
     assert str(BASE) in made.object_key
@@ -77,6 +78,7 @@ async def test_the_size_limit_is_signed_into_the_policy() -> None:
         store,  # pyright: ignore[reportArgumentType]
         BASE,
         _ticket("手册.md"),
+        (),
     )
     assert store.limits is not None
     assert store.limits.max_bytes == MAX_RAW_BYTES
@@ -91,6 +93,7 @@ async def test_a_zero_byte_file_is_refused_by_the_policy() -> None:
         store,  # pyright: ignore[reportArgumentType]
         BASE,
         _ticket("手册.md"),
+        (),
     )
     assert store.limits is not None
     assert store.limits.min_bytes > 0
@@ -105,6 +108,7 @@ async def test_an_unsupported_format_is_refused_before_signing(
             _Store(),  # pyright: ignore[reportArgumentType]
             BASE,
             _ticket(filename),
+            (),
         )
 
 
@@ -115,6 +119,7 @@ async def test_a_file_over_the_limit_is_refused_before_signing() -> None:
             _Store(),  # pyright: ignore[reportArgumentType]
             BASE,
             _ticket("手册.md", MAX_RAW_BYTES + 1),
+            (),
         )
 
 

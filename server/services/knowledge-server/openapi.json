@@ -1561,6 +1561,17 @@
             ],
             "title": "Page"
           },
+          "page_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page End"
+          },
           "path": {
             "items": {
               "type": "string"

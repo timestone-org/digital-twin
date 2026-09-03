@@ -60,15 +60,15 @@ def test_the_error_lists_what_is_accepted() -> None:
         parser_for(_raw("a.pdf"))
 
 
-def test_pdf_is_deliberately_absent_for_now() -> None:
+def test_pdf_needs_an_external_backend_to_show_up() -> None:
     """⚠ 一期不收 PDF 是拍过板的。加它就是加一个文件 + 注册表一行，
     不动任何调用方——这条用例是那句话的凭证，改了要连着文档一起改。"""
-    assert ".pdf" not in accepted_suffixes()
+    assert ".pdf" not in accepted_suffixes(())
 
 
 def test_accepted_suffixes_has_no_duplicates() -> None:
     """⚠ 重了的话「先到先得」就成了实际规则，而那条规则没人记得。"""
-    names = accepted_suffixes()
+    names = accepted_suffixes(())
     assert len(names) == len(set(names))
 
 
@@ -76,7 +76,7 @@ def test_every_suffix_is_lowercase_with_a_dot() -> None:
     """名单直接下发给界面当 accept，形状写歪一个就选不中那类文件。"""
     assert all(
         one.startswith(".") and one == one.lower()
-        for one in accepted_suffixes()
+        for one in accepted_suffixes(())
     )
 
 
