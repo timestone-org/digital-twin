@@ -9516,7 +9516,8 @@
           "kind": {
             "enum": [
               "chat",
-              "embedding"
+              "embedding",
+              "rerank"
             ],
             "title": "Kind",
             "type": "string"
@@ -9772,6 +9773,13 @@
             },
             "title": "Presets",
             "type": "array"
+          },
+          "rerank_dialects": {
+            "items": {
+              "$ref": "#/components/schemas/LlmRerankDialectOut"
+            },
+            "title": "Rerank Dialects",
+            "type": "array"
           }
         },
         "required": [
@@ -9783,6 +9791,7 @@
           "model_kinds",
           "consumers",
           "efforts",
+          "rerank_dialects",
           "presets"
         ],
         "title": "LlmProviderKindOut",
@@ -10121,6 +10130,30 @@
           "updated_at"
         ],
         "title": "LlmPurposeOut",
+        "type": "object"
+      },
+      "LlmRerankDialectOut": {
+        "description": "一套重排线形。重排不在 OpenAI 兼容口径里，各家的路径与请求体不同。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "label",
+          "description"
+        ],
+        "title": "LlmRerankDialectOut",
         "type": "object"
       },
       "MetricLimitIn": {

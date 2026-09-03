@@ -181,6 +181,14 @@ class LlmProviderPresetOut(OutputModel):
     base_url: str
 
 
+class LlmRerankDialectOut(OutputModel):
+    """一套重排线形。重排不在 OpenAI 兼容口径里，各家的路径与请求体不同。"""
+
+    code: str
+    label: str
+    description: str
+
+
 class LlmProviderKindOut(OutputModel):
     """一种接入形态：界面按它决定摆哪几格、后端按它校验。
 
@@ -196,6 +204,9 @@ class LlmProviderKindOut(OutputModel):
     model_kinds: list[str]
     consumers: list[str]
     efforts: list[str]
+    # 这一形态配得出哪几套重排线形；空表示它登记不了重排模型。
+    # ⚠ 第一个是默认那一路：没配这一格的供应商按它解
+    rerank_dialects: list[LlmRerankDialectOut]
     presets: list[LlmProviderPresetOut]
 
 

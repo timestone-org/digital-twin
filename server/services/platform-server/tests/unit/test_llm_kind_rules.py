@@ -8,6 +8,7 @@
 import pytest
 
 from platform_server.apps.llm_providers.enums import (
+    DEFAULT_RERANK_DIALECT,
     PROVIDER_KIND_CODEX_OAUTH,
     PROVIDER_KIND_OPENAI_COMPAT,
     ProviderKindSpec,
@@ -16,8 +17,10 @@ from platform_server.apps.llm_providers.enums import (
     purpose_of,
 )
 from platform_server.apps.llm_providers.rules import (
+    allowed_options,
     default_effort_of,
     purpose_mismatch,
+    rerank_dialect_of,
 )
 
 
@@ -89,3 +92,48 @@ def test_the_configured_effort_is_read_defensively(
     options: dict[str, object] | None, expected: str | None
 ) -> None:
     assert default_effort_of(options) == expected
+
+
+def test_the_endpoint_kind_serves_the_rerank_purpose() -> None:
+    assert (
+        purpose_mismatch(
+            _kind(PROVIDER_KIND_OPENAI_COMPAT), _purpose("knowledge.rerank")
+        )
+        is None
+    )
+
+
+def test_the_login_kind_is_rejected_for_rerank() -> None:
+    rejected = purpose_mismatch(
+        _kind(PROVIDER_KIND_CODEX_OAUTH), _purpose("knowledge.rerank")
+    )
+    assert rejected is not None
+    assert "knowledge" in rejected
+
+
+@pytest.mark.parametrize(
+    ("options", "expected"),
+    [
+        (None, DEFAULT_RERANK_DIALECT),
+        ({}, DEFAULT_RERANK_DIALECT),
+        # ⚠ 没配这一格的存量供应商打的正是默认那一套线形
+        ({"default_effort": "high"}, DEFAULT_RERANK_DIALECT),
+        ({"rerank_dialect": "dashscope"}, "dashscope"),
+        ({"rerank_dialect": 7}, DEFAULT_RERANK_DIALECT),
+        ({"rerank_dialect": ""}, DEFAULT_RERANK_DIALECT),
+    ],
+)
+def test_the_configured_dialect_falls_back_to_the_default(
+    options: dict[str, object] | None, expected: str
+) -> None:
+    assert rerank_dialect_of(options) == expected
+
+
+def test_only_the_endpoint_kind_offers_a_rerank_dialect() -> None:
+    """⚠ 形态之间的键不通用：混着存等于让一个形态读到另一个形态的取值。"""
+    assert "rerank_dialect" in allowed_options(
+        _kind(PROVIDER_KIND_OPENAI_COMPAT)
+    )
+    assert "rerank_dialect" not in allowed_options(
+        _kind(PROVIDER_KIND_CODEX_OAUTH)
+    )
