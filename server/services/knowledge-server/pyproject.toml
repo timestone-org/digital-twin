@@ -17,9 +17,19 @@ dependencies = [
     # 互相 import，而复制一份一定会漂——漂的表现是「同一个端点，助手调得通、
     # 知识库调不通」
     "llmcore",
+    # markdown 那一路的 CommonMark 实现（ADR-0043）。⚠ 纯 Python、无 C 扩展，
+    # 传递依赖只有 mdurl 一个，镜像体积代价可忽略。手写正则解 markdown 会把
+    # 围栏代码块里的 `#` 当标题、把 setext 标题当正文，而两者都静默
+    "markdown-it-py>=3.0",
+    # YAML front-matter 那一格。⚠ 必须由解析器认得：自己剥的话，第一行 `---`
+    # 会被 CommonMark 当主题分隔线、第二行会被当 setext 二级标题——于是元数据
+    # 变成了正文里的一个标题
+    "mdit-py-plugins>=0.4",
     # 解析 Office 三件套。⚠ 三路各要一个库，没有哪一个吃得下另外两种；
-    # 它们都是**阻塞且吃 CPU** 的，调用方必须扔进进程池
-    "python-docx>=1.1",
+    # 它们都是**阻塞且吃 CPU** 的，调用方必须扔进进程池。
+    # ⚠ docx 那一路要 1.2：`Document.iter_inner_content()` 是拿到「段落与表格
+    # 的真实先后」的唯一公开面，1.1 只给两份平行清单
+    "python-docx>=1.2",
     "openpyxl>=3.1",
     "python-pptx>=1.0",
     # 语音输入到 FunASR 的那条腿是 WebSocket 客户端（ADR-0038）。⚠ 必须自己
