@@ -36,7 +36,9 @@ def _made(
     handler: Handler, *, base_url: str = "https://endpoint/v1"
 ) -> HttpReranker:
     return HttpReranker(
-        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        client=httpx.AsyncClient(
+            transport=httpx.MockTransport(handler), timeout=5.0
+        ),
         endpoint=_endpoint(base_url),
         dialect=dialect_of(DIALECT_JINA),
     )

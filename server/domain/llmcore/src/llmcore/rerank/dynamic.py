@@ -89,7 +89,9 @@ class DynamicRerankAdapter:
         Args: endpoint。
         """
         if self._client is None:
-            self._client = httpx.AsyncClient()
+            # ⚠ 客户端上也要有预算：每次调用另给的那一份只盖得住走到这里的
+            # 调用，而没有默认预算的客户端在别处被用到时会无限期地等
+            self._client = httpx.AsyncClient(timeout=endpoint.timeout_s)
         return HttpReranker(
             client=self._client,
             endpoint=endpoint,
