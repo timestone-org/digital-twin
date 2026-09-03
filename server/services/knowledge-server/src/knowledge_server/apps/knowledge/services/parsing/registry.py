@@ -12,7 +12,6 @@
 """
 
 from knowledge_server.apps.knowledge.services.parsing.office import (
-    DocxParser,
     PptxParser,
     XlsxParser,
 )
@@ -23,6 +22,7 @@ from knowledge_server.apps.knowledge.services.parsing.ports import (
     UnsupportedRawItem,
 )
 from knowledge_server.apps.knowledge.services.parsing.text import TextParser
+from knowledge_server.apps.knowledge.services.parsing.word import DocxParser
 
 # 装了哪几路。⚠ 加一路 = 加一个文件 + 这里一行 + 一条契约测试
 PARSERS: tuple[DocumentParser, ...] = (
