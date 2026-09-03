@@ -203,3 +203,15 @@ def test_markdown_truncation_is_reported() -> None:
     )
     assert made.is_truncated is True
     assert len(made.blocks) == MAX_BLOCKS
+
+
+def test_a_soft_line_break_stays_inside_one_block() -> None:
+    """⚠ 换行不是分段：拆成两块的话，跨行的一句话在向量空间里成了两个半句。"""
+    assert _blocks("第一行\n第二行\n") == [("paragraph", "第一行 第二行")]
+
+
+def test_an_empty_heading_never_becomes_a_block() -> None:
+    """⚠ 空标题压进标题栈的话，后面每一块的引用路径里会多出一个空环节。"""
+    made = markdown_blocks("#\n\n正文\n", MAX_BLOCKS)
+    assert [(one.kind, one.text) for one in made] == [("paragraph", "正文")]
+    assert made[0].locator.path == ()
