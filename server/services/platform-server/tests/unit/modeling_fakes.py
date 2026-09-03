@@ -4,7 +4,7 @@
 核对，「跑完没报错」不等于「算对了」（docs/MODELING_DESIGN.md §10.3）。
 """
 
-from typing import Any, cast
+from typing import cast
 
 from platform_server.apps.modeling.operators import (
     CellValue,
@@ -19,6 +19,7 @@ from platform_server.apps.modeling.schemas.graph import (
 )
 from platform_server.apps.modeling.services.node_task import (
     NodePayload,
+    NodeResult,
     run_node_payload,
 )
 from platform_server.apps.modeling.services.run_executor import (
@@ -142,7 +143,7 @@ class DirectRunner:
     def __init__(self) -> None:
         self.calls: list[str] = []
 
-    async def run(self, payload: NodePayload) -> dict[str, Any]:
+    async def run(self, payload: NodePayload) -> NodeResult:
         """就地跑一个算子。
 
         Args: payload。
@@ -159,7 +160,7 @@ class BoomRunner:
         self._error = error
         self._direct = DirectRunner()
 
-    async def run(self, payload: NodePayload) -> dict[str, Any]:
+    async def run(self, payload: NodePayload) -> NodeResult:
         """撞上目标算子就抛，其余照跑。
 
         Args: payload。

@@ -27,7 +27,10 @@ from platform_server.apps.modeling.services.graph_walk import (
     split_plan_of,
     topological_order,
 )
-from platform_server.apps.modeling.services.node_task import NodePayload
+from platform_server.apps.modeling.services.node_task import (
+    NodePayload,
+    NodeResult,
+)
 
 # 错误文本落库前的截断长度，与节点记录那一列一致
 MAX_ERROR_TEXT = 8 * 1024
@@ -38,7 +41,7 @@ TIMEOUT_REASON = "这一步超过了单节点时限被掐断"
 class NodeRunner(Protocol):
     """把一个算子跑起来的那只手。真实现是进程池，测试用进程内假件。"""
 
-    async def run(self, payload: NodePayload) -> dict[str, Any]: ...
+    async def run(self, payload: NodePayload) -> NodeResult: ...
 
 
 @dataclass(frozen=True)
@@ -56,6 +59,12 @@ class NodeOutcome:
         default_factory=dict[str, dict[str, Any]]
     )
     is_preview_truncated: bool = False
+    # ⚠ 与 `preview` 分家：摘要有字节预算、会被削、有保留期，而这两样是发布件
+    # 的原料（docs/MODELING_PLATFORM_DESIGN.md D1 / D3）
+    fitted: dict[str, Any] | None = None
+    io: dict[str, dict[str, list[str]]] = field(
+        default_factory=dict[str, dict[str, list[str]]]
+    )
 
 
 @dataclass(frozen=True)
@@ -204,19 +213,19 @@ async def _run_one(
     if failure is not None:
         return _node_failed(node, setting, started, failure)
     try:
-        outputs = await _run_node(node, setting, context)
+        result = await _run_node(node, setting, context)
     except OperatorError as error:
         return _node_failed(node, setting, started, str(error))
     except TimeoutError:
         return _node_failed(node, setting, started, TIMEOUT_REASON)
     except Exception:
         return _node_failed(node, setting, started, traceback.format_exc())
-    for port, payload in outputs.items():
+    for port, payload in result.outputs.items():
         context[(node.id, port)] = payload
     previews, truncated = budget.take(
         {
             port: preview_service.summarize(value)
-            for port, value in outputs.items()
+            for port, value in result.outputs.items()
         }
     )
     return NodeOutcome(
@@ -228,6 +237,8 @@ async def _run_one(
         duration_ms=_elapsed(started),
         preview=previews,
         is_preview_truncated=truncated,
+        fitted=result.fitted,
+        io=result.io,
     )
 
 
@@ -235,7 +246,7 @@ async def _run_node(
     node: GraphNode,
     setting: _Setting,
     context: dict[tuple[str, str], Any],
-) -> dict[str, Any]:
+) -> NodeResult:
     """把一个算子实例交给注入的跑法。
 
     Args: node, setting, context。

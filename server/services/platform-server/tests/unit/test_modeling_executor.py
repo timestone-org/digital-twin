@@ -18,6 +18,7 @@ from platform_server.apps.modeling.services.preview import (
 )
 from platform_server.apps.modeling.services.run_executor import (
     TIMEOUT_REASON,
+    NodeOutcome,
     RunOutcome,
     execute_graph,
 )
@@ -89,6 +90,32 @@ async def test_the_model_preview_carries_the_true_coefficients() -> None:
     assert fitted["coef"]["温度"] == pytest.approx(SLOPE_TEMP)
     assert fitted["coef"]["负荷"] == pytest.approx(SLOPE_LOAD)
     assert fitted["intercept"] == pytest.approx(INTERCEPT)
+
+
+async def test_every_fitting_step_hands_back_what_it_learned() -> None:
+    """带拟合的算子学到的东西必须跟着记录回来，不能留在子进程里。
+
+    ⚠ 这一条盯的是一条真出过的缺陷：拟合参数曾经只在**建模**那一步的摘要里
+    有，填缺失与标准化两步的一个字都没落下来，于是推理期拿单行重新拟合
+    （docs/MODELING_PLATFORM_DESIGN.md 缺陷 A）。
+    """
+    outcome = await run_linear(100)
+    fills = _node_of(outcome, "fill_missing").fitted or {}
+    scales = _node_of(outcome, "standardize").fitted or {}
+    assert sorted(fills) == ["温度", "负荷"]
+    assert sorted(scales) == ["温度", "负荷"]
+    assert all(item["scale"] > 0 for item in scales.values()), scales
+    assert _node_of(outcome, "split_dataset").fitted is None
+
+
+async def test_each_step_records_the_columns_it_actually_saw() -> None:
+    """逐端口的真实列集要记下来，发布时的输入契约按它算（D3）。"""
+    outcome = await run_linear(100)
+    standardize = _node_of(outcome, "standardize").io
+    assert standardize["inputs"]["frame"] == ["温度", "负荷", "能耗"]
+    assert standardize["outputs"]["frame"] == ["温度", "负荷", "能耗"]
+    split = _node_of(outcome, "split_dataset").io
+    assert sorted(split["outputs"]) == ["test", "train"]
 
 
 async def test_a_failing_node_stops_the_run_and_skips_the_rest() -> None:
@@ -209,7 +236,15 @@ def _preview_of(
 
     Args: outcome, operator, port。
     """
+    return _node_of(outcome, operator).preview[port]
+
+
+def _node_of(outcome: RunOutcome, operator: str) -> NodeOutcome:
+    """从运行结果里取某个算子那一条记录。
+
+    Args: outcome, operator。
+    """
     for item in outcome.nodes:
         if item.operator == operator:
-            return item.preview[port]
+            return item
     raise AssertionError(f"运行里没有 {operator} 这个节点")

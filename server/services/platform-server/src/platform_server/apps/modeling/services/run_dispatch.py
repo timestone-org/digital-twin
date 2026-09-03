@@ -169,6 +169,8 @@ def _node_row(run_id: uuid.UUID, node: NodeOutcome) -> ModelingNodeRun:
         error_text=node.error_text or None,
         preview_json=node.preview or None,
         preview_truncated=node.is_preview_truncated,
+        fitted_json=node.fitted,
+        io_json=node.io or None,
     )
 
 

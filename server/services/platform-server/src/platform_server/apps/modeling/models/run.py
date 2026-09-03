@@ -161,6 +161,16 @@ class ModelingNodeRun(UuidPrimaryKeyMixin, EagerDefaultsMixin, Base):
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # 含 traceback
     error_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 这一步学到的参数，按列 key 建键；不带拟合的算子是 NULL。
+    # ⚠ 独立成列而不是塞进 `preview_json`：摘要有字节预算、超了会被静默削掉，
+    # 而这是发布件的原料，削掉的表现是「模型发布成功、上线才炸」
+    # （docs/MODELING_PLATFORM_DESIGN.md D1）
+    fitted_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
+    # `{"inputs": {端口: [列 key…]}, "outputs": {端口: [列 key…]}}`，
+    # 这一步**实际**看到与产出的列。发布时据它算逐步的输入契约（D3）
+    io_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     # `{端口名: 结果摘要}`，有硬上限（D19）
     preview_json: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB, nullable=True
