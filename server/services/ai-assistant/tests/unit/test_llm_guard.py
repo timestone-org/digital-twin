@@ -25,7 +25,7 @@ from ai_assistant.llm import (
     ModelRejected,
     ModelUnavailable,
 )
-from ai_assistant.llm.codex.rewire import CodexRewire
+from ai_assistant.llm.codex import CodexRewire
 from ai_assistant.llm.ports import ModelChoice
 from lib.resilience import CircuitBreaker
 from lib.testing.clock import FrozenClock

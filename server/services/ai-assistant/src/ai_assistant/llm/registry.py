@@ -110,7 +110,7 @@ class ModelRegistry:
     def is_codex(self, profile_id: str) -> bool:
         """这个档位名落在订阅账号那一形态上吗。
 
-        ⚠ 线形改写按它决定（`llm/codex/rewire.py`）：拿档位名与一个字面量
+        ⚠ 线形改写按它决定（`llmcore.codex.rewire`）：拿档位名与一个字面量
         比的话，目录里配出来的那几路（id 是 uuid）一条都改写不到，
         而现象是「一带工具就 400」。
         ⚠ 认不出的名字按**退回的那一路**算，与 `resolve` 同一个判定：两处不一致

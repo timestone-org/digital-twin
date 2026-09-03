@@ -1,9 +1,9 @@
-"""订阅账号那一路里**本服务独有**的部分：工具名的线形改写。
+"""订阅账号那一路 —— 共用件在 `llmcore.codex`，这里只再导出。
 
-模型构造与令牌来源在 `llmcore.codex`（两个消费方共用，ADR-0041）；这里只留
-「本服务的工具名带点号，而那个端点不认」这一条特例。
+⚠ 不在这里另建一套：模型构造、令牌来源与线形改写两个消费方共用（ADR-0041），
+复制一份一定会漂，而漂的表现是「同一个订阅账号，助手说得了话、知识库说不了」。
 """
 
-from ai_assistant.llm.codex.rewire import CodexRewire
+from llmcore.codex import CodexRewire
 
 __all__ = ["CodexRewire"]
