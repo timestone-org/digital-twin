@@ -11,6 +11,7 @@ from knowledge_server.apps.knowledge.models.knowledge_base import STRATEGIES
 from knowledge_server.apps.knowledge.schemas import (
     CapabilityOut,
     IndexCapabilityOut,
+    RerankCapabilityOut,
 )
 from knowledge_server.apps.knowledge.services.parsing import (
     accepted_suffixes,
@@ -109,9 +110,16 @@ def ready_strategies(
     ]
 
 
+# 没接重排时说得出的那句话。⚠ 一定要说：没接时检索走的是融合名次那一档，
+# 而悄悄退化的表现正是「质量忽然变了、一处都不报错」
+NO_RERANK_REASON = (
+    "模型管理页上还没给「知识库重排」分配模型，本部署按融合名次给出结果"
+)
+
+
 @dataclass(frozen=True)
 class ModelLanes:
-    """两路模型此刻接没接。
+    """几路模型此刻接没接。
 
     ⚠ 由适配器**此刻**回答，不由配置回答：端点来自运行期可改的目录
     （ADR-0039），配置里的开关只是它的永久默认值。
@@ -119,6 +127,22 @@ class ModelLanes:
 
     is_embedding_enabled: bool
     is_model_enabled: bool
+    # 重排接没接，以及此刻用的是哪个模型。⚠ 缺省是「没接」：这一格是后加的，
+    # 不给它的调用点本来就没有这一路
+    is_rerank_enabled: bool = False
+    rerank_model: str = ""
+
+
+def rerank_capability_of(lanes: ModelLanes) -> RerankCapabilityOut:
+    """重排那一路此刻的样子。
+
+    Args: lanes。
+    """
+    if not lanes.is_rerank_enabled:
+        return RerankCapabilityOut(is_enabled=False, reason=NO_RERANK_REASON)
+    return RerankCapabilityOut(
+        is_enabled=True, model=lanes.rerank_model, reason=""
+    )
 
 
 def capability_of(
@@ -149,4 +173,5 @@ def capability_of(
         source_kinds=list(source_kinds(sources)),
         accepted_suffixes=list(accepted_suffixes()),
         index=index_capability_of(settings, probe),
+        rerank=rerank_capability_of(lanes),
     )

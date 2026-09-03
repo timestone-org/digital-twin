@@ -8,6 +8,7 @@ from knowledge_server.apps.knowledge.services.capability import (
     KEYWORD_FAST,
     VECTOR_FALLBACK,
     VECTOR_FAST,
+    ModelLanes,
     capability_of,
     index_capability_of,
     keyword_choice,
@@ -128,3 +129,28 @@ def test_capability_reports_both_model_paths(settings: Settings) -> None:
     assert out.is_embedding_enabled is False
     assert out.is_model_enabled is False
     assert out.index.vector == VECTOR_FAST
+
+
+def test_an_absent_rerank_lane_says_why(settings: Settings) -> None:
+    """⚠ 没接重排时检索走的是融合名次那一档：不说的话，质量忽然变了
+    却没有任何一处报错。"""
+    out = capability_of(settings, _ready())
+    assert out.rerank.is_enabled is False
+    assert out.rerank.model == ""
+    assert "知识库重排" in out.rerank.reason
+
+
+def test_a_connected_rerank_lane_names_its_model(settings: Settings) -> None:
+    out = capability_of(
+        settings,
+        _ready(),
+        lanes=ModelLanes(
+            is_embedding_enabled=True,
+            is_model_enabled=True,
+            is_rerank_enabled=True,
+            rerank_model="gte-rerank-v2",
+        ),
+    )
+    assert out.rerank.is_enabled is True
+    assert out.rerank.model == "gte-rerank-v2"
+    assert out.rerank.reason == ""

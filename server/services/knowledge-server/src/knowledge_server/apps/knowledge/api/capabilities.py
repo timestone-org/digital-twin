@@ -51,6 +51,7 @@ def _capability_of(container: Container) -> CapabilityOut:
             probe=container.index,
             embedder=container.embedder,
             answerer=container.answerer,
+            reranker=container.reranker,
         )
     )
     return capability_of(
@@ -61,5 +62,7 @@ def _capability_of(container: Container) -> CapabilityOut:
         ModelLanes(
             is_embedding_enabled=container.embedder.can_embed,
             is_model_enabled=container.answerer.can_answer,
+            is_rerank_enabled=container.reranker.can_rerank,
+            rerank_model=container.reranker.model or "",
         ),
     )

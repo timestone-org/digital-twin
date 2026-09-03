@@ -90,5 +90,6 @@ def _lanes(container: Container) -> tuple[RetrievalStrategy, ...]:
             probe=container.index,
             embedder=container.embedder,
             answerer=container.answerer,
+            reranker=container.reranker,
         )
     )

@@ -5,7 +5,7 @@
 迹象（ADR-0034 决策四）。
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from knowledge_server.apps.knowledge.services.capability import (
     keyword_choice,
@@ -17,6 +17,10 @@ from knowledge_server.apps.knowledge.services.indexing import (
     build_indexes,
 )
 from knowledge_server.apps.knowledge.services.llm import Answerer
+from knowledge_server.apps.knowledge.services.reranking import (
+    NullReranker,
+    Reranker,
+)
 from knowledge_server.apps.knowledge.services.retrieval import (
     RetrievalDeps,
     RetrievalStrategy,
@@ -49,6 +53,9 @@ class Lanes:
     probe: IndexProbe
     embedder: Embedder
     answerer: Answerer
+    # 重排那一路。⚠ 缺省是诚实缺席而不是 `None`：不给它的调用点拿到的是
+    # 一份不重排的策略，而不是一个会在第一次检索时炸的空洞
+    reranker: Reranker = field(default_factory=NullReranker)
 
 
 def strategies(lanes: Lanes) -> tuple[RetrievalStrategy, ...]:
@@ -61,5 +68,6 @@ def strategies(lanes: Lanes) -> tuple[RetrievalStrategy, ...]:
             indexes=index_pair(lanes.settings, lanes.probe),
             embedder=lanes.embedder,
             answerer=lanes.answerer,
+            reranker=lanes.reranker,
         )
     )

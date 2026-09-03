@@ -121,6 +121,12 @@ class Settings(
     model_breaker_failures: int = 5
     model_breaker_reset_s: float = 30.0
 
+    # 重排档（ADR-0042）。⚠ 它**只有模型目录一个来源**，没有环境变量那一档：
+    # 这一路是新加的，一个存量部署都不是靠环境变量配着它的，而多一条回退链
+    # 就多一处「配了没生效」要排查的地方。
+    # ⚠ 预算要比检索那一步的总预算小得多：它排在召回之后，超时就是整次检索超时
+    rerank_timeout_s: float = Field(default=15.0, gt=0)
+
     # 摄取队列。⚠ 与 worker 侧读的是同一对，改一处不改另一处的表现是
     # 「投得进去、没人消费」，而两边单看都对
     ingest_stream: str = "knowledge:ingest"
