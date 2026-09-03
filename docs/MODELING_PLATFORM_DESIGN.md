@@ -422,25 +422,73 @@ def describe_columns(
 「这个版本是用 sklearn 1.7 训的，当前环境是 1.9，请重新训练」，也不要让它悄悄算出别的数。
 界面上要能一眼看出哪些版本因此失效，并给「按同一份流水线重跑」的入口。
 
-### D11 · 通道 B 的模型**只服务对外部署，不进台账公式**
+### D11 · 通道 B **也要进台账**，为此给重算加一条批量预测相位
 
 | 通道 | 拟合参数 | 台账 `PREDICT` | 对外部署 `:predict` |
 | --- | --- | --- | --- |
 | A（纯 JSON） | 进 `serving_json` | ✅ | ✅ |
-| B（二进制产物） | 进对象存储 | ❌ 显式不可用，给原因 | ✅ |
+| B（二进制产物） | 进对象存储 | ✅ **经批量相位** | ✅ |
 
-**为什么台账不接通道 B**：台账重算是**逐行**求值的
+**问题**：台账重算今天是**逐行**求值的
 （[MODELING_DESIGN.md](./MODELING_DESIGN.md) D26：模型以已编译的可调用对象进求值上下文，
-每行一次点乘）。通道 A 的一次调用是几次乘加；通道 B 的一次调用是一趟
-Python → C 的往返 + 一次数组构造。20 万行 × 一次往返，量级完全不同，
-而求值器**没有批量相位**——要接通道 B 就得给求值器加一条批量相位，那是一次要走 ADR 的改动
-（[MODELING_DESIGN.md](./MODELING_DESIGN.md) §13.2 已经把它标成不确定项）。
+每行一次点乘）。通道 A 的一次调用是几次乘加，逐行完全够；通道 B 的一次调用是一趟
+Python → C 的往返 + 一次数组构造，20 万行 × 一次往返是另一个量级。
+[MODELING_DESIGN.md](./MODELING_DESIGN.md) §13.2 早就把这条标成不确定项。
 
-本轮把这条边界**显式**化：通道 B 的版本 `is_servable_in_ledger=false` + 一句原因，
-发布不拦、绑定拦。用户看得见「这个模型可以给第三方调，但接不进台账列」。
+**决定**（用户拍板）：不绕开，直接把批量相位做进去。做完之后所有重算路径都受益，
+且「哪些算法能进台账」这个问题从此消失——不再需要 `is_servable_in_ledger` 这一档区分。
 
-⚠ 这是**取舍不是限制**：诉求「数据台账可以调用模型做计算」由通道 A 满足，
-今天的线性回归、以及本轮新增的岭 / 套索 / 逻辑回归 / K 均值都在通道 A 上。
+### D11b · 批量相位落在 `record_compute` 的异步层，**求值器仍然纯同步**
+
+台账公式子系统最值钱的性质是「求值器纯同步、零 fixture 可单测」
+（[DATASET_DESIGN.md](./DATASET_DESIGN.md)）。批量相位**不许破坏它**。
+做法是把批量做在求值器**外面**一层：
+
+**1 · 按「模型调用深度」给公式列分层。**
+`PREDICT` 的实参可以是任意表达式，含别的公式列
+（[MODELING_DESIGN.md](./MODELING_DESIGN.md) D26 第 2 条把这当成相对参考仓的优势）。
+所以不能一趟把所有 `PREDICT` 收齐。给 `plan.order` 里的每一列算一个深度：
+
+```
+depth(列) = max(depth(它依赖的公式列), 默认 0) + (这一列自己含 PREDICT ? 1 : 0)
+```
+
+深度相同的列可以在同一轮里整批预测。绝大多数真实台账只有 1 层。
+
+**2 · 每一层两趟：收集趟 + 回填趟。**
+
+```
+for level in 0 .. max_depth:                     # 分层
+    for row in batch:                            # 趟 1：收集（同步）
+        evaluate(level 的列, sink=收集模式)       #   PREDICT 登记实参后抛内部哨兵
+    for code, calls in sink:                     # 整批（异步层，可 to_thread）
+        sink.results[code] = model.predict_batch(calls)
+    for row in batch:                            # 趟 2：回填（同步）
+        evaluate(level 的列, sink=回放模式)       #   PREDICT 按 (行号, 调用序号) 取已算好的
+```
+
+- 求值器只多认一个 `EvalContext.model_sink`，`PREDICT` 分支两种模式各三行；
+- **趟 1 抛哨兵而不是返回占位**：占位会被下游算术吃掉变成脏数，且没有任何症状。
+  哨兵由 `evaluate_row` 捕获，那一列这一轮不写值也不写错；
+- **按 `(行号, 调用序号)` 取结果，不按实参值**：同一行同一列里可以有多次 `PREDICT`，
+  实参也可能恰好相同。求值顺序是确定的，故调用序号稳定；
+- 趟 2 重算一遍这一层的纯算术。这比一次 sklearn 往返便宜两个数量级。
+
+**3 · `AnalysisModel` 协议加 `predict_batch`，通道 A 的默认实现就是逐行调 `predict`。**
+于是**只有一条代码路径**——通道 A 与 B 走同一条相位，不做「小批量走老路」这种分叉
+（分叉的表现是两条路算出的数在边界上不一致，且只有跨过阈值时才出现）。
+
+⚠ **加载与预测都是阻塞调用，必须在异步层用 `asyncio.to_thread`。**
+`async` 里禁任何阻塞调用是本仓的硬规矩；joblib 反序列化一个几十 MB 的森林是几百毫秒。
+批量相位天生就在 `record_compute` 的 async 层，这一条顺理成章——**而这正是为什么
+批量必须做在求值器外面**：求值器是同步的，它里面没有任何地方能 `await`。
+
+⚠ 加载有进程内 LRU（版本不可变，无需失效机制），但**第一次**加载仍然要走线程池；
+缓存要有条数上限，不然几十个大模型会把 API 副本的内存吃光。
+
+⚠ 单行写（人工修正、逐行录入）的批量大小恒为 1，两趟 + 一次 batch 的开销与今天几乎一样。
+
+**这条要一份 ADR**：它改的是台账公式引擎的求值形状，影响面超出建模模块。
 
 ### D12 · 全量产物下载是另一件事，且要另一个权限码
 
@@ -811,7 +859,7 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 | 迁移 | 内容 | 期 |
 | --- | --- | --- |
 | 1 | `modeling_node_runs` 加 `fitted_json JSONB NULL`、`io_json JSONB NULL` | 一 |
-| 2 | `modeling_model_versions` 加 `schema_json JSONB NOT NULL DEFAULT '{}'::jsonb`、`is_servable_in_ledger BOOLEAN NOT NULL DEFAULT true` | 二 |
+| 2 | `modeling_model_versions` 加 `schema_json JSONB NOT NULL DEFAULT '{}'::jsonb` | 二 |
 | 3 | 新表 `modeling_model_artifacts` | 五 |
 | 4 | 新表 `modeling_deployments` / `modeling_api_keys` / `modeling_call_logs` | 六 |
 
@@ -831,19 +879,24 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 | 二 | 入口契约与模型 schema | `describe_columns`；`known_keys_by_node` 改用它；`serving_json` 2.0 + 双版本分派；`schema_json` 生成器；前端删掉第二份收窄口径 | 一 |
 | 三 | 算子扩容 A（不改列集的） | `cast_type` / `drop_missing` / `clip_outlier` / `filter_rows` / `resample` / `logistic_regression` / `kmeans` / `classification_metrics` / `residual_analysis` / `feature_importance` | 一 |
 | 四 | 算子扩容 B（改列集的） | `time_feature` / `one_hot` / `select_feature` / `pca` / `lag_feature` / `rolling_feature` / `ledger_join` / `cross_validate` | 二 |
-| 五 | 产物与通道 B | 迁移 3；对象存储写读；四条护栏；树模型三个；`is_servable_in_ledger`；全量帧导出 | 二 |
-| 六 | 对外服务 | 迁移 4；管理面 + 对外面；边缘 location + 限流；auth 规则与种子；ADR | 二（schema 就是接口文档） |
-| 七 | 公式一键化 | `:register-formula`；换绑的入口契约比对；台账列显示「由哪个模型算」 | 二 |
-| 八 | 前端四面 | 运行面、模型详情、服务面、模板 | 五 / 六 / 七 |
+| **五** | **台账批量预测相位**（D11b） | 公式列分层；收集 / 回填两趟；`AnalysisModel.predict_batch`；`EvalContext.model_sink` 与 `row_ts`；ADR。**只碰 `apps/dataset`** | 二 |
+| 六 | 产物与通道 B | 迁移 3；对象存储写读；四条护栏；树模型三个；全量帧导出；ADR | 五 |
+| 七 | 对外服务 | 迁移 4；管理面 + 对外面；边缘 location + 限流；auth 规则与种子；ADR | 二（schema 就是接口文档） |
+| 八 | 公式一键化 | `:register-formula`；换绑的入口契约比对；台账列显示「由哪个模型算」 | 二 |
+| 九 | 前端四面 | 运行面、模型详情、服务面、模板、结果导出入口 | 六 / 七 / 八 |
 
 ⚠ **第一期必须最先**：它修的是一条已经在线上的静默错值缺陷，且后面每一期都压在它上面。
+⚠ **第五期排在第六期前面**：批量相位是通道 B 进台账的前提，先把相位铺好，
+树模型落地时只是「多一个实现了 `predict_batch` 的模型」，不必两件事一起改。
+⚠ 三、四两期内部可高度并行（每 2–3 个算子一个 PR，互不相干）。
 
 ### 需要的 ADR
 
 | 题 | 期 |
 | --- | --- |
-| 模型二进制产物走对象存储且只加载自产字节 | 五 |
-| 对外推理面走 API 密钥并由边缘免认证 location 承载 | 六 |
+| 台账公式重算加批量预测相位，求值器保持纯同步 | 五 |
+| 模型二进制产物走对象存储且只加载自产字节 | 六 |
+| 对外推理面走 API 密钥并由边缘免认证 location 承载 | 七 |
 
 ⚠ 编号取当前未占用的下一个。`docs/adr/` 在 `main` 上到 0044，
 但另有分支正在占 0045——开写前先看一眼。
@@ -856,9 +909,10 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 `evaluate_row` 的形参上就有 `ts`，加一格带默认值的 `EvalContext.row_ts` 即可，
 改动落在一个函数上。详见 D19。
 
-**U2 · 通道 B 进不进台账。** 本文按 D11 判「不进」，理由是逐行开销。
-若实测下来 20 万行 × 一次 sklearn 往返在可接受范围内，这条可以放宽——
-但那要先把 [MODELING_DESIGN.md](./MODELING_DESIGN.md) §13.2 那条「没量过」补上。
+**U2 · ~~通道 B 进不进台账~~ —— 已拍板：进，且直接给求值器加批量相位。**
+见 D11 / D11b，单独成第五期。⚠ 相位落地后要补
+[MODELING_DESIGN.md](./MODELING_DESIGN.md) §13.2 那条「没量过」：
+用 20 万行 × 3 个模型压一次，把两趟求值的额外开销与批量预测的收益都记下来。
 
 **U3 · 对外面的资源名。** 本文用 `open-models`（照 `public-dashboards` 的构词）。
 备选 `served-models` / `model-endpoints`。定下来之后不好改（第三方已经在用）。
