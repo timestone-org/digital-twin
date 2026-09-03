@@ -132,6 +132,10 @@ class Settings(
     # 一份文档解析多久算卡死。⚠ 必须有：没有超时的解析会把这条消费循环
     # 永久占住，而现象是「队列不动了」，看不出是哪一份文档导致的
     parse_timeout_s: float = 10 * 60
+    # 外部解析服务（MinerU / PP-Structure 这一类）一次调用最多等多久。
+    # ⚠ 与上面那一档分开配：那一路是本地 CPU，这一路是网络 IO，几十秒是常态。
+    # 一期没有任何外部后端，这一格因此还没有生效路径（ADR-0043）
+    external_parse_timeout_s: float = Field(default=180.0, gt=0)
 
     # 索引档，见 ADR-0034
     vector_index: IndexChoice = "auto"

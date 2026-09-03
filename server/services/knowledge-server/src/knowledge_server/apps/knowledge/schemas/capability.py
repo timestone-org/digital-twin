@@ -18,6 +18,21 @@ class IndexCapabilityOut(BaseModel):
     reason: str = ""
 
 
+class ParsingCapabilityOut(BaseModel):
+    """解析那一层此刻装了哪几路后端（ADR-0043）。
+
+    ⚠ 外部那一路**没接就是空表**，不摆一个看着能用的占位：占位的表现是
+    「界面上写着接了 MinerU，传上去却报一句谁也看不懂的错」。
+    """
+
+    # 本地库解那一路（在进程池里跑）装了哪几个，按注册序
+    local_backends: list[str] = Field(default_factory=list)
+    # 外部解析服务那一路此刻接了哪几个
+    external_backends: list[str] = Field(default_factory=list)
+    # 外部那一路缺席的原因；接上了是空串
+    reason: str = ""
+
+
 class CapabilityOut(BaseModel):
     """知识库能力。"""
 
@@ -35,4 +50,5 @@ class CapabilityOut(BaseModel):
     # 而两边单看都对
     source_kinds: list[str] = Field(default_factory=list)
     accepted_suffixes: list[str] = Field(default_factory=list)
+    parsing: ParsingCapabilityOut
     index: IndexCapabilityOut

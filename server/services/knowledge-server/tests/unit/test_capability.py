@@ -1,9 +1,12 @@
 """能力面：报的是「此刻真能用哪一档」，而且走回退档时必须说出原因。"""
 
+from dataclasses import dataclass
+
 import pytest
 from pydantic import SecretStr
 
 from knowledge_server.apps.knowledge.services.capability import (
+    EXTERNAL_PARSER_ABSENT,
     KEYWORD_FALLBACK,
     KEYWORD_FAST,
     VECTOR_FALLBACK,
@@ -11,12 +14,35 @@ from knowledge_server.apps.knowledge.services.capability import (
     capability_of,
     index_capability_of,
     keyword_choice,
+    parsing_capability_of,
     vector_choice,
+)
+from knowledge_server.apps.knowledge.services.parsing import (
+    ParsedDocument,
+    RawItem,
 )
 from knowledge_server.probe import IndexProbe
 from knowledge_server.settings import Settings
 
 PLACEHOLDER = "knowledge-test"
+
+
+@dataclass(frozen=True)
+class _FakeRemote:
+    """一路假的外部解析后端；能力面只读它的名字。"""
+
+    name: str = "fake-remote"
+    suffixes: tuple[str, ...] = (".pdf",)
+    media_types: tuple[str, ...] = ("application/pdf",)
+
+    async def parse_remote(
+        self, raw: RawItem, timeout_s: float
+    ) -> ParsedDocument:
+        """这一组用不到真解析。
+
+        Args: raw, timeout_s。
+        """
+        raise NotImplementedError
 
 
 @pytest.fixture
@@ -128,3 +154,23 @@ def test_capability_reports_both_model_paths(settings: Settings) -> None:
     assert out.is_embedding_enabled is False
     assert out.is_model_enabled is False
     assert out.index.vector == VECTOR_FAST
+
+
+def test_the_local_parser_lane_is_reported_by_name() -> None:
+    made = parsing_capability_of()
+    assert "docx" in made.local_backends
+    assert "text" in made.local_backends
+
+
+def test_an_absent_external_parser_lane_says_why() -> None:
+    """⚠ 空表配空原因会被界面读成「一切正常」，而这里要说的是「这套部署根本
+    没接那一路」——悄悄缺席的表现是「传上去的 PDF 一直失败，没人知道为什么」。"""
+    made = parsing_capability_of()
+    assert made.external_backends == []
+    assert made.reason == EXTERNAL_PARSER_ABSENT
+
+
+def test_a_connected_external_parser_lane_reports_no_reason() -> None:
+    made = parsing_capability_of((), (_FakeRemote(),))
+    assert made.external_backends == ["fake-remote"]
+    assert made.reason == ""

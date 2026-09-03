@@ -15,8 +15,10 @@ pending → parsing → chunking → embedding → indexing → ready
 ⚠ 队列是 at-least-once，所以判幂等看的是**那一行的状态**——已经 `ready` 的
 直接跳过。「先查再插」不是幂等（两次并发会双双查空、双双插入）。
 
-⚠ 解析扔进**进程池**：docx/xlsx/pptx 的解析是纯 CPU 且阻塞的，放进事件循环
-会把整条消费循环连同健康探针一起冻住，而现象是「服务好好的，队列不动了」。
+⚠ 解析有两条口径，分成两支而不是一个函数（ADR-0043）：本地库解那一路是纯
+CPU 且阻塞的，扔进**进程池**——放进事件循环会把整条消费循环连同健康探针一起
+冻住，而现象是「服务好好的，队列不动了」；外部解析服务那一路是**网络 IO**，
+必须带自己的超时，且**不自动重试**（重试只由人按「重新解析」那一层负责）。
 
 ⚠ 没接嵌入档时**照样走完到 ready**：文档解析了、切块了、落库了，只是没有向量。
 检索那一侧会如实回答「这个库还没建索引」——判成 failed 的话，用户会以为是这
@@ -44,10 +46,13 @@ from knowledge_server.apps.knowledge.services.indexing import (
     VectorRows,
 )
 from knowledge_server.apps.knowledge.services.parsing import (
+    ExternalParseFailed,
+    ExternalParserBackend,
     ParsedDocument,
     RawItem,
     UnsupportedRawItem,
-    parse,
+    external_for,
+    parse_local,
 )
 from knowledge_server.apps.knowledge.services.sources import (
     KnowledgeSource,
@@ -88,6 +93,10 @@ class IngestDeps:
     pool: Executor
     parse_timeout_s: float
     batch_size: int = 16
+    # 接了哪几路外部解析后端。⚠ 一期恒空——没接就是诚实缺席（ADR-0043）
+    external_parsers: tuple[ExternalParserBackend, ...] = ()
+    # 外部那一路一次调用最多等多久
+    external_parse_timeout_s: float = 180.0
 
 
 @dataclass(frozen=True)
@@ -131,7 +140,7 @@ async def _raw_of(
         raise IngestFailed("原件已经不在对象存储里了") from error
 
 
-async def _parsed(deps: IngestDeps, raw: RawItem) -> ParsedDocument:
+async def _parsed_locally(deps: IngestDeps, raw: RawItem) -> ParsedDocument:
     """在进程池里解析，超时就当这一份解不动。
 
     ⚠ 超时必须有：没有超时的解析会把这条消费循环永久占住，而现象是
@@ -142,11 +151,51 @@ async def _parsed(deps: IngestDeps, raw: RawItem) -> ParsedDocument:
     loop = asyncio.get_running_loop()
     try:
         async with asyncio.timeout(deps.parse_timeout_s):
-            return await loop.run_in_executor(deps.pool, parse, raw)
+            return await loop.run_in_executor(deps.pool, parse_local, raw)
     except TimeoutError as error:
         raise IngestFailed("解析超时，这份文档可能过大") from error
     except UnsupportedRawItem as error:
         raise IngestFailed(str(error)) from error
+
+
+async def _parsed_remotely(
+    backend: ExternalParserBackend, deps: IngestDeps, raw: RawItem
+) -> ParsedDocument:
+    """交给外部解析服务，超时或它报错都当这一份解不动。
+
+    ⚠ 外面这一层 `timeout` 是兜底：端口要求实现自己守住 `timeout_s`，而一个
+    不守约的实现会把整条消费循环占死——现象仍是「队列不动了」。
+
+    ⚠ **不重试**：失败即写 `failed`，由人在界面上按「重新解析」。
+    runtime-resilience §4——一条链路只有一层负责重试，而那一层是人按的那一下。
+
+    Args: backend, deps, raw。
+    """
+    try:
+        async with asyncio.timeout(deps.external_parse_timeout_s):
+            return await backend.parse_remote(
+                raw, deps.external_parse_timeout_s
+            )
+    except TimeoutError as error:
+        raise IngestFailed(
+            f"外部解析服务 {backend.name} 没在限时内给出结果"
+        ) from error
+    except ExternalParseFailed as error:
+        raise IngestFailed(str(error)) from error
+
+
+async def _parsed(deps: IngestDeps, raw: RawItem) -> ParsedDocument:
+    """挑一路后端把这份原件解开。
+
+    ⚠ 两支不合成一个函数：本地那一路阻塞且吃 CPU，必须进进程池；外部那一路是
+    网络 IO，要带自己的超时。合成一个的话，那两条口径就只剩注释在维持了。
+
+    Args: deps, raw。
+    """
+    backend = external_for(raw, deps.external_parsers)
+    if backend is None:
+        return await _parsed_locally(deps, raw)
+    return await _parsed_remotely(backend, deps, raw)
 
 
 def _batched(

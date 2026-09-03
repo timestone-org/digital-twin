@@ -90,6 +90,7 @@ export type {
   KnowledgeIndexCapability,
   KnowledgeLocator,
   KnowledgeKeywordLane,
+  KnowledgeParsingCapability,
   KnowledgeSearchResult,
   KnowledgeSource,
   KnowledgeSourceKind,

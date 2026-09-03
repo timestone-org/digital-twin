@@ -21,6 +21,9 @@ from knowledge_server.apps.knowledge.services.ingest_worker import (
     ConsumerOptions,
     IngestConsumer,
 )
+from knowledge_server.apps.knowledge.services.parsing import (
+    EXTERNAL_BACKENDS,
+)
 from knowledge_server.container import Container, build_container
 from knowledge_server.probe import probe_indexes
 from knowledge_server.settings import Settings
@@ -109,6 +112,8 @@ def _ingest_consumer(
             pool=pool,
             parse_timeout_s=settings.parse_timeout_s,
             batch_size=settings.embedding_batch_size,
+            external_parsers=EXTERNAL_BACKENDS,
+            external_parse_timeout_s=settings.external_parse_timeout_s,
         ),
         options=ConsumerOptions(
             target=container.ingest_group(),
