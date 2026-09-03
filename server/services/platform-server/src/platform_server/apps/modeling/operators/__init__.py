@@ -35,7 +35,10 @@ from platform_server.apps.modeling.operators.evaluate import (
     ClassificationMetrics,
     RegressionMetrics,
 )
-from platform_server.apps.modeling.operators.feature import Standardize
+from platform_server.apps.modeling.operators.feature import (
+    OneHot,
+    Standardize,
+)
 from platform_server.apps.modeling.operators.frame import (
     COLUMN_ROLES,
     DTYPE_NUMBER,
@@ -104,6 +107,7 @@ __all__ = [
     "LogisticRegressionOperator",
     "MetricsPayload",
     "ModelPayload",
+    "OneHot",
     "OperatorBase",
     "OperatorConfig",
     "OperatorError",

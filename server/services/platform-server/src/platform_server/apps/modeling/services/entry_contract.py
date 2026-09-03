@@ -61,6 +61,31 @@ def record_of(records: dict[str, NodeRecord], node_id: str) -> NodeRecord:
     return records.get(node_id) or NodeRecord(preview={}, fitted=None, io={})
 
 
+def frame_columns_of(
+    record: NodeRecord, side: str, port: str
+) -> list[str] | None:
+    """某一步某一侧某个端口上**实际**流过的列。读不到给 `None`。
+
+    Args: record, side（inputs / outputs）, port。
+    """
+    found = as_dict(record.io.get(side)).get(port)
+    if not isinstance(found, list):
+        return None
+    return [as_text(item) for item in cast("list[object]", found)]
+
+
+def without_target(keys: list[str] | None, target_key: str) -> list[str] | None:
+    """推理时那一行上会有的列 = 训练时那一步看到的列**去掉目标列**。
+
+    ⚠ 这是训练与推理之间唯一的差别：目标列在训练时一路跟着走（切分要用它），
+    推理时压根不存在。带拟合的算子都不动目标列，所以这条减法对每一步都成立。
+    Args: keys, target_key。
+    """
+    if keys is None:
+        return None
+    return [key for key in keys if key != target_key]
+
+
 def entry_of(
     graph: PipelineGraph,
     records: dict[str, NodeRecord],
@@ -78,15 +103,14 @@ def entry_of(
     if not served:
         return ()
     first = served[0]
-    seen = as_dict(record_of(records, first).io.get("inputs")).get("frame")
-    if not isinstance(seen, list):
+    seen = without_target(
+        frame_columns_of(record_of(records, first), "inputs", "frame"),
+        target_key,
+    )
+    if seen is None:
         return None
     meta = entry_meta(graph, records, first)
-    return tuple(
-        _entry_column(as_text(key), meta)
-        for key in cast("list[object]", seen)
-        if as_text(key) != target_key
-    )
+    return tuple(_entry_column(key, meta) for key in seen)
 
 
 def entry_meta(

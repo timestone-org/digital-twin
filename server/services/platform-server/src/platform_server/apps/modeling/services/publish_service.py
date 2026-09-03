@@ -12,7 +12,6 @@ from typing import Any
 
 import numpy
 import sklearn
-from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from platform_server.apps.modeling.crud import model_version_crud, run_crud
@@ -25,8 +24,6 @@ from platform_server.apps.modeling.models import ModelingModelVersion
 from platform_server.apps.modeling.operators import (
     CONTRACT_MODEL,
     DTYPE_NUMBER,
-    ColumnKeys,
-    OperatorBase,
     OperatorError,
     registry,
 )
@@ -37,8 +34,10 @@ from platform_server.apps.modeling.services.entry_contract import (
     NodeRecord,
     entry_meta,
     entry_of,
+    frame_columns_of,
     record_of,
     smoke_moment,
+    without_target,
 )
 from platform_server.apps.modeling.services.graph_walk import topological_order
 from platform_server.apps.modeling.services.jsonshape import (
@@ -271,16 +270,21 @@ def _steps_of(
 
     ⚠ `fitted` 与用户配置 `config` **并列**而不是混在一起：混在一起之后，
     推理时要先把私有键剔出去才构造得出配置。
-    ⚠ 期望列是从入口**正推**出来的，不再是「所有步骤都写同一份特征列」：那份
-    只在「没有任何算子增删列」时才碰巧对，而那正是 D2 要拆掉的假设。
+    ⚠ 期望列取自**训练时实际流过的列**去掉目标列，不按算子的静态声明推：
+    独热这类算子产出哪几列取决于数据里有哪些类目，静态推不出来，而推不出来时
+    退化成「不断言」正是这道闸存在的理由（D3）。
     Args: publishing, entry。
     """
     nodes = publishing.graph.node_by_id()
+    target_key = as_text(publishing.payload.get("target_key"))
     steps: list[dict[str, Any]] = []
-    current: ColumnKeys = tuple(item.key for item in entry)
+    flowed: list[str] | None = [item.key for item in entry]
     for node_id in publishing.served:
-        operator = registry.get(nodes[node_id].operator)
-        produced = _produced_by(operator, nodes[node_id].config, current)
+        record = record_of(publishing.records, node_id)
+        expected = _seen_by(record, flowed, target_key)
+        produced = without_target(
+            frame_columns_of(record, "outputs", "frame"), target_key
+        )
         steps.append(
             {
                 "node_id": node_id,
@@ -292,27 +296,33 @@ def _steps_of(
                     node_id == publishing.model_id,
                     publishing.payload,
                 ),
-                "expected_input_columns": list(current or ()),
-                "produced_columns": list(produced or ()),
+                "expected_input_columns": expected or [],
+                "produced_columns": produced or [],
             }
         )
-        if node_id != publishing.model_id:
-            current = produced
+        flowed = produced if produced is not None else flowed
     return steps
 
 
-def _produced_by(
-    operator: type[OperatorBase], raw: dict[str, Any], current: ColumnKeys
-) -> ColumnKeys:
-    """这一步吃 `current` 会吐出哪些列。参数不合法时当成推不出来。
+def _seen_by(
+    record: NodeRecord, flowed: list[str] | None, target_key: str
+) -> list[str] | None:
+    """这一步在推理时会看到哪些列。
 
-    Args: operator, raw, current。
+    ⚠ 建模那一步的输入端口叫 `train` / `test`，推理时却只有一份帧——那时候拿
+    上一步流出来的列，而不是它训练时的两个入口。
+    Args: record, flowed, target_key。
     """
-    try:
-        config = operator.CONFIG_MODEL.model_validate(raw)
-    except ValidationError:
-        return None
-    return operator.describe_columns(config, {"frame": current}).get("frame")
+    seen = without_target(
+        frame_columns_of(record, "inputs", "frame"), target_key
+    )
+    if seen is not None:
+        return seen
+    if flowed is not None:
+        return flowed
+    return without_target(
+        frame_columns_of(record, "inputs", "train"), target_key
+    )
 
 
 def _last_expected(

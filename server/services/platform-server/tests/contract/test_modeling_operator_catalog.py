@@ -38,6 +38,7 @@ EXPECTED_CODES = (
     "ledger_source",
     "linear_regression",
     "logistic_regression",
+    "one_hot",
     "regression_metrics",
     "resample",
     "residual_analysis",
