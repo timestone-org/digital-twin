@@ -19,10 +19,9 @@ import { computed, ref, shallowRef, watch } from 'vue'
 import * as modeling from '@/api/modeling'
 import { describeError } from '@/composables/useAsyncList'
 
-import { headlineOf } from './nodeHeadline'
+import { headlineFromPayload } from './nodeHeadline'
 import type { NodeRuntime } from './nodeState'
 import { stateOf } from './nodeState'
-import { previewOf } from './preview'
 import { useGraphIssues } from './useGraphIssues'
 import { useCanvasSelection } from './useCanvasSelection'
 import { useModelingGraph } from './useModelingGraph'
@@ -52,8 +51,7 @@ function runtimeOf(
       state: stateOf(node.status),
       errorText: node.error_text ?? '',
       hasResult: node.has_preview || detail !== undefined,
-      headline:
-        detail === undefined ? '' : headlineOf(previewOf(detail.preview)),
+      headline: detail === undefined ? '' : headlineFromPayload(detail.preview),
     })
   }
   return table

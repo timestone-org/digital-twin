@@ -232,6 +232,27 @@ function metricsOf(raw: Record<string, unknown>): MetricsPreview {
   }
 }
 
+/** 一个节点的一路输出：端口名与它那份摘要。 */
+export interface PortPreview {
+  port: string
+  preview: Preview
+}
+
+/**
+ * 把一个节点的结果摘要读成**逐端口**的清单。
+ *
+ * ⚠ 后端给的摘要是**按端口建键**的（取数是 `{frame: {…}}`，切分是
+ * `{train: {…}, test: {…}}`，回归是 `{model: {…}, scored: {…}}`），不是一份
+ * 摊平的摘要。拿整包去读 `kind` 永远读不到，界面于是把每一步都显示成
+ * 「这一步没有可展示的结果」——而卡片上那行数字也跟着一起空掉。
+ */
+export function portPreviewsOf(raw: Record<string, unknown>): PortPreview[] {
+  return Object.entries(raw).map(([port, value]) => ({
+    port,
+    preview: previewOf(asRecord(value)),
+  }))
+}
+
 /** 读一份摘要。`kind` 认不出来就当 `unknown`。 */
 export function previewOf(raw: Record<string, unknown>): Preview {
   const kind = asText(raw['kind'])

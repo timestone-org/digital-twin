@@ -45,6 +45,7 @@ import { edgeOf } from './scripts/useCanvasWiring'
 import { useCanvasMenu } from './scripts/useCanvasMenu'
 import { useCanvasPage } from './scripts/useCanvasPage'
 import { useCanvasShortcuts } from './scripts/useCanvasShortcuts'
+import { useResultPanel } from './scripts/useResultPanel'
 
 const route = useRoute()
 const router = useRouter()
@@ -59,7 +60,6 @@ const clock = ref<ReturnType<typeof setInterval> | null>(null)
 // ⚠ 手工与 EditorCanvas 的 `defineExpose` 对齐：`InstanceType<typeof 组件>` 取不到
 // `defineExpose` 的类型（会塌成 any），写错了 typecheck 与 lint 都不拦
 const canvasRef = ref<CanvasHandle | null>(null)
-const resultNodeId = ref<string | null>(null)
 const renameNodeId = ref<string | null>(null)
 const renameDraft = ref('')
 const isHistoryOpen = ref(false)
@@ -98,13 +98,15 @@ const menu = useCanvasMenu({
   hasResult: (id) => page.runtime.value.get(id)?.hasResult === true,
   onRename: (id) => openRename(id),
   onOpenConfig: (id) => config.open(id),
-  onOpenResult: (id) => void openResult(id),
+  onOpenResult: (id) => void result.open(id),
 })
 
-const resultPayload = computed(
-  () =>
-    page.runner.previews.value.get(resultNodeId.value ?? '')?.preview ?? null,
-)
+const result = useResultPanel({
+  graph: page.graph.graph,
+  operators: page.operatorMap,
+  previewOf: (id) => page.runner.previews.value.get(id)?.preview,
+  loadPreview: page.runner.loadPreview,
+})
 
 /** 点问题条里的卡片名：选中它并把参数面板开在那一项上。 */
 function focusIssue(nodeId: string): void {
@@ -131,11 +133,6 @@ function dropOperator(code: string, at: CanvasPoint): void {
 }
 
 const progress = computed(() => progressOf(page.runner.run.value, tick.value))
-
-async function openResult(nodeId: string): Promise<void> {
-  resultNodeId.value = nodeId
-  await page.runner.loadPreview(nodeId)
-}
 
 function openRename(nodeId: string): void {
   const node = page.graph.graph.value.nodes.find((item) => item.id === nodeId)
@@ -388,7 +385,7 @@ onMounted(async () => {
           @remove-edge="actions.removeEdge"
           @reject="(reason) => toast.warning(reason)"
           @open-config="config.open"
-          @open-result="(id) => void openResult(id)"
+          @open-result="(id) => void result.open(id)"
           @drop-operator="dropOperator"
           @open-menu="menu.open"
           @auto-layout="actions.autoLayout"
@@ -437,12 +434,16 @@ onMounted(async () => {
     </DtModal>
 
     <DtModal
-      :model-value="resultPayload !== null"
+      :model-value="result.payload.value !== null"
       title="这一步的结果"
       width="56rem"
-      @update:model-value="resultNodeId = null"
+      @update:model-value="result.close"
     >
-      <ResultView v-if="resultPayload" :payload="resultPayload" />
+      <ResultView
+        v-if="result.payload.value"
+        :payload="result.payload.value"
+        :labels="result.labels.value"
+      />
     </DtModal>
 
     <DtModal v-model="isKeysOpen" title="快捷键与手势" width="34rem">
