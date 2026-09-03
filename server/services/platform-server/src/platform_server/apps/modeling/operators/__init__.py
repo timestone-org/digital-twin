@@ -74,6 +74,11 @@ from platform_server.apps.modeling.operators.timefeature import (
     TIME_PARTS,
     TimeFeature,
 )
+from platform_server.apps.modeling.operators.window import (
+    ROLLING_STATS,
+    LagFeature,
+    RollingFeature,
+)
 
 __all__ = [
     "AGG_FUNCS",
@@ -88,6 +93,7 @@ __all__ = [
     "ROLE_FEATURE",
     "ROLE_IGNORED",
     "ROLE_TARGET",
+    "ROLLING_STATS",
     "SERVING_CHANNELS",
     "TIME_PARTS",
     "CastType",
@@ -102,6 +108,7 @@ __all__ = [
     "FilterRows",
     "Frame",
     "FrameColumn",
+    "LagFeature",
     "LedgerSource",
     "LinearRegressionOperator",
     "LogisticRegressionOperator",
@@ -119,6 +126,7 @@ __all__ = [
     "RegressionMetrics",
     "Resample",
     "ResidualAnalysis",
+    "RollingFeature",
     "SplitDataset",
     "Standardize",
     "TimeFeature",
