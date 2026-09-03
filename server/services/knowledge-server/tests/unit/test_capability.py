@@ -7,16 +7,20 @@ from pydantic import SecretStr
 
 from knowledge_server.apps.knowledge.services.capability import (
     EXTERNAL_PARSER_ABSENT,
+    NO_RERANK_REASON,
+    RERANK_FAILING_REASON,
     ModelLanes,
     capability_of,
     index_capability_of,
     parsing_capability_of,
+    rerank_capability_of,
 )
 from knowledge_server.apps.knowledge.services.indexing import PGVECTOR, TRGM
 from knowledge_server.apps.knowledge.services.parsing import (
     ParsedDocument,
     RawItem,
 )
+from knowledge_server.apps.knowledge.services.reranking import NullReranker
 from knowledge_server.settings import Settings
 
 PLACEHOLDER = "knowledge-test"
@@ -125,3 +129,53 @@ def test_a_connected_rerank_lane_names_its_model(settings: Settings) -> None:
     assert out.rerank.is_enabled is True
     assert out.rerank.model == "gte-rerank-v2"
     assert out.rerank.reason == ""
+
+
+def test_a_rerank_lane_that_is_connected_and_healthy_says_nothing() -> None:
+    made = rerank_capability_of(
+        ModelLanes(
+            is_embedding_enabled=True,
+            is_model_enabled=True,
+            is_rerank_enabled=True,
+            rerank_model="bge-reranker",
+        )
+    )
+    assert made.is_enabled is True
+    assert made.reason == ""
+
+
+def test_a_rerank_lane_that_is_never_connected_says_so() -> None:
+    """⚠ 「没接」是这套部署的常态，不是毛病：那句话要与「接了但排不成」
+    分开，否则运维会去查一个根本没配过的端点。"""
+    made = rerank_capability_of(
+        ModelLanes(is_embedding_enabled=True, is_model_enabled=True)
+    )
+    assert made.is_enabled is False
+    assert made.reason == NO_RERANK_REASON
+
+
+def test_a_connected_lane_that_keeps_failing_stops_claiming_it_is_fine() -> (
+    None
+):
+    """⚠ 这一条是实测出来的：端点接着、`/v1/models` 秒回、`/v1/rerank` 挂住
+    不回，于是每次检索先等满超时——而能力面报的是「接了、一切正常」。
+    「接了」与「接了而且排得成」是两件事。"""
+    made = rerank_capability_of(
+        ModelLanes(
+            is_embedding_enabled=True,
+            is_model_enabled=True,
+            is_rerank_enabled=True,
+            is_rerank_failing=True,
+            rerank_model="bge-reranker",
+        )
+    )
+    assert made.is_enabled is True
+    assert made.reason == RERANK_FAILING_REASON
+    # ⚠ 那句话要说得出下一步：只说「不可用」会让人去查网络
+    assert "端点" in made.reason
+
+
+def test_the_null_lane_is_not_reported_as_failing() -> None:
+    """⚠ 缺席不是失败。`NullReranker` 的 `is_failing` 必须是假，否则每一套
+    没配重排的部署都会在界面上挂一条红字。"""
+    assert NullReranker().is_failing is False

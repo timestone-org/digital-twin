@@ -47,6 +47,17 @@ class Reranker(Protocol):
         """这一路此刻真能排吗。"""
         ...
 
+    @property
+    def is_failing(self) -> bool:
+        """这一路此刻**接着却排不成**吗（断路器不是关着的）。
+
+        ⚠ 与 `can_rerank` 是两件事，而混成一件正是那个静默退化的来路：
+        「解得出端点」不等于「那个端点会应答」。实测过一次——端点接了、
+        `/v1/models` 秒回、`/v1/rerank` 挂住不回，于是每次检索先等满超时，
+        而 `/capabilities` 报的是「接了、一切正常」。
+        """
+        ...
+
     async def rerank(
         self, query: str, documents: Sequence[str], *, top_n: int
     ) -> list[RerankScore]:
@@ -70,6 +81,9 @@ class NullReranker:
     id: str = "none"
     model: str | None = None
     can_rerank: bool = False
+    # ⚠ 没接不算「正在失败」：那是这套部署的常态，而 `reason` 里说的是
+    # 「没接」；两者混成一句会让运维去查一个根本没配过的端点
+    is_failing: bool = False
 
     async def rerank(
         self, query: str, documents: Sequence[str], *, top_n: int

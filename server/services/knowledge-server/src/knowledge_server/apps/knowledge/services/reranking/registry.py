@@ -54,6 +54,15 @@ class RemoteReranker:
         """此刻解得出端点就能排。"""
         return self.adapter.is_ready
 
+    @property
+    def is_failing(self) -> bool:
+        """断路器不是关着的，就说明这一路接着却排不成。
+
+        ⚠ 半开也算「正在失败」：那时只放一个探测过去，别的调用照样退回融合
+        名次——对用户来说与全开没有区别。
+        """
+        return self.breaker.state != "closed"
+
     async def rerank(
         self, query: str, documents: Sequence[str], *, top_n: int
     ) -> list[RerankScore]:

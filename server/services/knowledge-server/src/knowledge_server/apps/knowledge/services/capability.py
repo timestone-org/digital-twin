@@ -112,6 +112,13 @@ def ready_strategies(
 
 # 没接重排时说得出的那句话。⚠ 一定要说：没接时检索走的是融合名次那一档，
 # 而悄悄退化的表现正是「质量忽然变了、一处都不报错」
+# 接了但一直排不成时说的那句。⚠ 要说得出下一步：只说「不可用」会让人去查
+# 网络，而真正该看的是那个端点应不应答
+RERANK_FAILING_REASON = (
+    "重排这一路接着，但连着几次没排成，已暂时短路——检索照常返回融合名次。"
+    "去看一眼那个重排端点应不应答"
+)
+
 NO_RERANK_REASON = (
     "模型管理页上还没给「知识库重排」分配模型，本部署按融合名次给出结果"
 )
@@ -133,18 +140,27 @@ class ModelLanes:
     # 重排接没接，以及此刻用的是哪个模型。⚠ 缺省是「没接」：这一格是后加的，
     # 不给它的调用点本来就没有这一路
     is_rerank_enabled: bool = False
+    # 接着却排不成（断路器不是关着的）。⚠ 与「没接」分开：那是常态，这是毛病
+    is_rerank_failing: bool = False
     rerank_model: str = ""
 
 
 def rerank_capability_of(lanes: ModelLanes) -> RerankCapabilityOut:
     """重排那一路此刻的样子。
 
+    ⚠ 「接了」与「接了而且排得成」是两件事。实测过一次：端点接着、
+    `/v1/models` 秒回、`/v1/rerank` 挂住不回，于是每次检索先等满超时，
+    而这里报的是「接了、一切正常」——那正是 §4.2 那条设计原则要防的
+    「悄悄退化」，只不过它当时只覆盖了「没接」那一档。
+
     Args: lanes。
     """
     if not lanes.is_rerank_enabled:
         return RerankCapabilityOut(is_enabled=False, reason=NO_RERANK_REASON)
     return RerankCapabilityOut(
-        is_enabled=True, model=lanes.rerank_model, reason=""
+        is_enabled=True,
+        model=lanes.rerank_model,
+        reason=RERANK_FAILING_REASON if lanes.is_rerank_failing else "",
     )
 
 
