@@ -299,3 +299,60 @@ describe('摘要按端口建键', () => {
     expect(wrapper.text()).toContain('这一步没有可展示的结果')
   })
 })
+
+// ⚠ DtTable **没有默认的单元格渲染**：列上没挂 `#cell-<key>` 插槽就渲染成占位符
+// 「—」，而「前 N 行」那张表的列是随台账变的（F1/F2/F3），只能逐列动态给。漏了
+// 的表现是列统计一切正常、下面那张表整屏「—」，看着像数据根本没取到。
+describe('前若干行那张表', () => {
+  function columnOf(key: string) {
+    return {
+      key,
+      name: key,
+      dtype: 'number',
+      role: 'feature',
+      unit: '',
+      null_ratio: 0,
+      n_unique: 2,
+      min: 0,
+      max: 2,
+      mean: 1,
+      p50: 1,
+    }
+  }
+
+  const ROWS = {
+    frame: {
+      kind: 'frame',
+      shape: { rows: 2, cols: 3 },
+      columns: [columnOf('F1'), columnOf('F2'), columnOf('F3')],
+      index_name: 'ts',
+      // ⚠ 后端给的是毫秒时间戳整数，不是时刻串
+      index_head: [1788331980000, 1788332040000],
+      head: [
+        [0, 0, -1.2032851449288888],
+        [null, 1.5, 2],
+      ],
+      rows_truncated: false,
+      cols_truncated: false,
+    },
+  }
+
+  it('每一列都真的印出值，不是一整屏占位符', () => {
+    const wrapper = mount(ResultView, { props: { payload: ROWS } })
+
+    expect(wrapper.text()).toContain('-1.2033')
+    expect(wrapper.text()).toContain('1.5')
+  })
+
+  it('时间索引按时刻印出来，不是一列空白也不是行号', () => {
+    const wrapper = mount(ResultView, { props: { payload: ROWS } })
+
+    expect(wrapper.text()).toContain('2026')
+  })
+
+  it('空的那一格仍旧显示「—」', () => {
+    const wrapper = mount(ResultView, { props: { payload: ROWS } })
+
+    expect(wrapper.text()).toContain('—')
+  })
+})
