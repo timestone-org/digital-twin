@@ -3,6 +3,9 @@
 alembic 的 `env.py` 通过本文件收集元数据，故须维护 `__all__`：漏一个即迁移漏表。
 """
 
+from platform_server.apps.modeling.models.artifact import (
+    ModelingModelArtifact,
+)
 from platform_server.apps.modeling.models.base import Base
 from platform_server.apps.modeling.models.binding import ModelingBinding
 from platform_server.apps.modeling.models.model_version import (
@@ -19,6 +22,7 @@ __all__ = [
     "MAX_ERROR_TEXT_LENGTH",
     "Base",
     "ModelingBinding",
+    "ModelingModelArtifact",
     "ModelingModelVersion",
     "ModelingNodeRun",
     "ModelingPipeline",
