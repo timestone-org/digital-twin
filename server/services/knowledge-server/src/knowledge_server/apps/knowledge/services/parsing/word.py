@@ -188,6 +188,9 @@ def _caption_at(
     ⚠ 图自己那一段的文字**不当图注**：它已经是一个正文块了，再当图注会让同
     一句话在引用卡片上出现两遍。
 
+    ⚠ 收走了就要**跳过那一段**，见 `parse`：不跳的话「图 1 …」在检索到的原文
+    里印两遍——一遍是图那一块的正文，一遍是它自己那一段。实测出来的。
+
     Args: document, elements, index。
     """
     nxt = elements[index + 1] if index + 1 < len(elements) else None
@@ -423,18 +426,21 @@ class DocxParser:
         walk = _Walk()
         walk.made.extend(_section_blocks(document))
         elements = _body_items(document)
+        # 已经被上一段的图当图注收走的那一段。⚠ 跳过它，否则「图 1 …」在检索
+        # 到的原文里印两遍——一遍是图那一块的正文，一遍是它自己那一段
+        taken = -1
         for index, element in enumerate(elements):
             if len(walk.made) >= MAX_BLOCKS:
                 break
-            if isinstance(element, CT_P):
-                _paragraph_into(
-                    walk,
-                    document,
-                    element,
-                    _caption_at(document, elements, index),
-                )
-            else:
+            if not isinstance(element, CT_P):
                 _table_into(walk, Table(element, document))
+                continue
+            if index == taken:
+                continue
+            caption = _caption_at(document, elements, index)
+            if caption and _embedded(element):
+                taken = index + 1
+            _paragraph_into(walk, document, element, caption)
         walk.made.extend(_textbox_blocks(document, len(walk.made)))
         made = walk.made[:MAX_BLOCKS]
         return ParsedDocument(
