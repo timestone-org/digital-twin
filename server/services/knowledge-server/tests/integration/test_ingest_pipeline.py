@@ -160,6 +160,7 @@ def _deps(source: object, embedder: object, pair: IndexPair) -> IngestDeps:
         embedder=embedder,  # pyright: ignore[reportArgumentType]
         indexes=pair,
         pool=ThreadPoolExecutor(max_workers=1),
+        store=None,
         parse_timeout_s=30.0,
         batch_size=2,
     )

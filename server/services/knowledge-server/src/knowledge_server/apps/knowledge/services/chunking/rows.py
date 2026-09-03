@@ -51,6 +51,7 @@ class RowChunker:
                     heading_path=heading,
                     locator=block.locator,
                     token_count=estimated(text),
+                    figure_refs=(block.figure_ref,) if block.figure_ref else (),
                 )
             )
         return tuple(made)

@@ -36,6 +36,17 @@ class DocumentNotFound(AppError):
     http_status = 404
 
 
+class FigureBytesGone(AppError):
+    """图那一行还在，字节已经不在对象存储里了。
+
+    ⚠ 与「没这一行」分开报：行还在而字节没了意味着桶被清过，而那是运维要知道
+    的事，不是「用户点了个不存在的图」。混成 404 的话，前者永远查不出来。
+    """
+
+    code = 42310
+    http_status = 410
+
+
 class SourceNotFound(AppError):
     """来源不存在，或存在但调用者无权看见。"""
 

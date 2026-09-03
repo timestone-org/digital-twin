@@ -2632,6 +2632,53 @@
         ]
       }
     },
+    "/api/v1/knowledge/documents/{document_id}/figures/{figure_id}": {
+      "get": {
+        "description": "把一张图的字节吐出去。\n\n⚠ **不走统一信封**：它回的是字节不是 JSON（api-contract 的显式豁免，\n与素材字节那一路同一条口径）。失败仍然走信封——那时回的是 JSON。\n\n⚠ 缓存写成 `private`：这张图是某个库里的内容，不许被共享缓存留下来。\n`ETag` 用内容哈希，于是重新解析之后浏览器那份缓存仍然有效。\n\nArgs: session, container, _viewer, document_id, figure_id。",
+        "operationId": "read_figure_api_v1_knowledge_documents__document_id__figures__figure_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "figure_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Figure Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "取一张解析出来的图",
+        "tags": [
+          "document"
+        ]
+      }
+    },
     "/api/v1/knowledge/documents/{document_id}:reparse": {
       "post": {
         "description": "把一份文档退回待处理并重新排队。\n\n⚠ 这是这条链路上**唯一**的重试入口，而且它由人按：一份解不动的文档\n自动重试一万次也解不动，只会把 worker 占满。\n\nArgs: session, container, _actor, document_id。",

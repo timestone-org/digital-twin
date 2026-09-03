@@ -97,6 +97,7 @@ def ingest_deps(embedder: FakeEmbedder) -> IngestDeps:
         embedder=embedder,  # pyright: ignore[reportArgumentType]
         indexes=build_indexes(embedder.dimensions),
         pool=ThreadPoolExecutor(max_workers=1),
+        store=None,
         parse_timeout_s=30.0,
     )
 

@@ -11,6 +11,7 @@
 import hashlib
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +20,7 @@ from knowledge_server.apps.knowledge import crud
 from knowledge_server.apps.knowledge.errors import (
     DocumentNotFound,
     DuplicateDocument,
+    FigureBytesGone,
     SourceNotFound,
     UnsupportedRawItem,
 )
@@ -43,6 +45,7 @@ from knowledge_server.apps.knowledge.services.sources import (
 from knowledge_server.settings import MAX_RAW_BYTES
 from lib.db import after_commit
 from lib.objectstore import (
+    ObjectNotFound,
     ObjectStore,
     ObjectStoreError,
     PresignedPost,
@@ -319,3 +322,47 @@ async def drop_document(
         await store.delete(key)
 
     after_commit(session, sweep)
+
+
+@dataclass(frozen=True)
+class FigureBytes:
+    """一张图连它的字节，交给端点直接吐出去。"""
+
+    content: bytes
+    media_type: str
+    # 内容哈希，当 ETag 用。⚠ 用它而不是 `updated_at`：同一张图重新解析之后
+    # 哈希不变，浏览器那份缓存因此仍然有效
+    etag: str
+
+
+async def read_figure(
+    session: AsyncSession,
+    store: ObjectStore,
+    document_id: uuid.UUID,
+    figure_id: uuid.UUID,
+) -> FigureBytes:
+    """取一张图的字节。
+
+    ⚠ **流字节而不是发预签名 URL。** 预签名 URL 一旦生成就是一条「谁拿到谁能
+    看」的链接，而边缘那条 `/oss/` 是免认证 location；流字节则每一次都经
+    `auth_request` 判过权限。图一般几十 KB，过一趟服务的代价可以接受。
+
+    ⚠ 按 `(document_id, figure_id)` 一起取：只按图 id 取的话，换一个文档 id
+    就能把别的库的图取出来——而那两个 id 单看都是合法的 uuid。
+
+    Args: session, store, document_id, figure_id。
+    """
+    row = await crud.figure.get_figure(session, document_id, figure_id)
+    if row is None:
+        raise DocumentNotFound("没有这张图")
+    try:
+        content = await store.get_bytes(row.object_key)
+    except ObjectNotFound as error:
+        # ⚠ 与「没这一行」分开报：行还在而字节没了意味着桶被清过，
+        # 而那是运维要知道的事，不是「用户点了个不存在的图」
+        raise FigureBytesGone("这张图的字节已不在对象存储里") from error
+    return FigureBytes(
+        content=content,
+        media_type=row.media_type or "application/octet-stream",
+        etag=row.content_hash,
+    )

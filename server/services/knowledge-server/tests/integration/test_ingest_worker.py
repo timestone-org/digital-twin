@@ -107,6 +107,7 @@ def _consumer(
             ),
             indexes=build_indexes(dimensions),
             pool=ThreadPoolExecutor(max_workers=1),
+            store=None,
             parse_timeout_s=30.0,
         ),
         options=ConsumerOptions(target=TARGET),

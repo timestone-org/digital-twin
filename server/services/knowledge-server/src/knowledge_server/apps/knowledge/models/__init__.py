@@ -9,12 +9,20 @@
 
 from knowledge_server.apps.knowledge.models.chunk import KnowledgeChunk
 from knowledge_server.apps.knowledge.models.document import KnowledgeDocument
+from knowledge_server.apps.knowledge.models.figure import (
+    FIGURE_KINDS,
+    KnowledgeChunkFigure,
+    KnowledgeFigure,
+)
 from knowledge_server.apps.knowledge.models.knowledge_base import KnowledgeBase
 from knowledge_server.apps.knowledge.models.source import KnowledgeSource
 
 __all__ = [
+    "FIGURE_KINDS",
     "KnowledgeBase",
     "KnowledgeChunk",
+    "KnowledgeChunkFigure",
     "KnowledgeDocument",
+    "KnowledgeFigure",
     "KnowledgeSource",
 ]

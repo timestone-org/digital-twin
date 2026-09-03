@@ -95,6 +95,7 @@ def test_block_kinds_stay_a_closed_set() -> None:
         "table_row",
         "list_item",
         "caption",
+        "figure",
     )
 
 
