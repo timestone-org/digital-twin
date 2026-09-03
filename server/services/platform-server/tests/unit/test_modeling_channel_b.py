@@ -5,6 +5,7 @@
 上线后每一格都空着（docs/MODELING_PLATFORM_DESIGN.md D9 / D10）。
 """
 
+from datetime import datetime
 from typing import Any
 
 import pytest
@@ -223,3 +224,53 @@ def _model_step(serving: dict[str, Any]) -> dict[str, Any]:
             assert isinstance(step, dict)
             return step
     raise AssertionError("可服务表示里没有建模那一步")
+
+
+async def test_batch_and_row_by_row_agree() -> None:
+    """整批算与逐行算，每一行的数逐个相同。
+
+    ⚠ 这是批量相位唯一的正确性论据：`predict_many` 把整条推理链在一张 n 行的
+    帧上跑一遍，而 `predict` 一次跑一行。中间任何一步若依赖「整张帧」（比如
+    偷偷重新拟合一次尺度），两者就会分道扬镳——而两边都不报错。
+    """
+    graph, records, estimator = await _run()
+    compiled = compile_model(
+        inspect_run(graph, records, estimator).serving, estimator=estimator
+    )
+    rows: list[tuple[list[float | None], datetime | None]] = [
+        ([20.0 + step, 400.0 + step * 3], None) for step in range(12)
+    ]
+    assert compiled.predict_many(rows) == [
+        compiled.predict(args, at) for args, at in rows
+    ]
+
+
+async def test_a_row_with_a_missing_argument_stays_out_of_the_batch() -> None:
+    """实参有空的那一行答案是 None，且不把缺失值喂进变换链。"""
+    graph, records, estimator = await _run()
+    compiled = compile_model(
+        inspect_run(graph, records, estimator).serving, estimator=estimator
+    )
+    answers = compiled.predict_many(
+        [([None, 400.0], None), ([20.0, 400.0], None)]
+    )
+    assert answers[0] is None
+    assert answers[1] is not None
+
+
+async def test_a_binary_model_wants_to_be_batched() -> None:
+    """通道 B 如实说「整批算划算」——批量相位靠这一句决定跑不跑。"""
+    graph, records, estimator = await _run()
+    compiled = compile_model(
+        inspect_run(graph, records, estimator).serving, estimator=estimator
+    )
+    assert compiled.should_batch is True
+
+
+async def test_a_json_model_does_not_ask_to_be_batched() -> None:
+    """通道 A 一行就是几个乘加，为它多跑一趟收集是净亏。"""
+    graph = linear_graph()
+    execution = execution_of(DirectRunner(), frames={"s": linear_frame(120)})
+    records = _records_of(await execute_graph(graph, execution=execution))
+    compiled = compile_model(inspect_run(graph, records).serving)
+    assert compiled.should_batch is False

@@ -23,10 +23,13 @@ from platform_server.apps.dataset.crud import (
 from platform_server.apps.dataset.formula import (
     AnalysisModel,
     AnalysisUnavailable,
+    BatchAnalysisModel,
     ColumnFormula,
     EvalContext,
     FormulaError,
     HistoryCache,
+    ModelMemo,
+    PredictKey,
     RowSnapshot,
     WholeStats,
     build_externals,
@@ -125,7 +128,12 @@ def evaluate_row(
             externals = build_externals(parsed.deps, cache, current)
             computed[key] = evaluate(
                 parsed,
-                EvalContext(values=merged, externals=externals, row_ts=ts),
+                EvalContext(
+                    values=merged,
+                    externals=externals,
+                    row_ts=ts,
+                    model_memo=cache.model_memo,
+                ),
             )
         except FormulaError as error:
             computed[key] = None
@@ -217,6 +225,7 @@ async def _run_passes(
         # ⚠ 模型定义整批装一次：漏了这一处的症状是「单行试算对、全表重算全空」
         models=await load_models(session, scope),
     )
+    await _collect_predictions(session, scope, targets, batch)
     failed = 0
     for _ in range(_MAX_PASSES if _needs_extra_passes(scope) else 1):
         failed, has_changed = await _one_pass(session, scope, targets, batch)
@@ -225,7 +234,58 @@ async def _run_passes(
     return failed
 
 
-@dataclass(frozen=True)
+async def _collect_predictions(
+    session: AsyncSession,
+    scope: ComputeScope,
+    targets: list[DatasetRecord],
+    batch: "_Batch",
+) -> None:
+    """批量相位：先空跑一遍收齐全部 `PREDICT` 调用，一次算完存进备忘。
+
+    ⚠ 只在**真划算**时跑：树模型那一类逐行调等于逐行付一次到 C 的往返，几万行
+    要几十秒；纯 JSON 那些一行就是几个乘加，为它多走一趟收集反而是净亏。
+    ⚠ 收集这一趟**不写记录**：它算出来的那些 None 是占位，落库就成了「重算一次
+    先把整列清空」。
+    ⚠ 收不齐不影响正确性：真实相位里命不中备忘的照样逐行现算（D11b）。
+    Args: session, scope, targets, batch。
+    """
+    batched = [
+        model
+        for model in batch.models.values()
+        if isinstance(model, BatchAnalysisModel) and model.should_batch
+    ]
+    if not batched:
+        return
+    memo = ModelMemo()
+    batch.memo = memo
+    await _one_pass(session, scope, targets, batch)
+    _answer(memo, batch.models)
+    memo.is_collecting = False
+
+
+def _answer(
+    memo: ModelMemo, models: dict[str, AnalysisModel | AnalysisUnavailable]
+) -> None:
+    """把收集到的调用按模型分组，一个模型一次算完。
+
+    ⚠ 分组的键是**公式标识**：两条绑定可以指着同一个模型版本，但它们的实参
+    映射未必一样，混在一起算就是把甲的实参喂给乙。
+    Args: memo, models。
+    """
+    by_code: dict[str, list[PredictKey]] = {}
+    for key in memo.requests:
+        by_code.setdefault(key[0], []).append(key)
+    memo.requests = []
+    for code, keys in by_code.items():
+        model = models.get(code)
+        if not isinstance(model, BatchAnalysisModel):
+            continue
+        answers = model.predict_many([(list(key[1]), key[2]) for key in keys])
+        for key, answer in zip(keys, answers, strict=True):
+            memo.values[key] = answer
+
+
+@dataclass
 class _Batch:
     """一趟重算里对每一行都相同的那几份输入。"""
 
@@ -235,6 +295,8 @@ class _Batch:
     #: 这一批共用的模型定义。⚠ 整批装一次：漏了这一处的症状是「单行试算对、
     #: 全表重算全空」（docs/MODELING_DESIGN.md §7.2）
     models: dict[str, AnalysisModel | AnalysisUnavailable]
+    #: 这一批共用的 `PREDICT` 备忘；没开批量相位时是 `None`
+    memo: ModelMemo | None = None
 
 
 async def _one_pass(
@@ -253,16 +315,20 @@ async def _one_pass(
         RowTarget(table_id=targets[0].table_id, ts=targets[0].ts),
     )
     series = list(batch.seeds)
+    is_collecting = batch.memo is not None and batch.memo.is_collecting
     failed = 0
     has_changed = False
     for position, record in enumerate(targets):
         values = batch.values[position]
         cache = _cache_of(scope, series, whole, batch)
         computed, errors = evaluate_row(scope, record.ts, values, cache)
-        has_changed = has_changed or computed != (record.computed_json or {})
-        record.computed_json = computed
-        record.compute_error = errors or None
-        failed += 1 if errors else 0
+        if not is_collecting:
+            has_changed = has_changed or computed != (
+                record.computed_json or {}
+            )
+            record.computed_json = computed
+            record.compute_error = errors or None
+            failed += 1 if errors else 0
         series.append(RowSnapshot(ts=record.ts, values={**values, **computed}))
         # ⚠ 纯内存的长循环要主动让出：几万行连算会把同进程的 /health 一起卡住
         if (position + 1) % YIELD_EVERY == 0:
@@ -291,6 +357,7 @@ def _cache_of(
     cache.whole_stats = whole
     cache.external_rows = externals
     cache.models = models
+    cache.model_memo = batch.memo
     return cache
 
 

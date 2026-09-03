@@ -13,6 +13,7 @@ from platform_server.apps.dataset.protocols import (
 from platform_server.apps.modeling.operators import (
     AGG_FUNCS,
     CATEGORIES,
+    CONTRACT_MODEL,
     CONTRACTS,
     SERVING_CHANNELS,
     Frame,
@@ -439,3 +440,37 @@ def _least_config(code: str) -> Any:
     return registry.get(code).CONFIG_MODEL.model_validate(
         {name: least[name] for name in required if name in least}
     )
+
+
+def test_no_serving_step_may_change_the_row_count() -> None:
+    """推理链上一步都不许增删行。
+
+    ⚠ 这是**批量相位**成立的前提：整批算是把 n 行一次喂进整条链，任何一步增删
+    行都会让答案与行错位。错位不报错——每一行都拿到了一个看着正常的数
+    （docs/MODELING_PLATFORM_DESIGN.md D11b）。
+    """
+    guilty = [
+        code
+        for code in registry.codes()
+        if registry.get(code).ENABLED_IN_SERVING
+        and registry.get(code).CHANGES_ROW_COUNT
+    ]
+    assert guilty == []
+
+
+def test_only_the_model_step_declares_a_serving_channel() -> None:
+    """只有产模型的那一步声明上线通道，别的都不许声明。
+
+    ⚠ 声明了通道的那一步在推理时走 `predict_rows` 而不是 `run`。一个特征算子
+    误声明的表现是它整步被换成一次预测，而列名照旧。
+    """
+    wrong = [
+        code
+        for code in registry.codes()
+        if registry.get(code).SERVING_CHANNEL
+        and not any(
+            port.contract == CONTRACT_MODEL
+            for port in registry.get(code).OUTPUTS
+        )
+    ]
+    assert wrong == []

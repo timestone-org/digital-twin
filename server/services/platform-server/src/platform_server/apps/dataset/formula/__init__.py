@@ -7,6 +7,9 @@
 from platform_server.apps.dataset.formula.analysis import (
     AnalysisModel,
     AnalysisUnavailable,
+    BatchAnalysisModel,
+    ModelMemo,
+    PredictKey,
 )
 from platform_server.apps.dataset.formula.catalog import (
     CATEGORIES,
@@ -103,6 +106,7 @@ __all__ = [
     "WINDOW_UNITS",
     "AnalysisModel",
     "AnalysisUnavailable",
+    "BatchAnalysisModel",
     "CatalogFunction",
     "ColumnFormula",
     "ColumnLabel",
@@ -118,8 +122,10 @@ __all__ = [
     "FxEntry",
     "FxParam",
     "HistoryCache",
+    "ModelMemo",
     "NotationNode",
     "ParsedFormula",
+    "PredictKey",
     "PrevRef",
     "RowSnapshot",
     "TableLabels",

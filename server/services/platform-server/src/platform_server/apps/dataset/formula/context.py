@@ -13,6 +13,7 @@ from datetime import UTC, datetime, tzinfo
 from platform_server.apps.dataset.formula.analysis import (
     AnalysisModel,
     AnalysisUnavailable,
+    ModelMemo,
 )
 from platform_server.apps.dataset.formula.errors import FormulaError
 from platform_server.apps.dataset.formula.evaluator import ExternalKey
@@ -101,6 +102,10 @@ class HistoryCache:
     models: dict[str, "AnalysisModel | AnalysisUnavailable"] = field(
         default_factory=dict[str, "AnalysisModel | AnalysisUnavailable"]
     )
+    #: 这一批共用的 `PREDICT` 备忘；`None` 表示这一批没开批量相位。
+    #: ⚠ 与 `models` 一样是**整批一份**：每行新造一个的话备忘永远命不中，
+    #: 而那不会报错，只是批量相位白跑一趟
+    model_memo: "ModelMemo | None" = None
     external_rows: dict[str, list[RowSnapshot]] = field(
         default_factory=dict[str, list[RowSnapshot]]
     )

@@ -885,7 +885,8 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 | 1 | `modeling_node_runs` 加 `fitted_json JSONB NULL`、`io_json JSONB NULL` | 一 |
 | 2 | `modeling_model_versions` 加 `signature_json JSONB NOT NULL DEFAULT '{}'::jsonb` | 二 |
 | 3 | 新表 `modeling_model_artifacts` | 五 |
-| 4 | 新表 `modeling_deployments` / `modeling_api_keys` / `modeling_call_logs` | 六 |
+| 4 | `modeling_node_runs` 加 `artifact_json JSONB NULL` | 五 |
+| 5 | 新表 `modeling_deployments` / `modeling_api_keys` / `modeling_call_logs` | 七 |
 
 ⚠ 迁移 2 的两列都给默认值，故「新结构 + 旧代码」可用（旧代码不读这两列）。
 ⚠ 迁移 1 之后、代码更新之前，`fitted_json` 全是 `NULL`，与今天的行为一致（今天就是没有）。
@@ -903,27 +904,26 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 | 二 ✅ | 入口契约与模型签名 | `describe_columns`；`known_keys_by_node` 改用它；`serving_json` 2.0 + 双版本分派；`signature_json` 生成器；前端删掉第二份收窄口径 | 一 |
 | 三 ✅ | 算子扩容 A（不改列集的） | `cast_type` / `drop_missing` / `filter_rows` / `clip_outlier` / `resample` / `logistic_regression` / `classification_metrics` / `residual_analysis` / `feature_importance`。⚠ `kmeans` 移出本期，见 D22 | 一 |
 | 四 ✅ | 算子扩容 B（改列集的） | `time_feature` / `one_hot` / `select_feature` / `pca` / `lag_feature` / `rolling_feature` / `ledger_join` / `cross_validate`；逐步期望列改按实测 io 推 | 二 |
-| **五** | **台账批量预测相位**（D11b） | 公式列分层；收集 / 回填两趟；`AnalysisModel.predict_batch`；`EvalContext.model_sink` 与 `row_ts`；ADR。**只碰 `apps/dataset`** | 二 |
-| 六 | 产物与通道 B | 迁移 3；对象存储写读；四条护栏；树模型三个；全量帧导出；ADR | 五 |
-| 七 | 对外服务 | 迁移 4；管理面 + 对外面；边缘 location + 限流；auth 规则与种子；ADR | 二（schema 就是接口文档） |
+| **五+六** ✅ | **产物、通道 B 与台账批量相位** | 迁移 3/4；四条护栏；`tree_regressor`；发布搬产物 + 实跑；`converge_pipeline` 接上并清产物；`BatchAnalysisModel` / `ModelMemo` / 收集相位；ADR-0045、ADR-0046 | 二 |
+| 七 | 对外服务 | 迁移 5；管理面 + 对外面；边缘 location + 限流；auth 规则与种子；ADR | 二（schema 就是接口文档） |
 | 八 | 公式一键化 | `:register-formula`；换绑的入口契约比对；台账列显示「由哪个模型算」 | 二 |
 | 九 | 前端四面 | 运行面、模型详情、服务面、模板、结果导出入口 | 六 / 七 / 八 |
 
 ⚠ **第一期必须最先**：它修的是一条已经在线上的静默错值缺陷，且后面每一期都压在它上面。
-⚠ **第五期排在第六期前面**：批量相位是通道 B 进台账的前提，先把相位铺好，
-树模型落地时只是「多一个实现了 `predict_batch` 的模型」，不必两件事一起改。
+⚠ **五、六两期最终并成一次交付**：批量相位的验收件必须是一个**真的**通道 B
+模型——只有假件的话，「整批与逐行算出来的数相同」这条断言证明不了推理链在多行
+帧上跑得对。相位与树模型分两次做，第一次就没有可验的东西。
 ⚠ 三、四两期内部可高度并行（每 2–3 个算子一个 PR，互不相干）。
 
 ### 需要的 ADR
 
 | 题 | 期 |
 | --- | --- |
-| 台账公式重算加批量预测相位，求值器保持纯同步 | 五 |
-| 模型二进制产物走对象存储且只加载自产字节 | 六 |
+| ~~台账公式重算加批量预测相位，求值器保持纯同步~~ → **ADR-0046** | 五+六 ✅ |
+| ~~模型二进制产物走对象存储且只加载自产字节~~ → **ADR-0045** | 五+六 ✅ |
 | 对外推理面走 API 密钥并由边缘免认证 location 承载 | 七 |
 
-⚠ 编号取当前未占用的下一个。`docs/adr/` 在 `main` 上到 0044，
-但另有分支正在占 0045——开写前先看一眼。
+⚠ 编号取当前未占用的下一个。本分支已占 0045 与 0046。
 
 ---
 
