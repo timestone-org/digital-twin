@@ -242,7 +242,7 @@ def test_a_kind_this_side_cannot_build_is_absent_not_silently_metered(
 
 
 @pytest.mark.parametrize(
-    ("catalog", "expected"),
+    ("catalog", "is_codex"),
     [
         (_assigned(_codex_provider(), "gpt-5-codex"), True),
         (_assigned(_endpoint_provider(), "qwen-plus"), False),
@@ -251,12 +251,12 @@ def test_a_kind_this_side_cannot_build_is_absent_not_silently_metered(
     ids=["codex", "endpoint", "absent"],
 )
 def test_only_the_codex_lane_asks_for_the_wire_rename(
-    catalog: ModelCatalog, expected: bool
+    catalog: ModelCatalog, is_codex: bool
 ) -> None:
     """⚠ 问的是适配器自己：这一侧只有一个档位（`default`），按档位名比的话，
     配了订阅账号之后每一次带工具的对话都撞一条 400，而那条 400 里既不说是
     哪个工具、也不说问题出在点号上。"""
-    assert _adapter(catalog, settings=_with_env()).is_codex_now() is expected
+    assert _adapter(catalog, settings=_with_env()).is_codex_now() is is_codex
 
 
 def test_every_tool_this_service_declares_survives_the_wire_rename() -> None:
