@@ -4,8 +4,8 @@
  * ⚠ 不能拿「图里所有取数节点」凑数：一条流水线接两张台账时，下游那一支的列
  * 选择器会列出另一支的列名，用户勾了之后要等运行时才报「这一列不存在」。
  * ⚠ 这里只管**台账清单**，不管列候选：列由后端算好经 `:validate` 的
- * `known_columns` 给下来。前端曾经另写一份收窄口径，两份各自自洽而真跑起来
- * 对不上（docs/MODELING_PLATFORM_DESIGN.md D2）。
+ * `known_columns` 给下来。两处各算一份的话，两份各自自洽而真跑起来对不上
+ * （docs/MODELING_PLATFORM_DESIGN.md D2）。
  */
 import type { ModelingGraph, ModelingOperator } from '@dt/contracts'
 

@@ -80,6 +80,24 @@ async function putGraph(
   }
 }
 
+/** 拉一条流水线。拉不到时把原因留在 `error` 上，不抛。 */
+async function fetchPipeline(
+  pipelineId: string,
+  isLoading: Ref<boolean>,
+  error: Ref<string | null>,
+): Promise<ModelingPipeline | null> {
+  isLoading.value = true
+  error.value = null
+  try {
+    return await modeling.getModelingPipeline(pipelineId)
+  } catch (caught) {
+    error.value = describeError(caught)
+    return null
+  } finally {
+    isLoading.value = false
+  }
+}
+
 export function usePipelineDoc() {
   const pipeline = shallowRef<ModelingPipeline | null>(null)
   const issues = ref<readonly ModelingGraphIssue[]>([])
@@ -91,21 +109,6 @@ export function usePipelineDoc() {
   // 边改边校验：慢的那次后返回不许盖掉快的那次，否则问题清单会退回上一版图的
   const checking = useRacedFetch()
 
-  async function load(pipelineId: string): Promise<ModelingPipeline | null> {
-    isLoading.value = true
-    error.value = null
-    try {
-      const next = await modeling.getModelingPipeline(pipelineId)
-      pipeline.value = next
-      return next
-    } catch (caught) {
-      error.value = describeError(caught)
-      return null
-    } finally {
-      isLoading.value = false
-    }
-  }
-
   return {
     pipeline,
     issues,
@@ -113,7 +116,11 @@ export function usePipelineDoc() {
     isLoading,
     isSaving,
     error,
-    load,
+    load: async (pipelineId: string) => {
+      const next = await fetchPipeline(pipelineId, isLoading, error)
+      if (next !== null) pipeline.value = next
+      return next
+    },
     save: async (graph: ModelingGraph) => {
       const current = pipeline.value
       if (current === null) return false
@@ -130,6 +137,11 @@ export function usePipelineDoc() {
         graph,
         isQuiet,
       ),
+    /** 回看历史时清空：问题清单与列候选都是「正在编辑那张图」的。 */
+    clearCheck: () => {
+      issues.value = []
+      knownColumns.value = {}
+    },
     /** 离开画布时作废在飞的那一次校验。 */
     stopChecking: () => checking.cancel(),
   }

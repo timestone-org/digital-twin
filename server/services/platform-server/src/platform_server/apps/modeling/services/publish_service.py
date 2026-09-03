@@ -166,45 +166,86 @@ def _model_node_of(graph: PipelineGraph) -> str | None:
     return None
 
 
-def _servable(ctx: _Publishing) -> Publishable:
+def _servable(publishing: _Publishing) -> Publishable:
     """拼出可服务表示，并当场**实跑一行**验证它真的算得出来。
 
     ⚠ 发布时就跑：常量列、缺参数这类问题若留到推理期才炸，就成了「模型训出来
     了、上线才发现用不了」（§7.3）。⚠ 只编译不够——编译只看形状，缺参数的那一步
     编译得过、跑起来才抛。
-    Args: ctx。
+    Args: publishing。
     """
-    features = as_texts(ctx.payload.get("feature_keys"))
-    target_key = as_text(ctx.payload.get("target_key"))
-    entry = _entry_of(ctx, target_key)
+    target_key = as_text(publishing.payload.get("target_key"))
+    entry = _entry_of(publishing, target_key)
     if entry is None:
         return _unservable(
             "这次运行没有留下逐步的列记录，早于本次升级——"
             "请重跑一遍这条流水线再发布"
         )
-    steps = _steps_of(ctx, entry)
-    starved = _starved_step(ctx.graph, steps)
+    steps = _steps_of(publishing, entry)
+    refused = _refusal(publishing, steps, entry)
+    if refused:
+        return _unservable(refused)
+    serving = _serving_of(publishing, steps, entry)
+    try:
+        compile_model(serving).predict([item.mean for item in entry])
+    except OperatorError as error:
+        return _unservable(f"可服务表示校验没通过：{error}")
+    return _published(publishing, serving, steps, entry)
+
+
+def _refusal(
+    publishing: _Publishing,
+    steps: list[dict[str, Any]],
+    entry: tuple[EntryColumn, ...],
+) -> str:
+    """不该上线的两条硬理由；都过得去就给空串。
+
+    Args: publishing, steps, entry。
+    """
+    starved = _starved_step(publishing.graph, steps)
     if starved:
-        return _unservable(starved)
+        return starved
+    features = as_texts(publishing.payload.get("feature_keys"))
     missing = sorted(set(features) - set(_last_expected(steps, entry)))
     if missing:
-        return _unservable(
+        return (
             f"推理链算不出模型要的这几列：{'、'.join(missing)}。"
             "请检查特征工程那几步的配置"
         )
-    serving = {
+    return ""
+
+
+def _serving_of(
+    publishing: _Publishing,
+    steps: list[dict[str, Any]],
+    entry: tuple[EntryColumn, ...],
+) -> dict[str, Any]:
+    """可服务表示。推理时读的就是它，别的都不读。
+
+    Args: publishing, steps, entry。
+    """
+    return {
         "format_version": SERVING_FORMAT_VERSION,
-        "task": as_text(ctx.payload.get("task")),
+        "task": as_text(publishing.payload.get("task")),
         "entry_columns": [
             {"key": item.key, "dtype": item.dtype} for item in entry
         ],
         "steps": steps,
     }
-    try:
-        compiled = compile_model(serving)
-        compiled.predict([item.mean for item in entry])
-    except OperatorError as error:
-        return _unservable(f"可服务表示校验没通过：{error}")
+
+
+def _published(
+    publishing: _Publishing,
+    serving: dict[str, Any],
+    steps: list[dict[str, Any]],
+    entry: tuple[EntryColumn, ...],
+) -> Publishable:
+    """一条可上线的结论。
+
+    Args: publishing, serving, steps, entry。
+    """
+    target_key = as_text(publishing.payload.get("target_key"))
+    task = as_text(publishing.payload.get("task"))
     return Publishable(
         is_servable=True,
         reason="",
@@ -212,14 +253,14 @@ def _servable(ctx: _Publishing) -> Publishable:
         signature=build_schema(
             entry=[_as_meta(item) for item in entry],
             steps=steps,
-            target=_target_meta(ctx, target_key),
-            task=as_text(ctx.payload.get("task")),
+            target=_target_meta(publishing, target_key),
+            task=task,
         ),
-        feature_keys=tuple(features),
+        feature_keys=tuple(as_texts(publishing.payload.get("feature_keys"))),
         entry_columns=entry,
         target_key=target_key,
-        algo=as_text(ctx.payload.get("algo")),
-        task=as_text(ctx.payload.get("task")),
+        algo=as_text(publishing.payload.get("algo")),
+        task=task,
         channel="json",
     )
 
@@ -238,7 +279,7 @@ def _served_nodes(graph: PipelineGraph) -> list[str]:
 
 
 def _steps_of(
-    ctx: _Publishing, entry: tuple[EntryColumn, ...]
+    publishing: _Publishing, entry: tuple[EntryColumn, ...]
 ) -> list[dict[str, Any]]:
     """推理链上的每一步：参数、拟合值，以及它**真正**会看到什么列。
 
@@ -246,12 +287,12 @@ def _steps_of(
     推理时要先把私有键剔出去才构造得出配置。
     ⚠ 期望列是从入口**正推**出来的，不再是「所有步骤都写同一份特征列」：那份
     只在「没有任何算子增删列」时才碰巧对，而那正是 D2 要拆掉的假设。
-    Args: ctx, entry。
+    Args: publishing, entry。
     """
-    nodes = ctx.graph.node_by_id()
+    nodes = publishing.graph.node_by_id()
     steps: list[dict[str, Any]] = []
     current: ColumnKeys = tuple(item.key for item in entry)
-    for node_id in ctx.served:
+    for node_id in publishing.served:
         operator = registry.get(nodes[node_id].operator)
         produced = _produced_by(operator, nodes[node_id].config, current)
         steps.append(
@@ -260,16 +301,16 @@ def _steps_of(
                 "operator": nodes[node_id].operator,
                 "config": dict(nodes[node_id].config),
                 "fitted": _fitted_of(
-                    ctx.records,
+                    publishing.records,
                     node_id,
-                    node_id == ctx.model_id,
-                    ctx.payload,
+                    node_id == publishing.model_id,
+                    publishing.payload,
                 ),
                 "expected_input_columns": list(current or ()),
                 "produced_columns": list(produced or ()),
             }
         )
-        if node_id != ctx.model_id:
+        if node_id != publishing.model_id:
             current = produced
     return steps
 
@@ -335,7 +376,7 @@ def _starved_step(graph: PipelineGraph, steps: list[dict[str, Any]]) -> str:
 
 
 def _entry_of(
-    ctx: _Publishing, target_key: str
+    publishing: _Publishing, target_key: str
 ) -> tuple[EntryColumn, ...] | None:
     """推理入口契约：调用方必须提供的那几列，**在特征工程之前**。
 
@@ -343,15 +384,17 @@ def _entry_of(
     它们由管线自己造（docs/MODELING_PLATFORM_DESIGN.md D4）。
     ⚠ 顺序照训练时那份，不排序：绑定按位置映射，重排会让存量绑定静默错位。
     读不到逐步列记录时给 `None`，由调用方判成「这次运行早于本次升级」。
-    Args: ctx, target_key。
+    Args: publishing, target_key。
     """
-    if not ctx.served:
+    if not publishing.served:
         return ()
-    first = ctx.served[0]
-    seen = as_dict(_record(ctx.records, first).io.get("inputs")).get("frame")
+    first = publishing.served[0]
+    seen = as_dict(_record(publishing.records, first).io.get("inputs")).get(
+        "frame"
+    )
     if not isinstance(seen, list):
         return None
-    meta = _entry_meta(ctx, first)
+    meta = _entry_meta(publishing, first)
     return tuple(
         _entry_column(as_text(key), meta)
         for key in cast("list[object]", seen)
@@ -378,19 +421,23 @@ def _entry_column(key: str, meta: dict[str, dict[str, Any]]) -> EntryColumn:
     )
 
 
-def _entry_meta(ctx: _Publishing, first: str) -> dict[str, dict[str, Any]]:
+def _entry_meta(
+    publishing: _Publishing, first: str
+) -> dict[str, dict[str, Any]]:
     """入口那些列的元信息，取自上游那一步的结果摘要里的列统计。
 
     ⚠ 用列统计而不是摘要里的前几行：`head` 会被字节预算削掉，而统计不会。
     均值还必然落在训练区间内，拿它做发布期那一次实跑不会触发外推告警。
-    Args: ctx, first。
+    Args: publishing, first。
     """
-    upstream = _upstream_of(ctx.graph, first, "frame")
+    upstream = _upstream_of(publishing.graph, first, "frame")
     if upstream is None:
         return {}
     node_id, port = upstream
     stats = as_list(
-        as_dict(_record(ctx.records, node_id).preview.get(port)).get("columns")
+        as_dict(_record(publishing.records, node_id).preview.get(port)).get(
+            "columns"
+        )
     )
     return {as_text(as_dict(item).get("key")): as_dict(item) for item in stats}
 
@@ -409,14 +456,14 @@ def _as_meta(item: EntryColumn) -> dict[str, Any]:
     }
 
 
-def _target_meta(ctx: _Publishing, target_key: str) -> dict[str, Any]:
+def _target_meta(publishing: _Publishing, target_key: str) -> dict[str, Any]:
     """目标列的类型、显示名与单位；取数摘要里没有就只留 key。
 
-    Args: ctx, target_key。
+    Args: publishing, target_key。
     """
-    if not ctx.served:
+    if not publishing.served:
         return {"key": target_key}
-    stat = _entry_meta(ctx, ctx.served[0]).get(target_key, {})
+    stat = _entry_meta(publishing, publishing.served[0]).get(target_key, {})
     return {
         "key": target_key,
         "label": as_text(stat.get("name")) or target_key,

@@ -95,8 +95,8 @@ async def test_the_model_preview_carries_the_true_coefficients() -> None:
 async def test_every_fitting_step_hands_back_what_it_learned() -> None:
     """带拟合的算子学到的东西必须跟着记录回来，不能留在子进程里。
 
-    ⚠ 这一条盯的是一条真出过的缺陷：拟合参数曾经只在**建模**那一步的摘要里
-    有，填缺失与标准化两步的一个字都没落下来，于是推理期拿单行重新拟合
+    ⚠ 留在子进程里就再也拿不回来：算子实例用完即弃，它学到的东西不跟着输出走。
+    没落下来的表现是推理期拿请求里的单行重新拟合，标准化当场除零
     （docs/MODELING_PLATFORM_DESIGN.md 缺陷 A）。
     """
     outcome = await run_linear(100)
