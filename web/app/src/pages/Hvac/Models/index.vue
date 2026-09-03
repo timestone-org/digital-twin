@@ -8,17 +8,16 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { AcModel, DtTableSort, Room } from '@dt/contracts'
-import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtEmpty, useConfirm, useToast } from '@dt/ui'
+import { DtEmpty, useConfirm, useToast } from '@dt/ui'
 
 import * as hvac from '@/api/hvac'
-import PermGuard from '@/components/PermGuard.vue'
 import { AppShell } from '@/components/layout'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import { useViewMode } from '@/composables/useViewMode'
 import CreateModelDialog from './components/CreateModelDialog.vue'
 import ModelTable from './components/ModelTable.vue'
+import RoomHeader from './components/RoomHeader.vue'
 import RoomSidebar from './components/RoomSidebar.vue'
 import { buildRoomListing, resolveRoomId } from './scripts/roomGroups'
 import {
@@ -201,7 +200,7 @@ function onCreated(modelId: string): void {
          操作列；2xl 以下房间栏叠在上面，表格拿整行宽 -->
     <div class="flex h-full min-h-0 flex-col gap-4 2xl:flex-row">
       <RoomSidebar
-        class="max-h-64 shrink-0 2xl:max-h-none 2xl:w-72"
+        class="max-h-72 shrink-0 2xl:max-h-none 2xl:w-72"
         :entries="listing.entries"
         :hidden-count="listing.hiddenCount"
         :selected="roomId"
@@ -210,23 +209,7 @@ function onCreated(modelId: string): void {
 
       <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
         <template v-if="current">
-          <div class="flex flex-wrap items-start justify-between gap-2">
-            <div class="min-w-0">
-              <h2 class="truncate text-sm font-semibold text-text-primary">
-                {{ current.name }}
-              </h2>
-              <p class="text-xs text-text-secondary">
-                {{ current.workshopName }} · {{ current.acUnitCount }} 台空调 ·
-                {{ current.modelCount }} 个模型
-              </p>
-            </div>
-            <!-- 建模永远是针对某个房间的，入口贴着房间上下文最不容易选错 -->
-            <PermGuard :codes="[PERMISSION_CODES.acManage]">
-              <DtButton intent="primary" size="sm" @click="isCreating = true">
-                新建模型
-              </DtButton>
-            </PermGuard>
-          </div>
+          <RoomHeader :room="current" @create="isCreating = true" />
 
           <ModelTable
             :rows="rows"

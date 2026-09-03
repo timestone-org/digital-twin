@@ -40,7 +40,11 @@ function unitsOf(room: Room): readonly AcUnit[] {
       empty-hint="房间是空调互相影响的边界，先把它分出来。"
       @retry="emit('retry')"
     >
-      <div class="grid gap-3 xl:grid-cols-2">
+      <!-- items-start：房间卡按自己的内容定高。拉伸的话，空房间会被同排那张
+           塞满空调的卡撑出一大截死白 -->
+      <div
+        class="grid grid-cols-[repeat(auto-fill,minmax(22rem,1fr))] items-start gap-3"
+      >
         <RoomGroup
           v-for="room in props.rooms"
           :key="room.id"
