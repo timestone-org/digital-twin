@@ -63,6 +63,7 @@ function capability(): KnowledgeCapability {
     readyStrategies: ['hybrid'],
     acceptedSuffixes: ['.md'],
     index: { vector: 'pgvector', keyword: 'trgm', reason: '' },
+    rerank: { isEnabled: false, model: '', reason: '这套部署没接重排' },
   }
 }
 
