@@ -715,7 +715,7 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 
 | code | 名称 | 关键参数 | 列变? | 备注 |
 | --- | --- | --- | --- | --- |
-| `ledger_join` | 多台账按时间对齐 | `how`(inner/outer/left) / `tolerance_ms` / 列前缀 | **是** | 两个 `frame` 输入。⚠ 列名会撞，必须带来源前缀 |
+| `ledger_join` ✅ | 多台账按时间对齐 | `how`(inner/left) / `tolerance_ms` / `right_prefix` | **是** | 按**时刻就近**对齐不按行号；前缀不许空串——空了就是静默覆盖 |
 
 ### 8.2 预处理 `preprocess`
 
@@ -734,14 +734,14 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 
 | code | 名称 | 关键参数 | fit? | 列变? | serving? |
 | --- | --- | --- | --- | --- | --- |
-| `time_feature` | 时间特征 | `parts[]`(hour/dayofweek/month/is_weekend/…) | 否 | **是** | 是，**但要时刻**（D19） |
-| `one_hot` | 独热编码 | `columns[]` / `max_categories` / 未知类目落全零 | **是** | **是** | 是 |
-| `lag_feature` | 滞后特征 | `columns[]` / `lags[]` | 否 | **是** | 否（需窗口 → 整条不可服务） |
-| `rolling_feature` | 滚动统计 | `columns[]` / `window` / `stats[]` | 否 | **是** | 否（同上） |
-| `select_feature` | 特征筛选 | `method`(variance/correlation/mutual_info) / `top_k` | **是** | **是**（减列） | 是 |
-| `pca` | 主成分降维 | `n_components` / `whiten` | **是** | **是**（换列） | 是 |
+| `time_feature` ✅ | 时间特征 | `parts[]`(hour/dayofweek/month/is_weekend/…) | 否 | **是** | 是，**但要时刻**（D19） |
+| `one_hot` ✅ | 独热编码 | `columns[]` / `max_categories` / 未知类目落全零 | **是** | **是** | 是 |
+| `lag_feature` ✅ | 滞后特征 | `columns[]` / `lags[]` | 否 | **是** | 否（需窗口 → 整条不可服务） |
+| `rolling_feature` ✅ | 滚动统计 | `columns[]` / `window` / `stats[]` | 否 | **是** | 否（同上） |
+| `select_feature` ✅ | 特征筛选 | `method`(variance/correlation/mutual_info) / `top_k` | **是** | **是**（减列） | 是 |
+| `pca` ✅ | 主成分降维 | `n_components` / `whiten` | **是** | **是**（换列） | 是 |
 
-⚠ **`time_feature` 是第一个改列集的算子**，它必须排在 §3 §4 的地基之后。
+✅ **`time_feature` 是第一个改列集的算子**，它必须排在 §3 §4 的地基之后。
 在地基落地之前加它，等于给存量模型埋一颗「入口契约要求调用方提供 `hour` 列」的雷。
 
 ### D19 · 需要时刻的推理：入口契约里除了列，还有一个「时刻」
@@ -815,7 +815,7 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 | `classification_metrics` ✅ | 分类评估 | accuracy / precision / recall / F1 + 混淆矩阵。**分母为 0 一律 null 不给 0** |
 | `residual_analysis` ✅ | 残差分析 | 残差均值 / 标准差 / 分位数 / 最大绝对残差 + 直方图 |
 | `feature_importance` ✅ | 特征重要性 | **置换重要性**：打乱一列再打分，掉多少就是多重要。⚠ 不取系数绝对值——那只有特征已标准化时才可比，而画布上可以不接标准化 |
-| `cross_validate` | 交叉验证 | 每折指标 + 汇总。⚠ 时序数据默认用**前向链**折法，不是随机 K 折 |
+| `cross_validate` ✅ | 交叉验证 | 每折的均值 / 波动 / 最差那一折。⚠ 默认**前向链**——等分 K 折在时序数据上会拿未来的行去训过去的行 |
 
 ### 8.6 依赖
 
@@ -902,7 +902,7 @@ POST /api/v1/platform/modeling-model-versions/{id}:register-formula
 | **一** ✅ | **拟合参数归位**（缺陷 A/B） | 迁移 1；子进程返回 `fitted`/`io`；执行器落库；发布读新列；发布期实跑一行核对；带 `standardize` 的端到端用例 | —— |
 | 二 ✅ | 入口契约与模型签名 | `describe_columns`；`known_keys_by_node` 改用它；`serving_json` 2.0 + 双版本分派；`signature_json` 生成器；前端删掉第二份收窄口径 | 一 |
 | 三 ✅ | 算子扩容 A（不改列集的） | `cast_type` / `drop_missing` / `filter_rows` / `clip_outlier` / `resample` / `logistic_regression` / `classification_metrics` / `residual_analysis` / `feature_importance`。⚠ `kmeans` 移出本期，见 D22 | 一 |
-| 四 | 算子扩容 B（改列集的） | `time_feature` / `one_hot` / `select_feature` / `pca` / `lag_feature` / `rolling_feature` / `ledger_join` / `cross_validate` | 二 |
+| 四 ✅ | 算子扩容 B（改列集的） | `time_feature` / `one_hot` / `select_feature` / `pca` / `lag_feature` / `rolling_feature` / `ledger_join` / `cross_validate`；逐步期望列改按实测 io 推 | 二 |
 | **五** | **台账批量预测相位**（D11b） | 公式列分层；收集 / 回填两趟；`AnalysisModel.predict_batch`；`EvalContext.model_sink` 与 `row_ts`；ADR。**只碰 `apps/dataset`** | 二 |
 | 六 | 产物与通道 B | 迁移 3；对象存储写读；四条护栏；树模型三个；全量帧导出；ADR | 五 |
 | 七 | 对外服务 | 迁移 4；管理面 + 对外面；边缘 location + 限流；auth 规则与种子；ADR | 二（schema 就是接口文档） |

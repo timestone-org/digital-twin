@@ -28,6 +28,7 @@ from platform_server.apps.modeling.operators.cleaning import (
     Resample,
 )
 from platform_server.apps.modeling.operators.diagnostics import (
+    CrossValidate,
     FeatureImportance,
     ResidualAnalysis,
 )
@@ -50,6 +51,7 @@ from platform_server.apps.modeling.operators.frame import (
     FrameColumn,
     Provenance,
 )
+from platform_server.apps.modeling.operators.join import LedgerJoin
 from platform_server.apps.modeling.operators.model import (
     LinearRegressionOperator,
     LogisticRegressionOperator,
@@ -106,6 +108,7 @@ __all__ = [
     "ClipOutlier",
     "ColumnKeys",
     "ColumnsByPort",
+    "CrossValidate",
     "DropMissing",
     "FeatureImportance",
     "FillMissing",
@@ -113,6 +116,7 @@ __all__ = [
     "Frame",
     "FrameColumn",
     "LagFeature",
+    "LedgerJoin",
     "LedgerSource",
     "LinearRegressionOperator",
     "LogisticRegressionOperator",

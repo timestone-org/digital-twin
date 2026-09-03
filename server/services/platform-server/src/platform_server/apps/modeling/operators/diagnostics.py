@@ -1,4 +1,4 @@
-"""诊断类评估算子：残差分析、特征重要性。
+"""诊断类评估算子：残差分析、特征重要性、交叉验证。
 
 与 `evaluate.py` 的区别是问的问题不同：那边答「拟合得好不好」，这边答「错在
 哪一边」「哪一列在起作用」。分类都是 `evaluate`，分模块只为把两边各自的行数
@@ -6,7 +6,7 @@
 """
 
 import math
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 from pydantic import Field
@@ -29,7 +29,9 @@ from platform_server.apps.modeling.operators.frame import (
     Frame,
     frame_input,
     numbers_of,
+    select_rows,
     with_column_values,
+    with_roles,
 )
 from platform_server.apps.modeling.operators.model import (
     TASK_CLASSIFICATION,
@@ -306,3 +308,164 @@ def _shuffled(frame: Frame, key: str, seed: int) -> Frame:
     generator = np.random.default_rng(seed)
     order = [int(item) for item in generator.permutation(len(values))]
     return with_column_values(frame, key, [values[index] for index in order])
+
+
+# 折数的上下限
+MIN_FOLDS = 2
+MAX_FOLDS = 20
+
+type FoldMethod = Literal["forward_chain", "kfold"]
+
+
+class CrossValidateConfig(OperatorConfig):
+    """交叉验证的参数。"""
+
+    folds: int = Field(
+        default=5,
+        ge=MIN_FOLDS,
+        le=MAX_FOLDS,
+        title="折数",
+        description="切成这么多份轮流当测试集",
+    )
+    method: FoldMethod = Field(
+        default="forward_chain",
+        title="怎么折",
+        description=(
+            "forward_chain=前向链，每一折都拿它之前的行训、这一折的行测；"
+            "kfold=顺序等分轮流当测试集；"
+            "⚠ 时序数据用 kfold 会拿未来的行去训练过去的行，指标虚高"
+        ),
+    )
+
+
+@register_operator
+class CrossValidate(OperatorBase):
+    """把同一套配置在若干折上各训一遍，看指标稳不稳。
+
+    ⚠ 默认**前向链**而不是等分 K 折：台账数据是时序的，等分折会拿未来的行去训
+    过去的行，指标虚高而上线崩——这与切分算子默认时序切是同一条理由。
+    ⚠ 它读的是**建模那一步的算法与超参**，自己不认识任何具体算法：加一个新的
+    建模算子时这里不用改。
+    """
+
+    CODE = "cross_validate"
+    NAME = "交叉验证"
+    DESCRIPTION = "在若干折上各训一遍，给出每折指标与它们的均值和波动"
+    CATEGORY = "evaluate"
+    ICON = "refresh-cw"
+    CONFIG_MODEL = CrossValidateConfig
+    INPUTS = (
+        PortSpec(name="model", contract=CONTRACT_MODEL, label="模型"),
+        PortSpec(
+            name="frame",
+            contract=CONTRACT_FRAME,
+            label="全量数据",
+            description="切分**之前**那一份——交叉验证要自己切",
+        ),
+    )
+    OUTPUTS = (
+        PortSpec(name="metrics", contract=CONTRACT_METRICS, label="指标"),
+    )
+    # 推理时不评估
+    ENABLED_IN_SERVING = False
+
+    @property
+    def _config(self) -> CrossValidateConfig:
+        if not isinstance(
+            self.config, CrossValidateConfig
+        ):  # pragma: no cover —— 参数由注册表按算子造，型别不会错
+            raise OperatorError("交叉验证拿到了不匹配的参数")
+        return self.config
+
+    def run(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        """逐折训练、逐折打分，最后给均值与波动。
+
+        Args: inputs。
+        """
+        payload = inputs.get("model")
+        if not isinstance(payload, ModelPayload):
+            raise OperatorError("输入端口 model 上没有模型")
+        frame = with_roles(
+            frame_input(inputs, "frame"), target_key=payload.target_key
+        )
+        scores = [
+            _fold_score(payload, frame, train, test)
+            for train, test in _folds(
+                frame.row_count, self._config.folds, self._config.method
+            )
+        ]
+        return {
+            "metrics": MetricsPayload(
+                task=payload.task, metrics=_summary(scores)
+            )
+        }
+
+
+def _folds(
+    row_count: int, folds: int, method: FoldMethod
+) -> list[tuple[list[int], list[int]]]:
+    """每一折的训练行与测试行下标。
+
+    ⚠ 前向链只出 `folds - 1` 折：第一块没有「它之前的行」可以训。
+    Args: row_count, folds, method。
+    """
+    width = row_count // folds
+    if width < 1:
+        raise OperatorError(
+            f"只有 {row_count} 行，切不出 {folds} 折——请减少折数或多取些数据"
+        )
+    made: list[tuple[list[int], list[int]]] = []
+    for index in range(folds):
+        start = index * width
+        stop = row_count if index == folds - 1 else start + width
+        test = list(range(start, stop))
+        train = (
+            list(range(start))
+            if method == "forward_chain"
+            else [item for item in range(row_count) if item not in set(test)]
+        )
+        if train:
+            made.append((train, test))
+    if not made:
+        raise OperatorError("一折都切不出来，请检查折数与数据量")
+    return made
+
+
+def _fold_score(
+    payload: ModelPayload, frame: Frame, train: list[int], test: list[int]
+) -> float:
+    """一折上的分：回归给 R²，分类给准确率。
+
+    Args: payload, frame, train, test。
+    """
+    model, _ = registry.build(payload.algo, dict(payload.hyper_params))
+    model.bind_runtime(tz_offset_minutes=0, split_plan=None)
+    model.run(
+        {
+            "train": select_rows(frame, train),
+            "test": select_rows(frame, test),
+        }
+    )
+    tested = select_rows(frame, test)
+    truth = [
+        float(value or _ZERO)
+        for value in numbers_of(tested, payload.target_key)
+    ]
+    return _scored_by_task(payload.task, truth, model.predict_rows(tested))
+
+
+def _summary(scores: list[float]) -> dict[str, float | None]:
+    """每折的分折成三个数：均值、波动、最差的那一折。
+
+    ⚠ 只给均值是不够的：几折之间差得很远才是这条评估要说的事——那意味着模型
+    对切在哪儿很敏感，换一段数据就不灵了。
+    Args: scores。
+    """
+    mean = sum(scores) / len(scores)
+    variance = sum((value - mean) ** 2 for value in scores) / len(scores)
+    return {
+        "folds": float(len(scores)),
+        "score_mean": mean,
+        "score_std": variance**0.5,
+        "score_worst": min(scores),
+    }
