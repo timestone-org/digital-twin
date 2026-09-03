@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from knowledge_server.apps.chat.services.citations import Ledger
 from knowledge_server.apps.chat.services.scope import (
     ALL_BASES,
     BaseOutOfScope,
@@ -39,7 +40,9 @@ async def _sessions() -> AsyncIterator[_Session]:
 
 
 def _tools(scope: BaseScope = ALL_BASES) -> KnowledgeTools:
-    return KnowledgeTools(sessions=_sessions, strategies=(), scope=scope)
+    return KnowledgeTools(
+        sessions=_sessions, strategies=(), scope=scope, ledger=Ledger()
+    )
 
 
 def _scope(*base_ids: uuid.UUID) -> BaseScope:
@@ -54,7 +57,12 @@ def _scope(*base_ids: uuid.UUID) -> BaseScope:
 def test_the_registry_offers_three_read_tools_and_one_ask() -> None:
     """⚠ 顺序是契约：知识库那一路在前，客户端那一路在后。"""
     made = build_registry(
-        ToolDeps(sessions=_sessions, strategies=(), scope=ALL_BASES)
+        ToolDeps(
+            sessions=_sessions,
+            strategies=(),
+            scope=ALL_BASES,
+            ledger=Ledger(),
+        )
     )
 
     assert [one.name for one in made.specs] == [
@@ -78,7 +86,12 @@ def test_every_knowledge_tool_is_read_only_by_name() -> None:
 async def test_the_ask_tool_never_runs_on_the_server() -> None:
     """⚠ 静默成功会让模型以为问过了，按它自己猜的选项答。"""
     made = build_registry(
-        ToolDeps(sessions=_sessions, strategies=(), scope=ALL_BASES)
+        ToolDeps(
+            sessions=_sessions,
+            strategies=(),
+            scope=ALL_BASES,
+            ledger=Ledger(),
+        )
     )
 
     with pytest.raises(RunsElsewhere):

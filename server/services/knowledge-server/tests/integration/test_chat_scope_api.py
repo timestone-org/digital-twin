@@ -15,6 +15,7 @@ import pytest
 from integration.conftest import CommittingSession, DbStack
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from knowledge_server.apps.chat.services.citations import Ledger
 from knowledge_server.apps.chat.services.scope import (
     ALL_BASES,
     BaseOutOfScope,
@@ -63,7 +64,9 @@ def _tools(sessions: Sessions, scope: BaseScope) -> KnowledgeTools:
         async with sessions() as session:
             yield session
 
-    return KnowledgeTools(sessions=opened, strategies=(), scope=scope)
+    return KnowledgeTools(
+        sessions=opened, strategies=(), scope=scope, ledger=Ledger()
+    )
 
 
 async def _seed_chunk(sessions: Sessions, base_id: uuid.UUID) -> uuid.UUID:

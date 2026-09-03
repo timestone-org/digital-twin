@@ -240,3 +240,107 @@ describe('知识库对话的回合门面', () => {
     expect(seen).toEqual([0])
   })
 })
+
+describe('引用那一帧', () => {
+  const CITED = {
+    marker: '①',
+    chunk_id: 'c1',
+    document_id: 'd1',
+    document_title: '冷却水操作规程.pdf',
+    base_name: '手册库',
+    heading_path: '二、运行参数',
+    where: '第 3 页',
+    page: 3,
+    page_end: null,
+    text: '出口温度不得高于 65 ℃',
+    figures: [],
+  }
+
+  it('摊开交给页面', async () => {
+    const { advance } = advanceOf([
+      [frame('citations', { items: [CITED] }), DONE],
+    ])
+    const { sink, replies } = sinkOf()
+    const cited: unknown[][] = []
+
+    await runKnowledgeTurn(
+      {
+        advance,
+        sessionId: 's1',
+        userText: '上限多少',
+        onCited: (items) => cited.push([...items]),
+      },
+      sink,
+    )
+
+    expect(replies).toEqual(['上限 65 ℃ [1]'])
+    expect(cited).toEqual([[CITED]])
+  })
+
+  it('少一格必需字段的那条不要', async () => {
+    // ⚠ 只认必需的那几格：少一格就画不出那一行，而画一半比不画更难查
+    const { advance } = advanceOf([
+      [
+        frame('citations', {
+          items: [CITED, { marker: '②', chunk_id: 'c2' }],
+        }),
+        DONE,
+      ],
+    ])
+    const { sink } = sinkOf()
+    const cited: unknown[][] = []
+
+    await runKnowledgeTurn(
+      {
+        advance,
+        sessionId: 's1',
+        userText: '上限多少',
+        onCited: (items) => cited.push([...items]),
+      },
+      sink,
+    )
+
+    expect(cited).toEqual([[CITED]])
+  })
+
+  it('items 不是数组就当没有这一帧', async () => {
+    const { advance } = advanceOf([
+      [frame('citations', { items: '一堆' }), DONE],
+    ])
+    const { sink } = sinkOf()
+    const cited: unknown[][] = []
+
+    await runKnowledgeTurn(
+      {
+        advance,
+        sessionId: 's1',
+        userText: '上限多少',
+        onCited: (items) => cited.push([...items]),
+      },
+      sink,
+    )
+
+    expect(cited).toEqual([])
+  })
+
+  it('一条都不合格时不叫回调', async () => {
+    // ⚠ 不叫：空数组会让时间线上多一张空引用卡片，而那看着像出了问题
+    const { advance } = advanceOf([
+      [frame('citations', { items: [{ marker: '②' }] }), DONE],
+    ])
+    const { sink } = sinkOf()
+    const cited: unknown[][] = []
+
+    await runKnowledgeTurn(
+      {
+        advance,
+        sessionId: 's1',
+        userText: '上限多少',
+        onCited: (items) => cited.push([...items]),
+      },
+      sink,
+    )
+
+    expect(cited).toEqual([])
+  })
+})

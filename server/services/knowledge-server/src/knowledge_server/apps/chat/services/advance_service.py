@@ -28,6 +28,12 @@ from knowledge_server.apps.chat.services import (
     title_service,
 )
 from knowledge_server.apps.chat.services import scope as scope_service
+from knowledge_server.apps.chat.services.citations import (
+    CitationsFound,
+    Ledger,
+    with_figures,
+)
+from knowledge_server.apps.chat.services.markers import numbers_in
 from knowledge_server.apps.chat.services.prompt import (
     SYSTEM_PROMPT,
     scope_messages,
@@ -72,7 +78,7 @@ SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 
 # 按这次对话的范围造一份工具注册表。⚠ 收工厂而不是收一份现成的：范围钉在会话
 # 上，而依赖是按请求装的——装配那一刻还不知道这一次要推进的是哪个会话
-ToolFactory = Callable[[BaseScope], ToolRegistry]
+ToolFactory = Callable[[BaseScope, Ledger], ToolRegistry]
 
 
 @dataclass(frozen=True)
@@ -100,11 +106,12 @@ def deps_of(container: Container, caller: CallerContext) -> AdvanceDeps:
         model=container.responder,
         # ⚠ 走注册表而不是直接造 `KnowledgeTools`：客户端那一路的名字也在
         # 表里，于是「本该交给浏览器的工具走到了服务端」会得到一句说得清的错
-        tools=lambda chosen: build_registry(
+        tools=lambda chosen, ledger: build_registry(
             ToolDeps(
                 sessions=container.database.session,
                 strategies=lanes,
                 scope=chosen,
+                ledger=ledger,
             )
         ),
         summarizer=summarize.ModelSummarizer(
@@ -243,7 +250,7 @@ async def advance(
     *,
     chat_session_id: uuid.UUID,
     payload: AdvanceInput,
-) -> AsyncIterator[TurnEvent | title_service.SessionTitled]:
+) -> AsyncIterator[TurnEvent | title_service.SessionTitled | CitationsFound]:
     """推进一个回合，边跑边吐，最后落库。
 
     ⚠ 增量**不进落库那一摞**：回合结束时落的是攒齐的那条助手消息，增量只是
@@ -253,7 +260,8 @@ async def advance(
     """
     loaded, messages = await _opened(deps, chat_session_id, payload)
     # ⚠ 注册表按这一轮读到的范围现造：范围改了下一轮就跟着改，不留隔夜的那份
-    registry = deps.tools(loaded.scope)
+    ledger = Ledger()
+    registry = deps.tools(loaded.scope, ledger)
     turn = TurnDeps(
         model=deps.model,
         specs=_offered(registry.specs, payload.client_tools),
@@ -277,12 +285,38 @@ async def advance(
             outcome=outcome,
             steps=produced,
         )
-        yield outcome
-        # ⚠ 排在 outcome 之后：起名字要再调一次模型，而用户此刻已经看到答案了。
-        # 排在前面的话，那一秒会被读成「还在答」
-        named = await _named(deps, chat_session_id, payload, outcome)
-        if named is not None:
-            yield named
+        async for tail in _closing(
+            deps, chat_session_id, payload, ledger, outcome
+        ):
+            yield tail
+
+
+async def _closing(
+    deps: AdvanceDeps,
+    chat_session_id: uuid.UUID,
+    payload: AdvanceInput,
+    ledger: Ledger,
+    outcome: TurnOutcome,
+) -> AsyncIterator[TurnEvent | title_service.SessionTitled | CitationsFound]:
+    """落库之后收尾的那几帧，次序是有讲究的。
+
+    ⚠ 引用排在 outcome **之前**：前端拿到 outcome 就把回合标成结束了，之后
+    再来的帧要么被丢掉、要么显得像「答完了又冒出来一块」。
+
+    ⚠ 起名字排在 outcome **之后**：它要再调一次模型，而用户此刻已经看到答案
+    了；排在前面的话，那一秒会被读成「还在答」。
+
+    Args: deps, chat_session_id, payload, ledger, outcome。
+    """
+    cited = await with_figures(
+        deps.sessions, ledger.resolve(numbers_in(outcome.reply))
+    )
+    if cited:
+        yield CitationsFound(items=tuple(cited))
+    yield outcome
+    named = await _named(deps, chat_session_id, payload, outcome)
+    if named is not None:
+        yield named
 
 
 async def _named(

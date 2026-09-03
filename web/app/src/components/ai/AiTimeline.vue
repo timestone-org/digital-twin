@@ -12,6 +12,7 @@ import type { AssistantAskAnswer } from '@dt/contracts'
 import { DtMarkdown } from '@dt/ui'
 
 import AiAskCard from '@/components/ai/AiAskCard.vue'
+import AiCitations from '@/components/ai/AiCitations.vue'
 import AiCoreIcon from '@/components/ai/AiCoreIcon.vue'
 import AiReasoning from '@/components/ai/AiReasoning.vue'
 import AiToolCard from '@/components/ai/AiToolCard.vue'
@@ -94,6 +95,12 @@ watch(
           :text="entry.text"
           :streaming="entry.isStreaming === true"
         />
+        <li
+          v-else-if="entry.role === 'citations' && entry.citations"
+          class="ai-cited"
+        >
+          <AiCitations :items="entry.citations" />
+        </li>
         <li v-else-if="entry.role === 'note'" class="ai-note">
           {{ entry.text }}
         </li>
