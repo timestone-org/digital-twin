@@ -70,14 +70,7 @@ async def list_all(
     rows, total = await crud.knowledge_base.list_bases(
         session, offset=params.offset, limit=params.size
     )
-    return ok(
-        Page[KnowledgeBaseOut](
-            items=[library_service.base_out(one, 0) for one in rows],
-            page=params.page,
-            size=params.size,
-            total=total,
-        )
-    )
+    return ok(await library_service.base_page(session, rows, params, total))
 
 
 @router.get("/{base_id}", response_model=ApiResponse[KnowledgeBaseOut])
@@ -89,7 +82,8 @@ async def get_one(
     Args: session, _viewer, base_id。
     """
     row = await library_service.read_base(session, base_id)
-    return ok(library_service.base_out(row, 0))
+    counts = await crud.document.counts_by_base(session, [row.id])
+    return ok(library_service.base_out(row, counts.get(row.id, 0)))
 
 
 @router.delete("/{base_id}", status_code=status.HTTP_204_NO_CONTENT)

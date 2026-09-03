@@ -1,10 +1,13 @@
 """文档的读写面，打真库。直传两步与摄取排队都在这里验。"""
 
 import uuid
+from collections.abc import Callable
+from typing import Any
 
 import httpx
 import pytest
 
+from knowledge_server.apps.knowledge import crud
 from knowledge_server.settings import API_PREFIX
 
 pytestmark = pytest.mark.requires_postgres
@@ -182,3 +185,25 @@ async def test_a_missing_document_is_404(
     response = await db_client.get(f"{DOCS}/{uuid.uuid4()}")
     assert response.status_code == httpx.codes.NOT_FOUND
     assert response.json()["code"] == 42303
+
+
+async def test_counting_documents_groups_by_base_in_one_query(
+    db_client: httpx.AsyncClient, db_sessions: Callable[[], Any]
+) -> None:
+    """⚠ 一次查完再按库分组，不逐个库查：库清单一页十来个，逐个查就是十来个
+    往返，而这一格只是列表上的一行字。"""
+    base_id = await _base(db_client)
+    await _uploaded(db_client, base_id)
+
+    async with db_sessions() as session:
+        made = await crud.document.counts_by_base(session, [uuid.UUID(base_id)])
+
+    assert made == {uuid.UUID(base_id): 1}
+
+
+async def test_counting_nothing_asks_the_database_nothing(
+    db_sessions: Callable[[], Any],
+) -> None:
+    """⚠ 空清单直接回空表：一页库都没有时还去打一次库是白费的往返。"""
+    async with db_sessions() as session:
+        assert await crud.document.counts_by_base(session, []) == {}
