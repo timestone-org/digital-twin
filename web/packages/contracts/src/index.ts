@@ -80,8 +80,10 @@ export type {
   KnowledgeCapability,
   KnowledgeChatAdvanceIn,
   KnowledgeChatMessage,
+  KnowledgeChatScopeBase,
   KnowledgeChatSession,
   KnowledgeChatSessionDetail,
+  KnowledgeChatSessionPatch,
   KnowledgeChatStep,
   KnowledgeChatToolResult,
   KnowledgeDocument,
@@ -99,6 +101,8 @@ export type {
   KnowledgeVectorLane,
 } from './knowledge'
 export {
+  KNOWLEDGE_CHAT_CONFLICT_CODE,
+  KNOWLEDGE_CHAT_SCOPE_UNKNOWN_CODE,
   KNOWLEDGE_CHAT_UNAVAILABLE_CODE,
   KNOWLEDGE_DOCUMENT_STATUSES,
   KNOWLEDGE_KEYWORD_LANES,

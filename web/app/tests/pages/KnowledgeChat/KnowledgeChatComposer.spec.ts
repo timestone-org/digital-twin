@@ -48,7 +48,14 @@ function render(
   }> = {},
 ): VueWrapper {
   return mount(KnowledgeChatComposer, {
-    props: { running: false, asking: false, speechEnabled: true, ...props },
+    props: {
+      running: false,
+      asking: false,
+      speechEnabled: true,
+      bases: [],
+      scope: null,
+      ...props,
+    },
     attachTo: document.body,
   })
 }

@@ -10,6 +10,7 @@ import type {
   KnowledgeChatAdvanceIn,
   KnowledgeChatSession,
   KnowledgeChatSessionDetail,
+  KnowledgeChatSessionPatch,
 } from '@dt/contracts'
 
 import { KNOWLEDGE_BASE_URL } from '@/config/app'
@@ -39,11 +40,20 @@ export async function listSessions(
   return page.items
 }
 
-/** 新建对话。 */
-export async function createSession(title = ''): Promise<KnowledgeChatSession> {
+/**
+ * 新建对话。
+ * @param title 标题；摘不出时留空
+ * @param baseScopeIds 检索范围；null = 全部知识库（缺省）。⚠ 空数组后端拒收
+ */
+export async function createSession(
+  title = '',
+  baseScopeIds: string[] | null = null,
+): Promise<KnowledgeChatSession> {
+  const body: KnowledgeChatSessionPatch = { title }
+  if (baseScopeIds !== null) body.base_scope_ids = baseScopeIds
   return requestData<KnowledgeChatSession>(
     SESSIONS,
-    onKnowledge({ method: 'POST', body: { title } }),
+    onKnowledge({ method: 'POST', body }),
   )
 }
 
@@ -66,6 +76,32 @@ export async function renameSession(
   return requestData<KnowledgeChatSession>(
     `${SESSIONS}/${sessionId}`,
     onKnowledge({ method: 'PATCH', body: { title } }),
+  )
+}
+
+/**
+ * 改这个对话的检索范围。
+ * ⚠ `null` 是「全部知识库」，与空数组不是一回事——后者后端当场 400。
+ * ⚠ 一律带 `expected_version`：不带就是无条件覆盖，另一个标签页刚改过的范围
+ * 会被悄悄顶掉，而两边都看不出来。冲突时后端回 409。
+ * @param sessionId 哪个对话
+ * @param baseScopeIds 范围；null = 全部
+ * @param expectedVersion 手上那份的行版本
+ */
+export async function setSessionScope(
+  sessionId: string,
+  baseScopeIds: string[] | null,
+  expectedVersion: number,
+): Promise<KnowledgeChatSession> {
+  return requestData<KnowledgeChatSession>(
+    `${SESSIONS}/${sessionId}`,
+    onKnowledge({
+      method: 'PATCH',
+      body: {
+        base_scope_ids: baseScopeIds,
+        expected_version: expectedVersion,
+      } satisfies KnowledgeChatSessionPatch,
+    }),
   )
 }
 

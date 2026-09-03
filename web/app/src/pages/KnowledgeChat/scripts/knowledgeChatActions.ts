@@ -1,23 +1,40 @@
 /**
  * @fileoverview 知识库对话页的动作：列、建、选、改名、归档、删、发一句。
  */
-import { readCapability } from '@/api/knowledge'
+import { KNOWLEDGE_CHAT_CONFLICT_CODE } from '@dt/contracts'
+
+import { BizError } from '@/api/client'
+import { listBases, readCapability } from '@/api/knowledge'
 import {
   archiveSession,
   createSession,
   deleteSession,
   listSessions,
   renameSession,
+  setSessionScope,
 } from '@/api/knowledgeChat'
 import { guarded, replaySelected } from './knowledgeChatState'
 import type { KnowledgeChatState } from './knowledgeChatState'
 
 /**
- * 首屏：对话清单与「接没接语音识别」并行取。
+ * 首屏：对话清单、知识库清单与「接没接语音识别」并行取。
  * @param state 页面状态
  */
 export async function reload(state: KnowledgeChatState): Promise<void> {
-  await Promise.all([loadSessions(state), loadSpeechCapability(state)])
+  await Promise.all([
+    loadSessions(state),
+    loadBases(state),
+    loadSpeechCapability(state),
+  ])
+}
+
+/** 取库清单给范围选择器用。取不到只剩「全部」一项，不为它挡对话、也不报错。 */
+async function loadBases(state: KnowledgeChatState): Promise<void> {
+  try {
+    state.bases.value = await listBases()
+  } catch {
+    state.bases.value = []
+  }
 }
 
 /**
@@ -56,6 +73,8 @@ export async function select(
 ): Promise<void> {
   state.chat.clear()
   state.selectedId.value = sessionId
+  // 暂存的范围只服务「下一个新对话」；切过去之后由那条会话自己的范围说了算
+  state.pendingScope.value = null
   await guarded(state, () => replaySelected(state))
 }
 
@@ -65,9 +84,48 @@ export async function select(
  */
 export async function create(state: KnowledgeChatState): Promise<void> {
   await guarded(state, async () => {
-    const made = await createSession()
+    const made = await createSession('', state.pendingScope.value)
     state.sessions.value = [made, ...state.sessions.value]
     await select(state, made.id)
+  })
+}
+
+/**
+ * 改这次对话的检索范围。还没有会话时先暂存，建会话那一刻带上去。
+ * ⚠ 冲突（别处刚改过）时重新载入清单并说清楚：默默覆盖的话，另一个标签页刚
+ * 划好的范围会不声不响地没掉。
+ * @param state 页面状态
+ * @param baseScopeIds 选中的库；null = 全部知识库
+ */
+export async function setScope(
+  state: KnowledgeChatState,
+  baseScopeIds: string[] | null,
+): Promise<void> {
+  const one = state.current.value
+  if (one === null) {
+    state.pendingScope.value = baseScopeIds
+    return
+  }
+  await guarded(state, async () => {
+    try {
+      const updated = await setSessionScope(
+        one.id,
+        baseScopeIds,
+        one.row_version,
+      )
+      state.sessions.value = state.sessions.value.map((each) =>
+        each.id === updated.id ? updated : each,
+      )
+    } catch (cause) {
+      if (
+        cause instanceof BizError &&
+        cause.code === KNOWLEDGE_CHAT_CONFLICT_CODE
+      ) {
+        await loadSessions(state)
+        throw new Error('这个对话的范围在别处改过了，已重新载入，请再改一次')
+      }
+      throw cause
+    }
   })
 }
 
