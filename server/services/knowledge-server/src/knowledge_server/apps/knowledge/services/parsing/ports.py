@@ -69,7 +69,9 @@ class Block:
 
     kind: BlockKind
     text: str
-    # 标题层级，从 1 起；非标题块是 0
+    # 标题层级 / 列表项的嵌套深度，都从 1 起；两者都不是的块是 0。
+    # ⚠ 一格两义靠 `kind` 分辨：标题与列表项各只用得上其中一种深度，
+    # 而各开一格会让每个解析器都要决定另一格填什么
     level: int = 0
     locator: Locator = field(default_factory=Locator)
 

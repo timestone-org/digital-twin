@@ -29,12 +29,14 @@ from knowledge_server.apps.knowledge.services.parsing.ports import (
     ParsedDocument,
     RawItem,
 )
+from knowledge_server.apps.knowledge.services.parsing.structure import (
+    cell_text,
+    paired,
+    pushed,
+)
 
 # 与纯文本那一路同一个上限，理由也同源
 MAX_BLOCKS = 20_000
-# 一个单元格最多取多少字符。⚠ 有上限：一格里粘进整篇说明书是现场常事，
-# 而它会把整块挤成一格的内容
-MAX_CELL_CHARS = 2_000
 
 _DOCX_SUFFIXES = (".docx",)
 _XLSX_SUFFIXES = (".xlsx", ".xlsm")
@@ -55,18 +57,6 @@ def _heading_level(style_name: str) -> int:
             if tail.isdigit():
                 return int(tail)
     return 0
-
-
-def _pushed(
-    stack: list[tuple[int, str]], level: int, text: str
-) -> list[tuple[int, str]]:
-    """把一个标题压进栈，先弹掉不比它浅的那几层。
-
-    Args: stack, level, text。
-    """
-    kept = [one for one in stack if one[0] < level]
-    kept.append((level, text))
-    return kept
 
 
 @dataclass(frozen=True)
@@ -97,7 +87,7 @@ class DocxParser:
             style = paragraph.style
             level = _heading_level("" if style is None else (style.name or ""))
             if level > 0:
-                stack = _pushed(stack, level, text)
+                stack = pushed(stack, level, text)
             path = tuple(one for _level, one in stack)
             made.append(
                 Block(
@@ -133,7 +123,7 @@ def _docx_tables(
         for row_index, row in enumerate(table.rows, start=1):
             if made_so_far + len(made) >= MAX_BLOCKS:
                 return made
-            cells = [one.text.strip()[:MAX_CELL_CHARS] for one in row.cells]
+            cells = [cell_text(one.text) for one in row.cells]
             if not any(cells):
                 continue
             made.append(
@@ -189,16 +179,6 @@ class XlsxParser:
         )
 
 
-def _cell_text(value: object) -> str:
-    """一个单元格的文本；空的给空串。
-
-    Args: value。
-    """
-    if value is None:
-        return ""
-    return str(value).strip()[:MAX_CELL_CHARS]
-
-
 def _sheet_blocks(sheet: Worksheet, made_so_far: int) -> list[Block]:
     """一个工作表摊成行块，第一行当表头。
 
@@ -210,7 +190,7 @@ def _sheet_blocks(sheet: Worksheet, made_so_far: int) -> list[Block]:
     for row_index, row in enumerate(sheet.iter_rows(values_only=True), 1):
         if made_so_far + len(made) >= MAX_BLOCKS:
             break
-        cells = [_cell_text(one) for one in row]
+        cells = [cell_text(one) for one in row]
         if not any(cells):
             continue
         if not header:
@@ -227,28 +207,11 @@ def _sheet_blocks(sheet: Worksheet, made_so_far: int) -> list[Block]:
         made.append(
             Block(
                 kind="table_row",
-                text=_paired(header, cells),
+                text=paired(header, cells),
                 locator=Locator(sheet=title, row=row_index, path=(title,)),
             )
         )
     return made
-
-
-def _paired(header: list[str], cells: list[str]) -> str:
-    """把表头与一行值拼成「列名=值」。
-
-    ⚠ 多出来的列没有表头时用序号兜底，不丢：现场的表常有几列没写表头，
-    丢掉的话那几列的数据就再也检索不到了。
-
-    Args: header, cells。
-    """
-    parts: list[str] = []
-    for index, value in enumerate(cells):
-        if not value:
-            continue
-        name = header[index] if index < len(header) else f"第{index + 1}列"
-        parts.append(f"{name or f'第{index + 1}列'}={value}")
-    return " | ".join(parts)
 
 
 @dataclass(frozen=True)

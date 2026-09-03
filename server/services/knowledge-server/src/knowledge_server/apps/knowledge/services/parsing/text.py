@@ -1,30 +1,33 @@
 """纯文本那一路：md / txt / html / json。
 
-⚠ markdown 的标题层级是**切块质量的主要来源**：按标题切出来的块，每一块都是
-一个完整的意思单元；按定长切出来的块，一半的块从句子中间开始。所以这一路要把
-`#` 层级如实解出来，而不是当成普通行。
+⚠ 四种后缀在这里**按后缀分流**，不共用一种读法：markdown 走 CommonMark
+（`markdown.py`），而 `.txt` / `.log` 走逐行读。把日志当 markdown 解的话，
+一行 `# 注意` 会变成标题、`- 甲` 会变成列表项，于是整份日志被切成一棵假的
+标题树；反过来（把 markdown 当纯文本）只是少了层级，代价小得多。
 
 ⚠ html **只剥标签取文本，绝不执行任何脚本**，也不跟外链。解析一份从别人系统
 拉回来的 html 时，那里面可以有任何东西。
 """
 
 import json
-import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import cast
 
+from knowledge_server.apps.knowledge.services.parsing.markdown import (
+    markdown_blocks,
+)
 from knowledge_server.apps.knowledge.services.parsing.ports import (
     Block,
     Locator,
     ParsedDocument,
     RawItem,
 )
+from knowledge_server.apps.knowledge.services.parsing.structure import (
+    path_of,
+    pushed,
+)
 
-# markdown 的 ATX 标题：井号数即层级
-_HEADING = re.compile(r"^(#{1,6})\s+(.*\S)\s*$")
-# 无序与有序列表项
-_LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*\S)\s*$")
 # `h1`–`h6` 这种标签名的长度
 _HEADING_TAG_LENGTH = 2
 # 一份原件最多解出多少块。⚠ 有上限：一份几十万行的日志会把内存与后面每一层
@@ -33,7 +36,8 @@ MAX_BLOCKS = 20_000
 # JSON 里一条路径最深展开到第几层
 MAX_JSON_DEPTH = 8
 
-_MARKDOWN_SUFFIXES = (".md", ".markdown", ".txt", ".text", ".log")
+_MARKDOWN_SUFFIXES = (".md", ".markdown")
+_PLAIN_SUFFIXES = (".txt", ".text", ".log")
 _HTML_SUFFIXES = (".html", ".htm")
 _JSON_SUFFIXES = (".json",)
 
@@ -97,63 +101,22 @@ def _decoded(raw: RawItem) -> str:
     return raw.content.decode("utf-8", "replace")
 
 
-def _path_of(stack: list[tuple[int, str]]) -> tuple[str, ...]:
-    """当前标题栈摊成一条路径。
+def _plain_blocks(text: str) -> list[Block]:
+    """逐行读的纯文本：一行一块，任何记号都不当记号。
 
-    Args: stack。
-    """
-    return tuple(text for _level, text in stack)
-
-
-def _pushed(
-    stack: list[tuple[int, str]], level: int, text: str
-) -> list[tuple[int, str]]:
-    """把一个标题压进栈，先弹掉不比它浅的那几层。
-
-    ⚠ 必须先弹：不弹的话「第 2 章」之后的「第 3 章」会挂在「第 2 章」下面，
-    而那条路径会一路带进每一个块的引用里。
-
-    Args: stack, level, text。
-    """
-    kept = [one for one in stack if one[0] < level]
-    kept.append((level, text))
-    return kept
-
-
-def _markdown_blocks(text: str) -> list[Block]:
-    """按行扫 markdown / 纯文本，标题层级如实解出来。
+    ⚠ 这一路刻意**不认标题与列表**：日志与说明文本里的 `#` 与 `-` 是内容，
+    不是结构；认了的话一份日志会被切成一棵假的标题树，而那棵树会一路带进
+    每一条引用。
 
     Args: text。
     """
-    stack: list[tuple[int, str]] = []
     made: list[Block] = []
     for line in text.splitlines():
         if len(made) >= MAX_BLOCKS:
             break
-        heading = _HEADING.match(line)
-        if heading is not None:
-            level = len(heading.group(1))
-            stack = _pushed(stack, level, heading.group(2))
-            made.append(
-                Block(
-                    kind="heading",
-                    text=heading.group(2),
-                    level=level,
-                    locator=Locator(path=_path_of(stack)),
-                )
-            )
-            continue
-        item = _LIST_ITEM.match(line)
-        body = item.group(1) if item is not None else line.strip()
-        if not body:
-            continue
-        made.append(
-            Block(
-                kind="list_item" if item is not None else "paragraph",
-                text=body,
-                locator=Locator(path=_path_of(stack)),
-            )
-        )
+        body = line.strip()
+        if body:
+            made.append(Block(kind="paragraph", text=body))
     return made
 
 
@@ -168,13 +131,13 @@ def _html_blocks(text: str) -> list[Block]:
     made: list[Block] = []
     for level, body in reader.rows[:MAX_BLOCKS]:
         if level > 0:
-            stack = _pushed(stack, level, body)
+            stack = pushed(stack, level, body)
         made.append(
             Block(
                 kind="heading" if level > 0 else "paragraph",
                 text=body,
                 level=level,
-                locator=Locator(path=_path_of(stack)),
+                locator=Locator(path=path_of(stack)),
             )
         )
     return made
@@ -210,17 +173,39 @@ def _json_rows(node: object, path: tuple[str, ...], out: list[Block]) -> None:
 
 
 def _json_blocks(text: str) -> list[Block]:
-    """一份 JSON 摊成行；解不动就当纯文本。
+    """一份 JSON 摊成行；解不动就按纯文本逐行读。
+
+    ⚠ 解不动就退纯文本而不是抛：一份后缀写错的文本仍然值得摄取。退的是
+    **纯文本**不是 markdown——一份不是 json 的东西更不会是 markdown。
 
     Args: text。
     """
     try:
         tree: object = json.loads(text)
     except ValueError:
-        return _markdown_blocks(text)
+        return _plain_blocks(text)
     made: list[Block] = []
     _json_rows(tree, (), made)
     return made
+
+
+def _blocks_for(filename: str, text: str) -> list[Block]:
+    """按后缀挑一种读法。
+
+    ⚠ 认不出后缀时按**纯文本**读，不按 markdown：走到这里的一定是靠 media
+    type 选中的条目（外部系统拉回来的常常没有像样的文件名），而它们多半就是
+    纯文本。
+
+    Args: filename, text。
+    """
+    lowered = filename.lower()
+    if lowered.endswith(_HTML_SUFFIXES):
+        return _html_blocks(text)
+    if lowered.endswith(_JSON_SUFFIXES):
+        return _json_blocks(text)
+    if lowered.endswith(_MARKDOWN_SUFFIXES):
+        return markdown_blocks(text, MAX_BLOCKS)
+    return _plain_blocks(text)
 
 
 @dataclass(frozen=True)
@@ -230,6 +215,7 @@ class TextParser:
     name: str = "text"
     suffixes: tuple[str, ...] = (
         *_MARKDOWN_SUFFIXES,
+        *_PLAIN_SUFFIXES,
         *_HTML_SUFFIXES,
         *_JSON_SUFFIXES,
     )
@@ -245,14 +231,7 @@ class TextParser:
 
         Args: raw。
         """
-        text = _decoded(raw)
-        lowered = raw.filename.lower()
-        if lowered.endswith(_HTML_SUFFIXES):
-            made = _html_blocks(text)
-        elif lowered.endswith(_JSON_SUFFIXES):
-            made = _json_blocks(text)
-        else:
-            made = _markdown_blocks(text)
+        made = _blocks_for(raw.filename, _decoded(raw))
         return ParsedDocument(
             title=raw.filename,
             blocks=tuple(made),
