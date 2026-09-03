@@ -1,8 +1,11 @@
 """组合根：把配置拧成各个协作对象。装配只在这里发生，模块顶层不做副作用。
 
-⚠ 嵌入档与对话档的端点**先问模型目录、再退环境变量**（ADR-0039）：目录是
-平台上配的「各用途走哪一路模型」，运行期可改；环境变量是它的永久默认值。
-两路的适配器都按「此刻解得出端点吗」如实回答可用性，装配期不再钉死。
+⚠ 嵌入档与对话档**先问模型目录、再退环境变量**（ADR-0039）：目录是平台上配的
+「各用途走哪一路模型」，运行期可改；环境变量是它的永久默认值。两路的适配器都按
+「此刻装得出来吗」如实回答可用性，装配期不再钉死。
+
+⚠ 对话档按**接入形态**查一张显式的表（`llm_adapters.KIND_BUILDERS`，ADR-0041）：
+订阅账号那一路的登录态归 platform，本服务经内部面领令牌、只领不刷。
 """
 
 from dataclasses import dataclass, field
@@ -23,7 +26,8 @@ from knowledge_server.apps.knowledge.services.sources import (
     SourceDeps,
     build_sources,
 )
-from knowledge_server.llm_purposes import PURPOSE_CHAT, PURPOSE_EMBEDDING
+from knowledge_server.llm_adapters import AdapterDeps, CatalogChatAdapter
+from knowledge_server.llm_purposes import PURPOSE_EMBEDDING
 from knowledge_server.probe import IndexProbe
 from knowledge_server.settings import SERVICE_NAME, Settings
 from lib.cache import Cache
@@ -35,13 +39,13 @@ from lib.stream import RedisStream, StreamGroup, StreamLike
 from llmcore import (
     CatalogCache,
     CatalogClient,
-    ChatEndpoint,
+    CodexTokenClient,
     DynamicEmbeddingAdapter,
     EmbeddingEndpoint,
     ModelChoice,
     ModelDisabled,
-    OpenAiCompatAdapter,
 )
+from llmcore.codex import CodexRewire
 from llmcore.guard import GuardedModel
 
 # 幂等键的命名空间。⚠ 必须带服务名：共用一个 Redis 的两个服务，同一个端点名
@@ -77,8 +81,8 @@ class Container:
     # 模型目录（ADR-0039）：平台上配的「各用途走哪一路模型」，按 TTL 重拉。
     # ⚠ 一个进程一份：嵌入与对话两路读的都是它的快照
     catalog: CatalogCache
-    # 对话面用的带断路器的模型调用面。⚠ 端点此刻解不出时它抛 `ModelDisabled`，
-    # 对话入口按 `answerer.can_answer` 先判一次再进回合
+    # 对话面用的带断路器的模型调用面。⚠ 这一路此刻装不出来时它抛
+    # `ModelDisabled`，对话入口按 `answerer.can_answer` 先判一次再进回合
     responder: GuardedModel
     # 启动时探测填进去。⚠ 可变对象，故不带 frozen——它是这份容器里唯一
     # 「装配之后才知道」的东西
@@ -197,17 +201,36 @@ def _build_catalog(settings: Settings) -> CatalogCache:
     )
 
 
-def _chat_endpoint(
+def _chat_adapter(
     settings: Settings, catalog: CatalogCache
-) -> ChatEndpoint | None:
-    """对话档此刻该打哪：目录里分配了就走目录，否则退环境变量那一档。
+) -> CatalogChatAdapter:
+    """对话档的适配器：走哪一路由目录在**调用时**挑（ADR-0041）。
 
     Args: settings, catalog。
     """
-    from_catalog = catalog.snapshot().chat_endpoint(
-        PURPOSE_CHAT, timeout_s=settings.model_timeout_s
+    return CatalogChatAdapter(
+        deps=AdapterDeps(
+            settings=settings, catalog=catalog, tokens=_build_tokens(settings)
+        )
     )
-    return from_catalog or settings.chat_endpoint()
+
+
+def _build_tokens(settings: Settings) -> CodexTokenClient:
+    """订阅账号那一路的令牌来源：platform 的内部凭据面（ADR-0041）。
+
+    ⚠ 构造不连网，也不判「这套部署配没配」：目录里有没有那一形态是运行期的事，
+    而这一件在没有那一路时根本不会被调到。
+
+    ⚠ 拿 `edge_service_key` 去打：与 platform 那边 `PLATFORM_EDGE_SERVICE_KEY`
+    取同一个值，分叉就是每一次领令牌都 401、而两侧代码单看都对。
+
+    Args: settings。
+    """
+    return CodexTokenClient(
+        base_url=settings.platform_base_url,
+        service_key=settings.edge_service_key.get_secret_value(),
+        timeout_s=settings.llm_login_timeout_s,
+    )
 
 
 def _embedding_endpoint(
@@ -223,29 +246,20 @@ def _embedding_endpoint(
     return from_catalog or settings.embedding_endpoint()
 
 
-def _chat_adapter(
-    settings: Settings, catalog: CatalogCache
-) -> OpenAiCompatAdapter:
-    """对话档的适配器。端点由目录与环境变量在调用时解出。
-
-    Args: settings, catalog。
-    """
-    return OpenAiCompatAdapter(
-        resolve=lambda _kind: _chat_endpoint(settings, catalog),
-        label="知识库对话档",
-        models=(settings.model_chat,) if settings.model_chat else (),
-    )
-
-
 def _build_responder(
-    adapter: OpenAiCompatAdapter,
+    adapter: CatalogChatAdapter,
     breaker: CircuitBreaker,
     catalog: CatalogCache,
 ) -> GuardedModel:
     """对话面的模型调用面。
 
-    ⚠ 端点此刻解不出时抛 `ModelDisabled`，而不是让适配器撞一条编排错：
+    ⚠ 这一路此刻装不出来时抛 `ModelDisabled`，而不是让适配器撞一条编排错：
     前者是「没接对话档」，回给用户的是一句点得出名字的话。
+
+    ⚠ 订阅账号那一路要改工具名的线形（它不认点号，而本服务的工具名是
+    `kb.search` 这样的）。「此刻是不是那一路」问适配器而不是比档位名：这一侧
+    只有一个档位，走哪一路由目录说了算——按档位名比的话，配了订阅账号之后
+    每一次带工具的对话都撞一条 400，而那条 400 里不会提到点号。
 
     Args: adapter, breaker, catalog。
     """
@@ -256,4 +270,8 @@ def _build_responder(
             raise ModelDisabled("这套部署没有接对话档")
         return await adapter.build(choice)
 
-    return GuardedModel(source=source, breaker=breaker)
+    return GuardedModel(
+        source=source,
+        breaker=breaker,
+        rewire=CodexRewire(is_codex=lambda _profile: adapter.is_codex_now()),
+    )

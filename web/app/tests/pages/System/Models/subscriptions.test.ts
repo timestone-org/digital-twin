@@ -2,9 +2,8 @@
  * @fileoverview 哪几路要摆登录面板。
  *
  * 守两件在界面上完全看不出来的事：按形态判而不是按名字猜（形态是后端下发的，
- * 与后端校验同源）；目录里没有订阅型供应商时还要认环境变量那一路——不认的话，
- * 一套按老办法配好的部署在这一页上完全找不到登录入口，而助手那边说着
- * 「这一路没登录」。
+ * 与后端校验同源）；只摆目录里的那几路——登录态挂在那一行供应商上（ADR-0041），
+ * 目录之外的那一路无处存登录态，摆出来点下去是一条指不回任何地方的错。
  */
 import { describe, expect, it } from 'vitest'
 import type { LlmProvider, LlmProviderKind } from '@dt/contracts'
@@ -30,7 +29,7 @@ const KINDS: LlmProviderKind[] = [
     is_endpoint_required: false,
     is_login_required: true,
     model_kinds: ['chat'],
-    consumers: ['assistant'],
+    consumers: ['assistant', 'knowledge'],
     efforts: ['low'],
     presets: [],
   },
@@ -58,7 +57,7 @@ function provider(over: Partial<LlmProvider> = {}): LlmProvider {
 
 describe('要登录的那几路', () => {
   it('端点那一形态不摆登录面板', () => {
-    expect(subscriptionAccounts([provider()], KINDS, [])).toEqual([])
+    expect(subscriptionAccounts([provider()], KINDS)).toEqual([])
   })
 
   it('目录里每一路订阅账号各摆一份，键是那一路的 id', () => {
@@ -69,35 +68,17 @@ describe('要登录的那几路', () => {
         provider({ id: 'p3', name: '同事的 Codex', kind: 'codex_oauth' }),
       ],
       KINDS,
-      [],
     )
     expect(listed).toEqual([
-      { ref: 'p2', name: '我的 Codex', isFromCatalog: true },
-      { ref: 'p3', name: '同事的 Codex', isFromCatalog: true },
+      { ref: 'p2', name: '我的 Codex' },
+      { ref: 'p3', name: '同事的 Codex' },
     ])
   })
 
-  it('目录里没有订阅型时认环境变量那一路', () => {
-    const listed = subscriptionAccounts([provider()], KINDS, [
-      'default',
-      'codex',
-    ])
-    expect(listed).toEqual([
-      { ref: 'codex', name: '订阅账号（环境变量）', isFromCatalog: false },
-    ])
-  })
-
-  it('目录里配了订阅型就不再摆环境变量那一路', () => {
-    // ⚠ 两路并排摆着的话，人会看到两个「订阅账号」，而其中一个是配置文件里的影子
-    const listed = subscriptionAccounts(
-      [provider({ id: 'p2', name: '我的 Codex', kind: 'codex_oauth' })],
-      KINDS,
-      ['codex'],
-    )
-    expect(listed.map((one) => one.ref)).toEqual(['p2'])
-  })
-
-  it('助手没接订阅那一路时什么都不摆', () => {
-    expect(subscriptionAccounts([], KINDS, ['default'])).toEqual([])
+  it('目录里一路订阅型都没有时什么都不摆', () => {
+    // ⚠ 登录态挂在那一行供应商上：目录之外没有可挂的地方，摆出来的面板
+    // 点下去是一条指不回任何地方的错
+    expect(subscriptionAccounts([provider()], KINDS)).toEqual([])
+    expect(subscriptionAccounts([], KINDS)).toEqual([])
   })
 })

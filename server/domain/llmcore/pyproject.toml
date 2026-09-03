@@ -36,7 +36,12 @@ testpaths = ["tests"]
 pythonpath = ["tests"]
 asyncio_mode = "auto"
 addopts = "-q"
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    # 上游对订阅账号那一路的实验性声明。走这条路是拍过板的（理由见
+    # codex/model.py 的文件头），每次构造都喊一遍只会淹掉真警告
+    "ignore:`_ChatOpenAICodex` is experimental:UserWarning",
+]
 
 [tool.coverage.run]
 branch = true

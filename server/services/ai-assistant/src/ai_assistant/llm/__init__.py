@@ -10,7 +10,6 @@ from ai_assistant.llm.adapters import (
     build_openai_embedding,
 )
 from ai_assistant.llm.ports import (
-    CODEX_PROFILE,
     DEFAULT_PROFILE,
     MODEL_KINDS,
     EmbeddingAdapter,
@@ -31,7 +30,6 @@ from llmcore import (
 from llmcore.guard import GuardedModel
 
 __all__ = [
-    "CODEX_PROFILE",
     "DEFAULT_PROFILE",
     "MODEL_KINDS",
     "AdapterDeps",

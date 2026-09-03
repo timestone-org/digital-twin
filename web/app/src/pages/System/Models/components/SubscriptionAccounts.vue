@@ -2,8 +2,8 @@
 /**
  * @fileoverview 要先登录的那几路各摆一份登录面板。
  *
- * ⚠ 一路一份状态：面板自己按 `providerRef` 建那一段轮询与登录态，
- * 共用一份的话第二路点登录时改的是第一路。
+ * ⚠ 一路一份状态：面板自己按 `providerRef`（那一路供应商的 id）建那一段轮询与
+ * 登录态，共用一份的话第二路点登录时改的是第一路。
  */
 import type { SubscriptionAccount } from '../scripts/subscriptions'
 import CodexAccountPanel from './CodexAccountPanel.vue'

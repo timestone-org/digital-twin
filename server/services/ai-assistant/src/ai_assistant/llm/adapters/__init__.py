@@ -8,25 +8,21 @@ import 副作用：隐式注册会让「接得了哪几种」取决于 import �
 正确的行为是「界面上配得出、助手说这一路我接不了」，不是拿端点那一路的接法
 去打一个根本不是那么接的地方。
 
-⚠ 环境变量那两路是目录的**永久默认值**（config-and-secrets §7.1）：目录里有了
-同一形态的供应商就以目录为准，一路都没有时才轮到它们。按形态逐格顶替而不是
-「目录一非空就全顶掉」——配了一路订阅账号不该把好端端的按量那一路挤没。
+⚠ 环境变量那一路是目录的**永久默认值**（config-and-secrets §7.1）：只有端点
+那一形态有这一档，目录里配了同形态的供应商就以目录为准。订阅账号那一形态
+没有环境变量档——登录态挂在那一路供应商的行上（ADR-0041），目录之外的那一路
+无处存登录态，装出来也说不了话。
 """
 
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from ai_assistant.llm.adapters.codex_oauth import (
-    CodexOAuthAdapter,
-    build_catalog_codex,
-    build_env_codex,
-)
+from ai_assistant.llm.adapters.codex_oauth import build_catalog_codex
 from ai_assistant.llm.adapters.endpoint import (
     build_env_endpoint,
     endpoint_on,
     timeout_of,
 )
-from ai_assistant.llm.codex.token_provider import TokenSource
 from ai_assistant.llm.ports import (
     PROVIDER_KIND_CODEX_OAUTH,
     PROVIDER_KIND_OPENAI_COMPAT,
@@ -39,12 +35,14 @@ from llmcore import (
     MODEL_KIND_CHAT,
     CatalogSource,
     ChatEndpoint,
+    CodexOAuthAdapter,
     DynamicEmbeddingAdapter,
     EmbeddingAdapter,
     EmbeddingEndpoint,
     ModelCatalog,
     OpenAiCompatAdapter,
     ProviderSpec,
+    TokenSource,
 )
 
 
@@ -57,7 +55,7 @@ class AdapterDeps:
     """
 
     settings: Settings
-    # 订阅账号那一路的凭据面；没接就是 None
+    # 订阅账号那一路的令牌来源（platform 的内部凭据面）；没接就是 None
     tokens: TokenSource | None = None
     # 模型目录；没接就是 None（只有用例会这么装）
     catalog: CatalogSource | None = None
@@ -171,20 +169,17 @@ def _providers(catalog: CatalogSource | None) -> tuple[ProviderSpec, ...]:
 
 
 def _env_adapters(deps: AdapterDeps, covered: set[str]) -> list[ModelAdapter]:
-    """环境变量配出来的那几路里，还没被目录顶替掉的。
+    """环境变量配出来的那一路，还没被目录顶替掉时。
+
+    ⚠ 只有端点那一形态有这一档：订阅账号那一路的登录态挂在供应商行上，
+    目录之外的那一路无处存登录态。
 
     Args: deps, covered（目录里已经出现过的形态）。
     """
-    listed: list[ModelAdapter] = []
-    if PROVIDER_KIND_OPENAI_COMPAT not in covered:
-        made = build_env_endpoint(deps.settings)
-        if made is not None:
-            listed.append(made)
-    if PROVIDER_KIND_CODEX_OAUTH not in covered:
-        codex = build_env_codex(deps.settings, deps.tokens)
-        if codex is not None:
-            listed.append(codex)
-    return listed
+    if PROVIDER_KIND_OPENAI_COMPAT in covered:
+        return []
+    made = build_env_endpoint(deps.settings)
+    return [] if made is None else [made]
 
 
 __all__ = [

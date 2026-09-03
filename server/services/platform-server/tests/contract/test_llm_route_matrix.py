@@ -20,7 +20,7 @@ from platform_server.deps import REQUIRED_CODES_ATTR
 from platform_server.settings import API_PREFIX, INTERNAL_PREFIX
 
 # 对外端点的条数。写死是为了让「加了端点没加规则」在这里红
-PUBLIC_ROUTE_COUNT = 11
+PUBLIC_ROUTE_COUNT = 15
 
 
 def _routes() -> list[APIRoute]:
@@ -81,16 +81,22 @@ def test_each_public_route_matches_gate_one(
     assert codes == expected, f"{method} {path} 声明的是 {sorted(codes)}"
 
 
-def test_the_internal_catalog_is_guarded_by_the_service_key_only() -> None:
-    """内部目录带明文密钥：只认服务级密钥，不认任何人的权限码。"""
+def test_the_internal_face_is_guarded_by_the_service_key_only() -> None:
+    """内部两条都带口令等价物（明文密钥、短时令牌）：只认服务级密钥，
+    不认任何人的权限码，也一律不进 openapi。"""
     internal = [
         route for route in _routes() if route.path.startswith(INTERNAL_PREFIX)
     ]
-    assert [route.path for route in internal] == [
-        f"{INTERNAL_PREFIX}/llm-catalog"
-    ]
-    route = internal[0]
-    assert _codes_of(route) == frozenset()
-    guards = [dependency.call for dependency in route.dependant.dependencies]
-    assert require_service_key in guards
-    assert route.include_in_schema is False
+    assert sorted(route.path for route in internal) == sorted(
+        (
+            f"{INTERNAL_PREFIX}/llm-catalog",
+            f"{INTERNAL_PREFIX}/llm-credentials/{{provider_id}}:token",
+        )
+    )
+    for route in internal:
+        assert _codes_of(route) == frozenset()
+        guards = [
+            dependency.call for dependency in route.dependant.dependencies
+        ]
+        assert require_service_key in guards
+        assert route.include_in_schema is False

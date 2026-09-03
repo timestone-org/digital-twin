@@ -72,38 +72,6 @@ export interface AssistantCapability {
   default_effort: string
 }
 
-/** 一路模型账号的登录态。⚠ 令牌本身**永远不在里面**。 */
-export interface AssistantCredentialStatus {
-  provider: string
-  is_connected: boolean
-  /** 账号标识的掩码，形如 `…a1b2c3`。只回答「是不是我那个号」。 */
-  account_label: string | null
-  plan_label: string | null
-  expires_at: string | null
-  last_refresh_at: string | null
-  /** 最近一次续期失败的原因，给人看。为空表示一切正常。 */
-  last_error: string | null
-}
-
-/** 设备码登录开了个头。 */
-export interface AssistantDeviceLoginStart {
-  /** 这次登录的句柄。⚠ 不是 device_code——那一格是密钥态，不下发。 */
-  ref: string
-  user_code: string
-  verification_uri: string
-  /** 建议的轮询间隔。⚠ 必须照它来：打快了上游会限流整台机器。 */
-  interval_s: number
-  expires_in_s: number
-}
-
-/** 问了一次的结果。 */
-export interface AssistantDeviceLoginPoll {
-  is_done: boolean
-  /** 下一次隔多久再问。上游让慢下来时这个数会变大，界面要用回它。 */
-  interval_s: number
-  status: AssistantCredentialStatus | null
-}
-
 /** 消息的说话人。`tool` 是工具结果回填的那一条。 */
 export const ASSISTANT_MESSAGE_ROLES = ['user', 'assistant', 'tool'] as const
 

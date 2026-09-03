@@ -3,20 +3,23 @@
 ⚠ 只暴露 `complete(system, user) -> str`，不把 langchain 的类型漏进检索层：
 检索策略只该认「问一句、拿一段话」，认了消息类型之后换库就要改策略。
 
-⚠ 与助手那一侧**不共用调用外壳**：那一侧要流式、要工具、要订阅账号的线形改写，
-而这一侧一样都不要。共用的是 `domain/llmcore`——端点形状、失败分档、断路器
-的判据（ADR-0032 决策三）。
+⚠ 与助手那一侧**不共用调用外壳**：那一侧要流式、要工具，而这一路一样都不要。
+共用的是 `domain/llmcore`——端点形状、适配器、失败分档、断路器的判据
+（ADR-0032 决策三 / ADR-0041）。
 
 ⚠ 这一层**不重试**：一条链路只有一层负责重试，而那一层是编排层。
 
-⚠ 端点来自运行期可改的目录（ADR-0039）：`can_answer` 问的是**此刻**解不解得出
-端点，`complete` 调用前先让目录刷新一次。
+⚠ 走哪一路来自运行期可改的目录（ADR-0039 / ADR-0040）：`can_answer` 问的是
+**此刻**装不装得出适配器，`complete` 调用前先让目录刷新一次。这一层只认一个
+「对话模型适配器」协议，不认那一路是端点还是订阅账号——认了就要为每加一种
+接入形态在这里写一条分支。
 """
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Protocol, cast, runtime_checkable
 
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from openai import OpenAIError
 
@@ -24,6 +27,7 @@ from lib.logging import get_logger
 from lib.resilience import BreakerOpen, CircuitBreaker
 from llmcore import ChatEndpoint, ModelChoice, OpenAiCompatAdapter
 from llmcore.errors import ModelUnavailable, classified, is_our_fault
+from llmcore.ports import ModelKind
 
 _logger = get_logger("knowledge.llm")
 
@@ -36,6 +40,30 @@ class AnswerUnavailable(RuntimeError):
     ⚠ 抛而不是回空串：回空串的话，调用方会把「没接模型」当成「模型没话说」，
     然后把一个空答案交给用户。
     """
+
+
+@runtime_checkable
+class ChatAdapter(Protocol):
+    """一路对话模型：吃不吃这一档、按这次选择造一个模型。
+
+    ⚠ 收窄到这两问而不是直接认某个具体类：这一侧接得了的接入形态是一张表
+    （`llm_adapters.KIND_BUILDERS`），认具体类等于每加一种形态就要改这一层，
+    而漏改的表现是「界面上分配了、这一侧却还在用环境变量那一档」。
+    """
+
+    def supports(self, kind: ModelKind) -> bool:
+        """这一路吃不吃这一档。
+
+        Args: kind。
+        """
+        ...
+
+    async def build(self, choice: ModelChoice) -> BaseChatModel:
+        """按这次选择造一个可调用的模型。
+
+        Args: choice。
+        """
+        ...
 
 
 @runtime_checkable
@@ -72,16 +100,16 @@ class NullAnswerer:
 
 @dataclass(frozen=True)
 class ChatAnswerer:
-    """走 OpenAI 兼容端点，外面包一层断路器。"""
+    """走目录此刻指的那一路，外面包一层断路器。"""
 
-    adapter: OpenAiCompatAdapter
+    adapter: ChatAdapter
     breaker: CircuitBreaker
     # 调用前先让目录刷新一次；没接目录就是 None
     refresh: Refresh | None = None
 
     @property
     def can_answer(self) -> bool:
-        """此刻解得出对话端点吗。"""
+        """此刻装得出对话模型吗。"""
         return self.adapter.supports("chat")
 
     async def complete(self, system: str, user: str) -> str:
@@ -137,19 +165,19 @@ def _text_of(content: object) -> str:
 
 
 def build_answerer(
-    endpoint: ChatEndpoint | OpenAiCompatAdapter | None,
+    endpoint: ChatEndpoint | ChatAdapter | None,
     breaker: CircuitBreaker,
     *,
     refresh: Refresh | None = None,
 ) -> Answerer:
     """按端点（或已装好的适配器）装一路对话档；没配就给 `NullAnswerer`。
 
-    Args: endpoint（定死的端点，或按目录解端点的适配器）, breaker,
+    Args: endpoint（定死的端点，或按目录挑那一路的适配器）, breaker,
         refresh（调用前让目录刷新一次的口子）。
     """
     if endpoint is None:
         return NullAnswerer()
-    if isinstance(endpoint, OpenAiCompatAdapter):
+    if not isinstance(endpoint, ChatEndpoint):
         return ChatAnswerer(adapter=endpoint, breaker=breaker, refresh=refresh)
     fixed = endpoint
     return ChatAnswerer(

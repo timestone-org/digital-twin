@@ -8,6 +8,9 @@
  * ⚠ 密钥只在建与改的请求体里出现一次，任何出参里都没有它。
  */
 import type {
+  LlmCredential,
+  LlmDeviceLoginPoll,
+  LlmDeviceLoginStart,
   LlmProbeResult,
   LlmProvider,
   LlmProviderKind,
@@ -163,6 +166,63 @@ export async function assignPurpose(
 export async function clearPurpose(purpose: string): Promise<void> {
   await request<null>(
     `${PURPOSES}/${purpose}`,
+    onPlatform({ method: 'DELETE' }),
+  )
+}
+
+/**
+ * 读一路供应商的登录态（ADR-0041）。⚠ 回来的东西里没有令牌，也永远不该有。
+ * @param providerId 那一路的 id
+ * @param signal 中止信号
+ */
+export async function readCredential(
+  providerId: string,
+  signal?: AbortSignal,
+): Promise<LlmCredential | null> {
+  return request<LlmCredential>(
+    `${PROVIDERS}/${providerId}/credential`,
+    onPlatform({ signal }),
+  )
+}
+
+/**
+ * 开一次设备码登录：拿用户码与验证地址。
+ * @param providerId 那一路的 id
+ * @param key 幂等键
+ */
+export async function startDeviceLogin(
+  providerId: string,
+  key: string = newIdempotencyKey(),
+): Promise<LlmDeviceLoginStart> {
+  return requestData<LlmDeviceLoginStart>(
+    `${PROVIDERS}/${providerId}/credential:start-login`,
+    onPlatform({ method: 'POST', headers: { 'Idempotency-Key': key } }),
+  )
+}
+
+/**
+ * 问一次「用户点完了没」。
+ * ⚠ 下一次要隔多久由**返回值**说了算：上游让慢下来时它会变大，照原间隔接着
+ * 打的话，被限流的是整台机器而不只是这一次登录。
+ * @param providerId 哪一路
+ * @param ref 这次登录的句柄
+ * @param signal 中止信号
+ */
+export async function pollDeviceLogin(
+  providerId: string,
+  ref: string,
+  signal?: AbortSignal,
+): Promise<LlmDeviceLoginPoll> {
+  return requestData<LlmDeviceLoginPoll>(
+    `${PROVIDERS}/${providerId}/credential:poll-login`,
+    onPlatform({ method: 'POST', body: { ref }, signal }),
+  )
+}
+
+/** 退出这一路的订阅账号。⚠ 整套部署共用一份，退的是所有消费方的。 */
+export async function forgetCredential(providerId: string): Promise<void> {
+  await request<null>(
+    `${PROVIDERS}/${providerId}/credential`,
     onPlatform({ method: 'DELETE' }),
   )
 }

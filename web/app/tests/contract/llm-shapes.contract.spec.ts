@@ -17,6 +17,9 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type {
+  LlmCredential,
+  LlmDeviceLoginPoll,
+  LlmDeviceLoginStart,
   LlmModel,
   LlmProbeResult,
   LlmProvider,
@@ -153,6 +156,27 @@ const SHAPES: Record<string, Record<string, true>> = {
     model_name: true,
     updated_at: true,
   } satisfies Keys<LlmPurpose>,
+  LlmCredentialOut: {
+    provider_id: true,
+    is_connected: true,
+    account_label: true,
+    plan_label: true,
+    expires_at: true,
+    last_refresh_at: true,
+    last_error: true,
+  } satisfies Keys<LlmCredential>,
+  LlmDeviceLoginStartOut: {
+    ref: true,
+    user_code: true,
+    verification_uri: true,
+    interval_s: true,
+    expires_in_s: true,
+  } satisfies Keys<LlmDeviceLoginStart>,
+  LlmDeviceLoginPollOut: {
+    is_done: true,
+    interval_s: true,
+    credential: true,
+  } satisfies Keys<LlmDeviceLoginPoll>,
 }
 
 describe('@dt/contracts 的模型供应商类型与 openapi.json 的字段一致', () => {
@@ -167,6 +191,16 @@ describe('@dt/contracts 的模型供应商类型与 openapi.json 的字段一致
   it('出参里永远没有密钥明文', () => {
     const provider = schemas['LlmProviderOut']
     expect(Object.keys(provider?.properties ?? {})).not.toContain('api_key')
+  })
+
+  it('登录态那几个出参里永远没有令牌', () => {
+    // ⚠ 出去过一次就永远躺在别人的 devtools 里：短时令牌只走 /internal/，
+    // 而那一族刻意不进 openapi
+    for (const name of ['LlmCredentialOut', 'LlmDeviceLoginPollOut']) {
+      const keys = Object.keys(schemas[name]?.properties ?? {})
+      expect(keys).not.toContain('access_token')
+      expect(keys).not.toContain('refresh_token')
+    }
   })
 })
 
@@ -264,10 +298,18 @@ describe('接入形态三方逐字一致', () => {
     expect([...LLM_PROVIDER_KINDS].sort()).toEqual(platform)
   })
 
+  it('llmcore 与平台一致', () => {
+    // ⚠ 两个消费方按它挑适配器（ADR-0041）：llmcore 少一种的话，那一路在
+    // 两侧都如实缺席，而「缺席」在界面上看起来与「还没配」一模一样
+    const shared = [
+      ...new Set(kindLiterals(readFileSync(LLMCORE_CATALOG, 'utf8'))),
+    ].sort()
+    expect(shared).toEqual(platform)
+  })
+
   it('助手认得出平台登记的每一种', () => {
-    // ⚠ 端点那一形态的名字在 llmcore（协议名，两个消费方共用），
-    // 订阅那一形态的名字在助手自己那份 ports——认不出的形态如实缺席，
-    // 而「缺席」在界面上看起来与「还没配」一模一样
+    // ⚠ 端点与推理档位那几样从 llmcore 再导出，订阅那一形态在助手自己那份
+    // ports 里也复述一份
     const assistant = [
       ...new Set([
         ...kindLiterals(readFileSync(ASSISTANT_PORTS, 'utf8')),

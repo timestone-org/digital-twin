@@ -67,8 +67,54 @@ class LlmPurposeMismatch(AppError):
     http_status = 400
 
 
+class LlmCredentialNotFound(AppError):
+    """这一路供应商还没登录过。"""
+
+    code = 42408
+    http_status = 404
+
+
+class LlmLoginRejected(AppError):
+    """上游拒绝了这次登录（授权被拒、码已作废）。"""
+
+    code = 42409
+    http_status = 400
+
+
+class LlmLoginSessionExpired(AppError):
+    """这次设备码登录已经过期或从未开始。"""
+
+    code = 42410
+    http_status = 404
+
+
+class LlmCredentialStale(AppError):
+    """登录过，但那一份已经续不动了——要人重新登一次。
+
+    ⚠ 与「还没登录过」分开：这一条的处置是「重新登录」，那一条是「先登录」；
+    与「暂时不可用」也分开——混成一档的话，人会去查网络而不是去登录。
+    """
+
+    code = 42411
+    http_status = 409
+
+
+class LlmProviderNotLoginBased(AppError):
+    """这一形态不走登录（它填的是端点与密钥）。"""
+
+    code = 42412
+    http_status = 400
+
+
 class LlmProvidersDisabled(AppError):
     """本部署没开模型供应商目录（没配加密密钥）。不是故障，是这套环境就没接。"""
 
     code = 52401
+    http_status = 503
+
+
+class LlmLoginUpstreamUnavailable(AppError):
+    """登录服务此刻不可达。"""
+
+    code = 52402
     http_status = 503

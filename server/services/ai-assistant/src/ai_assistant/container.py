@@ -2,14 +2,6 @@
 
 from dataclasses import dataclass
 
-import httpx
-
-from ai_assistant.apps.credential.services import (
-    HTTP_TIMEOUT_S,
-    CredentialStore,
-    DeviceLogin,
-    OAuthClient,
-)
 from ai_assistant.llm import (
     DEFAULT_PROFILE,
     AdapterDeps,
@@ -19,7 +11,8 @@ from ai_assistant.llm import (
     build_openai_embedding,
 )
 from ai_assistant.llm.breakers import BreakerBook
-from ai_assistant.llm.codex.rewire import CodexRewire
+from ai_assistant.llm.codex import CodexRewire
+from ai_assistant.llm.logins import PlatformLogins
 from ai_assistant.settings import SERVICE_NAME, Settings
 from ai_assistant.upstream import (
     AuthClient,
@@ -31,11 +24,10 @@ from ai_assistant.upstream import (
     PlatformClient,
 )
 from lib.cache import Cache
-from lib.crypto import SecretCipher
 from lib.db import Database, PoolProfile
 from lib.idempotency import IdempotencyStore
 from lib.resilience import CircuitBreaker
-from llmcore import CatalogCache, CatalogClient
+from llmcore import CatalogCache, CatalogClient, CodexTokenClient
 
 # 幂等键的命名空间。⚠ 必须带服务名：共用一个 Redis 的两个服务，同一个端点名
 # 撞上同一个幂等键时会互相返回对方的结果
@@ -67,12 +59,9 @@ class Container:
     # 没配任何一路时它仍在，只是 `servers` 是空的——空目录报空清单，
     # 与「装不上就如实缺席」同一口径
     mcp: McpCatalog
-    # 订阅账号那一路的凭据读写与登录。没开 codex 时同样是 `None`
-    credentials: CredentialStore | None
-    device_login: DeviceLogin | None
-    # 打 OAuth 端点的 http 客户端。⚠ 与凭据一起活：没开 codex 时不建，
-    # 建了就要在关停时收掉（见 app.py 的 lifespan 钩子）
-    oauth_http: httpx.AsyncClient | None
+    # 要登录的那几路此刻登没登录（ADR-0041）。⚠ 只问不写：登录态归 platform，
+    # 与那一路供应商同属主
+    logins: PlatformLogins
     # 嵌入那一路（ADR-0030）。⚠ 没配时是 `None`：长期记忆仍然记得住
     # （存文本、标没有向量），只是检索用不了——能力缺席就如实缺席
     embedder: EmbeddingAdapter | None
@@ -131,9 +120,10 @@ def _build_model(
     return GuardedModel(
         source=registry.resolve,
         is_streaming=settings.model_stream_enabled,
-        # ⚠ 订阅账号那一路要改线形（不认工具名里的点号）；外壳在 llmcore、
-        # 两个服务共用，特例只能以钩子注进去
-        rewire=CodexRewire(),
+        # ⚠ 订阅账号那几路要改线形（不认工具名里的点号）；外壳在 llmcore、
+        # 两个服务共用，特例只能以钩子注进去。⚠ 「是不是那一路」问注册表而不是
+        # 比字面量：档位名是目录里那一路的 id
+        rewire=CodexRewire(is_codex=registry.is_codex),
         # 兜底那一份只在「档位认不出、用途也没登记」时用得上
         breaker=_breaker_of(settings, DEFAULT_PROFILE, "chat"),
         breakers=BreakerBook(
@@ -150,35 +140,22 @@ def _breaker_of(settings: Settings, profile: str, kind: str) -> CircuitBreaker:
     )
 
 
-def _build_codex(
-    settings: Settings, database: Database, cache: Cache
-) -> tuple[
-    CredentialStore | None, DeviceLogin | None, httpx.AsyncClient | None
-]:
-    """按配置装订阅账号那一路；没开就三个都不建。
+def _build_tokens(settings: Settings) -> CodexTokenClient:
+    """订阅账号那一路的令牌来源：platform 的内部凭据面（ADR-0041）。
 
-    ⚠ 密钥在这里已经保证有了：`Settings` 的校验器兜着「开了 codex 却没配
-    密钥 → 启动即退出」，所以这里不需要再写一条「没配就降级」的分支——
-    写了反而会让配置漏填悄悄变成「登录不了但服务起着」。
+    ⚠ 构造不连网、也不判「这套部署有没有配」：目录里配没配订阅账号那一形态是
+    运行期的事，而这一件在没有那一路时根本不会被调到。
 
-    Args: settings, database, cache。
+    ⚠ 拿 `edge_service_key` 去打：与 platform 那边 `PLATFORM_EDGE_SERVICE_KEY`
+    取同一个值，分叉就是每一次领令牌都 401、而两侧代码单看都对。
+
+    Args: settings。
     """
-    secret = settings.credential_secret
-    if not settings.codex_enabled or secret is None:
-        return (None, None, None)
-    # ⚠ 客户端自己也带超时：逐个请求写的那份只兜住走 `_post` 的路径，
-    # 而「每个跨进程调用必须有超时」守的是整条连接
-    http = httpx.AsyncClient(timeout=HTTP_TIMEOUT_S)
-    store = CredentialStore(
-        sessions=database.session,
-        cipher=SecretCipher(
-            secret.get_secret_value(), label="model-credential"
-        ),
-        oauth=OAuthClient(http),
-        cache=cache,
+    return CodexTokenClient(
+        base_url=settings.platform_base_url,
+        service_key=settings.edge_service_key.get_secret_value(),
+        timeout_s=settings.llm_login_timeout_s,
     )
-    login = DeviceLogin(oauth=OAuthClient(http), cache=cache, store=store)
-    return (store, login, http)
 
 
 def _build_mcp(settings: Settings) -> McpCatalog:
@@ -218,14 +195,11 @@ def build_container(settings: Settings) -> Container:
     Args: settings。
     """
     cache = Cache(url=settings.url(), timeout_s=settings.redis_timeout_s)
-    database = _build_database(settings)
-    credentials, device_login, oauth_http = _build_codex(
-        settings, database, cache
-    )
+    tokens = _build_tokens(settings)
     # ⚠ 目录一个进程一份：注册表与嵌入那一路读的都是它的快照
     catalog = _build_catalog(settings)
     adapter_deps = AdapterDeps(
-        settings=settings, tokens=credentials, catalog=catalog
+        settings=settings, tokens=tokens, catalog=catalog
     )
     # ⚠ 一个进程一份：造两份的话，两份各自的档位清单可以在将来漂开
     registry = ModelRegistry(adapter_deps)
@@ -238,7 +212,7 @@ def build_container(settings: Settings) -> Container:
     )
     return Container(
         settings=settings,
-        database=database,
+        database=_build_database(settings),
         cache=cache,
         idempotency=IdempotencyStore(
             cache=cache, namespace=IDEMPOTENCY_NAMESPACE
@@ -253,9 +227,7 @@ def build_container(settings: Settings) -> Container:
         auth=auth,
         models=registry,
         mcp=_build_mcp(settings),
-        credentials=credentials,
-        device_login=device_login,
-        oauth_http=oauth_http,
+        logins=PlatformLogins(tokens=tokens),
         embedder=build_openai_embedding(adapter_deps),
         knowledge=_build_knowledge(settings, auth),
         catalog=catalog,
