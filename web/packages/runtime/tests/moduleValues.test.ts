@@ -2,13 +2,17 @@
  * @fileoverview 守绑定求值：数组槽展开回行数组、定值变换与 enum 映射按声明生效、
  * 派生槽迭代求解（派生可以引用派生）、成环诚实给 null 并说出原因，
  * 以及取不到的槽**不注入值**——空值冒充「没数据」正是本仓要消灭的静默故障。
+ * 时序槽那一段守的是同一条：序列缺席、序列为空、序列取不到三种情况在屏上
+ * 必须长得不一样，且序列与末值永远同一个换算口径。
  */
-import type { BindingSpec } from '@dt/contracts'
+import type { BindingSpec, ModuleSlotMeta } from '@dt/contracts'
 import { describe, expect, it } from 'vitest'
 
+import { computeModuleStatus } from '../src/moduleStatus'
 import {
   computeModuleValues,
   injectFieldValue,
+  pointsFieldKeyOf,
   resolveBindingSpec,
   type BindingSlot,
   type BindingValueReader,
@@ -465,5 +469,251 @@ describe('enum 映射的键口径', () => {
     })
 
     expect(result.values).toEqual({ mode: '运行' })
+  })
+})
+
+/** 时序槽用的行槽：行钉在实体上，子槽 `series` 是那一行的历史序列。 */
+const SERIES_SPEC: BindingSpec = {
+  key: 'seriesValues',
+  label: '系列',
+  dataType: 'number',
+  isArray: true,
+  isEntityPinned: true,
+  arrayFields: [
+    { key: 'series', label: '曲线', dataType: 'number', isTimeSeries: true },
+  ],
+}
+
+const SERIES_KEY = 'seriesValues[0].series'
+
+/** 只配了一条时序绑定的模块，读取器给什么就求什么。 */
+function computeSeries(
+  slot: BindingSlot,
+  transform: Parameters<typeof fakeBinding>[0]['transformJson'] = null,
+) {
+  return computeModuleValues({
+    specs: [SERIES_SPEC],
+    bindings: [
+      fakeBinding({
+        id: 'b1',
+        fieldKey: SERIES_KEY,
+        sourceKind: 'archive',
+        transformJson: transform,
+      }),
+    ],
+    read: readerOf({ [SERIES_KEY]: slot }),
+  })
+}
+
+describe('时序槽的伴生序列键', () => {
+  it('数组行的子槽拿到同一行的伴生键', () => {
+    expect(pointsFieldKeyOf(SERIES_KEY)).toBe('seriesValues[0].seriesPoints')
+  })
+
+  it('不带子键的数组行没有伴生键：序列要跟末值同住一行', () => {
+    expect(pointsFieldKeyOf('seriesValues[0]')).toBeUndefined()
+  })
+
+  it('顶层槽没有伴生键', () => {
+    expect(pointsFieldKeyOf('power')).toBeUndefined()
+  })
+})
+
+describe('时序槽的序列注入', () => {
+  it('序列落在同一行的伴生键上，与末值并排', () => {
+    const result = computeSeries({
+      state: 'ok',
+      value: 3,
+      points: [
+        { t: 1, v: 1 },
+        { t: 2, v: 3 },
+      ],
+    })
+
+    expect(result.values).toEqual({
+      seriesValues: [
+        {
+          series: 3,
+          seriesPoints: [
+            { t: 1, v: 1 },
+            { t: 2, v: 3 },
+          ],
+        },
+      ],
+    })
+  })
+
+  it('⚠ 定值变换逐点跟着走：只换末值不换曲线会让 Y 轴与末值差三个数量级', () => {
+    const result = computeSeries(
+      {
+        state: 'ok',
+        value: 101_325,
+        points: [
+          { t: 1, v: 101_325 },
+          { t: 2, v: 99_000 },
+        ],
+      },
+      { scale: 0.001, round: 3 },
+    )
+
+    expect(result.values).toEqual({
+      seriesValues: [
+        {
+          series: 101.325,
+          seriesPoints: [
+            { t: 1, v: 101.325 },
+            { t: 2, v: 99 },
+          ],
+        },
+      ],
+    })
+  })
+
+  it('序列里的非数值点原样保留，与标量那条口径一致', () => {
+    const result = computeSeries(
+      { state: 'ok', value: 2, points: [{ t: 1, v: '12.345' }] },
+      { scale: 2 },
+    )
+
+    expect(result.values).toEqual({
+      seriesValues: [{ series: 4, seriesPoints: [{ t: 1, v: '12.345' }] }],
+    })
+  })
+
+  it('顶层槽的序列不注入：那会在模块目录扫描里变成一个暗键', () => {
+    const result = computeModuleValues({
+      specs: [],
+      bindings: [
+        fakeBinding({ id: 'b1', fieldKey: 'power', sourceKind: 'archive' }),
+      ],
+      read: readerOf({
+        power: { state: 'ok', value: 3, points: [{ t: 1, v: 1 }] },
+      }),
+    })
+
+    expect(result.values).toEqual({ power: 3 })
+  })
+
+  it('不带子键的数组行同样不注入序列', () => {
+    const result = computeModuleValues({
+      specs: [SERIES_SPEC],
+      bindings: [
+        fakeBinding({
+          id: 'b1',
+          fieldKey: 'seriesValues[0]',
+          sourceKind: 'archive',
+        }),
+      ],
+      read: readerOf({
+        'seriesValues[0]': { state: 'ok', value: 3, points: [{ t: 1, v: 1 }] },
+      }),
+    })
+
+    expect(result.values).toEqual({ seriesValues: [3] })
+  })
+})
+
+describe('序列的三种「没有」', () => {
+  it('没给序列的槽不写空数组：伴生键压根不出现', () => {
+    const result = computeSeries({ state: 'ok', value: 3 })
+
+    expect(result.values).toEqual({ seriesValues: [{ series: 3 }] })
+  })
+
+  it('取不到就落 error，一个点都不注入，整块折成取不到', () => {
+    const result = computeSeries({ state: 'error', message: '这张表被删了' })
+
+    expect(result.values).toEqual({})
+    expect(result.errors).toEqual({ [SERIES_KEY]: '这张表被删了' })
+    expect(
+      computeModuleStatus({ unboundRequiredCount: 0, tally: result.tally }),
+    ).toBe('error')
+  })
+
+  it('取到了但窗内没数据：序列是空数组、末值是空，整块折成空态', () => {
+    const result = computeSeries({ state: 'ok', value: null, points: [] })
+
+    expect(result.values).toEqual({
+      seriesValues: [{ series: null, seriesPoints: [] }],
+    })
+    expect(result.errors).toEqual({})
+    expect(result.tally.empty).toBe(1)
+    expect(result.tally.error).toBe(0)
+    expect(
+      computeModuleStatus({ unboundRequiredCount: 0, tally: result.tally }),
+    ).toBe('empty')
+  })
+
+  it('压根没绑的时序槽不是空态，是「这一格还没接数据源」', () => {
+    const result = computeModuleValues({
+      specs: [SERIES_SPEC],
+      bindings: [],
+      read: readerOf({}),
+    })
+
+    expect(result.slots).toEqual({})
+    expect(
+      computeModuleStatus({ unboundRequiredCount: 0, tally: result.tally }),
+    ).toBe('connected')
+  })
+})
+
+describe('时序槽的逐槽结论', () => {
+  it('⚠ 序列槽不带采样时刻，因此不进 sampled：通道一抖不该把历史图表标成过期', () => {
+    const result = computeSeries({
+      state: 'ok',
+      value: 3,
+      points: [{ t: 1_700_000_000_000, v: 3 }],
+    })
+
+    expect(result.tally.ok).toBe(1)
+    expect(result.tally.sampled).toBe(0)
+    expect(result.valueTimeMs).toBeNull()
+    expect(
+      computeModuleStatus({
+        unboundRequiredCount: 0,
+        tally: result.tally,
+        connectionState: 'closed',
+      }),
+    ).toBe('connected')
+  })
+
+  it('触顶与降级两个标记真的到了模块读得到的那一份逐槽结论里', () => {
+    const result = computeSeries({
+      state: 'ok',
+      value: 3,
+      points: [{ t: 1, v: 3 }],
+      isTruncated: true,
+      isStale: true,
+    })
+
+    // ⚠ 显式标成 `ModuleSlotMeta` 再逐个读：契约上少一个键时这两行 typecheck
+    //   当场红，而只比对运行期对象的话，写进去了但模块读不到照样全绿
+    const meta: ModuleSlotMeta | undefined = result.slots[SERIES_KEY]
+    expect(meta?.isTruncated).toBe(true)
+    expect(meta?.isStale).toBe(true)
+    expect(meta).toEqual({ state: 'ok', isTruncated: true, isStale: true })
+  })
+
+  it('明写的 false 照样带过去：「没触顶」与「不知道有没有触顶」不是一回事', () => {
+    const result = computeSeries({
+      state: 'ok',
+      value: 3,
+      points: [{ t: 1, v: 3 }],
+      isTruncated: false,
+      isStale: false,
+    })
+
+    expect(result.slots[SERIES_KEY]).toEqual({
+      state: 'ok',
+      isTruncated: false,
+      isStale: false,
+    })
+  })
+
+  it('两个标记都没给时不编一个 false', () => {
+    const result = computeSeries({ state: 'ok', value: 3, points: [] })
+
+    expect(result.slots[SERIES_KEY]).toEqual({ state: 'ok' })
   })
 })

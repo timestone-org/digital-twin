@@ -8,6 +8,7 @@ import type {
   BindingView,
   BindingSpec,
   BindingTransform,
+  HistoryPoint,
   ModuleSlotMeta,
 } from '@dt/contracts'
 
@@ -20,8 +21,23 @@ export type BindingSlot =
   | {
       state: 'ok'
       value: unknown
-      /** 采样时刻，UTC 毫秒。 */
+      /**
+       * 采样时刻，UTC 毫秒。
+       * ⚠ 带序列的槽一律不写它：它只记进 `tally.sampled`，而那一档推的是
+       * 「实时通道断了、屏上还挂着推来的值」。历史序列是一次性拉回来的，
+       * 写了会让实时通道一抖就把一屏图表全标成可能过期。时刻在 `points` 里。
+       */
       timestampMs?: number
+      /**
+       * 时序槽的历史序列，按时刻升序。
+       * ⚠ 缺席 ≠ 空序列：取不到就让 `state` 落 `error`，缺席时这一格一个点
+       * 都不注入。空数组是「取到了，窗内确实没数据」，两者在屏上要长得不一样。
+       */
+      points?: readonly HistoryPoint[]
+      /** 窗内还有更多点，只取回了上限那一批。 */
+      isTruncated?: boolean
+      /** 值来自降级路径。 */
+      isStale?: boolean
     }
   /** 还没有首帧。 */
   | { state: 'pending' }
@@ -149,6 +165,21 @@ function ensureRow(rows: unknown[], index: number): Record<string, unknown> {
 }
 
 /**
+ * 时序槽的伴生序列键：`rows[0].series` → 同一行的 `rows[0].seriesPoints`。
+ * 不是数组行子槽的槽键给 `undefined`。
+ *
+ * ⚠ 序列只能落在行内，顶层槽一律不注入：`manifests.contract.spec.ts` 那条
+ * 「绑定槽键两侧逐一对上」按模块目录扫 `values.<键>` 并要求与清单声明的槽键
+ * 逐一相等，顶层槽 `foo` 的伴生键 `fooPoints` 会被判成暗键、当场红；行对象
+ * 里的键不参与那次扫描。
+ * @param fieldKey 绑定的槽键
+ */
+export function pointsFieldKeyOf(fieldKey: string): string | undefined {
+  const groups = ARRAY_FIELD_KEY.exec(fieldKey)?.groups
+  return groups?.sub === undefined ? undefined : `${fieldKey}Points`
+}
+
+/**
  * 找 `fieldKey` 对应的绑定槽声明，数组槽落到行内子槽上。
  * @param specs 模块清单声明的绑定槽
  * @param fieldKey 绑定的槽键
@@ -183,6 +214,25 @@ function applyTransform(
   const unit = Math.pow(10, round)
   const rounded = Math.round(scaled * unit) / unit
   return Number.isFinite(rounded) ? rounded : scaled
+}
+
+/**
+ * 逐点跑同一份定值变换。
+ * ⚠ 序列必须跟着标量一起换算：配了 `scale: 0.001` 的系列只换末值不换曲线，
+ * 得到的是「Y 轴与曲线是帕、末值与提示框是千帕」，差三个数量级且零报错。
+ * `applyEnumMap` 反过来对数值序列没有意义，不跑。
+ * @param points 取回的原始序列
+ * @param transform 绑定上的变换；没有则原样返回同一个数组
+ */
+function transformPoints(
+  points: readonly HistoryPoint[],
+  transform: BindingTransform | null,
+): readonly HistoryPoint[] {
+  if (transform === null) return points
+  return points.map((point) => ({
+    t: point.t,
+    v: applyTransform(point.v, transform),
+  }))
 }
 
 /** enum 槽的数值 → 清单声明的语义值；映射里没有的数值原样保留。 */
@@ -241,14 +291,8 @@ function resolveBinding(
     return
   }
   noteTimestamp(state, slot.timestampMs)
-  state.slots[binding.fieldKey] = {
-    state: 'ok',
-    // ⚠ 逐槽各带各的时刻：整块只留最新的那一个，而多点位模块里「哪一格不动了」
-    //   正是要靠各自的时刻才看得出来
-    ...(slot.timestampMs !== undefined
-      ? { timestampMs: slot.timestampMs }
-      : {}),
-  }
+  state.slots[binding.fieldKey] = okSlotMeta(slot)
+  injectPoints(state.values, binding, slot.points)
   const spec = resolveBindingSpec(input.specs, binding.fieldKey)
   const value = applyEnumMap(
     applyTransform(slot.value, binding.transformJson),
@@ -261,6 +305,45 @@ function resolveBinding(
   }
   state.siblings[binding.fieldKey] = value
   injectFieldValue(state.values, binding.fieldKey, value)
+}
+
+/**
+ * `ok` 档的逐槽结论。可选的三样一律「有才写」——缺席与显式 `undefined`
+ * 在读侧不是一回事。
+ * ⚠ 逐槽各带各的时刻：整块只留最新的那一个，而多点位模块里「哪一格不动了」
+ * 正是要靠各自的时刻才看得出来。
+ * @param slot 读取器给出的 `ok` 结果
+ */
+function okSlotMeta(
+  slot: Extract<BindingSlot, { state: 'ok' }>,
+): ModuleSlotMeta {
+  return {
+    state: 'ok',
+    ...(slot.timestampMs !== undefined
+      ? { timestampMs: slot.timestampMs }
+      : {}),
+    ...(slot.isTruncated !== undefined
+      ? { isTruncated: slot.isTruncated }
+      : {}),
+    ...(slot.isStale !== undefined ? { isStale: slot.isStale } : {}),
+  }
+}
+
+/**
+ * 把序列注入到同一行的伴生键上，逐点跑绑定自己的定值变换。
+ * @param values 注入袋
+ * @param binding 这条绑定，变换与槽键都从它来
+ * @param points 读取器给出的序列；缺席就一个点都不写
+ */
+function injectPoints(
+  values: Record<string, unknown>,
+  binding: BindingView,
+  points: readonly HistoryPoint[] | undefined,
+): void {
+  if (points === undefined) return
+  const key = pointsFieldKeyOf(binding.fieldKey)
+  if (key === undefined) return
+  injectFieldValue(values, key, transformPoints(points, binding.transformJson))
 }
 
 function noteTimestamp(
