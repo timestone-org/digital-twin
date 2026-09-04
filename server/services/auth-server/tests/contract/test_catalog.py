@@ -6,7 +6,7 @@
 
 from auth_server.apps.auth import catalog
 from auth_server.apps.auth.models import PERMISSION_KINDS
-from auth_server.apps.auth.services.matching import is_redundant
+from auth_server.apps.auth.services.matching import decide, is_redundant
 from contract.rule_views import catalog_rule_views
 
 # 已发布的权限码字面量。**只许新增，不许改名或删除。**
@@ -52,6 +52,20 @@ PUBLISHED_CODES = frozenset(
         "llm:view",
         "llm:manage",
     }
+)
+
+PLATFORM_PREFIX = "/api/v1/platform"
+SAMPLE_ID = "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+
+# 一张挂了绑定的大屏在运行态要打的读端点。⚠ 三族三个码：大屏本身要
+# `dashboard:view`，archive 绑定的格子读点位历史要 `collect:view`，dataset
+# 绑定的格子先由台账 code 解出 table_id 再取序列，两趟都要 `dataset:view`
+DASHBOARD_RUNTIME_READS: tuple[tuple[str, str], ...] = (
+    (f"{PLATFORM_PREFIX}/dashboards/{SAMPLE_ID}", "GET"),
+    (f"{PLATFORM_PREFIX}/point-histories", "GET"),
+    (f"{PLATFORM_PREFIX}/point-histories:aggregate", "POST"),
+    (f"{PLATFORM_PREFIX}/dataset-tables", "GET"),
+    (f"{PLATFORM_PREFIX}/dataset-tables/{SAMPLE_ID}/series", "GET"),
 )
 
 
@@ -110,6 +124,25 @@ def test_viewer_role_is_derived_from_the_view_tier() -> None:
         role for role in catalog.ROLES if role.name == catalog.ROLE_VIEWER
     )
     assert frozenset(viewer.codes) == frozenset(catalog.VIEW_CODES)
+
+
+def test_the_viewer_role_reads_every_endpoint_a_bound_screen_needs() -> None:
+    # 缺 `collect:view` 或 `dataset:view` 的表现不是打不开大屏，而是屏照常
+    # 打开、挂了历史或台账绑定的那几格各自 403
+    views = catalog_rule_views()
+    held = frozenset(
+        next(
+            role for role in catalog.ROLES if role.name == catalog.ROLE_VIEWER
+        ).codes
+    )
+    denied = [
+        f"{method} {path}"
+        for path, method in DASHBOARD_RUNTIME_READS
+        if not decide(
+            views, path=path, method=method, held_codes=held
+        ).is_allowed
+    ]
+    assert denied == []
 
 
 def test_role_manage_is_grouped_under_user_not_its_code_prefix() -> None:
