@@ -12946,6 +12946,18 @@
             "title": "Exported Ports",
             "type": "array"
           },
+          "fitted": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fitted"
+          },
           "has_preview": {
             "title": "Has Preview",
             "type": "boolean"
@@ -12970,6 +12982,18 @@
             "additionalProperties": true,
             "title": "Preview",
             "type": "object"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report"
           },
           "status": {
             "enum": [

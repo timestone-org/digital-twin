@@ -10,6 +10,8 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from platform_server.apps.modeling.operators.reporting import ReportBlock
+
 # 一个帧端口上的列 key 与顺序；`None` = 静态推不出来。
 # ⚠ 是**有序**的元组不是集合：绑定按位置把形参映射到特征上，顺序一变，存量绑定
 # 就静默错位——温度喂进了负荷那一格，算出来的还是个数
@@ -246,6 +248,15 @@ class OperatorBase:
         Args: inputs。
         """
         raise NotImplementedError
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """这一步要在结果面上讲的块；默认一块都不讲。
+
+        ⚠ 必须在 `run()` 之后调，且**必须随 `NodeResult` 回传**：算子实例跑在
+        子进程里、用完即弃，执行器那边拿不回来
+        （docs/MODELING_RESULT_VIEW_DESIGN.md §4.4）。
+        """
+        return ()
 
     @classmethod
     def describe_columns(
