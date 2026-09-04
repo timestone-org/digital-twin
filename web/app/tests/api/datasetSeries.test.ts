@@ -3,6 +3,8 @@
  * 线形逐点转成 `HistoryPoint`、触顶砍的是更早那一头。
  * ⚠ 台账编码解不出表时必须诚实报错：清单装不下一页与「没有这张表」是两回事，
  * 说成后者等于把翻页没翻到栽给用户的配置。
+ * ⚠ 缓存住的清单会旧：解不出的编码要先作废重取一次再判，否则同一次会话里新建的
+ * 台账在绑点面板里挑得到、在图上却一直报解不出。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DatasetSeries, DatasetTableSummary, Page } from '@dt/contracts'
@@ -271,18 +273,64 @@ describe('解不出表', () => {
     })
   })
 
-  it('清单里没有这个编码时说的是找不到这张表', async () => {
+  it('⚠ 清单里没有这个编码时不预设原因：可能编码写错、可能没权限，不是必然被删了', async () => {
     const found = await readDatasetSeries(
       [request('a', 'ds:missing:kwh'), request('b', 'ds:energy:kwh')],
       undefined,
       NOW,
     )
 
+    // 这一拍的清单本来就是刚拉的，不必再重取一次
+    expect(tablesMock).toHaveBeenCalledTimes(1)
     expect(found.get('a')).toEqual({
       state: 'error',
-      message: expect.stringContaining('找不到台账编码 missing'),
+      message: '台账清单里没有编码 missing，解不出这条绑定指向的表',
     })
     expect(found.get('b')).toMatchObject({ state: 'ok' })
+  })
+
+  it('⚠ 解不出的编码先作废缓存重取一次：同一次会话里新建的台账当场解得出', async () => {
+    await readDatasetSeries([request('a', 'ds:energy:kwh')], undefined, NOW)
+    tablesMock.mockResolvedValue(
+      tablePage([table('energy', 't-1'), table('fresh', 't-2')]),
+    )
+
+    const found = await readDatasetSeries(
+      [request('b', 'ds:fresh:kwh')],
+      undefined,
+      NOW,
+    )
+
+    expect(tablesMock).toHaveBeenCalledTimes(2)
+    expect(seriesMock.mock.calls.at(-1)?.[0]).toBe('t-2')
+    expect(found.get('b')).toMatchObject({ state: 'ok' })
+  })
+
+  it('重取过还是没有才报解不出，且只重取一次', async () => {
+    await readDatasetSeries([request('a', 'ds:energy:kwh')], undefined, NOW)
+
+    const found = await readDatasetSeries(
+      [request('b', 'ds:missing:kwh')],
+      undefined,
+      NOW,
+    )
+
+    expect(tablesMock).toHaveBeenCalledTimes(2)
+    expect(found.get('b')).toMatchObject({ state: 'error' })
+  })
+
+  it('重取失败不改判：解得出的那几条照常出数', async () => {
+    await readDatasetSeries([request('a', 'ds:energy:kwh')], undefined, NOW)
+    tablesMock.mockRejectedValue(new Error('清单挂了'))
+
+    const found = await readDatasetSeries(
+      [request('b', 'ds:missing:kwh'), request('c', 'ds:energy:kwh')],
+      undefined,
+      NOW,
+    )
+
+    expect(found.get('b')).toMatchObject({ state: 'error' })
+    expect(found.get('c')).toMatchObject({ state: 'ok' })
   })
 
   it('清单取不到不缓存：抖一次之后下一拍还能解出来', async () => {

@@ -26,6 +26,9 @@ const TABLE_PAGE_SIZE = 200
  * 台账编码 → 台账 id 的映射，取到一次就缓存住。
  * ⚠ 失败不缓存，故这里存的是那次取数本身：一次网络抖动不该让这一屏此后
  * 永远解不出表。
+ * ⚠ 缓存住的这份会旧：同一次会话里新建的台账不在里面，而绑点面板每次挂载都
+ * 重拉——于是同一张表在那边挑得到、在图上却报解不出。解不出的编码要先作废
+ * 重取一次再判，见 `resolveTables`。
  */
 let tableIds: Promise<ReadonlyMap<string, string>> | null = null
 
@@ -132,7 +135,7 @@ async function groupByTable(
   const groups = new Map<string, DatasetGroup>()
   let tables: ReadonlyMap<string, string>
   try {
-    tables = await loadTableIds()
+    tables = await resolveTables(wanted)
   } catch (caught) {
     const message = failureText(caught)
     for (const one of wanted)
@@ -142,9 +145,11 @@ async function groupByTable(
   for (const one of wanted) {
     const tableId = tables.get(one.code)
     if (tableId === undefined) {
+      // ⚠ 不预设原因：清单已经重取过一次，剩下的可能是编码写错了、表被删了、
+      //   或者这个账号看不到它——挑一个说出来，用户就会照着那一个方向去查
       found.set(one.fieldKey, {
         state: 'error',
-        message: `找不到台账编码 ${one.code}，这条绑定指向的表已经不在了`,
+        message: `台账清单里没有编码 ${one.code}，解不出这条绑定指向的表`,
       })
       continue
     }
@@ -173,20 +178,47 @@ function absorb(
 }
 
 /**
+ * 这一批要的编码都解得出吗？解不出的先当成缓存旧了，作废重取一次再判。
+ * ⚠ 只在吃到缓存时重取：这一拍才拉回来的那份不必再拉一次。
+ * ⚠ 重取失败不改判：本来解得出的那几条照常出数，解不出的仍旧按解不出说——
+ * 为了一条编码把整批拖成取数失败，是拿一条坏绑定去换一屏图。
+ * @param wanted 这一批拆好的绑定
+ */
+async function resolveTables(
+  wanted: readonly Wanted[],
+): Promise<ReadonlyMap<string, string>> {
+  const first = await loadTableIds()
+  if (first.isFresh) return first.tables
+  if (wanted.every((one) => first.tables.has(one.code))) return first.tables
+  tableIds = null
+  try {
+    return (await loadTableIds()).tables
+  } catch {
+    return first.tables
+  }
+}
+
+/** 一份台账映射，外加它是不是这一拍才拉的。 */
+interface TableIds {
+  tables: ReadonlyMap<string, string>
+  isFresh: boolean
+}
+
+/**
  * 台账编码 → id，取一次缓存住。
  * ⚠ 没有 by-code 端点，只能拉一页清单本地匹配；**装不下一页就报错**而不是当成
  * 「没有这张表」——两者在界面上长得一样，而后者会把「翻页没翻到」说成用户配错了。
  * 已知欠账：前端补 `q` 查询参数或后端补一条 by-code 端点，有其一就不必整页拉。
  */
-async function loadTableIds(): Promise<ReadonlyMap<string, string>> {
+async function loadTableIds(): Promise<TableIds> {
   const cached = tableIds
-  if (cached !== null) return await cached
+  if (cached !== null) return { tables: await cached, isFresh: false }
   const loading = readTableIds().catch((caught: unknown) => {
     tableIds = null
     throw caught
   })
   tableIds = loading
-  return await loading
+  return { tables: await loading, isFresh: true }
 }
 
 /** 真去拉那一页台账清单。 */

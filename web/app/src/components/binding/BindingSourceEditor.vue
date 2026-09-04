@@ -33,6 +33,7 @@ import {
 import { computed } from 'vue'
 
 import { windowToMs } from '@/api/pointHistories'
+import { isBucketOutOfReach } from '@/api/pointSeries'
 import {
   TREND_BUCKET_AUTO,
   trendBucketChoices,
@@ -138,14 +139,18 @@ const bucketValue = computed(
  * 当前相对窗下的桶宽档位。
  * ⚠ 够不着的那几档禁掉而不是藏掉：藏掉会让人以为只看得到这么细，而实际上
  * 把相对窗缩小一点就选得上了。
+ * ⚠ 判据是「取数要切几段」而不是「一次问得下几个桶」：长窗配细档是切段问的，
+ * 按一次的桶数判会把一年窗的日桶也禁掉——而一年日历本来就是一格一天，退到
+ * 两天一格之后有一半格子是空的，且空格与「那几天真停机」长得一模一样。
  */
-const bucketOptions = computed<DtSelectOption[]>(() =>
-  trendBucketChoices(windowToMs(window.value)).map((one) => ({
+const bucketOptions = computed<DtSelectOption[]>(() => {
+  const windowMs = windowToMs(window.value)
+  return trendBucketChoices(windowMs).map((one) => ({
     value: one.value,
     label: one.label,
-    disabled: one.isTooFine,
-  })),
-)
+    disabled: isBucketOutOfReach(windowMs, one.value),
+  }))
+})
 
 /** 聚合下拉当前选中的那一档；空串即没配过、跟服务端缺省走。 */
 const aggregateValue = computed(() => archiveDetail.value?.aggregate ?? '')

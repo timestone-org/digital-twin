@@ -10,6 +10,7 @@ import type {
   BindingSourceKind,
   BindingSpec,
   CollectAggregate,
+  DtSelectOption,
 } from '@dt/contracts'
 import { BINDING_SOURCE_KINDS } from '@dt/contracts'
 import { DtSelect } from '@dt/ui'
@@ -212,6 +213,16 @@ describe('分桶取数口径', () => {
     lastWindow?: string
   }
 
+  /** 桶宽下拉这一刻摆出来的那几档。 */
+  function bucketOptions(
+    wrapper: ReturnType<typeof mountEditor>,
+  ): readonly DtSelectOption[] {
+    const raw: unknown = wrapper
+      .findAllComponents(DtSelect)[0]
+      ?.props('options')
+    return raw as readonly DtSelectOption[]
+  }
+
   /** 点位历史那一支，带上已经配好的分桶口径。 */
   function archive(over: Bucketing = {}): BindingPayload {
     const { lastWindow = '24h', ...bucketing } = over
@@ -326,6 +337,21 @@ describe('分桶取数口径', () => {
       range: { lastWindow: '7d' },
       timezone: 'Asia/Shanghai',
     })
+  })
+
+  it('⚠ 一年窗下日桶必须选得动：够不着的判据是切几段，不是一次问得下几个桶', () => {
+    // 一年日历本来就是一格一天。按「一次问得下 190 个桶」判的话，365 天窗只
+    // 剩两天一格——热力图上一半格子是空的，而空格与「那几天真停机」长得一样
+    const wrapper = mountEditor(archive({ lastWindow: '365d' }))
+    const at = (value: string): DtSelectOption | undefined =>
+      bucketOptions(wrapper).find((one) => one.value === value)
+
+    expect(at(TREND_BUCKET_AUTO)?.disabled).toBe(false)
+    expect(at('1d')?.disabled).toBe(false)
+    expect(at('12h')?.disabled).toBe(false)
+    // 细到切爆段数上限的那几档照旧禁掉：它们到了取数那一步一定会被降档
+    expect(at('1h')?.disabled).toBe(true)
+    expect(at('1s')?.disabled).toBe(true)
   })
 
   it('桶宽档位跟着相对窗走，而不是一张固定的表', async () => {
