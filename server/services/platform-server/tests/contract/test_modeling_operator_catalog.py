@@ -23,7 +23,7 @@ from platform_server.apps.modeling.operators import (
     registry,
 )
 from platform_server.apps.modeling.operators.base import PREFETCHED_KEY
-from platform_server.apps.modeling.operators.cleaning import (
+from platform_server.apps.modeling.operators.resample import (
     _FOLDERS as FOLDERS,
 )
 

@@ -23,11 +23,9 @@ from platform_server.apps.modeling.operators.base import (
     PortSpec,
 )
 from platform_server.apps.modeling.operators.cleaning import (
-    AGG_FUNCS,
     CastType,
     DropMissing,
     FilterRows,
-    Resample,
 )
 from platform_server.apps.modeling.operators.diagnostics import (
     CrossValidate,
@@ -54,11 +52,7 @@ from platform_server.apps.modeling.operators.frame import (
     Provenance,
 )
 from platform_server.apps.modeling.operators.join import LedgerJoin
-from platform_server.apps.modeling.operators.model import (
-    LinearRegressionOperator,
-    LogisticRegressionOperator,
-    SplitDataset,
-)
+from platform_server.apps.modeling.operators.model import SplitDataset
 from platform_server.apps.modeling.operators.payloads import (
     MetricsPayload,
     ModelPayload,
@@ -76,6 +70,14 @@ from platform_server.apps.modeling.operators.registry import (
     OperatorRegistryError,
     register_operator,
     registry,
+)
+from platform_server.apps.modeling.operators.regression import (
+    LinearRegressionOperator,
+    LogisticRegressionOperator,
+)
+from platform_server.apps.modeling.operators.resample import (
+    AGG_FUNCS,
+    Resample,
 )
 from platform_server.apps.modeling.operators.source import LedgerSource
 from platform_server.apps.modeling.operators.timefeature import (
