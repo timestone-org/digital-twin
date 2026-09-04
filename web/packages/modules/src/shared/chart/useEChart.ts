@@ -1,6 +1,6 @@
 /**
- * @fileoverview 图表挂载的唯一样板：建实例 → 首帧 → 尺寸/换肤跟随 → 释放。
- * 族组件因此只剩 props、空态口径与一个 build 闭包。
+ * @fileoverview 图表挂载的唯一样板：建实例 → 首帧 → 尺寸/换肤跟随 → 释放，
+ * 并把舞台缩放折进画布的位图分辨率。族组件因此只剩 props、空态口径与一个 build 闭包。
  * 容器不要求常驻：挂 v-if 或被 :key 置换时，元素出现即（重）建、消失即释放。
  */
 import type { InteractionEvent } from '@dt/contracts'
@@ -30,6 +30,49 @@ export interface UseEChartOptions {
   onItemClick?: ((event: InteractionEvent) => void) | undefined
   /** 点击取值口径；缺省「类目名，退回系列名」。 */
   itemValueOf?: ((params: unknown) => string) | undefined
+}
+
+// 缩放比偏出这一档才值得 dispose 重建：编辑器逐格缩放时不至于每一步都重建
+const DPR_REBUILD_RATIO = 0.25
+
+/**
+ * 画布该用的位图分辨率倍率 = 屏幕像素比 × 宿主在舞台上的累积缩放比。
+ * 缩放比就地量：`getBoundingClientRect().width` 含祖先 transform，`offsetWidth`
+ * 是未变换的布局宽，两者一比就是大屏舞台那层 `scale()`。
+ * ⚠ 大屏把整个节点树套在 `scale()` 上，只按屏幕像素比建图会让 1920 设计屏铺到
+ * 3840 墙屏时位图只有一半分辨率；而 ResizeObserver 量的是 border-box、与祖先
+ * transform 无关，所以这个糊没有自愈路径。
+ * ⚠ 元素还没布局时布局宽是 0，除下去是 Infinity，这一档只按屏幕像素比算。
+ * @param host 图表挂载点
+ */
+function chartDprOf(host: HTMLElement): number {
+  const layoutWidth = host.offsetWidth
+  if (layoutWidth <= 0) return window.devicePixelRatio
+  return (
+    (window.devicePixelRatio * host.getBoundingClientRect().width) / layoutWidth
+  )
+}
+
+/**
+ * 舞台缩放比偏到该连实例一起重建的地步了没有。
+ * ⚠ 只能重建：echarts 的位图分辨率只在 init 时读，改这个数对活着的实例没有效果。
+ * @param host 图表挂载点
+ * @param builtDpr 建这个实例时用的倍率
+ */
+function dprDrifted(host: HTMLElement, builtDpr: number): boolean {
+  return Math.abs(chartDprOf(host) - builtDpr) > builtDpr * DPR_REBUILD_RATIO
+}
+
+/** 画一帧：全量重建，或只换族指定的那几个键。 */
+function paint(
+  chart: ChartHandle,
+  opts: UseEChartOptions,
+  full: boolean,
+): void {
+  const update = full
+    ? { notMerge: true }
+    : { replaceMerge: opts.partialMerge ?? ['series'] }
+  chart.setOption(opts.build(full), update)
 }
 
 /** echarts 点击回调里我们要用的几样东西（zrender 事件裹着原生事件）。 */
@@ -63,15 +106,18 @@ function createBinder(opts: UseEChartOptions) {
   let chart: ChartHandle | null = null
   let observer: ResizeObserver | null = null
   let boundEl: HTMLElement | null = null
+  // 当前这个实例是按哪个分辨率倍率建的；echarts 只在 init 时读它，比值变了只能重建
+  let builtDpr = 0
   // 建实例要 await 动态 import；期间容器换了或已卸载，回来的实例必须当场扔掉
   let generation = 0
 
+  /** 刷新一帧；只有全量那一档复查缩放比，值刷新每秒都来、量布局不值当。 */
   function refresh(full: boolean): void {
-    if (!chart) return
-    const update = full
-      ? { notMerge: true }
-      : { replaceMerge: opts.partialMerge ?? ['series'] }
-    chart.setOption(opts.build(full), update)
+    if (full && boundEl && chart && dprDrifted(boundEl, builtDpr)) {
+      void attach(boundEl)
+      return
+    }
+    if (chart) paint(chart, opts, full)
   }
 
   function detach(): void {
@@ -87,7 +133,8 @@ function createBinder(opts: UseEChartOptions) {
     detach()
     const token = generation
     boundEl = el
-    const instance = await createChart(el)
+    builtDpr = chartDprOf(el)
+    const instance = await createChart(el, { devicePixelRatio: builtDpr })
     if (token !== generation) {
       instance.dispose()
       return
@@ -95,7 +142,7 @@ function createBinder(opts: UseEChartOptions) {
     chart = instance
     // 事件必须每次重建都重新注册：实例是 dispose 后新建的，监听不会跟着活过来
     if (opts.onItemClick) instance.onClick(clickHandler(opts))
-    refresh(true)
+    paint(instance, opts, true)
     observer = new ResizeObserver(() => instance.resize())
     observer.observe(el)
   }
