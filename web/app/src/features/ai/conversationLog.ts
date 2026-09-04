@@ -258,10 +258,17 @@ function withoutImage(step: RunnerStep): RunnerStep {
   return next
 }
 
+/** 模型收了嘴却一个字都没说时，界面上留的那句话。 */
+export const SAID_NOTHING = '模型这一轮没有给出答复，再问一次试试。'
+
 /**
  * 回合结束：把没长完的收口，并在**一个字都没流出来**时补上整段答复。
  * ⚠ 流出来过就不补：补了会让同一段话在界面上出现两遍，而这只在真模型上
  * 才看得见——假件是一次性回全的，两条路在本地长得一模一样。
+ * ⚠ 一个字都没流出来、整段答复又是空的时候**要留一句话**：回合确实结束了
+ * （等浏览器那一档走的是另一帧），而界面上什么都不添的表现是「问完之后什么
+ * 也没发生」——用户分不清是它在想、是坏了、还是自己没点上。实测小模型会把
+ * 话全说进思考那一路然后收嘴。
  * @param log 当前时间线
  * @param reply 服务端给的整段答复
  */
@@ -270,7 +277,7 @@ export function withReply(
   reply: string,
 ): ConversationLog {
   if (log.saidTextId !== null) return { ...sealed(log), saidTextId: null }
-  if (reply === '') return sealed(log)
+  if (reply === '') return withSaid(log, 'note', SAID_NOTHING)
   return withSaid(log, 'assistant', reply)
 }
 

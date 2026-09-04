@@ -334,3 +334,46 @@ async def test_without_a_context_budget_nothing_shrinks() -> None:
         if isinstance(one, ToolMessage)
     ]
     assert sizes[0] == sizes[1]
+
+
+async def test_a_turn_that_says_nothing_is_reported_not_swallowed(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """⚠ 回合正常结束、每一步都成功，而模型一个字都没说——实测小模型会把话全
+    说进思考那一路然后收嘴。不记的话，这一类「问完之后什么也没发生」在日志里
+    查不出任何异常。"""
+    responder = ScriptedResponder([AIMessage(content="")])
+
+    with caplog.at_level("WARNING"):
+        got = await run_turn(_deps(responder), [])
+
+    assert got.reply == ""
+    events = [
+        getattr(one, "payload", {}).get("event") for one in caplog.records
+    ]
+    assert "turn_said_nothing" in events
+
+
+async def test_the_tools_stop_being_offered_once_the_room_is_gone() -> None:
+    """⚠ 没地方了还接着下发工具的表现是：模型接着查、每次只拿得到几百字、
+    上下文仍在往上飘，最后整个回合以一句「模型端点认为请求不合法」告终，
+    用户一个字都拿不到。少答几条总比不答好。"""
+    calls = [
+        AIMessage(content="", tool_calls=[tool_call("kb.search", {}, "c1")]),
+        AIMessage(content="就这些"),
+    ]
+    responder = ScriptedResponder(calls)
+
+    async def fat(name: str, arguments: dict[str, Any]) -> object:
+        del name, arguments
+        return {"body": "甲" * 3000}
+
+    deps = replace(
+        _deps(responder, fat),
+        max_context_chars=1500,
+        max_tool_result_chars=3000,
+    )
+    await run_turn(deps, [])
+
+    # 第一次问带着工具声明，塞不下之后那一次一个都不带
+    assert responder.tools_seen == [2, 0]

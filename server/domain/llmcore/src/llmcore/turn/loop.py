@@ -275,14 +275,15 @@ def _thinker(deps: TurnDeps) -> Callable[[TurnState], Awaitable[TurnUpdate]]:
         spec.name for spec in deps.specs if spec.runs_on == "client"
     )
     schemas = [openai_schema(spec) for spec in deps.specs]
-
+    overhead = _overhead(schemas)
     offered = frozenset(spec.name for spec in deps.specs)
 
     async def think(state: TurnState) -> TurnUpdate:
+        used = _used(state["messages"], overhead)
         answered = await deps.model.respond(
             choice=deps.choice,
             messages=list(state["messages"]),
-            tools=schemas,
+            tools=schemas if _has_room(deps, used) else [],
             on_delta=deps.on_delta,
         )
         reply = _salvaged(answered, offered)
@@ -343,12 +344,13 @@ def _tool_step(
     client_names = frozenset(
         spec.name for spec in deps.specs if spec.runs_on == "client"
     )
+    overhead = _overhead([openai_schema(spec) for spec in deps.specs])
 
     async def use_tools(state: TurnState) -> TurnUpdate:
         asked = _tool_calls(state["messages"])
         outputs: list[BaseMessage] = []
         steps: list[TurnStep] = []
-        used = sum(sized(one) for one in state["messages"])
+        used = _used(state["messages"], overhead)
         for call in asked:
             if call.name in client_names:
                 continue
@@ -405,6 +407,41 @@ async def _run_one(
             output_json={"body": body},
         ),
     )
+
+
+def _overhead(schemas: Sequence[dict[str, Any]]) -> int:
+    """工具声明本身占多少字。
+
+    ⚠ 每一次调用都要**连工具声明一起**发出去，而它不在消息列表里。不算进去的
+    表现是：预算算得比真实宽出一大截，于是「按剩余地方收紧」这条闸看着在起
+    作用、实际每一轮都往上飘，最后还是 400（实测那台端点上，声明加提示词的
+    固定前缀就将近 2000 token）。
+
+    Args: schemas。
+    """
+    return len(json.dumps(schemas, ensure_ascii=False))
+
+
+def _used(messages: Sequence[BaseMessage], overhead: int) -> int:
+    """这一轮到此刻占了多少字，连工具声明一起。
+
+    Args: messages, overhead。
+    """
+    return overhead + sum(sized(one) for one in messages)
+
+
+def _has_room(deps: TurnDeps, used: int) -> bool:
+    """还有地方再查一次吗。
+
+    ⚠ 没地方了就**不再下发工具**，让模型拿现有资料作答。继续下发的表现是它
+    接着查、每次只拿得到几百字、而上下文仍在往上飘——最后整个回合以一句
+    「模型端点认为请求不合法」告终，用户一个字都拿不到。少答几条总比不答好。
+
+    Args: deps, used。
+    """
+    if deps.max_context_chars <= 0:
+        return True
+    return used + MIN_TOOL_RESULT_CHARS < deps.max_context_chars
 
 
 def _room(deps: TurnDeps, used: int) -> int:
@@ -506,12 +543,23 @@ def _outcome(final: dict[str, Any], seeded: int) -> TurnOutcome:
     """
     messages = list(final.get("messages") or [])
     pending = tuple(final.get("pending") or ())
-    return TurnOutcome(
+    made = TurnOutcome(
         messages=messages[seeded:],
         steps=list(final.get("steps") or []),
         pending=pending,
         reply=_last_text(messages),
     )
+    if not made.reply and not made.is_waiting:
+        # ⚠ 响亮记一条：回合正常结束、每一步都成功，而模型一个字都没说。
+        # 实测小模型会把话全说进思考那一路然后收嘴，界面上是一片空白——不记的
+        # 话，这一类「问完之后什么也没发生」在日志里查不出任何异常。
+        # ⚠ 记在这里而不是某一条路上：`run_turn` 与 `stream_turn` 都从这里出结果
+        _logger.warning(
+            "turn_said_nothing",
+            "回合结束了，模型一个字都没说",
+            steps=len(made.steps),
+        )
+    return made
 
 
 def _last_text(messages: Sequence[BaseMessage]) -> str:

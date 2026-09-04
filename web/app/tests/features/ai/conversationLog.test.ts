@@ -18,6 +18,7 @@ import {
   withCitations,
   withDelta,
   withReply,
+  SAID_NOTHING,
   withSaid,
   withStep,
   type ConversationLog,
@@ -124,8 +125,22 @@ describe('回合收尾', () => {
     expect(texts(log)).toEqual(['绑好了'])
   })
 
-  it('答复是空串时什么都不添', () => {
-    expect(withReply(emptyLog(), '').entries).toEqual([])
+  // ⚠ 实测小模型会把话全说进思考那一路然后收嘴：回合确实结束了，而界面上
+  // 什么都不添的表现是「问完之后什么也没发生」——用户分不清是它在想、是坏了、
+  // 还是自己没点上
+  it('一个字都没说时留一句话，而不是一片空白', () => {
+    const log = withReply(emptyLog(), '')
+
+    expect(roles(log)).toEqual(['note'])
+    expect(texts(log)).toEqual([SAID_NOTHING])
+  })
+
+  it('流出来过就不会再补那句话——那一轮明明说了', () => {
+    let log = emptyLog()
+    log = withDelta(log, 'text', '上限 65 ℃')
+    log = withReply(log, '')
+
+    expect(roles(log)).toEqual(['assistant'])
   })
 
   it('收尾会把想的过程那一条也停住', () => {
