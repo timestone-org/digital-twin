@@ -9935,6 +9935,606 @@
       "bindings": []
     },
     {
+      "type": "trend-chart",
+      "display_name": "趋势曲线",
+      "category": "图表",
+      "description": "趋势曲线：把一条或多条点位归档 / 台账列的历史序列画成带真实时间轴的折线、面积或阶梯图，回答「这个数过去几小时怎么走的」。只要当前值用 info-card 或 data-card，要比几个量的高低用 bar-chart，要看占比构成用 pie-chart。一个数组绑定槽 `seriesValues`，行钉在 `series` 配置项上：第 i 行喂第 i 条曲线，行内 `series` 收历史序列（只有点位归档与数据台账两支给得出）、`latest` 收可选的实时末值。⚠ 取数窗口不在这份配置里——它住在每条绑定自己的取数说明上，由绑点面板写入；同一块图里两条系列的窗口可以不一样，时间轴按取回来的点铺。⚠ 实时末值只在它的采样时刻严格晚于序列末点时才接上去，时刻缺席一律不接：否则曲线尾巴上会凭空长出一个位置不明的点。⚠ 图例是逐条状态唯一的承载面，缺省开着；关掉它「等首帧」「取不到」「早段未取全」在屏上就一个字都没有。⚠ 公开屏不装历史取数，这块图在那里画不出曲线，空态会照实说明。",
+      "icon": "chart-line",
+      "keywords": [
+        "trend",
+        "line",
+        "area",
+        "history",
+        "quxian",
+        "zhexiantu",
+        "qushi",
+        "趋势",
+        "曲线",
+        "折线",
+        "折线图",
+        "面积图",
+        "历史",
+        "时序"
+      ],
+      "default_size": {
+        "width": 520,
+        "height": 300,
+        "min_width": 220,
+        "min_height": 160
+      },
+      "chrome": "card",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "default": "",
+          "placeholder": "留空隐藏标题栏",
+          "group": "数据",
+          "span": "full"
+        },
+        {
+          "key": "series",
+          "label": "系列",
+          "type": "array",
+          "default": [
+            {
+              "name": "系列 1",
+              "unit": "",
+              "color": "",
+              "axis": "left"
+            }
+          ],
+          "group": "数据",
+          "help": "每一项在绑点面板上是一行，行内两个槽：历史序列与可选的实时末值。⚠ 删掉中间一项，它之后每一条的绑定都会改喂前一条——删完请核对绑点面板。",
+          "span": "full",
+          "item_schema": [
+            {
+              "key": "name",
+              "label": "名称",
+              "type": "string",
+              "default": "",
+              "placeholder": "留空则按「第 N 条」称呼",
+              "help": "图例与提示框上的名字；留空时按「第 N 条」称呼它。点这条线上抛的联动值也是它，留空则这一条点了不上抛。⚠ 两条重名会被加上 #1 这样的后缀，否则 echarts 会把它们并成一条图例；上抛的仍是这里写的原名。"
+            },
+            {
+              "key": "unit",
+              "label": "单位",
+              "type": "string",
+              "default": "",
+              "placeholder": "留空跟随整块",
+              "help": "这一条自己的单位，提示框与数值标签用它。留空跟随整块那一档，首尾空格照原样保留。"
+            },
+            {
+              "key": "precision",
+              "label": "小数位",
+              "type": "number",
+              "help": "留空跟随整块那一档。",
+              "min": 0,
+              "max": 6,
+              "step": 1
+            },
+            {
+              "key": "color",
+              "label": "固定颜色",
+              "type": "color",
+              "default": "",
+              "help": "填了就固定这一条的颜色，压过色板。只填 var(--…) 引用，填死色值换肤时不跟着走。"
+            },
+            {
+              "key": "axis",
+              "label": "挂在哪根轴",
+              "type": "enum",
+              "default": "left",
+              "options": [
+                {
+                  "value": "left",
+                  "label": "左轴"
+                },
+                {
+                  "value": "right",
+                  "label": "右轴"
+                }
+              ],
+              "help": "⚠ 只有开了「双 Y 轴」才分得出两根轴；没开时右轴根本不存在，这一档静默等同左轴。"
+            },
+            {
+              "key": "lineType",
+              "label": "线型",
+              "type": "enum",
+              "default": "solid",
+              "options": [
+                {
+                  "value": "solid",
+                  "label": "实线"
+                },
+                {
+                  "value": "dashed",
+                  "label": "虚线"
+                },
+                {
+                  "value": "dotted",
+                  "label": "点线"
+                }
+              ],
+              "help": "两条颜色相近的曲线叠在一起时，换一种线型比换颜色更认得出。"
+            }
+          ],
+          "item_label_key": "name",
+          "min_items": 1
+        },
+        {
+          "key": "emptyText",
+          "label": "空态文案",
+          "type": "string",
+          "default": "暂无数据",
+          "group": "数据",
+          "help": "一条都画不出来时画在图区正中的那一句。⚠ 「这一页没有历史取数」与「窗口里确实没有点」两种情况另有专门的文案，不走这里。",
+          "span": "half"
+        },
+        {
+          "key": "chartStyle",
+          "label": "图表样式",
+          "type": "enum",
+          "default": "line",
+          "options": [
+            {
+              "value": "line",
+              "label": "折线"
+            },
+            {
+              "value": "smooth",
+              "label": "平滑曲线"
+            },
+            {
+              "value": "area",
+              "label": "面积"
+            },
+            {
+              "value": "stackedArea",
+              "label": "堆叠面积"
+            },
+            {
+              "value": "step",
+              "label": "阶梯"
+            }
+          ],
+          "group": "样式",
+          "span": "half"
+        },
+        {
+          "key": "palette",
+          "label": "自定义色板",
+          "type": "array",
+          "default": [],
+          "group": "样式",
+          "help": "留空使用主题色板；每行一个颜色，按系列顺序取用。",
+          "item_schema": [
+            {
+              "key": "color",
+              "label": "颜色",
+              "type": "color"
+            }
+          ]
+        },
+        {
+          "key": "areaGradient",
+          "label": "面积渐变",
+          "type": "boolean",
+          "default": false,
+          "group": "样式",
+          "help": "默认关闭（纯色填充）；开启后由主色派生上浓下透的竖向渐变。",
+          "span": "half",
+          "when": {
+            "key": "chartStyle",
+            "in": [
+              "area",
+              "stackedArea"
+            ]
+          }
+        },
+        {
+          "key": "areaGradientTo",
+          "label": "面积渐变末端色",
+          "type": "color",
+          "default": "",
+          "group": "样式",
+          "help": "留空由主色自动派生同色渐隐；支持 var(--x) 随换肤走。",
+          "span": "half",
+          "when": {
+            "key": "chartStyle",
+            "in": [
+              "area",
+              "stackedArea"
+            ]
+          }
+        },
+        {
+          "key": "areaTopAlpha",
+          "label": "面积起始透明度",
+          "type": "number",
+          "default": 0.3,
+          "group": "样式",
+          "help": "渐变顶端的不透明度，底端固定全透明。",
+          "span": "half",
+          "when": {
+            "key": "chartStyle",
+            "in": [
+              "area",
+              "stackedArea"
+            ]
+          },
+          "min": 0,
+          "max": 1,
+          "step": 0.05
+        },
+        {
+          "key": "areaOpacity",
+          "label": "面积整体不透明度",
+          "type": "number",
+          "default": 0.18,
+          "group": "样式",
+          "help": "叠在填充色之上的整体透明度，与渐变无关，纯色填充时也生效。",
+          "span": "half",
+          "when": {
+            "key": "chartStyle",
+            "in": [
+              "area",
+              "stackedArea"
+            ]
+          },
+          "min": 0,
+          "max": 1,
+          "step": 0.02
+        },
+        {
+          "key": "showSymbol",
+          "label": "显示数据点",
+          "type": "boolean",
+          "default": false,
+          "group": "样式",
+          "help": "关闭后只画线不画点，密集时序远观更干净。",
+          "span": "half"
+        },
+        {
+          "key": "symbolSize",
+          "label": "数据点大小",
+          "type": "number",
+          "default": 6,
+          "group": "样式",
+          "span": "half",
+          "when": {
+            "key": "showSymbol",
+            "in": [
+              true
+            ]
+          },
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "unit",
+          "label": "单位",
+          "type": "string",
+          "default": "",
+          "group": "样式",
+          "span": "half"
+        },
+        {
+          "key": "precision",
+          "label": "小数位",
+          "type": "number",
+          "group": "样式",
+          "help": "留空自动（最多 2 位、去尾随零）",
+          "span": "half",
+          "min": 0,
+          "max": 6,
+          "step": 1
+        },
+        {
+          "key": "showDataZoom",
+          "label": "显示缩放条",
+          "type": "boolean",
+          "default": false,
+          "group": "样式",
+          "help": "类目较多时启用横向滑动缩放。",
+          "span": "half"
+        },
+        {
+          "key": "xAxisName",
+          "label": "X 轴名称",
+          "type": "string",
+          "default": "",
+          "group": "坐标轴",
+          "span": "half"
+        },
+        {
+          "key": "yAxisName",
+          "label": "Y 轴名称",
+          "type": "string",
+          "default": "",
+          "group": "坐标轴",
+          "span": "half"
+        },
+        {
+          "key": "yScale",
+          "label": "数值轴不强制含 0",
+          "type": "boolean",
+          "default": true,
+          "group": "坐标轴",
+          "help": "默认从 0 起；开启后按数据范围自适应，适合高基线上的窄幅波动。",
+          "span": "half"
+        },
+        {
+          "key": "boundaryGap",
+          "label": "类目轴两端留白",
+          "type": "boolean",
+          "default": false,
+          "group": "坐标轴",
+          "help": "关闭后曲线 / 面积贴紧左右边缘。",
+          "span": "half"
+        },
+        {
+          "key": "dualAxis",
+          "label": "双 Y 轴",
+          "type": "boolean",
+          "default": false,
+          "group": "坐标轴",
+          "help": "量纲差得远的两组量（功率与温度）叠在一根轴上，小的那条会被压成一条平线。⚠ 参考线跟着左轴走。",
+          "span": "half"
+        },
+        {
+          "key": "rightAxisName",
+          "label": "右轴名称",
+          "type": "string",
+          "default": "",
+          "placeholder": "留空不显示",
+          "group": "坐标轴",
+          "help": "双轴时右边那根轴的名字；刻度上不写单位，单位写在这里。",
+          "span": "half",
+          "when": {
+            "key": "dualAxis",
+            "in": [
+              true
+            ]
+          }
+        },
+        {
+          "key": "showLegend",
+          "label": "显示图例",
+          "type": "boolean",
+          "default": true,
+          "group": "图例",
+          "span": "half"
+        },
+        {
+          "key": "showTooltip",
+          "label": "显示提示框",
+          "type": "boolean",
+          "default": true,
+          "group": "提示框",
+          "span": "half"
+        },
+        {
+          "key": "showValueLabel",
+          "label": "显示数值标签",
+          "type": "boolean",
+          "default": false,
+          "group": "数据标签",
+          "span": "half"
+        },
+        {
+          "key": "animation",
+          "label": "启用动画",
+          "type": "boolean",
+          "default": false,
+          "group": "动画",
+          "help": "默认关闭；开启后首帧入场与数据更新会带过渡。",
+          "span": "half"
+        },
+        {
+          "key": "animationDuration",
+          "label": "动画时长(ms)",
+          "type": "number",
+          "default": 600,
+          "group": "动画",
+          "help": "首帧入场 / 数据更新的过渡时长；仅在启用动画时生效。",
+          "span": "half",
+          "when": {
+            "key": "animation",
+            "in": [
+              true
+            ]
+          },
+          "min": 0,
+          "step": 50
+        },
+        {
+          "key": "refLines",
+          "label": "参考线",
+          "type": "array",
+          "default": [],
+          "group": "参考线",
+          "help": "阈值线 / 目标线 / 基线；留空不画。",
+          "item_schema": [
+            {
+              "key": "value",
+              "label": "参考值",
+              "type": "number"
+            },
+            {
+              "key": "label",
+              "label": "文字",
+              "type": "string",
+              "placeholder": "留空只画线不写字"
+            },
+            {
+              "key": "color",
+              "label": "颜色",
+              "type": "color"
+            },
+            {
+              "key": "lineType",
+              "label": "线型",
+              "type": "enum",
+              "default": "dashed",
+              "options": [
+                {
+                  "value": "dashed",
+                  "label": "虚线"
+                },
+                {
+                  "value": "solid",
+                  "label": "实线"
+                },
+                {
+                  "value": "dotted",
+                  "label": "点线"
+                }
+              ]
+            },
+            {
+              "key": "fontSize",
+              "label": "文字字号",
+              "type": "number",
+              "min": 6,
+              "max": 40,
+              "step": 1
+            }
+          ],
+          "item_label_key": "label"
+        }
+      ],
+      "bindings": [
+        {
+          "key": "seriesValues",
+          "label": "曲线数据",
+          "data_type": "number",
+          "is_array": true,
+          "is_entity_pinned": true,
+          "array_fields": [
+            {
+              "key": "series",
+              "label": "历史序列",
+              "data_type": "number",
+              "is_time_series": true
+            },
+            {
+              "key": "latest",
+              "label": "实时末值",
+              "data_type": "number"
+            }
+          ]
+        }
+      ],
+      "config_presets": [
+        {
+          "id": "process-line",
+          "label": "工艺曲线",
+          "hint": "素净折线 + 底部图例，数值轴按数据范围自适应；工艺温度这类窄幅波动看得出起伏。",
+          "config": {
+            "chartStyle": "line",
+            "palette": [],
+            "areaGradient": false,
+            "areaGradientTo": "",
+            "areaTopAlpha": 0.3,
+            "areaOpacity": 0.18,
+            "showSymbol": false,
+            "symbolSize": 6,
+            "showDataZoom": false,
+            "yScale": true,
+            "boundaryGap": false,
+            "dualAxis": false,
+            "showLegend": true,
+            "showTooltip": true,
+            "showValueLabel": false,
+            "animation": false,
+            "animationDuration": 600
+          }
+        },
+        {
+          "id": "filled-area",
+          "label": "渐变面积",
+          "hint": "面积 + 上浓下透的竖向渐变，一条主曲线单独占一块时最好看。",
+          "config": {
+            "chartStyle": "area",
+            "palette": [],
+            "areaGradient": true,
+            "areaGradientTo": "",
+            "areaTopAlpha": 0.35,
+            "areaOpacity": 0.9,
+            "showSymbol": false,
+            "symbolSize": 6,
+            "showDataZoom": false,
+            "yScale": false,
+            "boundaryGap": false,
+            "dualAxis": false,
+            "showLegend": true,
+            "showTooltip": true,
+            "showValueLabel": false,
+            "animation": false,
+            "animationDuration": 600
+          }
+        },
+        {
+          "id": "dual-axis",
+          "label": "双轴对比",
+          "hint": "开双 Y 轴：量纲差得远的两组量各挂一根轴，逐条在「系列」里选左右。⚠ 参考线跟着左轴走。",
+          "config": {
+            "chartStyle": "line",
+            "palette": [],
+            "areaGradient": false,
+            "areaGradientTo": "",
+            "areaTopAlpha": 0.3,
+            "areaOpacity": 0.18,
+            "showSymbol": false,
+            "symbolSize": 6,
+            "showDataZoom": false,
+            "yScale": true,
+            "boundaryGap": false,
+            "dualAxis": true,
+            "showLegend": true,
+            "showTooltip": true,
+            "showValueLabel": false,
+            "animation": false,
+            "animationDuration": 600
+          }
+        },
+        {
+          "id": "long-window",
+          "label": "长窗回放",
+          "hint": "带缩放条：一天以上的窗口拖着看局部。四套里唯一关掉图例的一套，代价是取不到数的那几条在屏上没有说明。",
+          "config": {
+            "chartStyle": "line",
+            "palette": [],
+            "areaGradient": false,
+            "areaGradientTo": "",
+            "areaTopAlpha": 0.3,
+            "areaOpacity": 0.18,
+            "showSymbol": false,
+            "symbolSize": 4,
+            "showDataZoom": true,
+            "yScale": true,
+            "boundaryGap": false,
+            "dualAxis": false,
+            "showLegend": false,
+            "showTooltip": true,
+            "showValueLabel": false,
+            "animation": false,
+            "animationDuration": 600
+          }
+        }
+      ],
+      "content_keys": [
+        "title",
+        "series",
+        "emptyText",
+        "rightAxisName"
+      ]
+    },
+    {
       "type": "twin-2d-view",
       "display_name": "2D 孪生",
       "category": "孪生",

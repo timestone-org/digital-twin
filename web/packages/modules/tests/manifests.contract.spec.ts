@@ -43,6 +43,10 @@ import {
   SLICE_ITEMS_KEY,
   SLICE_SLOT_KEY,
 } from '../src/modules/pie-chart/slices'
+import {
+  SERIES_ITEMS_KEY,
+  SERIES_SLOT_KEY,
+} from '../src/modules/trend-chart/series'
 import { registerBuiltinModules } from '../src/registerBuiltins'
 import { __resetModules, listModules } from '../src/registry'
 import {
@@ -67,6 +71,8 @@ const KEY_CONSTANTS: Record<string, string> = {
   GAUGE_SLOT_KEY,
   LIST_ITEMS_KEY,
   LIST_SLOT_KEY,
+  SERIES_ITEMS_KEY,
+  SERIES_SLOT_KEY,
   SHOW_TITLE_CONFIG_KEY,
   SLICE_ITEMS_KEY,
   SLICE_SLOT_KEY,
@@ -231,6 +237,7 @@ describe('一个模块 = 一个目录', () => {
       'nav-tabs',
       'pie-chart',
       'text-block',
+      'trend-chart',
       'twin-2d-view',
       'twin-view',
     ])
