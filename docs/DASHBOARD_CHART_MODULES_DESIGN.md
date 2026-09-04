@@ -389,11 +389,21 @@ dev 构建下每渲染一次刷一条 `series not exists` 的 `console.warn`，�
 | 折线 / 柱 / 雷达（`trend-chart` / `bar-chart` / `radar-chart`） | 一个 series，图例名 = `series.name` | series **照常进 option**、`data` 给空数组。名字由 series 自己带着，图例认得出 |
 | 饼 / 漏斗（`pie-chart` / 后续同族） | 一个 **data 项**，图例名 = 该项的 `name` | 该项**必须进 `series.data`** 且 `value: null`，再逐项 `label`/`labelLine` 关掉、`itemStyle` 置灰。**不进 data 就等于这一档从屏上消失** |
 
-⚠ 这一条**单测抓不到**：图表族的组件用例把 echarts 整包打桩，断言的是 option 对象的形状，
-而这里错的是「这份合法的 option 交给真 echarts 之后画不出来」。
-故每个图表模块**必须**有一条拿真 echarts 跑 SSR（`renderer: 'svg'`、`ssr: true`、
-`renderToSVGString()`）的用例，断言非 `ok` 的那几个名字**真的出现在 SVG 里**。
-`pie-chart` 的那条就是照这个写的，后面几族照抄。
+⚠ 这一条**形状断言守不住**：图表族的组件用例把 echarts 整包打桩，断言的是 option 对象的形状，
+只能守住写用例那天预想到的几种走样；而这里错的是「这份形状完全合法的 option 交给真 echarts
+之后画不出来」。故每个图表模块**必须**有一条拿真 echarts 跑 SSR（`renderer: 'svg'`、
+`ssr: true`、`renderToSVGString()`）的用例，且要**正反两条**：正的断言非 `ok` 的那几个名字
+**真的出现在 SVG 里**；反的把那几个名字从认领路径上摘掉（饼族从 `series.data` 里剔掉，
+线/柱族改掉 `series.name`），断言它们**不在** SVG 里。反的那条钉的是「认领不到就真的画不
+出来」这条前提本身——哪天 echarts 改成图例照单全收，正的那条便悄悄失去意义。
+
+五个用 echarts 的模块各有一条，都在 `web/packages/modules/tests/modules/` 下：
+`pie-chart/ssr.spec.ts`、`bar-chart/legendSsr.spec.ts`、`radar-chart/ssr.test.ts`、
+`calendar-heat/ssr.spec.ts`，`trend-chart` 那条并在 `option.test.ts` 末尾的
+「真 echarts 画出来的样子」一组里（`data-table` 不画 echarts，不在此列）。
+⚠ 用例里按需 `use()` 一份带 `SVGRenderer` 的清单，不许 `import * as echarts`：
+整包会把所有组件都注册上，测不出真实的注册条件；`shared/chart/echarts.ts` 那份只装了
+CanvasRenderer，canvas 在 node 里出不了可断言的文本。
 
 ⚠ 饼族还有两处同源的坑：`stillShowZeroSum` 缺省 `true`，读数**全 0** 时会画出 N 等份的假扇形
 （要 `false` 并给一句专门的空态文案，「合计为 0」与「一片都画不出来」是两回事）；
