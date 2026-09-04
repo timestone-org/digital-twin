@@ -216,3 +216,65 @@ async def test_a_block_that_is_not_text_never_reaches_the_reply() -> None:
     got = await run_turn(_deps(responder), [])
 
     assert got.reply == "看图说话"
+
+
+async def test_a_tool_call_written_as_prose_is_actually_run() -> None:
+    """⚠ 小模型（与某些兼容网关）会把调用照训练时的写法打进正文。不捡的表现是
+    双重失败：那一步没人执行，而那坨尖括号原样成了给用户的答案。"""
+    written = AIMessage(
+        content=(
+            "先看看原文。\n\n<tool_call>\n<function=kb.search>\n"
+            "<parameter=query>冷却水</parameter>\n</function>\n</tool_call>"
+        )
+    )
+    responder = ScriptedResponder([written, AIMessage(content="上限 65 ℃")])
+    seen: list[dict[str, Any]] = []
+
+    async def spy(name: str, arguments: dict[str, Any]) -> object:
+        del name
+        seen.append(arguments)
+        return {"hits": []}
+
+    got = await run_turn(_deps(responder, spy), [])
+
+    assert seen == [{"query": "冷却水"}]
+    assert got.reply == "上限 65 ℃"
+
+
+async def test_the_salvaged_block_never_reaches_the_stored_message() -> None:
+    """摘不掉的话它会落库、进标题、进下一轮的上下文，而用户看到的是一坨 XML。"""
+    written = AIMessage(
+        content=(
+            "先看看原文。<tool_call><function=kb.search>"
+            "<parameter=query>冷却水</parameter></function></tool_call>"
+        )
+    )
+    responder = ScriptedResponder([written, AIMessage(content="好了")])
+
+    got = await run_turn(_deps(responder), [])
+
+    stored = "".join(str(one.content) for one in got.messages)
+    assert "<tool_call>" not in stored
+    assert "先看看原文。" in stored
+
+
+async def test_a_real_tool_call_is_never_second_guessed() -> None:
+    """⚠ 有原生调用还去翻正文的话，模型复述自己刚发的那次调用会被执行两遍。"""
+    both = AIMessage(
+        content=(
+            "我调了 <tool_call><function=kb.search>"
+            "<parameter=query>复述</parameter></function></tool_call>"
+        ),
+        tool_calls=[tool_call("kb.search", {"query": "真的那次"}, "c1")],
+    )
+    responder = ScriptedResponder([both, AIMessage(content="好了")])
+    seen: list[dict[str, Any]] = []
+
+    async def spy(name: str, arguments: dict[str, Any]) -> object:
+        del name
+        seen.append(arguments)
+        return {}
+
+    await run_turn(_deps(responder, spy), [])
+
+    assert seen == [{"query": "真的那次"}]

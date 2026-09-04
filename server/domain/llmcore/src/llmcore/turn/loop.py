@@ -31,6 +31,7 @@ from dataclasses import dataclass, field, replace
 from typing import Annotated, Any, Protocol, TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
+from langchain_core.messages.tool import ToolCall
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
@@ -41,6 +42,7 @@ from llmcore import (
     ModelChoice,
 )
 from llmcore.deltas import text_of
+from llmcore.textcalls import salvage
 from llmcore.tools.shapes import (
     ToolSpec,
     openai_schema,
@@ -265,13 +267,16 @@ def _thinker(deps: TurnDeps) -> Callable[[TurnState], Awaitable[TurnUpdate]]:
     )
     schemas = [openai_schema(spec) for spec in deps.specs]
 
+    offered = frozenset(spec.name for spec in deps.specs)
+
     async def think(state: TurnState) -> TurnUpdate:
-        reply = await deps.model.respond(
+        answered = await deps.model.respond(
             choice=deps.choice,
             messages=list(state["messages"]),
             tools=schemas,
             on_delta=deps.on_delta,
         )
+        reply = _salvaged(answered, offered)
         pending = _client_calls(reply, client_names)
         return {
             "messages": [reply],
@@ -280,6 +285,43 @@ def _thinker(deps: TurnDeps) -> Callable[[TurnState], Awaitable[TurnUpdate]]:
         }
 
     return think
+
+
+def _salvaged(reply: AIMessage, offered: frozenset[str]) -> AIMessage:
+    """模型把调用写成正文时，把它捡回成真的 `tool_calls`。
+
+    ⚠ 只在**一个原生调用都没有**时才捡：有原生调用还去翻正文的话，模型在
+    正文里复述自己刚发的那次调用会被执行两遍。
+
+    ⚠ 捡回来的调用照常走注册表、照常记步骤——这里只换一条消息的形状，不执行
+    任何东西（`textcalls` 文件头）。
+
+    Args: reply, offered（这一轮真发下去过的工具名）。
+    """
+    if reply.tool_calls:
+        return reply
+    made = salvage(text_of(reply), offered)
+    if not made.calls:
+        return reply
+    # ⚠ 响亮记一条：端点没解析出 tool_calls 是它那一侧的毛病，而捡回来之后
+    # 一切看着都正常——不记的话，这套部署会一直靠兜底跑着，没人知道
+    _logger.warning(
+        "tool_call_salvaged",
+        "模型把工具调用写进了正文，已捡回",
+        tools=",".join(one.name for one in made.calls),
+    )
+    # ⚠ 用量与端点元数据要原样带过去：换一条消息不该顺手把这一次调用的账
+    # 也丢掉（`guard.usage_of` 读的就是这几格）
+    return AIMessage(
+        content=made.text,
+        tool_calls=[
+            ToolCall(id=f"salvaged-{at}", name=one.name, args=one.arguments)
+            for at, one in enumerate(made.calls, start=1)
+        ],
+        additional_kwargs=reply.additional_kwargs,
+        response_metadata=reply.response_metadata,
+        usage_metadata=reply.usage_metadata,
+    )
 
 
 def _tool_step(
