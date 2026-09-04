@@ -343,7 +343,7 @@ const build: ChartBuild = (theme, resolve, full) =>
 4. **`chart-config.ts:12-21` 的 `GROUP` 八个分段名不许另造字符串**，否则属性面板摆出两个近义分段。
 5. **`manifest.ts` 里绝不静态 import `Component.vue` / `option.ts`**：`registerBuiltins.ts:19-21` 的 glob 是 `eager: true`，静态引一下就把渲染组件并进注册 chunk，并破坏 `component: () => import('./Component.vue')` 的懒加载语义。（⚠ **不是**「会把 echarts 拖进首屏」——`chartKit.ts:9` 对 echarts 是 `import type`，`echarts.ts:92-97` 全走动态 import，`startup-graph.contract.spec.ts` 只守 `three`。所以 `<domain>.ts` 里静态引 `chartKit` 没有风险，不必为此做多余的拆分。）
 6. **`ChartShell` 的 `watchValues` 收的是函数**（`ChartShell.vue:26` `watchValues?: () => unknown`）；配 `:values-deep="false"`（`useEChart.ts:133` 缺省 `true`，6 系列 × 数百点会被逐点深度遍历）。
-7. **`partialMerge` 一律给 `['series','legend']`**：图例是本设计里逐槽状态的唯一承载面，把它一起纳入替换范围，比推断 echarts 的组件 merge 语义稳；并配一条「系列从 pending 变 ok 后图例后缀跟着变」的组件用例。
+7. **`partialMerge` 至少给 `['series','legend']`**（画布正中有派生读数的族还要带上 `'title'`——环心那个数不换就会停在首帧，而扇区跟着值变，两个数当场对不上且零报错）：图例是本设计里逐槽状态的唯一承载面，把它一起纳入替换范围，比推断 echarts 的组件 merge 语义稳；并配一条「系列从 pending 变 ok 后图例后缀跟着变」的组件用例。
 
 ---
 
@@ -368,12 +368,37 @@ const build: ChartBuild = (theme, resolve, full) =>
 | 档 | 画法 |
 |---|---|
 | 该行没配来源（`slots` 里没这个键） | 该系列**整条不进 option**，图例也不列它 |
-| `pending`（配了没首帧） | 图例列出系列名 + 后缀「等首帧」，series 数据为空数组、不画线 |
-| `error`（取不到 / 这一档来源给不出序列） | 图例列出系列名 + 后缀「取不到」，图例文字取 `theme.textMuted` 置灰，series 数据为空数组 |
+| `pending`（配了没首帧） | 图例列出系列名 + 后缀「等首帧」，**不画线/不出扇区**（画法按族分，见 §8.1） |
+| `error`（取不到 / 这一档来源给不出序列） | 图例列出系列名 + 后缀「取不到」，图例文字取 `theme.textMuted` 置灰，同样不画线/不出扇区 |
 | `ok` 且 `isTruncated` | 正常画 + 图例后缀「只到 …」，并按 `truncatedSide` 说清砍的是哪一头 |
 | `ok` | 正常画 |
 | 全部系列都不是 `ok` | 交给 `ChartShell` 的 `isEmpty` + `emptyText`，画一层居中文案 |
 | 公开屏上的时序模块 | 空态文案专门写「公开屏不提供历史数据」，不用通用的「暂无数据」 |
+
+### 8.1 ⚠ 「图例列出它」的实现按族分成两条，写错哪一条都是静默失效
+
+echarts 的图例只认两条路径来认领一个名字（`LegendView.js`）：**匹配某个 series 的 `name`**，
+或**匹配该 series 原始 data 里某一项的 `name``**（`LegendVisualProvider.containName` 读的是
+`_getRawData()`）。两条都不中的名字，`_createItem` 根本不会被调用——图例项**不存在**，
+dev 构建下每渲染一次刷一条 `series not exists` 的 `console.warn`，生产构建下连这个都没有。
+
+于是同一句「图例列出系列名 + 后缀」在两族里是两种写法：
+
+| 族 | 一个系列 = | 非 `ok` 的槽怎么写 |
+|---|---|---|
+| 折线 / 柱 / 雷达（`trend-chart` / `bar-chart` / `radar-chart`） | 一个 series，图例名 = `series.name` | series **照常进 option**、`data` 给空数组。名字由 series 自己带着，图例认得出 |
+| 饼 / 漏斗（`pie-chart` / 后续同族） | 一个 **data 项**，图例名 = 该项的 `name` | 该项**必须进 `series.data`** 且 `value: null`，再逐项 `label`/`labelLine` 关掉、`itemStyle` 置灰。**不进 data 就等于这一档从屏上消失** |
+
+⚠ 这一条**单测抓不到**：图表族的组件用例把 echarts 整包打桩，断言的是 option 对象的形状，
+而这里错的是「这份合法的 option 交给真 echarts 之后画不出来」。
+故每个图表模块**必须**有一条拿真 echarts 跑 SSR（`renderer: 'svg'`、`ssr: true`、
+`renderToSVGString()`）的用例，断言非 `ok` 的那几个名字**真的出现在 SVG 里**。
+`pie-chart` 的那条就是照这个写的，后面几族照抄。
+
+⚠ 饼族还有两处同源的坑：`stillShowZeroSum` 缺省 `true`，读数**全 0** 时会画出 N 等份的假扇形
+（要 `false` 并给一句专门的空态文案，「合计为 0」与「一片都画不出来」是两回事）；
+图例默认可点，而占比是一次算死的，点掉一片之后圆心角会按 echarts 自己的口径重算、
+与图上的百分比对不上——故饼族一律 `legend.selectedMode: false`。
 
 > ⚠ **不能用 `graphic` 组件画角标**——它不在 `echarts.ts` 的注册清单里，写了静默不渲染。`TitleComponent` 虽已注册，但 `ChartShell` 的标题走 `ModulePanel`，图表内的 `title` 一律 `show: false`。所以逐槽结论**只有图例这一个承载面**。
 > ⚠ **一个子槽都不给 `isRequired`**：配了 6 条先接 2 条是常态，给了会让整块被判 `unbound` 并盖上浮层，逐槽四档白画。全仓至今零个模块用 `isRequired: true`。
