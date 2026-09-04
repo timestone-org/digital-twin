@@ -27,6 +27,7 @@ import { dirname, join, resolve } from 'node:path'
 import type { Component } from 'vue'
 import { beforeAll, describe, expect, it } from 'vitest'
 
+import { BAR_ITEMS_KEY, BAR_SLOT_KEY } from '../src/modules/bar-chart/bars'
 import {
   GAUGE_ITEMS_KEY,
   GAUGE_SLOT_KEY,
@@ -60,6 +61,8 @@ const MODULES_DIR = join(SRC_DIR, 'modules')
 
 // 组件按常量取键时，扫源码看到的是常量名——这张表把它翻回真正的键
 const KEY_CONSTANTS: Record<string, string> = {
+  BAR_ITEMS_KEY,
+  BAR_SLOT_KEY,
   CARD_ITEMS_KEY,
   DATA_CARD_CELLS_KEY,
   DATA_CARD_PARTS_KEY,
@@ -225,6 +228,7 @@ describe('一个模块 = 一个目录', () => {
   it('扫到的目录不是空的，扫描本身没有空转', () => {
     expect(directories).toEqual([
       'action-button',
+      'bar-chart',
       'container',
       'data-card',
       'footer',

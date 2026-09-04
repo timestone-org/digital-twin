@@ -17,6 +17,7 @@ def test_the_committed_catalog_registers_the_known_modules() -> None:
     assert catalog.known_types() == frozenset(
         {
             "action-button",
+            "bar-chart",
             "container",
             "data-card",
             "footer",

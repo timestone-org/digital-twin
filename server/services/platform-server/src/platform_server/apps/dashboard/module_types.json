@@ -980,6 +980,698 @@
       ]
     },
     {
+      "type": "bar-chart",
+      "display_name": "对比柱图",
+      "category": "图表",
+      "description": "对比柱图：把几路读数摆成共享同一条值轴的柱，回答「谁高谁低」与「按时间怎么走」。要看占比构成用 pie-chart，要逐行摆一串数字用 info-list 或 info-card，要「离满还有多远」用 gauge-card。一个数组绑定槽 `barValues`，行钉在 `items` 配置项上：第 i 行喂第 i 组。行内两个子槽——`value` 是实时档，一行画一根柱；`series` 是历史档（时序），一行画一条按时间桶铺开的系列。读哪一路由「取数来源」这一档决定，两路都绑了也只读它指定的那一路，另一路在图例后缀上标出来。⚠ 两档的类目轴不是一回事：实时档的类目是各行的名字，历史档的类目是各行时刻的并集，两行的取数窗口本来就可以不同。⚠ 百分比档的分母由前端按列现算，一整列全缺时整列留空而不是画成 0%；负值是真读数（回馈电量、温差），一律照实向下画，不取绝对值。⚠ 行级切成折线的那几行不参与堆叠——把达标率堆到产量上去，画出来的线不对应任何一个真实的量。⚠ 图例是逐行状态唯一的承载面，缺省开着；关掉它「等首帧」与「取不到」在屏上就一个字都没有。点某一根柱上抛的联动值是这一行配置里写的名称，没起名的点了不上抛。",
+      "icon": "chart-column",
+      "keywords": [
+        "bar",
+        "column",
+        "histogram",
+        "zhuzhuangtu",
+        "duibi",
+        "duidie",
+        "柱状图",
+        "柱图",
+        "条形图",
+        "对比",
+        "堆叠",
+        "双轴"
+      ],
+      "default_size": {
+        "width": 420,
+        "height": 300,
+        "min_width": 200,
+        "min_height": 160
+      },
+      "chrome": "card",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "default": "",
+          "placeholder": "留空隐藏标题栏",
+          "group": "数据",
+          "span": "full"
+        },
+        {
+          "key": "items",
+          "label": "数据组",
+          "type": "array",
+          "default": [
+            {
+              "name": "数据组 1",
+              "color": "",
+              "unit": "",
+              "stack": ""
+            }
+          ],
+          "group": "数据",
+          "help": "每一项在绑点面板上是一行。⚠ 删掉中间一项，它之后每一组的绑定都会改喂前一组——删完请核对绑点面板。",
+          "span": "full",
+          "item_schema": [
+            {
+              "key": "name",
+              "label": "名称",
+              "type": "string",
+              "default": "",
+              "placeholder": "留空则按「第 N 行」称呼",
+              "help": "图例与实时档类目轴上的名字；留空时按「第 N 行」称呼它。点这一组上抛的联动值也是它，留空则这一组点了不上抛。⚠ 两组重名会被加上 #1 这样的后缀，否则 echarts 会把它们并成一条图例；上抛的仍是这里写的原名。"
+            },
+            {
+              "key": "unit",
+              "label": "单位",
+              "type": "string",
+              "default": "",
+              "placeholder": "留空跟随整块",
+              "help": "这一组自己的单位，留空跟随整块那一档。首尾空格照原样保留。"
+            },
+            {
+              "key": "precision",
+              "label": "小数位",
+              "type": "number",
+              "help": "留空跟随整块那一档。",
+              "min": 0,
+              "max": 6,
+              "step": 1
+            },
+            {
+              "key": "color",
+              "label": "固定颜色",
+              "type": "color",
+              "default": "",
+              "help": "填了就固定这一组的颜色，压过色板。只填 var(--…) 引用，填死色值换肤时不跟着走。"
+            },
+            {
+              "key": "stack",
+              "label": "堆叠分组",
+              "type": "string",
+              "default": "",
+              "placeholder": "留空不堆叠",
+              "help": "同名的几组堆成一根柱。⚠ 只在历史档生效：实时档一行就是一个类目，堆无可堆。⚠ 切成折线的那几组一律不参与堆叠。"
+            },
+            {
+              "key": "plot",
+              "label": "画法",
+              "type": "enum",
+              "default": "bar",
+              "options": [
+                {
+                  "value": "bar",
+                  "label": "柱"
+                },
+                {
+                  "value": "line",
+                  "label": "折线"
+                }
+              ],
+              "help": "这一组画成柱还是折线。达标率、单耗这类与柱不同量纲的量，切成折线再挂右轴才读得出来。"
+            },
+            {
+              "key": "axis",
+              "label": "挂轴",
+              "type": "enum",
+              "default": "left",
+              "options": [
+                {
+                  "value": "left",
+                  "label": "左轴"
+                },
+                {
+                  "value": "right",
+                  "label": "右轴"
+                }
+              ],
+              "help": "挂左轴还是右轴。⚠ 只要有一组挂了右轴就会多出一条值轴；两条轴的量程互不相干，别拿两边的柱高直接比。"
+            }
+          ],
+          "item_label_key": "name",
+          "min_items": 1
+        },
+        {
+          "key": "valueSource",
+          "label": "取数来源",
+          "type": "enum",
+          "default": "live",
+          "options": [
+            {
+              "value": "live",
+              "label": "实时读数"
+            },
+            {
+              "value": "history",
+              "label": "历史序列"
+            }
+          ],
+          "group": "数据",
+          "help": "实时档读每一组的「数值」子槽（一组 = 一根柱），历史档读「历史序列」子槽（一组 = 一条按时间桶铺开的系列）。⚠ 两路都绑了也只读这一档指定的那一路，被忽略的那一路会在图例后缀上标出来。",
+          "span": "half"
+        },
+        {
+          "key": "emptyText",
+          "label": "空态文案",
+          "type": "string",
+          "default": "暂无数据",
+          "group": "数据",
+          "help": "一根柱都画不出来时画在图区正中的那一句。⚠ 留空时历史档另说一句——公开大屏根本不提供历史数据，那不是现场没数。",
+          "span": "half"
+        },
+        {
+          "key": "chartStyle",
+          "label": "图表样式",
+          "type": "enum",
+          "default": "grouped",
+          "options": [
+            {
+              "value": "grouped",
+              "label": "并排"
+            },
+            {
+              "value": "stacked",
+              "label": "堆叠"
+            },
+            {
+              "value": "percent",
+              "label": "百分比堆叠"
+            },
+            {
+              "value": "horizontal",
+              "label": "横向条形"
+            },
+            {
+              "value": "diverging",
+              "label": "正负对称"
+            }
+          ],
+          "group": "样式",
+          "span": "half"
+        },
+        {
+          "key": "barWidth",
+          "label": "柱宽上限 (px)",
+          "type": "number",
+          "group": "样式",
+          "help": "留空自动。只封上限，类目多时仍会自己变窄。",
+          "span": "half",
+          "min": 1,
+          "max": 200,
+          "step": 1
+        },
+        {
+          "key": "barRadius",
+          "label": "柱角圆角 (px)",
+          "type": "range",
+          "default": 2,
+          "group": "样式",
+          "help": "⚠ 堆叠档里每一段都会被圆角切一刀，堆高的那几段之间会露出缝——堆叠时建议调回 0。",
+          "span": "half",
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "palette",
+          "label": "自定义色板",
+          "type": "array",
+          "default": [],
+          "group": "样式",
+          "help": "留空使用主题色板；每行一个颜色，按系列顺序取用。",
+          "item_schema": [
+            {
+              "key": "color",
+              "label": "颜色",
+              "type": "color"
+            }
+          ]
+        },
+        {
+          "key": "barGradient",
+          "label": "柱体渐变",
+          "type": "boolean",
+          "default": false,
+          "group": "样式",
+          "help": "默认关闭（纯色填充）；开启后由主色派生上浓下透的竖向渐变。",
+          "span": "half"
+        },
+        {
+          "key": "barGradientTo",
+          "label": "柱体渐变末端色",
+          "type": "color",
+          "default": "",
+          "group": "样式",
+          "help": "留空由主色自动派生同色渐隐；支持 var(--x) 随换肤走。",
+          "span": "half"
+        },
+        {
+          "key": "barTopAlpha",
+          "label": "柱体起始透明度",
+          "type": "number",
+          "default": 0.45,
+          "group": "样式",
+          "help": "渐变顶端的不透明度，底端固定全透明。",
+          "span": "half",
+          "min": 0,
+          "max": 1,
+          "step": 0.05
+        },
+        {
+          "key": "barOpacity",
+          "label": "柱体整体不透明度",
+          "type": "number",
+          "default": 1,
+          "group": "样式",
+          "help": "叠在填充色之上的整体透明度，与渐变无关，纯色填充时也生效。",
+          "span": "half",
+          "min": 0,
+          "max": 1,
+          "step": 0.02
+        },
+        {
+          "key": "unit",
+          "label": "单位",
+          "type": "string",
+          "default": "",
+          "group": "样式",
+          "span": "half"
+        },
+        {
+          "key": "precision",
+          "label": "小数位",
+          "type": "number",
+          "group": "样式",
+          "help": "留空自动（最多 2 位、去尾随零）",
+          "span": "half",
+          "min": 0,
+          "max": 6,
+          "step": 1
+        },
+        {
+          "key": "xAxisName",
+          "label": "X 轴名称",
+          "type": "string",
+          "default": "",
+          "group": "坐标轴",
+          "span": "half"
+        },
+        {
+          "key": "yAxisName",
+          "label": "Y 轴名称",
+          "type": "string",
+          "default": "",
+          "group": "坐标轴",
+          "span": "half"
+        },
+        {
+          "key": "xLabelInterval",
+          "label": "类目标签间隔",
+          "type": "string",
+          "default": "",
+          "placeholder": "自动",
+          "group": "坐标轴",
+          "help": "留空自动抽稀；填 0 全部显示，填 n 每隔 n 个显示一个。",
+          "span": "half"
+        },
+        {
+          "key": "yScale",
+          "label": "数值轴不强制含 0",
+          "type": "boolean",
+          "default": false,
+          "group": "坐标轴",
+          "help": "默认从 0 起；开启后按数据范围自适应，适合高基线上的窄幅波动。",
+          "span": "half"
+        },
+        {
+          "key": "boundaryGap",
+          "label": "类目轴两端留白",
+          "type": "boolean",
+          "default": true,
+          "group": "坐标轴",
+          "help": "关闭后曲线 / 面积贴紧左右边缘。",
+          "span": "half"
+        },
+        {
+          "key": "showDataZoom",
+          "label": "显示缩放条",
+          "type": "boolean",
+          "default": false,
+          "group": "样式",
+          "help": "类目较多时启用横向滑动缩放。",
+          "span": "half"
+        },
+        {
+          "key": "showLegend",
+          "label": "显示图例",
+          "type": "boolean",
+          "default": true,
+          "group": "图例",
+          "span": "half"
+        },
+        {
+          "key": "showTooltip",
+          "label": "显示提示框",
+          "type": "boolean",
+          "default": true,
+          "group": "提示框",
+          "span": "half"
+        },
+        {
+          "key": "showValueLabel",
+          "label": "显示数值标签",
+          "type": "boolean",
+          "default": false,
+          "group": "数据标签",
+          "span": "half"
+        },
+        {
+          "key": "refLines",
+          "label": "参考线",
+          "type": "array",
+          "default": [],
+          "group": "参考线",
+          "help": "阈值线 / 目标线 / 基线；留空不画。",
+          "item_schema": [
+            {
+              "key": "value",
+              "label": "参考值",
+              "type": "number"
+            },
+            {
+              "key": "label",
+              "label": "文字",
+              "type": "string",
+              "placeholder": "留空只画线不写字"
+            },
+            {
+              "key": "color",
+              "label": "颜色",
+              "type": "color"
+            },
+            {
+              "key": "lineType",
+              "label": "线型",
+              "type": "enum",
+              "default": "dashed",
+              "options": [
+                {
+                  "value": "dashed",
+                  "label": "虚线"
+                },
+                {
+                  "value": "solid",
+                  "label": "实线"
+                },
+                {
+                  "value": "dotted",
+                  "label": "点线"
+                }
+              ]
+            },
+            {
+              "key": "fontSize",
+              "label": "文字字号",
+              "type": "number",
+              "min": 6,
+              "max": 40,
+              "step": 1
+            }
+          ],
+          "item_label_key": "label"
+        },
+        {
+          "key": "animation",
+          "label": "启用动画",
+          "type": "boolean",
+          "default": false,
+          "group": "动画",
+          "help": "默认关闭；开启后首帧入场与数据更新会带过渡。",
+          "span": "half"
+        },
+        {
+          "key": "animationDuration",
+          "label": "动画时长(ms)",
+          "type": "number",
+          "default": 600,
+          "group": "动画",
+          "help": "首帧入场 / 数据更新的过渡时长；仅在启用动画时生效。",
+          "span": "half",
+          "when": {
+            "key": "animation",
+            "in": [
+              true
+            ]
+          },
+          "min": 0,
+          "step": 50
+        },
+        {
+          "key": "axisLabelFontSize",
+          "label": "轴刻度字号",
+          "type": "number",
+          "default": 11,
+          "group": "坐标轴",
+          "span": "half",
+          "min": 6,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "axisNameFontSize",
+          "label": "轴名称字号",
+          "type": "number",
+          "default": 11,
+          "group": "坐标轴",
+          "span": "half",
+          "min": 6,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "legendFontSize",
+          "label": "图例字号",
+          "type": "number",
+          "default": 11,
+          "group": "图例",
+          "span": "half",
+          "min": 6,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "tooltipFontSize",
+          "label": "提示框字号",
+          "type": "number",
+          "default": 12,
+          "group": "提示框",
+          "span": "half",
+          "min": 6,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "labelFontSize",
+          "label": "数值标签字号",
+          "type": "number",
+          "default": 11,
+          "group": "数据标签",
+          "span": "half",
+          "min": 6,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "labelColor",
+          "label": "数值标签颜色",
+          "type": "color",
+          "default": "",
+          "group": "数据标签",
+          "help": "留空用次要文字色；支持 var(--x) 随换肤走。",
+          "span": "half"
+        }
+      ],
+      "bindings": [
+        {
+          "key": "barValues",
+          "label": "数据组读数",
+          "data_type": "number",
+          "is_array": true,
+          "is_entity_pinned": true,
+          "array_fields": [
+            {
+              "key": "value",
+              "label": "数值",
+              "data_type": "number"
+            },
+            {
+              "key": "series",
+              "label": "历史序列",
+              "data_type": "number",
+              "is_time_series": true
+            }
+          ]
+        }
+      ],
+      "config_presets": [
+        {
+          "id": "rank-bars",
+          "label": "竖排名",
+          "hint": "并排竖柱 + 柱顶读数，一眼看出谁高谁低；实时档最常用的一套。",
+          "config": {
+            "chartStyle": "grouped",
+            "barWidth": null,
+            "barRadius": 2,
+            "palette": [],
+            "barGradient": false,
+            "barGradientTo": "",
+            "barTopAlpha": 0.45,
+            "barOpacity": 1,
+            "xLabelInterval": "",
+            "yScale": false,
+            "boundaryGap": true,
+            "showDataZoom": false,
+            "showLegend": true,
+            "showTooltip": true,
+            "showValueLabel": true,
+            "animation": false,
+            "animationDuration": 600,
+            "axisLabelFontSize": 11,
+            "axisNameFontSize": 11,
+            "legendFontSize": 11,
+            "tooltipFontSize": 12,
+            "labelFontSize": 11,
+            "labelColor": ""
+          }
+        },
+        {
+          "id": "rank-horizontal",
+          "label": "横排名",
+          "hint": "类目转到左边，名字长也排得开；条右侧写读数。窄高的块里用这一套。",
+          "config": {
+            "chartStyle": "horizontal",
+            "barWidth": 18,
+            "barRadius": 2,
+            "palette": [],
+            "barGradient": false,
+            "barGradientTo": "",
+            "barTopAlpha": 0.45,
+            "barOpacity": 1,
+            "xLabelInterval": "0",
+            "yScale": false,
+            "boundaryGap": true,
+            "showDataZoom": false,
+            "showLegend": false,
+            "showTooltip": true,
+            "showValueLabel": true,
+            "animation": false,
+            "animationDuration": 600,
+            "axisLabelFontSize": 11,
+            "axisNameFontSize": 11,
+            "legendFontSize": 11,
+            "tooltipFontSize": 12,
+            "labelFontSize": 11,
+            "labelColor": ""
+          }
+        },
+        {
+          "id": "stacked-hours",
+          "label": "分时堆叠",
+          "hint": "按时间桶堆起来看总量与构成，配缩放条拖着看；桶多时标签自动抽稀。",
+          "config": {
+            "chartStyle": "stacked",
+            "barWidth": null,
+            "barRadius": 0,
+            "palette": [],
+            "barGradient": false,
+            "barGradientTo": "",
+            "barTopAlpha": 0.45,
+            "barOpacity": 1,
+            "xLabelInterval": "",
+            "yScale": false,
+            "boundaryGap": true,
+            "showDataZoom": true,
+            "showLegend": true,
+            "showTooltip": true,
+            "showValueLabel": false,
+            "animation": false,
+            "animationDuration": 600,
+            "axisLabelFontSize": 11,
+            "axisNameFontSize": 11,
+            "legendFontSize": 11,
+            "tooltipFontSize": 12,
+            "labelFontSize": 11,
+            "labelColor": ""
+          }
+        },
+        {
+          "id": "share-percent",
+          "label": "构成占比",
+          "hint": "每一列归一到 100%，只看构成不看总量。⚠ 一整列全缺时那一列整列留空，不画成 0%。",
+          "config": {
+            "chartStyle": "percent",
+            "barWidth": null,
+            "barRadius": 0,
+            "palette": [],
+            "barGradient": false,
+            "barGradientTo": "",
+            "barTopAlpha": 0.45,
+            "barOpacity": 1,
+            "xLabelInterval": "",
+            "yScale": false,
+            "boundaryGap": true,
+            "showDataZoom": false,
+            "showLegend": true,
+            "showTooltip": true,
+            "showValueLabel": true,
+            "animation": false,
+            "animationDuration": 600,
+            "axisLabelFontSize": 11,
+            "axisNameFontSize": 11,
+            "legendFontSize": 11,
+            "tooltipFontSize": 12,
+            "labelFontSize": 11,
+            "labelColor": ""
+          }
+        },
+        {
+          "id": "balance-diverging",
+          "label": "正负对比",
+          "hint": "值轴按最大绝对值向两侧对称铺开，回馈与用电各占一半；负值照实向下画。",
+          "config": {
+            "chartStyle": "diverging",
+            "barWidth": null,
+            "barRadius": 2,
+            "palette": [],
+            "barGradient": false,
+            "barGradientTo": "",
+            "barTopAlpha": 0.45,
+            "barOpacity": 1,
+            "xLabelInterval": "",
+            "yScale": false,
+            "boundaryGap": true,
+            "showDataZoom": false,
+            "showLegend": true,
+            "showTooltip": true,
+            "showValueLabel": true,
+            "animation": false,
+            "animationDuration": 600,
+            "axisLabelFontSize": 11,
+            "axisNameFontSize": 11,
+            "legendFontSize": 11,
+            "tooltipFontSize": 12,
+            "labelFontSize": 11,
+            "labelColor": ""
+          }
+        }
+      ],
+      "content_keys": [
+        "title",
+        "items",
+        "emptyText"
+      ]
+    },
+    {
       "type": "container",
       "display_name": "容器",
       "category": "布局",
