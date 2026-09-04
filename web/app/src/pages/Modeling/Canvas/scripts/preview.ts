@@ -57,16 +57,25 @@ export interface ModelPreview {
   featureKeys: string[]
   targetKey: string
   hyperParams: [string, string][]
-  /** 真训出参数来了没有。 */
+  /**
+   * 真训出模型来了没有。
+   *
+   * ⚠ 判据是**可服务通道**，不是 `fitted` 空不空：通道 B 的模型本体在二进制
+   * 产物里、`fitted` 刻意留空（`operators/trees.py::run`），按空不空判会把每一
+   * 个训练成功的树模型说成没训出来。
+   */
   isFitted: boolean
   /**
    * ⚠ 与 `isFitted` 分开：摘要撑爆字节预算时后端会把拟合参数整个摘掉
    * （`preview.py::_stripped`），那时「看不到系数」与「没训练出来」是两回事，
-   * 混作一处会让一个跑成功的模型在界面上被说成没训出来。
+   * 混作一处会让一个跑成功的模型在界面上被说成没训出来。通道 B 本来就没有
+   * 可看的系数，不算被削。
    */
   isFittedTrimmed: boolean
   /** 特征列 → 权重。算法不给系数时为空。 */
   coefficients: [string, number][]
+  /** 两类模型的类目，升序；正类是后一个。算法不给类目时为空。 */
+  classes: number[]
   intercept: number | null
   servingChannel: string
 }
@@ -85,7 +94,14 @@ export interface MetricsPreview {
   /** ⚠ 值可能是 null：R² 与 MAPE 在无定义时给 null，显示成 0 是假数。 */
   metrics: [string, number | null][]
   pairs: [number, number][]
+  /** 点太多，后端只带回了其中一部分。 */
   isPairsTruncated: boolean
+  /**
+   * ⚠ 与 `isPairsTruncated` 分开：摘要撑爆字节预算时后端把 `pairs` 整个摘掉却
+   * 原样留着 `pairs_truncated`（`preview.py::_stripped`），只读后者的话那张散点
+   * 图会无声消失。指标本身仍是按全部数据算的。
+   */
+  isPairsTrimmed: boolean
   residualBins: ResidualBin[]
 }
 
@@ -97,6 +113,9 @@ export interface UnknownPreview {
 
 export type Preview =
   FramePreview | ModelPreview | MetricsPreview | UnknownPreview
+
+// 通道 B：模型本体是一份二进制产物，拟合参数不进 JSON
+const CHANNEL_BINARY = 'binary'
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -187,11 +206,23 @@ function coefficientsOf(fitted: Record<string, unknown>): [string, number][] {
   return pairs
 }
 
+/** 两个类目。读不出数的那一项丢掉——正类方向按它判，混进 NaN 会判反。 */
+function classesOf(fitted: Record<string, unknown>): number[] {
+  const values: number[] = []
+  for (const item of asList(fitted['classes'])) {
+    const value = asNumber(item)
+    if (value !== null) values.push(value)
+  }
+  return values
+}
+
 function modelOf(raw: Record<string, unknown>): ModelPreview {
   // ⚠ 后端给的 `fitted` 是一份**拟合参数字典**，不是布尔。按布尔读的话每个训
   // 好的模型都会被说成没训出来，而这是一条只在真跑过之后才看得见的错
   const hasFitted = 'fitted' in raw
   const fitted = asRecord(raw['fitted'])
+  const channel = asText(raw['serving_channel'])
+  const isBinary = channel === CHANNEL_BINARY
   return {
     kind: 'model',
     algo: asText(raw['algo']),
@@ -201,11 +232,12 @@ function modelOf(raw: Record<string, unknown>): ModelPreview {
     hyperParams: Object.entries(asRecord(raw['hyper_params'])).map(
       ([key, value]) => [key, String(value)],
     ),
-    isFitted: hasFitted && Object.keys(fitted).length > 0,
-    isFittedTrimmed: !hasFitted,
+    isFitted: isBinary || (hasFitted && Object.keys(fitted).length > 0),
+    isFittedTrimmed: !hasFitted && !isBinary,
     coefficients: coefficientsOf(fitted),
+    classes: classesOf(fitted),
     intercept: asNumber(fitted['intercept']),
-    servingChannel: asText(raw['serving_channel']),
+    servingChannel: channel,
   }
 }
 
@@ -242,6 +274,7 @@ function metricsOf(raw: Record<string, unknown>): MetricsPreview {
     metrics,
     pairs,
     isPairsTruncated: raw['pairs_truncated'] === true,
+    isPairsTrimmed: !('pairs' in raw),
     residualBins: residualBinsOf(raw['residual_bins']),
   }
 }

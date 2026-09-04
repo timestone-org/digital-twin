@@ -128,6 +128,69 @@ describe('读一份结果摘要', () => {
     expect(preview.isFitted).toBe(false)
   })
 
+  // ⚠ 通道 B（树模型）刻意给一份空的 `fitted`——真参数在二进制产物里
+  // （`operators/trees.py::run`）。按「fitted 空不空」判会把每一个训练成功的树
+  // 模型说成没训出来，而这条只有真跑过一轮树回归才看得见
+  it('二进制通道不看拟合参数，空字典也算训出来了', () => {
+    const preview = previewOf({
+      ...model(),
+      serving_channel: 'binary',
+      fitted: {},
+    })
+
+    if (preview.kind !== 'model') throw new Error('派发错了')
+    expect(preview.isFitted).toBe(true)
+    expect(preview.isFittedTrimmed).toBe(false)
+  })
+
+  it('纯 JSON 通道的拟合参数为空时，仍旧算没训出来', () => {
+    const preview = previewOf({
+      ...model(),
+      serving_channel: 'json',
+      fitted: {},
+    })
+
+    if (preview.kind !== 'model') throw new Error('派发错了')
+    expect(preview.isFitted).toBe(false)
+    expect(preview.isFittedTrimmed).toBe(false)
+  })
+
+  it('二进制通道的摘要被削掉 fitted 也不算「参数没带回来」', () => {
+    const trimmed: Record<string, unknown> = {
+      ...model(),
+      serving_channel: 'binary',
+    }
+    delete trimmed['fitted']
+
+    const preview = previewOf(trimmed)
+
+    if (preview.kind !== 'model') throw new Error('派发错了')
+    expect(preview.isFitted).toBe(true)
+    expect(preview.isFittedTrimmed).toBe(false)
+  })
+
+  // ⚠ 两个类目是升序的，正类是后一个（`operators/regression.py::dump_fitted`）
+  it('两类模型的类目读得出来，算法不给时是空的', () => {
+    const preview = previewOf({
+      ...model(),
+      task: 'classification',
+      fitted: { coef: { a: 1 }, intercept: 0, classes: [0, 1] },
+    })
+
+    if (preview.kind !== 'model') throw new Error('派发错了')
+    expect(preview.classes).toEqual([0, 1])
+  })
+
+  it('拟合参数里没有类目时给空数组，不给 NaN', () => {
+    const preview = previewOf({
+      ...model(),
+      fitted: { coef: { a: 1 }, intercept: 0, classes: ['一', 2] },
+    })
+
+    if (preview.kind !== 'model') throw new Error('派发错了')
+    expect(preview.classes).toEqual([2])
+  })
+
   it('系数里读不出数的那几项丢掉，不混进 NaN', () => {
     const preview = previewOf({
       ...model(),
@@ -159,6 +222,34 @@ describe('读一份结果摘要', () => {
     ])
     expect(preview.pairs).toEqual([[1, 1.1]])
     expect(preview.isPairsTruncated).toBe(true)
+  })
+
+  // ⚠ 「点太多只画了一部分」与「整份 pairs 被摘要预算削掉」是两回事：
+  // `preview.py::_stripped` 摘 `pairs` 时不动 `pairs_truncated`，只读后者的话
+  // 散点会无声消失
+  it('pairs 这个键整个不在时算被摘要削掉了', () => {
+    const preview = previewOf({
+      kind: 'metrics',
+      task: 'regression',
+      metrics: { r2: 0.9 },
+      pairs_truncated: true,
+    })
+
+    if (preview.kind !== 'metrics') throw new Error('派发错了')
+    expect(preview.isPairsTrimmed).toBe(true)
+    expect(preview.pairs).toEqual([])
+  })
+
+  it('pairs 是空数组时不算被削掉——那是真的一个点都没有', () => {
+    const preview = previewOf({
+      kind: 'metrics',
+      task: 'regression',
+      metrics: {},
+      pairs: [],
+    })
+
+    if (preview.kind !== 'metrics') throw new Error('派发错了')
+    expect(preview.isPairsTrimmed).toBe(false)
   })
 
   it('残差直方图三元组读成一根根柱子，缺项的那根丢掉', () => {

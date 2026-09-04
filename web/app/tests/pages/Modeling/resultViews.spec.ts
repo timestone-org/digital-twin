@@ -151,15 +151,42 @@ describe('模型结果', () => {
 
   it('可服务性说清楚能不能配到台账里去', () => {
     expect(mount(ResultView, { props: { payload: MODEL } }).text()).toContain(
-      '可上线',
+      '可上线：拟合参数是纯 JSON',
     )
     expect(
       mount(ResultView, {
         props: {
-          payload: { model: { ...MODEL_BODY, serving_channel: 'binary' } },
+          payload: { model: { ...MODEL_BODY, serving_channel: '' } },
         },
       }).text(),
-    ).toContain('不可上线')
+    ).toContain('不产出可上线的模型')
+  })
+
+  // ⚠ 通道 B 也是可上线的：发布那一侧判的是「二进制产物在不在」而不是
+  // 「fitted 空不空」（`services/publish_service.py::_channel_refusal`）
+  it('二进制通道不说成不可上线', () => {
+    const text = mount(ResultView, {
+      props: {
+        payload: { model: { ...MODEL_BODY, serving_channel: 'binary' } },
+      },
+    }).text()
+
+    expect(text).not.toContain('不可上线')
+    expect(text).toContain('可上线')
+  })
+
+  // ⚠ 树模型的 `fitted` 刻意是空的（`operators/trees.py::run`），按空不空判
+  // 会把每一个训练成功的树模型说成没训出来
+  it('二进制通道的模型拟合参数为空也不喊「还没训练出来」', () => {
+    const wrapper = mount(ResultView, {
+      props: {
+        payload: {
+          model: { ...MODEL_BODY, serving_channel: 'binary', fitted: {} },
+        },
+      },
+    })
+
+    expect(wrapper.text()).not.toContain('还没有训练出模型')
   })
 
   // ⚠ 「摘要被截断」与「没训出来」是两回事，混作一处会冤枉一个跑成功的模型
@@ -211,6 +238,35 @@ describe('评估结果', () => {
     })
 
     expect(wrapper.find('.dt-ml-residual__zero').exists()).toBe(false)
+  })
+
+  // ⚠ 「点太多只画了一部分」与「整份散点被摘要预算削掉」要分开说：
+  // `preview.py::_stripped` 摘 `pairs` 时留着 `pairs_truncated`，只读后者的话
+  // 那张图会无声消失
+  it('散点被摘要削掉时照实说一句，不是一声不吭地少一张图', () => {
+    const trimmed: Record<string, unknown> = {
+      ...METRICS_BODY,
+      pairs_truncated: true,
+    }
+    delete trimmed['pairs']
+
+    const wrapper = mount(ResultView, {
+      props: { payload: { metrics: trimmed } },
+    })
+
+    expect(wrapper.text()).toContain('没有一起带回来')
+    expect(wrapper.text()).not.toContain('点太多')
+  })
+
+  it('点太多只画了一部分时说的是另一句', () => {
+    const wrapper = mount(ResultView, {
+      props: {
+        payload: { metrics: { ...METRICS_BODY, pairs_truncated: true } },
+      },
+    })
+
+    expect(wrapper.text()).toContain('点太多')
+    expect(wrapper.text()).not.toContain('没有一起带回来')
   })
 
   // ⚠ 无定义写成 0 会被读成「一点都不准」

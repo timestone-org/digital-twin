@@ -4,6 +4,9 @@
  *
  * ⚠ 值为 null 的指标写「无定义」不写 0：R² 在整列取值相同时、MAPE 在真值有 0 时
  * 都是算不出来的，显示成 0 会被读成「一点都不准」。
+ *
+ * ⚠ 「点太多只画了一部分」与「整份散点被摘要预算削掉」是两回事，各说各的：
+ * 后者不说的话那张图会一声不吭地少掉（`preview.py::_stripped`）。
  */
 import { DtNotice, DtTag } from '@dt/ui'
 import { computed } from 'vue'
@@ -46,6 +49,10 @@ const cards = computed(() =>
     </ul>
     <DtNotice v-if="cards.length === 0" intent="warning">
       这一步没有产出任何指标
+    </DtNotice>
+    <DtNotice v-if="props.preview.isPairsTrimmed" intent="info">
+      这一步的结果摘要太大，画散点用的那些点没有一起带回来——这里少一张图，不是
+      一个点都没有。指标不靠这些点算。
     </DtNotice>
     <div class="dt-ml-metrics__plots">
       <ScatterChart
