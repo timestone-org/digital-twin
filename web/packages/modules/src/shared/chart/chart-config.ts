@@ -1,6 +1,8 @@
 /**
  * @fileoverview 图表族共用的 configSchema 片段工厂：族 manifest 里直接 spread。
  * 分段组名在这里定死一套，各族不许另造字符串，否则属性面板会摆出两个近义分段。
+ * ⚠ 紧凑控件逐个显式写 `span`：缺席等于铺满整行（`PropertyPanel.vue` 只认 `half`），
+ * 而清单侧那条闸门查的是顶层 configSchema，工厂漏一个就整族红。
  */
 import type {
   ConfigField,
@@ -43,6 +45,7 @@ export function titleField(opts: { placeholder?: string } = {}): ConfigField[] {
       type: 'string',
       default: '',
       group: GROUP.data,
+      span: 'full',
       placeholder: opts.placeholder ?? '留空隐藏标题栏',
     },
   ]
@@ -64,6 +67,7 @@ export function chartStyleField(
       type: 'enum',
       group: GROUP.style,
       default: def ?? options[0]?.value,
+      span: 'half',
       options,
     },
   ]
@@ -83,6 +87,7 @@ export function legendFields(
       type: 'boolean',
       default: opts.default ?? false,
       group: GROUP.legend,
+      span: 'half',
       ...whenOf(opts.when),
     },
   ]
@@ -100,6 +105,7 @@ export function tooltipFields(opts: { when?: When } = {}): ConfigField[] {
       type: 'boolean',
       default: true,
       group: GROUP.tooltip,
+      span: 'half',
       ...whenOf(opts.when),
     },
   ]
@@ -119,6 +125,7 @@ export function dataLabelFields(
       type: 'boolean',
       default: opts.default ?? true,
       group: GROUP.dataLabel,
+      span: 'half',
       ...whenOf(opts.when),
     },
   ]
@@ -136,6 +143,7 @@ export function cartesianAxisFields(opts: { when?: When } = {}): ConfigField[] {
       type: 'string',
       default: '',
       group: GROUP.axis,
+      span: 'half',
       ...whenOf(opts.when),
     },
     {
@@ -144,6 +152,7 @@ export function cartesianAxisFields(opts: { when?: When } = {}): ConfigField[] {
       type: 'string',
       default: '',
       group: GROUP.axis,
+      span: 'half',
       ...whenOf(opts.when),
     },
   ]
@@ -161,6 +170,7 @@ export function unitPrecisionFields(opts: { when?: When } = {}): ConfigField[] {
       type: 'string',
       default: '',
       group: GROUP.style,
+      span: 'half',
       ...whenOf(opts.when),
     },
     {
@@ -171,6 +181,7 @@ export function unitPrecisionFields(opts: { when?: When } = {}): ConfigField[] {
       max: 6,
       step: 1,
       group: GROUP.style,
+      span: 'half',
       help: '留空自动（最多 2 位、去尾随零）',
       ...whenOf(opts.when),
     },
@@ -191,6 +202,7 @@ export function dataZoomFields(
       type: 'boolean',
       default: opts.default ?? false,
       group: GROUP.style,
+      span: 'half',
       help: '类目较多时启用横向滑动缩放。',
       ...whenOf(opts.when),
     },
@@ -213,6 +225,7 @@ export function animationFields(
       type: 'boolean',
       default: false,
       group: GROUP.animation,
+      span: 'half',
       help: '默认关闭；开启后首帧入场与数据更新会带过渡。',
       ...whenOf(opts.when),
     },
@@ -229,6 +242,7 @@ export function animationFields(
     step: 50,
     default: 600,
     group: GROUP.animation,
+    span: 'half',
     help: '首帧入场 / 数据更新的过渡时长；仅在启用动画时生效。',
     when: { key: 'animation', in: [true] },
   })
@@ -283,6 +297,7 @@ const GRADIENT_TEMPLATES: Record<
       type: 'boolean',
       default: false,
       group: GROUP.style,
+      span: 'half',
       help: '默认关闭（纯色填充）；开启后由主色派生上浓下透的竖向渐变。',
     },
   },
@@ -292,6 +307,7 @@ const GRADIENT_TEMPLATES: Record<
       type: 'color',
       default: '',
       group: GROUP.style,
+      span: 'half',
       help: '留空由主色自动派生同色渐隐；支持 var(--x) 随换肤走。',
     },
   },
@@ -304,6 +320,7 @@ const GRADIENT_TEMPLATES: Record<
       max: 1,
       step: 0.05,
       group: GROUP.style,
+      span: 'half',
       help: '渐变顶端的不透明度，底端固定全透明。',
     },
   },
@@ -316,6 +333,7 @@ const GRADIENT_TEMPLATES: Record<
       max: 1,
       step: 0.02,
       group: GROUP.style,
+      span: 'half',
       help: '叠在填充色之上的整体透明度，与渐变无关，纯色填充时也生效。',
     },
   },
@@ -429,6 +447,7 @@ export function axisIntervalFields(
       type: 'string',
       default: '',
       group: GROUP.axis,
+      span: 'half',
       placeholder: '自动',
       help: '留空自动抽稀；填 0 全部显示，填 n 每隔 n 个显示一个。',
       ...whenOf(opts.when),
@@ -439,6 +458,7 @@ export function axisIntervalFields(
       type: 'boolean',
       default: opts.yScale ?? false,
       group: GROUP.axis,
+      span: 'half',
       help: '默认从 0 起；开启后按数据范围自适应，适合高基线上的窄幅波动。',
       ...whenOf(opts.when),
     },
@@ -448,6 +468,7 @@ export function axisIntervalFields(
       type: 'boolean',
       default: opts.boundaryGap ?? true,
       group: GROUP.axis,
+      span: 'half',
       help: '关闭后曲线 / 面积贴紧左右边缘。',
       ...whenOf(opts.when),
     },
@@ -468,6 +489,7 @@ export function symbolFields(
       type: 'boolean',
       default: opts.showSymbol ?? true,
       group: GROUP.style,
+      span: 'half',
       help: '关闭后只画线不画点，密集时序远观更干净。',
       ...whenOf(opts.when),
     },
@@ -480,6 +502,7 @@ export function symbolFields(
       max: 40,
       step: 1,
       group: GROUP.style,
+      span: 'half',
       when: opts.when ?? { key: 'showSymbol', in: [true] },
     },
   ]
@@ -516,6 +539,7 @@ const CHART_FONT_TEMPLATES: Record<ChartFontFieldKey, ConfigField> = {
     default: 11,
     ...FONT_SIZE_RANGE,
     group: GROUP.axis,
+    span: 'half',
   },
   axisNameFontSize: {
     key: 'axisNameFontSize',
@@ -524,6 +548,7 @@ const CHART_FONT_TEMPLATES: Record<ChartFontFieldKey, ConfigField> = {
     default: 11,
     ...FONT_SIZE_RANGE,
     group: GROUP.axis,
+    span: 'half',
   },
   legendFontSize: {
     key: 'legendFontSize',
@@ -532,6 +557,7 @@ const CHART_FONT_TEMPLATES: Record<ChartFontFieldKey, ConfigField> = {
     default: 11,
     ...FONT_SIZE_RANGE,
     group: GROUP.legend,
+    span: 'half',
   },
   tooltipFontSize: {
     key: 'tooltipFontSize',
@@ -540,6 +566,7 @@ const CHART_FONT_TEMPLATES: Record<ChartFontFieldKey, ConfigField> = {
     default: 12,
     ...FONT_SIZE_RANGE,
     group: GROUP.tooltip,
+    span: 'half',
   },
   labelFontSize: {
     key: 'labelFontSize',
@@ -548,6 +575,7 @@ const CHART_FONT_TEMPLATES: Record<ChartFontFieldKey, ConfigField> = {
     default: 11,
     ...FONT_SIZE_RANGE,
     group: GROUP.dataLabel,
+    span: 'half',
   },
   labelFontFamily: {
     key: 'labelFontFamily',
@@ -555,6 +583,7 @@ const CHART_FONT_TEMPLATES: Record<ChartFontFieldKey, ConfigField> = {
     type: 'enum',
     default: 'sans',
     group: GROUP.dataLabel,
+    span: 'half',
     help: '族层负责把它换成已解析的字体栈——canvas 不认 var(--x)。',
     options: [
       { value: 'sans', label: '默认（继承正文）' },
@@ -568,6 +597,7 @@ const CHART_FONT_TEMPLATES: Record<ChartFontFieldKey, ConfigField> = {
     type: 'color',
     default: '',
     group: GROUP.dataLabel,
+    span: 'half',
     help: '留空用次要文字色；支持 var(--x) 随换肤走。',
   },
 }
