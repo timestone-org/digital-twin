@@ -25,6 +25,7 @@ from knowledge_server.apps.chat.errors import ChatUnavailable
 from knowledge_server.apps.chat.models import ChatMessage, ChatSession
 from knowledge_server.apps.chat.services import (
     advance_persist,
+    budget,
     title_service,
 )
 from knowledge_server.apps.chat.services import scope as scope_service
@@ -65,6 +66,7 @@ from llmcore.tools.registry import ToolRegistry
 from llmcore.tools.selection import specs_named
 from llmcore.tools.shapes import ToolSpec
 from llmcore.turn import (
+    DEFAULT_MAX_TOOL_RESULT_CHARS,
     Responder,
     TurnDeps,
     TurnEvent,
@@ -91,6 +93,9 @@ class AdvanceDeps:
     model: Responder
     tools: ToolFactory
     summarizer: Summarizer
+    # 一次工具产出最多占多少字。⚠ 按对话档模型的窗口折算（`budget`）：窗口小的
+    # 模型上，一次检索回执就能把上下文顶穿，而端点回的 400 与长度毫无关系
+    tool_result_chars: int = DEFAULT_MAX_TOOL_RESULT_CHARS
 
 
 def deps_of(container: Container, caller: CallerContext) -> AdvanceDeps:
@@ -103,6 +108,9 @@ def deps_of(container: Container, caller: CallerContext) -> AdvanceDeps:
     if not container.answerer.can_answer:
         raise ChatUnavailable("这套部署没有接对话档，知识库对话用不了")
     lanes = strategies(lanes_of(container))
+    afforded = budget.result_chars(
+        container.settings.model_context_tokens, DEFAULT_MAX_TOOL_RESULT_CHARS
+    )
     return AdvanceDeps(
         sessions=container.database.session,
         model=container.responder,
@@ -114,11 +122,13 @@ def deps_of(container: Container, caller: CallerContext) -> AdvanceDeps:
                 strategies=lanes,
                 scope=chosen,
                 ledger=ledger,
+                result_chars=afforded,
             )
         ),
         summarizer=summarize.ModelSummarizer(
             model=container.responder, profile="default"
         ),
+        tool_result_chars=afforded,
     )
 
 
@@ -269,6 +279,7 @@ async def advance(
         specs=_offered(registry.specs, payload.client_tools),
         run_tool=registry.run,
         choice=ModelChoice(),
+        max_tool_result_chars=deps.tool_result_chars,
     )
     produced: list[TurnStep] = []
     outcome: TurnOutcome | None = None

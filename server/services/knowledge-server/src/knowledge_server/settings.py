@@ -137,6 +137,12 @@ class Settings(
     model_api_key: SecretStr | None = None
     model_chat: str = ""
     model_timeout_s: float = 60.0
+    # 对话档模型的上下文窗口（token）。**0 = 不知道**，一格都不收紧。
+    # ⚠ 是取值不是行为（config-and-secrets §5）：知道了这个数之后，一次工具产出
+    # 的字数上限按它折算（`apps/chat/services/budget.py`）。不给的表现是——窗口
+    # 小的模型每次都在同一步 400，而给用户的是一句「模型端点认为请求不合法」，
+    # 与长度毫无关系（实测：一台 n_ctx=6656 的本地端点，检索回执一进上下文就超）
+    model_context_tokens: int = Field(default=0, ge=0)
     # 断路器。⚠ 只有「下游此刻不行」那一档让它计数：401/403/400 一律不计——
     # 断路器一开，真正的原因就被盖成「暂时不可用」，而那会让人去查网络
     model_breaker_failures: int = 5

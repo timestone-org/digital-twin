@@ -106,3 +106,26 @@ class StrategyCannotAnswer(AppError):
 
     code = 42309
     http_status = 409
+
+
+class RawItemAbsent(AppError):
+    """这份文档没有原件可看。
+
+    ⚠ 与「文档不存在」分开报：外部系统那一路的一行是对方接口里的一条记录，
+    它压根没有过原件（CONTEXT.md §1）。混成 404 的话，界面只能说「没有这份
+    文档」——而它明明就在那张表里列着。
+    """
+
+    code = 42311
+    http_status = 404
+
+
+class RawBytesGone(AppError):
+    """文档那一行还在，原件的字节已经不在对象存储里了。
+
+    ⚠ 与「没有原件」分开报：这一档意味着桶被清过，是运维要知道的事，
+    不是「这一路来源本来就没有文件」。
+    """
+
+    code = 42312
+    http_status = 410

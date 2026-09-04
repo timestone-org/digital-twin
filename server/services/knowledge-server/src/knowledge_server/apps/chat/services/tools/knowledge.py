@@ -23,6 +23,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+from knowledge_server.apps.chat.services import budget
 from knowledge_server.apps.chat.services.citations import Ledger
 from knowledge_server.apps.chat.services.scope import BaseScope
 from knowledge_server.apps.knowledge.services import (
@@ -132,6 +133,8 @@ class KnowledgeTools:
     # 这一回合发过的角标。⚠ 收进来而不是这里自己造：回合结束时要拿同一份
     # 去解析答案里用到的那几个，而注册表是按回合现造的
     ledger: Ledger
+    # 一次检索回执的字数预算；0 = 不知道窗口，按 `MAX_SNIPPET_CHARS` 老口径
+    result_chars: int = 0
 
     # 这一路在注册表里的名字。⚠ 不加类型标注：加了它就成了 dataclass 字段
     name = "knowledge"
@@ -201,8 +204,16 @@ class KnowledgeTools:
                 # ⚠ 抛成工具失败而不是穿到回合外：模型拿到「这个库检索不了」
                 # 往往能换一个库或换个说法，而穿出去等于整个回合断掉
                 raise UnknownTool(str(error)) from error
+        # ⚠ 按**这一次要回几条**摊字数，不按上限摊：模型只要 2 条时该让它
+        # 看得更全，而不是拿着按 20 条算出来的那点字数把两条都截断
+        per_hit = budget.snippet_chars(
+            self.result_chars, body.limit, MAX_SNIPPET_CHARS
+        )
         return {
-            "hits": [_hit_of(one, base.name, self.ledger) for one in made.hits],
+            "hits": [
+                _hit_of(one, base.name, self.ledger, per_hit)
+                for one in made.hits
+            ],
             "strategy": made.strategy,
             "note": made.note,
         }
@@ -241,7 +252,9 @@ def _scope_note(scope: BaseScope) -> str:
     )
 
 
-def _hit_of(hit: HitOut, base_name: str, ledger: Ledger) -> dict[str, Any]:
+def _hit_of(
+    hit: HitOut, base_name: str, ledger: Ledger, snippet_chars: int
+) -> dict[str, Any]:
     """一条召回摊成给模型看的样子，并领一个角标。
 
     ⚠ `base_name` 一并带上：对话是跨库的，模型挑错库时用户看不出——
@@ -250,9 +263,12 @@ def _hit_of(hit: HitOut, base_name: str, ledger: Ledger) -> dict[str, Any]:
     ⚠ 角标在**这里**发而不是等模型自己编号：编号要跨多次检索连续，而模型
     只看得见这一次的回执。
 
-    Args: hit, base_name, ledger。
+    ⚠ 发出去的角标记的是**截断后**那段文字：引用面上要与模型看到的逐字一致，
+    否则用户点开依据看到的是另一段话。
+
+    Args: hit, base_name, ledger, snippet_chars（这一条最多多少字）。
     """
-    text = hit.text[:MAX_SNIPPET_CHARS]
+    text = hit.text[:snippet_chars]
     return {
         "mark": ledger.mark(hit, base_name, text),
         "chunk_id": str(hit.chunk_id),

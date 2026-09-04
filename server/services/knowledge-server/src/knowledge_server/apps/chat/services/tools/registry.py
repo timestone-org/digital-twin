@@ -46,6 +46,10 @@ class ToolDeps:
     # 这一回合的角标账本。⚠ 与 `scope` 同理逐次传进来：回合结束时要拿同一份
     # 去解析答案里用到的那几个
     ledger: Ledger
+    # 一次检索回执最多占多少字；0 = 不知道窗口，按老口径。⚠ 按预算**结构化地**
+    # 少给几条、每条短一点，而不是等回合循环把序列化好的 JSON 拦腰截断——截断
+    # 之后模型收到的是半个 JSON，小模型多半就此答飞
+    result_chars: int = 0
 
 
 def build_registry(deps: ToolDeps) -> ToolRegistry:
@@ -60,6 +64,7 @@ def build_registry(deps: ToolDeps) -> ToolRegistry:
                 strategies=deps.strategies,
                 scope=deps.scope,
                 ledger=deps.ledger,
+                result_chars=deps.result_chars,
             ),
             ClientTools(),
         )
