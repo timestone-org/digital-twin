@@ -165,15 +165,15 @@ def fitted(
     if budget_chars <= 0:
         return list(messages)
     kept = list(messages)
-    total = sum(_sized(one) for one in kept)
+    total = sum(sized(one) for one in kept)
     while kept and total > budget_chars:
-        total -= _sized(kept.pop(0))
+        total -= sized(kept.pop(0))
     while kept and isinstance(kept[0], ToolMessage):
         kept.pop(0)
     return kept
 
 
-def _sized(message: BaseMessage) -> int:
+def sized(message: BaseMessage) -> int:
     """一条消息大约占多少字。⚠ 工具调用的入参也算进去：它们与正文一样进请求，
     而一次带十几个参数的调用比它的正文长得多。
 

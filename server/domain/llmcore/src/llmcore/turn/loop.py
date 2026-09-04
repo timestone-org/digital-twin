@@ -42,6 +42,7 @@ from llmcore import (
     ModelChoice,
 )
 from llmcore.deltas import text_of
+from llmcore.memory.history import sized
 from llmcore.textcalls import salvage
 from llmcore.tools.shapes import (
     ToolSpec,
@@ -60,6 +61,9 @@ from llmcore.turn.types import (
 DEFAULT_MAX_STEPS = 24
 # 单个工具产出的字数上限。⚠ 不设上限的话，一次超大结果能把整个上下文挤掉
 DEFAULT_MAX_TOOL_RESULT_CHARS = 20_000
+# 再挤也要给工具产出留这么多字。⚠ 回一个空壳会被模型读成「查过了，没有」，
+# 而那与「这个库里确实没这句话」分辨不出来
+MIN_TOOL_RESULT_CHARS = 400
 
 # ⚠ 记作 `chat.turn` 而不是 `assistant.turn`：这一份被两个服务共用，写死某一家
 # 的名字会让另一家的日志谎报出处。哪个服务发的由日志信封里的 `service` 字段答
@@ -119,6 +123,11 @@ class TurnDeps:
     # 一个回合最多走几步。⚠ 没有上限时，模型与工具可以互相喂到把整个上下文
     # 填满，而每一步都在花钱
     max_steps: int = DEFAULT_MAX_STEPS
+    # 整段上下文的字数预算；0 = 不知道模型的窗口，一格都不收紧。⚠ 与上面那格
+    # 是两条判据：那一格管「一次产出别太大」，这一格管「这一**轮**加起来别顶穿
+    # 窗口」。只有前者的表现是——一个回合里连查三次的那种问题每次都在同一步
+    # 400，而单看每一次产出都在上限之内（实测 n_ctx=6656 的本地端点）
+    max_context_chars: int = 0
     # 单个工具产出的字数上限，超了截断并说出来（见 `_clamped`）
     max_tool_result_chars: int = DEFAULT_MAX_TOOL_RESULT_CHARS
 
@@ -339,14 +348,16 @@ def _tool_step(
         asked = _tool_calls(state["messages"])
         outputs: list[BaseMessage] = []
         steps: list[TurnStep] = []
+        used = sum(sized(one) for one in state["messages"])
         for call in asked:
             if call.name in client_names:
                 continue
             message, step = await _run_one(
-                deps.run_tool, call, deps.max_tool_result_chars
+                deps.run_tool, call, _room(deps, used)
             )
             outputs.append(message)
             steps.append(step)
+            used += sized(message)
         # ⚠ 不回 `pending`：上一步定下来的待办要原样留着
         return {"messages": outputs, "steps": steps}
 
@@ -394,6 +405,24 @@ async def _run_one(
             output_json={"body": body},
         ),
     )
+
+
+def _room(deps: TurnDeps, used: int) -> int:
+    """这一次的工具产出还剩多少地方。
+
+    ⚠ 一个回合里连查三次是常事，而每一次都在单次上限之内——顶穿窗口的是**它们
+    加起来**。按剩余地方逐次收紧之后，后面几次拿到的越来越少，模型据此收手，
+    而不是整个回合以一句「模型端点认为请求不合法」告终。
+
+    ⚠ 地方不够时也留 `MIN_TOOL_RESULT_CHARS`：回一个空壳与回一句「已截断」在
+    模型眼里是两件事，前者会被读成「查过了，没有」。
+
+    Args: deps, used（这一轮已经占掉多少字）。
+    """
+    if deps.max_context_chars <= 0:
+        return deps.max_tool_result_chars
+    left = deps.max_context_chars - used
+    return max(MIN_TOOL_RESULT_CHARS, min(deps.max_tool_result_chars, left))
 
 
 def _clamped(body: str, max_chars: int) -> str:

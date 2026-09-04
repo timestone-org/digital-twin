@@ -26,6 +26,9 @@ MIN_RESULT_CHARS = 600
 # 历史再少也要留这么多字。⚠ 削成 0 的表现是「它连我上一句问的什么都不记得」，
 # 而那比少看几条资料更让人没法用
 MIN_HISTORY_CHARS = 800
+# 留给这一轮答复的那一份。⚠ 模型写答案的 token 与提示词共用同一个窗口：
+# 不留的表现是「提示词刚好塞进去，写到一半被截断」
+ANSWER_TOKENS = 800
 
 
 def result_chars(context_tokens: int, ceiling: int) -> int:
@@ -72,3 +75,21 @@ def history_chars(context_tokens: int, result_budget: int) -> int:
         (context_tokens - RESERVED_TOKENS) * CHARS_PER_TOKEN - result_budget
     )
     return max(MIN_HISTORY_CHARS, afforded)
+
+
+def context_chars(context_tokens: int) -> int:
+    """整段上下文（含常驻提示词与工具声明）最多占多少字。
+
+    ⚠ 这是给回合循环用的**总闸**：一个回合里连查三次是常事，而每一次都在单次
+    上限之内——顶穿窗口的是它们加起来。
+
+    ⚠ 折算里要把答复那一份也留出来：模型写答案的 token 与提示词共用同一个窗口。
+
+    Args: context_tokens（0 = 不知道）。
+    """
+    if context_tokens <= 0:
+        return 0
+    return max(
+        MIN_RESULT_CHARS,
+        int((context_tokens - ANSWER_TOKENS) * CHARS_PER_TOKEN),
+    )

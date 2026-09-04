@@ -4,16 +4,18 @@
 超大产出要截断且说出来、上限可配。助手那边另有一条把熔断也串进来的用例。
 """
 
+from dataclasses import replace
 from typing import Any
 
 import pytest
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, ToolMessage
 from unit.fakes import ScriptedResponder, tool_call
 
 from llmcore.tools.shapes import ToolSpec
 from llmcore.turn import (
     DEFAULT_MAX_STEPS,
     DEFAULT_MAX_TOOL_RESULT_CHARS,
+    MIN_TOOL_RESULT_CHARS,
     ServerToolRunner,
     TurnDeps,
     run_turn,
@@ -278,3 +280,57 @@ async def test_a_real_tool_call_is_never_second_guessed() -> None:
     await run_turn(_deps(responder, spy), [])
 
     assert seen == [{"query": "真的那次"}]
+
+
+async def test_the_second_tool_result_gets_only_the_room_that_is_left() -> None:
+    """⚠ 一个回合里连查三次是常事，而每一次都在单次上限之内——顶穿窗口的是
+    它们加起来。按剩余地方逐次收紧之后，模型据此收手，而不是整个回合以一句
+    「模型端点认为请求不合法」告终。"""
+    calls = [
+        AIMessage(content="", tool_calls=[tool_call("kb.search", {}, "c1")]),
+        AIMessage(content="", tool_calls=[tool_call("kb.search", {}, "c2")]),
+        AIMessage(content="够了"),
+    ]
+    responder = ScriptedResponder(calls)
+
+    async def fat(name: str, arguments: dict[str, Any]) -> object:
+        del name, arguments
+        return {"body": "甲" * 3000}
+
+    deps = replace(
+        _deps(responder, fat),
+        max_context_chars=4000,
+        max_tool_result_chars=3000,
+    )
+    got = await run_turn(deps, [])
+
+    sizes = [
+        len(str(one.content))
+        for one in got.messages
+        if isinstance(one, ToolMessage)
+    ]
+    assert sizes[0] > sizes[1], sizes
+    assert sizes[1] >= MIN_TOOL_RESULT_CHARS
+
+
+async def test_without_a_context_budget_nothing_shrinks() -> None:
+    """⚠ 不知道窗口时一格都不收紧：收紧了的表现是大窗口的模型也只拿得到
+    半份资料，而那与「工具本来就只回了这些」分辨不出来。"""
+    calls = [
+        AIMessage(content="", tool_calls=[tool_call("kb.search", {}, "c1")]),
+        AIMessage(content="", tool_calls=[tool_call("kb.search", {}, "c2")]),
+        AIMessage(content="够了"),
+    ]
+
+    async def fat(name: str, arguments: dict[str, Any]) -> object:
+        del name, arguments
+        return {"body": "甲" * 3000}
+
+    got = await run_turn(_deps(ScriptedResponder(calls), fat), [])
+
+    sizes = [
+        len(str(one.content))
+        for one in got.messages
+        if isinstance(one, ToolMessage)
+    ]
+    assert sizes[0] == sizes[1]

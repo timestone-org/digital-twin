@@ -98,6 +98,9 @@ class AdvanceDeps:
     tool_result_chars: int = DEFAULT_MAX_TOOL_RESULT_CHARS
     # 回放进来的历史最多占多少字；0 = 不知道窗口，按条数窗口那一份走
     history_chars: int = 0
+    # 整段上下文的字数预算；0 = 不知道窗口。⚠ 与上面两格是三条判据：一条管
+    # 单次产出、一条管历史、这一条管「这一轮加起来」
+    context_chars: int = 0
 
 
 def deps_of(container: Container, caller: CallerContext) -> AdvanceDeps:
@@ -131,6 +134,7 @@ def deps_of(container: Container, caller: CallerContext) -> AdvanceDeps:
         ),
         tool_result_chars=afforded,
         history_chars=budget.history_chars(window_tokens, afforded),
+        context_chars=budget.context_chars(window_tokens),
     )
 
 
@@ -287,6 +291,7 @@ async def advance(
         specs=_offered(registry.specs, payload.client_tools),
         run_tool=registry.run,
         choice=ModelChoice(),
+        max_context_chars=deps.context_chars,
         max_tool_result_chars=deps.tool_result_chars,
     )
     produced: list[TurnStep] = []
