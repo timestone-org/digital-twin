@@ -313,7 +313,9 @@ export interface DatasetLatest {
 
 /**
  * 序列上的一个点。对应后端 `DatasetSeriesPointOut`。
- * ⚠ 字段名与点位历史读侧的 `HistoryPoint` 对齐，趋势页的渲染代码两边共用一份。
+ * ⚠ 与点位历史读侧的 `HistoryPoint`（`{ t: UTC 毫秒, v }`）**不是同一套线形**：
+ * 这里的时刻是 RFC3339 字符串、值键叫 `value`。两边共用一份渲染代码就得逐点
+ * 转换一次，照着字段名直接喂过去时间轴会整条塌成 NaN 而不报任何错。
  */
 export interface DatasetSeriesPoint {
   ts: string

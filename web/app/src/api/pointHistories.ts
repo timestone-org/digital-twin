@@ -17,6 +17,7 @@ import type {
   HistoryResult,
   HistoryTimeRange,
 } from '@dt/contracts'
+import { DataSourceError } from '@dt/datasources'
 
 import { PLATFORM_BASE_URL } from '@/config/app'
 import { requestData, type RequestOptions } from './client'
@@ -42,10 +43,13 @@ function onPlatform(options: RequestOptions = {}): RequestOptions {
   return { ...options, baseUrl: PLATFORM_BASE_URL }
 }
 
-/** 解析 `1h` / `7d` 这类相对窗；不认识的写法回落一小时。 */
-export function windowToMs(lastWindow: string | undefined): number {
-  const matched = /^(\d{1,4})(s|m|h|d)$/.exec(lastWindow ?? '')
-  if (matched === null) return DEFAULT_WINDOW_MS
+/**
+ * 解析 `1h` / `7d` 这类相对窗；认不出的写法给 null。
+ * @param lastWindow 相对窗原文
+ */
+function parseWindowMs(lastWindow: string): number | null {
+  const matched = /^(\d{1,4})(s|m|h|d)$/.exec(lastWindow)
+  if (matched === null) return null
   const amount = Number(matched[1])
   const unit = matched[2]
   const scale =
@@ -60,8 +64,33 @@ export function windowToMs(lastWindow: string | undefined): number {
 }
 
 /**
+ * 解析相对窗给界面用，认不出的写法回落一小时。
+ * ⚠ 只给「还在输入中的那个框」用：桶宽档位表在半截输入下也得给得出一份清单。
+ * 取数一侧走 `resolveWindow`，它对认不出的写法一律拒绝。
+ * @param lastWindow 相对窗原文
+ */
+export function windowToMs(lastWindow: string | undefined): number {
+  return parseWindowMs(lastWindow ?? '') ?? DEFAULT_WINDOW_MS
+}
+
+/** 配了相对窗就必须认得出来；没配的按兜底窗口取最新一段。 */
+function requiredWindowMs(lastWindow: string | undefined): number {
+  const text = lastWindow ?? ''
+  if (text === '') return DEFAULT_WINDOW_MS
+  const found = parseWindowMs(text)
+  if (found !== null) return found
+  throw new DataSourceError(
+    'invalid-query',
+    `认不出这个相对窗：${text}；只认 30s / 15m / 2h / 7d 这样的写法`,
+  )
+}
+
+/**
  * 把范围口径落成一段具体的时间窗。
  * `fromMs` 优先于 `lastWindow`；只给 `limit` 时按兜底窗口取最新一段。
+ * ⚠ 认不出的相对窗一律 `invalid-query`：静默回落一小时的话，`7d` 写成 `1w`
+ * 换回来的是一条只有一小时的曲线，而那与「这个点位只有一小时的数据」长得
+ * 一模一样，而配置面是个自由文本框、没有校验。
  * @param range 绑定里的范围口径
  * @param nowMs 当前时刻，测试注入
  */
@@ -70,7 +99,7 @@ export function resolveWindow(
   nowMs: number,
 ): { fromMs: number; toMs: number } {
   const toMs = range.toMs ?? nowMs
-  const fromMs = range.fromMs ?? toMs - windowToMs(range.lastWindow)
+  const fromMs = range.fromMs ?? toMs - requiredWindowMs(range.lastWindow)
   return { fromMs: Math.min(fromMs, toMs), toMs }
 }
 
