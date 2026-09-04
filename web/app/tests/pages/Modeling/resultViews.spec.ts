@@ -89,7 +89,9 @@ describe('结果视图按 kind 派发', () => {
     })
 
     expect(wrapper.text()).toContain('R²')
-    expect(wrapper.findAll('circle')).toHaveLength(2)
+    // 真值-预测与预测-残差两张：后者才看得出异方差（规格 §5-20）
+    expect(wrapper.findAll('.dt-ml-scatter__dots')).toHaveLength(2)
+    expect(wrapper.text()).toContain('共 2 个点')
   })
 
   it('评估：真值全都一样时不会因为除以 0 画出 NaN', () => {
@@ -110,9 +112,12 @@ describe('结果视图按 kind 派发', () => {
       },
     })
 
-    const cx = wrapper.findAll('circle').map((c) => c.attributes('cx'))
+    const paths = wrapper
+      .findAll('.dt-ml-scatter__dots')
+      .map((dots) => dots.attributes('d'))
+    expect(paths).toHaveLength(2)
     expect(
-      cx.every((value) => value !== undefined && !value.includes('NaN')),
+      paths.every((value) => value !== undefined && !value.includes('NaN')),
     ).toBe(true)
   })
 
@@ -221,23 +226,58 @@ describe('评估结果', () => {
   it('残差直方图按桶画出来', () => {
     const wrapper = mount(ResultView, { props: { payload: METRICS } })
 
-    expect(wrapper.findAll('.dt-ml-residual__bar')).toHaveLength(3)
+    expect(wrapper.findAll('.dt-ml-hist__bar-kept')).toHaveLength(3)
+    // ⚠ 标题与轴名是靠 prop 传下去的，名字写错时 typecheck 与 lint 双双放行
+    expect(wrapper.find('.dt-ml-hist figcaption').text()).toContain('残差分布')
+    expect(wrapper.find('.dt-ml-hist__axis-name').text()).toBe('残差')
   })
 
   it('残差跨过 0 时把零线画出来', () => {
     const wrapper = mount(ResultView, { props: { payload: METRICS } })
 
-    expect(wrapper.find('.dt-ml-residual__zero').exists()).toBe(true)
+    expect(wrapper.find('.dt-ml-hist__mark').exists()).toBe(true)
+    expect(wrapper.find('.dt-ml-hist__mark-label').text()).toBe('零误差 0')
   })
 
-  it('残差全在一侧时不画零线，免得画到框外去', () => {
+  // ⚠ 零线落到框外去会骗人，但「不画」也不能一声不吭：残差全同号本身就是结论
+  it('残差全在一侧时不画零线，改成图下一行字', () => {
     const wrapper = mount(ResultView, {
       props: {
         payload: { metrics: { ...METRICS_BODY, residual_bins: [[1, 2, 5]] } },
       },
     })
 
-    expect(wrapper.find('.dt-ml-residual__zero').exists()).toBe(false)
+    expect(wrapper.find('.dt-ml-hist__mark').exists()).toBe(false)
+    expect(wrapper.find('.dt-ml-hist__stray').text()).toContain('零误差 0')
+  })
+
+  // ⚠ 偏均值与离散度就在同一份 metrics 里，今天只印成两个数字，与那张直方图
+  // 互不相干（规格 §5-22）
+  it('残差分析给了偏均值与离散度时叠一条正态参考曲线', () => {
+    const wrapper = mount(ResultView, {
+      props: {
+        payload: {
+          metrics: {
+            ...METRICS_BODY,
+            metrics: { residual_mean: -0.2, residual_std: 1.4 },
+          },
+        },
+      },
+    })
+
+    expect(wrapper.find('.dt-ml-hist__curve').exists()).toBe(true)
+  })
+
+  it('只有偏均值没有离散度时不硬画那条曲线', () => {
+    const wrapper = mount(ResultView, {
+      props: {
+        payload: {
+          metrics: { ...METRICS_BODY, metrics: { residual_mean: -0.2 } },
+        },
+      },
+    })
+
+    expect(wrapper.find('.dt-ml-hist__curve').exists()).toBe(false)
   })
 
   // ⚠ 「点太多只画了一部分」与「整份散点被摘要预算削掉」要分开说：

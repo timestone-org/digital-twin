@@ -45,6 +45,40 @@ export function niceNumber(value: number | null | undefined): string {
   return trimmed(size < 1 ? value.toPrecision(DIGITS) : value.toFixed(DIGITS))
 }
 
+/** 小到一位小数写不出来的百分数，改写成「不到这么多」。 */
+const PERCENT_FLOOR = 0.01
+
+/**
+ * 四舍五入把 99.99 推到 100 时退半格。
+ *
+ * ⚠ 「全部」与「几乎全部」是两回事：印成 100% 会被读成一行不剩。
+ * Args: value 原值；text 已经定点化的写法。
+ */
+function capped(value: number, text: string): string {
+  const shown = Number(text)
+  if (Math.abs(value) >= 100 || Math.abs(shown) < 100) return text
+  return value > 0 ? '99.9' : '-99.9'
+}
+
+/**
+ * 百分数：整数不带小数点，一位小数封顶（不到 1 的给两位）。
+ *
+ * ⚠ 不走 `niceNumber`：那一档是系数与统计量的四位有效数字口径，套到百分数上
+ * 会把 8/360 印成 2.2222%——那四位是假精度。
+ * Args: value 已经乘过 100 的百分数值，不是 0–1 的比率。
+ */
+export function percentText(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return '—'
+  }
+  if (value === 0) return '0%'
+  const size = Math.abs(value)
+  if (size < PERCENT_FLOOR) {
+    return `${value > 0 ? '<' : '>-'}${PERCENT_FLOOR}%`
+  }
+  return `${capped(value, trimmed(value.toFixed(size < 1 ? 2 : 1)))}%`
+}
+
 /** 千分位。⚠ 不用 `toLocaleString`：CI 与开发机 locale 不同，会本地绿 CI 红。 */
 export function grouped(value: number): string {
   return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ',')

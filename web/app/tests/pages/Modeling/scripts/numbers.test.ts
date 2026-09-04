@@ -5,7 +5,11 @@ import { describe, expect, it } from 'vitest'
 
 import { headlineOf } from '@/pages/Modeling/Canvas/scripts/nodeHeadline'
 import type { MetricsPreview } from '@/pages/Modeling/Canvas/scripts/preview'
-import { grouped, niceNumber } from '@/pages/Modeling/Canvas/scripts/numbers'
+import {
+  grouped,
+  niceNumber,
+  percentText,
+} from '@/pages/Modeling/Canvas/scripts/numbers'
 
 function metrics(pairs: [string, number | null][]): MetricsPreview {
   return {
@@ -16,6 +20,8 @@ function metrics(pairs: [string, number | null][]): MetricsPreview {
     isPairsTruncated: false,
     isPairsTrimmed: false,
     residualBins: [],
+    labels: [],
+    matrix: [],
   }
 }
 
@@ -56,6 +62,43 @@ describe('小系数不许印成 0', () => {
   it('千分位只插在整数位之间', () => {
     expect(grouped(12000)).toBe('12,000')
     expect(grouped(999)).toBe('999')
+  })
+})
+
+describe('百分数不摆四位有效数字', () => {
+  // ⚠ 8/360 走系数那一档会印成 2.2222%——四位有效数字在百分数上是假精度
+  it('一位小数封顶，整数不带小数点', () => {
+    expect(percentText((8 / 360) * 100)).toBe('2.2%')
+    expect(percentText(33.333333)).toBe('33.3%')
+    expect(percentText(30)).toBe('30%')
+    expect(percentText(100)).toBe('100%')
+  })
+
+  it('不到 1% 的给两位，量级不被抹平', () => {
+    expect(percentText(0.42)).toBe('0.42%')
+    expect(percentText(0.126)).toBe('0.13%')
+  })
+
+  // ⚠ 印成 0% 会被读成「一行都没有」，那与「有但很少」是两回事
+  it('小到两位小数都写不出来的明说是不到多少', () => {
+    expect(percentText(0.004)).toBe('<0.01%')
+    expect(percentText(-0.004)).toBe('>-0.01%')
+    expect(percentText(0)).toBe('0%')
+  })
+
+  // ⚠ 「全部」与「几乎全部」是两回事：99.9999% 印成 100% 会被读成一行不剩
+  it('四舍五入撞上 100 时退半格，真的 100 才写 100', () => {
+    expect(percentText(99.9999)).toBe('99.9%')
+    expect(percentText(-99.9999)).toBe('-99.9%')
+    expect(percentText(99.9)).toBe('99.9%')
+    expect(percentText(100)).toBe('100%')
+    expect(percentText(120)).toBe('120%')
+  })
+
+  it('空值与非有限数写成「—」而不是 0%', () => {
+    expect(percentText(null)).toBe('—')
+    expect(percentText(undefined)).toBe('—')
+    expect(percentText(Number.NaN)).toBe('—')
   })
 })
 

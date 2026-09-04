@@ -90,6 +90,8 @@ describe('卡片上那行结果', () => {
         isPairsTruncated: false,
         isPairsTrimmed: false,
         residualBins: [],
+        labels: [],
+        matrix: [],
       }),
     ).toBe('R² 0.93 · RMSE 2')
   })
@@ -171,6 +173,8 @@ describe('无定义的指标不往卡片上印', () => {
         isPairsTruncated: false,
         isPairsTrimmed: false,
         residualBins: [],
+        labels: [],
+        matrix: [],
       }),
     ).toBe('RMSE 2 · MAE 1')
   })

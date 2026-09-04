@@ -13,7 +13,7 @@ import { computed } from 'vue'
 
 import { formatDateTime } from '@/utils/datetime'
 
-import { grouped, niceNumber } from '../scripts/numbers'
+import { grouped, niceNumber, percentText } from '../scripts/numbers'
 import type { ColumnStat, FramePreview } from '../scripts/preview'
 
 const props = defineProps<{ preview: FramePreview }>()
@@ -96,7 +96,7 @@ function display(value: unknown): string {
 }
 
 function statOf(column: ColumnStat, key: string): string {
-  if (key === 'nullRatio') return `${niceNumber(column.nullRatio * 100)}%`
+  if (key === 'nullRatio') return percentText(column.nullRatio * 100)
   if (key === 'uniqueCount') return grouped(column.uniqueCount)
   return niceNumber(
     { min: column.min, max: column.max, mean: column.mean, p50: column.p50 }[
