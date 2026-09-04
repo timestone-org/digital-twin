@@ -20,9 +20,12 @@
     "@dt/twin-config": "workspace:*",
     "@dt/twin2d": "workspace:*",
     "@dt/ui": "workspace:*",
+    "docx-preview": "0.4.0",
     "html-to-image": "^1.11.13",
+    "pdfjs-dist": "6.3.289",
     "pinia": "^2.3.0",
     "pinyin-pro": "3.28.2",
+    "read-excel-file": "9.3.10",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },
