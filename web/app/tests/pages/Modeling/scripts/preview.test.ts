@@ -298,6 +298,60 @@ describe('读一份结果摘要', () => {
     expect(preview.provenance.isTruncated).toBe(false)
   })
 
+  // ⚠ 后端一年前就在传 labels 与 matrix，前端一直没读，混淆矩阵从上线到现在
+  // 一次都没显示过
+  it('分类评估的类目与混淆矩阵读得出来', () => {
+    const preview = previewOf({
+      kind: 'metrics',
+      task: 'classification',
+      metrics: { accuracy: 0.8 },
+      labels: ['0', '1'],
+      matrix: [
+        [5, 3],
+        [1, 9],
+      ],
+    })
+
+    if (preview.kind !== 'metrics') throw new Error('派发错了')
+    expect(preview.labels).toEqual(['0', '1'])
+    expect(preview.matrix).toEqual([
+      [5, 3],
+      [1, 9],
+    ])
+  })
+
+  // ⚠ 按 0 补会把一份读坏的矩阵显示成一份算得出准确率的矩阵
+  it('矩阵里读不出数的那一格给 null，形状原样留着', () => {
+    const preview = previewOf({
+      kind: 'metrics',
+      task: 'classification',
+      metrics: {},
+      labels: ['0', '1'],
+      matrix: [
+        [5, '三'],
+        [1, 9],
+      ],
+    })
+
+    if (preview.kind !== 'metrics') throw new Error('派发错了')
+    expect(preview.matrix).toEqual([
+      [5, null],
+      [1, 9],
+    ])
+  })
+
+  it('预测连续值的评估没有类目与矩阵，给两个空数组而不是 undefined', () => {
+    const preview = previewOf({
+      kind: 'metrics',
+      task: 'regression',
+      metrics: { r2: 0.9 },
+    })
+
+    if (preview.kind !== 'metrics') throw new Error('派发错了')
+    expect(preview.labels).toEqual([])
+    expect(preview.matrix).toEqual([])
+  })
+
   it('认不出的 kind 读成 unknown，并保留后端那句说明', () => {
     const preview = previewOf({ kind: '将来某种', note: '这一步没有摘要' })
 

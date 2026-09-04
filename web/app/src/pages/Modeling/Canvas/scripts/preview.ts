@@ -103,6 +103,17 @@ export interface MetricsPreview {
    */
   isPairsTrimmed: boolean
   residualBins: ResidualBin[]
+  /** 分类的类目，升序。回归评估里是空的。 */
+  labels: string[]
+  /**
+   * 混淆矩阵：第 i 行第 j 列 = 真实第 i 类被判成第 j 类的行数。
+   *
+   * ⚠ 行是真实、列是预测（后端 `evaluate._confusion`）。按列是真实读的话，
+   * 精确率与召回率会整个换位，而对称矩阵上看不出任何异样。
+   * ⚠ 读不出数的那一格给 null 不给 0：矩阵的形状比某一格的值要紧，按 0 补会把
+   * 一份读坏的矩阵显示成一份算得出准确率的矩阵（`matrixStats` 照实报错）。
+   */
+  matrix: (number | null)[][]
 }
 
 /** 认不出来的摘要，照实说明。 */
@@ -255,6 +266,11 @@ function residualBinsOf(raw: unknown): ResidualBin[] {
   return bins
 }
 
+/** 矩阵按行读，形状原样留着：某一格读不出来就是 null。 */
+function matrixOf(raw: unknown): (number | null)[][] {
+  return asList(raw).map((row) => asList(row).map((cell) => asNumber(cell)))
+}
+
 function metricsOf(raw: Record<string, unknown>): MetricsPreview {
   const pairs: [number, number][] = []
   for (const item of asList(raw['pairs'])) {
@@ -276,6 +292,8 @@ function metricsOf(raw: Record<string, unknown>): MetricsPreview {
     isPairsTruncated: raw['pairs_truncated'] === true,
     isPairsTrimmed: !('pairs' in raw),
     residualBins: residualBinsOf(raw['residual_bins']),
+    labels: asTexts(raw['labels']),
+    matrix: matrixOf(raw['matrix']),
   }
 }
 
