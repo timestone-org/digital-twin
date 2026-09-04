@@ -122,9 +122,9 @@ describe('绘图区', () => {
   it('刻度文字用 echarts 6 的那一对键收进绘图区，不写作废了的 containLabel', () => {
     const grid = asRecord(optionOf(BASE, []).grid)
 
-    expect(grid.containLabel).toBe(false)
+    expect('containLabel' in grid).toBe(false)
     expect(grid.outerBoundsMode).toBe('same')
-    expect(grid.outerBoundsContain).toBe('axisLabel')
+    expect(grid.outerBoundsContain).toBe('all')
   })
 })
 

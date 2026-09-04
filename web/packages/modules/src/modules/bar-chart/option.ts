@@ -661,12 +661,9 @@ export function buildBarOption(
   return {
     ...TRANSPARENT_BG,
     ...animationOpts(config),
-    // 开了缩放条要给它让出底下那一条，否则滑块压在类目标签上。
-    // ⚠ 不开 `containLabel`：echarts 6 已经把它废掉，缺省就按外框收缩、连轴名一起算，
-    //   而它需要另注册一个 legacy 组件，没注册时每渲染一帧刷一句 warn 且这个键无效。
+    // 开了缩放条要给它让出底下那一条，否则滑块压在类目标签上
     grid: cartesianGrid({
       legend: readBoolean(config.showLegend, true),
-      containLabel: false,
       ...(zoom ? { bottom: 34 } : {}),
     }),
     ...(layout.horizontal

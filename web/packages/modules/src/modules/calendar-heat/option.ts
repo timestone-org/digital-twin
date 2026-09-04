@@ -21,6 +21,7 @@
  */
 import {
   animationOpts,
+  cartesianGrid,
   categoryAxis,
   escapeHtml,
   tooltipStyle,
@@ -249,18 +250,23 @@ function calendarOf(
 }
 
 /**
- * 一块矩阵坐标。
- * ⚠ 不走 `cartesianGrid()`：那一份出的是单块的四边留白，摆不了「第 i 块从这里起、
- * 占这么高」。
+ * 一块矩阵坐标：第 i 块从 `top` 起、占 `height` 那么高。
+ * ⚠ `labelsInside` 关掉：左右两侧的留白本身就是给年月名与几号留的位置，再按字宽收
+ * 一次等于把它算两遍——实测绘图区左边界会再往右挪 44px。关掉之后轴文字仍被 echarts
+ * 缺省的画布外框兜着，越不出画布。
+ * ⚠ 「占这么高」由 `height` 说了算，`cartesianGrid` 顺带给的 `bottom` 是空转的：
+ * echarts 只在没给 `height` 时才读 `bottom`。
  * @param box 这一块的纵向位置
  */
 function gridOf(box: BlockBox | undefined): OptionFragment {
   return {
-    left: CHART_LEFT,
-    right: CHART_RIGHT,
-    top: box?.top,
+    ...cartesianGrid({
+      left: CHART_LEFT,
+      right: CHART_RIGHT,
+      ...(box ? { top: box.top } : {}),
+      labelsInside: false,
+    }),
     height: box?.height,
-    containLabel: false,
   }
 }
 

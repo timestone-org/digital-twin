@@ -144,8 +144,22 @@ export function legendStyle(
 }
 
 /**
+ * 「刻度文字与轴名都收在四边留白之内」，即绘图区按它们的实际尺寸往里缩。
+ * ⚠ 这是 `grid.containLabel` 在 echarts 6 上的替代口径：那个键要另注册
+ * `LegacyGridContainLabel` 才生效，没注册时每渲染一帧刷一句 warn，而它走的回退路
+ * 不带收缩下限——实测 120×100 的画布上绘图区被刻度文字挤成 0 宽，柱子一根都不剩。
+ * ⚠ `outerBoundsContain` 取 'all' 而不是 'axisLabel'：后者只管刻度文字、不管轴名，
+ * 实测 grid.top 小于 12 时纵轴轴名会被画到画布外裁掉。
+ */
+const LABELS_INSIDE = {
+  outerBoundsMode: 'same',
+  outerBoundsContain: 'all',
+} as const
+
+/**
  * grid 内边距；`legend:true` 时给底部图例让出位置。四边收百分比串。
- * @param opts 四边留白与是否有图例
+ * 缺省把刻度文字与轴名收进这圈留白之内。
+ * @param opts 四边留白、是否有图例、要不要收字
  */
 export function cartesianGrid(
   opts: {
@@ -154,7 +168,11 @@ export function cartesianGrid(
     bottom?: number | string
     left?: number | string
     legend?: boolean
-    containLabel?: boolean
+    /**
+     * 关掉那一档收缩，交回 echarts 缺省的「按画布收」。
+     * 留白本身就是给轴文字留的位置时要关：再收一次等于把字宽算两遍。
+     */
+    labelsInside?: boolean
   } = {},
 ): OptionFragment {
   return {
@@ -162,7 +180,7 @@ export function cartesianGrid(
     right: opts.right ?? 16,
     bottom: opts.bottom ?? (opts.legend ? 26 : 6),
     left: opts.left ?? 6,
-    containLabel: opts.containLabel ?? true,
+    ...(opts.labelsInside === false ? {} : LABELS_INSIDE),
   }
 }
 

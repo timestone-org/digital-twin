@@ -165,6 +165,23 @@ describe('cartesianGrid', () => {
       top: 32,
     })
   })
+
+  it('缺省把刻度文字与轴名收进留白之内，不写 echarts 6 上作废了的那个键', () => {
+    const grid = cartesianGrid()
+
+    expect(grid).toMatchObject({
+      outerBoundsMode: 'same',
+      outerBoundsContain: 'all',
+    })
+    expect('containLabel' in grid).toBe(false)
+  })
+
+  it('显式关掉那一档就一个键都不写，交回 echarts 缺省的按画布收', () => {
+    const grid = cartesianGrid({ labelsInside: false })
+
+    expect('outerBoundsMode' in grid).toBe(false)
+    expect('outerBoundsContain' in grid).toBe(false)
+  })
 })
 
 describe('categoryAxis', () => {

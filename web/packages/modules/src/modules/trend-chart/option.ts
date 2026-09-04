@@ -74,15 +74,6 @@ const STACK_NAME = 'trend'
 /** 开了缩放条时 grid 底部要多让出来的位置。 */
 const ZOOM_BOTTOM = 30
 
-/**
- * 把刻度文字收进绘图区的那一对键，是 `grid.containLabel` 在 echarts 6 上的等价写法。
- * ⚠ 不写的话左边一列刻度会被裁掉一半，而没有任何报错。
- */
-const LABELS_INSIDE = {
-  outerBoundsMode: 'same',
-  outerBoundsContain: 'axisLabel',
-} as const
-
 function pad2(value: number): string {
   return String(value).padStart(2, '0')
 }
@@ -466,23 +457,15 @@ function trendSeries(
 }
 
 /**
- * 绘图区的边距。
- * ⚠ `containLabel` 在 echarts 6 上已作废：写了不但没有效果，每渲染一次还刷一句
- * warn，而刻度文字会被裁在绘图区外。等价写法是 `LABELS_INSIDE` 那两个键。
+ * 绘图区的边距。刻度文字与轴名收在留白之内那一档由 `cartesianGrid` 缺省给出。
  * @param showLegend 图例开着没有
  * @param showZoom 缩放条开着没有
  */
 function gridOf(showLegend: boolean, showZoom: boolean): OptionFragment {
-  return {
-    ...cartesianGrid({
-      legend: showLegend,
-      containLabel: false,
-      ...(showZoom
-        ? { bottom: showLegend ? ZOOM_BOTTOM * 2 : ZOOM_BOTTOM }
-        : {}),
-    }),
-    ...LABELS_INSIDE,
-  }
+  return cartesianGrid({
+    legend: showLegend,
+    ...(showZoom ? { bottom: showLegend ? ZOOM_BOTTOM * 2 : ZOOM_BOTTOM } : {}),
+  })
 }
 
 /** 提示框，关着时只留一个 `show: false`。 */
