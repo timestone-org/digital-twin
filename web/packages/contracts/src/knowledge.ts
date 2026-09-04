@@ -161,6 +161,12 @@ export interface KnowledgeDocument {
    */
   failure_reason: string
   chunk_count: number
+  /**
+   * 有没有可预览可下载的原件。
+   * ⚠ 别拿 `media_type` 去推：上传那一路登记时把它留成空串，推出来的结论会是
+   * 「一份原件都没有」，而表现是预览入口整列不出现，且任何一处都不报错。
+   */
+  has_raw: boolean
   created_at: string
   ready_at: string | null
 }

@@ -29,6 +29,7 @@ function documentOf(id: string): KnowledgeDocument {
     failureReason: '',
     chunkCount: 1,
     sizeBytes: 8,
+    hasRaw: true,
     createdAt: '2026-09-01T00:00:00.000Z',
     readyAt: '2026-09-01T00:00:01.000Z',
   }

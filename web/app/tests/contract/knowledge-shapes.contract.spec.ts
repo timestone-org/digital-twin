@@ -132,6 +132,7 @@ const SHAPES: Record<string, Record<string, true>> = {
     status: true,
     failure_reason: true,
     chunk_count: true,
+    has_raw: true,
     created_at: true,
     ready_at: true,
   } satisfies Keys<KnowledgeDocument>,

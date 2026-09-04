@@ -258,3 +258,26 @@ export async function readFigureBytes(
     onKnowledge(signal ? { signal } : {}),
   )
 }
+
+/**
+ * 取一份文档原件的字节，供页面里预览与下载。
+ *
+ * ⚠ 与图那条同源，**不能把这条地址直接写进 `<img src>` 或 `<iframe src>`**：
+ * 浏览器给这类子资源请求带不上 `Authorization`，而知识库的原件要认人。
+ * 写进 src 的表现是一个空白框，且不报任何错。
+ *
+ * ⚠ 也**不走预签名 URL**：预签名一旦生成就是一条「谁拿到谁能看」的链接，
+ * 而知识库里可能有涉密图纸。
+ *
+ * @param documentId 哪份文档
+ * @param signal 中止信号，调用方卸载时必须 abort
+ */
+export async function readDocumentRaw(
+  documentId: string,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  return await requestBytes(
+    `${DOCUMENTS}/${documentId}/raw`,
+    onKnowledge(signal ? { signal } : {}),
+  )
+}

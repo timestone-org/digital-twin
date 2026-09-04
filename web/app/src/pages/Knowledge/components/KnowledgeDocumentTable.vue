@@ -4,6 +4,9 @@
  *
  * ⚠ 失败原因**直接显示在行里**，不藏进详情：那句话是后端写给最终用户的
  * （「认不出 .pdf 是什么格式」），藏起来的话用户只看得到一个红色的「失败」。
+ * ⚠ 预览按钮**不进 `PermGuard`**：看原件要的是 `knowledge:use`，与重新解析、
+ * 删除那两个写操作不是同一档权限。包进去的表现是只读账号连看都看不了，
+ * 而这一页对他就只剩一张列表。
  * ⚠ 大小与上传时刻不单独成列：这张表在 ≥xl 时与试验台并排、只有 28rem 上下，
  * 再多两列「操作」就被推出视口，要横滚才够得着。
  */
@@ -28,6 +31,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  preview: [document: KnowledgeDocument]
   reparse: [document: KnowledgeDocument]
   remove: [document: KnowledgeDocument]
 }>()
@@ -39,7 +43,9 @@ const DOCUMENT_COLUMNS: readonly DtDataColumn[] = [
   {
     key: 'actions',
     label: '操作',
-    width: '8rem',
+    // ⚠ 10rem 是三个按钮的实测下限。再窄一档「重新解析」那四个字会换行，
+    // 而换行之后整行高度翻倍，一屏能看的文档少一半
+    width: '10rem',
     align: 'right',
     card: 'actions',
   },
@@ -105,7 +111,20 @@ function metaOf(row: KnowledgeDocument): string {
 
       <!-- ⚠ `block` 不能省：表格开着 fixedLayout，行内盒不截就直接压到相邻列上 -->
       <template #cell-title="{ row }">
-        <span class="block truncate" :title="row.title">{{ row.title }}</span>
+        <!-- 有原件的那几行，名字本身就是预览的入口：它是这一行最大的目标，
+             而右边那个眼睛图标只有找过一次的人才会再找第二次 -->
+        <button
+          v-if="row.hasRaw"
+          type="button"
+          class="block w-full truncate text-left hover:underline"
+          :title="`预览 ${row.title}`"
+          @click="emit('preview', row)"
+        >
+          {{ row.title }}
+        </button>
+        <span v-else class="block truncate" :title="row.title">
+          {{ row.title }}
+        </span>
         <span
           v-if="row.failureReason !== ''"
           class="block truncate text-xs text-state-danger"
@@ -127,8 +146,17 @@ function metaOf(row: KnowledgeDocument): string {
       <template #cell-chunks="{ row }">{{ row.chunkCount }}</template>
 
       <template #cell-actions="{ row }">
-        <PermGuard :codes="[PERMISSION_CODES.knowledgeWrite]">
-          <div class="flex items-center justify-end gap-1">
+        <div class="flex items-center justify-end gap-1">
+          <DtButton
+            v-if="row.hasRaw"
+            variant="ghost"
+            size="sm"
+            icon="eye"
+            aria-label="预览原件"
+            title="预览原件"
+            @click="emit('preview', row)"
+          />
+          <PermGuard :codes="[PERMISSION_CODES.knowledgeWrite]">
             <DtButton variant="ghost" size="sm" @click="emit('reparse', row)">
               重新解析
             </DtButton>
@@ -141,8 +169,8 @@ function metaOf(row: KnowledgeDocument): string {
               title="删除文档"
               @click="emit('remove', row)"
             />
-          </div>
-        </PermGuard>
+          </PermGuard>
+        </div>
       </template>
     </DtDataView>
   </DtCard>

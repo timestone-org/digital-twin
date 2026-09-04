@@ -91,6 +91,7 @@ function documentOf(patch: Partial<KnowledgeDocument>): KnowledgeDocument {
     failureReason: '',
     chunkCount: 12,
     sizeBytes: 2048,
+    hasRaw: true,
     createdAt: '2026-09-01T00:00:00.000Z',
     readyAt: '2026-09-01T00:01:00.000Z',
     ...patch,
