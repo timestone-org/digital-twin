@@ -25,6 +25,7 @@ import ModuleStatusOverlay from './ModuleStatusOverlay.vue'
 import { resolveModuleConfig, type GetModuleManifest } from './nodeTree'
 import { useRuntimeData } from './runtimeData'
 import { useModuleEvaluation } from './useModuleEvaluation'
+import { useSeriesSlots } from './useSeriesSlots'
 
 const props = defineProps<{
   moduleType: string
@@ -154,12 +155,27 @@ function onHostKeydown(event: KeyboardEvent): void {
   }
 }
 
+// 时序槽的取数由这一层发起；没装批量取数口时它一条槽都不接管
+const seriesSlots = useSeriesSlots({
+  specs: () => manifest.value?.bindings ?? [],
+  bindings: () => props.bindings ?? [],
+  read: () => runtimeData.readSeries,
+  epoch: () => runtimeData.seriesEpoch?.() ?? 0,
+})
+
 // ⚠ 读取器在 computed 里调用：对取数源的响应式依赖由那次调用建立
 const { evaluated, meta, showStatusOverlay } = useModuleEvaluation({
   manifest: () => manifest.value,
   bindings: () => props.bindings ?? [],
   nodeId: () => props.nodeId,
-  read: () => runtimeData.readBinding(),
+  // 时序槽包在注入的读取器外面：注入的那份一行不改，非时序槽绑了序列来源仍然
+  // 落回它原来那句「画不出」，而这里照旧不认识任何来源种类
+  read: () => {
+    const base = runtimeData.readBinding()
+    const series = seriesSlots.value
+    return (binding, siblings) =>
+      series.get(binding.fieldKey) ?? base(binding, siblings)
+  },
   hasRenderError: () => fallback.value !== null,
   interactive: () =>
     interaction !== null && props.nodeId !== undefined
