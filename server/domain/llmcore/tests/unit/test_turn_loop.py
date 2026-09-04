@@ -377,3 +377,22 @@ async def test_the_tools_stop_being_offered_once_the_room_is_gone() -> None:
 
     # 第一次问带着工具声明，塞不下之后那一次一个都不带
     assert responder.tools_seen == [2, 0]
+
+
+async def test_a_written_call_is_not_salvaged_once_the_room_is_gone() -> None:
+    """⚠ 捡回来的调用照样会跑：地方用完之后还捡的话，「收手」那条闸被绕开，
+    上下文接着飘，而这一轮本来就是靠收手才答得出来的。"""
+    written = AIMessage(
+        content=(
+            "还得再查。<tool_call><function=kb.search>"
+            "<parameter=query>再查一遍</parameter></function></tool_call>"
+        )
+    )
+    responder = ScriptedResponder([written])
+    deps = replace(_deps(responder), max_context_chars=1)
+
+    got = await run_turn(deps, [])
+
+    # 没跑任何工具，且那一段原样留着——它此刻是模型说的话，不是一次调用
+    assert not [one for one in got.steps if one.kind == "server_tool"]
+    assert "<tool_call>" in got.reply

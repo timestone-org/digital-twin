@@ -279,14 +279,16 @@ def _thinker(deps: TurnDeps) -> Callable[[TurnState], Awaitable[TurnUpdate]]:
     offered = frozenset(spec.name for spec in deps.specs)
 
     async def think(state: TurnState) -> TurnUpdate:
-        used = _used(state["messages"], overhead)
+        # ⚠ 没地方了这一轮就不发工具，捡回那一步也要跟着关：捡回来的调用照样
+        # 会跑，于是「地方用完就收手」这条闸被绕开，上下文接着飘
+        roomy = _has_room(deps, _used(state["messages"], overhead))
         answered = await deps.model.respond(
             choice=deps.choice,
             messages=list(state["messages"]),
-            tools=schemas if _has_room(deps, used) else [],
+            tools=schemas if roomy else [],
             on_delta=deps.on_delta,
         )
-        reply = _salvaged(answered, offered)
+        reply = _salvaged(answered, offered if roomy else frozenset())
         pending = _client_calls(reply, client_names)
         return {
             "messages": [reply],
