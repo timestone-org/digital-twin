@@ -44,6 +44,7 @@ import {
   SLICE_ITEMS_KEY,
   SLICE_SLOT_KEY,
 } from '../src/modules/pie-chart/slices'
+import { AXIS_ITEMS_KEY, AXIS_SLOT_KEY } from '../src/modules/radar-chart/axes'
 import {
   SERIES_ITEMS_KEY,
   SERIES_SLOT_KEY,
@@ -61,6 +62,8 @@ const MODULES_DIR = join(SRC_DIR, 'modules')
 
 // 组件按常量取键时，扫源码看到的是常量名——这张表把它翻回真正的键
 const KEY_CONSTANTS: Record<string, string> = {
+  AXIS_ITEMS_KEY,
+  AXIS_SLOT_KEY,
   BAR_ITEMS_KEY,
   BAR_SLOT_KEY,
   CARD_ITEMS_KEY,
@@ -240,6 +243,7 @@ describe('一个模块 = 一个目录', () => {
       'info-list',
       'nav-tabs',
       'pie-chart',
+      'radar-chart',
       'text-block',
       'trend-chart',
       'twin-2d-view',

@@ -10361,6 +10361,389 @@
       ]
     },
     {
+      "type": "radar-chart",
+      "display_name": "多维雷达",
+      "category": "图表",
+      "description": "多维雷达：把能效、达标率、设备健康度、绿色工厂评价这类**量纲不同**的指标按逐轴量程归一后连成一个封闭形状，回答「这几个维度整体上强在哪、弱在哪」，并可叠一条对比组做横向比较。要看几个量各占多少用 pie-chart，要逐行比高低用 info-list 的进度件，只要几个裸数字用 info-card。一个数组绑定槽 `axisValues`，行钉在 `indicators` 配置项上：第 i 行喂第 i 根轴，两个子槽分别是本组 `value` 与对比组 `compare`，对比组留空是常态。⚠ 每根轴的 min / max 是逐轴的静态配置，雷达必须逐轴自带量程，否则量纲一混形状没有意义；本组与对比组共用同一套量程，不许各归一各的。⚠ 某根轴量程配错（max ≤ min）或取不到读数时，那根轴**整根不进轮子**、改在图例上标出原因——雷达画不出「空着的一维」，喂空值等于在图上凭空造一个凹陷。⚠ 画得出来的轴不足 3 根时整块走空态：两根轴的雷达是一条线段。⚠ 删掉 `indicators` 中间一项，它之后每一根轴的绑定都会改喂前一根。",
+      "icon": "chart-mixed",
+      "keywords": [
+        "radar",
+        "spider",
+        "leida",
+        "duowei",
+        "雷达",
+        "雷达图",
+        "蜘蛛图",
+        "多维",
+        "评价",
+        "画像",
+        "对比"
+      ],
+      "default_size": {
+        "width": 360,
+        "height": 300,
+        "min_width": 200,
+        "min_height": 180
+      },
+      "chrome": "card",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "default": "",
+          "placeholder": "留空隐藏标题栏",
+          "group": "数据",
+          "span": "full"
+        },
+        {
+          "key": "indicators",
+          "label": "指标",
+          "type": "array",
+          "default": [
+            {
+              "name": "指标 1",
+              "min": 0,
+              "max": 100
+            },
+            {
+              "name": "指标 2",
+              "min": 0,
+              "max": 100
+            },
+            {
+              "name": "指标 3",
+              "min": 0,
+              "max": 100
+            }
+          ],
+          "group": "数据",
+          "help": "每一项是雷达的一根轴，在绑点面板上是一行。⚠ 至少要 3 根画得出来的轴，不足时整块走空态。⚠ 删掉中间一项，它之后每一根轴的绑定都会改喂前一根——删完请核对绑点面板。",
+          "span": "full",
+          "item_schema": [
+            {
+              "key": "name",
+              "label": "名称",
+              "type": "string",
+              "default": "",
+              "placeholder": "留空则按「第 N 轴」称呼",
+              "help": "轮子上这根轴的名字。⚠ 两根轴重名会被加上 #1 这样的后缀，否则图例上「这一根画不出来」的说明会被并成一条。"
+            },
+            {
+              "key": "min",
+              "label": "量程下限",
+              "type": "number",
+              "default": 0,
+              "help": "这根轴的圆心处代表的值。"
+            },
+            {
+              "key": "max",
+              "label": "量程上限",
+              "type": "number",
+              "default": 100,
+              "help": "这根轴的最外圈代表的值。⚠ 填得不大于下限时整根轴画不出来（在图例上标「量程配错」），而不是把读数夹成 0——伪造的 0 在雷达上是一个真实的凹陷。"
+            },
+            {
+              "key": "unit",
+              "label": "单位",
+              "type": "string",
+              "default": "",
+              "placeholder": "留空跟随整块",
+              "help": "这根轴自己的单位，留空跟随整块那一档。首尾空格照原样保留。"
+            },
+            {
+              "key": "precision",
+              "label": "小数位",
+              "type": "number",
+              "help": "留空跟随整块那一档。",
+              "min": 0,
+              "max": 6,
+              "step": 1
+            }
+          ],
+          "item_label_key": "name",
+          "min_items": 1
+        },
+        {
+          "key": "seriesName",
+          "label": "本组名称",
+          "type": "string",
+          "default": "本组",
+          "group": "数据",
+          "help": "图例上这一组的名字，也是点它上抛的联动值。⚠ 清空会回落到出厂称呼：空名字在 echarts 那边认领不到图例项。",
+          "span": "half"
+        },
+        {
+          "key": "compareName",
+          "label": "对比组名称",
+          "type": "string",
+          "default": "对比组",
+          "group": "数据",
+          "help": "第二条形状的名字。⚠ 一根轴的对比子槽都没绑时整条不画、图例也不列它。",
+          "span": "half"
+        },
+        {
+          "key": "emptyText",
+          "label": "空态文案",
+          "type": "string",
+          "default": "暂无数据",
+          "group": "数据",
+          "help": "一根轴都没接数据时画在图区正中的那一句。⚠ 绑了但画不出三根轴时另说一句、并逐根列出原因，不用这一句。",
+          "span": "half"
+        },
+        {
+          "key": "chartStyle",
+          "label": "图表样式",
+          "type": "enum",
+          "default": "area",
+          "options": [
+            {
+              "value": "line",
+              "label": "描边"
+            },
+            {
+              "value": "area",
+              "label": "填充"
+            }
+          ],
+          "group": "样式",
+          "span": "half"
+        },
+        {
+          "key": "shape",
+          "label": "网格形状",
+          "type": "enum",
+          "default": "polygon",
+          "options": [
+            {
+              "value": "polygon",
+              "label": "多边形"
+            },
+            {
+              "value": "circle",
+              "label": "圆形"
+            }
+          ],
+          "group": "样式",
+          "help": "⚠ 圆形网格读不出一共几根轴，而轴数本身是这块图的信息量之一。",
+          "span": "half"
+        },
+        {
+          "key": "splitCount",
+          "label": "网格环数",
+          "type": "number",
+          "default": 4,
+          "group": "样式",
+          "help": "从圆心到最外圈分几环。环多了读得准，也更容易糊成一片。",
+          "span": "half",
+          "min": 1,
+          "max": 10,
+          "step": 1
+        },
+        {
+          "key": "areaOpacity",
+          "label": "填充浓度 (%)",
+          "type": "range",
+          "default": 25,
+          "group": "样式",
+          "help": "两组叠在一起时靠它分前后。⚠ 上限刻意留在 80：填满会让后画的那一组把先画的整个盖掉。",
+          "span": "half",
+          "when": {
+            "key": "chartStyle",
+            "in": [
+              "area"
+            ]
+          },
+          "min": 0,
+          "max": 80,
+          "step": 1
+        },
+        {
+          "key": "palette",
+          "label": "自定义色板",
+          "type": "array",
+          "default": [],
+          "group": "样式",
+          "help": "留空使用主题色板；每行一个颜色，按系列顺序取用。",
+          "item_schema": [
+            {
+              "key": "color",
+              "label": "颜色",
+              "type": "color"
+            }
+          ]
+        },
+        {
+          "key": "unit",
+          "label": "单位",
+          "type": "string",
+          "default": "",
+          "group": "样式",
+          "span": "half"
+        },
+        {
+          "key": "precision",
+          "label": "小数位",
+          "type": "number",
+          "group": "样式",
+          "help": "留空自动（最多 2 位、去尾随零）",
+          "span": "half",
+          "min": 0,
+          "max": 6,
+          "step": 1
+        },
+        {
+          "key": "showLegend",
+          "label": "显示图例",
+          "type": "boolean",
+          "default": true,
+          "group": "图例",
+          "span": "half"
+        },
+        {
+          "key": "showTooltip",
+          "label": "显示提示框",
+          "type": "boolean",
+          "default": true,
+          "group": "提示框",
+          "span": "half"
+        },
+        {
+          "key": "showValueLabel",
+          "label": "显示数值标签",
+          "type": "boolean",
+          "default": false,
+          "group": "数据标签",
+          "span": "half"
+        },
+        {
+          "key": "animation",
+          "label": "启用动画",
+          "type": "boolean",
+          "default": false,
+          "group": "动画",
+          "help": "默认关闭；开启后首帧入场与数据更新会带过渡。",
+          "span": "half"
+        },
+        {
+          "key": "animationDuration",
+          "label": "动画时长(ms)",
+          "type": "number",
+          "default": 600,
+          "group": "动画",
+          "help": "首帧入场 / 数据更新的过渡时长；仅在启用动画时生效。",
+          "span": "half",
+          "when": {
+            "key": "animation",
+            "in": [
+              true
+            ]
+          },
+          "min": 0,
+          "step": 50
+        }
+      ],
+      "bindings": [
+        {
+          "key": "axisValues",
+          "label": "逐轴读数",
+          "data_type": "number",
+          "is_array": true,
+          "is_entity_pinned": true,
+          "array_fields": [
+            {
+              "key": "value",
+              "label": "本组",
+              "data_type": "number"
+            },
+            {
+              "key": "compare",
+              "label": "对比组",
+              "data_type": "number"
+            }
+          ]
+        }
+      ],
+      "config_presets": [
+        {
+          "id": "green-factory",
+          "label": "绿色工厂",
+          "hint": "多边形网格 + 一层实面，单组评价一眼看出短板；底部图例交代画不出来的那几根轴。",
+          "config": {
+            "chartStyle": "area",
+            "shape": "polygon",
+            "splitCount": 4,
+            "areaOpacity": 32,
+            "palette": [],
+            "showLegend": true,
+            "showTooltip": true,
+            "showValueLabel": false,
+            "animation": false,
+            "animationDuration": 600
+          }
+        },
+        {
+          "id": "group-compare",
+          "label": "双组对比",
+          "hint": "面调淡，两组叠着也分得出前后；网格加一环，读得出差在哪一档。",
+          "config": {
+            "chartStyle": "area",
+            "shape": "polygon",
+            "splitCount": 5,
+            "areaOpacity": 18,
+            "palette": [],
+            "showLegend": true,
+            "showTooltip": true,
+            "showValueLabel": false,
+            "animation": false,
+            "animationDuration": 600
+          }
+        },
+        {
+          "id": "outline-clean",
+          "label": "净描边",
+          "hint": "不铺面、圆形网格，轴多时最清爽；顶点上直接写读数。",
+          "config": {
+            "chartStyle": "line",
+            "shape": "circle",
+            "splitCount": 4,
+            "areaOpacity": 25,
+            "palette": [],
+            "showLegend": true,
+            "showTooltip": true,
+            "showValueLabel": true,
+            "animation": false,
+            "animationDuration": 600
+          }
+        },
+        {
+          "id": "compact-radar",
+          "label": "紧凑轮",
+          "hint": "窄块里用：三环、细描边、图例与标签都不占地方——代价是画不出来的那几根轴在屏上没有说明。",
+          "config": {
+            "chartStyle": "line",
+            "shape": "polygon",
+            "splitCount": 3,
+            "areaOpacity": 25,
+            "palette": [],
+            "showLegend": false,
+            "showTooltip": true,
+            "showValueLabel": false,
+            "animation": true,
+            "animationDuration": 600
+          }
+        }
+      ],
+      "content_keys": [
+        "title",
+        "indicators",
+        "emptyText",
+        "seriesName",
+        "compareName"
+      ]
+    },
+    {
       "type": "text-block",
       "display_name": "文本块",
       "category": "装饰",

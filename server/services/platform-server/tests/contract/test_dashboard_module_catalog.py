@@ -52,6 +52,7 @@ EXPECTED_TYPES = frozenset(
         "image-block",
         "nav-tabs",
         "pie-chart",
+        "radar-chart",
         "text-block",
         "trend-chart",
         "twin-2d-view",

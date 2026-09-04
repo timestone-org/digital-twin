@@ -33,6 +33,7 @@ async def test_the_listing_names_every_registered_module(
         "info-list",
         "nav-tabs",
         "pie-chart",
+        "radar-chart",
         "text-block",
         "trend-chart",
         "twin-2d-view",

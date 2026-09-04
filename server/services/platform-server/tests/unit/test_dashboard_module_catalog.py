@@ -29,6 +29,7 @@ def test_the_committed_catalog_registers_the_known_modules() -> None:
             "info-list",
             "nav-tabs",
             "pie-chart",
+            "radar-chart",
             "text-block",
             "trend-chart",
             "twin-2d-view",
