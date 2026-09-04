@@ -272,3 +272,45 @@ def test_an_image_part_becomes_a_placeholder_not_the_bytes() -> None:
     )
 
     assert history.IMAGE_PLACEHOLDER in made[1]["text"]
+
+
+def test_a_reasoning_block_is_dropped_not_mistaken_for_an_image() -> None:
+    """⚠ 带思考摘要的那几路（Responses 方言）把摘要放进 `reasoning` 块里，
+    与正文块并排。当成图的表现是界面上冒出一句「[图片]」——用户读成一张加载
+    失败的插图，而正文其实好好的。"""
+    made = history.to_content(
+        AIMessage(
+            content=[
+                {
+                    "type": "reasoning",
+                    "id": "rs_1",
+                    "summary": [{"type": "summary_text", "text": "先查库"}],
+                },
+                {"type": "text", "text": "上限是 65 ℃。①"},
+            ]
+        )
+    )
+
+    assert made[1]["text"] == "上限是 65 ℃。①"
+
+
+def test_a_message_that_only_thought_lands_as_empty_text() -> None:
+    """只想不说的那一条（只发工具调用）落库是空正文，不是一串占位。
+
+    ⚠ 落成「[图片] [图片]」的话，那句话既回放到界面上，也在下一轮原样喂回给
+    模型——它会看见自己上一轮「说」过一句 `[图片]`。
+    """
+    made = history.to_content(
+        AIMessage(
+            content=[
+                {"type": "reasoning", "id": "rs_1", "summary": []},
+                {"type": "reasoning", "id": "rs_2", "summary": []},
+            ],
+            tool_calls=[
+                {"id": "c1", "name": "kb.search", "args": {"query": "冷却水"}}
+            ],
+        )
+    )
+
+    assert made[1]["text"] == ""
+    assert [one["id"] for one in made[1]["tool_calls"]] == ["c1"]

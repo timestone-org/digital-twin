@@ -35,6 +35,10 @@ from llmcore.memory.ports import HistoryRow
 # 图片在历史里的占位。⚠ 回放时不重新塞图：一次回放会把会话里每一张图都再喂
 # 一遍，而模型早已在当时看过并给出了结论
 IMAGE_PLACEHOLDER = "[图片]"
+# 哪几种内容块是**图**。⚠ 白名单，不是「除了文字都算图」：思考摘要那一路
+# （Responses 方言）也是内容块，当成图的表现是库里留下一句「[图片]」，
+# 而它会原样出现在回放出来的对话框里，看着就像一张加载失败的插图
+IMAGE_BLOCK_TYPES = frozenset({"image", "image_url", "input_image"})
 # 窗口一次脱落几条。⚠ 按台阶脱落而不是逐条：逐条会让窗口每多一条消息就整体
 # 前移一格，历史区的前缀从此再也对不上（ADR-0025）
 DEFAULT_DROP_STEP = 10
@@ -156,7 +160,12 @@ def _text_of(message: BaseMessage) -> str:
 
 
 def _part_text(part: object) -> str:
-    """一个内容块摊成文字。
+    """一个内容块摊成文字：文字照抄、图换成占位、别的当没有。
+
+    ⚠ 认不出的块**丢掉而不是当成图**。带思考摘要的那几路（Responses 方言）
+    把摘要放进 `reasoning` 块里，与正文块并排——一律当成图的表现是「一条只
+    想不说的助手消息在库里成了一句 `[图片] [图片]`」，而它会原样回放到界面上
+    也原样喂回给模型。思考本来就不落库（见文件头），丢掉才是对的。
 
     Args: part。
     """
@@ -165,9 +174,10 @@ def _part_text(part: object) -> str:
     if not isinstance(part, dict):
         return ""
     body = cast("dict[str, object]", part)
-    if body.get("type") == "text":
+    kind = body.get("type")
+    if kind == "text":
         return str(body.get("text") or "")
-    return IMAGE_PLACEHOLDER
+    return IMAGE_PLACEHOLDER if kind in IMAGE_BLOCK_TYPES else ""
 
 
 def _calls_of(body: dict[str, Any]) -> list[ToolCall]:
