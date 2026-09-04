@@ -96,6 +96,26 @@ describe('回合收尾', () => {
     expect(log.entries[0]?.isStreaming).toBe(false)
   })
 
+  // ⚠ 这是**真实帧序**：服务端在最后一次作答之后必定发一步「给出答复」，
+  // 排在正文之后、`turn.done` 之前。上面那条用例少了这一步，于是漏掉了这个
+  // 缺陷——现场表现是同一段答复在界面上出现两遍，而刷新之后反而正常
+  // （回放读的是库里那一条）
+  it('正文与整段之间夹着「给出答复」那一步，照样不补第二遍', () => {
+    let log = emptyLog()
+    log = withDelta(log, 'text', '是的，那是一张表格截图。')
+    log = withStep(log, {
+      kind: 'model',
+      name: 'model',
+      state: 'succeeded',
+      title: '给出答复',
+      error: null,
+    })
+    log = withReply(log, '是的，那是一张表格截图。')
+
+    expect(roles(log)).toEqual(['assistant', 'step'])
+    expect(texts(log)).toEqual(['是的，那是一张表格截图。', '给出答复'])
+  })
+
   it('一个字都没流出来时才补上整段', () => {
     // 端点不支持流式、或者部署把流式关了，都会走到这一条
     const log = withReply(emptyLog(), '绑好了')
