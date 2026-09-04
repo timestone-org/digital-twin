@@ -109,10 +109,8 @@ const menu = useCanvasMenu({
 const result = useResultPanel({
   graph: page.graph.graph,
   operators: page.operatorMap,
-  previewOf: (id) => page.runner.previews.value.get(id)?.preview,
+  nodeRunOf: (id) => page.runner.previews.value.get(id),
   loadPreview: page.runner.loadPreview,
-  exportedPortsOf: (id) =>
-    page.runner.previews.value.get(id)?.exported_ports ?? [],
 })
 
 /** 点问题条里的卡片名：选中它并把参数面板开在那一项上。 */
@@ -431,11 +429,10 @@ onMounted(async () => {
     </DtModal>
 
     <ResultDialog
-      :payload="result.payload.value"
+      :detail="result.detail.value"
       :labels="result.labels.value"
       :run-id="page.runner.run.value?.id"
       :node-id="result.nodeId.value"
-      :exported-ports="result.exportedPorts.value"
       @close="result.close"
     />
 

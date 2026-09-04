@@ -175,6 +175,8 @@ describe('节点结果', () => {
       preview: { kind: 'frame' },
       is_preview_truncated: false,
       exported_ports: [],
+      report: null,
+      fitted: null,
     }
   }
 
