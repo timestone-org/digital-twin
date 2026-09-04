@@ -248,12 +248,38 @@ export async function requestBytes(
   return unwrapBytes(await send(path, options))
 }
 
-/** 把一个字节响应拆成 Blob；非 2xx 一律抛。 */
+/**
+ * 把一个字节响应拆成 Blob；非 2xx 一律抛。
+ *
+ * ⚠ 失败时**先把信封里那句话读出来**再抛：这条路上的拒绝都是后端写给最终
+ * 用户的（「这份文档来自外部系统，没有可看的原件」），扔掉它之后界面上只剩
+ * 一句与所有失败都长得一样的通用话，用户看不出到底出了什么事。
+ * body 不是信封（网关的 HTML 错误页之类）时才退回那句通用话。
+ */
 async function unwrapBytes(response: Response): Promise<Blob> {
-  if (!response.ok) {
-    throw new TransportError(response.status, '这张图取不回来')
+  if (response.ok) return await response.blob()
+  const envelope = await readErrorEnvelope(response)
+  if (envelope === null) {
+    throw new TransportError(response.status, '这个文件取不回来')
   }
-  return await response.blob()
+  throw new BizError(
+    envelope.code,
+    envelope.message,
+    response.status,
+    envelope.trace_id,
+    readDetails(envelope),
+  )
+}
+
+/** 失败响应体是不是一个信封；不是就给 null，由调用方退回通用话。 */
+async function readErrorEnvelope(
+  response: Response,
+): Promise<ApiEnvelope<unknown> | null> {
+  try {
+    return await readEnvelope<unknown>(response)
+  } catch {
+    return null
+  }
 }
 
 /**

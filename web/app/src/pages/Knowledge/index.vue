@@ -27,6 +27,7 @@ import PermGuard from '@/components/PermGuard.vue'
 import KnowledgeBaseFormDialog from './components/KnowledgeBaseFormDialog.vue'
 import KnowledgeBaseHeader from './components/KnowledgeBaseHeader.vue'
 import KnowledgeBaseList from './components/KnowledgeBaseList.vue'
+import KnowledgeDocumentPreview from './components/KnowledgeDocumentPreview.vue'
 import KnowledgeDocumentTable from './components/KnowledgeDocumentTable.vue'
 import KnowledgeSearchPanel from './components/KnowledgeSearchPanel.vue'
 import { useIngestPolling } from './scripts/useIngestPolling'
@@ -41,6 +42,8 @@ useIngestPolling(page.documents, page.refreshDocuments)
 const isCreating = ref(false)
 const isSubmitting = ref(false)
 const createError = ref('')
+/** 正在预览的那一份；为空即弹窗关着。 */
+const previewing = ref<KnowledgeDocument | null>(null)
 
 onMounted(() => void page.reload())
 
@@ -76,6 +79,19 @@ async function dropBase(base: KnowledgeBase): Promise<void> {
 async function addFiles(files: readonly File[]): Promise<void> {
   const uploaded = await page.addFiles(files)
   if (uploaded > 0) toast.success(`已传 ${uploaded} 份文档，后台正在处理`)
+}
+
+function preview(doc: KnowledgeDocument): void {
+  previewing.value = doc
+}
+
+/**
+ * 弹窗自己关上时把选中的那一份也放掉。
+ * ⚠ 不放的话下次点同一份文档，`document` 没变、弹窗也就不会重新取字节——
+ * 表现是「第二次点开是空的」。
+ */
+function onPreviewOpen(isOpen: boolean): void {
+  if (!isOpen) previewing.value = null
 }
 
 async function reparse(doc: KnowledgeDocument): Promise<void> {
@@ -182,6 +198,7 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
                 class="h-100 shrink-0 2xl:h-auto"
                 :documents="page.documents.value"
                 :loading="page.isLoading.value"
+                @preview="preview"
                 @reparse="reparse"
                 @remove="removeDocument"
               />
@@ -215,6 +232,12 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
       :is-busy="isSubmitting"
       :error="createError"
       @submit="createBase"
+    />
+
+    <KnowledgeDocumentPreview
+      :model-value="previewing !== null"
+      :document="previewing"
+      @update:model-value="onPreviewOpen"
     />
   </AppShell>
 </template>

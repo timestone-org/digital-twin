@@ -12,10 +12,11 @@ const EDGE_FILLER = /^[_\s]+|[_\s]+$/g
 /**
  * 名字规整成文件名；整串都被滤掉时给一个兜底名。
  * @param name 原始名字
+ * @param fallback 整串都被滤掉时用的名字
  */
-export function toFileName(name: string): string {
+export function toFileName(name: string, fallback = 'dashboard'): string {
   const safe = name.replace(UNSAFE_NAME, '_').replace(EDGE_FILLER, '')
-  return safe === '' ? 'dashboard' : safe
+  return safe === '' ? fallback : safe
 }
 
 /**
@@ -57,6 +58,21 @@ export function downloadCsv(text: string, name: string): void {
     new Blob([text], { type: 'text/csv;charset=utf-8' }),
     `${toFileName(name)}.csv`,
   )
+}
+
+/**
+ * 触发浏览器下载一份**已经拿到手**的字节。
+ *
+ * ⚠ 扩展名由调用方连在名字里一起给，这里不补也不改：扩展名是操作系统挑打开
+ * 方式的唯一依据，丢掉它的表现是存下来一个双击打不开的文件。
+ * ⚠ 与 `downloadUrl` 的分工是「字节在谁手上」：要认人的接口取回来的 Blob 只能
+ * 走这一支——把那条地址交给 `<a download>` 的话，浏览器发的是一个不带
+ * `Authorization` 的请求，存下来的是一份 401 的错误信封。
+ * @param blob 字节
+ * @param fileName 存成的文件名，含扩展名；会先做字符规整
+ */
+export function downloadBytes(blob: Blob, fileName: string): void {
+  downloadBlob(blob, toFileName(fileName, '原件'))
 }
 
 function downloadBlob(blob: Blob, fileName: string): void {

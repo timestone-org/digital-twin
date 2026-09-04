@@ -49,6 +49,13 @@ export interface KnowledgeDocument {
   failureReason: string
   chunkCount: number
   sizeBytes: number
+  /**
+   * 有没有可预览可下载的原件。
+   * ⚠ 别拿别的字段去推：外部系统那一路的一行压根没有过文件，而上传那一路
+   * 登记时把 media_type 留成空串——推出来的结论会是「一份原件都没有」，
+   * 表现是预览入口整列不出现，且任何一处都不报错。
+   */
+  hasRaw: boolean
   createdAt: string
   readyAt: string | null
 }
@@ -132,6 +139,10 @@ function nullableText(value: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null
 }
 
+function flag(value: unknown): boolean {
+  return value === true
+}
+
 function nullableCount(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
@@ -201,6 +212,7 @@ export function toDocument(value: unknown): KnowledgeDocument {
     failureReason: text(row.failure_reason),
     chunkCount: count(row.chunk_count),
     sizeBytes: count(row.byte_size),
+    hasRaw: flag(row.has_raw),
     createdAt: text(row.created_at),
     readyAt: nullableText(row.ready_at),
   }
