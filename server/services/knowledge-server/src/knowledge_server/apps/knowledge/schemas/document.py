@@ -56,6 +56,10 @@ class DocumentOut(BaseModel):
     # 失败原因，一句人话。⚠ 不含表名、SQL、内网地址——它会原样上界面
     failure_reason: str
     chunk_count: int
+    # 有没有可看可下的原件。⚠ 不让前端拿「有没有 media_type」去推：上传那一路
+    # 登记时把 media_type 留成空串，推出来的结论会是「一份原件都没有」，
+    # 而表现是预览入口整列不出现，且任何一处都不报错
+    has_raw: bool
     created_at: datetime
     ready_at: datetime | None
 

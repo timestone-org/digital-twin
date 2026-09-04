@@ -144,6 +144,49 @@ def window(
     return split(rows, limit, step)[1]
 
 
+def fitted(
+    messages: Sequence[BaseMessage], budget_chars: int
+) -> list[BaseMessage]:
+    """把回放出来的这一截历史再按**字数预算**收一次，从最旧的那头削。
+
+    ⚠ 条数窗口（`window`）与这一层是两条不同的判据，两条都要：条数管的是
+    「别把上下文喂到几十轮」，字数管的是「这一段到底塞不塞得进模型的窗口」。
+    只有条数的表现是——窗口小的模型上，一段三四轮的对话每次都在同一步 400，
+    而端点回的那句话与长度毫无关系（实测：`n_ctx=6656` 的本地端点）。
+
+    ⚠ 削完要**掐掉开头的孤儿工具消息**，与 `split` 同一条规矩：窗口以几条没有
+    调用的工具回应开头时，端点直接判整段请求不合法，报出来的 400 与真实原因
+    毫无关系。
+
+    ⚠ 预算给 0（不知道窗口）时**一条都不削**：这一层只在知道窗口时才收紧。
+
+    Args: messages（已按序回放的那一截）, budget_chars（0 = 不限）。
+    """
+    if budget_chars <= 0:
+        return list(messages)
+    kept = list(messages)
+    total = sum(_sized(one) for one in kept)
+    while kept and total > budget_chars:
+        total -= _sized(kept.pop(0))
+    while kept and isinstance(kept[0], ToolMessage):
+        kept.pop(0)
+    return kept
+
+
+def _sized(message: BaseMessage) -> int:
+    """一条消息大约占多少字。⚠ 工具调用的入参也算进去：它们与正文一样进请求，
+    而一次带十几个参数的调用比它的正文长得多。
+
+    Args: message。
+    """
+    body = len(_text_of(message))
+    if isinstance(message, AIMessage):
+        body += sum(
+            len(str(call.get("args") or "")) for call in message.tool_calls
+        )
+    return body
+
+
 def _text_of(message: BaseMessage) -> str:
     """一条消息落库时留下的那段文字。
 

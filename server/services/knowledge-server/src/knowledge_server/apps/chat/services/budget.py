@@ -23,6 +23,9 @@ CHARS_PER_TOKEN = 1.2
 # 再小也要留这么多字。⚠ 低于这个数的回执对模型没有意义，与其喂半句话
 # 不如让它按「资料不足」回答
 MIN_RESULT_CHARS = 600
+# 历史再少也要留这么多字。⚠ 削成 0 的表现是「它连我上一句问的什么都不记得」，
+# 而那比少看几条资料更让人没法用
+MIN_HISTORY_CHARS = 800
 
 
 def result_chars(context_tokens: int, ceiling: int) -> int:
@@ -51,3 +54,21 @@ def snippet_chars(budget: int, limit: int, ceiling: int) -> int:
         return ceiling
     # 留一成给回执里的元数据（文件名、页码、角标、说明那几句）
     return max(1, min(ceiling, int(budget * 0.9) // limit))
+
+
+def history_chars(context_tokens: int, result_budget: int) -> int:
+    """回放进来的历史最多占多少字。
+
+    ⚠ 历史与「这一轮的工具产出」抢的是同一个窗口。**先保这一轮**：历史丢几轮
+    只是模型忘了前面聊过什么，而工具产出被挤掉是这一问直接答不出来。
+
+    ⚠ 给 0（不知道窗口）时回 0，即不限——由条数窗口那一份说了算。
+
+    Args: context_tokens（0 = 不知道）, result_budget（这一轮工具产出的预算）。
+    """
+    if context_tokens <= 0:
+        return 0
+    afforded = int(
+        (context_tokens - RESERVED_TOKENS) * CHARS_PER_TOKEN - result_budget
+    )
+    return max(MIN_HISTORY_CHARS, afforded)

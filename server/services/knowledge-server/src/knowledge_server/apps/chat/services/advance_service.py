@@ -96,6 +96,8 @@ class AdvanceDeps:
     # 一次工具产出最多占多少字。⚠ 按对话档模型的窗口折算（`budget`）：窗口小的
     # 模型上，一次检索回执就能把上下文顶穿，而端点回的 400 与长度毫无关系
     tool_result_chars: int = DEFAULT_MAX_TOOL_RESULT_CHARS
+    # 回放进来的历史最多占多少字；0 = 不知道窗口，按条数窗口那一份走
+    history_chars: int = 0
 
 
 def deps_of(container: Container, caller: CallerContext) -> AdvanceDeps:
@@ -108,9 +110,8 @@ def deps_of(container: Container, caller: CallerContext) -> AdvanceDeps:
     if not container.answerer.can_answer:
         raise ChatUnavailable("这套部署没有接对话档，知识库对话用不了")
     lanes = strategies(lanes_of(container))
-    afforded = budget.result_chars(
-        container.settings.model_context_tokens, DEFAULT_MAX_TOOL_RESULT_CHARS
-    )
+    window_tokens = container.settings.model_context_tokens
+    afforded = budget.result_chars(window_tokens, DEFAULT_MAX_TOOL_RESULT_CHARS)
     return AdvanceDeps(
         sessions=container.database.session,
         model=container.responder,
@@ -129,6 +130,7 @@ def deps_of(container: Container, caller: CallerContext) -> AdvanceDeps:
             model=container.responder, profile="default"
         ),
         tool_result_chars=afforded,
+        history_chars=budget.history_chars(window_tokens, afforded),
     )
 
 
@@ -224,6 +226,7 @@ def assemble(
     rows: list[HistoryRow],
     summary: Summary | None,
     scope: BaseScope,
+    history_chars: int = 0,
 ) -> list[BaseMessage]:
     """把这一轮喂给模型的消息列表拼出来。
 
@@ -234,10 +237,15 @@ def assemble(
     ⚠ 尾部没应答的工具调用要补回执：否则端点判整段历史不合法，而这个会话再也
     发不出下一句。
 
-    Args: payload, rows, summary, scope。
+    ⚠ 历史要按**字数**再收一次（`history.fitted`）。条数窗口管不住 token：
+    一次检索回执三千多 token，三四轮下来光历史就把小模型的窗口占满，而表现是
+    每次都在同一步 400（实测 `n_ctx=6656` 的本地端点）。给 0 表示不知道窗口，
+    这一步就不动。
+
+    Args: payload, rows, summary, scope, history_chars（0 = 不限）。
     """
     recent = history.window(rows, MAX_HISTORY_MESSAGES, HISTORY_DROP_STEP)
-    replayed = history.replay(recent)
+    replayed = history.fitted(history.replay(recent), history_chars)
     fresh = incoming_messages(payload)
     answered = {
         one.tool_call_id for one in fresh if isinstance(one, ToolMessage)
@@ -413,6 +421,7 @@ async def _opened(
         rows=loaded.rows,
         summary=summary,
         scope=loaded.scope,
+        history_chars=deps.history_chars,
     )
 
 

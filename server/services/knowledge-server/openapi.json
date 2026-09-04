@@ -1398,6 +1398,10 @@
             "title": "Failure Reason",
             "type": "string"
           },
+          "has_raw": {
+            "title": "Has Raw",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -1443,6 +1447,7 @@
           "status",
           "failure_reason",
           "chunk_count",
+          "has_raw",
           "created_at",
           "ready_at"
         ],
@@ -2795,6 +2800,43 @@
           }
         },
         "summary": "取一张解析出来的图",
+        "tags": [
+          "document"
+        ]
+      }
+    },
+    "/api/v1/knowledge/documents/{document_id}/raw": {
+      "get": {
+        "description": "把一份文档的原件吐出去，供页面里预览与下载。\n\n⚠ 回的是字节不是信封（与图那条同一份 api-contract 显式豁免）。\n\nArgs: session, container, _viewer, document_id。",
+        "operationId": "read_raw_api_v1_knowledge_documents__document_id__raw_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "取原件的字节",
         "tags": [
           "document"
         ]

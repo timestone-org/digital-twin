@@ -1,5 +1,6 @@
 """文档的读写面，打真库。直传两步与摄取排队都在这里验。"""
 
+import hashlib
 import uuid
 from collections.abc import Callable
 from typing import Any
@@ -9,11 +10,14 @@ import pytest
 
 from knowledge_server.apps.knowledge import crud
 from knowledge_server.settings import API_PREFIX
+from lib.objectstore import ObjectNotFound
 
 pytestmark = pytest.mark.requires_postgres
 
 BASES = f"{API_PREFIX}/knowledge-bases"
 DOCS = f"{API_PREFIX}/documents"
+# 假对象存储在「浏览器传上去了」那一步落下的字节（见 integration/conftest.py）
+FAKE_UPLOAD_BYTES = "# 标题\n正文".encode()
 
 
 async def _base(client: httpx.AsyncClient) -> str:
@@ -207,3 +211,134 @@ async def test_counting_nothing_asks_the_database_nothing(
     """⚠ 空清单直接回空表：一页库都没有时还去打一次库是白费的往返。"""
     async with db_sessions() as session:
         assert await crud.document.counts_by_base(session, []) == {}
+
+
+async def test_reading_the_original_streams_it_with_a_content_etag(
+    db_client: httpx.AsyncClient,
+) -> None:
+    """⚠ 流字节而不是发预签名 URL，与图那条同源：预签名一旦生成就是一条
+    「谁拿到谁能看」的链接，而知识库里可能有涉密图纸。"""
+    base_id = await _base(db_client)
+    made = await _uploaded(db_client, base_id)
+
+    response = await db_client.get(f"{DOCS}/{made['id']}/raw")
+
+    assert response.status_code == httpx.codes.OK
+    assert response.content == FAKE_UPLOAD_BYTES
+    assert response.headers["content-type"] == "text/markdown; charset=utf-8"
+    # ⚠ ETag 是**内容哈希**而不是时间戳：重新解析之后哈希不变，浏览器那份
+    # 缓存因此仍然有效；按时间戳的话每次重新解析都要把原件重下一遍
+    digest = hashlib.sha256(FAKE_UPLOAD_BYTES).hexdigest()
+    assert response.headers["etag"] == f'"{digest}"'
+    # ⚠ 只能是 private：原件是某个库里的内容，不许被共享缓存留下来
+    assert response.headers["cache-control"].startswith("private")
+    assert response.headers["content-disposition"].startswith("inline")
+
+
+async def test_the_original_carries_the_two_guard_headers(
+    db_client: httpx.AsyncClient,
+) -> None:
+    """⚠ 两条都不能省：`nosniff` 挡住「声明成文本、浏览器嗅成 HTML 去执行」，
+    `sandbox` 让万一真被当成文档渲染的那一份跑在不透明源上、脚本不执行。"""
+    base_id = await _base(db_client)
+    made = await _uploaded(db_client, base_id)
+
+    response = await db_client.get(f"{DOCS}/{made['id']}/raw")
+
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert "sandbox" in response.headers["content-security-policy"]
+
+
+async def test_an_html_original_is_never_served_inline(
+    db_client: httpx.AsyncClient,
+) -> None:
+    """⚠ 安全边界：把用户传上来的 HTML 以 inline 摊在本站域名下，那份 HTML
+    里的脚本就跑在本站源上，能读这个源的存储、能替用户调接口。"""
+    base_id = await _base(db_client)
+    made = await _uploaded(db_client, base_id, "坏页面.html")
+
+    response = await db_client.get(f"{DOCS}/{made['id']}/raw")
+
+    assert response.status_code == httpx.codes.OK
+    assert response.headers["content-disposition"].startswith("attachment")
+
+
+async def test_a_chinese_filename_survives_the_response_header(
+    db_client: httpx.AsyncClient,
+) -> None:
+    """⚠ 响应头按 latin-1 编码，一个中文名会让整条响应在编码那一步炸掉，
+    而炸的地方离「文件名」三个字很远。"""
+    base_id = await _base(db_client)
+    made = await _uploaded(db_client, base_id, "冷却水系统手册.md")
+
+    response = await db_client.get(f"{DOCS}/{made['id']}/raw")
+
+    assert response.status_code == httpx.codes.OK
+    disposition = response.headers["content-disposition"]
+    assert "filename*=UTF-8''" in disposition
+    assert disposition.isascii()
+
+
+async def test_a_document_without_an_original_is_reported_apart(
+    db_client: httpx.AsyncClient, db_sessions: Callable[[], Any]
+) -> None:
+    """⚠ 外部系统那一路的一行压根没有过原件，而它明明就在那张表里列着——
+    混成「没有这份文档」的话，用户只会觉得界面在自相矛盾。"""
+    base_id = await _base(db_client)
+    document_id = uuid.uuid4()
+    async with db_sessions() as session:
+        source = await crud.source.find_source_by_kind(
+            session, uuid.UUID(base_id), "upload"
+        )
+        assert source is not None
+        await crud.document.insert_document(
+            session,
+            crud.document.DocumentWrite(
+                document_id=document_id,
+                base_id=uuid.UUID(base_id),
+                source_id=source.id,
+                external_ref="ems:record:42",
+                title="外部系统里的一条记录",
+                media_type="",
+                object_key="",
+                byte_size=0,
+                content_hash="d" * 64,
+            ),
+        )
+
+    response = await db_client.get(f"{DOCS}/{document_id}/raw")
+
+    assert response.status_code == httpx.codes.NOT_FOUND
+    assert response.json()["code"] == 42311
+    listed = await db_client.get(f"{DOCS}/{document_id}")
+    assert listed.json()["data"]["has_raw"] is False
+
+
+async def test_an_uploaded_document_says_it_has_an_original(
+    db_client: httpx.AsyncClient,
+) -> None:
+    """⚠ 前端靠这一格决定摆不摆预览入口。让它去推「有没有 media_type」的话，
+    上传那一路登记时留的是空串，推出来的结论会是「一份原件都没有」。"""
+    base_id = await _base(db_client)
+    made = await _uploaded(db_client, base_id)
+    assert made["has_raw"] is True
+
+
+async def test_an_original_whose_bytes_are_gone_is_reported_apart(
+    db_stack: Any, db_client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """⚠ 与「没有原件」分开报：行还在而字节没了意味着桶被清过，
+    那是运维要知道的事。"""
+    base_id = await _base(db_client)
+    made = await _uploaded(db_client, base_id)
+
+    async def _gone(key: str) -> bytes:
+        raise ObjectNotFound(f"没有 {key}")
+
+    monkeypatch.setattr(
+        db_stack.app.state.container.objectstore, "get_bytes", _gone
+    )
+    response = await db_client.get(f"{DOCS}/{made['id']}/raw")
+
+    assert response.status_code == httpx.codes.GONE
+    assert response.json()["code"] == 42312
