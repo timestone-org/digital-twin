@@ -144,6 +144,7 @@ function detailOf(id: string, said: string): KnowledgeChatSessionDetail {
         content_json: { text: said },
         usage_json: null,
         steps: [],
+        citations: [],
         created_at: '',
       },
     ],
