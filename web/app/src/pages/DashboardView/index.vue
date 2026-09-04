@@ -33,6 +33,8 @@ import { fetchPointHistory } from '@/api/pointHistories'
 import {
   installDashboardDataSources,
   installDashboardModules,
+  installDashboardSeries,
+  useSeriesEpoch,
 } from '@/bootstrap/dashboard'
 import { useDashboardDoc } from '@/composables/useDashboardDoc'
 import { parseInteractionRules } from '@/features/dashboard/interactionRules'
@@ -41,6 +43,7 @@ import { useDashboardValues } from '@/composables/useDashboardValues'
 import { useRealtimeChannel } from '@/composables/useRealtimeChannel'
 import { dashboardTopic } from '@/runtime/pointFrames'
 import { createPointSubscribe } from '@/runtime/pointStream'
+import { fetchDatasetSeries } from '@/runtime/seriesReader'
 
 // 鼠标停下多久之后把返回入口淡掉
 const CHROME_IDLE_MS = 2400
@@ -67,17 +70,26 @@ installDashboardDataSources({
     return current === null ? null : dashboardTopic(current.id)
   }),
   fetchHistory: fetchPointHistory,
+  fetchDatasetSeries,
 })
 
 const nodes = computed(() => file.dashboard.value?.nodes ?? [])
 // ⚠ 取当前**已加载**的那张屏而不是地址栏里的 id：切屏期间地址已经换了、文档还没到，
 // 按地址走会让上一屏的画面配上新屏的订阅
 // 第三支是连接态：通道断了、屏上还挂着最后已知值时，每一格自己标出「数据可能过期」
-useDashboardValues(
+const values = useDashboardValues(
   () => nodes.value,
   () => file.dashboard.value?.id ?? '',
   () => channel.connectionState.value,
 )
+
+// 时序槽的取数与刷新节拍叠在实时那一份之上，整屏一个节拍。
+// ⚠ 必须排在 `useDashboardValues` 之后：两次注入的是同一个键，后者整份覆盖前者
+installDashboardSeries({
+  readPoint: values.read,
+  connectionState: () => channel.connectionState.value,
+  seriesEpoch: useSeriesEpoch(),
+})
 
 const tree = computed(() => buildNodeTree(nodes.value, getManifest))
 

@@ -2,6 +2,8 @@
  * @fileoverview 运行态页必须**自己**装配模块与取数：直连 `/dashboards/:id` 时
  * 没有别的页面替它注册过任何东西。注册表清空后挂载，模块要照常渲染，
  * 且实时与历史两种 provider 都要在场——装配缺失时这两条必红。
+ * ⚠ 序列那一份还要带上刷新节拍：只在绑定变化时取一次的话，挂一天的大屏曲线
+ * 会停在打开那一刻，而它与「设备停了」长得一模一样。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -10,9 +12,23 @@ import { __resetConfigControls, __resetModules } from '@dt/modules'
 import { __resetProviders, listProviders } from '@dt/datasources'
 import type { DashboardPayload, ModuleConnectionState } from '@dt/contracts'
 
-import { __resetDashboardBootstrap } from '@/bootstrap/dashboard'
+import type * as DashboardBootstrap from '@/bootstrap/dashboard'
+import {
+  __resetDashboardBootstrap,
+  installDashboardSeries,
+} from '@/bootstrap/dashboard'
 import { OFFLINE_GRACE_MS } from '@/composables/useRealtimeOffline'
 import DashboardView from '@/pages/DashboardView/index.vue'
+
+// ⚠ 只把装配那一支换成间谍、其余原样：这一页要验的是它**怎么装**，
+// 而装出来的东西还得是真的
+vi.mock('@/bootstrap/dashboard', async (importOriginal) => {
+  const actual = await importOriginal<typeof DashboardBootstrap>()
+  return {
+    ...actual,
+    installDashboardSeries: vi.fn(actual.installDashboardSeries),
+  }
+})
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({
@@ -90,6 +106,7 @@ beforeEach(() => {
   __resetConfigControls()
   __resetProviders()
   __resetDashboardBootstrap()
+  vi.mocked(installDashboardSeries).mockClear()
 })
 
 afterEach(() => {
@@ -117,6 +134,29 @@ describe('自装配', () => {
     expect(kinds).toContain('archive')
     expect(kinds).toContain('static')
     expect(kinds).toContain('computed')
+    wrapper.unmount()
+  })
+})
+
+describe('序列取数与刷新节拍', () => {
+  it('台账 provider 也在场——dataset 绑定不再是「这一种没登记过」', async () => {
+    const wrapper = mount(DashboardView)
+    await flushPromises()
+
+    expect(listProviders().map((provider) => provider.kind)).toContain(
+      'dataset',
+    )
+    wrapper.unmount()
+  })
+
+  it('装序列取数时把快照读取器、连接态与节拍一起带上', async () => {
+    const wrapper = mount(DashboardView)
+    await flushPromises()
+
+    const ports = vi.mocked(installDashboardSeries).mock.calls[0]?.[0]
+    expect(ports?.readPoint).toBeTypeOf('function')
+    expect(ports?.connectionState?.()).toBe('open')
+    expect(ports?.seriesEpoch).toBeTypeOf('function')
     wrapper.unmount()
   })
 })
