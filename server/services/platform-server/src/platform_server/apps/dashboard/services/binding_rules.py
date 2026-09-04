@@ -37,6 +37,7 @@ _REQUIRED_PAYLOAD = {
     "static": ("static_value_json", "常量绑定必须给出值"),
     "computed": ("compute_json", "派生绑定必须给出运算规格"),
     "archive": ("detail_json", "历史绑定必须给出取数说明"),
+    "dataset": ("detail_json", "台账绑定必须给出取数说明"),
 }
 
 
@@ -84,6 +85,15 @@ def referenced_node_keys(bindings: Sequence[BindingDraft]) -> frozenset[str]:
 
 
 def _point_key(binding: BindingDraft) -> str | None:
+    """这条绑定指向的点位身份；不指向点位的来源给 None。
+
+    ⚠ `dataset` 不在其列：它的 `detail_json` 里躺的是台账列身份
+    `ds:{台账code}:{列key}`，不是点位身份 `{source_id}:{point_code}`。混进来
+    会被 `split_node_key` 判成畸形串，报出一条说点位有问题的错，而用户绑的
+    根本不是点位；表存不存在由台账那一侧管。
+
+    Args: binding。
+    """
     if binding.source_kind == "opcua":
         return binding.node_key
     if binding.source_kind == "archive":
