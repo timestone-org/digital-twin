@@ -38,6 +38,7 @@ const DOCUMENT_WIRE = {
   failure_reason: '',
   chunk_count: 12,
   byte_size: 2048,
+  has_raw: true,
   created_at: '2026-09-01T00:00:00.000Z',
   ready_at: '2026-09-01T00:01:00.000Z',
 }
@@ -218,6 +219,25 @@ describe('取图', () => {
     const controller = new AbortController()
 
     await knowledge.readFigureBytes('d1', 'f1', controller.signal)
+
+    expect(lastCall(requestBytes)[1].signal).toBe(controller.signal)
+  })
+})
+
+describe('取原件', () => {
+  it('走取原件端点并带上知识库前缀', async () => {
+    // ⚠ 同样走 `requestBytes`：这条地址写进 `<iframe src>` 的表现是一个空白框，
+    // 浏览器给子资源请求带不上 Authorization，而原件不匿名可读
+    await knowledge.readDocumentRaw('d1')
+
+    expect(lastCall(requestBytes)[0]).toBe('/documents/d1/raw')
+    expect(lastCall(requestBytes)[1].baseUrl).toBe(KNOWLEDGE_PREFIX)
+  })
+
+  it('给了中止信号就带上', async () => {
+    const controller = new AbortController()
+
+    await knowledge.readDocumentRaw('d1', controller.signal)
 
     expect(lastCall(requestBytes)[1].signal).toBe(controller.signal)
   })

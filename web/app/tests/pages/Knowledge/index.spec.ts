@@ -23,6 +23,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const api = vi.hoisted(() => ({
   readCapability: vi.fn(),
+  readDocumentRaw: vi.fn(),
   listBases: vi.fn(),
   listDocuments: vi.fn(),
   createBase: vi.fn(),
@@ -594,6 +595,77 @@ describe('删除知识库', () => {
     expect(toastSuccess).toHaveBeenCalledWith('已删除知识库')
     expect(wrapper.text()).toContain('还没有知识库')
     expect(wrapper.text()).toContain('选择一个知识库')
+  })
+})
+
+describe('原件预览', () => {
+  it('点文档名就打开预览，并去取那一份的字节', async () => {
+    api.readDocumentRaw.mockResolvedValue(new Blob(['# 标题']))
+    const wrapper = await render()
+
+    await buttonOf(wrapper, '一号机组.docx')?.trigger('click')
+    await flushPromises()
+
+    expect(api.readDocumentRaw.mock.calls[0]?.[0]).toBe('d1')
+    expect(document.body.textContent).toContain('下载原件')
+  })
+
+  it('右边那个眼睛图标是同一个入口', async () => {
+    api.readDocumentRaw.mockResolvedValue(new Blob(['# 标题']))
+    const wrapper = await render()
+
+    const eye = wrapper
+      .findAll('button')
+      .find((one) => one.attributes('aria-label') === '预览原件')
+    await eye?.trigger('click')
+    await flushPromises()
+
+    expect(api.readDocumentRaw).toHaveBeenCalledTimes(1)
+  })
+
+  it('⚠ 关掉之后再点同一份还能打开：关的时候要把选中的那份也放掉', async () => {
+    api.readDocumentRaw.mockResolvedValue(new Blob(['# 标题']))
+    const wrapper = await render()
+
+    await buttonOf(wrapper, '一号机组.docx')?.trigger('click')
+    await flushPromises()
+    modalButton('关闭').click()
+    await flushPromises()
+    expect(document.body.querySelector('.dt-modal')).toBeNull()
+
+    await buttonOf(wrapper, '一号机组.docx')?.trigger('click')
+    await flushPromises()
+
+    expect(api.readDocumentRaw).toHaveBeenCalledTimes(2)
+    expect(document.body.textContent).toContain('下载原件')
+  })
+
+  it('没有原件的那一行不摆预览入口', async () => {
+    api.listDocuments.mockResolvedValue([
+      documentOf({ id: 'd9', title: '外部系统的一条记录', hasRaw: false }),
+    ])
+    const wrapper = await render()
+
+    expect(buttonOf(wrapper, '外部系统的一条记录')).toBeUndefined()
+    expect(
+      wrapper
+        .findAll('button')
+        .some((one) => one.attributes('aria-label') === '预览原件'),
+    ).toBe(false)
+  })
+
+  it('只读账号照样看得了原件——看原件不是写操作', async () => {
+    api.readDocumentRaw.mockResolvedValue(new Blob(['# 标题']))
+    const wrapper = await render(['knowledge:use'])
+
+    expect(buttonOf(wrapper, '重新解析')).toBeUndefined()
+    const eye = wrapper
+      .findAll('button')
+      .find((one) => one.attributes('aria-label') === '预览原件')
+    await eye?.trigger('click')
+    await flushPromises()
+
+    expect(api.readDocumentRaw).toHaveBeenCalledTimes(1)
   })
 })
 
