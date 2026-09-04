@@ -148,15 +148,28 @@ dayKeyOf(formatter, t) → formatToParts → `YYYY-MM-DD`
 不是本模块能决定的。序列槽一律不写 `timestampMs`，所以历史数据不会因为 WS 抖一下
 被标成陈旧。
 
-### 4.1 空态那三句各说各的
+### 4.1 空态那四句各说各的
 
-| 情形 | 文案 |
+| 判据 | 文案 |
 |---|---|
 | 时区认不出 | `时区「…」认不出来，日界算不了` |
+| 每一张的时序槽都被**同步**读取器原样退回来 | 「公开屏不提供历史数据」 |
 | 一张都没配来源 | `config.emptyText`，清空则回落「暂无数据」 |
 | 配了却一天都没取到 | `一天的读数都没取到：能耗（取不到）、产量（等首帧）` |
 
 合成一句「暂无数据」的代价是：看的人不知道该去改配置、去配绑定，还是再等一会儿。
+
+⚠ 第二条的判据与 `trend-chart` 同一份口径（`series.ts` 的 `historyUnavailable`）：
+比的是**应用壳那份同步读取器的拒绝原文**，不是猜路由。公开屏（匿名令牌页）明令不装
+历史 provider，而 `point-histories*` 与 `dataset-tables*` 两个端点都在认证面上，
+所以这块日历在那里永远铺不出格子；设计态画布与模块库缩略图走的是同一条路。
+少了这一条判据，公开屏就落到表里最后那一档，出的是「一天的读数都没取到：能耗
+（取不到）」——把「这个部署根本不提供历史」说成「这几天没数据」
+（`DASHBOARD_CHART_MODULES_DESIGN` 的空态表与 §15 Q2 点名三个时序模块各写一句）。
+
+⚠ 那句原文是跨包的一句约定（`app/src/runtime/bindingReader.ts` 的 `SERIES_MESSAGE`），
+本包够不到它的定义（`packages/*` 不许依赖 `app/`），只能在 `days.ts` 里留一份常量。
+两边真漂了也**不会画错数**，只是退回逐张说明原因的那一句——这是刻意选的失效方向。
 
 ---
 
@@ -184,13 +197,11 @@ dayKeyOf(formatter, t) → formatToParts → `YYYY-MM-DD`
 只到 2026-03-05 至 2026-03-07，此外的日期没取回
 ```
 
-**已知欠账：`truncatedSide` 到不了模块。** 适配器算得出方向（点位侧砍晚的
-`'late'`、台账侧砍早的 `'early'`，见 `pointSeries.ts` / `datasetSeries.ts`），但
-`seriesSlots.ts` 折成 `BindingSlot` 时只搬了 `isTruncated`，`ModuleSlotMeta`
-（`contracts/src/module.ts`）里也没有这个字段。补它要动 `contracts` + `runtime` +
-catalog 快照，**不在新模块 PR 的豁免路径集合内**，故本轮不做。
-选「说清取回的是哪一段」而不是「说清砍了哪一头」是有意的：前者只依赖模块手里已有的
-事实，且对两个方向都成立——凡是落在这一段之外的日期，空白都不代表停机。
+`ModuleSlotMeta` 上有 `truncatedSide`（点位侧砍晚的 `'late'`、台账侧砍早的 `'early'`，
+`seriesSlots.ts` 与 `moduleValues.ts` 都透传，`trend-chart` 已按它分早晚两头说话），
+本模块**仍然不用它**：选「说清取回的是哪一段」而不是「说清砍了哪一头」是有意的——
+前者只依赖模块手里已有的事实，且对两个方向都成立，凡是落在这一段之外的日期，
+空白都不代表停机。
 
 ---
 
@@ -365,5 +376,5 @@ web/packages/modules/src/modules/calendar-heat/
 | 按小时的热力（横轴日、纵轴 24 小时） | 那是 `trend-chart` 的粒度；真要做是第三档铺法，不是新模块 |
 | 点某一格下钻到那天的曲线 | 联动规则已经能表达「点这块 → 切另一张屏」，不在模块内另造一套；且上抛日期在规则里匹配不上（§9） |
 | 归档心跳结转空桶 | 需要逐点位的 `archive_max_interval_ms`，大屏绑定里没有。空桶就是空桶，与趋势页的口径差异记在这里 |
-| `truncatedSide` 的方向文案 | 要动 `contracts` + `runtime` + catalog 快照，不在新模块 PR 的豁免路径里（§5） |
+| `truncatedSide` 的方向文案 | 日历上要紧的是「哪一段取回了」，方向说不清落在段外的空白算不算停机（§5） |
 | 周/月粒度的折算 | 「按天」是这一块的定义。要按周看请在台账侧建一列周聚合 |

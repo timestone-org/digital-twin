@@ -1,7 +1,7 @@
 /**
  * @fileoverview calendar-heat 一整块的取值：槽键与 `fieldKey`、指标列表的归一化、
  * 逐张状态、把一条历史序列按配置给的时区折成「一天一个数」、色阶量程与整块跨度，
- * 以及空态那几句与点一张日历上抛的值，最后收成一份纯数据的 `MetricView[]`。
+ * 以及空态那四句与点一张日历上抛的值，最后收成一份纯数据的 `MetricView[]`。
  * 纯函数，不碰 DOM 也不碰 echarts。
  *
  * ⚠ 日界一律按 `config.timezone` 给的 IANA 串算，留空即浏览器本地。绝不写死东八区：
@@ -58,6 +58,24 @@ export const CALENDAR_EMPTY_TEXT = '暂无数据'
 
 /** 配了来源、却一天读数都没取到时的那一句开头。 */
 export const CALENDAR_BLANK_TEXT = '一天的读数都没取到'
+
+/**
+ * 这一页压根没装历史取数时的那一句。
+ * ⚠ 公开屏（匿名令牌页）明令不装历史 provider，而历史读侧的两个端点都在认证面上，
+ * 于是这块日历在那里永远铺不出格子。落到逐张说明原因的那一句会写成
+ * 「一天的读数都没取到：能耗（取不到）」，把「这个部署根本不提供历史」说成
+ * 「这几天没数据」（DASHBOARD_CHART_MODULES §15 Q2）。
+ */
+export const CALENDAR_NO_HISTORY_TEXT = '公开屏不提供历史数据'
+
+/**
+ * 应用壳里那份**同步**读取器对序列类来源的拒绝原文。
+ * ⚠ 这是跨包的一句约定，本包够不到它的定义（`packages/*` 不许依赖 `app/`），
+ * 判据只能是它本身，且与 trend-chart 同口径：装没装历史取数是应用壳的事，模块看得见
+ * 的只有「每一张的时序槽都被同步读取器原样退回来了」。两边真漂了也不会画错数，
+ * 只是退回逐张说明原因的那一句。
+ */
+const SYNC_REFUSAL = '序列要异步取数，画布上不展开'
 
 /** 没有名称的那一张在标题上的称呼。 */
 const UNNAMED_PREFIX = '第 '
@@ -124,6 +142,8 @@ export interface MetricView {
   emitValue: string
   /** 没画出格子（或只画了一段）的原因；空串 = 正常。 */
   note: string
+  /** 取不到时取数侧给的那句话；正常给空串。 */
+  message: string
   unit: string
   precision: number
   /** 按天升序；空数组 = 这一张一格都画不出来。 */
@@ -388,6 +408,7 @@ function collect(
       name,
       emitValue: item.name,
       note: noteOf(state, cells, slot?.isTruncated === true),
+      message: slot?.message ?? '',
       unit: item.unit,
       precision: item.precision ?? DEFAULT_PRECISION,
       cells,
@@ -533,9 +554,25 @@ function reasonLine(view: MetricView): string {
 }
 
 /**
+ * 这一页装没装历史取数。
+ * ⚠ 判据是「每一张的时序槽都被同步读取器原样退回来了」，不是猜路由：公开屏那条路
+ * 只是最常见的一种，设计态画布与模块库缩略图走的是同一条。
+ * @param views 这一块的全部日历
+ */
+export function historyUnavailable(views: readonly MetricView[]): boolean {
+  return (
+    views.length > 0 &&
+    views.every(
+      (view) => view.state === 'error' && view.message === SYNC_REFUSAL,
+    )
+  )
+}
+
+/**
  * 空态口径。
- * ⚠ 「时区认不出」「一张都没配」「配了但一天都没取到」三件事各说各的：
- * 合成一句「暂无数据」的代价是看的人不知道该去改配置、去配绑定，还是再等一会儿。
+ * ⚠ 「时区认不出」「这一页没有历史取数」「一张都没配」「配了但一天都没取到」四件事
+ * 各说各的：合成一句「暂无数据」的代价是看的人不知道该去改配置、去配绑定，还是
+ * 再等一会儿；而公开屏那一档连等都等不来。
  * @param config 该节点落库的配置
  * @param views 这一块的全部日历
  */
@@ -548,6 +585,9 @@ export function emptyStateOf(
     return { isEmpty: true, text: timezoneFaultText(zone) }
   }
   if (drawnMetrics(views).length > 0) return { isEmpty: false, text: '' }
+  if (historyUnavailable(views)) {
+    return { isEmpty: true, text: CALENDAR_NO_HISTORY_TEXT }
+  }
   if (views.length === 0) {
     return {
       isEmpty: true,

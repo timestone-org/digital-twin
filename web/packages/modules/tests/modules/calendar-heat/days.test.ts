@@ -1,7 +1,7 @@
 /**
  * @fileoverview 守日历热力的取值层：日界按配置给的时区算（跨零点的样本落在正确的
  * 那一天）、认不出的时区不静默按本地折日、一天之内那批采样按五档算法归并成一个数、
- * 逐张四档与触顶那句「只到 …」、整块共用的日期跨度与色阶量程，以及空态那三句
+ * 逐张四档与触顶那句「只到 …」、整块共用的日期跨度与色阶量程，以及空态那四句
  * 各说各的原因。
  *
  * ⚠ 时区这一条错了整块只是**错一天**，屏上一个字的异常都没有——只能靠这里逐条钉。
@@ -16,11 +16,13 @@ import {
   buildMetricViews,
   CALENDAR_BLANK_TEXT,
   CALENDAR_EMPTY_TEXT,
+  CALENDAR_NO_HISTORY_TEXT,
   dayCellsOf,
   dayFormatterOf,
   dayKeyOf,
   drawnMetrics,
   emptyStateOf,
+  historyUnavailable,
   METRIC_ITEMS_KEY,
   METRIC_NOTES,
   metricFieldKey,
@@ -65,6 +67,12 @@ function viewsOf(
 }
 
 const ONE = { [METRIC_ITEMS_KEY]: [{ name: '能耗', unit: 'kWh' }] }
+
+/**
+ * 应用壳那份同步读取器对序列类来源的拒绝原文。
+ * ⚠ 这一句是跨包约定，本处照抄字面量：模块侧的判据钉的就是它，改一个字两边就漂了。
+ */
+const SYNC_REFUSAL = '序列要异步取数，画布上不展开'
 
 describe('日界跟着配置里的时区走', () => {
   it('东八区的跨零点样本落在第二天', () => {
@@ -408,7 +416,7 @@ describe('整块共用的跨度与量程', () => {
   })
 })
 
-describe('空态那三句各说各的', () => {
+describe('空态那四句各说各的', () => {
   it('一张都没配来源时用配置里那一句，清空了回落一句现成的', () => {
     expect(emptyStateOf({ emptyText: '未接台账' }, []).text).toBe('未接台账')
     expect(emptyStateOf({ emptyText: '   ' }, []).text).toBe(
@@ -429,6 +437,40 @@ describe('空态那三句各说各的', () => {
     expect(emptyStateOf(config, views).text).toBe(
       `${CALENDAR_BLANK_TEXT}：能耗（取不到）、产量（等首帧）`,
     )
+  })
+
+  it('每一张都被同步读取器退回来时，说清这一页不提供历史', () => {
+    const config = {
+      timezone: 'UTC',
+      [METRIC_ITEMS_KEY]: [{ name: '能耗' }, { name: '产量' }],
+    }
+    const views = viewsOf(config, rowsOf(), {
+      [metricFieldKey(0)]: { state: 'error', message: SYNC_REFUSAL },
+      [metricFieldKey(1)]: { state: 'error', message: SYNC_REFUSAL },
+    })
+
+    expect(historyUnavailable(views)).toBe(true)
+    expect(emptyStateOf(config, views).text).toBe(CALENDAR_NO_HISTORY_TEXT)
+  })
+
+  it('只有一张是那句拒绝时不算没装历史，仍逐张说明原因', () => {
+    const config = {
+      timezone: 'UTC',
+      [METRIC_ITEMS_KEY]: [{ name: '能耗' }, { name: '产量' }],
+    }
+    const views = viewsOf(config, rowsOf(), {
+      [metricFieldKey(0)]: { state: 'error', message: SYNC_REFUSAL },
+      [metricFieldKey(1)]: { state: 'error', message: '表被删了' },
+    })
+
+    expect(historyUnavailable(views)).toBe(false)
+    expect(emptyStateOf(config, views).text).toBe(
+      `${CALENDAR_BLANK_TEXT}：能耗（取不到）、产量（取不到）`,
+    )
+  })
+
+  it('一张都没配来源时不算没装历史', () => {
+    expect(historyUnavailable([])).toBe(false)
   })
 
   it('只要有一张画得出格子就不算空', () => {
