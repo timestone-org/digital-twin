@@ -19,6 +19,7 @@ from knowledge_server.apps.chat.models import (
     ChatStep,
 )
 from knowledge_server.apps.chat.schemas import (
+    ChatCitationOut,
     ChatMessageOut,
     ChatScopeBaseOut,
     ChatSessionCreateIn,
@@ -245,6 +246,13 @@ async def require_session(
 def _to_message_out(
     message: ChatMessage, *, steps: Sequence[ChatStep]
 ) -> ChatMessageOut:
+    """一行消息摊成出参，连它走过的步骤与用到的依据。
+
+    ⚠ 引用那一列**逐条过一遍出参模型**而不是原样透出：形状漂了要在这里当场
+    炸，而不是让前端读到一条画不出来的引用——那一条在界面上就是不见了。
+
+    Args: message, steps。
+    """
     return ChatMessageOut(
         id=message.id,
         session_id=message.session_id,
@@ -254,6 +262,10 @@ def _to_message_out(
         usage_json=message.usage_json,
         created_at=message.created_at,
         steps=[ChatStepOut.model_validate(step) for step in steps],
+        citations=[
+            ChatCitationOut.model_validate(one)
+            for one in message.citations_json or []
+        ],
     )
 
 

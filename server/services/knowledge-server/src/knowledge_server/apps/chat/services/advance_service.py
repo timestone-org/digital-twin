@@ -30,7 +30,9 @@ from knowledge_server.apps.chat.services import (
 from knowledge_server.apps.chat.services import scope as scope_service
 from knowledge_server.apps.chat.services.citations import (
     CitationsFound,
+    Cited,
     Ledger,
+    as_json,
     with_figures,
 )
 from knowledge_server.apps.chat.services.markers import numbers_in
@@ -278,24 +280,52 @@ async def advance(
             produced.append(item)
         yield item
     if outcome is not None:
-        await advance_persist.persist(
-            deps.sessions,
-            chat_session_id=chat_session_id,
+        cited = await _stored(
+            deps, chat_session_id, payload, (outcome, produced), ledger
+        )
+        async for tail in _closing(
+            deps, chat_session_id, payload, cited, outcome
+        ):
+            yield tail
+
+
+async def _stored(
+    deps: AdvanceDeps,
+    chat_session_id: uuid.UUID,
+    payload: AdvanceInput,
+    made: tuple[TurnOutcome, list[TurnStep]],
+    ledger: Ledger,
+) -> list[Cited]:
+    """解出这一轮用到的依据，连同消息与步骤一起落库，回那几条。
+
+    ⚠ 引用要在落库**之前**算出来：它跟着那条助手消息一起落，落完再算就得再写
+    一次库。不落的表现是回放时整块依据凭空消失——而依据里挂着的正是文档解析出来
+    的那几张图。
+
+    Args: deps, chat_session_id, payload, made（这一轮的结果与步骤）, ledger。
+    """
+    outcome, produced = made
+    cited = await with_figures(
+        deps.sessions, ledger.resolve(numbers_in(outcome.reply))
+    )
+    await advance_persist.persist(
+        deps.sessions,
+        chat_session_id=chat_session_id,
+        record=advance_persist.TurnRecord(
             incoming=incoming_messages(payload),
             outcome=outcome,
             steps=produced,
-        )
-        async for tail in _closing(
-            deps, chat_session_id, payload, ledger, outcome
-        ):
-            yield tail
+            citations=as_json(cited),
+        ),
+    )
+    return cited
 
 
 async def _closing(
     deps: AdvanceDeps,
     chat_session_id: uuid.UUID,
     payload: AdvanceInput,
-    ledger: Ledger,
+    cited: list[Cited],
     outcome: TurnOutcome,
 ) -> AsyncIterator[TurnEvent | title_service.SessionTitled | CitationsFound]:
     """落库之后收尾的那几帧，次序是有讲究的。
@@ -306,11 +336,8 @@ async def _closing(
     ⚠ 起名字排在 outcome **之后**：它要再调一次模型，而用户此刻已经看到答案
     了；排在前面的话，那一秒会被读成「还在答」。
 
-    Args: deps, chat_session_id, payload, ledger, outcome。
+    Args: deps, chat_session_id, payload, cited（已落库的那几条）, outcome。
     """
-    cited = await with_figures(
-        deps.sessions, ledger.resolve(numbers_in(outcome.reply))
-    )
     if cited:
         yield CitationsFound(items=tuple(cited))
     yield outcome

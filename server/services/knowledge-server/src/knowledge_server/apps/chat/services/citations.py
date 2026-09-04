@@ -9,9 +9,10 @@
 """
 
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, field, replace
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -139,5 +140,37 @@ async def with_figures(sessions: Sessions, items: list[Cited]) -> list[Cited]:
                 for fig in found.get(one.chunk_id, [])
             ),
         )
+        for one in items
+    ]
+
+
+def as_json(items: Sequence[Cited]) -> list[dict[str, Any]]:
+    """引用摊成线上那一份——`citations` 帧与落库那一列共用这一个形状。
+
+    ⚠ 只有这一处：帧与落库各摊一遍的话，直播时画得出来的引用回放时会少一格，
+    而两边单看都对。形状由 `schemas.ChatCitationOut` 钉着。
+
+    ⚠ `where` 由后端拼好：各端各拼一份一定会漂，而这一句要与检索面上那一句
+    逐字一致。
+
+    Args: items。
+    """
+    return [
+        {
+            "marker": one.marker,
+            "chunk_id": str(one.chunk_id),
+            "document_id": str(one.document_id),
+            "document_title": one.document_title,
+            "base_name": one.base_name,
+            "heading_path": one.heading_path,
+            "where": one.where,
+            "page": one.page,
+            "page_end": one.page_end,
+            "text": one.text,
+            "figures": [
+                {"id": str(fig.id), "caption": fig.caption, "page": fig.page}
+                for fig in one.figures
+            ],
+        }
         for one in items
     ]

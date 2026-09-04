@@ -5,6 +5,8 @@ from knowledge_server.apps.chat.schemas.advance import (
     ToolResultIn,
 )
 from knowledge_server.apps.chat.schemas.session import (
+    ChatCitationFigureOut,
+    ChatCitationOut,
     ChatMessageOut,
     ChatScopeBaseOut,
     ChatSessionCreateIn,
@@ -16,6 +18,8 @@ from knowledge_server.apps.chat.schemas.session import (
 
 __all__ = [
     "ChatAdvanceIn",
+    "ChatCitationFigureOut",
+    "ChatCitationOut",
     "ChatMessageOut",
     "ChatScopeBaseOut",
     "ChatSessionCreateIn",
