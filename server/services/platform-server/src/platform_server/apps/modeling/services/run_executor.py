@@ -177,7 +177,12 @@ def _setting_of(
 
 
 class _Budget:
-    """一次运行里全部摘要合计的字节预算。用光之后的节点只留统计。"""
+    """一次运行里全部摘要合计的字节预算。用光之后的节点只留统计。
+
+    ⚠ 按**实际字节**记账，不是每个端口一律记满单份摘要的上限：那样记的话
+    第 33 路端口起一律只剩桩，而绝大多数图的每份摘要都远不到那个上限。装不下
+    的那一路才换成桩，于是合计**不会**超出预算。
+    """
 
     def __init__(self) -> None:
         self._used = 0
@@ -192,17 +197,18 @@ class _Budget:
         kept: dict[str, dict[str, Any]] = {}
         truncated = False
         for port, raw in previews.items():
-            if self._used >= preview_service.RUN_PREVIEW_MAX_BYTES:
+            fitted, was_cut = preview_service.fit_budget(raw)
+            size = preview_service.size_of(fitted)
+            if self._used + size > preview_service.RUN_PREVIEW_MAX_BYTES:
                 kept[port] = {
                     "kind": raw.get("kind", "unknown"),
                     "note": "本次运行的结果摘要已用满预算",
                 }
                 truncated = True
                 continue
-            fitted, was_cut = preview_service.fit_budget(raw)
             kept[port] = fitted
             truncated = truncated or was_cut
-            self._used += preview_service.PREVIEW_MAX_BYTES
+            self._used += size
         return kept, truncated
 
 

@@ -191,6 +191,42 @@ async def test_run_previews_stay_within_the_budget() -> None:
     assert total <= RUN_PREVIEW_MAX_BYTES
 
 
+async def test_the_run_budget_counts_the_bytes_it_really_wrote() -> None:
+    """运行级预算按实际字节记账，不是每个端口一律记满单份摘要的上限。
+
+    ⚠ 按上限记账时一次运行只有前 32 路端口有摘要：第 33 路起写的是一个只有
+    `kind` 与一句说明的桩，既没有列统计也没有形状，而界面看着一切正常。
+    """
+    ids = _source_ids(40)
+    frames = {node_id: linear_frame(3) for node_id in ids}
+    execution = execution_of(DirectRunner(), frames=frames)
+    outcome = await execute_graph(_many_sources(ids), execution=execution)
+    thirty_third = outcome.nodes[32].preview["frame"]
+    assert thirty_third["kind"] == "frame"
+    assert thirty_third["columns"]
+    assert outcome.nodes[-1].preview["frame"]["columns"]
+    assert all(item.is_preview_truncated is False for item in outcome.nodes)
+
+
+async def test_a_run_that_fills_the_budget_stubs_the_rest() -> None:
+    """预算真被填满时剩下的端口只留桩，且全部摘要合计**不超过**预算。
+
+    ⚠ 一份 200 行 60 列的帧摘要就是十几万字节，62 路端口装不进 8MB。
+    """
+    ids = _source_ids(62)
+    execution = execution_of(
+        DirectRunner(), frames=dict.fromkeys(ids, _wide_frame())
+    )
+    outcome = await execute_graph(_many_sources(ids), execution=execution)
+    assert outcome.nodes[0].preview["frame"]["columns"]
+    assert set(outcome.nodes[-1].preview["frame"]) == {"kind", "note"}
+    total = sum(
+        len(json.dumps(item.preview, ensure_ascii=False).encode())
+        for item in outcome.nodes
+    )
+    assert total <= RUN_PREVIEW_MAX_BYTES
+
+
 async def test_a_frame_preview_reports_column_statistics() -> None:
     """帧摘要里每列都带空值率与四个统计量。"""
     frame = Frame(
@@ -220,6 +256,41 @@ def _without_standardize() -> PipelineGraph:
         )
     )
     return graph
+
+
+def _source_ids(count: int) -> tuple[str, ...]:
+    """一串取数节点 id。⚠ 补零是为了让拓扑序与数字序一致。
+
+    Args: count。
+    """
+    return tuple(f"s{index:02d}" for index in range(count))
+
+
+def _many_sources(ids: tuple[str, ...]) -> PipelineGraph:
+    """每个 id 一个互不相连的取数节点，于是端口数就是 id 的个数。
+
+    Args: ids。
+    """
+    return PipelineGraph(
+        nodes=[
+            node(node_id, "ledger_source", table_code="energy_h")
+            for node_id in ids
+        ]
+    )
+
+
+def _wide_frame() -> Frame:
+    """一份 200 行 60 列的帧，摘要落到上限量级。"""
+    return Frame(
+        columns=tuple(
+            FrameColumn(key=f"c{index}", name=f"列{index}", dtype="number")
+            for index in range(60)
+        ),
+        rows=tuple(
+            tuple(float(row * index % 97) + 0.123456 for index in range(60))
+            for row in range(200)
+        ),
+    )
 
 
 def _source_only() -> PipelineGraph:
