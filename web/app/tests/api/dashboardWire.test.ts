@@ -230,6 +230,85 @@ describe('时间范围', () => {
     })
   })
 
+  it('分桶的桶宽存进去再读回来不丢', () => {
+    const detail = {
+      nodeKey: 's1:t1',
+      range: { lastWindow: '24h' },
+      interval: '15m',
+    }
+
+    const wire = fromBindingDetail(detail)
+
+    expect(wire.interval).toBe('15m')
+    expect(toBindingDetail(wire)).toEqual(detail)
+  })
+
+  it('分桶的聚合档存进去再读回来不丢', () => {
+    // ⚠ 档位不是装饰：拿 avg 去读一条累积曲线画出来的是压扁了的假线，
+    // 而数值本身完全合法——丢掉这个键在图上看不出任何异常
+    const detail = {
+      nodeKey: 's1:kwh',
+      range: { lastWindow: '7d' },
+      aggregate: 'max' as const,
+    }
+
+    const wire = fromBindingDetail(detail)
+
+    expect(wire.aggregate).toBe('max')
+    expect(toBindingDetail(wire)).toEqual(detail)
+  })
+
+  it('日界对齐的时区存进去再读回来不丢', () => {
+    const detail = {
+      nodeKey: 's1:t1',
+      range: { lastWindow: '365d' },
+      timezone: 'Asia/Shanghai',
+    }
+
+    const wire = fromBindingDetail(detail)
+
+    expect(wire.timezone).toBe('Asia/Shanghai')
+    expect(toBindingDetail(wire)).toEqual(detail)
+  })
+
+  it('三项都没配时一个键都不写出去，别把缺席写成 null', () => {
+    const wire = fromBindingDetail({
+      nodeKey: 's1:t1',
+      range: { lastWindow: '1h' },
+    })
+
+    expect(Object.keys(wire).sort()).toEqual(['node_key', 'range'])
+  })
+
+  it('认不出的聚合档按没配处理，不原样带进载荷', () => {
+    // detail_json 是自由 JSONB，手编进去的 avgg 照样入库；原样喂给聚合端点
+    // 换回来的是一个没头没尾的 422
+    expect(toBindingDetail({ node_key: 's1:t1', aggregate: 'avgg' })).toEqual({
+      nodeKey: 's1:t1',
+      range: {},
+    })
+  })
+
+  it('空串的桶宽与时区按没配处理', () => {
+    expect(
+      toBindingDetail({ node_key: 's1:t1', interval: '', timezone: '' }),
+    ).toEqual({ nodeKey: 's1:t1', range: {} })
+  })
+
+  it('台账那一支不长这三项', () => {
+    // ⚠ 台账 `:series` 端点没有桶宽、档位与时区三个参数，写出去就是配得出来、
+    // 存得下、取数时被丢掉
+    const wire = fromBindingDetail({
+      datasetKey: 'ds:energy_log:进水量',
+      range: { lastWindow: '1h' },
+    })
+
+    expect(Object.keys(wire).sort()).toEqual(['dataset_key', 'range'])
+    expect(toBindingDetail({ dataset_key: 'ds:a:b', interval: '15m' })).toEqual(
+      { datasetKey: 'ds:a:b', range: {} },
+    )
+  })
+
   it('按自身形状判别是哪一支，不看 source_kind', () => {
     // ⚠ 换过来源却没清干净取数说明时，以真正躺在里面的那个字段为准——
     // 信一个可能对不上的枚举，会拿点位身份去当台账列身份用

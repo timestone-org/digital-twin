@@ -9,10 +9,12 @@
  * 于是一条指向不存在点位的历史绑定照常入库、永不产数据。
  */
 import type {
+  ArchiveBindingDetail,
   BindingDetail,
   BindingPayload,
   BindingSourceKind,
   BindingTransform,
+  CollectAggregate,
   ComputeOp,
   ComputeSpec,
   DashboardNodePayload,
@@ -20,7 +22,11 @@ import type {
   HistoryTimeRange,
   ProjectPayload,
 } from '@dt/contracts'
-import { BINDING_SOURCE_KINDS, COMPUTE_OPS } from '@dt/contracts'
+import {
+  BINDING_SOURCE_KINDS,
+  COLLECT_AGGREGATES,
+  COMPUTE_OPS,
+} from '@dt/contracts'
 
 import { TransportError } from './client'
 
@@ -132,6 +138,10 @@ function isComputeOp(value: unknown): value is ComputeOp {
   return COMPUTE_OPS.some((op) => op === value)
 }
 
+function isAggregate(value: unknown): value is CollectAggregate {
+  return COLLECT_AGGREGATES.some((one) => one === value)
+}
+
 /**
  * 窄化来源种类。
  * ⚠ 认不出就抛：`source_kind` 是闭合集合，出现第五种值意味着两侧的清单漂了，
@@ -236,6 +246,32 @@ export function fromHistoryRange(
   return out
 }
 
+/** 分桶取数的三项：桶宽、聚合档位、时区。 */
+type ArchiveBucketing = Pick<
+  ArchiveBindingDetail,
+  'interval' | 'aggregate' | 'timezone'
+>
+
+/**
+ * 点位历史那一支的分桶口径。缺席与认不出的一律不写那个键——
+ * 「没配过」要能与「配了个空的」分开，缺席时才轮得到服务端缺省。
+ *
+ * ⚠ `aggregate` 必须按白名单窄化：`detail_json` 是自由 JSONB，手编进去的
+ * `avgg` 照样入库，原样喂给聚合端点换回来的是一个没头没尾的 422。
+ * @param raw 线上的 `detail_json`
+ */
+function toBucketing(raw: Record<string, unknown>): ArchiveBucketing {
+  const found: ArchiveBucketing = {}
+  if (typeof raw.interval === 'string' && raw.interval !== '') {
+    found.interval = raw.interval
+  }
+  if (isAggregate(raw.aggregate)) found.aggregate = raw.aggregate
+  if (typeof raw.timezone === 'string' && raw.timezone !== '') {
+    found.timezone = raw.timezone
+  }
+  return found
+}
+
 /**
  * 序列类绑定的取数说明。缺身份串时给 null：那样的绑定取不到数，
  * 由求值层报「绑定没有取数说明」，而不是在这里凭空补一个点位。
@@ -251,7 +287,11 @@ export function toBindingDetail(raw: unknown): BindingDetail | null {
     return { datasetKey: raw.dataset_key, range: toHistoryRange(raw.range) }
   }
   if (typeof raw.node_key === 'string') {
-    return { nodeKey: raw.node_key, range: toHistoryRange(raw.range) }
+    return {
+      nodeKey: raw.node_key,
+      range: toHistoryRange(raw.range),
+      ...toBucketing(raw),
+    }
   }
   return null
 }
@@ -264,9 +304,12 @@ export function fromBindingDetail(
   detail: BindingDetail,
 ): Record<string, unknown> {
   const range = fromHistoryRange(detail.range)
-  return 'datasetKey' in detail
-    ? { dataset_key: detail.datasetKey, range }
-    : { node_key: detail.nodeKey, range }
+  if ('datasetKey' in detail) return { dataset_key: detail.datasetKey, range }
+  const out: Record<string, unknown> = { node_key: detail.nodeKey, range }
+  if (detail.interval !== undefined) out.interval = detail.interval
+  if (detail.aggregate !== undefined) out.aggregate = detail.aggregate
+  if (detail.timezone !== undefined) out.timezone = detail.timezone
+  return out
 }
 
 /**
