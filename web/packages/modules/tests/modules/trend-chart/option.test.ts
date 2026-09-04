@@ -37,6 +37,7 @@ import {
   SERIES_ITEMS_KEY,
   type SeriesView,
 } from '../../../src/modules/trend-chart/series'
+import { bottomBand } from '../../../src/shared/chart/chartKit'
 import type { ChartTheme } from '../../../src/shared/chart/theme'
 
 const THEME: ChartTheme = {
@@ -430,6 +431,26 @@ describe('提示框、标签与缩放条', () => {
       Number(asRecord(bare.grid).bottom),
     )
     expect('dataZoom' in optionOf(BASE, [])).toBe(false)
+  })
+
+  it('滑块摞在图例之上：两者都锚在画布底，不错开就横穿图例的字', () => {
+    // ⚠ 落位钉的是共用那一份，真渲染量在 tests/shared/chart/bottomBandSsr.spec.ts
+    const band = bottomBand({ legend: true, legendFontSize: 11 })
+    const zoomed = optionOf({ ...BASE, showDataZoom: true }, [])
+
+    expect(asRecord(asArray(zoomed.dataZoom)[0]).bottom).toBe(band.zoom)
+    expect(asRecord(zoomed.grid).bottom).toBe(band.grid)
+    expect(band.zoom).toBeGreaterThan(4)
+  })
+
+  it('关掉图例时滑块回到贴底，绘图区少让一条带子', () => {
+    const bare = optionOf(
+      { ...BASE, showDataZoom: true, showLegend: false },
+      [],
+    )
+
+    expect(asRecord(asArray(bare.dataZoom)[0]).bottom).toBe(4)
+    expect(asRecord(bare.grid).bottom).toBe(34)
   })
 
   it('点某一条线上抛配置里写的名称，不是带去重后缀的图例名', () => {

@@ -17,6 +17,7 @@
 import {
   animationOpts,
   areaFade,
+  bottomBand,
   cartesianGrid,
   dataZoomSlider,
   escapeHtml,
@@ -28,6 +29,7 @@ import {
   TRANSPARENT_BG,
   valueAxis,
   valueText,
+  type BottomBand,
   type ColorResolver,
   type MarkLineRef,
   type OptionFragment,
@@ -70,9 +72,6 @@ const JOIN = '：'
 
 /** 堆叠面积共用的那一个堆名。 */
 const STACK_NAME = 'trend'
-
-/** 开了缩放条时 grid 底部要多让出来的位置。 */
-const ZOOM_BOTTOM = 30
 
 function pad2(value: number): string {
   return String(value).padStart(2, '0')
@@ -458,13 +457,20 @@ function trendSeries(
 
 /**
  * 绘图区的边距。刻度文字与轴名收在留白之内那一档由 `cartesianGrid` 缺省给出。
+ * ⚠ 开了缩放条时底部让出来的高度由 `bottomBand` 一处算：图例与滑块都锚在画布底，
+ * 各让各的会让选窗条横穿图例的字。
  * @param showLegend 图例开着没有
  * @param showZoom 缩放条开着没有
+ * @param band 底部那条带子里各自的位置
  */
-function gridOf(showLegend: boolean, showZoom: boolean): OptionFragment {
+function gridOf(
+  showLegend: boolean,
+  showZoom: boolean,
+  band: BottomBand,
+): OptionFragment {
   return cartesianGrid({
     legend: showLegend,
-    ...(showZoom ? { bottom: showLegend ? ZOOM_BOTTOM * 2 : ZOOM_BOTTOM } : {}),
+    ...(showZoom ? { bottom: band.grid } : {}),
   })
 }
 
@@ -512,6 +518,10 @@ export function buildTrendOption(
   const showLegend = readBoolean(config.showLegend, true)
   const showZoom = readBoolean(config.showDataZoom, false)
   const dualAxis = readBoolean(config.dualAxis, false)
+  const band = bottomBand({
+    legend: showLegend,
+    legendFontSize: LABEL_FONT_SIZE,
+  })
   const layout: TrendLayout = {
     style: readEnum(config.chartStyle, TREND_STYLE_VALUES, 'line'),
     theme,
@@ -522,12 +532,16 @@ export function buildTrendOption(
   return {
     ...TRANSPARENT_BG,
     ...animationOpts(config),
-    grid: gridOf(showLegend, showZoom),
+    grid: gridOf(showLegend, showZoom, band),
     tooltip: tooltipOf(config, views, theme),
     legend: legendOf(views, layout, showLegend),
     xAxis: timeAxis(config, theme, spanOf(views)),
     yAxis: valueAxes(config, theme, dualAxis),
-    ...(showZoom ? { dataZoom: dataZoomSlider(theme, { xAxisIndex: 0 }) } : {}),
+    ...(showZoom
+      ? {
+          dataZoom: dataZoomSlider(theme, { xAxisIndex: 0, bottom: band.zoom }),
+        }
+      : {}),
     series: trendSeries(config, views, layout),
   }
 }

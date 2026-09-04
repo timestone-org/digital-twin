@@ -74,7 +74,9 @@ export default defineModule({
   ],
   defaultSize: { width: 420, height: 300, minWidth: 200, minHeight: 160 },
   configPresets: BAR_CHART_PRESETS,
-  contentKeys: ['title', BAR_ITEMS_KEY, 'emptyText'],
+  // ⚠ `valueSource` 是内容键：它决定这一块读哪一路绑定，一套「换个样子」把它从
+  //   历史档翻回实时档，整屏曲线会当场变成一排单值柱
+  contentKeys: ['title', BAR_ITEMS_KEY, 'emptyText', 'valueSource'],
   configSchema: [
     ...titleField(),
     {
@@ -169,7 +171,7 @@ export default defineModule({
       group: GROUP.data,
       default: BAR_EMPTY_TEXT,
       span: 'half',
-      help: '一根柱都画不出来时画在图区正中的那一句。⚠ 留空时历史档另说一句——公开大屏根本不提供历史数据，那不是现场没数。',
+      help: '一根柱都画不出来时画在图区正中的那一句。⚠ 这一页压根不提供历史取数时另说一句，压过本文案——公开大屏上历史档必然画不出来，那不是现场没数。',
     },
     ...chartStyleField([...BAR_STYLES], 'grouped'),
     {

@@ -25,6 +25,7 @@ import {
   buildBarViews,
   cellText,
   emptyStateOf,
+  historyUnavailable,
   readBarFormat,
   readBarItems,
   readValueSource,
@@ -78,16 +79,30 @@ function historyView(
   config: Record<string, unknown>,
   rows: readonly (readonly { t: number; v: unknown }[] | undefined)[],
   states: readonly ('ok' | 'pending' | 'error')[] = [],
+  messages: readonly string[] = [],
 ): BarChartView {
+  const slots = slotsFor(
+    BAR_SERIES_FIELD,
+    rows.map((_, index) => states[index] ?? 'ok'),
+  )
+  messages.forEach((message, index) => {
+    slots[barFieldKey(index, BAR_SERIES_FIELD)] = {
+      state: states[index] ?? 'ok',
+      message,
+    }
+  })
   return buildBarViews({
     config: { ...config, valueSource: 'history' },
     rows: rows.map((points) => ({ [`${BAR_SERIES_FIELD}Points`]: points })),
-    slots: slotsFor(
-      BAR_SERIES_FIELD,
-      rows.map((_, index) => states[index] ?? 'ok'),
-    ),
+    slots,
   })
 }
+
+/**
+ * 应用壳那份同步读取器对序列类来源的拒绝原文。
+ * ⚠ 这一句是跨包约定，本处照抄字面量：模块侧的判据钉的就是它，改一个字两边就漂了。
+ */
+const SYNC_REFUSAL = '序列要异步取数，画布上不展开'
 
 const BASE_CONFIG = { [BAR_ITEMS_KEY]: THREE }
 
@@ -346,6 +361,29 @@ describe('陈旧与触顶', () => {
       `${BAR_NOTES.stale} · ${BAR_NOTES.truncated}`,
     )
   })
+
+  it('砍掉的是哪一头由取数侧带回来，早晚各说各的', () => {
+    const sides = [
+      { truncatedSide: 'early', note: BAR_NOTES.early },
+      { truncatedSide: 'late', note: BAR_NOTES.late },
+    ] as const
+
+    for (const side of sides) {
+      const view = buildBarViews({
+        config: { ...BASE_CONFIG, valueSource: 'history' },
+        rows: [{ seriesPoints: [{ t: BASE, v: 1 }] }],
+        slots: {
+          [barFieldKey(0, BAR_SERIES_FIELD)]: {
+            state: 'ok',
+            isTruncated: true,
+            truncatedSide: side.truncatedSide,
+          },
+        },
+      })
+
+      expect(view.series[0]?.note).toBe(side.note)
+    }
+  })
 })
 
 describe('设计态与独立挂载', () => {
@@ -422,19 +460,58 @@ describe('空态', () => {
     expect(emptyStateOf({ emptyText: '   ' }, view).text).toBe(BAR_EMPTY_TEXT)
   })
 
-  it('历史档整块取不到时另说一句：那不是现场没数据', () => {
+  it('每一行都被同步读取器退回来时另说一句：那不是现场没数据', () => {
     const view = historyView(
       BASE_CONFIG,
       [undefined, undefined],
       ['error', 'error'],
+      [SYNC_REFUSAL, SYNC_REFUSAL],
     )
 
+    expect(historyUnavailable(view)).toBe(true)
     expect(emptyStateOf({}, view).text).toBe(BAR_HISTORY_EMPTY_TEXT)
+  })
+
+  it('这一句压过自定义文案：出厂就铺着缺省，排在它后面等于永远出不来', () => {
+    const view = historyView(
+      BASE_CONFIG,
+      [undefined],
+      ['error'],
+      [SYNC_REFUSAL],
+    )
+
+    expect(emptyStateOf({ emptyText: BAR_EMPTY_TEXT }, view).text).toBe(
+      BAR_HISTORY_EMPTY_TEXT,
+    )
+    expect(emptyStateOf({ emptyText: '自己写的一句' }, view).text).toBe(
+      BAR_HISTORY_EMPTY_TEXT,
+    )
+  })
+
+  it('取数真失败时不冒充公开屏那句：台账改名与网络断都不是「不提供历史数据」', () => {
+    const view = historyView(
+      BASE_CONFIG,
+      [undefined, undefined],
+      ['error', 'error'],
+      ['台账里没有这一列', SYNC_REFUSAL],
+    )
+
+    expect(historyUnavailable(view)).toBe(false)
+    expect(emptyStateOf({}, view).text).toBe(BAR_EMPTY_TEXT)
+    expect(emptyStateOf({ emptyText: '未接点位' }, view).text).toBe('未接点位')
   })
 
   it('历史档只是窗内没数时仍说通用那一句，不赖到公开屏上', () => {
     const view = historyView(BASE_CONFIG, [[], []], ['ok', 'ok'])
 
+    expect(historyUnavailable(view)).toBe(false)
+    expect(emptyStateOf({}, view).text).toBe(BAR_EMPTY_TEXT)
+  })
+
+  it('一行都没进来时不说公开屏那句：空清单不是「取不到历史」', () => {
+    const view = historyView({ [BAR_ITEMS_KEY]: [] }, [])
+
+    expect(historyUnavailable(view)).toBe(false)
     expect(emptyStateOf({}, view).text).toBe(BAR_EMPTY_TEXT)
   })
 })

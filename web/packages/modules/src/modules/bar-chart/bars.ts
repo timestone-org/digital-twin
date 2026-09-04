@@ -63,6 +63,14 @@ export const BAR_EMPTY_TEXT = '暂无数据'
  */
 export const BAR_HISTORY_EMPTY_TEXT = '取不到历史序列（公开大屏不提供历史数据）'
 
+/**
+ * 应用壳里那份**同步**读取器对序列类来源的拒绝原文。
+ * ⚠ 这是跨包的一句约定，本包够不到它的定义（`packages/*` 不许依赖 `app/`）。
+ * 判据只能是它：装没装历史取数是应用壳的事，模块看得见的只有「每一行的时序槽都被
+ * 同步读取器原样退回来了」。两边真漂了也不会画错数，只是退回通用空态。
+ */
+const SYNC_REFUSAL = '序列要异步取数，画布上不展开'
+
 /** 没有名称的那一行在图例上的称呼。 */
 const UNNAMED_PREFIX = '第 '
 const UNNAMED_SUFFIX = ' 行'
@@ -71,13 +79,16 @@ const UNNAMED_SUFFIX = ' 行'
  * 一行没画出来（或画得不全）时挂在图例名后面的后缀。
  * ⚠ 逐条各说各的原因：并成一句「无数据」的代价是「还没到首帧」与「表被删了」
  * 在图例上看着一模一样。
- * ⚠ `truncated` 不说砍的是哪一头：两个历史端点砍的方向相反，而 `ModuleSlotMeta`
- * 只带得回一个布尔（`contracts/src/module.ts` 的 `isTruncated`），说不出方向就不许猜。
+ * ⚠ 触顶分早晚两头：两个历史读侧砍的方向是**相反**的——点位逐条读正序取前 N 条、
+ * 砍掉晚的那一头，台账序列留最新那一批、砍掉早的那一头。方向由 `truncatedSide`
+ * 带回来，取数侧说不出方向时才退回通用的那一句。
  */
 export const BAR_NOTES = {
   pending: '等首帧',
   error: '取不到',
   empty: '窗内无数据',
+  early: '早段未取全',
+  late: '晚段未取全',
   truncated: '窗内还有更多点',
   stale: '陈旧',
   ignoredHistory: '历史未用',
@@ -114,6 +125,8 @@ export interface BarSeriesView {
   emitValue: string
   /** 没画满的原因；空串 = 正常。 */
   note: string
+  /** 取数侧给的原文；空串 = 没说话。空态那一句靠它认出「这一页没装历史取数」。 */
+  message: string
   item: BarItem
   /**
    * 与类目轴等长的读数；null = 这一格没有数。
@@ -259,6 +272,15 @@ function joinNotes(...parts: readonly string[]): string {
 }
 
 /**
+ * 触顶那一句：砍的是哪一头由取数侧带回来，说不出方向才退回通用的那一句。
+ * @param slot 这一槽的取数结论
+ */
+function truncatedNote(slot: ModuleSlotMeta): string {
+  if (slot.truncatedSide === 'early') return BAR_NOTES.early
+  return slot.truncatedSide === 'late' ? BAR_NOTES.late : BAR_NOTES.truncated
+}
+
+/**
  * 这一行的后缀。
  * @param state 这一行所在的档
  * @param slot 这一槽的取数结论
@@ -274,7 +296,7 @@ function noteOf(
   else if (state === 'error') parts.push(BAR_NOTES.error)
   else {
     if (slot?.isStale === true) parts.push(BAR_NOTES.stale)
-    if (slot?.isTruncated === true) parts.push(BAR_NOTES.truncated)
+    if (slot?.isTruncated === true) parts.push(truncatedNote(slot))
   }
   return joinNotes(...parts, ignored)
 }
@@ -305,6 +327,8 @@ interface RawRow {
   name: string
   /** 状态与被忽略那一路带来的后缀；「窗内无数据」要等铺完格子才知道。 */
   note: string
+  /** 取数侧给的原文；空串 = 没说话。 */
+  message: string
   item: BarItem
   /** 实时档的那一个读数。 */
   value: number | null
@@ -341,6 +365,7 @@ function collect(
       state,
       name,
       note: noteOf(state, slot, ignoredNoteOf(input.slots, index, source)),
+      message: slot?.message ?? '',
       item,
       value: state === 'ok' && isPresent(raw) ? raw : null,
       points: state === 'ok' ? pointsAt(rows, index) : undefined,
@@ -446,6 +471,7 @@ export function buildBarViews(input: BarViewsInput): BarChartView {
       legendName: note === '' ? raw.name : `${raw.name}（${note}）`,
       emitValue: raw.item.name,
       note,
+      message: raw.message,
       item: raw.item,
       data,
       shares: data.map((value, cell) => {
@@ -506,9 +532,25 @@ export interface BarEmptyState {
 }
 
 /**
+ * 这一页装没装历史取数。
+ * ⚠ 判据是「每一行的时序槽都被同步读取器原样退回来了」，不是「全都 error」：
+ * 台账改名、相对窗写错、网络断也全是 error，说成「公开大屏不提供历史数据」
+ * 等于把人指向一个不存在的原因。
+ * @param view 这一块的取值结果
+ */
+export function historyUnavailable(view: BarChartView): boolean {
+  return (
+    view.series.length > 0 &&
+    view.series.every(
+      (series) => series.state === 'error' && series.message === SYNC_REFUSAL,
+    )
+  )
+}
+
+/**
  * 空态口径。
- * ⚠ 「一行都没接」与「历史序列取不到」各说各的：后者在公开大屏上是必然的，
- * 一句通用的「暂无数据」会让人去查现场设备。
+ * ⚠ 「历史序列在这一页根本取不到」排在自定义文案**之前**：`emptyText` 的清单缺省
+ * 是 `BAR_EMPTY_TEXT`，渲染前必被铺上，专用那一句排在它后面就永远出不来。
  * @param config 该节点落库的配置
  * @param view 这一块的取值结果
  */
@@ -520,15 +562,12 @@ export function emptyStateOf(
     series.data.some((value) => value !== null),
   )
   if (drawn) return { isEmpty: false, text: '' }
-  const custom = readTrimmedText(config.emptyText)
-  if (custom !== '') return { isEmpty: true, text: custom }
-  const stuck =
-    view.source === 'history' &&
-    view.series.length > 0 &&
-    view.series.every((series) => series.state === 'error')
+  if (historyUnavailable(view)) {
+    return { isEmpty: true, text: BAR_HISTORY_EMPTY_TEXT }
+  }
   return {
     isEmpty: true,
-    text: stuck ? BAR_HISTORY_EMPTY_TEXT : BAR_EMPTY_TEXT,
+    text: readTrimmedText(config.emptyText) || BAR_EMPTY_TEXT,
   }
 }
 

@@ -7,7 +7,7 @@
  * `isRequired` 会让整块被浮层盖住、逐行四档白画；漏 `isTimeSeries` 则驱动器
  * 根本不认这一路是序列，历史档一个点都取不回来。
  */
-import type { BindingSpec, ConfigField } from '@dt/contracts'
+import { styleKeysOf, type BindingSpec, type ConfigField } from '@dt/contracts'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -79,8 +79,21 @@ describe('身份与出厂形状', () => {
     expect(text).toContain('负值')
   })
 
-  it('内容键就是标题、数据组与空态那三个', () => {
-    expect(manifest.contentKeys).toEqual(['title', BAR_ITEMS_KEY, 'emptyText'])
+  it('内容键是标题、数据组、空态与取数来源那四个', () => {
+    expect(manifest.contentKeys).toEqual([
+      'title',
+      BAR_ITEMS_KEY,
+      'emptyText',
+      'valueSource',
+    ])
+  })
+
+  it('取数来源算内容不算观感：AI 套一套观感翻不动它', () => {
+    // ⚠ 预设那一路另有手写排除表挡着，而模型改观感走的是 styleKeysOf——
+    //   它只认 contentKeys，漏在那里的话「换个样子」会把历史档翻回实时档，
+    //   整屏曲线当场变成一排单值柱
+    expect(styleKeysOf(manifest)).not.toContain('valueSource')
+    expect(TOP_KEYS).toContain('valueSource')
   })
 
   it('预设整套挂在清单上，画布演示只提清单里有的键', () => {

@@ -421,10 +421,72 @@ export function markLineRef(
   }
 }
 
+/** 缩放条本体的厚度（横向档是高、竖向档是宽），不含两端探出来的把手。 */
+const ZOOM_BAND = 14
+
+/** 滑块贴着画布底摆时离底边的距离。 */
+const ZOOM_FLOOR = 4
+
+/** 图例那条带子在字号之外还要占掉的上下留白。 */
+const LEGEND_PAD = 8
+
+/**
+ * 滑块与图例之间的净空。
+ * ⚠ 不能取 0：滑块两端的把手比本体高出一截，真 SSR 量到的图元比 `height` 多出约 3 个像素。
+ */
+const ZOOM_CLEAR = 8
+
+/** 绘图区与滑块之间的净空：刻度文字收在绘图区留白之内，靠这一段与滑块分开。 */
+const ZOOM_GRID_GAP = 16
+
+/** 图例字号的兜底，与 `chartFontFields()` 里 `legendFontSize` 的缺省同一个值。 */
+const LEGEND_FONT_SIZE = 11
+
+/** 底部那条带子里各自摆在哪。 */
+export interface BottomBand {
+  /** 横向缩放条的 `bottom`。 */
+  zoom: number
+  /** 绘图区的 `bottom`。 */
+  grid: number
+}
+
+/**
+ * 图例与横向缩放条同摆底部时各自的位置：图例贴底、滑块摞在图例之上、
+ * 绘图区再给两者一起让开。
+ * ⚠ 两者都锚在画布底，不错开的话滑块的选窗条会从图例的字上横穿过去——
+ * 这是真 SSR 量出来的，option 形状本身完全合法。
+ * ⚠ 图例那条带子跟着字号走：字号在面板上可调（6–40），写死一个常量会在大字号上被顶穿。
+ * @param opts 图例开着没有、图例字号
+ */
+export function bottomBand(opts: {
+  legend: boolean
+  legendFontSize?: number
+}): BottomBand {
+  // ⚠ 钳到非负：面板上字号最小 6，手编的 config 绕得过它，负字号会把滑块拉回图例里
+  const font = Math.max(0, Math.round(opts.legendFontSize ?? LEGEND_FONT_SIZE))
+  const zoom = opts.legend ? font + LEGEND_PAD + ZOOM_CLEAR : ZOOM_FLOOR
+  return { zoom, grid: zoom + ZOOM_BAND + ZOOM_GRID_GAP }
+}
+
+/**
+ * 滑块本体的几何。
+ * ⚠ 横竖各写各的键，不写对方那一档——两档都写 echarts 会按后解析的那个摆。
+ * @param vertical 竖着摆没有
+ * @param bottom 横向档离画布底边的距离
+ */
+function zoomBox(
+  vertical: boolean,
+  bottom: number | undefined,
+): OptionFragment {
+  return vertical
+    ? { width: ZOOM_BAND }
+    : { height: ZOOM_BAND, bottom: bottom ?? ZOOM_FLOOR }
+}
+
 /**
  * 滑动条 + 内置缩放，成对返回后 spread 进 `dataZoom`。
  * @param theme 当前主题色
- * @param opts 朝向、初始区间与绑定的轴
+ * @param opts 朝向、初始区间、绑定的轴与横向档离底边的距离
  */
 export function dataZoomSlider(
   theme: ChartTheme,
@@ -434,6 +496,8 @@ export function dataZoomSlider(
     end?: number
     xAxisIndex?: number | number[]
     yAxisIndex?: number | number[]
+    /** 横向档离画布底边的距离；底部还摆着图例时要抬到图例之上（见 `bottomBand`）。 */
+    bottom?: number
   } = {},
 ): OptionFragment[] {
   const orient = opts.orient ?? 'horizontal'
@@ -442,8 +506,7 @@ export function dataZoomSlider(
   const axisBind = vertical
     ? { yAxisIndex: opts.yAxisIndex ?? 0 }
     : { xAxisIndex: opts.xAxisIndex ?? 0 }
-  // 横竖各写各的几何键，不写对方那一档——两档都写 echarts 会按后解析的那个摆
-  const box = vertical ? { width: 14 } : { height: 14, bottom: 4 }
+  const box = zoomBox(vertical, opts.bottom)
   return [
     {
       type: 'slider',

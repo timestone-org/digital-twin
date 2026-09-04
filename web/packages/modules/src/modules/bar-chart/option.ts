@@ -17,6 +17,7 @@
  */
 import {
   animationOpts,
+  bottomBand,
   cartesianGrid,
   categoryAxis,
   dataZoomSlider,
@@ -119,6 +120,12 @@ interface BarLayout {
   /** 渐变末端色，已解析；空串 = 由主色派生同色渐隐。 */
   gradientTo: string
   colorOf: (series: BarSeriesView) => string
+  /**
+   * 变量名 → 实际色值。
+   * ⚠ 面板上凡是 `type: 'color'` 的字段都得过它：生产只注册 `CanvasRenderer`，
+   * canvas 不认 `var(--x)`，原样丢进去的变量名被静默忽略、那处颜色一声不响地丢掉。
+   */
+  resolve: ColorResolver
 }
 
 /**
@@ -259,7 +266,10 @@ function seriesLabel(
     show: true,
     position: layout.horizontal ? 'right' : 'top',
     fontSize: readNumber(config.labelFontSize, 11),
-    ...withColor(readTrimmedText(config.labelColor) || theme.textMuted),
+    ...withColor(
+      resolveColor(readTrimmedText(config.labelColor), layout.resolve) ||
+        theme.textMuted,
+    ),
     formatter: labelFormatter(series, layout),
   }
 }
@@ -283,7 +293,7 @@ function refLinesOf(
     const item = readRecord(row)
     const value = readLooseNumber(item.value)
     if (value === null) continue
-    const color = readTrimmedText(item.color)
+    const color = resolveColor(readTrimmedText(item.color), layout.resolve)
     const size = readLooseNumber(item.fontSize)
     refs.push({
       value,
@@ -567,6 +577,7 @@ function layoutOf(
     hasRight: view.series.some((series) => series.item.axis === 'right'),
     gradientTo: resolveColor(readTrimmedText(config.barGradientTo), resolve),
     colorOf: (series) => colorOf(series, palette, resolve),
+    resolve,
   }
 }
 
@@ -641,6 +652,26 @@ function allSeries(
   )
 }
 
+/** 横向档的滑块竖着摆在右侧，绘图区要让开的是右边那一条。 */
+const SIDE_ZOOM_RIGHT = 34
+
+/**
+ * 开了缩放条时绘图区要多让出来的那一边。
+ * ⚠ 让错边是静默的：横向档的滑块竖在右侧，而只加大 `bottom` 的话值轴刻度与
+ * 柱面读数照旧画到最右，被滑块整条压住——option 完全合法，只有真渲染量得出来。
+ * @param zoom 缩放条开着没有
+ * @param layout 几何与取数口径
+ * @param bottom 竖柱档底部要让出来的高度
+ */
+function zoomInset(
+  zoom: boolean,
+  layout: BarLayout,
+  bottom: number,
+): { right?: number; bottom?: number } {
+  if (!zoom) return {}
+  return layout.horizontal ? { right: SIDE_ZOOM_RIGHT } : { bottom }
+}
+
 /**
  * 一整块的 option。
  * @param config 该节点落库的配置
@@ -656,16 +687,17 @@ export function buildBarOption(
 ): ECOption {
   const layout = layoutOf(config, view, theme, resolve)
   const zoom = readBoolean(config.showDataZoom, false)
+  const legend = readBoolean(config.showLegend, true)
+  const band = bottomBand({
+    legend,
+    legendFontSize: readNumber(config.legendFontSize, 11),
+  })
   const values = valueAxes(config, theme, view, layout)
   const category = catAxis(config, theme, view, layout)
   return {
     ...TRANSPARENT_BG,
     ...animationOpts(config),
-    // 开了缩放条要给它让出底下那一条，否则滑块压在类目标签上
-    grid: cartesianGrid({
-      legend: readBoolean(config.showLegend, true),
-      ...(zoom ? { bottom: 34 } : {}),
-    }),
+    grid: cartesianGrid({ legend, ...zoomInset(zoom, layout, band.grid) }),
     ...(layout.horizontal
       ? { xAxis: values, yAxis: [category] }
       : { xAxis: [category], yAxis: values }),
@@ -673,10 +705,12 @@ export function buildBarOption(
     legend: legendOf(config, theme, view, layout),
     ...(zoom
       ? {
-          dataZoom: dataZoomSlider(theme, {
-            orient: layout.horizontal ? 'vertical' : 'horizontal',
-            ...(layout.horizontal ? { yAxisIndex: 0 } : { xAxisIndex: 0 }),
-          }),
+          dataZoom: dataZoomSlider(
+            theme,
+            layout.horizontal
+              ? { orient: 'vertical', yAxisIndex: 0 }
+              : { orient: 'horizontal', xAxisIndex: 0, bottom: band.zoom },
+          ),
         }
       : {}),
     series: allSeries(config, theme, view, layout),

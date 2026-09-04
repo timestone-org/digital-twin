@@ -24,6 +24,7 @@ import {
   refHostIndex,
   symmetricBound,
 } from '../../../src/modules/bar-chart/option'
+import { bottomBand } from '../../../src/shared/chart/chartKit'
 import type { ChartTheme } from '../../../src/shared/chart/theme'
 
 const HOUR = 3_600_000
@@ -432,6 +433,22 @@ describe('参考线', () => {
     expect(asRecord(data[0]).yAxis).toBe(80)
   })
 
+  it('参考线的颜色也过一遍解析：线与文字都不许把变量名交给 canvas', () => {
+    const config = {
+      ...BASE_CONFIG,
+      refLines: [{ value: 80, label: '目标', color: 'var(--brand)' }],
+    }
+    const item = asRecord(
+      asArray(
+        asRecord(seriesAt(optionOf(config, liveView(config, [30])), 0).markLine)
+          .data,
+      )[0],
+    )
+
+    expect(asRecord(item.lineStyle).color).toBe('tone-brand')
+    expect(asRecord(item.label).color).toBe('tone-brand')
+  })
+
   it('一条参考线都没配时不写 markLine 这个键', () => {
     const option = optionOf(BASE_CONFIG, liveView(BASE_CONFIG, [30]))
 
@@ -454,6 +471,24 @@ describe('两处相反的转义口径', () => {
     )
 
     expect(asRecord(seriesAt(off, 0).label)).toEqual({ show: false })
+  })
+
+  it('标签色写 var(--x) 时解析成实际色值：canvas 不认变量名，原样丢进去静默丢色', () => {
+    const config = { ...BASE_CONFIG, labelColor: 'var(--brand)' }
+    const label = asRecord(
+      seriesAt(optionOf(config, liveView(config, [30])), 0).label,
+    )
+
+    expect(label.color).toBe('tone-brand')
+  })
+
+  it('取不到那个变量时退回主题弱化色，不把「var(--x)」原样交给 canvas', () => {
+    const config = { ...BASE_CONFIG, labelColor: 'var(--nope)' }
+    const label = asRecord(
+      seriesAt(optionOf(config, liveView(config, [30])), 0).label,
+    )
+
+    expect(label.color).toBe('tone-muted')
   })
 
   it('百分比档的标签写的是百分号，不是原始读数', () => {
@@ -675,7 +710,54 @@ describe('轴与缩放', () => {
     expect(Object.keys(bare)).not.toContain('dataZoom')
     expect(asRecord(asArray(zoomed.dataZoom)[0]).orient).toBe('horizontal')
     expect(asRecord(asArray(sideways.dataZoom)[0]).orient).toBe('vertical')
-    expect(asRecord(zoomed.grid).bottom).toBe(34)
+  })
+
+  it('滑块摞在图例之上，绘图区把两条带子一起让开', () => {
+    // ⚠ 落位钉的是共用那一份：图例与滑块都锚在画布底，各让各的会让选窗条横穿
+    //   图例的字（那一条由 tests/shared/chart/bottomBandSsr.spec.ts 真渲染量着）
+    const band = bottomBand({ legend: true, legendFontSize: 11 })
+    const config = { ...BASE_CONFIG, showDataZoom: true }
+    const option = optionOf(config, liveView(config, [1]))
+
+    expect(asRecord(asArray(option.dataZoom)[0]).bottom).toBe(band.zoom)
+    expect(asRecord(option.grid).bottom).toBe(band.grid)
+    expect(band.zoom).toBeGreaterThan(4)
+  })
+
+  it('图例字号调大时滑块跟着往上让，写死一个常量会被图例顶穿', () => {
+    const base = { ...BASE_CONFIG, showDataZoom: true }
+    const small = optionOf(base, liveView(base, [1]))
+    const large = optionOf({ ...base, legendFontSize: 28 }, liveView(base, [1]))
+
+    expect(Number(asRecord(asArray(large.dataZoom)[0]).bottom)).toBeGreaterThan(
+      Number(asRecord(asArray(small.dataZoom)[0]).bottom),
+    )
+  })
+
+  it('关掉图例时滑块回到贴底，绘图区少让一条带子', () => {
+    const config = { ...BASE_CONFIG, showDataZoom: true, showLegend: false }
+    const option = optionOf(config, liveView(config, [1]))
+
+    expect(asRecord(asArray(option.dataZoom)[0]).bottom).toBe(4)
+    expect(asRecord(option.grid).bottom).toBe(34)
+  })
+
+  it('横向档让开的是右边那一条：滑块竖在右侧，值轴刻度与柱面读数都在那儿', () => {
+    const config = {
+      ...BASE_CONFIG,
+      showDataZoom: true,
+      chartStyle: 'horizontal',
+    }
+    const grid = asRecord(optionOf(config, liveView(config, [1])).grid)
+
+    const slider = asRecord(
+      asArray(optionOf(config, liveView(config, [1])).dataZoom)[0],
+    )
+
+    expect(grid.right).toBe(34)
+    // 竖滑块一点都不占底下那条带子：多让的话图白白被压扁一截
+    expect(grid.bottom).toBe(26)
+    expect(Object.keys(slider)).not.toContain('bottom')
   })
 })
 

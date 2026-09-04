@@ -203,7 +203,7 @@ export function dataZoomFields(
       default: opts.default ?? false,
       group: GROUP.style,
       span: 'half',
-      help: '类目较多时启用横向滑动缩放。',
+      help: '类目较多时启用滑动缩放。⚠ 滑块跟着几何走：竖柱与曲线摆在图下方，横条图摆在图右侧。',
       ...whenOf(opts.when),
     },
   ]

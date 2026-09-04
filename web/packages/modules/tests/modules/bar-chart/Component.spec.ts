@@ -153,11 +153,22 @@ describe('骨架', () => {
     wrapper.unmount()
   })
 
-  it('历史档整块取不到时另说一句：公开大屏本来就不提供历史数据', async () => {
+  it('每一行都被同步读取器退回来时另说一句：公开大屏本来就不提供历史数据', async () => {
+    // ⚠ 判据是这一句拒绝原文，不是「全都 error」：台账改名与网络断也全是 error
+    const refusal = '序列要异步取数，画布上不展开'
     const wrapper = await render(
       { [BAR_ITEMS_KEY]: THREE, valueSource: 'history', emptyText: '' },
       series([], []),
-      bound(BAR_SERIES_FIELD, 'error', 'error'),
+      {
+        [barFieldKey(0, BAR_SERIES_FIELD)]: {
+          state: 'error',
+          message: refusal,
+        },
+        [barFieldKey(1, BAR_SERIES_FIELD)]: {
+          state: 'error',
+          message: refusal,
+        },
+      },
     )
 
     expect(wrapper.get('.dt-chart__empty').text()).toBe(BAR_HISTORY_EMPTY_TEXT)
