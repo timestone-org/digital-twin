@@ -1,0 +1,176 @@
+// data-table 的样式：整块内边距、滚动视口、表头与数据行、逐格四档与命中规则的上色。
+// 由 Component.vue 的 scoped 块 @use 进来——摊进组件里会把它撑过单文件 500 行的闸门。
+// ⚠ 表头与数据行的列宽写在**同一条规则**里：拆成两条就会错列，而 typecheck 与 lint
+//   都看不出问题。契约测试 look.test.ts 逐字守着这一条。
+// ⚠ 每个 --dtb-* 都带回落值：不带回落的那条，名字一拼错整条声明直接作废，
+//   屏上表现为「这一项配了没反应」。代价是全局那道 css-var-names 契约只查不带回落的
+//   引用，于是这套变量的名字它一个都不管——只有 look.test.ts 那条双向吻合断言管。
+
+.dtb {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  padding: var(--dtb-pad-y, 2px) var(--dtb-pad-x, 4px);
+}
+
+// 视口吃掉表头之外的全部高度；min-height 不给 0 的话它撑着不缩，整块再也滚不动
+.dtb-scroll {
+  overflow: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.dtb-empty {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0 8px;
+  color: var(--text-disabled);
+  font-size: 13px;
+  text-align: center;
+}
+
+// 截断与重列的说明；⚠ 少画几行而不吭声，看的人会把它当成现场就这么多行
+.dtb-note {
+  flex: none;
+  margin: 2px 0 0;
+  color: var(--text-disabled);
+  font-size: 11px;
+}
+
+// ⚠ 表头与数据行共用的**唯一**一份列宽模板
+.dtb-head,
+.dtb-row {
+  display: grid;
+  align-items: center;
+  column-gap: var(--dtb-col-gap, 8px);
+  grid-template-columns: var(--dtb-cols-tpl, minmax(0, 1fr));
+}
+
+.dtb-head {
+  padding: var(--dtb-cell-py, 7px) var(--dtb-cell-px, 8px);
+  border-bottom: 1px solid var(--border-strong);
+  color: var(--dtb-head-color, var(--text-secondary));
+  font-size: var(--dtb-head-size, 12px);
+  letter-spacing: 0.04em;
+}
+
+// 钉住表头：视口一滚，列头还在。
+// ⚠ 底色必须不透明，否则数据行会从表头的字底下穿过去；而 --surface-base 是本仓
+//   唯一一个不透明的面色，其余 surface 全是拿来叠的半透明色。
+.dtb--sticky .dtb-head {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  background: var(--surface-base);
+}
+
+.dtb-headcell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dtb-headcell--name {
+  text-align: left;
+}
+
+.dtb-row {
+  padding: var(--dtb-cell-py, 7px) var(--dtb-cell-px, 8px);
+}
+
+.dtb--lines-horizontal .dtb-row,
+.dtb--lines-both .dtb-row {
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--border-strong) 55%, transparent);
+}
+
+.dtb--lines-both .dtb-cell,
+.dtb--lines-both .dtb-headcell {
+  border-left: 1px solid
+    color-mix(in srgb, var(--border-strong) 35%, transparent);
+  padding-left: 6px;
+}
+
+.dtb--striped .dtb-row:nth-child(even) {
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+}
+
+.dtb-row--pick {
+  cursor: pointer;
+}
+
+.dtb-row--pick:hover {
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+}
+
+.dtb-name {
+  overflow: hidden;
+  color: var(--dtb-name-color, var(--text-secondary));
+  font-size: var(--dtb-name-size, 13px);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dtb-cell {
+  overflow: hidden;
+  color: var(--dtb-value-color, var(--text-primary));
+  font-family: var(--font-mono);
+  font-size: var(--dtb-value-size, 14px);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dtb--align-left {
+  text-align: left;
+}
+
+.dtb--align-center {
+  text-align: center;
+}
+
+.dtb--align-right {
+  text-align: right;
+}
+
+// 还没绑：最弱的一档，看的人要去配绑定
+.dtb-cell.dtb-cell--unbound {
+  color: var(--text-disabled);
+}
+
+// 等首帧：绑了，只要再等一会儿
+.dtb-cell.dtb-cell--pending {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+// 取不到要显眼：它是「去查现场」的信号，与「还没配」不是一回事
+.dtb-cell.dtb-cell--error {
+  color: var(--state-danger);
+}
+
+.dtb-cell--blink {
+  animation: dtb-blink 1.1s steps(1, end) infinite;
+}
+
+// 「减少动态」偏好下不闪：颜色仍在，信息一点不少
+@media (prefers-reduced-motion: reduce) {
+  .dtb-cell--blink {
+    animation: none;
+  }
+}
+
+@keyframes dtb-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}

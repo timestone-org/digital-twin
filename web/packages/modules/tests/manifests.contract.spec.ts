@@ -41,6 +41,12 @@ import {
   DATA_CARD_PARTS_KEY,
   DATA_CARD_SLOT_KEY,
 } from '../src/modules/data-card/cells'
+import {
+  CELL_SLOT_KEY,
+  TABLE_COLUMNS_KEY,
+  TABLE_ROWS_KEY,
+  TABLE_RULES_KEY,
+} from '../src/modules/data-table/cells'
 import { CARD_ITEMS_KEY, CARD_SLOT_KEY } from '../src/modules/info-card/cells'
 import { FEED_SLOT_KEY } from '../src/modules/info-feed/feed'
 import { LIST_ITEMS_KEY, LIST_SLOT_KEY } from '../src/modules/info-list/rows'
@@ -77,6 +83,7 @@ const KEY_CONSTANTS: Record<string, string> = {
   DATA_CARD_PARTS_KEY,
   DATA_CARD_SLOT_KEY,
   CARD_SLOT_KEY,
+  CELL_SLOT_KEY,
   CONTAINER_CONFIG_KEY,
   FEED_SLOT_KEY,
   GAUGE_ITEMS_KEY,
@@ -88,6 +95,9 @@ const KEY_CONSTANTS: Record<string, string> = {
   SHOW_TITLE_CONFIG_KEY,
   SLICE_ITEMS_KEY,
   SLICE_SLOT_KEY,
+  TABLE_COLUMNS_KEY,
+  TABLE_ROWS_KEY,
+  TABLE_RULES_KEY,
   TWIN_2D_CONFIG_KEY,
   TWIN_2D_EDGE_BINDING_KEY,
   TWIN_2D_NODE_BINDING_KEY,
@@ -241,6 +251,7 @@ describe('一个模块 = 一个目录', () => {
       'calendar-heat',
       'container',
       'data-card',
+      'data-table',
       'footer',
       'gauge-card',
       'header',

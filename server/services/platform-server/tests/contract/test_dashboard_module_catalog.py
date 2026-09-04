@@ -44,6 +44,7 @@ EXPECTED_TYPES = frozenset(
         "calendar-heat",
         "container",
         "data-card",
+        "data-table",
         "footer",
         "gauge-card",
         "header",

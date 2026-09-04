@@ -25,6 +25,7 @@ async def test_the_listing_names_every_registered_module(
         "calendar-heat",
         "container",
         "data-card",
+        "data-table",
         "footer",
         "gauge-card",
         "header",

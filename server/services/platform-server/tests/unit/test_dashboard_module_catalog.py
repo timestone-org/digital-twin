@@ -21,6 +21,7 @@ def test_the_committed_catalog_registers_the_known_modules() -> None:
             "calendar-heat",
             "container",
             "data-card",
+            "data-table",
             "footer",
             "gauge-card",
             "header",

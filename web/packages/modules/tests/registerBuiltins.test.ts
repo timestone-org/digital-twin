@@ -32,6 +32,7 @@ const BUILTIN_TYPES = [
   'calendar-heat',
   'container',
   'data-card',
+  'data-table',
   'footer',
   'gauge-card',
   'header',

@@ -2954,6 +2954,676 @@
       }
     },
     {
+      "type": "data-table",
+      "display_name": "数据表格",
+      "category": "数据",
+      "description": "数据表格：列头 + N 行 × M 列的矩阵，回答「这一批对象的这几项分别是多少」。一台设备只看几个数用 info-card 或 data-card，逐行比高低用 info-list 的进度件，看占比构成用 pie-chart。一个数组绑定槽 `cellValues`，行钉在 `rows` 配置项上、列是八个固定子槽 `c1`…`c8`：第 i 行第 c 列那一格喂 `cellValues[i].c` ——列名、单位、小数位、对齐与列宽都是逐列的配置，不从点位来。⚠ 列的绑定按**列键**认，调列的顺序不动任何绑定；行的绑定按**下标**认，删掉 `rows` 中间一项会让它之后每一行的绑定都改喂前一行。⚠ 没在「列」里挑列键的子槽整列不渲染，重复挑同一个列键的那几列只画先声明的那一条并在表下说明。⚠ 逐格四档各有记号：没配来源画「—」、等首帧画「⋯」、取不到画「✕」并标红、有值才画数，完整原因挂在这一格的悬停提示上。⚠ `maxRows` 截断时表下面有一句说明，不会静默少画几行。点某一行上抛的联动值是这一行配置里写的名称，没起名的点了不上抛。",
+      "icon": "table",
+      "keywords": [
+        "table",
+        "grid",
+        "matrix",
+        "biaoge",
+        "liebiao",
+        "表格",
+        "数据表",
+        "列表",
+        "矩阵",
+        "台账",
+        "清单"
+      ],
+      "default_size": {
+        "width": 480,
+        "height": 320,
+        "min_width": 200,
+        "min_height": 120
+      },
+      "chrome": "card",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "default": "",
+          "placeholder": "留空则不画标题栏",
+          "group": "数据",
+          "help": "留空时整条标题栏都不出，模块从最上面一行就开始画表。",
+          "span": "half"
+        },
+        {
+          "key": "nameHeader",
+          "label": "行名列表头",
+          "type": "string",
+          "default": "名称",
+          "group": "数据",
+          "help": "最左边那一列的列头文案；留空回落「名称」。",
+          "span": "half"
+        },
+        {
+          "key": "rows",
+          "label": "行",
+          "type": "array",
+          "default": [
+            {
+              "name": "第 1 行"
+            }
+          ],
+          "group": "数据",
+          "help": "每一项在绑点面板上是一行。⚠ 删掉中间一项，它之后每一行的绑定都会改喂前一行——删完请核对绑点面板。",
+          "item_schema": [
+            {
+              "key": "name",
+              "label": "名称",
+              "type": "string",
+              "default": "",
+              "placeholder": "留空则按「第 N 行」称呼",
+              "help": "最左列显示的名字；留空时按「第 N 行」称呼它。点这一行上抛的联动值也是它，留空则这一行点了不上抛。"
+            }
+          ],
+          "item_label_key": "name",
+          "min_items": 1
+        },
+        {
+          "key": "columns",
+          "label": "列",
+          "type": "array",
+          "default": [
+            {
+              "key": "c1",
+              "name": "数值",
+              "align": "right"
+            }
+          ],
+          "group": "列",
+          "help": "一列一项，摆在行名列右边，顺序就是这里的顺序。⚠ 每一列必须挑一个**不同**的列键：列键就是绑定认的那一半，重复挑同一个的那几列读的是同一个子槽，只画先声明的那一条。⚠ 调顺序、改名字、删列都不动任何绑定——绑定按列键认，不按位置认。",
+          "item_schema": [
+            {
+              "key": "key",
+              "label": "列键",
+              "type": "enum",
+              "default": "c1",
+              "options": [
+                {
+                  "value": "c1",
+                  "label": "列 1"
+                },
+                {
+                  "value": "c2",
+                  "label": "列 2"
+                },
+                {
+                  "value": "c3",
+                  "label": "列 3"
+                },
+                {
+                  "value": "c4",
+                  "label": "列 4"
+                },
+                {
+                  "value": "c5",
+                  "label": "列 5"
+                },
+                {
+                  "value": "c6",
+                  "label": "列 6"
+                },
+                {
+                  "value": "c7",
+                  "label": "列 7"
+                },
+                {
+                  "value": "c8",
+                  "label": "列 8"
+                }
+              ],
+              "help": "这一列读第几个子槽。⚠ 同一张表里不许重复：重复的那几列读的是同一个数，只有先声明的那一条会画出来。改它等于把这一列的绑定整条换掉。"
+            },
+            {
+              "key": "name",
+              "label": "列名",
+              "type": "string",
+              "default": "",
+              "placeholder": "留空则显示列键",
+              "help": "表头上的文案；留空时显示列键本身，好让人对得上绑点面板。"
+            },
+            {
+              "key": "unit",
+              "label": "单位",
+              "type": "string",
+              "default": "",
+              "help": "跟在读数后面的单位。首尾空格照原样保留。⚠ 没有读数的那三档一律不带单位——「— kV」看着像是有读数的。"
+            },
+            {
+              "key": "precision",
+              "label": "小数位",
+              "type": "number",
+              "help": "留空跟随整块那一档。",
+              "min": 0,
+              "max": 6,
+              "step": 1
+            },
+            {
+              "key": "align",
+              "label": "对齐",
+              "type": "enum",
+              "default": "right",
+              "options": [
+                {
+                  "value": "left",
+                  "label": "左对齐"
+                },
+                {
+                  "value": "center",
+                  "label": "居中"
+                },
+                {
+                  "value": "right",
+                  "label": "右对齐"
+                }
+              ],
+              "help": "数值列右对齐才逐行对得齐；文本列可以改成左对齐。"
+            },
+            {
+              "key": "width",
+              "label": "列宽 (px)",
+              "type": "number",
+              "default": 0,
+              "help": "0 = 不定宽，跟其余不定宽的列平分剩下的地方。",
+              "min": 0,
+              "max": 480,
+              "step": 4
+            }
+          ],
+          "item_label_key": "name",
+          "min_items": 1
+        },
+        {
+          "key": "precision",
+          "label": "小数位",
+          "type": "number",
+          "default": 2,
+          "group": "数据",
+          "help": "没有单独配小数位的那几列用这一档。",
+          "span": "half",
+          "min": 0,
+          "max": 6,
+          "step": 1
+        },
+        {
+          "key": "grouping",
+          "label": "千分位",
+          "type": "boolean",
+          "default": false,
+          "group": "数据",
+          "help": "开了整数部分按三位分组。⚠ 一屏里开与不开混着用，同一个量看着像两个精度不同的表。",
+          "span": "half"
+        },
+        {
+          "key": "emptyText",
+          "label": "空态文案",
+          "type": "string",
+          "default": "暂无数据",
+          "group": "数据",
+          "help": "一行都没配时画在表区正中的那一句。⚠ 「格子都还没绑」不算空：那时照画整张表，逐格自己交代四档。",
+          "span": "half"
+        },
+        {
+          "key": "density",
+          "label": "行高",
+          "type": "enum",
+          "default": "normal",
+          "options": [
+            {
+              "value": "compact",
+              "label": "紧凑"
+            },
+            {
+              "value": "normal",
+              "label": "标准"
+            },
+            {
+              "value": "loose",
+              "label": "宽松"
+            }
+          ],
+          "group": "样式",
+          "help": "一屏塞得下多少行由它决定。",
+          "span": "half"
+        },
+        {
+          "key": "striped",
+          "label": "斑马纹",
+          "type": "boolean",
+          "default": true,
+          "group": "样式",
+          "help": "隔行加一层很淡的底色，列多时更容易横着读一行。",
+          "span": "half"
+        },
+        {
+          "key": "gridLines",
+          "label": "网格线",
+          "type": "enum",
+          "default": "horizontal",
+          "options": [
+            {
+              "value": "none",
+              "label": "无"
+            },
+            {
+              "value": "horizontal",
+              "label": "仅横线"
+            },
+            {
+              "value": "both",
+              "label": "横竖都画"
+            }
+          ],
+          "group": "样式",
+          "help": "竖线在列多时帮着分格，列少时只会显得吵。",
+          "span": "half"
+        },
+        {
+          "key": "showHeader",
+          "label": "显示表头",
+          "type": "boolean",
+          "default": true,
+          "group": "样式",
+          "help": "⚠ 关掉之后没有任何一处写着这几列各是什么——只在列名已经画进标题里时才关。",
+          "span": "half"
+        },
+        {
+          "key": "headerSticky",
+          "label": "钉住表头",
+          "type": "boolean",
+          "default": true,
+          "group": "样式",
+          "help": "行多要滚时列头留在最上面。表头关着时这一项不起作用。",
+          "span": "half",
+          "when": {
+            "key": "showHeader",
+            "in": [
+              true
+            ]
+          }
+        },
+        {
+          "key": "maxRows",
+          "label": "最多显示行数",
+          "type": "number",
+          "default": 0,
+          "group": "样式",
+          "help": "0 = 不限。⚠ 截断时表下面会写一句「共 N 行，只显示前 M 行」——那几行的绑定还在，只是屏上不画。",
+          "span": "half",
+          "min": 0,
+          "max": 500,
+          "step": 1
+        },
+        {
+          "key": "nameTone",
+          "label": "行名与表头层级",
+          "type": "enum",
+          "default": "secondary",
+          "options": [
+            {
+              "value": "secondary",
+              "label": "次要"
+            },
+            {
+              "value": "primary",
+              "label": "正文"
+            },
+            {
+              "value": "title",
+              "label": "标题"
+            },
+            {
+              "value": "muted",
+              "label": "弱化"
+            }
+          ],
+          "group": "样式",
+          "help": "行名列与表头共用一档文字层级，跟着主题走。",
+          "span": "half"
+        },
+        {
+          "key": "headSize",
+          "label": "表头字号",
+          "type": "number",
+          "default": 12,
+          "group": "样式",
+          "help": "设计坐标系像素。",
+          "span": "half",
+          "min": 8,
+          "max": 48,
+          "step": 1
+        },
+        {
+          "key": "nameSize",
+          "label": "行名字号",
+          "type": "number",
+          "default": 13,
+          "group": "样式",
+          "help": "设计坐标系像素。",
+          "span": "half",
+          "min": 8,
+          "max": 48,
+          "step": 1
+        },
+        {
+          "key": "valueSize",
+          "label": "读数字号",
+          "type": "number",
+          "default": 14,
+          "group": "样式",
+          "help": "设计坐标系像素。",
+          "span": "half",
+          "min": 8,
+          "max": 48,
+          "step": 1
+        },
+        {
+          "key": "valueColor",
+          "label": "读数颜色",
+          "type": "color",
+          "default": "",
+          "group": "样式",
+          "help": "留空跟随主题正文色。只填 var(--…) 引用，填死色值换肤时不跟着走。⚠ 命中值规则的那几格用规则自己的颜色，压过这一档。",
+          "span": "half"
+        },
+        {
+          "key": "rules",
+          "label": "值规则",
+          "type": "array",
+          "default": [],
+          "group": "规则",
+          "help": "按声明顺序取首个命中，高危规则放前面；颜色留空跟随严重度语义色，填则只填 var(--…)。⚠ 规则只给单元格文字上色，不改单位与小数位。",
+          "item_schema": [
+            {
+              "key": "column",
+              "label": "管哪一列",
+              "type": "enum",
+              "default": "",
+              "options": [
+                {
+                  "value": "",
+                  "label": "全部列"
+                },
+                {
+                  "value": "c1",
+                  "label": "列 1"
+                },
+                {
+                  "value": "c2",
+                  "label": "列 2"
+                },
+                {
+                  "value": "c3",
+                  "label": "列 3"
+                },
+                {
+                  "value": "c4",
+                  "label": "列 4"
+                },
+                {
+                  "value": "c5",
+                  "label": "列 5"
+                },
+                {
+                  "value": "c6",
+                  "label": "列 6"
+                },
+                {
+                  "value": "c7",
+                  "label": "列 7"
+                },
+                {
+                  "value": "c8",
+                  "label": "列 8"
+                }
+              ],
+              "help": "这条规则只判这一列的读数。选「全部列」要当心：各列量纲不同，同一个阈值套到别的列上会给出完全合法却毫无意义的颜色。"
+            },
+            {
+              "key": "op",
+              "label": "判断",
+              "type": "enum",
+              "default": "gt",
+              "options": [
+                {
+                  "value": "lt",
+                  "label": "< 小于"
+                },
+                {
+                  "value": "lte",
+                  "label": "≤ 小于等于"
+                },
+                {
+                  "value": "gt",
+                  "label": "> 大于"
+                },
+                {
+                  "value": "gte",
+                  "label": "≥ 大于等于"
+                },
+                {
+                  "value": "between",
+                  "label": "区间内 [a,b]"
+                },
+                {
+                  "value": "outside",
+                  "label": "区间外"
+                },
+                {
+                  "value": "eq",
+                  "label": "= 等于"
+                },
+                {
+                  "value": "neq",
+                  "label": "≠ 不等于"
+                }
+              ]
+            },
+            {
+              "key": "value",
+              "label": "阈值",
+              "type": "number",
+              "default": 0
+            },
+            {
+              "key": "value2",
+              "label": "阈值上界",
+              "type": "number",
+              "when": {
+                "key": "op",
+                "in": [
+                  "between",
+                  "outside"
+                ]
+              }
+            },
+            {
+              "key": "level",
+              "label": "严重度",
+              "type": "enum",
+              "default": "warning",
+              "options": [
+                {
+                  "value": "normal",
+                  "label": "正常（绿）"
+                },
+                {
+                  "value": "info",
+                  "label": "提示（蓝）"
+                },
+                {
+                  "value": "warning",
+                  "label": "警告（黄）"
+                },
+                {
+                  "value": "danger",
+                  "label": "危险（红）"
+                }
+              ]
+            },
+            {
+              "key": "color",
+              "label": "颜色",
+              "type": "color",
+              "default": "",
+              "help": "留空跟随严重度语义色；能源类型、水温梯度这类非严重度的配色填这里。"
+            },
+            {
+              "key": "label",
+              "label": "文案",
+              "type": "string",
+              "default": ""
+            },
+            {
+              "key": "blink",
+              "label": "闪烁",
+              "type": "boolean",
+              "default": false
+            }
+          ],
+          "item_label_key": "label"
+        }
+      ],
+      "bindings": [
+        {
+          "key": "cellValues",
+          "label": "单元格读数",
+          "data_type": "number",
+          "is_array": true,
+          "is_entity_pinned": true,
+          "array_fields": [
+            {
+              "key": "c1",
+              "label": "列 1",
+              "data_type": "number"
+            },
+            {
+              "key": "c2",
+              "label": "列 2",
+              "data_type": "number"
+            },
+            {
+              "key": "c3",
+              "label": "列 3",
+              "data_type": "number"
+            },
+            {
+              "key": "c4",
+              "label": "列 4",
+              "data_type": "number"
+            },
+            {
+              "key": "c5",
+              "label": "列 5",
+              "data_type": "number"
+            },
+            {
+              "key": "c6",
+              "label": "列 6",
+              "data_type": "number"
+            },
+            {
+              "key": "c7",
+              "label": "列 7",
+              "data_type": "number"
+            },
+            {
+              "key": "c8",
+              "label": "列 8",
+              "data_type": "number"
+            }
+          ]
+        }
+      ],
+      "config_presets": [
+        {
+          "id": "dense-matrix",
+          "label": "密集矩阵",
+          "hint": "紧凑行高 + 斑马纹 + 钉住表头，十几台设备 × 五六列塞进一块中等大小的板子。",
+          "config": {
+            "density": "compact",
+            "striped": true,
+            "showHeader": true,
+            "headerSticky": true,
+            "gridLines": "horizontal",
+            "maxRows": 0,
+            "headSize": 11,
+            "nameSize": 12,
+            "valueSize": 13,
+            "nameTone": "secondary",
+            "valueColor": ""
+          }
+        },
+        {
+          "id": "ledger",
+          "label": "台账清单",
+          "hint": "标准行高 + 横竖网格线，逐列读数的场合最清楚；不用斑马纹，靠线分格。",
+          "config": {
+            "density": "normal",
+            "striped": false,
+            "showHeader": true,
+            "headerSticky": true,
+            "gridLines": "both",
+            "maxRows": 0,
+            "headSize": 12,
+            "nameSize": 13,
+            "valueSize": 14,
+            "nameTone": "primary",
+            "valueColor": ""
+          }
+        },
+        {
+          "id": "wall-board",
+          "label": "大屏看板",
+          "hint": "宽松行高 + 大号读数 + 不画线，远处看得清；行少的时候用它。",
+          "config": {
+            "density": "loose",
+            "striped": true,
+            "showHeader": true,
+            "headerSticky": false,
+            "gridLines": "none",
+            "maxRows": 0,
+            "headSize": 14,
+            "nameSize": 16,
+            "valueSize": 20,
+            "nameTone": "title",
+            "valueColor": ""
+          }
+        },
+        {
+          "id": "top-ten",
+          "label": "前十行",
+          "hint": "紧凑 + 只画前 10 行：⚠ 第 11 行起在屏上看不见，只有表下面那一句截断说明会提到它们。",
+          "config": {
+            "density": "compact",
+            "striped": true,
+            "showHeader": true,
+            "headerSticky": true,
+            "gridLines": "horizontal",
+            "maxRows": 10,
+            "headSize": 11,
+            "nameSize": 12,
+            "valueSize": 13,
+            "nameTone": "secondary",
+            "valueColor": ""
+          }
+        }
+      ],
+      "content_keys": [
+        "title",
+        "nameHeader",
+        "columns",
+        "rows",
+        "emptyText",
+        "rules"
+      ]
+    },
+    {
       "type": "footer",
       "display_name": "页脚",
       "category": "布局",
