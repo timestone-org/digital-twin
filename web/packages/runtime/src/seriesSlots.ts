@@ -156,6 +156,11 @@ export function slotOfOutcome(outcome: SeriesOutcome): BindingSlot {
     value: last === undefined ? null : last.v,
     points: outcome.points,
     isTruncated: outcome.isTruncated,
+    // ⚠ 方向要一路带到模块：两个读侧砍的是相反的两头，只说「截断了」的话
+    //   图例上就只写得出一句让人按错方向读曲线的通用话
+    ...(outcome.truncatedSide === undefined
+      ? {}
+      : { truncatedSide: outcome.truncatedSide }),
     isStale: outcome.isStale,
   }
 }

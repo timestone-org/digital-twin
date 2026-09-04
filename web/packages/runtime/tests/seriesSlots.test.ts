@@ -219,7 +219,7 @@ describe('取数结论折成绑定槽', () => {
     })
   })
 
-  it('触顶与降级两个标记原样带上来', () => {
+  it('触顶、砍掉的那一头与降级三个标记原样带上来', () => {
     const slot = slotOfOutcome({
       state: 'ok',
       points: [{ t: 1, v: 1 }],
@@ -228,7 +228,24 @@ describe('取数结论折成绑定槽', () => {
       isStale: true,
     })
 
-    expect(slot).toMatchObject({ isTruncated: true, isStale: true })
+    // ⚠ 方向丢在这一层的话，模块只写得出一句通用的「数据被截断」，而两个读侧
+    //   砍的恰好是相反的两头——按错的方向去读那条曲线，曲线本身完全合法
+    expect(slot).toMatchObject({
+      isTruncated: true,
+      truncatedSide: 'early',
+      isStale: true,
+    })
+  })
+
+  it('取数侧说不出方向时不编一个：那个键整个不写', () => {
+    const slot = slotOfOutcome({
+      state: 'ok',
+      points: [{ t: 1, v: 1 }],
+      isTruncated: true,
+      isStale: false,
+    })
+
+    expect(slot).not.toHaveProperty('truncatedSide')
   })
 
   it('取不到就说取不到', () => {

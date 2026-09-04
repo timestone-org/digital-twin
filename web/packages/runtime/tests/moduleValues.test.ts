@@ -695,6 +695,24 @@ describe('时序槽的逐槽结论', () => {
     expect(meta).toEqual({ state: 'ok', isTruncated: true, isStale: true })
   })
 
+  it('触顶砍掉的是哪一头也到得了模块，两个读侧砍的方向相反', () => {
+    const result = computeSeries({
+      state: 'ok',
+      value: 3,
+      points: [{ t: 1, v: 3 }],
+      isTruncated: true,
+      truncatedSide: 'late',
+    })
+
+    const meta: ModuleSlotMeta | undefined = result.slots[SERIES_KEY]
+    expect(meta?.truncatedSide).toBe('late')
+    expect(meta).toEqual({
+      state: 'ok',
+      isTruncated: true,
+      truncatedSide: 'late',
+    })
+  })
+
   it('明写的 false 照样带过去：「没触顶」与「不知道有没有触顶」不是一回事', () => {
     const result = computeSeries({
       state: 'ok',

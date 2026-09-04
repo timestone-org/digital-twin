@@ -36,6 +36,12 @@ export type BindingSlot =
       points?: readonly HistoryPoint[]
       /** 窗内还有更多点，只取回了上限那一批。 */
       isTruncated?: boolean
+      /**
+       * 触顶砍掉的是哪一头。
+       * ⚠ 必须跟着 `isTruncated` 一路透到模块：两个读侧砍的方向相反，
+       * 模块只拿得到「截断了」这一位时就只写得出一句通用的话。
+       */
+      truncatedSide?: 'early' | 'late'
       /** 值来自降级路径。 */
       isStale?: boolean
     }
@@ -324,6 +330,9 @@ function okSlotMeta(
       : {}),
     ...(slot.isTruncated !== undefined
       ? { isTruncated: slot.isTruncated }
+      : {}),
+    ...(slot.truncatedSide !== undefined
+      ? { truncatedSide: slot.truncatedSide }
       : {}),
     ...(slot.isStale !== undefined ? { isStale: slot.isStale } : {}),
   }
