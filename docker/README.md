@@ -7,8 +7,9 @@
 
 `nginx/nginx.conf.template` 是 envsubst 模板，由官方镜像在启动时渲染。
 
-> ⚠ 必须设 `NGINX_ENVSUBST_FILTER=^AUTH_`，否则 `$uri` / `$host` 这些 nginx 变量
-> 会被 envsubst 一起替换成空串，表现为「路由全乱、鉴权全过」。
+> ⚠ 必须设 `NGINX_ENVSUBST_FILTER='^(AUTH_|OSS_)'`，且过滤器只能这么窄：放开的话
+> `$uri` / `$host` 这些 nginx 变量会被 envsubst 一起替换成空串，表现为
+> 「路由全乱、鉴权全过」。
 
 ### 三处不能改的配置
 
@@ -25,12 +26,26 @@
 `/verify` 的响应头里带 base64 编码的权限集，默认 4k 的 `proxy_buffer_size`
 会截断它。配置里显式设了 8k。
 
+### `.mjs` 的 media type
+
+nginx 自带的 `mime.types` 里**没有 `.mjs`**，于是 ES 模块被按 `default_type`
+发成 `application/octet-stream`，而浏览器对模块脚本做严格 MIME 检查、当场拒收。
+模板的 http 块里补了一条 `types { text/javascript mjs; }`。
+
+⚠ 表现极难对上号：不是 404 也不是 5xx，只是那个模块「没生效」——实测是 pdf.js 的
+worker 加载失败、知识库的 PDF 预览一律画不出来，而访问日志里那条请求是干干净净的
+200。⚠ 不能挪进 `server` / `location`：`types` 块会**丢掉整份继承**。
+
 ## compose
 
 ```bash
 cd docker
-cp ../.env.example .env   # 填数据库、Redis、外部 EMS 库与三个密钥
+cp ../.env.example .env   # 填数据库、Redis、对象存储、外部 EMS 库与几个密钥
 docker compose up -d --build
+
+# 要 MinerU（PDF 与扫描件的解析后端，ADR-0043）才加这个 profile：
+# 镜像 2.4 GB、权重另有 2.4 GB，而没有它整套照样跑得起来，只是不收 PDF
+docker compose --profile mineru up -d --build
 ```
 
 共享值（`AUTH_EDGE_SERVICE_KEY` 等）的回退链**必须每个服务都写全**：
@@ -44,8 +59,12 @@ docker compose up -d --build
 
 | 变量 | 谁读它 | 说明 |
 |---|---|---|
-| `POSTGRES_*` / `REDIS_*` | auth · platform | —— |
-| `AUTH_JWT_SECRET` / `AUTH_EDGE_SIGNING_SECRET` / `AUTH_EDGE_SERVICE_KEY` | auth（后两个 platform / 边缘也读） | 各 32 字节以上 |
+| `POSTGRES_*` / `REDIS_*` | 全部七个代码单元 | 一库多 schema、一个 Redis 实例同一个 `db` |
+| `AUTH_JWT_SECRET` / `AUTH_EDGE_SIGNING_SECRET` / `AUTH_EDGE_SERVICE_KEY` | auth（后两个 platform ×3 / opcua / realtime / assistant / knowledge ×2 / 边缘也读） | 各 32 字节以上 |
+| `OSS_ENDPOINT` `OSS_ACCESS_KEY` `OSS_SECRET_KEY` | `minio-init` / platform ×3 / knowledge ×2 | 对象存储在本编排之外（ADR-0015）。`OSS_UPSTREAM` 另给边缘，**只能是 `host:port`、不带 scheme**——带了 nginx 直接起不来 |
+| `COLLECT_CREDENTIAL_SECRET` | platform ×3 | 数据源口令的加密密钥（≥32 字符）。换钥后旧密文解不开，界面上重填即恢复 |
+| `LLM_PROVIDER_SECRET` | platform ×3 | 模型供应商目录的加密密钥（ADR-0039）。留空即目录整个缺席 |
+| `AUTH_SEED_ADMIN_PASSWORD` | `auth-migrate` | **绝不给默认值**——弱默认的管理员口令等于没有口令 |
 | `ACSOURCE_HOST` `ACSOURCE_USER` `ACSOURCE_PASSWORD` `ACSOURCE_DB` | platform | 现场 EMS 的 SQL Server，**只读**；compose 把它们转成 `PLATFORM_SQLSERVER_*` |
 | `ACSOURCE_PORT`（默认 1433）`ACSOURCE_TIMEZONE`（默认 `Asia/Shanghai`） | platform | 有默认值，取值差异不是行为差异 |
 
@@ -63,14 +82,29 @@ docker compose up -d --build
 docker compose run --rm auth-server      alembic upgrade head
 docker compose run --rm auth-server      python -m scripts.seed
 docker compose run --rm platform-server  alembic upgrade head
+docker compose run --rm platform-server  python -m scripts.seed
 docker compose run --rm opcua-server     alembic upgrade head
 docker compose run --rm realtime-hub     alembic upgrade head
 docker compose run --rm collector-server alembic upgrade head
+docker compose run --rm ai-assistant     alembic upgrade head
+docker compose run --rm knowledge-server alembic upgrade head
 ```
 
 ⚠ **`collector-server` 那条别漏。** 它建的是独立的 `collect` schema 与点位历史超表，
 建表时会 `CREATE EXTENSION timescaledb`；漏跑的表现是采集容器健康、日志也不报错，
 但一条历史都落不进去。
+
+⚠ **`knowledge-server` 那条要库上装得了 pgvector。** 它建 `vector` 与 `pg_trgm`
+两个扩展（**装进 `knowledge` 这个 schema，不是 `public`**）、建向量表与三个索引
+（[ADR-0045](../docs/adr/0045-向量与关键词索引改为硬依赖.md)）。装不上就**响亮
+失败**——没有「退化成不带索引也能跑」那一档，因为那种退化在界面上与真检索长得
+一模一样。
+
+⚠ **`KNOWLEDGE_EMBEDDING_DIMENSIONS` 在跑迁移那一刻定死**：建的是 `vector(N)`，
+N 取自这一格，所以迁移作业的 `environment` 里也列了它。它必须等于模型管理页上
+分配给「知识库嵌入」的那个模型的维数，否则一份文档都摄不进来，撞的是一条
+「expected N dimensions」——而那条错不会提到你配的是哪个模型。改维数要重跑一次
+迁移、并把已有文档全部重新解析，**所以先定好再灌数据**。
 
 ⚠ **每次上新功能都要重跑种子。** 权限码与路由规则表（闸 1）存在**数据库里**，
 由 auth-server 的种子脚本全量覆盖（可重复执行；人工新建的规则不受影响）。
@@ -137,14 +171,60 @@ WS 的 token 走 `Sec-WebSocket-Protocol` 子协议，而 `auth_request` 的子�
 `proxy_read_timeout`（300s）**，否则边缘先掐断，服务端这条超时与它的失败分档一次
 都轮不到，而现象是「助手转了半分钟然后什么都没发生」。
 
+### knowledge-server 的四处部署前置
+
+**一份镜像两个角色，`KNOWLEDGE_APP_ROLE` 分叉，两个都要起。**
+`api` 只做读写与检索；解析、切块、嵌入、来源同步全在 `worker`
+（[ADR-0032](../docs/adr/0032-知识库独立成代码单元且LLM客户端下沉domain.md)）。
+只起 api 的表现是**检索面好好的、传上去的文档永远停在「处理中」**。
+⚠ 两个角色**共用一份 Settings**，所以对象存储那四项每个角色都要给全，
+哪怕 worker 一个字节都不读——`compose.yml` 里那两段是逐条抄齐的，改一处要改两处。
+⚠ worker **可以多副本**（消费组自动分活），这与 publisher 那种单活租约不是一回事。
+
+**pgvector 是硬依赖。** `knowledge-migrate` 装 `vector` 与 `pg_trgm` 并建三个索引
+（[ADR-0045](../docs/adr/0045-向量与关键词索引改为硬依赖.md)）。库上装不了 = 迁移
+失败 = 知识库整个起不来。**这是有意的**：如果留一条「装不上就不建索引也照跑」的
+回退档，它在界面上与真检索长得一模一样，坏了没人看得出来。⚠ 扩展装进 `knowledge` 这个 schema 而不是 `public`——应用连库时
+`search_path` 恰好只有本服务那一个 schema，装错地方报的是「type vector does not
+exist」，与「装没装扩展」这件事看着毫无关系。
+
+**桶与素材共用，但 `knowledge/` 前缀不许匿名可读。** 原件与插图落在同一个桶的
+`knowledge/` 下，一律经 knowledge-server 的受管端点取字节。匿名可读的**只有**
+`models` / `images` / `icons` 那三个给现场大屏机取素材的前缀。
+
+**四组能力开关，每组都是「开着却不给地址/密钥 = 启动即失败」。**
+
+| 开关 | 关着时 |
+|---|---|
+| `KNOWLEDGE_EMBEDDING_ENABLED` | 文档照常摄取，检索**如实**回「这个库还没建索引」——不是返回空表，空表与「确实没有相关内容」长得一模一样 |
+| `KNOWLEDGE_MODEL_ENABLED` | agentic 检索策略**如实不可用**，不悄悄退化成 naive |
+| `KNOWLEDGE_MINERU_ENABLED` | 不收 PDF：上传面给的是一句点得出名字的错，而不是一份状态 ready 却检索不到的空文档 |
+| `KNOWLEDGE_ASR_ENABLED` | 对话页没有麦克风键 |
+
+⚠ **真正走哪一路由模型目录说了算**（ADR-0039）：`KNOWLEDGE_EMBEDDING_*` /
+`_MODEL_*` 只是目录里没给这个用途分配时的永久默认值。
+⚠ **`KNOWLEDGE_MODEL_CONTEXT_TOKENS` 不要凭印象填**：`0` = 不知道、一格都不收紧；
+本地 llama.cpp 看 `/props` 的 `n_ctx`，它是启动参数，多半远小于模型的训练长度。
+填大了等于没填，表现是窗口小的模型**每次都在同一步失败**，而端点回的 400 与长度
+毫无关系。
+⚠ **浏览器开麦要 HTTPS 或 localhost**，这是浏览器的安全上下文要求，与本仓无关：
+`http://` 的页面上 `getUserMedia` 根本不存在。现场部署要给边缘配 TLS。
+
 ## 迁移与种子（自动）
 
-`docker compose up` 会先把五个一次性作业跑完，再放真服务进来：
+`docker compose up` 会先把七个一次性作业跑完，再放真服务进来：
 
 | 作业 | 做什么 |
 |---|---|
-| `auth-migrate` | `alembic upgrade head` + `python -m scripts.seed` |
-| `platform-migrate` / `opcua-migrate` / `collect-migrate` / `realtime-migrate` | 各自 `alembic upgrade head` |
+| `auth-migrate` / `platform-migrate` | `alembic upgrade head` + `python -m scripts.seed` |
+| `opcua-migrate` / `collect-migrate` / `realtime-migrate` / `assistant-migrate` / `knowledge-migrate` | 各自 `alembic upgrade head` |
+
+⚠ **一个代码单元一个作业，各用自己的镜像**：七套迁移分属七个 schema，合成一个
+作业就要求某一个镜像装得下全部七份代码。
+
+另有两个跑完即退出的作业，与迁移同档：`minio-init`（建桶并把 `models` / `images`
+/ `icons` 三个前缀设成匿名可读；⚠ `staging/` 与 `knowledge/` **刻意不在列**）、
+`mineru-models`（下 2.4 GB 权重，只在 `--profile mineru` 下起）。
 
 真服务用 `depends_on: {condition: service_completed_successfully}` 等它们，
 这正是「迁移先行」那条规矩——代码可回滚、数据库不回滚，故必须先让新结构就位。
