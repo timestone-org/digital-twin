@@ -29,6 +29,7 @@ afterEach(() => {
 const BUILTIN_TYPES = [
   'action-button',
   'bar-chart',
+  'calendar-heat',
   'container',
   'data-card',
   'footer',

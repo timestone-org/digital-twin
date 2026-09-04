@@ -18,6 +18,7 @@ def test_the_committed_catalog_registers_the_known_modules() -> None:
         {
             "action-button",
             "bar-chart",
+            "calendar-heat",
             "container",
             "data-card",
             "footer",

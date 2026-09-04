@@ -41,6 +41,7 @@ EXPECTED_TYPES = frozenset(
     {
         "action-button",
         "bar-chart",
+        "calendar-heat",
         "container",
         "data-card",
         "footer",

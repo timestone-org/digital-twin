@@ -29,6 +29,10 @@ import { beforeAll, describe, expect, it } from 'vitest'
 
 import { BAR_ITEMS_KEY, BAR_SLOT_KEY } from '../src/modules/bar-chart/bars'
 import {
+  DAY_SLOT_KEY,
+  METRIC_ITEMS_KEY,
+} from '../src/modules/calendar-heat/days'
+import {
   GAUGE_ITEMS_KEY,
   GAUGE_SLOT_KEY,
 } from '../src/modules/gauge-card/gauges'
@@ -67,6 +71,8 @@ const KEY_CONSTANTS: Record<string, string> = {
   BAR_ITEMS_KEY,
   BAR_SLOT_KEY,
   CARD_ITEMS_KEY,
+  DAY_SLOT_KEY,
+  METRIC_ITEMS_KEY,
   DATA_CARD_CELLS_KEY,
   DATA_CARD_PARTS_KEY,
   DATA_CARD_SLOT_KEY,
@@ -232,6 +238,7 @@ describe('一个模块 = 一个目录', () => {
     expect(directories).toEqual([
       'action-button',
       'bar-chart',
+      'calendar-heat',
       'container',
       'data-card',
       'footer',
