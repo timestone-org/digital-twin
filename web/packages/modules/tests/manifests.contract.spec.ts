@@ -39,6 +39,10 @@ import {
 import { CARD_ITEMS_KEY, CARD_SLOT_KEY } from '../src/modules/info-card/cells'
 import { FEED_SLOT_KEY } from '../src/modules/info-feed/feed'
 import { LIST_ITEMS_KEY, LIST_SLOT_KEY } from '../src/modules/info-list/rows'
+import {
+  SLICE_ITEMS_KEY,
+  SLICE_SLOT_KEY,
+} from '../src/modules/pie-chart/slices'
 import { registerBuiltinModules } from '../src/registerBuiltins'
 import { __resetModules, listModules } from '../src/registry'
 import {
@@ -64,6 +68,8 @@ const KEY_CONSTANTS: Record<string, string> = {
   LIST_ITEMS_KEY,
   LIST_SLOT_KEY,
   SHOW_TITLE_CONFIG_KEY,
+  SLICE_ITEMS_KEY,
+  SLICE_SLOT_KEY,
   TWIN_2D_CONFIG_KEY,
   TWIN_2D_EDGE_BINDING_KEY,
   TWIN_2D_NODE_BINDING_KEY,
@@ -223,6 +229,7 @@ describe('一个模块 = 一个目录', () => {
       'info-feed',
       'info-list',
       'nav-tabs',
+      'pie-chart',
       'text-block',
       'twin-2d-view',
       'twin-view',

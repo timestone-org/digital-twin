@@ -9288,6 +9288,387 @@
       ]
     },
     {
+      "type": "pie-chart",
+      "display_name": "构成环图",
+      "category": "图表",
+      "description": "构成环图：把几路实时读数按占比画成饼 / 环 / 玫瑰，回答「这几个量各占多少」。要逐行比高低用 info-list 的进度件，只要几个裸数字用 info-card 或 data-card，要「离满还有多远」用 gauge-card。一个数组绑定槽 `sliceValues`，行钉在 `slices` 配置项上：第 i 行喂第 i 片，唯一的子槽 `value` 收数值；扇区名、单位、小数位与固定颜色是逐片的配置，不从点位来，环心那个读数也是从当前这几片派生的、不占绑定槽。⚠ 占比只按**当前取到数的那几片**归一：取不到的那一片不进分母，配了 6 片先接 2 片时画的就是这 2 片的百分百。⚠ 负值在扇形上没有几何意义，整片剔除并在图例上标注原因，不取绝对值混进去。⚠ 删掉 `slices` 中间一项，它之后每一片的绑定都会改喂前一片。⚠ 图例是逐片状态唯一的承载面，缺省开着；关掉它「等首帧」与「取不到」在屏上就一个字都没有了。点某一片上抛的联动值是这一片配置里写的名称，没起名的点了不上抛。",
+      "icon": "chart-pie",
+      "keywords": [
+        "pie",
+        "donut",
+        "rose",
+        "bingtu",
+        "huantu",
+        "zhanbi",
+        "饼图",
+        "环图",
+        "环形图",
+        "玫瑰图",
+        "占比",
+        "构成",
+        "比例"
+      ],
+      "default_size": {
+        "width": 360,
+        "height": 280,
+        "min_width": 160,
+        "min_height": 140
+      },
+      "chrome": "card",
+      "version": 1,
+      "config_schema": [
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "string",
+          "default": "",
+          "placeholder": "留空隐藏标题栏",
+          "group": "数据",
+          "span": "full"
+        },
+        {
+          "key": "slices",
+          "label": "扇区",
+          "type": "array",
+          "default": [
+            {
+              "name": "扇区 1",
+              "color": "",
+              "unit": ""
+            }
+          ],
+          "group": "数据",
+          "help": "每一项在绑点面板上是一行。⚠ 删掉中间一项，它之后每一片的绑定都会改喂前一片——删完请核对绑点面板。",
+          "span": "full",
+          "item_schema": [
+            {
+              "key": "name",
+              "label": "名称",
+              "type": "string",
+              "default": "",
+              "placeholder": "留空则按「第 N 片」称呼",
+              "help": "图例与扇区标签上的名字；留空时按「第 N 片」称呼它。点这一片上抛的联动值也是它，留空则这一片点了不上抛。⚠ 两片重名会被加上 #1 这样的后缀，否则 echarts 会把它们并成一条图例；上抛的仍是这里写的原名。"
+            },
+            {
+              "key": "color",
+              "label": "固定颜色",
+              "type": "color",
+              "default": "",
+              "help": "填了就固定这一片的颜色，压过色板。只填 var(--…) 引用，填死色值换肤时不跟着走。"
+            },
+            {
+              "key": "unit",
+              "label": "单位",
+              "type": "string",
+              "default": "",
+              "placeholder": "留空跟随整块",
+              "help": "这一片自己的单位，留空跟随整块那一档。首尾空格照原样保留。"
+            },
+            {
+              "key": "precision",
+              "label": "小数位",
+              "type": "number",
+              "help": "留空跟随整块那一档。",
+              "min": 0,
+              "max": 6,
+              "step": 1
+            }
+          ],
+          "item_label_key": "name",
+          "min_items": 1
+        },
+        {
+          "key": "emptyText",
+          "label": "空态文案",
+          "type": "string",
+          "default": "暂无数据",
+          "group": "数据",
+          "help": "一片都画不出来时画在图区正中的那一句。⚠ 只接了一部分片不算空：那时照画接到的那几片。",
+          "span": "half"
+        },
+        {
+          "key": "centerText",
+          "label": "环心读数",
+          "type": "enum",
+          "default": "none",
+          "options": [
+            {
+              "value": "none",
+              "label": "不显示"
+            },
+            {
+              "value": "sum",
+              "label": "合计"
+            },
+            {
+              "value": "max",
+              "label": "最大片"
+            },
+            {
+              "value": "count",
+              "label": "片数"
+            }
+          ],
+          "group": "数据",
+          "help": "从当前画得出来的那几片派生，不占绑定槽。⚠ 实心饼没有心可写，这一项只对环形与玫瑰生效。",
+          "span": "half",
+          "when": {
+            "key": "chartStyle",
+            "in": [
+              "donut",
+              "rose"
+            ]
+          }
+        },
+        {
+          "key": "centerUnit",
+          "label": "环心单位",
+          "type": "string",
+          "default": "",
+          "placeholder": "留空跟随整块",
+          "group": "数据",
+          "help": "环心那个数后面的单位；留空时合计与最大片跟随整块的单位，片数不带单位。",
+          "span": "half",
+          "when": {
+            "key": "chartStyle",
+            "in": [
+              "donut",
+              "rose"
+            ]
+          }
+        },
+        {
+          "key": "chartStyle",
+          "label": "图表样式",
+          "type": "enum",
+          "default": "donut",
+          "options": [
+            {
+              "value": "pie",
+              "label": "实心饼"
+            },
+            {
+              "value": "donut",
+              "label": "环形"
+            },
+            {
+              "value": "rose",
+              "label": "玫瑰"
+            }
+          ],
+          "group": "样式",
+          "span": "half"
+        },
+        {
+          "key": "innerRadius",
+          "label": "内半径 (%)",
+          "type": "range",
+          "default": 45,
+          "group": "样式",
+          "help": "占绘图区短边的百分比。⚠ 填得不小于外半径时会被压回去，否则环带宽度为 0、整块空白且不报错。",
+          "span": "half",
+          "when": {
+            "key": "chartStyle",
+            "in": [
+              "donut",
+              "rose"
+            ]
+          },
+          "min": 0,
+          "max": 100,
+          "step": 1
+        },
+        {
+          "key": "outerRadius",
+          "label": "外半径 (%)",
+          "type": "range",
+          "default": 66,
+          "group": "样式",
+          "help": "占绘图区短边的百分比；开了扇区标签要给引线留出四周的地方。",
+          "span": "half",
+          "min": 0,
+          "max": 100,
+          "step": 1
+        },
+        {
+          "key": "palette",
+          "label": "自定义色板",
+          "type": "array",
+          "default": [],
+          "group": "样式",
+          "help": "留空使用主题色板；每行一个颜色，按系列顺序取用。",
+          "item_schema": [
+            {
+              "key": "color",
+              "label": "颜色",
+              "type": "color"
+            }
+          ]
+        },
+        {
+          "key": "unit",
+          "label": "单位",
+          "type": "string",
+          "default": "",
+          "group": "样式",
+          "span": "half"
+        },
+        {
+          "key": "precision",
+          "label": "小数位",
+          "type": "number",
+          "group": "样式",
+          "help": "留空自动（最多 2 位、去尾随零）",
+          "span": "half",
+          "min": 0,
+          "max": 6,
+          "step": 1
+        },
+        {
+          "key": "showLegend",
+          "label": "显示图例",
+          "type": "boolean",
+          "default": true,
+          "group": "图例",
+          "span": "half"
+        },
+        {
+          "key": "showTooltip",
+          "label": "显示提示框",
+          "type": "boolean",
+          "default": true,
+          "group": "提示框",
+          "span": "half"
+        },
+        {
+          "key": "showValueLabel",
+          "label": "显示数值标签",
+          "type": "boolean",
+          "default": true,
+          "group": "数据标签",
+          "span": "half"
+        },
+        {
+          "key": "animation",
+          "label": "启用动画",
+          "type": "boolean",
+          "default": false,
+          "group": "动画",
+          "help": "默认关闭；开启后首帧入场与数据更新会带过渡。",
+          "span": "half"
+        },
+        {
+          "key": "animationDuration",
+          "label": "动画时长(ms)",
+          "type": "number",
+          "default": 600,
+          "group": "动画",
+          "help": "首帧入场 / 数据更新的过渡时长；仅在启用动画时生效。",
+          "span": "half",
+          "when": {
+            "key": "animation",
+            "in": [
+              true
+            ]
+          },
+          "min": 0,
+          "step": 50
+        }
+      ],
+      "bindings": [
+        {
+          "key": "sliceValues",
+          "label": "扇区数值",
+          "data_type": "number",
+          "is_array": true,
+          "is_entity_pinned": true,
+          "array_fields": [
+            {
+              "key": "value",
+              "label": "数值",
+              "data_type": "number"
+            }
+          ]
+        }
+      ],
+      "config_presets": [
+        {
+          "id": "energy-donut",
+          "label": "能源构成",
+          "hint": "粗环 + 底部图例 + 环心合计，扇区上不再重复写名字。",
+          "config": {
+            "centerText": "sum",
+            "chartStyle": "donut",
+            "innerRadius": 52,
+            "outerRadius": 70,
+            "palette": [],
+            "showLegend": true,
+            "showTooltip": true,
+            "showValueLabel": false,
+            "animation": false,
+            "animationDuration": 600
+          }
+        },
+        {
+          "id": "share-pie",
+          "label": "占比饼",
+          "hint": "实心饼 + 扇区外标签，一眼读得到每一片的名字与占比；图例留着交代取不到数的那几片。",
+          "config": {
+            "centerText": "none",
+            "chartStyle": "pie",
+            "innerRadius": 45,
+            "outerRadius": 66,
+            "palette": [],
+            "showLegend": true,
+            "showTooltip": true,
+            "showValueLabel": true,
+            "animation": false,
+            "animationDuration": 600
+          }
+        },
+        {
+          "id": "rose-rank",
+          "label": "玫瑰排名",
+          "hint": "半径也随占比走，谁最大一眼可见；配图例与环心最大值。",
+          "config": {
+            "centerText": "max",
+            "chartStyle": "rose",
+            "innerRadius": 20,
+            "outerRadius": 76,
+            "palette": [],
+            "showLegend": true,
+            "showTooltip": true,
+            "showValueLabel": false,
+            "animation": false,
+            "animationDuration": 600
+          }
+        },
+        {
+          "id": "compact-ring",
+          "label": "紧凑环",
+          "hint": "窄块里用：细环 + 环心合计，图例与标签都不占地方——代价是取不到数的那几片在屏上没有说明。",
+          "config": {
+            "centerText": "sum",
+            "chartStyle": "donut",
+            "innerRadius": 64,
+            "outerRadius": 78,
+            "palette": [],
+            "showLegend": false,
+            "showTooltip": true,
+            "showValueLabel": false,
+            "animation": true,
+            "animationDuration": 600
+          }
+        }
+      ],
+      "content_keys": [
+        "title",
+        "slices",
+        "emptyText",
+        "centerUnit"
+      ]
+    },
+    {
       "type": "text-block",
       "display_name": "文本块",
       "category": "装饰",
