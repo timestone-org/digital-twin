@@ -173,7 +173,7 @@ onUnmounted(stopListening)
 
     &:hover:not(:disabled),
     &:focus-visible {
-      background: rgb(var(--accent-primary-rgb) / 0.14);
+      background: rgba(var(--accent-primary-rgb), 0.14);
       color: var(--text-primary);
       outline: none;
     }
@@ -188,7 +188,7 @@ onUnmounted(stopListening)
 
       &:hover:not(:disabled),
       &:focus-visible {
-        background: rgb(var(--state-danger-rgb) / 0.16);
+        background: rgba(var(--state-danger-rgb), 0.16);
         color: var(--state-danger);
       }
     }

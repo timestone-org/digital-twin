@@ -90,7 +90,7 @@ const dots = computed(() =>
   }
 
   &__dot {
-    fill: rgb(var(--accent-primary-rgb) / 0.7);
+    fill: rgba(var(--accent-primary-rgb), 0.7);
   }
 
   &__note {

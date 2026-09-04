@@ -96,7 +96,7 @@ const zeroAt = computed(() => {
   }
 
   &__bar {
-    fill: rgb(var(--accent-primary-rgb) / 0.6);
+    fill: rgba(var(--accent-primary-rgb), 0.6);
   }
 
   &__axis {

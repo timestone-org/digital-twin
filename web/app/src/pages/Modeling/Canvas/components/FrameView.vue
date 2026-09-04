@@ -18,11 +18,15 @@ import type { ColumnStat, FramePreview } from '../scripts/preview'
 
 const props = defineProps<{ preview: FramePreview }>()
 
-/** 列角色的中文名。认不出的角色不摆徽标，不瞎猜。 */
+/**
+ * 列角色的中文名。认不出的角色不摆徽标，不瞎猜。
+ *
+ * 取值集合是后端的 `operators/frame.py::COLUMN_ROLES`，两侧由契约用例对齐。
+ */
 const ROLE_LABELS: Record<string, string> = {
   target: '目标列',
   feature: '特征列',
-  index: '时间索引',
+  ignored: '不参与建模',
 }
 
 /** 「台账 energy_log · 2026-01-01 00:00 ~ 至今」。取不到来源时给空串。 */
@@ -105,13 +109,15 @@ function statOf(column: ColumnStat, key: string): string {
 <template>
   <div class="dt-ml-frame">
     <p v-if="provenance" class="dt-ml-frame__source">{{ provenance }}</p>
+    <!-- ⚠ 取数是反扫取最新的 limit 行（`dataset/services/record_read.py::scan_window`），
+         触顶时丢的是**更早**那批。方向指反了，用户会往错的一头缩时间范围 -->
     <DtNotice
       v-if="props.preview.provenance.isTruncated"
       intent="warning"
       icon="alert-triangle"
     >
-      取数触了行数上限：这一段时间里靠后的数据根本没有取进来，模型是在半截数据
-      上训的。要么把「行数上限」调大，要么把时间范围缩小。
+      取数触了行数上限：只留下了最新的那一批，更早的那些数据根本没有取进来，模型
+      是在半截数据上训的。要么把「行数上限」调大，要么把时间范围的起点往后挪。
     </DtNotice>
     <p class="dt-ml-frame__shape">
       {{ grouped(props.preview.rowCount) }} 行 × {{ props.preview.colCount }} 列

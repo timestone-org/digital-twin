@@ -4,7 +4,8 @@
  *
  * ⚠ 「没训练出模型」与「摘要太大被截掉了系数」要分开说：后端在撑爆字节预算时
  * 会把拟合参数整个摘掉（`preview.py::_stripped`），把两者混作一处会让一个跑成功
- * 的模型在界面上被说成没训出来。
+ * 的模型在界面上被说成没训出来。走通道 B 的模型两者都不是——它的参数本来就不进
+ * JSON，判据见 `scripts/preview.ts` 的 `isFitted`。
  */
 import { DtNotice, DtTag } from '@dt/ui'
 import { computed } from 'vue'
@@ -19,13 +20,22 @@ const TASK_LABELS: Record<string, string> = {
   classification: '分类',
 }
 
-/** 可服务性：这一版能不能配到台账公式里去。 */
+/**
+ * 可服务性：这一版能不能配到台账公式里去。
+ *
+ * ⚠ 通道 B 一样能上线：发布那一侧判的是「二进制产物在不在」，不是「拟合参数空
+ * 不空」（`services/publish_service.py::_channel_refusal`）。产物在不在这一步
+ * 的摘要里看不出来，所以只说明形态、不打包票。
+ */
 const SERVING = computed(() => {
   if (props.preview.servingChannel === 'json') {
     return { intent: 'success' as const, text: '可上线：拟合参数是纯 JSON' }
   }
   if (props.preview.servingChannel === 'binary') {
-    return { intent: 'warning' as const, text: '二进制产物，本轮不可上线' }
+    return {
+      intent: 'info' as const,
+      text: '可上线：模型存成一份二进制产物，发布时核产物在不在',
+    }
   }
   return { intent: 'neutral' as const, text: '这一步不产出可上线的模型' }
 })
@@ -37,9 +47,19 @@ const ranked = computed(() =>
   ),
 )
 
-const widest = computed(() =>
-  Math.max(1, ...ranked.value.map(([, weight]) => Math.abs(weight))),
-)
+/**
+ * 条子的基准。
+ *
+ * ⚠ 基准必须是**实际最大绝对值**：钉死成 1 的话，未标准化的原始量纲上系数常常
+ * 全都小于 1，整排条子缩成看不见的一丝，读起来像「哪一列都不重要」。
+ */
+const widest = computed(() => {
+  const peak = Math.max(
+    0,
+    ...ranked.value.map(([, weight]) => Math.abs(weight)),
+  )
+  return peak > 0 ? peak : 1
+})
 
 /**
  * 每根权重条画在哪。零线在正中，正权重往右长、负权重往左长。
@@ -210,10 +230,10 @@ const bars = computed(() =>
     top: 0;
     bottom: 0;
     border-radius: var(--radius-sm);
-    background: rgb(var(--accent-primary-rgb) / 0.75);
+    background: rgba(var(--accent-primary-rgb), 0.75);
 
     &--minus {
-      background: rgb(var(--state-warning-rgb) / 0.75);
+      background: rgba(var(--state-warning-rgb), 0.75);
     }
   }
 
