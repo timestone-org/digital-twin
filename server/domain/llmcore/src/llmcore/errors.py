@@ -12,6 +12,8 @@
 所以两个消费方共用同一段——各服务自己的业务错误各用各的领域号。
 """
 
+from typing import cast
+
 from openai import (
     APIConnectionError,
     APIStatusError,
@@ -63,6 +65,41 @@ def is_our_fault(error: OpenAIError) -> bool:
     Args: error。
     """
     return isinstance(error, OUR_FAULT)
+
+
+# 上游错误体里那几个**可安全记进日志**的键。⚠ 只取这几个机器可读的格，
+# 绝不记 `message`：那一格是自由文本，有的端点会把请求内容原样回显进去，
+# 而请求内容不许进日志（observability §3）
+_SAFE_DETAIL_KEYS = ("type", "code", "param", "n_prompt_tokens", "n_ctx")
+
+
+def detail_of(error: OpenAIError) -> dict[str, str]:
+    """上游拒绝的**机器可读**那几格，给日志用。取不到就空表。
+
+    ⚠ 有这一层是因为「模型端点认为请求不合法」这句话对排查毫无帮助：真实原因
+    （上下文超长、工具声明不被支持、参数名不认）只在上游的错误体里，而它此前
+    一个字都没留下来。实测踩过一次：一台 `n_ctx=6656` 的本地端点上，检索回执
+    一进上下文就 400，而日志里只有一句「请求不合法」。
+
+    ⚠ 只取白名单里那几个格：`message` 是自由文本，有的端点会把请求内容原样
+    回显进去。
+
+    Args: error。
+    """
+    body: object = getattr(error, "body", None)
+    if not isinstance(body, dict):
+        return {}
+    outer = cast("dict[str, object]", body)
+    inner = outer.get("error")
+    payload = (
+        cast("dict[str, object]", inner) if isinstance(inner, dict) else outer
+    )
+    found: dict[str, str] = {}
+    for key in _SAFE_DETAIL_KEYS:
+        value = payload.get(key)
+        if isinstance(value, str | int) and not isinstance(value, bool):
+            found[key] = str(value)
+    return found
 
 
 def reason_of(error: OpenAIError) -> str:

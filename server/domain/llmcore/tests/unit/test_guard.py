@@ -13,7 +13,7 @@ import httpx
 import pytest
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-from openai import APIConnectionError, AuthenticationError
+from openai import APIConnectionError, AuthenticationError, BadRequestError
 
 from lib.resilience import CircuitBreaker
 from llmcore import ModelChoice, ModelRejected, ModelUnavailable
@@ -61,6 +61,30 @@ async def test_our_own_fault_never_opens_the_breaker() -> None:
         await guarded.respond(choice=ModelChoice(), messages=[], tools=())
 
     assert breaker.state != "open"
+
+
+async def test_a_rejection_leaves_the_real_reason_in_the_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """⚠ 界面上只有一句「模型端点认为请求不合法」，真实原因在上游的错误体里。
+    实测踩过一次：一台 `n_ctx=6656` 的本地端点，检索回执一进上下文就 400，
+    而日志里看不出跟长度有任何关系。"""
+    rejected = BadRequestError(
+        "",
+        response=httpx.Response(400, request=httpx.Request("POST", "http://x")),
+        body={"error": {"type": "exceed_context_size_error", "n_ctx": 6656}},
+    )
+    guarded, _breaker = _guarded(ScriptedChat(error=rejected))
+
+    with caplog.at_level("WARNING"), pytest.raises(ModelRejected):
+        await guarded.respond(choice=ModelChoice(), messages=[], tools=())
+
+    payloads = [getattr(one, "payload", {}) for one in caplog.records]
+    rejected_log = next(
+        one for one in payloads if one.get("event") == "model_call_rejected"
+    )
+    assert rejected_log["type"] == "exceed_context_size_error"
+    assert rejected_log["n_ctx"] == "6656"
 
 
 async def test_a_downstream_outage_opens_the_breaker() -> None:

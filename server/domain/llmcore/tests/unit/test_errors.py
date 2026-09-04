@@ -21,6 +21,7 @@ from llmcore.errors import (
     ModelUnavailable,
     classified,
     classified_status,
+    detail_of,
     is_our_fault,
     is_our_fault_status,
     reason_of,
@@ -126,3 +127,46 @@ def test_the_reason_never_leaks_the_endpoint() -> None:
     error = APIStatusError("", response=_status(500), body=None)
     assert "model-endpoint" not in reason_of(error)
     assert "http" not in reason_of(error)
+
+
+def test_the_machine_readable_detail_is_kept_for_the_log() -> None:
+    """⚠ 「模型端点认为请求不合法」对排查毫无帮助：真实原因只在上游的错误体
+    里。实测踩过一次——一台 `n_ctx=6656` 的本地端点，检索回执一进上下文就
+    400，而日志里看不出跟长度有任何关系。"""
+    error = BadRequestError(
+        "",
+        response=_status(400),
+        body={
+            "error": {
+                "code": 400,
+                "message": "request (9010 tokens) exceeds the available "
+                "context size (6656 tokens), try increasing it",
+                "type": "exceed_context_size_error",
+                "n_prompt_tokens": 9010,
+                "n_ctx": 6656,
+            }
+        },
+    )
+
+    made = detail_of(error)
+
+    assert made["type"] == "exceed_context_size_error"
+    assert made["n_prompt_tokens"] == "9010"
+    assert made["n_ctx"] == "6656"
+
+
+def test_the_free_text_message_never_reaches_the_log() -> None:
+    """⚠ `message` 是自由文本，有的端点会把请求内容原样回显进去——而请求内容
+    不许进日志（observability §3）。"""
+    error = BadRequestError(
+        "",
+        response=_status(400),
+        body={"error": {"type": "x", "message": "你的点位密码是 hunter2"}},
+    )
+
+    assert "message" not in detail_of(error)
+
+
+def test_a_body_less_rejection_yields_nothing_rather_than_blowing_up() -> None:
+    """端点回一句纯文本 400 是常事；取不到细节不该把这条链路再炸一次。"""
+    assert detail_of(_bad_request()) == {}
