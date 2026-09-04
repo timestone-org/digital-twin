@@ -7,6 +7,7 @@
 
 import uuid
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,6 +44,17 @@ WriteDep = Annotated[CallerContext, Depends(require(KNOWLEDGE_WRITE))]
 # 图的缓存时长。⚠ 只能是 `private`：这张图是某个库里的内容，不许被共享缓存
 # 留下来。ETag 用内容哈希，所以时长长一点也不会拿到旧图
 FIGURE_CACHE_S = 3600
+# 原件的缓存时长。同上只能是 `private`，ETag 同样是内容哈希——重新解析不改
+# 字节，那份缓存因此仍然有效
+RAW_CACHE_S = 3600
+# 用户传上来的字节在浏览器里的安全护栏，两条都不能省：
+# `nosniff` 挡住「声明成 text/plain、浏览器嗅成 HTML 去执行」那一路；
+# `sandbox` 让万一真被当成文档渲染的那一份跑在不透明源上、脚本不执行。
+# ⚠ `default-src 'none'` 一并把它往外发信标的路也断了
+RAW_GUARD_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "default-src 'none'; sandbox",
+}
 PageDep = Annotated[PageParams, Depends(page_params)]
 
 
@@ -196,6 +208,64 @@ def _figure_response(made: document_service.FigureBytes) -> Response:
             "Cache-Control": f"private, max-age={FIGURE_CACHE_S}",
         },
     )
+
+
+@router.get(
+    "/{document_id}/raw",
+    summary="取原件的字节",
+    response_class=Response,
+)
+async def read_raw(
+    session: SessionDep,
+    container: ContainerDep,
+    _viewer: UseDep,
+    document_id: uuid.UUID,
+) -> Response:
+    """把一份文档的原件吐出去，供页面里预览与下载。
+
+    ⚠ 回的是字节不是信封（与图那条同一份 api-contract 显式豁免）。
+
+    Args: session, container, _viewer, document_id。
+    """
+    made = await document_service.read_raw(
+        session, container.objectstore, document_id
+    )
+    return _raw_response(made)
+
+
+def _raw_response(made: document_service.RawBytes) -> Response:
+    """一份原件连缓存头、护栏头与文件名。
+
+    ⚠ `Content-Disposition` 的取值由**类型白名单**定，不由调用方定：把用户传上
+    来的 HTML 以 `inline` 摊在本站域名下，那份 HTML 里的脚本就跑在本站源上，
+    能读这个源的存储、能替用户调接口——一次上传就是一次存储型 XSS。
+    页面里的预览另有安全的画法（沙箱 iframe），不靠这条端点摊开。
+
+    Args: made。
+    """
+    return Response(
+        content=made.content,
+        media_type=made.media_type,
+        headers={
+            "ETag": f'"{made.etag}"',
+            "Cache-Control": f"private, max-age={RAW_CACHE_S}",
+            "Content-Disposition": _disposition(made),
+            **RAW_GUARD_HEADERS,
+        },
+    )
+
+
+def _disposition(made: document_service.RawBytes) -> str:
+    """摆出去还是存下来，以及存成什么名字。
+
+    ⚠ 文件名走 RFC 5987 的 `filename*`，**且不再给 ASCII 那一份**：响应头按
+    latin-1 编码，一个中文名直接让整条响应在编码那一步炸掉，而炸的地方离
+    「文件名」三个字很远。百分号编码之后它只剩 ASCII。
+
+    Args: made。
+    """
+    how = "inline" if made.is_inline else "attachment"
+    return f"{how}; filename*=UTF-8''{quote(made.filename, safe='')}"
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)

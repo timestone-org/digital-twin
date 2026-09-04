@@ -18,6 +18,7 @@ import {
   withCitations,
   withDelta,
   withReply,
+  SAID_NOTHING,
   withSaid,
   withStep,
   type ConversationLog,
@@ -96,6 +97,26 @@ describe('回合收尾', () => {
     expect(log.entries[0]?.isStreaming).toBe(false)
   })
 
+  // ⚠ 这是**真实帧序**：服务端在最后一次作答之后必定发一步「给出答复」，
+  // 排在正文之后、`turn.done` 之前。上面那条用例少了这一步，于是漏掉了这个
+  // 缺陷——现场表现是同一段答复在界面上出现两遍，而刷新之后反而正常
+  // （回放读的是库里那一条）
+  it('正文与整段之间夹着「给出答复」那一步，照样不补第二遍', () => {
+    let log = emptyLog()
+    log = withDelta(log, 'text', '是的，那是一张表格截图。')
+    log = withStep(log, {
+      kind: 'model',
+      name: 'model',
+      state: 'succeeded',
+      title: '给出答复',
+      error: null,
+    })
+    log = withReply(log, '是的，那是一张表格截图。')
+
+    expect(roles(log)).toEqual(['assistant', 'step'])
+    expect(texts(log)).toEqual(['是的，那是一张表格截图。', '给出答复'])
+  })
+
   it('一个字都没流出来时才补上整段', () => {
     // 端点不支持流式、或者部署把流式关了，都会走到这一条
     const log = withReply(emptyLog(), '绑好了')
@@ -104,8 +125,22 @@ describe('回合收尾', () => {
     expect(texts(log)).toEqual(['绑好了'])
   })
 
-  it('答复是空串时什么都不添', () => {
-    expect(withReply(emptyLog(), '').entries).toEqual([])
+  // ⚠ 实测小模型会把话全说进思考那一路然后收嘴：回合确实结束了，而界面上
+  // 什么都不添的表现是「问完之后什么也没发生」——用户分不清是它在想、是坏了、
+  // 还是自己没点上
+  it('一个字都没说时留一句话，而不是一片空白', () => {
+    const log = withReply(emptyLog(), '')
+
+    expect(roles(log)).toEqual(['note'])
+    expect(texts(log)).toEqual([SAID_NOTHING])
+  })
+
+  it('流出来过就不会再补那句话——那一轮明明说了', () => {
+    let log = emptyLog()
+    log = withDelta(log, 'text', '上限 65 ℃')
+    log = withReply(log, '')
+
+    expect(roles(log)).toEqual(['assistant'])
   })
 
   it('收尾会把想的过程那一条也停住', () => {

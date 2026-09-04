@@ -27,6 +27,7 @@ from llmcore.errors import (
     OUR_FAULT,
     ModelRejected,
     ModelUnavailable,
+    detail_of,
     reason_of,
 )
 from llmcore.ports import ModelChoice, ModelSource
@@ -118,6 +119,7 @@ class GuardedModel:
                 else await _drain(bound.astream(messages), sink)
             )
         except OUR_FAULT as error:
+            _log_rejection(choice, error)
             raise ModelRejected(reason_of(error)) from error
         except OpenAIError as error:
             breaker.record_failure(type(error).__name__)
@@ -153,6 +155,29 @@ class GuardedModel:
                 "model_short_circuited", "断路器打开着，本次没有发出去"
             )
             raise ModelUnavailable("模型暂时不可用") from error
+
+
+def _log_rejection(choice: ModelChoice, error: OpenAIError) -> None:
+    """端点判「我们发错了」时，把它**机器可读**的那几格记下来。
+
+    ⚠ 没有这一条，排查就只剩界面上那句「模型端点认为请求不合法」——而真实
+    原因（上下文超长、工具声明不被支持、参数名不认）只在上游的错误体里。
+    实测踩过一次：一台 `n_ctx=6656` 的本地端点，检索回执一进上下文就 400，
+    日志里却看不出跟长度有任何关系。
+
+    ⚠ 只记白名单里那几格（`errors.detail_of`），不记自由文本的 `message`：
+    有的端点会把请求内容原样回显进去，而请求内容不许进日志。
+
+    Args: choice, error。
+    """
+    _logger.warning(
+        "model_call_rejected",
+        "模型端点拒绝了这次请求",
+        kind=choice.kind,
+        profile=choice.profile,
+        error=type(error).__name__,
+        **detail_of(error),
+    )
 
 
 def usage_of(reply: AIMessage) -> dict[str, int] | None:

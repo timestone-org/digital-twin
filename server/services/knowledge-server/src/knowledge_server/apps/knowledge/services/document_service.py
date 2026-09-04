@@ -21,6 +21,8 @@ from knowledge_server.apps.knowledge.errors import (
     DocumentNotFound,
     DuplicateDocument,
     FigureBytesGone,
+    RawBytesGone,
+    RawItemAbsent,
     SourceNotFound,
     UnsupportedRawItem,
 )
@@ -32,6 +34,10 @@ from knowledge_server.apps.knowledge.schemas import (
     UploadTicketOut,
 )
 from knowledge_server.apps.knowledge.services import ingest_queue
+from knowledge_server.apps.knowledge.services.media_types import (
+    is_inline_safe,
+    media_type_of,
+)
 from knowledge_server.apps.knowledge.services.parsing import (
     ExternalParserBackend,
     accepted_suffixes,
@@ -78,6 +84,7 @@ def document_out(row: KnowledgeDocument) -> DocumentOut:
         status=row.status,
         failure_reason=row.failure_reason,
         chunk_count=row.chunk_count,
+        has_raw=row.object_key != "",
         created_at=row.created_at,
         ready_at=row.ready_at,
     )
@@ -365,4 +372,57 @@ async def read_figure(
         content=content,
         media_type=row.media_type or "application/octet-stream",
         etag=row.content_hash,
+    )
+
+
+@dataclass(frozen=True)
+class RawBytes:
+    """一份原件连它的字节，交给端点直接吐出去。"""
+
+    content: bytes
+    media_type: str
+    # 下载时显示的名字，即文档行上那个原始文件名
+    filename: str
+    # 内容哈希，当 ETag 用
+    etag: str
+    # 能不能让浏览器当场摊开。⚠ 为假时端点回 `attachment`
+    is_inline: bool
+
+
+async def read_raw(
+    session: AsyncSession, store: ObjectStore, document_id: uuid.UUID
+) -> RawBytes:
+    """取一份文档的原件字节，供页面里预览与下载。
+
+    ⚠ **流字节而不是发预签名 URL**，与图那条同源：预签名 URL 一旦生成就是一条
+    「谁拿到谁能看」的链接，而知识库里可能有涉密图纸。流字节则每一次都经
+    `auth_request` 判过权限。
+
+    ⚠ media type 按**对象键**的后缀查，不按标题：标题是用户传上来的原始文件名，
+    它可以带路径分隔符、控制字符与任意长度；对象键里那个后缀是登记时净化过的
+    （`sources.suffix_of`），而解析器分派认的也正是它。
+
+    ⚠ 整份读进内存。字节数由直传凭证上的 `MAX_RAW_BYTES` 封着，所以有上界；
+    但这是这条端点的**代价所在**，别在它上面再加并发批量预览。
+
+    Args: session, store, document_id。
+    """
+    row = await read_document(session, document_id)
+    if not row.object_key:
+        # ⚠ 与「没这份文档」分开报：外部系统那一路的一行压根没有过原件，
+        # 而它明明就在那张表里列着
+        raise RawItemAbsent("这份文档来自外部系统，没有可看的原件")
+    media_type = media_type_of(suffix_of(row.object_key))
+    try:
+        content = await store.get_bytes(row.object_key)
+    except ObjectNotFound as error:
+        # ⚠ 与「没有原件」分开报：行还在而字节没了意味着桶被清过，
+        # 那是运维要知道的事
+        raise RawBytesGone("这份原件的字节已不在对象存储里") from error
+    return RawBytes(
+        content=content,
+        media_type=media_type,
+        filename=row.title,
+        etag=row.content_hash,
+        is_inline=is_inline_safe(media_type),
     )

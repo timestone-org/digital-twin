@@ -24,6 +24,8 @@ import type {
   KnowledgeChatSessionDetail,
   KnowledgeChatStep,
   KnowledgeChatToolResult,
+  KnowledgeCitation,
+  KnowledgeCitedFigure,
   KnowledgeDocument,
   KnowledgeHit,
   KnowledgeIndexCapability,
@@ -206,8 +208,29 @@ const SHAPES: Record<string, Record<string, true>> = {
     content_json: true,
     usage_json: true,
     steps: true,
+    citations: true,
     created_at: true,
   } satisfies Keys<KnowledgeChatMessage>,
+  // ⚠ 这两条同时钉住**流式那一帧**：`citations` 帧与这里落库的那一列共用
+  // 同一个形状（`citations.as_json`），而帧本身进不了 openapi
+  ChatCitationOut: {
+    marker: true,
+    chunk_id: true,
+    document_id: true,
+    document_title: true,
+    base_name: true,
+    heading_path: true,
+    where: true,
+    page: true,
+    page_end: true,
+    text: true,
+    figures: true,
+  } satisfies Keys<KnowledgeCitation>,
+  ChatCitationFigureOut: {
+    id: true,
+    caption: true,
+    page: true,
+  } satisfies Keys<KnowledgeCitedFigure>,
   ChatScopeBaseOut: {
     base_id: true,
     name: true,

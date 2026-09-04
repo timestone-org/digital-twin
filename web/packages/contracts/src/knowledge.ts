@@ -294,6 +294,12 @@ export interface KnowledgeChatMessage {
   content_json: Record<string, unknown>
   usage_json: Record<string, unknown> | null
   steps: KnowledgeChatStep[]
+  /**
+   * 这一轮答案真正用到的那几条依据；助手消息之外的角色恒空。
+   * ⚠ 回放要靠它：引用只作为一帧流出去的话，重开这条对话整块依据就没了，
+   * 而依据里挂着的正是文档解析出来的那几张图。
+   */
+  citations: KnowledgeCitation[]
   created_at: string
 }
 

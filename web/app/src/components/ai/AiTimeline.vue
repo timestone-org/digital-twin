@@ -17,6 +17,7 @@ import AiCoreIcon from '@/components/ai/AiCoreIcon.vue'
 import AiReasoning from '@/components/ai/AiReasoning.vue'
 import AiToolCard from '@/components/ai/AiToolCard.vue'
 import type { ChatEntry } from '@/features/ai/conversationLog'
+import { withoutToolCallBlocks } from '@/features/ai/toolCallText'
 
 const props = defineProps<{
   entries: readonly ChatEntry[]
@@ -83,16 +84,20 @@ watch(
         <li v-if="entry.role === 'user'" class="ai-said ai-said--mine">
           {{ entry.text }}
         </li>
+        <!-- ⚠ 摘完是空的就整条不画：一个空气泡看着像出了什么事，
+             而它其实只是模型把一次调用写成了正文 -->
         <li
-          v-else-if="entry.role === 'assistant'"
+          v-else-if="
+            entry.role === 'assistant' && withoutToolCallBlocks(entry.text)
+          "
           class="ai-said"
           :class="{ 'ai-said--live': entry.isStreaming }"
         >
-          <DtMarkdown :text="entry.text" />
+          <DtMarkdown :text="withoutToolCallBlocks(entry.text)" />
         </li>
         <AiReasoning
           v-else-if="entry.role === 'reasoning'"
-          :text="entry.text"
+          :text="withoutToolCallBlocks(entry.text)"
           :streaming="entry.isStreaming === true"
         />
         <li

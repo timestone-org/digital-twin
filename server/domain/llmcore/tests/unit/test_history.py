@@ -272,3 +272,100 @@ def test_an_image_part_becomes_a_placeholder_not_the_bytes() -> None:
     )
 
     assert history.IMAGE_PLACEHOLDER in made[1]["text"]
+
+
+def test_a_reasoning_block_is_dropped_not_mistaken_for_an_image() -> None:
+    """⚠ 带思考摘要的那几路（Responses 方言）把摘要放进 `reasoning` 块里，
+    与正文块并排。当成图的表现是界面上冒出一句「[图片]」——用户读成一张加载
+    失败的插图，而正文其实好好的。"""
+    made = history.to_content(
+        AIMessage(
+            content=[
+                {
+                    "type": "reasoning",
+                    "id": "rs_1",
+                    "summary": [{"type": "summary_text", "text": "先查库"}],
+                },
+                {"type": "text", "text": "上限是 65 ℃。①"},
+            ]
+        )
+    )
+
+    assert made[1]["text"] == "上限是 65 ℃。①"
+
+
+def test_a_message_that_only_thought_lands_as_empty_text() -> None:
+    """只想不说的那一条（只发工具调用）落库是空正文，不是一串占位。
+
+    ⚠ 落成「[图片] [图片]」的话，那句话既回放到界面上，也在下一轮原样喂回给
+    模型——它会看见自己上一轮「说」过一句 `[图片]`。
+    """
+    made = history.to_content(
+        AIMessage(
+            content=[
+                {"type": "reasoning", "id": "rs_1", "summary": []},
+                {"type": "reasoning", "id": "rs_2", "summary": []},
+            ],
+            tool_calls=[
+                {"id": "c1", "name": "kb.search", "args": {"query": "冷却水"}}
+            ],
+        )
+    )
+
+    assert made[1]["text"] == ""
+    assert [one["id"] for one in made[1]["tool_calls"]] == ["c1"]
+
+
+def test_a_budget_of_zero_keeps_the_whole_window() -> None:
+    """⚠ 不知道窗口时一条都不削：这一层只在知道窗口时才收紧。"""
+    said = [HumanMessage(content="甲" * 100), AIMessage(content="乙" * 100)]
+
+    assert history.fitted(said, 0) == said
+
+
+def test_the_oldest_messages_go_first_when_the_budget_is_tight() -> None:
+    """⚠ 条数窗口管不住 token：一次检索回执三千多 token，三四轮下来光历史就把
+    小模型的窗口占满，而表现是每次都在同一步 400。"""
+    said = [
+        HumanMessage(content="最旧" * 50),
+        AIMessage(content="中间" * 50),
+        HumanMessage(content="最新" * 10),
+    ]
+
+    made = history.fitted(said, 60)
+
+    assert [str(one.content) for one in made] == ["最新" * 10]
+
+
+def test_a_window_never_starts_with_an_orphan_tool_reply() -> None:
+    """⚠ 窗口以几条没有调用的工具回应开头时，端点直接判整段请求不合法，
+    而报出来的 400 与真实原因毫无关系。"""
+    said = [
+        AIMessage(content="", tool_calls=[_call("kb.search", "c1")]),
+        ToolMessage(content="回执" * 40, tool_call_id="c1"),
+        HumanMessage(content="接着问"),
+    ]
+
+    made = history.fitted(said, 100)
+
+    assert not isinstance(made[0], ToolMessage)
+
+
+def test_a_call_with_big_arguments_counts_as_big() -> None:
+    """⚠ 入参也进请求：只数正文的话，一次带一大段查询的调用会被当成很小。"""
+    small = AIMessage(content="", tool_calls=[_call("kb.search", "c1")])
+    big = AIMessage(
+        content="",
+        tool_calls=[_call("kb.search", "c2", {"query": "甲" * 500})],
+    )
+
+    assert history.fitted([big, small], 200) == [small]
+
+
+def _call(name: str, call_id: str, args: dict[str, Any] | None = None) -> Any:
+    return {
+        "name": name,
+        "args": args or {},
+        "id": call_id,
+        "type": "tool_call",
+    }

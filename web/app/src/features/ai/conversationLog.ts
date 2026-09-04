@@ -68,6 +68,16 @@ export interface ConversationLog {
   /** 正在长的那一条的 id；没有就是 null。 */
   openText: string | null
   openReasoning: string | null
+  /**
+   * 这一轮**流出来过**正文的那一条的 id；一个字都没流出来时是 null。
+   *
+   * ⚠ 与 `openText` 分开是必须的：步骤一来就把 `openText` 收口了（那之后模型
+   * 说的话是新的一段），而服务端在最后一次作答之后**必定**发一步「给出答复」，
+   * 排在正文之后、`turn.done` 之前。拿 `openText` 判「流没流过字」的表现是
+   * 整段答复被又补一遍，界面上同一段话出现两次——而刷新之后反而正常，因为
+   * 回放读的是库里那一条。
+   */
+  saidTextId: string | null
 }
 
 let seed = 0
@@ -100,7 +110,12 @@ export function withCitations(
 
 /** 空的时间线。 */
 export function emptyLog(): ConversationLog {
-  return { entries: [], openText: null, openReasoning: null }
+  return {
+    entries: [],
+    openText: null,
+    openReasoning: null,
+    saidTextId: null,
+  }
 }
 
 /**
@@ -119,6 +134,9 @@ export function withSaid(
   return {
     ...sealedLog,
     entries: [...sealedLog.entries, { id: nextId(), role, text }],
+    // 整条添进来的话是回合之外的一段（用户发话、界面提示、补上的整段答复），
+    // 「这一轮流过字没有」到此为止
+    saidTextId: null,
   }
 }
 
@@ -240,10 +258,17 @@ function withoutImage(step: RunnerStep): RunnerStep {
   return next
 }
 
+/** 模型收了嘴却一个字都没说时，界面上留的那句话。 */
+export const SAID_NOTHING = '模型这一轮没有给出答复，再问一次试试。'
+
 /**
  * 回合结束：把没长完的收口，并在**一个字都没流出来**时补上整段答复。
  * ⚠ 流出来过就不补：补了会让同一段话在界面上出现两遍，而这只在真模型上
  * 才看得见——假件是一次性回全的，两条路在本地长得一模一样。
+ * ⚠ 一个字都没流出来、整段答复又是空的时候**要留一句话**：回合确实结束了
+ * （等浏览器那一档走的是另一帧），而界面上什么都不添的表现是「问完之后什么
+ * 也没发生」——用户分不清是它在想、是坏了、还是自己没点上。实测小模型会把
+ * 话全说进思考那一路然后收嘴。
  * @param log 当前时间线
  * @param reply 服务端给的整段答复
  */
@@ -251,8 +276,8 @@ export function withReply(
   log: ConversationLog,
   reply: string,
 ): ConversationLog {
-  if (log.openText !== null) return sealed(log)
-  if (reply === '') return sealed(log)
+  if (log.saidTextId !== null) return { ...sealed(log), saidTextId: null }
+  if (reply === '') return withSaid(log, 'note', SAID_NOTHING)
   return withSaid(log, 'assistant', reply)
 }
 
@@ -261,6 +286,7 @@ export function sealed(log: ConversationLog): ConversationLog {
   if (log.openText === null && log.openReasoning === null) return log
   const open = new Set([log.openText, log.openReasoning])
   return {
+    ...log,
     entries: log.entries.map((entry) =>
       open.has(entry.id) ? { ...entry, isStreaming: false } : entry,
     ),
@@ -277,9 +303,11 @@ function started(
   const id = nextId()
   const role: ChatRole = channel === 'reasoning' ? 'reasoning' : 'assistant'
   const entries = [...log.entries, { id, role, text, isStreaming: true }]
+  // ⚠ 正文那一路要同时记进 `saidTextId`：收口之后 `openText` 就没了，而
+  // 回合收尾时要问的是「这一轮流过字没有」
   return channel === 'reasoning'
     ? { ...log, entries, openReasoning: id }
-    : { ...log, entries, openText: id }
+    : { ...log, entries, openText: id, saidTextId: id }
 }
 
 function appended(

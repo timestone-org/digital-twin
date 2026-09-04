@@ -31,6 +31,7 @@ from dataclasses import dataclass, field, replace
 from typing import Annotated, Any, Protocol, TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
+from langchain_core.messages.tool import ToolCall
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
@@ -41,6 +42,8 @@ from llmcore import (
     ModelChoice,
 )
 from llmcore.deltas import text_of
+from llmcore.memory.history import sized
+from llmcore.textcalls import salvage
 from llmcore.tools.shapes import (
     ToolSpec,
     openai_schema,
@@ -58,6 +61,9 @@ from llmcore.turn.types import (
 DEFAULT_MAX_STEPS = 24
 # 单个工具产出的字数上限。⚠ 不设上限的话，一次超大结果能把整个上下文挤掉
 DEFAULT_MAX_TOOL_RESULT_CHARS = 20_000
+# 再挤也要给工具产出留这么多字。⚠ 回一个空壳会被模型读成「查过了，没有」，
+# 而那与「这个库里确实没这句话」分辨不出来
+MIN_TOOL_RESULT_CHARS = 400
 
 # ⚠ 记作 `chat.turn` 而不是 `assistant.turn`：这一份被两个服务共用，写死某一家
 # 的名字会让另一家的日志谎报出处。哪个服务发的由日志信封里的 `service` 字段答
@@ -117,6 +123,11 @@ class TurnDeps:
     # 一个回合最多走几步。⚠ 没有上限时，模型与工具可以互相喂到把整个上下文
     # 填满，而每一步都在花钱
     max_steps: int = DEFAULT_MAX_STEPS
+    # 整段上下文的字数预算；0 = 不知道模型的窗口，一格都不收紧。⚠ 与上面那格
+    # 是两条判据：那一格管「一次产出别太大」，这一格管「这一**轮**加起来别顶穿
+    # 窗口」。只有前者的表现是——一个回合里连查三次的那种问题每次都在同一步
+    # 400，而单看每一次产出都在上限之内（实测 n_ctx=6656 的本地端点）
+    max_context_chars: int = 0
     # 单个工具产出的字数上限，超了截断并说出来（见 `_clamped`）
     max_tool_result_chars: int = DEFAULT_MAX_TOOL_RESULT_CHARS
 
@@ -264,14 +275,20 @@ def _thinker(deps: TurnDeps) -> Callable[[TurnState], Awaitable[TurnUpdate]]:
         spec.name for spec in deps.specs if spec.runs_on == "client"
     )
     schemas = [openai_schema(spec) for spec in deps.specs]
+    overhead = _overhead(schemas)
+    offered = frozenset(spec.name for spec in deps.specs)
 
     async def think(state: TurnState) -> TurnUpdate:
-        reply = await deps.model.respond(
+        # ⚠ 没地方了这一轮就不发工具，捡回那一步也要跟着关：捡回来的调用照样
+        # 会跑，于是「地方用完就收手」这条闸被绕开，上下文接着飘
+        roomy = _has_room(deps, _used(state["messages"], overhead))
+        answered = await deps.model.respond(
             choice=deps.choice,
             messages=list(state["messages"]),
-            tools=schemas,
+            tools=schemas if roomy else [],
             on_delta=deps.on_delta,
         )
+        reply = _salvaged(answered, offered if roomy else frozenset())
         pending = _client_calls(reply, client_names)
         return {
             "messages": [reply],
@@ -280,6 +297,43 @@ def _thinker(deps: TurnDeps) -> Callable[[TurnState], Awaitable[TurnUpdate]]:
         }
 
     return think
+
+
+def _salvaged(reply: AIMessage, offered: frozenset[str]) -> AIMessage:
+    """模型把调用写成正文时，把它捡回成真的 `tool_calls`。
+
+    ⚠ 只在**一个原生调用都没有**时才捡：有原生调用还去翻正文的话，模型在
+    正文里复述自己刚发的那次调用会被执行两遍。
+
+    ⚠ 捡回来的调用照常走注册表、照常记步骤——这里只换一条消息的形状，不执行
+    任何东西（`textcalls` 文件头）。
+
+    Args: reply, offered（这一轮真发下去过的工具名）。
+    """
+    if reply.tool_calls:
+        return reply
+    made = salvage(text_of(reply), offered)
+    if not made.calls:
+        return reply
+    # ⚠ 响亮记一条：端点没解析出 tool_calls 是它那一侧的毛病，而捡回来之后
+    # 一切看着都正常——不记的话，这套部署会一直靠兜底跑着，没人知道
+    _logger.warning(
+        "tool_call_salvaged",
+        "模型把工具调用写进了正文，已捡回",
+        tools=",".join(one.name for one in made.calls),
+    )
+    # ⚠ 用量与端点元数据要原样带过去：换一条消息不该顺手把这一次调用的账
+    # 也丢掉（`guard.usage_of` 读的就是这几格）
+    return AIMessage(
+        content=made.text,
+        tool_calls=[
+            ToolCall(id=f"salvaged-{at}", name=one.name, args=one.arguments)
+            for at, one in enumerate(made.calls, start=1)
+        ],
+        additional_kwargs=reply.additional_kwargs,
+        response_metadata=reply.response_metadata,
+        usage_metadata=reply.usage_metadata,
+    )
 
 
 def _tool_step(
@@ -292,19 +346,22 @@ def _tool_step(
     client_names = frozenset(
         spec.name for spec in deps.specs if spec.runs_on == "client"
     )
+    overhead = _overhead([openai_schema(spec) for spec in deps.specs])
 
     async def use_tools(state: TurnState) -> TurnUpdate:
         asked = _tool_calls(state["messages"])
         outputs: list[BaseMessage] = []
         steps: list[TurnStep] = []
+        used = _used(state["messages"], overhead)
         for call in asked:
             if call.name in client_names:
                 continue
             message, step = await _run_one(
-                deps.run_tool, call, deps.max_tool_result_chars
+                deps.run_tool, call, _room(deps, used)
             )
             outputs.append(message)
             steps.append(step)
+            used += sized(message)
         # ⚠ 不回 `pending`：上一步定下来的待办要原样留着
         return {"messages": outputs, "steps": steps}
 
@@ -352,6 +409,59 @@ async def _run_one(
             output_json={"body": body},
         ),
     )
+
+
+def _overhead(schemas: Sequence[dict[str, Any]]) -> int:
+    """工具声明本身占多少字。
+
+    ⚠ 每一次调用都要**连工具声明一起**发出去，而它不在消息列表里。不算进去的
+    表现是：预算算得比真实宽出一大截，于是「按剩余地方收紧」这条闸看着在起
+    作用、实际每一轮都往上飘，最后还是 400（实测那台端点上，声明加提示词的
+    固定前缀就将近 2000 token）。
+
+    Args: schemas。
+    """
+    return len(json.dumps(schemas, ensure_ascii=False))
+
+
+def _used(messages: Sequence[BaseMessage], overhead: int) -> int:
+    """这一轮到此刻占了多少字，连工具声明一起。
+
+    Args: messages, overhead。
+    """
+    return overhead + sum(sized(one) for one in messages)
+
+
+def _has_room(deps: TurnDeps, used: int) -> bool:
+    """还有地方再查一次吗。
+
+    ⚠ 没地方了就**不再下发工具**，让模型拿现有资料作答。继续下发的表现是它
+    接着查、每次只拿得到几百字、而上下文仍在往上飘——最后整个回合以一句
+    「模型端点认为请求不合法」告终，用户一个字都拿不到。少答几条总比不答好。
+
+    Args: deps, used。
+    """
+    if deps.max_context_chars <= 0:
+        return True
+    return used + MIN_TOOL_RESULT_CHARS < deps.max_context_chars
+
+
+def _room(deps: TurnDeps, used: int) -> int:
+    """这一次的工具产出还剩多少地方。
+
+    ⚠ 一个回合里连查三次是常事，而每一次都在单次上限之内——顶穿窗口的是**它们
+    加起来**。按剩余地方逐次收紧之后，后面几次拿到的越来越少，模型据此收手，
+    而不是整个回合以一句「模型端点认为请求不合法」告终。
+
+    ⚠ 地方不够时也留 `MIN_TOOL_RESULT_CHARS`：回一个空壳与回一句「已截断」在
+    模型眼里是两件事，前者会被读成「查过了，没有」。
+
+    Args: deps, used（这一轮已经占掉多少字）。
+    """
+    if deps.max_context_chars <= 0:
+        return deps.max_tool_result_chars
+    left = deps.max_context_chars - used
+    return max(MIN_TOOL_RESULT_CHARS, min(deps.max_tool_result_chars, left))
 
 
 def _clamped(body: str, max_chars: int) -> str:
@@ -435,12 +545,23 @@ def _outcome(final: dict[str, Any], seeded: int) -> TurnOutcome:
     """
     messages = list(final.get("messages") or [])
     pending = tuple(final.get("pending") or ())
-    return TurnOutcome(
+    made = TurnOutcome(
         messages=messages[seeded:],
         steps=list(final.get("steps") or []),
         pending=pending,
         reply=_last_text(messages),
     )
+    if not made.reply and not made.is_waiting:
+        # ⚠ 响亮记一条：回合正常结束、每一步都成功，而模型一个字都没说。
+        # 实测小模型会把话全说进思考那一路然后收嘴，界面上是一片空白——不记的
+        # 话，这一类「问完之后什么也没发生」在日志里查不出任何异常。
+        # ⚠ 记在这里而不是某一条路上：`run_turn` 与 `stream_turn` 都从这里出结果
+        _logger.warning(
+            "turn_said_nothing",
+            "回合结束了，模型一个字都没说",
+            steps=len(made.steps),
+        )
+    return made
 
 
 def _last_text(messages: Sequence[BaseMessage]) -> str:

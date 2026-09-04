@@ -97,8 +97,40 @@ class ChatStepOut(OutputModel):
     created_at: Utc
 
 
+class ChatCitationFigureOut(OutputModel):
+    """引用里带的一张图。⚠ 只有 id 与图注，字节走取图端点——每一次都过权限。"""
+
+    id: uuid.UUID
+    caption: str
+    page: int | None
+
+
+class ChatCitationOut(OutputModel):
+    """答案里真正用到的一条依据。形状与流式那一帧逐字相同。
+
+    ⚠ 一份形状两处用（`citations` 帧与这里）：各写一份的话，直播时画得出来
+    的引用回放时少一格，而两边单看都对。唯一真源是
+    `chat/services/citations.py::as_json`。
+    """
+
+    marker: str
+    chunk_id: uuid.UUID
+    document_id: uuid.UUID
+    document_title: str
+    base_name: str
+    heading_path: str
+    # 给人看的一句位置（「第 4–6 页 · 二、运行参数」）。⚠ 由后端拼
+    where: str
+    page: int | None
+    page_end: int | None
+    text: str
+    figures: list[ChatCitationFigureOut] = Field(
+        default_factory=list[ChatCitationFigureOut]
+    )
+
+
 class ChatMessageOut(OutputModel):
-    """一条消息，连着它走过的那几步。"""
+    """一条消息，连着它走过的那几步与它用到的那几条依据。"""
 
     id: uuid.UUID
     session_id: uuid.UUID
@@ -108,6 +140,11 @@ class ChatMessageOut(OutputModel):
     usage_json: dict[str, Any] | None
     created_at: Utc
     steps: list[ChatStepOut] = Field(default_factory=list[ChatStepOut])
+    # 这一轮答案真正用到的那几条。⚠ 空表 = 这一条没有引用；助手消息之外的
+    # 角色恒空
+    citations: list[ChatCitationOut] = Field(
+        default_factory=list[ChatCitationOut]
+    )
 
 
 class ChatSessionDetailOut(ChatSessionOut):

@@ -6,8 +6,9 @@
 
 import json
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -23,23 +24,35 @@ from knowledge_server.apps.chat.services.citations import Ledger
 from knowledge_server.apps.chat.services.scope import BaseScope
 from knowledge_server.apps.chat.services.tools import ToolDeps, build_registry
 from knowledge_server.apps.chat.services.tools.client import ASK_TOOL
+from knowledge_server.apps.knowledge import crud
+from knowledge_server.apps.knowledge.crud.figure import FigureWrite
+from knowledge_server.apps.knowledge.models import (
+    KnowledgeChunk,
+    KnowledgeDocument,
+)
+from knowledge_server.apps.knowledge.schemas import HitOut, LocatorOut
 from knowledge_server.settings import API_PREFIX
 from lib.resilience import CircuitBreaker
 from llmcore import ModelChoice
 from llmcore.guard import GuardedModel
 from llmcore.memory import NullSummarizer
 from llmcore.testing import ScriptedChat, StreamingChat, asks
-from llmcore.tools.registry import ToolRegistry
+from llmcore.tools.registry import ToolRegistry, registry_of
+from llmcore.tools.shapes import ToolSpec, object_schema
 
 pytestmark = pytest.mark.requires_postgres
 
 URL = f"{API_PREFIX}/chat-sessions"
 
 
-def _install(stack: DbStack, model: BaseChatModel) -> None:
+def _install(
+    stack: DbStack,
+    model: BaseChatModel,
+    tools: Callable[[BaseScope, Ledger], ToolRegistry] | None = None,
+) -> None:
     """把假模型与用例那条连接装进推进依赖。
 
-    Args: stack, model。
+    Args: stack, model, tools（换掉整份工具注册表；不给就是真的那一份）。
     """
 
     async def source(_choice: ModelChoice) -> BaseChatModel:
@@ -51,7 +64,7 @@ def _install(stack: DbStack, model: BaseChatModel) -> None:
             yield session
             await session.commit()
 
-    def tools(scope: BaseScope, ledger: Ledger) -> ToolRegistry:
+    def real_tools(scope: BaseScope, ledger: Ledger) -> ToolRegistry:
         return build_registry(
             ToolDeps(
                 sessions=sessions,
@@ -64,7 +77,7 @@ def _install(stack: DbStack, model: BaseChatModel) -> None:
     stack.app.dependency_overrides[get_advance_deps] = lambda: AdvanceDeps(
         sessions=sessions,
         model=GuardedModel(source=source, breaker=CircuitBreaker(name="m")),
-        tools=tools,
+        tools=tools or real_tools,
         summarizer=NullSummarizer(),
     )
 
@@ -267,3 +280,161 @@ async def test_no_chat_endpoint_means_an_honest_409(db_stack: DbStack) -> None:
 
     assert response.status_code == 409
     assert response.json()["code"] == 42321
+
+
+@dataclass(frozen=True)
+class _MarkingSearch:
+    """只做「发一个角标」这一件事的假检索。
+
+    ⚠ 用假件而不是把真检索拖进来：这一条要验的是「发角标 → 落库 → 回放」
+    这条链，而真检索要一整套向量索引——拖进来之后这条链断在哪一段就看不出来了。
+    """
+
+    hit: HitOut
+    ledger: Ledger
+    name = "marking"
+
+    def specs(self) -> tuple[ToolSpec, ...]:
+        return (
+            ToolSpec(
+                name="kb.search",
+                description="检索",
+                parameters=object_schema({}, []),
+                runs_on="server",
+            ),
+        )
+
+    async def run(self, name: str, arguments: dict[str, Any]) -> Any:
+        del name, arguments
+        return {"mark": self.ledger.mark(self.hit, "现场资料", self.hit.text)}
+
+
+_FIGURE_HASH = "e" * 64
+
+
+async def _seeded_chunk(session: AsyncSession) -> KnowledgeChunk:
+    """建一个库、一份文档与一块，回那一块。"""
+    base = await crud.knowledge_base.insert_base(
+        session,
+        crud.knowledge_base.BaseWrite(
+            name=f"引用测试 {uuid.uuid4().hex[:6]}",
+            description="",
+            owner_id="tester",
+            embedding_model=None,
+            dimensions=None,
+            retrieval_strategy="hybrid",
+        ),
+    )
+    source = await crud.source.insert_source(
+        session, base.id, "upload", "上传", {}
+    )
+    document = KnowledgeDocument(
+        base_id=base.id,
+        source_id=source.id,
+        external_ref="knowledge/x/规程.pdf",
+        title="冷却水系统操作规程",
+        content_hash="d" * 64,
+    )
+    session.add(document)
+    await session.flush()
+    chunk = KnowledgeChunk(
+        base_id=base.id,
+        document_id=document.id,
+        ordinal=0,
+        text="冷凝器出口温度不得高于 65 ℃",
+    )
+    session.add(chunk)
+    await session.flush()
+    return chunk
+
+
+async def _seeded_with_a_figure(
+    stack: DbStack,
+) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
+    """在那一块上再挂一张图；回文档 id、块 id 与图 id。"""
+    async with stack.sessions() as session:
+        chunk = await _seeded_chunk(session)
+        made = await crud.figure.replace_figures(
+            session,
+            chunk.base_id,
+            chunk.document_id,
+            [
+                FigureWrite(
+                    ordinal=0,
+                    kind="image",
+                    page=2,
+                    caption="图 1 冷却水回路",
+                    object_key="knowledge/x/y/figures/e.jpg",
+                    media_type="image/jpeg",
+                    byte_size=64,
+                    content_hash=_FIGURE_HASH,
+                    bbox={},
+                )
+            ],
+        )
+        figure_id = made[_FIGURE_HASH]
+        await crud.figure.link_figures(session, [(chunk.id, figure_id, 0)])
+        await session.commit()
+        return chunk.document_id, chunk.id, figure_id
+
+
+async def test_the_citations_survive_a_reload_with_their_figures(
+    db_stack: DbStack,
+) -> None:
+    """⚠ 引用只作为一帧流出去的话，重开这条对话整块依据凭空消失——而文档解析
+    出来的那几张插图**只挂在依据上**，现象是「问的时候看得见图，回来就没了」。
+    """
+    document_id, chunk_id, figure_id = await _seeded_with_a_figure(db_stack)
+    hit = HitOut(
+        chunk_id=chunk_id,
+        document_id=document_id,
+        document_title="冷却水系统操作规程",
+        text="冷凝器出口温度不得高于 65 ℃",
+        heading_path="二、运行参数",
+        locator=LocatorOut(page=2, label="第 2 页 · 二、运行参数"),
+        score=0.9,
+        why="关键词命中",
+    )
+    _install(
+        db_stack,
+        ScriptedChat(
+            script=[
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {"id": "t1", "name": "kb.search", "args": {}},
+                    ],
+                ),
+                AIMessage(content="上限是 65 ℃①"),
+            ]
+        ),
+        tools=lambda _scope, ledger: registry_of(
+            (_MarkingSearch(hit, ledger),)
+        ),
+    )
+    session_id = await _new_session(db_stack.client)
+
+    events = await _advance(db_stack.client, session_id, user_text="上限多少")
+
+    live = [body for name, body in events if name == "citations"]
+    assert len(live) == 1
+
+    detail = await db_stack.client.get(f"{URL}/{session_id}")
+    cited = detail.json()["data"]["messages"][-1]["citations"]
+    assert [one["marker"] for one in cited] == ["①"]
+    assert cited[0]["document_id"] == str(document_id)
+    assert [fig["id"] for fig in cited[0]["figures"]] == [str(figure_id)]
+    # 回放那一份与直播那一帧逐字相同：各摊一遍的话，回放会少一格而两边单看都对
+    assert cited == live[0]["items"]
+
+
+async def test_a_turn_without_markers_stores_no_citations(
+    db_stack: DbStack,
+) -> None:
+    """⚠ 空表落成 `NULL`：一条空依据在界面上会让用户以为出了什么问题。"""
+    _install(db_stack, ScriptedChat(reply=AIMessage(content="资料里没写")))
+    session_id = await _new_session(db_stack.client)
+    await _advance(db_stack.client, session_id, user_text="上限多少")
+
+    detail = await db_stack.client.get(f"{URL}/{session_id}")
+    assert detail.json()["data"]["messages"][-1]["citations"] == []

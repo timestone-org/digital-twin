@@ -35,6 +35,10 @@ from llmcore.memory.ports import HistoryRow
 # 图片在历史里的占位。⚠ 回放时不重新塞图：一次回放会把会话里每一张图都再喂
 # 一遍，而模型早已在当时看过并给出了结论
 IMAGE_PLACEHOLDER = "[图片]"
+# 哪几种内容块是**图**。⚠ 白名单，不是「除了文字都算图」：思考摘要那一路
+# （Responses 方言）也是内容块，当成图的表现是库里留下一句「[图片]」，
+# 而它会原样出现在回放出来的对话框里，看着就像一张加载失败的插图
+IMAGE_BLOCK_TYPES = frozenset({"image", "image_url", "input_image"})
 # 窗口一次脱落几条。⚠ 按台阶脱落而不是逐条：逐条会让窗口每多一条消息就整体
 # 前移一格，历史区的前缀从此再也对不上（ADR-0025）
 DEFAULT_DROP_STEP = 10
@@ -140,6 +144,49 @@ def window(
     return split(rows, limit, step)[1]
 
 
+def fitted(
+    messages: Sequence[BaseMessage], budget_chars: int
+) -> list[BaseMessage]:
+    """把回放出来的这一截历史再按**字数预算**收一次，从最旧的那头削。
+
+    ⚠ 条数窗口（`window`）与这一层是两条不同的判据，两条都要：条数管的是
+    「别把上下文喂到几十轮」，字数管的是「这一段到底塞不塞得进模型的窗口」。
+    只有条数的表现是——窗口小的模型上，一段三四轮的对话每次都在同一步 400，
+    而端点回的那句话与长度毫无关系（实测：`n_ctx=6656` 的本地端点）。
+
+    ⚠ 削完要**掐掉开头的孤儿工具消息**，与 `split` 同一条规矩：窗口以几条没有
+    调用的工具回应开头时，端点直接判整段请求不合法，报出来的 400 与真实原因
+    毫无关系。
+
+    ⚠ 预算给 0（不知道窗口）时**一条都不削**：这一层只在知道窗口时才收紧。
+
+    Args: messages（已按序回放的那一截）, budget_chars（0 = 不限）。
+    """
+    if budget_chars <= 0:
+        return list(messages)
+    kept = list(messages)
+    total = sum(sized(one) for one in kept)
+    while kept and total > budget_chars:
+        total -= sized(kept.pop(0))
+    while kept and isinstance(kept[0], ToolMessage):
+        kept.pop(0)
+    return kept
+
+
+def sized(message: BaseMessage) -> int:
+    """一条消息大约占多少字。⚠ 工具调用的入参也算进去：它们与正文一样进请求，
+    而一次带十几个参数的调用比它的正文长得多。
+
+    Args: message。
+    """
+    body = len(_text_of(message))
+    if isinstance(message, AIMessage):
+        body += sum(
+            len(str(call.get("args") or "")) for call in message.tool_calls
+        )
+    return body
+
+
 def _text_of(message: BaseMessage) -> str:
     """一条消息落库时留下的那段文字。
 
@@ -156,7 +203,12 @@ def _text_of(message: BaseMessage) -> str:
 
 
 def _part_text(part: object) -> str:
-    """一个内容块摊成文字。
+    """一个内容块摊成文字：文字照抄、图换成占位、别的当没有。
+
+    ⚠ 认不出的块**丢掉而不是当成图**。带思考摘要的那几路（Responses 方言）
+    把摘要放进 `reasoning` 块里，与正文块并排——一律当成图的表现是「一条只
+    想不说的助手消息在库里成了一句 `[图片] [图片]`」，而它会原样回放到界面上
+    也原样喂回给模型。思考本来就不落库（见文件头），丢掉才是对的。
 
     Args: part。
     """
@@ -165,9 +217,10 @@ def _part_text(part: object) -> str:
     if not isinstance(part, dict):
         return ""
     body = cast("dict[str, object]", part)
-    if body.get("type") == "text":
+    kind = body.get("type")
+    if kind == "text":
         return str(body.get("text") or "")
-    return IMAGE_PLACEHOLDER
+    return IMAGE_PLACEHOLDER if kind in IMAGE_BLOCK_TYPES else ""
 
 
 def _calls_of(body: dict[str, Any]) -> list[ToolCall]:

@@ -3,6 +3,7 @@
 from llmcore.turn.loop import (
     DEFAULT_MAX_STEPS,
     DEFAULT_MAX_TOOL_RESULT_CHARS,
+    MIN_TOOL_RESULT_CHARS,
     ServerToolRunner,
     TurnDeps,
     TurnEvent,
@@ -22,6 +23,7 @@ from llmcore.turn.types import (
 __all__ = [
     "DEFAULT_MAX_STEPS",
     "DEFAULT_MAX_TOOL_RESULT_CHARS",
+    "MIN_TOOL_RESULT_CHARS",
     "ClientToolCall",
     "Responder",
     "ServerToolRunner",

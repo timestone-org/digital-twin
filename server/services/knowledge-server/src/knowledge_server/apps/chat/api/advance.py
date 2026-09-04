@@ -19,7 +19,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from knowledge_server.apps.chat.deps import get_advance_deps
 from knowledge_server.apps.chat.schemas import ChatAdvanceIn
 from knowledge_server.apps.chat.services import advance_service
-from knowledge_server.apps.chat.services.citations import CitationsFound
+from knowledge_server.apps.chat.services.citations import (
+    CitationsFound,
+    as_json,
+)
 from knowledge_server.apps.chat.services.session_service import (
     require_session,
 )
@@ -103,37 +106,10 @@ def _frame_of(item: TurnEvent | SessionTitled | CitationsFound) -> str:
             {"title": item.title, "row_version": item.row_version},
         )
     if isinstance(item, CitationsFound):
-        return events.frame("citations", {"items": _cited_of(item)})
+        # ⚠ 与落库那一列共用 `as_json`：各摊一遍的话，直播画得出来的引用回放
+        # 时会少一格，而两边单看都对
+        return events.frame("citations", {"items": as_json(item.items)})
     return events.outcome_frame(item)
-
-
-def _cited_of(found: CitationsFound) -> list[dict[str, object]]:
-    """引用摊成线上那一份。
-
-    ⚠ `where` 由后端拼好：各端各拼一份一定会漂，而这一句要与检索面上那一句
-    逐字一致。
-
-    Args: found。
-    """
-    return [
-        {
-            "marker": one.marker,
-            "chunk_id": str(one.chunk_id),
-            "document_id": str(one.document_id),
-            "document_title": one.document_title,
-            "base_name": one.base_name,
-            "heading_path": one.heading_path,
-            "where": one.where,
-            "page": one.page,
-            "page_end": one.page_end,
-            "text": one.text,
-            "figures": [
-                {"id": str(fig.id), "caption": fig.caption, "page": fig.page}
-                for fig in one.figures
-            ],
-        }
-        for one in found.items
-    ]
 
 
 def _to_input(payload: ChatAdvanceIn) -> advance_service.AdvanceInput:

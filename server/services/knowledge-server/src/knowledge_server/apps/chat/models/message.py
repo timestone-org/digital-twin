@@ -39,6 +39,13 @@ class ChatMessage(UuidPrimaryKeyMixin, TimestampMixin, Base):
     usage_json: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB, nullable=True
     )
+    # 这一轮答案真正用到的那几条依据，摊好的一份（形状见
+    # `chat/services/citations.py::as_json`）。⚠ 与 `content_json` 分开一列：
+    # 那一列是**模型认的消息体**，回放时要原样喂回给模型，混进只给人看的东西
+    # 会让模型在下一轮读到一坨它没说过的话
+    citations_json: Mapped[list[Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
 
     __table_args__ = (
         ForeignKeyConstraint(

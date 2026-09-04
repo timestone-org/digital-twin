@@ -4,16 +4,18 @@
 超大产出要截断且说出来、上限可配。助手那边另有一条把熔断也串进来的用例。
 """
 
+from dataclasses import replace
 from typing import Any
 
 import pytest
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, ToolMessage
 from unit.fakes import ScriptedResponder, tool_call
 
 from llmcore.tools.shapes import ToolSpec
 from llmcore.turn import (
     DEFAULT_MAX_STEPS,
     DEFAULT_MAX_TOOL_RESULT_CHARS,
+    MIN_TOOL_RESULT_CHARS,
     ServerToolRunner,
     TurnDeps,
     run_turn,
@@ -216,3 +218,181 @@ async def test_a_block_that_is_not_text_never_reaches_the_reply() -> None:
     got = await run_turn(_deps(responder), [])
 
     assert got.reply == "看图说话"
+
+
+async def test_a_tool_call_written_as_prose_is_actually_run() -> None:
+    """⚠ 小模型（与某些兼容网关）会把调用照训练时的写法打进正文。不捡的表现是
+    双重失败：那一步没人执行，而那坨尖括号原样成了给用户的答案。"""
+    written = AIMessage(
+        content=(
+            "先看看原文。\n\n<tool_call>\n<function=kb.search>\n"
+            "<parameter=query>冷却水</parameter>\n</function>\n</tool_call>"
+        )
+    )
+    responder = ScriptedResponder([written, AIMessage(content="上限 65 ℃")])
+    seen: list[dict[str, Any]] = []
+
+    async def spy(name: str, arguments: dict[str, Any]) -> object:
+        del name
+        seen.append(arguments)
+        return {"hits": []}
+
+    got = await run_turn(_deps(responder, spy), [])
+
+    assert seen == [{"query": "冷却水"}]
+    assert got.reply == "上限 65 ℃"
+
+
+async def test_the_salvaged_block_never_reaches_the_stored_message() -> None:
+    """摘不掉的话它会落库、进标题、进下一轮的上下文，而用户看到的是一坨 XML。"""
+    written = AIMessage(
+        content=(
+            "先看看原文。<tool_call><function=kb.search>"
+            "<parameter=query>冷却水</parameter></function></tool_call>"
+        )
+    )
+    responder = ScriptedResponder([written, AIMessage(content="好了")])
+
+    got = await run_turn(_deps(responder), [])
+
+    stored = "".join(str(one.content) for one in got.messages)
+    assert "<tool_call>" not in stored
+    assert "先看看原文。" in stored
+
+
+async def test_a_real_tool_call_is_never_second_guessed() -> None:
+    """⚠ 有原生调用还去翻正文的话，模型复述自己刚发的那次调用会被执行两遍。"""
+    both = AIMessage(
+        content=(
+            "我调了 <tool_call><function=kb.search>"
+            "<parameter=query>复述</parameter></function></tool_call>"
+        ),
+        tool_calls=[tool_call("kb.search", {"query": "真的那次"}, "c1")],
+    )
+    responder = ScriptedResponder([both, AIMessage(content="好了")])
+    seen: list[dict[str, Any]] = []
+
+    async def spy(name: str, arguments: dict[str, Any]) -> object:
+        del name
+        seen.append(arguments)
+        return {}
+
+    await run_turn(_deps(responder, spy), [])
+
+    assert seen == [{"query": "真的那次"}]
+
+
+async def test_the_second_tool_result_gets_only_the_room_that_is_left() -> None:
+    """⚠ 一个回合里连查三次是常事，而每一次都在单次上限之内——顶穿窗口的是
+    它们加起来。按剩余地方逐次收紧之后，模型据此收手，而不是整个回合以一句
+    「模型端点认为请求不合法」告终。"""
+    calls = [
+        AIMessage(content="", tool_calls=[tool_call("kb.search", {}, "c1")]),
+        AIMessage(content="", tool_calls=[tool_call("kb.search", {}, "c2")]),
+        AIMessage(content="够了"),
+    ]
+    responder = ScriptedResponder(calls)
+
+    async def fat(name: str, arguments: dict[str, Any]) -> object:
+        del name, arguments
+        return {"body": "甲" * 3000}
+
+    deps = replace(
+        _deps(responder, fat),
+        max_context_chars=4000,
+        max_tool_result_chars=3000,
+    )
+    got = await run_turn(deps, [])
+
+    sizes = [
+        len(str(one.content))
+        for one in got.messages
+        if isinstance(one, ToolMessage)
+    ]
+    assert sizes[0] > sizes[1], sizes
+    assert sizes[1] >= MIN_TOOL_RESULT_CHARS
+
+
+async def test_without_a_context_budget_nothing_shrinks() -> None:
+    """⚠ 不知道窗口时一格都不收紧：收紧了的表现是大窗口的模型也只拿得到
+    半份资料，而那与「工具本来就只回了这些」分辨不出来。"""
+    calls = [
+        AIMessage(content="", tool_calls=[tool_call("kb.search", {}, "c1")]),
+        AIMessage(content="", tool_calls=[tool_call("kb.search", {}, "c2")]),
+        AIMessage(content="够了"),
+    ]
+
+    async def fat(name: str, arguments: dict[str, Any]) -> object:
+        del name, arguments
+        return {"body": "甲" * 3000}
+
+    got = await run_turn(_deps(ScriptedResponder(calls), fat), [])
+
+    sizes = [
+        len(str(one.content))
+        for one in got.messages
+        if isinstance(one, ToolMessage)
+    ]
+    assert sizes[0] == sizes[1]
+
+
+async def test_a_turn_that_says_nothing_is_reported_not_swallowed(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """⚠ 回合正常结束、每一步都成功，而模型一个字都没说——实测小模型会把话全
+    说进思考那一路然后收嘴。不记的话，这一类「问完之后什么也没发生」在日志里
+    查不出任何异常。"""
+    responder = ScriptedResponder([AIMessage(content="")])
+
+    with caplog.at_level("WARNING"):
+        got = await run_turn(_deps(responder), [])
+
+    assert got.reply == ""
+    events = [
+        getattr(one, "payload", {}).get("event") for one in caplog.records
+    ]
+    assert "turn_said_nothing" in events
+
+
+async def test_the_tools_stop_being_offered_once_the_room_is_gone() -> None:
+    """⚠ 没地方了还接着下发工具的表现是：模型接着查、每次只拿得到几百字、
+    上下文仍在往上飘，最后整个回合以一句「模型端点认为请求不合法」告终，
+    用户一个字都拿不到。少答几条总比不答好。"""
+    calls = [
+        AIMessage(content="", tool_calls=[tool_call("kb.search", {}, "c1")]),
+        AIMessage(content="就这些"),
+    ]
+    responder = ScriptedResponder(calls)
+
+    async def fat(name: str, arguments: dict[str, Any]) -> object:
+        del name, arguments
+        return {"body": "甲" * 3000}
+
+    deps = replace(
+        _deps(responder, fat),
+        max_context_chars=1500,
+        max_tool_result_chars=3000,
+    )
+    await run_turn(deps, [])
+
+    # 第一次问带着工具声明，塞不下之后那一次一个都不带
+    assert responder.tools_seen == [2, 0]
+
+
+async def test_a_written_call_is_not_salvaged_once_the_room_is_gone() -> None:
+    """⚠ 捡回来的调用照样会跑：地方用完之后还捡的话，「收手」那条闸被绕开，
+    上下文接着飘，而这一轮本来就是靠收手才答得出来的。"""
+    written = AIMessage(
+        content=(
+            "还得再查。<tool_call><function=kb.search>"
+            "<parameter=query>再查一遍</parameter></function></tool_call>"
+        )
+    )
+    responder = ScriptedResponder([written])
+    deps = replace(_deps(responder), max_context_chars=1)
+
+    got = await run_turn(deps, [])
+
+    # 没跑任何工具，且那一段原样留着——它此刻是模型说的话，不是一次调用
+    assert not [one for one in got.steps if one.kind == "server_tool"]
+    assert "<tool_call>" in got.reply

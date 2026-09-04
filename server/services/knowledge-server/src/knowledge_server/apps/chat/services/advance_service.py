@@ -25,12 +25,15 @@ from knowledge_server.apps.chat.errors import ChatUnavailable
 from knowledge_server.apps.chat.models import ChatMessage, ChatSession
 from knowledge_server.apps.chat.services import (
     advance_persist,
+    budget,
     title_service,
 )
 from knowledge_server.apps.chat.services import scope as scope_service
 from knowledge_server.apps.chat.services.citations import (
     CitationsFound,
+    Cited,
     Ledger,
+    as_json,
     with_figures,
 )
 from knowledge_server.apps.chat.services.markers import numbers_in
@@ -63,6 +66,7 @@ from llmcore.tools.registry import ToolRegistry
 from llmcore.tools.selection import specs_named
 from llmcore.tools.shapes import ToolSpec
 from llmcore.turn import (
+    DEFAULT_MAX_TOOL_RESULT_CHARS,
     Responder,
     TurnDeps,
     TurnEvent,
@@ -89,6 +93,14 @@ class AdvanceDeps:
     model: Responder
     tools: ToolFactory
     summarizer: Summarizer
+    # 一次工具产出最多占多少字。⚠ 按对话档模型的窗口折算（`budget`）：窗口小的
+    # 模型上，一次检索回执就能把上下文顶穿，而端点回的 400 与长度毫无关系
+    tool_result_chars: int = DEFAULT_MAX_TOOL_RESULT_CHARS
+    # 回放进来的历史最多占多少字；0 = 不知道窗口，按条数窗口那一份走
+    history_chars: int = 0
+    # 整段上下文的字数预算；0 = 不知道窗口。⚠ 与上面两格是三条判据：一条管
+    # 单次产出、一条管历史、这一条管「这一轮加起来」
+    context_chars: int = 0
 
 
 def deps_of(container: Container, caller: CallerContext) -> AdvanceDeps:
@@ -101,6 +113,8 @@ def deps_of(container: Container, caller: CallerContext) -> AdvanceDeps:
     if not container.answerer.can_answer:
         raise ChatUnavailable("这套部署没有接对话档，知识库对话用不了")
     lanes = strategies(lanes_of(container))
+    window_tokens = container.settings.model_context_tokens
+    afforded = budget.result_chars(window_tokens, DEFAULT_MAX_TOOL_RESULT_CHARS)
     return AdvanceDeps(
         sessions=container.database.session,
         model=container.responder,
@@ -112,11 +126,15 @@ def deps_of(container: Container, caller: CallerContext) -> AdvanceDeps:
                 strategies=lanes,
                 scope=chosen,
                 ledger=ledger,
+                result_chars=afforded,
             )
         ),
         summarizer=summarize.ModelSummarizer(
             model=container.responder, profile="default"
         ),
+        tool_result_chars=afforded,
+        history_chars=budget.history_chars(window_tokens, afforded),
+        context_chars=budget.context_chars(window_tokens),
     )
 
 
@@ -212,6 +230,7 @@ def assemble(
     rows: list[HistoryRow],
     summary: Summary | None,
     scope: BaseScope,
+    history_chars: int = 0,
 ) -> list[BaseMessage]:
     """把这一轮喂给模型的消息列表拼出来。
 
@@ -222,10 +241,15 @@ def assemble(
     ⚠ 尾部没应答的工具调用要补回执：否则端点判整段历史不合法，而这个会话再也
     发不出下一句。
 
-    Args: payload, rows, summary, scope。
+    ⚠ 历史要按**字数**再收一次（`history.fitted`）。条数窗口管不住 token：
+    一次检索回执三千多 token，三四轮下来光历史就把小模型的窗口占满，而表现是
+    每次都在同一步 400（实测 `n_ctx=6656` 的本地端点）。给 0 表示不知道窗口，
+    这一步就不动。
+
+    Args: payload, rows, summary, scope, history_chars（0 = 不限）。
     """
     recent = history.window(rows, MAX_HISTORY_MESSAGES, HISTORY_DROP_STEP)
-    replayed = history.replay(recent)
+    replayed = history.fitted(history.replay(recent), history_chars)
     fresh = incoming_messages(payload)
     answered = {
         one.tool_call_id for one in fresh if isinstance(one, ToolMessage)
@@ -267,6 +291,8 @@ async def advance(
         specs=_offered(registry.specs, payload.client_tools),
         run_tool=registry.run,
         choice=ModelChoice(),
+        max_context_chars=deps.context_chars,
+        max_tool_result_chars=deps.tool_result_chars,
     )
     produced: list[TurnStep] = []
     outcome: TurnOutcome | None = None
@@ -278,24 +304,52 @@ async def advance(
             produced.append(item)
         yield item
     if outcome is not None:
-        await advance_persist.persist(
-            deps.sessions,
-            chat_session_id=chat_session_id,
+        cited = await _stored(
+            deps, chat_session_id, payload, (outcome, produced), ledger
+        )
+        async for tail in _closing(
+            deps, chat_session_id, payload, cited, outcome
+        ):
+            yield tail
+
+
+async def _stored(
+    deps: AdvanceDeps,
+    chat_session_id: uuid.UUID,
+    payload: AdvanceInput,
+    made: tuple[TurnOutcome, list[TurnStep]],
+    ledger: Ledger,
+) -> list[Cited]:
+    """解出这一轮用到的依据，连同消息与步骤一起落库，回那几条。
+
+    ⚠ 引用要在落库**之前**算出来：它跟着那条助手消息一起落，落完再算就得再写
+    一次库。不落的表现是回放时整块依据凭空消失——而依据里挂着的正是文档解析出来
+    的那几张图。
+
+    Args: deps, chat_session_id, payload, made（这一轮的结果与步骤）, ledger。
+    """
+    outcome, produced = made
+    cited = await with_figures(
+        deps.sessions, ledger.resolve(numbers_in(outcome.reply))
+    )
+    await advance_persist.persist(
+        deps.sessions,
+        chat_session_id=chat_session_id,
+        record=advance_persist.TurnRecord(
             incoming=incoming_messages(payload),
             outcome=outcome,
             steps=produced,
-        )
-        async for tail in _closing(
-            deps, chat_session_id, payload, ledger, outcome
-        ):
-            yield tail
+            citations=as_json(cited),
+        ),
+    )
+    return cited
 
 
 async def _closing(
     deps: AdvanceDeps,
     chat_session_id: uuid.UUID,
     payload: AdvanceInput,
-    ledger: Ledger,
+    cited: list[Cited],
     outcome: TurnOutcome,
 ) -> AsyncIterator[TurnEvent | title_service.SessionTitled | CitationsFound]:
     """落库之后收尾的那几帧，次序是有讲究的。
@@ -306,11 +360,8 @@ async def _closing(
     ⚠ 起名字排在 outcome **之后**：它要再调一次模型，而用户此刻已经看到答案
     了；排在前面的话，那一秒会被读成「还在答」。
 
-    Args: deps, chat_session_id, payload, ledger, outcome。
+    Args: deps, chat_session_id, payload, cited（已落库的那几条）, outcome。
     """
-    cited = await with_figures(
-        deps.sessions, ledger.resolve(numbers_in(outcome.reply))
-    )
     if cited:
         yield CitationsFound(items=tuple(cited))
     yield outcome
@@ -375,6 +426,7 @@ async def _opened(
         rows=loaded.rows,
         summary=summary,
         scope=loaded.scope,
+        history_chars=deps.history_chars,
     )
 
 

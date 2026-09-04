@@ -258,3 +258,56 @@ describe('回放不还原可点的提问卡片', () => {
     expect(log.entries.every((one) => one.ask === undefined)).toBe(true)
   })
 })
+
+describe('依据要跟着回放', () => {
+  // ⚠ 不回放的表现是「问的时候看得见图，重开这条对话图就没了」：文档解析出来
+  // 的那几张插图只挂在依据上，而依据此前只作为一帧流出去
+  it('助手那条带着的引用回放成 citations，排在正文后面', () => {
+    const log = replayedLog({
+      messages: [
+        {
+          role: 'assistant',
+          content_json: { text: '上限是 65 ℃。①' },
+          steps: [],
+          citations: [
+            {
+              marker: '①',
+              chunk_id: 'c1',
+              document_id: 'd1',
+              document_title: '冷却水系统操作规程',
+              base_name: '现场资料',
+              heading_path: '二、运行参数',
+              where: '第 2 页 · 二、运行参数',
+              page: 2,
+              page_end: null,
+              text: '冷凝器出口温度不得高于 65 ℃',
+              figures: [{ id: 'f1', caption: '图 1 冷却水回路', page: 2 }],
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(log.entries.map((one) => one.role)).toEqual([
+      'assistant',
+      'citations',
+    ])
+    expect(log.entries[1]?.citations?.[0]?.figures).toHaveLength(1)
+  })
+
+  // ⚠ 空表不出这一条：一张空依据卡片会让用户以为出了什么问题
+  it('没有引用的那一条不多出一个空块', () => {
+    const log = replayedLog({
+      messages: [
+        {
+          role: 'assistant',
+          content_json: { text: '这份资料里没写' },
+          steps: [],
+          citations: [],
+        },
+      ],
+    })
+
+    expect(log.entries.map((one) => one.role)).toEqual(['assistant'])
+  })
+})

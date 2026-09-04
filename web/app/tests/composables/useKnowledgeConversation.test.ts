@@ -39,6 +39,7 @@ function detailOf(text: string): KnowledgeChatSessionDetail {
         content_json: { text },
         usage_json: null,
         steps: [],
+        citations: [],
         created_at: '',
       },
     ],

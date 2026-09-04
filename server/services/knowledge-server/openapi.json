@@ -807,9 +807,130 @@
         "title": "ChatAdvanceIn",
         "type": "object"
       },
-      "ChatMessageOut": {
-        "description": "一条消息，连着它走过的那几步。",
+      "ChatCitationFigureOut": {
+        "description": "引用里带的一张图。⚠ 只有 id 与图注，字节走取图端点——每一次都过权限。",
         "properties": {
+          "caption": {
+            "title": "Caption",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          }
+        },
+        "required": [
+          "id",
+          "caption",
+          "page"
+        ],
+        "title": "ChatCitationFigureOut",
+        "type": "object"
+      },
+      "ChatCitationOut": {
+        "description": "答案里真正用到的一条依据。形状与流式那一帧逐字相同。\n\n⚠ 一份形状两处用（`citations` 帧与这里）：各写一份的话，直播时画得出来\n的引用回放时少一格，而两边单看都对。唯一真源是\n`chat/services/citations.py::as_json`。",
+        "properties": {
+          "base_name": {
+            "title": "Base Name",
+            "type": "string"
+          },
+          "chunk_id": {
+            "format": "uuid",
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_title": {
+            "title": "Document Title",
+            "type": "string"
+          },
+          "figures": {
+            "items": {
+              "$ref": "#/components/schemas/ChatCitationFigureOut"
+            },
+            "title": "Figures",
+            "type": "array"
+          },
+          "heading_path": {
+            "title": "Heading Path",
+            "type": "string"
+          },
+          "marker": {
+            "title": "Marker",
+            "type": "string"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "page_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page End"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "where": {
+            "title": "Where",
+            "type": "string"
+          }
+        },
+        "required": [
+          "marker",
+          "chunk_id",
+          "document_id",
+          "document_title",
+          "base_name",
+          "heading_path",
+          "where",
+          "page",
+          "page_end",
+          "text"
+        ],
+        "title": "ChatCitationOut",
+        "type": "object"
+      },
+      "ChatMessageOut": {
+        "description": "一条消息，连着它走过的那几步与它用到的那几条依据。",
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/ChatCitationOut"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
           "content_json": {
             "additionalProperties": true,
             "title": "Content Json",
@@ -1277,6 +1398,10 @@
             "title": "Failure Reason",
             "type": "string"
           },
+          "has_raw": {
+            "title": "Has Raw",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -1322,6 +1447,7 @@
           "status",
           "failure_reason",
           "chunk_count",
+          "has_raw",
           "created_at",
           "ready_at"
         ],
@@ -2674,6 +2800,43 @@
           }
         },
         "summary": "取一张解析出来的图",
+        "tags": [
+          "document"
+        ]
+      }
+    },
+    "/api/v1/knowledge/documents/{document_id}/raw": {
+      "get": {
+        "description": "把一份文档的原件吐出去，供页面里预览与下载。\n\n⚠ 回的是字节不是信封（与图那条同一份 api-contract 显式豁免）。\n\nArgs: session, container, _viewer, document_id。",
+        "operationId": "read_raw_api_v1_knowledge_documents__document_id__raw_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "取原件的字节",
         "tags": [
           "document"
         ]
