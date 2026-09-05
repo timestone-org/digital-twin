@@ -1,6 +1,7 @@
 /**
  * @fileoverview 守图表挂载的生命周期：结构变全量重建、值变只换 series、换肤整图重绘、
- * 容器出现/消失跟着建与放（不泄漏实例），以及点击上抛的是联动契约里的那个事件。
+ * 容器出现/消失跟着建与放（不泄漏实例）、点击上抛的是联动契约里的那个事件，
+ * 以及舞台缩放折进位图分辨率后按阈值重建。
  * ⚠ 打桩打在装配点 `shared/chart/echarts` 上，不 mock echarts 包本身。
  */
 import type { InteractionEvent } from '@dt/contracts'
@@ -8,23 +9,24 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, ref, type PropType } from 'vue'
 
-import type { ECOption } from '../../../src/shared/chart/echarts'
+import type { ChartInit, ECOption } from '../../../src/shared/chart/echarts'
 import {
   useEChart,
   type UseEChartOptions,
 } from '../../../src/shared/chart/useEChart'
 
 const echarts = vi.hoisted(() => {
-  const newHandle = (host: HTMLElement) => ({
+  const newHandle = (host: HTMLElement, init: ChartInit) => ({
     host,
+    init,
     setOption: vi.fn((option: unknown, update: unknown) => [option, update]),
     onClick: vi.fn((handler: (params: unknown) => void) => handler),
     resize: vi.fn(),
     dispose: vi.fn(),
   })
   const handles: ReturnType<typeof newHandle>[] = []
-  const createChart = vi.fn((host: HTMLElement) => {
-    const handle = newHandle(host)
+  const createChart = vi.fn((host: HTMLElement, init: ChartInit = {}) => {
+    const handle = newHandle(host, init)
     handles.push(handle)
     return Promise.resolve(handle)
   })
@@ -40,6 +42,29 @@ function lastHandle() {
   const handle = echarts.handles.at(-1)
   if (!handle) throw new Error('还没有建出实例')
   return handle
+}
+
+/**
+ * 摆一个舞台：布局宽是未变换的，视觉宽含祖先 transform，两者一比就是缩放比。
+ * ⚠ happy-dom 这两样都量不出真东西，只能自己摆；散场靠 `restoreAllMocks` 还回去。
+ * @param layoutWidth 未变换的布局宽
+ * @param visualWidth 累积 transform 之后的视觉宽
+ */
+function stubStage(layoutWidth: number, visualWidth: number): void {
+  vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(
+    layoutWidth,
+  )
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+    x: 0,
+    y: 0,
+    width: visualWidth,
+    height: 0,
+    top: 0,
+    right: visualWidth,
+    bottom: 0,
+    left: 0,
+    toJSON: () => ({}),
+  })
 }
 
 /** 最近一次 setOption 的口径。 */
@@ -103,6 +128,8 @@ beforeEach(() => {
 
 afterEach(() => {
   document.body.removeAttribute('style')
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe('挂载与释放', () => {
@@ -160,7 +187,7 @@ describe('挂载与释放', () => {
   })
 
   it('建实例期间被卸载时，回来的实例当场扔掉', async () => {
-    const handle = echarts.newHandle(document.createElement('div'))
+    const handle = echarts.newHandle(document.createElement('div'), {})
     let settle: () => void = () => {}
     echarts.createChart.mockImplementationOnce(
       () =>
@@ -364,5 +391,98 @@ describe('尺寸跟随', () => {
 
     expect(disconnect).toHaveBeenCalledTimes(1)
     vi.unstubAllGlobals()
+  })
+})
+
+describe('舞台缩放下的位图分辨率', () => {
+  it('缩放比折进分辨率——不折的话 2 倍舞台上 canvas 只有一半分辨率', async () => {
+    vi.stubGlobal('devicePixelRatio', 1.5)
+    stubStage(100, 200)
+
+    const wrapper = await mountChart()
+
+    expect(lastHandle().init).toEqual({ devicePixelRatio: 3 })
+
+    wrapper.unmount()
+  })
+
+  it('元素还没布局时退回屏幕像素比——布局宽是 0，除下去是 Infinity', async () => {
+    vi.stubGlobal('devicePixelRatio', 2)
+    stubStage(0, 400)
+
+    const wrapper = await mountChart()
+
+    expect(lastHandle().init).toEqual({ devicePixelRatio: 2 })
+
+    wrapper.unmount()
+  })
+
+  it('缩放比只挪了一点不重建——编辑器逐格缩放不该每步扔掉实例', async () => {
+    stubStage(100, 100)
+    const wrapper = await mountChart({ config: { title: '甲' } })
+
+    stubStage(100, 110)
+    await wrapper.setProps({ config: { title: '乙' } })
+    await flushPromises()
+
+    expect(echarts.createChart).toHaveBeenCalledTimes(1)
+    expect(lastUpdate()).toEqual({ notMerge: true })
+
+    wrapper.unmount()
+  })
+
+  it('缩放比偏大了连实例一起重建——位图分辨率只在 init 时读', async () => {
+    stubStage(100, 100)
+    const wrapper = await mountChart({ config: { title: '甲' } })
+    const first = lastHandle()
+
+    stubStage(100, 140)
+    await wrapper.setProps({ config: { title: '乙' } })
+    await flushPromises()
+
+    expect(echarts.createChart).toHaveBeenCalledTimes(2)
+    expect(lastHandle().init).toEqual({ devicePixelRatio: 140 / 100 })
+    expect(first.dispose).toHaveBeenCalledTimes(1)
+    expect(lastUpdate()).toEqual({ notMerge: true })
+
+    wrapper.unmount()
+  })
+
+  it('容器缺席时改配置既不建实例也不画帧', async () => {
+    const wrapper = await mountChart({
+      hasChart: false,
+      config: { title: '甲' },
+    })
+
+    await wrapper.setProps({ config: { title: '乙' } })
+    await flushPromises()
+
+    expect(echarts.createChart).not.toHaveBeenCalled()
+
+    wrapper.unmount()
+  })
+
+  it('首帧还没回来就改配置：不重复建实例，也不抢在实例之前画', async () => {
+    const handle = echarts.newHandle(document.createElement('div'), {})
+    let settle: () => void = () => {}
+    echarts.createChart.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          settle = () => resolve(handle)
+        }),
+    )
+
+    const wrapper = mount(Host, {
+      props: { config: { title: '甲' } },
+      attachTo: document.body,
+    })
+    await wrapper.setProps({ config: { title: '乙' } })
+    settle()
+    await flushPromises()
+
+    expect(echarts.createChart).toHaveBeenCalledTimes(1)
+    expect(handle.setOption).toHaveBeenCalledTimes(1)
+
+    wrapper.unmount()
   })
 })

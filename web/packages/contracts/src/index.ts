@@ -387,6 +387,9 @@ export type {
   PointState,
   PointValueListener,
   ProviderRegistry,
+  SeriesOutcome,
+  SeriesReader,
+  SeriesRequest,
   Unsubscribe,
 } from './datasource'
 export { POINT_QUALITIES, POINT_STATES } from './datasource'

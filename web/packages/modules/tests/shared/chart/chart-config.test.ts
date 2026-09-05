@@ -1,7 +1,7 @@
 /**
  * @fileoverview 守 configSchema 片段工厂：缺省值是全部存量大屏的渲染兜底，改一个就
  * 整批跟着变；没有条件时不许写出 `when` 键（写了 undefined 面板会当成一条永假的条件）；
- * 字段顺序由工厂定死，不随调用方 include 的书写顺序漂。
+ * 字段顺序由工厂定死，不随调用方 include 的书写顺序漂；紧凑控件逐个带 `span`。
  */
 import type { ConfigField } from '@dt/contracts'
 import { describe, expect, it } from 'vitest'
@@ -26,6 +26,44 @@ import {
 } from '../../../src/shared/chart/chart-config'
 
 const WHEN = { key: 'chartStyle', in: ['line'] }
+
+/**
+ * 形状天生占整行、缺 `span` 是对的那几档，逐字抄自清单侧那条闸门
+ * （`tests/manifests.contract.spec.ts` 的 `WIDE_FIELD_TYPES`）。
+ */
+const WIDE_FIELD_TYPES = new Set<ConfigField['type']>([
+  'array',
+  'object',
+  'textarea',
+  'image',
+  'json',
+  'font',
+  'style',
+  'dashboard-ref',
+])
+
+/**
+ * 全部工厂的产物摊平成一张表。
+ * ⚠ 只摊顶层，不进 `itemSchema`：闸门就是这个口径，且 `ArrayControl` 根本不读子字段的
+ * `span`，摊深了等于给未来的行内字段凭空加一条谁也不执行的约束。
+ */
+const ALL_TOP_FIELDS: readonly ConfigField[] = [
+  ...titleField(),
+  ...chartStyleField([{ value: 'line', label: '折线' }]),
+  ...legendFields(),
+  ...tooltipFields(),
+  ...dataLabelFields(),
+  ...cartesianAxisFields(),
+  ...unitPrecisionFields(),
+  ...dataZoomFields(),
+  ...animationFields(),
+  ...paletteOverrideField(),
+  ...gradientFields(),
+  ...markLineFields(),
+  ...axisIntervalFields(),
+  ...symbolFields(),
+  ...chartFontFields(),
+]
 
 function keysOf(fields: readonly ConfigField[]): string[] {
   return fields.map((field) => field.key)
@@ -321,5 +359,35 @@ describe('chartFontFields', () => {
     chartFontFields({ when: WHEN })
 
     expect('when' in byKey(chartFontFields(), 'labelColor')).toBe(false)
+  })
+})
+
+describe('两列栅格的 span', () => {
+  it('紧凑控件逐个显式声明了 span，与清单侧那条闸门同口径', () => {
+    const offenders = ALL_TOP_FIELDS.filter(
+      (field) => !WIDE_FIELD_TYPES.has(field.type) && field.span === undefined,
+    ).map((field) => `${field.key}(${field.type})`)
+
+    expect(offenders).toEqual([])
+  })
+
+  it('标题独占一行，成对出现的旋钮并排半行', () => {
+    expect(byKey(titleField(), 'title').span).toBe('full')
+    expect(byKey(unitPrecisionFields(), 'unit').span).toBe('half')
+    expect(byKey(unitPrecisionFields(), 'precision').span).toBe('half')
+    expect(byKey(cartesianAxisFields(), 'xAxisName').span).toBe('half')
+    expect(byKey(cartesianAxisFields(), 'yAxisName').span).toBe('half')
+    expect(byKey(animationFields(), 'animation').span).toBe('half')
+    expect(byKey(animationFields(), 'animationDuration').span).toBe('half')
+    expect(byKey(symbolFields(), 'showSymbol').span).toBe('half')
+    expect(byKey(symbolFields(), 'symbolSize').span).toBe('half')
+  })
+
+  it('模板产出的那两批也带着 span，裁剪与挂条件都不冲掉它', () => {
+    const gradient = gradientFields({ prefix: 'bar', include: ['gradient'] })
+    const fonts = chartFontFields({ when: WHEN, include: ['labelColor'] })
+
+    expect(gradient.every((field) => field.span === 'half')).toBe(true)
+    expect(fonts.every((field) => field.span === 'half')).toBe(true)
   })
 })

@@ -6,14 +6,21 @@
  * ⚠ 五种来源**逐档显式列出**，末尾那一档是「没有认出的来源」而不是某一种来源：
  * 用 `v-else` 兜底的话，再加一种来源会安静地画成上一种的表单，
  * 用户填得完、也存得下，只是存的是另一种来源的字段。契约测试逐档钉死。
+ * ⚠ 取点间隔与折算**只画在点位历史那一档**：台账 `:series` 与常量、派生都不收
+ * 这两个参数，摆在别处是「配得出来、存得下、取数时被丢掉」。
+ * ⚠ 这两项的说法与趋势分析页逐字一致：同一件事在两个页面上长得不一样，用户
+ * 会以为它们是两回事。
  */
 import type {
+  ArchiveBindingDetail,
   BindingPayload,
   BindingSpec,
+  CollectAggregate,
   ComputeOp,
   DtSelectOption,
+  HistoryTimeRange,
 } from '@dt/contracts'
-import { COMPUTE_OPS } from '@dt/contracts'
+import { COLLECT_AGGREGATES, COMPUTE_OPS } from '@dt/contracts'
 import {
   DtCheckbox,
   DtField,
@@ -25,6 +32,12 @@ import {
 } from '@dt/ui'
 import { computed } from 'vue'
 
+import { windowToMs } from '@/api/pointHistories'
+import { isBucketOutOfReach } from '@/api/pointSeries'
+import {
+  TREND_BUCKET_AUTO,
+  trendBucketChoices,
+} from '@/features/trend/trendBucket'
 import DatasetRefField from './DatasetRefField.vue'
 import PointRefField from './PointRefField.vue'
 
@@ -44,6 +57,29 @@ const OP_OPTIONS: readonly DtSelectOption[] = COMPUTE_OPS.map((op) => ({
   value: op,
   label: op,
 }))
+
+/** 各档折算的说法。⚠ 与 `COLLECT_AGGREGATES` 一一对应，少一条就是下拉里少一项。 */
+const AGGREGATE_LABELS: Record<string, string> = {
+  avg: '平均值',
+  max: '最大值',
+  min: '最小值',
+  sum: '求和',
+  count: '样本数',
+}
+
+/** 服务端的聚合缺省档（`schemas/history.py` 的 `aggregate` 默认值）。 */
+const DEFAULT_AGGREGATE = 'avg'
+
+const AGGREGATE_OPTIONS: readonly DtSelectOption[] = [
+  {
+    value: '',
+    label: `默认（${AGGREGATE_LABELS[DEFAULT_AGGREGATE] ?? DEFAULT_AGGREGATE}）`,
+  },
+  ...COLLECT_AGGREGATES.map((value) => ({
+    value,
+    label: AGGREGATE_LABELS[value] ?? value,
+  })),
+]
 
 const staticText = computed(() =>
   typeof props.binding.staticValueJson === 'string'
@@ -85,11 +121,39 @@ function toggleInput(key: string, on: boolean): void {
   emit('write', { ...props.binding, computeJson: { op, inputs: next } })
 }
 
-/** 点位历史那一支的点位身份；这条绑定不是那一支时给空串。 */
-const archiveNodeKey = computed(() => {
+/** 点位历史那一支的取数说明；这条绑定不是那一支时给 null。 */
+const archiveDetail = computed<ArchiveBindingDetail | null>(() => {
   const detail = props.binding.detailJson
-  return detail !== null && 'nodeKey' in detail ? detail.nodeKey : ''
+  return detail !== null && 'nodeKey' in detail ? detail : null
 })
+
+/** 点位历史那一支的点位身份；这条绑定不是那一支时给空串。 */
+const archiveNodeKey = computed(() => archiveDetail.value?.nodeKey ?? '')
+
+/** 桶宽下拉当前选中的那一档；没配过就是自动档。 */
+const bucketValue = computed(
+  () => archiveDetail.value?.interval ?? TREND_BUCKET_AUTO,
+)
+
+/**
+ * 当前相对窗下的桶宽档位。
+ * ⚠ 够不着的那几档禁掉而不是藏掉：藏掉会让人以为只看得到这么细，而实际上
+ * 把相对窗缩小一点就选得上了。
+ * ⚠ 判据是「取数要切几段」而不是「一次问得下几个桶」：长窗配细档是切段问的，
+ * 按一次的桶数判会把一年窗的日桶也禁掉——而一年日历本来就是一格一天，退到
+ * 两天一格之后有一半格子是空的，且空格与「那几天真停机」长得一模一样。
+ */
+const bucketOptions = computed<DtSelectOption[]>(() => {
+  const windowMs = windowToMs(window.value)
+  return trendBucketChoices(windowMs).map((one) => ({
+    value: one.value,
+    label: one.label,
+    disabled: isBucketOutOfReach(windowMs, one.value),
+  }))
+})
+
+/** 聚合下拉当前选中的那一档；空串即没配过、跟服务端缺省走。 */
+const aggregateValue = computed(() => archiveDetail.value?.aggregate ?? '')
 
 /** 台账那一支的列身份；这条绑定不是那一支时给空串。 */
 const datasetKey = computed(() => {
@@ -102,14 +166,64 @@ function writeWindow(text: string): void {
   // ⚠ 按当前来源写回对应的那一支，绝不「保留原样只换 range」：换过来源之后
   // 原来那一支的身份串还躺在 detailJson 里，原样带过去就是拿点位身份当台账
   // 列身份用，取数永远落空而界面上什么都看不出来
-  const detailJson =
-    props.binding.sourceKind === 'dataset'
-      ? { datasetKey: datasetKey.value, range }
-      : {
-          nodeKey: archiveNodeKey.value || (props.binding.nodeKey ?? ''),
-          range,
-        }
+  if (props.binding.sourceKind === 'dataset') {
+    emit('write', {
+      ...props.binding,
+      detailJson: { datasetKey: datasetKey.value, range },
+    })
+    return
+  }
+  writeArchive(
+    range,
+    archiveDetail.value?.interval,
+    archiveDetail.value?.aggregate,
+  )
+}
+
+/**
+ * 写回点位历史那一支。分桶口径逐项带上，缺席的键一个都不写。
+ * ⚠ 换一项要把另外几项一起带回去：漏了的表现是「改一下相对窗，桶宽和聚合档
+ * 自己变回默认」——存得下、没有报错，只是曲线安静地换了口径。
+ * @param range 时间范围
+ * @param interval 桶宽，自动档给 undefined
+ * @param aggregate 聚合档位，跟服务端缺省走时给 undefined
+ */
+function writeArchive(
+  range: HistoryTimeRange,
+  interval: string | undefined,
+  aggregate: CollectAggregate | undefined,
+): void {
+  const detailJson: ArchiveBindingDetail = {
+    nodeKey: archiveNodeKey.value || (props.binding.nodeKey ?? ''),
+    range,
+  }
+  if (interval !== undefined) detailJson.interval = interval
+  if (aggregate !== undefined) detailJson.aggregate = aggregate
+  const timezone = archiveDetail.value?.timezone
+  if (timezone !== undefined) detailJson.timezone = timezone
   emit('write', { ...props.binding, detailJson })
+}
+
+/**
+ * 换桶宽。
+ * ⚠ 自动档写成「没有这个键」而不是存一个 `auto` 进去：档位口径以后变了，
+ * 存下来的那个字面量会把这条绑定永久钉在旧口径上。
+ * @param raw 下拉选中的档
+ */
+function writeInterval(raw: string): void {
+  const detail = archiveDetail.value
+  const interval = raw === TREND_BUCKET_AUTO ? undefined : raw
+  writeArchive(detail?.range ?? {}, interval, detail?.aggregate)
+}
+
+/**
+ * 换聚合档位。认不出的取值按「跟服务端缺省走」处理，不硬喂给接口换一个 422。
+ * @param raw 下拉选中的档
+ */
+function writeAggregate(raw: string): void {
+  const detail = archiveDetail.value
+  const aggregate = COLLECT_AGGREGATES.find((one) => one === raw)
+  writeArchive(detail?.range ?? {}, detail?.interval, aggregate)
 }
 
 /** 挑好台账列之后写回身份串，时间窗保持不变。 */
@@ -183,6 +297,24 @@ function writeDatasetKey(key: string): void {
           size="sm"
           placeholder="1h"
           @update:model-value="writeWindow"
+        />
+      </DtField>
+      <DtField label="取点间隔" size="sm">
+        <DtSelect
+          :model-value="bucketValue"
+          :options="bucketOptions"
+          size="sm"
+          aria-label="取点间隔"
+          @update:model-value="writeInterval"
+        />
+      </DtField>
+      <DtField label="折算" size="sm">
+        <DtSelect
+          :model-value="aggregateValue"
+          :options="AGGREGATE_OPTIONS"
+          size="sm"
+          aria-label="折算"
+          @update:model-value="writeAggregate"
         />
       </DtField>
     </template>

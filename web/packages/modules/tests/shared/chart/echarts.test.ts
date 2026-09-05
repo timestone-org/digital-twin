@@ -1,6 +1,6 @@
 /**
  * @fileoverview 守 echarts 装配点的契约：注册清单逐项对齐、多次建图只注册一次、
- * 实例面收窄成四件事且原样透传。
+ * 建实例口径原样透给 init，以及实例面收窄成四件事且原样透传。
  * ⚠ 这是本包唯一允许 mock echarts 包本身的地方——被测的正是「怎么把它装起来」；
  * 其余用例一律在本模块上打桩，见 testing-standard-typescript §5.2。
  */
@@ -15,8 +15,10 @@ const echarts = vi.hoisted(() => {
   const dispose = vi.fn()
   return {
     use: vi.fn((modules: readonly unknown[]) => modules),
-    init: vi.fn((host: HTMLElement) => ({
+    init: vi.fn((host: HTMLElement, theme?: unknown, init?: unknown) => ({
       host,
+      theme,
+      init,
       setOption,
       on,
       resize,
@@ -121,6 +123,24 @@ describe('createChart', () => {
     expect(echarts.init).toHaveBeenCalledTimes(2)
     expect(echarts.init.mock.calls[0]?.[0]).toBe(first)
     expect(echarts.init.mock.calls[1]?.[0]).toBe(second)
+  })
+
+  it('分辨率倍率原样透给 init——echarts 只在这一刻读它', async () => {
+    const host = document.createElement('div')
+
+    await createChart(host, { devicePixelRatio: 2.5 })
+
+    expect(echarts.init).toHaveBeenCalledWith(host, undefined, {
+      devicePixelRatio: 2.5,
+    })
+  })
+
+  it('不给口径就一项都不摆布，走 echarts 自己的默认值', async () => {
+    const host = document.createElement('div')
+
+    await createChart(host)
+
+    expect(echarts.init).toHaveBeenCalledWith(host, undefined, {})
   })
 
   it('setOption 把口径原样交给实例', async () => {

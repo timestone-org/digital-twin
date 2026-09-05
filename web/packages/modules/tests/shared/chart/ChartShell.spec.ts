@@ -1,7 +1,7 @@
 /**
  * @fileoverview 守图表族公共壳的渲染契约：标题走 ModulePanel（留空不画标题栏）、
- * 空态盖在图区上但不吃鼠标、主题与取色器自渲染根派生后喂进各族 build，
- * 以及 `watchValues` 覆盖后按族自己的口径刷新。
+ * 空态盖在图区上但不吃鼠标、主题与取色器自渲染根派生后喂进各族 build、
+ * `watchValues` 覆盖后按族自己的口径刷新，以及读屏摘要只在真有话说时才挂。
  */
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -177,13 +177,58 @@ describe('图元点击', () => {
     wrapper.unmount()
   })
 
-  it('传了就把联动事件转出去', async () => {
-    const onItemClick = vi.fn()
-    const wrapper = await mountShell({ onItemClick })
+  it('只给上抛回调时走缺省取值——⚠ 取值器不许叫 Object 原型上已有的名字', async () => {
+    const emit = vi.fn()
+    const wrapper = await mountShell({ itemClick: { emit } })
 
     echarts.handle.onClick.mock.calls[0]?.[0]({ name: '甲' })
 
-    expect(onItemClick).toHaveBeenCalledWith({ event: 'click', value: '甲' })
+    expect(emit).toHaveBeenCalledWith({ event: 'click', value: '甲' })
+
+    wrapper.unmount()
+  })
+
+  it('取值口径跟着上抛回调一起给', async () => {
+    const emit = vi.fn()
+    const wrapper = await mountShell({
+      itemClick: { emit, readValue: () => '自定义' },
+    })
+
+    echarts.handle.onClick.mock.calls[0]?.[0]({ name: '甲' })
+
+    expect(emit).toHaveBeenCalledWith({ event: 'click', value: '自定义' })
+
+    wrapper.unmount()
+  })
+})
+
+describe('读屏摘要', () => {
+  it('摘要挂在图区宿主上——canvas 里的一切对读屏是纯空白', async () => {
+    const wrapper = await mountShell({ ariaSummary: '功率趋势：两条系列' })
+    const canvas = wrapper.get('.dt-chart__canvas')
+
+    expect(canvas.attributes('aria-label')).toBe('功率趋势：两条系列')
+    expect(canvas.attributes('role')).toBe('img')
+
+    wrapper.unmount()
+  })
+
+  it('没摘要就连属性一起省掉——没名字的图形比不写更糟', async () => {
+    const wrapper = await mountShell()
+    const canvas = wrapper.get('.dt-chart__canvas')
+
+    expect(canvas.attributes('aria-label')).toBeUndefined()
+    expect(canvas.attributes('role')).toBeUndefined()
+
+    wrapper.unmount()
+  })
+
+  it('一串空格不算摘要', async () => {
+    const wrapper = await mountShell({ ariaSummary: '   ' })
+
+    expect(
+      wrapper.get('.dt-chart__canvas').attributes('aria-label'),
+    ).toBeUndefined()
 
     wrapper.unmount()
   })

@@ -21,6 +21,7 @@ from platform_server.apps.dashboard.services.drafts import BindingDraft
 from platform_server.apps.dashboard.services.module_catalog import (
     ModuleCatalog,
 )
+from platform_server.apps.dashboard.source_kinds import SOURCE_KINDS
 
 SIZE = ModuleDefaultSizeOut(width=100, height=100)
 
@@ -101,6 +102,8 @@ CATALOG = _fixture_catalog()
 SOURCE_ID = "0192f0c0-0000-7000-8000-00000000abcd"
 KNOWN_KEY = f"{SOURCE_ID}:outlet_temp"
 KNOWN = frozenset({KNOWN_KEY})
+# 台账列身份 `ds:{台账code}:{列key}`，与点位身份不是同一套形状
+DATASET_KEY = "ds:pv_daily:yield_kwh"
 
 
 def binding(
@@ -338,6 +341,77 @@ def test_a_history_binding_pointing_nowhere_is_rejected() -> None:
     assert [(item.field, item.code) for item in issues] == [
         ("detail_json", "point_not_found")
     ]
+
+
+def test_a_dataset_binding_with_a_detail_passes() -> None:
+    issues = check_sources(
+        [
+            binding(
+                uuid7(),
+                "sceneStatus",
+                source_kind="dataset",
+                payload={
+                    "detail_json": {
+                        "dataset_key": DATASET_KEY,
+                        "range": {"last_window": "1h"},
+                    }
+                },
+            )
+        ],
+        known_node_keys=KNOWN,
+    )
+    assert issues == []
+
+
+def test_a_dataset_binding_without_a_detail_is_rejected() -> None:
+    # 缺取数说明是用户填错，要落成一条 FieldError（400 档）；漏登记这一档来源
+    # 的话这里撞的是 KeyError，整个保存变成 500
+    issues = check_sources(
+        [binding(uuid7(), "sceneStatus", source_kind="dataset")],
+        known_node_keys=KNOWN,
+    )
+    assert [(item.field, item.code) for item in issues] == [
+        ("detail_json", "source_payload_missing")
+    ]
+
+
+def test_a_dataset_column_is_not_looked_up_as_a_point() -> None:
+    # ⚠ 台账列身份不是点位身份：混进来会被 `split_node_key` 判成畸形串，
+    # 报出一条说点位不存在的错，而用户绑的根本不是点位
+    keys = referenced_node_keys(
+        [
+            binding(
+                uuid7(),
+                "sceneStatus",
+                source_kind="dataset",
+                payload={
+                    "detail_json": {
+                        "dataset_key": DATASET_KEY,
+                        "range": {},
+                    }
+                },
+            )
+        ]
+    )
+    assert keys == frozenset()
+
+
+def test_every_registered_source_kind_asks_for_its_payload() -> None:
+    # ⚠ 来源集合与「每种来源必须带的那一件」是两张表：`SourceKind` 里加一档而
+    # 载荷表漏登记，表现不是校验放行而是下标 KeyError——保存整个变成 500
+    for kind in SOURCE_KINDS:
+        issues = check_sources(
+            [
+                BindingDraft(
+                    node_id=uuid7(),
+                    field_key="sceneStatus",
+                    source_kind=kind,
+                    field_path="",
+                )
+            ],
+            known_node_keys=KNOWN,
+        )
+        assert codes(list(issues)) == ["source_payload_missing"]
 
 
 def test_a_derived_binding_needs_a_registered_operator() -> None:

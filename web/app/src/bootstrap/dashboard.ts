@@ -1,6 +1,7 @@
 /**
  * @fileoverview 大屏子系统的启动装配：注册内置模块、登记配置控件、把三类素材引用（图片 /
- * 模型 / 图标）各自接到取回地址上、装配取数 provider。
+ * 模型 / 图标）各自接到取回地址上、装配取数 provider，并把序列取数与刷新节拍接进
+ * 运行时的取数源。
  *
  * ⚠ WS 客户端留在应用壳（它要读登录态），provider 只收一个**注入的订阅函数**——
  * 这正是 `@dt/datasources` 不自己建连接、也因此能在测试里跑假件的那条缝
@@ -10,7 +11,11 @@
  * ⚠ 模型地址解析必须走深路径 `@dt/three-core/host`：桶文件第一行就静态依赖
  * 整个 three，从桶进来会把 three 拖进首屏 chunk（startup-graph 契约测试守着）。
  */
-import type { HistoryQuery, HistoryResult } from '@dt/contracts'
+import type {
+  HistoryQuery,
+  HistoryResult,
+  ModuleConnectionState,
+} from '@dt/contracts'
 import {
   createComputedProvider,
   createDatasetProvider,
@@ -20,14 +25,21 @@ import {
   registerProvider,
 } from '@dt/datasources'
 import { configureAssetImages, registerBuiltinModules } from '@dt/modules'
+import { provideRuntimeData } from '@dt/runtime'
 import { configureTwinModelHost } from '@dt/three-core/host'
 import { configureTwin2dAssets } from '@dt/twin2d'
 import { assetUrl, modelVariantUrl } from '@dt/contracts'
+import { onScopeDispose, ref } from 'vue'
 
 import { ASSET_BASE_URL } from '@/config/app'
 
 import { installConfigControls } from '@/features/dashboard/configControls'
+import {
+  createBindingReader,
+  type ReadPointSample,
+} from '@/runtime/bindingReader'
 import type { SubscribePoints } from '@/runtime/pointStream'
+import { readDashboardSeries } from '@/runtime/seriesReader'
 
 /** 应用壳注入给大屏子系统的口子。 */
 export interface DashboardRuntimePorts {
@@ -128,6 +140,97 @@ export function installDashboardDataSources(
       createDatasetProvider({ fetchSeries: ports.fetchDatasetSeries }),
     )
   }
+}
+
+/**
+ * 序列刷新周期。
+ * ⚠ 先写死一个常量：接平台运行参数要多一条「改完立刻改节拍」的路径，
+ * 那是二期的事（docs/DASHBOARD_CHART_MODULES_DESIGN.md §15 Q1）。
+ */
+const SERIES_REFRESH_MS = 60_000
+
+/**
+ * 一屏一个刷新节拍：每到周期 +1，页面隐藏时停拍、重新可见时立刻补一拍。
+ * 须在 setup 内调用。
+ * ⚠ 一屏一个而不是一格一个：五块图各起一条定时器，就是按观看人数放大的五倍
+ * 轮询——那正是台账 provider 拒绝自己轮询的理由。
+ * ⚠ 隐藏时必须停：投在墙上的那一份不会被隐藏，而每个人自己电脑上开着的那些
+ * 标签页会，它们照样在按分钟问后端。
+ * ⚠ 回到可见要补的这一拍不能省：停拍期间取数窗口一直在往前滑，不补的话屏上
+ * 停的还是隐藏那一刻的曲线，而它看着与「设备停了」一模一样。
+ */
+export function useSeriesEpoch(): () => number {
+  const epoch = ref(0)
+  let timer: ReturnType<typeof setInterval> | null = null
+
+  function stop(): void {
+    if (timer === null) return
+    clearInterval(timer)
+    timer = null
+  }
+
+  function start(): void {
+    if (timer !== null) return
+    timer = setInterval(() => {
+      epoch.value += 1
+    }, SERIES_REFRESH_MS)
+  }
+
+  function follow(): void {
+    if (document.hidden) {
+      stop()
+      return
+    }
+    epoch.value += 1
+    start()
+  }
+
+  if (!document.hidden) start()
+  document.addEventListener('visibilitychange', follow)
+  onScopeDispose(() => {
+    stop()
+    document.removeEventListener('visibilitychange', follow)
+  })
+  return () => epoch.value
+}
+
+/** 装配序列取数时要给的那几样。 */
+export interface DashboardSeriesPorts {
+  /** 点位快照读取器，取自 `useDashboardValues` 的返回值。 */
+  readPoint: ReadPointSample
+  /**
+   * 实时通道连接态。
+   * ⚠ 不给就是「这里没有实时通道」，模块永不标「数据可能过期」：设计态画布
+   * 画一枚说通道断了的角标，只会让人去查一条不存在的故障。
+   */
+  connectionState?: () => ModuleConnectionState
+  /**
+   * 刷新节拍。
+   * ⚠ 编辑期不给：编辑一格的时候，屏上不该有东西在背后自己刷新。
+   */
+  seriesEpoch?: () => number
+}
+
+/**
+ * 把序列取数接进本子树的取数源。须在 setup 内、且排在 `useDashboardValues`
+ * 之后调用。
+ * ⚠ 它整份覆盖前一次注入（同一个键 `provide` 两次是后者胜），所以实时那两支
+ * 必须在这里重新装齐——少装一支的表现是整屏的实时值一起变成「没有装配取数源」，
+ * 而序列那两支照常出数。`app/tests/bootstrap/dashboard.test.ts` 里有一条比对
+ * 两次注入键集的用例守着这件事。
+ * @param ports 快照读取器、连接态与刷新节拍
+ */
+export function installDashboardSeries(ports: DashboardSeriesPorts): void {
+  provideRuntimeData({
+    readBinding: () => createBindingReader(ports.readPoint),
+    ...(ports.connectionState === undefined
+      ? {}
+      : { connectionState: ports.connectionState }),
+    readSeries: readDashboardSeries,
+    ...(ports.seriesEpoch === undefined
+      ? {}
+      : { seriesEpoch: ports.seriesEpoch }),
+  })
 }
 
 /** 只给测试用：让「模块只注册一次」这条判定回到初始状态。 */

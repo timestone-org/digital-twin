@@ -21,8 +21,11 @@ async def test_the_listing_names_every_registered_module(
     # 同步改这条：它是 Agent 看得见的对外契约，静默变长等于契约无人把关
     assert types == {
         "action-button",
+        "bar-chart",
+        "calendar-heat",
         "container",
         "data-card",
+        "data-table",
         "footer",
         "gauge-card",
         "header",
@@ -31,7 +34,10 @@ async def test_the_listing_names_every_registered_module(
         "info-feed",
         "info-list",
         "nav-tabs",
+        "pie-chart",
+        "radar-chart",
         "text-block",
+        "trend-chart",
         "twin-2d-view",
         "twin-view",
     }

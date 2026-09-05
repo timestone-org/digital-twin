@@ -28,8 +28,11 @@ afterEach(() => {
 /** 目录即清单，故这份名单与 `src/modules/` 下的目录一一对应。 */
 const BUILTIN_TYPES = [
   'action-button',
+  'bar-chart',
+  'calendar-heat',
   'container',
   'data-card',
+  'data-table',
   'footer',
   'gauge-card',
   'header',
@@ -38,7 +41,10 @@ const BUILTIN_TYPES = [
   'info-feed',
   'info-list',
   'nav-tabs',
+  'pie-chart',
+  'radar-chart',
   'text-block',
+  'trend-chart',
   'twin-2d-view',
   'twin-view',
 ]

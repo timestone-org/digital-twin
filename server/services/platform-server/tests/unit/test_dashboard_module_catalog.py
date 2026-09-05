@@ -17,8 +17,11 @@ def test_the_committed_catalog_registers_the_known_modules() -> None:
     assert catalog.known_types() == frozenset(
         {
             "action-button",
+            "bar-chart",
+            "calendar-heat",
             "container",
             "data-card",
+            "data-table",
             "footer",
             "gauge-card",
             "header",
@@ -27,7 +30,10 @@ def test_the_committed_catalog_registers_the_known_modules() -> None:
             "info-feed",
             "info-list",
             "nav-tabs",
+            "pie-chart",
+            "radar-chart",
             "text-block",
+            "trend-chart",
             "twin-2d-view",
             "twin-view",
         }

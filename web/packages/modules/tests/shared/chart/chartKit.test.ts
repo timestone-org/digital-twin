@@ -11,6 +11,7 @@ import {
   cartesianGrid,
   categoryAxis,
   dataLabel,
+  bottomBand,
   dataZoomSlider,
   escapeHtml,
   legendStyle,
@@ -164,6 +165,23 @@ describe('cartesianGrid', () => {
       left: '3%',
       top: 32,
     })
+  })
+
+  it('缺省把刻度文字与轴名收进留白之内，不写 echarts 6 上作废了的那个键', () => {
+    const grid = cartesianGrid()
+
+    expect(grid).toMatchObject({
+      outerBoundsMode: 'same',
+      outerBoundsContain: 'all',
+    })
+    expect('containLabel' in grid).toBe(false)
+  })
+
+  it('显式关掉那一档就一个键都不写，交回 echarts 缺省的按画布收', () => {
+    const grid = cartesianGrid({ labelsInside: false })
+
+    expect('outerBoundsMode' in grid).toBe(false)
+    expect('outerBoundsContain' in grid).toBe(false)
   })
 })
 
@@ -362,6 +380,45 @@ describe('dataZoomSlider', () => {
     expect(slider).toMatchObject({ yAxisIndex: 0, width: 14, start: 20 })
     expect('height' in (slider ?? {})).toBe(false)
     expect('bottom' in (slider ?? {})).toBe(false)
+  })
+
+  it('横向时收得下抬高的落位：底下还摆着图例时要抬到它上面去', () => {
+    const [slider] = dataZoomSlider(theme(), { bottom: 27 })
+
+    expect(slider).toMatchObject({ height: 14, bottom: 27 })
+  })
+
+  it('纵向档不认这一档落位：横竖各写各的几何键', () => {
+    const [slider] = dataZoomSlider(theme(), { orient: 'vertical', bottom: 27 })
+
+    expect('bottom' in (slider ?? {})).toBe(false)
+  })
+})
+
+describe('bottomBand', () => {
+  it('没有图例时滑块贴底，绘图区只让开滑块那一条', () => {
+    expect(bottomBand({ legend: false })).toEqual({ zoom: 4, grid: 34 })
+  })
+
+  it('有图例时滑块整条抬到图例之上，绘图区把两条一起让开', () => {
+    const band = bottomBand({ legend: true })
+
+    expect(band.zoom).toBeGreaterThan(19)
+    expect(band.grid).toBe(band.zoom + 30)
+  })
+
+  it('图例带子跟着字号走：字号调大滑块再往上让', () => {
+    const small = bottomBand({ legend: true, legendFontSize: 11 })
+    const large = bottomBand({ legend: true, legendFontSize: 28 })
+
+    expect(large.zoom - small.zoom).toBe(17)
+    expect(large.grid - small.grid).toBe(17)
+  })
+
+  it('手编的负字号钳回 0，不把滑块拉回图例里', () => {
+    expect(bottomBand({ legend: true, legendFontSize: -40 })).toEqual(
+      bottomBand({ legend: true, legendFontSize: 0 }),
+    )
   })
 })
 

@@ -9,11 +9,14 @@ import type {
   BindingPayload,
   BindingSourceKind,
   BindingSpec,
+  CollectAggregate,
+  DtSelectOption,
 } from '@dt/contracts'
 import { BINDING_SOURCE_KINDS } from '@dt/contracts'
 import { DtSelect } from '@dt/ui'
 
 import BindingSourceEditor from '@/components/binding/BindingSourceEditor.vue'
+import { TREND_BUCKET_AUTO } from '@/features/trend/trendBucket'
 
 function binding(over: Partial<BindingPayload> = {}): BindingPayload {
   return {
@@ -193,6 +196,173 @@ describe('历史序列', () => {
       ?.trigger('click')
 
     expect(wrapper.emitted('pick')).toHaveLength(1)
+  })
+})
+
+/**
+ * 分桶取数口径：取点间隔（桶宽）与折算（聚合档位）。
+ * ⚠ 档位不是装饰：温度看 avg、电量这类累积量看 max，拿平均去读一条累积曲线
+ * 会画出一条压扁了的假线，而数值本身完全合法——错了在图上看不出来。
+ */
+describe('分桶取数口径', () => {
+  /** 分桶取数口径的三项加相对窗，缺席即没配过。 */
+  interface Bucketing {
+    interval?: string
+    aggregate?: CollectAggregate
+    timezone?: string
+    lastWindow?: string
+  }
+
+  /** 桶宽下拉这一刻摆出来的那几档。 */
+  function bucketOptions(
+    wrapper: ReturnType<typeof mountEditor>,
+  ): readonly DtSelectOption[] {
+    const raw: unknown = wrapper
+      .findAllComponents(DtSelect)[0]
+      ?.props('options')
+    return raw as readonly DtSelectOption[]
+  }
+
+  /** 点位历史那一支，带上已经配好的分桶口径。 */
+  function archive(over: Bucketing = {}): BindingPayload {
+    const { lastWindow = '24h', ...bucketing } = over
+    return binding({
+      sourceKind: 'archive',
+      detailJson: { nodeKey: 's1:t1', range: { lastWindow }, ...bucketing },
+    })
+  }
+
+  it('只有点位历史那一档摆出这两项', () => {
+    const withPair = BINDING_SOURCE_KINDS.filter((kind) => {
+      const text = mountEditor(binding({ sourceKind: kind })).text()
+      return text.includes('取点间隔') || text.includes('折算')
+    })
+
+    expect(withPair).toEqual(['archive'])
+  })
+
+  it('没配过时桶宽停在自动档、聚合档停在跟服务端缺省走', () => {
+    const wrapper = mountEditor(archive())
+
+    expect(wrapper.text()).toContain('自动（10 分钟）')
+    expect(wrapper.text()).toContain('默认（平均值）')
+  })
+
+  it('挑一档桶宽写进取数说明，已配的聚合档一起带上', async () => {
+    const wrapper = mountEditor(archive({ aggregate: 'max' }))
+
+    wrapper.findAllComponents(DtSelect)[0]?.vm.$emit('update:modelValue', '15m')
+    await wrapper.vm.$nextTick()
+
+    expect(written(wrapper).detailJson).toEqual({
+      nodeKey: 's1:t1',
+      range: { lastWindow: '24h' },
+      interval: '15m',
+      aggregate: 'max',
+    })
+  })
+
+  it('挑自动档写成没有这个键，而不是存一个 auto 进去', async () => {
+    const wrapper = mountEditor(archive({ interval: '15m' }))
+
+    wrapper
+      .findAllComponents(DtSelect)[0]
+      ?.vm.$emit('update:modelValue', TREND_BUCKET_AUTO)
+    await wrapper.vm.$nextTick()
+
+    expect(written(wrapper).detailJson).toEqual({
+      nodeKey: 's1:t1',
+      range: { lastWindow: '24h' },
+    })
+  })
+
+  it('挑一档聚合写进取数说明，已配的桶宽一起带上', async () => {
+    const wrapper = mountEditor(archive({ interval: '15m' }))
+
+    wrapper.findAllComponents(DtSelect)[1]?.vm.$emit('update:modelValue', 'sum')
+    await wrapper.vm.$nextTick()
+
+    expect(written(wrapper).detailJson).toEqual({
+      nodeKey: 's1:t1',
+      range: { lastWindow: '24h' },
+      interval: '15m',
+      aggregate: 'sum',
+    })
+  })
+
+  it('挑「默认」写成没有这个键；认不出的档位同样不写', async () => {
+    const wrapper = mountEditor(archive({ aggregate: 'max' }))
+    const selects = wrapper.findAllComponents(DtSelect)
+
+    selects[1]?.vm.$emit('update:modelValue', '')
+    await wrapper.vm.$nextTick()
+    expect(written(wrapper).detailJson).toEqual({
+      nodeKey: 's1:t1',
+      range: { lastWindow: '24h' },
+    })
+
+    selects[1]?.vm.$emit('update:modelValue', 'avgg')
+    await wrapper.vm.$nextTick()
+    expect(written(wrapper).detailJson).toEqual({
+      nodeKey: 's1:t1',
+      range: { lastWindow: '24h' },
+    })
+  })
+
+  it('改相对窗时把桶宽与聚合档一起带回去', async () => {
+    // ⚠ 漏了的表现是「改一下相对窗，桶宽和聚合档自己变回默认」——存得下、
+    // 没有报错，只是曲线安静地换了口径
+    const wrapper = mountEditor(archive({ interval: '15m', aggregate: 'max' }))
+
+    await wrapper.find('.dt-input__el').setValue('7d')
+
+    expect(written(wrapper).detailJson).toEqual({
+      nodeKey: 's1:t1',
+      range: { lastWindow: '7d' },
+      interval: '15m',
+      aggregate: 'max',
+    })
+  })
+
+  it('日界对齐的时区没有输入框，但配过就一路带着走', async () => {
+    // ⚠ 面板上只摆桶宽与聚合两项；时区由取数适配器与模块侧写入，重写取数说明
+    // 时把它抹掉的话，跨零点的样本会静静落到错误的那一天
+    const wrapper = mountEditor(archive({ timezone: 'Asia/Shanghai' }))
+
+    expect(wrapper.text()).not.toContain('时区')
+    await wrapper.find('.dt-input__el').setValue('7d')
+
+    expect(written(wrapper).detailJson).toEqual({
+      nodeKey: 's1:t1',
+      range: { lastWindow: '7d' },
+      timezone: 'Asia/Shanghai',
+    })
+  })
+
+  it('⚠ 一年窗下日桶必须选得动：够不着的判据是切几段，不是一次问得下几个桶', () => {
+    // 一年日历本来就是一格一天。按「一次问得下 190 个桶」判的话，365 天窗只
+    // 剩两天一格——热力图上一半格子是空的，而空格与「那几天真停机」长得一样
+    const wrapper = mountEditor(archive({ lastWindow: '365d' }))
+    const at = (value: string): DtSelectOption | undefined =>
+      bucketOptions(wrapper).find((one) => one.value === value)
+
+    expect(at(TREND_BUCKET_AUTO)?.disabled).toBe(false)
+    expect(at('1d')?.disabled).toBe(false)
+    expect(at('12h')?.disabled).toBe(false)
+    // 细到切爆段数上限的那几档照旧禁掉：它们到了取数那一步一定会被降档
+    expect(at('1h')?.disabled).toBe(true)
+    expect(at('1s')?.disabled).toBe(true)
+  })
+
+  it('桶宽档位跟着相对窗走，而不是一张固定的表', async () => {
+    // ⚠ 一次聚合每个点位最多回 200 桶：24 小时最细只到 10 分钟一格，缩到
+    // 1 小时才轮得到 30 秒一格。不把相对窗透进去的话，档位表永远是同一张
+    const wrapper = mountEditor(archive())
+    expect(wrapper.text()).toContain('自动（10 分钟）')
+
+    await wrapper.setProps({ binding: archive({ lastWindow: '1h' }) })
+
+    expect(wrapper.text()).toContain('自动（30 秒）')
   })
 })
 

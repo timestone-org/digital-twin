@@ -40,8 +40,11 @@ _CHROME_KEY = re.compile(r"\{\s*key:\s*'([^']+)'")
 EXPECTED_TYPES = frozenset(
     {
         "action-button",
+        "bar-chart",
+        "calendar-heat",
         "container",
         "data-card",
+        "data-table",
         "footer",
         "gauge-card",
         "header",
@@ -50,7 +53,10 @@ EXPECTED_TYPES = frozenset(
         "info-list",
         "image-block",
         "nav-tabs",
+        "pie-chart",
+        "radar-chart",
         "text-block",
+        "trend-chart",
         "twin-2d-view",
         "twin-view",
     }

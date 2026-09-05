@@ -4,6 +4,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { DataSourceError } from '@dt/datasources'
+
 import * as client from '@/api/client'
 import {
   fetchPointAggregate,
@@ -48,11 +50,12 @@ function lastCall(): [string, Record<string, unknown>] {
 }
 
 describe('窗口换算', () => {
-  it('相对窗四种单位；不认识的写法回落一小时', () => {
+  it('相对窗四种单位；给界面那一面的换算认不出就回落一小时', () => {
     expect(windowToMs('30s')).toBe(30_000)
     expect(windowToMs('5m')).toBe(300_000)
     expect(windowToMs('2h')).toBe(7_200_000)
     expect(windowToMs('7d')).toBe(604_800_000)
+    // ⚠ 桶宽档位表要在半截输入下也给得出一份清单，故这一面认不出不许抛
     expect(windowToMs('怪写法')).toBe(3_600_000)
     expect(windowToMs(undefined)).toBe(3_600_000)
   })
@@ -65,6 +68,25 @@ describe('窗口换算', () => {
       fromMs: NOW - 3_600_000,
       toMs: NOW,
     })
+    expect(resolveWindow({ lastWindow: '' }, NOW)).toEqual({
+      fromMs: NOW - 3_600_000,
+      toMs: NOW,
+    })
+  })
+
+  it('⚠ 取数一侧认不出的相对窗落 invalid-query，不是静默回落一小时', () => {
+    for (const written of ['1w', '30min', '1H']) {
+      expect(() => resolveWindow({ lastWindow: written }, NOW)).toThrow(
+        DataSourceError,
+      )
+    }
+    expect(() => resolveWindow({ lastWindow: '1w' }, NOW)).toThrow(/1w/)
+  })
+
+  it('写错的相对窗在 fromMs 给了的时候不碍事', () => {
+    expect(
+      resolveWindow({ fromMs: 1000, toMs: 5000, lastWindow: '1w' }, NOW),
+    ).toEqual({ fromMs: 1000, toMs: 5000 })
   })
 })
 
@@ -136,6 +158,16 @@ describe('取数', () => {
     expect(result.isTruncated).toBe(true)
   })
 
+  it('相对窗写错时当场拒绝，不拿一小时的曲线冒充七天', async () => {
+    await expect(
+      fetchPointHistory(
+        { nodeKey: 's1:temp', range: { lastWindow: '1w' } },
+        NOW,
+      ),
+    ).rejects.toMatchObject({ code: 'invalid-query' })
+    expect(requestMock).not.toHaveBeenCalled()
+  })
+
   it('翻页中途失败整体 reject，不拿半截结果冒充取齐', async () => {
     requestMock
       .mockResolvedValueOnce(
@@ -181,6 +213,30 @@ describe('分桶聚合', () => {
       interval: '5m',
       aggregate: 'max',
     })
+  })
+
+  it('取消信号原样递进去，不给它就不带这个键', async () => {
+    requestMock.mockResolvedValue({
+      items: [],
+      interval: '5m',
+      aggregate: 'avg',
+      timezone: 'UTC',
+      is_truncated: false,
+    })
+    const controller = new AbortController()
+    const query = {
+      nodeKeys: ['s1:temp'],
+      fromMs: Date.parse('2026-08-14T11:00:00Z'),
+      toMs: NOW,
+      interval: '5m',
+      aggregate: 'avg',
+    }
+
+    await fetchPointAggregate(query, controller.signal)
+    expect(lastCall()[1].signal).toBe(controller.signal)
+
+    await fetchPointAggregate(query)
+    expect(lastCall()[1]).not.toHaveProperty('signal')
   })
 
   it('触顶如实带上来，不悄悄当成「就这么多」', async () => {

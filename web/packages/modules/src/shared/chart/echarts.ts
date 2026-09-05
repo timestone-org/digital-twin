@@ -132,15 +132,28 @@ async function registerOnce() {
 // 注册是全局一次性的：重复 use 会把同一批组件再装一遍
 let core: ReturnType<typeof registerOnce> | null = null
 
+/** 建实例时的口径；缺省走 echarts 自己的默认值。 */
+export interface ChartInit {
+  /**
+   * 位图分辨率倍率。
+   * ⚠ echarts 只在 init 时读它，建好之后改这个数没有任何效果，只能 dispose 重建。
+   */
+  devicePixelRatio?: number
+}
+
 /**
  * 在宿主元素上建一个图表实例。
  * ⚠ 新图表族要用的组件必须补进上面的 `use` 清单：漏注册的症状是运行时
  * 静默不渲染，既不报错也没有半张图可看。
  * @param host 承载画布的元素
+ * @param init 建实例口径
  */
-export async function createChart(host: HTMLElement): Promise<ChartHandle> {
+export async function createChart(
+  host: HTMLElement,
+  init: ChartInit = {},
+): Promise<ChartHandle> {
   core ??= registerOnce()
-  const instance = (await core).init(host)
+  const instance = (await core).init(host, undefined, init)
   return {
     setOption: (option, update) => {
       instance.setOption(option, update)

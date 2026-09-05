@@ -2,6 +2,7 @@
  * @fileoverview 绑定的来源种类与取数形状：五种来源是闭合集合，
  * 未注册的值服务端一律 400（口径见 docs/DASHBOARD_DESIGN.md §4）。
  */
+import type { CollectAggregate } from './collect'
 
 /**
  * 绑定的来源种类。
@@ -81,11 +82,28 @@ export interface HistoryTimeRange {
   limit?: number
 }
 
-/** `archive` 来源的取数说明，落在绑定的 `detailJson`。 */
+/**
+ * `archive` 来源的取数说明，落在绑定的 `detailJson`。
+ *
+ * ⚠ 分桶那三项挂在这一层而不是共用的 `HistoryTimeRange`：只有点位历史的
+ * `POST /point-histories:aggregate` 收桶宽、档位与时区，台账 `:series` 与逐条
+ * 读数都没有这三个参数。挂进共用那层的话，台账绑定与逐条读数上也长出这三项，
+ * 配得出来、存得下、取数时被丢掉，而界面上没有任何迹象。
+ */
 export interface ArchiveBindingDetail {
   /** 点位身份 `{sourceId}:{pointCode}`。 */
   nodeKey: string
   range: HistoryTimeRange
+  /** 桶宽，形如 `15m` / `1d`；缺席即按窗口长度自动选一档。 */
+  interval?: string
+  /**
+   * 分桶的聚合档位；缺席即按服务端缺省。
+   * ⚠ 档位不是装饰：温度看 `avg`、电量这类累积量看 `max`，拿平均去读一条累积
+   * 曲线会画出一条压扁了的假线，而数值本身完全合法。
+   */
+  aggregate?: CollectAggregate
+  /** 日界对齐用的 IANA 时区串，形如 `Asia/Shanghai`；缺席即按服务端缺省。 */
+  timezone?: string
 }
 
 /**

@@ -27,6 +27,11 @@ import { dirname, join, resolve } from 'node:path'
 import type { Component } from 'vue'
 import { beforeAll, describe, expect, it } from 'vitest'
 
+import { BAR_ITEMS_KEY, BAR_SLOT_KEY } from '../src/modules/bar-chart/bars'
+import {
+  DAY_SLOT_KEY,
+  METRIC_ITEMS_KEY,
+} from '../src/modules/calendar-heat/days'
 import {
   GAUGE_ITEMS_KEY,
   GAUGE_SLOT_KEY,
@@ -36,9 +41,24 @@ import {
   DATA_CARD_PARTS_KEY,
   DATA_CARD_SLOT_KEY,
 } from '../src/modules/data-card/cells'
+import {
+  CELL_SLOT_KEY,
+  TABLE_COLUMNS_KEY,
+  TABLE_ROWS_KEY,
+  TABLE_RULES_KEY,
+} from '../src/modules/data-table/cells'
 import { CARD_ITEMS_KEY, CARD_SLOT_KEY } from '../src/modules/info-card/cells'
 import { FEED_SLOT_KEY } from '../src/modules/info-feed/feed'
 import { LIST_ITEMS_KEY, LIST_SLOT_KEY } from '../src/modules/info-list/rows'
+import {
+  SLICE_ITEMS_KEY,
+  SLICE_SLOT_KEY,
+} from '../src/modules/pie-chart/slices'
+import { AXIS_ITEMS_KEY, AXIS_SLOT_KEY } from '../src/modules/radar-chart/axes'
+import {
+  SERIES_ITEMS_KEY,
+  SERIES_SLOT_KEY,
+} from '../src/modules/trend-chart/series'
 import { registerBuiltinModules } from '../src/registerBuiltins'
 import { __resetModules, listModules } from '../src/registry'
 import {
@@ -52,18 +72,32 @@ const MODULES_DIR = join(SRC_DIR, 'modules')
 
 // 组件按常量取键时，扫源码看到的是常量名——这张表把它翻回真正的键
 const KEY_CONSTANTS: Record<string, string> = {
+  AXIS_ITEMS_KEY,
+  AXIS_SLOT_KEY,
+  BAR_ITEMS_KEY,
+  BAR_SLOT_KEY,
   CARD_ITEMS_KEY,
+  DAY_SLOT_KEY,
+  METRIC_ITEMS_KEY,
   DATA_CARD_CELLS_KEY,
   DATA_CARD_PARTS_KEY,
   DATA_CARD_SLOT_KEY,
   CARD_SLOT_KEY,
+  CELL_SLOT_KEY,
   CONTAINER_CONFIG_KEY,
   FEED_SLOT_KEY,
   GAUGE_ITEMS_KEY,
   GAUGE_SLOT_KEY,
   LIST_ITEMS_KEY,
   LIST_SLOT_KEY,
+  SERIES_ITEMS_KEY,
+  SERIES_SLOT_KEY,
   SHOW_TITLE_CONFIG_KEY,
+  SLICE_ITEMS_KEY,
+  SLICE_SLOT_KEY,
+  TABLE_COLUMNS_KEY,
+  TABLE_ROWS_KEY,
+  TABLE_RULES_KEY,
   TWIN_2D_CONFIG_KEY,
   TWIN_2D_EDGE_BINDING_KEY,
   TWIN_2D_NODE_BINDING_KEY,
@@ -213,8 +247,11 @@ describe('一个模块 = 一个目录', () => {
   it('扫到的目录不是空的，扫描本身没有空转', () => {
     expect(directories).toEqual([
       'action-button',
+      'bar-chart',
+      'calendar-heat',
       'container',
       'data-card',
+      'data-table',
       'footer',
       'gauge-card',
       'header',
@@ -223,7 +260,10 @@ describe('一个模块 = 一个目录', () => {
       'info-feed',
       'info-list',
       'nav-tabs',
+      'pie-chart',
+      'radar-chart',
       'text-block',
+      'trend-chart',
       'twin-2d-view',
       'twin-view',
     ])

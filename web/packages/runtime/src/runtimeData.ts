@@ -4,7 +4,7 @@
  * ⚠ 注入的是**函数不是值**：`ModuleRenderer` 在 computed 里调用它，响应式依赖由那次
  * 调用建立；传一个取好的值进来，值再变也不会重算，而且不报任何错。
  */
-import type { ModuleConnectionState } from '@dt/contracts'
+import type { ModuleConnectionState, SeriesReader } from '@dt/contracts'
 import { inject, provide, type InjectionKey } from 'vue'
 
 import type { BindingSlot, BindingValueReader } from './moduleValues'
@@ -18,6 +18,19 @@ export interface RuntimeDataSource {
    * 于是模块永远不会被标成陈旧——而不是被当成断开。
    */
   connectionState?: () => ModuleConnectionState
+  /**
+   * 一次读一批时序槽的历史序列。
+   * ⚠ 不装这一支就是「这里没有历史取数」（设计态画布、模块库缩略图、公开屏），
+   * 时序槽于是照常走 `readBinding` 那条路，得到的是它对序列来源那句诚实的
+   * 「画不出」——而不是一张看不出问题的空图。
+   */
+  readSeries?: SeriesReader
+  /**
+   * 刷新节拍序号：每 +1 重取一轮序列。
+   * ⚠ 不装即「只在绑定变化时取一次」，挂一天的大屏曲线会停在打开那一刻；
+   * 编辑期刻意不装，编辑一格的时候不该有东西在背后自己刷。
+   */
+  seriesEpoch?: () => number
 }
 
 export const RUNTIME_DATA_KEY: InjectionKey<RuntimeDataSource> =

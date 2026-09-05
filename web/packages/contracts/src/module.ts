@@ -203,9 +203,12 @@ export interface BindingSpec {
   /** 数组槽每一行的子槽，仅 `isArray: true` 时有意义。 */
   arrayFields?: BindingSpec[]
   /**
-   * 时序槽：除当前标量外还注入该点位的历史序列（`HistoryPoint[]`）。
-   * ⚠ 只有 `opcua` / `archive` 有真实历史，`static` / `computed` 取不到时按
-   * 取数失败处理，不许拿空序列冒充「这段时间没数据」（DASHBOARD_DESIGN §4.3）。
+   * 时序槽：除当前标量外还注入该行的历史序列（`HistoryPoint[]`）。
+   * 序列落在数组行内的伴生键上——子槽 `series` 的序列写在同一行的 `seriesPoints`。
+   * ⚠ 能给出历史序列的只有 `archive`（点位归档）与 `dataset`（数据台账）两支：
+   * 它们各自带一份取数说明（`detailJson`）。`opcua` / `static` / `computed`
+   * 给不出序列，按取数失败处理，不许拿空序列冒充「这段时间没数据」
+   * （DASHBOARD_DESIGN §4.3）。
    */
   isTimeSeries?: boolean
 }
@@ -480,8 +483,27 @@ export interface ModuleSlotMeta {
   state: 'ok' | 'pending' | 'error'
   /** `state: 'error'` 时的原因。 */
   message?: string
-  /** 采样时刻，UTC 毫秒；只有 `ok` 档有。 */
+  /**
+   * 采样时刻，UTC 毫秒；只有 `ok` 档有。
+   * ⚠ 时序槽一律没有它：它推的是「通道断了、屏上还挂着推来的值」那一档，
+   * 而历史序列是一次性拉回来的，跟实时通道无关。
+   */
   timestampMs?: number
+  /**
+   * 序列触顶：窗内还有更多点，只取回了上限那一批。
+   * ⚠ 文案必须说清砍的是哪一头——两个历史端点砍的方向是相反的，
+   * 一句通用的「数据被截断」会让人把「前半段缺」读成「后半段缺」。
+   */
+  isTruncated?: boolean
+  /**
+   * 触顶砍掉的是哪一头，模块的文案据此写；缺席 = 取数侧说不出方向。
+   * ⚠ 与 `isTruncated` 分成两个字段：光有「截断了」这一位，模块只写得出
+   * 一句通用的话，而两个读侧砍的方向恰好相反（点位逐条读砍晚的那一头，
+   * 台账序列砍早的那一头）——写错方向的曲线完全合法，没有任何报错。
+   */
+  truncatedSide?: 'early' | 'late'
+  /** 值来自降级路径。陈旧必须标注为陈旧，不许当成新鲜值照画。 */
+  isStale?: boolean
 }
 
 /** 运行时透传给渲染组件的状态。 */
