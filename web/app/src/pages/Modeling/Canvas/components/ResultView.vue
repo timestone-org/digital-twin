@@ -6,7 +6,7 @@
  * 因此按端口建键；多路时用页签一次只摆一路，两路各摆一遍等于把同一份账印两遍。
  * ⚠ 没有讲解的运行（老运行）退回升级前的样子：不摆空区、不折叠、不多说一个字。
  */
-import { DtEmpty, DtSegmented } from '@dt/ui'
+import { DtCard, DtEmpty, DtSegmented } from '@dt/ui'
 import type { DtSegmentedOption } from '@dt/contracts'
 import { computed, ref } from 'vue'
 
@@ -99,6 +99,18 @@ const shownPorts = computed<PortPreview[]>(() => {
 
 const nodeBlocks = computed(() => blocksOfPort(report.value.blocks, ''))
 
+/**
+ * 每一路输出的外壳。
+ *
+ * ⚠ 只在有讲解时才套卡片（规格 §3.3）：没有讲解的老运行要一个字不多地退回升级
+ * 前的样子，凭空多出一圈边框也算多说了一句（§4.7）。
+ */
+const shell = computed(() => (hasFace.value ? DtCard : 'section'))
+
+const shellProps = computed(() =>
+  hasFace.value ? { padding: 'sm' as const } : {},
+)
+
 function portBlocks(port: string) {
   return blocksOfPort(report.value.blocks, port)
 }
@@ -113,9 +125,13 @@ const isSourceTruncated = computed(() =>
   ports.value.some((item) => provenanceOf(item)?.isTruncated === true),
 )
 
-const isBudgetTrimmed = computed(
-  () => props.isPreviewTruncated === true || report.value.dropped.length > 0,
-)
+/**
+ * 摘要本身被削过。
+ *
+ * ⚠ 与「讲解被降档丢了几块」分开：那一档带得出标题，摆在块流里的原位说
+ * （规格 §2-P5），这一档只知道明细行少了，只能在顶上说。
+ */
+const isPreviewTrimmed = computed(() => props.isPreviewTruncated === true)
 
 /** 各路出处一字不差时只印一次——切分不改出处，印两遍是同一句话说两遍。 */
 const isSharedProvenance = computed(() => {
@@ -221,12 +237,14 @@ function jump(target: string): void {
       </button>
     </nav>
     <TruncationNotice v-if="hasFace && isSourceTruncated" kind="source" />
-    <TruncationNotice
-      v-if="isBudgetTrimmed"
-      kind="budget"
+    <TruncationNotice v-if="isPreviewTrimmed" kind="budget" />
+    <ReportBlocks
+      v-if="hasFace"
+      :blocks="nodeBlocks"
+      :zones="LEAD_ZONES"
       :dropped="report.dropped"
+      :note="report.note"
     />
-    <ReportBlocks v-if="hasFace" :blocks="nodeBlocks" :zones="LEAD_ZONES" />
     <DtSegmented
       v-if="hasFace && isLabelled"
       :model-value="shownPort"
@@ -235,7 +253,13 @@ function jump(target: string): void {
       aria-label="这一步的输出"
       @update:model-value="activePort = $event"
     />
-    <section v-for="item in shownPorts" :key="item.port">
+    <component
+      :is="shell"
+      v-for="item in shownPorts"
+      :key="item.port"
+      v-bind="shellProps"
+      class="dt-ml-result__unit"
+    >
       <header
         v-if="!hasFace && (isLabelled || downloadOf(item.port))"
         class="dt-ml-result__head"
@@ -310,7 +334,7 @@ function jump(target: string): void {
       <p v-if="hasFace && isSharedProvenance" class="dt-ml-result__shared">
         各路来自同一次取数，这一步不改出处。
       </p>
-    </section>
+    </component>
   </div>
 </template>
 
@@ -320,7 +344,7 @@ function jump(target: string): void {
   flex-direction: column;
   gap: 1.25rem;
 
-  section {
+  &__unit {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;

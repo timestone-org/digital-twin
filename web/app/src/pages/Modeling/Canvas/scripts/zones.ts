@@ -28,6 +28,9 @@ export const ZONE_TITLES: Record<ReportZone, string> = {
 /** 「完整数据」那一区：主体视图与它自己的块摆在一处。 */
 export const TABLE_ZONE: ReportZone = 'table'
 
+/** 「对比图」那一区：唯一一个再分主体位与辅图格的区（规格 §3.2）。 */
+export const CHART_ZONE: ReportZone = 'charts'
+
 /** 摆在主体视图之前的四区。 */
 export const LEAD_ZONES: readonly ReportZone[] = ZONE_ORDER.filter(
   (zone) => zone !== TABLE_ZONE,

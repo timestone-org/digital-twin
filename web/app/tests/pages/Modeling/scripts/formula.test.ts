@@ -19,7 +19,10 @@ import {
   warnOf,
 } from '@/pages/Modeling/Canvas/scripts/formula'
 import type { FormulaSpec } from '@/pages/Modeling/Canvas/scripts/formulaCatalog'
-import { formulasOf } from '@/pages/Modeling/Canvas/scripts/formulaCatalog'
+import {
+  formulaCodes,
+  formulasOf,
+} from '@/pages/Modeling/Canvas/scripts/formulaCatalog'
 import type {
   FramePreview,
   ModelPreview,
@@ -181,7 +184,7 @@ describe('线性回归的公式', () => {
 
   it('代入态就是那一行能抄走的式子', () => {
     const spec = pick(
-      formulasOf('linear_regression', { ports, config: {} }),
+      formulasOf('linear_regression', { blocks: [], ports, config: {} }),
       'predict',
     )
 
@@ -194,7 +197,7 @@ describe('线性回归的公式', () => {
 
   it('符号态里 Σ 的上下限都在', () => {
     const spec = pick(
-      formulasOf('linear_regression', { ports, config: {} }),
+      formulasOf('linear_regression', { blocks: [], ports, config: {} }),
       'predict',
     )
 
@@ -203,7 +206,7 @@ describe('线性回归的公式', () => {
 
   it('负系数拆成减号，不印成「+ -0.84」', () => {
     const spec = pick(
-      formulasOf('linear_regression', { ports, config: {} }),
+      formulasOf('linear_regression', { blocks: [], ports, config: {} }),
       'predict',
     )
 
@@ -214,6 +217,7 @@ describe('线性回归的公式', () => {
     const tiny = model({ coefficients: [['温度', 3e-5]], intercept: 0 })
     const spec = pick(
       formulasOf('linear_regression', {
+        blocks: [],
         ports: [{ port: 'model', preview: tiny }],
         config: {},
       }),
@@ -230,6 +234,7 @@ describe('线性回归的公式', () => {
     })
     const spec = pick(
       formulasOf('linear_regression', {
+        blocks: [],
         ports: [{ port: 'model', preview: headless }],
         config: {},
       }),
@@ -243,6 +248,7 @@ describe('线性回归的公式', () => {
     const bare = model({ coefficients: [] })
     const spec = pick(
       formulasOf('linear_regression', {
+        blocks: [],
         ports: [{ port: 'model', preview: bare }],
         config: {},
       }),
@@ -257,6 +263,7 @@ describe('线性回归的公式', () => {
     const trimmed = model({ coefficients: [], isFittedTrimmed: true })
     const spec = pick(
       formulasOf('linear_regression', {
+        blocks: [],
         ports: [{ port: 'model', preview: trimmed }],
         config: {},
       }),
@@ -268,7 +275,7 @@ describe('线性回归的公式', () => {
 
   it('连模型端口都没有时也不空着', () => {
     const spec = pick(
-      formulasOf('linear_regression', { ports: [], config: {} }),
+      formulasOf('linear_regression', { blocks: [], ports: [], config: {} }),
       'predict',
     )
 
@@ -278,6 +285,7 @@ describe('线性回归的公式', () => {
   it('L2 惩罚项把 alpha 代进去', () => {
     const spec = pick(
       formulasOf('linear_regression', {
+        blocks: [],
         ports,
         config: { regularization: 'ridge', ridge_alpha: 0.5 },
       }),
@@ -293,6 +301,7 @@ describe('线性回归的公式', () => {
   it('普通最小二乘干脆不画惩罚项', () => {
     const spec = pick(
       formulasOf('linear_regression', {
+        blocks: [],
         ports,
         config: { regularization: 'none' },
       }),
@@ -305,7 +314,7 @@ describe('线性回归的公式', () => {
 
   it('这次运行没记下正则化方式时不瞎猜成 0', () => {
     const spec = pick(
-      formulasOf('linear_regression', { ports, config: {} }),
+      formulasOf('linear_regression', { blocks: [], ports, config: {} }),
       'fit',
     )
 
@@ -324,7 +333,7 @@ describe('逻辑回归的公式', () => {
 
   it('判别式代入系数，且默认就展开', () => {
     const spec = pick(
-      formulasOf('logistic_regression', { ports, config: {} }),
+      formulasOf('logistic_regression', { blocks: [], ports, config: {} }),
       'score',
     )
 
@@ -337,7 +346,7 @@ describe('逻辑回归的公式', () => {
 
   it('概率那条是纯口径说明：没有实参可代，也不该报「代不进」', () => {
     const spec = pick(
-      formulasOf('logistic_regression', { ports, config: {} }),
+      formulasOf('logistic_regression', { blocks: [], ports, config: {} }),
       'probability',
     )
 
@@ -348,7 +357,7 @@ describe('逻辑回归的公式', () => {
 
   it('判成哪一类：正类是后一个类目', () => {
     const spec = pick(
-      formulasOf('logistic_regression', { ports, config: {} }),
+      formulasOf('logistic_regression', { blocks: [], ports, config: {} }),
       'decide',
     )
 
@@ -362,6 +371,7 @@ describe('逻辑回归的公式', () => {
     const blind = model({ classes: [] })
     const spec = pick(
       formulasOf('logistic_regression', {
+        blocks: [],
         ports: [{ port: 'model', preview: blind }],
         config: {},
       }),
@@ -374,7 +384,7 @@ describe('逻辑回归的公式', () => {
 
   it('几率比那条给的是业务读法', () => {
     const spec = pick(
-      formulasOf('logistic_regression', { ports, config: {} }),
+      formulasOf('logistic_regression', { blocks: [], ports, config: {} }),
       'odds',
     )
 
@@ -386,6 +396,7 @@ describe('训练测试切分的公式', () => {
   it('两段行数与配置比例一起代进去', () => {
     const spec = pick(
       formulasOf('split_dataset', {
+        blocks: [],
         ports: split(800, 200),
         config: { test_ratio: 0.2, method: 'time_order' },
       }),
@@ -401,6 +412,7 @@ describe('训练测试切分的公式', () => {
   it('配 5% 只有 10 行时实得 10%，必须当场说出来', () => {
     const spec = pick(
       formulasOf('split_dataset', {
+        blocks: [],
         ports: split(9, 1),
         config: { test_ratio: 0.05 },
       }),
@@ -413,7 +425,7 @@ describe('训练测试切分的公式', () => {
 
   it('两路行数取不到时只出符号态', () => {
     const spec = pick(
-      formulasOf('split_dataset', { ports: [], config: { test_ratio: 0.2 } }),
+      formulasOf('split_dataset', { blocks: [], ports: [], config: { test_ratio: 0.2 } }),
       'size',
     )
 
@@ -424,6 +436,7 @@ describe('训练测试切分的公式', () => {
   it('一行都没有也不会除出个 NaN', () => {
     const spec = pick(
       formulasOf('split_dataset', {
+        blocks: [],
         ports: split(0, 0),
         config: { test_ratio: 0.2 },
       }),
@@ -437,6 +450,7 @@ describe('训练测试切分的公式', () => {
   it('随机切把泄漏警告写进式子里', () => {
     const spec = pick(
       formulasOf('split_dataset', {
+        blocks: [],
         ports: split(800, 200),
         config: { method: 'random', random_state: 42 },
       }),
@@ -452,6 +466,7 @@ describe('训练测试切分的公式', () => {
   it('按时间切的测试段是最后那一截', () => {
     const spec = pick(
       formulasOf('split_dataset', {
+        blocks: [],
         ports: split(800, 200),
         config: { method: 'time_order' },
       }),
@@ -463,7 +478,7 @@ describe('训练测试切分的公式', () => {
 
   it('没记下切分方式时说的是「没记下方式」而不是「没有行数」', () => {
     const spec = pick(
-      formulasOf('split_dataset', { ports: split(8, 2), config: {} }),
+      formulasOf('split_dataset', { blocks: [], ports: split(8, 2), config: {} }),
       'order',
     )
 
@@ -473,7 +488,7 @@ describe('训练测试切分的公式', () => {
 
   it('两路行数缺席时的措辞另算一档', () => {
     const spec = pick(
-      formulasOf('split_dataset', { ports: [], config: { method: 'random' } }),
+      formulasOf('split_dataset', { blocks: [], ports: [], config: { method: 'random' } }),
       'order',
     )
 
@@ -492,7 +507,7 @@ describe('树回归的公式', () => {
 
   it('通道 B 画不出系数是正常的，措辞要说清这一点', () => {
     const spec = pick(
-      formulasOf('tree_regressor', { ports, config: { shape: 'forest' } }),
+      formulasOf('tree_regressor', { blocks: [], ports, config: { shape: 'forest' } }),
       'ensemble',
     )
 
@@ -504,6 +519,7 @@ describe('树回归的公式', () => {
   it('随机森林是一堆树取平均', () => {
     const spec = pick(
       formulasOf('tree_regressor', {
+        blocks: [],
         ports,
         config: { shape: 'forest', n_estimators: 100 },
       }),
@@ -518,7 +534,7 @@ describe('树回归的公式', () => {
 
   it('梯度提升换一副骨架，并交代改不了的学习率', () => {
     const spec = pick(
-      formulasOf('tree_regressor', { ports, config: { shape: 'gbdt' } }),
+      formulasOf('tree_regressor', { blocks: [], ports, config: { shape: 'gbdt' } }),
       'ensemble',
     )
 
@@ -532,7 +548,7 @@ describe('树回归的公式', () => {
   it('不外推这条坑两种形态都要说', () => {
     for (const shape of ['forest', 'gbdt']) {
       const spec = pick(
-        formulasOf('tree_regressor', { ports, config: { shape } }),
+        formulasOf('tree_regressor', { blocks: [], ports, config: { shape } }),
         'ensemble',
       )
 
@@ -542,7 +558,7 @@ describe('树回归的公式', () => {
 
   it('分裂准则是纯口径说明，两个分式都在', () => {
     const spec = pick(
-      formulasOf('tree_regressor', { ports, config: {} }),
+      formulasOf('tree_regressor', { blocks: [], ports, config: {} }),
       'split',
     )
 
@@ -554,19 +570,28 @@ describe('树回归的公式', () => {
 })
 
 describe('骨架表的边界', () => {
+  // ⚠ 认不出的 code 给空清单而不是抛错：结果面上那一步只是不摆 ④ 区，
+  // 不会连着把整个弹窗一起炸掉
   it('没登记的算子给空清单，不是抛错', () => {
-    expect(formulasOf('cast_type', { ports: [], config: {} })).toEqual([])
+    expect(
+      formulasOf('将来某个算子', { blocks: [], ports: [], config: {} }),
+    ).toEqual([])
   })
 
-  it('本波登记的就是 model 那四个', () => {
+  it('24 个算子逐个都登记了', () => {
+    expect(formulaCodes()).toHaveLength(24)
     for (const code of [
       'split_dataset',
       'linear_regression',
       'logistic_regression',
       'tree_regressor',
+      'cast_type',
+      'ledger_source',
+      'cross_validate',
     ]) {
       expect(
-        formulasOf(code, { ports: [], config: {} }).length,
+        formulasOf(code, { blocks: [], ports: [], config: {} }).length,
+        code,
       ).toBeGreaterThan(0)
     }
   })
@@ -574,6 +599,7 @@ describe('骨架表的边界', () => {
   it('警示项是有的，颜色之外还得有第二重编码', () => {
     const spec = pick(
       formulasOf('split_dataset', {
+        blocks: [],
         ports: split(8, 2),
         config: { method: 'random' },
       }),

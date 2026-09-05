@@ -234,6 +234,51 @@ describe('有讲解时铺成六区', () => {
     expect(wrapper.text()).toContain('载荷热力')
   })
 
+  // ⚠ 摆回整屏顶上就成了「这一屏有点不全」这种笼统话；摆进块流里，那个位置
+  // 自己就答得上「这里本来还有东西」（规格 §2-P5）
+  it('丢掉的块摆进块流里，不是笼统在顶上说一句', () => {
+    const wrapper = mount(ResultView, {
+      props: {
+        payload: FRAME,
+        report: { ...REPORT, dropped: ['载荷热力'] },
+      },
+    })
+
+    expect(wrapper.find('.dt-ml-blocks__gone').text()).toContain('载荷热力')
+  })
+
+  // ⚠ 后端降到最后一档才写这句话，前端过去一个字都没读过
+  it('降到最后一档时后端那句说明也印出来', () => {
+    const wrapper = mount(ResultView, {
+      props: {
+        payload: FRAME,
+        report: { ...REPORT, note: '这一步的讲解太大，只留下了每一步都有的那几行' },
+      },
+    })
+
+    expect(wrapper.text()).toContain('只留下了每一步都有的那几行')
+  })
+
+  // ⚠ 规格 §3.3 的骨架图把每一路画成一张卡；裸 section 摆两路时两段账糊成一片
+  it('有讲解时每一路套一张卡', () => {
+    const wrapper = mount(ResultView, {
+      props: { payload: FRAME, report: REPORT },
+    })
+
+    expect(wrapper.find('.dt-ml-result__unit').classes()).toContain('dt-card')
+  })
+
+  // ⚠ 老运行要一个字不多地退回升级前的样子（§4.7）：凭空多一圈边框也算多说
+  it('没有讲解的老运行不套卡片', () => {
+    const wrapper = mount(ResultView, {
+      props: { payload: FRAME, report: null },
+    })
+
+    expect(wrapper.find('.dt-ml-result__unit').classes()).not.toContain(
+      'dt-card',
+    )
+  })
+
   it('点锚点滚到那一区', async () => {
     const wrapper = mount(ResultView, {
       props: { payload: FRAME, report: REPORT },

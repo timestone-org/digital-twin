@@ -26,7 +26,7 @@ describe('整包讲解', () => {
     expect(reportOf(undefined).blocks).toEqual([])
   })
 
-  it('块的六个字段照读，降档留痕也读出来', () => {
+  it('块的七个字段照读，降档留痕也读出来', () => {
     const report = reportOf({
       blocks: [
         {
@@ -35,7 +35,7 @@ describe('整包讲解', () => {
           port: 'train',
           title: '行数账',
           tier: 2,
-          payload: { before: 3 },
+          payload: { before: 3, is_primary: true },
         },
       ],
       dropped: ['载荷热力'],
@@ -48,10 +48,25 @@ describe('整包讲解', () => {
       port: 'train',
       title: '行数账',
       tier: 2,
-      payload: { before: 3 },
+      isPrimary: true,
+      payload: { before: 3, is_primary: true },
     })
     expect(report.dropped).toEqual(['载荷热力'])
     expect(report.note).toBe('讲解太长')
+  })
+
+  // ⚠ 「没标」与「标了不是主体」要分得开：折成同一个值之后，后端漏标一张图与
+  // 明写它是辅图在前端就再也查不出区别，而规格 §4.3 的缺省恰恰不是 true
+  it('主次没标时是 null，标了 false 时就是 false', () => {
+    const marks = reportOf({
+      blocks: [
+        { kind: 'bins', zone: 'charts', payload: {} },
+        { kind: 'bins', zone: 'charts', payload: { is_primary: false } },
+        { kind: 'bins', zone: 'charts', payload: { is_primary: true } },
+      ],
+    }).blocks.map((block) => block.isPrimary)
+
+    expect(marks).toEqual([null, false, true])
   })
 
   // ⚠ 认不出的种类留成原样交给兜底画法：改写成 unknown 就没法照实说是哪一种

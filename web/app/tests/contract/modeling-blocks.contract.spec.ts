@@ -48,6 +48,7 @@ function blockOf(kind: string): ReportBlock {
     port: '',
     title: `${kind} 那一块`,
     tier: 0,
+    isPrimary: null,
     payload: { before: 12 },
   }
 }

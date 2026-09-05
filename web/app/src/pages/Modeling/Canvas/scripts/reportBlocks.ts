@@ -3,6 +3,9 @@
  *
  * ⚠ 块的内部形状没有 openapi 保护，键名写错时 typecheck 与 lint 双双放行，
  * 两侧花名册由 `tests/contract/modeling-blocks.contract.spec.ts` 双向钉住。
+ * ⚠ 四个通用扩展键（规格 §4.3）各有归属：`is_primary` 在这里读成块上的一个
+ * 字段（它决定图摆主体位还是辅图格，是版式的事）；`notes` 归 `blockNotes.ts`；
+ * `degraded` 与 `degraded_reason` 归 `ledgerBlocks.ts`。
  */
 import type { ReportZone } from './zones'
 import { isReportZone } from './zones'
@@ -54,6 +57,14 @@ export interface ReportBlock {
   port: string
   title: string
   tier: number
+  /**
+   * 这张图是不是这一步的主体图。
+   *
+   * ⚠ 缺省是 null 不是 true：`zone === 'charts'` 的块必带这个键，漏标由后端
+   * 契约逐个算子拦下。前端把「没标」与「标了 false」画成同一档，才不会让
+   * 同一条降档梯子在不同算子上摆出不同的版面（规格 §4.3）。
+   */
+  isPrimary: boolean | null
   payload: Item
 }
 
@@ -90,6 +101,11 @@ function asCount(value: unknown): number {
   return asNumber(value) ?? 0
 }
 
+/** 布尔键：没写就是 null，不折成 false——「没标」与「标了不是」要分得开。 */
+function asFlag(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null
+}
+
 function asTexts(value: unknown): string[] {
   return asList(value).map((item) => asText(item))
 }
@@ -121,13 +137,15 @@ export function reportOf(raw: Item | null | undefined): NodeReport {
 function blockOf(raw: unknown): ReportBlock {
   const item = recordOf(raw)
   const zone = asText(item['zone'])
+  const payload = recordOf(item['payload'])
   return {
     kind: asText(item['kind']),
     zone: isReportZone(zone) ? zone : FALLBACK_ZONE,
     port: asText(item['port']),
     title: asText(item['title']),
     tier: asCount(item['tier']),
-    payload: recordOf(item['payload']),
+    isPrimary: asFlag(payload['is_primary']),
+    payload,
   }
 }
 

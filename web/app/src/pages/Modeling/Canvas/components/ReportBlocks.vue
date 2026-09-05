@@ -4,6 +4,9 @@
  *
  * ⚠ 分区顺序由常量表定、不看数组顺序（规格 §2-P1）；查不到画法的块交给兜底件
  * 照实列出，不静默丢——丢掉的那一块与「这一步没算」在界面上分不出来。
+ * ⚠ 对比图那一区再分主体位与辅图格（规格 §3.2）：主体图独占一行 44rem，辅图
+ * 走 22rem 起的网格。挤在同一排时图的宽度由图注那行字的长短决定，改一个字版式
+ * 就变一档。
  */
 import { DtSkeleton } from '@dt/ui'
 import type { Component } from 'vue'
@@ -12,8 +15,17 @@ import { computed } from 'vue'
 import type { BlockKind, ReportBlock } from '../scripts/reportBlocks'
 import { isBlockKind } from '../scripts/reportBlocks'
 import type { ReportZone } from '../scripts/zones'
-import { ZONE_ORDER, ZONE_TITLES, groupByZone } from '../scripts/zones'
+import { CHART_ZONE, ZONE_ORDER, ZONE_TITLES, groupByZone } from '../scripts/zones'
 
+import AxisBlock from './AxisBlock.vue'
+import BinsBlock from './BinsBlock.vue'
+import BreakdownBlock from './BreakdownBlock.vue'
+import CellsBlock from './CellsBlock.vue'
+import ColumnsBlock from './ColumnsBlock.vue'
+import FitsBlock from './FitsBlock.vue'
+import RowsBlock from './RowsBlock.vue'
+import StructureBlock from './StructureBlock.vue'
+import TruncationNotice from './TruncationNotice.vue'
 import UnknownBlock from './UnknownBlock.vue'
 
 const props = withDefaults(
@@ -23,21 +35,38 @@ const props = withDefaults(
     zones?: readonly ReportZone[] | undefined
     /** 详情还没拉回来。⚠ 占位高度按区固定，回来之后不跳版。 */
     pending?: boolean | undefined
+    /**
+     * 被字节预算降档丢掉的那几块的标题。
+     *
+     * ⚠ 摆在块流的末尾而不是整屏顶上（规格 §2-P5 的第二档）：留痕里只有标题、
+     * 没有分区，摆回它原来那一格是编的，但摆在块中间至少答得上「这里本来还有
+     * 东西」。一个字都不说的话，「这一步本来就没有图」与「图被削掉了」在屏幕上
+     * 长得一模一样。
+     */
+    dropped?: readonly string[] | undefined
+    /** 降到最后一档时后端留下的那句说明；空串 = 没降到那一档。 */
+    note?: string | undefined
   }>(),
-  { blocks: () => [], zones: () => ZONE_ORDER, pending: false },
+  {
+    blocks: () => [],
+    zones: () => ZONE_ORDER,
+    pending: false,
+    dropped: () => [],
+    note: '',
+  },
 )
 
 // 八种块的画法。⚠ 键集由 `Record<BlockKind, …>` 钉死：漏一种就过不了 typecheck，
 // 与后端花名册漂了由 `tests/contract/modeling-blocks.contract.spec.ts` 逮
 const BLOCK_VIEWS: Record<BlockKind, Component> = {
-  rows: UnknownBlock,
-  columns: UnknownBlock,
-  cells: UnknownBlock,
-  fits: UnknownBlock,
-  bins: UnknownBlock,
-  axis: UnknownBlock,
-  breakdown: UnknownBlock,
-  structure: UnknownBlock,
+  rows: RowsBlock,
+  columns: ColumnsBlock,
+  cells: CellsBlock,
+  fits: FitsBlock,
+  bins: BinsBlock,
+  axis: AxisBlock,
+  breakdown: BreakdownBlock,
+  structure: StructureBlock,
 }
 
 // 骨架的高度按区固定：三档高度是这三区实际内容的常见高度
@@ -47,11 +76,37 @@ const HOLDS: readonly { zone: ReportZone; height: string }[] = [
   { zone: 'charts', height: '14rem' },
 ]
 
+/** 对比图区分两档摆法；别的区一档摆完。 */
+const LEAD_LANE = 'lead'
+const AUX_LANE = 'aux'
+const FLAT_LANE = 'flat'
+
+interface Lane {
+  key: string
+  blocks: ReportBlock[]
+}
+
 const groups = computed(() => groupByZone(props.blocks, props.zones))
 
 const holds = computed(() =>
   HOLDS.filter((hold) => props.zones.includes(hold.zone)),
 )
+
+/**
+ * 一个区里的块怎么分排。
+ *
+ * ⚠ 只有明写了 `is_primary: true` 的才进主体位：缺省是「没标」不是「是主体」，
+ * 把没标的一律顶上去会让同一条降档梯子在不同算子上摆出不同的版面（§4.3）。
+ * Args: zone, blocks。
+ */
+function lanesOf(zone: ReportZone, blocks: readonly ReportBlock[]): Lane[] {
+  if (zone !== CHART_ZONE) return [{ key: FLAT_LANE, blocks: [...blocks] }]
+  const lanes: Lane[] = [
+    { key: LEAD_LANE, blocks: blocks.filter((one) => one.isPrimary === true) },
+    { key: AUX_LANE, blocks: blocks.filter((one) => one.isPrimary !== true) },
+  ]
+  return lanes.filter((lane) => lane.blocks.length > 0)
+}
 
 function viewOf(kind: string): Component {
   return isBlockKind(kind) ? BLOCK_VIEWS[kind] : UnknownBlock
@@ -61,6 +116,10 @@ function viewOf(kind: string): Component {
 function keyOf(block: ReportBlock): string {
   return `${block.zone}:${block.kind}:${block.title}`
 }
+
+const hasTrace = computed(() => props.dropped.length > 0 || props.note !== '')
+
+const hasBody = computed(() => groups.value.length > 0 || hasTrace.value)
 </script>
 
 <template>
@@ -74,7 +133,7 @@ function keyOf(block: ReportBlock): string {
       <DtSkeleton />
     </div>
   </div>
-  <div v-else-if="groups.length > 0" class="dt-ml-blocks">
+  <div v-else-if="hasBody" class="dt-ml-blocks">
     <section
       v-for="group in groups"
       :key="group.zone"
@@ -82,13 +141,27 @@ function keyOf(block: ReportBlock): string {
       :data-zone="group.zone"
     >
       <h5 class="dt-ml-blocks__title">{{ ZONE_TITLES[group.zone] }}</h5>
-      <component
-        :is="viewOf(block.kind)"
-        v-for="block in group.blocks"
-        :key="keyOf(block)"
-        :block="block"
-      />
+      <div
+        v-for="lane in lanesOf(group.zone, group.blocks)"
+        :key="lane.key"
+        class="dt-ml-blocks__lane"
+        :data-lane="lane.key"
+      >
+        <component
+          :is="viewOf(block.kind)"
+          v-for="block in lane.blocks"
+          :key="keyOf(block)"
+          :block="block"
+        />
+      </div>
     </section>
+    <div v-if="hasTrace" class="dt-ml-blocks__gone">
+      <p class="dt-ml-blocks__gone-title">这里本来还有几块，没能一起存下来</p>
+      <TruncationNotice kind="budget" :dropped="props.dropped" />
+      <p v-if="props.note !== ''" class="dt-ml-blocks__gone-note">
+        {{ props.note }}
+      </p>
+    </div>
   </div>
 </template>
 
@@ -108,9 +181,24 @@ function keyOf(block: ReportBlock): string {
     gap: 0.5rem;
   }
 
+  &__lane {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
   // 图的宽度归摆放它的这一区管，图元件自己不焊上限（规格 §3.2 的主体图档）
-  &__zone[data-zone='charts'] {
+  &__lane[data-lane='lead'] {
     --dt-ml-chart-max: min(44rem, 100%);
+  }
+
+  // 辅图两列起排：70rem 的弹窗里正好两格，窄下来自己折成一列
+  &__lane[data-lane='aux'] {
+    --dt-ml-chart-max: 100%;
+
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+    align-items: start;
   }
 
   &__title {
@@ -119,6 +207,29 @@ function keyOf(block: ReportBlock): string {
     font-size: var(--ctl-hint-fs-md);
     font-weight: 600;
     letter-spacing: 0.02em;
+  }
+
+  // 留痕摆成一个「空出来的位置」：虚线框读起来就是这里缺了东西
+  &__gone {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    padding: 0.5rem;
+    border: 1px dashed var(--border-subtle);
+    border-radius: var(--radius-md);
+  }
+
+  &__gone-title {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: var(--ctl-hint-fs-sm);
+    font-weight: 600;
+  }
+
+  &__gone-note {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: var(--ctl-hint-fs-sm);
   }
 }
 </style>

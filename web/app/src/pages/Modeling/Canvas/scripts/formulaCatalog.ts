@@ -1,12 +1,16 @@
 /**
- * @fileoverview 建模算子的公式骨架表，按算子 code 建键。
+ * @fileoverview 建模算子的公式骨架表，按算子 code 建键。24 个算子一个不漏。
  *
  * 骨架随算子代码走、不随运行走——公式**不进结果摘要**（§6）：放进去等于每次
- * 运行把同一串常量重传一遍还要吃字节预算。实参只从两处取：`preview.fitted`
- * 的系数与类目，以及运行时冻结下来的节点 config 快照（所以 `test_ratio`
- * 这些「参数不进摘要」的量零后端解决，历史回看也正确）。
+ * 运行把同一串常量重传一遍还要吃字节预算。实参只从三处取：这一步的讲解块、
+ * 逐路摘要里的系数与类目，以及运行时冻结下来的节点 config 快照（所以
+ * `test_ratio` 这些「参数不进摘要」的量零后端解决，历史回看也正确）。
  *
- * ⚠ 本波只登记 model 那四个算子，其余二十条归后面的波次。
+ * ⚠ 后端算子花名册里的每个 code 在这张表里都要有，由
+ * `tests/contract/modeling-formulas.contract.spec.ts` 单向钉住；反向允许多，
+ * 前端可以先给将来的算子备好骨架。
+ * ⚠ 默认展开只有六处（§6）：有实参且实参就是结论的那几条。纯口径说明一律折起
+ * 来，但指标为 null 时那一条自动展开——那时它正好回答「为什么是无定义」。
  */
 import type { FormulaNode, FormulaTerm } from './formula'
 import {
@@ -20,75 +24,29 @@ import {
   varOf,
   warnOf,
 } from './formula'
-import { niceNumber, percentText } from './numbers'
-import type { FramePreview, ModelPreview, PortPreview } from './preview'
+import type {
+  FormulaContext,
+  FormulaLegend,
+  FormulaMaker,
+  FormulaSpec,
+} from './formulaArgs'
+import {
+  frameAt,
+  modelAt,
+  numberAt,
+  percent,
+  textAt,
+} from './formulaArgs'
+import { CLEAN_FORMULAS } from './formulaClean'
+import { EVAL_FORMULAS } from './formulaEval'
+import { FEATURE_FORMULAS } from './formulaFeature'
+import { niceNumber } from './numbers'
+import type { ModelPreview } from './preview'
 
-/** 变量表的一行：这个符号是什么。 */
-export interface FormulaLegend {
-  symbol: string
-  text: string
-}
-
-/** 一条公式。符号态永远画得出来，代入态取不到实参时为 null。 */
-export interface FormulaSpec {
-  id: string
-  title: string
-  symbolic: FormulaNode[]
-  filled: FormulaNode[] | null
-  /** 想代实参却代不进时说明为什么；纯口径说明式没有实参可代，这里是 null。 */
-  fallback: string | null
-  /** 默认展开：有实参且实参就是结论的那几条。 */
-  isOpen: boolean
-  legend: FormulaLegend[]
-  notes: string[]
-}
-
-/** 代实参要用到的两样东西：这个节点的逐端口摘要，与它那份 config 快照。 */
-export interface FormulaContext {
-  ports: readonly PortPreview[]
-  config: Readonly<Record<string, unknown>>
-}
+export type { FormulaContext, FormulaLegend, FormulaSpec }
 
 // 实得比例与配置比例差到这个数才值得说一句
 const RATIO_GAP = 0.005
-
-function numberAt(
-  config: Readonly<Record<string, unknown>>,
-  key: string,
-): number | null {
-  const value = config[key]
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
-}
-
-function textAt(
-  config: Readonly<Record<string, unknown>>,
-  key: string,
-): string {
-  const value = config[key]
-  return typeof value === 'string' ? value : ''
-}
-
-function frameAt(
-  ports: readonly PortPreview[],
-  port: string,
-): FramePreview | null {
-  for (const item of ports) {
-    if (item.port === port && item.preview.kind === 'frame') return item.preview
-  }
-  return null
-}
-
-function modelAt(ports: readonly PortPreview[]): ModelPreview | null {
-  for (const item of ports) {
-    if (item.preview.kind === 'model') return item.preview
-  }
-  return null
-}
-
-/** 百分数写法。⚠ 一律过 `percentText`：`0.2*100` 在浮点上是 20.000000000000004。 */
-function percent(ratio: number): string {
-  return percentText(ratio * 100)
-}
 
 /**
  * 代不进系数时那句话。四种「没有」措辞各不相同，合并了就分不清是哪一种。
@@ -493,17 +451,23 @@ function treeSplit(): FormulaSpec {
   }
 }
 
-type FormulaMaker = (context: FormulaContext) => FormulaSpec
-
 const CATALOG: Record<string, readonly FormulaMaker[]> = {
+  ...CLEAN_FORMULAS,
+  ...FEATURE_FORMULAS,
+  ...EVAL_FORMULAS,
   split_dataset: [splitSize, splitOrder],
   linear_regression: [linearPredict, linearFit],
   logistic_regression: [logitScore, logitProbability, logitDecide, logitOdds],
   tree_regressor: [treeEnsemble, treeSplit],
 }
 
+/** 后端花名册里的每个 code 在这里都有；契约用例遍历的就是这份键集。 */
+export function formulaCodes(): string[] {
+  return Object.keys(CATALOG).sort()
+}
+
 /**
- * 一个算子的公式清单。没登记的算子给空数组——本波只做 model 那四个。
+ * 一个算子的公式清单。没登记的算子给空数组，界面上就是不摆 ④ 区。
  * Args: code, context。
  */
 export function formulasOf(
