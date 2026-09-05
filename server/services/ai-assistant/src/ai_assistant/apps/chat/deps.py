@@ -105,6 +105,24 @@ async def get_advance_deps(
     )
 
 
+async def get_known_profiles(
+    container: Annotated[Container, Depends(get_container)],
+) -> tuple[str, ...]:
+    """此刻在册的那几路档位名。换模型要落在其中一路上。
+
+    ⚠ 只问「在不在册」，不问「此刻能不能用」：没登录的那一路照样选得中——
+    界面上它是个待登录的选项，选中它再去登录是正常路径，而按「能不能用」拒
+    会让用户在登录页与助手之间来回跳。
+
+    ⚠ 先刷一次目录：读的是快照，不刷的话平台那边新配的一路这里永远认不出，
+    表现是「刚配好的模型选不了」。
+
+    Args: container。
+    """
+    await container.models.refresh()
+    return tuple(one.id for one in container.models.profiles())
+
+
 async def get_model_defaults(
     container: Annotated[Container, Depends(get_container)],
 ) -> ModelDefaults:

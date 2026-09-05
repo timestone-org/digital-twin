@@ -13,6 +13,7 @@
  */
 import { onMounted, onUnmounted, ref, type Ref } from 'vue'
 import type { AssistantModelProfile } from '@dt/contracts'
+import { useToast } from '@dt/ui'
 
 import { createSession } from '@/api/assistant'
 import { newComposeState, type ComposeState } from '@/composables/useAiCompose'
@@ -126,6 +127,10 @@ export function useAiPanel(options: AiPanelOptions): AiPanel {
  * 造「打开面板」这个动作：第一次打开建会话，随后把库里的历史回放进时间线。
  * ⚠ 连点两下不能建两个会话：第二个会拿着一段空历史，而用户看不出
  * 自己在跟哪一个说话。
+ *
+ * ⚠ 建不出会话时**必须说出来**：入口的两个调用方都是 `void ai.open()`，抛出去
+ * 就只剩控制台里一条未处理的 rejection，而界面上是「点了图标没有任何反应」。
+ * 这一类表现查起来最贵——它与「按钮坏了」「权限不够」「服务没部署」长得一样。
  */
 function openerOf(parts: {
   surfaceKind: AiSurface['kind']
@@ -144,6 +149,11 @@ function openerOf(parts: {
         const created = await createSession(parts.surfaceKind, parts.refId())
         parts.sessionId.value = created.id
         adoptRow(parts.choice, created)
+      } catch (caught) {
+        useToast().error(
+          caught instanceof Error ? caught.message : '助手打不开，请稍后重试',
+        )
+        return
       } finally {
         opening = false
       }

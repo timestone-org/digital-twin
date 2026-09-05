@@ -1,9 +1,10 @@
 /**
  * @fileoverview 契约：助手面板的装配那一层。
  *
- * 四条：工作面**挂载时登记、卸载时撤掉**（不撤的话助手仍握着一份指向已经没了
+ * 五条：工作面**挂载时登记、卸载时撤掉**（不撤的话助手仍握着一份指向已经没了
  * 的页面的句柄）；探测失败一律读成「这套部署没有助手」而不是「暂时故障」；
  * 连点两下不许建出两个会话（第二个拿着一段空历史，用户看不出自己在跟哪一个说话）；
+ * 建不出会话时要**说得出一句**（不说的话表现是「点了图标没反应」）；
  * 打开面板要把库里的历史回放出来，且回放失败不挡打开、已有内容不重复灌。
  */
 import { mount } from '@vue/test-utils'
@@ -14,6 +15,7 @@ import type {
   AssistantSession,
   AssistantSessionDetail,
 } from '@dt/contracts'
+import { useToast } from '@dt/ui'
 
 import * as api from '@/api/assistant'
 import { useAiPanel, type AiPanel } from '@/composables/useAiPanel'
@@ -213,10 +215,22 @@ describe('打开面板', () => {
     ctx.wrapper.unmount()
   })
 
-  it('建会话失败时不留下半开的面板', async () => {
-    created.mockRejectedValue(new Error('502'))
+  it('建会话失败时不留下半开的面板，并且说得出一句', async () => {
+    created.mockRejectedValue(new Error('这一路模型不可用'))
+    const toast = useToast()
+    toast.clear()
     const ctx = setup()
-    await expect(ctx.panel.open()).rejects.toThrow()
+
+    await ctx.panel.open()
+
+    // ⚠ 抛出去等于没说：两个调用方都是 `void ai.open()`，异常只会落进控制台，
+    // 而界面上是「点了助手图标没有任何反应」——这一类表现与「按钮坏了」
+    // 「权限不够」「服务没部署」长得一模一样，查起来最贵
+    expect(
+      toast.toasts.value.some((one) =>
+        one.message.includes('这一路模型不可用'),
+      ),
+    ).toBe(true)
     expect(ctx.panel.isOpen.value).toBe(false)
     expect(ctx.panel.sessionId.value).toBeNull()
     ctx.wrapper.unmount()
