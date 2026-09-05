@@ -116,7 +116,8 @@ updated_at  timestamptz not null default now()   # 由 ORM 或触发器维护
 | **加列** | 必须**可空**或带**非 volatile 默认值**。带 volatile 默认（如 `now()`、`gen_random_uuid()`）会重写全表并持有 ACCESS EXCLUSIVE 锁 |
 | **删列** | 两步：先发布不再引用该列的代码 → 下个发布再 `DROP COLUMN` |
 | **改列名** | **禁止**。用「加新列 → 双写 → 回填 → 切读 → 删旧列」四次发布完成 |
-| **改类型** | 同改名。原地 `ALTER TYPE` 会重写全表并锁表 |
+| **改类型** | 同改名。原地 `ALTER TYPE` 会重写全表并锁表。**唯一例外**见下 |
+| **加宽到 `text`** | `varchar(n) → text` 放行：二进制兼容，PG 不重写全表，且旧代码写得进去的值加宽后照样写得进去，滚动发布期间没有坏掉的那一版。迁移里必须同时写 `existing_type=sa.String(n)`——不写的话一个 `integer → text` 长得一模一样，而那一个会重写全表 |
 | **加 NOT NULL** | 三步：`ADD CONSTRAINT ck CHECK (col IS NOT NULL) NOT VALID` → `VALIDATE CONSTRAINT`（只取 SHARE UPDATE EXCLUSIVE 锁）→ `SET NOT NULL` → 删除临时 CHECK |
 | **加唯一约束** | 先 `CREATE UNIQUE INDEX CONCURRENTLY` → 再 `ALTER TABLE ADD CONSTRAINT … USING INDEX` |
 | **加外键** | `ADD CONSTRAINT … NOT VALID` → 稍后 `VALIDATE CONSTRAINT`，避免全表校验期间锁住写入 |

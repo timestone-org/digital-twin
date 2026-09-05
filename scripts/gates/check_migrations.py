@@ -29,6 +29,10 @@ INDEX_ARGS = 2
 MAX_IDENTIFIER = 63
 # 只拿「长得像库对象名」的字面量比长度，别把 SQL 片段与说明文字算进来
 IDENTIFIER_SHAPE = re.compile(r"(?:ix|uq|ck|fk|pk)_[a-z0-9_]+")
+# 唯一放行的改类型：`varchar(n)` 加宽成 `text`。它二进制兼容，PG 不重写全表，
+# 滚动发布期间也没有坏掉的那一版——旧代码写得进去的值，加宽之后照样写得进去
+WIDEN_TO = "Text"
+WIDEN_FROM = ("String", "VARCHAR", "Unicode")
 
 
 def _versions(service: Path) -> list[Path]:
@@ -106,13 +110,53 @@ def check_no_backfill_in_migration() -> list[Violation]:
     return found
 
 
+def _type_name(node: ast.expr | None) -> str | None:
+    """`sa.Text()` / `Text()` 这样的类型构造取出类型名。
+
+    Args: node（关键字实参的值；不是类型构造就给 None）。
+    """
+    if not isinstance(node, ast.Call):
+        return None
+    target = node.func
+    if isinstance(target, ast.Attribute):
+        return target.attr
+    if isinstance(target, ast.Name):
+        return target.id
+    return None
+
+
+def _retypes(call: ast.Call, *, to: str, sources: tuple[str, ...]) -> bool:
+    """这一次改类型是不是「`sources` 里的某个类型 → `to`」。
+
+    ⚠ 两头都要写明：`existing_type` 不写的话，一个 `integer → text` 在 AST 上
+    与加宽长得一模一样，而它是真会重写全表的那一种。
+
+    Args: call（一次 `op.alter_column` 调用）, to（改成什么）,
+        sources（原来是什么）。
+    """
+    given = {keyword.arg: keyword.value for keyword in call.keywords}
+    if _type_name(given.get("type_")) != to:
+        return False
+    return _type_name(given.get("existing_type")) in sources
+
+
 def check_no_rename_or_retype() -> list[Violation]:
-    """改列名与原地改类型都会重写全表并锁表，且滚动发布期间必坏一版代码。"""
+    """改列名与原地改类型都会重写全表并锁表，且滚动发布期间必坏一版代码。
+
+    例外只有一条：`varchar(n)` 加宽成 `text`（`database-standard.md` §5.2）。
+    ⚠ 例外**认函数**：加宽只许写在 `upgrade` 里，它的镜像（`text` 收回
+    `varchar(n)`）只许写在 `downgrade` 里。不认函数的话，同一条例外反着写
+    就是一次真的缩窄，而缩窄会在存量值超长时失败。
+    """
     found: list[Violation] = []
     for path in _all_versions():
         tree = parse(path)
         if tree is None:
             continue
+        forward = _function(tree, "upgrade")
+        backward = _function(tree, "downgrade")
+        widening = _op_calls(forward, "alter_column") if forward else []
+        mirroring = _op_calls(backward, "alter_column") if backward else []
         for call in _op_calls(tree, "alter_column"):
             named = {keyword.arg for keyword in call.keywords}
             if "new_column_name" in named:
@@ -123,12 +167,24 @@ def check_no_rename_or_retype() -> list[Violation]:
                         "走「加新列 → 双写 → 回填 → 切读 → 删旧列」四次发布",
                     )
                 )
-            if "type_" in named:
+            if "type_" not in named:
+                continue
+            allowed = (
+                call in widening
+                and _retypes(call, to=WIDEN_TO, sources=WIDEN_FROM)
+            ) or (
+                call in mirroring
+                and any(
+                    _retypes(call, to=one, sources=(WIDEN_TO,))
+                    for one in WIDEN_FROM
+                )
+            )
+            if not allowed:
                 found.append(
                     Violation(
                         "禁止原地改类型",
                         at(path, call.lineno),
-                        "同改名：加新列再切读",
+                        "同改名：加新列再切读（只有加宽到 text 例外）",
                     )
                 )
     return found
