@@ -1,7 +1,7 @@
 """会话面那几件不连库就能钉住的契约。
 
-入参的闭合集合与长度上限、归档语义、看得见谁的判定，以及列表排序键——最后一条
-错了不会报错，只会让分页静默重复某一行并漏掉另一行。
+入参的闭合集合与长度上限、归档语义、看得见谁的判定、换模型只能换到在册的那几路，
+以及列表排序键——最后一条错了不会报错，只会让分页静默重复某一行并漏掉另一行。
 """
 
 import uuid
@@ -11,6 +11,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from ai_assistant.apps.chat.crud import DEFAULT_ORDER, session_crud
 from ai_assistant.apps.chat.enums import SURFACE_KINDS
+from ai_assistant.apps.chat.errors import UnknownModelProfile
 from ai_assistant.apps.chat.models.session import (
     SURFACE_REF_MAX_LENGTH,
     TITLE_MAX_LENGTH,
@@ -21,7 +22,10 @@ from ai_assistant.apps.chat.schemas import (
     SessionUpdateIn,
 )
 from ai_assistant.apps.chat.schemas import session as session_schemas
-from ai_assistant.apps.chat.services.session_service import visible_owner
+from ai_assistant.apps.chat.services.session_service import (
+    ensure_known_profile,
+    visible_owner,
+)
 from lib.auth import CallerContext
 from lib.utils.timeutils import utcnow
 
@@ -131,6 +135,38 @@ def test_both_filters_narrow_the_list_query() -> None:
     rendered = str(statement)
     assert "chat_sessions.surface_kind = " in rendered
     assert "chat_sessions.is_archived = true" in rendered
+
+
+@pytest.mark.parametrize(
+    "chosen",
+    [
+        # 档位名就是那一路供应商的 id（ADR-0040）：uuid 形态，不是字面量
+        "01a0649b-760e-769f-8ea2-b81c379730dc",
+        # 环境变量配出来的那一路仍是字面量，两种形态都要收得下
+        "default",
+        # 只改标题的 PATCH 不带这一格，那不是「换到一个不认识的档位」
+        None,
+    ],
+)
+def test_a_route_on_the_register_or_no_switch_at_all_goes_through(
+    chosen: str | None,
+) -> None:
+    known = ("01a0649b-760e-769f-8ea2-b81c379730dc", "default")
+    # 放行就是「什么都不做」：既不抛，也不改写成别的一路
+    assert ensure_known_profile(chosen, known) is None
+
+
+def test_a_route_that_is_not_on_the_register_is_refused() -> None:
+    # 放行的话它落进会话行，而取模型那一层认不出就退回第一路——界面显示
+    # 「用的是订阅账号」而实际走的是按量端点，只有账单看得出来
+    with pytest.raises(UnknownModelProfile):
+        ensure_known_profile("没这一路", ("default",))
+
+
+def test_an_empty_register_refuses_every_switch() -> None:
+    # 一路都没配时不能「因为没得比就放行」
+    with pytest.raises(UnknownModelProfile):
+        ensure_known_profile("default", ())
 
 
 def test_timestamps_leave_as_utc_with_a_trailing_zulu() -> None:

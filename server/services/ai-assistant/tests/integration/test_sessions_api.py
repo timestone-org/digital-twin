@@ -331,6 +331,10 @@ async def test_an_unknown_model_profile_is_rejected(
         f"{SESSIONS_URL}/{session_id}", json={"model_profile": "没这一路"}
     )
     assert rejected.status_code == 400
+    # ⚠ 连 code 一起钉：档位的闭合集合撤掉之后，这一拒是服务层问注册表问出来
+    # 的（42202），不再是 schema 的通用校验（40001）。只钉 400 的话，哪天
+    # 校验又漂回 schema 也照样绿，而那正是这次要修的那个漂移
+    assert rejected.json()["code"] == 42202
 
 
 def _default_route(capability: dict[str, object]) -> tuple[object, object]:

@@ -136,6 +136,18 @@ async def create_session(
     return SessionOut.model_validate(chat_session)
 
 
+def ensure_known_profile(chosen: str | None, known: Collection[str]) -> None:
+    """换模型只能换到此刻在册的那几路上。`None` 表示这次不换。
+
+    ⚠ 认不出的名字放行的话它会落进会话行，而取模型那一层认不出就退回第一路
+    ——界面上显示「用的是订阅账号」而实际走的是按量端点，账单上才看得出来。
+
+    Args: chosen（这次要换到哪一路）, known（此刻在册的那几路）。
+    """
+    if chosen is not None and chosen not in known:
+        raise UnknownModelProfile("这一路模型不可用")
+
+
 async def update_session(
     session: AsyncSession,
     *,
@@ -154,9 +166,7 @@ async def update_session(
     chat_session = await require_session(
         session, chat_session_id=chat_session_id, caller=caller
     )
-    chosen = payload.model_profile
-    if chosen is not None and chosen not in known_profiles:
-        raise UnknownModelProfile("这一路模型不可用")
+    ensure_known_profile(payload.model_profile, known_profiles)
     changes = payload.model_dump(exclude_unset=True)
     if not changes:
         return SessionOut.model_validate(chat_session)
