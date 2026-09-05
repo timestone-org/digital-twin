@@ -5,7 +5,7 @@ from typing import Annotated, Any, ClassVar
 
 from pydantic import AfterValidator, Field, StringConstraints, WithJsonSchema
 
-from ai_assistant.apps.chat.enums import MODEL_PROFILES, SURFACE_KINDS
+from ai_assistant.apps.chat.enums import SURFACE_KINDS
 from ai_assistant.apps.chat.schemas.common import (
     InputModel,
     OutputModel,
@@ -18,6 +18,9 @@ from ai_assistant.settings import REASONING_EFFORTS
 # 而报出来的是一句 22001，看不出是哪个字段。由单元用例钉住不许漂
 TITLE_MAX_LENGTH = 200
 SURFACE_REF_MAX_LENGTH = 128
+# 档位名的长度只是一道防荒唐的闸，不是取值范围：档位就是供应商（ADR-0040），
+# 认不认得这一路要问此刻的注册表，而那是部署期的数据，不是代码里的集合
+PROFILE_MAX_LENGTH = 128
 
 
 def _known_surface_kind(value: str) -> str:
@@ -27,19 +30,6 @@ def _known_surface_kind(value: str) -> str:
     """
     if value not in SURFACE_KINDS:
         raise ValueError(f"未登记的工作面：{value}")
-    return value
-
-
-def _known_profile(value: str) -> str:
-    """未登记的模型档位一律拒。
-
-    ⚠ 放行的话它会落进会话行，而取模型那一层认不出就退回默认——
-    界面上显示「用的是订阅账号」而实际走的是按量端点，账单上才看得出来。
-
-    Args: value。
-    """
-    if value not in MODEL_PROFILES:
-        raise ValueError(f"未登记的模型档位：{value}")
     return value
 
 
@@ -134,10 +124,15 @@ class SessionDetailOut(SessionOut):
     plan_json: dict[str, Any] | None = None
 
 
+# ⚠ 这里**不摊取值**，与工作面那一条相反：档位就是那一路供应商，而供应商是
+# 库里的行，随部署配置增减。摊进 openapi 的话，前端生成的类型会把「这套部署
+# 配了哪几路」钉死成编译期的字面量集合，改一次配置就得重新生成一次类型。
+# 认不认得这一路由服务层问注册表（`session_service.update_session`）
 ModelProfileName = Annotated[
     str,
-    AfterValidator(_known_profile),
-    WithJsonSchema({"type": "string", "enum": list(MODEL_PROFILES)}),
+    StringConstraints(
+        strip_whitespace=True, min_length=1, max_length=PROFILE_MAX_LENGTH
+    ),
 ]
 ReasoningEffort = Annotated[
     str,

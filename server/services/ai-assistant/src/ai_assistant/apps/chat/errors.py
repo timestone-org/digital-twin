@@ -15,3 +15,14 @@ class SessionNotFound(AppError):
 
     code = 42201
     http_status = 404
+
+
+class UnknownModelProfile(AppError):
+    """这套部署此刻没有这一路模型。
+
+    ⚠ 放行的话它会落进会话行，而取模型那一层认不出就退回第一路——界面上
+    显示「用的是订阅账号」而实际走的是按量端点，账单上才看得出来。
+    """
+
+    code = 42202
+    http_status = 400

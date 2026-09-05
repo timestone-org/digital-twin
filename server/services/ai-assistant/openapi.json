@@ -859,10 +859,8 @@
           "model_profile": {
             "anyOf": [
               {
-                "enum": [
-                  "default",
-                  "codex"
-                ],
+                "maxLength": 128,
+                "minLength": 1,
                 "type": "string"
               },
               {
@@ -1470,7 +1468,7 @@
         ]
       },
       "patch": {
-        "description": "改标题或归档。归档只是不再默认列出，历史一条都不删。\n\nArgs: session_id, payload, session, caller。",
+        "description": "改标题、归档，或换一路模型。归档只是不再默认列出，历史一条都不删。\n\nArgs: session_id, payload, session, caller, profiles。",
         "operationId": "update_session_api_v1_assistant_sessions__session_id__patch",
         "parameters": [
           {

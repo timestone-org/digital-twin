@@ -5,13 +5,13 @@
 """
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_assistant.apps.chat.crud import session_crud
-from ai_assistant.apps.chat.errors import SessionNotFound
+from ai_assistant.apps.chat.errors import SessionNotFound, UnknownModelProfile
 from ai_assistant.apps.chat.models import ChatMessage, ChatSession, ChatStep
 from ai_assistant.apps.chat.schemas import (
     MessageOut,
@@ -142,16 +142,21 @@ async def update_session(
     chat_session_id: uuid.UUID,
     caller: CallerContext,
     payload: SessionUpdateIn,
+    known_profiles: Collection[str],
 ) -> SessionOut:
-    """改标题或归档。缺省的字段不动。
+    """改标题、归档，或换一路模型。缺省的字段不动。
 
     ⚠ 一个字段都没给时不推进 `row_version`：推了的话 `updated_at` 跟着走，
     一次什么都没改的 PATCH 会把这条会话顶到列表最前面。
-    Args: session, chat_session_id, caller, payload。
+    Args: session, chat_session_id, caller, payload, known_profiles
+        （此刻在册的那几路；换模型要落在其中一路上）。
     """
     chat_session = await require_session(
         session, chat_session_id=chat_session_id, caller=caller
     )
+    chosen = payload.model_profile
+    if chosen is not None and chosen not in known_profiles:
+        raise UnknownModelProfile("这一路模型不可用")
     changes = payload.model_dump(exclude_unset=True)
     if not changes:
         return SessionOut.model_validate(chat_session)

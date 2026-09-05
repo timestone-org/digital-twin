@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ai_assistant.apps.chat.catalog import ASSISTANT_USE
 from ai_assistant.apps.chat.deps import (
     WriteContext,
+    get_known_profiles,
     get_model_defaults,
     get_write_context,
 )
@@ -53,6 +54,8 @@ def get_filters(
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 # 新会话该盖上的那一路模型：与能力端点报的 `default_model_id` 同一份判定
 DefaultsDep = Annotated[ModelDefaults, Depends(get_model_defaults)]
+# 此刻在册的那几路：换模型只能换到其中一路上
+ProfilesDep = Annotated[tuple[str, ...], Depends(get_known_profiles)]
 PageDep = Annotated[PageParams, Depends(page_params)]
 UseDep = Annotated[CallerContext, Depends(require(ASSISTANT_USE))]
 WriteDep = Annotated[WriteContext, Depends(get_write_context)]
@@ -133,16 +136,18 @@ async def update_session(
     payload: SessionUpdateIn,
     session: SessionDep,
     caller: UseDep,
+    profiles: ProfilesDep,
 ) -> ApiResponse[SessionOut]:
-    """改标题或归档。归档只是不再默认列出，历史一条都不删。
+    """改标题、归档，或换一路模型。归档只是不再默认列出，历史一条都不删。
 
-    Args: session_id, payload, session, caller。
+    Args: session_id, payload, session, caller, profiles。
     """
     updated = await session_service.update_session(
         session,
         chat_session_id=session_id,
         caller=caller,
         payload=payload,
+        known_profiles=profiles,
     )
     return ok(updated, message="会话已更新")
 

@@ -10,6 +10,10 @@ from collections.abc import Callable
 import httpx
 import pytest
 
+from ai_assistant.apps.chat.deps import get_known_profiles, get_model_defaults
+from ai_assistant.apps.chat.services.model_profiles import ModelDefaults
+from integration.conftest import DbStack
+
 pytestmark = pytest.mark.requires_postgres
 
 # 身份头工厂的形状。⚠ 不从 conftest import：workspace 里每个服务都有一个顶层
@@ -20,6 +24,9 @@ SESSIONS_URL = "/api/v1/assistant/sessions"
 CAPABILITIES_URL = "/api/v1/assistant/capabilities"
 ASSISTANT_USE = "assistant:use"
 DEFAULT_SURFACE = "dashboard-editor"
+# 一路供应商形态的档位名。⚠ 钉的是**形态**不是某一路：档位即供应商
+# （ADR-0040），供应商是库里的行，故档位名是 36 字符的 uuid
+PROVIDER_PROFILE = ("01a0649b-760e-769f-8ea2-b81c379730dc",)
 
 
 def _data(response: httpx.Response) -> dict[str, object]:
@@ -266,31 +273,55 @@ async def test_a_created_session_answers_with_its_location(
 
 
 async def test_a_session_remembers_which_model_it_was_switched_to(
-    db_client: httpx.AsyncClient,
+    db_stack: DbStack,
 ) -> None:
-    """换模型是会话级的选择。
+    """换模型是会话级的选择，而档位名就是那一路供应商的 id。
 
     ⚠ 存在会话上而不是每次请求带：工具回填那几次推进是循环自己发的，
     那时前端手上没有用户的选择，只有落在会话上才带得过去。
+    ⚠ 档位名钉成 uuid 形态：档位即供应商（ADR-0040），而供应商是库里的行。
+    照老口径按 varchar(32) 存的话，这一条在写库那一下炸成 22001。
     """
-    created = await db_client.post(
-        SESSIONS_URL, json={"surface_kind": "dashboard-editor"}
+    db_stack.app.dependency_overrides[get_known_profiles] = (
+        lambda: PROVIDER_PROFILE
+    )
+    created = await db_stack.client.post(
+        SESSIONS_URL, json={"surface_kind": DEFAULT_SURFACE}
     )
     session_id = created.json()["data"]["id"]
-    patched = await db_client.patch(
+    patched = await db_stack.client.patch(
         f"{SESSIONS_URL}/{session_id}",
-        json={"model_profile": "codex", "reasoning_effort": "high"},
+        json={"model_profile": PROVIDER_PROFILE[0], "reasoning_effort": "high"},
     )
     assert patched.status_code == 200
     body = patched.json()["data"]
-    assert body["model_profile"] == "codex"
+    assert body["model_profile"] == PROVIDER_PROFILE[0]
     assert body["reasoning_effort"] == "high"
+
+
+async def test_a_new_session_holds_a_provider_shaped_profile_id(
+    db_stack: DbStack,
+) -> None:
+    """建行时盖上的那一路也是 uuid 形态，且写得进去。
+
+    ⚠ 这一条与上一条各守一处：建会话是**每次打开助手**都走的路，它写不进去
+    的表现是「点了助手图标没反应」——前端把建会话的失败吞了，界面上没有
+    任何迹象，而库里那句 22001 只在服务端日志里。
+    """
+    db_stack.app.dependency_overrides[get_model_defaults] = lambda: (
+        ModelDefaults(profile=PROVIDER_PROFILE[0], effort="medium")
+    )
+    created = await db_stack.client.post(
+        SESSIONS_URL, json={"surface_kind": DEFAULT_SURFACE}
+    )
+    assert created.status_code == 201
+    assert _data(created)["model_profile"] == PROVIDER_PROFILE[0]
 
 
 async def test_an_unknown_model_profile_is_rejected(
     db_client: httpx.AsyncClient,
 ) -> None:
-    # 放行的话它会落进会话行，而取模型那一层认不出就退回默认——
+    # 放行的话它会落进会话行，而取模型那一层认不出就退回第一路——
     # 界面上显示「用的是订阅账号」而实际走的是按量端点，账单上才看得出来
     created = await db_client.post(
         SESSIONS_URL, json={"surface_kind": "dashboard-editor"}

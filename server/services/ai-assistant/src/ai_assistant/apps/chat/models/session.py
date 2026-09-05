@@ -17,7 +17,6 @@ SURFACE_KIND_MAX_LENGTH = 32
 # ⚠ 存字符串不存 UUID：不同工作面指向的标识形态不同，收成 UUID 就把
 # 「将来会有非 UUID 标识的工作面」这件事挡死在类型上
 SURFACE_REF_MAX_LENGTH = 128
-PROFILE_MAX_LENGTH = 32
 EFFORT_MAX_LENGTH = 16
 
 
@@ -65,9 +64,10 @@ class ChatSession(UuidPrimaryKeyMixin, TimestampMixin, Base):
     # 工具回填那几次推进是循环自己发的，那时前端手上没有用户的选择。
     # ⚠ 建行时就盖上此刻的默认，不留 NULL：留着的话推进那一层退按量，
     # 而界面显示的是能力面报的默认，两边不一致时只有账单看得出来
-    model_profile: Mapped[str | None] = mapped_column(
-        String(PROFILE_MAX_LENGTH), nullable=True
-    )
+    # ⚠ `text` 而不是定长：档位名就是那一路供应商的 id（ADR-0040），而供应商
+    # 是库里的行，id 是 36 字符的 uuid——按老口径的 varchar(32) 存，表现是
+    # 每一条新会话都写不进去，而界面上只是「点了助手没反应」
+    model_profile: Mapped[str | None] = mapped_column(Text, nullable=True)
     reasoning_effort: Mapped[str | None] = mapped_column(
         String(EFFORT_MAX_LENGTH), nullable=True
     )
