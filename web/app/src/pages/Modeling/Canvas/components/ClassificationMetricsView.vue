@@ -91,6 +91,9 @@ const shares = computed<BarListItem[]>(() =>
 
 const SHARE_LABELS: readonly [string, string] = ['真实占比', '预测占比']
 
+const MATRIX_CAPTION =
+  '行是真实类别、列是判成的类别；对角格越深、这一类召回率越高，错格越深、错到那一格的行数越多。数的是这一次打分真判出来的那份结果，不是换个阈值之后的假设'
+
 /** 测试集一行都没有时四个指标与矩阵一起没有，这不是「模型很差」。 */
 const isEmptyTest = computed(
   () => stats.value.issue === '' && stats.value.total === 0,
@@ -122,10 +125,12 @@ const positiveText = computed(
       标徽标。
     </DtNotice>
     <div class="dt-ml-clf__stack">
+      <!-- ⚠ 一屏上可能有两张矩阵：概率侧的滑杆会另摆一张随阈值走的。这一句
+           把这一张钉在打分结果上，且它在多分类（没有阈值可言）上同样为真 -->
       <MatrixTable
         :labels="props.preview.labels"
         :matrix="props.preview.matrix"
-        caption="行是真实类别、列是判成的类别；对角格越深、这一类召回率越高，错格越深、错到那一格的行数越多"
+        :caption="MATRIX_CAPTION"
       />
       <BarList
         v-if="hasClasses"

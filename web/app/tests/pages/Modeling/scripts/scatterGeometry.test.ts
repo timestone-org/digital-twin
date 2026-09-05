@@ -1,6 +1,6 @@
 /**
- * @fileoverview 契约：散点四态的画幅算料——抽样、两轴同尺、零线与 ±σ 带、
- * 落在数据之外的参考线、以及图下那行结论。
+ * @fileoverview 契约：散点五态的画幅算料——抽样、两轴同尺、零线与 ±σ 带、
+ * 落在数据之外的参考线、比率曲线的定轴与空心点、以及图下那行结论。
  *
  * ⚠ 退化分支（空序列 / 全等值 / 全零 / 单点 / 负值 / 超上限）在这里钉：
  * 挂载测试量不出一个点的坐标，只有纯函数量得出来。
@@ -400,5 +400,126 @@ describe('散点画幅：刻度', () => {
       expect(tick.at).toBeGreaterThanOrEqual(TOP)
       expect(tick.at).toBeLessThanOrEqual(BASELINE)
     }
+  })
+})
+
+describe('散点画幅：比率曲线', () => {
+  const curve: [number, number][] = [
+    [0, 0],
+    [0.2, 0.5],
+  ]
+
+  // ⚠ 按数据定界会让「假正率只到 0.2」的那张图铺满整幅，与旁边那张不同尺
+  it('两轴钉死在 0–1，不按数据的极值定界', () => {
+    const view = scatterGeometry(ask({ mode: 'curve', series: one(curve) }))
+
+    expect(view.xTicks.map((tick) => tick.text)).toEqual([
+      '0',
+      '0.2',
+      '0.4',
+      '0.6',
+      '0.8',
+      '1',
+    ])
+    expect(view.yTicks.map((tick) => tick.text)).toEqual(view.xTicks.map((t) => t.text))
+  })
+
+  it('画幅比另外四态高：两轴都是 0–1，横长纵短会把曲线压扁', () => {
+    const flat = scatterGeometry(ask({ mode: 'series', series: one(curve) }))
+    const tall = scatterGeometry(ask({ mode: 'curve', series: one(curve) }))
+
+    expect(flat.viewBox).toBe('0 0 360 182')
+    expect(tall.viewBox).toBe('0 0 360 240')
+    expect(tall.plot.baseline).toBe(206)
+  })
+
+  it('要对角线才画：ROC 与校准要，PR 的基准是另一条横线', () => {
+    const bare = scatterGeometry(ask({ mode: 'curve', series: one(curve) }))
+    const asked = scatterGeometry(
+      ask({ mode: 'curve', series: one(curve), diagonal: true }),
+    )
+
+    expect(bare.diagonal).toBeNull()
+    expect(asked.diagonal).toEqual({
+      x1: LEFT,
+      y1: 206,
+      x2: RIGHT,
+      y2: TOP,
+    })
+  })
+
+  it('图下那行结论写明两轴的量程', () => {
+    const view = scatterGeometry(
+      ask({ mode: 'curve', series: one(curve), diagonal: true }),
+    )
+
+    expect(view.summary).toBe('共 2 个点；两轴都是 0 ~ 1 的比率，对角线是基准')
+  })
+})
+
+describe('散点画幅：空心点', () => {
+  const points: [number, number][] = [
+    [0.1, 0.2],
+    [0.5, 0.6],
+    [0.9, 0.9],
+  ]
+
+  it('空心那几个单独一条路径，实心的那几个在另一条', () => {
+    const view = scatterGeometry(
+      ask({
+        mode: 'curve',
+        series: [{ name: '校准', points, hollow: [false, true, false] }],
+      }),
+    )
+    const [drawn] = view.series
+
+    expect(drawn?.dotsPath.match(/M/g)).toHaveLength(2)
+    expect(drawn?.hollowPath.match(/M/g)).toHaveLength(1)
+  })
+
+  it('没给空心表时一个空心点都没有', () => {
+    const view = scatterGeometry(ask({ mode: 'curve', series: one(points) }))
+
+    expect(view.series[0]?.hollowPath).toBe('')
+  })
+
+  // ⚠ 丢非有限值与抽样都按点走：两个数组分开筛，空心就会落到别的点上，而屏幕上
+  // 看着完全正常
+  it('中间那个点是坏值被丢掉后，空心仍跟着原来那个点走', () => {
+    const view = scatterGeometry(
+      ask({
+        mode: 'curve',
+        series: [
+          {
+            name: '校准',
+            points: [
+              [0.1, 0.2],
+              [Number.NaN, 0.5],
+              [0.9, 0.9],
+            ],
+            hollow: [false, false, true],
+          },
+        ],
+      }),
+    )
+    const [drawn] = view.series
+    const hollowLeft = Number(/M([\d.]+),/.exec(drawn?.hollowPath ?? '')?.[1])
+
+    expect(drawn?.dotsPath.match(/M/g)).toHaveLength(1)
+    expect(hollowLeft).toBeGreaterThan(LEFT + (RIGHT - LEFT) * 0.85)
+  })
+
+  it('只画线的那一路不画空心点', () => {
+    const view = scatterGeometry(
+      ask({
+        mode: 'curve',
+        series: [
+          { name: '校准', points, hollow: [true, true, true], draw: 'line' },
+        ],
+      }),
+    )
+
+    expect(view.series[0]?.hollowPath).toBe('')
+    expect(view.series[0]?.linePoints).not.toBe('')
   })
 })

@@ -380,3 +380,71 @@ function pointsOf(raw: unknown): [number, number][] {
   }
   return kept
 }
+
+/**
+ * 概率侧那四块，按逐项带的键认出来。
+ *
+ * ⚠ 认键不认标题：标题是给人读的一句话，改一个字就换一张画法的话，这条接线
+ * 早晚会哑掉，而哑掉的样子是曲线退回成一排横条——不报错也不白屏。
+ */
+export const CURVE_KINDS = ['roc', 'pr', 'calibration', 'grid'] as const
+
+export type CurveKind = (typeof CURVE_KINDS)[number]
+
+/** 四块各认哪两个键。⚠ 与后端 `evalcurves.py` 的四个 `*_items` 逐字对齐。 */
+const CURVE_KEYS: readonly (readonly [CurveKind, readonly string[]])[] = [
+  ['roc', ['fpr', 'tpr']],
+  ['pr', ['recall', 'precision']],
+  ['calibration', ['predicted', 'actual']],
+  ['grid', ['tp', 'fn']],
+]
+
+/** 概率侧一项上那些键，四块共用一副读取器。缺的一律 null，不折成 0。 */
+export interface ProbabilityItem {
+  name: string
+  /** ROC 的第一个点是「全判负类」那个锚点，它没有阈值。 */
+  threshold: number | null
+  fpr: number | null
+  tpr: number | null
+  recall: number | null
+  precision: number | null
+  predicted: number | null
+  actual: number | null
+  count: number | null
+  /** 这一箱里不足十行：点画空心，别照它下结论。 */
+  isSparse: boolean
+  truePositive: number | null
+  falsePositive: number | null
+  trueNegative: number | null
+  falseNegative: number | null
+}
+
+/** 这一块是不是概率侧那四块之一；不是就给 null，交回原来的横条画法。 */
+export function curveKindOf(payload: Item): CurveKind | null {
+  const [first] = asItems(payload['items'])
+  if (first === undefined) return null
+  for (const [kind, keys] of CURVE_KEYS) {
+    if (keys.every((key) => key in first)) return kind
+  }
+  return null
+}
+
+/** 概率侧一块的逐项。Args: payload。 */
+export function probabilityItemsOf(payload: Item): ProbabilityItem[] {
+  return asItems(payload['items']).map((item) => ({
+    name: asText(item['name']),
+    threshold: asNumber(item['threshold']),
+    fpr: asNumber(item['fpr']),
+    tpr: asNumber(item['tpr']),
+    recall: asNumber(item['recall']),
+    precision: asNumber(item['precision']),
+    predicted: asNumber(item['predicted']),
+    actual: asNumber(item['actual']),
+    count: asNumber(item['count']),
+    isSparse: item['is_sparse'] === true,
+    truePositive: asNumber(item['tp']),
+    falsePositive: asNumber(item['fp']),
+    trueNegative: asNumber(item['tn']),
+    falseNegative: asNumber(item['fn']),
+  }))
+}

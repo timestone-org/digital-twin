@@ -39,6 +39,15 @@ describe('派发', () => {
     expect(wrapper.find('.dt-ml-regress').exists()).toBe(false)
   })
 
+  // ⚠ 概率侧的阈值滑杆会在同一屏上另摆一张随阈值走的矩阵：两张长得一模一样，
+  // 不写清哪一张是打分结果，读者会把假设当成实得
+  it('这一张矩阵写明数的是打分真判出来的那份结果', () => {
+    const text = screen(CLASSIFY).find('.dt-ml-matrix__caption').text()
+
+    expect(text).toContain('这一次打分真判出来的那份结果')
+    expect(text).toContain('不是换个阈值之后的假设')
+  })
+
   it('有真值预测对就画散点那一屏', () => {
     const wrapper = screen({
       task: 'regression',

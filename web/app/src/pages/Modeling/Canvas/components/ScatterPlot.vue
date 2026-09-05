@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
- * @fileoverview 散点四态：真值对预测（pairs）、残差诊断（residual）、按行序或
- * 时间的序列（series）、正态 QQ。九个算子（两种回归、树、残差分析、回归评估、
- * 重采样、滞后、滚动、主成分）共用这一张画法，规格 §7「同一个语义永远同一个外形」。
+ * @fileoverview 散点五态：真值对预测（pairs）、残差诊断（residual）、按行序或
+ * 时间的序列（series）、正态 QQ、比率曲线（curve）。十个算子（两种回归、树、
+ * 残差分析、两种评估、重采样、滞后、滚动、主成分）共用这一张画法，规格 §7
+ * 「同一个语义永远同一个外形」。
  *
  * ⚠ 颜色不作唯一编码：「之前」那一路除了灰还空心，多路序列除了色相还有各自的
  * 标记形状与线型，参考线与阈值线的线型也不同。
@@ -30,6 +31,8 @@ const props = withDefaults(
     band?: ScatterBand | null
     isTruncated?: boolean
     note?: string
+    /** curve 态画不画那条对角线；ROC 与校准要，PR 的基准是另一条横线。 */
+    diagonal?: boolean
   }>(),
   {
     mode: 'pairs',
@@ -40,6 +43,7 @@ const props = withDefaults(
     band: null,
     isTruncated: false,
     note: '',
+    diagonal: false,
   },
 )
 
@@ -49,6 +53,7 @@ const view = computed(() =>
     series: props.series,
     rules: props.rules,
     band: props.band,
+    diagonal: props.diagonal,
   }),
 )
 </script>
@@ -121,6 +126,11 @@ const view = computed(() =>
             class="dt-ml-scatter__dots"
             :class="`dt-ml-scatter__dots--${one.tone}`"
             :d="one.dotsPath"
+          />
+          <path
+            v-if="one.hollowPath"
+            class="dt-ml-scatter__hollow"
+            :d="one.hollowPath"
           />
         </template>
       </g>
@@ -269,6 +279,14 @@ const view = computed(() =>
       stroke-width: 1.8;
       stroke-dasharray: 8 4;
     }
+  }
+
+  // 空心那几个走文字色描边、不跟着序列色：它们说的是「这一档样本不足，别照它
+  // 下结论」，跟着色轮走反倒像是另一路数据
+  &__hollow {
+    fill: none;
+    stroke: var(--text-secondary);
+    stroke-width: 1;
   }
 
   // ⚠ 系列色顺序：主 → 警示 → 危险 → 成功 → 次强调 → 静默。第二档不能是
