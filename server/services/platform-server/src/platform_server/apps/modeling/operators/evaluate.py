@@ -4,6 +4,8 @@
 无定义情形，显示成 0 读起来像「模型很差」，而实际是「这个数算不出来」。
 """
 
+from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import Field
@@ -15,6 +17,17 @@ from platform_server.apps.modeling.operators.base import (
     OperatorConfig,
     OperatorError,
     PortSpec,
+)
+from platform_server.apps.modeling.operators.evalblocks import (
+    Classified,
+    classification_blocks,
+    regression_blocks,
+)
+from platform_server.apps.modeling.operators.evalstats import (
+    Scored,
+    deviation_of,
+    even_sample,
+    scored_of,
 )
 from platform_server.apps.modeling.operators.frame import (
     Frame,
@@ -29,6 +42,7 @@ from platform_server.apps.modeling.operators.model import (
 )
 from platform_server.apps.modeling.operators.payloads import MetricsPayload
 from platform_server.apps.modeling.operators.registry import register_operator
+from platform_server.apps.modeling.operators.reporting import ReportBlock
 
 # 散点图默认带回多少个点。再多前端也画不出信息，只会把响应撑大
 DEFAULT_SCATTER_POINTS = 500
@@ -97,6 +111,10 @@ class RegressionMetrics(OperatorBase):
             raise OperatorError("回归评估拿到了不匹配的参数")
         return config
 
+    def __init__(self, config: OperatorConfig) -> None:
+        super().__init__(config)
+        self._seen: _Evaluated | None = None
+
     def run(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """算指标。
 
@@ -105,22 +123,44 @@ class RegressionMetrics(OperatorBase):
         config = self._config
         scored = frame_input(inputs, "scored")
         truth, predicted = scored_columns_of(scored)
-        residuals = [
-            actual - guess
-            for actual, guess in zip(truth, predicted, strict=True)
-        ]
+        seen = scored_of(truth, predicted, scored.index)
+        metrics = _metrics_of(truth, seen.residuals)
+        self._seen = _Evaluated(scored=seen, metrics=metrics)
         limit = config.max_scatter_points
         return {
             "metrics": MetricsPayload(
                 task=TASK_REGRESSION,
-                metrics=_metrics_of(truth, residuals),
-                pairs=tuple(zip(truth, predicted, strict=True))[:limit],
+                metrics=metrics,
+                pairs=even_sample(
+                    tuple(zip(truth, predicted, strict=True)), limit
+                ),
                 is_truncated=len(truth) > limit,
                 residual_bins=residual_histogram(
-                    residuals, config.residual_bins
+                    list(seen.residuals), config.residual_bins
                 ),
             )
         }
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """抽样口径、五个指标、残差分布、分位数、误差最大的那几行。"""
+        seen = self._seen
+        if seen is None:
+            return ()
+        config = self._config
+        return regression_blocks(
+            seen.scored,
+            seen.metrics,
+            config.residual_bins,
+            config.max_scatter_points,
+        )
+
+
+@dataclass(frozen=True)
+class _Evaluated:
+    """一次回归评估实际看到了什么，`report()` 照它讲。"""
+
+    scored: Scored
+    metrics: dict[str, float | None]
 
 
 def scored_columns_of(scored: Frame) -> tuple[list[float], list[float]]:
@@ -141,10 +181,13 @@ def scored_columns_of(scored: Frame) -> tuple[list[float], list[float]]:
 
 
 def _metrics_of(
-    truth: list[float], residuals: list[float]
+    truth: list[float], residuals: Sequence[float]
 ) -> dict[str, float | None]:
-    """五个回归指标。R² 与 MAPE 在无定义时给 None，不给一个假的 0。
+    """五个回归指标，外加同一份残差上的偏均值与离散度。
 
+    ⚠ R² 与 MAPE 在无定义时给 None，不给一个假的 0。
+    ⚠ 偏均值与离散度一并给：残差直方图上那条同均值同方差的正态参考曲线要这两个
+    数，缺了它就只剩一排不知道该不该对称的柱子。
     Args: truth, residuals。
     """
     count = len(truth)
@@ -164,11 +207,13 @@ def _metrics_of(
             None if not relatives else sum(relatives) / len(relatives) * 100.0
         ),
         "max_error": max(abs(value) for value in residuals),
+        "residual_mean": sum(residuals) / count,
+        "residual_std": deviation_of(residuals),
     }
 
 
 def residual_histogram(
-    residuals: list[float], bins: int
+    residuals: Sequence[float], bins: int
 ) -> tuple[tuple[float, float, int], ...]:
     """残差分布。全部残差相同时退化成单个桶。
 
@@ -231,6 +276,10 @@ class ClassificationMetrics(OperatorBase):
             raise OperatorError("分类评估拿到了不匹配的参数")
         return self.config
 
+    def __init__(self, config: OperatorConfig) -> None:
+        super().__init__(config)
+        self._seen: Classified | None = None
+
     def run(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """算四个指标与一张混淆矩阵。
 
@@ -239,15 +288,33 @@ class ClassificationMetrics(OperatorBase):
         scored = frame_input(inputs, "scored")
         truth, predicted = _scored_pairs(scored)
         labels = sorted({*truth, *predicted})
-        positive = self._config.positive_label
+        texts = tuple(_label_text(item) for item in labels)
+        matrix = _confusion(truth, predicted, labels)
+        positive = _label_text(self._config.positive_label)
+        metrics = _classification_scores(
+            truth, predicted, self._config.positive_label
+        )
+        self._seen = Classified(
+            metrics=metrics,
+            labels=texts,
+            matrix=matrix,
+            positive_text=positive,
+            rows=len(truth),
+        )
         return {
             "metrics": MetricsPayload(
                 task=TASK_CLASSIFICATION,
-                metrics=_classification_scores(truth, predicted, positive),
-                labels=tuple(_label_text(item) for item in labels),
-                matrix=_confusion(truth, predicted, labels),
+                metrics=metrics,
+                labels=texts,
+                matrix=matrix,
+                positive_label_text=positive,
             )
         }
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """判对判错的账、四个指标、真实与预测的类别分布。"""
+        seen = self._seen
+        return () if seen is None else classification_blocks(seen)
 
 
 def _scored_pairs(scored: Frame) -> tuple[list[float], list[float]]:
@@ -257,6 +324,8 @@ def _scored_pairs(scored: Frame) -> tuple[list[float], list[float]]:
     """
     truth = numbers_of(scored, SCORED_TRUE)
     predicted = numbers_of(scored, SCORED_PRED)
+    if not truth:
+        raise OperatorError("测试集一行都没有，算不出指标")
     if any(value is None for value in (*truth, *predicted)):
         raise OperatorError("打分结果里有空值，算不出分类指标")
     return (

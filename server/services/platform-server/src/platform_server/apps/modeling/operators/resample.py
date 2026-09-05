@@ -5,7 +5,7 @@
 """
 
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 from pydantic import Field
@@ -25,6 +25,28 @@ from platform_server.apps.modeling.operators.frame import (
     frame_input,
 )
 from platform_server.apps.modeling.operators.registry import register_operator
+from platform_server.apps.modeling.operators.reporting import (
+    TIER_LARGE,
+    TIER_SCALAR,
+    TIER_SMALL,
+    BlockAt,
+    Item,
+    ReportBlock,
+    RowCounts,
+    TimeAxis,
+    axis_block,
+    bins_block,
+    rows_block,
+)
+from platform_server.apps.modeling.operators.steps import (
+    Stage,
+    axis_span,
+    column_bins,
+    funnel_of,
+    moment_text,
+    ratio_of,
+    spread_of,
+)
 
 # 时间桶的宽度，毫秒。⚠ 只给闭合的几档，不收「随便一个毫秒数」：那会让用户配出
 # 与台账对不上的桶宽，而两边各自看着都对
@@ -56,6 +78,15 @@ AGG_FUNCS: tuple[str, ...] = (
 
 # 一分钟的毫秒数，把时区偏移折成毫秒用
 _MINUTE_MS = 60_000
+
+# 这个算子只有一路输出，讲解全挂在它上面
+PORT = "frame"
+# 每桶行数那张图上，警示线画在「一桶只有一行」这个位置
+_SINGLE_ROW = 1.0
+# 每桶行数那条分布不属于任何一列，用这个名字当它的列名
+BUCKET_SIZE_KEY = "每桶行数"
+# 一行都没进来时，桶的账算不出来
+NOTE_NO_ROWS = "一行都没进来，切不出桶"
 
 
 class ResampleConfig(OperatorConfig):
@@ -100,6 +131,10 @@ class Resample(OperatorBase):
     # 推理时只有一行，没有可合并的桶
     ENABLED_IN_SERVING = False
 
+    def __init__(self, config: OperatorConfig) -> None:
+        super().__init__(config)
+        self._folding: _Folding | None = None
+
     @property
     def _config(self) -> ResampleConfig:
         # pragma 理由 —— 参数由注册表按算子造，型别不会错
@@ -121,7 +156,134 @@ class Resample(OperatorBase):
         buckets = _buckets_of(
             frame.index, self._config.bucket, self.tz_offset_minutes
         )
-        return {"frame": _merged(frame, buckets, self._config.agg)}
+        folded = _merged(frame, buckets, self._config.agg)
+        self._folding = _Folding(
+            row_count=frame.row_count,
+            starts=tuple(start for start, _ in buckets),
+            sizes=tuple(len(positions) for _, positions in buckets),
+        )
+        return {"frame": folded}
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """重采样的三块：压缩比、桶占用与断档、每桶行数。"""
+        folding = self._folding
+        if folding is None:
+            return ()
+        width = _BUCKET_MS[self._config.bucket]
+        return (
+            _rows_block(folding, width),
+            _axis_block(folding, width, self.tz_offset_minutes),
+            _sizes_block(folding),
+        )
+
+
+@dataclass(frozen=True)
+class _Folding:
+    """这一步把多少行折进了哪些桶，`report()` 照它讲。"""
+
+    #: 进来多少行
+    row_count: int
+    #: 每个桶的起点，升序
+    starts: tuple[int, ...]
+    #: 与 `starts` 同序的每桶行数
+    sizes: tuple[int, ...]
+
+
+def _rows_block(folding: _Folding, width: int) -> ReportBlock:
+    """压缩比：多少行折成多少行。
+
+    ⚠ 折掉的行不记进 `dropped`：一行都没被丢，每一行都进了某个桶——记成丢弃
+    的话，界面会告诉用户这一步丢了数据。
+    Args: folding, width。
+    """
+    after = len(folding.starts)
+    return rows_block(
+        BlockAt(zone="step", title="压缩比", port=PORT, tier=TIER_SCALAR),
+        RowCounts(
+            before=folding.row_count,
+            after=after,
+            ratio_actual=ratio_of(after, folding.row_count),
+        ),
+        funnel=funnel_of(_bucket_stages(folding, width)),
+    )
+
+
+def _bucket_stages(folding: _Folding, width: int) -> tuple[Stage, ...]:
+    """进来多少行 → 这一段横跨几个桶 → 其中几个有数据 → 几个是空的。
+
+    Args: folding, width。
+    """
+    occupied = len(folding.starts)
+    span = _span_of(folding.starts, width)
+    note = "" if span is not None else NOTE_NO_ROWS
+    return (
+        Stage("输入行", folding.row_count, "行"),
+        Stage("时段内的桶", span, "个", note),
+        Stage("有数据的桶", occupied, "个"),
+        Stage("空桶", None if span is None else span - occupied, "个", note),
+    )
+
+
+def _span_of(starts: tuple[int, ...], width: int) -> int | None:
+    """首尾两个桶之间一共横跨几个桶；一个桶都没有时给 `None`。
+
+    Args: starts, width。
+    """
+    if not starts:
+        return None
+    return (starts[-1] - starts[0]) // width + 1
+
+
+def _axis_block(
+    folding: _Folding, width: int, tz_offset_minutes: int
+) -> ReportBlock:
+    """桶占用与断档，桶宽与时区一并说清。
+
+    ⚠ 时区必须跟着桶宽一起讲：按 UTC 与按东八区切出来的两条轴长得一模一样，
+    而每一格里的数差了 8 小时。
+    Args: folding, width, tz_offset_minutes。
+    """
+    starts = folding.starts
+    span = axis_span(starts)
+    return axis_block(
+        BlockAt(
+            zone="charts", title="桶占用与断档", port=PORT, tier=TIER_LARGE
+        ),
+        TimeAxis(
+            bucket_ms=width,
+            tz_offset_minutes=tz_offset_minutes,
+            actual_since=moment_text(starts[0]) if starts else None,
+            actual_until=moment_text(starts[-1]) if starts else None,
+            occupancy=span.occupancy,
+            gaps=span.gaps,
+        ),
+    )
+
+
+def _sizes_block(folding: _Folding) -> ReportBlock:
+    """每桶行数的分布，有单行桶时在那一柱上画一条警示线。
+
+    ⚠ 没有单行桶就不画那条线：无条件画的话，「1 那一柱是空的」与「这段数据里
+    压根没有单行桶」在图上长得一模一样。
+    Args: folding。
+    """
+    singles = sum(1 for size in folding.sizes if size == 1)
+    marks: tuple[Item, ...] = (
+        ()
+        if singles == 0
+        else (
+            {
+                "at": _SINGLE_ROW,
+                "label": f"单行桶 {singles} 个",
+                "intent": "warning",
+            },
+        )
+    )
+    spread = spread_of([float(size) for size in folding.sizes])
+    return bins_block(
+        BlockAt(zone="charts", title="每桶行数", port=PORT, tier=TIER_SMALL),
+        [column_bins(BUCKET_SIZE_KEY, spread, marks=marks)],
+    )
 
 
 def _buckets_of(
@@ -151,8 +313,10 @@ def _merged(
     """
     rows = tuple(
         tuple(
-            _aggregated(frame, column, positions, agg)
-            for column in frame.columns
+            _aggregated(
+                column, [frame.rows[at][position] for at in positions], agg
+            )
+            for position, column in enumerate(frame.columns)
         )
         for _, positions in buckets
     )
@@ -160,19 +324,14 @@ def _merged(
 
 
 def _aggregated(
-    frame: Frame,
-    column: FrameColumn,
-    positions: list[int],
-    agg: AggFunc,
+    column: FrameColumn, values: list[CellValue], agg: AggFunc
 ) -> CellValue:
     """一个桶里的一列折成一个值。
 
-    Args: frame, column, positions, agg。
+    ⚠ 取值由调用方按列下标取好：列下标在这里查的话，每桶每列都要把列定义扫
+    一遍，宽表上是几千万次线性查找。
+    Args: column, values, agg。
     """
-    values = [
-        frame.rows[position][frame.position_of(column.key)]
-        for position in positions
-    ]
     if column.dtype != DTYPE_NUMBER:
         return _last_present(values)
     numbers = [

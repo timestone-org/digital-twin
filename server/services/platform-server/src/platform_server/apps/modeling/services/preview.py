@@ -107,6 +107,9 @@ def _frame_preview(frame: Frame, rows: int) -> dict[str, Any]:
 def _column_stat(frame: Frame, key: str) -> dict[str, Any]:
     """一列的统计。非数值列只给空值率与唯一值个数。
 
+    ⚠ 转不动的格数与空值率分开给：台账 values_json 里的类型不可信，转不动的格
+    在取数那一步被当成缺失记进 `coerce_failed`（`operators/frame.py`）。两者合成
+    一个空值率之后，用户会去查采集为什么没上来，而真因是这一列的类型配错了。
     Args: frame, key。
     """
     column = frame.column_of(key)
@@ -120,6 +123,7 @@ def _column_stat(frame: Frame, key: str) -> dict[str, Any]:
         "unit": column.unit,
         "null_ratio": _ratio(len(values) - len(present), len(values)),
         "n_unique": len({str(value) for value in present}),
+        "coerce_failed": column.coerce_failed,
     }
     numbers = [float(value) for value in present if _is_number(value)]
     stat.update(_number_stat(numbers))
@@ -172,6 +176,7 @@ def _metrics_preview(payload: MetricsPayload) -> dict[str, Any]:
         "pairs_truncated": payload.is_truncated,
         "residual_bins": [list(item) for item in payload.residual_bins],
         "labels": list(payload.labels),
+        "positive_label_text": payload.positive_label_text,
         "matrix": [list(row) for row in payload.matrix],
     }
 

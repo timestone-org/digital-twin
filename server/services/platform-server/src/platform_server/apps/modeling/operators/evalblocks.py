@@ -1,0 +1,413 @@
+"""五个评估算子的块拼装：算料在 `evalstats.py`，这里只把它们摆进区里。
+
+⚠ 拼装与算料一起放进算子类的话，两个贴着行数上限的算子文件下一次谁都改不动
+（docs/MODELING_RESULT_VIEW_DESIGN.md §8.1）。
+⚠ 一项都算不出来的块不摆：空块在界面上与「这一步本来就没有这张图」长得一模
+一样，而两者要用户做的事不同（规格 §2-P5）。
+"""
+
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
+from typing import Any
+
+from platform_server.apps.modeling.operators.evalstats import (
+    CLASSIFICATION_METRICS,
+    REGRESSION_METRICS,
+    RESIDUAL_METRICS,
+    Scored,
+    deviation_of,
+    drift_items,
+    fold_items,
+    fold_score_items,
+    metric_items,
+    qq_items,
+    quantile_items,
+    residual_marks,
+    worst_items,
+)
+from platform_server.apps.modeling.operators.reporting import (
+    TIER_LARGE,
+    TIER_SCALAR,
+    TIER_SMALL,
+    BlockAt,
+    ReportBlock,
+    RowCounts,
+    Scale,
+    TimeAxis,
+    Zone,
+    axis_block,
+    bins_block,
+    breakdown_block,
+    rows_block,
+)
+from platform_server.apps.modeling.operators.steps import (
+    Stage,
+    column_bins,
+    funnel_of,
+    ratio_of,
+    spread_of,
+)
+
+# 五个评估算子的输出端口都叫这个名字
+PORT = "metrics"
+# 残差那一列在图上的名字
+RESIDUAL_KEY = "residual"
+# 没有基线分读不出重要性的量级，这句话跟着基线一起摆
+BASELINE_NOTE = (
+    "同一个 0.12 在 R²=0.9 的模型上是砍掉 13% 的解释力，在 R²=0.2 上是砍掉 60%"
+)
+# 每折的分是什么口径
+FOLD_NOTE = "每折的分：回归是 R²、分类是准确率"
+_ZERO = 0.0
+
+
+@dataclass(frozen=True)
+class Classified:
+    """分类评估这一步实际看到了什么，`report()` 照它讲。"""
+
+    metrics: dict[str, float | None]
+    labels: tuple[str, ...]
+    matrix: tuple[tuple[int, ...], ...]
+    #: 正类在界面上的写法。⚠ config 里那个是浮点数，摘要里的类目是字符串
+    positive_text: str
+    rows: int
+
+
+@dataclass(frozen=True)
+class Importances:
+    """置换重要性这一步实际算出了什么。"""
+
+    #: 已按重要性降序排好；`feature_keys` 原序在图上读不出任何东西
+    items: tuple[dict[str, Any], ...]
+    baseline: float | None
+    score_kind: str
+    rows: int
+    repeats: int
+
+
+@dataclass(frozen=True)
+class Folds:
+    """交叉验证这一步实际切了什么、跑出了什么。"""
+
+    scores: tuple[float, ...]
+    #: 每一折的 (训练行下标, 测试行下标)
+    spans: tuple[tuple[Sequence[int], Sequence[int]], ...]
+    configured: int
+    rows: int
+    score_kind: str
+
+
+def regression_blocks(
+    scored: Scored,
+    metrics: Mapping[str, float | None],
+    buckets: int,
+    limit: int,
+) -> tuple[ReportBlock, ...]:
+    """回归评估的五块：抽样口径、五个指标、残差分布、分位数、最差的那几行。
+
+    Args: scored, metrics, buckets, limit。
+    """
+    rows = len(scored.truth)
+    kept = min(rows, limit)
+    return (
+        rows_block(
+            _at("step", "散点抽样口径", TIER_SCALAR),
+            RowCounts(
+                before=rows,
+                after=kept,
+                dropped=rows - kept,
+                ratio_actual=ratio_of(kept, rows),
+            ),
+            funnel=funnel_of(
+                (
+                    Stage("测试行数", rows, "行"),
+                    Stage("散点上限", limit, "点"),
+                    Stage("等距抽回", kept, "点"),
+                )
+            ),
+        ),
+        breakdown_block(
+            _at("stats", "回归指标", TIER_SCALAR),
+            Scale(label="测试集上的五个指标"),
+            metric_items(REGRESSION_METRICS, metrics),
+        ),
+        _bins_block(scored.residuals, buckets),
+        breakdown_block(
+            _at("table", "残差分位数", TIER_SMALL),
+            Scale(label="有序残差上的线性插值分位数"),
+            quantile_items(scored.residuals),
+        ),
+        breakdown_block(
+            _at("table", "误差最大的那几行", TIER_LARGE),
+            Scale(label="按绝对误差降序，残差 = 真实值 − 预测值"),
+            worst_items(scored),
+        ),
+    )
+
+
+def classification_blocks(view: Classified) -> tuple[ReportBlock, ...]:
+    """分类评估的三块：判对判错的账、四个指标、真实与预测的类别分布。
+
+    Args: view。
+    """
+    hit = sum(
+        view.matrix[seat][seat]
+        for seat in range(min(len(view.matrix), len(view.labels)))
+    )
+    return (
+        rows_block(
+            _at("step", "评估口径", TIER_SCALAR),
+            RowCounts(before=view.rows, after=view.rows),
+            funnel=funnel_of(
+                (
+                    Stage("测试行数", view.rows, "行"),
+                    Stage("类目数", len(view.labels), "类"),
+                    Stage("判对", hit, "行"),
+                    Stage("判错", view.rows - hit, "行"),
+                )
+            ),
+        ),
+        breakdown_block(
+            _at("stats", "分类指标", TIER_SCALAR),
+            Scale(label=_positive_note(view)),
+            metric_items(CLASSIFICATION_METRICS, view.metrics),
+        ),
+        breakdown_block(
+            _at("charts", "类别分布", TIER_SMALL),
+            Scale(label="真实占比与预测占比并排：模型是不是全押多数类"),
+            _class_items(view),
+        ),
+    )
+
+
+def residual_blocks(
+    scored: Scored, metrics: Mapping[str, float | None], buckets: int
+) -> tuple[ReportBlock, ...]:
+    """残差分析的三到五块：口径、五个统计量、分布，以及画得出来的 QQ 与时序。
+
+    Args: scored, metrics, buckets。
+    """
+    rows = len(scored.residuals)
+    made = [
+        rows_block(
+            _at("step", "评估口径", TIER_SCALAR),
+            RowCounts(before=rows, after=rows),
+            funnel=funnel_of(
+                (
+                    Stage("测试行数", rows, "行"),
+                    Stage("直方桶数", buckets, "个"),
+                )
+            ),
+        ),
+        breakdown_block(
+            _at("stats", "残差统计量", TIER_SCALAR),
+            Scale(label="残差 = 真实值 − 预测值"),
+            metric_items(RESIDUAL_METRICS, metrics),
+        ),
+        _bins_block(scored.residuals, buckets),
+    ]
+    made.extend(_residual_charts(scored))
+    return tuple(made)
+
+
+def importance_blocks(view: Importances) -> tuple[ReportBlock, ...]:
+    """特征重要性的三块：口径、基线分、重要性排行。
+
+    Args: view。
+    """
+    return (
+        rows_block(
+            _at("step", "评估口径", TIER_SCALAR),
+            RowCounts(before=view.rows, after=view.rows),
+            funnel=funnel_of(
+                (
+                    Stage("测试行数", view.rows, "行"),
+                    Stage("特征列数", len(view.items), "列"),
+                    Stage("每列打乱", view.repeats, "遍"),
+                )
+            ),
+        ),
+        breakdown_block(
+            _at("stats", "打乱前的基线分", TIER_SCALAR),
+            Scale(
+                label=BASELINE_NOTE,
+                score_kind=view.score_kind,
+                baseline=view.baseline,
+            ),
+            (
+                {
+                    "name": _score_name(view.score_kind),
+                    "value": view.baseline,
+                    "score_kind": view.score_kind,
+                },
+            ),
+        ),
+        breakdown_block(
+            _at("charts", "特征重要性", TIER_SMALL),
+            Scale(
+                label="打乱一列后掉的分；不大于零 = 打乱反而没变差，是噪声列",
+                baseline=view.baseline,
+            ),
+            view.items,
+        ),
+    )
+
+
+def fold_blocks(view: Folds) -> tuple[ReportBlock, ...]:
+    """交叉验证的三块：配置对实得、逐折分数、折布局。
+
+    Args: view。
+    """
+    mean = None if not view.scores else sum(view.scores) / len(view.scores)
+    return (
+        rows_block(
+            _at("step", "折的配置与实得", TIER_SCALAR),
+            RowCounts(before=view.rows, after=view.rows),
+            funnel=funnel_of(_fold_stages(view)),
+        ),
+        breakdown_block(
+            _at("charts", "逐折分数", TIER_SMALL),
+            Scale(label=FOLD_NOTE, score_kind=view.score_kind, baseline=mean),
+            fold_score_items(view.scores),
+        ),
+        _aux(
+            axis_block(
+                _at("charts", "折布局", TIER_SMALL),
+                TimeAxis(segments=fold_items(view.spans)),
+            )
+        ),
+    )
+
+
+def _at(zone: Zone, title: str, tier: int) -> BlockAt:
+    """一块摆在哪儿。五个评估算子都只有一路输出，端口名都一样。
+
+    Args: zone, title, tier。
+    """
+    return BlockAt(zone=zone, title=title, port=PORT, tier=tier)
+
+
+def _aux(block: ReportBlock) -> ReportBlock:
+    """把一块标成辅图：超预算时它比主体图先走（规格 §4.6）。
+
+    Args: block。
+    """
+    return replace(block, payload={**block.payload, "is_primary": False})
+
+
+def _bins_block(residuals: Sequence[float], buckets: int) -> ReportBlock:
+    """残差分布，带零线、偏均值与 ±1σ 三种参考线。
+
+    Args: residuals, buckets。
+    """
+    mean = _ZERO if not residuals else sum(residuals) / len(residuals)
+    return bins_block(
+        _at("charts", "残差分布", TIER_SMALL),
+        (
+            column_bins(
+                RESIDUAL_KEY,
+                spread_of(residuals, buckets=buckets),
+                off_label="算不出的残差",
+                marks=residual_marks(mean, deviation_of(residuals) or _ZERO),
+            ),
+        ),
+    )
+
+
+def _residual_charts(scored: Scored) -> list[ReportBlock]:
+    """画得出来的那两张辅图：正态 QQ 与残差随时间。
+
+    Args: scored。
+    """
+    made: list[ReportBlock] = []
+    quantiles = qq_items(scored.residuals)
+    if quantiles:
+        made.append(
+            _aux(
+                breakdown_block(
+                    _at("charts", "正态 QQ", TIER_SMALL),
+                    Scale(label="实测分位对同均值同方差的正态分位"),
+                    quantiles,
+                )
+            )
+        )
+    drift = drift_items(scored)
+    if drift:
+        made.append(
+            _aux(
+                breakdown_block(
+                    _at("charts", "残差随时间", TIER_LARGE),
+                    Scale(label="每格取均值；整段偏移在直方图上会摊平成胖尾"),
+                    drift,
+                )
+            )
+        )
+    return made
+
+
+def _positive_note(view: Classified) -> str:
+    """正类是哪一个，以及它在不在这份测试集里。
+
+    ⚠ 正类可能一次都没出现过：那时精确率与召回率双双无定义，而界面照旧会把
+    「无定义」摆在正类徽标旁边，不说清就读成「模型很差」。
+    Args: view。
+    """
+    if view.positive_text in view.labels:
+        return f"精确率 / 召回率 / F1 都是相对正类「{view.positive_text}」算的"
+    return (
+        f"正类「{view.positive_text}」在这份测试集里一次都没出现过，"
+        "精确率与召回率无定义"
+    )
+
+
+def _class_items(view: Classified) -> list[dict[str, Any]]:
+    """每一类的真实占比与预测占比，并排给。
+
+    Args: view。
+    """
+    made: list[dict[str, Any]] = []
+    for seat, label in enumerate(view.labels):
+        if seat >= len(view.matrix):
+            break
+        truth = sum(view.matrix[seat])
+        guessed = sum(row[seat] for row in view.matrix if seat < len(row))
+        made.append(
+            {
+                "name": label,
+                "value": ratio_of(truth, view.rows),
+                "before": ratio_of(truth, view.rows),
+                "after": ratio_of(guessed, view.rows),
+                "truth_rows": truth,
+                "predicted_rows": guessed,
+            }
+        )
+    return made
+
+
+def _fold_stages(view: Folds) -> tuple[Stage, ...]:
+    """配置几折 → 实得几折 → 每折测试多少行。
+
+    Args: view。
+    """
+    made = len(view.spans)
+    note = (
+        ""
+        if made == view.configured
+        else "前向链的第一折没有可训的行，那一折整折丢弃"
+    )
+    return (
+        Stage("总行数", view.rows, "行"),
+        Stage("配置折数", view.configured, "折"),
+        Stage("实得折数", made, "折", note),
+        Stage("每折测试行", view.rows // max(view.configured, 1), "行"),
+    )
+
+
+def _score_name(score_kind: str) -> str:
+    """基线分那一项在界面上叫什么。
+
+    Args: score_kind。
+    """
+    if score_kind == "r2":
+        return "R²"
+    return "准确率" if score_kind == "accuracy" else "基线分"

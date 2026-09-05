@@ -18,6 +18,12 @@ from platform_server.apps.modeling.operators.base import (
     PortSpec,
     column_field,
 )
+from platform_server.apps.modeling.operators.featureblocks import (
+    OneHotRun,
+    ScaleRun,
+    one_hot_blocks,
+    scale_blocks,
+)
 from platform_server.apps.modeling.operators.fitting import (
     fit_columns,
     training_frame,
@@ -32,6 +38,7 @@ from platform_server.apps.modeling.operators.frame import (
     with_column_values,
 )
 from platform_server.apps.modeling.operators.registry import register_operator
+from platform_server.apps.modeling.operators.reporting import ReportBlock
 
 type ScaleMethod = Literal["zscore", "minmax"]
 # 训练行上只有一个取值时的处置。skip 那一档不给这列记尺度，推理时也就跟着不缩放
@@ -79,6 +86,8 @@ class Standardize(OperatorBase):
     def __init__(self, config: OperatorConfig) -> None:
         super().__init__(config)
         self._scales: dict[str, dict[str, float]] = {}
+        self._fit_rows: dict[str, int] = {}
+        self._ran: ScaleRun | None = None
 
     @property
     def _config(self) -> StandardizeConfig:
@@ -98,11 +107,36 @@ class Standardize(OperatorBase):
             if self._scales
             else fit_columns(frame, self._config.columns, self.split_plan)
         )
-        if not self._scales:
-            self._fits(training_frame(frame, self.split_plan), keys)
+        train = None if self._scales else training_frame(frame, self.split_plan)
+        if train is not None:
+            self._fits(train, keys)
+        scaled = frame
         for key in self._scales:
-            frame = with_column_values(frame, key, self._scaled(frame, key))
-        return {"frame": frame}
+            scaled = _rescaled(scaled, key, self._scaled(scaled, key))
+        if train is not None:
+            self._ran = self._recorded(frame, scaled, keys, train.row_count)
+        return {"frame": scaled}
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """标准化的三块：换了多少个数、逐列尺度表、缩放前分布。"""
+        return () if self._ran is None else scale_blocks(self._ran)
+
+    def _recorded(
+        self, source: Frame, scaled: Frame, keys: tuple[str, ...], rows: int
+    ) -> ScaleRun:
+        """把这一步学尺度的经过留给 `report()`。
+
+        Args: source, scaled, keys, rows。
+        """
+        return ScaleRun(
+            source=source,
+            result=scaled,
+            keys=keys,
+            scales={key: dict(value) for key, value in self._scales.items()},
+            fit_rows=dict(self._fit_rows),
+            train_rows=rows,
+            method=self._config.method,
+        )
 
     def dump_fitted(self) -> dict[str, Any] | None:
         """按列 key 建键的尺度参数。"""
@@ -137,6 +171,7 @@ class Standardize(OperatorBase):
             present = [
                 value for value in numbers_of(train, key) if value is not None
             ]
+            self._fit_rows[key] = len(present)
             if not present:
                 raise OperatorError(f"列「{key}」在训练行上整列都是空值")
             scale = _scale_of(config.method, present)
@@ -155,6 +190,25 @@ class Standardize(OperatorBase):
             None if value is None else (value - center) / span
             for value in numbers_of(frame, key)
         ]
+
+
+def _rescaled(frame: Frame, key: str, values: list[CellValue]) -> Frame:
+    """换掉一列的取值**并清掉它的单位**，其余原样。
+
+    ⚠ 缩放出来的数没有量纲：只换值不动列定义的话，那一列还顶着「℃」，界面照旧
+    把 z 分数当温度印（docs/MODELING_RESULT_VIEW_DESIGN.md 的 D-9）。
+    Args: frame, key, values。
+    """
+    scaled = with_column_values(frame, key, values)
+    position = scaled.position_of(key)
+    return replace(
+        scaled,
+        columns=(
+            *scaled.columns[:position],
+            replace(scaled.columns[position], unit=""),
+            *scaled.columns[position + 1 :],
+        ),
+    )
 
 
 def _scale_entry(key: str, raw: object) -> dict[str, float]:
@@ -242,6 +296,8 @@ class OneHot(OperatorBase):
     def __init__(self, config: OperatorConfig) -> None:
         super().__init__(config)
         self._categories: dict[str, list[str]] = {}
+        self._ranked: dict[str, list[tuple[str, int]]] = {}
+        self._ran: OneHotRun | None = None
 
     @property
     def _config(self) -> OneHotConfig:
@@ -269,11 +325,37 @@ class OneHot(OperatorBase):
         Args: inputs。
         """
         frame = frame_input(inputs, "frame")
-        if not self._categories:
-            self._fits(training_frame(frame, self.split_plan))
+        train = (
+            None if self._categories else training_frame(frame, self.split_plan)
+        )
+        if train is not None:
+            self._fits(train)
+        encoded = frame
         for key in self._categories:
-            frame = _encoded(frame, key, self._categories[key])
-        return {"frame": frame}
+            encoded = _encoded(encoded, key, self._categories[key])
+        if train is not None:
+            self._ran = self._recorded(frame, encoded, train.row_count)
+        return {"frame": encoded}
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """独热编码的三块：列 diff、类目命中、逐列类目账。"""
+        return () if self._ran is None else one_hot_blocks(self._ran)
+
+    def _recorded(self, source: Frame, encoded: Frame, rows: int) -> OneHotRun:
+        """把这一步定类目的经过留给 `report()`。
+
+        Args: source, encoded, rows。
+        """
+        return OneHotRun(
+            source=source,
+            result=encoded,
+            keys=tuple(self._config.columns),
+            categories={
+                key: list(value) for key, value in self._categories.items()
+            },
+            ranked={key: list(value) for key, value in self._ranked.items()},
+            train_rows=rows,
+        )
 
     def dump_fitted(self) -> dict[str, Any] | None:
         """按列 key 建键的类目清单，顺序即编码顺序。"""
@@ -306,7 +388,9 @@ class OneHot(OperatorBase):
     def _fits(self, train: Frame) -> None:
         config = self._config
         for key in config.columns:
-            found = _ranked_categories(train, key)
+            ranked = _ranked_categories(train, key)
+            self._ranked[key] = ranked
+            found = [name for name, _ in ranked]
             if len(found) > config.max_categories:
                 if config.on_many_categories != "keep_top":
                     raise OperatorError(
@@ -320,11 +404,13 @@ class OneHot(OperatorBase):
             self._categories[key] = found
 
 
-def _ranked_categories(train: Frame, key: str) -> list[str]:
-    """训练行上出现过的类目，按出现次数从多到少；同频按字典序。
+def _ranked_categories(train: Frame, key: str) -> list[tuple[str, int]]:
+    """训练行上出现过的类目与频次，按出现次数从多到少；同频按字典序。
 
     ⚠ 顺序必须是确定的：按集合迭代顺序取，同一份数据在不同进程上会编出不同的
     列名，而两次训练各自看着都对。
+    ⚠ 频次跟着类目一起回来：只回名字的话，「这个类目在训练行上见过几次」在讲解
+    那一侧就得再数一遍，两份早晚会漂。
     Args: train, key。
     """
     counts: dict[str, int] = {}
@@ -332,7 +418,8 @@ def _ranked_categories(train: Frame, key: str) -> list[str]:
         if value is None:
             continue
         counts[str(value)] = counts.get(str(value), 0) + 1
-    return sorted(counts, key=lambda item: (-counts[item], item))
+    names = sorted(counts, key=lambda item: (-counts[item], item))
+    return [(name, counts[name]) for name in names]
 
 
 def _encoded(frame: Frame, key: str, categories: list[str]) -> Frame:

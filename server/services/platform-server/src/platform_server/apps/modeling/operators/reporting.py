@@ -128,10 +128,14 @@ class CellChange:
 
 @dataclass(frozen=True)
 class ColumnBins:
-    """一列的分布：桶高、几条参考线、以及落在轴外的那一撮。"""
+    """一列的分布：桶高、轴的两端、几条参考线、以及落在轴外的那一撮。"""
 
     key: str
     bins: Sequence[float] = ()
+    #: 这条轴的两端。⚠ 桶高自己说不出它横跨哪一段，缺了这两个数，界面既画不出
+    #: 刻度也放不下参考线——只有一排不知道量的是什么的柱子
+    low: float | None = None
+    high: float | None = None
     #: 每条线是 `{at, label, intent}`
     marks: Sequence[Item] = ()
     #: `{label, count}`；None = 没有落在轴外的
@@ -279,6 +283,8 @@ def bins_block(at: BlockAt, by_column: Sequence[ColumnBins]) -> ReportBlock:
             {
                 "key": item.key,
                 "bins": list(item.bins[:MAX_BINS]),
+                "low": item.low,
+                "high": item.high,
                 "marks": _items(item.marks, MAX_MARKS),
                 "off_axis": _mapping(item.off_axis),
             }

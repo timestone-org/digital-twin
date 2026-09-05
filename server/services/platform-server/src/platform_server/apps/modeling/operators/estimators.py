@@ -6,6 +6,7 @@
 
 import math
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any, Literal, cast
 
 import numpy as np
@@ -178,6 +179,8 @@ class BinaryLogit:
         self._coef: list[float] = []
         self._intercept = 0.0
         self._classes: list[float] = []
+        self._n_iter: int | None = None
+        self._max_iter = 0
 
     def fit(
         self, rows: Sequence[Sequence[float]], target: Sequence[float]
@@ -217,6 +220,8 @@ class BinaryLogit:
             [float(flat[index]) for index in range(flat.size)],
             float(np.asarray(raw_intercept, dtype=float).reshape(-1)[0]),
         )
+        self._n_iter = _rounds_of(estimator)
+        self._max_iter = int(estimator.max_iter)
 
     @property
     def coef(self) -> list[float]:
@@ -232,6 +237,34 @@ class BinaryLogit:
     def classes(self) -> list[float]:
         """两个类目，升序。下标 1 那个是「正类」。"""
         return list(self._classes)
+
+    @property
+    def n_iter(self) -> int | None:
+        """实际迭代了多少轮；None = 还没拟合过。
+
+        ⚠ 撞上 `max_iter` 就是没收敛，那组系数不可信——而模型照样打得出分，
+        指标看着也正常，不把这个数交出去的话界面上一个字都看不见。
+        """
+        return self._n_iter
+
+    @property
+    def max_iter(self) -> int:
+        """迭代上限。⚠ 名字随 sklearn，它是从估计器身上读回来的默认值。"""
+        return self._max_iter
+
+
+def _rounds_of(estimator: LogisticRegression) -> int | None:
+    """估计器实际迭代了多少轮；读不出来给 `None` 不给 0。
+
+    Args: estimator。
+    """
+    # pyright: ignore 的理由 —— n_iter_ 在 sklearn 类型面上部分未知
+    raw = cast(
+        "Sequence[int]",
+        estimator.n_iter_,  # pyright: ignore[reportUnknownMemberType]
+    )
+    flat = np.asarray(raw, dtype=int).reshape(-1)
+    return int(flat[0]) if flat.size else None
 
 
 def logistic_probability(
@@ -262,6 +295,7 @@ class PrincipalComponents:
         self._n_components = n_components
         self._mean: list[float] = []
         self._components: list[list[float]] = []
+        self._explained: list[float] = []
 
     def fit(self, rows: Sequence[Sequence[float]]) -> None:
         """在给定矩阵上拟合。行数或列数不够时明说。
@@ -291,13 +325,20 @@ class PrincipalComponents:
             "Sequence[Sequence[float]]",
             estimator.components_,  # pyright: ignore[reportUnknownMemberType]
         )
+        # pyright: ignore 的理由 —— explained_variance_ratio_ 在类型面上部分未知
+        raw_ratio = cast(
+            "Sequence[float]",
+            estimator.explained_variance_ratio_,  # pyright: ignore[reportUnknownMemberType]
+        )
         mean = np.asarray(raw_mean, dtype=float).reshape(-1)
         axes = np.asarray(raw_axes, dtype=float)
+        ratio = np.asarray(raw_ratio, dtype=float).reshape(-1)
         self._mean = [float(mean[index]) for index in range(mean.size)]
         self._components = [
             [float(axes[row][col]) for col in range(axes.shape[1])]
             for row in range(axes.shape[0])
         ]
+        self._explained = [float(ratio[seat]) for seat in range(ratio.size)]
 
     @property
     def mean(self) -> list[float]:
@@ -308,6 +349,15 @@ class PrincipalComponents:
     def components(self) -> list[list[float]]:
         """每一条主成分轴上的权重，与拟合时的列序一致。"""
         return [list(row) for row in self._components]
+
+    @property
+    def explained(self) -> list[float]:
+        """每条轴解释掉原始方差的比例，与 `components` 同序。
+
+        ⚠ 只有拟合那一趟拿得到：sklearn 算完就有，回灌参数上线的那一路没有它，
+        那时是空清单。不交出去的话，用户看到的 pc1…pcK 就是几列没头没尾的数。
+        """
+        return list(self._explained)
 
 
 def projected(
@@ -326,6 +376,15 @@ def projected(
         )
         for axis in components
     ]
+
+
+@dataclass(frozen=True)
+class EnsembleShape:
+    """一片树集成的形状。⚠ 一棵树都没有时深度与叶子数是 `None` 不是 0。"""
+
+    count: int
+    depth: int | None
+    leaves: int | None
 
 
 class TreeEnsemble:
@@ -421,6 +480,41 @@ class TreeEnsemble:
         )
         flat = np.asarray(raw, dtype=float).reshape(-1)
         return [float(flat[index]) for index in range(flat.size)]
+
+    @property
+    def shape(self) -> EnsembleShape:
+        """这片集成长成什么样：几棵、最深几层、一共多少个叶子。
+
+        ⚠ 三个数一起交出去而不是各读各的：树在训练区间之外恒给边界叶值，
+        「深到什么程度、碎成多少块」是判断这个模型敢不敢用的唯一依据，而它
+        一个字都不在纯 JSON 的拟合参数里（通道 B）。
+        """
+        members = _member_trees(self._estimator)
+        if not members:
+            return EnsembleShape(count=0, depth=None, leaves=None)
+        return EnsembleShape(
+            count=len(members),
+            depth=max(int(item.max_depth) for item in members),
+            leaves=sum(int(item.n_leaves) for item in members),
+        )
+
+
+def _member_trees(estimator: object) -> list[Any]:
+    """集成里每棵树的内部结构，摊平成一串。
+
+    ⚠ 两族的形状不同：森林的 `estimators_` 是一串树，提升树的是每轮一排。
+    Args: estimator。
+    """
+    members: Any | None = getattr(estimator, "estimators_", None)
+    if members is None:
+        return []
+    flat: Any = np.asarray(members, dtype=object).reshape(-1)
+    made: list[Any] = []
+    for item in flat:
+        inner: Any | None = getattr(item, "tree_", None)
+        if inner is not None:
+            made.append(inner)
+    return made
 
 
 def _tree_estimator(

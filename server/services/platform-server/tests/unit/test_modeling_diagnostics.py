@@ -21,6 +21,7 @@ from platform_server.apps.modeling.operators.frame import (
     ROLE_TARGET,
 )
 from platform_server.apps.modeling.operators.payloads import ModelPayload
+from platform_server.apps.modeling.operators.reporting import ReportBlock
 
 STRONG = "有用的列"
 NOISE = "没用的列"
@@ -80,8 +81,10 @@ def _model_of(frame: Frame) -> ModelPayload:
 
 
 def _importance(frame: Frame, **config: Any) -> dict[str, float | None]:
-    """跑一遍特征重要性。
+    """跑一遍特征重要性，按列名读回它算出来的那几个数。
 
+    ⚠ 读的是块不是 `metrics` 字典：按列名建的键搬进块之后，字典是空的
+    （docs/MODELING_RESULT_VIEW_DESIGN.md R-34）。
     Args: frame, config。
     """
     operator, _ = registry.build("feature_importance", config)
@@ -90,7 +93,21 @@ def _importance(frame: Frame, **config: Any) -> dict[str, float | None]:
         "metrics"
     ]
     assert isinstance(payload, MetricsPayload)
-    return payload.metrics
+    assert payload.metrics == {}
+    ranking = _block_of(operator.report(), "特征重要性")
+    items: list[dict[str, Any]] = ranking.payload["items"]
+    return {str(item["name"]): item["value"] for item in items}
+
+
+def _block_of(blocks: tuple[ReportBlock, ...], title: str) -> ReportBlock:
+    """按标题取一块；取不到就当场说清是哪一块没了。
+
+    Args: blocks, title。
+    """
+    for block in blocks:
+        if block.title == title:
+            return block
+    raise AssertionError(f"讲解里没有「{title}」这一块")
 
 
 def _residuals(scored: Frame) -> MetricsPayload:

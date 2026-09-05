@@ -17,6 +17,19 @@ from platform_server.apps.modeling.operators.base import (
     PortSpec,
     column_field,
 )
+from platform_server.apps.modeling.operators.cleaning_report import (
+    CastRun,
+    EmptyRun,
+    Failed,
+    FilterRun,
+    HoledRun,
+    blame_of,
+    cast_blocks,
+    empty_blocks,
+    failed_of,
+    filter_blocks,
+    holed_blocks,
+)
 from platform_server.apps.modeling.operators.frame import (
     DTYPE_BOOLEAN,
     DTYPE_NUMBER,
@@ -31,6 +44,7 @@ from platform_server.apps.modeling.operators.frame import (
     without_columns,
 )
 from platform_server.apps.modeling.operators.registry import register_operator
+from platform_server.apps.modeling.operators.reporting import ReportBlock
 
 type CastTarget = Literal["number", "bool", "string"]
 # 转不动时的处置。⚠ coerce 那一档把转不动的格子变成空值，它的下游通常要接一个
@@ -86,6 +100,10 @@ class CastType(OperatorBase):
     INPUTS = (PortSpec(name="frame", contract=CONTRACT_FRAME, label="输入"),)
     OUTPUTS = (PortSpec(name="frame", contract=CONTRACT_FRAME, label="输出"),)
 
+    def __init__(self, config: OperatorConfig) -> None:
+        super().__init__(config)
+        self._cast: CastRun | None = None
+
     @property
     def _config(self) -> CastTypeConfig:
         # pragma 理由 —— 参数由注册表按算子造，型别不会错
@@ -101,14 +119,29 @@ class CastType(OperatorBase):
         Args: inputs。
         """
         config = self._config
-        frame = frame_input(inputs, "frame")
+        source = frame_input(inputs, "frame")
+        frame = source
+        failed: dict[str, Failed] = {}
         for key in config.columns:
-            values = [
+            values = frame.values_of(key)
+            cast = [
                 _cast_one(value, config.to, config.on_error, key)
-                for value in frame.values_of(key)
+                for value in values
             ]
-            frame = with_column_cast(frame, key, values, _DTYPE_OF[config.to])
+            failed[key] = failed_of(values, cast)
+            frame = with_column_cast(frame, key, cast, _DTYPE_OF[config.to])
+        self._cast = CastRun(
+            before=source,
+            after=frame,
+            failed=failed,
+            target=config.to,
+            on_error=config.on_error,
+        )
         return {"frame": frame}
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """类型归一的三块：转不动的格、类型对照、空值率前后。"""
+        return () if self._cast is None else cast_blocks(self._cast)
 
 
 type DropAxis = Literal["row", "col"]
@@ -160,6 +193,11 @@ class DropMissing(OperatorBase):
     # 推理时只有一行：丢行等于把这次预测丢掉，丢列等于按一行的空值率判——都不对
     ENABLED_IN_SERVING = False
 
+    def __init__(self, config: OperatorConfig) -> None:
+        super().__init__(config)
+        self._holed: HoledRun | None = None
+        self._empty: EmptyRun | None = None
+
     @property
     def _config(self) -> DropMissingConfig:
         # pragma 理由 —— 参数由注册表按算子造，型别不会错
@@ -189,16 +227,29 @@ class DropMissing(OperatorBase):
             return {"frame": self._without_empty_columns(frame)}
         return {"frame": self._without_holed_rows(frame)}
 
+    def report(self) -> tuple[ReportBlock, ...]:
+        """丢行档讲行数账与判据列空值率，丢列档讲列数账、丢了谁、空值率对阈值。"""
+        if self._holed is not None:
+            return holed_blocks(self._holed)
+        return () if self._empty is None else empty_blocks(self._empty)
+
     def _without_empty_columns(self, frame: Frame) -> Frame:
         limit = self._config.max_null_ratio
-        dropped = tuple(
-            column.key
+        ratios = {
+            column.key: null_ratio_of(frame, column.key)
             for column in frame.columns
-            if null_ratio_of(frame, column.key) > limit
-        )
+        }
+        dropped = tuple(key for key, ratio in ratios.items() if ratio > limit)
         kept = without_columns(frame, dropped)
         if not kept.columns:
             raise OperatorError(f"每一列的空值率都超过了 {limit}，一列都没剩")
+        self._empty = EmptyRun(
+            before=frame,
+            after=kept,
+            ratios=ratios,
+            removed=dropped,
+            limit=limit,
+        )
         return kept
 
     def _without_holed_rows(self, frame: Frame) -> Frame:
@@ -211,7 +262,15 @@ class DropMissing(OperatorBase):
         ]
         if not kept:
             raise OperatorError("按这个判据每一行都被丢掉了，没有数据能往下走")
-        return select_rows(frame, kept)
+        picked = select_rows(frame, kept)
+        self._holed = HoledRun(
+            before=frame,
+            after=picked,
+            watched=tuple(keys),
+            blame=blame_of(frame, keys, frozenset(kept)),
+            is_any=self._config.how == "any",
+        )
+        return picked
 
 
 # 闭合的比较运算。⚠ 这里**不许**变成一段表达式：那是一个任意代码执行面
@@ -258,6 +317,10 @@ class FilterRows(OperatorBase):
     # 推理时只有一行，筛掉它等于这次预测算不出数
     ENABLED_IN_SERVING = False
 
+    def __init__(self, config: OperatorConfig) -> None:
+        super().__init__(config)
+        self._filtered: FilterRun | None = None
+
     @property
     def _config(self) -> FilterRowsConfig:
         # pragma 理由 —— 参数由注册表按算子造，型别不会错
@@ -286,7 +349,22 @@ class FilterRows(OperatorBase):
             raise OperatorError(
                 f"按这个条件筛下来一行都不剩，请放宽「{config.column}」那一条"
             )
-        return {"frame": select_rows(frame, kept)}
+        picked = select_rows(frame, kept)
+        blanks = {index for index, value in enumerate(values) if value is None}
+        self._filtered = FilterRun(
+            before=frame,
+            after=picked,
+            column=config.column,
+            blanks=len(blanks),
+            dropped_blank=len(blanks - set(kept)),
+            threshold=config.value,
+            is_blank_judge=config.op in _BLANK_OPS,
+        )
+        return {"frame": picked}
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """条件过滤的两块：行数账（含因空丢弃）、判据列的分布与阈值线。"""
+        return () if self._filtered is None else filter_blocks(self._filtered)
 
 
 def _cast_one(

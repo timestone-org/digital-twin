@@ -31,6 +31,12 @@ from platform_server.apps.modeling.operators.frame import (
     matrix_of,
     numbers_of,
 )
+from platform_server.apps.modeling.operators.linearreport import (
+    LogitTrained,
+    Trained,
+    linear_blocks,
+    logit_blocks,
+)
 from platform_server.apps.modeling.operators.model import (
     SCORED_PRED,
     SCORED_TRUE,
@@ -41,9 +47,12 @@ from platform_server.apps.modeling.operators.model import (
 )
 from platform_server.apps.modeling.operators.payloads import ModelPayload
 from platform_server.apps.modeling.operators.registry import register_operator
+from platform_server.apps.modeling.operators.reporting import ReportBlock
 
 # 判成正类的概率门槛
 _DECISION_THRESHOLD = 0.5
+# 逻辑回归的惩罚项：sklearn 的默认，本仓没有把它做成参数
+LOGIT_PENALTY = "l2"
 # 两类模型的类目个数
 _TWO_CLASSES = 2
 
@@ -101,6 +110,7 @@ class LinearRegressionOperator(OperatorBase):
         super().__init__(config)
         self._coef: dict[str, float] = {}
         self._intercept = 0.0
+        self._seen: Trained | None = None
 
     def run(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """在训练集上拟合，在测试集上打分。
@@ -113,19 +123,51 @@ class LinearRegressionOperator(OperatorBase):
         target_key = single_target(train)
         if not feature_keys:
             raise OperatorError("训练集里一个特征列都没有")
+        config = _linear_config(self.config)
         self._fit(train, feature_keys, target_key)
+        predicted = self.predict_rows(test)
+        self._seen = self._trained(train, test, target_key, predicted)
         return {
             "model": ModelPayload(
                 algo=self.CODE,
                 task=TASK_REGRESSION,
                 feature_keys=feature_keys,
                 target_key=target_key,
-                hyper_params=_hyper_params_of(_linear_config(self.config)),
+                hyper_params=_hyper_params_of(config),
                 fitted=self.dump_fitted() or {},
                 serving_channel=self.SERVING_CHANNEL,
             ),
-            "scored": scored_frame(test, target_key, self.predict_rows(test)),
+            "scored": scored_frame(test, target_key, predicted),
         }
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """拟合概况与共线性、系数与可比贡献、训练分与测试分。"""
+        seen = self._seen
+        return () if seen is None else linear_blocks(seen)
+
+    def _trained(
+        self,
+        train: Frame,
+        test: Frame,
+        target_key: str,
+        predicted: list[float],
+    ) -> Trained:
+        """这一步实际拟合出了什么，讲解照它讲。
+
+        Args: train, test, target_key, predicted。
+        """
+        config = _linear_config(self.config)
+        return Trained(
+            train=train,
+            test=test,
+            keys=tuple(self._coef),
+            target=target_key,
+            predicted=predicted,
+            coef=dict(self._coef),
+            intercept=self._intercept,
+            use_intercept=config.use_intercept,
+            method=config.regularization,
+        )
 
     @classmethod
     def describe_columns(
@@ -288,6 +330,8 @@ class LogisticRegressionOperator(OperatorBase):
         self._coef: dict[str, float] = {}
         self._intercept = 0.0
         self._classes: list[float] = []
+        self._rounds: tuple[int | None, int] = (None, 0)
+        self._seen: LogitTrained | None = None
 
     @classmethod
     def describe_columns(
@@ -312,6 +356,8 @@ class LogisticRegressionOperator(OperatorBase):
         if not feature_keys:
             raise OperatorError("训练集里一个特征列都没有")
         self._fit(train, feature_keys, target_key)
+        predicted = self.predict_rows(test)
+        self._seen = self._trained(train, test, target_key, predicted)
         return {
             "model": ModelPayload(
                 algo=self.CODE,
@@ -322,8 +368,13 @@ class LogisticRegressionOperator(OperatorBase):
                 fitted=self.dump_fitted() or {},
                 serving_channel=self.SERVING_CHANNEL,
             ),
-            "scored": scored_frame(test, target_key, self.predict_rows(test)),
+            "scored": scored_frame(test, target_key, predicted),
         }
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """判别口径与收敛、系数与几率比、训练集类目占比。"""
+        seen = self._seen
+        return () if seen is None else logit_blocks(seen)
 
     def predict_rows(self, frame: Frame) -> list[float]:
         """按拟合参数给每一行判一个**类目**。
@@ -396,6 +447,12 @@ class LogisticRegressionOperator(OperatorBase):
     def _fit(
         self, train: Frame, feature_keys: tuple[str, ...], target_key: str
     ) -> None:
+        """拟合，并把「迭代了几轮 / 上限是多少」一并记下来。
+
+        ⚠ 这两个数只有拟合那一刻拿得到：估计器用完即弃，事后再问就没有了，而
+        撞上上限意味着这组系数还没收敛。
+        Args: train, feature_keys, target_key。
+        """
         config = _logit_config(self.config)
         target = numbers_of(train, target_key)
         if any(value is None for value in target):
@@ -411,6 +468,36 @@ class LogisticRegressionOperator(OperatorBase):
         self._coef = dict(zip(feature_keys, estimator.coef, strict=True))
         self._intercept = estimator.intercept
         self._classes = estimator.classes
+        self._rounds = (estimator.n_iter, estimator.max_iter)
+
+    def _trained(
+        self,
+        train: Frame,
+        test: Frame,
+        target_key: str,
+        predicted: list[float],
+    ) -> LogitTrained:
+        """这一步实际拟合出了什么，讲解照它讲。
+
+        Args: train, test, target_key, predicted。
+        """
+        config = _logit_config(self.config)
+        return LogitTrained(
+            fit=Trained(
+                train=train,
+                test=test,
+                keys=tuple(self._coef),
+                target=target_key,
+                predicted=predicted,
+                coef=dict(self._coef),
+                intercept=self._intercept,
+                use_intercept=config.use_intercept,
+                method=LOGIT_PENALTY,
+            ),
+            classes=list(self._classes),
+            n_iter=self._rounds[0],
+            max_iter=self._rounds[1],
+        )
 
 
 def _logit_config(config: OperatorConfig) -> LogisticRegressionConfig:

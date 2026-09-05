@@ -5,6 +5,7 @@
 """
 
 import math
+from dataclasses import dataclass
 from typing import Any, Literal, cast
 
 from pydantic import Field
@@ -16,6 +17,14 @@ from platform_server.apps.modeling.operators.base import (
     OperatorError,
     PortSpec,
     column_field,
+)
+from platform_server.apps.modeling.operators.fitreport import (
+    Bound,
+    ClipRun,
+    ColumnFit,
+    FillRun,
+    clip_blocks,
+    fill_blocks,
 )
 from platform_server.apps.modeling.operators.fitting import (
     fit_columns,
@@ -29,6 +38,7 @@ from platform_server.apps.modeling.operators.frame import (
     with_column_values,
 )
 from platform_server.apps.modeling.operators.registry import register_operator
+from platform_server.apps.modeling.operators.reporting import ReportBlock
 
 # 少于这么多个取值就定不出上下界——两个点的「标准差」没有意义
 _MIN_BOUND_ROWS = 3
@@ -83,6 +93,8 @@ class FillMissing(OperatorBase):
     def __init__(self, config: OperatorConfig) -> None:
         super().__init__(config)
         self._fills: dict[str, float] = {}
+        self._fit: dict[str, ColumnFit] = {}
+        self._ran: FillRun | None = None
 
     @property
     def _config(self) -> FillMissingConfig:
@@ -102,11 +114,25 @@ class FillMissing(OperatorBase):
             if self._fills
             else fit_columns(frame, self._config.columns, self.split_plan)
         )
-        if not self._fills:
-            self._fits(training_frame(frame, self.split_plan), keys)
+        train = None if self._fills else training_frame(frame, self.split_plan)
+        if train is not None:
+            self._fits(train, keys)
+            self._ran = FillRun(
+                source=frame,
+                keys=keys,
+                fills=dict(self._fills),
+                fit=dict(self._fit),
+                train_rows=train.row_count,
+                strategy=self._config.strategy,
+            )
+        filled = frame
         for key in self._fills:
-            frame = with_column_values(frame, key, self._filled(frame, key))
-        return {"frame": frame}
+            filled = with_column_values(filled, key, self._filled(filled, key))
+        return {"frame": filled}
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """填缺失的三块：填了多少格、逐列填充表、填充前分布。"""
+        return () if self._ran is None else fill_blocks(self._ran)
 
     def dump_fitted(self) -> dict[str, Any] | None:
         """按列 key 建键的填充值。"""
@@ -136,6 +162,7 @@ class FillMissing(OperatorBase):
             present = [
                 value for value in numbers_of(train, key) if value is not None
             ]
+            self._fit[key] = ColumnFit(rows=len(present))
             if not present and config.on_all_null == "skip":
                 continue
             self._fills[key] = _fill_value(
@@ -233,6 +260,8 @@ class ClipOutlier(OperatorBase):
     def __init__(self, config: OperatorConfig) -> None:
         super().__init__(config)
         self._bounds: dict[str, dict[str, float]] = {}
+        self._fit: dict[str, ColumnFit] = {}
+        self._ran: ClipRun | None = None
 
     @property
     def _config(self) -> ClipOutlierConfig:
@@ -252,11 +281,41 @@ class ClipOutlier(OperatorBase):
             if self._bounds
             else fit_columns(frame, self._config.columns, self.split_plan)
         )
-        if not self._bounds:
-            self._fits(training_frame(frame, self.split_plan), keys)
+        train = None if self._bounds else training_frame(frame, self.split_plan)
+        if train is not None:
+            self._fits(train, keys)
+            self._ran = self._recorded(frame, train, keys)
+        clipped = frame
         for key in self._bounds:
-            frame = with_column_values(frame, key, self._clipped(frame, key))
-        return {"frame": frame}
+            clipped = with_column_values(
+                clipped, key, self._clipped(clipped, key)
+            )
+        return {"frame": clipped}
+
+    def report(self) -> tuple[ReportBlock, ...]:
+        """离群裁剪的三块：夹了多少格、逐列定界表、裁剪前分布。"""
+        return () if self._ran is None else clip_blocks(self._ran)
+
+    def _recorded(
+        self, frame: Frame, train: Frame, keys: tuple[str, ...]
+    ) -> ClipRun:
+        """把这一步定界的经过留给 `report()`。
+
+        Args: frame, train, keys。
+        """
+        return ClipRun(
+            source=frame,
+            train=train,
+            keys=keys,
+            bounds={
+                key: Bound(bound[_LOW], bound[_HIGH])
+                for key, bound in self._bounds.items()
+            },
+            fit=dict(self._fit),
+            method=self._config.method,
+            threshold=self._config.threshold,
+            is_split=self.split_plan is not None,
+        )
 
     def dump_fitted(self) -> dict[str, Any] | None:
         """按列 key 建键的上下界。"""
@@ -291,9 +350,13 @@ class ClipOutlier(OperatorBase):
             present = [
                 value for value in numbers_of(train, key) if value is not None
             ]
-            bound = _bound_of(config.method, present, config.threshold)
-            if bound is not None:
-                self._bounds[key] = bound
+            fitted = _bound_of(config.method, present, config.threshold)
+            self._fit[key] = ColumnFit(
+                rows=len(present),
+                stats=None if fitted is None else fitted.stats,
+            )
+            if fitted is not None:
+                self._bounds[key] = fitted.bound
             elif config.on_no_bound != "skip":
                 raise OperatorError(
                     f"列「{key}」在训练行上定不出上下界（取值太少或整列都空），"
@@ -329,33 +392,60 @@ def _bound_entry(key: str, value: object) -> dict[str, float]:
         raise OperatorError(f"列「{key}」的上下界不是两个数") from error
 
 
+@dataclass(frozen=True)
+class _Fitted:
+    """一列学出来的上下界，以及界是从哪两个统计量来的。
+
+    ⚠ 统计量跟着界一起回来，不回头重算：重算一份 μ/σ 就是第二个实现，两份早晚
+    会漂，而漂了之后代入式公式算出来的界与真正裁的那条不是同一条。
+    """
+
+    bound: dict[str, float]
+    stats: dict[str, float]
+
+
 def _bound_of(
     method: OutlierMethod, present: list[float], threshold: float
-) -> dict[str, float] | None:
-    """一列的上下界；取值太少定不出来时给 `None`。
+) -> _Fitted | None:
+    """一列的上下界与它的统计量；取值太少定不出来时给 `None`。
 
     Args: method, present, threshold。
     """
     if len(present) < _MIN_BOUND_ROWS:
         return None
     if method == "iqr":
-        return _iqr_bound(present, threshold)
-    return _zscore_bound(present, threshold)
+        return _iqr_fit(present, threshold)
+    return _zscore_fit(present, threshold)
 
 
-def _zscore_bound(present: list[float], threshold: float) -> dict[str, float]:
+def _zscore_fit(present: list[float], threshold: float) -> _Fitted:
+    """均值加减若干倍标准差。⚠ 总体口径，除 n。
+
+    Args: present, threshold。
+    """
     mean = sum(present) / len(present)
     variance = sum((value - mean) ** 2 for value in present) / len(present)
-    spread = math.sqrt(variance) * threshold
-    return {_LOW: mean - spread, _HIGH: mean + spread}
+    deviation = math.sqrt(variance)
+    spread = deviation * threshold
+    return _Fitted(
+        {_LOW: mean - spread, _HIGH: mean + spread},
+        {"mean": mean, "sd": deviation},
+    )
 
 
-def _iqr_bound(present: list[float], threshold: float) -> dict[str, float]:
+def _iqr_fit(present: list[float], threshold: float) -> _Fitted:
+    """四分位距向外扩若干倍。
+
+    Args: present, threshold。
+    """
     ordered = sorted(present)
     first = _quantile(ordered, 0.25)
     third = _quantile(ordered, 0.75)
     spread = (third - first) * threshold
-    return {_LOW: first - spread, _HIGH: third + spread}
+    return _Fitted(
+        {_LOW: first - spread, _HIGH: third + spread},
+        {"q1": first, "q3": third},
+    )
 
 
 def _quantile(ordered: list[float], ratio: float) -> float:

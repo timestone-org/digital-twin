@@ -29,6 +29,8 @@ from platform_server.apps.modeling.services.report_budget import (
 HUGE = REPORT_MAX_BYTES + 8 * 1024
 # 两块加起来才顶穿的填充量
 HALF = REPORT_MAX_BYTES * 2 // 3
+# 一块大表的填充量：小到能跟主体图一起留在预算里
+QUARTER = REPORT_MAX_BYTES // 4
 
 
 def block(
@@ -128,6 +130,25 @@ def test_the_main_chart_outlives_the_auxiliary_one() -> None:
     assert titles(report) == ["这一步做了什么", "主体图"]
     assert report is not None
     assert report["dropped"] == ["辅图"]
+
+
+def test_the_bulky_table_is_dropped_before_the_auxiliary_chart() -> None:
+    """⚠ 前两档不许对调：先斩明细表，再斩辅图。
+
+    对调的话只丢一张辅图就压回了预算，于是几十行的大表留在屏幕上，而它恰恰是
+    最靠下、也最容易再拉一次接口拿回来的那一块（§4.6）。
+    """
+    report = fit_report(
+        (
+            gist(),
+            block("主体图", tier=TIER_LARGE, weight=HALF),
+            block("辅图", tier=TIER_LARGE, weight=HALF, is_primary=False),
+            block("逐列明细", zone="table", tier=TIER_LARGE, weight=QUARTER),
+        )
+    )
+    assert titles(report) == ["这一步做了什么", "主体图"]
+    assert report is not None
+    assert report["dropped"] == ["逐列明细", "辅图"]
 
 
 def test_a_chart_without_a_primary_flag_counts_as_the_main_one() -> None:
