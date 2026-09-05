@@ -199,15 +199,20 @@ async def update_user(
     user_id: uuid.UUID,
     payload: UserUpdateIn,
     session: SessionDep,
+    container: ContainerDep,
     operation: OperationDep,
     _manager: ManageDep,
 ) -> ApiResponse[UserDetailOut]:
     """改他人资料。
 
-    Args: user_id, payload, session, operation, _manager。
+    Args: user_id, payload, session, container, operation, _manager。
     """
     updated = await user_service.update_user(
-        session, operation, user_id=user_id, payload=payload
+        session,
+        operation,
+        user_id=user_id,
+        payload=payload,
+        cache=container.identities,
     )
     return ok(updated, message="用户已更新")
 
@@ -220,14 +225,17 @@ async def update_user(
 async def delete_user(
     user_id: uuid.UUID,
     session: SessionDep,
+    container: ContainerDep,
     operation: OperationDep,
     _deleter: DeleteDep,
 ) -> Response:
     """删已删的返回 404；不可删自己与最后一个全权账号。
 
-    Args: user_id, session, operation, _deleter。
+    Args: user_id, session, container, operation, _deleter。
     """
-    await user_service.delete_user(session, operation, user_id=user_id)
+    await user_service.delete_user(
+        session, operation, user_id=user_id, cache=container.identities
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -239,15 +247,20 @@ async def delete_user(
 async def activate_user(
     user_id: uuid.UUID,
     session: SessionDep,
+    container: ContainerDep,
     operation: OperationDep,
     _manager: ManageDep,
 ) -> ApiResponse[UserDetailOut]:
     """启用账号。
 
-    Args: user_id, session, operation, _manager。
+    Args: user_id, session, container, operation, _manager。
     """
     updated = await user_service.set_active(
-        session, operation, user_id=user_id, is_active=True
+        session,
+        operation,
+        user_id=user_id,
+        is_active=True,
+        cache=container.identities,
     )
     return ok(updated, message="账号已启用")
 
@@ -260,15 +273,20 @@ async def activate_user(
 async def deactivate_user(
     user_id: uuid.UUID,
     session: SessionDep,
+    container: ContainerDep,
     operation: OperationDep,
     _manager: ManageDep,
 ) -> ApiResponse[UserDetailOut]:
     """停用账号。
 
-    Args: user_id, session, operation, _manager。
+    Args: user_id, session, container, operation, _manager。
     """
     updated = await user_service.set_active(
-        session, operation, user_id=user_id, is_active=False
+        session,
+        operation,
+        user_id=user_id,
+        is_active=False,
+        cache=container.identities,
     )
     return ok(updated, message="账号已停用")
 
@@ -309,15 +327,20 @@ async def assign_role(
     user_id: uuid.UUID,
     payload: AssignRoleIn,
     session: SessionDep,
+    container: ContainerDep,
     operation: OperationDep,
     _granter: GrantDep,
 ) -> ApiResponse[UserDetailOut]:
     """提权入口，受四条授权不变式约束。
 
-    Args: user_id, payload, session, operation, _granter。
+    Args: user_id, payload, session, container, operation, _granter。
     """
     updated = await grant_service.assign_role(
-        session, operation, user_id=user_id, payload=payload
+        session,
+        operation,
+        user_id=user_id,
+        payload=payload,
+        cache=container.identities,
     )
     return ok(updated, message="角色已改派")
 
@@ -331,14 +354,19 @@ async def set_permissions(
     user_id: uuid.UUID,
     payload: SetPermissionsIn,
     session: SessionDep,
+    container: ContainerDep,
     operation: OperationDep,
     _granter: GrantDep,
 ) -> ApiResponse[UserDetailOut]:
     """给什么就是什么，不做增量合并。
 
-    Args: user_id, payload, session, operation, _granter。
+    Args: user_id, payload, session, container, operation, _granter。
     """
     updated = await grant_service.set_direct_permissions(
-        session, operation, user_id=user_id, payload=payload
+        session,
+        operation,
+        user_id=user_id,
+        payload=payload,
+        cache=container.identities,
     )
     return ok(updated, message="直权已更新")

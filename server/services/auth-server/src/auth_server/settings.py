@@ -43,8 +43,11 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     edge_service_key: SecretStr = Field(min_length=32)
     edge_permission_ttl_s: int = 60
 
+    # 闸 1 的身份缓存窗口。⚠ 它**就是**降权与停用的生效延迟：写路径改完即失效，
+    # 但那只作用于本副本，多副本靠这个 TTL 收敛。调大等于同比放大吊销窗口。
+    identity_cache_ttl_s: float = Field(default=10.0, gt=0)
     # API 密钥的 argon2 校验结果缓存窗口。⚠ 缓存的只是「这串明文的散列对得上」，
-    # 吊销、过期、账号停用每次认证都回库判定，不受它影响。
+    # 吊销与过期每次认证都回库判定，不受它影响；账号停用则由上面那个 TTL 兜。
     # 不缓存的话，`/verify` 那 500ms 的超时挡不住 argon2，全站会整片按拒绝处理。
     api_key_verify_cache_ttl_s: int = Field(default=60, ge=1)
     # `last_used_at` 的写库节流。每次认证一次 UPDATE 会把全站前置的读链路

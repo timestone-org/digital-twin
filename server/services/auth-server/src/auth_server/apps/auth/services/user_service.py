@@ -24,6 +24,10 @@ from auth_server.apps.auth.services.identity import (
     count_super_admins,
     load_identity,
 )
+from auth_server.apps.auth.services.identity_cache import (
+    IdentityCache,
+    invalidate_after_commit,
+)
 from auth_server.apps.auth.services.presenters import (
     to_user_detail,
     to_user_list_item,
@@ -122,10 +126,11 @@ async def update_user(
     *,
     user_id: uuid.UUID,
     payload: UserUpdateIn,
+    cache: IdentityCache,
 ) -> UserDetailOut:
     """改他人资料。
 
-    Args: session, operation, user_id, payload。
+    Args: session, operation, user_id, payload, cache。
     """
     target = await _require_identity(session, user_id)
     _assert_can_touch(operation, target, action="修改")
@@ -140,6 +145,7 @@ async def update_user(
         target.user,
         before,
     )
+    invalidate_after_commit(session, cache, user_id)
     return to_user_detail(await load_identity(session, target.user))
 
 
@@ -148,10 +154,11 @@ async def delete_user(
     operation: Operation,
     *,
     user_id: uuid.UUID,
+    cache: IdentityCache,
 ) -> None:
     """删号。不可对自己、不可对权限更高者、不可删掉最后一个全权账号。
 
-    Args: session, operation, user_id。
+    Args: session, operation, user_id, cache。
     """
     target = await _require_identity(session, user_id)
     guards.assert_not_self(
@@ -177,6 +184,7 @@ async def delete_user(
         ),
     )
     await user_crud.delete(session, target.user)
+    invalidate_after_commit(session, cache, user_id)
 
 
 async def set_active(
@@ -185,10 +193,13 @@ async def set_active(
     *,
     user_id: uuid.UUID,
     is_active: bool,
+    cache: IdentityCache,
 ) -> UserDetailOut:
     """启用或停用账号。停用同样受「最后一个全权账号」保护。
 
-    Args: session, operation, user_id, is_active。
+    ⚠ 停用要在缓存里也当场生效，否则本副本还会按旧画像放行一个 TTL。
+
+    Args: session, operation, user_id, is_active, cache。
     """
     target = await _require_identity(session, user_id)
     action = "启用" if is_active else "停用"
@@ -218,6 +229,7 @@ async def set_active(
         target.user,
         before,
     )
+    invalidate_after_commit(session, cache, user_id)
     return to_user_detail(await load_identity(session, target.user))
 
 
