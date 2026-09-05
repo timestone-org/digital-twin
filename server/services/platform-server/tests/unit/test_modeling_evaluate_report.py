@@ -232,8 +232,12 @@ def classified() -> Frame:
     return scored(((0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 1.0), (2.0, 2.0)))
 
 
-def test_the_classification_report_lays_out_three_blocks() -> None:
-    """三块各就各位：判对判错的账、四个指标、类别分布。"""
+def test_a_multiclass_report_lays_out_only_three_blocks() -> None:
+    """三块各就各位：判对判错的账、四个指标、类别分布。
+
+    ⚠ 只有三块是**多分类**的样子：二分类带概率列时另有概率侧那四样，钉在
+    `test_modeling_classification_curves.py` 里。
+    """
     blocks = ran("classification_metrics", classified()).report()
     assert [(block.kind, block.zone, block.title) for block in blocks] == [
         ("rows", "step", "评估口径"),

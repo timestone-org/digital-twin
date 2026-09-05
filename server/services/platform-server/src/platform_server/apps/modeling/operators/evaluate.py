@@ -30,12 +30,14 @@ from platform_server.apps.modeling.operators.evalstats import (
     scored_of,
 )
 from platform_server.apps.modeling.operators.frame import (
+    DTYPE_NUMBER,
     Frame,
     frame_input,
     numbers_of,
 )
 from platform_server.apps.modeling.operators.model import (
     SCORED_PRED,
+    SCORED_PROBA,
     SCORED_TRUE,
     TASK_CLASSIFICATION,
     TASK_REGRESSION,
@@ -290,16 +292,18 @@ class ClassificationMetrics(OperatorBase):
         labels = sorted({*truth, *predicted})
         texts = tuple(_label_text(item) for item in labels)
         matrix = _confusion(truth, predicted, labels)
-        positive = _label_text(self._config.positive_label)
-        metrics = _classification_scores(
-            truth, predicted, self._config.positive_label
-        )
+        wanted = self._config.positive_label
+        metrics = _classification_scores(truth, predicted, wanted)
+        positive = _label_text(wanted)
         self._seen = Classified(
             metrics=metrics,
             labels=texts,
             matrix=matrix,
             positive_text=positive,
             rows=len(truth),
+            probabilities=_probabilities_of(scored),
+            actual_positive=tuple(value == wanted for value in truth),
+            predicted_positive=tuple(value == wanted for value in predicted),
         )
         return {
             "metrics": MetricsPayload(
@@ -332,6 +336,23 @@ def _scored_pairs(scored: Frame) -> tuple[list[float], list[float]]:
         [float(value or 0.0) for value in truth],
         [float(value or 0.0) for value in predicted],
     )
+
+
+def _probabilities_of(scored: Frame) -> tuple[float, ...] | None:
+    """打分帧上的正类概率列；没有这一列、或它不可用时给 `None`。
+
+    ⚠ 不抛：概率列是给三条曲线用的加项，缺了它四个指标照旧算得出来，而抛出去
+    会让一份本来完整的评估整个失败。
+    Args: scored。
+    """
+    if SCORED_PROBA not in scored.keys:
+        return None
+    if scored.column_of(SCORED_PROBA).dtype != DTYPE_NUMBER:
+        return None
+    values = numbers_of(scored, SCORED_PROBA)
+    if any(value is None for value in values):
+        return None
+    return tuple(float(value or _ZERO) for value in values)
 
 
 def _classification_scores(

@@ -40,7 +40,7 @@ from platform_server.apps.modeling.operators.reporting import (
 CONDITION_ALERT = 1e6
 # 各列 σ 差到这么多倍，按 |β| 排序就会把单位小的列顶到最前
 SIGMA_SPREAD_ALERT = 10.0
-# 少数类占比低于它就提醒：阈值固定 0.5，模型很可能全押多数类
+# 少数类占比低于它就提醒：模型很可能全押多数类，而准确率照样好看
 IMBALANCE_ALERT = 0.1
 # 逻辑回归只做两类
 TWO_CLASSES = 2
@@ -64,26 +64,26 @@ SIGMA_NOTE = (
 )
 SIGMOID_NOTE = (
     "系数不是直接加到预测值上：先算 z = β₀ + Σβⱼxⱼ，再过一层 sigmoid 得到概率，"
-    "最后拿概率与 0.5 比大小"
+    "最后拿概率与阈值 {threshold:g} 比大小"
 )
 THRESHOLD_NOTE = (
-    "判正类的阈值固定在 0.5 且不可配：它既不是超参也不进结果，"
-    "类不平衡时你改不了也看不见"
+    "判正类的阈值是 {threshold:g}：概率不小于它就判正类，"
+    "而全部分类指标都只是这一个阈值上的切片——调低它换召回、调高换精确率"
 )
 DEFAULTS_NOTE = (
     "penalty 与 solver 用的是 sklearn 的默认（L2 + lbfgs）："
     "这一步只传了截距开关与正则化强度 C"
 )
-NO_PROBABILITY_NOTE = (
-    "本轮打分结果里只有硬标签、没有每行的概率，"
-    "所以这一屏没有 ROC / PR / 校准曲线——那三张图都要概率"
+PROBABILITY_NOTE = (
+    "打分结果里每一行都带正类概率（列 y_proba）："
+    "换个阈值不用重训，ROC / PR / 校准曲线要的也是它"
 )
 NOT_CONVERGED_NOTE = (
     "迭代撞上了上限（{n_iter}/{max_iter}）：这组系数还没收敛，结果不可信，"
     "先加一步标准化再跑一次"
 )
 IMBALANCE_NOTE = (
-    "少数类只占 {share:.1%}，而阈值固定在 0.5：模型很可能全押多数类，"
+    "少数类只占 {share:.1%}，而阈值是 {threshold:g}：模型很可能全押多数类，"
     "而准确率照样好看"
 )
 
@@ -114,6 +114,8 @@ class LogitTrained:
     #: 实际迭代轮数；None = 估计器没记下来
     n_iter: int | None
     max_iter: int
+    #: 这一次判正类用的概率阈值
+    threshold: float
 
 
 def linear_blocks(seen: Trained) -> tuple[ReportBlock, ...]:
@@ -299,11 +301,16 @@ def _positive_label(seen: LogitTrained) -> str:
 
 
 def _logit_notes(seen: LogitTrained) -> tuple[str, ...]:
-    """三条读法提醒 + 没有概率列这一条 + 没收敛与类不平衡两条告警。
+    """四条读法提醒，外加没收敛与类不平衡两条告警。
 
     Args: seen。
     """
-    made = [SIGMOID_NOTE, THRESHOLD_NOTE, DEFAULTS_NOTE, NO_PROBABILITY_NOTE]
+    made = [
+        SIGMOID_NOTE.format(threshold=seen.threshold),
+        THRESHOLD_NOTE.format(threshold=seen.threshold),
+        DEFAULTS_NOTE,
+        PROBABILITY_NOTE,
+    ]
     if seen.n_iter is not None and seen.n_iter >= seen.max_iter:
         made.append(
             NOT_CONVERGED_NOTE.format(
@@ -312,7 +319,9 @@ def _logit_notes(seen: LogitTrained) -> tuple[str, ...]:
         )
     share = _minority_share(seen)
     if share is not None and share < IMBALANCE_ALERT:
-        made.append(IMBALANCE_NOTE.format(share=share))
+        made.append(
+            IMBALANCE_NOTE.format(share=share, threshold=seen.threshold)
+        )
     return tuple(made)
 
 

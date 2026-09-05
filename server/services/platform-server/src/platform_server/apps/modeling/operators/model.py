@@ -93,9 +93,12 @@ NULL_LABEL = "两侧差得远的列，多半只在其中一段有数据，上线
 
 TASK_REGRESSION = "regression"
 TASK_CLASSIFICATION = "classification"
-# 打分帧上的两列，评估算子按它们取数
+# 打分帧上的列，评估算子按它们取数。⚠ 三个都是**定值 key**，不按目标列取名：
+# `describe_columns` 只拿得到列 key、拿不到列角色，推不出哪一列是目标
 SCORED_TRUE = "y_true"
 SCORED_PRED = "y_pred"
+# 只有二分类的模型多产这一列：每行落在正类上的概率
+SCORED_PROBA = "y_proba"
 
 type SplitMethod = Literal["time_order", "random"]
 
@@ -488,6 +491,7 @@ def _split_config(config: OperatorConfig) -> SplitDatasetConfig:
 
 __all__ = [
     "SCORED_PRED",
+    "SCORED_PROBA",
     "SCORED_TRUE",
     "SPLIT_METHODS",
     "TASK_REGRESSION",

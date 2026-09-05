@@ -5,6 +5,7 @@
 """
 
 import math
+from dataclasses import replace
 from typing import Any, cast
 
 from pydantic import Field
@@ -25,8 +26,10 @@ from platform_server.apps.modeling.operators.estimators import (
     logistic_probability,
 )
 from platform_server.apps.modeling.operators.frame import (
+    DTYPE_NUMBER,
     ROLE_FEATURE,
     Frame,
+    FrameColumn,
     frame_input,
     matrix_of,
     numbers_of,
@@ -39,6 +42,7 @@ from platform_server.apps.modeling.operators.linearreport import (
 )
 from platform_server.apps.modeling.operators.model import (
     SCORED_PRED,
+    SCORED_PROBA,
     SCORED_TRUE,
     TASK_CLASSIFICATION,
     TASK_REGRESSION,
@@ -49,7 +53,9 @@ from platform_server.apps.modeling.operators.payloads import ModelPayload
 from platform_server.apps.modeling.operators.registry import register_operator
 from platform_server.apps.modeling.operators.reporting import ReportBlock
 
-# 判成正类的概率门槛
+# 判成正类的概率门槛的出厂值。⚠ 它同时是**存量已发布版本的回落值**：那些版本
+# 的可服务表示里没有这个键，读不到时必须照旧按它判，否则同一份模型上线前后
+# 算出来的类目不同，而没有任何一处会报错（§13.5 R-37）
 _DECISION_THRESHOLD = 0.5
 # 逻辑回归的惩罚项：sklearn 的默认，本仓没有把它做成参数
 LOGIT_PENALTY = "l2"
@@ -293,6 +299,16 @@ class LogisticRegressionConfig(OperatorConfig):
         title="正则化强度的倒数",
         description="越小罚得越狠；它就是 sklearn 那个 C",
     )
+    positive_threshold: float = Field(
+        default=_DECISION_THRESHOLD,
+        ge=0.0,
+        le=1.0,
+        title="判正类的概率阈值",
+        description=(
+            "一行的正类概率不小于它就判成正类。"
+            "类不平衡时调低它换召回、调高它换精确率"
+        ),
+    )
 
 
 @register_operator
@@ -337,12 +353,14 @@ class LogisticRegressionOperator(OperatorBase):
     def describe_columns(
         cls, config: OperatorConfig, inputs: ColumnsByPort
     ) -> ColumnsByPort:
-        """打分帧是新造的两列，与两个输入的列集无关。
+        """打分帧是新造的三列，与两个输入的列集无关。
 
+        ⚠ 概率那一列必须在这里一并声明：声明与实测不一致时发布会被拒
+        （docs/MODELING_PLATFORM_DESIGN.md D3）。
         Args: config, inputs。
         """
         del config, inputs
-        return {"scored": (SCORED_TRUE, SCORED_PRED)}
+        return {"scored": (SCORED_TRUE, SCORED_PRED, SCORED_PROBA)}
 
     def run(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """在训练集上拟合，在测试集上打分。
@@ -356,7 +374,8 @@ class LogisticRegressionOperator(OperatorBase):
         if not feature_keys:
             raise OperatorError("训练集里一个特征列都没有")
         self._fit(train, feature_keys, target_key)
-        predicted = self.predict_rows(test)
+        probabilities = self.predict_proba(test)
+        predicted = self._labels_of(probabilities)
         self._seen = self._trained(train, test, target_key, predicted)
         return {
             "model": ModelPayload(
@@ -368,7 +387,9 @@ class LogisticRegressionOperator(OperatorBase):
                 fitted=self.dump_fitted() or {},
                 serving_channel=self.SERVING_CHANNEL,
             ),
-            "scored": scored_frame(test, target_key, predicted),
+            "scored": _with_proba(
+                scored_frame(test, target_key, predicted), probabilities
+            ),
         }
 
     def report(self) -> tuple[ReportBlock, ...]:
@@ -380,24 +401,36 @@ class LogisticRegressionOperator(OperatorBase):
         """按拟合参数给每一行判一个**类目**。
 
         ⚠ 给的是类目不是概率：台账那一格与第三方接口拿到的都是「判成哪一类」。
-        概率想看的话在打分帧上另开一列，那是下一轮的事。
+        每行的概率在打分帧的 `y_proba` 那一列上。
+        Args: frame。
+        """
+        return self._labels_of(self.predict_proba(frame))
+
+    def predict_proba(self, frame: Frame) -> list[float]:
+        """每一行落在正类上的概率。
+
         Args: frame。
         """
         if not self._coef:
             raise OperatorError("模型还没有拟合参数")
         keys = tuple(self._coef)
         coef = [self._coef[key] for key in keys]
-        rows = matrix_of(frame, keys)
         return [
-            self._classes[
-                (
-                    1
-                    if logistic_probability(coef, self._intercept, row)
-                    >= _DECISION_THRESHOLD
-                    else 0
-                )
-            ]
-            for row in rows
+            logistic_probability(coef, self._intercept, row)
+            for row in matrix_of(frame, keys)
+        ]
+
+    def _labels_of(self, probabilities: list[float]) -> list[float]:
+        """按阈值把概率折成类目。**全算子唯一的一处比较**。
+
+        ⚠ 概率列与硬标签必须在同一个数上翻面：各算一遍的话，阈值附近会出现
+        「概率 0.62、标签却是负类」这种自相矛盾且不报错的行。
+        Args: probabilities。
+        """
+        threshold = _logit_config(self.config).positive_threshold
+        return [
+            self._classes[1 if value >= threshold else 0]
+            for value in probabilities
         ]
 
     def dump_fitted(self) -> dict[str, Any] | None:
@@ -497,6 +530,7 @@ class LogisticRegressionOperator(OperatorBase):
             classes=list(self._classes),
             n_iter=self._rounds[0],
             max_iter=self._rounds[1],
+            threshold=config.positive_threshold,
         )
 
 
@@ -515,4 +549,18 @@ def _logit_hyper_params(config: LogisticRegressionConfig) -> dict[str, Any]:
     return {
         "use_intercept": config.use_intercept,
         "regularization_strength": config.regularization_strength,
+        "positive_threshold": config.positive_threshold,
     }
+
+
+def _with_proba(scored: Frame, probabilities: list[float]) -> Frame:
+    """在打分帧右边接上正类概率那一列。
+
+    Args: scored, probabilities。
+    """
+    column = FrameColumn(key=SCORED_PROBA, name="正类概率", dtype=DTYPE_NUMBER)
+    rows = tuple(
+        (*row, value)
+        for row, value in zip(scored.rows, probabilities, strict=True)
+    )
+    return replace(scored, columns=(*scored.columns, column), rows=rows)

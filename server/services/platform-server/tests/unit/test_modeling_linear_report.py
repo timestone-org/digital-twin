@@ -20,9 +20,7 @@ from platform_server.apps.modeling.operators import (
 )
 from platform_server.apps.modeling.operators.linearreport import (
     DEFAULTS_NOTE,
-    NO_PROBABILITY_NOTE,
-    SIGMOID_NOTE,
-    THRESHOLD_NOTE,
+    PROBABILITY_NOTE,
     LogitTrained,
     Trained,
     logit_blocks,
@@ -381,15 +379,31 @@ def test_the_logit_report_counts_the_training_classes() -> None:
     assert blocks["charts"].payload["is_primary"] is True
 
 
-def test_the_logit_report_always_spells_out_the_half_threshold() -> None:
-    """四条读法提醒一条都不能少：界面上没有任何一处拦这些误读。"""
+@pytest.mark.parametrize("threshold", [0.5, 0.7])
+def test_the_logit_report_spells_out_the_threshold_it_really_used(
+    threshold: float,
+) -> None:
+    """四条读法提醒一条都不能少，且报的是这一次真用的那个阈值。
+
+    ⚠ 阈值升成超参之后还照着「固定 0.5」讲的话，界面会与它自己的参数面板
+    互相打脸，而没有任何一处会报错（§13.2）。
+    """
     notes = notes_of(
-        blocks_of("logistic_regression", frame_of(logit_columns()))["step"]
+        blocks_of(
+            "logistic_regression",
+            frame_of(logit_columns()),
+            positive_threshold=threshold,
+        )["step"]
     )
-    assert SIGMOID_NOTE in notes
-    assert THRESHOLD_NOTE in notes
+    assert [note for note in notes if f"阈值 {threshold:g} 比大小" in note]
+    assert [
+        note
+        for note in notes
+        if note.startswith(f"判正类的阈值是 {threshold:g}")
+    ]
     assert DEFAULTS_NOTE in notes
-    assert NO_PROBABILITY_NOTE in notes
+    assert PROBABILITY_NOTE in notes
+    assert not [note for note in notes if "固定" in note]
 
 
 def test_the_logit_report_shows_the_rounds_it_actually_took() -> None:
@@ -411,11 +425,16 @@ def test_the_logit_report_names_the_positive_class() -> None:
 
 
 def test_the_logit_report_warns_when_one_class_barely_shows_up() -> None:
-    """少数类只占一小撮而阈值固定 0.5：模型很可能全押多数类。"""
+    """少数类只占一小撮：模型很可能全押多数类，告警里带着当次的阈值。"""
     notes = notes_of(
-        blocks_of("logistic_regression", frame_of(logit_columns(1)))["step"]
+        blocks_of(
+            "logistic_regression",
+            frame_of(logit_columns(1)),
+            positive_threshold=0.7,
+        )["step"]
     )
     assert [note for note in notes if note.startswith("少数类只占")]
+    assert [note for note in notes if "而阈值是 0.7" in note]
 
 
 def test_the_logit_report_says_when_the_fit_never_converged() -> None:
@@ -436,6 +455,7 @@ def test_the_logit_report_says_when_the_fit_never_converged() -> None:
         classes=[0.0, 1.0],
         n_iter=MAX_ROUNDS,
         max_iter=MAX_ROUNDS,
+        threshold=0.5,
     )
     blocks = {block.zone: block for block in logit_blocks(seen)}
     assert [
@@ -463,6 +483,7 @@ def test_the_logit_report_stays_quiet_about_a_positive_class_it_lacks() -> None:
         classes=[],
         n_iter=3,
         max_iter=MAX_ROUNDS,
+        threshold=0.5,
     )
     blocks = {block.zone: block for block in logit_blocks(seen)}
     assert "正类是" not in blocks["step"].payload["label"]

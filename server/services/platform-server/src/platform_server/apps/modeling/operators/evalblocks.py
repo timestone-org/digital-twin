@@ -10,6 +10,23 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from platform_server.apps.modeling.operators.evalcurves import (
+    BINARY_CLASSES,
+    CALIBRATION_NOTE,
+    GRID_NOTE,
+    MULTICLASS_NOTE,
+    NO_PROBABILITY_NOTE,
+    ONE_SIDED_NOTE,
+    PR_NOTE,
+    PROBABILITY_NOTE,
+    ROC_NOTE,
+    Curves,
+    calibration_items,
+    curves_of,
+    grid_items,
+    pr_items,
+    roc_items,
+)
 from platform_server.apps.modeling.operators.evalstats import (
     CLASSIFICATION_METRICS,
     REGRESSION_METRICS,
@@ -26,6 +43,7 @@ from platform_server.apps.modeling.operators.evalstats import (
     worst_items,
 )
 from platform_server.apps.modeling.operators.reporting import (
+    NOTE_ALERT,
     TIER_LARGE,
     TIER_SCALAR,
     TIER_SMALL,
@@ -35,6 +53,7 @@ from platform_server.apps.modeling.operators.reporting import (
     Scale,
     TimeAxis,
     Zone,
+    annotated,
     axis_block,
     bins_block,
     breakdown_block,
@@ -71,6 +90,12 @@ class Classified:
     #: 正类在界面上的写法。⚠ config 里那个是浮点数，摘要里的类目是字符串
     positive_text: str
     rows: int
+    #: 每行的正类概率；None = 这份打分结果里没有可用的概率列
+    probabilities: tuple[float, ...] | None = None
+    #: 每行的真实类目是不是正类。三条曲线全部相对它算
+    actual_positive: tuple[bool, ...] = ()
+    #: 每行被判成的是不是正类。用来反推打分时站的那个阈值
+    predicted_positive: tuple[bool, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -146,26 +171,13 @@ def regression_blocks(
 
 
 def classification_blocks(view: Classified) -> tuple[ReportBlock, ...]:
-    """分类评估的三块：判对判错的账、四个指标、真实与预测的类别分布。
+    """分类评估的三到八块：判对判错的账、四个指标、类别分布，与概率侧那四样。
 
     Args: view。
     """
-    hit = sum(
-        view.matrix[seat][seat]
-        for seat in range(min(len(view.matrix), len(view.labels)))
-    )
-    return (
-        rows_block(
-            _at("step", "评估口径", TIER_SCALAR),
-            RowCounts(before=view.rows, after=view.rows),
-            funnel=funnel_of(
-                (
-                    Stage("测试行数", view.rows, "行"),
-                    Stage("类目数", len(view.labels), "类"),
-                    Stage("判对", hit, "行"),
-                    Stage("判错", view.rows - hit, "行"),
-                )
-            ),
+    made = [
+        annotated(
+            _scope_block(view), NOTE_ALERT, (_missing_curves_note(view),)
         ),
         breakdown_block(
             _at("stats", "分类指标", TIER_SCALAR),
@@ -177,7 +189,9 @@ def classification_blocks(view: Classified) -> tuple[ReportBlock, ...]:
             Scale(label="真实占比与预测占比并排：模型是不是全押多数类"),
             _class_items(view),
         ),
-    )
+    ]
+    made.extend(_probability_blocks(view))
+    return tuple(made)
 
 
 def residual_blocks(
@@ -333,6 +347,166 @@ def _residual_charts(scored: Scored) -> list[ReportBlock]:
             )
         )
     return made
+
+
+def _scope_block(view: Classified) -> ReportBlock:
+    """判对判错的账：几行、几类、对几行、错几行。
+
+    Args: view。
+    """
+    hit = sum(
+        view.matrix[seat][seat]
+        for seat in range(min(len(view.matrix), len(view.labels)))
+    )
+    return rows_block(
+        _at("step", "评估口径", TIER_SCALAR),
+        RowCounts(before=view.rows, after=view.rows),
+        funnel=funnel_of(
+            (
+                Stage("测试行数", view.rows, "行"),
+                Stage("类目数", len(view.labels), "类"),
+                Stage("判对", hit, "行"),
+                Stage("判错", view.rows - hit, "行"),
+            )
+        ),
+    )
+
+
+def _missing_curves_note(view: Classified) -> str:
+    """三条曲线为什么不在这一屏上；画得出来时是空串。
+
+    ⚠ 两种「没有」分开写：多分类要用户改建模口径，缺概率列要用户换上游算子，
+    合成一句之后两种情形都不知道该做什么（规格 §2-P5）。
+    Args: view。
+    """
+    if len(view.labels) > BINARY_CLASSES:
+        return MULTICLASS_NOTE
+    return "" if view.probabilities is not None else NO_PROBABILITY_NOTE
+
+
+def _probability_blocks(view: Classified) -> list[ReportBlock]:
+    """概率侧那四样：两个关键数字、ROC、PR、校准曲线，以及阈值网格。
+
+    ⚠ 画不出来的那几张一块都不摆：空块与「这一步本来就没有这张图」在屏幕上长得
+    一模一样，而两者的原因已经在第一区那条告警里分开说过了。
+    Args: view。
+    """
+    if view.probabilities is None or len(view.labels) > BINARY_CLASSES:
+        return []
+    curves = curves_of(view.probabilities, view.actual_positive)
+    made = [_probability_stats(curves, view)]
+    made.extend(_curve_blocks(curves, view.probabilities, view.actual_positive))
+    grid = grid_items(curves)
+    if grid:
+        made.append(
+            breakdown_block(
+                _at("charts", "阈值网格", TIER_LARGE, is_primary=False),
+                Scale(
+                    label=GRID_NOTE,
+                    baseline=_scoring_threshold(
+                        view.probabilities, view.predicted_positive
+                    ),
+                ),
+                grid,
+            )
+        )
+    return made
+
+
+def _probability_stats(curves: Curves, view: Classified) -> ReportBlock:
+    """AUC / AP / 正类占比三个关键数字。
+
+    ⚠ 三个都不套阈值染色：AUC 的随机线在 0.5、AP 的随机线是正类占比，两条都与
+    准确率那套档位对不上，套上去会把 AUC=0.55 印成绿的（规格 §2-P3）。
+    Args: curves, view。
+    """
+    block = breakdown_block(
+        _at("stats", "概率评估", TIER_SCALAR),
+        Scale(label=PROBABILITY_NOTE),
+        (
+            _stat("AUC", "auc", curves.auc),
+            _stat("AP", "average_precision", curves.average_precision),
+            _stat(
+                f"正类「{view.positive_text}」占比",
+                "positive_rate",
+                curves.positive_rate,
+            ),
+        ),
+    )
+    if curves.auc is not None:
+        return block
+    return annotated(block, NOTE_ALERT, (ONE_SIDED_NOTE,))
+
+
+def _curve_blocks(
+    curves: Curves,
+    probabilities: Sequence[float],
+    actual_positive: Sequence[bool],
+) -> list[ReportBlock]:
+    """画得出来的那几条曲线。
+
+    Args: curves, probabilities, actual_positive。
+    """
+    made: list[ReportBlock] = []
+    roc = roc_items(curves)
+    if roc:
+        made.append(
+            breakdown_block(
+                _at("charts", "ROC 曲线", TIER_SMALL, is_primary=True),
+                Scale(label=ROC_NOTE),
+                roc,
+            )
+        )
+    curve = pr_items(curves)
+    if curve:
+        made.append(
+            breakdown_block(
+                _at("charts", "PR 曲线", TIER_SMALL, is_primary=True),
+                Scale(label=PR_NOTE, baseline=curves.positive_rate),
+                curve,
+            )
+        )
+    calibration = calibration_items(probabilities, actual_positive)
+    if calibration:
+        made.append(
+            breakdown_block(
+                _at("charts", "校准曲线", TIER_SMALL, is_primary=False),
+                Scale(label=CALIBRATION_NOTE),
+                calibration,
+            )
+        )
+    return made
+
+
+def _scoring_threshold(
+    probabilities: Sequence[float], predicted_positive: Sequence[bool]
+) -> float | None:
+    """打分时站的那个阈值：判成正类的行里最低的那个概率。
+
+    ⚠ 不写死 0.5：阈值是逻辑回归的超参，写死之后网格上那条竖线会指在一个模型
+    根本没用过的位置，而同屏的指标卡是按真阈值算的。
+    Args: probabilities, predicted_positive。
+    """
+    seats = [
+        value
+        for value, flag in zip(probabilities, predicted_positive, strict=True)
+        if flag
+    ]
+    return min(seats) if seats else None
+
+
+def _stat(name: str, key: str, value: float | None) -> dict[str, Any]:
+    """一个没有公认好坏线的关键数字。
+
+    Args: name, key, value。
+    """
+    return {
+        "name": name,
+        "key": key,
+        "value": value,
+        "unit": "",
+        "score_kind": "",
+    }
 
 
 def _positive_note(view: Classified) -> str:
